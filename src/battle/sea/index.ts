@@ -6,3 +6,4 @@ export * from './result';
 export * from './sim';
 export * from './ticket';
 export * from './handoff';
+export * from './words';

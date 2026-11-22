@@ -14676,7 +14676,7 @@
         edge: { all: 0.04 },
         fame: 3,
         ribbon: ["#12305a", "#f0f0f0"],
-        cite: "{unit} brought an enemy fleet to action in the {place} and sank one of its great ships.",
+        cite: "{unit} brought an enemy fleet to action {where} and sank one of its great ships.",
         real: "In May 1941 the Royal Navy hunted the battleship Bismarck across the North Atlantic and sank her some three hundred miles off Brest. The ships that took part carry the battle honour 'Bismarck 1941'."
       },
       {
@@ -15716,6 +15716,104 @@
     return n > 0 ? sum2 / n : null;
   }
 
+  // ../../data/campaign/sea-words.json
+  var sea_words_default = {
+    _about: `How each sea is said in running text (the UI director, 18 November 2026: ui-director/words-sea-names.md). 'where' is the words after "The action" or a verb of place. A sea not listed here is "in the" and its map name. The 'what' form, for a sea that is a sentence's object, comes from the where form: drop "in ", or put "the waters " before an "off" form. Map labels keep the map names. Keyed by the map name; src/campaign/sea-words.ts reads it, and tests/sea-words.test.ts checks every key is a sea on the map.`,
+    where: {
+      "Aleutian Waters": "off the Aleutians",
+      "Amazon Mouth": "off the mouth of the Amazon",
+      "Angola Basin": "off Angola",
+      "Atacama Coast": "off the Atacama coast",
+      "Azores Waters": "off the Azores",
+      "Bahia Coast": "off Bahia",
+      "Bonin Waters": "off the Bonins",
+      "California Coast": "off California",
+      "Canary Basin": "off the Canaries",
+      "Cape Basin": "off the Cape",
+      "Carolina Coast": "off the Carolinas",
+      "Caroline Waters": "off the Carolines",
+      "Ceylon Waters": "off Ceylon",
+      "Eastern Seaboard": "off the Eastern Seaboard",
+      "Eastern Solomons": "off the Eastern Solomons",
+      "Ellice Waters": "off the Ellice Islands",
+      "Eniwetok Waters": "off Eniwetok",
+      "Falkland Waters": "off the Falklands",
+      "Fiji Waters": "off Fiji",
+      "Gilbert Waters": "off the Gilberts",
+      "Grand Banks": "off the Grand Banks",
+      "Guiana Coast": "off the Guianas",
+      "Hawaiian Approaches": "in the approaches to Hawaii",
+      "Hawaiian Waters": "off Hawaii",
+      "Honshu Coast": "off Honshu",
+      "Hudson Bay": "in Hudson Bay",
+      "Iberian Coast": "off the Iberian coast",
+      "Indochina Coast": "off Indochina",
+      "Kurile Waters": "off the Kuriles",
+      "Kyushu Coast": "off Kyushu",
+      "Leyte Gulf": "in Leyte Gulf",
+      "Line Islands": "off the Line Islands",
+      "Mariana Waters": "off the Marianas",
+      "Marshall Waters": "off the Marshalls",
+      "Mascarene Waters": "off the Mascarenes",
+      "Mentawai Waters": "off the Mentawai Islands",
+      "Midway Waters": "off Midway",
+      "New Hebrides Waters": "off the New Hebrides",
+      "New Zealand Waters": "off New Zealand",
+      "North New Guinea Waters": "off northern New Guinea",
+      "Peruvian Coast": "off Peru",
+      "River Plate": "off the River Plate",
+      "Ryukyu Waters": "off the Ryukyus",
+      "Samoa Waters": "off Samoa",
+      "Santos Bight": "off Santos",
+      "Scotian Shelf": "off Nova Scotia",
+      "Sierra Leone Basin": "off Sierra Leone",
+      "Somali Coast": "off the Somali coast",
+      "Wake Waters": "off Wake Island",
+      "West Australian Waters": "off Western Australia",
+      "Western Carolines": "off the Western Carolines",
+      "Zanzibar Coast": "off Zanzibar"
+    }
+  };
+
+  // ../../src/campaign/sea-words.ts
+  var WHERE = sea_words_default.where;
+  function seaWhere(name) {
+    return WHERE[name] ?? `in the ${name}`;
+  }
+  function seaWhat(name) {
+    const w = seaWhere(name);
+    return w.startsWith("off ") ? `the waters ${w}` : w.replace(/^in /, "");
+  }
+  function seaHead(name) {
+    const w = seaWhat(name);
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  function seaPlural(name) {
+    const head = seaWhat(name).replace(/^the /, "").split(/ (?:of|to|off) /)[0].split(" ").pop() ?? "";
+    return /[^s]s$/.test(head);
+  }
+  var seaIs = (name) => seaPlural(name) ? "are" : "is";
+  var joined = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var seaWhatList = (names) => joined(names.map(seaWhat));
+  var ORDINAL2 = ["", "", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"];
+  function seaAction(name, nth2 = 1) {
+    return `${nth2 <= 1 ? "The action" : `The ${ORDINAL2[nth2] ?? `${nth2}th`} action`} ${name ? seaWhere(name) : "at sea"}`;
+  }
+  var reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  function seaSaid(text, names) {
+    let i = -1, said = "", at3 = Infinity;
+    for (let k = 0; k < names.length; k++) {
+      const w = ` ${seaWhere(names[k])}`;
+      const m = new RegExp(`${reEsc(w)}(?= and |[.,:]|$)`).exec(text);
+      if (m && (m.index < at3 || m.index === at3 && w.length > said.length)) {
+        i = k;
+        said = w;
+        at3 = m.index;
+      }
+    }
+    return i >= 0 ? { i, said } : null;
+  }
+
   // ../../src/campaign/stories.ts
   var STORIES = stories_default;
   var DEF = new Map(STORIES.honours.map((h) => [h.id, h]));
@@ -15766,7 +15864,7 @@
     const d = DEF.get(a.hon);
     if (!d) return "";
     const N = g2.nations[a.nat];
-    return fill2(d.cite, { unit: a.name, place: placeName(g2, a.kind, a.at) || "the front", year: turnToDate(a.turn).year, n: a.n, rival: a.rival, designation: designation(a.nat), adj: N?.adj });
+    return fill2(d.cite, { unit: a.name, place: placeName(g2, a.kind, a.at) || "the front", where: a.kind === "fleet" && g2.seas[a.at] ? seaWhere(g2.seas[a.at].name) : `in ${placeName(g2, a.kind, a.at) || "the front"}`, year: turnToDate(a.turn).year, n: a.n, rival: a.rival, designation: designation(a.nat), adj: N?.adj });
   }
   var fameOf = (a) => (DEF.get(a.hon)?.fame ?? 1) + (a.first ? 1 : 0);
   var corpsNamed = (g2, id) => (id === void 0 ? void 0 : g2.corps.find((c) => c.id === id) ?? Object.values(g2.nations).flatMap((n) => n.cadres ?? []).find((c) => c.id === id))?.name ?? "another corps";
@@ -15776,7 +15874,9 @@
   function diaryText(g2, u, line) {
     const [, what, where, n] = line;
     const sea = "ships" in u;
-    const at3 = where < 0 ? "the front" : sea || what === "strike" ? `the ${g2.seas[where]?.name ?? "sea"}` : g2.regions[where]?.name ?? "the front";
+    const seaName = where >= 0 && (sea || what === "strike") ? g2.seas[where]?.name ?? "" : null;
+    const at3 = where < 0 ? "the front" : seaName !== null ? seaName ? seaWhat(seaName) : "the sea" : g2.regions[where]?.name ?? "the front";
+    const atIn = (prep) => seaName ? seaWhere(seaName) : `${prep} ${at3}`;
     const times = n && n > 1 ? ` ${n} times` : "";
     switch (what) {
       case "took":
@@ -15819,11 +15919,11 @@
         return `${at3} was freed: the place it was raised in.`;
       case "rival": {
         const r = rivalryOf(g2, n);
-        return r ? `Met ${r.theirsName} again, at ${at3}. The two are old enemies now.` : `Met an old enemy again at ${at3}.`;
+        return r ? `Met ${r.theirsName} again, ${atIn("at")}. The two are old enemies now.` : `Met an old enemy again ${atIn("at")}.`;
       }
       case "score": {
         const r = rivalryOf(g2, n);
-        return r ? `Destroyed its old enemy ${r.theirsName} at ${at3}.` : `Destroyed an old enemy at ${at3}.`;
+        return r ? `Destroyed its old enemy ${r.theirsName} ${atIn("at")}.` : `Destroyed an old enemy ${atIn("at")}.`;
       }
       case "drafts":
         return `Took in drafts: ${n}% of the corps is new to it.`;
@@ -15836,7 +15936,7 @@
       case "rebuilt":
         return `Raised again round its cadre at ${at3}.`;
       case "destroyed":
-        return `Destroyed at ${at3}.`;
+        return `Destroyed ${atIn("at")}.`;
       case "surrendered":
         return `Laid down its arms at ${at3}.`;
       case "starved":
@@ -15846,7 +15946,7 @@
       case "night":
         return `Bombed ${at3} by night.`;
       case "strike":
-        return `Struck at shipping in ${at3}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
+        return `Struck at shipping ${atIn("in")}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
       case "sky":
         return `Won the sky over ${at3}.`;
       case "fight":
@@ -15854,9 +15954,9 @@
       case "defend":
         return `Fought off raids over ${at3}${times}.`;
       case "action":
-        return `Won a fleet action in ${at3}${n ? `: ${n} enemy ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
+        return `Won a fleet action ${atIn("in")}${n ? `: ${n} enemy ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
       case "beaten":
-        return `Beaten in a fleet action in ${at3}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} lost` : ""}.`;
+        return `Beaten in a fleet action ${atIn("in")}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} lost` : ""}.`;
       default:
         return what;
     }
@@ -17157,7 +17257,7 @@
     return !road || out + SIEGE.ringNear * near2 >= need;
   }
   var garrisonFed = (g2, r) => !besieged(g2, r) || monthsShut(g2, r) <= storesOf(g2, r) || fed(g2, r);
-  function joined(g2, nat, from2, most) {
+  function joined2(g2, nat, from2, most) {
     const out = [from2];
     for (let i = 0; i < out.length; i++) {
       for (const j of g2.regions[out[i]].nb) {
@@ -17173,7 +17273,7 @@
     const P = SIEGE.pocket;
     const most = Math.min(P.least - 1, Math.ceil(P.share * home) - 1);
     if (most < 1 || !allied(g2, nat, fieldCtrl(g2, r))) return null;
-    const pocket = joined(g2, nat, r.id, most);
+    const pocket = joined2(g2, nat, r.id, most);
     if (!pocket) return null;
     let roads = 0;
     for (const id of pocket) {
@@ -17283,7 +17383,7 @@
     const nat = r ? pocketNat(g2, r) : null;
     if (!r || !nat) return null;
     const n = g2.nations[nat];
-    const pocket = joined(g2, nat, r.id, SIEGE.pocket.least) ?? [r.id];
+    const pocket = joined2(g2, nat, r.id, SIEGE.pocket.least) ?? [r.id];
     const town = larder(g2, nat, pocket) ?? r;
     const stores2 = storesOf(g2, town);
     const eaten = (g2.flags[`pkte:${r.id}`] ?? 0) / 10;
@@ -17750,7 +17850,7 @@
     if (by2) {
       const closed = ringClosed(g2, r);
       const seas = bySea ? feedingSeas(g2, r).map((z) => g2.seas[z].name) : [];
-      lines2.push(bySea ? `Ships still reach the harbour${seas.length ? ` by the ${seas.length === 1 ? seas[0] : `${seas.slice(0, -1).join(", ")} and the ${seas[seas.length - 1]}`}` : ""}: the town cannot be starved while they do.${byBook ? " Food comes in across the lake as well, so closing the sea would not starve it." : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? "those waters" : "that water"} to them, starts its stores running down.`}` : byBook ? "Food still comes in across the lake: however close the ring, the town is not starved while no player's troops stand in it." : !closed ? "The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it." : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? "one more month" : `${left} more months`}; after that they go hungry.` : inside2 ? "Its stores are gone: the garrison is starving, and loses men and heart every month." : "Its stores are gone: it is about to give in.");
+      lines2.push(bySea ? `Ships still reach the harbour${seas.length ? ` by ${seaWhatList(seas)}` : ""}: the town cannot be starved while they do.${byBook ? " Food comes in across the lake as well, so closing the sea would not starve it." : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? "those waters" : "that water"} to them, starts its stores running down.`}` : byBook ? "Food still comes in across the lake: however close the ring, the town is not starved while no player's troops stand in it." : !closed ? "The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it." : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? "one more month" : `${left} more months`}; after that they go hungry.` : inside2 ? "Its stores are gone: the garrison is starving, and loses men and heart every month." : "Its stores are gone: it is about to give in.");
       if (closed && r.cap && r.owner === r.ctrl) {
         const sat = Math.max(0, g2.turn - investedOn(g2, r));
         lines2.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.` : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
@@ -22524,7 +22624,7 @@
     if (w.flew === g2.turn) return "It flew its strike this month: it is back aboard next month.";
     if (w.moved === g2.turn) return "It has already changed base this month.";
     if (!offShore(g2, c, r.id)) {
-      return atSea(c) ? `The ${c.name} is in the ${g2.seas[c.zone].name}: its wing can fly ashore only to an airfield on that sea.` : c.base >= 0 ? `The ${c.name} lies at ${c.port}: from harbour its wing can fly ashore only to the airfield there.` : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
+      return atSea(c) ? `The ${c.name} is ${seaWhere(g2.seas[c.zone].name)}: its wing can fly ashore only to an airfield on that sea.` : c.base >= 0 ? `The ${c.name} lies at ${c.port}: from harbour its wing can fly ashore only to the airfield there.` : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
     }
     const land2 = { ...w, ship: void 0, base: -1, moved: 0 };
     const no = whyNotBase(g2, land2, r, true);
@@ -22544,7 +22644,7 @@
       if (allied(g2, w.nat, g2.regions[id].ctrl)) first2 ?? (first2 = no);
     }
     if (first2) return first2;
-    return atSea(c) ? `No friendly airfield lies on the ${g2.seas[c.zone].name}, where the ${c.name} is.` : c.base >= 0 ? whyNotAshore(g2, w, g2.regions[c.base]) : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
+    return atSea(c) ? `The ${c.name} is ${seaWhere(g2.seas[c.zone].name)}, and no friendly airfield lies on that sea.` : c.base >= 0 ? whyNotAshore(g2, w, g2.regions[c.base]) : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
   }
   function flyAshore(g2, w, r) {
     if (whyNotAshore(g2, w, r)) return false;
@@ -22570,14 +22670,14 @@
     if (f.flew === g2.turn) return "It flew its raid this month: it is back at its airfield next month.";
     if (f.moved === g2.turn) return "It has already changed base this month.";
     if (!offShore(g2, c, f.base)) {
-      return atSea(c) ? `The ${c.name} is in the ${g2.seas[c.zone].name}: the wing must be at an airfield on that sea to fly out to it.` : `The ${c.name} lies at ${c.port}: the wing must be at the airfield there to go aboard.`;
+      return atSea(c) ? `The ${c.name} is ${seaWhere(g2.seas[c.zone].name)}: the wing must be at an airfield on that sea to fly out to it.` : `The ${c.name} lies at ${c.port}: the wing must be at the airfield there to go aboard.`;
     }
     return null;
   }
   function decksFor(g2, f) {
     if (!carrierRules(g2) || f.ashore === void 0) return [];
     const kind = kindOfWing(f);
-    return g2.fleets.filter((c) => c.nat === f.nat && c.ships.cv > 0 && bareOf(c, kind) > 0).map((c) => ({ fleet: c.id, name: c.name, where: atSea(c) ? `in the ${g2.seas[c.zone].name}` : `in harbour at ${c.port}`, room: bareOf(c, kind), why: whyNotAboard(g2, f, c) })).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (a.fleet === f.ashore ? 0 : 1) - (b.fleet === f.ashore ? 0 : 1) || a.fleet - b.fleet);
+    return g2.fleets.filter((c) => c.nat === f.nat && c.ships.cv > 0 && bareOf(c, kind) > 0).map((c) => ({ fleet: c.id, name: c.name, where: atSea(c) ? seaWhere(g2.seas[c.zone].name) : `in harbour at ${c.port}`, room: bareOf(c, kind), why: whyNotAboard(g2, f, c) })).sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (a.fleet === f.ashore ? 0 : 1) - (b.fleet === f.ashore ? 0 : 1) || a.fleet - b.fleet);
   }
   function whyNoDeck(g2, f) {
     const all = decksFor(g2, f);
@@ -22657,7 +22757,7 @@
       const kind = w.kind === "bmr" ? "bmr" : "ftr";
       const n = w[kind], est = w.est[kind];
       const away2 = w.flew === g2.turn;
-      const doing = away2 ? "Flew its strike this month: back aboard next month" : w.mission === "rest" ? "Stood down to rest and refit" : kind === "ftr" ? atSea(c) ? `On patrol over the ships in the ${g2.seas[c.zone].name}` : `In harbour at ${c.port}: on patrol over its fleet` : "Ranged on deck, ready for a strike";
+      const doing = away2 ? "Flew its strike this month: back aboard next month" : w.mission === "rest" ? "Stood down to rest and refit" : kind === "ftr" ? atSea(c) ? `On patrol over the ships ${seaWhere(g2.seas[c.zone].name)}` : `In harbour at ${c.port}: on patrol over its fleet` : "Ranged on deck, ready for a strike";
       const short = est - n;
       return {
         id: w.id,
@@ -22828,7 +22928,7 @@
     const news3 = foes.filter((_, i) => rank2[after[i]] > rank2[before[i]]);
     const told2 = news3.map((x) => fleetKnown(g2, x, f.nat) === "exact" ? `the ${x.name} (${shipList(x.ships)})` : `${g2.nations[x.nat].adj} ships, not identified`);
     const sea = g2.seas[z].name;
-    const text = told2.length ? `Aircraft of the ${f.name} searching the ${sea} found ${told2.join(", and ")}.` : foes.some((_, i) => after[i] !== "none") ? `Aircraft of the ${f.name} searched the ${sea} and found nothing new.` : `Aircraft of the ${f.name} searched the ${sea} and found no enemy ships.`;
+    const text = told2.length ? `Aircraft of the ${f.name} searching ${seaWhat(sea)} found ${told2.join(", and ")}.` : foes.some((_, i) => after[i] !== "none") ? `Aircraft of the ${f.name} searched ${seaWhat(sea)} and found nothing new.` : `Aircraft of the ${f.name} searched ${seaWhat(sea)} and found no enemy ships.`;
     if (f.nat === g2.human) headline(g2, "info", text, f.nat);
     return { ok: true, text, found: news3.length };
   }
@@ -22955,15 +23055,15 @@
       }
       if (atSea(c) || !(A.sortie > 0) || c.duty === "raid" || c.ready < FLEETS.ai.ready) continue;
       const power = fleetPower(g2, c);
-      const keep = { zone: c.zone, stance: c.stance };
+      const keep2 = { zone: c.zone, stance: c.stance };
       let at3 = -1, plan = null;
       for (const z of fleetReach(g2, c)) {
         if (seaSide(g2, z, nat, false).total + power < A.sortie * seaSide(g2, z, nat, true).total) continue;
         c.zone = z;
         c.stance = "patrol";
         const b = bestBlow(g2, nat, lead2, escorts, hit);
-        c.zone = keep.zone;
-        c.stance = keep.stance;
+        c.zone = keep2.zone;
+        c.stance = keep2.stance;
         if (b && (!plan || b.v > plan.v)) {
           plan = b;
           at3 = z;
@@ -23380,8 +23480,7 @@
       return r.via !== void 0 && g2.regions[r.via] ? `Overland, by way of ${g2.regions[r.via].name}` : "Overland";
     }
     if (r.way === "none" || !r.seas.length) return "No way open";
-    const names = r.seas.map((z) => `the ${g2.seas[z].name}`);
-    return `By sea through ${names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`}`;
+    return `By sea through ${seaWhatList(r.seas.map((z) => g2.seas[z].name))}`;
   };
   function tradeBook(g2, nat) {
     const n = g2.nations[nat];
@@ -24259,11 +24358,11 @@
     }
     return out;
   }
-  function mixLine(mix3) {
-    if (!mix3.length) return "No troops";
-    const total = mix3.reduce((s, m) => s + m.divs, 0);
-    const parts2 = mix3.map((m) => `${m.divs} ${m.word}`);
-    const unit = mix3.every((m) => m.kind === "eng") ? total === 1 ? "brigade" : "brigades" : total === 1 ? "division" : "divisions";
+  function mixLine(mix4) {
+    if (!mix4.length) return "No troops";
+    const total = mix4.reduce((s, m) => s + m.divs, 0);
+    const parts2 = mix4.map((m) => `${m.divs} ${m.word}`);
+    const unit = mix4.every((m) => m.kind === "eng") ? total === 1 ? "brigade" : "brigades" : total === 1 ? "division" : "divisions";
     return `${listed3(parts2)} ${unit}`;
   }
   function corpsSeen(g2, c, viewer = g2.human) {
@@ -24311,9 +24410,9 @@
       }
       const cards = seen3.map((c) => corpsSeen(g2, c, viewer));
       const dv = cards.reduce((s, c) => s + c.divs, 0);
-      const mix4 = mixOf(seen3);
+      const mix5 = mixOf(seen3);
       const est = armyBand(g2, region, nat, cs, viewer, sight2 === SIGHT.full);
-      const words = [seen3.length ? `${mixLine(mix4)} identified` : "", k.none.length ? `${k.none.length} corps not identified` : ""].filter(Boolean).join(", ");
+      const words = [seen3.length ? `${mixLine(mix5)} identified` : "", k.none.length ? `${k.none.length} corps not identified` : ""].filter(Boolean).join(", ");
       return {
         region,
         nat,
@@ -24330,7 +24429,7 @@
         moraleWord: "",
         rest: 0,
         restWord: "",
-        mix: mix4,
+        mix: mix5,
         line: `${words[0].toUpperCase()}${words.slice(1)}`,
         allies: [],
         corps: cards
@@ -24338,7 +24437,7 @@
     }
     const order2 = sorted(cs);
     const divs = cs.reduce((s, c) => s + c.divs, 0);
-    const mix3 = mixOf(cs);
+    const mix4 = mixOf(cs);
     const morale = forceMorale(cs);
     const rest = divs > 0 ? cs.reduce((s, c) => s + c.org * c.divs, 0) / divs : 0;
     return {
@@ -24357,8 +24456,8 @@
       moraleWord: morale === null ? "" : moraleWord(morale),
       rest,
       restWord: restWord(rest),
-      mix: mix3,
-      line: mixLine(mix3),
+      mix: mix4,
+      line: mixLine(mix4),
       allies,
       corps: order2.map((c) => (mine4 ? null : corpsSeen(g2, c, viewer)) ?? corpsCard(g2, c))
     };
@@ -24487,6 +24586,101 @@
     return said;
   }
 
+  // ../../src/campaign/stars.ts
+  var CLASSES2 = ["bb", "cv", "ca", "dd", "ss"];
+  function shipStars(f, c) {
+    const have = f.stars?.[c] ?? [];
+    return Array.from({ length: Math.max(0, f.ships[c]) }, (_, i) => [...have[i] ?? []]);
+  }
+  function keep(f, c, list4) {
+    let n = list4.length;
+    while (n > 0 && !list4[n - 1].length) n--;
+    if (n > 0) (f.stars ?? (f.stars = {}))[c] = list4.slice(0, n);
+    else if (f.stars?.[c]) {
+      delete f.stars[c];
+      if (!Object.keys(f.stars).length) delete f.stars;
+    }
+  }
+  function mendStars(f, only) {
+    if (!f.stars) return;
+    for (const c of only ? [only] : CLASSES2) {
+      const list4 = f.stars?.[c];
+      if (list4 && list4.length > Math.max(0, f.ships[c])) keep(f, c, list4.slice(0, Math.max(0, f.ships[c])));
+    }
+  }
+  function loseStars(f, c, k) {
+    if (k <= 0 || !f.stars?.[c]) return;
+    const have = f.stars[c], there = Math.max(0, f.ships[c]) + k;
+    const list4 = Array.from({ length: there }, (_, i) => [...have[i] ?? []]);
+    const from2 = Math.max(0, f.lost[c] - k);
+    for (let j = 0; j < k && list4.length; j++) list4.splice((from2 + j) % list4.length, 1);
+    keep(f, c, list4);
+  }
+  function splitStars(f, s) {
+    if (!f.stars) return void 0;
+    const out = {};
+    for (const c of CLASSES2) {
+      if (!f.stars?.[c]) continue;
+      const all = shipStars(f, c), stay = Math.max(0, all.length - Math.max(0, s[c]));
+      keep(f, c, all.slice(0, stay));
+      keep(out, c, all.slice(stay));
+    }
+    return out.stars;
+  }
+  function joinStars(a, b) {
+    if (!a.stars && !b.stars) return;
+    for (const c of CLASSES2) if (a.stars?.[c] || b.stars?.[c]) keep(b, c, [...shipStars(b, c), ...shipStars(a, c)]);
+    delete a.stars;
+  }
+  function bookSeaAction(g2, zone, winners) {
+    var _a;
+    if (!winners?.length) return -1;
+    const actions = (_a = g2.stories).seaActions ?? (_a.seaActions = []);
+    actions.push([g2.turn, zone]);
+    const at3 = actions.length - 1;
+    for (const f of winners) {
+      for (const c of CLASSES2) {
+        if (f.ships[c] <= 0) {
+          mendStars(f, c);
+          continue;
+        }
+        const list4 = shipStars(f, c);
+        for (const ship2 of list4) ship2.push(at3);
+        keep(f, c, list4);
+      }
+    }
+    return at3;
+  }
+  function starSplit(n) {
+    const k = Math.max(0, Math.floor(n));
+    return { silver: Math.floor(k / 5), bronze: k % 5 };
+  }
+  function seaActionName(g2, at3) {
+    const actions = g2.stories.seaActions ?? [];
+    const [turn2, zone] = actions[at3] ?? [g2.turn, -1];
+    let nth2 = 1;
+    for (let i = 0; i < at3; i++) if (actions[i][0] === turn2 && actions[i][1] === zone) nth2++;
+    const sea = g2.seas[zone]?.name;
+    return { name: seaAction(sea ?? null, nth2), month: turnToDate(turn2).label, turn: turn2, zone };
+  }
+  function starRow(g2, f, c) {
+    const list4 = shipStars(f, c);
+    const each3 = list4.map((s) => s.length);
+    const most = Math.max(0, ...each3);
+    if (most <= 0) return null;
+    const count4 = /* @__PURE__ */ new Map();
+    for (const s of list4) for (const at3 of new Set(s)) count4.set(at3, (count4.get(at3) ?? 0) + 1);
+    const of2 = list4.length;
+    const battles = [...count4.keys()].sort((a, b) => a - b).map((at3) => {
+      const { name, month: month3, turn: turn2, zone } = seaActionName(g2, at3);
+      const ships = count4.get(at3);
+      return { name, month: month3, turn: turn2, zone, ships, of: of2, line: `${name}, ${month3}${ships < of2 ? ` (${ships} of ${of2} ships)` : ""}` };
+    });
+    const { silver, bronze } = starSplit(most);
+    const head = `${of2 === 1 ? "This ship has" : "The most decorated of these ships has"} ${most === 1 ? "a battle star, for an action" : `${most} battle stars, one for each action`} it came through on the winning side.`;
+    return { most, silver, bronze, each: each3, battles, words: [head, ...silver ? ["A silver star stands for five bronze stars."] : [], ...battles.map((b) => b.line)] };
+  }
+
   // ../../src/campaign/fleets.ts
   var B = fleets_default.bombard;
   var none = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
@@ -24495,12 +24689,13 @@
   var gunsRaw = (s) => CLASSES.reduce((n, c) => n + s[c] * B.guns[c], 0);
   var gunWeight = (g2, f) => gunsRaw(f.ships) * quality(g2, f.nat) * fit2(g2, f);
   function fleetDoing(g2, f) {
-    const sea = g2.seas[f.zone]?.name ?? "the sea";
+    const sea = g2.seas[f.zone]?.name;
+    const where = sea ? seaWhere(sea) : "at sea", what = sea ? seaWhat(sea) : "the sea";
     if (!atSea(f)) return `In harbour at ${f.port}`;
-    if (f.stance === "raid") return `Raiding shipping in the ${sea}`;
-    if (f.stance === "hunt") return `Hunting submarines in the ${sea}`;
+    if (f.stance === "raid") return `Raiding shipping ${where}`;
+    if (f.stance === "hunt") return `Hunting submarines ${where}`;
     if (f.stance === "escort") return `Escorting ${seaRoutes(g2).find((r) => r.id === f.lane)?.name ?? "a shipping lane"}`;
-    return `Patrolling the ${sea}`;
+    return `Patrolling ${what}`;
   }
   function fleetCard(g2, f) {
     const heavy = f.ships.bb + f.ships.cv + f.ships.ca;
@@ -24525,7 +24720,12 @@
       ready: f.ready,
       power: fleetPower(g2, f),
       ships: shipCount(f.ships),
-      cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => ({ cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] })),
+      cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => {
+        const card = { cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] };
+        const stars = starRow(g2, f, c);
+        if (stars) card.stars = stars;
+        return card;
+      }),
       guns: gunWeight(g2, f),
       escort: escortW * quality(g2, f.nat) * fit2(g2, f),
       hunters: (f.ships.dd + f.ships.cv * FLEETS.hunt.carrier * deckWorth(g2, f)) * quality(g2, f.nat) * fit2(g2, f),
@@ -24582,14 +24782,14 @@
     plan.then = now.loss;
     plan.guardThen = now.guard;
     if (plan.why || plan.bound) return plan;
-    const keep = { zone: f.zone, stance: f.stance, lane: f.lane };
+    const keep2 = { zone: f.zone, stance: f.stance, lane: f.lane };
     f.stance = "escort";
     f.lane = lane;
     const then = laneLoss(g2, rt.to, rt.zones, rt.id);
-    f.zone = keep.zone;
-    f.stance = keep.stance;
-    if (keep.lane === void 0) delete f.lane;
-    else f.lane = keep.lane;
+    f.zone = keep2.zone;
+    f.stance = keep2.stance;
+    if (keep2.lane === void 0) delete f.lane;
+    else f.lane = keep2.lane;
     plan.then = then.loss;
     plan.guardThen = then.guard;
     return plan;
@@ -24618,14 +24818,14 @@
       const huntNow = huntShareSunk(huntersIn(g2, f.nat, z).weight, subs);
       let hunt = huntNow;
       if (subs > 0 && seaWar(g2)) {
-        const keep = { zone: f.zone, stance: f.stance, lane: f.lane };
+        const keep2 = { zone: f.zone, stance: f.stance, lane: f.lane };
         f.zone = z;
         f.stance = "hunt";
         delete f.lane;
         hunt = huntShareSunk(huntersIn(g2, f.nat, z).weight, subs);
-        f.zone = keep.zone;
-        f.stance = keep.stance;
-        if (keep.lane !== void 0) f.lane = keep.lane;
+        f.zone = keep2.zone;
+        f.stance = keep2.stance;
+        if (keep2.lane !== void 0) f.lane = keep2.lane;
       }
       return {
         zone: z,
@@ -24649,7 +24849,7 @@
     if (!seaWar(g2)) return "Fleets shell a coast only in the grand campaign.";
     if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
     if (!atSea(f)) return `The ${f.name} is in harbour. Send it to sea off the coast first.`;
-    if (!r.seas.includes(f.zone)) return `${r.name} is not on the ${g2.seas[f.zone].name}, where the ${f.name} is.`;
+    if (!r.seas.includes(f.zone)) return `The ${f.name} is ${seaWhere(g2.seas[f.zone].name)}, and ${r.name} is not on that sea.`;
     if (!atWar(g2, f.nat, r.ctrl)) return `${r.name} is not in enemy hands.`;
     if (gunsRaw(f.ships) < B.least) return `The ${f.name} has too few heavy guns to shell a coast: that is work for battleships and cruisers.`;
     if (f.shelled === g2.turn) return `The ${f.name} has already shelled a coast this month.`;
@@ -24788,7 +24988,7 @@
     if (city) rep.city = { region: city.region, added: city.added, now: city.now };
     g2.shoreReports.push(rep);
     const adj = g2.nations[defNat].adj;
-    const news3 = `${what === "troops" ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : what === "town" ? `The ${f.name} shells the defences of ${townName(r)} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}`}${afloat2 ? ` ${keptAfloat(f, kept2, shipCount(sunk) ? "fleet's" : "its")}` : ""}`;
+    const news3 = `${what === "troops" ? `The ${f.name} shells the ${adj} troops at ${r.name} from ${seaWhat(g2.seas[f.zone].name)}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : what === "town" ? `The ${f.name} shells the defences of ${townName(r)} from ${seaWhat(g2.seas[f.zone].name)}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}`}${afloat2 ? ` ${keptAfloat(f, kept2, shipCount(sunk) ? "fleet's" : "its")}` : ""}`;
     if (shipCount(sunk)) headline(g2, "battle", news3, f.nat, r.id, { arm: "sea", won: defNat, lost: f.nat });
     else routineNews(g2, `shell:${f.nat}:${what}:${r.id}`, "battle", news3, what === "troops" ? `the ${adj} troops at ${r.name} shelled from the sea` : what === "town" ? `the defences of ${townName(r)} shelled from the sea` : `${r.name} shelled from the sea`, f.nat, r.id, { arm: "sea" });
     return rep;
@@ -24821,6 +25021,7 @@
   function detach(g2, f, take2, name) {
     if (whyNotDetach(g2, f, take2)) return null;
     const s = taken(take2);
+    const stars = splitStars(f, s);
     for (const c of CLASSES) f.ships[c] -= s[c];
     const wanted2 = name?.trim();
     const sq = {
@@ -24845,6 +25046,7 @@
     if (f.shelled !== void 0) sq.shelled = f.shelled;
     if (f.seen) sq.seen = { ...f.seen };
     if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
+    if (stars) sq.stars = stars;
     g2.fleets.push(sq);
     moveWings(g2, f, sq, s.cv, f.ships.cv + s.cv);
     g2.supplyDirty = true;
@@ -24862,6 +25064,7 @@
     if (whyNotMerge(g2, a, b)) return false;
     const na = shipCount(a.ships), nb = shipCount(b.ships);
     b.ready = nb + na > 0 ? (b.ready * nb + a.ready * na) / (nb + na) : b.ready;
+    joinStars(a, b);
     for (const c of CLASSES) {
       b.ships[c] += a.ships[c];
       b.lost[c] += a.lost[c];
@@ -29157,6 +29360,7 @@
         tell2(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`);
         return;
       }
+      mendStars(f, hull);
       f.ships[hull] += count4;
       const decks = hull === "cv" && carrierRules(g2);
       if (decks) syncWings(g2);
@@ -29293,7 +29497,7 @@
     const wants = programmeWants(g2, nat);
     if (!wants.length) return;
     const men2 = menSpare(g2, nat) >= (specOf(g2, "inf")?.divs ?? 1);
-    const keep = PRODUCTION.aiReserve + (men2 ? corpsCost(g2, nat, "inf") : 0);
+    const keep2 = PRODUCTION.aiReserve + (men2 ? corpsCost(g2, nat, "inf") : 0);
     const inc = income(g2, nat);
     let spare = inc - upkeepTotal(g2, nat);
     const list4 = offers(g2, nat).filter((o) => o.at >= 0 && (o.why === null || o.poor));
@@ -29311,7 +29515,7 @@
       for (const o of mine4) {
         if (spare < o.upkeep * BUDGET.debt.aiMargin) continue;
         const set = purse >= o.cost;
-        if (!set && n.pp < o.cost + keep) continue;
+        if (!set && n.pp < o.cost + keep2) continue;
         if (set) n.pp += o.cost;
         if (orderOffer(g2, nat, o.key, o.at)) {
           if (set) purse -= o.cost;
@@ -29329,9 +29533,9 @@
     const n = g2.nations[nat];
     if (!C3 || g2.flags.open !== 1 || !budgeted(g2) || nat === g2.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
     const level = (r) => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === "fort" && b.region === r.id).length;
-    const order2 = (r, keep) => {
+    const order2 = (r, keep2) => {
       const cost = fortCost(g2, nat, r);
-      return cost !== null && n.pp >= cost + keep && !!orderFort(g2, nat, r.id);
+      return cost !== null && n.pp >= cost + keep2 && !!orderFort(g2, nat, r.id);
     };
     const idle = corpsCost(g2, nat, "inf") + PRODUCTION.aiReserve;
     const coast = watch.map((nm) => g2.byName[nm]).filter((r) => !!r && isHome(g2, nat, r) && level(r) < C3.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
@@ -29857,15 +30061,15 @@
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
     const pct11 = (x) => `${Math.round(x * 1e3) / 10}%`;
-    const keep = keepOf(g2, r);
-    if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED) * keep)} more a month`);
+    const keep2 = keepOf(g2, r);
+    if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED) * keep2)} more a month`);
     if (l.trade) bits.push(`trade agreements worth ${pct11(l.trade)} more`);
     if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
     if (l.research) bits.push(`research ${pct11(l.research)} faster`);
     if (l.xp) bits.push("corps raised here start more experienced");
     if (l.drafts) bits.push(`replacements ${pct11(l.drafts)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct11(l.rest)} faster`);
-    if (own && l.tax) bits.push(`${cash(l.tax * keep)} more tax a month`);
+    if (own && l.tax) bits.push(`${cash(l.tax * keep2)} more tax a month`);
     if (own && l.pc) bits.push(`${l.pc.toFixed(2)} political capital a month`);
     if (!own && l.occupiedShare) bits.push(`the province pays ${pct11(l.occupiedShare)} more of its worth`);
     const s = bits.join(", ");
@@ -29877,15 +30081,15 @@
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
     const pct11 = (x) => `${Math.round(x * 1e3) / 10}%`;
-    const keep = keepOf(g2, r);
-    if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep)} a month`);
+    const keep2 = keepOf(g2, r);
+    if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep2)} a month`);
     if (own && l.trade) bits.push(`trade agreements worth ${pct11(l.trade * lv)} more`);
     if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
     if (own && l.research) bits.push(`research ${pct11(l.research * lv)} faster`);
     if (own && l.xp) bits.push("corps raised here start more experienced");
     if (own && l.drafts) bits.push(`replacements ${pct11(l.drafts * lv)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct11(l.rest * lv)} faster`);
-    if (own && l.tax) bits.push(`${cash(l.tax * lv * keep)} tax a month`);
+    if (own && l.tax) bits.push(`${cash(l.tax * lv * keep2)} tax a month`);
     if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
     if (!own && l.occupiedShare) bits.push(`the province pays ${pct11(l.occupiedShare * lv)} more of its worth`);
     if (!bits.length) return "Stands idle under occupation.";
@@ -29966,12 +30170,12 @@
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       const own = r.owner === nat;
-      const keep = keepOf(g2, r);
+      const keep2 = keepOf(g2, r);
       for (const l of CIVIC.lines) {
         const lv = g2.flags[key3(l.id, r.id)] ?? 0;
         if (lv <= 0) continue;
         s.count++;
-        if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED) * keep;
+        if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED) * keep2;
         if (l.sup) {
           if (keeps) s.sup += l.sup * lv * (own ? 1 : OCCUPIED);
           else s.farms += (l.moneyElse ?? 0) * lv * (own ? 1 : OCCUPIED);
@@ -29981,7 +30185,7 @@
         if (l.house && lv >= l.house && (r.port || g2.nations[nat].capital === r.id)) s.houses++;
         if (l.research) s.research += l.research * lv;
         if (l.drafts) s.drafts += l.drafts * lv;
-        if (l.tax) s.tax += l.tax * lv * keep;
+        if (l.tax) s.tax += l.tax * lv * keep2;
         if (l.pc) s.pc += l.pc * lv;
       }
     }
@@ -32401,7 +32605,7 @@
     const sea = m === "strike" || m === "fleet", night = m === "night";
     const zone = m === "fleet" ? quarry?.zone ?? -1 : target;
     const nat = fleets[0]?.nat ?? "";
-    const place2 = sea ? `the ${g2.seas[zone]?.name ?? "sea"}` : g2.regions[target]?.name ?? "";
+    const place2 = sea ? g2.seas[zone] ? seaWhat(g2.seas[zone].name) : "the sea" : g2.regions[target]?.name ?? "";
     const wx = weatherOn(g2);
     const sky = wx ? sea ? skyAtSea(g2, zone) : skyAt(g2, target) : "clear";
     const out = { why: null, place: place2, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, drilled: 0, aa: 0, guns: { light: 0, heavy: 0, all: 0 }, squadrons: 0, groups: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
@@ -32633,6 +32837,7 @@
     const C3 = AIR.combat, I = intensity(m);
     const sea = m === "strike" || m === "fleet", night = m === "night";
     const zone = m === "fleet" ? a.ships[0].zone : target;
+    const seaAt3 = sea && g2.seas[zone] ? seaWhere(g2.seas[zone].name) : `in ${a.place}`;
     const rng = airRng(g2, `${m}:${target}:${nat}${salt}`);
     const staff = battle?.staff;
     const luck = () => battle && !staff ? 1 : rng.range(1 - C3.luck, 1 + C3.luck);
@@ -32719,7 +32924,9 @@
           struck[i].sunk[c] = k;
           total[c] += k;
           keptAll[c] += kept2[c];
+          loseStars(x, c, k);
         }
+        mendStars(x);
         afloatWatch.tell?.({ route: "air", nat: x.nat, sunk: struck[i].sunk, saved: kept2 });
         if (shipCount(kept2)) afloat2.push({ x, kept: kept2 });
         x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
@@ -32932,16 +33139,16 @@
     const together = !!defNat && (nat === "UK" || nat === "USA") && ["UK", "USA"].every((x) => g2.nations[x]?.alive && g2.nations[x].atWar.includes(defNat));
     let text;
     if (m === "superiority") text = `${who} ${a.att.length === 1 ? "fights" : "fight"} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? together ? "The Allied air forces now hold the sky there." : `The ${g2.nations[nat].adj} air force now holds the sky there.` : held2 ? nat === g2.human ? "The sky there is still yours." : `The ${g2.nations[nat].adj} air force still holds the sky there.` : df(def) ? "The defenders still hold their sky." : "No fighters came up to meet them."}`;
-    else if (m === "fleet") text = `${who} ${a.att.length === 1 ? "strikes" : "strike"} the ${a.ships[0].name} in ${a.place}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
+    else if (m === "fleet") text = `${who} ${a.att.length === 1 ? "strikes" : "strike"} the ${a.ships[0].name} ${seaAt3}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "harbour") text = `${who} ${a.att.length === 1 ? "raids" : "raid"} ${harbourOf(a.place)}${a.surprise ? " without warning" : ""}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "town") text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} the defences of ${townName(g2.regions[target])}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
-    else if (sea) text = `${who} ${a.att.length === 1 ? "strikes" : "strike"} at shipping in ${a.place}. ${result} ${cap7(cost)}.`;
+    else if (sea) text = `${who} ${a.att.length === 1 ? "strikes" : "strike"} at shipping ${seaAt3}. ${result} ${cap7(cost)}.`;
     else if (m === "line") text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} the ${adj} fieldworks at ${a.place}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "ground") text = `${who} ${a.att.length === 1 ? "raids" : "raid"} the ${adj} troops at ${a.place}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} ${a.place}${night ? " by night" : ""}. ${result} ${cap7(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     if (g2.flags.open === 1 && m === "superiority" && !sky && aLost + dLost === 0) return rep;
     const full = sky || notable2 || shipsSunk > 0 || m === "fleet" || m === "harbour";
-    const brief2 = m === "superiority" ? `a fight for the sky over ${a.place}` : m === "town" ? `the defences of ${townName(g2.regions[target])} bombed` : sea ? `shipping struck in ${a.place}` : m === "line" ? `the ${adj} fieldworks at ${a.place} bombed` : m === "ground" ? `the ${adj} troops at ${a.place} raided` : `${a.place} bombed${night ? " by night" : ""}`;
+    const brief2 = m === "superiority" ? `a fight for the sky over ${a.place}` : m === "town" ? `the defences of ${townName(g2.regions[target])} bombed` : sea ? `shipping struck ${seaAt3}` : m === "line" ? `the ${adj} fieldworks at ${a.place} bombed` : m === "ground" ? `the ${adj} troops at ${a.place} raided` : `${a.place} bombed${night ? " by night" : ""}`;
     const fought = { arm: "air", ...defNat ? won ? { won: nat, lost: defNat } : { won: defNat, lost: nat } : {} };
     if (full) headline(g2, "battle", text, nat, sea ? void 0 : target, fought);
     else routineNews(g2, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, "battle", text, `${brief2}${aLost ? ` (${aLost} aircraft lost)` : ""}`, nat, sea ? void 0 : target, fought);
@@ -33928,7 +34135,8 @@
       const n = g2.nations[g2.regions[id].ctrl];
       return !!n && n.alive && atWar(g2, g2.regions[id].ctrl, nat) && skyOver(g2, id) === null;
     });
-    return `The ${g2.seas[z].name} is closed to your troopships: the enemy has ${round2(e.total)} there to your ${round2(own.total)}, and ${opensAt(g2, z, nat)} would open it. Put a fleet to sea there, or ${foeCoast && e.air >= 0.5 ? "win the sky over the enemy's coast on it" : "beat the enemy's fleets in it"}.`;
+    const sea = g2.seas[z].name, it = seaPlural(sea) ? "them" : "it";
+    return `${seaHead(sea)} ${seaIs(sea)} closed to your troopships: the enemy has ${round2(e.total)} there to your ${round2(own.total)}, and ${opensAt(g2, z, nat)} would open ${it}. Put a fleet to sea there, or ${foeCoast && e.air >= 0.5 ? `win the sky over the enemy's coast on ${it}` : `beat the enemy's fleets in ${it}`}.`;
   }
   function canPass(g2, a, b, nat) {
     const i = g2.gates.findIndex((x) => x.a === a && x.b === b || x.a === b && x.b === a);
@@ -34130,7 +34338,7 @@
   }
   function laneWhy(g2, nat, from2, to, bar) {
     if (bar.kind === "sea") return closedLine(g2, bar.sea, nat);
-    if (bar.kind === "far") return `${to.name} is too far for a landing from ${from2.name}: troopships cross ${NAVY.landing.range} seas at most, and ${bar.round !== void 0 ? `the safe way round the ${g2.seas[bar.round].name} is longer` : bar.seas > NAVY.landing.range ? `this is ${bar.seas}` : "the safe way round is longer"}.`;
+    if (bar.kind === "far") return `${to.name} is too far for a landing from ${from2.name}: troopships cross ${NAVY.landing.range} seas at most, and ${bar.round !== void 0 ? `the safe way round ${seaWhat(g2.seas[bar.round].name)} is longer` : bar.seas > NAVY.landing.range ? `this is ${bar.seas}` : "the safe way round is longer"}.`;
     if (bar.kind === "gate") return `The ${g2.gates[bar.gate].name} ${/s$/.test(g2.gates[bar.gate].name) ? "are" : "is"} shut to your ships, and no other way leads to ${to.name}.`;
     return `No sea joins ${from2.name} to ${to.name}.`;
   }
@@ -34276,12 +34484,12 @@
     const months3 = monthsUnfed();
     const name = g2.seas[sea].name;
     const lines2 = [];
-    if (e.ships >= 0.5) lines2.push({ label: `Enemy ships in the ${name} now`, value: round2(e.ships), effect: "at sea there already" });
+    if (e.ships >= 0.5) lines2.push({ label: `Enemy ships ${seaWhere(name)} now`, value: round2(e.ships), effect: "at sea there already" });
     if (come >= 0.5) lines2.push({ label: "Enemy fleets that could come", value: round2(come), effect: "at their full strength: every fleet within a month of that sea that his admirals would send" });
     if (kept2 >= 0.5) lines2.push({ label: "Enemy fleets your aircraft keep away", value: round2(kept2), effect: "no admiral takes his fleet under your bombers, except to save his own homeland" });
     if (shy2 >= 0.5) lines2.push({ label: "Enemy fleets that will not risk it", value: round2(shy2), effect: "none of them will face what you have in that sea, while it stays there" });
-    if (e.air >= 0.5) lines2.push({ label: `Enemy aircraft over the ${name}`, value: round2(e.air), effect: "count against the supply ships too" });
-    lines2.push({ label: `Your ships and aircraft in the ${name}`, value: `${round2(own.ships)} and ${round2(own.air)}`, effect: need <= 0 ? "the enemy has too little in reach to close it" : contested ? `more than the ${round2(need)} that keep it open today, and fewer than the ${round2(foe)} he can bring` : open2 ? `more than the ${round2(need)} that keep it open` : `${round2(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
+    if (e.air >= 0.5) lines2.push({ label: `Enemy aircraft over ${seaWhat(name)}`, value: round2(e.air), effect: "count against the supply ships too" });
+    lines2.push({ label: `Your ships and aircraft ${seaWhere(name)}`, value: `${round2(own.ships)} and ${round2(own.air)}`, effect: need <= 0 ? "the enemy has too little in reach to close it" : contested ? `more than the ${round2(need)} that keep it open today, and fewer than the ${round2(foe)} he can bring` : open2 ? `more than the ${round2(need)} that keep it open` : `${round2(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
     lines2.push({
       label: "The sea behind the beach",
       value: contested ? "contested" : open2 ? "stays open" : "can be closed",
@@ -34301,13 +34509,13 @@
     const name = (z) => g2.seas[z].name;
     const fly2 = sky === "ours" ? null : reach3(to.id);
     const skyWon = fly2 ? withSky(g2, to.id, nat, () => landingRisk(g2, nat, path, to)) : null;
-    const lines2 = [{ label: "The way", value: path.map((z, i) => i ? `then the ${name(z)}` : `the ${name(z)}`).join(", "), effect: path.length > 1 ? "every sea crossed is a chance to be found" : void 0 }];
+    const lines2 = [{ label: "The way", value: path.map((z, i) => i ? `then ${seaWhat(name(z))}` : seaWhat(name(z))).join(", "), effect: path.length > 1 ? "every sea crossed is a chance to be found" : void 0 }];
     for (const d of ds) {
-      if (d.ships >= 0.5) lines2.push({ label: `Enemy ships at sea in the ${name(d.z)}`, value: round2(d.ships), effect: "hunt the troopships" });
-      if (d.air >= 0.5) lines2.push({ label: `Enemy aircraft over the ${name(d.z)}`, value: round2(d.air), effect: "count for half against ships under way" });
+      if (d.ships >= 0.5) lines2.push({ label: `Enemy ships at sea ${seaWhere(name(d.z))}`, value: round2(d.ships), effect: "hunt the troopships" });
+      if (d.air >= 0.5) lines2.push({ label: `Enemy aircraft over ${seaWhat(name(d.z))}`, value: round2(d.air), effect: "count for half against ships under way" });
       if (d.last && d.sortie >= 0.5) lines2.push({ label: "Enemy fleets that will come out", value: round2(d.sortie), effect: "from harbours on these seas and the seas next to them" });
       if (d.last) lines2.push({ label: `The sky over ${to.name}`, value: sky === "ours" ? "yours" : sky === "denied" ? "held by enemy fighters" : "nobody holds it", effect: sky === "ours" ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === "denied" ? "no invasion fleet can cross under them" : fly2 ? "no help to either side" : "out of reach of your fighters from any airfield you hold" });
-      if (d.hunters > 0 || d.last) lines2.push({ label: `Your ships and aircraft in the ${name(d.z)}`, value: `${round2(d.own.ships)} and ${round2(d.own.air)}`, effect: d.own.total >= 0.5 ? "each counts double against the hunters" : "nothing covers the troopships" });
+      if (d.hunters > 0 || d.last) lines2.push({ label: `Your ships and aircraft ${seaWhere(name(d.z))}`, value: `${round2(d.own.ships)} and ${round2(d.own.air)}`, effect: d.own.total >= 0.5 ? "each counts double against the hunters" : "nothing covers the troopships" });
     }
     const lost = Math.round(risk * NAVY.intercept.loss * 100);
     lines2.push({ label: "Caught at sea", value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? lost > 0 ? `about ${lost}% of the men lost` : "almost none of the men lost" : "nothing is in a position to stop the crossing" });
@@ -34320,7 +34528,7 @@
         if (r < risk - 5e-3) helps.push({ id, text, risk: r });
       };
       if (fly2 && skyWon !== null) tell2("sky", fly2.how === "now" ? `Win the sky over ${to.name} with a fight for the sky flown by your fighters` : `Bring fighters up to the airfields of ${g2.regions[fly2.base].name} and win the sky over ${to.name}`, skyWon);
-      if (more >= 1) tell2("sea", `Send ${cover3.length === 1 ? cover3[0].name : `your ${cover3.length} fleets in reach`} to patrol the ${name(worst.z)}`, caughtIn(seaDangers(g2, nat, path, to, { more, at: worst.z })));
+      if (more >= 1) tell2("sea", `Send ${cover3.length === 1 ? cover3[0].name : `your ${cover3.length} fleets in reach`} to patrol ${seaWhat(name(worst.z))}`, caughtIn(seaDangers(g2, nat, path, to, { more, at: worst.z })));
       if (foes) tell2("fleets", "Beat the enemy fleets within reach, or strike them in harbour, so that none comes out", caughtIn(seaDangers(g2, nat, path, to, { beaten: true })));
       if (helps.length > 1) {
         const rest = () => caughtIn(seaDangers(g2, nat, path, to, { more: more >= 1 ? more : 0, at: worst.z, beaten: foes }));
@@ -34448,7 +34656,7 @@
     }
     const account = crossingAccount(g2, nat, path, to, reach3);
     const barred3 = n.sealift <= 0 ? "lift" : shut >= 0 ? "sea" : account.sky === "denied" ? "sky" : null;
-    const bar = barred3 === "lift" ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.` : barred3 === "sea" ? `The ${g2.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.` : barred3 === "sky" ? `${g2.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.` : null;
+    const bar = barred3 === "lift" ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.` : barred3 === "sea" ? `${seaHead(g2.seas[shut].name)} ${seaIs(g2.seas[shut].name)} closed to your troopships: the enemy is much the stronger there.` : barred3 === "sky" ? `${g2.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.` : null;
     return { from: from2, to, path, bar, barred: barred3, account, ...barred3 === "sea" ? { shut } : {} };
   }
   function crossingsOf2(g2, nat, o = {}) {
@@ -34683,7 +34891,9 @@
       f.ships[c] -= k;
       f.lost[c] += k;
       out[c] = k;
+      loseStars(f, c, k);
     }
+    mendStars(f);
     return out;
   }
   var COUNT_WORD = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
@@ -34743,7 +34953,10 @@
     const named2 = (name) => g2.fleets.find((f) => f.nat === nat && f.name === name);
     for (const b of NAVY.building) if (b.nat === nat && g2.turn >= b.from && g2.turn <= b.to) {
       const f = named2(b.fleet);
-      if (f) f.ships[b.cls] += b.perMonth;
+      if (f) {
+        mendStars(f, b.cls);
+        f.ships[b.cls] += b.perMonth;
+      }
     }
     const mine4 = NAVY.arrivals.filter((r) => r[1] === nat);
     for (const [turn2, who, fleet, ships, what, dial] of [...mine4.filter((r) => !r[5]?.waits), ...mine4.filter((r) => r[5]?.waits)]) {
@@ -34753,6 +34966,7 @@
       const due = (dial?.lapse === void 0 || g2.turn < dial.lapse) && (dial?.stops ? turn2 <= g2.turn && g2.flags.open === 1 && dial.stops.includes(stopOf(g2)) && (dialRuns(g2, nat) || onto) && !g2.flags[key6] : turn2 === g2.turn && !(dial?.not && g2.flags.open === 1 && dial.not.includes(stopOf(g2)) && nat !== g2.human));
       const f = who === nat && due ? named2(fleet) : void 0;
       if (!f || dial?.waits && !onto && !CLASSES.every((c) => (ships[c] ?? 0) <= 0 || gapOf(g2, f, c) > 0)) continue;
+      mendStars(f);
       let src;
       if (from2) {
         const brought = dial?.by !== void 0 ? `arr:${dial.by}:${who}:${from2}` : void 0;
@@ -34976,6 +35190,8 @@
         f.admiral = { name: admiral, level: 1, xp: 0 };
         headline(g2, "info", `${admiral} takes command of ${fleetName(f)}.`, nat);
       }
+      mendStars(f, "ss");
+      if (pool) mendStars(pool, "ss");
       if (pool) pool.ships.ss -= parts2[i] - f.ships.ss;
       f.ships.ss = parts2[i];
       if (beat[i] >= 0) f.station = beat[i];
@@ -35043,6 +35259,7 @@
         f.ships.ss -= k;
         f.lost.ss += k;
         sunk += k;
+        loseStars(f, "ss", k);
       }
       if (!sunk) continue;
       out[z] = sunk;
@@ -35054,11 +35271,12 @@
         f.ships.dd -= k;
         f.lost.dd += k;
         cost += k;
+        loseStars(f, "dd", k);
       }
       const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : h.fleets.length ? `The escorts of ${fleetName(h.fleets[0])}` : `${g2.nations[nat].adj} aircraft`;
       const told2 = !g2.human || g2.human === nat || allied(g2, g2.human, nat) || quarry.some((f) => f.nat === g2.human);
       const subsSunk = `${sunk} ${g2.nations[quarry[0].nat].adj} submarine${sunk === 1 ? "" : "s"}`;
-      if (told2) routineNews(g2, `hunt:${nat}:${z}`, "battle", `${who} sink ${subsSunk} in the ${zone.name}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? "" : "s"}` : ""}.`, `${subsSunk} sunk in the ${zone.name}`, nat, void 0, { arm: "sea", won: nat, lost: quarry[0].nat });
+      if (told2) routineNews(g2, `hunt:${nat}:${z}`, "battle", `${who} sink ${subsSunk} ${seaWhere(zone.name)}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? "" : "s"}` : ""}.`, `${subsSunk} sunk ${seaWhere(zone.name)}`, nat, void 0, { arm: "sea", won: nat, lost: quarry[0].nat });
     }
     return out;
   }
@@ -35097,11 +35315,12 @@
         f.ships[cls]--;
         f.lost[cls]++;
         if (cls !== "ca") nameLosses(g2, f.nat, f.name, { ...none2(), [cls]: 1 }, `torpedo:${g2.turn}:${f.id}`);
+        loseStars(f, cls, 1);
       }
       afloatWatch.tell?.({ route: "torpedo", nat: f.nat, sunk: { ...none2(), [cls]: sinks ? 1 : 0 }, saved: { ...none2(), [cls]: sinks ? 0 : 1 } });
       f.ready = Math.max(0, f.ready - 0.05);
-      if (sinks) headline(g2, "battle", `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g2.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, void 0, { arm: "sea", lost: nat });
-      else headline(g2, "battle", `A submarine attacks ${fleetName(f)} in the ${g2.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships. ${keptAfloat(f, { ...none2(), [cls]: 1 }, "its")}`, nat, void 0, { arm: "sea" });
+      if (sinks) headline(g2, "battle", `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} ${seaWhere(g2.seas[f.zone].name)}: the fleet has too few destroyers to screen its heavy ships.`, nat, void 0, { arm: "sea", lost: nat });
+      else headline(g2, "battle", `A submarine attacks ${fleetName(f)} ${seaWhere(g2.seas[f.zone].name)}: the fleet has too few destroyers to screen its heavy ships. ${keptAfloat(f, { ...none2(), [cls]: 1 }, "its")}`, nat, void 0, { arm: "sea" });
     }
   }
   function newBase(g2, f) {
@@ -35135,8 +35354,8 @@
     f.ready = Math.max(0, f.ready - 0.1);
     afloatWatch.tell?.({ route: "toll", nat: f.nat, sunk, saved: kept2 });
     const afloat2 = keptAfloat(f, kept2, "its");
-    if (shipCount(sunk)) headline(g2, "battle", `Bombers sink ${shipList(sunk)} of ${fleetName(f)} in the ${g2.seas[f.zone].name}.${afloat2 ? ` ${afloat2}` : ""}`, f.nat, void 0, { arm: "air", lost: f.nat });
-    else if (afloat2) headline(g2, "battle", `Bombers attack ${fleetName(f)} in the ${g2.seas[f.zone].name}. ${afloat2}`, f.nat, void 0, { arm: "air" });
+    if (shipCount(sunk)) headline(g2, "battle", `Bombers sink ${shipList(sunk)} of ${fleetName(f)} ${seaWhere(g2.seas[f.zone].name)}.${afloat2 ? ` ${afloat2}` : ""}`, f.nat, void 0, { arm: "air", lost: f.nat });
+    else if (afloat2) headline(g2, "battle", `Bombers attack ${fleetName(f)} ${seaWhere(g2.seas[f.zone].name)}. ${afloat2}`, f.nat, void 0, { arm: "air" });
   }
   var raidShare = (f) => f.stance === "raid" ? 1 : f.stance === "patrol" ? NAVY.convoy.patrolRaid : 0;
   function guardShare(g2, f, zones, lane) {
@@ -35197,6 +35416,7 @@
             f.ships.ss -= k;
             f.lost.ss += k;
             subsLost += k;
+            loseStars(f, "ss", k);
           }
         }
         const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
@@ -35205,6 +35425,7 @@
           f.ships.dd -= k;
           f.lost.dd += k;
           escortsLost += k;
+          loseStars(f, "dd", k);
         }
       }
       g2.convoys[route.id] = { turn: g2.turn, raid: raid2, guard, tons, total: (g2.convoys[route.id]?.total ?? 0) + tons, share: route.share * L2, loss: L2, subsLost, escortsLost };
@@ -35257,13 +35478,16 @@
   var seaField = {};
   function sinkFought(f, p, frac, rng, dc = 1, kept2) {
     const out = p.toDice ? sinkShips(f, frac, rng, CLASSES, dc, kept2) : sinkShips(f, frac, rng, ["ss"], dc, kept2);
+    if (kept2 && !p.toDice) for (const c of SURFACE2) kept2[c] += p.kept?.[f.id]?.[c] ?? 0;
     const there = p.sunk[f.id] ?? {};
     for (const c of SURFACE2) {
       const more = Math.min(f.ships[c], Math.max(0, (there[c] ?? 0) - (p.toDice ? out[c] : 0)));
       f.ships[c] -= more;
       f.lost[c] += more;
       out[c] += more;
+      loseStars(f, c, more);
     }
+    mendStars(f);
     return out;
   }
   function afterAction(g2, f, side3, won, rng, spared3 = 0) {
@@ -35312,7 +35536,7 @@
       };
       if (A >= NAVY.battle.evadeAt * D2 && rng.chance(NAVY.battle.evade)) {
         for (const f of met2) sail(g2, f, f.home, "port");
-        headline(g2, "event", `${cap8(names(met2))} ${met2.length === 1 ? "declines" : "decline"} battle in the ${zone.name} and ${met2.length === 1 ? "makes" : "make"} for port.`, met2[0].nat, void 0, { arm: "sea", won: nat, lost: met2[0].nat });
+        headline(g2, "event", `${cap8(names(met2))} ${met2.length === 1 ? "declines" : "decline"} battle ${seaWhere(zone.name)} and ${met2.length === 1 ? "makes" : "make"} for port.`, met2[0].nat, void 0, { arm: "sea", won: nat, lost: met2[0].nat });
         continue;
       }
       const att = mine4.map(sideOf2), def = met2.map(sideOf2);
@@ -35380,8 +35604,9 @@
       const win = won ? mine4 : met2, lose3 = won ? met2 : mine4;
       const ws = total(won ? att : def), ls = total(won ? def : att);
       storySea(g2, z, win, lose3, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
+      bookSeaAction(g2, z, win);
       const afloat2 = [...mine4.map((f, i) => keptAfloat(f, keptA[i])), ...met2.map((f, i) => keptAfloat(f, keptD[i]))].filter(Boolean);
-      headline(g2, "battle", `${cap8(names(win))} ${win.length === 1 ? "defeats" : "defeat"} ${names(lose3)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ""}.${afloat2.length ? ` ${afloat2.join(" ")}` : ""}`, win[0].nat, void 0, { arm: "sea", won: win[0].nat, lost: lose3[0].nat });
+      headline(g2, "battle", `${cap8(names(win))} ${win.length === 1 ? "defeats" : "defeat"} ${names(lose3)} ${seaWhere(zone.name)}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ""}.${afloat2.length ? ` ${afloat2.join(" ")}` : ""}`, win[0].nat, void 0, { arm: "sea", won: win[0].nat, lost: lose3[0].nat });
     }
     return out;
   }
@@ -37076,8 +37301,8 @@
     return { land: land2, port, oil, fac, capital: capital3, total: land2 + port + oil + fac + capital3 };
   }
   function damaged(g2, r, nat, whole2, land0, port0, oil, fac0, capital0, dmg) {
-    const keep = 1 - dmg;
-    const land2 = land0 * keep, port = port0 * keep, fac = fac0 * keep, capital3 = capital0 * keep;
+    const keep2 = 1 - dmg;
+    const land2 = land0 * keep2, port = port0 * keep2, fac = fac0 * keep2, capital3 = capital0 * keep2;
     if (!whole2 && nat === r.ctrl && besieged(g2, r)) {
       const p = SIEGE.pay;
       return { land: land2 * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital3 * p, total: (land2 + port + oil + fac + capital3) * p, siege: true, damage: dmg };
@@ -37465,8 +37690,8 @@
     const cap12 = g2.regions[n.capital];
     if (!isHome(g2, nat, cap12)) return;
     const home = lineFactories(g2, nat);
-    const keep = (b) => b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0;
-    let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
+    const keep2 = (b) => b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0;
+    let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep2(b), 0) : Infinity;
     const slots = () => n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" && !isTeam({ kind: b.kind ?? "" }) || b.what === "fort" && (nat === g2.human || g2.flags.open !== 1)).length;
     const most = g2.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
     const u = budgeted(g2) && !armyIdle(g2, nat) ? eliteOf(nat) : null;
@@ -38235,15 +38460,15 @@
   }
   var ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands|Dominican Republic)\b/g;
   var PLACES = places_default;
-  var reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  var reEsc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   var NAME_WORDS = "Army|Group|Corps|Front|Fleet|Force|Command|Division|Brigade|Detachment|Legion|Operation|General|Admiral|Marshal|Colonel|Major|Captain|Lord|Sir|President|Minister|King|Mount|Lake|Cape|Port|Fort|River|Gulf|Bay|Isle|Saint|St|New|North|South|East|West|Upper|Lower|Old|Great";
   var PLACED = new RegExp(`(^|[^A-Za-z])(?<![Tt]he )(?<!\\b[Aa]n? )(?<!\\b(?:${NAME_WORDS}) )(${[...PLACES.the].sort((a, b) => b.length - a.length).map((n) => {
     const longer = PLACES.within?.[n] ?? [];
-    const after = longer.filter((l) => l.startsWith(n)).map((l) => `(?!${reEsc(l.slice(n.length))})`).join("");
-    const before = longer.filter((l) => l.endsWith(n) && l !== n).map((l) => `(?<!${reEsc(l.slice(0, l.length - n.length))})`).join("");
-    return `${before}${reEsc(n)}${after}`;
+    const after = longer.filter((l) => l.startsWith(n)).map((l) => `(?!${reEsc2(l.slice(n.length))})`).join("");
+    const before = longer.filter((l) => l.endsWith(n) && l !== n).map((l) => `(?<!${reEsc2(l.slice(0, l.length - n.length))})`).join("");
+    return `${before}${reEsc2(n)}${after}`;
   }).join("|")})\\b(?! [A-Z])`, "g");
-  var PLURAL_OWN = new RegExp(`\\b(${[...PLACES.the.filter((n) => /s$/.test(n)), "Netherlands", "United States"].sort((a, b) => b.length - a.length).map(reEsc).join("|")})'s\\b`, "g");
+  var PLURAL_OWN = new RegExp(`\\b(${[...PLACES.the.filter((n) => /s$/.test(n)), "Netherlands", "United States"].sort((a, b) => b.length - a.length).map(reEsc2).join("|")})'s\\b`, "g");
   function theWords(text, before = "") {
     const cut2 = before.length;
     const put = (s, re) => s.replace(re, (m, pre, name, at3) => {
@@ -41533,7 +41758,7 @@
     };
     const unseen = `${reported === 1 ? "One force is" : `${reported} forces are`} reported there and not identified: ${reported === 1 ? "its" : "their"} strength is not known.`;
     if (surfaceShips(f) <= 0) plan.why = "Submarines fight no fleet action: they raid shipping, and escorts hunt them.";
-    else if (!met2.length) plan.why = `No enemy fleet is known to be at sea in the ${sea.name}.${reported ? ` ${unseen}` : ""}`;
+    else if (!met2.length) plan.why = `No enemy fleet is known to be at sea ${seaWhere(sea.name)}.${reported ? ` ${unseen}` : ""}`;
     if (plan.why) return plan;
     const A = ours.total, D2 = Math.max(1, theirs.total);
     const mid = A / D2;
@@ -41593,11 +41818,11 @@
     return shipRule(g2, "dc") ? `should lose ${n > 0 ? `about ${n}%` : "almost none"}` : `could lose up to ${n}%`;
   }
   function placeOf2(g2, kind, target, viewer = null) {
-    if (kind === "strike") return `the ${g2.seas[target]?.name ?? "sea"}`;
+    if (kind === "strike") return g2.seas[target] ? seaWhat(g2.seas[target].name) : "the sea";
     if (kind === "fleet") {
       const t = g2.fleets.find((x) => x.id === target);
       if (!t) return "a fleet";
-      return fleetKnown(g2, t, viewer) === "exact" ? `the ${t.name}` : `${g2.nations[t.nat].adj} ships in the ${g2.seas[t.zone].name}`;
+      return fleetKnown(g2, t, viewer) === "exact" ? `the ${t.name}` : `${g2.nations[t.nat].adj} ships ${seaWhere(g2.seas[t.zone].name)}`;
     }
     if (kind === "harbour") {
       const p = g2.regions[target]?.name ?? "";
@@ -42355,44 +42580,44 @@
 
   // ../../src/campaign/fold.ts
   var foldRules = (g2) => g2.flags.open === 1 && !!MANPOWER.fold;
-  function whyNotFold(g2, keep, gone) {
+  function whyNotFold(g2, keep2, gone) {
     if (!foldRules(g2)) return "Corps are folded together in the grand campaign.";
-    if (keep === gone || keep.dead || gone.dead) return "There is nothing to fold.";
-    if (keep.nat !== gone.nat) return "The two corps serve different countries.";
-    if (keep.kind === "fort" || gone.kind === "fort") return "Fortress troops stay in their works.";
-    if (keep.reg !== gone.reg || keep.town !== void 0 || gone.town !== void 0) return "The two corps must stand together in the field, in the same province.";
-    if (keep.kind !== gone.kind) return "The two corps must be of the same kind.";
-    if ((keep.elite ?? "") !== (gone.elite ?? "") || !!keep.airborne !== !!gone.airborne) return "A special formation folds only into another of its own.";
-    if (keep.joint || gone.joint) return "A corps marching with an ally cannot be folded.";
-    if (keep.leave !== void 0 || gone.leave !== void 0) return "A corps at home cannot be folded.";
-    if (!keep.supplied || !gone.supplied) return "Cut off, the cadre has no way home.";
+    if (keep2 === gone || keep2.dead || gone.dead) return "There is nothing to fold.";
+    if (keep2.nat !== gone.nat) return "The two corps serve different countries.";
+    if (keep2.kind === "fort" || gone.kind === "fort") return "Fortress troops stay in their works.";
+    if (keep2.reg !== gone.reg || keep2.town !== void 0 || gone.town !== void 0) return "The two corps must stand together in the field, in the same province.";
+    if (keep2.kind !== gone.kind) return "The two corps must be of the same kind.";
+    if ((keep2.elite ?? "") !== (gone.elite ?? "") || !!keep2.airborne !== !!gone.airborne) return "A special formation folds only into another of its own.";
+    if (keep2.joint || gone.joint) return "A corps marching with an ally cannot be folded.";
+    if (keep2.leave !== void 0 || gone.leave !== void 0) return "A corps at home cannot be folded.";
+    if (!keep2.supplied || !gone.supplied) return "Cut off, the cadre has no way home.";
     const worn = MANPOWER.fold.worn;
-    if (keep.str >= worn || gone.str >= worn) return `Both corps must be under ${Math.round(worn * 100)}% of their strength.`;
+    if (keep2.str >= worn || gone.str >= worn) return `Both corps must be under ${Math.round(worn * 100)}% of their strength.`;
     return null;
   }
   var better = (a, b) => a.level !== b.level ? a.level > b.level : a.xp !== b.xp ? a.xp > b.xp : a.rec.won > b.rec.won;
-  function command(g2, keep, gone) {
-    const a = generalOf(g2, keep), b = generalOf(g2, gone);
+  function command(g2, keep2, gone) {
+    const a = generalOf(g2, keep2), b = generalOf(g2, gone);
     const lead2 = b && (!a || better(b, a)) ? b : a;
     return { lead: lead2, out: lead2 === b ? a : b };
   }
-  function foldView(g2, keep, gone) {
-    const mine4 = keep.str * keep.divs, theirs = gone.str * gone.divs;
-    const fill8 = Math.min(keep.divs, mine4 + theirs), from2 = Math.max(0, fill8 - mine4);
-    const mix3 = (a, b) => fill8 > 0 ? (a * mine4 + b * from2) / fill8 : a;
-    const { lead: lead2, out } = command(g2, keep, gone);
+  function foldView(g2, keep2, gone) {
+    const mine4 = keep2.str * keep2.divs, theirs = gone.str * gone.divs;
+    const fill8 = Math.min(keep2.divs, mine4 + theirs), from2 = Math.max(0, fill8 - mine4);
+    const mix4 = (a, b) => fill8 > 0 ? (a * mine4 + b * from2) / fill8 : a;
+    const { lead: lead2, out } = command(g2, keep2, gone);
     const t = cadreTerms(g2, gone.nat, gone);
     const v = {
-      keep: keep.id,
+      keep: keep2.id,
       gone: gone.id,
-      keepName: keep.name,
+      keepName: keep2.name,
       goneName: gone.name,
-      why: whyNotFold(g2, keep, gone),
-      str: fill8 / keep.divs,
+      why: whyNotFold(g2, keep2, gone),
+      str: fill8 / keep2.divs,
       men: Math.round(fill8 * MEN_PER_DIV),
-      xp: mix3(keep.xp, gone.xp),
-      org: clamp(mix3(keep.org, gone.org) - MANPOWER.fold.org, 0, 1),
-      ap: Math.min(keep.ap, gone.ap),
+      xp: mix4(keep2.xp, gone.xp),
+      org: clamp(mix4(keep2.org, gone.org) - MANPOWER.fold.org, 0, 1),
+      ap: Math.min(keep2.ap, gone.ap),
       back: Math.round((mine4 + theirs - fill8) * MEN_PER_DIV),
       general: lead2?.name ?? null,
       stepsDown: out?.name ?? null,
@@ -42400,44 +42625,44 @@
       cadreMonths: t.months,
       cadreMen: t.divs * MEN_PER_DIV
     };
-    if (worksOf(gone) > worksOf(keep)) v.works = worksOf(gone);
+    if (worksOf(gone) > worksOf(keep2)) v.works = worksOf(gone);
     return v;
   }
   function foldChoices(g2, reg, nat) {
     if (!foldRules(g2)) return [];
     const cs = g2.regions[reg].units.filter((c) => c.nat === nat && !c.dead);
     const out = [];
-    for (const keep of cs) for (const gone of cs) if (keep !== gone && whyNotFold(g2, keep, gone) === null) out.push(foldView(g2, keep, gone));
+    for (const keep2 of cs) for (const gone of cs) if (keep2 !== gone && whyNotFold(g2, keep2, gone) === null) out.push(foldView(g2, keep2, gone));
     return out;
   }
-  function foldCorps(g2, keep, gone) {
-    if (whyNotFold(g2, keep, gone) !== null) return false;
-    const v = foldView(g2, keep, gone), n = g2.nations[keep.nat], reg = keep.reg;
-    const mine4 = keep.str * keep.divs, fill8 = v.str * keep.divs, from2 = Math.max(0, fill8 - mine4);
-    if (keep.mor !== void 0 && gone.mor !== void 0 && fill8 > 0) keep.mor = (keep.mor * mine4 + gone.mor * from2) / fill8;
-    keep.xp = v.xp;
-    keep.org = v.org;
-    keep.str = v.str;
-    keep.ap = v.ap;
-    if (gone.fought) keep.fought = true;
-    if (gone.pressed) keep.pressed = true;
-    if ((gone.blows ?? 0) > (keep.blows ?? 0)) keep.blows = gone.blows;
-    returnMen(g2, keep.nat, gone.str * gone.divs - from2);
+  function foldCorps(g2, keep2, gone) {
+    if (whyNotFold(g2, keep2, gone) !== null) return false;
+    const v = foldView(g2, keep2, gone), n = g2.nations[keep2.nat], reg = keep2.reg;
+    const mine4 = keep2.str * keep2.divs, fill8 = v.str * keep2.divs, from2 = Math.max(0, fill8 - mine4);
+    if (keep2.mor !== void 0 && gone.mor !== void 0 && fill8 > 0) keep2.mor = (keep2.mor * mine4 + gone.mor * from2) / fill8;
+    keep2.xp = v.xp;
+    keep2.org = v.org;
+    keep2.str = v.str;
+    keep2.ap = v.ap;
+    if (gone.fought) keep2.fought = true;
+    if (gone.pressed) keep2.pressed = true;
+    if ((gone.blows ?? 0) > (keep2.blows ?? 0)) keep2.blows = gone.blows;
+    returnMen(g2, keep2.nat, gone.str * gone.divs - from2);
     if (v.works !== void 0) {
-      keep.dug = true;
-      keep.dugFor = gone.dugFor;
-      if (keep.ap < keep.apMax) keep.relief = true;
+      keep2.dug = true;
+      keep2.dugFor = gone.dugFor;
+      if (keep2.ap < keep2.apMax) keep2.relief = true;
     }
-    const { lead: lead2, out } = command(g2, keep, gone);
+    const { lead: lead2, out } = command(g2, keep2, gone);
     if (out) appoint(g2, out, null);
-    if (lead2 && lead2.corps !== keep.id) appoint(g2, lead2, keep);
-    noteCorps(g2, keep, "folded", reg, gone.id);
-    noteCorps(g2, gone, "cadre", reg, keep.id);
+    if (lead2 && lead2.corps !== keep2.id) appoint(g2, lead2, keep2);
+    noteCorps(g2, keep2, "folded", reg, gone.id);
+    noteCorps(g2, gone, "cadre", reg, keep2.id);
     removeCorps(g2, gone);
     gone.str = 0;
     gone.ap = 0;
     (n.cadres ?? (n.cadres = [])).push(gone);
-    if (keep.nat === g2.human) headline(g2, "info", `${gone.name} is folded into ${keep.name} at ${g2.regions[reg].name}: ${v.men.toLocaleString("en-US")} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString("en-US")} sent back to the reserve` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
+    if (keep2.nat === g2.human) headline(g2, "info", `${gone.name} is folded into ${keep2.name} at ${g2.regions[reg].name}: ${v.men.toLocaleString("en-US")} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString("en-US")} sent back to the reserve` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep2.nat, reg);
     return true;
   }
 
@@ -43638,7 +43863,7 @@
     const field4 = (c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.town === void 0;
     const mine4 = (c) => field4(c) && !c.hold && !c.dyle && c.joint === void 0 && c.leave === void 0 && !massed.has(c.id) && !aside(g2, g2.regions[c.reg], nat);
     const key6 = (c) => `rl:${c.id}`;
-    const keep = (c) => {
+    const keep2 = (c) => {
       c.hold = true;
       rested.push(c);
     };
@@ -43670,7 +43895,7 @@
         }
       }
       if (!inLine3(g2.regions[c.reg]) && g2.flags[key6(c)] === void 0) g2.flags[key6(c)] = g2.turn;
-      keep(c);
+      keep2(c);
     }
   }
   function gather(g2, nat, ph) {
@@ -44540,11 +44765,11 @@
       seen2.add(c.reg);
       const here = g2.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.str < worn);
       let best = null;
-      for (const keep of here) for (const gone of here) {
-        if (keep === gone || whyNotFold(g2, keep, gone) !== null) continue;
-        const v = foldView(g2, keep, gone);
+      for (const keep2 of here) for (const gone of here) {
+        if (keep2 === gone || whyNotFold(g2, keep2, gone) !== null) continue;
+        const v = foldView(g2, keep2, gone);
         if (v.back > 0) continue;
-        if (!best || v.str > best.str || v.str === best.str && (keep.xp > best.keep.xp || keep.xp === best.keep.xp && keep.id < best.keep.id)) best = { keep, gone, str: v.str };
+        if (!best || v.str > best.str || v.str === best.str && (keep2.xp > best.keep.xp || keep2.xp === best.keep.xp && keep2.id < best.keep.id)) best = { keep: keep2, gone, str: v.str };
       }
       if (best) foldCorps(g2, best.keep, best.gone);
     }
@@ -45402,9 +45627,9 @@
     if (lift2.lift < want) wanting.push(lift2.building.length ? `shipping (the ships carry ${lift2.lift} corps a month; troopships for more are on the slips, the next lot ready in ${turnToDate(lift2.building[0]).label})` : `shipping (the ships carry ${lift2.lift} corps a month)`);
     if (wanting.length) return { ...plan, state: "waiting", text: `Your staff is preparing ${way}. Still wanting: ${listAnd3(wanting)}.` };
     const h = x.account.hold;
-    if (!h.open) return { ...plan, state: "warned", text: h.island ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close the ${g2.seas[h.sea].name} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.` : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g2.seas[h.sea].name} behind it. The order to sail under that warning is yours alone.` };
+    if (!h.open) return { ...plan, state: "warned", text: h.island ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close ${seaWhat(g2.seas[h.sea].name)} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.` : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close ${seaWhat(g2.seas[h.sea].name)} behind it. The order to sail under that warning is yours alone.` };
     const lost = Math.round(x.account.loss * 100);
-    return { ...plan, state: "ready", text: `Your staff reports ${way} ready: the way is open, ${force3} corps stand on the quay and the ships can carry ${Math.min(force3, lift2.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ""}.${h.contested ? ` The ${g2.seas[h.sea].name} behind the beach is yours today, but the enemy can bring ships enough to fight you for it.` : ""} The order to land is yours.` };
+    return { ...plan, state: "ready", text: `Your staff reports ${way} ready: the way is open, ${force3} corps stand on the quay and the ships can carry ${Math.min(force3, lift2.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ""}.${h.contested ? ` ${seaHead(g2.seas[h.sea].name)} behind the beach ${seaIs(g2.seas[h.sea].name)} yours today, but the enemy can bring ships enough to fight you for ${seaPlural(g2.seas[h.sea].name) ? "them" : "it"}.` : ""} The order to land is yours.` };
   }
   function crossingReport(g2, nat) {
     const w = crossingWord(g2, nat);
@@ -45545,7 +45770,7 @@
   }
   function raidWords(g2, r) {
     const at3 = r.region >= 0 ? g2.regions[r.region] : null;
-    if (!at3) return `ships in the ${g2.seas[r.zone]?.name ?? r.place}`;
+    if (!at3) return `ships ${g2.seas[r.zone] ? seaWhere(g2.seas[r.zone].name) : `in ${r.place}`}`;
     switch (r.mission) {
       case "bomb":
         return at3.fac > 0 ? `the factories at ${at3.name}` : `the railway at ${at3.name}`;
@@ -45588,7 +45813,7 @@
     for (const f of fleetsOf(g2, nat)) {
       const w = was.get(f.id);
       if (!w || w.zone === f.zone && w.stance === f.stance) continue;
-      if (atSea(f)) out.push(`the ${f.name} into the ${g2.seas[f.zone].name}${f.stance === "escort" ? " with the convoys" : f.stance === "raid" ? " to raid" : ""}`);
+      if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g2.seas[f.zone].name)}${f.stance === "escort" ? " with the convoys" : f.stance === "raid" ? " to raid" : ""}`);
       else if (w.stance !== "port") back.push(`the ${f.name}`);
     }
     if (out.length) did.push(`sent ${some(out)}`);
@@ -46239,8 +46464,8 @@
       return !!c && canOrder(g2, c);
     }) : [];
   }
-  function orderFold(g2, keep, gone) {
-    const a = g2.corps.find((c) => c.id === keep), b = g2.corps.find((c) => c.id === gone);
+  function orderFold(g2, keep2, gone) {
+    const a = g2.corps.find((c) => c.id === keep2), b = g2.corps.find((c) => c.id === gone);
     if (!a || !b || !canOrder(g2, a) || !canOrder(g2, b)) return false;
     return foldCorps(g2, a, b);
   }
@@ -53067,8 +53292,8 @@
             m.v = 0;
             m.el = 1;
             m.until = t + 1.5;
-            const keep = m.role === "mg" || roll(this.seed, u.id, m.n, n, 94) < BOOK2.suppress.keep;
-            m.aim = keep && close3 && m.role !== "officer" ? this.aimFor(sq, m, e) : void 0;
+            const keep2 = m.role === "mg" || roll(this.seed, u.id, m.n, n, 94) < BOOK2.suppress.keep;
+            m.aim = keep2 && close3 && m.role !== "officer" ? this.aimFor(sq, m, e) : void 0;
             m.pose = m.aim ? this.firePose(m) : "cower";
             continue;
           }
@@ -55891,11 +56116,11 @@
       if (this.t > 0 || this.over) return false;
       const W2 = this.field.w, H = this.field.h, C3 = HEDGE_CELL, near2 = LAND2.hide.hedge.near;
       const cols = Math.ceil(W2 / C3), rows = Math.ceil(H / C3), map = new Uint8Array(cols * rows);
-      const keep = [];
+      const keep2 = [];
       for (const h of hedges) {
         const pts = (h.points ?? []).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
         if (pts.length < 2 || !pts.some(([x, y]) => x >= 0 && x <= W2 && y >= 0 && y <= H)) continue;
-        keep.push({ kind: h.kind, points: pts });
+        keep2.push({ kind: h.kind, points: pts });
         for (let i = 1; i < pts.length; i++) {
           const [ax, ay] = pts[i - 1], [bx, by2] = pts[i];
           const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - near2) / C3)), c1 = Math.min(cols - 1, Math.floor((Math.max(ax, bx) + near2) / C3));
@@ -55903,11 +56128,11 @@
           for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (segGap((c + 0.5) * C3, (r + 0.5) * C3, ax, ay, bx, by2) <= near2) map[r * cols + c] = 1;
         }
       }
-      this.hedges = keep;
+      this.hedges = keep2;
       this.gates = gates.filter((g2) => Number.isFinite(g2.x) && Number.isFinite(g2.y) && g2.x >= 0 && g2.x <= W2 && g2.y >= 0 && g2.y <= H);
-      this.hedgeMap = keep.length ? map : null;
+      this.hedgeMap = keep2.length ? map : null;
       this.hedgeSegs.clear();
-      for (const h of keep) for (let i = 1; i < h.points.length; i++) {
+      for (const h of keep2) for (let i = 1; i < h.points.length; i++) {
         const [ax, ay] = h.points[i - 1], [bx, by2] = h.points[i], seg = [ax, ay, bx, by2];
         for (let c = Math.floor(Math.min(ax, bx) / GATE_CELL); c <= Math.floor(Math.max(ax, bx) / GATE_CELL); c++)
           for (let r = Math.floor(Math.min(ay, by2) / GATE_CELL); r <= Math.floor(Math.max(ay, by2) / GATE_CELL); r++) {
@@ -58903,13 +59128,13 @@
           const escort2 = (v) => !away(v) && v.air === "ftr";
           const atEscort = u.def === "escort" && u.kit.ftr > 0;
           const cur = u.job.do === "intercept" ? this.unit(u.job.on) : void 0;
-          const keep = (q) => {
+          const keep2 = (q) => {
             if (!u.rise || !q || u.to <= q.band + 1) return;
             u.to = q.band + 1;
             if (u.to <= 1 && u.band <= 1) u.rise = false;
           };
           if (!first2 && cur && this.valid(u, u.job) && (atEscort ? escort2(cur) : loaded(cur))) {
-            keep(cur);
+            keep2(cur);
             continue;
           }
           const want = u.kit.bmr > 0 || u.kit0 <= 0;
@@ -58924,7 +59149,7 @@
               this.say("air:climb", u, told(this.called(u), "Warned by radar, {n} [climbs|climb] to get above the raid."), { to: up });
             } else u.to = Math.max(u.to, 1);
           }
-          keep(e);
+          keep2(e);
         }
       }
     }
@@ -61680,53 +61905,71 @@
     "sea:air": "bomb_stick_01",
     "sea:sunk": "ship_sinking",
     "sea:burning": "fire_start",
-    routing: "ship_horn",
-    broken: "ship_horn",
-    end: "ship_bell"
+    "sea:torpedo": "torpedo_launch",
+    "sea:torpedoHit": "torpedo_hit",
+    // Fighters over the fleet meet a strike or a raid; its guns open on what is left (ruling 239, item 3 of the panel).
+    "sea:cap": "fighter_pass",
+    "sea:flak": "flak_light_fire",
+    // A fleet breaking off: silent until a new horn passes Brian's ear (he cut 'ship_horn', 14:49Z).
+    // The action ends: two bells (the README: "a fleet signals; action stations; the action ends").
+    end: "ship_bells_two"
   };
   var SEA_LOOPS = {
     idle: "sea_day_loop",
-    march: "ship_loop",
-    run: "ship_loop",
-    turn: "ship_loop",
-    rout: "ship_loop",
+    march: "ship_engine_loop",
+    run: "ship_engine_loop",
+    turn: "ship_engine_loop",
+    rout: "ship_engine_loop",
     fight: "sea_battle_loop"
   };
+  function seaLoop(cls, act2) {
+    const loop = SEA_LOOPS[act2] ?? "";
+    return loop === "ship_engine_loop" && cls === "dd" ? "destroyer_wash_loop" : loop;
+  }
 
   // ../../data/battle/sea.json
   var sea_default = {
     _about: {
-      what: "The numbers of a fleet action fought out on the field (src/battle/sea). Every ship's weight, toughness and nation's quality come from data/campaign/navy.json, as the rules count them: this file only says how the field plays them out. Abstract by design (project memory air-battle-paused, ruling 217): pieces wear each other down by range and angle; nothing is aimed and nothing flies.",
-      field: "The sea is a square of 'size' metres. The attacker's fleets come on from the south edge, 'edge' metres in, the defender's from the north. 'limit' is the battle time in seconds before it is called on the exchange so far.",
-      classes: "speed in metres a second at cruising speed; turn in radians a second at full way (a ship turns slower when slow, and barely at all when stopped); best is the range at which a class hits hardest and reach the furthest it hits at all; per is how many ships of the class sail as one piece (destroyers in fours); crew is a ship's company, for the after-action card only; len and beam are a ship's length and breadth in metres, for the screens and the 3D models; a piece's ships sail in line ahead, three lengths apart. A carrier fights by its strike, not its guns: standoff is how far it keeps from the nearest enemy, behind its own screen, so that the heavy guns can still reach it and it pays for its place in the line as the rules count it. punch evens out what the reach of a class costs it: destroyers have to close before they can fire at all, so on the field each destroyer's weight hits harder, and a fleet strong in destroyers is worth what the rules say it is.",
+      what: "The numbers of a fleet action fought out on the field (src/battle/sea). Every ship's weight, toughness and nation's quality come from data/campaign/navy.json, as the rules count them: this file only says how the field plays them out. Abstract by design (project memory air-battle-paused, ruling 217): pieces wear each other down within reach, by the angle their guns bear; nothing is aimed and nothing flies.",
+      field: "The sea is a square of 'size' metres. The attacker's fleets come on from the south edge, 'edge' metres in, the defender's from the north, in rows 'row' metres apart: destroyers ahead, then cruisers, battleships and carriers. 'limit' is the battle time in seconds before it is called on the exchange so far.",
+      classes: "speed in metres a second at cruising speed (the historian's: battleships 11, cruisers 13, destroyers 14, carriers 13); turn in radians a second at full way (a ship turns slower when slow, and barely at all when stopped); reach is the furthest its guns hit at all (the one ring the screens draw) and a ship nearer the enemy than three quarters of best turns away to open the range; per is how many ships of the class sail as one piece (destroyers in fours); crew is a ship's company, for the after-action card only; len and beam are a ship's length and breadth in metres, for the screens and the 3D models; a piece's ships sail in line ahead, three lengths apart. Battleships, cruisers and destroyers have one reach and hit with one punch for each unit of their weight (the design director, b415, upheld by ruling 239): the campaign's card already prices a battleship as more weight than a cruiser, so the field does not count the class a second time. Reach by class was measured and withdrawn: reach is worth weight (the longer reach lands its weight first, and early harm compounds), and the card prices weight, not reach. A destroyer's smaller guns are left to the look. Classes differ in speed, turning, toughness and their place in the line, and their salvos differ in look only (battleships slow and heavy, destroyers quick and light: SALVO in src/battle/ui/sea-draw.ts), with the same harm per unit of weight each minute. A carrier fights by its strike, not its guns: standoff is how far it keeps from the nearest enemy, behind its own screen and beyond the guns' reach.",
       speeds: "Shares of a class's cruising speed for the speed order, and accel, how fast way is gained or lost (metres a second, each second).",
-      fire: "rate turns weight into wear on a hull each second. hull: a side's hulls together come to this many times its weight, shared over its ships by the rules' toughness (a battleship takes about twice the wear of its weight that a destroyer does), so that toughness decides which ships go down and not who wins. far is what a piece does at the edge of its reach, against 1 at its best range or closer. endOn is what its guns do when the target is dead ahead or astern, against 1 on the beam: crossing the T. damaged: a crippled ship still fights at this share. retarget: seconds between a piece looking for a new target.",
-      nerve: "A piece's nerve falls by 'hit' for each whole hull it takes in wear, and by 'near' when a ship of its own side goes down within 'nearR' metres; out of the fight for 'quiet' seconds it mends at 'mend' a second. Below 'waver' it wavers and fights at 'wavering'; below 'break' it breaks off for its own edge.",
-      side: "A side breaks off when it has lost 'breakAt' of its ships' weight (a share of 'spread' either way, more with a good admiral: 'admiral' a level). After a side breaks, its enemy has 'pursuit' seconds to make it pay before the battle ends. The luck of the day is the rules' own: one roll of the dice's run (0.8 to 1.2, navy.ts seaBattles) for the battle, the attacker's ships fighting that much better and the defender's that much worse, so that with nobody playing the field gives what the dice give.",
-      strike: "A carrier's strike: ordered, it lands 'windup' seconds later on the target and the ships near it within 'radius', and the carrier can strike again 'every' seconds after that. A strike carries the weight of 'every' seconds of the carrier's own weight at 'share': a gun ship, out of reach some of the time and at long range or end-on much of the rest, deals about a third of its full rate over an action, so a carrier that strikes whenever it can pulls its weight as the rules count it, no more. It is counted, not flown: no aircraft are on the field.",
-      air: "Aircraft from the coasts (the rules' airOver, times navy.json air.weight) raid every 'every' seconds, the first within the first raid's span; each raid's weight is 'share' of what that much weight of guns would deal in the time, as a strike's is.",
-      pieces: "No more than 'most' pieces a side: past that, cruisers sail in twos, then destroyers in more than fours.",
-      ai: "The computer's captains (and the player's, where he has given no order): a ship further than 'keep' metres from the middle of its own fleet works back toward it as it fights."
+      fire: "rate turns weight into wear on a hull each second, the same for every class. hull: a side's hulls together come to this many times its weight, shared over its ships by the rules' toughness (a battleship takes about twice the wear of its weight that a destroyer does); every shot, strike and raid takes the same weight out of the fight whatever ship it falls on, so toughness decides which ships go down and not who wins. far is what a piece does at the edge of its reach against 1 at its best range or closer: 1, so guns tell as hard anywhere in reach, and a ship in the rear rows is not worth less than its weight for standing further back (at 0.5, a fleet strong in the ships behind the line won 10 points less than the card). endOn is what its guns do when the target is dead ahead or astern, against 1 on the beam: crossing the T. damaged: a crippled ship still fights at this share. retarget: seconds between a piece looking for a new target.",
+      nerve: "A piece's nerve falls by 'hit' for each whole hull it takes in wear, and when a ship of its own side goes down within 'nearR' metres by 'near' times that ship's share of its side's weight (a cruiser lost from a fleet of weight 60 shakes it by 0.06, a destroyer by 0.02, a battleship by 0.2: the design director, b438), so a fleet of many light ships is shaken no more for the same weight lost; out of the fight for 'quiet' seconds it mends at 'mend' a second. Below 'waver' it wavers and fights at 'wavering'; below 'break' it breaks off for its own edge.",
+      side: "A side breaks off when it has lost 'breakAt' of its strength as the card counts it, its ships and its coasts' aircraft together (a share of 'spread' either way, more with a good admiral: 'admiral' a level). After a side breaks, its enemy has 'pursuit' seconds to make it pay before the battle ends. The luck of the day is the rules' own: one roll of the dice's run (0.8 to 1.2, navy.ts seaBattles) for the battle, the attacker's ships fighting that much better and the defender's that much worse, so that with nobody playing the field gives what the dice give. Once the enemy has broken off, every ship of the side still fighting runs it down at full speed, the player's as the staff's, until the player gives an order of their own (b402). An order from the chasing side to hold, to break off or to steer for a point lets the beaten enemy go: the action ends there, the side that broke off beaten and the losses as they stand (b458). An order to attack it is a pursuit, and the chase runs on. A ship still afloat at the end with 'hurt' of its hull or less left, or gone out of the fight burning, came home badly hurt: the after card names it by its kind, the enemy's as the player's, so a victory over a fleet that took its wrecks home reads as one (b458). A ship worn to 'hurt' of her own hull or less leaves the line burning and makes for port, whether she sinks the dice's limit by class; the side whose blow put her out owes the hull she takes with her, paid out of its next blows, and it counts toward her side's loss only as it is paid: what is unpaid at the end counts on neither side (the ship plan's R2). A ship breaking off steers away from the enemy nearest her still fighting, bent for home (the sum of the two directions), so she opens the range as she goes; by the field's side edges she holds for home (R5).",
+      strike: "A carrier's strike: ordered, it is flown within the second and lands 'windup' seconds later on the target and the ships near it within 'radius', and the carrier can strike again 'every' seconds after that. A strike carries the weight of 'every' seconds of the carrier's own weight at 'share', its own weight being what is left of its air group. It takes the same weight out of the fight whatever ship it falls on (wear in proportion to the ship's hull), so the screen is no cheaper a target than the battleship. Every blow on a side, by gun, strike or raid, wears the whole of what the side brought by weight: the ship it fell on for the gun ships' share, each carrier for its own (as a hull wears, but out of its air group: it stays afloat) and the coasts' aircraft for theirs (b415). Kept whole at 6,000 m while the gun ships wore, carriers were worth more the longer the gun fight ran, a tenth or more of the card either way with the fleets' make-up; worn with their fleet, share 0.34 keeps them within the dice attacking and attacked, with a light screen or a mixed one. Carriers with no gun ship at all are not: the field cannot honour an action where one side has none, so the staff settles it and the field is not offered it (the design director, b438: carriers against carriers is an air battle, and the field flies no planes). With no strike ordered, or under a fleet order, a carrier strikes by its job (jobs.strike): the enemy's carriers first, then battleships, cruisers and destroyers, the one nearest its fleet's main effort; where its style shares fire out (spread), a second carrier takes a second enemy carrier before doubling up. A strike ordered on one piece goes where it is sent. Hit the flight decks first, then the battleships (the panel's principle; Midway, June 1942). Once a side has broken off, no carrier flies a new strike unless the player has sent it after the beaten enemy since (b458): the staff's carriers, and a carrier left to itself, let the enemy go. It is counted, not flown: no aircraft are on the field, and a strike in the air does not slow the screens' fast approach, which runs until the guns meet (b458).",
+      air: "Aircraft from the coasts (the rules' airOver, times navy.json air.weight) raid every 'every' seconds, the first within the first raid's span; each raid's weight is 'share' of what that much weight of guns would deal in the time, as a strike's is, and like gunfire it takes the same weight out of the fight whatever ship it finds. A raid finds its ship by the campaign's own aim (carriers.json strike.aim, read only: carriers 3, battleships 2, cruisers 1, destroyers 0.5), times the ships afloat in each piece, with one draw as before. The card counts the coasts' aircraft in a side's strength, so the field does: they are worn by every blow on their side by their share of its weight, and having no hull they lose the whole of it, where a ship's hull takes it at 'fire.hull' (b415). Each raid is as strong as the aircraft left. Share 0.55 keeps the coasts' aircraft within the dice on either side, from a few against a fleet to most of a side's strength. It was 0.5 until every class drew up on one front (b458, see pieces): a gun fleet's whole weight then came to bear, and a fleet of 16 ships won 62 and 65 in 100 at even odds, attacking and attacked, against 8 destroyers whose side was four fifths aircraft. At 0.55 it wins 47 either way, and at 0.6, 31 and 36.",
+      pieces: "No more than 'most' pieces a side: past that, cruisers sail in twos, then destroyers in more than fours. Every class's row is 'front' metres times its share of its side's weight, the same metres for every class, with its pieces spaced evenly along it: a row of battleships, carriers, cruisers or destroyers that carries a third of its side's weight is a third of 3,250 m wide. So two fleets of the same weight meet on the same front whatever their make and however many pieces they come in (b438, b458). 'front' replaced 'frontage' (the design director, b458), which spaced each class at its own natural gap (650 m between big ships, 500 m between fours of destroyers, at a side's weight of 50), so that each unit of a side's weight stood on 3,250 m of front in a battleship row, 4,643 m in a carrier row, 6,250 m in a destroyer row and 10,833 m in a cruiser row. A light line then stood two or three times as wide as a battle line of the same weight, its wings out of reach: 12 cruisers and 12 destroyers won 31 in 100 against 3 battleships, 2 cruisers and 8 destroyers at even odds, and 'Carriers against a battle line' won 66 against a card of 71. On one front they win 45 and 70. 3,250 m keeps a battleship row as wide as it was. At 2,500 m the largest fleets fell further from the card, and at 3,600 m or more a fleet of 23 pieces lost 97 in 100 at even odds to one of 18 of much the same make.",
+      ai: "The computer's captains (and the player's, where no order is given): each side has a main effort, the enemy piece nearest the middle of its own fleet, kept until it goes or breaks off, when the enemy then nearest the middle that is still fighting takes its place. Around it each ship does its class's job ('jobs'). That is exactly what a newcomer does (select all, right-click the enemy nearest the middle, Space): an order to attack given to two or more pieces is a fleet order, which sets the main effort and leaves each piece to its job, so the newcomer's battle and the staff's are the same (b402, ruling 239). An order to one piece alone is its own target. A ship further than 'keep' metres from the middle of its own fleet works back toward it as it fights. A ship steers for the enemy nearest it, and for the main effort only when that lies more than 'beyond' metres further off than the nearest enemy (ruling 226, 4: every ship sent at one point made a knot the enemy fought around). Until the guns first meet, a fleet keeps together: its gun ships sail at the speed of its slowest gun ship, and one more than 'station' metres ahead of the rearmost of them slows to half that speed until the line comes up, so the screen closes up on the battle line and stays just ahead of it (the historian: fleet speed was the slowest heavy ship's, and the screen kept station on the battle line). Drawn up 700 m a row apart and each at its own speed, a battle line reached the fight a minute after its screen and lost to a light fleet of the same weight 95 times in 100; with the screen kept 600 m ahead it still came 13 in 100 short (b407, ruling 217). A fleet keeps together only to meet a gun line: not once either side has broken off (the chase runs at full speed) and not against an enemy with no gun ship left: then every gun ship not sent at a speed of its own runs the carriers down at full speed, as a broken enemy is. While it keeps together a fleet also holds one course, from its own middle to the enemy's, so the line comes on as it drew up: each steering for the enemy nearest it, the wings turned in toward the middle and the line came on bunched (b438). A ship the player sends at a speed of their own, or on a course, goes as told, and a destroyer piece whose torpedo run has opened goes in at flank (torp; the ship plan's R4). A ship within 'broadside' metres of the enemy it is steering for turns to bring its broadside to bear; further off it closes. Closing until 3,450 m left the ships behind their own screen end-on for the whole fight. The AA ring (the ship plan's R3; the design director, 14:36Z): while the enemy brings aircraft and until the guns first meet, a side with carriers and no battleship keeps its whole escort, cruisers and destroyers at cruising speed fighting at will or under a fleet order and not on a torpedo run, round its carriers at torp's 'station' metres (inside the strike's radius, so their guns count against aircraft and they share what a strike lands), spaced evenly round from the bearing of the enemy's middle, the pieces shared in turn over the carriers fighting at will or sent to strike. At contact they fight as any other ship does. Held through the action the ring kept its guns' weight out of the fight, which the card prices whole: carriers against carriers missed the card by .13 to .38 in every such form, and the campaign's flak law hands back 0.2 to 0.3% of a strike whatever the ring. It is let go for good once a carrier of its side sights an enemy battleship within evade's 'see' metres: the screen left the carriers to meet surface ships (Samar, October 1944), and a ring that turned away with them kept the guns from meeting for most of the action, or all of it. None once a side has broken off, or against an enemy with no gun ship left. While the enemy brings aircraft a carrier keeps station 'keep' metres astern of the middle of its gun ships keeping with the fleet (not those in the ring, on a run, or sent at a target, a speed or a course of the player's own), on the line from the enemy's middle through theirs, and further back until no enemy lies within its standoff (the 1944 War Instructions: carrier groups manoeuvre away from the enemy); kept inside the field's edge by the margin of the turn away, which may bring it nearer. Two or more stand abreast across that line, their navy's spacing apart ('carriers': the record's one figure for carriers in one group, whatever they stand behind; it was torp's 'station', 1,000 m, closer than any figure in the record: the design director, 21:00Z). On station it keeps the gun ships' course and way, never below its slow speed. With no such gun ship (a carrier group whose escorts are all in its ring) it keeps its standoff as before, and a carrier the player sends at a speed of their own goes as told. Once the guns have met the station runs only while the side has a battleship afloat and not breaking off, its carriers astern of the line (Formidable stayed out on the disengaged side at Matapan while the battleships fought); a carrier group has none after contact, the ring's window: it is the screen's geometry, so it runs when the screen does (kept on, it held the group's carriers astern through the gun fight and the cruiser-heavy side lost .05 more of the card). With no station, two or more carriers keep their navy's way ('carriers', by navy and era: the design director, 20:50Z): each for herself, never inside the navy's spacing of a sister, or on a guide, the first by id keeping her standoff at a pace her followers can close on and each other her place abreast of her; a carrier with an enemy strike aloft at her leaves the guide's formation and steers on her own, never inside the spacing of a sister (let each steer off her own nearest enemy with neither, a carrier group's carriers came 132-214 m apart in the gun fight). Its turn into the wind to launch is the 3D game's to show: the rules keep its course.",
+      evade: "A carrier group without battleships that sees an enemy battleship within 'see' metres of a carrier turns away from it and opens the range at 'speed' times a carrier's cruising speed, launching as it goes, unless the player has ordered it to steer, hold or withdraw (a carrier evades even when ordered to strike). Near the edge of the field it turns along it. 'screen' is how near a carrier a ship of its screen must be to turn away with it: 0, so the screen stays and fights (b402: a screen that ran with its carriers left the plain order short of the card). A fleet with battleships of its own stands and fights, its carriers behind the line. Before the guns first meet, where the enemy brings aircraft, a carrier group's escorts keep the AA ring round its carriers (ai), and the ring is let go the moment a carrier sights a battle line: the screen stays and fights as b402 has it (the ship plan's R3).",
+      jobs: "Each ship class to its own job (the tactics panel's item 2, ruling 239): 'fire' lists, for each gun class, the enemy classes it fires on, in order; 'strike', the enemy classes a carrier strikes, in order (see strike). A piece takes the first class it has in reach, ships still fighting before ships breaking off, and among them the one nearest its fleet's main effort; a style that shares the big guns' fire out ('spread' 1) has each battleship and cruiser take, among them, the one fewest of its side's battleships and cruisers are firing on (ties: nearest the main effort, then its own left), and keep it until another has two fewer. So big guns go on big ships and no enemy big ship is left untroubled, cruisers fight cruisers and back the line, and destroyers fight destroyers and cruisers, turning their guns on battleships and carriers only when nothing else is in reach: a destroyer's shells burst on a big ship's upper works and never pierced its belt (Samar, October 1944; Hiei, November 1942), and its real blow at a big ship is the torpedo run (torp). A bar on destroyer guns firing at big ships was measured and withdrawn (ruling 239): it held priced weight out of the fight. No dice: the same ships in the same places make the same choice. The navies shared fire so that no enemy capital ship went unengaged, and cruisers engaged cruisers (the panel's history notes).",
+      torp: "The destroyers' torpedo run (the tactics panel's item 3, ruling 239). A destroyer piece whose guns have nothing in reach banks their weight each second after the guns first meet (fire's rate times its weight, its nerve and the day, with no range or angle), up to 'bank' seconds' worth, and that bank is its salvo: weight its guns could not fire, so the card's weight is moved, not added to. On a run its guns keep firing at whatever their job finds in reach, so a run takes no weight out of the fight. A run: on the cues below, a steady destroyer piece outside the screen goes for the enemy big ship nearest the main effort within 'start' metres, battleships first, then cruisers, then carriers; with spread 1 the ship fewest runs are closing on first (pieces opening together still go as one division at one target). A piece runs only with a full salvo banked ('bank' seconds' worth at its guns' weight now); short of one it chases with its guns, as destroyers that had fired off their torpedoes did (the ship plan's R5). It goes in with its tubes full: a full salvo loaded at the start, drawn in advance from its guns' later fire. Weight its guns cannot fire earns it down, and on a run that includes what its guns lose bearing end-on going in and stern-on coming out, which pays its own salvo's advance first, before and after it launches, the rest banking as ever (the design director, 08:10Z: the bank is the weight the guns could not fire, so the run's lost gunfire is not a second cost on top of the advance); what is still unearned when the salvo lands is owed by its side then, paid out of the side's gunfire weight for weight, as R2's debt is paid out of its blows, and like that debt it counts on neither side until it is paid (the break and the odds read weight dealt: the design director, 09:48Z), so a loaded salvo never fired, or still running when the action ends, moves no weight; once fired, the tubes fill again only by the bank (the design director, 05:01Z and 06:14Z: owed at launch out of the destroyer's own guns, it was paid in the deciding minutes for weight that lands after the break, since as the run's clock then stood no salvo landed before it). It closes at flank, launches at its style's 'press' range (a cover run, on the Samar cue below, as soon as its target is within 'start' metres: its job is to turn her away, and at Samar Johnston fired at about 9,000 m and the others soon after: the design director, 11:25Z), turns away at flank for 'away' seconds and rejoins; it may run again 'again' seconds after it launched. Wavering on the run-in breaks it off, its bank kept for the next. The salvo runs 'travel' seconds and falls on its target, as any blow does (the same weight out of the fight whatever it falls on); with the target gone, on the enemy nearest where it was aimed within 'radius' metres, else on the heaviest. When a run goes is what its crews could see, never a clock (the ship plan's R4; the design director, 06:14Z and 06:48Z). A piece's run opens at once, at the ship doing the threatening within 'start' metres, ahead of her beam or not, when an enemy battleship or cruiser is coming at one of the side's carriers, heading at her (she lies ahead of its beam), the range falling, and making more way than she does, so it will overtake her (a carrier keeping her distance is the very flight the screen covers), or is within its own gun reach of one of the side's battleships where the enemy's heavy ships in reach of her outnumber the side's own in reach of them (Samar, October 1944: the escort carriers' screen ran early as Kurita's ships came on and turned them away), and such a division launches at once and runs on through its own side's break, covering the withdrawal; at once, once the guns have met and while a battleship or cruiser of its own side is within gun reach of an enemy battleship or cruiser (one still fighting, or one it is running down once the enemy has broken off), when it lies ahead of the beam of the enemy big ship it would run at, within 'start' metres (of the course she flees on, for a ship running for home: a piece on her bow as she turns away is soon astern of her) (the record's firing position ahead of the target's beam; by day the record's runs at an alert line came while the lines were engaged, at Jutland, the Java Sea and North Cape, and unsupported destroyers ran in at a heavy line only to cover something, so a destroyer-only side opens none; Surigao's runs before the guns met were the night's, which the field does not fight: the design director, 08:10Z and 09:48Z); and, abaft her beam, once its style's torpWhen finds the enemy's big ships in reach of the side's big guns shaken to that much of their nerve, slowed by gunfire (North Cape, December 1943). The pieces whose runs open in the same second go as one division at one target, the one the piece nearest its own target would take (a ship threatening the side's carriers or outnumbered battleships first), those of them within 'start' metres of her (the others open their own in the next second): they close in company, a piece more than the fleet's station distance (ai.station) nearer the target than the division's rearmost slowing to half until it comes up, and each launches at press, so the division's salvoes land together (a cover division launches at once, its target being in reach). Sea visibility and night actions are not modelled yet (on the after-release list, from the battle's one weather draw). The screen (styles: screen) is the destroyer pieces nearest the side's big ships as it draws up: each keeps 'station' metres ahead of the big ship it guards, toward the enemy, until its guns find a target, and then fights where it is, as the line's other pieces do (held on station, its weight stood out of the fight); it steers for any enemy run within 'intercept' metres and fires first on destroyers making a run; it never runs, and launches its bank from station at an enemy big ship that comes within press. A fleet with no big ship keeps no screen. Once no enemy destroyer is afloat its job is done, and its pieces run and fight as any other destroyer does (the design director, 22:57Z). Destroyers screened the line and attacked in groups with torpedoes, then turned away (North Cape, December 1943; Samar, October 1944: the panel's history notes).",
+      styles: "How a side's captains fight (ruling 239): a temperament, not a weapon. The card has priced the fight, so a style changes how the action unfolds, never how much weight each side brings. 'spread': 1 shares the big guns' fire out over the enemy's big ships (jobs), 0 fires on the one nearest the main effort. 'torpWhen': a destroyer piece abaft the beam of its target opens its run once the enemy big ships in the big guns' reach average this much of their nerve or less (1, at first contact); runs ahead of the beam, or against a ship threatening the side's carriers or outnumbered battleships, open at once (torp). 'press': the range a run closes to before it launches, in metres (a cover run launches once its target is within torp.start: torp). 'screen': the share of the side's destroyer pieces kept back as the screen, rounded down, and at least one where the share is above 0 and there are two or more. 'cover': the share of each carrier strike held back as fighters over the fleet when the enemy brings aircraft (cap); a strike the player orders holds back the same share (ruling 239, 12).",
+      cap: "Fighters and guns over the fleet (ruling 239; the tactics panel's item 3, at sea): two neutral trades, so they move where weight falls, never how much. Fighters: when the enemy brings aircraft (a carrier with its air group, or the coasts' aircraft), each carrier flies (1 - cover) of its strike and holds the rest over the fleet, its side's pool; what it holds and has not spent flies with its next strike, so nothing is lost. A strike or a raid of weight W coming in is met by the pool and denied min(pool, W x cap.spoil x the square root of pool / (pool + W)): cap.spoil is the campaign's own (carriers.json cap.spoil, 0.8; air.ts), and the pool pays what it denies, weight for weight, out of each carrier's cover by its share. Guns: the gun ships within the strike's radius of the ship it finds deny f of what is left, f the sum of their ships times carriers.json flak.ships times flak.per, to at most flak.most (0.12), the campaign's own law; each ship pays its share, weight for weight, out of its own next gunfire, and a ship that leaves the fight hands what it owes to the nearest of its side still fighting. Both are told as events, 'sea:cap' (the share the fighters denied) and 'sea:flak' (what the guns denied), for the 3D game: fighters circling over the fleet, flak over the screen.",
+      carrierBattle: "Where both sides bring carriers and neither a battleship (ruling 239, 11): 'field' fights it out here, carriers striking from beyond the guns' reach; 'staff' leaves it to the dice, as an action where one side has no gun ship is (b438). It stays 'field' until the design director has read how many such actions the campaign fights.",
+      look: "What the 3D game draws and nothing in the rules reads (the ship plan's B1, ruling 239 at 23:20Z: look fields that move no number, src/battle/sea/sim.ts showLooks). A ship that goes out of the fight burning limps for her own side's edge, her course turned off it by up to half of 'limpSpread' radians either way (a hash of her piece and how many it has lost, no dice), at 'limpSpeed' of her class's cruising speed, in place of the 3D game freezing her where she left the line.",
+      line: "The battle line (the ship plan's R1, ruling 239's order at 23:20Z; src/battle/sea/sim.ts planLines). Once the guns have met, each side's battleships and cruisers fighting at will or under a fleet order turn together onto one course and keep it at the cruising speed of the slowest of them: the rows they drew up in become columns in line ahead, as long as the rows were wide (b438), the foremost along the course the van. The course is square to the bearing of the enemy's line (its battleships and cruisers), bent toward it by up to 'bend' radians while it lies beyond best range (at the guns' reach, the whole of it) and away while within it, so the rear row comes into reach; on the hand the enemy's line is moving across that bearing (more than 'across' metres a second on average), so the line keeps level with its van and bends across its head as it draws ahead, crossing its T. With the enemy coming straight on it turns to starboard, as the enemy's captains do: the field is the same turned half round for either side (b402), so the lines pass on opposite courses and wheel to keep each other abeam. Turning toward the field's east instead put the defender's line ahead of the attacker's and won it 3 to 5 in 100 more of the same fleets. It turns together onto the other hand when its van's course would take it within 'margin' metres of the field's edge 'edge' metres on, and when its van steers within 'crossed' radians of an enemy line whose course lies square to the bearing (its T crossed: it turns away together onto the hand that runs with the enemy); once formed, and after a turn together, it holds its hand 'settle' seconds while it comes round. A piece more than ai.keep metres from the middle of the line works back toward it at up to flank. There is no line against destroyers alone: at the speed of its slowest ship a line could not bring them to action, and against coasts' aircraft the gun fleet lost 7 in 100 more than the card either way round. A carrier group without battleships forms none: its cruisers stay with its carriers (the historian: Samar, October 1944), and in line they lost the carriers' side 6 to 9 in 100 to a battle line. A piece the player sends at a target, a point or a speed of its own leaves the line; it dissolves once a side breaks off or the enemy has no gun ship left, and the chase is run as before. Destroyers keep their jobs (torp). No dice. Fought each ship for itself, broadside on at the edge of reach, a line's rear row stood out of reach (bbl: the battleships idle 0.86 a battle and losing 0.69 to angle and range).",
+      carriers: "How a navy's carriers keep company where they keep no station (the design director, 20:50Z and 20:56Z, by navy and era as a 239 style; the historian's carrier-spacing-record.md); where they keep station (ai) they stand abreast at the same spacing (21:00Z). Each navy has a path, '_' every navy not named; a side stands at the step its research has reached, one step for each of 'grow' it holds in order (the campaign's Carrier task forces: 'fast carriers, battleships and their screen sailing and fighting as one body'), read off the nation's record by the sea ticket as land's styles grow by doctrines held, never by a date. 'herself': each carrier steers off her own enemy, but never closes inside 'spacing' metres of a sister: with one inside it and her course closing on her she turns square to the line between them, neither closing nor opening by will (every navy in 1942 and Japan throughout manoeuvred each for herself under air attack and drew apart by miles: Coral Sea, Midway). 'guide': the first carrier by id in formation is the guide and keeps her standoff, at slow while a follower lies more than 'spacing' metres from her place, so they reach their places; each other keeps her place abreast of the guide, 'spacing' metres apart across the line from the enemy (the US cruising dispositions from late 1943; the British Pacific Fleet, 1945, on US signal books). Both run wherever the carriers keep no station, before the guns meet as after (a carrier group's ring holds every gun ship, so it has no station before contact either). A carrier with an enemy strike aloft at her is out of the guide's formation and steers her own standoff, as a carrier under direct attack swung on her own, and a guide under attack hands the formation to the next by id; the spacing line binds her still (with none under attack, two carriers struck at once came 9-80 m apart). The spacings are the record's laid figures: US 1942 2,740 m (Coral Sea, 3,000 yd, H), US late 1943-45 and the BPF about 2,300 m (2,500 yd, L-M), Japan's Kido Butai box 7,000 m (M), Formation ZK 2,000 m (1944, L, inferred); Britain 1942 has no figure and takes the US 1942 one; a navy not named takes the US path, the guide coming with the research. Not laid: the US June 1942 to mid-1943 step of one carrier to a ring, the rings 9,000-18,500 m apart, which nothing on the ticket marks (the design director, 20:56Z: no marker invented)."
     },
     field: {
       size: 2e4,
       edge: 5e3,
-      limit: 1500
+      limit: 1500,
+      row: 300
     },
     classes: {
       bb: {
-        speed: 13,
+        speed: 11,
         turn: 0.05,
         best: 3e3,
         reach: 5e3,
         per: 1,
         crew: 1500,
         len: 240,
-        beam: 33,
-        punch: 1
+        beam: 33
       },
       cv: {
-        speed: 14,
+        speed: 13,
         turn: 0.05,
         best: 800,
         reach: 1500,
@@ -61734,30 +61977,27 @@
         crew: 1800,
         len: 240,
         beam: 32,
-        standoff: 2500,
-        punch: 1
+        standoff: 6e3
       },
       ca: {
-        speed: 15,
+        speed: 13,
         turn: 0.08,
-        best: 2600,
-        reach: 4200,
+        best: 3e3,
+        reach: 5e3,
         per: 1,
         crew: 700,
         len: 180,
-        beam: 20,
-        punch: 1
+        beam: 20
       },
       dd: {
-        speed: 18,
+        speed: 14,
         turn: 0.12,
-        best: 1800,
-        reach: 3200,
+        best: 3e3,
+        reach: 5e3,
         per: 4,
         crew: 200,
         len: 110,
-        beam: 11,
-        punch: 1.5
+        beam: 11
       }
     },
     speeds: {
@@ -61769,14 +62009,14 @@
     fire: {
       rate: 18e-4,
       hull: 1.5,
-      far: 0.5,
+      far: 1,
       endOn: 0.4,
       damaged: 0,
       retarget: 2
     },
     nerve: {
       hit: 1.2,
-      near: 0.06,
+      near: 1.2,
       nearR: 1500,
       quiet: 15,
       mend: 3e-3,
@@ -61788,23 +62028,82 @@
       breakAt: 0.22,
       spread: 0.02,
       admiral: 0.01,
-      pursuit: 150
+      pursuit: 150,
+      hurt: 0.5
     },
     strike: {
       windup: 90,
       every: 240,
-      share: 0.3,
+      share: 0.34,
       radius: 1500
     },
     air: {
       every: 120,
-      share: 0.7
+      share: 0.55
     },
     pieces: {
-      most: 24
+      most: 24,
+      front: 3250
     },
     ai: {
-      keep: 2500
+      keep: 2500,
+      beyond: 2500,
+      station: 300,
+      broadside: 4750
+    },
+    evade: {
+      see: 7e3,
+      speed: 0.9,
+      screen: 0
+    },
+    jobs: {
+      fire: {
+        bb: ["bb", "ca", "cv", "dd"],
+        ca: ["ca", "bb", "dd", "cv"],
+        dd: ["dd", "ca", "bb", "cv"]
+      },
+      strike: ["cv", "bb", "ca", "dd"]
+    },
+    torp: {
+      start: 7e3,
+      travel: 75,
+      bank: 180,
+      away: 60,
+      again: 600,
+      radius: 800,
+      station: 1e3,
+      intercept: 4e3
+    },
+    styles: {
+      methodical: {
+        spread: 1,
+        torpWhen: 0.7,
+        press: 2500,
+        screen: 0.5,
+        cover: 0.4
+      }
+    },
+    carrierBattle: "field",
+    look: {
+      limpSpread: 0.6,
+      limpSpeed: 0.3
+    },
+    line: {
+      bend: 0.6,
+      across: 2,
+      edge: 2500,
+      margin: 1500,
+      crossed: 0.6,
+      settle: 60
+    },
+    carriers: {
+      path: {
+        USA: [{ form: "herself", spacing: 2740 }, { form: "guide", spacing: 2300 }],
+        UK: [{ form: "herself", spacing: 2740 }, { form: "guide", spacing: 2300 }],
+        JAP: [{ form: "herself", spacing: 7e3 }, { form: "herself", spacing: 2e3 }],
+        _: [{ form: "herself", spacing: 2740 }, { form: "guide", spacing: 2300 }]
+      },
+      grow: ["taskforces"]
     }
   };
 
@@ -61813,6 +62112,9 @@
   var RULES_CLASSES = navy_default.classes;
   var RULES_BATTLE = navy_default.battle;
   var DICE = [0.8, 1.2];
+  var STRIKE_AIM = carriers_default.strike.aim;
+  var CAP = carriers_default.cap;
+  var FLAK = carriers_default.flak;
 
   // ../../src/battle/sea/types.ts
   var SEA_CLASSES = ["bb", "cv", "ca", "dd"];
@@ -61840,12 +62142,12 @@
     const won = R2 >= 1, edge3 = won ? R2 : 1 / R2;
     return won ? edge3 >= 2 ? "Decisive victory" : "Close victory" : edge3 >= 2 ? "Decisive defeat" : "Close defeat";
   }
-  function sunkCaps(fleets, odds) {
+  function sunkCaps(fleets, odds, plain2 = false) {
     const [lo, hi] = diceRange(odds);
     const worst = { att: lossShares(lo).att, def: lossShares(hi).def };
     const out = { att: none3(), def: none3() };
     for (const f of fleets) for (const c of SEA_CLASSES) {
-      out[f.side][c] += Math.min(f.ships[c], Math.ceil(f.ships[c] * worst[f.side] * RULES_CLASSES[c].tough - 1e-9));
+      out[f.side][c] += Math.min(f.ships[c], Math.ceil(f.ships[c] * worst[f.side] * ((plain2 ? void 0 : f.tough?.[c]) ?? RULES_CLASSES[c].tough) - 1e-9));
     }
     return out;
   }
@@ -61863,6 +62165,7 @@
     const deck = f.ships.cv > 0 ? deckWorth(g2, f) : 1;
     const raw2 = SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === "cv" ? deck : 1), 0);
     const bombers = g2.airFleets.filter((w) => w.ship === f.id).reduce((n, w) => n + w.bmr, 0);
+    const kit = shipKit(g2, f.nat);
     return {
       id: f.id,
       name: f.name,
@@ -61872,7 +62175,9 @@
       mul: raw2 > 0 ? fleetPower(g2, f) / raw2 : 1,
       deck,
       bombers,
-      admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null
+      admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null,
+      ...dcOf(g2, f.nat) !== 1 ? { tough: { bb: toughOf(g2, f, "bb"), cv: toughOf(g2, f, "cv"), ca: toughOf(g2, f, "ca"), dd: toughOf(g2, f, "dd") } } : {},
+      ...kit.stage || kit.vt || kit.dc ? { kit } : {}
     };
   }
   var forceOf = (f, weight5, total) => {
@@ -61891,10 +62196,22 @@
     };
   };
   var weightOf = (f) => SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul, 0);
-  function sideTicket(nat, adj, color, human, fleets) {
+  function sideTicket(nat, adj, color, human, fleets, doctrine = []) {
     const total = fleets.reduce((s, f) => s + weightOf(f), 0);
     const top = [...fleets].sort((a, b) => weightOf(b) - weightOf(a))[0];
-    return { nat, adj, color, human, forces: fleets.map((f) => forceOf(f, weightOf(f), total)), general: top?.admiral ?? null };
+    return {
+      nat,
+      adj,
+      color,
+      human,
+      forces: fleets.map((f) => forceOf(f, weightOf(f), total)),
+      general: top?.admiral ?? null,
+      ...doctrine.length ? { doctrine } : {}
+    };
+  }
+  function researchOf(g2, nat) {
+    const done = techRules(g2) ? g2.nations[nat]?.tech?.done ?? [] : [];
+    return SEA.carriers.grow.filter((id) => done.includes(id));
   }
   function linesOf(fleets, air2, odds) {
     const ships = (side3) => {
@@ -61906,6 +62223,14 @@
     if (air2.att > 0.5 || air2.def > 0.5) lines2.push({ label: "Air", value: air2.att > air2.def ? "The attacker has the stronger air cover from the coast" : air2.def > air2.att ? "The defender has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(air2.att)} against ${Math.round(air2.def)}` });
     lines2.push({ label: "Odds", value: `${odds.toFixed(1)} to 1`, effect: `Between ${(odds * DICE[0]).toFixed(1)} and ${(odds * DICE[1]).toFixed(1)} to 1 as the day goes` });
     return lines2;
+  }
+  function fieldFights(t) {
+    const guns2 = (side3) => t.place.fleets.some((f) => f.side === side3 && f.mul > 0 && f.ships.bb + f.ships.ca + f.ships.dd > 0);
+    return guns2("att") && guns2("def") && !(SEA.carrierBattle === "staff" && carriersOnly(t));
+  }
+  function carriersOnly(t) {
+    const has = (side3, c) => t.place.fleets.some((f) => f.side === side3 && f.mul > 0 && f.ships[c] > 0);
+    return has("att", "cv") && has("def", "cv") && !has("att", "bb") && !has("def", "bb");
   }
   function seaTicket(g2, m) {
     const zone = g2.seas[m.zone];
@@ -61925,10 +62250,11 @@
       seed: hashString(`seafield:${g2.seed}:${g2.turn}:${m.zone}:${m.nat}`),
       turn: g2.turn,
       date: turnToDate(g2.turn).label,
-      title: `The action in the ${zone.name}`,
+      // The second in the same sea this month is "The second action ...", as the battle stars name it.
+      title: seaAction(zone.name, 1 + g2.seaReports.filter((r) => r.turn === g2.turn && r.zone === m.zone).length),
       place: { zone: m.zone, zoneName: zone.name, fleets, air: air2 },
-      att: sideTicket(attNat, nation(attNat).adj, nation(attNat).color, human("att"), fleets.filter((f) => f.side === "att")),
-      def: sideTicket(defNat, nation(defNat).adj, nation(defNat).color, human("def"), fleets.filter((f) => f.side === "def")),
+      att: sideTicket(attNat, nation(attNat).adj, nation(attNat).color, human("att"), fleets.filter((f) => f.side === "att"), researchOf(g2, attNat)),
+      def: sideTicket(defNat, nation(defNat).adj, nation(defNat).color, human("def"), fleets.filter((f) => f.side === "def"), researchOf(g2, defNat)),
       reckoning: { A: m.A, D: m.D, odds, dice: DICE, even: 1 },
       lines: linesOf(fleets, air2, odds),
       limit: SEA.field.limit
@@ -61944,7 +62270,8 @@
     const out = [];
     const before = seaField.fought;
     seaField.fought = (m) => {
-      out.push({ key: meetingKey(m), meeting: m, ticket: seaTicket(copy2, m) });
+      const ticket = seaTicket(copy2, m);
+      if (fieldFights(ticket)) out.push({ key: meetingKey(m), meeting: m, ticket });
       return void 0;
     };
     try {
@@ -61956,7 +62283,7 @@
   }
   function foughtOf(r) {
     const x = r.extra;
-    return { R: r.R, sunk: x?.sunk ?? {}, toDice: x?.toDice };
+    return { R: r.R, sunk: x?.sunk ?? {}, toDice: x?.toDice, ...x?.kept ? { kept: x.kept } : {} };
   }
   function playedHook(played) {
     return (m) => {
@@ -61977,6 +62304,7 @@
     return per;
   }
   var shipWeight = (f, c) => RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul;
+  var ROW = { dd: 0, ca: 1, bb: 2, cv: 3 };
   function drawUp2(fleets) {
     const units = [], info = /* @__PURE__ */ new Map();
     const F = SEA.field;
@@ -61996,12 +62324,14 @@
       const order2 = ["dd", "ca", "bb", "cv"];
       const toward = side3 === "att" ? 1 : -1;
       const baseY = side3 === "att" ? F.edge : F.size - F.edge;
-      order2.forEach((c, row2) => {
+      const sideW = mine4.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + f.ships[c] * shipWeight(f, c), 0), 0);
+      order2.forEach((c) => {
         const list4 = rows[c];
-        const gap = c === "dd" ? 500 : 650;
-        const y = baseY - toward * row2 * 700;
+        const y = baseY - toward * ROW[c] * F.row;
+        const rowW = list4.reduce((m, p) => m + p.n * shipWeight(p.f, c), 0);
+        const slot = SEA.pieces.front * rowW / (Math.max(1e-6, sideW) * Math.max(1, list4.length));
         list4.forEach((p, i) => {
-          const x = F.size / 2 + (i - (list4.length - 1) / 2) * gap;
+          const x = F.size / 2 + (side3 === "def" ? -1 : 1) * (i - (list4.length - 1) / 2) * slot;
           const w2 = shipWeight(p.f, c);
           const u = {
             id,
@@ -62009,7 +62339,9 @@
             corps: p.f.id,
             nat: p.f.nat,
             kind: c,
-            name: p.n === 1 ? `${cap10(RULES_CLASSES[c].one)}, ${p.f.name}` : `${p.n} ${RULES_CLASSES[c].many}, ${p.f.name}`,
+            // Numbered in kind on its side, as the campaign counts ships by kind and the field never names what the
+            // campaign does not know (the design director): "Cruiser 2", "Destroyers 4". Its fleet is extra.fleet.
+            name: `${cap10(p.n === 1 ? RULES_CLASSES[c].one : RULES_CLASSES[c].many)} ${i + 1}`,
             x,
             y,
             face: side3 === "att" ? 0 : Math.PI,
@@ -62044,10 +62376,53 @@
   }
   var cap10 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+  // ../../src/battle/sea/words.ts
+  var theFleet = (name) => /\b(?:Fleet|Navy)$/.test(name.trim()) ? `the ${name}` : name;
+  var ofFleet = (name) => `of ${theFleet(name)}`;
+  var headCount = (n) => n >= 1 && n <= 9 ? ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"][n - 1] : String(n);
+  function hurtAfloat(str, ships0, afloat2) {
+    if (afloat2 <= 0) return 0;
+    return str * ships0 - (afloat2 - 1) <= SEA.side.hurt + 1e-9 ? 1 : 0;
+  }
+
   // ../../src/battle/sea/sim.ts
   var other3 = (s) => s === "att" ? "def" : "att";
   var live4 = (u) => u.state !== "gone" && u.state !== "withdrawn";
+  var mix3 = (n) => {
+    let h = n >>> 0;
+    h ^= h >>> 16;
+    h = Math.imul(h, 2246822507);
+    h ^= h >>> 13;
+    h = Math.imul(h, 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
   var steady2 = (u) => u.state === "steady" || u.state === "wavering";
+  var BIG_GUNS = /* @__PURE__ */ new Set(["bb", "ca"]);
+  var EDGE_MARGIN = 1200;
+  var aheadOfBeam = (e, u) => Math.abs(turn(e.face, bearing(e.x, e.y, u.x, u.y))) < Math.PI / 2;
+  function nearestEnemy(units, side3, x, y) {
+    const f0 = side3 === "att" ? 0 : Math.PI, c = Math.cos(f0), s = Math.sin(f0);
+    let best = null, bd = Infinity, bl = Infinity;
+    for (const e of units) {
+      if (e.side === side3 || !live4(e)) continue;
+      const d = Math.hypot(e.x - x, e.y - y), lat = (e.x - x) * c - (e.y - y) * s;
+      if (d < bd - 1 || d <= bd + 1 && lat < bl) {
+        best = e;
+        bd = Math.min(bd, d);
+        bl = lat;
+      }
+    }
+    return best;
+  }
+  function enemyNearestMiddle(units, side3) {
+    const mine4 = units.filter((u) => u.side === side3 && live4(u));
+    if (!mine4.length) return null;
+    const cx = mine4.reduce((n, u) => n + u.x, 0) / mine4.length, cy = mine4.reduce((n, u) => n + u.y, 0) / mine4.length;
+    return nearestEnemy(units, side3, cx, cy);
+  }
+  var LET_GO = /* @__PURE__ */ new Set(["hold", "withdraw", "withdrawAll", "move", "line"]);
+  var STEER = /* @__PURE__ */ new Set(["move", "line"]);
   var SeaSim = class {
     constructor(ticket) {
       __publicField(this, "domain", "sea");
@@ -62064,31 +62439,131 @@
       __publicField(this, "zones", []);
       __publicField(this, "caps");
       __publicField(this, "lostShips", { att: none3(), def: none3() });
+      /** Ruling 240: the limit by class without damage control (navy.json's toughness), the ships that limit would have let
+       *  go down so far, and by fleet the ships that went out burning that it would have sunk (SeaLosses.kept). */
+      __publicField(this, "plainCaps");
+      __publicField(this, "plainLost", { att: none3(), def: none3() });
+      __publicField(this, "kept", {});
       __publicField(this, "weight0", { att: 0, def: 0 });
+      /** The coasts' aircraft still in the fight, each side's, in weight: the card counts them in the side's strength. */
+      __publicField(this, "airLeft");
+      /** What is left of each carrier piece's aircraft, 1 at the start, by unit id (1 for every other piece). */
+      __publicField(this, "deck", []);
       __publicField(this, "breakAt");
+      /** The side that handed the action to the staff, if one did. */
+      __publicField(this, "handedBy", null);
       /** The luck of the day, the rules' own run of the dice (0.8 to 1.2): the attacker fights at it and the defender at its inverse. */
       __publicField(this, "luck");
       __publicField(this, "broken", null);
       __publicField(this, "brokeAt", 0);
-      __publicField(this, "contact", false);
+      /** Battle time the guns first reached an enemy, null before it (ruling 226(1): the screens run fast until then). */
+      __publicField(this, "contactAt", null);
+      /** Each fleet has been said to be near breaking off (ruling 226(3)): once a side. */
+      __publicField(this, "warned", { att: false, def: false });
       __publicField(this, "lastHit", /* @__PURE__ */ new Map());
       __publicField(this, "look", /* @__PURE__ */ new Map());
       /** Which way round each piece turns to bring its broadside to bear: kept, so that it does not dither. */
       __publicField(this, "hand", /* @__PURE__ */ new Map());
       __publicField(this, "strikes", []);
+      /** The enemy each carrier last struck, by the carrier's id (strikeTarget's spread, and the C1 mark). */
+      __publicField(this, "struck", /* @__PURE__ */ new Map());
+      /** The destroyer pieces whose torpedo line has been told: once a piece, on its first salvo. */
+      __publicField(this, "toldTorp", /* @__PURE__ */ new Set());
+      /** Fighters over the fleet (cap): what each carrier holds back of its strikes and has not yet spent, by its id (its
+       *  side's pool is their sum); and what each gun ship owes out of its next gunfire for what its guns denied. */
+      __publicField(this, "cover", []);
+      __publicField(this, "owe", []);
+      /** What the fighters did to the last strike or raid that met them: the share they turned back, and whose they were. */
+      __publicField(this, "capLast", null);
+      /** What each side's guns have denied, by whose aircraft: a carrier's strikes ('cv') or the coasts' raids ('air'). */
+      __publicField(this, "flakOn", { att: { cv: 0, air: 0 }, def: { cv: 0, air: 0 } });
+      /** A side's carrier has come within the guns' reach of an enemy battleship (the C5 mark). */
+      __publicField(this, "cvNear", { att: false, def: false });
+      /** Destroyer pieces on a torpedo run, by unit id; the battle time each may run again; the weight each has banked for
+       *  its torpedoes (torp); the screen's pieces, chosen as the fleets draw up, with the big ship each guards and how far
+       *  to its side it keeps; and salvos in the water. */
+      __publicField(this, "runs", /* @__PURE__ */ new Map());
+      __publicField(this, "nextRun", /* @__PURE__ */ new Map());
+      __publicField(this, "bank", []);
+      /**
+       * A destroyer piece's loaded salvo not yet earned by its guns (the design director, 05:01Z and 06:14Z: the ship plan's
+       * R5): it begins the action with its tubes full, a salvo drawn in advance from its guns' later fire. Weight its guns
+       * could not fire earns it down (store); what is still unearned rides with the salvo (Torp.drawn) and is owed by its
+       * side when the salvo lands (advance).
+       */
+      __publicField(this, "loaded", []);
+      /**
+       * What a side owes for salvoes that landed before its guns had earned them, paid out of its gun ships' next fire,
+       * weight for weight, as R2's debt is paid out of its blows (the design director, 06:14Z). Until paid it is weight the
+       * tubes dealt beyond the guns; a salvo still running when the action ends owes nothing, having dealt nothing.
+       */
+      __publicField(this, "advance", { att: 0, def: 0 });
+      /**
+       * What the unearned part of the enemy's landed salvoes took out of a side, in lostShare's own measure, as the take
+       * itself measured it (a carrier's deck, the coasts' aircraft, a piece worn through: what it took, not what it weighed).
+       * Added back to the side's weight left until the enemy's guns pay the advance, and cut as they pay, part for part: so
+       * the advance counts on neither side until it is paid, as R2's debt (the design director, 09:48Z).
+       */
+      __publicField(this, "unpaid", { att: 0, def: 0 });
+      __publicField(this, "screen", /* @__PURE__ */ new Set());
+      __publicField(this, "guard", /* @__PURE__ */ new Map());
+      __publicField(this, "torps", []);
+      __publicField(this, "zoneId", 0);
+      /** Runs launched by each side's destroyers outside the screen (the B4 mark). */
+      __publicField(this, "launched", { att: 0, def: 0 });
       __publicField(this, "nextAir");
       /** Wear each piece has dealt by gunfire, and seconds it has spent with a target in reach, by unit id: see tally. */
       __publicField(this, "dealt", []);
       __publicField(this, "inReach", []);
       /** How hard each piece is turning, as a share of its helm at full way: for 'turn' in the models' act. */
       __publicField(this, "swing", []);
+      /** What the 3D game draws and nothing in the rules reads back (the ship plan's B1, ruling 239 at 23:20Z): see showLooks. */
+      __publicField(this, "steered", []);
+      __publicField(this, "helmed", []);
+      __publicField(this, "away", []);
+      __publicField(this, "coverHeld", []);
+      __publicField(this, "recovers", []);
+      /** Each side's battle line once the guns have met (see line), and this tick's plan for it. */
+      __publicField(this, "lines", { att: null, def: null });
+      __publicField(this, "linePlans", { att: { t: -1, members: [] }, def: { t: -1, members: [] } });
+      /** By side, the pieces keeping the AA ring this tick (R3): each one's carrier, its place in that carrier's ring and how
+       *  many share it. */
+      __publicField(this, "rings", { att: /* @__PURE__ */ new Map(), def: /* @__PURE__ */ new Map() });
+      /** Whether a side's ring has been let go for good because its carriers sighted a battle line (R3; see planRings). */
+      __publicField(this, "ringGone", { att: false, def: false });
+      /** The carriers that took their station this tick (carrierHelm, and not turned away): for R4's overtaking cue. */
+      __publicField(this, "onStation", /* @__PURE__ */ new Set());
       /** Wear dealt by strikes ('att:cv') and by the coasts' aircraft ('att:air'). */
       __publicField(this, "fromAir", {});
+      /**
+       * What the tactics panel's marks read (tactics-panel/briefs/sea.md), in the tally beside the wear by class: the wear
+       * each class dealt on each enemy class ('att:bb>ca'); and, once a second after the guns meet, a gun class's seconds of
+       * fire while an enemy big ship was in its reach ('att:bb@big:s'), and of those at one ('att:bb@big>big:s'); and, while
+       * a side's battleships (or cruisers) in reach of the enemy's are at least as many, the enemy's in their reach counted
+       * each second ('att:bb:exposed:s'), with those that no ship of the class was firing on ('att:bb:untroubled:s') and
+       * those no ship at all was ('att:bb:unfired:s'). Counted only: nothing reads them back, and they draw no dice.
+       */
+      __publicField(this, "marks", {});
       __publicField(this, "fleetLoss", { sunk: {}, burnt: {} });
+      /** The player's sides take the chase in hand with their first order after the enemy breaks off. */
+      __publicField(this, "chaseTaken", { att: false, def: false });
+      /** Carriers the player has sent after a beaten enemy since it broke off, and at whom: only these strike in the chase. */
+      __publicField(this, "pursuing", /* @__PURE__ */ new Map());
+      /** Each side's main effort: the enemy piece nearest the middle of its own fleet, kept until it goes or breaks off,
+       *  or the one the player names in a fleet order. Each ship does its job around it (jobs): the staff's play is
+       *  exactly the newcomer's (select all, right-click the enemy nearest the middle), so the two give the same battle
+       *  (b402, ruling 239). */
+      __publicField(this, "focus", { att: -1, def: -1 });
       /** The enemy a piece with no order steers by: the nearest, looked for again once a second. */
       __publicField(this, "foeOf", /* @__PURE__ */ new Map());
       /** The middle of a side's pieces still in the fight, weighted by their weight; kept for one tick. */
       __publicField(this, "centres", { t: -1, at: { att: [0, 0], def: [0, 0] } });
+      /**
+       * Weight a side owes for the hull its blows put out of the line with the ships they hurt (fallOut), in the blows' own
+       * measure: paid out of its next blows, weight for weight, as owed flak is. Until paid it counts on neither side.
+       */
+      __publicField(this, "debt", { att: 0, def: 0 });
+      __publicField(this, "divId", 0);
       this.ticket = ticket;
       this.rng = new Rng(ticket.seed);
       const { units, info } = drawUp2(ticket.place.fleets);
@@ -62099,32 +62574,56 @@
         this.dealt[u.id] = 0;
         this.inReach[u.id] = 0;
         this.swing[u.id] = 0;
+        this.steered[u.id] = -1;
+        this.helmed[u.id] = 0;
+        this.away[u.id] = false;
+        this.coverHeld[u.id] = 0;
+        this.deck[u.id] = 1;
+        this.bank[u.id] = 0;
+        this.cover[u.id] = 0;
+        this.owe[u.id] = 0;
+        if (u.extra.cls === "cv") u.extra.planes = 1;
         this.weight0[u.side] += this.weightOf(u);
       }
+      this.airLeft = { att: ticket.place.air.att, def: ticket.place.air.def };
+      this.weight0.att += this.airLeft.att;
+      this.weight0.def += this.airLeft.def;
       for (const f of ticket.place.fleets) {
         this.fleetLoss.sunk[f.id] = none3();
         this.fleetLoss.burnt[f.id] = none3();
       }
       this.caps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds);
+      this.plainCaps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds, true);
       this.ai = { att: !ticket.att.human, def: !ticket.def.human };
+      for (const side3 of ["att", "def"]) this.focus[side3] = this.nearestToMiddle(side3);
+      for (const side3 of ["att", "def"]) this.drawScreen(side3);
       const S3 = SEA.side;
       this.luck = this.rng.range(DICE[0], DICE[1]);
+      for (const u of units) {
+        this.loaded[u.id] = 0;
+        if (u.extra.cls !== "dd") continue;
+        this.bank[u.id] = this.loaded[u.id] = SEA.fire.rate * this.output(u) * this.day(u.side) * SEA.torp.bank;
+      }
       const adm = (side3) => Math.max(0, ...ticket.place.fleets.filter((f) => f.side === side3).map((f) => f.admiral?.level ?? 0));
       this.breakAt = {
         att: S3.breakAt + S3.admiral * adm("att") + S3.spread * (this.rng.next() * 2 - 1),
         def: S3.breakAt + S3.admiral * adm("def") + S3.spread * (this.rng.next() * 2 - 1)
       };
       this.nextAir = { att: this.rng.range(0.2, 0.8) * SEA.air.every, def: this.rng.range(0.2, 0.8) * SEA.air.every };
+      this.showLooks();
     }
     /** Wear dealt by each side's classes ('att:bb') over the battle, and seconds each spent in reach ('att:bb:s'): for tuning, read by tools and tests only. */
     get tally() {
-      const out = { ...this.fromAir };
+      const out = { ...this.fromAir, ...this.marks };
       for (const u of this.units) {
         const k = `${u.side}:${u.extra.cls}`;
         out[k] = (out[k] ?? 0) + this.dealt[u.id];
         out[`${k}:s`] = (out[`${k}:s`] ?? 0) + this.inReach[u.id];
       }
       return out;
+    }
+    mark(k, n) {
+      this.marks[k] = (this.marks[k] ?? 0) + n;
     }
     // ---- What a piece is worth ---------------------------------------------------------------------------------
     /** How a side's ships fight today: the luck of the day for the attacker, its inverse for the defender. */
@@ -62139,11 +62638,11 @@
       const p = this.info.get(u.id), n0 = u.extra.ships0;
       const afloat2 = this.ships(u);
       if (afloat2 <= 0) return 0;
-      return p.weight * (afloat2 * SEA.fire.damaged + (1 - SEA.fire.damaged) * u.str * n0);
+      return p.weight * (afloat2 * SEA.fire.damaged + (1 - SEA.fire.damaged) * u.str * n0) * this.deck[u.id];
     }
-    /** Its weight as it stands: what is left of its hull. */
+    /** Its weight as it stands: what is left of its hull, and of a carrier's aircraft. */
     weightOf(u) {
-      return this.info.get(u.id).weight * u.extra.ships0 * (live4(u) || u.state === "withdrawn" ? u.str : 0);
+      return this.info.get(u.id).weight * u.extra.ships0 * (live4(u) || u.state === "withdrawn" ? u.str : 0) * this.deck[u.id];
     }
     hullOf(u) {
       const p = this.info.get(u.id);
@@ -62153,15 +62652,92 @@
     orderOf(id) {
       return this.orders.get(id);
     }
-    /** The share of a side's starting weight it has lost: hull worn away, on pieces still there or gone. */
+    /** The share of a side's starting weight it has lost: hull worn away, on pieces still there or gone, and aircraft lost,
+     *  the carriers' and the coasts'. Hull that went out of the line with a badly hurt ship counts only as the enemy's
+     *  blows pay for it (debt): the break and the count read weight dealt, nothing more (the design director, 03:49Z).
+     *  So does the part of a landed salvo its side's guns had not yet earned (advance): owed as R2's debt is, it counts
+     *  on neither side until it is paid (the design director, 09:48Z: what V3 meant). */
     lostShare(side3) {
-      let left = 0;
-      for (const u of this.units) if (u.side === side3) left += this.info.get(u.id).weight * u.extra.ships0 * u.str;
-      return this.weight0[side3] > 0 ? 1 - left / this.weight0[side3] : 0;
+      return this.weight0[side3] > 0 ? 1 - (this.left(side3) + this.unpaid[side3]) / this.weight0[side3] : 0;
+    }
+    /** A side's weight left as lostShare counts it, before what the enemy's unpaid salvoes took is added back (unpaid). */
+    left(side3) {
+      let left = this.airLeft[side3] + this.debt[other3(side3)] / SEA.fire.hull;
+      for (const u of this.units) if (u.side === side3) left += this.info.get(u.id).weight * u.extra.ships0 * u.str * this.deck[u.id];
+      return left;
+    }
+    /** How near a side is to breaking off, from 0 to 1: what it has lost against what it breaks at (ruling 226, 3: no
+     *  hidden thresholds, so the screens show this as it is). */
+    nearBreak(side3) {
+      if (this.broken === side3) return 1;
+      return Math.max(0, Math.min(1, this.lostShare(side3) / this.breakAt[side3]));
+    }
+    /** Whether any shot has told yet on either side. */
+    fired() {
+      return this.lostShare("att") + this.lostShare("def") > 0;
+    }
+    /** The staff's chance for the attacker were the rest handed to them now: the dice's run at the ratio then standing,
+     *  as the staff reckon it (the day's own luck, which settles it, is not theirs to know); in a chase, sure for the
+     *  chaser. */
+    handChance() {
+      if (this.broken) return this.broken === "def" ? 1 : 0;
+      const k = this.ticket.reckoning, [d0, d1] = k.dice;
+      if (k.odds * d1 < 1) return 0;
+      if (k.odds * d0 >= 1) return 1;
+      const now = k.odds * Math.max(1e-6, 1 - this.lostShare("att")) / Math.max(1e-6, 1 - this.lostShare("def"));
+      return clamp5((d1 - 1 / now) / (d1 - d0), 0, 1);
     }
     // ---- Orders ------------------------------------------------------------------------------------------------
     command(c, by2) {
       if (this.over) return false;
+      const chasing = this.broken !== null && this.broken !== by2;
+      const ok2 = this.order(c, by2);
+      if (ok2 && chasing && c.do !== "dice" && c.do !== "auto") this.chaseTaken[by2] = true;
+      if (ok2 && chasing) {
+        if (c.do === "attack" || c.do === "ability") {
+          const target = c.target;
+          for (const id of c.units) {
+            const u = this.byId.get(id);
+            if (u && u.side === by2 && u.extra.cls === "cv" && target !== void 0) this.pursuing.set(id, target);
+          }
+        }
+        if (LET_GO.has(c.do) && (!STEER.has(c.do) || this.steersHome(c, by2))) this.letGo(by2);
+      }
+      return ok2;
+    }
+    /**
+     * Whether a point lies on a side's own sea while it chases a beaten enemy (b458, 1): nearer the middle of its own fleet
+     * still in the fight than the beaten fleet's middle and than every enemy piece still afloat. A course for such a point
+     * lets the enemy go; one among the beaten fleet, or past it, runs it down. Each enemy, and the enemy's middle, cuts the
+     * sea in two along the line halfway between it and the side's middle, so the side's own sea is the part on its side of
+     * every such line: a line ordered with both ends there lies there whole.
+     */
+    ownSea(side3, x, y) {
+      const all = this.units.filter((u) => u.side === side3 && live4(u)), fighting3 = all.filter((u) => u.state !== "routing");
+      const mine4 = fighting3.length ? fighting3 : all, theirs = this.units.filter((u) => u.side !== side3 && live4(u));
+      if (!mine4.length || !theirs.length) return true;
+      const mid = (us) => [us.reduce((n, u) => n + u.x, 0) / us.length, us.reduce((n, u) => n + u.y, 0) / us.length];
+      const [mx, my] = mid(mine4), [tx, ty] = mid(theirs), home = Math.hypot(x - mx, y - my);
+      return Math.hypot(x - tx, y - ty) > home && theirs.every((e) => Math.hypot(e.x - x, e.y - y) > home);
+    }
+    /** A steer order whose every point is the side's own sea (ownSea). */
+    steersHome(c, by2) {
+      if (c.do === "move") return this.ownSea(by2, c.x, c.y);
+      if (c.do === "line") return this.ownSea(by2, c.x0, c.y0) && this.ownSea(by2, c.x1, c.y1);
+      return false;
+    }
+    /**
+     * The side chasing a beaten enemy lets it go (b458, 1): the action ends at once, the side that broke off beaten and
+     * every loss as it stands, booked as any other ending is (the after card, and the campaign through handoff.ts). An
+     * order to hold, break off or steer for a point on its own sea does this (command); false unless this side's enemy
+     * has broken off and the action is still on.
+     */
+    letGo(side3) {
+      if (this.over || this.broken === null || this.broken === side3) return false;
+      this.finish(side3, "withdrew");
+      return true;
+    }
+    order(c, by2) {
       const mine4 = (ids2) => (ids2 ?? []).map((id) => this.byId.get(id)).filter((u) => !!u && u.side === by2 && steady2(u));
       switch (c.do) {
         case "move": {
@@ -62180,15 +62756,12 @@
         case "attack": {
           const us = mine4(c.units), foe = this.byId.get(c.target);
           if (!us.length || !foe || foe.side === by2 || !live4(foe)) return false;
+          const fleet = us.length > 1;
           for (const u of us) {
-            if (u.extra.cls === "cv") {
-              this.orders.set(u.id, { kind: "attack", target: foe.id });
-              this.strike(u, foe);
-            } else {
-              this.orders.set(u.id, { kind: "attack", target: foe.id });
-              u.extra.target = foe.id;
-            }
+            this.orders.set(u.id, fleet ? { kind: "attack", target: foe.id, fleet } : { kind: "attack", target: foe.id });
+            if (!fleet && u.extra.cls !== "cv") u.extra.target = foe.id;
           }
+          if (fleet) this.focus[by2] = foe.id;
           return true;
         }
         case "hold": {
@@ -62205,8 +62778,8 @@
           return us.length > 0;
         }
         case "withdrawAll": {
-          if (c.side !== by2 || this.broken) return false;
-          this.breakSide(by2, true);
+          if (c.side !== by2 || this.broken === by2) return false;
+          if (!this.broken) this.breakSide(by2, true);
           return true;
         }
         case "ability": {
@@ -62233,8 +62806,14 @@
         }
         case "dice": {
           if (this.over) return false;
+          this.handedBy = by2;
           const k = this.ticket.reckoning;
           const R2 = diceNow(k.odds, k.dice, { att: 1 - this.lostShare("att"), def: 1 - this.lostShare("def") }, (this.luck - k.dice[0]) / (k.dice[1] - k.dice[0]));
+          if (this.broken) {
+            const w = other3(this.broken);
+            this.finish(w, "time", true, w === "att" ? Math.max(1, R2) : Math.min(0.999, R2));
+            return true;
+          }
           this.finish(R2 >= 1 ? "att" : "def", "time", true, R2);
           return true;
         }
@@ -62242,17 +62821,65 @@
           return false;
       }
     }
+    /**
+     * The enemy a carrier left to itself, or under a fleet order, strikes (jobs.strike; ruling 239, item 4): carriers
+     * first, then battleships, cruisers and destroyers, ships still fighting before ships breaking off; among them the one
+     * nearest its fleet's main effort, or, where its style shares fire out (spread), the one fewest of its side's other
+     * carriers last struck, so a second carrier takes a second enemy carrier before doubling up. No dice.
+     */
+    strikeTarget(cv) {
+      const side3 = cv.side, main = this.byId.get(this.focus[side3]);
+      const [mx, my] = main ? [main.x, main.y] : this.centre(other3(side3));
+      const f0 = side3 === "att" ? 0 : Math.PI, cs = Math.cos(f0), sn = Math.sin(f0);
+      const spread = this.style(side3).spread > 0;
+      const on = (e) => {
+        let n = 0;
+        for (const [id, t] of this.struck) {
+          const c = this.byId.get(id);
+          if (id !== cv.id && t === e.id && c && live4(c)) n++;
+        }
+        return n;
+      };
+      for (const breaking of [false, true]) {
+        for (const tc of SEA.jobs.strike) {
+          const pool = this.units.filter((e) => e.side !== side3 && e.extra.cls === tc && live4(e) && (breaking || e.state !== "routing"));
+          if (!pool.length) continue;
+          return pool.map((e) => ({ e, n: spread ? on(e) : 0, d: Math.round(dist(e.x, e.y, mx, my)), l: (e.x - mx) * cs - (e.y - my) * sn })).sort((a, b) => a.n - b.n || a.d - b.d || a.l - b.l || a.e.id - b.e.id)[0].e;
+        }
+      }
+      return null;
+    }
+    /** What a carrier last struck, and its first strike's target for the C1 mark: at a carrier where the enemy has one,
+     *  else at a battleship where it has one. */
+    struckFirst(cv, foe) {
+      const first2 = !this.struck.has(cv.id);
+      this.struck.set(cv.id, foe.id);
+      if (!first2) return;
+      const has = (c) => this.units.some((e) => e.side !== cv.side && e.extra.cls === c && live4(e));
+      this.mark(`${cv.side}:cvFirst`, 1);
+      if (has("cv")) {
+        this.mark(`${cv.side}:cvFirstVsCv`, 1);
+        if (foe.extra.cls === "cv") this.mark(`${cv.side}:cvFirstAtCv`, 1);
+      } else if (has("bb")) {
+        this.mark(`${cv.side}:cvFirstVsBb`, 1);
+        if (foe.extra.cls === "bb") this.mark(`${cv.side}:cvFirstAtBb`, 1);
+      }
+    }
     /** Orders a carrier's strike on an enemy piece. False if its aircraft are not ready. Counted, not flown. */
     strike(cv, foe) {
       const ab = cv.abilities?.find((a) => a.key === "strike");
       if (!ab || ab.ready > 0 || ab.winding || !steady2(cv)) return false;
       const p = this.info.get(cv.id);
-      const weight5 = SEA.fire.rate * this.output(cv) * SEA.strike.share * SEA.strike.every * this.day(cv.side);
+      const whole2 = SEA.fire.rate * this.output(cv) * SEA.strike.share * SEA.strike.every * this.day(cv.side);
+      const keep2 = this.bringsAir(other3(cv.side)) ? whole2 * this.style(cv.side).cover : 0;
+      const weight5 = whole2 - keep2 + this.cover[cv.id];
+      this.cover[cv.id] = keep2;
+      this.coverHeld[cv.id] = keep2;
       const perCarrier = p.fleet.ships.cv > 0 ? Math.round(p.fleet.bombers / p.fleet.ships.cv) : 0;
       const count4 = Math.round(perCarrier * (this.output(cv) / (p.weight * cv.extra.ships0)));
       ab.winding = true;
       ab.ready = SEA.strike.every;
-      this.strikes.push({ at: this.t + SEA.strike.windup, side: cv.side, target: foe.id, weight: weight5, from: cv.extra.fleet, count: count4 });
+      this.strikes.push({ at: this.t + SEA.strike.windup, side: cv.side, target: foe.id, weight: weight5, from: cv.extra.fleet, count: count4, cv: cv.id });
       this.say({ what: "ability", unit: cv.id, side: cv.side, text: `${this.told(cv, true)} flies off ${count4 ? `${count4} bombers` : "its aircraft"} against ${this.told(foe)}.`, extra: { key: "strike", target: foe.id, count: count4 } });
       return true;
     }
@@ -62261,76 +62888,160 @@
       if (this.over) return;
       this.t = Math.round((this.t + DT) * 1e3) / 1e3;
       const tick = Math.round(this.t / DT);
+      this.planLines();
+      this.planRings();
       for (const u of this.units) if (live4(u)) this.steer(u);
-      if (tick % 10 === 0) this.decide();
+      if (tick % 10 === 0) {
+        this.sample();
+        this.watchCarriers();
+        this.decide();
+      }
+      this.handOwes();
       for (const u of this.units) {
         u.engaged = void 0;
         if (live4(u)) this.fire(u);
       }
-      for (const u of this.units) this.pose(u);
       this.landStrikes();
+      this.recover();
+      this.landTorps();
       this.coastAir();
       for (const u of this.units) if (live4(u)) this.nerve(u);
+      for (const u of this.units) this.pose(u);
+      this.showLooks();
       for (const u of this.units) for (const a of u.abilities ?? []) if (a.ready > 0) a.ready = Math.max(0, Math.round((a.ready - DT) * 1e3) / 1e3);
       this.zones = this.zones.filter((z) => z.until > this.t);
       this.judge();
     }
+    /** Once a second after the guns meet, before the targets change: what the marks read (see marks). */
+    sample() {
+      if (this.contactAt === null) return;
+      for (const [id, r] of this.runs) {
+        const u = this.byId.get(id);
+        if (u && r.phase === "in" && !r.near) r.near = this.units.some((e) => e.side !== u.side && this.screen.has(e.id) && live4(e) && dist(u.x, u.y, e.x, e.y) <= SEA.torp.intercept);
+      }
+      const big = (c) => c === "bb" || c === "ca" || c === "cv";
+      const near2 = (a, b, r) => dist(a.x, a.y, b.x, b.y) <= r;
+      for (const side3 of ["att", "def"]) {
+        const mine4 = this.units.filter((u) => u.side === side3 && live4(u) && u.state !== "routing");
+        const foes = this.units.filter((u) => u.side !== side3 && live4(u) && u.state !== "routing");
+        for (const u of mine4) {
+          const c = u.extra.cls;
+          if (c === "cv" || u.engaged === void 0) continue;
+          const R2 = SEA.classes[c].reach;
+          if (!foes.some((e) => big(e.extra.cls) && near2(u, e, R2))) continue;
+          this.mark(`${side3}:${c}@big:s`, 1);
+          const t = this.byId.get(u.engaged);
+          if (t && big(t.extra.cls)) this.mark(`${side3}:${c}@big>big:s`, 1);
+        }
+        for (const c of ["bb", "ca"]) {
+          const R2 = SEA.classes[c].reach, own = mine4.filter((u) => u.extra.cls === c), theirs = foes.filter((e) => e.extra.cls === c);
+          const exposed = theirs.filter((e) => own.some((u) => near2(u, e, R2)));
+          const able2 = own.filter((u) => theirs.some((e) => near2(u, e, R2)));
+          if (!exposed.length || able2.length < exposed.length) continue;
+          this.mark(`${side3}:${c}:exposed:s`, exposed.length);
+          this.mark(`${side3}:${c}:untroubled:s`, exposed.filter((e) => !own.some((u) => u.engaged === e.id)).length);
+          this.mark(`${side3}:${c}:unfired:s`, exposed.filter((e) => !mine4.some((u) => u.engaged === e.id)).length);
+        }
+      }
+    }
     /** Once a second: targets, carriers' strikes, and the side's own reckoning. */
     decide() {
+      for (const side3 of ["att", "def"]) {
+        const f = this.byId.get(this.focus[side3]);
+        if (!f || !live4(f) || f.state === "routing") this.focus[side3] = this.nearestToMiddle(side3);
+      }
       for (const u of this.units) {
         if (!live4(u)) continue;
         const o = this.orders.get(u.id);
         if (o?.kind === "attack") {
           const foe = this.byId.get(o.target);
-          if (!foe || !live4(foe)) this.orders.delete(u.id);
+          if (!foe || !live4(foe) || foe.state === "routing") this.orders.delete(u.id);
         }
-        if (u.extra.cls === "cv" && steady2(u)) {
-          const ordered = o?.kind === "attack" ? this.byId.get(o.target) : void 0;
-          const foe = ordered && live4(ordered) ? ordered : this.heaviest(other3(u.side));
-          if (foe) this.strike(u, foe);
+        if (u.extra.cls === "cv" && steady2(u) && (this.broken === null || this.pursuing.has(u.id))) {
+          const still = this.orders.get(u.id), sent = this.pursuing.get(u.id);
+          const ordered = still?.kind === "attack" && !still.fleet ? this.byId.get(still.target) : sent !== void 0 ? this.byId.get(sent) : void 0;
+          const foe = ordered && live4(ordered) ? ordered : this.strikeTarget(u) ?? this.heaviest(other3(u.side));
+          if (foe && this.strike(u, foe)) this.struckFirst(u, foe);
         }
         if ((this.look.get(u.id) ?? 0) <= this.t) {
           this.look.set(u.id, this.t + SEA.fire.retarget);
           this.aim(u);
         }
       }
+      this.startRuns();
     }
-    /** The enemy piece a piece fires on: the one it was told to attack if it can reach it, or one in reach picked by its threat. */
+    nearestToMiddle(side3) {
+      const fighting3 = this.units.filter((u) => u.side === side3 || u.state !== "routing");
+      return (enemyNearestMiddle(fighting3, side3) ?? enemyNearestMiddle(this.units, side3))?.id ?? -1;
+    }
+    /**
+     * The enemy piece a piece fires on (ruling 239, the tactics panel's item 2: each ship class to its own job). A piece
+     * told on its own to attack one enemy fires on it whenever it is in reach. Otherwise it does its class's job
+     * (jobs.fire): the first class of enemy it has in reach, ships still fighting before ships breaking off; among them
+     * the one nearest its fleet's main effort, or, where its style shares the big guns' fire out (spread), the one fewest
+     * of its side's battleships and cruisers are firing on, kept until another has two fewer. No dice: the same ships in
+     * the same places make the same choice.
+     */
     aim(u) {
       const o = this.orders.get(u.id);
       const C3 = SEA.classes[u.extra.cls];
-      if (o?.kind === "attack") {
+      if (o?.kind === "attack" && !o.fleet) {
         const foe = this.byId.get(o.target);
         if (foe && live4(foe) && dist(u.x, u.y, foe.x, foe.y) <= C3.reach) {
           u.extra.target = foe.id;
           return;
         }
       }
-      let total = 0;
-      const near2 = [];
-      for (const e of this.units) {
-        if (e.side === u.side || !live4(e)) continue;
-        const d = dist(u.x, u.y, e.x, e.y);
-        if (d > C3.reach) continue;
-        const w = this.output(e) * (d <= C3.best ? 1 : 0.5);
-        near2.push([e, w]);
-        total += w;
+      u.extra.target = this.job(u);
+    }
+    /** The enemy a piece's job puts its guns on, or -1 with none of its classes in reach (see aim). */
+    job(u) {
+      const c = u.extra.cls;
+      if (c === "cv") return -1;
+      const side3 = u.side, R2 = SEA.classes[c].reach, main = this.byId.get(this.focus[side3]);
+      const [mx, my] = main ? [main.x, main.y] : this.centre(other3(side3));
+      const f0 = side3 === "att" ? 0 : Math.PI, cs = Math.cos(f0), sn = Math.sin(f0);
+      const spread = BIG_GUNS.has(c) && this.style(side3).spread > 0;
+      const shooters = (e) => {
+        let n = 0;
+        for (const f of this.units) if (f !== u && f.side === side3 && live4(f) && BIG_GUNS.has(f.extra.cls) && f.extra.target === e.id) n++;
+        return n;
+      };
+      const classes = SEA.jobs.fire[c];
+      if (this.screen.has(u.id) && !this.broken) {
+        const dds = this.units.filter((e) => e.side !== side3 && e.extra.cls === "dd" && live4(e) && e.state !== "routing" && dist(u.x, u.y, e.x, e.y) <= R2);
+        const running = dds.filter((e) => this.runs.get(e.id)?.phase === "in");
+        const bigs = this.units.filter((f) => f.side === side3 && f.extra.cls !== "dd" && live4(f));
+        const by2 = (us, d) => us.map((e) => ({ id: e.id, d: Math.round(d(e)) })).sort((a, b) => a.d - b.d || a.id - b.id)[0].id;
+        if (running.length) return by2(running, (e) => dist(u.x, u.y, e.x, e.y));
+        if (dds.length) return by2(dds, (e) => bigs.length ? Math.min(...bigs.map((f) => dist(f.x, f.y, e.x, e.y))) : dist(u.x, u.y, e.x, e.y));
       }
-      if (!near2.length) {
-        u.extra.target = -1;
-        return;
-      }
-      const cur = near2.find(([e]) => e.id === u.extra.target);
-      if (cur && this.rng.chance(0.7)) return;
-      let r = this.rng.next() * total;
-      for (const [e, w] of near2) {
-        r -= w;
-        if (r <= 0) {
-          u.extra.target = e.id;
-          return;
+      for (const breaking of [false, true]) {
+        for (const tc of classes) {
+          const pool = this.units.filter((e) => e.side !== side3 && e.extra.cls === tc && live4(e) && (breaking || e.state !== "routing") && dist(u.x, u.y, e.x, e.y) <= R2);
+          if (!pool.length) continue;
+          const ranked = pool.map((e) => ({ id: e.id, n: spread ? shooters(e) : 0, d: Math.round(dist(e.x, e.y, mx, my)), l: (e.x - mx) * cs - (e.y - my) * sn })).sort((a, b) => a.n - b.n || a.d - b.d || a.l - b.l || a.id - b.id);
+          if (spread) {
+            const cur = ranked.find((r) => r.id === u.extra.target);
+            if (cur && cur.n + 1 - ranked[0].n < 2) return cur.id;
+          }
+          return ranked[0].id;
         }
       }
-      u.extra.target = near2[near2.length - 1][0].id;
+      return -1;
+    }
+    /** A side's style (ruling 239): methodical for every side until the ticket carries each side's. */
+    styleName(side3) {
+      void side3;
+      return "methodical";
+    }
+    style(side3) {
+      return SEA.styles[this.styleName(side3)];
+    }
+    /** How much of a piece's fire tells at this range: all of it within its best range, falling to fire.far at its reach
+     *  (fire.far is 1: the guns tell as hard anywhere in reach, b415). */
+    reachFactor(C3, d) {
+      return d <= C3.best ? 1 : SEA.fire.far + (1 - SEA.fire.far) * (C3.reach - d) / (C3.reach - C3.best);
     }
     heaviest(side3) {
       let best = null, bw = 0;
@@ -62352,24 +63063,55 @@
       return foe;
     }
     nearestFoe(u) {
-      let best = null, bd = Infinity;
-      for (const e of this.units) if (e.side !== u.side && live4(e)) {
-        const d = dist(u.x, u.y, e.x, e.y);
-        if (d < bd) {
-          bd = d;
-          best = e;
-        }
+      return nearestEnemy(this.units, u.side, u.x, u.y);
+    }
+    /** Whether a gun ship keeps with its fleet until the guns meet: at cruising speed, fighting at will or under an
+     *  order to attack (a ship the player has sent at a speed of its own, or on a course, goes as told, a destroyer
+     *  piece whose torpedo run has opened goes in: R4, and a piece of the AA ring keeps its place round its carrier: R3). */
+    keepsStation(e) {
+      if (!live4(e) || e.state === "routing" || e.extra.cls === "cv" || e.extra.speed !== "cruise" || this.runs.has(e.id) || this.rings[e.side].has(e.id)) return false;
+      const o = this.orders.get(e.id);
+      return !o || o.kind === "attack";
+    }
+    /** Whether a side has no gun ship left in the fight: only carriers, or ships breaking off. */
+    gunless(side3) {
+      return !this.units.some((e) => e.side === side3 && live4(e) && e.state !== "routing" && e.extra.cls !== "cv");
+    }
+    /** How far toward the enemy a ship stands: y for the attacker, -y for the defender. */
+    ahead(e) {
+      return e.side === "att" ? e.y : -e.y;
+    }
+    /** A side's gun ships keeping with its fleet: the cruising speed of the slowest of them, and how far toward the enemy
+     *  the rearmost of them stands (see ahead). Null when none keeps station: before the guns meet a fleet keeps together
+     *  only to meet a gun line, so not once either side has broken off (the chase runs at full speed) and not against
+     *  an enemy with no gun ship left in the fight (the screen runs carriers down at its own speed). */
+    keeping(side3) {
+      if (this.broken !== null || this.contactAt !== null || this.gunless(other3(side3))) return null;
+      let slowest = Infinity, rear = Infinity;
+      for (const e of this.units) {
+        if (e.side !== side3 || !this.keepsStation(e)) continue;
+        slowest = Math.min(slowest, SEA.classes[e.extra.cls].speed);
+        rear = Math.min(rear, this.ahead(e));
       }
-      return best;
+      return Number.isFinite(slowest) ? { slowest, rear } : null;
+    }
+    /** The speed a ship makes until the guns meet if it is keeping with its fleet, else null: for the screens' estimate
+     *  of when the action begins. */
+    fleetSpeed(u) {
+      const line = this.keepsStation(u) ? this.keeping(u.side) : null;
+      return line ? line.slowest * SEA.speeds.cruise : null;
     }
     // ---- Ship handling -------------------------------------------------------------------------------------------
     steer(u) {
       const C3 = SEA.classes[u.extra.cls], F = SEA.field;
       const o = this.orders.get(u.id) ?? FREE2;
-      let want = u.face, speed = C3.speed * SEA.speeds[u.extra.speed];
+      let want = u.face, speed = C3.speed * SEA.speeds[u.extra.speed], foeId = -1;
+      this.away[u.id] = false;
+      const run0 = this.runs.get(u.id);
+      if (run0 && (u.state === "routing" || this.toldOff(o, run0))) this.endRun(u, run0, run0.phase !== "in");
       const home = u.side === "att" ? Math.PI : 0;
       if (u.state === "routing" || o.kind === "leave") {
-        want = home;
+        want = this.breakOffCourse(u, home);
         speed = C3.speed * SEA.speeds.flank;
       } else if (o.kind === "move") {
         const d = dist(u.x, u.y, o.x, o.y);
@@ -62381,19 +63123,60 @@
       } else if (o.kind === "hold") {
         speed = 0;
       } else {
-        const foe = o.kind === "attack" ? this.byId.get(o.target) ?? null : this.steerFoe(u);
-        if (foe) want = this.engage(u, foe);
-        if (this.broken && this.broken !== u.side && this.ai[u.side]) speed = C3.speed * SEA.speeds.flank;
+        const run = u.extra.cls === "dd" ? this.runCourse(u, o) : null;
+        const post2 = run ?? this.ringHelm(u) ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u) ?? this.carrierHelm(u) ?? this.guideHelm(u);
+        if (post2) {
+          want = post2.want;
+          speed = post2.speed;
+        } else {
+          const tgt = this.byId.get(o.kind === "attack" && !o.fleet ? o.target : this.focus[u.side]) ?? null;
+          const near2 = this.steerFoe(u);
+          const foe = u.extra.cls !== "cv" && tgt && (!near2 || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near2.x, near2.y) + SEA.ai.beyond) ? tgt : near2;
+          if (foe) {
+            want = this.engage(u, foe);
+            foeId = foe.id;
+          }
+          if (u.extra.cls === "cv") {
+            want = this.apart(u, want);
+            if (this.guideWaits(u)) {
+              speed = Math.min(speed, C3.speed * SEA.speeds.slow);
+              this.mark(`${u.side}:cvPace:s`, DT);
+            }
+          }
+        }
+        const away2 = this.groupEvasion(u, false);
+        if (away2) {
+          want = away2.course;
+          speed = Math.min(C3.speed * SEA.speeds.flank, away2.speed);
+          foeId = -1;
+          this.away[u.id] = true;
+          this.onStation.delete(u.id);
+        }
+        if (this.broken && this.broken !== u.side && !this.chaseTaken[u.side]) speed = C3.speed * SEA.speeds.flank;
+        else if (u.extra.cls !== "cv" && u.extra.speed === "cruise" && this.gunless(other3(u.side))) speed = C3.speed * SEA.speeds.flank;
+        const line = this.keepsStation(u) ? this.keeping(u.side) : null;
+        if (line) {
+          const [ax, ay] = this.centre(u.side), [bx, by2] = this.centre(other3(u.side));
+          want = bearing(ax, ay, bx, by2);
+          foeId = -1;
+          speed = Math.min(speed, line.slowest * SEA.speeds.cruise);
+          if (this.ahead(u) - line.rear > SEA.ai.station) speed = Math.min(speed, line.slowest * SEA.speeds.slow);
+        }
       }
       if (u.state !== "routing" && o.kind !== "leave") {
         const m = 800;
-        if (u.x < m || u.x > F.size - m || u.y < m || u.y > F.size - m) want = bearing(u.x, u.y, F.size / 2, F.size / 2);
+        if (u.x < m || u.x > F.size - m || u.y < m || u.y > F.size - m) {
+          want = bearing(u.x, u.y, F.size / 2, F.size / 2);
+          foeId = -1;
+        }
       }
       const acc = SEA.speeds.accel * DT;
       u.extra.way = u.extra.way < speed ? Math.min(speed, u.extra.way + acc) : Math.max(speed, u.extra.way - acc);
       const helm = C3.turn * (0.25 + 0.75 * Math.min(1, u.extra.way / C3.speed)) * DT;
       const swing = clamp5(turn(u.face, want), -helm, helm);
       this.swing[u.id] = helm > 0 ? Math.abs(swing) / (C3.turn * DT) : 0;
+      this.helmed[u.id] = helm > 0 ? swing / (C3.turn * DT) : 0;
+      this.steered[u.id] = foeId;
       u.face = norm(u.face + swing);
       u.x += Math.sin(u.face) * u.extra.way * DT;
       u.y += Math.cos(u.face) * u.extra.way * DT;
@@ -62402,7 +63185,443 @@
         this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? "have broken off and make" : "has broken off and makes"} for port.` });
       }
     }
-    /** The course that brings a piece to its best range with its broadside to the enemy. */
+    // ---- The battle line ---------------------------------------------------------------------------------------------
+    /** Whether a piece sails in its side's battle line: a battleship or cruiser fighting at will or under a fleet order, at
+     *  cruising speed, not breaking off. A piece the player sends at a target, a point or a speed of its own leaves it. */
+    inLine(u) {
+      if (!live4(u) || u.state === "routing" || u.extra.cls !== "bb" && u.extra.cls !== "ca" || u.extra.speed !== "cruise") return false;
+      const o = this.orders.get(u.id);
+      return !o || o.kind === "free" || o.kind === "attack" && !!o.fleet;
+    }
+    /** The middle of a set of pieces, by their weight. */
+    middle(us) {
+      let x = 0, y = 0, w = 0;
+      for (const u of us) {
+        const k = this.weightOf(u) + 1e-6;
+        x += u.x * k;
+        y += u.y * k;
+        w += k;
+      }
+      return [x / w, y / w];
+    }
+    /** The line's course: square to the bearing of the enemy's gun ships on its hand, bent toward them while they lie
+     *  beyond its best range and away while they lie within it (line.bend at the guns' reach). */
+    lineCourse(members, foes, hand2) {
+      const [mx, my] = this.middle(members), [ex, ey] = this.middle(foes), C3 = SEA.classes.bb;
+      const b = bearing(mx, my, ex, ey), d = dist(mx, my, ex, ey);
+      const bend = clamp5((d - C3.best) / (C3.reach - C3.best), -1, 1) * SEA.line.bend;
+      return norm(b + hand2 * (Math.PI / 2 - bend));
+    }
+    /** The pieces in order along a course, the foremost first. */
+    alongCourse(us, course) {
+      const cs = Math.sin(course), cc = Math.cos(course);
+      return us.map((u) => ({ id: u.id, a: u.x * cs + u.y * cc })).sort((a, b) => b.a - a.a || a.id - b.id).map((r) => r.id);
+    }
+    /**
+     * Each side's battle line this tick (the ship plan's R1; ruling 239's order at 23:20Z; the historian: a fleet deployed
+     * from its cruising order into line ahead as the enemy came in sight, every broadside clear of the next ship, and
+     * steered to cross the enemy's T: Jutland, Surigao Strait), planned for both sides at the start of the tick from where
+     * the ships lay at the end of the last, so neither side sees the other's move first. Once the guns have met, a side's
+     * battleships and cruisers fighting at will or under a fleet order turn together onto one course and keep it at the
+     * speed of the slowest of them: the rows they drew up in become columns in line ahead, as long as the rows were wide
+     * (b438), the foremost along the course the van. The course is square to the bearing of the enemy's line (its
+     * battleships and cruisers), bent toward it while it lies beyond best range and away while within it (lineCourse: so
+     * the rear row comes into reach), on the hand the enemy's line is moving across that bearing, so the line keeps level
+     * with its van and bends across its head as it draws ahead (crossing the T). With the enemy coming straight on it
+     * turns to starboard, as the enemy's captains do: the field is the same turned half round for either side (b402), and
+     * the lines pass on opposite courses and wheel to keep each other abeam. It turns together onto the other hand when its
+     * van's course would take it off the field (line.edge), and when its van steers at an enemy line whose broadsides bear
+     * on it (its T crossed: line.crossed), as a line being crossed turned away together. There is no line against
+     * destroyers alone (the gun ships fight each for itself, as before), and none in a carrier group without battleships
+     * (until the guns meet, where the enemy brings aircraft, its escorts ring its carriers, R3, and otherwise they fight
+     * each for itself). It keeps until a side breaks off or the enemy has no gun ship
+     * left, when the chase runs as before. No dice.
+     */
+    planLines() {
+      const sides = ["att", "def"];
+      for (const side3 of sides) this.planLine(side3);
+      const crossed = sides.map((side3) => this.crossed(side3));
+      sides.forEach((side3, i) => {
+        if (crossed[i] !== 0 && crossed[i] !== this.lines[side3].hand) this.turnTogether(side3, crossed[i], "crossed");
+      });
+    }
+    /** A side's line this tick: formed, its pieces still in it, its course and speed, turned off the field's edge. */
+    planLine(side3) {
+      const P = this.linePlans[side3];
+      P.t = this.t;
+      P.members = [];
+      if (this.contactAt === null || this.broken !== null || this.gunless(other3(side3))) return;
+      const mine4 = this.units.filter((u) => u.side === side3 && live4(u));
+      if (mine4.some((u) => u.extra.cls === "cv") && !mine4.some((u) => u.extra.cls === "bb" && u.state !== "routing")) return;
+      const foes = this.lineFoes(side3);
+      const members = this.units.filter((u) => u.side === side3 && this.inLine(u));
+      if (!members.length || !foes.length) return;
+      const N = SEA.line;
+      let L2 = this.lines[side3];
+      if (!L2) {
+        const [mx, my] = this.middle(members), [ex, ey] = this.middle(foes), b = bearing(mx, my, ex, ey);
+        let vx = 0, vy = 0;
+        for (const e of foes) {
+          vx += Math.sin(e.face) * e.extra.way;
+          vy += Math.cos(e.face) * e.extra.way;
+        }
+        const lat = (vx * Math.cos(b) - vy * Math.sin(b)) / foes.length;
+        const hand2 = Math.abs(lat) > N.across ? Math.sign(lat) : 1;
+        L2 = { order: [], hand: hand2, course: this.lineCourse(members, foes, hand2), speed: 0, turned: this.t };
+        this.lines[side3] = L2;
+        this.mark(`${side3}:lineFormed`, 1);
+        this.say({ what: "sea:line", unit: members[0].id, side: side3, text: "", extra: { why: "form", hand: hand2, course: Math.round(L2.course * 100) / 100 } });
+      }
+      L2.course = this.lineCourse(members, foes, L2.hand);
+      L2.order = this.alongCourse(members, L2.course);
+      L2.speed = Math.min(...members.map((u) => SEA.classes[u.extra.cls].speed)) * SEA.speeds.cruise;
+      P.members = L2.order.map((id) => this.byId.get(id));
+      const g2 = P.members[0], F = SEA.field.size, m = N.margin;
+      const ax = g2.x + Math.sin(L2.course) * N.edge, ay = g2.y + Math.cos(L2.course) * N.edge;
+      if (this.t - L2.turned >= N.settle && (ax < m || ax > F - m || ay < m || ay > F - m)) this.turnTogether(side3, -L2.hand, "edge");
+    }
+    /** The enemy's battleships and cruisers still fighting: the line a line deploys against. Against destroyers alone
+     *  there is none: the gun ships fight each for itself, as before. */
+    lineFoes(side3) {
+      return this.units.filter((e) => e.side !== side3 && live4(e) && e.state !== "routing" && (e.extra.cls === "bb" || e.extra.cls === "ca"));
+    }
+    /** Whether a side's line has its T crossed: its guide steams within line.crossed of the bearing of an enemy line whose
+     *  course lies square to its own bearing to it, so the enemy's broadsides bear and its own guns end-on. The hand to
+     *  turn away together onto, the one that runs with the enemy's line rather than into it; 0 when not crossed. */
+    crossed(side3) {
+      const L2 = this.lines[side3], them = this.lines[other3(side3)];
+      const ours = this.linePlans[side3].members, theirs = this.linePlans[other3(side3)].members;
+      if (!L2 || !them || this.t - L2.turned < SEA.line.settle || !ours.length || !theirs.length) return 0;
+      const N = SEA.line, g2 = ours[0], [mx, my] = this.middle(ours), [ex, ey] = this.middle(theirs);
+      const broadside = Math.abs(Math.sin(turn(them.course, bearing(ex, ey, mx, my)))) > Math.cos(N.crossed);
+      if (!broadside || Math.abs(turn(g2.face, bearing(g2.x, g2.y, ex, ey))) >= N.crossed) return 0;
+      const foes = this.lineFoes(side3);
+      const off2 = (h) => Math.abs(turn(this.lineCourse(ours, foes, h), them.course));
+      return off2(1) <= off2(-1) ? 1 : -1;
+    }
+    /** A side's line turns together onto a hand: every piece steers the new course at once, so the rear leads. */
+    turnTogether(side3, hand2, why) {
+      const L2 = this.lines[side3], members = this.linePlans[side3].members;
+      if (!L2 || !members.length) return;
+      L2.hand = hand2;
+      L2.course = this.lineCourse(members, this.lineFoes(side3), hand2);
+      L2.order = this.alongCourse(members, L2.course);
+      this.linePlans[side3].members = L2.order.map((id) => this.byId.get(id));
+      L2.turned = this.t;
+      this.mark(`${side3}:lineTurn:${why}`, 1);
+      this.say({ what: "sea:line", unit: members[0].id, side: side3, text: "", extra: { why, hand: hand2, course: Math.round(L2.course * 100) / 100 } });
+    }
+    /** The course and speed of a piece in its side's battle line, or null when it is in none: the line's course at the
+     *  cruising speed of its slowest piece, so its rows keep together as columns in line ahead. A piece that has strayed
+     *  more than ai.keep metres from the middle of the line works back toward it at up to flank. */
+    lineHelm(u) {
+      if (u.extra.cls !== "bb" && u.extra.cls !== "ca") return null;
+      const P = this.linePlans[u.side], L2 = this.lines[u.side];
+      if (!L2 || P.t !== this.t || !P.members.includes(u)) return null;
+      const C3 = SEA.classes[u.extra.cls];
+      const [cx, cy] = this.middle(P.members), gap = dist(u.x, u.y, cx, cy);
+      if (gap <= SEA.ai.keep) return { want: L2.course, speed: L2.speed };
+      const pull = Math.min(0.6, (gap - SEA.ai.keep) / SEA.ai.keep), back = turn(L2.course, bearing(u.x, u.y, cx, cy));
+      return { want: norm(L2.course + pull * back), speed: Math.cos(back) > 0 ? C3.speed * SEA.speeds.flank : L2.speed };
+    }
+    /**
+     * The AA ring (the ship plan's R3): while the enemy brings aircraft and until the guns first meet, a side with carriers
+     * and no battleship keeps its whole escort round them, cruisers and destroyers alike, as the carrier forces of the
+     * record cruised (Coral Sea, Midway, Santa Cruz: the screen on circles round the carriers; the 1944 War Instructions
+     * put the heavy ships on the 2,000-yard circle and the AA cruiser at 1,000). A piece keeps it at cruising speed, fighting
+     * at will or under a fleet order, and not on a torpedo run: an order to attack one ship, a speed or a course of the
+     * player's own takes it out, and the plain order does not, so the newcomer's battle stays the staff's (b402, mark 4).
+     * The pieces are shared in turn, by id, over the carriers fighting at will or sent to strike (one the player sends on
+     * a course, holds or withdraws keeps no ring). At contact the ring is let go and its ships fight as any other: held
+     * through the action it kept its guns' weight out of the fight, and the card prices that weight whole (cvcv missed its
+     * mark by .13 to .38 in every such form: the design director, 14:36Z, the ring earning its keep by where its guns
+     * stand, not by flak, which at the campaign's law takes 0.2 to 0.3% of a strike whatever the ring). It is let go for
+     * good, too, once a carrier of its side sights an enemy battleship within evade.see and turns away (evasion): the
+     * screen left the carriers to meet surface ships (Samar, October 1944), and a ring that ran with them kept the guns
+     * from ever meeting while the battle line followed at its fleet's speed. None once a side has broken off (the chase
+     * runs as before) or against an enemy with no gun ship left (the screen runs its carriers down, as before). A fleet
+     * with a battle line keeps its line (R1), its carriers astern of it. Planned for both sides at the start of the tick,
+     * before any ship steers (ringHelm reads the places as each one steers). No dice.
+     */
+    planRings() {
+      this.onStation.clear();
+      for (const side3 of ["att", "def"]) {
+        const ring = this.rings[side3];
+        ring.clear();
+        if (this.ringGone[side3] || this.contactAt !== null || this.broken !== null || !this.bringsAir(other3(side3)) || this.gunless(other3(side3))) continue;
+        const mine4 = this.units.filter((u) => u.side === side3 && live4(u) && u.state !== "routing");
+        if (mine4.some((u) => u.extra.cls === "bb")) continue;
+        const all = mine4.filter((u) => u.extra.cls === "cv");
+        if (all.some((c) => this.evasion(c) !== null)) {
+          this.ringGone[side3] = true;
+          this.mark(`${side3}:ringGone`, this.t);
+          continue;
+        }
+        const cvs = all.filter((c) => {
+          const o = this.orders.get(c.id);
+          return !o || o.kind === "free" || o.kind === "attack";
+        }).sort((a, b) => a.id - b.id);
+        if (!cvs.length) continue;
+        const keeps = mine4.filter((u) => {
+          if (u.extra.cls !== "ca" && u.extra.cls !== "dd" || u.extra.speed !== "cruise" || this.runs.has(u.id)) return false;
+          const o = this.orders.get(u.id);
+          return !o || o.kind === "free" || o.kind === "attack" && !!o.fleet;
+        }).sort((a, b) => a.id - b.id);
+        const per = /* @__PURE__ */ new Map();
+        keeps.forEach((u, n) => {
+          const c = cvs[n % cvs.length].id;
+          per.set(c, [...per.get(c) ?? [], u.id]);
+        });
+        for (const [c, ids2] of per) ids2.forEach((id, i) => ring.set(id, { cv: c, i, k: ids2.length }));
+      }
+    }
+    /** A ring piece's course and speed (R3), or null when it keeps no ring: its station torp.station metres from its
+     *  carrier (the screen's own distance from the ship it guards, inside the strike's radius, so its guns count against
+     *  aircraft and it shares what a strike lands), the ring's places spaced evenly round from the bearing of the enemy's
+     *  middle. On station it keeps the carrier's course and way; off it, it closes as a screen piece does. */
+    ringHelm(u) {
+      const r = this.rings[u.side].get(u.id);
+      if (!r) return null;
+      const cv = this.byId.get(r.cv), [ex, ey] = this.centre(other3(u.side)), R2 = SEA.torp.station;
+      const a = bearing(cv.x, cv.y, ex, ey) + 2 * Math.PI * r.i / r.k;
+      const sx = cv.x + Math.sin(a) * R2, sy = cv.y + Math.cos(a) * R2, d = dist(u.x, u.y, sx, sy);
+      const flank = SEA.classes[u.extra.cls].speed * SEA.speeds.flank;
+      this.mark(`${u.side}:ring:s`, DT);
+      if (d < 200) return { want: cv.face, speed: Math.min(flank, cv.extra.way) };
+      return { want: bearing(u.x, u.y, sx, sy), speed: clamp5(d / 20, cv.extra.way, flank) };
+    }
+    /**
+     * A carrier's station (R3) while the enemy brings aircraft: ai.keep metres astern of the middle of its side's gun ships
+     * keeping with the fleet (fighting at will or under a fleet order, at cruising speed, not on a torpedo run, and not in
+     * the AA ring), on the line from the enemy's middle through theirs (the 1944 War Instructions: "commanders of carrier
+     * groups maneuver their units away from the enemy"; Formidable hauled out to the disengaged side at Matapan and stayed
+     * there while the battleships fought; the record's tens of kilometres are beyond the field, and the standoff stands for
+     * them), and further back along that line until no enemy lies within its standoff of it; then kept inside the field's
+     * edge by the margin the turn away keeps (evasion), which may bring it nearer. Two or more carriers keeping station
+     * stand abreast across that line, their navy's spacing apart (carrierWay: the record's one figure for carriers in one
+     * group, whatever they stand behind; the design director, 21:00Z: it was torp.station, the screen's own 1,000 m,
+     * closer than any figure in the record), each taking the place on its own hand as they lie, so none steams onto
+     * another's (at 1,000 m, closing on them from ahead, they passed about 240 m apart as each turned to the fleet's
+     * course: recorded, a look for the turning circles). Nearer an enemy
+     * than its standoff it opens the range along the line. On station it keeps the gun ships' course and way, and with the
+     * gun ships slower than its own slowest speed it keeps way on round its station (a carrier where the enemy's aircraft reach never lay stopped). Null with no such
+     * gun ship (a carrier group's escorts all in its ring), with the enemy bringing no aircraft, or for a carrier the player
+     * sends at a speed of its own: it then keeps its standoff as before. Once the guns have met it runs only while the side
+     * has a battleship afloat and not breaking off, its carriers astern of the line it fights in (Matapan); a carrier group
+     * has none after contact, the ring's own window: it is the screen's geometry, so it runs when the screen does (the
+     * design director, 14:36Z). Before contact a carrier group's ring holds every gun ship it could stand astern of. Kept
+     * on after contact, the group's escorts freed from the ring and fighting, it held the carriers astern through the gun
+     * fight and moved cvcvr .05 past its bar; let go at contact in a fleet with battleships as well, its carriers fell back
+     * on their standoffs from abreast and crossed 113 m apart. Wherever carriers keep no station (a carrier group's before
+     * contact as after) they keep their navy's way (carrierWay): on a guide (guideHelm) or each for herself but never
+     * inside its spacing of a sister (apart); each left to her own standoff with neither, a carrier group's came 132-214 m
+     * apart in the gun fight on 7 of 12 runs.
+     * It runs only while the enemy brings aircraft (applied in
+     * every action it moved the uscv mark, its cause not traced).
+     * Its turn into the wind to launch is the 3D game's to show (seaWind): the rules keep its course (the design director,
+     * 14:36Z: weather stays off the rules, and one wind for both sides would make a battle uneven by its luck).
+     */
+    carrierHelm(u) {
+      if (!this.keepsCarrierStation(u) || !this.bringsAir(other3(u.side))) return null;
+      if (this.contactAt !== null && !this.units.some((b) => b.side === u.side && b.extra.cls === "bb" && live4(b) && b.state !== "routing")) return null;
+      const guns2 = this.units.filter((e) => {
+        if (e.side !== u.side || !live4(e) || e.state === "routing" || e.extra.cls === "cv" || e.extra.speed !== "cruise" || this.runs.has(e.id) || this.rings[u.side].has(e.id)) return false;
+        const o = this.orders.get(e.id);
+        return !o || o.kind === "free" || o.kind === "attack" && !!o.fleet;
+      });
+      if (!guns2.length) return null;
+      const [gx, gy] = this.middle(guns2), [ex, ey] = this.centre(other3(u.side)), gd = dist(gx, gy, ex, ey);
+      if (gd < 1e-6) return null;
+      const ux = (gx - ex) / gd, uy = (gy - ey) / gd, C3 = SEA.classes.cv, so = C3.standoff ?? 2500;
+      const near2 = this.nearestFoe(u);
+      if (near2 && dist(u.x, u.y, near2.x, near2.y) < so) return { want: Math.atan2(ux, uy), speed: C3.speed * SEA.speeds.cruise };
+      const px = uy, py = -ux, across = (c) => c.x * px + c.y * py;
+      const mates = this.units.filter((c) => c.side === u.side && this.keepsCarrierStation(c)).sort((a, b) => across(a) - across(b) || a.id - b.id);
+      const off2 = (mates.indexOf(u) - (mates.length - 1) / 2) * this.carrierWay(u.side).spacing;
+      const bx = gx + px * off2, by2 = gy + py * off2;
+      let back = SEA.ai.keep;
+      for (const e of this.units) {
+        if (e.side === u.side || !live4(e)) continue;
+        const wx = bx - e.x, wy = by2 - e.y, h = wx * ux + wy * uy, q = h * h - (wx * wx + wy * wy - so * so);
+        if (q > 0) back = Math.max(back, -h + Math.sqrt(q));
+      }
+      const F = SEA.field.size, m = EDGE_MARGIN;
+      const sx = clamp5(bx + ux * back, m, F - m), sy = clamp5(by2 + uy * back, m, F - m);
+      const d = dist(u.x, u.y, sx, sy);
+      let vx = 0, vy = 0;
+      for (const e of guns2) {
+        vx += Math.sin(e.face) * e.extra.way;
+        vy += Math.cos(e.face) * e.extra.way;
+      }
+      vx /= guns2.length;
+      vy /= guns2.length;
+      const fv = Math.hypot(vx, vy), lo = C3.speed * SEA.speeds.slow, hi = C3.speed * SEA.speeds.flank;
+      this.mark(`${u.side}:cvStation:s`, DT);
+      this.onStation.add(u.id);
+      if (d < 200) return { want: fv >= lo ? Math.atan2(vx, vy) : d > 1e-6 ? bearing(u.x, u.y, sx, sy) : u.face, speed: clamp5(fv, lo, hi) };
+      return { want: bearing(u.x, u.y, sx, sy), speed: clamp5(d / 20, lo, hi) };
+    }
+    /**
+     * A side's carriers' way of keeping company where they keep no station (the design director, 20:50Z and 20:56Z: by
+     * navy and era, as a 239 style): its navy's path in sea.json 'carriers' ('_' for a navy not named), stepped by the
+     * research the side holds (carriers.grow: Carrier task forces), never by a date, as land's styles grow (stepsOf). The
+     * record (carrier-spacing-record.md): in 1942 every navy's carriers, and Japan's throughout, manoeuvred each for
+     * herself under air attack; the US from late 1943 and the British Pacific Fleet in 1945 sailed as one body on a guide.
+     */
+    carrierWay(side3) {
+      const P = SEA.carriers, path = P.path[this.ticket[side3].nat] ?? P.path._, held2 = this.ticket[side3].doctrine ?? [];
+      let n = 0;
+      while (n < P.grow.length && held2.includes(P.grow[n])) n++;
+      return path[Math.min(path.length - 1, n)];
+    }
+    /** Whether a carrier is under direct air attack: an enemy strike is aloft at her, flown off and not yet landed. */
+    underAir(u) {
+      return this.strikes.some((k) => k.side !== u.side && k.target === u.id);
+    }
+    /** Whether a carrier keeps formation on a guide: as she would keep station (keepsCarrierStation), and not under direct
+     *  air attack (underAir): a carrier under attack swung on her own (the record), out of the guide's formation. */
+    inFormation(c) {
+      return this.keepsCarrierStation(c) && !this.underAir(c);
+    }
+    /**
+     * Carriers steaming on their guide, where their navy's way is the guide's (carrierWay; the design director, 19:12Z
+     * form G, 20:50Z by navy and era): wherever a side's carriers keep no station (carrierHelm), before the guns meet as
+     * after (a carrier group's ring holds every gun ship she could stand astern of, so it has none before contact either:
+     * with the guide only after contact its carriers drew 7 km apart first and a follower never reached her place), the
+     * first of them by id in formation (inFormation) is the guide and keeps her standoff as before (engage), pacing her
+     * formation (guideWaits); each other takes her place abreast of the guide, her navy's spacing from her across the line
+     * from the enemy's middle through her, in the order they lie across it (ties by id), as on station, closing on it at up
+     * to flank and on it keeping the guide's course and way (with the guide slower than slow, keeping way on round it at
+     * slow, as on station); the place is kept inside the field's edge as on station, which may bring it nearer. The guide
+     * sunk, breaking off, sent at a speed of her own, under an order to steer, hold or withdraw, or under direct air
+     * attack, the next by id in formation is the guide; a carrier out of formation goes as she is told, or steers her own
+     * standoff. The game marks no flagship among a fleet's carriers, so none is preferred. The record: the US cruising
+     * dispositions from late 1943 (one ship the guide, every other keeping bearing and distance on it, the formation
+     * turning together), the British Pacific Fleet's in 1945. Null for a lone carrier, for the guide, for a carrier out of
+     * formation, and where her navy's way is each for herself (apart).
+     */
+    guideHelm(u) {
+      const p = this.guidePlace(u);
+      if (!p) return null;
+      const { guide, sx, sy } = p, C3 = SEA.classes.cv;
+      const d = dist(u.x, u.y, sx, sy), fv = guide.extra.way, lo = C3.speed * SEA.speeds.slow, hi = C3.speed * SEA.speeds.flank;
+      this.mark(`${u.side}:cvGuide:s`, DT);
+      if (d < 200) return { want: fv >= lo ? guide.face : d > 1e-6 ? bearing(u.x, u.y, sx, sy) : u.face, speed: clamp5(fv, lo, hi) };
+      return { want: bearing(u.x, u.y, sx, sy), speed: clamp5(d / 20, lo, hi) };
+    }
+    /** A carrier's guide and her place abreast of the guide (guideHelm), or null where she steams on no guide. */
+    guidePlace(u) {
+      if (!this.inFormation(u)) return null;
+      const way = this.carrierWay(u.side);
+      if (way.form !== "guide") return null;
+      const group = this.units.filter((c) => c.side === u.side && this.inFormation(c));
+      if (group.length < 2) return null;
+      const guide = group.reduce((a, b) => b.id < a.id ? b : a);
+      if (guide === u) return null;
+      const [ex, ey] = this.centre(other3(u.side)), gd = dist(guide.x, guide.y, ex, ey);
+      if (gd < 1e-6) return null;
+      const ux = (guide.x - ex) / gd, uy = (guide.y - ey) / gd, px = uy, py = -ux;
+      const across = (c) => c.x * px + c.y * py;
+      group.sort((a, b) => across(a) - across(b) || a.id - b.id);
+      const off2 = (group.indexOf(u) - group.indexOf(guide)) * way.spacing;
+      const F = SEA.field.size, m = EDGE_MARGIN;
+      return { guide, sx: clamp5(guide.x + px * off2, m, F - m), sy: clamp5(guide.y + py * off2, m, F - m) };
+    }
+    /** Whether a guide paces her formation (the design director, 20:50Z: she keeps her standoff at a way her followers can
+     *  close on, so they reach their places): a carrier steaming on her lies more than her navy's spacing from her place.
+     *  She then makes the way a fleet keeping together makes for its rearmost: slow (steer). */
+    guideWaits(u) {
+      if (u.extra.cls !== "cv") return false;
+      const way = this.carrierWay(u.side);
+      for (const c of this.units) {
+        if (c === u || c.side !== u.side || c.extra.cls !== "cv") continue;
+        const p = this.guidePlace(c);
+        if (p && p.guide === u && dist(c.x, c.y, p.sx, p.sy) > way.spacing) return true;
+      }
+      return false;
+    }
+    /**
+     * Each for herself, where that is her navy's way (carrierWay; the design director, 20:50Z): a carrier steering off her
+     * own enemy (engage, its pull to the fleet's middle included) never closes inside her navy's spacing from a sister:
+     * with the nearest sister afloat inside it and her course closing on her, she turns to the course square to the line
+     * between them on the side nearer her course, neither closing nor opening by will. It binds her under direct air
+     * attack too, in either way (the design director, 21:00Z): she swings on her own, out of her guide's formation where
+     * she keeps one, but not into a sister (with no line under attack, both carriers struck at once came 9-80 m apart at
+     * Japan's 2,000 m in 4 of 12 runs). A guide and her followers keep their places and keep no line. A carrier sent at a
+     * speed of her own, or under an order to steer, hold or withdraw, goes as told and keeps no line. The
+     * record: in 1942 every navy's carriers, and Japan's throughout, manoeuvred each for herself, drawing apart by miles;
+     * let each steer off her own nearest enemy with no line, a carrier group's carriers came 132-214 m apart in the gun
+     * fight on 7 of 12 runs (R3).
+     */
+    apart(u, want) {
+      const way = this.carrierWay(u.side);
+      if (!this.keepsCarrierStation(u) || way.form === "guide" && !this.underAir(u)) return want;
+      let near2 = null, nd = way.spacing;
+      for (const c of this.units) {
+        if (c === u || c.side !== u.side || c.extra.cls !== "cv" || !live4(c)) continue;
+        const d = dist(u.x, u.y, c.x, c.y);
+        if (d < nd) {
+          nd = d;
+          near2 = c;
+        }
+      }
+      if (!near2) return want;
+      const b = bearing(u.x, u.y, near2.x, near2.y), t = turn(b, want);
+      if (Math.abs(t) >= Math.PI / 2) return want;
+      this.mark(`${u.side}:cvApart:s`, DT);
+      return norm(b + (t >= 0 ? 1 : -1) * Math.PI / 2);
+    }
+    /** Whether a carrier takes its station (carrierHelm) when there is one to take: afloat, not breaking off, at cruising
+     *  speed, fighting at will or sent to strike (one the player sends at a speed of its own goes as told). */
+    keepsCarrierStation(c) {
+      if (c.extra.cls !== "cv" || !live4(c) || c.state === "routing" || c.extra.speed !== "cruise") return false;
+      const o = this.orders.get(c.id);
+      return !o || o.kind === "free" || o.kind === "attack";
+    }
+    /** The course and speed of a carrier group turning away from a battle line, for a carrier or a ship of its screen
+     *  (within 'screen' metres of a carrier of its own side), or null when no battle line is near. */
+    groupEvasion(u, ordered) {
+      if (this.units.some((f) => f.side === u.side && f.extra.cls === "bb" && live4(f) && f.state !== "routing")) return null;
+      const speed = SEA.classes.cv.speed * SEA.evade.speed;
+      if (u.extra.cls === "cv") {
+        const h2 = this.evasion(u);
+        return h2 === null ? null : { course: h2, speed };
+      }
+      if (ordered || !SEA.evade.screen) return null;
+      let cv = null, cd = SEA.evade.screen;
+      for (const c of this.units) {
+        if (c.side !== u.side || c.extra.cls !== "cv" || !live4(c) || c.state === "routing") continue;
+        const d = dist(u.x, u.y, c.x, c.y);
+        if (d < cd) {
+          cd = d;
+          cv = c;
+        }
+      }
+      if (!cv) return null;
+      const h = this.evasion(cv);
+      return h === null ? null : { course: h, speed };
+    }
+    /** The course a carrier takes away from the nearest enemy battleship within sight, or null when none is near. Along
+     *  the edge of the field when straight away would run it off. */
+    evasion(u) {
+      let bb = null, bd = SEA.evade.see;
+      for (const e of this.units) {
+        if (e.side === u.side || e.extra.cls !== "bb" || !live4(e) || e.state === "routing") continue;
+        const d = dist(u.x, u.y, e.x, e.y);
+        if (d < bd) {
+          bd = d;
+          bb = e;
+        }
+      }
+      if (!bb) return null;
+      const a = bearing(bb.x, bb.y, u.x, u.y), F = SEA.field, m = EDGE_MARGIN, ahead2 = 2e3;
+      for (const k of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+        const h = norm(a + k), x = u.x + Math.sin(h) * ahead2, y = u.y + Math.cos(h) * ahead2;
+        if (x > m && x < F.size - m && y > m && y < F.size - m) return h;
+      }
+      return norm(a + Math.PI / 2);
+    }
+    /** The course that brings a piece into reach with its broadside to the enemy, and opens the range when it is too near. */
     engage(u, foe) {
       const C3 = SEA.classes[u.extra.cls];
       const d = dist(u.x, u.y, foe.x, foe.y), b = bearing(u.x, u.y, foe.x, foe.y);
@@ -62410,12 +63629,12 @@
       let off2;
       if (u.extra.cls === "cv") off2 = d < want ? 2.6 : d > want * 1.3 ? 0.6 : Math.PI / 2;
       else if (d > C3.reach) off2 = 0.15;
-      else if (d > want * 1.15) off2 = 0.6;
+      else if (d > SEA.ai.broadside) off2 = 0.6;
       else if (d < want * 0.75) off2 = 2.1;
       else off2 = Math.PI / 2;
       let h = this.hand.get(u.id);
       const a = Math.abs(turn(u.face, b + off2)), z = Math.abs(turn(u.face, b - off2));
-      if (h === void 0 || (h > 0 ? z + 0.8 < a : a + 0.8 < z)) h = a <= z ? 1 : -1;
+      if (h === void 0 || (h > 0 ? z + 0.8 < a : a + 0.8 < z)) h = a <= z + 1e-6 ? 1 : -1;
       this.hand.set(u.id, h);
       let want2 = norm(b + h * off2);
       const [cx, cy] = this.centre(u.side), gap = dist(u.x, u.y, cx, cy);
@@ -62424,6 +63643,30 @@
         want2 = norm(want2 + pull * turn(want2, bearing(u.x, u.y, cx, cy)));
       }
       return want2;
+    }
+    /**
+     * The course of a ship breaking off (the ship plan's R5): away from the enemy nearest her that is still fighting,
+     * bent for home, so she opens the range as she goes rather than steaming due north or south across the enemy's bows
+     * (Jutland, May 1916: the High Seas Fleet's battle turns away). It is the sum of the two directions,
+     * home and away from that enemy, so it never runs toward her own side's far edge; by the field's side edges it holds
+     * for home. With no enemy fighting, or that enemy dead ahead on her course home, she steers for home.
+     */
+    breakOffCourse(u, home) {
+      let foe = null, fd = Infinity;
+      for (const e of this.units) {
+        if (e.side === u.side || !live4(e) || e.state === "routing") continue;
+        const d = dist(u.x, u.y, e.x, e.y);
+        if (d < fd) {
+          fd = d;
+          foe = e;
+        }
+      }
+      if (!foe || fd <= 0) return home;
+      const F = SEA.field.size, m = 800;
+      let x = Math.sin(home) + (u.x - foe.x) / fd;
+      const y = Math.cos(home) + (u.y - foe.y) / fd;
+      if (u.x < m && x < 0 || u.x > F - m && x > 0) x = 0;
+      return Math.hypot(x, y) < 1e-9 ? home : Math.atan2(x, y);
     }
     centre(side3) {
       if (this.centres.t !== this.t) {
@@ -62441,27 +63684,108 @@
     }
     // ---- Fire and wear -------------------------------------------------------------------------------------------
     fire(u) {
-      if (u.extra.cls === "cv" || u.extra.target < 0) return;
+      if (u.extra.cls === "cv") return;
+      if (u.extra.target < 0) {
+        this.store(u);
+        return;
+      }
       const foe = this.byId.get(u.extra.target);
       if (!foe || !live4(foe)) {
         u.extra.target = -1;
+        this.store(u);
         return;
       }
       const C3 = SEA.classes[u.extra.cls];
       const d = dist(u.x, u.y, foe.x, foe.y);
-      if (d > C3.reach) return;
-      const range2 = d <= C3.best ? 1 : SEA.fire.far + (1 - SEA.fire.far) * (C3.reach - d) / (C3.reach - C3.best);
+      if (d > C3.reach) {
+        this.store(u);
+        return;
+      }
+      const range2 = this.reachFactor(C3, d);
       const arc = SEA.fire.endOn + (1 - SEA.fire.endOn) * Math.abs(Math.sin(turn(u.face, bearing(u.x, u.y, foe.x, foe.y))));
       const nerve2 = u.state === "wavering" ? SEA.nerve.wavering : u.state === "routing" || this.orders.get(u.id)?.kind === "leave" ? 0.5 : 1;
-      if (!this.contact) {
-        this.contact = true;
+      if (this.contactAt === null) {
+        this.contactAt = this.t;
         this.say({ what: "contact", unit: u.id, side: u.side, text: "The fleets are in range of each other." });
       }
       u.engaged = foe.id;
-      const w = SEA.fire.rate * C3.punch * this.output(u) * range2 * arc * nerve2 * this.day(u.side) * DT;
+      let w = SEA.fire.rate * this.output(u) * range2 * arc * nerve2 * this.day(u.side) * DT;
+      if (this.runs.has(u.id) && arc < 1) this.store(u, SEA.fire.rate * this.output(u) * range2 * (1 - arc) * nerve2 * this.day(u.side) * DT);
+      if (this.owe[u.id] > 0) {
+        const p = Math.min(this.owe[u.id], w);
+        this.owe[u.id] -= p;
+        w -= p;
+        this.mark(`${u.side}:paid`, p);
+      }
+      if (this.advance[u.side] > 0) {
+        const a = this.advance[u.side], p = Math.min(a, w);
+        this.unpaid[other3(u.side)] = p >= a ? 0 : this.unpaid[other3(u.side)] * (1 - p / a);
+        this.advance[u.side] -= p;
+        w -= p;
+        this.mark(`${u.side}:salvoPaid`, p);
+      }
+      w = this.take(foe, w);
       this.dealt[u.id] += w;
       this.inReach[u.id] += DT;
-      this.wear(foe, w);
+      this.mark(`${u.side}:${u.extra.cls}>${foe.extra.cls}`, w);
+      if (u.extra.cls === "dd" && (foe.extra.cls === "bb" || foe.extra.cls === "cv")) {
+        this.mark(`${u.side}:ddBig:s`, DT);
+        if (!this.runs.has(u.id)) {
+          this.mark(`${u.side}:ddBigOff:s`, DT);
+          if (d > this.style(u.side).press) this.mark(`${u.side}:ddBigFar:s`, DT);
+        }
+      }
+      if (u.extra.cls === "dd") this.mark(`${u.side}:ddGun:s`, DT);
+      if (this.screen.has(u.id)) {
+        const r = this.runs.get(foe.id);
+        if (r?.phase === "in") r.shot = true;
+      }
+    }
+    /**
+     * A blow of weight 'w' on a side wears the whole of what the side brought, by weight, as the card counts it (b415):
+     * the ship it fell on takes the gun ships' share, each carrier its own share and the coasts' aircraft theirs. A
+     * carrier is a ship to the card, so its share wears as a hull does ('fire.hull'), but the loss falls on its air
+     * group and it stays afloat, out of the guns' reach. The coasts' aircraft have no hull: a blow takes its whole weight
+     * from them. Kept whole while the guns fought, carriers and the coasts' aircraft were worth more the longer the gun
+     * fight ran (a fifth of the card one way or the other with the fleets' mix); worn with the fleet, they are worth
+     * what the card prices them. A blow that falls on a carrier itself falls on its hull. A side that owes for hull its
+     * blows put out of the line (debt, fallOut) pays that first; what is left of the blow lands, and is what this returns.
+     */
+    take(foe, w) {
+      const by2 = other3(foe.side);
+      if (this.debt[by2] > 0) {
+        const p = Math.min(this.debt[by2], w);
+        this.debt[by2] -= p;
+        w -= p;
+        this.mark(`${by2}:debtPaid`, p);
+        if (w <= 0) return 0;
+      }
+      if (foe.extra.cls === "cv") {
+        this.wear(foe, this.evenWear(foe, w));
+        return w;
+      }
+      const s = foe.side;
+      let ships = 0, total = this.airLeft[s];
+      for (const u of this.units) if (u.side === s && live4(u)) {
+        const x = this.weightOf(u);
+        total += x;
+        if (u.extra.cls !== "cv") ships += x;
+      }
+      if (total <= 0) return w;
+      this.wear(foe, this.evenWear(foe, w * ships / total));
+      for (const u of this.units) {
+        if (u.side !== s || !live4(u) || u.extra.cls !== "cv") continue;
+        const whole2 = this.info.get(u.id).weight * u.extra.ships0 * u.str;
+        if (whole2 > 0) this.deck[u.id] = Math.max(0, this.deck[u.id] - w * this.weightOf(u) / total / SEA.fire.hull / whole2);
+        u.extra.planes = this.deck[u.id];
+      }
+      this.airLeft[s] = Math.max(0, this.airLeft[s] * (1 - w / total));
+      return w;
+    }
+    /** The wear that takes 'w' of weight out of the fight on this piece, whatever it is: in proportion to its hull. */
+    evenWear(e, w) {
+      const p = this.info.get(e.id);
+      return w * p.hull / (p.weight * SEA.fire.hull);
     }
     /** Wear on a piece's hull: ships go down as it wears away, and its nerve is shaken. */
     wear(u, amount) {
@@ -62472,27 +63796,92 @@
       this.lastHit.set(u.id, this.t);
       const afloat2 = u.str <= 1e-9 ? 0 : Math.ceil(u.str * u.extra.ships0 - 1e-9);
       while (u.extra.ships > afloat2) this.loseShip(u);
+      this.fallOut(u);
     }
-    /** One ship of a piece goes: down, or out of the fight burning once its side has lost all the dice allow of its class. */
-    loseShip(u) {
+    /**
+     * A ship worn to side.hurt of her hull or less leaves the line burning and makes for port (the ship plan's R2; the
+     * design director, 01:36Z 21 November). The record: a captain took his ship out of the line when her steering was
+     * gone, she was down a quarter to a third of her speed, or about half her main battery or its fire control was out
+     * (Hiei, Lion at the Dogger Bank, Exeter, Prince of Wales, South Dakota); hits and fire alone never sent her out
+     * (Seydlitz kept her place). The field's guns wear with the hull (fire.damaged), so half her hull is half her main
+     * battery, and side.hurt is the rules' own "badly hurt" (b458). Her own hull is what is left of the piece's damaged
+     * ship; the rest of the piece fights on. Whether she sinks is the rules' outcome, as for any ship lost to the fight
+     * (loseShip: the dice's limit by class). The hull she takes with her is owed (debt) by the side whose blow put her
+     * out, paid out of its next blows, and counts toward her side's loss only as it is paid: a blow takes out its own
+     * weight whatever it falls on (b418, b438), so concentrated fire gets ships out of the line sooner and takes no more
+     * weight out of the fight, and the break and the odds the player is shown read only weight dealt. What is unpaid when
+     * the action ends counts on neither side: she is a damaged ship home, not a loss (the design director, 02:15Z and
+     * 03:49Z). No dice, no new number.
+     */
+    fallOut(u) {
+      const n0 = u.extra.ships0, hurt2 = SEA.side.hurt;
+      while (live4(u) && u.extra.ships > 0) {
+        const own = u.str * n0 - (u.extra.ships - 1);
+        if (own <= 1e-9 || own > hurt2 + 1e-9) return;
+        u.str = (u.extra.ships - 1) / n0;
+        this.debt[other3(u.side)] += this.info.get(u.id).weight * own * this.deck[u.id] * SEA.fire.hull;
+        this.loseShip(u, own);
+      }
+    }
+    /**
+     * Where a ship lost leaves her smoke, for the 3D game (the art director's grit direction, 19 November: black oil smoke
+     * from burning ships, standing to the end of the fight, as the burning wrecks on land do): a zone at her place in her
+     * piece's line, from this second to the end. 'sunk' is the oil burning on the water where she went down; 'burning' is
+     * where she left the line on fire, making for port. Drawn only: nothing in the rules reads it, and it draws no dice.
+     */
+    smoke(u, kind) {
+      const n = this.zones.filter((z) => z.unit === u.id).length, F = SEA.field.size;
+      const along = (mix3(u.id * 613 + n * 389 + 3) - 0.5) * u.d * 0.8;
+      const x = clamp5(u.x + along * Math.sin(u.face), 2, F - 2), y = clamp5(u.y + along * Math.cos(u.face), 2, F - 2);
+      this.zones.push({
+        id: ++this.zoneId,
+        kind,
+        x: Math.round(x),
+        y: Math.round(y),
+        r: Math.round(SEA.classes[u.extra.cls].len * 0.6),
+        until: this.ticket.limit,
+        side: u.side,
+        at: Math.round(this.t * 10) / 10,
+        unit: u.id
+      });
+    }
+    /**
+     * One ship of a piece goes: down, or out of the fight burning once its side has lost all the dice allow of its class.
+     * hull is her own hull as she went (0 to 1), told on her event for the 3D game: 0 for a ship worn through, what she
+     * had left for one that fell out of the line (fallOut), so the scene does not draw the hull she takes with her as
+     * shell hits (the 3D sea scene thread, 05:04Z 21 November). Drawn only: nothing in the rules reads it.
+     */
+    loseShip(u, hull = 0) {
+      var _a;
       const c = u.extra.cls, side3 = u.side, fleet = this.info.get(u.id).fleet.id;
       u.extra.ships--;
-      const one = RULES_CLASSES[c].one;
+      const one = RULES_CLASSES[c].one, left = Math.round(clamp5(hull, 0, 1) * 1e3) / 1e3;
+      const plain2 = this.plainLost[side3][c] < this.plainCaps[side3][c];
+      if (plain2) this.plainLost[side3][c]++;
       if (this.lostShips[side3][c] < this.caps[side3][c]) {
         this.lostShips[side3][c]++;
         u.extra.sunk++;
         this.fleetLoss.sunk[fleet][c]++;
-        this.say({ what: "sea:sunk", unit: u.id, side: side3, text: `A ${one} of ${u.extra.fleet} goes down.`, extra: { cls: c, fleet } });
-        for (const f of this.units) if (f.side === side3 && f.id !== u.id && live4(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - SEA.nerve.near);
+        this.say({ what: "sea:sunk", unit: u.id, side: side3, text: `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, extra: { cls: c, fleet, hull: left } });
+        this.smoke(u, "sunk");
+        const shake = SEA.nerve.near * this.info.get(u.id).weight / Math.max(1e-6, this.weight0[side3]);
+        for (const f of this.units) if (f.side === side3 && f.id !== u.id && live4(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - shake);
       } else {
         this.fleetLoss.burnt[fleet][c]++;
+        if (plain2) ((_a = this.kept)[fleet] ?? (_a[fleet] = none3()))[c]++;
         u.extra.burnt = (u.extra.burnt ?? 0) + 1;
-        this.say({ what: "sea:burning", unit: u.id, side: side3, text: `A ${one} of ${u.extra.fleet} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
+        const L2 = SEA.look, n = u.extra.burnt;
+        const limp = { course: Math.round(norm((side3 === "att" ? Math.PI : 0) + (mix3(u.id * 733 + n) - 0.5) * L2.limpSpread) * 100) / 100, speed: Math.round(SEA.classes[c].speed * SEA.speeds.cruise * L2.limpSpeed * 10) / 10 };
+        this.say({ what: "sea:burning", unit: u.id, side: side3, text: `A ${one} ${ofFleet(u.extra.fleet)} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet, limp, hull: left } });
+        this.smoke(u, "burning");
       }
       if (u.extra.ships <= 0) {
         u.state = u.extra.sunk >= u.extra.ships0 || !u.extra.burnt ? "gone" : "withdrawn";
         u.str = u.state === "gone" ? 0 : u.str;
-        this.say({ what: u.state === "gone" ? "gone" : "withdrawn", unit: u.id, side: side3, text: u.state === "gone" ? `${u.name}: lost.` : `${u.name}: out of the fight.` });
+        this.runs.delete(u.id);
+        delete u.extra.run;
+        const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
+        this.say({ what: u.state === "gone" ? "gone" : "withdrawn", unit: u.id, side: side3, text: u.extra.ships0 === 1 ? "" : u.state === "gone" ? `${all} are lost.` : `${all} are out of the fight.` });
       }
     }
     /** Strikes due to land, counted, not flown: the weight falls on the target and the ships near it. */
@@ -62502,35 +63891,614 @@
       this.strikes = this.strikes.filter((s) => s.at > this.t);
       for (const s of due) {
         for (const u of this.units) for (const a of u.abilities ?? []) if (a.key === "strike" && a.winding && u.side === s.side && u.extra.fleet === s.from) a.winding = false;
+        this.recovers.push({ at: this.t + SEA.strike.windup, cv: s.cv, side: s.side });
         const foe = this.byId.get(s.target);
         const at3 = foe && live4(foe) ? foe : this.heaviest(other3(s.side));
         if (!at3) continue;
-        this.splash(at3, s.weight, s.side);
-        this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-        this.say({ what: "sea:strike", unit: at3.id, side: s.side, text: `${s.count ? `${s.count} bombers` : "Aircraft"} from ${s.from} find ${this.told(at3)}.`, extra: { count: s.count } });
+        const landed = this.meet(at3, s.weight, s.side, true);
+        const got = this.splash(at3, landed, s.side);
+        this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + got;
+        const text = this.turnedBack(s.count ? `${s.count} bombers from ${theFleet(s.from)}` : `aircraft from ${theFleet(s.from)}`, at3, "find") ?? `${s.count ? `${headCount(s.count)} bombers` : "Aircraft"} from ${theFleet(s.from)} find ${this.told(at3)}.`;
+        this.say({ what: "sea:strike", unit: at3.id, side: s.side, text, extra: { count: s.count, flown: s.weight, landed } });
+      }
+    }
+    /**
+     * A strike's aircraft back over their carrier and landing on, 'windup' seconds after they found their target: an event
+     * for the 3D game's deck cycle (the ship plan's L2), with no words and no sound of its own until the UI and sound
+     * directors give them. 'ditch' when the carrier has gone down meanwhile, and the aircraft come down in the sea. Nothing
+     * in the rules reads it: the carrier's next strike waits on its own 'every', as before.
+     */
+    recover() {
+      if (!this.recovers.some((r) => r.at <= this.t)) return;
+      const due = this.recovers.filter((r) => r.at <= this.t);
+      this.recovers = this.recovers.filter((r) => r.at > this.t);
+      for (const r of due) this.say({ what: "sea:recover", unit: r.cv, side: r.side, text: "", extra: { ditch: this.byId.get(r.cv)?.state === "gone" } });
+    }
+    // ---- Torpedoes ---------------------------------------------------------------------------------------------------
+    /**
+     * The screen (torp; styles: screen): the destroyer pieces nearest the side's own big ships as the fleets draw up,
+     * ties by id, no dice; at least one where the style keeps a screen and there are two or more. Each keeps station on the
+     * big ship it is nearest, at its own side of it as drawn up. A fleet with no big ship keeps no screen.
+     */
+    drawScreen(side3) {
+      const dds = this.units.filter((u) => u.side === side3 && u.extra.cls === "dd");
+      const bigs = this.units.filter((u) => u.side === side3 && u.extra.cls !== "dd");
+      const share = this.style(side3).screen;
+      if (!bigs.length || share <= 0) return;
+      const k = Math.max(dds.length >= 2 ? 1 : 0, Math.floor(share * dds.length));
+      const cs = side3 === "att" ? 1 : -1;
+      const near2 = (u) => bigs.reduce((b, x) => dist(u.x, u.y, x.x, x.y) < dist(u.x, u.y, b.x, b.y) - 1e-6 ? x : b);
+      const ranked = dds.map((u) => ({ u, d: Math.round(dist(u.x, u.y, near2(u).x, near2(u).y)) })).sort((a, b) => a.d - b.d || a.u.id - b.u.id);
+      for (const { u } of ranked.slice(0, k)) {
+        const g2 = near2(u);
+        this.screen.add(u.id);
+        u.extra.screen = true;
+        this.guard.set(u.id, { ship: g2.id, lat: clamp5((u.x - g2.x) * cs, -SEA.torp.station, SEA.torp.station) });
+      }
+    }
+    /** Once no enemy destroyer is afloat, the screen's job is done: its pieces leave it for good and run, and fight, as any
+     *  other destroyer piece does (the design director's (b), 22:57Z). No dice. */
+    freeScreen() {
+      for (const side3 of ["att", "def"]) {
+        const mine4 = this.units.filter((u) => u.side === side3 && this.screen.has(u.id));
+        if (!mine4.length || this.units.some((e) => e.side !== side3 && e.extra.cls === "dd" && live4(e))) continue;
+        for (const u of mine4) {
+          this.screen.delete(u.id);
+          this.guard.delete(u.id);
+          delete u.extra.screen;
+        }
+        this.mark(`${side3}:screenFreed`, 1);
+      }
+    }
+    /** The big ship a screen piece guards: the one it drew up beside, or once that is gone or breaking off, its side's
+     *  big ship now nearest it (ties by id); null with none left, when the piece fights as any other does. */
+    guarded(u) {
+      const gd = this.guard.get(u.id);
+      if (!gd) return null;
+      const g2 = this.byId.get(gd.ship);
+      if (g2 && live4(g2) && g2.state !== "routing") return g2;
+      let best = null, bd = Infinity;
+      for (const f of this.units) {
+        if (f.side !== u.side || f.extra.cls === "dd" || !live4(f) || f.state === "routing") continue;
+        const d = dist(u.x, u.y, f.x, f.y);
+        if (d < bd - 1e-6) {
+          bd = d;
+          best = f;
+        }
+      }
+      if (best) gd.ship = best.id;
+      return best;
+    }
+    /**
+     * A screen piece's course and speed (torp): for an enemy destroyer piece on a run within 'intercept' metres of it, the
+     * nearest; else its station, 'station' metres ahead of the big ship it guards toward the enemy's middle, at its own
+     * side of it. Null before the guns meet (the fleet keeps together), once a side has broken off, under an order of the
+     * player's own, or with no big ship left to guard: it then fights as any other piece does.
+     */
+    station(u, o) {
+      if (this.contactAt === null || this.broken || !(o.kind === "free" || o.kind === "attack" && o.fleet) || !steady2(u)) return null;
+      const g2 = this.guarded(u);
+      if (!g2) return null;
+      const T = SEA.torp, flank = SEA.classes.dd.speed * SEA.speeds.flank;
+      let runner = null, rd = T.intercept;
+      for (const e of this.units) {
+        if (e.side === u.side || !live4(e) || this.runs.get(e.id)?.phase !== "in") continue;
+        const d2 = dist(u.x, u.y, e.x, e.y);
+        if (d2 < rd) {
+          rd = d2;
+          runner = e;
+        }
+      }
+      if (runner) return { want: this.engage(u, runner), speed: flank };
+      if (u.extra.target >= 0) return null;
+      const [ex, ey] = this.centre(other3(u.side)), b = bearing(g2.x, g2.y, ex, ey), lat = this.guard.get(u.id).lat;
+      const sx = g2.x + Math.sin(b) * T.station + Math.cos(b) * lat, sy = g2.y + Math.cos(b) * T.station - Math.sin(b) * lat;
+      const d = dist(u.x, u.y, sx, sy);
+      if (d < 200) return { want: g2.face, speed: g2.extra.way };
+      return { want: bearing(u.x, u.y, sx, sy), speed: clamp5(d / 20, g2.extra.way, flank) };
+    }
+    /** A destroyer piece whose guns have nothing in reach banks their weight for its torpedoes (torp), from the moment the
+     *  guns first meet, up to torp.bank seconds' worth: its salvo is weight its guns could not fire, and no more. */
+    store(u, unfired) {
+      if (u.extra.cls !== "dd" || this.contactAt === null || !steady2(u) || this.orders.get(u.id)?.kind === "leave") return;
+      const per = SEA.fire.rate * this.output(u) * this.day(u.side);
+      const nerve2 = u.state === "wavering" ? SEA.nerve.wavering : 1, cap12 = per * SEA.torp.bank;
+      let add = unfired ?? per * nerve2 * DT;
+      if (this.runs.has(u.id)) add -= this.repay(u, add);
+      const into = Math.max(0, Math.min(add, cap12 - this.bank[u.id]));
+      this.bank[u.id] = Math.min(cap12, this.bank[u.id] + into);
+      this.loaded[u.id] = Math.min(this.bank[u.id], Math.max(0, this.loaded[u.id] - (add - into)));
+    }
+    /**
+     * Weight a destroyer piece on a run cannot fire pays its own salvo's advance first (R4; the design director, 08:10Z:
+     * the bank is the weight the guns could not fire, so a run's end-on guns are not a second cost on top of the advance):
+     * before it launches, the loaded part of its salvo still unearned; once launched, the unearned part of that salvo
+     * still in the water while the run lasts (the salvo is still running when the run ends: torp.travel is longer than
+     * torp.away). Only the rest is owed by its side when the salvo lands (V3). Returns what it paid; store() banks the
+     * rest as ever.
+     */
+    repay(u, w) {
+      let paid = 0;
+      const own = Math.min(this.loaded[u.id], w);
+      if (own > 0) {
+        this.loaded[u.id] -= own;
+        paid += own;
+      }
+      for (const s of this.torps) {
+        if (paid >= w) break;
+        if (s.from !== u.id || s.drawn <= 0) continue;
+        const p = Math.min(s.drawn, w - paid);
+        s.drawn -= p;
+        paid += p;
+      }
+      if (paid > 0) this.mark(`${u.side}:salvoEarnedRun`, paid);
+      return paid;
+    }
+    /** Whether a destroyer piece has a full salvo banked: its bank at the cap store() fills it to (R5). */
+    salvoReady(u) {
+      const full = SEA.fire.rate * this.output(u) * this.day(u.side) * SEA.torp.bank;
+      return full > 0 && this.bank[u.id] >= full * (1 - 1e-9);
+    }
+    /** How shaken the enemy's big ships in reach of a side's big guns are: their nerve on average, or Infinity with none. */
+    shaken(side3) {
+      let n = 0, m = 0;
+      for (const e of this.units) {
+        if (e.side === side3 || e.extra.cls === "dd" || !live4(e) || e.state === "routing") continue;
+        if (!this.units.some((u) => u.side === side3 && BIG_GUNS.has(u.extra.cls) && live4(u) && u.state !== "routing" && dist(u.x, u.y, e.x, e.y) <= SEA.classes[u.extra.cls].reach)) continue;
+        n++;
+        m += e.mor;
+      }
+      return n ? m / n : Infinity;
+    }
+    /**
+     * Once a second: the destroyers' torpedo runs (torp), by what their crews could see, never by a clock (the ship plan's
+     * R4; the design director, 06:14Z and 06:48Z). A steady destroyer piece outside the screen, free to run and with a full
+     * salvo (R5), opens its run on the first of three cues:
+     * - its own carriers threatened by an enemy heavy ship closing on one faster than she goes, or its battleships
+     *   outnumbered by the enemy's heavy ships in gun reach of them (threats): at once, at the ship doing the threatening
+     *   within torp.start, ahead of her beam or not, since its job is to turn her away (Samar, October 1944: the screen's
+     *   runs early, turning Kurita's heavy ships away from the escort carriers); such a division launches at once, she
+     *   being in torpedo reach (pressOf), and runs on through its own side's break (breakSide);
+     * - an enemy big ship within torp.start (runTarget's: battleships, then cruisers, then carriers), the piece ahead of
+     *   her beam (of the course she flees on, for a ship running for home: aheadOf): at once once the guns have met and
+     *   while its own side's heavy ships are engaged with the enemy's
+     *   (engaged; in daylight against an alert line the record's runs came after the guns met and while the lines were
+     *   engaged; Surigao's runs before them were the night's, and the field fights no night; a destroyer-only side opens
+     *   none: the design director, 08:10Z and 09:48Z);
+     * - its style's torpWhen, the enemy's heavy ships in the big guns' reach shaken to that nerve, slowed by gunfire (at
+     *   first contact for torpWhen 1): the cue for a piece abaft the beam, which waits for the enemy to be slowed rather
+     *   than chase (North Cape, December 1943: the destroyers closed once a hit had cut Scharnhorst's speed).
+     * The pieces whose runs open in the same second go as one division at one target, the one the piece nearest its own
+     * target would take (a ship threatening the side's charge first), those of them in torpedo reach of her (torp.start),
+     * and close in company (runCourse); a lone piece runs alone. One told on its own to attack a bigger ship runs at it.
+     * A screen piece launches its bank from station at an enemy big ship within press.
+     */
+    startRuns() {
+      if (this.contactAt !== null) this.freeScreen();
+      for (const side3 of ["att", "def"]) {
+        const st = this.style(side3);
+        const slowed = this.contactAt !== null && (st.torpWhen >= 1 || this.shaken(side3) <= st.torpWhen);
+        const threats = this.threats(side3), engaged = this.engaged(side3);
+        const opening = [];
+        for (const u of this.units) {
+          if (u.side !== side3 || u.extra.cls !== "dd" || u.state !== "steady" || this.runs.has(u.id) || (this.nextRun.get(u.id) ?? 0) > this.t) continue;
+          const o = this.orders.get(u.id);
+          if (o && o.kind !== "attack") continue;
+          if (o && !o.fleet) {
+            if (this.contactAt === null) continue;
+            const foe2 = this.byId.get(o.target);
+            if (foe2 && live4(foe2) && foe2.extra.cls !== "dd" && dist(u.x, u.y, foe2.x, foe2.y) <= SEA.torp.start) this.beginRun(u, foe2);
+            continue;
+          }
+          if (this.screen.has(u.id) && !this.broken && (this.contactAt === null || this.guarded(u))) {
+            if (this.contactAt === null || this.bank[u.id] <= 0) continue;
+            let foe2 = null, fd2 = st.press;
+            for (const e of this.units) {
+              if (e.side === side3 || e.extra.cls === "dd" || !live4(e) || e.state === "routing") continue;
+              const d = dist(u.x, u.y, e.x, e.y);
+              if (d <= fd2) {
+                fd2 = d;
+                foe2 = e;
+              }
+            }
+            if (foe2) this.launch(u, foe2, null);
+            continue;
+          }
+          if (!this.salvoReady(u)) continue;
+          let foe = null, fd = SEA.torp.start;
+          for (const e of threats) {
+            const d = dist(u.x, u.y, e.x, e.y);
+            if (d <= fd && (!foe || d < fd - 1e-6 || e.id < foe.id)) {
+              fd = d;
+              foe = e;
+            }
+          }
+          const guard = foe !== null;
+          if (!foe) {
+            const t = this.runTarget(u);
+            if (t && (this.contactAt !== null && engaged && this.aheadOf(t, u) || slowed)) foe = t;
+          }
+          if (foe) opening.push({ u, foe, guard });
+        }
+        if (opening.length) {
+          opening.sort((a, b) => Number(b.guard) - Number(a.guard) || dist(a.u.x, a.u.y, a.foe.x, a.foe.y) - dist(b.u.x, b.u.y, b.foe.x, b.foe.y) || a.u.id - b.u.id);
+          const foe = opening[0].foe, guard = opening[0].guard;
+          const go = opening.filter((x) => dist(x.u.x, x.u.y, foe.x, foe.y) <= SEA.torp.start);
+          const div = go.length > 1 ? ++this.divId : 0;
+          for (const x of go) this.beginRun(x.u, foe, div, guard);
+          if (div) this.mark(`${side3}:divisions`, 1);
+        }
+      }
+    }
+    /** Whether a piece lies ahead of an enemy ship's beam: on her heading, or for a ship running for home (broken off, or
+     *  told to withdraw), on the course she flees on (breakOffCourse), as the crews saw her turn away. A piece on her bow
+     *  as she turns is astern of her within seconds, and a run begun there is a chase that never reaches press. */
+    aheadOf(e, u) {
+      if (e.state !== "routing" && this.orders.get(e.id)?.kind !== "leave") return aheadOfBeam(e, u);
+      const flees = this.breakOffCourse(e, e.side === "att" ? Math.PI : 0);
+      return Math.abs(turn(flees, bearing(e.x, e.y, u.x, u.y))) < Math.PI / 2;
+    }
+    /** Whether a side's heavy ships are engaged with the enemy's: a battleship or cruiser of its own still fighting within
+     *  its gun reach of an enemy battleship or cruiser, one still fighting or, once the enemy has broken off, one it is
+     *  running down (the chase: the ships a run may go at, runTarget). By day a destroyer division goes in ahead of an
+     *  enemy's beam only while the lines are engaged (the design director, 09:48Z: Jutland, the Java Sea, North Cape after
+     *  the guns met); unsupported destroyers by day ran at a heavy line only to cover something (the Samar cue). */
+    engaged(side3) {
+      const mine4 = (g2) => BIG_GUNS.has(g2.extra.cls) && live4(g2) && g2.state !== "routing";
+      const theirs = (e) => BIG_GUNS.has(e.extra.cls) && live4(e) && (e.state !== "routing" || this.broken === e.side);
+      for (const g2 of this.units) {
+        if (g2.side !== side3 || !mine4(g2)) continue;
+        const R2 = SEA.classes[g2.extra.cls].reach;
+        for (const e of this.units) if (e.side !== side3 && theirs(e) && dist(g2.x, g2.y, e.x, e.y) <= R2) return true;
+      }
+      return false;
+    }
+    /**
+     * The enemy heavy ships threatening a side's charge (R4's Samar cue): each enemy battleship or cruiser still fighting
+     * that is closing on one of the side's carriers, heading at her (ahead of its beam) and going faster than she is, so
+     * it will overtake her (what the crews saw as Kurita's ships came on: a carrier keeping her distance is the very
+     * flight the screen covers, so gun reach is not the test: the design director, 09:48Z); or within its own gun reach
+     * of one of the side's battleships
+     * where the enemy's heavy ships in reach of her outnumber the side's own heavy ships in reach of them. Counts on the
+     * field, no number.
+     */
+    threats(side3) {
+      const heavy = (e) => BIG_GUNS.has(e.extra.cls) && live4(e) && e.state !== "routing";
+      const theirs = this.units.filter((e) => e.side !== side3 && heavy(e));
+      if (!theirs.length) return [];
+      const inReach = (e, f) => dist(e.x, e.y, f.x, f.y) <= SEA.classes[e.extra.cls].reach;
+      const closing = (e, f) => {
+        const rx = f.x - e.x, ry = f.y - e.y;
+        const vx = Math.sin(f.face) * f.extra.way - Math.sin(e.face) * e.extra.way, vy = Math.cos(f.face) * f.extra.way - Math.cos(e.face) * e.extra.way;
+        return rx * vx + ry * vy < 0;
+      };
+      const out = /* @__PURE__ */ new Set();
+      for (const f of this.units) {
+        if (f.side !== side3 || !live4(f) || f.state === "routing" || f.extra.cls !== "cv" && f.extra.cls !== "bb") continue;
+        if (f.extra.cls === "cv") {
+          const pace = this.onStation.has(f.id) ? Math.max(f.extra.way, SEA.classes.cv.speed * SEA.speeds.cruise) : f.extra.way;
+          for (const e of theirs) if (e.extra.way > pace && aheadOfBeam(e, f) && closing(e, f)) out.add(e);
+          continue;
+        }
+        const on = theirs.filter((e) => inReach(e, f));
+        if (!on.length) continue;
+        if (f.extra.cls === "bb") {
+          const ours = this.units.filter((g2) => g2.side === side3 && heavy(g2) && on.some((e) => inReach(g2, e))).length;
+          if (on.length <= ours) continue;
+        }
+        for (const e of on) out.add(e);
+      }
+      return [...out];
+    }
+    /** The enemy big ship a destroyer piece runs at: battleships, then cruisers, then carriers, within torp.start of it,
+     *  the one nearest the main effort; with spread, the one fewest runs are closing on first (a division goes at one, startRuns). Ships still fighting, except in a
+     *  chase. No dice. */
+    runTarget(u) {
+      const side3 = u.side, main = this.byId.get(this.focus[side3]);
+      const [mx, my] = main ? [main.x, main.y] : this.centre(other3(side3));
+      const cs = side3 === "att" ? 1 : -1, spread = this.style(side3).spread > 0;
+      const on = (e) => {
+        let n = 0;
+        for (const [id, r] of this.runs) if (r.target === e.id && r.phase === "in" && live4(this.byId.get(id))) n++;
+        return n;
+      };
+      for (const tc of ["bb", "ca", "cv"]) {
+        const pool = this.units.filter((e) => e.side !== side3 && e.extra.cls === tc && live4(e) && (e.state !== "routing" || this.broken === e.side) && dist(u.x, u.y, e.x, e.y) <= SEA.torp.start);
+        if (!pool.length) continue;
+        const ranked = pool.map((e) => ({ e, n: spread ? on(e) : 0, d: Math.round(dist(e.x, e.y, mx, my)), l: (e.x - mx) * cs })).sort((a, b) => a.n - b.n || a.d - b.d || a.l - b.l || a.e.id - b.e.id);
+        return ranked[0].e;
+      }
+      return null;
+    }
+    beginRun(u, foe, div = 0, guard = false) {
+      this.runs.set(u.id, { target: foe.id, phase: "in", until: 0, away: 0, face: 0, turned: 0, launched: 0, near: false, shot: false, div, guard });
+      u.extra.run = foe.id;
+    }
+    /**
+     * The course and speed of a destroyer piece on a torpedo run (torp): in at flank until its press range (pressOf), when
+     * it launches; then away from the target at flank for torp.away seconds. Null when it is on none, or the run has just
+     * ended: a piece that wavers on the run-in, or whose target goes, breaks it off with its bank kept; an order of the
+     * player's own ends it.
+     */
+    runCourse(u, o) {
+      const run = this.runs.get(u.id);
+      if (!run) return null;
+      const flank = SEA.classes.dd.speed * SEA.speeds.flank;
+      const told2 = this.toldOff(o, run);
+      if (run.phase === "in") {
+        const foe = this.byId.get(run.target);
+        if (!foe || !live4(foe) || foe.state === "routing" && this.broken !== foe.side || u.state !== "steady" || told2) {
+          this.endRun(u, run, false);
+          return null;
+        }
+        const d = dist(u.x, u.y, foe.x, foe.y);
+        if (d > this.pressOf(u, run)) {
+          let rear = d;
+          if (run.div) {
+            for (const [id, r] of this.runs) {
+              const f = this.byId.get(id);
+              if (!f || f === u || r.div !== run.div || r.phase !== "in" || !live4(f) || f.state !== "steady" || this.toldOff(this.orders.get(id) ?? FREE2, r)) continue;
+              rear = Math.max(rear, dist(f.x, f.y, foe.x, foe.y));
+            }
+          }
+          return { want: bearing(u.x, u.y, foe.x, foe.y), speed: rear - d > SEA.ai.station ? SEA.classes.dd.speed * SEA.speeds.slow : flank };
+        }
+        this.launch(u, foe, run);
+      }
+      if (u.state === "routing" || told2) {
+        this.endRun(u, run, true);
+        return null;
+      }
+      run.turned = Math.max(run.turned, Math.abs(turn(run.face, u.face)));
+      if (this.t >= run.until) {
+        this.endRun(u, run, true);
+        return null;
+      }
+      return { want: run.away, speed: flank };
+    }
+    /**
+     * The range a run launches at: its style's press, pressed home to put the salvo where it will tell; a cover run
+     * (guard) launches as soon as its target is in torpedo reach (torp.start), its job to turn her away, not to sink her.
+     * Samar, 25 October 1944: Johnston fired at about 9,000 m and the others soon after, to turn Kurita's heavy ships away
+     * from the escort carriers, and were sunk after (the design director, 11:25Z). No new number.
+     */
+    pressOf(u, run) {
+      return run.guard ? SEA.torp.start : this.style(u.side).press;
+    }
+    /** Whether the player's order takes a piece off its run: sent somewhere, held, withdrawn, or sent at another ship. */
+    toldOff(o, run) {
+      return o.kind === "move" || o.kind === "hold" || o.kind === "leave" || o.kind === "attack" && !o.fleet && o.target !== run.target;
+    }
+    /** A run ends: after its launch it may run again torp.again seconds after it; broken off before, as soon as it is fit. */
+    endRun(u, run, done) {
+      this.runs.delete(u.id);
+      delete u.extra.run;
+      if (this.broken === u.side && live4(u) && u.state !== "routing") u.state = "routing";
+      if (!done) {
+        this.nextRun.set(u.id, this.t);
+        this.mark(`${u.side}:runsBroken`, 1);
+        return;
+      }
+      this.nextRun.set(u.id, run.launched + SEA.torp.again);
+      if (run.turned < Math.PI / 2) this.mark(`${u.side}:turnLate`, 1);
+    }
+    /**
+     * A destroyer piece launches its bank at an enemy ship (torp): a salvo that falls torp.travel seconds later, aimed
+     * where the target will be by then, its track a zone of kind 'torpedo' from the launch to the aim point (for the 3D
+     * game; it lasts while the salvo runs). On a run, it then turns away; from station, it may launch again torp.again
+     * seconds later.
+     */
+    launch(u, foe, run) {
+      const T = SEA.torp, F = SEA.field.size, w = this.bank[u.id];
+      const full = SEA.fire.rate * this.output(u) * this.day(u.side) * T.bank;
+      const share = full > 0 ? Math.round(clamp5(w / full, 0, 1) * 100) / 100 : 0;
+      this.bank[u.id] = 0;
+      const drawn = Math.min(this.loaded[u.id], w);
+      this.loaded[u.id] = 0;
+      const ahead2 = foe.extra.way * T.travel;
+      const x = Math.round(clamp5(foe.x + Math.sin(foe.face) * ahead2, 2, F - 2)), y = Math.round(clamp5(foe.y + Math.cos(foe.face) * ahead2, 2, F - 2));
+      this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn });
+      this.zones.push({ id: ++this.zoneId, kind: "torpedo", x, y, r: T.radius, until: this.t + T.travel, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id });
+      const first2 = !this.toldTorp.has(u.id);
+      this.toldTorp.add(u.id);
+      const text = first2 ? `${this.told(u, true)} ${this.many(u) ? "fire" : "fires"} torpedoes at ${this.told(foe)}.` : "";
+      this.say({ what: "sea:torpedo", unit: u.id, side: u.side, text, extra: { target: foe.id, x, y, running: T.travel, share } });
+      if (!run) {
+        this.nextRun.set(u.id, this.t + T.again);
+        this.mark(`${u.side}:screenLaunch`, 1);
+        return;
+      }
+      this.launched[u.side]++;
+      this.mark(`${u.side}:runs`, 1);
+      if (dist(u.x, u.y, foe.x, foe.y) > this.pressOf(u, run) + 200) this.mark(`${u.side}:launchFar`, 1);
+      if (run.near) {
+        this.mark(`${u.side}:runsNearScreen`, 1);
+        if (run.shot) this.mark(`${u.side}:runsShotByScreen`, 1);
+      }
+      const inbound = run.guard ? bearing(u.x, u.y, foe.x, foe.y) : u.face;
+      Object.assign(run, { phase: "away", until: this.t + T.away, away: bearing(foe.x, foe.y, u.x, u.y), face: inbound, turned: 0, launched: this.t });
+      delete u.extra.run;
+    }
+    /** Salvos due to fall: on the target, as any blow does (take); with it gone, on the enemy nearest the aim point within
+     *  torp.radius, else on the heaviest, so the destroyers' weight is never lost. */
+    landTorps() {
+      if (!this.torps.some((s) => s.at <= this.t)) return;
+      const due = this.torps.filter((s) => s.at <= this.t);
+      this.torps = this.torps.filter((s) => s.at > this.t);
+      for (const s of due) {
+        if (s.weight <= 0) continue;
+        const foe = this.byId.get(s.target);
+        let at3 = foe && live4(foe) ? foe : null;
+        if (!at3) {
+          let bd = SEA.torp.radius;
+          for (const e of this.units) {
+            if (e.side === s.side || !live4(e)) continue;
+            const d = dist(e.x, e.y, s.x, s.y);
+            if (d <= bd) {
+              bd = d;
+              at3 = e;
+            }
+          }
+        }
+        at3 ?? (at3 = this.heaviest(other3(s.side)));
+        if (!at3) continue;
+        const among = at3.extra.ships > 1 ? `find their mark among the ${RULES_CLASSES[at3.extra.cls].many} ${ofFleet(at3.extra.fleet)}` : `hit ${this.told(at3)}`;
+        const by2 = this.byId.get(s.from);
+        this.say({ what: "sea:torpedoHit", unit: at3.id, side: s.side, text: `Torpedoes from ${this.told(by2)} ${among}.`, extra: { from: s.from } });
+        const l0 = this.left(at3.side);
+        const got = this.take(at3, s.weight);
+        this.dealt[s.from] += got;
+        this.mark(`${s.side}:torp>${at3.extra.cls}`, got);
+        if (s.drawn > 0) {
+          this.advance[s.side] += s.drawn;
+          this.unpaid[at3.side] += Math.max(0, l0 - this.left(at3.side)) * s.drawn / s.weight;
+          this.mark(`${s.side}:salvoDrawn`, s.drawn);
+        }
+        this.mark(`${s.side}:salvoLanded`, 1);
+        if (at3 === foe) this.mark(`${s.side}:salvoOnTarget`, 1);
+        if (this.broken === null) this.mark(`${s.side}:salvoBeforeBreak`, 1);
+      }
+    }
+    /** The side brings aircraft into the action: a carrier with its air group, or the coasts' aircraft (cap). */
+    bringsAir(side3) {
+      return this.airLeft[side3] > 1e-9 || this.units.some((u) => u.side === side3 && u.extra.cls === "cv" && live4(u) && this.deck[u.id] > 1e-9);
+    }
+    /**
+     * A strike or a raid of weight w coming in on 'at' (cap; ruling 239): the fighters over its side's fleet deny what the
+     * campaign's law gives (carriers.json cap.spoil), paid weight for weight out of the pool, each carrier by its share;
+     * then the gun ships within the strike's radius deny their share of the rest (flak), each owing it out of its next
+     * gunfire. Returns what lands. Two neutral trades, no dice.
+     */
+    meet(at3, w, by2, strike) {
+      const side3 = at3.side;
+      const cvs = this.units.filter((u) => u.side === side3 && u.extra.cls === "cv");
+      const pool = cvs.reduce((n, u) => n + this.cover[u.id], 0);
+      let a = 0;
+      this.capLast = null;
+      if (pool > 1e-12 && w > 0) {
+        a = Math.min(pool, w * CAP.spoil * Math.sqrt(pool / (pool + w)));
+        const most = cvs.reduce((b, u) => this.cover[u.id] > this.cover[b.id] ? u : b, cvs[0]);
+        this.capLast = { share: a / w, fleet: most.extra.fleet };
+        for (const u of cvs) this.cover[u.id] *= 1 - a / pool;
+        this.mark(`${side3}:paid`, a);
+        this.say({ what: "sea:cap", unit: at3.id, side: side3, text: "", extra: { denied: a, share: a / w, by: by2 } });
+      }
+      const guns2 = this.units.filter((e) => e.side === side3 && live4(e) && e.extra.cls !== "cv" && dist(e.x, e.y, at3.x, at3.y) <= SEA.strike.radius);
+      const parts2 = guns2.map((e) => e.extra.ships * (FLAK.ships[e.extra.cls] ?? 0) * FLAK.per);
+      const sum2 = parts2.reduce((n, x) => n + x, 0);
+      const g2 = sum2 > 0 ? Math.min(FLAK.most, sum2) * (w - a) : 0;
+      if (g2 > 0) {
+        guns2.forEach((e, i) => {
+          this.owe[e.id] += g2 * parts2[i] / sum2;
+        });
+        this.flakOn[side3][strike ? "cv" : "air"] += g2;
+        this.say({ what: "sea:flak", unit: at3.id, side: side3, text: "", extra: { denied: g2, by: by2, ships: guns2.filter((_, i) => parts2[i] > 0).map((e) => e.id) } });
+      }
+      this.mark(`${side3}:denied`, a + g2);
+      if (strike && cvs.some(live4)) {
+        this.mark(`${side3}:strikesIn`, 1);
+        if (a > 0 && a + g2 > 0) this.mark(`${side3}:strikesMet`, 1);
+      }
+      return w - a - g2;
+    }
+    /** A gun ship out of the fight hands what it owes to the nearest of its side's gun ships still fighting (cap). */
+    handOwes() {
+      for (const u of this.units) {
+        if (live4(u) || this.owe[u.id] <= 0) continue;
+        let to = null, bd = Infinity;
+        for (const f of this.units) {
+          if (f.side !== u.side || f.extra.cls === "cv" || !live4(f)) continue;
+          const d = dist(u.x, u.y, f.x, f.y);
+          if (d < bd - 1e-6) {
+            bd = d;
+            to = f;
+          }
+        }
+        if (!to) continue;
+        this.owe[to.id] += this.owe[u.id];
+        this.owe[u.id] = 0;
+      }
+    }
+    /**
+     * The action over, or handed to the staff: what is still owed is settled where it is owed before the count, as the land
+     * field pays its air (b418, weight moves where it falls, never how much). What a ship's guns still owe for the aircraft
+     * they turned away lands on that ship, or on the first of its side's still fighting: those aircraft get through after
+     * all. What a carrier still holds over its fleet flies at the enemy its next strike would have gone for, whole. No line
+     * of its own and nothing drawn: the count carries it.
+     */
+    settle() {
+      this.handOwes();
+      for (const u of this.units) {
+        const o = this.owe[u.id];
+        if (!(o > 0)) continue;
+        const to = live4(u) ? u : this.units.find((f) => f.side === u.side && live4(f));
+        if (!to) continue;
+        this.owe[u.id] = 0;
+        const got = this.take(to, o);
+        const by2 = other3(u.side), k = this.flakOn[u.side], cv = k.cv + k.air > 0 ? k.cv / (k.cv + k.air) : 0;
+        this.fromAir[`${by2}:cv`] = (this.fromAir[`${by2}:cv`] ?? 0) + got * cv;
+        this.fromAir[`${by2}:air`] = (this.fromAir[`${by2}:air`] ?? 0) + got * (1 - cv);
+        this.mark(`${u.side}:paid`, o);
+        this.mark(`${u.side}:settled`, o);
+      }
+      for (const cv of this.units) {
+        const c = this.cover[cv.id];
+        if (!(c > 0)) continue;
+        const at3 = this.strikeTarget(cv) ?? this.heaviest(other3(cv.side));
+        if (!at3) continue;
+        this.cover[cv.id] = 0;
+        const got = this.splash(at3, c, cv.side);
+        this.fromAir[`${cv.side}:cv`] = (this.fromAir[`${cv.side}:cv`] ?? 0) + got;
+        this.mark(`${cv.side}:coverFlown`, c);
+      }
+      for (const k of this.strikes) this.mark(`${k.side}:aloft`, k.weight);
+    }
+    /** The C5 mark: a side's carrier within the guns' reach of an enemy battleship, at any moment of the action. */
+    watchCarriers() {
+      const R2 = SEA.classes.bb.reach;
+      for (const u of this.units) {
+        if (u.extra.cls !== "cv" || !live4(u) || this.cvNear[u.side]) continue;
+        if (this.units.some((e) => e.side !== u.side && e.extra.cls === "bb" && live4(e) && dist(u.x, u.y, e.x, e.y) < R2)) this.cvNear[u.side] = true;
       }
     }
     /** The coasts' aircraft raid the enemy's ships every so often, with the weight the rules give them over this sea. */
     coastAir() {
       for (const side3 of ["att", "def"]) {
-        const w = this.ticket.place.air[side3];
+        const w = this.airLeft[side3];
         if (w <= 0 || this.t < this.nextAir[side3]) continue;
         this.nextAir[side3] += SEA.air.every;
         const foes = this.units.filter((e) => e.side !== side3 && live4(e));
         if (!foes.length) continue;
-        const at3 = foes[this.rng.int(foes.length)];
+        const aims = foes.map((e) => (STRIKE_AIM[e.extra.cls] ?? 0) * e.extra.ships);
+        const all = aims.reduce((n, a) => n + a, 0);
+        let r = this.rng.next() * all, at3 = foes[foes.length - 1];
+        for (let i = 0; i < foes.length; i++) {
+          r -= aims[i];
+          if (r < 0) {
+            at3 = foes[i];
+            break;
+          }
+        }
+        if (all > 0) for (let i = 0; i < foes.length; i++) this.mark(`${side3}:raidExp>${foes[i].extra.cls}`, aims[i] / all);
+        this.mark(`${side3}:raid>${at3.extra.cls}`, 1);
         const weight5 = SEA.fire.rate * w * SEA.air.share * SEA.air.every * this.day(side3);
-        this.splash(at3, weight5, side3);
-        this.fromAir[`${side3}:air`] = (this.fromAir[`${side3}:air`] ?? 0) + weight5;
-        this.say({ what: "sea:air", unit: at3.id, side: side3, text: `Aircraft from the coast attack ${this.told(at3)}.` });
+        const landed = this.meet(at3, weight5, side3, false);
+        const got = this.splash(at3, landed, side3);
+        this.fromAir[`${side3}:air`] = (this.fromAir[`${side3}:air`] ?? 0) + got;
+        this.say({ what: "sea:air", unit: at3.id, side: side3, text: this.turnedBack("aircraft from the coast", at3, "attack") ?? `Aircraft from the coast attack ${this.told(at3)}.` });
       }
     }
     /** A strike's weight shared over the target and the ships within the strike's radius of it, by their weight. */
     splash(at3, weight5, by2) {
       const hit = this.units.filter((e) => e.side !== by2 && live4(e) && dist(e.x, e.y, at3.x, at3.y) <= SEA.strike.radius);
       const total = hit.reduce((n, e) => n + this.output(e) + (e.id === at3.id ? this.output(e) : 0), 0);
-      if (total <= 0) return;
-      for (const e of hit) this.wear(e, weight5 * (this.output(e) + (e.id === at3.id ? this.output(e) : 0)) / total);
+      if (total <= 0) return 0;
+      let got = 0;
+      for (const e of hit) {
+        const share = weight5 * (this.output(e) + (e.id === at3.id ? this.output(e) : 0)) / total;
+        got += this.take(e, share);
+      }
+      return got;
     }
     // ---- Nerve ------------------------------------------------------------------------------------------------------
     nerve(u) {
@@ -62557,7 +64525,14 @@
     breakSide(side3, ordered) {
       this.broken = side3;
       this.brokeAt = this.t;
-      for (const u of this.units) if (u.side === side3 && live4(u)) u.state = "routing";
+      for (const u of this.units) {
+        if (u.side !== side3 || !live4(u)) continue;
+        if (this.runs.get(u.id)?.guard && u.state === "steady") {
+          this.mark(`${side3}:guardOn`, 1);
+          continue;
+        }
+        u.state = "routing";
+      }
       this.say({ what: "broken", side: side3, text: ordered ? `The ${this.adj(side3)} fleet breaks off the action on its admiral's order.` : `The ${this.adj(side3)} fleet has had enough and breaks off the action.` });
     }
     adj(side3) {
@@ -62577,6 +64552,11 @@
           break;
         }
       }
+      if (!this.broken) for (const side3 of ["att", "def"]) {
+        if (this.warned[side3] || this.nearBreak(side3) < 0.75) continue;
+        this.warned[side3] = true;
+        this.say({ what: "nearBreak", side: side3, text: this.ticket[side3].human ? "Your fleet is near breaking off: pull back the worn, or hand it to the staff." : `The ${this.adj(side3)} fleet is near breaking off.` });
+      }
       if (this.broken && this.t - this.brokeAt >= SEA.side.pursuit) {
         this.finish(other3(this.broken), "withdrew");
         return;
@@ -62591,6 +64571,7 @@
     }
     finish(winner, how, toDice = false, rolled) {
       if (this.over) return;
+      this.settle();
       const lost = { att: this.lostShare("att"), def: this.lostShare("def") };
       const R2 = rolled ?? seaRatio(winner, lost, this.ticket.reckoning.odds);
       const crews = { att: 0, def: 0 };
@@ -62612,12 +64593,41 @@
       };
       const sa = sunkOf("att"), sd = sunkOf("def"), a = this.ticket.att.adj, d = this.ticket.def.adj;
       const lines2 = [
-        `${this.adj(winner)} ships hold the ${this.ticket.place.zoneName}.`,
+        `${this.adj(winner)} ships hold ${seaWhat(this.ticket.place.zoneName)}.`,
         // Handed to the staff, the rules sink the rest as they settle it, so this line says only what went down in sight.
         !toDice ? `${a} losses: ${shipWords2(sa)} sunk. ${d} losses: ${shipWords2(sd)} sunk.` : shipsIn(sa) + shipsIn(sd) === 0 ? "No ship had gone down on either side when the staff took over." : `When the staff took over, the ${a} fleet had lost ${shipWords2(sa)} and the ${d} fleet ${shipWords2(sd)}.`
       ];
-      if (toDice) lines2.push(`The staff settled the rest of the action in the ${this.ticket.place.zoneName} from where it stood: what you had won stays won.`);
-      const extra = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, ...toDice ? { toDice } : {} };
+      if (toDice) {
+        const zone = seaWhere(this.ticket.place.zoneName), by2 = this.handedBy ?? "att";
+        const k = this.ticket.reckoning.odds, now = k * (1 - this.lostShare("att")) / Math.max(1e-6, 1 - this.lostShare("def"));
+        const share = (o) => (by2 === "att" ? o : 1) / (1 + o);
+        lines2.push(!this.fired() ? `The staff settled the whole action ${zone}: no shot had been fired.` : share(now) - share(k) >= 0.05 ? `The staff settled the rest of the action ${zone} from where it stood: what you had won stays won.` : `The staff settled the rest of the action ${zone} from where it stood.`);
+      }
+      const hurt2 = {};
+      for (const f of this.ticket.place.fleets) hurt2[f.id] = { ...this.fleetLoss.burnt[f.id] };
+      for (const u of this.units) if (u.state !== "gone") hurt2[this.info.get(u.id).fleet.id][u.extra.cls] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
+      const extra = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt: hurt2, ...Object.keys(this.kept).length ? { kept: this.kept } : {}, ...toDice ? { toDice } : {} };
+      for (const side3 of ["att", "def"]) {
+        const free2 = this.units.filter((u) => u.side === side3 && u.extra.cls === "dd" && !this.screen.has(u.id)).length;
+        if (free2 < 2 || !this.units.some((e) => e.side !== side3 && e.extra.cls !== "dd")) continue;
+        this.mark(`${side3}:runEligible`, 1);
+        if (this.launched[side3] > 0) this.mark(`${side3}:runBattles`, 1);
+      }
+      for (const u of this.units) {
+        if (this.bank[u.id] - (this.loaded[u.id] ?? 0) > 0) this.mark(`${u.side}:bankLeft`, this.bank[u.id] - (this.loaded[u.id] ?? 0));
+        if ((this.loaded[u.id] ?? 0) > 0) this.mark(`${u.side}:loadedLeft`, this.loaded[u.id]);
+      }
+      for (const sd2 of ["att", "def"]) if (this.advance[sd2] > 0) this.mark(`${sd2}:salvoUnpaid`, this.advance[sd2]);
+      for (const t of this.torps) if (t.weight > 0) this.mark(`${t.side}:salvoInWater`, 1);
+      for (const u of this.units) {
+        if (this.owe[u.id] > 0) this.mark(`${u.side}:owedLeft`, this.owe[u.id]);
+        if (this.cover[u.id] > 0) this.mark(`${u.side}:coverLeft`, this.cover[u.id]);
+      }
+      for (const side3 of ["att", "def"]) {
+        if (!this.units.some((u) => u.side === side3 && u.extra.cls === "cv") || !this.units.some((e) => e.side !== side3 && e.extra.cls === "bb")) continue;
+        this.mark(`${side3}:cvVsBb`, 1);
+        if (this.cvNear[side3]) this.mark(`${side3}:cvNearBb`, 1);
+      }
       this.over = {
         winner,
         how,
@@ -62633,11 +64643,29 @@
       this.say({ what: "end", side: winner, text: lines2[0] });
     }
     // ---- What the screens draw --------------------------------------------------------------------------------------
-    /** A piece in a sentence, by what it is and whose (log b348: no "the" before a fleet's own name): "a battleship of Home Fleet", "3 destroyers of Home Fleet". */
+    /** A piece in a sentence, by what it is and whose, the fleet taking "the" only where English does (log b370, b458 6):
+     *  "a battleship of the Home Fleet", "3 destroyers of Force H". */
     told(u, start2 = false) {
       const c = RULES_CLASSES[u.extra.cls], n = Math.max(1, u.extra.ships);
-      const s = n === 1 ? `a ${c.one} of ${u.extra.fleet}` : `${n} ${c.many} of ${u.extra.fleet}`;
+      const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${start2 ? headCount(n) : n} ${c.many} ${ofFleet(u.extra.fleet)}`;
       return start2 ? s[0].toUpperCase() + s.slice(1) : s;
+    }
+    /**
+     * The line for a strike or raid whose fleet's fighters turned back a third or more of it, in place of the find line
+     * (the UI director, 20 November 21:17 UTC, ui-director/field-battles/sea-226-review.md): "The Pacific Fleet's
+     * fighters turn back half of the 36 bombers from the Striking Force, and the rest find a battleship." Null below a
+     * third, where the find line stands. Flak gets no words: its work shows in the hits.
+     */
+    turnedBack(what, at3, verb) {
+      const c = this.capLast;
+      if (!c || c.share < 1 / 3) return null;
+      const fl = theFleet(c.fleet), who = `${fl[0].toUpperCase()}${fl.slice(1)}'s fighters turn back`;
+      const all = c.share >= 1 - 1e-9;
+      const word2 = all ? "all" : c.share <= 0.42 ? "a third" : c.share <= 0.58 ? "half" : c.share <= 0.75 ? "two thirds" : "most";
+      const of2 = all ? /^\d/.test(what) ? `all ${what}` : `all the ${what}` : `${word2} of the ${what}`;
+      if (all) return `${who} ${of2}, and none reach its ships.`;
+      const c2 = RULES_CLASSES[at3.extra.cls], n = Math.max(1, at3.extra.ships);
+      return `${who} ${of2}, and the rest ${verb} ${n === 1 ? `a ${c2.one}` : `${n} ${c2.many}`}.`;
     }
     /** More than one ship still afloat in the piece: the sentence takes a plural verb. */
     many(u) {
@@ -62662,10 +64690,47 @@
       u.speed = Math.round(u.extra.way * 10) / 10;
       u.act = u.state === "routing" || this.orders.get(u.id)?.kind === "leave" ? "rout" : u.engaged !== void 0 ? "fight" : u.extra.way < 0.5 ? "idle" : this.swing[u.id] > 0.6 ? "turn" : u.extra.way > C3.speed * SEA.speeds.cruise * 1.05 ? "run" : "march";
     }
-    /** Each side's ships still in the fight, as a share of both sides' weight at the start. */
+    /**
+     * What the 3D game draws of how each piece is handled (the ship plan's B1, ruling 239 at 23:20Z: look fields in one
+     * commit that move no number). Read from what the sim did this tick; nothing in the rules reads them back and they draw
+     * no dice. On every piece: 'foe', the enemy piece whose bearing set its course this tick (-1 when an order, its fleet's
+     * line, a carrier group's turn away or the field's edge set it), for the columns to wheel on; 'helm', how hard it is
+     * turning, -1 to 1, + to starboard, for heel and wake; 'lineAt', its place in its side's battle line (0 the guide),
+     * absent when it is in none. On a destroyer piece on a torpedo run: 'runPhase', 'in' or
+     * 'away', and 'runUntil', the second it turns back. 'smoke': a destroyer or cruiser piece laying a smoke screen, as one
+     * turning away from its run, one breaking off, or a destroyer piece within its screen's station of a carrier of its
+     * own turning away from a battle line (drawn only: it hides nothing, and the guns fire through it). On a carrier:
+     * 'flight', its air group on deck, 'out' at the enemy, or 'back' and landing on; and 'cover', the share of the
+     * fighters it held over the fleet at its last strike that are still up, 0 to 1.
+     */
+    showLooks() {
+      const L0 = { att: this.linePlans.att.t === this.t && this.lines.att !== null, def: this.linePlans.def.t === this.t && this.lines.def !== null };
+      for (const u of this.units) {
+        const x = u.extra, on = live4(u), r = on ? this.runs.get(u.id) : void 0;
+        x.foe = on ? this.steered[u.id] : -1;
+        x.helm = on ? Math.round(this.helmed[u.id] * 100) / 100 : 0;
+        if (r) {
+          x.runPhase = r.phase;
+          if (r.phase === "away") x.runUntil = Math.round(r.until * 10) / 10;
+          else delete x.runUntil;
+        } else {
+          delete x.runPhase;
+          delete x.runUntil;
+        }
+        const at3 = on && L0[u.side] ? this.linePlans[u.side].members.indexOf(u) : -1;
+        if (at3 >= 0) x.lineAt = at3;
+        else delete x.lineAt;
+        const light = x.cls === "dd" || x.cls === "ca";
+        x.smoke = on && light && (r?.phase === "away" || u.state === "routing" || x.cls === "dd" && this.units.some((c) => c.side === u.side && c.extra.cls === "cv" && live4(c) && this.away[c.id] && dist(u.x, u.y, c.x, c.y) <= SEA.torp.station));
+        if (x.cls !== "cv") continue;
+        x.flight = this.strikes.some((s) => s.cv === u.id) ? "out" : this.recovers.some((s) => s.cv === u.id) ? "back" : "deck";
+        x.cover = this.coverHeld[u.id] > 0 ? Math.round(clamp5(this.cover[u.id] / this.coverHeld[u.id], 0, 1) * 100) / 100 : 0;
+      }
+    }
+    /** Each side's strength still in the fight, its ships and its coasts' aircraft, as a share of both sides' at the start. */
     balance() {
       const total = this.weight0.att + this.weight0.def;
-      const standing5 = (side3) => this.units.reduce((n, u) => n + (u.side === side3 && live4(u) ? this.weightOf(u) : 0), 0);
+      const standing5 = (side3) => this.units.reduce((n, u) => n + (u.side === side3 && live4(u) ? this.weightOf(u) : 0), this.airLeft[side3]);
       return { att: total > 0 ? standing5("att") / total : 0, def: total > 0 ? standing5("def") / total : 0 };
     }
     view(as) {
@@ -62680,12 +64745,43 @@
         events,
         zones: this.zones.map((z) => ({ ...z })),
         ai: { ...this.ai },
-        over: this.over
+        over: this.over,
+        breaking: { att: this.nearBreak("att"), def: this.nearBreak("def") },
+        contact: this.contactAt
       };
+    }
+    /** Where the wind blows from in this battle, for the 3D game (the ship plan's L6): seaWind. */
+    get wind() {
+      return seaWind(this.ticket.seed);
+    }
+    /** How hard it blows, for the 3D game: seaWindSpeed. */
+    get windSpeed() {
+      return seaWindSpeed(this.ticket.seed);
+    }
+    /** Battle time the guns first reached an enemy, null before it. */
+    get contactTime() {
+      return this.contactAt;
+    }
+    /** The side that has broken off the action and is making for port, while the other chases; null before. */
+    get brokenSide() {
+      return this.broken;
+    }
+    /** Nothing is happening yet: no gun has reached an enemy. The screens run time fast while it holds (ruling 226(1)).
+     *  Strikes and the coasts' raids are counted, not flown, so one in the air does not end it, before or after it lands
+     *  (b458, 2a): it holds until the guns meet, and once they have it never holds again. A side that breaks off before
+     *  they meet ends it too: what follows is the chase, not the approach. */
+    get quiet() {
+      return this.contactAt === null && this.broken === null;
     }
   };
   var TAU3 = Math.PI * 2;
   var norm = (a) => (a % TAU3 + TAU3) % TAU3;
+  function seaWind(seed) {
+    return Math.round(mix3((seed ^ 2654435769) >>> 0) * TAU3 * 1e3) / 1e3;
+  }
+  function seaWindSpeed(seed) {
+    return Math.round((4 + 7 * mix3((seed ^ 1374496523) >>> 0)) * 10) / 10;
+  }
   var FREE2 = { kind: "free" };
 
   // Rules/battle-bridge.ts
@@ -62720,7 +64816,7 @@
       speed: Math.round(u.speed * 10) / 10,
       engaged: u.engaged ?? -1,
       cover: u.cover ?? "",
-      loop: air2 ? airLoop(air2) : u.extra?.cls ? SEA_LOOPS[u.act] ?? "" : town ? TOWN.loop : loops?.[u.act] ?? "",
+      loop: air2 ? airLoop(air2) : u.extra?.cls ? seaLoop(u.extra.cls, u.act) : town ? TOWN.loop : loops?.[u.act] ?? "",
       ...drops ? { drops: { takes: drops.takes, every: drops.every } } : {},
       // A land block's name for a card and what it belongs to under it ("11th Infantry" over "I Corps"), beside its full name.
       ...land2.short ? { short: land2.short, parent: land2.parent } : {},
@@ -63056,9 +65152,9 @@
   var WORDS2 = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
   var count3 = (n) => WORDS2[n] ?? String(n);
   var ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$|(?:^|\b[Tt]he |\()\d{1,2}\.$/;
-  var reEsc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  var reEsc3 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   var ORDINAL_WORDS = [...new Set(Object.values(air_names_default.ladders).flat().flatMap((r) => [r.form.ftr, r.form.bmr]).map((f) => /^\{n\}\. (\S+)/.exec(f)?.[1]).filter((w) => !!w))];
-  var ORDINAL_NEXT = new RegExp(`^ (?:${ORDINAL_WORDS.map(reEsc2).join("|")})(?=[\\s,.;:)]|$)`);
+  var ORDINAL_NEXT = new RegExp(`^ (?:${ORDINAL_WORDS.map(reEsc3).join("|")})(?=[\\s,.;:)]|$)`);
   var first = (text) => {
     const stop = /[.!?](?=\s|$)/g;
     for (let m = stop.exec(text); m; m = stop.exec(text)) {
@@ -63489,7 +65585,7 @@
       row2.line = good ? `${cap11(the3(ourFleet))} beat ${the3(theirFleet)}.` : `${cap11(the3(theirFleet))} beat ${the3(ourFleet)}.`;
       row2.figures = good && shipCount(theirSunk) ? [{ n: String(shipCount(theirSunk)), label: `${classWord(theirSunk)} sunk` }] : shipCount(ourSunk) ? [{ n: String(shipCount(ourSunk)), label: `${classWord(ourSunk)} lost` }] : shipCount(theirSunk) ? [{ n: String(shipCount(theirSunk)), label: `${classWord(theirSunk)} sunk` }] : [];
       row2.kind = "FLEET ACTION";
-      row2.head = good ? `Victory in the ${r.zoneName.replace(/^the /i, "")}` : `Defeat in the ${r.zoneName.replace(/^the /i, "")}`;
+      row2.head = `${good ? "Victory" : "Defeat"} ${seaWhere(r.zoneName.replace(/^the /i, ""))}`;
       row2.follows = shipCount(theirSunk) || shipCount(ourSunk) ? `${cap11(shipCount(theirSunk) ? shipList(theirSunk) : "no enemy ship")} sunk${shipCount(ourSunk) ? ` for the loss of ${shipList(ourSunk)}` : ", and no ship of yours lost"}.` : "Neither side lost a ship.";
       row2.facts = [{ n: String(shipCount(sumShips(us, "ships"))), label: "ships engaged" }, { n: String(shipCount(ourSunk)), label: "lost" }, { n: String(shipCount(theirSunk)), label: "of theirs sunk" }];
       ranked.push({ row: row2, sub: 0, weight: CORPS_MEN + shipsWeight(theirSunk) + shipsWeight(ourSunk), fleet: true, great: true });
@@ -63543,7 +65639,8 @@
         row2.place = place2;
         row2.line = r.won ? att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, "Their $2") : miss;
         const low2 = place2.replace(/^The /, "the ");
-        row2.head = r.mission === "fleet" || r.mission === "strike" ? r.won ? `${r.mission === "fleet" ? place2 : `Shipping in ${low2}`} is struck from the air` : att ? `The strike on ${r.mission === "fleet" ? low2 : `shipping in ${low2}`} fails` : `The strike on ${r.mission === "fleet" ? low2 : `shipping in ${low2}`} is beaten off` : r.won ? `${place2} is bombed` : att ? `The raid on ${place2} fails` : `${place2} beats off the raid`;
+        const shipAt = g2.seas[r.zone] ? seaWhere(g2.seas[r.zone].name) : `in ${low2}`;
+        row2.head = r.mission === "fleet" || r.mission === "strike" ? r.won ? `${r.mission === "fleet" ? place2 : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} is beaten off` : r.won ? `${place2} is bombed` : att ? `The raid on ${place2} fails` : `${place2} beats off the raid`;
       }
       row2.follows = r.result;
       const sunkHere = shipsHit ? shipCount(shipsHit) : 0;
@@ -63608,9 +65705,10 @@
       row2.week = h.week;
       Object.assign(row2, dated2(h.turn));
       if (h.region !== void 0) row2.region = h.region;
-      const where = h.region === void 0 ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
-      row2.place = h.region !== void 0 ? g2.regions[h.region].name : where ? cap11(where[1].replace(/^the /, "")) : h.arm === "sea" ? "At sea" : "In the air";
-      const zone = where ? g2.seas.findIndex((z) => z.name.replace(/^the /i, "") === where[1].replace(/^the /i, "")) : -1;
+      const seaAt3 = h.region === void 0 ? seaSaid(h.text, g2.seas.map((z) => z.name)) : null;
+      const where = h.region === void 0 && !seaAt3 ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
+      row2.place = h.region !== void 0 ? g2.regions[h.region].name : seaAt3 ? g2.seas[seaAt3.i].name : where ? cap11(where[1].replace(/^the /, "")) : h.arm === "sea" ? "At sea" : "In the air";
+      const zone = seaAt3 ? seaAt3.i : where ? g2.seas.findIndex((z) => z.name.replace(/^the /i, "") === where[1].replace(/^the /i, "")) : -1;
       if (zone >= 0) row2.sea = zone;
       row2.sign = h.arm === "land" ? bridges ? "eng" : /airborne/.test(h.text) ? "para" : "inf" : h.arm === "sea" ? /submarine|torpedo|convoy|shipping/i.test(h.text) ? "ss" : "hull" : "bmr";
       row2.picture = h.arm === "land" ? bridges || /\b(town|city|garrison|siege)\b/.test(h.text) ? "town" : "troops" : h.arm === "sea" ? "fleet" : h.region !== void 0 ? "factories" : "fleet";
@@ -63621,10 +65719,10 @@
       const other4 = [h.won, h.lost, h.nat].find((x) => x !== void 0 && x !== me && !!g2.nations[x]);
       row2.ours = me;
       row2.theirs = other4 ?? null;
-      const said2 = first(where ? h.text.replace(where[0], "") : h.text);
+      const said2 = first(seaAt3 ? h.text.replace(seaAt3.said, "") : where ? h.text.replace(where[0], "") : h.text);
       const river = bridges ? /bridges over (the [A-Z][A-Za-z' -]*?)(?= at | between | as | before |[.,]|$)/.exec(h.text) : null;
       const ships = sinking ? CLASS_WORD.exec(h.text) : null;
-      const torpedoed = sinking && !ships ? /\btorpedoes and sinks an? (battleship|carrier|cruiser|destroyer|submarine) of (the [^:.]+?) in the /.exec(h.text) : null;
+      const torpedoed = sinking && !ships ? /\btorpedoes and sinks an? (battleship|carrier|cruiser|destroyer|submarine) of (the [^:.]+?) (?:in|off) [^:.]+:/.exec(h.text) : null;
       row2.line = river ? /\bseize\b/.test(h.text) ? `The bridges over ${river[1]} were taken intact.` : /\bblow\b/.test(h.text) ? `The bridges over ${river[1]} are blown.` : `${said2}.` : `${said2}.`;
       row2.kind = h.arm === "land" ? "ON LAND" : h.arm === "sea" ? "AT SEA" : "IN THE AIR";
       row2.head = ships ? `${cap11(count3(Number(ships[1])).toLowerCase())} ${ships[2]} ${ships[3]} sunk` : brief(said2, 64);
@@ -63734,13 +65832,13 @@
     }
     for (const nat of new Set(banded.filter((b) => b.h.kind === "fall" && b.h.nat).map((b) => b.h.nat))) {
       const same4 = banded.filter((b) => b.h.kind === "fall" && b.h.nat === nat);
-      const keep = [...same4].reverse().find((b) => b.h.region === void 0) ?? same4[same4.length - 1];
-      for (const b of same4) if (b !== keep) banded.splice(banded.indexOf(b), 1);
+      const keep2 = [...same4].reverse().find((b) => b.h.region === void 0) ?? same4[same4.length - 1];
+      for (const b of same4) if (b !== keep2) banded.splice(banded.indexOf(b), 1);
     }
     for (const nat of new Set(banded.filter((b) => b.band.word === "FREED" && b.h.nat).map((b) => b.h.nat))) {
       const both = banded.filter((b) => (b.band.word === "FREED" || b.band.word === "FALLEN") && b.h.nat === nat);
-      const keep = both.reduce((a, b) => hs.indexOf(b.h) > hs.indexOf(a.h) ? b : a);
-      for (const b of both) if (b !== keep) banded.splice(banded.indexOf(b), 1);
+      const keep2 = both.reduce((a, b) => hs.indexOf(b.h) > hs.indexOf(a.h) ? b : a);
+      for (const b of both) if (b !== keep2) banded.splice(banded.indexOf(b), 1);
     }
     const DECLARES = /^(.+?) declares war on (.+)$/;
     for (const b of [...banded]) {
@@ -63761,12 +65859,12 @@
     }
     const onHim = banded.filter((b) => b.h.kind === "war" && !mine4(b.h.nat) && DECLARES.exec(b.band.head)?.[2].replace(/^the /, "") === N.name);
     if (onHim.length > 1) {
-      const [keep, ...rest] = onHim;
+      const [keep2, ...rest] = onHim;
       const at3 = ` declare war on ${theName(N)}`;
-      keep.band.head = `${listIn(onHim.map((b, i) => i ? midName(DECLARES.exec(b.band.head)[1]) : DECLARES.exec(b.band.head)[1]), BAND_ROOM - at3.length)}${at3}`;
-      keep.band.nats = onHim.map((b) => b.h.nat).slice(0, 2);
-      keep.band.text = onHim.map((b) => b.band.text).join(" ");
-      keep.rank = Math.min(...onHim.map((b) => b.rank));
+      keep2.band.head = `${listIn(onHim.map((b, i) => i ? midName(DECLARES.exec(b.band.head)[1]) : DECLARES.exec(b.band.head)[1]), BAND_ROOM - at3.length)}${at3}`;
+      keep2.band.nats = onHim.map((b) => b.h.nat).slice(0, 2);
+      keep2.band.text = onHim.map((b) => b.band.text).join(" ");
+      keep2.rank = Math.min(...onHim.map((b) => b.rank));
       for (const b of rest) banded.splice(banded.indexOf(b), 1);
     }
     for (const b of banded) {
@@ -65778,7 +67876,7 @@
     }
     return {
       zones: [...new Set(fresh4.map((r) => r.zone))],
-      notes: fresh4.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn2.has(r.id) ? ` ${lostIn2.get(r.id)}` : ""}`),
+      notes: fresh4.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn2.has(r.id) ? ` ${lostIn2.get(r.id)}` : ""}`),
       mine: fresh4.some((r) => r.attNat === s.human || r.defNat === s.human),
       sunk
     };
@@ -67463,7 +69561,7 @@
           seas: zones,
           sunk: all.sunk.filter((x) => zones.includes(x.zone)),
           mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
-          note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(" ") || all.notes[0] || "",
+          note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(" ") || all.notes[0] || "",
           view: view2()
         });
       }
@@ -68918,7 +71016,9 @@ ${next.text}` : ""}` : next ? next.also : "";
         guns: Math.round(card.guns),
         screen: card.screen.gap > 0 ? `${cap1(card.screen.word)}: ${card.screen.have} destroyers where ${card.screen.need} are needed.` : "",
         shelled: card.shelled,
-        cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief })),
+        // Battle stars (b477): the row as the rules count it (stars.ts starRow: most, silver, bronze, each, battles,
+        // words), or null where no ship of the class has one. The 3D card draws it as it comes, without recounting.
+        cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief, stars: c.stars ?? null })),
         seas: (o?.seas ?? []).map((z) => ({ zone: z.zone, name: z.name, surface: z.surface, subs: z.subs, meet: z.meet, hunt: z.hunt, torpedo: z.torpedo, reported: z.reported ?? 0, search: z.search ?? "" })),
         coasts: o?.coasts ?? [],
         merge: o?.merge ?? [],
@@ -68949,7 +71049,7 @@ ${next.text}` : ""}` : next ? next.also : "";
           buttons.push({ label: `SPLIT OFF ${half}`, act: `fleetsplit:${id}:${c.cls}:${half}`, ok: up && !whyHalf, tip: whyHalf ?? "Half of them leave as a fleet of their own." });
         }
       }
-      return { nat: card.nat, title: `${c.count} ${SHIP_WORD[c.cls]?.[c.count === 1 ? 0 : 1] ?? c.label.toLowerCase()}`, lines: [c.role, c.lost ? `${c.lost} lost since the war began.` : ""].filter(Boolean), buttons };
+      return { nat: card.nat, title: `${c.count} ${SHIP_WORD[c.cls]?.[c.count === 1 ? 0 : 1] ?? c.label.toLowerCase()}`, lines: [c.role, c.lost ? `${c.lost} lost since the war began.` : "", c.stars?.words[0] ?? ""].filter(Boolean), buttons };
     });
     const seas = (o?.seas ?? []).map((z) => {
       const meet = z.meet === "clear" ? "A patrol would meet no enemy fleet." : z.meet === "battle" ? "A patrol would bring the enemy fleet to battle." : "The enemy there is too strong: a patrol would not face him.";
@@ -69668,8 +71768,8 @@ ${standing5}`,
           return null;
         }
       })() : null;
-      const keep = (list4) => dn && kind === "night" ? [...list4, ...dn.home.filter((id) => !list4.includes(id))] : list4;
-      const carry = keep(p.picked);
+      const keep2 = (list4) => dn && kind === "night" ? [...list4, ...dn.home.filter((id) => !list4.includes(id))] : list4;
+      const carry = keep2(p.picked);
       const picture = (t, holder) => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || "X"}`;
       const gunsOf2 = (t) => sea || !s.regions[t] || !["bomb", "night", "town", "harbour"].includes(kind) ? -1 : gunsAt(s, t);
       const stops = raidTargetsFor(s, k, -1);
@@ -69679,7 +71779,7 @@ ${standing5}`,
         const name = t?.name ?? fallback;
         if (kind !== "fleet") return { title: name, who: "" };
         const sea2 = (s.seas[t?.zone ?? -1]?.name ?? "").replace(/^the /i, "");
-        const cut2 = name.indexOf(" in the ");
+        const cut2 = name.search(/ (?:in|off) /);
         return { title: sea2 || name, who: cut2 > 0 ? name.slice(0, cut2) : name };
       };
       const card = {
@@ -69725,7 +71825,7 @@ ${standing5}`,
         strip: stops.slice(0, 10).map((t) => {
           let q = previewRaid(s, k, t.id, p.picked);
           if (q.why || !q.picked.length) q = previewRaid(s, k, t.id);
-          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), guns: gunsOf2(t.id), ...titled(t, t.name) };
+          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, keep2(q.picked)), now: t.id === target, picture: picture(t.id, t.holder), guns: gunsOf2(t.id), ...titled(t, t.name) };
         }),
         seats: p.seats.map((x) => {
           const stays = !!dn && kind === "night" && dn.home.includes(x.id);
@@ -70014,10 +72114,10 @@ ${standing5}`,
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
     if (part[0] === "fold") {
-      const keep = Number(part[1]), gone = Number(part[2]);
-      const a = s.corps.find((c) => c.id === keep), b = s.corps.find((c) => c.id === gone);
+      const keep2 = Number(part[1]), gone = Number(part[2]);
+      const a = s.corps.find((c) => c.id === keep2), b = s.corps.find((c) => c.id === gone);
       const names = a && b ? [a.name, b.name] : null;
-      ok2 = !!names && orderFold(s, keep, gone);
+      ok2 = !!names && orderFold(s, keep2, gone);
       note4 = ok2 && names ? `${names[1]} is folded into ${names[0]}. Its cadre waits in the arsenal.` : "They cannot be folded together now.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: ok2 ? "close" : open2, view: view2() };
     }

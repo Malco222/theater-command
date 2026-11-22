@@ -620,6 +620,12 @@ export interface Fleet extends Storied {
    * share of their decks until the wing comes back aboard.
    */
   bare?: { ftr: number; bmr: number };
+  /**
+   * Battle stars (b477), ship by ship: for each class, an entry for each of its ships, those longest in the fleet
+   * first, each the fleet actions it came through on the winning side (places in g.stories.seaActions). Ships at the
+   * back with none are left off, and a fleet with none has no record. Kept in step with the counts by stars.ts.
+   */
+  stars?: Partial<Record<ShipClass, number[][]>>;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -835,6 +841,11 @@ export interface Stories {
   crews?: Record<string, CrewsHome>;
   /** The holders of each nation's highest award for valour (valour.ts), oldest first. */
   heroes?: Hero[];
+  /**
+   * The fleet actions of the war that one side won, in the order they were fought: the month and the sea. A ship's
+   * battle stars are places in this list (stars.ts). Absent until the first is won, and in a save from before.
+   */
+  seaActions?: [turn: number, zone: number][];
 }
 
 /** A man given his nation's highest award for valour (valour.ts). */

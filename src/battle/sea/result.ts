@@ -41,7 +41,7 @@ const POWER = 0.5;
 
 /**
  * R from a played fleet action: who held the sea, and how lopsided the exchange of weight lost was. Clamped to what
- * the dice could roll at the battle's odds (ruling 217); within that, the attacker's win is never below 1 and his
+ * the dice could roll at the battle's odds (ruling 217); within that, the attacker's win is never below 1 and their
  * defeat never at 1 or above.
  */
 export function seaRatio(winner: Side, lost: Record<Side, number>, odds: number): number {
@@ -64,14 +64,16 @@ export function seaLevel(R: number): VictoryLevel {
 /**
  * The most ships of each class each side can lose on the field: what the rules would sink at that side's worst luck
  * (the attacker's at the bottom of the dice, the defender's at the top), rounding each fleet's figure up as the dice
- * can (sinkShips rolls about ships x share x tough).
+ * can (sinkShips rolls about ships x share x tough). Each fleet's tough is its own where its damage control eases it
+ * (ruling 240: the ticket's tough), else navy.json's; 'plain' reads navy.json's for every fleet, the caps the field
+ * would have had without damage control.
  */
-export function sunkCaps(fleets: FleetTicket[], odds: number): Record<Side, SeaShips> {
+export function sunkCaps(fleets: FleetTicket[], odds: number, plain = false): Record<Side, SeaShips> {
   const [lo, hi] = diceRange(odds);
   const worst: Record<Side, number> = { att: lossShares(lo).att, def: lossShares(hi).def };
   const out: Record<Side, SeaShips> = { att: none(), def: none() };
   for (const f of fleets) for (const c of SEA_CLASSES) {
-    out[f.side][c] += Math.min(f.ships[c], Math.ceil(f.ships[c] * worst[f.side] * RULES_CLASSES[c].tough - 1e-9));
+    out[f.side][c] += Math.min(f.ships[c], Math.ceil(f.ships[c] * worst[f.side] * ((plain ? undefined : f.tough?.[c]) ?? RULES_CLASSES[c].tough) - 1e-9));
   }
   return out;
 }

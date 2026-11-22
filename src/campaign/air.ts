@@ -28,6 +28,7 @@ import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
 import { nameLosses, nameSide } from './hulls';
+import { loseStars, mendStars } from './stars';
 import { groundRules } from './ground';
 import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
@@ -44,6 +45,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
+import { seaWhat, seaWhere } from './sea-words';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -1449,7 +1451,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const sea = m === 'strike' || m === 'fleet', night = m === 'night';
   const zone = m === 'fleet' ? quarry?.zone ?? -1 : target;
   const nat = fleets[0]?.nat ?? '';
-  const place = sea ? `the ${g.seas[zone]?.name ?? 'sea'}` : g.regions[target]?.name ?? '';
+  const place = sea ? (g.seas[zone] ? seaWhat(g.seas[zone].name) : 'the sea') : g.regions[target]?.name ?? '';
   // Weather (ruling 127): the sky over the target, and the groups whose own sky is closed stay on the ground.
   const wx = weatherOn(g);
   const sky: Sky = wx ? (sea ? skyAtSea(g, zone) : skyAt(g, target)) : 'clear';
@@ -1715,6 +1717,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const sea = m === 'strike' || m === 'fleet', night = m === 'night';
   // The sea fought over: the one struck, or the one the fleet struck is in.
   const zone = m === 'fleet' ? a.ships[0].zone : target;
+  // Where at sea, as the UI director's sea words say it: "in the North Sea", "off the Azores".
+  const seaAt = sea && g.seas[zone] ? seaWhere(g.seas[zone].name) : `in ${a.place}`;
   const rng = airRng(g, `${m}:${target}:${nat}${salt}`);
   // A raid fought out as an air battle (airfought.ts) books the field's own losses; otherwise the dice roll.
   // Handed to the staff partway, the dice roll as for any raid, and the battle's part is added to what they give the rest.
@@ -1808,7 +1812,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         const k = Math.min(x.ships[c], n);
         kept[c] = Math.min(x.ships[c], n0) - k;
         x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k; keptAll[c] += kept[c];
+        loseStars(x, c, k);
       }
+      mendStars(x);
       afloatWatch.tell?.({ route: 'air', nat: x.nat, sunk: struck![i].sunk, saved: kept });
       if (shipCount(kept)) afloat.push({ x, kept });
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
@@ -2021,10 +2027,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));
   let text: string;
   if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : held ? (nat === g.human ? 'The sky there is still yours.' : `The ${g.nations[nat].adj} air force still holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
-  else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} in ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
+  else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} ${seaAt}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'harbour') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} ${harbourOf(a.place)}${a.surprise ? ' without warning' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'town') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the defences of ${townName(g.regions[target])}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
-  else if (sea) text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} at shipping in ${a.place}. ${result} ${cap(cost)}.`;
+  else if (sea) text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} at shipping ${seaAt}. ${result} ${cap(cost)}.`;
   else if (m === 'line') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the ${adj} fieldworks at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'ground') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the ${adj} troops at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} ${a.place}${night ? ' by night' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
@@ -2035,7 +2041,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const full = sky || notable || shipsSunk > 0 || m === 'fleet' || m === 'harbour';
   const brief = m === 'superiority' ? `a fight for the sky over ${a.place}`
     : m === 'town' ? `the defences of ${townName(g.regions[target])} bombed`
-    : sea ? `shipping struck in ${a.place}`
+    : sea ? `shipping struck ${seaAt}`
     : m === 'line' ? `the ${adj} fieldworks at ${a.place} bombed`
     : m === 'ground' ? `the ${adj} troops at ${a.place} raided`
     : `${a.place} bombed${night ? ' by night' : ''}`;

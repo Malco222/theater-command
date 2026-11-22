@@ -31,6 +31,9 @@ export interface PieceInfo {
   fleet: FleetTicket;
 }
 
+/** Each class's row in the line, counted back from the front: destroyers ahead, then cruisers, battleships, carriers. */
+const ROW: Record<SeaClass, number> = { dd: 0, ca: 1, bb: 2, cv: 3 };
+
 /**
  * The pieces of both sides, drawn up at the start: the attacker's toward the south edge facing north, the defender's
  * toward the north edge facing south, each fleet in its own column, capital ships in the centre and the destroyers
@@ -52,16 +55,30 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
     const order: SeaClass[] = ['dd', 'ca', 'bb', 'cv'];
     const toward = side === 'att' ? 1 : -1;
     const baseY = side === 'att' ? F.edge : F.size - F.edge;
-    order.forEach((c, row) => {
+    const sideW = mine.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + f.ships[c] * shipWeight(f, c), 0), 0);
+    order.forEach((c) => {
       const list = rows[c];
-      const gap = c === 'dd' ? 500 : 650;
-      const y = baseY - toward * row * 700;
+      const y = baseY - toward * ROW[c] * F.row;
+      // One front for every class (b458): a row is pieces.front metres times its share of its side's weight, the same
+      // metres for battleships, carriers, cruisers and destroyers, with its pieces spaced evenly along it. Rows that
+      // carry the same share of their side's weight are as wide whatever ships they are, so fleets of the same weight
+      // meet on the same front whatever their make and however many pieces they come in. Each class had its own spacing
+      // before (650 m between big ships, 500 m between fours of destroyers): for the same weight a cruiser row stood on
+      // three times the front of a battleship row and a destroyer row on twice, so a light line stood two or three times
+      // as wide as a battle line of the same weight, its wings out of reach, and won 31 in 100 against a card of 50.
+      const rowW = list.reduce((m, p) => m + p.n * shipWeight(p.f, c), 0);
+      const slot = (SEA.pieces.front * rowW) / (Math.max(1e-6, sideW) * Math.max(1, list.length));
       list.forEach((p, i) => {
-        const x = F.size / 2 + (i - (list.length - 1) / 2) * gap;
+        // The defender's line is the attacker's turned half round, not its mirror: each side's first ship is on its
+        // own left, so a ship turning to starboard does for one side what it does for the other (b402: drawn as a
+        // mirror, the same helm put one side across the other's bows).
+        const x = F.size / 2 + (side === 'def' ? -1 : 1) * (i - (list.length - 1) / 2) * slot;
         const w = shipWeight(p.f, c);
         const u: SeaUnit = {
           id, side, corps: p.f.id, nat: p.f.nat, kind: c,
-          name: p.n === 1 ? `${cap(RULES_CLASSES[c].one)}, ${p.f.name}` : `${p.n} ${RULES_CLASSES[c].many}, ${p.f.name}`,
+          // Numbered in kind on its side, as the campaign counts ships by kind and the field never names what the
+          // campaign does not know (the design director): "Cruiser 2", "Destroyers 4". Its fleet is extra.fleet.
+          name: `${cap(p.n === 1 ? RULES_CLASSES[c].one : RULES_CLASSES[c].many)} ${i + 1}`,
           x, y, face: side === 'att' ? 0 : Math.PI, str: 1, mor: 1, state: 'steady',
           men0: p.n * SEA.classes[c].crew,
           // For the models: one figure a ship, the piece's ships in line ahead three lengths apart (the sim keeps these up to date).
