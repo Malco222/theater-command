@@ -6,6 +6,7 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/CampaignStepPlayer.h"
+#include "Campaign/EdgeSeals.h"
 #include "TheaterCommand.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -2200,7 +2201,13 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 				// to its next step by the computer's own clock, so a replay clip on a fixed step would lose the pacing its ink
 				// is fitted to. The code checker's note on c3c9d18d. Other clips are taken at the computer's pace, as before.)
 				const bool bOrderClip = FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm")) || FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare"));
-				if (bOrderClip && ClipFrames > 0 && ClipEvery <= 0.4f && !FApp::IsBenchmarking() && !FApp::UseFixedTimeStep())
+				// (Release 2, news at the map's edge: and the clip of the seals sliding in, "-TheaterSeal=slide", read as the
+				// edge's layer reads it, EdgeSeals::ReadSealAsk. The layer times the slide-in on the world's clock, so only a
+				// stepped clip shows it frame by frame. Never a replay shot's: the seals are not shown while the replay plays.)
+				FString SealAsked;
+				const bool bSealClip = !Shot.bWatch && FParse::Value(FCommandLine::Get(), TEXT("TheaterSeal="), SealAsked, false)
+					&& EdgeSeals::ReadSealAsk(std::string(TCHAR_TO_UTF8(*SealAsked))).bSlide;
+				if ((bOrderClip || bSealClip) && ClipFrames > 0 && ClipEvery <= 0.4f && !FApp::IsBenchmarking() && !FApp::UseFixedTimeStep())
 				{
 					bClipStepped = true;
 					ClipStepWas = FApp::GetFixedDeltaTime();
