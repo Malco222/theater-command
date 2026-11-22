@@ -57,8 +57,10 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     expect((leagueData as any).never).toContain('JAP');
     for (const id of ['MAN', 'MGL']) { expect((leagueData as any).never, id).not.toContain(id); expect(small(id), id).toBe(true); }
     expect(small('JAP')).toBe(false);
-    // (The far world's fleet bases by date, and the carrier striking force's two of the Pacific war file.)
-    expect(NAVY.moves!.length).toBe(FW.navy.moves.length + 2);
+    // (The far world's fleet bases by date, and the Pacific war file's own: the carrier striking force's two and the
+    // Asiatic Fleet's four, the design director's rulings of 03:55Z and 04:25Z, 22 November 2026.)
+    expect(NAVY.moves!.length).toBe(FW.navy.moves.length + 6);
+    expect(NAVY.moves!.filter((m) => m.fleet === 'Asiatic Fleet' && m.nat === 'USA').map((m) => m.base)).toEqual(['Panay', 'Soerabaja', 'Semarang', 'Perth']);
     expect(NAVY.moves!.filter((m) => m.fleet === 'Mobile Fleet' && m.nat === 'JAP').map((m) => m.base).slice(-2)).toEqual(['Etorofu', 'Hiroshima']);
   });
 

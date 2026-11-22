@@ -134,10 +134,13 @@ describe('the readiness test: the gathering and the three things', () => {
   it("the wave at a beach is every row that sails for it: a division's tank regiments are weighed with it while they stand with it on its quay (rider b631 (i))", () => {
     const g = months(december(3), 4);
     const now = readiness(g, 'JAP')!;
-    // The 48th Division's lift for Lingayen is three rows, and the two divisions for Kota Bharu sail with the 5th's regiments.
-    expect(now.waves.Manila).toEqual(['14th Army (48th Division)', '4th Tank Regiment', '7th Tank Regiment']);
+    // The 48th Division's lift for Lingayen is five rows (its two tank regiments, and from the design director's
+    // rulings of 22:34Z and 22:42Z of 21 November 2026 the 16th Division's 9th Infantry and the 14th Army's heavy
+    // guns), and the two divisions for Kota Bharu sail with the 5th's regiments.
+    const NINTH = '16th Division (9th Infantry)', HEAVY = '14th Army artillery (1st and 8th Field Heavy Artillery)';
+    expect(now.waves.Manila).toEqual(['14th Army (48th Division)', '4th Tank Regiment', '7th Tank Regiment', NINTH, HEAVY]);
     expect(now.waves.Singapore).toEqual(['25th Army (5th Division)', '1st Tank Regiment', '6th Tank Regiment', '25th Army (18th Division)']);
-    // The three rows weigh more at the beach than the division alone does: the test reads what the ships put ashore.
+    // The five rows weigh more at the beach than the division alone does: the test reads what the ships put ashore.
     const beach = g.byName['Lingayen'], also = new Set(['USA', 'PHI', 'UK', 'AUS', 'NED']);
     const wave = now.waves.Manila.map((nm) => corps(g, nm)!);
     const alone = reckon(g, 'JAP', beach, [wave[0]], 0, undefined, also)!, whole = reckon(g, 'JAP', beach, wave, 0, undefined, also)!;
@@ -146,8 +149,10 @@ describe('the readiness test: the gathering and the three things', () => {
     expect(whole.chance).toBeGreaterThan(alone.chance);
     // A regiment that is not on the division's quay does not sail with it, and one let go is its staff's own.
     relocate(g, corps(g, '4th Tank Regiment')!, g.byName['Tokyo']);
-    expect(readiness(g, 'JAP')!.waves.Manila).toEqual(['14th Army (48th Division)', '7th Tank Regiment']);
+    expect(readiness(g, 'JAP')!.waves.Manila).toEqual(['14th Army (48th Division)', '7th Tank Regiment', NINTH, HEAVY]);
     corps(g, '7th Tank Regiment')!.hold = false;
+    expect(readiness(g, 'JAP')!.waves.Manila).toEqual(['14th Army (48th Division)', NINTH, HEAVY]);
+    for (const nm of [NINTH, HEAVY]) corps(g, nm)!.hold = false;
     expect(readiness(g, 'JAP')!.waves.Manila).toEqual(['14th Army (48th Division)']);
     // A place whose beaches are all Japan's has no wave: the test is not asked there.
     g.byName['Manila'].ctrl = 'JAP';
@@ -160,7 +165,8 @@ describe('the readiness test: the gathering and the three things', () => {
     const tanaka = 'Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)';
     // Luzon's other landings lie on the ground Lingayen's defenders are counted from: Aparri's and Legaspi's rows
     // within the three marches, Davao's beyond them on the same enemy ground. Malaya's test has no other beach.
-    expect(now.beside.Manila).toEqual([tanaka, '14th Army (16th Division)', 'Sakaguchi Detachment (56th Mixed Infantry Group)']);
+    // (The 16th Division sails for Legaspi with its Kimura Detachment in its lift: the director's 22:34Z of 21 November 2026.)
+    expect(now.beside.Manila).toEqual([tanaka, '14th Army (16th Division)', 'Kimura Detachment (16th Division)', 'Sakaguchi Detachment (56th Mixed Infantry Group)']);
     expect(now.beside.Singapore).toEqual([]);
     const beach = g.byName['Lingayen'], also = new Set(['USA', 'PHI', 'UK', 'AUS', 'NED']);
     const wave = now.waves.Manila.map((nm) => corps(g, nm)!), sixteenth = corps(g, '14th Army (16th Division)')!;
@@ -182,7 +188,11 @@ describe('the readiness test: the gathering and the three things', () => {
     // Nor is a row counted beside the wave counted again among those the ships bring in after it.
     const quay = g.regions[wave[0].reg], detachment = corps(g, tanaka)!;
     detachment.str = 1;
-    expect(followUp(g, 'JAP', quay, wave, beach, undefined, [detachment])).toBeLessThan(followUp(g, 'JAP', quay, wave, beach));
+    // (Read with the division and its two tank regiments as the wave: the 48th's whole lift of five fills the beach,
+    // and the ships bring nobody in behind a beach that is full.)
+    const three = wave.slice(0, 3);
+    expect(followUp(g, 'JAP', quay, three, beach, undefined, [detachment])).toBeLessThan(followUp(g, 'JAP', quay, three, beach));
+    expect(followUp(g, 'JAP', quay, wave, beach)).toBe(0);
     // A row that stands on no quay is not weighed.
     relocate(g, sixteenth, g.regions.find((r) => r.owner === 'JAP' && r.ctrl === 'JAP' && !r.port)!);
     expect(readiness(g, 'JAP')!.beside.Manila).not.toContain('14th Army (16th Division)');

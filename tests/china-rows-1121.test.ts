@@ -71,9 +71,11 @@ describe("the China file's amendments and the rows its dated rows take", () => {
     for (const r of MINE) for (const nm of (r[6]?.from ?? []) as string[]) expect(N[r[1]].has(nm), `${r[2]} takes ${nm}`).toBe(true);
   });
 
-  it("the book's own rows are marked for stops 1 and 2; the brigades, the garrisons and the guards stand at every stop", () => {
+  // (The five guards: the director's 16:44Z of 21 November 2026. Dated at the book's stops as before; at stops 3 to 5
+  // they fold into the rear garrison that comes by cause, staff.ts rearMonth, at the same figures: far-rear-garrison.)
+  it("the book's own rows are marked for stops 1 and 2, and so are the five guards; the brigades and the garrisons stand at every stop", () => {
     for (const r of MINE.filter((x) => x[0] >= 24)) expect(r[6].stops, r[2]).toEqual([1, 2]);
-    for (const r of GUARDS) expect(r[6].stops, r[2]).toBeUndefined();
+    for (const r of GUARDS) expect(r[6].stops, r[2]).toEqual([1, 2]);
     expect(GUARDS).toHaveLength(5);
   });
 });
@@ -264,7 +266,12 @@ describe("the book's massings: rows that take their men from rows on the board, 
     g.turn = 37; startPhase(g, 'JAP');
     for (const nm of ['13th Army (15th Division, for Chekiang)', '13th Army (detachments of the 32nd and 116th Divisions)', '13th Army (mixed brigades, for Chekiang)']) expect(of(g, nm), nm).toBeUndefined();
     const home = g.corps.filter((c) => c.name === '13th Army (15th Division, Nanking)' && !c.dead);
-    expect(home.map((c) => [g.regions[c.reg].name, Math.round(c.str * 20) / 20, c.hold, !!c.stay])).toEqual([['Nanking', 0.9, true, true]]);
+    expect(home.map((c) => [g.regions[c.reg].name, c.hold, !!c.stay])).toEqual([['Nanking', true, true]]);
+    // (Its row's 0.9 and the month's drafts, a little: read with room, not rounded to the twentieth. The drafts' share
+    // stood at 0.9248 and moves by a hair with whatever else draws them that month: 0.9251 once the tank divisions
+    // formed short of their lent regiments, the lent rows' commit of 22 November 2026.)
+    expect(home[0].str).toBeGreaterThanOrEqual(0.9);
+    expect(home[0].str).toBeLessThan(0.95);
     // (The planner's row of month 54, the 15th for Mandalay, still finds it.)
     expect(dated('15th Division')[6].from).toEqual(['13th Army (15th Division, Nanking)']);
   });
@@ -375,19 +382,27 @@ describe("the small islands' guards after capture are the navy's guard units, at
     expect(((setup as any).expeditions as any[]).some((r) => r[1] === 'JAP' && r[5] === 'Morotai')).toBe(false);
   });
 
-  it('where the island is Japan\'s on the date the guard stands in it; where it is not, it comes ashore at a port Japan holds and the staff posts it', () => {
-    const g = war();
+  it('at the book\'s stops: where the island is Japan\'s on the date the guard stands in it; where it is not, it comes ashore at a port Japan holds and the staff posts it', () => {
+    const g = war(1);
     declareWar(g, 'JAP', 'USA');
     give(g, 'Guam', 'JAP');
     g.turn = 29; startPhase(g, 'JAP');
     const c = of(g, '54th Guard Unit (Guam)')!;
     expect([g.regions[c.reg].name, c.str, c.full, c.hold, !!c.stay]).toEqual(['Guam', 0.03, 0.03, true, true]);
-    const b = war();
+    const b = war(1);
     declareWar(b, 'JAP', 'USA');
     b.turn = 29; startPhase(b, 'JAP');
     const x = of(b, '54th Guard Unit (Guam)')!;
     const r = b.regions[x.reg];
     expect([r.name !== 'Guam', r.ctrl, r.port, x.hold, x.str]).toEqual([true, 'JAP', true, false, 0.03]);
+  });
+
+  it('at stops 3 to 5 no guard comes on its date: it comes by cause, the month after its port is taken (far-rear-garrison)', () => {
+    const g = war();
+    declareWar(g, 'JAP', 'USA');
+    give(g, 'Guam', 'JAP');
+    g.turn = 29; startPhase(g, 'JAP');
+    expect(of(g, '54th Guard Unit (Guam)')).toBeUndefined();
   });
 
   it('no guard comes in a war that has not begun', () => {

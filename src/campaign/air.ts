@@ -20,7 +20,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
+import { allied, atWar, ensureSupply, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { hasTech } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
@@ -749,10 +749,11 @@ export function groupOverSea(g: Game, f: AirFleet, z: number, S: { cover?: Recor
  * groups in reach, 'per' of them to a point, times the sea's air share. navy.ts airOver asks it for the seas the rule
  * names; SeaPicture adds the same figures in the same order.
  */
-export function groupsOver(g: Game, z: number, nat: string, hostile: boolean, S: { per: number; cover?: Record<string, number> }): number {
+export function groupsOver(g: Game, z: number, nat: string, hostile: boolean, S: { per: number; cover?: Record<string, number> }, beside?: ((x: string) => boolean) | null): number {
   let s = 0;
   for (const f of g.airFleets) {
-    if (f.ship !== undefined || !(hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat))) continue;
+    // (`beside`: of its friends, those who count beside it in this sea: navy.ts besideIn. None is left out with the far side off.)
+    if (f.ship !== undefined || !(hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat)))) continue;
     s += groupOverSea(g, f, z, S);
   }
   return (s / S.per) * g.seas[z].air;
@@ -1414,6 +1415,27 @@ function recordMoves(g: Game, nat: string): void {
   }
 }
 
+/**
+ * The far side: a nation's supply picture for its land air groups' fields, as the month's supply rule draws it
+ * (game.ts computeSupply: the map a corps' drafts read), or null where every field counts as fed: with the far
+ * side's switch off, for a country at peace, and for a country with no army in the field, which has no picture.
+ * (Ruling 184's count of a field's unfed months; and the design director's ruling of 21:58Z, 21 November 2026, on
+ * Luzon's sky: a land-based group takes from its country's reserve only where its field is fed, and the reckoning of
+ * what a defender can put up once his losses are made good reads the same. The picture is drawn fresh if the board
+ * has moved since it was last drawn, so that a group reads the map the corps beside it reads.)
+ */
+function fedFields(g: Game, nat: string): Uint8Array | null {
+  if (!skiesOn(g) || !g.nations[nat]?.atWar.length) return null;
+  ensureSupply(g);
+  return g.supply[nat] ?? null;
+}
+/** True where a land air group's field is fed (`fedFields`). A carrier wing has no field: it is made up in harbour. */
+export function fieldFed(g: Game, f: AirFleet): boolean {
+  if (f.ship !== undefined) return true;
+  const fed = fedFields(g, f.nat);
+  return !fed || !!fed[f.base];
+}
+
 /** The start of a nation's month in the air: new formations, lost bases, new aircraft and pilots, and rest. */
 export function airUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -1456,7 +1478,7 @@ export function airUpkeep(g: Game, nat: string): void {
   if (built) { p.ftr += built[1]; p.bmr += built[2]; }
   if (trained) p.pilots += trained[1];
   // The far side (ruling 184): whether each land group's field is fed, as the supply picture stands. (A country with no army in the field has no picture: its groups count as fed.)
-  const fed = skiesOn(g) && n.atWar.length ? g.supply[nat] : undefined;
+  const fed = fedFields(g, nat);
   for (const f of airFleetsOf(g, nat)) {
     // A carrier wing has no airfield to lose: it goes where its fleet goes.
     if (f.ship !== undefined) continue;
@@ -1503,8 +1525,10 @@ export function airUpkeep(g: Game, nat: string): void {
   const R = AIR.ready;
   for (const f of order) {
     // A carrier wing is made up only while its fleet lies in harbour: no replacement aircraft reach a deck at sea.
+    // (The far side: nor do any reach a land group whose field is not fed. A corps draws its drafts only when it is
+    // supplied, and the air reads the same map: the design director's ruling of 21:58Z, 21 November 2026.)
     const ship = f.ship === undefined ? null : carrierOf(g, f);
-    const refits = f.ship === undefined || (!!ship && !atSea(ship));
+    const refits = f.ship === undefined ? !fed || !!fed[f.base] : !!ship && !atSea(ship);
     const nf = refits ? Math.max(0, Math.min(f.est.ftr - f.ftr, p.ftr, p.pilots)) : 0;
     f.ftr += nf; p.ftr -= nf; p.pilots -= nf;
     const nb = refits ? Math.max(0, Math.min(f.est.bmr - f.bmr, p.bmr)) : 0;
@@ -2161,15 +2185,18 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (m === 'superiority') {
     const Eafter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
     const EpowAfter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd * worth(g, x.f), 0);
+    // (The far side: no losses are made good on a field that is not fed, as none will be when its country's month
+    // opens (airUpkeep): such a group counts at what it has, and the reserve's aircraft go to the groups that are fed.)
+    const fedNow = a.def.map((x) => fieldFed(g, x.f));
     const lostBy: Record<string, number> = {};
-    def.forEach((s) => { lostBy[s.nat] = (lostBy[s.nat] ?? 0) + s.lostFtr; });
+    def.forEach((s, i) => { if (fedNow[i]) lostBy[s.nat] = (lostBy[s.nat] ?? 0) + s.lostFtr; });
     let Dnext = 0;
     a.def.forEach((x, i) => {
       const p = airPool(g, x.f.nat);
       const built = row(AIR.production[x.f.nat], g.turn + 1), trained = row(AIR.pilots.perMonth[x.f.nat], g.turn + 1);
       const can = Math.min(p.ftr + (built ? built[1] : 0), p.pilots + (trained ? trained[1] : 0));
       const lost = lostBy[x.f.nat] ?? 0;
-      const back = lost > 0 ? Math.min(lost, can) * (def[i].lostFtr / lost) : 0;
+      const back = fedNow[i] && lost > 0 ? Math.min(lost, can) * (def[i].lostFtr / lost) : 0;
       Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * techMul(g, x.f.nat, 'radar');
     });
     hold = Dnext > 0 ? EpowAfter / Dnext : 99;

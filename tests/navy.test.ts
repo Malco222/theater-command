@@ -1,10 +1,10 @@
 // The war at sea: the seas, who holds them, fleet actions, convoys, troopships, landings and Norway.
 import { describe, expect, it } from 'vitest';
-import { addCorps, assess, capture, computeSupply, createGame, declareWar, men } from '../src/campaign/game';
+import { addCorps, assess, atWar, capture, computeSupply, createGame, declareWar, men } from '../src/campaign/game';
 import { income } from '../src/campaign/economy';
 import {
   NAVY, airOver, baseTargets, canPass, closedTo, convoyWar, crossingRisk, fleetPower, fleetReach, liftLeft, navalUpkeep, oreRoute,
-  sail, seaAt, seaBattles, seaIncomeLoss, shipCount, surfaceShips, zoneOf,
+  sail, seaAt, seaBattles, seaIncomeLoss, seaSide, shipCount, surfaceShips, zoneOf,
 } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import {
@@ -114,6 +114,20 @@ describe('who holds a sea', () => {
     expect(airOver(g, skag, 'UK', true)).toBe(before);
     g.turn++;
     expect(airOver(g, skag, 'UK', true)).toBeGreaterThan(before);
+  });
+
+  it('a friend counts beside a country in a sea whoever that friend is at war with: the far side\'s form is not this chart\'s', () => {
+    // (The director's ruling of 03:23Z, 22 November 2026; tests/far-sea-read.test.ts. With the far side off the old
+    // read stands; the form for this chart is after release.)
+    const g = createGame(1, null);
+    declareWar(g, 'ITA', 'UK');
+    expect(atWar(g, 'FRA', 'ITA')).toBe(false);
+    // The Tyrrhenian Sea: Italy's aircraft against Britain, and France's from Corsica beside her, at peace with Italy.
+    const tyrr = zoneOf(g, 'tyrr');
+    expect(seaSide(g, tyrr, 'UK', true).total).toBeGreaterThan(0);
+    expect(seaSide(g, tyrr, 'UK', false).air).toBeGreaterThan(0);
+    // The form itself, asked for by hand, would count none of them: the switch is what keeps it off here.
+    expect(seaSide(g, tyrr, 'UK', false, true).total).toBe(0);
   });
 
   it('a fleet reaches only the seas near its base', () => {

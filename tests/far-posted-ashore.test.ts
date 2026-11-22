@@ -65,7 +65,8 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     month(g, 29);
     const c = row(g, BRIGADE)!;
     const at = g.regions[c.reg];
-    expect([at.port, at.ctrl, c.hold, c.str, c.full]).toEqual([true, 'JAP', false, 0.4, 0.4]);
+    // (6,651 men, 0.44 of a division: the director's order for Luzon, (3), of 21 November 2026.)
+    expect([at.port, at.ctrl, c.hold, c.str, c.full]).toEqual([true, 'JAP', false, 0.44, 0.44]);
     // The nearest port Japan holds with room: nothing nearer was passed over but for want of room or an enemy on it.
     const nearer = g.regions.filter((r) => r.port && r.ctrl === 'JAP' && mapDist2(g, r.x, r.y, lingayen.x, lingayen.y) < mapDist2(g, at.x, at.y, lingayen.x, lingayen.y));
     for (const r of nearer) expect(friendlyUnits(g, r, 'JAP').filter((u) => u.kind !== 'eng').length, r.name).toBeGreaterThanOrEqual(3);
@@ -146,7 +147,8 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
 
   it("a detachment cut from a corps on the board comes only once its sister row has made the cut (the director, 17:23Z)", () => {
     const WHOLE = 'Tientsin-Pukow railway garrison (21st Division)', REST = 'Tientsin-Pukow railway garrison (21st Division, less its Bataan detachment)', PART = '21st Division detachment (for Bataan)';
-    expect(dated(PART)[6].cut).toBe(REST);
+    // (Since (g) of 21 November 2026 the detachment names each row that may make its cut: this one at stops 3 to 5, the 17th Division's taking over Hsuchow at the book's stops, far-21st-division.)
+    expect(dated(PART)[6].cut).toEqual([REST, '13th Army (17th Division, Hsuchow)']);
     // Hsuchow held: the garrison is cut to 0.65 and the quarter for Bataan comes, ashore where Lingayen is not Japan's.
     const g = war();
     expect(g.regions[row(g, WHOLE)!.reg].name).toBe('Hsuchow');

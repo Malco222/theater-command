@@ -16,6 +16,7 @@ import { appoint, generalOf } from './commanders';
 import { MANPOWER, returnMen } from './manpower';
 import { cadreTerms } from './economy';
 import { noteCorps } from './stories';
+import { atItsPost, postWords } from './pacific';
 
 export const foldRules = (g: Game): boolean => g.flags.open === 1 && !!MANPOWER.fold;
 
@@ -29,6 +30,8 @@ export function whyNotFold(g: Game, keep: Corps, gone: Corps): string | null {
   if (keep.kind !== gone.kind) return 'The two corps must be of the same kind.';
   if ((keep.elite ?? '') !== (gone.elite ?? '') || !!keep.airborne !== !!gone.airborne) return 'A special formation folds only into another of its own.';
   if (keep.joint || gone.joint) return 'A corps marching with an ally cannot be folded.';
+  // (The far side: Vichy's corps at their posts in Indochina are folded into nobody, nor anybody into them: pacific.ts atItsPost.)
+  if (atItsPost(keep) || atItsPost(gone)) return postWords(atItsPost(keep) ? keep : gone, 'post') ?? 'It takes no orders.';
   if (keep.leave !== undefined || gone.leave !== undefined) return 'A corps at home cannot be folded.';
   if (!keep.supplied || !gone.supplied) return 'Cut off, the cadre has no way home.';
   // (A corps its row keeps small is read against its own establishment, `full`: a regiment at a quarter of a division's

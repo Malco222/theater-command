@@ -16,6 +16,7 @@ import { closedTo, liftLeft, onOwnShipping, useLift, whyNotLand } from '../src/c
 import { startOpen } from '../src/campaign/staff';
 import { bookAttacks, bookSails, bookWatch, stations, type Attack } from '../src/campaign/stations';
 import farWorld from '../data/campaign/far-world.json';
+import farShores from '../data/campaign/far-shores.json';
 import type { BattleReport, Corps, Game } from '../src/campaign/types';
 
 const MAIZURU = 'Naval landing force (Maizuru 2nd, for Wake)';
@@ -27,6 +28,10 @@ const TULAGI = 'Naval landing force (Kure 3rd, for Tulagi)';
 const AIRFIELD = 'Naval landing force (the Guadalcanal airfield party)';
 
 const attacks = (): Attack[] => stations()!.attacks!;
+// (British Borneo's landings are the book's too, laid after the ring's: the design director's rulings of 03:59Z and
+// 04:06Z, 22 November 2026. They are read in tests/far-borneo-book.test.ts and are no rows of the ring.)
+const BORNEO = ['Miri and Seria', 'Brunei', 'Kuching', 'Jesselton', 'Sandakan'];
+const ring = (): Attack[] => attacks().filter((a) => a.sea && !a.name.startsWith('Java') && !BORNEO.includes(a.name));
 const attack = (name: string): Attack => attacks().find((a) => a.name === name)!;
 const index = (name: string): number => attacks().findIndex((a) => a.name === name);
 
@@ -71,7 +76,7 @@ const made = (name: string): Told[] => told.filter((t) => t.name === name && t.w
 
 describe("Japan's second ring by the book (rider b599 (i) to ruling 234)", () => {
   it("lays the historian's rows: each landing's month, force, port and met figures, and the table runs to July 1942", () => {
-    const rows = attacks().filter((a) => a.sea && !a.name.startsWith('Java'));
+    const rows = ring();
     expect(rows.map((a) => [a.month, a.name, a.at, a.force, a.from, a.met ?? null])).toEqual([
       [28, 'Wake: the first try', ['Wake'], [MAIZURU], ['Kwajalein'], [0.03, 0.035]],
       [28, 'Wake: the taking', ['Wake'], [MAIZURU], ['Kwajalein'], [0.1, 0.035]],
@@ -81,7 +86,8 @@ describe("Japan's second ring by the book (rider b599 (i) to ruling 234)", () =>
       [29, 'Kendari', ['Kendari'], [SASEBO], ['Menado'], [0.2, 0.03]],
       [29, 'Balikpapan', ['Balikpapan'], [SAKAGUCHI], ['Tarakan'], [0.45, 0.07]],
       [29, 'Ambon', ['Ambon'], [ITO], ['Davao'], [0.35, 0.26]],
-      [30, 'Palembang', ['Palembang'], [R229], ['Cam Ranh'], [0.25, 0.15]],
+      // (Palembang's paratroops sail in the regiment's lift at the book's stops too: the director's 16:18Z of 21 November 2026.)
+      [30, 'Palembang', ['Palembang'], [R229, '2nd Raiding Regiment (paratroops of the 1st Raiding Group)'], ['Cam Ranh'], [0.25, 0.15]],
       [31, 'Lae and Salamaua', ['Lae'], ['South Seas Detachment'], ['Rabaul'], [0.2, 0.01]],
       [31, 'Medan', ['Medan'], ['25th Army (Imperial Guards Division)'], ['Singapore'], [1.2, 0.15]],
       // (Tulagi is the chief place of the game's Guadalcanal: the May landing and July's airfield party go to the same province.)
@@ -264,7 +270,9 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     const knil = row(g, 'Palembang garrison (the oil)');
     expect([knil.nat, knil.raised]).toEqual(['UK', 'NED']);
     expect(share(knil)).toBeCloseTo(0.8 / g.nations.UK.quality, 6);
-    for (const nm of ['KNIL 1st Division (West Java)', 'Great East garrisons (Ambon, Celebes, Timor)', 'Borneo garrisons (Tarakan and Balikpapan)']) expect(share(row(g, nm))).toBeCloseTo(0.8 / g.nations.UK.quality, 6);
+    // (The Indies' record of 21 November 2026, the director's 15:16Z: a Java division in the field 0.7, the Molukken
+    // Brigade at Ambon 0.85; the regulars in their posts keep the army's 0.8.)
+    for (const [nm, q] of [['KNIL 1st Division (West Java)', 0.7], ['Great East garrisons (Ambon, Celebes, Timor)', 0.85], ['Borneo garrisons (Tarakan and Balikpapan)', 0.8]] as [string, number][]) expect([nm, share(row(g, nm)).toFixed(6)]).toEqual([nm, (q / g.nations.UK.quality).toFixed(6)]);
     const laid = (name: string): Corps => addCorps(g, 'UK', name, 'inf', 1, 'Batavia', { xp: 0.1 });
     expect(share(laid('Outer Islands reinforcement (Tarakan, Menado, Koepang)'))).toBeCloseTo(0.8 / g.nations.UK.quality, 6);
     expect(share(laid("KNIL mobilisation (Java's militia and the Landstorm)"))).toBeCloseTo(0.5 / g.nations.UK.quality, 6);
@@ -281,17 +289,25 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     expect(share(us('Philippine Division'))).toBeCloseTo(1 / g.nations.USA.quality, 6);
     expect(share(laid('8th Australian Division (22nd Brigade)'))).toBeCloseTo(g.nations.AUS.quality / g.nations.UK.quality, 6);
     expect(share(us('26th Cavalry, Philippine Scouts'))).toBeCloseTo(1 / g.nations.USA.quality, 6);
-    expect(share(us('51st Division, Philippine Army'))).toBeCloseTo(0.5 / g.nations.USA.quality, 6);
-    expect(share(us('Philippine Army'))).toBeCloseTo(0.6 / g.nations.USA.quality, 6);
+    // (The Philippine Army by row as it stood in the open in December 1941: the design director's order for Luzon,
+    // (4), of 21 November 2026 and his 22:50Z. The 0.5 the reserve divisions read before was Bataan's, works counted.)
+    expect(share(us('51st Division, Philippine Army'))).toBeCloseTo(0.3 / g.nations.USA.quality, 6);
+    expect(share(us('41st Division, Philippine Army'))).toBeCloseTo(0.45 / g.nations.USA.quality, 6);
+    expect(share(us('North Luzon Force'))).toBeCloseTo(0.35 / g.nations.USA.quality, 6);
+    expect(share(us('101st Division, Philippine Army'))).toBeCloseTo(0.35 / g.nations.USA.quality, 6);
+    expect(share(us('Philippine Army'))).toBeCloseTo(0.5 / g.nations.USA.quality, 6);
     const indian = laid('11th Indian Division (6th and 15th Brigades)');
     g.turn = 41;
     expect(share(indian)).toBe(1);
     g.turn = 28;
     // Every row the table names is a row of the world, and every country it names is in the game.
+    // (The Celebes' garrisons by place are first-day rows of the hand-kept shores file: the Indies' record of 21 November 2026.)
     const R = (stations() as any).raised as { armies: Record<string, number>; rows: Record<string, number | string | [number, number]> };
-    const world = new Set<string>([...(farWorld as any).world.corps.map((r: any[]) => r[1]), ...(farWorld as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...(farWorld as any)['setup-1939'].formations.map((r: any[]) => r[2])]);
+    const world = new Set<string>([...(farWorld as any).world.corps.map((r: any[]) => r[1]), ...(farWorld as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...(farWorld as any)['setup-1939'].formations.map((r: any[]) => r[2]), ...(farShores as any).world.corps.map((r: any[]) => r[1])]);
     for (const [nm, of] of Object.entries(R.rows)) { expect(world.has(nm), nm).toBe(true); if (typeof of === 'string') expect(g.nations[of]?.quality, of).toBeGreaterThan(0); }
-    expect(R.armies).toEqual({ NED: 0.8 });
+    // (Vichy's corps in Indochina answer to Japan from the demand and fight at Vichy's own figure: the director's 16:46Z of 21 November 2026, far-indochina-kept.)
+    expect(R.armies).toEqual({ NED: 0.8, VIC: 0.8 });
+    expect(R.armies.VIC).toBe(g.nations.VIC.quality);
     // Britain's own rows are Britain's, and Japan's Japan's.
     expect(share(laid('18th British Division'))).toBe(1);
     expect(share(put(g, SASEBO, 'Ulithi', 0.2))).toBe(1);
@@ -308,7 +324,7 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
   });
 
   it("carries the historian's mark on each dated landing: Wake met the place's works, Rabaul and Ambon one row's, the rest none", () => {
-    const marks = attacks().filter((a) => a.sea && !a.name.startsWith('Java')).map((a) => [a.name, a.works ?? null]);
+    const marks = ring().map((a) => [a.name, a.works ?? null]);
     expect(marks).toEqual([
       ['Wake: the first try', true], ['Wake: the taking', true],
       ['Menado', []], ['Tarakan', []], ['Rabaul', ['Lark Force (2/22nd Battalion)']], ['Kendari', []], ['Balikpapan', []],

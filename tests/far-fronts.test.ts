@@ -12,7 +12,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, garrisons, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar } from '../src/campaign/game';
-import { setStop } from '../src/campaign/history';
+import { raisedQuality, setStop } from '../src/campaign/history';
 import { byThePlan, followKey, frontsClear, frontsState, frontsTick, hopKey, hopMade, landMarches, offFront, onFront, planFronts, planWaits, plansHold, sailedKey, walkedKey } from '../src/campaign/planfronts';
 import { garrison, garrisonOf } from '../src/campaign/siege';
 import { ops, startOpen } from '../src/campaign/staff';
@@ -38,7 +38,10 @@ const SAKAGUCHI = 'Sakaguchi Detachment (56th Mixed Infantry Group)';
 const KURE = 'Naval landing forces (Kure 1st and 2nd)';
 const SASEBO = 'Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)';
 const D2 = '16th Army (2nd Division)';
+const KAWAGUCHI = 'Kawaguchi Detachment (35th Brigade, of the 18th Division)';
+const TANAKA = 'Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)';
 const SOUTH_SEAS = 'South Seas Detachment';
+const B65 = '14th Army (65th Brigade)';
 
 const SOUTH = () => ops('JAP').find((op) => op.id === 'south')!;
 const front = (id: string) => SOUTH().fronts!.find((F) => F.id === id)!;
@@ -83,9 +86,12 @@ afterEach(() => { frontWatch.tell = null; frontsClear(); });
 describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
   it("lays the seven fronts: each its place, the November plan's aim, and its rows as the book has them", () => {
     expect(SOUTH().fronts!.map((F) => [F.id, F.place, F.rows.length])).toEqual([
-      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Myitkyina', 4], ['hongkong', 'Hong Kong', 4],
+      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 9], ['burma', 'Myitkyina', 4], ['hongkong', 'Hong Kong', 4],
       ['indies', 'Batavia', 5], ['southseas', 'Rabaul', 1], ['wake', 'Wake', 1],
     ]);
+    // (Luzon's nine: the six, and the 16th Division's Kimura Detachment and 9th Infantry and the 14th Army's heavy
+    // guns, rows of their own from the design director's rulings of 22:34Z and 22:42Z of 21 November 2026.)
+    expect(front('luzon').rows.slice(6)).toEqual(['Kimura Detachment (16th Division)', '16th Division (9th Infantry)', '14th Army artillery (1st and 8th Field Heavy Artillery)']);
     // By road: the Guards with their tanks to Singora, the 143rd Regiment to the Kra (the design director's of 04:58Z,
     // 21 November 2026), and Hong Kong's rows to Tungkun (the book's own step).
     expect(SOUTH().fronts!.flatMap((F) => (F.land ?? []).map((m) => [F.id, m.corps, m.with, m.to]))).toEqual([
@@ -113,7 +119,7 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
       [1, R228, 'Ambon', ['Hong Kong', 'Kendari'], false],
       [2, SASEBO, 'Makassar', ['Kendari'], false],
       [2, R229, 'Palembang', ['Hong Kong', 'Johore'], false],
-      [2, D48, 'Jolo', [], true],
+      [2, D48, 'Jolo', ['Manila'], true],
       [3, D48, 'Semarang', ['Makassar'], false],
       [3, SAKAGUCHI, 'Semarang', ['Makassar'], false],
       [3, R230, 'Bandoeng', ['Hong Kong', 'Palembang'], false],
@@ -121,10 +127,22 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
       [3, GUARDS, 'Medan', ['Singapore'], false],
       // (Timor, the last of the list so that the others keep their places: the 228th goes on from Ambon.)
       [2, R228, 'Koepang', ['Ambon'], false],
+      // (The Kawaguchi Detachment on the record's dates, after the list's others: the Indies' record of 21 November 2026.)
+      [0, KAWAGUCHI, 'Miri', [], false],
+      [0, KAWAGUCHI, 'Kuching', [], false],
+      [1, KAWAGUCHI, 'Jesselton', [], false],
+      [1, KAWAGUCHI, 'Sandakan', [], false],
+      [1, KAWAGUCHI, 'Singkawang', [], false],
+      [1, KAWAGUCHI, 'Pontianak', [], false],
+      [4, KAWAGUCHI, 'Cebu', [], false],
+      [4, KAWAGUCHI, 'Del Monte', [], false],
     ]);
     expect(front('southseas').then!.map((f) => [f.month, f.corps, f.to[0], f.after])).toEqual([[1, SOUTH_SEAS, 'Rabaul', ['Guam']]]);
+    // (Luzon's one follow-on is a move: the 65th Brigade to the beach, the month after the blow. The director's order for Luzon, (3).)
+    expect(front('luzon').then!.map((f) => [f.month, f.corps, f.to, f.after ?? [], f.stage ?? false])).toEqual([[1, B65, ['Lingayen'], [], true]]);
     // The 48th takes its tank regiment; a row with several follow-ons has them in the order it makes them.
-    expect(front('indies').then!.filter((f) => f.corps === D48).map((f) => f.with)).toEqual([[T4], [T4]]);
+    // (The 48th goes whole: its 2nd Formosa Infantry, the Tanaka and Kanno Detachments' row, sails with it as its tanks do.)
+    expect(front('indies').then!.filter((f) => f.corps === D48).map((f) => f.with)).toEqual([[T4, TANAKA], [T4, TANAKA]]);
   });
 
   it('there are none before the plan goes, where the book dates the rows, or for a player: nothing is read and nothing is held', () => {
@@ -194,7 +212,7 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect([state(g, 'luzon').live, state(g, 'luzon').over]).toEqual([false, 30]);
   });
 
-  it('a follow-on takes its row by its date whatever the state of its front, unless it waits for that front to fall', () => {
+  it("a follow-on that waits for its row's own front to fall leaves the row that front's until it does: the 48th is Luzon's while Manila holds", () => {
     const g = war(3, 29, 28);
     const d48 = put(g, D48, 'Lingayen');
     // (The tank regiment is on the chart from the first day: the row the table names is that one.)
@@ -206,27 +224,67 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect(state(g, 'luzon').rows).toEqual([D48, T4]);
     expect(state(g, 'hongkong').rows).toEqual([R228]);
     expect(planWaits(d48) || planWaits(d38)).toBe(false);
-    // Two months after it the 48th and its tanks are the Indies', waiting where they stand, though Manila holds.
+    // Two months after it, the month its sailing for Jolo is dated, the 48th and its tanks are Luzon's still: Manila
+    // holds, and the sailing waits for it (the director's order for Luzon, (2), of 21 November 2026).
     g.turn = 30;
     frontsTick(g, 'JAP');
     expect(g.byName.Manila.ctrl).toBe('USA');
-    expect(state(g, 'luzon').rows).toEqual([]);
-    expect(state(g, 'indies').waiting).toEqual([D48, T4]);
-    expect(planWaits(d48) && planWaits(t4)).toBe(true);
+    expect(state(g, 'luzon').rows).toEqual([D48, T4]);
+    expect(state(g, 'indies').waiting).toEqual([]);
+    expect(planWaits(d48) || planWaits(t4)).toBe(false);
     expect(state(g, 'hongkong').rows).toEqual([R228]);
     // Hong Kong falls: the 228th is the Indies' for its two landings, Ambon and Timor.
     japans(g, 'Hong Kong');
     g.turn = 31;
     frontsTick(g, 'JAP');
     expect(state(g, 'hongkong').live).toBe(false);
-    expect(state(g, 'indies').waiting).toEqual([D48, T4, R228]);
-    // A row lost: its follow-ons are ended, and the rest go on.
-    d38.dead = true;
+    expect(state(g, 'indies').waiting).toEqual([R228]);
+    // Manila falls: Luzon's front is over, and the 48th and its tanks are the Indies', for Jolo and then Java.
+    japans(g, 'Manila');
     g.turn = 32;
     frontsTick(g, 'JAP');
+    expect(state(g, 'luzon').live).toBe(false);
+    expect(state(g, 'indies').waiting).toEqual([D48, T4, R228]);
+    expect(planWaits(d48) && planWaits(t4)).toBe(true);
+    // A row lost: its follow-ons are ended, and the rest go on.
+    d38.dead = true;
+    g.turn = 33;
+    frontsTick(g, 'JAP');
     const T = front('indies').then!;
-    expect(T.map((f, i) => (f.corps === R228 ? g.flags[followKey('JAP', 4, i)] : undefined)).filter((x) => x !== undefined)).toEqual([-32, -32]);
+    expect(T.map((f, i) => (f.corps === R228 ? g.flags[followKey('JAP', 4, i)] : undefined)).filter((x) => x !== undefined)).toEqual([-33, -33]);
     expect(state(g, 'indies').waiting).toEqual([D48, T4]);
+  });
+
+  // (The design director's order for Luzon, (3), of 21 November 2026. Luzon's trace of that day, seed 19: its dated row
+  // put the brigade down on Formosa, the beach being America's on its date, and it stood there to month 37: on the
+  // front's list, so no staff's to ship, and under no order of the plan's. The record's brigade landed at Lingayen on
+  // 1 January 1942, ten days after the landing: 6,651 men, a garrison brigade of older reservists.)
+  it("the 65th Brigade follows the Luzon landing: it comes to Lingayen once the beach is Japan's and not before, and is the front's in the field", () => {
+    const g = war(3, 29, 28);
+    const b = put(g, B65, 'Formosa', { str: 0.44 });
+    expect(raisedQuality(g, b)).toBe(0.65);
+    expect((farWorld as any)['setup-1939'].expeditions.find((r: any[]) => r[2] === B65)).toMatchObject([29, 'JAP', B65, 'inf', 1, 'Lingayen', { str: 0.44, est: 0.44 }]);
+    // The beach is still America's: it waits on Formosa as the plan's, and nothing sails.
+    expect(g.byName.Lingayen.ctrl).toBe('USA');
+    listen();
+    runAI(g, 'JAP');
+    expect(g.byName.Lingayen.ctrl).toBe('USA');
+    expect(told.filter((t) => t.force.includes(B65))).toEqual([]);
+    expect([where(g, b), b.hold, g.flags[followKey('JAP', 1, 0)]]).toEqual(['Formosa', true, undefined]);
+    // The beach taken: it comes by sea that month.
+    japans(g, 'Lingayen');
+    g.turn = 30;
+    told.length = 0;
+    runAI(g, 'JAP');
+    expect(told.filter((t) => t.force.includes(B65)).map((t) => [t.what, t.front, t.from, t.to])).toEqual([['stage', 'luzon', 'Formosa', 'Lingayen']]);
+    expect([where(g, b), g.flags[followKey('JAP', 1, 0)]]).toEqual(['Lingayen', 30]);
+    // Ashore it is Luzon's row, and the plan has it wait for nothing more: the staff's offensive there lets it go in.
+    g.turn = 31;
+    runAI(g, 'JAP');
+    frontsTick(g, 'JAP');
+    expect([onFront(b), planWaits(b), b.hold]).toEqual([true, false, false]);
+    expect(['Lingayen', 'Manila', 'Bataan']).toContain(where(g, b));
+    frontsClear();
   });
 
   it('a row on a live front goes no farther from its place than it stands; the plan\'s own orders are not bound', () => {

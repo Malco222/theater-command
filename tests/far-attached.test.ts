@@ -17,7 +17,7 @@ import { bookMonth } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { addCorps, atWar, capitulate, createGame, declareWar, hostileUnits, removeCorps, startPhase } from '../src/campaign/game';
 import { release } from '../src/campaign/ai';
-import { setStop } from '../src/campaign/history';
+import { raisedQuality, setStop } from '../src/campaign/history';
 import { landCorps, liftLeft, navalUpkeep, whyNotLand } from '../src/campaign/navy';
 import { readinessMonth } from '../src/campaign/readiness';
 import { ops, startOpen } from '../src/campaign/staff';
@@ -29,6 +29,8 @@ const corps = (g: Game, name: string): Corps | undefined => g.corps.find((c) => 
 const at = (g: Game, name: string): string | undefined => { const c = corps(g, name); return c && g.regions[c.reg].name; };
 const reg = (n: string): string => `${n} Tank Regiment`;
 const G5 = '25th Army (5th Division)', G18 = '25th Army (18th Division)', G48 = '14th Army (48th Division)', GUARDS = '25th Army (Imperial Guards Division)';
+const G16 = '14th Army (16th Division)', KIMURA = 'Kimura Detachment (16th Division)', NINTH = '16th Division (9th Infantry)';
+const HEAVY = '14th Army artillery (1st and 8th Field Heavy Artillery)', B65 = '14th Army (65th Brigade)';
 
 /**
  * A made-up December 1941 (far-ready.test.ts): the Netherlands and France struck down by hand, the months read from
@@ -111,15 +113,18 @@ describe("Japan's armour roster (riders b591 and b593): the rows, at every stop"
     // June 1942: the 1st and 2nd Tank Divisions at Mutankiang, out of the regiments of Manchuria.
     g.turn = 34; startPhase(g, 'JAP');
     const d1 = corps(g, '1st Tank Division')!, d2 = corps(g, '2nd Tank Division')!;
-    expect([at(g, d1.name), d1.kind, d1.full, at(g, d2.name), d2.full]).toEqual(['Mutankiang', 'arm', 0.8, 'Mutankiang', 0.8]);
-    expect(d1.str).toBeGreaterThanOrEqual(0.6); expect(d1.str).toBeLessThan(0.7);
-    expect(d2.str).toBeGreaterThanOrEqual(0.5); expect(d2.str).toBeLessThan(0.6);
+    // (The director's rulings of 04:01Z and 04:26Z, 22 November 2026: the divisions form in their month at every
+    // stop, each short of the regiments lent to the south, whose shares are kept for them. At this stop nothing ends
+    // by date alone, and with Singapore and Bataan standing the three stay lent. far-lent-rows.test.ts has the
+    // make-up, and the book's months at stops 1 and 2.)
+    expect([at(g, d1.name), d1.kind, at(g, d2.name)]).toEqual(['Mutankiang', 'arm', 'Mutankiang']);
+    expect(d1.full).toBeCloseTo(0.55, 9); expect(d2.full).toBeCloseTo(0.3, 9);
+    expect(d1.str).toBeGreaterThanOrEqual(0.45); expect(d1.str).toBeLessThanOrEqual(0.55 + 1e-9);
+    expect(d2.str).toBeGreaterThanOrEqual(0.25); expect(d2.str).toBeLessThanOrEqual(0.3 + 1e-9);
     for (const n of ['3rd', '5th', '9th', '10th', '11th']) expect(corps(g, reg(n)), n).toBeUndefined();
     expect(at(g, reg('8th'))).toBe('Mukden');
-    // October 1942: the 1st, 6th and 7th leave the south, where the divisions' fourth regiments came from.
-    for (const n of ['1st', '6th', '7th']) expect(corps(g, reg(n)), n).toBeDefined();
     g.turn = 38; startPhase(g, 'JAP');
-    for (const n of ['1st', '6th', '7th']) expect(corps(g, reg(n)), n).toBeUndefined();
+    for (const n of ['1st', '6th', '7th']) expect(corps(g, reg(n)), n).toBeDefined();
     for (const n of ['2nd', '4th', '14th']) expect(corps(g, reg(n)), n).toBeDefined();
     // December 1942: the 3rd Tank Division at Paotow, out of the Cavalry Group and the regiments of north China.
     expect(corps(g, 'Mongolia Garrison Army (3rd Tank Division)')).toBeUndefined();
@@ -261,5 +266,119 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     // to ruling 234. The 48th Division lands at Lingayen in December, as it did on the 22nd, its regiments with it.)
     expect([at(g, G48), at(g, reg('4th')), at(g, reg('7th'))]).toEqual(['Lingayen', 'Lingayen', 'Lingayen']);
     for (const n of ['1st', '6th', '14th', '4th', '7th']) expect(corps(g, reg(n))!.stay, n).toBe(true);
+  });
+});
+
+// The Lingayen reading (pacific-r2/indies/TRACE-LUZON-LINGAYEN-1121.md) and the design director's rulings of 22:34Z,
+// 22:42Z and 22:50Z of 21 November 2026, with the historian's marks: the record put about twice the game's men ashore
+// at Lingayen. The 48th Division is 0.8; the 16th Division is its three landings, the main body and the Kimura
+// Detachment for Legaspi's province and its 9th Infantry for Lingayen with the 48th; the 14th Army's heavy guns are a
+// row, in the form of the 23rd Army's at Canton. The new rows are facts of the day and belong to every stop: each
+// stands on its division's quay and lands in its lift, and by the book stands beside the corps the record gave it.
+describe("the 14th Army's rows that land with a division (the Lingayen reading)", () => {
+  it('the rows, at every stop: the 16th Division by its three landings with no man counted twice, the guns on the 48th Division\'s quay', () => {
+    for (const stop of [1, 2, 3]) {
+      const g = december(stop);
+      const fig = (nm: string) => { const c = corps(g, nm)!; return [at(g, nm), c.kind, c.str, c.full, c.hold]; };
+      expect(fig(G48), `stop ${stop}`).toEqual(['Formosa', 'inf', 0.8, 0.8, true]);
+      expect(fig(G16), `stop ${stop}`).toEqual(['Okinawa', 'inf', 0.5, 0.5, true]);
+      expect(fig(KIMURA), `stop ${stop}`).toEqual(['Okinawa', 'inf', 0.15, 0.15, true]);
+      expect(fig(NINTH), `stop ${stop}`).toEqual(['Formosa', 'inf', 0.25, 0.25, true]);
+      expect(fig(HEAVY), `stop ${stop}`).toEqual(['Formosa', 'art', 0.4, 0.4, true]);
+      // The division's three rows are the 0.9 its one row read.
+      expect(corps(g, G16)!.str + corps(g, KIMURA)!.str + corps(g, NINTH)!.str).toBeCloseTo(0.9, 9);
+      // Each goes with the division it sailed with: the first the table gives. (At stop 2 the table's months slide with its war's own date for the blow.)
+      if (stop !== 2) expect([KIMURA, NINTH, HEAVY].map((nm) => goesWith(g, corps(g, nm)!)?.name), `stop ${stop}`).toEqual([G16, G48, G48]);
+      // (Formosa's quay holds six rows of the 14th Army: the two that came last stand there whatever stands there.)
+      expect(g.regions[corps(g, G48)!.reg].units.filter((u) => u.nat === 'JAP' && !u.dead).length).toBe(6);
+    }
+  });
+
+  it('the 48th Division\'s lift is five rows for one sailing, the most a beach takes, and the 16th\'s is two', () => {
+    const g = december(3);
+    const d48 = corps(g, G48)!, d16 = corps(g, G16)!;
+    const t4 = corps(g, reg('4th'))!, t7 = corps(g, reg('7th'))!, i9 = corps(g, NINTH)!, guns = corps(g, HEAVY)!, kimura = corps(g, KIMURA)!;
+    expect(alongside(g, [d48])).toEqual([t4, t7, i9, guns]);
+    expect(alongside(g, [d16])).toEqual([kimura]);
+    expect(riding(g, [d48, t4, t7, i9, guns])).toEqual([t4, t7, i9, guns]);
+    declareWar(g, 'JAP', 'USA');
+    const lingayen = g.byName['Lingayen'];
+    for (const u of [...hostileUnits(g, lingayen, 'JAP')]) removeCorps(g, u);
+    spend(g, liftLeft(g, 'JAP') - 1);
+    expect(whyNotLand(g, [d48, t4, t7, i9, guns], lingayen)).toBeNull();
+    const res = landCorps(g, [d48], lingayen);
+    expect([res.ok, res.taken]).toEqual([true, true]);
+    expect([G48, reg('4th'), reg('7th'), NINTH, HEAVY].map((nm) => at(g, nm))).toEqual(['Lingayen', 'Lingayen', 'Lingayen', 'Lingayen', 'Lingayen']);
+    expect(liftLeft(g, 'JAP')).toBe(0);
+    // Ashore they are the staff's own.
+    expect([i9.hold, guns.hold, goesWith(g, i9), goesWith(g, guns)]).toEqual([false, false, null, null]);
+  });
+
+  it('where history is loose: the month Japan strikes they land with their divisions, the 9th Infantry and the guns at Lingayen and Kimura at Legaspi', () => {
+    const g = ready(december(3));
+    g.phase = g.order.indexOf('JAP');
+    runTurnAI(g);
+    expect(g.flags['st:done:JAP:south']).toBe(28);
+    expect([G48, NINTH, HEAVY].map((nm) => at(g, nm))).toEqual(['Lingayen', 'Lingayen', 'Lingayen']);
+    expect([G16, KIMURA].map((nm) => at(g, nm))).toEqual(['Legaspi', 'Legaspi']);
+    for (const nm of [NINTH, HEAVY, KIMURA]) expect(corps(g, nm)!.hold, nm).toBe(false);
+  });
+
+  it('by the book: they land with their divisions in December, stand beside the corps the record gave them after, and the guns leave after May 1942', () => {
+    const g = december(1);
+    g.phase = g.order.indexOf('JAP');
+    runTurnAI(g);
+    expect(g.flags['st:done:JAP:south']).toBe(28);
+    expect([G48, NINTH, HEAVY].map((nm) => at(g, nm))).toEqual(['Lingayen', 'Lingayen', 'Lingayen']);
+    expect([G16, KIMURA].map((nm) => at(g, nm))).toEqual(['Legaspi', 'Legaspi']);
+    for (const nm of [NINTH, HEAVY, KIMURA]) expect(corps(g, nm)!.stay, nm).toBe(true);
+    // January 1942: the 9th Infantry and the guns are the 65th Brigade's (Abucay); April, the 9th is its division's again.
+    const h = december(1);
+    h.flags['st:done:JAP:south'] = 28;
+    const b65 = addCorps(h, 'JAP', B65, 'inf', 1, 'Formosa', {});
+    const lead = (nm: string): string | undefined => goesWith(h, corps(h, nm)!)?.name;
+    h.turn = 29;
+    expect([lead(NINTH), lead(HEAVY), lead(KIMURA)]).toEqual([b65.name, b65.name, G16]);
+    h.turn = 32;
+    expect([lead(NINTH), lead(HEAVY)]).toEqual([G16, b65.name]);
+    // The guns stand through May 1942 (month 33) and are struck off in June, as Canton's are.
+    h.turn = 33; startPhase(h, 'JAP');
+    expect(corps(h, HEAVY)).toBeDefined();
+    h.turn = 34; startPhase(h, 'JAP');
+    expect(corps(h, HEAVY)).toBeUndefined();
+    expect(corps(h, NINTH)).toBeDefined();
+  });
+
+  it("America's rows beside the record: the 26th Cavalry at its 838 men, the 4th Marines at about 1,500 on Bataan", () => {
+    for (const stop of [1, 3]) {
+      const g = december(stop);
+      const cav = g.corps.find((c) => c.nat === 'USA' && c.name === '26th Cavalry, Philippine Scouts' && !c.dead)!;
+      expect([cav.str, cav.full], `stop ${stop}`).toEqual([0.06, 0.06]);
+      startPhase(g, 'USA');
+      const marines = g.corps.find((c) => c.nat === 'USA' && c.name === '4th Marines' && !c.dead)!;
+      expect([g.regions[marines.reg].name, marines.str, marines.full], `stop ${stop}`).toEqual(['Bataan', 0.1, 0.1]);
+    }
+  });
+
+  it('the Philippine Army by row (the director\'s order (4)): men by the record where it gives them, else 6,750, and each division at its December figure', () => {
+    for (const stop of [1, 3]) {
+      const g = december(stop);
+      // (A formation of the opening armies comes in its own month: September 1941, the call-up.)
+      g.turn = 25; startPhase(g, 'USA'); g.turn = 28;
+      const us = (nm: string): Corps => g.corps.find((c) => c.nat === 'USA' && c.name === nm && !c.dead)!;
+      const PA = (n: string): string => `${n} Division, Philippine Army`;
+      // The North Luzon Force is one row of four: the 11th 6,750, the 21st 8,500, the 31st 6,000, the 71st 6,750.
+      const nlf = us('North Luzon Force');
+      expect([nlf.divs, nlf.full], `stop ${stop}`).toEqual([4, 0.467]);
+      expect(Math.abs(nlf.divs * nlf.full! * 15000 - 28000)).toBeLessThan(50);
+      expect([PA('91st'), PA('41st'), PA('51st'), PA('61st'), PA('81st'), PA('101st')].map((nm) => us(nm).full), `stop ${stop}`).toEqual([0.4, 0.45, 0.45, 0.35, 0.35, 0.35]);
+      // The first-day row is the 1st Regular Division: 0.45 at its most, from the small regular army of 1939.
+      expect(us('Philippine Army').full, `stop ${stop}`).toBe(0.45);
+      // Quality is the row's own at every stop, weeks into the call-up; nobody has fought.
+      const q = (nm: string): number | null => raisedQuality(g, us(nm));
+      expect([q('North Luzon Force'), q(PA('91st')), q(PA('41st')), q(PA('51st')), q(PA('61st')), q(PA('81st')), q(PA('101st')), q('Philippine Army')], `stop ${stop}`).toEqual([0.35, 0.3, 0.45, 0.3, 0.35, 0.35, 0.35, 0.5]);
+      expect([q('Philippine Division'), q('26th Cavalry, Philippine Scouts')]).toEqual([1, 1]);
+      for (const nm of ['North Luzon Force', PA('91st'), PA('41st'), PA('51st'), PA('61st'), PA('81st'), PA('101st'), 'Philippine Army']) expect(us(nm).xp, nm).toBe(0);
+    }
   });
 });

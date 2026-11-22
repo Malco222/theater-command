@@ -56,10 +56,10 @@ import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './wea
 import desertData from '../../data/campaign/desert.json';
 import farSandData from '../../data/campaign/far-sand.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { raisedQuality, stopOf } from './history';
+import { raisedQuality, stopDef, stopOf } from './history';
 import { clientWar, tiedPair } from './far';
 import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
-import { onLiveFront } from './planfronts';
+import { frontOfRow, onLiveFront } from './planfronts';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -3259,6 +3259,95 @@ function draw(g: Game, nat: string, theatre: string, divs: number, made?: Corps)
 }
 
 /**
+ * Whether a lent row's time with its campaign is up: its month (`until`), by the book and wherever no more is said.
+ *
+ * The far side, at the stops that keep no book (the design director's rulings of 22:55Z, 21 November, and 03:49Z,
+ * 22 November 2026; no number): a lent row leaves when the place it was lent for is decided.
+ *   takes   a row lent to take a place leaves when that place is its side's, or when the front of its staff's plan
+ *           that lists the row has ended with the front's own place untaken. While that front stands, and after it
+ *           has taken its own place with the row's still to take (the luzon front's is Manila, and the guns and the
+ *           7th Tank Regiment were lent for Bataan), the row stays, past the book's month. Where no front of a plan
+ *           lists the row (the plan never taken up; the player's own Japan) the place taken is all that decides it
+ *           (his ruling of 04:26Z): at these stops nothing ends by date alone.
+ *   holds   a row lent to hold places leaves when the last of them is lost, and stays while one is held.
+ */
+function lentOver(g: Game, nat: string, row: any[], o: any): boolean {
+  const due = g.turn >= o.until;
+  if (!farOn(g) || stopDef(g).book || (!o.takes && !o.holds)) return due;
+  const mine = (nm: string): boolean => { const r = g.byName[nm]; return !!r && allied(g, nat, r.ctrl); };
+  if (o.holds) return !(o.holds as string[]).some(mine);
+  if (mine(o.takes)) return true;
+  const F = frontOfRow(g, nat, row[2]);
+  return !!F && !F.live && !F.taken;
+}
+
+/**
+ * The far side: a division made up of regiments, some of them lent to a campaign elsewhere when its row forms (the
+ * design director's rulings of 03:49Z and 04:01Z, 22 November 2026, on the historian's paper
+ * japan-tank-divisions-1942.md; no number). The division's row names the regiments on the board it is formed from
+ * (`from`) and the lent ones it waits for (`awaits`); the row stands by date at every stop. What changes is the
+ * make-up:
+ *   the share    a lent regiment's share of its division is the regiment's own fullest size by its own row. While
+ *                the regiment is lent the division's fullest size is that much short, and the drafts do not fill it.
+ *   coming home  a regiment that leaves its place alive (`lentOver`) brings the worth it stands at into its
+ *                division, one for one, and its share is the division's again: never more than the share, so no tank
+ *                is lost, and the regiment's corps leaves the board that month, so none is counted twice. One that
+ *                comes home before its division has formed is remembered at that worth.
+ *   destroyed    a regiment destroyed while lent holds no share: the drafts fill it, as the record replaced losses.
+ *   formation    the row's own figure counts the regiments the book has with the division in its month: those it
+ *                is formed from, and each lent one whose book month has come by then, every one an equal part. A
+ *                counted regiment that is not there (lent still, or destroyed) leaves the division that part
+ *                short; one the figure does not count that is home already adds the worth it came home at.
+ * Each regiment the row awaits: its place in the list of dated rows, its book month, its share in the division's
+ * own divisions, whether it is lent still, and the worth it came home at (null where it has not come home).
+ */
+function awaited(g: Game, nat: string, o: any, divs: number): { j: number; until: number; share: number; lent: boolean; home: number | null }[] {
+  const rows = ((setup as any).expeditions as any[]) ?? [];
+  const out: { j: number; until: number; share: number; lent: boolean; home: number | null }[] = [];
+  for (const name of o.awaits as string[]) {
+    const j = rows.findIndex((r) => r[1] === nat && r[2] === name && r[6]?.until);
+    if (j < 0) continue;
+    const id = g.flags[`lent:${j}`] ?? 0, came = g.flags[`home:${j}`];
+    const home = came === undefined ? null : (came - 1) / 1000 / divs;
+    out.push({ j, until: rows[j][6].until, share: ((estAt(rows[j][6].est, g.turn) ?? 1) * rows[j][4]) / divs, lent: home === null && id > 0 && g.corps.some((x) => x.id === id && x.nat === nat && !x.dead), home });
+  }
+  return out;
+}
+
+/** The fullest size of a division that awaits lent regiments (`awaited`): its row's, less the share of each one lent still. It takes nothing from what the division already has. */
+function makeUp(g: Game, nat: string, row: any[], o: any): void {
+  const d = g.corps.find((x) => x.nat === nat && x.name === row[2] && !x.dead);
+  if (!d || d.divs !== row[4]) return;
+  const full = Math.max(d.str, (estAt(o.est, g.turn) ?? 1) - awaited(g, nat, o, d.divs).reduce((sum, r) => sum + (r.lent ? r.share : 0), 0));
+  if (full < 1) d.full = full; else delete d.full;
+}
+
+/** A division that awaits lent regiments, as its row forms it (`awaited`, formation): its figure less the part of each counted regiment that is not there, and with the worth of each uncounted one that is home already. */
+function formUp(g: Game, nat: string, row: any[], o: any, c: Corps): void {
+  const A = awaited(g, nat, o, c.divs);
+  const counted = (Array.isArray(o.from) ? o.from.length : 0) + A.filter((r) => r.until <= row[0]).length;
+  for (const r of A) {
+    if (r.until <= row[0]) { if (r.home === null) c.str -= o.str / counted; }
+    else if (r.home !== null) c.str += r.home;
+  }
+  makeUp(g, nat, row, o);
+}
+
+/** A lent regiment that leaves its place alive comes home to the division whose row awaits it (`awaited`, coming home). */
+function comeHome(g: Game, nat: string, i: number, row: any[], c: Corps): void {
+  if (!farOn(g) || c.dead) return;
+  const rows = ((setup as any).expeditions as any[]) ?? [];
+  const k = rows.findIndex((r) => r[1] === nat && Array.isArray(r[6]?.awaits) && r[6].awaits.includes(row[2]));
+  if (k < 0) return;
+  const worth = c.str * c.divs;
+  g.flags[`home:${i}`] = 1 + Math.round(worth * 1000);
+  const d = g.flags[`sent:${k}`] ? g.corps.find((x) => x.nat === nat && x.name === rows[k][2] && !x.dead) : undefined;
+  if (!d || d.divs !== rows[k][4]) return;
+  d.str += worth / d.divs;
+  makeUp(g, nat, rows[k], rows[k][6]);
+}
+
+/**
  * Formations history sent to a war away from the main fronts. Unlike the home mobilisation they need a
  * friendly place to arrive at: one that has been lost, or is full, puts the move off, and after half a year
  * it is cancelled. Formations only lent to a campaign ('until') go back to the main army when their time is up.
@@ -3503,11 +3592,14 @@ function expeditions(g: Game, nat: string): void {
       if (g.flags[`sent:${i}`] === 1) estMonth(g, nat, row);
       // The main army's order of battle already counts these formations: the campaign only had the loan of them.
       const id = g.flags[`lent:${i}`];
-      if (o.until && g.turn >= o.until && id > 0) {
+      if (o.until && id > 0 && lentOver(g, nat, row, o)) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
-        if (c) gone.push(c);
+        // (The far side: a regiment its division awaits comes home to it: `comeHome`.)
+        if (c) { gone.push(c); comeHome(g, nat, i, row, c); }
         g.flags[`lent:${i}`] = -1;
       }
+      // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
+      if (o.awaits && farOn(g)) makeUp(g, nat, row, o);
       return;
     }
     let reg = g.byName[row[5]];
@@ -3585,7 +3677,10 @@ function expeditions(g: Game, nat: string): void {
     // that row has made the cut, at its posting or ashore, so that its men are never counted twice: the design
     // director's of 17:23Z of 19 November 2026 on rider b642 part 2. The 21st Division's detachment for Bataan waits
     // for the row that cuts Hsuchow's garrison; with Hsuchow lost it waits its half year and is struck.)
-    if (o.cut && farOn(g) && !rowLanded(g, o.cut)) return;
+    // (A detachment cut from a division the record moved at some stops and not at others names each row that may
+    // make the cut, and comes once any of them has: the 21st Division's for Bataan, cut at Hsuchow where it stays
+    // (stops 3 to 5) or freed when the 17th Division takes over its stretch (the book's stops, far-shores.json '_21st').)
+    if (o.cut && farOn(g) && !(Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]).some((nm) => rowLanded(g, nm))) return;
     // An army put together out of a defeat forms only once the ground is really lost: while the nation or an ally
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
@@ -3620,6 +3715,8 @@ function expeditions(g: Game, nat: string): void {
     const as = ashore ? { ...o, hold: undefined, stay: undefined, est: ashore.adds ?? o.est } : fell ? { ...o, hold: undefined } : o;
     const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, own ? { ...as, est: o.adds } : as);
     if (o.str !== undefined) c.str = o.str;
+    // (The far side: a division that awaits lent regiments forms without the ones that are not there: `formUp`.)
+    if (o.awaits && o.str !== undefined && farOn(g)) formUp(g, nat, row, o, c);
     if (kept) c.raised = row[1];
     if (ashore?.adds) c.str = Math.min(c.str, ashore.adds);
     if (own) c.str = Math.min(c.str, o.adds);

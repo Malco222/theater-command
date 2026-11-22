@@ -216,6 +216,21 @@ function landedFree(g: Game, B: Stations, cal: { slide: number }, i: number): vo
   }
 }
 
+/**
+ * True of a corps the book names in a dated attack still to come (the design director's ruling of 03:59Z, 22 November
+ * 2026, on the 2nd Division's road to Java): a row of the table not yet made nor called off, with a place still to
+ * take, while the stations bind its country. The staff's ships leave such a corps for the attack the book has for it
+ * (ai.ts, hop); they took the 2nd Division from Sendai for a shore of their own, three months before its landing in
+ * Java. At the stops that keep no book the corps is the staff's to judge, as before.
+ */
+export function bookedAhead(g: Game, c: Corps): boolean {
+  const B = stations();
+  if (!B?.attacks || c.nat !== B.taker || !stationsBind(g, c.nat)) return false;
+  const cal = calendar(g, B)!;
+  return B.attacks.some((r, k) => !g.flags[`ba:${k}`] && r.force.includes(c.name) && !(r.until !== undefined && g.turn > r.until + cal.slide)
+    && r.at.some((nm) => !!g.byName[nm] && !allied(g, c.nat, g.byName[nm].ctrl)));
+}
+
 /** True where a corps can fall back to: ground its side holds, no enemy in the field, and a retreat's room. */
 const open = (g: Game, c: Corps, to: Region, joining: boolean): boolean =>
   allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && (to.id === c.reg || joining || friendlyUnits(g, to, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2);

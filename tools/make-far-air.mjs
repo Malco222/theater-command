@@ -126,6 +126,27 @@ const LEAVES = { 'Chinese Air Force': [[20, 50, 50, 'SOV', 'JAP']] };
  * (Read only where the source gives the row no moves of its own: once the planner's file carries one, his stands.)
  */
 const GOES = { '19th Bomb Group (Del Monte)': [[29, 'Soerabaja']], 'XX Bomber Command': [[66, 'Kharagpur']] };
+/**
+ * The design director's ruling of 22:05Z, 21 November 2026, on America's air rows in the Philippines (the historian's
+ * count, historian/luzon-1941-42-philippine-army-feaf.md section 4b: counted as Japan's Formosa rows are, on hand in
+ * the groups, older types included). In month 28, 8 December 1941:
+ * - the Far East Air Force on Luzon is 120 fighters (91 P-40s and the P-35As) and 40 bombers (19 B-17s at Clark, 16
+ *   B-18s, a few A-27s), where the planner's row reads 100 and 19;
+ * - Del Monte's 16 B-17s and 2 B-18s are 18 bombers on Mindanao, a row of their own, sent south out of Formosa's
+ *   reach, where the planner's row reads 16;
+ * - the Philippine Army Air Corps is a row of its own, the 16 P-26As of its 6th Pursuit Squadron, not in the Far East
+ *   Air Force's. Its fields (Zablan, Batangas) are in the chart's Manila: the builder's reading, named for the
+ *   director. Its end is not laid, as Wake's squadron's is not: the fall of its field ends it.
+ * The month-29 fall to 10 stays the book's at the stops that keep it; where no book is kept the row is kept at its
+ * new most, as `byBook` reads. (RULED replaces one month's figures on a row of the source, and is read only while the
+ * source still gives the figures named in `was`: once the planner's file carries the ruling, his stands. ADDS are
+ * rows the source has not: once it has one of that name, his stands.)
+ */
+const RULED = {
+  'Far East Air Force': { month: 28, was: [100, 19], is: [120, 40] },
+  '19th Bomb Group (Del Monte)': { month: 28, was: [0, 16], is: [0, 18] },
+};
+const ADDS = [{ nat: 'USA', name: 'Philippine Army Air Corps (6th Pursuit Squadron)', base: 'Manila', from: 28, est: [[28, 16, 0]] }];
 
 // ---- The source -------------------------------------------------------------------------------------------------
 
@@ -148,7 +169,17 @@ const sched = (rows, what, width) => {
 need(Array.isArray(src.fleets) && src.fleets.length > 0 && src.japan, `${FILE}: no fleets or no 'japan'`);
 const seen = new Set(air.fleets.map((r) => `${r.nat}|${r.name}`));
 const fleets = [];
-for (const r of src.fleets) {
+const ruled = (r) => {
+  const R = RULED[r.name];
+  if (!R) return r;
+  const i = r.est.findIndex((x) => x[0] === R.month);
+  need(i >= 0, `"${r.name}": the ruling names month ${R.month}, which its row does not have`);
+  if (r.est[i][1] === R.is[0] && r.est[i][2] === R.is[1]) return r; // the planner's file carries the ruling
+  need(r.est[i][1] === R.was[0] && r.est[i][2] === R.was[1], `"${r.name}": month ${R.month} reads ${r.est[i].slice(1)}, neither the figures the ruling replaced nor its own`);
+  return { ...r, est: r.est.map((x, j) => (j === i ? [x[0], ...R.is] : x)) };
+};
+const rowsIn = [...src.fleets.map(ruled), ...ADDS.filter((x) => !src.fleets.some((r) => r.nat === x.nat && r.name === x.name))];
+for (const r of rowsIn) {
   const what = `${r.nat} "${r.name}"`;
   need(typeof r.nat === 'string' && typeof r.name === 'string' && r.name.length > 0, `a row with no nation or no name: ${JSON.stringify(r).slice(0, 80)}`);
   need(!seen.has(`${r.nat}|${r.name}`), `${what}: a row of that name stands already`);
@@ -182,7 +213,7 @@ for (const r of src.fleets) {
   if (bmrRange !== undefined) out.bmrRange = bmrRange;
   fleets.push(out);
 }
-for (const k of [...Object.keys(WEAK), ...Object.keys(LONG), ...Object.keys(HANDS), ...Object.values(HANDS).flat(), ...Object.keys(LEAVES), ...Object.keys(GOES)]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
+for (const k of [...Object.keys(WEAK), ...Object.keys(LONG), ...Object.keys(HANDS), ...Object.values(HANDS).flat(), ...Object.keys(LEAVES), ...Object.keys(GOES), ...Object.keys(RULED)]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
 // A command that hands over ends by the record (its last row reads nothing), and to its own side; what leaves a command is on its row as a fall of at least as much that month.
 for (const [k, to] of Object.entries(HANDS)) {
   const r = fleets.find((x) => x.name === k), last = r.est[r.est.length - 1];

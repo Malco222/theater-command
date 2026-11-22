@@ -21,7 +21,7 @@ import { KIND, type Corps, type Game, type Kind, type Region } from './types';
 import { barred, groundRules, whyBarred } from './ground';
 import { straitOpen } from './history';
 import { allied, atWar, headline } from './game';
-import { tieBars, whyTieBars } from './far';
+import { stationBars, tieBars, whyStationBars, whyTieBars } from './far';
 import { halted } from './history';
 
 export interface River { name: string; /** The course in map units. */ pts: [number, number][]; /** The same course as [latitude, longitude]. */ ll: [number, number][] }
@@ -98,9 +98,10 @@ export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boole
  * bridges down. On the far side, also a strike from a client's ground into a war the client is not in (far.ts). And
  * ground a computer staff does not go into by the book (b512(h), history.json 'restraint'). And, for a country whose
  * war is a declaration and not a front, any ground but its own (diplomacy.json 'stay', Turkey in 1945). And a strait
- * that is shut to it (straitOpen).
+ * that is shut to it (straitOpen). And ground its holder stands on by agreement with an owner the corps' country is
+ * at peace with (far.ts `stationBars`: Indochina under Japan's demand).
  */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to);
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || stationBars(g, c.nat, to) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to);
 
 /** True where a computer-run country whose war is only declared (diplomacy.json 'stay') would send a corps off its own ground. */
 export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`stay:${c.nat}`] && c.nat !== g.human && to.owner !== c.nat;
@@ -109,7 +110,7 @@ export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`
 export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string | null {
   const high = whyBarred(g, c, to);
   if (high) return high;
-  if (!noCrossing(g, c.kind, from, to.id)) return whyTieBars(g, c, to, from);
+  if (!noCrossing(g, c.kind, from, to.id)) return whyTieBars(g, c, to, from) ?? whyStationBars(g, c.nat, to);
   const x = crossingOf(from, to.id)!;
   return `The bridges over the ${riverName(x)} between ${g.regions[from].name} and ${to.name} are down. ${c.name} cannot cross until engineers rebuild them.`;
 }

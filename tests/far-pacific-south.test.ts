@@ -199,7 +199,9 @@ describe("a fallen country's far ground (ruling 199)", () => {
 });
 
 describe('the demand on Indochina (ruling 199)', () => {
-  it('by the book: July 1941, one step and no war, and the garrison stands down; the freeze follows on its date', () => {
+  // (The garrison: the design director's 16:44Z and 16:46Z of 21 November 2026, mending his added line to 199(e).
+  // It stays at its posts and answers to Japan, as a fallen country's corps answers to its keeper: far-indochina-kept.)
+  it('by the book: July 1941, one step and no war, and the garrison stays at its posts under Japan; the freeze follows on its date', () => {
     const g = france(1);
     g.turn = 22;
     pacificOpening(g);
@@ -207,12 +209,14 @@ describe('the demand on Indochina (ruling 199)', () => {
     expect(mayDemand(g)).toBe(true);
     g.turn = 23;
     pacificOpening(g);
-    for (const name of ['Saigon', 'Cam Ranh', 'Hanoi', 'Phnom Penh', 'Vientiane']) { expect(g.byName[name].owner, name).toBe('JAP'); expect(g.byName[name].ctrl, name).toBe('JAP'); }
+    // (Japan the holder, Vichy France still the owner: the design director's form 2 of 21:08Z, 21 November 2026; far-indochina-mark.)
+    for (const name of ['Saigon', 'Cam Ranh', 'Hanoi', 'Phnom Penh', 'Vientiane']) { expect(g.byName[name].owner, name).toBe('VIC'); expect(g.byName[name].ctrl, name).toBe('JAP'); }
     expect(g.flags['pac:demand']).toBe(23);
     expect(atWar(g, 'JAP', 'VIC')).toBe(false);
     expect(g.nations.VIC.alive).toBe(true);
-    expect(g.corps.some((c) => c.nat === 'VIC' && !c.dead && g.regions[c.reg].owner === 'JAP')).toBe(false);
-    expect(corps(g, 'Cochinchina and Cambodia Division')).toBeUndefined();
+    expect(g.corps.some((c) => c.nat === 'VIC' && !c.dead && g.regions[c.reg].ctrl === 'JAP')).toBe(false);
+    const kept = corps(g, 'Cochinchina and Cambodia Division')!;
+    expect([kept.nat, kept.raised, at(g, kept.name), kept.hold, !!kept.stay]).toEqual(['JAP', 'VIC', 'Saigon', true, true]);
     expect(news(g, 23, 'demands Indochina of Vichy France')).toBe(true);
     expect(holds(g, 'holds:JAP,Saigon')).toBe(true);
     expect(mayDemand(g)).toBe(false);
@@ -264,7 +268,7 @@ describe('the demand on Indochina (ruling 199)', () => {
     expect(mayDemand(g)).toBe(true);
     declareWar(g, 'JAP', 'VIC');
     expect(atWar(g, 'JAP', 'VIC')).toBe(false);
-    expect(g.byName['Saigon'].owner).toBe('JAP');
+    expect([g.byName['Saigon'].owner, g.byName['Saigon'].ctrl]).toEqual(['VIC', 'JAP']);
     expect(g.byName['Cam Ranh'].ctrl).toBe('JAP');
     expect(g.flags['pac:demand']).toBe(23);
     expect(mayDemand(g)).toBe(false);
@@ -423,9 +427,12 @@ describe("Japan's month of December 1941", () => {
     // By the book the ten landings of the great blow sail on the record's own shipping, each in its record month, and
     // draw nothing from the month's lift of six (rider b626 to ruling 234: the record shows the shipping sufficed).
     // With Guam's garrison at the record's size (ruling 234(b): some 750 men, not a brigade) the South Seas
-    // Detachment lands in December as it did, and the Kawaguchi Detachment is at Brunei, as on the 16th.
+    // Detachment lands in December as it did. The Kawaguchi Detachment, ashore at Miri and Seria on the 16th, has gone
+    // on by the book's dated rows to Brunei overland and to Kuching by sea, which fell on the 24th and 25th (the design
+    // director's rulings of 03:59Z and 04:06Z, 22 November 2026: tests/far-borneo-book.test.ts). It stood at Brunei at
+    // the month's end before those rows were laid.
     expect(at(g, 'South Seas Detachment')).toBe('Guam');
-    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Brunei');
+    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Kuching');
     // All ten are ashore in December: nine stand on their own shores, and the 5th Division, landed at Singora, has been
     // carried on to Ipoh. The month's lift of six is not spent on them.
     const ashore = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).map((l) => l.corps);

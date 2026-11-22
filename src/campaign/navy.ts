@@ -28,8 +28,10 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
+import { stationBars, whyStationBars } from './far';
+import { farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
-import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
+import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
@@ -126,11 +128,21 @@ export const NAVY = data as unknown as {
  * player's staff runs moves the fleet's base to the province named, if its country holds the place, and only at the
  * stops of the history dial the row names (every stop where it names none). A player who runs his navy himself
  * moves his fleets when he says (depth.ts, `byHand`).
+ *
+ * A move of base named with one of the great choices ('with', as a month at sea is; the Asiatic Fleet's months, the
+ * design director's rulings of 03:55Z and 04:25Z, 22 November 2026) belongs to the war that choice opens: it keeps
+ * its distance from the choice where the stop draws the choice's month, and it is read only while its country is at
+ * war with the nation whose choice it is. A row marked 'ally' may take a harbour an ally holds, as an air command's
+ * row so marked takes an ally's field (air.ts, `rowGround`): an ally at war with that same nation, where the row
+ * names one. A row marked 'eve' is the other side of the blow: it is read in the choice's own month, before the
+ * blow falls, on the book's word that it falls that month (`bookLays`: the choice's nation is a computer's, the stop
+ * keeps the book and the book is open in the choice's theatre), while its country is still at peace with that
+ * nation. Where the book lays no blow (a player's own Japan) no eve is read, and the surprise is the player's.
  */
 export interface FleetMove {
   turn: number; nat: string; fleet: string; words: string; stops?: number[];
-  /** A move of base: the province, what the harbour is called, and the sea it opens on. */
-  base?: string; port?: string; home?: string;
+  /** A move of base: the province, what the harbour is called, and the sea it opens on. 'ally': the harbour may be an ally's. 'eve': read before the blow it is named with. */
+  base?: string; port?: string; home?: string; ally?: boolean; eve?: boolean;
   /**
    * The far side (ruling 234(d)) in place of a base: the fleet spends that month at sea in this sea, though its
    * country is at peace, and is back at its base the month after (the Pacific Fleet's carriers in December 1941).
@@ -355,14 +367,16 @@ export function fleetPower(g: Game, f: Fleet): number {
  * far side's seas it is counted from the land air groups in reach instead (rulings 184 and 187: pacific.json 'skies',
  * air.ts groupsOver); none while the far side's switch is off.
  */
-export function airOver(g: Game, z: number, nat: string, hostile = false): number {
+export function airOver(g: Game, z: number, nat: string, hostile = false, beside: ((x: string) => boolean) | null | undefined = hostile ? null : besideIn(g, z, nat)): number {
   const zone = g.seas[z];
   const S = skiesOver(g, z);
-  if (S) return groupsOver(g, z, nat, hostile, S);
+  if (S) return groupsOver(g, z, nat, hostile, S, beside);
   if (!zone.coast.length) return 0;
   // Weather (ruling 127): no aircraft cover a sea under a closed sky, and cloud halves what they do.
   const wx = seaSkyMul(g, z);
   if (wx === 0) return 0;
+  // (Of its friends, those who count beside it in this sea: besideIn. None is left out with the far side off.)
+  const side = (x: string): boolean => (hostile ? atWar(g, x, nat) : allied(g, x, nat) && (!beside || beside(x)));
   let s = 0;
   for (const id of zone.coast) {
     const r = g.regions[id];
@@ -371,10 +385,43 @@ export function airOver(g: Game, z: number, nat: string, hostile = false): numbe
     if (!n || !n.alive || !n.atWar.length) continue;
     // An enemy who has won the sky over this coast flies from it in strength, and its owner barely at all.
     const sky = skyOver(g, id);
-    if (hostile ? atWar(g, r.ctrl, nat) : allied(g, r.ctrl, nat)) s += n.air * (sky ? AIR.sky.seaFoe : 1);
-    else if (sky && (hostile ? atWar(g, sky, nat) : allied(g, sky, nat))) s += g.nations[sky].air * AIR.sky.seaOwn;
+    if (side(r.ctrl)) s += n.air * (sky ? AIR.sky.seaFoe : 1);
+    else if (sky && side(sky)) s += g.nations[sky].air * AIR.sky.seaOwn;
   }
   return (s / zone.coast.length) * zone.air * wx;
+}
+
+/**
+ * The far side (the director's ruling of 03:23Z, 22 November 2026, on seven Soviet bomber divisions read as America's
+ * own over the Honshu Coast, with the Soviet Union not at war with Japan): a nation counts in a sea's read only
+ * against those it is at war with. This is the test of who counts beside a nation in one sea: itself always, and a
+ * friend only if it is at war with one of the nation's enemies that stand in that sea's read (a fleet at sea in it,
+ * or aircraft counted over it). Null where every friend counts as before: with none of its enemies in the sea,
+ * where the read closes nothing, and with the far side off (the old chart's form is after release). `form` is the
+ * far switch unless a reading asks for the other form on the same month. SeaPicture reads the same from its lists.
+ */
+export function besideIn(g: Game, z: number, nat: string, form: boolean = farOn(g)): ((x: string) => boolean) | null {
+  if (!form) return null;
+  const foes: string[] = [];
+  const foe = (x: string): void => { if (!foes.includes(x)) foes.push(x); };
+  for (const f of g.fleets) if (f.zone === z && atSea(f) && atWar(g, f.nat, nat) && fleetPower(g, f) > 0) foe(f.nat);
+  const zone = g.seas[z];
+  const S = skiesOver(g, z);
+  if (S) {
+    for (const f of g.airFleets) if (atWar(g, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g, f, z, S) > 0) foe(f.nat);
+  } else if (zone.coast.length && seaSkyMul(g, z) !== 0) {
+    for (const id of zone.coast) {
+      const r = g.regions[id];
+      if (r.since >= g.turn) continue;
+      const n = g.nations[r.ctrl];
+      if (!n || !n.alive || !n.atWar.length) continue;
+      const sky = skyOver(g, id);
+      if (atWar(g, r.ctrl, nat)) { if (n.air > 0) foe(r.ctrl); }
+      else if (sky && atWar(g, sky, nat) && g.nations[sky].air > 0) foe(sky);
+    }
+  }
+  if (!foes.length) return null;
+  return (x) => x === nat || foes.some((e) => atWar(g, x, e));
 }
 
 /** What the sky over a sea leaves of the aircraft over it (weather, ruling 127): none when closed, half under cloud, all with no weather. */
@@ -383,10 +430,12 @@ const seaSkyMul = (g: Game, z: number): number => (weatherOn(g) ? skySupport(sky
 export interface SeaBalance { ships: number; air: number; total: number }
 
 /** One side's strength in a sea: its fleets at sea there, and its aircraft within reach. */
-export function seaSide(g: Game, z: number, nat: string, hostile: boolean): SeaBalance {
+export function seaSide(g: Game, z: number, nat: string, hostile: boolean, form: boolean = farOn(g)): SeaBalance {
+  // (The far side: of its friends, those at war with an enemy of its own in this sea: besideIn.)
+  const beside = hostile ? null : besideIn(g, z, nat, form);
   let ships = 0;
-  for (const f of g.fleets) if (f.zone === z && atSea(f) && (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat))) ships += fleetPower(g, f);
-  const air = airOver(g, z, nat, hostile) * NAVY.air.weight;
+  for (const f of g.fleets) if (f.zone === z && atSea(f) && (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat)))) ships += fleetPower(g, f);
+  const air = airOver(g, z, nat, hostile, beside) * NAVY.air.weight;
   return { ships, air, total: ships + air };
 }
 
@@ -499,18 +548,40 @@ export class SeaPicture {
   /** seaSide's total. */
   private side(z: number, nat: string, hostile: boolean): number {
     const g = this.g;
+    const beside = hostile ? null : this.beside(z, nat);
     let ships = 0;
-    for (const f of this.afloat(z)) if (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat)) ships += f.power;
-    return ships + this.air(z, nat, hostile) * NAVY.air.weight;
+    for (const f of this.afloat(z)) if (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat))) ships += f.power;
+    return ships + this.air(z, nat, hostile, beside) * NAVY.air.weight;
+  }
+
+  /** besideIn, from the picture's lists. */
+  private beside(z: number, nat: string): ((x: string) => boolean) | null {
+    const g = this.g;
+    if (!farOn(g)) return null;
+    const foes: string[] = [];
+    const foe = (x: string): void => { if (!foes.includes(x)) foes.push(x); };
+    for (const f of this.afloat(z)) if (f.power > 0 && atWar(g, f.nat, nat)) foe(f.nat);
+    const S = skiesOver(g, z);
+    if (S) {
+      for (const x of this.groupsOf(z, S)) if (atWar(g, x.nat, nat)) foe(x.nat);
+    } else if (g.seas[z].coast.length && seaSkyMul(g, z) !== 0) {
+      for (const c of this.coastsOf(z)) {
+        if (atWar(g, c.ctrl, nat)) { if (c.air > 0) foe(c.ctrl); }
+        else if (c.sky && atWar(g, c.sky, nat) && c.skyAir > 0) foe(c.sky);
+      }
+    }
+    if (!foes.length) return null;
+    return (x) => x === nat || foes.some((e) => atWar(g, x, e));
   }
 
   /** airOver. */
-  private air(z: number, nat: string, hostile: boolean): number {
+  private air(z: number, nat: string, hostile: boolean, beside: ((x: string) => boolean) | null): number {
     const g = this.g, zone = g.seas[z];
+    const side = (x: string): boolean => (hostile ? atWar(g, x, nat) : allied(g, x, nat) && (!beside || beside(x)));
     const S = skiesOver(g, z);
     if (S) {
       let s = 0;
-      for (const x of this.groupsOf(z, S)) if (hostile ? atWar(g, x.nat, nat) : allied(g, x.nat, nat)) s += x.n;
+      for (const x of this.groupsOf(z, S)) if (side(x.nat)) s += x.n;
       return (s / S.per) * zone.air;
     }
     if (!zone.coast.length) return 0;
@@ -518,8 +589,8 @@ export class SeaPicture {
     if (wx === 0) return 0;
     let s = 0;
     for (const c of this.coastsOf(z)) {
-      if (hostile ? atWar(g, c.ctrl, nat) : allied(g, c.ctrl, nat)) s += c.air * (c.sky ? AIR.sky.seaFoe : 1);
-      else if (c.sky && (hostile ? atWar(g, c.sky, nat) : allied(g, c.sky, nat))) s += c.skyAir * AIR.sky.seaOwn;
+      if (side(c.ctrl)) s += c.air * (c.sky ? AIR.sky.seaFoe : 1);
+      else if (c.sky && side(c.sky)) s += c.skyAir * AIR.sky.seaOwn;
     }
     return (s / zone.coast.length) * zone.air * wx;
   }
@@ -587,8 +658,32 @@ export function gatesTick(g: Game): void {
   }
 }
 
-/** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed. */
-export function openSeas(g: Game, nat: string, seas?: SeaPicture): Uint8Array {
+/**
+ * The provinces joined by land to a nation's capital over ground it or its allies hold, or null where it holds no
+ * capital on the chart: where its own roads bring the stores down from where it makes its arms.
+ */
+function joinedToCapital(g: Game, nat: string): Uint8Array | null {
+  const cap = g.nations[nat]?.capital ?? -1;
+  if (cap < 0 || g.regions[cap].ctrl !== nat) return null;
+  const linked = new Uint8Array(g.regions.length);
+  const road = [cap];
+  linked[cap] = 1;
+  for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
+  return linked;
+}
+
+/**
+ * The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed.
+ *
+ * The far side (the director's ruling of 03:01Z, 22 November 2026, on Luzon reading fed with the sea behind it
+ * shut): the supply ships sail from where the country makes its arms. A home port sends them out only where it is
+ * joined by land to the capital; a home port across the water (Manila, Pearl Harbor, Truk, Malta) is a quay only
+ * while the month's open seas join it to one of those, so it no longer feeds itself on its own sea alone. A country
+ * that holds no capital on the chart, or has no home port its roads reach from it (Portugal: the chart gives Lisbon
+ * none), has no such place, and its home ports read as they did. `homeward` is the far switch unless a reading asks
+ * for the other form on the same month; with the far side off nothing changes.
+ */
+export function openSeas(g: Game, nat: string, seas?: SeaPicture, homeward: boolean = farOn(g)): Uint8Array {
   const open = new Uint8Array(g.seas.length);
   // Whether a sea is closed to the nation is asked only of the seas its ships could reach, once each (-1: not asked yet).
   const shutAt = new Int8Array(g.seas.length).fill(-1);
@@ -596,16 +691,16 @@ export function openSeas(g: Game, nat: string, seas?: SeaPicture): Uint8Array {
   const q: number[] = [];
   const start = (z: number): void => { if (!open[z] && !shut(z)) { open[z] = 1; q.push(z); } };
   const coastal = seas ? seas.ports() : g.regions;
-  for (const r of coastal) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
+  const linked = homeward || seaWar(g) ? joinedToCapital(g, nat) : null;
+  const own = (r: Region): boolean => r.port && r.owner === nat && r.ctrl === nat;
+  // The far side: only the home ports its own roads reach from the capital send the ships out (where it has one).
+  const home = homeward && linked && coastal.some((r) => own(r) && linked[r.id]) ? linked : null;
+  for (const r of coastal) if (own(r) && (!home || home[r.id])) r.seas.forEach(start);
   for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
   // The grand campaign: a harbour the nation has taken serves its supply ships as a home port does, once its own
   // roads reach the quay: the stores come down to it overland and go on by sea. So an army put across a narrow sea
   // from a conquered coast is fed from that coast, and not round by the harbours of the homeland.
-  if (seaWar(g) && (g.nations[nat]?.capital ?? -1) >= 0 && g.regions[g.nations[nat].capital].ctrl === nat) {
-    const linked = new Uint8Array(g.regions.length);
-    const road = [g.nations[nat].capital];
-    linked[road[0]] = 1;
-    for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
+  if (seaWar(g) && linked) {
     for (const r of coastal) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
   }
   // So is the sea a country off the map sends its convoys in by.
@@ -804,6 +899,7 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
     if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can emplane.';
     if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
+    if (stationBars(g, nat, to)) return whyStationBars(g, nat, to);
     if (!from.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
     if (g.flags[dropKey(g, nat)]) return 'The transport aircraft can carry one airborne assault a month.';
     if (skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no transport aircraft can fly under them. Win the sky there first.`;
@@ -815,6 +911,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (cs.some((c) => c.kind === 'fort' || c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can embark.';
   if (!to.seas.length) return `${to.name} has no coast.`;
   if (allied(g, nat, to.ctrl) || cs.some((c) => !atWar(g, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
+  // (Nor on ground the enemy's troops stand on by agreement with an owner any country of the force is at peace with: far.ts.)
+  for (const c of cs) if (stationBars(g, c.nat, to)) return whyStationBars(g, c.nat, to);
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   // (A row that goes with a corps of the force sails in that corps' lift: rider b604 to ruling 234, stations.ts.)
   // (Nor is a dated landing of the book, on the record's own shipping: rider b626.)
@@ -1289,7 +1387,8 @@ function armyReach(g: Game, nat: string): Uint8Array {
   const q: number[] = [];
   const own = (u: Corps): boolean => u.nat === nat && !u.dead && u.kind !== 'fort';
   for (const r of g.regions) if (r.ctrl === nat || (allied(g, nat, r.ctrl) && (r.units.some(own) || (r.garr ?? []).some(own)))) { byLand[r.id] = 1; q.push(r.id); }
-  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl)) { byLand[j] = 1; q.push(j); }
+  // (Ground the enemy's troops stand on by agreement with an owner the nation is at peace with is shut to its army, and nothing is reached through it: far.ts `stationBars`.)
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl) && !stationBars(g, nat, g.regions[j])) { byLand[j] = 1; q.push(j); }
   return byLand;
 }
 
@@ -1344,7 +1443,8 @@ export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): 
   };
   const shores = new Map<string, Region[]>();
   for (const r of g.regions) {
-    if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive || allysOwn(r)) continue;
+    // (Nor a shore the enemy's troops stand on by agreement with an owner the nation is at peace with: far.ts `stationBars`.)
+    if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive || allysOwn(r) || stationBars(g, nat, r)) continue;
     const k = `${r.owner}:${r.ctrl}:${r.overseas ? 1 : 0}`;
     shores.set(k, [...(shores.get(k) ?? []), r]);
   }
@@ -1574,11 +1674,12 @@ export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
 /**
  * A fleet's base moved by order of its staff's book (navy.json 'moves', and the base a planned strike comes home to,
  * carriers.ts): to a harbour its country holds, the sea it lies on named. It lies in harbour there, and the news
- * says so. False where the place is not its country's, or it is there already.
+ * says so. False where the place is not its country's, or it is there already. `friend`: for a row of the book
+ * marked 'ally', whether the harbour's holder is one whose harbour the fleet may take.
  */
-export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }): boolean {
+export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }, friend?: (holder: string) => boolean): boolean {
   const r = g.byName[m.base], sea = zoneOf(g, m.home);
-  if (!r || r.ctrl !== f.nat || r.id === f.base || sea < 0) return false;
+  if (!r || (r.ctrl !== f.nat && !friend?.(r.ctrl)) || r.id === f.base || sea < 0) return false;
   f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
   delete f.lane;
   g.supplyDirty = true;
@@ -1619,6 +1720,12 @@ export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = 
 }
 
 // ---- The month at sea -----------------------------------------------------------------------------
+
+/** True while the book lays the great choice named ('with': nation and choice) and it has not gone: a computer's nation, at a stop that keeps the book, with the book open in the choice's theatre. */
+function bookLays(g: Game, named: string): boolean {
+  const [who, op] = named.split(':');
+  return who !== g.human && !!stopDef(g).book && onBook(g, theatreOf(who, op)) && !((g.flags[`st:done:${who}:${op}`] ?? 0) > 0);
+}
 
 /** How many months a dated move has slid with the great choice it is named with ('with': nation and choice), where the stop draws that choice's date. */
 function moveSlide(g: Game, m: FleetMove): number {
@@ -1757,9 +1864,14 @@ export function navalUpkeep(g: Game, nat: string): void {
       continue;
     }
     // (A player who runs his navy himself moves his own fleets; where his staff runs it, the staff keeps the dates.)
-    if (m.turn !== g.turn || byHand(g, nat, 'navy')) continue;
+    // (A move named with a great choice keeps that choice's month and is read at war with the nation whose it is; one
+    // marked 'eve' before that war, on the book's word that the blow falls this month.)
+    const foe = m.with?.split(':')[0];
+    if (m.turn + moveSlide(g, m) !== g.turn || byHand(g, nat, 'navy')) continue;
+    if (foe !== undefined && (m.eve ? atWar(g, nat, foe) || !bookLays(g, m.with!) : !atWar(g, nat, foe))) continue;
     const f = named(m.fleet);
-    if (f && m.base !== undefined && m.port !== undefined && m.home !== undefined) orderedTo(g, f, { base: m.base, port: m.port, home: m.home, words: m.words });
+    const friend = m.ally ? (holder: string): boolean => allied(g, nat, holder) && (foe === undefined || atWar(g, holder, foe)) : undefined;
+    if (f && m.base !== undefined && m.port !== undefined && m.home !== undefined) orderedTo(g, f, { base: m.base, port: m.port, home: m.home, words: m.words }, friend);
   }
   if (!stopDef(g).book) {
     for (const f of fleetsOf(g, nat)) {
@@ -2147,15 +2259,38 @@ function torpedoes(g: Game, nat: string): void {
   }
 }
 
-/** A fleet whose base has fallen makes for the nearest port its nation still holds. Returns false if there is none and the fleet is lost. */
-function newBase(g: Game, f: Fleet): boolean {
+/**
+ * The far side's haven for a fleet whose base has fallen (the design director's ruling of 03:42Z, 22 November 2026, on
+ * the Asiatic Fleet's bases; every nation, no number): a fed port held by the fleet's own nation or by an ally at war
+ * with the enemy the base fell to, and never one lying in a sea that is closed to the fleet's nation. Fed is the
+ * fleet's own nation's supply picture as it stands: whether its own forces are supplied there (the holder's picture,
+ * where the fleet's nation has no army on the board to draw one).
+ */
+export function haven(g: Game, f: Fleet, r: Region): boolean {
+  if (!r.port || !r.seas.length) return false;
+  const foe = f.base >= 0 ? g.regions[f.base].ctrl : '';
+  if (r.ctrl !== f.nat && !(allied(g, f.nat, r.ctrl) && !!foe && atWar(g, f.nat, foe) && atWar(g, r.ctrl, foe))) return false;
+  if (!(g.supply[f.nat] ?? g.supply[r.ctrl])?.[r.id]) return false;
+  return !closedTo(g, r.seas[0], f.nat);
+}
+
+/**
+ * A fleet whose base has fallen makes for the nearest port its nation still holds. Returns false if there is none and
+ * the fleet is lost. On the far side it makes for the nearest haven first (`haven`: fed, its own nation's or an ally's
+ * at war with the same enemy, and in no closed sea); with none in its reach it reads as it did.
+ */
+function newBase(g: Game, f: Fleet, form: boolean = farOn(g)): boolean {
   const old = g.regions[f.base];
-  let best: Region | null = null, bd = 1e9;
-  for (const r of g.regions) {
-    if (!r.port || !r.seas.length || r.ctrl !== f.nat || !canSailTo(g, f, r)) continue;
-    const d = mapDist(g, r.x, r.y, old.x, old.y);
-    if (d < bd) { bd = d; best = r; }
-  }
+  const nearest = (ok: (r: Region) => boolean): Region | null => {
+    let best: Region | null = null, bd = 1e9;
+    for (const r of g.regions) {
+      if (!r.port || !r.seas.length || !ok(r) || !canSailTo(g, f, r)) continue;
+      const d = mapDist(g, r.x, r.y, old.x, old.y);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  };
+  const best = (form ? nearest((r) => haven(g, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat);
   if (best) {
     rebase(g, f, best);
     headline(g, 'event', `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
