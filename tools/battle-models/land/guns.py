@@ -789,7 +789,9 @@ def pounder25(fine=True, tag="UK"):
     v = GunWorks("25pdr", "25-pounder", "gun", tag, fine)
     # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
     v.dice = 0.2
-    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.6, rim=True)
+    # (the art director's E7 mend, 22 Nov 19:27Z: her road dirt kept low, thinning from 0.35 m up to a quarter by 0.9 m,
+    # so the Light Stone of her shield top reads as paint from the battle camera's height)
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.6, rim=True, foot=0.35, top=0.9)
     R, T, plat = 0.45, 1.78, 0.03
     v.gun_root(R + plat)
     for letter, s in SIDES:

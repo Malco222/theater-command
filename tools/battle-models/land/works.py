@@ -435,7 +435,7 @@ class Works(Shop, Gear, Fittings):
         skin = field(0.45, 0.95, 6)
         coat_hex = self.m.paints.get("upper", "565C3A")
         low_c, top_c = ground_dirt(ground, coat_hex) if ground else dirt_for(coat_hex)
-        two = layers == 2 and (not ground or top_c != low_c)
+        two = layers == 2 and (not ground or top_c not in (low_c, coat_hex.upper()))
         self.m.info["dust"] = colour or low_c
         file = self.m.info.setdefault("file", {})
         file["dust_colour"] = self.m.info["dust"]
@@ -873,7 +873,8 @@ GROUND_DIRT_HOW = ("dust_by_ground: the dirt of each ground (field, desert, ital
 def ground_dirt(ground, coat):
     """(low, haze) of a ground's dirt on a coat, by the art director's rule: dirt must differ from the paint under it by
     9 or more in lightness or it does not show. A low that is too near the coat takes the ground's other tone, then
-    its pale haze; a haze too near it is dropped for the low."""
+    its pale haze. A haze too near it is no haze: the coat itself (the art director's E7 mend, 22 Nov 19:27Z: on the
+    Light Stone the roof is the largest thing the battle camera sees, and it reads as paint; it was the low before)."""
     low, top, other = GROUND_DIRT[ground]
     c = lightness(coat)
     for cand in (low, other, top):
@@ -881,7 +882,7 @@ def ground_dirt(ground, coat):
             low = cand
             break
     if abs(lightness(top) - c) < 9.0:
-        top = low
+        top = coat.upper()
     return low, top
 
 

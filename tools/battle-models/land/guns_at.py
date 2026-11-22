@@ -4,7 +4,7 @@ the same parts, sockets and clips, so they drop into a gun pit's `gun` socket an
 
 from guns import GunWorks, crew
 from motorpool import LEFT, RIGHT, SIDES, X
-from tanks_ger import GER_COATS, coats
+from tanks_ger import BY_MONTH_HOW, GER_COATS, coats, spray, sprayed
 
 coat = "upper"
 
@@ -16,7 +16,9 @@ def pak40(fine=True, tag="GER", paint=None):
     v = GunWorks("Pak40", "7.5 cm Pak 40", "gun", tag, fine, paint=GER_COATS[paint or "grey"][0])
     # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
     v.dice = 0.2
-    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.6, rim=True)
+    # (the art director's E7 mend, 22 Nov 19:27Z: her top haze halved and the road dirt kept to her wheels and trail (thinning
+    # from 0.3 m up to a quarter by 0.8 m: she stands 1.25 m, not a tank's 2 m), so the grey's shield top stays grey)
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.6, rim=True, lie=0.12, foot=0.3, top=0.8)
     R, T = 0.45, 1.62
     v.gun_root(R)
     for letter, s in SIDES:
@@ -37,7 +39,13 @@ def pak40(fine=True, tag="GER", paint=None):
     v.socket("dust.muzzle", (2.6, 0.0, 0.03), X, part="vehicle", note="the ground under the muzzle: the blast lifts the dust here")
     crew(v, (-0.75, 0.55, 0.0), (-1.7, -0.5, 0.0), (-2.6, 1.5, 0.0), (-2.2, -1.5, 0.0), (-1.6, -0.2, 0.0))
     v.gun_clips(0.9, E.x, lift=0.05, close=close, eye_z=0.2, track=T, low=-5.0)
-    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": coats(v, paint or "grey")}
+    # (her own sprayed blotches, as the Tiger's: with her own dirt in her file the game sprays none of its own, so her 1944
+    # coat is in the file, dark yellow with olive green and red-brown bands; the art director's E7 mend, 22 Nov 19:27Z)
+    spray(v, paint or "grey")
+    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + BY_MONTH_HOW,
+                                                "paint": coats(v, paint or "grey"),
+                                                "by_month": sprayed([{"to": "1943-01", "paint": "grey"}, {"from": "1943-02", "to": "1943-05", "paint": "yellow"},
+                                                                     {"from": "1943-06", "paint": "yellow"}])}
     return v
 
 
