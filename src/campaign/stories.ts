@@ -20,6 +20,7 @@ import { gainXp, generalOf } from './commanders';
 import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
 import { moraleRules, restedMonth } from './morale';
+import { seaWhat, seaWhere } from './sea-words';
 import {
   STACK,
   type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
@@ -134,7 +135,7 @@ export function citation(g: Game, a: Award): string {
   const d = DEF.get(a.hon);
   if (!d) return '';
   const N = g.nations[a.nat];
-  return fill(d.cite, { unit: a.name, place: placeName(g, a.kind, a.at) || 'the front', year: turnToDate(a.turn).year, n: a.n, rival: a.rival, designation: designation(a.nat), adj: N?.adj });
+  return fill(d.cite, { unit: a.name, place: placeName(g, a.kind, a.at) || 'the front', where: a.kind === 'fleet' && g.seas[a.at] ? seaWhere(g.seas[a.at].name) : `in ${placeName(g, a.kind, a.at) || 'the front'}`, year: turnToDate(a.turn).year, n: a.n, rival: a.rival, designation: designation(a.nat), adj: N?.adj });
 }
 
 /** What an honour is worth when it is cashed in: more for the first of its kind in the nation. */
@@ -151,7 +152,10 @@ export function noteCorps(g: Game, c: Corps, what: string, where: number, n?: nu
 export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: unknown }, line: DiaryLine): string {
   const [, what, where, n] = line;
   const sea = 'ships' in u;
-  const at = where < 0 ? 'the front' : sea || what === 'strike' ? `the ${g.seas[where]?.name ?? 'sea'}` : g.regions[where]?.name ?? 'the front';
+  const seaName = where >= 0 && (sea || what === 'strike') ? g.seas[where]?.name ?? '' : null;
+  const at = where < 0 ? 'the front' : seaName !== null ? (seaName ? seaWhat(seaName) : 'the sea') : g.regions[where]?.name ?? 'the front';
+  // At sea a place is where the sea is, by the UI director's sea words ("in the North Sea", "off the Azores"); ashore "at Sedan".
+  const atIn = (prep: string): string => (seaName ? seaWhere(seaName) : `${prep} ${at}`);
   const times = n && n > 1 ? ` ${n} times` : '';
   switch (what) {
     case 'took': return `Took ${at}${n ? `, with ${n},000 prisoners` : ''}.`;
@@ -172,24 +176,24 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'drill': return `A month at the battle schools at ${at}${typeof n === 'number' && STORIES.grades[n] ? `: came back ${STORIES.grades[n][1].toLowerCase()}` : ''}.`;
     case 'homelost': return `${at} fell to the enemy: the place it was raised in.`;
     case 'homefree': return `${at} was freed: the place it was raised in.`;
-    case 'rival': { const r = rivalryOf(g, n); return r ? `Met ${r.theirsName} again, at ${at}. The two are old enemies now.` : `Met an old enemy again at ${at}.`; }
-    case 'score': { const r = rivalryOf(g, n); return r ? `Destroyed its old enemy ${r.theirsName} at ${at}.` : `Destroyed an old enemy at ${at}.`; }
+    case 'rival': { const r = rivalryOf(g, n); return r ? `Met ${r.theirsName} again, ${atIn('at')}. The two are old enemies now.` : `Met an old enemy again ${atIn('at')}.`; }
+    case 'score': { const r = rivalryOf(g, n); return r ? `Destroyed its old enemy ${r.theirsName} ${atIn('at')}.` : `Destroyed an old enemy ${atIn('at')}.`; }
     case 'drafts': return `Took in drafts: ${n}% of the corps is new to it.`;
     case 'reraised': return `Raised again in the name of the formation lost at ${at}.`;
     case 'folded': return `Took in the men of ${corpsNamed(g, n)} at ${at}.`;
     case 'cadre': return `Its men went to ${corpsNamed(g, n)} at ${at}. A cadre was kept to raise it again.`;
     case 'rebuilt': return `Raised again round its cadre at ${at}.`;
-    case 'destroyed': return `Destroyed at ${at}.`;
+    case 'destroyed': return `Destroyed ${atIn('at')}.`;
     case 'surrendered': return `Laid down its arms at ${at}.`;
     case 'starved': return `Cut off and out of supply, laid down its arms at ${at}.`;
     case 'raid': return `Bombed ${at}.`;
     case 'night': return `Bombed ${at} by night.`;
-    case 'strike': return `Struck at shipping in ${at}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
+    case 'strike': return `Struck at shipping ${atIn('in')}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
     case 'sky': return `Won the sky over ${at}.`;
     case 'fight': return `Fought for the sky over ${at}.`;
     case 'defend': return `Fought off raids over ${at}${times}.`;
-    case 'action': return `Won a fleet action in ${at}${n ? `: ${n} enemy ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
-    case 'beaten': return `Beaten in a fleet action in ${at}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} lost` : ''}.`;
+    case 'action': return `Won a fleet action ${atIn('in')}${n ? `: ${n} enemy ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
+    case 'beaten': return `Beaten in a fleet action ${atIn('in')}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} lost` : ''}.`;
     default: return what;
   }
 }

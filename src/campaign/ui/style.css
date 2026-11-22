@@ -1437,6 +1437,7 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .shipbox .hulls { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; min-height: 16px; }
 .shipbox .hulls svg { display: block; }
 .shipbox .hulls i { font-style: normal; font-size: 11px; color: var(--ink-2); margin-left: 2px; }
+.shipbox .starrow { color: var(--brass); letter-spacing: 1px; cursor: help; } .shipbox .starrow b { color: var(--ink-2); font-weight: inherit; }
 .tstance.fleetord, .thead .tstance.fleetord { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
 .tstance.fleetord small { display: none; }
 .tstance.fleetord button:disabled { opacity: .45; cursor: default; }

@@ -32,6 +32,7 @@ import { TOWNS, townName, townSize, type TownSize } from './towns';
 import { PRIZES, harbourOpen, prizesOnLoss } from './prizes';
 import { cityHit } from './repairs';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
+import { seaWhatList } from './sea-words';
 
 export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
@@ -1145,7 +1146,7 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   if (by) {
     const closed = ringClosed(g, r);
     const seas = bySea ? feedingSeas(g, r).map((z) => g.seas[z].name) : [];
-    lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by the ${seas.length === 1 ? seas[0] : `${seas.slice(0, -1).join(', ')} and the ${seas[seas.length - 1]}`}` : ''}: the town cannot be starved while they do.${byBook ? ' Food comes in across the lake as well, so closing the sea would not starve it.' : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? 'those waters' : 'that water'} to them, starts its stores running down.`}`
+    lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by ${seaWhatList(seas)}` : ''}: the town cannot be starved while they do.${byBook ? ' Food comes in across the lake as well, so closing the sea would not starve it.' : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? 'those waters' : 'that water'} to them, starts its stores running down.`}`
       : byBook ? 'Food still comes in across the lake: however close the ring, the town is not starved while no player\'s troops stand in it.'
       : !closed ? 'The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it.'
       : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? 'one more month' : `${left} more months`}; after that they go hungry.`

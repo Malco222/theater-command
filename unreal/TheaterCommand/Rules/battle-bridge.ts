@@ -465,6 +465,12 @@
 // reaches that action, and stands in for the dice there (navy.ts seaField). An action not fought, or one that comes
 // out of the month with other fleets in it, rolls the dice as before. Each sea unit's extra carries its class (cls),
 // its ships afloat and sunk, and its fleet; 'loop' comes from src/battle/sea/cues.ts.
+// A sea view's zones are the ships it has lost (the art director's grit direction, 19 Nov: black oil smoke from
+// burning ships, standing to the end of the fight): { id, kind: 'sunk' | 'burning', x, y, r, until, side, at, unit },
+// one for each ship lost, at her place in her piece's line, from battle second 'at' to the end. 'sunk' is the oil
+// burning on the water where she went down: flame first, then a tall black column. 'burning' is where she left the
+// line on fire for port: her smoke trailing off. Lean every column the same way with one wind; r is the oil's reach in
+// metres. The rules never read them. The horizon's far columns, the camera, spray, debris and grade are the 3D game's.
 
 import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { DROPS, LOOPS, TOWN } from '../../../src/battle/core/cues';
@@ -488,7 +494,7 @@ import type { BattleReport, Game } from '../../../src/campaign/types';
 import type { FieldBill } from '../../../src/campaign/game';
 import { seaField } from '../../../src/campaign/navy';
 import { attackOutlook, endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
-import { SEA_LOOPS } from '../../../src/battle/sea/cues';
+import { seaLoop } from '../../../src/battle/sea/cues';
 import { foughtOf, playedHook, seaAhead, type SeaAhead, type SeaPlayed } from '../../../src/battle/sea/handoff';
 import { SEA } from '../../../src/battle/sea/numbers';
 import { SeaSim, type SeaLosses } from '../../../src/battle/sea/sim';
@@ -538,7 +544,7 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     id: u.id, side: u.side, kind: u.kind, name: u.name, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, face: Math.round(u.face * 1000) / 1000,
     str: Math.round(u.str * 1000) / 1000, mor: Math.round(u.mor * 1000) / 1000, state: u.state, figures0: u.figures0, figures: u.figures,
     w: u.w, d: u.d, act: u.act, speed: Math.round(u.speed * 10) / 10, engaged: u.engaged ?? -1, cover: u.cover ?? '',
-    loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? SEA_LOOPS[u.act] ?? '' : town ? TOWN.loop : loops?.[u.act] ?? '',
+    loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? seaLoop((u.extra as { cls?: string }).cls, u.act) : town ? TOWN.loop : loops?.[u.act] ?? '',
     ...(drops ? { drops: { takes: drops.takes, every: drops.every } } : {}),
     // A land block's name for a card and what it belongs to under it ("11th Infantry" over "I Corps"), beside its full name.
     ...(land.short ? { short: land.short, parent: land.parent } : {}),

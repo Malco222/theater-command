@@ -4,11 +4,13 @@
 import { describe, expect, it } from 'vitest';
 import { runOut } from '../src/battle/core/clock';
 import { closeWith, foughtOf, meetingKey, playedHook, seaAhead, type SeaPlayed } from '../src/battle/sea/handoff';
+import { SEA } from '../src/battle/sea/numbers';
 import { diceRange } from '../src/battle/sea/result';
 import { SeaSim, type SeaLosses } from '../src/battle/sea/sim';
 import { createGame } from '../src/campaign/game';
 import { sail, seaBattles, seaField, shipCount, zoneOf, type SeaFought, type SeaMeeting } from '../src/campaign/navy';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
+import { fieldFights, plainTicket } from '../src/battle/sea/ticket';
 import { current, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 
@@ -23,6 +25,7 @@ function meet(seed: number): { g: Game; home: Fleet; battle: Fleet } {
   return { g, home, battle };
 }
 const ukClose = (g: Game): void => { seaBattles(g, 'UK'); };
+const loadOf = (g: Game): Game => loadGame(saveGame(g))!;
 const SURFACE = ['bb', 'cv', 'ca', 'dd'] as const;
 
 describe('with nothing played, the rules are untouched', () => {
@@ -83,6 +86,18 @@ describe('the look-ahead', () => {
     }
     expect(seen).toBeGreaterThan(0);
   });
+
+  it('does not offer an action where one side has no gun ship: the staff settles it by the dice (b438)', () => {
+    const { g, battle } = meet(5);
+    battle.ships = { bb: 0, cv: 2, ca: 0, dd: 0, ss: battle.ships.ss };
+    const met: SeaMeeting[] = [];
+    seaField.fought = (m) => { met.push(m); return undefined; };
+    try { seaBattles(loadOf(g), 'UK'); } finally { seaField.fought = undefined; }
+    expect(met.length).toBe(1); // the rules still fight it
+    expect(seaAhead(g, ukClose)).toEqual([]); // but the field is not offered it
+    expect(fieldFights(plainTicket({ seed: 1, att: [{ name: 'A', nat: 'UK', ships: { cv: 2 } }], def: [{ name: 'B', nat: 'JAP', ships: { cv: 2 } }] }))).toBe(false);
+    expect(fieldFights(plainTicket({ seed: 1, att: [{ name: 'A', nat: 'UK', ships: { cv: 2, dd: 1 } }], def: [{ name: 'B', nat: 'GER', ships: { bb: 1 } }] }))).toBe(true);
+  });
 });
 
 describe('a played action stands in place of the dice', () => {
@@ -110,6 +125,28 @@ describe('a played action stands in place of the dice', () => {
     expect(battle.ships.ss + rep.def[0].sunk.ss).toBe(6);
     // The beaten side makes for port, as after any action.
     expect((rep.won ? battle : home).stance).toBe('port');
+  });
+
+  it('a chase let go (b458, 1) is booked as any other ending: the side that broke off beaten, the losses as they stood', () => {
+    const { g, home, battle } = meet(5);
+    const [a] = seaAhead(g, ukClose);
+    const sim = new SeaSim(a.ticket);
+    sim.ai.att = true; sim.ai.def = true;
+    while (!sim.over && sim.brokenSide === null) sim.step();
+    expect(sim.over).toBeNull();
+    const chaser = sim.brokenSide === 'att' ? 'def' : 'att';
+    const mine = sim.units.filter((u) => u.side === chaser && u.state === 'steady').map((u) => u.id);
+    expect(sim.command({ do: 'hold', units: mine }, chaser)).toBe(true);
+    expect(sim.over!.winner).toBe(chaser);
+    const x = sim.over!.extra as unknown as SeaLosses;
+    closeWith(g, new Map([[a.key, { meeting: a.meeting, fought: foughtOf(sim.over!) }]]), ukClose);
+    const rep = g.seaReports[g.seaReports.length - 1];
+    expect(rep.odds).toBe(sim.over!.R);
+    expect(rep.won).toBe(chaser === 'att');
+    for (const c of SURFACE) {
+      expect(rep.att[0].sunk[c], `Home Fleet ${c}`).toBe(x.sunk[home.id][c]);
+      expect(rep.def[0].sunk[c], `Battle Fleet ${c}`).toBe(x.sunk[battle.id][c]);
+    }
   });
 
   it('handed to the dice part-way, the rules sink as at that ratio, and never fewer than had gone down', () => {
@@ -167,5 +204,28 @@ describe('the hook left in place for a whole session (the 3D game)', () => {
     expect(c.g.seaReports[0].odds).toBe(1.05);
     expect(c.g.seaReports[0].def[0].sunk.dd).toBe(2);
     expect(played.size).toBe(0);
+  });
+});
+
+describe("a navy's carriers grow by its research (sea.json carriers; the design director, 20:56Z)", () => {
+  it("the sea ticket carries Carrier task forces off the nation's record where the campaign keeps research, and no other research; none where it keeps none", () => {
+    const { g } = meet(5);
+    const sides = (): { att?: string[]; def?: string[]; nats: string[]; way: unknown } => {
+      const t = seaAhead(g, ukClose)[0].ticket, s = new SeaSim(t) as any;
+      return { att: t.att.doctrine, def: t.def.doctrine, nats: [t.att.nat, t.def.nat], way: s.carrierWay('att') };
+    };
+    expect(sides().nats).toEqual(['UK', 'GER']);
+    g.flags.open = 1;
+    g.nations.UK.tech = { done: ['carriers', 'radar'], work: [] };
+    expect(sides().att).toBeUndefined();
+    g.nations.UK.tech = { done: ['carriers', 'taskforces', 'radar'], work: [] };
+    const held = sides();
+    expect(held.att).toEqual(['taskforces']);
+    expect(held.def).toBeUndefined();
+    expect(held.way).toEqual(SEA.carriers.path.UK[1]);
+    // Where the campaign keeps no research, none is read, whatever the record holds.
+    g.flags.open = 0;
+    expect(sides().att).toBeUndefined();
+    expect(sides().way).toEqual(SEA.carriers.path.UK[0]);
   });
 });

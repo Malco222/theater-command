@@ -1,9 +1,9 @@
 // The hand-back between the campaign and the field for fleet actions.
 //
 // The rules fight a month's fleet actions while they close a nation's month (turn.ts closePhase, navy.ts seaBattles),
-// in among its air battles and the rest of the month's routine. So a screen that offers the player his fleet actions
+// in among its air battles and the rest of the month's routine. So a screen that offers the player their fleet actions
 // first looks ahead: it closes the month on a copy of the game, with the seam (navy.ts seaField) noting each action
-// as the rules are about to fight it, and writes each one out as a ticket. The player fights the ones he wants; then
+// as the rules are about to fight it, and writes each one out as a ticket. The player fights the ones they want; then
 // the month is closed on the game itself, with the seam handing each played action's result to the rules in place of
 // the dice. An action the look-ahead did not see, or saw with other fleets in it (an action played earlier in the
 // month can change what follows), is settled by the dice as before. With the seam unset nothing here runs at all.
@@ -16,7 +16,7 @@ import { loadGame, saveGame } from '../../campaign/save';
 import type { Game } from '../../campaign/types';
 import type { FieldResult } from '../core/types';
 import type { SeaLosses } from './sim';
-import { seaTicket } from './ticket';
+import { fieldFights, seaTicket } from './ticket';
 import type { SeaTicket } from './types';
 
 /** A fleet action the month will bring: the rules' own meeting, and the ticket the field is built from. */
@@ -28,16 +28,22 @@ export const meetingKey = (m: SeaMeeting): string => `${m.turn}:${m.zone}:${m.na
 const sameFleets = (a: number[], b: number[]): boolean => a.length === b.length && [...a].sort((x, y) => x - y).join() === [...b].sort((x, y) => x - y).join();
 
 /**
- * The fleet actions that closing the month will bring, found on a copy of the game. 'close' closes the month on the
- * copy it is given (for the player's own month, (c) => endHuman(c); for a computer's, (c) => stepAI(c)). Rolls no dice
- * and changes nothing in g.
+ * The fleet actions that closing the month will bring and the field can fight, found on a copy of the game. 'close'
+ * closes the month on the copy it is given (for the player's own month, (c) => endHuman(c); for a computer's,
+ * (c) => stepAI(c)). Rolls no dice and changes nothing in g. An action with no gun ship on one side is left to the
+ * staff: the close settles it by the dice, as every action not played is.
  */
 export function seaAhead(g: Game, close: (copy: Game) => void): SeaAhead[] {
   const copy = loadGame(saveGame(g));
   if (!copy) return [];
   const out: SeaAhead[] = [];
   const before = seaField.fought;
-  seaField.fought = (m) => { out.push({ key: meetingKey(m), meeting: m, ticket: seaTicket(copy, m) }); return undefined; };
+  seaField.fought = (m) => {
+    const ticket = seaTicket(copy, m);
+    // One the field cannot fight (a side with no gun ship) is settled by the staff, not offered (b438).
+    if (fieldFights(ticket)) out.push({ key: meetingKey(m), meeting: m, ticket });
+    return undefined;
+  };
   try { close(copy); } finally { seaField.fought = before; }
   return out;
 }

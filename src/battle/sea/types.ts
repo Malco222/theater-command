@@ -12,6 +12,9 @@ import type { BattleKind, Command, FieldTicket, Side, UnitBase } from '../core/t
 
 /** The classes that fight a fleet action. Submarines do not (navy.ts: "Submarines fight no fleet action"). */
 export type SeaClass = 'bb' | 'cv' | 'ca' | 'dd';
+
+/** How a side's captains fight (ruling 239): a temperament, not a weapon. data/battle/sea.json styles. */
+export type SeaStyle = 'bold' | 'methodical' | 'mass';
 export const SEA_CLASSES: SeaClass[] = ['bb', 'cv', 'ca', 'dd'];
 
 /** Ships by class, as the rules count them (types.ts Ships), without submarines. */
@@ -55,7 +58,9 @@ export type SeaSpeed = 'slow' | 'cruise' | 'flank';
 export type SeaOrder =
   | { kind: 'free' }
   | { kind: 'move'; x: number; y: number; face?: number }
-  | { kind: 'attack'; target: number }
+  /** 'fleet': given to two or more pieces at once, the order sets the fleet's main effort and each piece does its job
+   *  around it; given to one piece, it is that piece's own target (ruling 239). */
+  | { kind: 'attack'; target: number; fleet?: boolean }
   | { kind: 'hold' }
   | { kind: 'leave' };
 
@@ -74,6 +79,12 @@ export interface SeaExtra {
   target: number;
   /** The campaign fleet it came from, by name, for the card ("Home Fleet"). */
   fleet: string;
+  /** A carrier's aircraft still in the fight, from 1 at the start: they are worn as the fleet is (b415). */
+  planes?: number;
+  /** A destroyer piece of its fleet's screen (data/battle/sea.json torp), and the enemy piece it is running in on
+   *  with torpedoes while it makes a run (ruling 239): for the screens and the 3D game. */
+  screen?: boolean;
+  run?: number;
   [k: string]: unknown;
 }
 

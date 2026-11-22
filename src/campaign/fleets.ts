@@ -23,8 +23,10 @@ import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules
 import { dcOf } from './tech';
 import { townName } from './towns';
 import { cityHit, type CityHit } from './repairs';
+import { joinStars, splitStars, starRow, type StarRow } from './stars';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
 import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
+import { seaWhat, seaWhere } from './sea-words';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
 const B = (fleetData as unknown as typeof FLEETS).bombard;
@@ -42,6 +44,8 @@ export interface ShipCard {
   /** What this class is for, in a sentence, and in three words for the face of a card. */
   role: string;
   brief: string;
+  /** Battle stars (b477): the row of the most decorated ship of the class, and the actions behind it. Absent where none has one. */
+  stars?: StarRow;
 }
 
 export interface FleetCard {
@@ -95,12 +99,13 @@ export const gunWeight = (g: Game, f: Fleet): number => gunsRaw(f.ships) * quali
 
 /** What a fleet is doing, in a phrase. */
 export function fleetDoing(g: Game, f: Fleet): string {
-  const sea = g.seas[f.zone]?.name ?? 'the sea';
+  const sea = g.seas[f.zone]?.name;
+  const where = sea ? seaWhere(sea) : 'at sea', what = sea ? seaWhat(sea) : 'the sea';
   if (!atSea(f)) return `In harbour at ${f.port}`;
-  if (f.stance === 'raid') return `Raiding shipping in the ${sea}`;
-  if (f.stance === 'hunt') return `Hunting submarines in the ${sea}`;
+  if (f.stance === 'raid') return `Raiding shipping ${where}`;
+  if (f.stance === 'hunt') return `Hunting submarines ${where}`;
   if (f.stance === 'escort') return `Escorting ${seaRoutes(g).find((r) => r.id === f.lane)?.name ?? 'a shipping lane'}`;
-  return `Patrolling the ${sea}`;
+  return `Patrolling ${what}`;
 }
 
 /** A fleet as both interfaces show it: its admiral, where it is and what it is doing, and its ships as cards. */
@@ -116,7 +121,12 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     port: f.port, base: f.base, zone: f.zone, sea: g.seas[f.zone]?.name ?? '', stance: f.stance,
     order: FLEETS.orders[f.stance].label, lane: f.stance === 'escort' ? f.lane ?? null : null, doing: fleetDoing(g, f),
     ready: f.ready, power: fleetPower(g, f), ships: shipCount(f.ships),
-    cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => ({ cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] })),
+    cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => {
+      const card: ShipCard = { cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] };
+      const stars = starRow(g, f, c);
+      if (stars) card.stars = stars;
+      return card;
+    }),
     guns: gunWeight(g, f), escort: escortW * quality(g, f.nat) * fit(g, f),
     hunters: (f.ships.dd + f.ships.cv * FLEETS.hunt.carrier * deckWorth(g, f)) * quality(g, f.nat) * fit(g, f),
     screen: {
@@ -285,7 +295,7 @@ export function whyNotBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, 
   if (!seaWar(g)) return 'Fleets shell a coast only in the grand campaign.';
   if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
   if (!atSea(f)) return `The ${f.name} is in harbour. Send it to sea off the coast first.`;
-  if (!r.seas.includes(f.zone)) return `${r.name} is not on the ${g.seas[f.zone].name}, where the ${f.name} is.`;
+  if (!r.seas.includes(f.zone)) return `The ${f.name} is ${seaWhere(g.seas[f.zone].name)}, and ${r.name} is not on that sea.`;
   if (!atWar(g, f.nat, r.ctrl)) return `${r.name} is not in enemy hands.`;
   if (gunsRaw(f.ships) < B.least) return `The ${f.name} has too few heavy guns to shell a coast: that is work for battleships and cruisers.`;
   if (f.shelled === g.turn) return `The ${f.name} has already shelled a coast this month.`;
@@ -436,8 +446,8 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   g.shoreReports.push(rep);
   const adj = g.nations[defNat].adj;
   const news = `${what === 'troops'
-    ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
-    : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
+    ? `The ${f.name} shells the ${adj} troops at ${r.name} from ${seaWhat(g.seas[f.zone].name)}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
+    : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from ${seaWhat(g.seas[f.zone].name)}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
     : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`}${afloat ? ` ${keptAfloat(f, kept, 'its')}` : ''}`;
   // The same ships shelling the same shore month after month are one line of the month's summary; a ship lost is news.
   if (shipCount(sunk)) headline(g, 'battle', news, f.nat, r.id, { arm: 'sea', won: defNat, lost: f.nat });
@@ -484,6 +494,8 @@ export function whyNotDetach(g: Game, f: Fleet, take: Partial<Ships>): string | 
 export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): Fleet | null {
   if (whyNotDetach(g, f, take)) return null;
   const s = taken(take);
+  // The ships that go take their battle stars with them: the last of each class (stars.ts).
+  const stars = splitStars(f, s);
   for (const c of CLASSES) f.ships[c] -= s[c];
   const wanted = name?.trim();
   const sq: Fleet = {
@@ -495,6 +507,7 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   if (f.shelled !== undefined) sq.shelled = f.shelled;
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
+  if (stars) sq.stars = stars;
   g.fleets.push(sq);
   // Carriers that go take their aircraft with them.
   moveWings(g, f, sq, s.cv, f.ships.cv + s.cv);
@@ -517,6 +530,8 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   if (whyNotMerge(g, a, b)) return false;
   const na = shipCount(a.ships), nb = shipCount(b.ships);
   b.ready = nb + na > 0 ? (b.ready * nb + a.ready * na) / (nb + na) : b.ready;
+  // Its ships bring their battle stars, in at the back of b's (stars.ts).
+  joinStars(a, b);
   for (const c of CLASSES) { b.ships[c] += a.ships[c]; b.lost[c] += a.lost[c]; }
   if (!b.admiral && a.admiral) b.admiral = a.admiral;
   if (a.shelled !== undefined && (b.shelled ?? -1) < a.shelled) b.shelled = a.shelled;

@@ -137,6 +137,7 @@ import {
 } from '../../../src/campaign/lessons';
 import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
+import { seaWhere } from '../../../src/campaign/sea-words';
 
 let g: Game | null = null;
 /** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
@@ -1366,7 +1367,7 @@ function seaFightsSince(s: Game, since: number): { zones: number[]; notes: strin
   } catch { /* a fight whose losses cannot be read is told without them */ }
   return {
     zones: [...new Set(fresh.map((r) => r.zone))],
-    notes: fresh.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn.has(r.id) ? ` ${lostIn.get(r.id)}` : ''}`),
+    notes: fresh.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn.has(r.id) ? ` ${lostIn.get(r.id)}` : ''}`),
     mine: fresh.some((r) => r.attNat === s.human || r.defNat === s.human),
     sunk,
   };
@@ -3096,7 +3097,7 @@ function endMonth() {
       const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
       steps.push({
         nat: late[0].attNat, taken: [], battles: [], focus: [], seas: zones, sunk: all.sunk.filter((x) => zones.includes(x.zone)), mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
-        note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(' ') || all.notes[0] || '',
+        note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(' ') || all.notes[0] || '',
         view: view(),
       });
     }
@@ -4600,7 +4601,9 @@ function fleetInHand(id: number) {
     return {
       ok: true, grand, id, name: card.name, admiral: card.admiral ? `${card.admiral.name}, level ${card.admiral.level}` : '', doing: card.doing, order: card.order, stance: card.stance,
       ready: card.ready, guns: Math.round(card.guns), screen: card.screen.gap > 0 ? `${cap1(card.screen.word)}: ${card.screen.have} destroyers where ${card.screen.need} are needed.` : '', shelled: card.shelled,
-      cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief })),
+      // Battle stars (b477): the row as the rules count it (stars.ts starRow: most, silver, bronze, each, battles,
+      // words), or null where no ship of the class has one. The 3D card draws it as it comes, without recounting.
+      cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief, stars: c.stars ?? null })),
       seas: (o?.seas ?? []).map((z) => ({ zone: z.zone, name: z.name, surface: z.surface, subs: z.subs, meet: z.meet, hunt: z.hunt, torpedo: z.torpedo, reported: z.reported ?? 0, search: z.search ?? '' })),
       coasts: o?.coasts ?? [], merge: o?.merge ?? [], split: !!o?.split, canOrder: !!o,
       wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
@@ -4630,7 +4633,7 @@ function fleetPage(s: Game, id: number): Page | null {
         buttons.push({ label: `SPLIT OFF ${half}`, act: `fleetsplit:${id}:${c.cls}:${half}`, ok: up && !whyHalf, tip: whyHalf ?? 'Half of them leave as a fleet of their own.' });
       }
     }
-    return { nat: card.nat, title: `${c.count} ${SHIP_WORD[c.cls]?.[c.count === 1 ? 0 : 1] ?? c.label.toLowerCase()}`, lines: [c.role, c.lost ? `${c.lost} lost since the war began.` : ''].filter(Boolean), buttons };
+    return { nat: card.nat, title: `${c.count} ${SHIP_WORD[c.cls]?.[c.count === 1 ? 0 : 1] ?? c.label.toLowerCase()}`, lines: [c.role, c.lost ? `${c.lost} lost since the war began.` : '', c.stars?.words[0] ?? ''].filter(Boolean), buttons };
   });
   const seas: PageRow[] = (o?.seas ?? []).map((z) => {
     const meet = z.meet === 'clear' ? 'A patrol would meet no enemy fleet.' : z.meet === 'battle' ? 'A patrol would bring the enemy fleet to battle.' : 'The enemy there is too strong: a patrol would not face him.';
@@ -5317,7 +5320,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       const name = t?.name ?? fallback;
       if (kind !== 'fleet') return { title: name, who: '' };
       const sea = (s.seas[t?.zone ?? -1]?.name ?? '').replace(/^the /i, '');
-      const cut = name.indexOf(' in the ');
+      // ("Japanese ships in the Coral Sea", "... off the Azores", "... in Hudson Bay": the sea words' where forms.)
+      const cut = name.search(/ (?:in|off) /);
       return { title: sea || name, who: cut > 0 ? name.slice(0, cut) : name };
     };
     const card = {
