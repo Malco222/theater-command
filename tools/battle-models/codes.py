@@ -476,6 +476,10 @@ class Her:
             for q in ((getattr(m, "tally", None) or {}).get(kind) or {}).get("slots", []):
                 r = (m.tally[kind].get("radius") or 0.06)
                 boxes.append((q[0] - r, q[0] + r, q[2] - r, q[2] + r))
+        name = (getattr(m, "tally", None) or {}).get("name") or {}
+        for q in name.get("line", []):                    # (an ace's name over them: acepanel.py)
+            r = 0.6 * name.get("cap", 0.05)
+            boxes.append((q[0] - r, q[0] + r, q[2] - r, q[2] + r))
         self.tally = boxes and (min(b[0] for b in boxes), max(b[1] for b in boxes), min(b[2] for b in boxes), max(b[3] for b in boxes))
 
     def side_point(self, x, z, w):

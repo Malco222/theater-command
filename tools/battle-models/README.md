@@ -624,16 +624,28 @@ flown, which of them she led). Past the last slot nothing more is painted.
 | `rudder` | the port face of the rudder (part `rudder`, so it turns with it); fighters Germany flies | `KILL-BAR`: a white bar a kill |
 | `missions` | the port side under the cockpit, rows of twenty (sixteen on a medium bomber, twelve on a two-seater) | `BOMB`: a small yellow bomb standing on its nose |
 | `lead` | slot k stands over mission k | `LEAD`: a small yellow star, painted if she led that mission |
+| `name` | a fighter's: one line under the port cockpit sill, where her first row of kills was; her `kills` hang beneath it | his rank and name (below) |
 
 Who wears what is the art director's ruling (`habit` in the file; a generic machine says "by nation"): Germany's
 fighters wear `rudder` bars; the Soviet Union's wear a small red star a kill in the `kills` slots (`KILL-STAR`);
 every other nation's fighters wear the victims' marks there. Bombers of Britain and America wear `missions`, `lead`
 and their gunners' `kills`; other nations' bombers wear nothing (their slots are in the file all the same). A victim's
 mark is never a party emblem: Germany's is the plain cross, Japan's the red disc, Italy's a small green, white and
-red flag, France's her roundel, any other nation's the marking the game draws on its own aircraft. No names, nose art
-or badges, and nothing copied from a real machine. A mark is about a hand high, matt and a little worn: it is read
+red flag, France's her roundel, any other nation's the marking the game draws on its own aircraft. No names (but an
+ace's own, below), nose art or badges, and nothing copied from a real machine. A mark is about a hand high, matt and a little worn: it is read
 only at the nearest camera. For the pictures `marks.record()` draws them: `airlook.py B17 <out> nose,record
 record='{"kills": [["GER", 6]], "missions": 32, "lead": [12, 19]}'`; `Plane(..., record=...)` in a clip.
+
+**An ace's name** (Brian's named aces, release 2, 2026-11-22; `acepanel.py`). Every fighter's `tally` has `name`: one
+line where her first row of kills was, her rows of kills lower by the line and a gap (about 8 cm of her skin; the
+Spitfire's rows are nine long, her number coming forward over a tenth). `line` is points along the middle of the
+capitals' height, every 0.1 m from the line's front (`at`) to its back, each `x, y, z, nx, ny, nz` like a slot;
+`long` is its length, `cap` the capitals' height (0.05 m; smaller down to `cap_min` 0.035 for a long name, never above
+`cap_max` 0.07), `up` which way is up on her side. It reads from the front, as her kills do. Plain block capitals,
+one colour: black where the paint under the line is light (L* 50 or more), else off-white, as a bomber's record
+(`ink`); the rank short as his nation wrote it (F/LT, OBLT., TEN., LT., ST. LT.), then his initial and surname. A
+pilot's name on his machine was mostly an American habit; for every nation's ace it is the game's convention, kept
+small and plain. For the pictures, `record='{"kills": [["GER", 14]], "name": "F/LT T. HARLAND"}'`.
 
 Paints added after the game's own: `torn` (the inside of a torn-off end), `blur` (the disc of a turning airscrew),
 and the fit-out's (`inside`, `leather`, `skin`, `suit`, `vest`, `goggles`, `exhaust`, `gunmetal`, `patch`, `lens`,

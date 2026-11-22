@@ -12,6 +12,7 @@ battle should draw that paint clear (the file says how clear under `clear`), and
 Everything is in the model's axes (y to port). The game's numbers have y to the right: `port()` turns one to the other.
 """
 import math
+import crewfit
 import zlib
 
 from mathutils import Matrix, Vector
@@ -504,9 +505,17 @@ def cockpit(m, f, s, G, hull):
     first = True
     for hood, x, y, face in seats_of(f, s, G):
         z = body_top(hood, x, -y) - 0.118 - 0.03 - SEAT_DROP.get(f.name, 0.0)
+        fits = single and face == 0.0 and crewfit.wanted(f)    # (a fighter's pilot: kept inside her skin, crewfit.py)
+        if fits:
+            top = crewfit.skin_top(f, hull)
+            low = crewfit.drop(hull, x, z, top, hood)
+            z -= low
+            n0 = len(m.verts)
         at = figure(m, (x, y, z), face, vest=single)
         f.seated = getattr(f, "seated", []) + [(Vector((x, y, z)), face, at)]             # (for rear_gunner: a man facing aft at a gun)
         if not m.fine:
+            if fits:
+                crewfit.squash(m, hull, n0, top, hood=hood)
             continue
         m.box(at(-0.2, 0, -0.3), (0.05, 0.42, 0.36), "inside", yaw=face)                    # the back of his seat
         if single and face == 0.0 and s.get("canopy"):
@@ -526,6 +535,10 @@ def cockpit(m, f, s, G, hull):
                 m.ball((x + 0.56, 0.0, sill), (0.16, min(wide, 0.2), 0.075), "gunmetal", 12, 6)   # the coaming over his instruments
                 m.box((x + 0.43, 0.0, z - 0.03), (0.06, 0.05, 0.08), "gunmetal")            # his sight, and its glass
                 m.box((x + 0.46, 0.0, z + 0.04), (0.008, 0.075, 0.085), "lens", pitch=-32.0)
+        if fits:
+            moved = crewfit.squash(m, hull, n0, top, 0.04 if getattr(f, "cockpit", None) else crewfit.SPARE, hood)
+            if low or moved:
+                print(f"crewfit {f.name}: {low:.3f} lower, {moved:.3f} drawn in", flush=True)
         first = False
 
 

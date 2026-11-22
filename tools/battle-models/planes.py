@@ -1849,7 +1849,7 @@ def schemes_of(G, name, s, paints, ink):
 # star over a mission she led. The file says where each mark goes (a slot: a place on her port side and the way her
 # skin faces there, in the game's axes); the game paints as many as her record in the campaign has earned, first slot
 # first. Rows are level and read from the front.
-# The art director's rulings (03:26 UTC that day): each nation's own habit, never a party emblem, no names, nose art or
+# The art director's rulings (03:26 UTC that day): each nation's own habit, never a party emblem, no names (but an ace's own: acepanel.py, 2026-11-22), nose art or
 # badges, nothing copied from any real machine. A victim's mark is the plain marking of the nation that lost the
 # machine, in small (Italy a little green, white and red flag; France her roundel). Germany's fighters carry white bars
 # on the rudder instead; the Soviet Union's, small red stars under the cockpit. Bombers of Britain and America carry
@@ -1892,6 +1892,9 @@ def tally_of(name, s, hull, role, G, fins, fine=True, model=None):
         return out
     n_kill, n_miss, per_row, r_kill, r_bomb = TALLY[role]
     per_row = TALLY_ROW.get(name, per_row)
+    if role == "fighter":
+        import acepanel
+        per_row = acepanel.ROW.get(name, per_row)
     hoods = s.get("hoods", [])
     hood = G["Body"](hoods[0][0], 2.0) if hoods else None
     nation = fitout.nation(s)
@@ -1946,6 +1949,8 @@ def tally_of(name, s, hull, role, G, fins, fine=True, model=None):
     out = {"side": "port", "nation": nation, "habit": habit(nation, role) if nation != "*" else "by nation",
            "note": "a slot is a place in the game's axes and the way the skin faces there (x, y, z, nx, ny, nz); fill each list in order"}
     z = top
+    if role == "fighter":                                  # (an ace's name: one line where her first row of kills was, the rows beneath it; acepanel.py)
+        out["name"], z = acepanel.line(name, x0, xs_kill[-1] - r_kill, top, side, down)
     bombs, stars = [], []
     for _ in range(n_miss):
         z_star = down(z, LEAD + 0.01)

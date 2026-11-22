@@ -352,6 +352,9 @@ def record(model, rec):
         flown, led = int(rec.get("missions", 0)), set(rec.get("lead", []))
         fill(t["missions"], ["BOMB"] * flown)
         fill(t["lead"], ["LEAD" if (k + 1) in led and k < flown else None for k in range(len(t["lead"]["slots"]))])
+    if rec.get("name") and "name" in t:                # (an ace's name over his kills: acepanel.py)
+        import acepanel
+        out += acepanel.marks(t["name"], rec["name"], rec.get("ink") or acepanel.ink_under(model, t["name"]))
     return out
 
 
@@ -406,7 +409,7 @@ def put(model, ob, arm, rec=None, own=None, fin=None):
             if "finish" in mk:                                                   # (a bomber's panel: the marks for the finish under it)
                 drawn = bomb_mark(mk["finish"]) if tag == "BOMB" else kill_mark(tag, mk["finish"])
             else:
-                drawn = flag(mk, fin) if tag == "*FIN" else layers(tag) if isinstance(tag, list) else shapes(tag)
+                drawn = flag(mk, fin) if tag == "*FIN" else layers(tag) if isinstance(tag, list) else mk["drawn"] if "drawn" in mk else shapes(tag)
             for layer, polys in enumerate(drawn):
                 for col, poly in polys:
                     # (cut small before it is laid on her: a big flat piece dips under a round fuselage in its middle,
