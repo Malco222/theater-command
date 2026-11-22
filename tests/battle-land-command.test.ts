@@ -143,6 +143,23 @@ describe('orders by radio', () => {
     expect(v.orderAt).toBeCloseTo(b.t + LAND.radio.delay * LAND.radio.cut, 6);
   });
 
+  it('the wait counts from the time he gave it as shown (at), never from before it, and never ahead of the battle', () => {
+    const b = field();
+    b.ai.att = false; b.radio = true;
+    run(b, 10);
+    const [u, v, w] = foot(b);
+    // Given 2 s ago as the picture showed it: it lands 3 s from now.
+    expect(b.command({ do: 'move', units: [u.id], x: u.x + 50, y: u.y + 50, at: b.t - 2 } as never, 'att')).toBe(true);
+    expect(u.orderAt).toBeCloseTo(b.t - 2 + LAND.radio.delay, 6);
+    // An 'at' ahead of the battle counts from now.
+    b.command({ do: 'move', units: [v.id], x: v.x + 50, y: v.y + 50, at: b.t + 30 } as never, 'att');
+    expect(v.orderAt).toBeCloseTo(b.t + LAND.radio.delay, 6);
+    // Given longer ago than the wait: carried out at once.
+    b.command({ do: 'move', units: [w.id], x: w.x + 50, y: w.y + 50, at: b.t - LAND.radio.delay - 1 } as never, 'att');
+    expect(w.orderAt).toBeUndefined();
+    expect(w.order?.kind).toBe('move');
+  });
+
   it('before the clock runs (the setup step) his orders are given at once', () => {
     const b = field();
     b.ai.att = false; b.radio = true;

@@ -33,7 +33,8 @@
 //                                   true }: a block he orders is his (view units carry taken: true) and his staff fights the
 //                                   rest ({ do: 'land:staff', units } hands blocks back); { radio: true }: his orders reach a
 //                                   block a few seconds later, longer when its headquarters is hit (units carry orderIn, the
-//                                   seconds left). A 'move' with run: true goes at the double. Off unless asked
+//                                   seconds left); an order may carry at, the battle time he gave it as shown, and the wait
+//                                   counts from there (never before it). A 'move' with run: true goes at the double. Off unless asked
 //   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
 //                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
 //                                   red ghost with the words beside it). Moves nothing (release 2)
