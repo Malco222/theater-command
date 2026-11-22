@@ -42,6 +42,7 @@ interface BookRow { nat: string; kind: string; what: string; targets: string; ti
 interface RepairRow { target: string; perMonth: number; dispersed?: number }
 
 export const AC = data as unknown as {
+  on?: boolean;
   sky: { months: number; keep: number; knocked: number; idle: number };
   stock: { most: number; least: number };
   use: { night: string; day: string; oilfield: string; oil: string };
@@ -72,7 +73,15 @@ export function recordField(g: Game, region: number): number {
   return out;
 }
 
-/** Turns the air campaigns on or off (a new game, or the test kitchen). */
+/**
+ * True when a new grand campaign opens with air campaigns flown (aircampaigns.json `on`; on as shipped: the design
+ * director, 22 November 12:28Z, b623 and b636). The interfaces read it as a grand campaign starts, right after
+ * startOpen, where the war runners set g.flags.ac with TC_AC=1. Scenarios and history campaigns never read it, and a
+ * saved game keeps the switch it was started with: one saved without the flag plays on with air campaigns off.
+ */
+export const airCampaignsShipped = (): boolean => AC.on === true;
+
+/** Turns the air campaigns on or off (a new grand campaign as shipped, or the test kitchen). The bridge calls it by name. */
 export function setAirCampaigns(g: Game, on: boolean): void {
   if (on) g.flags.ac = 1;
   else delete g.flags.ac;

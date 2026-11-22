@@ -2052,6 +2052,13 @@ export function setCityDamage(g: Game, on: boolean): boolean {
   return damageRules(g) === on;
 }
 
+// ---- Air campaigns (aircampaigns.ts; the grand campaign's air war, ruling 236.2) ---------------------------------
+
+// On in a new grand campaign as shipped (aircampaigns.json `on`; the design director, 22 November 12:28Z, b623 and
+// b636). The browser's newGame and the campaign bridge's start turn it on right after startOpen, where the war runners
+// set g.flags.ac with TC_AC=1. The bridge asks for both by name, so it builds on rules without the switch too.
+export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
+
 /** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
 export function cityDamage(g: Game, region: number): RepairView | null {
   return damageRules(g) ? repairView(g, region, g.human) : null;
