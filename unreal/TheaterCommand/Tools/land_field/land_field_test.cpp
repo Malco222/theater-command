@@ -988,7 +988,7 @@ int main(int Argc, char** Argv)
 		std::string Line;
 		for (const auto& Kv : Area) Line += Kv.first + Fmt(" %.0f%%, ", 100.0 * Kv.second / std::max(1.0, All));
 		std::printf("  crops by ground: %sarable %.0f%%, grass %.0f%%\n", Line.c_str(), 100.0 * Arable / std::max(1.0, All), 100.0 * Grass / std::max(1.0, All));
-		if (Arable > 0.0 && !F.Steppe.bOn)
+		if (Arable > 0.0 && !F.Steppe.bOn && !bRegion) // Normandy's July only: a region's harvest keeps its own calendar
 			Check(Area["stubble"] <= 0.035 * Arable, "mid-July: the harvest barely begun (stubble 3% of the arable at most)", Fmt("stubble %.1f%% of the arable", 100.0 * Area["stubble"] / Arable));
 	}
 	std::printf("  triangles: near %zu, far %zu, built %zu, ring %zu; instances %zu\n", T.NearTris, T.FarTris, T.BuiltTris, T.RingTris, T.Instances);
