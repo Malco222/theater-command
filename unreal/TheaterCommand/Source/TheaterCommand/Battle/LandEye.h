@@ -4,6 +4,7 @@
 #include "Battle/LandPlay.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -125,6 +126,13 @@ namespace LandEye
 		 * frame of the camera's passes about 2 ms (the production lead's plan for battles of 8,000 men, 22 November). An
 		 * asked shot, and a shot whose man has gone into hiding, are chosen at once. 0: a cut's choice all in one frame. */
 		int ChooseSteps = 3000;
+		/** And by the clock: past ChooseMs milliseconds of the camera's frame, the choice goes on next frame too, whatever
+		 * the steps (0: steps only). Brian's Mac read a step at some 5 to 8 microseconds against the cloud's 1, so 3,000
+		 * steps a frame were 14 to 27 ms there: LandCamera among a long frame's three heaviest jobs some 50 times a battle
+		 * (the lit Normandy trace of 22 November). The test keeps it 0, so its runs are the same on any machine. Whatever
+		 * the clock, a frame goes ChooseLeast steps into the choice, so it always goes on. */
+		double ChooseMs = 3.0;
+		int ChooseLeast = 250;
 		/** The hand-held wobble's strength (0 off, 1 as made). */
 		double Hand = 1.0;
 		/** Brian's feel for the ground battle (22 November: a war film's fury with a squad's-eye realism, the feel only,
@@ -227,9 +235,9 @@ namespace LandEye
 		 * in shallow focus; the distance follows the subject on a critically damped spring of FocusPull a second (a focus
 		 * puller, not a snap), and never past FocusMost metres. FocusFar 0: never, and nothing asked for it a frame. (The
 		 * film is mostly close shots: at 40 m or 80 m alike some 47 of 50 shots are in it, 94-95% of the fight's frames, so
-		 * the Mac would pay for the pass nearly all fight long. HELD at 0 by the production lead, 22 Nov 21:22Z, while
-		 * frame time comes first; 40 is the tried value.) */
-		double FocusFar = 0.0, FocusPull = 5.0, FocusMost = 300.0;
+		 * the Mac pays for the pass nearly all fight long. Held at 0 from 21:22Z, on again at 23:10Z (Brian's "full speed
+		 * ahead on graphics"): it ships on only if the Mac's A/B, -TheaterLandFocusLive=0 against 1, holds 45 fps.) */
+		double FocusFar = 40.0, FocusPull = 5.0, FocusMost = 300.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -710,6 +718,10 @@ namespace LandEye
 		bool bChoiceMiddle = false;
 		double ChoiceBattle = 0.0, ChoiceReal = 0.0;
 		bool ScanChoice(long Start, long Budget);
+		/** The frame's share of a choice spent: its steps (Budget past Start), or the clock (Settings::ChooseMs since the
+		 * frame's Update began), never on a choice made at once. */
+		std::chrono::steady_clock::time_point FrameClock;
+		bool ShareSpent(long Start, long Budget) const;
 		void ChoiceOptions(double Battle);
 		/** The shot on the screen, kept while a choice's tries place others in its fields, and put back. */
 		struct ShotKept
