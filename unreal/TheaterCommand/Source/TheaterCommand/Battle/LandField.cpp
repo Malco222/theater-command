@@ -5100,6 +5100,16 @@ namespace LandField
 			}
 			return;
 		}
+		if (Rg && !Rg->FarRows())
+		{
+			// (a region's plain has no hedgerows to the horizon unless it asks: the desert's serir, Italy's terraces)
+			for (Tile& T : RingList)
+			{
+				Bounds(T);
+				Count.RingTris += T.Near.Tris();
+			}
+			return;
+		}
 		// The near ring's hedgerows: the parcels' edges traced on an 8 m raster a kilometre out from the tiles.
 		constexpr double HR = 8.0, Reach = 1000.0;
 		const double HX0 = IX0 - Reach, HY0 = IY0 - Reach;

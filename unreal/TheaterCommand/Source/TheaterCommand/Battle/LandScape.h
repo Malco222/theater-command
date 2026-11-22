@@ -70,7 +70,10 @@ namespace LandScape
 		double HazeOvercast[3] = { 0.50, 0.52, 0.54 };
 		double HazeDensity = 0.0069;                 // at the field's ground (LandBattle's HazeDensity)
 		double SkyDust = 0.6;                        // LandBattle's SkyDust
-		double Grade[4] = { 0.45, 0.48, 1.0, 1.02 };
+		double Grade[4] = { 0.45, 0.48, 1.0, 1.02 }; // the colour kept in the darks and the middles; red and blue gain
+		double Stops = -0.5;                         // exposure (LandBattle's half stop down)
+		double Contrast = 1.42;                      // BattleLook's
+		double Toe = 0.55;                           // the film's toe (Unreal's own)
 		double KeyKelvin = 0.0;                      // 0: the battle's own
 	};
 	Air AirOf(Look L, double Snow);
@@ -271,6 +274,9 @@ namespace LandScape
 		virtual double FarTilled() const { return 0.36; }
 		/** Woods beyond the band where the country's slow noise passes this (-0.5 everywhere .. 0.6 nowhere). */
 		virtual double WoodsEdge() const { return 0.27; }
+		/** Whether the far ring carries the bocage's tree-lined field edges for its first kilometre (dark ridges with
+		 * crowns standing up from them, the layers to the horizon): France 1940's poplar rows might; the desert not. */
+		virtual bool FarRows() const { return false; }
 		/** A parcel's crop (the region's own number, 0 to 63) for its kind (KOpen, KField, KRough) and a number U. */
 		virtual int CropOf(int Kind, double U) const = 0;
 		/** Its word for sheets and tests. */
