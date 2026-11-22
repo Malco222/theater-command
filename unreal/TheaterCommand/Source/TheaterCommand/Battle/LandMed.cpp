@@ -17,8 +17,14 @@
  * dead straw grass, white dust), the Winter Line's and Cassino's winter (brown mud, wet green-brown grass, bare vines,
  * snow on the high ridges), the spring's green corn, the autumn's turning vines. In the south (Sicily, below 38.6
  * degrees) the recording's woods are old olive groves and its open ground ochre fallow with macchia in clumps, as the
- * art director's dry south set (battle-models/med/sets/drysouth.json); on the mainland its woods are holm oak.
- * Kit: battle-models/med.
+ * art director's dry south set (battle-models/med/sets/drysouth.json); on the mainland its woods are holm oak and the
+ * deciduous oaks, bare in the winter. The art director's first read (22 November) mended: small fields of every kind side
+ * by side (stubble with its stooks, red ploughland, fallow with its thistle and fennel, olives and almonds in rows),
+ * prickly pear and agave at the field edges in the south, the walls laid with the kit's dry stone, the straw stacks round
+ * their poles, the ground's own colour drifting lighter and darker, warmer and cooler, softly from some 14 to 45 m (the
+ * general's camera, high and oblique, sees the field without its clutter), the winter's wheat an olive green over the
+ * wet earth, rain in the plough's furrows, snow on the heights.
+ * Kit: battle-models/med; the prickly pear, the agave, the stook, the bare tree and the straw stack built here.
  */
 namespace LandScape
 {
@@ -33,7 +39,8 @@ namespace LandScape
 			Grain = 2,  // wheat: green in winter, ripe in May and June, stubble after the harvest, ploughed in the autumn
 			Fallow = 3, // grazing and fallow: grass, thistles, stones
 			Maquis = 4, // the rough: macchia scrub, garrigue and limestone
-			Plough = 5  // bare ploughed earth
+			Plough = 5, // bare ploughed earth (the summer's worked fallow, the autumn's and the winter's ploughland)
+			Almond = 6  // almonds in their rows (the south's)
 		};
 
 		enum Slot : int
@@ -47,7 +54,14 @@ namespace LandScape
 			KBoulder = 6,
 			KHouseStone = 7,
 			KPole = 8,
-			KSangar = 9
+			KSangar = 9,
+			KWall = 10,  // the kit's dry-stone wall, laid along the walls' lines
+			KPear = 11,  // prickly pear (built here)
+			KAgave = 12, // agave (built here)
+			KStook = 13, // the summer's stooks of wheat sheaves (built here) ...
+			KBare = 13,  // ... and the rest of the year the bare broadleaf tree in the same slot
+			KStack = 14, // a straw stack round its pole (built here)
+			KSpike = 15  // an agave in flower, its dry pole (built here)
 		};
 
 		enum Clut : int
@@ -107,6 +121,74 @@ namespace LandScape
 			return std::hypot(PX - AX - T * DX, PY - AY - T * DY);
 		}
 
+		/** A tapered tube from one ring to another (a trunk, a limb, a sheaf, a pole), Sides round, its ends open, its
+		 * faces out. */
+		void Tube(Writer& W, double X0, double Y0, double Z0, double R0, double X1, double Y1, double Z1, double R1, int Sides, const Tone& C0, const Tone& C1)
+		{
+			const double AX = X1 - X0, AY = Y1 - Y0, AZ = Z1 - Z0, AL = std::sqrt(AX * AX + AY * AY + AZ * AZ);
+			if (AL < 1e-6 || Sides < 3) return;
+			const double UX = AX / AL, UY = AY / AL, UZ = AZ / AL;
+			// two axes square to it: P level, Q = U x P
+			double PX = -UY, PY = UX;
+			const double PL = std::hypot(PX, PY);
+			if (PL < 1e-6)
+			{
+				PX = 1.0;
+				PY = 0.0;
+			}
+			else
+			{
+				PX /= PL;
+				PY /= PL;
+			}
+			const double QX = -UZ * PY, QY = UZ * PX, QZ = UX * PY - UY * PX;
+			const uint32_t First = static_cast<uint32_t>(W.M.Colours.size());
+			for (int K = 0; K < Sides; ++K)
+			{
+				const double A = 2.0 * Pi * K / Sides, CA = std::cos(A), SA = std::sin(A);
+				const double NX = CA * PX + SA * QX, NY = CA * PY + SA * QY, NZ = SA * QZ;
+				W.Vert(X0 + R0 * NX, Y0 + R0 * NY, Z0 + R0 * NZ, NX, NY, NZ, C0);
+				W.Vert(X1 + R1 * NX, Y1 + R1 * NY, Z1 + R1 * NZ, NX, NY, NZ, C1);
+			}
+			for (int K = 0; K < Sides; ++K)
+			{
+				const uint32_t A0 = First + 2 * K, A1 = A0 + 1, B0 = First + 2 * ((K + 1) % Sides), B1 = B0 + 1;
+				W.Tri(A0, B0, B1);
+				W.Tri(A0, B1, A1);
+			}
+		}
+
+		/** A flat oval pad (the prickly pear's): its middle, its long axis A and its short axis B (unit, square to each
+		 * other), its half length and half width; both faces, a little domed. */
+		void Pad(Writer& W, const double C[3], const double A[3], const double B[3], double Long, double Wide, const Tone& Col)
+		{
+			const double N[3] = { A[1] * B[2] - A[2] * B[1], A[2] * B[0] - A[0] * B[2], A[0] * B[1] - A[1] * B[0] };
+			constexpr int Rim = 8;
+			for (int Face = 0; Face < 2; ++Face)
+			{
+				const double S = Face == 0 ? 1.0 : -1.0;
+				const uint32_t Mid = W.Vert(C[0] + 0.025 * S * N[0], C[1] + 0.025 * S * N[1], C[2] + 0.025 * S * N[2], S * N[0], S * N[1], S * N[2], Col);
+				for (int K = 0; K < Rim; ++K)
+				{
+					const double T = 2.0 * Pi * K / Rim, CT = std::cos(T), ST = std::sin(T);
+					double P[3], Nr[3];
+					for (int I = 0; I < 3; ++I)
+					{
+						P[I] = C[I] + CT * Long * A[I] + ST * Wide * B[I];
+						Nr[I] = S * N[I] + 0.45 * (CT * A[I] + ST * B[I]);
+					}
+					const double L = std::sqrt(Nr[0] * Nr[0] + Nr[1] * Nr[1] + Nr[2] * Nr[2]);
+					W.Vert(P[0], P[1], P[2], Nr[0] / L, Nr[1] / L, Nr[2] / L, Varied(Col, 0.94, 0.0));
+				}
+				for (int K = 0; K < Rim; ++K)
+				{
+					const uint32_t P0 = Mid + 1 + K, P1 = Mid + 1 + (K + 1) % Rim;
+					if (Face == 0) W.Tri(Mid, P0, P1);
+					else W.Tri(Mid, P1, P0);
+				}
+			}
+		}
+
 		class Med final : public Region
 		{
 		public:
@@ -130,8 +212,25 @@ namespace LandScape
 				Turn = TurnOf[M];
 				Stage = StageOf[M];
 				bSouth = F.Lat < 38.6;
+				// (the prickly pear and the agave at the field edges and round the farms: Sicily's, the far south's)
+				bPears = F.Lat < 40.9;
 				// (the far ridges white in the winter months: Monte Cairo over Cassino)
 				bSnowCaps = (M <= 2 || M == 11) && F.Lat > 39.5;
+				Dim = bSouth ? 1.0 : 1.0 - 0.3 * Wet;
+
+				// The ground's broad mottle and the soil's red patches read once onto an 8 m grid over the field and 400 m
+				// round it (the paint asks them at every point of every tile: four noises each is too dear).
+				MNX = static_cast<int>((FW + 2.0 * MotMargin) / MotStep) + 2;
+				MNY = static_cast<int>((FH + 2.0 * MotMargin) / MotStep) + 2;
+				MotGrid.resize(4 * static_cast<size_t>(MNX) * static_cast<size_t>(MNY));
+				for (int J = 0; J < MNY; ++J)
+					for (int I = 0; I < MNX; ++I)
+					{
+						float* P = &MotGrid[4 * (static_cast<size_t>(J) * static_cast<size_t>(MNX) + static_cast<size_t>(I))];
+						double Mo[4];
+						MotRaw(-MotMargin + I * MotStep, -MotMargin + J * MotStep, Mo);
+						for (int C = 0; C < 4; ++C) P[C] = static_cast<float>(Mo[C]);
+					}
 
 				// The hill town's crest: beyond the field, behind the rules' town as the attack looks at it.
 				const double TX = F.bTown ? F.TownX : 0.5 * FW;
@@ -188,7 +287,10 @@ namespace LandScape
 					const double F = Fbm(X, Y, 2300.0, 2, Seed ^ 0x6B1);
 					const double Ridge = 1.0 - std::fabs(Noise(X / 1600.0 + 0.37, Y / 1600.0 - 0.21, Seed ^ 0x6B2));
 					const double Mount = 120.0 + 130.0 * F + 110.0 * Ridge * Ridge;
-					E += std::max(40.0, Mount) * Smooth(300.0, 2700.0, D);
+					// (on the mainland the Apennines stand behind, their ridges some 800 m and more four kilometres out:
+					// Monte Cairo's over Cassino)
+					const double Range = bSouth ? 1.0 : 1.0 + 1.5 * Smooth(2000.0, 4600.0, D) * (0.55 + 0.45 * Ridge);
+					E += std::max(40.0, Mount) * Range * Smooth(300.0, 2700.0, D);
 				}
 				return E;
 			}
@@ -259,15 +361,23 @@ namespace LandScape
 
 			// ------------------------------------------------------------------ the parcels
 
-			double PlotMin() const override { return 14000.0; }
-			double PlotMax() const override { return 36000.0; }
+			// (small fields, some 50 to 100 m: the art director's dry south set's 30 to 90)
+			double PlotMin() const override { return 9000.0; }
+			double PlotMax() const override { return 17000.0; }
 			double FarTilled() const override { return 0.55; }
 			double WoodsEdge() const override { return 0.32; }
 			int CropOf(int Kind, double U) const override
 			{
 				if (Kind == KRough) return Maquis;
-				if (Kind == KField) return U < 0.34 ? Olive : U < 0.52 ? Vine : U < 0.88 ? Grain : Plough;
-				return U < 0.6 ? Fallow : U < 0.76 ? Olive : U < 0.9 ? Grain : Maquis;
+				// (every kind side by side, so no view is one fallow: the wheat, its stubble in the summer, the most; the
+				// ploughland, the fallow, the olives; the south's almonds, the mainland's vines)
+				if (bSouth)
+				{
+					if (Kind == KField) return U < 0.14 ? Olive : U < 0.22 ? Vine : U < 0.29 ? Almond : U < 0.72 ? Grain : U < 0.94 ? Plough : Fallow;
+					return U < 0.3 ? Fallow : U < 0.6 ? Grain : U < 0.76 ? Plough : U < 0.86 ? Olive : U < 0.93 ? Almond : Maquis;
+				}
+				if (Kind == KField) return U < 0.18 ? Olive : U < 0.34 ? Vine : U < 0.72 ? Grain : U < 0.94 ? Plough : Fallow;
+				return U < 0.34 ? Fallow : U < 0.6 ? Grain : U < 0.76 ? Plough : U < 0.88 ? Olive : Maquis;
 			}
 			const char* CropWord(int C) const override
 			{
@@ -275,97 +385,180 @@ namespace LandScape
 				{
 				case Olive: return "olives";
 				case Vine: return "vines";
-				// (the harvested wheat is not the bocage's "stubble": the test reads that word as Normandy's mid-July, its
-				// harvest barely begun; Sicily's was in by the end of June)
-				case Grain: return Stage == 2 ? "wheat stubble" : Stage == 3 ? "ploughed" : "wheat";
+				case Grain: return Stage == 2 ? "stubble" : Stage == 3 ? "ploughed" : "wheat";
 				case Fallow: return "fallow";
 				case Maquis: return "maquis";
 				case Plough: return "ploughed";
+				case Almond: return "almonds";
 				default: return "";
 				}
 			}
 
 			// ------------------------------------------------------------------ colours
 
+			/** The ground's own texture, all soft, each noise bent by a broader one and by the others so no lattice shows
+			 * (-1..1 each): M its patches some 45 m across, which the crops' grounds read; Mid drifts lighter and darker
+			 * some 26 m across, Fine some 14 m (gently: from above, on the map, it reads as grain); Warm drifts warmer and cooler some 36 m across. Nothing finer:
+			 * the near ground's points are 4 m apart, and LandField's own mottle (N2, 7 m) draws on them as a dither (the
+			 * art director's read). From the general's camera, high and oblique, the clutter has dropped out and this is
+			 * the breakup the field shows (the far ground, its points 17 m apart, keeps M, Mid and Warm). */
+			struct Mottle
+			{
+				double M = 0.0, Mid = 0.0, Fine = 0.0, Warm = 0.0;
+			};
+			/** M, Mid, Warm and the soil's red noise at a place, worked out (the grid's points; beyond it). */
+			void MotRaw(double X, double Y, double Out[4]) const
+			{
+				// (bent by a broad noise of their own, some 90 m)
+				const double Bend = Noise(X / 90.0 + 3.1, Y / 90.0 - 1.7, Seed ^ 0x9A6);
+				Out[0] = Noise((X + 14.0 * Bend) / 46.0, (Y - 10.0 * Bend) / 46.0, Seed ^ 0x9A1);
+				// (Mid on a lattice turned off the field's square, 37 degrees)
+				const double U = 0.8 * X - 0.6 * Y, V = 0.6 * X + 0.8 * Y;
+				Out[1] = Noise((V + 8.0 * Out[0]) / 26.0, (9.0 * Bend - U) / 26.0, Seed ^ 0x9A5);
+				Out[2] = Noise((X + 9.0 * Bend) / 36.0, (Y + 6.0 * Out[0]) / 36.0, Seed ^ 0x9A4);
+				Out[3] = Noise(X / 380.0, Y / 380.0, Seed ^ 0x501);
+			}
+			/** The grid's channel C here, read between its points (worked out beyond it). */
+			double MotRead(double X, double Y, int C) const
+			{
+				const double U = (X + MotMargin) / MotStep, V = (Y + MotMargin) / MotStep;
+				if (!(U >= 0.0 && V >= 0.0 && U < MNX - 1.0 && V < MNY - 1.0))
+				{
+					double Mo[4];
+					MotRaw(X, Y, Mo);
+					return Mo[C];
+				}
+				const int I = static_cast<int>(U), J = static_cast<int>(V);
+				const double FU = U - I, FV = V - J;
+				const size_t K = 4 * (static_cast<size_t>(J) * static_cast<size_t>(MNX) + static_cast<size_t>(I)) + static_cast<size_t>(C);
+				const size_t Row = 4 * static_cast<size_t>(MNX);
+				const double A = MotGrid[K], B = MotGrid[K + 4], Cc = MotGrid[K + Row], D = MotGrid[K + Row + 4];
+				return Lerp(Lerp(A, B, FU), Lerp(Cc, D, FU), FV);
+			}
+			Mottle MottleAt(double X, double Y, double N1) const
+			{
+				Mottle Out;
+				const double U = (X + MotMargin) / MotStep, V = (Y + MotMargin) / MotStep;
+				if (U >= 0.0 && V >= 0.0 && U < MNX - 1.0 && V < MNY - 1.0)
+				{
+					const int I = static_cast<int>(U), J = static_cast<int>(V);
+					const double FU = U - I, FV = V - J;
+					const size_t K = 4 * (static_cast<size_t>(J) * static_cast<size_t>(MNX) + static_cast<size_t>(I));
+					const size_t Row = 4 * static_cast<size_t>(MNX);
+					auto Read = [&](size_t C) { return Lerp(Lerp(MotGrid[K + C], MotGrid[K + 4 + C], FU), Lerp(MotGrid[K + Row + C], MotGrid[K + Row + 4 + C], FU), FV); };
+					Out.M = Read(0);
+					Out.Mid = Read(1);
+					Out.Warm = Read(2);
+				}
+				else
+				{
+					double Mo[4];
+					MotRaw(X, Y, Mo);
+					Out.M = Mo[0];
+					Out.Mid = Mo[1];
+					Out.Warm = Mo[2];
+				}
+				// (Fine worked out here, bent by LandField's 30 m patches and by Mid; its lattice turned 53 degrees)
+				const double U2 = 0.8 * X - 0.6 * Y, V2 = 0.6 * X + 0.8 * Y;
+				Out.Fine = Noise((U2 - 6.0 * N1 + 5.0 * Out.Mid) / 14.0, (V2 + 7.0 * N1) / 14.0, Seed ^ 0x9A3);
+				return Out;
+			}
+			/** A ground's colour textured by its mottle (a field's lightness spread near some 30 to 40 per cent from its
+			 * darkest drifts to its lightest, as a field's texture, warmer and cooler by turns) and the country's broad
+			 * noise. */
+			static Tone Textured(const Tone& T, const Mottle& Mo, double Broad)
+			{
+				return Varied(T, 1.0 + 0.12 * Mo.Fine + 0.17 * Mo.Mid + 0.16 * Mo.M + 0.05 * Broad, 0.1 * Mo.Warm + 0.03 * Mo.Mid + 0.015 * Broad);
+			}
+
 			/** The earth: a pale limestone soil, or the red-brown terra rossa in broad patches; wet in the winter. */
 			Tone Soil(double X, double Y, double N1) const
 			{
 				// (Sicily's interior mostly the pale grey-brown of its clays and marls, the red in patches)
-				const double Red = Smooth(-0.2, 0.3, Noise(X / 380.0, Y / 380.0, Seed ^ 0x501) + 0.25 * N1 + (bSouth ? -0.28 : 0.05));
-				const Tone Pale = Mixed(Rgb(188, 176, 148), Rgb(204, 198, 182), Smooth(0.2, 0.7, N1));
+				const double Red = Smooth(-0.2, 0.3, MotRead(X, Y, 3) + 0.15 * N1 + (bSouth ? -0.12 : 0.05));
+				const Tone Pale = Mixed(Rgb(176, 162, 134), Rgb(192, 184, 164), Smooth(-0.4, 0.9, N1));
 				const Tone T = Mixed(Pale, Rgb(162, 96, 64), Red);
 				return Mixed(T, Rgb(100, 82, 62), 0.58 * Wet);
 			}
-			Tone Ploughed(const Tone& Earth, double N2) const
+			/** Ploughed earth (M the soft mottle): the furrows' shade and the clods' lit tops, darker and browner wet. */
+			Tone Ploughed(const Tone& Earth, double M) const
 			{
-				// (the furrows' shade and the clods' lit tops; darker and browner wet)
-				return Varied(Mixed(Earth, Rgb(112, 92, 72), 0.4 + 0.1 * Wet), 0.84 + 0.2 * N2, 0.0);
+				return Varied(Mixed(Earth, Rgb(112, 92, 72), 0.4 + 0.12 * Wet), 0.92 + 0.08 * M - 0.1 * Wet, 0.0);
 			}
 			/** Grass by the month: dead straw in the summer, wet green-brown in the winter, green in the spring. */
-			Tone Grass(double N1, double N2) const
+			Tone Grass(double N1, double M) const
 			{
-				// (ochre, the art director's fallow 9C925C round it; its patches of thistle and dead weed green-brown, strong
-				// enough to read in the noon sun)
-				Tone Summer = Mixed(Rgb(150, 136, 92), Rgb(186, 168, 116), Smooth(-0.5, 0.3, N1));
-				Summer = Mixed(Summer, Rgb(98, 98, 62), 0.75 * Smooth(0.05, 0.4, N2));
-				// (the winter's: wet green-brown, last summer's dead grass in brown patches, never lime)
-				Tone Winter = Mixed(Rgb(130, 114, 80), Rgb(104, 118, 66), Clamp01(Green + 0.25 * N1));
-				Winter = Mixed(Winter, Rgb(126, 106, 74), 0.6 * Smooth(0.05, 0.4, N2));
+				// (ochre, the art director's fallow 9C925C round it; its patches of thistle and dead weed green-brown, soft
+				// and some 45 m across)
+				Tone Summer = Mixed(Rgb(150, 136, 92), Rgb(184, 166, 114), Smooth(-0.8, 0.8, 0.5 * N1 - 0.5 * M));
+				Summer = Mixed(Summer, Rgb(104, 102, 64), 0.6 * Smooth(0.15, 0.65, M));
+				// (the winter's: green-brown after the rains, last summer's dead grass in brown patches, never lime)
+				Tone Winter = Mixed(Rgb(126, 114, 80), Rgb(104, 114, 66), Clamp01(Green + 0.1 + 0.2 * N1));
+				Winter = Mixed(Winter, Rgb(134, 114, 82), 0.55 * Smooth(0.1, 0.6, -M));
 				return Mixed(Winter, Summer, Dry);
 			}
 			Tone Dust() const { return Mixed(Rgb(156, 142, 120), Rgb(230, 222, 204), Dry); }
 
-			Tone Ground(int C, double X, double Y, double N1, double N2, uint64_t Key) const
+			/** A crop's ground (M the soft mottle, N1 LandField's 30 m patches, used gently). */
+			Tone Ground(int C, double X, double Y, double N1, double M, uint64_t Key) const
 			{
 				const Tone Earth = Soil(X, Y, N1);
 				switch (C)
 				{
 				case Olive:
+				case Almond:
 				{
-					// (half the groves ploughed clean under the trees, the rest left to the grass)
-					if (Unit(Mix(Key ^ 0x01E1)) < 0.55) return Mixed(Ploughed(Earth, N2), Grass(N1, N2), 0.15 + 0.2 * Smooth(0.2, 0.7, N1));
-					return Mixed(Grass(N1, N2), Earth, 0.25 + 0.2 * Smooth(0.0, 0.6, N2));
+					// (most groves ploughed clean under the trees, the rest left to the grass)
+					if (Unit(Mix(Key ^ 0x01E1)) < (C == Almond ? 0.8 : 0.55)) return Mixed(Ploughed(Earth, M), Grass(N1, M), 0.12 + 0.2 * Smooth(0.0, 0.8, M));
+					return Mixed(Grass(N1, M), Earth, 0.25 + 0.2 * Smooth(-0.2, 0.6, -M));
 				}
 				case Vine:
 				{
 					const Tone Leaves = Mixed(Rgb(92, 114, 52), Mixed(Rgb(198, 162, 66), Rgb(156, 80, 46), 0.4 + 0.3 * N1), Turn);
 					const Tone Stocks = Rgb(112, 96, 78);
-					return Mixed(Mixed(Ploughed(Earth, N2), Stocks, 0.12), Leaves, 0.32 * Leaf);
+					return Mixed(Mixed(Ploughed(Earth, M), Stocks, 0.12), Leaves, 0.32 * Leaf);
 				}
 				case Grain:
 					switch (Stage)
 					{
 					case 2:
 					{
-						// gold stubble: straw rows over pale earth, paler where the straw lies, the earth through it here and there
-						const Tone Straw = Mixed(Rgb(188, 162, 106), Rgb(210, 186, 128), Smooth(-0.2, 0.6, N1));
-						return Mixed(Straw, Earth, 0.15 + 0.35 * Smooth(-0.1, 0.6, N2));
+						// gold stubble (the art director's B59961): straw over pale earth, the earth through it here and there
+						const Tone Straw = Mixed(Rgb(172, 150, 102), Rgb(196, 176, 126), Smooth(-0.7, 0.7, 0.5 * N1 - 0.5 * M));
+						return Mixed(Straw, Earth, 0.16 + 0.28 * Smooth(0.0, 0.8, M));
 					}
-					case 3: return Ploughed(Earth, N2);
-					case 1: return Mixed(Rgb(150, 156, 78), Rgb(204, 182, 106), Clamp01(0.5 + 0.6 * N1));
-					default: return Mixed(Ploughed(Earth, N2), Rgb(98, 128, 56), Green * (0.38 + 0.15 * N1));
+					case 3: return Ploughed(Earth, M);
+					case 1: return Mixed(Rgb(150, 156, 78), Rgb(204, 182, 106), Clamp01(0.5 + 0.5 * M));
+					default:
+					{
+						// the sown corn: a fine fresh green over the dark earth from the winter on, its rows closing by the
+						// spring
+						// (in February half the earth still showing between the rows; an olive green, never lime)
+						const double Cover = Clamp01(0.25 + 0.5 * Green + 0.12 * M);
+						return Mixed(Ploughed(Earth, M), Mixed(Rgb(80, 110, 52), Rgb(96, 120, 60), 0.5 + 0.5 * N1), Cover);
+					}
 					}
 				case Maquis:
 				{
 					// thin soil, limestone breaking through, the scrub's dark clumps
-					Tone T = Mixed(Mixed(Rgb(154, 136, 98), Earth, 0.3), Rgb(204, 196, 176), 0.6 * Smooth(0.15, 0.6, N2));
-					return Mixed(T, Mixed(Rgb(78, 94, 56), Rgb(88, 100, 62), Wet), 0.6 * Smooth(0.0, 0.4, N1));
+					const Tone T = Mixed(Mixed(Rgb(154, 136, 98), Earth, 0.3), Rgb(204, 196, 176), 0.5 * Smooth(0.15, 0.7, -M));
+					return Mixed(T, Mixed(Rgb(78, 94, 56), Rgb(88, 100, 62), Wet), 0.5 * Smooth(0.0, 0.6, M));
 				}
-				case Plough: return Ploughed(Earth, N2);
+				case Plough: return Ploughed(Earth, M);
 				default:
 				{
-					// grazing: dead grass, the bare stony earth showing through in patches
-					const Tone Bare = Mixed(Earth, Rgb(204, 198, 182), 0.3);
-					Tone T = Mixed(Grass(N1, N2), Bare, 0.1 + 0.55 * Smooth(-0.3, -0.75, N2) * Smooth(-0.3, 0.3, N1));
-					// (and the thin stony ground of the macchia in patches, its scrub in dark clumps)
-					const Tone Scrubby = Mixed(Mixed(Rgb(142, 126, 89), Earth, 0.2), Rgb(84, 92, 58), 0.35 * Smooth(0.0, 0.5, N2));
-					return Mixed(T, Scrubby, 0.8 * Smooth(0.3, 0.5, N1));
+					// grazing and fallow: dead grass, the bare stony earth showing through in patches, the macchia's thin
+					// stony ground and its scrub in others
+					const Tone Bare = Mixed(Earth, Rgb(190, 182, 162), 0.25);
+					const Tone T = Mixed(Grass(N1, M), Bare, 0.1 + 0.35 * Smooth(-0.35, -0.85, M));
+					const Tone Scrubby = Mixed(Mixed(Rgb(142, 126, 89), Earth, 0.2), Rgb(96, 100, 64), 0.3);
+					return Mixed(T, Scrubby, 0.45 * Smooth(0.35, 0.8, 0.5 * N1 + 0.5 * M));
 				}
 				}
 			}
 
 			/** The farms' yards, threshing floors and tracks (Sites lays them): T where none is near. */
-			Tone Farmyard(const Tone& T, double X, double Y, double N2) const
+			Tone Farmyard(const Tone& T, double X, double Y, double M) const
 			{
 				if (FarmGrid.empty()) return T;
 				const int I = static_cast<int>(std::floor((X + Margin) / FarmCell)), J = static_cast<int>(std::floor((Y + Margin) / FarmCell));
@@ -376,17 +569,38 @@ namespace LandScape
 					const Farm& F = Farms[K];
 					const double D = std::hypot(X - F.X, Y - F.Y);
 					// beaten earth round the house, dust in the summer, mud in the winter
-					if (D < 26.0) Out = Mixed(Out, Mixed(Rgb(112, 96, 76), Rgb(204, 188, 156), Dry), 0.85 * Smooth(24.0, 12.0, D + 3.0 * N2));
+					if (D < 26.0) Out = Mixed(Out, Mixed(Rgb(104, 88, 70), Rgb(204, 188, 156), Dry), 0.85 * Smooth(24.0, 12.0, D + 3.0 * M));
 					// the threshing floor: a round of laid stones, straw on it after the harvest
 					const double Q = std::hypot(X - F.FloorX, Y - F.FloorY);
 					if (Q < 7.0) Out = Mixed(Out, Mixed(Rgb(176, 168, 150), Rgb(218, 200, 152), 0.6 * Dry), Smooth(7.0, 5.5, Q));
 					if (F.bTrack)
 					{
 						const double R = SegDist(X, Y, F.AX, F.AY, F.BX, F.BY);
-						if (R < 2.6) Out = Mixed(Out, Varied(Dust(), 0.96, 0.0), 0.9 * Smooth(2.6, 1.1, R + 0.3 * N2));
+						if (R < 2.6) Out = Mixed(Out, Varied(Dust(), 0.96, 0.0), 0.9 * Smooth(2.6, 1.1, R + 0.3 * M));
 					}
 				}
 				return Out;
+			}
+
+			/** The crop at a place: its parcel's, or where an arable parcel is worked in strips (a holding's wheat field part
+			 * stubble, part ploughed already, a strip left fallow) its strip's: strips 26 to 42 m wide along the parcel's
+			 * grain, each its own, so the fields read some 30 to 90 m (LandField's parcels are 0.8 ha at the least). Some
+			 * three arable parcels in five are. */
+			int CropAt(const Spot& S) const
+			{
+				const int C = S.Crop >= 0 ? S.Crop : S.Kind == KRough ? Maquis : S.Kind == KWoods ? Olive : Fallow;
+				if ((C != Grain && C != Fallow && C != Plough) || S.Key == 0 || (S.Kind != KOpen && S.Kind != KField)) return C;
+				if (Unit(Mix(S.Key ^ 0x57A1)) > 0.6) return C;
+				const double W = 26.0 + 16.0 * Unit(Mix(S.Key ^ 0x57A2));
+				const int64_t Strip = static_cast<int64_t>(std::floor(S.Across / W + 0.5));
+				if (Strip == 0) return C;
+				// (by turns: the wheat's, the plough's, the fallow's; every other strip another's than the parcel's own, the
+				// rest the parcel's own on half of them, two or three side by side then reading as one wider field)
+				const int Of3 = C == Grain ? 0 : C == Plough ? 1 : 2;
+				const double Turn_ = Unit(Hash(S.Key ^ 0x57A3, static_cast<uint64_t>(Strip + 1000)));
+				const int Step = Strip % 2 != 0 ? (Turn_ < 0.5 ? 1 : 2) : Turn_ < 0.5 ? 0 : Turn_ < 0.75 ? 1 : 2;
+				static const int Turns[3] = { Grain, Plough, Fallow };
+				return Turns[(Of3 + Step) % 3];
 			}
 
 			Tone Colour(const Spot& S) const override
@@ -405,45 +619,55 @@ namespace LandScape
 					T = Mixed(Crown, Pressed, 0.55 * Rut);
 					if (Wet > 0.5 && S.N2 > 0.35) T = Mixed(T, Rgb(92, 94, 96), 0.6 * Rut * Smooth(0.35, 0.6, S.N2)); // (puddles)
 					// off the floor: the verge, dusty
-					if (S.Lane > -0.4) T = Mixed(T, Mixed(Grass(S.N1, S.N2), Dust(), 0.45 * Dry), Smooth(-0.4, 1.6, S.Lane));
+					if (S.Lane > -0.4) T = Mixed(T, Mixed(Grass(S.N1, 0.0), Dust(), 0.45 * Dry), Smooth(-0.4, 1.6, S.Lane));
 					return T;
 				}
 				case KVillage:
 				{
-					// the village's yards and gardens: beaten earth, the gardens' green
 					// the village's yards and gardens: beaten earth and dust, the gardens' rows of beans and tomatoes green
 					// against it even in the summer (watered from the well)
+					const Mottle Mo = MottleAt(S.X, S.Y, S.N1);
 					const Tone Earth = Mixed(Rgb(118, 100, 80), Rgb(194, 176, 142), Dry);
 					T = Mixed(Earth, Soil(S.X, S.Y, S.N1), 0.35);
-					T = Mixed(T, Mixed(RFresh, Rgb(112, 122, 66), 0.5 * Dry), 0.7 * Smooth(-0.05, 0.3, S.N1) * Smooth(-0.6, 0.0, S.N2));
-					return Varied(T, 1.0 + 0.06 * S.N2, 0.0);
+					T = Mixed(T, Mixed(RFresh, Rgb(112, 122, 66), 0.5 * Dry), 0.7 * Smooth(-0.05, 0.3, S.N1) * Smooth(-0.6, 0.0, Mo.M));
+					return Textured(T, Mo, 0.0);
 				}
-				case KYard: return Varied(Mixed(Rgb(116, 100, 80), Rgb(202, 186, 152), Dry), 1.0 + 0.05 * S.N2, 0.0);
+				case KYard: return Varied(Mixed(Rgb(116, 100, 80), Rgb(202, 186, 152), Dry), 1.0 + 0.05 * S.N1, 0.0);
 				case KWater: return Mixed(Rgb(84, 98, 90), Rgb(96, 104, 96), Dry);
 				case KMarsh: return Varied(Mixed(Rgb(98, 108, 66), Rgb(158, 148, 98), Dry), 1.0 + 0.06 * S.N1, 0.0);
 				case KWorks:
 				{
 					// (the positions on ground too hard to dig: the macchia's stony ground, the spoil of what was dug in
 					// pale heaps)
-					const double Patch = Noise(S.X / 15.0, S.Y / 15.0, Seed ^ 0x9A1);
-					T = Ground(Maquis, S.X, S.Y, S.N1, Patch, S.Key);
-					return Varied(Mixed(T, Rgb(196, 188, 166), 0.5 * Smooth(0.1, 0.5, S.N2)), 1.0 + 0.04 * Patch, 0.0);
+					const Mottle Mo = MottleAt(S.X, S.Y, S.N1);
+					T = Ground(Maquis, S.X, S.Y, S.N1, Mo.M, S.Key);
+					return Textured(Mixed(T, Rgb(196, 188, 166), 0.5 * Smooth(0.1, 0.6, S.N1)), Mo, 0.0);
 				}
 				case KWoods:
 					if (bSouth) break; // (the south's woods are its old olive groves: their ground as theirs)
-					T = Mixed(Mixed(Rgb(110, 98, 72), Rgb(92, 86, 64), Wet), Rgb(78, 92, 56), 0.35 + 0.3 * S.N1);
-					return Varied(T, 1.0 + 0.06 * S.N2, 0.0);
+					// (the oak woods' floor: dead leaves and the evergreen undergrowth)
+					T = Mixed(Mixed(Rgb(110, 98, 72), Rgb(92, 80, 62), Wet), Rgb(78, 92, 56), 0.35 + 0.3 * S.N1);
+					return Textured(T, MottleAt(S.X, S.Y, S.N1), S.Broad);
 				default: break;
 				}
-				const int C = S.Crop >= 0 ? S.Crop : S.Kind == KRough ? Maquis : S.Kind == KWoods ? Olive : Fallow;
-				// (the crops' own mottle some 15 m across: the ground's N2 is finer than the near ground's points, 4 m apart,
-				// and reads there as one flat colour)
-				const double Patch = Noise(S.X / 15.0, S.Y / 15.0, Seed ^ 0x9A1);
-				T = Ground(C, S.X, S.Y, S.N1, Patch, S.Key);
+				const int C = CropAt(S);
+				const Mottle Mo = MottleAt(S.X, S.Y, S.N1);
+				const double M = Mo.M;
+				T = Ground(C, S.X, S.Y, S.N1, M, S.Key);
 				// (the roads' dust laid on the ground beside them)
 				if (S.Lane < 3.5) T = Mixed(T, Dust(), 0.45 * Dry * Smooth(3.5, 0.0, S.Lane));
-				T = Farmyard(T, S.X, S.Y, Patch);
-				return Varied(T, 1.0 + 0.04 * Patch + 0.04 * S.Broad, 0.012 * S.Broad);
+				// (the winter's mud on the valley floor: the roads' verges and the field gateways churned, the low wet
+				// patches)
+				if (Wet > 0.4)
+				{
+					const double Churned = std::max(0.75 * Smooth(7.0, 0.5, S.Lane), 0.35 * Smooth(2.5, 0.3, S.Edge));
+					T = Mixed(T, Rgb(90, 76, 60), Wet * std::max(Churned, 0.6 * Smooth(0.5, 0.85, -M)));
+					// (the rain lying in the plough's furrows, grey with the sky, where the ground is lowest: from afar a
+					// sheen in drifts across the field)
+					if (C == Plough || (C == Grain && Stage == 3)) T = Mixed(T, Rgb(124, 130, 136), 0.4 * Wet * Smooth(0.2, 0.75, -Mo.Mid));
+				}
+				T = Farmyard(T, S.X, S.Y, M);
+				return Textured(T, Mo, S.Broad);
 			}
 
 			/** The land's rise beyond the field and its slope there (from the coarse grid Sites lays, else worked out). */
@@ -471,7 +695,8 @@ namespace LandScape
 				(void)Gap;
 				double E = 0.0, Slope = 0.0;
 				LiftAt(S.X, S.Y, E, Slope);
-				const Tone Canopy = Mixed(Rgb(58, 72, 44), Rgb(70, 78, 54), 0.5 + 0.5 * S.N1);
+				// (the mainland's oak woods grey-brown in the winter, bare among their holm oaks)
+				const Tone Canopy = Mixed(Mixed(Rgb(58, 72, 44), Rgb(70, 78, 54), 0.5 + 0.5 * S.N1), Rgb(92, 84, 74), bSouth ? 0.0 : 0.55 * (1.0 - Leaf));
 				Tone T;
 				if (bWoods && bSouth) T = Mixed(Mixed(Rgb(108, 116, 84), Soil(S.X, S.Y, S.N1), 0.35), Canopy, 0.25); // (old olive groves)
 				else if (bWoods) T = Canopy;
@@ -490,7 +715,9 @@ namespace LandScape
 					const double High = Smooth(30.0, 120.0, E) * Smooth(-0.15, 0.25, Noise(S.X / 650.0, S.Y / 650.0, Seed ^ 0x3D1) + 0.3 * S.N1);
 					T = Mixed(T, Canopy, 0.85 * High);
 				}
-				if (bSnowCaps) T = Mixed(T, Rgb(228, 230, 236), Smooth(250.0, 330.0, E + 40.0 * S.N1));
+				// (the snow on the high ground: the Apennines' ridges behind white, the hill town's crest (some 200 m over the
+				// valley) dusted in patches, thinner on the steep)
+				if (bSnowCaps) T = Mixed(T, Rgb(228, 230, 236), Smooth(120.0, 200.0, E + 40.0 * S.N1) * (0.7 + 0.3 * Smooth(200.0, 400.0, E)) * (1.0 - 0.45 * Smooth(0.3, 0.6, Slope)));
 				return Varied(T, 1.0 + 0.05 * S.Broad, 0.01 * S.Broad);
 			}
 
@@ -516,7 +743,7 @@ namespace LandScape
 				// (in patches: the spot comes without the ground's noises, so its own, cheap)
 				const double Clump = Smooth(-0.4, 0.4, Noise(S.X / 5.3, S.Y / 5.3, Seed ^ 0xC1));
 				const double Thick = 0.55 + 0.9 * Clump;
-				if (S.Drawn == 10) return Of(Pick, 0.45, { { 0.6, Grass_ }, { 0.25, Stalk }, { 0.15, Stone } }); // (a wall's foot)
+				if (S.Drawn == 10) return Of(Pick, 1.0, { { 0.45, Grass_ }, { 0.25, Stalk }, { 0.2, Stone }, { 0.1, Shrub } }); // (a wall's foot: weeds, fallen stones)
 				switch (S.Kind)
 				{
 				case KVillage:
@@ -528,7 +755,7 @@ namespace LandScape
 					break;
 				default: break;
 				}
-				const int C = S.Crop >= 0 ? S.Crop : S.Kind == KRough ? Maquis : Fallow;
+				const int C = CropAt(S);
 				const LandField::Base Sward = LandField::Base::Sward;
 				switch (C)
 				{
@@ -536,16 +763,23 @@ namespace LandScape
 					if (S.Edge > 1.2 && std::fabs(RowNear(S)) < 0.22) return Grown{ ClutOf(CVine), 1.7 };
 					return Of(Pick, 0.3, { { 0.6, Clod }, { 0.3, Grass_ }, { 0.1, Stone } });
 				case Grain:
-					if (Stage == 2) return Of(Pick, 1.0, { { 0.86, LandField::Base::Stubble }, { 0.06, Grass_ }, { 0.04, Stalk }, { 0.04, Stone } });
+					if (Stage == 2) return Of(Pick, 1.0, { { 0.78, LandField::Base::Stubble }, { 0.08, Clod }, { 0.06, Grass_ }, { 0.04, Stalk }, { 0.04, Stone } }); // (the earth through the stubble in clods)
 					if (Stage == 3) return Of(Pick, 0.5, { { 0.8, Clod }, { 0.15, Stone }, { 0.05, Grass_ } });
 					if (Stage == 1) return Of(Pick, 0.9, { { 0.8, Grass_ }, { 0.15, Clod }, { 0.05, Stone } });
-					return Of(Pick, 0.8, { { 0.55, Grass_ }, { 0.4, Clod }, { 0.05, Stone } });
-				case Plough: return Of(Pick, 0.5, { { 0.8, Clod }, { 0.15, Stone }, { 0.05, Grass_ } });
+					return Of(Pick, 1.0, { { 0.95, Grass_ }, { 0.05, Stone } }); // (the sown corn's shoots; the earth between them in the ground's own colour)
+				case Plough: return Of(Pick, Wet > 0.6 ? 0.7 : 0.5, { { 0.8, Clod }, { 0.15, Stone }, { 0.05, Grass_ } });
 				case Olive:
-					if (Unit(Mix(S.Key ^ 0x01E1)) < 0.55) return Of(Pick, 0.45, { { 0.6, Clod }, { 0.15, Stone }, { 0.25, Grass_ } });
+				case Almond:
+					if (Unit(Mix(S.Key ^ 0x01E1)) < (C == Almond ? 0.8 : 0.55)) return Of(Pick, 0.45, { { 0.6, Clod }, { 0.15, Stone }, { 0.25, Grass_ } });
 					return Of(Pick, 0.8 * Thick, { { 0.35, Sward }, { 0.47, Grass_ }, { 0.1, Stalk }, { 0.08, Stone } });
 				case Maquis: return Of(Pick, 0.8, { { 0.3, Shrub }, { 0.3, Stone }, { 0.3, Grass_ }, { 0.1, Stalk } });
-				default: return Of(Pick, 1.25 * Thick, { { 0.3, Sward }, { 0.5, Grass_ }, { 0.12, Stalk }, { 0.05, Stone }, { 0.03, Shrub } });
+				default:
+				{
+					// fallow: thistle and wild fennel in stands, the grass between, stones, a little garrigue (fewer stalks in
+					// the winter, last summer's dead)
+					const double Stand = Smooth(0.05, 0.5, Noise(S.X / 9.0, S.Y / 9.0, Seed ^ 0xC2)) * (0.5 + 0.5 * Dry);
+					return Of(Pick, 1.2 * Thick, { { 0.24, Sward }, { 0.06, Clod }, { 0.45 - 0.25 * Stand, Grass_ }, { 0.1 + 0.3 * Stand, Stalk }, { 0.05, Stone }, { 0.03, Shrub } });
+				}
 				}
 			}
 
@@ -559,7 +793,7 @@ namespace LandScape
 				{
 					// most tufts small, a few big; straw in the summer, green-brown in the winter, a few dead ones always
 					const double Size = 0.55 + 0.85 * std::pow(U4, 1.5);
-					const bool bShoots = S.Crop == Grain && Stage == 0;
+					const bool bShoots = Stage == 0 && CropAt(S) == Grain;
 					P.Scale = static_cast<float>(bShoots ? 0.45 + 0.2 * U4 : Size);
 					P.ScaleZ = static_cast<float>(bShoots ? 0.4 + 0.2 * U5 : Size * (0.7 + 0.5 * U5));
 					const double Dead = U6 < 0.15 ? 1.0 : Dry;
@@ -570,10 +804,11 @@ namespace LandScape
 				}
 				case CStalk:
 				{
+					// (the summer's dry stalks tall; the winter's, last year's, broken and dark with the rain)
 					P.Scale = static_cast<float>(0.7 + 0.5 * U4);
-					P.ScaleZ = static_cast<float>(0.6 + 0.7 * U5);
+					P.ScaleZ = static_cast<float>(Lerp(0.45 + 0.4 * U5, 0.65 + 0.6 * U5, Dry));
 					const double L = 0.9 + 0.2 * U6;
-					P.Tint = Tint(L * Lerp(0.9, 1.04, Dry), L * Lerp(0.92, 1.0, Dry), L * Lerp(0.86, 0.94, Dry));
+					P.Tint = Tint(L * Lerp(0.78, 1.04, Dry), L * Lerp(0.76, 1.0, Dry), L * Lerp(0.74, 0.94, Dry));
 					return true;
 				}
 				case CStone:
@@ -606,9 +841,19 @@ namespace LandScape
 				}
 				default:
 				{
-					// clods in the earth's own colour
 					P.Scale = static_cast<float>(0.7 + 0.6 * U4);
 					P.ScaleZ = static_cast<float>(0.7 + 0.4 * U5);
+					if (Wet > 0.6)
+					{
+						// (the winter's: built wet and dark, the water standing between them along the furrows)
+						P.Yaw = static_cast<float>(S.Angle + 0.15 * (U7 - 0.5));
+						const double L = 0.88 + 0.24 * U6;
+						P.Tint = Tint(L, L, L);
+						return true;
+					}
+					// clods in the earth's own colour (on the stubble and the fallow lower, broken by the harvest and the sheep)
+					const int C_ = CropAt(S);
+					if (C_ == Fallow || (C_ == Grain && Stage == 2)) P.ScaleZ = static_cast<float>(0.35 + 0.25 * U5);
 					const Tone E = Ploughed(Soil(P.X, P.Y, 0.0), 0.0);
 					const double L = (0.9 + 0.2 * U6) / 128.0;
 					P.Tint = Tint(E.R * L, E.G * L, E.B * L);
@@ -627,16 +872,18 @@ namespace LandScape
 				{
 				case CGrass:
 				{
-					// a tuft: a score of blades, built straw-pale (the tint gives the month its colour)
+					// a tuft: a score of blades, built straw-pale (the tint gives the month its colour); the winter's lower,
+					// new grass among last year's, no seed heads
+					const bool bWinter = Dry < 0.3;
 					for (int B = 0; B < 30; ++B)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), Out0 = R.Range(0.0, 0.16), High = R.Range(0.12, 0.36), Lean = R.Range(0.08, 0.3);
+						const double A = R.Range(0.0, 2.0 * Pi), Out0 = R.Range(0.0, 0.16), High = R.Range(0.12, 0.36) * (bWinter ? 0.7 : 1.0), Lean = R.Range(0.08, 0.3);
 						const double X0 = Out0 * std::cos(A), Y0 = Out0 * std::sin(A);
 						const double L = R.Range(0.85, 1.12), Wide = R.Range(0.016, 0.026);
 						W.Blade(X0, Y0, -0.01, X0 + Lean * std::cos(A), Y0 + Lean * std::sin(A), High, Wide, Varied(Rgb(150, 136, 100), L, 0.0), Varied(Rgb(206, 192, 146), L, 0.0));
 					}
-					// (a few gone to seed, their heads pale)
-					for (int B = 0; B < 5; ++B)
+					// (a few gone to seed in the summer, their heads pale)
+					for (int B = 0; B < (bWinter ? 0 : 5); ++B)
 					{
 						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.38, 0.55), Lean = R.Range(0.06, 0.16);
 						const double X1 = Lean * std::cos(A), Y1 = Lean * std::sin(A);
@@ -649,20 +896,43 @@ namespace LandScape
 				}
 				case CStalk:
 				{
-					// wild fennel and thistle gone to seed: a few stems, their heads
-					const int Stems = 4;
-					for (int B = 0; B < Stems; ++B)
+					// wild fennel gone to seed: three tall stems, each with its umbel's rays spread flat at the top, small
+					// umbels on their ends
+					for (int B = 0; B < 3; ++B)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.5, 0.95), Lean = R.Range(0.03, 0.14);
+						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.0, 1.55), Lean = R.Range(0.05, 0.2);
 						const double X1 = Lean * std::cos(A), Y1 = Lean * std::sin(A);
-						W.Blade(0.0, 0.0, -0.02, X1, Y1, High, 0.025, Rgb(118, 100, 72), Rgb(150, 128, 90));
-						for (int H = 0; H < 5; ++H)
+						W.Blade(0.0, 0.0, -0.02, X1, Y1, High, 0.035, Rgb(116, 100, 70), Rgb(150, 130, 88));
+						for (int H = 0; H < 7; ++H)
 						{
-							const double B2 = R.Range(0.0, 2.0 * Pi), Spray = R.Range(0.05, 0.1), Top = R.Range(0.02, 0.07);
-							W.Blade(X1, Y1, High - 0.02, X1 + Spray * std::cos(B2), Y1 + Spray * std::sin(B2), High + Top, 0.018, Rgb(134, 114, 80), Rgb(168, 146, 102));
+							const double B2 = H * 2.0 * Pi / 7.0 + R.Range(-0.3, 0.3), Spray = R.Range(0.1, 0.17), Top = R.Range(0.06, 0.11);
+							const double X2 = X1 + Spray * std::cos(B2), Y2 = Y1 + Spray * std::sin(B2), Z2 = High + Top;
+							W.Blade(X1, Y1, High - 0.03, X2, Y2, Z2, 0.012, Rgb(136, 116, 78), Rgb(166, 142, 92));
+							// (its umbellet: a tuft of short seed-stalks standing up from the ray's end, so the umbel's top is
+							// flat, as an umbrella's)
+							for (int U = 0; U < 3; ++U)
+							{
+								const double UA = B2 + U * 2.0 * Pi / 3.0;
+								W.Blade(X2, Y2, Z2 - 0.005, X2 + 0.018 * std::cos(UA), Y2 + 0.018 * std::sin(UA), Z2 + 0.035, 0.016, Rgb(160, 136, 86), Rgb(178, 154, 98));
+							}
 						}
 					}
-					M.FarFrom = 50.0f;
+					// and a thistle beside it: a stiff stem, its spiny leaves at the foot, two heads
+					{
+						const double TX = 0.32, TY = 0.12, High = R.Range(0.55, 0.8);
+						for (int L = 0; L < 6; ++L)
+						{
+							const double A = L * 2.0 * Pi / 6.0 + R.Range(-0.25, 0.25), Reach = R.Range(0.18, 0.26);
+							W.Blade(TX, TY, 0.02, TX + Reach * std::cos(A), TY + Reach * std::sin(A), R.Range(0.06, 0.14), 0.06, Rgb(120, 112, 84), Rgb(150, 140, 106));
+						}
+						W.Blade(TX, TY, -0.02, TX + 0.03, TY, High, 0.03, Rgb(122, 110, 82), Rgb(150, 136, 98));
+						for (int Hd = 0; Hd < 2; ++Hd)
+						{
+							const double HX = TX + (Hd ? 0.09 : 0.03), HZ = High - (Hd ? 0.12 : 0.0);
+							W.Box(HX, TY, HZ, 0.035, 0.035, 0.04, 0.4 * Hd, Rgb(150, 134, 108));
+						}
+					}
+					M.FarFrom = 55.0f;
 					M.Paint = 2;
 					break;
 				}
@@ -731,6 +1001,27 @@ namespace LandScape
 				}
 				default:
 				{
+					if (Wet > 0.6)
+					{
+						// the winter's: the furrows' ridges in dark wet clods, the rain standing in the furrows between them,
+						// grey with the sky (laid along the parcel's grain)
+						const Tone Sky = Rgb(122, 130, 138), SkyEdge = Rgb(84, 84, 80);
+						for (int F = -1; F <= 1; ++F)
+						{
+							const double Y0 = 0.62 * F, Half = R.Range(0.035, 0.06), Long = R.Range(0.7, 1.0);
+							const uint32_t A = W.Vert(-Long, Y0 - Half, 0.015, 0.0, 0.0, 1.0, SkyEdge);
+							const uint32_t B = W.Vert(Long, Y0 - Half, 0.015, 0.0, 0.0, 1.0, SkyEdge);
+							const uint32_t C = W.Vert(Long, Y0 + Half, 0.015, 0.0, 0.0, 1.0, Sky);
+							const uint32_t D = W.Vert(-Long, Y0 + Half, 0.015, 0.0, 0.0, 1.0, Sky);
+							W.Tri(A, B, C);
+							W.Tri(A, C, D);
+						}
+						W.Rock(0.1, 0.31, 0.13, 0.08, 41, Rgb(98, 82, 66), Rgb(58, 48, 40));
+						W.Rock(-0.35, -0.31, 0.1, 0.07, 42, Rgb(94, 78, 62), Rgb(56, 46, 38));
+						W.Rock(0.5, -0.3, 0.08, 0.05, 43, Rgb(100, 84, 68), Rgb(60, 50, 42));
+						M.FarFrom = 35.0f;
+						break;
+					}
 					// clods: a few lumps of earth, built grey-brown (the tint gives the earth's own colour)
 					W.Rock(0.0, 0.0, 0.11, 0.07, 41, Rgb(136, 130, 124), Rgb(84, 80, 76));
 					W.Rock(0.2, -0.08, 0.08, 0.05, 42, Rgb(132, 126, 120), Rgb(80, 76, 72));
@@ -759,68 +1050,112 @@ namespace LandScape
 				case KHouseStone: return "FlatRoofHouseStone";
 				case KPole: return "TelegraphPole";
 				case KSangar: return "Sangar";
+				case KWall: return "StoneWall";
+				case KPear: return bPears ? "PricklyPear" : nullptr;
+				case KAgave: return bPears ? "Agave" : nullptr;
+				case KStook: return Stage == 2 ? "Stook" : "BareTree";
+				case KStack: return "StrawStack";
+				case KSpike: return bPears ? "AgaveSpike" : nullptr;
 				default: return nullptr;
 				}
 			}
+			bool KitBuilt(int K) const override { return K == KPear || K == KAgave || K == KStook || K == KStack || K == KSpike; }
 			void KitLook(int K, LandField::BaseMesh& M) const override
 			{
+				auto Stands = [&M](float Mid, float Half, float Across, float Trunk, float Far) {
+					M.bSight = true;
+					M.SightMid = Mid;
+					M.SightHalf = Half;
+					M.SightAcross = Across;
+					M.SightTrunk = Trunk;
+					M.FarFrom = Far;
+				};
 				switch (K)
 				{
 				case KOlive:
-					M.bSight = true;
-					M.SightMid = 0.62f;
-					M.SightHalf = 0.32f;
-					M.SightAcross = 0.75f;
-					M.SightTrunk = 0.3f;
-					M.FarFrom = 120.0f;
+					Stands(0.62f, 0.32f, 0.75f, 0.3f, 120.0f);
 					M.Paint = 1;
 					M.bTree = true; // (far off a crown with no shadow, as the bocage's trees)
 					break;
 				case KCypress:
-					M.bSight = true;
-					M.SightMid = 0.5f;
-					M.SightHalf = 0.48f;
-					M.SightAcross = 0.85f;
-					M.SightTrunk = 0.3f;
-					M.FarFrom = 220.0f;
+					Stands(0.5f, 0.48f, 0.85f, 0.3f, 220.0f);
 					M.Paint = 1;
 					M.bTree = true;
 					break;
 				case KMacchia:
-					M.bSight = true;
-					M.SightMid = 0.5f;
-					M.SightHalf = 0.5f;
-					M.SightAcross = 0.8f;
-					M.FarFrom = 90.0f;
+					Stands(0.5f, 0.5f, 0.8f, 0.0f, 90.0f);
 					M.Paint = 1;
 					break;
 				case KFarm:
 				case KHouseStone:
-				case KTower:
-					M.bSight = true;
-					M.SightMid = 0.5f;
-					M.SightHalf = 0.5f;
-					M.SightAcross = 0.9f;
-					M.FarFrom = 400.0f;
-					break;
+				case KTower: Stands(0.5f, 0.5f, 0.9f, 0.0f, 400.0f); break;
 				case KBoulder:
-				case KSangar:
-					M.bSight = true;
-					M.SightMid = 0.5f;
-					M.SightHalf = 0.5f;
-					M.SightAcross = 0.85f;
-					M.FarFrom = 200.0f;
-					break;
+				case KSangar: Stands(0.5f, 0.5f, 0.85f, 0.0f, 200.0f); break;
 				case KPole: M.FarFrom = 220.0f; break;
+				case KWall:
+				{
+					// (every stone near; far off six blocks of grey-ochre stone, light and dark, their tops stepping, in
+					// place of the kit's own plain box, which read as a smooth white kerb)
+					M.FarFrom = 45.0f;
+					M.Far = LandField::Mesh();
+					Writer F(M.Far);
+					static const double Tops[6] = { 1.16, 1.27, 1.04, 1.2, 1.1, 1.24 }, Lit[6] = { 1.0, 0.86, 1.06, 0.9, 0.97, 0.84 };
+					for (int P = 0; P < 6; ++P) F.Box(-2.52 + 1.01 * P, 0.03 * ((P * 5) % 3 - 1), 0.5 * Tops[P], 0.52, 0.5 - 0.03 * (P % 2), 0.5 * Tops[P], 0.04 * ((P * 7) % 3 - 1), Varied(Rgb(152, 139, 114), Lit[P], 0.0));
+					break;
+				}
+				case KPear: Stands(0.5f, 0.5f, 0.8f, 0.0f, 110.0f); break;
+				case KAgave: M.FarFrom = 90.0f; M.Paint = 1; break;
+				case KSpike: M.FarFrom = 160.0f; M.Paint = 1; break;
+				case KStook:
+					if (Stage == 2)
+					{
+						M.FarFrom = 110.0f;
+						break;
+					}
+					// (the bare tree: seen through but for its trunk; far off a crown)
+					Stands(0.6f, 0.35f, 0.35f, 0.3f, 110.0f);
+					M.Paint = 2;
+					M.bTree = true;
+					break;
+				case KStack: Stands(0.45f, 0.45f, 0.9f, 0.0f, 260.0f); break;
 				default: M.FarFrom = 90.0f; break;
 				}
 			}
 			void KitPlain(int K, LandField::BaseMesh& M) const override
 			{
 				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
 				Writer W(M.Near);
+				Writer F(M.Far);
+				Rng R(Seed ^ (0xB17ull + static_cast<uint64_t>(K) * 7919ull));
 				switch (K)
 				{
+				case KPear:
+					Pear(W, R);
+					F.Rock(0.0, 0.0, 0.95, 1.6, 61, Rgb(110, 126, 82), Rgb(72, 84, 54));
+					return;
+				case KAgave:
+				case KSpike:
+					Agave(W, R, K == KSpike);
+					M.Far = M.Near;
+					return;
+				case KStook:
+					if (Stage == 2)
+					{
+						Stook(W, R);
+						Tube(F, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 1.25, 0.16, 6, Rgb(150, 126, 80), Rgb(206, 180, 118));
+						return;
+					}
+					{
+						Rng Same = R;
+						Bare(W, R, true);
+						Bare(F, Same, false);
+					}
+					return;
+				case KStack:
+					Stack(W, R, true);
+					Stack(F, R, false);
+					return;
 				case KFarm:
 					W.Box(0.0, 0.0, 3.0, 7.0, 4.2, 3.0, 0.0, Rgb(204, 188, 156));
 					W.Box(0.0, 0.0, 6.6, 7.3, 4.5, 0.6, 0.0, Rgb(170, 100, 70));
@@ -834,10 +1169,227 @@ namespace LandScape
 				case KCypress: W.Box(0.0, 0.0, 6.0, 0.9, 0.9, 6.0, 0.0, Rgb(46, 60, 42)); break;
 				case KMacchia: W.Rock(0.0, 0.0, 0.8, 1.1, 7, Rgb(76, 92, 54), Rgb(52, 64, 38)); break;
 				case KPole: W.Box(0.0, 0.0, 3.5, 0.1, 0.1, 3.5, 0.0, Rgb(110, 96, 80)); break;
+				case KWall: W.Box(0.0, 0.0, 0.6, 3.0, 0.45, 0.6, 0.0, Rgb(146, 134, 110)); break;
 				default: W.Rock(0.0, 0.0, 0.9, 0.7, 11, Rgb(196, 186, 164), Rgb(130, 120, 104)); break;
 				}
 				M.Far = M.Near;
 				M.FarFrom = 400.0f;
+			}
+
+			/** The prickly pear: a clump of flat oval pads, each grown from the rim of the one below, some 1.6 m; the
+			 * oldest at the foot woody and grey-brown, the young ones fresher grey-green. */
+			static void Pear(Writer& W, Rng& R)
+			{
+				struct Bud
+				{
+					double P[3], A[3];
+					int Depth;
+				};
+				std::vector<Bud> Todo;
+				for (int K = 0; K < 5; ++K)
+				{
+					const double Az = K * 2.0 * Pi / 5.0 + R.Range(-0.4, 0.4), Out = R.Range(0.05, 0.4), Lean = R.Range(0.15, 0.55);
+					const double L = std::sqrt(1.0 + Lean * Lean);
+					Todo.push_back({ { Out * std::cos(Az), Out * std::sin(Az), 0.0 }, { Lean * std::cos(Az) / L, Lean * std::sin(Az) / L, 1.0 / L }, 0 });
+				}
+				for (size_t Next = 0; Next < Todo.size() && Next < 70; ++Next)
+				{
+					const Bud Bd = Todo[Next];
+					const double Long = 0.27 - 0.015 * Bd.Depth, Wide = 0.19 - 0.01 * Bd.Depth;
+					// the pad's face, turned about its axis
+					const double Yaw = R.Range(0.0, 2.0 * Pi), Shade = R.Range(0.9, 1.08);
+					double B[3] = { std::cos(Yaw), std::sin(Yaw), 0.0 };
+					const double Dot = B[0] * Bd.A[0] + B[1] * Bd.A[1];
+					for (int I = 0; I < 3; ++I) B[I] -= Dot * Bd.A[I];
+					double BL = std::sqrt(B[0] * B[0] + B[1] * B[1] + B[2] * B[2]);
+					if (BL < 1e-3)
+					{
+						B[0] = 1.0;
+						B[1] = 0.0;
+						B[2] = 0.0;
+						BL = 1.0;
+					}
+					for (double& V : B) V /= BL;
+					const double C[3] = { Bd.P[0] + Long * Bd.A[0], Bd.P[1] + Long * Bd.A[1], Bd.P[2] + Long * Bd.A[2] };
+					const Tone Col = Bd.Depth == 0 ? Varied(Rgb(128, 122, 96), Shade, 0.0) : Varied(Mixed(Rgb(102, 122, 78), Rgb(122, 140, 88), Bd.Depth / 4.0), Shade, 0.0);
+					Pad(W, C, Bd.A, B, Long, Wide, Col);
+					// its children from its rim, one or two (three low down), leaning out and up
+					const double Kids = R.Next();
+					const int N = Bd.Depth >= 4 ? 0 : 1 + (Kids < 0.55 ? 1 : 0) + (Bd.Depth < 2 && Kids < 0.2 ? 1 : 0);
+					for (int Kd = 0; Kd < N; ++Kd)
+					{
+						const double Turn = R.Range(-0.9, 0.9), Where = R.Range(-0.5, 0.5);
+						Bud Kid;
+						for (int I = 0; I < 3; ++I) Kid.A[I] = std::cos(Turn) * Bd.A[I] + std::sin(Turn) * B[I];
+						Kid.A[2] += 0.35;
+						const double AL = std::sqrt(Kid.A[0] * Kid.A[0] + Kid.A[1] * Kid.A[1] + Kid.A[2] * Kid.A[2]);
+						for (int I = 0; I < 3; ++I)
+						{
+							Kid.A[I] /= AL;
+							Kid.P[I] = C[I] + 0.85 * Long * Bd.A[I] + Where * Wide * B[I];
+						}
+						Kid.Depth = Bd.Depth + 1;
+						Todo.push_back(Kid);
+					}
+				}
+			}
+
+			/** The agave: a rosette of stiff grey-blue leaves, the outer ones low and long, a few dead ones lying brown at
+			 * its foot; in flower (bSpike) its leaves yellowing and its dry pole 5 to 6 m, its branches at the top. */
+			static void Agave(Writer& W, Rng& R, bool bSpike)
+			{
+				const int Leaves = 22;
+				const Tone Foot = bSpike ? Rgb(112, 116, 90) : Rgb(96, 116, 104), Tip = bSpike ? Rgb(160, 150, 106) : Rgb(146, 164, 144);
+				for (int L = 0; L < Leaves; ++L)
+				{
+					const double T = static_cast<double>(L) / (Leaves - 1); // (0 the outermost, 1 the heart)
+					const double Az = L * 2.39996 + R.Range(-0.15, 0.15), Up = Lerp(0.35, 1.3, T) + R.Range(-0.1, 0.1), Len = Lerp(1.3, 0.7, T) * R.Range(0.9, 1.1);
+					const double Light = R.Range(0.92, 1.06);
+					const double X0 = 0.08 * std::cos(Az), Y0 = 0.08 * std::sin(Az), Z0 = 0.1 + 0.15 * T, Out = Len * std::cos(Up);
+					W.Blade(X0, Y0, Z0, X0 + Out * std::cos(Az), Y0 + Out * std::sin(Az), Z0 + Len * std::sin(Up), Lerp(0.22, 0.14, T), Varied(Foot, Light, 0.0), Varied(Tip, Light, 0.0));
+				}
+				for (int L = 0; L < 4; ++L)
+				{
+					const double Az = R.Range(0.0, 2.0 * Pi), Len = R.Range(0.9, 1.3);
+					W.Blade(0.1 * std::cos(Az), 0.1 * std::sin(Az), 0.05, Len * std::cos(Az), Len * std::sin(Az), 0.02, 0.2, Rgb(140, 120, 90), Rgb(170, 150, 112));
+				}
+				if (!bSpike) return;
+				const Tone Dry = Rgb(132, 116, 88), DryLit = Rgb(164, 146, 110);
+				const double TopX = R.Range(-0.2, 0.2), TopY = R.Range(-0.2, 0.2), Top = R.Range(5.2, 6.0);
+				Tube(W, 0.0, 0.0, 0.2, 0.09, TopX, TopY, Top, 0.03, 6, Dry, DryLit);
+				// its branches, each holding up its dry seed heads
+				for (int B = 0; B < 8; ++B)
+				{
+					const double T = 0.62 + 0.36 * B / 7.0, Az = B * 2.39996 + R.Range(-0.2, 0.2), Reach = Lerp(0.75, 0.35, T) * R.Range(0.85, 1.15);
+					const double BX = TopX * T, BY = TopY * T, BZ = 0.2 + (Top - 0.2) * T;
+					const double EX = BX + Reach * std::cos(Az), EY = BY + Reach * std::sin(Az), EZ = BZ + 0.35 * Reach;
+					W.Blade(BX, BY, BZ, EX, EY, EZ, 0.05, Dry, DryLit);
+					for (int P = 0; P < 3; ++P)
+					{
+						const double PA = R.Range(0.0, 2.0 * Pi);
+						W.Blade(EX, EY, EZ - 0.04, EX + 0.12 * std::cos(PA), EY + 0.12 * std::sin(PA), EZ + 0.12, 0.09, Rgb(118, 100, 74), Rgb(150, 128, 92));
+					}
+				}
+			}
+
+			/** A stook: eight sheaves stood leaning together heads up, a ninth in their middle; the straw gold, some
+			 * 1.3 m. */
+			static void Stook(Writer& W, Rng& R)
+			{
+				const Tone Butt = Rgb(150, 126, 80), Straw = Rgb(194, 166, 106), Ears = Rgb(212, 188, 128);
+				for (int K = 0; K < 9; ++K)
+				{
+					const bool bMid = K == 8;
+					const double Az = K * 2.0 * Pi / 8.0 + R.Range(-0.2, 0.2), Foot = bMid ? 0.0 : R.Range(0.34, 0.44), Head = bMid ? 0.0 : 0.1;
+					const double High = bMid ? R.Range(1.3, 1.4) : R.Range(1.12, 1.28);
+					const double FX = Foot * std::cos(Az), FY = Foot * std::sin(Az), HX = Head * std::cos(Az), HY = Head * std::sin(Az);
+					// the butts, the band about the waist, the ears spread over it, their top closed
+					const double WX = Lerp(FX, HX, 0.5), WY = Lerp(FY, HY, 0.5), WZ = 0.5 * High;
+					Tube(W, FX, FY, 0.0, 0.12, WX, WY, WZ, 0.075, 5, Butt, Straw);
+					Tube(W, WX, WY, WZ, 0.075, HX, HY, High, 0.16, 5, Straw, Ears);
+					const uint32_t Peak = W.Vert(HX, HY, High + 0.07, 0.0, 0.0, 1.0, Ears);
+					for (int S = 0; S < 5; ++S)
+					{
+						const double A = 2.0 * Pi * S / 5.0;
+						W.Vert(HX + 0.16 * std::cos(A), HY + 0.16 * std::sin(A), High, 0.5 * std::cos(A), 0.5 * std::sin(A), 0.87, Ears);
+					}
+					for (int S = 0; S < 5; ++S) W.Tri(Peak, Peak + 1 + S, Peak + 1 + (S + 1) % 5);
+				}
+			}
+
+			/** A broadleaf tree bare in the winter (an oak, an elm, a chestnut): its trunk, five limbs, their branches and at
+			 * their ends a fine grey haze of twigs; the oaks hold a few dead brown leaves. Some 10 m. Far off (bFull false)
+			 * the trunk, the limbs and the branches. */
+			static void Bare(Writer& W, Rng& R, bool bFull)
+			{
+				const Tone Bark = Rgb(88, 82, 76), BarkLit = Rgb(108, 100, 92), Twig = Rgb(116, 106, 100), TwigTip = Rgb(142, 130, 124);
+				const Tone Dead = Rgb(146, 104, 64), DeadLit = Rgb(168, 124, 78);
+				Tube(W, 0.0, 0.0, -0.2, 0.34, 0.0, 0.0, 3.0, 0.24, bFull ? 7 : 5, Bark, BarkLit);
+				for (int L = 0; L < 5; ++L)
+				{
+					const double Az = L * 2.0 * Pi / 5.0 + R.Range(-0.35, 0.35), Lean = R.Range(0.42, 0.8), Len = R.Range(3.4, 4.6), Z0 = R.Range(2.3, 3.0);
+					const double DX = std::sin(Lean) * std::cos(Az), DY = std::sin(Lean) * std::sin(Az), DZ = std::cos(Lean);
+					const double X0 = 0.12 * std::cos(Az), Y0 = 0.12 * std::sin(Az);
+					const double X1 = X0 + Len * DX, Y1 = Y0 + Len * DY, Z1 = Z0 + Len * DZ;
+					Tube(W, X0, Y0, Z0, 0.16, X1, Y1, Z1, 0.07, bFull ? 5 : 4, Bark, BarkLit);
+					for (int Bn = 0; Bn < 3; ++Bn)
+					{
+						const double T = 0.45 + 0.27 * Bn + R.Range(-0.05, 0.05);
+						const double BAz = Az + R.Range(-1.0, 1.0), BLean = std::clamp(Lean + R.Range(-0.45, 0.35), 0.15, 1.3), BLen = R.Range(1.8, 2.8);
+						const double SX = Lerp(X0, X1, T), SY = Lerp(Y0, Y1, T), SZ = Lerp(Z0, Z1, T);
+						const double BX = std::sin(BLean) * std::cos(BAz), BY = std::sin(BLean) * std::sin(BAz), BZ = std::cos(BLean);
+						Tube(W, SX, SY, SZ, 0.06, SX + BLen * BX, SY + BLen * BY, SZ + BLen * BZ, 0.022, bFull ? 4 : 3, Bark, Twig);
+						// the twigs, a spray from the branch's outer half (drawn for the near level only, but always drawn
+						// from the numbers so both levels share their limbs)
+						for (int Tw = 0; Tw < 8; ++Tw)
+						{
+							const double U = R.Range(0.35, 1.0), TAz = BAz + R.Range(-1.2, 1.2), TLean = std::clamp(BLean + R.Range(-0.7, 0.5), 0.05, 1.5), TLen = R.Range(0.7, 1.3);
+							const double Leafy = R.Next(), LeafAz = R.Range(0.0, 2.0 * Pi);
+							if (!bFull) continue;
+							const double PX = SX + U * BLen * BX, PY = SY + U * BLen * BY, PZ = SZ + U * BLen * BZ;
+							const double QX = PX + TLen * std::sin(TLean) * std::cos(TAz), QY = PY + TLen * std::sin(TLean) * std::sin(TAz), QZ = PZ + TLen * std::cos(TLean);
+							W.Blade(PX, PY, PZ, QX, QY, QZ, 0.06, Twig, TwigTip);
+							if (Leafy < 0.3) W.Blade(QX, QY, QZ - 0.05, QX + 0.14 * std::cos(LeafAz), QY + 0.14 * std::sin(LeafAz), QZ + 0.02, 0.1, Dead, DeadLit);
+						}
+					}
+				}
+			}
+
+			/** A straw stack (the pagliaio): the straw built round a pole into a bulging cone some 4.4 m, the pole standing
+			 * out of its top; its skin ragged, wisps out of it, grey where the rain runs, gold where it was cut. Far off
+			 * (bNear false) its plain shape. */
+			static void Stack(Writer& W, Rng& R, bool bNear)
+			{
+				static const double Prof[8][2] = { { 0.0, 1.7 }, { 0.5, 1.95 }, { 1.3, 2.05 }, { 2.1, 1.9 }, { 2.9, 1.5 }, { 3.6, 0.98 }, { 4.1, 0.5 }, { 4.4, 0.16 } };
+				const int Sides = bNear ? 14 : 8;
+				const Tone Gold = Rgb(194, 166, 106), Grey = Rgb(136, 126, 106), Cut = Rgb(206, 180, 118);
+				const uint32_t First = static_cast<uint32_t>(W.M.Colours.size());
+				for (int Rn = 0; Rn < 8; ++Rn)
+				{
+					const double Z = Prof[Rn][0], Rad = Prof[Rn][1];
+					const int Lo = std::max(0, Rn - 1), Hi = std::min(7, Rn + 1);
+					const double DR = Prof[Hi][1] - Prof[Lo][1], DZ = Prof[Hi][0] - Prof[Lo][0];
+					for (int K = 0; K < Sides; ++K)
+					{
+						const double A = 2.0 * Pi * K / Sides + 0.13 * Rn;
+						const bool bRagged = bNear && Rn > 0 && Rn < 7;
+						const double Rag = bRagged ? R.Range(0.92, 1.08) : 1.0, Lift = bRagged ? R.Range(-0.07, 0.07) : 0.0, Streak = bNear ? R.Next() : 0.5;
+						const double NX = std::cos(A) * DZ, NY = std::sin(A) * DZ, NZ = -DR, NL = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+						// (weathered grey from the top down where the rain runs, the gold between; cut fresh low on one side)
+						Tone C = Mixed(Gold, Grey, Clamp01(0.25 + 0.55 * Smooth(1.0, 4.0, Z) + 0.35 * (Streak - 0.5)));
+						if (bNear && Rn <= 3 && std::cos(A - 0.6) > 0.7) C = Mixed(C, Cut, 0.6);
+						W.Vert(Rad * Rag * std::cos(A), Rad * Rag * std::sin(A), Z + Lift, NX / NL, NY / NL, NZ / NL, C);
+					}
+				}
+				for (int Rn = 0; Rn + 1 < 8; ++Rn)
+					for (int K = 0; K < Sides; ++K)
+					{
+						const uint32_t A0 = First + Rn * Sides + K, B0 = First + Rn * Sides + (K + 1) % Sides, A1 = A0 + Sides, B1 = B0 + Sides;
+						W.Tri(A0, B0, B1);
+						W.Tri(A0, B1, A1);
+					}
+				const uint32_t Peak = W.Vert(0.0, 0.0, 4.5, 0.0, 0.0, 1.0, Grey);
+				for (int K = 0; K < Sides; ++K) W.Tri(First + 7 * Sides + K, First + 7 * Sides + (K + 1) % Sides, Peak);
+				// the pole out of its top
+				Tube(W, 0.0, 0.0, 3.9, 0.07, 0.05, 0.03, 5.7, 0.05, bNear ? 5 : 3, Rgb(100, 90, 76), Rgb(120, 108, 92));
+				if (!bNear) return;
+				// wisps out of its ragged skin, and the skirt of straw round its foot
+				for (int K = 0; K < 60; ++K)
+				{
+					const double U = R.Next(), A = R.Range(0.0, 2.0 * Pi), Len = R.Range(0.2, 0.45), Droop = R.Range(-0.35, 0.05);
+					const double Zf = U * 3.9;
+					int Rn = 0;
+					while (Rn < 6 && Prof[Rn + 1][0] < Zf) ++Rn;
+					const double T = (Zf - Prof[Rn][0]) / (Prof[Rn + 1][0] - Prof[Rn][0]);
+					const double Rad = Lerp(Prof[Rn][1], Prof[Rn + 1][1], T) - 0.03;
+					const double X0 = Rad * std::cos(A), Y0 = Rad * std::sin(A);
+					W.Blade(X0, Y0, Zf, X0 + Len * std::cos(A), Y0 + Len * std::sin(A), Zf + Len * Droop, 0.12, Mixed(Gold, Grey, 0.4), Gold);
+				}
+				for (int K = 0; K < 28; ++K)
+				{
+					const double A = K * 2.0 * Pi / 28.0 + R.Range(-0.1, 0.1), Out = R.Range(1.9, 2.25);
+					W.Blade(1.85 * std::cos(A), 1.85 * std::sin(A), 0.55, Out * std::cos(A), Out * std::sin(A), 0.0, 0.3, Mixed(Gold, Grey, 0.3), Mixed(Gold, Grey, 0.5));
+				}
 			}
 
 			// ------------------------------------------------------------------ what stands on it
@@ -1047,20 +1599,33 @@ namespace LandScape
 								const double Side = ShedSide < 0.5 ? -1.0 : 1.0;
 								if (H.House(KitOf(KHouseStone), X + Side * 15.5 * CA + 3.0 * SA, Y + Side * 15.5 * SA - 3.0 * CA, Yaw, 11.6, 11.2)) ++Built;
 							}
-							// the threshing floor before the house; haystacks round it
+							// the threshing floor before the house; a straw stack or two round their poles by it
 							const double FloorAlong = R.Range(-5.0, 5.0), FloorAcross = R.Range(-5.0, 5.0);
 							F.FloorX = X - 15.0 * SA + FloorAlong * CA;
 							F.FloorY = Y + 15.0 * CA + FloorAcross * SA;
-							const int Stacks = 1 + R.Below(3);
+							const double Second = R.Next();
+							const int Stacks = Second < 0.4 ? 2 : 1;
 							for (int K = 0; K < Stacks; ++K)
 							{
 								const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(9.0, 13.0);
 								const double PX = F.FloorX + D * std::cos(A), PY = F.FloorY + D * std::sin(A);
-								const double Sz = R.Range(2.0, 2.5), Tall = R.Range(2.4, 2.9);
+								const double Sz = R.Range(0.85, 1.02), Tall = R.Range(0.88, 1.12);
 								// (the summer's new straw gold; the winter's old stack weathered grey-brown, part eaten)
 								const double Old = 1.0 - Dry;
 								const double StackYaw = R.Range(0.0, 2.0 * Pi), Eaten = R.Next();
-								if (H.Free(PX, PY, 2.6)) H.Plant(LandField::Base::Haycock, PX, PY, StackYaw, Sz, Sz * Tall * (1.0 - 0.25 * Old * Eaten), Tint(Lerp(1.12, 0.9, Old), Lerp(1.08, 0.88, Old), Lerp(0.92, 0.82, Old)));
+								if (H.Free(PX, PY, 2.4)) H.Plant(KitOf(KStack), PX, PY, StackYaw, Sz, Tall * (1.0 - 0.3 * Old * Eaten), Tint(Lerp(1.04, 0.86, Old), Lerp(1.02, 0.85, Old), Lerp(0.97, 0.84, Old)));
+							}
+							// the prickly pears round the farm (the south's)
+							if (bPears)
+							{
+								const double More = R.Next();
+								const int Pears = 2 + static_cast<int>(More * 3.0);
+								for (int K = 0; K < Pears; ++K)
+								{
+									const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(11.0, 22.0), PearYaw = R.Range(0.0, 2.0 * Pi), Sz = R.Range(0.95, 1.5), Tall = R.Range(0.85, 1.2);
+									const double PX = X + D * std::cos(A), PY = Y + D * std::sin(A);
+									if (H.Free(PX, PY, 1.6)) H.Plant(KitOf(KPear), PX, PY, PearYaw, Sz, Sz * Tall, Tint(1.0, 1.0, 1.0));
+								}
 							}
 							// cypresses by the house
 							const int Cyp = 1 + R.Below(3);
@@ -1146,7 +1711,18 @@ namespace LandScape
 				std::vector<std::pair<double, double>> Cur;
 				double Hi = High;
 				auto Flush = [&]() {
-					if (Cur.size() >= 3) H.Wall(Cur, Hi, Thick);
+					if (Cur.size() >= 3)
+					{
+						// (the fields' and the roads' walls laid in the kit's dry stone, each length its own height, the top
+						// stepping unevenly; the wall men take cover behind a little lower and thinner inside them. The
+						// terraces' risers as the ground's own walls.)
+						if (bTerrace) H.Wall(Cur, Hi, Thick);
+						else
+						{
+							H.Wall(Cur, 0.82 * Hi, 0.7 * Thick);
+							LayStone(H, R, Cur, Hi);
+						}
+					}
 					Cur.clear();
 					// (a stretch fallen or bulged: some one in six low)
 					const double Fallen = R.Next(), Low = R.Range(0.45, 0.7), Even = R.Range(0.92, 1.06);
@@ -1182,6 +1758,38 @@ namespace LandScape
 					Cur.push_back({ X, Y });
 				}
 				Flush();
+			}
+
+			/** The kit's dry-stone wall along a run, in lengths of some 4 m (its 6 m piece scaled), each its own height and
+			 * shade; none where a vehicle's recorded way crosses (the wall is cut there). */
+			void LayStone(Host& H, Rng& R, const std::vector<std::pair<double, double>>& Line, double Hi)
+			{
+				std::vector<double> At(Line.size(), 0.0);
+				for (size_t K = 1; K < Line.size(); ++K) At[K] = At[K - 1] + std::hypot(Line[K].first - Line[K - 1].first, Line[K].second - Line[K - 1].second);
+				const double Total = At.back();
+				if (Total < 2.0) return;
+				const int N = std::max(1, static_cast<int>(std::lround(Total / 4.2)));
+				const double Piece = Total / N;
+				size_t Seg = 0;
+				auto PointAt = [&](double S, double& OutX, double& OutY) {
+					while (Seg + 2 < Line.size() && At[Seg + 1] < S) ++Seg;
+					const double L = At[Seg + 1] - At[Seg], T = L > 1e-9 ? std::clamp((S - At[Seg]) / L, 0.0, 1.0) : 0.0;
+					OutX = Lerp(Line[Seg].first, Line[Seg + 1].first, T);
+					OutY = Lerp(Line[Seg].second, Line[Seg + 1].second, T);
+				};
+				double AX = 0.0, AY = 0.0;
+				PointAt(0.0, AX, AY);
+				for (int K = 0; K < N; ++K)
+				{
+					double BX = 0.0, BY = 0.0;
+					PointAt((K + 1) * Piece, BX, BY);
+					const double Taller = R.Range(0.9, 1.1), Shade = R.Range(0.93, 1.06);
+					const double L = std::hypot(BX - AX, BY - AY);
+					if (L > 0.8 && !H.At(AX, AY).bVehicle && !H.At(BX, BY).bVehicle)
+						H.Plant(KitOf(KWall), 0.5 * (AX + BX), 0.5 * (AY + BY), std::atan2(BY - AY, BX - AX), (L + 0.08) / 6.06, Hi * Taller / 1.29, Tint(0.8 * Shade, 0.8 * Shade, 0.78 * Shade));
+					AX = BX;
+					AY = BY;
+				}
 			}
 
 			void Walls(Host& H) override
@@ -1368,7 +1976,7 @@ namespace LandScape
 			 * height's contours (marching squares on the valley side's own rise). */
 			void Terraces(Host& H, Rng& R)
 			{
-				const double B = H.Band(), Step_ = 3.0;
+				const double B = H.Band(), Step_ = 4.0;
 				const double X0 = -B, Y0 = -B;
 				const int NX = static_cast<int>(std::ceil((FW + 2.0 * B) / Step_)) + 1, NY = static_cast<int>(std::ceil((FH + 2.0 * B) / Step_)) + 1;
 				std::vector<float> V(static_cast<size_t>(NX) * NY, -1.0f);
@@ -1529,7 +2137,7 @@ namespace LandScape
 				// the woods (the south's old olive groves; the mainland's holm oak, its dark evergreen crowns), the maquis on
 				// the rough, macchia in clumps across the fallow, a lone olive or two in the grazing, the field corners' cairns
 				// of cleared stones, the sangars on the works
-				const int Tries = static_cast<int>(W * D / 60.0);
+				const int Tries = static_cast<int>(W * D / 80.0);
 				for (int K = 0; K < Tries; ++K)
 				{
 					const double X = R.Range(-B, W - B), Y = R.Range(-B, D - B);
@@ -1537,17 +2145,17 @@ namespace LandScape
 					if (!H.Free(X, Y, 1.0)) continue;
 					const Spot S = H.At(X, Y);
 					if (S.Drawn == 9 || S.Drawn == 11 || S.Drawn == 7 || S.Kind == KWater || S.Kind == KLane) continue;
-					const int C = S.Crop >= 0 ? S.Crop : S.Kind == KRough ? Maquis : Fallow;
+					const int C = CropAt(S);
 					if (S.Kind == KWorks)
 					{
 						// (sangars, stone breastworks, some three a hectare)
-						if (Keep < 0.018 && H.Free(X, Y, 3.0)) H.Plant(KitOf(KSangar), X, Y, Yaw, 0.85 + 0.25 * Size, 1.0, Tint(1.0, 1.0, 1.0));
+						if (Keep < 0.0225 && H.Free(X, Y, 3.0)) H.Plant(KitOf(KSangar), X, Y, Yaw, 0.85 + 0.25 * Size, 1.0, Tint(1.0, 1.0, 1.0));
 						continue;
 					}
 					if (S.Kind == KVillage)
 					{
 						// (the gardens' fruit trees, dark citrus and an olive or two)
-						if (Keep < 0.075) H.Plant(KitOf(KOlive), X, Y, Yaw, Size * 0.8, Size * 0.75, Tint(0.7, 0.86, 0.66));
+						if (Keep < 0.094) H.Plant(KitOf(KOlive), X, Y, Yaw, Size * 0.8, Size * 0.75, Tint(0.7, 0.86, 0.66));
 						continue;
 					}
 					if (S.Kind == KWoods && bSouth)
@@ -1558,7 +2166,7 @@ namespace LandScape
 						const double U = X * CA + Y * SA, V = -X * SA + Y * CA;
 						const int64_t CI = static_cast<int64_t>(std::floor(U / Lat)), CJ = static_cast<int64_t>(std::floor(V / Lat));
 						const uint64_t Cell = Hash(Seed ^ 0x0F1, static_cast<uint64_t>(CI), static_cast<uint64_t>(CJ));
-						if (Keep < 0.88 && WoodCells.insert(Cell).second)
+						if (WoodCells.insert(Cell).second)
 						{
 							const double JU = 1.4 * (2.0 * Unit(Mix(Cell ^ 0x11)) - 1.0), JV = 1.4 * (2.0 * Unit(Mix(Cell ^ 0x12)) - 1.0);
 							const double PU = (CI + 0.5) * Lat + JU, PV = (CJ + 0.5) * Lat + JV;
@@ -1571,18 +2179,20 @@ namespace LandScape
 								H.Plant(KitOf(KOlive), PX, PY, Yaw, Sz, Sz * (0.9 + 0.2 * Silver), Tint(0.92 + 0.1 * Silver, 0.95 + 0.08 * Silver, 0.92 + 0.12 * Silver));
 							}
 						}
-						else if (Keep > 0.94) H.Plant(KitOf(KMacchia), X, Y, Yaw, Size, Size * Lerp(0.8, 1.4, Tall), Tint(Shade, Shade, Shade));
+						else if (Keep > 0.85) H.Plant(KitOf(KMacchia), X, Y, Yaw, Size, Size * Lerp(0.8, 1.4, Tall), Tint(Shade, Shade, Shade));
 						continue;
 					}
 					if (S.Kind == KWoods)
 					{
-						if (Keep < 0.75)
+						if (Keep < 0.8)
 						{
-							// (holm oak, dark and evergreen; the deciduous oaks among them brown into the winter)
-							const bool bHolm = R.Next() < 0.7;
+							// (holm oak, dark and evergreen; the deciduous oaks most of the wood, in leaf from April, bare
+							// from December to March but for a few dead leaves)
+							const double Which_ = R.Next();
+							const bool bHolm = Which_ < 0.35;
 							const double Sz = R.Range(0.48, 0.7);
-							const LandField::Rgb8 Tn = bHolm ? Tint(0.44 * Shade, 0.52 * Shade, 0.42 * Shade) : Tint(Lerp(1.05, 0.62, Leaf) * Shade, Lerp(0.78, 0.7, Leaf) * Shade, Lerp(0.5, 0.5, Leaf) * Shade);
-							H.Plant(LandField::Base::Oak, X, Y, Yaw, Sz, Sz * Lerp(0.85, 1.05, Tall), Tn);
+							if (bHolm) H.Plant(LandField::Base::Oak, X, Y, Yaw, Sz, Sz * Lerp(0.85, 1.05, Tall), Tint(0.44 * Shade, 0.52 * Shade, 0.42 * Shade));
+							else Deciduous(H, X, Y, Yaw, Sz / 0.6, Tall, Shade);
 						}
 						else H.Plant(KitOf(KMacchia), X, Y, Yaw, Size * 1.4, Size * 1.6, Tint(Shade, Shade, Shade));
 						continue;
@@ -1593,28 +2203,42 @@ namespace LandScape
 					{
 						static const double PerHa[5] = { 0.0, 0.0, 2.0, 4.0, 7.0 };
 						const double Ha = PerHa[static_cast<int>(Unit(Mix(S.Key ^ 0x5CA7)) * 4.999)];
-						if (Keep < Ha * 60.0 / 10000.0 && S.Edge > 5.0)
+						if (Keep < Ha * 80.0 / 10000.0 && S.Edge > 5.0)
 						{
-							const bool bCarob = R.Next() < 0.25;
-							H.Plant(KitOf(KOlive), X, Y, Yaw, Size * (bCarob ? 1.5 : 1.35), Size * (bCarob ? 1.3 : 1.45), bCarob ? Tint(0.72, 0.84, 0.7) : Tint(1.04, 1.07, 1.05));
+							// (in the south carobs among them; on the mainland oaks and elms, bare in the winter)
+							const double Which_ = R.Next();
+							if (!bSouth && Which_ < 0.5) Deciduous(H, X, Y, Yaw, 0.75 * Size, Tall, Shade);
+							else
+							{
+								const bool bCarob = bSouth && Which_ < 0.25;
+								H.Plant(KitOf(KOlive), X, Y, Yaw, Size * (bCarob ? 1.5 : 1.35), Size * (bCarob ? 1.3 : 1.45), bCarob ? Tint(0.72, 0.84, 0.7) : Tint(1.04 * Dim, 1.07 * Dim, 1.05 * Dim));
+							}
 							continue;
 						}
 					}
+					// (the south's field edges and roadsides: prickly pear, agave, now and then an agave's dry flower pole)
+					if (bPears && C != Maquis && (S.Edge < 2.5 || (S.Lane > 2.6 && S.Lane < 6.0)) && Keep >= 0.5 && Keep < 0.65 && H.Free(X, Y, 1.4))
+					{
+						if (Keep < 0.5975) H.Plant(KitOf(KPear), X, Y, Yaw, Size * 1.15, Size * Lerp(0.9, 1.3, Tall), Tint(Shade, Shade, Shade));
+						else if (Keep < 0.6375) H.Plant(KitOf(KAgave), X, Y, Yaw, Size, Size * Lerp(0.85, 1.15, Tall), Tint(Shade, Shade, Shade));
+						else H.Plant(KitOf(KSpike), X, Y, Yaw, Size * 0.9, Lerp(0.9, 1.1, Tall), Tint(Shade, Shade, Shade));
+						continue;
+					}
 					if (C == Maquis)
 					{
-						if (Keep < 0.63) H.Plant(KitOf(KMacchia), X, Y, Yaw, Size, Size * Lerp(0.7, 1.5, Tall), Tint(Shade, Shade, Shade));
-						else if (Keep < 0.675) H.Plant(KitOf(KBoulder), X, Y, Yaw, Size, Size * 0.8, Tint(1.08, 1.06, 1.02));
-						else if (Keep < 0.705) H.Plant(KitOf(KStones), X, Y, Yaw, Size, Size, Tint(1.1, 1.08, 1.04));
+						if (Keep < 0.79) H.Plant(KitOf(KMacchia), X, Y, Yaw, Size, Size * Lerp(0.7, 1.5, Tall), Tint(Shade, Shade, Shade));
+						else if (Keep < 0.846) H.Plant(KitOf(KBoulder), X, Y, Yaw, Size, Size * 0.8, Tint(1.08, 1.06, 1.02));
+						else if (Keep < 0.884) H.Plant(KitOf(KStones), X, Y, Yaw, Size, Size, Tint(1.1, 1.08, 1.04));
 						continue;
 					}
 					if (C == Fallow)
 					{
 						// (macchia in clumps across it, some 14 a hectare, thicker along its edges; stones cleared into heaps)
-						if (Keep < 0.084 || (S.Edge < 4.0 && Keep < 0.25)) H.Plant(KitOf(KMacchia), X, Y, Yaw, Size, Size * Lerp(0.7, 1.4, Tall), Tint(Shade, Shade, Shade));
-						else if (Keep > 0.25 && Keep < 0.286) H.Plant(KitOf(KStones), X, Y, Yaw, Size * 1.1, Size, Tint(1.12, 1.1, 1.05));
+						if (Keep < 0.105 || (S.Edge < 4.0 && Keep < 0.31)) H.Plant(KitOf(KMacchia), X, Y, Yaw, Size, Size * Lerp(0.7, 1.4, Tall), Tint(Shade, Shade, Shade));
+						else if (Keep > 0.31 && Keep < 0.355) H.Plant(KitOf(KStones), X, Y, Yaw, Size * 1.1, Size, Tint(1.12, 1.1, 1.05));
 						continue;
 					}
-					if ((C == Grain || C == Plough) && S.Edge < 3.0 && Keep < 0.015) H.Plant(KitOf(KStones), X, Y, Yaw, Size * 1.2, Size, Tint(1.12, 1.1, 1.05));
+					if ((C == Grain || C == Plough) && S.Edge < 3.0 && Keep < 0.019) H.Plant(KitOf(KStones), X, Y, Yaw, Size * 1.2, Size, Tint(1.12, 1.1, 1.05));
 				}
 				// the olives on the terraces' treads (Walls found them)
 				for (const auto& [X, Y] : TerraceTrees)
@@ -1623,16 +2247,63 @@ namespace LandScape
 					if (!H.Free(X, Y, 1.4)) continue;
 					const Spot S = H.At(X, Y);
 					if (S.Drawn == 7 || S.Drawn == 10 || S.Kind == KWoods || S.Kind == KWater || S.Kind == KVillage) continue;
+					// (olives; in the south whole hillsides of almonds among them)
+					if (bSouth && Noise(X / 260.0, Y / 260.0, Seed ^ 0xA1D) > 0.15)
+					{
+						Almond_(H, X, Y, Yaw, 0.75 + 0.2 * Age, Tall, 0.94 + 0.12 * Silver);
+						continue;
+					}
 					const double Sz = 1.05 + 0.6 * Age;
-					H.Plant(KitOf(KOlive), X, Y, Yaw, Sz, Sz * Tall, Tint(0.92 + 0.1 * Silver, 0.95 + 0.08 * Silver, 0.92 + 0.12 * Silver));
+					H.Plant(KitOf(KOlive), X, Y, Yaw, Sz, Sz * Tall, Tint(Dim * (0.92 + 0.1 * Silver), Dim * (0.95 + 0.08 * Silver), Dim * (0.92 + 0.12 * Silver)));
 				}
 				Lanes(H, R);
 				HillTown(H, R);
 			}
 
-			/** The olive groves: in each, the trees on its own loose rows some ten metres apart (fewer than 150 a hectare),
-			 * the rows wavering, a tree missing here and there, old and young. Each parcel found from a coarse scan, then
-			 * walked slot by slot from where it was found. */
+			/** Walk a parcel's lattice slot by slot out from where it was found (GA apart along its grain, GC across it, the
+			 * rows wavering by Wave metres), calling Lay(X, Y, Spot) at each slot inside it. */
+			template <typename F>
+			static void Lattice(Host& H, const Spot& S, double GA, double GC, double Wave, F&& Lay)
+			{
+				const uint64_t Key = S.Key;
+				const double Ca = std::cos(S.Angle), Sa = std::sin(S.Angle);
+				const double OX = S.X - (S.Along * Ca - S.Across * Sa), OY = S.Y - (S.Along * Sa + S.Across * Ca);
+				const double A0 = GA * Unit(Mix(Key ^ 0x0A3)), C0 = GC * Unit(Mix(Key ^ 0x0A4));
+				auto Slot = [&](int I, int J, double& OutX, double& OutY) {
+					const double Along = A0 + I * GA, Across = C0 + J * GC + Wave * Noise(Along / 45.0, J * 1.7, Key);
+					OutX = OX + Along * Ca - Across * Sa;
+					OutY = OY + Along * Sa + Across * Ca;
+				};
+				// (begun from the slots round where the parcel was found, so one found near its edge, its nearest slot
+				// outside it, is walked all the same)
+				std::unordered_set<int64_t> Done;
+				std::vector<std::pair<int, int>> Todo;
+				const int I0 = static_cast<int>(std::lround((S.Along - A0) / GA)), J0 = static_cast<int>(std::lround((S.Across - C0) / GC));
+				for (int DI = -1; DI <= 1; ++DI)
+					for (int DJ = -1; DJ <= 1; ++DJ)
+					{
+						Todo.push_back({ I0 + DI, J0 + DJ });
+						Done.insert(static_cast<int64_t>(I0 + DI) * 100003 + (J0 + DJ));
+					}
+				while (!Todo.empty())
+				{
+					const auto [I, J] = Todo.back();
+					Todo.pop_back();
+					double PX = 0.0, PY = 0.0;
+					Slot(I, J, PX, PY);
+					const Spot Q = H.At(PX, PY);
+					if (Q.Key != Key) continue;
+					for (const auto& [DI, DJ] : { std::pair<int, int>{ 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } })
+						if (Done.insert(static_cast<int64_t>(I + DI) * 100003 + (J + DJ)).second) Todo.push_back({ I + DI, J + DJ });
+					Lay(PX, PY, Q);
+				}
+			}
+
+			/** The groves: in each olive grove the trees on its own loose rows some ten metres apart (fewer than 150 a
+			 * hectare), the rows wavering, a tree missing here and there, old and young; the almonds on a closer, straighter
+			 * grid, smaller, their leaves a fresher green (bare in the winter, in blossom in Sicily's February). And the
+			 * summer's stooks on the stubble, in rows (on most fields: some carted off already). Each parcel found from a
+			 * coarse scan, then walked slot by slot from where it was found. */
 			void Groves(Host& H, Rng& R)
 			{
 				const double B = H.Band();
@@ -1641,42 +2312,69 @@ namespace LandScape
 					for (double SX = -B + 10.0; SX < FW + B; SX += 20.0)
 					{
 						const Spot S = H.At(SX, SY);
-						if (S.Crop != Olive || S.Key == 0 || S.Kind == KWoods || S.Kind == KVillage) continue;
+						// (the stooks on the stubble: a wheat field's, or the stubble strips of one worked in strips)
+						const bool bStooks = Stage == 2 && (S.Crop == Grain || ((S.Crop == Fallow || S.Crop == Plough) && Unit(Mix(S.Key ^ 0x57A1)) <= 0.6));
+						if ((S.Crop != Olive && S.Crop != Almond && !bStooks) || S.Key == 0 || S.Kind == KWoods || S.Kind == KVillage) continue;
 						if (!Seen.insert(S.Key).second) continue;
 						const uint64_t Key = S.Key;
-						const bool bOld = S.Kind == KOpen;
-						const double Ca = std::cos(S.Angle), Sa = std::sin(S.Angle);
-						const double OX = S.X - (S.Along * Ca - S.Across * Sa), OY = S.Y - (S.Along * Sa + S.Across * Ca);
-						const double GA = 8.5 + 2.5 * Unit(Mix(Key ^ 0x0A1)), GC = 9.5 + 2.0 * Unit(Mix(Key ^ 0x0A2));
-						const double A0 = GA * Unit(Mix(Key ^ 0x0A3)), C0 = GC * Unit(Mix(Key ^ 0x0A4));
-						auto Slot = [&](int I, int J, double& OutX, double& OutY) {
-							const double Along = A0 + I * GA, Across = C0 + J * GC + 1.4 * Noise(Along / 45.0, J * 1.7, Key);
-							OutX = OX + Along * Ca - Across * Sa;
-							OutY = OY + Along * Sa + Across * Ca;
-						};
-						std::unordered_set<int64_t> Done;
-						std::vector<std::pair<int, int>> Todo{ { static_cast<int>(std::lround((S.Along - A0) / GA)), static_cast<int>(std::lround((S.Across - C0) / GC)) } };
-						Done.insert(static_cast<int64_t>(Todo[0].first) * 100003 + Todo[0].second);
-						while (!Todo.empty())
+						if (bStooks)
 						{
-							const auto [I, J] = Todo.back();
-							Todo.pop_back();
-							double PX = 0.0, PY = 0.0;
-							Slot(I, J, PX, PY);
-							const Spot Q = H.At(PX, PY);
-							if (Q.Key != Key) continue;
-							for (const auto& [DI, DJ] : { std::pair<int, int>{ 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } })
-								if (Done.insert(static_cast<int64_t>(I + DI) * 100003 + (J + DJ)).second) Todo.push_back({ I + DI, J + DJ });
+							// (sheaves stooked in rows some 9 m apart, a stook every 7 m along them)
+							if (Unit(Mix(Key ^ 0x5700)) > 0.85) continue;
+							Lattice(H, S, 7.0, 9.0, 0.6, [&](double PX, double PY, const Spot& Q) {
+								const double Miss = R.Next(), JX = R.Range(-0.8, 0.8), JY = R.Range(-0.8, 0.8), Yaw = R.Range(0.0, 2.0 * Pi), Sz = R.Range(0.9, 1.1), Tall = R.Range(0.92, 1.08);
+								if (Miss < 0.15 || Q.Edge < 3.0 || CropAt(Q) != Grain) return;
+								const double X = PX + JX, Y = PY + JY;
+								if (H.Free(X, Y, 0.8)) H.Plant(KitOf(KStook), X, Y, Yaw, Sz, Sz * Tall, Tint(1.0, 1.0, 1.0));
+							});
+							continue;
+						}
+						const bool bAlmond = S.Crop == Almond;
+						const bool bOld = S.Kind == KOpen;
+						const double GA = bAlmond ? 6.5 + 1.0 * Unit(Mix(Key ^ 0x0A1)) : 8.5 + 2.5 * Unit(Mix(Key ^ 0x0A1));
+						const double GC = bAlmond ? 7.0 + 1.0 * Unit(Mix(Key ^ 0x0A2)) : 9.5 + 2.0 * Unit(Mix(Key ^ 0x0A2));
+						Lattice(H, S, GA, GC, bAlmond ? 0.4 : 1.4, [&](double PX, double PY, const Spot& Q) {
 							const double Miss = R.Next(), JX = R.Range(-1.4, 1.4), JY = R.Range(-1.4, 1.4), Yaw = R.Range(0.0, 2.0 * Pi);
 							const double Age = R.Next(), Silver = R.Range(0.0, 1.0), Tall = R.Range(0.9, 1.12);
-							if (Miss < (bOld ? 0.3 : 0.12) || Q.Edge < 2.5) continue;
-							const double X = PX + JX, Y = PY + JY;
-							if (!H.Free(X, Y, 1.4)) continue;
+							if (Miss < (bAlmond ? 0.08 : bOld ? 0.3 : 0.12) || Q.Edge < 2.5) return;
+							const double X = PX + (bAlmond ? 0.3 : 1.0) * JX, Y = PY + (bAlmond ? 0.3 : 1.0) * JY;
+							if (!H.Free(X, Y, 1.4)) return;
+							if (bAlmond)
+							{
+								Almond_(H, X, Y, Yaw, 0.72 + 0.22 * Age, Tall, 0.94 + 0.12 * Silver);
+								return;
+							}
 							// (centuries old most of them, a few young ones replanted; the crowns speckled toward silver)
 							const double Sz = Age < 0.15 ? 0.85 + 0.3 * Age / 0.15 : 1.2 + 0.55 * (Age - 0.15) / 0.85;
-							H.Plant(KitOf(KOlive), X, Y, Yaw, Sz, Sz * Tall, Tint(0.92 + 0.1 * Silver, 0.95 + 0.08 * Silver, 0.92 + 0.12 * Silver));
-						}
+							H.Plant(KitOf(KOlive), X, Y, Yaw, Sz, Sz * Tall, Tint(Dim * (0.92 + 0.1 * Silver), Dim * (0.95 + 0.08 * Silver), Dim * (0.92 + 0.12 * Silver)));
+						});
 					}
+			}
+
+			/** An almond tree (Sz as the olive's): in leaf a fresher, yellower green than the olives; bare in the winter, its
+			 * blossom pale over its twigs in Sicily's January and February. */
+			void Almond_(Host& H, double X, double Y, double Yaw, double Sz, double Tall, double Shade) const
+			{
+				if (Leaf < 0.5)
+				{
+					const double Bloom = bSouth && (Fd.Month == 1 || Fd.Month == 2) ? 1.0 : 0.0;
+					H.Plant(KitOf(KBare), X, Y, Yaw, 0.42 * Sz / 0.85, 0.42 * Sz / 0.85 * Tall, Tint(Lerp(1.0, 1.7, Bloom) * Shade, Lerp(1.0, 1.6, Bloom) * Shade, Lerp(1.0, 1.62, Bloom) * Shade));
+					return;
+				}
+				H.Plant(KitOf(KOlive), X, Y, Yaw, Sz, Sz * Tall, Tint(0.98 * Shade, 1.1 * Shade, 0.76 * Shade));
+			}
+
+			/** A deciduous broadleaf tree (an oak, an elm; Sz as the bare tree's, some 10 m): bare from December to March
+			 * (the bare tree), in leaf after (the bocage's oak, browning into the autumn). */
+			void Deciduous(Host& H, double X, double Y, double Yaw, double Sz, double Tall, double Shade) const
+			{
+				if (Leaf < 0.5)
+				{
+					H.Plant(KitOf(KBare), X, Y, Yaw, Sz, Sz * Lerp(0.88, 1.08, Tall), Tint(Shade, Shade, Shade));
+					return;
+				}
+				const double S = 0.6 * Sz;
+				H.Plant(LandField::Base::Oak, X, Y, Yaw, S, S * Lerp(0.85, 1.05, Tall), Tint(Lerp(1.05, 0.62, Leaf) * Shade, Lerp(0.78, 0.7, Leaf) * Shade, 0.5 * Shade));
 			}
 
 			/** Along the roads: rows of cypress here and there, the telegraph line beside the main road. */
@@ -1694,10 +2392,12 @@ namespace LandScape
 						Longest = Len;
 						Main = L;
 					}
-					// a row of cypresses on one side, now and then (a villa's frontage, a chapel, a crossing)
+					// a row of cypresses on one side, now and then (a villa's frontage, a chapel, a crossing); on the
+					// mainland half the rows plane trees and elms, bare in the winter
 					const double Half = H.LaneHalf(L);
 					double S = 0.0, NextRow = R.Range(150.0, 400.0), RowEnd = -1.0;
 					int Side = 1;
+					bool bBroad = false;
 					for (size_t K = 1; K < Line.size(); ++K)
 					{
 						const double DX = Line[K].first - Line[K - 1].first, DY = Line[K].second - Line[K - 1].second, DL = std::hypot(DX, DY);
@@ -1706,17 +2406,23 @@ namespace LandScape
 						if (S > NextRow && RowEnd < 0.0)
 						{
 							RowEnd = S + R.Range(30.0, 90.0);
-							const double Which_ = R.Next();
+							const double Which_ = R.Next(), Kind_ = R.Next();
 							Side = Which_ < 0.5 ? -1 : 1;
+							bBroad = !bSouth && Kind_ < 0.5;
+							if (bBroad) RowEnd += 60.0;
 						}
 						if (RowEnd > 0.0)
 						{
-							if (std::fmod(S, 7.0) < DL)
+							if (std::fmod(S, bBroad ? 9.0 : 7.0) < DL)
 							{
-								const double Off = Half + 3.4;
+								const double Off = Half + (bBroad ? 4.2 : 3.4);
 								const double X = Line[K].first - DY / DL * Side * Off, Y = Line[K].second + DX / DL * Side * Off;
 								const double Yaw = R.Range(0.0, 2.0 * Pi), Wide = R.Range(0.9, 1.1), Tall = R.Range(1.1, 1.5);
-								if (H.Free(X, Y, 1.2) && H.At(X, Y).Drawn != 7) H.Plant(KitOf(KCypress), X, Y, Yaw, Wide, Tall, Tint(1.0, 1.0, 1.0));
+								if (H.Free(X, Y, 1.2) && H.At(X, Y).Drawn != 7)
+								{
+									if (bBroad) Deciduous(H, X, Y, Yaw, 0.85 * Wide, (Tall - 1.1) / 0.4, 1.0);
+									else H.Plant(KitOf(KCypress), X, Y, Yaw, Wide, Tall, Tint(1.0, 1.0, 1.0));
+								}
 							}
 							if (S > RowEnd)
 							{
@@ -1785,7 +2491,9 @@ namespace LandScape
 				return Wet > 0.6 && Else == 0 ? 4 : Else; // (the winter's earth is mud)
 			}
 			const char* Earth() const override { return "terrarossa"; }
-			Tone WallStone() const override { return Rgb(176, 168, 148); }
+			// (grey-ochre field stone, lit some 170 to 190 in the sun: the kit's 8C7E66 and A8987C between; its face in the
+			// shade a dark grey-brown, never black)
+			Tone WallStone() const override { return Rgb(142, 130, 106); }
 			double WallIvy() const override { return 0.08; }
 
 		private:
@@ -1793,7 +2501,8 @@ namespace LandScape
 			double FW = 0.0, FH = 0.0;
 			double Dry = 1.0, Wet = 0.0, Green = 0.0, Leaf = 1.0, Turn = 0.0;
 			int Stage = 2;
-			bool bSouth = false, bSnowCaps = false;
+			bool bSouth = false, bPears = false, bSnowCaps = false;
+			double Dim = 1.0; // (the olives' silver crowns a little darker under the mainland's winter light, wet)
 			double HillX = 0.0, HillY = 0.0, HillTop = 0.0;
 			std::vector<Exit> Exits;
 			std::vector<Farm> Farms;
@@ -1802,6 +2511,9 @@ namespace LandScape
 			bool bTower = false, bCemetery = false;
 			std::vector<float> LiftGrid;
 			double GridX0 = 0.0, GridY0 = 0.0, GridStep = 50.0;
+			static constexpr double MotStep = 8.0, MotMargin = 400.0;
+			std::vector<float> MotGrid; // (M, Mid, Warm, the soil's red: four to a point)
+			int MNX = 0, MNY = 0;
 			int GridNX = 0, GridNY = 0;
 			std::vector<std::pair<double, double>> TerraceTrees;
 			double TowerX = 0.0, TowerY = 0.0, CemX = 0.0, CemY = 0.0, CemYaw = 0.0;

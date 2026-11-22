@@ -298,7 +298,7 @@ namespace LandScape
 			A.bSet = true;
 			Ink(A.HazeInk, 0.61, 0.70, 0.81);
 			Ink(A.HazeOvercast, 0.52, 0.55, 0.58);
-			A.HazeDensity = 0.0101;
+			A.HazeDensity = 0.0051; // (a clear day's, some 4,700 m, as the desert's: the art director's first read of 22 November; a hazy or sirocco day's 2,400 m is 0.0101)
 			A.SkyDust = 0.85;
 			Grade(0.50, 0.58, 1.35, -0.5, 0.55, 1.02, 0.97);
 			break;
