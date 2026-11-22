@@ -254,6 +254,23 @@ namespace
 		return Out;
 	}
 
+	/** A painter of the shadows alone: it owns none of the clouds (its part takes none), so it lays only their shadows
+	 * on the sea and the land, every one the far room lays, as loose as the far room (its turn by AirSky::Rooms's
+	 * own measure). A puff's room of one, never used. */
+	AirSky::Painter ShadowsAlone(double Ink)
+	{
+		AirSky::Painter Shade;
+		AirSky::Part None;
+		None.bAll = false;
+		None.bNear = false;
+		None.Split = 1e18;
+		Shade.SetPart(None);
+		Shade.SetRoom(1);
+		Shade.SetInk(Ink);
+		Shade.SetLoose(0.0005, 0.04);
+		return Shade;
+	}
+
 	double LeastMiddle(const std::function<void()>& Work)
 	{
 		// (the middle of 15, the least of three tries: one slow stretch of a shared machine is not the work's)
@@ -355,7 +372,9 @@ int main(int Argc, char** Argv)
 	std::vector<Limit> Limits;
 	Match Whole;
 	Stale Within, Margin;
-	double WorstLayMs = 0.0, WorstAskUs = 0.0;
+	double WorstLayMs = 0.0, WorstAskUs = 0.0, WorstShadeMs = 0.0, ShadowMost = 0.0;
+	int ShadowEyes = 0, ShadowDiffer = 0;
+	long ShadowsLaid = 0;
 	int MostLaid = 0, MostDropped = 0, LeastSlackEye = 1 << 30;
 	double LeastSlack = 1e18;
 	for (const Case& C : Cases)
@@ -393,6 +412,33 @@ int main(int Argc, char** Argv)
 			const auto T0 = Clock::now();
 			for (int Rep = 0; Rep < 100000; ++Rep) bSink = bSink ^ Timed.Wants(E + Vec(0.0, 0.0, Rep * 1e-6), C.Drift);
 			WorstAskUs = std::max(WorstAskUs, Ms(T0) * 1000.0 / 100000.0);
+			// (the shadows on the sea, painted alone by a painter that owns none of the clouds, as a scene does whose
+			// clouds the chip draws: the far room's own shadows, point for point, and what that costs)
+			AirSky::Rooms Today;
+			Today.SetSprites(true);
+			Today.SetInk(C.Ink);
+			Today.PaintBoth(C.F, E, C.Drift, C.Sun, C.Light);
+			AirSky::Painter Shade = ShadowsAlone(C.Ink);
+			std::vector<Vec> NoPoints, ShadowPoints;
+			std::vector<uint8_t> NoRgba, ShadowRgba;
+			Shade.Paint(C.F, E, C.Drift, C.Sun, C.Light, NoPoints, NoRgba, &ShadowPoints, &ShadowRgba, nullptr);
+			++ShadowEyes;
+			if (ShadowPoints.size() != Today.Shadows.size() || ShadowRgba != Today.ShadowRgba)
+			{
+				++ShadowDiffer;
+			}
+			else
+			{
+				for (size_t Q = 0; Q < ShadowPoints.size(); ++Q)
+				{
+					ShadowMost = std::max(ShadowMost, (ShadowPoints[Q] - Today.Shadows[Q]).Length());
+				}
+				for (size_t Q = 3; Q < ShadowRgba.size(); Q += 4)
+				{
+					ShadowsLaid += ShadowRgba[Q] > 0 ? 1 : 0;
+				}
+			}
+			WorstShadeMs = std::max(WorstShadeMs, LeastMiddle([&]() { Shade.Paint(C.F, E, C.Drift, C.Sun, C.Light, NoPoints, NoRgba, &ShadowPoints, &ShadowRgba, nullptr); }));
 		}
 		std::printf("%-26s %d puffs drawn and matched, %ld points: place %.3f m at most (%ld over %.2f), colour %d (%ld over %d), alpha %d (%ld over %d), sheet %.4f (%ld over %.3f); %d drawn by the painter only, %d by the chip only\n",
 		            C.Name.c_str(), Here.Puffs, Here.Points, Here.MostPlace, Here.PlaceOff, PlaceGive, Here.MostColour, Here.ColourOff, ColourGive, Here.MostAlpha, Here.AlphaOff, AlphaGive, Here.MostSheet,
@@ -487,6 +533,10 @@ int main(int Argc, char** Argv)
 	Limits.push_back({ "the chip's table has room", MostDropped == 0, std::to_string(MostLaid) + " puffs at most of " + std::to_string(AirSky::Chip().Room()) + ", " + std::to_string(MostDropped) + " left out",
 	                   "none left out" });
 	Limits.push_back({ "the chip's table laid within budget", WorstLayMs < 2.5, Num(WorstLayMs, 2) + " ms", "under 2.5 ms (the least of three middles of 15; the painter's turn is under 5)" });
+	Limits.push_back({ "the shadows painted alone are the far room's", ShadowEyes > 0 && ShadowDiffer == 0 && ShadowMost < 1e-6,
+	                   std::to_string(ShadowEyes) + " eyes, " + std::to_string(ShadowDiffer) + " differ, " + std::to_string(ShadowsLaid) + " shadow points shown, " + Num(ShadowMost, 6) + " m at most apart",
+	                   "the same points and paints" });
+	Limits.push_back({ "the shadows painted alone within budget", WorstShadeMs < 1.5, Num(WorstShadeMs, 2) + " ms", "under 1.5 ms (the least of three middles of 15; on the game's thread, about twice a second)" });
 	Limits.push_back({ "the chip's frame ask within budget", WorstAskUs < 2.0, Num(WorstAskUs, 3) + " us", "under 2 microseconds" });
 	for (const auto& Each : Paths)
 	{
