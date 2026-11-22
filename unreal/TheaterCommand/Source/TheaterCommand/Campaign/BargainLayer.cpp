@@ -667,6 +667,9 @@ namespace BargainLayer
 			{
 				UMaterialInstanceDynamic* Ink = UMaterialInstanceDynamic::Create(Highlight, Map);
 				Ink->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+				// (held here, in the mesh's own list, from the start: S.Ink only watches it, and no section may have triangles
+				// to take it for a while. As BattleEffects.cpp holds its puffs' ink)
+				Mesh->SetMaterial(0, Ink);
 				S.Ink = Ink;
 			}
 			else
