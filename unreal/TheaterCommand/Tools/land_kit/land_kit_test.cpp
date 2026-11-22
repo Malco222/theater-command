@@ -892,6 +892,144 @@ int main(int argc, char** argv)
 		}
 	}
 
+	// ---- The desert coats (release 2): a model's swaps.paint.by_ground rows are read before by_month on a field of that
+	// ground; a month none of them holds, and every other ground, is dressed as before.
+	{
+		std::printf("\nTHE DESERT COATS (swaps.paint.by_ground)\n");
+		// (another folder of model files, for those not in the game yet: the Matilda's Light Stone)
+		const char* More = std::getenv("LAND_KIT_MORE");
+		auto ReadModel = [&Content, More](const std::string& Name, std::string& Out)
+		{
+			return ReadFile(Content + "/Models/Battle/" + Name + ".json", Out) || (More && ReadFile(std::string(More) + "/" + Name + ".json", Out));
+		};
+		auto CoatOf = [](const std::string& Text, const std::string& Nation, int Year, int Month, const std::string& Terrain, std::string& Out)
+		{
+			Dress D;
+			D.Nation = Nation;
+			D.Year = Year;
+			D.Month = Month;
+			D.Terrain = Terrain;
+			Model M;
+			const bool bOk = M.Load(Text, D, Out);
+			if (bOk)
+			{
+				Out = M.Coat;
+			}
+			return bOk;
+		};
+		struct Want
+		{
+			const char* Name;
+			const char* Nation;
+			int Year, Month;
+			const char* Coat;
+		};
+		const Want Wants[] = {
+			{ "PanzerIV", "GER", 1941, 6, "desert41" }, { "PanzerIV", "GER", 1942, 2, "desert41" }, { "PanzerIV", "GER", 1942, 3, "desert42" },
+			{ "PanzerIV", "GER", 1943, 5, "desert42" }, { "PanzerIV", "GER", 1943, 6, "" }, { "StuG3", "GER", 1942, 11, "desert42" },
+			{ "leFH18", "GER", 1941, 4, "desert41" }, { "Tiger", "GER", 1943, 2, "desert42" }, { "Tiger", "GER", 1943, 7, "" },
+			{ "Matilda", "UK", 1941, 6, "stone" }, { "Sherman", "USA", 1943, 3, "" } };
+		Tally Picked;
+		for (const Want& W : Wants)
+		{
+			std::string Text, Desert, Plains;
+			if (!ReadModel(W.Name, Text))
+			{
+				std::printf("  (%s.json is in neither the game's models nor LAND_KIT_MORE: not checked)\n", W.Name);
+				continue;
+			}
+			const bool bOk = CoatOf(Text, W.Nation, W.Year, W.Month, "desert", Desert) && CoatOf(Text, W.Nation, W.Year, W.Month, "plains", Plains);
+			// (an empty want: a month no desert row holds, or a model with none, dressed on the desert as by its by_month)
+			const std::string Wanted = *W.Coat ? std::string(W.Coat) : Plains;
+			std::printf("  %-9s %-3s %04d-%02d  desert: %-9s plains: %-9s %s\n", W.Name, W.Nation, W.Year, W.Month, Desert.c_str(), Plains.c_str(),
+				bOk && Desert == Wanted ? "ok" : "WRONG");
+			Picked.Note(bOk && Desert == Wanted, 0.0, std::string(W.Name) + " " + std::to_string(W.Year) + "-" + std::to_string(W.Month) + " on the desert: " + Desert + ", not " + Wanted);
+		}
+		Report("a desert field picks the desert coat of its month", Picked, "");
+
+		// Every game model, every month of the war, its owners: no ground, plains and steppe dress alike (as before this
+		// reader), and the desert differs only in the months its desert rows hold.
+		Tally Same;
+		const char* Models[10] = { "Sherman", "Tiger", "PanzerIV", "Howitzer105", "leFH18", "Truck", "StuG3", "T34", "LightTank", "ZiS3" };
+		const char* Nations[4] = { "USA", "GER", "SOV", "UK" };
+		long Desert = 0;
+		for (const char* Name : Models)
+		{
+			std::string Text;
+			if (!ReadModel(Name, Text))
+			{
+				continue;
+			}
+			Json Doc;
+			std::string Why;
+			Doc.Parse(Text, Why);
+			const Json::Value Rows = Doc.Root()["swaps"]["paint"]["by_ground"]["desert"];
+			for (const char* Nation : Nations)
+			{
+				for (int Key = 1939 * 12 + 8; Key <= 1945 * 12 + 7; ++Key)
+				{
+					const int Year = Key / 12, Month = Key % 12 + 1;
+					char MonthKey[16];
+					std::snprintf(MonthKey, sizeof(MonthKey), "%04d-%02d", Year, Month);
+					std::string None, Plains, Steppe, Sand;
+					const bool bOk = CoatOf(Text, Nation, Year, Month, "", None) && CoatOf(Text, Nation, Year, Month, "plains", Plains)
+						&& CoatOf(Text, Nation, Year, Month, "steppe", Steppe) && CoatOf(Text, Nation, Year, Month, "desert", Sand);
+					std::string Row;
+					for (size_t I = 0; I < Rows.Count(); ++I)
+					{
+						const std::string From = Rows.At(I)["from"].Str(""), To = Rows.At(I)["to"].Str("");
+						if ((From.empty() || From <= MonthKey) && (To.empty() || MonthKey <= To))
+						{
+							Row = Rows.At(I)["paint"].Str("");
+							break;
+						}
+					}
+					Desert += Row.empty() ? 0 : 1;
+					Same.Note(bOk && Plains == None && Steppe == None && Sand == (Row.empty() ? None : Row), 0.0,
+						std::string(Name) + " " + Nation + " " + MonthKey + ": none " + None + ", plains " + Plains + ", steppe " + Steppe + ", desert " + Sand);
+				}
+			}
+		}
+		std::printf("  (%ld model-nation-months held by a desert row)\n", Desert);
+		Report("every other ground and month dressed as before", Same, "");
+
+		// The whole way: this battle's recording with its field made desert and its date November 1942 (Tunisia), read by
+		// Battle::Load, dresses the German models in the desert coat and leaves the others as on its own ground.
+		Tally Whole;
+		std::string Sand = Recording, Home = Recording;
+		const size_t TerrainAt = Sand.find("\"terrain\":\"");
+		const size_t DateAt = Sand.find("\"date\":\"");
+		if (TerrainAt != std::string::npos && DateAt != std::string::npos)
+		{
+			const size_t TerrainEnd = Sand.find('"', TerrainAt + 11);
+			Sand.replace(TerrainAt + 11, TerrainEnd - (TerrainAt + 11), "desert");
+			const size_t DateIn = Sand.find("\"date\":\"") + 8;
+			Sand.replace(DateIn, Sand.find('"', DateIn) - DateIn, "November 1942");
+			const size_t HomeDate = Home.find("\"date\":\"") + 8;
+			Home.replace(HomeDate, Home.find('"', HomeDate) - HomeDate, "November 1942");
+			Battle OnSand, OnHome;
+			std::string SandError, HomeError;
+			const bool bSand = OnSand.Load(Sand, Read, Flat, nullptr, 79, SandError);
+			const bool bHome = OnHome.Load(Home, Read, Flat, nullptr, 79, HomeError);
+			Whole.Note(bSand && bHome && OnSand.Terrain == "desert" && OnHome.Terrain == B.Terrain, 0.0,
+				"the battle on the desert would not load (" + SandError + HomeError + "), or its ground read " + OnSand.Terrain);
+			std::printf("  this battle's own ground: %s\n", B.Terrain.c_str());
+			for (const auto& [Key, M] : OnSand.Models())
+			{
+				const auto Other = OnHome.Models().find(Key);
+				const std::string Was = Other != OnHome.Models().end() ? Other->second.Coat : std::string("?");
+				const bool bGerman = M.Dressed.Nation == "GER" && Key.rfind("Truck", 0) != 0;
+				std::printf("  %-16s November 1942 on its own ground: %-9s on the desert: %s\n", Key.c_str(), Was.c_str(), M.Coat.c_str());
+				Whole.Note(bGerman ? M.Coat == "desert42" : M.Coat == Was, 0.0, Key + " on the desert in November 1942: " + M.Coat + " (on its own ground " + Was + ")");
+			}
+		}
+		else
+		{
+			Whole.Note(false, 0.0, "the recording has no field.place.terrain or date to change");
+		}
+		Report("a recording's desert field dresses its models (Battle::Load)", Whole, "");
+	}
+
 	std::printf("\n%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
 	return Failures ? 1 : 0;
 }

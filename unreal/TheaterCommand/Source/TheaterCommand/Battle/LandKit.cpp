@@ -898,11 +898,10 @@ namespace LandKit
 			return PartKind::Fixed;
 		}
 
-		/** The month's row of a model's swaps.by_month (from and to both counted in), or a null. */
-		Json::Value MonthRow(const Json::Value& Swaps, const std::string& Key)
+		/** The month's row of a list of rows (from and to both counted in; a row with neither holds every month), or a null. */
+		Json::Value RowFor(const Json::Value& Rows, const std::string& Key)
 		{
-			const Json::Value Rows = Swaps["by_month"];
-			for (size_t I = 0; I < Rows.Count(); ++I)
+			for (size_t I = 0; Rows.IsArray() && I < Rows.Count(); ++I)
 			{
 				const Json::Value Row = Rows.At(I);
 				const std::string From = Row["from"].Str(""), To = Row["to"].Str("");
@@ -913,6 +912,8 @@ namespace LandKit
 			}
 			return Json::Value();
 		}
+		/** The month's row of a model's swaps.by_month, or a null. */
+		Json::Value MonthRow(const Json::Value& Swaps, const std::string& Key) { return RowFor(Swaps["by_month"], Key); }
 		/** A row's choice for one swap: a name, or a mix's "one" (the face a game showing one look a unit takes). */
 		std::string ChoiceIn(const Json::Value& Row, const std::string& Swap)
 		{
@@ -1334,7 +1335,22 @@ namespace LandKit
 		std::string CoatUpper, CoatUpper2, CoatShade, CoatUpper3;
 		if (PaintSwap["choices"].IsObject())
 		{
-			std::string Choice = ChoiceIn(Row, "paint");
+			// The field's ground first (swaps.paint.by_ground: on a desert field the German desert coats of 1941 and 1942
+			// and the British Light Stone): its rows are read as by_month's are, and a month none of them holds (or a
+			// coat the file does not have) falls back to by_month.
+			std::string Choice;
+			if (!D.Terrain.empty())
+			{
+				Choice = ChoiceIn(RowFor(PaintSwap["by_ground"][D.Terrain], MonthKey), "paint");
+				if (!Choice.empty() && !PaintSwap["choices"][Choice].IsObject())
+				{
+					Choice.clear();
+				}
+			}
+			if (Choice.empty())
+			{
+				Choice = ChoiceIn(Row, "paint");
+			}
 			if (Choice.empty() && Nation == "GER" && PaintSwap["choices"]["yellow"].IsObject())
 			{
 				// Dark yellow from February 1943 (the Tiger's file names the years but has no months).
@@ -4788,6 +4804,7 @@ namespace LandKit
 		D.Nation = B.Nation;
 		D.Year = Year;
 		D.Month = Month;
+		D.Terrain = Terrain;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
@@ -4942,6 +4959,7 @@ namespace LandKit
 		{
 			return false;
 		}
+		Terrain = Doc.Root()["field"]["place"]["terrain"].Str("plains");
 		bLive = Doc.Root()["live"].Truth(false);
 		Limit = Doc.Root()["limit"].Num(0.0);
 
