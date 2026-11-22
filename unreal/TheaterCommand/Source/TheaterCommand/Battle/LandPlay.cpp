@@ -56,6 +56,8 @@ namespace LandPlay
 			if (Weapon == "at") return Army == "GER" ? 88.0 : 60.0;
 			if (Weapon == "gun") return 105.0;
 			if (Weapon == "mortar") return 81.0;
+			// (a smoke round: the platoon's light mortar, the British 2-inch, the American 60 mm, the others' 50 mm)
+			if (Weapon == "smoke") return Army == "UK" ? 51.0 : Army == "USA" || Army == "FRA" ? 60.0 : Army == "ITA" ? 45.0 : 50.0;
 			return 8.0;
 		}
 	}
@@ -204,12 +206,12 @@ namespace LandPlay
 		double Up = 0.0, Ahead = 0.6;
 		if (Tr.Role == "tank") { Up = 2.2; Ahead = 4.0; }
 		else if (Tr.Role == "gun") { Up = 1.2; Ahead = 2.0; }
-		else if (Weapon == "mortar") { Up = 0.7; Ahead = 0.3; }
+		else if (Weapon == "mortar" || Weapon == "smoke") { Up = 0.7; Ahead = 0.3; } // (a smoke round: the light mortar's)
 		else Up = MuzzleHeight(Pose);
 		At = Vec(S.X + Fx * Ahead, S.Y + Fy * Ahead, Ground + Up);
 		// A mortar and a howitzer firing far lay their tube high: the flash and smoke go up its line.
 		double Lift = 0.0;
-		if (Weapon == "mortar") Lift = 1.1;
+		if (Weapon == "mortar" || Weapon == "smoke") Lift = 1.1;
 		else if (Weapon == "gun") Lift = 0.35;
 		OutFacing = Vec(Fx * std::cos(Lift), Fy * std::cos(Lift), std::sin(Lift)).Unit();
 		return At;
@@ -338,7 +340,7 @@ namespace LandPlay
 		N.At = At;
 		N.From = At;
 		N.To = To;
-		N.Weapon = R.W;
+		N.Weapon = R.W == "smoke" ? std::string("mortar") : R.W; // (a smoke round is fired from the light mortar: its sound)
 		N.Army = Army;
 		N.Side = By ? By->Side : -1;
 		N.Track = S;
@@ -380,7 +382,7 @@ namespace LandPlay
 		}
 		else
 		{
-			M.Name = R.W == "tank" ? "tank_gun" : R.W == "at" ? "at_gun" : R.W == "gun" ? "howitzer" : R.W == "mortar" ? "mortar" : "rifle";
+			M.Name = R.W == "tank" ? "tank_gun" : R.W == "at" ? "at_gun" : R.W == "gun" ? "howitzer" : R.W == "mortar" || R.W == "smoke" ? "mortar" : "rifle";
 			if (S >= 0) OutFx.push_back(M);
 		}
 		OutNoise.push_back(N);
@@ -436,10 +438,14 @@ namespace LandPlay
 			}
 			return;
 		}
-		// A smoke round (the drill book's screens, 22 November) is not high explosive: no burst, no hole, no blast's
-		// noise. Its screen is drawn apart; until it is, nothing (never a shell's burst and crater by mistake).
+		// A smoke round (the drill book's screens, 22 November) is not high explosive: no burst of earth, no hole, no
+		// blast's noise. Its screen: a phosphorus round's white burst for the Americans' 60 mm, a burning bomb's gush for
+		// the others' light mortars.
 		if (R.W == "smoke")
 		{
+			F.Kind = FxKind::Screen;
+			F.Name = Army == "USA" ? "wp" : "canister";
+			OutFx.push_back(F);
 			return;
 		}
 		const bool bAgainstArmour = R.W == "tank" || R.W == "at";

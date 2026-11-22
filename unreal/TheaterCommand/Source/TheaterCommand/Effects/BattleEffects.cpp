@@ -497,6 +497,14 @@ void FBattleEffects::OilStop(int32 Id)
 	}
 }
 
+void FBattleEffects::SmokeScreen(const FVector& WorldAt, float AcrossMetres, float Seconds, const FString& Kind, int32 Id)
+{
+	if (IsReady())
+	{
+		Core.Screen(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Named(Kind).c_str(), Id);
+	}
+}
+
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Core.SetWind(ToFxWay(MetresPerSecond));

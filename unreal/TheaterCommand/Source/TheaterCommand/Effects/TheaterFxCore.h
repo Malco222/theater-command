@@ -445,6 +445,16 @@ namespace TheaterFx
 		void OilFire(double Now, int Id, const Vec& At, double Reach, const char* Kind = "sunk", double Until = 0.0, double Since = 0.0);
 		/** That oil fire goes out: no new flame or smoke; what is in the air thins away on its own. */
 		void OilStop(double Now, int Id);
+		/** A smoke screen where a smoke round came down (the drill book's screens, 22 November): at At, its burst, and
+		 * then a low white wall laid from where it landed for Seconds, Across metres wide at its fullest, drifting down
+		 * the wind (SetWind) with its lumps swelling as they go, so it stands as one screen through its middle with rags
+		 * at its edges; after Seconds it is laid no more and thins away over its lumps' lives. Kind "wp" (white
+		 * phosphorus, the American mortars' round): a hard white burst throwing burning streamers in a dome, each
+		 * trailing its own white smoke and curling over as it falls, and the wall built from where they came down;
+		 * "canister" (a burning smoke bomb's or a base-ejection shell's, the British and German): no burst, a gush of
+		 * white from the ground that thickens into the wall over its first seconds. Never a crater, never a black or
+		 * grey cloud. Its numbers are the recipe's smoke_screen row. Id 0 or more: the caller's own number for it. */
+		void Screen(double Now, const Vec& At, double Across, double Seconds, const char* Kind = "wp", int Id = -1);
 
 		/** What the eye is: where it is, which way its screen's right, up and forward point, and how many pixels a
 		 * radian across the screen is (the screen's width / (2 tan(field of view / 2))). Smoke takes SmokeLight (the
@@ -815,7 +825,8 @@ namespace TheaterFx
 			size_t PopNext = 0;
 			double JetAt = 0.0, JetEnd = 0.0, JetTall = 0.0, JetDip = 0.0;
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
-			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off
+			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off, 6 a smoke screen
+			bool bPhos = false; // (a smoke screen: a phosphorus round's, its wall laid from where its streamers fell, Heads; Flames is when it is laid no more)
 			// (on a moving ship, BurnMove, SteamMove, CookOffMove: bMoves once it has been moved; Vel the ship's velocity
 			// there, metres a second, as last told at MovedAt; Ride, its own number for the pieces that lie on the ship)
 			Vec Vel;
@@ -828,7 +839,7 @@ namespace TheaterFx
 			uint64_t Seed = 1;
 			OilRow Oil; // (an oil fire: its row)
 			BankRow Bank; // (a burning thing: its smoke as a bank of lumps, when the recipe asks and it is big enough)
-			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts)
+			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts; a smoke screen: the seats its wall is laid from)
 		};
 		struct Paint
 		{
@@ -1131,6 +1142,8 @@ namespace TheaterFx
 		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
+		/** A smoke screen's wall (Kind 6): its lumps laid up to Now. */
+		void ScreenLumps(Source& S, double Now);
 		void Prune(double Now);
 
 		Vec Where(const Bit& B, double Age) const;

@@ -58,7 +58,8 @@ namespace LandPlay
 		Size,       // a burst by the kit's size row (Name: grenade, gun75, how105...) at At on Ground
 		Skip,       // an armour-piercing round that missed: a low spurt and a skip along Way
 		Glance,     // a shot glancing off armour at At: Way its incoming way, Normal the plate's, CalibreMm
-		Plate       // a round on armour that went in or killed: the kit's on_armour sparks (Size with bArmour)
+		Plate,      // a round on armour that went in or killed: the kit's on_armour sparks (Size with bArmour)
+		Screen      // a smoke round landing: its screen (Name: wp, a phosphorus round's burst; canister, a burning bomb's), CalibreMm the bomb's
 	};
 
 	struct Effect

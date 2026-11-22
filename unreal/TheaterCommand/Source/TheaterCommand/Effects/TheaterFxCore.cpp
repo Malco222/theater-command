@@ -9094,6 +9094,212 @@ namespace TheaterFx
 		}
 	}
 
+	void Battle::Screen(double Now, const Vec& At, double Across, double Seconds, const char* Kind, int Id)
+	{
+		// A smoke round (the drill book's screens, 22 November). The 2-inch and 60 mm mortars' bombs gave a screen for
+		// about a minute, the 81 mm's about a minute and a half, a field gun's base-ejection shell two to three minutes;
+		// the caller says how long and how wide. A phosphorus round bursts hard and white and throws burning streamers;
+		// a burning bomb or canister lies on the ground and gushes. Either way the screen is white, low and drifting,
+		// never a crater and never black.
+		if (!IsAPlace(At))
+		{
+			return;
+		}
+		const std::string P = "smoke_screen.";
+		Source S;
+		S.At = At;
+		S.Kind = 6;
+		S.Id = Id >= 0 ? Id : -1;
+		S.Start = Now;
+		S.Next = Now;
+		S.NextSmoke = Now + (Kind && std::string(Kind) == "wp" ? 0.4 : 0.0);
+		S.Across = Across == Across ? std::clamp(Across, 2.0, 200.0) : 20.0;
+		S.Flames = Now + (Seconds == Seconds ? std::clamp(Seconds, 1.0, 1200.0) : 60.0);
+		S.End = S.Flames + std::max(1.0, Range(P + "life_s", 25.0, 45.0).B);
+		S.Seed = ++Seeds * 0x2545F4914F6CDD1Dull ^ PlaceKey(At);
+		S.bPhos = Kind && std::string(Kind) == "wp";
+		Dice D(S.Seed ^ 0x5C2EE7ull);
+		const Rgb White = Picture(P + "colour", Rgb::FromPicture(232, 233, 230));
+		const Rgb Shadow = Picture(P + "shadow_colour", Rgb::FromPicture(170, 173, 176));
+		const double Ground = Height(At.X, At.Y);
+		const Vec Foot(At.X, At.Y, (Ground == Ground ? Ground : At.Z) + 0.2);
+		if (!S.bPhos)
+		{
+			// (a burning bomb or a canister: it lies where it fell, and a base-ejection shell's canisters a few metres
+			// apart along its flight; the wall is laid from them)
+			S.Heads.push_back(Foot);
+			const int More = D.Whole(0, 2);
+			for (int I = 0; I < More; ++I)
+			{
+				const double A = D.U(0.0, 2.0 * Pi), R = D.U(2.0, 5.0);
+				const Vec Q(At.X + std::cos(A) * R, At.Y + std::sin(A) * R, 0.0);
+				const double Z = Height(Q.X, Q.Y);
+				S.Heads.push_back(Vec(Q.X, Q.Y, (Z == Z ? Z : Foot.Z) + 0.2));
+			}
+			Sources.push_back(S);
+			return;
+		}
+		// The phosphorus burst: burning streamers thrown out and up in a dome, each a white-hot point trailing its own
+		// white smoke, that curls over as it falls; the trails hang, swell and drift. And at the burst's heart a ball of
+		// dense white, rising a little as it swells.
+		const Span Streamers = Range(P + "streamers", 10.0, 16.0);
+		const double Reach = S.Across * Num(P + "streamer_reach", 0.8);
+		const double TrailEvery = std::max(0.02, Num(P + "trail_every_s", 0.07));
+		const Span TrailLife = Range(P + "trail_life_s", 8.0, 14.0);
+		const Span TrailR = Range(P + "trail_r_m", 1.0, 1.8);
+		const Rgb Hot = Picture(P + "streamer_colour", Rgb::FromPicture(255, 250, 236));
+		const int N = std::clamp(static_cast<int>(std::lround(Streamers.Pick(D))), 3, 40);
+		for (int I = 0; I < N; ++I)
+		{
+			const double A = (2.0 * Pi * (I + D.U(0.0, 0.7))) / N; // (round the dome, a little uneven)
+			const double E = D.U(0.55, 1.25); // (thrown 30 to 70 degrees up)
+			const double Far = Reach * D.U(0.45, 1.1);
+			const double V = std::sqrt(Far * 9.8 / std::max(0.25, std::sin(2.0 * E)));
+			const Vec Vel(std::cos(A) * std::cos(E) * V, std::sin(A) * std::cos(E) * V, std::sin(E) * V);
+			const double Flight = std::min(3.0, 2.0 * V * std::sin(E) / 9.8);
+			Bit H;
+			H.Form = Bit::Shape::Streak;
+			H.Born = Now;
+			H.From = Foot + Vec(0.0, 0.0, 0.2);
+			H.Vel = Vel;
+			H.Gravity = 9.8;
+			H.Life = Flight;
+			H.R0 = H.R1 = 0.06;
+			H.Col = Hot;
+			H.Col2 = Hot * 0.85;
+			H.Alpha = 1.0;
+			H.FadeIn = 0.002;
+			H.Hold = 0.85;
+			H.Heart = 0.9;
+			H.Rim = 0.4;
+			H.LeastPx = 1.5;
+			H.bLight = true;
+			Bits.push_back(H);
+			for (double T = 0.03; T < Flight; T += TrailEvery * D.U(0.8, 1.2))
+			{
+				Bit B;
+				B.Born = Now + T;
+				B.From = H.From + Vel * T + Vec(0.0, 0.0, -4.9 * T * T);
+				B.Life = TrailLife.Pick(D) * (0.6 + 0.4 * T / Flight);
+				B.R1 = TrailR.Pick(D) * (0.7 + 0.6 * T / Flight);
+				B.R0 = 0.15 * B.R1;
+				B.Grow = 0.3;
+				B.Windage = D.U(0.8, 1.0);
+				B.Rise = D.U(0.1, 0.4);
+				const double Tone = D.U(0.94, 1.03);
+				B.Col = White * Tone;
+				B.Col2 = White.Mix(Shadow, 0.3) * Tone;
+				B.Alpha = D.U(0.7, 0.9);
+				B.FadeIn = 0.04;
+				B.Hold = 0.35;
+				B.Heart = 0.65;
+				B.HeartEnd = 0.3;
+				B.Inner = 0.55;
+				B.Rough = 0.3;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
+				Bits.push_back(B);
+			}
+			const Vec Down(Foot.X + Vel.X * Flight, Foot.Y + Vel.Y * Flight, 0.0);
+			const double Z = Height(Down.X, Down.Y);
+			S.Heads.push_back(Vec(Down.X, Down.Y, (Z == Z ? Z : Foot.Z) + 0.2));
+		}
+		const double Ball = Num(P + "burst_r_m", 0.22) * S.Across;
+		for (int I = 0; I < 9; ++I)
+		{
+			Bit B;
+			B.Born = Now + D.U(0.0, 0.06);
+			const Vec Way = Vec(D.Bell(), D.Bell(), std::fabs(D.Bell()) + 0.4).Unit();
+			B.From = Foot + Vec(0.0, 0.0, 0.6) + Way * D.U(0.2, 1.0);
+			B.Vel = Way * D.U(4.0, 9.0);
+			B.Drag = D.U(2.0, 3.0);
+			B.Rise = D.U(0.4, 1.0);
+			B.Windage = D.U(0.8, 1.0);
+			B.Life = D.U(16.0, 26.0);
+			B.R1 = Ball * D.U(0.8, 1.2);
+			B.R0 = 0.25 * B.R1;
+			B.Grow = 0.2;
+			const double Tone = D.U(0.96, 1.04);
+			B.Col = White * Tone;
+			B.Col2 = White.Mix(Shadow, 0.4) * Tone;
+			B.Alpha = D.U(0.8, 0.95);
+			B.FadeIn = 0.03;
+			B.Hold = 0.4;
+			B.Heart = 0.75;
+			B.HeartEnd = 0.35;
+			B.Inner = 0.6;
+			B.Rough = 0.3;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			Bits.push_back(B);
+		}
+		Sources.push_back(S);
+	}
+
+	void Battle::ScreenLumps(Source& S, double Now)
+	{
+		// The wall: a lump every every_s from one of its seats, laid low, swelling as it goes down the wind, and some
+		// spread across it, so the screen stands as one through its middle with rags at its edges. It thickens over its
+		// first build_s (a phosphorus round's at once) and thins over the last of its time from thin_from.
+		const std::string P = "smoke_screen.";
+		const double Every = std::max(0.05, Num(P + "every_s", 0.3));
+		const Span Life = Range(P + "life_s", 25.0, 45.0);
+		const Span LumpR = Range(P + "lump_r", 0.24, 0.36);
+		const Span Alpha = Range(P + "alpha", 0.55, 0.8);
+		const Span Rise = Range(P + "rise_mps", 0.05, 0.3);
+		const double Build = std::max(0.1, Num(P + (S.bPhos ? "build_wp_s" : "build_s"), S.bPhos ? 1.5 : 3.0));
+		const double Fade = std::clamp(Num(P + "thin_from", 0.7), 0.0, 0.99);
+		const double Spread = Num(P + "spread", 0.25);
+		const Rgb White = Picture(P + "colour", Rgb::FromPicture(232, 233, 230));
+		const Rgb Shadow = Picture(P + "shadow_colour", Rgb::FromPicture(170, 173, 176));
+		const int Lumps = static_cast<int>(std::clamp(Num(P + "lumps", 3.0), 0.0, 8.0));
+		const double LumpsPx = Num(P + "lumps_px", 120.0);
+		const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Aside(-Down.Y, Down.X, 0.0);
+		const double Breeze = std::hypot(Wind.X, Wind.Y);
+		const double Creep = Num(P + "creep_mps", 0.6); // (on a still day a screen still creeps)
+		while (S.NextSmoke <= Now && S.NextSmoke < S.Flames)
+		{
+			const double T = S.NextSmoke;
+			Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0x9E3779B97F4A7C15ull + 0x5C2Eull));
+			const double Since = T - S.Start;
+			const double X = Since / std::max(S.Flames - S.Start, 0.1);
+			const double Full = Clamp01((Since + 0.3) / Build) * (X < Fade ? 1.0 : std::max(0.25, 1.0 - 0.75 * (X - Fade) / (1.0 - Fade)));
+			const Vec Seat = S.Heads.empty() ? S.At : S.Heads[static_cast<size_t>(D.Whole(0, static_cast<int>(S.Heads.size()) - 1))];
+			Bit B;
+			B.Born = T;
+			B.Life = Life.Pick(D);
+			B.R1 = LumpR.Pick(D) * S.Across * (0.7 + 0.3 * Full);
+			B.R0 = std::max(0.6, 0.35 * B.R1);
+			B.Grow = 0.35;
+			const Vec Off = Vec(D.Bell(), D.Bell(), 0.0) * (0.06 * S.Across);
+			const double Z = Height(Seat.X + Off.X, Seat.Y + Off.Y);
+			B.From = Vec(Seat.X + Off.X, Seat.Y + Off.Y, (Z == Z ? Z : Seat.Z) + 0.6 * B.R0 + D.U(0.0, 0.6));
+			B.Windage = D.U(0.8, 1.0);
+			B.Vel = Aside * (D.Bell() * Spread * S.Across / B.Life) + (Breeze < Creep ? Down * (Creep - Breeze) : Vec());
+			B.Rise = Rise.Pick(D);
+			const double Tone = D.U(0.93, 1.03);
+			B.Col = White * Tone;
+			B.Col2 = White.Mix(Shadow, 0.35) * Tone;
+			B.Alpha = Alpha.Pick(D) * (0.5 + 0.5 * Full);
+			B.FadeIn = 0.6;
+			B.Hold = 0.4;
+			B.Heart = 0.7;
+			B.HeartEnd = 0.3;
+			B.Inner = 0.55;
+			B.Rough = 0.3;
+			B.Lumps = Lumps;
+			B.LumpsPx = LumpsPx;
+			B.LumpsAlpha = 0.85;
+			B.LumpsLight = 0.6;
+			B.LumpsRim = 0.8;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			Bits.push_back(B);
+			S.NextSmoke += Every / std::max(0.35, Full);
+		}
+	}
+
 	Vec Battle::OnSlick(const Source& S, Dice& D) const
 	{
 		const double A = D.U(0.0, 2.0 * Pi), Out_ = std::sqrt(D.U());
@@ -9526,6 +9732,12 @@ namespace TheaterFx
 					}
 					S.Next += S.Cook.JetEvery;
 				}
+				continue;
+			}
+			if (S.Kind == 6)
+			{
+				// a smoke screen (smoke_screen): its low white wall, laid from its seats while it lasts
+				ScreenLumps(S, Now);
 				continue;
 			}
 			if (S.Kind == 0)

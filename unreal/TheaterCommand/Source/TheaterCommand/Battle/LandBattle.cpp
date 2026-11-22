@@ -3138,6 +3138,17 @@ void ALandBattle::PlayEffects()
 		case LandPlay::FxKind::Plate:
 			Effects->ShellOfSize(At, Name.IsEmpty() ? FString(TEXT("gun75")) : Name, Ground, true);
 			break;
+		case LandPlay::FxKind::Screen:
+		{
+			// A smoke round's screen, as long and as wide as its bomb gave (the kit's life clock is the seen world's: a
+			// light mortar's bomb about a minute, 18 m; the 81 mm's a minute and a half, 24 m; a field gun's shell two
+			// and a half minutes, 30 m). No hole: MakeCraters takes shells only.
+			const double Cal = E.CalibreMm;
+			const float Across = Cal < 70.0 ? 18.0f : Cal < 85.0 ? 24.0f : 30.0f;
+			const float Seconds = Cal < 70.0 ? 60.0f : Cal < 85.0 ? 90.0f : 150.0f;
+			Effects->SmokeScreen(At, Across, Seconds, Name.IsEmpty() ? FString(TEXT("canister")) : Name, -1);
+			break;
+		}
 		}
 	}
 }
