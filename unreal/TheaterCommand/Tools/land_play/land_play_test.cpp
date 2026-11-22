@@ -76,6 +76,9 @@ namespace
 		Vec EyeWas, LookWas;
 		std::vector<double> Kicks;
 		int Knocked = 0, KnockedSeen = 0;
+		// (Brian's war-film feel: in the fight, how much of the film is at a soldier's eye level, and on the film's own
+		// section)
+		int FightFrames = 0, EyeLevel = 0, OnSquad = 0;
 
 		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
 		{
@@ -93,7 +96,11 @@ namespace
 			if (bMan && bUp && (P.Shot == LandEye::Kind::Shoulder || P.Shot == LandEye::Kind::Low))
 			{
 				++OwnFrames;
-				if (D.OwnGap(P, B) < Set.OwnClear * 0.8) ++OwnNear;
+				if (D.OwnGap(P, B) < Set.OwnClear * 0.8)
+				{
+					++OwnNear;
+					if (std::getenv("LAND_PLAY_OWN")) std::printf("  own man near at %.2f: %s on %d, %.2f m\n", B, LandEye::NameOf(P.Shot), P.Subject, D.OwnGap(P, B));
+				}
 			}
 			// The pan's kick: the change in the look's swing from one frame to the next (not across a cut).
 			{
@@ -128,6 +135,12 @@ namespace
 				LookZWas = P.Look.Z;
 				EyeWas = P.Eye;
 				LookWas = P.Look;
+			}
+			if (Rec->Contact >= 0.0 && B >= Rec->Contact && B <= Rec->End)
+			{
+				++FightFrames;
+				if (!bAir && P.Eye.Z - Rec->Ground.HeightAt(P.Eye.X, P.Eye.Y) <= 2.2) ++EyeLevel;
+				if (D.InSquad(P.Subject)) ++OnSquad;
 			}
 			// Every tank knocked out: in the picture as she goes.
 			for (const LandFeed::Track& Tr : Rec->Tracks)
@@ -173,6 +186,8 @@ namespace
 				Label, Bursts, BurstsKept, Set.OwnClear * 0.8, 100.0 * OwnNear / std::max(1, OwnFrames), OwnFrames, 100.0 * Set.OwnMost,
 				100.0 * OwnFilled / std::max(1, OwnLooks), 100.0 * Crossed * Share, 100.0 * Edged * Share, LostLongest, LostAt, Kick, KickAt, Kick999,
 				PanKick, PanKickAt, Knocked, KnockedSeen);
+			std::printf("; in the fight %.0f%% at a soldier's eye level (2.2 m or under), %.0f%% on the film's own section", 100.0 * EyeLevel / std::max(1, FightFrames),
+				100.0 * OnSquad / std::max(1, FightFrames));
 			if (BurstsKept > 0) Fault("a shell landed at the lens and the shot was not cut on its flash");
 			if (static_cast<double>(OwnNear) / std::max(1, OwnFrames) > 0.005) Fault("the lens came within its own man's face more than 0.5% of the time");
 			if (static_cast<double>(OwnFilled) / std::max(1, OwnLooks) > 0.03) Fault("its own man filled the picture more than 3% of the time");
@@ -903,6 +918,13 @@ int main(int argc, char** argv)
 	if (ScreenedShare > 0.05) Fault("the picture was screened by things more than 5% of the time");
 	if (LongestScreened > 1.0) Fault("a shot stayed screened by things for over a second");
 	Film.Report("this run");
+	{
+		int Men = 0;
+		for (size_t I = 0; I < Rec.Tracks.size(); ++I) Men += Eye.InSquad(static_cast<int>(I)) ? 1 : 0;
+		int Shots = 0;
+		std::printf("\ncamera: the film's own section is block %d section %d (%d men)", Eye.SquadBlock(), Eye.SquadK(), Men);
+		(void)Shots;
+	}
 	// The camera alone, on three more seeds: the film's own choices part from any one run within a minute, so the screen
 	// rules must hold on whatever shots a seed chooses, not on this run's alone. These play the fight as the scene now
 	// does, at half the battle's clock (its rules run at twice life's pace): the camera's rules are timed on the screen.

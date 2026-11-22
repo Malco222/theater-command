@@ -104,6 +104,18 @@ namespace LandEye
 		double Opening = 9.0;
 		/** The hand-held wobble's strength (0 off, 1 as made). */
 		double Hand = 1.0;
+		/** Brian's feel for the ground battle (22 November: a war film's fury with a squad's-eye realism, the feel only,
+		 * every shot our own):
+		 *  - The film's own section: one squad of the own side, the one that will see the most of the fight, is gone back
+		 *    to through the battle (one shot in SquadEvery is on its men), so they become faces the film knows.
+		 *  - In the fight a man is watched from beside him at his own height (NearWatch of the watch shots), not from a
+		 *    bank 30-50 m off; the bank keeps the rest, for where the men are.
+		 *  - Under shelling the holds are short and nervous: a shot with heavy rounds landing round its man in its time
+		 *    holds ShakenHold of its length, and the hand shakes harder after a burst near the lens (NervesNear metres:
+		 *    up to NervesMost more wobble, settling over NervesFade real seconds). */
+		int SquadEvery = 3;
+		double NearWatch = 0.6, ShakenHold = 0.65;
+		double NervesNear = 30.0, NervesMost = 0.9, NervesFade = 2.0;
 		uint64_t Seed = 1;
 		/** The art director's rules for the lens: no nearer a thing than ThingClear metres, a man than ManClear, and
 		 * no picture more than BlockedMost filled by a thing within NearBlock metres of the lens (a man within
@@ -144,6 +156,11 @@ namespace LandEye
 		double OwnClear = 1.0, OwnMost = 0.4;
 		/** The step back from its own man on a spring of this rate (1/s), never nearer than OwnNearest of OwnClear. */
 		double PushRate = 14.0, OwnNearest = 0.82;
+		/** Its own man come in a frame within OwnCutInside of OwnClear of the lens (a man lying down turned about where he
+		 * lay): the shot is cut away from, not shoved a metre. */
+		double OwnCutInside = 0.55;
+		/** The lens lifted over banks and corn on a spring of this rate (1/s): an operator standing up, not a leap. */
+		double LiftRate = 12.0;
 		double BurstClear = 6.0, BurstBig = 1.4, BurstAround = 3.5, BurstFlash = 0.12;
 		double CrossClear = 1.4, CrossAhead = 2.0;
 		double LostAfter = 1.0;
@@ -194,6 +211,11 @@ namespace LandEye
 		bool BurstAt(const Pose& P, double From, double To) const { return LensBurst(P.Eye, P.Look, P.Fov, From, To, P.Subject, nullptr); }
 		/** How much of a pose's picture its own man fills (0 with no Solid or no man). */
 		double OwnFill(const Pose& P) const { return OwnShare(P.Eye, P.Look, P.Fov, P.Subject); }
+		/** Whether a track is a man of the film's own section (Settings::SquadEvery). */
+		bool InSquad(int Track) const;
+		/** The film's own section: its block and section number (-1: none). */
+		int SquadBlock() const { return HeroBlock; }
+		int SquadK() const { return HeroK; }
 		/** How near the lens its own man's head or chest is (metres; 1e9 with none). */
 		double OwnGap(const Pose& P, double Battle) const { return OwnDistance(P.Eye, P.Subject, Battle); }
 		/** Whether a man of the recording walks within CrossClear of a pose's lens between two battle times. */
@@ -234,8 +256,19 @@ namespace LandEye
 		Vec OwnPush, PushSwing;
 		/** The battle time of a fall or a tank's end this shot holds for (-1 none): not left as dead or lost before it. */
 		double WaitFor = -1.0;
-		/** How far the eye is held up over a bank it has passed (metres), let down over half a second. */
-		double BankLift = 0.0;
+		/** How far the eye is lifted over banks and corn (metres) and how fast: up on a spring, down over half a second. */
+		double Lift = 0.0, LiftSwing = 0.0;
+		/** The height the corn under the lens holds it at (world metres), let down on a spring as it leaves the corn;
+		 * the look's lift with the corn on its own spring. */
+		double CornHeld = -1e9, CornSwing = 0.0, LookLiftSwing = 0.0;
+		/** The highest corn foreseen on the lens's way lately (world metres), let down at a metre a second. */
+		double ForeHeld = -1e9;
+		/** The film's own section (Settings::SquadEvery), -1 none, and the shots since one was on its men. */
+		int HeroBlock = -1, HeroK = -1, SinceSquad = 0;
+		/** The operator's nerves after a burst near the lens (0 to 1), and where they are going. */
+		double Nerves = 0.0, NervesWant = 0.0;
+		/** Heavy rounds landing within Radius of a point between two battle times. */
+		int HeavyNear(double X, double Y, double From, double To, double Radius) const;
 		double Soon(double RealSeconds) const { return RealSeconds * std::clamp(Pace, 0.1, 4.0); }
 		double OnScreen(double BattleSeconds) const { return BattleSeconds / std::clamp(Pace, 0.1, 4.0); }
 		uint64_t Dice = 0;
@@ -322,9 +355,6 @@ namespace LandEye
 		Vec KeepAboveAhead(Vec At, const Vec& Toward, double Least) const;
 		/** How high the corn stands round a place (World::Crop), 0 where none or none known. */
 		double CropAt(double X, double Y) const;
-		/** The height the corn holds a lens near the ground at now (world metres): up at once as the eye comes over
-		 * taller corn or rising ground, down slowly as it leaves it, so it does not bob over every clump or bank. */
-		double CropFloor = -1e9;
 
 		// The camera director's rules (Settings: OwnClear and on).
 		/** A shoulder shot's height over its man's stance (the operator stands, kneels or lies down with him). */

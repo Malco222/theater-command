@@ -7,6 +7,7 @@
 #include "Battle/LandBattleState.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
@@ -1008,11 +1009,22 @@ bool ALandBattle::Open()
 			Variable->Set(static_cast<float>(LandSize), ECVF_SetByCode);
 		}
 	}
+	// (the eye stood on the opening shot before it is the view: spawned at the world's middle, its first frame was
+	// drawn from there)
+	if (Eye)
+	{
+		S.Pose = S.Eye.Current();
+		AimEye(0.0f);
+	}
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
 		if (Eye)
 		{
 			Controller->SetViewTarget(Eye);
+			if (Controller->PlayerCameraManager)
+			{
+				Controller->PlayerCameraManager->SetGameCameraCutThisFrame();
+			}
 		}
 		if (ACampaignHUD* Hud = Cast<ACampaignHUD>(Controller->GetHUD()))
 		{
@@ -2734,6 +2746,18 @@ void ALandBattle::Tick(float DeltaSeconds)
 
 	// The picture: the camera, the ground round it, the men and the tanks.
 	AimEye(static_cast<float>(Real));
+	// A cut is told to the renderer, so this frame starts afresh: the last shot's smoke, fog, light and sharpening are
+	// not carried over a frame into the new one (the film check's smoke popping in a frame after a cut).
+	if (S.Pose.bCut)
+	{
+		if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+		{
+			if (Controller->PlayerCameraManager)
+			{
+				Controller->PlayerCameraManager->SetGameCameraCutThisFrame();
+			}
+		}
+	}
 	const FVector EyeWorld = Eye ? Eye->GetActorLocation() : World(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z);
 	Mark = LandParts::Seconds();
 	ShowField(EyeWorld, S.Battle);
