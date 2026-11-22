@@ -166,6 +166,94 @@ struct FCityOrders
 	TArray<FString> Lines; // one an order, soonest first
 };
 
+/**
+ * (Release 2, Brian's city at a glance) One town's plate under its name on the map: who holds it, what is on order
+ * there, what is going up and what is damaged. The player's own towns and his enemies' as far as his eyes reach
+ * (an agent there, or a report of the corps inside); an ally's town has none. Display only: the rules decide nothing here.
+ */
+struct FCityGlance
+{
+	int32 Region = INDEX_NONE;
+	bool bOwn = false;
+	bool bSpied = false; // known only through intelligence: the plate wears the dashed frame and its age
+	int32 Ago = -1; // months since the report, for a spied town
+	int32 Garrison = 0; // divisions inside the walls, the guard counted, rounded
+	bool bGuardOnly = false; // nobody but the town's own guard
+	FString GarrisonFigure; // "4 div", "guard", or empty
+	FString GarrisonWords; // "the Berlin garrison and the guard · 2 corps in the field outside"
+	FString OrderFigure; // the months until the next unit here is ready ("2 mo", "now"), empty when nothing is on order
+	FString OrderWords; // "2 infantry corps, then 1 more"
+	int32 UpMonths = -1; // months until the next work here is finished, -1 when nothing is going up
+	FString UpFigure, UpWords;
+	int32 Damage = 0; // percent of the town (or its factories) wrecked
+	FString DamageFigure, DamageWords;
+};
+
+/** (Release 2) One card on the city panel's GARRISON shelf: an army inside, the guard, an air group or a fleet. */
+struct FGlanceCard
+{
+	FString Kind; // army, guard, air, fleet or field (his corps in the open country of the province)
+	FString Sign; // the sign it wears (the order badge's signs, or "defence")
+	FString Name, Line;
+	float Share = 0.0f; // its strength or readiness, 0 to 1
+	int32 Id = INDEX_NONE;
+};
+
+/** (Release 2) One card on the ON ORDER HERE shelf. */
+struct FGlanceOrder
+{
+	FString Sign;
+	bool bStar = false;
+	FString Name, Line; // "Infantry corps", "3 divisions · forms here"
+	float Share = 0.0f;
+	int32 Months = 0;
+	int32 Id = INDEX_NONE;
+	bool bFresh = false; // ordered this month: it can still be taken back
+};
+
+/** (Release 2) A dated arrival history's book sends to this town (no order of his: nothing to take back). */
+struct FGlanceArrival
+{
+	FString Name, Line, When;
+};
+
+/** (Release 2) One tile on the BUILDING AND REPAIRS shelf. */
+struct FGlanceTile
+{
+	FString Kind; // up (going up), stands (finished), free (an empty plot) or damaged
+	FString Sign, Name, Line;
+	float Share = 0.0f;
+	int32 Months = 0;
+	int32 Cost = 0; // a repair's price, where he can order it
+	FString Key; // what pressing it does: a works key for the rules ("work:repair"), "plots" for the town plan, or empty
+	FString Cause; // why it is damaged, or why it cannot be ordered
+};
+
+/** (Release 2) A ship or air group mending at its base: refit in harbour, resting. */
+struct FGlanceRow
+{
+	FString Name, Line, Sign;
+	float Share = 0.0f;
+};
+
+/** (Release 2) The city panel's AT A GLANCE page: the same three shelves as the plate, in full. */
+struct FCityShelves
+{
+	bool bValid = false;
+	bool bOwn = false, bSpied = false;
+	int32 Ago = -1;
+	FString GarrisonHead;
+	TArray<FGlanceCard> Garrison;
+	TArray<FGlanceOrder> Orders;
+	TArray<FGlanceArrival> Arriving;
+	FString BuildHead; // "2 going up · 1 damaged"
+	TArray<FGlanceTile> Tiles;
+	TArray<FGlanceRow> Rows;
+	int32 Agents = 0; // his agents in the town
+	bool bOnGuard = false; // one of them on guard against the enemy's
+	FString Rail; // open, cut, none, or empty when unknown
+};
+
 /** The player's treasury. */
 struct FTreasury
 {
@@ -932,6 +1020,7 @@ struct FCampaignView
 	TArray<int32> FreeCapitals; // capitals of fallen countries the player would set free by taking them
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
 	TArray<FCityOrders> CityOrders; // what each of the player's cities has on order
+	TArray<FCityGlance> Glance; // (release 2) each town's plate under its name: garrison, on order, going up, damaged
 	TArray<int32> Going; // works going up from the arsenal, where the player can know it: flat pairs, the region and what (bits: 1 factory, 2 shipyard, 4 guns, 8 airfield, 16 fortifications)
 	TArray<int32> Wrecked; // factories not working (bombed, sabotaged, burnt), where the player can know it: flat pairs, the region and how many
 	TArray<FIntVector4> RegionWorks; // by region id: factories built since the war began, shipyard level, anti-aircraft level, airfield level
@@ -1706,6 +1795,7 @@ struct FProvinceInfo
 	TArray<FProvinceOption> Options;
 	TArray<FOrderLine> Forming;
 	FString FormingHead; // the total with its breakdown, where units are on order here
+	FCityShelves Glance; // (release 2) the AT A GLANCE page: garrison, on order here, building and repairs
 	// The town's building plots (the grand campaign): what stands on each or "Free plot", whether the town is the
 	// player's to build in, and how many kinds of building could be ordered there now.
 	bool bHasPlots = false, bPlotsMine = false;

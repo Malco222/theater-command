@@ -497,6 +497,121 @@ namespace
 		return Out;
 	}
 
+	/** (Release 2) The city panel's AT A GLANCE page as the rules give it (the bridge's glanceShelves). */
+	FCityShelves ReadShelves(const TSharedPtr<FJsonObject>& Object)
+	{
+		FCityShelves Out;
+		if (!Object.IsValid())
+		{
+			return Out;
+		}
+		Out.bValid = true;
+		Object->TryGetBoolField(TEXT("own"), Out.bOwn);
+		Object->TryGetBoolField(TEXT("spied"), Out.bSpied);
+		Object->TryGetNumberField(TEXT("ago"), Out.Ago);
+		Object->TryGetStringField(TEXT("garrHead"), Out.GarrisonHead);
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (Object->TryGetArrayField(TEXT("garrison"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceCard& Card = Out.Garrison.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("kind"), Card.Kind);
+				Entry->TryGetStringField(TEXT("sign"), Card.Sign);
+				Entry->TryGetStringField(TEXT("name"), Card.Name);
+				Entry->TryGetStringField(TEXT("line"), Card.Line);
+				Entry->TryGetNumberField(TEXT("share"), Card.Share);
+				Entry->TryGetNumberField(TEXT("id"), Card.Id);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("orders"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceOrder& Order = Out.Orders.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("sign"), Order.Sign);
+				Entry->TryGetBoolField(TEXT("star"), Order.bStar);
+				Entry->TryGetStringField(TEXT("name"), Order.Name);
+				Entry->TryGetStringField(TEXT("line"), Order.Line);
+				Entry->TryGetNumberField(TEXT("share"), Order.Share);
+				Entry->TryGetNumberField(TEXT("months"), Order.Months);
+				Entry->TryGetNumberField(TEXT("id"), Order.Id);
+				Entry->TryGetBoolField(TEXT("fresh"), Order.bFresh);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("arriving"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceArrival& Arrival = Out.Arriving.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("name"), Arrival.Name);
+				Entry->TryGetStringField(TEXT("line"), Arrival.Line);
+				Entry->TryGetStringField(TEXT("when"), Arrival.When);
+			}
+		}
+		Object->TryGetStringField(TEXT("buildHead"), Out.BuildHead);
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("tiles"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceTile& Tile = Out.Tiles.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("kind"), Tile.Kind);
+				Entry->TryGetStringField(TEXT("sign"), Tile.Sign);
+				Entry->TryGetStringField(TEXT("name"), Tile.Name);
+				Entry->TryGetStringField(TEXT("line"), Tile.Line);
+				Entry->TryGetNumberField(TEXT("share"), Tile.Share);
+				Entry->TryGetNumberField(TEXT("months"), Tile.Months);
+				Entry->TryGetNumberField(TEXT("cost"), Tile.Cost);
+				Entry->TryGetStringField(TEXT("key"), Tile.Key);
+				Entry->TryGetStringField(TEXT("cause"), Tile.Cause);
+			}
+		}
+		List = nullptr;
+		if (Object->TryGetArrayField(TEXT("rows"), List))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *List)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				if (!Entry.IsValid())
+				{
+					continue;
+				}
+				FGlanceRow& Row = Out.Rows.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("name"), Row.Name);
+				Entry->TryGetStringField(TEXT("line"), Row.Line);
+				Entry->TryGetStringField(TEXT("sign"), Row.Sign);
+				Entry->TryGetNumberField(TEXT("share"), Row.Share);
+			}
+		}
+		Object->TryGetNumberField(TEXT("agents"), Out.Agents);
+		Object->TryGetBoolField(TEXT("onGuard"), Out.bOnGuard);
+		Object->TryGetStringField(TEXT("rail"), Out.Rail);
+		return Out;
+	}
+
 	/** Honours as the rules list them: a title and the two colours of a ribbon. */
 	TArray<FHonourRibbon> ReadRibbons(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
 	{
@@ -1178,6 +1293,36 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetStringField(TEXT("head"), City.Head);
 			Entry->TryGetBoolField(TEXT("spied"), City.bSpied);
 			Entry->TryGetStringArrayField(TEXT("lines"), City.Lines);
+		}
+	}
+	// (Release 2) Each town's plate under its name: garrison, on order, going up, damaged.
+	const TArray<TSharedPtr<FJsonValue>>* Glance = nullptr;
+	if (Object->TryGetArrayField(TEXT("glance"), Glance))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Glance)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FCityGlance& Plate = Out.Glance.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("region"), Plate.Region);
+			Entry->TryGetBoolField(TEXT("own"), Plate.bOwn);
+			Entry->TryGetBoolField(TEXT("spied"), Plate.bSpied);
+			Entry->TryGetNumberField(TEXT("ago"), Plate.Ago);
+			Entry->TryGetNumberField(TEXT("garr"), Plate.Garrison);
+			Entry->TryGetBoolField(TEXT("guard"), Plate.bGuardOnly);
+			Entry->TryGetStringField(TEXT("garrFig"), Plate.GarrisonFigure);
+			Entry->TryGetStringField(TEXT("garrWords"), Plate.GarrisonWords);
+			Entry->TryGetStringField(TEXT("orderFig"), Plate.OrderFigure);
+			Entry->TryGetStringField(TEXT("orderWords"), Plate.OrderWords);
+			Entry->TryGetNumberField(TEXT("up"), Plate.UpMonths);
+			Entry->TryGetStringField(TEXT("upFig"), Plate.UpFigure);
+			Entry->TryGetStringField(TEXT("upWords"), Plate.UpWords);
+			Entry->TryGetNumberField(TEXT("dmg"), Plate.Damage);
+			Entry->TryGetStringField(TEXT("dmgFig"), Plate.DamageFigure);
+			Entry->TryGetStringField(TEXT("dmgWords"), Plate.DamageWords);
 		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Going = nullptr;
@@ -3037,6 +3182,11 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	}
 	Info.Forming = ReadOrders(Object, TEXT("forming"));
 	Object->TryGetStringField(TEXT("formingHead"), Info.FormingHead);
+	const TSharedPtr<FJsonObject>* GlanceObject = nullptr;
+	if (Object->TryGetObjectField(TEXT("glance"), GlanceObject) && GlanceObject && GlanceObject->IsValid())
+	{
+		Info.Glance = ReadShelves(*GlanceObject);
+	}
 	return Info;
 }
 

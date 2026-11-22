@@ -45,6 +45,7 @@ struct FRegionPanelInfo
 	FText OptionsTitle = FText::FromString(TEXT("PROVINCE"));
 	TArray<FOrderLine> Forming;
 	FString FormingHead; // the total of what is on order here, with its breakdown
+	FCityShelves Glance; // (release 2) the AT A GLANCE page: garrison, on order here, building and repairs
 	int32 Revision = 0;
 };
 
@@ -292,12 +293,44 @@ struct FTownPlate
 	bool bPlus = false;
 	int32 Months = 0;
 	int32 Stage = 0; // 0 the whole badge, 1 without the count and the plus, 2 the sign alone
+	// (Release 2, Brian's city at a glance.) The plate under the name: up to four marks, left to right, the garrison,
+	// the order badge above (moved down into it), what is going up and what is damaged. Close up the whole plate;
+	// from the middle distance the signs and the months alone; from far off four dots in fixed places.
+	bool bGlance = false;
+	int32 GlanceStage = 0; // 0 close, 1 middle, 2 far (the dots)
+	bool bGlanceSpied = false; // an enemy's town as his intelligence gives it: a dashed brass frame and the report's age
+	int32 GlanceAgo = -1;
+	FString GarrisonFigure; // "3", "guard", or empty where the mark is not shown
+	int32 UpMonths = -1; // the months until the next work is finished, -1 for no mark
+	int32 Damage = 0; // percent wrecked, 0 for no mark
+	bool bGlanceOrders = false; // units on order here (the order cell itself is the badge's fields above; this is its far dot)
+	bool bPicked = false; // the selected city: the plate's lit edge
 	// (Ruling 86.) Not a town: a sea gate's mark. Its holder's flag and a lamp, green or red; with Stage 0 its name
 	// too, and with Stage 2 the lamp alone.
 	bool bGate = false;
 	bool bGateOpen = true;
 	int32 Gate = INDEX_NONE;
 	FString Flag;
+};
+
+/** (Release 2, the city at a glance; the art director's spec, section 3.) One line of the paper card over a town: a mark in words. */
+struct FHoverGlanceLine
+{
+	FString Sign; // the UI kit's sign (defence, scaffold, wrench, hourglass) or an order badge's ("inf", "bmr")
+	bool bOrderSign = false; // an order badge's sign, half as wide again as it is high
+	FString Figure; // "3 div", "1 mo", "35%"
+	FString Words; // "Third Army and the guard"
+	bool bAlarm = false; // the damaged line, in the alarm's red
+};
+
+/** (Release 2) The paper card over the town under the pointer, where it wears a plate: its name, what it is, a line a mark. */
+struct FHoverGlance
+{
+	bool bValid = false;
+	FString Title; // the town's name
+	FString Kind; // "your city", "enemy city · seen 2 mo ago"
+	TArray<FHoverGlanceLine> Lines;
+	FString Foot; // "click: open the city · right-click: send the army in hand here"
 };
 
 /** The bar of a town's building plots, shown when one of the player's provinces is picked and nothing is in hand. */
@@ -699,6 +732,8 @@ public:
 	 * moves left this month.</>" and "<Red>Shut to your ships:</>". The marks are the box's own; nothing else is read as one.
 	 */
 	FText GetHoverTipMarked() const { return HoverTipMarked; }
+	/** (Release 2) The paper card of the city at a glance over the town under the pointer; not valid where there is none. */
+	const FHoverGlance& GetHoverGlance() const { return HoverGlance; }
 	/** A country's name as it is said in a sentence: "the United States", "the Soviet Union", "the Netherlands"; "Germany". */
 	static FString WithThe(const FString& Name) { return (Name.StartsWith(TEXT("United")) || Name.StartsWith(TEXT("Soviet")) || Name.StartsWith(TEXT("Netherlands"))) ? TEXT("the ") + Name : Name; }
 	/** The same at the head of a sentence: "The United States has fallen." (84.2.6) */
@@ -1240,6 +1275,7 @@ private:
 	/** Why the army in hand cannot attack the enemy army seen at a place, in a sentence that says what to do; empty where none is seen there. */
 	FString WhyNoAttackOn(int32 RegionId) const;
 	FText HoverTipMarked;
+	FHoverGlance HoverGlance; // (release 2) the paper card over a town with a plate
 	TArray<int32> StandingRoad; // and the road still ahead of it, if it is on a standing march
 	int32 RouteTarget = INDEX_NONE;
 	int32 PendingTarget = INDEX_NONE; // ground clicked once with an army in hand: a second click, or the button, sends it there
@@ -1442,7 +1478,7 @@ private:
 	void StopSpeaking();
 	bool IsSpeaking();
 	void SpeakAdviser();
-	int32 ProvinceTab = 0;
+	int32 ProvinceTab = 3; // (release 2) 3 AT A GLANCE, which a newly picked town opens on; 1 ORDER; 2 BUILD; 0 PROVINCE
 	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
 	int32 AgentInHand = INDEX_NONE; // (ruling 153) the agent picked up, by his id
 	bool bAgentHeld = false, bAgentWasInHand = false; // the left button went down on an agent's piece; and he was in hand already, so a plain click puts him down

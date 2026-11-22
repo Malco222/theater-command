@@ -48264,6 +48264,14 @@
           return [];
         }
       })(),
+      // (Release 2: the city at a glance.) Every town the player may know something of, with its plate's marks and their words.
+      glance: (() => {
+        try {
+          return glanceMarks(s, seen2);
+        } catch {
+          return [];
+        }
+      })(),
       going: (() => {
         const at = /* @__PURE__ */ new Map();
         try {
@@ -48802,6 +48810,315 @@
       head: `${c.spied ? "Your agent reports: " : ""}${c.summary}`,
       lines: c.lines.map((l) => `${upFirst2(l.label)}, ready ${inMonths2(l.months)}`)
     }));
+  }
+  function glanceSight(s, id, seen2) {
+    const me = s.human, r = s.regions[id];
+    if (!me || !r || !s.nations[me]?.alive) return null;
+    const inside2 = garrisonOf(r).filter((c) => !c.dead);
+    if (r.ctrl === me) return { own: true, ally: false, spied: false, agent: false, known: inside2, ago: 0 };
+    if (allied(s, r.ctrl, me)) return { own: false, ally: true, spied: false, agent: false, known: inside2, ago: 0 };
+    const agent = !!agentAt(s, id, me);
+    let ago = agent ? 0 : -1;
+    const known = [];
+    for (const c of inside2) {
+      const k = agent ? { level: "exact", age: 0 } : corpsKnown(s, c, me);
+      if (k.level === "none") continue;
+      known.push(c);
+      ago = ago < 0 ? k.age : Math.min(ago, k.age);
+    }
+    if (!agent && !known.length && !(seen2[id] > 0)) return null;
+    return { own: false, ally: false, spied: true, agent, known, ago };
+  }
+  function glanceDamage(s, id, see, seen2) {
+    const r = s.regions[id];
+    if (!see.own && !see.ally && !see.agent && !(seen2[id] > 0)) return null;
+    const ruin = repairView(s, id);
+    let lost = 0;
+    try {
+      lost = r.fac > 0 ? Math.max(0, r.fac - workingFactories(s, r)) : 0;
+    } catch {
+      lost = 0;
+    }
+    const town = ruin && ruin.damage > 0 ? ruin.pct : 0;
+    const plants = r.fac > 0 ? Math.round(lost / r.fac * 100) : 0;
+    const pct11 = Math.max(town, plants);
+    if (pct11 <= 0) return null;
+    return { pct: pct11, town, lost, fac: r.fac, ruin: ruin && ruin.damage > 0 ? ruin : null };
+  }
+  var sayDivs = (d) => `${d} div`;
+  var sayMonths = (m) => m <= 0 ? "now" : `${m} mo`;
+  var joinWords = (xs) => xs.length <= 1 ? xs[0] ?? "" : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var glanceName = (s, c) => c.nat === s.human ? c.name : corpsNamed2(s, c.nat, c.name);
+  var guardLeft = (s, id) => 1 - Math.max(0, Math.min(100, s.flags[`guard:${id}`] ?? 0)) / 100;
+  function glanceMarks(s, seen2) {
+    const me = s.human;
+    if (!me || !s.nations[me]?.alive) return [];
+    let book = [];
+    try {
+      book = ordersBookOf(s);
+    } catch {
+      book = [];
+    }
+    const byRegion = new Map(book.map((c) => [c.region, c]));
+    const out = [];
+    for (const r of s.regions) {
+      const see = glanceSight(s, r.id, seen2);
+      if (!see || see.ally) continue;
+      const divs = see.known.reduce((n, c2) => n + c2.divs * Math.max(0, Math.min(1, c2.str)), 0);
+      let guard = 0;
+      try {
+        guard = see.own || see.agent ? guardOf(s, r) : 0;
+      } catch {
+        guard = 0;
+      }
+      const garr = see.known.length ? Math.max(1, Math.round(divs + guard)) : 0;
+      const guardOnly2 = !see.known.length && guard > 0;
+      const names = see.known.map((c2) => glanceName(s, c2));
+      const outside = see.own ? r.units.filter((c2) => !c2.dead && c2.nat === me && c2.kind !== "fort").length : 0;
+      const air2 = see.own ? s.airFleets.filter((f) => f.nat === me && f.base === r.id && f.ship === void 0 && f.ftr + f.bmr >= 1).length : 0;
+      const ships = see.own ? s.fleets.filter((f) => f.nat === me && f.base === r.id && f.stance === "port" && shipCount(f.ships) > 0).length : 0;
+      const besides = [outside ? `${outside} corps in the field outside` : "", air2 ? `${air2} air group${air2 === 1 ? "" : "s"} based here` : "", ships ? `${ships} fleet${ships === 1 ? "" : "s"} in port` : ""].filter(Boolean);
+      const who = names.length > 3 ? `${names.length} corps` : joinWords(names);
+      const garrWords = garr || guardOnly2 ? `${guardOnly2 ? "the town's own guard" : `${who}${guard > 0 ? " and the guard" : ""}`}${besides.length ? ` · ${besides.join(", ")}` : ""}` : "";
+      const c = byRegion.get(r.id);
+      const units = c ? c.lines.filter((l) => l.unit) : [];
+      const works = c ? c.lines.filter((l) => !l.unit) : [];
+      let orderFig = "", orderWords2 = "";
+      if (units.length) {
+        const first2 = units[0];
+        const same2 = units.filter((l) => l.mark === first2.mark && l.elite === first2.elite).length;
+        orderFig = sayMonths(first2.months);
+        orderWords2 = `${same2 === 1 ? first2.label : `${same2} ${first2.plural}`}${units.length > same2 ? `, then ${units.length - same2} more` : ""}`;
+      }
+      let up = -1, upFig = "", upWords = "";
+      if (works.length) {
+        const next = works.slice().sort((a, b) => a.months - b.months || a.id - b.id)[0];
+        up = next.months;
+        upFig = sayMonths(next.months);
+        upWords = `${next.label}${works.length > 1 ? `, then ${works.length - 1} more` : ""}`;
+      }
+      const hurt = glanceDamage(s, r.id, see, seen2);
+      let dmgFig = "", dmgWords = "";
+      if (hurt) {
+        dmgFig = `${hurt.pct}%`;
+        const bits = [];
+        if (hurt.town > 0) bits.push(`the town ${hurt.town}% in ruins`);
+        if (hurt.lost > 0) bits.push(`${hurt.lost} of ${hurt.fac} ${hurt.fac === 1 ? "factory" : "factories"} wrecked`);
+        dmgWords = `${bits.join(", ")}${see.own && hurt.ruin && hurt.ruin.why === null ? `, repair ${moneyWords(hurt.ruin.cost)}` : ""}`;
+      }
+      if (!garr && !guardOnly2 && !orderFig && up < 0 && !hurt) continue;
+      out.push({
+        region: r.id,
+        own: see.own,
+        spied: see.spied,
+        ago: see.spied ? see.ago : -1,
+        garr,
+        guard: guardOnly2,
+        garrFig: guardOnly2 ? "guard" : garr ? sayDivs(garr) : "",
+        garrWords,
+        orderFig,
+        orderWords: orderWords2,
+        up,
+        upFig,
+        upWords,
+        dmg: hurt?.pct ?? 0,
+        dmgFig,
+        dmgWords
+      });
+    }
+    return out;
+  }
+  function shipsWords(f) {
+    const parts2 = [];
+    for (const k of ["bb", "cv", "ca", "dd", "ss"]) {
+      const n = Math.round(f.ships[k] ?? 0);
+      const spec2 = NAVY.classes[k];
+      if (n > 0 && spec2) parts2.push(`${n} ${n === 1 ? spec2.one : spec2.many}`);
+    }
+    return parts2.slice(0, 2).join(", ") || "no ships";
+  }
+  function glanceShelves(s, id) {
+    const me = s.human, r = s.regions[id];
+    if (!me || !r) return null;
+    const seen2 = sight(s);
+    const see = glanceSight(s, id, seen2);
+    if (!see) return null;
+    const garrison2 = [];
+    for (const c2 of see.known) {
+      garrison2.push({ kind: "army", sign: c2.kind === "fort" ? "defence" : c2.airborne ? "para" : c2.kind, name: glanceName(s, c2), line: `1 corps · ${c2.divs} division${c2.divs === 1 ? "" : "s"}${c2.nat !== r.ctrl ? ` · ${s.nations[c2.nat]?.adj ?? c2.nat}` : ""}`, share: Math.max(0, Math.min(1, c2.str)), id: c2.id });
+    }
+    let guard = 0;
+    try {
+      guard = see.own || see.ally || see.agent ? guardOf(s, r) : 0;
+    } catch {
+      guard = 0;
+    }
+    if (guard > 0) {
+      garrison2.push({ kind: "guard", sign: "defence", name: "Town guard", line: `${(Math.round(guard * 10) / 10).toFixed(1)} div · ${see.known.length ? "beside the garrison" : "holds alone"}`, share: guardLeft(s, id), id: -1 });
+    }
+    if (see.own || see.ally) {
+      for (const f of s.airFleets) {
+        if (f.base !== id || f.ship !== void 0 || f.ftr + f.bmr < 1 || !(f.nat === me || allied(s, f.nat, me))) continue;
+        const ftr = Math.round(f.ftr), bmr = Math.round(f.bmr);
+        const est = Math.max(1, (f.est?.ftr ?? 0) + (f.est?.bmr ?? 0) + (f.extra?.ftr ?? 0) + (f.extra?.bmr ?? 0));
+        garrison2.push({ kind: "air", sign: bmr > ftr ? "bmr" : "ftr", name: f.name, line: `${[ftr ? `${ftr} fighters` : "", bmr ? `${bmr} bombers` : ""].filter(Boolean).join(", ")} · based here`, share: Math.max(0, Math.min(1, (f.ftr + f.bmr) / est)), id: f.id });
+      }
+      for (const f of s.fleets) {
+        if (f.base !== id || f.stance !== "port" || shipCount(f.ships) <= 0 || !(f.nat === me || allied(s, f.nat, me))) continue;
+        garrison2.push({ kind: "fleet", sign: f.ships.cv > 0 ? "cv" : f.ships.ss > 0 && f.ships.bb + f.ships.ca + f.ships.dd === 0 ? "ss" : "hull", name: f.name, line: `${shipsWords(f)} · in port`, share: Math.max(0, Math.min(1, f.ready)), id: f.id });
+      }
+      for (const c2 of r.units) {
+        if (c2.dead || c2.nat !== me) continue;
+        if (c2.kind === "fort") continue;
+        garrison2.push({ kind: "field", sign: c2.airborne ? "para" : c2.kind, name: glanceName(s, c2), line: `${c2.divs} division${c2.divs === 1 ? "" : "s"} · in the field outside the town`, share: Math.max(0, Math.min(1, c2.str)), id: c2.id });
+      }
+    }
+    const divsIn = see.known.reduce((n, c2) => n + c2.divs * Math.max(0, Math.min(1, c2.str)), 0);
+    const garrDivs = see.known.length ? Math.max(1, Math.round(divsIn + guard)) : 0;
+    const airN = garrison2.filter((g2) => g2.kind === "air").length, fleetN = garrison2.filter((g2) => g2.kind === "fleet").length;
+    const garrHead = [garrDivs ? sayDivs(garrDivs) : guard > 0 ? "guard" : "", airN ? `${airN} air` : "", fleetN ? `${fleetN} fleet${fleetN === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+    let book = [];
+    try {
+      book = ordersBookOf(s);
+    } catch {
+      book = [];
+    }
+    const c = book.find((x) => x.region === id);
+    const orders = [];
+    const works = [];
+    for (const l of c?.lines ?? []) {
+      const b = s.nations[c.holder]?.queue.find((q) => q.id === l.id);
+      let joins = "";
+      if (!c.spied && b && b.what === "air") {
+        const kind = b.item ?? "ftr";
+        const here = s.airFleets.filter((f) => f.nat === me && f.base === id && f.ship === void 0 && (f.kind === void 0 || f.kind === kind)).sort((x, y) => y.ftr + y.bmr - (x.ftr + x.bmr))[0];
+        joins = here ? `joins ${here.name}` : "forms a new air group here";
+      } else if (!c.spied && b && b.what === "ship") {
+        if (b.item === "tp") joins = "joins the sea lift";
+        else {
+          let f = null;
+          try {
+            f = joinsFleet(s, me, b.item ?? "dd", id);
+          } catch {
+            f = null;
+          }
+          joins = f ? `joins the ${f.name}` : "forms a new fleet at this yard";
+        }
+      } else if (!c.spied && b && b.what === "corps") {
+        joins = "forms here";
+      }
+      const size = l.holds > 1 ? `${l.holds} ${l.what === "air" ? "aircraft" : "ships"}` : b && b.what === "corps" && b.divs ? `${b.divs} division${b.divs === 1 ? "" : "s"}` : "";
+      const row2 = {
+        sign: l.mark || (l.unit ? l.sign : ""),
+        star: l.elite,
+        name: upFirst2(l.label),
+        line: [size, joins, l.unit ? "" : `ready ${l.ready}`].filter(Boolean).join(" · ") || l.name,
+        share: Math.min(1, Math.max(0, l.done / Math.max(1, l.need))),
+        months: l.months,
+        id: l.id,
+        fresh: l.fresh && !c.spied
+      };
+      if (l.unit) orders.push(row2);
+      else if (l.what !== "civic") works.push(row2);
+    }
+    const arriving = [];
+    if (see.own) {
+      try {
+        const rows2 = [...setup_1939_default.reinforcements ?? [], ...setup_1939_default.formations ?? []];
+        for (const row2 of rows2) {
+          const turn = Number(row2[0]), opts = row2[6] ?? {};
+          if (row2[1] !== me || turn <= s.turn || turn > s.turn + 6 || s.byName[String(row2[5])]?.id !== id) continue;
+          if (opts.open && s.flags.open !== 1) continue;
+          const divs = Number(row2[4]) || 0;
+          arriving.push({ name: String(row2[2]), line: `${KIND[row2[3]]?.label ?? "Corps"}${divs ? `, ${divs} division${divs === 1 ? "" : "s"}` : ""}`, when: turnToDate(turn).label });
+        }
+      } catch {
+      }
+    }
+    const tiles = [];
+    let t = null;
+    try {
+      t = see.own || see.ally ? townBuildings(s, id) : null;
+    } catch {
+      t = null;
+    }
+    for (const p of t?.plots ?? []) {
+      if (!p.line) {
+        tiles.push({ kind: "free", sign: "", name: "Free plot", line: "choose a building", share: 0, months: 0, cost: 0, key: "plots", cause: "" });
+        continue;
+      }
+      if (p.building) {
+        const q = s.nations[r.ctrl]?.queue.find((b) => b.what === "civic" && b.region === id && b.item === p.line);
+        const share = q && q.eta > q.ordered ? Math.min(1, Math.max(0, (s.turn - q.ordered) / (q.eta - q.ordered))) : 0;
+        tiles.push({ kind: "up", sign: "scaffold", name: p.label || p.name, line: p.level > 0 ? `level ${p.level} → ${p.level + 1}` : "new, level 1", share, months: Math.max(0, (p.due ?? s.turn) - s.turn), cost: 0, key: "", cause: "" });
+      } else {
+        tiles.push({ kind: "stands", sign: "factory", name: p.label || p.name, line: `${p.name}, level ${p.level}`, share: 1, months: 0, cost: 0, key: "", cause: "" });
+      }
+    }
+    for (const w of works) tiles.push({ kind: "up", sign: "scaffold", name: w.name, line: w.line, share: w.share, months: w.months, cost: 0, key: "", cause: "" });
+    const hurt = glanceDamage(s, id, see, seen2);
+    if (hurt?.ruin) {
+      const why = hurt.ruin.why;
+      tiles.push({ kind: "damaged", sign: "wrench", name: hurt.ruin.town, line: `${hurt.ruin.pct}% wrecked`, share: 1 - hurt.ruin.damage, months: 0, cost: see.own && why === null ? shown(hurt.ruin.cost) : 0, key: see.own && why === null ? "work:repair" : "", cause: hurt.ruin.hit ? "hit this month" : "" });
+    }
+    if (hurt && hurt.lost > 0) {
+      let key6 = "";
+      if (see.own) {
+        for (const e of r.units) {
+          if (e.dead || e.nat !== me || e.kind !== "eng" || e.job) continue;
+          try {
+            if (engineerJobs(s, e).some((j) => j.key === "plant" && !j.why)) {
+              key6 = `work:job:${e.id}:plant`;
+              break;
+            }
+          } catch {
+          }
+        }
+      }
+      let cause = "";
+      try {
+        cause = ruinedAt(s, r) > 0 ? "bombed" : "burnt";
+      } catch {
+        cause = "";
+      }
+      tiles.push({ kind: "damaged", sign: "wrench", name: hurt.lost === 1 ? "A factory" : `${hurt.lost} factories`, line: `${hurt.lost} of ${hurt.fac} wrecked`, share: 1 - hurt.lost / Math.max(1, hurt.fac), months: 0, cost: 0, key: key6, cause: see.own && !key6 ? "engineers rebuild it" : cause });
+    }
+    const rows = [];
+    if (see.own) {
+      for (const f of s.fleets) if (f.nat === me && f.base === id && f.stance === "port" && shipCount(f.ships) > 0 && f.ready < 0.97) rows.push({ name: f.name, line: "refit in harbour", share: Math.max(0, Math.min(1, f.ready)), sign: "hull" });
+      for (const f of s.airFleets) if (f.nat === me && f.base === id && f.ship === void 0 && f.ftr + f.bmr >= 1 && f.ready < 0.97) rows.push({ name: f.name, line: "resting", share: Math.max(0, Math.min(1, f.ready)), sign: f.bmr > f.ftr ? "bmr" : "ftr" });
+    }
+    const upN = tiles.filter((x) => x.kind === "up").length, hurtN = tiles.filter((x) => x.kind === "damaged").length;
+    let agents = 0, onGuard = false, rail2 = "";
+    try {
+      for (const a of s.intel.agents) if (a.nat === me && a.reg === id) {
+        agents++;
+        if (a.mission === "guard") onGuard = true;
+      }
+    } catch {
+    }
+    try {
+      const n = railNote(s, id);
+      rail2 = !n ? "" : !n.line ? "none" : n.cut ? "cut" : "open";
+    } catch {
+      rail2 = "";
+    }
+    return {
+      own: see.own,
+      spied: see.spied,
+      ago: see.spied ? see.ago : -1,
+      garrHead,
+      garrison: garrison2,
+      orders,
+      arriving,
+      ordersHead: orders.length,
+      buildHead: [upN ? `${upN} going up` : "", hurtN ? `${hurtN} damaged` : ""].filter(Boolean).join(" · "),
+      tiles,
+      rows,
+      agents,
+      onGuard,
+      rail: rail2
+    };
   }
   function orderLine(s, b, book = ordersBookOf(s)) {
     const months3 = Math.max(0, b.eta - s.turn);
@@ -51000,6 +51317,14 @@ ${next.text}` : ""}` : next ? next.also : "";
           return [];
         }
       })()),
+      // (Release 2: the city at a glance.) The AT A GLANCE tab's three shelves and its foot line.
+      glance: (() => {
+        try {
+          return glanceShelves(s, r.id);
+        } catch {
+          return null;
+        }
+      })(),
       // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
       // (all only in the grand campaign, where those rules apply).
       // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.

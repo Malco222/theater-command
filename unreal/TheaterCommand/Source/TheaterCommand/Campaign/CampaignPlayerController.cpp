@@ -1937,6 +1937,38 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Wears->Stage = Stage;
 		}
 	}
+	// (Release 2, Brian's ask of 22 November 2026: which units are being built in each city, which are garrisoned in
+	// it, and which buildings are going up or being repaired.) Each town with something to say wears one plate under
+	// its name: the garrison, the order badge (moved down into it), what is going up, what is damaged. His own towns,
+	// and his enemies' as far as his intelligence reaches; an ally's town keeps its name alone. From far off, where
+	// capitals alone are named, the plate is four dots in fixed places.
+	{
+		const int32 GlanceStage = Distance <= 5500.0f ? 0 : Distance <= 8500.0f ? 1 : 2;
+		for (const FCityGlance& Town : View.Glance)
+		{
+			if (!Data.Regions.IsValidIndex(Town.Region))
+			{
+				continue;
+			}
+			FTownPlate* Wears = Out.FindByPredicate([&Town](const FTownPlate& Each)
+			{
+				return Each.Region == Town.Region && !Each.Name.IsEmpty() && !Each.bGate && !Each.bSeal && !Each.bCrowd && !Each.bAirfield && !Each.bHarbour;
+			});
+			if (!Wears)
+			{
+				continue; // (the plate goes away with its name, as the order badge does)
+			}
+			Wears->bGlance = true;
+			Wears->GlanceStage = GlanceStage;
+			Wears->bGlanceSpied = Town.bSpied;
+			Wears->GlanceAgo = Town.Ago;
+			Wears->GarrisonFigure = Town.bGuardOnly ? FString(TEXT("guard")) : Town.Garrison > 0 ? FString::FromInt(Town.Garrison) : FString();
+			Wears->UpMonths = Town.UpFigure.IsEmpty() ? -1 : FMath::Max(Town.UpMonths, 0);
+			Wears->Damage = Town.DamageFigure.IsEmpty() ? 0 : FMath::Max(Town.Damage, 1);
+			Wears->bGlanceOrders = !Town.OrderFigure.IsEmpty();
+			Wears->bPicked = Town.Region == SelectedRegion;
+		}
+	}
 	// An airfield with air groups based on it wears a small badge: an aircraft and how many groups fly from it, on
 	// its holder's colour. From working height and closer; from far off the map is left clear. (The groups
 	// themselves are seen by clicking the airfield: no aircraft piece stands on the map for them.)
@@ -5828,6 +5860,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		HoverTipHand = TipHand;
 		HoverTip = FText::GetEmpty();
 		HoverTipMarked = FText::GetEmpty();
+		HoverGlance = FHoverGlance();
 		FCampaignSession* Session = GetSession();
 		if (Session && Map->GetData().Regions.IsValidIndex(TipRegion))
 		{
@@ -5862,8 +5895,60 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					Line += TEXT("\n") + CutLine;
 				}
 			}
+			// (Release 2, Brian's city at a glance; the art director's spec, section 3.) Over a town that wears a plate, a
+			// paper card says its marks in words, a line each, in the plate's order: the garrison, what is on order, what
+			// is going up, what is damaged. What it has on order is said there, and not again in the lines below.
+			const FCityGlance* GlanceHere = TipField == INDEX_NONE ? View.Glance.FindByPredicate([TipRegion](const FCityGlance& Each) { return Each.Region == TipRegion; }) : nullptr;
+			if (GlanceHere)
+			{
+				const FTownInfo* GlanceTown = Map->TownOf(TipRegion);
+				HoverGlance.bValid = true;
+				HoverGlance.Title = GlanceTown && !GlanceTown->Name.IsEmpty() ? GlanceTown->Name : Region.Name;
+				const FString Size = GlanceTown && !GlanceTown->Size.IsEmpty() ? GlanceTown->Size.ToLower() : FString(TEXT("town"));
+				HoverGlance.Kind = GlanceHere->bOwn ? FString::Printf(TEXT("your %s"), *Size)
+					: Standing == TEXT("enemy") ? FString::Printf(TEXT("enemy %s"), *Size)
+					: FString::Printf(TEXT("%s at peace"), *Size);
+				if (GlanceHere->bSpied)
+				{
+					HoverGlance.Kind += GlanceHere->Ago <= 0 ? FString(TEXT(" \u00B7 seen this month")) : FString::Printf(TEXT(" \u00B7 seen %d mo ago"), GlanceHere->Ago);
+				}
+				if (!GlanceHere->GarrisonFigure.IsEmpty())
+				{
+					FHoverGlanceLine& Said = HoverGlance.Lines.AddDefaulted_GetRef();
+					Said.Sign = TEXT("defence");
+					Said.Figure = GlanceHere->GarrisonFigure;
+					Said.Words = GlanceHere->GarrisonWords;
+				}
+				if (!GlanceHere->OrderFigure.IsEmpty())
+				{
+					const FCityOrders* GlanceSigned = View.CityOrders.FindByPredicate([TipRegion](const FCityOrders& Each) { return Each.Region == TipRegion; });
+					FHoverGlanceLine& Said = HoverGlance.Lines.AddDefaulted_GetRef();
+					Said.bOrderSign = GlanceSigned && !GlanceSigned->Sign.IsEmpty();
+					Said.Sign = Said.bOrderSign ? GlanceSigned->Sign : FString(TEXT("hourglass"));
+					Said.Figure = GlanceHere->OrderFigure;
+					Said.Words = GlanceHere->OrderWords;
+				}
+				if (!GlanceHere->UpFigure.IsEmpty())
+				{
+					FHoverGlanceLine& Said = HoverGlance.Lines.AddDefaulted_GetRef();
+					Said.Sign = TEXT("scaffold");
+					Said.Figure = GlanceHere->UpFigure;
+					Said.Words = GlanceHere->UpWords;
+				}
+				if (!GlanceHere->DamageFigure.IsEmpty())
+				{
+					FHoverGlanceLine& Said = HoverGlance.Lines.AddDefaulted_GetRef();
+					Said.Sign = TEXT("wrench");
+					Said.Figure = GlanceHere->DamageFigure;
+					Said.Words = GlanceHere->DamageWords;
+					Said.bAlarm = true;
+				}
+				HoverGlance.Foot = ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion
+					? FString(TEXT("click: open the city \u00B7 right-click: send the army in hand here"))
+					: FString(TEXT("click: open the city"));
+			}
 			// (Ruling 46: pointing at a city lists everything it has on order, the total first.)
-			if (const FCityOrders* City = View.CityOrders.FindByPredicate([TipRegion](const FCityOrders& Each) { return Each.Region == TipRegion; }))
+			if (const FCityOrders* City = GlanceHere && !GlanceHere->OrderFigure.IsEmpty() ? nullptr : View.CityOrders.FindByPredicate([TipRegion](const FCityOrders& Each) { return Each.Region == TipRegion; }))
 			{
 				Line += TEXT("\n") + City->Head;
 				for (int32 K = 0; K < FMath::Min(City->Lines.Num(), 6); ++K)
@@ -6211,6 +6296,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				const int32* BarredBy = Held->Reach.Contains(Sea) ? nullptr : Held->Barred.Find(Sea);
 				const FViewGate* Bar = BarredBy ? Session->GetView().Gates.FindByPredicate([BarredBy](const FViewGate& Each) { return Each.Id == *BarredBy; }) : nullptr;
 				HoverTipMarked = Bar ? FText::FromString(FString::Printf(TEXT("<Red>%s</>"), *PlainInMarked(Bar->Shut))) : FText::GetEmpty();
+				HoverGlance = FHoverGlance();
 				HoverTip = FText::FromString(Held->Reach.Contains(Sea)
 					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s."), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"))
 					: Bar ? Name
@@ -6219,6 +6305,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			else if (TipRegion == INDEX_NONE)
 			{
 				HoverTip = FText::GetEmpty();
+				HoverGlance = FHoverGlance();
 			}
 		}
 	}
@@ -6245,6 +6332,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			HoverGate = OnGate;
 			HoverTip = GateTip;
 			HoverTipMarked = GateTipMarked;
+			HoverGlance = FHoverGlance(); // (a gate's slip is not a town's card)
 			if (StagedGate != INDEX_NONE)
 			{
 				for (const TPair<int32, FBox2D>& Mark : GateMarks)
@@ -6261,6 +6349,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			HoverGate = INDEX_NONE;
 			HoverTip = FText::GetEmpty();
 			HoverTipMarked = FText::GetEmpty();
+			HoverGlance = FHoverGlance();
 			HoverTipRegion = -2; // (and whatever lies under the pointer says its own piece again)
 			FleetHoverSea = -2;
 		}
@@ -6560,6 +6649,7 @@ void ACampaignPlayerController::PutDownFleet()
 	FleetInHand = INDEX_NONE;
 	FleetHoverSea = INDEX_NONE;
 	HoverTip = FText::GetEmpty();
+	HoverGlance = FHoverGlance();
 	RefreshOrders();
 }
 
@@ -7260,6 +7350,10 @@ void ACampaignPlayerController::SelectRegion(int32 RegionId)
 	if (!Map.IsValid())
 	{
 		return;
+	}
+	if (RegionId != SelectedRegion)
+	{
+		ProvinceTab = 3; // (release 2: a town newly picked opens on AT A GLANCE, the art director's spec, section 4)
 	}
 	SelectedRegion = RegionId;
 	Map->SetSelectedRegion(RegionId);
@@ -11029,6 +11123,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			}
 			RegionPanel.Forming = Province.Forming;
 			RegionPanel.FormingHead = Province.FormingHead;
+			RegionPanel.Glance = Province.Glance;
 		}
 	}
 }
