@@ -186,6 +186,72 @@ namespace EdgeSeals
 	 */
 	std::string EightWords(const std::string& Text, int Most = 8);
 
+	/**
+	 * Ruling 64(g) as amended 08:55Z, the fold of alike runs: "Three or more in a row that would look the same (wax,
+	 * mark, sign, pulse) stand as one seal with their count at the first item's place, and a press opens the card at
+	 * that run's first row." FAlike is how an item's seal looks on the edge: its wax, what is pressed in it (its drawn
+	 * mark, or the order sign it names) and whether it pulses. A dated warning (the red wax) never folds, so no run
+	 * crosses one either.
+	 */
+	struct FAlike
+	{
+		EWax Wax = EWax::Brass;
+		EGlyph Glyph = EGlyph::News;
+		std::string Sign; // the order sign pressed in it, where Glyph is Sign; empty otherwise
+		bool bPulse = false;
+
+		bool IsWarning() const { return Wax == EWax::Red; }
+		bool operator==(const FAlike& Other) const = default;
+	};
+	/** An item's look, from its part, its word, its tone and the order sign its row names: LookOf's wax and pulse, GlyphOf's mark, the sign where MayPress. */
+	FAlike AlikeOf(ESection Section, const std::string& Word, int Tone, const std::string& Sign);
+
+	/** A run of the card's items that stands as one seal: the first item's place in card order, and how many (1: a seal of its own). */
+	struct FAlikeRun
+	{
+		int First = 0;
+		int Count = 1;
+	};
+	/**
+	 * The card's items as the seals that stand for them, in card order, into Out: each run of Least or more alike items
+	 * in a row as one, every other item as its own. Display only: the card and its items are not changed, every item
+	 * is in one run and one only, in order, and the runs' counts add up to the items.
+	 */
+	void FoldAlike(const std::vector<FAlike>& Looks, std::vector<FAlikeRun>& Out, int Least = 3);
+
+	/**
+	 * What the card says of one item, for the words of a folded seal: its part; the line its seal's own eight words
+	 * are cut from (Line); the card's sentence for it (Sentence: a band's or a row's text, the lead's headline, the line
+	 * of home as said, the staff's, elsewhere's); and for a front's row its place (Name) and the rest of its head as the
+	 * card prints it (Head: "LOST against Germany", "HIT").
+	 */
+	struct FSaid
+	{
+		ESection Section = ESection::Band;
+		std::string Line;
+		std::string Sentence;
+		std::string Name;
+		std::string Head;
+	};
+	/** A front's row as FSaid: its line (RowLine), its sentence (its text, else its line), its place, and its head where it has a tag. */
+	FSaid RowSaid(const std::string& Place, const std::string& Tag, const std::string& Join, const std::string& JoinName, const std::string& Text);
+	/** Any other item as FSaid: its line and its sentence are the same words. */
+	FSaid PlainSaid(ESection Section, const std::string& Text);
+
+	/**
+	 * The words under the pointer for a folded seal: the run's items named in card order, and how many more, in nothing
+	 * the card does not say.
+	 * - Where each sentence is a name (one to four words, none named twice) and then the same words, those words with
+	 *   their verb made plural, and the names: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more".
+	 * - Else, where each is a front's row with the same head, that head and the places: "3 HIT: Ruhr, Hamburg and Bohemia".
+	 * - Else the first item's eight words, how many more, and where on the card they are: "Soviet troops close round
+	 *   Helsinki, and 4 more elsewhere in the war".
+	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more".
+	 */
+	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run);
+	/** A verb as it stands after more than one name: "declares" "declare", "has" "have", "is" "are", "carries" "carry". A word with no third person's -s (a past, a word in capitals) is left as it is. */
+	std::string PluralVerb(const std::string& Word);
+
 	/** The sizes the seals are laid out with, in the screen's units (the frame's own, before its scale). */
 	struct FParams
 	{
@@ -248,6 +314,15 @@ namespace EdgeSeals
 		 * not shown.
 		 */
 		FFold LayRanked(const FParams& Params, const std::vector<FWant>& Items, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out);
+
+		/**
+		 * The same, for seals that may each stand for a run of alike items (FoldAlike): Seals holds what each seal wants,
+		 * in card order, and Carries how many items each stands for (one where Carries has no entry for it). Every seal
+		 * given stands, with no "+N", only where they are no more than Most and carry all Total items; else at most Most - 1
+		 * stand and the "+N" seal counts the items the rest carry, and the items past them. Returns how many seals stand
+		 * (Shown) and how many items the "+N" counts (More): the "+N" counts items, never seals.
+		 */
+		FFold LayRanked(const FParams& Params, const std::vector<FWant>& Seals, const std::vector<int>& Carries, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out);
 
 	private:
 		/** Of the points of an edge where a box of the given half sizes stands clear of every obstacle, the one nearest Wanted. */
@@ -532,5 +607,43 @@ namespace EdgeSeals
 			double Ring = 0.0;
 		};
 		FCall CallOf(double Since, double Period = 2.4);
+
+		/**
+		 * A folded seal's count (ruling 64(g) as amended 08:55Z): a small tab of the date strip's paper between the
+		 * ribbon's tails, edged in its darker fold, laid over the tails under the disc, its figures in dark ink in the
+		 * kit's typed face (Courier Prime Bold, CampaignHUD's Typed) at CountPt. The tab lies wholly under the disc's foot
+		 * and its rim (TabTop), so the figures are never on the wax, and inside the seal's box, which stays 34 by 44: a
+		 * folded seal is the size of any other, and breathes and grows under the pointer as one.
+		 *
+		 * The face's measures, in ems (from the font file): a figure is FigureH tall at the least (the 5 and the 7; the
+		 * round ones stand a hair over), its ink FigureInk wide inside an advance of FigureAdvance, and the line Slate
+		 * measures runs from Ascent above the baseline to Descent below it. A Slate point is 4/3 of a unit (96 a
+		 * inch), so CountPt's em is CountPt * 4/3 units, and its figures FigurePx pixels tall on a screen of PxPerUnit:
+		 * 9.4 at 1441 by 878, the floor being 9 there.
+		 */
+		constexpr double TabTop = 32.4;
+		constexpr double TabBottom = BoxH;
+		constexpr double TabPad = 1.4; // the paper either side of the figures' ink
+		constexpr double TabRound = 1.6;
+		constexpr double CountPt = 13.5;
+		constexpr double FigureH = 0.58;
+		constexpr double FigureInk = 0.47;
+		constexpr double FigureAdvance = 0.6;
+		constexpr double Ascent = 0.78125;
+		constexpr double Descent = 0.341796875;
+		constexpr int CountMostFigures = 3; // the box takes three figures' tab; a run is never so long
+
+		/** The count's em, in units. */
+		constexpr double CountEm() { return CountPt * 4.0 / 3.0; }
+		/** How far above the middle of its line, as Slate measures it, a figure's middle stands, in units. */
+		double FigureLift();
+		/** The tab for a count of Figures figures (1 to CountMostFigures), centred under the disc. */
+		FBox TabOf(int Figures);
+		/** Where the figures' ink lies on it: centred in the tab. */
+		FBox FiguresOf(int Figures);
+		/** How tall the figures stand on a screen of PxPerUnit pixels to a unit. */
+		double FigurePx(double PxPerUnit);
+		/** How many figures a count has. */
+		int FiguresIn(int Count);
 	}
 }

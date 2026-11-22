@@ -10,13 +10,22 @@ struct FMonthCard;
  *
  * One seal on the map's edge: an item of the month's card (ruling 64(g): the same items, in the same order), what is
  * pressed into it, its colour, its eight words for the pointer, and the place it points at, where the row has one
- * (ruling 64(d)). Display only: nothing here is saved. The seals are laid again from the month's card.
+ * (ruling 64(d)); or, as ruling 64(g) was amended at 08:55Z, a run of three or more items in a row that would look the
+ * same, standing as one seal with their count, at the run's first item. Display only: nothing here is saved. The seals
+ * are laid again from the month's card.
  */
 struct FEdgeNewsSeal
 {
-	/** The card's part (EdgeSeals::ESection: 0 a band, 1 the lead story, 2 a front's row, 3 home, 4 the staff, 5 elsewhere, 6 "+N") and the item's place in it. */
+	/** The card's part (EdgeSeals::ESection: 0 a band, 1 the lead story, 2 a front's row, 3 home, 4 the staff, 5 elsewhere, 6 "+N") and the item's place in it: a run's first item, where it folds a run (a press opens the card there). */
 	int32 Section = 0;
 	int32 Index = 0;
+	/**
+	 * How many items of the card it stands for: 1 for an item of its own; 3 or more for a run of alike items in a row
+	 * (wax, mark, sign and pulse: EdgeSeals::FoldAlike; a dated warning never folds), its count shown on a tab of paper
+	 * under the disc. A folded seal looks, pulses and lies as its first item's would, and its words name the run's items
+	 * (EdgeSeals::FoldWords).
+	 */
+	int32 Alike = 1;
 	/** Ruling 64's class (EdgeSeals::ClassOf). */
 	int32 Class = 3;
 	/** The row's tone on the card: 1 good news (a band: a FREED his own side won), -1 bad, 2 something that blocks or warns, 0 neither; 3 next month's, in grey. */
@@ -51,9 +60,11 @@ struct FEdgeNewsBoard
 	static constexpr int32 MostSeals = 9;
 
 	/**
-	 * The card's first items as seals, in card order (at most MostSeals), and how many items the card has in all. Empty
-	 * until a month's card falls due, and again as the next month resolves. How many of them stand is the screen's to
-	 * say, each frame, from the room the edge has (EdgeSeals::FLayout::LayRanked): the rest fold into the "+N" seal.
+	 * The card's first seals, in card order (at most MostSeals), each an item or a folded run of alike items, and how many
+	 * items the card has in all. The runs are folded before the seals are counted, so a run past the ninth item still
+	 * stands as one. Empty until a month's card falls due, and again as the next month resolves. How many of them stand
+	 * is the screen's to say, each frame, from the room the edge has (EdgeSeals::FLayout::LayRanked): the rest fold into
+	 * the "+N" seal, which counts the items they stand for, never the seals.
 	 */
 	TArray<FEdgeNewsSeal> Seals;
 	int32 Items = 0;
@@ -69,7 +80,7 @@ struct FEdgeNewsBoard
 	int32 FocusPage = -1;
 	double FocusAt = 0.0;
 
-	/** Sets out the seals for a month's card: its first MostSeals items in its order, and the "+N" seal for the rest. */
+	/** Sets out the seals for a month's card: its items in its order, each alike run of three or more folded into one seal, the first MostSeals of them; and the "+N" seal for the rest. */
 	void LayFrom(const FMonthCard& Card);
 	/** Takes every seal away (the month that follows resolves). */
 	void Clear();

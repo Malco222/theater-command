@@ -38,7 +38,8 @@ namespace
 
 #define CHECK(Condition) Check((Condition), #Condition, __LINE__)
 
-void* operator new(std::size_t Size)
+// (not inlined: where g++ inlines the pair it sees std::free take what operator new gave, and warns of a mismatch)
+[[gnu::noinline]] void* operator new(std::size_t Size)
 {
 	++Allocations;
 	if (void* Block = std::malloc(Size == 0 ? 1 : Size))
@@ -48,12 +49,12 @@ void* operator new(std::size_t Size)
 	throw std::bad_alloc();
 }
 
-void operator delete(void* Block) noexcept
+[[gnu::noinline]] void operator delete(void* Block) noexcept
 {
 	std::free(Block);
 }
 
-void operator delete(void* Block, std::size_t) noexcept
+[[gnu::noinline]] void operator delete(void* Block, std::size_t) noexcept
 {
 	std::free(Block);
 }
@@ -1133,6 +1134,554 @@ static void TestSwords()
 	}
 }
 
+namespace
+{
+	/** The real months' cards (real_months.inc, from the rules bundle): one line a month, then one an item, tab-separated. */
+	const char* const RealMonths =
+#include "real_months.inc"
+		;
+
+	/** One month of the card as the edge's seals see it: each item's look and what the card says of it, in card order. */
+	struct FMonth
+	{
+		std::string Seat;
+		std::string Date;
+		std::vector<FAlike> Looks;
+		std::vector<FSaid> Said;
+	};
+
+	std::vector<std::string> Fields(const std::string& Line)
+	{
+		std::vector<std::string> Out;
+		size_t At = 0;
+		for (;;)
+		{
+			const size_t Tab = Line.find('\t', At);
+			Out.push_back(Line.substr(At, Tab == std::string::npos ? std::string::npos : Tab - At));
+			if (Tab == std::string::npos)
+			{
+				break;
+			}
+			At = Tab + 1;
+		}
+		Out.resize(std::max<size_t>(Out.size(), 8));
+		return Out;
+	}
+
+	/** An item as EdgeNews.cpp's EdgeSealOf makes it: its look (AlikeOf, the lead's sign from its picture) and its words. */
+	void AddItem(FMonth& Month, ESection Section, const std::string& Word, int Tone, const std::string& Sign, const std::string& A, const std::string& B, const std::string& C, const std::string& Text)
+	{
+		Month.Looks.push_back(AlikeOf(Section, Word, Tone, Section == ESection::Lead ? LeadSign(Sign) : Sign));
+		if (Section == ESection::Row)
+		{
+			Month.Said.push_back(RowSaid(A, Word, B, C, Text));
+		}
+		else if (Section == ESection::Home)
+		{
+			std::string Said = A.empty() ? Text : A + " " + Text;
+			Said += B.empty() ? "" : ", " + B;
+			Month.Said.push_back(PlainSaid(Section, Said));
+		}
+		else
+		{
+			Month.Said.push_back(PlainSaid(Section, Text));
+		}
+	}
+
+	std::vector<FMonth> ReadMonths()
+	{
+		std::vector<FMonth> Months;
+		const std::string All(RealMonths);
+		size_t At = 0;
+		while (At < All.size())
+		{
+			const size_t End = std::min(All.find('\n', At), All.size());
+			const std::string Line = All.substr(At, End - At);
+			At = End + 1;
+			if (Line.empty())
+			{
+				continue;
+			}
+			const std::vector<std::string> F = Fields(Line);
+			if (F[0] == "M")
+			{
+				Months.push_back(FMonth{ F[1], F[2], {}, {} });
+			}
+			else if (!Months.empty())
+			{
+				AddItem(Months.back(), static_cast<ESection>(std::atoi(F[0].c_str())), F[1], std::atoi(F[2].c_str()), F[3], F[4], F[5], F[6], F[7]);
+			}
+		}
+		return Months;
+	}
+
+	/** Mac run 3's month (USA, grand, from January 1942, seed 1939): the card of January 1942 as the rules gave it. */
+	FMonth RunThree()
+	{
+		FMonth Month{ "USA", "January 1942", {}, {} };
+		AddItem(Month, ESection::Band, "WAR", -1, "", "", "", "", "Cuba declares war on Germany");
+		AddItem(Month, ESection::Band, "WAR", -1, "", "", "", "", "Panama declares war on Germany");
+		for (const char* Place : { "Costa Rica", "Nicaragua", "Honduras", "El Salvador", "Guatemala", "Haiti", "Dominican Republic" })
+		{
+			const std::string Named = std::string(Place) == "Dominican Republic" ? "The Dominican Republic" : Place;
+			AddItem(Month, ESection::Row, "WAR", -1, "", Place, "", "", Named + " declares war on Germany.");
+		}
+		AddItem(Month, ESection::Row, "NEWS", 0, "", "Soviet Union", "", "", "British and Soviet troops have entered Iran.");
+		AddItem(Month, ESection::Home, "", 0, "", "", "", "", "German envoys are courting Buenos Aires.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "Soviet troops close round Helsinki: the capital of Finland is under siege, with one corps inside.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "Soviet troops blow the bridges over the Oka at Kaluga as German forces reach the river.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "Scorched earth: German troops tore up the railway at Kaluga as they were driven off.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "No. 4 Group bombs Berlin by night.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "4\xC2\xAA Divisione Aerea strikes at shipping in the Western Mediterranean.");
+		return Month;
+	}
+
+	/** The runs cover every item once, in card order: each starts where the last ended, and their counts add up. */
+	bool RunsCover(const std::vector<FAlikeRun>& Runs, int Items)
+	{
+		int Next = 0;
+		for (const FAlikeRun& Run : Runs)
+		{
+			if (Run.First != Next || Run.Count < 1)
+			{
+				return false;
+			}
+			Next += Run.Count;
+		}
+		return Next == Items;
+	}
+
+	/** Each run is alike, holds no warning where it folds, and is whole: a fold is never 2, and no item next to it looks the same. */
+	bool RunsRight(const std::vector<FAlike>& Looks, const std::vector<FAlikeRun>& Runs, std::string& Why)
+	{
+		for (size_t Index = 0; Index < Runs.size(); ++Index)
+		{
+			const FAlikeRun& Run = Runs[Index];
+			const FAlike& First = Looks[static_cast<size_t>(Run.First)];
+			if (Run.Count == 2)
+			{
+				Why = "a fold of two";
+				return false;
+			}
+			for (int Each = Run.First; Each < Run.First + Run.Count; ++Each)
+			{
+				if (!(Looks[static_cast<size_t>(Each)] == First) || (Run.Count > 1 && Looks[static_cast<size_t>(Each)].IsWarning()))
+				{
+					Why = "a fold of items that are not alike, or of a warning";
+					return false;
+				}
+			}
+			const int Before = Run.First - 1, After = Run.First + Run.Count;
+			if (Run.Count > 1 && ((Before >= 0 && Looks[static_cast<size_t>(Before)] == First) || (After < static_cast<int>(Looks.size()) && Looks[static_cast<size_t>(After)] == First)))
+			{
+				Why = "a fold that stops short of an alike item";
+				return false;
+			}
+			// (three alike in a row that are not a warning always fold)
+			if (Run.Count == 1 && !First.IsWarning() && Index + 2 < Runs.size() && Runs[Index + 1].Count == 1 && Runs[Index + 2].Count == 1
+				&& Looks[static_cast<size_t>(Runs[Index + 1].First)] == First && Looks[static_cast<size_t>(Runs[Index + 2].First)] == First)
+			{
+				Why = "three alike left unfolded";
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool Contains(const std::string& Text, const std::string& Part)
+	{
+		return Text.find(Part) != std::string::npos;
+	}
+
+	bool StartsWith(const std::string& Text, const std::string& Part)
+	{
+		return Text.compare(0, Part.size(), Part) == 0;
+	}
+
+	/**
+	 * Nothing the card does not say: a folded seal's words begin with its count, name its first items in card order
+	 * (each from its own sentence or its row's place), and say how many more; or they are its first item's own words
+	 * and how many more.
+	 */
+	bool SaysOnlyTheCard(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words, std::string& Why)
+	{
+		const std::string Count = std::to_string(Run.Count);
+		const FSaid& First = Said[static_cast<size_t>(Run.First)];
+		const size_t Colon = Words.find(": ");
+		if (StartsWith(Words, Count + " ") && Colon != std::string::npos)
+		{
+			const std::string Says = Words.substr(Count.size() + 1, Colon - Count.size() - 1);
+			const std::string Names = Words.substr(Colon + 2);
+			// (the words after the verb are on every item's sentence, or the head on every row)
+			const size_t Space = Says.find(' ');
+			const std::string Tail = Space == std::string::npos ? std::string() : Says.substr(Space);
+			const int Named = Run.Count > 4 ? 3 : Run.Count;
+			size_t From = 0;
+			for (int Index = 0; Index < Run.Count; ++Index)
+			{
+				const FSaid& Item = Said[static_cast<size_t>(Run.First + Index)];
+				const bool bHead = Item.Head == Says;
+				if (!bHead && !Contains(Item.Sentence, Tail))
+				{
+					Why = "a folded seal's words say what an item's sentence does not";
+					return false;
+				}
+				if (Index < Named)
+				{
+					// (its name, where the list has it, in card order: its row's place, or the words of its own sentence before
+					// its verb, the word before the rest)
+					std::string Sentence = Item.Sentence;
+					while (!Sentence.empty() && Sentence.back() == '.')
+					{
+						Sentence.pop_back();
+					}
+					const size_t Rest = Tail.empty() ? Sentence.size() : Sentence.find(Tail);
+					const size_t Verb = Rest == std::string::npos || Rest == 0 ? std::string::npos : Sentence.rfind(' ', Rest - 1);
+					std::string Name = bHead ? Item.Name : Verb == std::string::npos ? std::string() : Sentence.substr(0, Verb);
+					if (StartsWith(Name, "The "))
+					{
+						Name[0] = 't';
+					}
+					const size_t Found = Names.find(Name, From);
+					if (Found == std::string::npos || Name.empty())
+					{
+						Why = "a name not in card order, or not the card's";
+						return false;
+					}
+					From = Found + Name.size();
+				}
+			}
+			const std::string Rest = Run.Count > 4 ? " and " + std::to_string(Run.Count - 3) + " more" : std::string();
+			if (Names.size() < Rest.size() || Names.compare(Names.size() - Rest.size(), Rest.size(), Rest) != 0)
+			{
+				Why = "a folded seal's words that do not say how many more";
+				return false;
+			}
+			return true;
+		}
+		std::string Own = EightWords(First.Line);
+		while (!Own.empty() && (Own.back() == '.' || Own.back() == ',' || Own.back() == ':' || Own.back() == ';'))
+		{
+			Own.pop_back();
+		}
+		if (!StartsWith(Words, Own + ", and " + std::to_string(Run.Count - 1) + " more"))
+		{
+			Why = "a folded seal's words that are neither its names nor its first item's words and how many more";
+			return false;
+		}
+		return true;
+	}
+}
+
+/**
+ * Ruling 64(g) as amended 08:55Z: three or more alike in a row stand as one seal with their count, at the first item's
+ * place; a press opens the card at the run's first row. Mac run 3's month, the warnings, the order and the counts over
+ * every real month, the card left as it was, the words under the pointer, the "+N" counting items, and the tab.
+ */
+static void TestFold()
+{
+	// 1. Mac run 3's month (January 1942, USA): sixteen items, so eight seals and a "+8" before the fold. Folded: four,
+	// the nine declarations of war as one, the news from Iran, home's line, and elsewhere's five as one; no "+N".
+	const FMonth Three = RunThree();
+	std::vector<FAlikeRun> Runs;
+	FoldAlike(Three.Looks, Runs);
+	CHECK(Three.Looks.size() == 16 && Runs.size() == 4);
+	CHECK(Runs.size() == 4 && Runs[0].First == 0 && Runs[0].Count == 9 && Runs[1].Count == 1 && Runs[2].Count == 1 && Runs[3].First == 11 && Runs[3].Count == 5);
+	CHECK(Three.Looks[0].Wax == EWax::Band && Three.Looks[0].Glyph == EGlyph::War && Three.Looks[0].bPulse && Three.Looks[9].Glyph == EGlyph::News && Three.Looks[9].bPulse);
+	CHECK(Three.Looks[10].Wax == EWax::Brass && !Three.Looks[10].bPulse && Three.Looks[11].Wax == EWax::Grey && Three.Looks[11].Glyph == EGlyph::Globe);
+	// (elsewhere's five were five grey seals of their own before the fold: no two items ever shared a seal)
+	CHECK(Fold(16, 9).Shown == 8 && Fold(16, 9).More == 8);
+	if (Runs.size() == 4)
+	{
+		const std::string War = FoldWords(Three.Said, Runs[0]), Iran = FoldWords(Three.Said, Runs[1]), Home = FoldWords(Three.Said, Runs[2]), Elsewhere = FoldWords(Three.Said, Runs[3]);
+		CHECK(War == "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more");
+		CHECK(Iran == EightWords(Three.Said[9].Line) && Iran == "Soviet Union NEWS: British and Soviet troops have");
+		CHECK(Home == "German envoys are courting Buenos Aires.");
+		CHECK(Elsewhere == "Soviet troops close round Helsinki, and 4 more elsewhere in the war");
+		std::printf("(run 3's month folded: \"%s\"; \"%s\")\n", War.c_str(), Elsewhere.c_str());
+		// Laid at 1441 by 878 and at 1024 by 768 (the layer is 972 units high: 1595 by 972, 1296 by 972), with the frame:
+		// all four stand, and no "+N".
+		FLayout Layout;
+		std::vector<FSpot> Spots;
+		const std::vector<int> Carries = { 9, 1, 1, 5 };
+		for (const double Wide : { 1441.0 / 878.0 * 972.0, 1024.0 / 768.0 * 972.0 })
+		{
+			FParams Window;
+			Window.ScreenW = std::floor(Wide);
+			Window.ScreenH = 972.0;
+			std::vector<FWant> Wants(4);
+			Wants[0] = FWant{ true, FPoint{ Window.ScreenW * 0.3, Window.ScreenH * 0.6 }, -1 }; // (Cuba, south-west on the map)
+			Wants[1] = FWant{ true, FPoint{ Window.ScreenW * 0.9, Window.ScreenH * 0.4 }, -1 }; // (Iran, off to the east)
+			const FFold Laid = Layout.LayRanked(Window, Wants, Carries, 16, 9, SmallFrame(Window.ScreenW, Window.ScreenH), Spots);
+			std::string Why;
+			CHECK(Laid.Shown == 4 && Laid.More == 0 && Spots.size() == 4 && Spots[0].bShown && Spots[3].bShown);
+			CHECK(LaidClear(Window, SmallFrame(Window.ScreenW, Window.ScreenH), Spots, Why));
+		}
+	}
+
+	// 2. A warning never folds, and no run crosses one: three warnings in a row stand as three; alike seals either side
+	// of one are two runs, each folded only where it is three or more on its own.
+	{
+		FMonth Warned;
+		for (int Each = 0; Each < 3; ++Each)
+		{
+			AddItem(Warned, ESection::Band, "WARNING", -1, "", "", "", "", "Act by March.");
+		}
+		AddItem(Warned, ESection::Lead, "LAST MONTH", -1, "troops", "", "", "", "The last month to hold the line.");
+		for (int Each = 0; Each < 2; ++Each)
+		{
+			AddItem(Warned, ESection::Row, "WAR", -1, "", "A", "", "", "A declares war on B.");
+		}
+		AddItem(Warned, ESection::Row, "WARNING", -1, "", "C", "", "", "Act by April.");
+		for (int Each = 0; Each < 3; ++Each)
+		{
+			AddItem(Warned, ESection::Row, "WAR", -1, "", "D", "", "", "D declares war on B.");
+		}
+		FoldAlike(Warned.Looks, Runs);
+		CHECK(Warned.Looks[0].IsWarning() && Warned.Looks[3].IsWarning() && Warned.Looks[6].IsWarning() && !Warned.Looks[4].IsWarning());
+		CHECK(Runs.size() == 8 && Runs[0].Count == 1 && Runs[1].Count == 1 && Runs[2].Count == 1 && Runs[3].Count == 1);
+		CHECK(Runs.size() == 8 && Runs[4].Count == 1 && Runs[5].Count == 1 && Runs[6].Count == 1 && Runs[7].First == 7 && Runs[7].Count == 3);
+		// (with a fold of two allowed, the warnings still stand alone)
+		FoldAlike(Warned.Looks, Runs, 2);
+		bool bAlone = true;
+		for (const FAlikeRun& Run : Runs)
+		{
+			bAlone = bAlone && (Run.Count == 1 || !Warned.Looks[static_cast<size_t>(Run.First)].IsWarning());
+		}
+		CHECK(bAlone && Runs.size() == 7 && Runs[4].Count == 2);
+	}
+
+	// 3. Order kept and counts adding up, over random cards (warnings among them) and over every real month of every
+	// seat in real_months.inc; and the "+N" counts items: what stands carries, and the "+N" counts, every item.
+	{
+		const FAlike Palette[] = { AlikeOf(ESection::Band, "WAR", -1, ""), AlikeOf(ESection::Band, "WARNING", -1, ""), AlikeOf(ESection::Row, "", 0, ""),
+			AlikeOf(ESection::Row, "LOST", -1, "inf"), AlikeOf(ESection::Row, "LOST", -1, "arm"), AlikeOf(ESection::Elsewhere, "", 0, "") };
+		std::mt19937 Dice(64);
+		std::uniform_int_distribution<int> Pick(0, 5), Length(0, 30), Stay(0, 2);
+		bool bCover = true, bRight = true;
+		std::string Why;
+		for (int Round = 0; Round < 20000; ++Round)
+		{
+			std::vector<FAlike> Looks;
+			const int Items = Length(Dice);
+			int Last = Pick(Dice);
+			for (int Each = 0; Each < Items; ++Each)
+			{
+				Last = Stay(Dice) > 0 ? Last : Pick(Dice);
+				Looks.push_back(Palette[Last]);
+			}
+			FoldAlike(Looks, Runs);
+			bCover = bCover && RunsCover(Runs, Items);
+			bRight = bRight && RunsRight(Looks, Runs, Why);
+		}
+		CHECK(bCover);
+		CHECK(bRight);
+
+		const std::vector<FMonth> Months = ReadMonths();
+		int Seats = 0, Folded = 0, Before = 0, After = 0, Lost = 0, Wrong = 0;
+		std::string LastSeat;
+		FLayout Layout;
+		std::vector<FSpot> Spots;
+		std::vector<FWant> Wants;
+		std::vector<int> Carries;
+		for (const FMonth& Month : Months)
+		{
+			Seats += Month.Seat != LastSeat ? 1 : 0;
+			LastSeat = Month.Seat;
+			FoldAlike(Month.Looks, Runs);
+			bCover = bCover && RunsCover(Runs, static_cast<int>(Month.Looks.size()));
+			bRight = bRight && RunsRight(Month.Looks, Runs, Why);
+			Before += Fold(static_cast<int>(Month.Looks.size()), 9).Shown + (Fold(static_cast<int>(Month.Looks.size()), 9).More > 0 ? 1 : 0);
+			// (the board keeps the first nine runs; the screen stands what it has room for, the rest in a "+N" of items)
+			const size_t Kept = std::min<size_t>(Runs.size(), 9);
+			Wants.assign(Kept, FWant());
+			Carries.clear();
+			for (size_t Index = 0; Index < Kept; ++Index)
+			{
+				Carries.push_back(Runs[Index].Count);
+				Folded += Runs[Index].Count > 1 ? 1 : 0;
+			}
+			for (const double Wide : { 1595.0, 1296.0 })
+			{
+				FParams Window;
+				Window.ScreenW = Wide;
+				Window.ScreenH = 972.0;
+				const FFold Laid = Layout.LayRanked(Window, Wants, Carries, static_cast<int>(Month.Looks.size()), 9, SmallFrame(Wide, 972.0), Spots);
+				int Carried = 0;
+				for (int Index = 0; Index < Laid.Shown; ++Index)
+				{
+					Carried += Carries[static_cast<size_t>(Index)];
+				}
+				Lost += Carried + Laid.More != static_cast<int>(Month.Looks.size()) ? 1 : 0;
+				Wrong += Laid.Shown + (Laid.More > 0 ? 1 : 0) > 9 ? 1 : 0;
+				After += Wide == 1595.0 ? Laid.Shown + (Laid.More > 0 ? 1 : 0) : 0;
+			}
+		}
+		CHECK(Months.size() >= 40 && Seats >= 10 && Folded >= 40);
+		CHECK(bCover && bRight);
+		CHECK(Lost == 0 && Wrong == 0);
+		std::printf("(the fold over %zu real months of %d seats: %d folded seals; %d seals stood before it, %d after, at 1441 by 878)\n", Months.size(), Seats, Folded, Before, After);
+
+		// The "+N" counts items, not seals: run 3's month with room for three seals only stands the nine and the news
+		// from Iran, and its "+N" counts the six items of the two seals that do not stand.
+		FParams Window;
+		Window.ScreenW = 1595.0;
+		Window.ScreenH = 972.0;
+		const FFold Three3 = Layout.LayRanked(Window, std::vector<FWant>(4), { 9, 1, 1, 5 }, 16, 3, {}, Spots);
+		CHECK(Three3.Shown == 2 && Three3.More == 6 && Spots.size() == 3);
+		// (each item a seal of its own, as before the fold: the same as LayRanked without carries, every time)
+		std::mt19937 Again(9);
+		std::uniform_int_distribution<int> Count(0, 14);
+		bool bSame = true;
+		std::vector<FSpot> Others;
+		for (int Round = 0; Round < 500; ++Round)
+		{
+			const int Given = Count(Again), Total = Given + Count(Again) / 3;
+			const std::vector<FWant> Some(static_cast<size_t>(Given));
+			const FFold A = Layout.LayRanked(Window, Some, Total, 9, SmallFrame(1595.0, 972.0), Spots);
+			const FFold B = Layout.LayRanked(Window, Some, std::vector<int>(static_cast<size_t>(Given), 1), Total, 9, SmallFrame(1595.0, 972.0), Others);
+			bSame = bSame && A.Shown == B.Shown && A.More == B.More && Spots.size() == Others.size();
+		}
+		CHECK(bSame);
+		// (and laying the carried seals again allocates nothing, once warm)
+		const std::vector<FBox> Frame = SmallFrame(1595.0, 972.0);
+		const std::vector<FWant> Four(4);
+		const std::vector<int> Carry = { 9, 1, 1, 5 };
+		Layout.LayRanked(Window, Four, Carry, 16, 9, Frame, Spots);
+		const long Was = Allocations;
+		Layout.LayRanked(Window, Four, Carry, 16, 9, Frame, Spots);
+		CHECK(Allocations == Was);
+	}
+
+	// 4. The card is unchanged: the fold reads the items and changes none of them, nor their order; the runs give back
+	// every item in card order, and a folded seal is its first item's (so a press opens the card at the run's first row).
+	{
+		const FMonth Three2 = RunThree();
+		const FMonth Kept = Three2;
+		FoldAlike(Three2.Looks, Runs);
+		for (const FAlikeRun& Run : Runs)
+		{
+			FoldWords(Three2.Said, Run);
+		}
+		bool bSame = Kept.Looks == Three2.Looks && Kept.Said.size() == Three2.Said.size();
+		for (size_t Index = 0; bSame && Index < Kept.Said.size(); ++Index)
+		{
+			const FSaid& A = Kept.Said[Index];
+			const FSaid& B = Three2.Said[Index];
+			bSame = A.Section == B.Section && A.Line == B.Line && A.Sentence == B.Sentence && A.Name == B.Name && A.Head == B.Head;
+		}
+		CHECK(bSame);
+		std::vector<FItem> Items;
+		ListItems(FCardCounts{ 2, false, 8, 1, 0, 5 }, Items);
+		std::vector<int> Back;
+		for (const FAlikeRun& Run : Runs)
+		{
+			for (int Each = Run.First; Each < Run.First + Run.Count; ++Each)
+			{
+				Back.push_back(Each);
+			}
+		}
+		bool bInOrder = Back.size() == Items.size();
+		for (size_t Index = 0; bInOrder && Index < Back.size(); ++Index)
+		{
+			bInOrder = Back[Index] == static_cast<int>(Index);
+		}
+		CHECK(bInOrder && Items[static_cast<size_t>(Runs[0].First)].Section == ESection::Band && Items[static_cast<size_t>(Runs[3].First)].Section == ESection::Elsewhere && Items[static_cast<size_t>(Runs[3].First)].Index == 0);
+	}
+
+	// 5. The words under the pointer: the names in card order, how many more, nothing the card does not say.
+	{
+		auto Words = [](const std::vector<std::pair<std::string, std::string>>& Items)
+		{
+			FMonth Month;
+			for (const auto& Item : Items)
+			{
+				if (Item.first.empty())
+				{
+					AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", Item.second);
+				}
+				else
+				{
+					AddItem(Month, ESection::Row, "HIT", -1, "bmr", Item.first, "", "", Item.second);
+				}
+			}
+			return FoldWords(Month.Said, FAlikeRun{ 0, static_cast<int>(Items.size()) });
+		};
+		CHECK(Words({ { "", "Paris falls." }, { "", "Rome falls." }, { "", "Oslo falls." } }) == "3 fall: Paris, Rome and Oslo");
+		CHECK(Words({ { "", "Paris has fallen." }, { "", "Rome has fallen." }, { "", "Oslo has fallen." }, { "", "Riga has fallen." } }) == "4 have fallen: Paris, Rome, Oslo and Riga");
+		CHECK(Words({ { "", "Bernard Montgomery reports for duty and is waiting for a command." }, { "", "Harold Alexander reports for duty and is waiting for a command." }, { "", "Alan Brooke reports for duty and is waiting for a command." } })
+			== "3 report for duty and are waiting for a command: Bernard Montgomery, Harold Alexander and Alan Brooke");
+		CHECK(Words({ { "", "The Dominican Republic declares war on Germany." }, { "", "Haiti declares war on Germany." }, { "", "Cuba declares war on Germany." } }) == "3 declare war on Germany: the Dominican Republic, Haiti and Cuba");
+		// (the rows' head and their places, where their sentences name no one: the card's "Ruhr HIT" three times)
+		CHECK(Words({ { "Ruhr", "Their bombers hit its factories by night." }, { "Hamburg", "Their bombers hit its factories by night." }, { "Bohemia", "Their bombers hit its factories by night." } }) == "3 HIT: Ruhr, Hamburg and Bohemia");
+		// (else the first item's words: a name twice, a stop in the name, a capital after it, or different words after it)
+		CHECK(Words({ { "", "Soviet troops close round Riga." }, { "", "Soviet troops close round Pskov." }, { "", "Soviet troops close round Narva." } }) == "Soviet troops close round Riga, and 2 more elsewhere in the war");
+		CHECK(Words({ { "", "Scorched earth: German troops tore up the railway." }, { "", "Scorched earth: Soviet troops tore up the railway." }, { "", "Scorched earth: Finnish troops tore up the railway." } })
+			== "Scorched earth: German troops tore up the railway, and 2 more elsewhere in the war");
+		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls, and 2 more elsewhere in the war");
+		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } }) == "No. 3 Group bombs Paris by night, and 2 more elsewhere in the war");
+		CHECK(PluralVerb("declares") == "declare" && PluralVerb("carries") == "carry" && PluralVerb("dies") == "die" && PluralVerb("presses") == "press" && PluralVerb("reaches") == "reach");
+		CHECK(PluralVerb("closes") == "close" && PluralVerb("seizes") == "seize" && PluralVerb("goes") == "go" && PluralVerb("tore") == "tore" && PluralVerb("WAR") == "WAR" && PluralVerb("pass") == "pass");
+		// Over every folded seal of the real months: nothing the card does not say.
+		const std::vector<FMonth> Months = ReadMonths();
+		int Told = 0, Named = 0, Bad = 0;
+		std::string Why, First;
+		for (const FMonth& Month : Months)
+		{
+			FoldAlike(Month.Looks, Runs);
+			for (const FAlikeRun& Run : Runs)
+			{
+				const std::string Said = FoldWords(Month.Said, Run);
+				if (Run.Count == 1)
+				{
+					Bad += Said == EightWords(Month.Said[static_cast<size_t>(Run.First)].Line) ? 0 : 1;
+					continue;
+				}
+				++Told;
+				Named += StartsWith(Said, std::to_string(Run.Count) + " ") ? 1 : 0;
+				if (!SaysOnlyTheCard(Month.Said, Run, Said, Why))
+				{
+					++Bad;
+					First = First.empty() ? Said + " (" + Why + ")" : First;
+				}
+			}
+		}
+		CHECK(Bad == 0 && Told >= 40 && Named >= 10);
+		if (Bad > 0)
+		{
+			std::printf("  first: %s\n", First.c_str());
+		}
+		std::printf("(the real months' %d folded seals: %d name their items, the rest give the first item's words)\n", Told, Named);
+	}
+
+	// 6. The tab: the date strip's paper between the tails, under the disc's foot (never on the wax, nor its figures),
+	// inside the seal's box (a folded seal is the size of any other), its figures 9 px tall or more at 1441 by 878.
+	{
+		bool bUnder = true;
+		for (int Figures = 1; Figures <= Look::CountMostFigures; ++Figures)
+		{
+			const FBox Tab = Look::TabOf(Figures), Ink = Look::FiguresOf(Figures);
+			bUnder = bUnder && Tab.MinX >= 0.0 && Tab.MaxX <= Look::BoxW && Tab.MinY >= 0.0 && Tab.MaxY <= Look::BoxH;
+			bUnder = bUnder && Tab.MinY > Look::MidY + Look::DiscR && Ink.MinY > Look::MidY + Look::DiscR;
+			bUnder = bUnder && Ink.MinX >= Tab.MinX && Ink.MaxX <= Tab.MaxX && Ink.MinY >= Tab.MinY && Ink.MaxY <= Tab.MaxY;
+			bUnder = bUnder && std::fabs((Tab.MinX + Tab.MaxX) * 0.5 - Look::MidX) < 1e-9;
+			for (const Look::FRun& Run : Look::Runs)
+			{
+				const double Turn = Run.Degrees * 3.141592653589793 / 180.0;
+				bUnder = bUnder && Look::MidY + Run.Out * std::sin(Turn) + Run.Radius < Tab.MinY;
+			}
+		}
+		CHECK(bUnder);
+		CHECK(Look::FiguresIn(9) == 1 && Look::FiguresIn(10) == 2 && Look::FiguresIn(99) == 2 && Look::FiguresIn(100) == 3);
+		const double Small = 878.0 / 972.0, Full = 1080.0 / 972.0;
+		CHECK(Look::FigurePx(Small) >= 9.0 && Look::FigurePx(Full) > Look::FigurePx(Small));
+		// (the figures stand in the middle of the tab: the text is placed by its line's middle, FigureLift above theirs)
+		CHECK(Look::FigureLift() > 0.0 && Look::FigureLift() < 0.1 * Look::CountEm());
+		std::printf("(the count's figures %.2f px tall at 1441 by 878, %.2f at 1920 by 1080; the tab %.1f by %.1f units for one figure)\n", Look::FigurePx(Small), Look::FigurePx(Full),
+			Look::TabOf(1).MaxX - Look::TabOf(1).MinX, Look::TabOf(1).MaxY - Look::TabOf(1).MinY);
+	}
+}
+
 /** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
 static void TestSealLook()
 {
@@ -2193,6 +2742,7 @@ int main(int ArgCount, char** Args)
 	TestUnderFrame();
 	TestSealAsk();
 	TestSwords();
+	TestFold();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

@@ -5759,7 +5759,7 @@ namespace
 					// Their signs are the seal set's (SealSignBrush), not the badges'.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return SealSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11))
+						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return SealSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11), Typed(13.5f, true))
 					]
 					// R2 bargains hook: the one bid card, opaque over the map and so a piece of the frame; collapsed while none is open.
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(TAttribute<FMargin>::CreateLambda([]() { return BargainLayer::CardPadding(); }))

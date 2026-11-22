@@ -254,6 +254,299 @@ namespace EdgeSeals
 		return Out;
 	}
 
+	FAlike AlikeOf(ESection Section, const std::string& Word, int Tone, const std::string& Sign)
+	{
+		const FLook Worn = LookOf(Section, Word, Tone);
+		FAlike Alike;
+		Alike.Wax = Worn.Wax;
+		Alike.bPulse = Worn.bPulse;
+		Alike.Glyph = GlyphOf(Section, Word, MayPress(Sign));
+		if (Alike.Glyph == EGlyph::Sign)
+		{
+			Alike.Sign = Sign;
+		}
+		return Alike;
+	}
+
+	void FoldAlike(const std::vector<FAlike>& Looks, std::vector<FAlikeRun>& Out, int Least)
+	{
+		Out.clear();
+		const int Count = static_cast<int>(Looks.size());
+		const int Fewest = std::max(Least, 2);
+		for (int First = 0; First < Count;)
+		{
+			int End = First + 1;
+			// (a dated warning stands alone: it never folds, and as it looks like nothing else, no run goes past it)
+			if (!Looks[static_cast<size_t>(First)].IsWarning())
+			{
+				while (End < Count && Looks[static_cast<size_t>(End)] == Looks[static_cast<size_t>(First)])
+				{
+					++End;
+				}
+			}
+			if (End - First >= Fewest)
+			{
+				Out.push_back(FAlikeRun{ First, End - First });
+			}
+			else
+			{
+				for (int Each = First; Each < End; ++Each)
+				{
+					Out.push_back(FAlikeRun{ Each, 1 });
+				}
+			}
+			First = End;
+		}
+	}
+
+	namespace
+	{
+		void SplitWords(const std::string& Text, std::vector<std::string>& Out)
+		{
+			Out.clear();
+			for (size_t At = 0; At < Text.size();)
+			{
+				while (At < Text.size() && IsSpace(Text[At]))
+				{
+					++At;
+				}
+				const size_t Start = At;
+				while (At < Text.size() && !IsSpace(Text[At]))
+				{
+					++At;
+				}
+				if (At > Start)
+				{
+					Out.push_back(Text.substr(Start, At - Start));
+				}
+			}
+			// (the sentence's own full stop is no part of what it says of each)
+			while (!Out.empty())
+			{
+				std::string& Last = Out.back();
+				while (!Last.empty() && (Last.back() == '.' || Last.back() == '!' || Last.back() == '?'))
+				{
+					Last.pop_back();
+				}
+				if (!Last.empty())
+				{
+					break;
+				}
+				Out.pop_back();
+			}
+		}
+
+		std::string JoinWords(const std::vector<std::string>& Words, size_t From, size_t To)
+		{
+			std::string Out;
+			for (size_t Index = From; Index < To; ++Index)
+			{
+				Out += Index > From ? " " : "";
+				Out += Words[Index];
+			}
+			return Out;
+		}
+
+		/** The rules' listNames: two as "A and B", three or four whole, more as the first three "and N more". */
+		std::string ListNames(const std::vector<std::string>& Names)
+		{
+			const size_t Count = Names.size();
+			if (Count <= 2)
+			{
+				return Count == 0 ? std::string() : Count == 1 ? Names[0] : Names[0] + " and " + Names[1];
+			}
+			std::string Out;
+			const size_t Whole = Count > 4 ? 3 : Count - 1;
+			for (size_t Index = 0; Index < Whole; ++Index)
+			{
+				Out += Index > 0 ? ", " : "";
+				Out += Names[Index];
+			}
+			return Count > 4 ? Out + " and " + std::to_string(Count - 3) + " more" : Out + " and " + Names[Count - 1];
+		}
+
+		bool StartsLower(const std::string& Word)
+		{
+			return !Word.empty() && Word[0] >= 'a' && Word[0] <= 'z';
+		}
+
+		bool EndsStopped(const std::string& Word)
+		{
+			return !Word.empty() && (IsStop(Word.back()) || Word.back() == '.');
+		}
+
+		bool EndsWith(const std::string& Word, const char* Tail)
+		{
+			const std::string Wanted(Tail);
+			return Word.size() >= Wanted.size() && Word.compare(Word.size() - Wanted.size(), Wanted.size(), Wanted) == 0;
+		}
+
+		/**
+		 * The sentences of a run as a name each and the same words after it (the predicate): where each sentence is one
+		 * to four words with no stop in them, none named twice, and then the same words, the first of them in small
+		 * letters (a verb, never another name). Out: the names, "The" made "the" for the list.
+		 */
+		bool SplitNames(const std::vector<FSaid>& Said, const FAlikeRun& Run, std::vector<std::string>& OutNames, std::string& OutSays)
+		{
+			std::vector<std::string> First, Each;
+			SplitWords(Said[static_cast<size_t>(Run.First)].Sentence, First);
+			for (size_t Lead = 1; Lead <= 4 && Lead < First.size(); ++Lead)
+			{
+				if (!StartsLower(First[Lead]) || EndsStopped(First[Lead - 1]))
+				{
+					continue;
+				}
+				const size_t Says = First.size() - Lead;
+				bool bAll = true;
+				OutNames.clear();
+				for (int Index = Run.First; bAll && Index < Run.First + Run.Count; ++Index)
+				{
+					SplitWords(Said[static_cast<size_t>(Index)].Sentence, Each);
+					const size_t Named = Each.size() > Says ? Each.size() - Says : 0;
+					bAll = Named >= 1 && Named <= 4;
+					for (size_t Word = 0; bAll && Word < Each.size(); ++Word)
+					{
+						bAll = Word < Named ? !EndsStopped(Each[Word]) : Each[Word] == First[Lead + Word - Named];
+					}
+					if (bAll)
+					{
+						std::string Name = JoinWords(Each, 0, Named);
+						if (Name.compare(0, 4, "The ") == 0)
+						{
+							Name[0] = 't';
+						}
+						bAll = std::find(OutNames.begin(), OutNames.end(), Name) == OutNames.end();
+						OutNames.push_back(Name);
+					}
+				}
+				if (bAll)
+				{
+					// (the verb made plural, and an "is", "has" or "was" after an "and" with it: "report for duty and are waiting")
+					std::vector<std::string> Words(First.begin() + static_cast<std::ptrdiff_t>(Lead), First.end());
+					Words[0] = PluralVerb(Words[0]);
+					for (size_t Word = 1; Word < Words.size(); ++Word)
+					{
+						if (Words[Word - 1] == "and" && (Words[Word] == "is" || Words[Word] == "has" || Words[Word] == "was"))
+						{
+							Words[Word] = PluralVerb(Words[Word]);
+						}
+					}
+					OutSays = JoinWords(Words, 0, Words.size());
+					return true;
+				}
+			}
+			return false;
+		}
+	}
+
+	FSaid RowSaid(const std::string& Place, const std::string& Tag, const std::string& Join, const std::string& JoinName, const std::string& Text)
+	{
+		FSaid Said;
+		Said.Section = ESection::Row;
+		Said.Line = RowLine(Place, Tag, Join, JoinName, Text);
+		Said.Sentence = Text.empty() ? Said.Line : Text;
+		Said.Name = Place;
+		if (!Tag.empty())
+		{
+			Said.Head = !Join.empty() && !JoinName.empty() ? Tag + " " + Join + " " + JoinName : Tag;
+		}
+		return Said;
+	}
+
+	FSaid PlainSaid(ESection Section, const std::string& Text)
+	{
+		FSaid Said;
+		Said.Section = Section;
+		Said.Line = Text;
+		Said.Sentence = Text;
+		return Said;
+	}
+
+	std::string PluralVerb(const std::string& Word)
+	{
+		if (Word == "is")
+		{
+			return "are";
+		}
+		if (Word == "has")
+		{
+			return "have";
+		}
+		if (Word == "was")
+		{
+			return "were";
+		}
+		if (Word == "does" || Word == "goes")
+		{
+			return Word.substr(0, Word.size() - 2);
+		}
+		if (!StartsLower(Word) || Word.size() < 3 || Word.back() != 's' || EndsWith(Word, "ss") || EndsWith(Word, "us") || EndsWith(Word, "is"))
+		{
+			return Word;
+		}
+		// (carries carry, but dies die and lies lie)
+		if (EndsWith(Word, "ies"))
+		{
+			return Word.size() > 4 ? Word.substr(0, Word.size() - 3) + "y" : Word.substr(0, Word.size() - 1);
+		}
+		// (presses press, pushes push, reaches reach, taxes tax, buzzes buzz; but closes close, seizes seize)
+		if (EndsWith(Word, "sses") || EndsWith(Word, "shes") || EndsWith(Word, "ches") || EndsWith(Word, "xes") || EndsWith(Word, "zzes"))
+		{
+			return Word.substr(0, Word.size() - 2);
+		}
+		return Word.substr(0, Word.size() - 1);
+	}
+
+	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run)
+	{
+		if (Run.First < 0 || Run.Count < 1 || static_cast<size_t>(Run.First + Run.Count) > Said.size())
+		{
+			return std::string();
+		}
+		const FSaid& Head = Said[static_cast<size_t>(Run.First)];
+		if (Run.Count == 1)
+		{
+			return EightWords(Head.Line);
+		}
+		const std::string Count = std::to_string(Run.Count);
+		std::vector<std::string> Names;
+		std::string Says;
+		if (SplitNames(Said, Run, Names, Says))
+		{
+			return Count + " " + Says + ": " + ListNames(Names);
+		}
+		// (a front's rows that share their head: its place on each, and the head as the card prints it)
+		bool bRows = !Head.Head.empty();
+		Names.clear();
+		for (int Index = Run.First; bRows && Index < Run.First + Run.Count; ++Index)
+		{
+			const FSaid& Row = Said[static_cast<size_t>(Index)];
+			bRows = Row.Section == ESection::Row && Row.Head == Head.Head && !Row.Name.empty() && std::find(Names.begin(), Names.end(), Row.Name) == Names.end();
+			Names.push_back(Row.Name);
+		}
+		if (bRows)
+		{
+			return Count + " " + Head.Head + ": " + ListNames(Names);
+		}
+		// (else the first item's own words, how many more, and the part of the card they are in, where they share one)
+		bool bOnePart = true;
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
+		{
+			bOnePart = bOnePart && Said[static_cast<size_t>(Index)].Section == Head.Section;
+		}
+		const char* Where = "";
+		if (bOnePart)
+		{
+			Where = Head.Section == ESection::Row ? " on your fronts" : Head.Section == ESection::Home ? " at home" : Head.Section == ESection::Staff ? " from your staff" : Head.Section == ESection::Elsewhere ? " elsewhere in the war" : "";
+		}
+		std::string First = EightWords(Head.Line);
+		while (!First.empty() && (IsStop(First.back()) || First.back() == '.' || First.back() == '!' || First.back() == '?'))
+		{
+			First.pop_back(); // (its full stop: the words go on)
+		}
+		return First + ", and " + std::to_string(Run.Count - 1) + " more" + Where;
+	}
+
 	FLane LaneOf(const FParams& Params, EEdge Edge)
 	{
 		FLane Lane;
@@ -514,14 +807,39 @@ namespace EdgeSeals
 
 	FFold FLayout::LayRanked(const FParams& Params, const std::vector<FWant>& Items, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out)
 	{
+		// (each item a seal of its own: an empty list of carries, which allocates nothing)
+		return LayRanked(Params, Items, std::vector<int>(), Total, Most, Reserved, Out);
+	}
+
+	FFold FLayout::LayRanked(const FParams& Params, const std::vector<FWant>& Seals, const std::vector<int>& Carries, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out)
+	{
 		const int Count = std::max(Total, 0);
 		const int Room = std::max(Most, 1);
-		// (the most items that may stand: all of them where they and no "+N" fit in Most seals, else Most - 1)
-		const int Start = std::min(static_cast<int>(Items.size()), Count <= Room ? Count : Room - 1);
+		// (the items the first Standing seals stand for)
+		auto CarriedBy = [&Carries](int Standing)
+		{
+			int Carried = 0;
+			for (int Index = 0; Index < Standing; ++Index)
+			{
+				Carried += static_cast<size_t>(Index) < Carries.size() ? std::max(Carries[static_cast<size_t>(Index)], 1) : 1;
+			}
+			return Carried;
+		};
+		// (the most seals that may stand: all of them where they are no more than Most and carry every item, so that no
+		// "+N" is needed; else Most - 1, and the "+N")
+		int Start = std::min(static_cast<int>(Seals.size()), Room);
+		while (Start > 0 && CarriedBy(Start - 1) >= Count)
+		{
+			--Start; // (and no more seals than it takes to carry every item)
+		}
+		if (CarriedBy(Start) < Count)
+		{
+			Start = std::min(Start, Room - 1);
+		}
 		for (int Standing = Start; Standing >= 0; --Standing)
 		{
-			const int More = Count - Standing;
-			Trial.assign(Items.begin(), Items.begin() + Standing);
+			const int More = std::max(Count - CarriedBy(Standing), 0);
+			Trial.assign(Seals.begin(), Seals.begin() + Standing);
 			if (More > 0)
 			{
 				Trial.push_back(FWant()); // (the "+N" seal: it has no place, and waits in the stack at the top)
@@ -868,6 +1186,41 @@ namespace EdgeSeals
 			Call.RingW = 1.6;
 			Call.Ring = 0.55 * std::min(Spread / 0.1, 1.0) * (1.0 - Spread);
 			return Call;
+		}
+
+		double FigureLift()
+		{
+			// (the line's middle, and the middle of a figure standing on its baseline, both from the line's top)
+			return ((Ascent + Descent) * 0.5 - (Ascent - FigureH * 0.5)) * CountEm();
+		}
+
+		FBox TabOf(int Figures)
+		{
+			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
+			const double HalfW = ((FigureInk + FigureAdvance * (Shown - 1)) * CountEm()) * 0.5 + TabPad;
+			return FBox{ MidX - HalfW, TabTop, MidX + HalfW, TabBottom };
+		}
+
+		FBox FiguresOf(int Figures)
+		{
+			const FBox Tab = TabOf(Figures);
+			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * CountEm() * 0.5;
+			return FBox{ Tab.MinX + TabPad, Middle - HalfH, Tab.MaxX - TabPad, Middle + HalfH };
+		}
+
+		double FigurePx(double PxPerUnit)
+		{
+			return FigureH * CountEm() * PxPerUnit;
+		}
+
+		int FiguresIn(int Count)
+		{
+			int Figures = 1;
+			for (int Left = std::max(Count, 0); Left >= 10; Left /= 10)
+			{
+				++Figures;
+			}
+			return Figures;
 		}
 	}
 }

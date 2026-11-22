@@ -21,14 +21,17 @@ struct FSlateBrush;
  * column, the date strip, the tray, the minimap) and every panel that stands over the map (the staff's note, the
  * adviser): KeepOffOf fills an array with them, in the window's (paint) measure, as the frame last painted them
  * (EdgeNewsKeepOff).
- * As many stand as the edge has room for, in the card's ranking, and the rest fold into the "+N" seal. A seal wears the
+ * Three or more items in a row that would look the same stand as one seal, its count on a tab of paper under the disc
+ * (ruling 64(g) as amended 08:55Z; EdgeNews folds them, a dated warning never). As many stand as the edge has room
+ * for, in the card's ranking, and the rest fold into the "+N" seal, which counts the items. A seal wears the
  * colour of the row it opens (the art director's ruling of 22 November: EdgeSeals::LookOf): a dated warning is red and
  * pulses slowly until opened; war and peace and the news wear the news band's brass (a freeing his own side did, its
  * green) and pulse; the rest wear their row's colour and stand still. The pointer on a seal gives its eight words and
  * pings its place on the map; a press opens the month's card at its row. SignOf gives the picture pressed for an order
  * sign by its key: the seal set's (Content/CityOrders/Seal/seal-<key>.png, the art director's ruling of 22 November,
  * 06:45Z), never the badges' own, whose strokes are too fine for the wax; null where there is none. CountFace is the
- * face the "+N" is pressed in. For the photographer, the layer reads "-TheaterSeal=open:N,hover:N,slide" once
+ * face the "+N" is pressed in; TabFace the kit's typed face, bold, that a folded seal's count is in (at
+ * EdgeSeals::Look::CountPt, whatever its size). For the photographer, the layer reads "-TheaterSeal=open:N,hover:N,slide" once
  * (EdgeSeals::ReadSealAsk), and outside shipping builds logs each laying once its seals are in: the pixels a unit, the
  * window's size and each seal's box in the window's pixels.
  *
@@ -41,7 +44,7 @@ struct FSlateBrush;
  * the fronts' rows opens for a row under it. The HUD calls Begin as it lays the card out, Unfolds where the rows fold,
  * Mark round each item of the card, and Tick once a frame.
  */
-TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<void(TArray<FSlateRect>&)> KeepOffOf, const FSlateFontInfo& CountFace);
+TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<void(TArray<FSlateRect>&)> KeepOffOf, const FSlateFontInfo& CountFace, const FSlateFontInfo& TabFace);
 void EdgeNewsKeepOff(const TArray<FSlateRect>& Frame, const TSharedPtr<SWidget>& Root, std::initializer_list<TSharedPtr<SWidget>> Panels, TArray<FSlateRect>& Out);
 
 struct FEdgeNewsCardMarks

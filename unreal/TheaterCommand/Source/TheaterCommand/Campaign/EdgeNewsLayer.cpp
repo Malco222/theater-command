@@ -53,6 +53,8 @@ namespace
 	// (the ribbon is the date strip's paper, with a fold of its darker edge down it)
 	const FLinearColor SealRibbon = FLinearColor(FColor(214, 201, 168));
 	const FLinearColor SealRibbonFold = FLinearColor(FColor(150, 132, 96));
+	// (a folded seal's count: the kit's dark ink, ink-900, on the tab of that paper)
+	const FLinearColor SealTabInk = FLinearColor(FColor::FromHex(TEXT("2A2118")));
 
 	// A seal's box, in the frame's units: the disc at its head, the ribbon's two tails under it (EdgeSeals::Look).
 	constexpr double SealBoxW = EdgeSeals::Look::BoxW;
@@ -168,6 +170,8 @@ namespace
 		TFunction<void(TArray<FSlateRect>&)> KeepOffOf;
 		TArray<FSlateRect> KeepOff;
 		FSlateFontInfo CountFace;
+		/** A folded seal's count: the kit's typed face, bold, at EdgeSeals::Look::CountPt (its figures 9 px tall or more at 1441 by 878). */
+		FSlateFontInfo TabFace;
 
 		/** The board's laying these are for: a new one slides the seals in again. */
 		int32 Revision = INDEX_NONE;
@@ -212,6 +216,8 @@ namespace
 			int32 Folded = 0; // how many items the "+N" seal stands for, and that as it is pressed in it and as its words say
 			FString Count;
 			FString RestWords;
+			int32 Alike = 1; // how many items the board's seal in this slot stands for (a folded run: 3 or more), and that as its tab shows it
+			FString AlikeCount;
 		};
 		FNow Seals[SealSlots];
 
@@ -222,6 +228,7 @@ namespace
 		EdgeSeals::FLayout Layout;
 		EdgeSeals::FFold Standing;
 		std::vector<EdgeSeals::FWant> Wants;
+		std::vector<int> Carries; // how many items each of the board's seals stands for, as LayRanked counts the "+N" in items
 		std::vector<EdgeSeals::FBox> Reserved;
 		std::vector<EdgeSeals::FSpot> Spots;
 	};
@@ -259,6 +266,13 @@ namespace
 			const FLinearColor Hollow = Ink.CopyWithNewOpacity(1.0f / 255.0f);
 			const FSlateRoundedBoxBrush Round(Hollow, static_cast<float>(Radius), Ink, static_cast<float>(Width));
 			FSlateDrawElement::MakeBox(Out, Layer, On.ToPaintGeometry(FVector2D(2.0 * Radius, 2.0 * Radius), FSlateLayoutTransform(FVector2D(MidX - Radius, MidY - Radius))), &Round, ESlateDrawEffect::None, Hollow);
+		}
+
+		/** A slip of paper: a rounded box at From, Size, filled in Fill and edged in Edge, the edge Width wide inside it. */
+		void Slip(int32 Layer, const FVector2D& From, const FVector2D& Size, double Round, const FLinearColor& Fill, const FLinearColor& Edge, double Width) const
+		{
+			const FSlateRoundedBoxBrush Paper(Fill, static_cast<float>(Round), Edge, static_cast<float>(Width));
+			FSlateDrawElement::MakeBox(Out, Layer, On.ToPaintGeometry(Size, FSlateLayoutTransform(From)), &Paper, ESlateDrawEffect::None, Paper.TintColor.GetSpecifiedColor());
 		}
 
 		/** A bar with rounded ends, Long by Thick, its middle at (MidX, MidY), turned Degrees clockwise. */
@@ -468,7 +482,15 @@ namespace
 			{
 				Pen.Ring(Layer + 1, SealMidX, SealMidY, SealDiscR + 2.2, 1.5, SealLitBrass);
 			}
-			return Layer + 2;
+			// A folded run's count (ruling 64(g) as amended 08:55Z): a tab of the date strip's paper between the tails, wholly
+			// under the disc's foot, so that its dark figures are never on the wax. Laid last, over the tails and the
+			// pointer's ring; on the seal's own face, so it breathes and grows with it, and the seal keeps its size.
+			const FEdgeNewsLaid::FNow& Here = Laid->Seals[SealSlot];
+			if (!Here.bRest && !Here.AlikeCount.IsEmpty())
+			{
+				PaintTab(Pen, Layer + 2, Here.AlikeCount, Shown, PxPerUnit);
+			}
+			return Layer + 4;
 		}
 
 	private:
@@ -501,6 +523,26 @@ namespace
 			}
 		}
 #endif
+
+		/**
+		 * A folded seal's tab and its count (EdgeSeals::Look::TabOf): the paper edged in the ribbon's fold (no line under
+		 * 1.5 px), the figures in ink-900 in the typed face, bold, centred on the tab. Slate places text by its line, which
+		 * runs from the face's ascent to its descent, so the line is set FigureLift below the tab's middle for the figures'
+		 * own middle to stand on it.
+		 */
+		void PaintTab(const FSealPen& Pen, int32 Layer, const FString& Count, float Shown, double PxPerUnit) const
+		{
+			const EdgeSeals::FBox Tab = EdgeSeals::Look::TabOf(Count.Len());
+			Pen.Slip(Layer, FVector2D(Tab.MinX, Tab.MinY), FVector2D(Tab.MaxX - Tab.MinX, Tab.MaxY - Tab.MinY), EdgeSeals::Look::TabRound, SealRibbon.CopyWithNewOpacity(Shown),
+				SealRibbonFold.CopyWithNewOpacity(Shown), EdgeSeals::Look::Stroke(1.0, PxPerUnit));
+			if (!FSlateApplication::IsInitialized())
+			{
+				return;
+			}
+			const FVector2D Size = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Count, Laid->TabFace);
+			const FVector2D Middle((Tab.MinX + Tab.MaxX) * 0.5, (Tab.MinY + Tab.MaxY) * 0.5 + EdgeSeals::Look::FigureLift());
+			FSlateDrawElement::MakeText(Pen.Out, Layer + 1, Pen.On.ToPaintGeometry(Size, FSlateLayoutTransform(Middle - Size * 0.5)), Count, Laid->TabFace, ESlateDrawEffect::None, SealTabInk.CopyWithNewOpacity(Shown));
+		}
 
 		/** The sign or the mark in the seal's hollow, moved (DX, DY), in one ink, its strokes held to 1.5 px at PxPerUnit. */
 		void PaintMark(const FEdgeNewsSeal& Seal, const FSealPen& Pen, int32 Layer, double DX, double DY, const FLinearColor& Ink, double PxPerUnit) const
@@ -719,16 +761,19 @@ namespace
 					}
 				}
 				Shared.Wants.resize(static_cast<size_t>(Count));
+				Shared.Carries.resize(static_cast<size_t>(Count));
 				for (int32 Each = 0; Each < Count; ++Each)
 				{
+					Shared.Carries[static_cast<size_t>(Each)] = FMath::Max(Board.Seals[Each].Alike, 1);
 					FVector2D At(0.0, 0.0);
 					EdgeSeals::FWant& Want = Shared.Wants[static_cast<size_t>(Each)];
 					Want.bPlace = Board.Seals[Each].HasPlace() && PlaceOf(Board.Seals[Each], At);
 					Want.At = EdgeSeals::FPoint{ At.X, At.Y };
 					Want.Kept = Shared.Seals[Each].bLive && !Shared.Seals[Each].bRest ? Shared.Seals[Each].Edge : -1;
 				}
-				// (as many as the edge has room for, in the card's ranking; the rest fold into "+N", so none is lost: ruling 64(g))
-				Shared.Standing = Shared.Layout.LayRanked(Shared.Params, Shared.Wants, Board.Items, SealSlots, Shared.Reserved, Shared.Spots);
+				// (as many as the edge has room for, in the card's ranking; the rest fold into "+N", so none is lost: ruling 64(g).
+				// A folded run's seal carries its items, and the "+N" counts items, never seals)
+				Shared.Standing = Shared.Layout.LayRanked(Shared.Params, Shared.Wants, Shared.Carries, Board.Items, SealSlots, Shared.Reserved, Shared.Spots);
 				for (int32 Each = 0; Each < SealSlots; ++Each)
 				{
 					FEdgeNewsLaid::FNow& Seal = Shared.Seals[Each];
@@ -753,6 +798,12 @@ namespace
 						Seal.SlideAt = Now;
 					}
 					Seal.bRest = bRestHere;
+					const int32 Alike = !bRestHere && Each < Count ? FMath::Max(Board.Seals[Each].Alike, 1) : 1;
+					if (Seal.Alike != Alike)
+					{
+						Seal.Alike = Alike;
+						Seal.AlikeCount = Alike > 1 ? FString::FromInt(Alike) : FString();
+					}
 					if (bRestHere && Seal.Folded != Shared.Standing.More)
 					{
 						Seal.Folded = Shared.Standing.More;
@@ -844,7 +895,8 @@ namespace
 					continue;
 				}
 				const FVector2D Min = Painted.LocalToAbsolute(Seal.Target - Half), Max = Painted.LocalToAbsolute(Seal.Target + Half);
-				Line += FString::Printf(TEXT("; seal %d%s at %.0f,%.0f to %.0f,%.0f"), Each + 1, Seal.bRest ? *FString::Printf(TEXT(", the \"+N\" (%d items),"), Seal.Folded) : TEXT(""),
+				Line += FString::Printf(TEXT("; seal %d%s at %.0f,%.0f to %.0f,%.0f"), Each + 1,
+					Seal.bRest ? *FString::Printf(TEXT(", the \"+N\" (%d items),"), Seal.Folded) : Seal.Alike > 1 ? *FString::Printf(TEXT(", a run of %d alike,"), Seal.Alike) : TEXT(""),
 					Min.X, Min.Y, Max.X, Max.Y);
 			}
 			UE_LOG(LogTheater, Display, TEXT("%s (the window's pixels)"), *Line);
@@ -903,7 +955,7 @@ namespace
 	};
 }
 
-TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<void(TArray<FSlateRect>&)> KeepOffOf, const FSlateFontInfo& CountFace)
+TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<void(TArray<FSlateRect>&)> KeepOffOf, const FSlateFontInfo& CountFace, const FSlateFontInfo& TabFace)
 {
 	const TSharedRef<FEdgeNewsLaid> Laid = MakeShared<FEdgeNewsLaid>();
 	Laid->Player = Player;
@@ -911,6 +963,9 @@ TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerContro
 	Laid->KeepOffOf = MoveTemp(KeepOffOf);
 	Laid->KeepOff.Reserve(32);
 	Laid->CountFace = CountFace;
+	// (the tab's count at the size EdgeSeals' test holds to 9 px figures at 1441 by 878, whatever size the face came at)
+	Laid->TabFace = TabFace;
+	Laid->TabFace.Size = static_cast<float>(EdgeSeals::Look::CountPt);
 	// (the photographer's "-TheaterSeal=open:N,hover:N,slide", read once: EdgeSeals::ReadSealAsk)
 	FString Asked;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeal="), Asked, false))
@@ -920,6 +975,7 @@ TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerContro
 			Laid->Ask.Unknown > 0 ? *FString::Printf(TEXT(" (%d parts not known, left out)"), Laid->Ask.Unknown) : TEXT(""));
 	}
 	Laid->Wants.reserve(SealSlots);
+	Laid->Carries.reserve(SealSlots);
 	Laid->Spots.reserve(SealSlots);
 	Laid->Reserved.reserve(32);
 	return SNew(SEdgeNewsLayer, Laid);
