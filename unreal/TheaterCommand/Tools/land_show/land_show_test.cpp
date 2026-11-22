@@ -8,6 +8,10 @@
 // LAND_SHOW_THREADS=n (4 by default) times the scene's own skin of the men in the picture over n threads too.
 // LAND_SHOW_LIFE=x: life seconds a battle second (Crowd::SetLife), 2 by default as the scene plays the fight (the rules'
 // clock about twice life's); 1 plays the clips on the battle's clock, as before.
+// LAND_SHOW_LEVELS=1 sets the scene's GS3 levels (Crowd::SetLevels: Near under 8.6 m, the 150 lines of a 1.8 m man at
+// the 50 deg lens and 665 lines; Mid to 80 m, where his shadow ends) and plays the scene's cap of 50 meshes made again
+// a frame: how many men change level a frame, how long the cap keeps one at his old level, and that no man flickers
+// between two levels (back again within half a second).
 #include "land_json.h"
 #include "Battle/LandMen.h"
 
@@ -301,6 +305,17 @@ int main(int Argc, char** Argv)
 	const char* ThreadsEnv = std::getenv("LAND_SHOW_THREADS");
 	const int Threads = std::max(1, ThreadsEnv ? std::atoi(ThreadsEnv) : 4);
 	if (bThrift) std::printf("thrifty: far men posed every 2nd to 4th frame by their distance (Crowd::SetThrift)\n");
+	const char* LevelsEnv = std::getenv("LAND_SHOW_LEVELS");
+	const bool bLevels = LevelsEnv && std::string(LevelsEnv) == "1";
+	const double LevelLines = 1.8 * 665.0 / (2.0 * std::tan(25.0 * 3.14159265358979 / 180.0));
+	const double CullFrom = LevelLines / 2.0;
+	const int RebuildCap = 50;
+	if (bLevels)
+	{
+		C.SetLevels(LevelLines / 150.0, 80.0);
+		std::printf("levels (GS3): Near within %.2f m, Mid to 80 m, Far beyond, none past %.0f m but in the mass shot; at most %d meshes made again a frame\n",
+			LevelLines / 150.0, CullFrom, RebuildCap);
+	}
 
 	// Who is who: armies, faces and helmets.
 	{
@@ -384,6 +399,14 @@ int main(int Argc, char** Argv)
 	int MostNear = 0, MostMid = 0;
 	double SkinnedPoints = 0.0;
 	long NanFrames = 0;
+	// (GS3: each man's level as last updated and as the scene last drew it under the cap, when it last changed and
+	// from what; the changes a frame, the men held back and the longest wait, the flickers, the shadow switches)
+	std::vector<int> LevelWas(static_cast<size_t>(N), -1), LevelBefore(static_cast<size_t>(N), -1), DrawnLevel(static_cast<size_t>(N), -1);
+	std::vector<double> LevelAt(static_cast<size_t>(N), -1e9);
+	std::vector<int> HeldFrames(static_cast<size_t>(N), 0);
+	long LevelChanges = 0, Flickers = 0, ShadowSwitches = 0, HeldTotal = 0, LevelCapFrames = 0, CulledTotal = 0;
+	int MostChanges = 0, LongestHeld = 0, MostHeld = 0;
+	double MostChangesAt = 0.0;
 
 	// Deaths.
 	struct Body
@@ -483,6 +506,56 @@ int main(int Argc, char** Argv)
 			SkinnedPoints += C.Skin(I, L, At[static_cast<size_t>(I)].data(), Facing[static_cast<size_t>(I)].data());
 		}
 		const auto T2 = std::chrono::steady_clock::now();
+		if (bLevels)
+		{
+			int Changes = 0, Rebuilds = RebuildCap, Held = 0;
+			for (int I = 0; I < N; ++I)
+			{
+				const size_t K = static_cast<size_t>(I);
+				if (!C.Visible(I)) continue;
+				if (C.SeenDistance(I) > CullFrom) { ++CulledTotal; continue; }
+				const int L = static_cast<int>(C.LodOf(I));
+				if (LevelWas[K] >= 0 && L != LevelWas[K])
+				{
+					++Changes;
+					// (the test's eye jumps every half second, a cut: a change it made is no flicker, nor its undoing)
+					const bool bCut = Fr % 30 == 0;
+					if (!bCut && L == LevelBefore[K] && T - LevelAt[K] < 0.5)
+					{
+						++Flickers;
+						if (Flickers <= 3)
+						{
+							std::printf("  flicker: man %d back to level %d at %.2f s, %.2f s after leaving it (seen %.2f m)\n", I, L, T, T - LevelAt[K], C.SeenDistance(I));
+						}
+					}
+					LevelBefore[K] = LevelWas[K];
+					LevelAt[K] = bCut ? -1e9 : T;
+				}
+				LevelWas[K] = L;
+				// (the scene's DrawMen: a man whose drawn level differs is made again while the frame's cap lasts; past it,
+				// kept at his old level, and a new man not drawn yet)
+				if (DrawnLevel[K] != L)
+				{
+					if (Rebuilds > 0)
+					{
+						--Rebuilds;
+						if (DrawnLevel[K] >= 0 && (DrawnLevel[K] == static_cast<int>(Far)) != (L == static_cast<int>(Far))) ++ShadowSwitches;
+						DrawnLevel[K] = L;
+						HeldFrames[K] = 0;
+					}
+					else
+					{
+						++Held;
+						LongestHeld = std::max(LongestHeld, ++HeldFrames[K]);
+					}
+				}
+			}
+			LevelChanges += Changes;
+			HeldTotal += Held;
+			LevelCapFrames += Held > 0;
+			MostHeld = std::max(MostHeld, Held);
+			if (Changes > MostChanges) { MostChanges = Changes; MostChangesAt = T; }
+		}
 		UpdateMs.push_back(Ms(T0, T1));
 		SkinMs.push_back(Ms(T1, T2));
 		FrameMs.push_back(Ms(T0, T2));
@@ -1211,6 +1284,17 @@ int main(int Argc, char** Argv)
 			Percentile(SceneWallMs, 0.95), Percentile(SceneWallMs, 0.99), OneMean < 3.0 ? "met" : "NOT met", WallMean < 1.5 ? "met" : "NOT met");
 	}
 	if (NanFrames) Fail("%ld frames with NaN", NanFrames);
+	if (bLevels)
+	{
+		const double Fs = static_cast<double>(std::max<size_t>(1, FrameMs.size()));
+		std::printf("\nlevels (GS3): %.2f men change level a frame on average, the most %d (at %.2f s); %ld shadow switches (%.2f a frame); "
+			"the cap of %d held men at their old level in %ld frames (the most %d in a frame, %.2f a frame), the longest wait %d frames (%.0f ms); "
+			"%ld flickers (a man back to his last level within half a second); %.1f men a frame too small to draw (past %.0f m)\n",
+			LevelChanges / Fs, MostChanges, MostChangesAt, ShadowSwitches, ShadowSwitches / Fs, RebuildCap, LevelCapFrames, MostHeld, HeldTotal / Fs, LongestHeld,
+			LongestHeld * Dt * 1000.0, Flickers, CulledTotal / Fs, CullFrom);
+		if (LongestHeld > 30) Fail("a man waited %d frames (over half a second) for his new level under the cap", LongestHeld);
+		if (Flickers > LevelChanges / 50 + 2) Fail("%ld of %ld level changes flicker back within half a second", Flickers, LevelChanges);
+	}
 
 	std::printf("\n%s (%d failures)\n", Fails ? "LAND SHOW FAILED" : "land show ok", Fails);
 	return Fails ? 1 : 0;

@@ -2120,6 +2120,24 @@ void ALandBattle::MakeMen()
 	}
 	// (six hundred men: a man away from the eye posed every few frames, his place, shots and falls every frame)
 	Crowd->SetThrift(true);
+	// The levels of detail by the man's share of the picture (the battle-scale plan's GS3), at the usual 50 deg lens and
+	// 665 lines tall: a 1.8 m man over NearPx lines (150) drawn Near, Mid to ShadowTo metres (80, where his shadow
+	// ends), Far beyond; under CullPx lines (2) not drawn but in the wide mass shot. "-TheaterLandNearPx=",
+	// "-TheaterLandShadowTo=", "-TheaterLandCullPx=" and "-TheaterLandRebuilds=" (a frame's most meshes made again).
+	{
+		float NearPx = 150.0f, ShadowTo = 80.0f, CullPx = 2.0f;
+		int32 Rebuilds = 50;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandNearPx="), NearPx);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShadowTo="), ShadowTo);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCullPx="), CullPx);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandRebuilds="), Rebuilds);
+		const double Lines = 1.8 * 665.0 / (2.0 * FMath::Tan(FMath::DegreesToRadians(25.0)));
+		Crowd->SetLevels(Lines / FMath::Max(1.0f, NearPx), ShadowTo);
+		S.MenCullFrom = CullPx > 0.0f ? Lines / CullPx : 1e12;
+		S.MenRebuildsMax = FMath::Clamp(Rebuilds, 1, 100000);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the men drawn Near within %.1f m, Mid to %.0f m (their shadows end there), Far beyond, none past %.0f m but in the mass shot; at most %d meshes made again a frame"),
+			Lines / FMath::Max(1.0f, NearPx), FMath::Max(Lines / FMath::Max(1.0f, NearPx), static_cast<double>(ShadowTo)), S.MenCullFrom, S.MenRebuildsMax);
+	}
 	S.Men = std::move(Crowd);
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
 	S.TrackOfMan.assign(static_cast<size_t>(S.Men->Count()), -1);
@@ -2169,27 +2187,25 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	int32 Floats = 0;
 	// (the banked men's meshes made as first needed: at most four a frame; a man whose mesh waits is skinned meanwhile)
 	int32 Builds = 4;
+	// (a man's mesh made again for a new level of detail rebuilds its whole draw: at most MenRebuildsMax a frame, the
+	// battle-scale plan's stopgap; the rest keep their level a frame or more, a new man waits to be drawn)
+	int32 Rebuilds = S.MenRebuildsMax;
+	// (no man drawn under some 2 of the picture's lines, GS3, but in the camera's wide of the whole army, where the far
+	// men are its crowd)
+	const bool bMass = S.Eye.MassShot();
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
-		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man);
+		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || Crowd.SeenDistance(Man) <= S.MenCullFrom);
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
 		Crowd.PlaceOf(Man, X, Y, Z, Facing);
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
 		const bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
-		// (no shadow past about 80 m as the picture sees him: a far man's shadow is a smudge of a few pixels, and every
-		// moving one makes the shadow maps draw their pages under him again; GS3)
-		if (D.Mesh.IsValid() && bShown)
+		if (bShown && bLooked)
 		{
-			const float Seen = Crowd.SeenDistance(Man);
-			const bool bShadow = D.bShadow ? Seen < 84.0f : Seen < 80.0f;
-			if (bShadow != D.bShadow)
-			{
-				D.Mesh->SetCastShadow(bShadow);
-				D.bShadow = bShadow;
-			}
+			++MenInPicture;
 		}
 		if (!bShown || !bLooked)
 		{
@@ -2253,7 +2269,25 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			}
 		}
 		BankOut(D);
-		const LandMen::Lod Level = Crowd.LodOf(Man);
+		LandMen::Lod Level = Crowd.LodOf(Man);
+		if (!D.Mesh.IsValid() || D.Lod != static_cast<int32>(Level))
+		{
+			if (Rebuilds <= 0)
+			{
+				// (over the frame's rebuilds: he keeps the level his mesh has, or waits to be drawn)
+				if (!D.Mesh.IsValid() || D.Lod < 0)
+				{
+					continue;
+				}
+				Level = static_cast<LandMen::Lod>(D.Lod);
+				++RebuildsPut;
+			}
+			else
+			{
+				--Rebuilds;
+				++MenRebuilt;
+			}
+		}
 		// (banked but his set's mesh not made yet: his stamp holds while only his place moves, so he is skinned each frame)
 		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Crowd.Stamp(Man) && Pose < 0)
 		{
@@ -2331,7 +2365,16 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		}
 		if (D.Lod != static_cast<int32>(Level))
 		{
-			// A new level: its own triangles and colours (the same all battle, read once), then the skin.
+			// A new level: its own triangles and colours (the same all battle, read once), then the skin. His shadow goes
+			// with the level, switched only as his draw is made again anyway (GS3): near and mid men cast one, within some
+			// 80 m as the picture sees him (the Mid level's end); a far man's would be a smudge of a few pixels, and every
+			// moving one makes the shadow maps draw their pages under him again.
+			const bool bShadow = Level != LandMen::Far;
+			if (bShadow != D.bShadow)
+			{
+				D.Mesh->SetCastShadow(bShadow);
+				D.bShadow = bShadow;
+			}
 			const LandMen::Look& Paint = Crowd.LookOf(Man, Level);
 			T.SetNumUninitialized(static_cast<int32>(Paint.Triangles.size()));
 			for (int32 I = 0; I < T.Num(); ++I)
@@ -2671,15 +2714,21 @@ void ALandBattle::RideTanks()
 			// Up as her lid swings open, from 40% open, and down again as it shuts.
 			const double Open = FMath::Clamp((V.HatchOpen - 0.4) / 0.55, 0.0, 1.0);
 			Rise = Open * Open * (3.0 - 2.0 * Open);
+			const double BurstSpan = R.Long[FRider::Burst] / FMath::Max(0.25, Life);
+			const auto Next = std::lower_bound(R.Bursts.begin(), R.Bursts.end(), Now + 0.02);
+			const double Last = Next != R.Bursts.begin() ? *(Next - 1) : -1e9;
+			const double Coming = Next != R.Bursts.end() ? *Next : 1e9;
+			// (her roof gun firing, or about to, while the lid still swings open: he is up at it at once, so no burst
+			// comes from a gun nobody mans, or from a German cradle not drawn; the pre-check's note on 174524b6)
+			if (V.HatchOpen > 0.15 && (Now - Last < BurstSpan || Coming - Now < 0.5))
+			{
+				Rise = 1.0;
+			}
 			R.Rise = static_cast<float>(Rise);
 			if (Rise > 0.03)
 			{
 				// At the roof gun from some seconds before her bursts to some after, firing each burst; else looking
 				// about with his glasses.
-				const double BurstSpan = R.Long[FRider::Burst] / FMath::Max(0.25, Life);
-				const auto Next = std::lower_bound(R.Bursts.begin(), R.Bursts.end(), Now + 0.02);
-				const double Last = Next != R.Bursts.begin() ? *(Next - 1) : -1e9;
-				const double Coming = Next != R.Bursts.end() ? *Next : 1e9;
 				if (Now - Last < BurstSpan)
 				{
 					Want = FRider::Burst;
@@ -4116,8 +4165,14 @@ void ALandBattle::Tick(float DeltaSeconds)
 	Mark = LandParts::Seconds();
 	ShowField(EyeWorld, S.Battle);
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
+	Mark = LandParts::Seconds();
+	const int32 InPictureWas = MenInPicture;
 	DrawMen(EyeWorld);
+	DrawMenMs += (LandParts::Seconds() - Mark) * 1000.0;
+	MostInPicture = FMath::Max(MostInPicture, MenInPicture - InPictureWas);
+	Mark = LandParts::Seconds();
 	DrawArmour(EyeWorld);
+	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	DrawManShades();
 
 	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
@@ -4139,10 +4194,14 @@ void ALandBattle::Tick(float DeltaSeconds)
 			ViewW = FMath::Max(1, static_cast<int32>(Size.X));
 			ViewH = FMath::Max(1, static_cast<int32>(Size.Y));
 		}
+		Mark = LandParts::Seconds();
 		const FBattleJolt Jolt = Effects->Tick(S.Lived, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
+		EffectsMs += (LandParts::Seconds() - Mark) * 1000.0;
 		Eye->SetActorLocationAndRotation(Eye->GetActorLocation() + Jolt.Offset, Eye->GetActorRotation() + FRotator(0.0, 0.0, Jolt.RollDegrees));
 	}
+	Mark = LandParts::Seconds();
 	PlaySound(Real);
+	SoundMs += (LandParts::Seconds() - Mark) * 1000.0;
 
 	// The battle's end: the last words shown, then the after card a few seconds on.
 	if (S.Words.bOver && S.Battle >= S.Rec.End)
@@ -4179,9 +4238,15 @@ void ALandBattle::Tick(float DeltaSeconds)
 		UE_LOG(LogTheater, Display, TEXT("Land battle: %.0f s of battle, %s shot; %.0f frames a second, the scene's slowest frame %.1f ms; a frame's cores %.2f ms, men %.2f, tanks %.2f, ground %.2f; shots heard %d, takes %d (dropped %d, on the screen %d), cracks %d, falls %d"),
 			S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), LogFrames / Span, SlowestFrame, CoresMs / LogFrames, MenMs / LogFrames, ArmourMs / LogFrames, FieldMs / LogFrames,
 			S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped, S.Mix.Cracks, S.Mix.Falls);
+		// (the drawing's own parts, the battle-scale plan's speed log: what the Mac's frame goes on)
+		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f"),
+			DrawMenMs / LogFrames, DrawArmourMs / LogFrames, EffectsMs / LogFrames, SoundMs / LogFrames, static_cast<double>(MenInPicture) / LogFrames, MostInPicture,
+			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames);
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
+		DrawMenMs = DrawArmourMs = EffectsMs = SoundMs = 0.0;
+		MenInPicture = MenRebuilt = RebuildsPut = MostInPicture = 0;
 	}
 }
 

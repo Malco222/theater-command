@@ -1590,6 +1590,7 @@ namespace LandMen
 		bool bThrift = false; // far men posed every few frames (SetThrift)
 		/** Life seconds a battle second (SetLife): a clip's seconds are life's, laid on the battle's clock at 1 / Life. */
 		double Life = 1.0;
+		double NearTo = 25.0, MidTo = 120.0; // the detail levels' bounds (SetLevels)
 		uint64_t Frame = 0;   // Updates since the start, for the thrifty frames' turns
 		bool bBuilt = false;
 		FallMemory Falls;
@@ -2741,7 +2742,8 @@ namespace LandMen
 		 * while he falls; then by his distance, every 2nd frame to 50 m, every 3rd to 120 m, every 4th beyond. */
 		static int EveryOf(const Man& M)
 		{
-			if (M.State != Man::Alive || M.L == Near || M.Last < 0.0) return 1;
+			// (a man within 25 m posed every frame, whatever his level: SetLevels may draw him at Mid there)
+			if (M.State != Man::Alive || M.L == Near || M.EyeD < 25.f || M.Last < 0.0) return 1;
 			return M.EyeD < 50.f ? 2 : M.EyeD < 120.f ? 3 : 4;
 		}
 
@@ -3818,9 +3820,9 @@ namespace LandMen
 			const double D = std::sqrt(DX * DX + DY * DY + DZ * DZ) / I.EyeZoom;
 			Mn.EyeD = static_cast<float>(D);
 			const double Give = 1.05;
-			Lod L = D < 25.0 ? Near : D < 120.0 ? Mid : Far;
-			if (Mn.L == Near && L == Mid && D < 25.0 * Give) L = Near;
-			if (Mn.L == Mid && L == Far && D < 120.0 * Give) L = Mid;
+			Lod L = D < I.NearTo ? Near : D < I.MidTo ? Mid : Far;
+			if (Mn.L == Near && L == Mid && D < I.NearTo * Give) L = Near;
+			if (Mn.L == Mid && L == Far && D < I.MidTo * Give) L = Mid;
 			Mn.L = L;
 		}
 		std::stable_sort(Outbox.begin(), Outbox.end(), [](const Event& A, const Event& B) { return A.T < B.T; });
@@ -3846,6 +3848,11 @@ namespace LandMen
 	}
 	void Crowd::SetThrift(bool bOn) { Inner->bThrift = bOn; }
 	void Crowd::SetLife(double LifePerBattleSecond) { Inner->Life = std::clamp(LifePerBattleSecond, 0.25, 4.0); }
+	void Crowd::SetLevels(double NearTo, double MidTo)
+	{
+		Inner->NearTo = std::clamp(NearTo, 1.0, 400.0);
+		Inner->MidTo = std::clamp(MidTo, Inner->NearTo, 2000.0);
+	}
 	int Crowd::PoseEvery(int Man) const { return Inner->bThrift ? Impl::EveryOf(Inner->Men[static_cast<size_t>(Man)]) : 1; }
 
 	bool Crowd::SkinReadsGround(int Man, Lod L) const

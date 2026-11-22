@@ -414,6 +414,10 @@ namespace LandMen
 		 * 1, the default, is as before. Set before Build (the shots are planned there).
 		 */
 		void SetLife(double LifePerBattleSecond);
+		/** The detail levels' bounds, in metres as the picture sees him (SeenDistance, a 50 degree lens's): Near under
+		 * NearTo, Mid under MidTo, Far beyond, each crossed back with a twentieth's give. 25 and 120 unless set; the scene
+		 * sets them by his height on the screen (the battle-scale plan's GS3). */
+		void SetLevels(double NearTo, double MidTo);
 		/** Every how many frames he is posed now (1 when not thrifty). */
 		int PoseEvery(int Man) const;
 		/** This Update's events, in time order. */

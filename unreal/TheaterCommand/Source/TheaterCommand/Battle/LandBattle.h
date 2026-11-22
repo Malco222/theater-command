@@ -386,7 +386,10 @@ private:
 	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
 	double LogAt = 0.0, SlowestFrame = 0.0, CoresMs = 0.0, MenMs = 0.0, ArmourMs = 0.0, FieldMs = 0.0;
-	int32 LogFrames = 0;
+	/** ...and the drawing's own parts (the men's meshes, the tanks', the effects kit, the sound), the men in the picture
+	 * and their meshes made again or held at the old level (the GS3 cap) over the span; the most in one frame. */
+	double DrawMenMs = 0.0, DrawArmourMs = 0.0, EffectsMs = 0.0, SoundMs = 0.0;
+	int32 LogFrames = 0, MenInPicture = 0, MenRebuilt = 0, RebuildsPut = 0, MostInPicture = 0;
 
 	// ---- The picture run (-TheaterLandBattleShots) ----
 	FString ShotFolder;

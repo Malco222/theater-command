@@ -104,13 +104,27 @@ camera comes back to its shot.
   with her while he was up (the rules' hatch open at her end), he slumps over the rim or drops inside, by her own draw;
   thrown with her turret when she blows up; a round that struck him up there (the rules' `cm`) drops him inside and
   she fights on buttoned up. His rifle is put away (its bones drawn to a point). No shade on the ground, no place in the
-  camera's movers (she stands for him). `-TheaterLandNoCommanders` leaves them out.
+  camera's movers (she stands for him). A burst due while her lid is still swinging open (over 15% open) brings him
+  straight up, so no roof gun fires unmanned. Tanks that join a live battle later (`Extend`) get no commander yet:
+  `MakeRiders` runs once, at the start. `-TheaterLandNoCommanders` leaves them out.
 - **Roof guns as the models draw them.** A German tank's MG 34 on the cupola's rail (`roof_mg_cradle`) is drawn only
   while her commander mans it; the Sherman's .50 stays on its post. A tank whose model draws no roof gun this month or
   for her nation (an early Tiger; a British Sherman, `swaps.roof_mg.by_nation`, now read) never fires one: the replay
   asks the scene (`World::RoofGun`) and gives her coaxial instead.
 - **A/B switches for the production lead.** `-TheaterLandNoMassWide` turns off the camera's whole-army wide (the
   dearest shot until the far men are instanced).
+- **The men's detail by their size in the picture (the battle-scale plan's GS3).** A man's level goes by his seen
+  distance (the usual 50 deg lens's, so a long lens's far men count as near): Near while a 1.8 m man stands over 150
+  of 665 lines (within 8.6 m), Mid to 80 m, Far beyond, each crossed back with a twentieth's give. His shadow goes with
+  the level: on at Near and Mid, off at Far, switched only when his mesh is made again for a new level (a shadow
+  switched alone rebuilds his draw as dear as the mesh). A man under 2 lines (past some 640 m) is not drawn, except in
+  the camera's wide of the whole army (`MassShot`), where the far men are its crowd. At most 50 men's meshes are made
+  again a frame; the rest keep their old level a frame or two longer, and a man not yet drawn waits. Switches:
+  `-TheaterLandNearPx=150`, `-TheaterLandShadowTo=80`, `-TheaterLandCullPx=2` (0 draws every man),
+  `-TheaterLandRebuilds=50`. Every man within 25 m is still posed every frame whatever his level.
+- **The speed log.** Every 10 s, after the cores' line, a second line: what a frame's drawing cost (the men's meshes,
+  the tanks', the effects kit's tick, the sound), the men in the picture a frame and the most in one frame, and the
+  meshes made again or held at the old level a frame.
 - **Smoke at the lens.** The effects kit lays each puff flat to the lens. The land camera stands among the bursts, so a
   shell's smoke whose middle was level with the camera a few metres to one side was laid across the whole picture as
   one dark disc. The land scene now calls `SetLensFade(1, 5, 0.3)` on the effects: smoke and dust thin out as their near

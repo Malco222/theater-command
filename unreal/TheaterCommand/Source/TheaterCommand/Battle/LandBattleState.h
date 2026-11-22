@@ -122,6 +122,13 @@ struct FLandBattleState
 	/** The speed this frame ran at, against life (the battle's clock ran at SpeedNow / Life). */
 	double SpeedNow = 1.0;
 
+	/** The men's draw (the battle-scale plan's GS3): a man the lens draws under ~2 px tall (CullPx) is not drawn, past
+	 * MenCullFrom metres of seen distance (the usual 50 deg lens's), except in the wide mass shot, where the far men stay
+	 * as dots; and at most MenRebuildsMax men's meshes made again for a new level of detail a frame, the rest kept at
+	 * their old level a frame or two longer (a remade mesh rebuilds its whole draw). */
+	double MenCullFrom = 1e12;
+	int MenRebuildsMax = 50;
+
 	/** The battle's end: the last line shown, then the after card a few seconds on. */
 	bool bOver = false, bCard = false;
 	double OverReal = 0.0;
