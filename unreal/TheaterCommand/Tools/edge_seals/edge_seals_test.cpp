@@ -1389,19 +1389,26 @@ namespace
 		return Out.substr(1, Out.size() - 2);
 	}
 
+	/** A line with no stop or full stop left at its end. */
+	std::string Unstop(std::string Line)
+	{
+		while (!Line.empty() && (Line.back() == '.' || Line.back() == ',' || Line.back() == ':' || Line.back() == ';' || Line.back() == '!' || Line.back() == '?' || Line.back() == ' '))
+		{
+			Line.pop_back();
+		}
+		return Line;
+	}
+
 	/**
 	 * The test's own reading of an item's short line, for a folded seal that lists its items (the design director,
 	 * 64(g)(4)): a front's row's title as the card prints it, its line up to the colon before its text ("Ruhr HIT",
-	 * "Polish Silesia LOST against Germany"); else its eight words. No stop or full stop at its end.
+	 * "Polish Silesia LOST against Germany"); else its eight words, cut by ListedCut, which never ends on a small word
+	 * nor on a verb without its object (20:27Z: TestWholeClause holds it to the test's own rules). No stop or full stop at
+	 * its end.
 	 */
 	std::string ShortSaid(const FSaid& Item)
 	{
-		std::string Out = Item.Section == ESection::Row && !Item.Head.empty() ? Item.Line.substr(0, Item.Line.find(": ", Item.Name.size())) : EightWords(Item.Line);
-		while (!Out.empty() && (Out.back() == '.' || Out.back() == ',' || Out.back() == ':' || Out.back() == ';' || Out.back() == '!' || Out.back() == '?' || Out.back() == ' '))
-		{
-			Out.pop_back();
-		}
-		return Out;
+		return Unstop(Item.Section == ESection::Row && !Item.Head.empty() ? Item.Line.substr(0, Item.Line.find(": ", Item.Name.size())) : ListedCut(Item.Line));
 	}
 
 	/** The test's own count of the letters some words set in the typed face: each one advance, whatever bytes UTF-8 gives it. */
@@ -1432,7 +1439,7 @@ namespace
 
 	/**
 	 * The short lines a folded seal can list: each item's in card order, up to the first item with no words of its own;
-	 * a row whose title is listed already gives its own eight words (the review of the rulings' build: "Stalino HIT"
+	 * a row whose title is listed already gives its own first words, cut (the review of the rulings' build: "Stalino HIT"
 	 * twice read as one line said twice).
 	 */
 	std::vector<std::string> ShortLines(const std::vector<FSaid>& Said, const FAlikeRun& Run)
@@ -1448,31 +1455,11 @@ namespace
 			}
 			if (Item.Section == ESection::Row && !Item.Head.empty() && std::find(Lines.begin(), Lines.end(), Line) != Lines.end())
 			{
-				Line = EightWords(Item.Line);
-				while (!Line.empty() && (Line.back() == '.' || Line.back() == ',' || Line.back() == ':' || Line.back() == ';' || Line.back() == '!' || Line.back() == '?' || Line.back() == ' '))
-				{
-					Line.pop_back();
-				}
+				Line = Unstop(ListedCut(Item.Line));
 			}
 			Lines.push_back(Line);
 		}
 		return Lines;
-	}
-
-	/** How many of a folded seal's listed lines (the first Named of its short lines) say a line the list gave already, where the card's lines for them differ. */
-	int ListedTwice(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Named)
-	{
-		const std::vector<std::string> Lines = ShortLines(Said, Run);
-		int Twice = 0;
-		for (size_t Index = 1; Index < Lines.size() && Index < static_cast<size_t>(Named); ++Index)
-		{
-			for (size_t Before = 0; Before < Index; ++Before)
-			{
-				const bool bSame = Lines[Before] == Lines[Index] && Said[static_cast<size_t>(Run.First) + Before].Line != Said[static_cast<size_t>(Run.First) + Index].Line;
-				Twice += bSame ? 1 : 0;
-			}
-		}
-		return Twice;
 	}
 
 	/** The first Named of those lines (the first as given), "; " between, and "and N more" for the rest of the run. */
@@ -1487,6 +1474,359 @@ namespace
 		return Rest > 0 ? Out + (Out.empty() ? "and " : "; and ") + std::to_string(Rest) + " more" : Out;
 	}
 
+	/**
+	 * The test's own list of the joining and small words a cut never ends on, kept apart from EdgeSeals' own: the rules'
+	 * LITTLE (src/campaign/monthcard.ts, the card's own cut), and "her". A word of stops only, or a dash, counts too.
+	 */
+	bool IsSmall(std::string Word)
+	{
+		while (!Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'))
+		{
+			Word.pop_back();
+		}
+		if (Word.empty() || Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94")
+		{
+			return true;
+		}
+		for (char& Letter : Word)
+		{
+			Letter = Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+		}
+		for (const char* Small : { "a", "an", "the", "of", "at", "in", "on", "to", "with", "for", "from", "by", "and", "or", "but", "its", "their", "his", "is", "are", "was",
+				 "were", "be", "been", "has", "have", "had", "can", "could", "will", "would", "may", "must", "not", "no", "it", "they", "he", "we", "that", "which",
+				 "as", "if", "so", "than", "then", "when", "while", "before", "after", "until", "because", "about", "out", "up", "off", "into", "over", "under",
+				 "near", "round", "against", "between", "who", "whose", "her" })
+		{
+			if (Word == Small)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A line's words, split at spaces. */
+	std::vector<std::string> WordsOf(const std::string& Line)
+	{
+		std::vector<std::string> Out;
+		size_t At = 0;
+		while (At < Line.size())
+		{
+			while (At < Line.size() && Line[At] == ' ')
+			{
+				++At;
+			}
+			const size_t Start = At;
+			while (At < Line.size() && Line[At] != ' ')
+			{
+				++At;
+			}
+			if (At > Start)
+			{
+				Out.push_back(Line.substr(Start, At - Start));
+			}
+		}
+		return Out;
+	}
+
+	/**
+	 * The lines each item of a folded seal that lists them can give (the design director, 20:27Z): Short, its short line
+	 * (ShortLines); Whole, its whole clause, up to 16 words, as EdgeSeals::WholeClause gives it (TestWholeClause holds that
+	 * to the test's own reading), or its short line where it has none; a row's title stands for its whole line, which
+	 * says where and what happened, and a repeated title's whole is its own line's clause.
+	 */
+	struct FListLines
+	{
+		std::vector<std::string> Short, Whole;
+	};
+
+	FListLines LinesToList(const std::vector<FSaid>& Said, const FAlikeRun& Run)
+	{
+		FListLines Out;
+		Out.Short = ShortLines(Said, Run);
+		for (size_t Index = 0; Index < Out.Short.size(); ++Index)
+		{
+			const FSaid& Item = Said[static_cast<size_t>(Run.First) + Index];
+			const bool bTitle = Item.Section == ESection::Row && !Item.Head.empty() && !Item.Name.empty();
+			const bool bRepeated = bTitle && std::find(Out.Short.begin(), Out.Short.begin() + static_cast<std::ptrdiff_t>(Index), ShortSaid(Item)) != Out.Short.begin() + static_cast<std::ptrdiff_t>(Index);
+			const std::string Whole = bTitle && !bRepeated ? std::string() : Unstop(WholeClause(Item.Line));
+			Out.Whole.push_back(Whole.empty() ? Out.Short[Index] : Whole);
+		}
+		return Out;
+	}
+
+	/**
+	 * The test's own reading of ruling B (the design director, 20:27Z): the lines a folded seal lists in Room letters.
+	 * In card order, each item's whole line where the list, with how many more after it, still fits; else its short line
+	 * where that fits; the list ends at the first item that fits neither way, unless all the items left, each short, fit
+	 * with no "and N more" after them. Then, first to last, each line still short is made whole where the list still
+	 * fits. None where not even the first item's short line fits (FoldWords then cuts that line shorter, or gives the
+	 * count).
+	 */
+	std::vector<std::string> BList(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room)
+	{
+		const FListLines Each = LinesToList(Said, Run);
+		// (each item listed so far: true where it is given whole)
+		std::vector<bool> Choice;
+		auto Lines = [&Each](const std::vector<bool>& Chosen)
+		{
+			std::vector<std::string> Out;
+			for (size_t Index = 0; Index < Chosen.size(); ++Index)
+			{
+				Out.push_back(Chosen[Index] ? Each.Whole[Index] : Each.Short[Index]);
+			}
+			return Out;
+		};
+		auto Fits = [&Lines, &Run, Room](const std::vector<bool>& Chosen)
+		{
+			const std::vector<std::string> Out = Lines(Chosen);
+			return !Out.empty() && LettersSet(Listed(Out, Out.size(), Out[0], Run.Count)) <= Room;
+		};
+		for (size_t Index = 0; Index < Each.Short.size(); ++Index)
+		{
+			std::vector<bool> Try = Choice;
+			Try.push_back(true);
+			if (!Fits(Try))
+			{
+				Try.back() = false;
+			}
+			if (Fits(Try))
+			{
+				Choice = Try;
+				continue;
+			}
+			if (Each.Short.size() == static_cast<size_t>(Run.Count))
+			{
+				Try = Choice;
+				Try.resize(Each.Short.size(), false);
+				Choice = Fits(Try) ? Try : Choice;
+			}
+			break;
+		}
+		for (size_t Index = 0; Index < Choice.size(); ++Index)
+		{
+			if (!Choice[Index])
+			{
+				Choice[Index] = true;
+				Choice[Index] = Fits(Choice);
+			}
+		}
+		return Lines(Choice);
+	}
+
+	/** Those lines as the hover says them: "; " between, and "and N more" for the rest of the run; "" where there are none. */
+	std::string BWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room)
+	{
+		const std::vector<std::string> Lines = BList(Said, Run, Room);
+		return Lines.empty() ? std::string() : Listed(Lines, Lines.size(), Lines[0], Run.Count);
+	}
+
+	/**
+	 * The words 6798b95b gave a folded seal that lists its items' lines, to print each hover the ruling changes: each
+	 * item's eight words by the EightWords rules (a repeated title its own), as many as fit, and how many more; "" where
+	 * not even the first fits. Named, how many it lists.
+	 */
+	std::string ListedBefore(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room, size_t& Named)
+	{
+		Named = 0;
+		std::vector<std::string> Lines;
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
+		{
+			const FSaid& Item = Said[static_cast<size_t>(Index)];
+			const bool bTitle = Item.Section == ESection::Row && !Item.Head.empty();
+			std::string Line = bTitle ? ShortSaid(Item) : Unstop(EightWords(Item.Line));
+			if (Line.empty())
+			{
+				break;
+			}
+			if (bTitle && std::find(Lines.begin(), Lines.end(), Line) != Lines.end())
+			{
+				Line = Unstop(EightWords(Item.Line));
+			}
+			Lines.push_back(Line);
+		}
+		for (size_t Most = Lines.size(); Most >= 1; --Most)
+		{
+			const std::string Out = Listed(Lines, Most, Lines[0], Run.Count);
+			if (LettersSet(Out) <= Room)
+			{
+				Named = Most;
+				return Out;
+			}
+		}
+		return std::string();
+	}
+
+	/** How many of a folded seal's listed lines (the lines ruling B lists, the first Named of them) say a line the list gave already, where the card's lines for them differ. */
+	int ListedTwice(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Named)
+	{
+		const std::vector<std::string> Lines = BList(Said, Run, HoverLine);
+		int Twice = 0;
+		for (size_t Index = 1; Index < Lines.size() && Index < static_cast<size_t>(Named); ++Index)
+		{
+			for (size_t Before = 0; Before < Index; ++Before)
+			{
+				const bool bSame = Lines[Before] == Lines[Index] && Said[static_cast<size_t>(Run.First) + Before].Line != Said[static_cast<size_t>(Run.First) + Index].Line;
+				Twice += bSame ? 1 : 0;
+			}
+		}
+		return Twice;
+	}
+
+	/** A word in small letters, any , ; : or . after it taken off. */
+	std::string Plain(std::string Word)
+	{
+		while (!Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'))
+		{
+			Word.pop_back();
+		}
+		for (char& Letter : Word)
+		{
+			Letter = Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+		}
+		return Word;
+	}
+
+	bool InList(const std::string& Word, std::initializer_list<const char*> Words)
+	{
+		return std::find_if(Words.begin(), Words.end(), [&Word](const char* Each) { return Word == Each; }) != Words.end();
+	}
+
+	/** How a verb stands to the word before it: after has, have or had (Perfect); after a form of be (Being, where only its -ing form wants an object); else Other. */
+	enum class EVerbAfter
+	{
+		Other,
+		Perfect,
+		Being
+	};
+
+	EVerbAfter VerbAfter(const std::string& Before)
+	{
+		const std::string Word = Plain(Before);
+		return InList(Word, { "has", "have", "had" }) ? EVerbAfter::Perfect : InList(Word, { "is", "are", "was", "were", "be", "been", "being" }) ? EVerbAfter::Being : EVerbAfter::Other;
+	}
+
+	/** One verb the real months' lines put between a doer and its object, as it stands there: its word, what stands before it, and the line's words round it. */
+	struct FDerivedVerb
+	{
+		std::string Word;
+		EVerbAfter After = EVerbAfter::Other;
+		std::string Before, Where;
+	};
+
+	/**
+	 * The test's own list of the news lines' verbs that want an object, derived from the 48 real months' lines (the design
+	 * director, 20:27Z: a cut never ends on a verb that lacks its object; the rule is a plain one over the lines, not a
+	 * reading of English). A word in small letters, with no stop after it, neither a small word (IsSmall) nor one of the
+	 * lines' own things that follow a doer ("troops", "fleet", "raid", "landing"...) nor a name's particle ("de", "von"),
+	 * that stands after its doer (a name in capitals, one of those things, or has, have, had, been, is, are, was or were)
+	 * and right before what it does (the, a, an, its, their, your, his, her, a number or a name). After a form of be only
+	 * an -ing form counts ("is manning"; "is bombed" is done to its doer). Each once for each way it stands.
+	 */
+	std::vector<FDerivedVerb> DerivedVerbs(const std::vector<FMonth>& Months)
+	{
+		auto Stopped = [](const std::string& Word) { return !Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'); };
+		auto Bare = [](std::string Word)
+		{
+			while (!Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'))
+			{
+				Word.pop_back();
+			}
+			return Word;
+		};
+		auto IsThing = [](const std::string& Word)
+		{
+			return InList(Word, { "troops", "army", "armies", "corps", "air", "airborne", "fighters", "bombers", "aircraft", "agents", "sabotage", "industry", "hands", "forces", "fleet",
+				"fleets", "fieldworks", "command", "train", "ships", "shipping", "raid", "production", "navy", "landing", "honour", "envoys", "drawing", "designs", "counter", "coast",
+				"submarine", "submarines", "guns", "tanks", "divisions" });
+		};
+		auto IsCapital = [](const std::string& Word) { return !Word.empty() && Word[0] >= 'A' && Word[0] <= 'Z'; };
+		auto IsDeterminer = [](const std::string& Word) { return InList(Word, { "the", "a", "an", "its", "their", "your", "his", "her" }); };
+		auto IsDoer = [&](const std::string& Word)
+		{
+			const std::string Was = Bare(Word);
+			return !Stopped(Word) && !IsDeterminer(Plain(Word)) && (IsCapital(Was) || IsThing(Was) || InList(Was, { "has", "have", "had", "been", "is", "are", "was", "were" }));
+		};
+		auto Opens = [&](const std::string& Word)
+		{
+			const std::string Was = Bare(Word);
+			return IsDeterminer(Was) || (!Was.empty() && Was[0] >= '0' && Was[0] <= '9') || IsCapital(Was)
+				|| InList(Was, { "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve" });
+		};
+		std::vector<FDerivedVerb> Out;
+		for (const FMonth& Month : Months)
+		{
+			for (const FSaid& Item : Month.Said)
+			{
+				const std::vector<std::string> Words = WordsOf(Item.Sentence);
+				for (size_t Index = 1; Index + 1 < Words.size(); ++Index)
+				{
+					const std::string Word = Bare(Words[Index]);
+					if (Stopped(Words[Index]) || Word.empty() || !(Word[0] >= 'a' && Word[0] <= 'z') || IsSmall(Word) || IsThing(Word)
+						|| InList(Word, { "de", "du", "da", "di", "del", "della", "der", "den", "van", "von", "la", "le", "y", "al", "bin", "ibn" }))
+					{
+						continue;
+					}
+					const EVerbAfter After = VerbAfter(Words[Index - 1]);
+					const bool bIng = Word.size() > 3 && Word.compare(Word.size() - 3, 3, "ing") == 0;
+					if (!IsDoer(Words[Index - 1]) || !Opens(Words[Index + 1]) || (After == EVerbAfter::Being && !bIng))
+					{
+						continue;
+					}
+					if (std::none_of(Out.begin(), Out.end(), [&](const FDerivedVerb& Each) { return Each.Word == Word && Each.After == After; }))
+					{
+						Out.push_back(FDerivedVerb{ Word, After, Words[Index - 1], Words[Index - 1] + " " + Words[Index] + " " + Words[Index + 1] });
+					}
+				}
+			}
+		}
+		std::sort(Out.begin(), Out.end(), [](const FDerivedVerb& A, const FDerivedVerb& B) { return A.Word != B.Word ? A.Word < B.Word : A.After < B.After; });
+		return Out;
+	}
+
+	/**
+	 * Whether the last word of a cut line, Word after Before, is one of those verbs as the lines have it there: never a
+	 * word after the, a, its..., nor one with a stop after it in its line (bStopped), which ends its clause.
+	 */
+	bool EndsOnBareVerb(const std::vector<FDerivedVerb>& Verbs, const std::string& Before, const std::string& Word, bool bStopped)
+	{
+		if (bStopped || InList(Plain(Before), { "the", "a", "an", "its", "their", "your", "his", "her" }))
+		{
+			return false;
+		}
+		const EVerbAfter After = VerbAfter(Before);
+		const std::string Key = Plain(Word);
+		return std::any_of(Verbs.begin(), Verbs.end(), [&](const FDerivedVerb& Each) { return Each.Word == Key && Each.After == After; });
+	}
+
+	/**
+	 * Whether a listed line reads broken by the test's own rules: it is its item's line cut where the line goes on with no
+	 * stop (a line that ends where its item's does, or before a stop, says its clause whole), and its last word is a small
+	 * word or a verb the lines want an object after.
+	 */
+	bool ReadsBroken(const std::vector<FDerivedVerb>& Verbs, const std::string& Listed, const std::string& Line, std::string& Last)
+	{
+		const std::vector<std::string> Words = WordsOf(Listed);
+		Last = Words.empty() ? std::string() : Words.back();
+		if (Words.empty())
+		{
+			return true;
+		}
+		const size_t At = Line.find(Listed);
+		const size_t End = At == std::string::npos ? std::string::npos : At + Listed.size();
+		if (End == std::string::npos || End >= Line.size())
+		{
+			return End == std::string::npos;
+		}
+		const char Next = Line[End];
+		const bool bStopped = Next == ',' || Next == ';' || Next == ':' || Next == '.' || Next == '!' || Next == '?';
+		if (bStopped)
+		{
+			return false;
+		}
+		return IsSmall(Last) || EndsOnBareVerb(Verbs, Words.size() > 1 ? Words[Words.size() - 2] : std::string(), Last, false);
+	}
+
 	/** Whether a folded seal's words name its items (its count, then a colon), as the names and the rows' head do. */
 	bool NamesItsItems(const FAlikeRun& Run, const std::string& Words)
 	{
@@ -1496,7 +1836,8 @@ namespace
 
 	/**
 	 * How many of a folded seal's items its words name: the names' and the rows' head's list up to four whole, more as
-	 * three; else the short lines it gives (one where the first's is cut to fit); none where it gives the count alone.
+	 * three; else the lines it lists (ruling B's: one where the first's is cut to fit); none where it gives the count
+	 * alone.
 	 */
 	int ItemsNamed(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words)
 	{
@@ -1504,15 +1845,12 @@ namespace
 		{
 			return Run.Count > 4 ? 3 : Run.Count;
 		}
-		const std::vector<std::string> Lines = ShortLines(Said, Run);
-		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		const std::vector<std::string> Lines = BList(Said, Run, HoverLine);
+		if (!Lines.empty() && Words == Listed(Lines, Lines.size(), Lines[0], Run.Count))
 		{
-			if (Words == Listed(Lines, Named, Lines[0], Run.Count))
-			{
-				return static_cast<int>(Named);
-			}
+			return static_cast<int>(Lines.size());
 		}
-		return Lines.empty() ? 0 : 1;
+		return ShortLines(Said, Run).empty() ? 0 : 1;
 	}
 
 	/**
@@ -1577,29 +1915,17 @@ namespace
 			}
 			return true;
 		}
-		// (else each item's own short line in card order, "; " between, as many as one line of the hover holds, then "and
-		// N more", which is one more of the list, never more of the line before it)
+		// (else each item's own line in card order, "; " between, as ruling B lists them in one line of the hover (BList:
+		// each whole where the line holds it, else cut, as many as fit), then "and N more", which is one more of the list,
+		// never more of the line before it)
 		if (LettersSet(Words) > HoverLine)
 		{
 			Why = "a folded seal's words longer than one line of the hover";
 			return false;
 		}
 		const std::vector<std::string> Lines = ShortLines(Said, Run);
-		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		if (Words == BWords(Said, Run, HoverLine))
 		{
-			if (Words != Listed(Lines, Named, Lines[0], Run.Count))
-			{
-				continue;
-			}
-			// (and none more would have fitted)
-			for (size_t More = Named + 1; More <= Lines.size(); ++More)
-			{
-				if (LettersSet(Listed(Lines, More, Lines[0], Run.Count)) <= HoverLine)
-				{
-					Why = "a folded seal that lists fewer of its items than one line of the hover holds";
-					return false;
-				}
-			}
 			return true;
 		}
 		// (or, where even the first line does not fit with its "and N more", that line itself cut shorter, and that; never a
@@ -1611,7 +1937,7 @@ namespace
 			const std::string Cut = bTail ? Words.substr(0, Words.size() - Tail.size()) : std::string();
 			if (Cut.empty() || !StartsWith(Lines[0], Cut) || LettersSet(Listed(Lines, 1, Lines[0], Run.Count)) <= HoverLine)
 			{
-				Why = "a folded seal's words that are neither its names nor its items' own short lines, as many as fit, and how many more";
+				Why = "a folded seal's words that are neither its names nor its items' own lines as ruling B lists them, and how many more";
 				return false;
 			}
 			return true;
@@ -1914,11 +2240,13 @@ static void TestFold()
 		CHECK(Words({ { "", "Scorched earth: German troops tore up the railway." }, { "", "Scorched earth: Soviet troops tore up the railway." }, { "", "Scorched earth: Finnish troops tore up the railway." } })
 			== "Scorched earth: German troops tore up the railway; Scorched earth: Soviet troops tore up the railway; and 1 more");
 		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls; Paris falls; Rome falls");
-		// (two rows of one place and head, GER August 1942 as drawn: the second gives its own first words, so the list
-		// never seems to say one line twice; the first keeps its title, as the ruling has it)
+		// (two rows of one place and head, GER August 1942 as drawn: the second gives its own first words, its title
+		// first, so the list never seems to say one line twice; the first keeps its title, as the ruling has it. Its whole
+		// clause does not fit with "Ruhr HIT" after it, so it is cut, and never on the verb whose object the cut leaves
+		// behind: not "The Black Sea Fleet shelled" (the design director, 20:27Z))
 		CHECK(Words({ { "Kharkov", "Their bombers hit its factories." }, { "Stalino", "Their bombers hit its factories." }, { "Dnepropetrovsk", "Their bombers hit its factories." },
 				  { "Kiev", "Their bombers hit its factories." }, { "Stalino", "The Black Sea Fleet shelled the troops ashore." }, { "Ruhr", "Their bombers hit its factories." } })
-			== "Kharkov HIT; Stalino HIT; Dnepropetrovsk HIT; Kiev HIT; Stalino HIT: The Black Sea Fleet shelled; Ruhr HIT");
+			== "Kharkov HIT; Stalino HIT; Dnepropetrovsk HIT; Kiev HIT; Stalino HIT: The Black Sea Fleet; Ruhr HIT");
 		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } })
 			== "No. 3 Group bombs Paris by night; No. 4 Group bombs Rome by night; No. 5 Group bombs Turin by night");
 		// (a list's "and" is never the verb, nor a name with one in it listed; words that run on into a second sentence are
@@ -1951,7 +2279,7 @@ static void TestFold()
 		CHECK(Each({ "Argentina", "Chile", "Spain" }, "leans toward the Axis: trade and treaties, but not at war.") == "3 lean toward the Axis: Argentina, Chile and Spain");
 		CHECK(Each({ "Hungary", "Romania", "Bulgaria" }, "lets its claim to Transylvania rest for now.") == "3 let their claim to Transylvania rest for now: Hungary, Romania and Bulgaria");
 		CHECK(Each({ "Hungary", "Romania", "Finland" }, "joins the Axis and declares war on the Soviet Union.")
-			== "Hungary joins the Axis and declares war; Romania joins the Axis and declares war; and 1 more");
+			== "Hungary joins the Axis and declares war on the Soviet Union; Romania joins the Axis and declares war; and 1 more");
 		CHECK(Each({ "Hood", "Repulse", "Barham" }, "loses her captain.") == "Hood loses her captain; Repulse loses her captain; Barham loses her captain");
 		// (a name's own small word is the name's; but the verb is the first other word in small letters, so a run that does
 		// not split there splits nowhere: never "3 her captain: Hood loses, Repulse sinks and Barham rams")
@@ -2279,70 +2607,13 @@ static void TestFold()
 	}
 }
 
-namespace
-{
-	/**
-	 * The test's own list of the joining and small words a cut never ends on, kept apart from EdgeSeals' own: the rules'
-	 * LITTLE (src/campaign/monthcard.ts, the card's own cut), and "her". A word of stops only, or a dash, counts too.
-	 */
-	bool IsSmall(std::string Word)
-	{
-		while (!Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'))
-		{
-			Word.pop_back();
-		}
-		if (Word.empty() || Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94")
-		{
-			return true;
-		}
-		for (char& Letter : Word)
-		{
-			Letter = Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
-		}
-		for (const char* Small : { "a", "an", "the", "of", "at", "in", "on", "to", "with", "for", "from", "by", "and", "or", "but", "its", "their", "his", "is", "are", "was",
-				 "were", "be", "been", "has", "have", "had", "can", "could", "will", "would", "may", "must", "not", "no", "it", "they", "he", "we", "that", "which",
-				 "as", "if", "so", "than", "then", "when", "while", "before", "after", "until", "because", "about", "out", "up", "off", "into", "over", "under",
-				 "near", "round", "against", "between", "who", "whose", "her" })
-		{
-			if (Word == Small)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/** A line's words, split at spaces. */
-	std::vector<std::string> WordsOf(const std::string& Line)
-	{
-		std::vector<std::string> Out;
-		size_t At = 0;
-		while (At < Line.size())
-		{
-			while (At < Line.size() && Line[At] == ' ')
-			{
-				++At;
-			}
-			const size_t Start = At;
-			while (At < Line.size() && Line[At] != ' ')
-			{
-				++At;
-			}
-			if (At > Start)
-			{
-				Out.push_back(Line.substr(Start, At - Start));
-			}
-		}
-		return Out;
-	}
-}
-
 /**
  * The eight-word cut never ends on a joining or small word (the rules' LITTLE: at, in, on, of, to, by, for, from, with,
  * and, or, the, a, an, its, his, their, is, has, have, been, under, round...; and her), on a dash or on stops standing
  * apart, nor leaves a bracket open: it steps back to the last word that says something. A seal's own words and each
  * line a folded seal lists alike ("The Baltic Fleet shells the Finnish troops at, and 2 more" was 0010's first form),
- * over the 48 real months, every cut's last word shown.
+ * over the 48 real months, every cut's last word shown. (A listed line's cut also never ends on a verb without its
+ * object, and is given whole where the hover holds it: TestWholeClause.)
  */
 static void TestCuts()
 {
@@ -2387,24 +2658,29 @@ static void TestCuts()
 	const std::string Baltic = "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland.";
 	CHECK(EightWords(Baltic) == "The Baltic Fleet shells the Finnish troops");
 	{
-		// (a folded seal's lines are each item's eight words, as its own seal's are: the eight-word cut stands for every
-		// seal, ruling 5 of 64(g)(4); a row's line is its title, place and head)
+		// (a folded seal's lines are each item's whole clause, up to 16 words, where the hover's line holds it (the design
+		// director, 20:27Z); else its eight words, cut as its own seal's are (ruling 5 of 64(g)(4)) but never on a verb
+		// whose object the cut leaves behind; a row's line is its title, place and head. Where the line holds the first
+		// item whole, the list gives it so, and names fewer)
 		std::vector<FSaid> Said;
 		Said.push_back(PlainSaid(ESection::Elsewhere, Baltic));
 		Said.push_back(PlainSaid(ESection::Elsewhere, "Hungary joins the Axis."));
 		Said.push_back(PlainSaid(ESection::Elsewhere, "Romania joins the Axis."));
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; Hungary joins the Axis; Romania joins the Axis");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland; Hungary joins the Axis; and 1 more");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }, 80) == "The Baltic Fleet shells the Finnish troops; Hungary joins the Axis; and 1 more");
+		// (19 words, no clause of 16 or fewer: the cut)
 		Said[0] = PlainSaid(ESection::Elsewhere, "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland and the Aaland Islands.");
 		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; Hungary joins the Axis; Romania joins the Axis");
 		Said[0] = PlainSaid(ESection::Elsewhere, "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.");
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Hungary joins the Axis; Romania joins the Axis");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches; and 2 more");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }, 100) == "The escorts of the Western Approaches Fleet; Hungary joins the Axis; Romania joins the Axis");
 		// (items of other parts of the card: each its own line; a row's, its title)
 		Said[1] = PlainSaid(ESection::Home, "Research complete: Radar.");
 		Said[2] = PlainSaid(ESection::Staff, "Your staff on the fighting at Sedan.");
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Research complete: Radar; Your staff on the fighting at Sedan");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }, 104) == "The escorts of the Western Approaches Fleet; Research complete: Radar; and 1 more");
 		CHECK(FoldWords(Said, FAlikeRun{ 1, 2 }) == "Research complete: Radar; Your staff on the fighting at Sedan");
 		Said[2] = RowSaid("Ruhr", "HIT", "", "", "Their bombers hit its factories by night.");
-		CHECK(ShortLine(Said[2]) == "Ruhr HIT" && FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Research complete: Radar; Ruhr HIT");
+		CHECK(ShortLine(Said[2]) == "Ruhr HIT" && FoldWords(Said, FAlikeRun{ 0, 3 }, 100) == "The escorts of the Western Approaches Fleet; Research complete: Radar; Ruhr HIT");
 		CHECK(ShortLine(RowSaid("Polish Silesia", "LOST", "against", "Germany", "Our troops were driven from it.")) == "Polish Silesia LOST against Germany");
 	}
 
@@ -2458,11 +2734,12 @@ static void TestCuts()
 			{
 				continue;
 			}
+			const std::vector<std::string> Lines = BList(Month.Said, Run, HoverLine);
 			const int Named = ItemsNamed(Month.Said, Run, Words);
-			for (int Index = Run.First; Index < Run.First + Named; ++Index)
+			for (int Index = Run.First; Index < Run.First + Named && static_cast<size_t>(Index - Run.First) < Lines.size(); ++Index)
 			{
 				const FSaid& Each = Month.Said[static_cast<size_t>(Index)];
-				const std::string Line = ShortLine(Each);
+				const std::string& Line = Lines[static_cast<size_t>(Index - Run.First)];
 				if (WordsOf(Line).size() >= WordsOf(Each.Line).size() || (Each.Section == ESection::Row && !Each.Head.empty()))
 				{
 					continue;
@@ -2489,6 +2766,304 @@ static void TestCuts()
 	}
 	std::printf("(the real months' eight words: %d of %d items cut, %d ending on a small word; every cut's last word: %s)\n", Cuts, Items, Bad, Shown.c_str());
 	std::printf("(the real months' folded seals' listed lines that are cut: %d, %d ending on a small word: %s)\n", FoldCuts, FoldBad, FoldLast.c_str());
+}
+
+/**
+ * The design director's ruling of 20:27Z (B, YES): a folded seal's listed line is its whole clause, up to 16 words,
+ * where the hover's one line (TipLetters, 118 letters) still holds it; where it does not, the eight-word cut, which ends
+ * at a whole word, never on a small word and never on a verb that lacks its object: it steps back to the last word that
+ * is neither ("The escorts of the Western Approaches Fleet"). A row's short title still comes first; a title the list
+ * gave already is said with its own first words; the cut never goes below a row's title. No press, no hover bigger, the
+ * card and the press as they were. The small words are the rules' LITTLE (IsSmall); the verbs are derived here from the
+ * real months' lines, printed, and EdgeSeals' own table held to them. Over every folded seal of the 48 real months, in
+ * both folds: no hover over TipLetters(), no listed line ending on a small word or a bare verb, each the ruling's; and
+ * every hover the ruling changes, printed before (6798b95b) and after.
+ */
+static void TestWholeClause()
+{
+	// 1. The whole clause: from the line's start to the end of the clause its eight words end in (the first , ; : or
+	// sentence's end from their last word on, outside a bracket; the full stop of "No." or "4." ends nothing), up to 16
+	// words; none where the clause is longer, leaves a bracket open, or the line breaks it off on an article or a joining
+	// word. A clause the line ends on a small word of its own is whole ("as they were driven off").
+	const std::string Escorts = "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.";
+	CHECK(WholeClause(Escorts) == "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches");
+	CHECK(WholeClause("German troops close round Warsaw: the capital of Poland is under siege, with one corps inside.") == "German troops close round Warsaw");
+	CHECK(WholeClause("The Black Sea Fleet shelled the troops ashore at Sevastopol, and the city holds.") == "The Black Sea Fleet shelled the troops ashore at Sevastopol");
+	CHECK(WholeClause("No. 9 Group has driven the enemy's fighters from the sky over Sicily.") == "No. 9 Group has driven the enemy's fighters from the sky over Sicily");
+	CHECK(WholeClause("7. Fliegerdivision strikes at shipping in the Eastern Mediterranean.") == "7. Fliegerdivision strikes at shipping in the Eastern Mediterranean");
+	CHECK(WholeClause("Scorched earth: German troops tore up the railway at Kaluga as they were driven off.") == "Scorched earth: German troops tore up the railway at Kaluga as they were driven off");
+	CHECK(WholeClause("The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland and the Aaland Islands.").empty());
+	CHECK(WholeClause("one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen.")
+		== "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen");
+	CHECK(WholeClause("one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen.").empty());
+	CHECK(WholeClause("one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen, seventeen.")
+		== "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen");
+	CHECK(WholeClause("one two three four five six seven eight nine and, ten.").empty() && WholeClause("one two three four five six seven eight nine the; ten.").empty());
+	CHECK(WholeClause("one two three four five six seven (eight nine, ten) eleven.") == "one two three four five six seven (eight nine, ten) eleven");
+	CHECK(WholeClause("one two three four five six seven eight (nine ten.").empty());
+	CHECK(WholeClause("Paris falls.") == "Paris falls" && WholeClause("").empty() && WholeClause(" ; , ").empty());
+
+	// 2. The fallback cut, ListedCut: the eight-word cut, stepping back past a verb whose object it leaves behind as past
+	// a small word, to the last word that is neither. A row's tag in capitals, a word after "the" or "its", a verb with a
+	// stop after it, and a done form that is no past ("shipping sunk") are no such verb; nor is "bombed" after "is".
+	CHECK(EightWords(Escorts) == "The escorts of the Western Approaches Fleet sink" && ListedCut(Escorts) == "The escorts of the Western Approaches Fleet");
+	CHECK(ListedCut("Danzig Corridor HIT: The Battle Fleet shelled the troops ashore.") == "Danzig Corridor HIT: The Battle Fleet");
+	CHECK(ListedCut("Soviet troops close round Helsinki.", 4) == "Soviet troops" && ListedCut("Soviet troops close round Helsinki.") == "Soviet troops close round Helsinki.");
+	CHECK(ListedCut("one two three four five six has driven the ships") == "one two three four five six");
+	CHECK(ListedCut("The Home Fleet is manning its harbours", 5) == "The Home Fleet" && ListedCut("Lyon is bombed by night today", 3) == "Lyon is bombed");
+	CHECK(ListedCut("197,000 tons of shipping sunk this month", 5) == "197,000 tons of shipping sunk" && ListedCut("Their bombers hit, and the city burns tonight", 3) == "Their bombers hit");
+	CHECK(ListedCut("one two three four five six the cut nine") == "one two three four five six the cut" && ListedCut("one two three four five six seven HIT nine") == "one two three four five six seven HIT");
+	CHECK(VerbWithoutObject("Fleet", "sink") && VerbWithoutObject("troops", "close") && VerbWithoutObject("troops", "sank") && VerbWithoutObject("Lyon", "Sinks"));
+	CHECK(VerbWithoutObject("has", "driven") && !VerbWithoutObject("has", "drove") && VerbWithoutObject("is", "manning") && !VerbWithoutObject("is", "bombed"));
+	CHECK(!VerbWithoutObject("shipping", "sunk") && !VerbWithoutObject("the", "cut") && !VerbWithoutObject("its", "hold") && !VerbWithoutObject("Ruhr", "HIT") && !VerbWithoutObject("Fleet", "sails"));
+
+	// 3. The design director's two cards: FRA January 1940 and SOV January 1944, pressed, each the escorts' line and two
+	// more. Whole in the hover's line; in a line of 100 letters, where the whole clause no longer fits, the cut, which
+	// steps back from "sink" to "Fleet". 6798b95b gave "The escorts of the Western Approaches Fleet sink; ..." in both.
+	const std::vector<FMonth> Months = ReadMonths();
+	std::vector<FAlikeRun> Runs;
+	auto MonthOf = [&Months](const char* Seat, const char* Date) -> const FMonth*
+	{
+		for (const FMonth& Month : Months)
+		{
+			if (Month.Seat == Seat && Month.Date == Date)
+			{
+				return &Month;
+			}
+		}
+		return nullptr;
+	};
+	auto Folds = [&Runs](const FMonth& Month, int First, int Count)
+	{
+		FoldAlike(Month.Looks, Runs);
+		return std::any_of(Runs.begin(), Runs.end(), [First, Count](const FAlikeRun& Run) { return Run.First == First && Run.Count == Count; });
+	};
+	const FMonth* Fra = MonthOf("FRA", "January 1940");
+	const FMonth* Sov = MonthOf("SOV", "January 1944");
+	CHECK(Fra != nullptr && Sov != nullptr);
+	if (Fra != nullptr && Sov != nullptr)
+	{
+		size_t Named = 0;
+		const FAlikeRun FraRun{ 3, 3 }, SovRun{ 14, 3 };
+		CHECK(Folds(*Fra, 3, 3) && Folds(*Sov, 14, 3));
+		const std::string FraWhole = FoldWords(Fra->Said, FraRun), SovWhole = FoldWords(Sov->Said, SovRun);
+		CHECK(FraWhole == "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches; and 2 more" && LettersOf(FraWhole) == 105);
+		CHECK(SovWhole == "The escorts of the Western Approaches Fleet sink 15 German submarines in the Western Approaches; and 2 more" && LettersOf(SovWhole) == 107);
+		CHECK(FoldWords(Fra->Said, FraRun, 100) == "The escorts of the Western Approaches Fleet; 4. Fliegerdivision bombs London by night; and 1 more");
+		CHECK(FoldWords(Sov->Said, SovRun, 100) == "The escorts of the Western Approaches Fleet; and 2 more");
+		CHECK(ListedBefore(Fra->Said, FraRun, HoverLine, Named) == "The escorts of the Western Approaches Fleet sink; 4. Fliegerdivision bombs London by night; and 1 more" && Named == 2);
+		CHECK(ListedBefore(Sov->Said, SovRun, HoverLine, Named) == "The escorts of the Western Approaches Fleet sink; and 2 more" && Named == 1);
+		std::printf("(the design director's cards, whole: \"%s\" (%d letters), \"%s\" (%d); cut, in 100 letters: \"%s\", \"%s\")\n", FraWhole.c_str(), LettersOf(FraWhole), SovWhole.c_str(),
+			LettersOf(SovWhole), FoldWords(Fra->Said, FraRun, 100).c_str(), FoldWords(Sov->Said, SovRun, 100).c_str());
+	}
+	{
+		// (a title the list gave already is said with its own first words, its title first: whole where the line holds it,
+		// else cut, never on "shelled"; a row's title is never cut, nor the cut taken below it)
+		std::vector<FSaid> Rows;
+		for (const char* Place : { "Kharkov", "Stalino", "Dnepropetrovsk", "Kiev" })
+		{
+			Rows.push_back(RowSaid(Place, "HIT", "", "", "Their bombers hit its factories."));
+		}
+		Rows.push_back(RowSaid("Stalino", "HIT", "", "", "The Black Sea Fleet shelled the troops ashore."));
+		Rows.push_back(RowSaid("Ruhr", "HIT", "", "", "Their bombers hit its factories."));
+		CHECK(FoldWords(Rows, FAlikeRun{ 0, 5 }) == "Kharkov HIT; Stalino HIT; Dnepropetrovsk HIT; Kiev HIT; Stalino HIT: The Black Sea Fleet shelled the troops ashore");
+		CHECK(FoldWords(Rows, FAlikeRun{ 0, 6 }) == "Kharkov HIT; Stalino HIT; Dnepropetrovsk HIT; Kiev HIT; Stalino HIT: The Black Sea Fleet; Ruhr HIT");
+		CHECK(FoldWords(Rows, FAlikeRun{ 0, 6 }, 35) == "Kharkov HIT; and 5 more" && FoldWords(Rows, FAlikeRun{ 0, 6 }, 23) == "Kharkov HIT; and 5 more");
+		CHECK(FoldWords(Rows, FAlikeRun{ 0, 6 }, 22) == "6 on your fronts");
+	}
+
+	// 4. The test's own rule for a verb that wants its object, derived from the real months' lines and printed; every one
+	// of them, as it stands there, is one EdgeSeals' table holds a cut back from. And the small words the lines use.
+	const std::vector<FDerivedVerb> Verbs = DerivedVerbs(Months);
+	std::string Shown, Missing, Smalls;
+	std::vector<std::string> SmallSeen;
+	for (const FDerivedVerb& Each : Verbs)
+	{
+		const std::string Word = (Each.After == EVerbAfter::Perfect ? "(has) " : Each.After == EVerbAfter::Being ? "(is) " : "") + Each.Word;
+		Shown += (Shown.empty() ? "" : ", ") + Word;
+		if (!VerbWithoutObject(Each.Before, Each.Word))
+		{
+			Missing += (Missing.empty() ? "" : "; ") + Each.Where;
+		}
+	}
+	for (const FMonth& Month : Months)
+	{
+		for (const FSaid& Item : Month.Said)
+		{
+			for (const std::string& Word : WordsOf(Item.Line))
+			{
+				const std::string Key = Plain(Word);
+				if (!Key.empty() && IsSmall(Key) && std::find(SmallSeen.begin(), SmallSeen.end(), Key) == SmallSeen.end())
+				{
+					SmallSeen.push_back(Key);
+				}
+			}
+		}
+	}
+	std::sort(SmallSeen.begin(), SmallSeen.end());
+	for (const std::string& Word : SmallSeen)
+	{
+		Smalls += (Smalls.empty() ? "" : " ") + Word;
+	}
+	CHECK(Verbs.size() >= 20 && Missing.empty() && SmallSeen.size() >= 30);
+	std::printf("(the verbs the real months' lines put between a doer and its object, derived from the lines: %zu: %s)\n", Verbs.size(), Shown.c_str());
+	std::printf("(the small words, the rules' LITTLE and \"her\", the real months' lines use: %zu: %s)\n", SmallSeen.size(), Smalls.c_str());
+	if (!Missing.empty())
+	{
+		std::printf("  not in EdgeSeals' verbs: %s\n", Missing.c_str());
+	}
+
+	// 5. Every item's line in the real months: its cut is its own first words, at most eight, never ending on a small word
+	// or a bare verb; its whole clause, where it has one, is its own first words, as many as the cut's or more and at
+	// most 16, ending where the line ends a clause (the first stop from the cut's last word on), never on an article or
+	// a joining word.
+	int Items = 0, Cuts = 0, BadCut = 0, Wholes = 0, BadWhole = 0;
+	std::string FirstBad;
+	for (const FMonth& Month : Months)
+	{
+		for (const FSaid& Item : Month.Said)
+		{
+			++Items;
+			const std::vector<std::string> All = WordsOf(Item.Line);
+			const std::string Cut = ListedCut(Item.Line);
+			const std::vector<std::string> Kept = WordsOf(Cut);
+			std::string Last;
+			if (Kept.size() < All.size())
+			{
+				++Cuts;
+				if (Kept.empty() || Kept.size() > 8 || !StartsWith(Item.Line, Cut) || ReadsBroken(Verbs, Cut, Item.Line, Last))
+				{
+					++BadCut;
+					FirstBad = FirstBad.empty() ? Cut : FirstBad;
+				}
+			}
+			const std::string Whole = WholeClause(Item.Line);
+			if (Whole.empty())
+			{
+				continue;
+			}
+			++Wholes;
+			const std::vector<std::string> In = WordsOf(Whole);
+			const size_t Eight = WordsOf(EightWords(Item.Line)).size();
+			const char Next = Whole.size() < Item.Line.size() ? Item.Line[Whole.size()] : '.';
+			bool bOk = StartsWith(Item.Line, Whole) && In.size() <= 16 && In.size() >= Eight && (Next == ',' || Next == ';' || Next == ':' || Next == '.' || Next == '!' || Next == '?')
+				&& !InList(Plain(In.back()), { "the", "a", "an", "and", "or", "but" });
+			for (size_t Index = Eight == 0 ? 0 : Eight - 1; bOk && Index + 1 < In.size(); ++Index)
+			{
+				const char End = In[Index].back();
+				bOk = End != ',' && End != ';' && End != ':' && End != '!' && End != '?';
+			}
+			if (!bOk)
+			{
+				++BadWhole;
+				FirstBad = FirstBad.empty() ? Whole : FirstBad;
+			}
+		}
+	}
+	CHECK(Items >= 300 && Cuts >= 40 && BadCut == 0 && Wholes >= 100 && BadWhole == 0);
+	if (BadCut + BadWhole > 0)
+	{
+		std::printf("  first: %s\n", FirstBad.c_str());
+	}
+
+	// 6. Over every folded seal of the real months, in both folds (pressed, and as drawn below 972 high), each once: no
+	// hover over TipLetters(); a seal that lists its items' lines lists them as the ruling has it (BList), none ending on a
+	// small word or a bare verb, every line still cut one its whole clause would not fit in place of, and no item more
+	// that would fit. Each hover the ruling changes, before and after.
+	std::vector<FAlike> Drawn;
+	std::vector<FAlikeRun> Pressed, Unpressed;
+	int Seals = 0, Listing = 0, Over = 0, NotB = 0, Broken = 0, NotMost = 0, Changed = 0, Fewer = 0, ShowWhole = 0, FallBack = 0, LinesWhole = 0, LinesBack = 0, NoClause = 0, NoBefore = 0;
+	std::string FirstBroken;
+	std::printf("(the hovers ruling B changes, 6798b95b's words first:)\n");
+	for (const FMonth& Month : Months)
+	{
+		Drawn.clear();
+		for (const FAlike& Look : Month.Looks)
+		{
+			Drawn.push_back(AsDrawn(Look, false));
+		}
+		FoldAlike(Month.Looks, Pressed);
+		FoldAlike(Drawn, Unpressed);
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			for (const FAlikeRun& Run : Pass == 0 ? Pressed : Unpressed)
+			{
+				const bool bAgain = Pass == 1 && std::any_of(Pressed.begin(), Pressed.end(), [&Run](const FAlikeRun& Other) { return Other.First == Run.First && Other.Count == Run.Count; });
+				if (Run.Count < 2 || bAgain)
+				{
+					continue;
+				}
+				++Seals;
+				const std::string Words = FoldWords(Month.Said, Run);
+				Over += LettersSet(Words) > TipLetters() ? 1 : 0;
+				if (NamesItsItems(Run, Words))
+				{
+					continue;
+				}
+				++Listing;
+				const FListLines Each = LinesToList(Month.Said, Run);
+				const std::vector<std::string> Given = BList(Month.Said, Run, TipLetters());
+				const auto Says = [&Run](const std::vector<std::string>& Lines) { return Lines.empty() ? std::string() : Listed(Lines, Lines.size(), Lines[0], Run.Count); };
+				NotB += Given.empty() || Words != Says(Given) ? 1 : 0;
+				bool bWhole = false, bBack = false;
+				for (size_t Index = 0; Index < Given.size(); ++Index)
+				{
+					const FSaid& Item = Month.Said[static_cast<size_t>(Run.First) + Index];
+					std::string Last;
+					if (ReadsBroken(Verbs, Given[Index], Item.Line, Last))
+					{
+						++Broken;
+						FirstBroken = FirstBroken.empty() ? Given[Index] + " [" + Last + "]" : FirstBroken;
+					}
+					const bool bLonger = Each.Whole[Index] != Each.Short[Index];
+					NotB += Given[Index] != Each.Whole[Index] && Given[Index] != Each.Short[Index] ? 1 : 0;
+					if (bLonger && Given[Index] == Each.Whole[Index])
+					{
+						++LinesWhole;
+						bWhole = true;
+					}
+					else if (bLonger)
+					{
+						++LinesBack;
+						bBack = true;
+						std::vector<std::string> Try = Given;
+						Try[Index] = Each.Whole[Index];
+						NotMost += LettersSet(Says(Try)) <= TipLetters() ? 1 : 0;
+					}
+					const bool bTitle = Item.Section == ESection::Row && !Item.Head.empty() && Given[Index] == ShortSaid(Item);
+					NoClause += !bTitle && WholeClause(Item.Line).empty() ? 1 : 0;
+				}
+				if (Given.size() < Each.Short.size())
+				{
+					std::vector<std::string> Try = Given;
+					Try.push_back(Each.Short[Given.size()]);
+					NotMost += LettersSet(Says(Try)) <= TipLetters() ? 1 : 0;
+				}
+				ShowWhole += bWhole ? 1 : 0;
+				FallBack += bBack ? 1 : 0;
+				size_t Before = 0;
+				const std::string Then = ListedBefore(Month.Said, Run, HoverLine, Before);
+				NoBefore += Then.empty() ? 1 : 0;
+				if (Then != Words)
+				{
+					++Changed;
+					Fewer += Given.size() < Before ? 1 : 0;
+					std::printf("  %s %s, %s, %d alike: %zu named, %d letters -> %zu named, %d letters\n    before: %s\n    after:  %s\n", Month.Seat.c_str(), Month.Date.c_str(), Pass == 0 ? "pressed" : "as drawn",
+						Run.Count, Before, LettersOf(Then), Given.size(), LettersOf(Words), Then.c_str(), Words.c_str());
+				}
+			}
+		}
+	}
+	CHECK(Seals >= 60 && Listing >= 50 && Over == 0 && NotB == 0 && Broken == 0 && NotMost == 0 && NoBefore == 0);
+	CHECK(Changed >= 10 && ShowWhole >= 10 && LinesWhole >= ShowWhole);
+	if (Broken > 0)
+	{
+		std::printf("  first broken: %s\n", FirstBroken.c_str());
+	}
+	std::printf("(ruling B over the real months' %d folded seals in both folds: %d list their items' lines, none over %d letters, %d ending on a small word or a verb without its object; %d show a whole "
+				"clause (%d lines), %d give a line cut where its whole clause would not fit (%d lines), and %d listed lines are cut with no clause of 16 words or fewer; %d hovers changed from 6798b95b, "
+				"%d of them naming fewer items)\n",
+		Seals, Listing, TipLetters(), Broken, ShowWhole, LinesWhole, FallBack, LinesBack, NoClause, Changed, Fewer);
 }
 
 namespace
@@ -2585,7 +3160,8 @@ namespace
 
 /**
  * The design director's ruling 64(g)(4), 13:00Z: a folded seal that cannot name its run lists each item's own short
- * line, in card order, as many as the hover's own size holds, then "and N more". The hover is the engine's own tip,
+ * line, in card order, as many as the hover's own size holds, then "and N more" (and, since 20:27Z, each line its whole
+ * clause where the line holds it: TestWholeClause). The hover is the engine's own tip,
  * sized to its words and wrapped at 1000 units, in the typed face at 9.5 points (CampaignHUD's "ToolTip.Font"), which
  * the layer leaves as it is. Slate sets each letter at a whole pixel's advance at the tip's scale, which is the game
  * layer's (the window's height over 1080) or the desktop's: so one line of it is 125 letters at 1920 by 1080, and 118
@@ -2650,7 +3226,9 @@ static void TestHover(const char* Folder)
 		CHECK(Elsewhere == "Soviet troops close round Helsinki; Soviet troops blow the bridges over the Oka; and 3 more");
 		// (a smaller room lists fewer; with none for even the first whole, the first a word shorter at a time)
 		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 60) == "Soviet troops close round Helsinki; and 4 more");
-		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 31) == "Soviet troops close; and 4 more" && FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 30) == "Soviet troops; and 4 more");
+		// (and never on a verb whose object the cut leaves behind: not "Soviet troops close; and 4 more", the design director,
+		// 20:27Z)
+		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 31) == "Soviet troops; and 4 more" && FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 30) == "Soviet troops; and 4 more");
 		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 5) == "5 elsewhere in the war");
 		// (a front's rows: the first line, the row's title, is never cut, so that no place stands without what happened;
 		// with no room for it and its "and N more", the count and where. The three are one place, so form 2 lists none)
@@ -2756,8 +3334,10 @@ static void TestHover(const char* Folder)
 		TipLetters(), TipLettersAt(1.0), TipLettersAt(783.0 / 1080.0), TipLettersAt(640.0 / 1080.0), static_cast<int>(std::floor(TipWrap / Letter)), Hovers, Longest, LongestSaid.c_str(), TodaysOver, TodaysLongest, TodaysTallest, TodaysWidest);
 	std::printf("(the real months' %d folded seals, %d where the set is pressed and %d more as drawn below 972 high: %d name every item, %d say \"and N more\" (%d of the pressed); %d list their items' own lines; naming 1: %d, 2: %d, 3: %d, 4 or more: %d, none: %d)\n",
 		Folded, PressedFolded, Folded - PressedFolded, NamedAll, More, PressedMore, Whole, ByNamed[1], ByNamed[2], ByNamed[3], ByNamed[4], ByNamed[0]);
-	// (one names a single item: SOV January 1944's three lines of 60 letters and more, where two and "and 1 more" pass the line)
-	CHECK(ByNamed[1] <= 1 && ByNamed[0] == 0);
+	// (seven name a single item: SOV January 1944's, where two and "and 1 more" pass the line, and six whose first item
+	// the line holds whole, which the design director's ruling of 20:27Z gives before a second item: UK September and
+	// October 1939, FRA January 1940, SOV July 1941, UK July 1943 and May 1944, all pressed; TestWholeClause prints them)
+	CHECK(ByNamed[1] <= 7 && ByNamed[0] == 0);
 }
 
 /** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
@@ -4139,6 +4719,7 @@ int main(int ArgCount, char** Args)
 	TestFold();
 	TestCountFace(ArgCount > 1 ? Args[1] : nullptr);
 	TestCuts();
+	TestWholeClause();
 	TestHover(ArgCount > 1 ? Args[1] : nullptr);
 	TestGlobe(ArgCount > 1 ? Args[1] : nullptr);
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
