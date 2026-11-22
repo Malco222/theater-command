@@ -2178,13 +2178,24 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		// picture shows, "-TheaterArmy=Farther Pomerania -TheaterOrderTo=Pomorze", the moment that picture is taken, and
 		// puts its result card away, so that a clip made with it starts on the player's own order taking a province,
 		// outside the month's replay: the ink spreading from the side it was taken from, at the second it takes.)
-		if (Current == 0 && FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm")))
+		// (Release 2, the art director's read of run 4, 22 November: the clip again "with the panels put down (Esc), and that
+		// province in the middle of the frame". "-TheaterConfirmBare" sends the order in as "-TheaterConfirm" does, then puts
+		// the army down and the province's card away in the same moment, so that neither the army's washes nor the panels
+		// stand over the ground the ink crosses.)
+		static const bool bConfirmBare = FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare"));
+		if (Current == 0 && (bConfirmBare || FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm"))))
 		{
 			if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
 			{
 				Sender->ConfirmAttack();
 				Sender->CloseFaceOff();
 				UE_LOG(LogTheater, Display, TEXT("Photographer: the order is sent in, its result card put away"));
+				if (bConfirmBare)
+				{
+					Sender->PutDownArmy();
+					Sender->SelectRegion(INDEX_NONE);
+					UE_LOG(LogTheater, Display, TEXT("Photographer: the army is put down and the province's card put away"));
+				}
 			}
 		}
 	}
