@@ -20,6 +20,7 @@ def t34_hull(v, fine, bow_mg=True):
     front plate (the assault guns built on this hull have their gun there)."""
     v.root(hull_pivot=(0.0, 0.0, 0.8))
     v.m.paints["canvas"] = "66684A"                # (a tarpaulin in the field: olive canvas, never pale)
+    v.m.paints["wood"] = "6E6252"                  # (her log has lain out in every weather: grey-brown, no warm brown left in it)
     hw, sw, st, zf, zr = 0.92, 1.47, 0.95, 0.92, 1.56
     # ---- a tub between the tracks; over them a box whose every side leans in --------------------------
     v.hull([(x, hw, z) for x, z in [(-2.66, 0.42), (-2.94, 0.62), (-2.94, 0.94), (2.94, 0.94), (3.00, 0.86), (2.50, 0.42)]], coat, bevel=0.014)
@@ -106,7 +107,18 @@ def t34_hull(v, fine, bow_mg=True):
                 v.bolt(r_at(u, s * (side_y(zf + rb.z * u) - 0.07)) + rn * 0.002, rn, 0.014, 0.01)
         # the unditching log lashed along her right side, and a rolled tarpaulin on her left under the rails
         la, lb = (Vector((x, -side_y(1.10), 1.10)) + sn[1] * 0.10 for x in (2.05, 0.38))
-        v.rod(la, lb, 0.085, "wood", 10)
+        # (a felled trunk, not a turned pole: thicker at the butt, never quite round along its length, the sawn ends
+        #  paler than the weathered bark, and a drying split or two along it)
+        ll = (lb - la).length
+        girth = [0.090, 0.086, 0.088, 0.083, 0.085, 0.081, 0.083, 0.079, 0.078]
+        v.lathe(la, lb - la, [(ll, 0.0)] + [(ll * k / 8.0, girth[k]) for k in range(8, -1, -1)] + [(0.0, 0.0)], "wood", 10)
+        v.own_paint("wood.end", "9C8F78")
+        v.lathe(la, lb - la, [(0.001, 0.0), (0.001, girth[0] * 0.93), (-0.003, girth[0] * 0.93), (-0.003, 0.0)], "wood.end", 10)
+        v.lathe(la, lb - la, [(ll + 0.003, 0.0), (ll + 0.003, girth[8] * 0.93), (ll - 0.001, girth[8] * 0.93), (ll - 0.001, 0.0)], "wood.end", 10)
+        v.own_paint("wood.split", "3A342C")
+        for x0_, x1_, way, r_ in ((1.52, 0.86, (sn[1] + Z * 0.5).normalized(), 0.0855), (1.98, 1.62, (sn[1] - Z * 0.35).normalized(), 0.088), (0.78, 0.42, sn[1], 0.0795)):
+            ca, cb = (Vector((x, -side_y(1.10), 1.10)) + sn[1] * 0.10 + way * (r_ - 0.0035) for x in (x0_, x1_))
+            v.rod(ca, cb, 0.0055, "wood.split", 4)
         for x in (1.75, 0.68):
             c = Vector((x, -side_y(1.10), 1.10)) + sn[1] * 0.10
             v.rod(c - X * 0.02, c + X * 0.02, 0.09, "steel", 10)
@@ -147,7 +159,9 @@ def t34(fine=True, tag="SOV"):
     round hatches, the 76 mm F-34 in a rounded mantlet under its recoil housing."""
     v = Works("T34", "T-34", "tank", tag, fine)
     v.dice = 0.2
-    v.worn_kw = dict(shade=True, cast=lambda p, part: part in ("turret", "gun"))        # (her turret and gun shield are castings)
+    # (her turret and gun shield are castings. Her wheels keep their green on the open face, the dirt packed at the rim and
+    #  round the hub's bolts, the tyres dark under theirs; her star stays red under its dust: the art director, 22 Nov)
+    v.worn_kw = dict(shade=True, rim=(0.345, 0.80, 0.90), disc=0.32, tyre=0.3, marks=0.3, cast=lambda p, part: part in ("turret", "gun"))
     h = t34_hull(v, fine)
     zr = h["zr"]
     x0, zt = 0.62, zr
@@ -206,7 +220,7 @@ def t34_85(fine=True, tag="SOV"):
     85 mm gun; 8.15 m over the gun, 2.72 m high."""
     v = Works("T34-85", "T-34-85", "tank", tag, fine)
     v.dice = 0.2
-    v.worn_kw = dict(shade=True, cast=lambda p, part: part in ("turret", "gun"))
+    v.worn_kw = dict(shade=True, rim=(0.345, 0.80, 0.90), disc=0.32, tyre=0.3, marks=0.3, cast=lambda p, part: part in ("turret", "gun"))
     h = t34_hull(v, fine)
     zr = h["zr"]
     x0, zt = 0.62, zr

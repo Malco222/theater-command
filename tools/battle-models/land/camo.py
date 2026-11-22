@@ -210,7 +210,7 @@ def lay(m, seed=None, cover=0.34, cell=0.66, soft=None, grain=None, plain_parts=
     tree = BVHTree.FromPolygons([tuple(p) for p in V], [tuple(f) for f in faces])
     looks = [Vector((math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e)))
              for e in (math.radians(3.0), math.radians(24.0), math.radians(50.0)) for a in (math.radians(22.5 * k + 7.0) for k in range(16))] + [Vector((0.0, 0.0, 1.0))]
-    dull = set()
+    dull, unseen = set(), set()
     for fi, f in enumerate(faces):
         if not elig[fi]:
             continue
@@ -227,6 +227,12 @@ def lay(m, seed=None, cover=0.34, cell=0.66, soft=None, grain=None, plain_parts=
         if clear < seen * max(tried, 1):
             elig[fi] = False
             dull.update(f)
+            unseen.add(fi)
+    # (a point a seen face stands on is painted with it, though a hidden face shares it: the roof beside a hatch's
+    #  lid, a plate beside the paste. Left plain, every patch stopped short at the plate's edge.)
+    for fi, f in enumerate(faces):
+        if coat[fi] and fi not in unseen:
+            dull.difference_update(f)
     if not any(elig):
         return None
 
@@ -270,9 +276,13 @@ def lay(m, seed=None, cover=0.34, cell=0.66, soft=None, grain=None, plain_parts=
             for i in range(len(f)):
                 ef.setdefault(key(f[i], f[(i + 1) % len(f)]), set()).add(fi)
 
+    cut_at = set()                                           # (the points of every face the cutting made)
+
     def replace(fi, tris, nors):
         """Face fi becomes the first of `tris`; the others are new faces with all that fi carries."""
         f = faces[fi]
+        for t in tris:
+            cut_at.update(t)
         for i in range(len(f)):
             ef[key(f[i], f[(i + 1) % len(f)])].discard(fi)
         out = []
@@ -443,12 +453,23 @@ def lay(m, seed=None, cover=0.34, cell=0.66, soft=None, grain=None, plain_parts=
             done += 1
 
     # ---- each point's share of the second colour -----------------------------------------------------------------
+    # (Where nothing was cut, faces too small to cut or a plate already cut small for her dirt, a blotch's edge can only
+    #  step from point to point: there the band is as wide as the points stand apart, so that the edge does not run
+    #  along the mesh's own lines as a row of blocks.)
+    span = {}
+    for fi, f in enumerate(faces):
+        if coat[fi]:
+            far = max((V[f[i]] - V[f[(i + 1) % len(f)]]).length for i in range(len(f)))
+            for i in f:
+                if i not in cut_at:
+                    span[i] = max(span.get(i, 0.0), far)
     ids = [i for i in range(len(V)) if dv[i] is not None]
     for i in ids:
         if i in dull or (plain is not None and plain(V[i])):
             m.vblend[i] = 0.0
             continue
-        t = min(max(dv[i] / (2.0 * soft) + 0.5, 0.0), 1.0)
+        wide = max(soft, 0.55 * min(span.get(i, 0.0), 0.3))
+        t = min(max(dv[i] / (2.0 * wide) + 0.5, 0.0), 1.0)
         m.vblend[i] = t * t * (3.0 - 2.0 * t)
     got, whole = 0.0, 0.0
     for fi, f in enumerate(faces):

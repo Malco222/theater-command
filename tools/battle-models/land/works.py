@@ -397,7 +397,7 @@ class Works(Shop, Gear, Fittings):
             self.m.weather = weather
         return self
 
-    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5, rim=False):
+    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5, rim=False, disc=0.55, tyre=0.45, lie=0.24):
         """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
         all there is). Dust, point by point, in the file's `dust` (`wear` stays paint chipped to the metal): thick on her running gear and the foot of her
         hull, thinning fast between `foot` and `top` (metres up) so that her upper plates stay her own paint, lying a
@@ -409,7 +409,10 @@ class Works(Shop, Gear, Fittings):
         dulled by it (`marks`: each mark's own `dust`). A wheel's dirt is read in the wheel's own place, so wheels of
         one shape carry the same. rim: a wheel goes round, so its dirt cannot lie low on it; it is packed where a wheel
         keeps it, round the rim's edge and in the ring of hub bolts, and the open face between is nearer her paint
-        (the art director, 22 Nov: dirt on a wheel must not read as a flat tint).
+        (the art director, 22 Nov: dirt on a wheel must not read as a flat tint). rim may be three shares of the wheel's
+        radius, for a wheel whose rings of points stand elsewhere: the bolts' ring out to the first, the rim's edge from
+        the second to the third. disc: how much of the dirt the open face keeps; tyre: how much a rubber tyre keeps.
+        lie: how much dust lies on what looks up.
         And on `soot`, over what the exhaust and the worn edges already lay there: her paint a little uneven, plate by
         plate, as weeks of sun, rain and hands leave it. `cast(point, part)` says where she is a casting: a casting's
         skin is uneven in patches a foot or two across, lighter and darker, and sits a shade under the rolled plate.
@@ -456,6 +459,8 @@ class Works(Shop, Gear, Fittings):
                         q = Vector(self.m.verts[i]) - part.pivot
                         reach[part.name] = max(reach.get(part.name, 0.0), (q - part.axis * q.dot(part.axis)).length)
         axes = {p.name: p.axis for p in self.m.parts if p.kind == "spin" and p.axis is not None}
+        # (where a wheel keeps its dirt, as shares of its radius: the hub's bolts out to the first, the rim's edge from the second to the third)
+        rim_at = rim if isinstance(rim, (tuple, list)) else (0.42, 0.68, 0.92)
 
         def weather(p, n, paint, part):
             w, s = base(p, n, paint, part) if base else (0.0, 0.0)
@@ -475,7 +480,7 @@ class Works(Shop, Gear, Fittings):
             low = max(0.0, min(1.0, (1.95 - p.z) / 1.5)) ** 1.25 * 0.95
             t = max(0.0, min(1.0, (p.z - foot) / max(top - foot, 1e-3)))
             low *= 1.0 - 0.75 * t * t * (3.0 - 2.0 * t)
-            lying = 0.24 * max(0.0, n[2]) ** 2 * (0.4 + 1.2 * small(p))
+            lying = lie * max(0.0, n[2]) ** 2 * (0.4 + 1.2 * small(p))
             face = (1.0 - 0.6 * max(0.0, n[0]) if p.x > 0.0 else 1.0) * (1.0 + 0.15 * max(0.0, -n[0]))
             # (the wind of her going keeps her face cleaner, and her tail rides in her own dust)
             d, lying = low * patch * face, lying * face
@@ -486,10 +491,10 @@ class Works(Shop, Gear, Fittings):
                 if part in reach:
                     q = p - Vector((0.0, 0.0, 0.5))
                     rn = (q - axes[part] * q.dot(axes[part])).length / max(reach[part], 1e-3)
-                    ramp = max(0.0, min(1.0, (rn - 0.68) / 0.24))
-                    d *= 0.9 if rn < 0.2 else 1.4 if rn < 0.42 else 0.55 + 1.0 * ramp * ramp * (3.0 - 2.0 * ramp)
+                    ramp = max(0.0, min(1.0, (rn - rim_at[1]) / max(rim_at[2] - rim_at[1], 1e-3)))
+                    d *= 0.9 if rn < 0.2 else 1.4 if rn < rim_at[0] else disc + (1.55 - disc) * ramp * ramp * (3.0 - 2.0 * ramp)
             if kind == "rubber":
-                d *= 0.45                               # (a tyre's tread is wiped clean every turn; the dirt stays in its walls)
+                d *= tyre                               # (a tyre's tread is wiped clean every turn; the dirt stays in its walls)
             for c, r, least in spots:                   # (what hangs on her and is never wiped: spare links)
                 if (p - c).length_squared < r * r:
                     d = max(d, least * (0.7 + 0.6 * small(p)) * (0.6 + 0.6 * max(0.0, n[2])))

@@ -317,7 +317,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     them all, a string names the hull plates this tank has lost ("l2,r4")."""
     v = Works("PanzerIV", "Panzer IV", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
     v.dice = 0.2
-    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, rim=True)
+    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, rim=True, lie=0.17)        # (less haze on her roof than a Tiger's: her patches must read across from her ribbed plates to her smooth ones)
     v.root(hull_pivot=(0.0, 0.0, 0.75))
     m = v.m
 
