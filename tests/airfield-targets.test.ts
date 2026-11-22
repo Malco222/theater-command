@@ -31,8 +31,8 @@ const shipped = FIELD.on;
 afterEach(() => { FIELD.on = shipped; });
 
 describe('the switch', () => {
-  it('is off as shipped, set only in a grand campaign, and kept with the save', () => {
-    expect(airfieldTargetsShipped()).toBe(false);
+  it('is on as shipped in release 2 (the gate held; the design director, 22 November 18:27Z), set only in a grand campaign, and kept with the save', () => {
+    expect(airfieldTargetsShipped()).toBe(true);
     const off = grand(3, false);
     expect(fieldRules(off)).toBe(false);
     expect(airfieldTargetsOn(off)).toBe(false);
