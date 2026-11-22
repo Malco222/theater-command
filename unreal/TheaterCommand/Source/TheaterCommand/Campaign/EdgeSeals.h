@@ -368,7 +368,9 @@ namespace EdgeSeals
 	 * - "hover:N": the Nth seal as if the pointer rested on it: it grows, the brass ring goes round it, and the ping
 	 *   spreads from its place on the map. Its words go to the log, since the engine's tip is not in a picture.
 	 * - "slide": each laying waits beyond the edge until a picture is taken, and sets off as that picture is taken, so
-	 *   that the photographer's clip after its first picture ("-TheaterClip=30,0.05") holds the slide-in.
+	 *   that the photographer's clip after its first picture ("-TheaterClip=30,0.05") holds the slide-in. With it the
+	 *   layer times the slide-in, the call and the ping on the world's clock, which the clip steps by its own gap, not
+	 *   on the computer's, which a tick that takes a picture runs on by a quarter of a second and more.
 	 * A part it does not know, or a number under 1 or past Most (the most seals that may stand, FEdgeNewsBoard::MostSeals),
 	 * is counted in Unknown and left out. A seal named that does not stand on this month's edge is said so in the log
 	 * (EdgeNewsLayer), and nothing is shown for it.

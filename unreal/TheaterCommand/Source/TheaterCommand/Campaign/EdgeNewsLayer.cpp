@@ -10,6 +10,7 @@
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/World.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/PlatformTime.h"
@@ -176,6 +177,8 @@ namespace
 		/** The board's laying these are for: a new one slides the seals in again. */
 		int32 Revision = INDEX_NONE;
 		double LaidAt = -1.0;
+		/** When the seals' call is timed from, on the layer's Clock: the board's laying; with "-TheaterSeal=slide", the moment they set off. */
+		double CallFrom = 0.0;
 
 		/** The screen's pixels to one of the layer's units, as Tick measures it (the viewport's pixels over the layer's size); 0 until measured. */
 		double PxPerUnit = 0.0;
@@ -192,6 +195,21 @@ namespace
 		double HeldSince = 0.0;
 		/** Whether this laying has been told to the log (once, when every seal standing has slid all the way in). */
 		bool bLaidTold = false;
+
+		/**
+		 * The layer's clock, for the slide-in, the call and the ping: the computer's, as for the frame's other motion; but
+		 * with "-TheaterSeal=slide", the world's, which the photographer's clip steps by its own gap while it is taken
+		 * (CampaignPhotographer, "-TheaterClip": a fixed step, as for the order's ink of run 4). On the computer's clock a
+		 * tick that takes a picture can run a quarter of a second and more, and the whole slide-in (0.38 s a seal, an
+		 * eighth of a second between them) would fall between two or three frames of the clip; on the world's, a clip of
+		 * "-TheaterClip=30,0.05" holds it at the pace it has in play, frame by frame.
+		 */
+		double Clock() const
+		{
+			const ACampaignPlayerController* Owner = Ask.bSlide ? Player.Get() : nullptr;
+			const UWorld* World = Owner ? Owner->GetWorld() : nullptr;
+			return World ? World->GetTimeSeconds() : FPlatformTime::Seconds();
+		}
 
 		/** The slot the pointer is on: the real pointer's, else the one "-TheaterSeal=hover:N" names; INDEX_NONE for none. */
 		int32 PointedSlot() const
@@ -306,7 +324,7 @@ namespace
 				return LayerId;
 			}
 			const FSealPen Pen{ OutDrawElements, Geometry };
-			const double Since = FPlatformTime::Seconds() - Laid->HoveredAt;
+			const double Since = Laid->Clock() - Laid->HoveredAt;
 			const FVector2D At = Laid->PingAt;
 			for (int32 Wave = 0; Wave < 3; ++Wave)
 			{
@@ -357,7 +375,7 @@ namespace
 			if (Laid->Hovered != SealSlot)
 			{
 				Laid->Hovered = SealSlot;
-				Laid->HoveredAt = FPlatformTime::Seconds();
+				Laid->HoveredAt = Laid->Clock();
 			}
 		}
 
@@ -401,14 +419,14 @@ namespace
 #if !UE_BUILD_SHIPPING
 			WatchUnderFrame(Geometry);
 #endif
-			const double Now = FPlatformTime::Seconds();
+			const double Now = Laid->Clock();
 			// (the pointer on it, or the photographer's "-TheaterSeal=hover:N"; opened, or shown so by "-TheaterSeal=open:N")
 			const bool bHot = Laid->PointedSlot() == SealSlot;
 			const bool bOpened = Seal.bOpened || Laid->Ask.Open == SealSlot + 1;
 			// (a dated warning, and war and peace and the news, call until opened: the seal breathes, a glow comes and goes
 			// under it and a ring spreads from it. EdgeSeals::LookOf says which seals call; Look::CallOf how)
 			const bool bCalling = Seal.bPulse && !bOpened;
-			const EdgeSeals::Look::FCall Call = bCalling ? EdgeSeals::Look::CallOf(Now - Laid->LaidAt) : EdgeSeals::Look::FCall();
+			const EdgeSeals::Look::FCall Call = bCalling ? EdgeSeals::Look::CallOf(Now - Laid->CallFrom) : EdgeSeals::Look::FCall();
 			const FSealInks Inks = SealInksOf(Seal, bOpened);
 			const float Shown = Inks.Shown;
 			// (the frame's units to the screen's pixels, to hold the pressed sign's strokes to 1.5 px: as the layer measures
@@ -646,7 +664,7 @@ namespace
 				return;
 			}
 			const FEdgeNewsBoard& Board = Player->GetEdgeNews();
-			const double Now = FPlatformTime::Seconds();
+			const double Now = Shared.Clock();
 			const int32 Count = FMath::Min(Board.Seals.Num(), SealSlots);
 			if (Board.Revision != Shared.Revision || Board.LaidAt != Shared.LaidAt)
 			{
@@ -654,6 +672,8 @@ namespace
 				// about an eighth of a second apart.
 				Shared.Revision = Board.Revision;
 				Shared.LaidAt = Board.LaidAt;
+				// (the call is timed from the laying, as before; on the world's clock, from now, and again as they set off)
+				Shared.CallFrom = Shared.Ask.bSlide ? Now : Board.LaidAt;
 				Shared.Hovered = INDEX_NONE;
 				Shared.bLaidTold = false;
 				Shared.bHeld = Shared.Ask.bSlide;
@@ -673,13 +693,15 @@ namespace
 				// ("-TheaterSeal=slide", for the photographer: the laying waits beyond the edge until a picture is taken,
 				// and sets off as that picture is taken, so that the clip after the first picture, "-TheaterClip=30,0.05",
 				// holds the slide-in. The picture's own paint ticks the layer while the request stands, so the first
-				// picture shows the edge before the seals come. Should no picture come, they set off after 20 s)
+				// picture shows the edge before the seals come. Should no picture come, they set off after 20 s. Timed on the
+				// world's clock, which the clip steps by its gap: FEdgeNewsLaid::Clock)
 				const bool bPicture = FScreenshotRequest::IsScreenshotRequested();
 				if (!bPicture && Now - Shared.HeldSince < 20.0)
 				{
 					return;
 				}
 				Shared.bHeld = false;
+				Shared.CallFrom = Now;
 				for (int32 Each = 0; Each < SealSlots; ++Each)
 				{
 					Shared.Seals[Each].SlideAt = Now + 0.12 * Each;
