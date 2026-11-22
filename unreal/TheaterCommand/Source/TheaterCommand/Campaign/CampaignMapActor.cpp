@@ -9306,17 +9306,23 @@ void ACampaignMapActor::BuildTrees(const TSet<FIntPoint>* Only)
 	const double U = UnitScale;
 	int32 Trees = 0;
 	// Where pieces stand in each region (its first three armies, and its airfield either side of the town): kept clear.
-	TArray<TArray<FVector2D>> Clearings;
-	Clearings.SetNum(Data.Regions.Num());
-	for (const FCampaignRegion& Region : Data.Regions)
+	// (Release 2, map run 8: tc.Speed.TreesSpread. Laid once at a whole planting and kept: a square planted again on its
+	// own, a few a frame, would otherwise find every province's spots afresh each time, the dearest part of a planting.)
+	if (!Only || TreeClearingsKept.Num() != Data.Regions.Num())
 	{
-		for (int32 Slot = 0; Slot < 3; ++Slot)
+		TreeClearingsKept.Reset();
+		TreeClearingsKept.SetNum(Data.Regions.Num());
+		for (const FCampaignRegion& Region : Data.Regions)
 		{
-			Clearings[Region.Id].Add(WorldToMap(ArmySpot(Region.Id, Slot, Slot + 1)));
+			for (int32 Slot = 0; Slot < 3; ++Slot)
+			{
+				TreeClearingsKept[Region.Id].Add(WorldToMap(ArmySpot(Region.Id, Slot, Slot + 1)));
+			}
+			TreeClearingsKept[Region.Id].Add(Region.Center + FVector2D(-0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
+			TreeClearingsKept[Region.Id].Add(Region.Center + FVector2D(0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
 		}
-		Clearings[Region.Id].Add(Region.Center + FVector2D(-0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
-		Clearings[Region.Id].Add(Region.Center + FVector2D(0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
 	}
+	const TArray<TArray<FVector2D>>& Clearings = TreeClearingsKept;
 	for (int32 SY = 0; SY < SquaresY; ++SY)
 	{
 		for (int32 SX = 0; SX < SquaresX; ++SX)

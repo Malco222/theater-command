@@ -700,6 +700,7 @@ private:
 	// TreeSquareOf, and what one square has been costing (ms), so that a frame takes about the budget
 	TArray<int32> TreesDue;
 	float TreeSquareMs = 0.5f;
+	TArray<TArray<FVector2D>> TreeClearingsKept; // where each province's pieces stand, kept clear of trees: laid at a whole planting
 	void PlantTreesDue(const FVector& CameraFocus);
 	void RebuildHighlight();
 	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection, double HalfLine = 0.42, const FLinearColor& Under = FLinearColor::Transparent, double UnderHalf = 0.0);
