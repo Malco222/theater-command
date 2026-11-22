@@ -115,6 +115,12 @@ public:
 	bool AreFineSheetsComing() const { return bFineSheetsComing || bLandTilesComing || bSquaresComing || FogAsideBuilding.IsValid(); }
 	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
 	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
+	// ---- (release 2, the front you can read) ----
+	/** The player has cut the month's replay short: ink still running is finished at once, and ground that changes hands in this same frame takes its new colour at once, with no ink. */
+	void SkipInk();
+	/** The month's replay: ink begun in this frame is run in no longer than the step is shown (Seconds), so that the next step's ground never cuts it short (TheaterFront::InkFitted). */
+	void FitInk(double Seconds);
+	// ---- (end release 2, the front you can read) ----
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
 
 	/**
@@ -1018,6 +1024,11 @@ private:
 	int32 FrontLineFar = -1; // which weight of the line is shown: 0 the working one, 1 the staff map's (none yet: -1)
 	/** (Speed: tc.Speed.FrontWeights.) Lays one weight of the front line (0 or 1) or both (INDEX_NONE); false if there is no front. */
 	bool LayFrontLine(int32 Only, bool bOwed);
+	// ---- (release 2, the front you can read: Campaign/FrontLine.h) ----
+	/** LayFrontLine's line as a map-maker's pen draws it: chained, rounded, dark ink with teeth toward the player's enemy in sections 0 and 1 (the two weights), its soft shadow in 2 and 3. */
+	bool LayPenFront(int32 Only, bool bOwed);
+	TSharedPtr<struct FPenFront> PenFront; // (what the pen keeps from one laying to the next: the border's pieces, the lines, its work arrays)
+	// ---- (end release 2, the front you can read) ----
 	int32 FrontLineOwed = INDEX_NONE; // the weight still to be laid, a frame after the other
 	uint64 FrontLineOwedFrame = 0;
 	float FrontLineSeenFrom = 0.0f; // (the eye's distance at the last look, for which weight is laid first)
@@ -1242,6 +1253,11 @@ private:
 	/** A fine sheet has stood up or been taken away over Box: the frontier lines over and around it are laid again next time. */
 	void ForgetBorderEdges(const FBox2D& Box);
 	double InkBegan = 0.0, PaintStepped = 0.0;
+	// ---- (release 2, the front you can read) ----
+	float InkSeconds = 1.5f; // how long ink takes to cross a province ("-TheaterInkSeconds=1.0" for release 1's second)
+	uint64 InkSkipFrame = 0; // (the frame in which the player cut the month's replay short: see SkipInk)
+	uint64 InkBeganFrame = 0; // (the frame in which the last run of ink began: see FitInk)
+	// ---- (end release 2, the front you can read) ----
 	bool bInkBorders = false; // the frontier's lines are still to be drawn in their new place
 	FIntRect InkBox = FIntRect(0, 0, 0, 0);
 	TArray<FColor> TintBefore, OccupiedBefore, TintShown, OccupiedShown;
