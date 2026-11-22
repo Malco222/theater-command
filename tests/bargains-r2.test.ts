@@ -436,7 +436,42 @@ describe('goodwill: a sale makes a country lean, never join (the design director
     bargainsMonth(g);
     expect(S.opinion).toBe(-(DIPLOMACY.joinAt - BARGAINS.pull / 2));
   });
+
+  // (The review, 22 November: the month's drift moves opinion toward home + momentum x bandwagon / pull, so a home leaning
+  // raised by sales could carry the seller to the mark a month later, with no pull of the sale's own crossing it.)
+  const drift = (g: Game, nat: string, m: number): void => {
+    const n = g.nations[nat], bw = DIPLOMACY.bandwagon[nat] ?? DIPLOMACY.bandwagon._default;
+    n.opinion = Math.max(-100, Math.min(100, n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw));
+  };
+
+  it('nor raises the home leaning to where the drift alone, at the war\'s fullest swing, would carry the seller to the mark', () => {
+    const g = world(3);
+    const S = g.nations.SWE, bw = DIPLOMACY.bandwagon.SWE ?? DIPLOMACY.bandwagon._default;
+    S.opinion = 40; S.home = DIPLOMACY.joinAt - bw / DIPLOMACY.pull - 2;
+    const was = S.home;
+    for (let k = 0; k < 120; k++) {
+      drift(g, 'SWE', 1);
+      expect(S.opinion).toBeLessThan(DIPLOMACY.joinAt);
+      heldOf(g, 'swe-ore')!.until = g.turn + 12;
+      bargainsMonth(g);
+      g.turn++;
+    }
+    expect(S.home).toBeGreaterThan(was);
+    expect(S.home + bw / DIPLOMACY.pull).toBeLessThan(DIPLOMACY.joinAt);
+    expect(heldOf(g, 'swe-ore')!.buyer).toBe('GER');
+  });
+
+  it('moves no home leaning at all where the drift could carry the seller there without the sale', () => {
+    const g = world(1);
+    const S = g.nations.SWE, bw = DIPLOMACY.bandwagon.SWE ?? DIPLOMACY.bandwagon._default;
+    S.opinion = 40; S.home = DIPLOMACY.joinAt - bw / DIPLOMACY.pull + 1;
+    const was = S.home;
+    bargainsMonth(g);
+    expect(S.opinion).toBeCloseTo(40 + BARGAINS.pull, 9);
+    expect(S.home).toBe(was);
+  });
 });
+
 
 describe('a seller that joins its buyer\'s side (the design director, 08:20 UTC)', () => {
   it('keeps its term running: the goods go, the buyer pays, the map shows it', () => {

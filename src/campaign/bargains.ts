@@ -439,7 +439,8 @@ function dependence(g: Game): void {
 /**
  * A sale draws the seller toward its buyer's side, a little each month. Not a seat in the player's hands: its path is his.
  * A sale makes a country lean, never join (the design director, 08:20 UTC): no month's pull carries the seller's opinion
- * to the mark at which it would join that side (diplomacy.json 'joinAt'). What else moves its opinion is not stopped.
+ * to the mark at which it would join that side (diplomacy.json 'joinAt'), and none raises its home leaning to where the
+ * drift alone could carry it there (the review, 22 November). What else moves its opinion is not stopped.
  */
 function goodwill(g: Game): void {
   const bk = book(g);
@@ -457,7 +458,10 @@ function goodwill(g: Game): void {
     const d = BARGAINS.pull * Math.sign(s);
     if ((S.opinion + d) * Math.sign(d) >= DIPLOMACY.joinAt) continue;
     S.opinion = Math.max(-100, Math.min(100, S.opinion + d));
-    S.home = Math.max(-100, Math.min(100, S.home + d / 3));
+    // (Nor its home leaning so far that the month's drift alone, at the war's fullest swing toward that side, would one
+    // day carry it to the mark: diplomacy.ts drifts opinion toward home + momentum x bandwagon / pull, momentum -1 to 1.)
+    const bw = Math.abs(DIPLOMACY.bandwagon[seller] ?? DIPLOMACY.bandwagon._default);
+    if ((S.home + d / 3) * Math.sign(d) + bw / DIPLOMACY.pull < DIPLOMACY.joinAt) S.home = Math.max(-100, Math.min(100, S.home + d / 3));
   }
 }
 
