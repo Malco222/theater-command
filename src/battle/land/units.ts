@@ -232,7 +232,7 @@ const BRIGADES = ['UK', 'CAN', 'AUS', 'NZL', 'NZ', 'SAF', 'IND'];
  * The kind's word in a division's name, as its army's English wrote it (the historian, 22 November 18:54Z,
  * historian/unit-type-words-by-nation.md, from the UI director's "4th Armored"): the US Armored and Motorized, Britain
  * and the Commonwealth Armoured and Motor; Germany's Panzer, its motorized divisions Panzergrenadier from mid-1943;
- * the Soviets' and Japan's Tank, the Soviets' Motorized and Rifle; every other army Armoured and Motorised (the UI director's house
+ * the Soviets' and Japan's Tank, the Soviets' Motorized, Rifle and Mountain Rifle (the historian, 19:09Z); every other army Armoured and Motorised (the UI director's house
  * style, 19:03Z: "Panzer" a proper name, "1st Panzer Division"). 'ym' the battle's year times 12 plus the month from 1.
  */
 function kindWord(nat: string, k: Kind, ym = 0): string {
@@ -245,6 +245,7 @@ function kindWord(nat: string, k: Kind, ym = 0): string {
   }
   // (the Soviets' foot: the Rifle Division, as its Rifle Regiments under it)
   if (k === 'inf' && nat === 'SOV') return 'Rifle';
+  if (k === 'mtn' && nat === 'SOV') return 'Mountain Rifle';
   return KIND_WORD[k];
 }
 
