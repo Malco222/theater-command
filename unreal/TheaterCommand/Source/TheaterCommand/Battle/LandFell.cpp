@@ -81,7 +81,9 @@ namespace LandFell
 		}
 
 #if LAND_FELL_SIGNALS
-		constexpr int Signals[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP, SIGABRT };
+		// (not SIGABRT: abort() puts the default back once a handler returns, so the game's own report would be lost; the
+		// pre-check, 22 November)
+		constexpr int Signals[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP };
 		constexpr int SignalCount = static_cast<int>(sizeof(Signals) / sizeof(Signals[0]));
 		struct sigaction Before[SignalCount];
 		bool bArmed = false;
@@ -150,7 +152,6 @@ namespace LandFell
 			case SIGILL: return "SIGILL";
 			case SIGFPE: return "SIGFPE";
 			case SIGTRAP: return "SIGTRAP";
-			case SIGABRT: return "SIGABRT";
 			default: return "a signal";
 			}
 		}
