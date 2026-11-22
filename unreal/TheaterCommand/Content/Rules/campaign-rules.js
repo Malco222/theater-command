@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 436436db 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 48a88550 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -10197,11 +10197,11 @@
      */
     rollBoth(expected, other4) {
       const u = this.next();
-      const at3 = (x) => {
+      const at4 = (x) => {
         const whole2 = Math.floor(x);
         return whole2 + (u < x - whole2 ? 1 : 0);
       };
-      return [at3(expected), at3(other4)];
+      return [at4(expected), at4(other4)];
     }
     /** An independent stream, so adding rolls in one system does not shift another. */
     fork(label) {
@@ -10778,6 +10778,8 @@
     shareWords: () => shareWords2,
     shipAir: () => shipAir,
     shipHits: () => shipHits,
+    shipHitsBy: () => shipHitsBy,
+    shipLaw: () => shipLaw,
     shipsInPort: () => shipsInPort,
     skyByNumbers: () => skyByNumbers,
     skyDenies: () => skyDenies,
@@ -12842,9 +12844,9 @@
     const out = [];
     const fight2 = fightWords(t, "its");
     if (fight2) out.push(fight2);
-    const at3 = t.incomeAt === "peace" ? " while at peace" : t.incomeAt === "war" ? " while at war" : "";
-    if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString("en-US")} a month${at3}${t.uncharted ? ", for works beyond the edge of the map" : ""}.`);
-    if (t.incomeMul) out.push(`Earnings up ${pct(t.incomeMul)}${at3}.`);
+    const at4 = t.incomeAt === "peace" ? " while at peace" : t.incomeAt === "war" ? " while at war" : "";
+    if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString("en-US")} a month${at4}${t.uncharted ? ", for works beyond the edge of the map" : ""}.`);
+    if (t.incomeMul) out.push(`Earnings up ${pct(t.incomeMul)}${at4}.`);
     if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? "double" : `${t.oil} times as much`}.`);
     if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
     if (t.drafts) out.push(`Losses are made good ${pct(t.drafts)} ${t.drafts > 1 ? "faster" : "slower"}.`);
@@ -13353,11 +13355,11 @@
   }
   function firstDay(g2) {
     const W2 = world_default;
-    for (const [nat, name, kind, divs, at3, o] of W2.corps) {
-      const r = g2.byName[at3];
+    for (const [nat, name, kind, divs, at4, o] of W2.corps) {
+      const r = g2.byName[at4];
       if (!r || r.id < FAR_FIRST || r.ctrl === nat || !g2.nations[nat]?.alive || !tiedPair(g2, nat, r.ctrl)) continue;
       if (g2.corps.some((x) => x.nat === nat && x.name === name)) continue;
-      const c = addCorps(g2, nat, name, kind, divs, at3, o);
+      const c = addCorps(g2, nat, name, kind, divs, at4, o);
       if (o.str !== void 0) c.str = o.str;
     }
     for (const [a, b] of FAR_SETUP.wars) if (g2.nations[a]?.alive && g2.nations[b]?.alive && !atWar(g2, a, b)) setWar(g2, a, b);
@@ -15152,9 +15154,9 @@
         const codes = shuffled(key6, "letter", squadronLetters);
         const l = i % 26, word2 = (year >= MARKS.letter.from ? MARKS.letter.late : MARKS.letter.early)[l];
         const N = MARKS.letter.never, never = (c) => N.includes(c) || N.includes(`${c}-${ALPHABET[l]}`);
-        let at3 = Math.floor(i / 26) % codes.length;
-        for (let spare = codes.length - 1; spare >= 0 && never(codes[at3]); spare--) at3 = spare;
-        return { name: `${ALPHABET[l]} for ${word2}`, mark: `${codes[at3]}-${ALPHABET[l]}`, word: word2 };
+        let at4 = Math.floor(i / 26) % codes.length;
+        for (let spare = codes.length - 1; spare >= 0 && never(codes[at4]); spare--) at4 = spare;
+        return { name: `${ALPHABET[l]} for ${word2}`, mark: `${codes[at4]}-${ALPHABET[l]}`, word: word2 };
       }
       case "code": {
         const C3 = MARKS.code, codes = shuffled(key6, "code", wingCodes);
@@ -15483,9 +15485,9 @@
   var unitFor = (g2, kind, id) => kind === "corps" ? g2.corps.find((c) => c.id === id && !c.dead) : kind === "air" ? g2.airFleets.find((f) => f.id === id) : g2.fleets.find((f) => f.id === id);
   var placeOf = (g2, h) => h.at < 0 ? "" : h.kind === "fleet" ? `the ${g2.seas[h.at]?.name ?? "sea"}` : thePlace(g2.regions[h.at]?.name ?? "");
   function heroWords(g2, h) {
-    const at3 = placeOf(g2, h);
+    const at4 = placeOf(g2, h);
     const how = given(h.nat, h.turn);
-    return `${h.who} of ${theUnit(h.name)} has been ${how}${how.endsWith("for valour") ? "" : " for valour"}${at3 ? h.kind === "fleet" ? ` in ${at3}` : ` at ${at3}` : ""}.`;
+    return `${h.who} of ${theUnit(h.name)} has been ${how}${how.endsWith("for valour") ? "" : " for valour"}${at4 ? h.kind === "fleet" ? ` in ${at4}` : ` at ${at4}` : ""}.`;
   }
   function arm(kind, u) {
     if (kind === "fleet") return "fleet";
@@ -15755,7 +15757,7 @@
     const most = u.nat === g2.human ? STORIES.log.own : STORIES.log.other;
     if (log.length > most) log.splice(0, log.length - most);
   }
-  var placeName = (g2, kind, at3) => at3 < 0 ? "" : kind === "fleet" ? g2.seas[at3]?.name ?? "" : g2.regions[at3]?.name ?? "";
+  var placeName = (g2, kind, at4) => at4 < 0 ? "" : kind === "fleet" ? g2.seas[at4]?.name ?? "" : g2.regions[at4]?.name ?? "";
   var fill2 = (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => `${v[k] ?? ""}`).replace(/\s+/g, " ").trim();
   function awardTitle(g2, a) {
     const d = DEF.get(a.hon);
@@ -15776,31 +15778,31 @@
   function diaryText(g2, u, line) {
     const [, what, where, n] = line;
     const sea = "ships" in u;
-    const at3 = where < 0 ? "the front" : sea || what === "strike" ? `the ${g2.seas[where]?.name ?? "sea"}` : g2.regions[where]?.name ?? "the front";
+    const at4 = where < 0 ? "the front" : sea || what === "strike" ? `the ${g2.seas[where]?.name ?? "sea"}` : g2.regions[where]?.name ?? "the front";
     const times = n && n > 1 ? ` ${n} times` : "";
     switch (what) {
       case "took":
-        return `Took ${at3}${n ? `, with ${n},000 prisoners` : ""}.`;
+        return `Took ${at4}${n ? `, with ${n},000 prisoners` : ""}.`;
       case "storm":
-        return `Broke through at ${at3}${n ? ` and took ${n},000 prisoners` : ""}.`;
+        return `Broke through at ${at4}${n ? ` and took ${n},000 prisoners` : ""}.`;
       case "capital":
-        return `Fought its way into ${at3}, the enemy's capital.`;
+        return `Fought its way into ${at4}, the enemy's capital.`;
       case "landed":
-        return `Landed at ${at3} from the sea and took it.`;
+        return `Landed at ${at4} from the sea and took it.`;
       case "dropped":
-        return `Came down on ${at3} from the air and took it.`;
+        return `Came down on ${at4} from the air and took it.`;
       case "repulsed":
-        return `Attacked ${at3}${times} and was beaten off.`;
+        return `Attacked ${at4}${times} and was beaten off.`;
       case "held":
-        return `Held ${at3} against attack${times}.`;
+        return `Held ${at4} against attack${times}.`;
       case "driven":
-        return `Driven out of ${at3}.`;
+        return `Driven out of ${at4}.`;
       case "evac":
-        return `Taken off by sea from ${at3}.`;
+        return `Taken off by sea from ${at4}.`;
       case "cut":
-        return `Cut off at ${at3}.`;
+        return `Cut off at ${at4}.`;
       case "relief":
-        return `Back in supply at ${at3} after ${n} months cut off.`;
+        return `Back in supply at ${at4} after ${n} months cut off.`;
       case "honour": {
         const a = n ? awardOf(g2, n) : void 0;
         return a ? `Honoured: ${awardTitle(g2, a)}.` : "Honoured.";
@@ -15812,59 +15814,59 @@
       case "back":
         return "Back from home and ready for orders.";
       case "drill":
-        return `A month at the battle schools at ${at3}${typeof n === "number" && STORIES.grades[n] ? `: came back ${STORIES.grades[n][1].toLowerCase()}` : ""}.`;
+        return `A month at the battle schools at ${at4}${typeof n === "number" && STORIES.grades[n] ? `: came back ${STORIES.grades[n][1].toLowerCase()}` : ""}.`;
       case "homelost":
-        return `${at3} fell to the enemy: the place it was raised in.`;
+        return `${at4} fell to the enemy: the place it was raised in.`;
       case "homefree":
-        return `${at3} was freed: the place it was raised in.`;
+        return `${at4} was freed: the place it was raised in.`;
       case "rival": {
         const r = rivalryOf(g2, n);
-        return r ? `Met ${r.theirsName} again, at ${at3}. The two are old enemies now.` : `Met an old enemy again at ${at3}.`;
+        return r ? `Met ${r.theirsName} again, at ${at4}. The two are old enemies now.` : `Met an old enemy again at ${at4}.`;
       }
       case "score": {
         const r = rivalryOf(g2, n);
-        return r ? `Destroyed its old enemy ${r.theirsName} at ${at3}.` : `Destroyed an old enemy at ${at3}.`;
+        return r ? `Destroyed its old enemy ${r.theirsName} at ${at4}.` : `Destroyed an old enemy at ${at4}.`;
       }
       case "drafts":
         return `Took in drafts: ${n}% of the corps is new to it.`;
       case "reraised":
-        return `Raised again in the name of the formation lost at ${at3}.`;
+        return `Raised again in the name of the formation lost at ${at4}.`;
       case "folded":
-        return `Took in the men of ${corpsNamed(g2, n)} at ${at3}.`;
+        return `Took in the men of ${corpsNamed(g2, n)} at ${at4}.`;
       case "cadre":
-        return `Its men went to ${corpsNamed(g2, n)} at ${at3}. A cadre was kept to raise it again.`;
+        return `Its men went to ${corpsNamed(g2, n)} at ${at4}. A cadre was kept to raise it again.`;
       case "rebuilt":
-        return `Raised again round its cadre at ${at3}.`;
+        return `Raised again round its cadre at ${at4}.`;
       case "destroyed":
-        return `Destroyed at ${at3}.`;
+        return `Destroyed at ${at4}.`;
       case "surrendered":
-        return `Laid down its arms at ${at3}.`;
+        return `Laid down its arms at ${at4}.`;
       case "starved":
-        return `Cut off and out of supply, laid down its arms at ${at3}.`;
+        return `Cut off and out of supply, laid down its arms at ${at4}.`;
       case "raid":
-        return `Bombed ${at3}.`;
+        return `Bombed ${at4}.`;
       case "night":
-        return `Bombed ${at3} by night.`;
+        return `Bombed ${at4} by night.`;
       case "strike":
-        return `Struck at shipping in ${at3}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
+        return `Struck at shipping in ${at4}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
       case "sky":
-        return `Won the sky over ${at3}.`;
+        return `Won the sky over ${at4}.`;
       case "fight":
-        return `Fought for the sky over ${at3}.`;
+        return `Fought for the sky over ${at4}.`;
       case "defend":
-        return `Fought off raids over ${at3}${times}.`;
+        return `Fought off raids over ${at4}${times}.`;
       case "action":
-        return `Won a fleet action in ${at3}${n ? `: ${n} enemy ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
+        return `Won a fleet action in ${at4}${n ? `: ${n} enemy ${n === 1 ? "ship" : "ships"} sunk` : ""}.`;
       case "beaten":
-        return `Beaten in a fleet action in ${at3}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} lost` : ""}.`;
+        return `Beaten in a fleet action in ${at4}${n ? `: ${n} ${n === 1 ? "ship" : "ships"} lost` : ""}.`;
       default:
         return what;
     }
   }
   var major = (nat) => DIPLOMACY.majors.includes(nat);
-  function nickFor(g2, u, d, kind, at3) {
+  function nickFor(g2, u, d, kind, at4) {
     if (!d.nick?.length) return void 0;
-    const place2 = placeName(g2, kind, at3);
+    const place2 = placeName(g2, kind, at4);
     const taken2 = /* @__PURE__ */ new Set();
     for (const c of g2.corps) if (c.nat === u.nat && c.nick) taken2.add(c.nick);
     for (const f of g2.airFleets) if (f.nat === u.nat && f.nick) taken2.add(f.nick);
@@ -15875,20 +15877,20 @@
     return new Rng(hashString(`nick:${g2.seed}:${u.nat}:${u.name}:${d.id}`)).pick(all);
   }
   var corpsRegion = (kind, u) => kind === "corps" ? u.reg : kind === "air" ? u.base : void 0;
-  function award(g2, kind, u, d, at3, extra = {}) {
+  function award(g2, kind, u, d, at4, extra = {}) {
     const S3 = g2.stories, N = g2.nations[u.nat];
     const first2 = !S3.awards.some((a2) => a2.hon === d.id && a2.nat === u.nat && !a2.old);
-    const a = { id: S3.awards.length + 1, turn: g2.turn, hon: d.id, kind, unit: u.id, name: u.name, nat: u.nat, at: at3 };
+    const a = { id: S3.awards.length + 1, turn: g2.turn, hon: d.id, kind, unit: u.id, name: u.name, nat: u.nat, at: at4 };
     if (extra.n) a.n = extra.n;
     if (extra.rival) a.rival = extra.rival;
     if (first2) a.first = true;
     S3.awards.push(a);
     (u.hon ?? (u.hon = [])).push(a.id);
-    note(g2, u, "honour", at3, a.id);
-    const named2 = !u.nick && !d.last ? nickFor(g2, u, d, kind, at3) : void 0;
+    note(g2, u, "honour", at4, a.id);
+    const named2 = !u.nick && !d.last ? nickFor(g2, u, d, kind, at4) : void 0;
     if (named2) u.nick = named2;
     const service = kind === "corps" ? "army" : kind === "air" ? "air force" : "navy";
-    const where = kind === "fleet" ? void 0 : at3 >= 0 ? at3 : corpsRegion(kind, u);
+    const where = kind === "fleet" ? void 0 : at4 >= 0 ? at4 : corpsRegion(kind, u);
     if (u.nat === g2.human) {
       news(g2, a, `${citation(g2, a)}${named2 ? ` The ${service} has begun to call it ${named2}.` : ""}`, where);
       if (kind === "corps" && !d.last) {
@@ -15933,7 +15935,7 @@
       news(g2, a, `${listOf2(xs.map((x) => x.a.name))} have each earned the honour '${awardTitle(g2, a)}'${together ? ` at ${placeName(g2, a.kind, a.at)}` : ""}.`, together || placed(a) ? xs[0].region : void 0);
     }
   }
-  function earn2(g2, kind, u, at3, extra = {}) {
+  function earn2(g2, kind, u, at4, extra = {}) {
     for (const d of STORIES.honours) {
       if (d.for !== kind || d.last) continue;
       const have = (u.hon ?? []).reduce((n, id) => {
@@ -15943,7 +15945,7 @@
       const v = stat(g2, u, d.needs[0]);
       if (d.each ? Math.floor(v / d.needs[1]) <= have : have > 0 || v < d.needs[1]) continue;
       if (d.also && stat(g2, u, d.also[0]) < d.also[1]) continue;
-      award(g2, kind, u, d, at3, extra);
+      award(g2, kind, u, d, at4, extra);
     }
   }
   function edge2(g2, u, key6) {
@@ -16359,13 +16361,13 @@
     const home = went.length === 1 ? `They go ${went[0][1]}.` : `${each3.slice(0, -1).join(", ")}, and ${each3[each3.length - 1]}.`;
     return `${who} have finished their tours of ${t.tour} ${t.flown}s. ${home}${lift2}`;
   }
-  function bombersFlew(g2, f, bombing, kills, at3, sea, fallen, foe, seen2, guns2) {
+  function bombersFlew(g2, f, bombing, kills, at4, sea, fallen, foe, seen2, guns2) {
     if (!keptByName(f)) return;
     const struck = muster(g2, f, fallen);
     if (!f.bombers) return;
     const mine4 = f.nat === g2.human;
     const old = struck.filter((b) => b[0] && b[2] >= BOMBERS.told).sort((a, b) => b[2] - a[2])[0];
-    if (mine4 && old) headline(g2, "info", `The bomber ${bomberName(g2, f, old)} of ${theUnit(f.name)}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${sea ? placeName(g2, "fleet", at3) ? `the ${placeName(g2, "fleet", at3)}` : "the raid" : thePlace(placeName(g2, "air", at3)) || "the raid"}.`, f.nat, sea ? void 0 : at3);
+    if (mine4 && old) headline(g2, "info", `The bomber ${bomberName(g2, f, old)} of ${theUnit(f.name)}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${sea ? placeName(g2, "fleet", at4) ? `the ${placeName(g2, "fleet", at4)}` : "the raid" : thePlace(placeName(g2, "air", at4)) || "the raid"}.`, f.nat, sea ? void 0 : at4);
     if (!bombing) return;
     const share = f.ftr > 0 ? Math.min(BOMBERS.escorted, f.bmr * BOMBERS.gunners / (f.ftr + f.bmr * BOMBERS.gunners)) : 1;
     const done = flownMonth(g2, f, guns2 ?? Math.round(kills * share), foe, seen2);
@@ -16729,14 +16731,14 @@
       if (!g2.nations[from2] || !g2.nations[by2]) continue;
       const party = g2.human !== null && [by2, from2].some((p) => p === g2.human || allied(g2, p, g2.human));
       const places = [], tracks = [];
-      let fields = 0, at3 = -1;
+      let fields = 0, at4 = -1;
       for (const { r, mask } of rows) {
         const mine4 = party || g2.human !== null && (r.owner === g2.human || allied(g2, r.owner, g2.human));
         if (!mine4 && !r.oil && !r.cap && r.fac < 4) continue;
         const kinds = ["oil", "works", "harbour"].filter((k) => mask & BIT[k]);
         if (kinds.length) {
           places.push(`${listed2(kinds)} of ${r.name}`);
-          if (at3 < 0) at3 = r.id;
+          if (at4 < 0) at4 = r.id;
         }
         if (mask & BIT.airfield) fields++;
         if (mine4 && mask & BIT.rail) tracks.push(r.name);
@@ -16749,7 +16751,7 @@
         places.length ? `${theName(g2.nations[by2], true)} will get nothing from the wrecks for months` : "",
         tracks.length ? `${places.length ? "the" : "The"} track will take about ${monthsWord(PRIZES.burn.months.rail)} to make good, less with engineers` : ""
       ].filter(Boolean).join(", and ");
-      headline(g2, "battle", `Scorched earth: ${g2.nations[from2].adj} troops ${did} as they were driven off. ${cost}.`, from2, at3 >= 0 ? at3 : rows[0].r.id, { arm: "land", won: by2, lost: from2 });
+      headline(g2, "battle", `Scorched earth: ${g2.nations[from2].adj} troops ${did} as they were driven off. ${cost}.`, from2, at4 >= 0 ? at4 : rows[0].r.id, { arm: "land", won: by2, lost: from2 });
     }
   }
   var PLACE_WORDS = { oil: "the oilfields", works: "the factory district", airfield: "the airfield", harbour: "the harbour", junction: "the rail junction" };
@@ -18436,9 +18438,9 @@
   }
   function codename(g2, id) {
     const used = /* @__PURE__ */ new Set([...g2.intel.agents.map((a) => a.name), ...g2.intel.notes.map((n) => n.agent)]);
-    const N = INTEL.names, at3 = hashString(`intelname:${g2.seed}:${id}`) % N.length;
-    for (let k = 0; k < N.length; k++) if (!used.has(N[(at3 + k) % N.length])) return N[(at3 + k) % N.length];
-    return `${N[at3]} ${id}`;
+    const N = INTEL.names, at4 = hashString(`intelname:${g2.seed}:${id}`) % N.length;
+    for (let k = 0; k < N.length; k++) if (!used.has(N[(at4 + k) % N.length])) return N[(at4 + k) % N.length];
+    return `${N[at4]} ${id}`;
   }
   var waitWords = (g2, a) => {
     const m = a.ready - g2.turn;
@@ -18765,8 +18767,8 @@
         const base = f.reg === a.reg ? SECRET.hunters.here : r.nb.includes(f.reg) ? SECRET.hunters.near : 0;
         if (base <= 0 || draw2(g2, g2.turn, "hunt", a.id, f.id) >= clamp2(base + SECRET.hunters.skill * (skillOf(a) - 1), 0, 0.95)) continue;
         f.found = g2.turn;
-        const F = g2.nations[f.nat], at3 = g2.regions[f.reg];
-        const text = `Agent ${a.name} uncovers ${/^[AEIOU]/.test(F?.adj ?? "") ? "an" : "a"} ${F?.adj ?? "enemy"} agent at ${at3.name}. Arrest it before it strikes.`;
+        const F = g2.nations[f.nat], at4 = g2.regions[f.reg];
+        const text = `Agent ${a.name} uncovers ${/^[AEIOU]/.test(F?.adj ?? "") ? "an" : "a"} ${F?.adj ?? "enemy"} agent at ${at4.name}. Arrest it before it strikes.`;
         note2(g2, a, f.reg, "uncovered", text, true);
         headline(g2, "event", text, nat, f.reg);
         learn(g2, a, 1);
@@ -22020,8 +22022,8 @@
   }
   function controlFirst(g2, nat) {
     if (!acOn(g2) || stopDef(g2).book) return null;
-    const at3 = g2.ac?.night?.[nat];
-    if (at3 === void 0 || g2.turn - at3 > AC.radar.need) return null;
+    const at4 = g2.ac?.night?.[nat];
+    if (at4 === void 0 || g2.turn - at4 > AC.radar.need) return null;
     return hasTech(g2, nat, AC.radar.tech) && !hasTech(g2, nat, AC.radar.control) ? AC.radar.control : null;
   }
   function radarWords(g2, nat, id) {
@@ -22270,9 +22272,9 @@
     const fs = airFleetsOf(g2, nat).filter((f) => !afloat(f) && th.mine(f) && !taken2.has(f.id) && (bombers ? f.bmr > 0 && f.kind !== "ftr" : f.ftr > 0 && f.kind !== "bmr"));
     const size = (f) => bombers ? f.bmr : f.ftr;
     const range2 = (f) => bombers ? airRange(f, g2).bmr : airRange(f, g2).ftr;
-    const nearFrom = (at3) => Math.min(...targets2.map((t) => km(g2, at3, t)));
+    const nearFrom = (at4) => Math.min(...targets2.map((t) => km(g2, at4, t)));
     const near2 = (f) => Math.min(...targets2.map((t) => kmTo(g2, f, t)));
-    const toBase = (at3) => Math.min(...bases.map((b) => km(g2, at3, b)));
+    const toBase = (at4) => Math.min(...bases.map((b) => km(g2, at4, b)));
     const out = [];
     let got = 0;
     const enough = (f) => want <= 0 || got > 0 && got + size(f) / 2 > want;
@@ -22645,8 +22647,8 @@
     let n = 0;
     for (const w of g2.airFleets) {
       if (w.ship === void 0 || w.ftr <= 0 || w.mission !== "support" || !allied(g2, w.nat, c.nat)) continue;
-      const at3 = carrierOf(g2, w);
-      if (at3 && atSea(at3) && at3.zone === c.zone) n += w.ftr * (0.5 + 0.5 * w.ready);
+      const at4 = carrierOf(g2, w);
+      if (at4 && atSea(at4) && at4.zone === c.zone) n += w.ftr * (0.5 + 0.5 * w.ready);
     }
     return Math.min(CARRIERS.cap.most, n / (n + CARRIERS.cap.scale));
   }
@@ -22956,7 +22958,7 @@
       if (atSea(c) || !(A.sortie > 0) || c.duty === "raid" || c.ready < FLEETS.ai.ready) continue;
       const power = fleetPower(g2, c);
       const keep = { zone: c.zone, stance: c.stance };
-      let at3 = -1, plan = null;
+      let at4 = -1, plan = null;
       for (const z of fleetReach(g2, c)) {
         if (seaSide(g2, z, nat, false).total + power < A.sortie * seaSide(g2, z, nat, true).total) continue;
         c.zone = z;
@@ -22966,10 +22968,10 @@
         c.stance = keep.stance;
         if (b && (!plan || b.v > plan.v)) {
           plan = b;
-          at3 = z;
+          at4 = z;
         }
       }
-      if (plan && sail(g2, c, at3, "patrol")) {
+      if (plan && sail(g2, c, at4, "patrol")) {
         const b = bestBlow(g2, nat, lead2, escorts, hit);
         if (b) send(b);
       }
@@ -23110,16 +23112,16 @@
     const prev = /* @__PURE__ */ new Map([[a, ""]]), depth = /* @__PURE__ */ new Map([[a, 0]]);
     const queue = [a];
     for (let i = 0; i < queue.length; i++) {
-      const at3 = queue[i], d = depth.get(at3);
-      for (const c of B2.get(at3) ?? []) {
+      const at4 = queue[i], d = depth.get(at4);
+      for (const c of B2.get(at4) ?? []) {
         if (prev.has(c)) continue;
         if (c === b) {
           const out = [];
-          for (let x = at3; x !== a; x = prev.get(x)) out.unshift(x);
+          for (let x = at4; x !== a; x = prev.get(x)) out.unshift(x);
           return out;
         }
         if (d >= most || !open2(c)) continue;
-        prev.set(c, at3);
+        prev.set(c, at4);
         depth.set(c, d + 1);
         queue.push(c);
       }
@@ -23158,16 +23160,16 @@
     const cost = new Array(N).fill(Infinity), prev = new Array(N).fill(-1), done = new Array(N).fill(false);
     for (const z of A.from) if (!shut(z)) cost[z] = 1 + 20 * risk(z);
     for (; ; ) {
-      let at3 = -1;
-      for (let i = 0; i < N; i++) if (!done[i] && cost[i] < Infinity && (at3 < 0 || cost[i] < cost[at3])) at3 = i;
-      if (at3 < 0) break;
-      done[at3] = true;
-      for (const j of g2.seas[at3].adj) {
-        if (done[j] || shut(j) || !canPass(g2, at3, j, a) || !canPass(g2, at3, j, b)) continue;
-        const c = cost[at3] + 1 + 20 * risk(j);
+      let at4 = -1;
+      for (let i = 0; i < N; i++) if (!done[i] && cost[i] < Infinity && (at4 < 0 || cost[i] < cost[at4])) at4 = i;
+      if (at4 < 0) break;
+      done[at4] = true;
+      for (const j of g2.seas[at4].adj) {
+        if (done[j] || shut(j) || !canPass(g2, at4, j, a) || !canPass(g2, at4, j, b)) continue;
+        const c = cost[at4] + 1 + 20 * risk(j);
         if (c < cost[j]) {
           cost[j] = c;
-          prev[j] = at3;
+          prev[j] = at4;
         }
       }
     }
@@ -23891,9 +23893,9 @@
       if (!n || !n.alive || n.capital < 0 || !allied(g2, nat, g2.regions[n.capital].ctrl)) continue;
       for (let k = 0; k < ENGINEERING.start.corps; k++) {
         const cap12 = g2.regions[n.capital];
-        const at3 = [cap12, ...cap12.nb.map((j) => g2.regions[j])].find((r) => r.ctrl === nat && r.owner === nat && friendlyUnits(g2, r, nat).length < STACK);
-        if (!at3) break;
-        addCorps(g2, nat, `${ORD[k] ?? `${k + 1}th`} Engineer Corps`, "eng", arsenal_default.land.eng.divs, at3.id, {});
+        const at4 = [cap12, ...cap12.nb.map((j) => g2.regions[j])].find((r) => r.ctrl === nat && r.owner === nat && friendlyUnits(g2, r, nat).length < STACK);
+        if (!at4) break;
+        addCorps(g2, nat, `${ORD[k] ?? `${k + 1}th`} Engineer Corps`, "eng", arsenal_default.land.eng.divs, at4.id, {});
       }
     }
   }
@@ -23945,7 +23947,7 @@
     }
     if (goal < 0) return -1;
     const way = [];
-    for (let at3 = goal; at3 !== c.reg; at3 = prev.get(at3)) way.unshift(at3);
+    for (let at4 = goal; at4 !== c.reg; at4 = prev.get(at4)) way.unshift(at4);
     for (const j of way) if (!moveCorps(g2, c, g2.regions[j])) break;
     return goal;
   }
@@ -23984,8 +23986,8 @@
           }
         }
       }
-      const at3 = g2.regions[c.reg];
-      if (at3.ctrl === nat && at3.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0)) {
+      const at4 = g2.regions[c.reg];
+      if (at4.ctrl === nat && at4.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0)) {
         if (!orderJob(g2, c, "works")) orderJob(g2, c, "mines");
       }
     }
@@ -23995,8 +23997,8 @@
     const idle = mine4.filter((c) => !c.job).length;
     const waiting2 = new Set(sites.filter((s) => s.what === "bridge").flatMap((s) => s.spans).filter((x) => !covered.has(x))).size + sites.filter((s) => s.what !== "bridge" && open2(s)).length;
     if (waiting2 > idle + coming2 && mine4.length + coming2 < ENGINEERING.ai.most && n.pp >= spec2.cost + ENGINEERING.ai.reserve) {
-      const at3 = raiseSite(g2, nat, "eng", n.capital);
-      if (at3 >= 0) orderCorps(g2, nat, "eng", at3);
+      const at4 = raiseSite(g2, nat, "eng", n.capital);
+      if (at4 >= 0) orderCorps(g2, nat, "eng", at4);
     }
   }
   function aiBridges(g2, nat, blowIt) {
@@ -24369,15 +24371,15 @@
   var strikes = (g2, c) => corpsBase(g2, c) * KIND[c.kind].atk;
   var stands = (g2, c, r) => corpsBase(g2, c) * KIND[c.kind].def * TERRAIN_DEF[r.terrain];
   var field2 = (c) => !c.dead && c.kind !== "fort" && !c.town;
-  function reckon(g2, nat, at3, force3, follow2 = 0, seen2) {
+  function reckon(g2, nat, at4, force3, follow2 = 0, seen2) {
     const S3 = STRENGTH;
     if (!S3) return null;
     const N = g2.regions.length, M2 = S3.months;
     const ours = (c) => c === nat || allied(g2, nat, c);
     const held2 = g2.regions.map((r) => fieldCtrl(g2, r));
     const far = new Int16Array(N).fill(-1);
-    const q = [at3.id];
-    far[at3.id] = 0;
+    const q = [at4.id];
+    far[at4.id] = 0;
     for (let i = 0; i < q.length; i++) {
       if (far[q[i]] >= M2) continue;
       for (const j of g2.regions[q[i]].nb) if (far[j] < 0 && (ours(held2[j]) || atWar(g2, nat, held2[j]))) {
@@ -24394,7 +24396,7 @@
       if (!r.overseas && r.owner === held2[id]) door.add(r.owner);
     }
     const host = /* @__PURE__ */ new Set();
-    if (atWar(g2, nat, held2[at3.id])) host.add(held2[at3.id]);
+    if (atWar(g2, nat, held2[at4.id])) host.add(held2[at4.id]);
     else for (const id of w) host.add(held2[id]);
     for (let i = 0; i < w.length; i++) for (const j of g2.regions[w[i]].nb) if (!rail2[j] && atWar(g2, nat, held2[j])) {
       rail2[j] = 1;
@@ -24403,7 +24405,7 @@
     const mine4 = new Set(force3.map((c) => c.id));
     const out = { theirs: 0, near: 0, reserve: 0, corps: 0, behind: 0, ours: 0, force: 0, friends: 0, follow: follow2, chance: 1, divs: { theirs: 0, ours: 0 } };
     for (const c of force3) {
-      out.force += stands(g2, c, at3);
+      out.force += stands(g2, c, at4);
       out.divs.ours += c.divs * c.str;
     }
     const inLine3 = (c, r) => {
@@ -24412,7 +24414,7 @@
         tied = true;
         if (far[j] >= 0) here = true;
       }
-      return { tied, here: here || r.id === at3.id };
+      return { tied, here: here || r.id === at4.id };
     };
     for (let id = 0; id < N; id++) {
       if (far[id] < 0 && !rail2[id]) continue;
@@ -24447,16 +24449,16 @@
     out.chance = out.theirs > 0 ? out.ours / (out.ours + out.theirs) : 1;
     return out;
   }
-  function followUp(g2, nat, quay, wave, at3, most = Infinity) {
+  function followUp(g2, nat, quay, wave, at4, most = Infinity) {
     const S3 = STRENGTH;
     if (!S3) return 0;
     const gone = new Set(wave.map((c) => c.id));
-    const there = at3.units.filter((u) => !u.dead && (u.nat === nat || allied(g2, nat, u.nat))).length;
+    const there = at4.units.filter((u) => !u.dead && (u.nat === nat || allied(g2, nat, u.nat))).length;
     const room2 = Math.max(0, Math.min((S3.months - 1) * g2.nations[nat].sealift, STACK - wave.length - there, most));
     if (room2 <= 0) return 0;
     const ours = (c) => c === nat || allied(g2, nat, c);
     const quiet2 = (r) => ours(r.ctrl) && !r.units.some((u) => !u.dead && atWar(g2, nat, u.nat)) && !r.nb.some((j) => atWar(g2, nat, fieldCtrl(g2, g2.regions[j])));
-    return [quay, ...quay.nb.map((j) => g2.regions[j]).filter(quiet2)].flatMap((r) => r.units).filter((u) => u.nat === nat && field2(u) && u.kind !== "eng" && !u.airborne && u.joint === void 0 && u.str >= 0.6 && !gone.has(u.id)).map((u) => stands(g2, u, at3)).sort((a, b) => b - a).slice(0, room2).reduce((s, x) => s + x, 0);
+    return [quay, ...quay.nb.map((j) => g2.regions[j]).filter(quiet2)].flatMap((r) => r.units).filter((u) => u.nat === nat && field2(u) && u.kind !== "eng" && !u.airborne && u.joint === void 0 && u.str >= 0.6 && !gone.has(u.id)).map((u) => stands(g2, u, at4)).sort((a, b) => b - a).slice(0, room2).reduce((s, x) => s + x, 0);
   }
   var knownTo = (g2, viewer) => (c) => corpsKnown(g2, c, viewer).level === "none" ? 0 : 1;
   function ashoreSays(g2, cs, to, viewer = g2.human) {
@@ -24915,7 +24917,7 @@
       }
       if (f.duty === "raid" || !(FLEETS.ai.sortie > 0)) continue;
       const mine4 = fleetPower(g2, f);
-      let at3 = -1, best = null, bv = 0;
+      let at4 = -1, best = null, bv = 0;
       for (const z of fleetReach(g2, f)) {
         if (seaSide(g2, z, nat, false).total + mine4 < FLEETS.ai.sortie * seaSide(g2, z, nat, true).total) continue;
         for (const id of g2.seas[z].coast) {
@@ -24923,11 +24925,11 @@
           if (v > bv) {
             bv = v;
             best = g2.regions[id];
-            at3 = z;
+            at4 = z;
           }
         }
       }
-      if (best && sail(g2, f, at3, "patrol")) bombard(g2, f, best, aim(best));
+      if (best && sail(g2, f, at4, "patrol")) bombard(g2, f, best, aim(best));
     }
   }
 
@@ -24968,9 +24970,9 @@
     const back = g2.regions.filter((r) => r.owner === FIN && r.ctrl === RED && !named2.has(r.name));
     return { cede, back };
   }
-  function window(at3) {
+  function window(at4) {
     const P = OP.peace;
-    return { from: Math.max(P.from, at3 + P.after), by: Math.max(P.by, at3 + P.after + (P.by - P.from)) };
+    return { from: Math.max(P.from, at4 + P.after), by: Math.max(P.by, at4 + P.after + (P.by - P.from)) };
   }
   function close(g2) {
     if (!g2.flags["wnt:on"]) return;
@@ -24982,7 +24984,7 @@
   }
   function makeWinterPeace(g2, book) {
     if (!OP?.peace || !winterSince(g2) || !atWar(g2, RED, FIN)) return false;
-    const at3 = winterSince(g2);
+    const at4 = winterSince(g2);
     const { cede, back } = terms(g2);
     const given3 = book ? OP.peace.cede.map((n) => g2.byName[n]).filter((r) => !!r && r.owner === FIN && (r.ctrl === FIN || r.ctrl === RED)) : cede;
     for (const r of given3) {
@@ -24995,7 +24997,7 @@
     for (const k of ["st:on", "st:pushed", "st:rest"]) delete g2.flags[`${k}:${RED}:${FIN}`];
     g2.supplyDirty = true;
     const handed = back.map((r) => r.name);
-    const text = book ? cap4(W.book.replace("{after}", at3 === 3 && g2.turn === 7 ? W.long : "").replace("Moscow. it", "Moscow. It")) : given3.length ? W.held : W.none;
+    const text = book ? cap4(W.book.replace("{after}", at4 === 3 && g2.turn === 7 ? W.long : "").replace("Moscow. it", "Moscow. It")) : given3.length ? W.held : W.none;
     headline(g2, "event", handed.length ? `${text} ${W.back.replace("{list}", listOf3(handed))}` : text, FIN);
     close(g2);
     return true;
@@ -25016,7 +25018,7 @@
       close(g2);
       return;
     }
-    const at3 = winterSince(g2), P = OP.peace, { from: from2, by: by2 } = window(at3);
+    const at4 = winterSince(g2), P = OP.peace, { from: from2, by: by2 } = window(at4);
     const held2 = terms(g2).cede.length > 0;
     if (g2.human === RED || g2.human === FIN) {
       if (held2 || g2.turn >= from2) (_a = g2.flags)["wnt:offer"] ?? (_a["wnt:offer"] = g2.turn);
@@ -25026,7 +25028,7 @@
       if (g2.turn >= P.from) makeWinterPeace(g2, true);
       return;
     }
-    if (held2 && g2.turn > at3 || g2.turn >= by2 || g2.turn >= from2 && dialDraw(g2, "wnt", g2.turn) < P.chance) makeWinterPeace(g2, false);
+    if (held2 && g2.turn > at4 || g2.turn >= by2 || g2.turn >= from2 && dialDraw(g2, "wnt", g2.turn) < P.chance) makeWinterPeace(g2, false);
   }
   function winterPeace(g2) {
     if (g2.flags.open !== 1 || !OP?.peace || !g2.flags["wnt:offer"] || !winterSince(g2) || !atWar(g2, RED, FIN) || swallowed(g2)) return null;
@@ -25320,17 +25322,17 @@
     });
     const done = new Uint8Array(N);
     for (; ; ) {
-      let at3 = -1;
-      for (const id of open2) if (!done[id] && (at3 < 0 || cost[id] < cost[at3])) at3 = id;
-      if (at3 < 0) break;
-      done[at3] = 1;
-      for (const j of g2.regions[at3].nb) {
+      let at4 = -1;
+      for (const id of open2) if (!done[id] && (at4 < 0 || cost[id] < cost[at4])) at4 = id;
+      if (at4 < 0) break;
+      done[at4] = 1;
+      for (const j of g2.regions[at4].nb) {
         if (f.depth[j] < 1 || done[j]) continue;
-        const c = cost[at3] + step2(g2.regions[j]);
+        const c = cost[at4] + step2(g2.regions[j]);
         if (c < cost[j]) {
           if (cost[j] === 1e9) open2.push(j);
           cost[j] = c;
-          from2[j] = at3;
+          from2[j] = at4;
         }
       }
     }
@@ -25378,9 +25380,9 @@
     }
     return [...out];
   }
-  function nearEnemy(g2, nat, at3, within3) {
-    const seen2 = /* @__PURE__ */ new Set([at3.id]);
-    let ring = [at3.id];
+  function nearEnemy(g2, nat, at4, within3) {
+    const seen2 = /* @__PURE__ */ new Set([at4.id]);
+    let ring = [at4.id];
     for (let d = 0; d < within3; d++) {
       const next = [];
       for (const id of ring) for (const j of g2.regions[id].nb) if (!seen2.has(j)) {
@@ -25441,8 +25443,8 @@
     for (const e of n.atWar) {
       if (!g2.nations[e]?.alive) continue;
       const quiet2 = quietWith(g2, nat, e);
-      const at3 = flag2(g2, `st:probe:${nat}:${e}`);
-      const step2 = at3 && g2.turn - at3 <= I.effort ? flag2(g2, `st:probeK:${nat}:${e}`) : I.after.filter((m) => quiet2 >= m).length;
+      const at4 = flag2(g2, `st:probe:${nat}:${e}`);
+      const step2 = at4 && g2.turn - at4 <= I.effort ? flag2(g2, `st:probeK:${nat}:${e}`) : I.after.filter((m) => quiet2 >= m).length;
       if (step2) {
         enemies.add(e);
         k = Math.max(k, step2);
@@ -25587,9 +25589,9 @@
     };
     const cur = effortOf(g2, nat, where);
     if (cur) {
-      const at3 = g2.regions[cur.target];
+      const at4 = g2.regions[cur.target];
       const f = real.find((x) => x.enemies.includes(cur.enemy)) ?? null;
-      const taken2 = allied(g2, nat, fieldCtrl(g2, at3));
+      const taken2 = allied(g2, nat, fieldCtrl(g2, at4));
       if (taken2) {
         g2.flags[key6("effWon")] = cur.won + 1;
         cur.won++;
@@ -25597,7 +25599,7 @@
       const gone = !f || !g2.nations[cur.enemy]?.alive || !atWar(g2, nat, cur.enemy);
       const general = !!f && onSince(g2, nat, f, where) > 0;
       const live5 = !gone && !general && g2.turn <= cur.to;
-      const next = live5 && taken2 ? sector(g2, nat, f, T.minOdds, at3) : null;
+      const next = live5 && taken2 ? sector(g2, nat, f, T.minOdds, at4) : null;
       if (next) {
         g2.flags[key6("eff")] = next.target.id + 1;
         return;
@@ -25634,21 +25636,21 @@
   }
   function effortOrders(g2, nat, e, real, T) {
     const E = RIVALS.effort;
-    const at3 = g2.regions[e.target];
-    const f = real.find((x) => x.depth[at3.id] >= 1) ?? real.find((x) => x.enemies.includes(e.enemy));
+    const at4 = g2.regions[e.target];
+    const f = real.find((x) => x.depth[at4.id] >= 1) ?? real.find((x) => x.enemies.includes(e.enemy));
     if (!f) return null;
-    const doors = at3.nb.filter((j) => allied(g2, nat, fieldCtrl(g2, g2.regions[j])));
-    const around = at3.nb.filter((j) => f.depth[j] >= 1 && atWar(g2, nat, fieldCtrl(g2, g2.regions[j])) && g2.regions[j].nb.some((k) => doors.includes(k))).sort((a, b) => f.depth[a] - f.depth[b] || g2.regions[b].vp - g2.regions[a].vp || a - b).slice(0, Math.max(0, E.sector - 1));
+    const doors = at4.nb.filter((j) => allied(g2, nat, fieldCtrl(g2, g2.regions[j])));
+    const around = at4.nb.filter((j) => f.depth[j] >= 1 && atWar(g2, nat, fieldCtrl(g2, g2.regions[j])) && g2.regions[j].nb.some((k) => doors.includes(k))).sort((a, b) => f.depth[a] - f.depth[b] || g2.regions[b].vp - g2.regions[a].vp || a - b).slice(0, Math.max(0, E.sector - 1));
     const staging = {};
     for (const j of doors) if (j !== g2.nations[nat].capital) staging[g2.regions[j].name] = Math.min(STACK, E.mass);
     return {
       posture: "attack",
       name: e.name.replace(/^t/, "T"),
       from: e.from,
-      effort: at3.id,
+      effort: at4.id,
       enemies: f.enemies,
-      objectives: [at3.name, ...around.map((j) => g2.regions[j].name)],
-      targets: [at3.name, ...around.map((j) => g2.regions[j].name)],
+      objectives: [at4.name, ...around.map((j) => g2.regions[j].name)],
+      targets: [at4.name, ...around.map((j) => g2.regions[j].name)],
       // No attack goes in the month the effort is named: the word of it runs ahead of the blow.
       minOdds: g2.turn === e.from ? HOLD_ODDS : e.odds ? Math.min(T.minOdds, e.odds) : T.minOdds,
       ...g2.turn === e.from ? { massing: true } : {},
@@ -25672,8 +25674,8 @@
     for (const e of f.enemies) g2.flags[`st:idle:${nat}:${e}${where}`] = g2.turn;
   }
   var shy = (g2, nat, f, where = "") => rivalRules(g2) && f.ratio < RIVALS.press.ratio && f.enemies.some((e) => {
-    const at3 = flag2(g2, `st:idle:${nat}:${e}${where}`);
-    return at3 > 0 && g2.turn - at3 < RIVALS.press.again;
+    const at4 = flag2(g2, `st:idle:${nat}:${e}${where}`);
+    return at4 > 0 && g2.turn - at4 < RIVALS.press.again;
   });
   function cond(g2, nat, c, real) {
     if (c.includes("|")) return c.split("|").some((x) => cond(g2, nat, x, real));
@@ -25881,9 +25883,9 @@
         const second = /* @__PURE__ */ new Set();
         for (const id of first2) for (const j of g2.regions[id].nb) if (g2.regions[j].ctrl === nat && !first2.includes(j) && j !== n.capital) second.add(j);
         phase.assembly = [...first2, ...second].map((id) => g2.regions[id].name);
-        const at3 = door ? first2.filter((id) => door.nb.includes(id)) : [];
-        const beside = first2.filter((id) => !at3.includes(id) && at3.some((a) => g2.regions[a].nb.includes(id)));
-        phase.armour = [...at3, ...beside].slice(0, 3).map((id) => g2.regions[id].name);
+        const at4 = door ? first2.filter((id) => door.nb.includes(id)) : [];
+        const beside = first2.filter((id) => !at4.includes(id) && at4.some((a) => g2.regions[a].nb.includes(id)));
+        phase.armour = [...at4, ...beside].slice(0, 3).map((id) => g2.regions[id].name);
         const gather2 = /* @__PURE__ */ new Set([...first2, ...second]);
         phase.garrison = g2.regions.filter((r) => r.ctrl === nat && r.owner !== nat && !g2.nations[r.owner]?.alive && (r.cap || r.vp >= 2) && !gather2.has(r.id)).sort((a, b) => b.vp - a.vp || a.id - b.id).slice(0, 6).map((r) => r.name);
       }
@@ -25998,12 +26000,12 @@
   }
   var SLOT = ["", ":o"];
   function lodgment(g2, nat, slot = 0) {
-    const at3 = g2.regions[flag2(g2, `st:lodged:${nat}${SLOT[slot]}`) - 1];
-    if (!at3 || !at3.port || at3.ctrl !== nat && fieldCtrl(g2, at3) !== nat) return null;
+    const at4 = g2.regions[flag2(g2, `st:lodged:${nat}${SLOT[slot]}`) - 1];
+    if (!at4 || !at4.port || at4.ctrl !== nat && fieldCtrl(g2, at4) !== nat) return null;
     const D2 = OPEN.descent;
     const seen2 = new Uint8Array(g2.regions.length);
-    const q = [at3.id];
-    seen2[at3.id] = 1;
+    const q = [at4.id];
+    seen2[at4.id] = 1;
     let front = false, mine4 = 0, foes = 0;
     for (let i = 0; i < q.length; i++) {
       const r = g2.regions[q[i]];
@@ -26024,8 +26026,8 @@
       }
     }
     if (!front) return null;
-    const hold2 = keepsDoor(g2, nat) && beyondEurope(at3.id) ? 0 : D2.hold ?? 15;
-    return { at: at3, ports: q.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g2, nat, r.ctrl)), short: mine4 < Math.max(hold2, (D2.feed ?? 2) * foes) };
+    const hold2 = keepsDoor(g2, nat) && beyondEurope(at4.id) ? 0 : D2.hold ?? 15;
+    return { at: at4, ports: q.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g2, nat, r.ctrl)), short: mine4 < Math.max(hold2, (D2.feed ?? 2) * foes) };
   }
   function lanes(g2, nat, from2, shut) {
     const d = new Int16Array(g2.seas.length).fill(-1);
@@ -26181,11 +26183,11 @@
     if (!S3 || !isOpen(g2) || nat === g2.human) return null;
     return Math.max(S3.even, rivalRules(g2) && characterOf(g2, nat) === "bold" ? S3.bold : S3.sure);
   }
-  function holdsAshore(g2, nat, at3, force3, follow2 = 0) {
+  function holdsAshore(g2, nat, at4, force3, follow2 = 0) {
     const ask = strengthAsked(g2, nat);
     if (ask === null) return true;
-    const R2 = reckon(g2, nat, at3, force3, follow2);
-    if (R2) strengthWatch.tell?.({ nat, at: at3, force: force3, ask, R: R2 });
+    const R2 = reckon(g2, nat, at4, force3, follow2);
+    if (R2) strengthWatch.tell?.({ nat, at: at4, force: force3, ask, R: R2 });
     return !R2 || R2.chance >= ask;
   }
   function mainFirst(nat, ports) {
@@ -26195,10 +26197,10 @@
     return ports.some(main) ? [...ports.filter(main), ...ports.filter((p) => !main(p))] : ports;
   }
   var strengthWatch = { tell: null };
-  function staysAshore(g2, nat, ally, at3) {
+  function staysAshore(g2, nat, ally, at4) {
     const S3 = STRENGTH;
     if (!S3) return true;
-    const R2 = reckon(g2, ally, at3, []);
+    const R2 = reckon(g2, ally, at4, []);
     return !R2 || R2.chance >= (strengthAsked(g2, nat) ?? S3.sure);
   }
   function seaFoe(g2, nat, slot = 0) {
@@ -26215,7 +26217,7 @@
     if (!D2 || !isOpen(g2)) return null;
     if (g2.regions.some((r) => r.owner === nat && !r.overseas && atWar(g2, nat, r.ctrl))) return null;
     const ids2 = Object.keys(g2.nations);
-    const key6 = `st:foe:${nat}`, at3 = `st:foeAt:${nat}`;
+    const key6 = `st:foe:${nat}`, at4 = `st:foeAt:${nat}`;
     const home = homeGround(g2, nat);
     const from2 = [...new Set(home.list.map((id) => g2.regions[id]).filter((r) => r.port && r.owner === nat && !r.overseas).flatMap((r) => r.seas))];
     const inReach = (e) => from2.length > 0 && seaHops(g2, from2, harbours(g2, e).filter((r) => opensOn(g2, nat, r) || opensSoon(g2, nat, r))) <= NAVY.landing.range;
@@ -26242,9 +26244,9 @@
     };
     const later = !!kept2 && !!P?.from && !lodgment(g2, nat) && n.atWar.some(turnsTo);
     if (kept2 && g2.nations[kept2].alive && atWar(g2, nat, kept2) && !later) {
-      if (g2.turn - flag2(g2, at3) < 12 || lodgment(g2, nat)) return { foe: kept2, L: D2, second: true };
+      if (g2.turn - flag2(g2, at4) < 12 || lodgment(g2, nat)) return { foe: kept2, L: D2, second: true };
       if (inReach(kept2) && !inTouch(g2, nat, kept2, home.on)) {
-        g2.flags[at3] = g2.turn;
+        g2.flags[at4] = g2.turn;
         return { foe: kept2, L: D2, second: true };
       }
     }
@@ -26264,16 +26266,16 @@
       return null;
     }
     g2.flags[key6] = ids2.indexOf(best) + 1;
-    g2.flags[at3] = g2.turn;
+    g2.flags[at4] = g2.turn;
     return { foe: best, L: D2, second: true };
   }
   function abroad2(g2, nat) {
     const D2 = OPEN.descent, n = g2.nations[nat];
     const ids2 = Object.keys(g2.nations);
-    const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at3 = `st:quayAt:${nat}:o`, none4 = `st:far:${nat}`;
+    const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at4 = `st:quayAt:${nat}:o`, none4 = `st:far:${nat}`;
     const foe = ids2[flag2(g2, kf) - 1], quay = g2.regions[flag2(g2, kq) - 1];
     const room2 = (p) => STACK - friendlyUnits(g2, p, nat).filter((u) => u.nat !== nat).length >= D2.force;
-    if (foe && quay && g2.nations[foe].alive && atWar(g2, nat, foe) && allied(g2, nat, quay.ctrl) && room2(quay) && (g2.turn - flag2(g2, at3) < 3 || lodgment(g2, nat, 1)?.short)) return { foe, quay };
+    if (foe && quay && g2.nations[foe].alive && atWar(g2, nat, foe) && allied(g2, nat, quay.ctrl) && room2(quay) && (g2.turn - flag2(g2, at4) < 3 || lodgment(g2, nat, 1)?.short)) return { foe, quay };
     if (flag2(g2, none4) === g2.turn) return null;
     const drop = () => {
       delete g2.flags[kf];
@@ -26359,7 +26361,7 @@
     const got = best;
     g2.flags[kf] = ids2.indexOf(got.foe) + 1;
     g2.flags[kq] = got.quay.id + 1;
-    g2.flags[at3] = g2.turn;
+    g2.flags[at4] = g2.turn;
     return got;
   }
   function seaBase(g2, nat, slot = 0) {
@@ -26367,7 +26369,7 @@
     if (!sea) return null;
     if (slot) return abroad2(g2, nat)?.quay ?? null;
     const you = sea.foe;
-    const key6 = `st:quay:${nat}`, at3 = `st:quayAt:${nat}`, tk = `st:quayFor:${nat}`;
+    const key6 = `st:quay:${nat}`, at4 = `st:quayAt:${nat}`, tk = `st:quayFor:${nat}`;
     const lod = sea.second ? lodgment(g2, nat) : null;
     const listed7 = sea.second ? harbours(g2, you).filter((r) => opensOn(g2, nat, r) || opensSoon(g2, nat, r)) : [];
     const shores = lod?.short ? [lod.at] : listed7.length ? listed7 : harbours(g2, you);
@@ -26376,7 +26378,7 @@
     const target = D2.afresh ? 1 + hashString(`${you}:${[...new Set(listed7.map((r) => r.owner))].sort().join(",")}`) % 1e6 : 0;
     const room2 = (p) => !D2.room || STACK - friendlyUnits(g2, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
     const kept2 = g2.regions[flag2(g2, key6) - 1];
-    const fresh4 = !!kept2 && kept2.ctrl === nat && g2.turn - flag2(g2, at3) < 6 && (!target || flag2(g2, tk) === target);
+    const fresh4 = !!kept2 && kept2.ctrl === nat && g2.turn - flag2(g2, at4) < 6 && (!target || flag2(g2, tk) === target);
     if (fresh4 && room2(kept2) && quayWorth(g2, nat, kept2, shores, shut).worth > 0) return kept2;
     let best = null, bw = 0, bs = Infinity;
     let full = null, fw = 0, fs = Infinity;
@@ -26415,7 +26417,7 @@
       best = near2;
     }
     g2.flags[key6] = best.id + 1;
-    g2.flags[at3] = g2.turn;
+    g2.flags[at4] = g2.turn;
     if (target) g2.flags[tk] = target;
     return best;
   }
@@ -26495,10 +26497,10 @@
     }
     return Infinity;
   }
-  function groundFrom(g2, nat, at3) {
+  function groundFrom(g2, nat, at4) {
     const on = new Uint8Array(g2.regions.length);
-    const q = [at3.id];
-    on[at3.id] = 1;
+    const q = [at4.id];
+    on[at4.id] = 1;
     for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (!on[j] && allied(g2, nat, fieldCtrl(g2, g2.regions[j]))) {
       on[j] = 1;
       q.push(j);
@@ -26585,7 +26587,7 @@
   }
   function oceanBase(g2, nat, ocean, safe) {
     const n = g2.nations[nat];
-    const key6 = `st:base:${nat}:${ocean}`, at3 = `st:baseAt:${nat}:${ocean}`;
+    const key6 = `st:base:${nat}:${ocean}`, at4 = `st:baseAt:${nat}:${ocean}`;
     const P = waitsUndated(g2, nat) ?? planned(g2, nat);
     const waits = !!P?.behind && !!P.base && (dated(g2) || !!waitsUndated(g2, nat));
     const strong = /* @__PURE__ */ new Map();
@@ -26599,7 +26601,7 @@
     };
     const serves = (p) => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g2, nat, p.ctrl) && (p.ctrl === nat || !!g2.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g2, p, nat).length && safe(p) && (!waits || based(P, p)) && holds4(p);
     const kept2 = g2.regions[flag2(g2, key6) - 1];
-    if (kept2 && serves(kept2) && g2.turn - flag2(g2, at3) < 6) return kept2;
+    if (kept2 && serves(kept2) && g2.turn - flag2(g2, at4) < 6) return kept2;
     const all = [...n.atWar].sort().filter((e) => g2.nations[e]?.alive && g2.nations[e].capital >= 0).flatMap((e) => harbours(g2, e));
     const meant = all.filter((r) => opensOn(g2, nat, r) || joinsOn(g2, nat, r));
     const shores = meant.length ? meant : all;
@@ -26630,7 +26632,7 @@
       return null;
     }
     g2.flags[key6] = best.id + 1;
-    g2.flags[at3] = g2.turn;
+    g2.flags[at4] = g2.turn;
     return best;
   }
   function dangerFrom(g2, nat, quays) {
@@ -26781,10 +26783,10 @@
     const live5 = Object.values(g2.nations).filter((n) => n.alive && !n.dormant && n.atWar.length);
     if (live5.length < 2) return [];
     const N = g2.regions.length;
-    const at3 = /* @__PURE__ */ new Map();
+    const at4 = /* @__PURE__ */ new Map();
     const mark = (id, r) => {
-      let a = at3.get(id);
-      if (!a) at3.set(id, a = new Uint8Array(N));
+      let a = at4.get(id);
+      if (!a) at4.set(id, a = new Uint8Array(N));
       a[r] = 1;
     };
     for (const r of g2.regions) {
@@ -26792,7 +26794,7 @@
       for (const u of r.units) if (!u.dead) mark(u.nat, r.id);
     }
     const touch = (a, b) => {
-      const A = at3.get(a), B2 = at3.get(b);
+      const A = at4.get(a), B2 = at4.get(b);
       if (!A || !B2) return false;
       for (let i = 0; i < N; i++) if (A[i] && (B2[i] || g2.regions[i].nb.some((j) => B2[j]))) return true;
       return false;
@@ -27295,8 +27297,8 @@
     }
     if (book) {
       if (now === "allout") return;
-      const at3 = bookOf(g2, nat)?.allout;
-      const due = at3 === "invaded" ? homeLost(g2, nat) > 0 : typeof at3 === "number" && g2.turn >= at3;
+      const at4 = bookOf(g2, nat)?.allout;
+      const due = at4 === "invaded" ? homeLost(g2, nat) > 0 : typeof at4 === "number" && g2.turn >= at4;
       if (due) orderFooting(g2, nat, "allout");
       return;
     }
@@ -27555,10 +27557,10 @@
     const t = GOV.tracks.find((x) => x.id === track);
     if (!t || !t.steps[step2]) return "There is no such decree.";
     if (t.id === "economy" && replacesLadder(g2)) return LADDER_GONE;
-    const at3 = st.steps[track] ?? 0;
-    if (step2 === at3) return "That is the law already.";
-    if (step2 === at3 - 1) return null;
-    if (step2 !== at3 + 1) return "One step at a time.";
+    const at4 = st.steps[track] ?? 0;
+    if (step2 === at4) return "That is the law already.";
+    if (step2 === at4 - 1) return null;
+    if (step2 !== at4 + 1) return "One step at a time.";
     const wait = (st.wait[`track:${track}`] ?? 0) - g2.turn;
     if (wait > 0) return `This was relaxed lately: it cannot be tightened again for ${wait === 1 ? "a month" : `${wait} months`}.`;
     const why = whyNotNeed(g2, nat, t.steps[step2].needs);
@@ -28060,8 +28062,8 @@
     for (const m of seen(g2, nat)?.reach ?? []) {
       const was = g2.turn - m.t < P.memory ? m.odds[r.id] : void 0;
       if (was === void 0) continue;
-      const at3 = m.depth?.[r.id] ?? depth;
-      if (boldness2(was, at3) < boldness2(best.odds, best.depth) - 1e-9) best = { odds: was, depth: at3, then: m.t };
+      const at4 = m.depth?.[r.id] ?? depth;
+      if (boldness2(was, at4) < boldness2(best.odds, best.depth) - 1e-9) best = { odds: was, depth: at4, then: m.t };
     }
     return best;
   }
@@ -28519,8 +28521,8 @@
       options: GOV.ministers.filter((m) => (m.seat === s.id || m.seat === "*") && m.id !== ministerIn(st, s.id).id).map((m) => ({ ...mv(m), why: whyNotAppoint(g2, nat, s.id, m.id) }))
     }));
     const tracks = GOV.tracks.filter((t) => !(t.id === "economy" && replacesLadder(g2))).map((t) => {
-      const at3 = st.steps[t.id] ?? 0;
-      return { id: t.id, name: t.name, at: at3, steps: t.steps.map((x, i) => ({ id: x.id, name: x.name, text: x.text, cost: x.cost ?? 0, on: i === at3, why: i === at3 ? null : whyNotDecree(g2, nat, t.id, i) })) };
+      const at4 = st.steps[t.id] ?? 0;
+      return { id: t.id, name: t.name, at: at4, steps: t.steps.map((x, i) => ({ id: x.id, name: x.name, text: x.text, cost: x.cost ?? 0, on: i === at4, why: i === at4 ? null : whyNotDecree(g2, nat, t.id, i) })) };
     });
     const sums = [];
     for (const k of Object.keys(LEVER_NAME)) {
@@ -28638,8 +28640,8 @@
     if (!w || w.ftr === null && w.bmr === null) return `${name} has no aircraft industry: more aircraft come only from abroad.`;
     const from2 = w[wing], other4 = wing === "ftr" ? "bmr" : "ftr";
     if (from2 !== null && (from2 > g2.turn || worksRate(g2, nat, wing) <= 0)) {
-      const at3 = worksOpensAt(g2, nat, wing);
-      return `${name} builds no ${WING_WORD[wing]} before ${turnToDate(at3).label}: until then more ${WING_WORD[wing]} come only from abroad.`;
+      const at4 = worksOpensAt(g2, nat, wing);
+      return `${name} builds no ${WING_WORD[wing]} before ${turnToDate(at4).label}: until then more ${WING_WORD[wing]} come only from abroad.`;
     }
     if (from2 === null) return `${name} builds ${WING_WORD[other4]} at home, but no ${WING_WORD[wing]}: more ${WING_WORD[wing]} come only from abroad.`;
     return null;
@@ -28886,7 +28888,7 @@
     const u = budgeted(g2) ? eliteOf(nat) : null;
     if (u) {
       const need = needsOf(g2, u.kind);
-      const at3 = raiseSite(g2, nat, u.kind, sel);
+      const at4 = raiseSite(g2, nat, u.kind, sel);
       const no = gate(`corps:${u.kind}`)?.why ?? whyNoElite(g2, nat);
       out.push({
         key: "elite",
@@ -28897,16 +28899,16 @@
         cost: u.cost,
         months: u.months,
         upkeep: corpsUpkeep(u.kind, u.divs),
-        at: at3,
-        note: at3 < 0 ? "" : `Forms up at ${g2.regions[at3].name}. ${eliteCount(g2, nat)} of ${u.most} in the field or on order.`,
-        why: no ?? (at3 < 0 ? need ? `Needs a home province with ${plural3(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : noMen(u.divs) ?? poor(u.cost)),
+        at: at4,
+        note: at4 < 0 ? "" : `Forms up at ${g2.regions[at4].name}. ${eliteCount(g2, nat)} of ${u.most} in the field or on order.`,
+        why: no ?? (at4 < 0 ? need ? `Needs a home province with ${plural3(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : noMen(u.divs) ?? poor(u.cost)),
         ...menFor(u.divs)
       });
     }
     for (const c of cadresOf(g2, nat)) {
       if (n.queue.some((b) => b.cadre === c.id)) continue;
       const t = cadreTerms(g2, nat, c);
-      const at3 = raiseSite(g2, nat, c.kind, sel);
+      const at4 = raiseSite(g2, nat, c.kind, sel);
       out.push({
         key: `cadre:${c.id}`,
         group: "army",
@@ -28917,17 +28919,17 @@
         cost: t.cost,
         months: t.months,
         upkeep: budgeted(g2) ? corpsUpkeep(c.kind, c.divs) : 0,
-        at: at3,
-        note: at3 < 0 ? "" : `Forms up at ${g2.regions[at3].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
-        why: whyNoCadre(g2, nat, c) ?? (at3 < 0 ? "There is no home ground left to raise troops on." : noMen(c.divs) ?? poor(t.cost)),
+        at: at4,
+        note: at4 < 0 ? "" : `Forms up at ${g2.regions[at4].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
+        why: whyNoCadre(g2, nat, c) ?? (at4 < 0 ? "There is no home ground left to raise troops on." : noMen(c.divs) ?? poor(t.cost)),
         ...menFor(c.divs)
       });
     }
     for (const kind of corpsKinds(g2)) {
       const spec2 = specOf(g2, kind);
       const need = needsOf(g2, kind);
-      const at3 = raiseSite(g2, nat, kind, sel);
-      const where = at3 >= 0 ? g2.regions[at3].name : "";
+      const at4 = raiseSite(g2, nat, kind, sel);
+      const where = at4 >= 0 ? g2.regions[at4].name : "";
       const cost = corpsCost(g2, nat, kind);
       const held2 = gate(`corps:${kind}`);
       out.push({
@@ -28939,16 +28941,16 @@
         cost,
         months: spec2.months,
         upkeep: budgeted(g2) ? corpsUpkeep(kind, spec2.divs) : 0,
-        at: at3,
-        note: at3 < 0 ? "" : `Forms up at ${where}${need && at3 !== sel && r && canRaise(g2, nat, r) ? `: ${r.name} has not the ${plural3(need, "factory", "factories")} this needs` : ""}.`,
-        why: held2?.why ?? (at3 < 0 ? need ? `Needs a home province with ${plural3(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : noMen(spec2.divs) ?? poor(cost)),
+        at: at4,
+        note: at4 < 0 ? "" : `Forms up at ${where}${need && at4 !== sel && r && canRaise(g2, nat, r) ? `: ${r.name} has not the ${plural3(need, "factory", "factories")} this needs` : ""}.`,
+        why: held2?.why ?? (at4 < 0 ? need ? `Needs a home province with ${plural3(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : noMen(spec2.divs) ?? poor(cost)),
         ...held2 ? { tech: held2.tech } : {},
         ...menFor(spec2.divs)
       });
     }
     if (budgeted(g2)) {
       const p = TECH.units.para;
-      const at3 = raiseSite(g2, nat, "inf", sel);
+      const at4 = raiseSite(g2, nat, "inf", sel);
       const held2 = gate("para");
       const cost = priceOf(g2, nat, "para", p.cost);
       out.push({
@@ -28960,9 +28962,9 @@
         cost,
         months: p.months,
         upkeep: corpsUpkeep("inf", p.divs),
-        at: at3,
-        note: at3 < 0 ? "" : `Forms up at ${g2.regions[at3].name}. ${paraCount(g2, nat)} of ${p.most} in the field or on order.`,
-        why: held2?.why ?? whyNoPara(g2, nat) ?? (at3 < 0 ? "There is no home ground left to raise troops on." : noMen(p.divs) ?? poor(cost)),
+        at: at4,
+        note: at4 < 0 ? "" : `Forms up at ${g2.regions[at4].name}. ${paraCount(g2, nat)} of ${p.most} in the field or on order.`,
+        why: held2?.why ?? whyNoPara(g2, nat) ?? (at4 < 0 ? "There is no home ground left to raise troops on." : noMen(p.divs) ?? poor(cost)),
         ...held2 ? { tech: held2.tech } : {},
         ...menFor(p.divs)
       });
@@ -28979,11 +28981,11 @@
       const abroad3 = small2 && none4 !== null && abroadRules(g2, nat);
       const seller = abroad3 ? sellerOf(g2, nat) : null;
       const built = small2 ? none4 === null || seller !== null : industry(g2, nat, spec2.factories);
-      const at3 = built ? stationSite(g2, nat, sel) : -1;
-      const joins = at3 >= 0 ? fleetAt(g2, nat, at3, wing) : null;
+      const at4 = built ? stationSite(g2, nat, sel) : -1;
+      const joins = at4 >= 0 ? fleetAt(g2, nat, at4, wing) : null;
       const home = priceOf(g2, nat, `air:${wing}`, spec2.cost);
       const cost = seller ? Math.round(home * ABROAD().price) : home;
-      const where = at3 < 0 ? "" : joins ? `Joins ${joins.name} at ${g2.regions[at3].name}.` : airWar(g2) ? `Forms a new air group on the airfield at ${g2.regions[at3].name}.` : `Founds a new air fleet on the airfields of ${g2.regions[at3].name}.`;
+      const where = at4 < 0 ? "" : joins ? `Joins ${joins.name} at ${g2.regions[at4].name}.` : airWar(g2) ? `Forms a new air group on the airfield at ${g2.regions[at4].name}.` : `Founds a new air fleet on the airfields of ${g2.regions[at4].name}.`;
       out.push({
         key: `air:${wing}`,
         group: "air",
@@ -28993,16 +28995,16 @@
         cost,
         months: seller ? abroadMonths(g2, nat, wing) : small2 && built ? worksMonths(g2, nat, wing) : spec2.months,
         upkeep: spec2.count * BUDGET.upkeep.air[wing],
-        at: at3,
-        note: seller && at3 >= 0 ? `Bought from ${theName(g2.nations[seller])}. ${joins ? `Joins ${theGroupName(joins.name)} at ${g2.regions[at3].name}.` : where}` : where,
-        why: seller ? at3 < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost) : abroad3 ? noSeller(g2, nat) : none4 ?? (!built ? `Needs an aircraft industry: a home province with ${spec2.factories} factories.` : at3 < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost)),
+        at: at4,
+        note: seller && at4 >= 0 ? `Bought from ${theName(g2.nations[seller])}. ${joins ? `Joins ${theGroupName(joins.name)} at ${g2.regions[at4].name}.` : where}` : where,
+        why: seller ? at4 < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost) : abroad3 ? noSeller(g2, nat) : none4 ?? (!built ? `Needs an aircraft industry: a home province with ${spec2.factories} factories.` : at4 < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost)),
         ...seller ? { from: seller } : {}
       });
     }
     for (const hull of ["dd", "ss", "tp", "ca", "cv", "bb"]) {
       const spec2 = ARSENAL.ships[hull];
-      const at3 = slipSite(g2, nat, spec2.yard, sel);
-      const fleet = at3 >= 0 && hull !== "tp" ? joinsFleet(g2, nat, hull, at3) : null;
+      const at4 = slipSite(g2, nat, spec2.yard, sel);
+      const fleet = at4 >= 0 && hull !== "tp" ? joinsFleet(g2, nat, hull, at4) : null;
       const full = hull === "tp" && liftBought(g2, nat) >= ARSENAL.lift.most;
       const cost = priceOf(g2, nat, `ship:${hull}`, spec2.cost);
       const one = hull === "tp" ? "" : NAVY.classes[hull].one, many = hull === "tp" ? "" : NAVY.classes[hull].many;
@@ -29018,9 +29020,9 @@
         cost,
         months: spec2.months,
         upkeep: hull === "tp" ? 0 : spec2.count * BUDGET.upkeep.ships[hull],
-        at: at3,
-        note: at3 < 0 ? "" : hull === "tp" ? `Built at ${g2.regions[at3].name}.` : fleet ? `Laid down at ${g2.regions[at3].name}. Joins the ${fleet.name}.` : `Laid down at ${g2.regions[at3].name}. Forms a new fleet there.`,
-        why: noPlans ?? held2?.why ?? (at3 < 0 ? `Needs a shipyard of level ${spec2.yard} in one of your home ports.` : full ? "The nation has all the troopships its ports can handle." : poor(cost))
+        at: at4,
+        note: at4 < 0 ? "" : hull === "tp" ? `Built at ${g2.regions[at4].name}.` : fleet ? `Laid down at ${g2.regions[at4].name}. Joins the ${fleet.name}.` : `Laid down at ${g2.regions[at4].name}. Forms a new fleet there.`,
+        why: noPlans ?? held2?.why ?? (at4 < 0 ? `Needs a shipyard of level ${spec2.yard} in one of your home ports.` : full ? "The nation has all the troopships its ports can handle." : poor(cost))
       });
     }
     const W2 = ARSENAL.works;
@@ -29517,9 +29519,9 @@
     const want = clamp(1 + Math.floor(vp / LIB.army.perVp), 1, LIB.army.most);
     let corps = 0;
     for (let k = 0; k < want; k++) {
-      const at3 = musterAt(g2, X);
-      if (!at3) break;
-      const c = addCorps(g2, nat, corpsName(nat, "inf", X.corpsNo++), "inf", LIB.army.divs, at3.id, { xp: LIB.army.xp });
+      const at4 = musterAt(g2, X);
+      if (!at4) break;
+      const c = addCorps(g2, nat, corpsName(nat, "inf", X.corpsNo++), "inf", LIB.army.divs, at4.id, { xp: LIB.army.xp });
       c.str = LIB.army.str;
       c.org = LIB.army.org;
       c.ap = 0;
@@ -31310,6 +31312,7 @@
       // the staff settled the whole of it (ruling 226, mark 5).
       ...w.staff ? [staffLine({ place: w.place, sky: w.sky, how: w.how ?? "rest" })] : [],
       ...w.bombers > 0 ? [bombersLine(w)] : [],
+      ...w.kept ?? [],
       ...w.bill ? [`The ${w.sky ? `fight for the sky over ${w.place}` : "raid"} cost you ${what(w.bill, w.me) || "nothing"}, and the ${them} lost ${what(w.bill, foe) || "none"}.`] : [],
       // Two kinds of his own already carry an 'and', so a comma sets the enemy's part apart.
       // Nothing down on either side yet: the sea card's form (the UI director, air review 2).
@@ -31317,13 +31320,13 @@
     ];
   }
   function bombersLine(w) {
-    const B2 = w.bombers, dropped = Math.max(0, Math.min(B2, w.dropped));
+    const B2 = w.bombers, dropped = Math.max(0, Math.min(B2, w.dropped)), on = w.target ?? w.place;
     const lost = Math.max(0, Math.min(B2 - dropped, w.lostBefore ?? 0));
     const jett = Math.max(0, Math.min(B2 - dropped - lost, w.jettisoned));
     const whose = w.me === "att" ? `your ${B2}` : `${B2} ${w.adj.att}`;
     const rest = [jett ? `${jett} jettisoned ${jett === 1 ? "its bombs" : "theirs"}` : "", lost ? `${lost} ${lost === 1 ? "was" : "were"} lost before the target` : ""].filter(Boolean).join(", and ");
-    if (!dropped) return `None of ${w.me === "att" ? whose : `the ${whose}`} bombers dropped their bombs on ${w.place}${rest ? `: ${rest}` : ""}.`;
-    return `${dropped} of ${whose} bombers dropped their bombs on ${w.place}${rest ? `; ${rest}` : ""}.`;
+    if (!dropped) return `None of ${w.me === "att" ? whose : `the ${whose}`} bombers dropped their bombs on ${on}${rest ? `: ${rest}` : ""}.`;
+    return `${dropped} of ${whose} bombers dropped their bombs on ${on}${rest ? `; ${rest}` : ""}.`;
   }
   function reckoned(carried2, chance) {
     if (chance >= 0.995) return carried2 ? "As the staff expected: they were sure of it." : "Worse than the staff expected: they were sure of it.";
@@ -31353,6 +31356,20 @@
     "Decisive defeat": "Decisive victory",
     "Crushing defeat": "Heroic victory"
   };
+  function keptLines(rows, owner) {
+    const kept2 = rows.filter((x) => x.kept && shipCount(x.kept));
+    if (!kept2.length) return [];
+    const mine4 = rows.filter((x) => owner !== null && x.nat === owner).length;
+    if (!rows.some((x) => shipCount(x.sunk))) {
+      const all = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 };
+      for (const x of kept2) for (const c of Object.keys(all)) all[c] += x.kept[c];
+      const names = rows.map((x) => x.nat === owner ? `your ${x.fleet}` : fleetsNamed([{ name: x.fleet }]));
+      const who = !mine4 ? rows.length === 1 ? `Ships of the ${rows[0].fleet}` : `Ships of ${fleetsNamed(rows.map((x) => ({ name: x.fleet })))}` : rows.length === 1 ? "Your ships" : `Ships of ${names.length <= 3 ? andNames(names) : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`}`;
+      return [`${who} were hit, but none was sunk: ${keptAfloatPast(all)}.`];
+    }
+    return kept2.map((x) => keptAfloat({ name: x.fleet }, x.kept, x.nat !== owner ? "fleet" : mine4 > 1 ? "your fleet" : "yours", true));
+  }
+  var andNames = (xs) => xs.length === 1 ? xs[0] : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   function afterCard(g2, rep, fought) {
     const me = g2.human !== null && g2.human === rep.defNat && g2.human !== rep.attNat ? "def" : "att";
     const adj = (n) => g2.nations[n]?.adj ?? n;
@@ -31371,6 +31388,7 @@
       lostBefore,
       staff: !!fought.staff,
       ...fought.staff ? { how: staffHow(me, fought.staff, fought.chance) } : {},
+      ...rep.ships ? { kept: keptLines(rep.ships, me === "def" ? g2.human : null) } : {},
       bill: { att: { ftr: sum2(rep.att, "lostFtr"), bmr: sum2(rep.att, "lostBmr") }, def: { ftr: sum2(rep.def, "lostFtr"), bmr: sum2(rep.def, "lostBmr") } },
       before: fought.staff ? { att: { ftr: had(rep.att, "ftr"), bmr: had(rep.att, "bmr") }, def: { ftr: had(rep.def, "ftr"), bmr: had(rep.def, "bmr") } } : null
     });
@@ -31808,7 +31826,7 @@
       return [f];
     }
     const whole2 = { ftr: f.ftr, bmr: f.bmr, est: { ...f.est }, extra: f.extra ? { ...f.extra } : null };
-    const at3 = g2.airFleets.indexOf(f);
+    const at4 = g2.airFleets.indexOf(f);
     const out = [];
     plan.forEach((p, i) => {
       const part = (n) => Math.floor(n / p.of) + (p.k < n % p.of ? 1 : 0);
@@ -31834,7 +31852,7 @@
       grp2.bmr = p.kind === "bmr" ? part(whole2.bmr) : 0;
       grp2.est = { ftr: p.kind === "ftr" ? part(whole2.est.ftr) : 0, bmr: p.kind === "bmr" ? part(whole2.est.bmr) : 0 };
       if (whole2.extra) grp2.extra = { ftr: p.kind === "ftr" ? part(whole2.extra.ftr) : 0, bmr: p.kind === "bmr" ? part(whole2.extra.bmr) : 0 };
-      if (i > 0) g2.airFleets.splice(at3 + i, 0, grp2);
+      if (i > 0) g2.airFleets.splice(at4 + i, 0, grp2);
       out.push(grp2);
     });
     if (out.length > 1) for (const grp2 of out) grp2.name = groupName(g2, f.nat, grp2.kind, Math.max(grp2.est[grp2.kind], grp2[grp2.kind]), g2.regions[grp2.base] ?? null);
@@ -32074,7 +32092,7 @@
   }
   function shareWords2(share) {
     const steps = [[0.85, "nine in ten"], [0.7, "three quarters"], [0.6, "two thirds"], [0.45, "half"], [0.3, "a third"], [0.22, "a quarter"], [0.15, "a fifth"], [0.07, "a tenth"]];
-    return steps.find(([at3]) => share >= at3)?.[1] ?? "hardly any";
+    return steps.find(([at4]) => share >= at4)?.[1] ?? "hardly any";
   }
   function crowdedFields(g2, nat = g2.human) {
     if (!nat || !airWar(g2)) return [];
@@ -32103,8 +32121,8 @@
     if (!me || !airWar(g2) || !g2.nations[me]?.alive) return;
     const pre = `crowd:${me}:`;
     const now = staffRuns(g2, me, "air") ? [] : crowdedFields(g2, me);
-    const at3 = new Set(now.map((c) => c.region));
-    for (const k of Object.keys(g2.flags)) if (k.startsWith(pre) && !at3.has(Number(k.slice(pre.length)))) delete g2.flags[k];
+    const at4 = new Set(now.map((c) => c.region));
+    for (const k of Object.keys(g2.flags)) if (k.startsWith(pre) && !at4.has(Number(k.slice(pre.length)))) delete g2.flags[k];
     const fresh4 = now.filter((c) => g2.flags[`${pre}${c.region}`] === void 0);
     for (const c of now) (_a = g2.flags)[_b = `${pre}${c.region}`] ?? (_a[_b] = g2.turn);
     if (!fresh4.length) return;
@@ -32284,7 +32302,7 @@
         const first2 = have[0], base = g2.regions[first2.base];
         if (!base) continue;
         for (const f of have) f.share = (f.share ?? 1) * (have.length / n);
-        let at3 = g2.airFleets.indexOf(have[have.length - 1]);
+        let at4 = g2.airFleets.indexOf(have[have.length - 1]);
         for (let k = have.length; k < n; k++) {
           const grp2 = {
             id: g2.nextAir++,
@@ -32305,7 +32323,7 @@
             share: 1 / n
           };
           grp2.name = groupName(g2, nat, kind, Math.round(want / n), base);
-          g2.airFleets.splice(++at3, 0, grp2);
+          g2.airFleets.splice(++at4, 0, grp2);
           headline(g2, "info", `${grp2.name} forms in ${base.name}, a new group of ${r.name}.`, nat, base.id);
         }
       }
@@ -32361,12 +32379,29 @@
   var noShips = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
   var navalSkill = (f) => deckBred(f) ? CARRIERS.naval.carrier : CARRIERS.naval.land[f.nat] ?? CARRIERS.naval.land._default;
   function shipHits(a, m, through2, found2 = 1) {
-    const S3 = CARRIERS.strike, H = CARRIERS.harbour;
-    const sunk = noShips();
-    let hits = through2 * a.naval * S3.hit * (1 - a.spoil) * a.again * found2;
-    if (m === "harbour") hits *= H.hit * (a.surprise ? H.surprise : 1);
+    return shipHitsBy(shipLaw(a, m, found2), through2);
+  }
+  function shipLaw(a, m, found2 = 1) {
     const have = noShips();
     for (const x of a.ships) for (const c of SHIPS) have[c] += x.ships[c];
+    return {
+      harbour: m === "harbour",
+      naval: a.naval,
+      spoil: a.spoil,
+      again: a.again,
+      found: found2,
+      surprise: a.surprise,
+      have,
+      fleets: a.ships.map((x) => ({ id: x.id, nat: x.nat, name: x.name, ships: { ...x.ships } })),
+      ...a.tough ? { tough: [...a.tough] } : {}
+    };
+  }
+  function shipHitsBy(L2, through2) {
+    const S3 = CARRIERS.strike, H = CARRIERS.harbour;
+    const sunk = noShips();
+    let hits = through2 * L2.naval * S3.hit * (1 - L2.spoil) * L2.again * L2.found;
+    if (L2.harbour) hits *= H.hit * (L2.surprise ? H.surprise : 1);
+    const have = L2.have;
     const weight5 = SHIPS.reduce((s, c) => s + have[c] * S3.aim[c], 0);
     if (weight5 <= 0 || hits <= 0) return { hits: 0, sunk, count: 0, value: 0 };
     let count4 = 0;
@@ -32374,15 +32409,15 @@
       sunk[c] = Math.min(have[c], hits * have[c] * S3.aim[c] / weight5 / S3.takes[c]);
       count4 += sunk[c];
     }
-    const most = (m === "harbour" ? H.most : S3.most) * SHIPS.reduce((s, c) => s + (S3.aim[c] > 0 ? have[c] : 0), 0);
+    const most = (L2.harbour ? H.most : S3.most) * SHIPS.reduce((s, c) => s + (S3.aim[c] > 0 ? have[c] : 0), 0);
     if (count4 > most) {
       for (const c of SHIPS) sunk[c] *= most / count4;
       hits *= most / count4;
       count4 = most;
     }
-    if (a.tough) {
-      const plain2 = { ...sunk }, tough = a.tough;
-      const by2 = a.ships.map((x, i) => {
+    if (L2.tough) {
+      const plain2 = { ...sunk }, tough = L2.tough;
+      const by2 = L2.fleets.map((x, i) => {
         const part = noShips();
         for (const c of SHIPS) if (have[c] > 0) part[c] = plain2[c] * (x.ships[c] / have[c]) / (c === "ss" ? 1 : tough[i] ?? 1);
         return part;
@@ -32712,8 +32747,9 @@
           if (have[c] <= 0) continue;
           const share2 = plain2[c] * (x.ships[c] / have[c]);
           const [n, n0] = rng.rollBoth(exp.by ? exp.by[i][c] : share2, share2);
-          const k = Math.min(x.ships[c], n);
-          kept2[c] = Math.min(x.ships[c], n0) - k;
+          const field4 = battle?.sunk?.[x.id]?.[c];
+          const k = Math.min(x.ships[c], field4 === void 0 ? n : staff ? Math.max(field4, n) : field4);
+          kept2[c] = field4 !== void 0 && (!staff || field4 >= n) ? battle?.kept?.[x.id]?.[c] ?? 0 : Math.min(x.ships[c], n0) - k;
           x.ships[c] -= k;
           x.lost[c] += k;
           struck[i].sunk[c] = k;
@@ -32721,7 +32757,10 @@
           keptAll[c] += kept2[c];
         }
         afloatWatch.tell?.({ route: "air", nat: x.nat, sunk: struck[i].sunk, saved: kept2 });
-        if (shipCount(kept2)) afloat2.push({ x, kept: kept2 });
+        if (shipCount(kept2)) {
+          afloat2.push({ x, kept: kept2 });
+          struck[i].kept = { ...kept2 };
+        }
         x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
         x.struck = [g2.turn, (x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
         (x.seen ?? (x.seen = {}))[nat] = g2.turn;
@@ -33015,7 +33054,7 @@
     const cities = g2.regions.filter((r) => own(r) && (r.fac > 0 || r.vp > 0)).map((r) => r.id);
     const places = [.../* @__PURE__ */ new Set([...troops, ...cities])];
     if (!places.length) return;
-    const at3 = new Map(places.map((id, i) => [id, i]));
+    const at4 = new Map(places.map((id, i) => [id, i]));
     const ask = new Float64Array(places.length);
     for (const e of g2.airFleets) {
       if (!atWar(g2, nat, e.nat) || e.ftr + e.bmr <= 0) continue;
@@ -33024,7 +33063,7 @@
       for (const id of places) {
         const d = kmTo(g2, e, id);
         const n = (troops.has(id) ? d <= R2.ftrRange ? e.ftr : 0 : 0) + (d <= R2.bmrRange ? e.bmr : 0);
-        if (n > 0) hits.push([at3.get(id), n]);
+        if (n > 0) hits.push([at4.get(id), n]);
       }
       const all = hits.reduce((s, x) => s + x[1], 0);
       if (!all) continue;
@@ -33032,7 +33071,7 @@
       for (const [i, n] of hits) ask[i] += weight5 * n / all;
     }
     if (battles.length) {
-      for (const id of troops) if (battles.includes(id) || g2.regions[id].nb.some((j) => battles.includes(j))) ask[at3.get(id)] *= Math.max(1, AIRWAR.sky.own);
+      for (const id of troops) if (battles.includes(id) || g2.regions[id].nb.some((j) => battles.includes(j))) ask[at4.get(id)] *= Math.max(1, AIRWAR.sky.own);
     }
     const P = g2.flags.open === 1 ? K.presence ?? 0 : 0;
     if (P > 0 && troops.size) {
@@ -33044,7 +33083,7 @@
       }
       const threat2 = ask.reduce((s, x) => s + x, 0);
       const share = threat2 > 0 ? threat2 * P : 1;
-      if (all > 0) for (const [id, d] of divs) ask[at3.get(id)] += share * d / all;
+      if (all > 0) for (const [id, d] of divs) ask[at4.get(id)] += share * d / all;
     }
     const asked2 = ask.reduce((s, x) => s + x, 0);
     if (asked2 <= 0) return;
@@ -34554,10 +34593,10 @@
       }
       if (!seen2) continue;
       g2.flags[`st:watch:${d}`] = g2.turn;
-      const key6 = `cw:${att}:${d}`, at3 = `cwAt:${att}:${d}`;
-      if (g2.flags[key6] === seen2.quay.id + 1 && g2.turn - (g2.flags[at3] ?? -99) < W2.every) continue;
+      const key6 = `cw:${att}:${d}`, at4 = `cwAt:${att}:${d}`;
+      if (g2.flags[key6] === seen2.quay.id + 1 && g2.turn - (g2.flags[at4] ?? -99) < W2.every) continue;
       g2.flags[key6] = seen2.quay.id + 1;
-      g2.flags[at3] = g2.turn;
+      g2.flags[at4] = g2.turn;
       if (landedOn(g2, att, d)) continue;
       const force3 = seen2.corps === 1 ? "one corps" : `${seen2.corps} corps`;
       if (d === g2.human) warning(g2, "Coast watch", `The coast watch reports ${n.adj} shipping gathering at ${seen2.quay.name}, with troops on the quays: enough to carry ${force3}. ${seen2.coast.name} is within their reach, and a landing could come as soon as next month.`, d, seen2.coast.id, att);
@@ -34695,14 +34734,14 @@
     const form = how === true ? "yours" : how === false ? "fleet" : how;
     const head = (k) => COUNT_WORD[k] ?? String(k);
     const classes = CLASSES.filter((c) => saved[c] > 0);
-    const owned = form === "yours" || form !== "fleet" && classes.length === 1;
+    const owned = form === "yours" || form !== "fleet" && form !== "your fleet" && classes.length === 1;
     const whose = form === "yours" ? "your" : form === "its" ? "its" : "the fleet's";
     const parts2 = classes.map((c, i) => {
       const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
       if (owned) return `${i ? k === 1 ? "one" : k : head(k)} of ${whose} ${many}`;
       return k === 1 ? aShip(one, !i) : `${i ? k : head(k)} ${many}`;
     });
-    const of2 = owned ? "" : form === "fleet" ? ` of ${fleetName(f)}` : " of the fleet";
+    const of2 = owned ? "" : form === "fleet" ? ` of ${fleetName(f)}` : form === "your fleet" ? ` of your ${f.name}` : " of the fleet";
     const verb = past ? n === 1 ? "was" : "were" : n === 1 ? "is" : "are";
     return `${andList2(parts2)}${of2} ${verb} badly hit, but the repair parties ${past ? "kept" : "keep"} the ${n === 1 ? "ship" : "ships"} afloat.`;
   }
@@ -35632,9 +35671,9 @@
       computeSupply(g2);
       return;
     }
-    for (const [nat, name, kind, divs, at3, o] of WORLD.corps) {
-      if (!g2.nations[nat]?.alive || !g2.byName[at3] || g2.byName[at3].ctrl !== nat) continue;
-      const c = addCorps(g2, nat, name, kind, divs, at3, o);
+    for (const [nat, name, kind, divs, at4, o] of WORLD.corps) {
+      if (!g2.nations[nat]?.alive || !g2.byName[at4] || g2.byName[at4].ctrl !== nat) continue;
+      const c = addCorps(g2, nat, name, kind, divs, at4, o);
       if (o.str !== void 0) c.str = o.str;
     }
     for (const row2 of WORLD.fleets) if (g2.nations[row2.nat]?.alive && g2.byName[row2.base ?? ""]?.ctrl === row2.nat) addFleet(g2, row2);
@@ -35690,9 +35729,9 @@
     }
     settleFallen(g2, from2);
     const fresh4 = (name) => !!name && !!g2.byName[name] && g2.byName[name].id >= from2;
-    for (const [nat, name, kind, divs, at3, o] of WORLD.corps) {
-      if (!fresh4(at3) || !g2.nations[nat]?.alive || g2.byName[at3].ctrl !== nat) continue;
-      const c = addCorps(g2, nat, name, kind, divs, at3, o);
+    for (const [nat, name, kind, divs, at4, o] of WORLD.corps) {
+      if (!fresh4(at4) || !g2.nations[nat]?.alive || g2.byName[at4].ctrl !== nat) continue;
+      const c = addCorps(g2, nat, name, kind, divs, at4, o);
       if (o.str !== void 0) c.str = o.str;
     }
     for (const row2 of WORLD.fleets) if (fresh4(row2.base) && g2.nations[row2.nat]?.alive && g2.byName[row2.base].ctrl === row2.nat) addFleet(g2, row2);
@@ -36598,8 +36637,8 @@
       // raised it has stood in other hands at a month's opening. News of a fight is told only where there was one:
       // ground that came over by a treaty's terms and was never fought for has not been taken (ruling 100).
       case "taken": {
-        const r = g2.byName[a[1]], at3 = g2.flags[a[2]];
-        return !!r && !!at3 && !!N(r.ctrl) && bloc(N(r.ctrl)) === a[0] && (g2.flags[`others:${a[1]}`] ?? 0) >= at3;
+        const r = g2.byName[a[1]], at4 = g2.flags[a[2]];
+        return !!r && !!at4 && !!N(r.ctrl) && bloc(N(r.ctrl)) === a[0] && (g2.flags[`others:${a[1]}`] ?? 0) >= at4;
       }
       default:
         return false;
@@ -36749,12 +36788,12 @@
           headline(g2, "event", e.text, e.enter.nations[0]);
           told2 = true;
         }
-        const at3 = g2.headlines.length;
+        const at4 = g2.headlines.length;
         declareWar(g2, a, b);
         did = did || A.atWar.includes(b);
         if (e.tell === "war" && !told2 && A.atWar.includes(b)) {
           const plain2 = theWords(`${theName(A, true)} declares war on ${theName(B2)}.`);
-          const h = g2.headlines.slice(at3).find((x) => x.kind === "war" && x.nat === a && x.text === plain2);
+          const h = g2.headlines.slice(at4).find((x) => x.kind === "war" && x.nat === a && x.text === plain2);
           if (h) {
             h.text = theWords(e.text);
             told2 = true;
@@ -36841,10 +36880,10 @@
     for (const row2 of e.spawn ?? []) {
       const r = g2.byName[row2[4]];
       if (!r || r.ctrl !== row2[0]) continue;
-      let at3;
+      let at4;
       const seen2 = /* @__PURE__ */ new Set([r.id]);
-      for (let ring = [r], step2 = 0; ring.length && !at3 && step2 <= 3; step2++) {
-        at3 = ring.find((x) => x.units.length < STACK);
+      for (let ring = [r], step2 = 0; ring.length && !at4 && step2 <= 3; step2++) {
+        at4 = ring.find((x) => x.units.length < STACK);
         const next = [];
         for (const x of ring) for (const j of x.nb) if (!seen2.has(j) && g2.regions[j].ctrl === row2[0]) {
           seen2.add(j);
@@ -36852,7 +36891,7 @@
         }
         ring = next;
       }
-      if (at3) addCorps(g2, row2[0], row2[1], row2[2], row2[3], at3.id, { hold: 1 });
+      if (at4) addCorps(g2, row2[0], row2[1], row2[2], row2[3], at4.id, { hold: 1 });
     }
     if (!told2) {
       headline(g2, "event", e.text, e.band ?? e.annex?.by ?? e.cede?.to ?? e.liberate?.to[0] ?? e.join?.nations[0] ?? e.partition?.nation);
@@ -37333,7 +37372,7 @@
     n.queue.push(b);
     return b;
   }
-  function reform(g2, c, at3) {
+  function reform(g2, c, at4) {
     c.dead = false;
     c.str = 1;
     c.org = 0.7;
@@ -37341,15 +37380,15 @@
     c.fought = false;
     c.supplied = true;
     c.general = null;
-    c.reg = at3.id;
+    c.reg = at4.id;
     c.hold = false;
     c.dyle = null;
-    c.xp = Math.max((c.nat === g2.human ? raisedXp(g2, c.nat) : 0.05) + campXp(g2, at3.id), c.xp * MANPOWER.fold.xp);
+    c.xp = Math.max((c.nat === g2.human ? raisedXp(g2, c.nat) : 0.05) + campXp(g2, at4.id), c.xp * MANPOWER.fold.xp);
     for (const k of ["dug", "dugFor", "digging", "pressed", "blows", "relief", "yields", "gaveWay", "digs", "joint", "leave", "town", "job", "rival"]) delete c[k];
     raiseMorale(g2, c);
     g2.corps.push(c);
-    at3.units.push(c);
-    noteCorps(g2, c, "rebuilt", at3.id);
+    at4.units.push(c);
+    noteCorps(g2, c, "rebuilt", at4.id);
   }
   function fortCost(g2, nat, r) {
     if (!isHome(g2, nat, r)) return null;
@@ -37409,24 +37448,24 @@
         continue;
       }
       const room2 = (x) => canRaise(g2, nat, x) && x.units.filter((u) => allied(g2, u.nat, nat)).length < STACK;
-      let at3 = room2(r) ? r : null;
-      if (!at3 && n.capital >= 0 && room2(g2.regions[n.capital])) at3 = g2.regions[n.capital];
-      if (!at3) at3 = g2.regions.find((x) => room2(x) && x.fac > 0) ?? g2.regions.find(room2) ?? null;
-      if (!at3) continue;
+      let at4 = room2(r) ? r : null;
+      if (!at4 && n.capital >= 0 && room2(g2.regions[n.capital])) at4 = g2.regions[n.capital];
+      if (!at4) at4 = g2.regions.find((x) => room2(x) && x.fac > 0) ?? g2.regions.find(room2) ?? null;
+      if (!at4) continue;
       if (b.cadre !== void 0) {
         const i = (n.cadres ?? []).findIndex((x) => x.id === b.cadre);
         if (i < 0) continue;
         const c2 = n.cadres.splice(i, 1)[0];
-        reform(g2, c2, at3);
-        if (nat === g2.human) headline(g2, "info", `${c2.name} has been raised again round its cadre at ${at3.name}, and is ready for orders.`, nat, at3.id);
+        reform(g2, c2, at4);
+        if (nat === g2.human) headline(g2, "info", `${c2.name} has been raised again round its cadre at ${at4.name}, and is ready for orders.`, nat, at4.id);
         continue;
       }
-      const c = addCorps(g2, nat, b.name, b.kind, b.divs, at3.id, { xp: (nat === g2.human ? raisedXp(g2, nat) : 0.05) + campXp(g2, at3.id), airborne: b.airborne });
+      const c = addCorps(g2, nat, b.name, b.kind, b.divs, at4.id, { xp: (nat === g2.human ? raisedXp(g2, nat) : 0.05) + campXp(g2, at4.id), airborne: b.airborne });
       c.org = 0.7;
       if (b.elite) c.elite = b.elite;
       const old = b.revive !== void 0 ? fallenOf(g2, b.revive) : void 0;
       if (old && old.heir === void 0) inherit(g2, c, old.id);
-      if (nat === g2.human) headline(g2, "info", old ? `${b.name} is raised again at ${at3.name}, ${g2.turn - old.turn} months after it was lost at ${g2.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at3.name} and is ready for orders.`, nat, at3.id);
+      if (nat === g2.human) headline(g2, "info", old ? `${b.name} is raised again at ${at4.name}, ${g2.turn - old.turn} months after it was lost at ${g2.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at4.name} and is ready for orders.`, nat, at4.id);
     }
     const line = airLine(air2);
     if (line) headline(g2, "info", line.text, nat, line.region);
@@ -37471,9 +37510,9 @@
     const most = g2.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
     const u = budgeted(g2) && !armyIdle(g2, nat) ? eliteOf(nat) : null;
     if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g2, nat) === null && !locked(g2, nat, `corps:${u.kind}`) && !(u.kind === "arm" && shortOfOil(g2, nat))) {
-      const at3 = raiseSite(g2, nat, u.kind, cap12.id), cost = corpsUpkeep(u.kind, u.divs);
+      const at4 = raiseSite(g2, nat, u.kind, cap12.id), cost = corpsUpkeep(u.kind, u.divs);
       const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
-      if (at3 >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && menSpare(g2, nat) >= u.divs && orderElite(g2, nat, at3)) spare -= cost;
+      if (at4 >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && menSpare(g2, nat) >= u.divs && orderElite(g2, nat, at4)) spare -= cost;
     }
     const wantsGuns = () => gunsWanted(g2, nat);
     while (slots() < most) {
@@ -37488,16 +37527,16 @@
         }
       }
       let kind = wantsGuns() ? "art" : home >= 20 && n.corpsNo % 3 === 2 ? "arm" : "inf";
-      let at3 = budgeted(g2) ? raiseSite(g2, nat, kind, cap12.id) : cap12.id;
-      if (at3 < 0 || locked(g2, nat, `corps:${kind}`) || kind === "arm" && shortOfOil(g2, nat)) {
+      let at4 = budgeted(g2) ? raiseSite(g2, nat, kind, cap12.id) : cap12.id;
+      if (at4 < 0 || locked(g2, nat, `corps:${kind}`) || kind === "arm" && shortOfOil(g2, nat)) {
         kind = "inf";
-        at3 = cap12.id;
+        at4 = cap12.id;
       }
       if (n.pp < corpsCost(g2, nat, kind) + PRODUCTION.aiReserve) break;
       const cost = corpsUpkeep(kind, specOf(g2, kind).divs);
       if (spare < cost * BUDGET.debt.aiMargin) break;
       if (menSpare(g2, nat) < specOf(g2, kind).divs) break;
-      if (!orderCorps(g2, nat, kind, at3)) break;
+      if (!orderCorps(g2, nat, kind, at4)) break;
       spare -= cost;
     }
   }
@@ -37516,12 +37555,12 @@
     const want = Math.min(TEAMS.ai.most, Math.floor(line / TEAMS.ai.per));
     if (have.mg + have.mor >= want) return;
     const kind = have.mor < have.mg || have.mor === have.mg && gunsWanted(g2, nat) ? "mor" : "mg";
-    const at3 = raiseSite(g2, nat, kind, n.capital);
-    if (at3 < 0 || n.pp < corpsCost(g2, nat, kind) + PRODUCTION.aiReserve) return;
+    const at4 = raiseSite(g2, nat, kind, n.capital);
+    if (at4 < 0 || n.pp < corpsCost(g2, nat, kind) + PRODUCTION.aiReserve) return;
     const up = corpsUpkeep(kind, TEAMS[kind].divs);
     const spare = income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + (b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0), 0);
     if (spare < up * BUDGET.debt.aiMargin || menSpare(g2, nat) < TEAMS[kind].divs) return;
-    orderCorps(g2, nat, kind, at3);
+    orderCorps(g2, nat, kind, at4);
   }
 
   // ../../data/campaign/places.json
@@ -37572,9 +37611,9 @@
   function gunsOfTheDay(year) {
     const rows = SUPPORT.antiTank.byYear;
     const years = Object.keys(rows).map(Number).sort((a, b) => a - b);
-    let at3 = years[0];
-    for (const y of years) if (y <= year) at3 = y;
-    return rows[String(at3)];
+    let at4 = years[0];
+    for (const y of years) if (y <= year) at4 = y;
+    return rows[String(at4)];
   }
   var armourOfTheDay = (year) => SUPPORT.tech.armour.filter((id) => (techById(id)?.year ?? 9999) <= year).length;
   function antiTank(g2, attackers2, defenders, target, f) {
@@ -37651,10 +37690,10 @@
   }
   var assaultFire = (g2, c) => isFoot(c) && hasTech(g2, c.nat, SUPPORT.tech.handHeld) ? 1 + SUPPORT.assault.attack : 1;
   var snipedIn = (target, town) => town ? "town" : !SUPPORT.snipers.ground.includes(target.terrain) ? null : target.terrain === "urban" ? "city" : "forest";
-  function tollOf(g2, attackers2, defenders, at3, f, sniped, mgUp = 0) {
+  function tollOf(g2, attackers2, defenders, at4, f, sniped, mgUp = 0) {
     const L2 = SUPPORT.toll, M2 = SUPPORT.machineGuns;
     const snipers = sniped ? SUPPORT.snipers.toll : 0;
-    if (!at3 || !f) return { tanks: 1, foot: 1 + snipers, guns: 1, why: { machineGuns: 0, guns: 0, snipers, shield: 0 } };
+    if (!at4 || !f) return { tanks: 1, foot: 1 + snipers, guns: 1, why: { machineGuns: 0, guns: 0, snipers, shield: 0 } };
     let all = 0, mg = 0;
     for (const d of defenders) {
       if (isTeam(d)) continue;
@@ -37670,10 +37709,10 @@
       mine4 += k;
       if (c.kind === "arm") armour += k;
     }
-    const shield = mine4 > 0 ? L2.shield * Math.min(1, 2 * armour / mine4) * (1 - at3.strength) : 0;
+    const shield = mine4 > 0 ? L2.shield * Math.min(1, 2 * armour / mine4) * (1 - at4.strength) : 0;
     const machine = L2.machineGuns * (all > 0 ? mg / all : 0), guns2 = Math.min(L2.gunsMost, L2.guns * f.guns);
     return {
-      tanks: L2.tanks[0] + (L2.tanks[1] - L2.tanks[0]) * at3.strength,
+      tanks: L2.tanks[0] + (L2.tanks[1] - L2.tanks[0]) * at4.strength,
       foot: (1 + machine + guns2 + snipers) * (1 - shield),
       guns: L2.behind,
       why: { machineGuns: machine, guns: guns2, snipers, shield }
@@ -37684,30 +37723,30 @@
     return x >= 0.9 ? "in full" : x >= 0.71 ? "for three quarters" : x >= 0.58 ? "for two thirds" : x >= 0.42 ? "for half" : x >= 0.29 ? "for a third" : x >= 0.17 ? "for a quarter" : x >= 0.05 ? "for a tenth" : "for nothing";
   }
   var shareOf = (x) => x >= 0.9 ? "all" : x >= 0.71 ? "three quarters" : x >= 0.58 ? "two thirds" : x >= 0.42 ? "half" : x >= 0.29 ? "a third" : x >= 0.17 ? "a quarter" : "a tenth";
-  function antiTankParts(at3) {
+  function antiTankParts(at4) {
     const parts2 = [
-      [at3.guns, "anti-tank guns"],
-      [at3.destroyers, "tank destroyers"],
-      [at3.handHeld, "hand-held weapons"],
-      [at3.artillery, "guns in the line"],
-      [at3.mines, "mines"],
-      [at3.works, at3.fort >= 2 ? "dragon's teeth" : "a ditch"],
-      [at3.tanks, "tanks of their own"]
+      [at4.guns, "anti-tank guns"],
+      [at4.destroyers, "tank destroyers"],
+      [at4.handHeld, "hand-held weapons"],
+      [at4.artillery, "guns in the line"],
+      [at4.mines, "mines"],
+      [at4.works, at4.fort >= 2 ? "dragon's teeth" : "a ditch"],
+      [at4.tanks, "tanks of their own"]
     ];
     return parts2.filter((p) => p[0] >= 0.03).sort((a, b) => b[0] - a[0]).slice(0, 3).map((p) => p[1]);
   }
-  var aloneWords = (at3) => `${at3.cover <= 0 ? "No infantry" : "Too little infantry"} with your tanks`;
-  function aloneUnknown(at3) {
-    const most = SUPPORT.antiTank.alone.cut * (1 - at3.cover);
-    return most >= 0.05 ? { sign: "tank", text: `${aloneWords(at3)}: their guns take as much as ${shareOf(most)} of the tanks' attack.` } : null;
+  var aloneWords = (at4) => `${at4.cover <= 0 ? "No infantry" : "Too little infantry"} with your tanks`;
+  function aloneUnknown(at4) {
+    const most = SUPPORT.antiTank.alone.cut * (1 - at4.cover);
+    return most >= 0.05 ? { sign: "tank", text: `${aloneWords(at4)}: their guns take as much as ${shareOf(most)} of the tanks' attack.` } : null;
   }
   function faceLines(f) {
     const out = [];
-    const at3 = f.antiTank;
-    if (at3 && f.alone >= 0.05) out.push({ sign: "tank", text: `${aloneWords(at3)}: their guns take ${shareOf(f.alone)} of the tanks' attack.` });
-    if (at3 && f.shock !== null) {
-      const parts2 = antiTankParts(at3);
-      out.push({ sign: "anti-tank", text: at3.strength < 0.1 || !parts2.length ? "Few anti-tank guns: your tanks' shock counts in full." : `${cap9(listAnd(parts2))}: your tanks' shock counts ${shareWords3(f.shock)}.` });
+    const at4 = f.antiTank;
+    if (at4 && f.alone >= 0.05) out.push({ sign: "tank", text: `${aloneWords(at4)}: their guns take ${shareOf(f.alone)} of the tanks' attack.` });
+    if (at4 && f.shock !== null) {
+      const parts2 = antiTankParts(at4);
+      out.push({ sign: "anti-tank", text: at4.strength < 0.1 || !parts2.length ? "Few anti-tank guns: your tanks' shock counts in full." : `${cap9(listAnd(parts2))}: your tanks' shock counts ${shareWords3(f.shock)}.` });
     }
     if (f.machineGuns) out.push({ sign: "machine-gun", text: f.mgDug ? "Machine guns, dug in: most of your losses will be infantry." : "Machine guns in the open: more of your losses will be infantry." });
     if (f.worksCut >= 0.05) out.push({ sign: "mortar", text: `Fieldworks: your ${f.mortars && f.gunsIn ? "mortars and guns" : f.mortars ? "mortars" : "guns"} take ${shareOf(f.worksCut)} of them away.` });
@@ -38246,9 +38285,9 @@
   var PLURAL_OWN = new RegExp(`\\b(${[...PLACES.the.filter((n) => /s$/.test(n)), "Netherlands", "United States"].sort((a, b) => b.length - a.length).map(reEsc).join("|")})'s\\b`, "g");
   function theWords(text, before = "") {
     const cut2 = before.length;
-    const put = (s, re) => s.replace(re, (m, pre, name, at3) => {
-      if (at3 + pre.length < cut2) return m;
-      const head = /(^|[.!?]\s+)$/.test(s.slice(0, at3 + pre.length));
+    const put = (s, re) => s.replace(re, (m, pre, name, at4) => {
+      if (at4 + pre.length < cut2) return m;
+      const head = /(^|[.!?]\s+)$/.test(s.slice(0, at4 + pre.length));
       return `${pre}${head ? "The" : "the"} ${name}`;
     });
     return put(put(before + text, ARTICLED), PLACED).slice(cut2).replace(PLURAL_OWN, "$1'");
@@ -38260,12 +38299,12 @@
     g2.headlines.push({ turn: g2.turn, week: newsWeek(g2), text: theWords(text), kind, nat, region, ...tag });
   }
   function newsWeek(g2) {
-    const me = g2.human, at3 = me ? g2.order.indexOf(me) : -1, reached = g2.flags.newsweek ?? 0, month3 = (g2.turn - 1) * 4;
-    if (at3 >= 0 && g2.phase === at3 && g2.flags.eve !== 1) {
+    const me = g2.human, at4 = me ? g2.order.indexOf(me) : -1, reached = g2.flags.newsweek ?? 0, month3 = (g2.turn - 1) * 4;
+    if (at4 >= 0 && g2.phase === at4 && g2.flags.eve !== 1) {
       g2.flags.newsweek = Math.max(reached > month3 ? reached : 0, month3 + g2.week);
       return g2.week;
     }
-    if (at3 < 0 || g2.phase <= at3) return g2.week;
+    if (at4 < 0 || g2.phase <= at4) return g2.week;
     let floor = reached > month3 ? reached - month3 : 0;
     for (let i = g2.reports.length - 1; i >= 0 && g2.reports[i].turn === g2.turn; i--) if (g2.reports[i].attNat === me) floor = Math.max(floor, g2.reports[i].week);
     return Math.max(g2.week, floor);
@@ -38401,16 +38440,16 @@
   }
   function patronPress(g2, p) {
     const P = g2.nations[p], { europe, beside, willGone } = pressData(p);
-    const at3 = (step2, fallen = false) => ({ step: step2, answers: answersOf(p, step2), fallen });
-    if (!P?.alive) return at3(1);
+    const at4 = (step2, fallen = false) => ({ step: step2, answers: answersOf(p, step2), fallen });
+    if (!P?.alive) return at4(1);
     const foe = (u) => !u.dead && u.kind !== "fort" && atWar(g2, u.nat, p);
     const invaded = g2.regions.some((r) => r.owner === p && !r.overseas && (r.units.some(foe) || !allied(g2, p, r.ctrl) && (r.garr ?? []).some(foe)));
-    if (invaded || P.resilience > 0 && collapseScore(g2, p) >= willGone * P.resilience) return at3(4);
+    if (invaded || P.resilience > 0 && collapseScore(g2, p) >= willGone * P.resilience) return at4(4);
     const enemies = europe.filter((e) => e !== p && g2.nations[e]?.alive && atWar(g2, p, e));
-    if (!enemies.length) return at3(1);
+    if (!enemies.length) return at4(1);
     const F = beside ? g2.nations[beside] : void 0;
-    if (F?.alive && !F.dormant && F.atWar.some((e) => enemies.includes(e))) return at3(2);
-    return at3(3, !F?.alive);
+    if (F?.alive && !F.dormant && F.atWar.some((e) => enemies.includes(e))) return at4(2);
+    return at4(3, !F?.alive);
   }
   var dominionAnswers = (g2, p, a, b, war) => hashString(`dominion:${g2.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < (war < g2.turn ? answersOf(p) : patronPress(g2, p).answers);
   function standsBy(g2, a, b, since) {
@@ -38595,9 +38634,9 @@
       const sunk = convoyDrag(g2, id);
       const open2 = lanesOf(id);
       let mates = null;
-      for (const at3 of sources) {
-        if (!friend2[road[at3]]) continue;
-        const r = g2.regions[at3];
+      for (const at4 of sources) {
+        if (!friend2[road[at4]]) continue;
+        const r = g2.regions[at4];
         const shut = !!field4 && field4[r.id] !== r.ctrl;
         const home = !shut && r.ctrl === id && r.owner === id;
         const depot = home && (r.cap || r.fac >= 3 || !!g2.flags["depot:" + r.id]);
@@ -38778,9 +38817,9 @@
   function worksShare(months3) {
     const s = DEFENCE.entrench.share;
     if (months3 <= 0) return 0;
-    const at3 = (k) => k <= 0 ? 0 : s[Math.min(k, s.length) - 1];
+    const at4 = (k) => k <= 0 ? 0 : s[Math.min(k, s.length) - 1];
     const i = Math.floor(months3);
-    return at3(i) + (at3(i + 1) - at3(i)) * (months3 - i);
+    return at4(i) + (at4(i + 1) - at4(i)) * (months3 - i);
   }
   function surprised(g2, nat, foes) {
     const n = g2.nations[nat];
@@ -38890,8 +38929,8 @@
       foot: armsA ? armsA.foot : 0,
       tanks: armsA ? armsA.tanks : 0
     } : null;
-    const at3 = facing2 ? antiTank(g2, attackers2, defenders, target, facing2) : null;
-    const boxed = !wide3 || !!at3 && Math.round(at3.strength * 1e6) / 1e6 >= DESERT.box;
+    const at4 = facing2 ? antiTank(g2, attackers2, defenders, target, facing2) : null;
+    const boxed = !wide3 || !!at4 && Math.round(at4.strength * 1e6) / 1e6 >= DESERT.box;
     const onFoot = facing2 ? footShare2(attackers2) : 0;
     const mortar = facing2 ? morUp ? 1 - (1 - mortars(g2, attackers2)) * (1 - morUp) : mortars(g2, attackers2) : 0;
     const rushed = town && g2.flags[`siege:${target.id}`] === g2.turn ? SIEGE.assault.hasty[townSize(g2, target)] : 1;
@@ -38932,15 +38971,15 @@
           p *= 0.6;
           armorStuck = true;
         } else {
-          if (at3 ? at3.strength < 1 : !defHasArmor) {
-            p *= 1 + 0.25 * (at3 ? 1 - at3.strength : 1);
+          if (at4 ? at4.strength < 1 : !defHasArmor) {
+            p *= 1 + 0.25 * (at4 ? 1 - at4.strength : 1);
             armorShock = true;
           }
-          if (at3 && at3.alone > 0) {
+          if (at4 && at4.alone > 0) {
             const old = armsA ? armsA.alone : 1;
-            if (1 - at3.alone < old) {
-              p *= (1 - at3.alone) / old;
-              armorAlone = at3.alone;
+            if (1 - at4.alone < old) {
+              p *= (1 - at4.alone) / old;
+              armorAlone = at4.alone;
               aloneOver = old;
             }
           }
@@ -39105,7 +39144,7 @@
       }
     }
     const caught = wide3 && !town && surprised(g2, attNat, /* @__PURE__ */ new Set([...dN, target.ctrl])) ? DEFENCE.prepared.surprise : 0;
-    const pierced = armorShock ? DEFENCE.prepared.armour * (at3 ? 1 - at3.strength : 1) : 0;
+    const pierced = armorShock ? DEFENCE.prepared.armour * (at4 ? 1 - at4.strength : 1) : 0;
     const prepared = wide3 && !town && D2 > 0 ? Math.min(1, readyD / D2) * (1 - soften) * (1 - mortar) * (1 - caught) * (1 - pierced) : 0;
     const dice2 = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]] : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
     const guarded2 = !town && !opts.sally && defenders.length > 0 ? guardInField(g2, target, attNat, attackers2) : 0;
@@ -39279,7 +39318,7 @@
       const built = works >= full - 0.05 ? "their works are finished" : works < 0.05 ? "their works have been battered flat" : `their works are ${age === 1 ? "a month" : `${age} months`} old of the ${full} they take to finish`;
       const who = dugIn === defenders.length ? "The defenders are dug in" : `${dugIn} of the ${defenders.length} defending corps are dug in`;
       const worked = soften && mortar ? "the guns and mortars have" : mortar ? "the mortars have" : "the guns have";
-      const broke = !at3 ? "LINE has no armour to meet the tanks" : at3.strength < 0.1 ? "LINE has little to stop the tanks" : "the tanks break part of the way into LINE";
+      const broke = !at4 ? "LINE has no armour to meet the tanks" : at4.strength < 0.1 ? "LINE has little to stop the tanks" : "the tanks break part of the way into LINE";
       const lost = [(soften || mortar) && prepared < 1 ? `${worked} worked LINE over` : "", caught ? "the new offensive has caught LINE off balance" : "", pierced ? broke : ""].filter(Boolean).map((t, i) => t.replace("LINE", i ? "it" : "the line"));
       const cover3 = dugD > 0 ? Math.round((DUG_IN - 1) * Math.min(1, works) * 100) : 0;
       const luck = prepared > 5e-3 ? `The day runs against the attack: an even chance takes about ${evenOdds(dice2).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer` : defenders.some((d) => d.dug && !d.supplied) && !defenders.some((d) => d.dug && d.supplied) ? "Cut off from supply, the line is no better than open ground on the day" : "On the day the line is no better than open ground";
@@ -39365,7 +39404,7 @@
     }
     if (spied) lines2.push({ label: "Intelligence", value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
     if (sneaked) lines2.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
-    if (armorShock) lines2.push(at3 ? { label: "Armor", value: `Tank attack up ${Math.round(25 * (1 - at3.strength))}%` } : { label: "Armor", value: "Tanks against a defence without armor", effect: "Tank attack up 25%" });
+    if (armorShock) lines2.push(at4 ? { label: "Armor", value: `Tank attack up ${Math.round(25 * (1 - at4.strength))}%` } : { label: "Armor", value: "Tanks against a defence without armor", effect: "Tank attack up 25%" });
     if (armorStuck) lines2.push({ label: "Armor", value: "Tanks in close country", effect: "Tank attack cut to 60%" });
     if (streets) lines2.push({ label: "Armor", value: "Tanks in the streets of the town", effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
     if (hasty) lines2.push({ label: "A hasty assault", value: "The army has only just come up to the town: it goes in off the march", effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
@@ -39373,13 +39412,13 @@
     let faced = null;
     if (wide3) {
       const sniped = snipedIn(target, town);
-      const toll = tollOf(g2, attackers2, defenders, at3, facing2, sniped, mgUp);
+      const toll = tollOf(g2, attackers2, defenders, at4, facing2, sniped, mgUp);
       const tanksIn = attackers2.some((c) => c.kind === "arm");
       const dugNow = facing2 ? defenders.some((d) => facing2.works(d) > 0) : false;
       faced = {
-        antiTank: at3,
+        antiTank: at4,
         toll,
-        shock: at3 && tanksIn && !armorStuck ? 1 - at3.strength : null,
+        shock: at4 && tanksIn && !armorStuck ? 1 - at4.strength : null,
         alone: armorAlone,
         machineGuns: toll.why.machineGuns > 0 && onFoot > 0,
         mgDug: facing2 ? defenders.some((d) => machineGuns(g2, d, 1, 0) > 1 && facing2.works(d) > 0) : false,
@@ -39632,7 +39671,7 @@
     const mobile = attackers2.some((c) => KIND[c.kind].mobile);
     const weight5 = odds === a.odds ? a.weight : g2.flags.open === 1 && !town ? Math.min(1, odds / DEFENCE.wear.fullAt) : 1;
     const all = a.defenders.reduce((s, c) => s + men(c), 0);
-    const at3 = (R2, win) => {
+    const at4 = (R2, win) => {
       const attFrac = attackLoss(R2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
       const defFrac = defenceLoss(R2);
       const stood = win ? 1 : HELD_LOSS;
@@ -39645,8 +39684,8 @@
     const lo = Math.max(1e-6, odds * a.dice[0]), hi = Math.max(lo, odds * a.dice[1]);
     return {
       chance: chanceOn(odds, a.dice),
-      won: hi >= 1.2 ? at3((Math.max(1.2, lo) + hi) / 2, true) : null,
-      lost: lo < 1.2 ? at3((lo + Math.min(1.2, hi)) / 2, false) : null
+      won: hi >= 1.2 ? at4((Math.max(1.2, lo) + hi) / 2, true) : null,
+      lost: lo < 1.2 ? at4((lo + Math.min(1.2, hi)) / 2, false) : null
     };
   }
   var GUNS_OVERRUN = { label: "Guns alone", value: "The guns stand with no infantry or tanks in front of them", effect: "An attack overruns them: every gun is taken" };
@@ -40145,7 +40184,7 @@
     takeWorks(g2, c, to);
     return true;
   }
-  var news2 = (code, strong, rest, at3) => ({ code, line: `${strong} ${rest}`, strong, at: at3 });
+  var news2 = (code, strong, rest, at4) => ({ code, line: `${strong} ${rest}`, strong, at: at4 });
   function cutAside(g2, r) {
     const why = cutCause(g2, r), on = cutOn(g2, r);
     return ` (${why ? `${CAUSE_WORDS[why]}, ` : "since "}${turnToDate(on ?? g2.turn).label})`;
@@ -40194,7 +40233,7 @@
     }
     if (cost[to] >= INF) return { code: "unjoined", line: `No railway joins ${from2.name} to ${dest.name}.` };
     const way = [];
-    for (let at3 = to; at3 >= 0 && at3 !== c.reg; at3 = prev[at3]) way.unshift(at3);
+    for (let at4 = to; at4 >= 0 && at4 !== c.reg; at4 = prev[at4]) way.unshift(at4);
     let a = c.reg;
     for (const b of way) {
       const r = g2.regions[b];
@@ -40410,8 +40449,8 @@
     const armistice = nat === "FRA" && !g2.flags.dom && !X.freedOn;
     delete X.freedOn;
     for (const c of g2.corps.filter((c2) => c2.nat === nat)) {
-      const at3 = g2.regions[c.reg];
-      if (armistice && at3.vichy && at3.overseas && at3.ctrl === "FRA") {
+      const at4 = g2.regions[c.reg];
+      if (armistice && at4.vichy && at4.overseas && at4.ctrl === "FRA") {
         c.nat = "VIC";
         c.hold = true;
         continue;
@@ -40680,12 +40719,12 @@
     g2.supplyDirty = true;
   }
   var sharesWar = (g2, nat, friend2) => !!g2.nations[friend2]?.atWar.some((e) => atWar(g2, nat, e));
-  function roomNear2(g2, nat, at3) {
+  function roomNear2(g2, nat, at4) {
     const full = (r) => friendlyUnits(g2, r, nat).filter((u) => u.kind !== "eng").length >= STACK;
-    if (!full(at3)) return at3;
+    if (!full(at4)) return at4;
     const seen2 = new Uint8Array(g2.regions.length);
-    const q = [at3.id];
-    seen2[at3.id] = 1;
+    const q = [at4.id];
+    seen2[at4.id] = 1;
     for (let i = 0; i < q.length; i++) {
       for (const j of g2.regions[q[i]].nb) {
         if (seen2[j]) continue;
@@ -40727,14 +40766,14 @@
       if (rows.some((r, j) => r[2] === o.carried && r[1] === row2[1] && g2.flags[`sent:${j}`] === 1)) g2.flags[`sent:${i}`] = 2;
     });
   }
-  function fallbackHarbour(g2, nat, at3) {
-    const k = THEATRE_OF.get(at3.name) ?? -1;
+  function fallbackHarbour(g2, nat, at4) {
+    const k = THEATRE_OF.get(at4.name) ?? -1;
     if (k < 0) return null;
     let best = null, bd = Infinity;
     for (const r of g2.regions) {
-      if (!r.port || r.id === at3.id || THEATRE_OF.get(r.name) !== k) continue;
+      if (!r.port || r.id === at4.id || THEATRE_OF.get(r.name) !== k) continue;
       if (!allied(g2, nat, r.ctrl) || hostileUnits(g2, r, nat).length || friendlyUnits(g2, r, nat).filter((u) => u.kind !== "eng").length >= STACK) continue;
-      const d = Math.hypot(r.x - at3.x, r.y - at3.y);
+      const d = Math.hypot(r.x - at4.x, r.y - at4.y);
       if (d < bd || d === bd && best && r.id < best.id) {
         bd = d;
         best = r;
@@ -41557,7 +41596,7 @@
       }
     }
     plan.win = wins / STEPS2;
-    plan.verdict = VERDICT.find(([at3]) => plan.win >= at3)[1];
+    plan.verdict = VERDICT.find(([at4]) => plan.win >= at4)[1];
     plan.likely = { ours: each2(lo, Math.round), theirs: each2(lt, Math.round) };
     const worst = shares2(ends[0]), best = shares2(ends[1]);
     plan.range = {
@@ -41674,7 +41713,7 @@
     const away2 = f.flew === g2.turn && isOffensive(f.mission);
     const with_ = escorted(g2, f);
     const place2 = placeOf2(g2, kindFlown(f.mission), f.target, viewer);
-    const deck = afloat(f), at3 = groupAt(g2, f);
+    const deck = afloat(f), at4 = groupAt(g2, f);
     const fleet = deck ? carrierOf(g2, f) : f.ashore !== void 0 ? g2.fleets.find((c) => c.id === f.ashore) ?? null : null;
     const own = f.nat === viewer;
     const doing = away2 ? `Flew against ${place2} this month: back ${deck ? "aboard" : "at its airfield"} next month` : isOffensive(f.mission) ? `Ordered against ${place2}: flies when the month ends` : f.mission === "rest" ? "Resting and refitting" : kind === "bmr" ? deck ? "Ranged on deck, ready for a strike" : "Supporting the armies, and ready for a raid" : f.close && !deck ? "On ground support: on call over its own side's battles within its reach, and meets no raid" : with_ ? `On patrol, and sticking with the ${with_.name} as its escort` : deck ? fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : "On patrol over its fleet: meets any raid on the ships in its sea" : "On patrol: meets any raid within its reach";
@@ -41699,9 +41738,9 @@
       where: deck ? `Aboard the ${homeName(g2, f)}` : f.ashore !== void 0 ? `Ashore at ${g2.regions[f.base].name}` : `At ${g2.regions[f.base].name}`,
       wingMove: !own ? null : deck ? { order: "ashore", price: PRICE_ASHORE, why: whyNoShore(g2, f) } : f.ashore !== void 0 ? { order: "aboard", price: PRICE_ABOARD, why: whyNoDeck(g2, f) } : null,
       ship: f.ship ?? -1,
-      sea: at3.sea,
-      x: at3.x,
-      y: at3.y,
+      sea: at4.sea,
+      x: at4.x,
+      y: at4.y,
       doing,
       job: away2 || isOffensive(f.mission) ? "raid" : f.mission === "rest" ? "rest" : with_ ? "escort" : "patrol",
       escorts: with_ ? with_.id : -1,
@@ -42531,15 +42570,15 @@
   function cityOrders(g2, nat = g2.human) {
     const n = nat ? g2.nations[nat] : null;
     if (!n) return [];
-    const at3 = /* @__PURE__ */ new Map();
+    const at4 = /* @__PURE__ */ new Map();
     for (const b of n.queue) {
-      const l = at3.get(b.region);
+      const l = at4.get(b.region);
       if (l) l.push(b);
-      else at3.set(b.region, [b]);
+      else at4.set(b.region, [b]);
     }
-    const out = [...at3].map(([region, builds]) => cityOf(g2, region, n.id, false, builds));
+    const out = [...at4].map(([region, builds]) => cityOf(g2, region, n.id, false, builds));
     for (const r of g2.regions) {
-      if (r.ctrl === n.id || at3.has(r.id) || !agentAt(g2, r.id, n.id)) continue;
+      if (r.ctrl === n.id || at4.has(r.id) || !agentAt(g2, r.id, n.id)) continue;
       const theirs = g2.nations[r.ctrl]?.queue.filter((b) => b.region === r.id) ?? [];
       if (theirs.length) out.push(cityOf(g2, r.id, r.ctrl, true, theirs));
     }
@@ -42724,10 +42763,10 @@
   var leavesHome = (g2, nat, from2) => homeland(from2, nat) && floorShare(g2, nat) !== null;
   var weight3 = (us) => us.reduce((s, u) => s + u.divs * u.str, 0);
   function theatreFront(g2, nat, ground, ports) {
-    const at3 = ports.find((p) => allied(g2, nat, p.ctrl));
-    if (!at3) return null;
-    const on = /* @__PURE__ */ new Set([at3.id]);
-    const list4 = [at3.id];
+    const at4 = ports.find((p) => allied(g2, nat, p.ctrl));
+    if (!at4) return null;
+    const on = /* @__PURE__ */ new Set([at4.id]);
+    const list4 = [at4.id];
     for (let i = 0; i < list4.length; i++) for (const j of g2.regions[list4[i]].nb) if (!on.has(j) && ground.has(j) && allied(g2, nat, g2.regions[j].ctrl)) {
       on.add(j);
       list4.push(j);
@@ -42740,7 +42779,7 @@
       if (atWar(g2, u.nat, nat) && u.kind !== "fort") threat2 += u.divs * u.str;
       else if (on.has(id) && allied(g2, u.nat, nat)) held2 += u.divs * u.str;
     }
-    return { at: at3, on, threat: threat2, held: held2 };
+    return { at: at4, on, threat: threat2, held: held2 };
   }
   function homeThreat(g2, nat, waves2) {
     const coast = new Uint8Array(g2.seas.length);
@@ -43422,8 +43461,8 @@
     const door = !watchOnly && isOpen(g2) ? doorQuay(g2, nat) : null;
     const loose = !!door && !enemyAtTheDoor(g2, nat);
     const spare = (c, least) => {
-      const at3 = g2.regions[c.reg];
-      return own(at3).length >= least || loose && !ph.watch?.includes(at3.name) && !(at3.name in ph.staging);
+      const at4 = g2.regions[c.reg];
+      return own(at4).length >= least || loose && !ph.watch?.includes(at4.name) && !(at4.name in ph.staging);
     };
     for (const [name, all] of Object.entries(ph.staging)) {
       if (watchOnly && !ph.watch?.includes(name)) continue;
@@ -43676,7 +43715,7 @@
   function gather(g2, nat, ph) {
     if (!ph?.concentrate) return;
     const places = Object.keys(ph.concentrate).map((nm) => g2.byName[nm]).filter((r) => r && allied(g2, nat, r.ctrl));
-    const at3 = new Set(places.map((r) => r.id));
+    const at4 = new Set(places.map((r) => r.id));
     const fast = (r) => r.units.filter((u) => u.nat === nat && KIND[u.kind].mobile);
     const crowd = (r) => friendlyUnits(g2, r, nat).length;
     for (const r of places) {
@@ -43684,7 +43723,7 @@
       for (let guard = 0; guard < want && fast(r).length < want; guard++) {
         if (crowd(r) >= STACK) {
           const foot = r.units.find((u) => u.nat === nat && !u.hold && u.kind !== "fort" && !KIND[u.kind].mobile && u.ap > 0);
-          const next = r.nb.map((j) => g2.regions[j]).filter((x) => ctl(g2, x) === nat && within2(x) && !at3.has(x.id) && crowd(x) < STACK).sort((a, b) => crowd(a) - crowd(b))[0];
+          const next = r.nb.map((j) => g2.regions[j]).filter((x) => ctl(g2, x) === nat && within2(x) && !at4.has(x.id) && crowd(x) < STACK).sort((a, b) => crowd(a) - crowd(b))[0];
           if (!foot || !next || !moveCorps2(g2, foot, next)) break;
         }
         const d = hops(g2, r.id, (x) => allied(g2, nat, ctl(g2, x)));
@@ -43692,7 +43731,7 @@
           const here = g2.regions[c2.reg];
           return here.units.filter((u) => u.nat === nat && u.kind !== "fort").length >= 3 || !here.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0);
         };
-        const c = g2.corps.filter((x) => x.nat === nat && !x.hold && KIND[x.kind].mobile && !at3.has(x.reg) && d[x.reg] > 0 && spare(x) && (scope ? scope.has(x.reg) && x.ap >= d[x.reg] && d[x.reg] <= 4 : x.ap >= 4 && !aside(g2, g2.regions[x.reg], nat))).sort((a, b) => (scope ? atkPower(g2, b) - atkPower(g2, a) : 0) || crowd(g2.regions[b.reg]) - crowd(g2.regions[a.reg]) || d[a.reg] - d[b.reg])[0];
+        const c = g2.corps.filter((x) => x.nat === nat && !x.hold && KIND[x.kind].mobile && !at4.has(x.reg) && d[x.reg] > 0 && spare(x) && (scope ? scope.has(x.reg) && x.ap >= d[x.reg] && d[x.reg] <= 4 : x.ap >= 4 && !aside(g2, g2.regions[x.reg], nat))).sort((a, b) => (scope ? atkPower(g2, b) - atkPower(g2, a) : 0) || crowd(g2.regions[b.reg]) - crowd(g2.regions[a.reg]) || d[a.reg] - d[b.reg])[0];
         if (!c) break;
         if (scope) {
           walkToward(g2, c, r);
@@ -43990,9 +44029,9 @@
       }
     }
     for (const run of oceanRuns(g2, nat)) {
-      const key6 = `fy:${nat}:${run.ocean}`, at3 = `fyAt:${nat}:${run.ocean}`;
-      if (g2.flags[at3] !== g2.turn) {
-        g2.flags[at3] = g2.turn;
+      const key6 = `fy:${nat}:${run.ocean}`, at4 = `fyAt:${nat}:${run.ocean}`;
+      if (g2.flags[at4] !== g2.turn) {
+        g2.flags[at4] = g2.turn;
         g2.flags[key6] = Math.min(O.bank, (g2.flags[key6] ?? 0) + run.share * n.sealift);
       }
       let spare = home().length - O.guard;
@@ -44132,7 +44171,7 @@
     }
   }
   function takeAim(g2, nat, sfx, quay, force3, L2, you, waveFor = null) {
-    const key6 = `st:aim:${nat}${sfx}`, at3 = `st:aimAt:${nat}${sfx}`;
+    const key6 = `st:aim:${nat}${sfx}`, at4 = `st:aimAt:${nat}${sfx}`;
     if (!force3.length) return;
     const men2 = force3.reduce((s, c) => s + c.divs * c.str, 0);
     let best = null, bv = 0;
@@ -44156,18 +44195,18 @@
     }
     if (!best) {
       delete g2.flags[key6];
-      delete g2.flags[at3];
+      delete g2.flags[at4];
       return;
     }
     if (g2.flags[key6] !== best.id + 1 || opensSoon(g2, nat, best)) {
       g2.flags[key6] = best.id + 1;
-      g2.flags[at3] = g2.turn;
+      g2.flags[at4] = g2.turn;
       return;
     }
-    if (g2.turn - (g2.flags[at3] ?? g2.turn) >= 6) {
+    if (g2.turn - (g2.flags[at4] ?? g2.turn) >= 6) {
       g2.flags[`st:aimNo:${nat}:${best.id}`] = g2.turn + 12;
       delete g2.flags[key6];
-      delete g2.flags[at3];
+      delete g2.flags[at4];
     }
   }
   function hops(g2, from2, pass) {
@@ -44199,9 +44238,9 @@
       return lead2 ? notTanksAlone(g2, [...pick4, lead2], pool, target) : null;
     }
     if (g2.flags.open !== 1 || !pick4.some((c) => c.kind === "arm") || pick4.some((c) => isFoot(c))) return pick4;
-    const at3 = assess(g2, pick4, target).faced?.antiTank;
-    if (!at3) return pick4;
-    const strength3 = Math.round(at3.strength * 1e6) / 1e6;
+    const at4 = assess(g2, pick4, target).faced?.antiTank;
+    if (!at4) return pick4;
+    const strength3 = Math.round(at4.strength * 1e6) / 1e6;
     if (strength3 < SUPPORT.staff.gunned) return pick4;
     const foot = pool.filter((c) => isFoot(c) && !pick4.includes(c)).sort((a, b) => atkPower(g2, b) - atkPower(g2, a))[0];
     if (foot) return [...pick4, foot];
@@ -44549,16 +44588,16 @@
       if (best) foldCorps(g2, best.keep, best.gone);
     }
   }
-  function support(g2, nat, at3) {
-    if (!allied(g2, nat, ctl(g2, at3))) return;
-    const danger = at3.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0);
+  function support(g2, nat, at4) {
+    if (!allied(g2, nat, ctl(g2, at4))) return;
+    const danger = at4.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0);
     const want = danger ? 2 : 1;
-    let have = friendlyUnits(g2, at3, nat).length;
+    let have = friendlyUnits(g2, at4, nat).length;
     if (have >= want) return;
-    const pool = g2.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== "fort" && g2.regions[c.reg].nb.includes(at3.id) && c.ap >= Math.min(moveCost(g2, c, at3), 4)).sort((a, b) => (a.kind === "arm" ? 1 : 0) - (b.kind === "arm" ? 1 : 0) || b.ap - a.ap);
+    const pool = g2.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== "fort" && g2.regions[c.reg].nb.includes(at4.id) && c.ap >= Math.min(moveCost(g2, c, at4), 4)).sort((a, b) => (a.kind === "arm" ? 1 : 0) - (b.kind === "arm" ? 1 : 0) || b.ap - a.ap);
     for (const c of pool) {
       if (have >= want) break;
-      if (moveCorps2(g2, c, at3)) have++;
+      if (moveCorps2(g2, c, at4)) have++;
     }
   }
   function advance(g2, nat, enemies, wave, door, halt) {
@@ -45171,9 +45210,9 @@
     let phase = d.phase;
     g2.order.forEach((id, k) => {
       if (order2.includes(id)) return;
-      const at3 = k > 0 && order2.includes(g2.order[k - 1]) ? order2.indexOf(g2.order[k - 1]) + 1 : order2.length;
-      order2.splice(at3, 0, id);
-      if (at3 <= phase) phase++;
+      const at4 = k > 0 && order2.includes(g2.order[k - 1]) ? order2.indexOf(g2.order[k - 1]) + 1 : order2.length;
+      order2.splice(at4, 0, id);
+      if (at4 <= phase) phase++;
     });
     g2.turn = d.turn;
     g2.phase = phase;
@@ -45191,8 +45230,8 @@
     for (const [id, n] of Object.entries(d.nations)) {
       const lab = g2.nations[id]?.lab;
       if (!lab || n.lab !== void 0) continue;
-      const at3 = d.order.indexOf(id);
-      lab.months = Math.max(0, at3 >= 0 && at3 <= d.phase ? d.turn : d.turn - 1);
+      const at4 = d.order.indexOf(id);
+      lab.months = Math.max(0, at4 >= 0 && at4 <= d.phase ? d.turn : d.turn - 1);
       for (const f of FIELDS) lab.clock[f] = lab.months;
     }
     g2.headlines = d.headlines;
@@ -45544,25 +45583,25 @@
     return did.length ? `${listAnd3(did)}.` : null;
   }
   function raidWords(g2, r) {
-    const at3 = r.region >= 0 ? g2.regions[r.region] : null;
-    if (!at3) return `ships in the ${g2.seas[r.zone]?.name ?? r.place}`;
+    const at4 = r.region >= 0 ? g2.regions[r.region] : null;
+    if (!at4) return `ships in the ${g2.seas[r.zone]?.name ?? r.place}`;
     switch (r.mission) {
       case "bomb":
-        return at3.fac > 0 ? `the factories at ${at3.name}` : `the railway at ${at3.name}`;
+        return at4.fac > 0 ? `the factories at ${at4.name}` : `the railway at ${at4.name}`;
       case "night":
-        return `${at3.name} by night`;
+        return `${at4.name} by night`;
       case "ground":
-        return `the troops at ${at3.name}`;
+        return `the troops at ${at4.name}`;
       case "line":
-        return `the fieldworks at ${at3.name}`;
+        return `the fieldworks at ${at4.name}`;
       case "town":
-        return `the town of ${at3.name}`;
+        return `the town of ${at4.name}`;
       case "superiority":
-        return `the sky over ${at3.name}`;
+        return `the sky over ${at4.name}`;
       case "harbour":
-        return `the ships in harbour at ${at3.name}`;
+        return `the ships in harbour at ${at4.name}`;
       default:
-        return at3.name;
+        return at4.name;
     }
   }
   var lossesOf = (reps) => ({
@@ -45655,8 +45694,8 @@
       case "research": {
         const s = techOf(g2, nat), teams2 = teamsOf(g2, nat) + spyTeamsOf(g2, nat);
         if (!s) return "";
-        const at3 = workOf(s).map((w) => `${techById(w.id)?.name ?? w.id} (${months2(Math.max(1, Math.ceil(w.left)))})`);
-        return at3.length ? `${at3.length} of ${teams2} team${teams2 === 1 ? "" : "s"} at work: ${some(at3, 4)}.` : `No research team has work.`;
+        const at4 = workOf(s).map((w) => `${techById(w.id)?.name ?? w.id} (${months2(Math.max(1, Math.ceil(w.left)))})`);
+        return at4.length ? `${at4.length} of ${teams2} team${teams2 === 1 ? "" : "s"} at work: ${some(at4, 4)}.` : `No research team has work.`;
       }
       case "build": {
         const corps = n.queue.filter((b) => b.what === "corps").length, other4 = n.queue.length - corps;
@@ -45679,8 +45718,8 @@
         }
         const open2 = Object.values(g2.nations).filter((T) => T.id !== nat && courtable(T)).length;
         const who = staffRuns(g2, nat, "diplomacy") ? Object.values(g2.nations).filter((T) => (g2.flags[`court:${nat}:${T.id}`] ?? -9) >= g2.turn - 1).sort((x, y) => g2.flags[`court:${nat}:${y.id}`] - g2.flags[`court:${nat}:${x.id}`])[0] : void 0;
-        const at3 = who ? ` Your envoys are courting ${the2(who)}.` : "";
-        return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open2 ? `${open2} neutral${open2 === 1 ? " is" : "s are"} open to courting.` : "No neutral is open to courting."}${at3}`;
+        const at4 = who ? ` Your envoys are courting ${the2(who)}.` : "";
+        return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open2 ? `${open2} neutral${open2 === 1 ? " is" : "s are"} open to courting.` : "No neutral is open to courting."}${at4}`;
       }
       case "spies": {
         const all = agentsOf(g2, nat), out = all.filter((a) => abroad(g2, a)).length;
@@ -45855,14 +45894,14 @@
     if (!f) return null;
     if (gunsKnown(g2, a, viewer)) return faceLines(f);
     const out = [];
-    const at3 = f.antiTank;
-    const lone = at3 && f.shock !== null ? aloneUnknown(at3) : null;
+    const at4 = f.antiTank;
+    const lone = at4 && f.shock !== null ? aloneUnknown(at4) : null;
     if (lone) out.push(lone);
-    const mines = !!at3 && at3.mines > 0 && minesAt(g2, target) > 0 && minesKnown(g2, target, viewer);
-    if (at3 && f.shock !== null && (at3.works > 0 || mines)) {
-      const names = [at3.works > 0 ? at3.fort >= 2 ? "Dragon's teeth" : "A ditch" : "", mines ? at3.works > 0 ? "mines" : "Mines" : ""].filter(Boolean);
+    const mines = !!at4 && at4.mines > 0 && minesAt(g2, target) > 0 && minesKnown(g2, target, viewer);
+    if (at4 && f.shock !== null && (at4.works > 0 || mines)) {
+      const names = [at4.works > 0 ? at4.fort >= 2 ? "Dragon's teeth" : "A ditch" : "", mines ? at4.works > 0 ? "mines" : "Mines" : ""].filter(Boolean);
       const lone2 = names.length === 1 && names[0] === "A ditch";
-      out.push({ sign: "anti-tank", text: `${names.join(" and ")}: ${lone2 ? "it takes" : "they take"} ${smallShare(at3.works + (mines ? at3.mines : 0))} of your tanks' shock, before their guns are counted.` });
+      out.push({ sign: "anti-tank", text: `${names.join(" and ")}: ${lone2 ? "it takes" : "they take"} ${smallShare(at4.works + (mines ? at4.mines : 0))} of your tanks' shock, before their guns are counted.` });
     }
     const works = faceLines(f).find((l) => l.sign === "mortar");
     if (works) out.push(works);
@@ -46068,7 +46107,7 @@
     const end = m.get(to);
     if (!end || end.attack) return 0;
     const path = [];
-    for (let at3 = to; at3 !== c.reg && at3 >= 0; at3 = m.get(at3).prev) path.unshift(at3);
+    for (let at4 = to; at4 !== c.reg && at4 >= 0; at4 = m.get(at4).prev) path.unshift(at4);
     let n = 0;
     for (const j of path) {
       if (!moveCorps(g2, c, g2.regions[j])) break;
@@ -46151,8 +46190,8 @@
     }).filter((l) => !k.none.length || !(l.label === "Machine guns" || l.label === "Tanks alone" || l.label === "Guns alone" || l.label === "Who pays" || l.label === "Minefields" && !minesKnown(g2, target, g2.human)));
     const loneMost = k.none.length && a.faced?.antiTank && a.faced.shock !== null ? SUPPORT.antiTank.alone.cut * (1 - a.faced.antiTank.cover) : 0;
     if (loneMost >= 5e-3) {
-      const at3 = lines2.findIndex((l) => l.label === "Armor");
-      lines2.splice(at3 < 0 ? lines2.length : at3 + 1, 0, { label: "Tanks alone", value: `Tank attack cut by as much as ${Math.round(loneMost * 100)}%: their guns are not known` });
+      const at4 = lines2.findIndex((l) => l.label === "Armor");
+      lines2.splice(at4 < 0 ? lines2.length : at4 + 1, 0, { label: "Tanks alone", value: `Tank attack cut by as much as ${Math.round(loneMost * 100)}%: their guns are not known` });
     }
     const nn = k.none.length, old = k.report.length;
     const count4 = (x) => ["No", "One", "Two", "Three", "Four", "Five", "Six"][x] ?? `${x}`;
@@ -47394,7 +47433,7 @@
     const end = ground.get(to);
     if (!end) return null;
     const road = [];
-    for (let at3 = to; at3 !== c.reg && at3 >= 0; at3 = ground.get(at3).prev) road.unshift(at3);
+    for (let at4 = to; at4 !== c.reg && at4 >= 0; at4 = ground.get(at4).prev) road.unshift(at4);
     return { road, cost: end.cost };
   }
   var marchMonths = (c, cost) => Math.max(1, Math.ceil(cost / Math.max(1, c.apMax ?? 4)));
@@ -47408,7 +47447,7 @@
     }
     if (far < 0) return [];
     const path = [];
-    for (let at3 = road[far]; at3 !== c.reg && at3 >= 0; at3 = m.get(at3).prev) path.unshift(at3);
+    for (let at4 = road[far]; at4 !== c.reg && at4 >= 0; at4 = m.get(at4).prev) path.unshift(at4);
     return path;
   }
   function enemyReach(g2, matters) {
@@ -47443,8 +47482,8 @@
     for (const id of enemyReach(g2, ourGround(g2))) g2.flags[`hot:${g2.turn}:${id}`] = 1;
   }
   var wasHot = (g2, id, reg) => {
-    const at3 = g2.flags[`marchAt:${id}`];
-    return at3 !== void 0 && g2.flags[`hot:${at3}:${reg}`] === 1;
+    const at4 = g2.flags[`marchAt:${id}`];
+    return at4 !== void 0 && g2.flags[`hot:${at4}:${reg}`] === 1;
   };
   function sweepHot(g2) {
     const keys = Object.keys(g2.flags);
@@ -47470,8 +47509,8 @@
     const why = whyNotMarch(g2, c, to, groundOf4);
     if (why) return { ok: false, spent, now: false, months: 0, road: [], line: why };
     const way = roadOver(g2, c, to, groundOf4);
-    const at3 = spent ? void 0 : (kept2.reach ? kept2.reach() : reach2(g2, c)).get(to);
-    if (at3 && !at3.attack) return { ok: true, spent, now: true, months: 0, road: way.road, line: "" };
+    const at4 = spent ? void 0 : (kept2.reach ? kept2.reach() : reach2(g2, c)).get(to);
+    if (at4 && !at4.attack) return { ok: true, spent, now: true, months: 0, road: way.road, line: "" };
     const months3 = spent ? marchMonths(c, way.cost) : 1 + marchMonths(c, Math.max(1, way.cost - c.ap));
     const line = spent ? `${c.name} marches here from next month, ${aboutMonths(months3)}.` : `${c.name} marches here over ${aboutMonths(months3)}, going on by itself as each month opens.`;
     return { ok: true, spent, now: false, months: months3, road: way.road, line };
@@ -47960,9 +47999,9 @@
       if (!fighters) fighters = g2.corps.filter((c) => !c.dead && armyOf(c) === nat && fights(c) && !c.hold && c.town === void 0 && c.leave === void 0 && c.ap > 0);
       const can2 = current(g2) === nat ? fighters.filter((c) => reach2(g2, c).has(r.id)) : [];
       const red = can2.length > 0;
-      const at3 = can2.length ? [...new Set(can2.map((c) => c.reg))].sort((a, b) => Number(!r.nb.includes(a)) - Number(!r.nb.includes(b)) || can2.filter((c) => c.reg === b).length - can2.filter((c) => c.reg === a).length || a - b)[0] : -1;
+      const at4 = can2.length ? [...new Set(can2.map((c) => c.reg))].sort((a, b) => Number(!r.nb.includes(a)) - Number(!r.nb.includes(b)) || can2.filter((c) => c.reg === b).length - can2.filter((c) => c.reg === a).length || a - b)[0] : -1;
       const town = townName(r);
-      out.push({ region: r.id, what, red, help: can2.filter((c) => c.reg === at3).map((c) => c.id), from: at3, line: red ? `Only ${what} are left round ${town}: send infantry or tanks this month, or the siege is raised.` : `Only ${what} are left round ${town}. No infantry or tanks of yours can reach them this month: the siege will be raised.` });
+      out.push({ region: r.id, what, red, help: can2.filter((c) => c.reg === at4).map((c) => c.id), from: at4, line: red ? `Only ${what} are left round ${town}: send infantry or tanks this month, or the siege is raised.` : `Only ${what} are left round ${town}. No infantry or tanks of yours can reach them this month: the siege will be raised.` });
     }
     return out;
   }
@@ -49182,12 +49221,12 @@
     const cols = Math.round(w / cell), rows = Math.round(h / cell), n = cols * rows;
     const rng = new Rng(seed ^ 24301);
     const R2 = RECIPE[place2.terrain] ?? RECIPE.plains;
-    const at3 = (c, r) => r * cols + c;
+    const at4 = (c, r) => r * cols + c;
     const ground = new Array(n).fill(G3.open);
     const height = new Array(n).fill(0);
     const lift2 = fractal(rng, cols, rows, 28, 4);
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      let v = lift2[at3(c, r)];
+      let v = lift2[at4(c, r)];
       if (place2.terrain === "mountain") {
         const pass = Math.exp(-(((c - cols / 2) / (cols * 0.14)) ** 2));
         v = Math.max(0, v - 0.45 * pass) * 1.25;
@@ -49195,20 +49234,20 @@
       if (place2.terrain === "desert") {
         v = v * 0.5 + (r > rows * 0.62 ? 0.5 : r > rows * 0.55 ? (r - rows * 0.55) / (rows * 0.07) * 0.5 : 0);
       }
-      height[at3(c, r)] = v * R2.relief;
+      height[at4(c, r)] = v * R2.relief;
     }
-    const coverOf = (share, scale, code, where = () => true) => {
+    const coverOf2 = (share, scale, code, where = () => true) => {
       if (share <= 0) return;
       const f = fractal(rng, cols, rows, scale, 3), k = cut(f, 1 - share);
-      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (f[at3(c, r)] > k && where(c, r) && ground[at3(c, r)] === G3.open) ground[at3(c, r)] = code;
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (f[at4(c, r)] > k && where(c, r) && ground[at4(c, r)] === G3.open) ground[at4(c, r)] = code;
     };
-    coverOf(R2.marsh, 12, G3.marsh, (c, r) => height[at3(c, r)] < R2.relief * 0.55);
-    coverOf(R2.woods, 10, G3.woods);
-    coverOf(R2.fields, 7, G3.field);
-    coverOf(R2.rough, 9, G3.rough);
+    coverOf2(R2.marsh, 12, G3.marsh, (c, r) => height[at4(c, r)] < R2.relief * 0.55);
+    coverOf2(R2.woods, 10, G3.woods);
+    coverOf2(R2.fields, 7, G3.field);
+    coverOf2(R2.rough, 9, G3.rough);
     if (R2.rock > 0) {
       const slope = new Float32Array(n);
-      for (let r = 1; r < rows - 1; r++) for (let c = 1; c < cols - 1; c++) slope[at3(c, r)] = Math.hypot(height[at3(c + 1, r)] - height[at3(c - 1, r)], height[at3(c, r + 1)] - height[at3(c, r - 1)]) / (2 * cell);
+      for (let r = 1; r < rows - 1; r++) for (let c = 1; c < cols - 1; c++) slope[at4(c, r)] = Math.hypot(height[at4(c + 1, r)] - height[at4(c - 1, r)], height[at4(c, r + 1)] - height[at4(c, r - 1)]) / (2 * cell);
       const k = cut(slope, 1 - R2.rock);
       for (let i = 0; i < n; i++) if (slope[i] > k && slope[i] > 0.12) ground[i] = G3.rock;
     }
@@ -49227,11 +49266,11 @@
       else {
         for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
           const d = Math.hypot(c * cell + cell / 2 - tx2, r * cell + cell / 2 - ty2) / rad;
-          if (d < 1 && dense[at3(c, r)] > 0.25 + 0.45 * d) ground[at3(c, r)] = G3.buildings;
+          if (d < 1 && dense[at4(c, r)] > 0.25 + 0.45 * d) ground[at4(c, r)] = G3.buildings;
         }
         for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
           const d = Math.hypot(c * cell - tx2, r * cell - ty2) / (rad * 1.3);
-          if (d < 1) height[at3(c, r)] *= 0.4 + 0.6 * d;
+          if (d < 1) height[at4(c, r)] *= 0.4 + 0.6 * d;
         }
       }
     }
@@ -49241,7 +49280,7 @@
         const c0 = Math.floor(x / cell), r0 = Math.floor(y / cell);
         for (let dc = 0; dc < wide3; dc++) {
           const c = c0 + dc;
-          if (c >= 0 && c < cols && r0 >= 0 && r0 < rows && ground[at3(c, r0)] !== G3.water) ground[at3(c, r0)] = G3.road;
+          if (c >= 0 && c < cols && r0 >= 0 && r0 < rows && ground[at4(c, r0)] !== G3.water) ground[at4(c, r0)] = G3.road;
         }
       }
     };
@@ -49270,11 +49309,11 @@
         for (let r = 0; r < rows; r++) {
           const y = r * cell + cell / 2;
           if (Math.abs(y - yc) <= half) {
-            const i = at3(c, r);
+            const i = at4(c, r);
             ground[i] = ground[i] === G3.road || over.has(c) ? place2.bridgeDown ? G3.blown : G3.bridge : G3.water;
             height[i] = Math.min(height[i], 0) - 2;
-          } else if (over.has(c) && Math.abs(y - yc) <= half + 200) ground[at3(c, r)] = G3.road;
-          else if (Math.abs(y - yc) <= half + 40 && ground[at3(c, r)] === G3.open && place2.terrain !== "desert") ground[at3(c, r)] = G3.field;
+          } else if (over.has(c) && Math.abs(y - yc) <= half + 200) ground[at4(c, r)] = G3.road;
+          else if (Math.abs(y - yc) <= half + 40 && ground[at4(c, r)] === G3.open && place2.terrain !== "desert") ground[at4(c, r)] = G3.field;
         }
       }
       if (bend) {
@@ -49306,7 +49345,7 @@
               sAt = along[i2 - 1] + q * (along[i2] - along[i2 - 1]);
             }
           }
-          const half = halfAt(c0 - away2 * sAt / cell), i = at3(c, r), g0 = ground[i];
+          const half = halfAt(c0 - away2 * sAt / cell), i = at4(c, r), g0 = ground[i];
           if (g0 === G3.water || g0 === G3.bridge || g0 === G3.blown) continue;
           if (best <= half) {
             ground[i] = g0 === G3.road && sAt <= arcLen ? place2.bridgeDown ? G3.blown : G3.bridge : G3.water;
@@ -49335,13 +49374,13 @@
     const deck = (k) => k === G3.road || k === G3.bridge || k === G3.blown;
     const hard = (k) => k === G3.rock || k === G3.marsh || k === G3.water || k === G3.bunker;
     for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols; c++) {
-      if (!deck(ground[at3(c, r)])) continue;
+      if (!deck(ground[at4(c, r)])) continue;
       for (const dc of [-1, 1]) {
-        if (c + dc < 0 || c + dc >= cols || !deck(ground[at3(c + dc, r + 1)])) continue;
-        const p = at3(c + dc, r), q = at3(c, r + 1);
+        if (c + dc < 0 || c + dc >= cols || !deck(ground[at4(c + dc, r + 1)])) continue;
+        const p = at4(c + dc, r), q = at4(c, r + 1);
         if (!hard(ground[p]) || !hard(ground[q])) continue;
         const k = ground[p] === G3.water && ground[q] !== G3.water ? q : p;
-        if (cityWater?.[k] && ![-1, 0, 1].some((a) => [-1, 0, 1].some((b) => ground[at3(Math.min(cols - 1, Math.max(0, k % cols + a)), Math.min(rows - 1, Math.max(0, Math.floor(k / cols) + b)))] === G3.bridge))) continue;
+        if (cityWater?.[k] && ![-1, 0, 1].some((a) => [-1, 0, 1].some((b) => ground[at4(Math.min(cols - 1, Math.max(0, k % cols + a)), Math.min(rows - 1, Math.max(0, Math.floor(k / cols) + b)))] === G3.bridge))) continue;
         ground[k] = ground[k] === G3.water ? span2 : G3.road;
       }
     }
@@ -49351,7 +49390,7 @@
       for (let c = Math.floor(w * 0.1 / cell); c < Math.min(cols - 2, Math.ceil(w * 0.9 / cell)); c += every) {
         const r = Math.floor(fy / cell);
         for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
-          const i = at3(c + dc, r + dr);
+          const i = at4(c + dc, r + dr);
           if (ground[i] !== G3.water && ground[i] !== G3.bridge && ground[i] !== G3.blown) {
             if (ground[i] !== G3.bunker) beneath[i] = ground[i];
             ground[i] = G3.bunker;
@@ -49844,20 +49883,20 @@
     };
     const round3 = (radius) => {
       const p2 = cr.range(0, Math.PI * 2), p3 = cr.range(0, Math.PI * 2);
-      const at3 = (a) => radius * (1 + 0.16 * Math.sin(2 * a + p2) + 0.1 * Math.sin(3 * a + p3));
-      return { at: at3, inside: (i) => {
+      const at4 = (a) => radius * (1 + 0.16 * Math.sin(2 * a + p2) + 0.1 * Math.sin(3 * a + p3));
+      return { at: at4, inside: (i) => {
         const x = i % cols * cell + cell / 2 - hx, y = Math.floor(i / cols) * cell + cell / 2 - hy;
-        return Math.hypot(x, y) < at3(Math.atan2(y, x));
+        return Math.hypot(x, y) < at4(Math.atan2(y, x));
       } };
     };
     const old = round3(capital3 ? 300 : 210);
     for (let i = 0; i < n; i++) if (core[i] && old.inside(i)) storeys[i] = 4 + (fill8[i] > 0.5 ? 1 : 0);
     storeys[hub] = 5;
-    for (const { at: at3 } of capital3 ? [old, round3(720), round3(1150)] : [old]) {
+    for (const { at: at4 } of capital3 ? [old, round3(720), round3(1150)] : [old]) {
       const path = [];
-      const steps = Math.ceil(at3(0) * Math.PI * 2 / (cell / 2));
+      const steps = Math.ceil(at4(0) * Math.PI * 2 / (cell / 2));
       for (let t = 0; t <= steps; t++) {
-        const a = t / steps * Math.PI * 2, c = Math.floor((hx + Math.cos(a) * at3(a)) / cell), r = Math.floor((hy + Math.sin(a) * at3(a)) / cell);
+        const a = t / steps * Math.PI * 2, c = Math.floor((hx + Math.cos(a) * at4(a)) / cell), r = Math.floor((hy + Math.sin(a) * at4(a)) / cell);
         const i = c >= 0 && r >= 0 && c < cols && r < rows ? r * cols + c : -1;
         if (i >= 0 && i !== path[path.length - 1]) path.push(i);
       }
@@ -50683,9 +50722,9 @@
       const us = rest.filter((u) => role(u) === "main");
       const stood = us.filter((u) => !isMobile(u)).length ? us.filter((u) => !isMobile(u)) : us;
       for (const u of us) {
-        const at3 = P.spot[u.id];
-        if (!at3 || u.order?.kind === "withdraw") continue;
-        if (!u.order && dist(u.x, u.y, at3[0], at3[1]) > 20 && u.engaged === void 0) b.command({ do: "move", units: [u.id], x: at3[0], y: at3[1], face: side3 === "att" ? 0 : Math.PI }, side3);
+        const at4 = P.spot[u.id];
+        if (!at4 || u.order?.kind === "withdraw") continue;
+        if (!u.order && dist(u.x, u.y, at4[0], at4[1]) > 20 && u.engaged === void 0) b.command({ do: "move", units: [u.id], x: at4[0], y: at4[1], face: side3 === "att" ? 0 : Math.PI }, side3);
       }
       const there = (u) => !u.order && (!P.spot[u.id] || dist(u.x, u.y, P.spot[u.id][0], P.spot[u.id][1]) <= 25);
       const all = stood.reduce((a, u) => a + u.power0, 0);
@@ -50741,11 +50780,11 @@
             const gun2 = foes.filter((g2) => g2.kind === "art" && dir * (g2.y - t.y) > 0 && dir * (g2.y - t.y) <= STYLE.deepBehind && Math.abs(g2.x - t.x) <= STYLE.deepBehind).reduce((m, g2) => !m || dist(g2.x, g2.y, t.x, t.y) < dist(m.x, m.y, t.x, t.y) ? g2 : m, null);
             if (gun2) target = gun2;
           }
-          const at3 = [t.x + flank * (t.w / 2 + u.w / 2 + 80), t.y + (s.deep ? dir * (t.d / 2 + 60) : 0)];
-          const x = Math.min(b.field.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, at3[0]));
-          if (CLOSE2.includes(groundAt(b.field, x, at3[1]))) continue;
-          P.hook[u.id] = { stage: "out", at: [x, at3[1]], target: target.id };
-          b.command({ do: "move", units: [u.id], x, y: at3[1] }, side3);
+          const at4 = [t.x + flank * (t.w / 2 + u.w / 2 + 80), t.y + (s.deep ? dir * (t.d / 2 + 60) : 0)];
+          const x = Math.min(b.field.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, at4[0]));
+          if (CLOSE2.includes(groundAt(b.field, x, at4[1]))) continue;
+          P.hook[u.id] = { stage: "out", at: [x, at4[1]], target: target.id };
+          b.command({ do: "move", units: [u.id], x, y: at4[1] }, side3);
           P.phase = "hook";
         }
       }
@@ -50798,9 +50837,9 @@
     const struck = mine4.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
     let next = 0;
     const sendTo = (u) => {
-      const at3 = struck[next++ % struck.length];
+      const at4 = struck[next++ % struck.length];
       u.reserve = "sent";
-      by(b, side3, u, foes.find((f) => f.id === at3.engaged));
+      by(b, side3, u, foes.find((f) => f.id === at4.engaged));
     };
     const near2 = !struck.length && style?.defShift ? coming(b, mine4, foes, style.defShift) : null;
     for (const u of mine4) {
@@ -51273,17 +51312,17 @@
     const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
     const wingsAt = (row2) => {
       const span2 = lines2[0].length * (150 + GAP) / 2;
-      const at3 = row2.map((u, i) => {
+      const at4 = row2.map((u, i) => {
         const left = i % 2 === 0, k = Math.floor(i / 2);
         return cx + (left ? -1 : 1) * (span2 + 60 + k * (u.w + GAP));
       });
-      return row2.every((u, i) => at3[i] - u.w / 2 >= x0 && at3[i] + u.w / 2 <= x1) ? at3 : null;
+      return row2.every((u, i) => at4[i] - u.w / 2 >= x0 && at4[i] + u.w / 2 <= x1) ? at4 : null;
     };
     const place2 = (row2, y, wings2) => {
-      const at3 = wings2 ? wingsAt(row2) : null;
-      if (at3) {
+      const at4 = wings2 ? wingsAt(row2) : null;
+      if (at4) {
         row2.forEach((u, i) => {
-          u.x = at3[i];
+          u.x = at4[i];
           u.y = y;
         });
         return true;
@@ -51306,9 +51345,9 @@
     if (side3 === "def" && lines2[0].length >= 4) {
       for (let n2 = Math.max(1, Math.floor(lines2[0].length / 4)); n2 > 0; n2--) {
         const count4 = (c) => lines2[0].filter((u) => u.corps === c).length;
-        let at3 = -1;
-        for (let i = lines2[0].length - 1; i >= 0; i--) if (at3 < 0 || count4(lines2[0][i].corps) > count4(lines2[0][at3].corps)) at3 = i;
-        held2.unshift(...lines2[0].splice(at3, 1));
+        let at4 = -1;
+        for (let i = lines2[0].length - 1; i >= 0; i--) if (at4 < 0 || count4(lines2[0][i].corps) > count4(lines2[0][at4].corps)) at4 = i;
+        held2.unshift(...lines2[0].splice(at4, 1));
       }
     }
     if (lo === void 0 || hi === void 0) {
@@ -51322,10 +51361,10 @@
       return;
     }
     const rows = [];
-    const cut2 = (line, at3) => line.forEach((u, i) => {
+    const cut2 = (line, at4) => line.forEach((u, i) => {
       const r = rows[rows.length - 1];
       if (i > 0 && rowWidth([...r.us, u]) <= x1 - x0) r.us.push(u);
-      else rows.push({ us: [u], at: at3, first: i === 0, wings: false });
+      else rows.push({ us: [u], at: at4, first: i === 0, wings: false });
     });
     cut2(lines2[0], 0);
     const wide3 = rows.length <= 1 && lines2[1].length > 0 && wingsAt(lines2[1]) !== null;
@@ -51959,8 +51998,8 @@
           for (const [g2, e] of groups) {
             const key6 = `${sq.u.id}:${g2}`;
             if (e.moving) this.rushed.set(key6, t);
-            const at3 = this.rushed.get(key6);
-            cands.push({ id: sq.u.id, g: g2, d: foes.length ? near2(e.x / e.n, e.y / e.n) : 0, on: at3 !== void 0 && t - at3 <= LEAD_RUSH });
+            const at4 = this.rushed.get(key6);
+            cands.push({ id: sq.u.id, g: g2, d: foes.length ? near2(e.x / e.n, e.y / e.n) : 0, on: at4 !== void 0 && t - at4 <= LEAD_RUSH });
           }
         }
         if (!cands.length) {
@@ -52279,15 +52318,15 @@
     tanksOf(side3) {
       const t = this.b.t;
       if (this.tankMemo.t !== t) this.tankMemo = { t, at: {} };
-      let at3 = this.tankMemo.at[side3];
-      if (!at3) {
-        at3 = [];
+      let at4 = this.tankMemo.at[side3];
+      if (!at4) {
+        at4 = [];
         for (const sq of this.squads.values()) if (sq.u.side === side3 && sq.u.kind === "arm" && live2(sq.u)) {
-          for (const m of this.memo(sq).stand) if (m.role === "tank") at3.push([m.x, m.y]);
+          for (const m of this.memo(sq).stand) if (m.role === "tank") at4.push([m.x, m.y]);
         }
-        this.tankMemo.at[side3] = at3;
+        this.tankMemo.at[side3] = at4;
       }
-      return at3;
+      return at4;
     }
     /** The place of the man of 'of' nearest p (within a reach). */
     nearestOf(of2, p, within3 = Infinity) {
@@ -52315,8 +52354,8 @@
       const pri = this.priority(eq);
       if (pri.length && roll(this.seed, sq.u.id, m.n, Math.floor(t / 6), 91) < 0.6) {
         const near2 = this.tanksOf(sq.u.side).some(([x, y]) => Math.abs(x - m.x) < 120 && Math.abs(y - m.y) < 120);
-        const at3 = near2 ? pri.filter((x) => x.role === "at") : [];
-        const p = this.nearestOf(at3.length ? at3 : pri, [m.x, m.y], 700);
+        const at4 = near2 ? pri.filter((x) => x.role === "at") : [];
+        const p = this.nearestOf(at4.length ? at4 : pri, [m.x, m.y], 700);
         if (p) return p;
       }
       return this.aimAt(m, e);
@@ -52690,9 +52729,9 @@
       const order2 = [...M2.up].sort((a, c) => (a.j === void 0 ? 0 : 1) - (c.j === void 0 ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
       for (const m of order2) {
         if (VEHICLE.has(m.role) || CARRIED.has(m.pose) || sq.boarding !== void 0) continue;
-        const going = MOVING.has(m.pose) && m.v > 0, at3 = going ? m.spot : [m.x, m.y];
-        const p = this.leash(sq, this.clear(room2, sq, m, at3), -4);
-        if (Math.hypot(p[0] - at3[0], p[1] - at3[1]) > 0.05) {
+        const going = MOVING.has(m.pose) && m.v > 0, at4 = going ? m.spot : [m.x, m.y];
+        const p = this.leash(sq, this.clear(room2, sq, m, at4), -4);
+        if (Math.hypot(p[0] - at4[0], p[1] - at4[1]) > 0.05) {
           m.spot = p;
           if (!going) {
             const low2 = m.pose === "fire_prone" || m.pose === "hide" || m.pose === "cower" || m.pose === "lmg_burst" || m.pose === "observe";
@@ -52919,11 +52958,11 @@
         ny = -ny;
       }
       const half = Math.max(0, (g2.width ?? 3) / 2 - 0.5), o = (roll(this.seed, sq.u.id, m.n, 61) * 2 - 1) * half, S3 = 1.5;
-      const cx = g2.x + hx * o, cy = g2.y + hy * o, at3 = (m.x - g2.x) * nx + (m.y - g2.y) * ny;
+      const cx = g2.x + hx * o, cy = g2.y + hy * o, at4 = (m.x - g2.x) * nx + (m.y - g2.y) * ny;
       const inGap = Math.abs((m.x - cx) * hx + (m.y - cy) * hy) <= half + 0.5;
       const way = [];
-      if (!inGap || at3 < -S3 + 0.3) way.push([cx - nx * S3, cy - ny * S3]);
-      if (!inGap || at3 < S3 - 0.3) way.push([cx + nx * S3, cy + ny * S3]);
+      if (!inGap || at4 < -S3 + 0.3) way.push([cx - nx * S3, cy - ny * S3]);
+      if (!inGap || at4 < S3 - 0.3) way.push([cx + nx * S3, cy + ny * S3]);
       return way.length ? way : void 0;
     }
     leash(sq, p, extra = 0) {
@@ -53057,8 +53096,8 @@
             cyc = bk.cyc;
             off2 = -(this.turnFor(sq, m, bound3) * bk.slot + (first2 ? 0 : 0.3 + (BOOK2.stagger - 0.3) * roll(this.seed, u.id, grp(m), Math.floor((m.j ?? 0) / 2), 92)));
           } else off2 += m.jx * 0.08;
-          const at3 = t + off2 + 100 * cyc, n = Math.floor(at3 / cyc);
-          const rushing = at3 - n * cyc < rush;
+          const at4 = t + off2 + 100 * cyc, n = Math.floor(at4 / cyc);
+          const rushing = at4 - n * cyc < rush;
           const gain = (s[0] - m.x) * hx + (s[1] - m.y) * hy, behind2 = gain > 30;
           const lead2 = v * (rush + (cyc - rush) / 2);
           if (rushing && m.rushed !== n && gain + lead2 < 3) m.rushed = n;
@@ -53448,7 +53487,7 @@
       }
       const first2 = m.lead || m.j === void 0 && m.role === "rifle" || bound3 === "body" && m.role === "mg";
       const off2 = -(this.turnFor(sq, m, bound3) * bk.slot + (first2 ? 0 : 0.3 + (BOOK2.stagger - 0.3) * roll(this.seed, u.id, grp(m), Math.floor((m.j ?? 0) / 2), 92)));
-      const at3 = t + off2 + 100 * bk.cyc, n = Math.floor(at3 / bk.cyc), rushing = at3 - n * bk.cyc < bk.rush;
+      const at4 = t + off2 + 100 * bk.cyc, n = Math.floor(at4 / bk.cyc), rushing = at4 - n * bk.cyc < bk.rush;
       const dl = edge3 - G5 * 0.7;
       if (rushing && m.rushed !== n && !down && dl > 2) {
         const F = BOOK2.flank.rush, swing = F[0] + (F[1] - F[0]) * roll(this.seed, u.id, m.n, n, 3), step2 = 10 + 10 * roll(this.seed, u.id, m.n, n, 4);
@@ -53759,12 +53798,12 @@
       const men2 = sq.men.filter((m) => this.stands(sq, m));
       const run = sq.phase === "flee" ? "flee" : "run";
       const afoot = (m, to) => {
-        const dx = to.x - m.x, dy = to.y - m.y, at3 = this.mountAt(sq, m);
+        const dx = to.x - m.x, dy = to.y - m.y, at4 = this.mountAt(sq, m);
         m.aim = void 0;
         m.hidden = void 0;
         m.cover = "none";
         m.until = t + 1;
-        const by2 = !!at3 && Math.hypot(at3[0] - m.x, at3[1] - m.y) < 2;
+        const by2 = !!at4 && Math.hypot(at4[0] - m.x, at4[1] - m.y) < 2;
         const go = sq.slow < MOUNT.downAfter ? sq.phase === "flee" || m.pose === run || Math.hypot(dx, dy) < 30 || to.v === 0 || sq.net > 1 && (dx * sq.wx + dy * sq.wy) / sq.net > 5 : sq.phase === "flee" && !by2;
         if (go) {
           m.pose = run;
@@ -53913,35 +53952,35 @@
     ambush(sq) {
       const u = sq.u, b = this.b, t = b.t;
       if (!fighting(u) || sq.phase === "fallback" || sq.phase === "flee" || sq.phase === "column") return;
-      const at3 = this.up(sq).find((m) => m.role === "at");
+      const at4 = this.up(sq).find((m) => m.role === "at");
       const tanks = b.units.filter((e) => e.side !== u.side && e.kind === "arm" && fighting(e) && !e.hid && b.gap(u, e) < DR.ranges.ambush);
-      if (at3) {
-        if (!tanks.length || sq.speed > 0.6) at3.hidden = void 0;
+      if (at4) {
+        if (!tanks.length || sq.speed > 0.6) at4.hidden = void 0;
         else {
           const tk = tanks.reduce((m, e) => b.gap(u, e) < b.gap(u, m) ? e : m, tanks[0]);
           const [rx, ry] = right(u.face), side3 = Math.sign((tk.x - u.x) * rx + (tk.y - u.y) * ry) || 1;
           const end = toWorld(u, u.face, side3 * (u.w / 2 - 4), u.d / 2 - 6);
           const dir = [(tk.x - end[0]) / (Math.hypot(tk.x - end[0], tk.y - end[1]) || 1), (tk.y - end[1]) / (Math.hypot(tk.x - end[0], tk.y - end[1]) || 1)];
           const close3 = b.gap(u, tk) < 150 || tk.engaged === u.id;
-          if (!at3.hidden && !close3) {
-            this.go(sq, at3, end, "creep", 2.5, t + 3, dir, 14);
-            at3.hidden = true;
-            at3.aim = void 0;
-          } else if (at3.hidden && Math.hypot(at3.x - at3.spot[0], at3.y - at3.spot[1]) < 1 && !close3) {
-            at3.pose = "hide";
-            at3.v = 0;
+          if (!at4.hidden && !close3) {
+            this.go(sq, at4, end, "creep", 2.5, t + 3, dir, 14);
+            at4.hidden = true;
+            at4.aim = void 0;
+          } else if (at4.hidden && Math.hypot(at4.x - at4.spot[0], at4.y - at4.spot[1]) < 1 && !close3) {
+            at4.pose = "hide";
+            at4.v = 0;
           }
-          if (close3 && t >= at3.until) {
-            const ts = this.squads.get(tk.id), tank = ts?.men.filter((x) => x.role === "tank" && this.stands(ts, x)).sort((p, q) => Math.hypot(p.x - at3.x, p.y - at3.y) - Math.hypot(q.x - at3.x, q.y - at3.y))[0];
-            at3.hidden = void 0;
-            at3.pose = "fire_kneel";
-            at3.v = 0;
-            at3.shot = t;
-            at3.aim = tank ? [tank.x, tank.y] : [tk.x, tk.y];
-            at3.until = t + 6 + 3 * roll(this.seed, u.id, t);
+          if (close3 && t >= at4.until) {
+            const ts = this.squads.get(tk.id), tank = ts?.men.filter((x) => x.role === "tank" && this.stands(ts, x)).sort((p, q) => Math.hypot(p.x - at4.x, p.y - at4.y) - Math.hypot(q.x - at4.x, q.y - at4.y))[0];
+            at4.hidden = void 0;
+            at4.pose = "fire_kneel";
+            at4.v = 0;
+            at4.shot = t;
+            at4.aim = tank ? [tank.x, tank.y] : [tk.x, tk.y];
+            at4.until = t + 6 + 3 * roll(this.seed, u.id, t);
             const next = toWorld(u, u.face, side3 * (u.w / 2 - 10 - 15 * roll(this.seed, u.id, t, 2)), u.d / 2 - 6);
-            at3.slotAt = next;
-          } else if (!at3.hidden && close3 && Math.hypot(at3.x - at3.slotAt[0], at3.y - at3.slotAt[1]) > 3 && t >= at3.until - 3) this.go(sq, at3, at3.slotAt, "creep", 2.5, t + 3, dir, 6);
+            at4.slotAt = next;
+          } else if (!at4.hidden && close3 && Math.hypot(at4.x - at4.slotAt[0], at4.y - at4.slotAt[1]) > 3 && t >= at4.until - 3) this.go(sq, at4, at4.slotAt, "creep", 2.5, t + 3, dir, 6);
         }
       }
       const lone = tanks.find((e) => e.aloneAt !== void 0 && t - e.aloneAt < 2 && (e.engaged === u.id || u.engaged === e.id));
@@ -54029,8 +54068,8 @@
           return;
         }
         if (ph === "deploy" || ph === "bound" && v >= 3.5) {
-          const [hx, hy] = fwd(h), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, at3 = t + roll(this.seed, u.id, m.n, 41) * 4;
-          const halt = ph === "bound" && e && b.gap(u, e) < 600 && lag < 6 && at3 % 4 < 1.5 && roll(this.seed, u.id, m.n, Math.floor(at3 / 4)) < 0.25;
+          const [hx, hy] = fwd(h), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, at4 = t + roll(this.seed, u.id, m.n, 41) * 4;
+          const halt = ph === "bound" && e && b.gap(u, e) < 600 && lag < 6 && at4 % 4 < 1.5 && roll(this.seed, u.id, m.n, Math.floor(at4 / 4)) < 0.25;
           if (halt) {
             m.spot = [m.x, m.y];
             m.v = 0;
@@ -54357,16 +54396,16 @@
           }
         }
         const face = bearing2(best[0], best[1], e.x, e.y), [rx, ry] = right(face);
-        const at3 = (dx) => [best[0] + rx * dx, best[1] + ry * dx];
+        const at4 = (dx) => [best[0] + rx * dx, best[1] + ry * dx];
         if (!sq.fo) {
           const mk = (k, dx) => {
-            const s = at3(dx);
+            const s = at4(dx);
             return { k, n: k, role: "fo", team: 0, x: s[0] - Math.sin(face) * 30, y: s[1] - Math.cos(face) * 30, face, pose: "creep", v: 2, spot: s, cover: "none", until: t + 1, slotAt: best, jx: 0, jy: 0 };
           };
           sq.fo = [mk(200, 0), mk(201, 2.5)];
         } else if (Math.hypot(best[0] - sq.fo[0].slotAt[0], best[1] - sq.fo[0].slotAt[1]) > 15) {
           sq.fo.forEach((m, i) => {
-            m.spot = at3(i * 2.5);
+            m.spot = at4(i * 2.5);
             m.slotAt = best;
             m.v = 2;
           });
@@ -54535,20 +54574,20 @@
           continue;
         }
         if (sq.boarding !== void 0 && m.role !== "holder" && !CARRIED.has(m.pose) && this.stands(sq, m)) {
-          const at3 = this.mountAt(sq, m);
-          if (at3) {
+          const at4 = this.mountAt(sq, m);
+          if (at4) {
             const x0 = m.x, y0 = m.y;
-            m.spot = at3;
+            m.spot = at4;
             step2(m);
-            if (Math.hypot(at3[0] - m.x, at3[1] - m.y) < (u.kind === "mot" ? MOUNT.climb : MOUNT.saddle)) {
+            if (Math.hypot(at4[0] - m.x, at4[1] - m.y) < (u.kind === "mot" ? MOUNT.climb : MOUNT.saddle)) {
               if (this.mayMount(sq, m)) {
                 m.pose = u.kind === "mot" ? "mounted" : "ride";
                 m.v = 0;
                 m.aim = void 0;
                 m.cover = "none";
                 if (u.kind === "mot") {
-                  m.x = at3[0];
-                  m.y = at3[1];
+                  m.x = at4[0];
+                  m.y = at4[1];
                   m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
                 }
                 m.spot = [m.x, m.y];
@@ -54776,13 +54815,13 @@
       }
       if (may && roll(this.seed, u.id, m.n, k0, 66) < p) {
         const fc = this.faceOf(v, m.x, m.y), [a, h] = this.spotOn(v, u.id, m.n, k0), [vx2, vy2] = this.ahead(v, fly2);
-        const at3 = { ...base, ok: v.k, x: Math.round(vx2 * 10) / 10, y: Math.round(vy2 * 10) / 10, fc, u: a, h };
-        if (v.role === "tank" && small2) this.book({ ...at3, r: "glance", ...this.commanderHit(v, BOOK2.tankMg.commander, u.id, m.n, k0) ? { cm: 1 } : {} });
-        else if (small2) this.book({ ...at3, r: v.role === "lorry" ? "worn" : "glance" }, v, "pocks");
-        else if (w === "grenade") this.book({ ...at3, r: "glance" }, v, "scorch");
+        const at4 = { ...base, ok: v.k, x: Math.round(vx2 * 10) / 10, y: Math.round(vy2 * 10) / 10, fc, u: a, h };
+        if (v.role === "tank" && small2) this.book({ ...at4, r: "glance", ...this.commanderHit(v, BOOK2.tankMg.commander, u.id, m.n, k0) ? { cm: 1 } : {} });
+        else if (small2) this.book({ ...at4, r: v.role === "lorry" ? "worn" : "glance" }, v, "pocks");
+        else if (w === "grenade") this.book({ ...at4, r: "glance" }, v, "scorch");
         else {
           const glance = roll(this.seed, u.id, m.n, k0, 67) < R2.glance[fc];
-          this.book({ ...at3, r: glance ? "glance" : "worn" }, v, glance ? "gouge" : "hole");
+          this.book({ ...at4, r: glance ? "glance" : "worn" }, v, glance ? "gouge" : "hole");
         }
         return;
       }
@@ -54819,10 +54858,10 @@
      * carried one, only with him up in his hatch, a share of the time; the hull gunner's at what is before her bow; else
      * the coaxial beside the main gun.
      */
-    tankGun(u, m, at3, n) {
+    tankGun(u, m, at4, n) {
       const T = BOOK2.tankMg;
       if (!m.buttoned && m.cmdDown === void 0 && T.roof.includes(u.nat) && roll(this.seed, u.id, m.n, n, 98) < T.roofShare) return "roof";
-      const off2 = Math.abs(wrap(bearing2(m.x, m.y, at3[0], at3[1]) - m.face)) * (180 / Math.PI);
+      const off2 = Math.abs(wrap(bearing2(m.x, m.y, at4[0], at4[1]) - m.face)) * (180 / Math.PI);
       return off2 <= T.hullArc ? "hull" : "coax";
     }
     /** A round striking a tank strikes her commander, up in his hatch, this share of the time: he drops inside, and she buttons up. */
@@ -54839,7 +54878,7 @@
      */
     killRound(by2, vq, v, p) {
       const t = this.b.t, tq = by2 ? this.squads.get(by2.id) : void 0;
-      const at3 = p ?? [v.x, v.y];
+      const at4 = p ?? [v.x, v.y];
       let s, w = p ? by2?.kind === "arm" ? "tank" : by2?.team === "mor" ? "mortar" : "gun" : "rifle";
       if (tq) {
         const shells = (x) => x.role === "tank" || x.role === "gun" || x.role === "mortar";
@@ -54849,7 +54888,7 @@
         const from2 = pref.length ? pref : can2;
         let dd = Infinity;
         for (const x of from2) {
-          const d = Math.hypot(x.x - at3[0], x.y - at3[1]);
+          const d = Math.hypot(x.x - at4[0], x.y - at4[1]);
           if (d < dd) {
             dd = d;
             s = x;
@@ -54857,13 +54896,13 @@
         }
       }
       if (!p && s) w = s.role === "hmg" || s.role === "tank" ? "mg" : v.role === "tank" ? s.role === "at" ? "at" : "grenade" : s.role === "mg" ? "mg" : "rifle";
-      const r = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at3[0] * 10) / 10, y: Math.round(at3[1] * 10) / 10, r: "kill" };
+      const r = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at4[0] * 10) / 10, y: Math.round(at4[1] * 10) / 10, r: "kill" };
       if (v.j !== void 0) r.oj = v.j;
       if (by2) r.by = by2.id;
       if (s) {
         r.k = s.k;
         if (s.j !== void 0) r.j = s.j;
-        if (w === "mg" && s.role === "tank" && by2) r.g = this.tankGun(by2, s, at3, Math.round(t * 10));
+        if (w === "mg" && s.role === "tank" && by2) r.g = this.tankGun(by2, s, at4, Math.round(t * 10));
         if (w !== "rifle" && w !== "mg") {
           s.shot = t;
           s.fired = t;
@@ -55504,15 +55543,15 @@
         return;
       }
       const R2 = LAND2.radio, hit = u.state === "wavering" || u.str < R2.hqAt * u.str0;
-      const at3 = Math.round((from2 + R2.delay * (hit ? R2.cut : 1) * this.radioOf(u)) * 1e3) / 1e3;
+      const at4 = Math.round((from2 + R2.delay * (hit ? R2.cut : 1) * this.radioOf(u)) * 1e3) / 1e3;
       this.pending = this.pending.filter((p) => p.id !== u.id);
-      if (at3 <= this.t + 1e-9) {
+      if (at4 <= this.t + 1e-9) {
         delete u.orderAt;
         go();
         return;
       }
-      this.pending.push({ at: at3, id: u.id, go });
-      u.orderAt = at3;
+      this.pending.push({ at: at4, id: u.id, go });
+      u.orderAt = at4;
     }
     /** The player's orders on the air that have reached their blocks (radio): carried out, if the block still fights. */
     landOrders() {
@@ -55546,8 +55585,8 @@
       delete u.search;
       delete u.searchR;
       const t = o.kind === "attack" && o.target !== void 0 ? this.unit(o.target) : void 0;
-      const at3 = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
-      u.path = at3 ? this.route(u, at3[0], at3[1]) : [];
+      const at4 = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
+      u.path = at4 ? this.route(u, at4[0], at4[1]) : [];
     }
     /** How near a block closes on what it attacks before it stands and fights: well inside its reach. */
     closeTo(u) {
@@ -55948,9 +55987,9 @@
      * meets no hedge, or no gate serves: he climbs the bank there.
      */
     gateOn(x0, y0, x1, y1, skip = 0) {
-      const at3 = this.hedgeCross(x0, y0, x1, y1, skip);
-      if (!at3 || Math.hypot(at3[0] - x1, at3[1] - y1) < 0.75) return null;
-      const near2 = this.gates.map((g2) => ({ g: g2, d: Math.hypot(g2.x - at3[0], g2.y - at3[1]) })).filter((x) => x.d <= GATE_REACH).sort((a, b) => a.d - b.d);
+      const at4 = this.hedgeCross(x0, y0, x1, y1, skip);
+      if (!at4 || Math.hypot(at4[0] - x1, at4[1] - y1) < 0.75) return null;
+      const near2 = this.gates.map((g2) => ({ g: g2, d: Math.hypot(g2.x - at4[0], g2.y - at4[1]) })).filter((x) => x.d <= GATE_REACH).sort((a, b) => a.d - b.d);
       for (const { g: g2 } of near2) {
         const to = this.hedgeCross(x0, y0, g2.x, g2.y, skip);
         if (!to || Math.hypot(to[0] - g2.x, to[1] - g2.y) <= LAND2.hide.hedge.gap) return g2;
@@ -56441,14 +56480,14 @@
         x = Math.round(clamp5(t.x + across * c + along * s, 2, this.field.w - 2) * 10) / 10;
         y = Math.round(clamp5(t.y - across * s + along * c, 2, this.field.h - 2) * 10) / 10;
       }
-      const cal = by2.cal ?? "field", at3 = Math.round(this.t * 10) / 10, armour = t.kind === "arm";
+      const cal = by2.cal ?? "field", at4 = Math.round(this.t * 10) / 10, armour = t.kind === "arm";
       const ground = groundAt(this.field, x, y);
-      const ev = { t: at3, what: "shell", text: "", x, y, cal, on: t.id, armour, ground, reach: REACH[cal] };
+      const ev = { t: at4, what: "shell", text: "", x, y, cal, on: t.id, armour, ground, reach: REACH[cal] };
       if (this.known(by2)) ev.by = by2.id;
       this.events.push(ev);
       this.drill?.shelled(x, y, by2.id, t.id, k);
       if (!armour && !inRiver(ground)) {
-        this.craters.push({ id: -(this.craters.length + 1), kind: "crater", x, y, r: CRATER[cal] / 2, until: this.ticket.limit, at: at3, cal });
+        this.craters.push({ id: -(this.craters.length + 1), kind: "crater", x, y, r: CRATER[cal] / 2, until: this.ticket.limit, at: at4, cal });
       }
     }
     /**
@@ -56540,9 +56579,9 @@
           u.path = [];
         } else {
           const want = this.closeTo(u);
-          const at3 = this.gap(u, t) > want || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
-          if (at3) {
-            u.path = this.route(u, at3[0], at3[1]);
+          const at4 = this.gap(u, t) > want || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
+          if (at4) {
+            u.path = this.route(u, at4[0], at4[1]);
             to = u.path[0];
           } else {
             u.path = [];
@@ -56771,18 +56810,18 @@
       const [fx, fy] = ahead(face), [rx, ry] = ahead(face + Math.PI / 2), mine4 = dist(u.x, u.y, x, y);
       for (const f of this.units) {
         if (f === u || f.side !== u.side || !fighting2(f)) continue;
-        let at3 = f.speed <= 0.5 ? [f.x, f.y] : null;
-        if (!at3 && f.order?.kind === "attack" && f.stand) {
+        let at4 = f.speed <= 0.5 ? [f.x, f.y] : null;
+        if (!at4 && f.order?.kind === "attack" && f.stand) {
           const theirs = dist(f.x, f.y, f.stand[0], f.stand[1]);
-          if (theirs < mine4 || theirs === mine4 && f.id < u.id) at3 = f.stand;
+          if (theirs < mine4 || theirs === mine4 && f.id < u.id) at4 = f.stand;
         }
-        if (!at3) continue;
-        const dx = at3[0] - x, dy = at3[1] - y;
+        if (!at4) continue;
+        const dx = at4[0] - x, dy = at4[1] - y;
         if (Math.abs(dx) > 300 || Math.abs(dy) > 300) continue;
         const c = Math.abs(Math.cos(f.face - face)), s = Math.abs(Math.sin(f.face - face));
         const pl = u.w / 2 + f.w / 2 * c + f.d / 2 * s + LAND2.room / 2 - Math.abs(dx * rx + dy * ry);
         const pd = u.d / 2 + f.w / 2 * s + f.d / 2 * c - Math.abs(dx * fx + dy * fy);
-        if (pl > 0 && pd > 0) return { id: f.id, x: at3[0], y: at3[1], w: f.w };
+        if (pl > 0 && pd > 0) return { id: f.id, x: at4[0], y: at4[1], w: f.w };
       }
       return null;
     }
@@ -57262,14 +57301,14 @@
         });
         for (const [id, v] of owed) {
           const b = this.unit(id);
-          let at3 = 0;
+          let at4 = 0;
           top.forEach(([tid], i) => {
-            const t = this.unit(tid), a = this.unit(top[at3][0]);
-            if (dist(t.x, t.y, b.x, b.y) < dist(a.x, a.y, b.x, b.y)) at3 = i;
+            const t = this.unit(tid), a = this.unit(top[at4][0]);
+            if (dist(t.x, t.y, b.x, b.y) < dist(a.x, a.y, b.x, b.y)) at4 = i;
           });
-          legs[at3].owed.set(id, v);
-          legs[at3].nerve.set(id, this.airNerve[s].get(id) ?? v);
-          legs[at3].total += v;
+          legs[at4].owed.set(id, v);
+          legs[at4].nerve.set(id, this.airNerve[s].get(id) ?? v);
+          legs[at4].total += v;
         }
         for (const [id, v] of bank) if (v > 0 && !live1(id)) this.offField(s, id, v);
       }
@@ -57307,13 +57346,13 @@
     }
     /** One strike's tick, its legs flown together. What each leg lands this tick is added to 'hurt'. */
     flyStrike(k, hurt2) {
-      const A = LAND2.air, at3 = k.called + A.eta, led = this.airLedger[k.side];
+      const A = LAND2.air, at4 = k.called + A.eta, led = this.airLedger[k.side];
       let over = true;
       for (const l of k.legs) {
         const r = l.flight.run, len = Math.max(1, dist(r[0], r[1], r[2], r[3])), secs = Math.max(DT, len / A.speed), [dx, dy] = [(r[2] - r[0]) / len, (r[3] - r[1]) / len];
         const f = l.flight;
-        if (this.t < at3) {
-          const back = (at3 - this.t) * A.speed, k0 = (at3 - this.t) / A.eta;
+        if (this.t < at4) {
+          const back = (at4 - this.t) * A.speed, k0 = (at4 - this.t) / A.eta;
           f.phase = "in";
           f.x = r[0] - dx * back;
           f.y = r[1] - dy * back;
@@ -57366,7 +57405,7 @@
           over = false;
           continue;
         }
-        const gone = this.t - (at3 + secs);
+        const gone = this.t - (at4 + secs);
         if (gone < A.out) {
           f.phase = "out";
           f.x = r[2] + dx * gone * A.speed;
@@ -57406,12 +57445,12 @@
     bomb(s, x, y, f) {
       x = Math.round(clamp5(x, 2, this.field.w - 2) * 10) / 10;
       y = Math.round(clamp5(y, 2, this.field.h - 2) * 10) / 10;
-      const hit = this.underRun(s, x, y)[0], on = hit && this.known(hit) ? hit : void 0, ground = groundAt(this.field, x, y), armour = on?.kind === "arm", at3 = Math.round(this.t * 10) / 10;
-      const ev = { t: at3, what: "shell", text: "", x, y, cal: "bomb", armour: !!armour, ground, reach: REACH.bomb, extra: { flight: f.id } };
+      const hit = this.underRun(s, x, y)[0], on = hit && this.known(hit) ? hit : void 0, ground = groundAt(this.field, x, y), armour = on?.kind === "arm", at4 = Math.round(this.t * 10) / 10;
+      const ev = { t: at4, what: "shell", text: "", x, y, cal: "bomb", armour: !!armour, ground, reach: REACH.bomb, extra: { flight: f.id } };
       if (on) ev.on = on.id;
       this.events.push(ev);
       this.drill?.shelled(x, y);
-      if (!armour && !inRiver(ground)) this.craters.push({ id: -(this.craters.length + 1), kind: "crater", x, y, r: CRATER.bomb / 2, until: this.ticket.limit, at: at3, cal: "bomb" });
+      if (!armour && !inRiver(ground)) this.craters.push({ id: -(this.craters.length + 1), kind: "crater", x, y, r: CRATER.bomb / 2, until: this.ticket.limit, at: at4, cal: "bomb" });
     }
     /**
      * The words a strafing run leaves in the dispatches, for the player's side only and never naming a block he does not
@@ -58194,6 +58233,4068 @@
     }
   }
 
+  // ../../data/battle/air-stages.json
+  var air_stages_default = {
+    _about: "The set-piece stages of the air battle (ruling 238, the design director, 19 November 2026): Pearl Harbor and Midway, by place and not by script. Positions are metres east and north of each stage's origin, the same frame as the 3D game's stage geometry (unreal/TheaterCommand/Content/Data/Stages/<key>.json, built by Tools/build_stages.py from open map data). 'aim' is where a raid of each kind goes for; 'fields' the airfields the defending fighters rise from; 'berths' the record's moorings on its date, with the record's name where the campaign's ship there is of the same class (ruling 238(4)), and 'spots' the moorings for any other ship. 'fleets' gives the record's names for ships at sea on its date, by nation and class. Rows with a 'note' are for the historian; the shapes are today's.",
+    stages: {
+      oahu: {
+        name: "Oahu",
+        places: [
+          "Pearl Harbor",
+          "Oahu"
+        ],
+        seas: [],
+        origin: [21.3638, -157.952],
+        record: {
+          year: 1941,
+          month: 11,
+          nat: "USA"
+        },
+        aim: {
+          harbour: [0, 0]
+        },
+        fields: [
+          {
+            name: "Wheeler Field",
+            at: [-8863.9, 12976.5],
+            kind: "fighters"
+          },
+          {
+            name: "Haleiwa",
+            at: [-15343.3, 25820.2],
+            kind: "fighters"
+          },
+          {
+            name: "Bellows Field",
+            at: [24777.3, -420.7],
+            kind: "fighters"
+          },
+          {
+            name: "Hickam Field",
+            at: [207.3, -2856.6],
+            kind: "bombers"
+          },
+          {
+            name: "Ford Island",
+            at: [-933, 22.1],
+            kind: "navy"
+          },
+          {
+            name: "Kaneohe Bay",
+            at: [19075.4, 9544.2],
+            kind: "navy"
+          },
+          {
+            name: "Ewa",
+            at: [-10159.7, -3742.4],
+            kind: "navy"
+          }
+        ],
+        berths: [
+          {
+            id: "F-8",
+            cls: "bb",
+            name: "Nevada",
+            at: [377.7, 273],
+            face: 51,
+            open: 1
+          },
+          {
+            id: "F-7",
+            cls: "bb",
+            name: "Arizona",
+            at: [181.3, 115.2],
+            face: 51,
+            open: 0.6
+          },
+          {
+            id: "F-7o",
+            cls: "ar",
+            name: null,
+            at: [202.7, 88.8],
+            face: 51,
+            open: 1,
+            note: "Vestal, a repair ship: no campaign class"
+          },
+          {
+            id: "F-6",
+            cls: "bb",
+            name: "Tennessee",
+            at: [13.8, -18.8],
+            face: 51,
+            open: 0.3
+          },
+          {
+            id: "F-6o",
+            cls: "bb",
+            name: "West Virginia",
+            at: [35.2, -45.2],
+            face: 51,
+            open: 1
+          },
+          {
+            id: "F-5",
+            cls: "bb",
+            name: "Maryland",
+            at: [-154.6, -156.6],
+            face: 51,
+            open: 0.3
+          },
+          {
+            id: "F-5o",
+            cls: "bb",
+            name: "Oklahoma",
+            at: [-133.2, -183],
+            face: 51,
+            open: 1
+          },
+          {
+            id: "F-4",
+            cls: "ao",
+            name: null,
+            at: [-323.8, -293.6],
+            face: 51,
+            open: 1,
+            note: "Neosho, an oiler: no campaign class"
+          },
+          {
+            id: "F-3",
+            cls: "bb",
+            name: "California",
+            at: [-493, -430.6],
+            face: 51,
+            open: 1
+          },
+          {
+            id: "DD1",
+            cls: "bb",
+            name: "Pennsylvania",
+            at: [-675.6, -1367.6],
+            face: 211,
+            open: 0,
+            note: "Dry Dock No. 1",
+            dock: true
+          },
+          {
+            id: "DD1a",
+            cls: "dd",
+            name: "Cassin",
+            at: [-757.8, -1490.8],
+            face: 211,
+            open: 0,
+            note: "Dry Dock No. 1, ahead of Pennsylvania",
+            dock: true
+          },
+          {
+            id: "DD1b",
+            cls: "dd",
+            name: "Downes",
+            at: [-745.8, -1498],
+            face: 211,
+            open: 0,
+            note: "Dry Dock No. 1, ahead of Pennsylvania",
+            dock: true
+          },
+          {
+            id: "1010",
+            cls: "ca",
+            name: "Helena",
+            at: [-398, -978.2],
+            face: 30,
+            open: 0.8,
+            note: "1010 Dock"
+          },
+          {
+            id: "1010o",
+            cls: "cm",
+            name: null,
+            at: [-414.5, -968.7],
+            face: 30,
+            open: 1,
+            note: "Oglala, a minelayer, outboard of Helena: no campaign class"
+          },
+          {
+            id: "B-21",
+            cls: "ca",
+            name: "Honolulu",
+            at: [106, -1124.1],
+            face: 212.5,
+            open: 0.2,
+            note: "B-21, East Quay, port side to"
+          },
+          {
+            id: "B-21o",
+            cls: "ca",
+            name: "St. Louis",
+            at: [89, -1113.1],
+            face: 212.5,
+            open: 0.3,
+            note: "outboard of Honolulu at B-21"
+          },
+          {
+            id: "B-17",
+            cls: "ca",
+            name: "San Francisco",
+            at: [81, -1039],
+            face: 32,
+            open: 0.1,
+            note: "Berth 17, across the pier from New Orleans"
+          },
+          {
+            id: "B-16",
+            cls: "ca",
+            name: "New Orleans",
+            at: [32, -1008],
+            face: 32,
+            open: 0.1,
+            note: "Berth 16, the west face of the B15-18 pier"
+          },
+          {
+            id: "YFD-2",
+            cls: "dd",
+            name: "Shaw",
+            at: [-985, -1250],
+            face: 275,
+            open: 0,
+            note: "floating dry dock YFD-2"
+          },
+          {
+            id: "C-6",
+            cls: "ca",
+            name: "Phoenix",
+            at: [829.4, 819.3],
+            face: 20,
+            open: 0.7,
+            note: "anchored north-east of Ford Island"
+          },
+          {
+            id: "F-9",
+            cls: "cv",
+            name: null,
+            at: [-1492.4, 247.5],
+            face: 232,
+            open: 1,
+            note: "a carrier berth, empty that day"
+          },
+          {
+            id: "F-10",
+            cls: "cv",
+            name: null,
+            at: [-1281.9, 409.2],
+            face: 232,
+            open: 1,
+            note: "Tangier, a seaplane tender, that day: a carrier berth"
+          },
+          {
+            id: "F-11",
+            cls: "ag",
+            name: null,
+            at: [-1058.1, 575.7],
+            face: 232,
+            open: 1,
+            note: "Utah, a target ship: no campaign class"
+          },
+          {
+            id: "F-12",
+            cls: "ca",
+            name: "Raleigh",
+            at: [-836.1, 744.8],
+            face: 232,
+            open: 1
+          },
+          {
+            id: "F-13",
+            cls: "ca",
+            name: "Detroit",
+            at: [-614.2, 913.8],
+            face: 232,
+            open: 1
+          },
+          {
+            id: "S-10",
+            cls: "ss",
+            name: "Tautog",
+            at: [906.7, -856.1],
+            face: 220,
+            open: 0,
+            note: "Pier 2"
+          },
+          {
+            id: "S-11",
+            cls: "ss",
+            name: "Narwhal",
+            at: [1051, -689],
+            face: 220,
+            open: 0,
+            note: "S-9"
+          },
+          {
+            id: "S-20",
+            cls: "ss",
+            name: "Dolphin",
+            at: [977.3, -771.8],
+            face: 220,
+            open: 0,
+            note: "Pier 4, S-8, port side to"
+          }
+        ],
+        spots: [
+          {
+            at: [570.2, 963.3],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [579.2, 952.6],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [588.2, 941.9],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [597.2, 931.2],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [829.4, 1151.5],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [838.4, 1140.8],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [847.4, 1130.1],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [856.4, 1119.4],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1031.1, 1266.5],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1040.1, 1255.8],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1049.1, 1245.1],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1058.1, 1234.4],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1396.2, 1383.2],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1405.2, 1372.5],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1414.2, 1361.8],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1423.2, 1351.1],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [311, 819.3],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [320, 808.6],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [329, 797.9],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [338, 787.2],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1600, 1448.9],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1609, 1438.2],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1618, 1427.5],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [1627, 1416.8],
+            face: 50,
+            nest: true
+          },
+          {
+            at: [-2860, -1940],
+            face: 50
+          },
+          {
+            at: [-1820, -1940],
+            face: 50
+          },
+          {
+            at: [-1820, -1680],
+            face: 50
+          },
+          {
+            at: [-4160, -1420],
+            face: 50
+          },
+          {
+            at: [-3898.3, -1424.7],
+            face: 50
+          },
+          {
+            at: [-3120, -1420],
+            face: 50
+          },
+          {
+            at: [-1820, -1420],
+            face: 50
+          },
+          {
+            at: [-5200, -1160],
+            face: 50
+          },
+          {
+            at: [-4940, -1160],
+            face: 50
+          },
+          {
+            at: [-4160, -1160],
+            face: 50
+          },
+          {
+            at: [-1820, -1160],
+            face: 50
+          },
+          {
+            at: [-1560, -1160],
+            face: 50
+          },
+          {
+            at: [-1300, -1160],
+            face: 50
+          },
+          {
+            at: [-1040, -1160],
+            face: 50
+          },
+          {
+            at: [520, -1160],
+            face: 50
+          },
+          {
+            at: [780, -1160],
+            face: 50
+          },
+          {
+            at: [-5460, -900],
+            face: 50
+          },
+          {
+            at: [-5200, -900],
+            face: 50
+          },
+          {
+            at: [-4940, -900],
+            face: 50
+          },
+          {
+            at: [-4680, -900],
+            face: 50
+          },
+          {
+            at: [-4420, -900],
+            face: 50
+          },
+          {
+            at: [-1820, -900],
+            face: 50
+          },
+          {
+            at: [-780, -900],
+            face: 50
+          },
+          {
+            at: [-520, -900],
+            face: 50
+          },
+          {
+            at: [260, -900],
+            face: 50
+          },
+          {
+            at: [780, -900],
+            face: 50
+          },
+          {
+            at: [-6240, -640],
+            face: 50
+          },
+          {
+            at: [-5980, -640],
+            face: 50
+          },
+          {
+            at: [-5720, -640],
+            face: 50
+          },
+          {
+            at: [-5460, -640],
+            face: 50
+          },
+          {
+            at: [-5200, -640],
+            face: 50
+          },
+          {
+            at: [-4420, -640],
+            face: 50
+          },
+          {
+            at: [-2080, -640],
+            face: 50
+          },
+          {
+            at: [-1820, -640],
+            face: 50
+          },
+          {
+            at: [-520, -640],
+            face: 50
+          },
+          {
+            at: [-260, -640],
+            face: 50
+          },
+          {
+            at: [0, -640],
+            face: 50
+          },
+          {
+            at: [260, -640],
+            face: 50
+          },
+          {
+            at: [-6500, -380],
+            face: 50
+          },
+          {
+            at: [-6240, -380],
+            face: 50
+          },
+          {
+            at: [-5980, -380],
+            face: 50
+          },
+          {
+            at: [-5720, -380],
+            face: 50
+          },
+          {
+            at: [-5460, -380],
+            face: 50
+          },
+          {
+            at: [-5200, -380],
+            face: 50
+          },
+          {
+            at: [-2340, -380],
+            face: 50
+          },
+          {
+            at: [-2080, -380],
+            face: 50
+          },
+          {
+            at: [-260, -380],
+            face: 50
+          },
+          {
+            at: [0, -380],
+            face: 50
+          },
+          {
+            at: [260, -380],
+            face: 50
+          },
+          {
+            at: [489.4, -354.3],
+            face: 50
+          },
+          {
+            at: [-6500, -120],
+            face: 50
+          },
+          {
+            at: [-5980, -120],
+            face: 50
+          },
+          {
+            at: [-5720, -120],
+            face: 50
+          },
+          {
+            at: [-5460, -120],
+            face: 50
+          },
+          {
+            at: [-5196.8, -123.8],
+            face: 50
+          },
+          {
+            at: [-2080, -120],
+            face: 50
+          },
+          {
+            at: [-1820, -120],
+            face: 50
+          },
+          {
+            at: [260, -120],
+            face: 50
+          },
+          {
+            at: [520, -120],
+            face: 50
+          },
+          {
+            at: [-5980, 140],
+            face: 50
+          },
+          {
+            at: [-5720, 140],
+            face: 50
+          },
+          {
+            at: [-2080, 140],
+            face: 50
+          },
+          {
+            at: [-1820, 140],
+            face: 50
+          },
+          {
+            at: [520, 140],
+            face: 50
+          },
+          {
+            at: [780, 140],
+            face: 50
+          },
+          {
+            at: [1040, 170],
+            face: 50
+          },
+          {
+            at: [-6240, 400],
+            face: 50
+          },
+          {
+            at: [-5980, 400],
+            face: 50
+          },
+          {
+            at: [-5720, 400],
+            face: 50
+          },
+          {
+            at: [-3120, 400],
+            face: 50
+          },
+          {
+            at: [-2860, 400],
+            face: 50
+          },
+          {
+            at: [-2600, 400],
+            face: 50
+          },
+          {
+            at: [-2340, 400],
+            face: 50
+          },
+          {
+            at: [-2080, 400],
+            face: 50
+          },
+          {
+            at: [-1820, 400],
+            face: 50
+          },
+          {
+            at: [-1560, 400],
+            face: 50
+          },
+          {
+            at: [270, 400],
+            face: 50
+          },
+          {
+            at: [520, 400],
+            face: 50
+          },
+          {
+            at: [780, 400],
+            face: 50
+          },
+          {
+            at: [1040, 400],
+            face: 50
+          },
+          {
+            at: [-6500, 660],
+            face: 50
+          },
+          {
+            at: [-6240, 660],
+            face: 50
+          },
+          {
+            at: [-5980, 660],
+            face: 50
+          },
+          {
+            at: [-5720, 660],
+            face: 50
+          },
+          {
+            at: [-3380, 660],
+            face: 50
+          },
+          {
+            at: [-3120, 660],
+            face: 50
+          },
+          {
+            at: [-2860, 660],
+            face: 50
+          },
+          {
+            at: [-2600, 660],
+            face: 50
+          },
+          {
+            at: [-2340, 660],
+            face: 50
+          },
+          {
+            at: [-2080, 660],
+            face: 50
+          },
+          {
+            at: [-1560, 660],
+            face: 50
+          },
+          {
+            at: [-1300, 660],
+            face: 50
+          },
+          {
+            at: [0, 660],
+            face: 50
+          },
+          {
+            at: [520, 660],
+            face: 50
+          },
+          {
+            at: [780, 660],
+            face: 50
+          },
+          {
+            at: [1040, 660],
+            face: 50
+          },
+          {
+            at: [1300, 660],
+            face: 50
+          },
+          {
+            at: [-6500, 920],
+            face: 50
+          },
+          {
+            at: [-6240, 920],
+            face: 50
+          },
+          {
+            at: [-3380, 920],
+            face: 50
+          },
+          {
+            at: [-3120, 920],
+            face: 50
+          },
+          {
+            at: [-2860, 920],
+            face: 50
+          },
+          {
+            at: [-2600, 920],
+            face: 50
+          },
+          {
+            at: [-1300, 920],
+            face: 50
+          },
+          {
+            at: [-1040, 920],
+            face: 50
+          },
+          {
+            at: [-780, 920],
+            face: 50
+          },
+          {
+            at: [-520, 920],
+            face: 50
+          },
+          {
+            at: [-260, 920],
+            face: 50
+          },
+          {
+            at: [0, 920],
+            face: 50
+          },
+          {
+            at: [260, 920],
+            face: 50
+          },
+          {
+            at: [520, 920],
+            face: 50
+          },
+          {
+            at: [780, 920],
+            face: 50
+          },
+          {
+            at: [1040, 920],
+            face: 50
+          },
+          {
+            at: [1300, 920],
+            face: 50
+          },
+          {
+            at: [1560, 920],
+            face: 50
+          },
+          {
+            at: [-6500, 1180],
+            face: 50
+          },
+          {
+            at: [-3640, 1180],
+            face: 50
+          },
+          {
+            at: [-3380, 1180],
+            face: 50
+          },
+          {
+            at: [-3120, 1180],
+            face: 50
+          },
+          {
+            at: [-2860, 1180],
+            face: 50
+          },
+          {
+            at: [-2600, 1180],
+            face: 50
+          },
+          {
+            at: [-1300, 1180],
+            face: 50
+          },
+          {
+            at: [-1040, 1180],
+            face: 50
+          },
+          {
+            at: [-780, 1180],
+            face: 50
+          },
+          {
+            at: [-520, 1180],
+            face: 50
+          },
+          {
+            at: [-260, 1180],
+            face: 50
+          },
+          {
+            at: [0, 1180],
+            face: 50
+          },
+          {
+            at: [260, 1180],
+            face: 50
+          },
+          {
+            at: [520, 1180],
+            face: 50
+          },
+          {
+            at: [780, 1180],
+            face: 50
+          },
+          {
+            at: [1040, 1180],
+            face: 50
+          },
+          {
+            at: [1300, 1180],
+            face: 50
+          },
+          {
+            at: [1560, 1180],
+            face: 50
+          },
+          {
+            at: [-3640, 1440],
+            face: 50
+          },
+          {
+            at: [-3380, 1440],
+            face: 50
+          },
+          {
+            at: [-3120, 1440],
+            face: 50
+          },
+          {
+            at: [-2860, 1440],
+            face: 50
+          },
+          {
+            at: [-2600, 1440],
+            face: 50
+          },
+          {
+            at: [-1300, 1440],
+            face: 50
+          },
+          {
+            at: [-1040, 1440],
+            face: 50
+          },
+          {
+            at: [-780, 1440],
+            face: 50
+          },
+          {
+            at: [-520, 1440],
+            face: 50
+          },
+          {
+            at: [-260, 1440],
+            face: 50
+          },
+          {
+            at: [0, 1440],
+            face: 50
+          },
+          {
+            at: [260, 1440],
+            face: 50
+          },
+          {
+            at: [520, 1440],
+            face: 50
+          },
+          {
+            at: [780, 1440],
+            face: 50
+          },
+          {
+            at: [-3900, 1700],
+            face: 50
+          },
+          {
+            at: [-3640, 1700],
+            face: 50
+          },
+          {
+            at: [-3380, 1700],
+            face: 50
+          },
+          {
+            at: [-3120, 1700],
+            face: 50
+          },
+          {
+            at: [-1300, 1700],
+            face: 50
+          },
+          {
+            at: [-1040, 1700],
+            face: 50
+          },
+          {
+            at: [-780, 1700],
+            face: 50
+          },
+          {
+            at: [-520, 1700],
+            face: 50
+          },
+          {
+            at: [-260, 1700],
+            face: 50
+          },
+          {
+            at: [0, 1700],
+            face: 50
+          },
+          {
+            at: [260, 1700],
+            face: 50
+          },
+          {
+            at: [520, 1700],
+            face: 50
+          },
+          {
+            at: [-3900, 1960],
+            face: 50
+          },
+          {
+            at: [-3640, 1960],
+            face: 50
+          },
+          {
+            at: [-3380, 1960],
+            face: 50
+          },
+          {
+            at: [-1300, 1960],
+            face: 50
+          },
+          {
+            at: [-1040, 1960],
+            face: 50
+          },
+          {
+            at: [-780, 1960],
+            face: 50
+          },
+          {
+            at: [-520, 1960],
+            face: 50
+          },
+          {
+            at: [-260, 1960],
+            face: 50
+          },
+          {
+            at: [0, 1960],
+            face: 50
+          },
+          {
+            at: [-3900, 2220],
+            face: 50
+          },
+          {
+            at: [-3640, 2220],
+            face: 50
+          },
+          {
+            at: [-1560, 2220],
+            face: 50
+          },
+          {
+            at: [-1300, 2220],
+            face: 50
+          },
+          {
+            at: [-1040, 2220],
+            face: 50
+          },
+          {
+            at: [-780, 2220],
+            face: 50
+          },
+          {
+            at: [-520, 2220],
+            face: 50
+          },
+          {
+            at: [-3900, 2480],
+            face: 50
+          },
+          {
+            at: [-3640, 2480],
+            face: 50
+          },
+          {
+            at: [-1300, 2480],
+            face: 50
+          },
+          {
+            at: [-1040, 2480],
+            face: 50
+          },
+          {
+            at: [-780, 2480],
+            face: 50
+          }
+        ]
+      },
+      midway: {
+        name: "Midway",
+        places: [
+          "Midway"
+        ],
+        seas: [
+          "midway"
+        ],
+        origin: [28.208, -177.36],
+        record: {
+          year: 1942,
+          month: 5
+        },
+        aim: {
+          harbour: [0, 0],
+          fleet: [-28284, 28284]
+        },
+        fields: [
+          {
+            name: "Eastern Island",
+            at: [2787.2, 197],
+            kind: "fighters"
+          },
+          {
+            name: "Sand Island seaplane base",
+            at: [-1569.6, -221.6],
+            kind: "navy"
+          }
+        ],
+        berths: [],
+        spots: [
+          {
+            at: [-4600, -1200],
+            face: 45
+          },
+          {
+            at: [-4300, -1200],
+            face: 45
+          },
+          {
+            at: [-4e3, -1200],
+            face: 45
+          },
+          {
+            at: [-4900, -900],
+            face: 45
+          },
+          {
+            at: [-4600, -900],
+            face: 45
+          },
+          {
+            at: [-4300, -900],
+            face: 45
+          },
+          {
+            at: [-4e3, -900],
+            face: 45
+          },
+          {
+            at: [-3700, -900],
+            face: 45
+          },
+          {
+            at: [-1600, -900],
+            face: 45
+          },
+          {
+            at: [-5200, -600],
+            face: 45
+          },
+          {
+            at: [-4900, -600],
+            face: 45
+          },
+          {
+            at: [-4600, -600],
+            face: 45
+          },
+          {
+            at: [-4300, -600],
+            face: 45
+          },
+          {
+            at: [-4e3, -600],
+            face: 45
+          },
+          {
+            at: [-3700, -600],
+            face: 45
+          },
+          {
+            at: [-3400, -600],
+            face: 45
+          },
+          {
+            at: [-1e3, -600],
+            face: 45
+          },
+          {
+            at: [-700, -600],
+            face: 45
+          },
+          {
+            at: [-400, -600],
+            face: 45
+          },
+          {
+            at: [-100, -600],
+            face: 45
+          },
+          {
+            at: [200, -600],
+            face: 45
+          },
+          {
+            at: [-5500, -300],
+            face: 45
+          },
+          {
+            at: [-5200, -300],
+            face: 45
+          },
+          {
+            at: [-4900, -300],
+            face: 45
+          },
+          {
+            at: [-4600, -300],
+            face: 45
+          },
+          {
+            at: [-4300, -300],
+            face: 45
+          },
+          {
+            at: [-4e3, -300],
+            face: 45
+          },
+          {
+            at: [-3700, -300],
+            face: 45
+          },
+          {
+            at: [-3400, -300],
+            face: 45
+          },
+          {
+            at: [-3100, -300],
+            face: 45
+          },
+          {
+            at: [-400, -300],
+            face: 45
+          },
+          {
+            at: [-100, -300],
+            face: 45
+          },
+          {
+            at: [200, -300],
+            face: 45
+          },
+          {
+            at: [500, -300],
+            face: 45
+          },
+          {
+            at: [800, -300],
+            face: 45
+          },
+          {
+            at: [1400, -300],
+            face: 45
+          },
+          {
+            at: [-5800, 0],
+            face: 45
+          },
+          {
+            at: [-5500, 0],
+            face: 45
+          },
+          {
+            at: [-5200, 0],
+            face: 45
+          },
+          {
+            at: [-4900, 0],
+            face: 45
+          },
+          {
+            at: [-4600, 0],
+            face: 45
+          },
+          {
+            at: [-4300, 0],
+            face: 45
+          },
+          {
+            at: [-4e3, 0],
+            face: 45
+          },
+          {
+            at: [-3700, 0],
+            face: 45
+          },
+          {
+            at: [-3400, 0],
+            face: 45
+          },
+          {
+            at: [-3100, 0],
+            face: 45
+          },
+          {
+            at: [200, 0],
+            face: 45
+          },
+          {
+            at: [500, 0],
+            face: 45
+          },
+          {
+            at: [800, 0],
+            face: 45
+          },
+          {
+            at: [-5800, 300],
+            face: 45
+          },
+          {
+            at: [-5500, 300],
+            face: 45
+          },
+          {
+            at: [-5200, 300],
+            face: 45
+          },
+          {
+            at: [-4900, 300],
+            face: 45
+          },
+          {
+            at: [-4600, 300],
+            face: 45
+          },
+          {
+            at: [-4300, 300],
+            face: 45
+          },
+          {
+            at: [-4e3, 300],
+            face: 45
+          },
+          {
+            at: [-3700, 300],
+            face: 45
+          },
+          {
+            at: [-3400, 300],
+            face: 45
+          },
+          {
+            at: [-3100, 300],
+            face: 45
+          },
+          {
+            at: [-2800, 300],
+            face: 45
+          },
+          {
+            at: [200, 300],
+            face: 45
+          },
+          {
+            at: [500, 300],
+            face: 45
+          },
+          {
+            at: [800, 300],
+            face: 45
+          },
+          {
+            at: [1100, 300],
+            face: 45
+          },
+          {
+            at: [1400, 300],
+            face: 45
+          },
+          {
+            at: [1700, 300],
+            face: 45
+          },
+          {
+            at: [2e3, 300],
+            face: 45
+          },
+          {
+            at: [3800, 300],
+            face: 45
+          },
+          {
+            at: [-5800, 600],
+            face: 45
+          },
+          {
+            at: [-5500, 600],
+            face: 45
+          },
+          {
+            at: [-5200, 600],
+            face: 45
+          },
+          {
+            at: [-4900, 600],
+            face: 45
+          },
+          {
+            at: [-4600, 600],
+            face: 45
+          },
+          {
+            at: [-4300, 600],
+            face: 45
+          },
+          {
+            at: [-4e3, 600],
+            face: 45
+          },
+          {
+            at: [-3700, 600],
+            face: 45
+          },
+          {
+            at: [-3400, 600],
+            face: 45
+          },
+          {
+            at: [-3100, 600],
+            face: 45
+          },
+          {
+            at: [-2800, 600],
+            face: 45
+          },
+          {
+            at: [-400, 600],
+            face: 45
+          },
+          {
+            at: [200, 600],
+            face: 45
+          },
+          {
+            at: [500, 600],
+            face: 45
+          },
+          {
+            at: [800, 600],
+            face: 45
+          },
+          {
+            at: [1100, 600],
+            face: 45
+          },
+          {
+            at: [1400, 600],
+            face: 45
+          },
+          {
+            at: [1700, 600],
+            face: 45
+          },
+          {
+            at: [2e3, 600],
+            face: 45
+          },
+          {
+            at: [2300, 600],
+            face: 45
+          },
+          {
+            at: [2600, 600],
+            face: 45
+          },
+          {
+            at: [3800, 600],
+            face: 45
+          },
+          {
+            at: [-5800, 900],
+            face: 45
+          },
+          {
+            at: [-5500, 900],
+            face: 45
+          },
+          {
+            at: [-5200, 900],
+            face: 45
+          },
+          {
+            at: [-4900, 900],
+            face: 45
+          },
+          {
+            at: [-4600, 900],
+            face: 45
+          },
+          {
+            at: [-4300, 900],
+            face: 45
+          },
+          {
+            at: [-4e3, 900],
+            face: 45
+          },
+          {
+            at: [-3700, 900],
+            face: 45
+          },
+          {
+            at: [-3400, 900],
+            face: 45
+          },
+          {
+            at: [-3100, 900],
+            face: 45
+          },
+          {
+            at: [-2800, 900],
+            face: 45
+          },
+          {
+            at: [200, 900],
+            face: 45
+          },
+          {
+            at: [500, 900],
+            face: 45
+          },
+          {
+            at: [800, 900],
+            face: 45
+          },
+          {
+            at: [1100, 900],
+            face: 45
+          },
+          {
+            at: [1400, 900],
+            face: 45
+          },
+          {
+            at: [1700, 900],
+            face: 45
+          },
+          {
+            at: [2e3, 900],
+            face: 45
+          },
+          {
+            at: [2300, 900],
+            face: 45
+          },
+          {
+            at: [2600, 900],
+            face: 45
+          },
+          {
+            at: [3500, 900],
+            face: 45
+          },
+          {
+            at: [3800, 900],
+            face: 45
+          },
+          {
+            at: [-5500, 1200],
+            face: 45
+          },
+          {
+            at: [-5200, 1200],
+            face: 45
+          },
+          {
+            at: [-4900, 1200],
+            face: 45
+          },
+          {
+            at: [-4600, 1200],
+            face: 45
+          },
+          {
+            at: [-4300, 1200],
+            face: 45
+          },
+          {
+            at: [-4e3, 1200],
+            face: 45
+          },
+          {
+            at: [-3700, 1200],
+            face: 45
+          },
+          {
+            at: [-3400, 1200],
+            face: 45
+          },
+          {
+            at: [-3100, 1200],
+            face: 45
+          },
+          {
+            at: [-2800, 1200],
+            face: 45
+          },
+          {
+            at: [-2500, 1200],
+            face: 45
+          },
+          {
+            at: [-700, 1200],
+            face: 45
+          },
+          {
+            at: [-400, 1200],
+            face: 45
+          },
+          {
+            at: [-100, 1200],
+            face: 45
+          },
+          {
+            at: [200, 1200],
+            face: 45
+          },
+          {
+            at: [500, 1200],
+            face: 45
+          },
+          {
+            at: [800, 1200],
+            face: 45
+          },
+          {
+            at: [1100, 1200],
+            face: 45
+          },
+          {
+            at: [1400, 1200],
+            face: 45
+          },
+          {
+            at: [1700, 1200],
+            face: 45
+          },
+          {
+            at: [2e3, 1200],
+            face: 45
+          },
+          {
+            at: [2300, 1200],
+            face: 45
+          },
+          {
+            at: [2600, 1200],
+            face: 45
+          },
+          {
+            at: [2900, 1200],
+            face: 45
+          },
+          {
+            at: [3500, 1200],
+            face: 45
+          },
+          {
+            at: [3800, 1200],
+            face: 45
+          },
+          {
+            at: [-5500, 1500],
+            face: 45
+          },
+          {
+            at: [-5200, 1500],
+            face: 45
+          },
+          {
+            at: [-4900, 1500],
+            face: 45
+          },
+          {
+            at: [-4600, 1500],
+            face: 45
+          },
+          {
+            at: [-4300, 1500],
+            face: 45
+          },
+          {
+            at: [-4e3, 1500],
+            face: 45
+          },
+          {
+            at: [-3700, 1500],
+            face: 45
+          },
+          {
+            at: [-3400, 1500],
+            face: 45
+          },
+          {
+            at: [-3100, 1500],
+            face: 45
+          },
+          {
+            at: [-2800, 1500],
+            face: 45
+          },
+          {
+            at: [-2500, 1500],
+            face: 45
+          },
+          {
+            at: [-2200, 1500],
+            face: 45
+          },
+          {
+            at: [-1900, 1500],
+            face: 45
+          },
+          {
+            at: [-1600, 1500],
+            face: 45
+          },
+          {
+            at: [-1300, 1500],
+            face: 45
+          },
+          {
+            at: [-1e3, 1500],
+            face: 45
+          },
+          {
+            at: [-700, 1500],
+            face: 45
+          },
+          {
+            at: [-400, 1500],
+            face: 45
+          },
+          {
+            at: [-100, 1500],
+            face: 45
+          },
+          {
+            at: [200, 1500],
+            face: 45
+          },
+          {
+            at: [500, 1500],
+            face: 45
+          },
+          {
+            at: [800, 1500],
+            face: 45
+          },
+          {
+            at: [1100, 1500],
+            face: 45
+          },
+          {
+            at: [1400, 1500],
+            face: 45
+          },
+          {
+            at: [1700, 1500],
+            face: 45
+          },
+          {
+            at: [2e3, 1500],
+            face: 45
+          },
+          {
+            at: [2300, 1500],
+            face: 45
+          },
+          {
+            at: [2600, 1500],
+            face: 45
+          },
+          {
+            at: [2900, 1500],
+            face: 45
+          },
+          {
+            at: [3200, 1500],
+            face: 45
+          },
+          {
+            at: [3500, 1500],
+            face: 45
+          },
+          {
+            at: [3800, 1500],
+            face: 45
+          },
+          {
+            at: [-5500, 1800],
+            face: 45
+          },
+          {
+            at: [-5200, 1800],
+            face: 45
+          },
+          {
+            at: [-4900, 1800],
+            face: 45
+          },
+          {
+            at: [-4600, 1800],
+            face: 45
+          },
+          {
+            at: [-4300, 1800],
+            face: 45
+          },
+          {
+            at: [-4e3, 1800],
+            face: 45
+          },
+          {
+            at: [-3700, 1800],
+            face: 45
+          },
+          {
+            at: [-3400, 1800],
+            face: 45
+          },
+          {
+            at: [-3100, 1800],
+            face: 45
+          },
+          {
+            at: [-2800, 1800],
+            face: 45
+          },
+          {
+            at: [-2500, 1800],
+            face: 45
+          },
+          {
+            at: [-2200, 1800],
+            face: 45
+          },
+          {
+            at: [-1900, 1800],
+            face: 45
+          },
+          {
+            at: [-1600, 1800],
+            face: 45
+          },
+          {
+            at: [-1300, 1800],
+            face: 45
+          },
+          {
+            at: [-1e3, 1800],
+            face: 45
+          },
+          {
+            at: [-700, 1800],
+            face: 45
+          },
+          {
+            at: [-400, 1800],
+            face: 45
+          },
+          {
+            at: [-100, 1800],
+            face: 45
+          },
+          {
+            at: [200, 1800],
+            face: 45
+          },
+          {
+            at: [500, 1800],
+            face: 45
+          },
+          {
+            at: [800, 1800],
+            face: 45
+          },
+          {
+            at: [1100, 1800],
+            face: 45
+          },
+          {
+            at: [1400, 1800],
+            face: 45
+          },
+          {
+            at: [1700, 1800],
+            face: 45
+          },
+          {
+            at: [2e3, 1800],
+            face: 45
+          },
+          {
+            at: [2300, 1800],
+            face: 45
+          },
+          {
+            at: [2600, 1800],
+            face: 45
+          },
+          {
+            at: [2900, 1800],
+            face: 45
+          },
+          {
+            at: [3200, 1800],
+            face: 45
+          },
+          {
+            at: [3500, 1800],
+            face: 45
+          },
+          {
+            at: [3800, 1800],
+            face: 45
+          },
+          {
+            at: [-5500, 2100],
+            face: 45
+          },
+          {
+            at: [-5200, 2100],
+            face: 45
+          },
+          {
+            at: [-4900, 2100],
+            face: 45
+          },
+          {
+            at: [-4600, 2100],
+            face: 45
+          },
+          {
+            at: [-4300, 2100],
+            face: 45
+          },
+          {
+            at: [-4e3, 2100],
+            face: 45
+          },
+          {
+            at: [-3700, 2100],
+            face: 45
+          },
+          {
+            at: [-3400, 2100],
+            face: 45
+          },
+          {
+            at: [-3100, 2100],
+            face: 45
+          },
+          {
+            at: [-2800, 2100],
+            face: 45
+          },
+          {
+            at: [-2500, 2100],
+            face: 45
+          },
+          {
+            at: [-2200, 2100],
+            face: 45
+          },
+          {
+            at: [-1900, 2100],
+            face: 45
+          },
+          {
+            at: [-1600, 2100],
+            face: 45
+          },
+          {
+            at: [-1300, 2100],
+            face: 45
+          },
+          {
+            at: [-1e3, 2100],
+            face: 45
+          },
+          {
+            at: [-700, 2100],
+            face: 45
+          },
+          {
+            at: [-400, 2100],
+            face: 45
+          },
+          {
+            at: [-100, 2100],
+            face: 45
+          },
+          {
+            at: [200, 2100],
+            face: 45
+          },
+          {
+            at: [500, 2100],
+            face: 45
+          },
+          {
+            at: [800, 2100],
+            face: 45
+          },
+          {
+            at: [1100, 2100],
+            face: 45
+          },
+          {
+            at: [1400, 2100],
+            face: 45
+          },
+          {
+            at: [1700, 2100],
+            face: 45
+          },
+          {
+            at: [2e3, 2100],
+            face: 45
+          },
+          {
+            at: [2300, 2100],
+            face: 45
+          },
+          {
+            at: [2600, 2100],
+            face: 45
+          },
+          {
+            at: [2900, 2100],
+            face: 45
+          },
+          {
+            at: [3200, 2100],
+            face: 45
+          },
+          {
+            at: [3500, 2100],
+            face: 45
+          },
+          {
+            at: [3800, 2100],
+            face: 45
+          },
+          {
+            at: [-5200, 2400],
+            face: 45
+          },
+          {
+            at: [-4900, 2400],
+            face: 45
+          },
+          {
+            at: [-4600, 2400],
+            face: 45
+          },
+          {
+            at: [-4300, 2400],
+            face: 45
+          },
+          {
+            at: [-4e3, 2400],
+            face: 45
+          },
+          {
+            at: [-3700, 2400],
+            face: 45
+          },
+          {
+            at: [-3400, 2400],
+            face: 45
+          },
+          {
+            at: [-3100, 2400],
+            face: 45
+          },
+          {
+            at: [-2800, 2400],
+            face: 45
+          },
+          {
+            at: [-2500, 2400],
+            face: 45
+          },
+          {
+            at: [-2200, 2400],
+            face: 45
+          },
+          {
+            at: [-1900, 2400],
+            face: 45
+          },
+          {
+            at: [-1600, 2400],
+            face: 45
+          },
+          {
+            at: [-1300, 2400],
+            face: 45
+          },
+          {
+            at: [-1e3, 2400],
+            face: 45
+          },
+          {
+            at: [-700, 2400],
+            face: 45
+          },
+          {
+            at: [-400, 2400],
+            face: 45
+          },
+          {
+            at: [-100, 2400],
+            face: 45
+          },
+          {
+            at: [200, 2400],
+            face: 45
+          },
+          {
+            at: [500, 2400],
+            face: 45
+          },
+          {
+            at: [800, 2400],
+            face: 45
+          },
+          {
+            at: [1100, 2400],
+            face: 45
+          },
+          {
+            at: [1400, 2400],
+            face: 45
+          },
+          {
+            at: [1700, 2400],
+            face: 45
+          },
+          {
+            at: [2e3, 2400],
+            face: 45
+          },
+          {
+            at: [2300, 2400],
+            face: 45
+          },
+          {
+            at: [2600, 2400],
+            face: 45
+          },
+          {
+            at: [2900, 2400],
+            face: 45
+          },
+          {
+            at: [3200, 2400],
+            face: 45
+          },
+          {
+            at: [3500, 2400],
+            face: 45
+          },
+          {
+            at: [3800, 2400],
+            face: 45
+          },
+          {
+            at: [-5200, 2700],
+            face: 45
+          },
+          {
+            at: [-4900, 2700],
+            face: 45
+          },
+          {
+            at: [-4600, 2700],
+            face: 45
+          },
+          {
+            at: [-4300, 2700],
+            face: 45
+          },
+          {
+            at: [-4e3, 2700],
+            face: 45
+          },
+          {
+            at: [-3700, 2700],
+            face: 45
+          },
+          {
+            at: [-3400, 2700],
+            face: 45
+          },
+          {
+            at: [-3100, 2700],
+            face: 45
+          },
+          {
+            at: [-2800, 2700],
+            face: 45
+          },
+          {
+            at: [-2500, 2700],
+            face: 45
+          },
+          {
+            at: [-2200, 2700],
+            face: 45
+          },
+          {
+            at: [-1900, 2700],
+            face: 45
+          },
+          {
+            at: [-1600, 2700],
+            face: 45
+          },
+          {
+            at: [-1300, 2700],
+            face: 45
+          },
+          {
+            at: [-1e3, 2700],
+            face: 45
+          },
+          {
+            at: [-700, 2700],
+            face: 45
+          },
+          {
+            at: [-400, 2700],
+            face: 45
+          },
+          {
+            at: [-100, 2700],
+            face: 45
+          },
+          {
+            at: [200, 2700],
+            face: 45
+          },
+          {
+            at: [500, 2700],
+            face: 45
+          },
+          {
+            at: [800, 2700],
+            face: 45
+          },
+          {
+            at: [1100, 2700],
+            face: 45
+          },
+          {
+            at: [1400, 2700],
+            face: 45
+          },
+          {
+            at: [1700, 2700],
+            face: 45
+          },
+          {
+            at: [2e3, 2700],
+            face: 45
+          },
+          {
+            at: [2300, 2700],
+            face: 45
+          },
+          {
+            at: [2600, 2700],
+            face: 45
+          },
+          {
+            at: [2900, 2700],
+            face: 45
+          },
+          {
+            at: [3200, 2700],
+            face: 45
+          },
+          {
+            at: [3500, 2700],
+            face: 45
+          },
+          {
+            at: [3800, 2700],
+            face: 45
+          },
+          {
+            at: [-5200, 3e3],
+            face: 45
+          },
+          {
+            at: [-4900, 3e3],
+            face: 45
+          },
+          {
+            at: [-4600, 3e3],
+            face: 45
+          },
+          {
+            at: [-4300, 3e3],
+            face: 45
+          },
+          {
+            at: [-4e3, 3e3],
+            face: 45
+          },
+          {
+            at: [-3700, 3e3],
+            face: 45
+          },
+          {
+            at: [-3400, 3e3],
+            face: 45
+          },
+          {
+            at: [-3100, 3e3],
+            face: 45
+          },
+          {
+            at: [-2800, 3e3],
+            face: 45
+          },
+          {
+            at: [-2500, 3e3],
+            face: 45
+          },
+          {
+            at: [-2200, 3e3],
+            face: 45
+          },
+          {
+            at: [-1900, 3e3],
+            face: 45
+          },
+          {
+            at: [-1600, 3e3],
+            face: 45
+          },
+          {
+            at: [-1300, 3e3],
+            face: 45
+          },
+          {
+            at: [-1e3, 3e3],
+            face: 45
+          },
+          {
+            at: [-700, 3e3],
+            face: 45
+          },
+          {
+            at: [-400, 3e3],
+            face: 45
+          },
+          {
+            at: [-100, 3e3],
+            face: 45
+          },
+          {
+            at: [200, 3e3],
+            face: 45
+          },
+          {
+            at: [500, 3e3],
+            face: 45
+          },
+          {
+            at: [800, 3e3],
+            face: 45
+          },
+          {
+            at: [1100, 3e3],
+            face: 45
+          },
+          {
+            at: [1400, 3e3],
+            face: 45
+          },
+          {
+            at: [1700, 3e3],
+            face: 45
+          },
+          {
+            at: [2e3, 3e3],
+            face: 45
+          },
+          {
+            at: [2300, 3e3],
+            face: 45
+          },
+          {
+            at: [2600, 3e3],
+            face: 45
+          },
+          {
+            at: [2900, 3e3],
+            face: 45
+          },
+          {
+            at: [3200, 3e3],
+            face: 45
+          },
+          {
+            at: [3500, 3e3],
+            face: 45
+          },
+          {
+            at: [-4900, 3300],
+            face: 45
+          },
+          {
+            at: [-4600, 3300],
+            face: 45
+          },
+          {
+            at: [-4300, 3300],
+            face: 45
+          },
+          {
+            at: [-4e3, 3300],
+            face: 45
+          },
+          {
+            at: [-3700, 3300],
+            face: 45
+          },
+          {
+            at: [-3400, 3300],
+            face: 45
+          },
+          {
+            at: [-3100, 3300],
+            face: 45
+          },
+          {
+            at: [-2800, 3300],
+            face: 45
+          },
+          {
+            at: [-2500, 3300],
+            face: 45
+          },
+          {
+            at: [-2200, 3300],
+            face: 45
+          },
+          {
+            at: [-1900, 3300],
+            face: 45
+          },
+          {
+            at: [-1600, 3300],
+            face: 45
+          },
+          {
+            at: [-1300, 3300],
+            face: 45
+          },
+          {
+            at: [-1e3, 3300],
+            face: 45
+          },
+          {
+            at: [-700, 3300],
+            face: 45
+          },
+          {
+            at: [-400, 3300],
+            face: 45
+          },
+          {
+            at: [-100, 3300],
+            face: 45
+          },
+          {
+            at: [200, 3300],
+            face: 45
+          },
+          {
+            at: [500, 3300],
+            face: 45
+          },
+          {
+            at: [800, 3300],
+            face: 45
+          },
+          {
+            at: [1100, 3300],
+            face: 45
+          },
+          {
+            at: [1400, 3300],
+            face: 45
+          },
+          {
+            at: [1700, 3300],
+            face: 45
+          },
+          {
+            at: [2e3, 3300],
+            face: 45
+          },
+          {
+            at: [2300, 3300],
+            face: 45
+          },
+          {
+            at: [2600, 3300],
+            face: 45
+          },
+          {
+            at: [2900, 3300],
+            face: 45
+          },
+          {
+            at: [3200, 3300],
+            face: 45
+          },
+          {
+            at: [3500, 3300],
+            face: 45
+          },
+          {
+            at: [-4900, 3600],
+            face: 45
+          },
+          {
+            at: [-4600, 3600],
+            face: 45
+          },
+          {
+            at: [-4300, 3600],
+            face: 45
+          },
+          {
+            at: [-4e3, 3600],
+            face: 45
+          },
+          {
+            at: [-3700, 3600],
+            face: 45
+          },
+          {
+            at: [-3400, 3600],
+            face: 45
+          },
+          {
+            at: [-3100, 3600],
+            face: 45
+          },
+          {
+            at: [-2800, 3600],
+            face: 45
+          },
+          {
+            at: [-2500, 3600],
+            face: 45
+          },
+          {
+            at: [-2200, 3600],
+            face: 45
+          },
+          {
+            at: [-1900, 3600],
+            face: 45
+          },
+          {
+            at: [-1600, 3600],
+            face: 45
+          },
+          {
+            at: [-1300, 3600],
+            face: 45
+          },
+          {
+            at: [-1e3, 3600],
+            face: 45
+          },
+          {
+            at: [-700, 3600],
+            face: 45
+          },
+          {
+            at: [-400, 3600],
+            face: 45
+          },
+          {
+            at: [-100, 3600],
+            face: 45
+          },
+          {
+            at: [200, 3600],
+            face: 45
+          },
+          {
+            at: [500, 3600],
+            face: 45
+          },
+          {
+            at: [800, 3600],
+            face: 45
+          },
+          {
+            at: [1100, 3600],
+            face: 45
+          },
+          {
+            at: [1400, 3600],
+            face: 45
+          },
+          {
+            at: [1700, 3600],
+            face: 45
+          },
+          {
+            at: [2e3, 3600],
+            face: 45
+          },
+          {
+            at: [2300, 3600],
+            face: 45
+          },
+          {
+            at: [2600, 3600],
+            face: 45
+          },
+          {
+            at: [2900, 3600],
+            face: 45
+          },
+          {
+            at: [3200, 3600],
+            face: 45
+          },
+          {
+            at: [3500, 3600],
+            face: 45
+          },
+          {
+            at: [-4900, 3900],
+            face: 45
+          },
+          {
+            at: [-4600, 3900],
+            face: 45
+          },
+          {
+            at: [-4300, 3900],
+            face: 45
+          },
+          {
+            at: [-4e3, 3900],
+            face: 45
+          },
+          {
+            at: [-3700, 3900],
+            face: 45
+          },
+          {
+            at: [-3400, 3900],
+            face: 45
+          },
+          {
+            at: [-3100, 3900],
+            face: 45
+          },
+          {
+            at: [-2800, 3900],
+            face: 45
+          },
+          {
+            at: [-2500, 3900],
+            face: 45
+          },
+          {
+            at: [-2200, 3900],
+            face: 45
+          },
+          {
+            at: [-1900, 3900],
+            face: 45
+          },
+          {
+            at: [-1600, 3900],
+            face: 45
+          },
+          {
+            at: [-1300, 3900],
+            face: 45
+          },
+          {
+            at: [-1e3, 3900],
+            face: 45
+          },
+          {
+            at: [-700, 3900],
+            face: 45
+          },
+          {
+            at: [-400, 3900],
+            face: 45
+          },
+          {
+            at: [-100, 3900],
+            face: 45
+          },
+          {
+            at: [200, 3900],
+            face: 45
+          },
+          {
+            at: [500, 3900],
+            face: 45
+          },
+          {
+            at: [800, 3900],
+            face: 45
+          },
+          {
+            at: [1100, 3900],
+            face: 45
+          },
+          {
+            at: [1400, 3900],
+            face: 45
+          },
+          {
+            at: [1700, 3900],
+            face: 45
+          },
+          {
+            at: [2e3, 3900],
+            face: 45
+          },
+          {
+            at: [2300, 3900],
+            face: 45
+          },
+          {
+            at: [2600, 3900],
+            face: 45
+          },
+          {
+            at: [2900, 3900],
+            face: 45
+          },
+          {
+            at: [3200, 3900],
+            face: 45
+          },
+          {
+            at: [-4600, 4200],
+            face: 45
+          },
+          {
+            at: [-4300, 4200],
+            face: 45
+          },
+          {
+            at: [-4e3, 4200],
+            face: 45
+          },
+          {
+            at: [-3700, 4200],
+            face: 45
+          },
+          {
+            at: [-3400, 4200],
+            face: 45
+          },
+          {
+            at: [-3100, 4200],
+            face: 45
+          },
+          {
+            at: [-2800, 4200],
+            face: 45
+          },
+          {
+            at: [-2500, 4200],
+            face: 45
+          },
+          {
+            at: [-2200, 4200],
+            face: 45
+          },
+          {
+            at: [-1900, 4200],
+            face: 45
+          },
+          {
+            at: [-1600, 4200],
+            face: 45
+          },
+          {
+            at: [-1300, 4200],
+            face: 45
+          },
+          {
+            at: [-1e3, 4200],
+            face: 45
+          },
+          {
+            at: [-700, 4200],
+            face: 45
+          },
+          {
+            at: [-400, 4200],
+            face: 45
+          },
+          {
+            at: [-100, 4200],
+            face: 45
+          },
+          {
+            at: [200, 4200],
+            face: 45
+          },
+          {
+            at: [500, 4200],
+            face: 45
+          },
+          {
+            at: [800, 4200],
+            face: 45
+          },
+          {
+            at: [1100, 4200],
+            face: 45
+          },
+          {
+            at: [1400, 4200],
+            face: 45
+          },
+          {
+            at: [1700, 4200],
+            face: 45
+          },
+          {
+            at: [2e3, 4200],
+            face: 45
+          },
+          {
+            at: [2300, 4200],
+            face: 45
+          },
+          {
+            at: [2600, 4200],
+            face: 45
+          },
+          {
+            at: [2900, 4200],
+            face: 45
+          },
+          {
+            at: [3200, 4200],
+            face: 45
+          },
+          {
+            at: [-4600, 4500],
+            face: 45
+          },
+          {
+            at: [-4300, 4500],
+            face: 45
+          },
+          {
+            at: [-4e3, 4500],
+            face: 45
+          },
+          {
+            at: [-3700, 4500],
+            face: 45
+          },
+          {
+            at: [-3400, 4500],
+            face: 45
+          },
+          {
+            at: [-3100, 4500],
+            face: 45
+          },
+          {
+            at: [-2800, 4500],
+            face: 45
+          },
+          {
+            at: [-2500, 4500],
+            face: 45
+          },
+          {
+            at: [-2200, 4500],
+            face: 45
+          },
+          {
+            at: [-1900, 4500],
+            face: 45
+          },
+          {
+            at: [-1600, 4500],
+            face: 45
+          },
+          {
+            at: [-1300, 4500],
+            face: 45
+          },
+          {
+            at: [-1e3, 4500],
+            face: 45
+          },
+          {
+            at: [-700, 4500],
+            face: 45
+          },
+          {
+            at: [-400, 4500],
+            face: 45
+          },
+          {
+            at: [-100, 4500],
+            face: 45
+          },
+          {
+            at: [200, 4500],
+            face: 45
+          },
+          {
+            at: [500, 4500],
+            face: 45
+          },
+          {
+            at: [800, 4500],
+            face: 45
+          },
+          {
+            at: [1100, 4500],
+            face: 45
+          },
+          {
+            at: [1400, 4500],
+            face: 45
+          },
+          {
+            at: [1700, 4500],
+            face: 45
+          },
+          {
+            at: [2e3, 4500],
+            face: 45
+          },
+          {
+            at: [2300, 4500],
+            face: 45
+          },
+          {
+            at: [2600, 4500],
+            face: 45
+          },
+          {
+            at: [2900, 4500],
+            face: 45
+          },
+          {
+            at: [-4300, 4800],
+            face: 45
+          },
+          {
+            at: [-4e3, 4800],
+            face: 45
+          },
+          {
+            at: [-3700, 4800],
+            face: 45
+          },
+          {
+            at: [-3400, 4800],
+            face: 45
+          },
+          {
+            at: [-3100, 4800],
+            face: 45
+          },
+          {
+            at: [-2800, 4800],
+            face: 45
+          },
+          {
+            at: [-2500, 4800],
+            face: 45
+          },
+          {
+            at: [-2200, 4800],
+            face: 45
+          },
+          {
+            at: [-1900, 4800],
+            face: 45
+          },
+          {
+            at: [-1600, 4800],
+            face: 45
+          },
+          {
+            at: [-1300, 4800],
+            face: 45
+          },
+          {
+            at: [-1e3, 4800],
+            face: 45
+          },
+          {
+            at: [-700, 4800],
+            face: 45
+          },
+          {
+            at: [-400, 4800],
+            face: 45
+          },
+          {
+            at: [-100, 4800],
+            face: 45
+          },
+          {
+            at: [200, 4800],
+            face: 45
+          },
+          {
+            at: [500, 4800],
+            face: 45
+          },
+          {
+            at: [800, 4800],
+            face: 45
+          },
+          {
+            at: [1100, 4800],
+            face: 45
+          },
+          {
+            at: [1400, 4800],
+            face: 45
+          },
+          {
+            at: [1700, 4800],
+            face: 45
+          },
+          {
+            at: [2e3, 4800],
+            face: 45
+          },
+          {
+            at: [2300, 4800],
+            face: 45
+          },
+          {
+            at: [2600, 4800],
+            face: 45
+          },
+          {
+            at: [-4e3, 5100],
+            face: 45
+          },
+          {
+            at: [-3700, 5100],
+            face: 45
+          },
+          {
+            at: [-3400, 5100],
+            face: 45
+          },
+          {
+            at: [-3100, 5100],
+            face: 45
+          },
+          {
+            at: [-2800, 5100],
+            face: 45
+          },
+          {
+            at: [-2500, 5100],
+            face: 45
+          },
+          {
+            at: [-2200, 5100],
+            face: 45
+          },
+          {
+            at: [-1900, 5100],
+            face: 45
+          },
+          {
+            at: [-1600, 5100],
+            face: 45
+          },
+          {
+            at: [-1300, 5100],
+            face: 45
+          },
+          {
+            at: [-1e3, 5100],
+            face: 45
+          },
+          {
+            at: [-700, 5100],
+            face: 45
+          },
+          {
+            at: [-400, 5100],
+            face: 45
+          },
+          {
+            at: [-100, 5100],
+            face: 45
+          },
+          {
+            at: [200, 5100],
+            face: 45
+          },
+          {
+            at: [500, 5100],
+            face: 45
+          },
+          {
+            at: [800, 5100],
+            face: 45
+          },
+          {
+            at: [1100, 5100],
+            face: 45
+          },
+          {
+            at: [1400, 5100],
+            face: 45
+          },
+          {
+            at: [1700, 5100],
+            face: 45
+          },
+          {
+            at: [2e3, 5100],
+            face: 45
+          },
+          {
+            at: [2300, 5100],
+            face: 45
+          },
+          {
+            at: [2600, 5100],
+            face: 45
+          },
+          {
+            at: [-3700, 5400],
+            face: 45
+          },
+          {
+            at: [-3400, 5400],
+            face: 45
+          },
+          {
+            at: [-3100, 5400],
+            face: 45
+          },
+          {
+            at: [-2800, 5400],
+            face: 45
+          },
+          {
+            at: [-2500, 5400],
+            face: 45
+          },
+          {
+            at: [-2200, 5400],
+            face: 45
+          },
+          {
+            at: [-1900, 5400],
+            face: 45
+          },
+          {
+            at: [-1600, 5400],
+            face: 45
+          },
+          {
+            at: [-1300, 5400],
+            face: 45
+          },
+          {
+            at: [-1e3, 5400],
+            face: 45
+          },
+          {
+            at: [-700, 5400],
+            face: 45
+          },
+          {
+            at: [-400, 5400],
+            face: 45
+          },
+          {
+            at: [-100, 5400],
+            face: 45
+          },
+          {
+            at: [200, 5400],
+            face: 45
+          },
+          {
+            at: [500, 5400],
+            face: 45
+          },
+          {
+            at: [800, 5400],
+            face: 45
+          },
+          {
+            at: [1100, 5400],
+            face: 45
+          },
+          {
+            at: [1400, 5400],
+            face: 45
+          },
+          {
+            at: [1700, 5400],
+            face: 45
+          },
+          {
+            at: [2e3, 5400],
+            face: 45
+          },
+          {
+            at: [2300, 5400],
+            face: 45
+          },
+          {
+            at: [-3400, 5700],
+            face: 45
+          },
+          {
+            at: [-3100, 5700],
+            face: 45
+          },
+          {
+            at: [-2800, 5700],
+            face: 45
+          },
+          {
+            at: [-2500, 5700],
+            face: 45
+          },
+          {
+            at: [-2200, 5700],
+            face: 45
+          },
+          {
+            at: [-1900, 5700],
+            face: 45
+          },
+          {
+            at: [-1600, 5700],
+            face: 45
+          },
+          {
+            at: [-1300, 5700],
+            face: 45
+          },
+          {
+            at: [-1e3, 5700],
+            face: 45
+          },
+          {
+            at: [-700, 5700],
+            face: 45
+          },
+          {
+            at: [-400, 5700],
+            face: 45
+          },
+          {
+            at: [-100, 5700],
+            face: 45
+          },
+          {
+            at: [200, 5700],
+            face: 45
+          },
+          {
+            at: [500, 5700],
+            face: 45
+          },
+          {
+            at: [800, 5700],
+            face: 45
+          },
+          {
+            at: [1100, 5700],
+            face: 45
+          },
+          {
+            at: [1400, 5700],
+            face: 45
+          },
+          {
+            at: [1700, 5700],
+            face: 45
+          },
+          {
+            at: [2e3, 5700],
+            face: 45
+          },
+          {
+            at: [-3100, 6e3],
+            face: 45
+          },
+          {
+            at: [-2800, 6e3],
+            face: 45
+          },
+          {
+            at: [-2500, 6e3],
+            face: 45
+          },
+          {
+            at: [-2200, 6e3],
+            face: 45
+          },
+          {
+            at: [-1900, 6e3],
+            face: 45
+          },
+          {
+            at: [-1600, 6e3],
+            face: 45
+          },
+          {
+            at: [-1300, 6e3],
+            face: 45
+          },
+          {
+            at: [-1e3, 6e3],
+            face: 45
+          },
+          {
+            at: [-700, 6e3],
+            face: 45
+          },
+          {
+            at: [-400, 6e3],
+            face: 45
+          },
+          {
+            at: [-100, 6e3],
+            face: 45
+          },
+          {
+            at: [200, 6e3],
+            face: 45
+          },
+          {
+            at: [500, 6e3],
+            face: 45
+          },
+          {
+            at: [800, 6e3],
+            face: 45
+          },
+          {
+            at: [1100, 6e3],
+            face: 45
+          },
+          {
+            at: [1400, 6e3],
+            face: 45
+          },
+          {
+            at: [1700, 6e3],
+            face: 45
+          },
+          {
+            at: [-2800, 6300],
+            face: 45
+          },
+          {
+            at: [-2500, 6300],
+            face: 45
+          },
+          {
+            at: [-2200, 6300],
+            face: 45
+          },
+          {
+            at: [-1900, 6300],
+            face: 45
+          },
+          {
+            at: [-1600, 6300],
+            face: 45
+          },
+          {
+            at: [-1300, 6300],
+            face: 45
+          },
+          {
+            at: [-1e3, 6300],
+            face: 45
+          },
+          {
+            at: [-700, 6300],
+            face: 45
+          },
+          {
+            at: [-400, 6300],
+            face: 45
+          },
+          {
+            at: [-100, 6300],
+            face: 45
+          },
+          {
+            at: [200, 6300],
+            face: 45
+          },
+          {
+            at: [500, 6300],
+            face: 45
+          },
+          {
+            at: [800, 6300],
+            face: 45
+          },
+          {
+            at: [1100, 6300],
+            face: 45
+          },
+          {
+            at: [1400, 6300],
+            face: 45
+          },
+          {
+            at: [1700, 6300],
+            face: 45
+          },
+          {
+            at: [-2500, 6600],
+            face: 45
+          },
+          {
+            at: [-2200, 6600],
+            face: 45
+          },
+          {
+            at: [-1900, 6600],
+            face: 45
+          },
+          {
+            at: [-1600, 6600],
+            face: 45
+          },
+          {
+            at: [-1300, 6600],
+            face: 45
+          },
+          {
+            at: [-1e3, 6600],
+            face: 45
+          },
+          {
+            at: [-700, 6600],
+            face: 45
+          },
+          {
+            at: [-400, 6600],
+            face: 45
+          },
+          {
+            at: [-100, 6600],
+            face: 45
+          },
+          {
+            at: [200, 6600],
+            face: 45
+          },
+          {
+            at: [500, 6600],
+            face: 45
+          },
+          {
+            at: [800, 6600],
+            face: 45
+          },
+          {
+            at: [1100, 6600],
+            face: 45
+          },
+          {
+            at: [1400, 6600],
+            face: 45
+          },
+          {
+            at: [-2200, 6900],
+            face: 45
+          },
+          {
+            at: [-1900, 6900],
+            face: 45
+          },
+          {
+            at: [-1600, 6900],
+            face: 45
+          },
+          {
+            at: [-1300, 6900],
+            face: 45
+          },
+          {
+            at: [-1e3, 6900],
+            face: 45
+          },
+          {
+            at: [-700, 6900],
+            face: 45
+          },
+          {
+            at: [-400, 6900],
+            face: 45
+          },
+          {
+            at: [-100, 6900],
+            face: 45
+          },
+          {
+            at: [200, 6900],
+            face: 45
+          },
+          {
+            at: [500, 6900],
+            face: 45
+          },
+          {
+            at: [800, 6900],
+            face: 45
+          },
+          {
+            at: [1100, 6900],
+            face: 45
+          },
+          {
+            at: [-1600, 7200],
+            face: 45
+          },
+          {
+            at: [-1300, 7200],
+            face: 45
+          },
+          {
+            at: [-1e3, 7200],
+            face: 45
+          },
+          {
+            at: [-700, 7200],
+            face: 45
+          },
+          {
+            at: [-400, 7200],
+            face: 45
+          },
+          {
+            at: [-100, 7200],
+            face: 45
+          },
+          {
+            at: [200, 7200],
+            face: 45
+          },
+          {
+            at: [500, 7200],
+            face: 45
+          }
+        ],
+        fleets: {
+          JAP: {
+            cv: [
+              "Akagi",
+              "Kaga",
+              "Hiryu",
+              "Soryu"
+            ],
+            bb: [
+              "Haruna",
+              "Kirishima"
+            ],
+            ca: [
+              "Tone",
+              "Chikuma",
+              "Nagara"
+            ]
+          },
+          USA: {
+            cv: [
+              "Yorktown",
+              "Enterprise",
+              "Hornet"
+            ],
+            ca: [
+              "Astoria",
+              "Portland",
+              "Northampton",
+              "Pensacola",
+              "Vincennes",
+              "Minneapolis",
+              "New Orleans",
+              "Atlanta"
+            ]
+          }
+        }
+      }
+    }
+  };
+
+  // ../../src/battle/air/stages.ts
+  var STAGES = air_stages_default.stages;
+  function stageOf(kind, region, sea) {
+    for (const [key6, s] of Object.entries(STAGES)) {
+      if (!s.aim[kind]) continue;
+      if (kind === "harbour" && region !== null && s.places.includes(region)) return key6;
+      if (kind === "fleet" && sea !== null && s.seas.includes(sea)) return key6;
+    }
+    return null;
+  }
+  function onBoard(st, p, T) {
+    const dx = p[0] - st.aim[0], dy = p[1] - st.aim[1], c = Math.cos(st.turn), s = Math.sin(st.turn);
+    return [T.x + dx * c - dy * s, T.y + dx * s + dy * c];
+  }
+  var faceOnBoard = (st, deg) => deg * Math.PI / 180 - st.turn;
+  var recordMonth = (key6, w) => STAGES[key6].record.year === w.year && STAGES[key6].record.month === w.month;
+
+  // ../../src/battle/air/ships.ts
+  var CLASSES2 = ["bb", "cv", "ca", "dd", "ss"];
+  var COMMONWEALTH3 = /* @__PURE__ */ new Set(["UK", "CAN", "AUS", "NZL", "SAF", "IND"]);
+  var at2 = (w) => w.year + w.month / 12;
+  function deckMix(nat, w, m) {
+    const d = at2(w);
+    if (nat === "JAP" || nat === "JPN") return m === "harbour" ? [["torpedo", 0.15], ["level", 0.38], ["dive", 0.47]] : [["torpedo", 0.45], ["dive", 0.55]];
+    if (nat === "USA") return d < 1943.5 ? [["torpedo", 0.25], ["dive", 0.75]] : [["torpedo", 0.35], ["dive", 0.65]];
+    if (COMMONWEALTH3.has(nat)) return m === "harbour" ? [["torpedo", 0.55], ["dive", 0.45]] : [["torpedo", 0.8], ["dive", 0.2]];
+    return [["torpedo", 0.4], ["dive", 0.6]];
+  }
+  function deckModels(nat, w) {
+    const d = at2(w);
+    if (nat === "JAP" || nat === "JPN") return { ftr: "Zero", torpedo: d < 1944 ? "B5N" : "B6N", level: d < 1944 ? "B5N" : "B6N", dive: d < 1944 ? "D3A" : "D4Y" };
+    if (nat === "USA") return { ftr: d < 1943 + 7 / 12 ? "Wildcat" : "Hellcat", torpedo: d < 1942.5 ? "TBD" : "TBF", level: d < 1942.5 ? "TBD" : "TBF", dive: d < 1943 + 10 / 12 ? "SBD" : "SB2C" };
+    if (COMMONWEALTH3.has(nat)) return { ftr: d < 1942 ? "Fulmar" : "Seafire", torpedo: d < 1943.5 ? "Swordfish" : "Barracuda", level: d < 1943.5 ? "Swordfish" : "Barracuda", dive: d < 1941.5 ? "Skua" : d < 1943.5 ? "Swordfish" : "Barracuda" };
+    return { ftr: fighterOf(nat, at2(w)), torpedo: `Torpedo:${nat}`, level: `Torpedo:${nat}`, dive: `Dive:${nat}` };
+  }
+  var BAND = { torpedo: 1, level: 1, dive: 2 };
+  function shipPlace(g2, a, m, target, nat, w, T, turn2) {
+    if (m !== "harbour" && m !== "fleet") return null;
+    const law = shipLaw(a, m, foundShare(g2, a, nat));
+    const quarry = m === "fleet" ? a.ships[0] : null;
+    const key6 = stageOf(m, m === "harbour" ? g2.regions[target]?.name ?? null : null, quarry ? g2.seas[quarry.zone]?.key ?? null : null);
+    const stage = key6 ? { key: key6, aim: STAGES[key6].aim[m], turn: turn2 } : null;
+    const pieces = m === "harbour" ? moored(g2, law, stage, T, w) : atSeaPieces(g2, law, stage, T, w);
+    const wings2 = [];
+    for (const x of a.att) {
+      if (!deckBred(x.f) || wings2.some((v) => v.corps === x.f.id)) continue;
+      const md = deckModels(x.f.nat, w);
+      wings2.push({ corps: x.f.id, ftr: md.ftr, parts: deckMix(x.f.nat, w, m).map(([strike, share]) => ({ strike, share, model: md[strike], band: BAND[strike] })) });
+    }
+    return { law, mul: techMul(g2, nat, "bombers"), stage, pieces, wings: wings2, surprise: a.surprise };
+  }
+  function moored(g2, law, stage, T, w) {
+    const out = [];
+    const S3 = stage ? STAGES[stage.key] : null;
+    const named2 = !!S3 && recordMonth(stage.key, w);
+    const used = /* @__PURE__ */ new Set(), spotsUsed = /* @__PURE__ */ new Set();
+    for (const f of law.fleets) {
+      const adj = g2.nations[f.nat]?.adj ?? f.nat;
+      for (const c of CLASSES2) {
+        for (let k = 0; k < f.ships[c]; k++) {
+          const id = out.length + 1;
+          if (S3) {
+            const b = S3.berths.find((x) => x.cls === c && !used.has(x.id));
+            if (b) {
+              used.add(b.id);
+              const [x, y] = onBoard(stage, b.at, T);
+              out.push({ id, fleet: f.id, nat: f.nat, adj, cls: c, name: named2 && (!S3.record.nat || S3.record.nat === f.nat) ? b.name : null, berth: b.id, x, y, face: faceOnBoard(stage, b.face), open: b.open, ...b.dock ? { dock: true } : {} });
+              continue;
+            }
+            let j = c === "dd" ? S3.spots.findIndex((s, i) => s.nest && !spotsUsed.has(i)) : -1;
+            if (j < 0) {
+              let best = Infinity;
+              S3.spots.forEach((s, i) => {
+                if (spotsUsed.has(i) || s.nest) return;
+                const d = Math.hypot(s.at[0] - stage.aim[0], s.at[1] - stage.aim[1]);
+                if (d < best) {
+                  best = d;
+                  j = i;
+                }
+              });
+            }
+            if (j >= 0) {
+              spotsUsed.add(j);
+              const s = S3.spots[j], [x, y] = onBoard(stage, s.at, T);
+              out.push({ id, fleet: f.id, nat: f.nat, adj, cls: c, name: null, berth: null, x, y, face: faceOnBoard(stage, s.face), open: 0.7 });
+              continue;
+            }
+          }
+          const row2 = Math.floor(out.length / 8), col = out.length % 8;
+          out.push({ id, fleet: f.id, nat: f.nat, adj, cls: c, name: null, berth: null, x: T.x + (col - 3.5) * 260, y: T.y + 300 + row2 * 250, face: Math.PI / 2, open: col % 2 ? 0.4 : 0.9 });
+        }
+      }
+    }
+    return out;
+  }
+  function atSeaPieces(g2, law, stage, T, w) {
+    const out = [];
+    const S3 = stage ? STAGES[stage.key] : null;
+    const named2 = !!S3 && recordMonth(stage.key, w);
+    const given3 = /* @__PURE__ */ new Map();
+    const course = stage ? faceOnBoard(stage, 135) : 2.3;
+    law.fleets.forEach((f, fi) => {
+      const adj = g2.nations[f.nat]?.adj ?? f.nat;
+      const cx = T.x + fi * 9e3, cy = T.y + fi * 2e3;
+      const ring = (r, n, k, turn2 = 0) => {
+        const t = turn2 + 2 * Math.PI * k / Math.max(1, n);
+        return [cx + r * Math.sin(t), cy + r * Math.cos(t)];
+      };
+      const cv = f.ships.cv, mid = f.ships.bb + f.ships.ca, dd = f.ships.dd + f.ships.ss;
+      let iCv = 0, iMid = 0, iDd = 0;
+      for (const c of CLASSES2) {
+        for (let k = 0; k < f.ships[c]; k++) {
+          let p;
+          if (c === "cv") {
+            const cols = Math.ceil(Math.sqrt(cv));
+            p = [cx + (iCv % cols - (cols - 1) / 2) * 2500, cy + (Math.floor(iCv / cols) - (Math.ceil(cv / cols) - 1) / 2) * 2500];
+            iCv++;
+          } else if (c === "bb" || c === "ca") p = ring(cv ? 4e3 : 1500 * Math.min(1, iMid), mid, iMid++, 0.4);
+          else p = ring(6500, dd, iDd++, 0.1);
+          const list4 = named2 ? S3.fleets?.[f.nat]?.[c] : void 0;
+          const n = given3.get(`${f.nat}:${c}`) ?? 0;
+          const name = list4 && n < list4.length ? list4[n] : null;
+          if (name) given3.set(`${f.nat}:${c}`, n + 1);
+          out.push({ id: out.length + 1, fleet: f.id, nat: f.nat, adj, cls: c, name, berth: null, x: p[0], y: p[1], face: course, open: 1 });
+        }
+      }
+    });
+    return out;
+  }
+  function splitWings(units, P, drawn, nextId) {
+    const out = [];
+    for (const u of units) {
+      const wing = u.side === "att" ? P.wings.find((x) => x.corps === u.corps) : void 0;
+      if (!wing) {
+        out.push(u);
+        continue;
+      }
+      if (u.air === "ftr") {
+        u.model = wing.ftr;
+        out.push(u);
+        continue;
+      }
+      const raw2 = wing.parts.map((p) => u.n * p.share);
+      const n = raw2.map(Math.floor);
+      let left = u.n - n.reduce((s, x) => s + x, 0);
+      raw2.map((r, i) => [r - Math.floor(r), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(([, i]) => {
+        if (left > 0) {
+          n[i]++;
+          left--;
+        }
+      });
+      let first2 = true;
+      wing.parts.forEach((p, i) => {
+        if (n[i] <= 0) return;
+        const v = first2 ? u : { ...u, id: nextId(), contacts: [], fire: [], strag: [], kit: { ...u.kit }, job: { ...u.job } };
+        first2 = false;
+        Object.assign(v, drawn(n[i]), { n: n[i], n0: n[i], men0: n[i], band: p.band, to: p.band, alt: SKY.bands.alt[p.band], model: p.model, strike: p.strike });
+        out.push(v);
+      });
+    }
+    const raid2 = out.filter((u) => u.side === "att" && u.air === "bmr");
+    const all = raid2.reduce((s, u) => s + u.n, 0), weighed = raid2.reduce((s, u) => s + u.n * SKY.flak.band[u.band], 0);
+    return { units: out, flakNorm: P.wings.length && weighed > 0 ? all / weighed : 1 };
+  }
+  function howDown(p, harbour) {
+    if (p.dock) return [["burn", 0.6], ["explode", 0.4]];
+    if (p.cls === "cv") return [["burn", 0.7], ["explode", 0.3]];
+    if (p.cls === "dd") return [["break", 0.4], ["explode", 0.3], [harbour ? "settle" : "sink", 0.3]];
+    if (p.cls === "ss") return [[harbour ? "settle" : "sink", 1]];
+    return [[harbour ? "settle" : "sink", 0.5], ["capsize", 0.3], ["explode", 0.2]];
+  }
+  var WORD = { bb: "battleship", cv: "carrier", ca: "cruiser", dd: "destroyer", ss: "submarine" };
+  var WORDS2 = { bb: "battleships", cv: "carriers", ca: "cruisers", dd: "destroyers", ss: "submarines" };
+  var VERB = { settle: "settles on the bottom", sink: "goes down", capsize: "rolls over", explode: "blows up", burn: "is ablaze from end to end and cannot be saved", break: "breaks in two" };
+  function sinkLine(p, how, own) {
+    const who = p.name ? `The ${WORD[p.cls]} ${p.name}` : p.nat === own ? `One of your ${WORDS2[p.cls]}` : `${/^[AEIOU]/.test(p.adj) ? "An" : "A"} ${p.adj} ${WORD[p.cls]}`;
+    return `${who} ${VERB[how]}.`;
+  }
+  var ShipBook = class {
+    /** own: the player's nation where the ships under attack are the player's, for "One of your cruisers". */
+    constructor(P, throws, shown2, bombers0, own = null) {
+      __publicField(this, "P", P);
+      __publicField(this, "shown", shown2);
+      __publicField(this, "own", own);
+      __publicField(this, "pieces");
+      /** Each wing's quarry (S2): the campaign group whose boxes fly together, and the piece they go for (null: none left). */
+      __publicField(this, "quarries", /* @__PURE__ */ new Map());
+      __publicField(this, "leads", /* @__PURE__ */ new Map());
+      __publicField(this, "parts", /* @__PURE__ */ new Map());
+      __publicField(this, "throws", /* @__PURE__ */ new Map());
+      __publicField(this, "down", /* @__PURE__ */ new Map());
+      /** Ruling 240 (C3), only where the law carries `tough`: what the plain law (no one's damage control) sinks on the same throws. */
+      __publicField(this, "plainDown");
+      __publicField(this, "dropped", 0);
+      __publicField(this, "hitsSoFar", 0);
+      __publicField(this, "big", false);
+      __publicField(this, "harbour");
+      __publicField(this, "bombers0");
+      this.harbour = P.law.harbour;
+      this.bombers0 = Math.max(1, bombers0);
+      this.pieces = P.pieces.map((p) => ({ ...p, hits: 0, sunk: null }));
+      for (const f of P.law.fleets) for (const c of CLASSES2) if (f.ships[c] > 0) {
+        this.throws.set(`${f.id}:${c}`, throws.next());
+        this.down.set(`${f.id}:${c}`, 0);
+      }
+      this.plainDown = P.law.tough ? new Map([...this.down.keys()].map((k) => [k, 0])) : null;
+    }
+    /**
+     * Each wing takes its quarry (the tactics panel's S2): the afloat ship its lead kind (its largest part) weighs most
+     * as pickHit weighs it, the law's aim by how open the ship lies, so at sea the carriers first, then the battleships,
+     * the cruisers and the destroyers, by the campaign's own table; a torpedo never takes a ship in dock. Among ships of
+     * equal weight, the one fewest wings have taken; then the one the wing as a whole weighs most, so that in harbour a
+     * wing led by its dive bombers takes a ship its torpedo bombers can reach, outboard; then the nearest the target, then
+     * the first. A wing is a carrier group's boxes together, or a land group's single box; boxes in the order the battle
+     * has them. Nothing is drawn.
+     */
+    aim(boxes) {
+      const big = /* @__PURE__ */ new Map();
+      for (const b of boxes) {
+        if (!this.leads.has(b.corps) || b.n > big.get(b.corps)) {
+          this.leads.set(b.corps, b.strike ?? "bomb");
+          big.set(b.corps, b.n);
+        }
+        this.parts.set(b.corps, [...this.parts.get(b.corps) ?? [], { strike: b.strike ?? "bomb", n: b.n }]);
+      }
+      for (const corps of this.leads.keys()) this.retake(corps);
+    }
+    /** A wing's quarry: the piece its boxes go for, null when no ship it could hit is afloat (undefined: not a wing). */
+    quarryOf(corps) {
+      return this.quarries.get(corps);
+    }
+    retake(corps) {
+      const lead2 = this.leads.get(corps), T = SKY.target, eps = 1e-9;
+      const taken2 = (p) => [...this.quarries].filter(([c, q]) => c !== corps && q === p.id).length;
+      const whole2 = (p) => (this.parts.get(corps) ?? []).reduce((t, x) => t + x.n * this.weigh(p, x.strike), 0);
+      let best = null, bw = 0;
+      for (const p of this.pieces) {
+        const w = this.weigh(p, lead2);
+        if (w <= 0) continue;
+        if (!best || w > bw + eps) {
+          best = p;
+          bw = w;
+          continue;
+        }
+        if (w < bw - eps) continue;
+        const k = taken2(p) - taken2(best), o = whole2(p) - whole2(best), d = Math.hypot(p.x - T.x, p.y - T.y) - Math.hypot(best.x - T.x, best.y - T.y);
+        if (k < 0 || k === 0 && (o > eps || Math.abs(o) <= eps && (d < -eps || Math.abs(d) <= eps && p.id < best.id))) best = p;
+      }
+      this.quarries.set(corps, best ? best.id : null);
+    }
+    /** 2: the wing's own quarry; 1: another wing's; 0: nobody's. */
+    aimed(p, corps) {
+      if (corps !== void 0 && this.quarries.get(corps) === p.id) return 2;
+      return [...this.quarries.values()].includes(p.id) ? 1 : 0;
+    }
+    /** How much a box of this kind goes for a ship: the law's aim by how open it lies (pickHit's own weight). */
+    weigh(p, strike) {
+      return p.sunk || strike === "torpedo" && p.dock ? 0 : CARRIERS.strike.aim[p.cls] * (0.25 + (strike === "torpedo" ? p.open : 0.5));
+    }
+    /**
+     * The bombers have dropped so far 'dropped' in all, the last of them 'strike' bombers of the campaign group 'corps':
+     * the ships hit and sunk. A hit drawn in the class of the wing's quarry lands on the quarry while it floats (the
+     * tactics panel's S3): the hits by class, the sinkings and the stream they are drawn from are as before.
+     */
+    drop(dropped, strike, t, corps) {
+      if (dropped <= this.dropped) return [];
+      this.dropped = dropped;
+      const L2 = this.P.law, exp = shipHitsBy(L2, dropped * this.P.mul), news3 = [];
+      const more = this.shown.roll(Math.max(0, exp.hits - this.hitsSoFar));
+      this.hitsSoFar = Math.max(this.hitsSoFar, exp.hits);
+      for (let k = 0; k < Math.min(more, 3 * this.pieces.length); k++) {
+        const drawn = this.pickHit(strike);
+        if (!drawn) break;
+        const q = corps === void 0 ? null : this.pieces.find((x) => x.id === this.quarries.get(corps)) ?? null;
+        const p = q && q.cls === drawn.cls && this.weigh(q, strike) > 0 ? q : drawn;
+        p.hits++;
+        news3.push({ what: "air:ship-hit", piece: p, text: "", extra: { ship: p.id, strike, x: p.x, y: p.y } });
+      }
+      L2.fleets.forEach((f, i) => {
+        for (const c of CLASSES2) {
+          const key6 = `${f.id}:${c}`, u = this.throws.get(key6);
+          if (u === void 0 || L2.have[c] <= 0) continue;
+          const e = exp.by ? exp.by[i][c] : exp.sunk[c] * (f.ships[c] / L2.have[c]);
+          const n = e > u ? Math.min(f.ships[c], Math.floor(e - u) + 1) : 0;
+          if (this.plainDown) {
+            const e0 = exp.plain ? exp.plain[c] * (f.ships[c] / L2.have[c]) : e;
+            this.plainDown.set(key6, Math.max(n, e0 > u ? Math.min(f.ships[c], Math.floor(e0 - u) + 1) : 0));
+          }
+          for (let k = this.down.get(key6); k < n; k++) {
+            const p = this.pieces.filter((x) => x.fleet === f.id && x.cls === c && !x.sunk).sort((a, b) => b.hits - a.hits || this.aimed(b, corps) - this.aimed(a, corps) || b.open - a.open || a.id - b.id)[0];
+            if (!p) break;
+            const how = this.pick(howDown(p, this.harbour));
+            if (p.hits === 0) {
+              p.hits = 1;
+              news3.push({ what: "air:ship-hit", piece: p, text: "", extra: { ship: p.id, strike, x: p.x, y: p.y }, given: true });
+            }
+            p.sunk = { t, how };
+            const big = !this.big && how === "explode" && (c === "bb" || c === "cv");
+            if (big) this.big = true;
+            news3.push({ what: "air:ship-sunk", piece: p, text: sinkLine(p, how, this.own), extra: { ship: p.id, how, strike, x: p.x, y: p.y, ...p.name ? { name: p.name } : {}, ...big ? { big: true } : {} } });
+          }
+          this.down.set(key6, n);
+        }
+      });
+      for (const [c, q] of this.quarries) if (q !== null && this.pieces.find((x) => x.id === q).sunk) this.retake(c);
+      return news3;
+    }
+    pickHit(strike) {
+      const w = (p) => this.weigh(p, strike);
+      const all = this.pieces.reduce((s, p) => s + w(p), 0);
+      if (all <= 0) return null;
+      let x = this.shown.next() * all;
+      for (const p of this.pieces) {
+        x -= w(p);
+        if (x < 0 && w(p) > 0) return p;
+      }
+      return this.pieces.filter((p) => w(p) > 0).pop() ?? null;
+    }
+    pick(rows) {
+      const all = rows.reduce((s, [, k]) => s + k, 0);
+      let x = this.shown.next() * all;
+      for (const [h, k] of rows) {
+        x -= k;
+        if (x < 0) return h;
+      }
+      return rows[rows.length - 1][0];
+    }
+    /** What the ships sunk so far are worth on the campaign's scale (fly()'s own measure). */
+    value() {
+      const V = CARRIERS.strike.value;
+      let v = 0;
+      for (const [key6, n] of this.down) v += n * V[key6.split(":")[1]];
+      return v;
+    }
+    /** The ships of each class sunk in each fleet, every class it has (0 included): what the campaign books (fly(), battle.sunk). */
+    sunk() {
+      var _a;
+      const out = {};
+      for (const [key6, n] of this.down) {
+        const [f, c] = key6.split(":");
+        (out[_a = Number(f)] ?? (out[_a] = {}))[c] = n;
+      }
+      return out;
+    }
+    /**
+     * Ruling 240 (C3; the design director, 13:38Z on step 9): the ships of each class in each fleet that damage control
+     * kept afloat so far, every class it has (0 included): on each fleet and class's own throw, what the plain law would
+     * have sunk less what the eased law sank, as fly()'s rollBoth counts them on the dice's path. Undefined where the law
+     * carries no `tough` (the switch off, or no fleet's figure other than 1): then nothing is said of it anywhere.
+     */
+    kept() {
+      var _a;
+      if (!this.plainDown) return void 0;
+      const out = {};
+      for (const [key6, n0] of this.plainDown) {
+        const [f, c] = key6.split(":");
+        (out[_a = Number(f)] ?? (out[_a] = {}))[c] = n0 - this.down.get(key6);
+      }
+      return out;
+    }
+    /** The ships for the 3D game, and how far a harbour caught unready has its guns manned (shown only, ruling 238(1)). */
+    view() {
+      return { guns: this.P.surprise ? Math.min(1, 0.15 + 0.85 * this.dropped / this.bombers0) : 1, pieces: this.pieces.map((p) => ({ ...p, ...p.sunk ? { sunk: { ...p.sunk } } : {} })) };
+    }
+  };
+
   // ../../src/battle/air/fates.ts
   var HOWS = ["explode", "flamer", "burn", "wing", "tail", "pilot", "spin", "glide", "breakup"];
   var freshMemory = () => ({ last: [], looks: {} });
@@ -58311,17 +62412,17 @@
     const chuteAt = [];
     if (thrown || extra) {
       const first2 = how === "spin" || how === "wing" || how === "tail" ? F.chute.spin : F.chute.first;
-      let at3 = range(thrown ? rng : more, first2);
+      let at4 = range(thrown ? rng : more, first2);
       const open2 = () => {
-        chuteAt.push(Math.round(Math.min(at3, Math.max(0.5, upTo - 0.5)) * 10) / 10);
+        chuteAt.push(Math.round(Math.min(at4, Math.max(0.5, upTo - 0.5)) * 10) / 10);
       };
       for (let i = 0; i < thrown; i++) {
         if (i < ours) open2();
-        at3 += range(rng, F.chute.gap);
+        at4 += range(rng, F.chute.gap);
       }
       for (let i = 0; i < extra; i++) {
         open2();
-        at3 += range(more, F.chute.gap);
+        at4 += range(more, F.chute.gap);
       }
     }
     let roll3 = rng.chance(0.5) ? 1 : -1;
@@ -58374,7 +62475,7 @@
   }
 
   // ../../src/battle/air/guns.ts
-  var at2 = (w) => w.year + w.month / 12;
+  var at3 = (w) => w.year + w.month / 12;
   var MID = (a, b) => Math.round((a + b) / 2);
   var SYNC = 0.9;
   var G4 = {
@@ -58412,9 +62513,9 @@
   var fixed = (spec2, where, rounds, more = {}) => gun(spec2, "fixed", where, rounds, more);
   var wings = (k) => Array.from({ length: k }, (_, i) => `gun.${i + 1}`);
   var yd = (x) => Math.round(x * 0.9144);
-  var raf = (w) => at2(w) < 1940 + 5 / 12 ? yd(400) : yd(250);
+  var raf = (w) => at3(w) < 1940 + 5 / 12 ? yd(400) : yd(250);
   function fighterGuns(model, nat, w) {
-    const d = at2(w);
+    const d = at3(w);
     switch (model) {
       case "Bf109": {
         if (d >= 1941) return { mark: "Bf 109F-4", conv: null, silent: ["gun.1", "gun.2"], guns: [fixed(G4.mg151, ["gun.nose"], 200, { n: 1 }), fixed(G4.mg17, ["gun.nose"], 500, { n: 2, rate: Math.round(G4.mg17.rate * SYNC) })] };
@@ -58475,7 +62576,7 @@
   var turret = (spec2, where, rounds, arc = null) => gun(spec2, "turret", where, rounds, { arc });
   var REACH2 = { rifle: 370, hmg: 550, cannon20: 550 };
   function bomberGuns(model, nat, w) {
-    const d = at2(w);
+    const d = at3(w);
     const box = (mark, guns2, silent = []) => ({ mark, conv: null, silent, guns: guns2, reach: REACH2 });
     switch (model) {
       case "He111": {
@@ -58633,6 +62734,9 @@
       __publicField(this, "openTold", /* @__PURE__ */ new Set());
       /** The enemy group each close escort has broken off to engage, if any. */
       __publicField(this, "chasing", /* @__PURE__ */ new Map());
+      /** A strike on ships (ships.ts, ruling 238): the ships under attack, and what the guns' toll is scaled by once carrier groups fly at their own heights. */
+      __publicField(this, "sea", null);
+      __publicField(this, "flakNorm", 1);
       /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
       __publicField(this, "metAt", null);
       /** The defending groups whose staff has weighed its climb (once each: a group that has dived is never sent back up). */
@@ -58696,7 +62800,8 @@
             name: f.name,
             x: s.x + (kind === "bmr" ? 0 : 1500 * (side3 === "att" ? 1 : 0)),
             y: s.y,
-            face: side3 === "att" ? 0 : bearing(s.x, s.y, T.x, T.y),
+            // Defenders face the target they rise to cover; a fleet's own cover, already out over it, faces the strike (S1).
+            face: side3 === "att" ? 0 : s.over ? bearing(T.x, T.y, s.x, s.y) : bearing(s.x, s.y, T.x, T.y),
             str: 1,
             mor,
             state: "steady",
@@ -58741,9 +62846,17 @@
           if (kind === "ftr") this.skill.set(u.id, Math.round(clamp013(SKY.pilots.base + SKY.pilots.leader * f.xp + SKY.pilots.ready * f.org) * 100) / 100);
         }
       }
+      if (this.place.ships) {
+        const sp = splitWings(this.units, this.place.ships, (n) => this.drawn("bmr", n), () => id++);
+        this.units = sp.units;
+        this.flakNorm = sp.flakNorm;
+        const boxes = this.units.filter((u) => u.side === "att" && u.air === "bmr");
+        this.sea = new ShipBook(this.place.ships, this.rng.fork(29), this.rng.fork(31), boxes.reduce((t, u) => t + u.n, 0), this.ticket.def.human ? this.ticket.def.nat : null);
+        this.sea.aim(boxes);
+      }
       for (const u of this.units) {
         const B2 = u.air === "bmr" ? this.place.bombers?.[u.corps] : void 0;
-        if (!B2 || !B2.seats.length) continue;
+        if (!B2 || !B2.seats.length || this.units.some((x) => x !== u && x.air === "bmr" && x.corps === u.corps)) continue;
         const k = Math.min(u.n0, B2.seats.length);
         this.seated.set(u.id, { all: B2.seats, told: B2.told, flown: B2.flown, form: Array.from({ length: k }, (_, i) => i), away: [], spare: u.n0 - k, fell: [], shot: /* @__PURE__ */ new Map() });
       }
@@ -58780,6 +62893,7 @@
       this.start = this.expect();
       for (const u of this.units) this.mor0.set(u.id, u.mor);
       this.through0 = this.throughNow(this.place.forecast.bmr);
+      if (this.show) for (const u of this.units) this.shown(u, 0);
     }
     /**
      * How a group of n aircraft is drawn: how many models, one for every 'per' aircraft, in a box of w by d metres.
@@ -58828,8 +62942,8 @@
       return t[u.side].human || !(t.att.human || t.def.human) ? "" : t[u.side].adj;
     }
     say(what, u, text, extra, cue) {
-      const at3 = extra && typeof extra.x === "number" ? { x: extra.x, y: extra.y } : u ? { x: u.x, y: u.y } : {};
-      const e = { t: this.t, what, text, ...u ? { unit: u.id, side: u.side } : {}, ...at3, ...cue ? { cue } : {}, ...extra ? { extra } : {} };
+      const at4 = extra && typeof extra.x === "number" ? { x: extra.x, y: extra.y } : u ? { x: u.x, y: u.y } : {};
+      const e = { t: this.t, what, text, ...u ? { unit: u.id, side: u.side } : {}, ...at4, ...cue ? { cue } : {}, ...extra ? { extra } : {} };
       this.events.push(e);
       this.log.push(e);
     }
@@ -58921,7 +63035,7 @@
             if (up !== null) {
               u.to = up;
               u.rise = true;
-              this.say("air:climb", u, told(this.called(u), "Warned by radar, {n} [climbs|climb] to get above the raid."), { to: up });
+              this.say("air:climb", u, told(this.called(u), this.place.starts[u.corps]?.over ? "Warned by the lookouts, {n} [climbs|climb] to get above the strike." : "Warned by radar, {n} [climbs|climb] to get above the raid."), { to: up });
             } else u.to = Math.max(u.to, 1);
           }
           keep(e);
@@ -58929,7 +63043,8 @@
       }
     }
     /**
-     * The staff's climb (the tactics panel's 5d): warned by radar of a day raid, a computer defence's group climbs its
+     * The staff's climb (the tactics panel's 5d): warned by radar of a day raid (or, over its own fleet, by the fleet's
+     * lookouts: the tactics panel's S1), a computer defence's group climbs its
      * style's bands above the raid's highest box (its highest group, in a fight for the sky) before it meets it, if the
      * raid is far enough off for the climb to be done first; if not, it meets the raid at its height, as every staff did
      * before. Weighed once for each group, so a group that has dived is never sent back up. The climb is drawn, never
@@ -58938,7 +63053,7 @@
      */
     climb(u) {
       const D2 = this.place.defence;
-      if (!D2 || D2.climb <= 0 || !this.place.radar || this.place.night || this.risen.has(u.id)) return null;
+      if (!D2 || D2.climb <= 0 || this.place.night || !(this.place.radar || this.place.starts[u.corps]?.over) || this.risen.has(u.id)) return null;
       this.risen.add(u.id);
       const raid2 = this.units.filter((v) => v.side === "att" && flying2(v));
       const boxes = raid2.filter((v) => v.air === "bmr");
@@ -59198,8 +63313,9 @@
           u.run += dt;
           if (u.run >= SKY.run) {
             u.dropped = u.n;
-            this.say("air:bombs", u, `${told(this.called(u), "{N} [bombs|bomb]")} ${this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C2.bombs);
+            this.say("air:bombs", u, `${told(this.called(u), u.strike === "torpedo" ? "{N} [attacks|attack]" : "{N} [bombs|bomb]")} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C2.bombs);
             this.bombsFall();
+            if (this.sea) for (const x of this.sea.drop(this.droppedNow(), u.strike ?? "bomb", this.t, u.corps)) this.say(x.what, u, x.text, x.extra);
           }
         }
       }
@@ -59424,7 +63540,7 @@
           if (u.dropped || u.jettisoned) continue;
           const pass = SKY.flak.hold ? this.beats.get(u.id) : void 0;
           const own = pass?.go ? pass.by : null;
-          owe(u, own ?? "flak", u.n * P.gunLoss * SKY.flak.band[u.band] * dt / this.flakIn);
+          owe(u, own ?? "flak", u.n * P.gunLoss * SKY.flak.band[u.band] * this.flakNorm * dt / this.flakIn);
           u.shot = Math.min(1, u.shot + dt / this.flakIn);
           if (own !== null) holding.set(u.id, own);
         } else if (SKY.flak.fighters > 0) owe(u, "flak", u.n * P.gunLoss * SKY.flak.fighters * SKY.flak.band[u.band] * dt / this.flakT);
@@ -59458,7 +63574,7 @@
           const over = u.side === "att" ? "enemy" : "own";
           const fall2 = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
           if (fall2.back) u.back++;
-          const alt = s ? Math.max(0, u.alt - s.down) : u.alt;
+          const alt = s ? Math.max(0, this.shownAlt(u) - s.down) : this.shownAlt(u);
           const before = u.figures;
           u.figures = this.modelsAfter(u, s);
           lost.push({ u, fall: fall2, by: by2, s, alt, fid: this.fid++, seat: seat4, gun: gun2, models: before - u.figures });
@@ -59564,9 +63680,9 @@
     sceneOf(L2, near2) {
       const { u, s, by: by2 } = L2;
       const engines = u.air === "bmr" ? enginesOf(u.model) : fighterEngines(u.model);
-      const at3 = s ? this.stragAt(u, s) : { x: u.x, y: u.y };
+      const at4 = s ? this.stragAt(u, s) : { x: u.x, y: u.y };
       const v = typeof by2 === "number" ? this.unit(by2) : void 0;
-      const kinds = SKY.flak.kinds[u.band];
+      const band = this.shownBand(u), kinds = SKY.flak.kinds[band];
       return {
         air: u.air,
         engines,
@@ -59576,11 +63692,12 @@
         gun: v && v.air === "ftr" ? this.heaviest(v) : null,
         flak: by2 === "flak" ? kinds[kinds.length - 1] : null,
         pass: u.air === "bmr" && typeof by2 === "number" ? this.passes.get(`${by2}:${u.id}`) ?? null : null,
-        band: u.band,
+        band,
         alt: L2.alt,
         loaded: u.air === "bmr" && u.dropped <= 0 && !u.jettisoned,
         strag: s ? s.eng : null,
-        sea: seaAt2(this.place.ground, at3.x, at3.y),
+        // A strike on a fleet is fought over open sea; a harbour over its stage's own ground.
+        sea: this.place.ships && !this.place.ships.law.harbour ? true : seaAt2(this.place.ground, at4.x, at4.y),
         night: !!this.place.night,
         back: L2.fall.back,
         over: L2.fall.over,
@@ -59773,8 +63890,8 @@
     nextDown(b) {
       const G5 = SKY.strag;
       const k = b.strag.findIndex((s) => s.age >= G5.seen && s.cover === null);
-      const at3 = k >= 0 ? k : b.n > b.strag.length ? -1 : 0;
-      return at3 >= 0 ? b.strag.splice(at3, 1)[0] : null;
+      const at4 = k >= 0 ? k : b.n > b.strag.length ? -1 : 0;
+      return at4 >= 0 ? b.strag.splice(at4, 1)[0] : null;
     }
     /**
      * One of a list of a box's seats, the likelier the greater its risk (a green crew's, as the campaign's own draw has
@@ -59885,6 +64002,9 @@
         model: u.model,
         cool: coolOf(u.model),
         form: u.form,
+        ...u.strike ? { strike: u.strike, run: Math.round(Math.min(1, u.run / SKY.run) * 1e3) / 1e3, drawAlt: Math.round(this.shownAlt(u)) } : {},
+        // The ship its wing goes for (S2): the 3D bends the last of its run onto it. Absent with none afloat to go for.
+        ...this.sea && u.side === "att" && this.sea.quarryOf(u.corps) != null ? { quarry: this.sea.quarryOf(u.corps) } : {},
         box: u.state === "routing" ? "broken" : u.state === "wavering" ? "loose" : "tight",
         boxes: this.boxesOf(u),
         away: u.away,
@@ -59892,9 +64012,22 @@
         // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief),
         // and never while their own fighters are going in on it ('hold': the guns are silent for that pass, with the air
         // seconds of it left in 'holdLeft'; between passes 'holdIn' is the air seconds until the next, SKY.flak.hold).
-        flak: u.side === "att" && this.place.gunLoss > 0 && !done && !away(u) && !this.held.has(u.id) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[u.band] : [],
+        flak: u.side === "att" && this.place.gunLoss > 0 && !done && !away(u) && !this.held.has(u.id) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],
         ...this.heldLook(u, done)
       };
+    }
+    /** A strike on a fleet at sea: the bombs fall on the fleet, as the ticket's title names it ("the Mobile Force"), not
+     * on the place; undefined for any other raid, a harbour's included. */
+    quarry() {
+      const name = this.place.ships && !this.place.ships.law.harbour ? this.place.ships.law.fleets[0]?.name : void 0;
+      return name ? `the ${name}` : void 0;
+    }
+    /** The band a box is drawn at: a torpedo box flies its run in low, though it is counted in the middle (ships.ts BAND). */
+    shownBand(u) {
+      return u.strike === "torpedo" && !u.dropped && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? 0 : u.band;
+    }
+    shownAlt(u) {
+      return this.shownBand(u) === u.band ? u.alt : SKY.bands.alt[this.shownBand(u)];
     }
     /**
      * A box's stragglers each tick, shown or not (the box's next loss is its straggler's, so the way each loss goes, which
@@ -60114,7 +64247,7 @@
       const units = this.units.map((u) => ({ ...u, spotted: { att: this.sees("att", u), def: this.sees("def", u) } })).filter((u) => !as || u.side === as || u.spotted[as]);
       const events = this.events;
       this.events = [];
-      return { t: this.t, limit: this.ticket.limit, units, balance: this.balance(), events, zones: this.zones, ai: { ...this.ai }, over: this.over, breaking: { att: this.nearBreak("att"), def: this.nearBreak("def") }, contact: this.metAt };
+      return { t: this.t, limit: this.ticket.limit, units, balance: this.balance(), events, zones: this.zones, ai: { ...this.ai }, over: this.over, breaking: { att: this.nearBreak("att"), def: this.nearBreak("def") }, contact: this.metAt, ...this.sea ? { ships: this.sea.view() } : {} };
     }
     /** Every event so far, for the after-action card and replays. */
     history() {
@@ -60153,7 +64286,7 @@
           out.bmr += hit;
         }
       }
-      for (const b of live5) if (b.air === "bmr" && b.side === "att" && inPlay(b)) out.bmr += b.n * this.place.gunLoss * SKY.flak.band[b.band] * (1 - b.shot);
+      for (const b of live5) if (b.air === "bmr" && b.side === "att" && inPlay(b)) out.bmr += b.n * this.place.gunLoss * SKY.flak.band[b.band] * this.flakNorm * (1 - b.shot);
       return out;
     }
     /**
@@ -60219,7 +64352,7 @@
       const R2 = this.place.reckon, L2 = this.place.bombs;
       const lost = (s) => this.units.filter((u) => u.side === s).reduce((t, u) => t + u.n0 - u.n, 0);
       const dropped = this.droppedNow();
-      const worth3 = this.place.mission === "superiority" ? 0 : L2 ? bombWorth(L2, dropped) + 300 * ((this.railCut ? 1 : 0) + (this.ruined ? 1 : 0)) : this.through0 > 0 ? R2.value * Math.min(1.5, dropped / this.through0) : 0;
+      const worth3 = this.place.mission === "superiority" ? 0 : this.sea ? this.sea.value() : L2 ? bombWorth(L2, dropped) + 300 * ((this.railCut ? 1 : 0) + (this.ruined ? 1 : 0)) : this.through0 > 0 ? R2.value * Math.min(1.5, dropped / this.through0) : 0;
       const up = (s) => this.units.filter((u) => u.side === s && u.air === "ftr" && flying2(u)).reduce((t, u) => t + u.n, 0);
       const l = { att: lost("att"), def: lost("def") };
       return { lost: l, worth: worth3, cut: this.railCut, ruined: this.ruined, ratio: (l.def + worth3 + 10) / (l.att + 10), up: { att: up("att"), def: up("def") } };
@@ -60248,6 +64381,7 @@
         pr = Math.min(1, R2.rail * share);
         pf = Math.min(1, R2.ruin * share);
         value = R2.value * share;
+        if (this.sea) value = this.sea.value() + (this.through0 > 0 ? R2.value * Math.min(1.5, Math.max(0, this.throughNow(bmrToCome) - this.droppedNow()) / this.through0) : 0);
       }
       const beats = (worth3) => {
         const x = Math.pow((foe + worth3 + 10) / (ftr + bmr + 10), R2.k);
@@ -60288,6 +64422,10 @@
         ...this.staff ? { staff: this.staff } : {},
         // Fought to the end, the field's throws decide the railway and the factory in the campaign too. Handed to the staff,
         // what the bombs had done stands (a throw of 0 cuts it) and the staff's own dice decide the rest (b368).
+        // Fought to the end, the ships the field sank are the ones the campaign books; handed over, they stay sunk (ships.ts).
+        ...this.sea ? { sunk: this.sea.sunk() } : {},
+        // Ruling 240: with damage control in play, the ships it kept afloat on the same throws (ships.ts kept()).
+        ...this.sea?.kept() ? { kept: this.sea.kept() } : {},
         ...this.place.bombs ? { rolls: this.staff ? { ...this.railCut ? { rail: 0 } : {}, ...this.ruined ? { ruin: 0 } : {} } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}
       };
     }
@@ -60317,8 +64455,10 @@
       const count4 = (s, k) => this.units.filter((u) => u.side === s && u.air === k).reduce((t, u) => t + u.n0 - u.n, 0);
       const me = this.ticket.def.human && !this.ticket.att.human ? "def" : "att";
       const bill = (s) => ({ ftr: count4(s, "ftr"), bmr: count4(s, "bmr") });
+      const quarry = this.quarry();
       const lines2 = afterWords({
         place: this.place.name,
+        ...quarry ? { target: quarry } : {},
         sky: this.place.mission === "superiority",
         me,
         adj: { att: this.ticket.att.adj, def: this.ticket.def.adj },
@@ -60358,7 +64498,7 @@
   // ../../src/battle/air/ground.ts
   var MARGIN = 5e4;
   var FINE = 400;
-  function groundOf3(g2, target, at3) {
+  function groundOf3(g2, target, at4) {
     const maps2 = [campaign_map_default, ...g2.flags.world === 1 ? [world_map_default] : []];
     const lo = -MARGIN, hi = SKY.w + MARGIN, hiY = SKY.h + MARGIN;
     const inBox2 = ([x, y]) => x >= lo && x <= hi && y >= lo && y <= hiY;
@@ -60400,7 +64540,7 @@
     for (const m of maps2) {
       for (const poly of m.land) {
         for (const ring of poly) {
-          const pts = ring.map(([x, y]) => at3(x, y));
+          const pts = ring.map(([x, y]) => at4(x, y));
           if (!bboxIn(pts)) continue;
           land2.push(thin(pts));
           if (pts.some(([x, y]) => x >= 0 && x <= SKY.w && y >= 0 && y <= SKY.h)) coast = true;
@@ -60408,7 +64548,7 @@
       }
       for (const r of m.regions) {
         for (const poly of r.polys) for (const ring of poly) {
-          const pts = ring.map(([x, y]) => at3(x, y));
+          const pts = ring.map(([x, y]) => at4(x, y));
           if (!bboxIn(pts)) continue;
           const closed = [...pts, pts[0]];
           if (r.id === target) {
@@ -60419,8 +64559,8 @@
       }
     }
     const rivers = [];
-    for (const rv of riversOf(g2)) rivers.push(...runs(rv.pts.map(([x, y]) => at3(x, y))));
-    const o = at3(0, 0), up = at3(0, -1), far = Math.hypot(up[0] - o[0], up[1] - o[1]) || 1;
+    for (const rv of riversOf(g2)) rivers.push(...runs(rv.pts.map(([x, y]) => at4(x, y))));
+    const o = at4(0, 0), up = at4(0, -1), far = Math.hypot(up[0] - o[0], up[1] - o[1]) || 1;
     const north = [Math.round((up[0] - o[0]) / far * 1e6) / 1e6 + 0, Math.round((up[1] - o[1]) / far * 1e6) / 1e6 + 0];
     return { land: coast ? land2 : [], rivers, borders: borders2, target: mine4, terrain, inland: !coast, north };
   }
@@ -61351,6 +65491,19 @@
   };
 
   // ../../src/battle/air/sky.ts
+  function skyWord(cover3) {
+    const eighths = Math.round(Math.max(0, Math.min(1, cover3)) * 8);
+    return eighths === 0 ? "clear" : eighths <= 2 ? "fair" : eighths <= 4 ? "scattered" : eighths <= 7 ? "broken" : "overcast";
+  }
+  var CUMULUS_MOST = 0.55;
+  var DECK_LEAST = 0.6;
+  function coverOf(kind, chance, u) {
+    const v = Math.max(0, Math.min(1, u));
+    const r2 = (x) => Math.round(x * 100) / 100;
+    if (kind === "deck") return r2(DECK_LEAST + (1 - DECK_LEAST) * Math.pow(v, 0.7));
+    const lean = Math.max(0.8, Math.min(2, 2 - 1.8 * chance));
+    return r2(CUMULUS_MOST * Math.pow(v, lean));
+  }
   var ZONES = air_cloud_default.zones;
   var FALLBACK = air_cloud_default.fallback;
   var ADJUST = air_cloud_default.adjust;
@@ -61393,10 +65546,11 @@
     const h = (z?.seasons ?? []).find((s) => s.months.includes(month3)) ?? row2;
     const baseRange = [h.base_m[0], h.base_m[1]];
     const topsRange = [h.tops_m[0], h.tops_m[1]];
-    const at3 = (r, u) => Math.round((r[0] + u * (r[1] - r[0])) / 10) * 10;
-    const base = at3(baseRange, fraction(`airsky:base:${seed}`));
-    const top = Math.max(at3(topsRange, fraction(`airsky:top:${seed}`)), base + CLOUD_THICK);
+    const at4 = (r, u) => Math.round((r[0] + u * (r[1] - r[0])) / 10) * 10;
+    const base = at4(baseRange, fraction(`airsky:base:${seed}`));
+    const top = Math.max(at4(topsRange, fraction(`airsky:top:${seed}`)), base + CLOUD_THICK);
     const kind = weather2 ? weather2 === "clear" ? "cumulus" : "deck" : fraction(`airsky:${seed}`) < chance ? "deck" : "cumulus";
+    const cover3 = coverOf(kind, chance, fraction(`airsky:cover:${seed}`));
     return {
       kind,
       base,
@@ -61405,6 +65559,8 @@
       topsRange,
       chance,
       zone: z ? z.zone : "elsewhere",
+      cover: cover3,
+      sky: skyWord(cover3),
       ...weather2 ? { weather: weather2 } : {}
     };
   }
@@ -61486,9 +65642,10 @@
 
   // ../../src/battle/air/ticket.ts
   var FOUGHT_KINDS = ["bomb", "superiority"];
+  var SHIP_KINDS = ["harbour", "fleet"];
   var clampTo = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  function airTicket(g2, kind, target, ids2, nat = g2.human) {
-    if (!FOUGHT_KINDS.includes(kind)) return { ticket: null, why: "Only day raids and fights for the sky can be fought out so far: the staff settles a night raid." };
+  function airTicket(g2, kind, target, ids2, nat = g2.human, opts = {}) {
+    if (!FOUGHT_KINDS.includes(kind) && !(opts.ships && SHIP_KINDS.includes(kind))) return { ticket: null, why: "Only day raids and fights for the sky can be fought out so far: the staff settles a night raid." };
     if (nat === null) return { ticket: null, why: "Nobody is at the controls." };
     const plan = planRaid(g2, kind, target, ids2, nat);
     if (plan.why) return { ticket: null, why: plan.why };
@@ -61502,8 +65659,9 @@
     const L2 = airWar(g2) ? night ? AIRWAR.losses.night : AIRWAR.losses : { bombers: C3.bombers, power: 1 };
     const most = airWar(g2) ? night ? AIRWAR.losses.most : AIRWAR.losses.day : C3.maxBomberLoss;
     const escort2 = airWar(g2) && !night ? AIRWAR.losses.escort : 1;
-    const defNat = a.def[0]?.f.nat ?? g2.regions[target].ctrl;
-    const T = g2.regions[target];
+    const quarry = kind === "fleet" ? a.ships[0] : null;
+    const defNat = a.def[0]?.f.nat ?? quarry?.nat ?? g2.regions[target].ctrl;
+    const T = quarry ? g2.seas[quarry.zone] : g2.regions[target];
     const vec = (f) => {
       const p = groupAt(g2, f);
       return [(p.x - T.x) * AIR.kmPerUnit * 1e3, -(p.y - T.y) * AIR.kmPerUnit * 1e3];
@@ -61517,7 +65675,11 @@
     }
     const from2 = Math.atan2(ay, ax) || -Math.PI / 2, turn2 = -Math.PI / 2 - from2;
     const rot = ([x, y]) => [x * Math.cos(turn2) - y * Math.sin(turn2), x * Math.sin(turn2) + y * Math.cos(turn2)];
-    const onBoard = (x, y, edge3 = 2e3) => [clampTo(x, edge3, SKY.w - edge3), clampTo(y, edge3, SKY.h - edge3)];
+    const clampBoard = (x, y, edge3 = 2e3) => [clampTo(x, edge3, SKY.w - edge3), clampTo(y, edge3, SKY.h - edge3)];
+    const when = { year: turnToDate(g2.turn).year, month: turnToDate(g2.turn).month };
+    const ships = SHIP_KINDS.includes(kind) ? shipPlace(g2, a, m, target, nat, when, SKY.target, turn2) : null;
+    const stage = ships?.stage ? STAGES[ships.stage.key] : null;
+    let field4 = 0;
     const starts2 = {};
     const att = [], def = [];
     const share = (pow, all) => all > 0 ? pow / all : 0;
@@ -61535,13 +65697,22 @@
         att.push(force(x.f, "bmr", bmr, share(bmr * C3.bomberDefence, Atot)));
       }
     });
+    const raidAt = Object.values(starts2), rax = raidAt.reduce((s, p) => s + p.x, 0) / Math.max(1, raidAt.length) - SKY.target.x;
+    const ray = raidAt.reduce((s, p) => s + p.y, 0) / Math.max(1, raidAt.length) - SKY.target.y, rad = Math.hypot(rax, ray) || 1;
     for (const x of a.def) {
       const n = Math.round(x.f.ftr * x.w);
       if (n <= 0) continue;
-      const [rx, ry] = rot(vec(x.f));
+      if (kind === "fleet" && x.f.ship !== void 0 && x.d <= 0 && raidAt.length) {
+        const ahead2 = STYLES2.cap.ahead;
+        starts2[x.f.id] = { x: SKY.target.x + rax / rad * ahead2, y: SKY.target.y + ray / rad * ahead2, band: 1, fuel: SKY.fuel.home, wait: false, over: true };
+        def.push(force(x.f, "ftr", n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
+        continue;
+      }
+      const home = stage && x.f.ship === void 0 && stage.places.includes(g2.regions[x.f.base]?.name ?? "") ? stage.fields.filter((f) => f.kind === "fighters") : [];
+      const [rx, ry] = home.length ? ((p) => [p[0] - SKY.target.x, p[1] - SKY.target.y])(onBoard(ships.stage, home[field4++ % home.length].at, SKY.target)) : rot(vec(x.f));
       const real = Math.hypot(rx, ry), d = SKY.fields.near + Math.min(SKY.fields.far - SKY.fields.near, real * SKY.fields.squeeze);
       const ux = real > 0 ? rx / real : 0, uy = real > 0 ? ry / real : 1;
-      const [bx, by2] = onBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
+      const [bx, by2] = clampBoard(SKY.target.x + ux * d, SKY.target.y + uy * d);
       starts2[x.f.id] = { x: bx, y: by2, band: a.radar ? 1 : 0, fuel: SKY.fuel.home, wait: !a.radar };
       def.push(force(x.f, "ftr", n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
     }
@@ -61553,7 +65724,6 @@
       forces,
       general: null
     });
-    const when = { year: turnToDate(g2.turn).year, month: turnToDate(g2.turn).month };
     const models = Object.fromEntries([.../* @__PURE__ */ new Set([nat, defNat, ...att.map((f) => f.nat), ...def.map((f) => f.nat)])].map((n) => [n, { ftr: fighterOf(n, designYear(g2, n, "fighters")), bmr: bomberOf(n, designYear(g2, n, "bombers")) }]));
     const seed = hashString(`airbattle:${g2.seed}:${g2.turn}:${kind}:${target}:${nat}:${(g2.flags.airBattles ?? 0) + 1}`);
     const styled = airStyles(g2, { nat, forces: att }, { nat: defNat, forces: def }, { escort: a.Epow, defence: a.Dpow });
@@ -61587,13 +65757,15 @@
       starts: starts2,
       from: fromOf(att.map((f) => !!carrierOf(g2, a.att.find((x) => x.f.id === f.corps).f))),
       saved: { att: AIR.pilots.away, def: AIR.pilots.home },
+      ...ships ? { ships } : {},
       // When it is fought, the aircraft each side's groups are, as the 3D game draws them (doctrine.ts), and their guns
       // that month (guns.ts).
       when,
       models,
       guns: Object.fromEntries(Object.entries(models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, when), bmr: bomberGuns(k.bmr, n, when) }])),
       // The country round the target, turned as the board is (b384(j)).
-      ground: groundOf3(g2, target, (x, y) => {
+      // Open water has no ground to lay, but it keeps its true north (the sun, the wind and a wake's heading can use it).
+      ground: quarry ? seaGround(turn2) : groundOf3(g2, target, (x, y) => {
         const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1e3, -(y - T.y) * AIR.kmPerUnit * 1e3]);
         return [SKY.target.x + rx, SKY.target.y + ry];
       }),
@@ -61610,7 +65782,7 @@
       seed,
       turn: g2.turn,
       date: date2,
-      title: m === "superiority" ? `The fight for the sky over ${a.place}` : `The air battle over ${a.place}`,
+      title: m === "superiority" ? `The fight for the sky over ${a.place}` : m === "harbour" ? `The raid on ${harbourOf2(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
       place: place2,
       att: side3(nat, att, g2.human === nat),
       def: side3(defNat, def, g2.human === defNat),
@@ -61620,6 +65792,9 @@
     };
     return { ticket, why: null };
   }
+  var harbourOf2 = (place2) => /\bHarbou?r\b/.test(place2) ? place2 : `the harbour of ${place2}`;
+  var OPEN_SEA = { land: [], rivers: [], borders: [], target: [], terrain: "sea", inland: false, north: [0, 1] };
+  var seaGround = (turn2) => ({ ...OPEN_SEA, north: [Math.round(-Math.sin(turn2) * 1e6) / 1e6 + 0, Math.round(Math.cos(turn2) * 1e6) / 1e6 + 0] });
   function fromOf(decks) {
     return decks.length && decks.every(Boolean) ? "sea" : decks.some(Boolean) ? "both" : "land";
   }
@@ -61665,6 +65840,8 @@
       flew,
       chance: o.chance,
       ...o.gaveUp ? { gaveUp: o.gaveUp } : {},
+      ...o.sunk ? { sunk: o.sunk } : {},
+      ...o.kept ? { kept: o.kept } : {},
       ...o.staff ? { staff: o.staff } : {},
       ...o.rolls ? { rolls: o.rolls } : {},
       ...Object.keys(fell).length ? { fell, shot } : {},
@@ -62427,15 +66604,15 @@
     }
     centre(side3) {
       if (this.centres.t !== this.t) {
-        const at3 = { att: [0, 0], def: [0, 0] }, w = { att: 0, def: 0 };
+        const at4 = { att: [0, 0], def: [0, 0] }, w = { att: 0, def: 0 };
         for (const u of this.units) if (live4(u)) {
           const k = this.weightOf(u) + 1e-6;
-          at3[u.side][0] += u.x * k;
-          at3[u.side][1] += u.y * k;
+          at4[u.side][0] += u.x * k;
+          at4[u.side][1] += u.y * k;
           w[u.side] += k;
         }
-        for (const sd of ["att", "def"]) if (w[sd] > 0) at3[sd] = [at3[sd][0] / w[sd], at3[sd][1] / w[sd]];
-        this.centres = { t: this.t, at: at3 };
+        for (const sd of ["att", "def"]) if (w[sd] > 0) at4[sd] = [at4[sd][0] / w[sd], at4[sd][1] / w[sd]];
+        this.centres = { t: this.t, at: at4 };
       }
       return this.centres.at[side3];
     }
@@ -62503,11 +66680,11 @@
       for (const s of due) {
         for (const u of this.units) for (const a of u.abilities ?? []) if (a.key === "strike" && a.winding && u.side === s.side && u.extra.fleet === s.from) a.winding = false;
         const foe = this.byId.get(s.target);
-        const at3 = foe && live4(foe) ? foe : this.heaviest(other3(s.side));
-        if (!at3) continue;
-        this.splash(at3, s.weight, s.side);
+        const at4 = foe && live4(foe) ? foe : this.heaviest(other3(s.side));
+        if (!at4) continue;
+        this.splash(at4, s.weight, s.side);
         this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-        this.say({ what: "sea:strike", unit: at3.id, side: s.side, text: `${s.count ? `${s.count} bombers` : "Aircraft"} from ${s.from} find ${this.told(at3)}.`, extra: { count: s.count } });
+        this.say({ what: "sea:strike", unit: at4.id, side: s.side, text: `${s.count ? `${s.count} bombers` : "Aircraft"} from ${s.from} find ${this.told(at4)}.`, extra: { count: s.count } });
       }
     }
     /** The coasts' aircraft raid the enemy's ships every so often, with the weight the rules give them over this sea. */
@@ -62518,19 +66695,19 @@
         this.nextAir[side3] += SEA.air.every;
         const foes = this.units.filter((e) => e.side !== side3 && live4(e));
         if (!foes.length) continue;
-        const at3 = foes[this.rng.int(foes.length)];
+        const at4 = foes[this.rng.int(foes.length)];
         const weight5 = SEA.fire.rate * w * SEA.air.share * SEA.air.every * this.day(side3);
-        this.splash(at3, weight5, side3);
+        this.splash(at4, weight5, side3);
         this.fromAir[`${side3}:air`] = (this.fromAir[`${side3}:air`] ?? 0) + weight5;
-        this.say({ what: "sea:air", unit: at3.id, side: side3, text: `Aircraft from the coast attack ${this.told(at3)}.` });
+        this.say({ what: "sea:air", unit: at4.id, side: side3, text: `Aircraft from the coast attack ${this.told(at4)}.` });
       }
     }
     /** A strike's weight shared over the target and the ships within the strike's radius of it, by their weight. */
-    splash(at3, weight5, by2) {
-      const hit = this.units.filter((e) => e.side !== by2 && live4(e) && dist(e.x, e.y, at3.x, at3.y) <= SEA.strike.radius);
-      const total = hit.reduce((n, e) => n + this.output(e) + (e.id === at3.id ? this.output(e) : 0), 0);
+    splash(at4, weight5, by2) {
+      const hit = this.units.filter((e) => e.side !== by2 && live4(e) && dist(e.x, e.y, at4.x, at4.y) <= SEA.strike.radius);
+      const total = hit.reduce((n, e) => n + this.output(e) + (e.id === at4.id ? this.output(e) : 0), 0);
       if (total <= 0) return;
-      for (const e of hit) this.wear(e, weight5 * (this.output(e) + (e.id === at3.id ? this.output(e) : 0)) / total);
+      for (const e of hit) this.wear(e, weight5 * (this.output(e) + (e.id === at4.id ? this.output(e) : 0)) / total);
     }
     // ---- Nerve ------------------------------------------------------------------------------------------------------
     nerve(u) {
@@ -63053,8 +67230,8 @@
   var num4 = (n) => Math.round(n).toLocaleString("en-US");
   var cap11 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   var plural8 = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-  var WORDS2 = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
-  var count3 = (n) => WORDS2[n] ?? String(n);
+  var WORDS3 = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+  var count3 = (n) => WORDS3[n] ?? String(n);
   var ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$|(?:^|\b[Tt]he |\()\d{1,2}\.$/;
   var reEsc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   var ORDINAL_WORDS = [...new Set(Object.values(air_names_default.ladders).flat().flatMap((r) => [r.form.ftr, r.form.bmr]).map((f) => /^\{n\}\. (\S+)/.exec(f)?.[1]).filter((w) => !!w))];
@@ -63081,12 +67258,12 @@
     return /[….]$/.test(cut2) ? cut2 : `${cut2}.`;
   };
   var linesAt = (text, per) => {
-    let n = 1, at3 = 0;
+    let n = 1, at4 = 0;
     for (const w of text.split(" ")) {
-      if (at3 && at3 + 1 + w.length > per) {
+      if (at4 && at4 + 1 + w.length > per) {
         n++;
-        at3 = w.length;
-      } else at3 += (at3 ? 1 : 0) + w.length;
+        at4 = w.length;
+      } else at4 += (at4 ? 1 : 0) + w.length;
     }
     return n;
   };
@@ -63162,8 +67339,8 @@
         else xs.push(p);
         return xs;
       }, []);
-      const at3 = items[0].lastIndexOf(" at ");
-      const what = (at3 < 0 ? items[0] : items[0].slice(0, at3)).replace(/^the /, ""), where = at3 < 0 ? "" : items[0].slice(at3 + 4);
+      const at4 = items[0].lastIndexOf(" at ");
+      const what = (at4 < 0 ? items[0] : items[0].slice(0, at4)).replace(/^the /, ""), where = at4 < 0 ? "" : items[0].slice(at4 + 4);
       const more = items.length - 1;
       return more ? fit3(`${what}, ${where} and ${more} more`, `${what} and ${more} more`, `${items.length} orders placed`) : fit3(where ? `${what}, ${where}` : what, what, "1 order placed");
     }
@@ -63711,8 +67888,8 @@
       if (!warn && !great && !touches && !news4) return;
       const word2 = warn ? "WARNING" : news4 ? "NEWS" : h.kind === "war" ? "WAR" : lib ? "FREED" : "FALLEN";
       const said2 = h.kind === "war" && !warn ? (h.text.match(/[^.!?]+/g) ?? []).map((s) => s.trim()).find((s) => {
-        const at3 = s.search(/\bwar on\b/);
-        return at3 >= 0 && nameAt(me, s.slice(at3)) >= 0;
+        const at4 = s.search(/\bwar on\b/);
+        return at4 >= 0 && nameAt(me, s.slice(at4)) >= 0;
       }) : void 0;
       const declarers = said2 ? namedIn(said2.slice(0, said2.search(/\bdeclares? war\b|\bwar on\b/))).filter((x) => x !== me) : [];
       const head = h.head ?? said2 ?? first(h.text);
@@ -63762,8 +67939,8 @@
     const onHim = banded.filter((b) => b.h.kind === "war" && !mine4(b.h.nat) && DECLARES.exec(b.band.head)?.[2].replace(/^the /, "") === N.name);
     if (onHim.length > 1) {
       const [keep, ...rest] = onHim;
-      const at3 = ` declare war on ${theName(N)}`;
-      keep.band.head = `${listIn(onHim.map((b, i) => i ? midName(DECLARES.exec(b.band.head)[1]) : DECLARES.exec(b.band.head)[1]), BAND_ROOM - at3.length)}${at3}`;
+      const at4 = ` declare war on ${theName(N)}`;
+      keep.band.head = `${listIn(onHim.map((b, i) => i ? midName(DECLARES.exec(b.band.head)[1]) : DECLARES.exec(b.band.head)[1]), BAND_ROOM - at4.length)}${at4}`;
       keep.band.nats = onHim.map((b) => b.h.nat).slice(0, 2);
       keep.band.text = onHim.map((b) => b.band.text).join(" ");
       keep.rank = Math.min(...onHim.map((b) => b.rank));
@@ -63881,8 +68058,8 @@
     const still = new Set(N.queue.map((b) => b.id));
     const group = (list4, sign, text, region, next) => {
       const place2 = g2.regions[region] ? townName(g2.regions[region]) : "";
-      const at3 = list4.find((x) => x.sign === sign && x.text === text && x.place === place2 && !!x.next === next);
-      if (at3) at3.count++;
+      const at4 = list4.find((x) => x.sign === sign && x.text === text && x.place === place2 && !!x.next === next);
+      if (at4) at4.count++;
       else list4.push({ sign, count: 1, text, place: place2, region, ...next ? { next: true } : {} });
     };
     const done = [], coming2 = [];
@@ -64437,8 +68614,8 @@
     return out;
   }
   function lessonWords(g2, l, game2, under = "", open2 = false) {
-    const at3 = pickupPlace(g2), s = siegeOf(g2);
-    const fill8 = (t) => t.split("{place}").join(at3 >= 0 ? placeThe(g2.regions[at3].name) : "the front").split("{province}").join(s ? capital2(placeThe(s.province)) : "The province").split("{city}").join(s && s.city !== s.province ? placeThe(s.city) : "its city");
+    const at4 = pickupPlace(g2), s = siegeOf(g2);
+    const fill8 = (t) => t.split("{place}").join(at4 >= 0 ? placeThe(g2.regions[at4].name) : "the front").split("{province}").join(s ? capital2(placeThe(s.province)) : "The province").split("{city}").join(s && s.city !== s.province ? placeThe(s.city) : "its city");
     return { head: l.head, text: fill8(namedWords(open2 && l.there ? l.there : l.text, game2, under)), deed: namedWords(l.deed, game2, under) };
   }
 
@@ -64537,14 +68714,14 @@
           else delete s.flags[key6];
           continue;
         }
-        const at3 = s.flags[key6];
-        if (at3 === void 0) continue;
-        const months3 = s.turn - Math.floor(at3 / 1e3);
+        const at4 = s.flags[key6];
+        if (at4 === void 0) continue;
+        const months3 = s.turn - Math.floor(at4 / 1e3);
         if (months3 > 3) {
           delete s.flags[key6];
           continue;
         }
-        if (months3 >= 1 && s.seas[at3 % 1e3]) old.push({ zone: at3 % 1e3, nat: f.nat, months: months3 });
+        if (months3 >= 1 && s.seas[at4 % 1e3]) old.push({ zone: at4 % 1e3, nat: f.nat, months: months3 });
       }
       for (const key6 of Object.keys(s.flags)) if (key6.startsWith("sight:") && !live5.has(key6)) delete s.flags[key6];
     } catch {
@@ -64769,7 +68946,7 @@
         }
       })(),
       going: (() => {
-        const at3 = /* @__PURE__ */ new Map();
+        const at4 = /* @__PURE__ */ new Map();
         try {
           for (const n of Object.values(s.nations)) {
             for (const b of n.queue) {
@@ -64779,12 +68956,12 @@
               if (!bit) continue;
               const r = s.regions[q.region];
               const known = !s.human || r.ctrl === s.human || allied(s, r.ctrl, s.human) || seen2[r.id] > 0;
-              if (known) at3.set(r.id, (at3.get(r.id) ?? 0) | bit);
+              if (known) at4.set(r.id, (at4.get(r.id) ?? 0) | bit);
             }
           }
         } catch {
         }
-        return [...at3.entries()].flat();
+        return [...at4.entries()].flat();
       })(),
       // Factories that are not working (bombed, sabotaged or burnt by their own side), for the table to show as
       // wrecks with cold chimneys: the province and how many. Only where the player can know it: on his own side's
@@ -65546,9 +69723,9 @@
       let joins = "";
       if (!c.spied && b && b.what === "air") {
         const to = plan.get(b.id) ?? null;
-        const at3 = (base) => base === id ? "" : ` at ${s.regions[base]?.name ?? "its base"}`;
+        const at4 = (base) => base === id ? "" : ` at ${s.regions[base]?.name ?? "its base"}`;
         const which = !to || to.nth <= 1 ? "new" : `${["second", "third", "fourth", "fifth"][to.nth - 2] ?? "further"} new`;
-        joins = !to ? "goes to the air reserve" : to.found ? to.first ? `forms a ${which} air group${to.base === id ? " here" : at3(to.base)}` : `joins the ${which} air group${to.base === id ? " formed here" : at3(to.base)}` : `joins ${to.name}${at3(to.base)}`;
+        joins = !to ? "goes to the air reserve" : to.found ? to.first ? `forms a ${which} air group${to.base === id ? " here" : at4(to.base)}` : `joins the ${which} air group${to.base === id ? " formed here" : at4(to.base)}` : `joins ${to.name}${at4(to.base)}`;
       } else if (!c.spied && b && b.what === "ship") {
         if (b.item === "tp") joins = "joins the sea lift";
         else {
@@ -66274,14 +70451,14 @@
       const list4 = dialCalls.claims ? dialCalls.claims(s) : [];
       if (!list4.length && d.stop <= 3) return null;
       const rows = list4.map((c) => {
-        const when = turnToDate(c.since).label, at3 = s.byName[c.ground[0]];
+        const when = turnToDate(c.since).label, at4 = s.byName[c.ground[0]];
         return {
           title: `${upFirst3(theName2(s, c.nat))} claims ${c.name}`,
           from: `from ${theName2(s, c.on)}${c.why ? `: ${c.why}` : ""}.`,
           tag: c.state === "marched" ? `At war for it since ${when}` : c.state === "pressing" ? `Pressing its claim since ${when}: it may march` : "A claim it has not pressed",
           state: c.state === "marched" ? 2 : c.state === "pressing" ? 1 : 0,
           onYou: !!c.onYou,
-          region: at3 ? at3.id : -1
+          region: at4 ? at4.id : -1
         };
       });
       const lead2 = d.stop > 3 ? `With the history dial at ${d.name}, a country outside the war may press a claim on ground a neighbour holds and march for it when its moment comes. It always gives warning first, and every claim that could be pressed is listed here.${rows.length ? "" : " No country holds a claim it could press today."}` : "Raised while the history dial stood looser than it does now. A war begun for a claim is fought to its end.";
@@ -66478,8 +70655,8 @@
     try {
       return gateViews(s, s.human ?? null).map((v) => {
         const gt = s.gates[v.id];
-        const at3 = GATE_AT[gt.name];
-        const spot = at3 ? { x: (at3[1] + 11) * 25.7115, y: (71.4 - at3[0]) * 40 } : gateSpot(s, gt);
+        const at4 = GATE_AT[gt.name];
+        const spot = at4 ? { x: (at4[1] + 11) * 25.7115, y: (71.4 - at4[0]) * 40 } : gateSpot(s, gt);
         const open2 = v.open !== false;
         const key6 = open2 ? "Open to your ships" : "Shut to your ships:";
         const i = v.line.indexOf(key6);
@@ -66593,7 +70770,7 @@
       }
       forgetMarch(s, [c.id]);
       const path = [];
-      for (let at3 = to; at3 !== c.reg && at3 >= 0; at3 = m.get(at3).prev) path.unshift(at3);
+      for (let at4 = to; at4 !== c.reg && at4 >= 0; at4 = m.get(at4).prev) path.unshift(at4);
       const n = orderMove(s, c, to);
       if (n > 0) moved.push({ id: c.id, path: path.slice(0, n) });
       else trySwap(c);
@@ -66908,7 +71085,7 @@
         const how = `${riverWords} · ${r.terrain}`;
         const first2 = going.slice().sort((a, b) => a.m.get(j).cost - b.m.get(j).cost)[0];
         const road = [];
-        for (let at3 = j; at3 !== first2.c.reg && at3 >= 0 && road.length < 32; at3 = first2.m.get(at3)?.prev ?? -1) road.unshift(at3);
+        for (let at4 = j; at4 !== first2.c.reg && at4 >= 0 && road.length < 32; at4 = first2.m.get(at4)?.prev ?? -1) road.unshift(at4);
         return { id: j, name: r.name, cost, left, attack: attack2, river, riverWords, down, ground: r.terrain, enemy: false, arrive: arrive3, how, says: "", road, going: going.map(({ c }) => c.id) };
       };
       let rows = [];
@@ -67142,14 +71319,14 @@
     const roads = /* @__PURE__ */ new Map();
     for (const c of cs) {
       const m = reach2(s, c), end = m.get(to), path = [];
-      if (end && !end.attack) for (let at3 = to; at3 !== c.reg && at3 >= 0; at3 = m.get(at3)?.prev ?? -1) path.unshift(at3);
+      if (end && !end.attack) for (let at4 = to; at4 !== c.reg && at4 >= 0; at4 = m.get(at4)?.prev ?? -1) path.unshift(at4);
       roads.set(c.id, path);
     }
     const before = new Map(cs.map((c) => [c.id, c.reg]));
     const res = orderTake(s, cs, to, assault);
     const moved = cs.filter((c) => !c.dead && c.reg !== before.get(c.id)).map((c) => {
-      const road = roads.get(c.id) ?? [], at3 = road.indexOf(c.reg);
-      return { id: c.id, path: at3 >= 0 ? road.slice(0, at3 + 1) : [c.reg] };
+      const road = roads.get(c.id) ?? [], at4 = road.indexOf(c.reg);
+      return { id: c.id, path: at4 >= 0 ? road.slice(0, at4 + 1) : [c.reg] };
     });
     forgetMarch(s, moved.map((m) => m.id));
     const report = res.report;
@@ -68438,8 +72615,8 @@ ${next.text}` : ""}` : next ? next.also : "";
     } else if (f.joins === null && bloc(n) === "league") lines2.push("The neutrals on the track between the blocs take no side in a quarrel with the League.");
     else if (f.joins === null && bloc(n) !== null) lines2.push(`${The} already belongs to ${blocOf(bloc(n))}: the neutral world expects this war and takes no fright at it.`);
     else if (!mine4) lines2.push("Your country belongs to neither bloc, so the neutrals have no side to turn away from. They will remember it all the same.");
-    const at3 = TRACK.indexOf(n.align) - 3;
-    const stands2 = n.league ? `is a member of ${LEAGUE.name} and at peace with you` : at3 === 0 ? "is neutral and at peace with you" : Math.abs(at3) === 1 ? `is neutral, leans toward ${blocOf(at3 > 0 ? "axis" : "allies")}, and is at peace with you` : `is ${TRACK_PHRASE[n.align]}, but at peace with you`;
+    const at4 = TRACK.indexOf(n.align) - 3;
+    const stands2 = n.league ? `is a member of ${LEAGUE.name} and at peace with you` : at4 === 0 ? "is neutral and at peace with you" : Math.abs(at4) === 1 ? `is neutral, leans toward ${blocOf(at4 > 0 ? "axis" : "allies")}, and is at peace with you` : `is ${TRACK_PHRASE[n.align]}, but at peace with you`;
     const r = target >= 0 ? s.regions[target] : null;
     const lead2 = r ? `Your army is about to cross the frontier into ${r.name}. ${The} ${stands2}. Marching in means war.` : `${The} ${stands2}.`;
     const mother = motherOf(s, on);
@@ -68956,15 +73133,15 @@ ${next.text}` : ""}` : next ? next.also : "";
       const enemy = z.surface || z.subs ? `Enemy there: ${[z.surface ? `${z.surface} surface warship${z.surface === 1 ? "" : "s"}` : "", z.subs ? `${z.subs} submarine${z.subs === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ")}.` : "No enemy ships are known there.";
       const hunt = z.subs ? `Hunting would sink about ${share(z.hunt)} of the submarines in a month${z.huntNow > 0 ? ` (${share(z.huntNow)} as things stand)` : ""}.` : "";
       const risk = z.torpedo >= 5e-3 ? `Chance of losing a heavy ship to a torpedo: ${share(z.torpedo)}.` : "";
-      const at3 = (st) => z.here && card.stance === st;
+      const at4 = (st) => z.here && card.stance === st;
       return {
         nat: "",
         title: `${z.name}${z.here ? "  ·  it is here" : ""}`,
         lines: [`${enemy} ${meet}`, [hunt, risk].filter(Boolean).join(" ")].filter(Boolean),
         buttons: [
-          { label: "PATROL", act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at3("patrol"), tip: "Seeks out the enemy's warships there and guards the convoys that cross it." },
-          { label: "RAID SHIPPING", act: `fleet:${id}:${z.zone}:raid`, ok: up && !at3("raid"), tip: "Goes for merchant ships and keeps clear of a fight with the enemy fleet." },
-          { label: "HUNT SUBMARINES", act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at3("hunt") && card.hunters > 0, tip: card.hunters > 0 ? "Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks." : "It has no destroyers to hunt with." }
+          { label: "PATROL", act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at4("patrol"), tip: "Seeks out the enemy's warships there and guards the convoys that cross it." },
+          { label: "RAID SHIPPING", act: `fleet:${id}:${z.zone}:raid`, ok: up && !at4("raid"), tip: "Goes for merchant ships and keeps clear of a fight with the enemy fleet." },
+          { label: "HUNT SUBMARINES", act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at4("hunt") && card.hunters > 0, tip: card.hunters > 0 ? "Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks." : "It has no destroyers to hunt with." }
         ]
       };
     });
@@ -69200,9 +73377,9 @@ ${standing5}`,
     if (!foes.length) {
       const near2 = [...new Set(s.regions.filter((r) => r.ctrl === me.id).flatMap((r) => r.nb.map((n) => s.regions[n].ctrl)).filter((id) => id !== me.id && s.nations[id]?.alive))].sort((a, b) => fieldArmy(s, b) - fieldArmy(s, a));
       const big = near2[0];
-      const at3 = big ? s.regions.find((r) => r.ctrl === big && r.nb.some((n) => s.regions[n].ctrl === me.id))?.id ?? cap12 : cap12;
+      const at4 = big ? s.regions.find((r) => r.ctrl === big && r.nb.some((n) => s.regions[n].ctrl === me.id))?.id ?? cap12 : cap12;
       cards.push({
-        region: at3,
+        region: at4,
         zoom: 0.4,
         turn: 14,
         title: "AT PEACE",
@@ -70032,10 +74209,10 @@ ${standing5}`,
         ok2 = done.length > 0;
         note4 = ok2 ? `Repaired: ${listNames(done)}.` : "Nothing could be repaired.";
       } else {
-        const at3 = Number(part[1]);
-        const v = repairView2(s, at3);
+        const at4 = Number(part[1]);
+        const v = repairView2(s, at4);
         try {
-          ok2 = !!repairCalls.order?.(s, at3);
+          ok2 = !!repairCalls.order?.(s, at4);
         } catch {
           ok2 = false;
         }
@@ -70044,11 +74221,11 @@ ${standing5}`,
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
     if (part[0] === "civic") {
-      const at3 = Number(part[1]);
-      const before = townBuildings(s, at3)?.offers.find((o) => o.line === part[2]);
-      const b = orderBuilding(s, at3, part[2]);
+      const at4 = Number(part[1]);
+      const before = townBuildings(s, at4)?.offers.find((o) => o.line === part[2]);
+      const b = orderBuilding(s, at4, part[2]);
       ok2 = !!b;
-      note4 = b ? `${before?.label ?? "The building"} ordered at ${townBuildings(s, at3)?.town ?? s.regions[at3]?.name ?? "the town"}. Due ${turnToDate(b.eta).label}.` : before?.why ?? "That cannot be built now.";
+      note4 = b ? `${before?.label ?? "The building"} ordered at ${townBuildings(s, at4)?.town ?? s.regions[at4]?.name ?? "the town"}. Due ${turnToDate(b.eta).label}.` : before?.why ?? "That cannot be built now.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open2, view: view2() };
     }
     if (part[0] === "men") {
@@ -70430,7 +74607,7 @@ ${standing5}`,
     const opts = paths(s);
     const others = members.filter((n) => n.id !== me.id);
     const foes = me.atWar.filter((x) => s.nations[x]?.alive);
-    const at3 = step(me);
+    const at4 = step(me);
     const where = mine4 === "league" ? `a member of ${LEAGUE.name}${others.length ? `, with ${listOf7(others.map((n) => theName2(s, n.id)))}` : ""}` : mine4 ? `a member of ${mine4 === "axis" ? "the Axis" : "the Allies"}` : TRACK_PHRASE[me.align];
     const path = {
       open: opts.length > 0,
@@ -70438,7 +74615,7 @@ ${standing5}`,
       options: opts.map((o) => {
         const T = PATH_TEXT[o.id];
         let text = T.text;
-        if (o.id === "alone" && !o.now && o.ok) text = `Step back to strict neutrality: you stop leaning toward ${at3 > 0 ? "the Axis" : "the Allies"}, and answer to nobody.`;
+        if (o.id === "alone" && !o.now && o.ok) text = `Step back to strict neutrality: you stop leaning toward ${at4 > 0 ? "the Axis" : "the Allies"}, and answer to nobody.`;
         if (o.id === "join" && others.length) text += ` Its members today: ${listOf7(others.map((n) => theName2(s, n.id)))}.`;
         return {
           id: o.id,
@@ -70516,7 +74693,7 @@ ${standing5}`,
       const k = lead(s, me.id, f);
       const pct11 = Math.round(spec2.per * k * 100);
       const n = lab.teams[f];
-      const at3 = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
+      const at4 = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
       return {
         id: f,
         label: f === "doctrine" ? `${spec2.label}: ${doctrineOf(me.id)}` : spec2.label,
@@ -70531,9 +74708,9 @@ ${standing5}`,
         work: PACE[n] ?? "",
         more: up && n < MAX_TEAMS && free2 > 0,
         fewer: up && n > 0,
-        fill: at3(lab.clock[f]),
-        today: at3(lab.months),
-        marks: stepsOf(me.id, f).filter((st) => st.at > 0).map((st) => ({ at: at3(st.at), got: st.at <= lab.clock[f], name: `${st.name}: ${when(st.at)} in history` }))
+        fill: at4(lab.clock[f]),
+        today: at4(lab.months),
+        marks: stepsOf(me.id, f).filter((st) => st.at > 0).map((st) => ({ at: at4(st.at), got: st.at <= lab.clock[f], name: `${st.name}: ${when(st.at)} in history` }))
       };
     });
     return {
@@ -70962,8 +75139,8 @@ ${standing5}`,
         laid = lessonShown(s, l);
       } else if (l) {
         note4 = lessonShown(s, l, !!moment3.open);
-        const at3 = l.id === "pickup" ? pickupPlace(s) : l.id === "attack" ? lessonFoeFlag(s, m.inHand) : l.id === "city" ? siegeOf(s)?.region ?? -1 : -1;
-        note4.region = at3;
+        const at4 = l.id === "pickup" ? pickupPlace(s) : l.id === "attack" ? lessonFoeFlag(s, m.inHand) : l.id === "city" ? siegeOf(s)?.region ?? -1 : -1;
+        note4.region = at4;
       } else if (closingOwed(s, lessonBook)) {
         const w = lessonWords(s, { ...LESSONS[0], text: CLOSING.text, deed: "" }, LESSON_GAME);
         note4 = { kind: "closing", id: CLOSING.id, n: 0, of: LESSONS.length, head: CLOSING.head, text: w.text, deed: "", does: "", due: "" };
