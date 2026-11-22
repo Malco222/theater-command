@@ -44,6 +44,17 @@ namespace TheaterFx
 			return B.bLight && (B.Life < 0.06 || B.bWhole) && !B.bShown;
 		}
 
+		/** Bit::CutAt: a trail's piece cut to end with one laid after it fades over the last Over seconds before. */
+		double CutFade(double CutAt, double Now, double Over)
+		{
+			if (!(CutAt < 1.0e17))
+			{
+				return 1.0;
+			}
+			const double T = std::clamp((CutAt - Now) / std::max(Over, 1e-3), 0.0, 1.0);
+			return T * T * (3.0 - 2.0 * T);
+		}
+
 		uint64_t PlaceKey(const Vec& At)
 		{
 			const uint64_t A = static_cast<uint64_t>(static_cast<int64_t>(std::floor(At.X * 10.0)));
@@ -324,6 +335,7 @@ namespace TheaterFx
 		CaseShine = std::clamp(Num("ground_cases.shine", 8.0), 1.0, 64.0);
 		MostLying = static_cast<size_t>(std::clamp(Num("ground_cases.most_lying", 200.0), 0.0, 5000.0));
 		CaseFar = std::max(1.0, Num("ground_cases.draw_within_m", 150.0));
+		TrailCutFade = SafeNum(Num("game.trail_cut_fade_s", 3.0), 0.05, 60.0, 3.0); // (an aircraft trail's piece cut to end with a later one: Bit::CutAt)
 		CaseDetailPx = std::max(0.0, Num("ground_cases.detail_px", 3.0));
 		CaseHoldPx = std::max(0.0, Num("ground_cases.hold_px", 0.0));
 		CaseFullPx = std::max(0.0, Num("ground_cases.full_px", 0.6));
@@ -381,6 +393,7 @@ namespace TheaterFx
 		SeenBits = SeenTwin = 0;
 		Serials = 0;
 		Numbered = 0;
+		TrailCuts.clear();
 		CaseOff = 0;
 		bEyeWas = false;
 		EyeMoved = EyeTurned = 0.0;
@@ -6203,6 +6216,8 @@ namespace TheaterFx
 		}
 		Tr.Kind = Name;
 		Tr.KindBorn = Now;
+		Tr.Run = ++TrailRuns; // (a kind of its own: a kind change is ruled by its own rows, never a cut. Bit::CutAt)
+		Tr.RunEnd = -1.0e18;
 		const TrailRow& Row = TrailRowOf(Name);
 		Tr.NextGout = Tr.GoutFrom = Tr.GoutUntil = Tr.FadeFor = Tr.KindFor = Tr.FlameWas = Tr.FlameOutBy = Tr.FlameShrinkS = 0.0;
 		// (blend_s: the new kind's pieces start as the last piece laid was, and go over to their own; no dice)
@@ -6255,6 +6270,20 @@ namespace TheaterFx
 
 	void Battle::TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D)
 	{
+		// (every piece laid here is of the trail's run: Bit::CutAt)
+		struct Tag
+		{
+			std::vector<Bit>& Into;
+			size_t From;
+			uint32_t Run;
+			~Tag()
+			{
+				for (size_t I = From; I < Into.size(); ++I)
+				{
+					Into[I].TrailRun = Run;
+				}
+			}
+		} Tagged{ Bits, Bits.size(), Tr.Run };
 		// Art director 21:27Z: thin and dark at the engine; about three times wider by 2 s and still widening; breaking
 		// into uneven lumps, paler and thinner with age; each lump hanging where it was laid. A trail still comes to
 		// full over ramp_s and darkens over darken_s as the damage takes hold.
@@ -6816,6 +6845,15 @@ namespace TheaterFx
 				Tr->NextKept = Tr->Puffs;
 			}
 		}
+		// (the pre-check on 13388a4f, Bit::CutAt: speeding up, the row's life is squeezed shorter, and the first piece laid
+		// now would end before the last one laid before it. Every piece of this run born by the last call is cut to end
+		// with it, so the trail goes from its old end and never has a hole. Slowing down, the new pieces end later: no
+		// cut, and the old end goes first as ever)
+		if (Tr->RunEnd > Tr->Last + Row.Life + 1.0e-3)
+		{
+			TrailCuts.push_back(TrailCut{ Tr->Run, Tr->Last, Tr->Last + Row.Life });
+		}
+		Tr->RunEnd = Now + Row.Life;
 		const double Between = Now - Tr->Last;
 		const Vec Path = At - Tr->At;
 		const double Long = Path.Length();
@@ -12392,9 +12430,50 @@ namespace TheaterFx
 		return Into.Strength > 1e-4;
 	}
 
+	void Battle::CutTrails()
+	{
+		// (Bit::CutAt: the cuts TrailMove asked since the last Draw, in one pass over the pieces, and over what the
+		// trails keep to reach back to)
+		if (TrailCuts.empty())
+		{
+			return;
+		}
+		std::sort(TrailCuts.begin(), TrailCuts.end(), [](const TrailCut& L, const TrailCut& R) { return L.Run != R.Run ? L.Run < R.Run : L.LaidBy < R.LaidBy; });
+		auto CutOf = [this](uint32_t Run_, double Born, double Was)
+		{
+			auto Low = std::lower_bound(TrailCuts.begin(), TrailCuts.end(), Run_, [](const TrailCut& C, uint32_t R) { return C.Run < R; });
+			for (; Low != TrailCuts.end() && Low->Run == Run_; ++Low)
+			{
+				if (Born <= Low->LaidBy)
+				{
+					Was = std::min(Was, Low->End);
+				}
+			}
+			return Was;
+		};
+		for (Bit& B : Bits)
+		{
+			if (B.TrailRun == 0)
+			{
+				continue;
+			}
+			B.CutAt = CutOf(B.TrailRun, B.Born, B.CutAt);
+			if (B.Back.bOn)
+			{
+				B.Back.CutAt = CutOf(B.TrailRun, B.Back.Born, B.Back.CutAt);
+			}
+		}
+		for (Trailing& Tr : Trails)
+		{
+			Tr.Kept.CutAt = CutOf(Tr.Run, Tr.Kept.Born, Tr.Kept.CutAt);
+			Tr.Prev.CutAt = CutOf(Tr.Run, Tr.Prev.Born, Tr.Prev.CutAt);
+		}
+		TrailCuts.clear();
+	}
+
 	void Battle::Prune(double Now)
 	{
-		auto Gone = [Now](const Bit& B) { return Now > B.Born + B.Life && (!Unseen(B) || Now > B.Born + 0.5); };
+		auto Gone = [Now](const Bit& B) { return (Now > B.Born + B.Life || Now > B.CutAt) && (!Unseen(B) || Now > B.Born + 0.5); };
 		// (the production lead's FX2: a piece is 1.8 kB, and erase(remove_if) moved every piece after the first one gone,
 		// most of the battle's pieces each frame. Now each gone piece takes the last one in its place, a piece moved
 		// for each gone. Nothing holds a place in Bits from one Draw to the next, and the order they are drawn in is
@@ -13333,7 +13412,7 @@ namespace TheaterFx
 		const double Age = Now - B.Born;
 		// (a piece of no life is never laid: its share of its life is 0 over 0. A trail's knot with knot_s 0 and 0 was
 		// one: the pre-check on 1fc2904, its cure)
-		if (Age < 0.0 || !(B.Life > 0.0) || (Age > B.Life && !Unseen(B)))
+		if (Age < 0.0 || !(B.Life > 0.0) || ((Age > B.Life || Now > B.CutAt) && !Unseen(B)))
 		{
 			return 0;
 		}
@@ -13360,7 +13439,7 @@ namespace TheaterFx
 		// a frame under the dark end of the piece ahead of it, a notch behind the engine ten times a second, and a piece
 		// laid at the very moment of a frame was left out whole, the trail starting a piece's length behind its engine)
 		const bool bBornFull = B.bSoft && B.Ribbon > 0.0;
-		double Fade = (bBornFull ? 1.0 : std::min(1.0, Shown / std::max(B.FadeIn, 1e-3))) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
+		double Fade = (bBornFull ? 1.0 : std::min(1.0, Shown / std::max(B.FadeIn, 1e-3))) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4)) * CutFade(B.CutAt, Now, TrailCutFade);
 		// (smoke that lingers, Lingering: through its cloud's tail it goes by the cloud's law, widens on, climbs and pales
 		// toward the air)
 		double TailPaled = 0.0;
@@ -13521,9 +13600,9 @@ namespace TheaterFx
 		{
 			const double AgeT = Now - B.Back.Born;
 			const double FT = Clamp01(AgeT / std::max(B.Back.Life, 1e-6));
-			if (AgeT <= B.Back.Life)
+			if (AgeT <= B.Back.Life && Now <= B.Back.CutAt)
 			{
-				TailA = B.Back.Alpha * (bBornFull ? 1.0 : std::min(1.0, AgeT / std::max(B.FadeIn, 1e-3))) * (FT < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (FT - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
+				TailA = B.Back.Alpha * (bBornFull ? 1.0 : std::min(1.0, AgeT / std::max(B.FadeIn, 1e-3))) * (FT < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (FT - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4)) * CutFade(B.Back.CutAt, Now, TrailCutFade);
 				if (B.DayAlpha != 1.0)
 				{
 					TailA *= 1.0 + (B.DayAlpha - 1.0) * DayOf(Eye.SmokeLight);
@@ -14518,6 +14597,7 @@ namespace TheaterFx
 		UpWas = Eye.Up;
 		bEyeWas = true;
 		Run(Now);
+		CutTrails();
 		// (Bit::Serial: what was made since the last Draw lies at the end of Bits in the order it was made; numbered so
 		// before Prune moves anything)
 		for (size_t I = std::min(Numbered, Bits.size()); I < Bits.size(); ++I)
@@ -14666,7 +14746,7 @@ namespace TheaterFx
 		const Vec RightLevel = Vec(Eye.Right.X, Eye.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 		for (const Bit& B : Bits)
 		{
-			if (Now < B.Born || (Now > B.Born + B.Life && !Unseen(B)))
+			if (Now < B.Born || ((Now > B.Born + B.Life || Now > B.CutAt) && !Unseen(B)))
 			{
 				continue;
 			}

@@ -685,6 +685,7 @@ void FBattleEffects::MakeSections(const FVector& Fill)
 		Mesh->SetMeshSectionVisible(Section, false);
 	}
 	SectionsUsed = 0;
+	FoldedAt = Fill;
 }
 
 void FBattleEffects::RoomLog(double Now, int32 Laid)
@@ -874,6 +875,29 @@ void FBattleEffects::Lay(double Now, const FVector& Eye, int32 Drawn, double Day
 		{
 			Mesh->SetMeshSectionVisible(Section, bUse);
 		}
+	}
+	// (the pre-check on FX1: a hidden section's box still counts in the mesh's bounds, and the translucent sort goes by
+	// the bounds' middle, so sections folded where the battle was stretch the box as the battle moves on, a bomber
+	// stream most. When the first puff is more than 500 m from where they were folded, every section not sent above is
+	// sent once more, folded onto it and still hidden: the box stays within 500 m of the puffs, at a cost of one send
+	// of the idle sections each 500 m the battle moves)
+	const int32 Sent = FMath::Max(Used, SectionsUsed);
+	if (Sent >= Sections)
+	{
+		FoldedAt = FirstAt; // (every section was sent at the battle as it is now)
+	}
+	else if (FVector::DistSquared(FirstAt, FoldedAt) > FMath::Square(500.0 * UnitsPerMetre))
+	{
+		for (int32 Index = 0; Index < Slots; ++Index)
+		{
+			Points[Index] = FirstAt;
+			Colours[Index] = FColor(0, 0, 0, 0);
+		}
+		for (int32 Section = Sent; Section < Sections; ++Section)
+		{
+			Mesh->UpdateMeshSection(Section, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+		}
+		FoldedAt = FirstAt;
 	}
 	SectionsUsed = Used;
 	LastDrawn = Drawn;

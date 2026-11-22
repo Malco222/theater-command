@@ -1483,6 +1483,33 @@ The production lead's battle-scale plan (/mnt/project-files/production/battle-sc
     with no `TickEnd` is ended by the next `TickBegin` or `Tick`.
   `Tick` is both at once on the game thread, as before (the air and sea scenes). The kit keeps no shared state: two
   kits drawing at once on two threads ran clean under the thread sanitiser and drew what each drew alone.
+- **The box of a moving battle** (the pre-check on FX1). A hidden section's box still counts in the mesh's bounds,
+  and the translucent sort goes by the bounds' middle, so sections folded where the battle was stretched the box as
+  the battle moved on (a bomber stream most). When the farthest puff is more than 500 m from where the idle sections
+  were folded, they are sent once more, folded onto it and still hidden: one send of the idle sections each 500 m.
+
+## A trail that speeds up keeps no hole (after head 9cc20a7)
+
+The pre-check on 13388a4f: an aircraft that speeds up from 80 to 220 m/s squeezes its row's life (`longest_m`), so
+the first piece laid fast ended before the slow pieces laid just behind it: a hole in the trail, kilometres wide,
+for over 10 s. Now each piece of a trail (and of its kind: a kind change keeps its own rows) laid before the squeeze
+rose is cut to end with that first fast piece, never later than its own end, and fades out over the last
+`game.trail_cut_fade_s` (3 s) before it. The trail dies from its old end, and lives no longer than it did.
+
+Measured with a probe on the kit (80 m/s for 10 s, up to 220 over 8 s or 2 s, held to 30 s, back down), the widest
+stretch with no living piece:
+
+| Trail | Before (8 s / 2 s) | Now (8 s / 2 s) | Longest now |
+|---|---|---|---|
+| smoke | 3,644 m / 4,032 m | 73 m / 72 m | 4,369 m / 3,484 m |
+| fire, fuel | 3,600 m / 4,008 m | 65 m / 65 m | 4,375 m / 3,489 m |
+| oil | 3,616 m / 4,000 m | 72 m / 73 m | 4,370 m / 3,485 m |
+| streak, doused | 2,080 m / 2,352 m | 72 m / 72 m | 3,818 m / 3,421 m |
+| glycol, mist | no hole | unchanged | |
+
+About 70 m is the spacing of the pieces themselves. Longest: the slow stretch laid before the speed-up lives on
+until the first fast piece goes, then fades (it was 5,200 m before, with the hole). At a steady speed nothing is
+cut: the 96 old frames and the 24 heavy frames are byte for byte as before.
 
 ## Bomb carpets far off (after head b0f46c5)
 

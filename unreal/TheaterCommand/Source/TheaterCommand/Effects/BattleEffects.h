@@ -346,6 +346,7 @@ private:
 	static constexpr int32 PuffsASection = 300;
 	int32 Sections = 0;
 	int32 SectionsUsed = 0; // sections holding puffs at the last Tick (shown)
+	FVector FoldedAt = FVector::ZeroVector; // where the sections holding no puffs were last folded (the pre-check on FX1: their boxes count in the mesh's bounds)
 	bool bShown = false;
 	TArray<FVector> Points; // one section's points and colours, filled for each section in turn
 	TArray<FColor> Colours;

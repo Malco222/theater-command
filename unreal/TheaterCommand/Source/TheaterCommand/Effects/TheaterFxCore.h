@@ -204,6 +204,7 @@ namespace TheaterFx
 			Rgb Col, Col2; double Cool = 0.0; // (and its own colour, young and old: a piece with bSoft runs to it along its length)
 			double PaleTo = -1.0; // (0 and over: how far that piece pales with age, its own PaleTo, 1 not at all; under 0: as the piece reaching back to it does)
 			double Lean = 0.0; // (and how much thinner its one side is: see Bit::Lean)
+			double CutAt = 1.0e18; // (and that piece's own cut: see Bit::CutAt)
 			bool bOn = false;
 		};
 		double Ribbon = 0.0, ShowFrom = 0.0, ShowBy = 0.0, SmearHold = -1.0;
@@ -332,6 +333,13 @@ namespace TheaterFx
 		// it was made. Prune fills each gap with the last piece, so Bits keeps no order; two pieces equally deep are
 		// drawn in this order, the older first, as they were when Bits kept the order they were made in)
 		uint64_t Serial = 0;
+		// (an aircraft trail's piece: the trail's run, Trailing::Run, and the moment by which it is gone however long its
+		// life, CutAt. The pre-check on 13388a4f: an aircraft that speeds up lays pieces of a shorter life, longest_m, and
+		// those went before the slow pieces laid before them: a hole in the trail with an old length hanging alone
+		// behind it. So no piece of a run outlives a piece laid after it: it is cut to that one's end, fading over the
+		// last game.trail_cut_fade_s before it, and the trail goes from its old end)
+		uint32_t TrailRun = 0;
+		double CutAt = 1.0e18;
 		Rgb PaleUpCol, PaleUpLit;
 		// (the far form, Battle::FarLay: 0, anything else, drawn as ever. 1, a piece of a near burst that has a far form
 		// too (a bomb of a stick), drawn while FarAt, where it struck, is within the draw range; 2, a piece of that far
@@ -859,6 +867,10 @@ namespace TheaterFx
 			// slow wander of its puffs' climb and drift, each taking most of the last one's)
 			double PlumeOwed = 1.0e9, PowerLate = -1.0, SurgeFrom = 0.0, SurgeUntil = -1.0e18, PlumeRise = 1.0, PlumeSide = 0.0;
 			double Squeeze = 1.0; // (longest_m: the share of its row's time the trail was last laid by, 1 when not squeezed; TrailKind's closing bar takes it)
+			// (Bit::CutAt: this kind's run of the trail, a new one at each TrailKind, and when the row's life ends for the
+			// last piece TrailMove laid; a later call whose first piece would end sooner cuts the pieces before it)
+			uint32_t Run = 0;
+			double RunEnd = -1.0e18;
 			unsigned PlumeN = 0;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
@@ -1222,6 +1234,17 @@ namespace TheaterFx
 		// the end, in the order made, and are numbered in that order before Prune moves any)
 		uint64_t Serials = 0;
 		size_t Numbered = 0;
+		// (Bit::CutAt: the trail runs given out, and the cuts asked since the last Draw, each for the pieces of its run
+		// born by LaidBy, done at the next Draw in one pass; and the fade before a cut)
+		struct TrailCut
+		{
+			uint32_t Run = 0;
+			double LaidBy = 0.0, End = 0.0;
+		};
+		uint32_t TrailRuns = 0;
+		std::vector<TrailCut> TrailCuts;
+		double TrailCutFade = 3.0;
+		void CutTrails();
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
 		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)
