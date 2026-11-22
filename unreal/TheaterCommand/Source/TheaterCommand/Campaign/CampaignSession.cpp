@@ -1315,6 +1315,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("ago"), Plate.Ago);
 			Entry->TryGetNumberField(TEXT("garr"), Plate.Garrison);
 			Entry->TryGetBoolField(TEXT("guard"), Plate.bGuardOnly);
+			Entry->TryGetBoolField(TEXT("quiet"), Plate.bQuiet);
 			Entry->TryGetStringField(TEXT("garrFig"), Plate.GarrisonFigure);
 			Entry->TryGetStringField(TEXT("garrWords"), Plate.GarrisonWords);
 			Entry->TryGetStringField(TEXT("orderFig"), Plate.OrderFigure);

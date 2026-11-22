@@ -186,6 +186,7 @@ struct FCityGlance
 	int32 Ago = -1; // months since the report, for a spied town
 	int32 Garrison = 0; // divisions inside the walls, the guard counted, rounded
 	bool bGuardOnly = false; // nobody but the town's own guard
+	bool bQuiet = false; // (the art director, 22 November) the guard alone, out of the enemy's reach: no "guard" on the plate
 	FString GarrisonFigure; // "4 div", "guard", or empty
 	FString GarrisonWords; // "the Berlin garrison and the guard · 2 corps in the field outside"
 	FString OrderFigure; // the months until the next unit here is ready ("2 mo", "now"), empty when nothing is on order
@@ -1029,7 +1030,7 @@ struct FCampaignView
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
 	TArray<FCityOrders> CityOrders; // what each of the player's cities has on order
 	TArray<FCityGlance> Glance; // (release 2) each town's plate under its name: garrison, on order, going up, damaged
-	TArray<int32> Going; // works going up from the arsenal, where the player can know it: flat pairs, the region and what (bits: 1 factory, 2 shipyard, 4 guns, 8 airfield, 16 fortifications)
+	TArray<int32> Going; // works going up from the arsenal, where the player can know it: flat pairs, the region and what (bits: 1 factory, 2 shipyard, 4 guns, 8 airfield, 16 fortifications, 32 field strip)
 	TArray<int32> Wrecked; // factories not working (bombed, sabotaged, burnt), where the player can know it: flat pairs, the region and how many
 	TArray<FIntVector4> RegionWorks; // by region id: factories built since the war began, shipyard level, anti-aircraft level, airfield level
 	TArray<FViewCorps> Corps;

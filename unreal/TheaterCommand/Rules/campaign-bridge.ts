@@ -468,7 +468,7 @@ function drawView() {
     })(),
     // Works going up from the arsenal, for the table to show as a builder's yard in scaffolding: the province, and
     // what is being built there as bits (1 a factory, 2 a shipyard, 4 anti-aircraft guns, 8 an airfield, 16
-    // fortifications). Only where the player can know it.
+    // fortifications, 32 a field strip, release 2's airfields). Only where the player can know it.
     cityOrders: (() => { try { return cityOrdersOf(s); } catch { return []; } })(),
     // (Release 2: the city at a glance.) Every town the player may know something of, with its plate's marks and their words.
     glance: (() => { try { return glanceMarks(s, seen); } catch { return []; } })(),
@@ -479,7 +479,7 @@ function drawView() {
           for (const b of n.queue) {
             const q = b as unknown as { what?: string; item?: string; region?: number };
             if (q.region === undefined || !s.regions[q.region]) continue;
-            const bit = q.what === 'fort' ? 16 : q.what === 'work' ? ({ factory: 1, yard: 2, aa: 4, field: 8 } as Record<string, number>)[q.item ?? ''] ?? 0 : 0;
+            const bit = q.what === 'fort' ? 16 : q.what === 'work' ? ({ factory: 1, yard: 2, aa: 4, field: 8, strip: 32 } as Record<string, number>)[q.item ?? ''] ?? 0 : 0;
             if (!bit) continue;
             const r = s.regions[q.region];
             const known = !s.human || r.ctrl === s.human || allied(s, r.ctrl, s.human) || seen[r.id] > 0;
@@ -993,6 +993,22 @@ const glanceName = (s: Game, c: Corps): string => (c.nat === s.human ? c.name : 
 /** How much of the town's guard is still on its feet, 0 to 1 (what bombardment and storms have not put out of action). */
 const guardLeft = (s: Game, id: number): number => 1 - Math.max(0, Math.min(100, (s.flags as Record<string, number>)[`guard:${id}`] ?? 0)) / 100;
 
+// (Release 2, the art director's read of run 2, 22 November: a town held by its own guard alone says nothing new, and
+// 70 such plates buried the ones that matter. It wears its "guard" plate only inside the enemy's reach this month,
+// where it is news; elsewhere the plate is quiet, and "guard" stays in the hover card and the panel. The enemy's
+// reach is the release 1 reach of the armies the player can see; asked once while nothing that moves it has changed.)
+let guardReachKey = '';
+let guardReachWas = new Set<number>();
+function guardReach(s: Game, me: string): Set<number> {
+  const key = `${s.turn}:${me}:${s.corps.filter((c) => !c.dead && c.nat !== me).map((c) => `${c.id}.${c.reg}.${c.ap}`).join(',')}:${s.regions.map((r) => r.ctrl).join(',')}`;
+  if (key === guardReachKey) return guardReachWas;
+  let danger = new Set<number>();
+  try { danger = enemyReach(s, (id) => s.regions[id]?.ctrl === me); } catch { danger = new Set<number>(); }
+  guardReachKey = key;
+  guardReachWas = danger;
+  return danger;
+}
+
 /** Every town the player may know something of, with its plate's marks and a line of words for each mark. */
 function glanceMarks(s: Game, seen: Uint8Array) {
   const me = s.human;
@@ -1002,11 +1018,12 @@ function glanceMarks(s: Game, seen: Uint8Array) {
   const byRegion = new Map(book.map((c) => [c.region, c] as const));
   const out: {
     region: number; own: boolean; spied: boolean; ago: number;
-    garr: number; guard: boolean; garrFig: string; garrWords: string;
+    garr: number; guard: boolean; quiet: boolean; garrFig: string; garrWords: string;
     orderFig: string; orderWords: string;
     up: number; upFig: string; upWords: string;
     dmg: number; dmgFig: string; dmgWords: string;
   }[] = [];
+  let reach: Set<number> | null = null;
   for (const r of s.regions) {
     const see = glanceSight(s, r.id, seen);
     if (!see || see.ally) continue; // (an ally's towns keep their names alone: the plates are for his own and his enemies')
@@ -1055,9 +1072,15 @@ function glanceMarks(s: Game, seen: Uint8Array) {
       dmgWords = `${bits.join(', ')}${see.own && hurt.ruin && hurt.ruin.why === null ? `, repair ${moneyWords(hurt.ruin.cost)}` : ''}`;
     }
     if (!garr && !guardOnly && !orderFig && up < 0 && !hurt) continue;
+    // (the guard alone, out of the enemy's reach: no "guard" on the plate, and no plate if it has nothing else to say)
+    let quiet = false;
+    if (guardOnly && see.own) {
+      if (!reach) reach = guardReach(s, me);
+      quiet = !reach.has(r.id);
+    }
     out.push({
       region: r.id, own: see.own, spied: see.spied, ago: see.spied ? see.ago : -1,
-      garr, guard: guardOnly, garrFig: guardOnly ? 'guard' : garr ? sayDivs(garr) : '', garrWords,
+      garr, guard: guardOnly, quiet, garrFig: guardOnly ? 'guard' : garr ? sayDivs(garr) : '', garrWords,
       orderFig, orderWords, up, upFig, upWords, dmg: hurt?.pct ?? 0, dmgFig, dmgWords,
     });
   }
