@@ -81,6 +81,10 @@ namespace
 		// (Brian's war-film feel: in the fight, how much of the film is at a soldier's eye level, and on the film's own
 		// section)
 		int FightFrames = 0, EyeLevel = 0, OnSquad = 0;
+		// (the lens inside a burst's cloud in its first seconds: the art director's 4 s by the round's size, never held
+		// past half a second of the screen's clock)
+		int CloudFrames = 0;
+		double CloudSince = -1.0, CloudLongest = 0.0, CloudAt = 0.0;
 
 		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
 		{
@@ -91,6 +95,13 @@ namespace
 			// (on the screen's clock: the scene plays the fight at half the battle's)
 			if (BurstDue >= 0.0 && R > BurstDue) { ++BurstsKept; BurstDue = -1.0; }
 			if (!bAir && D.BurstAt(P, From, B)) { ++Bursts; if (BurstDue < 0.0) BurstDue = R + Set.BurstFlash + 0.15; }
+			if (!bAir && D.InCloud(P.Eye, B))
+			{
+				++CloudFrames;
+				if (CloudSince < 0.0) CloudSince = R;
+				if (R - CloudSince > CloudLongest) { CloudLongest = R - CloudSince; CloudAt = B; }
+			}
+			else CloudSince = -1.0;
 			// Its own man (a man's shot, he not fallen): never within the lens's clearance of his head or chest.
 			const bool bMan = P.Subject >= 0 && !Rec->Tracks[static_cast<size_t>(P.Subject)].IsVehicle();
 			const LandFeed::Track* Own = P.Subject >= 0 ? &Rec->Tracks[static_cast<size_t>(P.Subject)] : nullptr;
@@ -190,6 +201,8 @@ namespace
 				PanKick, PanKickAt, Knocked, KnockedSeen);
 			std::printf("; in the fight %.0f%% at a soldier's eye level (2.2 m or under), %.0f%% on the film's own section", 100.0 * EyeLevel / std::max(1, FightFrames),
 				100.0 * OnSquad / std::max(1, FightFrames));
+			std::printf("; the lens in a burst's cloud %.2f%% of frames, the longest %.2f s (battle %.1f)", 100.0 * CloudFrames / std::max(1, Frames), CloudLongest, CloudAt);
+			if (CloudLongest > 0.6) Fault("the lens stayed inside a burst's cloud past half a second (the art director: never black past 0.5 s)");
 			if (BurstsKept > 0) Fault("a shell landed at the lens and the shot was not cut on its flash");
 			if (static_cast<double>(OwnNear) / std::max(1, OwnFrames) > 0.005) Fault("the lens came within its own man's face more than 0.5% of the time");
 			if (static_cast<double>(OwnFilled) / std::max(1, OwnLooks) > 0.03) Fault("its own man filled the picture more than 3% of the time");
@@ -1324,6 +1337,84 @@ int main(int argc, char** argv)
 		std::printf("ambush: every enemy block hidden to %.0f s: %d shots, %d frames on a hidden enemy, %d aerials\n", HideTo, Shots, OnHidden, Aerials);
 		if (OnHidden > 0) Fault("the film took a hidden enemy as its subject (it gives the ambush away)");
 		if (Shots < 3) Fault("with the enemy hidden the film hardly cut");
+	}
+	// The art director's dark rule (cut 4 fix 6: over 30% of a frame under L 25, reject the shot). The game's scene reads
+	// its own drawn frame; the rays cannot see light, so here a stand-in for that read: the share of the picture short of
+	// what the lens looks at (out to 40 m) that is a thing (a hedge's shrubs, a crown, a hull) or a bank's face across its
+	// upper half, as the shaded faces of the cut 4 stills were. Read four times a second of the frame last drawn.
+	{
+		auto DarkOf = [&Sight, &GroundAt](const LandEye::Pose& P) -> double
+		{
+			const Vec Way = P.Look - P.Eye;
+			const double Long = Way.Length();
+			if (Long < 1e-6) return 0.0;
+			const Vec Fwd = Way * (1.0 / Long);
+			Vec Right(Fwd.Y, -Fwd.X, 0.0);
+			Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
+			const Vec Up(Right.Y * Fwd.Z - Right.Z * Fwd.Y, Right.Z * Fwd.X - Right.X * Fwd.Z, Right.X * Fwd.Y - Right.Y * Fwd.X);
+			const double TanV = std::tan(P.Fov * 0.5 * 3.14159265358979 / 180.0), TanH = TanV * 16.0 / 9.0;
+			const double Far = std::min(40.0, std::max(2.0, Long - 2.0));
+			int Dark = 0;
+			for (int R = 0; R < 5; ++R)
+			{
+				for (int C = 0; C < 8; ++C)
+				{
+					const double Sx = (C + 0.5) / 8.0 * 2.0 - 1.0, Sy = (R + 0.5) / 5.0 * 2.0 - 1.0;
+					const Vec Dir = (Fwd + Right * (Sx * TanH) + Up * (Sy * TanV)).Unit();
+					for (double D = 0.3; D <= Far; D += D < 6.0 ? 0.35 : 1.0)
+					{
+						const Vec Q = P.Eye + Dir * D;
+						if (Q.Z < GroundAt(Q.X, Q.Y)) { Dark += Sy > 0.0 && D <= 12.0 ? 1 : 0; break; }
+						const int What = static_cast<int>(Sight.At(Q, P.Subject));
+						if (What == 2) { ++Dark; break; }
+						if (What == 1) break;
+					}
+				}
+			}
+			return Dark / 40.0;
+		};
+		LandEye::World Wd = EW;
+		double DarkRead = -1.0;
+		Wd.DarkNow = [&DarkRead]() { return DarkRead; };
+		LandEye::Director Dk;
+		Dk.Begin(Rec, Wd, ES);
+		int Shots = 0, Looked = 0, DarkFrames = 0, Again = 0;
+		double Stretch = 0.0, Longest = 0.0, LongestAt = 0.0, ShotAt = 0.0, NextRead = 0.0;
+		std::vector<Vec> LeftAt;
+		LandEye::Pose Drawn;
+		bool bDrawn = false;
+		for (double B = 0.0; B < Rec.End + 3.0; B += Dt)
+		{
+			const double R = 3000.0 + B;
+			if (bDrawn && R >= NextRead)
+			{
+				NextRead = R + 0.25;
+				DarkRead = Drawn.Shot == LandEye::Kind::Open || Drawn.Shot == LandEye::Kind::Wide ? 0.0 : DarkOf(Drawn);
+			}
+			PlaceMovers(B);
+			const LandEye::Pose P = Dk.Update(B, R, Dt);
+			if (P.bCut)
+			{
+				++Shots;
+				ShotAt = R;
+				if (Dk.LastWhy() == LandEye::Why::Dark) LeftAt.push_back(Drawn.Eye);
+				else
+					for (const Vec& W : LeftAt)
+						if (P.Shot != LandEye::Kind::Open && P.Shot != LandEye::Kind::Wide && std::hypot(P.Eye.X - W.X, P.Eye.Y - W.Y) < ES.DarkClear - 0.5) ++Again;
+			}
+			Drawn = P;
+			bDrawn = true;
+			++Looked;
+			// (a stretch over the line past a shot's first half second, read as the scene reads it, the rule not resting)
+			const bool bOver = DarkRead > ES.DarkLeave && R - ShotAt > 0.5 && Dk.DarkRun() < ES.DarkRunMost;
+			DarkFrames += DarkRead > ES.DarkLeave ? 1 : 0;
+			Stretch = bOver ? Stretch + Dt : 0.0;
+			if (Stretch > Longest) { Longest = Stretch; LongestAt = B; }
+		}
+		std::printf("dark (a stand-in for the drawn frame's share under L 25): %d shots, %d left for a dark picture; frames over %.0f%% %.1f%%, the longest stretch past a shot's first half second %.2f s (battle %.1f s); %d places within %.0f m of a dark one taken again\n",
+			Shots, Dk.DarkCuts(), ES.DarkLeave * 100.0, 100.0 * DarkFrames / std::max(1, Looked), Longest, LongestAt, Again, ES.DarkClear);
+		if (Longest > ES.DarkHold + 0.6) Fault("a shot held a dark picture past the dark rule");
+		if (Again > 0) Fault("a shot stood again where one was left for a dark picture");
 	}
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.

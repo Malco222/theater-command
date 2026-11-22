@@ -50,7 +50,7 @@ namespace LandEye
 	 * happening in it, something in front of the lens (a rescue: the only cut sooner than Settings::ShotLeast), a key
 	 * or a picture asked for, its subject gone from the field; a shell bursting at the lens (cut on its flash, the
 	 * other cut allowed sooner than Settings::ShotLeast); its own man out of the picture or hidden in the corn. */
-	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone, Burst, Lost };
+	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone, Burst, Lost, Dark };
 	const char* NameOf(Why W);
 
 	/** Where the eye is, what it looks at, the lens (vertical field of view, degrees) and the roll (degrees). */
@@ -96,6 +96,11 @@ namespace LandEye
 		 * fall or knock-out, and leaves a shot whose subject becomes hidden; his own hidden blocks are not his enemy's and
 		 * are filmed as ever. Unset: nothing hidden. */
 		std::function<bool(int Block)> Hidden;
+		/** The share of the picture last drawn that is darker than L 25 of 255 (0 to 1; below 0 not known yet), read by
+		 * the scene from its own frame a few times a second. The art director's dark rule (cut 4 fix 6: a hedge's shaded
+		 * face filled 75% of a still): a shot whose picture stays over Settings::DarkLeave is left, and the next stands
+		 * clear of where it stood. Unset: never asked (the rays cannot see light). */
+		std::function<double()> DarkNow;
 	};
 
 	struct Settings
@@ -178,6 +183,13 @@ namespace LandEye
 		/** The lens lifted over banks and corn on a spring of this rate (1/s): an operator standing up, not a leap. */
 		double LiftRate = 12.0;
 		double BurstClear = 6.0, BurstBig = 1.4, BurstAround = 3.5, BurstFlash = 0.12;
+		/** A burst's cloud (the art director, 22 November, from the effects kit's near-lens cap: a lens some 15 m inside a
+		 * 500 lb bomb's cloud still went dark): no shot holds its lens within a cloud's reach of a burst in its first
+		 * CloudFor seconds on the screen. CloudShell metres for a 75 mm (a tank's or an anti-tank gun's round),
+		 * CloudMortar for a mortar bomb, CloudGun for the battery's 105 mm, CloudBomb for a 500 lb bomb. A burst landing
+		 * that near a held shot cuts it on its flash; no shot is placed in a cloud still hanging, and a following shot
+		 * that runs into one is left. */
+		double CloudFor = 4.0, CloudShell = 10.0, CloudMortar = 9.0, CloudGun = 12.0, CloudBomb = 30.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -189,6 +201,12 @@ namespace LandEye
 		double Climb = 0.6;
 		/** The most a following shot's operator turns with his man, degrees a second. */
 		double TurnMost = 45.0;
+		/** The dark rule (World::DarkNow; the art director, cut 4 fix 6: reject a shot over 30% under L 25): a shot whose
+		 * drawn picture stays over DarkLeave for DarkHold seconds, past its first quarter second (the frame drawn lags the
+		 * cut), is left, and no later shot stands within DarkClear metres of where it stood. After DarkRunMost such cuts
+		 * running the light is to blame, not the place: the rule rests until a shot holds. */
+		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0;
+		int DarkRunMost = 2;
 	};
 
 	class Director
@@ -208,6 +226,12 @@ namespace LandEye
 		int Cuts() const { return CutCount; }
 		/** The most frames a cut's choice has taken (Settings::ChooseSteps). */
 		int LongestChoice() const { return ChoiceFramesMost; }
+		/** Shots left for a dark picture (World::DarkNow), and those running now (the rule rests at DarkRunMost). */
+		int DarkCuts() const { return DarkLeft; }
+		int DarkRun() const { return DarkRunNow; }
+		/** Whether the last asked shot found no fit place and was placed anyway (its kind kept for the picture run): a
+		 * still the film's own rules would have turned away. */
+		bool AskedUnfit() const { return bAskedUnfit; }
 		/** The ground asked under the camera's rays so far (the measure of its work a frame, the same on any machine). */
 		long Steps() const { return RaySteps; }
 		const std::vector<std::pair<double, Kind>>& Log() const { return CutLog; }
@@ -227,7 +251,11 @@ namespace LandEye
 		/** The pose the director holds (after Begin: the opening's first; the scene places its eye there before the first
 		 * frame is drawn). */
 		const Pose& Current() const { return Now; }
-		/** Whether a heavy round lands at a pose's lens between two battle times (Settings::BurstClear). */
+		/** A heavy round's cloud's reach (Settings::CloudShell and the rest), and whether a point is inside a burst's cloud
+		 * in its first CloudFor seconds at battle time T. */
+		double CloudOf(const LandFeed::Round& R) const;
+		bool InCloud(const Vec& At, double T) const;
+		/** Whether a heavy round lands at a pose's lens between two battle times (Settings::BurstClear, CloudShell). */
 		bool BurstAt(const Pose& P, double From, double To) const { return LensBurst(P.Eye, P.Look, P.Fov, From, To, P.Subject, nullptr); }
 		/** How much of a pose's picture its own man fills (0 with no Solid or no man). */
 		double OwnFill(const Pose& P) const { return OwnShare(P.Eye, P.Look, P.Fov, P.Subject); }
@@ -289,6 +317,12 @@ namespace LandEye
 		int HeroBlock = -1, HeroK = -1, SinceSquad = 0;
 		/** Where the shots among the men stood (Settings::SpotOnce). */
 		std::vector<Vec> UsedSpots;
+		/** Where shots left for a dark picture stood (Settings::DarkClear), the latest 32; since when the picture has been
+		 * dark (-1 not), the shots left for it in all and running, and whether the last asked shot was placed unfit. */
+		std::vector<Vec> DarkSpots;
+		double DarkSince = -1.0;
+		int DarkLeft = 0, DarkRunNow = 0;
+		bool bAskedUnfit = false;
 		/** A cut's second, less choosy pass (no fit found in the middle of the battle). */
 		bool bLoose = false;
 		/** The operator's nerves after a burst near the lens (0 to 1), and where they are going. */

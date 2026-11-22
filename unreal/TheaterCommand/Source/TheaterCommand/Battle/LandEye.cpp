@@ -105,6 +105,7 @@ namespace LandEye
 		case Why::Gone: return "gone";
 		case Why::Burst: return "burst";
 		case Why::Lost: return "lost";
+		case Why::Dark: return "dark";
 		}
 		return "?";
 	}
@@ -292,7 +293,7 @@ namespace LandEye
 		for (size_t I = 0; I < Rec->Rounds.size(); ++I)
 		{
 			const std::string& W = Rec->Rounds[I].W;
-			if (W == "mortar" || W == "gun" || W == "tank" || W == "at") Heavy.push_back(static_cast<int>(I));
+			if (W == "mortar" || W == "gun" || W == "tank" || W == "at" || W == "bomb") Heavy.push_back(static_cast<int>(I));
 		}
 		std::sort(Heavy.begin(), Heavy.end(), [this](int A, int B) { return Rec->Rounds[static_cast<size_t>(A)].L < Rec->Rounds[static_cast<size_t>(B)].L; });
 		ByLanding.clear();
@@ -345,6 +346,10 @@ namespace LandEye
 		Nerves = NervesWant = 0.0;
 		SinceSquad = 0;
 		UsedSpots.clear();
+		DarkSpots.clear();
+		DarkSince = -1.0;
+		DarkLeft = DarkRunNow = 0;
+		bAskedUnfit = false;
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
 		LookSwing = Vec();
@@ -687,6 +692,30 @@ namespace LandEye
 		return std::min(1.2, 0.2 + 0.8 * UpNow);
 	}
 
+	double Director::CloudOf(const LandFeed::Round& R) const
+	{
+		if (R.W == "bomb") return Set.CloudBomb;
+		if (R.W == "gun") return Set.CloudGun;
+		if (R.W == "mortar") return Set.CloudMortar;
+		return Set.CloudShell;
+	}
+
+	bool Director::InCloud(const Vec& At, double T) const
+	{
+		if (!Rec || Heavy.empty()) return false;
+		// (the bursts landed in the cloud's first seconds before T, in landing order)
+		auto It = std::lower_bound(Heavy.begin(), Heavy.end(), T - Soon(Set.CloudFor),
+			[this](int I, double V) { return Rec->Rounds[static_cast<size_t>(I)].L < V; });
+		for (; It != Heavy.end(); ++It)
+		{
+			const LandFeed::Round& R = Rec->Rounds[static_cast<size_t>(*It)];
+			if (R.L > T) break;
+			const Vec Burst(R.X, R.Y, HeightAt(R.X, R.Y) + 1.0);
+			if ((Burst - At).Length() < CloudOf(R)) return true;
+		}
+		return false;
+	}
+
 	bool Director::LensBurst(const Vec& Eye, const Vec& Look, double Fov, double From, double To, int Own, double* OutWhen) const
 	{
 		if (!Rec || Heavy.empty() || !(To > From)) return false;
@@ -703,12 +732,14 @@ namespace LandEye
 			if (R.L > To) break;
 			const Vec At(R.X, R.Y, HeightAt(R.X, R.Y) + 1.0);
 			const double Gap = (At - Eye).Length();
-			if (Gap >= Set.BurstClear * Set.BurstBig) continue;
+			const double Cloud = CloudOf(R);
+			if (Gap >= std::max(Set.BurstClear * Set.BurstBig, Cloud)) continue;
 			// (one striking the shot's own man or tank is its story: his fall, her knock-out; only right at the lens is
 			// it cut)
 			const bool bOwn = Own >= 0 && R.On >= 0 && TrackOfShooter(R.On, R.Ok, R.Oj) == Own;
 			const double Clear = Set.BurstClear * (R.W == "gun" ? Set.BurstBig : 1.0);
-			if (Gap < Set.BurstAround || (!bOwn && Gap < Clear && InPicture(P, At, 1.3)))
+			// (and any whose cloud will hang round the lens, its own man's or not: the art director's rule)
+			if (Gap < Set.BurstAround || Gap < Cloud || (!bOwn && Gap < Clear && InPicture(P, At, 1.3)))
 			{
 				if (OutWhen) *OutWhen = R.L;
 				return true;
@@ -1160,6 +1191,9 @@ namespace LandEye
 			Intended(Battle + Soon(Part == 2 ? 1.5 : 3.0), E, L);
 			return !BadPicture(E, L, Now.Fov, Set.ScreenLeave);
 		}
+		// (nowhere near where a shot was left for a dark picture: the same hedge's shaded face again)
+		for (const Vec& Was : DarkSpots)
+			if (Flat(Was, E) < Set.DarkClear) return false;
 		// (a place on the ground among the men is used once in the film: the third cut ran the same over-the-shoulder
 		// by a dark bush three times)
 		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && !bLoose)
@@ -1178,13 +1212,14 @@ namespace LandEye
 			}
 			if (Crossing(Eyes, Times, 5, Subject)) return false;
 		}
-		// (no shell landing at the lens in its first seconds: the second cut went near black for 0.8 s)
+		// (no shell landing at the lens in its first seconds: the second cut went near black for 0.8 s; nor its lens in a
+		// burst's cloud still hanging, the art director's 4 s by the round's size)
 		for (double U = 0.0; U < Set.ShotLeast + 0.5; U += 1.0)
 		{
 			const double T = Battle + Soon(U);
 			Vec Ek = E, Lk = L;
 			if (U > 0.0) Intended(T, Ek, Lk);
-			if (LensBurst(Ek, Lk, Now.Fov, T - Soon(0.5), T + Soon(0.5), Subject, nullptr)) return false;
+			if (LensBurst(Ek, Lk, Now.Fov, T - Soon(0.5), T + Soon(0.5), Subject, nullptr) || InCloud(Ek, T)) return false;
 		}
 		// (a watched man or a tracked tank in sight, not behind a tree or a hedge's shrubs)
 		if ((Shot == Kind::Watch || Shot == Kind::Track) && !SeenFrom(E, L, Subject)) return false;
@@ -1276,6 +1311,7 @@ namespace LandEye
 		{
 			bAsked = false;
 			bAskedNow = true;
+			bAskedUnfit = false;
 			Options.push_back({ AskedKind, AskedSubject, false });
 			Coming = -1;
 		}
@@ -1575,7 +1611,11 @@ namespace LandEye
 				if (bChoiceAsked && ChoiceO == 0)
 				{
 					bNearWatch = false;
-					if (Place(Op.K, Op.Who, Battle, 0)) return true;
+					if (Place(Op.K, Op.Who, Battle, 0))
+					{
+						bAskedUnfit = true;
+						return true;
+					}
 				}
 			}
 			ChoiceStage = 1;
@@ -1669,6 +1709,7 @@ namespace LandEye
 		BadSince = -1.0;
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
+		DarkSince = -1.0;
 		ShotLength = Set.ShotMin + Roll() * (Set.ShotMax - Set.ShotMin);
 		if (Shot == Kind::Wide) ShotLength *= 0.7;
 		// (under shelling the holds are short and nervous: heavy rounds landing round its man in its time)
@@ -1856,8 +1897,9 @@ namespace LandEye
 		if (!bChoosing && !bCut && Here.Solid && Shot != Kind::Open && Shot != Kind::Wide && Real >= NextLook)
 		{
 			NextLook = Real + 0.25;
+			// (a following eye run into a burst's cloud still hanging is left too)
 			bool bBad = !RoomAt(Now.Eye, Subject) || BlockedShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.BlockedMost) > Set.BlockedMost ||
-				ScreenShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.ScreenLeave) > Set.ScreenLeave;
+				ScreenShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.ScreenLeave) > Set.ScreenLeave || InCloud(Now.Eye, Battle);
 			// (where a following eye will be a moment on: left before it drives into a hedge, not once it is in it)
 			if (!bBad && FellAt < 0.0 && (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low))
 			{
@@ -1900,6 +1942,24 @@ namespace LandEye
 				Reason = Why::Rescue;
 			}
 		}
+		// The picture drawn too dark (the art director's rule, cut 4 fix 6): over DarkLeave under L 25 for DarkHold seconds
+		// past its first quarter second, the shot is left, and the next stands clear of where it stood (a hedge's shaded
+		// face, a crown's shade). After DarkRunMost such cuts running, the light is to blame, not the place: it rests.
+		if (!bChoosing && Here.DarkNow && Shot != Kind::Open && Shot != Kind::Wide)
+		{
+			const double Dark = Here.DarkNow();
+			if (Dark <= Set.DarkLeave || Held < 0.25) DarkSince = -1.0;
+			else if (DarkSince < 0.0) DarkSince = Real;
+			if (!bCut && !bHeld && DarkSince >= 0.0 && Real - DarkSince >= Set.DarkHold && DarkRunNow < Set.DarkRunMost)
+			{
+				bCut = true;
+				Reason = Why::Dark;
+				++DarkLeft;
+				++DarkRunNow;
+				DarkSpots.push_back(Now.Eye);
+				if (DarkSpots.size() > 32) DarkSpots.erase(DarkSpots.begin());
+			}
+		}
 		// Its own man come into the lens at once (a man lying down turned about where he lay, and his head was a hand from
 		// the lens): no operator steps a metre in a frame; the film cuts away.
 		if (!bChoosing && !bCut && !bHeld && FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low) && OwnDistance(Now.Eye, Subject, Battle) < Set.OwnClear * Set.OwnCutInside)
@@ -1914,6 +1974,8 @@ namespace LandEye
 			if (!bChoosing)
 			{
 				LeftWhy = Reason;
+				// (a shot left for anything but a dark picture held its light: the dark rule's run starts again)
+				if (Reason != Why::Dark) DarkRunNow = 0;
 				BeginChoice(Battle, Real);
 			}
 			const bool bAtOnce = bChoiceAsked || Set.ChooseSteps <= 0 || (Subject >= 0 && HiddenNow(Subject));
