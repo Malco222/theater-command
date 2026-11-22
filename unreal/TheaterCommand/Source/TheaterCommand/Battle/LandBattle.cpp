@@ -4237,6 +4237,11 @@ void ALandBattle::HideTheTable()
 		{
 			Table = Map;
 			Map->SetPutAway(true);
+			// (its per-frame update held while the battle is up, the gate's MapUpdate; -TheaterLandMapUpdate=1 keeps it
+			// running, as before, for the A/B)
+			int32 MapUpdate = 0;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLandMapUpdate="), MapUpdate);
+			Map->HoldUpdates(MapUpdate == 0);
 		}
 		if (It->IsA<ACampaignMapActor>() || It->IsA<AArmyPiece>())
 		{
@@ -4948,8 +4953,10 @@ void ALandBattle::ShowTheTable()
 	}
 	if (ACampaignMapActor* Map = Table.Get())
 	{
-		Map->SetActorHiddenInGame(false);
+		// (its held update run once, with the pieces back, before it is shown: nothing on it stale)
 		Map->SetPutAway(false);
+		Map->HoldUpdates(false);
+		Map->SetActorHiddenInGame(false);
 	}
 	else
 	{
