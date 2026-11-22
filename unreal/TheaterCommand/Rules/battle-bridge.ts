@@ -7,7 +7,7 @@
 // of the dice. The 3D game draws the pictures: the models, their walk and fire, the sounds the events name.
 // It draws every explosion too, by the art director's sheet (land: "Explosions" below).
 //
-// Wiring (two lines in campaign-bridge.ts, for the 3D builder):
+// Wiring (made in campaign-bridge.ts; kept here as the record of what it takes, and what to keep if it is redone):
 //   1. its attack(ids, to) takes two more arguments, fought?: number and field?: FieldBill (src/campaign/game.ts), and
 //      passes them on: orderAttack(s, sent, s.regions[to], fought, field) (field: what the field cost each corps and
 //      each side, so the bill falls on the corps as the field had it and the after card agrees with the field, ruling 226(6))
@@ -18,6 +18,8 @@
 // from what the campaign booked: { lines, level, groups }); and the TC object's line becomes
 //   ...battleCalls({ game, attack, raid: (k, t, ids, f) => act(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
 // With no air battle fought, nothing changes there either: the raid is paid with the dice as before.
+// (campaign-bridge.ts passes both hooks through its playerOrder, so a fought attack or raid is noted as the player's
+// own deed, in the notebook and the lessons, as the same order given from the map is.)
 //
 // The calls, on the same global object TC:
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,

@@ -98,6 +98,9 @@ import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, forecastAir, gunsAt a
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
+import type { FoughtAir } from '../../../src/campaign/airfought';
+import type { FieldBill } from '../../../src/campaign/game';
+import { battleCalls } from './battle-bridge';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit } from '../../../src/campaign/turn';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
@@ -2906,11 +2909,15 @@ function gateOrder(gate: number, shut: boolean) {
   return { ok, note, view: view() };
 }
 
-function attack(ids: number[], to: number) {
+/**
+ * The player's attack. Fought out on the field (battle-bridge.ts battleEnd), 'fought' is the field's R in place of the
+ * dice and 'field' what the field cost each corps and side (ruling 226(6)); without them the dice roll as always.
+ */
+function attack(ids: number[], to: number, fought?: number, field?: FieldBill) {
   const s = game();
   const before = new Map(s.corps.map((c) => [c.id, c.reg]));
   const sent = attackers(s, ids, to);
-  const report = orderAttack(s, sent, s.regions[to]);
+  const report = orderAttack(s, sent, s.regions[to], fought, field);
   if (report) forgetMarch(s, sent.map((c) => c.id)); // (an order carried out ends a standing march; one refused leaves it standing)
   // Corps that followed up into the ground they won, for the game to march across.
   const moved = report
@@ -5526,8 +5533,12 @@ function staffPage(s: Game): Page | null {
   };
 }
 
-/** Something pressed in one of those rooms. Says what came of it; the game then draws the room again. */
-function act(action: string, region = -1) {
+/**
+ * Something pressed in one of those rooms. Says what came of it; the game then draws the room again. A raid fought out
+ * as an air battle (battle-bridge.ts battleEnd) comes with 'fought', what the battle reports, paid in place of the dice,
+ * and says its after card ('after').
+ */
+function act(action: string, region = -1, fought?: FoughtAir) {
   const s = game();
   const h0 = s.headlines.length;
   const part = action.split(':');
@@ -5537,7 +5548,7 @@ function act(action: string, region = -1) {
   let flies: Flight[] = [];
   let open = '';
   const air0 = lastAirReport(s);
-  const air = airAct(s, action);
+  const air = airAct(s, action, fought);
   if (air) {
     // The air war as its own game (the grand campaign): a raid is flown the moment it is ordered, by every group picked.
     ok = air.ok; note = air.note; open = air.ok ? air.open ?? '' : '';
@@ -5563,7 +5574,7 @@ function act(action: string, region = -1) {
         }];
       }
     }
-    return { ok, note, fly, flies, open, view: view() };
+    return { ok, note, fly, flies, open, ...(air.after ? { after: air.after } : {}), view: view() };
   }
   if (part[0] === 'probe') {
     // (Version 64) One corps feels out the line: the attack card is read again with what it found.
@@ -6674,4 +6685,9 @@ function find(name: string) {
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
-  lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard };
+  lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
+  // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's
+  // own order, his attack or his raid, with what the field reports in place of the dice. Taken as his own deeds, as the
+  // same orders given from the map are.
+  ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
+};
