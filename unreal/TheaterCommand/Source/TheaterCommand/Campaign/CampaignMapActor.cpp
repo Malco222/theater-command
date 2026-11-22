@@ -11921,18 +11921,10 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 	// paper-100, lighter with the ground's own hue kept, so that the amber dashes are the only warm line on the map.
 	// The warm wash had tinted the province an army stood in orange, out to the dashes, and read as the border of
 	// that army's own march.)
+	// (Release 2, the art director's read of run 7, 22 November: at Moscow and Cairo the lift round the army read as one
+	// pale area with his march's lift, and nothing told the two apart. The reach lays no lift on the ground: it is the
+	// amber dashes and the threat card's words; his march's lift is the only lift. Section 9 stays cleared.)
 	const TSet<int32> In(Danger);
-	FCampaignMeshBuffers Buffers;
-	FLinearColor Wash(FColor(237, 230, 214)); // (paper-100)
-	Wash.A = 0.1f;
-	for (const int32 Id : In)
-	{
-		if (Data.Regions.IsValidIndex(Id) && !WarFoes.Contains(Data.Regions[Id].Owner))
-		{
-			AppendRegionFill(Buffers, Id, Wash);
-		}
-	}
-	Buffers.Commit(OrdersMesh, 9, WashInk());
 
 	if (!EnemyReachMesh)
 	{

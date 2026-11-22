@@ -792,6 +792,28 @@ public:
 	 * badge is under the pointer, or none: the pointer on a badge points at its airfield.
 	 */
 	void NoteFieldBadges(const TArray<TPair<int32, FBox2D>>& Badges) { FieldBadges = Badges; }
+	/**
+	 * (The UI director's read of run 7, 22 November: mend 3.) Where the towns' plates were last drawn, each with its
+	 * province, in the screen's own units: told by the screen as it paints them. And the plate of the town whose paper
+	 * card is on the pointer, for the card to stand clear of; false where no card shows or its plate is not drawn.
+	 */
+	void NoteTownPlateBoxes(const TArray<TPair<int32, FBox2D>>& Boxes) { TownPlateBoxes = Boxes; }
+	bool GetGlancePlate(FBox2D& Out) const
+	{
+		if (!HoverGlance.bValid || HoverTipRegion == INDEX_NONE)
+		{
+			return false;
+		}
+		for (const TPair<int32, FBox2D>& Each : TownPlateBoxes)
+		{
+			if (Each.Key == HoverTipRegion)
+			{
+				Out = Each.Value;
+				return true;
+			}
+		}
+		return false;
+	}
 	int32 FieldBadgeUnder(const FVector2D& Pointer) const
 	{
 		for (const TPair<int32, FBox2D>& Badge : FieldBadges)
@@ -1555,6 +1577,7 @@ private:
 	// (Ruling 86.) The gates' marks as last drawn; the gate under the pointer, and what its box says.
 	TArray<TPair<int32, FBox2D>> GateMarks;
 	TArray<TPair<int32, FBox2D>> FieldBadges; // (the UI director's HUD read, 22 November: mend 1) the airfields' badges as last drawn, by province
+	TArray<TPair<int32, FBox2D>> TownPlateBoxes; // (the UI director's read of run 7, 22 November: mend 3) the towns' plates as last drawn, by province
 	int32 StagedGate = INDEX_NONE;
 	int32 HoverGate = INDEX_NONE;
 	// (The code checker, 17 November.) The padlock under the pointer when the left button went down: the hover is blanked

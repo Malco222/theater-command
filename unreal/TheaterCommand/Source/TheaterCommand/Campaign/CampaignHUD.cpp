@@ -2479,6 +2479,11 @@ namespace
 					{
 						Rest = TEXT("at ") + Rest;
 					}
+					// (the UI director, 18:34Z 22 November: a region is "in", a town is "at": "Watching in the Ruhr")
+					else if (Agent->Doing.Split(TEXT(" in "), &Lead, &Rest))
+					{
+						Rest = TEXT("in ") + Rest;
+					}
 				}
 				Sign(Agent->bAtWork ? 1 : 4, X, 65.0, Brass, 2);
 				X += 14.0;
@@ -2543,23 +2548,43 @@ namespace
 				// ---- What he sees (abroad), or the threat he guards against (at home).
 				if (Agent->bAbroad)
 				{
+					// (The UI director's read of run 7, 22 November: CORPS and DIVISIONS stood 4 apart and read as one phrase.
+					// IN SIGHT is the only head; each row says its army in one cell at the right, as the plates say a garrison
+					// ("1 corps", the plates' dot, "3 div"): the figures bold, the words plain. A long name folds, never the cell.)
 					Write(TEXT("IN SIGHT"), 132.0, 90.0, Head12, Brass, 2);
-					WriteRight(TEXT("CORPS"), 286.0, 90.0, Small12, Muted, 2);
-					WriteRight(TEXT("DIVISIONS"), 358.0, 90.0, Small12, Muted, 2);
 					const int32 Shown = Agent->Sees.Num() > 5 ? 4 : Agent->Sees.Num();
+					double Y = 106.0;
 					for (int32 Row = 0; Row < Shown; ++Row)
 					{
 						const FAgentSight& Seen = Agent->Sees[Row];
-						const double Y = 106.0 + 26.0 * Row;
+						struct FCellPart { FString Text; bool bFigure; };
+						const FCellPart Cell[] = {
+							{ FString::FromInt(Seen.Corps), true }, { FString(TEXT(" corps \u00B7 ")), false },
+							{ FString::FromInt(Seen.Divisions), true }, { FString(TEXT(" div")), false } };
+						double CellWide = 0.0;
+						for (const FCellPart& Part : Cell)
+						{
+							CellWide += Wide(Part.Text, Part.bFigure ? Bold13 : Typed12);
+						}
+						double PartX = 358.0 - CellWide;
+						for (const FCellPart& Part : Cell)
+						{
+							Write(Part.Text, PartX, Part.bFigure ? Y + 6.0 : Y + 7.0, Part.bFigure ? Bold13 : Typed12, Part.bFigure ? Cream : Muted, 2);
+							PartX += Wide(Part.Text, Part.bFigure ? Bold13 : Typed12);
+						}
+						const TArray<FString> NameLines = FoldAt(Seen.Name, Row14, FMath::Max(358.0 - CellWide - 10.0 - 156.0, 40.0));
 						Picture(FlagOf(Seen.Nation), 134.0, Y + 8.0, 15.0, 10.0, 2);
-						Write(Seen.Name, 156.0, Y + 4.0, Row14, Cream, 2);
-						WriteRight(FString::FromInt(Seen.Corps), 286.0, Y + 6.0, Bold13, Cream, 2);
-						WriteRight(FString::FromInt(Seen.Divisions), 358.0, Y + 6.0, Bold13, Cream, 2);
-						Fill(132.0, Y + 25.0, 226.0, 1.0, Desk700, 2);
+						for (int32 NameLine = 0; NameLine < NameLines.Num(); ++NameLine)
+						{
+							Write(NameLines[NameLine], 156.0, Y + 4.0 + 17.0 * NameLine, Row14, Cream, 2);
+						}
+						const double RowHigh = 26.0 + 17.0 * FMath::Max(NameLines.Num() - 1, 0);
+						Fill(132.0, Y + RowHigh - 1.0, 226.0, 1.0, Desk700, 2);
+						Y += RowHigh;
 					}
 					if (Agent->Sees.Num() > Shown)
 					{
-						Write(FString::Printf(TEXT("and %d more armies"), Agent->Sees.Num() - Shown), 156.0, 106.0 + 26.0 * Shown + 5.0, Body13, Muted, 2);
+						Write(FString::Printf(TEXT("and %d more armies"), Agent->Sees.Num() - Shown), 156.0, Y + 5.0, Body13, Muted, 2);
 					}
 					if (Agent->Sees.Num() == 0)
 					{
@@ -2888,7 +2913,10 @@ namespace
 					Most = Work.Why;
 				}
 			}
-			return Most;
+			// (The UI director's read of run 7, 22 November: a reason only one row gives is that row's own, said under its
+			// label, not at the card's foot, where "A government keeps its books in its capital" stood away from "Read the
+			// books". A cause is said once under the list only where two rows or more share it.)
+			return MostCount >= 2 ? Most : FString();
 		}
 
 		const FSlateBrush* FlagOf(const FString& Tag) const
@@ -3319,10 +3347,14 @@ namespace
 			// (the UI director's HUD read, 22 November: mend 1. And where each airfield's badge is drawn, with its province, for
 			// the pointer: the badge stands for its airfield, for the tip and a click, as the field itself does.)
 			TArray<TPair<int32, FBox2D>> FieldBoxes;
+			// (the UI director's read of run 7, 22 November: mend 3. And where each town's plate is drawn, with its province,
+			// in the screen's own units: the town's paper card on the pointer stands clear of it.)
+			TArray<TPair<int32, FBox2D>> PlateBoxes;
 			if (Plates.Num() == 0)
 			{
 				Controller->NoteGateMarks(GateBoxes, Geometry.Scale);
 				Controller->NoteFieldBadges(FieldBoxes);
+				Controller->NoteTownPlateBoxes(PlateBoxes);
 				DrawnTownPlates.Reset();
 				return LayerId;
 			}
@@ -3922,6 +3954,7 @@ namespace
 					bGlancePlate = false;
 				}
 				Taken.Add(Box);
+				PlateBoxes.Add(TPair<int32, FBox2D>(Each.Region, Box));
 				const FSlateBrush& Back = bLabels ? PaperLabel : Each.bCapital && !Each.bFar ? CapitalPlate : Plate;
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, High), FSlateLayoutTransform(Corner)), &Back, ESlateDrawEffect::None, bLabels ? LabelPaper.CopyWithNewOpacity(0.92f) : Back.GetTint(InWidgetStyle));
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, High - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour.CopyWithNewOpacity(1.0f));
@@ -3969,6 +4002,7 @@ namespace
 			}
 			Controller->NoteGateMarks(GateBoxes, Scale);
 			Controller->NoteFieldBadges(FieldBoxes);
+			Controller->NoteTownPlateBoxes(PlateBoxes);
 			DrawnTownPlates = Taken;
 			return LayerId + 1;
 		}
@@ -5435,15 +5469,18 @@ namespace
 				RearChipBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("2E241A"))).CopyWithNewOpacity(0.94f), 4.0f, FLinearColor(FColor::FromHex(TEXT("6F5D38"))), 1.0f);
 				RearRingBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 8.0f, FLinearColor::White, 1.2f);
 				// (rulings 86 and 87: the marks inside the pointer's box)
-				TipPlain = FTextBlockStyle().SetFont(Font(TEXT("Regular"), 11)).SetColorAndOpacity(FSlateColor(Cream));
+				// (Release 2, the UI director's read of run 7, 22 November: hover cards go on paper, like the town's card. The
+				// pointer's slip is paper too, lettered in the card's inks: plain words in ink-900; brass's mark in a deep
+				// brass, the refusing red in the card's deep alarm, a train's line in a deep railway blue, dim in ink-600.)
+				TipPlain = FTextBlockStyle().SetFont(Font(TEXT("Regular"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor::FromHex(TEXT("2A2118")))));
 				TipStyles = MakeShared<FSlateStyleSet>(TEXT("TheaterTipMarks"));
-				TipStyles->Set("Brass", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(BrightBrass)));
-				TipStyles->Set("Red", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(Alarm)));
-				// (the railway brief, section 8: a train's line in the lit railway's blue-white; a break's opening with the
+				TipStyles->Set("Brass", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor::FromHex(TEXT("6E5014"))))));
+				TipStyles->Set("Red", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor::FromHex(TEXT("8C2F22"))))));
+				// (the railway brief, section 8: a train's line in the lit railway's blue; a break's opening with the
 				// box's emphasis; the kept march's line after it, dim)
-				TipStyles->Set("Rail", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor(198, 228, 255)))));
+				TipStyles->Set("Rail", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor::FromHex(TEXT("24527A"))))));
 				TipStyles->Set("Strong", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)));
-				TipStyles->Set("Dim", FTextBlockStyle(TipPlain).SetColorAndOpacity(FSlateColor(Muted)));
+				TipStyles->Set("Dim", FTextBlockStyle(TipPlain).SetColorAndOpacity(FSlateColor(FLinearColor(FColor::FromHex(TEXT("5C5040"))))));
 				// (The UI director, 18 November 2026, on the landing card: its section heads "take the card label style,
 				// brass small capitals at the label size", as the attack card's WHAT YOU FACE does: SmallCaps(), the frame's
 				// one size of small capital label.)
@@ -5844,7 +5881,7 @@ namespace
 							// in their colours. Wherever no card shows, the slip is as it was.)
 							+ SVerticalBox::Slot().AutoHeight()
 							[
-								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))
+								SNew(SBorder).BorderImage(&GlanceCardBrush).Padding(FMargin(12.0f, 7.0f))
 								.Visibility_Lambda([this]()
 								{
 									const bool bCardOnly = Controller.IsValid() && Controller->GetHoverGlance().bValid && Controller->GetHoverTipMarked().IsEmpty();
@@ -5854,7 +5891,7 @@ namespace
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight()
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f).WrapTextAt(420.0f)
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("2A2118")))).LineHeightPercentage(1.15f).WrapTextAt(420.0f)
 										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetHoverGlance().bValid ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTip() : FText::GetEmpty(); })
 									]
@@ -10097,6 +10134,24 @@ namespace
 				Tries.Add(FVector2D(Mark.Max.X - Tip.X, Mark.Max.Y + 6.0));
 				Tries.Add(FVector2D(Mark.Max.X - Tip.X, Mark.Min.Y - 6.0 - Tip.Y));
 				Near = Mark.GetCenter();
+			}
+			else if (FBox2D Plate(ForceInit); Controller.IsValid() && Controller->GetGlancePlate(Plate))
+			{
+				// (The UI director's read of run 7, 22 November: mend 3. Over New York the town's card hid its own plate down
+				// to "New". The card stands clear of the plate it explains and of the town over it, the ground from the
+				// pointer, which is on the town, to the plate: under the plate first, as a gate's slip stands, then beside
+				// the town, then over it.)
+				FBox2D Town = Plate;
+				Town += At - FVector2D(40.0, 40.0);
+				Town += At + FVector2D(40.0, 40.0);
+				Keep.Add(Town.ExpandBy(6.0));
+				const double Under = Town.Max.Y + 6.0;
+				Tries.Add(FVector2D(FMath::Max(Plate.Min.X, Clear), Under));
+				Tries.Add(FVector2D(Plate.Max.X - Tip.X, Under));
+				Tries.Add(FVector2D(Town.Max.X + 6.0, Town.Min.Y));
+				Tries.Add(FVector2D(Town.Min.X - 6.0 - Tip.X, Town.Min.Y));
+				Tries.Add(FVector2D(FMath::Max(Plate.Min.X, Clear), Town.Min.Y - 6.0 - Tip.Y));
+				Near = Town.GetCenter();
 			}
 			else
 			{
