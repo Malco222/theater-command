@@ -9208,6 +9208,16 @@ namespace
 			{
 				ShownOpening = Controller->GetOpening().Revision;
 				LayOutOpening(Controller->GetOpening());
+				// (Release 1, the UI director, 22 November 2026, for Brian's "when you click something on the menu it
+				// flickers".) This runs while the screen is being drawn, after Slate has measured it, so the card's new
+				// lines would be drawn this frame with no size, all at the list's top, and set right only on the next: a
+				// flash on every click. Measure the card again now, at the scale it is drawn at, so the frame that first
+				// shows the new lines shows them in their places.
+				if (OpeningCardBox.IsValid())
+				{
+					const float CardScale = OpeningCardBox->GetTickSpaceGeometry().Scale;
+					OpeningCardBox->SlatePrepass(CardScale > 0.0f ? CardScale : 1.0f);
+				}
 			}
 
 			// Lay the town's bar out again whenever it has changed.
@@ -15342,11 +15352,15 @@ namespace
 			// pixel high, so what it needs moves a little with the scale, and the scale with what it needs: left free, it
 			// could tremble between two scales for good. For its first frames after it is laid out it takes what it
 			// measures; after that it only grows, and so comes to rest, a few units slack at most.
-			if (OpeningSettle > 0 || Need > OpeningNeed)
+			// (Release 1, 22 November 2026.) Those first frames count only once the list has its size: a list just laid
+			// out that still measures as nothing would drop the card to its least height for a frame, and stand it up
+			// again on the next, a jump on every click.
+			const bool bListMeasured = ListFeet.Num() > 0 && ListFeet.Last() > 0.5f;
+			if ((OpeningSettle > 0 && bListMeasured) || Need > OpeningNeed)
 			{
 				OpeningNeed = Need;
 			}
-			if (OpeningSettle > 0)
+			if (OpeningSettle > 0 && bListMeasured)
 			{
 				--OpeningSettle;
 			}
