@@ -2678,6 +2678,9 @@ export function railSays(g: Game, corps: Corps[], beyond: number | number[], pre
   return { can: true, strong: '', line: `By rail this month, but a train reaches no farther than it can march.${brk ? ` ${brk.line}` : ''}` };
 }
 
+/** Whether a province is overseas as the score reads its home: the map's mark (the yield form lays its corrections over it). */
+export const overseasRead = (_g: Game, r: Region): boolean => !!r.overseas;
+
 /** The share of a nation's home country, by worth, that is in enemy hands. */
 export function homeLost(g: Game, nat: string): number {
   let vp = 0, held = 0;
