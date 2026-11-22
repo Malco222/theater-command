@@ -12,7 +12,7 @@ import { allied, atWar, bloc, headline } from './game';
 import { CLASSES, atSea, closedTo, laneLoss, oreRoute, zoneOf } from './navy';
 import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
-import { freezeAt } from './pacific';
+import { fleetAtPeace, freezeAt } from './pacific';
 import { TECH } from './tech';
 import { FAR_FIRST, oilAtHome } from './world';
 import { footWorn } from './footing';
@@ -64,7 +64,16 @@ export const RES = data as unknown as {
   nations: string[];
   oil: {
     fields: Record<string, number>; occupied: number; home: Record<string, number>;
-    need: { corps: Record<string, number>; air: number; ships: Record<ShipClass, number>; port: number; peace: number };
+    need: {
+      corps: Record<string, number>; air: number; ships: Record<ShipClass, number>; port: number; peace: number;
+      /**
+       * A navy on a peacetime allowance of oil (a row by nation; the far side lays Japan's, the only row): while its
+       * fleet is not yet mobilised (pacific.ts `fleetAtPeace`) its ships burn 'draw' in 'war' of what they would burn
+       * all at sea, wherever they lie and whatever they do. The two figures are the record's, in millions of barrels
+       * a month; the rules read only the one against the other. `navyAllowance`.
+       */
+      navy?: Record<string, { draw: number; war: number }>;
+    };
     start: Record<string, number>; cap: number;
     /** The tanks of a nation that holds more or less than 'cap' months of its need (ruling 194, point 5: a row by nation; the far side lays Japan's). */
     caps?: Record<string, number>;
@@ -159,9 +168,27 @@ function treeOil(g: Game, nat: string): { amount: number; factories: number } {
   return { amount: rate * fac, factories: fac };
 }
 
-/** What the forces burn in a month of war, by arm. */
-function oilUse(g: Game, nat: string): { fast: number; fastDivs: number; foot: number; footDivs: number; air: number; planes: number; sea: number; atSea: number; port: number; inPort: number } {
+/**
+ * The share of what its ships would burn all at sea that a navy on a peacetime allowance burns this month, or 0 for a
+ * navy with no such row and for one that is mobilised (the historian's paper sub-patrols-japan-oil.md, 6c, laid as
+ * found by the design director's 13:43Z of 22 November 2026). Japan's fleet did not burn at a war's rate from the
+ * China war's second month: from 1937 to 1941 the navy built its stocks up, on about a million and a quarter barrels
+ * a month, and the war rate (2,900 barrels an hour, about 2.1 million a month) shows only with the mobilisation of
+ * 1941. The game's oil has no barrel, so the allowance is laid as the one figure against the other.
+ */
+export function navyAllowance(g: Game, nat: string): number {
+  const A = RES.oil.need.navy?.[nat];
+  return A && A.war > 0 && fleetAtPeace(g, nat) ? A.draw / A.war : 0;
+}
+
+/**
+ * What the forces burn in a month of war, by arm. 'books' is true for the month's own books, where a navy on a
+ * peacetime allowance burns that and no more (`navyAllowance`), and false for the count of what a war would ask,
+ * which fills the depots on the first day and sizes the tanks: there every ship burns as it lies, as it always did.
+ */
+function oilUse(g: Game, nat: string, books = false): { fast: number; fastDivs: number; foot: number; footDivs: number; air: number; planes: number; sea: number; atSea: number; port: number; inPort: number } {
   const N = RES.oil.need;
+  const allowance = books ? navyAllowance(g, nat) : 0;
   const u = { fast: 0, fastDivs: 0, foot: 0, footDivs: 0, air: 0, planes: 0, sea: 0, atSea: 0, port: 0, inPort: 0 };
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead) continue;
@@ -173,7 +200,8 @@ function oilUse(g: Game, nat: string): { fast: number; fastDivs: number; foot: n
     if (f.nat !== nat) continue;
     let burn = 0, hulls = 0;
     for (const c of CLASSES) { burn += f.ships[c] * N.ships[c]; hulls += f.ships[c]; }
-    if (atSea(f)) { u.sea += burn; u.atSea += hulls; } else { u.port += burn * N.port; u.inPort += hulls; }
+    if (allowance > 0) burn *= allowance;
+    if (atSea(f)) { u.sea += burn; u.atSea += hulls; } else { u.port += allowance > 0 ? burn : burn * N.port; u.inPort += hulls; }
   }
   return u;
 }
@@ -192,15 +220,19 @@ export const overTheWater = (r: Region, nat: string): boolean => r.id >= FAR_FIR
 
 const divisions = (g: Game, nat: string): number => g.corps.reduce((s, c) => s + (c.nat === nat && !c.dead ? c.divs : 0), 0);
 
-/** A month's need of oil or supplies. 'war' asks what it would be at war, whatever the nation is doing now. */
-export function needOf(g: Game, nat: string, good: Good, war = g.nations[nat].atWar.length > 0): number {
+/**
+ * A month's need of oil or supplies. 'war' asks what it would be at war (or at peace), whatever the nation is doing
+ * now; left out, the need is the month's own, as its books count it.
+ */
+export function needOf(g: Game, nat: string, good: Good, war?: boolean): number {
   return outLines(g, nat, good, war).reduce((s, l) => s + l.amount, 0);
 }
 
-function outLines(g: Game, nat: string, good: Good, war = g.nations[nat].atWar.length > 0): ResLine[] {
+function outLines(g: Game, nat: string, good: Good, asked?: boolean): ResLine[] {
   const n = g.nations[nat];
+  const war = asked ?? n.atWar.length > 0;
   if (good === 'oil') {
-    const u = oilUse(g, nat), k = war ? 1 : RES.oil.need.peace;
+    const u = oilUse(g, nat, asked === undefined), k = war ? 1 : RES.oil.need.peace;
     return [
       { key: 'fast', label: 'Tanks and lorried troops', amount: u.fast * k, count: u.fastDivs },
       { key: 'foot', label: 'The rest of the army', amount: u.foot * k, count: u.footDivs },

@@ -232,6 +232,23 @@ export function pacificWar(g: Game, a: string, b: string): void {
   if (other !== null) followers(g, other);
 }
 
+/**
+ * True while Japan's fleet is not yet mobilised, and burns its peacetime allowance of oil (resources.ts
+ * `navyAllowance`; the historian's paper sub-patrols-japan-oil.md, 6c, laid as found by the design director's 13:43Z
+ * of 22 November 2026: the allowance to August 1941, a war's need from September). The clock is the freeze's, Japan's
+ * own: through the month America's sales stop, and from the month after the fleet burns what a war asks. By the book
+ * that is August 1941; where no book dates the freeze its own cause brings it. And never once Japan is at war with
+ * the freeze's seller or with the south's sellers, whatever the freeze. False for every other nation, and where the
+ * ties do not read.
+ */
+export function fleetAtPeace(g: Game, nat: string): boolean {
+  const P = PACIFIC;
+  if (!P || !reads(g) || nat !== P.power) return false;
+  const at = g.flags[FREEZE] ?? 0;
+  if (at > 0 && g.turn > at) return false;
+  return ![P.freeze.seller, ...P.freeze.wars, ...P.freeze.south].some((e) => atWar(g, nat, e));
+}
+
 /** The freeze: the month America's sales to Japan stop, and the south's. Kept in the campaign's flags; it does not lift. */
 function freezeMonth(g: Game): void {
   const P = PACIFIC!, F = P.freeze, J = live(g, P.power);
