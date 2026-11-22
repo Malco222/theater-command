@@ -53,6 +53,9 @@ public:
 	/** The share of the screen's height the top bar takes (its brass line too), as last drawn: the dark read leaves those
 	 * rows out, so it reads the picture under the words (the art director's 30% is read on the picture alone). */
 	double TopShare() const { return LastTopShare; }
+	/** The walk's click on a button by what it does: true when that button was on his screen as last painted (and it is
+	 * then pressed just as his click would press it), false when it was not drawn. */
+	bool PressDrawn(const FString& Action);
 
 private:
 	TWeakObjectPtr<ALandBattle> Battle;
