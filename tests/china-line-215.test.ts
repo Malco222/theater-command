@@ -620,7 +620,10 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     // The day-one and lasting ground was held to the surrender too: shut to the line's end. A raid has no floor.
     for (const nm of ['Peiping', 'Nanking', 'Hankow', 'Canton', 'Yochow', 'Ichang', 'Ningpo']) expect(L.back![nm], nm).toBe(L.until + 2);
     for (const nm of ['Pakhoi', 'Chuchow', 'Changteh']) expect(L.back![nm], nm).toBeUndefined();
-    expect(Object.keys(L.back!).length).toBe(60);
+    // (Sixty, and Waichow: Japan's from January 1945 to the end, the design director's ruling of 08:12Z of 22 November
+    // 2026 on the historian's waichow-1938-45.md. tests/far-china-attacks.test.ts.)
+    expect(Object.keys(L.back!).length).toBe(61);
+    expect(L.back!.Waichow).toBe(L.until + 2);
   });
 
   it('dates the record\'s raids of 1939 to 1941 as great choices of the book alone, Nanning landing from a home port (219(3), b375)', () => {
