@@ -85,7 +85,7 @@ R_axis, M4, _n = S.R_axis, S.M4, S._n
 
 SEED = {"usa": 214, "ger": 41}[WHO]       # (his face: a mix no other man's file uses; USA 85, 192, 140, 118, 146,
 #                                           163, 171 and 127 are taken, GER 3)
-NEW_PAINTS = {"usa": {"knit": 38, "lens": 39}, "ger": {"phones": 39, "shirt": 40}}[WHO]
+NEW_PAINTS = {"usa": {"knit": 38, "lens": 39, "jacket": 40}, "ger": {"phones": 39, "shirt": 40}}[WHO]
 
 
 # ================================================================================================ shapes on a cloth
@@ -108,6 +108,70 @@ class Over:
             P = np.stack([bx[near], by[near], bz[near]], axis=1)
             out[near] = np.maximum(self.src.at_points(P) - self.off, r[near])
         return out.reshape(shape)
+
+
+class Drape:
+    """Cloth hung over the back as a taut sheet, not laid on the skin: a height field behind him (x as a function of
+    y and z) that rests on the shoulder blades and spans the hollows between them (the spine's groove, the small of the
+    back) down to the waistband; a slab DEEP thick under it (negative inside), absent where `w` is under a half."""
+
+    DEEP = 0.06
+
+    def __init__(self, ys, zs, xd, w):
+        self.ys, self.zs, self.xd, self.w = ys, zs, xd, w
+        self.lo = np.array((float(np.nanmin(xd)) - 0.01, ys[0], zs[0]))
+        self.hi = np.array((float(np.nanmax(xd)) + self.DEEP + 0.01, ys[-1], zs[-1]))
+        self.c, self.R = (self.lo + self.hi) / 2, None
+
+    def _at(self, G, y, z):
+        fy = np.clip((y - self.ys[0]) / (self.ys[1] - self.ys[0]), 0.0, len(self.ys) - 1.001)
+        fz = np.clip((z - self.zs[0]) / (self.zs[1] - self.zs[0]), 0.0, len(self.zs) - 1.001)
+        iy, iz = fy.astype(int), fz.astype(int)
+        ty, tz = fy - iy, fz - iz
+        return ((G[iy, iz] * (1 - ty) + G[iy + 1, iz] * ty) * (1 - tz)
+                + (G[iy, iz + 1] * (1 - ty) + G[iy + 1, iz + 1] * ty) * tz)
+
+    def d(self, px, py, pz):
+        bx, by, bz = np.broadcast_arrays(np.asarray(px, float), np.asarray(py, float), np.asarray(pz, float))
+        x = self._at(self.xd, by, bz)
+        w = self._at(self.w, by, bz)
+        out = np.maximum(x - bx, bx - (x + self.DEEP))
+        out = np.maximum(out, (0.5 - w) * 0.02)
+        inside = (by >= self.ys[0]) & (by <= self.ys[-1]) & (bz >= self.zs[0]) & (bz <= self.zs[-1])
+        return np.where(inside, out, 1.0)
+
+
+def drape_back(L, y_half, z0, z1, h=0.01, sink=0.002):
+    """The cloth's back as it stands, read by rays from behind on a grid; then the sheet over it: a membrane held up
+    by the cloth (never under it) and held at the grid's edges, relaxed until it settles. Returns a Drape (or None)."""
+    ys = np.arange(-y_half, y_half + 1e-9, h)
+    zs = np.arange(z0, z1 + 1e-9, h)
+    Y, Z = np.meshgrid(ys, zs, indexing="ij")
+    P = np.stack([np.full(Y.size, -0.45), Y.ravel(), Z.ravel()], axis=1)
+    for _ in range(80):
+        d = L.at_points(P)
+        P[:, 0] += np.clip(d, -0.01, 0.01)
+    hit = np.abs(L.at_points(P)) < 1e-3
+    e = 1e-4
+    g = np.stack([(L.at_points(P + np.eye(3)[i] * e) - L.at_points(P - np.eye(3)[i] * e)) / (2 * e) for i in range(3)], axis=1)
+    nx = g[:, 0] / np.maximum(np.linalg.norm(g, axis=1), 1e-9)
+    ok = (hit & (nx < -0.55)).reshape(Y.shape)
+    xt = P[:, 0].reshape(Y.shape)
+    hb = np.where(ok, -xt, np.nan)
+    floor = np.nanmin(hb)
+    hb = np.where(ok, hb, floor) - sink
+    fixed = ~ok
+    fixed[0, :] = fixed[-1, :] = True
+    fixed[:, 0] = fixed[:, -1] = True
+    m = hb.copy()
+    for _ in range(1500):
+        avg = m.copy()
+        avg[1:-1, 1:-1] = (m[:-2, 1:-1] + m[2:, 1:-1] + m[1:-1, :-2] + m[1:-1, 2:]) / 4
+        m = np.where(fixed, hb, np.maximum(hb, avg))
+    fill = np.where(ok, m - hb, 0.0)
+    print(f"  tanker: the jacket's back hung as a sheet over {ok.sum()} of {ok.size} points, filling the hollows "
+          f"up to {fill.max() * 100:.1f} cm (median where it fills {np.median(fill[fill > 0.001]) * 100 if (fill > 0.001).any() else 0:.1f} cm)")
+    return Drape(ys, zs, -m, ok.astype(float))
 
 
 def snapshot(L):
@@ -157,8 +221,10 @@ if WHO == "usa":
     SPEC["helmet"] = "tanker"
     S.FIGURE_PAINTS.update(NEW_PAINTS)
     S.LOOK[NATION].update({
-        "tunic": "77714F",     # the winter combat jacket's olive drab poplin, lighter and greener than his trousers
-        "knit": "4E4A37",      # its knitted collar, cuffs and waistband: dark olive drab wool
+        "tunic": "77714F",     # (the army's tunic: no longer on him; his jacket is its own paint)
+        "jacket": "544E37",    # the winter combat jacket's olive drab poplin, its own paint (paint 40, jacket): the
+                               # army's lighter tunic read, lit from behind, as the skin of a bare back
+        "knit": "3A3428",      # its knitted collar, cuffs and waistband: dark brown-olive wool, darker than the jacket
         "trousers": "524E3D",  # olive drab wool trousers, darker than the jacket
         "helmet": "3A3229",    # the tanker's helmet: dark brown fibre and leather
         "lens": "56635E",      # the goggles' glass, smoky green-grey
@@ -172,6 +238,11 @@ CUFF_AT = 0.05             # (m: the knitted cuff's middle, back from the wrist;
 CUFF_LONG = (0.024, 0.019) # (m: the cuff's length toward the elbow and toward the hand from its middle)
 CUFF_OFF = 0.0045          # (m: the knit stands this far off the sleeve)
 SLASH_TILT = 24.0          # (degrees from upright, the top toward his middle)
+BACK_DRAPE = (0.15, 0.0)
+COLLAR_UP = 0.042          # (m: the knitted collar's top over the neck ring's middle: it stands 6.8 cm)
+YOKE = (0.05, 0.155, 0.002, 0.0065, 0.0095)   # (m: the yoke's seam this far under the shoulders, this far either side; a
+#                                               groove, its middle this far out, this wide; the yoke's welt this far over it)
+WAIST_FOLDS = ((0.012, 0.15, 0.006), (0.04, 0.145, 0.009), (0.068, 0.13, 0.008))   # (m over the waistband, half width, how much they wander)   # (m: the back hung as a sheet this far either side of his middle, up to this far over the shoulders)
 
 _uniform_usa = S.uniform_layers
 
@@ -182,6 +253,7 @@ def uniform_layers(man, J, spec, LM):
     LM["hem"] = LM["belt"] - JACKET_HEM
     layers = _uniform_usa(man, J, spec, LM)
     tunic, trousers, collar, cuffs = layers[0], layers[1], layers[3], layers[4]
+    tunic.paint = "jacket"
     # ---- off: soldier_usa.py's shoulder straps (the jacket has none) and so the buttons on them
     before = len(tunic.ops)
     tunic.ops = [(how, p, k) for how, p, k in tunic.ops
@@ -201,8 +273,8 @@ def uniform_layers(man, J, spec, LM):
     Rn = np.stack([nfwd, np.cross(ax, nfwd), ax], axis=1)
     collar.ops = []
     collar.paint = "knit"
-    collar.add(Tube(nmid, -0.026, 0.03, (nrx + 0.019, nry + 0.018), (nrx + 0.013, nry + 0.013), 0.01, Rn))
-    collar.add(Torus(nmid + ax * 0.03, nrx + 0.009, 0.0065, Rn, major_y=nry + 0.009), 0.006)
+    collar.add(Tube(nmid, -0.026, COLLAR_UP, (nrx + 0.019, nry + 0.018), (nrx + 0.013, nry + 0.013), 0.01, Rn))
+    collar.add(Torus(nmid + ax * COLLAR_UP, nrx + 0.009, 0.0065, Rn, major_y=nry + 0.009), 0.006)
     collar.sub(RoundBox(nmid + nfwd * (nrx + 0.022) + ax * 0.03, (0.03, 0.007, 0.05), 0.004, Rn), 0.002)
     # ---- the cuffs knitted: longer and close round the wrist
     cuffs.paint = "knit"
@@ -218,6 +290,38 @@ def uniform_layers(man, J, spec, LM):
         rb = S.ring_axes(tunic, cc, Rc)
         cuffs.add(Tube(cc, -CUFF_LONG[0], CUFF_LONG[1], (ra[0] + CUFF_OFF, ra[1] + CUFF_OFF),
                        (rb[0] + CUFF_OFF, rb[1] + CUFF_OFF), 0.005, Rc))
+    # ---- the back hung loose: with no suspenders or pack over it the jacket laid on his body showed his shoulder
+    # blades and his spine through it (a camera behind the tank read it as a bare back); the poplin hangs from the
+    # blades instead, over the spine and the small of his back, down to the waistband
+    if BACK_DRAPE:
+        dr = drape_back(tunic, BACK_DRAPE[0], LM["hem"] + WAISTBAND - 0.005, float(LM["shoulder"]) + BACK_DRAPE[1])
+        if dr is not None:
+            tunic.add(dr, 0.006)
+    # ---- the yoke's seam straight across the back under the shoulders, and the poplin bloused in soft folds over
+    # the waistband (a sheet of khaki with neither read as skin)
+    def across(z, ys, wave=0.0):
+        pts = []
+        for i, y in enumerate(ys):
+            zz = z + wave * math.sin(i * 1.9)
+            try:
+                p, nrm = on_surface(tunic, (-0.45, y, zz), (1.0, 0.0, 0.0))
+            except RuntimeError:
+                continue
+            if nrm[0] < -0.3:
+                pts.append((p, nrm))
+        return pts
+    if YOKE:
+        pts = across(float(LM["shoulder"]) - YOKE[0], np.linspace(-YOKE[1], YOKE[1], 13))
+        up = np.array((0.0, 0.0, 1.0))
+        for (a, na), (b, nb) in zip(pts[:-1], pts[1:]):
+            tunic.sub(RoundCone(a + na * YOKE[2], b + nb * YOKE[2], YOKE[3], YOKE[3]), 0.003)
+            # (the yoke laid over the back panel: its edge a welt standing just over the seam)
+            tunic.add(RoundCone(a + up * YOKE[4] - na * 0.002, b + up * YOKE[4] - nb * 0.002, 0.005, 0.005), 0.004)
+        print(f"  tanker: the yoke's seam across his back, {len(pts)} points")
+    for up, half, wave in WAIST_FOLDS:
+        pts = across(LM["hem"] + WAISTBAND + up, np.linspace(-half, half, 11), wave)
+        for (a, na), (b, nb) in zip(pts[:-1], pts[1:]):
+            tunic.add(RoundCone(a - na * 0.003, b - nb * 0.003, 0.009, 0.009), 0.012)
     # ---- the waistband knitted: the jacket's own surface stood out round the waist from the hem up
     was = snapshot(tunic)
     band = Layer("waistband", "knit")
@@ -236,7 +340,8 @@ def uniform_layers(man, J, spec, LM):
 
 
 S.uniform_layers = uniform_layers
-S.BUDGET["uniform"] = 2450 + 50
+S.BUDGET["uniform"] = (2450 + 50) if WHO != "usa" else 3600   # (the American's: finer, so the knit's edges, the yoke and
+#                                                                  the folds stay lines at a camera's close shot)
 
 _kit_usa = S.build_kit
 
@@ -1046,6 +1151,12 @@ def main():
                                                        ("headback", "idle", 0.5, (0.0, 0.0, 1.5), 1.2, 10.0, 200.0),
                                                        ("headside", "idle", 0.5, (0.0, 0.0, 1.5), 1.2, 4.0, 90.0)],
                     out_name=os.path.join(S.SCRATCH, "look", "sheet.png"))
+        elif step == "backlook":
+            # (his back as a camera behind the tank sees it: at the roof gun, from behind and above, near)
+            picture(info, fast=True, shots=[("roofback", "commander_roof_mg", 1.0, (0.05, 0.0, 1.25), 2.0, 22.0, 190.0),
+                                            ("roofback2", "commander_roof_mg", 1.0, (0.05, 0.0, 1.25), 1.6, 12.0, 150.0),
+                                            ("idleback", "idle", 0.5, (0.0, 0.0, 1.25), 1.6, 8.0, 200.0)],
+                    out_name=os.path.join(S.SCRATCH, "look", "back_sheet.png"))
         elif step == "export":
             export(info)
         elif step == "picture":

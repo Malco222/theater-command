@@ -45,7 +45,8 @@ BACKUP = "/home/user/art/looks/backup/"
 
 PAINT = {"tunic": 0, "trousers": 1, "boots": 2, "lower": 3, "straps": 4, "helmet": 5, "pack": 6, "skin": 7, "wood": 8,
          "steel": 9, "coat": 10, "coat_dark": 11, "leather": 12, "blanket": 13, "hoof": 14}
-CLOTH = {0, 1, 3, 4, 6, 10, 11, 13}          # (woven: fades, takes dust; webbing and leggings too)
+CLOTH = {0, 1, 3, 4, 6, 10, 11, 13, 38, 40}  # (woven: fades, takes dust; webbing and leggings too; and the files' own
+#                                            knit 38 and jacket or shirt 40: the tank commanders')
 LEGS = {1, 2, 3, 11}                         # (trousers, boots, leggings, a long coat's skirt: the mud's)
 GORE = {35, 36, 37}
 
@@ -66,7 +67,7 @@ DUST = (0.60, 0.54, 0.43)        # dry dust and dried mud (sRGB), and wet mud, t
 MUD = (0.27, 0.21, 0.15)
 SNOW_RGB = (0.92, 0.94, 0.97)
 WET_K = {0: 1.0, 1: 1.0, 3: 0.9, 4: 0.8, 6: 0.9, 10: 1.0, 11: 1.0, 13: 1.0, 2: 0.6, 12: 0.6, 14: 0.5, 5: 0.3, 7: 0.15,
-         8: 0.45, 9: 0.2}
+         8: 0.45, 9: 0.2, 38: 1.0, 40: 1.0}
 SNOW_K = {7: 0.1, 9: 0.5, 8: 0.7, 2: 0.8, 12: 0.8, 4: 0.85, 5: 1.0, 6: 1.0}
 GORE_VALUE = {"shade": 1.0, "shade_clean": 1.0, "dirt": 0.0, "dirt_wet": 0.0, "wet": 0.0, "snow": 0.0,
               "tint": np.ones(3)}
