@@ -224,6 +224,19 @@ export interface AfterCard {
   groups: { name: string; side: 'att' | 'def'; ftr: number; bmr: number; lostFtr: number; lostBmr: number; flew?: number; words: string }[];
 }
 
+/** Each side's aircraft lost on an after card, fighters and bombers apart. */
+export type AfterLost = Record<'att' | 'def', { ftr: number; bmr: number }>;
+
+/**
+ * The totals of an after card's rows, each side's fighters and bombers lost: the one place they are summed, so the
+ * totals the 3D game reads (AirFeed.cpp ReadAfter, after.lost) are always the rows' own sums (the lead, 09:12Z).
+ */
+export function afterLost(card: Pick<AfterCard, 'groups'>): AfterLost {
+  const out: AfterLost = { att: { ftr: 0, bmr: 0 }, def: { ftr: 0, bmr: 0 } };
+  for (const x of card.groups) { out[x.side].ftr += x.lostFtr; out[x.side].bmr += x.lostBmr; }
+  return out;
+}
+
 const FLIP: Record<VictoryLevel, VictoryLevel> = {
   'Heroic victory': 'Crushing defeat', 'Decisive victory': 'Decisive defeat', 'Close victory': 'Close defeat', 'Pyrrhic victory': 'Close defeat',
   'Close defeat': 'Close victory', 'Decisive defeat': 'Decisive victory', 'Crushing defeat': 'Heroic victory',
