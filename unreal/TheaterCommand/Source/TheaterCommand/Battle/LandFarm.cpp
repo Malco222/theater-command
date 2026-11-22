@@ -588,8 +588,12 @@ namespace LandScape
 						{
 							const Tone C = Tone{ static_cast<double>(M.Far.Colours[P].R), static_cast<double>(M.Far.Colours[P].G), static_cast<double>(M.Far.Colours[P].B) };
 							const double L = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
-							const Tone Bough = Varied(Rgb(40, 55, 45), 0.85 + 0.3 * Unit(Hash(Seed ^ 0x5E5, P)), 0.0);
-							const Tone T = L > 170.0 && Unit(Hash(Seed ^ 0x5E6, P)) < 0.34 ? C : L > 170.0 ? Bough : Mixed(C, Bough, 0.75);
+							// (the art director, 23:42Z: green-black, about 40,55,45 as seen with green at or over blue, one mass
+							// with snow flecks: the boughs written greener and with less blue than that, as the map read them a
+							// quarter darker and the sky's fill added blue (38,56,34 read 31,42,44), half the
+							// speckle and half the flecks of the first try, which read blue-black and static)
+							const Tone Bough = Varied(Rgb(50, 72, 36), 0.93 + 0.14 * Unit(Hash(Seed ^ 0x5E5, P)), 0.0);
+							const Tone T = L > 170.0 && Unit(Hash(Seed ^ 0x5E6, P)) < 0.17 ? C : L > 170.0 ? Bough : Mixed(C, Bough, 0.9);
 							M.Far.Colours[P] = LandField::Rgb8{ static_cast<uint8_t>(std::clamp(T.R, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.G, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.B, 0.0, 255.0)) };
 						}
 					break;
@@ -726,14 +730,28 @@ namespace LandScape
 				}
 				case 2:
 				{
-					// dry weed stalks: three or four stems from one foot, each with its seed head (a thistle's, a mugwort's)
+					// dry weed stalks: three or four stems from one foot, each with its seed head: a thistle's or a knapweed's
+					// round, a wild carrot's flat umbel on its spreading rays (the art director, 23:42Z: never a cube on a stick)
 					for (int B = 0; B < 4; ++B)
 					{
 						const double A = R.Range(0.0, 2.0 * Pi), Lean = R.Range(0.02, 0.12), High = R.Range(0.5, 0.85);
 						const double TX = Lean * std::cos(A), TY = Lean * std::sin(A);
 						W.Blade(0.0, 0.0, 0.0, TX, TY, High, 0.03, Rgb(112, 92, 64), Rgb(146, 124, 88));
 						W.Blade(0.0, 0.0, 0.0, -TY * 0.5, TX * 0.5, High * 0.92, 0.025, Rgb(112, 92, 64), Rgb(140, 118, 84));
-						W.Box(TX, TY, High - 0.03, 0.035, 0.035, 0.035, A, Rgb(96, 78, 58));
+						if (B % 2 == 0)
+						{
+							W.Bead(TX, TY, High + 0.005, R.Range(0.016, 0.024), R.Range(0.028, 0.04), Rgb(150, 132, 104), Rgb(104, 88, 64));
+						}
+						else
+						{
+							const double Half = R.Range(0.035, 0.05);
+							for (int H = 0; H < 6; ++H)
+							{
+								const double Ray = A + H * Pi / 3.0;
+								W.Blade(TX, TY, High - 0.04, TX + 0.9 * Half * std::cos(Ray), TY + 0.9 * Half * std::sin(Ray), High + 0.01, 0.008, Rgb(118, 98, 70), Rgb(140, 120, 88));
+							}
+							W.Bead(TX, TY, High + 0.012, Half, 0.012, Rgb(156, 138, 108), Rgb(112, 96, 72));
+						}
 					}
 					M.Paint = 2;
 					M.FarFrom = 60.0f;

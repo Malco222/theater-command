@@ -806,6 +806,7 @@ int main(int Argc, char** Argv)
 	if (const char* V = std::getenv("LAND_FIELD_LATLON")) std::sscanf(V, "%lf %lf", &F.Lat, &F.Lon);
 	if (const char* V = std::getenv("LAND_FIELD_SNOW")) F.Snow = std::atof(V);
 	if (const char* V = std::getenv("LAND_FIELD_TRIAL")) F.Trial = V; // (the looks on trial: Field::Trial)
+	if (const char* V = std::getenv("LAND_FIELD_WEATHER")) F.Weather = V; // (the campaign's weather word: "mud")
 	if (const char* V = std::getenv("LAND_FIELD_MONTH")) F.Month = std::atoi(V);
 	if (const char* V = std::getenv("LAND_FIELD_TERRAIN")) F.Terrain = V;
 	// The open steppe, where the recording lays it (field.steppe), and the east kit's models beside the recordings
@@ -2864,6 +2865,9 @@ int main(int Argc, char** Argv)
 		else if (G.SnowLying() > 0.0) // (under snow the grass is the snow's: marks in it, or on the grass where it shows)
 			Check(R.Pieces() > 2000 && ByKind[1] + ByKind[3] > 100, "tanks driven across the field leave their marks in the snow",
 				Fmt("%.0f pieces, %.0f in the snow or on grass through it", R.Pieces(), ByKind[1] + ByKind[3]));
+		else if (F.Weather == "mud") // (the thaw: a track tears the turf to mud, so none pressed on grass, all torn earth)
+			Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] == 0 && ByKind[3] >= 1, "tanks driven across the thaw's field leave their marks in corn and torn earth, none pressed on grass",
+				Fmt("%.0f pieces, %.0f in corn, %.0f torn earth, %.0f on grass", R.Pieces(), ByKind[2], ByKind[3], ByKind[1]));
 		else
 		Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] > 100, "tanks driven across the field leave their marks in corn and on grass",
 			Fmt("%.0f pieces, %.0f in corn, %.0f on grass", R.Pieces(), ByKind[2], ByKind[1]));

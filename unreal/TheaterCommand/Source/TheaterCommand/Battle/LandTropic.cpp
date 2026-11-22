@@ -87,7 +87,9 @@ namespace LandScape
 		{
 			if (P.size() < 2) return;
 			const V3 A = Norm(Across);
-			std::vector<uint32_t> L, R;
+			// (each face its own points, its normal leaning out of its own side, as Writer::Blade: a face seen from behind
+			// is lit as its front, so a back face given the front's normal drew near black: the kunai's dark stems)
+			std::vector<uint32_t> L, R, BL, BR;
 			for (size_t K = 0; K < P.size(); ++K)
 			{
 				const V3 Up = Norm(P[std::min(K + 1, P.size() - 1)] - P[K > 0 ? K - 1 : 0]);
@@ -98,15 +100,17 @@ namespace LandScape
 				const double H = 0.5 * Wide[K];
 				L.push_back(W.Vert(P[K].X - A.X * H, P[K].Y - A.Y * H, P[K].Z - A.Z * H, N.X, N.Y, N.Z, C));
 				R.push_back(W.Vert(P[K].X + A.X * H, P[K].Y + A.Y * H, P[K].Z + A.Z * H, N.X, N.Y, N.Z, C));
+				BL.push_back(W.Vert(P[K].X - A.X * H, P[K].Y - A.Y * H, P[K].Z - A.Z * H, -N.X, -N.Y, N.Z, C));
+				BR.push_back(W.Vert(P[K].X + A.X * H, P[K].Y + A.Y * H, P[K].Z + A.Z * H, -N.X, -N.Y, N.Z, C));
 			}
 			for (size_t K = 0; K + 1 < P.size(); ++K)
 			{
 				W.Tri(L[K], R[K], R[K + 1]);
-				W.Tri(R[K], L[K], R[K + 1]);
+				W.Tri(BR[K], BL[K], BR[K + 1]);
 				if (Wide[K + 1] > 1e-6)
 				{
 					W.Tri(L[K], R[K + 1], L[K + 1]);
-					W.Tri(R[K + 1], L[K], L[K + 1]);
+					W.Tri(BR[K + 1], BL[K], BL[K + 1]);
 				}
 			}
 		}

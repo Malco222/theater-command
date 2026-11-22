@@ -237,12 +237,12 @@
       }
     },
     "UK@desert": {
-      "about": "British infantry on the desert front (\"UK@desert\": LandMen takes army@front first): khaki drill shirt and shorts. STAND-IN: the Polish body (soldier_POL); the drill colour is OPEN for the art director; every other paint stands in from the American row.",
+      "about": "British infantry on the desert front (\"UK@desert\": LandMen takes army@front first): khaki drill shirt and shorts. STAND-IN: the Polish body (soldier_POL); the drill colour the art director's (23:42Z); every other paint stands in from the American row.",
       "standIn": "POL",
       "helmets": "own",
       "paints": {
-        "tunic": { "rgb": "A8946A", "about": "OPEN: khaki drill has no art director colour yet; A8946A is a stand-in for the art director to rule." },
-        "trousers": { "rgb": "A8946A", "about": "OPEN: khaki drill has no art director colour yet; A8946A is a stand-in for the art director to rule." },
+        "tunic": { "rgb": "B8A37A", "about": "Art director 22 Nov 23:42Z: sandy khaki drill, a touch paler than the first A8946A; written with extra colour for the grade, so checked in the first game stills." },
+        "trousers": { "rgb": "B8A37A", "about": "As the shirt (art director 23:42Z)." },
         "boots": { "rgb": "5A4030", "about": "stand-in: from the American row, not yet ruled for this army" },
         "lower": { "rgb": "5A4F36", "about": "stand-in: from the American row, not yet ruled for this army" },
         "straps": { "rgb": "958B65", "about": "stand-in: from the American row, not yet ruled for this army" },
@@ -325,11 +325,11 @@
       }
     },
     "USA@pacific": {
-      "about": "US infantry and Marines on the Pacific front (\"USA@pacific\": LandMen takes army@front first): the American files in the art director's US cloth; the twill green is OPEN for the art director. Every other paint as the American row.",
+      "about": "US infantry and Marines on the Pacific front (\"USA@pacific\": LandMen takes army@front first): the American files in the art director's sage-green herringbone twill (23:42Z). Every other paint as the American row.",
       "helmets": "file",
       "paints": {
-        "tunic": { "rgb": "78724C", "about": "Art director: the art director's unit table (art-director/generic-units/unit-table.json, cloth \"as built\"). The Pacific's herringbone twill green waits for the art director's own value (OPEN)." },
-        "trousers": { "rgb": "78724C", "about": "As the jacket (OPEN for the twill green)." },
+        "tunic": { "rgb": "667050", "about": "Art director 22 Nov 23:42Z: sage-green herringbone twill (HBT), green above red, not the olive-khaki wool; written with extra colour for the grade, so checked in the first game stills." },
+        "trousers": { "rgb": "667050", "about": "As the jacket, HBT (art director 23:42Z)." },
         "boots": { "rgb": "5A4030", "about": "Type II/III service shoes, russet roughout leather dubbed and worn dark. (In the Polish file the eyes share this paint.)" },
         "lower": { "rgb": "5A4F36", "about": "M1938 dismounted leggings, khaki duck canvas, as worn in the field: dubbed, wet and mud-stained to a dark drab. The pale A99D76 stood out too bright in the 21 Nov stills (the art director), so the soldiers thread darkened all six American files to 5A4F36 and this matches them." },
         "straps": { "rgb": "958B65", "about": "Cotton web gear (M1923 cartridge belt, M1928 haversack straps, suspenders): khaki in 1944, turning towards olive drab no. 7 late in the year." },

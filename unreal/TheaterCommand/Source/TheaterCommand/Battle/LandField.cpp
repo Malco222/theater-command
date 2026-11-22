@@ -590,6 +590,8 @@ namespace LandField
 		std::unique_ptr<LandScape::Snow> SnowLay;
 		double SnowIs = 0.0;
 		uint8_t PlainFx = 0;
+		/** The thaw's wet ground drawn (on trial, "wet", where Field::Weather lays the mud): Wetted. */
+		bool bWet = false;
 		struct RegionHost;
 		/** A place as a region sees it (the parcel, its edges, the lanes and ways; with LandField's noises if bNoise). */
 		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
@@ -684,6 +686,13 @@ namespace LandField
 
 		// meshes
 		Col GroundColour(double X, double Y) const;
+		/** The thaw's wet ground over a colour where bWet: a fifth darker, sodden, and mud standing in low patches. */
+		Col Wetted(Col C, double X, double Y) const
+		{
+			if (!bWet) return C;
+			const double Puddle = Smooth(0.25, 0.6, Noise(X / 23.0, Y / 23.0, Seed ^ 0x3E7));
+			return Mixed(Varied(C, 0.8, 0.0), Rgb(66, 58, 44), 0.35 * Puddle);
+		}
 		Col GroundBare(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
 		Col SteppeColour(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
 		Col FarColour(double X, double Y) const;
@@ -1140,6 +1149,7 @@ namespace LandField
 		if (Rg) PlainFx = static_cast<uint8_t>(std::clamp(Rg->Fx("open", PlainFx), 0, 7));
 		if (SnowIs >= 0.5) PlainFx = 6;
 		if (Fd.Weather == "mud" && PlainFx == 0) PlainFx = 4; // (the thaw's mud over open earth: Field::Weather)
+		bWet = PlainFx == 4 && Fd.Weather == "mud" && !Fd.Trial.empty() && Fd.Tried("wet"); // (its look, on trial)
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
 		for (size_t K = 0; K < Fd.Grounds.size(); ++K)
@@ -4140,12 +4150,12 @@ namespace LandField
 	 */
 	Col Ground::Impl::GroundColour(double X, double Y) const
 	{
-		if (!SnowLay) return GroundBare(X, Y);
-		if (!InRaster(X, Y)) return Snowed(GroundBare(X, Y), X, Y, false);
+		if (!SnowLay) return Wetted(GroundBare(X, Y), X, Y);
+		if (!InRaster(X, Y)) return Snowed(Wetted(GroundBare(X, Y), X, Y), X, Y, false);
 		// (under snow the place read once, for the ground's colour and the snow's both: read twice, the snow cost as much
 		// as the ground under it, and the track marks ask this colour at every step of every tank)
 		const LandScape::Spot S = SpotAt(X, Y, true);
-		const Col C = GroundBare(X, Y, &S);
+		const Col C = Wetted(GroundBare(X, Y, &S), X, Y);
 		const LandScape::Tone T = SnowLay->Over(LandScape::Tone{ C.R, C.G, C.B }, S);
 		return Col{ T.R, T.G, T.B };
 	}
@@ -5168,7 +5178,7 @@ namespace LandField
 				// higher than asked, so a wall inside the kit's stone stays inside it)
 				auto Fallen = [&](size_t I) {
 					const double Lane = static_cast<double>(Wr.Key % 977) + 0.5;
-					return -0.22 * Smooth(-0.1, 0.55, Noise(static_cast<double>(I) / 3.0, Lane, Seed ^ 0x70B)) - 0.03 * Unit(Hash(Wr.Key ^ 0x70A, I));
+					return -0.05 - 0.2 * Smooth(-0.3, 0.5, Noise(static_cast<double>(I) / 3.0, Lane, Seed ^ 0x70B)) - 0.06 * Unit(Hash(Wr.Key ^ 0x70A, I));
 				};
 				const double JagA = bBroken ? Fallen(K) : 0.0, JagB = bBroken ? Fallen(K + 1) : 0.0;
 				const double TA = GA + Wr.H[K] + JagA, TB = GB + Wr.H[K + 1] + JagB;
@@ -5186,20 +5196,23 @@ namespace LandField
 					};
 					const V2 Mid = (A + Bp) * 0.5;
 					const double GM = 0.5 * (GA + GB);
-					// (and a stone gone from the top here and there: one length in seven)
-					double TM = 0.5 * (TA + TB) - 0.02 * Unit(Hash(Wr.Key ^ 0x70F, K));
-					if (Unit(Hash(Wr.Key ^ 0x70E, K)) < 1.0 / 7.0) TM -= 0.15 + 0.15 * Unit(Hash(Wr.Key ^ 0x710, K));
+					// (and a stone gone from the top here and there: one length in four)
+					double TM = 0.5 * (TA + TB) - 0.04 * Unit(Hash(Wr.Key ^ 0x70F, K));
+					if (Unit(Hash(Wr.Key ^ 0x70E, K)) < 0.25) TM -= 0.12 + 0.16 * Unit(Hash(Wr.Key ^ 0x710, K));
 					TM = std::max(TM, GM + 0.35);
 					const V2 Pt[3] = { A, Mid, Bp };
 					const double Gd[3] = { GA, GM, GB }, Tp[3] = { TA, TM, TB };
 					const Col Cs[3] = { StoneAt(2 * K), StoneAt(2 * K + 1), StoneAt(2 * K + 2) };
+					// (the face's foot and top each their own stone's tone, crossing along it, the foot darker: no smooth slab,
+					// and no more triangles than a plain broken wall; a face in two courses read 1.73 million near, over 1.5)
+					const Col Us[3] = { StoneAt(0x40000 + 2 * K), StoneAt(0x40000 + 2 * K + 1), StoneAt(0x40000 + 2 * K + 2) };
 					for (int Half = 0; Half < 2; ++Half)
 						for (int S = -1; S <= 1; S += 2)
 						{
 							const V2 O = N * static_cast<double>(S), P0 = Pt[Half], P1 = Pt[Half + 1];
-							const Col F0 = Cs[Half], F1 = Cs[Half + 1];
+							const Col F0 = Cs[Half], F1 = Cs[Half + 1], U0 = Us[Half], U1 = Us[Half + 1];
 							B.Quad(V3{ P0.X + O.X, P0.Y + O.Y, Gd[Half] - 0.3 }, V3{ P1.X + O.X, P1.Y + O.Y, Gd[Half + 1] - 0.3 }, V3{ P1.X + O.X, P1.Y + O.Y, Tp[Half + 1] - 0.08 },
-								V3{ P0.X + O.X, P0.Y + O.Y, Tp[Half] - 0.08 }, Varied(F0, 0.8, 0.0), Varied(F1, 0.8, 0.0), F1, F0, V3{ O.X, O.Y, 0.0 });
+								V3{ P0.X + O.X, P0.Y + O.Y, Tp[Half] - 0.08 }, Varied(F0, 0.7, 0.0), Varied(F1, 0.7, 0.0), U1, U0, V3{ O.X, O.Y, 0.0 });
 							B.Quad(V3{ P0.X + O.X, P0.Y + O.Y, Tp[Half] - 0.08 }, V3{ P1.X + O.X, P1.Y + O.Y, Tp[Half + 1] - 0.08 }, V3{ P1.X, P1.Y, Tp[Half + 1] + 0.04 },
 								V3{ P0.X, P0.Y, Tp[Half] + 0.04 }, Varied(F0, 1.08, 0.0), Varied(F1, 1.08, 0.0), Varied(F1, 1.08, 0.0), Varied(F0, 1.08, 0.0), V3{ O.X, O.Y, 1.2 });
 						}

@@ -420,6 +420,9 @@ namespace LandScape
 		void Box(double CX, double CY, double CZ, double HX, double HY, double HZ, double Yaw, const Tone& C, bool bUnder = false);
 		/** A blade or a leaf: a thin tapered quad from (X0,Y0,Z0) up to (X1,Y1,Z1), Width at its foot, both faces. */
 		void Blade(double X0, double Y0, double Z0, double X1, double Y1, double Z1, double Width, const Tone& Foot, const Tone& Tip);
+		/** A small round thing (a seed head, a bud): its middle, Rad round and Tall high, Top its colour above and Foot
+		 * below; its normals out. */
+		void Bead(double X, double Y, double Z, double Rad, double Tall, const Tone& Top, const Tone& Foot);
 		/** A lumpy rock: a squashed icosphere-like ball of Radius, Height high, its points pushed by a noise of Seed. */
 		void Rock(double CX, double CY, double Radius, double Height, uint64_t RockSeed, const Tone& Lit, const Tone& Under);
 	};

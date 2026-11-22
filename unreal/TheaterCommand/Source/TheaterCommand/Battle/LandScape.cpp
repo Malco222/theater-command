@@ -549,6 +549,24 @@ namespace LandScape
 		Tri(BB, BA, BC);
 	}
 
+	void Writer::Bead(double X, double Y, double Z, double Rad, double Tall, const Tone& Top, const Tone& Foot)
+	{
+		constexpr int Round = 6;
+		const uint32_t T = Vert(X, Y, Z + 0.5 * Tall, 0.0, 0.0, 1.0, Top);
+		const uint32_t B = Vert(X, Y, Z - 0.5 * Tall, 0.0, 0.0, -1.0, Foot);
+		uint32_t Ring[Round];
+		for (int K = 0; K < Round; ++K)
+		{
+			const double A = 2.0 * 3.14159265358979 * K / Round, CA = std::cos(A), SA = std::sin(A);
+			Ring[K] = Vert(X + Rad * CA, Y + Rad * SA, Z, CA, SA, 0.0, Mixed(Foot, Top, 0.55));
+		}
+		for (int K = 0; K < Round; ++K)
+		{
+			Tri(T, Ring[K], Ring[(K + 1) % Round]);
+			Tri(B, Ring[(K + 1) % Round], Ring[K]);
+		}
+	}
+
 	void Writer::Rock(double CX, double CY, double Radius, double Height, uint64_t RockSeed, const Tone& Lit, const Tone& Under)
 	{
 		// a ball of 6 rings by 8 round, squashed to its height, its foot sunk a little, each point pushed in or out
