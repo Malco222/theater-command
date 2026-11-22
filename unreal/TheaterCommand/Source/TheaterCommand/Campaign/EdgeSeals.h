@@ -638,40 +638,62 @@ namespace EdgeSeals
 		FCall CallOf(double Since, double Period = 2.4);
 
 		/**
-		 * A folded seal's count (ruling 64(g) as amended 08:55Z): a small tab of the date strip's paper between the
-		 * ribbon's tails, edged in its darker fold, laid over the tails under the disc, its figures in dark ink in the
-		 * kit's typed face (Courier Prime Bold, CampaignHUD's Typed) at CountPt. The tab lies wholly under the disc's foot
-		 * and its rim (TabTop), so the figures are never on the wax, and inside the seal's box, which stays 34 by 44: a
-		 * folded seal is the size of any other, and breathes and grows under the pointer as one.
+		 * A folded seal's count (ruling 64(g) as amended 08:55Z): a small tab of the date strip's paper laid over the
+		 * ribbon's tails under the disc, its figures in dark ink in the kit's typed face (Courier Prime Bold,
+		 * CampaignHUD's Typed) at CountPt. The tab lies wholly under the disc's foot and its rim (TabTop), so the figures
+		 * are never on the wax, and inside the seal's box, which stays 34 by 44: a folded seal is the size of any other,
+		 * and breathes and grows under the pointer as one.
 		 *
-		 * The face's measures, in ems (from the font file): a figure is FigureH tall at the least (the 5 and the 7; the
-		 * round ones stand a hair over), its ink FigureInk wide inside an advance of FigureAdvance, and the line Slate
-		 * measures runs from Ascent above the baseline to Descent below it. A Slate point is 4/3 of a unit (96 a
-		 * inch), so CountPt's em is CountPt * 4/3 units, and its figures FigurePx pixels tall on a screen of PxPerUnit:
-		 * 9.4 at 1441 by 878, the floor being 9 there.
+		 * The paper runs the tab's full height, from TabTop to the box's foot, so the figures stand on paper and on
+		 * nothing else: the tab is edged in the ribbon's darker fold at its two sides only (TabEdge, a line held to
+		 * 1.5 px), which parts it from the tails, and between the edge and the figures' ink lies TabPaper of paper at the
+		 * least. (Edged all round, the edge drawn inside the tab lay under the figures' tops and feet: 13 to 35% of their
+		 * ink was on it, by the screen.) So the tab is as wide as its figures, two edges and their paper, by the screen.
+		 * One figure stands over the tails' roots; two cover most of the tails, which is the art director's to rule on (the
+		 * two figures need about 19 units of ink, and the tails part by 7 to 15 below the disc). Three, for a run of a
+		 * hundred (which no month's card has), are drawn in a tab as wide as the box, their outer figures over its edges.
+		 *
+		 * The face's measures, in ems (from the font file, CourierPrime-Bold.ttf, 2048 to the em): the figures' ink runs
+		 * from FigureBottom (the round ones' overshoot) to FigureTop (the 1) about the baseline, FigureH in all, and is at
+		 * most FigureInk wide (the 4) inside an advance of FigureAdvance; the line Slate measures runs from Ascent above
+		 * the baseline to Descent below it (the face has no line gap). A Slate point is 4/3 of a unit (96 a inch), so
+		 * CountPt's em is CountPt * 4/3 units, and its figures FigurePx pixels tall on a screen of PxPerUnit: 9.8 at 1441
+		 * by 878, 12.1 at 1920 by 1080. The art director's floor of 9 px holds from a window 806 high up (FigureFloorHigh);
+		 * at 1024 by 768 they are 8.6 px, and how far down the floor reaches is the art director's to rule on.
+		 * CampaignHUD's mount line asks Typed for CountPt (13.5): the layer takes the face as it is given (the test reads
+		 * the mount line and holds the two to each other).
 		 */
 		constexpr double TabTop = 32.4;
 		constexpr double TabBottom = BoxH;
-		constexpr double TabPad = 1.4; // the paper either side of the figures' ink
+		constexpr double TabPaper = 1.0; // the paper between a side's edge and the figures' ink, at the least
 		constexpr double TabRound = 1.6;
 		constexpr double CountPt = 13.5;
-		constexpr double FigureH = 0.58;
-		constexpr double FigureInk = 0.47;
+		constexpr double FigureTop = 0.592;
+		constexpr double FigureBottom = -0.011;
+		constexpr double FigureH = FigureTop - FigureBottom;
+		constexpr double FigureInk = 0.48;
 		constexpr double FigureAdvance = 0.6;
 		constexpr double Ascent = 0.78125;
 		constexpr double Descent = 0.341796875;
-		constexpr int CountMostFigures = 3; // the box takes three figures' tab; a run is never so long
+		constexpr int CountMostFigures = 3; // a run is never so long; a longer count is drawn in the tab of three
 
 		/** The count's em, in units. */
 		constexpr double CountEm() { return CountPt * 4.0 / 3.0; }
-		/** How far above the middle of its line, as Slate measures it, a figure's middle stands, in units. */
+		/** How far above the middle of its line, as Slate measures it, the figures' ink has its middle, in units: the line is set this much below the tab's middle. */
 		double FigureLift();
-		/** The tab for a count of Figures figures (1 to CountMostFigures), centred under the disc. */
-		FBox TabOf(int Figures);
-		/** Where the figures' ink lies on it: centred in the tab. */
-		FBox FiguresOf(int Figures);
-		/** How tall the figures stand on a screen of PxPerUnit pixels to a unit. */
+		/** The fold-coloured edge at each side of the tab, on a screen of PxPerUnit: a unit, held to 1.5 px. */
+		double TabEdge(double PxPerUnit);
+		/**
+		 * The tab for a count of Figures figures (1 to CountMostFigures) on a screen of PxPerUnit, centred under the
+		 * disc: the figures' ink, TabPaper of paper and TabEdge of edge either side, as wide as the seal's box at the most.
+		 */
+		FBox TabOf(int Figures, double PxPerUnit);
+		/** Where the figures' ink lies on it: centred in the tab, as wide as Figures figures, FigureH tall. */
+		FBox FiguresOf(int Figures, double PxPerUnit);
+		/** How tall the figures' ink stands on a screen of PxPerUnit pixels to a unit. */
 		double FigurePx(double PxPerUnit);
+		/** The lowest window, in pixels high, from which the figures stand 9 px tall or more (a unit is the window's height over 972). */
+		double FigureFloorHigh();
 		/** How many figures a count has. */
 		int FiguresIn(int Count);
 	}

@@ -1489,27 +1489,38 @@ namespace EdgeSeals
 
 		double FigureLift()
 		{
-			// (the line's middle, and the middle of a figure standing on its baseline, both from the line's top)
-			return ((Ascent + Descent) * 0.5 - (Ascent - FigureH * 0.5)) * CountEm();
+			// (the line's middle, and the middle of the figures' ink standing on its baseline, both from the line's top)
+			return ((Ascent + Descent) * 0.5 - (Ascent - (FigureTop + FigureBottom) * 0.5)) * CountEm();
 		}
 
-		FBox TabOf(int Figures)
+		double TabEdge(double PxPerUnit)
+		{
+			return Stroke(1.0, PxPerUnit);
+		}
+
+		FBox TabOf(int Figures, double PxPerUnit)
 		{
 			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
-			const double HalfW = ((FigureInk + FigureAdvance * (Shown - 1)) * CountEm()) * 0.5 + TabPad;
+			const double HalfW = std::min(((FigureInk + FigureAdvance * (Shown - 1)) * CountEm()) * 0.5 + TabPaper + TabEdge(PxPerUnit), BoxW * 0.5);
 			return FBox{ MidX - HalfW, TabTop, MidX + HalfW, TabBottom };
 		}
 
-		FBox FiguresOf(int Figures)
+		FBox FiguresOf(int Figures, double PxPerUnit)
 		{
-			const FBox Tab = TabOf(Figures);
-			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * CountEm() * 0.5;
-			return FBox{ Tab.MinX + TabPad, Middle - HalfH, Tab.MaxX - TabPad, Middle + HalfH };
+			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
+			const FBox Tab = TabOf(Shown, PxPerUnit);
+			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * CountEm() * 0.5, HalfW = (FigureInk + FigureAdvance * (Shown - 1)) * CountEm() * 0.5;
+			return FBox{ MidX - HalfW, Middle - HalfH, MidX + HalfW, Middle + HalfH };
 		}
 
 		double FigurePx(double PxPerUnit)
 		{
 			return FigureH * CountEm() * PxPerUnit;
+		}
+
+		double FigureFloorHigh()
+		{
+			return std::ceil(9.0 / (FigureH * CountEm()) * 972.0);
 		}
 
 		int FiguresIn(int Count)

@@ -171,7 +171,7 @@ namespace
 		TFunction<void(TArray<FSlateRect>&)> KeepOffOf;
 		TArray<FSlateRect> KeepOff;
 		FSlateFontInfo CountFace;
-		/** A folded seal's count: the kit's typed face, bold, at EdgeSeals::Look::CountPt (its figures 9 px tall or more at 1441 by 878). */
+		/** A folded seal's count: the kit's typed face, bold, as the HUD gives it (at EdgeSeals::Look::CountPt: its figures 9 px tall or more from a window 806 high). */
 		FSlateFontInfo TabFace;
 
 		/** The board's laying these are for: a new one slides the seals in again. */
@@ -500,15 +500,15 @@ namespace
 			{
 				Pen.Ring(Layer + 1, SealMidX, SealMidY, SealDiscR + 2.2, 1.5, SealLitBrass);
 			}
-			// A folded run's count (ruling 64(g) as amended 08:55Z): a tab of the date strip's paper between the tails, wholly
-			// under the disc's foot, so that its dark figures are never on the wax. Laid last, over the tails and the
+			// A folded run's count (ruling 64(g) as amended 08:55Z): a tab of the date strip's paper over the tails' roots,
+			// wholly under the disc's foot, so that its dark figures are never on the wax. Laid last, over the tails and the
 			// pointer's ring; on the seal's own face, so it breathes and grows with it, and the seal keeps its size.
 			const FEdgeNewsLaid::FNow& Here = Laid->Seals[SealSlot];
 			if (!Here.bRest && !Here.AlikeCount.IsEmpty())
 			{
 				PaintTab(Pen, Layer + 2, Here.AlikeCount, Shown, PxPerUnit);
 			}
-			return Layer + 4;
+			return Layer + 5;
 		}
 
 	private:
@@ -544,23 +544,27 @@ namespace
 #endif
 
 		/**
-		 * A folded seal's tab and its count (EdgeSeals::Look::TabOf): the paper edged in the ribbon's fold (no line under
-		 * 1.5 px), the figures in ink-900 in the typed face, bold, centred on the tab. Slate places text by its line, which
-		 * runs from the face's ascent to its descent, so the line is set FigureLift below the tab's middle for the figures'
-		 * own middle to stand on it.
+		 * A folded seal's tab and its count (EdgeSeals::Look::TabOf, on this screen): the ribbon's fold the tab's whole
+		 * width, and over it the paper, short of it by the edge (TabEdge, no line under 1.5 px) at each side and the tab's
+		 * full height, so the figures stand on paper alone; the figures in ink-900 in the typed face, bold, at the size
+		 * the HUD gives it (EdgeSeals::Look::CountPt), centred on the tab. Slate places text by its line, which runs from
+		 * the face's ascent to its descent, so the line is set FigureLift below the tab's middle for the figures' own ink
+		 * to have its middle there. Three layers, from Layer.
 		 */
 		void PaintTab(const FSealPen& Pen, int32 Layer, const FString& Count, float Shown, double PxPerUnit) const
 		{
-			const EdgeSeals::FBox Tab = EdgeSeals::Look::TabOf(Count.Len());
-			Pen.Slip(Layer, FVector2D(Tab.MinX, Tab.MinY), FVector2D(Tab.MaxX - Tab.MinX, Tab.MaxY - Tab.MinY), EdgeSeals::Look::TabRound, SealRibbon.CopyWithNewOpacity(Shown),
-				SealRibbonFold.CopyWithNewOpacity(Shown), EdgeSeals::Look::Stroke(1.0, PxPerUnit));
+			const EdgeSeals::FBox Tab = EdgeSeals::Look::TabOf(Count.Len(), PxPerUnit);
+			const double Edge = EdgeSeals::Look::TabEdge(PxPerUnit), Round = EdgeSeals::Look::TabRound;
+			const FLinearColor Fold = SealRibbonFold.CopyWithNewOpacity(Shown), Paper = SealRibbon.CopyWithNewOpacity(Shown);
+			Pen.Slip(Layer, FVector2D(Tab.MinX, Tab.MinY), FVector2D(Tab.MaxX - Tab.MinX, Tab.MaxY - Tab.MinY), Round, Fold, Fold, 0.0);
+			Pen.Slip(Layer + 1, FVector2D(Tab.MinX + Edge, Tab.MinY), FVector2D(Tab.MaxX - Tab.MinX - 2.0 * Edge, Tab.MaxY - Tab.MinY), FMath::Max(Round - Edge, 0.0), Paper, Paper, 0.0);
 			if (!FSlateApplication::IsInitialized())
 			{
 				return;
 			}
 			const FVector2D Size = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Count, Laid->TabFace);
 			const FVector2D Middle((Tab.MinX + Tab.MaxX) * 0.5, (Tab.MinY + Tab.MaxY) * 0.5 + EdgeSeals::Look::FigureLift());
-			FSlateDrawElement::MakeText(Pen.Out, Layer + 1, Pen.On.ToPaintGeometry(Size, FSlateLayoutTransform(Middle - Size * 0.5)), Count, Laid->TabFace, ESlateDrawEffect::None, SealTabInk.CopyWithNewOpacity(Shown));
+			FSlateDrawElement::MakeText(Pen.Out, Layer + 2, Pen.On.ToPaintGeometry(Size, FSlateLayoutTransform(Middle - Size * 0.5)), Count, Laid->TabFace, ESlateDrawEffect::None, SealTabInk.CopyWithNewOpacity(Shown));
 		}
 
 		/** The sign or the mark in the seal's hollow, moved (DX, DY), in one ink, its strokes held to 1.5 px at PxPerUnit. */
@@ -997,9 +1001,7 @@ TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerContro
 	Laid->KeepOffOf = MoveTemp(KeepOffOf);
 	Laid->KeepOff.Reserve(32);
 	Laid->CountFace = CountFace;
-	// (the tab's count at the size EdgeSeals' test holds to 9 px figures at 1441 by 878, whatever size the face came at)
 	Laid->TabFace = TabFace;
-	Laid->TabFace.Size = static_cast<float>(EdgeSeals::Look::CountPt);
 	// (the photographer's "-TheaterSeal=open:N,hover:N,slide", read once: EdgeSeals::ReadSealAsk)
 	FString Asked;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeal="), Asked, false))

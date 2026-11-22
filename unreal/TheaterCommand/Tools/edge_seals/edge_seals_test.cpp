@@ -1849,31 +1849,90 @@ static void TestFold()
 		std::printf("(the real months' %d folded seals: %d name their items, the rest give the first item's words)\n", Told, Named);
 	}
 
-	// 6. The tab: the date strip's paper between the tails, under the disc's foot (never on the wax, nor its figures),
-	// inside the seal's box (a folded seal is the size of any other), its figures 9 px tall or more at 1441 by 878.
+	// 6. The tab: the date strip's paper over the tails, under the disc's foot (never on the wax, nor its figures), inside
+	// the seal's box (a folded seal is the size of any other), on every screen from 600 to 2160 high: its figures on
+	// paper alone, TabPaper of it between their ink and each side's edge (the edge at its sides only, held to 1.5 px), and
+	// 9 px tall or more from a window FigureFloorHigh high.
 	{
-		bool bUnder = true;
-		for (int Figures = 1; Figures <= Look::CountMostFigures; ++Figures)
+		const double Highs[] = { 600.0, 768.0, 806.0, 878.0, 972.0, 1080.0, 1440.0, 1786.0, 2160.0 };
+		bool bUnder = true, bPaper = true, bEdge = true, bCentred = true;
+		for (const double High : Highs)
 		{
-			const FBox Tab = Look::TabOf(Figures), Ink = Look::FiguresOf(Figures);
-			bUnder = bUnder && Tab.MinX >= 0.0 && Tab.MaxX <= Look::BoxW && Tab.MinY >= 0.0 && Tab.MaxY <= Look::BoxH;
-			bUnder = bUnder && Tab.MinY > Look::MidY + Look::DiscR && Ink.MinY > Look::MidY + Look::DiscR;
-			bUnder = bUnder && Ink.MinX >= Tab.MinX && Ink.MaxX <= Tab.MaxX && Ink.MinY >= Tab.MinY && Ink.MaxY <= Tab.MaxY;
-			bUnder = bUnder && std::fabs((Tab.MinX + Tab.MaxX) * 0.5 - Look::MidX) < 1e-9;
-			for (const Look::FRun& Run : Look::Runs)
+			const double P = High / 972.0;
+			for (int Figures = 1; Figures <= Look::CountMostFigures; ++Figures)
 			{
-				const double Turn = Run.Degrees * 3.141592653589793 / 180.0;
-				bUnder = bUnder && Look::MidY + Run.Out * std::sin(Turn) + Run.Radius < Tab.MinY;
+				const FBox Tab = Look::TabOf(Figures, P), Ink = Look::FiguresOf(Figures, P);
+				const double Edge = Look::TabEdge(P);
+				bUnder = bUnder && Tab.MinX >= 0.0 && Tab.MaxX <= Look::BoxW && Tab.MinY >= 0.0 && Tab.MaxY <= Look::BoxH;
+				bUnder = bUnder && Tab.MinY > Look::MidY + Look::DiscR && Ink.MinY > Look::MidY + Look::DiscR;
+				for (const Look::FRun& Run : Look::Runs)
+				{
+					const double Turn = Run.Degrees * 3.141592653589793 / 180.0;
+					bUnder = bUnder && Look::MidY + Run.Out * std::sin(Turn) + Run.Radius < Tab.MinY;
+				}
+				// (the paper runs the tab's full height and lies between the two edges: the ink is on it, top to foot, with
+				// TabPaper of it each side of one or two figures, which is all a month's run ever has; three, for a run of a
+				// hundred, are drawn in a tab the box's width, inside it)
+				bPaper = bPaper && Ink.MinY >= Tab.MinY && Ink.MaxY <= Tab.MaxY;
+				bPaper = bPaper && (Figures > 2 ? Ink.MinX >= Tab.MinX && Ink.MaxX <= Tab.MaxX && Tab.MaxX - Tab.MinX >= Look::BoxW - 1e-9
+					: Ink.MinX - (Tab.MinX + Edge) >= Look::TabPaper - 1e-9 && (Tab.MaxX - Edge) - Ink.MaxX >= Look::TabPaper - 1e-9);
+				bEdge = bEdge && Edge * P >= 1.5 - 1e-9 && Edge >= 1.0;
+				bCentred = bCentred && std::fabs((Tab.MinX + Tab.MaxX) * 0.5 - Look::MidX) < 1e-9 && std::fabs((Ink.MinX + Ink.MaxX) * 0.5 - Look::MidX) < 1e-9;
+				bCentred = bCentred && std::fabs((Ink.MinY + Ink.MaxY) * 0.5 - (Tab.MinY + Tab.MaxY) * 0.5) < 1e-9;
 			}
 		}
 		CHECK(bUnder);
+		CHECK(bPaper);
+		CHECK(bEdge);
+		CHECK(bCentred);
 		CHECK(Look::FiguresIn(9) == 1 && Look::FiguresIn(10) == 2 && Look::FiguresIn(99) == 2 && Look::FiguresIn(100) == 3);
-		const double Small = 878.0 / 972.0, Full = 1080.0 / 972.0;
-		CHECK(Look::FigurePx(Small) >= 9.0 && Look::FigurePx(Full) > Look::FigurePx(Small));
-		// (the figures stand in the middle of the tab: the text is placed by its line's middle, FigureLift above theirs)
-		CHECK(Look::FigureLift() > 0.0 && Look::FigureLift() < 0.1 * Look::CountEm());
-		std::printf("(the count's figures %.2f px tall at 1441 by 878, %.2f at 1920 by 1080; the tab %.1f by %.1f units for one figure)\n", Look::FigurePx(Small), Look::FigurePx(Full),
-			Look::TabOf(1).MaxX - Look::TabOf(1).MinX, Look::TabOf(1).MaxY - Look::TabOf(1).MinY);
+		// The layer sets the count's line, from the face's ascent to its descent, with its middle FigureLift below the
+		// tab's middle: the figures' ink, FigureTop above the baseline to FigureBottom, is then where FiguresOf has it.
+		{
+			const double Em = Look::CountEm(), Lift = Look::FigureLift();
+			const FBox Tab = Look::TabOf(2, 1.0), Ink = Look::FiguresOf(2, 1.0);
+			const double LineTop = (Tab.MinY + Tab.MaxY) * 0.5 + Lift - (Look::Ascent + Look::Descent) * Em * 0.5;
+			const double InkTop = LineTop + (Look::Ascent - Look::FigureTop) * Em, InkFoot = LineTop + (Look::Ascent - Look::FigureBottom) * Em;
+			CHECK(std::fabs(InkTop - Ink.MinY) < 1e-9 && std::fabs(InkFoot - Ink.MaxY) < 1e-9);
+			// (the face's figures stand a little above the middle of its line, which reaches further up than down)
+			CHECK(Lift > 0.0 && Lift < 0.1 * Em);
+		}
+		// The art director's floor: 9 px figures at 1441 by 878 and from FigureFloorHigh up, not a pixel lower.
+		const double Floor = Look::FigureFloorHigh();
+		CHECK(Look::FigurePx(878.0 / 972.0) >= 9.0 && Look::FigurePx(Floor / 972.0) >= 9.0 && Look::FigurePx((Floor - 1.0) / 972.0) < 9.0);
+		CHECK(Look::FigurePx(1080.0 / 972.0) > Look::FigurePx(878.0 / 972.0));
+		// How much of the ribbon's tails shows round the tab (not under the disc, nor under the tab), for the art
+		// director: one figure leaves most of each tail; two or more cover most of what the disc leaves.
+		double Shows[3] = { 0.0, 0.0, 0.0 };
+		for (int Figures = 1; Figures <= 3; ++Figures)
+		{
+			const FBox Tab = Look::TabOf(Figures, 878.0 / 972.0);
+			int Out = 0, Seen = 0;
+			for (const Look::FTail& Tail : Look::Tails)
+			{
+				const double Turn = Tail.Degrees * 3.141592653589793 / 180.0, AlongX = std::cos(Turn), AlongY = std::sin(Turn);
+				for (int I = 0; I <= 160; ++I)
+				{
+					for (int J = 0; J <= 40; ++J)
+					{
+						const double Along = (I / 160.0 - 0.5) * Tail.Long, Across = (J / 40.0 - 0.5) * Tail.Thick;
+						const double X = Tail.X + Along * AlongX - Across * AlongY, Y = Tail.Y + Along * AlongY + Across * AlongX;
+						if (std::hypot(X - Look::MidX, Y - Look::MidY) <= Look::DiscR)
+						{
+							continue;
+						}
+						++Out;
+						Seen += X >= Tab.MinX && X <= Tab.MaxX && Y >= Tab.MinY && Y <= Tab.MaxY ? 0 : 1;
+					}
+				}
+			}
+			Shows[Figures - 1] = Out > 0 ? static_cast<double>(Seen) / Out : 0.0;
+		}
+		CHECK(Shows[0] >= 0.5 && Shows[1] < Shows[0]);
+		std::printf("(the count's figures %.2f px tall at 1441 by 878, %.2f at 1920 by 1080, %.2f at 1024 by 768; 9 px from a window %.0f high; the tab %.1f by %.1f units for one figure at 1441 by 878;"
+			" of the tails clear of the disc %.0f%% shows round one figure's tab, %.0f%% round two figures', %.0f%% round three)\n",
+			Look::FigurePx(878.0 / 972.0), Look::FigurePx(1080.0 / 972.0), Look::FigurePx(768.0 / 972.0), Floor, Look::TabOf(1, 878.0 / 972.0).MaxX - Look::TabOf(1, 878.0 / 972.0).MinX,
+			Look::TabOf(1, 878.0 / 972.0).MaxY - Look::TabOf(1, 878.0 / 972.0).MinY, Shows[0] * 100.0, Shows[1] * 100.0, Shows[2] * 100.0);
 	}
 }
 
@@ -3124,6 +3183,51 @@ static void TestSealSigns(const char* Folder)
 	CHECK(bStray);
 }
 
+/**
+ * The count's face as the HUD gives it: the layer takes TabFace as it comes (it never sets its size), so the HUD's mount
+ * line (CampaignHUD.cpp, the call to MakeEdgeNewsLayer) must ask the kit's typed face, bold, at Look::CountPt, the size
+ * the tab and its 9 px floor are measured for. The source is found from the order signs' folder (Content/CityOrders).
+ */
+static void TestCountFace(const char* Folder)
+{
+	if (!Folder)
+	{
+		std::printf("(the order signs' folder was not given: the HUD's mount line was not read)\n");
+		return;
+	}
+	const std::filesystem::path Hud = std::filesystem::path(Folder) / ".." / ".." / "Source" / "TheaterCommand" / "Campaign" / "CampaignHUD.cpp";
+	std::FILE* File = std::fopen(Hud.string().c_str(), "rb");
+	CHECK(File != nullptr);
+	if (!File)
+	{
+		return;
+	}
+	std::string Text;
+	char Block[4096];
+	for (size_t Got; (Got = std::fread(Block, 1, sizeof(Block), File)) > 0;)
+	{
+		Text.append(Block, Got);
+	}
+	std::fclose(File);
+	int Mounts = 0;
+	bool bFace = false;
+	for (size_t At = Text.find("MakeEdgeNewsLayer("); At != std::string::npos; At = Text.find("MakeEdgeNewsLayer(", At + 1))
+	{
+		++Mounts;
+		const size_t LineEnd = Text.find('\n', At);
+		const std::string Line = Text.substr(At, LineEnd == std::string::npos ? std::string::npos : LineEnd - At);
+		const size_t Typed = Line.rfind("Typed(");
+		if (Typed == std::string::npos)
+		{
+			continue;
+		}
+		char* After = nullptr;
+		const double Size = std::strtod(Line.c_str() + Typed + 6, &After);
+		bFace = std::fabs(Size - Look::CountPt) < 1e-6 && After != nullptr && std::string(After).rfind("f, true)", 0) == 0;
+	}
+	CHECK(Mounts == 1 && bFace);
+}
+
 int main(int ArgCount, char** Args)
 {
 	TestItems();
@@ -3139,6 +3243,7 @@ int main(int ArgCount, char** Args)
 	TestSealAsk();
 	TestSwords();
 	TestFold();
+	TestCountFace(ArgCount > 1 ? Args[1] : nullptr);
 	TestCuts();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
