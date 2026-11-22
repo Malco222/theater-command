@@ -75,6 +75,11 @@ export interface LiveDelta {
   views: Record<string, unknown>[];
   phases: { b: number; ph: [number, string, number | null, number | null][] }[];
   contact: number | null;
+  /**
+   * Hedge cutters: the gaps begun since the last delta that the player may know of (his own, and the enemy's he knew as
+   * it began), each once, as the 3D field reads a recording's cuts: begun at t0, open as a gateway at t1.
+   */
+  cuts?: { t0: number; t1: number; unit: number; x: number; y: number; yaw: number; width: number }[];
   /** The battle's end (the after card's result), once it is over, with its last battle second. */
   over?: unknown;
   end?: number;
@@ -395,6 +400,8 @@ export class LiveBattle {
   private phaseNew = new Map<number, [number, string, number | null, number | null][]>();
   private events: FieldEvent[] = [];
   private views: Record<string, unknown>[] = [];
+  /** The hedge cutters' gaps already sent (the rules' cuts, in the order begun). */
+  private cutsSent = 0;
   private lastView = -1;
   private placed = false;
   private sentOver = false;
@@ -506,10 +513,8 @@ export class LiveBattle {
         ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
         // (the rider ahead: his own corps' despatch riders, riding in before it)
         ...(v.riders?.length ? { riders: v.riders } : {}),
-        // (hedge cutters: the gaps cut and being cut that he may know of, each opening as a gateway at t1; smoke on call:
-        // the screens standing now, the enemy's block named only where he knows it. The 3D field opens the hedge and
-        // hangs the smoke; the smoke rounds carry how long each hangs as well)
-        ...this.sim.cutView(this.me ?? undefined),
+        // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
+        // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
         ...this.sim.screenView(this.me ?? undefined),
         ...(v.over ? { over: v.over } : {}),
       });
@@ -545,6 +550,10 @@ export class LiveBattle {
       phases: [...this.phaseNew.entries()].map(([b, ph]) => ({ b, ph })),
       contact: this.sim.contactAt,
     };
+    // (the gaps begun since the last delta, each once, those of the enemy only where he knew the block as it began)
+    const cuts = this.sim.cuts.slice(this.cutsSent).filter((c) => !this.me || c.side === this.me || c.known);
+    this.cutsSent = this.sim.cuts.length;
+    if (cuts.length) d.cuts = cuts.map((c) => ({ t0: r2(c.t0), t1: r2(c.t1), unit: c.unit, x: r1(c.x), y: r1(c.y), yaw: r3(c.yaw), width: r2(c.width) }));
     if (last) { d.over = over; this.sentOver = true; }
     this.events = []; this.views = []; this.roundsNew = []; this.phaseNew.clear(); this.placed = false;
     return d;

@@ -12,7 +12,7 @@ mkdir -p "$OUT"
 "$REPO/node_modules/.bin/esbuild" "$HERE/command-check.ts" --bundle --platform=node --format=esm --outfile="$OUT/land-command-check.mjs" --log-level=warning
 # (the battle run.sh fought is reused only when the rules that fought it are the rules here: a fingerprint of the land
 # rules' sources beside it; otherwise it is fought again, so a stale battle never hides a new rule)
-STAMP="$(cat "$REPO"/src/battle/land/*.ts "$REPO"/src/battle/core/*.ts "$HERE/deltas.ts" | cksum | cut -d' ' -f1)"
+STAMP="$(cat "$REPO"/src/battle/land/*.ts "$REPO"/src/battle/core/*.ts "$REPO"/data/battle/*.json "$ROOT/Rules/land-bridge.ts" "$HERE/deltas.ts" | cksum | cut -d' ' -f1)"
 if [ ! -f "$OUT/normandy/deltas.jsonl" ] || [ "$(cat "$OUT/normandy/rules.stamp" 2>/dev/null)" != "$STAMP" ]; then
   rm -rf "$OUT/normandy"
   "$REPO/node_modules/.bin/esbuild" "$HERE/deltas.ts" --bundle --platform=node --format=esm --outfile="$OUT/land-live-deltas.mjs" --log-level=warning
