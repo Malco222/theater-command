@@ -36,6 +36,8 @@ interface LaneRow {
   held?: string[];
   /** What is said of the lane while it waits on 'held'. */
   idle?: string;
+  /** Harbours the cargoes sail from: the lane runs while the recipient or an ally holds one of them, and an enemy who holds them all shuts it. */
+  ports?: string[];
   /** While the lane named here is open, this one carries these shares in place of its own (the aid to the Soviet Union split between two roads). */
   split?: { lane: string; oil: number; sup: number };
   /**
@@ -275,6 +277,15 @@ function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string }
     if (!r) continue;
     if (atWar(g, r.ctrl, to)) return cut(`${the(natOf(g, r.ctrl))} holds ${r.name} and the road through it is shut.`);
     if (r.ctrl !== to && !allied(g, r.ctrl, to)) return cut(row.idle ?? `It opens once ${r.name} is in friendly hands.`, 'idle');
+  }
+  if (row.ports) {
+    const ports = row.ports.map((name) => g.byName[name]).filter((r): r is Region => !!r);
+    if (ports.length && !ports.some((r) => r.ctrl === to || allied(g, r.ctrl, to))) {
+      const all = ports.length === 1 ? ports[0].name : `${ports.slice(0, -1).map((r) => r.name).join(', ')} and ${ports[ports.length - 1].name}`;
+      const foe = ports.every((r) => atWar(g, r.ctrl, to)) ? ports[0].ctrl : null;
+      if (foe) return cut(`${the(natOf(g, foe))} holds ${all}, and nothing sails from ${ports.length === 1 ? 'it' : 'them'}.`);
+      return cut(row.idle ?? `It opens once ${ports.length === 1 ? all : `one of ${all}`} is in friendly hands.`, 'idle');
+    }
   }
   if (row.source && g.nations[row.source] && atWar(g, row.source, to)) return cut(`${the(natOf(g, to))} is at war with ${the(natOf(g, row.source))}, which sold the cargoes.`);
   if (row.field) {

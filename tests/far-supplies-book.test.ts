@@ -129,7 +129,7 @@ describe("Japan's supplies book (ruling 195)", () => {
     expect(book(g).made).toBeCloseTo(20.9 + 0.41 * need, 9);
   });
 
-  it('each lane has its key: Pusan, Formosa, Saigon and Singapore', () => {
+  it('each lane has its key: Pusan, the island of Formosa, Saigon and Singapore', () => {
     const g = grand();
     // The rice is bought of whoever holds Saigon, and the south's cargoes pass Singapore: an enemy there stops them.
     expect([g.byName['Saigon'].ctrl, g.byName['Singapore'].ctrl]).toEqual(['FRA', 'UK']);
@@ -141,12 +141,20 @@ describe("Japan's supplies book (ruling 195)", () => {
     g.byName['Saigon'].ctrl = 'JAP';
     g.byName['Singapore'].ctrl = 'JAP';
     expect([lane(g, 'rice-japan').state, lane(g, 'south-japan').state]).toEqual(['open', 'open']);
-    // Korea's sails while Pusan is Japan's, and Formosa's while Formosa is.
+    // Korea's sails while Pusan is Japan's.
     expect(atWar(g, 'JAP', 'UK')).toBe(true);
     g.byName['Pusan'].ctrl = 'UK';
     expect(lane(g, 'korea-japan')).toMatchObject({ state: 'cut', flow: 0, why: 'The United Kingdom holds Pusan and the road through it is shut.' });
+    // Formosa is the island (the design director, 13:14Z, 22 November 2026): its cargoes sailed from Keelung in the
+    // north and Takao in the south, so the lane runs while Japan holds either province and stops when an enemy holds both.
+    expect(RES.lanes.find((x) => x.id === 'formosa-japan')!.ports).toEqual(['Taihoku', 'Formosa']);
     g.byName['Formosa'].ctrl = 'UK';
-    expect(lane(g, 'formosa-japan')).toMatchObject({ state: 'cut', flow: 0 });
+    expect(lane(g, 'formosa-japan')).toMatchObject({ state: 'open', flow: 1 });
+    g.byName['Formosa'].ctrl = 'JAP';
+    g.byName['Taihoku'].ctrl = 'UK';
+    expect(lane(g, 'formosa-japan')).toMatchObject({ state: 'open', flow: 1 });
+    g.byName['Formosa'].ctrl = 'UK';
+    expect(lane(g, 'formosa-japan')).toMatchObject({ state: 'cut', flow: 0, sup: 0, why: 'The United Kingdom holds Taihoku and Formosa, and nothing sails from them.' });
     expect(lane(g, 'rice-japan').state).toBe('open');
   });
 
