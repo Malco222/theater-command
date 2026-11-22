@@ -760,6 +760,14 @@ function drawView() {
         return [...out].flat();
       } catch { return []; }
     })(),
+    // (Brian's fog over the airfields, 22 November 2026; fog.ts) The airfields the player knows of that fog has closed
+    // this month, for a pale lid over each on the table. No side's colour: the weather takes no side. Empty with the switch off.
+    fogged: (() => {
+      try {
+        const at = rulesByName['fogAt'] as ((g: Game, region: number) => boolean) | undefined;
+        return at ? fields.filter((a) => at(s, a.region)).map((a) => a.region) : [];
+      } catch { return []; }
+    })(),
     sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
     // (Damaged cities) Each damaged town the player can know: pairs of the region and the percent of it in ruins
     // (to a whole percent), for the table to unroof that share of its houses. Empty in rules without them.
@@ -1315,6 +1323,24 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
     }
   }
   return { flights, notes, focus, mine };
+}
+
+/**
+ * (Brian's recon photos after a raid, 22 November 2026; photos.ts, photoprint.ts) A raid's photo by its report's id:
+ * the interpreters' lines, and the shapes of the two prints on a 400 x 300 card (the fields and their turn, the road,
+ * the river, the village, the target's fence, its sheds, tanks and tracks, and after the raid the craters, the burnt
+ * sheds, the smoke and the cut tracks), as the browser's card draws them. Null where the raid has none. Shown, never counted.
+ */
+function photoOf(id: number) {
+  const s = game();
+  try {
+    const r = s.airReports.find((x) => x.id === id);
+    const photo = (r as { photo?: unknown } | undefined)?.photo;
+    if (!r || !photo) return null;
+    const print = (rulesByName['photoPrint'] as ((key: string, p: unknown) => unknown) | undefined)?.(`${s.seed}:${r.id}`, photo);
+    const lines = (rulesByName['photoCaption'] as ((p: unknown, place: string) => string[]) | undefined)?.(photo, r.place) ?? [];
+    return print ? { id, place: r.place, date: turnToDate(r.turn).label, photo, lines, print } : null;
+  } catch { return null; }
 }
 
 const lastSeaReport = (s: Game): number => s.seaReports.reduce((m, r) => Math.max(m, r.id), -1);
@@ -6714,7 +6740,7 @@ function find(name: string) {
 
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
-  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
+  raidsFlown, photo: photoOf, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
