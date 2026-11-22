@@ -28,6 +28,7 @@ import soldier_usa as U  # noqa: E402  (soldier.py and the American's wrappers)
 S = U.S
 import bpy  # noqa: E402
 import numpy as np  # noqa: E402
+from mathutils import Vector  # noqa: E402
 import kit  # noqa: E402
 from sculpt import Ellipsoid, Layer, RoundBox, RoundCone, frame_from, on_surface, rot_euler  # noqa: E402
 
@@ -180,6 +181,13 @@ def antenna_line(J):
     return foot, way
 
 
+def whip_mount(J):
+    """The antenna's mount: where the whip's line meets the top of the set (its base stands on it, the whip 4.5 cm up)."""
+    foot, way = antenna_line(J)
+    top = J["radio"]["c"][2] + J["radio"]["half"][2]
+    return foot - way * ((foot[2] - top) / way[2])
+
+
 def build_antenna(foot, way, sides=6, joints=ANTENNA_JOINTS, r=ANTENNA_R, name="antenna"):
     """The whip: a thin steel rod tapering to its tip, the ferrules where its sections join (none at the far levels)."""
     g = S.Geo()
@@ -315,13 +323,112 @@ def make_lods(m, lod):
     foot, way = antenna_line(m["J"])
     c = build_antenna(foot, way, sides=4 if lod == 1 else 3, joints=0,
                       r=(0.0075, 0.0035) if lod == 1 else (0.0095, 0.005), name=f"antenna_LOD{lod}")
-    S.skin_rigid(c, "chest")
+    if "whip_1" in m["rig"].H0:
+        skin_whip(c, m["J"])
+    else:
+        S.skin_rigid(c, "chest")
     S.attach(c, m["arm"])
     out.append(c)
     return out
 
 
 S.make_lods = make_lods
+
+
+# ================================================================================================ the whip's bones
+# The whip is a chain of four bones, whip_1 (a child of chest, its head at the antenna's mount on top of the set) to
+# whip_4, laid end to end up the whip to its tip, each a quarter of the whip (0.8125 m; whip_1 also the 4.7 cm from the
+# mount up through the base to the whip's foot, 0.8596 m), so the deaths can bend it (the Eastern Front thread's falls.py) where a rigid whip would run into the
+# ground. They are added after the man is made and skinned (nothing else's weights change) and come AFTER the 32 bones in
+# the json's `bones` and in the glb's skin (put back in that order after export: Blender's exporter lists bones parents
+# first, which would put them after thumb_r), so every bone keeps the number the clips use. Near, each section of the
+# whip rides its bone, the ferrules at the three joints half on each; the far levels' whip is one straight tube from its
+# foot (whip_1) to its tip (whip_4). The base the whip stands in stays on chest, with the set. In every clip the chain
+# is straight, at rest, but for a gentle sway in walk, run and advance (a few degrees at each joint, a wave up it a
+# little after his steps; at least 2 degrees at each joint, so that no joint's track falls under the json's stillness
+# cut, a w within 1e-4 of 1, about 1.6 degrees, and the json and the glb sway alike).
+WHIP = ("whip_1", "whip_2", "whip_3", "whip_4")
+WHIP_PART = ANTENNA_LONG / len(WHIP)
+WHIP_JOINT = 0.0125                   # (half a ferrule: a point this near a joint takes the two sections half and half)
+SWAY = {"walk": 1.0, "run": 1.5, "advance": 1.2}   # (how hard each sways; once a step fore and aft, once a stride aside)
+SWAY_FORE = (2.0, 2.4, 2.8, 3.2)      # (degrees at each joint, fore and aft; aside 0.45 of it)
+
+
+def skin_whip(ob, J):
+    """The whip's points on its four bones by how far up it they are."""
+    foot, way = antenna_line(J)
+    for g in list(ob.vertex_groups):
+        ob.vertex_groups.remove(g)
+    groups = {b: ob.vertex_groups.new(name=b) for b in WHIP}
+    for v in ob.data.vertices:
+        u = float((np.array(v.co) - foot) @ way)
+        k = int(np.clip(math.floor(u / WHIP_PART), 0, len(WHIP) - 1))
+        near = [j for j in range(1, len(WHIP)) if abs(u - j * WHIP_PART) <= WHIP_JOINT]
+        if near:
+            j = near[0]
+            groups[WHIP[j - 1]].add([v.index], 0.5, "REPLACE")
+            groups[WHIP[j]].add([v.index], 0.5, "REPLACE")
+        else:
+            groups[WHIP[k]].add([v.index], 1.0, "REPLACE")
+
+
+def add_whip(m):
+    """The whip's four bones put on the made man (after his 32), its mesh skinned to them."""
+    arm, rig, J = m["arm"], m["rig"], m["J"]
+    old = list(rig.names)
+    M0 = {b: rig.M0[b].copy() for b in old}
+    for name in S.KEYED_DROP:                      # (the dropped rifle's way, worked out on the 32 bones as before: it
+        S.keyed_drop(rig, name)                    # lies clear of his bones, and the whip's must not move it)
+    foot, way = antenna_line(J)
+    mount = whip_mount(J)
+    if bpy.context.object and bpy.context.object.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
+    bpy.context.view_layer.objects.active = arm
+    arm.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    eb = arm.data.edit_bones
+    parent = "chest"
+    for k, b in enumerate(WHIP):
+        e = eb.new(b)
+        e.head = Vector(mount if k == 0 else foot + way * WHIP_PART * k)      # (end to end, from the mount)
+        e.tail = Vector(foot + way * WHIP_PART * (k + 1))
+        e.align_roll(Vector((1.0, 0.0, 0.0)))
+        e.parent = eb[parent]
+        e.use_connect = False
+        parent = b
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for b in WHIP:
+        arm.data.bones[b].use_deform = True
+        arm.pose.bones[b].rotation_mode = "QUATERNION"
+        bn = arm.data.bones[b]
+        rig.parent[b] = bn.parent.name
+        rig.H0[b], rig.T0[b], rig.M0[b] = np.array(bn.head_local), np.array(bn.tail_local), bn.matrix_local.copy()
+    rig.names = old + list(WHIP)
+    assert set(rig.names) == {b.name for b in arm.data.bones}
+    drift = max(max(abs(a - c) for ra, rc in zip(M0[b], arm.data.bones[b].matrix_local) for a, c in zip(ra, rc)) for b in old)
+    for b in old:                                  # (the old bones' rest as it was: the edit must not move them)
+        rig.M0[b] = M0[b]
+    ant = next(o for o in m["kit"] if o.name.split(".")[0] == "antenna")
+    skin_whip(ant, J)
+    print(f"  the whip: {len(WHIP)} bones after the {len(old)} (rest drift of the old bones through the edit {drift:.1e});"
+          f" whip_1's head (the mount) {np.round(rig.H0['whip_1'], 4)}, the tip {np.round(rig.T0['whip_4'], 4)}")
+    return m
+
+
+def whip_state(rig, st, name, t):
+    """The whip's bones in a pose: straight on the chest, or swaying in walk, run and advance."""
+    c = S.CLIPS.get(name, {})
+    hard = SWAY.get(name, 0.0)
+    for k, b in enumerate(WHIP):
+        L = None
+        if hard:
+            ph = 2.0 * math.pi * (t / c["long"]) - 0.5 * (k + 1)       # (a stride a loop: two steps)
+            L = R_axis((0.0, 1.0, 0.0), hard * SWAY_FORE[k] * math.sin(2.0 * ph)) @ \
+                R_axis((1.0, 0.0, 0.0), 0.45 * hard * SWAY_FORE[k] * math.sin(ph))
+        rig._child(st, b, L)
+    return st
 
 
 # ================================================================================================ where the handset is
@@ -556,9 +663,11 @@ def clip_state(rig, name, t, kind=None):
         _set_weapon(rig, st, CARBINE_DOWN)
         _set_handset(rig, st, W)
         st["Wh"] = W
-        return st
-    st = _clip_state(rig, name, t, kind)
-    _set_handset(rig, st, strap_place(rig, st))
+    else:
+        st = _clip_state(rig, name, t, kind)
+        _set_handset(rig, st, strap_place(rig, st))
+    if "whip_1" in rig.H0:
+        whip_state(rig, st, name, t)
     return st
 
 
@@ -576,14 +685,14 @@ def assemble():
     bpy.data.objects.remove(old)
     new.name = "socket_muzzle"
     m["sockets"][0] = new
-    return m
+    return add_whip(m)
 
 
 ABOUT = (" He is the company's radio man: soldier_usa.py's rifleman (dress, helmet, canteen, first-aid pouch) with the M1"
          " carbine on the weapon bone (0.904 m; semi-automatic: his fire_stand, fire_kneel and fire_prone are soldier_usa.py's,"
          " one shot a second, cue rifle_shot), a pistol belt with a pocket of two carbine magazines, and on his back in the"
          " haversack's place the SCR-300 set over its battery case (paint 19, radio) with its long whip antenna (3.25 m, up"
-         " from the set's top left, leaning a little back and out to his left; rigid on the chest bone). The handset rides the"
+         " from the set's top left, leaning a little back and out to his left; on its own four bones, below). The handset rides the"
          " bolt bone: clipped high on his left suspender strap in every clip, in his left hand and at his left ear in"
          f" radio_call. His own: radio_call ({CALL_LONG:g} s loop, kneeling, his carbine laid by his left knee): the handset"
          f" taken off the strap ({T_GRAB:g} s) and put to his ear, radio_squelch at {T_EAR:g} s (cue radio_squelch, on the head);"
@@ -592,7 +701,13 @@ ABOUT = (" He is the company's radio man: soldier_usa.py's rifleman (dress, helm
          " decides what comes, artillery or an airstrike; he hears the answer and nods, and hangs the handset back on the"
          f" strap ({T_HUNG:g} s). For an airstrike (in 1944 the target was marked with coloured smoke) the game can mark it"
          " with his throw_grenade clip (its grenade_release event) as a coloured smoke grenade. lmg_burst (prone on the aim)"
-         " fires nothing.")
+         " fires nothing. The whip is a chain of four bones for the deaths to bend: whip_1 (a child of chest, its head at"
+         " the antenna's mount on top of the set) to whip_4, laid end to end up the whip to its tip (whip_1 0.86 m, through"
+         " the base to the second ferrule; the others 0.8125 m each), after the 32 bones (bones 32 to 35, here and in the"
+         " glb's skin). Near, each section of"
+         " the whip rides its bone and the ferrules at the joints take the two bones half and half; mid and far, the whip"
+         " is one straight tube from its foot (whip_1) to its tip (whip_4). In every clip the chain is straight, at rest,"
+         " but for a gentle sway in walk, run and advance (a few degrees at each joint).")
 
 
 def about(data):
@@ -603,11 +718,66 @@ def about(data):
     # (the roof mark is his helmet's top, not the whip's tip: `high` stays the whole height, whip and all)
     P = np.array(data["near"]["points"]).reshape(-1, 3)
     chest = [b["name"] for b in data["bones"]].index("chest")
-    whip = (np.array(data["near"]["part"]) == chest) & (P[:, 2] > 1.6)
+    names = [b["name"] for b in data["bones"]]
+    on_whip = [names.index(b) for b in WHIP if b in names]
+    part = np.array(data["near"]["part"])
+    whip = np.isin(part, on_whip) | ((part == chest) & (P[:, 2] > 1.6))
     data["marks"] = {"roof": round(float(P[~whip, 2].max() - P[:, 2].min()), 3)}
     data["colours"] = dict(S.LOOK[NATION])
     data["new_paints"] = dict(NEW_PAINTS)
     return data
+
+
+def glb_joints_in_order(path, names):
+    """Put a glb's skin joints in `names`' order (the json's bones), its points' joint numbers and inverse binds with
+    them: Blender's exporter lists bones parents first, so the whip's would come after thumb_r, not after bipod."""
+    import struct
+    raw = open(path, "rb").read()
+    jl = struct.unpack("<I", raw[12:16])[0]
+    g = json.loads(raw[20:20 + jl])
+    b0 = 20 + jl
+    bl = struct.unpack("<I", raw[b0:b0 + 4])[0]
+    bin_ = bytearray(raw[b0 + 8:b0 + 8 + bl])
+    done = set()
+
+    def view(acc):
+        a = g["accessors"][acc]
+        bv = g["bufferViews"][a["bufferView"]]
+        return a, bv, bv.get("byteOffset", 0) + a.get("byteOffset", 0)
+    for sk in g["skins"]:
+        nodes = [g["nodes"][j]["name"] for j in sk["joints"]]
+        assert sorted(nodes) == sorted(names), "the glb's joints are not the json's bones"
+        new_of_old = [names.index(n) for n in nodes]
+        if new_of_old == list(range(len(nodes))):
+            continue
+        a, bv, off = view(sk["inverseBindMatrices"])
+        assert a["componentType"] == 5126 and a["type"] == "MAT4" and bv.get("byteStride", 64) == 64
+        M = np.frombuffer(bytes(bin_[off:off + 64 * a["count"]]), dtype="<f4").reshape(-1, 16)
+        Mn = np.empty_like(M)
+        Mn[new_of_old] = M
+        bin_[off:off + 64 * a["count"]] = Mn.tobytes()
+        old_joints = list(sk["joints"])
+        sk["joints"] = [old_joints[nodes.index(n)] for n in names]
+        remap = np.array(new_of_old)
+        for mesh in g["meshes"]:
+            for pr in mesh["primitives"]:
+                for k, acc in pr["attributes"].items():
+                    if not k.startswith("JOINTS_") or acc in done:
+                        continue
+                    done.add(acc)
+                    a, bv, off = view(acc)
+                    dt = {5121: "<u1", 5123: "<u2"}[a["componentType"]]
+                    size = np.dtype(dt).itemsize * 4
+                    stride = bv.get("byteStride", size)
+                    for i in range(a["count"]):
+                        o = off + i * stride
+                        J = np.frombuffer(bytes(bin_[o:o + size]), dtype=dt)
+                        bin_[o:o + size] = remap[J].astype(dt).tobytes()
+    js = json.dumps(g, separators=(",", ":")).encode()
+    js += b" " * (-len(js) % 4)
+    out = struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(bin_)) + struct.pack("<II", len(js), 0x4E4F534A) + js
+    out += struct.pack("<II", len(bin_), 0x004E4942) + bytes(bin_)
+    open(path, "wb").write(out)
 
 
 def export_man(info, m):
@@ -623,6 +793,8 @@ def export_man(info, m):
     S.export_glb(S.stage_path(f"{BASE}.glb"), [m["arm"]] + lods[0] + socks)
     for lod in (1, 2):
         S.export_glb(S.stage_path(f"{BASE}_LOD{lod}.glb"), [m["arm"]] + lods[lod] + socks, anim=False)
+    for n_ in ("", "_LOD1", "_LOD2"):
+        glb_joints_in_order(S.stage_path(f"{BASE}{n_}.glb"), list(m["rig"].names))
     data = S.write_game_json(S.stage_path(f"{BASE}.json"), m, lods)
     data = about(data)
     with open(S.stage_path(f"{BASE}.json"), "w") as f:
