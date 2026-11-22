@@ -25,7 +25,9 @@ def pak40(fine=True, tag="GER", paint=None):
         v.gun_wheel(letter, s, T / 2, R, "solid", w=0.12, holes=8, bolts=6)
     v.axle(T / 2 - 0.06, r=0.05, box=(0.22, 0.34, 0.11, 0.1))
     v.saddle(0.0, 0.96, 0.17, 32.0, rate=6.0, foot=0.28)
+    v.dice_least = 0.2                                   # (her cradle cut too, so the sprayed bands cross it: the art director, 22 Nov 19:51Z)
     v.cradle(-5.0, 22.0, 0.25, 0.17, 1.05, 0.62, 0.1)
+    v.dice_least = 0.45
     v.piece(3.70, 0.075, 0.98, 0.098, 0.056, 0.9, brake="double", steps=((0.42, 0.078),), ring=(0.3, 0.29, 0.3), block="right", lug=0.6)
     v.handwheels((-0.3, 0.36, 0.86), (-0.42, 0.3, 0.72), r=0.1)
     v.sight((-0.2, 0.27, 0.98), high=0.18)

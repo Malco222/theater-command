@@ -387,6 +387,7 @@ class Shop:
         self.belts = {}           # side letter -> what the track clip needs
         self.marks = []
         self.dice = None          # metres: cut her coat's plates into cells this size as they are made (see bm_dice); None leaves them whole
+        self.dice_least = 0.45    # metres: a solid under this in its second longest measure is not cut (bm_dice's `least`)
 
     # -- small conveniences
     def n(self, sides, least=6):
@@ -420,7 +421,7 @@ class Shop:
             lay = bm.faces.layers.int.new("cut_back")
             for f in bm.faces:
                 f[lay] = 1 if f in cut else 0
-            bm_dice(bm, self.dice)
+            bm_dice(bm, self.dice, self.dice_least)
             cut = set(f for f in bm.faces if f[lay])
         bm.verts.index_update()
         verts = [v.co.copy() for v in bm.verts]
@@ -517,13 +518,17 @@ class Shop:
                 faces.append(tuple(reversed(f)) if turn_round else f)
         self.m.add(verts, faces, paint, smooth_faces, None, part)
 
-    def rod(self, a, b, r, paint, sides=10, r2=None, caps=True, part=None):
+    def rod(self, a, b, r, paint, sides=10, r2=None, caps=True, part=None, rings=None):
+        """rings: metres between rings cut round her along her length (a point is all a file can colour: a long rod
+        cut so can carry sprayed bands and dirt along it); None, her two ends only."""
         a, b = Vector(a), Vector(b)
         L = (b - a).length
         if L < 1e-6:
             return
         r2 = r if r2 is None else r2
-        prof = [(L, 0.0), (L, r2), (0.0, r), (0.0, 0.0)] if caps else [(L, r2), (0.0, r)]
+        k = max(1, int(round(L / rings))) if rings else 1
+        side = [(L * t, r + (r2 - r) * t) for t in (i / k for i in range(k, -1, -1))]
+        prof = [(L, 0.0)] + side + [(0.0, 0.0)] if caps else side
         self.lathe(a, b - a, prof, paint, self.n(sides, 5), part=part)
 
     def tube(self, points, r, paint, sides=8, part=None, closed=False):

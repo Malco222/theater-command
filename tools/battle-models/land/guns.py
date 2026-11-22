@@ -486,7 +486,7 @@ class GunWorks(Works):
         self.part(name, "carriage", H, axis=(0, 0, s), limits=[0.0, round(spread + toe, 2)], kind="turn", note="a leg of the trail: + closes it for the road (0 is spread for action)")
         if tube:
             r0, r1 = tube
-            self.rod(H + along * 0.02, E, r0, coat, self.n(18, 8), r2=r1)
+            self.rod(H + along * 0.02, E, r0, coat, self.n(18, 8), r2=r1, rings=self.dice if (self.dice and self.fine) else None)
             self.lathe(H, Z, [(sec0[1] / 2, 0.0), (sec0[1] / 2, r0 * 1.5), (-sec0[1] / 2, r0 * 1.5), (-sec0[1] / 2, 0.0)], coat, n)
             if self.fine:
                 for f in (0.14, 0.5, 0.86):
