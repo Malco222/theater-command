@@ -4,6 +4,8 @@
 #include "Battle/LandFeed.h"
 
 #include <cmath>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 /**
@@ -99,8 +101,11 @@ namespace LandGeneralEye
 		/** The lift's fastest climb and its hardest push, a share of the eye's distance to its look-at a second (and
 		 * a second squared): about 46 and 860 degrees of the picture. */
 		double LiftSpeed = 0.8, LiftPush = 15.0;
-		/** How fast the lift is hurried when the eye is inside the near clearance (a spring's rate). */
-		double HurryRate = 30.0;
+		/** How fast the lift is hurried when the eye is inside the near clearance (a spring's rate), and the most it
+		 * may be hurried in a frame before it is put clear with a cut instead, metres. */
+		double HurryRate = 30.0, HurryMost = 0.15;
+		/** How long the lift may be shut in under leaves or eaves before the view cuts clear, seconds. */
+		double StuckMost = 0.4;
 		/** How fast the look-at's height follows the ground it slides over (a spring's rate). */
 		double GroundEase = 5.0;
 		/** How fast the eye may climb ahead of a thing it is coming to, m/s (it looks 1.6 s ahead). */
@@ -134,6 +139,8 @@ namespace LandGeneralEye
 		int HurriedNow() const { return Hurried; }
 		int WaitedFrames() const { return Waited; }
 		int BrakedFrames() const { return Braked; }
+		/** How many places the last frame asked about (for the cloud test). */
+		int AskedNow() const { return Asked; }
 		/** The eye's height over the look-at at a zoom (0..1). */
 		double UpAt(double Zoom) const;
 		/** Where a block's men or vehicles stand on average at a battle time (those not fallen or gone); false if none. */
@@ -166,6 +173,9 @@ namespace LandGeneralEye
 		bool bBrake = false;
 		double BrakeNeed = 0.0, BrakeFor = 0.0;
 		int Braked = 0;
+		mutable int Asked = 0;
+		/** How long the lift has been shut in under a thing, seconds. */
+		double StuckFor = 0.0;
 		/** Each block's tracks (the live feed adds tracks: rebuilt when the count changes). */
 		std::vector<std::pair<int, std::vector<int>>> ByBlock;
 		size_t TracksSeen = 0;
@@ -178,6 +188,10 @@ namespace LandGeneralEye
 			bool bOk = false;
 		};
 		AsideMemo Memo[4];
+		/** The tops of things lately found, by the metre square: the height clear over it and when. */
+		std::unordered_map<long long, std::pair<double, double>> Tops;
+		/** The corn's height lately asked, by the half-metre square, and when. */
+		mutable std::unordered_map<long long, std::pair<double, double>> Crops;
 		int MemoNext = 0;
 		double Clock = 0.0;
 		/** What placing the eye changes, kept so a frame's move can be taken back. */
@@ -187,7 +201,7 @@ namespace LandGeneralEye
 			double PushX = 0.0, PushY = 0.0, PushSwingX = 0.0, PushSwingY = 0.0, Lift = 0.0, LiftSwing = 0.0, NeedWas = 0.0;
 			int Hurried = 0;
 			bool bBrake = false;
-			double BrakeNeed = 0.0, BrakeFor = 0.0;
+			double BrakeNeed = 0.0, BrakeFor = 0.0, StuckFor = 0.0;
 		};
 		Kept Keep() const;
 		void Restore(const Kept& K);

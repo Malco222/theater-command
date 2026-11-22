@@ -42,14 +42,23 @@ namespace LandGeneralEye
 	double Eye::CropAt(double X, double Y) const
 	{
 		if (!Here.Crop) return 0.0;
-		const double C = Here.Crop(X, Y);
-		return C == C ? std::clamp(C, 0.0, 3.0) : 0.0;
+		// (the corn stands where it stands: kept by the half-metre square for a couple of seconds, the scene asked
+		// once, not a hundred times a frame)
+		const long long Key = (static_cast<long long>(std::floor(X * 2.0)) << 32) ^ static_cast<long long>(static_cast<unsigned int>(static_cast<int>(std::floor(Y * 2.0))));
+		const auto It = Crops.find(Key);
+		if (It != Crops.end() && Clock - It->second.second < 2.0) return It->second.first;
+		double C = Here.Crop(X, Y);
+		C = C == C ? std::clamp(C, 0.0, 3.0) : 0.0;
+		if (Crops.size() > 16384) Crops.clear();
+		Crops[Key] = std::make_pair(C, Clock);
+		return C;
 	}
 
 	bool Eye::Clear(const Vec& At, double R, bool bFree) const
 	{
 		// (Free is the film's ground-level word, a house's floor or a bank's hedge whatever the height: asked only
 		// within FreeUnder of the ground; Solid has the things' own shapes)
+		++Asked;
 		const double G = Ground(At.X, At.Y);
 		if (At.Z > G + Set.Tallest) return true;
 		// (the point itself first: most points looked at and refused are inside the thing)
@@ -169,8 +178,10 @@ namespace LandGeneralEye
 		Lift = LiftSwing = 0.0;
 		PushX = PushY = PushSwingX = PushSwingY = 0.0;
 		bBrake = false;
-		BrakeNeed = BrakeFor = 0.0;
+		BrakeNeed = BrakeFor = StuckFor = 0.0;
 		for (AsideMemo& M : Memo) M.When = -1e9;
+		Tops.clear();
+		Crops.clear();
 		bGliding = false;
 		Follow = -1;
 		bFirst = true;
@@ -195,6 +206,7 @@ namespace LandGeneralEye
 		K.bBrake = bBrake;
 		K.BrakeNeed = BrakeNeed;
 		K.BrakeFor = BrakeFor;
+		K.StuckFor = StuckFor;
 		return K;
 	}
 
@@ -214,6 +226,7 @@ namespace LandGeneralEye
 		bBrake = K.bBrake;
 		BrakeNeed = K.BrakeNeed;
 		BrakeFor = K.BrakeFor;
+		StuckFor = K.StuckFor;
 	}
 
 	int Eye::Place(double Dt, bool bHold, Vec& OutEye, Vec& OutLook)
@@ -237,13 +250,21 @@ namespace LandGeneralEye
 		// lift has room to lag a frame or two without a snap)
 		auto FloorAt = [this](const Vec& At, bool bHard = false)
 		{
-			double Floor = -1e9;
 			const Vec Round[] = { Vec(0, 0, 0), Vec(0.8, 0, 0), Vec(-0.8, 0, 0), Vec(0, 0.8, 0), Vec(0, -0.8, 0) };
-			for (const Vec& D : Round)
+			double Grounds[5];
+			double Highest = -1e9;
+			for (int K = 0; K < 5; ++K)
 			{
-				const double X = At.X + D.X, Y = At.Y + D.Y;
-				Floor = std::max(Floor, Ground(X, Y) + (bHard ? std::max(Set.HardGround, CropAt(X, Y) + Set.HardOverCrop)
-				                                              : std::max(Set.GroundClear, CropAt(X, Y) + Set.OverCrop)));
+				Grounds[K] = Ground(At.X + Round[K].X, At.Y + Round[K].Y);
+				Highest = std::max(Highest, Grounds[K]);
+			}
+			// (well over the tallest corn there is, the corn is not asked)
+			const double Least = bHard ? Set.HardGround : Set.GroundClear, Over = bHard ? Set.HardOverCrop : Set.OverCrop;
+			if (At.Z > Highest + 3.0 + Over + 0.5) return Highest + Least;
+			double Floor = -1e9;
+			for (int K = 0; K < 5; ++K)
+			{
+				Floor = std::max(Floor, Grounds[K] + std::max(Least, CropAt(At.X + Round[K].X, At.Y + Round[K].Y) + Over));
 			}
 			return Floor;
 		};
@@ -336,13 +357,25 @@ namespace LandGeneralEye
 		};
 		// (over a tall thing that cannot be stepped round, a tree standing in a hedge: how high the view must go, in
 		// coarse steps from where a short lift failed)
+		// (a thing's top stays where it is: kept by the metre square for a moment, as the tent looks at the same
+		// trees frame after frame)
 		auto TopOver = [&](const Vec& At, double From)
 		{
+			const long long Key = (static_cast<long long>(std::floor(At.X)) << 32) ^ static_cast<long long>(static_cast<unsigned int>(static_cast<int>(std::floor(At.Y))));
+			const auto It = Tops.find(Key);
+			if (It != Tops.end() && Clock - It->second.second < 0.5 && It->second.first - At.Z >= From + 1.5 - 1e-9) return std::min(Set.LiftMost, It->second.first - At.Z);
+			double Top = Set.LiftMost;
 			for (double L = From + 1.5; L <= Set.LiftMost + 1e-9; L += 1.5)
 			{
-				if (Clear(Vec(At.X, At.Y, At.Z + L), Want)) return L;
+				if (Clear(Vec(At.X, At.Y, At.Z + L), Want))
+				{
+					Top = L;
+					break;
+				}
 			}
-			return Set.LiftMost;
+			if (Tops.size() > 4096) Tops.clear();
+			Tops[Key] = std::make_pair(At.Z + Top, Clock);
+			return Top;
 		};
 		double Need = 0.0;
 		Vec PushWant;
@@ -414,7 +447,8 @@ namespace LandGeneralEye
 				for (int K = 1; K <= 16; ++K)
 				{
 					const double Tau = 0.1 * K;
-					const Vec Ahead = ArmEyeAt(Tau) + PushWant;
+					// (and the step aside as it is going there)
+					const Vec Ahead = ArmEyeAt(Tau) + Vec(Toward(PushX, PushSwingX, PushWant.X, Tau), Toward(PushY, PushSwingY, PushWant.Y, Tau), 0.0);
 					double L = 0.0;
 					bool bTall = false;
 					if (!LiftWithin(Ahead, Reach, L))
@@ -505,6 +539,15 @@ namespace LandGeneralEye
 					}
 				}
 			}
+			// (shut in under leaves or eaves with nowhere to step: a moment, then a cut to where it should be)
+			StuckFor = Goal < Need - 0.5 ? StuckFor + Dt : 0.0;
+			// (over a thing while the zoom brings the arm down, the lift must climb as fast as the arm comes down: led
+			// by that speed, so the eased lift does not lag behind it into the near clearance)
+			if (Goal > 0.05 && Goal >= Need - 1e-9)
+			{
+				const double ArmDown = -((UpAt(S + 1e-3) - UpAt(S)) / 1e-3 * SwingS + GroundSwing);
+				if (ArmDown > 0.0) Goal += std::min(ArmDown, Fastest) * 2.0 / Set.RiseRate;
+			}
 			double L = Lift, Sw = LiftSwing;
 			Spring(L, Sw, Goal, Goal > Lift ? Set.RiseRate : Set.SettleRate, Dt);
 			Sw = std::clamp(Sw, LiftSwing - Hardest * Dt, LiftSwing + Hardest * Dt);
@@ -529,13 +572,22 @@ namespace LandGeneralEye
 			}
 			Lift = std::max(Lift, Was);
 			EyeAt = Eye1 + Vec(0.0, 0.0, Lift);
-			if (EyeAt.Z < Ground(EyeAt.X, EyeAt.Y) + 0.25 || !Clear(EyeAt, 0.05, false))
+			// (more than a small step in a frame is a jolt the picture would feel: better a cut)
+			if (EyeAt.Z < Ground(EyeAt.X, EyeAt.Y) + 0.25 || !Clear(EyeAt, 0.05, false) || Lift - Was > Set.HurryMost)
 			{
 				Hurried = 2;
 				Lift = Up;
-				LiftSwing = 0.0;
-				EyeAt = Eye1 + Vec(0.0, 0.0, Lift);
 			}
+		}
+		if (Hurried == 2 || StuckFor > Set.StuckMost)
+		{
+			// (put clear at once, at the height it wants, and the picture cuts)
+			Hurried = 2;
+			Lift = UpFrom(std::max(Lift, Need), Want);
+			LiftSwing = 0.0;
+			StuckFor = 0.0;
+			bBrake = false;
+			EyeAt = Eye1 + Vec(0.0, 0.0, Lift);
 		}
 		OutEye = EyeAt;
 		OutLook = Look + Vec(PushX, PushY, Lift);
@@ -548,6 +600,7 @@ namespace LandGeneralEye
 		Index();
 		const double Dt = std::clamp(RealDt, 0.0, 0.25);
 		Clock += Dt;
+		Asked = 0;
 		const Vec Fwd(std::sin(H), std::cos(H), 0.0);
 		const Vec Right(std::cos(H), -std::sin(H), 0.0);
 		const double Arm = ArmAt(S), Tilt = TiltAt(S);

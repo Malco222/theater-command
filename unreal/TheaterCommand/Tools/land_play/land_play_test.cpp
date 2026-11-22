@@ -1138,7 +1138,7 @@ int main(int argc, char** argv)
 			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GT0).count();
 			Spent += Ms;
 			GSlowest = std::max(GSlowest, Ms);
-			if (Ms > 3.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow general's eye %.2f ms at real %.2f: zoom %.3f, lift %.2f need %.2f hurried %d aside %.2f waited %d braked %d\n", Ms, R + Dt, Gen.Zoom(), Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames());
+			if (Ms > 3.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow general's eye %.2f ms at real %.2f: zoom %.3f, lift %.2f need %.2f hurried %d aside %.2f waited %d braked %d, asked %d\n", Ms, R + Dt, Gen.Zoom(), Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames(), Gen.AskedNow());
 			++GFrames;
 			const double G = GroundAt(P.Eye.X, P.Eye.Y);
 			const double Over = P.Eye.Z - G;
@@ -1253,6 +1253,38 @@ int main(int argc, char** argv)
 		if (Counted < Tried) Fault("a tank's own hull hid her shot or knock-out from the dead-shot rule");
 	}
 	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks, %d behind stalks a step or two in front)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn, LensBehindStalks);
+	// The forest ambush (Brian, 22 November): every enemy block hidden from the player through the first minute of the
+	// fight; the film never takes one of their men or tanks as its subject, and still never goes up to an aerial.
+	{
+		LandEye::World Wh = EW;
+		const double HideTo = Contact + 60.0;
+		double HideClock = 0.0;
+		Wh.Hidden = [&Rec, &ES, &HideClock, HideTo](int Block)
+		{
+			const LandFeed::Block* B = Rec.BlockOf(Block);
+			return B && B->Side != ES.Own && HideClock < HideTo;
+		};
+		LandEye::Director Hid;
+		Hid.Begin(Rec, Wh, ES);
+		int OnHidden = 0, Shots = 0, Aerials = 0;
+		const double From = std::max(0.0, Contact - 10.0);
+		for (double B = From; B < std::min(Rec.End, HideTo + 10.0); B += Dt)
+		{
+			HideClock = B;
+			PlaceMovers(B);
+			const LandEye::Pose P = Hid.Update(B, 2000.0 + (B - From), Dt);
+			Shots += P.bCut ? 1 : 0;
+			if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0) ++Aerials;
+			if (P.Subject >= 0 && B < HideTo)
+			{
+				const LandFeed::Block* Bk = Rec.BlockOf(Rec.Tracks[static_cast<size_t>(P.Subject)].Block);
+				if (Bk && Bk->Side != ES.Own) ++OnHidden;
+			}
+		}
+		std::printf("ambush: every enemy block hidden to %.0f s: %d shots, %d frames on a hidden enemy, %d aerials\n", HideTo, Shots, OnHidden, Aerials);
+		if (OnHidden > 0) Fault("the film took a hidden enemy as its subject (it gives the ambush away)");
+		if (Shots < 3) Fault("with the enemy hidden the film hardly cut");
+	}
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.
 	{
@@ -1266,7 +1298,11 @@ int main(int argc, char** argv)
 			{
 				if (T.Fell >= 0.0 && T.Fell < When + 6.0) break;
 				const LandFeed::Spot Sp = LandFeed::SpotAt(T, When);
-				if (CornAt(Sp.X, Sp.Y) > 0.5) { InCorn = static_cast<int>(K); AskAt = When; break; }
+				// (well in it, the corn all round him: at a field's edge the low eye beside him stands on the grass, as
+				// the platoon recording's first man in the corn did)
+				bool bDeep = CornAt(Sp.X, Sp.Y) > 0.5;
+				for (int Q = 0; Q < 8 && bDeep; ++Q) bDeep = CornAt(Sp.X + 2.5 * std::sin(Q * 0.785398), Sp.Y + 2.5 * std::cos(Q * 0.785398)) > 0.5;
+				if (bDeep) { InCorn = static_cast<int>(K); AskAt = When; break; }
 			}
 		}
 		if (InCorn >= 0)
@@ -1280,6 +1316,7 @@ int main(int argc, char** argv)
 				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
 				PlaceMovers(AskAt + F * Dt);
 				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
+				if (std::getenv("LAND_PLAY_CORN") && F % 20 == 0) std::printf("  corn ask frame %d: %s on %d, eye corn %.2f, eye %.2f over the ground, man corn %.2f\n", F, LandEye::NameOf(P.Shot), P.Subject, CornAt(P.Eye.X, P.Eye.Y), P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), CornAt(LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).X, LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).Y));
 				if (P.Shot != LandEye::Kind::Low) continue;
 				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
 				if (Corn <= 0.0) continue;
