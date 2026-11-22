@@ -6,7 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Rng, hashString } from '../src/core/rng';
 import { CARRIERS, assessAir, fly, forecastAir, shipHits, type AirAssess } from '../src/campaign/air';
-import { planRaid } from '../src/campaign/airwar';
+import { planRaid, shippingWords } from '../src/campaign/airwar';
+import page from '../src/campaign/ui/main.ts?raw';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { bombard, planBombard } from '../src/campaign/fleets';
 import { createGame, relocate, setWar } from '../src/campaign/game';
@@ -608,13 +609,35 @@ describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the
     // (A fleet of many destroyers can weigh more than its head count, one of battleships less: the worth is not always lower
     // than release 1's.) Damage control eases each holder's own fleet by its own figure.
     expect(run('GER', 'ITA').x.cut).toBeCloseTo(run().x.cut / DC, 12);
-    // The card the player reads says the same share. (Its words await the UI director: rider 4.)
-    const card = (h: Game): string => planRaid(h, 'strike', zone, [strikeWing(h).id], 'UK').effects.find((e) => /could lose up to/.test(e))!;
+    // The card the player reads says the same share, in the UI director's words of rider 4 (22 November 12:53Z) with the
+    // switch on: the forecast's own voice, an expected loss. Off, release 1's line to the letter.
+    const card = (h: Game): string => planRaid(h, 'strike', zone, [strikeWing(h).id], 'UK').effects.find((e) => /^Warships caught at sea there /.test(e))!;
     const on = run('GER', 'ITA');
-    expect(card(on.h)).toBe(`Warships caught at sea there could lose up to ${Math.round(on.x.cut * 100)}% of their number, and merchant ships in those waters will be sunk.`);
+    expect(Math.round(on.x.cut * 100)).toBeGreaterThan(0);
+    expect(card(on.h)).toBe(`Warships caught at sea there should lose about ${Math.round(on.x.cut * 100)}% of their number, and merchant ships in those waters will be sunk.`);
     expect(Math.round(on.x.cut * 100)).toBeLessThan(Math.round(r1.cut * 100));
     R.dc.on = false;
     expect(card(loadGame(snap)!)).toBe(`Warships caught at sea there could lose up to ${Math.round(r1.cut * 100)}% of their number, and merchant ships in those waters will be sunk.`);
+  });
+
+  it("says it in the UI director's words of rider 4 with the switch on, on both cards, and release 1's with it off", () => {
+    const { g } = sea();
+    const line = (cut: number, waters?: 'those' | 'these'): string => shippingWords(g, cut, waters);
+    R.dc.on = false;
+    // Release 1's lines as each card had them: the raid card's "those waters", the air order's card's "these waters".
+    expect(line(0.034)).toBe('Warships caught at sea there could lose up to 3% of their number, and merchant ships in those waters will be sunk.');
+    expect(line(0.034, 'these')).toBe('Warships caught at sea there could lose up to 3% of their number, and merchant ships in these waters will be sunk.');
+    expect(line(0.004)).toBe('Warships caught at sea there could lose up to 0% of their number, and merchant ships in those waters will be sunk.');
+    R.dc.on = true;
+    expect(line(0.034)).toBe('Warships caught at sea there should lose about 3% of their number, and merchant ships in those waters will be sunk.');
+    // "those waters" in both places, as the sentence has already said "there".
+    expect(line(0.034, 'these')).toBe(line(0.034));
+    // A share that rounds to nothing.
+    expect(line(0.004)).toBe('Warships caught at sea there should lose almost none of their number, and merchant ships in those waters will be sunk.');
+    expect(line(0.005)).toBe('Warships caught at sea there should lose about 1% of their number, and merchant ships in those waters will be sunk.');
+    // The air order's card puts it after its bombers' line ("About 12% of the bombers are likely to be lost. ...").
+    expect(page).toContain("About ${lossPct}% of the bombers are likely to be lost. ${shippingWords(g, fc.cut, 'these')}</div>");
+    expect(page).not.toContain('could lose up to');
   });
 
   it("reads the fight's own figure: each fleet's easing is 1 / dcOf of its nation, as the fight's, under every flag on the chart", () => {

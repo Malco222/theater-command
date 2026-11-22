@@ -31,6 +31,7 @@ import { airfieldOpenTo } from './prizes';
 import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
 import { townName } from './towns';
+import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
 
@@ -41,6 +42,19 @@ const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const plural = (n: number, one: string, many = `${one}s`): string => `${num(n)} ${Math.round(n) === 1 ? one : many}`;
 const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const kindRow = (k: RaidKind) => AIRWAR.raids.kinds.find((x) => x.key === k)!;
+/**
+ * The older strike at shipping: what the warships caught at sea there should lose, as the raid card and the air order's
+ * card say it (ruling 240, rider 4; the UI director, 22 November 12:53Z). With the dc switch on, the share is the fight's
+ * own expected loss (forecastAir, the design director's rider 4 of 11:12Z), in the card's forecast voice: "should lose
+ * about 3%", or "almost none" where that rounds to nothing, and "those waters", as the sentence has said "there". With
+ * the switch off, release 1's words stand as each card had them: "could lose up to", and 'these' waters on the air
+ * order's card (logged for release 2).
+ */
+export function shippingWords(g: Game, cut: number, waters: 'those' | 'these' = 'those'): string {
+  const n = Math.round(cut * 100);
+  if (!shipRule(g, 'dc')) return `Warships caught at sea there could lose up to ${n}% of their number, and merchant ships in ${waters} waters will be sunk.`;
+  return `Warships caught at sea there should lose ${n > 0 ? `about ${n}%` : 'almost none'} of their number, and merchant ships in those waters will be sunk.`;
+}
 /** What a raid goes for, in words. A fleet is named only to someone who has it identified. */
 function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null = null): string {
   if (kind === 'strike') return `the ${g.seas[target]?.name ?? 'sea'}`;
@@ -711,7 +725,7 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     out.push(`Fighter odds ${fc.odds >= 9 ? 'overwhelming' : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
     if (fc.cut > 0) out.push(`The air groups based at ${place} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
   } else if (kind === 'strike') {
-    out.push(`Warships caught at sea there could lose up to ${pct(fc.cut)} of their number, and merchant ships in those waters will be sunk.`);
+    out.push(shippingWords(g, fc.cut));
   } else if (kind === 'fleet' || kind === 'harbour') {
     const sunk = fc.ships, hits = fc.hits ?? 0;
     const word = (c: (typeof CLASSES)[number], n: number): string => (n === 1 ? NAVY.classes[c].one : NAVY.classes[c].many);

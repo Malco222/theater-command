@@ -72,7 +72,7 @@ import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { nearX, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
-import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
+import { groupRow, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
@@ -6516,7 +6516,7 @@ function airPlanCard(): string {
         <div class="sub">Fighter odds ${fc.odds.toFixed(2)} to 1 going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up once his losses are made good.${a.B > 0 ? ` About ${lossPct}% of the bombers are likely to be lost.` : ''}${fc.cut > 0 ? ` Those that get through should cut the readiness of the fighters based there by about ${Math.round(fc.cut * 100)}%, and that carries over to next month.` : ''}</div>`;
     } else if (sea) {
       head = `<div class="verdict ${lossPct <= 10 ? 'win' : lossPct <= 25 ? '' : 'loss'}" style="font-size:24px">${lossPct <= 10 ? 'Light opposition' : lossPct <= 25 ? 'The fighters will take a toll' : 'Heavy losses are likely'}</div>
-        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. Warships caught at sea there could lose up to ${Math.round(fc.cut * 100)}% of their number, and merchant ships in these waters will be sunk.</div>`;
+        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${shippingWords(g, fc.cut, 'these')}</div>`;
     } else {
       head = `<div class="verdict ${lossPct <= 10 ? 'win' : lossPct <= 25 ? '' : 'loss'}" style="font-size:24px">${lossPct <= 10 ? 'Light losses expected' : lossPct <= 25 ? 'The fighters will take a toll' : 'Heavy losses are likely'}</div>
         <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${g.regions[m.target].fac > 0 ? `The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(place)}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[g.regions[m.target].ctrl].adj} production.` : `There is no industry at ${esc(place)}: the bombers go for its rail yards and junctions.`}${fc.rail ? ` There is about a ${Math.round(fc.rail * 100)}% chance of cutting the railway through ${esc(place)}, which stays cut until engineers relay it.` : ''}${fc.ruin ? ` There is about a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}</div>`;
