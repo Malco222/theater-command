@@ -34,6 +34,8 @@
 //   TC.court(nation)                    -> { ok, note, view }: courts a neutral
 //   TC.warPlan(nation, regionId?)       -> { ok, lead, friends, lines }: what declaring war would mean, for the question asked first
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
+//   TC.school([corpsId, ...], go)       -> { ok, note, view }: sends them to the battle schools for the month (go true), or calls them back (release 2).
+//                                          Each corps in the view carries school (at the schools now), schoolTo (the grade it would come back) and schoolWhy (why it cannot go, '' if it can)
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
 import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
@@ -102,8 +104,8 @@ import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrder
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
 import type { RaidKind, RaidPlan, RaidWay } from '../../../src/campaign/airwar';
-import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
-import { whyNotCash } from '../../../src/campaign/stories';
+import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack, orderSchool } from '../../../src/campaign/turn';
+import { whyNotCash, drillTo, whyNoSchool } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
@@ -606,6 +608,8 @@ function drawView() {
       carry: carriedBy(s, c), digging: !c.dug && ((c as { digging?: number }).digging ?? 0) > 0,
       // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
       lean: !!c.lean,
+      // (Release 2) the battle schools: at them this month, the grade a month there brings it to, and why it cannot go ('' if it can).
+      school: !!c.school, schoolTo: grade(drillTo(c.xp)), schoolWhy: c.nat === s.human && !c.school ? whyNoSchool(s, c) ?? '' : '',
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
@@ -5646,6 +5650,19 @@ function draftsFor(ids: number[], take: boolean) {
   return { ok: n > 0, note: n ? (take ? 'They take drafts as they come: their ranks fill, and the new men water down their experience.' : 'They keep their veterans together and take no drafts: they stay seasoned, and do not recover their strength.') : 'That order cannot be given to them.', view: view() };
 }
 
+/** (Release 2) Sends the picked corps to the battle schools for this month, or calls them back. */
+function schoolFor(ids: number[], go: boolean) {
+  const s = game();
+  const cs = corpsById(s, ids);
+  const why = go ? cs.map((c) => whyNoSchool(s, c)).find((w) => !!w) ?? '' : '';
+  let n = 0;
+  for (const c of cs) if (orderSchool(s, c, go)) n++;
+  const note = !n ? (why || 'That order cannot be given to them.')
+    : go ? `${n === 1 ? 'The corps goes' : `${n} corps go`} to the battle schools for the month. Left in peace, ${n === 1 ? 'it comes' : 'they come'} back a grade better when your next month opens, and ${n === 1 ? 'takes' : 'take'} no orders till then.`
+      : `${n === 1 ? 'The corps is' : `${n} corps are`} called back from the battle schools, and ready for orders. ${n === 1 ? 'It has' : 'They have'} had no term.`;
+  return { ok: n > 0, note, view: view() };
+}
+
 /** Places the army as the staff advises, on the eve of war. */
 function evePlanGo() {
   const s = game();
@@ -5826,5 +5843,5 @@ function find(name: string) {
 
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
-  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
+  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move, previewAttack: preview, attack, takeOutlook, take, stormLook, storm, gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally, endMonth, lead: leadOf };

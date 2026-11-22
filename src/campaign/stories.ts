@@ -16,6 +16,7 @@ import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
 import { gainXp, generalOf } from './commanders';
 import { DIPLOMACY } from './diplomacy';
+import { moraleRules, restedMonth } from './morale';
 import {
   STACK,
   type AirFleet, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
@@ -49,6 +50,7 @@ export const STORIES = data as unknown as {
   home: { defence: number; attack: number; lostOrg: number; freedOrg: number };
   rivals: { meets: number; edge: number; org: number; xp: number; pc: number };
   legacy: { xp: number };
+  drill: { cap: number };
   tour: { perMonth: number };
   lastStand: number;
   generalXp: number;
@@ -163,6 +165,7 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'bonds': return 'Sent home on a bond tour.';
     case 'school': return 'Sent home to the training schools as instructors.';
     case 'back': return 'Back from home and ready for orders.';
+    case 'drill': return `A month at the battle schools at ${at}${typeof n === 'number' && STORIES.grades[n] ? `: came back ${STORIES.grades[n][1].toLowerCase()}` : ''}.`;
     case 'homelost': return `${at} fell to the enemy: the place it was raised in.`;
     case 'homefree': return `${at} was freed: the place it was raised in.`;
     case 'rival': { const r = rivalryOf(g, n); return r ? `Met ${r.theirsName} again, at ${at}. The two are old enemies now.` : `Met an old enemy again at ${at}.`; }
@@ -555,6 +558,61 @@ export function drafted(g: Game, c: Corps, before: number, add: number): void {
   if (fresh >= 0.2 && was >= 0.4) {
     note(g, c, 'drafts', c.reg, Math.round(fresh * 100));
     moment(g, 2, 'drafts', c, c.reg);
+  }
+}
+
+// ---- Battle schools (release 2) -------------------------------------------------------------
+
+/** Which grade this experience is, counted from 0 (green). */
+const gradeIndex = (xp: number): number => STORIES.grades.reduce((k, [from], i) => (xp >= from ? i : k), 0);
+
+/** The experience a month at the battle schools brings a corps that went with this much: the start of its next grade, never past the cap. */
+export function drillTo(xp: number): number {
+  const next = STORIES.grades.map(([from]) => from).find((from) => from > xp + 1e-9);
+  return next === undefined ? xp : Math.max(xp, Math.min(next, STORIES.drill.cap));
+}
+
+/** True where a corps stands on its own country's soil, held by its own country: where its battle schools are. */
+export const atHome = (g: Game, c: Corps): boolean => {
+  const r = g.regions[c.reg];
+  return !!r && r.owner === c.nat && r.ctrl === c.nat && !r.overseas;
+};
+
+/** Why this corps of the player's cannot be sent to the battle schools this month, or null if it can. */
+export function whyNoSchool(g: Game, c: Corps): string | null {
+  if (!moraleRules(g)) return 'The battle schools are open only in the grand campaign.';
+  if (c.dead || g.human === null || c.nat !== g.human) return 'Only your own corps go to your battle schools.';
+  if (c.kind === 'fort') return 'A fortress stays where it is.';
+  if (c.school) return 'It is at the battle schools already.';
+  if (c.leave !== undefined) return 'It is at home, out of the line, already.';
+  if (c.joint !== undefined) return "It marches with an ally's army, and takes that army's orders.";
+  if (c.job) return 'Its engineers have work in hand here.';
+  if (!atHome(g, c)) return "The battle schools are at home: the corps must stand on its own country's soil.";
+  if (!c.supplied) return 'It is cut off from supply.';
+  if (c.fought) return 'It has fought this month already. A term at the schools is a whole quiet month.';
+  if (c.ap < c.apMax) return 'It has marched this month already. A term at the schools is a whole quiet month.';
+  if (drillTo(c.xp) <= c.xp) return `It is ${grade(c.xp).toLowerCase()} already, and the schools can teach it no more. Only battle makes an elite.`;
+  return null;
+}
+
+/**
+ * A corps' month at the battle schools is over, at the reckoning that opens its next month: it comes back one grade
+ * better than it went ('before', its experience before the month's drafts: the schools train the drafts too), or its
+ * term was cut short because it had to fight, was cut off or left home. The order lasts the one month either way.
+ */
+export function schoolMonth(g: Game, c: Corps, before: number): void {
+  if (!c.school) return;
+  delete c.school;
+  if (c.nat !== g.human) return;
+  const to = drillTo(before);
+  const place = g.regions[c.reg]?.name ?? 'home';
+  if (restedMonth(g, c) && atHome(g, c) && to > c.xp) {
+    c.xp = to;
+    note(g, c, 'drill', c.reg, gradeIndex(to));
+    headline(g, 'info', `${c.name} is back from the battle schools at ${place}, ${grade(to).toLowerCase()} now, and ready for orders.`, c.nat, c.reg);
+  } else {
+    const why = c.fought ? 'it had to fight' : !c.supplied ? 'it was cut off from supply' : !atHome(g, c) ? 'it was driven from home' : 'it marched';
+    headline(g, 'info', `${c.name}'s month at the battle schools at ${place} was cut short: ${why}. It is ready for orders.`, c.nat, c.reg);
   }
 }
 

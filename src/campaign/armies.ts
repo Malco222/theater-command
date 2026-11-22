@@ -255,6 +255,7 @@ export function whyNotOrder(g: Game, c: Corps): string | null {
   if (c.dead || g.human === null || c.nat !== g.human) return null;
   if (c.kind === 'fort') return FORT_NO_ORDERS;
   if (c.leave !== undefined) return `It is at home, out of the line, and takes no orders until ${turnToDate(c.leave).label}.`;
+  if (c.school) return 'It is at the battle schools this month, and takes no orders until it is back. Call it back to march or fight now; it will have had no term.';
   if (c.town !== undefined) return garrisonLine(g, [c]);
   return null;
 }

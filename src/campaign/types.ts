@@ -343,6 +343,11 @@ export interface Corps extends Storied {
   lean?: boolean;
   /** Sent home on a bond tour or to the training schools: out of the line until this month. */
   leave?: number;
+  /**
+   * At the battle schools this month (release 2): the player's order, for one month, to a corps standing on its own
+   * country's soil. It takes no orders while it is there, and comes back a grade better if it is left in peace. No computer nation sets it.
+   */
+  school?: boolean;
   /** The work an engineer corps has in hand: what, where, and the month it is finished. Lost if the corps leaves the place. */
   job?: { what: string; reg: number; eta: number; ap?: number };
   /** The rivalry it is part of: an id on the list of rivalries. */
