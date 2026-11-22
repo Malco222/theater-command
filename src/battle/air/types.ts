@@ -4,13 +4,14 @@
 // aircraft models in formation for it and acts out what the counts decide: a fight is a swirl of its models round
 // the fight's centre, a loss is one model falling (see 'air:lost' events). Nothing here flies a single aircraft.
 
-import type { AirMission, BomberRow, BomberSeats, BomberShot } from '../../campaign/types';
+import type { AirMission, BomberRow, BomberSeats, BomberShot, ShipClass } from '../../campaign/types';
 import type { BombLaw } from '../../campaign/airfought';
 import type { Side, UnitBase } from '../core/types';
 import type { Band } from './book';
 import type { AirGround } from './ground';
 import type { Form, Pass, Role, Style, When } from './doctrine';
 import type { Loadout } from './guns';
+import type { ShipPlace, Strike } from './ships';
 import type { AirCloud } from './sky';
 import type { Defence, DefRole } from './styles';
 
@@ -103,6 +104,8 @@ export interface AirUnit extends UnitBase {
   /** Bombers: aircraft of the box that have fallen out of formation (the design's 1.6), oldest first; those that limped home. */
   strag: Straggler[];
   away: number;
+  /** A carrier group's bombers: how this box attacks ships (ships.ts, ruling 238(2)). */
+  strike?: Strike;
   /** A computer defence's fighter group: sent at the raid's escort or at its bombers (styles.ts; the tactics panel's 5c). */
   def?: DefRole;
   /** On its staff's climb above a raid radar warned it of (the tactics panel's 5d): its height is drawn, never priced (b418). */
@@ -199,8 +202,11 @@ export interface AirPlace {
   models?: Record<string, { ftr: string; bmr: string }>;
   /** Each nation's guns that month, on the aircraft drawn for it (guns.ts): shown, never counted. */
   guns?: Record<string, { ftr: Loadout; bmr: Loadout }>;
-  /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
-  starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
+  /**
+   * Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. over: a
+   * fleet's own fighters standing over it as a strike comes on, warned by its lookouts (the tactics panel's S1).
+   */
+  starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean; over?: boolean }>;
   /** Where the raiders fly from: their own airfields, carriers at sea (the Home Fleet's aircraft), or both. */
   from?: 'land' | 'sea' | 'both';
   /** The country round the target, in board metres (ground.ts): absent, the page draws a plain country. */
@@ -209,6 +215,8 @@ export interface AirPlace {
   cloud?: AirCloud;
   /** Fighter pilots who come down over this side's ground fly again at this rate (AIR.pilots.home, away). */
   saved: Record<Side, number>;
+  /** A raid on a harbour or a strike on a fleet: the campaign's law for ships, the ships as pieces, the stage, the carrier groups by kind (ships.ts). */
+  ships?: ShipPlace | null;
   /**
    * How the computer flies the defence (styles.ts; the tactics panel's item 5, ruling 239): the share of its weight
    * sent at the escort, and how far its staff climbs above a raid radar warned it of. Absent for a human defender,
@@ -264,6 +272,10 @@ export interface AirOutcome {
   rolls?: { rail?: number; ruin?: number };
   railCut?: boolean;
   ruined?: boolean;
+  /** A strike on ships: the ships of each class sunk in each fleet, by fleet id (ShipBook.sunk), every class it has. */
+  sunk?: Record<number, Partial<Record<ShipClass, number>>>;
+  /** And, where damage control is in play (ruling 240), those its repair parties kept afloat (ShipBook.kept). */
+  kept?: Record<number, Partial<Record<ShipClass, number>>>;
 }
 
 /**

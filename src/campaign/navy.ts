@@ -1549,9 +1549,11 @@ const andList = (parts: string[]): string => (parts.length === 1 ? parts[0] : `$
  * where the sentence just before names the fleet, so the fleet is named once; "fleet's" where the fleet was named
  * earlier but another sentence stands between ("The shore batteries sink a destroyer. One of the fleet's cruisers is
  * ..."); 'yours' is for a text addressed to the fleet's owner alone. With several classes, 'its' and "fleet's" say "of
- * the fleet" once (rider 3): "A cruiser and 2 destroyers of the fleet are badly hit, ...".
+ * the fleet" once (rider 3): "A cruiser and 2 destroyers of the fleet are badly hit, ...". 'your fleet' names one of
+ * the owner's own fleets where two or more of them were struck, so that their lines do not read alike (rider 6): "A
+ * destroyer of your Battle Fleet was badly hit, ..." (no "the" after "your").
  */
-export type KeptForm = 'fleet' | 'its' | "fleet's" | 'yours';
+export type KeptForm = 'fleet' | 'its' | "fleet's" | 'yours' | 'your fleet';
 
 /**
  * Ruling 240: the one line that tells of ships damage control kept afloat, in the UI director's words of 21 November and
@@ -1573,14 +1575,14 @@ export function keptAfloat(f: { name: string }, saved: Ships, how: KeptForm | bo
   const head = (k: number): string => COUNT_WORD[k] ?? String(k);
   const classes = CLASSES.filter((c) => saved[c] > 0);
   // ("One of its ..." for one class; with several, the fleet form says "of the fleet" once. The owner's form passes as built.)
-  const owned = form === 'yours' || (form !== 'fleet' && classes.length === 1);
+  const owned = form === 'yours' || (form !== 'fleet' && form !== 'your fleet' && classes.length === 1);
   const whose = form === 'yours' ? 'your' : form === 'its' ? 'its' : "the fleet's";
   const parts = classes.map((c, i) => {
     const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
     if (owned) return `${i ? (k === 1 ? 'one' : k) : head(k)} of ${whose} ${many}`;
     return k === 1 ? aShip(one, !i) : `${i ? k : head(k)} ${many}`;
   });
-  const of = owned ? '' : form === 'fleet' ? ` of ${fleetName(f)}` : ' of the fleet';
+  const of = owned ? '' : form === 'fleet' ? ` of ${fleetName(f)}` : form === 'your fleet' ? ` of your ${f.name}` : ' of the fleet';
   const verb = past ? (n === 1 ? 'was' : 'were') : n === 1 ? 'is' : 'are';
   return `${andList(parts)}${of} ${verb} badly hit, but the repair parties ${past ? 'kept' : 'keep'} the ${n === 1 ? 'ship' : 'ships'} afloat.`;
 }
