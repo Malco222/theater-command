@@ -3982,7 +3982,8 @@ function spiesPage(s: Game, region: number): Page | null {
     // it is going, as the design director ruled on 22 November, so its row says what the rest would need there)
     const rest = a.training ? '' : barredLine(a.missions, { host: theName(s, a.host), restSaid: a.atWork && a.rest > 0 });
     if (rest) lines.push(rest);
-    for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? '' : 's'}.`);
+    // (whole divisions, as the agent card counts them: a worn corps is not "2.9472 divisions")
+    for (const x of a.sees.slice(0, 5)) { const d = Math.round(x.divs); lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${d} division${d === 1 ? '' : 's'}.`); }
     return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
   });
   const notes = room.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${n.text}`);

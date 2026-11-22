@@ -113,6 +113,9 @@ describe('the room as the UI director ruled it', () => {
     // (a great power draws its own plans, so no theft is counted; Berlin lacks only an oilfield)
     expect(row.lines).toContain('There is no oilfield at Berlin.');
     expect(row.lines.join(' ')).not.toMatch(/plans|more need/);
+    // (whole divisions, as the card counts them)
+    expect(row.lines.filter((l) => l.startsWith('In sight at ')).length).toBeGreaterThan(0);
+    for (const l of row.lines.filter((x) => x.startsWith('In sight at '))) expect(l).toMatch(/, \d+ divisions?\.$/);
   });
 
   // (Found by review, 22 November: each need is read from the rules' reason, never from the work's name.)
