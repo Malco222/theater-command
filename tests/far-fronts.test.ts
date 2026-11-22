@@ -86,9 +86,12 @@ afterEach(() => { frontWatch.tell = null; frontsClear(); });
 describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
   it("lays the seven fronts: each its place, the November plan's aim, and its rows as the book has them", () => {
     expect(SOUTH().fronts!.map((F) => [F.id, F.place, F.rows.length])).toEqual([
-      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Myitkyina', 4], ['hongkong', 'Hong Kong', 4],
+      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 9], ['burma', 'Myitkyina', 4], ['hongkong', 'Hong Kong', 4],
       ['indies', 'Batavia', 5], ['southseas', 'Rabaul', 1], ['wake', 'Wake', 1],
     ]);
+    // (Luzon's nine: the six, and the 16th Division's Kimura Detachment and 9th Infantry and the 14th Army's heavy
+    // guns, rows of their own from the design director's rulings of 22:34Z and 22:42Z of 21 November 2026.)
+    expect(front('luzon').rows.slice(6)).toEqual(['Kimura Detachment (16th Division)', '16th Division (9th Infantry)', '14th Army artillery (1st and 8th Field Heavy Artillery)']);
     // By road: the Guards with their tanks to Singora, the 143rd Regiment to the Kra (the design director's of 04:58Z,
     // 21 November 2026), and Hong Kong's rows to Tungkun (the book's own step).
     expect(SOUTH().fronts!.flatMap((F) => (F.land ?? []).map((m) => [F.id, m.corps, m.with, m.to]))).toEqual([

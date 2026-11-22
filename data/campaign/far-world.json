@@ -800,8 +800,8 @@
     "Lingayen",
     {
      "xp": 0.2,
-     "str": 0.25,
-     "est": 0.25
+     "str": 0.06,
+     "est": 0.06
     }
    ],
    [
@@ -2783,8 +2783,8 @@
     "Formosa",
     {
      "xp": 0.45,
-     "str": 0.65,
-     "est": 0.65,
+     "str": 0.8,
+     "est": 0.8,
      "gen": "Masaharu Homma",
      "hold": 1,
      "from": [
@@ -2816,11 +2816,12 @@
     "Okinawa",
     {
      "xp": 0.45,
-     "str": 0.9,
+     "str": 0.5,
      "hold": 1,
      "from": [
       "General reserve (16th Division, home from China)"
-     ]
+     ],
+     "est": 0.5
     }
    ],
    [
@@ -4736,6 +4737,51 @@
       2
      ]
     }
+   ],
+   [
+    27,
+    "JAP",
+    "Kimura Detachment (16th Division)",
+    "inf",
+    1,
+    "Okinawa",
+    {
+     "xp": 0.45,
+     "str": 0.15,
+     "est": 0.15,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "16th Division (9th Infantry)",
+    "inf",
+    1,
+    "Formosa",
+    {
+     "xp": 0.45,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1,
+     "join": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "14th Army artillery (1st and 8th Field Heavy Artillery)",
+    "art",
+    1,
+    "Formosa",
+    {
+     "xp": 0.3,
+     "str": 0.4,
+     "hold": 1,
+     "est": 0.4,
+     "until": 34,
+     "join": 1
+    }
    ]
   ],
   "formations": [
@@ -4981,9 +5027,9 @@
     "Bataan",
     {
      "xp": 0.1,
-     "str": 0.2,
+     "str": 0.1,
      "hold": 1,
-     "est": 0.2
+     "est": 0.1
     }
    ]
   ]

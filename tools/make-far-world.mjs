@@ -407,7 +407,8 @@ const out = {
 //                          a row that takes corps on the board adds from home (the 56th Division's body)
 //   riders-234-b599.json   rider b599 (i), the corps of Japan's second ring the world had not (the book's, stops 1-2)
 // And after them the director's later orders, kept by the rules builder of release 2's far side:
-//   pacific-r2/riders-luzon-1121.json   his order for Luzon of 21 November 2026: the 65th Brigade's size
+//   pacific-r2/riders-luzon-1121.json   his order for Luzon of 21 November 2026: the 65th Brigade's size, and his rulings of
+//                          22:34Z to 22:50Z on the Lingayen reading: the 14th Army's rows and Luzon's garrison by the record
 // A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
 // of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
 // another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
@@ -423,6 +424,8 @@ function layRiders(file) {
   const riders = src(file);
   const E = riders.expeditions ?? {}, C = riders.corps ?? {};
   for (const r of E.set ?? []) setRow('row by date', byDate(r), (x) => x[6], r);
+  // (A formation of the opening armies, the dated rows the far world lists as 'formations', is named the same way.)
+  for (const r of riders.formations?.set ?? []) setRow('formation by date', dated.formations.filter((x) => x[0] === r.row[0] && x[1] === r.row[1] && x[2] === r.row[2]), (x) => x[6], r);
   for (const r of E.move ?? []) {
     const rows = byDate(r);
     need(rows.length === 1, `rider: ${rows.length} rows by date named ${JSON.stringify(r.row)}`);
@@ -465,7 +468,7 @@ function layRiders(file) {
     out.commanders.roster[nat] = [...(r.first ?? []), ...roster];
   }
   const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
-  notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
+  notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(riders.formations?.set) ? `${n(riders.formations.set)} formations by date changed, ` : ''}${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
 }
 const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json', 'pacific-six/riders-234-b642.json', 'pacific-six/riders-234-b599.json', 'pacific-r2/riders-luzon-1121.json'];
 for (const file of RIDERS) layRiders(file);
