@@ -88,6 +88,10 @@ export function saveGame(g: Game): string {
     ac: g.ac,
     // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
     subLook: g.subLook,
+    // A neutral's bargains (release 2): absent while the switch is off, so such a save is written as it always was.
+    bargains: g.bargains,
+    // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
+    legions: g.legions,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -243,6 +247,8 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (d.ac && typeof d.ac === 'object') g.ac = d.ac;
   if (Array.isArray(d.subLook)) g.subLook = d.subLook;
+  if (d.bargains && typeof d.bargains === 'object') g.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
+  if (d.legions && typeof d.legions === 'object') g.legions = { abroad: {}, done: {}, ...d.legions };
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

@@ -58,6 +58,7 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { damageRules, openDamage } from './citydamage';
+import { FIELD, fieldRepairView as fieldRepairViewOf, fieldRules as fieldRulesOf, fieldView, fieldsDamaged, fieldsMonth, openFields, orderFieldRepair as repairFieldFor, undoFieldRepair as undoFieldFor, type FieldRepairView, type FieldView } from './fieldstate';
 import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
 import { gateViews, type GateView } from './gates';
@@ -84,6 +85,8 @@ import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
+import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
+import { legionsMonth, recallLegion, sendLegion } from './legions';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -112,6 +115,8 @@ function closePhase(g: Game, nat: string): void {
     // Works held outright from one month's end to the next are taken over by the side that holds them.
     worksMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
+    // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
+    fieldsMonth(g);
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
@@ -120,6 +125,10 @@ function closePhase(g: Game, nat: string): void {
     // Air campaigns (ruling 236.2): the bombs' damage is repaired, held skies kept, and the book's campaigns open and close.
     airWarMonth(g);
     monthlyDiplomacy(g);
+    // A neutral's bargains (release 2, switched off in release 1): terms end, bids open and close, patience moves.
+    bargainsMonth(g);
+    // Volunteer legions (release 2, switched off in release 1): they reach the line, come home, or are sent.
+    legionsMonth(g);
     // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
     winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
@@ -282,7 +291,11 @@ export function whyNotSetHistory(g: Game, stop: number): string | null {
  * world decide from the next month on. `fresh` is for a campaign that starts at this stop.
  */
 export function orderHistory(g: Game, stop: number, fresh = false): boolean {
-  return (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  const ok = (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  // (A new campaign's neutral bargains are opened before its stop is set: the record's first-day buyers are read again
+  // at the stop it starts at. Release 2; nothing while the switch is off.)
+  if (ok && fresh) bargainsFirstDay(g);
+  return ok;
 }
 /** The claims on named ground that can be read now (stops 4 and 5): who claims what from whom and why, and whether it is being pressed or fought for. */
 export const claimsOf = (g: Game): ClaimView[] => claimsView(g);
@@ -2103,6 +2116,54 @@ export function orderUndoRepair(g: Game, region: number): boolean {
   return humanUp(g) && undoRepair(g, g.human!, region);
 }
 
+// ---- Airfields as targets (fieldstate.ts; the grand campaign's air war with its switch) ----------------------------
+
+/** True when airfields are targets in this war. (The bridge looks this up by name: fieldRules.) */
+export const airfieldTargetsOn = (g: Game): boolean => fieldRulesOf(g);
+export const fieldRules = (g: Game): boolean => fieldRulesOf(g);
+
+/** True when new grand campaigns are opened with airfields as targets (damage.json field.on; false as shipped). */
+export const airfieldTargetsShipped = (): boolean => FIELD.on === true;
+
+/** Turns airfields as targets on or off for a grand campaign. Off, the war plays as release 1 did. */
+export function setAirfieldTargets(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  openFields(g, on);
+  return (g.flags.fields === 1) === on;
+}
+
+/** The bridge's name for setAirfieldTargets: a new grand campaign, behind its option. */
+export const setFieldRules = (g: Game, on: boolean): boolean => setAirfieldTargets(g, on);
+
+/** A province's field as the glance, the province job and the airfield card read it (null with the switch off, or no field). Keys: 'work:fieldfix:<id>' (glance tile), 'fieldfix:<id>' and 'fieldfix-undo:<id>' (province job), act 'fieldfix:<id>' (card). */
+export function fieldRepairView(g: Game, region: number, viewer: string | null = g.human): FieldRepairView | null {
+  return fieldRepairViewOf(g, region, viewer);
+}
+
+/** Repairs one of the player's fields, paid at once (the bridge's name). */
+export const orderFieldRepair = (g: Game, region: number): boolean => humanUp(g) && repairFieldFor(g, g.human!, region);
+
+/** Takes back the player's field repair of this month, with his money (the bridge's name). */
+export const undoFieldRepair = (g: Game, region: number): boolean => humanUp(g) && undoFieldFor(g, g.human!, region);
+
+/** A province's airfield as the city glance and the airfield card show it: tier, room, shut, levels burned, the repair, its price and why not. Null without a field or with the switch off. */
+export function airfieldState(g: Game, region: number): FieldView | null {
+  return fieldRulesOf(g) ? fieldView(g, region, g.human) : null;
+}
+
+/** Every damaged field on the map, for the map's marks (the 3D table shows only those the player may know of). */
+export const airfieldMarks = (g: Game): ReturnType<typeof fieldsDamaged> => fieldsDamaged(g);
+
+/** Repairs one of the player's fields, paid at once: the runway opens next month, a burned level each month after. */
+export function orderAirfieldRepair(g: Game, region: number): boolean {
+  return orderFieldRepair(g, region);
+}
+
+/** Takes back a field repair the player ordered this month, with his money. */
+export function orderUndoAirfieldRepair(g: Game, region: number): boolean {
+  return undoFieldRepair(g, region);
+}
+
 export interface BuildingTip { region: number; town: string; province: string; offer: CivicOffer }
 
 /** The buildings worth ordering next, for a list on the Build tab: for each line, the richest of the player's places that can take it now. */
@@ -2135,6 +2196,26 @@ export function orderTrade(g: Game, nat: string): boolean {
 /** Ends the player's trade agreement with another country. */
 export function orderEndTrade(g: Game, nat: string): boolean {
   return humanUp(g) && endTrade(g, g.human!, nat);
+}
+
+/** The player bids for a neutral's bargain whose round is open (release 2). Returns why not, or null when the bid stands. */
+export function orderBid(g: Game, id: string, pp: number): string | null {
+  return humanUp(g) ? placeBid(g, g.human!, id, pp) : 'It is not your month.';
+}
+
+/** The player, as the seller, chooses a buyer for a bargain from the bids that stand, or nobody (release 2). */
+export function orderSellTo(g: Game, id: string, buyer: string | null): string | null {
+  return humanUp(g) ? chooseBuyer(g, g.human!, id, buyer) : 'It is not your month.';
+}
+
+/** The player, at peace outside both sides, sends a legion of volunteers to a patron against its enemy (release 2). Returns why not, or null when it is sent. */
+export function orderLegion(g: Game, patron: string, against: string): string | null {
+  return humanUp(g) ? sendLegion(g, g.human!, patron, against) : 'It is not your month.';
+}
+
+/** The player calls his legion home: it leaves at the next month's start (release 2). Returns why not, or null. */
+export function orderRecall(g: Game): string | null {
+  return humanUp(g) ? recallLegion(g, g.human!) : 'It is not your month.';
 }
 
 // ---- Spies and the fog of war (the grand campaign) -----------------------------------------------------

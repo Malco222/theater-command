@@ -94,6 +94,7 @@ struct FViewCorps
 	bool bNear = false; // dim, but in plain view: a corps not identified
 	bool bLean = false; // it takes no drafts: the veterans are kept together
 	FString Ally; // an ally's corps that marches with the player's army: its own country
+	FString Vol; // R2 bargains hook: a volunteer legion's home, whose plain flag it flies under its host's (empty in release 1)
 	int32 Stale = 0; // known from a report this many months old (0: known as it is today)
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back

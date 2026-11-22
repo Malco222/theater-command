@@ -243,6 +243,66 @@ export interface TradeDeal {
   state: 'open' | 'raided' | 'cut';
 }
 
+/**
+ * A neutral's bargain as it stands (bargains.ts; release 2, with its switch on): who buys the good this term and at
+ * what price, how the goods go, and the round of bids open for it, if one is.
+ */
+export interface BargainHeld {
+  /** The country buying it this term, or null while nobody does. */
+  buyer: string | null;
+  /** What the buyer pays the seller a month, in production points, for the goods that arrive. */
+  price: number;
+  /** The month the term began and the last month it runs. */
+  since: number;
+  until: number;
+  /** How the goods go this month (trade.ts tradeRoute), the seas crossed, the share sunk, and the share that arrives. */
+  way: 'land' | 'sea' | 'none';
+  seas: number[];
+  lost: number;
+  share: number;
+  /** Months running the way has been shut. */
+  shut?: number;
+  /** A round of bids: the month it opened, each bidder's offer a month, and the month the seller in the player's seat was reminded. */
+  round?: { opened: number; bids: Record<string, number>; reminded?: number };
+}
+
+/** Every bargain's state, and each great power's patience with a seller that feeds its enemy. */
+export interface BargainBook {
+  rows: Record<string, BargainHeld>;
+  /** By 'power:seller': what is left of the power's patience, 0 to 100. Absent at 100. */
+  patience: Record<string, number>;
+  /** Every other country's exports, a month, by seller: fixed as the campaign opens from what it has to trade. */
+  generic: Record<string, number>;
+  /** By 'bargain:country': the last month the country had the goods, for a good its production comes to depend on. */
+  got: Record<string, number>;
+}
+
+/** A volunteer legion abroad (legions.ts; release 2, with its switch on), by its home. */
+export interface LegionAbroad {
+  /** Its corps in the patron's army; -1 in the month it is on its way. */
+  corps: number;
+  patron: string;
+  /** The enemy it was sent to fight. */
+  against: string;
+  name: string;
+  /** The record's row it is (legions.json), if it is one. */
+  row?: string;
+  /** Its size in divisions' worth of men. */
+  est: number;
+  /** The month it reaches the line, and the last month of its tour. */
+  since: number;
+  until: number;
+  /** Its home has called it back: it leaves at the next month's start. */
+  recall?: boolean;
+}
+
+/** The volunteer legions (legions.ts; release 2): who has one abroad, and the record's rows already played out. */
+export interface LegionBook {
+  abroad: Record<string, LegionAbroad>;
+  /** By the record's row: the month it ended. */
+  done: Record<string, number>;
+}
+
 /** A power's stocks of oil and supplies, and the share of last month's need of each that was met (1 unless the depots ran dry). */
 export interface Stores {
   oil: number; sup: number; oilMet: number; supMet: number;
@@ -275,6 +335,7 @@ export interface Build {
   id: number;
   /** A corps, a level of fortification, from the arsenal (aircraft, ships, or a work built in a province), or a level of a town's building ('civic', its line in 'item'). */
   what: 'corps' | 'fort' | 'air' | 'ship' | 'work' | 'civic';
+  /** A corps' kind. (Airfields as targets: a 'field' work carries 'strip' here where the level is a field strip, not concrete; read it as a string, isStripBuild.) */
   kind?: Kind;
   divs?: number;
   /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field'), and how many. */
@@ -404,6 +465,8 @@ export interface Corps extends Storied {
   nos?: number[];
   /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
   town?: number;
+  /** A volunteer legion (legions.ts; release 2): the country at peace whose men these are. It fights in its patron's army under its own name and flag. */
+  vol?: string;
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
@@ -1022,7 +1085,8 @@ export interface PlanPhase {
 /** What an air fleet is doing. 'ground' is a raid on troops, flown only in the grand campaign's air war. */
 /** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. 'town' is a raid on the defences of a town an army means to take (the grand campaign's sieges). */
 /** 'line' is a raid on the fieldworks of an enemy line (the grand campaign): the bombers take months off the works of the troops dug in there. */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line';
+/** 'airfield' is a raid on one enemy airfield (airfields as targets, behind its switch): its runway, hangars and the aircraft parked there. */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line' | 'airfield';
 
 export interface AirLeader {
   name: string;
@@ -1222,6 +1286,8 @@ export interface AirReport {
   surprise?: boolean;
   /** Damaged cities (the grand campaign with its switch): what the bombs did to the town, in percent points added, and where it now stands. */
   city?: { region: number; added: number; now: number };
+  /** Airfields as targets (behind its switch): what the bombs did to the field: whether its runway is shut, the levels burned now, the aircraft destroyed on the ground. */
+  field?: { region: number; shut: boolean; levels: number; ground: number };
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */
@@ -1388,6 +1454,10 @@ export interface Game {
   atSea?: Voyage[];
   /** The air campaigns (ruling 236.2, the grand campaign with the switch on): absent while the switch is off. */
   ac?: AirWarMemory;
+  /** A neutral's bargains (bargains.ts; release 2): absent while the switch is off. */
+  bargains?: BargainBook;
+  /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
+  legions?: LegionBook;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;
