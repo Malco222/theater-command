@@ -65,13 +65,15 @@ FLandLive::~FLandLive()
 namespace
 {
 	/** The player's battle rules, in the order the practice card lists them (FLandLive::FRule). */
-	// (each tip: what the rule does, then "Off:" what changes; the UI director, 22 November 20:56Z)
+	// (each tip: what the rule does, then "Off:" what changes; the UI director, 22 November 20:56Z. Smoke is off until he
+	// switches it on: the tactics thread's paired measure, 21:29Z, has an attacking staff's own screens blunting its own
+	// assault on plains, forest and city, so it stays his choice until that is mended.)
 	const FLandLive::FRule LandRuleTable[] = {
-		{ TEXT("cutters"), TEXT("Hedge cutters"), TEXT("Your tanks cut a gap through a hedge where you pick (from July 1944). Off: no cutting; tanks cross hedges as they always have."), TEXT("TheaterLandNoCutters") },
-		{ TEXT("smoke"), TEXT("Smoke on call"), TEXT("Your men on foot lay a smoke screen along a line you drag. Off: no smoke screens on call."), TEXT("TheaterLandNoSmoke") },
-		{ TEXT("hide"), TEXT("Forest ambushes"), TEXT("Units in woods stay hidden from the enemy until found or firing. Off: woods hide no one."), TEXT("TheaterLandNoHide") },
-		{ TEXT("relief"), TEXT("Hold till relieved"), TEXT("A unit digs in to wait for a corps coming up; if help comes late, it breaks sooner. Off: no hold order; help simply arrives."), TEXT("TheaterLandNoRelief") },
-		{ TEXT("rider"), TEXT("Despatch riders"), TEXT("A corps coming up sends a rider ahead; click him for its news. Off: help arrives with no word ahead."), TEXT("TheaterLandNoRider") },
+		{ TEXT("cutters"), TEXT("Hedge cutters"), TEXT("Your tanks cut a gap through a hedge where you pick (from July 1944). Off: no cutting; tanks cross hedges as they always have."), TEXT("TheaterLandNoCutters"), true, nullptr },
+		{ TEXT("smoke"), TEXT("Smoke on call"), TEXT("Your men on foot lay a smoke screen along a line you drag, and both staffs lay their own. Off: no smoke screens."), TEXT("TheaterLandNoSmoke"), false, TEXT("TheaterLandSmoke") },
+		{ TEXT("hide"), TEXT("Forest ambushes"), TEXT("Units in woods stay hidden from the enemy until found or firing. Off: woods hide no one."), TEXT("TheaterLandNoHide"), true, nullptr },
+		{ TEXT("relief"), TEXT("Hold till relieved"), TEXT("A unit digs in to wait for a corps coming up; if help comes late, it breaks sooner. Off: no hold order; help simply arrives."), TEXT("TheaterLandNoRelief"), true, nullptr },
+		{ TEXT("rider"), TEXT("Despatch riders"), TEXT("A corps coming up sends a rider ahead; click him for its news. Off: help arrives with no word ahead."), TEXT("TheaterLandNoRider"), true, nullptr },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
@@ -88,7 +90,7 @@ const FLandLive::FRule& FLandLive::RuleAt(int32 Index)
 
 bool FLandLive::RuleOn(int32 Index)
 {
-	bool bOn = true;
+	bool bOn = RuleAt(Index).bOnAtFirst;
 	if (GConfig)
 	{
 		GConfig->GetBool(RulesSection, RuleAt(Index).Key, bOn, GGameUserSettingsIni);
@@ -117,11 +119,12 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Me = InMe;
 	bSetup = bInSetup;
 	// (the battle rules the player may switch off, read here on the game thread, where his settings are written: each on
-	// unless he switched it off on the practice card, or for one run on the command line)
+	// as he left it on the Battle rules card (or as it starts), or for one run on the command line)
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
-		const bool bOn = RuleOn(R) && !FParse::Param(FCommandLine::Get(), LandRuleTable[R].OffFlag);
+		const FRule& Rule = LandRuleTable[R];
+		const bool bOn = (RuleOn(R) || (Rule.OnFlag && FParse::Param(FCommandLine::Get(), Rule.OnFlag))) && !FParse::Param(FCommandLine::Get(), Rule.OffFlag);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));
 	}
 	Thread = FRunnableThread::Create(this, TEXT("TheaterLandRules"), 0, TPri_Normal);
