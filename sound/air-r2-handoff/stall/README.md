@@ -1,5 +1,11 @@
 # The Bremen sound-on stall (r2f, 22 Nov): what the sound director found, and what the Mac should run
 
+**STOOD DOWN 22 Nov 19:03Z.** The Mac's play run (a1acb552, sound on, 150 s at 1441x878) has no stall: 43-58 fps,
+game 5-13 ms, 627 bursts and 1,136 takes, no 170/6 ms alternation (-nosound: 44-68 fps). The stall came only from the
+film recorder's fixed-step sound capture, which the Mac builder is fixing. The trace and bisect below are not needed.
+The gunner merge (`gunners-one-take-HELD.diff`) is not released, since nothing points at gunner voices, and the
+pooled-voice patch is parked (`parked-pool/README.md`).
+
 The builder's report (via the coordinator, 11:37Z): the Bremen r2f **sound** run stalls the game thread, "one ~170 ms
 step in two once the battle starts", only with sound on. It came in with r2e/r2f.
 

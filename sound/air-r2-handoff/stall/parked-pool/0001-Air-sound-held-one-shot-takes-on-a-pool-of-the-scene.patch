@@ -1,0 +1,742 @@
+From a2b3831561700d20be67b74038280a6edb495f5b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 18:10:53 +0000
+Subject: [PATCH] Air sound (held): one-shot takes on a pool of the scene's own
+ voices, at most 10 begun a frame; off unless the mix asks
+
+For the Mac's Bremen film stall with the sound on (frames alternating about 170 and 6 ms), should its trace show the
+game thread making and destroying the takes' voices: every one-shot take was a new audio component (CreateSound2D,
+destroyed at its end) and, for a gun's part, a world timer for its cut. Held: it ships only if the trace shows that.
+
+- The pool (mix.json air.voicePool): audio components the scene owns (VoicePool), made as first wanted up to
+  `components` and never destroyed, each given take after take once its last has ended. At most `voices` sound at once
+  without fading out; past that a take takes the voice of the farthest far take (300 m or more from the eye where it
+  is now, not the ridden plane's own, not a big moment), faded over air.limits.cutFade; a far take takes only a voice
+  farther off than itself. Each pooled voice carries a generation, and a take is kept as its voice, slot and
+  generation (FAirTake), so GunTakes, the muzzle move, GunStop and the cut reach a pooled voice only while it still
+  plays that take.
+- The cuts: a pooled take's part end is checked each frame (TakesDue) in place of a world timer a take, counted from
+  the start of the frame it was asked in, so it falls on the timer's own frame.
+- The cap (air.takesPerFrame, air.takesHeldFor): at most 10 takes begun a frame. A far take past it, or finding no
+  voice, is held and begun on the first following frame with room, the held before the new, and dropped only once it
+  has waited longer than 0.12 s and still finds no room. The ridden plane's own takes, anything within 300 m of the eye
+  and big moments are never held, delayed or taken; with the pool full they get a voice of their own, as before. A
+  held gun take is kept for its gun when it begins and cut where it would have been; if its gun stops while it waits,
+  it is begun and faded at once, as a gun firing for one frame was.
+- Loops (the formations' engines, the ridden engine, the far bed) are laid as before: never pooled, held or counted.
+- Levels and priorities as they were. With none of the new keys in the mix the scene does what it did: a harness
+  compares its calls into the engine with 24b8d1b9's, call for call. mix.json sets voices 96, components 128, 10 a
+  frame and 0.12 s, each with its note.
+- The 20 s tally line (takes laid on) gains takes pooled, voices made, reused, stolen, held, dropped, and on a voice of
+  their own; a line at open gives the numbers.
+
+Not built in Unreal (none here): the changed functions and blocks compiled from their literal text against stand-ins,
+g++ and clang++ -std=c++20 -Wall -Wextra -Wshadow -Werror, and run against a model of the audio engine.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhz35oCkUv94Xb2EwCjp
+---
+ .../Content/Data/Sound/mix.json               |  11 +
+ .../TheaterCommand/Battle/AirBattle.cpp       | 440 ++++++++++++++++--
+ .../Source/TheaterCommand/Battle/AirBattle.h  | 101 +++-
+ 3 files changed, 519 insertions(+), 33 deletions(-)
+
+diff --git a/unreal/TheaterCommand/Content/Data/Sound/mix.json b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+index 79263051..bd90b1fc 100644
+--- a/unreal/TheaterCommand/Content/Data/Sound/mix.json
++++ b/unreal/TheaterCommand/Content/Data/Sound/mix.json
+@@ -708,6 +708,17 @@
+       "bomberDronesFirst": 4,
+       "_bomberDronesFirst": "Of the `engines` loops, the 4 nearest bomber drones within the silent distance of the family the loops use (air.loopsFamily: air_far, 14 km) always keep their place: a vic's shared loop or a straggler's own. The rest go to the nearest of everything else. Under v2, with the camera on the dogfight, the fighters' loops kept 2 more of the boxes' drones silent (7 of 18 box loops played; 9 with this rule) and the drones' level was -52.2 dB against -40.3 with it (v3)."
+     },
++    "voicePool": {
++      "voices": 96,
++      "_voices": "One-shot takes (guns, cracks, flak, bombs, passes, planes lost: everything but the loops) sounding at once on the 3D game's pooled voices, not counting those fading out. Past it a new take takes the voice of the farthest far take (300 m or more from the camera where it is now, not the ridden plane's own, not a big moment), which fades over limits.cutFade; a far take takes only a voice farther off than itself, else it waits as takesPerFrame's do. 96: the engine's 128 voices less about 30 for the loops (a formation's engines each, the ridden plane's, the far bed) and the music, so the pool gives up a voice only where the engine would otherwise drop one, and fades it where the engine would stop it dead. Absent or 0: no pool, every take on a voice made for it and destroyed after (as before the pool).",
++      "components": 128,
++      "_components": "The most audio components the pool makes (made as first wanted, kept for the battle, never destroyed): the voices sounding plus those fading out (every gun take's 0.08 s cut, a taken voice's cutFade) until the engine lets them go. With all of them busy a far take waits as takesPerFrame's do, and a near one (the ridden plane's own, within 300 m, a big moment) is laid on a voice of its own as before the pool, never held. Absent: one and a half times voices.",
++      "_note": "Held patch (pool 0001): built for the Mac's Bremen film stall if its trace shows the game thread spending its time making and destroying the takes' voices (a new component and a world timer a take). Levels are not touched: every take plays at the level and priority it had."
++    },
++    "takesPerFrame": 10,
++    "_takesPerFrame": "The most one-shot takes begun in one frame (near takes counted, but never held). A far take past it is held and begun on a following frame, the held before the new. A gun's takes are 0.83 s apart, so 10 a frame at 60 frames a second is room for about 500 guns firing at once; it bites on the frame after a long one, when every gun whose next take fell due during it asks at once. The ridden plane's own guns, anything within 300 m of the camera and big moments are never held. Absent or 0: no cap.",
++    "takesHeldFor": 0.12,
++    "_takesHeldFor": "The longest a held far take waits (seconds) before it is dropped: it is begun on the first following frame with room, and dropped only on a frame that again has no room for it once it has waited longer than this, so it begins at most this and one frame late (0.14 s at 60 frames a second; 0.29 s on the Bremen film's 170 ms frames). 0.12 s is 7 frames at 60 a second and a seventh of a gun take's 0.83 s part; a gun 300 m off is heard on its flash, 0.9 s before its sound would really arrive, so 0.12 s later is still ahead of the real ear. A held take of a gun with a part (cannon, heavy) is cut where it would have been, counted from when it was asked, so the gun's takes still run end to end. The code keeps it under 0.25 s (a gun's takes are at least 0.3 s apart, so a gun has at most one take held).",
+     "passesPerGroup": 3,
+     "_passesPerGroup": "How many pass takes one fighter group may play at once. The sound thread took 3 in its review (19 Nov 07:10Z): 40 m behind it catches 5 of 7 passes, against 4 at 2 and 3 at 1.",
+     "masterDbByCameraDistance": [[300, 0], [1500, 8], [2600, 12]],
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+index 17b60434..7ab69028 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.cpp
+@@ -762,6 +762,23 @@ bool AAirBattle::Open(const FString& Why)
+ 				UE_LOG(LogTheater, Warning, TEXT("Air battle sound: the world has no audio device, so no master limiter and no sound."));
+ 			}
+ 		}
++		// The one-shot takes' voices (mix.json air.voicePool, air.takesPerFrame, air.takesHeldFor): a pool of voices given
++		// take after take, and a cap on takes begun a frame. With none of them in the mix, each take has a voice of its own,
++		// begun at once, as before. (HoldFor kept under the 0.3 s a gun's takes are at least apart, so a gun has one take
++		// held at most)
++		PoolVoices = FMath::Max(0, static_cast<int32>(AirParts::MixNumber(Mix, TEXT("air.voicePool.voices"), 0.0)));
++		PoolMost = FMath::Max(PoolVoices, static_cast<int32>(AirParts::MixNumber(Mix, TEXT("air.voicePool.components"), PoolVoices * 1.5)));
++		TakesPerFrame = FMath::Max(0, static_cast<int32>(AirParts::MixNumber(Mix, TEXT("air.takesPerFrame"), 0.0)));
++		HoldFor = FMath::Clamp(AirParts::MixNumber(Mix, TEXT("air.takesHeldFor"), 0.1), 0.0, 0.25);
++		CutFade = static_cast<float>(FMath::Max(0.0, AirParts::MixNumber(Mix, TEXT("air.limits.cutFade"), 0.3)));
++		if (PoolVoices > 0 || TakesPerFrame > 0)
++		{
++			const FString Pooled = PoolVoices > 0 ? FString::Printf(TEXT("pooled, at most %d sounding on up to %d voices"), PoolVoices, PoolMost)
++				: FString(TEXT("each on a voice of its own (no pool)"));
++			const FString Capped = TakesPerFrame > 0 ? FString::Printf(TEXT("at most %d begun a frame, a far take held up to %.2f s"), TakesPerFrame, HoldFor)
++				: FString(TEXT("no cap on takes a frame"));
++			UE_LOG(LogTheater, Display, TEXT("Air battle sound: one-shot takes %s; %s; a voice taken fades over %.2f s."), *Pooled, *Capped, CutFade);
++		}
+ 	}
+ 	// The paint: the campaign's own surface, coloured by each point's colour, as the stage's ships are.
+ 	{
+@@ -3271,6 +3288,8 @@ void AAirBattle::Tick(float DeltaSeconds)
+ 		}
+ 	}
+ 	S.Desk.Reach(S.Show.Shown());
++	// (the pooled takes' cuts due, and the takes the cap held begun before this frame's new ones)
++	TakesDue();
+ 	PlayEffects();
+ 	S.Desk.Write(Real, S.Show.Groups(), S.ClockTag, S.Words);
+ 	if (MetRealT < 0.0 && S.Desk.Head().Contact >= 0.0)
+@@ -4500,25 +4519,19 @@ void AAirBattle::PlayEffects()
+ 					: bMount ? FMath::Sqrt(static_cast<float>(FMath::Max(1, MountGuns.FindRef(SoundKey)))) : 1.0f;
+ 				const float Voice = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
+ 				UAudioComponent* Played = nullptr;
++				FAirTake Laid;
+ 				if (Recording)
+ 				{
+-					Played = bOwnGuns ? SoundAtEye(*Take, Together, Cut, false, Voice) : Sound(*Take, At, TEXT("air_guns"), Together, 0.0f, Cut, 0.0f, Voice);
++					Played = bOwnGuns ? SoundAtEye(*Take, Together, Cut, false, Voice, &Laid) : Sound(*Take, At, TEXT("air_guns"), Together, 0.0f, Cut, 0.0f, Voice, &Laid, &SoundKey);
+ 				}
+ 				if (Played)
+ 				{
+ 					++GunTakesLaid;
+-					// (its takes still playing kept, the finished ones let go)
+-					TArray<TWeakObjectPtr<UAudioComponent>> Had;
+-					GunTakes.MultiFind(SoundKey, Had);
+-					GunTakes.Remove(SoundKey);
+-					for (const TWeakObjectPtr<UAudioComponent>& Take_ : Had)
+-					{
+-						if (Take_.IsValid() && Take_->IsPlaying())
+-						{
+-							GunTakes.Add(SoundKey, Take_);
+-						}
+-					}
+-					GunTakes.Add(SoundKey, Played);
++					KeepGunTake(SoundKey, Laid);
++				}
++				else if (Laid.bHeld)
++				{
++					// (a far take the cap holds for a following frame: counted and kept for its gun when it begins, TakesDue)
+ 				}
+ 				else if (Recording)
+ 				{
+@@ -4531,14 +4544,16 @@ void AAirBattle::PlayEffects()
+ 			}
+ 			else if (!bOwnGuns && !bShip)
+ 			{
+-				// (a take laid at the muzzle goes along with the aircraft while it plays: a fighter covers 100 m in one)
+-				TArray<TWeakObjectPtr<UAudioComponent>> Playing;
++				// (a take laid at the muzzle goes along with the aircraft while it plays: a fighter covers 100 m in one. A pooled
++				// voice since given another take is left where that take is)
++				TArray<FAirTake> Playing;
+ 				GunTakes.MultiFind(SoundKey, Playing);
+-				for (const TWeakObjectPtr<UAudioComponent>& Take_ : Playing)
++				for (const FAirTake& Take_ : Playing)
+ 				{
+-					if (Take_.IsValid() && Take_->IsPlaying() && Take_->GetAttachParent() == nullptr)
++					UAudioComponent* const Moving = VoiceOf(Take_);
++					if (Moving && Moving->IsPlaying() && Moving->GetAttachParent() == nullptr)
+ 					{
+-						Take_->SetWorldLocation(At);
++						Moving->SetWorldLocation(At);
+ 					}
+ 				}
+ 			}
+@@ -4605,16 +4620,23 @@ void AAirBattle::PlayEffects()
+ 			}
+ 			// The burst heard stops with the gun (Brian 11-20 14:20Z: "after the bomber crew bails out, they can't keep
+ 			// shooting"): a take still playing is faded out at once, not left to run to its end after the trigger is up.
+-			TArray<TWeakObjectPtr<UAudioComponent>> Playing;
++			// (only a take's own voice: a pooled voice since given another take is not faded)
++			TArray<FAirTake> Playing;
+ 			GunTakes.MultiFind(StopKey, Playing);
+-			for (const TWeakObjectPtr<UAudioComponent>& Take : Playing)
++			for (const FAirTake& Take : Playing)
++			{
++				FadeTake(Take, 0.08f);
++			}
++			GunTakes.Remove(StopKey);
++			// (a take of its that the cap still holds is begun all the same, and faded at once: a gun that fired is heard,
++			// as one that fires for a single frame was before the cap)
++			for (FTakeAsk& Ask : HeldTakes)
+ 			{
+-				if (Take.IsValid())
++				if (Ask.bGun && Ask.GunKey == StopKey)
+ 				{
+-					Take->FadeOut(0.08f, 0.0f);
++					Ask.bStopped = true;
+ 				}
+ 			}
+-			GunTakes.Remove(StopKey);
+ 			break;
+ 		}
+ 		case AirShow::FxKind::Hit:
+@@ -6016,6 +6038,16 @@ void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
+ 		AirBed->Stop();
+ 		AirBed = nullptr;
+ 	}
++	// (the pooled voices stop with the scene, as its loops do: they are its own components and go with it; a take the cap
++	// still holds is let go)
++	for (const TObjectPtr<UAudioComponent>& Voice : VoicePool)
++	{
++		if (Voice)
++		{
++			Voice->Stop();
++		}
++	}
++	HeldTakes.Reset();
+ 	if (Limiter)
+ 	{
+ 		UAudioMixerBlueprintLibrary::RemoveMasterSubmixEffect(this, Limiter);
+@@ -6223,8 +6255,13 @@ UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoun
+ 	return Player;
+ }
+ 
+-UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut, float From, float Priority)
++UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut, float From, float Priority, FAirTake* Laid,
++	const int32* GunKey)
+ {
++	if (Laid)
++	{
++		*Laid = FAirTake();
++	}
+ 	if (After > 0.0f)
+ 	{
+ 		Later.Add({ RealT + After, FName(Name), Where, FName(Family), Volume, Cut, From });
+@@ -6238,7 +6275,38 @@ UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, cons
+ 	// (laid on at the battle's level now: louder riding an aircraft, and as the strategy camera draws back. A big moment
+ 	// plays at its full level and dips the rest; anything else laid on while one is dipping is laid on dipped)
+ 	const bool bBig = BigMoment(Name, Where);
+-	UAudioComponent* Player = Lay(Played, &Where, FamilyOf(Family), Volume * MasterGain * (bBig ? 1.0f : DuckCloseGain), From, bBig ? FMath::Max(Priority, 3.5f) : Priority);
++	const float Level = Volume * MasterGain * (bBig ? 1.0f : DuckCloseGain);
++	const float Voice = bBig ? FMath::Max(Priority, 3.5f) : Priority;
++	if (PoolVoices > 0 || TakesPerFrame > 0)
++	{
++		// (through the pool and the cap, at the same level and priority: a big moment, or anything within 300 m of the
++		// eye, never held and its voice never taken)
++		UWorld* const Here = GetWorld();
++		FTakeAsk Ask;
++		Ask.Played = Played;
++		Ask.Family = FamilyOf(Family);
++		Ask.Where = Where;
++		Ask.bPlaced = true;
++		Ask.Volume = Level;
++		Ask.From = From;
++		Ask.Priority = Voice;
++		Ask.Asked = Here ? Here->GetTimeSeconds() : 0.0;
++		Ask.CutAt = Cut > 0.0f ? Ask.Asked - (Here ? Here->GetDeltaSeconds() : 0.0f) + Cut : -1.0;
++		Ask.bNear = bBig || (Eye && FVector::Dist(Where, Eye->GetActorLocation()) < 300.0 * UnitsPerMetre);
++		Ask.bGun = GunKey != nullptr;
++		Ask.GunKey = GunKey ? *GunKey : 0;
++		const FAirTake Take = AskTake(Ask);
++		if (Laid)
++		{
++			*Laid = Take;
++		}
++		return VoiceOf(Take);
++	}
++	UAudioComponent* Player = Lay(Played, &Where, FamilyOf(Family), Level, From, Voice);
++	if (Laid && Player)
++	{
++		Laid->Voice = Player;
++	}
+ 	if (Player && Cut > 0.0f)
+ 	{
+ 		// (only the first part of the take: the rest is the ground's echo, which the sky does not have)
+@@ -6293,15 +6361,41 @@ bool AAirBattle::BigMoment(const TCHAR* Name, const FVector& Where)
+ 	return bBig;
+ }
+ 
+-UAudioComponent* AAirBattle::SoundAtEye(const TCHAR* Name, float Volume, float Cut, bool bLoop, float Priority)
++UAudioComponent* AAirBattle::SoundAtEye(const TCHAR* Name, float Volume, float Cut, bool bLoop, float Priority, FAirTake* Laid)
+ {
++	if (Laid)
++	{
++		*Laid = FAirTake();
++	}
+ 	USoundBase* Played = SoundOf(Name, bLoop);
+ 	if (!Played || !Eye)
+ 	{
+ 		return nullptr;
+ 	}
++	if (!bLoop && (PoolVoices > 0 || TakesPerFrame > 0))
++	{
++		// (a take at the eye is the ridden aircraft's own: through the pool, never held and its voice never taken)
++		UWorld* const Here = GetWorld();
++		FTakeAsk Ask;
++		Ask.Played = Played;
++		Ask.Volume = Volume * MasterGain;
++		Ask.Priority = Priority;
++		Ask.Asked = Here ? Here->GetTimeSeconds() : 0.0;
++		Ask.CutAt = Cut > 0.0f ? Ask.Asked - (Here ? Here->GetDeltaSeconds() : 0.0f) + Cut : -1.0;
++		Ask.bNear = true;
++		const FAirTake Take = AskTake(Ask);
++		if (Laid)
++		{
++			*Laid = Take;
++		}
++		return VoiceOf(Take);
++	}
+ 	// (unplaced, with no distance rule: heard as the mix sets it wherever the eye goes)
+ 	UAudioComponent* Player = Lay(Played, nullptr, nullptr, Volume * MasterGain, 0.0f, Priority);
++	if (Laid && Player && !bLoop)
++	{
++		Laid->Voice = Player;
++	}
+ 	if (Player)
+ 	{
+ 		if (Cut > 0.0f)
+@@ -6320,6 +6414,289 @@ UAudioComponent* AAirBattle::SoundAtEye(const TCHAR* Name, float Volume, float C
+ 	return Player;
+ }
+ 
++AAirBattle::FAirTake AAirBattle::AskTake(const FTakeAsk& Ask)
++{
++	FAirTake Take;
++	if (!BeginTake(Ask, Take) && Take.bHeld)
++	{
++		// (no room this frame: held for a following frame, where the held are begun before the new; TakesDue)
++		HeldTakes.Add(Ask);
++		++TakesHeld;
++	}
++	return Take;
++}
++
++bool AAirBattle::BeginTake(const FTakeAsk& Ask, FAirTake& Out)
++{
++	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_BeginTake);
++	Out = FAirTake();
++	USoundBase* const Played = Ask.Played.Get();
++	USoundAttenuation* const Family = Ask.Family.Get();
++	if (!Played)
++	{
++		return false;
++	}
++	// (past its family's silent distance from the eye: not laid at all, as Lay has it, so neither held nor counted)
++	if (Ask.bPlaced && Family && Eye)
++	{
++		const double Reach = Family->Attenuation.AttenuationShapeExtents.X + Family->Attenuation.FalloffDistance;
++		if (FVector::DistSquared(Ask.Where, Eye->GetActorLocation()) > Reach * Reach)
++		{
++			return false;
++		}
++	}
++	// The cap: past TakesPerFrame takes begun this frame (near ones counted too), a far take waits for a following frame.
++	if (!Ask.bNear && TakesPerFrame > 0 && TakesBegun >= TakesPerFrame)
++	{
++		Out.bHeld = true;
++		return false;
++	}
++	if (PoolVoices > 0)
++	{
++		// The pool: a voice whose last take has ended (IsPlaying false: played out, or its fade done), or one more made
++		// while there are fewer than PoolMost. A voice fading out is not given another take until its fade is done.
++		int32 Slot = INDEX_NONE;
++		int32 Sounding = 0;
++		for (int32 K = 0; K < VoicePool.Num(); ++K)
++		{
++			UAudioComponent* const Voice = VoicePool[K];
++			if (Voice && Voice->IsPlaying())
++			{
++				Sounding += VoiceTakes[K].bFading ? 0 : 1;
++			}
++			else if (Voice && Slot == INDEX_NONE)
++			{
++				Slot = K;
++			}
++		}
++		const bool bRoom = Slot != INDEX_NONE || VoicePool.Num() < PoolMost;
++		if (!bRoom && !Ask.bNear)
++		{
++			Out.bHeld = true;
++			return false;
++		}
++		if (bRoom && Sounding >= PoolVoices)
++		{
++			// (as many sounding as the pool allows: the farthest far take, 300 m or more from the eye where it is now, gives
++			// its voice up, faded over air.limits.cutFade; to a far take only one farther off than it. None: a near take is
++			// laid over the count, a far one waits)
++			const FVector Listener = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
++			const double Close = 300.0 * UnitsPerMetre;
++			const double Beyond = Ask.bNear ? Close : FVector::Dist(Ask.Where, Listener);
++			double Farthest = -1.0;
++			int32 Taken = INDEX_NONE;
++			for (int32 K = 0; K < VoicePool.Num(); ++K)
++			{
++				UAudioComponent* const Voice = VoicePool[K];
++				if (Voice && VoiceTakes[K].bFar && !VoiceTakes[K].bFading && Voice->IsPlaying())
++				{
++					const double Off = FVector::Dist(Voice->GetComponentLocation(), Listener);
++					if (Off >= Close && (Ask.bNear || Off > Beyond) && Off > Farthest)
++					{
++						Farthest = Off;
++						Taken = K;
++					}
++				}
++			}
++			if (Taken != INDEX_NONE)
++			{
++				VoicePool[Taken]->FadeOut(CutFade, 0.0f);
++				VoiceTakes[Taken].bFading = true;
++				VoiceTakes[Taken].CutAt = -1.0;
++				++VoicesStolen;
++			}
++			else if (!Ask.bNear)
++			{
++				Out.bHeld = true;
++				return false;
++			}
++		}
++		if (bRoom)
++		{
++			if (Slot == INDEX_NONE)
++			{
++				// (the actor's own, kept by VoicePool, never auto-destroyed; registered with the world as CreateSound2D's are,
++				// and like them attached to nothing)
++				UAudioComponent* const Made = NewObject<UAudioComponent>(this);
++				Made->bAutoActivate = false;
++				Made->bAutoDestroy = false;
++				Made->bIsUISound = false;
++				Made->RegisterComponent();
++				Slot = VoicePool.Add(Made);
++				VoiceTakes.AddDefaulted();
++				++VoicesMade;
++			}
++			else
++			{
++				++VoicesReused;
++			}
++			UAudioComponent* const Voice = VoicePool[Slot];
++			FVoiceTake& Given = VoiceTakes[Slot];
++			++Given.Generation;
++			Given.CutAt = Ask.CutAt;
++			Given.bFar = !Ask.bNear;
++			Given.bFading = false;
++			// (all that CreateSound2D and Lay give a take, given again: a voice keeps whatever its last take left on it. Set
++			// while it is stopped, so SetSound only sets the sound; and only then begun, as Lay begins one, so Play hands the
++			// priority on)
++			Voice->SetSound(Played);
++			Voice->SetVolumeMultiplier(Ask.Volume);
++			Voice->SetPitchMultiplier(1.0f);
++			Voice->bAllowSpatialization = Ask.bPlaced;
++			Voice->AttenuationSettings = Ask.bPlaced ? Family : nullptr;
++			if (Ask.bPlaced)
++			{
++				Voice->SetWorldLocation(Ask.Where);
++			}
++			Voice->bOverridePriority = Ask.Priority > 0.0f;
++			if (Ask.Priority > 0.0f)
++			{
++				Voice->Priority = Ask.Priority;
++			}
++			Voice->Play(Ask.From);
++			++TakesBegun;
++			++TakesPooled;
++			Out.Voice = Voice;
++			Out.Slot = Slot;
++			Out.Generation = Given.Generation;
++			return true;
++		}
++		// (every pooled voice sounding or fading, and as many as the pool may make: a near take is given a voice of its
++		// own, as every take was before the pool, never held)
++		++TakesOwnVoice;
++	}
++	UAudioComponent* const Player = Lay(Played, Ask.bPlaced ? &Ask.Where : nullptr, Family, Ask.Volume, Ask.From, Ask.Priority);
++	if (!Player)
++	{
++		return false;
++	}
++	++TakesBegun;
++	if (Ask.CutAt >= 0.0)
++	{
++		// (the take's part ends by a world timer, as before the pool, counted from the start of the frame it was asked in:
++		// the timer's own clock, which stands there while this frame's actors tick)
++		UWorld* const Here = GetWorld();
++		const double FrameFrom = Here ? Here->GetTimeSeconds() - Here->GetDeltaSeconds() : 0.0;
++		TWeakObjectPtr<UAudioComponent> Weak(Player);
++		FTimerHandle Handle;
++		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([Weak]()
++		{
++			if (Weak.IsValid())
++			{
++				Weak->FadeOut(0.08f, 0.0f);
++			}
++		}), static_cast<float>(FMath::Max(0.02, Ask.CutAt - FrameFrom)), false);
++	}
++	Out.Voice = Player;
++	return true;
++}
++
++UAudioComponent* AAirBattle::VoiceOf(const FAirTake& Take) const
++{
++	if (Take.Slot < 0)
++	{
++		return Take.Voice.Get();
++	}
++	return VoiceTakes.IsValidIndex(Take.Slot) && VoiceTakes[Take.Slot].Generation == Take.Generation ? VoicePool[Take.Slot].Get() : nullptr;
++}
++
++void AAirBattle::FadeTake(const FAirTake& Take, float Seconds)
++{
++	if (UAudioComponent* const Voice = VoiceOf(Take))
++	{
++		Voice->FadeOut(Seconds, 0.0f);
++		if (Take.Slot >= 0)
++		{
++			VoiceTakes[Take.Slot].bFading = true;
++			VoiceTakes[Take.Slot].CutAt = -1.0;
++		}
++	}
++}
++
++void AAirBattle::KeepGunTake(int32 Key, const FAirTake& Take)
++{
++	// (its takes still playing kept, the finished ones let go; a pooled voice since given another take is not its)
++	TArray<FAirTake> Had;
++	GunTakes.MultiFind(Key, Had);
++	GunTakes.Remove(Key);
++	for (const FAirTake& One : Had)
++	{
++		UAudioComponent* const Voice = VoiceOf(One);
++		if (Voice && Voice->IsPlaying())
++		{
++			GunTakes.Add(Key, One);
++		}
++	}
++	GunTakes.Add(Key, Take);
++}
++
++void AAirBattle::TakesDue()
++{
++	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_TakesDue);
++	TakesBegun = 0;
++	if (VoicePool.Num() == 0 && HeldTakes.Num() == 0)
++	{
++		return;
++	}
++	UWorld* const Here = GetWorld();
++	const double Now = Here ? Here->GetTimeSeconds() : 0.0;
++	// Each pooled take's part ends where the mix cuts it (Sound's and SoundAtEye's Cut): faded over 0.08 s, as the world
++	// timer a take was given before the pool, on the same frame (the time a take was asked in counted from its frame's
++	// start, the timer's own clock).
++	for (int32 K = 0; K < VoicePool.Num(); ++K)
++	{
++		FVoiceTake& Take = VoiceTakes[K];
++		if (Take.CutAt >= 0.0 && Now >= Take.CutAt)
++		{
++			Take.CutAt = -1.0;
++			if (UAudioComponent* const Voice = VoicePool[K])
++			{
++				Voice->FadeOut(0.08f, 0.0f);
++				Take.bFading = true;
++			}
++		}
++	}
++	// The takes the cap held, oldest first and before any new take this frame: begun if there is room; else held on,
++	// and dropped only once they have waited longer than HoldFor (air.takesHeldFor), so none begins later than HoldFor
++	// and one frame.
++	if (HeldTakes.Num() > 0)
++	{
++		TArray<FTakeAsk> Waiting = MoveTemp(HeldTakes);
++		HeldTakes.Reset();
++		for (const FTakeAsk& Ask : Waiting)
++		{
++			FAirTake Begun;
++			if (BeginTake(Ask, Begun))
++			{
++				if (Ask.bGun)
++				{
++					++GunTakesLaid;
++				}
++				if (Ask.bStopped)
++				{
++					FadeTake(Begun, 0.08f);
++				}
++				else if (Ask.bGun)
++				{
++					KeepGunTake(Ask.GunKey, Begun);
++				}
++			}
++			else if (Begun.bHeld && Now - Ask.Asked <= HoldFor)
++			{
++				HeldTakes.Add(Ask);
++			}
++			else if (Begun.bHeld)
++			{
++				++TakesDropped;
++			}
++			else if (Ask.bGun)
++			{
++				++GunTakesFar; // (out of earshot by the time there was room)
++			}
++		}
++	}
++}
++
+ void AAirBattle::Play(double Real)
+ {
+ 	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_Play);
+@@ -6407,9 +6784,16 @@ void AAirBattle::Play(double Real)
+ 	if (RealT >= GunTallyAt)
+ 	{
+ 		GunTallyAt = RealT + 20.0;
+-		UE_LOG(LogTheater, Display, TEXT("Air battle sound: %d bursts begun, %d takes laid on, %d takes that could not play, %d out of earshot, %d rounds heard passing; level %+.1f dB%s; air intensity %.2f, music %+.0f dB."),
++		// (with the pool or the cap on, the one-shot takes' voices too: takes laid on a pooled voice, voices made, voices
++		// given another take, voices taken by a nearer take, takes held by the cap, held takes dropped, near takes on a voice
++		// of their own with the pool full; without them the line is as it was)
++		const FString Voices = PoolVoices > 0 || TakesPerFrame > 0
++			? FString::Printf(TEXT(" Voices: %d takes pooled, %d voices made, %d reused, %d stolen; %d held, %d dropped (after %.2f s); %d on a voice of their own."),
++				TakesPooled, VoicesMade, VoicesReused, VoicesStolen, TakesHeld, TakesDropped, HoldFor, TakesOwnVoice)
++			: FString();
++		UE_LOG(LogTheater, Display, TEXT("Air battle sound: %d bursts begun, %d takes laid on, %d takes that could not play, %d out of earshot, %d rounds heard passing; level %+.1f dB%s; air intensity %.2f, music %+.0f dB.%s"),
+ 			GunBursts, GunTakesLaid, GunTakesLost, GunTakesFar, CracksHeard, 20.0 * FMath::LogX(10.0, FMath::Max(1e-4, static_cast<double>(MasterGain))), S.bClose ? TEXT(" (riding)") : TEXT(""),
+-			AirIntensity, ScoreShownDb);
++			AirIntensity, ScoreShownDb, *Voices);
+ 	}
+ }
+ 
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+index 04dcea95..7eba16c0 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirBattle.h
+@@ -375,9 +375,24 @@ private:
+ 	 * ship and its log line). */
+ 	TMap<int32, FString> ShipNames;
+ 	TSet<int32> CapitalShips;
++	/**
++	 * A one-shot take as the scene keeps it (GunTakes, a take the cap holds): its voice, and for a voice of the pool
++	 * (air.voicePool) the pool's slot and which of that slot's takes it was laid as (the slot's generation then). A
++	 * pooled voice is given take after take, so a take held from before is its voice's only while the generations agree:
++	 * after that VoiceOf is null, and nothing fades, moves or counts a voice since given to another take. Slot -1: a voice
++	 * of its own, made for the take and destroyed when it ends (every take's, before the pool). bHeld: not begun yet,
++	 * held by the cap for a following frame.
++	 */
++	struct FAirTake
++	{
++		TWeakObjectPtr<UAudioComponent> Voice;
++		int32 Slot = -1;
++		uint32 Generation = 0;
++		bool bHeld = false;
++	};
+ 	// The sounds' own clocks.
+ 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
+-	TMultiMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;  // the bursts a gun has playing, cut when it stops
++	TMultiMap<int32, FAirTake> GunTakes;  // the bursts a gun has playing, cut when it stops
+ 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard
+ 	double FlakHeardAt = -10.0, FlakGunsAt = 0.0;
+ 	double ShipGunHeardAt = -10.0; // a ship's heavy gun's last boom heard
+@@ -416,9 +431,82 @@ private:
+ 	 * shows every gun seen firing was heard. */
+ 	int32 GunBursts = 0, GunTakesLaid = 0, GunTakesLost = 0, GunTakesFar = 0, CracksHeard = 0;
+ 	double GunTallyAt = 20.0;
++	/**
++	 * The one-shot takes' voices (mix.json air.voicePool, air.takesPerFrame and air.takesHeldFor; with none of them in
++	 * the mix every take has a voice of its own, begun at once, as before). Loops (the formations' engines, the ridden
++	 * aircraft's, the far bed) are never pooled or held.
++	 * The pool: audio components the scene owns, made as they are first wanted (up to PoolMost) and never destroyed, each
++	 * given take after take once its last has ended. At most PoolVoices of them sound at once without fading out; past
++	 * that a take takes the voice of the farthest far take (none of the ridden aircraft's own, nothing within 300 m of the
++	 * eye, no big moment), which fades over air.limits.cutFade. The cap: at most TakesPerFrame takes begun in a frame. A
++	 * far take past it (or finding no voice) is held and begun on the first following frame with room, the held before
++	 * the new; one still without room once it has waited longer than HoldFor is dropped, so a held take begins at most
++	 * HoldFor and one frame late. Takes within 300 m of the eye, the ridden aircraft's own and big moments are never
++	 * held, and their voices never taken.
++	 */
++	UPROPERTY()
++	TArray<TObjectPtr<UAudioComponent>> VoicePool;
++	/** Each pooled voice's take now: its generation (counted up at each take); the world time its part ends and it fades
++	 * (Sound's and SoundAtEye's Cut, checked each frame by TakesDue in place of a timer a take; -1 none); whether it was
++	 * laid as a far take; whether it is fading out (cut, stopped or taken), and so no longer one of the voices sounding. */
++	struct FVoiceTake
++	{
++		uint32 Generation = 0;
++		double CutAt = -1.0;
++		bool bFar = false;
++		bool bFading = false;
++	};
++	TArray<FVoiceTake> VoiceTakes;
++	/** A take asked for: what Lay needs to begin it (bPlaced: at Where by Family, else unplaced at the eye); when its part
++	 * ends (world seconds, -1 none: counted from the frame it was asked in, so a held take ends where it would have and a
++	 * gun's takes still run end to end); whether it is never held nor its voice taken (bNear); the gun it is heard for
++	 * (GunTakes); when it was asked (world seconds); whether its gun stopped while the cap held it (begun then, and
++	 * faded at once, as a gun that fires for one frame is heard). */
++	struct FTakeAsk
++	{
++		TWeakObjectPtr<USoundBase> Played;
++		TWeakObjectPtr<USoundAttenuation> Family;
++		FVector Where = FVector::ZeroVector;
++		bool bPlaced = false;
++		float Volume = 1.0f;
++		float From = 0.0f;
++		float Priority = 0.0f;
++		double CutAt = -1.0;
++		bool bNear = false;
++		bool bGun = false;
++		int32 GunKey = 0;
++		double Asked = 0.0;
++		bool bStopped = false;
++	};
++	/** The far takes the cap holds, oldest first. */
++	TArray<FTakeAsk> HeldTakes;
++	/** The mix's numbers for them, read when the battle opens: PoolVoices 0, no pool; TakesPerFrame 0, no cap. */
++	int32 PoolVoices = 0, PoolMost = 0, TakesPerFrame = 0;
++	double HoldFor = 0.0;
++	float CutFade = 0.3f;
++	/** Takes begun this frame (the cap's count); and for the tally: takes laid on a pooled voice, voices made for the pool,
++	 * pooled voices given another take, voices taken by a nearer take, takes held by the cap, held takes dropped, and
++	 * near takes given a voice of their own while the pool is on (every pooled voice sounding or fading). */
++	int32 TakesBegun = 0;
++	int32 TakesPooled = 0, VoicesMade = 0, VoicesReused = 0, VoicesStolen = 0, TakesHeld = 0, TakesDropped = 0, TakesOwnVoice = 0;
++	/** Once a frame, before the frame's takes: the pooled takes whose part has ended faded, and the held takes begun
++	 * (the held before the new), held on, or dropped. */
++	void TakesDue();
++	/** A take begun now if the cap and the pool have room for it, else held for a following frame (bHeld). */
++	FAirTake AskTake(const FTakeAsk& Ask);
++	/** Begins a take on a voice of the pool, or one of its own (no pool, or the pool full for a near take): true begun;
++	 * false with Out.bHeld, no room this frame; false alone, not laid (missing, or past its family's silent distance). */
++	bool BeginTake(const FTakeAsk& Ask, FAirTake& Out);
++	/** The take's voice while it is still that take's (its own voice not yet destroyed, or its pooled voice's
++	 * generation the same), else null. */
++	UAudioComponent* VoiceOf(const FAirTake& Take) const;
++	/** The take faded out over Seconds, if its voice is still its own. */
++	void FadeTake(const FAirTake& Take, float Seconds);
++	/** A gun's take kept under its key (GunTakes), its takes no longer playing let go. */
++	void KeepGunTake(int32 Key, const FAirTake& Take);
+ 	/** A take unplaced at the eye (the ridden aircraft's own guns and engines): heard at Volume whatever the
+-	 * distance rules, and never the one the engine's voice limit drops. */
+-	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false, float Priority = 4.0f);
++	 * distance rules, and never the one the engine's voice limit drops. Laid: what became of a take that is not a loop. */
++	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false, float Priority = 4.0f, FAirTake* Laid = nullptr);
+ 	/** Makes a take's sound, gives it its voice priority (0: the recording's own), and only then begins it: Play hands the
+ 	 * priority to the engine, so one set after it reaches nothing. At *Where by its distance family, or unplaced at the
+ 	 * eye when Where is null. Null when the recording is missing, or Where is past its family's silent distance. */
+@@ -635,8 +723,11 @@ private:
+ 	void AimEye(double Real);
+ 	void PlaceTags();
+ 	/** A one-shot at a world point, in a distance family of the mix; After: held that many real seconds; Cut: only the first seconds of the take. */
+-	/** A one-shot at Where in its mix family: After seconds from now, cut off Cut seconds in, begun From seconds into its take. */
+-	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f, float Priority = 0.0f);
++	/** A one-shot at Where in its mix family: After seconds from now, cut off Cut seconds in, begun From seconds into its take.
++	 * Laid: what became of it (begun, held by the cap, or neither); GunKey: the gun it is heard for, under which GunTakes
++	 * keeps it once begun, now or when the cap lets it (null: no gun's). */
++	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f, float Priority = 0.0f,
++		FAirTake* Laid = nullptr, const int32* GunKey = nullptr);
+ 	USoundBase* SoundOf(const TCHAR* Name, bool bLoop = false);
+ 	USoundAttenuation* FamilyOf(const TCHAR* Name);
+ 	void EngineSounds();
+-- 
+2.43.0
+
