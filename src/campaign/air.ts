@@ -17,6 +17,7 @@ import carrierData from '../../data/campaign/carriers.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import qualityData from '../../data/campaign/air-quality.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
@@ -154,7 +155,19 @@ const intensity = (m: AirMission): number => (m === 'ground' ? AIRWAR.ground.int
 export const isOffensive = (m: AirMission): boolean => OFFENSIVE.includes(m);
 
 const SURFACE = ['bb', 'cv', 'ca', 'dd'] as const;
-const spec = (nat: string): NatSpec => AIR.nations[nat] ?? AIR.nations._default;
+/**
+ * The stage switch 'airQuality' (the design director, 22 Nov 2026, 06:26Z): an air force's quality from the record where
+ * air.json's default sells it short, one row a nation with its facts and source (data/campaign/air-quality.json).
+ * Off as shipped, and then air.json's quality stands exactly as in release 1; a harness turns it on (TC_AIRQ=1) by
+ * setting `on`. Not behind the switch 'Fighter types'.
+ */
+const AIRQ = { on: false, ...(qualityData as unknown as { rows: Record<string, { quality: number; mark: string; facts: string; source: string }> }) };
+export const AIR_QUALITY = (): typeof AIRQ => AIRQ;
+const spec = (nat: string): NatSpec => {
+  const s = AIR.nations[nat] ?? AIR.nations._default;
+  const q = AIRQ.on ? AIRQ.rows[nat] : undefined;
+  return q ? { ...s, quality: q.quality } : s;
+};
 /** The air war has its own dice, so that it never changes how a land or sea battle falls out. */
 const airRng = (g: Game, key: string): Rng => new Rng(hashString(`air:${g.seed}:${g.turn}:${key}`));
 const row = <T extends number[]>(rows: T[] | undefined, turn: number): T | null => {
