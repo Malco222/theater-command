@@ -29,6 +29,7 @@ import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
 import { stationBars, whyStationBars } from './far';
+import { farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
@@ -588,8 +589,32 @@ export function gatesTick(g: Game): void {
   }
 }
 
-/** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed. */
-export function openSeas(g: Game, nat: string, seas?: SeaPicture): Uint8Array {
+/**
+ * The provinces joined by land to a nation's capital over ground it or its allies hold, or null where it holds no
+ * capital on the chart: where its own roads bring the stores down from where it makes its arms.
+ */
+function joinedToCapital(g: Game, nat: string): Uint8Array | null {
+  const cap = g.nations[nat]?.capital ?? -1;
+  if (cap < 0 || g.regions[cap].ctrl !== nat) return null;
+  const linked = new Uint8Array(g.regions.length);
+  const road = [cap];
+  linked[cap] = 1;
+  for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
+  return linked;
+}
+
+/**
+ * The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed.
+ *
+ * The far side (the director's ruling of 03:01Z, 22 November 2026, on Luzon reading fed with the sea behind it
+ * shut): the supply ships sail from where the country makes its arms. A home port sends them out only where it is
+ * joined by land to the capital; a home port across the water (Manila, Pearl Harbor, Truk, Malta) is a quay only
+ * while the month's open seas join it to one of those, so it no longer feeds itself on its own sea alone. A country
+ * that holds no capital on the chart, or has no home port its roads reach from it (Portugal: the chart gives Lisbon
+ * none), has no such place, and its home ports read as they did. `homeward` is the far switch unless a reading asks
+ * for the other form on the same month; with the far side off nothing changes.
+ */
+export function openSeas(g: Game, nat: string, seas?: SeaPicture, homeward: boolean = farOn(g)): Uint8Array {
   const open = new Uint8Array(g.seas.length);
   // Whether a sea is closed to the nation is asked only of the seas its ships could reach, once each (-1: not asked yet).
   const shutAt = new Int8Array(g.seas.length).fill(-1);
@@ -597,16 +622,16 @@ export function openSeas(g: Game, nat: string, seas?: SeaPicture): Uint8Array {
   const q: number[] = [];
   const start = (z: number): void => { if (!open[z] && !shut(z)) { open[z] = 1; q.push(z); } };
   const coastal = seas ? seas.ports() : g.regions;
-  for (const r of coastal) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
+  const linked = homeward || seaWar(g) ? joinedToCapital(g, nat) : null;
+  const own = (r: Region): boolean => r.port && r.owner === nat && r.ctrl === nat;
+  // The far side: only the home ports its own roads reach from the capital send the ships out (where it has one).
+  const home = homeward && linked && coastal.some((r) => own(r) && linked[r.id]) ? linked : null;
+  for (const r of coastal) if (own(r) && (!home || home[r.id])) r.seas.forEach(start);
   for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
   // The grand campaign: a harbour the nation has taken serves its supply ships as a home port does, once its own
   // roads reach the quay: the stores come down to it overland and go on by sea. So an army put across a narrow sea
   // from a conquered coast is fed from that coast, and not round by the harbours of the homeland.
-  if (seaWar(g) && (g.nations[nat]?.capital ?? -1) >= 0 && g.regions[g.nations[nat].capital].ctrl === nat) {
-    const linked = new Uint8Array(g.regions.length);
-    const road = [g.nations[nat].capital];
-    linked[road[0]] = 1;
-    for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
+  if (seaWar(g) && linked) {
     for (const r of coastal) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
   }
   // So is the sea a country off the map sends its convoys in by.
