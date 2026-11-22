@@ -22,13 +22,18 @@ namespace ConvoyLook
 
 		/** [EST] Surfaced, her casing's deck this far over the still sea: awash, so the swell runs over it. */
 		constexpr double DeckAwash = 0.5;
-		/** [EST] At periscope depth and below, her highest point (her housed periscopes) at least this far under. */
+		/** [EST] At periscope depth with her periscope down, and below, her highest point (her taller periscope's head) at
+		 * least this far under. */
 		constexpr double ClearUnder = 0.8;
+		/** [EST] At periscope depth with it up, her taller periscope's head at most ScopeShows over the still sea (about 6
+		 * feet: a few feet of periscope was what a boat showed), and her shorter one's at least LowUnder under. */
+		constexpr double ScopeShows = 1.8, LowUnder = 0.4;
 		/** The most her drawn heave moves in a second (a jump in the show's keel is eased, never a pop): well over a dive's
 		 * own rate (the show's: 8 m in about 27 s, then 1 m/s [SHOW, after FSR's 25 to 30 s]), so she keeps with the show.
 		 * While all of her is this far under, before and after, nothing of her can be seen and she goes at once. */
 		constexpr double HeaveRate = 2.5, HiddenUnder = 6.0;
-		/** [EST] A periscope run up in about 4 s, housed in 3. */
+		/** [EST] A periscope run up in about 4 s, down in 3 (the model's periscopes are fixed: she rises and settles by the
+		 * difference, all of her but its head under). */
 		constexpr double RaiseUp = 0.25, RaiseDown = 1.0 / 3.0;
 		/** [EST] The feather: none under 0.4 m/s, full from 3 m/s (6 knots: a feather was why a boat attacked slowly). */
 		constexpr double FeatherFrom = 0.4, FeatherFull = 3.0;
@@ -84,51 +89,34 @@ namespace ConvoyLook
 
 	BoatModel ModelOf(const std::string& Nation)
 	{
-		// From battle-models/sea/Submarine*.json: length, its bounds' width (wide), draught, highest point (high less
-		// draught), the first periscope's place, its head housed and its slide (4.2 m), the stem (wake.bow). The casing's
-		// deck and the bridge's top are read off parts: the deck gun's pivot less half a metre, and the periscope
-		// standards' top (the slide's pivot) [EST].
+		// The stage's model, built in code (Campaign/CampaignShips.cpp, Submarine(), for the nation tag the stage asks it
+		// with; none is the kit's German): FHull{ Long, beam, deck 1.6, sheer 0.9, aft 0, rake 2.0, stern 0 }, the deck
+		// laid 0.05 over it (FYard::Deck), so 1.65 amidships; the conning tower from the deck to deck + 4.6 (its top's plan
+		// from 5.4 forward to 4.6 aft); the jumping wire from the bow to 5.0 forward, deck + 4.8 (radius 0.05); the
+		// anti-aircraft gun at 7.0 aft, its barrels to 5.4 aft, deck + 4.4 (radius 0.09); the periscopes, fixed rods from the
+		// tower's top, 1.5 forward to deck + 9.0 and amidships to deck + 7.5. Her bounds: the hull's length and the stem's
+		// rake forward of it, her beam across. Tools/convoy_looks/run.sh reads CampaignShips.cpp and fails if these change.
+		const bool bUsa = Nation == "USA", bGer = Nation.empty() || Nation == "GER";
+		const double Hull = bUsa ? 95.0 : bGer ? 67.0 : 80.0, Rake = 2.0, Deck = 1.6 + 0.05;
 		BoatModel M;
-		if (Nation == "GER")
-		{
-			M.Name = "Submarine_GER";
-			M.Long = 67.0;
-			M.Wide = 6.79;
-			M.Draught = 4.7;
-			M.Deck = 1.7;
-			M.TowerTop = 4.42;
-			M.Top = 6.29;
-			M.ScopeAlong = -0.2;
-			M.ScopeHead = 5.92;
-			M.BowAlong = 31.3;
-		}
-		else if (Nation == "USA")
-		{
-			M.Name = "Submarine_USA";
-			M.Long = 95.0;
-			M.Wide = 7.97;
-			M.Draught = 4.6;
-			M.Deck = 2.5;
-			M.TowerTop = 5.72;
-			M.Top = 9.04;
-			M.ScopeAlong = 2.4;
-			M.ScopeHead = 7.22;
-			M.BowAlong = 44.5;
-		}
-		else
-		{
-			M.Name = "Submarine";
-			M.Long = 80.0;
-			M.Wide = 7.08;
-			M.Draught = 4.6;
-			M.Deck = 2.0;
-			M.TowerTop = 4.92;
-			M.Top = 6.79;
-			M.ScopeAlong = 0.4;
-			M.ScopeHead = 6.42;
-			M.BowAlong = 37.5;
-		}
-		M.ScopeSlide = 4.2;
+		M.Name = bUsa ? "Submarine:USA" : bGer ? "Submarine:GER" : "Submarine:" + Nation;
+		M.Long = Hull + Rake;
+		M.Wide = bUsa ? 8.3 : 6.2;
+		M.Deck = Deck;
+		M.TowerTop = Deck + 4.6;
+		M.TowerFore = 5.4;
+		M.TowerAft = -4.6;
+		M.WireAlong = 5.0;
+		M.WireTop = Deck + 4.8 + 0.05;
+		M.GunAlong = -5.4;
+		M.GunTop = Deck + 2.2 + 2.2 + 0.09;
+		M.ScopeAlong = 1.5;
+		M.ScopeTop = Deck + 9.0;
+		M.LowAlong = 0.0;
+		M.LowTop = Deck + 7.5;
+		M.Top = M.ScopeTop;
+		// (the stem rakes forward from the waterline at half her length to the deck 2 m on: its spray from between)
+		M.BowAlong = Hull * 0.5 + Rake * 0.5;
 		return M;
 	}
 
@@ -138,6 +126,11 @@ namespace ConvoyLook
 		D.Along = HullLong > 1.0 && M.Long > 1.0 ? HullLong / M.Long : 1.0;
 		D.Up = HullBeam > 0.5 && M.Wide > 0.5 ? HullBeam / M.Wide : 1.0;
 		return D;
+	}
+
+	double ScopeClearOf(const BoatModel& M, const Drawn& D)
+	{
+		return std::max(0.3, std::min(ScopeShows, (M.ScopeTop - M.LowTop) * D.Up - LowUnder));
 	}
 
 	double ForcedUpFor() { return UpFor; }
@@ -179,18 +172,25 @@ namespace ConvoyLook
 		{
 			Sub = std::min(Sub, Lerp(S.ForcedFrom, 0.0, Smooth(0.0, UpFor, In.T - S.ForcedAt)));
 		}
+		// Her periscope: up when the show says it is up (never deep), and down. The model's periscopes are fixed rods, so
+		// "up" is her riding so high that the taller one's head is out, and "down" so low that it is under.
+		const bool bWantScope = In.bScope && In.Dive != "deep";
+		const double Raise = bJump ? (bWantScope ? 1.0 : 0.0) : Toward(S.Raise, bWantScope ? 1.0 : 0.0, (bWantScope ? RaiseUp : RaiseDown) * Dt);
+		const double Raised = Smooth(0.0, 1.0, Raise);
 		// (her keel surfaced, as the show has it, and so how far under her surfaced trim she is at periscope depth)
 		const double SurfacedKeel = std::max(0.0, In.Keel - In.Dived);
 		const double ScopeSub = std::max(1.0, In.ScopeKeel - SurfacedKeel);
 		const double TopDrawn = M.Top * D.Up;
 		const double DeckDrawn = M.Deck * D.Up;
-		// Her mark: the swell's lift (the show's, already fading as she goes down), less her trim awash (surfaced only: under,
-		// her depth is the show's), less how far under she is (as drawn: the stage stretches her up by D.Up, so her depth
-		// is stretched alike), and from periscope depth on never less than her highest point ClearUnder under, whatever
-		// her model.
-		const double Going = Smooth(0.0, 1.0, Sub / ScopeSub);
+		// Her mark: the swell's lift (the show's, already fading as she goes down), less her trim awash (surfaced only),
+		// less how far under she is. Down to periscope depth that is the looks' own, whatever her model: in step with the
+		// show's depth (whose easing it keeps), from nothing to where her taller periscope's head is ScopeClearOf out (up)
+		// or ClearUnder under (down); deeper, the show's depth below periscope depth as drawn (the stage stretches her up by
+		// D.Up, so her depth is stretched alike).
+		const double Going = Clamp(Sub / ScopeSub, 0.0, 1.0);
 		const double Awash = std::max(0.0, DeckDrawn - DeckAwash) * (1.0 - Going);
-		const double Under = std::max(Sub * D.Up, (TopDrawn + ClearUnder) * Going);
+		const double AtScope = TopDrawn + ClearUnder - Raised * (ClearUnder + ScopeClearOf(M, D));
+		const double Under = Going * AtScope + std::max(0.0, Sub - ScopeSub) * D.Up;
 		const double Mark = In.Heave - Awash - Under;
 		if (!S.bBegun && !(In.Keel > 0.0))
 		{
@@ -199,6 +199,7 @@ namespace ConvoyLook
 			Out.Heave = Mark;
 			return Out;
 		}
+		S.Raise = Raise;
 		const double Rate = !bJump && Dt > 1e-6 ? (Sub - S.Sub) / Dt : 0.0;
 		if (bJump)
 		{
@@ -218,23 +219,24 @@ namespace ConvoyLook
 
 		const P3 Fore = AheadOf(In.Heading), Side = RightOf(In.Heading);
 		const P3 Mid(In.At.X, In.At.Y, 0.0);
-		// The periscope: run up when the show says it is up (never deep), and housed.
-		const bool bWantScope = In.bScope && In.Dive != "deep";
-		S.Raise = bJump ? (bWantScope ? 1.0 : 0.0) : Toward(S.Raise, bWantScope ? 1.0 : 0.0, (bWantScope ? RaiseUp : RaiseDown) * Dt);
-		const double Raised = Smooth(0.0, 1.0, S.Raise);
-		const P3 ScopeAt = Mid + Fore * (M.ScopeAlong * D.Along);
-		const double HeadZ = S.Heave + (M.ScopeHead + Raised * M.ScopeSlide) * D.Up;
-		const double TowerZ = S.Heave + M.TowerTop * D.Up;
+		// Her model as the stage draws it: stretched, lifted by her heave and turned by her trim about her waterline
+		// amidships (bow up, what is forward rises).
+		const double Trim = (std::isfinite(In.Pitch) ? Clamp(In.Pitch, -30.0, 30.0) : 0.0) * LookPi / 180.0;
+		const double TrimCos = std::cos(Trim), TrimSin = std::sin(Trim);
+		auto Height = [&](double Along, double Up) { return S.Heave + Up * D.Up * TrimCos + Along * D.Along * TrimSin; };
+		Out.BridgeZ = std::max({ Height(M.TowerFore, M.TowerTop), Height(M.TowerAft, M.TowerTop), Height(M.WireAlong, M.WireTop), Height(M.GunAlong, M.GunTop) });
+		Out.ScopeZ = Height(M.ScopeAlong, M.ScopeTop);
+		Out.LowZ = Height(M.LowAlong, M.LowTop);
 		const double DeckZ = S.Heave + DeckDrawn;
-		if (Raised > 0.02)
+		const P3 ScopeAt = Mid + Fore * (M.ScopeAlong * D.Along * TrimCos);
+		Out.bScopeShown = Out.ScopeZ > 0.0 && Out.BridgeZ < 0.0;
+		if (Out.bScopeShown)
 		{
-			Out.bScopeShown = true;
-			// (from inside her standard, a little under its housed head, so the stick never stands off it)
-			Out.ScopeFoot = P3(ScopeAt.X, ScopeAt.Y, S.Heave + (M.ScopeHead - 0.6) * D.Up);
-			Out.ScopeHead = P3(ScopeAt.X, ScopeAt.Y, HeadZ);
+			Out.ScopeFoot = P3(ScopeAt.X, ScopeAt.Y, Height(M.ScopeAlong, M.TowerTop));
+			Out.ScopeHead = P3(ScopeAt.X, ScopeAt.Y, Out.ScopeZ);
 		}
-		// Its feather: only while the stick alone cuts the sea (the bridge under), by her speed.
-		const bool bCuts = HeadZ > 0.15 && TowerZ < -0.2;
+		// Its feather: only while a periscope alone cuts the sea (the bridge under), by her speed.
+		const bool bCuts = Out.ScopeZ > 0.15 && Out.BridgeZ < -0.2;
 		const double FeatherMark = bCuts ? Clamp((In.Speed - FeatherFrom) / (FeatherFull - FeatherFrom), 0.0, 1.0) : 0.0;
 		S.Feather = bJump ? FeatherMark : Toward(S.Feather, FeatherMark, 1.2 * Dt);
 		Out.Feather = S.Feather;
@@ -244,20 +246,20 @@ namespace ConvoyLook
 			S.NextFeather = In.T + (0.5 - 0.3 * S.Feather);
 		}
 		// The water off her casing: while her deck is in the band and she is moving through it, from the bow aft as she
-		// goes down by the bow, and bow first as she comes up.
+		// goes down by the bow (from her trim awash to the band's foot), and bow first as she comes up (back to it).
 		if (!bJump && std::fabs(DeckZ) < WashBand && std::fabs(S.SubRate) > 0.04 && In.T >= S.NextWash)
 		{
-			const double Phase = S.SubRate > 0.0 ? Clamp((WashBand - DeckZ) / (2.0 * WashBand), 0.0, 1.0) : Clamp((DeckZ + WashBand) / (2.0 * WashBand), 0.0, 1.0);
+			const double Phase = Clamp((S.SubRate > 0.0 ? DeckAwash - DeckZ : DeckZ + WashBand) / (DeckAwash + WashBand), 0.0, 1.0);
 			const double Along = (0.42 - 0.84 * Phase) * M.Long * D.Along;
 			const double Hand = Hash01(Stir(static_cast<uint64_t>(In.T * 10.0), 17)) < 0.5 ? -1.0 : 1.0;
 			Out.Splashes.push_back({ SplashKind::Wash, Mid + Fore * Along, Side * Hand, In.T });
 			S.NextWash = In.T + WashEvery;
 		}
-		// Her bridge going under (the swirl it leaves), or coming out (the last of the wash).
-		const bool bTowerUnder = TowerZ < 0.0;
+		// Her bridge going under (the swirl it leaves), or coming out (the last of the wash): the whole of it as drawn.
+		const bool bTowerUnder = Out.BridgeZ < 0.0;
 		if (S.bBegun && !bJump && bTowerUnder != S.bTowerUnder)
 		{
-			Out.Splashes.push_back({ bTowerUnder ? SplashKind::Swirl : SplashKind::Wash, Mid + Fore * (M.ScopeAlong * D.Along), Fore, In.T });
+			Out.Splashes.push_back({ bTowerUnder ? SplashKind::Swirl : SplashKind::Wash, Mid + Fore * (0.5 * (M.TowerFore + M.TowerAft) * D.Along), Fore, In.T });
 		}
 		S.bTowerUnder = bTowerUnder;
 		Out.bTowerUnder = bTowerUnder;

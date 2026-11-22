@@ -26,10 +26,11 @@ namespace SeaShow
  *
  *  - A boat (a ship of class ss): her own heave for the stage, so that surfaced she rides the swell with her casing
  *    awash (the scene draws her bow wave), goes down by the bow with the water running off her casing and a swirl
- *    where her bridge went under, runs at periscope depth with only her raised periscope and its feather of spray
- *    showing, and deep is nothing but, where light falls on the sea over her, a faint swirl now and then; never a pop
- *    (her depth is the show's, eased over the 25 to 30 s of a dive). Her periscope's stick is drawn here (the stage's
- *    model has its periscopes housed); the rest is her model on the stage.
+ *    where her bridge went under, runs at periscope depth with only the head of her taller periscope and its feather
+ *    of spray showing while the show has it up, and all of her under while it is down, and deep is nothing but, where
+ *    light falls on the sea over her, a faint swirl now and then; never a pop (her depth eased over the 25 to 30 s of
+ *    a dive). All of her is her model on the stage (the kit's code-built submarine, its periscopes fixed rods): the
+ *    looks only say how high she rides.
  *  - Depth charges: a pattern rolled off the stern's rails and thrown out on its throwers' arcs, one after another as
  *    the show lays it, each into the sea where the show will burst it; or the ahead thrower's ring of small splashes
  *    about 200 m ahead (ChargeDrop). Each burst as it comes: its white dome, then its column when shallow, or its boil

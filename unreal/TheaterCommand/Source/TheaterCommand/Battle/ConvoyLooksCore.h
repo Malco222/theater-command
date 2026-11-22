@@ -53,20 +53,27 @@ namespace ConvoyLook
 	// The boat
 
 	/**
-	 * A boat's model as the battle models give it (battle-models/sea/Submarine*.json: metres in its own frame, x forward,
-	 * z up from the waterline): her length and the width of her bounds, her draught, the casing's deck amidships, the
-	 * bridge's top, her highest point (the periscopes housed), the first periscope's place along her and its head housed,
-	 * how far it slides up, and her stem.
+	 * A boat's model as the stage draws her: AirStage lays a boat as "Submarine:<her navy>" (its KindOf), and with no
+	 * Content/Models/Submarine.json among the game's sculpted models the kit builds her in code (Campaign/CampaignShips.cpp,
+	 * Submarine(): 67 m by 6.2 for Germany, 95 by 8.3 for the United States, 80 by 6.2 for any other navy; no navy, the
+	 * kit's German). Metres in her own frame, along her forward from amidships and up from her waterline: the length and
+	 * width of her bounds (AirStage's FitHull stretches these to AirFeed::HullOf's size: the hull and the stem's rake of
+	 * 2 m forward of it), the casing's deck amidships, the bridge's top and the places along her of its top's fore and
+	 * aft ends, the jumping wire's head on its front, the anti-aircraft gun's muzzles abaft it, her two periscopes (FIXED
+	 * rods standing up from the bridge's top: the taller, the one that shows, 1.5 m forward of the shorter), her highest
+	 * point, and her stem at the waterline.
 	 */
 	struct BoatModel
 	{
 		std::string Name;
-		double Long = 80.0, Wide = 7.08, Draught = 4.6;
-		double Deck = 2.0, TowerTop = 4.95, Top = 6.79;
-		double ScopeAlong = 0.4, ScopeHead = 6.42, ScopeSlide = 4.2;
-		double BowAlong = 37.5;
+		double Long = 69.0, Wide = 6.2;
+		double Deck = 1.65, TowerTop = 6.25, TowerFore = 5.4, TowerAft = -4.6;
+		double WireAlong = 5.0, WireTop = 6.5, GunAlong = -5.4, GunTop = 6.14;
+		double ScopeAlong = 1.5, ScopeTop = 10.65, LowAlong = 0.0, LowTop = 9.15;
+		double Top = 10.65;
+		double BowAlong = 34.5;
 	};
-	/** "GER" the German layout (Submarine_GER), "USA" the American (Submarine_USA), any other the generic (Submarine). */
+	/** The row of the stage's model for a navy (the stage's own nation tag): "GER" or none, "USA", any other. */
 	BoatModel ModelOf(const std::string& Nation);
 
 	/** How the stage draws her model: stretched along to the length it fits her to, and across and up by the beam's
@@ -77,9 +84,14 @@ namespace ConvoyLook
 	};
 	Drawn DrawnOf(const BoatModel& M, double HullLong, double HullBeam);
 
+	/** How far her taller periscope stands out of the still sea at periscope depth with it "up" (metres, as drawn): at
+	 * most ScopeShows, and low enough that the shorter one stays under. */
+	double ScopeClearOf(const BoatModel& M, const Drawn& D);
+
 	/** What the show says of her this frame (ShipOut: Dive, Keel, Dived, bScope, her heave on the swell, already
-	 * fading as she goes down, her speed, place and heading), the show's periscope depth (its header's subs.scope), and
-	 * how much light falls on the sea over her (0 dark to 1 day: LitBy, SkyLit). */
+	 * fading as she goes down, her trim (Pitch, degrees, plus bow up: what the stage turns her model by about her
+	 * waterline amidships), her speed, place and heading), the show's periscope depth (its header's subs.scope), and how
+	 * much light falls on the sea over her (0 dark to 1 day: LitBy, SkyLit). */
 	struct BoatIn
 	{
 		double T = 0.0;
@@ -88,6 +100,7 @@ namespace ConvoyLook
 		double Dived = 0.0;     // metres her hull lies below her surfaced trim
 		bool bScope = false;    // her periscope is up
 		double Heave = 0.0;     // the swell's lift (metres)
+		double Pitch = 0.0;     // degrees, plus bow up
 		double Speed = 0.0;     // metres a second through the water
 		P3 At;                  // her waterline amidships (Z is the show's, not read)
 		double Heading = 0.0;   // degrees
@@ -110,7 +123,7 @@ namespace ConvoyLook
 		double Heave = 0.0;      // as drawn (metres): eased toward its mark, never faster than HeaveRate
 		double Sub = 0.0;        // how far under her surfaced trim she is (the show's Dived), last frame
 		double SubRate = 0.0;    // its rate (metres a second, plus: going down), smoothed
-		double Raise = 0.0;      // the periscope: 0 housed, 1 right up (before easing)
+		double Raise = 0.0;      // the periscope: 0 down (all of her under), 1 up (her taller periscope out), before easing
 		double Feather = 0.0;    // 0 to 1
 		double SwellLast = 0.0;  // the show's heave last frame (for the bow's plunge)
 		double NextFeather = 0.0, NextWash = 0.0, NextBow = 0.0, NextSwirl = 0.0;
@@ -138,8 +151,13 @@ namespace ConvoyLook
 	struct BoatOut
 	{
 		double Heave = 0.0;      // what the stage is steered with: her waterline over the still sea (metres)
+		/** As the stage draws her model this frame (metres over the still sea, her trim counted): the bridge's highest
+		 * point (its top, the wire's head on it, the gun's muzzles), and the heads of her taller and shorter periscopes. */
+		double BridgeZ = 0.0, ScopeZ = 0.0, LowZ = 0.0;
+		/** Her taller periscope alone out of the sea (her bridge under): where it stands, from the bridge's top to its head
+		 * (the model's own rod: the looks draw none). */
 		bool bScopeShown = false;
-		P3 ScopeFoot, ScopeHead; // the raised periscope's stick, when shown
+		P3 ScopeFoot, ScopeHead;
 		double Feather = 0.0;
 		bool bTowerUnder = false;
 		std::vector<BoatSplash> Splashes;

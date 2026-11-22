@@ -12,6 +12,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
 #include "TheaterCommand.h"
 
@@ -191,7 +192,6 @@ namespace ConvoyLooksParts
 	};
 
 	/** Painted metal (alpha 128: the map's surface paint wears it as metal), cloth and rope (255: none). */
-	static const FColor ScopeSteel(64, 68, 70, 128);
 	static const FColor ChargeDark(46, 50, 50, 128);
 	static const FColor ChuteCloth(222, 218, 204, 255);
 	static const FColor NetRope(150, 132, 98, 255);
@@ -447,10 +447,16 @@ void FConvoyLooks::StepBoats()
 		FBoatKept& B = Boats.FindOrAdd(Ship.Key);
 		if (B.SeenAt < 0.0)
 		{
-			// (the stage lays every boat as "Submarine", the generic model, in her navy's paint (AirStage's KindOf), fitted to
-			// AirFeed::HullOf's size: so her numbers are the generic's; ModelOf has the German and American rows ready for
-			// when the stage lays Submarine_GER and Submarine_USA by navy)
-			B.Model = ModelOf(std::string());
+			// (the stage lays a boat as "Submarine:<her navy>" (AirStage's KindOf) and, there being no sculpted Submarine among
+			// the game's models, the kit builds her in code by her navy (Campaign/CampaignShips.cpp), fitted to AirFeed::HullOf's
+			// size: ModelOf's rows are that model's. A sculpted one put in would be drawn instead, and the rows no longer fit.)
+			static bool bSculptedTold = false;
+			if (!bSculptedTold && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Submarine.json")))
+			{
+				bSculptedTold = true;
+				UE_LOG(LogTheater, Warning, TEXT("Convoy looks: Models/Submarine.json is in, so the stage draws that model: the looks' boat rows (ConvoyLooksCore ModelOf) are the code-built one's and need its numbers."));
+			}
+			B.Model = ModelOf(Ship.Nation);
 			const AirFeed::HullSize Hull = AirFeed::HullOf("ss", std::string(), Ship.Nation);
 			double DrawnLong = Hull.Long;
 			FVector Bow = FVector::ZeroVector;
@@ -468,6 +474,7 @@ void FConvoyLooks::StepBoats()
 		In.Dived = Ship.Dived;
 		In.bScope = Ship.bScope;
 		In.Heave = Ship.Heave;
+		In.Pitch = Ship.Pitch;
 		In.Speed = Ship.Speed;
 		In.At = P3(Ship.At.X, Ship.At.Y, 0.0);
 		In.Heading = Ship.Heading;
@@ -678,7 +685,7 @@ void FConvoyLooks::Begin()
 	Made->RegisterComponent();
 	Made->SetWorldTransform(FTransform::Identity);
 	Mesh = Made;
-	// Its solid things (the periscopes, the charges, the parachutes, the nets): the map's surface paint, lit, as the
+	// Its solid things (the charges, the parachutes, the nets): the map's surface paint, lit, as the
 	// scene's aircraft are. The flares' glow and the swirls: added light (M_Glow), each at its own strength. Held in the
 	// mesh's own list before it has any section.
 	UMaterialInterface* Surface = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface"));
@@ -746,20 +753,13 @@ void FConvoyLooks::Lay()
 	using ConvoyLook::P3;
 	const double U = UnitsPerMetre;
 	FLaid Solid, Glow, Faint;
-	// The boats' raised periscopes: a shaft and its slimmer head. Deep, the faint swirls over them where light falls.
+	// Deep boats: the faint swirls over them where light falls. (A boat's periscopes are her model's own, on the stage.)
 	for (const TPair<int32, FBoatKept>& Kept : Boats)
 	{
 		const FBoatKept& B = Kept.Value;
 		if (B.SeenAt != Now)
 		{
 			continue;
-		}
-		if (B.Out.bScopeShown)
-		{
-			const FVector Foot = World(B.Out.ScopeFoot), Head = World(B.Out.ScopeHead);
-			const FVector Neck = Head - FVector(0.0, 0.0, FMath::Min(1.0 * U, (Head - Foot).Size() * 0.4));
-			Solid.Rod(Foot, Neck, 0.16 * LookScale * U, 8, ScopeSteel);
-			Solid.Rod(Neck, Head, 0.09 * LookScale * U, 8, ScopeSteel);
 		}
 		for (const ConvoyLook::Swirl& W : B.State.Swirls)
 		{

@@ -2,7 +2,8 @@
 // coming up, never a pop, and the faint swirl over her deep where light falls; a depth charge's dome and column by depth
 // and charge; a pattern going in where and when the show bursts it; the ring of ahead-thrown bombs; a starshell's fall
 // and light; a crushed boat's boils; a rescuer's scrambling net. Plain C++, no engine.
-// Usage: Tools/convoy_looks/run.sh   (CONVOY_LOOKS_STORY=1 prints a dive, the bursts by depth and a starshell)
+// Usage: Tools/convoy_looks/run.sh   (CONVOY_LOOKS_STORY=1 prints a dive, the bursts by depth and a starshell). Given the
+// game's source folder (run.sh gives it), it also checks the boat rows against the stage's model in its source.
 
 #include "Battle/ConvoyLooksCore.h"
 
@@ -10,6 +11,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -44,16 +47,22 @@ namespace
 	 * A boat as the sea scene's show gives her (SeaShow.cpp Show::Trim and Output, 2cfd75b8): her keel eased to the depth
 	 * her state asks (a smoothstep over the time a dive takes: to periscope depth in 27 s, then 1 m/s deeper; up at 1.2
 	 * m/s, and from periscope depth to the surface in 20 s), Dived her keel less her surfaced keel (a twentieth less of
-	 * her class's length: 0.07 of it), her heave on the swell fading by e each 8 m under. The stand-in convoy's header:
-	 * class ss 67 m, subs{scope 13, deep 80}.
+	 * her class's length: 0.07 of it), her heave on the swell fading by e each 8 m under, her trim the swell's (fading
+	 * alike) and down by the bow as she goes down, up as she comes up (atan of her keel's rate over her speed, at most 12
+	 * degrees: Show::Advance). The stand-in convoy's header: class ss 67 m, subs{scope 13, deep 80}.
 	 */
 	struct ShowBoat
 	{
 		double Up = 67.0 * 0.07, ScopeKeel = 13.0, DeepKeel = 80.0;
 		double Keel = -1.0, KeelTo = 0.0, KeelFrom = 0.0, KeelSince = 0.0, KeelFor = 0.0;
+		double LastKeel = -1.0, LastT = 0.0, Sinking = 0.0;
 
 		void Step(double T, const std::string& Dive, double Want = -1.0)
 		{
+			if (Keel >= 0.0)
+			{
+				LastKeel = Keel;
+			}
 			const double To = Want >= 0.0 ? Want : Dive == "deep" ? DeepKeel : Dive == "periscope" ? ScopeKeel : Up;
 			if (Keel < 0.0)
 			{
@@ -71,9 +80,15 @@ namespace
 			}
 			const double K = KeelFor > 0.0 ? std::clamp((T - KeelSince) / KeelFor, 0.0, 1.0) : 1.0;
 			Keel = KeelFrom + (KeelTo - KeelFrom) * K * K * (3.0 - 2.0 * K);
+			Sinking = LastKeel >= 0.0 && T > LastT ? (Keel - LastKeel) / (T - LastT) : 0.0;
+			LastT = T;
 		}
 		double Dived() const { return std::max(0.0, Keel - Up); }
 		double Calm() const { return std::exp(-std::max(0.0, Keel - Up) / 8.0); }
+		double Pitch(double T, double Speed) const
+		{
+			return 2.5 * std::sin(T * 0.45) * Calm() + std::clamp(-std::atan(Sinking / std::max(1.5, Speed)) / Pi * 180.0, -12.0, 12.0);
+		}
 	};
 
 	/** A boat's run, frames at 30 a second: surfaced to 20 s, a crash dive to periscope depth, her periscope up from 60
@@ -84,9 +99,13 @@ namespace
 		double MostVisibleStep = 0.0; // the same while any of her was within HiddenUnder of the sea
 		int Feathers = 0, Washes = 0, Swirls = 0, Bows = 0;
 		std::vector<double> DiveWash, UpWash; // where along her each wash was, diving and coming up
-		double DeckSurfaced = 99.0, ScopeHeadAtPeriscope = -99.0, TowerAtPeriscope = 99.0, TopHoused = 99.0, TopAtDeep = 99.0;
+		double DeckSurfaced = 99.0, TowerAtPeriscope = -99.0, TopAtDeep = -99.0;
+		double ScopeUpLeast = 99.0, ScopeUpMost = -99.0, LowUpMost = -99.0; // her periscopes' heads, the show's periscope up
+		double ScopeDownMost = -99.0; // her taller periscope's head, at periscope depth with it down
 		double LeftSurface = -1.0, AtPeriscope = -1.0;
+		double SwirlBridge = 99.0; // her bridge's highest point (as drawn) when the swirl came
 		bool bFeatherWithoutCut = false;
+		double MostTrimLift = 0.0; // the most her trim lifted the bridge's highest point over its top amidships
 		int DeepSwirls = 0, ShallowSwirls = 0;
 		double MostSwirl = 0.0;
 	};
@@ -121,6 +140,7 @@ namespace
 			In.Dived = Show.Dived();
 			In.bScope = T >= 60.0 && T < 120.0;
 			In.Speed = Dive == "surfaced" ? 3.5 : 2.5;
+			In.Pitch = Show.Pitch(T, In.Speed);
 			In.Heading = Heading;
 			In.At = P3(100.0 + In.Speed * T * std::sin(Heading * Pi / 180.0), 200.0 + In.Speed * T * std::cos(Heading * Pi / 180.0), 0.0);
 			In.Heave = 0.6 * std::sin(T * 0.7) * Show.Calm();
@@ -142,19 +162,22 @@ namespace
 				R.DeckSurfaced = O.Heave - In.Heave + M.Deck * D.Up;
 				SurfMark = O.Heave - In.Heave;
 			}
+			R.MostTrimLift = std::max(R.MostTrimLift, O.BridgeZ - (O.Heave + M.TowerTop * D.Up));
 			if (T > 100.0 && T < 115.0 && !bJumpKeel)
 			{
 				ScopeMark = O.Heave - In.Heave;
-				R.ScopeHeadAtPeriscope = O.ScopeHead.Z;
-				R.TowerAtPeriscope = O.Heave + M.TowerTop * D.Up;
+				R.ScopeUpLeast = std::min(R.ScopeUpLeast, O.ScopeZ);
+				R.ScopeUpMost = std::max(R.ScopeUpMost, O.ScopeZ);
+				R.LowUpMost = std::max(R.LowUpMost, O.LowZ);
+				R.TowerAtPeriscope = std::max(R.TowerAtPeriscope, O.BridgeZ);
 			}
-			if (T > 125.0 && T < 130.0)
+			if ((T > 50.0 && T < 60.0) || (T > 125.0 && T < 130.0))
 			{
-				R.TopHoused = std::min(R.TopHoused, -Top);
+				R.ScopeDownMost = std::max(R.ScopeDownMost, O.ScopeZ);
 			}
 			if (T > 200.0 && T < 210.0)
 			{
-				R.TopAtDeep = Top;
+				R.TopAtDeep = std::max(R.TopAtDeep, std::max(Top, O.ScopeZ));
 			}
 			if (T >= 20.0 && R.LeftSurface < 0.0 && O.Heave - In.Heave < SurfMark - 0.2)
 			{
@@ -167,8 +190,8 @@ namespace
 				{
 				case SplashKind::Feather:
 					++R.Feathers;
-					// (the bridge under, and her periscope, raised or housed in its standard, through the sea; never deep)
-					if (!O.bTowerUnder || O.Heave + (M.ScopeHead + (O.bScopeShown ? M.ScopeSlide : 0.0)) * D.Up < 0.0 || Dive == "deep")
+					// (the whole bridge under as drawn, her trim counted, and her taller periscope's head out; never deep)
+					if (!O.bTowerUnder || O.BridgeZ >= 0.0 || O.ScopeZ <= 0.0 || Dive == "deep")
 					{
 						R.bFeatherWithoutCut = true;
 					}
@@ -179,6 +202,7 @@ namespace
 					break;
 				case SplashKind::Swirl:
 					++R.Swirls;
+					R.SwirlBridge = O.BridgeZ;
 					break;
 				case SplashKind::Bow:
 					++R.Bows;
@@ -195,8 +219,9 @@ namespace
 			}
 			if (bStory && !bJumpKeel && Lit == 0.0 && std::fmod(T + 1e-9, 10.0) < Frame)
 			{
-				std::printf("  %-13s t %5.1f %-9s keel %5.1f dived %5.1f heave %6.2f (show's %6.2f) scope %s head %5.2f feather %.2f\n", M.Name.c_str(), T, Dive.c_str(),
-				            Show.Keel, Show.Dived(), O.Heave, In.Heave - Show.Dived(), O.bScopeShown ? "up" : "--", O.bScopeShown ? O.ScopeHead.Z : 0.0, O.Feather);
+				std::printf("  %-13s t %5.1f %-9s keel %5.1f dived %5.1f heave %6.2f (show's %6.2f) trim %5.1f bridge %6.2f scope %s head %6.2f low %6.2f feather %.2f\n",
+				            M.Name.c_str(), T, Dive.c_str(), Show.Keel, Show.Dived(), O.Heave, In.Heave - Show.Dived(), In.Pitch, O.BridgeZ, O.bScopeShown ? "out" : "--", O.ScopeZ,
+				            O.LowZ, O.Feather);
 			}
 		}
 		(void)ScopeMark;
@@ -214,13 +239,16 @@ namespace
 			const Run R = Steam(M, D, false, 0.0);
 			Check(R.MostVisibleStep <= 2.5 * Frame + 1e-9, N + F("no pop: the most her heave moved in a frame while any of her could be seen, %.3f m", R.MostVisibleStep));
 			Check(std::fabs(R.DeckSurfaced - 0.5) < 1e-6, N + F("surfaced: her casing awash, its deck 0.5 m over the still sea: %.2f m", R.DeckSurfaced));
-			Check(R.TowerAtPeriscope < -0.5, N + F("at periscope depth (13 m keel) her bridge is under: %.2f m", R.TowerAtPeriscope));
-			Check(R.ScopeHeadAtPeriscope > 1.0 && R.ScopeHeadAtPeriscope < 3.5, N + F("her raised periscope stands 1 to 3.5 m clear: %.2f m", R.ScopeHeadAtPeriscope));
-			Check(R.TopHoused > 0.5, N + F("at periscope depth with her periscope housed, nothing of her shows: her top %.2f m under", R.TopHoused));
+			Check(R.TowerAtPeriscope < -0.5, N + F("at periscope depth (13 m keel), all of her bridge under as drawn: at most %.2f m", R.TowerAtPeriscope));
+			Check(R.ScopeUpLeast > 0.7 && R.ScopeUpMost < 2.2, N + F("the show's periscope up: her taller periscope's head 0.7 to 2.2 m out (%.2f to %.2f m)", R.ScopeUpLeast, R.ScopeUpMost));
+			Check(R.LowUpMost < 0.0, N + F("the show's periscope up: her shorter one's head stays under (at most %.2f m)", R.LowUpMost));
+			Check(R.ScopeDownMost < -0.4, N + F("at periscope depth with the show's periscope down, nothing of her shows: her highest point at most %.2f m", R.ScopeDownMost));
 			Check(R.TopAtDeep < -20.0, N + F("deep (80 m), nothing of her within 20 m of the surface: %.2f m", R.TopAtDeep));
 			Check(R.Feathers > 40, N + F("a feather while her periscope cuts the sea under way: %.0f spurts", R.Feathers));
-			Check(!R.bFeatherWithoutCut, N + "no feather unless her periscope alone cuts the sea (her bridge under)");
+			Check(!R.bFeatherWithoutCut, N + "no feather unless her periscope alone cuts the sea (all of her bridge under, as drawn)");
 			Check(R.Swirls == 1, N + F("one swirl, where her bridge went under on the dive: %.0f", R.Swirls));
+			Check(R.SwirlBridge < 0.0 && R.SwirlBridge > -0.15, N + F("the swirl comes as the last of her bridge goes under, as drawn: %.3f m", R.SwirlBridge));
+			Check(R.MostTrimLift > 0.5, N + F("going down by the bow, her trim lifts the bridge's after end over its top amidships (by %.2f m), and the looks count it", R.MostTrimLift));
 			Check(R.Washes >= 3 && R.Washes <= 12, N + F("water off her casing going down and coming up: %.0f churns", R.Washes));
 			Check(R.DiveWash.size() >= 2 && BowFirst(R.DiveWash), N + "on the dive the wash runs from the bow aft");
 			Check(R.UpWash.size() >= 2 && BowFirst(R.UpWash), N + "coming up, the bow breaks out first in its foam");
@@ -270,7 +298,7 @@ namespace
 			In.Heave = 0.5;
 			const BoatOut O = StepBoat(S, In, M, D);
 			Check(std::fabs(O.Heave - (0.5 - (M.Deck * D.Up - 0.5))) < 1e-9, F("surfaced: the swell's heave less her trim awash: %.3f", O.Heave));
-			Check(!O.bScopeShown && O.Splashes.empty(), "surfaced with her scope housed: no stick, no splash on the first frame");
+			Check(!O.bScopeShown && O.BridgeZ > 5.0 && O.Splashes.empty(), "surfaced: her bridge up, no periscope alone, no splash on the first frame");
 		}
 		{
 			// the show's very first frame has her untrimmed (no keel), the next at periscope depth: she is there at once
@@ -288,8 +316,8 @@ namespace
 			In.Dived = 13.0 - 4.69;
 			In.bScope = true;
 			const BoatOut Next = StepBoat(S, In, M, D);
-			Check(Next.Heave < -(M.Top * D.Up) && Next.bScopeShown && Next.ScopeHead.Z > 1.0,
-			      F("the battle opens on her at periscope depth: there at once (heave %.2f, scope head %.2f)", Next.Heave, Next.ScopeHead.Z));
+			Check(Next.bScopeShown && Next.ScopeZ > 0.7 && Next.LowZ < 0.0 && Next.BridgeZ < -1.0,
+			      F("the battle opens on her at periscope depth, periscope up: there at once (bridge %.2f, periscope head %.2f, the shorter's %.2f)", Next.BridgeZ, Next.ScopeZ, Next.LowZ));
 		}
 		{
 			// fast on the surface in a swell: spray off her bow as it drops, no more than every 1.5 s
@@ -364,6 +392,75 @@ namespace
 			Check(S1 > S0 && S1 > S2 && S1 <= 0.5 + 1e-9, "it shows, then fades, no stronger than it was made");
 			Check(!SwirlAt(W, 10.0 + SwirlLife() + 0.1, R0, S0), "gone after its life");
 		}
+	}
+
+	/** A file's text, empty where it cannot be read. */
+	std::string TextOf(const std::string& Path)
+	{
+		std::ifstream File(Path);
+		std::stringstream Text;
+		Text << File.rdbuf();
+		return Text.str();
+	}
+
+	/**
+	 * The boat rows against the model the stage draws: AirStage lays "Submarine:<navy>"; with no sculpted Submarine among
+	 * the game's models, the kit builds her in code (Campaign/CampaignShips.cpp, Submarine()), and FitHull stretches her
+	 * to AirFeed::HullOf's 95 by 8.3 m. Given the game's source folder, its text is read: a change to that model, a
+	 * sculpted one put in, or another size fails here, so the rows are mended with it.
+	 */
+	void TestModelRows(const std::string& Root)
+	{
+		struct Row
+		{
+			const char* Nation;
+			double Hull, Beam;
+		};
+		for (const Row& W : { Row{ "GER", 67.0, 6.2 }, Row{ "", 67.0, 6.2 }, Row{ "USA", 95.0, 8.3 }, Row{ "UK", 80.0, 6.2 }, Row{ "JAP", 80.0, 6.2 } })
+		{
+			const BoatModel M = ModelOf(W.Nation);
+			const Drawn D = DrawnOf(M, 95.0, 8.3);
+			const std::string N = std::string("[") + W.Nation + "] ";
+			Check(std::fabs(M.Long - (W.Hull + 2.0)) < 1e-9 && std::fabs(M.Wide - W.Beam) < 1e-9, N + F("the stage's model is %.0f m (with the stem's rake) by %.1f m", M.Long, M.Wide));
+			Check(std::fabs(M.Deck - 1.65) < 1e-9 && std::fabs(M.TowerTop - 6.25) < 1e-9 && std::fabs(M.ScopeTop - 10.65) < 1e-9 && std::fabs(M.LowTop - 9.15) < 1e-9 && M.Top == M.ScopeTop,
+			      N + "its deck 1.65 m, its bridge's top 6.25, its fixed periscopes' heads 10.65 and 9.15, the taller its highest point");
+			Check(M.ScopeAlong == 1.5 && M.LowAlong == 0.0 && M.TowerFore == 5.4 && M.TowerAft == -4.6, N + "the taller periscope 1.5 m forward of the shorter; the bridge's top from 5.4 m forward to 4.6 aft");
+			Check(std::fabs(D.Up - 8.3 / W.Beam) < 1e-9 && std::fabs(D.Along - 95.0 / (W.Hull + 2.0)) < 1e-9, N + F("fitted to 95 by 8.3 m: up %.3f, along %.3f", D.Up, D.Along));
+			const double Clear = ScopeClearOf(M, D);
+			Check(Clear >= 1.0 && Clear <= 1.8 && (M.ScopeTop - M.LowTop) * D.Up - Clear >= 0.4 - 1e-9, N + F("her taller periscope shows %.2f m, the shorter's head %.2f m under", Clear, (M.ScopeTop - M.LowTop) * D.Up - Clear));
+		}
+		if (Root.empty())
+		{
+			std::printf("(no source folder given: the rows not read against the model's code)\n");
+			return;
+		}
+		const std::string Ships = TextOf(Root + "/Campaign/CampaignShips.cpp");
+		const size_t From = Ships.find("static void Submarine(FMiniatureMesh& M)");
+		const size_t To = From == std::string::npos ? std::string::npos : Ships.find("static const MiniatureParts::FModel Models[]", From);
+		Check(From != std::string::npos && To != std::string::npos, "Campaign/CampaignShips.cpp has the code-built Submarine()");
+		const std::string Sub = From != std::string::npos && To != std::string::npos ? Ships.substr(From, To - From) : std::string();
+		for (const char* Said : {
+			     "Tag == TEXT(\"USA\") ? 95.0 : (Tag == TEXT(\"GER\") ? 67.0 : 80.0)",
+			     "const FHull H{ Long, Tag == TEXT(\"USA\") ? 8.3 : 6.2, 1.6, 0.9, 0.0, 2.0, 0.0 };",
+			     "const double Z = Y.Deck(0.0);",
+			     "{ { 5.4, 0.0 }, { 3.6, 1.3 }, { -2.8, 1.3 }, { -4.6, 0.0 }, { -2.8, -1.3 }, { 3.6, -1.3 } } },\n\t\t\t{ Z, Z + 4.6 }",
+			     "M.Rod(At(1.5, 0.0, Z + 4.6), At(1.5, 0.0, Z + 9.0), 0.12, Steel, 4);",
+			     "M.Rod(At(0.0, 0.0, Z + 4.6), At(0.0, 0.0, Z + 7.5), 0.1, Steel, 4);",
+			     "M.Pillar(At(-7.0, 0.0, Z), 2.0, 2.0, 2.2, Y.L.Upper, 10);",
+			     "Y.LightGun(-7.0, 0.0, Z + 2.2);",
+			     "At(5.0, 0.0, Z + 4.8), 0.05, Steel, 3);",
+		     })
+		{
+			Check(Sub.find(Said) != std::string::npos, std::string("the stage's code-built submarine still has: ") + Said);
+		}
+		Check(Ships.find("return DeckAt(H, X) + 0.05;") != std::string::npos && Ships.find("M.Rod(At(X, Side - 0.25, Z + 1.0), At(X + 1.6, Side - 0.25, Z + 2.2), 0.09, Steel, 4);") != std::string::npos,
+		      "its deck laid 0.05 m over the hull, its anti-aircraft gun's barrels 1.6 m long rising 1.2 m");
+		Check(TextOf(Root + "/Battle/AirStage.cpp").find("Class == TEXT(\"ss\") ? TEXT(\"Submarine\")") != std::string::npos, "the stage lays a boat as \"Submarine\"");
+		Check(TextOf(Root + "/Battle/AirFeed.cpp").find("if (Class == \"ss\") return { 95.0, 8.3 };") != std::string::npos, "and fits her to 95 by 8.3 m");
+		const std::string Content = Root + "/../../Content/Models/";
+		Check(!std::ifstream(Content + "Submarine.json").good() && !std::ifstream(Content + "Old/Submarine.json").good(),
+		      "no sculpted Submarine among the game's models (the stage would draw it instead of the code-built one)");
+		Check(std::ifstream(Content + "Bf109.json").good(), "(the game's models are where this test looks for them)");
 	}
 
 	void TestBursts()
@@ -682,9 +779,10 @@ namespace
 	}
 }
 
-int main()
+int main(int ArgC, char** ArgV)
 {
 	bStory = std::getenv("CONVOY_LOOKS_STORY") != nullptr;
+	TestModelRows(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	TestBoats();
 	TestBursts();
 	TestPatterns();

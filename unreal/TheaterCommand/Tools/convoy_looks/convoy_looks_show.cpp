@@ -1,9 +1,12 @@
 // The submarine scene's looks against the show itself: a recorded convoy night (the sea show's stand-in, read only)
 // played through the game's own Battle/SeaShow at 30 frames a second, and the looks' core (Battle/ConvoyLooksCore) fed
 // from it as the scene feeds it. Checks that what the looks draw agrees with what the show does: every boat, as the
-// show steers her, never pops where she can be seen and stays near the show's place in the water; every pattern's
-// charges go in where the show bursts them, and before; the ahead thrower's ring is in before its bursts; a starshell
-// lights and sinks. Plain C++, no engine. Usage: Tools/convoy_looks/run.sh (it runs this after the core's checks).
+// show steers her, never pops where she can be seen, rides surfaced where the show has her, and shows of the model the
+// stage draws (the kit's code-built submarine, typed here from its code, apart from the looks' own rows) only what her
+// state says: at periscope depth the head of her taller periscope while the show has it up and nothing while it is
+// down, nothing deep, the swirl as the last of her bridge goes under and feathers only with all of it under; every
+// pattern's charges go in where the show bursts them, and before; the ahead thrower's ring is in before its bursts; a
+// starshell lights and sinks. Plain C++, no engine. Usage: Tools/convoy_looks/run.sh (it runs this after the core's).
 
 #include "Battle/AirFeed.h"
 #include "Battle/ConvoyLooksCore.h"
@@ -54,14 +57,50 @@ namespace
 		double Sinking = 0.0, Ring = 0.0;
 	};
 
+	/**
+	 * The boat as the stage draws her, typed from Campaign/CampaignShips.cpp's Submarine() (built by her navy: 67 m by 6.2
+	 * for "GER" or none, 95 by 8.3 for "USA", 80 by 6.2 for any other; the stem's rake 2 m forward of the hull) and
+	 * stretched by AirStage's FitHull to AirFeed::HullOf's size, steered with the looks' heave and the show's trim
+	 * (plus bow up, about her waterline amidships). Heights over the still sea: the bridge's top (6.25 m: deck 1.65 + 4.6)
+	 * at both ends of its plan (5.4 forward, 4.6 aft) and the jumping wire's head on it (5.0 forward, 6.5); the fixed
+	 * periscopes' heads (1.5 forward, 10.65; amidships, 9.15).
+	 */
+	struct StageBoat
+	{
+		double Up = 1.0, Along = 1.0;
+
+		StageBoat(const std::string& Nation, double FitLong, double FitBeam)
+		{
+			const double Hull = Nation == "USA" ? 95.0 : (Nation.empty() || Nation == "GER") ? 67.0 : 80.0, Beam = Nation == "USA" ? 8.3 : 6.2;
+			Up = FitBeam / Beam;
+			Along = FitLong / (Hull + 2.0);
+		}
+		double At(double Heave, double Pitch, double Fore, double High) const
+		{
+			const double R = Pitch * 3.14159265358979323846 / 180.0;
+			return Heave + High * Up * std::cos(R) + Fore * Along * std::sin(R);
+		}
+		double Bridge(double Heave, double Pitch) const { return std::max({ At(Heave, Pitch, 5.4, 6.25), At(Heave, Pitch, -4.6, 6.25), At(Heave, Pitch, 5.0, 6.5) }); }
+		double Scope(double Heave, double Pitch) const { return At(Heave, Pitch, 1.5, 10.65); }
+		double Low(double Heave, double Pitch) const { return At(Heave, Pitch, 0.0, 9.15); }
+	};
+
 	struct BoatSeen
 	{
 		BoatState State;
 		BoatModel Model;
 		Drawn Size;
+		StageBoat Stage{ std::string(), 95.0, 8.3 };
 		bool bSeen = false;
 		double LastHeave = 0.0, WorstPop = 0.0, WorstOff = 0.0, PopAt = 0.0, OffAt = 0.0;
-		int ScopeFrames = 0, ScopeDryFrames = 0, DeepScopeFrames = 0;
+		// (what of the stage's model shows, against her state: frames at periscope depth with the show's periscope up and
+		// settled, how many show its head out, the least it shows, the most of her shorter periscope and her bridge; with it
+		// down and settled, the most of her highest point; deep, the same)
+		int UpFrames = 0, UpShown = 0, DownFrames = 0, DeepFrames = 0;
+		double UpLeast = 99.0, UpLowMost = -99.0, UpBridgeMost = -99.0, DownMost = -99.0, DeepMost = -99.0;
+		double ScopeSince = -1.0, DownSince = -1.0;
+		int Swirls = 0, Feathers = 0;
+		double SwirlLeast = 99.0, SwirlMost = -99.0, FeatherBridgeMost = -99.0;
 	};
 
 	int PlayNight(const std::string& Path)
@@ -110,9 +149,10 @@ namespace
 				BoatSeen& B = Boats[Ship.Key];
 				if (!B.bSeen)
 				{
-					B.Model = ModelOf(std::string());
+					B.Model = ModelOf(Ship.Nation);
 					const AirFeed::HullSize Hull = AirFeed::HullOf("ss", std::string(), Ship.Nation);
 					B.Size = DrawnOf(B.Model, Hull.Long, Hull.Beam);
+					B.Stage = StageBoat(Ship.Nation, Hull.Long, Hull.Beam);
 				}
 				BoatIn In;
 				In.T = T;
@@ -121,6 +161,7 @@ namespace
 				In.Dived = Ship.Dived;
 				In.bScope = Ship.bScope;
 				In.Heave = Ship.Heave;
+				In.Pitch = Ship.Pitch;
 				In.Speed = Ship.Speed;
 				In.At = P3(Ship.At.X, Ship.At.Y, 0.0);
 				In.Heading = Ship.Heading;
@@ -136,17 +177,50 @@ namespace
 					B.WorstPop = std::fabs(Out.Heave - B.LastHeave);
 					B.PopAt = T;
 				}
+				// (surfaced, she rides where the show has her, less her trim awash: the deck of the stage's model 0.5 m out)
 				const double ShowHeave = Ship.Heave - Ship.Dived;
-				if (ShowHeave > -15.0 && std::fabs(Out.Heave - ShowHeave) > B.WorstOff)
+				if (Ship.Dive == "surfaced" && Ship.Dived < 0.05 && std::fabs(Out.Heave - (ShowHeave - (1.65 * B.Stage.Up - 0.5))) > B.WorstOff)
 				{
-					B.WorstOff = std::fabs(Out.Heave - ShowHeave);
+					B.WorstOff = std::fabs(Out.Heave - (ShowHeave - (1.65 * B.Stage.Up - 0.5)));
 					B.OffAt = T;
 				}
-				if (Out.bScopeShown)
+				// What of the stage's model shows: at periscope depth, settled (the periscope up or down 5 s), the head of her
+				// taller periscope out while the show has it up and nothing while it is down; deep, nothing.
+				const double Bridge = B.Stage.Bridge(Out.Heave, Ship.Pitch), Scope = B.Stage.Scope(Out.Heave, Ship.Pitch), Low = B.Stage.Low(Out.Heave, Ship.Pitch);
+				const bool bAtScope = Ship.Dive == "periscope" && std::fabs(Ship.Keel - Board.ScopeKeel) < 0.05;
+				B.ScopeSince = bAtScope && Ship.bScope ? (B.ScopeSince < 0.0 ? T : B.ScopeSince) : -1.0;
+				B.DownSince = bAtScope && !Ship.bScope ? (B.DownSince < 0.0 ? T : B.DownSince) : -1.0;
+				if (B.ScopeSince >= 0.0 && T - B.ScopeSince > 5.0)
 				{
-					++B.ScopeFrames;
-					if (Ship.Dive == "periscope" && Ship.Keel >= Board.ScopeKeel - 0.5 && Out.ScopeHead.Z > 0.5) ++B.ScopeDryFrames;
-					if (Ship.Dive == "deep" && Ship.Keel > Board.ScopeKeel + 6.0 && Out.ScopeHead.Z > -1.0) ++B.DeepScopeFrames;
+					++B.UpFrames;
+					B.UpShown += Scope > 0.0 ? 1 : 0;
+					B.UpLeast = std::min(B.UpLeast, Scope);
+					B.UpLowMost = std::max(B.UpLowMost, Low);
+					B.UpBridgeMost = std::max(B.UpBridgeMost, Bridge);
+				}
+				if (B.DownSince >= 0.0 && T - B.DownSince > 5.0)
+				{
+					++B.DownFrames;
+					B.DownMost = std::max(B.DownMost, Scope);
+				}
+				if (Ship.Dive == "deep" && Ship.Keel > Board.ScopeKeel + 6.0)
+				{
+					++B.DeepFrames;
+					B.DeepMost = std::max(B.DeepMost, std::max(Scope, Bridge));
+				}
+				for (const BoatSplash& Sp : Out.Splashes)
+				{
+					if (Sp.Kind == SplashKind::Swirl)
+					{
+						++B.Swirls;
+						B.SwirlLeast = std::min(B.SwirlLeast, Bridge);
+						B.SwirlMost = std::max(B.SwirlMost, Bridge);
+					}
+					else if (Sp.Kind == SplashKind::Feather)
+					{
+						++B.Feathers;
+						B.FeatherBridgeMost = std::max(B.FeatherBridgeMost, Bridge);
+					}
 				}
 				B.LastHeave = Out.Heave;
 				B.bSeen = true;
@@ -246,15 +320,27 @@ namespace
 		for (const auto& [Key, B] : Boats)
 		{
 			ShowCheck(B.WorstPop < 0.25, Said("boat %.0f never pops where she can be seen (worst %.3f m in a frame, at %.1f s)", Key, B.WorstPop, B.PopAt));
-			ShowCheck(B.WorstOff < 3.5, Said("boat %.0f stays near the show's place in the water while near the surface (worst %.2f m off, at %.1f s)", Key, B.WorstOff, B.OffAt));
-			ShowCheck(B.DeepScopeFrames == 0, Said("boat %.0f shows no periscope running deep (%.0f frames)", Key, B.DeepScopeFrames));
+			ShowCheck(B.WorstOff < 0.3, Said("boat %.0f surfaced rides where the show has her, her casing awash (worst %.2f m off, at %.1f s)", Key, B.WorstOff, B.OffAt));
+			ShowCheck(B.UpFrames > 0 && B.UpShown == B.UpFrames && B.UpLeast > 0.5,
+			          Said("boat %.0f at periscope depth with the show's periscope up: the stage's model shows its taller periscope's head in every frame (%.0f), at least %.2f m", Key, B.UpFrames, B.UpLeast));
+			ShowCheck(B.UpFrames == 0 || (B.UpLowMost < 0.0 && B.UpBridgeMost < -1.0),
+			          Said("boat %.0f, the periscope up: her shorter periscope (at most %.2f m) and her bridge (at most %.2f m) under", Key, B.UpLowMost, B.UpBridgeMost));
+			ShowCheck(B.DownFrames == 0 || B.DownMost < -0.3, Said("boat %.0f at periscope depth with the show's periscope down: nothing of the stage's model out (its highest point at most %.2f m)", Key, B.DownMost));
+			ShowCheck(B.DeepFrames == 0 || B.DeepMost < -3.0, Said("boat %.0f running deep: nothing of the stage's model near the surface (at most %.2f m)", Key, B.DeepMost));
+			ShowCheck(B.Swirls == 0 || (B.SwirlLeast > -0.2 && B.SwirlMost <= 0.0),
+			          Said("boat %.0f: each swirl comes as the last of the stage's model's bridge goes under (%.2f to %.2f m)", Key, B.SwirlLeast, B.SwirlMost));
+			ShowCheck(B.FeatherBridgeMost < 0.0, Said("boat %.0f: feathers (%.0f) only while all of the stage's model's bridge is under (at most %.2f m)", Key, B.Feathers, B.FeatherBridgeMost));
 		}
 		ShowCheck(PatternBursts > 0 && AheadBursts > 0 && Stars > 0, Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars));
 		std::printf("%s: %zu boats, %d drops, %d pattern bursts (worst %.1f m off a charge drawn going in, the least %.1f s after it), %d ahead bursts (at most %.1f m outside the ring the show aimed), %d starshells\n",
 		            Rec.Key.c_str(), Boats.size(), Drops, PatternBursts, WorstMiss, LeastLead, AheadBursts, AheadOff, Stars);
 		for (const auto& [Key, B] : Boats)
 		{
-			std::printf("  boat %d: worst pop %.3f m (at %.1f s), worst off the show %.2f m (at %.1f s), periscope up and dry at periscope depth %d of %d frames shown\n", Key, B.WorstPop, B.PopAt, B.WorstOff, B.OffAt, B.ScopeDryFrames, B.ScopeFrames);
+			std::printf("  boat %d: worst pop %.3f m (at %.1f s); surfaced, at most %.2f m off the show's trim awash (at %.1f s); the stage's model: periscope up %d frames, its head %.2f m out at"
+			            " least, the shorter's at most %.2f, the bridge's %.2f; periscope down %d frames, highest point at most %.2f; deep %d frames, at most %.2f; %d swirls as the bridge went"
+			            " under (%.2f to %.2f m), %d feathers (the bridge at most %.2f m)\n",
+			            Key, B.WorstPop, B.PopAt, B.WorstOff, B.OffAt, B.UpFrames, B.UpLeast, B.UpLowMost, B.UpBridgeMost, B.DownFrames, B.DownMost, B.DeepFrames, B.DeepMost, B.Swirls,
+			            B.SwirlLeast, B.SwirlMost, B.Feathers, B.FeatherBridgeMost);
 		}
 		return 0;
 	}
