@@ -31,7 +31,7 @@ import { alongside, riding } from './stations';
 import { stationBars, whyStationBars } from './far';
 import { farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
-import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
+import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
@@ -128,11 +128,21 @@ export const NAVY = data as unknown as {
  * player's staff runs moves the fleet's base to the province named, if its country holds the place, and only at the
  * stops of the history dial the row names (every stop where it names none). A player who runs his navy himself
  * moves his fleets when he says (depth.ts, `byHand`).
+ *
+ * A move of base named with one of the great choices ('with', as a month at sea is; the Asiatic Fleet's months, the
+ * design director's rulings of 03:55Z and 04:25Z, 22 November 2026) belongs to the war that choice opens: it keeps
+ * its distance from the choice where the stop draws the choice's month, and it is read only while its country is at
+ * war with the nation whose choice it is. A row marked 'ally' may take a harbour an ally holds, as an air command's
+ * row so marked takes an ally's field (air.ts, `rowGround`): an ally at war with that same nation, where the row
+ * names one. A row marked 'eve' is the other side of the blow: it is read in the choice's own month, before the
+ * blow falls, on the book's word that it falls that month (`bookLays`: the choice's nation is a computer's, the stop
+ * keeps the book and the book is open in the choice's theatre), while its country is still at peace with that
+ * nation. Where the book lays no blow (a player's own Japan) no eve is read, and the surprise is the player's.
  */
 export interface FleetMove {
   turn: number; nat: string; fleet: string; words: string; stops?: number[];
-  /** A move of base: the province, what the harbour is called, and the sea it opens on. */
-  base?: string; port?: string; home?: string;
+  /** A move of base: the province, what the harbour is called, and the sea it opens on. 'ally': the harbour may be an ally's. 'eve': read before the blow it is named with. */
+  base?: string; port?: string; home?: string; ally?: boolean; eve?: boolean;
   /**
    * The far side (ruling 234(d)) in place of a base: the fleet spends that month at sea in this sea, though its
    * country is at peace, and is back at its base the month after (the Pacific Fleet's carriers in December 1941).
@@ -1664,11 +1674,12 @@ export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
 /**
  * A fleet's base moved by order of its staff's book (navy.json 'moves', and the base a planned strike comes home to,
  * carriers.ts): to a harbour its country holds, the sea it lies on named. It lies in harbour there, and the news
- * says so. False where the place is not its country's, or it is there already.
+ * says so. False where the place is not its country's, or it is there already. `friend`: for a row of the book
+ * marked 'ally', whether the harbour's holder is one whose harbour the fleet may take.
  */
-export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }): boolean {
+export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; home: string; words: string }, friend?: (holder: string) => boolean): boolean {
   const r = g.byName[m.base], sea = zoneOf(g, m.home);
-  if (!r || r.ctrl !== f.nat || r.id === f.base || sea < 0) return false;
+  if (!r || (r.ctrl !== f.nat && !friend?.(r.ctrl)) || r.id === f.base || sea < 0) return false;
   f.base = r.id; f.port = m.port; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
   delete f.lane;
   g.supplyDirty = true;
@@ -1709,6 +1720,12 @@ export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = 
 }
 
 // ---- The month at sea -----------------------------------------------------------------------------
+
+/** True while the book lays the great choice named ('with': nation and choice) and it has not gone: a computer's nation, at a stop that keeps the book, with the book open in the choice's theatre. */
+function bookLays(g: Game, named: string): boolean {
+  const [who, op] = named.split(':');
+  return who !== g.human && !!stopDef(g).book && onBook(g, theatreOf(who, op)) && !((g.flags[`st:done:${who}:${op}`] ?? 0) > 0);
+}
 
 /** How many months a dated move has slid with the great choice it is named with ('with': nation and choice), where the stop draws that choice's date. */
 function moveSlide(g: Game, m: FleetMove): number {
@@ -1847,9 +1864,14 @@ export function navalUpkeep(g: Game, nat: string): void {
       continue;
     }
     // (A player who runs his navy himself moves his own fleets; where his staff runs it, the staff keeps the dates.)
-    if (m.turn !== g.turn || byHand(g, nat, 'navy')) continue;
+    // (A move named with a great choice keeps that choice's month and is read at war with the nation whose it is; one
+    // marked 'eve' before that war, on the book's word that the blow falls this month.)
+    const foe = m.with?.split(':')[0];
+    if (m.turn + moveSlide(g, m) !== g.turn || byHand(g, nat, 'navy')) continue;
+    if (foe !== undefined && (m.eve ? atWar(g, nat, foe) || !bookLays(g, m.with!) : !atWar(g, nat, foe))) continue;
     const f = named(m.fleet);
-    if (f && m.base !== undefined && m.port !== undefined && m.home !== undefined) orderedTo(g, f, { base: m.base, port: m.port, home: m.home, words: m.words });
+    const friend = m.ally ? (holder: string): boolean => allied(g, nat, holder) && (foe === undefined || atWar(g, holder, foe)) : undefined;
+    if (f && m.base !== undefined && m.port !== undefined && m.home !== undefined) orderedTo(g, f, { base: m.base, port: m.port, home: m.home, words: m.words }, friend);
   }
   if (!stopDef(g).book) {
     for (const f of fleetsOf(g, nat)) {
