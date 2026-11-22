@@ -70,6 +70,21 @@ public:
 	void ReplayWhenReady(const FString& InKey);
 	/** Plays a recorded action now. False, with a warning, if the file is missing or unreadable. */
 	bool BeginReplay(const FString& InKey);
+	/**
+	 * (D1, ruling 241) The month's submarine scene inside the campaign: a staged recording's text (TC.subScene's
+	 * `recording`), played through its windows (field.staged.beats, each at (to - from) / screen, cut between), its
+	 * caption (the recording's after lines) over the last window and a few seconds after, then closed, the table given
+	 * back. A key or a click skips it at any moment. The picture run's and the test's flags are not read. False, with a
+	 * warning, where the text does not read (nothing taken from the screen then).
+	 */
+	bool BeginMonthScene(const FString& Text, const FString& Name);
+	/** The month's scene is playing (BeginMonthScene). */
+	bool IsMonthScene() const { return bMonthScene; }
+	/** The month's scene's caption as the screen shows it now: its lines, and how far it has come up (0 to 1); false
+	 * while none is shown. */
+	bool GetCaption(TArray<FString>& OutLines, float& OutShown) const;
+	/** The month's scene skipped (a key or a click on its screen): it closes on the next frame. */
+	void SkipMonthScene() { bMonthEnding = bMonthScene; }
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -343,6 +358,27 @@ private:
 	void TakeTheRoom(double SunAzimuth, double SunElevation);
 	void LightTheBattle();
 	void GiveBackTheRoom();
+
+	/** The scene opened on a recording's text (BeginReplay's file, or BeginMonthScene's); Where names it in a warning. */
+	bool OpenOn(const FString& Text, const FString& Name, const FString& Where);
+	/** The show on to battle time To at once, keeping what lasts (ships gone down, oil burning), the camera cut: a
+	 * picture run's skip, or the month's scene's cut between its windows. */
+	void SkipTo(double To);
+	/** The month's scene (BeginMonthScene): its windows played in turn, the pace of the one in hand, the caption and
+	 * the end. Each tick before the show is stepped; true where it cut ahead. */
+	bool RunMonthScene();
+	/** The month's scene closed (its end, or a key's): the screen, the keys and the pointer, the table, the music and
+	 * the campaign's own eye given back, the scene taken down. */
+	void EndMonthScene();
+	bool bMonthScene = false;
+	/** The window in hand (field.staged.beats); when the caption came up and when the scene ends (the real clock); the
+	 * caption's lines; whether the scene holds the keys and the pointer (its screen focused), and the table put away. */
+	int32 BeatAt = 0;
+	double CaptionAt = -1.0, MonthEndsAt = -1.0;
+	TArray<FString> Caption;
+	bool bOwnInput = false;
+	bool bTablePutAway = false;
+	bool bMonthEnding = false;
 
 	/** Hands the show every view it needs to show battle time T (one view in hand ahead of it, as the cloud test does). */
 	void Feed(double T);

@@ -40,6 +40,9 @@ public:
 	void SetMusicMood(const FString& Mood);
 	/** Plays the music softly under a voice (the newsreel's), and brings it back up afterwards. */
 	void DuckMusic(bool bDown);
+	/** (D1) The same, under the month's sea scene, held whatever the newsreel's duck is (the controller sets that one each
+	 * frame). */
+	void DuckForScene(bool bDown);
 	/**
 	 * (Brian's score.) One of the player's wars has ended: The Long Walk Home is played once, now. When it has ended
 	 * the pieces of the mood take their turns again. Nothing happens where the score has not been brought in.
@@ -102,6 +105,7 @@ private:
 	TMap<FString, TObjectPtr<UAudioComponent>> Pieces; // every piece that has been made, by its mood
 	FString MusicMood = TEXT("theme");
 	bool bMusicDucked = false;
+	bool bSceneDucked = false;
 	// The score (Music/Score in the game's folder): its pieces, which of them each mood plays in turn, and whose turn it is.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UAudioComponent>> ScorePlayers;

@@ -321,7 +321,11 @@ namespace SeaShow
 	 * her bow, his inboard hand on the rope and his head and his other arm clear of her side, his root GrabOut out from
 	 * the rope's dip (every point of every file's clip 2 cm or more clear of her planking, bench/side probe); and the loop
 	 * he holds is pulled out from her side and lifted to his hand (GrabAt's Held): GrabPull out and GrabLift up at its dip,
-	 * nothing at its ends.
+	 * falling away to nothing GrabPullHalf either side of it, so that the rope runs back to her side under his head and
+	 * along under his forearms as it lay (pulled out along the whole loop it ran through his head and his inboard forearm:
+	 * the review of 22 November; narrowed, the rope's centre is 3 cm or more from his head and 4.5 cm from his arms in
+	 * every file's clip, and his inboard fingers within 7 mm of the dip: ropefix probe). DrawBoat samples a held loop at
+	 * GrabPullAt's points too, so that the pull is drawn as GrabAt has it.
 	 */
 	constexpr double GrabLoop = 1.1, GrabLow = 0.08, GrabFrom = 0.38, GrabFast = 0.06, GrabThick = 0.012;
 	constexpr double GrabHandAhead = 0.34, GrabHandSide = 0.17, GrabHandUp = 0.11;
@@ -330,7 +334,9 @@ namespace SeaShow
 	 * toward her side. */
 	constexpr double GrabHandAlong = GrabHandAhead * 0.573576436351046 - GrabHandSide * 0.819152044288992;
 	constexpr double GrabHandIn = GrabHandAhead * 0.819152044288992 + GrabHandSide * 0.573576436351046;
-	constexpr double GrabPull = GrabOut - GrabHandIn, GrabLift = GrabHandUp - GrabLow;
+	constexpr double GrabPull = GrabOut - GrabHandIn, GrabLift = GrabHandUp - GrabLow, GrabPullHalf = 0.06;
+	/** The points a held loop is drawn at besides its own (GrabAt's pull), as shares of GrabPullHalf from its dip. */
+	constexpr double GrabPullAt[] = { -1.0, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1.0 };
 	inline int GrabLoops(double Long)
 	{
 		const int N = static_cast<int>(2.0 * GrabFrom * Long / GrabLoop + 0.5);
@@ -367,7 +373,8 @@ namespace SeaShow
 		const double Mid = 2.0 * Loop - 1.0;
 		const double Z = GrabLow + (Top - GrabLow) * Mid * Mid;
 		const double T = std::clamp((Z + 0.12) / (Sheer + 0.12), 0.0, 1.0);
-		const double Pulled = (Index < 32 && ((Held >> Index) & 1u) != 0u) ? 1.0 - Mid * Mid : 0.0;
+		const double Off = std::fabs(Mid) * 0.5 * Span;
+		const double Pulled = (Index < 32 && ((Held >> Index) & 1u) != 0u && Off < GrabPullHalf) ? (1.0 - Off / GrabPullHalf) * (1.0 - Off / GrabPullHalf) : 0.0;
 		return Vec(At, Hand * (Half * (0.84 + 0.16 * T) + GrabThick + GrabPull * Pulled), Z + GrabLift * Pulled);
 	}
 	/** Where her holder Slot of Hold (from 0) is, in her own frame (X along, Y across, Z 0): his inboard hand on a loop's

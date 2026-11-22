@@ -1,6 +1,7 @@
 #include "Campaign/CampaignGameMode.h"
 #include "Battle/AirBattle.h"
 #include "Battle/AirStage.h"
+#include "Battle/MonthSeaScene.h"
 #include "Battle/SeaBattle.h"
 
 #include "Campaign/CampaignFlags.h"
@@ -225,6 +226,14 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		{
 			Sea->ReplayWhenReady(SeaKey);
 		}
+	}
+
+	// (D1, ruling 241) The month's submarine scene, opened with the month in a played campaign (Battle/MonthSeaScene): the
+	// rules asked as the month's card lies open, the scene played once it is put away. "-TheaterSubScene=all|mine|never|off"
+	// sets the viewer's setting for a run (Saved/Campaign/subscene.json keeps the player's), and asks for it in a test run.
+	if (AMonthSeaScene::IsWanted())
+	{
+		World->SpawnActor<AMonthSeaScene>(FVector::ZeroVector, FRotator::ZeroRotator);
 	}
 }
 
@@ -484,7 +493,7 @@ float ACampaignGameMode::NowVolume() const
 	const float Opening = MusicMood == TEXT("theme") && ScoreOf.Contains(TEXT("theme")) && !bHomePlaying && !bBattleSceneUp ? 6.7f : 1.0f;
 	// (a battle scene's score at the level it asks for: under the fight's thick, back up in a lull)
 	const float Battle = bBattleScore ? FMath::Pow(10.0f, BattleScoreDb / 20.0f) : 1.0f;
-	return FMath::Min(MusicVolume * Opening, 1.0f) * (bMusicDucked ? 0.3f : 1.0f) * Battle;
+	return FMath::Min(MusicVolume * Opening, 1.0f) * (bMusicDucked || bSceneDucked ? 0.3f : 1.0f) * Battle;
 }
 
 void ACampaignGameMode::SetMusicMood(const FString& InMood)
@@ -772,6 +781,19 @@ void ACampaignGameMode::DuckMusic(bool bDown)
 		return;
 	}
 	bMusicDucked = bDown;
+	if (Music && bMusicOn)
+	{
+		Music->AdjustVolume(FadeLeft(0.8f), NowVolume());
+	}
+}
+
+void ACampaignGameMode::DuckForScene(bool bDown)
+{
+	if (bDown == bSceneDucked)
+	{
+		return;
+	}
+	bSceneDucked = bDown;
 	if (Music && bMusicOn)
 	{
 		Music->AdjustVolume(FadeLeft(0.8f), NowVolume());

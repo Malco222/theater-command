@@ -80,6 +80,14 @@ namespace SeaFeed
 	};
 	bool ReadAfter(const Json& J, After& Out);
 
+	/** One of a staged scene's windows of battle time (the D1 stager's `field.staged.beats`): what it shows, from and to
+	 * (battle seconds), and the seconds of screen it is given, so it plays at (To - From) / Screen. */
+	struct Beat
+	{
+		std::string What;
+		double From = 0.0, To = 0.0, Screen = 0.0;
+	};
+
 	/** A whole recorded action (tools/sea-record). */
 	struct Recording
 	{
@@ -89,6 +97,9 @@ namespace SeaFeed
 		SeaShow::Field Board;
 		std::vector<Frame> Views;
 		After Card;
+		/** A staged scene's windows, in order, each a window of at least a tenth of a second given a tenth of a second
+		 * of screen or more (empty for a fought action, which is played whole). Read only: the show never sees them. */
+		std::vector<Beat> Beats;
 	};
 	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError);
 

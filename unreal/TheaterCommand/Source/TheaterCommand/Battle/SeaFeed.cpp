@@ -329,6 +329,21 @@ namespace SeaFeed
 			Out.Views.push_back(std::move(F));
 		}
 		ReadAfter(J["after"], Out.Card);
+		// (a staged scene's windows of its battle time: the scene plays these and cuts between them)
+		const Json& Beats = J["field"]["staged"]["beats"];
+		double Last = -1e300;
+		for (size_t K = 0; K < Beats.Count(); ++K)
+		{
+			const Json& B = Beats.At(K);
+			Beat Read;
+			Read.What = B["what"].Str("");
+			Read.From = B["from"].Num(0.0);
+			Read.To = B["to"].Num(0.0);
+			Read.Screen = B["screen"].Num(0.0);
+			if (!std::isfinite(Read.From) || !std::isfinite(Read.To) || !std::isfinite(Read.Screen) || Read.To - Read.From < 0.1 || Read.Screen < 0.1 || Read.From < Last) continue;
+			Last = Read.To;
+			Out.Beats.push_back(Read);
+		}
 		return !Out.Views.empty();
 	}
 }

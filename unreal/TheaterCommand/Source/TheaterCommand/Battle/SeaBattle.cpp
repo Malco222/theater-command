@@ -13,6 +13,7 @@
 #include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignFlags.h"
+#include "Campaign/CampaignGameMode.h"
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
@@ -811,14 +812,29 @@ namespace SeaParts
 		const double From = -SeaShow::GrabFrom * Long, Span = 2.0 * SeaShow::GrabFrom * Long / Loops;
 		for (const double Hand : { -1.0, 1.0 })
 		{
-			// (the loops her holders have hold of on this side, pulled out to their hands)
+			// (the loops her holders have hold of on this side, pulled out to their hands: a held loop drawn at its pull's
+			// points too, either side of its dip)
 			const uint32_t Side = static_cast<uint32_t>(Hand > 0.0 ? Held & 0xffffffffull : Held >> 32);
 			SeaShow::Vec Was = SeaShow::GrabAt(Long, Beam, Hand, From, Side);
-			for (int32 K = 1; K <= Loops * Bits; ++K)
+			for (int32 Loop = 0; Loop < Loops; ++Loop)
 			{
-				const SeaShow::Vec Next = SeaShow::GrabAt(Long, Beam, Hand, From + Span * K / Bits, Side);
-				M.Rod(Fr.At(Was.X, Was.Y, Was.Z), Fr.At(Next.X, Next.Y, Next.Z), SeaShow::GrabThick, 4, GrabRope);
-				Was = Next;
+				const bool bHeld = Loop < 32 && ((Side >> Loop) & 1u) != 0u;
+				const double Dip = SeaShow::GrabDip(Long, Loop);
+				int32 Pull = 0;
+				for (int32 K = 1; K <= Bits; ++K)
+				{
+					const double Next = From + Span * (Loop + static_cast<double>(K) / Bits);
+					while (bHeld && Pull < static_cast<int32>(UE_ARRAY_COUNT(SeaShow::GrabPullAt)) && Dip + SeaShow::GrabPullAt[Pull] * SeaShow::GrabPullHalf < Next - 1e-9)
+					{
+						const double At = Dip + SeaShow::GrabPullAt[Pull++] * SeaShow::GrabPullHalf;
+						const SeaShow::Vec On = SeaShow::GrabAt(Long, Beam, Hand, At, Side);
+						M.Rod(Fr.At(Was.X, Was.Y, Was.Z), Fr.At(On.X, On.Y, On.Z), SeaShow::GrabThick, 4, GrabRope);
+						Was = On;
+					}
+					const SeaShow::Vec On = SeaShow::GrabAt(Long, Beam, Hand, Next, Side);
+					M.Rod(Fr.At(Was.X, Was.Y, Was.Z), Fr.At(On.X, On.Y, On.Z), SeaShow::GrabThick, 4, GrabRope);
+					Was = On;
+				}
 			}
 		}
 	}
@@ -1298,7 +1314,6 @@ FVector ASeaBattle::BoardOf(const FVector& WorldAt) const
 
 bool ASeaBattle::BeginReplay(const FString& InKey)
 {
-	using namespace SeaParts;
 	if (bBegun || State.IsValid())
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Sea battle: %s asked for on a scene already playing one; a battle takes a scene of its own."), *InKey);
@@ -1308,6 +1323,39 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	float Pace = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleSpeed="), Pace);
 	Speed = FMath::Clamp(static_cast<double>(Pace), 0.25, 4.0);
+	const FString File = FPaths::ProjectContentDir() / TEXT("Data/SeaBattles") / InKey + TEXT(".json");
+	FString Text;
+	if (!FFileHelper::LoadFileToString(Text, *File))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Sea battle: no recorded action %s (is Content/Data/SeaBattles staged with the build?)"), *File);
+		return false;
+	}
+	return OpenOn(Text, InKey, File);
+}
+
+bool ASeaBattle::BeginMonthScene(const FString& Text, const FString& Name)
+{
+	if (bBegun || State.IsValid() || !PendingReplay.IsEmpty())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Sea battle: the month's scene %s asked for on a scene already playing one; a battle takes a scene of its own."), *Name);
+		return false;
+	}
+	// (inside the campaign: no picture run, no start later, its own pace by its windows; RunMonthScene)
+	bMonthScene = true;
+	ShotFolder.Empty();
+	Speed = 1.0;
+	BeatAt = 0;
+	if (!OpenOn(Text, Name, TEXT("the month's sea scene (") + Name + TEXT(")")))
+	{
+		bMonthScene = false;
+		return false;
+	}
+	return true;
+}
+
+bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString& Where)
+{
+	using namespace SeaParts;
 	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
 	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
 	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
@@ -1323,18 +1371,11 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 			}
 		}
 	}
-	const FString File = FPaths::ProjectContentDir() / TEXT("Data/SeaBattles") / InKey + TEXT(".json");
-	FString Text;
-	if (!FFileHelper::LoadFileToString(Text, *File))
-	{
-		UE_LOG(LogTheater, Warning, TEXT("Sea battle: no recorded action %s (is Content/Data/SeaBattles staged with the build?)"), *File);
-		return false;
-	}
 	SeaFeed::Recording Rec;
 	std::string Error;
 	if (!SeaFeed::ReadRecording(Narrow(Text), Rec, Error) || Rec.Views.empty())
 	{
-		UE_LOG(LogTheater, Warning, TEXT("Sea battle: %s: %s"), *File, Error.empty() ? TEXT("no views") : *Wide(Error));
+		UE_LOG(LogTheater, Warning, TEXT("Sea battle: %s: %s"), *Where, Error.empty() ? TEXT("no views") : *Wide(Error));
 		return false;
 	}
 	const uint64 Seed = Rec.Seed ? Rec.Seed : 239;
@@ -1582,7 +1623,24 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		IFileManager::Get().MakeDirectory(*ShotFolder, true);
 	}
 	// "-TheaterSeaBattleFrom=300": the action from there (what lasts of the time before is kept, as a picture run's skip).
+	// The month's scene from its first window instead (RunMonthScene).
 	bool bStartedLater = false;
+	if (bMonthScene)
+	{
+		for (const std::string& Line : S.Rec.Card.Lines)
+		{
+			if (!Line.empty())
+			{
+				Caption.Add(Wide(Line));
+			}
+		}
+		if (!S.Rec.Beats.empty() && S.Rec.Beats.front().From > S.BeginT + 1.0)
+		{
+			SkipTo(FMath::Min(S.Rec.Beats.front().From, S.EndT));
+			bStartedLater = true;
+		}
+	}
+	else
 	{
 		float From = -1.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleFrom="), From) && From > S.BeginT + 1.0)
@@ -1629,9 +1687,32 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	bEyeCut = true;
 	bBegun = true;
 	SetActorTickEnabled(true);
-	UE_LOG(LogTheater, Display, TEXT("Sea battle: %s, %s (%s), %d views, %.0f s, the sun at %.0f degrees and %.0f up at %.1f h, %d shots%s."), *RecordKey,
+	if (bMonthScene)
+	{
+		// (the table put away under the scene, as the air scene has it: every piece off it and its hover quiet, and the
+		// controller's clicks and keys kept from it while it is; the scene's screen takes the keys and the pointer)
+		if (ACampaignMapActor* Map = Cast<ACampaignMapActor>(UGameplayStatics::GetActorOfClass(this, ACampaignMapActor::StaticClass())))
+		{
+			Map->SetPutAway(true);
+			bTablePutAway = true;
+		}
+		if (APlayerController* Controller = Here->GetFirstPlayerController(); Controller && Screen.IsValid())
+		{
+			FInputModeUIOnly Mode;
+			Mode.SetWidgetToFocus(Screen);
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			Controller->SetInputMode(Mode);
+			bOwnInput = true;
+		}
+		if (ACampaignGameMode* Campaign = Cast<ACampaignGameMode>(UGameplayStatics::GetGameMode(this)))
+		{
+			Campaign->DuckForScene(true);
+		}
+	}
+	UE_LOG(LogTheater, Display, TEXT("Sea battle: %s, %s (%s), %d views, %.0f s, the sun at %.0f degrees and %.0f up at %.1f h, %d shots%s%s."), *RecordKey,
 		*Wide(S.Rec.Board.Title), *Wide(S.Rec.Board.Date), static_cast<int32>(S.Rec.Views.size()), S.EndT - S.BeginT, SunAzimuth, SunElevation, Hour, Shots.Num(),
-		ShotFolder.IsEmpty() ? TEXT("") : *(TEXT(", pictures into ") + ShotFolder));
+		ShotFolder.IsEmpty() ? TEXT("") : *(TEXT(", pictures into ") + ShotFolder),
+		bMonthScene ? *FString::Printf(TEXT(", the month's scene in %d windows"), static_cast<int32>(S.Rec.Beats.size())) : TEXT(""));
 	return true;
 }
 
@@ -5461,29 +5542,20 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		const double To = FMath::Min(Shots[NextPicture].At - 20.0, S.EndT);
 		if (To - S.BattleT > 15.0)
 		{
-			bSkipping = true;
-			for (double T = S.BattleT + 1.0; T < To; T += 1.0)
-			{
-				StepTo(T, true);
-			}
-			StepTo(To, true);
-			bSkipping = false;
-			if (Effects)
-			{
-				TGuardValue<bool> Water(bOnWater, true);
-				for (const FOilLater& Oil : OilLater)
-				{
-					Effects->OilFire(Oil.Id, World(Oil.At.X, Oil.At.Y, 0.0), static_cast<float>(Oil.Reach), Oil.Kind, Oil.Until, static_cast<float>(Oil.Since + S.BattleT - Oil.LitAt));
-				}
-			}
-			OilLater.Reset();
-			FlakLater.Reset();
-			Later.Reset();
+			SkipTo(To);
 			bSkippedOn = true;
-			bEyeCut = true;
-			bLastFrameApart = true;
 			UE_LOG(LogTheater, Display, TEXT("Sea battle: on to %.0f s, 20 s before %s."), S.BattleT, *Shots[NextPicture].Name);
 		}
+	}
+	// The month's scene: its windows in turn, at each one's pace, cut between; its caption; its end, or a key's.
+	if (bMonthScene)
+	{
+		if (bMonthEnding || (MonthEndsAt >= 0.0 && RealT >= MonthEndsAt))
+		{
+			EndMonthScene(); // (the scene is taken down: nothing of it is touched after)
+			return;
+		}
+		bSkippedOn = RunMonthScene() || bSkippedOn;
 	}
 	StepTo(FMath::Min(S.BattleT + Dt * Speed, S.EndT + 12.0), false);
 	MoveKnot(Dt, bSkippedOn);
@@ -5544,6 +5616,147 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	}
 }
 
+void ASeaBattle::SkipTo(double To)
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	FSeaBattleState& S = *State;
+	bSkipping = true;
+	for (double T = S.BattleT + 1.0; T < To; T += 1.0)
+	{
+		StepTo(T, true);
+	}
+	StepTo(To, true);
+	bSkipping = false;
+	if (Effects)
+	{
+		TGuardValue<bool> Water(bOnWater, true);
+		for (const FOilLater& Oil : OilLater)
+		{
+			Effects->OilFire(Oil.Id, World(Oil.At.X, Oil.At.Y, 0.0), static_cast<float>(Oil.Reach), Oil.Kind, Oil.Until, static_cast<float>(Oil.Since + S.BattleT - Oil.LitAt));
+		}
+	}
+	OilLater.Reset();
+	FlakLater.Reset();
+	Later.Reset();
+	bEyeCut = true;
+	bLastFrameApart = true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The month's submarine scene (D1, ruling 241): a staged recording played inside the campaign, then closed.
+
+namespace SeaParts
+{
+	/** The month's scene: the caption's seconds on the screen after the last window, its fade in and out, the most a
+	 * window is played faster than the battle (the show is stepped a frame at a time), and the longest the scene is
+	 * let run (the form's 30 to 45 s, and the caption, with room). */
+	constexpr double CaptionHold = 6.0, CaptionFade = 0.8, FastestWindow = 6.0, LongestScene = 90.0;
+}
+
+bool ASeaBattle::RunMonthScene()
+{
+	using namespace SeaParts;
+	FSeaBattleState& S = *State;
+	const std::vector<SeaFeed::Beat>& Beats = S.Rec.Beats;
+	bool bCut = false;
+	if (!Beats.empty())
+	{
+		const int32 Windows = static_cast<int32>(Beats.size());
+		while (BeatAt < Windows && S.BattleT >= Beats[BeatAt].To - 1e-6)
+		{
+			++BeatAt;
+		}
+		if (BeatAt < Windows)
+		{
+			const SeaFeed::Beat& Window = Beats[BeatAt];
+			// (between windows nothing the scene needs happens: a cut to the next)
+			if (Window.From - S.BattleT > 1.0 && Window.From < S.EndT)
+			{
+				SkipTo(Window.From);
+				bCut = true;
+			}
+			Speed = FMath::Clamp((Window.To - Window.From) / Window.Screen, 0.25, FastestWindow);
+			if (BeatAt == Windows - 1 && CaptionAt < 0.0)
+			{
+				CaptionAt = RealT;
+			}
+		}
+		else
+		{
+			Speed = 1.0;
+			if (CaptionAt < 0.0)
+			{
+				CaptionAt = RealT;
+			}
+			if (MonthEndsAt < 0.0)
+			{
+				MonthEndsAt = RealT + CaptionHold;
+			}
+		}
+	}
+	else
+	{
+		// (a recording without windows: played whole in about 40 s of screen, the caption over its last 8)
+		Speed = FMath::Clamp((S.EndT - S.BeginT) / 40.0, 1.0, FastestWindow);
+		if (CaptionAt < 0.0 && S.BattleT >= S.EndT - 8.0 * Speed)
+		{
+			CaptionAt = RealT;
+		}
+		if (MonthEndsAt < 0.0 && S.BattleT >= S.EndT)
+		{
+			MonthEndsAt = RealT + CaptionHold;
+		}
+	}
+	if (MonthEndsAt < 0.0 && (S.BattleT >= S.EndT + 10.0 || RealT >= LongestScene))
+	{
+		MonthEndsAt = RealT + (CaptionAt >= 0.0 ? 2.0 : 0.0);
+	}
+	return bCut;
+}
+
+bool ASeaBattle::GetCaption(TArray<FString>& OutLines, float& OutShown) const
+{
+	if (!bMonthScene || CaptionAt < 0.0 || Caption.Num() == 0)
+	{
+		return false;
+	}
+	double Shown = FMath::Clamp((RealT - CaptionAt) / SeaParts::CaptionFade, 0.0, 1.0);
+	if (MonthEndsAt >= 0.0)
+	{
+		Shown = FMath::Min(Shown, FMath::Clamp((MonthEndsAt - RealT) / SeaParts::CaptionFade, 0.0, 1.0));
+	}
+	OutLines = Caption;
+	OutShown = static_cast<float>(Shown);
+	return true;
+}
+
+void ASeaBattle::EndMonthScene()
+{
+	if (!bMonthScene)
+	{
+		return;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Sea battle: the month's scene %s, after %.0f s on the screen."), MonthEndsAt >= 0.0 && RealT >= MonthEndsAt ? TEXT("ended") : TEXT("skipped"), RealT);
+	// (the screen, the table, the music and the campaign's own eye given back; EndPlay gives back the room's light and
+	// the frame. The keys and the pointer go to a guard over the map first, with no frame between, which gives them
+	// back to the campaign once the key or click that ended the scene is let go)
+	APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (bOwnInput && Controller)
+	{
+		bOwnInput = false;
+		SSeaKeyGuard::Raise(Controller);
+	}
+	HideScreen();
+	if (Controller)
+	{
+		Controller->SetViewTarget(Controller->GetPawn());
+	}
+	Destroy();
+}
+
 void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	SayFrameTimes();
@@ -5558,6 +5771,22 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 	if (Reason == EEndPlayReason::Destroyed)
 	{
 		GiveBackTheRoom(); // (taken down in the game: the table comes back as it was)
+	}
+	if (bTablePutAway)
+	{
+		bTablePutAway = false;
+		if (ACampaignMapActor* Map = Cast<ACampaignMapActor>(UGameplayStatics::GetActorOfClass(this, ACampaignMapActor::StaticClass())))
+		{
+			Map->SetPutAway(false);
+		}
+	}
+	if (bMonthScene)
+	{
+		bMonthScene = false;
+		if (ACampaignGameMode* Campaign = Cast<ACampaignGameMode>(UGameplayStatics::GetGameMode(this)))
+		{
+			Campaign->DuckForScene(false);
+		}
 	}
 	// (the stage first: its looks play on this scene's kit)
 	if (Stage)
@@ -5647,4 +5876,17 @@ void ASeaBattle::HideScreen()
 	}
 	ScreenFrame.Reset();
 	Screen.Reset();
+	if (bOwnInput)
+	{
+		bOwnInput = false;
+		if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+		{
+			// (the campaign's own mode, as its controller sets it: the pointer in sight while a drag turns the table, and
+			// never locked in)
+			FInputModeGameAndUI Mode;
+			Mode.SetHideCursorDuringCapture(false);
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			Controller->SetInputMode(Mode);
+		}
+	}
 }
