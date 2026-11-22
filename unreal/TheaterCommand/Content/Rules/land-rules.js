@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of fedae07e 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 5f395056 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -459,6 +459,16 @@
      * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
      */
     blocks: { least: 6, regiments: 3 },
+    /**
+     * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+     * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+     * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+     * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+     * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+     * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+     * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
+     */
+    scale: { budget: 8500, step: 5, page: 24e3 },
     /** The army breaks when this share of its power is running or gone. */
     breaks: 0.5,
     /**
@@ -513,6 +523,12 @@
     press: 600,
     /** Seconds of battle time before the defender is counted as having held. */
     limit: 360,
+    /**
+     * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+     * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+     * clear dry ground to come on at, in field cells in from the edge and along it either way.
+     */
+    join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
     /**
      * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
      * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
@@ -1691,8 +1707,10 @@
     }
     const style = b.style[side];
     if (side === "att") {
-      if (style) planned(b, side, style, mine, foes);
-      else plain(b, side, mine, foes);
+      sendOn(b, side, mine, foes);
+      const line = mine.some((u) => u.reserve === "sent") ? mine.filter((u) => u.reserve !== "sent") : mine;
+      if (style) planned(b, side, style, line, foes);
+      else plain(b, side, line, foes);
       if (b.measured) seekFlanks(b, side, mine);
       if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
       return;
@@ -1802,10 +1820,18 @@
       by(b, side, u, t);
     }
   }
+  var struckOf = (mine, foes) => mine.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
+  function sendOn(b, side, mine, foes) {
+    const sent = mine.filter((u) => u.reserve === "sent" && u.kind !== "art" && u.order?.kind !== "withdraw" && !hasTarget(u, foes));
+    if (!sent.length) return;
+    const struck = struckOf(mine, foes);
+    if (!struck.length) return;
+    sent.forEach((u, i) => by(b, side, u, foes.find((f) => f.id === struck[i % struck.length].engaged)));
+  }
   var weight = (u) => u.power0 * (0.35 + 0.65 * (u.str / u.str0));
   function makePlan(b, side, s, mine, foes) {
     const P = { phase: s.plan ? "guns" : "assault", main: [], startY: null, role: {}, group: {}, spot: {}, arrived: null, went: null, hook: {} };
-    const rest = mine.filter((u) => u.kind !== "art");
+    const rest = mine.filter((u) => u.kind !== "art" && u.reserve !== "sent");
     if (!s.plan || !rest.length) {
       for (const u of rest) P.role[u.id] = "pin";
       P.went = 0;
@@ -2017,7 +2043,7 @@
       const y = edge[Math.min(edge.length - 1, Math.max(0, Math.floor(f.x / cell)))];
       return y < 0 || f.y < y;
     };
-    const struck = mine.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
+    const struck = struckOf(mine, foes);
     let next = 0;
     const sendTo = (u) => {
       const at = struck[next++ % struck.length];
@@ -2266,11 +2292,10 @@
   var KIND_WORD = { inf: "Infantry", mtn: "Mountain", cav: "Cavalry", eng: "Engineers", mot: "Motorized", arm: "Armoured", art: "Artillery", fort: "Fortress" };
   var TEAM_WORD = { mg: "Machine-Gun Battalion", mor: "Mortar Battalion" };
   var teamOf = (f) => TEAMS.includes(f.kind) ? f.kind : void 0;
-  function partsFor(forces) {
-    const B = LAND.blocks;
+  function partsFor(forces, least = LAND.blocks.least) {
     const parts = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
     const total = () => parts.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
-    while (total() < B.least) {
+    while (total() < least) {
       let best = -1, size = 0;
       parts.forEach((p2, i) => {
         if (teamOf(forces[i]) || !p2.some((x) => x.regiment === void 0 && x.divs.length === 1)) return;
@@ -2282,7 +2307,7 @@
       });
       if (best < 0) break;
       const p = parts[best], j = p.findIndex((x) => x.regiment === void 0 && x.divs.length === 1);
-      p.splice(j, 1, ...Array.from({ length: B.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
+      p.splice(j, 1, ...Array.from({ length: LAND.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
     }
     return parts;
   }
@@ -2327,9 +2352,9 @@
       }
     });
   }
-  function makeBlocks(side, t, power, firstId) {
+  function makeBlocks(side, t, power, firstId, least = LAND.blocks.least) {
     const out = [];
-    const cut2 = partsFor(t.forces);
+    const cut2 = partsFor(t.forces, least);
     t.forces.forEach((f, i) => {
       const team = teamOf(f);
       const k = team ? "art" : Object.keys(LAND.speed).includes(f.kind) ? f.kind : "inf";
@@ -2345,8 +2370,8 @@
           men: own?.men ?? f.men / n
         };
       });
-      const weightOf = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND.blocks.regiments : 1);
-      const all = cut2[i].reduce((s, p) => s + weightOf(p), 0);
+      const weightOf2 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND.blocks.regiments : 1);
+      const all = cut2[i].reduce((s, p) => s + weightOf2(p), 0);
       for (const p of cut2[i]) {
         const ds = p.divs.map((d2) => divs[d2]);
         const name = p.regiment !== void 0 ? `${ORD(p.regiment + 1)} Regiment, ${ds[0].short}` : ds.length === 1 ? ds[0].name : ds.map((d2) => d2.short).join(" and ");
@@ -2357,7 +2382,7 @@
         const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND.blocks.regiments)) : per;
         const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
         const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
-        const share = weightOf(p) / all;
+        const share = weightOf2(p) / all;
         out.push({
           id: firstId + out.length,
           side,
@@ -2386,7 +2411,7 @@
           act: "idle",
           speed: 0,
           power0: power * f.share * share,
-          worth: weightOf(p),
+          worth: weightOf2(p),
           order: null,
           path: [],
           dug: !!f.dug,
@@ -2403,6 +2428,22 @@
         });
       }
     });
+    return out;
+  }
+  function joinBlocks(t, power, firstId) {
+    const out = [];
+    for (const side of ["att", "def"]) {
+      const js = (t[side].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined > 0 && f.share > 0);
+      if (!js.length) continue;
+      for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0)) {
+        const j = Math.min(1, js.find((f) => f.corps === u.corps).joined);
+        u.joined = j;
+        u.priced = u.power0;
+        u.power0 = u.priced / j;
+        u.dug = false;
+        out.push(u);
+      }
+    }
     return out;
   }
   var FRONT = ["inf", "mtn", "eng", "fort", "cav"];
@@ -2958,6 +2999,13 @@
        * together. On with platoons unless asked off.
        */
       __publicField(this, "byBook");
+      /**
+       * The battle's scale (the true-scale plan, GR1 and GR3; Brian's standing rule of 22 November 04:14Z: the numbers on
+       * screen reflect the units each side brings): one drawn man stands for this many. No block draws more men than its
+       * men0 over it: drawn as platoons where they fit, else as sections, else its key men only. Null: the battle's setting
+       * for every block, as before.
+       */
+      __publicField(this, "scale");
       __publicField(this, "sup", new Suppression());
       /** Each side's tanks standing this step, and each block's most dangerous men (its guns), worked out once a step. */
       __publicField(this, "tankMemo", { t: -1, at: {} });
@@ -2967,6 +3015,7 @@
       this.sections = !!opts.sections || !!opts.platoons;
       this.platoons = !!opts.platoons;
       this.byBook = opts.book ?? this.platoons;
+      this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
       for (const u of b.units) this.squads.set(u.id, this.make(u));
     }
     /** A block placed in the setup step (release 2) before the clock starts: its men drawn up afresh where it now stands. */
@@ -2974,25 +3023,30 @@
       if (this.b.t > 0 || !this.squads.has(u.id)) return;
       this.squads.set(u.id, this.make(u));
     }
+    /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
+    join(u) {
+      if (!this.squads.has(u.id)) this.squads.set(u.id, this.make(u));
+    }
     // ---- Who is in a block ------------------------------------------------------------------------------------------
     make(u) {
       const men = [], veh = [];
       const n = Math.max(0, u.figures0);
       const roles = rolesFor(u.kind, u.tray, n, u.team);
+      const fill = this.fillFor(u, roles.slice(0, n).map((r) => r[0])), tier = fill.tier;
       const man = (k, nn, role, team) => {
         const jx = (roll(this.seed, u.id, nn, 1) - 0.5) * 6, jy = (roll(this.seed, u.id, nn, 2) - 0.5) * 5;
         return { k, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: "idle", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx, jy };
       };
       for (let k = 0; k < n; k++) men.push(man(k, k, roles[k][0], roles[k][1]));
       let lor = 0;
-      if (this.sections) for (let k = 0; k < n; k++) {
-        const key = men[k], mot = u.kind === "mot" && this.platoons;
+      if (tier >= 1) for (let k = 0; k < n; k++) {
+        const key = men[k], mot = u.kind === "mot" && tier === 2;
         if (mot) {
           key.lor = lor;
           key.seat = 0;
         }
         const sec = sectionOf(u.nat, key.role);
-        sec.forEach(([role, pr, scout], i) => {
+        sec.slice(0, fill.sec[k]).forEach(([role, pr, scout], i) => {
           const m = man(k, 1e3 + k * 32 + i + 1, role, key.team);
           m.j = i + 1;
           m.sec = k;
@@ -3004,11 +3058,14 @@
           }
           men.push(m);
         });
+        if (fill.sec[k] > 0) key.hasSec = true;
         lor++;
-        if (!this.platoons || key.role !== "rifle") continue;
-        const P = platoonOf(u.nat);
+        if (tier < 2 || key.role !== "rifle" || fill.plat[k] <= 0) continue;
+        key.plat = true;
+        const P = platoonOf(u.nat), most = fill.plat[k];
         let j = sec.length, x = 0;
         const add = (sub, role, seat, opts = {}) => {
+          if (x >= most) return false;
           const m = man(k, 2e4 + k * 128 + x++, role, key.team);
           m.j = ++j;
           m.sec = k;
@@ -3020,19 +3077,23 @@
             m.seat = seat;
           }
           men.push(m);
+          return true;
         };
-        for (let s = 1; s < P.squads; s++, lor++) {
+        for (let s = 1; s < P.squads && x < most; s++, lor++) {
           add(s, "rifle", 0, { lead: true });
           sec.forEach(([role, pr], i) => add(s, role, i + 1, { pr }));
         }
-        add(P.squads, "rifle", 0, { lead: true });
-        for (let i = 1; i < P.hq; i++) add(P.squads, "rifle", i);
-        lor++;
+        if (x < most) {
+          add(P.squads, "rifle", 0, { lead: true });
+          for (let i = 1; i < P.hq; i++) add(P.squads, "rifle", i);
+          lor++;
+        }
       }
-      const lorries = u.kind === "mot" ? this.sections ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? this.sections ? n : 1 : 0;
+      const lorries = u.kind === "mot" ? tier >= 1 ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? tier >= 1 ? n : 1 : 0;
       for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i, role: "lorry", team: 0, x: u.x, y: u.y, face: u.face, pose: "parked", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0 });
       const sq = {
         u,
+        tier,
         men,
         veh,
         fo: null,
@@ -3065,6 +3126,28 @@
       };
       this.layStart(sq);
       return sq;
+    }
+    /**
+     * How many of each key man's section (sec) and platoon (plat: its other squads and headquarters, in order) a block
+     * draws (GR3; the production lead, 22 November 07:23Z). Unscaled, all the battle's setting draws. Under the scale its
+     * key men always (the rules' models), then their sections in squad order, then the rifle models' platoons squad by
+     * squad, as many men as fit its men0 over N, counted as the 3D game shows them (menOnScreen): the last group drawn
+     * short, so every block draws within a man of its cap where its whole draw would be more. tier: the most any key draws.
+     */
+    fillFor(u, keys) {
+      const top = this.platoons ? 2 : this.sections ? 1 : 0;
+      const secs = keys.map((r) => top >= 1 ? sectionOf(u.nat, r).length : 0);
+      const P = platoonOf(u.nat);
+      const plats = keys.map((r, i) => top === 2 && r === "rifle" ? (P.squads - 1) * (1 + secs[i]) + P.hq : 0);
+      if (this.scale === null || top === 0) return { tier: top, sec: secs, plat: plats };
+      let room = Math.floor(u.men0 / this.scale) - keys.reduce((c, r) => c + menOnScreen(r), 0);
+      const take = (most) => {
+        const n = Math.max(0, Math.min(room, most));
+        room -= n;
+        return n;
+      };
+      const sec = secs.map(take), plat = plats.map(take);
+      return { tier: plat.some((x) => x > 0) ? 2 : sec.some((x) => x > 0) ? 1 : 0, sec, plat };
     }
     layStart(sq) {
       const u = sq.u;
@@ -3101,7 +3184,7 @@
           m.cover = "none";
         }
       }
-      if (this.sections) {
+      if (sq.tier >= 1) {
         const room = /* @__PURE__ */ new Map(), order = [...sq.men].sort((a, c) => (a.j === void 0 ? 0 : 1) - (c.j === void 0 ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
         for (const m of order) {
           if (VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
@@ -3280,9 +3363,9 @@
         m.pose = "down";
         m.spot = [m.x, m.y];
         this.aid(sq, m);
-        if (this.sections) this.regroup(sq, m);
+        if (sq.tier >= 1) this.regroup(sq, m);
       }
-      if (this.sections) this.thin(sq);
+      if (sq.tier >= 1) this.thin(sq);
     }
     /** A comrade goes to a man who fell, where one is near and the block is not running (nor riding, nor mounting again). */
     aid(sq, m) {
@@ -3494,7 +3577,7 @@
      */
     turnFor(sq, m, bound) {
       const key = this.memo(sq).keyOf.get(m.sec ?? m.k);
-      const plat = this.platoons && (key ? key.role === "rifle" : m.role === "rifle");
+      const plat = key ? !!key.plat : sq.tier === 2 && m.role === "rifle";
       const squads = plat ? platoonOf(sq.u.nat).squads : 0, s = plat ? m.sub ?? 0 : m.sec ?? m.k;
       return turnOf(bound, m.role === "mg", s, plat && s >= squads);
     }
@@ -3774,7 +3857,7 @@
           l.push(m);
         }
       }
-      const all = this.sections ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
+      const all = sq.tier >= 1 ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
       return sq.memo = { fig: u.figures, on, stand, struck: on ? [...stand, ...sq.veh] : stand, up, keys, keyOf: keyOf2, all, bySec };
     }
     /** Whom a man who keeps by another keeps by in his section now: a loader his weapon, a gun's crew its gun, a runner his officer. */
@@ -3837,7 +3920,7 @@
      * rifle section's gunner fallen, his number two takes the gun up; with none to keep by, he fights as a rifleman.
      */
     pairs(sq, room) {
-      if (!this.sections) return;
+      if (sq.tier < 1) return;
       const u = sq.u, t = this.b.t;
       const count = /* @__PURE__ */ new Map(), booked = /* @__PURE__ */ new Set();
       for (const m of sq.men) {
@@ -3916,7 +3999,7 @@
      * there. Returns the places booked, for pairs.
      */
     space(sq) {
-      if (!this.sections) return void 0;
+      if (sq.tier < 1) return void 0;
       const M = this.memo(sq), t = this.b.t, room = /* @__PURE__ */ new Map();
       const order = [...M.up].sort((a, c) => (a.j === void 0 ? 0 : 1) - (c.j === void 0 ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
       for (const m of order) {
@@ -3986,7 +4069,7 @@
      * whole block goes in files (as many as its men need), section after section.
      */
     slot(sq, m, tpl) {
-      const u = sq.u, N = this.nums(u), band = this.band(u), M = this.memo(sq), S = DR.sections, sec = this.sections;
+      const u = sq.u, N = this.nums(u), band = this.band(u), M = this.memo(sq), S = DR.sections, sec = sq.tier >= 1;
       if (m.pr) {
         const L2 = this.leadOf(sq, m);
         if (L2) return this.slot(sq, L2, tpl);
@@ -4022,7 +4105,7 @@
       const half = u.w / 2 - 6 + (sec ? 25 : 0), span2 = Math.min(half - 4, sp * Math.max(0, n - 1));
       const outer = side * Math.min(half, u.w / 4 + span2 / 2);
       const a = outer - side * (n > 1 ? span2 * i / (n - 1) : 0);
-      const l = u.d / 2 - 4 + (i % 2 ? sec ? -(this.platoons ? S.platoon.rows : S.rows) : -3 : 0) + m.jy * 0.5;
+      const l = u.d / 2 - 4 + (i % 2 ? sec ? -(sq.tier === 2 ? S.platoon.rows : S.rows) : -3 : 0) + m.jy * 0.5;
       return [a + m.jx * 0.4, l];
     }
     /**
@@ -4228,7 +4311,7 @@
           best = o;
         }
       }
-      if (best && this.sections) for (let g = 0; g < 8; g++) for (const o of M.bySec.get(best.k * 8 + g) ?? []) {
+      if (best && sq.tier >= 1) for (let g = 0; g < 8; g++) for (const o of M.bySec.get(best.k * 8 + g) ?? []) {
         const dd = Math.hypot(o.x - m.x, o.y - m.y);
         if (dd < d) {
           d = dd;
@@ -4868,7 +4951,7 @@
       lead.aim = void 0;
       men.forEach((m, i) => {
         if (m === lead) return;
-        const ang = i / men.length * Math.PI * 2, r = this.sections ? 7 + 0.25 * men.length : 7;
+        const ang = i / men.length * Math.PI * 2, r = sq.tier >= 1 ? 7 + 0.25 * men.length : 7;
         const p = [lead.x + Math.sin(ang) * r + dir[0] * 4, lead.y + Math.cos(ang) * r + dir[1] * 4];
         if (Math.hypot(m.spot[0] - p[0], m.spot[1] - p[1]) > 4) this.go(sq, m, p, "run", 4, t + 2, dir, 4);
         else if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 1) {
@@ -4954,12 +5037,12 @@
     }
     /** Which of the block's lorries is his: by his place on the tray, or (drawn as sections) his section's own. */
     lorryIx(sq, m) {
-      return (m.lor ?? (this.sections ? m.sec ?? m.k : m.k)) % sq.veh.length;
+      return (m.lor ?? (sq.tier >= 1 ? m.sec ?? m.k : m.k)) % sq.veh.length;
     }
     /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
     seat(sq, m) {
       const v = this.lorryOf(sq, m);
-      if (this.sections) {
+      if (sq.tier >= 1) {
         const j2 = m.seat ?? m.j ?? 0;
         return toWorld(v, v.face, j2 % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j2 / 2));
       }
@@ -5392,7 +5475,7 @@
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), dir = this.threatDir(sq), h = sq.heading;
       const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
       const guns = this.up(sq).filter((m) => m.role === "gun"), tractor = sq.veh[0];
-      const own = this.sections && sq.veh.length > 1;
+      const own = sq.tier >= 1 && sq.veh.length > 1;
       if (sq.phase === "limbered" || sq.phase === "flee" || sq.phase === "fallback") {
         guns.forEach((g, i) => {
           g.aim = void 0;
@@ -5628,7 +5711,7 @@
     walk(sq) {
       const u = sq.u, f = this.b.field, t = this.b.t;
       let e;
-      const crowd = this.sections ? /* @__PURE__ */ new Map() : null;
+      const crowd = sq.tier >= 1 ? /* @__PURE__ */ new Map() : null;
       if (crowd) for (const m of sq.men) {
         if (m.fell !== void 0 || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
         const key = Math.floor(m.x / SPACE.cell) * 65536 + Math.floor(m.y / SPACE.cell);
@@ -6112,7 +6195,7 @@
       const b = this.b, out = [];
       const r13 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
       const one = (m) => {
-        const o = { k: m.k, r: this.sections && m.j === void 0 && m.role === "rifle" || m.lead ? "leader" : m.role, x: r13(m.x), y: r13(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r13(m.went ?? 0) : 0, c: m.cover };
+        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r13(m.x), y: r13(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r13(m.went ?? 0) : 0, c: m.cover };
         if (m.j !== void 0) o.j = m.j;
         if (m.aim) o.a = [r13(m.aim[0]), r13(m.aim[1])];
         if (m.shot !== void 0) o.s = r13(m.shot);
@@ -6182,6 +6265,7 @@
     const P = DR.sections.platoon, p = P[nat] ?? P.default;
     return { squads: Math.max(1, Math.min(7, p.squads)), hq: Math.max(1, p.hq) };
   }
+  var menOnScreen = (r) => r === "hmg" || r === "mortar" ? 3 : VEHICLE.has(r) ? 0 : 1;
   function sectionOf(nat, key) {
     const S = DR.sections, out = [];
     const add = (r, c, pr = false, scout = false) => {
@@ -6270,6 +6354,16 @@
   var inRiver = (g) => g === "water" || g === "blown";
   var live2 = (u) => u.state !== "gone" && u.state !== "withdrawn";
   var fighting2 = (u) => live2(u) && u.state !== "routing";
+  var weightOf = (u) => u.priced ?? u.power0;
+  var INWARD = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
+  function joinEdge(side, toward, own) {
+    if (toward === void 0 || !Number.isFinite(toward)) return side === "att" ? "south" : "north";
+    const sn = Math.sin(toward), cs = Math.cos(toward);
+    let e = Math.abs(cs) >= Math.abs(sn) ? cs > 0 ? "north" : "south" : sn > 0 ? "east" : "west";
+    if (e === (side === "att" ? "north" : "south")) e = sn > 1e-9 ? "east" : "west";
+    if (own && (e === "west" || e === "east") && e !== own) e = "south";
+    return e;
+  }
   var mix2 = (n) => {
     let h = n >>> 0;
     h ^= h >>> 16;
@@ -6392,6 +6486,16 @@
       __publicField(this, "models", /* @__PURE__ */ new Map());
       /** The player's orders on the air (radio): each block's, with the battle time it lands. */
       __publicField(this, "pending", []);
+      /**
+       * Neighbours join the fight (release 2): the blocks of corps coming up from next door, not yet on the field, earliest
+       * first: each with its corps' ticket, the battle second it comes on, the edge and the place there. Empty where none
+       * comes, and then nothing below reads it.
+       */
+      __publicField(this, "coming", []);
+      /** The battle second each joining corps came on. */
+      __publicField(this, "joinedAt", /* @__PURE__ */ new Map());
+      /** The corps that come up from next door. */
+      __publicField(this, "joinCorps", /* @__PURE__ */ new Set());
       // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
       /** Each side's fighters on call, where it has any. */
       __publicField(this, "airOn", { att: null, def: null });
@@ -6457,6 +6561,7 @@
       const att = makeBlocks("att", ticket.att, A, 1);
       const def = makeBlocks("def", ticket.def, D2, att.length + 1);
       this.units = [...att, ...def];
+      const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
       this.covered = coveredTanks(ticket, this.units);
       const works = ticket.place.fort >= 1 || def.some((u) => u.kind === "fort");
       this.freshHold = { att: att.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== "fort" && !u.team).length <= LAND.fresh.upTo };
@@ -6468,15 +6573,23 @@
         const c = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
         if (c) u.cal = c;
       }
+      for (const u of joining) {
+        const c = crewFor(u, ticket[u.side].joiners?.find((f) => f.corps === u.corps)?.battles ?? 0);
+        if (c) u.crew = c;
+        const k = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
+        if (k) u.cal = k;
+      }
       const dry = ticket.place.dryEnd ?? "west";
       const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf(FIELD.w, FIELD.h).att, dry), dry } : void 0;
       if (!bend) for (const u of att) delete u.dry;
+      for (const u of joining) if (u.side === "def" || !ticket.place.river) delete u.dry;
       const armour = att.filter((u) => MOTION[u.kind] === "tracks" || MOTION[u.kind] === "wheels"), all = armour.reduce((a, u) => a + u.power0, 0);
       this.armourWet = all > 0 ? armour.filter((u) => !u.dry).reduce((a, u) => a + u.power0, 0) / all : 0;
       this.field = buildField(ticket.place, ticket.seed, bend);
       if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND.city.clock * builtShare(this.field))) };
       deploy(this.units, "att", this.field);
       deploy(this.units, "def", this.field);
+      if (joining.length) this.comeOn(joining);
       const St = this.field.stream, held = this.units.filter((u) => u.side === "def");
       if (St?.lie === "up") {
         const xAt = (y) => St.course.reduce((m, p) => Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m)[0];
@@ -6508,10 +6621,10 @@
      * And only as far as the attack's tanks and lorries had to cross with it (armourWet): an attack on foot crosses at no
      * cost the field must make up, so a river never makes an attack better than none (b494).
      */
-    holdTake(u) {
+    holdTake(u, t) {
       const p = this.ticket.place, H = LAND.hold;
       const streets = streetsOf(p);
-      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
     }
     say(e) {
       const ev = { t: Math.round(this.t * 10) / 10, ...e };
@@ -6530,6 +6643,115 @@
     }
     unit(id) {
       return this.units.find((u) => u.id === id);
+    }
+    /** Every block of the battle: those on the field, then those of corps still coming up from next door (release 2). */
+    allBlocks() {
+      return this.coming.length ? [...this.units, ...this.coming.map((c) => c.u)] : this.units;
+    }
+    // ---- Neighbours join the fight (release 2) ----------------------------------------------------------------------
+    //
+    // The design director's ruling of 22 November 03:15Z: a corps next door that joins a battle is priced on the
+    // campaign card, and the field only draws it coming up. It reaches its side's line at (1 - joined) of the battle's
+    // own clock, worked out from its march weeks, never a fixed minute or a draw: it stands off the field until its own
+    // march from the edge facing the province it comes from would bring it there then, and walks on from that edge as a
+    // b407 reserve already sent, to where its side's line is struck hardest. Until then nothing on the field sees it,
+    // strikes it or is sent at it; the bar and the break count it at the card's figure.
+    /**
+     * Holds each joiner off the field: its time, its edge and each block's place there, side by side along the edge.
+     * Nothing here draws on the dice.
+     */
+    comeOn(joining) {
+      const B = this.field.bend, F = this.field, J = LAND.join;
+      for (const corps of [...new Set(joining.map((u) => u.corps))]) {
+        const us = joining.filter((u) => u.corps === corps), u0 = us[0], side = u0.side;
+        const f = this.ticket[side].joiners.find((x2) => x2.corps === corps);
+        const own = side === "att" && B ? u0.dry ? B.dry : B.dry === "west" ? "east" : "west" : void 0;
+        const edge = joinEdge(side, f.toward, own);
+        const lanes = own && B && edge === "south" ? own === "west" ? [10, B.x - BEND.clear] : [B.x + BEND.clear, F.w - 10] : null;
+        const [x, y] = this.edgeAt(side, edge, f.toward, u0.w, lanes);
+        const along = edge === "south" || edge === "north", [lo, hi] = lanes ?? [10, F.w - 10];
+        const own0 = this.units.filter((v) => v.side === side);
+        const cx = own0.length ? own0.reduce((a, v) => a + v.x, 0) / own0.length : x, cy = own0.length ? own0.reduce((a, v) => a + v.y, 0) / own0.length : y;
+        const walk2 = Math.hypot(x - cx, y - cy) / Math.max(1, LAND.speed[u0.kind]);
+        const at = Math.round(Math.max(0, (1 - u0.joined) * this.ticket.limit - walk2) * 1e3) / 1e3;
+        us.forEach((u, i) => {
+          const off = (i - (us.length - 1) / 2) * (u.w + J.gap);
+          const px = along ? clamp(x + off, lo + u.w / 2, Math.max(lo + u.w / 2, hi - u.w / 2)) : x, py = along ? y : clamp(y + off, 40, F.h - 40);
+          this.coming.push({ u, f, edge, x: px, y: py, lanes, at });
+        });
+        this.joinCorps.add(corps);
+      }
+      this.coming.sort((a, c) => a.at - c.at || a.u.id - c.u.id);
+    }
+    /** Where on its edge a joining corps comes on: across a back edge by the way it comes, at a flank its side's own depth. */
+    edgeAt(side, edge, toward, w, lanes) {
+      const F = this.field, z = F.zones[side], J = LAND.join;
+      if (edge === "west" || edge === "east") return [edge === "west" ? w / 2 + 10 : F.w - w / 2 - 10, (z[1] + z[3]) / 2];
+      const [lo, hi] = lanes ?? [z[0], z[2]];
+      const q = toward !== void 0 && Number.isFinite(toward) ? toward : 0;
+      return [clamp(F.w / 2 + F.w / 2 * Math.sin(q), lo + w / 2, Math.max(lo + w / 2, hi - w / 2)), edge === "south" ? J.edge : F.h - J.edge];
+    }
+    /** The joiners whose time has come: each corps' blocks walk on together, and its coming is told. */
+    arrive() {
+      const due = [];
+      while (this.coming.length && this.t >= this.coming[0].at - 1e-9) due.push(this.coming.shift());
+      for (const corps of [...new Set(due.map((c) => c.u.corps))]) {
+        const g = due.filter((c) => c.u.corps === corps);
+        for (const c of g) this.walkOn(c);
+        this.joinedAt.set(corps, Math.round(this.t * 10) / 10);
+        const u = g[0].u, f = g[0].f, side = u.side;
+        this.say({
+          what: "land:joined",
+          unit: u.id,
+          side,
+          x: u.x,
+          y: u.y,
+          text: `${this.ticket[side].human ? f.name : `The ${this.ticket[side].adj} ${f.name}`} comes up from next door${f.arrive ? `, ${f.arrive === "early" ? "early" : f.arrive === "midway" ? "midway through the fight" : "late in the day"}` : ""}.`
+        });
+      }
+    }
+    /**
+     * Sets one joining block on its edge, clear of the river and of every block, and starts it in: a reserve already
+     * sent (b407; its guns stand as guns), walking its LAND.join.walk metres onto the field, its ground where it stops.
+     */
+    walkOn(c) {
+      const u = c.u, J = LAND.join, [nx, ny, face] = INWARD[c.edge];
+      [u.x, u.y] = this.clearSpot(u, c.x, c.y, nx, ny, c.lanes);
+      u.face = face;
+      u.cover = groundAt(this.field, u.x, u.y);
+      if (u.kind !== "art") u.reserve = "sent";
+      this.units.push(u);
+      this.drill?.join(u);
+      const o = { kind: "move", x: u.x + nx * J.walk, y: u.y + ny * J.walk, face: u.side === "att" ? 0 : Math.PI };
+      this.send(u, o);
+      u.home = [o.x, o.y];
+    }
+    /**
+     * The first spot at or in from (x, y) where a block can stand: on ground it can stand on, out of the water, and clear
+     * of every block on the field. Tried in a fixed order (in from the edge a cell at a time, and along it either way), so
+     * the same battle always finds the same spot; where none is clear it keeps (x, y) and the march sorts it out.
+     */
+    clearSpot(u, x, y, nx, ny, lanes) {
+      const F = this.field, J = LAND.join, m = Math.max(u.w, u.d), cell = F.cell;
+      const [lo, hi] = lanes ?? [10, F.w - 10];
+      const fit = (px, py) => [clamp(px, lo + m / 2, Math.max(lo + m / 2, hi - m / 2)), clamp(py, 40, F.h - 40)];
+      const clear = (px, py) => {
+        if (this.wet(u, px, py, false) || wetUnder(F, { x: px, y: py, w: m, d: m })) return false;
+        for (const o of this.units) if (live2(o) && Math.abs(o.x - px) < (o.w + m) / 2 + LAND.placeClear && Math.abs(o.y - py) < (o.d + m) / 2 + LAND.placeClear) return false;
+        return true;
+      };
+      for (let k = 0; k <= J.inward; k++) for (let j = 0; j <= 2 * J.across; j++) {
+        const a = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2);
+        const [px, py] = fit(x + nx * k * cell + ny * a * cell, y + ny * k * cell + nx * a * cell);
+        if (clear(px, py)) return [px, py];
+      }
+      return fit(x, y);
+    }
+    /** The joiners still coming, as the view shows them: those of the player's side and those the player's staff knows. */
+    comingView() {
+      if (!this.coming.length || this.over) return {};
+      const shown = this.coming.filter((c) => this.known(c.u));
+      return shown.length ? { coming: shown.map((c) => ({ id: c.u.id, side: c.u.side, corps: c.u.corps, kind: c.u.kind, at: c.at, edge: c.edge, x: c.x, y: c.y, ...c.f.arrive ? { arrive: c.f.arrive } : {} })) } : {};
     }
     /**
      * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
@@ -6784,8 +7006,9 @@
     closeTo(u) {
       return reachOf(u) * (u.kind === "art" ? 0.85 : 0.6);
     }
+    // (A joiner over dry ground keeps off the water only where the river bends away from the dry lanes; with no bend it wades.)
     going(u) {
-      return u.dry && MOTION[u.kind] === "foot" ? "ashore" : MOTION[u.kind];
+      return u.dry && MOTION[u.kind] === "foot" && (u.joined === void 0 || this.field.bend) ? "ashore" : MOTION[u.kind];
     }
     paceOf(m) {
       return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND.pace.foot, water: 0, blown: 0 }) : LAND.pace[m];
@@ -6988,7 +7211,25 @@
     // ---- The tick -----------------------------------------------------------------------------------------------------
     /** The squad brain, made the first time it is asked for (drill.ts). */
     drillOn(opts) {
-      return this.drill ?? (this.drill = new Drill(this, opts));
+      if (this.drill) return this.drill;
+      const { scale, ...rest } = opts ?? {};
+      const n = scale === true ? this.scale() : typeof scale === "number" ? scale : void 0;
+      return this.drill = new Drill(this, n !== void 0 ? { ...rest, scale: n } : rest);
+    }
+    /**
+     * The battle's one N (GR1, LAND.scale): every man both sides bring (their blocks' men0, as the battle opens) over the
+     * figure budget, rounded up to a multiple of the step; 1 when they fit the budget whole. Sedan, Normandy, Prokhorovka
+     * and Kursk give 20, 20, 35 and 125. Looks only. menOf: a block's men as counted (a fogged field counts what the
+     * player can know: the bridge's battleStart); a figure that is no number counts none. budget: the figures it is set
+     * for (the 2D page's dots: LAND.scale.page). The blocks of corps still coming up from next door count too.
+     */
+    scale(menOf = (u) => u.men0, budget = LAND.scale.budget) {
+      const S = LAND.scale, men = this.allBlocks().reduce((s, u) => {
+        const m = menOf(u);
+        return s + (Number.isFinite(m) ? Math.max(0, m) : 0);
+      }, 0);
+      const raw = men / budget;
+      return raw <= 1 ? 1 : Math.ceil(raw / S.step) * S.step;
     }
     /**
      * Opens the setup step for one side (release 2): only before the first step. Its guns and support teams may then be
@@ -7083,7 +7324,7 @@
      * tank block needs a model the sheet has duels for); null hands it back to vehicleOf.
      */
     vehicleIs(id, model) {
-      const u = this.unit(id);
+      const u = this.unit(id) ?? this.coming.find((c) => c.u.id === id)?.u;
       if (!u) return false;
       if (model === null) {
         this.models.delete(id);
@@ -7329,6 +7570,7 @@
         return;
       }
       if (this.hide && !this.hidStarted) this.hideStart();
+      if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
       this.landOrders();
       if (this.t >= this.nextThink) {
         this.nextThink = this.t + LAND.think;
@@ -7613,7 +7855,7 @@
       const ground = this.groundTake(t);
       let take = ground;
       if (t.kind === "arm" && LAND.alone.on) take *= this.alone(t, u);
-      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u);
+      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
       if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
       const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
       const dmg = p * am * amx * take * luck * (u.side === "att" ? this.fortune : 1 / this.fortune) * DT;
@@ -8076,13 +8318,14 @@
         if (!live2(u)) continue;
         const k = u.state === "routing" ? 0.3 : 1;
         const d = due?.get(u.id), str = d === void 0 ? u.str : Math.max(0, u.str - d / Math.max(1e-9, u.power0) * u.str0);
-        s[u.side] += u.power0 * (str / u.str0) * k / tot;
+        s[u.side] += u.priced === void 0 ? u.power0 * (str / u.str0) * k / tot : Math.max(0, u.priced - u.power0 * (1 - str / u.str0)) * k / tot;
       }
+      for (const c of this.coming) s[c.u.side] += c.u.priced / tot;
       return s;
     }
     brokenShare(s) {
       let gone = 0;
-      for (const u of this.units) if (u.side === s && (u.state === "routing" || u.state === "gone")) gone += u.power0;
+      for (const u of this.units) if (u.side === s && (u.state === "routing" || u.state === "gone")) gone += weightOf(u);
       return gone / this.power[s];
     }
     /** The share of a side's power worn away on the field (strength lost, before anyone runs). */
@@ -8116,8 +8359,8 @@
       const r33 = (x) => Math.round(x * 1e3) / 1e3;
       const b = this.brink(s), w = b.worn / LAND.spent[s], r = b.running / LAND.breaks;
       const mine = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? "running" : "worn";
-      const on = mine.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + u.power0, 0);
-      const steady2 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + u.power0, 0) / p0 : 0;
+      const on = mine.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + weightOf(u), 0);
+      const steady2 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
       return {
         side: s,
         bar: r33(b.bar),
@@ -8151,7 +8394,8 @@
      */
     freshShare(s) {
       let n = 0;
-      for (const u of this.units) if (u.side === s && fighting2(u) && this.fresh(u)) n += u.power0;
+      for (const u of this.units) if (u.side === s && fighting2(u) && this.fresh(u)) n += weightOf(u);
+      for (const c of this.coming) if (c.u.side === s) n += c.u.priced;
       return n / this.power[s];
     }
     /** A block that holds its army at the brink (freshShare): fresh, in a small army, or not yet in the fight. */
@@ -8252,6 +8496,7 @@
         f.p += u.power0;
         forces.set(u.corps, f);
       }
+      for (const c of this.coming) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
       const loser = other(winner);
       const pct = (p) => p < 1e-4 ? "none" : p < 5e-3 ? "less than 1%" : `about ${Math.round(p * 100)}%`;
       const cap = (t) => t[0].toUpperCase() + t.slice(1);
@@ -8281,7 +8526,7 @@
         R: Math.round(r * 1e3) / 1e3,
         level: levelOf(r, men.att > men.def),
         lines,
-        forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0 })),
+        forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0, ...this.joinCorps.has(f.corps) ? { arrived: this.joinedAt.get(f.corps) ?? null } : {} })),
         ...how === "rout" || how === "destroyed" ? { broke: loser, ...why ? { brokeBy: why } : {} } : {},
         // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
         ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1e3) / 1e3 } } : {},
@@ -8795,7 +9040,7 @@
       const ev = this.events;
       this.events = [];
       void as;
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView() };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView() };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -9325,7 +9570,7 @@
       const sim = this.sim = new LandBattle(ticket);
       this.steppe = piece?.open === "steppe" ? openSteppe(sim.field, ticket.seed) : null;
       if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
-      for (const u of sim.units) if (u.kind === "arm") {
+      for (const u of sim.allBlocks()) if (u.kind === "arm") {
         const c = calFor("arm", u.nat, ticket.turn);
         if (c) u.cal = c;
       }
@@ -9338,7 +9583,7 @@
       if (opts.armour !== false) sim.measured = true;
       if (opts.names !== false) sim.namesOn();
       const tanksSeen = { att: 0, def: 0 };
-      this.blocks = sim.units.map((u) => {
+      this.blocks = sim.allBlocks().map((u) => {
         const a = piece ? u.side === "att" ? piece.att : piece.def : null;
         let model = null;
         if (a && u.kind === "arm") model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
@@ -9362,7 +9607,8 @@
           ...u.team ? { team: u.team } : {},
           ...u.crew ? { crew: u.crew } : {},
           model,
-          ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {}
+          ...a ? { army: a.army, ...a.standIn ? { standIn: a.standIn } : {} } : {},
+          ...u.joined !== void 0 ? { joins: true } : {}
         };
       });
       this.look();
@@ -9458,6 +9704,8 @@
           ...v.contact !== void 0 ? { contact: v.contact } : {},
           ...v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null }])) } : {},
           ...v.setup ? { setup: v.setup } : {},
+          // (the corps still coming up from next door that the player may know of: where on its edge and when)
+          ...v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r12(c.at), edge: c.edge, x: r12(c.x), y: r12(c.y), ...c.arrive ? { arrive: c.arrive } : {} })) } : {},
           ...v.over ? { over: v.over } : {}
         });
       }
