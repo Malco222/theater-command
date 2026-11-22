@@ -19,9 +19,30 @@ import bpy  # noqa: E402
 
 import brushhand  # noqa: E402
 import kit  # noqa: E402
+import midmesh  # noqa: E402
 import rigid  # noqa: E402
 import vehicles  # noqa: E402
 import works  # noqa: E402
+
+
+MIDDLE_FROM = 25000      # (a vehicle under this many near triangles is drawn whole at middle distance: no middle mesh)
+
+
+def add_middle(path, target=15000):
+    """The middle mesh (40 to 140 m, the scale plan's TK2) into a written file, as `mid`: see midmesh.py. Its `part`
+    numbers count the parts without the track links, as the far mesh's do."""
+    with open(path) as f:
+        d = json.load(f)
+    if len(d["near"]["triangles"]) // 3 < MIDDLE_FROM:
+        return 0
+    mid = midmesh.middle(d, target=target)
+    d["mid"] = {k: v for k, v in mid.items() if not k.startswith("_")}
+    d["about"] += (" `mid`: the middle mesh, for about 40 to 140 m (~15,000 triangles): the near mesh thinned, small pieces gone, the far "
+                   "mesh's track band in place of the links, alike parts (road wheels) carrying the same mesh; its `part` numbers count "
+                   "the parts without the track links, as `far`'s do.")
+    with open(path, "w") as f:
+        json.dump(d, f, separators=(",", ":"))
+    return len(d["mid"]["triangles"]) // 3
 
 
 def one(name, out, kinds):
@@ -42,6 +63,7 @@ def one(name, out, kinds):
     if "json" in kinds:
         path = os.path.join(out, name + ".json")
         rigid.write_json(m, near, far, path, extra)
+        add_middle(path)
         sizes["json"] = os.path.getsize(path)
     if "glb" in kinds or "fbx" in kinds:
         works.bake_actions(m, arm)
