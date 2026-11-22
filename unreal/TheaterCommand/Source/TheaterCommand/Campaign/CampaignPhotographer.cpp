@@ -810,6 +810,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	{
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterSelect="), Shots[0].Select, false);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterHover="), Shots[0].Hover, false);
+		// ("-TheaterTab=3" opens the picked province's card on that tab: 3 AT A GLANCE, 1 ORDER, 2 BUILD, 0 PROVINCE, the default.)
+		int32 TabAsked = 0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTab="), TabAsked))
+		{
+			Shots[0].ProvinceTab = FMath::Clamp(TabAsked, 0, 3);
+		}
 		// ("-TheaterLookWait=30" waits that many seconds more before the first picture: for something that takes time, as a train's run)
 		float LookWait = 0.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLookWait="), LookWait))
