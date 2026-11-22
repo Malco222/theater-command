@@ -277,6 +277,30 @@ namespace AirParts
 		}
 	}
 
+	/** Whether the effects kit's recipe (Content/Effects/battle-fx.json) turns on its far forms, game.air_far: a trail
+	 * past 1.2 km in fewer, longer pieces (trails_on), a gun past 1.5 km as a dash a burst (guns_on). Read once. */
+	static double FarSwitch(const TCHAR* Key)
+	{
+		static const TSharedPtr<FJsonObject> Far = []
+		{
+			FString Text;
+			TSharedPtr<FJsonObject> Recipe;
+			const TSharedPtr<FJsonObject>* Game = nullptr;
+			const TSharedPtr<FJsonObject>* Out = nullptr;
+			if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Effects/battle-fx.json"))) &&
+				FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Recipe) && Recipe.IsValid() &&
+				Recipe->TryGetObjectField(TEXT("game"), Game) && (*Game)->TryGetObjectField(TEXT("air_far"), Out))
+			{
+				return *Out;
+			}
+			return TSharedPtr<FJsonObject>();
+		}();
+		double Value = 0.0;
+		return Far.IsValid() && Far->TryGetNumberField(Key, Value) ? Value : 0.0;
+	}
+	static bool FarTrailsOn() { return FarSwitch(TEXT("trails_on")) >= 0.5; }
+	static bool FarGunsOn() { return FarSwitch(TEXT("guns_on")) >= 0.5; }
+
 	/** The kit from 1295edc (TrailStart with a span) keeps every flame on a full screen and sheds the farthest smoke
 	 * first, so the scene may light 24 trails at once on it; 10 on an older kit (the pre-check, 06:08Z). */
 	template <typename TKit>
@@ -886,7 +910,17 @@ bool AAirBattle::Open(const FString& Why)
 			}
 		}
 		AirParts::UseAirDistance(Effects.Get());
-		S.Trails.Most = AirParts::HasTrailSpan(Effects.Get()) ? 24 : 10;
+		// (with the kit's far trails on, game.air_far.trails_on: past 1.2 km a trail is some 40 pieces, not 128, so the scene
+		// may light 60 at once, the battle-scale plan's room at 150 aircraft; the art director passed them, 19:25Z 22 November.
+		// -TheaterTrailRoom= tries another, 10 to 120)
+		{
+			const bool bFar = AirParts::FarTrailsOn();
+			int32 Room = !AirParts::HasTrailSpan(Effects.Get()) ? 10 : bFar ? 60 : 24;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterTrailRoom="), Room);
+			S.Trails.Most = FMath::Clamp(Room, 10, 120);
+			UE_LOG(LogTheater, Display, TEXT("Air battle: room for %d trails at once (the kit's far trails %s, far guns %s)."), S.Trails.Most,
+				bFar ? TEXT("on") : TEXT("off"), AirParts::FarGunsOn() ? TEXT("on") : TEXT("off"));
+		}
 		Effects->SetWind(WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0) * (1.0 / 100.0));
 		// The ground's own kit (bomb bursts, crashes, splashes, fires, the stage's oil), so the clouds can lie over it
 		// while the air fight lies over them: its mesh is the one it hangs on Root.

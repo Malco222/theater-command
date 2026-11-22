@@ -1091,7 +1091,15 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    as matte as his paint and never brighter, taking its light, shade and grime; flags and roundels not sticker-bright;
    no row running on to the wing-root fillet, and no code letter or name panel over the aft end of a full row.
    His name (item 46) is painted with them.
-
+45. **Far trails and far guns** (the battle-scale plan's AS2; the effects kit's far forms, game.air_far in
+   Content/Effects/battle-fx.json, passed by the art director 19:25Z 22 November and turned on here): past 1.2 km a
+   trail is laid as some 40 longer pieces, not about 128, going over by degrees across the last 15% of the range so no
+   length of it changes as the eye closes in; past 1.5 km a gun lays one dash a burst along its aim instead of flying
+   its rounds. With them on the scene lights up to 60 trails at once, not 24 (`-TheaterTrailRoom=` tries another, 10 to
+   120); the log says "Air battle: room for 60 trails at once (the kit's far trails on, far guns on)". Look for: a far
+   trail as dark and lumpy as a near one, never pale at its head, and no jump as a fighter trailing smoke closes from
+   2 km to 1 km; a far gun's dashes reading as fire, not as a line drawn on the screen. To turn either off, set its
+   `trails_on` or `guns_on` to 0 in battle-fx.json (and tools/battle-fx/fx.json, its source).
 46. **A named ace's name under his cockpit, and a German's bars on his rudder** (Brian's named aces, release 2; the
    modeller's tally.name on every fighter, battle-models/air-next/ACES.md, after the art director's pass of 19:47Z 22
    November). Over his kill rows, on the line the modeller laid under the port cockpit sill: his rank short as his nation

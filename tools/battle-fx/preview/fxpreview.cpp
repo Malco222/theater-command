@@ -374,6 +374,25 @@ namespace
 		return Is && std::string(Is) == "srgb";
 	}
 
+	// (FX_LAND_GRADE=1: the kit's colours as written for the land battle's grade, Battle::SetLandGrade; see the frames
+	// through that grade with land_grade.py, not game_curve.py)
+	bool LandGradeWanted()
+	{
+		const char* Is = std::getenv("FX_LAND_GRADE");
+		return Is && std::string(Is) == "1";
+	}
+
+	// (FX_SOFT_CONTACT=metres: the land battle's soft contact, FBattleEffects::SetSoftContact. The kit lays its lying
+	// pieces nearer the eye, and here, as M_BattlePuffsSoft does, every piece fades where it comes within that depth in
+	// front of the ground, a box or a man)
+	double SoftWanted()
+	{
+		const char* Is = std::getenv("FX_SOFT_CONTACT");
+		const double M = Is ? std::atof(Is) : 0.0;
+		return M > 0.0 && M < 100.0 ? M : 0.0;
+	}
+	const double SoftFadeM = SoftWanted();
+
 	void Triangle(Canvas& C, const Camera& Cam, const Vec P[3], const unsigned char* Rgba[3])
 	{
 		double Sx[3], Sy[3], Z[3];
@@ -413,7 +432,11 @@ namespace
 				{
 					continue; // (behind the ground or a man: as Unreal's depth test for see-through things)
 				}
-				const double A = (W0 * Rgba[0][3] + W1 * Rgba[1][3] + W2 * Rgba[2][3]) / 255.0;
+				double A = (W0 * Rgba[0][3] + W1 * Rgba[1][3] + W2 * Rgba[2][3]) / 255.0;
+				if (SoftFadeM > 0.0)
+				{
+					A *= std::clamp((C.Depth[I] - Deep) / SoftFadeM, 0.0, 1.0);
+				}
 				if (A <= 0.0)
 				{
 					continue;
@@ -521,6 +544,8 @@ namespace
 		Battle Fx;
 		Fx.Setup(&Book, &FlatSea, nullptr, 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const double Since = EnvNum("FX_SINCE", 0.0);
@@ -652,6 +677,8 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, bSea ? &FlatSea : &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", bSea ? 3.0 : 1.6), EnvNum("FX_WIND_Y", bSea ? 0.8 : 0.4), 0.0));
@@ -869,6 +896,8 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		if (ShotName != "above")
 		{
@@ -1504,6 +1533,8 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
@@ -1718,6 +1749,8 @@ namespace
 		SeaDecks Decks;
 		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const char* UseIs = std::getenv("FX_USE"); // (FX_USE=air: as a scene that calls UseAirDistance; none: neither)
@@ -1907,6 +1940,8 @@ namespace
 		SeaDecks Decks; // (no decks: a flat sea)
 		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		const bool bScreen = Shot.compare(0, 6, "screen") == 0;
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 0.8), EnvNum("FX_WIND_Y", bScreen ? 3.0 : 0.8), 0.0));
@@ -2090,6 +2125,8 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, +[](void*, double, double) { return 0.0; }, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 4.0), EnvNum("FX_WIND_Y", 1.0), 0.0));
@@ -2303,6 +2340,8 @@ namespace
 		Battle Fx;
 		Fx.Setup(&Book, &Swell, nullptr, 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind until a scene sets one)
 		const double Speed = EnvNum("FX_SPEED", 10.0), Gap = EnvNum("FX_GAP", 30.0);
@@ -2440,6 +2479,8 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &FlatSea, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene: UseAirDistance)
 		const Vec Wind(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", -2.0), 0.0); // (the air scene's own, AirSky::Wind)
@@ -2784,6 +2825,8 @@ int main(int Argc, char** Argv)
 	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 	Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 	SkyFromEnv(Fx);
 	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };

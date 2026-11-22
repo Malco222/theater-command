@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Scene.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -166,6 +167,7 @@ void FBattleEffects::End()
 	}
 	Mesh.Reset();
 	Ink.Reset();
+	bSoftInk = false;
 	Holder.Reset();
 	Core.Clear();
 	TestShots.Reset();
@@ -244,6 +246,7 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	// since it came), M_Highlight and plain bytes, as before)
 	UMaterialInterface* Puffs = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_BattlePuffs.M_BattlePuffs"), nullptr, LOAD_NoWarn | LOAD_Quiet);
 	const bool bGammaBytes = Puffs != nullptr;
+	bOwnPuffs = bGammaBytes;
 	UMaterialInterface* Highlight = Puffs ? Puffs : LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
 	if (!Highlight)
 	{
@@ -279,7 +282,9 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	Core.SetSrgbBytes(bGammaBytes); // (before any Draw, on this thread: no task is running yet)
 	// (picture.lit_gain: the kit writes its colours that much darker and its hottest lights up to that much past white,
 	// so the material's brightness must be the same number for all else to look as it did)
-	Instance->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(Core.PictureGain()));
+	InkBrightness = static_cast<float>(Core.PictureGain());
+	Instance->SetScalarParameterValue(TEXT("Brightness"), InkBrightness);
+	bSoftInk = false;
 	double Wanted = 2.0, Candela = 2000.0;
 	Book.Find("game.max_lamps", Wanted);
 	Book.Find("game.lamp_candela_at_full", Candela);
@@ -642,9 +647,102 @@ void FBattleEffects::SetCraters(bool bOn)
 	});
 }
 
+void FBattleEffects::SetLandGrade(bool bOn)
+{
+	Do([=, this]()
+	{
+		Core.SetLandGrade(bOn);
+	});
+}
+
 void FBattleEffects::SetSun(const FVector& TowardSun)
 {
 	Sun = TowardSun.GetSafeNormal(UE_SMALL_NUMBER, FVector(-0.45, -0.35, 0.82));
+}
+
+bool FBattleEffects::SetFireSpread(FPostProcessSettings& Lens, float Spread, float Warm)
+{
+	// (on this thread only: the lens and the mesh's custom depth are the scene's, and the kit's worker reads neither)
+	if (UMaterialInstanceDynamic* Before = SpreadInk.Get())
+	{
+		Lens.WeightedBlendables.Array.RemoveAll([Before](const FWeightedBlendable& Each) { return Each.Object == Before; });
+	}
+	SpreadInk.Reset();
+	if (!Mesh.IsValid())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Battle effects: the fire's spread asked before Begin; none"));
+		return false;
+	}
+	if (!(Spread > 1.0f))
+	{
+		Mesh->SetRenderCustomDepth(false);
+		return true;
+	}
+	UMaterialInterface* Spreader = bOwnPuffs ? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_FireSpread.M_FireSpread"), nullptr, LOAD_NoWarn | LOAD_Quiet) : nullptr;
+	if (!Spreader)
+	{
+		Mesh->SetRenderCustomDepth(false);
+		UE_LOG(LogTheater, Warning, TEXT("Battle effects: %s is missing, so fire takes the scene's grade as it is (run Tools/build_content.sh with TC_REBUILD=M_BattlePuffs,M_FireSpread)"),
+			bOwnPuffs ? TEXT("M_FireSpread") : TEXT("M_BattlePuffs"));
+		return false;
+	}
+	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Spreader, Mesh.Get());
+	Instance->SetScalarParameterValue(TEXT("Spread"), Spread);
+	Instance->SetScalarParameterValue(TEXT("Warm"), FMath::Max(Warm, 0.0f));
+	Lens.WeightedBlendables.Array.Add(FWeightedBlendable(1.0f, Instance));
+	SpreadInk = Instance;
+	Mesh->SetRenderCustomDepth(true);
+	UE_LOG(LogTheater, Log, TEXT("Battle effects: the fire's spread after the grade, %.2f, green %.2f"), Spread, Warm);
+	return true;
+}
+
+bool FBattleEffects::SetSoftContact(float Metres)
+{
+	// (on this thread only: the mesh's materials are the scene's, and the kit's worker lays only places and colours)
+	if (!Mesh.IsValid() || !Ink.IsValid())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Battle effects: soft contact asked before Begin; none"));
+		return false;
+	}
+	const bool bWanted = Metres > 0.0f && Metres < 100.0f;
+	UMaterialInterface* Soft = bWanted && bOwnPuffs ? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_BattlePuffsSoft.M_BattlePuffsSoft"), nullptr, LOAD_NoWarn | LOAD_Quiet) : nullptr;
+	if (bWanted && !Soft)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Battle effects: %s is missing, so the kit's pieces meet the ground and hulls as before (run Tools/build_content.sh with TC_REBUILD=M_BattlePuffsSoft)"),
+			bOwnPuffs ? TEXT("M_BattlePuffsSoft") : TEXT("M_BattlePuffs"));
+	}
+	const bool bSoft = Soft != nullptr;
+	if (bSoft != bSoftInk)
+	{
+		// (a new instance of the other material, as bright as Begin made the first, on every section the mesh has)
+		UMaterialInterface* Base = bSoft ? Soft : LoadObject<UMaterialInterface>(nullptr, bOwnPuffs ? TEXT("/Game/Campaign/Materials/M_BattlePuffs.M_BattlePuffs") : TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Base)
+		{
+			return false; // (the plain material gone since Begin: Ink stays as it is)
+		}
+		UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Base, Mesh.Get());
+		Instance->SetScalarParameterValue(TEXT("Brightness"), InkBrightness);
+		for (int32 Section = 0; Section < FMath::Max(Sections, 1); ++Section)
+		{
+			Mesh->SetMaterial(Section, Instance);
+		}
+		Ink = Instance;
+		bSoftInk = bSoft;
+	}
+	if (bSoft)
+	{
+		Ink->SetScalarParameterValue(TEXT("FadeCm"), static_cast<float>(Metres * UnitsPerMetre)); // (the material's depths are in world units)
+	}
+	const double Lying = bSoft ? static_cast<double>(Metres) : 0.0;
+	Do([=, this]()
+	{
+		Core.SetSoftContact(Lying);
+	});
+	if (bSoft)
+	{
+		UE_LOG(LogTheater, Log, TEXT("Battle effects: soft contact, %.2f m"), Metres);
+	}
+	return bSoft || !bWanted;
 }
 
 void FBattleEffects::Clear()
