@@ -106,9 +106,9 @@ FINER = [
     ("n_around = 20 if fine else 10", "n_around = 28 if fine else 10"),
     # (what hangs under her or stands on her: a spat, a wheel, a bomb, a gun barrel, round close up and not cut like a gem)
     ('parts.ball("extra", (at[0], at[1] * hand, at[2]), radii, paint)', 'parts.ball("extra", (at[0], at[1] * hand, at[2]), radii, paint, u=28, v=18)'),
-    ("ra, rb, paint=paint, sides=10)", "ra, rb, paint=paint, sides=(22 if max(ra, rb) > 0.08 else 12))"),
+    ("ra, rb, paint=paint, sides=10)", "ra, rb, paint=paint, sides=battle_rod_sides(ra, rb, fine, s))"),
     ("[[body.at(x, 2.0 * math.pi * k / 12.0) for k in range(12)] for x in body.xs(0.3)]",
-     "[[body.at(x, 2.0 * math.pi * k / 24.0) for k in range(24)] for x in body.xs(0.12)]"),
+     "battle_body_rings(body, fine, s)"),
     ('parts.rod("tailwheel", (x, -0.04, z), (x, 0.04, z), 0.12, paint="tyre", sides=12 if fine else 6)', 'parts.rod("tailwheel", (x, -0.04, z), (x, 0.04, z), 0.12, paint="tyre", sides=20 if fine else 6)'),
 ]
 
@@ -1475,6 +1475,21 @@ def battle_us(wing, step, shares=()):
     return sorted(us)
 
 
+# The grain of what hangs under her or stands on her (FINER): round close up, on the fine model and the plain one alike.
+# A machine whose numbers say `plain_extras` (around, step, rod sides) takes the game's own grain for them on her plain
+# model instead: the Devastator, whose torpedo, bomb and wheels at the fine grain were a third of her plain model, and
+# from the distance the plain model is drawn at, a ring of 12 cannot be told from one of 24.
+def battle_rod_sides(ra, rb, fine, s):
+    if not fine and s.get("plain_extras"):
+        return s["plain_extras"][2]
+    return 22 if max(ra, rb) > 0.08 else 12
+
+
+def battle_body_rings(body, fine, s):
+    around, step = s["plain_extras"][:2] if not fine and s.get("plain_extras") else (24, 0.12)
+    return [[body.at(x, 2.0 * math.pi * k / around) for k in range(around)] for x in body.xs(step)]
+
+
 def battle_hinge(surface, chords):
     """A control surface of a machine's own numbers, its hinge moved back to the next ring of the chord, where convert()
     cuts it."""
@@ -1732,7 +1747,8 @@ def game():
               "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body, "battle_nacelle": fitout.nacelle_of,
               "battle_canopy": fighters.canopy, "battle_glare": fighters.glare, "rudder_ends": rudder_ends, "battle_heads": battle_heads,
               "battle_recess": battle_recess, "battle_dome": battle_dome, "battle_hinge": battle_hinge,
-              "battle_bands": battle_bands, "battle_band_shares": battle_band_shares}
+              "battle_bands": battle_bands, "battle_band_shares": battle_band_shares,
+              "battle_rod_sides": battle_rod_sides, "battle_body_rings": battle_body_rings}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
         _G["COMMON"]["torpedo"] = "6C7174"

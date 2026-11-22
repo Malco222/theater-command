@@ -549,7 +549,12 @@ What they add to the form:
   bent at the rings of the surface's chord, none under a star on her upper wing, and no rivet or joint under them:
   `fitout.corrugation`); `cowl_gun` (one fixed gun in the ring of her cowling, and socket `gun.nose` at its muzzle);
   `exhaust_side` (her one exhaust pipe, to starboard). An extra rod with `"one"` among its last values is laid on its
-  own side only, not mirrored (her pitot, on her starboard wing).
+  own side only, not mirrored (her pitot, on her starboard wing). `plain_extras` (around, step, rod sides): on her
+  plain model only, the bodies and rods of her extras (her torpedo, her bomb, her wheels) at that grain, (12, 0.3, 10),
+  the game's own, instead of the battle's 24 round every 12 cm and rods of 22 sides. At the fine grain her torpedo and
+  bomb were 3,144 of her plain model's 9,981 triangles; now 7,349, under the Kate's 11,146 and the Val's 10,942 that
+  fly with her at Midway. Her fine model is as it was. (`battle_rod_sides`, `battle_body_rings` in `planes.py`; a
+  machine without the key is built as before.)
 - **Later coats of paint** (`SCHEMES` in `planes.py`; the file's `schemes`). The same machine in other colours as
   the war goes on, from the art director's unit table (`carrier_paint`). Each entry has `from` (the month it comes
   in, `YYYY-MM`), `name`, `colours` (only the paints it changes, by paint name: lay them over the file's `colours`

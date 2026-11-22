@@ -204,6 +204,9 @@ NUMBERS = {
     #  the nose of its leading edge to her flap's hinge; the rest of the outer panel to the rounded tip, to her aileron's
     #  hinge; a triangle ahead of each elevator's hinge, from near its root to nothing 2.26 m out. A ridge every 5.2 cm:
     #  the drawing hatches them 4.3 cm apart, and so close they would weigh her down past her peers)
+    # (on her plain model her torpedo, bomb and wheels at the game's own grain, 12 round every 30 cm and rods of 10
+    #  sides: at the fine grain they were a third of it, and the map and the far camera cannot tell the difference)
+    "plain_extras": (12, 0.3, 10),
     "corrugated": [("wing", 2.31, 3.55, (0.04, 0.74), (0.04, 0.74), 0.052), ("wing", 3.72, 6.78, (0.04, 0.84), (0.04, 0.84), 0.052),
                    ("tail", 0.30, 2.24, (0.22, 0.46), (0.45, 0.46), 0.052)],
     "scoops": [
