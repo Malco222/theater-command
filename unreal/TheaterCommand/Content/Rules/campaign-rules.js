@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1d3bedae 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 5eb409f6 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -51977,6 +51977,8 @@
   var SUPPORT_COVER = support_default.antiTank.alone.cover;
   var TEAMS2 = ["mg", "mor"];
   var MOTION = { inf: "foot", mtn: "foot", cav: "foot", eng: "foot", mot: "wheels", arm: "tracks", art: "guns", fort: "fixed" };
+  var HEDGE_NEAR = 12;
+  var LOCATE = { secs: 25, fire: 0.5 };
   var LAND2 = {
     /** Metres a second over open ground, battle time (the field is 3 km by 2 km; contact comes in a few minutes at x1). */
     speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 },
@@ -52091,9 +52093,9 @@
       ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 },
       forest: 100,
       surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
-      locate: { secs: 25, fire: 0.5 },
+      locate: LOCATE,
       search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
-      hedge: { near: 12, gap: 3 },
+      hedge: { near: HEDGE_NEAR, gap: 3 },
       staff: { blocks: 2, ahead: 400, back: 100, across: 200 }
     },
     teams: {
@@ -52264,6 +52266,16 @@
      * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
      */
     blocks: { least: 6, regiments: 3 },
+    /**
+     * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+     * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+     * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+     * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+     * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+     * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+     * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
+     */
+    scale: { budget: 8500, step: 5, page: 24e3 },
     /** The army breaks when this share of its power is running or gone. */
     breaks: 0.5,
     /**
@@ -52318,6 +52330,12 @@
     press: 600,
     /** Seconds of battle time before the defender is counted as having held. */
     limit: 360,
+    /**
+     * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+     * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+     * clear dry ground to come on at, in field cells in from the edge and along it either way.
+     */
+    join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
     /**
      * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
      * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
@@ -52377,10 +52395,98 @@
       bombs: 2,
       toss: 1.5,
       bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 }
+    },
+    /**
+     * Hedge cutters (release 2; Brian, 22 November 14:19Z: "bladed Shermans punch a gap through a hedgerow where the player
+     * picks"; the design director's ruling 242, C1-A to C4-A; LandBattle.cutters): off unless the battle is opened with
+     * them. A tank block carries cutters from turn 'from' on a field with hedges, whatever its army (C2-A: Brian's standing
+     * rule that the battle's mechanics are every playable nation's, 21 November 06:54Z). Told to cut where a hedge line
+     * runs (within 'near' metres of one), it drives for that point and on through; as its front reaches the hedge the cut
+     * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
+     * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
+     * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
+     * a gap, so the fight is the same with the switch on or off. The bocage (C1-B, built as the ruling's 17:45Z amendment
+     * asks, "unfitted tanks cross only at gaps"; its own switch, LandBattle.bocage, measured against off): a tank block
+     * without cutters crosses a hedge line only at a gap, a gateway or a cut once open, and goes round to one; this is
+     * where cutters (and a cut's gap) change the fight, and only with that switch on.
+     *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
+     *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
+     *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
+     *     drawn tanks wear the blades, sent to the 3D game as the block's cutter flag (the bridge's unitOut). Looks only.
+     *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
+     *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
+     *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
+     *   width: the gap, metres: the 3D game's own gateway width (an M4 is about 2.6 m wide; no source gives a gap's width:
+     *     ruling 242 C3).
+     *   near: how near a hedge line the point picked must lie, metres: the hedge line's own (LAND.hide.hedge.near).
+     */
+    cutters: { from: 59, share: 0.6, secs: 6, width: 3.2, near: HEDGE_NEAR },
+    /**
+     * Smoke on call (release 2; Brian, 22 November 14:19Z: "a section lays a smoke line to cover a crossing, when and where
+     * the player orders it"; the design director's ruling 242, S1-A to S6, amended 17:45Z from the historian's answers;
+     * LandBattle.smoke): off unless the battle is opened with it. A block on foot, or lorried infantry, whose army has the
+     * means lays a screen across the ground before it: a line no longer than its own front (S2), its middle within its
+     * army's 'reach' of its front, standing 'hang' battle seconds; one at a time, and 'count' a battle (S3). While a screen
+     * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
+     * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
+     * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
+     * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it (the build spec's reading
+     * of S1-A; it draws nothing of the dice itself, but a block it keeps hidden is not fired on till found, so the draws
+     * after it change as the fight does: LandBattle's Smoke on call). Both staffs lay one as a
+     * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
+     *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
+     *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
+     *     on one blow: a blow already that vague, or fire on cover at a block still hidden (already a place, not a seen
+     *     target: LAND.hide.search.blow), is not halved again. Only the ground's part of a blow: the share a side holds
+     *     back for its air strikes is held back whole (the air is not touched).
+     *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
+     *     (ruling 242 S3; the historian found no section load for any army but Britain's).
+     *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
+     *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
+     *     1.52 m/s (FM 22-5).
+     *   front: an army that sets its smoke down along its own front (reach 0) lays it there for a line drawn on its own
+     *     ground or within this many metres of its front, and refuses one drawn further off (129(d)): a throw, the thrown
+     *     reach of the others' grenades (the historian, D: the Italian pot "is thrown or set down, so the 30 m thrown reach
+     *     fits").
+     *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
+     *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
+     *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
+     *       2 real minutes. (The 60 mm WP shell came only in January 1945.)
+     *     UK: the platoon's 2-inch mortar, smoke to 500 yd, 457 m (canadiansoldiers.com), about 2 real minutes a bomb (the
+     *       1966 pamphlet); 6 smoke bombs and 4 smoke grenades a platoon (Memorandum on Platoon Battle Drill, 1942), about
+     *       3 a section (the historian, D; ruling 242 as amended: Britain and her kin 3 screens).
+     *     GER: smoke hand grenades and candles, thrown (Nebelhandgranate 39, 1 to 2 minutes: Ordnance Bulletin 59,
+     *       Intelligence Bulletin January 1943); the 5 cm mortar had no smoke round (MIS Special Series 14).
+     *     SOV: the RDG-1 grenade, about 1.5 minutes, about 30 yd of screen, thrown (Intelligence Bulletin, June 1946).
+     *     JAP: the Type 89 discharger's smoke round, 45 to 206 yd (Intelligence Bulletin, June 1943); no burn time found
+     *       (the historian, H5): 22 s is the design director's knob.
+     *     ITA: the 2-kg smoke pot, set down or thrown, burning 1 min 15 s (TTT 38, November 1943): laid along its own
+     *       front (ruling 242 as amended).
+     *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
+     *     not listed has any: no stand-in until a means is found (ruling 242 S2).
+     *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
+     *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy and Free France
+     *     France's (none today; theirs too once H5 finds France a means).
+     */
+    smoke: {
+      share: LOCATE.fire,
+      count: 2,
+      perMin: 15,
+      front: 30,
+      means: {
+        USA: { reach: 195, hang: 30 },
+        UK: { reach: 457, hang: 30, count: 3 },
+        GER: { reach: 30, hang: 22 },
+        SOV: { reach: 30, hang: 22 },
+        JAP: { reach: 188, hang: 22 },
+        ITA: { reach: 0, hang: 19 }
+      },
+      kin: { CAN: "UK", AUS: "UK", NZL: "UK", SAF: "UK", IND: "UK", VIC: "FRA", FFR: "FRA" }
     }
   };
   var reachOf = (u) => u.team ? LAND2.teams[u.team].reach : LAND2.reach[u.kind];
   var gunsOf = (u) => u.team ? LAND2.teams[u.team] : LAND2.guns;
+  var smokeMeans = (nat) => LAND2.smoke.means[LAND2.smoke.kin[nat] ?? nat] ?? null;
 
   // ../../data/battle/city-plans.json
   var city_plans_default = {
@@ -53267,12 +53373,14 @@
     }
     return { storeys, landmark, streetEdge };
   }
+  var UNDUG = ["water", "bridge", "blown", "buildings", "industry", "bunker", "works"];
+  var diggable = (g2) => !UNDUG.includes(g2);
   function digWorks(f, x, y, w, d) {
     for (let yy = y - d / 2 - 15; yy <= y + d / 2 + 15; yy += f.cell / 2) for (let xx = x - w / 2; xx <= x + w / 2; xx += f.cell / 2) {
       const c = Math.floor(xx / f.cell), r = Math.floor(yy / f.cell);
       if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
       const i = r * f.cols + c, k = GROUNDS[f.ground[i]];
-      if (k !== "water" && k !== "bridge" && k !== "blown" && k !== "buildings" && k !== "industry" && k !== "bunker" && k !== "works") {
+      if (diggable(k)) {
         (f.dugInto ?? (f.dugInto = {}))[i] = f.ground[i];
         f.ground[i] = G3.works;
       }
@@ -53823,19 +53931,41 @@
       return;
     }
     const style = b.style[side5];
+    const stand = b.relief && b.hasJoiners(side5) ? relieve3(b, side5, mine4, foes) : null;
     if (side5 === "att") {
-      if (style) planned2(b, side5, style, mine4, foes);
-      else plain(b, side5, mine4, foes);
+      sendOn(b, side5, mine4, foes, stand);
+      const line = mine4.some((u) => u.reserve === "sent" || stand?.has(u.id)) ? mine4.filter((u) => u.reserve !== "sent" && !stand?.has(u.id)) : mine4;
+      if (style) planned2(b, side5, style, line, foes);
+      else plain(b, side5, line, foes);
       if (b.measured) seekFlanks(b, side5, mine4);
       if (b.hide && b.ambushed.has(side5)) searchCover(b, side5, mine4);
+      if (b.smoke) smokeIn(b, side5, mine4, foes);
       return;
     }
-    defend2(b, side5, style, mine4, foes);
+    defend2(b, side5, style, mine4, foes, stand);
     if (b.measured) seekFlanks(b, side5, mine4.filter((u) => u.reserve === "sent"));
+    if (b.smoke) smokeIn(b, side5, mine4, foes);
+  }
+  function smokeIn(b, side5, mine4, foes) {
+    const P = b.plan[side5];
+    if (side5 === "att" && P && P.went === null) return;
+    for (const u of mine4) {
+      if (!hasTarget(u, foes) || u.waits && !u.waits.free) continue;
+      if (side5 === "def" && u.reserve !== "sent" && dist(u.x, u.y, u.home[0], u.home[1]) < LAND2.hold.within) continue;
+      if (b.smokeWhy(u) !== null) continue;
+      const t = foes.find((f) => f.id === u.order.target), gap = b.gap(u, t);
+      if (gap > reachOf(u)) continue;
+      const m = b.smokeOf(u), k = Math.hypot(t.x - u.x, t.y - u.y);
+      if (k < 1e-6) continue;
+      const dx = (t.x - u.x) / k, dy = (t.y - u.y) / k, [fx, fy] = [Math.sin(u.face), Math.cos(u.face)];
+      const on = Math.min(m.reach, gap / 2), mx = u.x + fx * u.d / 2 + dx * on, my = u.y + fy * u.d / 2 + dy * on, h = u.w / 2;
+      b.command({ do: "land:smoke", units: [u.id], x0: mx - dy * h, y0: my + dx * h, x1: mx + dy * h, y1: my - dx * h }, side5);
+    }
   }
   function searchCover(b, side5, mine4) {
     const F = LAND2.hide.search, dir = side5 === "att" ? 1 : -1, step2 = b.hedges.length ? 10 : b.field.cell;
     for (const u of mine4) {
+      if (u.waits && !u.waits.free) continue;
       if (u.kind === "art" && !u.team || u.engaged !== void 0 || u.order?.kind === "withdraw") {
         if (u.engaged === void 0) {
           delete u.search;
@@ -53935,10 +54065,36 @@
       by(b, side5, u, t);
     }
   }
+  var struckOf = (mine4, foes) => mine4.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
+  function sendOn(b, side5, mine4, foes, skip = null) {
+    const sent = mine4.filter((u) => u.reserve === "sent" && u.kind !== "art" && u.order?.kind !== "withdraw" && !hasTarget(u, foes) && !skip?.has(u.id));
+    if (!sent.length) return;
+    const struck = struckOf(mine4, foes);
+    if (!struck.length) return;
+    sent.forEach((u, i) => by(b, side5, u, foes.find((f) => f.id === struck[i % struck.length].engaged)));
+  }
+  function relieve3(b, side5, mine4, foes) {
+    const skip = /* @__PURE__ */ new Set();
+    for (const u of struckOf(mine4, foes)) if (b.waitWhy(u) === null) b.command({ do: "land:wait", units: [u.id] }, side5);
+    const waiting2 = b.units.filter((u) => u.side === side5 && ok(u) && u.waits && !u.waits.free).sort((a, c) => a.str / a.str0 - c.str / c.str0 || a.id - c.id);
+    for (const w of waiting2) {
+      skip.add(w.id);
+      const near2 = (r4) => dist(r4.x, r4.y, w.x, w.y);
+      const rs = mine4.filter((r4) => r4.corps === w.waits.corps && r4.joined !== void 0 && r4.kind !== "art" && r4.order?.kind !== "withdraw" && !(r4.waits && !r4.waits.free) && !skip.has(r4.id));
+      if (!rs.length) continue;
+      const r = rs.reduce((m, x) => near2(x) < near2(m) - 1e-9 || Math.abs(near2(x) - near2(m)) <= 1e-9 && x.id < m.id ? x : m);
+      skip.add(r.id);
+      const foe = w.engaged !== void 0 ? foes.find((f) => f.id === w.engaged) : void 0;
+      if (foe) {
+        if (!(r.order?.kind === "attack" && r.order.target === foe.id)) by(b, side5, r, foe);
+      } else if (!(r.order?.kind === "move" && dist(r.order.x, r.order.y, w.x, w.y) <= LAND2.alone.near)) b.command({ do: "move", units: [r.id], x: w.x, y: w.y }, side5);
+    }
+    return skip;
+  }
   var weight5 = (u) => u.power0 * (0.35 + 0.65 * (u.str / u.str0));
   function makePlan(b, side5, s, mine4, foes) {
     const P = { phase: s.plan ? "guns" : "assault", main: [], startY: null, role: {}, group: {}, spot: {}, arrived: null, went: null, hook: {} };
-    const rest = mine4.filter((u) => u.kind !== "art");
+    const rest = mine4.filter((u) => u.kind !== "art" && u.reserve !== "sent");
     if (!s.plan || !rest.length) {
       for (const u of rest) P.role[u.id] = "pin";
       P.went = 0;
@@ -54142,7 +54298,7 @@
     b.command({ do: "move", units: [u.id], x: want, y: u.home[1], face: Math.PI }, side5);
     b.reserveSeen(side5, near2.foe);
   }
-  function defend2(b, side5, style, mine4, foes) {
+  function defend2(b, side5, style, mine4, foes, skip = null) {
     const leash2 = style?.defLeash ?? 300, finish2 = style?.defFinish ?? 150;
     const edge3 = b.field.streetEdge, cell = b.field.cell;
     const outside = (f) => {
@@ -54150,7 +54306,7 @@
       const y = edge3[Math.min(edge3.length - 1, Math.max(0, Math.floor(f.x / cell)))];
       return y < 0 || f.y < y;
     };
-    const struck = mine4.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
+    const struck = struckOf(mine4, foes);
     let next = 0;
     const sendTo = (u) => {
       const at4 = struck[next++ % struck.length];
@@ -54159,7 +54315,7 @@
     };
     const near2 = !struck.length && style?.defShift ? coming(b, mine4, foes, style.defShift) : null;
     for (const u of mine4) {
-      if (u.kind === "art" || u.order?.kind === "withdraw") continue;
+      if (u.kind === "art" || u.order?.kind === "withdraw" || skip?.has(u.id)) continue;
       if (u.hid && u.reserve !== "held") continue;
       if (u.reserve === "held") {
         if (struck.length) sendTo(u);
@@ -54390,11 +54546,10 @@
   var KIND_WORD2 = { inf: "Infantry", mtn: "Mountain", cav: "Cavalry", eng: "Engineers", mot: "Motorized", arm: "Armoured", art: "Artillery", fort: "Fortress" };
   var TEAM_WORD = { mg: "Machine-Gun Battalion", mor: "Mortar Battalion" };
   var teamOf = (f) => TEAMS2.includes(f.kind) ? f.kind : void 0;
-  function partsFor(forces) {
-    const B3 = LAND2.blocks;
+  function partsFor(forces, least = LAND2.blocks.least) {
     const parts2 = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
     const total = () => parts2.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
-    while (total() < B3.least) {
+    while (total() < least) {
       let best = -1, size = 0;
       parts2.forEach((p2, i) => {
         if (teamOf(forces[i]) || !p2.some((x) => x.regiment === void 0 && x.divs.length === 1)) return;
@@ -54406,11 +54561,23 @@
       });
       if (best < 0) break;
       const p = parts2[best], j = p.findIndex((x) => x.regiment === void 0 && x.divs.length === 1);
-      p.splice(j, 1, ...Array.from({ length: B3.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
+      p.splice(j, 1, ...Array.from({ length: LAND2.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
     }
     return parts2;
   }
   var BRIGADES = ["UK", "CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
+  function kindWord(nat, k, ym = 0) {
+    if (k === "arm") return nat === "USA" ? "Armored" : nat === "GER" ? "Panzer" : nat === "SOV" || nat === "JAP" ? "Tank" : "Armoured";
+    if (k === "mot") {
+      if (nat === "USA" || nat === "SOV") return "Motorized";
+      if (BRIGADES.includes(nat)) return "Motor";
+      if (nat === "GER") return ym >= 1943 * 12 + 6 ? "Panzergrenadier" : "Motorized";
+      return "Motorised";
+    }
+    if (k === "inf" && nat === "SOV") return "Rifle";
+    if (k === "mtn" && nat === "SOV") return "Mountain Rifle";
+    return KIND_WORD2[k];
+  }
   function regimentWord(nat, kind, n, i, ym) {
     const o = ORD3(n);
     if (kind === "arm") {
@@ -54420,7 +54587,7 @@
       if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
       return `${o} Tank Regiment`;
     }
-    const arm2 = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? "Motorized" : kind === "eng" ? "Engineer" : "Infantry";
+    const arm2 = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? kindWord(nat, "mot", ym) : kind === "eng" ? "Engineer" : "Infantry";
     if (BRIGADES.includes(nat)) return `${o} ${arm2} Brigade`;
     if (nat === "GER") {
       const late = ym >= 1942 * 12 + 10;
@@ -54442,7 +54609,7 @@
         const u = units[j++];
         if (!u || p.regiment === void 0 || team) continue;
         const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
-        const full = div?.name ?? `${ORD3(no)} ${KIND_WORD2[k]} Division`, short = div?.short ?? `${ORD3(no)} ${KIND_WORD2[k]}`;
+        const full = div?.name ?? `${ORD3(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD3(no)} ${kindWord(f.nat, k, ym)}`;
         const lead2 = /^(\d+)/.exec(full)?.[1];
         const n = lead2 ? (Number(lead2) - 1) * LAND2.blocks.regiments + p.regiment + 1 : p.regiment + 1;
         u.short = regimentWord(u.nat, k, n, p.regiment, ym);
@@ -54451,9 +54618,10 @@
       }
     });
   }
-  function makeBlocks(side5, t, power, firstId) {
+  function makeBlocks(side5, t, power, firstId, least = LAND2.blocks.least, turn2) {
     const out = [];
-    const cut2 = partsFor(t.forces);
+    const ym = turn2 === void 0 ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn2));
+    const cut2 = partsFor(t.forces, least);
     t.forces.forEach((f, i) => {
       const team = teamOf(f);
       const k = team ? "art" : Object.keys(LAND2.speed).includes(f.kind) ? f.kind : "inf";
@@ -54462,15 +54630,15 @@
         const own = f.divisions?.[d];
         const no = (f.first ?? 1) + d;
         return {
-          name: own?.name ?? (team ? `${ORD3(no)} ${TEAM_WORD[team]}` : `${ORD3(no)} ${KIND_WORD2[k]} Division`),
-          short: own?.short ?? (team ? `${ORD3(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD3(no)} ${KIND_WORD2[k]}`),
+          name: own?.name ?? (team ? `${ORD3(no)} ${TEAM_WORD[team]}` : `${ORD3(no)} ${kindWord(f.nat, k, ym)} Division`),
+          short: own?.short ?? (team ? `${ORD3(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD3(no)} ${kindWord(f.nat, k, ym)}`),
           str: own?.str ?? f.str,
           xp: own?.xp ?? f.xp,
           men: own?.men ?? f.men / n
         };
       });
-      const weightOf2 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND2.blocks.regiments : 1);
-      const all = cut2[i].reduce((s, p) => s + weightOf2(p), 0);
+      const weightOf3 = (p) => p.divs.reduce((s, d) => s + Math.max(0.01, divs[d].str), 0) / (p.regiment !== void 0 ? LAND2.blocks.regiments : 1);
+      const all = cut2[i].reduce((s, p) => s + weightOf3(p), 0);
       for (const p of cut2[i]) {
         const ds = p.divs.map((d2) => divs[d2]);
         const name = p.regiment !== void 0 ? `${ORD3(p.regiment + 1)} Regiment, ${ds[0].short}` : ds.length === 1 ? ds[0].name : ds.map((d2) => d2.short).join(" and ");
@@ -54481,7 +54649,7 @@
         const full = p.regiment !== void 0 ? Math.max(1, Math.round(per / LAND2.blocks.regiments)) : per;
         const str0 = Math.max(0.05, Math.min(1, ds.reduce((s, x) => s + x.str, 0) / ds.length));
         const mor0 = Math.min(1, 0.45 + 0.35 * f.org + 0.2 * (f.mor ?? 0.6));
-        const share = weightOf2(p) / all;
+        const share = weightOf3(p) / all;
         out.push({
           id: firstId + out.length,
           side: side5,
@@ -54510,7 +54678,7 @@
           act: "idle",
           speed: 0,
           power0: power * f.share * share,
-          worth: weightOf2(p),
+          worth: weightOf3(p),
           order: null,
           path: [],
           dug: !!f.dug,
@@ -54527,6 +54695,22 @@
         });
       }
     });
+    return out;
+  }
+  function joinBlocks(t, power, firstId) {
+    const out = [];
+    for (const side5 of ["att", "def"]) {
+      const js = (t[side5].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined > 0 && f.share > 0);
+      if (!js.length) continue;
+      for (const u of makeBlocks(side5, { ...t[side5], forces: js }, power[side5], firstId + out.length, 0, t.turn)) {
+        const j = Math.min(1, js.find((f) => f.corps === u.corps).joined);
+        u.joined = j;
+        u.priced = u.power0;
+        u.power0 = u.priced / j;
+        u.dug = false;
+        out.push(u);
+      }
+    }
     return out;
   }
   var FRONT = ["inf", "mtn", "eng", "fort", "cav"];
@@ -54807,7 +54991,7 @@
         "rush: seconds a man is up in a rush [raw, regular, veteran] (the general: up 3 to 5 s, 10 to 20 m); gap: seconds between one turn's rush and the next's; stagger: the most seconds a pair rises after the first of its turn (by twos and threes; the leaders first). aside: after a rush, the share of men who crawl [least, most] metres aside before they fire (the enemy is aiming where they dropped).",
         "suppress: a round landing near a group of men (a squad, a section, a crew) adds to its suppression [metres it reaches, how much it adds] by weapon; it halves every 'half' seconds [raw, regular, veteran]; above 'down' the group's men keep their heads down and its rushes wait, but for its gunner and a share 'keep' who go on firing; above 'heavy' those in the open crawl for cover. rapid: the time between shots of men covering their mates' rushes, as a share of their usual (rapid fire).",
         "lift: metres from friendly foot within which the guns' and the mortars' rounds lift off a target into its depth ('deep' metres beyond its far side), and the support teams' machine guns shift to its far half. mission: a battery's or a mortar team's shoot at a new target, its spotter's signaller calling it on his radio: the call [least, most] seconds, one ranging round over the target ('range' metres off), a call, a second short of it, a call, then fire for effect, 'salvos' [least, most] every 'every' [least, most] seconds, then quiet [least, most] seconds and again (a call of 'again' seconds, no ranging); a mortar team's calls and quiet as a share 'mortar'. Fire over open sights is no mission.",
-        "tank: battle seconds between a tank's own aimed rounds in a fight [least, most] (the general: a round every 15 to 30 s at a weapon). tankMg (Brian, 22 November 04:10Z: 'make sure the machine gun from the gunner inside the tank also shoots some times at infantry', and 'the top machine gun cant be used unless the tank commander mans the gun'): of the men a tank block takes off the enemy's foot, the share that fall to her machine guns rather than her main gun's shells, in the open and in cover (woods, streets, works: there high explosive does more of it); each machine-gun round names its gun (g): the commander's 'roof' gun (only in the armies named, only with him up in the hatch, 'roofShare' of his tank's bursts), the hull gunner's when the target is within 'hullArc' degrees of her bow, else the 'coax' beside the main gun. A commander up in his hatch is exposed: a small-arms round that strikes his tank strikes him 'commander' of the time, a shell bursting on her 'splinter' of the time (the round carries cm: 1); she fights buttoned up from then, and her roof gun is silent. hold: metres to which a defence holds its fire: its machine guns, its riflemen [raw, regular, veteran] (the general: machine guns 300 to 400 m, rifles 200, veterans 100, raw troops open at 600 to 800 and give themselves away). counter: a defence counter-attacks once the enemy is within 'at' metres of its line, its rear platoons going 'ahead' metres forward of their places; xp: its pause times this [raw, regular, veteran]. flank: metres [least, most] the assault's men swing out toward the flank on a rush ('rush'), and the most they swing out from their places in the line ('out': the general, inside a platoon 40 to 60 m). smoke: as an assault goes out its platoons lay the school's 'smoke' rounds (a British platoon's 2-inch mortar 3; none for the Soviets) side by side 'spread' metres apart on the enemy's front corner on its flank, again every 'every' seconds while it is out; no harm (the 3D draws a screen drifting with the battle's wind); off ('on' false) until the 3D scene draws smoke rounds."
+        "tank: battle seconds between a tank's own aimed rounds in a fight [least, most] (the general: a round every 15 to 30 s at a weapon). tankMg (Brian, 22 November 04:10Z: 'make sure the machine gun from the gunner inside the tank also shoots some times at infantry', and 'the top machine gun cant be used unless the tank commander mans the gun'): of the men a tank block takes off the enemy's foot, the share that fall to her machine guns rather than her main gun's shells, in the open and in cover (woods, streets, works: there high explosive does more of it); each machine-gun round names its gun (g): the commander's 'roof' gun (only in the armies named, only with him up in the hatch, 'roofShare' of his tank's bursts), the hull gunner's when the target is within 'hullArc' degrees of her bow, else the 'coax' beside the main gun. A commander up in his hatch is exposed: a small-arms round that strikes his tank strikes him 'commander' of the time, a shell bursting on her 'splinter' of the time (the round carries cm: 1); she fights buttoned up from then, and her roof gun is silent. hold: metres to which a defence holds its fire: its machine guns, its riflemen [raw, regular, veteran] (the general: machine guns 300 to 400 m, rifles 200, veterans 100, raw troops open at 600 to 800 and give themselves away). counter: a defence counter-attacks once the enemy is within 'at' metres of its line, its rear platoons going 'ahead' metres forward of their places; xp: its pause times this [raw, regular, veteran]. flank: metres [least, most] the assault's men swing out toward the flank on a rush ('rush'), and the most they swing out from their places in the line ('out': the general, inside a platoon 40 to 60 m). smoke: as an assault goes out its platoons lay the school's 'smoke' rounds (a British platoon's 2-inch mortar 3; none for the Soviets) side by side 'spread' metres apart on the enemy's front corner on its flank, again every 'every' seconds while it is out; no harm (the 3D draws a screen drifting with the battle's wind); off ('on' false) until the 3D scene draws smoke rounds. With smoke on call (the battle's smoke switch, release 2, ruling 242 S6) the platoons lay none of these: each screen the rules lay (LandBattle.screens) is drawn as rounds from the block's base of fire, one each 'per' metres of its line, at most 'most' (the design director's looks-only knobs), each hanging ('hang') till the screen's end."
       ],
       schools: {
         GER: { bound: "body", crawl: 0.1, final: "grenade", gunStays: false, counter: 10, smoke: 2 },
@@ -54871,7 +55055,7 @@
       hold: { mg: 350, rifle: [700, 200, 100] },
       counter: { at: 45, ahead: 12, xp: [2, 1, 0.6] },
       flank: { rush: [14, 26], out: 45 },
-      smoke: { on: true, every: 60, spread: 10 }
+      smoke: { on: true, every: 60, spread: 10, per: 15, most: 12 }
     }
   };
 
@@ -55082,6 +55266,13 @@
        * together. On with platoons unless asked off.
        */
       __publicField(this, "byBook");
+      /**
+       * The battle's scale (the true-scale plan, GR1 and GR3; Brian's standing rule of 22 November 04:14Z: the numbers on
+       * screen reflect the units each side brings): one drawn man stands for this many. No block draws more men than its
+       * men0 over it: drawn as platoons where they fit, else as sections, else its key men only. Null: the battle's setting
+       * for every block, as before.
+       */
+      __publicField(this, "scale");
       __publicField(this, "sup", new Suppression());
       /** Each side's tanks standing this step, and each block's most dangerous men (its guns), worked out once a step. */
       __publicField(this, "tankMemo", { t: -1, at: {} });
@@ -55091,6 +55282,7 @@
       this.sections = !!opts.sections || !!opts.platoons;
       this.platoons = !!opts.platoons;
       this.byBook = opts.book ?? this.platoons;
+      this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
       for (const u of b.units) this.squads.set(u.id, this.make(u));
     }
     /** A block placed in the setup step (release 2) before the clock starts: its men drawn up afresh where it now stands. */
@@ -55098,25 +55290,30 @@
       if (this.b.t > 0 || !this.squads.has(u.id)) return;
       this.squads.set(u.id, this.make(u));
     }
+    /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
+    join(u) {
+      if (!this.squads.has(u.id)) this.squads.set(u.id, this.make(u));
+    }
     // ---- Who is in a block ------------------------------------------------------------------------------------------
     make(u) {
       const men2 = [], veh = [];
       const n = Math.max(0, u.figures0);
       const roles = rolesFor(u.kind, u.tray, n, u.team);
+      const fill8 = this.fillFor(u, roles.slice(0, n).map((r) => r[0])), tier = fill8.tier;
       const man = (k, nn, role, team) => {
         const jx = (roll(this.seed, u.id, nn, 1) - 0.5) * 6, jy = (roll(this.seed, u.id, nn, 2) - 0.5) * 5;
         return { k, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: "idle", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx, jy };
       };
       for (let k = 0; k < n; k++) men2.push(man(k, k, roles[k][0], roles[k][1]));
       let lor = 0;
-      if (this.sections) for (let k = 0; k < n; k++) {
-        const key7 = men2[k], mot = u.kind === "mot" && this.platoons;
+      if (tier >= 1) for (let k = 0; k < n; k++) {
+        const key7 = men2[k], mot = u.kind === "mot" && tier === 2;
         if (mot) {
           key7.lor = lor;
           key7.seat = 0;
         }
         const sec = sectionOf(u.nat, key7.role);
-        sec.forEach(([role, pr, scout2], i) => {
+        sec.slice(0, fill8.sec[k]).forEach(([role, pr, scout2], i) => {
           const m = man(k, 1e3 + k * 32 + i + 1, role, key7.team);
           m.j = i + 1;
           m.sec = k;
@@ -55128,11 +55325,14 @@
           }
           men2.push(m);
         });
+        if (fill8.sec[k] > 0) key7.hasSec = true;
         lor++;
-        if (!this.platoons || key7.role !== "rifle") continue;
-        const P = platoonOf(u.nat);
+        if (tier < 2 || key7.role !== "rifle" || fill8.plat[k] <= 0) continue;
+        key7.plat = true;
+        const P = platoonOf(u.nat), most = fill8.plat[k];
         let j = sec.length, x = 0;
         const add = (sub, role, seat5, opts = {}) => {
+          if (x >= most) return false;
           const m = man(k, 2e4 + k * 128 + x++, role, key7.team);
           m.j = ++j;
           m.sec = k;
@@ -55144,19 +55344,23 @@
             m.seat = seat5;
           }
           men2.push(m);
+          return true;
         };
-        for (let s = 1; s < P.squads; s++, lor++) {
+        for (let s = 1; s < P.squads && x < most; s++, lor++) {
           add(s, "rifle", 0, { lead: true });
           sec.forEach(([role, pr], i) => add(s, role, i + 1, { pr }));
         }
-        add(P.squads, "rifle", 0, { lead: true });
-        for (let i = 1; i < P.hq; i++) add(P.squads, "rifle", i);
-        lor++;
+        if (x < most) {
+          add(P.squads, "rifle", 0, { lead: true });
+          for (let i = 1; i < P.hq; i++) add(P.squads, "rifle", i);
+          lor++;
+        }
       }
-      const lorries = u.kind === "mot" ? this.sections ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? this.sections ? n : 1 : 0;
+      const lorries = u.kind === "mot" ? tier >= 1 ? lor : n >= 4 ? 2 : 1 : u.kind === "art" && !u.team ? tier >= 1 ? n : 1 : 0;
       for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i, role: "lorry", team: 0, x: u.x, y: u.y, face: u.face, pose: "parked", v: 0, spot: [u.x, u.y], cover: "none", until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0 });
       const sq = {
         u,
+        tier,
         men: men2,
         veh,
         fo: null,
@@ -55189,6 +55393,28 @@
       };
       this.layStart(sq);
       return sq;
+    }
+    /**
+     * How many of each key man's section (sec) and platoon (plat: its other squads and headquarters, in order) a block
+     * draws (GR3; the production lead, 22 November 07:23Z). Unscaled, all the battle's setting draws. Under the scale its
+     * key men always (the rules' models), then their sections in squad order, then the rifle models' platoons squad by
+     * squad, as many men as fit its men0 over N, counted as the 3D game shows them (menOnScreen): the last group drawn
+     * short, so every block draws within a man of its cap where its whole draw would be more. tier: the most any key draws.
+     */
+    fillFor(u, keys) {
+      const top = this.platoons ? 2 : this.sections ? 1 : 0;
+      const secs = keys.map((r) => top >= 1 ? sectionOf(u.nat, r).length : 0);
+      const P = platoonOf(u.nat);
+      const plats = keys.map((r, i) => top === 2 && r === "rifle" ? (P.squads - 1) * (1 + secs[i]) + P.hq : 0);
+      if (this.scale === null || top === 0) return { tier: top, sec: secs, plat: plats };
+      let room2 = Math.floor(u.men0 / this.scale) - keys.reduce((c, r) => c + menOnScreen(r), 0);
+      const take2 = (most) => {
+        const n = Math.max(0, Math.min(room2, most));
+        room2 -= n;
+        return n;
+      };
+      const sec = secs.map(take2), plat = plats.map(take2);
+      return { tier: plat.some((x) => x > 0) ? 2 : sec.some((x) => x > 0) ? 1 : 0, sec, plat };
     }
     layStart(sq) {
       const u = sq.u;
@@ -55225,7 +55451,7 @@
           m.cover = "none";
         }
       }
-      if (this.sections) {
+      if (sq.tier >= 1) {
         const room2 = /* @__PURE__ */ new Map(), order2 = [...sq.men].sort((a, c) => (a.j === void 0 ? 0 : 1) - (c.j === void 0 ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
         for (const m of order2) {
           if (VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
@@ -55274,6 +55500,7 @@
           if (this.byBook) this.feel(sq);
           this.think(sq);
           this.pairs(sq, this.space(sq));
+          if (sq.screenQ) this.screenRound(sq);
         }
         this.walk(sq);
         this.fire(sq);
@@ -55404,9 +55631,9 @@
         m.pose = "down";
         m.spot = [m.x, m.y];
         this.aid(sq, m);
-        if (this.sections) this.regroup(sq, m);
+        if (sq.tier >= 1) this.regroup(sq, m);
       }
-      if (this.sections) this.thin(sq);
+      if (sq.tier >= 1) this.thin(sq);
     }
     /** A comrade goes to a man who fell, where one is near and the block is not running (nor riding, nor mounting again). */
     aid(sq, m) {
@@ -55618,7 +55845,7 @@
      */
     turnFor(sq, m, bound3) {
       const key7 = this.memo(sq).keyOf.get(m.sec ?? m.k);
-      const plat = this.platoons && (key7 ? key7.role === "rifle" : m.role === "rifle");
+      const plat = key7 ? !!key7.plat : sq.tier === 2 && m.role === "rifle";
       const squads = plat ? platoonOf(sq.u.nat).squads : 0, s = plat ? m.sub ?? 0 : m.sec ?? m.k;
       return turnOf2(bound3, m.role === "mg", s, plat && s >= squads);
     }
@@ -55898,7 +56125,7 @@
           l.push(m);
         }
       }
-      const all = this.sections ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
+      const all = sq.tier >= 1 ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
       return sq.memo = { fig: u.figures, on, stand, struck: on ? [...stand, ...sq.veh] : stand, up, keys, keyOf, all, bySec };
     }
     /** Whom a man who keeps by another keeps by in his section now: a loader his weapon, a gun's crew its gun, a runner his officer. */
@@ -55961,7 +56188,7 @@
      * rifle section's gunner fallen, his number two takes the gun up; with none to keep by, he fights as a rifleman.
      */
     pairs(sq, room2) {
-      if (!this.sections) return;
+      if (sq.tier < 1) return;
       const u = sq.u, t = this.b.t;
       const count4 = /* @__PURE__ */ new Map(), booked2 = /* @__PURE__ */ new Set();
       for (const m of sq.men) {
@@ -56040,7 +56267,7 @@
      * there. Returns the places booked, for pairs.
      */
     space(sq) {
-      if (!this.sections) return void 0;
+      if (sq.tier < 1) return void 0;
       const M2 = this.memo(sq), t = this.b.t, room2 = /* @__PURE__ */ new Map();
       const order2 = [...M2.up].sort((a, c) => (a.j === void 0 ? 0 : 1) - (c.j === void 0 ? 0 : 1) || (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0));
       for (const m of order2) {
@@ -56110,7 +56337,7 @@
      * whole block goes in files (as many as its men need), section after section.
      */
     slot(sq, m, tpl) {
-      const u = sq.u, N = this.nums(u), band = this.band(u), M2 = this.memo(sq), S3 = DR.sections, sec = this.sections;
+      const u = sq.u, N = this.nums(u), band = this.band(u), M2 = this.memo(sq), S3 = DR.sections, sec = sq.tier >= 1;
       if (m.pr) {
         const L2 = this.leadOf(sq, m);
         if (L2) return this.slot(sq, L2, tpl);
@@ -56146,7 +56373,7 @@
       const half = u.w / 2 - 6 + (sec ? 25 : 0), span2 = Math.min(half - 4, sp * Math.max(0, n - 1));
       const outer = side5 * Math.min(half, u.w / 4 + span2 / 2);
       const a = outer - side5 * (n > 1 ? span2 * i / (n - 1) : 0);
-      const l = u.d / 2 - 4 + (i % 2 ? sec ? -(this.platoons ? S3.platoon.rows : S3.rows) : -3 : 0) + m.jy * 0.5;
+      const l = u.d / 2 - 4 + (i % 2 ? sec ? -(sq.tier === 2 ? S3.platoon.rows : S3.rows) : -3 : 0) + m.jy * 0.5;
       return [a + m.jx * 0.4, l];
     }
     /**
@@ -56352,7 +56579,7 @@
           best = o;
         }
       }
-      if (best && this.sections) for (let g2 = 0; g2 < 8; g2++) for (const o of M2.bySec.get(best.k * 8 + g2) ?? []) {
+      if (best && sq.tier >= 1) for (let g2 = 0; g2 < 8; g2++) for (const o of M2.bySec.get(best.k * 8 + g2) ?? []) {
         const dd = Math.hypot(o.x - m.x, o.y - m.y);
         if (dd < d) {
           d = dd;
@@ -56632,11 +56859,11 @@
       if (e && !home) for (const m of assault) near2 = Math.min(near2, this.toBox(m, e));
       const away2 = e && near2 < BOOK2.lift.mg + 15 ? [e.x + fx * e.d / 2, e.y + fy * e.d / 2] : void 0;
       const out = assault.size > 0;
-      if (BOOK2.smoke.on && !home && e && out && S3.smoke > 0 && (sq.smokeAt === void 0 || t - sq.smokeAt >= BOOK2.smoke.every)) {
+      if (BOOK2.smoke.on && !b.smoke && !home && e && out && S3.smoke > 0 && (sq.smokeAt === void 0 || t - sq.smokeAt >= BOOK2.smoke.every)) {
         sq.smokeAt = t;
         sq.smokeLeft = S3.smoke;
       }
-      if (sq.smokeLeft && e && !home) {
+      if (sq.smokeLeft && e && !home && !b.smoke) {
         sq.smokeLeft--;
         this.smoke(sq, e, men2.filter((m) => !assault.has(m)), S3.smoke - sq.smokeLeft - 1, S3.smoke);
       }
@@ -56745,6 +56972,53 @@
       by2.pose = "wait";
       by2.aim = [ax, ay];
       by2.until = t + 1.5;
+    }
+    /**
+     * Smoke on call (release 2, ruling 242 S6): a screen the rules just laid (LandBattle.lay), drawn as the rounds that lay
+     * it, one round for each BOOK.smoke.per metres of its line (at most BOOK.smoke.most; looks only), one a think from the
+     * block's base of fire, as the book's own smoke is fired (smoke). A screen laid while one is still being drawn takes its
+     * place.
+     */
+    screen(s) {
+      const sq = this.squads.get(s.unit);
+      if (!sq) return;
+      const n = clamp6(Math.ceil(Math.hypot(s.x1 - s.x0, s.y1 - s.y0) / BOOK2.smoke.per), 1, BOOK2.smoke.most);
+      sq.screenQ = { s, i: 0, n };
+    }
+    /**
+     * The next round of the screen being drawn: from the platoon's headquarters (its light mortar) or a rifleman standing,
+     * else from the block's front, onto its place along the line ((i + 1/2) of n), scattered a little as a mortar's round;
+     * it hangs from its landing to the screen's end (hang). No harm, at no block (on -1). The shooter's stamp is the round's
+     * only change to his drill: he stands and fires it.
+     */
+    screenRound(sq) {
+      const q = sq.screenQ, u = sq.u, b = this.b, t = b.t, R2 = DR.rounds, s = q.s;
+      if (q.i >= q.n || !live2(u) || t >= s.until) {
+        delete sq.screenQ;
+        return;
+      }
+      const men2 = this.up(sq), squads = platoonOf(u.nat).squads;
+      const by2 = men2.find((m) => (m.sub ?? 0) >= squads && m.role === "rifle") ?? men2.find((m) => m.role === "rifle");
+      const k = (q.i + 0.5) / q.n, ax = s.x0 + (s.x1 - s.x0) * k, ay = s.y0 + (s.y1 - s.y0) * k, z = Math.round(t * 10);
+      const [fx, fy] = fwd(u.face), ox = by2 ? by2.x : u.x + fx * u.d / 2, oy = by2 ? by2.y : u.y + fy * u.d / 2, n = by2 ? by2.n : 0;
+      const range2 = Math.hypot(ax - ox, ay - oy), [i0, i1] = R2.indirect.mortar, sg = i0 + i1 * range2;
+      const x = clamp6(ax + gauss(roll(this.seed, u.id, n, z, 81), roll(this.seed, u.id, n, z, 82)) * sg * 0.35, 1, b.field.w - 1);
+      const y = clamp6(ay + gauss(roll(this.seed, u.id, n, z, 83), roll(this.seed, u.id, n, z, 84)) * sg * 0.35, 1, b.field.h - 1);
+      const l = Math.round((t + range2 / R2.speed.mortar) * 10) / 10;
+      const r = { t: Math.round(t * 10) / 10, l, by: u.id, w: "smoke", on: -1, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: "miss", hang: Math.max(0, Math.round((s.until - l) * 10) / 10) };
+      if (by2) {
+        r.k = by2.k;
+        if (by2.j !== void 0) r.j = by2.j;
+      }
+      this.book(r);
+      if (by2) {
+        by2.v = 0;
+        by2.spot = [by2.x, by2.y];
+        by2.pose = "wait";
+        by2.aim = [ax, ay];
+        by2.until = t + 1.5;
+      }
+      if (++q.i >= q.n) delete sq.screenQ;
     }
     /** Whether a mate lies within arm's length of him, down. */
     crowded(sq, m) {
@@ -56992,7 +57266,7 @@
       lead2.aim = void 0;
       men2.forEach((m, i) => {
         if (m === lead2) return;
-        const ang = i / men2.length * Math.PI * 2, r = this.sections ? 7 + 0.25 * men2.length : 7;
+        const ang = i / men2.length * Math.PI * 2, r = sq.tier >= 1 ? 7 + 0.25 * men2.length : 7;
         const p = [lead2.x + Math.sin(ang) * r + dir[0] * 4, lead2.y + Math.cos(ang) * r + dir[1] * 4];
         if (Math.hypot(m.spot[0] - p[0], m.spot[1] - p[1]) > 4) this.go(sq, m, p, "run", 4, t + 2, dir, 4);
         else if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 1) {
@@ -57078,12 +57352,12 @@
     }
     /** Which of the block's lorries is his: by his place on the tray, or (drawn as sections) his section's own. */
     lorryIx(sq, m) {
-      return (m.lor ?? (this.sections ? m.sec ?? m.k : m.k)) % sq.veh.length;
+      return (m.lor ?? (sq.tier >= 1 ? m.sec ?? m.k : m.k)) % sq.veh.length;
     }
     /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
     seat(sq, m) {
       const v = this.lorryOf(sq, m);
-      if (this.sections) {
+      if (sq.tier >= 1) {
         const j2 = m.seat ?? m.j ?? 0;
         return toWorld(v, v.face, j2 % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j2 / 2));
       }
@@ -57516,7 +57790,7 @@
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), dir = this.threatDir(sq), h = sq.heading;
       const e = u.aim !== void 0 ? b.unit(u.aim) ?? null : u.engaged !== void 0 ? b.unit(u.engaged) ?? null : null;
       const guns2 = this.up(sq).filter((m) => m.role === "gun"), tractor = sq.veh[0];
-      const own = this.sections && sq.veh.length > 1;
+      const own = sq.tier >= 1 && sq.veh.length > 1;
       if (sq.phase === "limbered" || sq.phase === "flee" || sq.phase === "fallback") {
         guns2.forEach((g2, i) => {
           g2.aim = void 0;
@@ -57731,7 +58005,10 @@
         sq.foOn = e.id;
         sq.foAt = [base.x, base.y];
       }
-      if (this.byBook && sq.ms && sq.ms.on === e.id) sq.fo[1].call = sq.ms.call;
+      if (this.byBook && sq.ms && sq.ms.on === e.id && sq.fo[1].call !== sq.ms.call) {
+        sq.fo[1].call = sq.ms.call;
+        sq.fo[1].callAt = [e.x, e.y];
+      }
       for (const m of sq.fo) {
         const d = Math.hypot(m.x - m.spot[0], m.y - m.spot[1]);
         if (d < 1 && m.v === 0) {
@@ -57752,7 +58029,7 @@
     walk(sq) {
       const u = sq.u, f = this.b.field, t = this.b.t;
       let e;
-      const crowd = this.sections ? /* @__PURE__ */ new Map() : null;
+      const crowd = sq.tier >= 1 ? /* @__PURE__ */ new Map() : null;
       if (crowd) for (const m of sq.men) {
         if (m.fell !== void 0 || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
         const key7 = Math.floor(m.x / SPACE.cell) * 65536 + Math.floor(m.y / SPACE.cell);
@@ -58236,7 +58513,7 @@
       const b = this.b, out = [];
       const r12 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
       const one = (m) => {
-        const o = { k: m.k, r: this.sections && m.j === void 0 && m.role === "rifle" || m.lead ? "leader" : m.role, x: r12(m.x), y: r12(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r12(m.went ?? 0) : 0, c: m.cover };
+        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r12(m.x), y: r12(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r12(m.went ?? 0) : 0, c: m.cover };
         if (m.j !== void 0) o.j = m.j;
         if (m.aim) o.a = [r12(m.aim[0]), r12(m.aim[1])];
         if (m.shot !== void 0) o.s = r12(m.shot);
@@ -58246,6 +58523,7 @@
         if (m.marks?.length) o.mk = m.marks.map((x) => [...x]);
         if (m.el && this.byBook) o.e = m.el;
         if (m.call !== void 0) o.cl = r12(m.call);
+        if (m.call !== void 0 && m.callAt) o.cs = [r12(m.callAt[0]), r12(m.callAt[1])];
         return o;
       };
       for (const sq of this.squads.values()) {
@@ -58306,6 +58584,7 @@
     const P = DR.sections.platoon, p = P[nat] ?? P.default;
     return { squads: Math.max(1, Math.min(7, p.squads)), hq: Math.max(1, p.hq) };
   }
+  var menOnScreen = (r) => r === "hmg" || r === "mortar" ? 3 : VEHICLE.has(r) ? 0 : 1;
   function sectionOf(nat, key7) {
     const S3 = DR.sections, out = [];
     const add = (r, c, pr = false, scout2 = false) => {
@@ -58361,6 +58640,8 @@
   var OPEN_GROUND = ["open", "field", "road", "bridge", "marsh"];
   var GATE_CELL = 25;
   var GATE_REACH = 120;
+  var HEDGE_BAR = 0.75;
+  var HEDGE_GAP = 1.25;
   function segHit(ax, ay, bx, by2, cx, cy, dx, dy) {
     const rx = bx - ax, ry = by2 - ay, sx = dx - cx, sy = dy - cy, den = rx * sy - ry * sx;
     if (Math.abs(den) < 1e-12) return null;
@@ -58394,6 +58675,16 @@
   var inRiver = (g2) => g2 === "water" || g2 === "blown";
   var live3 = (u) => u.state !== "gone" && u.state !== "withdrawn";
   var fighting2 = (u) => live3(u) && u.state !== "routing";
+  var weightOf = (u) => u.priced ?? u.power0;
+  var INWARD = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
+  function joinEdge(side5, toward, own) {
+    if (toward === void 0 || !Number.isFinite(toward)) return side5 === "att" ? "south" : "north";
+    const sn = Math.sin(toward), cs = Math.cos(toward);
+    let e = Math.abs(cs) >= Math.abs(sn) ? cs > 0 ? "north" : "south" : sn > 0 ? "east" : "west";
+    if (e === (side5 === "att" ? "north" : "south")) e = sn > 1e-9 ? "east" : "west";
+    if (own && (e === "west" || e === "east") && e !== own) e = "south";
+    return e;
+  }
   var mix2 = (n) => {
     let h = n >>> 0;
     h ^= h >>> 16;
@@ -58510,12 +58801,70 @@
        * it on; off, nothing here is read.
        */
       __publicField(this, "measured", false);
+      /**
+       * Hold until relieved (release 2; Brian, 22 November 12:48Z; "Hold until relieved" below): a block on foot may be told
+       * to dig in and wait for a corps coming up from next door. Off unless whoever opens the field turns it on (the 2D
+       * page's ?relief, the bridge's { relief: true }); off, nothing below is read.
+       */
+      __publicField(this, "relief", false);
       /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
       __publicField(this, "flanking", /* @__PURE__ */ new Map());
       /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
       __publicField(this, "models", /* @__PURE__ */ new Map());
-      /** The player's orders on the air (radio): each block's, with the battle time it lands. */
+      /**
+       * The player's orders on the air (radio): each block's, with the battle time it lands; 'smoke' (smoke on call, release
+       * 2) a smoke order, which rides beside the block's other order on the air, neither replacing it nor replaced by it.
+       */
       __publicField(this, "pending", []);
+      /**
+       * Neighbours join the fight (release 2): the blocks of corps coming up from next door, not yet on the field, earliest
+       * first: each with its corps' ticket, the battle second it comes on, the edge and the place there. Empty where none
+       * comes, and then nothing below reads it.
+       */
+      __publicField(this, "coming", []);
+      /** The battle second each joining corps came on. */
+      __publicField(this, "joinedAt", /* @__PURE__ */ new Map());
+      /** The corps that come up from next door. */
+      __publicField(this, "joinCorps", /* @__PURE__ */ new Set());
+      /**
+       * The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+       * strength and arrival time"; the design director, 13:43Z): off unless whoever opens the field turns it on (the 2D
+       * page's ?rider, the bridge's { rider: true }); off, nothing reads him. Looks and words only: the fight never does.
+       */
+      __publicField(this, "rider", false);
+      /** Each joining corps' rider, worked out with its time (comeOn): where he sets out and stands, and when. */
+      __publicField(this, "riders", []);
+      /** The joining corps a block has waited for this battle (hold until relieved): each relieves one block a battle. */
+      __publicField(this, "waitedFor", /* @__PURE__ */ new Set());
+      /**
+       * Hedge cutters (release 2; Brian, 22 November 14:19Z; ruling 242; LAND.cutters; "Hedge cutters" below): a tank block
+       * carries cutters, may be told to cut a gap through a hedge where the player picks, and the staffs' cut where their
+       * way crosses one. Off unless whoever opens the field turns it on (the 2D page's ?cutters, the bridge's { cutters:
+       * true }); off, nothing below is read.
+       */
+      __publicField(this, "cutters", false);
+      /** Every cut begun this battle (hedge cutters), in the order begun. Empty while the switch is off. */
+      __publicField(this, "cuts", []);
+      /**
+       * Smoke on call (release 2; Brian, 22 November 14:19Z; ruling 242; LAND.smoke; "Smoke on call" below): a block on foot
+       * whose army has the means may lay a smoke screen before it, and both staffs lay one as they go in. Off unless whoever
+       * opens the field turns it on (the 2D page's ?smoke, the bridge's { smoke: true }); off, nothing below is read.
+       */
+      __publicField(this, "smoke", false);
+      /**
+       * The bocage (release 2; ruling 242 C1-B, as amended 17:45Z: "unfitted tanks cross only at gaps"; "The bocage" below):
+       * on a field with hedges, a tank block without hedge cutters crosses a hedge line only at a gap in it, a gateway or a
+       * gap cut and open, and finds its way round to one. Its own switch, so cutters alone stays the fight it was (C1-B:
+       * "under its own switch, measured against the card"). Off unless whoever opens the field turns it on (the 2D page's
+       * ?bocage, the bridge's { bocage: true }); off, nothing below is read.
+       */
+      __publicField(this, "bocage", false);
+      /** The bocage: the field's cells a hedge line bars to a tank block without cutters (barrier()); null until asked, and again whenever a gap opens. */
+      __publicField(this, "bars", null);
+      /** How many times the barred cells have been laid afresh (a gap opened): a way found before is looked for again. */
+      __publicField(this, "barsLaid", 0);
+      /** Every screen laid this battle (smoke on call), in the order laid: standing while t < until. Empty while the switch is off. */
+      __publicField(this, "screens", []);
       // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
       /** Each side's fighters on call, where it has any. */
       __publicField(this, "airOn", { att: null, def: null });
@@ -58549,6 +58898,11 @@
       /** What the held defence's take is multiplied by for that flank: LAND.hold.stream up the field, LAND.hold.join beside a second river. */
       __publicField(this, "flankHold", 1);
       /**
+       * What waits' cover spared, being paid out: each held block's, at the pace it was spared, shared by men with the blocks
+       * that relieved it (the design director, 13:43Z). Empty with no waits, and then nothing reads it.
+       */
+      __publicField(this, "repay", []);
+      /**
        * The way there: straight, unless ground it cannot enter lies across it (a river away from its bridges, rock, marsh
        * for a lorry, a bunker). Then round it, the quickest way over the ground (a road is quicker than a field), cut to as
        * few turns as can be walked straight between: over a bridge, round a bend of the river, round an outcrop. Where it
@@ -58578,9 +58932,10 @@
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
       this.power = { att: A, def: D2 };
-      const att = makeBlocks("att", ticket.att, A, 1);
-      const def = makeBlocks("def", ticket.def, D2, att.length + 1);
+      const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
+      const def = makeBlocks("def", ticket.def, D2, att.length + 1, void 0, ticket.turn);
       this.units = [...att, ...def];
+      const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
       this.covered = coveredTanks(ticket, this.units);
       const works = ticket.place.fort >= 1 || def.some((u) => u.kind === "fort");
       this.freshHold = { att: att.filter((u) => u.kind !== "fort" && !u.team).length <= LAND2.fresh.upTo, def: !works && def.filter((u) => u.kind !== "fort" && !u.team).length <= LAND2.fresh.upTo };
@@ -58592,15 +58947,23 @@
         const c = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
         if (c) u.cal = c;
       }
+      for (const u of joining) {
+        const c = crewFor(u, ticket[u.side].joiners?.find((f) => f.corps === u.corps)?.battles ?? 0);
+        if (c) u.crew = c;
+        const k = u.team ? u.team === "mor" ? "mortar" : void 0 : calFor(u.kind, u.nat, ticket.turn);
+        if (k) u.cal = k;
+      }
       const dry = ticket.place.dryEnd ?? "west";
       const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf2(FIELD3.w, FIELD3.h).att, dry), dry } : void 0;
       if (!bend) for (const u of att) delete u.dry;
+      for (const u of joining) if (u.side === "def" || !ticket.place.river) delete u.dry;
       const armour = att.filter((u) => MOTION[u.kind] === "tracks" || MOTION[u.kind] === "wheels"), all = armour.reduce((a, u) => a + u.power0, 0);
       this.armourWet = all > 0 ? armour.filter((u) => !u.dry).reduce((a, u) => a + u.power0, 0) / all : 0;
       this.field = buildField(ticket.place, ticket.seed, bend);
       if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND2.city.clock * builtShare(this.field))) };
       deploy(this.units, "att", this.field);
       deploy(this.units, "def", this.field);
+      if (joining.length) this.comeOn(joining);
       const St = this.field.stream, held3 = this.units.filter((u) => u.side === "def");
       if (St?.lie === "up") {
         const xAt = (y) => St.course.reduce((m, p) => Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m)[0];
@@ -58632,10 +58995,10 @@
      * And only as far as the attack's tanks and lorries had to cross with it (armourWet): an attack on foot crosses at no
      * cost the field must make up, so a river never makes an attack better than none (b494).
      */
-    holdTake(u) {
+    holdTake(u, t) {
       const p = this.ticket.place, H = LAND2.hold;
       const streets = streetsOf(p);
-      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
     }
     say(e) {
       const ev = { t: Math.round(this.t * 10) / 10, ...e };
@@ -58654,6 +59017,732 @@
     }
     unit(id) {
       return this.units.find((u) => u.id === id);
+    }
+    /** Every block of the battle: those on the field, then those of corps still coming up from next door (release 2). */
+    allBlocks() {
+      return this.coming.length ? [...this.units, ...this.coming.map((c) => c.u)] : this.units;
+    }
+    // ---- Neighbours join the fight (release 2) ----------------------------------------------------------------------
+    //
+    // The design director's ruling of 22 November 03:15Z: a corps next door that joins a battle is priced on the
+    // campaign card, and the field only draws it coming up. It reaches its side's line at (1 - joined) of the battle's
+    // own clock, worked out from its march weeks, never a fixed minute or a draw: it stands off the field until its own
+    // march from the edge facing the province it comes from would bring it there then, and walks on from that edge as a
+    // b407 reserve already sent, to where its side's line is struck hardest. Until then nothing on the field sees it,
+    // strikes it or is sent at it; the bar and the break count it at the card's figure.
+    /**
+     * Holds each joiner off the field: its time, its edge and each block's place there, side by side along the edge.
+     * Nothing here draws on the dice.
+     */
+    comeOn(joining) {
+      const B3 = this.field.bend, F = this.field, J = LAND2.join;
+      for (const corps of [...new Set(joining.map((u) => u.corps))]) {
+        const us = joining.filter((u) => u.corps === corps), u0 = us[0], side5 = u0.side;
+        const f = this.ticket[side5].joiners.find((x2) => x2.corps === corps);
+        const own = side5 === "att" && B3 ? u0.dry ? B3.dry : B3.dry === "west" ? "east" : "west" : void 0;
+        const edge3 = joinEdge(side5, f.toward, own);
+        const lanes2 = own && B3 && edge3 === "south" ? own === "west" ? [10, B3.x - BEND.clear] : [B3.x + BEND.clear, F.w - 10] : null;
+        const [x, y] = this.edgeAt(side5, edge3, f.toward, u0.w, lanes2);
+        const along = edge3 === "south" || edge3 === "north", [lo, hi] = lanes2 ?? [10, F.w - 10];
+        const own0 = this.units.filter((v) => v.side === side5);
+        const cx = own0.length ? own0.reduce((a, v) => a + v.x, 0) / own0.length : x, cy = own0.length ? own0.reduce((a, v) => a + v.y, 0) / own0.length : y;
+        const walk2 = Math.hypot(x - cx, y - cy) / Math.max(1, LAND2.speed[u0.kind]);
+        const at4 = Math.round(Math.max(0, (1 - u0.joined) * this.ticket.limit - walk2) * 1e3) / 1e3;
+        if (at4 > 0) {
+          this.riders.push({ corps, side: side5, f, from: [x, y], mid: [cx, cy], to: [x, y], there: 0, comes: at4, edge: edge3 });
+          this.riderTo(this.riders[this.riders.length - 1]);
+        }
+        us.forEach((u, i) => {
+          const off2 = (i - (us.length - 1) / 2) * (u.w + J.gap);
+          const px = along ? clamp5(x + off2, lo + u.w / 2, Math.max(lo + u.w / 2, hi - u.w / 2)) : x, py = along ? y : clamp5(y + off2, 40, F.h - 40);
+          this.coming.push({ u, f, edge: edge3, x: px, y: py, lanes: lanes2, at: at4 });
+        });
+        this.joinCorps.add(corps);
+      }
+      this.coming.sort((a, c) => a.at - c.at || a.u.id - c.u.id);
+    }
+    /** Where on its edge a joining corps comes on: across a back edge by the way it comes, at a flank its side's own depth. */
+    edgeAt(side5, edge3, toward, w, lanes2) {
+      const F = this.field, z = F.zones[side5], J = LAND2.join;
+      if (edge3 === "west" || edge3 === "east") return [edge3 === "west" ? w / 2 + 10 : F.w - w / 2 - 10, (z[1] + z[3]) / 2];
+      const [lo, hi] = lanes2 ?? [z[0], z[2]];
+      const q = toward !== void 0 && Number.isFinite(toward) ? toward : 0;
+      return [clamp5(F.w / 2 + F.w / 2 * Math.sin(q), lo + w / 2, Math.max(lo + w / 2, hi - w / 2)), edge3 === "south" ? J.edge : F.h - J.edge];
+    }
+    /** The joiners whose time has come: each corps' blocks walk on together, and its coming is told. */
+    arrive() {
+      const due = [];
+      while (this.coming.length && this.t >= this.coming[0].at - 1e-9) due.push(this.coming.shift());
+      for (const corps of [...new Set(due.map((c) => c.u.corps))]) {
+        const g2 = due.filter((c) => c.u.corps === corps);
+        for (const c of g2) this.walkOn(c);
+        this.joinedAt.set(corps, Math.round(this.t * 10) / 10);
+        const u = g2[0].u, f = g2[0].f, side5 = u.side;
+        this.say({
+          what: "land:joined",
+          unit: u.id,
+          side: side5,
+          x: u.x,
+          y: u.y,
+          text: `${this.ticket[side5].human ? f.name : `The ${this.ticket[side5].adj} ${f.name}`} comes up from next door${f.arrive ? `, ${f.arrive === "early" ? "early" : f.arrive === "midway" ? "midway through the fight" : "late in the day"}` : ""}.`
+        });
+      }
+    }
+    /**
+     * Sets one joining block on its edge, clear of the river and of every block, and starts it in: a reserve already
+     * sent (b407; its guns stand as guns), walking its LAND.join.walk metres onto the field, its ground where it stops.
+     */
+    walkOn(c) {
+      const u = c.u, J = LAND2.join, [nx, ny, face] = INWARD[c.edge];
+      [u.x, u.y] = this.clearSpot(u, c.x, c.y, nx, ny, c.lanes);
+      u.face = face;
+      u.cover = groundAt(this.field, u.x, u.y);
+      if (u.kind !== "art") u.reserve = "sent";
+      this.units.push(u);
+      this.drill?.join(u);
+      const o = { kind: "move", x: u.x + nx * J.walk, y: u.y + ny * J.walk, face: u.side === "att" ? 0 : Math.PI };
+      this.send(u, o);
+      u.home = [o.x, o.y];
+    }
+    /**
+     * The first spot at or in from (x, y) where a block can stand: on ground it can stand on, out of the water, and clear
+     * of every block on the field. Tried in a fixed order (in from the edge a cell at a time, and along it either way), so
+     * the same battle always finds the same spot; where none is clear it keeps (x, y) and the march sorts it out.
+     */
+    clearSpot(u, x, y, nx, ny, lanes2) {
+      const F = this.field, J = LAND2.join, m = Math.max(u.w, u.d), cell = F.cell;
+      const [lo, hi] = lanes2 ?? [10, F.w - 10];
+      const fit3 = (px, py) => [clamp5(px, lo + m / 2, Math.max(lo + m / 2, hi - m / 2)), clamp5(py, 40, F.h - 40)];
+      const clear = (px, py) => {
+        if (this.wet(u, px, py, false) || wetUnder(F, { x: px, y: py, w: m, d: m })) return false;
+        for (const o of this.units) if (live3(o) && Math.abs(o.x - px) < (o.w + m) / 2 + LAND2.placeClear && Math.abs(o.y - py) < (o.d + m) / 2 + LAND2.placeClear) return false;
+        return true;
+      };
+      for (let k = 0; k <= J.inward; k++) for (let j = 0; j <= 2 * J.across; j++) {
+        const a = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2);
+        const [px, py] = fit3(x + nx * k * cell + ny * a * cell, y + ny * k * cell + nx * a * cell);
+        if (clear(px, py)) return [px, py];
+      }
+      return fit3(x, y);
+    }
+    /** Where a rider rides to and stands, and when he is there: worked out as the clock is set, and again once the setup step has placed the guns. */
+    riderTo(r) {
+      r.to = this.riderSpot(r.mid[0], r.mid[1]);
+      r.there = Math.round(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) / Math.max(...Object.values(LAND2.speed)) * 1e3) / 1e3;
+    }
+    /** Where a rider stands: the nearest point to (x, y), outward a half cell at a time, out of the water and off a bridge, clear of every block. */
+    riderSpot(x, y) {
+      const F = this.field, c = LAND2.placeClear;
+      const ok2 = (px, py) => {
+        if (px < 10 || py < 10 || px > F.w - 10 || py > F.h - 10) return false;
+        const g2 = groundAt(F, px, py);
+        return !inRiver(g2) && g2 !== "bridge" && !this.units.some((o) => live3(o) && Math.abs(o.x - px) < o.w / 2 + c && Math.abs(o.y - py) < o.d / 2 + c);
+      };
+      const r12 = (v) => Math.round(v * 10) / 10;
+      if (ok2(r12(x), r12(y))) return [r12(x), r12(y)];
+      for (let r = F.cell / 2; r <= 1e3; r += F.cell / 2) for (let a = 0; a < 16; a++) {
+        const px = r12(x + Math.sin(a * Math.PI / 8) * r), py = r12(y + Math.cos(a * Math.PI / 8) * r);
+        if (ok2(px, py)) return [px, py];
+      }
+      return [r12(x), r12(y)];
+    }
+    /**
+     * The riders the player sees: his own side's only (a courier's news is his own army's), from the first step until his
+     * corps comes up; none whose corps would beat him there (he comes on with it), none once the day is over.
+     */
+    riderView() {
+      if (!this.rider || !this.riders.length || this.over || this.t <= 0) return {};
+      const still = new Set(this.coming.map((c) => c.u.corps));
+      const on = this.riders.filter((r) => this.ticket[r.side].human && still.has(r.corps) && r.there <= r.comes);
+      if (!on.length) return {};
+      const r32 = (v) => Math.round(v * 1e3) / 1e3, r12 = (v) => Math.round(v * 10) / 10;
+      const KIND2 = { inf: "infantry", mtn: "mountain", cav: "cavalry", eng: "engineer", mot: "motorized", arm: "armoured", art: "artillery", fort: "fortress" };
+      const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+      return {
+        riders: on.map((r) => {
+          const k = r.there > 0 ? Math.min(1, this.t / r.there) : 1;
+          const us = this.coming.filter((c) => c.u.corps === r.corps).map((c) => c.u).sort((a, b) => a.id - b.id);
+          const men2 = us.reduce((a, u) => a + u.men0, 0), str = men2 > 0 ? us.reduce((a, u) => a + u.str0 * u.men0, 0) / men2 : r.f.str;
+          const divs = us.map((u) => u.short), kind = KIND2[r.f.kind] ?? r.f.kind;
+          const staff = this.ai[r.side], line = (1 - (us[0]?.joined ?? 1)) * this.ticket.limit;
+          const back = r.edge === (r.side === "att" ? "south" : "north"), by2 = back ? "from behind your line" : `on your ${r.edge} flank`;
+          const list4 = divs.length > 1 ? `${divs.slice(0, -1).join(", ")} and ${divs[divs.length - 1]}` : divs[0] ?? "";
+          const says = `${r.f.name}: ${divs.length} ${kind} division${divs.length === 1 ? "" : "s"} (${list4}), ${Math.round(men2).toLocaleString("en-GB")} men, strength ${Math.round(str * 100)}. It comes up ${by2} at ${mmss(r.comes)}${staff ? ` and reaches your line at about ${mmss(line)}` : ", and waits there for your orders"}.`;
+          return {
+            corps: r.corps,
+            side: r.side,
+            x: r12(r.from[0] + (r.to[0] - r.from[0]) * k),
+            y: r12(r.from[1] + (r.to[1] - r.from[1]) * k),
+            face: r32(bearing(r.from[0], r.from[1], r.to[0], r.to[1])),
+            speed: k < 1 ? Math.max(...Object.values(LAND2.speed)) : 0,
+            there: r32(r.there),
+            comes: r32(r.comes),
+            edge: r.edge,
+            ...staff ? { line: r32(line) } : {},
+            name: r.f.name,
+            kind: r.f.kind,
+            divs,
+            men: Math.round(men2),
+            str: r32(str),
+            says
+          };
+        })
+      };
+    }
+    /** The joiners still coming, as the view shows them: those of the player's side and those the player's staff knows. */
+    comingView() {
+      if (!this.coming.length || this.over) return {};
+      const shown2 = this.coming.filter((c) => this.known(c.u));
+      return shown2.length ? { coming: shown2.map((c) => ({ id: c.u.id, side: c.u.side, corps: c.u.corps, kind: c.u.kind, at: c.at, edge: c.edge, x: c.x, y: c.y, ...c.f.arrive ? { arrive: c.f.arrive } : {} })) } : {};
+    }
+    // ---- Hold until relieved (release 2) -----------------------------------------------------------------------------
+    //
+    // Brian, 22 November 12:48Z ("Do 2 and 3"): "a unit ordered to wait for help digs in harder, but breaks faster if help
+    // never comes"; the design director's rulings of 13:43Z. A block on foot told to wait for a corps coming up from next
+    // door stands where it is, fires on what comes into its reach and never advances; its staff never orders it. While it
+    // keeps to its spot it takes the field's light cover (LAND.cover[LAND.wreck.cover], the wrecks' own figure, within
+    // LAND.dug.keep, never better than its ground gives), and what that cover spares it is kept: the field moves when harm
+    // lands, never how much (b415, b418). It lands with the block if it breaks; else, once the cover ends, it is paid out at
+    // the pace it was spared, shared by men with the blocks that relieved it, never as one blow on men whose friends have
+    // just come; whatever is left lands at the end of the fight. Help is due when the corps' nearest block could reach it
+    // at its own pace, the joiners' own reckoning (comeOn), never a draw; it is relieved once a block of a joining corps
+    // stands beside it (LAND.alone.near). Past due unrelieved, or its corps out of the fight, help never came: the men are
+    // let down, and break where a block starts to waver (LAND.nerve.waver), not at the rout's mark, until relieved. The
+    // player's own order to move, attack, line up or withdraw ends the wait without that mark: men re-ordered are not let
+    // down. Each joining corps relieves one block a battle, the player's and every staff's alike (ai.ts relieve). Nothing
+    // here draws on the dice.
+    /**
+     * Whether this battle has corps coming up from next door, on the field yet or not; with a side, whether that side has
+     * (a side's own help: the player is never told by it of an enemy's that his staff has not identified).
+     */
+    hasJoiners(side5) {
+      if (side5 === void 0) return this.joinCorps.size > 0;
+      return this.coming.some((c) => c.u.side === side5) || this.units.some((u) => u.side === side5 && u.joined !== void 0);
+    }
+    /** A block of a joining corps that helps this one: its side's, of another corps, in the fight, not guns or a team. */
+    helps(r, u) {
+      return r.side === u.side && r.joined !== void 0 && r.corps !== u.corps && fighting2(r) && r.kind !== "art";
+    }
+    /** Help stands beside this block: a block of a joining corps within LAND.alone.near of it, edge to edge. */
+    relieved(u) {
+      return this.units.some((r) => this.helps(r, u) && this.gap(r, u) <= LAND2.alone.near);
+    }
+    /** This corps still has a block that is not guns coming up or in the fight: its help may yet come. */
+    canHelp(corps) {
+      return this.coming.some((c) => c.u.corps === corps && c.u.kind !== "art") || this.units.some((r) => r.corps === corps && r.joined !== void 0 && fighting2(r) && r.kind !== "art");
+    }
+    /**
+     * When help could reach this block, and whose: of its side's joining corps not yet waited for, the one whose nearest
+     * block (not guns) could be there soonest, from where it stands, or from its place on its edge at its time while it is
+     * still coming, at its own pace over open ground (comeOn's own reckoning). Null where none can come.
+     */
+    dueAt(u, skip) {
+      let corps = -1, due = Infinity;
+      const take2 = (c, d) => {
+        if (d < due - 1e-9 || Math.abs(d - due) <= 1e-9 && c < corps) {
+          corps = c;
+          due = d;
+        }
+      };
+      for (const c of this.coming) {
+        if (c.u.side !== u.side || c.u.corps === u.corps || c.u.kind === "art" || this.waitedFor.has(c.u.corps) || skip?.has(c.u.corps)) continue;
+        take2(c.u.corps, Math.max(this.t, c.at) + Math.hypot(c.x - u.x, c.y - u.y) / Math.max(1, LAND2.speed[c.u.kind]));
+      }
+      for (const r of this.units) if (this.helps(r, u) && !this.waitedFor.has(r.corps) && !skip?.has(r.corps)) take2(r.corps, this.t + Math.hypot(r.x - u.x, r.y - u.y) / Math.max(1, LAND2.speed[r.kind]));
+      return corps < 0 ? null : { corps, due: Math.round(due * 1e3) / 1e3 };
+    }
+    /**
+     * Why this block may not wait for help now, in the player's words; null where it may (words for the UI director).
+     * 'skip': corps already spoken for by blocks before it in the same order (waitWhyAll).
+     */
+    waitWhy(u, skip) {
+      if (!this.relief || !this.hasJoiners(u.side)) return "No help is coming up from next door.";
+      if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
+      if (MOTION[u.kind] !== "foot") return "Only men on foot dig in to wait for help.";
+      if (u.waited) return u.waits && !u.waits.free ? "It is waiting for help already." : "It has waited for help once today.";
+      if (!diggable(coverAt(this.field, u.x, u.y))) return "There is no digging in here.";
+      if (this.relieved(u)) return "Help is beside it already.";
+      const d = this.dueAt(u, skip);
+      if (!d) {
+        const any = this.coming.some((c) => c.u.side === u.side && c.u.corps !== u.corps && c.u.kind !== "art") || this.units.some((r) => this.helps(r, u));
+        return any ? "Each corps coming up relieves one block, and each is spoken for." : "No help is coming up from next door.";
+      }
+      if (d.due > this.ticket.limit) return "Help could not reach it before the day is out.";
+      return null;
+    }
+    /**
+     * Why each of these blocks, told together and in this order, may not wait: each one that may speaks for its corps
+     * before the next is asked, as their orders will land (one block a joining corps).
+     */
+    waitWhyAll(us) {
+      const claimed = /* @__PURE__ */ new Set();
+      return us.map((u) => {
+        const why = this.waitWhy(u, claimed);
+        if (why === null) claimed.add(this.dueAt(u, claimed).corps);
+        return why;
+      });
+    }
+    /** The joining corps' name as the dispatches give it. */
+    corpsName(side5, corps) {
+      const f = this.ticket[side5].joiners?.find((x) => x.corps === corps);
+      return f ? this.ticket[side5].human ? f.name : `the ${this.ticket[side5].adj} ${f.name}` : "help";
+    }
+    /** The wait order landing (by radio, the player's): where it may no longer wait, it holds as the core's hold does. */
+    wait(u) {
+      u.order = null;
+      u.path = [];
+      u.keepFace = null;
+      delete u.aim;
+      delete u.search;
+      delete u.searchR;
+      delete u.cut;
+      if (this.waitWhy(u) !== null) return;
+      const d = this.dueAt(u);
+      u.waits = { corps: d.corps, due: d.due, at: [u.x, u.y], since: this.t };
+      u.waited = true;
+      this.waitedFor.add(d.corps);
+      if (this.ticket[u.side].human) this.say({ what: "land:waits", unit: u.id, side: u.side, text: `${this.named(u)} digs in to wait for ${this.corpsName(u.side, d.corps)}.`, x: u.x, y: u.y });
+    }
+    /**
+     * Each tick, before the staffs think: a waiting block with help beside it is relieved; one whose help is overdue, or
+     * whose corps can no longer come, has waited in vain.
+     */
+    waitOn() {
+      for (const u of this.units) {
+        if (!u.waits || !fighting2(u)) continue;
+        if (this.relieved(u)) this.endWait(u, "relieved");
+        else if (!u.waits.late && (this.t >= u.waits.due - 1e-9 || !this.canHelp(u.waits.corps))) this.endWait(u, "late");
+      }
+    }
+    /**
+     * A wait ends, or help is late. Late, the block is still waiting: it keeps its spot, its cover and what that cover has
+     * spared it, and now carries the mark of help that never came. Relieved, its wait is over and the mark lifts. The
+     * player's own order, or giving ground at the brink (b496(1)), ends it, keeping the mark only where help was late
+     * already (men let down stay let down until relieved or broken: the design director, 13:43Z). What its cover spared
+     * lands at once if it broke, else, once the wait is over, is paid out from then at the pace it was spared (repay),
+     * shared with the blocks that relieved it.
+     */
+    endWait(u, how) {
+      const w = u.waits;
+      if (!w) return;
+      if (how === "late") w.late = true;
+      else if ((how === "off" || how === "gives") && w.late) w.free = true;
+      else delete u.waits;
+      if (how === "broke") this.landNow(u);
+      else if (how !== "late" && u.debt !== void 0) {
+        const by2 = how === "relieved" ? this.units.filter((r) => this.helps(r, u) && this.gap(r, u) <= LAND2.alone.near).map((r) => r.id) : [];
+        const d = u.debt, n = u.debtN ?? 0;
+        delete u.debt;
+        delete u.debtN;
+        if (d > 0) this.repay.push({ held: u.id, by: by2, left: d, nerve: n / d, rate: d / Math.max(DT, this.t - w.since) });
+      }
+      if (!this.ticket[u.side].human) return;
+      if (how === "relieved") this.say({ what: "land:relieved", unit: u.id, side: u.side, text: `${this.corpsName(u.side, w.corps)} has reached ${this.named(u)}.`, x: u.x, y: u.y });
+      if (how === "late") this.say({ what: "land:late", unit: u.id, side: u.side, text: `No help has reached ${this.named(u)}; its men are losing heart.`, x: u.x, y: u.y });
+    }
+    /** Each tick, after the blows: a tick's worth of each repayment lands. */
+    repayNow() {
+      for (const p of this.repay) {
+        const d = Math.min(p.left, p.rate * DT);
+        p.left -= d;
+        this.repayOn(p, d);
+      }
+      this.repay = this.repay.filter((p) => p.left > 1e-12);
+    }
+    /**
+     * The blocks a repayment lands on, each with its share by the men it has now: the held block and its relievers, on the
+     * field or not (one that has left still pays its share, off its strength, as the air's dues are paid: leaving never
+     * escapes it, nor hands it to the others).
+     */
+    repayShares(p) {
+      const on = [p.held, ...p.by].map((id) => this.unit(id)).filter((x) => !!x);
+      const men2 = on.map((x) => x.men0 * (Math.max(0, x.str) / Math.max(1e-9, x.str0))), all = men2.reduce((a, m) => a + m, 0);
+      return on.map((x, i) => [x, all > 0 ? men2[i] / all : 1 / on.length]);
+    }
+    /** Lands d of a repayment on its blocks: on the field as a blow, off it off their strength (harm). */
+    repayOn(p, d) {
+      if (d <= 0) return;
+      for (const [x, k] of this.repayShares(p)) this.harm(x, d * k, p.nerve);
+    }
+    /** What a wait's cover spared a block, kept or still being paid out, lands on it at once (it broke). */
+    landNow(u) {
+      const d = u.debt, n = u.debtN ?? 0;
+      delete u.debt;
+      delete u.debtN;
+      if (d !== void 0 && d > 0) this.harm(u, d, n / d);
+      for (const p of this.repay) if (p.held === u.id && p.left > 0) {
+        const left = p.left;
+        p.left = 0;
+        this.harm(u, left, p.nerve);
+      }
+      this.repay = this.repay.filter((p) => p.left > 1e-12);
+    }
+    /**
+     * Kept harm landing on a block: where it still stands, as a blow from whoever had struck it most (whose shells its lost
+     * men go to: looks only); off the field, off its strength alone.
+     */
+    harm(u, d, nerve2) {
+      if (d <= 0) return;
+      if (!live3(u)) {
+        this.offStrength(u, d);
+        return;
+      }
+      const owed = u.owed ?? {};
+      let by2;
+      for (const id of Object.keys(owed)) {
+        const s = this.unit(Number(id));
+        if (s && live3(s) && (!by2 || owed[s.id] > owed[by2.id])) by2 = s;
+      }
+      this.suffer(u, d, nerve2, by2 ? [[by2, d]] : [], false, true);
+    }
+    /** Harm off a block's strength alone, as the air's dues are paid off the field (offField). */
+    offStrength(u, d) {
+      u.str = Math.max(0, u.str - d / Math.max(1e-9, u.power0) * u.str0);
+      u.figures = u.str <= 0 ? 0 : Math.max(1, Math.ceil(u.tray * u.str));
+    }
+    /** The day is done: what waits' cover spared, kept or still being paid out, lands before the count. */
+    payWaits() {
+      if (!this.relief) return;
+      for (const p of this.repay) {
+        const left = p.left;
+        p.left = 0;
+        this.repayOn(p, left);
+      }
+      this.repay = [];
+      for (const u of this.units) if (u.debt !== void 0) {
+        const d = u.debt, n = u.debtN ?? 0;
+        delete u.debt;
+        delete u.debtN;
+        if (d > 0) this.harm(u, d, n / d);
+      }
+    }
+    /** What blocks on the field are owed, were the day settled now: the fighters on call's, and every wait's (the staff's chance). */
+    dueNow() {
+      let due = this.airDue();
+      if (!this.relief) return due;
+      const add = (id, d) => {
+        due ?? (due = /* @__PURE__ */ new Map());
+        due.set(id, (due.get(id) ?? 0) + d);
+      };
+      for (const u of this.units) if (u.debt && live3(u)) add(u.id, u.debt);
+      for (const p of this.repay) for (const [x, k] of this.repayShares(p)) if (live3(x)) add(x.id, p.left * k);
+      return due;
+    }
+    // ---- Hedge cutters (release 2) ----------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 14:19Z ("Let's do 1 and 2": "bladed Shermans punch a gap through a hedgerow where the player
+    // picks"); the design director's ruling 242, C1-A to C4-A (LAND.cutters). A tank block carries cutters from July 1944
+    // on a field with hedges, whatever its army. Told to cut at a point on a hedge line, it drives for that point and on
+    // through it till its rear stands LAND.cutters.near metres beyond, an order like any other (by radio, the player's,
+    // and gated again as it lands). As its front reaches the hedge the cut begins (t0, a land:cut event), and LAND.cutters.secs later
+    // a gap stands open there (t1): a Gate of kind 'cut' the drawn men of every block on either side walk through from
+    // then. A block its staff runs cuts wherever its own way crosses a hedge line with no gap near, with no order at all
+    // (C4-A); the player's own blocks only where he orders it. Looks only (C1-A): the gates are read by the drill alone
+    // (drill.ts via and gateOn: no number of the fight reads this.gates, and gateOn's only caller is the drill), the
+    // block's way is its move's own, and nothing here draws on the dice; so the fight is the same, cut or not. With the
+    // bocage switch on as well (C1-B, "The bocage" below), the gates are read by the way a tank block without cutters
+    // finds (barrier()): there a gap open is a way through for any tank, and the fight changes, measured.
+    /** Whether this block carries hedge cutters: the switch on, a tank block, from LAND.cutters.from, on a field with hedges. */
+    cutterOf(u) {
+      return this.cutters && u.kind === "arm" && this.ticket.turn >= LAND2.cutters.from && this.hedges.length > 0;
+    }
+    /**
+     * Why this block may not cut through the hedge at (x, y) now, in the player's words (129(d)); null where it may. With
+     * no point, whether it may cut anywhere. Whose block it is, is the caller's to ask (the bridge's words).
+     */
+    cutWhy(u, x, y) {
+      if (!this.cutters) return "Your tanks carry no hedge cutters.";
+      if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
+      if (u.kind !== "arm") return "Only tanks carry hedge cutters.";
+      if (this.ticket.turn < LAND2.cutters.from) return "Hedge cutters come in July 1944.";
+      if (!this.hedges.length) return "There are no hedges on this field.";
+      if (x === void 0 && y === void 0) return null;
+      const px = Number(x), py = Number(y);
+      if (!Number.isFinite(px) || !Number.isFinite(py) || px < 0 || py < 0 || px > this.field.w || py > this.field.h) return "Off the field.";
+      if (!this.hedgeNear(px, py, LAND2.cutters.near)) return "There is no hedge there.";
+      return null;
+    }
+    /**
+     * The nearest point of a hedge line to (x, y) within r metres, and the way the line runs there (radians from east, as
+     * a Gate's yaw); null where none passes that near.
+     */
+    hedgeNear(x, y, r) {
+      let best = null, bd = r;
+      const seen2 = /* @__PURE__ */ new Set();
+      for (let c = Math.floor((x - r) / GATE_CELL); c <= Math.floor((x + r) / GATE_CELL); c++)
+        for (let q = Math.floor((y - r) / GATE_CELL); q <= Math.floor((y + r) / GATE_CELL); q++)
+          for (const s of this.hedgeSegs.get(c * 4096 + q) ?? []) {
+            if (seen2.has(s)) continue;
+            seen2.add(s);
+            const dx = s[2] - s[0], dy = s[3] - s[1], l = dx * dx + dy * dy;
+            if (l <= 0) continue;
+            const k = Math.max(0, Math.min(1, ((x - s[0]) * dx + (y - s[1]) * dy) / l)), px = s[0] + k * dx, py = s[1] + k * dy, d = Math.hypot(x - px, y - py);
+            if (d <= bd) {
+              bd = d;
+              best = { x: px, y: py, yaw: Math.atan2(dy, dx) };
+            }
+          }
+      return best;
+    }
+    /**
+     * The cut order landing (by radio, the player's): where it may no longer cut there, it holds, as the core's hold does
+     * (as wait does). Else it drives for the nearest point of the hedge line and on through it, the cut its order's.
+     */
+    cutGo(u, x, y) {
+      if (this.cutWhy(u, x, y) !== null) {
+        u.order = null;
+        u.path = [];
+        u.keepFace = null;
+        delete u.aim;
+        delete u.search;
+        delete u.searchR;
+        delete u.cut;
+        return;
+      }
+      const p = this.hedgeNear(x, y, LAND2.cutters.near);
+      const k = Math.hypot(p.x - u.x, p.y - u.y), [ux, uy] = k > 1e-6 ? [(p.x - u.x) / k, (p.y - u.y) / k] : ahead(u.face);
+      const on = u.d / 2 + LAND2.cutters.near;
+      this.send(u, { kind: "move", x: p.x + ux * on, y: p.y + uy * on });
+      u.cut = { x: p.x, y: p.y, yaw: p.yaw };
+    }
+    /** The point lies on this block's front or inside its ground: its front has reached it. */
+    fronted(u, x, y) {
+      const [fx, fy] = ahead(u.face), dx = x - u.x, dy = y - u.y;
+      const along = dx * fx + dy * fy, across = Math.abs(dx * fy - dy * fx);
+      return along <= u.d / 2 + 0.5 && along >= -u.d / 2 && across <= u.w / 2;
+    }
+    /** A block its staff runs: the computer's, or one of the player's his staff fights (one he has not taken in hand). */
+    staffRuns(u) {
+      return this.ai[u.side] && !u.taken;
+    }
+    /** A gap within LAND.cutters.width of (x, y): a gate, or a cut under way. */
+    gapNear(x, y) {
+      const W2 = LAND2.cutters.width;
+      return this.gates.some((g2) => Math.hypot(g2.x - x, g2.y - y) <= W2) || this.cuts.some((c) => !c.open && Math.hypot(c.x - x, c.y - y) <= W2);
+    }
+    /**
+     * Each tick, once the blocks have moved ('before': where each stood; 'moved': where its own move took it, before the
+     * blocks were eased apart): a block whose front has reached the hedge it was sent to cut begins its cut, unless a gap
+     * stands there already (another block's cut, or a gateway: it goes through that); one whose way there has ended short
+     * of it drops it. A block its staff runs that carries cutters, whose own way this tick (its move, never a shove from a
+     * neighbour) crossed a hedge line with no gap near the crossing, cuts there. Geometry only.
+     */
+    cutOn(before, moved) {
+      for (const u of this.units) {
+        if (u.cut) {
+          const c = u.cut;
+          if (!fighting2(u)) delete u.cut;
+          else if (this.fronted(u, c.x, c.y)) {
+            delete u.cut;
+            if (!this.gapNear(c.x, c.y)) this.cutBegin(u, c.x, c.y, c.yaw);
+          } else if (u.order?.kind !== "move") delete u.cut;
+          continue;
+        }
+        if (!live3(u) || !this.staffRuns(u) || !this.cutterOf(u)) continue;
+        const b0 = before.get(u.id), b1 = moved.get(u.id);
+        if (!b0 || !b1 || b0[0] === b1[0] && b0[1] === b1[1]) continue;
+        const p = this.hedgeCross(b0[0], b0[1], b1[0], b1[1]);
+        if (!p || this.gapNear(p[0], p[1])) continue;
+        const d = this.hedgeDir(p[0], p[1]);
+        this.cutBegin(u, p[0], p[1], d ? Math.atan2(d[1], d[0]) : 0);
+      }
+    }
+    /**
+     * A cut begins: kept, and told (a land:cut event, with when the gap opens, the hedge's yaw and the gap's width). Its
+     * words go to the player for his own blocks; an enemy's is told with no words, for the 3D game alone (as every event
+     * of a block he has not met is kept from him).
+     */
+    cutBegin(u, x, y, yaw) {
+      const C4 = LAND2.cutters, r12 = (v) => Math.round(v * 10) / 10, r32 = (v) => Math.round(v * 1e3) / 1e3;
+      const c = { t0: r32(this.t), t1: r32(this.t + C4.secs), unit: u.id, side: u.side, x: r12(x), y: r12(y), yaw: r32(yaw), width: C4.width, known: this.known(u), open: false };
+      this.cuts.push(c);
+      const words = this.ticket[u.side].human || !this.ticket[other2(u.side)].human;
+      this.say({ what: "land:cut", unit: u.id, side: u.side, text: words ? `${this.named(u)} cuts a gap through the hedge.` : "", x: c.x, y: c.y, extra: { t1: c.t1, yaw: c.yaw, width: c.width } });
+    }
+    /** Each tick, as the clock moves on: a cut whose time is up stands open as a gate, for the drawn men from now. */
+    openCuts() {
+      for (const c of this.cuts) {
+        if (c.open || this.t < c.t1 - 1e-9) continue;
+        c.open = true;
+        this.gates.push({ x: c.x, y: c.y, yaw: c.yaw, width: c.width, kind: "cut" });
+        if (this.bocage) {
+          this.bars = null;
+          this.barsLaid++;
+        }
+      }
+    }
+    /** The cuts a side sees: its own, and those of enemy blocks it knew as they cut; every one with no side (a recording). */
+    cutView(as) {
+      if (!this.cutters || !this.cuts.length) return {};
+      const l = this.cuts.filter((c) => as === void 0 || c.side === as || c.known);
+      return l.length ? { cuts: l.map((c) => ({ t0: c.t0, t1: c.t1, unit: c.unit, x: c.x, y: c.y, yaw: c.yaw, width: c.width })) } : {};
+    }
+    // ---- The bocage (release 2) ---------------------------------------------------------------------------------------
+    //
+    // The design director's ruling 242 C1-B, built as amended 17:45Z from the historian ("unfitted tanks cross only at
+    // gaps"): the device's real point (the readings, C1-B: tanks without cutters "diving into the ditches nose first, to
+    // be stuck there and become easy targets"; the historian's K21). On a field with hedges, with the bocage switch on, a
+    // tank block that carries no cutters (before July 1944, or with the cutters switch off) crosses a hedge line only at a
+    // gap in it: a gateway the 3D game laid, or a gap a cutter tank has cut and that stands open ("Once a gap is open, any
+    // vehicle uses it"). It finds its way round to one, as round a river to its bridge (going 'hedged': the hedge lines
+    // bar the cells about them, barrier()), and is never eased over one. A tank block carrying cutters goes on as before:
+    // its cut is drawn (C1-A), and takes none of its time (the cut's LAND.cutters.secs stays the drawing's: the historian's
+    // bound of 3 real minutes or less, a breach and the drive to the next bank, holds it). Lorries, guns and foot are not
+    // held: the ruling holds tanks. Only the way changes: nothing here draws on the dice, and a block's way is found the
+    // same each time. It changes the fight (slower tanks in the bocage): measured against off (the cutters and smoke
+    // tests' (10b), LONG=1).
+    /** Whether a straight way from (x0, y0) to (x1, y1) crosses a hedge line where it is barred (barrier()): not at a gap. */
+    barredCross(x0, y0, x1, y1) {
+      const bar = this.barrier(), len = Math.hypot(x1 - x0, y1 - y0);
+      for (let skip = 0, p = this.hedgeCross(x0, y0, x1, y1); p; p = this.hedgeCross(x0, y0, x1, y1, skip)) {
+        if (bar[this.cellAt(p[0], p[1])]) return true;
+        skip = Math.hypot(p[0] - x0, p[1] - y0) + 0.01;
+        if (skip >= len) break;
+      }
+      return false;
+    }
+    /** Held back by hedges (the bocage on): a tank block without cutters, on a field with hedges. */
+    heldBack(u) {
+      return this.bocage && u.kind === "arm" && this.hedges.length > 0 && !this.cutterOf(u);
+    }
+    /**
+     * The field's cells a hedge line bars to a tank block without cutters: each cell whose middle lies within HEDGE_BAR
+     * cells of a hedge line, but for those within HEDGE_GAP cells of a gap in it (this.gates: a gateway, or a cut open).
+     * Laid when first asked and again once a gap opens.
+     */
+    barrier() {
+      if (this.bars) return this.bars;
+      const f = this.field, C4 = f.cols, R2 = f.rows, cs = f.cell, bar = new Uint8Array(C4 * R2), r = HEDGE_BAR * cs;
+      const mid = (i) => [i % C4 * cs + cs / 2, Math.floor(i / C4) * cs + cs / 2];
+      for (const h of this.hedges) for (let k = 1; k < h.points.length; k++) {
+        const [ax, ay] = h.points[k - 1], [bx, by2] = h.points[k];
+        const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - r) / cs)), c1 = Math.min(C4 - 1, Math.floor((Math.max(ax, bx) + r) / cs));
+        const r0 = Math.max(0, Math.floor((Math.min(ay, by2) - r) / cs)), r12 = Math.min(R2 - 1, Math.floor((Math.max(ay, by2) + r) / cs));
+        for (let q = r0; q <= r12; q++) for (let c = c0; c <= c1; c++) if (segGap(c * cs + cs / 2, q * cs + cs / 2, ax, ay, bx, by2) <= r) bar[q * C4 + c] = 1;
+      }
+      const gr = HEDGE_GAP * cs;
+      for (const g2 of this.gates) {
+        const c0 = Math.max(0, Math.floor((g2.x - gr) / cs)), c1 = Math.min(C4 - 1, Math.floor((g2.x + gr) / cs));
+        const r0 = Math.max(0, Math.floor((g2.y - gr) / cs)), r12 = Math.min(R2 - 1, Math.floor((g2.y + gr) / cs));
+        for (let q = r0; q <= r12; q++) for (let c = c0; c <= c1; c++) {
+          const [mx, my] = mid(q * C4 + c);
+          if (Math.hypot(mx - g2.x, my - g2.y) <= gr) bar[q * C4 + c] = 0;
+        }
+      }
+      return this.bars = bar;
+    }
+    // ---- Smoke on call (release 2) ----------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 14:19Z ("a section lays a smoke line to cover a crossing, when and where the player orders it");
+    // the design director's ruling 242, S1-A to S6, as amended 17:45Z (LAND.smoke). A block on foot, or lorried infantry,
+    // whose army has the means lays a screen along a line he draws: clipped to its own front about the line's middle,
+    // which must lie within its army's reach of its front (an army whose means is set down at its own front lays it there,
+    // for a line drawn on its ground or within LAND.smoke.front of its front), at once as the order lands (by radio, the
+    // player's, on its own place on the air beside his other order, gated again then); one at a time, its army's count a
+    // battle. While it stands (t < until), a direct blow whose line from the shooter's middle to the target's middle
+    // crosses it, either side's screen, strikes at LAND.smoke.share, never on top of the vague share nor of fire on cover
+    // at a block still hidden (blow); and, with hiding on, no hidden block is seen through it (spotHidden). Fire from far
+    // back is not touched: guns beyond LAND.guns.closeAt, mortar teams, and the air (the share a side holds back for its
+    // air strikes is held back from the blow whole, as if no screen stood). It gives no cover, does no harm and shakes no
+    // one. Both staffs lay one as a foot block of theirs goes in (ai.ts smokeIn). The drill draws each screen as the rounds
+    // that lay it, in place of its own salvoes (S6).
+    // The dice: where a screen acts it draws nothing and spares no draw. A screened blow draws its luck as it would; the
+    // veil (spotHidden) draws nothing. What follows from it changes the fight, and so the draws that come after, as every
+    // rule that changes the fight does: a weaker blow breaks a block later, and a block kept hidden by the veil (S1-A as the
+    // build spec reads it: nobody seen through a screen) is not fired on until it is found, so the blows it would have
+    // drawn are not drawn. That is the screen's effect, measured with the rest (S5-A), not a draw of its own.
+    /** This block's section smoke: the switch on, a block on foot or lorried infantry (not a support team) of an army with the means. */
+    smokeOf(u) {
+      if (!this.smoke || u.team || MOTION[u.kind] !== "foot" && u.kind !== "mot") return null;
+      return smokeMeans(u.nat);
+    }
+    /** The screen this block laid that still stands, if any. */
+    screenOf(u) {
+      return this.screens.find((s) => s.unit === u.id && this.t < s.until);
+    }
+    /** Metres from (x, y) to this block's front edge. */
+    frontGap(u, x, y) {
+      const [fx, fy] = ahead(u.face), cx = u.x + fx * u.d / 2, cy = u.y + fy * u.d / 2, hw = u.w / 2;
+      return segGap(x, y, cx - fy * hw, cy + fx * hw, cx + fy * hw, cy - fx * hw);
+    }
+    /**
+     * Why this block may not lay smoke now, in the player's words (129(d)); null where it may. With a line (x0, y0 to x1,
+     * y1, or only its middle x0, y0), whether it may lay it there; with none, whether it may lay one at all. Whose block it
+     * is, is the caller's to ask (the bridge's words).
+     */
+    smokeWhy(u, x0, y0, x1, y1) {
+      if (!this.smoke) return "There is no smoke to lay in this battle.";
+      if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
+      if (u.team || MOTION[u.kind] !== "foot" && u.kind !== "mot") return "Only troops on foot lay smoke.";
+      const m = smokeMeans(u.nat);
+      if (!m) return "Your army has no smoke to lay.";
+      if ((u.smokeLeft ?? m.count ?? LAND2.smoke.count) <= 0) return "They have no smoke left.";
+      if (this.screenOf(u)) return "Their last screen still stands.";
+      if (x0 === void 0 && y0 === void 0) return null;
+      const a = Number(x0), b = Number(y0), c = x1 === void 0 ? a : Number(x1), d = y1 === void 0 ? b : Number(y1);
+      if (![a, b, c, d].every(Number.isFinite)) return "Off the field.";
+      const mx = (a + c) / 2, my = (b + d) / 2;
+      if (m.reach > 0 && this.frontGap(u, mx, my) > m.reach + 1e-9) return `They can lay smoke up to ${m.reach} m ahead.`;
+      if (m.reach <= 0 && !this.fronted(u, mx, my) && this.frontGap(u, mx, my) > LAND2.smoke.front + 1e-9) return "They set their smoke down along their own front.";
+      return null;
+    }
+    /**
+     * Where this block lays its screen for the line drawn: along it, at most its own front long, about the line's middle
+     * (a point: its front long, square to its face); set down along its own front where its army's means is (reach 0).
+     */
+    smokeLine(u, l, m) {
+      const [fx, fy] = ahead(u.face), r12 = (v) => Math.round(v * 10) / 10;
+      let mx, my, dx = fy, dy = -fx, half = u.w / 2;
+      if (m.reach <= 0) {
+        mx = u.x + fx * u.d / 2;
+        my = u.y + fy * u.d / 2;
+      } else {
+        const [x0, y0, x1, y1] = l, len = Math.hypot(x1 - x0, y1 - y0);
+        mx = (x0 + x1) / 2;
+        my = (y0 + y1) / 2;
+        if (len > 1e-6) {
+          dx = (x1 - x0) / len;
+          dy = (y1 - y0) / len;
+          half = Math.min(len / 2, u.w / 2);
+        }
+      }
+      return [r12(mx - dx * half), r12(my - dy * half), r12(mx + dx * half), r12(my + dy * half)];
+    }
+    /**
+     * The smoke order landing (by radio, the player's): where it may no longer lay it there, nothing is laid and it goes
+     * on as it was. Else the screen is laid at once, its count goes down, and it is told (land:smoke); the drill draws its
+     * rounds. Its order is not touched: a block lays smoke as it goes.
+     */
+    lay(u, l) {
+      if (this.smokeWhy(u, l[0], l[1], l[2], l[3]) !== null) return;
+      const m = this.smokeOf(u), [x0, y0, x1, y1] = this.smokeLine(u, l, m);
+      const s = { id: this.screens.length + 1, side: u.side, unit: u.id, x0, y0, x1, y1, t: Math.round(this.t * 1e3) / 1e3, until: Math.round((this.t + m.hang) * 1e3) / 1e3 };
+      this.screens.push(s);
+      u.smokeLeft = (u.smokeLeft ?? m.count ?? LAND2.smoke.count) - 1;
+      this.say({ what: "land:smoke", unit: u.id, side: u.side, text: `${this.named(u)} lays a smoke screen.`, x: Math.round((x0 + x1) / 2 * 10) / 10, y: Math.round((y0 + y1) / 2 * 10) / 10, extra: { screen: s.id, until: s.until } });
+      this.drill?.screen(s);
+    }
+    /** A live screen lies across the line from (ax, ay) to (bx, by). */
+    screened(ax, ay, bx, by2) {
+      for (const s of this.screens) if (this.t < s.until && segHit(ax, ay, bx, by2, s.x0, s.y0, s.x1, s.y1) !== null) return true;
+      return false;
+    }
+    /** A blow struck straight at what it sees (foot, tanks, a machine-gun team, a gun over open sights), not from far back (guns beyond their close range, a mortar team). */
+    direct(u, t) {
+      if (u.team === "mor") return false;
+      return !(u.kind === "art" && !u.team && this.gap(u, t) >= gunsOf(u).closeAt);
+    }
+    /** The screens standing now, as a side sees them: every one, the laying block named where the side has met it. */
+    screenView(as) {
+      if (!this.smoke || !this.screens.length) return {};
+      const on = this.screens.filter((s) => this.t < s.until);
+      if (!on.length) return {};
+      return {
+        screens: on.map((s) => {
+          const u = this.unit(s.unit), named3 = as === void 0 || s.side === as || !u || this.known(u);
+          return { id: s.id, side: s.side, ...named3 ? { unit: s.unit } : {}, x0: s.x0, y0: s.y0, x1: s.x1, y1: s.y1, t: s.t, until: s.until };
+        })
+      };
     }
     /**
      * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
@@ -58686,14 +59775,14 @@
     // ---- Orders -----------------------------------------------------------------------------------------------------
     command(c, by2) {
       if (this.over) return false;
-      const mine4 = (ids2) => ids2.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort");
+      const mine4 = (ids2) => ids2.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort" && !(this.staffing && u.waits && !u.waits.free));
       const player = !this.staffing && this.ticket[by2].human;
       const hands = (us) => {
         if (this.perUnit && player) for (const u of us) this.take(u);
       };
       const air2 = this.radio && player && this.t > 0;
       const said = c.at, from2 = typeof said === "number" && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
-      const give = (u, go) => this.order(u, go, air2, from2);
+      const give = (u, go, smoke = false) => this.order(u, go, air2, from2, smoke);
       switch (c.do) {
         case "move": {
           const us = mine4(c.units);
@@ -58757,6 +59846,7 @@
             delete u.aim;
             delete u.search;
             delete u.searchR;
+            delete u.cut;
           });
           return us.length > 0;
         }
@@ -58769,6 +59859,7 @@
         case "withdrawAll": {
           if (c.side !== by2) return false;
           this.payAir();
+          this.payWaits();
           this.bar[by2] = this.breaking(by2);
           for (const u of this.units) if (u.side === by2 && fighting2(u)) {
             u.state = "withdrawn";
@@ -58781,7 +59872,10 @@
           if (c.side !== by2 && !this.ai[c.side]) return false;
           this.ai[c.side] = c.on;
           if (c.on) {
-            for (const u of this.units) if (u.side === c.side) delete u.taken;
+            for (const u of this.units) if (u.side === c.side) {
+              delete u.taken;
+              delete u.cut;
+            }
           }
           return true;
         }
@@ -58801,15 +59895,53 @@
             this.place(u, x, y, f !== void 0 && Number.isFinite(f) ? f : void 0);
             return true;
           }
+          if (c.do === "land:wait") {
+            if (!this.relief) return false;
+            const all = mine4(c.units ?? []), whys = this.waitWhyAll(all);
+            const us = all.filter((_, i) => whys[i] === null);
+            if (!us.length) return false;
+            hands(us);
+            for (const u of us) give(u, () => this.wait(u));
+            return true;
+          }
+          if (c.do === "land:cut") {
+            if (!this.cutters) return false;
+            const x = Number(c.x), y = Number(c.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+            const us = mine4(c.units ?? []).filter((u) => this.cutWhy(u, x, y) === null);
+            if (!us.length) return false;
+            hands(us);
+            const p = this.hedgeNear(x, y, LAND2.cutters.near), ax = Math.cos(p.yaw), ay = Math.sin(p.yaw);
+            const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
+            for (const u of us) {
+              const k = (u.x - cx) * ax + (u.y - cy) * ay, q = us.length > 1 ? this.hedgeNear(p.x + ax * k, p.y + ay * k, LAND2.cutters.near) : null;
+              const [px, py] = q ? [q.x, q.y] : [x, y];
+              give(u, () => this.cutGo(u, px, py));
+            }
+            return true;
+          }
+          if (c.do === "land:smoke") {
+            if (!this.smoke) return false;
+            const l = [c.x0, c.y0, c.x1 ?? c.x0, c.y1 ?? c.y0].map(Number);
+            if (!l.every(Number.isFinite)) return false;
+            const us = mine4(c.units ?? []).filter((u) => this.smokeWhy(u, l[0], l[1], l[2], l[3]) === null);
+            if (!us.length) return false;
+            for (const u of us) give(u, () => this.lay(u, l), true);
+            return true;
+          }
           if (c.do === "land:staff") {
             const us = mine4(c.units ?? []).filter((u) => u.taken);
-            for (const u of us) delete u.taken;
+            for (const u of us) {
+              delete u.taken;
+              delete u.cut;
+            }
             return us.length > 0;
           }
           if (c.do === "land:begin") {
             if (by2 !== this.setup) return false;
             this.setup = null;
             this.room = null;
+            for (const r of this.riders) this.riderTo(r);
             return true;
           }
           if (c.do === "land:fire" && c.target === void 0) {
@@ -58824,6 +59956,7 @@
               delete u.aim;
               u.search = [x, y];
               delete u.searchR;
+              delete u.cut;
             });
             return true;
           }
@@ -58837,6 +59970,7 @@
               u.path = [];
               u.keepFace = null;
               u.aim = t.id;
+              delete u.cut;
             });
             return true;
           }
@@ -58851,23 +59985,26 @@
     }
     /**
      * An order for one block: at once, or by radio (direct command, release 2), landing LAND.radio's delay later, longer
-     * when its headquarters is hit. A later order on the air replaces the one still on the way.
+     * when its headquarters is hit. A later order on the air replaces the one still on the way. A smoke order (smoke on
+     * call, release 2: 'smoke') has a place of its own on the air: it replaces only a smoke order of that block's still on
+     * the way, never its move or attack, nor is replaced by one, so "move, then smoke to cover it" lands both; and it
+     * leaves the block's orderAt (its move's or attack's) alone.
      */
-    order(u, go, air2, from2 = this.t) {
+    order(u, go, air2, from2 = this.t, smoke = false) {
       if (!air2) {
         go();
         return;
       }
       const R2 = LAND2.radio, hit = u.state === "wavering" || u.str < R2.hqAt * u.str0;
       const at4 = Math.round((from2 + R2.delay * (hit ? R2.cut : 1) * this.radioOf(u)) * 1e3) / 1e3;
-      this.pending = this.pending.filter((p) => p.id !== u.id);
+      this.pending = this.pending.filter((p) => p.id !== u.id || !p.smoke !== !smoke);
       if (at4 <= this.t + 1e-9) {
-        delete u.orderAt;
+        if (!smoke) delete u.orderAt;
         go();
         return;
       }
-      this.pending.push({ at: at4, id: u.id, go });
-      u.orderAt = at4;
+      this.pending.push(smoke ? { at: at4, id: u.id, go, smoke } : { at: at4, id: u.id, go });
+      if (!smoke) u.orderAt = at4;
     }
     /** The player's orders on the air that have reached their blocks (radio): carried out, if the block still fights. */
     landOrders() {
@@ -58878,11 +60015,12 @@
       for (const p of due) {
         const u = this.unit(p.id);
         if (!u) continue;
-        delete u.orderAt;
+        if (!p.smoke) delete u.orderAt;
         if (fighting2(u)) p.go();
       }
     }
     send(u, o) {
+      if (u.waits && !u.waits.free) this.endWait(u, "off");
       o.x = clamp5(o.x, u.w / 2, this.field.w - u.w / 2);
       if (o.kind !== "withdraw") o.y = clamp5(o.y, 10, this.field.h - 10);
       if (o.kind === "move" && this.wet(u, o.x, o.y, false) && groundAt(this.field, o.x, o.y) !== "bridge") {
@@ -58900,6 +60038,7 @@
       delete u.aim;
       delete u.search;
       delete u.searchR;
+      delete u.cut;
       const t = o.kind === "attack" && o.target !== void 0 ? this.unit(o.target) : void 0;
       const at4 = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
       u.path = at4 ? this.route(u, at4[0], at4[1]) : [];
@@ -58908,11 +60047,13 @@
     closeTo(u) {
       return reachOf(u) * (u.kind === "art" ? 0.85 : 0.6);
     }
+    // (A joiner over dry ground keeps off the water only where the river bends away from the dry lanes; with no bend it wades.)
     going(u) {
-      return u.dry && MOTION[u.kind] === "foot" ? "ashore" : MOTION[u.kind];
+      if (this.bocage && this.heldBack(u)) return "hedged";
+      return u.dry && MOTION[u.kind] === "foot" && (u.joined === void 0 || this.field.bend) ? "ashore" : MOTION[u.kind];
     }
     paceOf(m) {
-      return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND2.pace.foot, water: 0, blown: 0 }) : LAND2.pace[m];
+      return m === "ashore" ? this.ashore ?? (this.ashore = { ...LAND2.pace.foot, water: 0, blown: 0 }) : m === "hedged" ? LAND2.pace.tracks : LAND2.pace[m];
     }
     route(u, x, y) {
       const m = this.going(u), f = this.field;
@@ -58927,8 +60068,8 @@
       const near2 = (a, b) => Math.abs(a % f.cols - b % f.cols) <= 2 && Math.abs(Math.floor(a / f.cols) - Math.floor(b / f.cols)) <= 2;
       let w = this.ways.get(u.id), fresh5 = false;
       for (; ; ) {
-        if (!w || w.m !== m || !near2(w.goal, goal)) {
-          w = { m, goal, ...this.findWay(m, u.x, u.y, x, y) };
+        if (!w || w.m !== m || !near2(w.goal, goal) || m === "hedged" && w.bars !== this.barsLaid) {
+          w = { m, goal, ...this.findWay(m, u.x, u.y, x, y), ...m === "hedged" ? { bars: this.barsLaid } : {} };
           this.ways.set(u.id, w);
           fresh5 = true;
         }
@@ -58956,8 +60097,9 @@
      * Nothing where it stands on ground it can enter.
      */
     exit(m, x, y) {
-      const f = this.field, C4 = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y);
-      const go = (i) => pace[GROUNDS[f.ground[i]]] > 0;
+      const f = this.field, C4 = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y), bar = m === "hedged" ? this.barrier() : null;
+      const go = (i) => pace[GROUNDS[f.ground[i]]] > 0 && !(bar && bar[i]);
+      const mine4 = (i) => !bar || !this.barredCross(x, y, i % C4 * f.cell + f.cell / 2, Math.floor(i / C4) * f.cell + f.cell / 2);
       if (go(s)) return null;
       const wet = (i) => GROUNDS[f.ground[i]] === "water" || GROUNDS[f.ground[i]] === "blown";
       const inWet = wet(s), back = /* @__PURE__ */ new Map([[s, -1]]);
@@ -58970,7 +60112,7 @@
           const c = i % C4 + dc, r = Math.floor(i / C4) + dr, j = r * C4 + c;
           if (c < 0 || c >= C4 || r < 0 || r >= f.rows || back.has(j)) continue;
           back.set(j, i);
-          if (go(j)) {
+          if (go(j) && mine4(j)) {
             const d = dist(x, y, ...mid(j));
             if (d < bd || d === bd && j < best) {
               bd = d;
@@ -58993,9 +60135,9 @@
      * walk straight between. Where the place cannot be reached, the way ends at the nearest cell that can, and says so.
      */
     findWay(m, sx, sy, x, y) {
-      const f = this.field, C4 = f.cols, n = f.ground.length, pace = this.paceOf(m);
+      const f = this.field, C4 = f.cols, n = f.ground.length, pace = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
       const top = Math.max(...Object.values(pace)), s = this.cellAt(sx, sy), g2 = this.cellAt(x, y), gc = g2 % C4, gr = Math.floor(g2 / C4);
-      const go = (i) => pace[GROUNDS[f.ground[i]]];
+      const go = (i) => bar && bar[i] ? 0 : pace[GROUNDS[f.ground[i]]];
       const h = (i) => {
         const dc = Math.abs(i % C4 - gc), dr = Math.abs(Math.floor(i / C4) - gr);
         return (Math.max(dc, dr) + (Math.SQRT2 - 1) * Math.min(dc, dr)) / top;
@@ -59089,7 +60231,7 @@
       const stepX = dx ? cs / Math.abs(dx) : Infinity, stepY = dy ? cs / Math.abs(dy) : Infinity;
       let tx = dx ? (sx > 0 ? (c + 1) * cs - x0 : x0 - c * cs) / Math.abs(dx) : Infinity;
       let ty = dy ? (sy > 0 ? (r + 1) * cs - y0 : y0 - r * cs) / Math.abs(dy) : Infinity;
-      const pace = this.paceOf(m);
+      const pace = this.paceOf(m), bar = m === "hedged" ? this.barrier() : null;
       for (let n = Math.abs(c1 - c) + Math.abs(r12 - r); n > 0 && (c !== c1 || r !== r12); n--) {
         if (Math.abs(tx - ty) < 1e-9) {
           tx += stepX;
@@ -59106,13 +60248,32 @@
         }
         if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) return true;
         if (pace[GROUNDS[f.ground[r * f.cols + c]]] <= 0) return false;
+        if (bar && bar[r * f.cols + c]) return false;
       }
       return true;
     }
     // ---- The tick -----------------------------------------------------------------------------------------------------
     /** The squad brain, made the first time it is asked for (drill.ts). */
     drillOn(opts) {
-      return this.drill ?? (this.drill = new Drill(this, opts));
+      if (this.drill) return this.drill;
+      const { scale, ...rest } = opts ?? {};
+      const n = scale === true ? this.scale() : typeof scale === "number" ? scale : void 0;
+      return this.drill = new Drill(this, n !== void 0 ? { ...rest, scale: n } : rest);
+    }
+    /**
+     * The battle's one N (GR1, LAND.scale): every man both sides bring (their blocks' men0, as the battle opens) over the
+     * figure budget, rounded up to a multiple of the step; 1 when they fit the budget whole. Sedan, Normandy, Prokhorovka
+     * and Kursk give 20, 20, 35 and 125. Looks only. menOf: a block's men as counted (a fogged field counts what the
+     * player can know: the bridge's battleStart); a figure that is no number counts none. budget: the figures it is set
+     * for (the 2D page's dots: LAND.scale.page). The blocks of corps still coming up from next door count too.
+     */
+    scale(menOf = (u) => u.men0, budget = LAND2.scale.budget) {
+      const S3 = LAND2.scale, men2 = this.allBlocks().reduce((s, u) => {
+        const m = menOf(u);
+        return s + (Number.isFinite(m) ? Math.max(0, m) : 0);
+      }, 0);
+      const raw2 = men2 / budget;
+      return raw2 <= 1 ? 1 : Math.ceil(raw2 / S3.step) * S3.step;
     }
     /**
      * Opens the setup step for one side (release 2): only before the first step. Its guns and support teams may then be
@@ -59142,7 +60303,7 @@
     placeWhy(u, x, y) {
       if (!this.setup || u.side !== this.setup) return "The battle has begun.";
       if (this.placeAll ? u.kind === "fort" || !fighting2(u) : u.kind !== "art" || !fighting2(u)) return this.placeAll ? "Fortifications stay where they are built." : "Only guns and support teams are placed.";
-      if (u.dug) return "It is dug in where it stands.";
+      if (u.dug || u.waits) return "It is dug in where it stands.";
       return this.standWhy(u, x, y, this.room);
     }
     /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
@@ -59179,6 +60340,7 @@
       delete u.standFor;
       delete u.standFace;
       delete u.closing;
+      delete u.cut;
       this.ways.delete(u.id);
       u.home = [x, y];
       u.cover = groundAt(this.field, x, y);
@@ -59207,7 +60369,7 @@
      * tank block needs a model the sheet has duels for); null hands it back to vehicleOf.
      */
     vehicleIs(id, model) {
-      const u = this.unit(id);
+      const u = this.unit(id) ?? this.coming.find((c) => c.u.id === id)?.u;
       if (!u) return false;
       if (model === null) {
         this.models.delete(id);
@@ -59261,6 +60423,7 @@
       this.hedges = keep2;
       this.gates = gates.filter((g2) => Number.isFinite(g2.x) && Number.isFinite(g2.y) && g2.x >= 0 && g2.x <= W2 && g2.y >= 0 && g2.y <= H);
       this.hedgeMap = keep2.length ? map : null;
+      this.bars = null;
       this.hedgeSegs.clear();
       for (const h of keep2) for (let i = 1; i < h.points.length; i++) {
         const [ax, ay] = h.points[i - 1], [bx, by2] = h.points[i], seg = [ax, ay, bx, by2];
@@ -59442,8 +60605,9 @@
           continue;
         }
         const heard = u.speed > 0.5 ? H.heard[MOTION[u.kind]] : 0;
-        const by2 = this.units.find((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= Math.max(sight2, heard));
-        if (by2) this.reveal(u, this.gap(u, by2) <= sight2 ? "seen" : "heard", by2);
+        const veiled = (e) => this.smoke && this.screens.length > 0 && this.screened(e.x, e.y, u.x, u.y);
+        const by2 = this.units.find((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= Math.max(sight2, heard) && (this.gap(u, e) <= heard || !veiled(e)));
+        if (by2) this.reveal(u, this.gap(u, by2) <= sight2 && !veiled(by2) ? "seen" : "heard", by2);
       }
     }
     step() {
@@ -59453,7 +60617,9 @@
         return;
       }
       if (this.hide && !this.hidStarted) this.hideStart();
+      if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
       this.landOrders();
+      if (this.relief && this.joinCorps.size) this.waitOn();
       if (this.t >= this.nextThink) {
         this.nextThink = this.t + LAND2.think;
         this.staffing = true;
@@ -59499,8 +60665,8 @@
           if (this.rng.next() < 1 - (1 - F.odds) ** (DT / F.every)) this.reveal(t, "searched", u);
         }
         if (this.airLeft[u.side] > 0) {
-          const held3 = blow2.dmg * this.airOn[u.side].share, raw2 = held3 / blow2.ground;
-          blow2.dmg -= held3;
+          const full = blow2.dmg / blow2.screen, held3 = full * this.airOn[u.side].share, raw2 = held3 / blow2.ground;
+          blow2.dmg = (full - held3) * blow2.screen;
           this.airBank[u.side].set(t.id, (this.airBank[u.side].get(t.id) ?? 0) + raw2);
           this.airLedger[u.side].withheld += raw2;
           kept2.set(t.id, (kept2.get(t.id) ?? 0) + raw2);
@@ -59522,12 +60688,18 @@
         this.airNerve[side5].set(id, (this.airNerve[side5].get(id) ?? 0) + raw2 * h.nerve);
       }
       for (const [id, h] of hurt2) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
+      if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
       for (const u of this.units) if (live3(u)) this.nerve(u);
+      const at4 = () => new Map(this.units.map((u) => [u.id, [u.x, u.y]]));
+      const before = this.cutters && this.hedges.length ? at4() : null;
       for (const u of this.units) if (live3(u)) this.move(u);
+      const moved = before ? at4() : null;
       this.spread();
+      if (before) this.cutOn(before, moved);
       if (this.hide) this.spotHidden();
       this.t = Math.round((this.t + DT) * 1e3) / 1e3;
+      if (this.cuts.length) this.openCuts();
       this.judge();
       this.drill?.step();
     }
@@ -59544,6 +60716,7 @@
         const there = groundAt(this.field, x, y), here = groundAt(this.field, u.x, u.y);
         if (inRiver(there) && !inRiver(here)) return false;
         const to = pace[there];
+        if (this.bocage && this.going(u) === "hedged" && this.barredCross(u.x, u.y, x, y)) return false;
         return to > LAND2.queue.hard || to > 0 && to >= pace[here];
       };
       const go = (u, ux, uy, push) => {
@@ -59705,6 +60878,11 @@
       if (t.kind === "arm" && LAND2.tanksClose.ground.includes(gt)) take2 *= LAND2.tanksClose.take;
       return take2;
     }
+    /**
+     * One block's blow on another this tick: its weight (dmg), its nerve's multiplier, whether it lands on the front and
+     * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across
+     * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
+     */
     blow(u, t) {
       const gu = coverAt(this.field, u.x, u.y);
       let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND2.rate;
@@ -59719,7 +60897,10 @@
         nerveMul *= t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
       }
       if (u.team === "mor" && this.hide && this.units.some((f) => f.side === u.side && f.sprung !== void 0 && this.t - f.sprung < SP.secs && f.engaged === t.id)) p *= SP.mortar;
-      if (t.unloc !== void 0 && this.t < t.unloc) p *= LAND2.hide.locate.fire;
+      const vague = t.unloc !== void 0 && this.t < t.unloc;
+      if (vague) p *= LAND2.hide.locate.fire;
+      const screen = this.smoke && !vague && !t.hid && this.screens.length && this.direct(u, t) && this.screened(u.x, u.y, t.x, t.y) ? LAND2.smoke.share : 1;
+      p *= screen;
       if (u.kind === "art") {
         const G5 = gunsOf(u), close3 = this.gap(u, t) < G5.closeAt;
         p *= close3 ? G5.close : G5.punch;
@@ -59737,11 +60918,11 @@
       const ground = this.groundTake(t);
       let take2 = ground;
       if (t.kind === "arm" && LAND2.alone.on) take2 *= this.alone(t, u);
-      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND2.hold.within) take2 *= this.holdTake(u);
+      if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND2.hold.within) take2 *= this.holdTake(u, t);
       if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take2 *= LAND2.double.exposed;
       const luck = 1 + LAND2.jitter * (this.rng.next() * 2 - 1);
       const dmg = p * am * amx * take2 * luck * (u.side === "att" ? this.fortune : 1 / this.fortune) * DT;
-      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground };
+      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen };
     }
     /**
      * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
@@ -59749,8 +60930,17 @@
      * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
-    suffer(t, dmg, nerveMul, from2 = [], blind = false) {
-      if (t.hid && dmg > 0 && !blind) this.reveal(t, "struck");
+    suffer(t, dmg, nerveMul, from2 = [], blind = false, bare = false) {
+      if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
+      if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND2.dug.keep) {
+        const take2 = this.groundTake(t), f = Math.min(take2, LAND2.cover[LAND2.wreck.cover]) / Math.max(1e-9, take2);
+        if (f < 1) {
+          const spared3 = dmg * (1 - f);
+          t.debt = (t.debt ?? 0) + spared3;
+          t.debtN = (t.debtN ?? 0) + spared3 * nerveMul;
+          dmg *= f;
+        }
+      }
       const share = dmg / Math.max(1e-9, t.power0);
       const before = t.str, had = t.figures;
       t.str = Math.max(0, t.str - share * t.str0);
@@ -59850,7 +61040,7 @@
         return;
       }
       if (u.still > N.still) u.mor = Math.min(u.mor0, u.mor + N.recover * DT);
-      if (u.str <= N.shattered * u.str0 || u.mor < N.rout) {
+      if (u.str <= N.shattered * u.str0 || u.mor < (u.waits?.late ? N.waver : N.rout)) {
         this.rout(u);
         return;
       }
@@ -59867,6 +61057,8 @@
       u.engaged = void 0;
       this.say({ what: "routing", unit: u.id, side: u.side, text: `${this.named(u)} breaks and runs.`, x: u.x, y: u.y });
       for (const f of this.units) if (f !== u && f.side === u.side && fighting2(f) && dist(f.x, f.y, u.x, u.y) < LAND2.nerve.near) f.mor = Math.max(0, f.mor - LAND2.nerve.friendRuns);
+      if (u.waits) this.endWait(u, "broke");
+      else if (this.repay.length) this.landNow(u);
     }
     move(u) {
       const k = u.kind;
@@ -60200,13 +61392,14 @@
         if (!live3(u)) continue;
         const k = u.state === "routing" ? 0.3 : 1;
         const d = due?.get(u.id), str = d === void 0 ? u.str : Math.max(0, u.str - d / Math.max(1e-9, u.power0) * u.str0);
-        s[u.side] += u.power0 * (str / u.str0) * k / tot;
+        s[u.side] += u.priced === void 0 ? u.power0 * (str / u.str0) * k / tot : Math.max(0, u.priced - u.power0 * (1 - str / u.str0)) * k / tot;
       }
+      for (const c of this.coming) s[c.u.side] += c.u.priced / tot;
       return s;
     }
     brokenShare(s) {
       let gone = 0;
-      for (const u of this.units) if (u.side === s && (u.state === "routing" || u.state === "gone")) gone += u.power0;
+      for (const u of this.units) if (u.side === s && (u.state === "routing" || u.state === "gone")) gone += weightOf(u);
       return gone / this.power[s];
     }
     /** The share of a side's power worn away on the field (strength lost, before anyone runs). */
@@ -60240,8 +61433,8 @@
       const r32 = (x) => Math.round(x * 1e3) / 1e3;
       const b = this.brink(s), w = b.worn / LAND2.spent[s], r = b.running / LAND2.breaks;
       const mine4 = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? "running" : "worn";
-      const on = mine4.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + u.power0, 0);
-      const steady3 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + u.power0, 0) / p0 : 0;
+      const on = mine4.filter((u) => u.state !== "withdrawn"), p0 = on.reduce((a, u) => a + weightOf(u), 0);
+      const steady3 = p0 > 0 ? on.filter((u) => u.state === "steady").reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
       return {
         side: s,
         bar: r32(b.bar),
@@ -60275,7 +61468,8 @@
      */
     freshShare(s) {
       let n = 0;
-      for (const u of this.units) if (u.side === s && fighting2(u) && this.fresh(u)) n += u.power0;
+      for (const u of this.units) if (u.side === s && fighting2(u) && this.fresh(u)) n += weightOf(u);
+      for (const c of this.coming) if (c.u.side === s) n += c.u.priced;
       return n / this.power[s];
     }
     /** A block that holds its army at the brink (freshShare): fresh, in a small army, or not yet in the fight. */
@@ -60295,6 +61489,7 @@
         if (u.gives || this.fresh(u)) continue;
         u.gives = true;
         if (u.order?.kind === "withdraw") continue;
+        if (u.waits) this.endWait(u, "gives");
         this.send(u, { kind: "withdraw", x: u.x, y: s === "att" ? 0 : this.field.h });
         u.engaged = void 0;
         this.say({ what: "land:gives", unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y });
@@ -60360,6 +61555,7 @@
     finish(winner, how, R2, why) {
       if (this.over) return;
       this.payAir();
+      this.payWaits();
       const lost = this.lostShares();
       const men2 = { att: 0, def: 0 };
       for (const u of this.units) {
@@ -60376,16 +61572,16 @@
         f.p += u.power0;
         forces.set(u.corps, f);
       }
+      for (const c of this.coming) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
       const loser = other2(winner);
       const pct11 = (p) => p < 1e-4 ? "none" : p < 5e-3 ? "less than 1%" : `about ${Math.round(p * 100)}%`;
       const cap12 = (t) => t[0].toUpperCase() + t.slice(1);
       const line = this.practice && this.ticket.def.human ? "Your line" : this.practice ? "Their line" : `The ${this.ticket.def.adj} line`;
-      const lines2 = [
-        how === "rout" ? this.brokeAfter(loser) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
-      ];
       const told2 = how === "rout" && why && why.by !== "none";
-      if (told2) lines2.push(breakLine(why, this.whose(loser), true));
-      if (how !== "objective") lines2.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : `${told2 ? `In all, ${this.sideOf("att", "attack")}` : cap12(this.sideOf("att", "attack"))} lost ${pct11(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct11(lost.def)}.`);
+      const lines2 = [
+        how === "rout" ? this.brokeAfter(loser, told2 ? why : void 0) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
+      ];
+      if (how !== "objective") lines2.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told2 ? `By the day's end, counting the rout, ${this.sideOf("att", "attack")} had lost ${pct11(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct11(lost.def)}.` : `${cap12(this.sideOf("att", "attack"))} lost ${pct11(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct11(lost.def)}.`);
       else if (this.contactAt !== null) lines2.push(`Before you handed the battle to the staff, ${this.sideOf("att", "attack")} had lost ${pct11(lost.att)} of its strength on the field, and ${this.sideOf("def", "defence")} ${pct11(lost.def)}.`);
       for (const u of this.units) if (live3(u) && u.state !== "routing") {
         u.act = "idle";
@@ -60405,7 +61601,7 @@
         R: Math.round(r * 1e3) / 1e3,
         level: levelOf2(r, men2.att > men2.def),
         lines: lines2,
-        forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0 })),
+        forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round(f.lost / f.p * 1e3) / 1e3 : 0, ...this.joinCorps.has(f.corps) ? { arrived: this.joinedAt.get(f.corps) ?? null } : {} })),
         ...how === "rout" || how === "destroyed" ? { broke: loser, ...why ? { brokeBy: why } : {} } : {},
         // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
         ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1e3) / 1e3 } } : {},
@@ -60434,13 +61630,16 @@
      * minute (b464(6)). Whole minutes made everything from half a minute to a minute and a half "a minute", the span most
      * routs at odds the card calls sure or hopeless fall in.
      */
-    brokeAfter(s) {
+    brokeAfter(s, why) {
       const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
       const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
-      if (halves === 0) return `${who} broke within half a minute of fighting.`;
       const n = ["", "a", "two", "three", "four", "five", "six"][m] ?? `${m}`;
-      const span2 = m === 0 ? "half a minute" : m === 1 ? half ? "a minute and a half" : "a minute" : `${n}${half ? " and a half" : ""} minutes`;
-      return `${who} broke after ${span2} of fighting.`;
+      const span2 = halves === 0 ? "within half a minute" : `after ${m === 0 ? "half a minute" : m === 1 ? half ? "a minute and a half" : "a minute" : `${n}${half ? " and a half" : ""} minutes`}`;
+      const when = `${who} broke ${span2} of fighting`;
+      if (!why) return `${when}.`;
+      const said = breakLine(why, who, true);
+      const after = said.startsWith(`${who} broke`) ? said.slice(`${who} broke`.length) : `: ${said}`;
+      return `${when}${after.startsWith(":") ? after : `,${after}`}`;
     }
     /** Each side's standing power against what it brought, as the staff reckons the day now. */
     standingShares(due) {
@@ -60453,7 +61652,7 @@
      * STAFF's question (ruling 226(5)).
      */
     chanceNow() {
-      const k = this.ticket.reckoning, sh = this.standingShares(this.airDue());
+      const k = this.ticket.reckoning, sh = this.standingShares(this.dueNow());
       if (k.odds * k.dice[0] >= RATIO.carry) return 1;
       if (k.odds * k.dice[1] < RATIO.carry) return 0;
       const now = k.odds * (Math.max(1e-6, sh.att) / Math.max(1e-6, sh.def));
@@ -60464,7 +61663,7 @@
      * where the card did not know the defence (b453), so HAND IT TO THE STAFF gives a range and never the true chance.
      */
     chanceAt(card) {
-      const k = this.ticket.reckoning, bal = this.standing(this.airDue()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+      const k = this.ticket.reckoning, bal = this.standing(this.dueNow()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
       if (card * k.dice[0] >= RATIO.carry) return 1;
       if (card * k.dice[1] < RATIO.carry) return 0;
       const now = card * r;
@@ -60476,6 +61675,7 @@
       const k = this.ticket.reckoning;
       for (const s of ["att", "def"]) if (this.airOn[s]) this.airSettled[s] = this.airLeft[s];
       this.payAir();
+      this.payWaits();
       const R2 = diceNow(k.odds, k.dice, this.standingShares(), this.rng.next());
       this.finish(R2 >= RATIO.carry ? "att" : "def", "objective", R2);
     }
@@ -60918,8 +62118,7 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      void as;
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView() };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as) };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -69668,16 +70867,16 @@
       share: total > 0 ? weight6 / total : 0
     };
   };
-  var weightOf = (f) => SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul, 0);
+  var weightOf2 = (f) => SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul, 0);
   function sideTicket(nat, adj, color, human, fleets, doctrine = []) {
-    const total = fleets.reduce((s, f) => s + weightOf(f), 0);
-    const top = [...fleets].sort((a, b) => weightOf(b) - weightOf(a))[0];
+    const total = fleets.reduce((s, f) => s + weightOf2(f), 0);
+    const top = [...fleets].sort((a, b) => weightOf2(b) - weightOf2(a))[0];
     return {
       nat,
       adj,
       color,
       human,
-      forces: fleets.map((f) => forceOf(f, weightOf(f), total)),
+      forces: fleets.map((f) => forceOf(f, weightOf2(f), total)),
       general: top?.admiral ?? null,
       ...doctrine.length ? { doctrine } : {}
     };

@@ -1,6 +1,7 @@
 #include "Campaign/CampaignGameMode.h"
 #include "Campaign/TheaterSpeed.h"
 #include "Battle/AirBattle.h"
+#include "Battle/LandBattle.h"
 #include "Battle/AirStage.h"
 
 #include "Campaign/CampaignFlags.h"
@@ -180,7 +181,9 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 	// campaign left alone.)
 	FString ShotFolder;
 	const bool bSceneTakesThem = FCString::Strifind(FCommandLine::Get(), TEXT("TheaterAirBattle=")) != nullptr
-		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterStage=")) != nullptr;
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterStage=")) != nullptr
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandBattle=")) != nullptr
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandLive=")) != nullptr;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), ShotFolder) && !bSceneTakesThem)
 	{
 		if (ACampaignPhotographer* Photographer = World->SpawnActor<ACampaignPhotographer>())
@@ -209,6 +212,38 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		if (AAirBattle* Air = World->SpawnActor<AAirBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
 		{
 			Air->ReplayWhenReady(AirKey);
+		}
+	}
+
+	// "-TheaterLandBattle=normandy-1944" plays a recorded ground battle in the 3D scene (release 2; the recordings are
+	// Content/Data/LandBattles, written by Tools/land_record): with "-TheaterLandBattleShots=<folder>" it takes the art
+	// director's pictures there and quits.
+	FString LandKey;
+	if (ALandBattle::WantsReplay(LandKey))
+	{
+		if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Land->ReplayWhenReady(LandKey);
+		}
+	}
+
+	// "-TheaterLandLive=normandy-1944" fights a set piece live in the same scene, the player its general (release 2):
+	// "-TheaterLandSide=att" (the default), "def" or "none" (a film); "-TheaterLandNoDeploy" skips the setup step.
+	FString LiveKey, LiveLook;
+	if (LandKey.IsEmpty() && ALandBattle::WantsLive(LiveKey))
+	{
+		if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Land->LiveWhenReady(LiveKey);
+		}
+	}
+	// "-TheaterLandTicket=<file>": a campaign battle's look (TC.battleLook's answer) or ticket fought live the same way, the
+	// test path for the campaign's battles opened in the land rules (release 2, the production lead's (a)).
+	else if (LandKey.IsEmpty() && ALandBattle::WantsLiveTicket(LiveLook))
+	{
+		if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Land->LiveTicketWhenReady(LiveLook);
 		}
 	}
 }

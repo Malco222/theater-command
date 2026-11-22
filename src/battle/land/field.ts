@@ -1047,13 +1047,18 @@ function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number,
   return { storeys, landmark, streetEdge };
 }
 
+/** Ground no fieldworks are dug in: the river, a bridge, houses, works already there. */
+const UNDUG: readonly Ground[] = ['water', 'bridge', 'blown', 'buildings', 'industry', 'bunker', 'works'];
+/** Whether men can dig fieldworks on this ground (digWorks; hold until relieved, release 2). */
+export const diggable = (g: Ground): boolean => !UNDUG.includes(g);
+
 /** Fieldworks dug where a defender stood dug in: the cells under its box become 'works'. */
 export function digWorks(f: LandField, x: number, y: number, w: number, d: number): void {
   for (let yy = y - d / 2 - 15; yy <= y + d / 2 + 15; yy += f.cell / 2) for (let xx = x - w / 2; xx <= x + w / 2; xx += f.cell / 2) {
     const c = Math.floor(xx / f.cell), r = Math.floor(yy / f.cell);
     if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
     const i = r * f.cols + c, k = GROUNDS[f.ground[i]];
-    if (k !== 'water' && k !== 'bridge' && k !== 'blown' && k !== 'buildings' && k !== 'industry' && k !== 'bunker' && k !== 'works') {
+    if (diggable(k)) {
       (f.dugInto ??= {})[i] = f.ground[i];
       f.ground[i] = G.works;
     }

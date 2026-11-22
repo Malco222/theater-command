@@ -75,16 +75,52 @@ export function thinkFor(b: LandBattle, side: Side): void {
     return;
   }
   const style = b.style[side];
+  // Hold until relieved (release 2): its blocks waiting for help, and those sent to them, are left out of its other orders.
+  const stand = b.relief && b.hasJoiners(side) ? relieve(b, side, mine, foes) : null;
   if (side === 'att') {
-    if (style) planned(b, side, style, mine, foes);
-    else plain(b, side, mine, foes);
+    // Corps come up from next door (release 2): sent, as a b407 reserve, where the attack is struck hardest, and till
+    // then held where they came on, no part of the attack's own plan. (No attacking block is a reserve otherwise.)
+    sendOn(b, side, mine, foes, stand);
+    const line = mine.some((u) => u.reserve === 'sent' || stand?.has(u.id)) ? mine.filter((u) => u.reserve !== 'sent' && !stand?.has(u.id)) : mine;
+    if (style) planned(b, side, style, line, foes);
+    else plain(b, side, line, foes);
     if (b.measured) seekFlanks(b, side, mine);
     if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
+    if (b.smoke) smokeIn(b, side, mine, foes);
     return;
   }
-  defend(b, side, style, mine, foes);
+  defend(b, side, style, mine, foes, stand);
   // A reserve sent in at a tank block goes round her too; the line's own tanks hold where they stand.
   if (b.measured) seekFlanks(b, side, mine.filter((u) => u.reserve === 'sent'));
+  if (b.smoke) smokeIn(b, side, mine, foes);
+}
+
+/**
+ * Smoke on call (release 2, ruling 242 S5-A: both staffs alike). A block of foot (or lorried infantry) going in at a
+ * block of theirs, with smoke to lay and no screen of its own standing, lays one once its target is within its fire's
+ * reach (LAND.reach): the attack's in its assault (an attack with a plan, once its main effort has gone in; the pinning
+ * line too from then), the defence's in a counter-attack, a reserve sent forward; never a block standing in its works
+ * (within LAND.hold.within of its place, as the drill's 'home'). So on the defence only a reserve sent forward lays
+ * smoke: a line block gone out after a wavering enemy, or round a neighbour's flank, is never further from its place
+ * than its leash (every style's defLeash, 300 m, LAND.hold.within's own), so it fights from its works. The screen
+ * lies square to the way to its target, its front long, its middle min(its army's reach, half the gap) beyond the
+ * middle of its front: across the ground it must cross. Ordered as every staff order is (no radio).
+ */
+function smokeIn(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[]): void {
+  const P = b.plan[side];
+  if (side === 'att' && P && P.went === null) return;
+  for (const u of mine) {
+    if (!hasTarget(u, foes) || (u.waits && !u.waits.free)) continue;
+    if (side === 'def' && u.reserve !== 'sent' && dist(u.x, u.y, u.home[0], u.home[1]) < LAND.hold.within) continue;
+    if (b.smokeWhy(u) !== null) continue;
+    const t = foes.find((f) => f.id === u.order!.target)!, gap = b.gap(u, t);
+    if (gap > reachOf(u)) continue;
+    const m = b.smokeOf(u)!, k = Math.hypot(t.x - u.x, t.y - u.y);
+    if (k < 1e-6) continue;
+    const dx = (t.x - u.x) / k, dy = (t.y - u.y) / k, [fx, fy] = [Math.sin(u.face), Math.cos(u.face)];
+    const on = Math.min(m.reach, gap / 2), mx = u.x + (fx * u.d) / 2 + dx * on, my = u.y + (fy * u.d) / 2 + dy * on, h = u.w / 2;
+    b.command({ do: 'land:smoke', units: [u.id], x0: mx - dy * h, y0: my + dx * h, x1: mx + dy * h, y1: my - dx * h }, side);
+  }
 }
 
 /**
@@ -96,6 +132,8 @@ export function thinkFor(b: LandBattle, side: Side): void {
 function searchCover(b: LandBattle, side: Side, mine: LandUnit[]): void {
   const F = LAND.hide.search, dir = side === 'att' ? 1 : -1, step = b.hedges.length ? 10 : b.field.cell;
   for (const u of mine) {
+    // A block waiting for help (hold until relieved) is never its staff's to order, its fire no more than its feet.
+    if (u.waits && !u.waits.free) continue;
     if ((u.kind === 'art' && !u.team) || u.engaged !== undefined || u.order?.kind === 'withdraw') { if (u.engaged === undefined) { delete u.search; delete u.searchR; } continue; }
     const ahead = Math.min(F.ahead, reachOf(u)), r = ahead / 2;
     const x = u.x, y = u.y + dir * (u.d / 2 + r);
@@ -201,13 +239,62 @@ function plain(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[]): v
   }
 }
 
+/**
+ * Where a side's line is struck, hardest first (b407): its blocks in a fight, the most worn first. Its guns firing from
+ * far back are not the line struck, as they are not contact (sim.ts contactAt).
+ */
+const struckOf = (mine: LandUnit[], foes: LandUnit[]): LandUnit[] => mine.filter((m) => m.kind !== 'art' && m.reserve !== 'held' && m.engaged !== undefined && foes.some((f) => f.id === m.engaged))
+  .sort((a, c) => a.str / a.str0 - c.str / c.str0);
+
+/**
+ * The attack's corps come up from next door (neighbours join the fight, release 2): each with nothing in its sights is
+ * sent, as the defence sends its reserve (b407), at the enemy its line is fighting where it is struck hardest. Until
+ * the line is struck, its general's plan (or the plain general) gives it its lane. No attacking block is a reserve
+ * otherwise, so where no corps joins nothing here moves.
+ */
+function sendOn(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[], skip: Set<number> | null = null): void {
+  const sent = mine.filter((u) => u.reserve === 'sent' && u.kind !== 'art' && u.order?.kind !== 'withdraw' && !hasTarget(u, foes) && !skip?.has(u.id));
+  if (!sent.length) return;
+  const struck = struckOf(mine, foes);
+  if (!struck.length) return;
+  sent.forEach((u, i) => by(b, side, u, foes.find((f) => f.id === struck[i % struck.length].engaged)!));
+}
+
+/**
+ * Hold until relieved (release 2; LandBattle.relief): once its line is struck, a staff tells the block struck hardest
+ * that may wait (waitWhy) to dig in for a corps coming up from next door, as many as there are such corps not yet
+ * waited for (one block each); and sends that corps' nearest block to each of its side's waiting blocks before anywhere
+ * else: at the enemy the waiting block is fighting, or else to where it stands. A block of the player's that waits is
+ * relieved so too wherever his staff thinks for the corps. Returns the blocks its other orders leave be: those waiting,
+ * and those sent to them.
+ */
+function relieve(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[]): Set<number> {
+  const skip = new Set<number>();
+  for (const u of struckOf(mine, foes)) if (b.waitWhy(u) === null) b.command({ do: 'land:wait', units: [u.id] }, side);
+  const waiting = b.units.filter((u) => u.side === side && ok(u) && u.waits && !u.waits.free).sort((a, c) => a.str / a.str0 - c.str / c.str0 || a.id - c.id);
+  for (const w of waiting) {
+    skip.add(w.id);
+    const near = (r: LandUnit): number => dist(r.x, r.y, w.x, w.y);
+    // (Never a block that is itself waiting: its staff may not order it, and it would hold the help back.)
+    const rs = mine.filter((r) => r.corps === w.waits!.corps && r.joined !== undefined && r.kind !== 'art' && r.order?.kind !== 'withdraw' && !(r.waits && !r.waits.free) && !skip.has(r.id));
+    if (!rs.length) continue;
+    const r = rs.reduce((m, x) => (near(x) < near(m) - 1e-9 || (Math.abs(near(x) - near(m)) <= 1e-9 && x.id < m.id) ? x : m));
+    skip.add(r.id);
+    const foe = w.engaged !== undefined ? foes.find((f) => f.id === w.engaged) : undefined;
+    if (foe) { if (!(r.order?.kind === 'attack' && r.order.target === foe.id)) by(b, side, r, foe); }
+    else if (!(r.order?.kind === 'move' && dist(r.order.x, r.order.y, w.x, w.y) <= LAND.alone.near)) b.command({ do: 'move', units: [r.id], x: w.x, y: w.y }, side);
+  }
+  return skip;
+}
+
 /** A block's weight now: what it strikes with, as its blows count it. */
 const weight = (u: LandUnit): number => u.power0 * (0.35 + 0.65 * (u.str / u.str0));
 
 /** Sets the attack's plan at its general's first thought (styles.ts: the numbers). */
 function makePlan(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: LandUnit[]): AttackPlan {
   const P: AttackPlan = { phase: s.plan ? 'guns' : 'assault', main: [], startY: null, role: {}, group: {}, spot: {}, arrived: null, went: null, hook: {} };
-  const rest = mine.filter((u) => u.kind !== 'art');
+  // (A corps from next door is no part of the plan: it comes up as a reserve.)
+  const rest = mine.filter((u) => u.kind !== 'art' && u.reserve !== 'sent');
   if (!s.plan || !rest.length) {
     for (const u of rest) P.role[u.id] = 'pin';
     P.went = 0;
@@ -427,7 +514,7 @@ function walk(b: LandBattle, side: Side, u: LandUnit, near: { line: LandUnit; fo
 // of it, or to take one that has come round a neighbour's flank, and never far from its own ground (its style's leash;
 // today's 300 m where it has none). In a capital's or a city's streets never out of them: an enemy south of the edge of
 // its core is left to come on into the houses (the design director, b529).
-function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[], foes: LandUnit[]): void {
+function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[], foes: LandUnit[], skip: Set<number> | null = null): void {
   const leash = style?.defLeash ?? 300, finish = style?.defFinish ?? 150;
   const edge = b.field.streetEdge, cell = b.field.cell;
   const outside = (f: LandUnit): boolean => {
@@ -437,8 +524,7 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
   };
   // Where the line is struck, hardest first: its blocks in a fight, the most worn first (b407). Its guns firing from
   // far back are not the line struck, as they are not contact (sim.ts contactAt).
-  const struck = mine.filter((m) => m.kind !== 'art' && m.reserve !== 'held' && m.engaged !== undefined && foes.some((f) => f.id === m.engaged))
-    .sort((a, c) => a.str / a.str0 - c.str / c.str0);
+  const struck = struckOf(mine, foes);
   let next = 0;
   const sendTo = (u: LandUnit): void => {
     const at = struck[next++ % struck.length];
@@ -450,7 +536,7 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
   // reserve is, once the line is struck. A methodical or mass defence's stands in the middle until then.
   const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
   for (const u of mine) {
-    if (u.kind === 'art' || u.order?.kind === 'withdraw') continue;
+    if (u.kind === 'art' || u.order?.kind === 'withdraw' || skip?.has(u.id)) continue;
     // Hidden in the woods (release 2): its line keeps there, holding its fire, until the enemy finds it.
     if (u.hid && u.reserve !== 'held') continue;
     if (u.reserve === 'held') { if (struck.length) sendTo(u); else if (near) walk(b, side, u, near); continue; }

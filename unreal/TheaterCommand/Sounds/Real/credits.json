@@ -1,5 +1,5 @@
 {
- "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section. The ground battle's own recordings (the Normandy dry run: each army's rifles, machine guns and sub-machine guns, the tanks' guns and engines, artillery and mortars, the shells landing, the men's falls, orders and kit) follow them, played by the mix's land section. The Prokhorovka battle's Soviet recordings (the Maxim, the Mosin's bolt, four orders), from the same approved battle pack, close the list.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -942,6 +942,1861 @@
      "creator": "none",
      "licence": "CC0",
      "page": "https://freesound.org/people/LOVEBURD/sounds/329616/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "artillery_fire_01",
+   "recording": "artillery_fire_01",
+   "what": "A field gun fires",
+   "sources": [
+    {
+     "title": "File:Croatian artillery units fire artillery.webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Croatian_artillery_units_fire_artillery.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "battle_far_loop",
+   "recording": "battle_far_loop",
+   "what": "A battle somewhere ahead",
+   "sources": [
+    {
+     "title": "File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "File:M240G Live Fire Prime Cuts.ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Distant WW2 Gunfire Kent.wav",
+     "creator": "Cheeseheadburger",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Cheeseheadburger/sounds/170478/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_01",
+   "recording": "body_fall_01",
+   "what": "A man falls heavily on dirt",
+   "sources": [
+    {
+     "title": "BODY FALL - V HVY - DIRT",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/leonelmail/sounds/504626/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_02",
+   "recording": "body_fall_02",
+   "what": "A man falls to the ground (take 2)",
+   "sources": [
+    {
+     "title": "A body falling to the ground, with leaf crush",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Wigglesworth/sounds/853591/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_03",
+   "recording": "body_fall_03",
+   "what": "A man falls to the ground (take 3)",
+   "sources": [
+    {
+     "title": "A body falling to the ground, with leaf crush",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Wigglesworth/sounds/853591/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_04",
+   "recording": "body_fall_04",
+   "what": "A man falls in grass, close",
+   "sources": [
+    {
+     "title": "Body fall in grass CLOSE.mp3",
+     "creator": "J.Zazvurek",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/J.Zazvurek/sounds/73583/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_05",
+   "recording": "body_fall_05",
+   "what": "A man falls to the ground (fifth take)",
+   "sources": [
+    {
+     "title": "Body fall_02.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/deleted_user_2104797/sounds/346694/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_cry_01",
+   "recording": "body_fall_cry_01",
+   "what": "A man is hit and cries out as he falls (take 1)",
+   "sources": [
+    {
+     "title": "S03-19 Body falls on dirt; grunts.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675923/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_cry_02",
+   "recording": "body_fall_cry_02",
+   "what": "A man is hit and cries out as he falls (take 2)",
+   "sources": [
+    {
+     "title": "S03-19 Body falls on dirt; grunts.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675923/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_cry_03",
+   "recording": "body_fall_cry_03",
+   "what": "A man is hit and cries out as he falls (take 3)",
+   "sources": [
+    {
+     "title": "S03-19 Body falls on dirt; grunts.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675923/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_cry_04",
+   "recording": "body_fall_cry_04",
+   "what": "A man is hit and cries out as he falls (take 4)",
+   "sources": [
+    {
+     "title": "S03-19 Body falls on dirt; grunts.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675923/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_cry_05",
+   "recording": "body_fall_cry_05",
+   "what": "A man is hit and cries out as he falls (take 5)",
+   "sources": [
+    {
+     "title": "S03-19 Body falls on dirt; grunts.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675923/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "body_fall_rubble",
+   "recording": "body_fall_rubble",
+   "what": "A man falls into rubble",
+   "sources": [
+    {
+     "title": "Body falls into debris",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/leonelmail/sounds/461697/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bolt_k98",
+   "recording": "bolt_k98",
+   "what": "A German rifleman works his bolt (Mauser 98k)",
+   "sources": [
+    {
+     "title": "Mauser 98k - bolt-action mechanism sound",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Walking.With.Microphones/sounds/802673/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bren_far_01",
+   "recording": "bren_far_01",
+   "what": "A British machine gun far off (Bren, take 1)",
+   "sources": [
+    {
+     "title": "S20-23 distant sound of a Bren machine gun.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675591/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bren_far_02",
+   "recording": "bren_far_02",
+   "what": "A British machine gun far off (Bren, take 2)",
+   "sources": [
+    {
+     "title": "S20-23 distant sound of a Bren machine gun.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675591/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bren_far_03",
+   "recording": "bren_far_03",
+   "what": "A British machine gun far off (Bren, take 3)",
+   "sources": [
+    {
+     "title": "S20-23 distant sound of a Bren machine gun.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/675591/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "building_collapse",
+   "recording": "building_collapse",
+   "what": "A building comes down",
+   "sources": [
+    {
+     "title": "merrimack-st-demolition.aif",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/alienistcog/sounds/125937/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bullet_crack",
+   "recording": "bullet_crack",
+   "what": "A bullet cracks past",
+   "sources": [
+    {
+     "title": "Real Bullet Flyby Sound",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/qubodup/sounds/855248/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bullets_incoming_01",
+   "recording": "bullets_incoming_01",
+   "what": "Bullets whine and ricochet round a unit (take 1)",
+   "sources": [
+    {
+     "title": "Incoming Ricochets.wav",
+     "creator": "rakurka",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/rakurka/sounds/109958/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bullets_incoming_02",
+   "recording": "bullets_incoming_02",
+   "what": "Bullets whine and ricochet round a unit (take 2)",
+   "sources": [
+    {
+     "title": "Incoming Ricochets.wav",
+     "creator": "rakurka",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/rakurka/sounds/109958/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "explosion_debris",
+   "recording": "explosion_debris",
+   "what": "A shell bursts close, with earth and stones falling",
+   "sources": [
+    {
+     "title": "Nearby explosion with debris.wav",
+     "creator": "juskiddink",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/juskiddink/sounds/108641/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "far_guns_01",
+   "recording": "far_guns_01",
+   "what": "A battery fires a long way off (salvo 1 of 3)",
+   "sources": [
+    {
+     "title": "File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "far_guns_02",
+   "recording": "far_guns_02",
+   "what": "A battery fires a long way off (salvo 2 of 3)",
+   "sources": [
+    {
+     "title": "File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "far_guns_03",
+   "recording": "far_guns_03",
+   "what": "A battery fires a long way off (salvo 3 of 3)",
+   "sources": [
+    {
+     "title": "File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "field_gun_fire_02",
+   "recording": "field_gun_fire_02",
+   "what": "A field gun fires (second take)",
+   "sources": [
+    {
+     "title": "File:10th Mountain Division Conducts M119A3 Howitzer LFX at AAAB (953744).webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:10th_Mountain_Division_Conducts_M119A3_Howitzer_LFX_at_AAAB_(953744).webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "front_rumble_loop",
+   "recording": "front_rumble_loop",
+   "what": "The front, far off (loop)",
+   "sources": [
+    {
+     "title": "File:Croatian artillery units fire artillery.webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Croatian_artillery_units_fire_artillery.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "distant explosions",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Kostrava/sounds/320788/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "File:Artillery Battery Barrage • U.S.-ROK Marines Live-Fire.webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "File:10th Mountain Division Conducts M119A3 Howitzer LFX at AAAB (953744).webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:10th_Mountain_Division_Conducts_M119A3_Howitzer_LFX_at_AAAB_(953744).webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "File:Explosions-LS100152.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "garand_clip_ping",
+   "recording": "garand_clip_ping",
+   "what": "The M1 Garand's empty clip pings out",
+   "sources": [
+    {
+     "title": "An M1 Garand clip being ejected w/ ping",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/serøutōnin--deprivəd/sounds/725398/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "garand_shot",
+   "recording": "garand_shot",
+   "what": "An American rifleman fires (M1 Garand)",
+   "sources": [
+    {
+     "title": "M1 Garand Rifle",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/nioczkus/sounds/386842/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "german_los",
+   "recording": "german_los",
+   "what": "\"Los, los, los!\" (German)",
+   "sources": [
+    {
+     "title": "Los, los, los.aif",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/boomerangquest/sounds/237290/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "german_schnell",
+   "recording": "german_schnell",
+   "what": "\"Schnell, schnell!\" (German)",
+   "sources": [
+    {
+     "title": "Schnell, schnell.aif",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/boomerangquest/sounds/237294/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "grenade_blast",
+   "recording": "grenade_blast",
+   "what": "A grenade goes off",
+   "sources": [
+    {
+     "title": "File:Explosions-LS100152.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "grenade_blast_02",
+   "recording": "grenade_blast_02",
+   "what": "A grenade goes off (second take)",
+   "sources": [
+    {
+     "title": "Nearby explosion with debris.wav",
+     "creator": "juskiddink",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/juskiddink/sounds/108641/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "grenade_blast_03",
+   "recording": "grenade_blast_03",
+   "what": "A grenade goes off (third take)",
+   "sources": [
+    {
+     "title": "2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/julujanus/sounds/768370/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "grenade_throw",
+   "recording": "grenade_throw",
+   "what": "A pin is pulled and a grenade thrown",
+   "sources": [
+    {
+     "title": "Grenade with Pin Handling",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/loganzsound/sounds/876008/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "ThrowGrenadeCloth.ogg",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Avreliy/sounds/611613/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "halftrack_idle_loop",
+   "recording": "halftrack_idle_loop",
+   "what": "A half-track stands with its engine running",
+   "sources": [
+    {
+     "title": "File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv",
+     "creator": "rafowell",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:M3_Halftrack_at_Ft_MacArthur,_CA_(M16A2_MGMC).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "kar98_shot",
+   "recording": "kar98_shot",
+   "what": "A German rifleman fires (Mauser 98k)",
+   "sources": [
+    {
+     "title": "Mauser 98k Shooting",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Walking.With.Microphones/sounds/802675/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "kit_rattle_01",
+   "recording": "kit_rattle_01",
+   "what": "A soldier's kit rattles (take 1)",
+   "sources": [
+    {
+     "title": "Harness Armour straps - Baldric or military equipment",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Vrymaa/sounds/805470/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "kit_rattle_02",
+   "recording": "kit_rattle_02",
+   "what": "A soldier's kit rattles (take 2)",
+   "sources": [
+    {
+     "title": "Harness Armour straps - Baldric or military equipment",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Vrymaa/sounds/805470/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "kit_rattle_03",
+   "recording": "kit_rattle_03",
+   "what": "A canteen rattles on a running man",
+   "sources": [
+    {
+     "title": "Metal_Canteen_Rattle_002.wav",
+     "creator": "duckduckpony",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/duckduckpony/sounds/204047/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "light_tank_loop",
+   "recording": "light_tank_loop",
+   "what": "A light tank on the move",
+   "sources": [
+    {
+     "title": "t26_moving_01.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/greatmganga/sounds/329800/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "lmg_burst_01",
+   "recording": "lmg_burst_01",
+   "what": "A machine gunner fires a short burst",
+   "sources": [
+    {
+     "title": "File:M240G Live Fire Prime Cuts.ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "lmg_burst_02",
+   "recording": "lmg_burst_02",
+   "what": "A machine gunner fires a short burst (second take)",
+   "sources": [
+    {
+     "title": "File:M240G Live Fire Prime Cuts.ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "lmg_burst_03",
+   "recording": "lmg_burst_03",
+   "what": "A machine gunner fires a short burst (third take)",
+   "sources": [
+    {
+     "title": "File:M240G Live Fire Prime Cuts.ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "lorry_idle_loop",
+   "recording": "lorry_idle_loop",
+   "what": "A wartime lorry stands with its engine running",
+   "sources": [
+    {
+     "title": "File:GMC CCKW 353 à Besançon le 8 septembre 2026.webm",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://commons.wikimedia.org/wiki/File:GMC_CCKW_353_%C3%A0_Besan%C3%A7on_le_8_septembre_2026.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "marching_loop_02",
+   "recording": "marching_loop_02",
+   "what": "A second column marches",
+   "sources": [
+    {
+     "title": "Marching 3.wav",
+     "creator": "WebbFilmsUK",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/WebbFilmsUK/sounds/200322/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mg_town_01",
+   "recording": "mg_town_01",
+   "what": "Machine guns among the houses (take 1)",
+   "sources": [
+    {
+     "title": "Heavy Mashine Guns Around (Background) WW2.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338241/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mg_town_02",
+   "recording": "mg_town_02",
+   "what": "Machine guns among the houses (take 2)",
+   "sources": [
+    {
+     "title": "Heavy Mashine Guns Around (Background) WW2.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338241/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mg_town_03",
+   "recording": "mg_town_03",
+   "what": "Machine guns among the houses (take 3)",
+   "sources": [
+    {
+     "title": "Heavy Mashine Guns Around (Background) WW2.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338241/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_fire",
+   "recording": "mortar_fire",
+   "what": "A mortar fires",
+   "sources": [
+    {
+     "title": "120mm Mortar Shell Shot 2",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/qubodup/sounds/854478/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mp40_burst_01",
+   "recording": "mp40_burst_01",
+   "what": "A German submachine gun fires (MP 38, take 1)",
+   "sources": [
+    {
+     "title": "mp 38 schmeisser (Variations) WW2.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338046/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mp40_burst_02",
+   "recording": "mp40_burst_02",
+   "what": "A German submachine gun fires (MP 38, take 2)",
+   "sources": [
+    {
+     "title": "mp 38 schmeisser (Variations) WW2.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338046/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_charge",
+   "recording": "order_charge",
+   "what": "\"Charge!\" (a British voice)",
+   "sources": [
+    {
+     "title": "Charge! - (Version 2) British Warrior",
+     "creator": "theuncertainman",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/theuncertainman/sounds/458068/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_01",
+   "recording": "order_english_01",
+   "what": "A battlefield order in English (line 1 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_02",
+   "recording": "order_english_02",
+   "what": "A battlefield order in English (line 2 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_03",
+   "recording": "order_english_03",
+   "what": "A battlefield order in English (line 3 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_04",
+   "recording": "order_english_04",
+   "what": "A battlefield order in English (line 4 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_05",
+   "recording": "order_english_05",
+   "what": "A battlefield order in English (line 5 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_06",
+   "recording": "order_english_06",
+   "what": "A battlefield order in English (line 6 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_07",
+   "recording": "order_english_07",
+   "what": "A battlefield order in English (line 7 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_08",
+   "recording": "order_english_08",
+   "what": "A battlefield order in English (line 8 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_09",
+   "recording": "order_english_09",
+   "what": "A battlefield order in English (line 9 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_10",
+   "recording": "order_english_10",
+   "what": "A battlefield order in English (line 10 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_11",
+   "recording": "order_english_11",
+   "what": "A battlefield order in English (line 11 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_12",
+   "recording": "order_english_12",
+   "what": "A battlefield order in English (line 12 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_13",
+   "recording": "order_english_13",
+   "what": "A battlefield order in English (line 13 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_14",
+   "recording": "order_english_14",
+   "what": "A battlefield order in English (line 14 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_15",
+   "recording": "order_english_15",
+   "what": "A battlefield order in English (line 15 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_16",
+   "recording": "order_english_16",
+   "what": "A battlefield order in English (line 16 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_english_17",
+   "recording": "order_english_17",
+   "what": "A battlefield order in English (line 17 of 17)",
+   "sources": [
+    {
+     "title": "military01_scottstoked.wav",
+     "creator": "shawshank73",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/shawshank73/sounds/95520/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_go",
+   "recording": "order_go",
+   "what": "\"Go, go, go!\" (a British voice)",
+   "sources": [
+    {
+     "title": "Go Go Go - (Version 2) Northern British Soldier",
+     "creator": "theuncertainman",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/theuncertainman/sounds/402643/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "order_move",
+   "recording": "order_move",
+   "what": "\"Move!\" (a British voice)",
+   "sources": [
+    {
+     "title": "Move!  - British Warrior",
+     "creator": "theuncertainman",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/theuncertainman/sounds/458073/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ricochet_01",
+   "recording": "ricochet_01",
+   "what": "A round ricochets",
+   "sources": [
+    {
+     "title": "Ricochet 3_2.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/78092/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "rifle_shot_01",
+   "recording": "rifle_shot_01",
+   "what": "A rifleman fires (1 of 4)",
+   "sources": [
+    {
+     "title": "File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "rifle_shot_02",
+   "recording": "rifle_shot_02",
+   "what": "A rifleman fires (2 of 4)",
+   "sources": [
+    {
+     "title": "File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "rifle_shot_03",
+   "recording": "rifle_shot_03",
+   "what": "A rifleman fires (3 of 4)",
+   "sources": [
+    {
+     "title": "File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "rifle_shot_04",
+   "recording": "rifle_shot_04",
+   "what": "A rifleman fires (4 of 4)",
+   "sources": [
+    {
+     "title": "File:U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll).ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "rifles_far_loop",
+   "recording": "rifles_far_loop",
+   "what": "Rifles crackle in the distance",
+   "sources": [
+    {
+     "title": "Distant WW2 Gunfire Kent.wav",
+     "creator": "Cheeseheadburger",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Cheeseheadburger/sounds/170478/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "shell_impact_far",
+   "recording": "shell_impact_far",
+   "what": "A shell lands a long way off",
+   "sources": [
+    {
+     "title": "File:Explosions-LS100152.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "shell_impact_near",
+   "recording": "shell_impact_near",
+   "what": "A shell lands close by",
+   "sources": [
+    {
+     "title": "File:Explosions-LS100152.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "shell_impact_near_02",
+   "recording": "shell_impact_near_02",
+   "what": "A shell lands close by (second take)",
+   "sources": [
+    {
+     "title": "2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/julujanus/sounds/768370/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "shell_impact_near_03",
+   "recording": "shell_impact_near_03",
+   "what": "A shell lands close by (third take)",
+   "sources": [
+    {
+     "title": "2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/julujanus/sounds/768370/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "street_battle",
+   "recording": "street_battle",
+   "what": "A street battle",
+   "sources": [
+    {
+     "title": "Street Battle: Lviv Ukraine - WW1 Reconstruction.wav",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/337773/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_gun_02",
+   "recording": "tank_gun_02",
+   "what": "A tank fires its main gun (second take)",
+   "sources": [
+    {
+     "title": "File:1st Infantry Division Performs M1A2 Abrams Live Fire in Bulgaria (984396).webm",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:1st_Infantry_Division_Performs_M1A2_Abrams_Live_Fire_in_Bulgaria_(984396).webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "tank_idle_loop",
+   "recording": "tank_idle_loop",
+   "what": "A tank stands with its engine running",
+   "sources": [
+    {
+     "title": "File:Tank T-34 Eesti Vabadusvõitluse Muuseumis.ogg",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://commons.wikimedia.org/wiki/File:Tank_T-34_Eesti_Vabadusv%C3%B5itluse_Muuseumis.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "tank_idle_sherman_loop",
+   "recording": "tank_idle_sherman_loop",
+   "what": "A Sherman stands with its engine running",
+   "sources": [
+    {
+     "title": "Sherman E8 (\"Easy 8\") tank starting up and running",
+     "creator": "nicStage",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/nicStage/sounds/368670/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_knocked_out",
+   "recording": "tank_knocked_out",
+   "what": "A tank is knocked out",
+   "sources": [
+    {
+     "title": "File:Explosions-LS100152.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "File:Explosions-LS100155.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "tank_knocked_out_02",
+   "recording": "tank_knocked_out_02",
+   "what": "A tank is knocked out (second take)",
+   "sources": [
+    {
+     "title": "2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/julujanus/sounds/768370/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "File:Explosions-LS100155.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Nearby explosion with debris.wav",
+     "creator": "juskiddink",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/juskiddink/sounds/108641/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_knocked_out_03",
+   "recording": "tank_knocked_out_03",
+   "what": "A tank is knocked out (third take)",
+   "sources": [
+    {
+     "title": "Nearby explosion with debris.wav",
+     "creator": "juskiddink",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/juskiddink/sounds/108641/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "File:Explosions-LS100155.ogg",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "2024-11-16 0750 field recording czestochowa zawodzie power plant chimney detonation explosion zoom h4npro",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/julujanus/sounds/768370/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_mg_burst",
+   "recording": "tank_mg_burst",
+   "what": "A tank's machine gun fires",
+   "sources": [
+    {
+     "title": "File:M240G Live Fire Prime Cuts.ogv",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "tank_shell_case",
+   "recording": "tank_shell_case",
+   "what": "An empty shell case clangs to the floor",
+   "sources": [
+    {
+     "title": "Bouncing Shell Casings (Various Sizes)",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/GryffDavid/sounds/318964/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_sherman_drive_loop",
+   "recording": "tank_sherman_drive_loop",
+   "what": "A Sherman drives on",
+   "sources": [
+    {
+     "title": "Sherman E8 (\"Easy 8\") tank driving",
+     "creator": "nicStage",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/nicStage/sounds/368671/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_start",
+   "recording": "tank_start",
+   "what": "A Sherman tank's engine is started",
+   "sources": [
+    {
+     "title": "Sherman E8 (\"Easy 8\") tank starting up and running",
+     "creator": "nicStage",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/nicStage/sounds/368670/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "victory_cry",
+   "recording": "victory_cry",
+   "what": "Ten men raise a victory cry",
+   "sources": [
+    {
+     "title": "VICTORY CRY REVERB 1.wav",
+     "creator": "chripei",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/chripei/sounds/165492/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "whistle_long",
+   "recording": "whistle_long",
+   "what": "An officer blows one long blast",
+   "sources": [
+    {
+     "title": "Whistle army old.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/deleted_user_2104797/sounds/324539/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "fire_loop",
+   "recording": "fire_loop",
+   "what": "A fire roars and crackles",
+   "sources": [
+    {
+     "title": "Fire Large Roar And Hiss With Crackles.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/theoneandtruelybitch/sounds/698209/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "fire_small_loop",
+   "recording": "fire_small_loop",
+   "what": "A small fire burns",
+   "sources": [
+    {
+     "title": "Fire Burning Loop",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/midimagician/sounds/249418/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "fire_start",
+   "recording": "fire_start",
+   "what": "Something catches fire",
+   "sources": [
+    {
+     "title": "R30-09-Fires Burns Wood and Metal Crackling.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/483323/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_01",
+   "recording": "footstep_01",
+   "what": "A boot on gravel (step 1 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_02",
+   "recording": "footstep_02",
+   "what": "A boot on gravel (step 2 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_03",
+   "recording": "footstep_03",
+   "what": "A boot on gravel (step 3 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_04",
+   "recording": "footstep_04",
+   "what": "A boot on gravel (step 4 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_05",
+   "recording": "footstep_05",
+   "what": "A boot on gritty ground (step 5 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_06",
+   "recording": "footstep_06",
+   "what": "A boot on gritty ground (step 6 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_07",
+   "recording": "footstep_07",
+   "what": "A boot on gritty ground (step 7 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_08",
+   "recording": "footstep_08",
+   "what": "A boot on gritty ground (step 8 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "knee_down",
+   "recording": "knee_down",
+   "what": "A soldier drops to one knee",
+   "sources": [
+    {
+     "title": "Personaje se arrodilla.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/josecruz98/sounds/393021/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "garand_reload",
+   "recording": "garand_reload",
+   "what": "An M1 Garand is reloaded",
+   "sources": [
+    {
+     "title": "An M1 Garand being reloaded while empty; full sequence",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/serøutōnin--deprivəd/sounds/725399/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bullet_crack",
+   "recording": "crack_woods_01",
+   "what": "A rifle round cracks past close in woods, and the woods answer",
+   "sources": [
+    {
+     "title": "gun shot.aif",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/trip2000/sounds/52284/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ricochet_whine",
+   "recording": "ricochet_whine_01",
+   "what": "A ricochet's whine as the round goes off",
+   "sources": [
+    {
+     "title": "Ricochet 1.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/74393/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ricochet_whine",
+   "recording": "ricochet_whine_02",
+   "what": "A ricochet's whine as the round goes off",
+   "sources": [
+    {
+     "title": "Ricochet 2.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/74394/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ricochet_whine",
+   "recording": "ricochet_whine_03",
+   "what": "A ricochet's whine as the round goes off",
+   "sources": [
+    {
+     "title": "Ricochet 3.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/74395/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "armour_small_arms",
+   "recording": "steel_hit_01",
+   "what": "A rifle or machine-gun round strikes a tank's armour and rings",
+   "sources": [
+    {
+     "title": ".45 targetside metal.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/cedarstudios/sounds/148837/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "armour_small_arms",
+   "recording": "steel_hit_02",
+   "what": "A rifle or machine-gun round strikes a tank's armour and rings",
+   "sources": [
+    {
+     "title": ".45 targetside metal.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/cedarstudios/sounds/148837/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "armour_small_arms",
+   "recording": "steel_hit_03",
+   "what": "A rifle or machine-gun round strikes a tank's armour and rings",
+   "sources": [
+    {
+     "title": ".45 targetside metal.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/cedarstudios/sounds/148837/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_01",
+   "what": "A mortar bomb lands at a middle distance",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact Medium Distance 01",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426164/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_02",
+   "what": "A mortar bomb lands at a middle distance",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact Medium Distance 02",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426163/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_far_01",
+   "what": "A mortar bomb lands far off",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact  Distant 01",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426166/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_far_02",
+   "what": "A mortar bomb lands far off",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact  Distant 03",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426167/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_engine_german",
+   "recording": "panzer_engine_loop",
+   "what": "A German tank on the move (the Maybach petrol V12 of the Panzer IV)",
+   "sources": [
+    {
+     "title": "Taistelunäytös Lippujuhlan päivä 2014 16 Stug IIIG",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_16_Stug_IIIG.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "maxim_burst",
+   "recording": "maxim_burst",
+   "what": "A Soviet machine gun fires (Maxim; also the Soviet tanks' DT)",
+   "sources": [
+    {
+     "title": "Maxim Russian machinegun",
+     "creator": "poissonmort",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/poissonmort/sounds/160773/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bolt_mosin",
+   "recording": "bolt_mosin",
+   "what": "A Soviet rifleman works his bolt (Mosin-Nagant)",
+   "sources": [
+    {
+     "title": "Mosin Nagant Bolt Action Cycle",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Zott820/sounds/370345/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_01",
+   "recording": "russian_order_01",
+   "what": "A Soviet order: \"Ogon! Ogon!\" (fire!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_02",
+   "recording": "russian_order_02",
+   "what": "A Soviet order: \"Strelyat!\" (open fire!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_03",
+   "recording": "russian_order_03",
+   "what": "A Soviet shout: \"Pobeda!\" (victory!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_04",
+   "recording": "russian_order_04",
+   "what": "A Soviet order: \"Davai! Davai!\" (come on!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
      "archive": "Freesound"
     }
    ]
