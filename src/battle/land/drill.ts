@@ -86,6 +86,16 @@ export interface Man {
   pr?: true;
   /** One of a section's scouts, out ahead of it on the move. */
   scout?: true;
+  /**
+   * Drawn as platoons (Drill platoons): which of the platoon's groups he is in. None (0) for the key man's own squad;
+   * then its other squads from 1, and last its headquarters.
+   */
+  sub?: number;
+  /** A squad's leader or the platoon's (drawn as a leader): his group forms on him. */
+  lead?: true;
+  /** Lorried foot drawn as platoons: his lorry (one to each squad and to the headquarters) and his place on its benches. */
+  lor?: number;
+  seat?: number;
   /** A tank's firing post (0 her own place, then one side and the other), the shots she has fired from it, and where she is
    * in her move to the next: backing out of sight, crossing behind the line, coming up to it. */
   post?: number;
@@ -121,6 +131,8 @@ export interface Man {
   /** His own fixed lean in the line, metres across and along, so no two blocks stand alike. */
   jx: number;
   jy: number;
+  /** A tank's way on (m a battle second): what she went, falling off at TANK_SHED when she checks. */
+  way?: number;
   /** Who he is helping (a fallen comrade's k), while he is. */
   aid?: number;
   /** The fire-and-movement cycle of his last rush: one rush a cycle, however early he gets there. */
@@ -199,6 +211,7 @@ const DR = data as unknown as {
     rifle: Record<string, { men: number; loaders: number; scouts: number }>;
     officer: number; mg: number; at: number; sapper: number; holder: number; gun: number; hmg: number; mortar: number;
     space: number; rows: number; files: number; ahead: number;
+    platoon: Record<string, { squads: number; hq: number }> & { step: number; rows: number };
   };
   tanks: { post: number; back: number; shots: [number, number] };
 };
@@ -245,6 +258,8 @@ const TANK_TOP = 12;
  * second (the 3D ground battle scene, 21 November 23:58Z, from the summer of 1944).
  */
 const TANK_GAIN = 3;
+/** How fast a tank's way falls off when she checks (m a battle second, each battle second): a step's pause loses little. */
+const TANK_SHED = 6;
 /** A tank's top speed now: TANK_TOP, or her block's pace where the rules drive it faster (as they drive it, not as it is jostled). */
 const tankTop = (sq: { speed: number; u: LandUnit }): number => Math.max(TANK_TOP, Math.min(sq.speed, sq.u.speed ?? 0));
 /**
@@ -414,11 +429,15 @@ export class Drill {
    * round him (DR.sections). Off, a model is one man, as before.
    */
   readonly sections: boolean;
+  /** Drawn as platoons (release 2; Brian, 22 November: "I want a lot of troops in the ground battles"): each rifle model is
+   * its platoon, its key man's squad leading, the platoon's other squads and its headquarters behind (sections too). */
+  readonly platoons: boolean;
 
-  constructor(b: LandBattle, opts: { sections?: boolean } = {}) {
+  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean } = {}) {
     this.b = b;
     this.seed = b.ticket.seed;
-    this.sections = !!opts.sections;
+    this.sections = !!opts.sections || !!opts.platoons;
+    this.platoons = !!opts.platoons;
     for (const u of b.units) this.squads.set(u.id, this.make(u));
   }
 
@@ -439,19 +458,46 @@ export class Drill {
       return { k, n: nn, role, team, x: u.x, y: u.y, face: u.face, pose: 'idle', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx, jy };
     };
     for (let k = 0; k < n; k++) men.push(man(k, k, roles[k][0], roles[k][1]));
-    // The rest of each model's section, after the key men (so a key man is always first of his k).
+    // The rest of each model's section, after the key men (so a key man is always first of his k); drawn as platoons, a
+    // rifle model's other squads (each on its own leader) and its headquarters after it. Lorried, each group has a lorry.
+    let lor = 0;
     if (this.sections) for (let k = 0; k < n; k++) {
-      const key = men[k];
-      sectionOf(u.nat, key.role).forEach(([role, pr, scout], i) => {
+      const key = men[k], mot = u.kind === 'mot' && this.platoons;
+      if (mot) { key.lor = lor; key.seat = 0; }
+      const sec = sectionOf(u.nat, key.role);
+      sec.forEach(([role, pr, scout], i) => {
         const m = man(k, 1000 + k * 32 + i + 1, role, key.team);
         m.j = i + 1; m.sec = k;
         if (pr) m.pr = true;
         if (scout) m.scout = true;
+        if (mot) { m.lor = lor; m.seat = i + 1; }
         men.push(m);
       });
+      lor++;
+      if (!this.platoons || key.role !== 'rifle') continue;
+      const P = platoonOf(u.nat);
+      let j = sec.length, x = 0;
+      const add = (sub: number, role: Role, seat: number, opts: { pr?: boolean; lead?: boolean } = {}): void => {
+        const m = man(k, 20000 + k * 128 + x++, role, key.team);
+        m.j = ++j; m.sec = k; m.sub = sub;
+        if (opts.pr) m.pr = true;
+        if (opts.lead) m.lead = true;
+        if (mot) { m.lor = lor; m.seat = seat; }
+        men.push(m);
+      };
+      // The platoon's other squads, each its leader and the same section as the key man's (its scouts in the squad).
+      for (let s = 1; s < P.squads; s++, lor++) {
+        add(s, 'rifle', 0, { lead: true });
+        sec.forEach(([role, pr], i) => add(s, role, i + 1, { pr }));
+      }
+      // Its headquarters: its leader and the men with him (a sergeant, the runners).
+      add(P.squads, 'rifle', 0, { lead: true });
+      for (let i = 1; i < P.hq; i++) add(P.squads, 'rifle', i);
+      lor++;
     }
-    // Lorried foot's lorries (drawn as sections, one to each section) and a battery's tractor (one to each gun).
-    const lorries = u.kind === 'mot' ? (this.sections ? n : n >= 4 ? 2 : 1) : u.kind === 'art' && !u.team ? (this.sections ? n : 1) : 0; // a team's crews carry their weapons
+    // Lorried foot's lorries (drawn as sections, one to each section; as platoons, one to each group) and a battery's
+    // tractor (one to each gun).
+    const lorries = u.kind === 'mot' ? (this.sections ? lor : n >= 4 ? 2 : 1) : u.kind === 'art' && !u.team ? (this.sections ? n : 1) : 0; // a team's crews carry their weapons
     for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, n: 100 + i, role: 'lorry', team: 0, x: u.x, y: u.y, face: u.face, pose: 'parked', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0 });
     const sq: Squad = {
       u, men, veh, fo: null, phase: 'rest', since: 0, nextThink: roll(this.seed, u.id, 3) * 0.5, lastStr: u.str, harm: 0, shelledAt: -99,
@@ -847,7 +893,7 @@ export class Drill {
       if (m.j === undefined) { keys.push(m); keyOf.set(m.k, m); }
       if (m.pr) continue;
       up.push(m);
-      if (m.j !== undefined) { const s = m.sec ?? m.k; let l = bySec.get(s); if (!l) bySec.set(s, (l = [])); l.push(m); }
+      if (m.j !== undefined) { const s = grp(m); let l = bySec.get(s); if (!l) bySec.set(s, (l = [])); l.push(m); }
     }
     const all = this.sections ? [...up].sort((a, c) => (a.sec ?? a.k) - (c.sec ?? c.k) || (a.j ?? 0) - (c.j ?? 0)) : up;
     return (sq.memo = { fig: u.figures, on, stand, struck: on ? [...stand, ...sq.veh] : stand, up, keys, keyOf, all, bySec });
@@ -858,8 +904,19 @@ export class Drill {
     const want = LEADS[m.role];
     if (!want) return undefined;
     const M = this.memo(sq), s = m.sec ?? m.k, key = M.keyOf.get(s);
-    if (key && key !== m && want.includes(key.role)) return key;
-    return M.bySec.get(s)?.find((x) => x !== m && want.includes(x.role));
+    if (key && key !== m && !m.sub && want.includes(key.role)) return key;
+    return M.bySec.get(grp(m))?.find((x) => x !== m && want.includes(x.role));
+  }
+
+  /**
+   * Where a platoon's group forms, about its key man's place (across, along; outer: toward the block's flank): its other
+   * squads one behind another, a little to either side, PLATOON.step metres apart; its headquarters inside the leading
+   * squad's wedge, behind its point. At rest, their knots side by side.
+   */
+  private inPlatoon(sq: Squad, sub: number, outer: number, tpl: 'line' | 'rest'): [number, number] {
+    const P = DR.sections.platoon, hq = sub >= platoonOf(sq.u.nat).squads;
+    if (tpl === 'rest') return hq ? [0, -9] : [(sub % 2 ? outer : -outer) * 11 * Math.ceil(sub / 2), 0];
+    return hq ? [0, -4] : [(sub % 2 ? -outer : outer) * 4, -P.step * sub];
   }
 
   /**
@@ -869,8 +926,12 @@ export class Drill {
    */
   private inSection(sq: Squad, m: Man, tpl: 'line' | 'rest'): [number, number] {
     const S = DR.sections, M = this.memo(sq), s = m.sec ?? m.k, key = M.keyOf.get(s);
-    const [ka, kl] = key ? this.slot(sq, key, tpl) : [m.jx * 3, 0];
-    const mates = M.bySec.get(s) ?? [m], i = Math.max(0, mates.indexOf(m));
+    let [ka, kl] = key ? this.slot(sq, key, tpl) : [m.jx * 3, 0];
+    // A platoon's other squads and its headquarters form about their own places behind the key man's squad, each on its
+    // leader as a section on its key man.
+    if (m.sub) { const [oa, ol] = this.inPlatoon(sq, m.sub, key?.team === 1 ? -1 : 1, tpl); ka += oa; kl += ol; }
+    if (m.lead) return [ka + m.jx * 0.2, kl + m.jy * 0.2];
+    const mates = (M.bySec.get(grp(m)) ?? [m]).filter((x) => !x.lead), i = Math.max(0, mates.indexOf(m));
     if (tpl === 'rest') {
       const n = Math.max(1, mates.length), ang = (i / n) * Math.PI * 2 + m.jx * 0.1, r = 3 + n * 0.25;
       return [ka + Math.cos(ang) * r, kl + Math.sin(ang) * r * 0.8];
@@ -1072,7 +1133,7 @@ export class Drill {
     // The machine gun at the outer end; the riflemen inward from it.
     const outer = side * Math.min(half, u.w / 4 + span / 2);
     const a = outer - side * (n > 1 ? (span * i) / (n - 1) : 0);
-    const l = u.d / 2 - 4 + (i % 2 ? (sec ? -S.rows : -3) : 0) + m.jy * 0.5;
+    const l = u.d / 2 - 4 + (i % 2 ? (sec ? -(this.platoons ? S.platoon.rows : S.rows) : -3) : 0) + m.jy * 0.5;
     return [a + m.jx * 0.4, l];
   }
 
@@ -1202,7 +1263,7 @@ export class Drill {
     const M = this.memo(sq);
     let best: Man | undefined, d = Infinity;
     for (const o of M.keys) { const dd = Math.hypot(o.x - m.x, o.y - m.y); if (dd < d) { d = dd; best = o; } }
-    if (best && this.sections) for (const o of M.bySec.get(best.k) ?? []) { const dd = Math.hypot(o.x - m.x, o.y - m.y); if (dd < d) { d = dd; best = o; } }
+    if (best && this.sections) for (let g = 0; g < 8; g++) for (const o of M.bySec.get(best.k * 8 + g) ?? []) { const dd = Math.hypot(o.x - m.x, o.y - m.y); if (dd < d) { d = dd; best = o; } }
     return best ? [best.x, best.y] : [e.x, e.y];
   }
 
@@ -1538,12 +1599,12 @@ export class Drill {
   /** The lorry a lorried man rides in: his own, by his place on the tray. */
   private lorryOf(sq: Squad, m: Man): Man { return sq.veh[this.lorryIx(sq, m)]; }
   /** Which of the block's lorries is his: by his place on the tray, or (drawn as sections) his section's own. */
-  private lorryIx(sq: Squad, m: Man): number { return (this.sections ? m.sec ?? m.k : m.k) % sq.veh.length; }
+  private lorryIx(sq: Squad, m: Man): number { return (m.lor ?? (this.sections ? m.sec ?? m.k : m.k)) % sq.veh.length; }
   /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
   private seat(sq: Squad, m: Man): [number, number] {
     const v = this.lorryOf(sq, m);
     // Drawn as sections, a section to a lorry (a gun's crew to its tractor): its key man first, close benches.
-    if (this.sections) { const j = m.j ?? 0; return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2)); }
+    if (this.sections) { const j = m.seat ?? m.j ?? 0; return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 1.4 - 0.6 * Math.floor(j / 2)); }
     const j = Math.floor(m.k / sq.veh.length);
     return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
   }
@@ -2014,6 +2075,7 @@ export class Drill {
       const x0 = m.x, y0 = m.y;
       walkOne(m);
       m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
+      if (m.role === 'tank') m.way = Math.max(m.went, (m.way ?? 0) - TANK_SHED * DT);
     };
     const walkOne = (m: Man): void => {
       // A man firing, kneeling or lying is still: he goes nowhere until his next order gets him up.
@@ -2040,8 +2102,8 @@ export class Drill {
           // step than she can.
           if (m.role === 'lorry') s = Math.min(s, Math.max(0, 16 * DT - 0.85 * Math.abs(wrap(m.face - f0))));
         }
-        // A tank gathers way as a tank does: no faster this step than TANK_GAIN past her last.
-        if (m.role === 'tank') s = Math.min(s, ((m.went ?? 0) + TANK_GAIN * DT) * DT);
+        // A tank gathers way as a tank does: no faster this step than TANK_GAIN past the way she has on.
+        if (m.role === 'tank') s = Math.min(s, ((m.way ?? 0) + TANK_GAIN * DT) * DT);
         if (d > 0) {
           let ux = dx / d, uy = dy / d;
           // On foot and short of his place, he steps round a mate closer than SPACE.men ahead of him or beside his way: his
@@ -2398,7 +2460,7 @@ export class Drill {
     const r1 = (v: number): number => Math.round(v * 10) / 10, r2 = (v: number): number => Math.round(v * 100) / 100;
     const one = (m: Man): MenOut => {
       // A rifle section's key man is its leader (the 3D game gives him his army's leader's weapon).
-      const o: MenOut = { k: m.k, r: this.sections && m.j === undefined && m.role === 'rifle' ? 'leader' : m.role, x: r1(m.x), y: r1(m.y), f: r2(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r1(m.went ?? 0) : 0, c: m.cover };
+      const o: MenOut = { k: m.k, r: (this.sections && m.j === undefined && m.role === 'rifle') || m.lead ? 'leader' : m.role, x: r1(m.x), y: r1(m.y), f: r2(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r1(m.went ?? 0) : 0, c: m.cover };
       if (m.j !== undefined) o.j = m.j;
       if (m.aim) o.a = [r1(m.aim[0]), r1(m.aim[1])];
       if (m.shot !== undefined) o.s = r1(m.shot);
@@ -2464,6 +2526,15 @@ export function rolesFor(kind: Kind, tray: number, n: number, team?: Team): [Rol
  * charges, and riflemen. A horse holder: two more. A field gun: her crew. A support team's weapon (drawn with its three):
  * its ammunition bearers. A tank: none (her crew is inside).
  */
+/** A man's group in his block: his section (its key man's k), and drawn as platoons which of its groups (Man.sub). */
+const grp = (m: Man): number => (m.sec ?? m.k) * 8 + (m.sub ?? 0);
+
+/** A rifle platoon by army (drawn as platoons): its squads, the key man's own among them, and its headquarters' men. */
+export function platoonOf(nat: string): { squads: number; hq: number } {
+  const P = DR.sections.platoon, p = P[nat] ?? P.default;
+  return { squads: Math.max(1, Math.min(7, p.squads)), hq: Math.max(1, p.hq) };
+}
+
 export function sectionOf(nat: string, key: Role): [Role, boolean, boolean][] {
   const S = DR.sections, out: [Role, boolean, boolean][] = [];
   const add = (r: Role, c: number, pr = false, scout = false): void => { for (let i = 0; i < c; i++) out.push([r, pr, scout]); };

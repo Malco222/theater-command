@@ -23,6 +23,8 @@
 // with { sections: true }, so each rules figure is a whole section, gun crew or team. A man is known by his block (b),
 // his figure (k) and, for every man but the figure's key man, his place in its section (j, from 1). A track and a round
 // carry j as the drill gives it: a round's j is the shooter's, its oj the man it struck. A man with no j is the key man.
+// Platoons (Brian, 22 November: "I want a lot of troops in the ground battles"): with { platoons: true } each rifle
+// figure is its whole platoon, its other squads and headquarters numbered on in j after the key man's squad.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -243,7 +245,7 @@ function fight(p: SetPiece, seed: number): Fought {
   // A tank's shells by the model it is drawn with, as battleStart sets them (looks only: nothing in the fight reads cal).
   for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
   // Full sections: every man of a section, crew and team drawn and falling on his own (looks only, ruling 217).
-  const drill = sim.drillOn({ sections: true });
+  const drill = sim.drillOn({ sections: true, platoons: true });
   const f = sim.field;
 
   // What the scene draws each block with (looks only): its soldiers' file, its tank or gun model.

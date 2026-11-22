@@ -240,6 +240,15 @@
 //   spot (creeping, or crawling if he lies low); a man on the move bends his way round a mate ahead of him, and where
 //   two men's ways cross the lesser (a loader for his gunner) checks his pace to let the other by. Each battery's
 //   spotter party takes a place of its own, 12 m or more from another's. Men of different blocks are not spaced.
+//   Platoons (release 2; Brian, 22 November: "I want a lot of troops in the ground battles"): the bridge runs the drill
+//   with { platoons: true } too, so each rifle model is its whole platoon by its army (data/battle/drill.json
+//   sections.platoon: the US three squads of 12 and five at its head, 41; Germany and Britain three of 10 and seven, 37;
+//   the rest by their own). The key man's squad leads; the platoon's other squads form one behind another 9 m apart, a
+//   little to either side, its headquarters inside the leading squad's wedge. Each squad and the headquarters has its
+//   own leader (r leader, with j), and j runs on through the platoon (a German platoon's key man has j 1 to 9 in his own
+//   squad, the next squad 10 to 19, the third 20 to 29, the headquarters 30 to 36). Gun crews, support teams, anti-tank
+//   teams, sappers, an officer's party and tanks stay as sections. Lorried, each squad and the headquarters has a lorry.
+//   Normandy draws about 2,000 men (690 as sections).
 //   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
 //   ... when they do hit ... it shows up on the receiving object"): rounds lists those fired in the last two battle
 //   seconds, each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last
@@ -600,7 +609,7 @@ export function battleCalls(h: BattleHooks) {
       if (sim.fog) sim.seen = cardKnows(g, t);
       // The men inside the blocks, for the 3D game to draw as men (TC.battleMen): looks only, never read by the fight.
       // Each model as its whole section (release 2: "the ground battle needs a lot more soldiers in it").
-      sim.drillOn({ sections: true });
+      sim.drillOn({ sections: true, platoons: true });
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);
@@ -677,7 +686,7 @@ export function battleCalls(h: BattleHooks) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
       if (!land) return null;
-      const d = land.drillOn({ sections: true });
+      const d = land.drillOn({ sections: true, platoons: true });
       return { t: land.t, blocks: d.view(ses.me), rounds: d.rounds(ses.me) };
     },
     battleAirRun(x: number, y: number, x1?: number, y1?: number) {

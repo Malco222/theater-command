@@ -637,7 +637,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
   /** The squad brain, made the first time it is asked for (drill.ts). */
-  drillOn(opts?: { sections?: boolean }): Drill { return (this.drill ??= new Drill(this, opts)); }
+  drillOn(opts?: { sections?: boolean; platoons?: boolean }): Drill { return (this.drill ??= new Drill(this, opts)); }
 
   /**
    * Opens the setup step for one side (release 2): only before the first step. Its guns and support teams may then be

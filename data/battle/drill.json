@@ -53,7 +53,13 @@
       "default": {"men": 10, "loaders": 1, "scouts": 0}
     },
     "officer": 4, "mg": 4, "at": 2, "sapper": 8, "holder": 3, "gun": 8, "hmg": 7, "mortar": 8,
-    "space": 3.5, "rows": 18, "files": 24, "ahead": 14
+    "space": 3.5, "rows": 18, "files": 24, "ahead": 14,
+    "platoon": {
+      "_about": "Drawn as platoons (Brian, 22 November 2026: 'I want a lot of troops in the ground battles'): each rifle model drawn as its rifle platoon, by army. squads: its squads, the key man's own leading and the rest one behind another, step metres apart, each on its own leader and the same as the key man's section; hq: its headquarters, its leader counted, inside the leading squad's wedge. The US 3 squads of 12 and 5 (41 men), Germany 3 of 10 and a Zugtrupp of 7 (37), Britain 3 of 10 and 7 (37), the Soviets 4 of 10 and 3, Japan 3 of 13 and 4, Italy 3 of 10 and 4, France 3 of 12 and 4; the rest 3 and 4. rows: metres between a block's front and second row of platoons. Gun crews, support teams, anti-tank teams, sappers, an officer's party and tanks stay as they are.",
+      "USA": { "squads": 3, "hq": 5 }, "GER": { "squads": 3, "hq": 7 }, "UK": { "squads": 3, "hq": 7 }, "SOV": { "squads": 4, "hq": 3 },
+      "JAP": { "squads": 3, "hq": 4 }, "ITA": { "squads": 3, "hq": 4 }, "FRA": { "squads": 3, "hq": 4 }, "default": { "squads": 3, "hq": 4 },
+      "step": 9, "rows": 27
+    }
   },
   "tanks": {
     "_about": "A tank halted in a fight fights from alternate posts (every army but a mass, whose scoot is 0): 'shots' [least, most] from one post, then she backs 'back' metres out of sight, crosses behind the line and comes up at her next post, 'post' metres to one side of her own place and then the other (her own place is where the rules lay her wreck, so she never goes far from it).",
