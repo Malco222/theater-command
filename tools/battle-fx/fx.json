@@ -1394,7 +1394,7 @@
    "_shower": "Masonry lumps and tiles in the shower, in the town's clod colour: shower 0.8, though town throws no earth clods."
   },
   "rock": {
-   "clods": 0.35,
+   "clods": 0.25,
    "shower": 1.0,
    "dust": 1.5,
    "smoke": [
@@ -1403,18 +1403,57 @@
     114
    ],
    "haze_lingers": 1.2,
-   "crater_k": 0.55,
-   "extra": "stone splinters, pale dust, a shallow chipped scar: the shell bursts on the surface, so less earth goes up and more of it is pale grit and flying chips; the cloud a grey-tan, paler than earth's, darker than the town's masonry dust",
+   "crater_k": 1.0,
+   "crown_low": 0.6,
+   "crown_wide": 1.35,
+   "smoke_of_ground": {
+    "grey": 0.4,
+    "shade": 0.9,
+    "top_shade": 0.78
+   },
+   "chips": {
+    "count": [
+     24,
+     36
+    ],
+    "r_m": [
+     0.05,
+     0.125
+    ],
+    "out_m": [
+     30,
+     60
+    ],
+    "up_deg": [
+     3,
+     12
+    ],
+    "glint": 1.5,
+    "skitter": 0.3,
+    "skitter_keep": [
+     0.4,
+     0.6
+    ],
+    "puff_r_m": [
+     0.25,
+     0.6
+    ],
+    "rest_s": [
+     1.5,
+     3.0
+    ]
+   },
+   "extra": "rock cannot be dug, so the blast vents sideways: earth throws a tall dark brown fountain, rock a low pale grey spray, stone chips skittering out over the ground, a pale bruise left where it struck",
    "paint": {
     "soil": [
-     132,
-     126,
-     116
+     150,
+     146,
+     140
     ],
     "heavy": [
-     88,
-     83,
-     76
+     132,
+     128,
+     122
     ],
     "dust": [
      184,
@@ -1422,9 +1461,9 @@
      166
     ],
     "clod": [
-     104,
-     98,
-     90
+     112,
+     108,
+     102
     ],
     "smoke": [
      128,
@@ -1432,14 +1471,14 @@
      114
     ],
     "splinter": [
+     188,
      182,
-     176,
-     164
+     170
     ],
     "stone": [
-     140,
-     134,
-     124
+     146,
+     141,
+     133
     ],
     "ring": [
      168,
@@ -1447,19 +1486,33 @@
      150
     ],
     "foot": [
-     44,
-     42,
-     40
+     150,
+     146,
+     140
     ],
+    "foot_dust": 0.6,
     "grain": 0.75,
     "scar": [
      58,
      55,
      52
     ],
-    "scar_rays": 1.4
+    "bruise": [
+     175,
+     170,
+     160
+    ],
+    "bruise_core": 0.4,
+    "bruise_lobes": [
+     4,
+     6
+    ],
+    "bruise_chips_m": [
+     3,
+     5
+    ]
    },
-   "_how": "Lead's theatre ask (17:46Z 22 November): a rock ground for Italy's hills, the desert's escarpments and stony steppe. Grit, not earth: the jets granular (grain), a third of the lumps fresh pale splinters (splinter), the shower stone, a pale dust skirt and veil that hangs (dust, haze_lingers), and a scar a little over half as wide (crater_k) with longer chipped rays and a grey-black scorch. Used only where the scene passes the word rock; until then rock ground draws as before."
+   "_how": "Lead's theatre ask (17:46Z 22 November): a rock ground for Italy's hills, the desert's escarpments and stony steppe; the art director's 20:25Z read gave it its own shape. Rock can't be dug, so the blast vents sideways: the crown's fan crown_low as tall and crown_wide as wide (each jet's way and reach squashed so, its body, foot and lumps as much), its jets pale grey (soil, heavy, foot about 130-150) with grit (grain) and dark lumps a minority. chips: stone splinters count of them (more for a bigger shell), r_m in radius, flung up_deg above level out to out_m (by the square root of the shell's size), each face catching the sun as it turns (glint); skitter of them hop on keeping skitter_keep of their speed, a dust puff of puff_r_m where each lands, and they lie rest_s before going. Scar: a pale bruise (paint.bruise) crater_k as wide, with bruise_lobes broad soft lobes, a dark middle bruise_core of its radius (paint.scar), and pale chips scattered bruise_chips_m out. Cloud: smoke_of_ground, the ground's own colour where the game can say (SetGroundColour), pulled grey of the way to its own grey, shade times as light and its top top_shade times; else paint.smoke. Used only where the scene passes the word rock; until then rock ground draws as before."
   },
   "woods": {
    "thrown_from_ground": 0.55,

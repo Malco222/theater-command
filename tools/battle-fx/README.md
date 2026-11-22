@@ -2046,19 +2046,30 @@ side toward the sun, and its shadow laid on the ground downwind, and liked the s
   with `FX_LOOK_HIT=0 FX_BARRAGE=8 FX_BARRAGE_STEP=25`.
 - Stills: `battle-fx/stills/from-above/from-above-sheet.png` (today left, on right).
 
-## Rock ground: stone splinters, pale dust, a shallow scar (grounds.rock, drawn only when the scene passes "rock")
+## Rock ground: a low pale spray, skittering chips, a pale bruise (grounds.rock, drawn only when the scene passes "rock")
 
 The production lead's theatre ask (17:46Z 22 November), with the environments thread: Italy's hills, the desert's
 escarpments and stony steppe were drawn as earth (the game's own ground table maps its rock cells to earth today).
+The art director's 20:25Z read of the first look gave rock its own shape: "earth throws a tall dark brown fountain,
+rock a low pale grey spray".
 
-- A new ground word, `rock`, beside earth, sand, snow, mud, town, woods and water. Grit, not earth: the jets granular
-  (`paint.grain` 0.75, smaller pieces and more of them, not drawn out), a third of the lumps fresh pale splinters
-  (`paint.splinter`), the shower stone (`paint.stone`, `shower` 1), fewer earth lumps (`clods` 0.35), a pale dust skirt
-  and veil (`dust` 1.5, `paint.dust` 184,178,166) that hangs a little longer (`haze_lingers` 1.2), and a grey-tan cloud
-  (`smoke` 128,122,114), paler than earth's and darker than the town's masonry dust.
-- Shallow scar: `crater_k` (new, any ground; none written, 1) scales the size's `crater_m`. Rock's is 0.55, with longer
-  chipped rays (`scar_rays` 1.4; 1.8 read as a spider) and a grey-black scorch (`paint.scar` 58,55,52).
-- Switch: the word itself. Until the scene passes "rock" (the land field's FxWords table), nothing changes; every
-  frame with today's words is byte for byte as before.
-- Preview: `FX_GROUND=138,132,122 ./fxpreview recipe out how105 rock 4,20,60,300 960x540`.
-- Stills: `battle-fx/stills/rock/rock-sheet.png` (earth, rock, town; 0.1, 0.7, 2 and 10 s).
+- Shape: rock can't be dug, so the blast vents sideways. `crown_low` (0.6) and `crown_wide` (1.35), new for any ground
+  (none written: 1, byte for byte as before), squash the crown's fan: each jet's way and reach, the spikes, the body,
+  the foot, the lumps and the shower, so the fan stands 0.6 as tall and spreads wider. Its jets pale grey (`soil`
+  150, `heavy` 132, `foot` 150 with `foot_dust` 0.6), granular (`grain` 0.75), dark lumps a minority (`clods` 0.25).
+  The darkest tenth of the burst measures 112,103,95 at 0.1 s and 107,103,97 at 0.7 s (earth 77,64,56 and 71,62,54).
+- Chips (`grounds.rock.chips`, new): 24 to 36 stone splinters 10 to 25 cm across, flung 3 to 12 degrees above level
+  out to 30 to 60 m, their fresh faces catching the sun as they turn (`glint`, Bit::bChip); 3 in 10 skitter on along
+  the ground keeping 0.4 to 0.6 of their speed, kicking up a little dust where they strike and come down again; they
+  lie 1.5 to 3 s. Their own dice; fewer far off (burst.far).
+- Scar (`paint.bruise`, new): a pale powder splash (175,170,160) with 4 to 6 broad, short, soft lobes, a small dark
+  middle 0.4 of its radius (`paint.scar`), and pale chips scattered 3 to 5 m out. `crater_k` (new, any ground)
+  scales the size's crater; rock's is 1.
+- Cloud (`smoke_of_ground`, new): the ground's own colour where the game can say (SetGroundColour), pulled `grey`
+  (0.4) of the way to its own grey, `shade` (0.9) times as light and its top `top_shade` (0.78) times, written to
+  land on that. One rule, no table: pale limestone 182,174,156 gives a warm pale cloud (162,158,148), a tan
+  escarpment 168,142,108 a tan one (156,143,127), grey steppe stone 124,122,118 a neutral one (143,142,140). Where
+  the game cannot say, `paint.smoke`.
+- Switch: the word itself. Until the scene passes "rock" (the land field's FxWords table), nothing changes.
+- Preview: `FX_GROUND=138,132,122 ./fxpreview recipe out how105 rock 3,21,300 960x540`.
+- Stills: `battle-fx/stills/rock/rock-mend-*.png`.

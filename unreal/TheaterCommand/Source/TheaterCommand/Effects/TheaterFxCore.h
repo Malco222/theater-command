@@ -281,6 +281,7 @@ namespace TheaterFx
 		double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much until SunFrom seconds old and in full by SunBy, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
+		bool bChip = false; // (grounds.<ground>.chips: a stone splinter flung low and fast, its face catching the sun as it turns, Glint)
 		bool bFarCull = false; // (a land hit's piece, burst.far: past gone_beyond_m and under gone_px across at its biggest, it takes no place and is not laid)
 		double LensNear = 0.0; // (game.lens_cap: its burst's own near_m, sizes.<size>.lens_near_m, where that is more than the cap's)
 		double Land = 1e9, Land2 = 1e9;
@@ -1143,7 +1144,17 @@ namespace TheaterFx
 			bool bFirst = false, bSplinter = false;
 			double Grain = 1.0; // (the crown's puffs as a share of their size: under 1, broken and granular, as snow)
 			double FirstAtFoot = 1.0, FirstAtTip = 1.0; // (how much of a jet is the ground's first colour, foot to tip)
+			bool bSmokeTop = false; // (grounds.<ground>.smoke_of_ground: the cloud's top from the ground the game shows there)
+			Rgb SmokeTop;
+			bool bBruise = false; // (paint.bruise: the scar a pale powder bruise with a small dark middle, as on rock, never a dark star)
+			Rgb Bruise;
+			double BruiseCore = 0.4, BruiseLobesLo = 4.0, BruiseLobesHi = 6.0, BruiseChipsLo = 3.0, BruiseChipsHi = 5.0;
 		};
+		// (grounds.<ground>.crown_low and crown_wide, while one burst's crown is laid: a hard ground's fan lower and wider,
+		// each jet's way and reach squashed so, its body and lumps as much)
+		double CrownLow = 1.0, CrownWide = 1.0;
+		std::string CrownGround; // (and its ground's word, for its chips: grounds.<ground>.chips)
+		void Squash(Vec& Dir, double& Reach) const;
 
 		const Recipe* Book = nullptr;
 		GroundFn GroundAt = nullptr;

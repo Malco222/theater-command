@@ -841,7 +841,30 @@ namespace TheaterFx
 		Out_.bScar = Has(P + "scar.0");
 		Out_.Scar = Picture(P + "scar", Out_.Heavy);
 		Out_.ScarRays = std::max(1.0, Num(P + "scar_rays", 1.0));
+		Out_.bBruise = Has(P + "bruise.0");
+		if (Out_.bBruise)
+		{
+			Out_.Bruise = Picture(P + "bruise", Out_.Dust);
+			Out_.BruiseCore = SafeNum(Num(P + "bruise_core", 0.4), 0.1, 1.0, 0.4);
+			Out_.BruiseLobesLo = SafeNum(Num(P + "bruise_lobes.0", 4.0), 1.0, 12.0, 4.0);
+			Out_.BruiseLobesHi = SafeNum(Num(P + "bruise_lobes.1", 6.0), Out_.BruiseLobesLo, 12.0, 6.0);
+			Out_.BruiseChipsLo = SafeNum(Num(P + "bruise_chips_m.0", 3.0), 0.0, 30.0, 3.0);
+			Out_.BruiseChipsHi = SafeNum(Num(P + "bruise_chips_m.1", 5.0), Out_.BruiseChipsLo, 30.0, 5.0);
+		}
 		return Out_;
+	}
+
+	void Battle::Squash(Vec& Dir, double& Reach) const
+	{
+		// (grounds.<ground>.crown_low and crown_wide: the crown's fan squashed, a jet's height by CrownLow and its spread by
+		// CrownWide, its way turned and its reach changed to match, so a jet still ends where the squashed fan has it)
+		const Vec S(Dir.X * CrownWide, Dir.Y * CrownWide, Dir.Z * CrownLow);
+		const double L = S.Length();
+		if (L > 1e-9)
+		{
+			Dir = S * (1.0 / L);
+			Reach *= L;
+		}
 	}
 
 	std::string Battle::SizeOfCalibre(const char* Calibre) const
@@ -1044,8 +1067,26 @@ namespace TheaterFx
 		{
 			const Vec At(AtIn.X, AtIn.Y, Height(AtIn.X, AtIn.Y));
 			const std::string G = "grounds." + Ground + ".";
-			const Paint P = PaintOf(Ground);
+			Paint P = PaintOf(Ground);
 			const double Slow = Num(G + "crown_slow", 1.0);
+			// (grounds.<ground>.smoke_of_ground, the art director's 20:25Z read of rock: the cloud the colour of the ground
+			// it rose from, as the game's screen shows it there, pulled grey of the way toward its own grey and shade
+			// times as light, its top top_shade times; written to land on that (picture.to_land). So one rule gives
+			// Italy's limestone a warm pale cloud, the desert's escarpment a tan one and the steppe's stone a neutral one.
+			// Where the game cannot say: the paint's smoke and the recipe's top, as before)
+			double GrR = 0.0, GrG = 0.0, GrB = 0.0;
+			if (Has(G + "smoke_of_ground.grey") && GroundColour(At, GrR, GrG, GrB))
+			{
+				const double Pull = SafeNum(Num(G + "smoke_of_ground.grey", 0.5), 0.0, 1.0, 0.5);
+				const double Shade = SafeNum(Num(G + "smoke_of_ground.shade", 0.9), 0.2, 1.5, 0.9);
+				const double TopShade = SafeNum(Num(G + "smoke_of_ground.top_shade", 0.75), 0.2, 1.5, 0.75);
+				const double Grey = 0.2126 * GrR + 0.7152 * GrG + 0.0722 * GrB;
+				const LandTable Land = LandTableOf();
+				auto Of = [&](double Is, double By) { return Land.ToLand(std::min(255.0, (Is + (Grey - Is) * Pull) * By)); };
+				P.Smoke = Rgb::FromPicture(Of(GrR, Shade), Of(GrG, Shade), Of(GrB, Shade));
+				P.bSmokeTop = true;
+				P.SmokeTop = Rgb::FromPicture(Of(GrR, TopShade), Of(GrG, TopShade), Of(GrB, TopShade));
+			}
 			const double DustK = Num(G + "dust", 1.0);
 			const double ClodK = Ground == "water" ? 0.0 : Num(G + "clods", 1.0);
 			const double ShowerK = Ground == "water" ? 0.0 : Num(G + "shower", ClodK);
@@ -1148,7 +1189,12 @@ namespace TheaterFx
 				{
 					Skirt(Now + 0.01, At, K, P, DustK, D, Size, Few < 1.0 ? std::pow(Few, LandSkirtPow) : 1.0);
 				}
+				CrownLow = SafeNum(Num(G + "crown_low", 1.0), 0.2, 2.0, 1.0);
+				CrownWide = SafeNum(Num(G + "crown_wide", 1.0), 0.5, 3.0, 1.0);
+				CrownGround = Ground;
 				Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D, Few);
+				CrownLow = CrownWide = 1.0;
+				CrownGround.clear();
 				Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D, Few < 1.0 ? Many * std::pow(Few, LandSmokePow) : Many);
 				FewAlphaPow = 0.0;
 				if (bLandFar && !bSeaFar && LandGonePx > 0.0 && Ground != "water")
@@ -1804,8 +1850,12 @@ namespace TheaterFx
 				       : bRanked && !bShort ? Pick(D, Path("mid_reach"), 0.5, 0.7)
 				       : Pick(D, Path("heavy_reach"), 0.3, 1.0);
 			}
-			const Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
-			const double ReachJ = CrownH * ReachF;
+			Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
+			double ReachJ = CrownH * ReachF;
+			if (CrownLow != 1.0 || CrownWide != 1.0)
+			{
+				Squash(Dir, ReachJ); // (a hard ground's fan: lower and wider)
+			}
 			const double V = ReachJ * KD * 1.12 / std::sqrt(Slow);
 			JetThrow.push_back(Dir * std::sqrt(2.0 * 9.8 * ReachJ));
 			const double Thick = bHeavy ? Pick(D, Path("heavy_thick"), 0.7, 2.6) : Pick(D, C + "fill_thick", 1.6, 3.0);
@@ -1977,8 +2027,12 @@ namespace TheaterFx
 		{
 			const double Az = D.U(0.0, 2.0 * Pi);
 			const double Lean = SpikeLean.Pick(D) * Half;
-			const Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
-			const double ReachS = Reaches[static_cast<size_t>(S)];
+			Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
+			double ReachS = Reaches[static_cast<size_t>(S)];
+			if (CrownLow != 1.0 || CrownWide != 1.0)
+			{
+				Squash(Dir, ReachS);
+			}
 			JetThrow.push_back(Dir * std::sqrt(2.0 * 9.8 * ReachS));
 			const double Thick = SpikeThick.Pick(D);
 			const double Rf = FootR * Thick * (P.Grain < 0.999 ? P.Grain : 1.0), Rt = TipR * Thick;
@@ -2038,8 +2092,8 @@ namespace TheaterFx
 		for (int I = 0; I < NBody; ++I)
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
-			const double Out_ = CrownH * BodyWide * std::pow(D.U(), 0.6);
-			const double Up_ = CrownH * BodyHigh * std::pow(D.U(), 1.3);
+			const double Out_ = CrownH * BodyWide * std::pow(D.U(), 0.6) * CrownWide;
+			const double Up_ = CrownH * BodyHigh * std::pow(D.U(), 1.3) * CrownLow;
 			const Vec To = Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_) + Tilt * Up_;
 			const double Rr = CrownH * BodyR.Pick(D) * LumpCoarse;
 			const double KB = 5.0;
@@ -2090,8 +2144,8 @@ namespace TheaterFx
 			for (int I = 0; I < NFoot; ++I)
 			{
 				const double A = D.U(0.0, 2.0 * Pi);
-				const double Out_ = CrownH * FootWide * std::pow(D.U(), 0.7);
-				const double Up_ = CrownH * FootHigh * std::pow(D.U(), 1.5);
+				const double Out_ = CrownH * FootWide * std::pow(D.U(), 0.7) * CrownWide;
+				const double Up_ = CrownH * FootHigh * std::pow(D.U(), 1.5) * CrownLow;
 				const Vec To = Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_) + Tilt * Up_;
 				const double KB = 6.0;
 				Bit B;
@@ -2129,8 +2183,9 @@ namespace TheaterFx
 		for (int I = 0; I < NMore; ++I)
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
-			const double Out_ = D.U(1.0, 6.0) * K;
-			const double Up_ = (2.0 + 9.0 * std::pow(D.U(), 2.0)) * K;
+			// (speeds: a squashed fan's lumps rise CrownLow as high and land CrownWide as far)
+			const double Out_ = D.U(1.0, 6.0) * K * CrownWide / std::sqrt(CrownLow);
+			const double Up_ = (2.0 + 9.0 * std::pow(D.U(), 2.0)) * K * std::sqrt(CrownLow);
 			Launch.push_back(Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_));
 			const double Lo = ClodLo, Hi = ClodHi;
 			LaunchR.push_back((Lo + (Hi - Lo) * std::pow(D.U(), 2.2)) * K);
@@ -2162,8 +2217,8 @@ namespace TheaterFx
 				else
 				{
 					const double A = D.U(0.0, 2.0 * Pi);
-					const double Out_ = OutS.Pick(D) * SpeedK;
-					const double Up_ = UpS.Pick(D) * SpeedK;
+					const double Out_ = OutS.Pick(D) * SpeedK * CrownWide / std::sqrt(CrownLow);
+					const double Up_ = UpS.Pick(D) * SpeedK * std::sqrt(CrownLow);
 					Launch.push_back(Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_));
 				}
 				LaunchR.push_back((Rs.A + (Rs.B - Rs.A) * std::pow(D.U(), Skew)) * K);
@@ -2313,6 +2368,99 @@ namespace TheaterFx
 				Bits.push_back(Puff);
 			}
 		}
+		// the chips (grounds.<ground>.chips, the art director's 20:25Z read of rock): stone splinters flung low, flat and
+		// fast out to out_m, bigger than the shower's lumps, each one's fresh face catching the sun as it turns (Glint).
+		// skitter of them hop on along the ground when they land, keeping skitter_keep of their speed, a little dust kicked
+		// up at each landing: the rock's own mark, seen from the general's height too. Dice of their own; burst.far, Few
+		const std::string Ch = "grounds." + CrownGround + ".chips.";
+		if (!CrownGround.empty() && Has(Ch + "count.0"))
+		{
+			Dice DC(PlaceKey(At) * 0xA24BAED4963EE407ull ^ 0xC41Bull);
+			const int NAll = static_cast<int>(SafeNum(Range(Ch + "count", 24.0, 36.0).Pick(DC), 0.0, 200.0, 30.0) * std::max(0.5, std::min(K * K, 3.0)) * Busy);
+			const int NChips = bFew ? std::min(NAll, std::max(std::min(NAll, 2), static_cast<int>(NAll * Few + 0.5))) : NAll;
+			const Span ChipR = Range(Ch + "r_m", 0.05, 0.125), ChipOut = Range(Ch + "out_m", 30.0, 60.0), ChipUp = Range(Ch + "up_deg", 3.0, 12.0);
+			const Span Keep = Range(Ch + "skitter_keep", 0.4, 0.6), ChipPuff = Range(Ch + "puff_r_m", 0.25, 0.6), ChipRest = Range(Ch + "rest_s", 1.5, 3.0);
+			const double ChipGlint = SafeNum(Num(Ch + "glint", 1.5), 0.0, 8.0, 1.5), Skitter = Clamp01(Num(Ch + "skitter", 0.3));
+			const double OutK = std::sqrt(K);
+			for (int I = 0; I < NChips; ++I)
+			{
+				const double A = DC.U(0.0, 2.0 * Pi);
+				const double E = Radians(std::clamp(ChipUp.Pick(DC), 0.5, 60.0));
+				const double Far = std::clamp(ChipOut.Pick(DC), 1.0, 300.0) * OutK;
+				const double V = std::sqrt(9.8 * Far / std::max(std::sin(2.0 * E), 1e-3)); // (to land that far on level ground)
+				Bit B;
+				B.Form = Bit::Shape::Streak;
+				B.bThrown = true;
+				B.bChip = true;
+				B.Born = T0 + 0.01 + DC.U(0.0, 0.03);
+				B.From = At + ZUp * (0.2 * K);
+				B.Vel = Vec(std::cos(A) * std::cos(E), std::sin(A) * std::cos(E), std::sin(E)) * V;
+				B.Gravity = 9.8;
+				B.R0 = B.R1 = std::clamp(ChipR.Pick(DC), 0.01, 1.0);
+				B.Col = P.Splinter * DC.U(0.9, 1.08);
+				B.Col2 = B.Col;
+				B.Alpha = 1.0;
+				B.FadeIn = 0.005;
+				B.Heart = 0.95;
+				B.Rim = 0.6;
+				B.LeastPx = ClodLeast;
+				Chunk(B, DC);
+				B.Glint = ChipGlint;
+				Throw(B);
+				const bool bSkit = DC.U() < Skitter;
+				if (bSkit)
+				{
+					// (its own hop, low and long: Throw's bounce is a clod's, which stops short)
+					const Vec Down = B.Vel + Vec(0.0, 0.0, -B.Gravity * B.Land);
+					const double KeepIs = Keep.Pick(DC);
+					B.Vel2 = Vec(Down.X * KeepIs, Down.Y * KeepIs, std::fabs(Down.Z) * 0.3);
+					double T2 = 0.02;
+					for (; T2 < 4.0; T2 += 0.01)
+					{
+						const Vec Q = B.At1 + B.Vel2 * T2 + Vec(0.0, 0.0, -0.5 * B.Gravity * T2 * T2);
+						if (B.Vel2.Z - B.Gravity * T2 < 0.0 && Q.Z <= Height(Q.X, Q.Y) + B.R0 * 0.5)
+						{
+							break;
+						}
+					}
+					B.Land2 = B.Land + T2;
+					B.At2 = B.At1 + B.Vel2 * T2 + Vec(0.0, 0.0, -0.5 * B.Gravity * T2 * T2);
+					B.At2.Z = Height(B.At2.X, B.At2.Y) + B.R0 * 0.5;
+				}
+				else
+				{
+					B.Vel2 = Vec();
+					B.Land2 = B.Land;
+					B.At2 = B.At1;
+				}
+				B.Life = B.Land2 + ChipRest.Pick(DC);
+				B.Hold = std::min(0.95, (B.Land2 + 1.0) / B.Life);
+				Bits.push_back(B);
+				if (bSkit)
+				{
+					// (a little dust where it strikes and where it comes down again)
+					for (int L = 0; L < 2; ++L)
+					{
+						Bit Puff;
+						Puff.Born = B.Born + (L == 0 ? B.Land : B.Land2);
+						Puff.From = L == 0 ? B.At1 : B.At2;
+						Puff.Vel = Vec(B.Vel2.X, B.Vel2.Y, 0.0) * 0.08 + Vec(0.0, 0.0, 0.5);
+						Puff.Drag = 2.0;
+						Puff.Windage = 0.5;
+						Puff.Life = DC.U(0.8, 1.4);
+						const double Pr = ChipPuff.Pick(DC) * (L == 0 ? 1.0 : 0.7);
+						Puff.R0 = Pr * 0.35;
+						Puff.R1 = Pr;
+						Puff.Col = P.Dust;
+						Puff.Col2 = P.Dust;
+						Puff.Alpha = L == 0 ? 0.5 : 0.35;
+						Puff.FadeIn = 0.03;
+						Puff.Hold = 0.1;
+						Bits.push_back(Puff);
+					}
+				}
+			}
+		}
 	}
 
 	double Battle::Thicker(double Alpha, double Bigger) const
@@ -2373,7 +2521,7 @@ namespace TheaterFx
 		const Rgb Warm = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		const Vec Lean = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0) * 0.15;
 		const std::string Sm = "burst.smoke.";
-		const Rgb Top = Picture("grounds." + Ground + ".smoke_top", Picture(Sm + "colour_top", Rgb::FromPicture(66, 64, 62))); // (a water spout's mist goes pale, never charcoal)
+		const Rgb Top = P.bSmokeTop ? P.SmokeTop : Picture("grounds." + Ground + ".smoke_top", Picture(Sm + "colour_top", Rgb::FromPicture(66, 64, 62))); // (a water spout's mist goes pale, never charcoal; smoke_of_ground: the ground's own)
 		const double TopShare = Num(Sm + "top_share", 0.8);
 		// (the top breaks into a few lumps, never one smooth dome)
 		const int NLobes = D.Whole(static_cast<int>(Num(Sm + "top_lobes.0", 3.0)), static_cast<int>(Num(Sm + "top_lobes.1", 5.0)));
@@ -2619,7 +2767,7 @@ namespace TheaterFx
 		const Span FrRise = Range(Fr + "rise_mps", 0.25, 0.9);
 		const double FrOutward = SafeNum(Num(Fr + "outward", 1.0), 0.2, 4.0, 1.0); // (over 1: more of it near the column, thinning out to its width)
 		const Rgb Warm = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
-		const Rgb Top = Picture("grounds." + Ground + ".smoke_top", Picture("burst.smoke.colour_top", Rgb::FromPicture(66, 64, 62)));
+		const Rgb Top = P.bSmokeTop ? P.SmokeTop : Picture("grounds." + Ground + ".smoke_top", Picture("burst.smoke.colour_top", Rgb::FromPicture(66, 64, 62)));
 		const double TopShare = SafeNum(Num(Fr + "top_share", Num("burst.smoke.top_share", 0.8)), 0.0, 1.0, 0.8);
 		const Span FrDust = Range(Fr + "dust", 0.0, 0.0); // (how much of the ground's dust is in each puff's smoke: lighter grey-brown)
 		const double FrLow = SafeNum(Num(Fr + "low", 1.3), 0.3, 4.0, 1.3); // (over 1: more of it low)
@@ -3325,22 +3473,46 @@ namespace TheaterFx
 			B.bFarCull = bLandFar && LandGonePx > 0.0 && !bSeaFar; // (burst.far: a mark too small to see far off is not laid)
 			Marks.push_back(B);
 		};
-		const Rgb Hole = bSnow ? Rgb::FromPicture(30, 28, 26) : P.Heavy * 0.6;
-		const Rgb Thrown = P.bScar ? P.Scar : (bSnow ? P.Soil.Mix(P.Dust, 0.35) : P.Heavy); // (art director 03:40Z: on snow a brown-black star)
-		const int NRing = D.Whole(6, 9);
-		for (int I = 0; I < NRing; ++I)
+		if (P.bBruise)
 		{
-			const double A = 2.0 * Pi * (I + D.U(-0.3, 0.3)) / NRing;
-			const double Dist = D.U(0.8, 0.5 + 0.55 * Ring_) * R;
-			// (longer rays sit further out, so they reach out from the hole rather than across it)
-			Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (Dist + 0.7 * R * (P.ScarRays - 1.0)), D.U(0.35, 0.6) * R, D.U(1.2, 1.8) * P.ScarRays, P.bScar ? A : A + Pi / 2.0, Thrown * D.U(0.8, 1.1), D.U(0.55, 0.8), 0.6, 0.3);
+			// (paint.bruise, the art director's 20:25Z read of rock: high explosive on rock leaves a pale bruise, never a
+			// dark star. A pale powder splash with a few broad, short, soft lobes, a small dark middle bruise_core of its
+			// radius across (paint.scar), and pale chips of stone scattered bruise_chips_m out)
+			Mark(At, R * 1.1, D.U(0.9, 1.15), D.U(0.0, 2.0 * Pi), P.Bruise, 0.7, 0.5, 0.0);
+			const int NLobe = D.Whole(static_cast<int>(P.BruiseLobesLo), static_cast<int>(P.BruiseLobesHi));
+			const double LobeFrom = D.U(0.0, 2.0 * Pi);
+			for (int I = 0; I < NLobe; ++I)
+			{
+				const double A = LobeFrom + 2.0 * Pi * (I + D.U(-0.25, 0.25)) / std::max(NLobe, 1);
+				Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (D.U(0.75, 1.05) * R), D.U(0.45, 0.65) * R, D.U(1.2, 1.6), A, P.Bruise * D.U(0.95, 1.05), D.U(0.55, 0.7), 0.4, 0.0);
+			}
+			Mark(At, P.BruiseCore * R, D.U(0.9, 1.2), D.U(0.0, 2.0 * Pi), P.bScar ? P.Scar : P.Heavy * 0.6, 0.85, 0.7, 0.0);
+			const int NChip = D.Whole(10, 16);
+			for (int I = 0; I < NChip; ++I)
+			{
+				const double A = D.U(0.0, 2.0 * Pi);
+				Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (R + D.U(P.BruiseChipsLo, P.BruiseChipsHi) * std::sqrt(D.U())), D.U(0.05, 0.12), D.U(1.0, 1.6), D.U(0.0, 2.0 * Pi), P.bSplinter ? P.Splinter : P.Bruise, 0.8, 0.8, 0.3);
+			}
 		}
-		Mark(At, R * 1.05, D.U(0.9, 1.15), D.U(0.0, 2.0 * Pi), Hole, 0.92, 0.9, 0.15);
-		const int NSpat = D.Whole(5, 8);
-		for (int I = 0; I < NSpat; ++I)
+		else
 		{
-			const double A = D.U(0.0, 2.0 * Pi);
-			Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (D.U(1.5, 2.2) * R), D.U(0.08, 0.18) * R, D.U(1.0, 2.0), A, Thrown, 0.7, 0.7, 0.4);
+			const Rgb Hole = bSnow ? Rgb::FromPicture(30, 28, 26) : P.Heavy * 0.6;
+			const Rgb Thrown = P.bScar ? P.Scar : (bSnow ? P.Soil.Mix(P.Dust, 0.35) : P.Heavy); // (art director 03:40Z: on snow a brown-black star)
+			const int NRing = D.Whole(6, 9);
+			for (int I = 0; I < NRing; ++I)
+			{
+				const double A = 2.0 * Pi * (I + D.U(-0.3, 0.3)) / NRing;
+				const double Dist = D.U(0.8, 0.5 + 0.55 * Ring_) * R;
+				// (longer rays sit further out, so they reach out from the hole rather than across it)
+				Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (Dist + 0.7 * R * (P.ScarRays - 1.0)), D.U(0.35, 0.6) * R, D.U(1.2, 1.8) * P.ScarRays, P.bScar ? A : A + Pi / 2.0, Thrown * D.U(0.8, 1.1), D.U(0.55, 0.8), 0.6, 0.3);
+			}
+			Mark(At, R * 1.05, D.U(0.9, 1.15), D.U(0.0, 2.0 * Pi), Hole, 0.92, 0.9, 0.15);
+			const int NSpat = D.Whole(5, 8);
+			for (int I = 0; I < NSpat; ++I)
+			{
+				const double A = D.U(0.0, 2.0 * Pi);
+				Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (D.U(1.5, 2.2) * R), D.U(0.08, 0.18) * R, D.U(1.0, 2.0), A, Thrown, 0.7, 0.7, 0.4);
+			}
 		}
 		const size_t MostMarks = 2400;
 		if (Marks.size() > MostMarks)
@@ -15055,6 +15227,14 @@ namespace TheaterFx
 				// (art director on cut 5: a fast clod drawn along its flight was a long dark slab across the men. A thrown
 				// lump is a lump: never longer than ThrownLong times its width)
 				Half = std::min(Half, ThrownLong * Width);
+			}
+			if (B.bChip && B.Glint > 0.0 && Age < B.Land2)
+			{
+				// (grounds.<ground>.chips: a stone splinter's fresh face catches the sun as it turns, a flash a few times a
+				// second while it flies and skitters; none at night)
+				const double Th = B.Turn + B.TurnRate * Age;
+				const float Spot = static_cast<float>(B.Glint * DayOf(Eye.SmokeLight) * std::pow(std::fabs(std::cos(Th)), 12.0));
+				Col = Rgb(Col.R + Spot * Eye.SunLight.R, Col.G + Spot * Eye.SunLight.G, Col.B + Spot * Eye.SunLight.B);
 			}
 			if (SoftGlowDay > 0.0)
 			{
