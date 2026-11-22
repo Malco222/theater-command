@@ -106,6 +106,6 @@
     "hold": {"mg": 350, "rifle": [700, 200, 100]},
     "counter": {"at": 45, "ahead": 12, "xp": [2, 1, 0.6]},
     "flank": {"rush": [14, 26], "out": 45},
-    "smoke": {"on": false, "every": 60, "spread": 10}
+    "smoke": {"on": true, "every": 60, "spread": 10}
   }
 }

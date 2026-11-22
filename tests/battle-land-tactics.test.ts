@@ -233,7 +233,7 @@ describe('in a battle (looks only, ruling 217)', () => {
   });
 });
 
-describe('smoke on the flank (off until the 3D scene draws it)', () => {
+describe('smoke on the flank (on: the 3D scene draws it)', () => {
   const ticket = () => withTeams(sampleTicket('plains', 1.3, { seed: 5, nat: { att: 'UK', def: 'GER' }, style: { att: 'methodical', def: 'bold' } }));
   const sig = (b: LandBattle): string => JSON.stringify({ over: b.over, t: b.t, units: b.units.map((u) => [u.id, u.state, u.str, u.mor, u.x, u.y, u.figures]) });
   const run = (on: boolean) => {
