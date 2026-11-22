@@ -166,6 +166,22 @@ const FREEZE = 'pac:freeze', PACT = 'pac:pact';
 /** True where the ties read: the grand campaign on the whole world, before its last act. */
 const reads = (g: Game): boolean => PACIFIC !== null && g.flags.open === 1 && !((g.flags.dom ?? 0) > 0) && farOn(g);
 const live = (g: Game, id: string): Nation | null => { const n = g.nations[id]; return n?.alive && !n.dormant ? n : null; };
+
+/**
+ * The month before which a war one great power owes another does not open, or 0 where no book names one (the design
+ * director's 07:18Z of 22 November 2026). Two rules name the Soviet Union's war with Japan: the tie below (three
+ * months after Germany is beaten, and at the stops that keep the book not before the book's month) and the finish
+ * rule (finish.ts, rulings 111 and 115: notice the month the chief enemy falls, war so many months after, at every
+ * stop). The finish rule asked no stop, so the tie's book month was never heard once Germany had fallen: read by
+ * the book on twelve wars, the Soviet war with Japan opened in months 58 to 68 in eleven of them, three months
+ * after a Germany that fell early, where the record has August 1945, and Mongolia's cavalry rode north China a
+ * year before its time. At the stops that keep the book the war now comes at the later of the two: the record held both
+ * (Yalta tied the entry to Germany's defeat, and it came on 9 August 1945). The notice is given the month Germany
+ * falls, as it was. At the other stops the finish rule's months alone, as they were. Behind the far switch, and
+ * no new number: the month is the tie's own (`north.book`).
+ */
+export const owedNotBefore = (g: Game, who: string, on: string): number =>
+  PACIFIC !== null && reads(g) && !!stopDef(g).book && who === PACIFIC.north.nat && on === PACIFIC.power ? PACIFIC.north.book : 0;
 const fill = (line: string, words: Record<string, string>): string => line.replace(/\{(\w+)\}/g, (m, k: string) => words[k] ?? m);
 const listed = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);

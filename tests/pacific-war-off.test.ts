@@ -14,6 +14,8 @@ import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
 import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
 import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, readyRules, shoreLift, skiesOn, skiesOver } from '../src/campaign/pacific';
+import { owedNotBefore } from '../src/campaign/pacific';
+import { finishMonthEnd, warNotices } from '../src/campaign/finish';
 import { gatherMonth, readiness, readinessMonth } from '../src/campaign/readiness';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
@@ -54,6 +56,24 @@ describe('the Pacific war with the far side off', () => {
     const wars = g.nations.UK.atWar.length;
     declareWar(g, 'USA', 'ITA');
     expect(g.nations.UK.atWar.length).toBe(wars);
+  });
+
+  it('holds no war to a month of the book: by the book too, the finish rule\'s three months (the director\'s 07:18Z of 22 November 2026)', () => {
+    for (const stop of [1, 3]) {
+      const g = startOpen(createGame(3, null));
+      if (stop !== 3) setStopOff(g, stop, true);
+      g.turn = 57;
+      // (The old chart has no Japan: the Soviet Union as an ally at war with Germany, and Britain at war with Italy.)
+      expect(g.nations.JAP).toBeUndefined();
+      g.nations.SOV.align = 'allies';
+      setWar(g, 'SOV', 'GER');
+      setWar(g, 'UK', 'GER');
+      setWar(g, 'UK', 'ITA');
+      for (const on of ['JAP', 'ITA', 'GER']) expect(owedNotBefore(g, 'SOV', on)).toBe(0);
+      capitulate(g, 'GER', 'SOV');
+      finishMonthEnd(g);
+      expect(warNotices(g).find((n) => n.who === 'SOV' && n.on === 'ITA'), `stop ${stop}`).toEqual({ who: 'SOV', on: 'ITA', given: 57, due: 60 });
+    }
   });
 });
 
