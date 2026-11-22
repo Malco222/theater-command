@@ -1,6 +1,6 @@
 """Quick looks at a vehicle while she is being built: stills from fixed places.
 
-    python landlook.py <Name> <out folder> [views] [samples] [WxH] [pose=clip@t,clip@t] [turn=deg] [lift=deg] [gun= paint= mantlet= skirts= zimmerit=1]
+    python landlook.py <Name> <out folder> [views] [samples] [WxH] [pose=clip@t,clip@t] [turn=deg] [lift=deg] [gun= paint= mantlet= skirts= zimmerit=1 ambush=1]
 
 views: front, rear, side, top, gear (the running gear, close), game (the game's camera: 16 m off, 30 degrees down),
 low, turret, deck. Default: front,rear,gear,game.
@@ -37,6 +37,8 @@ def main():
         pick["skirts"] = True if opt["skirts"] in ("all", "1", "yes") else opt["skirts"]
     if opt.get("zimmerit"):
         pick["zimmerit"] = True
+    if opt.get("ambush"):
+        pick["ambush"] = True
     v = vehicles.build(name, True, **pick)
     m = v.m
     if opt.get("look") == "file":         # what the game's file carries and nothing more: each paint flat, tinted by the points' own colours
