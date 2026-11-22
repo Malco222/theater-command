@@ -228,6 +228,8 @@ namespace LandField
 		Trodden, // clutter: a piece of a cow path's bare trodden earth, laid end to end along the path
 		Stalks,  // clutter: standing corn stalk by stalk, with its leaves and its ears, laid where Wheat is and drawn
 		         // only within a few metres of the lens (the art director's cut 4, fix 4), the Wheat there cleared
+		Rosette, // clutter: a broad-leaved dock and a plantain or two lying close to the ground, in the open grass (the
+		         // bracken keeps to the banks: the art director's cut 5 note)
 		Count
 	};
 

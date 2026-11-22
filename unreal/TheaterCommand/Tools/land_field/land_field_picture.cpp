@@ -443,6 +443,7 @@ namespace LandFieldPicture
 			case Base::Poppies:
 			case Base::Flowers:
 			case Base::Fern:
+			case Base::Rosette:
 			case Base::Stubble:
 			case Base::Sward: return MatBlades;
 			default: return MatGround;

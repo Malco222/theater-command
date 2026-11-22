@@ -206,7 +206,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette" };
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
 	/** The highest triangle of a mesh over a place, seen from above (NaN where none). */
@@ -1049,6 +1049,65 @@ int main(int Argc, char** Argv)
 		Check(PA == PB && !PA.empty(), "clutter boxes that overlap lay the same things", Fmt("%.0f and %.0f in the overlap", static_cast<double>(PA.size()), static_cast<double>(PB.size())));
 	}
 
+	// The bracken keeps to the hedge banks (the art director's cut 5 note): none in the open grass or a field's rough
+	// ground more than 5 m from a bank's middle, a dock's or a plantain's low rosette there instead; none of either on the
+	// steppe (Prokhorovka's grass as it was). Squares 80 m across every 250 m over the field.
+	{
+		struct Seg
+		{
+			double AX, AY, BX, BY;
+		};
+		std::map<std::pair<int, int>, std::vector<Seg>> ByCell; // (the banks' middle lines, filed by 10 m cell)
+		for (const LandField::HedgeLine& H : G.Hedges())
+		{
+			if (H.Kind < 0 || H.Kind > 3) continue; // (the banked kinds: hedgerow, lane bank, wood edge, garden hedge)
+			for (size_t K = 0; K + 1 < H.Points.size(); ++K)
+			{
+				const Seg Sg{ H.Points[K].first, H.Points[K].second, H.Points[K + 1].first, H.Points[K + 1].second };
+				for (int I = static_cast<int>(std::floor((std::min(Sg.AX, Sg.BX) - 6.0) / 10.0)); I <= static_cast<int>(std::floor((std::max(Sg.AX, Sg.BX) + 6.0) / 10.0)); ++I)
+					for (int J = static_cast<int>(std::floor((std::min(Sg.AY, Sg.BY) - 6.0) / 10.0)); J <= static_cast<int>(std::floor((std::max(Sg.AY, Sg.BY) + 6.0) / 10.0)); ++J) ByCell[{ I, J }].push_back(Sg);
+			}
+		}
+		auto ToBank = [&ByCell](double X, double Y) {
+			double Best = 1e9;
+			const auto Found = ByCell.find({ static_cast<int>(std::floor(X / 10.0)), static_cast<int>(std::floor(Y / 10.0)) });
+			if (Found == ByCell.end()) return Best;
+			for (const Seg& Sg : Found->second)
+			{
+				const double DX = Sg.BX - Sg.AX, DY = Sg.BY - Sg.AY, L2 = DX * DX + DY * DY;
+				const double U = L2 > 1e-9 ? std::clamp(((X - Sg.AX) * DX + (Y - Sg.AY) * DY) / L2, 0.0, 1.0) : 0.0;
+				Best = std::min(Best, std::hypot(Sg.AX + U * DX - X, Sg.AY + U * DY - Y));
+			}
+			return Best;
+		};
+		long Open = 0, OpenFar = 0, Banked = 0, Rosettes = 0, All = 0;
+		std::vector<LandField::Placed> Out;
+		for (double X = 40.0; X + 40.0 <= F.Width(); X += 250.0)
+			for (double Y = 40.0; Y + 40.0 <= F.Depth(); Y += 250.0)
+			{
+				Out.clear();
+				G.Clutter(X - 40.0, Y - 40.0, X + 40.0, Y + 40.0, Out);
+				All += static_cast<long>(Out.size());
+				for (const LandField::Placed& P : Out)
+				{
+					if (P.Kind == LandField::Base::Rosette) ++Rosettes;
+					if (P.Kind != LandField::Base::Fern) continue;
+					const LandField::Drawn W = G.At(P.X, P.Y).What;
+					if (W != LandField::Drawn::Pasture && W != LandField::Drawn::Rough)
+					{
+						++Banked;
+						continue;
+					}
+					++Open;
+					if (ToBank(P.X, P.Y) > 5.05) ++OpenFar;
+				}
+			}
+		std::printf("  bracken and docks (squares of 80 m every 250 m, %ld things): bracken %ld on banks, lanes, walls and in woods, %ld in the open grass (%ld more than 5 m from a bank); %ld dock and plantain rosettes\n",
+		            All, Banked, Open, OpenFar, Rosettes);
+		Check(OpenFar == 0 && (bSteppe ? Rosettes == 0 && Open + Banked == 0 : Rosettes > 0), bSteppe ? "no bracken and no docks on the steppe (its grass as it was)" : "the bracken keeps within 5 m of a hedge bank in the open grass, docks and plantains out in the fields",
+		      Fmt("%.0f bracken in the open more than 5 m from a bank, ", static_cast<double>(OpenFar)) + Fmt("%.0f rosettes", static_cast<double>(Rosettes)));
+	}
+
 	// The clutter laid once in squares as the eye moves (LandCarpet, as the scene drives it): an eye dollying across the
 	// field at a tank's pace and looking 60 m ahead, cut away every 15 s, with shell holes torn near it. Its meshes kept
 	// here as the engine would keep them, place by place, and what they hold checked against the old box. The same walk
@@ -1543,8 +1602,8 @@ int main(int Argc, char** Argv)
 			            T.CowPathKm, Pathed, Into, GateX, GateY, Bare);
 			Check(T.CowPathKm > 0.5 && Into > 0 && Pathed * 10 >= Into * 8 && Bare < 0.2, "cow paths along the pastures' hedges and out of eight in ten of their gateways, trodden bare",
 			      Fmt("%.1f km, %.0f of %.0f gateways, grass on them %.2f of round them", T.CowPathKm, Pathed, Into, Bare));
-			// Clumps: the tufts a 2 m square in grazed pasture, over random places; their spread over their mean (1 when
-			// spread at random, more in clumps).
+			// Clumps: the tufts a 2 m square in grazed pasture, over random places (the docks among them, a share of the tufts'
+			// growth in the same clumps since cut 5); their spread over their mean (1 when spread at random, more in clumps).
 			uint64_t Sd = 777;
 			auto Next = [&Sd]() {
 				Sd = Sd * 6364136223846793005ull + 1442695040888963407ull;
@@ -1569,7 +1628,7 @@ int main(int Argc, char** Argv)
 				G.Clutter(X - 8.0, Y - 8.0, X + 8.0, Y + 8.0, Out);
 				int N[64] = {};
 				for (const LandField::Placed& P : Out)
-					if (P.Kind == LandField::Base::Tuft) ++N[std::clamp(static_cast<int>((P.X - (X - 8.0)) / 2.0), 0, 7) * 8 + std::clamp(static_cast<int>((P.Y - (Y - 8.0)) / 2.0), 0, 7)];
+					if (P.Kind == LandField::Base::Tuft || P.Kind == LandField::Base::Rosette) ++N[std::clamp(static_cast<int>((P.X - (X - 8.0)) / 2.0), 0, 7) * 8 + std::clamp(static_cast<int>((P.Y - (Y - 8.0)) / 2.0), 0, 7)];
 				for (const int K : N)
 				{
 					Sum += K;
@@ -1578,7 +1637,7 @@ int main(int Argc, char** Argv)
 				}
 			}
 			const double Mean = Cells > 0.0 ? Sum / Cells : 0.0, Spread = Cells > 0.0 && Mean > 0.0 ? (Sum2 / Cells - Mean * Mean) / Mean : 0.0;
-			std::printf("  grazed pasture's tufts: %.2f a 2 m square, spread over mean %.2f (%.0f squares)\n", Mean, Spread, Cells);
+			std::printf("  grazed pasture's tufts and docks: %.2f a 2 m square, spread over mean %.2f (%.0f squares)\n", Mean, Spread, Cells);
 			// (spread at random they read 1.19 here: b754375e, before the clumps)
 			Check(Cells < 64.0 || Spread >= 1.45, "the pasture's tufts in clumps, not spread even", Fmt("spread over mean %.2f", Spread));
 		}

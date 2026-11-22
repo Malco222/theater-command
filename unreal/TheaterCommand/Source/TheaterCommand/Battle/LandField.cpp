@@ -587,6 +587,8 @@ namespace LandField
 		double Sunk(double X, double Y) const;
 		double Carve(double X, double Y, double Z, double* OutEdge) const;
 		double BankAt(double X, double Y) const;
+		/** How far the nearest bank's middle line lies from here, looked for out to Reach metres (more than Reach where none is). */
+		double BankNear(double X, double Y, double Reach) const;
 		/** The nearest lane's half width (its floor), 2.2 where none is near. */
 		double LaneHalfAt(double X, double Y) const;
 		double Top(double X, double Y, Drawn* What) const;
@@ -852,6 +854,27 @@ namespace LandField
 			if (D >= W * BankEdge) continue;
 			Best = std::max(Best, BankProfile(D / W, Lerp(R.H[S.K], R.H[S.K + 1], T)));
 		}
+		return Best;
+	}
+
+	double Ground::Impl::BankNear(double X, double Y, double Reach) const
+	{
+		double Best = Reach + 1.0;
+		if (BGrid.Cells.empty()) return Best;
+		const V2 P{ X, Y };
+		const int I0 = std::max(0, static_cast<int>(std::floor((X - Reach - BGrid.X0) / BGrid.Size)));
+		const int I1 = std::min(BGrid.NX - 1, static_cast<int>(std::floor((X + Reach - BGrid.X0) / BGrid.Size)));
+		const int J0 = std::max(0, static_cast<int>(std::floor((Y - Reach - BGrid.Y0) / BGrid.Size)));
+		const int J1 = std::min(BGrid.NY - 1, static_cast<int>(std::floor((Y + Reach - BGrid.Y0) / BGrid.Size)));
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+				for (const uint32_t Id : BGrid.Cells[static_cast<size_t>(J) * BGrid.NX + I])
+				{
+					const BankSeg& S = BSegs[Id];
+					const Run& R = Runs[S.Run];
+					double T;
+					Best = std::min(Best, SegDist(P, R.P[S.K], R.P[S.K + 1], T));
+				}
 		return Best;
 	}
 
@@ -5515,7 +5538,7 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette" };
 		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
@@ -5877,6 +5900,60 @@ namespace LandField
 				Leaflet(Tip - Along * 0.02, Along, Blade * 0.1, 1.04);
 			}
 		}
+		// A dock and two plantains (the art director's cut 5 note: the bracken keeps to the hedge banks; out in the open
+		// grass a low flat rosette lying close to the ground). The dock: seven broad oblong leaves 16 to 30 cm long from its
+		// crown, the outer five arched low and lying out flat at their tips, the inner two held up, their edges waved, a
+		// red-brown midrib in some, one outer leaf going yellow. The plantains beside it: five broad leaves each, flat to the
+		// ground, paler, and a slender seed spike or two. Painted dark and warm for the grade, as the bracken; its own
+		// random draws, so the meshes built after it are as they were.
+		{
+			Mesh& M = At(Base::Rosette).Near;
+			Rng RR(S ^ 0xD0C7);
+			const auto Leaf = [&M, &RR](V3 Crown, double A, double Long, double Wide, double Rise, double Lift, const Col& Foot, const Col& Tip, const Col& Under, const Col& Rib) {
+				const V3 Out{ std::cos(A), std::sin(A), 0 };
+				const V3 Side{ -Out.Y, Out.X, 0 };
+				std::vector<V3> Spine;
+				std::vector<double> Half;
+				constexpr int N = 5;
+				for (int Q = 0; Q < N; ++Q)
+				{
+					const double T = Q / static_cast<double>(N - 1);
+					// (up off the crown and down to the ground at its tip; narrow at its stalk, broadest past its middle)
+					Spine.push_back(Crown + Out * (Long * T) + V3{ 0, 0, Long * Rise * std::sin(T * Pi) + 0.004 });
+					Half.push_back(Q + 1 < N ? Wide * (0.25 + 0.75 * std::sin(T * Pi * 0.92)) * RR.Range(0.86, 1.12) : 0.0);
+				}
+				Folded(M, Spine, Half, Side, Lift, Foot, Tip, Under, Rib);
+			};
+			const double Turn0 = RR.Range(0.0, 2.0 * Pi);
+			for (int K = 0; K < 7; ++K)
+			{
+				const bool bInner = K >= 5, bYellow = K == 1;
+				const double A = bInner ? Turn0 + 0.6 + (K - 5) * Pi + RR.Range(-0.4, 0.4) : Turn0 + K * 2.0 * Pi / 5.0 + RR.Range(-0.3, 0.3);
+				const double Long = bInner ? RR.Range(0.16, 0.22) : RR.Range(0.22, 0.3), Wide = Long * RR.Range(0.19, 0.24);
+				const double L = RR.Range(0.9, 1.08);
+				const Col Foot = Varied(Rgb(60, 82, 28), L, 0.0), Tip = Varied(bYellow ? Rgb(118, 108, 36) : Rgb(80, 102, 32), L, 0.0);
+				const Col Rib = K % 3 == 0 ? Rgb(118, 72, 46) : Rgb(104, 114, 54);
+				Leaf({ 0, 0, 0 }, A, Long, Wide, bInner ? RR.Range(0.35, 0.5) : RR.Range(0.12, 0.2), RR.Range(0.12, 0.22), Foot, Tip, Rgb(112, 122, 80), Rib);
+			}
+			for (int Pl = 0; Pl < 2; ++Pl)
+			{
+				const double At0 = Turn0 + 1.4 + Pl * 2.6 + RR.Range(-0.5, 0.5), Off = RR.Range(0.2, 0.3);
+				const V3 Crown{ Off * std::cos(At0), Off * std::sin(At0), 0 };
+				const double Turn = RR.Range(0.0, 2.0 * Pi), L = RR.Range(0.92, 1.08);
+				for (int K = 0; K < 5; ++K)
+				{
+					const double Long = RR.Range(0.08, 0.13);
+					Leaf(Crown, Turn + K * 2.0 * Pi / 5.0 + RR.Range(-0.25, 0.25), Long, Long * RR.Range(0.3, 0.36), RR.Range(0.05, 0.1), 0.1, Varied(Rgb(76, 98, 34), L, 0.0),
+						 Varied(Rgb(92, 112, 38), L, 0.0), Rgb(118, 128, 84), Rgb(116, 124, 70));
+				}
+				for (int Spike = 0; Spike < 1 + Pl; ++Spike)
+				{
+					const double A = RR.Range(0.0, 2.0 * Pi), High = RR.Range(0.12, 0.2);
+					const V3 Head = Crown + V3{ RR.Range(-0.03, 0.03), RR.Range(-0.03, 0.03), High };
+					Strip(M, { Crown, Crown + (Head - Crown) * 0.6, Head }, { 0.0018, 0.0016, 0.0028 }, { std::cos(A), std::sin(A), 0 }, Rgb(86, 100, 42), Rgb(112, 102, 62));
+				}
+			}
+		}
 		// A barley stubble: the binder cut it a hand's breadth up, so its stalks stand 8 to 15 cm in the drill rows, 17 cm
 		// apart, pale and hollow, their feet in shade; and a few straws the binder dropped lie loose along the rows.
 		// (1.4 m along seven rows; the field turns it to its own rows. The art director, 22 November: "straw rows over
@@ -5927,6 +6004,8 @@ namespace LandField
 			}
 		}
 		for (const Base B : { Base::Tuft, Base::TallGrass, Base::Wheat, Base::Poppies, Base::Flowers, Base::Stone, Base::Fern, Base::Stubble }) At(B).FarFrom = 70.0f;
+		// (low and flat: the grass hides it well before the tufts)
+		At(Base::Rosette).FarFrom = 40.0f;
 		At(Base::Sward).FarFrom = 25.0f;
 		// (the corn stalk by stalk only near the lens: its ink fades it out from 3.5 to 5 m, and past 5.5 m it is not drawn)
 		At(Base::Stalks).FarFrom = 5.5f;
@@ -6351,10 +6430,12 @@ namespace LandField
 				else if (Crop == CpSteppe) G = Of(1.3, { { 0.45, Base::Tuft }, { 0.42, Base::TallGrass }, { 0.13, Base::Flowers } });
 				else if (Crop == CpFallow) G = Of(0.9, { { 0.5, Base::Tuft }, { 0.3, Base::TallGrass }, { 0.2, Base::Flowers } });
 				else if (Edge < 3.0) G = Of(1.2, { { 0.35, Base::TallGrass }, { 0.15, Base::Fern }, { 0.2, Base::Flowers }, { 0.3, Base::Tuft } });
-				else if (Crop == CpLush) G = Of(1.45, { { 0.35, Base::Sward }, { 0.4, Base::Tuft }, { 0.18, Base::TallGrass }, { 0.07, Base::Flowers } });
-				else if (Crop == CpHayCut) G = Of(1.2, { { 0.55, Base::Sward }, { 0.4, Base::Tuft }, { 0.05, Base::Flowers } });
+				// (a dock or a plantain here and there in the open grass, where the beasts leave them: the art director's cut 5
+				// note. Each takes its share from the tufts', next to them, so nothing else in the grass moves)
+				else if (Crop == CpLush) G = Of(1.45, { { 0.35, Base::Sward }, { 0.37, Base::Tuft }, { 0.03, Base::Rosette }, { 0.18, Base::TallGrass }, { 0.07, Base::Flowers } });
+				else if (Crop == CpHayCut) G = Of(1.2, { { 0.55, Base::Sward }, { 0.38, Base::Tuft }, { 0.02, Base::Rosette }, { 0.05, Base::Flowers } });
 				else if (Crop == CpMeadow) G = Of(1.45, { { 0.2, Base::Sward }, { 0.15, Base::Tuft }, { 0.45, Base::TallGrass }, { 0.12, Base::Flowers }, { 0.08, Base::Poppies } });
-				else G = Of(1.45, { { 0.6, Base::Sward }, { 0.32, Base::Tuft }, { 0.05, Base::Flowers }, { 0.03, Base::TallGrass } });
+				else G = Of(1.45, { { 0.6, Base::Sward }, { 0.29, Base::Tuft }, { 0.03, Base::Rosette }, { 0.05, Base::Flowers }, { 0.03, Base::TallGrass } });
 				break;
 			case Drawn::Rough: G = Of(1.2, { { 0.5, Base::TallGrass }, { 0.35, Base::Tuft }, { 0.15, Base::Fern } }); break;
 			case Drawn::Works: G = Of(0.3, { { 1.0, Base::Tuft } }); break; // (its few stones: the clumped pass below)
@@ -6376,8 +6457,9 @@ namespace LandField
 			case Drawn::Beyond: G = Of(1.2, { { 0.45, Base::Sward }, { 0.45, Base::Tuft }, { 0.06, Base::TallGrass }, { 0.04, Base::Flowers } }); break;
 			default: break; // a floor or water: nothing
 			}
-			// (no bracken on the steppe: dry grass where the bocage has fern)
+			// (no bracken on the steppe: dry grass where the bocage has fern; and its pasture's tufts as they were)
 			if (bSteppe && G.Kind == Base::Fern) G.Kind = Base::TallGrass;
+			if (bSteppe && G.Kind == Base::Rosette) G.Kind = Base::Tuft;
 			// Trodden: gateways, and where the recording's men and vehicles went.
 			if (Occ & OcVehicle) G.Density *= 0.35;
 			else if (Occ & OcGate) G.Density *= 0.3;
@@ -6426,7 +6508,7 @@ namespace LandField
 					// The bocage's grass in clumps, not spread even (the review's item 3): in some patches tussocks and
 					// flowers together, between them the short sward. On
 					// a cow path, the ground trodden bare (its own pieces of earth laid below), its edge thinned.
-					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
+					Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
 					if (Gr.Kind == Base::Count) continue;
 					// (past what the thickest clump could keep, 1.85 times its growth: let go before the clump's noise and
 					// the cow paths are asked. The pre-check, 22 November: the clumps had made the bocage's clutter half as
@@ -6451,6 +6533,10 @@ namespace LandField
 					// was, spread: the camera reads it as standing corn for its low shots)
 					if (InClump >= 0.0 && Gr.Kind != Base::TallGrass) Thick *= Gr.Kind == Base::Sward ? 1.2 - 0.45 * InClump : 0.15 + 1.7 * InClump;
 					if (Keep >= Gr.Density * Thick / 2.0) continue;
+					// The bracken keeps to the hedge banks (the art director's cut 5 note): in the open grass or a field's
+					// rough ground more than 5 m from a bank's middle (a rough corner, a gateway, an edge with no hedge), a
+					// dock's low rosette in its place. (Asked last, of the few kept: the banks' grid is dearer than a draw.)
+					if (Gr.Kind == Base::Fern && (What == Drawn::Pasture || What == Drawn::Rough) && G.BankNear(X, Y, 5.0) > 5.0) Gr.Kind = Base::Rosette;
 					Placed P;
 					P.Kind = Gr.Kind;
 					P.X = static_cast<float>(X);
@@ -6555,6 +6641,16 @@ namespace LandField
 						TB = Here.B / 118.0;
 						Scale = 0.8 + 0.4 * U4;
 						ScaleZ = Crop == CpHayCut || Crop == CpGrazed ? 0.7 + 0.4 * U5 : 0.9 + 0.5 * U5;
+						break;
+					}
+					case Base::Rosette:
+					{
+						// (each its own size, a little warmer or cooler: a dock in the sun, one in a tussock's shade)
+						Scale = 0.75 + 0.5 * U4;
+						ScaleZ = 0.8 + 0.4 * U5;
+						const double Warm = Unit(Hash(H, 7));
+						TR = 0.94 + 0.12 * Warm;
+						TB = 1.05 - 0.1 * Warm;
 						break;
 					}
 					case Base::Stubble:
