@@ -8,10 +8,11 @@ import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
 import americasMap from '../generated/world-americas.json';
 import wholeMap from '../generated/world-whole.json';
-import { FAR_STAGE } from './stage';
+import { FAR_STAGE, SUBSCENE_ENV } from './stage';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
+import convoyBattleData from '../../data/campaign/convoybattle.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 
@@ -35,6 +36,7 @@ import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
+  type SubLook, type SubLookFleet,
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
@@ -1633,9 +1635,12 @@ export function navalUpkeep(g: Game, nat: string): void {
     } else f.ready = Math.min(1, f.ready + NAVY.ready.port);
   }
   // The grand campaign: the destroyers hunt before the month's cargoes are counted, and thin screens pay for it.
-  const sunk = seaWar(g) && n.atWar.length ? huntSubs(g, nat) : undefined;
+  // (Release 2, ruling 241: with the convoy battle on, a night the player fought on one of this nation's routes is
+  // read first, as the fleets stand before the hunt, and booked into the hunt's and the convoy's own rolls.)
+  const nights = convoyNights(g, nat);
+  const sunk = seaWar(g) && n.atWar.length ? huntSubs(g, nat, nights) : undefined;
   if (sunk) torpedoes(g, nat);
-  convoyWar(g, nat, sunk);
+  convoyWar(g, nat, sunk, nights);
 }
 
 // ---- The submarines' beats (ruling 233 rider b564) ----------------------------------------------------------------
@@ -1923,7 +1928,7 @@ export function huntShareSunk(weight: number, subs: number): number {
  * The grand campaign's month of submarine hunting for one nation: in every sea where enemy submarines are out, its
  * destroyers, carrier aircraft and the aircraft on its coasts sink a share of them. Returns what was sunk, by sea.
  */
-export function huntSubs(g: Game, nat: string): Record<number, number> {
+export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<number, number> {
   const out: Record<number, number> = {};
   for (const zone of g.seas) {
     const z = zone.id;
@@ -1934,11 +1939,15 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     const share = huntShareSunk(h.weight, subs);
     if (share <= 0) continue;
     const rng = seaRng(g, `hunt:${nat}:${z}`);
+    // (Release 2, ruling 241 D1, record only: the sea's hunt as the submarine scene stages it, while its setting is on.)
+    const look = subScene.on ? { zone: z, hunters: h.fleets.map((f) => lookFleet(f, f.ships.dd)), air: ownAirOver(g, z, nat), quarry: quarry.map((f) => lookFleet(f, f.ships.ss)), sunk: 0, cost: 0 } : null;
     let sunk = 0;
     for (const f of quarry) {
-      const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * share));
+      // (A night the player fought books its boats lost here, for its own raiders, inside the roll's run: release 2.)
+      const k = Math.min(f.ships.ss, booked(nights, 'ss', f.id, rng.roll(f.ships.ss * share), f.ships.ss * share));
       f.ships.ss -= k; f.lost.ss += k; sunk += k;
     }
+    if (look) { look.sunk = sunk; lookOf(g, nat).hunts.push(look); }
     if (!sunk) continue;
     out[z] = sunk;
     // The submarines hit back at the groups sent out after them.
@@ -1949,6 +1958,7 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
       const k = Math.min(f.ships.dd, rng.roll(sunk * FLEETS.hunt.cost * (f.ships.dd / dd)));
       f.ships.dd -= k; f.lost.dd += k; cost += k;
     }
+    if (look) look.cost = cost;
     const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : h.fleets.length ? `The escorts of ${fleetName(h.fleets[0])}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
     const subsSunk = `${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'}`;
@@ -1988,6 +1998,7 @@ function torpedoes(g: Game, nat: string): void {
     f.ships[cls]--; f.lost[cls]++;
     if (cls !== 'ca') nameLosses(g, f.nat, f.name, { ...none(), [cls]: 1 }, `torpedo:${g.turn}:${f.id}`); // her name is gone with her (a record only)
     f.ready = Math.max(0, f.ready - 0.05);
+    if (subScene.on) lookTorpedo(g, f, cls);
     headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
   }
 }
@@ -2038,44 +2049,241 @@ function guardShare(g: Game, f: Fleet, zones: number[], lane?: string): number {
   return f.stance !== 'raid' && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
 }
 
+/** The most of its cargoes a lane or a convoy route can lose in a month. */
+const LANE_CAP = 0.95;
+
+type ConvoyRoute = (typeof NAVY.convoys)[number];
+
+/**
+ * The raiders hunting a convoy route this month and the escorts guarding it, as convoyWar counts them: strength,
+ * fleets, the escorts' worth with radar, and the share of the cargoes the raiders would sink. Throws no dice.
+ */
+function routeForces(g: Game, nat: string, route: ConvoyRoute): { zones: number[]; raid: number; guard: number; raiders: Fleet[]; escorts: Fleet[]; G: number; L: number } {
+  const zones = route.zones.map((k) => zoneOf(g, k));
+  let raid = 0, guard = 0;
+  const raiders: Fleet[] = [], escorts: Fleet[] = [];
+  for (const f of g.fleets) {
+    if (!atSea(f)) continue;
+    if (atWar(g, f.nat, nat)) {
+      if (!zones.includes(f.zone)) continue;
+      let p = 0;
+      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+      p *= quality(g, f.nat) * fit(g, f) * raidShare(f);
+      if (p > 0) { raid += p; raiders.push(f); }
+    } else if (allied(g, f.nat, nat)) {
+      const w = guardShare(g, f, zones, route.id);
+      if (w <= 0) continue;
+      let p = 0;
+      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
+      p *= quality(g, f.nat) * fit(g, f) * w;
+      if (p > 0) { guard += p; escorts.push(f); }
+    }
+  }
+  if (route.base) {
+    // An enemy fortress astride the route hunts the convoys for as long as it holds out, and harder while it is itself fed.
+    const b = g.byName[route.base.region];
+    if (b && atWar(g, b.ctrl, nat)) raid += route.base.raid * quality(g, b.ctrl) * (g.supply[b.ctrl] && !g.supply[b.ctrl][b.id] ? route.base.starved : 1);
+  }
+  for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
+  // Radar and direction finding tell the escorts where the raiders are.
+  const G = guard * NAVY.convoy.escortWorth * techMul(g, nat, 'radar');
+  const L = raid > 0 ? raid / (raid + G + NAVY.convoy.ocean) : 0;
+  return { zones, raid, guard, raiders, escorts, G, L };
+}
+
+// ---- The convoy battle's seam (release 2, ruling 241) -----------------------------------------------------------
+// With the convoy battle on (a grand campaign that opened with stage.json 'convoyBattle'), every month on a convoy route
+// takes a swing, and a night the player fights on one is booked back here. The field (ConvoySim) and the screen that
+// offers the night are outside src/campaign; they reach the rules only through convoyField below and convoyhand.ts.
+// Off, nothing here is read: no die is thrown and every number is release 1's.
+
+/** The convoy battle's figures (data/campaign/convoybattle.json). */
+export const CONVOY_BATTLE = convoyBattleData as { swing: { low: number; high: number }; hand: string[] };
+
+/** True where this campaign plays the convoy battle: a grand campaign that opened with it (set at its start only). */
+export const convoyRules = (g: Game): boolean => g.flags.open === 1 && g.flags.convoyBattle === 1;
+
+/** A raider in a convoy's night: its fleet, its boats, and the boats its enemy's hunt would sink this month on average. */
+export interface ConvoyRaider { id: number; nat: string; ss: number; expect: number }
+/** An escort in a convoy's night: its fleet, its destroyers, and those the convoy's roll would cost it on average. */
+export interface ConvoyEscort { id: number; nat: string; dd: number; expect: number }
+
+/**
+ * A month on a convoy route as the rules are about to fight it, before the hunt: the card's figures. The look-ahead
+ * notes these on a copy; the real month asks the seam with the same meeting and books what it is given.
+ */
+export interface ConvoyMeeting {
+  turn: number;
+  route: string;
+  /** The nation the route feeds, in whose month the convoy war is counted. */
+  owner: string;
+  zones: number[];
+  raiders: ConvoyRaider[];
+  escorts: ConvoyEscort[];
+  /** The card: raiders' and escorts' strength, the escorts' worth with radar, the share of the cargoes the raiders would sink (before the swing), and its tons. */
+  raid: number;
+  guard: number;
+  G: number;
+  L: number;
+  tons: number;
+}
+
+/** A night the player fought, as the rules take it: the swing, and boats and destroyers lost by fleet id. A fleet left out rolls its dice. */
+export interface ConvoyFought { swing: number; ss: Record<number, number>; dd: Record<number, number> }
+
+/**
+ * The seam: set by the screen around the month's close (convoyhand.ts), unset otherwise. Asked once a route-month,
+ * while the convoy battle is on; undefined leaves the month to the staff's dice.
+ */
+export const convoyField: { fought?: (m: ConvoyMeeting) => ConvoyFought | undefined } = {};
+
+/** The nights booked into one nation's month, by route: what the field gave, which fleets it covers, and whether any of it had to be held into the dice's run. */
+export type ConvoyNights = Map<string, { fought: ConvoyFought; ss: Set<number>; dd: Set<number>; clamped: boolean }>;
+
+/** The month's meeting on a convoy route, as the fleets stand now. Throws no dice. */
+export function convoyMeeting(g: Game, nat: string, route: ConvoyRoute): ConvoyMeeting {
+  const { zones, raid, guard, raiders, escorts, G, L } = routeForces(g, nat, route);
+  const hunt = new Map<number, number>();
+  if (seaWar(g) && g.nations[nat].atWar.length) {
+    for (const z of zones) {
+      const quarry = g.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g, f.nat, nat));
+      if (!quarry.length) continue;
+      hunt.set(z, huntShareSunk(huntersIn(g, nat, z).weight, quarry.reduce((s, f) => s + f.ships.ss, 0)));
+    }
+  }
+  const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
+  return {
+    turn: g.turn, route: route.id, owner: nat, zones, raid, guard, G, L, tons: Math.round((route.tons * L) / 1000) * 1000,
+    raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: f.ships.ss * (hunt.get(f.zone) ?? 0) })),
+    escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid > 0 ? raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd)) : 0 })),
+  };
+}
+
+/** The nights fought on this nation's convoy routes this month, asked of the seam before the hunt. Empty while the convoy battle is off or nobody has set the seam. */
+function convoyNights(g: Game, nat: string): ConvoyNights | undefined {
+  const ask = convoyField.fought;
+  if (!ask || !convoyRules(g) || !g.nations[nat].atWar.length) return undefined;
+  let out: ConvoyNights | undefined;
+  for (const route of NAVY.convoys) {
+    // (Only the routes a hand may fight: the convoys to Libya stay with the staff until their rows are checked.)
+    if (route.to !== nat || !CONVOY_BATTLE.hand.includes(route.id)) continue;
+    const m = convoyMeeting(g, nat, route);
+    const fought = ask(m);
+    if (!fought) continue;
+    (out ??= new Map()).set(route.id, { fought, ss: new Set(m.raiders.map((r) => r.id)), dd: new Set(m.escorts.map((e) => e.id)), clamped: false });
+  }
+  return out;
+}
+
+/**
+ * A roll as a fought night books it: the dice are thrown as ever (so no later roll moves); where the night covers this
+ * fleet its own count stands in for them, held inside the roll's run (its floor and one over, core/rng.ts roll). A
+ * count held in is marked, and the night then reads as a bare close result (b331).
+ */
+function booked(nights: ConvoyNights | undefined, kind: 'ss' | 'dd', id: number, rolled: number, expected: number, route?: string): number {
+  if (!nights) return rolled;
+  for (const [rid, n] of nights) {
+    if (route !== undefined && rid !== route) continue;
+    if (!n[kind].has(id)) continue;
+    const want = n.fought[kind][id];
+    if (want === undefined) return rolled;
+    const lo = Math.floor(expected), hi = lo + 1;
+    const k = Math.max(lo, Math.min(hi, Math.round(want)));
+    if (k !== want) n.clamped = true;
+    return k;
+  }
+  return rolled;
+}
+
+/** The month's swing on a convoy route: drawn on its own key, or the fought night's held inside the same bounds. */
+function swingOf(g: Game, route: string, night?: { fought: ConvoyFought; clamped: boolean }): number {
+  const { low, high } = CONVOY_BATTLE.swing;
+  const drawn = low + (high - low) * seaRng(g, `convoySwing:${route}`).next();
+  if (!night) return drawn;
+  const w = night.fought.swing;
+  const k = Math.max(low, Math.min(high, Number.isFinite(w) ? w : 1));
+  if (k !== w) night.clamped = true;
+  return k;
+}
+
+// ---- The submarine scene's record (release 2, ruling 241 D1) ----------------------------------------------------
+// The month's submarine scene is look only: its viewing setting is outside the rules' save and no rule reads what is
+// written here. While it is on, each nation's month at sea is written into g.subLook (this month and last) for the
+// scene to stage; off, nothing is written and every save is release 1's.
+
+/** The submarine scene's viewing setting: set by the screen (a run outside the browser by TC_SUBSCENE=1). */
+export const subScene = { on: SUBSCENE_ENV };
+
+const lookFleet = (f: Fleet, n: number): SubLookFleet => ({ fleet: f.id, nat: f.nat, n });
+/** A raider as the scene stages it: its boats as the month began, and its heavy ships (battleships, carriers, cruisers), which raid too. */
+const lookRaider = (f: Fleet, n: number): SubLookFleet => ({ ...lookFleet(f, n), heavy: f.ships.bb + f.ships.cv + f.ships.ca });
+
+/** This nation's record for this month, made the first time it is written to; anything older than last month is let go. */
+function lookOf(g: Game, nat: string): SubLook {
+  const keep = (g.subLook ?? []).filter((l) => l.turn >= g.turn - 1);
+  let l = keep.find((x) => x.turn === g.turn && x.nat === nat);
+  if (!l) { l = { turn: g.turn, nat, hunts: [], torpedoes: [], convoys: [] }; keep.push(l); }
+  g.subLook = keep;
+  return l;
+}
+
+/** A torpedoing as the scene stages it: the boats' fleets in the sea that could have fired, and one picked on its own key, by their weight as torpedoRisk counts them. */
+function lookTorpedo(g: Game, f: Fleet, cls: ShipClass): void {
+  const could = g.fleets.filter((x) => x.zone === f.zone && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat));
+  const w = could.map((x) => x.ships.ss * quality(g, x.nat) * fit(g, x));
+  const all = w.reduce((a, b) => a + b, 0);
+  let by: number | null = null;
+  if (all > 0) {
+    let pick = seaRng(g, `look:torpedo:${f.id}`).next() * all;
+    for (let i = 0; i < could.length; i++) { pick -= w[i]; if (pick < 0 || i === could.length - 1) { by = could[i].id; break; } }
+  }
+  const byNat = by === null ? null : could.find((x) => x.id === by)!.nat;
+  lookOf(g, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, could: could.map((x) => x.id), by, couldNat: could.map((x) => x.nat), byNat });
+}
+
+/**
+ * A convoy month as the scene stages it, sea by sea: the month's tons shared by the raiders' strength in each sea
+ * (evenly where only a fortress raids). The raiders' boats and the escorts' destroyers are as the month began, before
+ * the convoy's own roll (a history campaign's convoy sinks boats as well as destroyers); its strength shares are read
+ * as the fleets stand after it, as before.
+ */
+function lookConvoy(g: Game, nat: string, route: string, zones: number[], raiders: Fleet[], escorts: Fleet[], at: { dd: Map<number, number>; ss: Map<number, number> }, tons: number): void {
+  const power = (f: Fleet): number => {
+    let p = 0;
+    for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+    return p * quality(g, f.nat) * fit(g, f) * raidShare(f);
+  };
+  const by = zones.map((z) => raiders.filter((f) => f.zone === z).reduce((a, f) => a + power(f), 0));
+  const all = by.reduce((a, b) => a + b, 0);
+  // (An escort bound to the route from outside its seas is staged where the raiders are strongest.)
+  const most = zones[by.indexOf(Math.max(...by))];
+  const seas = zones.map((z, i) => ({
+    zone: z,
+    raiders: raiders.filter((f) => f.zone === z).map((f) => lookRaider(f, at.ss.get(f.id) ?? f.ships.ss)),
+    escorts: escorts.filter((f) => f.zone === z || (z === most && !zones.includes(f.zone))).map((f) => lookFleet(f, at.dd.get(f.id) ?? f.ships.dd)),
+    air: airOver(g, z, nat) * NAVY.convoy.air,
+    tons: Math.round((all > 0 ? tons * (by[i] / all) : tons / zones.length) / 1000) * 1000,
+  }));
+  lookOf(g, nat).convoys.push({ route, tons, seas });
+}
+
 /** The month's fighting on the convoy routes that feed this nation: raiders against escorts. */
-export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>): void {
+export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>, nights?: ConvoyNights): void {
   const n = g.nations[nat];
   for (const route of NAVY.convoys) {
     if (route.to !== nat) continue;
     if (!n.atWar.length) { delete g.convoys[route.id]; continue; }
-    const zones = route.zones.map((k) => zoneOf(g, k));
     const rng = seaRng(g, `convoy:${route.id}`);
-    let raid = 0, guard = 0;
-    const raiders: Fleet[] = [], escorts: Fleet[] = [];
-    for (const f of g.fleets) {
-      if (!atSea(f)) continue;
-      if (atWar(g, f.nat, nat)) {
-        if (!zones.includes(f.zone)) continue;
-        let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-        p *= quality(g, f.nat) * fit(g, f) * raidShare(f);
-        if (p > 0) { raid += p; raiders.push(f); }
-      } else if (allied(g, f.nat, nat)) {
-        const w = guardShare(g, f, zones, route.id);
-        if (w <= 0) continue;
-        let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
-        p *= quality(g, f.nat) * fit(g, f) * w;
-        if (p > 0) { guard += p; escorts.push(f); }
-      }
-    }
-    if (route.base) {
-      // An enemy fortress astride the route hunts the convoys for as long as it holds out, and harder while it is itself fed.
-      const b = g.byName[route.base.region];
-      if (b && atWar(g, b.ctrl, nat)) raid += route.base.raid * quality(g, b.ctrl) * (g.supply[b.ctrl] && !g.supply[b.ctrl][b.id] ? route.base.starved : 1);
-    }
-    for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
-    // Radar and direction finding tell the escorts where the raiders are.
-    const G = guard * NAVY.convoy.escortWorth * techMul(g, nat, 'radar');
-    const L = raid > 0 ? raid / (raid + G + NAVY.convoy.ocean) : 0;
+    const { zones, raid, guard, raiders, escorts, G, L: L0 } = routeForces(g, nat, route);
+    // (Release 2, ruling 241: with the convoy battle on, the month's share sunk takes a swing, drawn on its own key, or
+    // the night the player fought gives it, inside the same bounds. Off, nothing is drawn and L is release 1's.)
+    const night = nights?.get(route.id);
+    const swing = convoyRules(g) ? swingOf(g, route.id, night) : undefined;
+    const L = swing === undefined ? L0 : Math.min(LANE_CAP, L0 * swing);
     const tons = Math.round((route.tons * L) / 1000) * 1000;
     let subsLost = 0, escortsLost = 0;
+    // (Release 2, ruling 241 D1, record only: the escorts' destroyers and the raiders' boats as the month began, before the convoy's roll.)
+    const at = subScene.on ? { dd: new Map(escorts.map((f) => [f.id, f.ships.dd])), ss: new Map(raiders.map((f) => [f.id, f.ships.ss])) } : null;
     if (raid > 0) {
       // In the grand campaign the submarines have already been hunted, sea by sea, by the destroyers and aircraft alone.
       if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
@@ -2088,11 +2296,16 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
       }
       const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
       for (const f of escorts) {
-        const k = Math.min(f.ships.dd, rng.roll(raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd))));
+        const x = raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd));
+        const k = Math.min(f.ships.dd, booked(nights, 'dd', f.id, rng.roll(x), x, route.id));
         f.ships.dd -= k; f.lost.dd += k; escortsLost += k;
       }
     }
     g.convoys[route.id] = { turn: g.turn, raid, guard, tons, total: (g.convoys[route.id]?.total ?? 0) + tons, share: route.share * L, loss: L, subsLost, escortsLost };
+    // (Record only, and only with the convoy battle on: the month's swing, and whether a fought night set it.)
+    if (swing !== undefined) g.convoys[route.id].swing = swing;
+    if (night) g.convoys[route.id].fought = night.clamped ? 'clamped' : 'field';
+    if (at) lookConvoy(g, nat, route.id, zones, raiders, escorts, at, tons);
     storyConvoy(g, raiders, escorts, tons, raid > 0);
     // The monthly figures are news only to the nations fighting over the route.
     if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat))) {
@@ -2126,7 +2339,7 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
   for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
   const G = guard * NAVY.convoy.escortWorth * techMul(g, nat, 'radar');
   const loss = raid > 0 ? (raid / (raid + G + NAVY.convoy.ocean)) * traitSeaLoss(g, nat) : 0;
-  return { raid, guard, loss: Math.min(0.95, loss) };
+  return { raid, guard, loss: Math.min(LANE_CAP, loss) };
 }
 
 /** Which way Swedish iron ore is reaching Germany this month, if at all. */
