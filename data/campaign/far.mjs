@@ -940,6 +940,10 @@ export const GLOBE_NO_BORDER = [
   // fell from Chad (March 1941) and the Fezzan from Chad (January 1943). So no march, attack or supply line crosses
   // Kufra's borders with the Sudan. Chad's with Kufra stay open.
   ['Kufra', 'Dongola'], ['Kufra', 'Wadi Halfa'],
+  // The Great Sand Sea between Kufra and Egypt's oases (the director's note of 14:23Z): only patrols and a car party
+  // crossed it, never an army or an army's supply. (Farafra is a city cut from an oasis province: its border is its
+  // province's there. Siwa is a province of today's chart, and its border with Kufra crosses the same sand.)
+  ['Kufra', 'Bahariya'], ['Kufra', 'Kharga'], ['Kufra', 'Siwa'],
 ];
 
 /**
