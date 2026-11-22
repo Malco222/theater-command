@@ -40,7 +40,7 @@ import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendl
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules, housed } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
-import { RES, fuelFleet, laneStopped, oilBeside } from './resources';
+import { RES, fieldBeside, fuelFleet, laneStopped } from './resources';
 import {
   MEN_PER_DIV, STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Nation, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
   type SubLook, type SubLookFleet,
@@ -388,10 +388,25 @@ export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fleetF
  * touches a working oilfield overseas its side holds (resources.ts oilBeside). Read in the far side's seas alone, so
  * no fleet of Europe's moves.
  */
-export function besideOil(g: Game, f: Fleet): boolean {
-  if (f.base < 0 || !farOn(g)) return false;
+export const besideOil = (g: Game, f: Fleet): boolean => !!wellsOf(g, f);
+/** The oilfield a fleet based beside the oil is fuelled from (`besideOil`), or null. */
+export function wellsOf(g: Game, f: Fleet): Region | null {
+  if (f.base < 0 || !farOn(g)) return null;
   const seas = g.regions[f.base]?.seas.filter((z) => z >= FAR_SEAS_FIRST) ?? [];
-  return seas.length > 0 && oilBeside(g, f.nat, seas);
+  return seas.length > 0 ? fieldBeside(g, f.nat, seas) : null;
+}
+
+/**
+ * The fleet's fuel line (the UI director's sheet 24, box 4; ruling 194, point (g)). 'wells' with the field's name for
+ * a fleet based beside the oil, whenever that holds, short month or not. Else 'short' with the share of its fitness
+ * for sea the want of oil costs it this month, which is the Oil page's own figure (`fuelFleet`). Null where neither
+ * holds. Display only: no figure moves.
+ */
+export function fuelLine(g: Game, f: Fleet): { kind: 'wells'; field: string } | { kind: 'short'; less: number } | null {
+  const wells = wellsOf(g, f);
+  if (wells) return { kind: 'wells', field: wells.name };
+  const less = Math.round((1 - fuelFleet(g, f.nat)) * 100);
+  return less >= 1 ? { kind: 'short', less } : null;
 }
 
 /**
@@ -2825,6 +2840,32 @@ export function subsWorth(g: Game, f: Fleet): number {
   const since = Math.max(g.flags[`war:${f.nat}:${S.foe}`] ?? 0, g.flags[`war:${S.foe}:${f.nat}`] ?? 0);
   return since > 0 && g.turn - since + 1 >= S.month ? 1 : S.share;
 }
+
+/**
+ * The faulty torpedoes as the cards say them (the UI director's sheet 24, box 3; ruling 194(f)): the share of their
+ * worth a navy's submarines raid at in the far side's seas, and the month they are mended. The month is the book's at
+ * the stops that keep the book; elsewhere it is counted from the start of the navy's war with its foe, and before
+ * that war no month is named ('until' null). Null once they are mended, and for every navy whose torpedoes work.
+ * `subsWorth` is the rule; this reads it and changes nothing.
+ */
+export function torpedoFault(g: Game, nat: string): { share: number; until: number | null } | null {
+  const S = NAVY.subs?.[nat];
+  if (!S || !farOn(g)) return null;
+  if (stopDef(g).book) return g.turn < S.book ? { share: S.share, until: S.book } : null;
+  const since = Math.max(g.flags[`war:${nat}:${S.foe}`] ?? 0, g.flags[`war:${S.foe}:${nat}`] ?? 0);
+  if (since <= 0) return { share: S.share, until: null };
+  return g.turn - since + 1 >= S.month ? null : { share: S.share, until: since + S.month - 1 };
+}
+/** The sentence: "Faulty torpedoes: your submarines raid at a quarter of their worth until September 1943." `boats` is "your submarines", "these boats" or "your boats". */
+export function torpedoWords(g: Game, nat: string, boats: string, month = true): string | null {
+  const t = torpedoFault(g, nat);
+  if (!t) return null;
+  const share = t.share === 0.25 ? 'a quarter' : t.share === 0.5 ? 'half' : `${Math.round(t.share * 100)}%`;
+  return `Faulty torpedoes: ${boats} raid at ${share} of their worth${month && t.until !== null ? ` until ${turnToDate(t.until).label}` : ''}.`;
+}
+/** Whether a navy's faulty boats are among the raiders in these seas: a fleet of its own at sea there with boats, raiding or on patrol, in a sea of the far side. */
+export const faultyRaiders = (g: Game, nat: string, zones: number[]): boolean =>
+  !!torpedoFault(g, nat) && g.fleets.some((f) => f.nat === nat && atSea(f) && f.ships.ss > 0 && zones.includes(f.zone) && f.zone >= FAR_SEAS_FIRST && raidShare(f) > 0);
 
 /**
  * The far side's one measure for the boat (the design director's 18:03Z and 18:04Z of 22 November 2026): of a fleet's

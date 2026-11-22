@@ -84,7 +84,7 @@ import {
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
-  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, ownBoatsReach, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
+  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, ownBoatsReach, faultyRaiders, torpedoWords, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
@@ -2554,6 +2554,17 @@ function wingCardHtml(card: FleetCard, w: WingCard): string {
 const fleetStance = (f: Fleet): Stance => (atSea(f) ? f.stance : ui.stance);
 
 /** The tray of a fleet that has been picked up: its admiral, its ships as cards by class, and its orders. */
+/**
+ * The fleet's fuel line (the UI director's sheet 24, box 4; ruling 194(g)): first under the admiral's line. Short of
+ * fuel is amber with what helps under it in ink; fuelled from the wells is ink and names the field; never both.
+ */
+function fleetFuelLine(card: FleetCard): string {
+  const F = card.fuel;
+  if (!F) return '';
+  if (F.kind === 'wells') return `<small class="sub fuel" style="color:var(--ink)"><b>Fuelled from the wells at ${esc(F.field)}:</b> it is not short of fuel while it is based there.</small>`;
+  return `<small class="sub fuel short" style="color:#e9c987"><b>Short of fuel:</b> ${F.less}% less fit for sea.</small><small class="sub fuel" style="color:var(--ink)">What helps: oil in stock at home, or a base beside a working oilfield of your own.</small>`;
+}
+
 /** The fleet tray's line on the boats out on patrol (the far side's one measure; the UI director's words of 22 November 2026). */
 function boatsOutWords(out: number, boats: number): string {
   if (boats === 1) return out >= 1 ? 'Its submarine is out on patrol' : 'Its submarine is not out on patrol';
@@ -2584,7 +2595,7 @@ function drawFleetTray(f: Fleet): void {
   const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
-  el.innerHTML = `<div class="thead">${head}${card.sky ? `<small class="sub">${esc(card.sky)}</small>` : ''}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
+  el.innerHTML = `<div class="thead">${head}${fleetFuelLine(card)}${card.sky ? `<small class="sub">${esc(card.sky)}</small>` : ''}${tally}${trayFold(card.ships, 'ship', 'ships')}${card.torpedoes && f.nat === g.human && f.stance === 'raid' ? `<small class="sub typed" style="font-family:'Courier Prime',monospace;color:var(--ink)">${esc(card.torpedoes)}</small>` : ''}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
   articled(el);
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
@@ -8069,6 +8080,8 @@ function laneRow(l: Lane, me: string | null): string {
   const status = l.state === 'cut' ? 'Cut' : l.state === 'idle' ? 'Not running' : `${pct}% getting through`;
   // What the lane runs on, the last sentence of its row; for a stopped lane, what stopped it and what would start it again (the Pacific's lanes alone: ruling 195(c), sheet 25 box 1).
   const key = laneKey(g, l.id, me), halted = l.state === 'cut' || l.state === 'idle';
+  // Faulty torpedoes (sheet 24, box 3): the last line, for the side whose boats are among the raiders, while the fault holds.
+  const faulty = me && foe && l.kind === 'sea' && !halted && faultyRaiders(g, me, l.zones) ? torpedoWords(g, me, 'your submarines') : null;
   const fight = l.kind === 'sea' && l.zones.length && l.state !== 'cut' && l.state !== 'idle' && g.nations[l.to].atWar.length
     ? ` Raiders ${num(l.raid)} against escorts ${num(l.guard)} ${seaNames(l.zones)}.` : '';
   const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
@@ -8077,7 +8090,7 @@ function laneRow(l: Lane, me: string | null): string {
   return `<div class="lane ${l.state}">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">${l.kind === 'sea' ? 'By sea' : 'Overland'}</span><span class="lflow">${status}</span></div>
     <div class="oddsbar" title="${status}"><i style="width:${pct}%"></i></div>
-    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${key && halted ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}${key && !halted ? ` ${esc(key)}` : ''}</small>
+    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${key && halted ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}${key && !halted ? ` ${esc(key)}` : ''}${faulty ? `<br><span style="color:var(--paper-100, #f3ead7)">${esc(faulty)}</span>` : ''}</small>
     ${l.path.length ? `<div class="acts"><button class="btn small" data-act="lanego" data-id="${l.id}">Show on the map</button></div>` : ''}
   </div>`;
 }

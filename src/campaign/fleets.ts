@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, fuelLine, torpedoWords, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -27,6 +27,7 @@ import { joinStars, splitStars, starRow, type StarRow } from './stars';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
 import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 import { seaWhat, seaWhere } from './sea-words';
+import { FAR_SEAS_FIRST } from './world';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
 const B = (fleetData as unknown as typeof FLEETS).bombard;
@@ -70,6 +71,10 @@ export interface FleetCard {
   ships: number;
   /** The far side's one measure: how many of its submarines are out on patrol, for a fleet at sea where the measure reads it (`boatsOut`, `patrolRow`); none and all are said too. */
   boatsOut?: number;
+  /** The fleet's fuel line (sheet 24, box 4): fuelled from the wells of a named field, or short of fuel by this many per cent of its fitness for sea. `fuelLine`. */
+  fuel?: { kind: 'wells'; field: string } | { kind: 'short'; less: number };
+  /** Faulty torpedoes (sheet 24, box 3): the sentence for a fleet whose boats raid at a share of their worth, shown to its own side. `torpedoWords`. */
+  torpedoes?: string;
   /** One card for each class it has ships of, heaviest first. */
   cards: ShipCard[];
   /** The weight of its guns against a coast, its worth with a convoy, and its weight hunting submarines. */
@@ -124,6 +129,8 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     order: FLEETS.orders[f.stance].label, lane: f.stance === 'escort' ? f.lane ?? null : null, doing: fleetDoing(g, f),
     ready: f.ready, power: fleetPower(g, f), ships: shipCount(f.ships),
     ...(atSea(f) && f.ships.ss > 0 && patrolRow(g, f) ? { boatsOut: Math.round(boatsOut(g, f)) } : {}),
+    ...(fuelLine(g, f) ? { fuel: fuelLine(g, f)! } : {}),
+    ...(f.ships.ss > 0 && f.zone >= FAR_SEAS_FIRST && torpedoWords(g, f.nat, 'these boats') ? { torpedoes: torpedoWords(g, f.nat, 'these boats')! } : {}),
     cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => {
       const card: ShipCard = { cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] };
       const stars = starRow(g, f, c);

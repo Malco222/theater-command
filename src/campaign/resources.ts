@@ -148,15 +148,17 @@ const oilGround = new WeakMap<Region[], Region[]>();
  * Leyte from Brunei, because the oil was there and the tankers to bring it home were not. (An oilfield at home is in
  * the nation's own stock already: a harbour beside Akita's wells is as dry as the rest of Japan.)
  */
-export function oilBeside(g: Game, nat: string, seas: number[]): boolean {
+export const oilBeside = (g: Game, nat: string, seas: number[]): boolean => !!fieldBeside(g, nat, seas);
+/** The working oilfield overseas of this nation's side that stands on one of these seas (`oilBeside`; the fleet's card names it), or null. */
+export function fieldBeside(g: Game, nat: string, seas: number[]): Region | null {
   let fields = oilGround.get(g.regions);
   if (!fields) { fields = g.regions.filter((r) => fieldOverseas(r)); oilGround.set(g.regions, fields); }
   for (const r of fields) {
     if (!r.seas.some((z) => seas.includes(z))) continue;
     const holder = prizeTaker(g, r, 'oil');
-    if (holder && (holder === nat || allied(g, holder, nat)) && fieldYield(g, r, holder) > 0) return true;
+    if (holder && (holder === nat || allied(g, holder, nat)) && fieldYield(g, r, holder) > 0) return r;
   }
-  return false;
+  return null;
 }
 
 /** The share of an oilfield's yield lost to sabotage this month: wells set alight burn for months. 0 for a field at work. */
