@@ -3861,8 +3861,9 @@ namespace
 				FVector2D NameSize = Measure->Measure(Shown, NameFont);
 				NameSize.X += StarWide;
 				const FVector2D LineSize = Each.Line.IsEmpty() ? FVector2D::ZeroVector : FVector2D(Measure->Measure(Each.Line, LineFont));
-				const double Wide = FMath::Max(NameSize.X, LineSize.X) + 19.0;
-				const double High = NameSize.Y + (Each.Line.IsEmpty() ? 0.0 : LineSize.Y - 1.0) + 5.0;
+				const FVector2D R2Line = BargainLayer::PlateLineSize(Each.Region, Each.bCapital && !Each.bFar && !bLabels); // R2 bargains hook: a sender's capital's line under its name (zero for any other plate, and in release 1)
+				const double Wide = FMath::Max(FMath::Max(NameSize.X, LineSize.X), R2Line.X) + 19.0;
+				const double High = NameSize.Y + (Each.Line.IsEmpty() ? 0.0 : LineSize.Y - 1.0) + R2Line.Y + 5.0;
 				FVector2D Corner(Each.At.X / Scale - Wide * 0.5, Each.At.Y / Scale);
 				// (Release 2) The plate of the city at a glance hangs under the name, left edges in line, and moves and is
 				// spaced with it.
@@ -3960,6 +3961,10 @@ namespace
 				if (!Each.Line.IsEmpty())
 				{
 					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(LineSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 1.0 + NameSize.Y))), Each.Line, LineFont, ESlateDrawEffect::None, LineInk);
+				}
+				if (R2Line.Y > 0.0) // R2 bargains hook: the sender's line under the name and the town's own line
+				{
+					BargainLayer::DrawPlateLine(OutDrawElements, LayerId + 1, Geometry, Each.Region, Corner + FVector2D(13.0, 1.0 + NameSize.Y + (Each.Line.IsEmpty() ? 0.0 : LineSize.Y - 1.0)));
 				}
 			}
 			Controller->NoteGateMarks(GateBoxes, Scale);
@@ -16554,6 +16559,7 @@ namespace
 								SNew(SImage).Image(FlagBrush(Card.Ally))
 							]
 						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[BargainLayer::TrayFlag(Card.CorpsId)] // R2 bargains hook: a legion's home flag (collapsed for any other corps)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
 							SNew(STextBlock).Text(Card.Nickname.IsEmpty() ? Card.Name : FText::FromString(FString::Printf(TEXT("%s \u201C%s\u201D"), *Card.Name.ToString(), *Card.Nickname.ToString()))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Ink)
@@ -16609,6 +16615,7 @@ namespace
 						SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? BrightBrass : Faint)
 						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Card.Kind.ToString(), *Card.Grade.ToString(), *MovesLine)))
 					]
+					+ SVerticalBox::Slot().AutoHeight()[BargainLayer::TrayLine(Card.CorpsId)] // R2 bargains hook: a legion's Courier line (collapsed for any other corps)
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.bMood ? 6.0f : 0.0f)[Mood]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.Carry.Num() >= 4 || Card.bDigging ? 6.0f : 0.0f)[CarryRow(Card, bGoing)]
 					+ SVerticalBox::Slot().AutoHeight()[Divisions]
