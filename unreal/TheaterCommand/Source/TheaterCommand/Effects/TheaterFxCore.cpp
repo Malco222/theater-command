@@ -5938,6 +5938,7 @@ namespace TheaterFx
 			R.KnotS = Range(P + "knot_s", 2.5, 5.0);
 			R.Fold = SafeNum(Num(P + "fold", 0.0), 0.0, 1.0, 0.0);
 			R.EdgeTorn = SafeNum(Num(P + "edge_torn", 0.0), 0.0, 4.0, 0.0);
+			R.Longest = SafeNum(Num(P + "longest_m", 0.0), 0.0, 1.0e7, 0.0);
 			R.SpurtM = Range(P + "spurt_m", 0.0, 0.0);
 			R.SpurtWide = SafeNum(Num(P + "spurt_wide", 2.0), 0.1, 8.0, 2.0);
 			R.SpurtAlpha = SafeNum(Num(P + "spurt_alpha", 1.6), 0.0, 8.0, 1.6);
@@ -6763,12 +6764,34 @@ namespace TheaterFx
 		{
 			TrailKind(*Tr, "streak", Now, true); // (the glycol run out, the extinguisher's puff blown away: the thin dark streak that stays)
 		}
-		const TrailRow& Row = TrailRowOf(Tr->Kind);
-		if (Row.Plume.bOn)
+		const TrailRow& AsRow = TrailRowOf(Tr->Kind);
+		if (AsRow.Plume.bOn)
 		{
-			PlumeMove(Now, *Tr, Row, At, Carry, Power); // (a funnel: laid by time into the air over the ship, with dice of its own, so nothing else is thrown differently for it)
+			PlumeMove(Now, *Tr, AsRow, At, Carry, Power); // (a funnel: laid by time into the air over the ship, with dice of its own, so nothing else is thrown differently for it)
 			return;
 		}
+		// (longest_m, the art director's mend of 22 November on the Bremen frames: no trail longer than about 2 km. A
+		// fast aircraft lays its smoke over more sky in life_s than a slow one; over longest_m, its puffs live that much
+		// shorter, and the whole of its age curve (its widening, paling, thinning and lumps) is squeezed by the same
+		// share, so it is the same trail, only shorter. Without the key, or slower: as the row says)
+		TrailRow Squeezed;
+		const TrailRow* Use = &AsRow;
+		const double Flies = Carry.Length();
+		if (AsRow.Longest > 0.0 && Flies * AsRow.Life > AsRow.Longest)
+		{
+			const double K = std::max(AsRow.Longest / (Flies * AsRow.Life), 0.02);
+			Squeezed = AsRow;
+			Squeezed.Life *= K;
+			Squeezed.ThinAfter *= K;
+			Squeezed.PaleFrom *= K;
+			Squeezed.PaleBy *= K;
+			Squeezed.WidenBy *= K;
+			Squeezed.SmearS *= K;
+			Squeezed.KnotS.A *= K;
+			Squeezed.KnotS.B *= K;
+			Use = &Squeezed;
+		}
+		const TrailRow& Row = *Use;
 		Dice D(++Seeds * 49979693ull ^ PlaceKey(At));
 		if (Now < Tr->Last || Now - Tr->Last > 0.5)
 		{

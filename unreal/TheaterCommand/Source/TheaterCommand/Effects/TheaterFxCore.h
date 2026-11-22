@@ -736,6 +736,7 @@ namespace TheaterFx
 		{
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
+			double Longest = 0.0; // (longest_m over 0: the most sky a trail is laid over in its life; a faster aircraft's is squeezed, see TrailMove)
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
 			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
 			double LeastPx = 0.0, LeastKeep = 0.0; // (a far trail held at least LeastPx across, keeping LeastKeep of its opacity)
