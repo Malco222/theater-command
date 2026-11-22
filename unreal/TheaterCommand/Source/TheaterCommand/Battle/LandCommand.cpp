@@ -68,6 +68,7 @@ namespace LandCommand
 			W.Short = B.Short;
 			W.Parent = B.Parent;
 			W.Kind = B.Kind;
+			W.Team = B.Team;
 			W.W = B.W;
 			W.D = B.D;
 			W.Figures0 = B.Figures0;
@@ -234,6 +235,7 @@ namespace LandCommand
 				G.Short = W->Short;
 				G.Parent = W->Parent;
 				G.Kind = W->Kind;
+				G.Team = W->Team;
 				G.W = W->W;
 				G.D = W->D;
 				G.Figures0 = W->Figures0;

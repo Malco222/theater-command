@@ -47,7 +47,8 @@ namespace
 	/** The screen's middle note is said in capitals, as every other. */
 	std::string NoteOf(const FString& Text)
 	{
-		return NarrowOf(Text.ToUpper());
+		// ("block" never goes on the screen: units, the UI director's word, 22 November 18:26Z)
+		return NarrowOf(Text.ToUpper().Replace(TEXT("BLOCKS"), TEXT("UNITS"), ESearchCase::CaseSensitive).Replace(TEXT("BLOCK"), TEXT("UNIT"), ESearchCase::CaseSensitive));
 	}
 
 	/** How far behind what the rules have fought the screen may come, battle seconds: a piece is up to half a second,

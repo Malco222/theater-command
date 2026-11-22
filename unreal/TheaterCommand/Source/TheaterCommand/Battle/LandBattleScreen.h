@@ -79,6 +79,12 @@ private:
 	/** The two flags' brushes, made once their pictures are there. */
 	mutable FSlateBrush FlagBrush[2];
 	mutable bool bFlagMade[2] = { false, false };
+	/** His cards' row, scrolled (the first card shown) where more units than fit: the row never wraps (the UI director,
+	 * 22 November 18:26Z); kept in range by the painting. */
+	mutable int32 CardFirst = 0;
+	/** The clock's and the camera's buttons (PAUSE, x1, x2, x4, FILM) stand in the top bar beside the clock where it has
+	 * the room, else at the foot's right end: worked out each frame before his screen is painted. */
+	mutable bool bControlsOnTop = false;
 	bool bDragging = false;
 	double SpeedBefore = 1.0;
 

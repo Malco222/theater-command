@@ -272,6 +272,9 @@ void ALandBattle::ShowGeneral()
 	}
 	LandFell::Phase("general: the tags and routes");
 	const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
+	// (each unit's ground washed from high up, fading as the eye comes down: full at 300 m over the ground, gone by 150 m)
+	const double EyeOver = S.Pose.Eye.Z - S.Rec.Ground.HeightAt(S.Pose.Eye.X, S.Pose.Eye.Y);
+	G.PrintInk = FMath::Clamp((EyeOver - 150.0) / 150.0, 0.0, 1.0) * 0.25;
 	auto OnView = [&View](const FVector2D& P, double Margin) { return P.X > -Margin && P.Y > -Margin && P.X < View.X + Margin && P.Y < View.Y + Margin; };
 	// A line along the ground, a point every few metres so it lies over the rises: broken where it goes behind the eye.
 	auto Along = [this](std::vector<std::pair<double, double>>& Into, double X0, double Y0, double X1, double Y1, double Lift)
@@ -318,6 +321,22 @@ void ALandBattle::ShowGeneral()
 					M.bCorners = M.bCorners && PixelOf(Cx, Cy, 0.5, P);
 					M.Corners[K * 2] = P.X;
 					M.Corners[K * 2 + 1] = P.Y;
+				}
+			}
+			if (G.PrintInk > 0.01 && T.bKnown && T.W > 1.0 && T.D > 1.0)
+			{
+				// (its real frontage and depth on the ground, across its facing and along it)
+				const double Sn = FMath::Sin(T.Face), Cs = FMath::Cos(T.Face);
+				const double Pw = T.W * 0.5, Pd = T.D * 0.5;
+				const double Edge[4][2] = { { -Pw, -Pd }, { Pw, -Pd }, { Pw, Pd }, { -Pw, Pd } };
+				M.bPrint = true;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					const double Cx = T.X + Edge[K][0] * Cs + Edge[K][1] * Sn, Cy = T.Y - Edge[K][0] * Sn + Edge[K][1] * Cs;
+					FVector2D P;
+					M.bPrint = M.bPrint && PixelOf(Cx, Cy, 0.3, P);
+					M.Print[K * 2] = P.X;
+					M.Print[K * 2 + 1] = P.Y;
 				}
 			}
 			G.Marks.push_back(M);

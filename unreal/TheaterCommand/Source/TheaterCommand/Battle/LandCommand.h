@@ -46,6 +46,8 @@ namespace LandCommand
 		double W = 0.0, D = 0.0;
 		/** The header's words: its name, its short name, the formation it belongs to, its kind (inf, arm, art, ...). */
 		std::string Name, Short, Parent, Kind;
+		/** A support team's kind ('mg', 'mor'; empty for every other block): its card says MACHINE-GUNS or MORTARS. */
+		std::string Team;
 		double Str = 1.0, Mor = 1.0;
 		int Figures = 0, Figures0 = 0;
 		/** The real men it stands for now (-1 not said: an enemy not met) and at the start; the men drawn for it on the
@@ -209,7 +211,7 @@ namespace LandCommand
 		struct Words
 		{
 			int Id = 0, Side = -1;
-			std::string Name, Short, Parent, Kind;
+			std::string Name, Short, Parent, Kind, Team;
 			double W = 0.0, D = 0.0;
 			int Figures0 = 0, Men0 = 0;
 			/** Drawn as tanks or guns (a model), not men. */

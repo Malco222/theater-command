@@ -2469,6 +2469,10 @@ void ALandBattle::MakeMen()
 		float MinPx = 2.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandMassMinPx="), MinPx);
 		MassMinPx = FMath::Clamp(static_cast<double>(MinPx), 0.0, 50.0);
+		// (and in the general's own view, "-TheaterLandGeneralMinPx=" (4): about two by four of the picture's points)
+		float GeneralPx = 4.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGeneralMinPx="), GeneralPx);
+		GeneralMinPx = FMath::Clamp(static_cast<double>(GeneralPx), 0.0, 50.0);
 	}
 	if (Crowd->PoseBankOn() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVat")))
 	{
@@ -2552,10 +2556,14 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	// (no man drawn under some 2 of the picture's lines, GS3, but in the camera's wide of the whole army, where the far
 	// men are its crowd)
 	const bool bMass = S.Eye.MassShot();
+	// (the general's own view, high over the field: every man drawn, the far ones no smaller than GeneralMinPx of the
+	// picture's lines and at most 2.5 times their size, so a section reads as a dark dash and a platoon as a row of them;
+	// the art director, 22 November 18:29Z: "the men are not on screen at all" at his height, culled under two lines)
+	const bool bHigh = S.General.bOn && !S.General.bFilm;
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
-		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || Crowd.SeenDistance(Man) <= S.MenCullFrom);
+		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || bHigh || Crowd.SeenDistance(Man) <= S.MenCullFrom);
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
 		Crowd.PlaceOf(Man, X, Y, Z, Facing);
@@ -2595,6 +2603,10 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			if (bMass && Level == static_cast<int32>(LandMen::Far) && MassMinPx > 0.0)
 			{
 				Grow = FMath::Max(1.0, MassMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines));
+			}
+			else if (bHigh && Level == static_cast<int32>(LandMen::Far) && GeneralMinPx > 0.0)
+			{
+				Grow = FMath::Clamp(GeneralMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines), 1.0, 2.5);
 			}
 			FTransform Helmet;
 			LandMen::Xform Worn;

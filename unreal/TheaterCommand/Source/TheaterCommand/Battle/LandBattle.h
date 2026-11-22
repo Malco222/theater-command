@@ -313,6 +313,9 @@ private:
 	 * about his feet ("-TheaterLandMassMinPx=", 2; 0 none). For the 10 s log: men placed as instances (mid, far), men
 	 * grown and the most grown, and the card's own frame time (ms, summed). */
 	double MassMinPx = 2.0;
+	/** In the general's own view, high over the field, a far man is drawn no smaller than GeneralMinPx of the picture's
+	 * lines ("-TheaterLandGeneralMinPx=", 4; 0 none): his men are always on the screen (the art director, 22 November). */
+	double GeneralMinPx = 4.0;
 	int32 VatMid = 0, VatFar = 0, MassGrown = 0;
 	double MostGrow = 1.0, GpuMs = 0.0;
 	/** For the 10 s log (FX2): the most smoke puffs the effects kit drew in a frame, and the room it was asked for then. */

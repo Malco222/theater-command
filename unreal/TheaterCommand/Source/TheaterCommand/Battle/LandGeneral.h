@@ -30,7 +30,14 @@ struct FLandGeneralShown
 		/** The block's ground's four corners (chosen blocks only, for the ring round them). */
 		bool bCorners = false;
 		double Corners[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+		/** Its real frontage and depth's four corners on the screen, for its ground washed in its side's colour from high
+		 * up (every unit he can see, while PrintInk is above nothing). */
+		bool bPrint = false;
+		double Print[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	};
+	/** How strongly each unit's ground is washed (0 to 0.25): full from 300 m up, gone by 150 m (the art director, 22
+	 * November 18:29Z: "the pin's stem ends over empty ground"). */
+	double PrintInk = 0.0;
 	std::vector<Mark> Marks;
 
 	/**
