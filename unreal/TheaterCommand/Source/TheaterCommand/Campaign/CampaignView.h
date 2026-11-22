@@ -892,6 +892,7 @@ struct FViewAgent
 	bool bAbroad = false, bAtWork = false;
 	int32 Wait = 0, Caught = 0, Rest = 0; // months until he is at work; the chance he is caught this month, in percent; months he must lie low
 	FString Mission, Doing; // what he is doing, by its id and in the rules' words
+	FString Status; // what he is doing without the place, as the room's status line says it: "watching and reporting"
 	FString Stuck; // the rules' reason why he cannot be sent anywhere now; empty when he can
 	FString Home; // for an agent at home: the threat he guards against, in a sentence
 	FString Will; // what the work he does (or will take up) is, in the rules' words

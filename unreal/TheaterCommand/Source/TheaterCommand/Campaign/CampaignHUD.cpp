@@ -2473,7 +2473,14 @@ namespace
 				X += 16.0;
 				// (What he is doing, in the rules' own sentence: its first words lead, the rest follows quietly.)
 				FString Lead = Agent->Doing, Rest;
-				if (!Agent->Doing.Split(TEXT(": "), &Lead, &Rest))
+				if (Agent->bAtWork && !Agent->Status.IsEmpty())
+				{
+					// (Release 2, the spies thread's six mends, 22 November: at work, the room's status line without its
+					// place, which the strip has just named: "Berlin  .  Germany | Watching and reporting", the same words as
+					// the room. On the road or in training the rules' sentence stays, for where he goes and when.)
+					Lead = Agent->Status.Left(1).ToUpper() + Agent->Status.Mid(1);
+				}
+				else if (!Agent->Doing.Split(TEXT(": "), &Lead, &Rest))
 				{
 					if (Agent->Doing.Split(TEXT(" at "), &Lead, &Rest))
 					{

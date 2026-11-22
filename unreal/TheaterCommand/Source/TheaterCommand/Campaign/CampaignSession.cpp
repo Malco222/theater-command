@@ -1085,6 +1085,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 				Entry->TryGetNumberField(TEXT("rest"), Agent.Rest);
 				Entry->TryGetStringField(TEXT("mission"), Agent.Mission);
 				Entry->TryGetStringField(TEXT("doing"), Agent.Doing);
+				Entry->TryGetStringField(TEXT("status"), Agent.Status);
 				Entry->TryGetStringField(TEXT("stuck"), Agent.Stuck);
 				Entry->TryGetStringField(TEXT("home"), Agent.Home);
 				Entry->TryGetStringField(TEXT("will"), Agent.Will);

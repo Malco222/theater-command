@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7cf4e6a5 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1d3bedae 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -74403,6 +74403,8 @@
           wait: a.wait,
           mission: a.mission,
           doing: a.doing,
+          // (the room's status line without its place, "watching and reporting": the card says it after the place)
+          status: a.status,
           caught: pct100(a.caught),
           rest: a.rest,
           stuck: !live5 || !a.atWork ? whyNotSendAgent(s, a.id, a.reg) ?? "" : "",

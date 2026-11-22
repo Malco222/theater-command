@@ -279,7 +279,7 @@ function agentsOnMap(s: Game, up: boolean) {
   type Work = { id: string; label: string; text: string; why: string; ok: boolean; now: boolean; caught: number; success: number; act: string };
   type Seen = { region: number; name: string; nat: string; corps: number; divs: number };
   type Piece = { id: number; name: string; rank: string; skill: number; ranks: number; xp: number; next: number; toward: string; region: number; where: string; host: string; hostName: string;
-    abroad: boolean; atWork: boolean; wait: number; mission: string; doing: string; caught: number; rest: number; stuck: string; home: string; will: string; work: Work[]; sees: Seen[] };
+    abroad: boolean; atWork: boolean; wait: number; mission: string; doing: string; status: string; caught: number; rest: number; stuck: string; home: string; will: string; work: Work[]; sees: Seen[] };
   const none = { agents: [] as Piece[], agentMarks: [] as { region: number; text: string }[] };
   try {
     const room = secretService(s);
@@ -294,7 +294,9 @@ function agentsOnMap(s: Game, up: boolean) {
       agents: room.agents.map((a): Piece => ({
         id: a.id, name: a.name, rank: a.rank, skill: a.skill, ranks: SERVICE.agents.ranks.length, xp: a.xp, next: a.next ?? 0, toward: a.next !== null ? SERVICE.agents.ranks[a.skill] ?? '' : '',
         region: a.reg, where: a.where, host: a.host, hostName: s.nations[a.host]?.name ?? a.host,
-        abroad: a.abroad, atWork: a.atWork, wait: a.wait, mission: a.mission, doing: a.doing, caught: pct100(a.caught), rest: a.rest,
+        abroad: a.abroad, atWork: a.atWork, wait: a.wait, mission: a.mission, doing: a.doing,
+        // (the room's status line without its place, "watching and reporting": the card says it after the place)
+        status: a.status, caught: pct100(a.caught), rest: a.rest,
         stuck: !live || !a.atWork ? whyNotSendAgent(s, a.id, a.reg) ?? '' : '',
         home: a.abroad ? '' : home,
         // (what the work he will take up is, in the rules' words: for the card of an agent still on the road)
