@@ -1959,6 +1959,23 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	}
 }
 
+void ACampaignPhotographer::StepOwnTime()
+{
+	// (a clip's fixed step is let go, and the engine's step put back as it stood)
+	if (bClipStepped)
+	{
+		bClipStepped = false;
+		FApp::SetUseFixedTimeStep(false);
+		FApp::SetFixedDeltaTime(ClipStepWas);
+	}
+}
+
+void ACampaignPhotographer::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StepOwnTime(); // (the photographer gone in the middle of a clip leaves no fixed step behind: the pre-check's note on c3c9d18d)
+	Super::EndPlay(EndPlayReason);
+}
+
 void ACampaignPhotographer::PutAwayCard(ACampaignPlayerController* Sender, bool bBare)
 {
 	// (the result card of the order "-TheaterConfirm" sent in is put away; with "-TheaterConfirmBare" the army is put
@@ -2179,7 +2196,11 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 				// stepped by the clip's own gap instead, however long a tick takes, so that its frames are that far apart in the
 				// game's own time. Not for a gap longer than 0.4 s, the engine's longest step: the world would still go on 0.4 s a
 				// tick, and the pictures would fall on the steps either side of the gap.)
-				if (ClipFrames > 0 && ClipEvery <= 0.4f && !FApp::IsBenchmarking() && !FApp::UseFixedTimeStep())
+				// (Only for the clip of an order sent in, "-TheaterConfirm" or "-TheaterConfirmBare": the month's replay moves
+				// to its next step by the computer's own clock, so a replay clip on a fixed step would lose the pacing its ink
+				// is fitted to. The code checker's note on c3c9d18d. Other clips are taken at the computer's pace, as before.)
+				const bool bOrderClip = FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm")) || FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare"));
+				if (bOrderClip && ClipFrames > 0 && ClipEvery <= 0.4f && !FApp::IsBenchmarking() && !FApp::UseFixedTimeStep())
 				{
 					bClipStepped = true;
 					ClipStepWas = FApp::GetFixedDeltaTime();
@@ -2235,13 +2256,7 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		if (ClipTaken == ClipFrames)
 		{
 			ClipAt = Clock + 1.0f; // (and a second for the last of them to be written)
-			if (bClipStepped)
-			{
-				// (the clip is taken: the game keeps the computer's own time again)
-				bClipStepped = false;
-				FApp::SetUseFixedTimeStep(false);
-				FApp::SetFixedDeltaTime(ClipStepWas);
-			}
+			StepOwnTime(); // (the clip is taken: the game keeps the computer's own time again)
 		}
 		return;
 	}
@@ -2253,6 +2268,16 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 	// A second later, move on.
 	if (bTaken && Clock >= 4.0f + Shots[Current].Wait)
 	{
+		if (CardPutAwayAt >= 0.0f)
+		{
+			// (a result card "-TheaterCardFor" left up is put away with its own picture, never in the next one's)
+			CardPutAwayAt = -1.0f;
+			if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
+			{
+				PutAwayCard(Sender, FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare")));
+			}
+		}
+		StepOwnTime(); // (and a clip's fixed step, if it is still on)
 		++Current;
 		if (!Shots.IsValidIndex(Current))
 		{

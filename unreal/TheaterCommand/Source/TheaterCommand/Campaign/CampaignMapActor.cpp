@@ -11593,6 +11593,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		}
 	}
 	InkBegan = Now;
+	InkHeldRun = 0.0; // (ink begun under an order's result card stands at its very start: see HoldInk)
 	{
 		// (release 2, the front you can read: the player's own ink crosses in a second, release 1's, as the art director
 		// ruled on 22 November after run 3, so that an order's ink is done before he clicks the next; the plan's second
@@ -11693,9 +11694,17 @@ void ACampaignMapActor::HoldInk(bool bHold)
 		return;
 	}
 	bInkHeldByCard = bHold;
-	if (!bHold && InkRuns.Num() > 0 && GetWorld())
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : InkBegan;
+	if (bHold)
 	{
-		InkBegan = GetWorld()->GetTimeSeconds(); // (the card is put away: the second begins now, from where it stood)
+		// (how far the ink had run when the card came up: none for the order's own, begun in this same frame; a part
+		// of its second for ink an earlier order began, which goes on from there and is never run again from its start:
+		// the code checker's note on bca710c9)
+		InkHeldRun = InkRuns.Num() > 0 ? FMath::Max(Now - InkBegan, 0.0) : 0.0;
+	}
+	else if (InkRuns.Num() > 0)
+	{
+		InkBegan = Now - InkHeldRun; // (the card is put away: the second goes on from where it stood)
 	}
 }
 
@@ -15465,7 +15474,10 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 {
 	THEATER_SPEED_SCOPE(MapUpdate);
 	// (lines put off by a press that changed whose ground is whose: see SetHolders)
-	if (FrontLineDue != 0 && GFrameCounter >= FrontLineDue)
+	// (Release 2: while an order's result card holds its ink at the start, the front line waits with it, and is drawn in
+	// its new place as the card is put away and the ink sets off, as it is in the frame after any other press: so that
+	// under the card the line and the paint tell the same story. The code checker's note on bca710c9.)
+	if (FrontLineDue != 0 && GFrameCounter >= FrontLineDue && !bInkHeldByCard)
 	{
 		FrontLineDue = 0;
 		BuildFrontLine();

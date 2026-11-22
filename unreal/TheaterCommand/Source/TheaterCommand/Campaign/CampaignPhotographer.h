@@ -24,10 +24,13 @@ public:
 	void Begin(const FString& InFolder);
 
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	/** The result card of the order "-TheaterConfirm" sent in is put away (and with bBare the army put down and the province's card put away). */
 	void PutAwayCard(ACampaignPlayerController* Sender, bool bBare);
+	/** A clip's fixed step, if on, is let go and the engine's own put back. */
+	void StepOwnTime();
 
 	struct FShot
 	{
