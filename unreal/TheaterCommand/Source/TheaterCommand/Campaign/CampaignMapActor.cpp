@@ -2315,6 +2315,7 @@ void ACampaignMapActor::PaintGround()
 	TintPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Tint, true, false, TEXT("TableTint"));
 	ReliefPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Relief, false, false, TEXT("TableRelief"));
 	MasksPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Masks, false, false, TEXT("TableMasks"));
+	MasksSentFor = -1.0f; // (made without snow: the season lays its own the first time it is told the month)
 	CoverPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Cover, false, false, TEXT("TableCover"));
 	// (an angle half way between two provinces' angles is neither's: no smoothing)
 	// (Speed, tc.Speed.PictureOnce: made unsmoothed from the first, not made and then made again, which waits for the
@@ -12032,6 +12033,10 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		// in July: the painter is told how far the snow takes each province toward white, and occupied ground is
 		// painted again when that has changed.)
 		bool bSnowMoved = false;
+		// (Release 2, map run 7: tc.Speed.MonthSpread. Where the snow's weight moved, the box of those provinces only;
+		// a province with no bounds that moved sends the whole picture, as before.)
+		FBox2D SnowBox(ForceInit);
+		bool bSnowEverywhere = false;
 		Paint.RegionSnow.SetNumZeroed(Data.Regions.Num());
 		for (const FCampaignRegion& Region : Data.Regions)
 		{
@@ -12047,46 +12052,82 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 				}
 			}
 			const float Lies = 0.34f * FMath::Sqrt(Hard) * Most;
-			bSnowMoved |= !Region.Lawful.IsEmpty() && FMath::RoundToInt32(Lies * 20.0f) != FMath::RoundToInt32(Paint.RegionSnow[Region.Id] * 20.0f);
+			const bool bMovedHere = !Region.Lawful.IsEmpty() && FMath::RoundToInt32(Lies * 20.0f) != FMath::RoundToInt32(Paint.RegionSnow[Region.Id] * 20.0f);
+			bSnowMoved |= bMovedHere;
+			if (bMovedHere)
+			{
+				if (Region.Bounds.bIsValid)
+				{
+					SnowBox += Region.Bounds;
+				}
+				else
+				{
+					bSnowEverywhere = true;
+				}
+			}
 			Paint.RegionSnow[Region.Id] = Lies;
 		}
 		if (bSnowMoved && bLandLaid && TintPicture && OccupiedPicture && Paint.Tint.Num() == Paint.NX * Paint.NY)
 		{
+			THEATER_SPEED_SCOPE(SeasonSnowPaint);
 			EndInk();
-			Paint.PaintTint(Data, Terrain, 0, 0, Terrain.NX - 1, Terrain.NY - 1);
-			CampaignTextures::Update(TintPicture, Paint.Tint);
-			CampaignTextures::Update(OccupiedPicture, Paint.Occupied);
-			CampaignTextures::Update(ReliefPicture, Paint.Relief);
+			if (TheaterSpeed::MonthSpread() && !bSnowEverywhere && SnowBox.bIsValid)
+			{
+				// (the margin ground changing hands is painted with: the band of stronger stain along a frontier)
+				const double Margin = FCampaignGround::BandReach + 2.0;
+				const int32 I0 = FMath::Clamp(FMath::FloorToInt32((SnowBox.Min.X - Margin) / Terrain.Cell), 0, Terrain.NX - 1);
+				const int32 I1 = FMath::Clamp(FMath::CeilToInt32((SnowBox.Max.X + Margin) / Terrain.Cell), 0, Terrain.NX - 1);
+				const int32 J0 = FMath::Clamp(FMath::FloorToInt32((SnowBox.Min.Y - Margin) / Terrain.Cell), 0, Terrain.NY - 1);
+				const int32 J1 = FMath::Clamp(FMath::CeilToInt32((SnowBox.Max.Y + Margin) / Terrain.Cell), 0, Terrain.NY - 1);
+				Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
+				CampaignTextures::UpdateBoxAll(TintPicture, Paint.Tint, I0, J0, I1, J1);
+				CampaignTextures::UpdateBoxAll(OccupiedPicture, Paint.Occupied, I0, J0, I1, J1);
+				CampaignTextures::UpdateBoxAll(ReliefPicture, Paint.Relief, I0, J0, I1, J1);
+			}
+			else
+			{
+				Paint.PaintTint(Data, Terrain, 0, 0, Terrain.NX - 1, Terrain.NY - 1);
+				CampaignTextures::Update(TintPicture, Paint.Tint);
+				CampaignTextures::Update(OccupiedPicture, Paint.Occupied);
+				CampaignTextures::Update(ReliefPicture, Paint.Relief);
+			}
 		}
 	}
-	TArray<FColor> Pixels = Paint.Masks;
-	if (Hard > 0.0f)
+	// (tc.Speed.MonthSpread: the masks carry the snow and nothing else that changes, so with the winter as hard as when
+	// they were last sent, as through the summer, they are not sent again.)
+	if (!TheaterSpeed::MonthSpread() || Hard != MasksSentFor)
 	{
-		const int32 NX = Terrain.NX, NY = Terrain.NY;
-		ParallelFor(NY, [&](int32 J)
+		THEATER_SPEED_SCOPE(SeasonMasks);
+		MasksSentFor = Hard;
+		TArray<FColor> Pixels = Paint.Masks;
+		if (Hard > 0.0f)
 		{
-			for (int32 I = 0; I < NX; ++I)
+			const int32 NX = Terrain.NX, NY = Terrain.NY;
+			ParallelFor(NY, [&](int32 J)
 			{
-				const int32 Idx = Terrain.Index(I, J);
-				if (Terrain.Coverage[Idx] < 0.4f)
+				for (int32 I = 0; I < NX; ++I)
 				{
-					continue; // the sea does not lie under snow
+					const int32 Idx = Terrain.Index(I, J);
+					if (Terrain.Coverage[Idx] < 0.4f)
+					{
+						continue; // the sea does not lie under snow
+					}
+					const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+					const float Lying = SnowLying(P, Hard);
+					// It lies thinner than on the crests, so that each country's colour still shows through it: under
+					// the stained paint a dusting is enough to turn the country white, so it is a thin one.
+					const float Plain = 0.15f * FMath::Sqrt(Hard) * Lying;
+					// And the snow line on the mountains comes down.
+					const float H = Terrain.Height[Idx];
+					const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
+					const float Rock = Pixels[Idx].R / 255.0f;
+					const float Snow = FMath::Max3(Pixels[Idx].G / 255.0f, Plain * (1.0f - 0.35f * Rock), High);
+					Pixels[Idx].G = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Snow * 255.0f), 0, 255));
 				}
-				const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
-				const float Lying = SnowLying(P, Hard);
-				// It lies thinner than on the crests, so that each country's colour still shows through it: under
-				// the stained paint a dusting is enough to turn the country white, so it is a thin one.
-				const float Plain = 0.15f * FMath::Sqrt(Hard) * Lying;
-				// And the snow line on the mountains comes down.
-				const float H = Terrain.Height[Idx];
-				const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
-				const float Rock = Pixels[Idx].R / 255.0f;
-				const float Snow = FMath::Max3(Pixels[Idx].G / 255.0f, Plain * (1.0f - 0.35f * Rock), High);
-				Pixels[Idx].G = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Snow * 255.0f), 0, 255));
-			}
-		});
+			});
+		}
+		CampaignTextures::Update(MasksPicture, Pixels);
 	}
-	CampaignTextures::Update(MasksPicture, Pixels);
 	// The year turns on the table. The woods: fresh green in spring, gold and russet through the autumn, bare in
 	// winter where they are not fir. The cloth of the woods seen from far off takes the same turn.
 	{
@@ -12107,6 +12148,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		}
 		if (bTrees && TreeMeshes.Num() > 0)
 		{
+			THEATER_SPEED_SCOPE(SeasonTrees);
 			const double Began = FPlatformTime::Seconds();
 			BuildTrees();
 			UE_LOG(LogTheater, Log, TEXT("The woods turned for the month in %.2f s"), FPlatformTime::Seconds() - Began);
@@ -12114,6 +12156,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		// The rivers of the east freeze where the snow lies, and run again in the thaw.
 		if (FMath::Abs(Hard - RiversDrawnFor) > 0.01f && RiverMesh)
 		{
+			THEATER_SPEED_SCOPE(SeasonRivers);
 			BuildWaterways();
 		}
 	}
@@ -12168,6 +12211,28 @@ void ACampaignMapActor::ShowWealth(bool bOn)
 	Buffers.Commit(OrdersMesh, 4, HighlightMaterial);
 }
 
+namespace
+{
+	/** The sides view's wash for a province, by how the player stands to its holder. */
+	FLinearColor SideWash(const FString& Side)
+	{
+		if (Side == TEXT("enemy"))
+		{
+			return FLinearColor(0.95f, 0.08f, 0.05f, 0.42f);
+		}
+		if (Side == TEXT("ally"))
+		{
+			return FLinearColor(0.15f, 0.5f, 1.0f, 0.38f);
+		}
+		if (Side == TEXT("own"))
+		{
+			return FLinearColor(0.3f, 1.0f, 0.45f, 0.2f);
+		}
+		// A country at peace with the player is greyed, so that a red country at peace is not taken for an enemy.
+		return FLinearColor(0.36f, 0.36f, 0.34f, 0.6f);
+	}
+}
+
 void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 {
 	THEATER_SPEED_SCOPE(ShowSides);
@@ -12178,6 +12243,19 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 	bSides = bOn;
 	SideOf = Standing;
 	bMiniStale = true;
+	if (TheaterSpeed::SidesKept())
+	{
+		if (const FProcMeshSection* Old = OrdersMesh->GetProcMeshSection(5); Old && Old->ProcVertexBuffer.Num() > 0)
+		{
+			OrdersMesh->ClearMeshSection(5); // (laid there with the switch off)
+		}
+		LaySidesKept(false);
+		return;
+	}
+	if (SidesMesh && SidesMesh->IsVisible())
+	{
+		SidesMesh->SetVisibility(false); // (kept there with the switch on)
+	}
 	OrdersMesh->ClearMeshSection(5);
 	if (!bSides)
 	{
@@ -12186,26 +12264,90 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 	FCampaignMeshBuffers Buffers;
 	for (int32 Id = 0; Id < Data.Regions.Num() && Id < SideOf.Num(); ++Id)
 	{
-		const FString& Side = SideOf[Id];
-		if (Side == TEXT("enemy"))
-		{
-			AppendRegionFill(Buffers, Id, FLinearColor(0.95f, 0.08f, 0.05f, 0.42f));
-		}
-		else if (Side == TEXT("ally"))
-		{
-			AppendRegionFill(Buffers, Id, FLinearColor(0.15f, 0.5f, 1.0f, 0.38f));
-		}
-		else if (Side == TEXT("own"))
-		{
-			AppendRegionFill(Buffers, Id, FLinearColor(0.3f, 1.0f, 0.45f, 0.2f));
-		}
-		else
-		{
-			// A country at peace with the player is greyed, so that a red country at peace is not taken for an enemy.
-			AppendRegionFill(Buffers, Id, FLinearColor(0.36f, 0.36f, 0.34f, 0.6f));
-		}
+		AppendRegionFill(Buffers, Id, SideWash(SideOf[Id]));
 	}
 	Buffers.Commit(OrdersMesh, 5, HighlightMaterial);
+}
+
+void ACampaignMapActor::WarmSides(const TArray<FString>& Standing)
+{
+	if (!TheaterSpeed::SidesKept() || bSides || !Data.IsLoaded())
+	{
+		return;
+	}
+	THEATER_SPEED_SCOPE(WarmSides);
+	SideOf = Standing;
+	LaySidesKept(true);
+}
+
+void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
+{
+	// (Release 2, map run 7: tc.Speed.SidesKept. The Y key's third view laid the wash afresh over every province of the
+	// world on each press, 211 ms. It is laid once, on a mesh of its own, and kept while the view is put away; shown
+	// again, only the provinces whose side has changed are coloured afresh, in place. The same wash either way.)
+	if (!bSides && !bWarmOnly)
+	{
+		if (SidesMesh && SidesMesh->IsVisible())
+		{
+			SidesMesh->SetVisibility(false);
+		}
+		return;
+	}
+	if (!SidesMesh)
+	{
+		SidesMesh = NewObject<UProceduralMeshComponent>(this, TEXT("SidesKept"));
+		SidesMesh->SetupAttachment(Root);
+		SidesMesh->bUseAsyncCooking = false;
+		SidesMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		SidesMesh->SetCastShadow(false);
+		SidesMesh->SetVisibility(false);
+		SidesMesh->RegisterComponent();
+	}
+	FProcMeshSection* Laid = SidesMesh->GetProcMeshSection(0);
+	if (!Laid || Laid->ProcVertexBuffer.Num() == 0 || Laid->ProcVertexBuffer.Num() != SidesPointRegion.Num())
+	{
+		FCampaignMeshBuffers Buffers;
+		SidesPointRegion.Reset();
+		for (int32 Id = 0; Id < Data.Regions.Num() && Id < SideOf.Num(); ++Id)
+		{
+			const int32 Before = Buffers.Vertices.Num();
+			AppendRegionFill(Buffers, Id, SideWash(SideOf[Id]));
+			for (int32 K = Before; K < Buffers.Vertices.Num(); ++K)
+			{
+				SidesPointRegion.Add(Id);
+			}
+		}
+		if (!Buffers.Commit(SidesMesh, 0, HighlightMaterial))
+		{
+			SidesPointRegion.Reset();
+			return;
+		}
+		SidesColouredFor = SideOf;
+	}
+	else if (SidesColouredFor != SideOf)
+	{
+		// (each point is its province's alone: AppendRegionFill lays every province's points afresh. A point the wash
+		// does not reach, off the province or on its sea, keeps its nought.)
+		for (int32 K = 0; K < Laid->ProcVertexBuffer.Num(); ++K)
+		{
+			const int32 Id = SidesPointRegion[K];
+			const FString& Now = SideOf.IsValidIndex(Id) ? SideOf[Id] : FString();
+			const FString& Was = SidesColouredFor.IsValidIndex(Id) ? SidesColouredFor[Id] : FString();
+			FColor& Point = Laid->ProcVertexBuffer[K].Color;
+			if (Now == Was || Point.A == 0)
+			{
+				continue;
+			}
+			FLinearColor Wash = SideWash(Now);
+			Point = Wash.ToFColor(false);
+		}
+		SidesColouredFor = SideOf;
+		SidesMesh->MarkRenderStateDirty();
+	}
+	if (!bWarmOnly && !SidesMesh->IsVisible())
+	{
+		SidesMesh->SetVisibility(true);
+	}
 }
 
 void ACampaignMapActor::UpdateFlashes()

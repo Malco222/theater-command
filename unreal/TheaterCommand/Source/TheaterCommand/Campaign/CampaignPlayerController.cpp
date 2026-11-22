@@ -10823,6 +10823,7 @@ void ACampaignPlayerController::SkipWatching()
 
 void ACampaignPlayerController::FinishMonth()
 {
+	THEATER_SPEED_SCOPE(FinishMonth);
 	FCampaignSession* Session = GetSession();
 	bWatching = false;
 	// (and with the new month it is morning again)
@@ -10840,7 +10841,9 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	const FCampaignView& View = Session->GetView();
 	RoundSeen.Reset(); // (the code checker, 17 November: a new month, and Tab's round of the armies begins again)
-	ShowWar(View, TArray<FCorpsMove>());
+	// (Release 2, map run 7: tc.Speed.MonthSpread. The new holders and the armies in the month's frame; the rest of the
+	// table a frame after, as an order's answer has it.)
+	ShowWar(View, TArray<FCorpsMove>(), nullptr, TheaterSpeed::MonthSpread());
 	if (Month.Steps.Num() > 0)
 	{
 		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
@@ -10859,7 +10862,20 @@ void ACampaignPlayerController::FinishMonth()
 	}
 
 	// The campaign is kept every month, so it can be continued another day.
-	if (ACampaignGameMode* Mode = GetMode())
+	// (Release 2, map run 7: tc.Speed.MonthSpread. Kept a frame after the rest of the table, so that the month's frame
+	// does not also carry the whole war written out. Nothing can be ordered in between: an order waits while these
+	// steps are owed, and the next month's end finishes them first.)
+	if (TheaterSpeed::MonthSpread())
+	{
+		Later([this]()
+		{
+			if (ACampaignGameMode* Mode = GetMode())
+			{
+				Mode->SaveCampaign();
+			}
+		});
+	}
+	else if (ACampaignGameMode* Mode = GetMode())
 	{
 		Mode->SaveCampaign();
 	}

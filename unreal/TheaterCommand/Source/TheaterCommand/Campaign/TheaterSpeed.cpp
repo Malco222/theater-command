@@ -112,6 +112,12 @@ namespace
 	TAutoConsoleVariable<int32> CVarShowSpread(
 		TEXT("tc.Speed.ShowSpread"), 80000,
 		TEXT("How many points of the towns' and the trees' squares are newly shown in one frame when the eye crosses a height at which they change (the nearest squares first, one always), the rest the frames after; 0 shows every square in the same frame, as before. The same picture either way, a few frames later."));
+	TAutoConsoleVariable<int32> CVarMonthSpread(
+		TEXT("tc.Speed.MonthSpread"), 1,
+		TEXT("1 spreads the month's turn: the season's masks sent only when the winter changes, snow's paint only in the box it moved in, and the rest of the table and the save a frame and two after; 0 does it all in the month's frame, as before. The same picture either way."));
+	TAutoConsoleVariable<int32> CVarSidesKept(
+		TEXT("tc.Speed.SidesKept"), 1,
+		TEXT("1 lays the sides view once on a mesh of its own, keeps it while it is put away and recolours it where the sides changed; 0 lays it afresh on every press, as before. The same picture either way."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
@@ -471,6 +477,16 @@ namespace TheaterSpeed
 	int32 ShowSpread()
 	{
 		return FMath::Clamp(CVarShowSpread.GetValueOnGameThread(), 0, 100000000);
+	}
+
+	bool MonthSpread()
+	{
+		return CVarMonthSpread.GetValueOnGameThread() != 0;
+	}
+
+	bool SidesKept()
+	{
+		return CVarSidesKept.GetValueOnGameThread() != 0;
 	}
 
 	FQuietModelling::FQuietModelling(int32 How)
