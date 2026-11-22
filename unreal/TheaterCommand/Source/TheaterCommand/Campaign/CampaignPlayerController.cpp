@@ -268,6 +268,8 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("newsreels"), TEXT("Newsreels"), TEXT("A month's great stories shown as film when it ends. Key K; Space skips one."), bNewsreels ? TEXT("ON") : TEXT("OFF"), bNewsreels);
 	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("The game's voice: it reads the newsreels and the opening flight aloud, speaks for the adviser, and lets your armies answer."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
 	Add(TEXT("showsfirst"), TEXT("Play the month before its card"), TEXT("Off: the month's card comes first when a month ends, and the tour of the map and the newsreel are a press away on it. On: the other countries' moves, the newsreel and the great moments play before the card."), bShowsFirst ? TEXT("ON") : TEXT("OFF"), bShowsFirst);
+	// (Release 2, news at the map's edge; ruling 131: merge by hand)
+	Add(TEXT("cardself"), TEXT("Month report: open by itself"), TEXT("Off: when a month ends, its news comes as seals along the edge of the map, and only your own battles stop the month. Press a seal to open the month's report at its row, or press R. On: the report opens by itself, as it used to, and the seals are laid as well."), bMonthReportOpens ? TEXT("ON") : TEXT("OFF"), bMonthReportOpens);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
 	Add(TEXT("askend"), TEXT("Ask before a month ends with idle armies"), TEXT("When armies at the front have not moved and have no orders, END THE MONTH asks once before it ends the month. Armies in the rear are never counted."), bAskAtMonthsEnd ? TEXT("ON") : TEXT("OFF"), bAskAtMonthsEnd);
@@ -321,6 +323,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("showsfirst"))
 	{
 		bShowsFirst = !bShowsFirst;
+	}
+	else if (Id == TEXT("cardself")) // (Release 2, news at the map's edge; ruling 131: merge by hand)
+	{
+		bMonthReportOpens = !bMonthReportOpens;
 	}
 	else if (Id == TEXT("briefing"))
 	{
@@ -436,7 +442,8 @@ void ACampaignPlayerController::SaveOptions() const
 	const FString Text = FString::Printf(
 		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s,\"askEnd\":%s,\"marchSlip\":%s,\"showsFirst\":%s}\n"),
 		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments), Word(bAskAtMonthsEnd), Word(bMarchSlipDone), Word(bShowsFirst));
-	FFileHelper::SaveStringToFile(Text, *OptionsFile());
+	// (Release 2, news at the map's edge; ruling 131: merge by hand) "Month report: open by itself", kept with the rest.
+	FFileHelper::SaveStringToFile(Text.LeftChop(2) + FString::Printf(TEXT(",\"reportOpens\":%s}\n"), Word(bMonthReportOpens)), *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
 }
@@ -480,6 +487,7 @@ void ACampaignPlayerController::LoadOptions()
 	bAskAtMonthsEnd = Yes(TEXT("askEnd"), true);
 	bMarchSlipDone = Yes(TEXT("marchSlip"), false);
 	bShowsFirst = Yes(TEXT("showsFirst"), false);
+	bMonthReportOpens = Yes(TEXT("reportOpens"), false); // (Release 2, news at the map's edge; ruling 131: merge by hand)
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -810,6 +818,8 @@ void ACampaignPlayerController::EnterCampaign()
 	// left too: a loaded game has no reel to play again until its own month ends, and tells its own first night.
 	LastReel.Reset();
 	LastReelDate.Reset();
+	EdgeNews.Clear(); // (Release 2, news at the map's edge; ruling 131: merge by hand) (nor its seals)
+	bEdgeNewsDue = false;
 	bNightTold = false;
 	AlarmShown = 0;
 	RefreshOrders();
@@ -5203,7 +5213,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	if (bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible)
 	{
 		bMonthCardDue = false;
-		OpenPage(TEXT("reports"));
+		// (Release 2, news at the map's edge; ruling 131: merge by hand) A month just resolved lays its rows as seals
+		// on the map's edge, and the card opens by itself only where the option asks for it. The card coming back from
+		// the tour or the newsreel, and the opening card, open as before.
+		const bool bLay = bEdgeNewsDue;
+		bEdgeNewsDue = false;
+		if (!bLay || bMonthReportOpens)
+		{
+			OpenPage(TEXT("reports"));
+		}
+		if (bLay)
+		{
+			LayEdgeNews(bPageOpen && Page.Month.bValid ? &Page.Month : nullptr);
+		}
 	}
 	// (Rules 84.3.3) FIRST COMMAND. The DONE stamp stands two seconds at most, then the next note comes. The notes are
 	// asked again whenever what only the screen sees has changed (the card open, the ARSENAL open, the army in hand, his
@@ -10870,6 +10892,15 @@ void ACampaignPlayerController::FinishMonth()
 	const bool bCard = Month.Fallen.IsEmpty() && !View.Human.IsEmpty();
 	DispatchUntil = bCard ? 0.0 : FPlatformTime::Seconds() + 25.0;
 	bMonthCardDue = bCard && !bScripted;
+	// (Release 2, news at the map's edge; ruling 131: merge by hand) Last month's seals go as this one resolves; this
+	// month's are laid where its card falls due (PlayerTick). While pictures are being taken they are laid at once,
+	// from the card the rules give.
+	EdgeNews.Clear();
+	bEdgeNewsDue = bMonthCardDue;
+	if (bCard && bScripted)
+	{
+		LayEdgeNews(nullptr);
+	}
 
 	if (!Month.Fallen.IsEmpty())
 	{

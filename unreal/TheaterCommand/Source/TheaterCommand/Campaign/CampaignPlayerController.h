@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "Campaign/CampaignView.h"
+#include "Campaign/EdgeNews.h" // (Release 2, news at the map's edge: merge by hand)
 #include "CampaignPlayerController.generated.h"
 
 class ACampaignMapActor;
@@ -697,6 +698,10 @@ public:
 	void PressPage(const FString& Action);
 	/** The rooms open to the player now, for the buttons that lead to them: ids and labels, in step. */
 	void GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const;
+	// (Release 2, news at the map's edge; ruling 131: merge by hand) The month's seals on the map's edge, and a press of
+	// one: the month's card opened at its row (EdgeNews.cpp).
+	const FEdgeNewsBoard& GetEdgeNews() const { return EdgeNews; }
+	void OpenEdgeSeal(int32 Seal);
 
 	/** The generals: who commands what, who is waiting, and the corps that have nobody. */
 	const FGeneralStaff& GetGenerals() const { return Staff; }
@@ -1340,6 +1345,14 @@ private:
 	// The other nations' month, being played out one nation at a time.
 	bool bWatching = false;
 	bool bMonthCardDue = false; // the month's card is to open once the replay, the newsreel and the great moments are over
+	// (Release 2, news at the map's edge; ruling 131: merge by hand) Where bMonthCardDue is for a month just resolved, its
+	// rows are laid as seals on the map's edge instead of the card opening by itself, unless the option "Month report:
+	// open by itself" is on (kept with the options; off by default). Nothing here is saved: the seals are laid again
+	// from the month's card.
+	FEdgeNewsBoard EdgeNews;
+	bool bEdgeNewsDue = false;
+	bool bMonthReportOpens = false;
+	void LayEdgeNews(const FMonthCard* Shown);
 	bool bRewatching = false; // the month is being watched again from its card
 	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began

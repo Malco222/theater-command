@@ -6,6 +6,7 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
+#include "Campaign/EdgeNewsLayer.h" // (Release 2, news at the map's edge: merge by hand)
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Fonts/CompositeFont.h"
@@ -5508,6 +5509,12 @@ namespace
 					[
 						SNew(SSkyPlates).Controller(Controller)
 					]
+					// (Release 2, news at the map's edge: merge by hand) The month's seals on the map's edge, under the
+					// frame and kept off every piece of it.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return OrderSignBrush(Key); }, []() -> const TArray<FSlateRect>& { return FrameRects; }, Serif(TEXT("Bold"), 11))
+					]
 
 					// The date plate: a desk calendar. A red binding along its top, the month in red capitals over the
 					// year in heavy black, who the player is in a clerk's italic, a ruled line, and under it what the
@@ -7173,7 +7180,7 @@ namespace
 									]
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
-										SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(PageBody, SVerticalBox)]
+										SAssignNew(EdgeMarks.Scroll, SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(PageBody, SVerticalBox)] // (Release 2, news at the map's edge: merge by hand)
 									]
 									// (what a page pins to its foot stays on the screen whatever scrolls above it: the raid card's buttons)
 									+ SVerticalBox::Slot().AutoHeight()[SAssignNew(PageFoot, SVerticalBox)]
@@ -8264,6 +8271,7 @@ namespace
 			PlaceLessonNote();
 			PlaceLessonPointer();
 			LookAtList();
+			EdgeMarks.Tick(); // (Release 2, news at the map's edge: merge by hand)
 			// Where the pieces of the frame are now, for the plates and names that must keep out from under them. (A piece
 			// counts only while it is on the screen, every box it stands in shown: one in a row that is put away, as the
 			// bottom row is behind the start screen, keeps no rectangle.)
@@ -11659,6 +11667,7 @@ namespace
 				ShownMonthDate = Card.Date;
 				bMonthRowsOpen = false;
 			}
+			EdgeMarks.Begin(Controller); // (Release 2, news at the map's edge: merge by hand) The row a seal opened the card at is framed and scrolled to.
 
 			// 1. The title, and the two buttons.
 			const bool bAgain = Controller.IsValid() && Controller->CanWatchAgain();
@@ -11785,6 +11794,7 @@ namespace
 				}
 				PageBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 				[
+					EdgeMarks.Mark(FEdgeNewsCardMarks::Band, static_cast<int32>(&Band - Card.Bands.GetData()), // (Release 2, news at the map's edge: merge by hand)
 					SNew(SBorder).BorderImage(bWarning ? &MonthBandBrush : &MonthNewsBrush).Padding(FMargin(0.0f))
 					[
 						SNew(SHorizontalBox)
@@ -11793,7 +11803,7 @@ namespace
 							SNew(SBox).WidthOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(EdgeInk)]
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(16.0f, 9.0f, 12.0f, 9.0f))[Whole]
-					]
+					])
 				];
 			}
 
@@ -11984,17 +11994,18 @@ namespace
 						}
 						LeadBox->AddSlot().AutoHeight().Padding(0.0f, 9.0f, 0.0f, 0.0f)[Doors];
 					}
-					Middle->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)[SNew(SBox).WidthOverride(470.0f)[LeadBox]];
+					Middle->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)[SNew(SBox).WidthOverride(470.0f)[EdgeMarks.Mark(FEdgeNewsCardMarks::Lead, 0, LeadBox)]]; // (Release 2, news at the map's edge: merge by hand)
 				}
 
 				TSharedRef<SVerticalBox> Fronts = SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()[Heading(TEXT("YOUR FRONTS  ·  THE LAND FIRST, THEN SEA AND AIR"))];
 				const int32 Most = 6; // (with the lead story, about seven in all: ruling 64)
+				bMonthRowsOpen = bMonthRowsOpen || EdgeMarks.Unfolds(Most); // (Release 2, news at the map's edge: merge by hand) (a seal's row under the fold opens it)
 				const bool bMore = Card.Rows.Num() > Most;
 				const int32 Shown = bMore && !bMonthRowsOpen ? Most : Card.Rows.Num();
 				for (int32 K = 0; K < Shown; ++K)
 				{
-					Fronts->AddSlot().AutoHeight().Padding(0.0f, K == 0 ? 8.0f : 6.0f, 0.0f, 0.0f)[MonthRowOf(Card.Rows[K])];
+					Fronts->AddSlot().AutoHeight().Padding(0.0f, K == 0 ? 8.0f : 6.0f, 0.0f, 0.0f)[EdgeMarks.Mark(FEdgeNewsCardMarks::Row, K, MonthRowOf(Card.Rows[K]))]; // (Release 2, news at the map's edge: merge by hand)
 				}
 				if (Card.Rows.Num() == 0)
 				{
@@ -12089,7 +12100,7 @@ namespace
 						];
 					}
 					Line->AddSlot().FillWidth(1.0f).VAlign(VAlign_Top).Padding((bSigns && Each.Count.IsEmpty()) ? 6.0f : 0.0f, 1.0f, 0.0f, 0.0f)[Words];
-					Home->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)[Line];
+					Home->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)[EdgeMarks.Mark(FEdgeNewsCardMarks::Home, static_cast<int32>(&Each - Card.Home.GetData()), Line)]; // (Release 2, news at the map's edge: merge by hand)
 				}
 				if (Card.Home.Num() == 0)
 				{
@@ -12119,7 +12130,7 @@ namespace
 							]
 						];
 					}
-					Staff->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)[Line];
+					Staff->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)[EdgeMarks.Mark(FEdgeNewsCardMarks::Staff, static_cast<int32>(&Each - Card.Staff.GetData()), Line)]; // (Release 2, news at the map's edge: merge by hand)
 				}
 				if (Card.Staff.Num() == 0)
 				{
@@ -12132,13 +12143,14 @@ namespace
 				{
 					Else->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)
 					[
+						EdgeMarks.Mark(FEdgeNewsCardMarks::Elsewhere, static_cast<int32>(&Each - Card.Elsewhere.GetData()), // (Release 2, news at the map's edge: merge by hand)
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)[Flag(Each.Tag, 26.0f, 17.0f)]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
 							SNew(STextBlock).Text(FText::FromString(Each.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
 							.ToolTipText(FText::FromString(Each.Tip))
-						]
+						])
 					];
 				}
 				if (Card.Elsewhere.Num() == 0)
@@ -16616,6 +16628,7 @@ namespace
 		FSlateBrush BigCardBrush; // the bigger card's backing: leather that lets nothing through
 		TSharedPtr<FSlateBrush> ShowBrush;
 		TSharedPtr<SVerticalBox> PageBody;
+		FEdgeNewsCardMarks EdgeMarks; // (Release 2, news at the map's edge: merge by hand)
 		TSharedPtr<SVerticalBox> PageFoot;
 		int32 ShownRoom = -1;
 		TSharedPtr<SVerticalBox> GeneralsList;
