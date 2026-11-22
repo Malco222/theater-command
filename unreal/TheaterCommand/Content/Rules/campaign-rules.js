@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 585a8a19 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 44a51d8f 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -69914,6 +69914,15 @@
     };
   }
   var RUSH = 4;
+  function liveOf(g2, t, look) {
+    const fog = !!look && !look.exact;
+    const designYears = {};
+    for (const nat of /* @__PURE__ */ new Set([t.att.nat, t.def.nat, ...t.att.forces.map((f) => f.nat), ...t.def.forces.map((f) => f.nat)])) {
+      const y = armourYear(g2, nat);
+      if (y) designYears[nat] = y;
+    }
+    return { fog, seen: fog ? [...cardKnows(g2, t)] : [], designYears };
+  }
   function battleCalls(h) {
     let s = null;
     const need = () => {
@@ -69928,6 +69937,14 @@
       else endHuman(c);
       for (let guard = 0; guard < 200 && !humanUp(c) && c.human; guard++) stepAI(c);
     };
+    const landSettle = (ids2, to, t) => (r) => {
+      const out = h.attack(ids2, to, r.R, fieldBill(r));
+      const rep = out?.report;
+      const pursuit = rep ? pursuitLine(t, r, rep) : null;
+      const more = { ...pursuit ? { pursuit } : {}, ...r.brokeBy ? { brokeBy: r.brokeBy } : {} };
+      return out && typeof out === "object" && Object.keys(more).length ? { ...out, ...more } : out;
+    };
+    let landSettled = null;
     function begin(sim, settle2) {
       const clock = new Clock();
       clock.set(1);
@@ -69942,7 +69959,21 @@
         const t = landTicket(g2, corps, g2.regions[to]);
         if (!t) return null;
         const why = staffOnly(t);
-        return why ? { ticket: null, why } : { ticket: t };
+        return why ? { ticket: null, why } : { ticket: t, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
+      },
+      battleSettleLand(ids2, to, result, seed) {
+        const r = result && "over" in result ? result.over : result;
+        if (!r || typeof r.R !== "number" || !Array.isArray(r.lines)) return null;
+        const key6 = JSON.stringify([ids2, to, r]);
+        if (landSettled && landSettled.key === key6) return landSettled.out;
+        const g2 = h.game();
+        const corps = ids2.map((i) => g2.corps.find((c) => c.id === i)).filter((c) => !!c);
+        const t = landTicket(g2, corps, g2.regions[to]);
+        if (!t || staffOnly(t)) return null;
+        if (seed !== void 0 && seed !== null && Number(seed) !== t.seed) return { why: "The attack the campaign would make now is not the battle that was fought." };
+        const out = landSettle(ids2, to, t)(r) ?? null;
+        landSettled = { key: key6, out };
+        return out;
       },
       battleStart(ids2, to, opts) {
         const g2 = h.game();
@@ -69956,17 +69987,12 @@
           if (c) u.cal = c;
         }
         const look = attackOutlook(g2, corps, target);
-        sim.fog = !!look && !look.exact;
-        if (sim.fog) sim.seen = cardKnows(g2, t);
+        const live5 = liveOf(g2, t, look);
+        sim.fog = live5.fog;
+        if (sim.fog) sim.seen = new Set(live5.seen);
         sim.drillOn({ sections: true, platoons: true });
         const going = t.att.forces.map((f2) => f2.corps);
-        const ses = begin(sim, (r) => {
-          const out = h.attack(ids2, to, r.R, fieldBill(r));
-          const rep = out?.report;
-          const pursuit = rep ? pursuitLine(t, r, rep) : null;
-          const more = { ...pursuit ? { pursuit } : {}, ...r.brokeBy ? { brokeBy: r.brokeBy } : {} };
-          return out && typeof out === "object" && Object.keys(more).length ? { ...out, ...more } : out;
-        });
+        const ses = begin(sim, landSettle(ids2, to, t));
         if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
         if (opts?.setup) sim.setupOn(ses.me, true);
         if (opts?.staff) {

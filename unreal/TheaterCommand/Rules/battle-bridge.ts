@@ -22,9 +22,20 @@
 // own deed, in the notebook and the lessons, as the same order given from the map is.)
 //
 // The calls, on the same global object TC:
-//   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,
-//                                   or { ticket: null, why } where the staff settles that kind of place (offered.ts): keep
-//                                   FIGHT IT YOURSELF on the card, off, with why beside it
+//   TC.battleLook(ids, to)       -> { ticket, live } for the attack the card shows, null where there is no field battle to
+//                                   fight, or { ticket: null, why } where the staff settles that kind of place (offered.ts):
+//                                   keep FIGHT IT YOURSELF on the card, off, with why beside it. live (release 2, the
+//                                   general's battle fought in the 3D game's own land rules, the production lead's (a)):
+//                                   { fog, seen, designYears }, the card's fog, the corps it identified and each side's
+//                                   armour design year, as TC.battleStart sets them on its own field; the whole answer goes
+//                                   as it stands to the land rules' TC.landStartTicket
+//   TC.battleSettleLand(ids, to, result[, seed]) -> what TC.battleEnd returns, for a land battle fought in the 3D game's own
+//                                   land rules from TC.battleLook's ticket: result is their TC.landResult answer ({ over })
+//                                   or the FieldResult itself, settled through the same closure as TC.battleStart's battle
+//                                   (the campaign's own attack order with the field's R, its bill, the pursuit line and
+//                                   brokeBy). seed, the ticket's, where given: null and nothing settled when the attack the
+//                                   campaign would make now is another battle ({ why }). Asked again with the same result,
+//                                   the same answer, settled once
 //   TC.battleStart(ids, to[, { setup: true }]) -> { field, going, view[, setup] }: the battle opens paused; field is the
 //                                   ground, sent once ("The ground" below). With { setup: true } (release 2) it opens
 //                                   on the setup step: the player places his guns and support teams before the clock
@@ -474,8 +485,8 @@
 
 import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { DROPS, LOOPS, TOWN } from '../../../src/battle/core/cues';
-import type { BattleSim, BattleView, BreakCause, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
-import { GROUNDS } from '../../../src/battle/land/field';
+import type { BattleSim, BattleView, BreakCause, Command, FieldResult, FieldTicket, Side, UnitBase } from '../../../src/battle/core/types';
+import { GROUNDS, type LandPlace } from '../../../src/battle/land/field';
 import { cardKnows, fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
 import { LandBattle, type Gate, type Hedge } from '../../../src/battle/land/sim';
 import { calFor } from '../../../src/battle/land/shells';
@@ -646,6 +657,22 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
 /** Fast until the armies meet, then the speed the player set (ruling 226(1)); the browser page runs the same. */
 const RUSH = 4;
 
+/**
+ * A land battle's options for the 3D game's own land rules (TC.landStartTicket), as battleStart sets them on its field:
+ * the card's fog where it did not know the defence (b453), the corps it identified (b476(3)), each side's armour design
+ * year (armourYear: looks only, the shells a tank is drawn firing).
+ */
+export function liveOf(g: Game, t: FieldTicket<LandPlace>, look: { exact: boolean } | null): { fog: boolean; seen: number[]; designYears: Record<string, number> } {
+  const fog = !!look && !look.exact;
+  const designYears: Record<string, number> = {};
+  // (every nation with a force on the field: an ally's corps fights in its own nation's tanks)
+  for (const nat of new Set([t.att.nat, t.def.nat, ...t.att.forces.map((f) => f.nat), ...t.def.forces.map((f) => f.nat)])) {
+    const y = armourYear(g, nat);
+    if (y) designYears[nat] = y;
+  }
+  return { fog, seen: fog ? [...cardKnows(g, t)] : [], designYears };
+}
+
 export function battleCalls(h: BattleHooks) {
   let s: Session | null = null;
   const need = (): Session => { if (!s) throw new Error('No battle is being fought'); return s; };
@@ -660,6 +687,23 @@ export function battleCalls(h: BattleHooks) {
     if (onEve(c)) endEve(c); else endHuman(c);
     for (let guard = 0; guard < 200 && !humanUp(c) && c.human; guard++) stepAI(c);
   };
+
+  /**
+   * How the campaign takes a land battle's result (battleStart's battle, or one fought in the 3D game's own land rules and
+   * handed back by battleSettleLand): the campaign's own attack order with the field's R and its bill, the pursuit line
+   * and why the army broke.
+   */
+  const landSettle = (ids: number[], to: number, t: FieldTicket<LandPlace>) => (r: FieldResult): unknown => {
+    const out = h.attack(ids, to, r.R, fieldBill(r));
+    // The army that broke, or pulled out under fire, booked more than the field cost it: the after card's line (b464, b474).
+    const rep = (out as { report?: BattleReport | null } | null)?.report;
+    const pursuit = rep ? pursuitLine(t, r, rep) : null;
+    // Why the army broke, for the after card's words where it broke (b496(2)).
+    const more = { ...(pursuit ? { pursuit } : {}), ...(r.brokeBy ? { brokeBy: r.brokeBy } : {}) };
+    return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
+  };
+  /** The last land battle handed back (battleSettleLand), so the same result asked again is settled once. */
+  let landSettled: { key: string; out: unknown } | null = null;
 
   /** Any domain's battle on the shared clock: it opens paused, the player's side commanding. */
   function begin(sim: BattleSim, settle: (r: FieldResult) => unknown): Session {
@@ -678,7 +722,22 @@ export function battleCalls(h: BattleHooks) {
       // The safety net (src/battle/land/offered.ts): a kind of place the field still lands more than a tenth off its card
       // is settled by the staff; the card keeps FIGHT IT YOURSELF, off, with this one sentence beside it.
       const why = staffOnly(t);
-      return why ? { ticket: null, why } : { ticket: t };
+      return why ? { ticket: null, why } : { ticket: t, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
+    },
+    battleSettleLand(ids: number[], to: number, result: FieldResult | { over: FieldResult | null }, seed?: number) {
+      const r = result && 'over' in result ? result.over : (result as FieldResult | null);
+      if (!r || typeof r.R !== 'number' || !Array.isArray(r.lines)) return null;
+      const key = JSON.stringify([ids, to, r]);
+      if (landSettled && landSettled.key === key) return landSettled.out;
+      const g = h.game();
+      const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
+      const t = landTicket(g, corps, g.regions[to]);
+      if (!t || staffOnly(t)) return null;
+      // (the battle fought was the one the campaign would make now: the ticket's own seed, where the 3D game passes it)
+      if (seed !== undefined && seed !== null && Number(seed) !== t.seed) return { why: 'The attack the campaign would make now is not the battle that was fought.' };
+      const out = landSettle(ids, to, t)(r) ?? null;
+      landSettled = { key, out };
+      return out;
     },
     battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean }) {
       const g = h.game();
@@ -693,24 +752,17 @@ export function battleCalls(h: BattleHooks) {
       // A defence the attack card did not know (b453), by the card's own outlook: its blocks show only where they stand
       // until one of the player's has fought them (b464(2)).
       const look = attackOutlook(g, corps, target);
-      sim.fog = !!look && !look.exact;
+      const live = liveOf(g, t, look);
+      sim.fog = live.fog;
       // All but the corps the card identified, which show as the card shows them (b476(3)).
-      if (sim.fog) sim.seen = cardKnows(g, t);
+      if (sim.fog) sim.seen = new Set(live.seen);
       // The men inside the blocks, for the 3D game to draw as men (TC.battleMen): looks only, never read by the fight.
       // Each model as its whole section (release 2: "the ground battle needs a lot more soldiers in it").
       sim.drillOn({ sections: true, platoons: true });
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);
-      const ses = begin(sim, (r) => {
-        const out = h.attack(ids, to, r.R, fieldBill(r));
-        // The army that broke, or pulled out under fire, booked more than the field cost it: the after card's line (b464, b474).
-        const rep = (out as { report?: BattleReport | null } | null)?.report;
-        const pursuit = rep ? pursuitLine(t, r, rep) : null;
-        // Why the army broke, for the after card's words where it broke (b496(2)).
-        const more = { ...(pursuit ? { pursuit } : {}), ...(r.brokeBy ? { brokeBy: r.brokeBy } : {}) };
-        return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
-      });
+      const ses = begin(sim, landSettle(ids, to, t));
       if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
       // The setup step (release 2): only when asked; the 3D game's two-argument call never opens it. Every block of his
       // side is placed in it (the general's controls).
