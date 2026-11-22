@@ -1,0 +1,417 @@
+From d7bfa16d59cafa05abad53073cad2c170bc7e2f5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 17:54:01 +0000
+Subject: [PATCH 3/3] GS6 patch A: the ground battle's clouds turned on the
+ graphics chip (M_CloudTurned), -TheaterSkyChip=0 for the old way
+
+LaySky lays AirSky::Chip's table in a float picture and makes one mesh, once (a puff's room a slot, the painter's
+triangles); M_CloudTurned's Custom node runs Battle/AirSkyChip.inl where the points are placed, every frame, for the
+eye as it is then. DrawSky only carries the mesh with the wind and, when the puffs' order goes stale, lays the table
+again and sends it. The rooms stay, unchanged, for -TheaterSkyChip=0 or a missing material. Tools/build_content.py:
+build_cloud_turned (TC_REBUILD=M_CloudTurned), placed in the list away from its tail.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhyzzCJpbk7hzRiikzLD
+---
+ .../TheaterCommand/Battle/LandBattle.cpp      | 193 +++++++++++++++++-
+ unreal/TheaterCommand/Tools/build_content.py  | 143 ++++++++++++-
+ 2 files changed, 333 insertions(+), 3 deletions(-)
+
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
+index d24ddee8..391e6dc4 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
+@@ -3743,6 +3743,15 @@ struct FLandSky
+ 	FVector DriftShown = FVector(1e30, 0.0, 0.0);
+ 	int32 NearTurns = 0, BothTurns = 0;
+ 	double TurnSeconds = 0.0, TurnsSaidAt = 0.0;
++	// GS6: or turned on the graphics chip (LaySky): the chip's table of the puffs, far to near, the one mesh it is read
++	// by (made once) and the float picture it is sent in; how often it was laid again, what that cost this thread and
++	// what it sent.
++	TUniquePtr<AirSky::Chip> Chip;
++	TWeakObjectPtr<UProceduralMeshComponent> Turned;
++	TWeakObjectPtr<UTexture2D> Table;
++	int32 Lays = 0;
++	double LaySeconds = 0.0, LayBytes = 0.0;
++	bool bDroppedSaid = false;
+ 	// The grade laid over the whole world while the battle stands, under the eye's own (KeepTheLook), and its check.
+ 	TWeakObjectPtr<APostProcessVolume> Grade;
+ 	bool bLookSaid = false, bTargetSaid = false;
+@@ -3801,6 +3810,32 @@ namespace LandLook
+ 			}
+ 		}
+ 	}
++
++	/** GS6: the chip's table (its first Rows rows, four floats a texel) sent to its picture; the copy is the renderer's
++	 * until it has read it. */
++	static void SendTable(UTexture2D* Table, const std::vector<float>& Cells, int32 Rows)
++	{
++		if (!Table || !Table->GetResource() || Rows <= 0)
++		{
++			return;
++		}
++		const int32 Wide = Table->GetSizeX();
++		Rows = FMath::Min(Rows, Table->GetSizeY());
++		const size_t Floats = static_cast<size_t>(Wide) * static_cast<size_t>(Rows) * 4;
++		if (Cells.size() < Floats)
++		{
++			return;
++		}
++		float* Copy = static_cast<float*>(FMemory::Malloc(Floats * sizeof(float)));
++		FMemory::Memcpy(Copy, Cells.data(), Floats * sizeof(float));
++		FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, Wide, Rows);
++		Table->UpdateTextureRegions(0, 1, Region, Wide * 4 * sizeof(float), 4 * sizeof(float), reinterpret_cast<uint8*>(Copy),
++			[](uint8* Data, const FUpdateTextureRegion2D* Regions)
++			{
++				FMemory::Free(Data);
++				delete Regions;
++			});
++	}
+ }
+ 
+ // ---- The table under the battle (as the air battle keeps it) ---------------------------------------------------
+@@ -4210,9 +4245,117 @@ void ALandBattle::LaySky()
+ 	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
+ 	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+ 	Day.Rooms.SetInk(CloudBright);
+-	// The first turn, to an eye over the field's middle; DrawSky turns them as the battle's eye moves.
+ 	const AirSky::Vec Drift = Day.Clouds.DriftAt(State->Battle);
+ 	const double MidX = 0.5 * Rec.Ground.W, MidY = 0.5 * Rec.Ground.H;
++
++	// GS6 (the speed gate's clouds on the graphics chip): the same puffs, turned to the eye where the points are placed,
++	// every frame, by M_CloudTurned (Battle/AirSkyChip.inl, the painter's own arithmetic, checked point by point against
++	// it by Tools/air_show/air_sky_chip_test). This thread lays a table of the puffs, far to near, in a float picture,
++	// and lays it again only when that order has gone stale (a few times a second as the eye flies, now and then as it
++	// walks); one mesh, made once, reads it. Nothing is turned or sent from here as the eye moves. "-TheaterSkyChip=0"
++	// turns them here as before (the two rooms below); "-TheaterSkyChipSort=" the order's staleness, a share of the
++	// nearest drawn puff's distance (0.025). Without M_CloudTurned (Tools/build_content.sh) they are turned here.
++	int32 ChipAsked = 1;
++	FParse::Value(FCommandLine::Get(), TEXT("TheaterSkyChip="), ChipAsked);
++	UMaterialInterface* TurnedMaterial = Day.bShapes && ChipAsked != 0
++		? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_CloudTurned.M_CloudTurned")) : nullptr;
++	if (Day.bShapes && ChipAsked != 0 && !TurnedMaterial)
++	{
++		UE_LOG(LogTheater, Warning, TEXT("Land battle look: M_CloudTurned is missing (run Tools/build_content.sh): the clouds are turned on the game's thread, as before."));
++	}
++	if (TurnedMaterial)
++	{
++		TUniquePtr<AirSky::Chip> Chip = MakeUnique<AirSky::Chip>();
++		double Sort = AirSky::Chip::DefaultOrderTurn;
++		FParse::Value(FCommandLine::Get(), TEXT("TheaterSkyChipSort="), Sort);
++		Chip->SetOrderTurn(Sort);
++		Chip->SetInk(CloudBright);
++		const int32 Wide = AirSky::Chip::Wide, High = Chip->Rows();
++		UTexture2D* ChipTable = UTexture2D::CreateTransient(Wide, High, PF_A32B32G32R32F, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("LandCloudTable")));
++		if (ChipTable && ChipTable->GetPlatformData() && ChipTable->GetPlatformData()->Mips.Num() > 0)
++		{
++			ChipTable->SRGB = false;
++			ChipTable->Filter = TF_Nearest;
++			ChipTable->AddressX = TA_Clamp;
++			ChipTable->AddressY = TA_Clamp;
++			ChipTable->NeverStream = true;
++			// The first lay, for an eye over the field's middle, in the picture as it is made.
++			Chip->Lay(Day.Clouds, AirSky::Vec(MidX, MidY, GroundZ(MidX, MidY) + 2.0), Drift, Day.Sun, Day.Light);
++			{
++				FTexture2DMipMap& Mip = ChipTable->GetPlatformData()->Mips[0];
++				const int64 Bytes = static_cast<int64>(Wide) * High * 4 * static_cast<int64>(sizeof(float));
++				Mip.BulkData.Lock(LOCK_READ_WRITE);
++				void* Out = Mip.BulkData.Realloc(Bytes);
++				FMemory::Memzero(Out, Bytes);
++				FMemory::Memcpy(Out, Chip->Table().data(), FMath::Min<int64>(Bytes, static_cast<int64>(Chip->Table().size() * sizeof(float))));
++				Mip.BulkData.Unlock();
++			}
++			ChipTable->UpdateResource();
++			UMaterialInstanceDynamic* TurnedInk = UMaterialInstanceDynamic::Create(TurnedMaterial, this);
++			TurnedInk->SetTextureParameterValue(TEXT("Sheet"), Sheet);
++			TurnedInk->SetTextureParameterValue(TEXT("Table"), ChipTable);
++			TurnedInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
++			TurnedInk->SetScalarParameterValue(TEXT("UnitsPerMetre"), static_cast<float>(UnitsPerMetre));
++			// The mesh: every slot's points with the painter's triangles, each point's place round its puff and its slot's
++			// texel in the table. The chip places every point, so they are made at the mesh's own middle (two a centimetre
++			// off, to give it a size), and its bounds are stretched over every cloud it can draw (200 km round, a little
++			// past the drawn 20 km and the wind's carry over a long battle): it is never left out of the picture, and if
++			// the material ever fails the points stay where they are made, where nothing is seen.
++			std::vector<float> RingPlaces, SlotPlaces;
++			Chip->PointPlaces(RingPlaces, SlotPlaces);
++			const int32 Count = static_cast<int32>(RingPlaces.size() / 2);
++			TArray<FVector> Points;
++			Points.Init(FVector::ZeroVector, Count);
++			TArray<FVector2D> Rings, Slots;
++			Rings.SetNum(Count);
++			Slots.SetNum(Count);
++			for (int32 Index = 0; Index < Count; ++Index)
++			{
++				const size_t P = static_cast<size_t>(Index) * 2;
++				Rings[Index] = FVector2D(RingPlaces[P], RingPlaces[P + 1]);
++				Slots[Index] = FVector2D(SlotPlaces[P], SlotPlaces[P + 1]);
++			}
++			if (Count > 1)
++			{
++				Points[0] = FVector(-1.0, -1.0, -1.0);
++				Points[Count - 1] = FVector(1.0, 1.0, 1.0);
++			}
++			const std::vector<int> Made = Chip->Triangles();
++			TArray<int32> Triangles;
++			Triangles.Reserve(static_cast<int32>(Made.size()));
++			for (const int Index : Made)
++			{
++				Triangles.Add(Index);
++			}
++			TArray<FVector> Normals;
++			Normals.Init(FVector::UpVector, Count);
++			UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, TEXT("LandCloudsTurned"));
++			Mesh->bUseAsyncCooking = false;
++			Mesh->SetupAttachment(Root);
++			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
++			Mesh->SetCastShadow(false);
++			Mesh->SetTranslucentSortPriority(-20);
++			Mesh->SetBoundsScale(2.0e7f);
++			Mesh->RegisterComponent();
++			const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * UnitsPerMetre;
++			Mesh->SetRelativeLocation(Carried);
++			Mesh->CreateMeshSection(0, Points, Triangles, Normals, Rings, Slots, TArray<FVector2D>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
++			Mesh->SetMaterial(0, TurnedInk);
++			Day.Turned = Mesh;
++			Day.Table = ChipTable;
++			Day.DriftShown = Carried;
++			Day.Lays = 1;
++			Day.LayBytes = static_cast<double>(Chip->RowsUsed()) * Wide * 16.0;
++			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky, %s from %.0f to %.0f m, %d clouds of %d puffs, %.0f%% of the sky, drawn as the sheet's shapes, turned to the eye on the graphics chip (M_CloudTurned: %d puffs' room in one mesh made once, %d laid, %d left out; -TheaterSkyChip=0 turns them on the game's thread)."),
++				Day.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), Day.Clouds.Base, Day.Clouds.Top, static_cast<int32>(Day.Clouds.Clouds.size()),
++				static_cast<int32>(Day.Clouds.Puffs.size()), Day.Clouds.Cover * 100.0, Chip->Room(), Chip->Laid(), Chip->Dropped());
++			Day.Chip = MoveTemp(Chip);
++			return;
++		}
++		UE_LOG(LogTheater, Warning, TEXT("Land battle look: the clouds' table could not be made: the clouds are turned on the game's thread, as before."));
++	}
++
++	// The first turn, to an eye over the field's middle; DrawSky turns them as the battle's eye moves.
+ 	Day.Rooms.PaintBoth(Day.Clouds, AirSky::Vec(MidX, MidY, GroundZ(MidX, MidY) + 2.0), Drift, Day.Sun, Day.Light);
+ 	const double U = UnitsPerMetre;
+ 	const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * U;
+@@ -4273,6 +4416,52 @@ void ALandBattle::DrawSky()
+ 		return;
+ 	}
+ 	FLandSky& Day = *SkyDay;
++	if (Day.Chip.IsValid())
++	{
++		// GS6: turned on the graphics chip; here only the wind's carry and, when the puffs' order has gone stale, the
++		// table laid again and sent (a few hundred kilobytes, no points).
++		UProceduralMeshComponent* TurnedMesh = Day.Turned.Get();
++		UTexture2D* ChipTable = Day.Table.Get();
++		if (!TurnedMesh || !ChipTable)
++		{
++			return;
++		}
++		const AirSky::Vec Drift = Day.Clouds.DriftAt(State->Battle);
++		const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * UnitsPerMetre;
++		if (!Carried.Equals(Day.DriftShown, 1.0))
++		{
++			Day.DriftShown = Carried;
++			TurnedMesh->SetRelativeLocation(Carried);
++		}
++		const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
++		const AirSky::Vec Seen(At.Y, At.X, At.Z);
++		AirSky::Chip& Chip = *Day.Chip;
++		if (Chip.Wants(Seen, Drift))
++		{
++			const double Began = LandParts::Seconds();
++			Chip.Lay(Day.Clouds, Seen, Drift, Day.Sun, Day.Light);
++			LandLook::SendTable(ChipTable, Chip.Table(), Chip.RowsUsed());
++			++Day.Lays;
++			Day.LayBytes += static_cast<double>(FMath::Min(Chip.RowsUsed(), ChipTable->GetSizeY())) * AirSky::Chip::Wide * 16.0;
++			Day.LaySeconds += LandParts::Seconds() - Began;
++			if (Chip.Dropped() > 0 && !Day.bDroppedSaid)
++			{
++				Day.bDroppedSaid = true;
++				UE_LOG(LogTheater, Warning, TEXT("Land battle sky: the chip's table had no room for %d of the farthest puffs (room %d; said once)."), Chip.Dropped(), Chip.Room());
++			}
++		}
++		// (the sky's clock in the log every 30 s: how often the table was laid, what a lay cost this thread, what it sent)
++		if (RealT - Day.TurnsSaidAt >= 30.0)
++		{
++			UE_LOG(LogTheater, Log, TEXT("Land battle sky, %.0f s, on the graphics chip: %d table lays, %.2f ms a lay, %.2f MB sent; %d puffs laid, the nearest %.0f m off, laid again past %.1f m"),
++				RealT - Day.TurnsSaidAt, Day.Lays, Day.Lays > 0 ? Day.LaySeconds * 1000.0 / Day.Lays : 0.0, Day.LayBytes / 1.0e6, Chip.Laid(), Chip.Nearest(), Chip.Slack());
++			Day.TurnsSaidAt = RealT;
++			Day.Lays = 0;
++			Day.LaySeconds = 0.0;
++			Day.LayBytes = 0.0;
++		}
++		return;
++	}
+ 	UProceduralMeshComponent* FarMesh = Day.Far.Get();
+ 	UProceduralMeshComponent* NearMesh = Day.Near.Get();
+ 	if (!FarMesh || !NearMesh)
+@@ -4417,7 +4606,7 @@ void ALandBattle::ShowTheTable()
+ 			Over->Destroy();
+ 		}
+ 		SkyDay->Grade.Reset();
+-		for (UProceduralMeshComponent* Mesh : { SkyDay->Far.Get(), SkyDay->Near.Get() })
++		for (UProceduralMeshComponent* Mesh : { SkyDay->Far.Get(), SkyDay->Near.Get(), SkyDay->Turned.Get() })
+ 		{
+ 			if (Mesh)
+ 			{
+diff --git a/unreal/TheaterCommand/Tools/build_content.py b/unreal/TheaterCommand/Tools/build_content.py
+index cf2acdcf..9ddaeac2 100644
+--- a/unreal/TheaterCommand/Tools/build_content.py
++++ b/unreal/TheaterCommand/Tools/build_content.py
+@@ -325,6 +325,145 @@ def build_cloud():
+     finish(m)
+ 
+ 
++def _sky_chip_code():
++    """GS6: M_CloudTurned's Custom node: Battle/AirSkyChip.inl as it stands (the clouds' arithmetic, which the cloud test
++    also compiles as C++ and checks against the painter's), then a few lines that read one puff's texels from the
++    table and hand back where the point goes (the mesh's own units, its own frame) with its colour and its place on
++    the sheet."""
++    import os
++    places = []
++    try:
++        places.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
++    except NameError:  # (run where the script's own path is not given)
++        pass
++    places.append(os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
++    for path in places:
++        if os.path.isfile(path):
++            with open(path, encoding="utf-8") as f:
++                maths = f.read()
++            break
++    else:
++        raise RuntimeError("Battle/AirSkyChip.inl was not found at " + " or ".join(places))
++    texels = ", ".join(f"SkyTable.Load(int3({k}, 0, 0))" for k in range(5)) + ",\n    " + \
++        ", ".join(f"SkyTable.Load(int3(SkyCol + {k}, SkyRow, 0))" for k in range(8))
++    return maths + f"""
++// (the glue: one point of one puff, for the eye where it is this frame)
++FSkyChip SkyChip;
++SkyChip.Pad = 0.0f;
++int SkyCol = (int)(SkySlot.x + 0.5f);
++int SkyRow = (int)(SkySlot.y + 0.5f);
++float3 SkyLocal = SkyEye / SkyUnits;
++FSkyChipOut SkyOut = SkyChip.Vertex({texels},
++    float3(SkyLocal.y, SkyLocal.x, SkyLocal.z), SkyCol / 8 + (SkyRow - 1) * 256, (int)(SkyRing.x + 0.5f), (int)(SkyRing.y + 0.5f));
++SkyColour = SkyOut.Colour;
++SkySheet = SkyOut.Sheet;
++return float3(SkyOut.At.y, SkyOut.At.x, SkyOut.At.z) * SkyUnits;
++"""
++
++
++def build_cloud_turned():
++    """GS6, THE CLOUDS TURNED ON THE GRAPHICS CHIP (the speed gate's sky: the same clouds as M_Cloud, with nothing turned
++    or sent from the game's thread as the eye moves). One mesh, made once, a puff's room for each slot of the table:
++    each point's first texture coordinate is its place round its puff (the point round the ring, and which ring: 0 the
++    middle, 1 the heart, 2 the rim), its second its slot's first texel in "Table" (a float picture the game lays, far
++    to near: AirSky::Chip). Where the points are placed (the vertex shader) the Custom node runs Battle/AirSkyChip.inl,
++    the painter's own arithmetic, for the eye as it is this frame ("UnitsPerMetre": the scene's), and the point is
++    moved there; its colour and its place on the sheet are carried to the pixels, which are M_Cloud's (the "Sheet" of
++    shapes, "Brightness", "Tint", "Opacity"). Light of its own, see-through, seen from both sides."""
++    m = new_material("M_CloudTurned")
++    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
++    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
++    m.set_editor_property("two_sided", True)
++
++    chip = node(m, unreal.MaterialExpressionCustom, -2400, 900)
++    chip.set_editor_property("description", "AirSkyChip")
++    chip.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
++    chip.set_editor_property("code", _sky_chip_code())
++    inputs = []
++    for name in ("SkyTable", "SkyRing", "SkySlot", "SkyEye", "SkyUnits"):
++        each = unreal.CustomInput()
++        each.set_editor_property("input_name", name)
++        inputs.append(each)
++    chip.set_editor_property("inputs", inputs)
++    outputs = []
++    for name in ("SkyColour", "SkySheet"):
++        each = unreal.CustomOutput()
++        each.set_editor_property("output_name", name)
++        each.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
++        outputs.append(each)
++    chip.set_editor_property("additional_outputs", outputs)
++
++    stand = stand_in(True)
++    table = node(m, unreal.MaterialExpressionTextureObjectParameter, -2900, 700, parameter_name="Table", texture=stand, sampler_type=sampler_for(stand))
++    connect(table, "", chip, "SkyTable")
++    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 850, coordinate_index=0), "", chip, "SkyRing")
++    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 950, coordinate_index=1), "", chip, "SkySlot")
++    eye = node(m, unreal.MaterialExpressionTransformPosition, -2700, 1050,
++               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
++               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
++    connect(node(m, unreal.MaterialExpressionCameraPositionWS, -2950, 1050), "", eye, "")
++    connect(eye, "", chip, "SkyEye")
++    connect(scalar(m, "UnitsPerMetre", 100.0, -2900, 1150), "", chip, "SkyUnits")
++
++    # The point moved from where the mesh made it to where the chip puts it, in the world.
++    away = node(m, unreal.MaterialExpressionSubtract, -2100, 900)
++    connect(chip, "", away, "A")
++    connect(node(m, unreal.MaterialExpressionPreSkinnedPosition, -2300, 1050), "", away, "B")
++    moved = node(m, unreal.MaterialExpressionTransform, -1900, 900,
++                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
++                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
++    connect(away, "", moved, "")
++    to_property(moved, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
++
++    # The pixels: M_Cloud's, from the colour and the sheet's place carried from the points.
++    colour = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkyColour"), -1700, -300)
++    carried = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkySheet"), -1700, 300)
++    paint = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, -300, r=True, g=True, b=True, a=False)
++    alpha = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, 650, r=False, g=False, b=False, a=True)
++    place = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1400, 0, r=True, g=True, b=False, a=False)
++    sheet = picture(m, "Sheet", place, -1100, 0, numbers=True)
++    behind = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 400, r=False, g=False, b=True, a=False)
++    ahead = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 520, r=False, g=False, b=False, a=True)
++
++    def less(a, b, x, y):
++        n = node(m, unreal.MaterialExpressionSubtract, x, y)
++        _feed(m, n, "A", a)
++        _feed(m, n, "B", b)
++        return n
++
++    # light = 2 (side + (front - side) behind + (back - side) ahead), as M_Cloud
++    toward = times(m, less((sheet, "G"), (sheet, "R"), -850, 200), behind, -650, 250)
++    against = times(m, less((sheet, "B"), (sheet, "R"), -850, 450), ahead, -650, 450)
++    light = times(m, plus(m, plus(m, (sheet, "R"), toward, -450, 150), against, -300, 250), 2.0, -150, 250)
++    lit = times(m, times(m, paint, light, -150, -200), scalar(m, "Brightness", 1.3, -350, -100), 50, -200)
++    tinted = times(m, lit, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -150, -400), 250, -250)
++    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
++    shown = times(m, times(m, alpha, (sheet, "A"), -450, 650), scalar(m, "Opacity", 1.0, -450, 780), -250, 650)
++    to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, -50, 650), "", unreal.MaterialProperty.MP_OPACITY)
++    finish(m)
++    try:  # (what the points' shader costs, for the next Mac run's notes; an engine without the call says nothing)
++        stats = mel.get_statistics(m)
++        unreal.log(f"Theater Command: M_CloudTurned: {stats.get_editor_property('num_vertex_shader_instructions')} vertex shader instructions, "
++                   f"{stats.get_editor_property('num_pixel_shader_instructions')} pixel")
++    except Exception:
++        pass
++
++
++def build_cloud_turned_or_tell():
++    """GS6: M_CloudTurned is the clouds' on the graphics chip only; without it the scenes turn them on the game's thread
++    as before (LandBattle's LaySky says so). Whatever goes wrong in it is told, and the rest is built as before."""
++    import traceback
++    try:
++        build_cloud_turned()
++    except Exception:
++        unreal.log_error("Theater Command: M_CloudTurned was not built (the clouds are turned on the game's thread, as before):\n" + traceback.format_exc())
++        try:
++            if eal.does_asset_exist(f"{MATERIALS}/M_CloudTurned"):
++                eal.delete_asset(f"{MATERIALS}/M_CloudTurned")
++        except Exception:
++            unreal.log_error("Theater Command: and the half-built M_CloudTurned could not be removed:\n" + traceback.format_exc())
++
++
+ def build_wake():
+     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
+     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
+@@ -2047,7 +2186,9 @@ REBUILD = os.environ.get("TC_REBUILD", "")
+ # the same. M_LandSteel, the far vehicles' instanced pieces with their soot (TK1), the same: TC_REBUILD=M_LandSteel
+ # after a change to M_MapSurface. M_LandCrowd, the mid and far men as posed instances (SO1), the same:
+ # TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
+-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
++# (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
++# Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
++for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
+         build()
+     else:
+-- 
+2.43.0
+

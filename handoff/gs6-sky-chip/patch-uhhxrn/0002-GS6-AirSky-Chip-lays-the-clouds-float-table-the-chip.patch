@@ -1,7 +1,7 @@
 From 3e5be7f66bf73463b0e4b190a19af0f6a90b28c7 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sun, 22 Nov 2026 17:45:11 +0000
-Subject: [PATCH 2/2] GS6: AirSky::Chip lays the clouds' float table; the chip
+Subject: [PATCH 2/3] GS6: AirSky::Chip lays the clouds' float table; the chip
  test checks every point the chip draws against the painter's
 
 The Chip gathers the puffs as the Painter does (with a 400 m margin), orders them far to near, and lays 8 texels a puff
