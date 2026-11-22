@@ -397,7 +397,7 @@ class Works(Shop, Gear, Fittings):
             self.m.weather = weather
         return self
 
-    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False):
+    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5):
         """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
         all there is). Dust, point by point, in the file's `dust` (`wear` stays paint chipped to the metal): thick on her running gear and the foot of her
         hull, thinning fast between `foot` and `top` (metres up) so that her upper plates stay her own paint, lying a
@@ -460,7 +460,7 @@ class Works(Shop, Gear, Fittings):
             if part in spins:
                 # (a wheel: its dirt read in its own place, so that every wheel of one shape carries the same and the game can draw them as one mesh)
                 p = p - spins[part] + Vector((0.0, 0.0, 0.5))
-            patch = min(1.5, max(0.25, 0.1 + 1.7 * big(p)))
+            patch = min(1.5, max(0.25, 0.1 + 1.7 * big(p))) if part not in spins else 0.9 + 0.7 * (small(p) - 0.5)
             low = max(0.0, min(1.0, (1.95 - p.z) / 1.5)) ** 1.25 * 0.95
             t = max(0.0, min(1.0, (p.z - foot) / max(top - foot, 1e-3)))
             low *= 1.0 - 0.75 * t * t * (3.0 - 2.0 * t)
@@ -471,7 +471,7 @@ class Works(Shop, Gear, Fittings):
             if not two:
                 d += lying
             if part.startswith(("wheel", "sprocket", "idler", "roller", "arm", "axle")):
-                d = max(d, 0.5 * patch)
+                d = max(d, gear * patch)                # (her running gear is never cleaner than this)
             if kind == "rubber":
                 d *= 0.45                               # (a tyre's tread is wiped clean every turn; the dirt stays in its walls)
             for c, r, least in spots:                   # (what hangs on her and is never wiped: spare links)
@@ -486,7 +486,7 @@ class Works(Shop, Gear, Fittings):
                         d, g = max(d, x), 0.0
                     else:
                         g = max(g * 0.5, -2.0 * x)
-            return w, max(s, min(0.38, g * grime)), (min(0.5, 1.25 * lying * dust) if two else 0.0), min(0.88, d * dust)
+            return w, max(s, min(0.38, g * grime)), (min(0.45, lying * dust) if two else 0.0), min(0.88, d * dust)
         self.m.weather = weather
         if shade:
             self.shaded()

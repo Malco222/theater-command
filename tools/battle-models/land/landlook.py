@@ -75,6 +75,8 @@ def main():
         "top": ((cx - 0.01, -0.3, L * 1.7), (cx, 0, 0), 50),
         "gear": ((cx + L * 0.46, -L * 0.42, 0.62), (cx + L * 0.26, -1.0, 0.5), 50),
         "game": ((cx + 16 * math.cos(math.radians(30)) * 0.8, -16 * math.cos(math.radians(30)) * 0.6, 16 * math.sin(math.radians(30))), (cx, 0, H * 0.3), 50),
+        # (as the battle's own camera sees her: 45 m off and 22 degrees up, small in the frame)
+        "battle": ((cx + 45 * math.cos(math.radians(22)) * 0.7, -45 * math.cos(math.radians(22)) * 0.714, 45 * math.sin(math.radians(22))), (cx, 0, H * 0.3), 70),
         "low": ((cx + L * 1.0, -L * 0.5, 0.9), (cx + 0.3, 0, H * 0.45), 40),
         "turret": ((cx + L * 0.48, -L * 0.4, H * 1.08), (cx + 0.4, 0, H * 0.7), 60),
         "deck": ((cx - L * 0.6, -L * 0.34, H * 1.3), (cx - L * 0.2, 0, H * 0.5), 55),

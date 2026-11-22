@@ -53,7 +53,7 @@ def spray(v, paint, **kw):
     `camo` coat fills them with the green and the red-brown, and the one-colour coats fill `upper2` and `upper3`
     with `upper` so that they do not show. The last thing a builder adds."""
     v.own_paint("upper3", v.m.paints["upper"])
-    kw = {"cell": 1.0, "soft": 0.05, "cover": (0.28, 0.26), "three": True, **kw}
+    kw = {"cell": 1.0, "cover": (0.40, 0.36), "three": True, **({"soft": 0.05, "grain": 0.3} if v.fine else {"grain": 0.9}), **kw}
     done = v.camouflage(**kw)
     v.m.paints["upper2"], v.m.paints["upper3"] = (GER_GREEN, GER_BROWN) if paint == "camo" else (v.m.paints["upper"],) * 2
     return done
@@ -705,8 +705,8 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     """Tiger I: 6.32 m hull, 3.56 m wide, 3.00 m high; a flat-sided box on broad tracks, eight axles of interleaved
     wheels a side, drive at the front; the 8.8 cm L/56 in a horseshoe turret with a flat slab of a mantlet."""
     v = Works("Tiger", "Tiger", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
-    v.dice = float(__import__("os").environ.get("DICE", 0.16))
-    v.worn_kw = dict(layers=2, marks=0.45, shade=True, cast=lambda p, part: part == "gun")
+    v.dice = 0.2
+    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, cast=lambda p, part: part == "gun")
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, zf, zr = 0.92, 1.57, 1.20, 1.80
     # ---- the hull ------------------------------------------------------------------------------------------
