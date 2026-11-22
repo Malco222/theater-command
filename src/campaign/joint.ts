@@ -72,7 +72,7 @@ export function joinArmy(g: Game, c: Corps, to: string | null = g.human): boolea
   if (whyNotJoin(g, c, to) !== null) return false;
   c.joint = to as string;
   // Its own staff's standing orders do not follow it.
-  delete c.yields; delete c.digs;
+  delete c.yields; delete c.digs; delete c.holdBack;
   return true;
 }
 
@@ -80,7 +80,7 @@ export function joinArmy(g: Game, c: Corps, to: string | null = g.human): boolea
 export function leaveArmy(g: Game, c: Corps): boolean {
   if (c.joint === undefined) return false;
   delete c.joint;
-  delete c.yields; delete c.digs;
+  delete c.yields; delete c.digs; delete c.holdBack;
   if (!c.dead) g.flags[`back:${c.id}`] = g.turn;
   return true;
 }

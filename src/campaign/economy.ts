@@ -515,7 +515,7 @@ export function orderCadre(g: Game, nat: string, id: number, region: number): Bu
 function reform(g: Game, c: Corps, at: Region): void {
   c.dead = false; c.str = 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
   c.xp = Math.max((c.nat === g.human ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
-  for (const k of ['dug', 'dugFor', 'digging', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival'] as const) delete c[k];
+  for (const k of ['dug', 'dugFor', 'digging', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival', 'holdBack', 'joinedIn'] as const) delete c[k];
   raiseMorale(g, c);
   g.corps.push(c);
   at.units.push(c);

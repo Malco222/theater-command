@@ -78,6 +78,7 @@ import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
+import { JOIN_DEFENCE, MAY_JOIN, joinRules, joinView, type Join, type JoinView } from './join';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -473,6 +474,21 @@ export interface Outlook {
   lines: TicketLine[];
   /** WHAT YOU FACE, as his reports know it (the grand campaign; null in a history campaign): a sign and a sentence a line, four at most. */
   face: FaceLine[] | null;
+  /**
+   * Neighbours join the fight (release 2, its switch on): the corps next door that come up in the battle, his side's
+   * and the enemy's, each with where it comes from, when ('early', 'midway', 'late') and the share of the battle it
+   * counts for. Where any of the enemy's is not identified 'hidden' is true and 'def' is empty: the card says only
+   * that armies next door may join. Unset where nobody joins.
+   */
+  join?: JoinSeen;
+}
+/** The joiners of an attack as the player's staff can name them. */
+export interface JoinSeen { att: JoinView[]; def: JoinView[]; hidden: boolean }
+
+/** What the player's staff knows of the joiners: the enemy's named only where every one of them is identified; those it cannot see, for the odds' band. */
+function joinSeen(g: Game, join: Join): { view: JoinSeen; doubt: Corps[] } {
+  const hidden = join.def.some((j) => corpsKnown(g, j.corps, g.human).level === 'none');
+  return { view: { att: join.att.map(joinView), def: hidden ? [] : join.def.map(joinView), hidden }, doubt: hidden ? join.def.map((j) => j.corps) : [] };
 }
 /** One result's bill as the player's staff can state it before the fight. */
 export interface CostSeen { ours: number; theirs: number | null; share: number }
@@ -504,8 +520,11 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   const dice = a.dice;
   const chanceAt = (odds: number): number => chanceOn(odds, dice);
   const even = evenOdds(dice);
-  const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
+  // (Release 2: the enemy next door the staff cannot see widens the band as the defenders it cannot see do.)
+  const seenJoin = a.join ? joinSeen(g, a.join) : null;
+  const band = oddsBand(g, seenJoin?.doubt.length ? [...a.defenders, ...seenJoin.doubt] : a.defenders, a.odds, target.id, g.human);
   const k = sortKnown(g, a.defenders, g.human);
+  const fogged = k.none.length + k.report.length > 0;
   // The bill: in men for both sides where the defence is known, and the defenders' as a share of their men where it is not.
   // (Where the staff's own estimate rules a result out but the band does not, that result is billed at the end of the band that allows it.)
   const billAt = (odds: number): { won: CostOf | null; lost: CostOf | null } => (going.length ? battleCost(g, a, going, target, {}, odds) : { won: null, lost: null });
@@ -515,11 +534,16 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   const seen = (c: CostOf | null): CostSeen | null => (c ? { ours: c.ours, theirs: band.exact ? c.theirs : null, share: c.share } : null);
   const cost = { won: seen(bill.won), lost: seen(bill.lost) };
   const face = whatYouFace(g, a, target, g.human);
-  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines, face };
+  const join = seenJoin ? { join: seenJoin.view } : {};
+  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines, face, ...join };
   const n = a.defenders.length;
   const corpsWord = (x: number): string => `${x} corps`;
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
   const lines = a.lines.map((l): TicketLine => {
+    // (Release 2: the enemy next door the staff has not identified may join, and no more is said: b453.)
+    if (l.label === JOIN_DEFENCE && seenJoin?.view.hidden) return { label: l.label, value: MAY_JOIN };
+    // (Where every defender is known and only the enemy next door is not, the defence's own lines stand as they are.)
+    if (!fogged) return l;
     // (The town's guard fighting beside them (ruling 232) is no secret: its part of the line stays.)
     if (l.label === 'Forces') { const guard = a.guard ? / and the town guard of about [\d,]+$/.exec(l.value)?.[0] : undefined; return { ...l, value: `${l.value.split(', against ')[0]}, against ${corpsWord(n)}${k.none.length ? `, ${k.none.length === n ? 'none' : `${n - k.none.length}`} of them identified` : ', known from old reports'}${guard ? `,${guard}` : ''}` }; }
     if (l.label === 'Morale') {
@@ -547,7 +571,7 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   const dated = !old ? '' : nn ? `${count(old).toLowerCase()} ${old === 1 ? 'is' : 'are'} known only from ${old === 1 ? 'an old report' : 'old reports'}`
     : old === n ? (n === 1 ? 'The defending corps is known only from an old report' : 'The defending corps are known only from old reports')
     : `${count(old)} of the ${n} defending corps ${old === 1 ? 'is' : 'are'} known only from ${old === 1 ? 'an old report' : 'old reports'}`;
-  const what = [dark, dated].filter(Boolean).join(', and ');
+  const what = [dark, dated, seenJoin?.view.hidden ? (dark || dated ? MAY_JOIN.toLowerCase() : MAY_JOIN) : ''].filter(Boolean).join(', and ');
   // What would narrow the band, and by how much: with the unidentified corps identified only the old reports are in doubt.
   const R = INTEL.reports;
   let w = 0, dOld = 0;
@@ -557,13 +581,16 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   const them = (x: number): string => (x === 1 ? 'the one corps' : `the ${count(x).toLowerCase()} corps`);
   const narrow = nn && !old ? `Identify ${them(nn)} the staff cannot see, and it can give one figure in place of this band.`
     : nn ? `Identify ${them(nn)} the staff cannot see, and the band closes to about ${Math.max(10, Math.min(90, part))}% of its width; fresh reports on the rest close it altogether.`
-    : `Fresh reports on ${them(old)} known from old ones would turn this band into one figure.`;
+    : old ? `Fresh reports on ${them(old)} known from old ones would turn this band into one figure.`
+    : 'Identify the corps next door that may join, and the staff can give one figure in place of this band.';
+  // (Release 2: where the enemy next door is not identified either, it must be for one figure.)
+  const narrowed = seenJoin?.view.hidden && (nn || old) ? `${narrow} The corps next door that may join must be identified too.` : narrow;
   return {
     exact: false, odds: band.mid, lo: band.lo, hi: band.hi, chance: chanceAt(band.mid), chanceLo: chanceAt(band.lo), chanceHi: chanceAt(band.hi), even,
     unidentified: k.none.length, stale: k.report.length,
     note: `${what}, so the odds are the staff's estimate. ${probeRules(g) ? 'A probe by one corps' : 'A battle'}, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
-    wide: chanceAt(band.hi) - chanceAt(band.lo) > 0.4, guess: Array.from({ length: 21 }, (_, i) => chanceAt(band.lo + ((band.hi - band.lo) * i) / 20)).reduce((s, x) => s + x, 0) / 21, narrow, cost,
-    lines, face,
+    wide: chanceAt(band.hi) - chanceAt(band.lo) > 0.4, guess: Array.from({ length: 21 }, (_, i) => chanceAt(band.lo + ((band.hi - band.lo) * i) / 20)).reduce((s, x) => s + x, 0) / 21, narrow: narrowed, cost,
+    lines, face, ...join,
   };
 }
 
@@ -1349,6 +1376,19 @@ export function orderStance(g: Game, c: Corps, posture: Posture): boolean {
 
 /** The standing order a corps is under. */
 export const postureOf = (c: Corps): Posture => (c.yields ? 'back' : c.digs ? 'dig' : 'stand');
+
+/**
+ * Neighbours join the fight (release 2, its switch on): the player's standing order that one of his corps, or an
+ * ally's that marches in his army, stays out of the battles next door ('hold' false lets it join them again). His
+ * allies' staffs send theirs as they see fit. Refused with the switch off, so that nothing of it is written.
+ */
+export function orderHoldBack(g: Game, c: Corps, hold: boolean): boolean {
+  if (!joinRules() || !canOrder(g, c)) return false;
+  if (hold) c.holdBack = true; else delete c.holdBack;
+  return true;
+}
+/** True where the player has ordered a corps to stay out of the battles next door. */
+export const holdsBack = (c: Corps): boolean => !!c.holdBack;
 
 /** What the player's engineer corps could do where it stands this month (the grand campaign). */
 export function engineerJobs(g: Game, c: Corps): JobOffer[] {

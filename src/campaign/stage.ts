@@ -16,8 +16,15 @@
 import stage from '../../data/campaign/stage.json';
 
 // A run outside the browser can be given the switch by its environment too: TC_FAR=1 node ... (the hash checks, a seat's trial).
-const G = globalThis as { TC_FAR?: unknown; process?: { env?: Record<string, string | undefined> } };
+const G = globalThis as { TC_FAR?: unknown; TC_JOIN?: unknown; process?: { env?: Record<string, string | undefined> } };
 const forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
 
 /** True where the grand campaign plays on the whole world: the far side's chart is read and its countries exist. */
 export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== '0' : (stage as { far: boolean }).far === true;
+
+// Neighbours join the fight (release 2; the design director's ruling of 22 November, 03:15Z): stage.json's 'join'.
+// Off, as it ships, every battle is fought as release 1 fought it. TC_JOIN=1 or 0 turns it for one run (a war of the
+// gate), and a test turns JOIN.on for its own file (src/campaign/join.ts reads it at every battle).
+const forcedJoin = G.TC_JOIN ?? G.process?.env?.TC_JOIN;
+/** The switch of the rule that brings corps next door into a battle (join.ts). */
+export const JOIN = { on: forcedJoin !== undefined ? !!forcedJoin && forcedJoin !== '0' : (stage as { join?: boolean }).join === true };

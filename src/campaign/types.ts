@@ -390,7 +390,17 @@ export interface Corps extends Storied {
   nos?: number[];
   /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
   town?: number;
+  /**
+   * Neighbours join the fight (release 2, its switch on: join.ts): the player's standing order that this corps stays
+   * out of battles next door. Absent, it joins one whenever it can. Only the player sets it, and only with the switch on.
+   */
+  holdBack?: boolean;
+  /** The month it last joined a battle next door (release 2, its switch on): its month is spent, and it stayed where it stood. */
+  joinedIn?: number;
 }
+
+/** When a corps from next door comes up in a battle it joins, as the battle card says it (release 2, join.ts). */
+export type JoinWord = 'early' | 'midway' | 'late';
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
 export type Posture = 'stand' | 'dig' | 'back';
@@ -462,6 +472,15 @@ export interface ReportUnit {
   /** Ruling 232: the province a beaten field army fell back to, and a field army cut off that laid down its arms. */
   to?: number;
   cut?: boolean;
+  /**
+   * Neighbours join the fight (release 2, join.ts): a corps that came up from next door and stayed where it stood.
+   * 'joined' is the share of the battle it was there for (0 to 1), 'from' the province it came from, 'arrive' the
+   * battle card's word for when it came up, and 'corps' its id. Set on such a unit alone; it is listed after all the others.
+   */
+  joined?: number;
+  from?: number;
+  arrive?: JoinWord;
+  corps?: number;
 }
 
 export interface BattleReport {

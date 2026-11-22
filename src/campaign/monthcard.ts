@@ -543,8 +543,9 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const besiegedTowns = new Set<number>();
   const fought = new Set<number>();
   for (const r of lands) {
-    const att = mine(r.attNat) || r.attackers.some((u) => mine(u.nat));
-    const def = !att && (mine(r.defNat) || r.defenders.some((u) => mine(u.nat)));
+    // (A corps that only came up from next door does not make a battle his: release 2's joiners are left out of his rows.)
+    const att = mine(r.attNat) || r.attackers.some((u) => mine(u.nat) && u.joined === undefined);
+    const def = !att && (mine(r.defNat) || r.defenders.some((u) => mine(u.nat) && u.joined === undefined));
     if (!att && !def) continue;
     fought.add(r.region);
     const reg = g.regions[r.region];
@@ -555,7 +556,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const us = att ? r.attackers : r.defenders;
     // (The defender's loss is his dead and wounded and the men taken prisoner.)
     const oursLost = att ? r.attLost : r.defLost + r.prisoners, theirsLost = att ? r.defLost + r.prisoners : r.attLost;
-    const corps = us.filter((u) => !u.guard).length;
+    const corps = us.filter((u) => !u.guard && u.joined === undefined).length;
     // A siege laid is the field won and the town still to take: good news for the besieger, a warning to the besieged.
     const good = r.siege ? att : att ? r.taken : !r.taken;
     // A siege laid on his town that holds is neither a battle won nor a battle lost (ruling 104): the score's small
@@ -569,7 +570,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (laidOnHim && shut.men > 0) besiegedTowns.add(r.region);
     if (!r.yielded && !laidOnHim) { if (good) battlesWon++; else battlesLost++; }
     menOurs += oursLost; menTheirs += theirsLost;
-    const lead = [...us].filter((u) => !u.guard).sort((a, b) => b.men - a.men)[0];
+    const lead = [...us].filter((u) => !u.guard && u.joined === undefined).sort((a, b) => b.men - a.men)[0];
     const row = blank();
     row.arm = 'land';
     row.place = place;

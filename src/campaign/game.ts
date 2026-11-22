@@ -56,6 +56,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
+import { joinLines, joinersOf, spendJoiner, type Join } from './join';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -1063,6 +1064,11 @@ export interface Assessment {
    * share of that side's strength, its air strikes and the groups that fly them. Unset where nobody is on call.
    */
   air?: CloseAir;
+  /**
+   * Neighbours join the fight (release 2, its switch on: join.ts): the corps next door that come up in this battle,
+   * each side's, with when and for what share of it. They are in A and D. Unset where nobody joins.
+   */
+  join?: Join;
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
@@ -1097,6 +1103,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // An assault on a town (the grand campaign) is fought against its garrison, not against an army in the field.
   const town = !!opts.town;
   const defenders = town ? [...garrisonOf(target)] : hostileUnits(g, target, attNat);
+  // Neighbours join the fight (release 2, its switch on): the corps next door that come up in it, both sides. Off, null.
+  const join = joinersOf(g, attackers, target, defenders, opts);
   const lines: TicketLine[] = [];
   const aN = new Set(attackers.map((c) => c.nat)), dN = new Set(defenders.map((c) => c.nat));
   if (town && !dN.size) dN.add(target.ctrl);
@@ -1224,6 +1232,15 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     cmdA += p * lead;
     A += p * lead;
   }
+  // Corps that join the attack from next door (release 2): each by the share of the battle it is there for, on its
+  // own terms as the corps above are reckoned on theirs. They come from no new side and take no room on the roads.
+  if (join) for (const j of join.att) {
+    const p = joinAttack(g, j.corps, target, { wide, land, mined, tempo, facing: !!facing, served, eased: breach ? 1 - (1 - soften) * (1 - breach) : soften });
+    const lead = cmdAttack(g, j.corps, false);
+    rawA += j.share * p;
+    cmdA += j.share * p * lead;
+    A += j.share * p * lead;
+  }
   // A relieving army (the grand campaign): the garrison of the town it has come to free sallies out to meet it.
   const sally = town || opts.sally ? { power: 0, corps: 0 } : sortiePower(g, target, attNat);
   if (sally.power > 0) A += sally.power;
@@ -1295,6 +1312,14 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const guardWalls = guarded > 0 ? fieldWalls(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, pAll > 0 ? 1 - pFaced / pAll : 1) : 1;
   const watch = town ? guardPower(g, target) * walls : guarded > 0 ? guardPower(g, target) * guardWalls : 0;
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
+  // Corps that join the defence from next door (release 2): in the strength, after the day's luck is set, and in none of the works.
+  if (join) for (const j of join.def) {
+    const p = joinDefence(g, j.corps, target, wide);
+    const lead = cmdDefence(g, j.corps);
+    rawD += j.share * p;
+    cmdD += j.share * p * lead;
+    D += j.share * p * lead;
+  }
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
   let airEdge = (aAir - dAir) / (aAir + dAir + 1);
   // Whoever has won the sky over this ground in the air war has it in the land battle too. In the grand campaign's air
@@ -1359,6 +1384,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
         : 'Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates',
     });
   }
+  // Who comes up from next door, and when (release 2).
+  if (join) lines.push(...joinLines(join));
   if (wide && defenders.length) {
     // Training and experience decide as many fights as numbers do: said in words, division for division.
     const grade = (cs: Corps[]): { worth: number; army: number; xp: number } => {
@@ -1601,12 +1628,64 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // (The town's guard fighting beside them (ruling 232) stands in front of them.)
   const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
   if (overrun) lines.push(GUNS_OVERRUN);
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}), ...(join ? { join } : {}) };
+}
+
+/**
+ * What a corps that joins an attack from next door brings to it before its share (release 2, join.ts): the terms of
+ * assess's own loop that are the corps' own (its ground and river, the mines, tanks in close country, a new
+ * offensive, a war declared this month, its nation's gifts and stores, its agent, its heart, its command and doctrine,
+ * its line and railhead, the winter, and the fortress works it faces), none of those that belong to the whole force.
+ */
+function joinAttack(g: Game, c: Corps, target: Region, f: { wide: boolean; land: boolean; mined: number; tempo: boolean; facing: boolean; served: boolean; eased: number }): number {
+  let p = corpsBase(g, c) * KIND[c.kind].atk;
+  if (f.wide) {
+    p *= groundAttack(g, c.kind, target);
+    const x = f.land ? riverBetween(g, c.reg, target.id) : null;
+    if (x) p *= bridgeDown(g, x) ? ENGINEERING.blown.attack : ENGINEERING.river.attack;
+    p *= f.mined;
+  }
+  if (c.kind === 'arm' && (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh')) p *= 0.6;
+  if (f.tempo && KIND[c.kind].mobile) p *= 1.2;
+  if (f.facing) p *= assaultFire(g, c);
+  if (f.wide && sneakOn(g, c.nat, target.ctrl)) p *= RELATIONS.sneak.attack;
+  if (f.wide) { p *= traitAttack(g, c, target, false); p *= shortAttack(g, c); const spy = intelAttack(g, c.nat, target); if (spy) p *= spy.mul; }
+  p *= heart(c);
+  if (g.nations[c.nat].slowCommand) p *= 0.85;
+  p *= techMul(g, c.nat, 'doctrine');
+  const line = lineStrength(g, c);
+  if (line.mul < 1) p *= line.mul;
+  if (f.wide) { const head = railheadOf(g, c); if (head.attack < 1) p *= head.attack; }
+  if (frozen(g, c.nat, target)) p *= 1 - (1 - EASTERN.winter.attack) * cmdWinter(g, c);
+  const fort = target.fort;
+  if (f.served && fort && fort.vs.includes(g.regions[c.reg].owner)) p /= f.eased ? 1 + (FORT_MUL[fort.lv] - 1) * (1 - f.eased) : FORT_MUL[fort.lv];
+  return p;
+}
+
+/** And what one that joins a defence brings to it: the ground's worth and the corps' own terms, with no works (it comes up from next door). */
+function joinDefence(g: Game, d: Corps, target: Region, wide: boolean): number {
+  let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
+  if (wide) p *= groundDefence(g, d.kind, target);
+  const blows = wide ? Math.min(DEFENCE.tired.most, d.blows ?? 0) : 0;
+  if (blows > 0) p *= 1 - DEFENCE.tired.per * blows;
+  if (frozen(g, d.nat, target)) p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d);
+  const dl = lineStrength(g, d).mul;
+  if (dl < 1) p *= 1 - (1 - dl) * (inDesert(target) ? DESERT.lineDefence : EASTERN.lineDefence);
+  if (wide) { const head = railheadOf(g, d); if (head.defence < 1) p *= head.defence; p *= traitDefence(g, d, target); p *= shortDefence(g, d); }
+  p *= heart(d);
+  return p;
 }
 
 function reportUnit(c: Corps): ReportUnit {
   return { name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: men(c), lost: 0, fate: '' };
 }
+
+/** A corps that joined a battle from next door, as the report lists it (release 2): its share, where it came from and when. */
+function joinedUnit(c: Corps, j: { share: number; from: number; word: ReportUnit['arrive'] }, before: number): ReportUnit {
+  return { name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: before, lost: before - men(c), fate: '', joined: Math.round(j.share * 1000) / 1000, from: j.from, arrive: j.word, corps: c.id };
+}
+/** A side's units in a report, with those that joined it from next door after everyone else. */
+const withJoined = (us: ReportUnit[], joined: ReportUnit[]): ReportUnit[] => (joined.length ? [...us, ...joined] : us);
 
 export function removeCorps(g: Game, c: Corps): void {
   c.dead = true;
@@ -1849,7 +1928,9 @@ export function battleCost(g: Game, a: Assessment, attackers: Corps[], target: R
   const ready = town ? 0 : a.prepared;
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
   const weight = odds === a.odds ? a.weight : g.flags.open === 1 && !town ? Math.min(1, odds / DEFENCE.wear.fullAt) : 1;
-  const all = a.defenders.reduce((s, c) => s + men(c), 0);
+  let all = a.defenders.reduce((s, c) => s + men(c), 0);
+  // (The corps that join the defence from next door are counted for their share of the fight: release 2.)
+  if (a.join) for (const j of a.join.def) all += men(j.corps) * j.share;
   const at = (R: number, win: boolean): CostOf => {
     const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
     const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
@@ -1858,6 +1939,11 @@ export function battleCost(g: Game, a: Assessment, attackers: Corps[], target: R
     let ours = 0, theirs = 0;
     for (const c of attackers) ours += men(c) * Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
     for (const c of a.defenders) theirs += men(c) * Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * weight;
+    // The joiners' bill, as resolveBattle books it (release 2).
+    if (a.join) {
+      for (const j of a.join.att) ours += men(j.corps) * Math.min(0.6, attFrac * tollFor(a.faced?.toll, j.corps) * cmdLoss(g, j.corps)) * j.share;
+      for (const j of a.join.def) theirs += men(j.corps) * Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[j.corps.kind].mobile ? 1 : caught) * stood * cmdLoss(g, j.corps)) * weight * j.share;
+    }
     return { ours: Math.round(ours), theirs: Math.round(theirs), share: all > 0 ? theirs / all : 0 };
   };
   const lo = Math.max(1e-6, odds * a.dice[0]), hi = Math.max(lo, odds * a.dice[1]);
@@ -1951,6 +2037,19 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     attLost += attU[i].lost;
     if (before > 0) bled.set(c.id, attU[i].lost / before);
   });
+  // Corps that joined the attack from next door (release 2) pay for the share of it they were in, stay where they
+  // stood, and have spent their month. They are listed after everyone else.
+  const attJoin: ReportUnit[] = [];
+  if (a.join) for (const j of a.join.att) {
+    const c = j.corps, before = men(c);
+    c.str *= 1 - Math.min(0.6, attFrac * tollFor(a.faced?.toll, c) * cmdLoss(g, c)) * j.share;
+    c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c) * nerve(c) * j.share, 0, 1);
+    c.xp = Math.min(1, c.xp + 0.05 * j.share);
+    spendJoiner(g, c);
+    const u = joinedUnit(c, j, before);
+    attLost += u.lost;
+    attJoin.push(u);
+  }
   const win = R >= 1.2;
   // Troops who hold their ground come out of the fight in better shape than troops driven off it.
   const stood = win ? 1 : HELD_LOSS;
@@ -1967,6 +2066,18 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     defLost += defU[i].lost;
     if (before > 0) bled.set(c.id, defU[i].lost / before);
   });
+  // And those that joined the defence: by the weight of the blow and their share of it, with no works to cover them.
+  const defJoin: ReportUnit[] = [];
+  if (a.join) for (const j of a.join.def) {
+    const c = j.corps, before = men(c);
+    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c)) * a.weight * j.share;
+    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight * j.share, 0, 1);
+    c.xp = Math.min(1, c.xp + 0.04 * j.share);
+    spendJoiner(g, c);
+    const u = joinedUnit(c, j, before);
+    defLost += u.lost;
+    defJoin.push(u);
+  }
   // Works wear down under attack (the grand campaign): whoever is still in them next month has less to stand behind,
   // and troops who were attacked dig slower that month, or not at all.
   if (!town && g.flags.open === 1) {
@@ -1981,6 +2092,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Whoever fights an army learns what it is made of: each side has identified the other's corps.
   identify(g, defenders, attNat);
   for (const nat of new Set(defenders.map((c) => c.nat))) identify(g, attackers, nat);
+  // (And the corps that came up from next door, on both sides.)
+  if (a.join) {
+    identify(g, a.join.def.map((j) => j.corps), attNat);
+    for (const nat of new Set(defenders.map((c) => c.nat))) identify(g, a.join.att.map((j) => j.corps), nat);
+  }
 
   const level: VictoryLevel = R >= 3 ? 'Heroic victory' : R >= 2 ? 'Decisive victory' : R >= 1.2 ? (attLost > defLost ? 'Pyrrhic victory' : 'Close victory') : R >= 0.8 ? 'Close defeat' : 'Decisive defeat';
   const affected = new Set(defenders.map((c) => c.nat));
@@ -2058,7 +2174,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   g.flags.battles = Math.max(g.flags.battles ?? 0, g.reports.length) + 1;
   const rep: BattleReport = {
     id: g.flags.battles, turn: g.turn, week, region: target.id, regionName: target.name, attNat, defNat,
-    attackers: attU, defenders: gone.length ? [...defU, ...gone] : defU, lines: ticketAfter(a.lines), aPower: a.A, dPower: a.D, odds: R, level, taken: win,
+    attackers: attJoin.length ? [...attU, ...attJoin] : attU, defenders: withJoined(gone.length ? [...defU, ...gone] : defU, defJoin), lines: ticketAfter(a.lines), aPower: a.A, dPower: a.D, odds: R, level, taken: win,
     attLost, defLost, prisoners,
   };
   if (town) rep.town = true;
@@ -3535,6 +3651,9 @@ function digIn(g: Game, nat: string): void {
       delete c.relief;
       if (c.dug && c.town === undefined && !c.yields && !c.fought) { if (c.pressed) delete c.pressed; continue; }
     }
+    // A corps that joined a battle next door this month (release 2) stayed where it stood: it keeps what works it has
+    // there, and digs no further.
+    if (c.joinedIn === g.turn && c.town === undefined && !c.yields) { if (c.pressed) delete c.pressed; continue; }
     if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
       // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
       const gain = c.pressed ? DEFENCE.wear.regrow : 1;
@@ -3709,6 +3828,8 @@ export function startPhase(g: Game, nat: string): void {
     if (jointHold(g, c)) c.ap = 0;
     // A garrison keeps to its town until it is ordered out.
     if (c.town) c.ap = 0;
+    // A corps that joined a battle next door earlier this month has spent it (release 2); one that joined last month is fresh.
+    if (c.joinedIn !== undefined) { if (c.joinedIn === g.turn) c.ap = 0; else delete c.joinedIn; }
   });
   if (drafted_ > 0) drawMen(g, nat, drafted_);
   if (menRules(g) && nat === g.human) {
