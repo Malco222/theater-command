@@ -11,7 +11,8 @@
     "share": 0
   },
   "alive": {
-    "_about": "The share of the men who went into the water still alive after so many hours in it, by the water's band (the historian's table by sea and month: 'water'), with straight lines between the record's points (S5). Cold and temperate water leave none alive past their last point (48 hours). Warm water runs on to Indianapolis's 35% at 100 hours. The rules read it no further than 96 hours past the fight's end.",
+    "_about": "The share of the men who went into the water still alive after so many hours in it, by the water's band (the historian's table by sea and month: 'water'), with straight lines between the record's points (S5). Cold and temperate water leave none alive past their last point (48 hours). Warm water runs on to Indianapolis's 35% at 100 hours. The rules read it no further than 96 hours past the fight's end. 'arctic' is water under 4 C (the design director, 18:50Z, from the historian's section 4b: men in life jackets with no raft, 85% at 15 minutes, 60% at 30, 20% at an hour, 5% at an hour and a half, none at three), read only in the sea-months the historian lays as arctic ('a') in the water table.",
+    "arctic": [[0, 1], [0.25, 0.85], [0.5, 0.6], [1, 0.2], [1.5, 0.05], [3, 0]],
     "cold": [[0, 1], [1, 0.6], [3, 0.05], [12, 0], [48, 0]],
     "temperate": [[0, 1], [1, 0.95], [3, 0.7], [12, 0.25], [48, 0.03]],
     "warm": [[0, 1], [1, 1], [3, 0.98], [12, 0.9], [48, 0.65], [100, 0.35]]
@@ -42,7 +43,7 @@
     "afloat": 240
   },
   "water": {
-    "_about": "The sea's band by month, January first: c cold (under 10 C), t temperate (10 to 21 C), w warm (over 21 C). The historian's table (historian/sailors-record-1122.md, section 5), by the campaign's sea ids.",
+    "_about": "The sea's band by month, January first: a arctic (under 4 C, only where the historian lays it), c cold (under 10 C), t temperate (10 to 21 C), w warm (over 21 C). The historian's table (historian/sailors-record-1122.md, section 5), by the campaign's sea ids.",
     "natl": "cccccccttccc",
     "wapp": "tccttttttttt",
     "irish": "cccctttttttt",

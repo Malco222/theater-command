@@ -53,7 +53,7 @@ export interface SeaPlace {
 }
 
 /** The band of the water men go into (data/battle/sailors.json water): cold, temperate or warm. */
-export type SeaWater = 'cold' | 'temperate' | 'warm';
+export type SeaWater = 'arctic' | 'cold' | 'temperate' | 'warm';
 
 /**
  * Men in the water (release 2's sailor rules: Brian, 22 November 12:49Z; the design director's form ruling 12:58Z and

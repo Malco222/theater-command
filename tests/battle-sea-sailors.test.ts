@@ -57,6 +57,26 @@ describe('the record and the switch', () => {
     expect(aliveAfter('warm', 100)).toBeCloseTo(0.35, 9);
   });
 
+  it("arctic water, under 4 C (the design director, 18:50Z; the historian's 4b): its finer points, and only where the table lays it", () => {
+    expect(aliveAfter('arctic', 0.25)).toBeCloseTo(0.85, 9);
+    expect(aliveAfter('arctic', 0.5)).toBeCloseTo(0.6, 9);
+    expect(aliveAfter('arctic', 0.75)).toBeCloseTo(0.4, 9);
+    expect(aliveAfter('arctic', 1)).toBeCloseTo(0.2, 9);
+    expect(aliveAfter('arctic', 1.5)).toBeCloseTo(0.05, 9);
+    expect(aliveAfter('arctic', 2.25)).toBeCloseTo(0.025, 9);
+    expect(aliveAfter('arctic', 3)).toBe(0);
+    expect(aliveAfter('arctic', 96)).toBe(0);
+    // Every letter in the table is a band, and 'a' reads arctic.
+    for (const [sea, months] of Object.entries(SAILORS.water)) if (!sea.startsWith('_')) expect(months, sea).toMatch(/^[actw]{12}$/);
+    SAILORS.water.__probe = 'acccccccccca';
+    try {
+      expect(waterOf('__probe', 0)).toBe('arctic');
+      expect(waterOf('__probe', 1)).toBe('cold');
+    } finally {
+      delete SAILORS.water.__probe;
+    }
+  });
+
   it('the figures are the design director\'s (17:42Z): no floating dead, the oil and the afloat time marked as knobs', () => {
     expect(SAILORS.down).toMatchObject({ sudden: 0.42, fought: 0.25, early: 0.01 });
     expect(SAILORS.dead.share).toBe(0);
@@ -227,6 +247,8 @@ describe('the abandon-ship call (form C)', () => {
       expect(x(men).down).toBe(Math.round(SEA.classes[x(a).cls as 'dd'].crew * 0.01));
       const sunk = ev.find((e) => e.what === 'sea:sunk' && e.unit === a.unit && e.t >= a.t && e.x === a.x && e.y === a.y)!;
       expect(sunk).toBeDefined();
+      // Her sinking names the hull her abandonment did (the sea scene's ask).
+      expect(x(sunk).ship).toBe(x(a).ship);
       expect(sunk.t).toBeCloseTo(Math.min(a.t + SAILORS.abandon.afloat, s.t), 6);
       expect(ev[ev.indexOf(sunk) + 1].what).toBe('sea:oil');
     }

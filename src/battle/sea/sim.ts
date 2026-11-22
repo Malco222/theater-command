@@ -2008,7 +2008,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * blow that wore her through, not on what is landing when it is told.
    */
   private sinkLater(w: Wreck, text: string, extra: Record<string, unknown>): void {
-    this.sinkings.push({ at: this.t + SAILORS.abandon.afloat, w, lit: w.cls === 'cv' && this.blow !== 'gun', text, extra });
+    // Her sea:sunk names her hull as her sea:abandon did ('ship'), so the scene sinks the right one of a piece's
+    // abandoned ships (the sea scene's 18:53Z ask).
+    this.sinkings.push({ at: this.t + SAILORS.abandon.afloat, w, lit: w.cls === 'cv' && this.blow !== 'gun', text, extra: { ...extra, ship: w.ship } });
   }
 
   /** Tells the abandoned ships' sinkings now due (sinkLater): all of them at the action's end. */
