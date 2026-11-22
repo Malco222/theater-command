@@ -4,5 +4,7 @@
   "_convoyBattle": "The wolf pack and convoy battle (release 2; Brian's yes of 20 November 2026, ruling 241 of 22 November). Off: nothing of the convoy battle runs, no extra die is thrown, and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'convoyBattle' (set at a campaign's start only, never in one under way): every month on a convoy route takes a swing (data/campaign/convoybattle.json), and a night the player fights is booked back through navy.ts convoyField. A run outside the browser can be given it by TC_CONVOY=1.",
   "convoyBattle": false,
   "_fortRows": "The fortress rows (the design director's 05:38Z-06:21Z of 22 November 2026; data/campaign/fortrows.json): the book's fortress crews by date, taking no place among the five, their works holding all round, and beaten crews staying in their works as the town's garrison on their own stores. Off, the game is release 1's, war for war. A run outside the browser can force it: TC_FORTS=1 or TC_FORTS=0.",
-  "fortRows": false
+  "fortRows": false,
+  "_yieldRule": "The yield form (the design director's 05:30Z, 06:41Z and 07:20Z of 22 November 2026; data/campaign/capitulations.json; src/campaign/yield.ts): a beaten country yields when its field army is beaten and no ally's relief can reach it, and at stops 1-2 a computer-run country yields in the record's month after the first blow. A second way in beside the fall that release 1 has. Off, the game is release 1's, war for war. A run outside the browser can force it: TC_YIELD=1 or TC_YIELD=0.",
+  "yieldRule": false
 }

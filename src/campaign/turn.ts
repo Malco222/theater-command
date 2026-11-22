@@ -41,6 +41,7 @@ import {
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
+import { yieldMonth } from './yield';
 import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
@@ -135,6 +136,8 @@ export function stepAI(g: Game): string {
   const nat = current(g);
   g.week = 1;
   startPhase(g, nat);
+  // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
+  yieldMonth(g, nat);
   if (g.nations[nat].alive) runAI(g, nat);
   closePhase(g, nat);
   return nat;
@@ -144,6 +147,8 @@ export function stepAI(g: Game): string {
 export function beginHuman(g: Game): void {
   g.week = 1;
   startPhase(g, current(g));
+  // (The yield form: the player's country is told the month the cause is met, and yields at the next opening.)
+  yieldMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.

@@ -8,6 +8,7 @@
 
 import { raiseForts, trainCrews } from './fortrows';
 import { FORTS_STAGE } from './stage';
+import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
 import { openTech } from './tech';
@@ -110,6 +111,9 @@ const OPEN = openData as unknown as {
   ward?: { stops: number[]; corps: number };
 };
 
+/** The organisation a corps needs before a staff counts it fit to send into battle (the staffs' own fit line; the yield form reads it too). */
+export const FIT_ORG = 0.35;
+
 /** True in a free-play war: the computer's nations make their own decisions. */
 export const isOpen = (g: Game): boolean => g.flags.open === 1;
 
@@ -125,6 +129,9 @@ export function startOpen(g: Game, wide = true): Game {
   // first day join the roster with the garrisons, before anything is counted from it. (A test may set the flag on the
   // game it opens.)
   if (FORTS_STAGE || g.flags.fortRows === 1) { g.flags.fortRows = 1; trainCrews(g); raiseForts(g); }
+  // The yield form (stage.ts YIELD_STAGE): the switch is set as the campaign opens. (A test may set the flag on the
+  // game it opens.)
+  if (YIELD_STAGE || g.flags.yieldRule === 1) g.flags.yieldRule = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
@@ -693,7 +700,7 @@ const busyElsewhere = (g: Game, e: string, nat: string): boolean => Object.keys(
 function sector(g: Game, nat: string, f: Front, least: number, beside?: Region): { target: Region; odds: number } | null {
   const ours = new Set(f.ours);
   const prize = objectives(g, f).slice(0, 8);
-  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= 0.35;
+  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= FIT_ORG;
   let best: { target: Region; odds: number; score: number } | null = null;
   for (const id of f.edge) {
     const t = g.regions[id];

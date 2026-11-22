@@ -3,6 +3,7 @@
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
 import { FORT_XP, crewFed, crewMonth, fortsMonth, portStores } from './fortrows';
+import capData from '../../data/campaign/capitulations.json';
 import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
@@ -2918,10 +2919,54 @@ export function railSays(g: Game, corps: Corps[], beyond: number | number[], pre
   return { can: true, strong: '', line: `By rail this month, but a train reaches no farther than it can march.${brk ? ` ${brk.line}` : ''}` };
 }
 
+/**
+ * Whether a province is overseas as the score reads its home: the map's mark, and with the yield form on its
+ * corrections (capitulations.json 'overseas' and 'home': the design director's 09:05Z and 11:50Z, on the historian's
+ * overseas-marks-home-chart.md). Home is ground under the state's ordinary home regime, islands included; ground under
+ * a regime of its own is overseas. Off, the map's mark alone, as release 1 has it.
+ */
+export const overseasRead = (g: Game, r: Region): boolean =>
+  yieldMarks(g) ? OUT_FIX.has(r.name) || (!!r.overseas && !IN_FIX.has(r.name)) : !!r.overseas;
+const CAP_MARKS = capData as unknown as { overseas?: string[]; home?: string[]; annexed?: { by: string; from: number; regions: string[] }[] };
+const OUT_FIX = new Set<string>(CAP_MARKS.overseas ?? []);
+const IN_FIX = new Set<string>(CAP_MARKS.home ?? []);
+const yieldMarks = (g: Game): boolean => g.flags.open === 1 && g.flags.yieldRule === 1;
+/** The record's formal annexations, by province (capitulations.json 'annexed'): who annexed it, and from which month. */
+const ANNEXED = new Map<string, { by: string; from: number }>();
+for (const a of CAP_MARKS.annexed ?? []) for (const name of a.regions) ANNEXED.set(name, { by: a.by, from: a.from });
+
+/**
+ * Whose home ground a province is, as the score and the yield form read it: none overseas (overseasRead), and with the
+ * yield form on, the annexing state's from the month a formal annexation of the record was fixed (annexMonth), while
+ * the country it belongs to stays fallen. Otherwise its owner. Off, exactly release 1's 'owner and not overseas'.
+ */
+export function homeOf(g: Game, r: Region): string | null {
+  if (overseasRead(g, r)) return null;
+  if (yieldMarks(g)) {
+    const a = ANNEXED.get(r.name);
+    if (a && g.flags[`annex:${r.id}`] !== undefined && !g.nations[r.owner]?.alive) return a.by;
+  }
+  return r.owner;
+}
+
+/**
+ * The month's formal annexations (the yield form's month, yield.ts): a province of the record's list becomes its
+ * annexer's home from its date, the first month on or after it in which the annexer holds it and the country it
+ * belongs to has fallen. Fixed once (the flag 'annex:<id>', the month).
+ */
+export function annexMonth(g: Game): void {
+  if (!yieldMarks(g)) return;
+  for (const [name, a] of ANNEXED) {
+    const r = g.byName[name];
+    if (!r || g.turn < a.from || g.flags[`annex:${r.id}`] !== undefined) continue;
+    if (r.ctrl === a.by && g.nations[a.by]?.alive && !g.nations[r.owner]?.alive) g.flags[`annex:${r.id}`] = g.turn;
+  }
+}
+
 /** The share of a nation's home country, by worth, that is in enemy hands. */
 export function homeLost(g: Game, nat: string): number {
   let vp = 0, held = 0;
-  for (const r of g.regions) if (r.owner === nat && !r.overseas) { vp += r.vp; if (allied(g, nat, r.ctrl)) held += r.vp; }
+  for (const r of g.regions) if (homeOf(g, r) === nat) { vp += r.vp; if (allied(g, nat, r.ctrl)) held += r.vp; }
   return vp ? 1 - held / vp : 0;
 }
 
@@ -3015,7 +3060,7 @@ export function victorOf(g: Game, nat: string): string | null {
   const score: Record<string, number> = {};
   const add = (who: string, v: number): void => { if (atWar(g, nat, who) && g.nations[who]?.alive) score[who] = (score[who] ?? 0) + v; };
   for (const r of g.regions) {
-    if (r.owner !== nat || r.overseas) continue;
+    if (homeOf(g, r) !== nat) continue;
     add(r.ctrl, 2 + r.vp);
     for (const u of r.units) if (!u.dead) add(u.nat, 0.5 * u.divs * u.str);
     if (allied(g, nat, r.ctrl)) for (const j of r.nb) { const x = g.regions[j]; if (x.owner !== nat) for (const u of x.units) if (!u.dead) add(u.nat, 0.1 * u.divs * u.str); }

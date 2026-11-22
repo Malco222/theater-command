@@ -41,3 +41,9 @@ export const SUBSCENE_ENV: boolean = subForced !== undefined && !!subForced && s
 const forts = (globalThis as { TC_FORTS?: unknown }).TC_FORTS ?? G.process?.env?.TC_FORTS;
 /** True where a grand campaign opens with the fortress rows (the flag is set as it opens: game.ts fortRows). */
 export const FORTS_STAGE: boolean = forts !== undefined ? !!forts && forts !== '0' : (stage as { fortRows?: boolean }).fortRows === true;
+
+// The yield form (data/campaign/stage.json 'yieldRule'; the design director's 07:20Z of 22 November 2026): forced by
+// TC_YIELD, as the far side's switch is by TC_FAR. Off, nothing of the form is read.
+const yields = (globalThis as { TC_YIELD?: unknown }).TC_YIELD ?? G.process?.env?.TC_YIELD;
+/** True where a beaten country yields by cause, and at stops 1-2 by the record's month (src/campaign/yield.ts). */
+export const YIELD_STAGE: boolean = yields !== undefined ? !!yields && yields !== '0' : (stage as { yieldRule?: boolean }).yieldRule === true;
