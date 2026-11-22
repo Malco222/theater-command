@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b358222a 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 000e14f5 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -292,6 +292,38 @@
       search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
       hedge: { near: HEDGE_NEAR, gap: 3 },
       staff: { blocks: 2, ahead: 400, back: 100, across: 200 }
+    },
+    /**
+     * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+     * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
+     * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
+     * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
+     * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
+     * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
+     * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
+     * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
+     * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
+     * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
+     * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
+     * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
+     * 1937, sec. 35).
+     *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
+     *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
+     *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
+     *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
+     *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
+     *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
+     *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
+     *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
+     *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
+     *     Its pictures, and the men its block loses when it is caught.
+     *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
+     */
+    patrol: {
+      found: 0.4,
+      caught: 0.3,
+      size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 },
+      night: { t0: -2400, t1: -600 }
     },
     teams: {
       mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
@@ -677,11 +709,128 @@
         ITA: { reach: 0, hang: 19 }
       },
       kin: { CAN: "UK", AUS: "UK", NZL: "UK", SAF: "UK", IND: "UK", VIC: "FRA", FFR: "FRA" }
+    },
+    /**
+     * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it
+     * off if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LandBattle.phones): off
+     * unless the battle is opened with them. Wire was the defence's own means ("Telephones are usually installed down to
+     * companies along the main line of resistance", FM 7-25 ¶52; Cherbourg 1944, "Approximately 95% of communications was
+     * by wire", Signal Corps Report 63), so as the clock starts every block of the defence on the field has a wire from its
+     * headquarters at the middle of its zone's back edge; a corps that comes up from next door has none. The wire head is
+     * "pushed close" (FM 7-24 ¶68h): it follows its block, and moving never cuts it. A blow on the block from an enemy gun
+     * block or mortar team cuts a line at 'cut' (Q1; machine guns never), and an enemy tank block whose step crosses the
+     * wire cuts a line outright (FM 24-20 ¶32d: surface lines "often are broken by passing troops and vehicles"). Once its
+     * lines are all cut the wire is down, and every order to that block, the player's or a staff's, waits its army's
+     * fallback from when it was given: the wireless (LAND.radio's wait, as the radio switch reckons it) or a runner (the
+     * metres from the headquarters over 'runner'). A lineman leaves the headquarters at the first cut, walks the wire to it
+     * at foot pace (LAND.speed.inf), splices it in 'splice' seconds and the wire is up again: what was waiting goes at once.
+     *   cut: the chance a line is cut by each such blow (each tick's blow of a gun block or a mortar team on the block at
+     *     the wire's end): knob (DD 18:36Z). No source counts breaks: the sources say lines were "repeatedly cut by enemy
+     *     artillery" (84th Division, Battle Experiences 1945) and "Heavy fire ... was constantly cutting our lines" (100th
+     *     Division, 1945).
+     *   splice: battle seconds a splice takes: FM 24-20 (1944) ¶15c(3) and ¶15c(5), preparing the splice "should not take
+     *     more than 1 minute" and tying it "should be about 1 minute": about 2 real minutes, at LAND.smoke.perMin 15
+     *     battle seconds a real minute. Finding the break is not counted (no source).
+     *   runner: metres a battle second a runner goes: the rules' own foot speed (LAND.speed.inf); knob (DD 18:36Z).
+     *   lines: lines to each block, by army. Germany 2 (DD 18:36Z, Q3, P6): "in the danger zone, therefore, double lines and
+     *     heavy insulated wires are used" (German Tactical Doctrine, MIS): a German wire needs two cuts before orders wait.
+     *     Every other army 1 ('_').
+     *   fallback: by army, [through year, 'radio' or 'runner'], the first that covers the battle's year (as LAND.radio's
+     *     nations): how orders go once the wire is down.
+     *     USA: runners to 1942, the wireless from 1943: the SCR-536 and SCR-300 "became available in substantial quantities"
+     *       only "well into 1943" (Tactical Notebook); FM 7-25 ¶49b, "radio and messengers are the primary means".
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) the wireless, every year: No. 18 sets at company and platoon headquarters
+     *       (the Calgary Highlanders' signals platoon, canadiansoldiers.com).
+     *     GER: runners to 1942, the wireless from 1943 (the Feldfu b/c pack sets "in the forward echelon", TTT 46, 1944):
+     *       "When wire connections fail or are not functioning steadily, the radio is indispensable" (German Tactical Doctrine).
+     *     SOV runners: 9,586 sets made in 1941 (SPbGUT); "a broken line often meant losing touch with subordinate troops"
+     *       (3DNews). JAP runners: 0 to 4 sets a battalion (TTT 46), "a pool of runners" at company (MIS Bulletin 16).
+     *     ITA runners (nothing sourced but the telephone). FRA and VIC runners: "only French heavy tanks had radios" in 1940
+     *       (GlobalSecurity). Every other army runners ('_'): knob (DD 18:36Z).
+     */
+    phones: {
+      cut: 0.12,
+      splice: 30,
+      runner: 6,
+      lines: { USA: 1, UK: 1, CAN: 1, AUS: 1, NZL: 1, SAF: 1, IND: 1, GER: 2, SOV: 1, JAP: 1, ITA: 1, FRA: 1, VIC: 1, _: 1 },
+      fallback: {
+        USA: [[1942, "runner"], [9999, "radio"]],
+        UK: [[9999, "radio"]],
+        CAN: [[9999, "radio"]],
+        AUS: [[9999, "radio"]],
+        NZL: [[9999, "radio"]],
+        SAF: [[9999, "radio"]],
+        IND: [[9999, "radio"]],
+        GER: [[1942, "runner"], [9999, "radio"]],
+        SOV: [[9999, "runner"]],
+        JAP: [[9999, "runner"]],
+        ITA: [[9999, "runner"]],
+        FRA: [[9999, "runner"]],
+        VIC: [[9999, "runner"]],
+        _: [[9999, "runner"]]
+      }
+    },
+    /**
+     * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
+     * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
+     * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
+     * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
+     * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
+     * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
+     * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
+     * nerve, its count or its size). Nothing here draws on the dice.
+     *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
+     *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
+     *     the rest of the men who fall as wounded. Sourced, no knob of ours:
+     *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
+     *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
+     *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
+     *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
+     *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
+     *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
+     *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
+     *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
+     *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
+     *       battleorder.org): 4 of a company of 142.
+     *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
+     *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
+     *       squad (med-dept.com, The WW2 Aid Station).
+     *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
+     *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
+     *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
+     *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
+     *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
+     *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
+     *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
+     *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
+     *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
+     *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
+     *       Carded for Record in WWII): knob (DD 18:36Z).
+     *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
+     *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
+     *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
+     *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
+     *       knobs (DD 18:36Z).
+     *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
+     */
+    bearers: {
+      killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 },
+      share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 },
+      litter: 4,
+      aid: 503,
+      pace: 3.048,
+      light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 }
     }
   };
+  var phoneLines = (nat) => LAND.phones.lines[nat] ?? LAND.phones.lines._;
+  var phoneFallback = (nat, year) => (LAND.phones.fallback[nat] ?? LAND.phones.fallback._).find(([to]) => year <= to)?.[1] ?? "runner";
   var reachOf = (u) => u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind];
+  var patrolSize = (nat) => LAND.patrol.size[nat] ?? LAND.patrol.size._;
   var gunsOf = (u) => u.team ? LAND.teams[u.team] : LAND.guns;
   var smokeMeans = (nat) => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+  var bearerShare = (nat) => LAND.bearers.share[nat] ?? LAND.bearers.share._;
+  var killedShare = (nat) => LAND.bearers.killed[nat] ?? LAND.bearers.killed._;
 
   // ../../data/battle/city-plans.json
   var city_plans_default = {
@@ -2180,7 +2329,8 @@
       u.reserve = "sent";
       by(b, side, u, foes.find((f) => f.id === at.engaged));
     };
-    const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
+    const shift = b.alertedStaff(side) ? Infinity : style?.defShift;
+    const near = !struck.length && shift ? coming(b, mine, foes, shift) : null;
     for (const u of mine) {
       if (u.kind === "art" || u.order?.kind === "withdraw" || skip?.has(u.id)) continue;
       if (u.hid && u.reserve !== "held") continue;
@@ -3054,7 +3204,7 @@
   var isFoot2 = (u) => MOTION[u.kind] === "foot" || u.kind === "mot";
   var CLOSE2 = ["woods", "buildings", "industry", "suburb"];
   var BUILT = ["buildings", "industry", "suburb"];
-  var MOVING = /* @__PURE__ */ new Set(["walk", "run", "advance", "creep", "crawl", "flee", "drive", "reverse", "towed"]);
+  var MOVING = /* @__PURE__ */ new Set(["walk", "run", "advance", "creep", "crawl", "flee", "drive", "reverse", "towed", "stretcher_front", "stretcher_rear"]);
   var CARRIED = /* @__PURE__ */ new Set(["ride", "mounted", "horses"]);
   var SMALL_ARMS = /* @__PURE__ */ new Set(["fire_stand", "fire_kneel", "fire_prone", "lmg_burst"]);
   var VEHICLE = /* @__PURE__ */ new Set(["tank", "gun", "lorry"]);
@@ -3371,6 +3521,7 @@
         sq.slow = sq.speed < MOUNT.down || sq.net < MOUNT.down ? sq.slow + DT : 0;
         sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
         this.falls(sq);
+        if (b.bearers) this.litters(sq);
         if (t >= sq.nextThink) {
           sq.nextThink = t + 0.5;
           if (this.byBook) this.feel(sq);
@@ -3440,6 +3591,7 @@
       const won = this.b.over?.winner;
       for (const sq of this.squads.values()) {
         const u = sq.u;
+        for (const c of sq.carries ?? []) if (c.stage === "carry") c.man.pose = "wounded";
         for (const m of [...sq.men, ...sq.veh, ...sq.fo ?? []]) {
           if (m.fell !== void 0) continue;
           m.v = 0;
@@ -3506,6 +3658,7 @@
         if (!shell && by2 !== void 0) this.killRound(this.b.unit(by2), sq, m);
         m.pose = "down";
         m.spot = [m.x, m.y];
+        if (this.b.bearers) this.hurt(sq, m);
         this.aid(sq, m);
         if (sq.tier >= 1) this.regroup(sq, m);
       }
@@ -3563,8 +3716,12 @@
       let up = 0;
       for (const m of sq.men) if (this.stands(sq, m) || m.j !== void 0 && m.fell === void 0) up++;
       let n = up - want;
+      if (n < 0 && this.b.bearers) {
+        this.rise(sq, -n);
+        return;
+      }
       if (n <= 0) return;
-      const cand = sq.men.filter((m) => m.j !== void 0 && m.fell === void 0);
+      const cand = sq.men.filter((m) => m.j !== void 0 && m.fell === void 0 && !m.job);
       if (!cand.length) return;
       let by2;
       const owed = u.owed ?? {};
@@ -3599,9 +3756,184 @@
         if (by2) this.killRound(by2, sq, m, shell ? burst : void 0);
         m.pose = "down";
         m.spot = [m.x, m.y];
+        if (b.bearers) this.hurt(sq, m);
         this.aid(sq, m);
       }
       sq.memo = void 0;
+    }
+    // ---- Stretcher bearers (release 2) ------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z; the design director's rulings Q4 and Q5 (18:36Z); LandBattle.bearers and LAND.bearers.
+    // The rules count the bearers and the wounded (LandBattle.litter); the drill draws them, looks only. Of the men who
+    // fall, the rules' share (1 - killed) lie wounded: a man of a section a light case at the rules' share, lying for his
+    // dressing and up again once it is done and his block's strength has them back (thin, rise); the rest lie for the
+    // bearers. The bearers are riflemen of the block (br), two to a stretcher, as many stretchers as the rules' bearers
+    // carry cases at once (its army's share of its men over LAND.bearers.litter). A pair fetches the litter case fallen
+    // earliest, lifts him and carries him head first to its aid post (LandBattle.aidOf) at LAND.bearers.pace, his place the
+    // stretcher's middle, the front bearer 1.12 m ahead of him and the rear 1.35 m behind; he stays there (gone), and they
+    // walk home. A block running, fled or gone sends no stretcher out; one on its way goes on. Every choice is the drill's
+    // own dice: the men drawn and the fight are the same as without them.
+    /** A man who falls, with the bearers on: wounded at the rules' share (else killed), a man of a section a light case at theirs. */
+    hurt(sq, m) {
+      if (VEHICLE.has(m.role) || CREWED.has(m.role) || m.wd !== void 0) return;
+      const B = LAND.bearers, u = sq.u;
+      if (roll(this.seed, u.id, m.n, 71) >= 1 - killedShare(u.nat)) return;
+      m.wd = this.b.t;
+      m.pose = "wounded";
+      if (m.j !== void 0 && roll(this.seed, u.id, m.n, 72) < B.light.share) {
+        m.light = true;
+        (sq.dressing ?? (sq.dressing = [])).push(m);
+      } else (sq.lying ?? (sq.lying = [])).push(m);
+    }
+    /** Its light cases whose dressing is done get up, up to n of them, the earliest hurt first, while its block fights. */
+    rise(sq, n) {
+      const u = sq.u, t = this.b.t, L2 = LAND.bearers.light, foot = LAND.speed.inf;
+      if (!fighting(u) || !sq.dressing?.length) return;
+      const walk2 = L2.at > 0 ? L2.at / (foot * L2.out) + L2.at / (foot * L2.back) : 0;
+      while (n > 0 && sq.dressing.length && sq.dressing[0].wd + walk2 + L2.dress <= t + 1e-9) {
+        const m = sq.dressing.shift();
+        m.light = void 0;
+        m.fell = void 0;
+        m.back = t;
+        m.pose = "wait";
+        m.v = 0;
+        m.spot = [m.x, m.y];
+        m.slotAt = [m.x, m.y];
+        m.until = t + 1;
+        if (!this.memo(sq).keyOf.has(m.sec ?? m.k)) {
+          const to = this.nearest(this.memo(sq).keys.filter((x) => !VEHICLE.has(x.role) && !CREWED.has(x.role)), m)?.[0];
+          if (to) {
+            m.sec = to.k;
+            m.sub = void 0;
+            m.lead = void 0;
+          }
+        }
+        sq.memo = void 0;
+        n--;
+      }
+    }
+    /** A bearer named in a carry: his model and his place in it. */
+    byId(m) {
+      return m.k * 1e3 + (m.j ?? 0);
+    }
+    /**
+     * Each step with the bearers on: its bearers picked (the first time), each pair free of a carry and on its feet sent
+     * for the next litter case (its block fighting, its men down), and every carry moved on a step.
+     */
+    litters(sq) {
+      const u = sq.u, b = this.b, t = b.t, B = LAND.bearers, f = b.field;
+      if (!sq.brs) {
+        const cand = sq.men.filter((m) => m.j !== void 0 && m.role === "rifle" && !m.pr && !m.scout && !m.lead && m.fell === void 0).sort((a, c) => roll(this.seed, u.id, a.n, 73) - roll(this.seed, u.id, c.n, 73) || a.n - c.n);
+        const pairs2 = Math.min(Math.floor(cand.length / 2), Math.max(1, Math.round(bearerShare(u.nat) * sq.m0 / B.litter)));
+        sq.brs = cand.slice(0, 2 * pairs2);
+        for (const m of sq.brs) m.br = true;
+      }
+      const carries = sq.carries ?? (sq.carries = []);
+      if (sq.lying?.length && fighting(u) && sq.down && sq.boarding === void 0) {
+        const free = sq.brs.filter((m) => !m.job && this.stands(sq, m) && !CARRIED.has(m.pose));
+        for (let i = 0; i + 1 < free.length && sq.lying.length; i += 2) {
+          const man = sq.lying.shift(), [ax, ay] = b.aidOf(u);
+          const to = [clamp2(ax, 3, f.w - 3), clamp2(ay, 3, f.h - 3)], way = bearing2(man.x, man.y, to[0], to[1]);
+          const c = { man, front: free[i], rear: free[i + 1], stage: "fetch", from: [man.x, man.y], to, way, t0: t, t1: t };
+          for (const m of [c.front, c.rear]) {
+            m.job = c;
+            m.aim = void 0;
+            m.hidden = void 0;
+            m.pose = "walk";
+            m.v = B.pace;
+          }
+          carries.push(c);
+          sq.memo = void 0;
+        }
+      }
+      for (const c of carries) this.carryStep(sq, c);
+      if (carries.some((c) => c.front.job !== c && c.rear.job !== c)) sq.carries = carries.filter((c) => c.front.job === c || c.rear.job === c);
+    }
+    /** A carry's step: the bearers walk to the man, lift him, carry him to the aid post and walk home. */
+    carryStep(sq, c) {
+      var _a;
+      const u = sq.u, t = this.b.t, B = LAND.bearers, rate = TURN.foot * DT, [wx, wy] = fwd(c.way);
+      const FRONT2 = 1.12, REAR = 1.35;
+      const stride = (m, p, v) => {
+        const ddx = p[0] - m.x, ddy = p[1] - m.y, d = Math.hypot(ddx, ddy);
+        if (d < 0.05) {
+          m.went = 0;
+          return true;
+        }
+        const want = Math.atan2(ddx, ddy);
+        m.face = turnTo(m.face, want, rate);
+        const s = Math.min(d, v * DT) * Math.max(0, Math.cos(wrap(want - m.face)));
+        m.x += ddx / d * s;
+        m.y += ddy / d * s;
+        m.went = s / DT;
+        return s >= d - 1e-9;
+      };
+      const bearers = [c.front, c.rear];
+      if (c.stage === "fetch") {
+        const at = (m) => m === c.front ? [c.man.x + wx * FRONT2, c.man.y + wy * FRONT2] : [c.man.x - wx * REAR, c.man.y - wy * REAR];
+        let there = 0;
+        for (const m of bearers) if (stride(m, at(m), B.pace)) there++;
+        if (there === 2) {
+          c.stage = "lift";
+          for (const m of bearers) {
+            m.pose = "wait";
+            m.v = 0;
+            m.went = 0;
+          }
+        }
+        return;
+      }
+      if (c.stage === "lift") {
+        for (const m of [...bearers, c.man]) m.face = turnTo(m.face, c.way, rate);
+        if (![...bearers, c.man].every((m) => Math.abs(wrap(m.face - c.way)) < 1e-6)) return;
+        c.stage = "carry";
+        c.t0 = t;
+        c.t1 = Math.round((t + Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y) / B.pace) * 1e3) / 1e3;
+        c.from = [c.man.x, c.man.y];
+        ((_a = c.man).cy ?? (_a.cy = [])).push([c.t0, c.t1, this.byId(c.front), this.byId(c.rear)]);
+        c.man.pose = "carried";
+        c.front.pose = "stretcher_front";
+        c.rear.pose = "stretcher_rear";
+        for (const m of bearers) m.v = B.pace;
+        return;
+      }
+      if (c.stage === "carry") {
+        const left = Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y), s = Math.min(left, B.pace * DT);
+        c.man.x += wx * s;
+        c.man.y += wy * s;
+        c.man.spot = [c.man.x, c.man.y];
+        c.front.x = c.man.x + wx * FRONT2;
+        c.front.y = c.man.y + wy * FRONT2;
+        c.rear.x = c.man.x - wx * REAR;
+        c.rear.y = c.man.y - wy * REAR;
+        for (const m of bearers) {
+          m.face = c.way;
+          m.went = s / DT;
+        }
+        if (s < left - 1e-9) return;
+        c.man.gone = t;
+        c.man.pose = "wounded";
+        c.stage = "home";
+        for (const m of bearers) {
+          m.pose = "walk";
+          m.v = B.pace;
+        }
+        return;
+      }
+      for (const m of bearers) {
+        if (m.job !== c) continue;
+        const p = this.leash(sq, [m.x, m.y], -4);
+        if (!live(u) || stride(m, p, B.pace)) {
+          m.job = void 0;
+          m.pose = "wait";
+          m.v = 0;
+          m.went = 0;
+          m.spot = [m.x, m.y];
+          m.slotAt = [m.x, m.y];
+          m.until = t + 1;
+          sq.memo = void 0;
+        }
+      }
     }
     // ---- What the block is doing ------------------------------------------------------------------------------------
     phaseOf(sq) {
@@ -3921,7 +4253,7 @@
       }
       this.ambush(sq);
       this.officer(sq);
-      for (const m of sq.men) if (m.fell === void 0 && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
+      for (const m of sq.men) if (m.fell === void 0 && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
     }
     /**
      * He has reached his place: off his feet into the pose for it (no man runs on the spot). A rifleman with a target
@@ -3975,7 +4307,7 @@
      * on the field and he has not fallen (falls).
      */
     stands(sq, m) {
-      return m.fell === void 0 && (m.j === void 0 ? m.k < sq.u.figures : live(sq.u));
+      return m.fell === void 0 && !m.job && (m.j === void 0 ? m.k < sq.u.figures : live(sq.u));
     }
     /**
      * The block's men on their feet, worked out again only when that changes: a man falls or joins another section (falls,
@@ -5907,7 +6239,7 @@
       let e;
       const crowd = sq.tier >= 1 ? /* @__PURE__ */ new Map() : null;
       if (crowd) for (const m of sq.men) {
-        if (m.fell !== void 0 || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
+        if (m.fell !== void 0 || m.job || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
         const key = Math.floor(m.x / SPACE.cell) * 65536 + Math.floor(m.y / SPACE.cell);
         let l = crowd.get(key);
         if (!l) crowd.set(key, l = []);
@@ -6032,6 +6364,7 @@
           m.went = 0;
           continue;
         }
+        if (m.job) continue;
         if (m.pose === "mounted" && (u.kind === "mot" || m.role === "crew") && sq.veh.length) {
           const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = this.seat(sq, m);
           m.x = p[0];
@@ -6399,6 +6732,11 @@
         if (m.marks?.length) o.mk = m.marks.map((x) => [...x]);
         if (m.el && this.byBook) o.e = m.el;
         if (m.call !== void 0) o.cl = r13(m.call);
+        if (m.wd !== void 0) o.wd = r13(m.wd);
+        if (m.cy) o.cy = m.cy.map((c) => [r13(c[0]), r13(c[1]), c[2], c[3]]);
+        if (m.gone !== void 0) o.gone = r13(m.gone);
+        if (m.back !== void 0) o.back = r13(m.back);
+        if (m.br) o.br = 1;
         if (m.call !== void 0 && m.callAt) o.cs = [r13(m.callAt[0]), r13(m.callAt[1])];
         return o;
       };
@@ -6407,7 +6745,7 @@
         const lead = this.leads.get(u.side), mark = lead && lead[0] === u.id ? lead[1] : void 0;
         if (as !== void 0 && u.side !== as && !b.known(u)) continue;
         if (u.state === "withdrawn" && !sq.men.some((m) => m.fell !== void 0)) continue;
-        const men = sq.men.filter((m) => m.fell !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
+        const men = sq.men.filter((m) => m.fell !== void 0 || m.job !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
           const o = one(m);
           if (mark !== void 0 && m.fell === void 0 && grp(m) === mark && m.role !== "lorry" && m.role !== "holder") o.ld = 1;
           return o;
@@ -6419,7 +6757,33 @@
           blk.foWith = sq.foWith;
           blk.foOn = sq.foOn;
         }
+        if (b.phones && b.phonesSeen(as)) {
+          const ln = this.linemen(u.id);
+          if (ln.length) blk.ln = ln;
+        }
         out.push(blk);
+      }
+      return out;
+    }
+    /**
+     * Field telephone lines (release 2; LandBattle.phones): the linemen out on this block's wire now, one for each mend.
+     * He leaves the headquarters at the mend's t0 with the cable reel ('reel'), walking the wire at foot pace to the cut,
+     * kneels there splicing ('splice') from t1, as he gets there, until the mend's t, then walks back along it ('walk') and
+     * is gone once he is home. Worked out from the mend alone, as the clock stands: looks only, and nothing here draws.
+     * Numbered k 300 on by the mend's man (the spotter's pair are 200 and 201).
+     */
+    linemen(id) {
+      const b = this.b, t = b.t, out = [], pace = LAND.speed.inf;
+      const r13 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
+      for (const m of b.wireMends) {
+        const w = b.wires[m.wire - 1];
+        if (!w || w.unit !== id || t < m.t0) continue;
+        const [hx, hy] = w.hq, d = Math.hypot(m.x - hx, m.y - hy), home = m.t + d / pace;
+        if (t >= home) continue;
+        const out1 = bearing2(hx, hy, m.x, m.y);
+        const k = t < m.t1 ? m.t1 > m.t0 ? (t - m.t0) / (m.t1 - m.t0) : 1 : t < m.t ? 1 : d > 0 ? Math.max(0, 1 - (t - m.t) * pace / d) : 0;
+        const p = t < m.t1 ? "reel" : t < m.t ? "splice" : "walk";
+        out.push({ k: 300 + m.man, r: "rifle", x: r13(hx + (m.x - hx) * k), y: r13(hy + (m.y - hy) * k), f: r22(wrap(p === "walk" ? out1 + Math.PI : out1)), p, v: p === "splice" ? 0 : pace, c: "none", ln: 1 });
       }
       return out;
     }
@@ -6662,6 +7026,18 @@
       __publicField(this, "hide", false);
       /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
       __publicField(this, "hidStarted", false);
+      /**
+       * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+       * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LAND.patrol; "Night patrol" below): the night
+       * before, the attack sends a patrol that may find the defence's most forward hidden post, or be caught and alert the
+       * defence. Off unless whoever opens the field turns it on (the 2D page's ?patrol, the bridge's { patrol: true }), and
+       * it needs hiding on: with hiding off no patrol goes out and nothing is drawn. Off, nothing below is read.
+       */
+      __publicField(this, "patrol", false);
+      /** The night's patrol, as it was settled when the clock started (night patrol): null until then, and where none went out. */
+      __publicField(this, "nightPatrol", null);
+      /** The block the player sends out on patrol, by his order while he places his army (night patrol): null where none. */
+      __publicField(this, "patrolBy", null);
       /** The field's hedges and their gates, as the 3D game handed them over (hedgesOn): empty where it has none. */
       __publicField(this, "hedges", []);
       __publicField(this, "gates", []);
@@ -6689,7 +7065,8 @@
       __publicField(this, "models", /* @__PURE__ */ new Map());
       /**
        * The player's orders on the air (radio): each block's, with the battle time it lands; 'smoke' (smoke on call, release
-       * 2) a smoke order, which rides beside the block's other order on the air, neither replacing it nor replaced by it.
+       * 2) a smoke order, which rides beside the block's other order on the air, neither replacing it nor replaced by it. An
+       * order waiting for a down wire (field telephone lines) also carries the order it is (key) and its stamp (held).
        */
       __publicField(this, "pending", []);
       /**
@@ -6741,6 +7118,39 @@
       __publicField(this, "barsLaid", 0);
       /** Every screen laid this battle (smoke on call), in the order laid: standing while t < until. Empty while the switch is off. */
       __publicField(this, "screens", []);
+      /**
+       * Field telephone lines (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off
+       * if someone doesnt want it"; the design director's rulings, 18:36Z, PHONES Q1 to Q3; LAND.phones; "Field telephone
+       * lines" below): the defence's blocks are on the telephone from its headquarters; guns, mortars and tanks cut the wires,
+       * and an order to a block whose wire is down waits its army's runner or wireless, the player's and every staff's alike.
+       * Off unless whoever opens the field turns it on (the 2D page's ?phones, the bridge's { phones: true }); off, nothing
+       * below is read.
+       */
+      __publicField(this, "phones", false);
+      /** The defence's wires (field telephone lines), laid as the clock starts, numbered from 1. Empty while the switch is off. */
+      __publicField(this, "wires", []);
+      /** Every line cut, every lineman sent, and every order that waited for a down wire, in order. Empty while the switch is off. */
+      __publicField(this, "wireCuts", []);
+      __publicField(this, "wireMends", []);
+      __publicField(this, "wireHeld", []);
+      /** Each block's wire, by its id; and the wires' own dice (never the battle's), from when they are laid. */
+      __publicField(this, "wireBy", /* @__PURE__ */ new Map());
+      __publicField(this, "phoneRng", null);
+      /**
+       * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+       * someone doesnt want it"; the design director's rulings Q4 and Q5, 18:36Z; LAND.bearers; "Stretcher bearers" below):
+       * a block's wounded lie for its bearers, who carry them back to its aid post, its own blows the weaker by the men away;
+       * its light cases are back in the line after their dressing. Off unless whoever opens the field turns it on (the 2D
+       * page's ?bearers, the bridge's { bearers: true }); off, nothing below is read.
+       */
+      __publicField(this, "bearers", false);
+      /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
+      __publicField(this, "litters", /* @__PURE__ */ new Map());
+      /**
+       * The light cases back in the line (stretcher bearers): when, the block and how much strength, a block's returns in one
+       * battle second taken together (at the first one's time). Empty while the switch is off.
+       */
+      __publicField(this, "returns", []);
       // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
       /** Each side's fighters on call, where it has any. */
       __publicField(this, "airOn", { att: null, def: null });
@@ -7620,6 +8030,194 @@
         })
       };
     }
+    // ---- Field telephone lines (release 2) ----------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off"); the design director's
+    // rulings of 18:36Z, PHONES Q1 to Q3 (LAND.phones). As the clock starts, every block of the defence on the field has a
+    // wire from its headquarters (the middle of the defence zone's back edge); a corps that comes up from next door later
+    // has none, and its orders go as ever. The wire runs straight to its block's middle and follows it: moving never cuts
+    // it. Each blow on the block from an enemy gun block or mortar team cuts a line at LAND.phones.cut, drawn from the
+    // wires' own stream ('phones:' and the seed), only for such blows and only while the wire has a line up; the cut lies
+    // where the wire comes nearest the block's front. An enemy tank block whose step, its middle from where it stood to
+    // where it stands, crosses the wire cuts a line outright, where it crosses. A wire is down once all its lines are cut
+    // (Germany's double lines need two cuts). While it is down, every order to its block, the player's (radio switch on or
+    // off) or a staff's, waits its army's fallback from when it was given: the wireless, LAND.radio's wait (longer for a
+    // block whose headquarters is hit, as the radio switch reckons it), or a runner, the metres from the headquarters over
+    // LAND.phones.runner. A later order takes its place and waits afresh, but a staff giving the same order again (it
+    // thinks every second) leaves the one on its way be. At a wire's first cut with no lineman out on it, one leaves the
+    // headquarters, walks the wire to the cut at foot pace and splices it in LAND.phones.splice seconds: the mend clears
+    // every cut on the wire, and whatever was waiting for it goes at once. He is looks only: never struck, no harm. The
+    // rules' own moves (the joiners walking on, a block giving ground at the brink) are no orders and never wait. Nothing
+    // here draws on the battle's dice.
+    /** The defence's headquarters, where every wire runs from: the middle of its zone's back edge (field.ts zonesOf). */
+    phonesHq() {
+      const z = this.field.zones.def, r13 = (v) => Math.round(v * 10) / 10;
+      return [r13((z[0] + z[2]) / 2), r13(z[3])];
+    }
+    /** This block's wire, where it has one (the switch on, a block of the defence on the field as the clock started). */
+    wireOf(u) {
+      return this.phones ? this.wireBy.get(u.id) ?? null : null;
+    }
+    /** This block's wire is down: every line of it cut, and no lineman has mended it yet. */
+    wireDown(u) {
+      const w = this.wireOf(u);
+      return !!w && w.cut >= w.lines;
+    }
+    /** How orders go to this block while its wire is down: its army's fallback in the battle's year (LAND.phones.fallback). */
+    fallbackOf(u) {
+      return phoneFallback(u.nat, turnToDate(this.ticket.turn).year);
+    }
+    /**
+     * How long an order to this block waits while its wire is down, battle seconds: the wireless, LAND.radio's wait as the
+     * radio switch reckons it (its headquarters hit: wavering or under hqAt of its strength); or a runner from the
+     * headquarters to where it stands.
+     */
+    fallbackWait(u) {
+      if (this.fallbackOf(u) === "radio") {
+        const R = LAND.radio, hit = u.state === "wavering" || u.str < R.hqAt * u.str0;
+        return R.delay * (hit ? R.cut : 1) * this.radioOf(u);
+      }
+      const [hx, hy] = this.phonesHq();
+      return Math.hypot(u.x - hx, u.y - hy) / LAND.phones.runner;
+    }
+    /** Each tick, before the orders land and the staffs think: the wires laid as the clock starts, and the mends whose time has come. */
+    phonesOn() {
+      if (!this.phoneRng) this.layWires();
+      for (const w of this.wires) if (w.out && this.t >= w.out.t - 1e-9) this.mend(w);
+    }
+    /** The clock starts: a wire to every block of the defence on the field, its own dice made (the day's luck's way). */
+    layWires() {
+      this.phoneRng = new Rng(hashString(this.ticket.attempt ? `phones:${this.ticket.seed}:${this.ticket.attempt}` : `phones:${this.ticket.seed}`));
+      const hq = this.phonesHq();
+      for (const u of this.units) {
+        if (u.side !== "def" || !live2(u)) continue;
+        const w = { id: this.wires.length + 1, side: u.side, unit: u.id, hq, lines: phoneLines(u.nat), cut: 0, out: null };
+        this.wires.push(w);
+        this.wireBy.set(u.id, w);
+      }
+    }
+    /**
+     * A blow struck on a block at its wire's end: from an enemy gun block or mortar team, while the wire has a line up, it
+     * cuts one at LAND.phones.cut, where the wire comes nearest the block's front. Machine guns, foot and tanks never.
+     */
+    wireBlow(u, t) {
+      const w = this.wireBy.get(t.id);
+      if (!w || w.cut >= w.lines || u.side === w.side || !(u.team === "mor" || u.kind === "art" && !u.team)) return;
+      if (this.phoneRng.next() >= LAND.phones.cut) return;
+      const [fx, fy] = ahead(t.face), px = t.x + fx * t.d / 2, py = t.y + fy * t.d / 2;
+      const dx = t.x - w.hq[0], dy = t.y - w.hq[1], l = dx * dx + dy * dy;
+      const k = l > 0 ? Math.max(0, Math.min(1, ((px - w.hq[0]) * dx + (py - w.hq[1]) * dy) / l)) : 1;
+      this.wireCut(w, w.hq[0] + k * dx, w.hq[1] + k * dy, u);
+    }
+    /** Each tick, once the blocks have moved: an enemy tank block whose step crossed a wire with a line up cuts one there. */
+    wireTanks(was) {
+      for (const [u, x0, y0] of was) {
+        if (u.x === x0 && u.y === y0) continue;
+        for (const w of this.wires) {
+          const e = w.cut < w.lines && w.side !== u.side ? this.unit(w.unit) : void 0;
+          if (!e || !live2(e)) continue;
+          const k = segHit(x0, y0, u.x, u.y, w.hq[0], w.hq[1], e.x, e.y);
+          if (k !== null) this.wireCut(w, x0 + (u.x - x0) * k, y0 + (u.y - y0) * k, u);
+        }
+      }
+    }
+    /**
+     * A line of the wire is cut: kept, and told to the defence (land:wire). At the wire's first cut with no lineman out, one
+     * leaves the headquarters now; he reaches the cut at foot pace and the wire is mended LAND.phones.splice seconds later.
+     */
+    wireCut(w, x, y, by2) {
+      const r13 = (v) => Math.round(v * 10) / 10, r33 = (v) => Math.round(v * 1e3) / 1e3;
+      w.cut++;
+      const c = { t: r33(this.t), wire: w.id, x: r13(x), y: r13(y), by: by2.id };
+      this.wireCuts.push(c);
+      if (!w.out) {
+        const t1 = r33(this.t + Math.hypot(c.x - w.hq[0], c.y - w.hq[1]) / LAND.speed.inf);
+        w.out = { t: r33(t1 + LAND.phones.splice), wire: w.id, man: this.wireMends.length + 1, t0: c.t, t1, x: c.x, y: c.y };
+        this.wireMends.push(w.out);
+      }
+      const u = this.unit(w.unit);
+      if (!u || !this.phoneWords()) return;
+      const down = w.cut >= w.lines, how = this.fallbackOf(u) === "radio" ? "by radio" : "by runner";
+      this.say({
+        what: "land:wire",
+        unit: u.id,
+        side: u.side,
+        x: c.x,
+        y: c.y,
+        extra: { wire: w.id, down: down ? 1 : 0, by: this.fallbackOf(u), mend: w.out.t },
+        text: down ? `The telephone line to ${this.named(u)} is cut. Orders go ${how} until it is mended.` : `One of the ${w.lines === 2 ? "two telephone lines" : "telephone lines"} to ${this.named(u)} is cut. Orders still go by the ${w.lines - w.cut === 1 ? "other" : "others"}.`
+      });
+    }
+    /** A lineman's splice is done: every cut on the wire is mended, and whatever was waiting for it goes at once. */
+    mend(w) {
+      const m = w.out, r33 = (v) => Math.round(v * 1e3) / 1e3;
+      w.out = null;
+      w.cut = 0;
+      const u = this.unit(w.unit);
+      const now = this.pending.filter((p) => p.id === w.unit && p.held);
+      if (now.length) {
+        this.pending = this.pending.filter((p) => !(p.id === w.unit && p.held));
+        if (u && now.some((p) => !p.smoke)) delete u.orderAt;
+        if (u && fighting2(u)) for (const p of now) {
+          p.go();
+          p.held.went = r33(this.t);
+        }
+      }
+      if (u && this.phoneWords()) this.say({ what: "land:mend", unit: u.id, side: u.side, x: m.x, y: m.y, extra: { wire: w.id, man: m.man }, text: `The line to ${this.named(u)} is mended.` });
+    }
+    /** The wires' events go to the defence alone: told where it is the player's, or nobody's (a recording), never to a player attacking. */
+    phoneWords() {
+      return this.ticket.def.human || !this.ticket.att.human;
+    }
+    /**
+     * An order for a block whose wire is down: it waits its army's fallback from when it was given (from). A staff giving
+     * the very same order again leaves the one on its way be; any other order takes its place and waits afresh. Stamped
+     * (wireHeld) as it is given, and as it goes.
+     */
+    byFallback(u, go, from, c, smoke = false) {
+      const r33 = (v) => Math.round(v * 1e3) / 1e3, key = c ? JSON.stringify(c) : void 0;
+      const slot = (p) => p.id === u.id && !p.smoke === !smoke;
+      const was = this.pending.find(slot);
+      if (this.staffing && was?.held && key !== void 0 && was.key === key) return;
+      const held = { t: r33(from), unit: u.id, due: r33(from + this.fallbackWait(u)) };
+      this.wireHeld.push(held);
+      this.pending = this.pending.filter((p) => !slot(p));
+      if (held.due <= this.t + 1e-9) {
+        if (!smoke) delete u.orderAt;
+        go();
+        held.went = r33(this.t);
+        return;
+      }
+      this.pending.push(smoke ? { at: held.due, id: u.id, go, smoke, key, held } : { at: held.due, id: u.id, go, key, held });
+      if (!smoke) u.orderAt = held.due;
+    }
+    /**
+     * The wires as a side sees them: the defence its own, and everyone everything where the view is unfogged (no side, or
+     * the card knew the defence). A cut's striker is named only where the side has met it.
+     */
+    phonesView(as) {
+      if (!this.phonesSeen(as)) return {};
+      const hq = this.phonesHq(), r13 = (v) => Math.round(v * 10) / 10;
+      return {
+        phones: {
+          hq: [...hq],
+          wires: this.wires.map((w) => {
+            const u = this.unit(w.unit);
+            return { id: w.id, side: w.side, pts: [[...w.hq], [r13(u.x), r13(u.y)]], hq: [...w.hq], unit: w.unit, lines: w.lines, cut: w.cut };
+          }),
+          cuts: this.wireCuts.map((c) => {
+            const by2 = this.unit(c.by);
+            return { t: c.t, wire: c.wire, x: c.x, y: c.y, ...as === void 0 || !by2 || by2.side === as || this.known(by2) ? { by: c.by } : {} };
+          }),
+          mends: this.wireMends.map((m) => ({ ...m })),
+          held: this.wireHeld.map((h) => ({ ...h }))
+        }
+      };
+    }
+    /** Whether a side sees the wires (phonesView): once they are laid, the defence, and everyone where the view is unfogged. */
+    phonesSeen(as) {
+      return this.phones && this.phoneRng !== null && (as === void 0 || as === "def" || !this.fog);
+    }
     /**
      * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
      * or the card identified its corps (b476(3)), once one of his has fought it or it has struck one of his in contact
@@ -7658,7 +8256,7 @@
       };
       const air = this.radio && player && this.t > 0;
       const said = c.at, from = typeof said === "number" && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
-      const give = (u, go, smoke = false) => this.order(u, go, air, from, smoke);
+      const give = (u, go, smoke = false) => this.order(u, go, air, from, c, smoke);
       switch (c.do) {
         case "move": {
           const us = mine(c.units);
@@ -7771,6 +8369,12 @@
             this.place(u, x, y, f !== void 0 && Number.isFinite(f) ? f : void 0);
             return true;
           }
+          if (c.do === "land:patrol") {
+            const u = this.unit(Number(c.unit ?? c.units?.[0]));
+            if (!this.patrol || !u || u.side !== by2 || by2 !== this.setup || this.patrolWhy(u) !== null) return false;
+            this.patrolBy = u.id;
+            return true;
+          }
           if (c.do === "land:wait") {
             if (!this.relief) return false;
             const all = mine(c.units ?? []), whys = this.waitWhyAll(all);
@@ -7866,7 +8470,11 @@
      * the way, never its move or attack, nor is replaced by one, so "move, then smoke to cover it" lands both; and it
      * leaves the block's orderAt (its move's or attack's) alone.
      */
-    order(u, go, air, from = this.t, smoke = false) {
+    order(u, go, air, from = this.t, c, smoke = false) {
+      if (this.phones && this.t > 0 && this.wireDown(u)) {
+        this.byFallback(u, go, from, c, smoke);
+        return;
+      }
       if (!air) {
         go();
         return;
@@ -7892,7 +8500,10 @@
         const u = this.unit(p.id);
         if (!u) continue;
         if (!p.smoke) delete u.orderAt;
-        if (fighting2(u)) p.go();
+        if (fighting2(u)) {
+          p.go();
+          if (p.held) p.held.went = Math.round(this.t * 1e3) / 1e3;
+        }
       }
     }
     send(u, o) {
@@ -8407,14 +9018,16 @@
       this.hidStarted = true;
       if (this.ai.def && !this.ticket.def.human) this.layAmbush("def");
       for (const u of this.units) this.markHid(u);
+      if (this.patrol) this.patrolOut();
     }
     /**
      * The computer's defence puts a block or two of its line into woods on the enemy's way in, before the clock starts
      * (LAND.hide.staff): foot of its line (not its held reserve, nor a block dug in), each to the furthest-forward wood
      * within 'ahead' metres before it or 'back' behind it and 'across' to either side, inside its own ground as the
-     * player's setup step allows his, clear of every other block. Where no woods lie near, none goes.
+     * player's setup step allows his, clear of every other block. Where no woods lie near, none goes. 'most' blocks at
+     * most, of those 'may' allows (a caught patrol's one more post: night patrol); the blocks it put there.
      */
-    layAmbush(side) {
+    layAmbush(side, most = LAND.hide.staff.blocks, may = () => true) {
       const H = LAND.hide.staff, dir = side === "att" ? 1 : -1;
       const z = this.field.zones[side];
       const own = this.units.filter((u) => u.side === side && live2(u));
@@ -8424,7 +9037,7 @@
         Math.max(z[2], ...own.map((u) => u.x + u.w / 2)),
         Math.max(z[3], ...own.map((u) => u.y + u.d / 2))
       ];
-      const foot = own.filter((u) => MOTION[u.kind] === "foot" && !u.team && !u.dug && u.reserve !== "held" && !u.taken && !this.inCover(u));
+      const foot = own.filter((u) => MOTION[u.kind] === "foot" && !u.team && !u.dug && u.reserve !== "held" && !u.taken && !this.inCover(u) && may(u));
       const picks = [];
       const cell = this.hedgeMap ? Math.min(this.field.cell, HEDGE_CELL) : this.field.cell;
       for (const u of foot) {
@@ -8439,18 +9052,20 @@
         if (best) picks.push({ u, ...best });
       }
       picks.sort((a, b) => b.ahead - a.ahead || a.u.id - b.u.id);
-      let laid = 0;
+      const laid = [];
       for (const p of picks) {
-        if (laid >= H.blocks) break;
+        if (laid.length >= most) break;
         if (this.standWhy(p.u, p.x, p.y, room) !== null) continue;
         this.place(p.u, p.x, p.y);
-        laid++;
+        laid.push(p.u);
       }
+      return laid;
     }
     /**
      * Found (release 2): no longer hidden from the other side, and known to the player if it is the enemy's (b464(2)).
      * 'fired': it opened fire on 'by'; 'seen': 'by' came close enough to see it; 'out': it left the woods; 'struck': hit
-     * from the air. Told to the player as his blocks would report it.
+     * from the air; 'patrol': the night before, by the patrol 'by' sent out (night patrol, release 2), before any shot.
+     * Told to the player as his blocks would report it.
      */
     reveal(u, how, by2) {
       if (!u.hid) return;
@@ -8459,7 +9074,7 @@
       const mineFound = this.ticket[u.side].human, theirs = this.ticket[other(u.side)].human;
       if (theirs) u.found = true;
       const where = this.inWoods(u) ? "the woods" : "the hedges";
-      const text = mineFound ? how === "fired" ? `${this.named(u)} springs its ambush from ${where}.` : how === "seen" ? `${this.named(u)} has been seen in ${where}.` : how === "heard" ? `${this.named(u)} has been heard moving in ${where}.` : how === "out" ? `${this.named(u)} has left cover and can be seen.` : how === "searched" ? `${this.named(u)} is flushed out of ${where} by fire.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.` : theirs ? how === "fired" && by2 ? `Enemy troops hidden in ${where} open fire on your ${by2.name}.` : (how === "seen" || how === "heard") && by2 ? `Your ${by2.name} has found enemy troops in ${where}.` : how === "searched" && by2 ? `Your ${by2.name} has flushed enemy troops out of ${where}.` : how === "out" ? "Enemy troops come out of cover." : `Enemy troops found in ${where}.` : "";
+      const text = mineFound ? how === "fired" ? `${this.named(u)} springs its ambush from ${where}.` : how === "seen" ? `${this.named(u)} has been seen in ${where}.` : how === "heard" ? `${this.named(u)} has been heard moving in ${where}.` : how === "out" ? `${this.named(u)} has left cover and can be seen.` : how === "searched" ? `${this.named(u)} is flushed out of ${where} by fire.` : how === "patrol" ? `An enemy patrol found ${this.named(u)} in ${where} in the night.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.` : theirs ? how === "fired" && by2 ? `Enemy troops hidden in ${where} open fire on your ${by2.name}.` : (how === "seen" || how === "heard") && by2 ? `Your ${by2.name} has found enemy troops in ${where}.` : how === "searched" && by2 ? `Your ${by2.name} has flushed enemy troops out of ${where}.` : how === "patrol" ? "Our night patrol found a hidden post." : how === "out" ? "Enemy troops come out of cover." : `Enemy troops found in ${where}.` : "";
       this.say({ what: "land:found", unit: u.id, side: u.side, text, x: u.x, y: u.y, extra: { how, ...by2 ? { by: by2.id } : {} } });
     }
     /**
@@ -8486,6 +9101,113 @@
         if (by2) this.reveal(u, this.gap(u, by2) <= sight && !veiled(by2) ? "seen" : "heard", by2);
       }
     }
+    // ---- Night patrol (release 2) -----------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it");
+    // the design director, 18:36Z, Q6 to Q8 (LAND.patrol). The night before, the attack sends one patrol out from a
+    // block of its line on foot: the computer's always, from its most forward (doctrine: Q8); the player's only by his
+    // order while he places his army (land:patrol). The defence never patrols. It needs hiding on (only hidden posts can
+    // be found): it is settled once in hideStart, after the computer's ambushes are laid and every block in cover is
+    // hidden and before either staff first thinks, so the attack's first plan counts what it found. Two draws on its own
+    // stream ('patrol:' and the seed, and the attempt), always both and found first, never on the battle's dice: found,
+    // the defence's most forward hidden post is found before any shot (it never springs its ambush); caught, the defence
+    // is alerted, ready but not stronger (Q7, b418): one more of its blocks takes a hidden post by the computer's own
+    // ambush rule (the player's defence too, laid for him and named in his warning), a computer defence's reserve starts
+    // toward the attack at once as a bold one does (ai.ts defend; a player's moves his own), and the patrol's block loses
+    // the patrol's men from its strength (counted as lost; its nerve untouched). The flares over it are looks only.
+    /** Why this block may not go out on patrol tonight, in the player's words (129(d)); null where it may. */
+    patrolWhy(u) {
+      if (!this.patrol) return "There are no night patrols in this battle.";
+      if (!this.hide) return "Nothing hides in this battle, so there is nothing for a patrol to find.";
+      if (u.side !== "att") return "Only the attacker sends out a patrol.";
+      if (this.t > 0 || this.over || this.hidStarted) return "The battle has begun: a patrol goes out the night before.";
+      if (this.setup !== u.side) return "A patrol is sent while you place your army, before the battle begins.";
+      if (this.patrolBy !== null) return "One patrol a night: one is already going out.";
+      if (!fighting2(u)) return "It is out of the fight.";
+      if (u.team || MOTION[u.kind] !== "foot") return "Only men on foot go out on patrol.";
+      return null;
+    }
+    /** A side's computer defence alerted by the patrol it caught (night patrol): its reserve starts toward the attack at once (ai.ts). */
+    alertedStaff(side) {
+      return this.patrol && side === "def" && !this.ticket.def.human && this.nightPatrol?.alerted === true;
+    }
+    /** The night's patrol goes out, and what it found and whether it was caught are settled (hideStart). */
+    patrolOut() {
+      const P = LAND.patrol, side = "att", foe = "def";
+      const foot = (u) => !!u && u.side === side && fighting2(u) && !u.team && MOTION[u.kind] === "foot";
+      const by2 = this.ticket[side].human ? this.patrolBy === null ? void 0 : this.unit(this.patrolBy) : this.units.filter((u) => foot(u) && u.reserve !== "held").sort((a, b) => b.y - a.y || a.id - b.id)[0];
+      if (!foot(by2)) return;
+      const rng = new Rng(hashString(this.ticket.attempt ? `patrol:${this.ticket.seed}:${this.ticket.attempt}` : `patrol:${this.ticket.seed}`));
+      const found = rng.next() < P.found, caught = rng.next() < P.caught;
+      const post = this.units.filter((u) => u.side === foe && live2(u) && u.hid).sort((a, b) => a.y - b.y || a.id - b.id)[0];
+      const men = patrolSize(by2.nat);
+      const r13 = (v) => Math.round(v * 10) / 10;
+      const near = found && post ? post : this.units.filter((u) => u.side === foe && live2(u) && !u.hid).sort((a, b) => dist(a.x, a.y, by2.x, by2.y) - dist(b.x, b.y, by2.x, by2.y) || a.id - b.id)[0];
+      const to = near ? [r13(near.x), r13(Math.max(0, near.y - near.d / 2 - 40))] : [r13(by2.x), r13(by2.y + by2.d / 2 + 200)];
+      const from = [r13(by2.x), r13(by2.y + by2.d / 2)];
+      const w = (j) => (mix2(Math.imul(this.ticket.seed >>> 0, 2246822507) + j) - 0.5) * 60;
+      const tm = Math.round((P.night.t0 + P.night.t1) / 2), at = (f, j) => [r13(from[0] + (to[0] - from[0]) * f + w(j)), r13(from[1] + (to[1] - from[1]) * f)];
+      const route = [
+        [P.night.t0, from[0], from[1]],
+        [Math.round((P.night.t0 + tm) / 2), ...at(0.5, 1)],
+        [tm, to[0], to[1]],
+        [Math.round((tm + P.night.t1) / 2), ...at(0.5, 2)],
+        [P.night.t1, from[0], from[1]]
+      ];
+      const night = {
+        side,
+        unit: by2.id,
+        men,
+        t0: P.night.t0,
+        t1: P.night.t1,
+        from,
+        to,
+        route,
+        found: null,
+        alerted: caught,
+        post: null,
+        lost: 0,
+        flares: []
+      };
+      this.nightPatrol = night;
+      if (found && post) {
+        night.found = { unit: post.id, x: r13(post.x), y: r13(post.y), kind: post.team ?? post.kind };
+        this.reveal(post, "patrol", by2);
+      }
+      if (caught) {
+        const laid = this.layAmbush(foe, 1, (u) => !u.order);
+        for (const u of laid) this.markHid(u);
+        const extra = laid.find((u) => u.hid);
+        if (extra) night.post = extra.id;
+        const lost = Math.min(by2.str, men * by2.str0 / Math.max(1, by2.men0));
+        by2.str -= lost;
+        by2.figures = by2.str <= 0 ? 0 : Math.max(1, Math.ceil(by2.tray * by2.str));
+        night.lost = lost;
+        const k = (i, j) => mix2(Math.imul(this.ticket.seed >>> 0, 2654435761) + i * 8 + j);
+        for (let i = 0; i < 3; i++) {
+          const t = Math.round(P.night.t0 + (P.night.t1 - P.night.t0) * ((i + k(i, 1)) / 3));
+          night.flares.push([t, r13(Math.min(this.field.w, Math.max(0, to[0] + (k(i, 2) - 0.5) * 240))), r13(Math.min(this.field.h, Math.max(0, to[1] + (k(i, 3) - 0.5) * 120)))]);
+        }
+        if (this.ticket[foe].human) {
+          const where = extra ? ` ${extra.name} has taken a hidden post in ${this.inWoods(extra) ? "the woods" : "the hedges"}.` : "";
+          this.say({ what: "land:patrol", side: foe, ...extra ? { unit: extra.id } : {}, text: `We caught an enemy patrol in the night. An attack is coming.${where}`, x: extra ? r13(extra.x) : to[0], y: extra ? r13(extra.y) : to[1], extra: { caught: true, ...extra ? { post: extra.id } : {} } });
+        }
+      }
+      if (this.ticket[side].human && (caught || !found || !post)) {
+        const text = caught ? "Our patrol was caught in the night. They know we're coming." : "Our patrol came back with nothing to report.";
+        this.say({ what: "land:patrol", side, unit: by2.id, text, x: to[0], y: to[1], extra: { caught, found: !!night.found } });
+      }
+    }
+    /** The night's patrol as a side sees it: the attack all of it; the defence only once alerted, where it caught it and the flares. */
+    patrolView(as) {
+      const p = this.nightPatrol;
+      if (!this.patrol || !p) return {};
+      const flares = p.flares.map((f) => [f[0], f[1], f[2]]);
+      if (as === void 0 || as === p.side) {
+        return { patrol: { side: p.side, unit: p.unit, t0: p.t0, t1: p.t1, men: p.men, from: [p.from[0], p.from[1]], to: [p.to[0], p.to[1]], route: p.route.map((r) => [r[0], r[1], r[2]]), found: p.found ? { x: p.found.x, y: p.found.y, kind: p.found.kind } : null, alerted: p.alerted, flares } };
+      }
+      return p.alerted ? { patrol: { side: p.side, t0: p.t0, t1: p.t1, men: p.men, to: [p.to[0], p.to[1]], found: null, alerted: true, flares } } : {};
+    }
     step() {
       if (this.setup) return;
       if (this.over) {
@@ -8493,6 +9215,7 @@
         return;
       }
       if (this.hide && !this.hidStarted) this.hideStart();
+      if (this.phones) this.phonesOn();
       if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
       this.landOrders();
       if (this.relief && this.joinCorps.size) this.waitOn();
@@ -8535,6 +9258,7 @@
           if (u.side === "att" || !t.met) this.say({ what: "contact", unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
         }
         const blow = this.blow(u, t);
+        if (this.phones && this.wires.length) this.wireBlow(u, t);
         if (blind) {
           const F = LAND.hide.search;
           blow.dmg *= F.blow;
@@ -8566,13 +9290,16 @@
       for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
       if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
+      if (this.bearers) this.carry();
       for (const u of this.units) if (live2(u)) this.nerve(u);
       const at = () => new Map(this.units.map((u) => [u.id, [u.x, u.y]]));
       const before = this.cutters && this.hedges.length ? at() : null;
+      const tanks = this.phones && this.wires.length ? this.units.filter((u) => u.side === "att" && u.kind === "arm" && live2(u)).map((u) => [u, u.x, u.y]) : null;
       for (const u of this.units) if (live2(u)) this.move(u);
       const moved = before ? at() : null;
       this.spread();
       if (before) this.cutOn(before, moved);
+      if (tanks) this.wireTanks(tanks);
       if (this.hide) this.spotHidden();
       this.t = Math.round((this.t + DT) * 1e3) / 1e3;
       if (this.cuts.length) this.openCuts();
@@ -8762,6 +9489,7 @@
     blow(u, t) {
       const gu = coverAt(this.field, u.x, u.y);
       let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
+      if (this.bearers) p *= this.atHand(u);
       if (u.state === "wavering") p *= LAND.wavering;
       const rearguard = this.givingGround(t);
       if (u.order && u.path.length && u.speed > 0.5 || rearguard) p *= LAND.moving;
@@ -8825,6 +9553,10 @@
       t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady2));
       t.still = 0;
       t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
+      if (this.bearers) {
+        this.wounded(t, before - t.str);
+        t.figures = Math.min(had, t.figures);
+      }
       const owed = t.owed ?? (t.owed = {}), model = t.power0 / Math.max(1e-9, t.tray * t.str0);
       for (const [u, d] of from) owed[u.id] = (owed[u.id] ?? 0) + d;
       for (let k = t.figures; k < had; k++) {
@@ -9258,6 +9990,120 @@
       const r = LAND.turn[u.kind] * DT;
       const d = turn(u.face, want);
       u.face = Math.abs(d) <= r ? want : u.face + Math.sign(d) * r;
+    }
+    // ---- Stretcher bearers (release 2) --------------------------------------------------------------------------------
+    //
+    // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it"); the
+    // design director's rulings Q4 and Q5 (18:36Z), and the light cases (18:38Z); LAND.bearers. Of each loss of strength a
+    // block suffers (suffer: the blows, the air, kept harm landing), LAND.bearers.killed are dead and the rest wounded. Of
+    // the wounded, light.share are dressed at the block and back in the line light.dress seconds later (with no walk while
+    // light.at is 0), if the block is still fighting then: running, fled or gone, it takes none back. They come back as
+    // strength, up to what it started with, never raising its nerve: the only upward write to strength in the fight. The
+    // rest are litter cases: while they lie waiting and its bearers (share of its strength at the start, by army) are home,
+    // a block still fighting sends a trip, litter bearers a case, out to its aid post (LAND.bearers.aid behind where it
+    // started, toward its own edge) and back at LAND.bearers.pace: 2 x aid / pace, 330 s. Bearers out are still counted in
+    // its strength, its nerve, the day's count and its size: they only weaken its own blows, by the share of its strength
+    // away (atHand). One land:bearers event a block, to the player's own side, as its bearers first go out. Nothing here
+    // draws on the dice. The drill draws the men (drill.ts): the wounded, the bearers and the carries, looks only.
+    /** Where a block's aid post stands: LAND.bearers.aid metres behind its start place, toward its own back edge, on the field. */
+    aidOf(u) {
+      const back = u.side === "att" ? -1 : 1;
+      return [clamp(u.home[0], 0, this.field.w), clamp(u.home[1] + back * LAND.bearers.aid, 0, this.field.h)];
+    }
+    /** A block's bearers and wounded, as the rules count them (strength): none before its first loss, or with the switch off. */
+    litter(u) {
+      return this.bearers ? this.litters.get(u.id) : void 0;
+    }
+    /** A loss of strength d on a block: its share of wounded, the light cases to their dressing, the rest lying for the bearers. */
+    wounded(u, d) {
+      if (!(d > 0)) return;
+      const B = LAND.bearers, L2 = B.light;
+      let l = this.litters.get(u.id);
+      if (!l) {
+        l = { all: bearerShare(u.nat) * u.str0, out: 0, trips: [], waiting: 0, light: [], aid: this.aidOf(u), told: false };
+        this.litters.set(u.id, l);
+      }
+      const hurt = d * (1 - killedShare(u.nat)), light = hurt * L2.share, foot = LAND.speed.inf;
+      const at = Math.round((this.t + (L2.at > 0 ? L2.at / (foot * L2.out) : 0) + L2.dress + (L2.at > 0 ? L2.at / (foot * L2.back) : 0)) * 1e3) / 1e3;
+      const last = l.light[l.light.length - 1];
+      if (last && last.at === at) last.n += light;
+      else if (light > 0) l.light.push({ at, n: light });
+      l.waiting += hurt - light;
+    }
+    /**
+     * Each tick, after the harm: the bearers whose trip is done are home; the light cases whose dressing is done are back
+     * in the line, where their block still fights (up to its strength at the start); then, while litter cases wait and
+     * bearers are home, a block still fighting sends them out: min(waiting, home / litter) cases, litter bearers each.
+     */
+    carry() {
+      const B = LAND.bearers, trip = 2 * B.aid / B.pace, t = this.t;
+      for (const u of this.units) {
+        const l = this.litters.get(u.id);
+        if (!l) continue;
+        if (l.trips.length && l.trips[0].back <= t + 1e-9) {
+          while (l.trips.length && l.trips[0].back <= t + 1e-9) l.trips.shift();
+          l.out = l.trips.reduce((a, x) => a + x.by, 0);
+        }
+        while (l.light.length && l.light[0].at <= t + 1e-9) {
+          const n = l.light.shift().n, was = u.str;
+          if (!fighting2(u)) continue;
+          u.str = Math.min(u.str0, u.str + n);
+          if (u.str <= was) continue;
+          let r;
+          for (let i = this.returns.length - 1; i >= 0 && !r; i--) if (this.returns[i].unit === u.id) r = this.returns[i];
+          if (r && Math.floor(r.t + 1e-9) === Math.floor(t + 1e-9)) r.n += u.str - was;
+          else this.returns.push({ t: Math.round(t * 1e3) / 1e3, unit: u.id, n: u.str - was });
+        }
+        if (!fighting2(u) || l.waiting <= 1e-12) continue;
+        const home = l.all - l.out;
+        if (home <= 1e-12) continue;
+        const cases = Math.min(l.waiting, home / B.litter), by2 = cases * B.litter;
+        l.waiting -= cases;
+        l.out += by2;
+        l.trips.push({ back: Math.round((t + trip) * 1e3) / 1e3, by: by2 });
+        if (!l.told) {
+          l.told = true;
+          if (this.ticket[u.side].human) this.say({ what: "land:bearers", unit: u.id, side: u.side, text: `${this.named(u)}'s stretcher bearers are carrying the wounded back.`, x: u.x, y: u.y });
+        }
+      }
+    }
+    /** The share of a block's strength at hand to strike with: all of it, less its bearers out carrying (none below nothing). */
+    atHand(u) {
+      const l = this.litters.get(u.id);
+      if (!l || l.out <= 0 || u.str <= 0) return 1;
+      return Math.max(0, u.str - l.out) / u.str;
+    }
+    /**
+     * The bearers' part of the view, a side's own blocks (every side's with no side given, as a recording is): each block's
+     * bearers out and litter cases waiting, in men (strength times its men at full strength), and the battle second the
+     * next of its bearers are back (null with none out); the aid post of each block that has had wounded; and the light
+     * cases back in the line in the two battle seconds before this one (when, the block, how many men), each told once by
+     * its t and block: a battle second is shown only once it is over, so an entry never changes after it is shown (a
+     * block's returns in one second are summed), and one of no whole man is left out. Every side's where the view is
+     * unfogged (the card knew the defence), as the telephone lines are. Left out with the switch off, and before anyone
+     * is hurt.
+     */
+    bearerView(as) {
+      if (!this.bearers || !this.litters.size) return {};
+      const r13 = (v) => Math.round(v * 10) / 10;
+      const ours = (u) => !!u && (as === void 0 || u.side === as || !this.fog);
+      const men = (u, s) => Math.round(s * u.men0 / Math.max(1e-9, u.str0));
+      const bearers = [], aid = [], returns = [];
+      for (const [id, l] of [...this.litters].sort((a, c) => a[0] - c[0])) {
+        const u = this.unit(id);
+        if (!ours(u)) continue;
+        aid.push({ side: u.side, unit: id, x: r13(l.aid[0]), y: r13(l.aid[1]) });
+        const out = men(u, l.out), waiting = men(u, l.waiting);
+        if (out > 0 || waiting > 0) bearers.push({ unit: id, out, waiting, back: l.trips.length ? l.trips[0].back : null });
+      }
+      const now = Math.floor(this.t + 1e-9);
+      for (const r of this.returns) {
+        const u = this.unit(r.unit), sec = Math.floor(r.t + 1e-9);
+        if (sec >= now || sec < now - 2 || !ours(u)) continue;
+        const n = men(u, r.n);
+        if (n > 0) returns.push({ t: r.t, unit: r.unit, n });
+      }
+      return { ...bearers.length ? { bearers } : {}, ...aid.length ? { aid } : {}, ...returns.length ? { returns } : {} };
     }
     // ---- The end --------------------------------------------------------------------------------------------------
     /** Each side's standing power as a share of both sides' at the start: the balance bar. */
@@ -9994,7 +10840,7 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as) };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -10584,6 +11430,9 @@
       if (opts.cutters !== false) sim.cutters = true;
       if (opts.smoke !== false) sim.smoke = true;
       if (opts.bocage) sim.bocage = true;
+      if (opts.phones !== false) sim.phones = true;
+      if (opts.bearers !== false) sim.bearers = true;
+      if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
       this.blocks = sim.allBlocks().map((u) => {
         const a = piece ? u.side === "att" ? piece.att : piece.def : null;
@@ -10714,6 +11563,11 @@
           // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
           // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
           ...this.sim.screenView(this.me ?? void 0),
+          // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
+          // by its t and unit; the night patrol: the attack's own route, and where it was caught)
+          ...this.sim.phonesView(this.me ?? void 0),
+          ...this.sim.bearerView(this.me ?? void 0),
+          ...this.sim.patrolView(this.me ?? void 0),
           ...v.over ? { over: v.over } : {}
         });
       }
@@ -10882,7 +11736,10 @@
         rider: opts?.rider !== false,
         cutters: opts?.cutters !== false,
         smoke: opts?.smoke !== false,
-        bocage: !!opts?.bocage
+        bocage: !!opts?.bocage,
+        phones: opts?.phones !== false,
+        bearers: opts?.bearers !== false,
+        patrol: opts?.patrol !== false
       });
       return live3.header();
     },
@@ -10909,6 +11766,9 @@
         cutters: o.cutters !== false,
         smoke: o.smoke !== false,
         bocage: !!o.bocage,
+        phones: o.phones !== false,
+        bearers: o.bearers !== false,
+        patrol: o.patrol !== false,
         fog: !!o.fog,
         seen: o.seen ?? [],
         designYears: o.designYears ?? {},
