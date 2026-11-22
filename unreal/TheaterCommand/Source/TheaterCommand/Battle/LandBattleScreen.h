@@ -70,6 +70,10 @@ private:
 	/** His view's keys held (W A S D and the arrows, Q E), a bit each; and the middle button sliding the view. */
 	uint32 ViewKeys = 0;
 	bool bSliding = false;
+	/** The block under the pointer (a tag or one of his cards; -1 none), and where the pointer is (local units): its
+	 * plate names what it belongs to, its real men and the drawing ratio. */
+	int32 HoverBlock = -1;
+	FVector2D HoverAt = FVector2D(-1.0, -1.0);
 	/** The view's keys held handed to the scene (and let go of all at once when the screen loses the keyboard). */
 	void HandViewKeys();
 	/** The two flags' brushes, made once their pictures are there. */

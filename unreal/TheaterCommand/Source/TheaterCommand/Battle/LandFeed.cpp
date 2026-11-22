@@ -121,6 +121,7 @@ namespace LandFeed
 				Row.bTaken = U["taken"].Truth(false);
 				Row.bHidden = U["hid"].Truth(false);
 				Row.OrderIn = U["orderIn"].IsNumber() ? U["orderIn"].Num() : -1.0;
+				Row.Men = U["men"].Int(-1);
 				const Json& O = U["order"];
 				if (O.IsObject())
 				{
@@ -482,6 +483,7 @@ namespace LandFeed
 			Row.Team = B["team"].Str("");
 			Row.Cal = B["cal"].Str("");
 			Row.Figures0 = B["figures0"].Int(0);
+			Row.Men0 = B["men0"].Int(0);
 			Row.W = B["w"].Num(0.0);
 			Row.D = B["d"].Num(0.0);
 			Out.Blocks.push_back(std::move(Row));

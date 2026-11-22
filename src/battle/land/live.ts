@@ -25,6 +25,7 @@ import { GROUNDS, groundAt, type LandPlace } from './field';
 import { LandBattle } from './sim';
 import { LAND, MOTION, type Kind } from './rules';
 import { calFor } from './shells';
+import { ARMOUR } from './armour';
 import type { LandUnit } from './units';
 import type { Drill, MenBlock, MenOut, Round } from './drill';
 import { PIECES, openSteppe, ticketOf, type SetPiece, type Steppe } from './pieces';
@@ -229,6 +230,8 @@ export function landUnitOut(u: LandUnit, t: number, known = true): Record<string
   return {
     id: u.id, side: u.side, kind: u.kind, name: u.name, x: r1(u.x), y: r1(u.y), face: r3(u.face),
     str: r3(u.str), mor: r3(u.mor), state: u.state, figures0: u.figures0, figures: u.figures,
+    // (the real men it stands for now, for the general's plate: the historian, 22 November 05:50Z)
+    men: Math.round(u.men0 * Math.min(1, u.str / Math.max(0.01, u.str0))),
     w: u.w, d: u.d, act: u.act, speed: r1(u.speed), engaged: u.engaged ?? -1, cover: u.cover ?? '',
     loop: town ? TOWN.loop : loops?.[u.act] ?? '',
     ...(drops ? { drops: { takes: drops.takes, every: drops.every } } : {}),
@@ -268,6 +271,13 @@ export interface LiveOpts {
    * from the other side till found, for both sides alike. On unless turned off.
    */
   hide?: boolean;
+  /**
+   * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z: the named tanks get their real advantages, German
+   * tanks far weaker at the back; the rules' LAND.armour, sim.measured): a tank's or a gun's blow on a tank weighs what its
+   * gun gets through the face struck at that range, each block weighed as the model the 3D game draws it with. On unless
+   * turned off.
+   */
+  armour?: boolean;
 }
 
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
@@ -303,15 +313,20 @@ export class LiveBattle {
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
+    if (opts.armour !== false) sim.measured = true;
+    // (the rules weigh a block as the model the set piece draws it with, so a Tiger on the screen fights as a Tiger: the
+    // sim's own model cache, seeded before the clock runs)
+    const models = (sim as unknown as { models: Map<number, string | null> }).models;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     this.blocks = sim.units.map((u) => {
       const a = piece ? (u.side === 'att' ? piece.att : piece.def) : null;
       let model: string | null = null;
       if (a && u.kind === 'arm') model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
       else if (a && u.kind === 'art' && !u.team) model = a.gun;
+      if (model && sim.measured && ARMOUR.models[model] && (u.kind !== 'arm' || ARMOUR.duels[model])) models.set(u.id, model);
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
-        figures0: u.figures0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
+        figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
       };
     });

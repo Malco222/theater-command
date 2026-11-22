@@ -48,6 +48,11 @@ namespace LandCommand
 		std::string Name, Short, Parent, Kind;
 		double Str = 1.0, Mor = 1.0;
 		int Figures = 0, Figures0 = 0;
+		/** The real men it stands for now (-1 not said: an enemy not met) and at the start; the men drawn for it on the
+		 * field (its men's tracks so far); and its side's drawing ratio, one figure for Ratio men (0 for a block of tanks
+		 * or guns, or none drawn yet). The historian, 22 November 05:50Z: the parent line carries the real men and the
+		 * ratio, as Brian's 04:14Z rule asks. */
+		int Men = -1, Men0 = 0, Drawn = 0, Ratio = 0;
 		/** steady, wavering, routing, gone, withdrawn ("unknown" for an enemy not met); what it is doing. */
 		std::string State, Act;
 		bool bMine = false;
@@ -145,7 +150,9 @@ namespace LandCommand
 			int Id = 0, Side = -1;
 			std::string Name, Short, Parent, Kind;
 			double W = 0.0, D = 0.0;
-			int Figures0 = 0;
+			int Figures0 = 0, Men0 = 0;
+			/** Drawn as tanks or guns (a model), not men. */
+			bool bVehicles = false;
 		};
 		struct Pending
 		{
@@ -156,6 +163,12 @@ namespace LandCommand
 			double Until = 0.0;
 		};
 		std::vector<Words> Blocks;
+		/** The men drawn for each block (by Blocks' order), counted from the tracks so far; each side's ratio. */
+		std::vector<int> DrawnOf;
+		size_t Counted = 0;
+		int RatioOf[2] = { 0, 0 };
+		/** The men's tracks counted up to the recording's now, and each side's ratio from them. */
+		void CountDrawn(const LandFeed::Recording& Rec);
 		std::vector<Tag> Shown;
 		std::vector<Pending> Given;
 		std::vector<int> Hand;

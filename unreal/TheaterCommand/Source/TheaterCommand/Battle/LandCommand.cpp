@@ -70,9 +70,56 @@ namespace LandCommand
 			W.W = B.W;
 			W.D = B.D;
 			W.Figures0 = B.Figures0;
+			W.Men0 = B.Men0;
+			W.bVehicles = !B.Model.empty();
 			Blocks.push_back(W);
 		}
 		std::sort(Blocks.begin(), Blocks.end(), [](const Words& A, const Words& B) { return A.Id < B.Id; });
+		DrawnOf.assign(Blocks.size(), 0);
+		Counted = 0;
+		RatioOf[0] = RatioOf[1] = 0;
+	}
+
+	void General::CountDrawn(const LandFeed::Recording& Rec)
+	{
+		if (Rec.Tracks.size() == Counted && DrawnOf.size() == Blocks.size())
+		{
+			return;
+		}
+		// (a live battle's tracks only grow; placed again before the clock ran, they begin again: counted afresh)
+		if (Rec.Tracks.size() < Counted || DrawnOf.size() != Blocks.size())
+		{
+			DrawnOf.assign(Blocks.size(), 0);
+			Counted = 0;
+		}
+		for (size_t I = Counted; I < Rec.Tracks.size(); ++I)
+		{
+			const LandFeed::Track& Tr = Rec.Tracks[I];
+			if (Tr.Role == "tank" || Tr.Role == "gun" || Tr.Role == "lorry")
+			{
+				continue;
+			}
+			auto It = std::lower_bound(Blocks.begin(), Blocks.end(), Tr.Block, [](const Words& W, int Key) { return W.Id < Key; });
+			if (It != Blocks.end() && It->Id == Tr.Block)
+			{
+				++DrawnOf[static_cast<size_t>(It - Blocks.begin())];
+			}
+		}
+		Counted = Rec.Tracks.size();
+		// One figure for how many men, a side: its men on foot over the men drawn for them (the scale plan's one N a battle
+		// makes the two the same).
+		double Men[2] = { 0.0, 0.0 }, Drawn[2] = { 0.0, 0.0 };
+		for (size_t I = 0; I < Blocks.size(); ++I)
+		{
+			const Words& W = Blocks[I];
+			if (W.bVehicles || DrawnOf[I] <= 0 || W.Men0 <= 0 || W.Side < 0 || W.Side > 1) continue;
+			Men[W.Side] += W.Men0;
+			Drawn[W.Side] += DrawnOf[I];
+		}
+		for (int S = 0; S < 2; ++S)
+		{
+			RatioOf[S] = Drawn[S] > 0.0 ? std::max(1, static_cast<int>(std::lround(Men[S] / Drawn[S]))) : 0;
+		}
 	}
 
 	const General::Words* General::WordsOf(int Id) const
@@ -95,6 +142,7 @@ namespace LandCommand
 		Me = Rec.bLive ? Rec.Me : -1;
 		bSetup = Rec.bSetup;
 		std::copy(Rec.Room, Rec.Room + 4, RoomAt);
+		CountDrawn(Rec);
 		Shown.clear();
 		const LandFeed::View* A = Rec.ViewAt(T);
 		if (!A)
@@ -136,7 +184,12 @@ namespace LandCommand
 				G.W = W->W;
 				G.D = W->D;
 				G.Figures0 = W->Figures0;
+				G.Men0 = W->Men0;
+				const size_t Wi = static_cast<size_t>(W - Blocks.data());
+				G.Drawn = Wi < DrawnOf.size() ? DrawnOf[Wi] : 0;
+				G.Ratio = !W->bVehicles && G.Drawn > 0 && U.Side >= 0 && U.Side <= 1 ? RatioOf[U.Side] : 0;
 			}
+			G.Men = U.bKnown ? U.Men : -1;
 			G.Str = U.Str;
 			G.Mor = U.Mor;
 			G.Figures = U.Figures;

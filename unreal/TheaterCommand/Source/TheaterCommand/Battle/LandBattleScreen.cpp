@@ -221,7 +221,7 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	if (bGeneral)
 	{
 		CardsH = PaintGeneral(Geometry, OutDrawElements, LayerId);
-		LayerId += 16;
+		LayerId += 18;
 	}
 	else
 	{
@@ -788,6 +788,40 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			X += CW + Gap;
 		}
 	}
+
+	// ---- The plate of the block under the pointer: its whole name, what it belongs to, its real men and the drawing
+	// ratio (the historian, 22 November 05:50Z, on Brian's 04:14Z rule: what is on the screen reflects the real numbers,
+	// the ratio said where it is not full scale). An enemy not met says nothing. ----
+	const LandCommand::Tag* Over = HoverBlock >= 0 && GeneralHeld < 0 ? Clip.TagOf(HoverBlock) : nullptr;
+	if (Over && Over->bKnown && (Over->bMine || !Over->bHidden) && !Over->Name.empty())
+	{
+		const int Men = Over->Men >= 0 ? Over->Men : Over->Men0;
+		// (about: to the hundred from a thousand up, else to the ten)
+		const int Step = Men >= 1000 ? 100 : 10;
+		const int About = FMath::Max(Step, (Men + Step / 2) / Step * Step);
+		FString Said = Over->Parent.empty() ? FString() : TEXT("of the ") + Wide(Over->Parent);
+		if (Men > 0)
+		{
+			Said += (Said.IsEmpty() ? TEXT("about ") : TEXT(", about ")) + FText::AsNumber(About).ToString() + TEXT(" men");
+		}
+		if (Over->Ratio > 0)
+		{
+			// (1:20 as written, never "x20", which reads as a multiplier on the men: the historian)
+			Said += FString::Printf(TEXT(", drawn 1:%d (one figure, %d men)"), Over->Ratio, Over->Ratio);
+		}
+		const FString Named = Wide(Over->Name).ToUpper();
+		const FSlateFontInfo NameFace = Typed(11.0f, true, 30), SaidFace = Serif(TEXT("Regular"), 13.0f);
+		const double PW = FMath::Max(WideOf(Named, NameFace), Said.IsEmpty() ? 0.0 : WideOf(Said, SaidFace)) + 20.0;
+		const double PH = Said.IsEmpty() ? 26.0 : 48.0;
+		const double PX = FMath::Clamp(HoverAt.X + 16.0, 8.0, FMath::Max(8.0, Size.X - PW - 8.0));
+		const double PY = FMath::Clamp(HoverAt.Y - PH - 12.0, 8.0, FMath::Max(8.0, Size.Y - PH - 8.0));
+		Fill(PX, PY, PW, PH, Plate, 16);
+		Write(Named, PX + 10.0, PY + 5.0, NameFace, Over->bMine ? BrightBrass : Cream, 17);
+		if (!Said.IsEmpty())
+		{
+			Write(Said, PX + 10.0, PY + 24.0, SaidFace, Cream, 17);
+		}
+	}
 	return CardsH;
 }
 
@@ -968,6 +1002,7 @@ FReply SLandBattleScreen::OnTouchGesture(const FGeometry& Geometry, const FPoint
 void SLandBattleScreen::OnMouseLeave(const FPointerEvent& Event)
 {
 	SLeafWidget::OnMouseLeave(Event);
+	HoverBlock = -1;
 	if (FLandBattleState* S = Battle.IsValid() ? Battle->EditState() : nullptr)
 	{
 		S->GeneralIn.EdgeRight = S->GeneralIn.EdgeAhead = 0.0;
@@ -1031,6 +1066,13 @@ FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerE
 			In.EdgeRight = Local.X >= Size.X - Edge ? 1.0 : Local.X <= Edge ? -1.0 : 0.0;
 			In.EdgeAhead = Local.Y <= Edge ? 1.0 : Local.Y >= Size.Y - Edge ? -1.0 : 0.0;
 			In.bLockEdgePan = GeneralHeld >= 0;
+		}
+		// (the block under the pointer, a tag or a card, for its plate)
+		HoverAt = Local;
+		HoverBlock = TagUnder(Local);
+		if (const FButton* Over = HoverBlock < 0 ? ButtonAt(Local) : nullptr)
+		{
+			HoverBlock = Over->Action.StartsWith(TEXT("pick:")) ? FCString::Atoi(*Over->Action.Mid(5)) : -1;
 		}
 		// (over his bar or a card, no word by the pointer)
 		Battle->GeneralMove(GeneralHeld < 0 && ButtonAt(Local) ? FVector2D(-1.0, -1.0) : ToPixels(Geometry, Local), TagUnder(Local));

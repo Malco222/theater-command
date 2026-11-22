@@ -89,6 +89,7 @@ int main(int Argc, char** Argv)
 	std::map<std::string, int> Made;
 	int Tags = 0, Eased = 0, Chips[6] = { 0, 0, 0, 0, 0, 0 };
 	double WorstOff = 0.0;
+	int RatioSeen[2] = { 0, 0 }, MenSeen = -1;
 	for (const std::string& Text : Deltas)
 	{
 		LandFeed::Grown Grew;
@@ -121,6 +122,10 @@ int main(int Argc, char** Argv)
 				if (Ub && std::hypot(T.X - Ua->X, T.Y - Ua->Y) > 1e-6) ++Eased;
 				Check((T.Says == LandCommand::Chip::Radio) == (T.bMine && Ua->OrderIn >= 0.0 && Ua->State != "gone" && Ua->State != "withdrawn"), "on the air exactly when his order is on its way");
 				Check(!T.bOrderable || (T.bMine && T.State != "routing" && T.Kind != "fort"), "only his fighting blocks take orders");
+				// (the plate's real men and the drawing ratio: said for every block met, never for one not met)
+				Check(T.bKnown ? T.Men >= 0 && T.Men <= T.Men0 : T.Men < 0, "real men said for a block met, and only for one met");
+				if (T.Ratio > 0 && T.Side >= 0 && T.Side <= 1) RatioSeen[T.Side] = T.Ratio;
+				MenSeen = std::max(MenSeen, T.Men);
 			}
 		}
 
@@ -233,6 +238,8 @@ int main(int Argc, char** Argv)
 		Tags, Eased, WorstOff, Chips[0], Chips[1], Chips[2], Chips[3], Chips[4], Chips[5]);
 	Check(WorstOff < 1e-6, "every tag on the line between its two views");
 	Check(Chips[2] > 0 && Chips[1] > 0, "some of his blocks were seen taken and with an order on the air");
+	std::printf("plates: one figure for %d men on the attack, %d on the defence; the biggest block %d men\n", RatioSeen[0], RatioSeen[1], MenSeen);
+	Check(RatioSeen[0] > 1 && RatioSeen[1] > 1 && MenSeen > 0, "each side's drawing ratio and its blocks' real men are known");
 	std::printf("orders made:");
 	for (const auto& [Do, N] : Made) std::printf(" %s %d", Do.c_str(), N);
 	std::printf("\n");

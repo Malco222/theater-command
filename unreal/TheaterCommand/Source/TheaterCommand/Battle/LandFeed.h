@@ -33,6 +33,8 @@ namespace LandFeed
 		std::string Team;
 		std::string Cal;
 		int Figures0 = 0;
+		/** The real men it stands for at the start (a live battle's header; 0 where the recording does not say). */
+		int Men0 = 0;
 		double W = 0.0, D = 0.0;
 		/** Tank crews' names, one per tank in the block's model order (empty strings for a plain tank). */
 		std::vector<std::string> CrewNames;
@@ -161,6 +163,8 @@ namespace LandFeed
 		bool bHidden = false;
 		/** Seconds till his order on the air reaches it (radio), -1 none on the air. */
 		double OrderIn = -1.0;
+		/** The real men it stands for now (its start's men by its strength now), -1 where not said (an enemy not met). */
+		int Men = -1;
 		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
 		 * path's corners. Empty kind: no order. */
 		std::string OrderKind;
