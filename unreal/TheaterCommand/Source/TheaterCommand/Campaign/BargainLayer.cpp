@@ -534,7 +534,7 @@ namespace BargainLayer
 			bool bCardLaid = false;
 			Bargains::FPlaced Placed;
 			bool bPlaced = false;
-			Bargains::FRect WasCard; // where it stood before it was last placed: the keep-off's last paint may still hold it there
+			TWeakPtr<SWidget> CardWidget; // the card's widget (MakeBargainCard): its own rect in the keep-off is known by it
 			int32 HotButton = INDEX_NONE;
 
 			// Kept between frames so that laying again makes nothing new.
@@ -1492,17 +1492,23 @@ namespace BargainLayer
 				if (KeepOffOf)
 				{
 					KeepOffOf(S.KeepOff);
+					// (the card is a piece of the frame too, and keeps off nothing of its own. Its rect is known by its widget,
+					// as the HUD read it into the frame this frame (FrameRects: the piece's GetPaintSpaceGeometry, where it was
+					// last painted), not by where it was placed: a card shut and opened again, or switched to another seal's,
+					// comes back into the frame where it was last painted, perhaps seconds ago, the frame after it is placed,
+					// and that ghost would push it to its other side for good. The review after the passes, finding 1)
+					const TSharedPtr<SWidget> CardWidget = S.CardWidget.Pin();
+					const bool bOwn = CardWidget.IsValid();
+					const FSlateRect Own = bOwn ? CardWidget->GetPaintSpaceGeometry().GetLayoutBoundingRect() : FSlateRect();
 					for (const FSlateRect& Piece : S.KeepOff)
 					{
+						if (bOwn && FMath::Abs(Piece.Left - Own.Left) < 0.5f && FMath::Abs(Piece.Top - Own.Top) < 0.5f && FMath::Abs(Piece.Right - Own.Right) < 0.5f && FMath::Abs(Piece.Bottom - Own.Bottom) < 0.5f)
+						{
+							continue;
+						}
 						const FVector2D Min = Painted.AbsoluteToLocal(FVector2D(Piece.Left, Piece.Top));
 						const FVector2D Max = Painted.AbsoluteToLocal(FVector2D(Piece.Right, Piece.Bottom));
-						const Bargains::FRect Rect{ Min.X, Min.Y, Max.X - Min.X, Max.Y - Min.Y };
-						auto Same = [&Rect](const Bargains::FRect& Card) { return FMath::Abs(Rect.X - Card.X) < 2.0 && FMath::Abs(Rect.Y - Card.Y) < 2.0 && FMath::Abs(Rect.W - Card.W) < 2.0 && FMath::Abs(Rect.H - Card.H) < 2.0; };
-						if (S.bPlaced && (Same(S.Placed.Card) || Same(S.WasCard)))
-						{
-							continue; // (the card is a piece of the frame too: it keeps off neither where it stands nor where it stood a frame ago)
-						}
-						S.Frame.push_back(Rect);
+						S.Frame.push_back(Bargains::FRect{ Min.X, Min.Y, Max.X - Min.X, Max.Y - Min.Y });
 					}
 				}
 				S.TownPlates.clear();
@@ -1547,7 +1553,6 @@ namespace BargainLayer
 					In.Px = Px;
 					if (!S.bPlaced || Bargains::NeedsPlace(S.Placed, In.Capital, Screen, Px) || !S.Placed.bFits || Bargains::KeepOffIntrusion(S.Placed.Card, In) > 0.0)
 					{
-						S.WasCard = S.bPlaced ? S.Placed.Card : Bargains::FRect{};
 						S.Placed = Bargains::PlaceCard(In);
 						S.bPlaced = true;
 					}
@@ -1967,7 +1972,9 @@ namespace BargainLayer
 
 	TSharedRef<SWidget> MakeBargainCard(const TWeakObjectPtr<ACampaignPlayerController>& Player)
 	{
-		return SNew(Impl::SBargainCard);
+		const TSharedRef<SWidget> Card = SNew(Impl::SBargainCard);
+		Impl::State().CardWidget = Card; // (the layer's Tick knows the card's own rect in the keep-off by it)
+		return Card;
 	}
 
 	FMargin CardPadding()
