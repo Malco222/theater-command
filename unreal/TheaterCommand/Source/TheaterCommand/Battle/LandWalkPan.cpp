@@ -4,6 +4,7 @@
 #include <cmath>
 #include <initializer_list>
 #include <map>
+#include <utility>
 
 namespace LandWalkPan
 {
@@ -130,9 +131,10 @@ namespace LandWalkPan
 
 	Plan ChooseTank(const LandFeed::Recording& Rec, const LandEye::World& Here, double T0, double For)
 	{
-		Plan Best;
 		const double T1 = T0 + For;
-		double BestScore = 0.0;
+		// (every steady drive, best first: the lens tries each in turn until one is seen in the open, so a town's or a
+		// wood's tank gives way to one on open ground)
+		std::vector<std::pair<double, Plan>> Drives;
 		for (size_t I = 0; I < Rec.Tracks.size(); ++I)
 		{
 			const LandFeed::Track& Tr = Rec.Tracks[I];
@@ -162,17 +164,24 @@ namespace LandWalkPan
 			}
 			if (!bAll) continue;
 			const double Score = std::exp(-std::pow((Speed - 5.0) / 2.5, 2.0)) / (1.0 + Wander);
-			if (Score <= BestScore) continue;
-			BestScore = Score;
-			Best = Plan();
-			Best.Block = Tr.Block;
-			Best.Men = Her;
-			Best.Speed = Speed;
+			Plan Her1;
+			Her1.Block = Tr.Block;
+			Her1.Men = Her;
+			Her1.Speed = Speed;
+			Drives.push_back({ Score, std::move(Her1) });
 		}
-		if (Best.Block < 0) return Best;
+		std::stable_sort(Drives.begin(), Drives.end(), [](const auto& A, const auto& B) { return A.first > B.first; });
 		// The eye off the flank of her drive's middle, past the hand-over: both sides, near to far, a man on a bank's
-		// height, then a roof's, then a church tower's (Normandy's hedges).
-		return EyeOff(Rec, Here, T0, For, Best, { 2.5, 6.0, 10.0 }, { 190.0, 170.0, 215.0, 240.0 });
+		// height, then a roof's, then a church tower's (Normandy's hedges). The first drive seen in the open, of the
+		// best eight; else the best's first free place, not open.
+		Plan First;
+		for (size_t K = 0; K < Drives.size() && K < 8; ++K)
+		{
+			Plan P = EyeOff(Rec, Here, T0, For, Drives[K].second, { 2.5, 6.0, 10.0 }, { 190.0, 170.0, 215.0, 240.0 });
+			if (P.Block >= 0 && P.bOpen) return P;
+			if (First.Block < 0 && P.Block >= 0) First = std::move(P);
+		}
+		return First;
 	}
 
 

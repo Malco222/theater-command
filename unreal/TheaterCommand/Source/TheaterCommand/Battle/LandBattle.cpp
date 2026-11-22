@@ -20,6 +20,7 @@
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignTextures.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Components/AudioComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -37,6 +38,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
 #include "FrameGrabber.h"
@@ -75,6 +77,12 @@
 #include <cmath>
 #include <map>
 #include <tuple>
+
+
+// The scene's own tick split by name for the gate (the production lead, 22 Nov 18:41Z: 24 ms a frame of the lit base's
+// ALandBattle::Tick had no name under it): each block in an Insights trace (cpu) and in the speed log's and the frame
+// recorder's "Theater" columns.
+#define LAND_SCOPE(Name) TRACE_CPUPROFILER_EVENT_SCOPE(Land_##Name); THEATER_SPEED_SCOPE(Land##Name)
 
 namespace LandParts
 {
@@ -819,6 +827,7 @@ namespace LandParts
 	/** The men and the vehicles where the cores have them now, for the camera's questions (LandSight). */
 	static void PlaceMovers(FLandBattleState& S)
 	{
+		LAND_SCOPE(PlaceMovers);
 		S.Sight.ClearMovers();
 		if (S.Men)
 		{
@@ -2360,6 +2369,7 @@ void ALandBattle::LayThings()
 
 void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 {
+	LAND_SCOPE(ShowField);
 	(void)Battle;
 	const FVector2D EyeAt(EyeWorld.Y / UnitsPerMetre, EyeWorld.X / UnitsPerMetre);
 	// The ground's level by the eye's distance to each tile (the things choose their own, by instancing).
@@ -2399,6 +2409,7 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 
 void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut, double EyeHigh)
 {
+	LAND_SCOPE(Clutter);
 	if (ClutterCopies.Num() == 0 || !State->Field || !Carpet.IsValid())
 	{
 		return;
@@ -2765,6 +2776,7 @@ void ALandBattle::MakeMen()
 
 void ALandBattle::DrawMen(const FVector& EyeWorld)
 {
+	LAND_SCOPE(DrawMen);
 	FLandBattleState& S = *State;
 	if (!S.Men)
 	{
@@ -2975,6 +2987,9 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Job.Offset = Floats;
 		Floats += Job.Points * 3;
 	}
+	// (the gate's names, nested to the function's end: DrawMen alone is the choice above, MenSend the sends, MenSkin the
+	// skinning, MenMeshes the near men's meshes)
+	LAND_SCOPE(MenSend);
 	// (the banked instances moved this frame sent at the frame's end, only those; a mesh holding no one now hidden)
 	for (int32 K = 0; K < BankCopies.Num(); ++K)
 	{
@@ -2993,6 +3008,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	{
 		return;
 	}
+	LAND_SCOPE(MenSkin);
 	SkinAt.SetNumUninitialized(Floats);
 	SkinFacing.SetNumUninitialized(Floats);
 	// (a body's first skin at a level lays him on the ground through the field: those here, one at a time; the rest
@@ -3016,6 +3032,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		const FSkinJob& Job = Jobs[Spread[K]];
 		Crowd.Skin(Job.Man, Job.Level, SkinAt.GetData() + Job.Offset, SkinFacing.GetData() + Job.Offset);
 	});
+	LAND_SCOPE(MenMeshes);
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
@@ -3369,6 +3386,7 @@ void ALandBattle::MakeRiders()
 
 void ALandBattle::RideTanks()
 {
+	LAND_SCOPE(RideTanks);
 	FLandBattleState& S = *State;
 	using FRider = FLandBattleState::FRider;
 	if (!S.Men || !S.Armour || S.Riders.empty())
@@ -3560,6 +3578,7 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 
 void ALandBattle::DrawArmour(const FVector& EyeWorld)
 {
+	LAND_SCOPE(DrawArmour);
 	FLandBattleState& S = *State;
 	if (!S.Armour)
 	{
@@ -3836,6 +3855,7 @@ void ALandBattle::DrawShades()
 
 void ALandBattle::DrawManShades()
 {
+	LAND_SCOPE(DrawManShades);
 	FLandBattleState& S = *State;
 	if (!S.Men || !ShadeInk)
 	{
@@ -4368,6 +4388,7 @@ void ALandBattle::HideTheTable()
 
 void ALandBattle::LightTheBattle()
 {
+	LAND_SCOPE(Light);
 	// The battle's day, said again wherever the room has changed it: every lamp white, the key turned to the sun at the
 	// day's strength and warmth, the other lamps the sky's fill (turned to the sky away from the sun, cool, throwing no
 	// shadow), and the sky light the day's (HideTheTable works them out).
@@ -4666,6 +4687,7 @@ void ALandBattle::LaySky()
 
 void ALandBattle::DrawSky()
 {
+	LAND_SCOPE(Sky);
 	// The clouds carried by the wind on the battle's clock, and turned to the eye as far as it has moved (the near room
 	// as often as its puffs' turn shows, the far room when a far puff's would: AirSky::Rooms). On this thread: from the
 	// ground the nearest puff is 900 m off, so a near turn comes every few metres the eye moves, about a millisecond.
@@ -4784,6 +4806,7 @@ void ALandBattle::DrawSky()
 
 void ALandBattle::KeepTheLook()
 {
+	LAND_SCOPE(Look);
 	// The battle grade (note 1: the art director measured the stills as ungraded, saturation 0.26 to 0.46 and blue
 	// under red by 20 to 70, against the air battle's graded 0.08 to 0.18 and +3 to +9). The grade is written into the
 	// battle's eye when it is made (Open), with every one of its overrides, and the shallow focus (AimEye) writes only
@@ -4831,6 +4854,7 @@ void ALandBattle::KeepTheLook()
 
 void ALandBattle::KeepTheTableHidden()
 {
+	LAND_SCOPE(TableHidden);
 	if (!bTableHidden)
 	{
 		return;
@@ -4968,6 +4992,7 @@ UTexture2D* ALandBattle::FlagOf(int32 Side) const
 
 void ALandBattle::Tick(float DeltaSeconds)
 {
+	LAND_SCOPE(Tick);
 	Super::Tick(DeltaSeconds);
 	if (!PendingReplay.IsEmpty())
 	{
@@ -5036,6 +5061,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// (a live battle: first what the rules have fought since the last frame; its contact unknown until it is made)
 	if (Live.IsValid())
 	{
+		LAND_SCOPE(PumpLive);
 		PumpLive();
 	}
 	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : Live.IsValid() && !S.Rec.bOver ? 1e9 : 0.0;
@@ -5058,12 +5084,14 @@ void ALandBattle::Tick(float DeltaSeconds)
 	double Mark = LandParts::Seconds();
 	if (S.Armour)
 	{
+		LAND_SCOPE(Armour);
 		S.Armour->Update(S.Battle);
 	}
 	ArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	Mark = LandParts::Seconds();
 	if (S.Men)
 	{
+		LAND_SCOPE(Men);
 		// (the men's detail by how big the lens draws them, the usual 50 deg lens as one: a long lens's far men drawn as
 		// the near ones they look; the battle-scale plan's GS3)
 		const double Zoom = FMath::Tan(FMath::DegreesToRadians(25.0)) / FMath::Max(0.02, FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(S.Pose.Fov, 2.0, 120.0) * 0.5)));
@@ -5078,13 +5106,17 @@ void ALandBattle::Tick(float DeltaSeconds)
 	S.Noises.clear();
 	S.Losses.clear();
 	S.Takes.clear();
-	S.Play.Step(From, S.Battle, S.Fx, S.Noises, S.Losses);
+	{
+		LAND_SCOPE(Rules);
+		S.Play.Step(From, S.Battle, S.Fx, S.Noises, S.Losses);
+	}
 	if (bShotHeld)
 	{
 		S.Eye.Hold(true);
 	}
 	LandParts::PlaceMovers(S);
 	{
+		LAND_SCOPE(Camera);
 		// (the camera's own ms, for its 10 s line)
 		const double EyeMark = LandParts::Seconds();
 		const long StepsWere = S.Eye.Steps();
@@ -5105,6 +5137,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	if (Live.IsValid())
 	{
+		LAND_SCOPE(GeneralView);
 		const double GenMark = LandParts::Seconds();
 		GeneralView(Real);
 		const double GenFrameMs = (LandParts::Seconds() - GenMark) * 1000.0;
@@ -5113,13 +5146,17 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	WalkPan(Real);
 	ReadDark(Real);
-	S.Words = S.Desk.Update(S.Battle, Real);
+	{
+		LAND_SCOPE(Desk);
+		S.Words = S.Desk.Update(S.Battle, Real);
+	}
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
 
 	// The picture: the camera, the ground round it, the men and the tanks.
 	AimEye(static_cast<float>(Real));
 	if (Live.IsValid())
 	{
+		LAND_SCOPE(ShowGeneral);
 		ShowGeneral();
 	}
 	// A cut is told to the renderer, so this frame starts afresh: the last shot's smoke, fog, light and sharpening are
@@ -5159,6 +5196,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	bool bEffectsBegun = false;
 	if (Effects && Eye)
 	{
+		LAND_SCOPE(EffectsBegin);
 		int32 ViewW = 1600, ViewH = 900;
 		if (GEngine && GEngine->GameViewport)
 		{
@@ -5187,6 +5225,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	PlayMenEvents();
 	if (bEffectsBegun)
 	{
+		LAND_SCOPE(EffectsEnd);
 		Mark = LandParts::Seconds();
 		Effects->TickEnd();
 		EffectsMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -5234,6 +5273,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	++LogFrames;
 	if (RealT - LogAt >= 10.0)
 	{
+		LAND_SCOPE(Log10);
 		const double Span = FMath::Max(0.001, RealT - LogAt);
 		UE_LOG(LogTheater, Display, TEXT("Land battle: %.0f s of battle, %s shot; %.0f frames a second, the scene's slowest frame %.1f ms; a frame's cores %.2f ms, men %.2f, tanks %.2f, ground %.2f; shots heard %d, takes %d (dropped %d, on the screen %d), cracks %d, falls %d"),
 			S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), LogFrames / Span, SlowestFrame, CoresMs / LogFrames, MenMs / LogFrames, ArmourMs / LogFrames, FieldMs / LogFrames,
@@ -5279,6 +5319,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 
 void ALandBattle::WalkPan(double Real)
 {
+	LAND_SCOPE(WalkPan);
 	if (WalkPanAt < 0.0 || !State.IsValid())
 	{
 		return;
@@ -5381,6 +5422,7 @@ void ALandBattle::StartDarkRead()
 
 void ALandBattle::ReadDark(double Real)
 {
+	LAND_SCOPE(ReadDark);
 	if (!DarkGrab.IsValid())
 	{
 		return;
@@ -5447,6 +5489,7 @@ void ALandBattle::StopDarkRead()
 
 void ALandBattle::AimEye(float DeltaSeconds)
 {
+	LAND_SCOPE(AimEye);
 	FLandBattleState& S = *State;
 	if (!Eye)
 	{
@@ -5552,6 +5595,7 @@ void ALandBattle::Press(const FString& Button)
 
 void ALandBattle::PlayEffects()
 {
+	LAND_SCOPE(PlayEffects);
 	FLandBattleState& S = *State;
 	if (!Effects)
 	{
@@ -5602,6 +5646,7 @@ void ALandBattle::PlayEffects()
 
 void ALandBattle::MakeBreaches()
 {
+	LAND_SCOPE(Breaches);
 	FLandBattleState& S = *State;
 	// (a live battle's cuts come with its deltas, after the field and its things were laid: their banks are torn as
 	// any other's; their shrubs, laid in the field's own copies, are left standing for now)
@@ -5915,6 +5960,7 @@ void ALandBattle::LayWires()
 
 void ALandBattle::MakeWires()
 {
+	LAND_SCOPE(Wires);
 	FLandBattleState& S = *State;
 	UInstancedStaticMeshComponent* Copies = WireCopies.Get();
 	if (!Copies || WireStates.Num() == 0)
@@ -6105,6 +6151,7 @@ void ALandBattle::LayStretchers()
 
 void ALandBattle::MakeStretchers()
 {
+	LAND_SCOPE(Stretchers);
 	FLandBattleState& S = *State;
 	UInstancedStaticMeshComponent* Copies = StretcherCopies.Get();
 	if (!Copies || CarrySpans.Num() == 0)
@@ -6125,8 +6172,8 @@ void ALandBattle::MakeStretchers()
 			}
 			continue;
 		}
-		// Under the man carried where he is drawn (his root is the canvas's middle, the soldiers' carried_wounded), at
-		// the height he is lifted to (the bearers' hips, LandMen's CarriedLift, raised over the first second), level.
+		// Under the man carried where he is drawn (his root at the stretcher's `lie`, the soldiers' carried_wounded), at
+		// the height he is lifted to (the bearers' fists, LandMen's CarriedLift, raised over the first second), level.
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float F = 0.f;
 		const size_t T = static_cast<size_t>(Span.Carried);
@@ -6139,10 +6186,9 @@ void ALandBattle::MakeStretchers()
 			F = static_cast<float>(Spot.F);
 		}
 		const double Lift = static_cast<double>(LandMen::CarriedLift) * FMath::Clamp(S.Battle - Span.From, 0.0, 1.0);
-		// (his head lies toward the rear bearer: the stretcher's head end, +x, turned to face back down his way; a
-		// heading clockwise from north is Unreal's yaw)
-		const double Head = static_cast<double>(F) + PI;
-		const FTransform At(FRotator(0.0, FMath::RadiansToDegrees(Head), 0.0), World(X, Y, Z + FMath::Max(0.0, Lift - 0.11)), FVector::OneVector);
+		// (carried head first: the stretcher's head end, +x, his way, the front bearer's; his root at its `lie`, 0.11 m
+		// over its root; a heading clockwise from north is Unreal's yaw)
+		const FTransform At(FRotator(0.0, FMath::RadiansToDegrees(static_cast<double>(F)), 0.0), World(X, Y, Z + FMath::Max(0.0, Lift - 0.11)), FVector::OneVector);
 		Copies->UpdateInstanceTransform(Span.Copy, At, true, false, true);
 		Span.bShown = true;
 		bTouched = true;
@@ -6155,6 +6201,7 @@ void ALandBattle::MakeStretchers()
 
 void ALandBattle::MakeCraters()
 {
+	LAND_SCOPE(Craters);
 	FLandBattleState& S = *State;
 	if (!S.Field)
 	{
@@ -6285,6 +6332,7 @@ void ALandBattle::SendDug()
 
 void ALandBattle::MakeRuts()
 {
+	LAND_SCOPE(Ruts);
 	FLandBattleState& S = *State;
 	if (!S.Field || !S.Armour)
 	{
@@ -6376,6 +6424,7 @@ void ALandBattle::TornChanged(int32 Kind, int32 A, int32 B)
 
 void ALandBattle::SettleTorn()
 {
+	LAND_SCOPE(SettleTorn);
 	if (!bTornBakes || TornHot.Num() == 0 || !State.IsValid())
 	{
 		return;
@@ -6463,6 +6512,7 @@ void ALandBattle::SettleTorn()
 
 void ALandBattle::PlayArmourEvents()
 {
+	LAND_SCOPE(ArmourEvents);
 	FLandBattleState& S = *State;
 	if (!S.Armour)
 	{
@@ -6551,6 +6601,7 @@ void ALandBattle::PlayArmourEvents()
 
 void ALandBattle::PlayMenEvents()
 {
+	LAND_SCOPE(MenEvents);
 	FLandBattleState& S = *State;
 	if (!S.Men)
 	{
@@ -6575,6 +6626,7 @@ void ALandBattle::PlayMenEvents()
 
 void ALandBattle::PlaySound(double RealDt)
 {
+	LAND_SCOPE(Sound);
 	FLandBattleState& S = *State;
 	if (!Mix.IsValid())
 	{
@@ -7015,6 +7067,7 @@ double ALandBattle::BusDb(const FString& Bus) const
 
 void ALandBattle::TakeShots()
 {
+	LAND_SCOPE(TakeShots);
 	if (ShotFolder.IsEmpty() || QuitAt >= 0.0)
 	{
 		return;

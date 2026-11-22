@@ -240,9 +240,9 @@ namespace LandMen
 		/** Metres over the ground (release 2: a wounded man carried on a stretcher, its canvas's height). */
 		float Lift = 0.f;
 	};
-	/** A wounded man carried on a stretcher lies this high over the ground (metres): the bearers' fists and the poles
-	 * at about 0.8 m (the soldiers thread's stretcher clips), the canvas sagging a hand under them. */
-	constexpr float CarriedLift = 0.74f;
+	/** A wounded man carried on a stretcher lies this high over the ground (metres): the soldiers thread's stretcher
+	 * clips' four fists at 0.83 m on the mean, the Stretcher prop's root 0.14 m under them and its `lie` 0.11 m over it. */
+	constexpr float CarriedLift = 0.80f;
 	/** The field from the man's own axes for that placing (it reads the ground at the pivot). */
 	Xform WorldOf(const Placing& P, const GroundFn& GroundAt);
 

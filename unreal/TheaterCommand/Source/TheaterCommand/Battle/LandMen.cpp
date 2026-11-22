@@ -2168,9 +2168,11 @@ namespace LandMen
 			}
 			else if (Pose == "wounded" || Pose == "carried")
 			{
-				// Alive on his back (carried_wounded: breathing, a knee drawn up, a hand on his chest); carried, on the
-				// canvas over the bearers' fists (Lift: the poles at about 0.8 m, the canvas a hand under them).
-				if (S.ClipIndex("carried_wounded") >= 0) Use("carried_wounded", Stance::Loop, Prone);
+				// Alive on his back, head to his front: waiting on the ground (wounded_waiting: a hand on the wound, an
+				// arm lifted once a loop to call the bearers, his rifle laid by him), or carried head first on the canvas
+				// (carried_wounded: breathing, a knee drawn up; Lift, the stretcher's `lie` over the bearers' fists).
+				const char* Own = Pose == "carried" ? "carried_wounded" : S.ClipIndex("wounded_waiting") >= 0 ? "wounded_waiting" : "carried_wounded";
+				if (S.ClipIndex(Own) >= 0) Use(Own, Stance::Loop, Prone);
 				else Use("fire_prone", Stance::Hold, Prone);
 				St.bRifleDown = true;
 				St.Lift = Pose == "carried" ? CarriedLift : 0.f;
@@ -2180,6 +2182,13 @@ namespace LandMen
 				if (S.ClipIndex("splice_kneel") >= 0) Use("splice_kneel", Stance::Loop, Kneel);
 				else Use("fire_kneel", Stance::Hold, Kneel);
 				St.bRifleDown = true;
+			}
+			else if (Pose == "reel")
+			{
+				// The lineman walking his line out, the reel before him (reel_walk; a file without it walks).
+				const bool bOwn = S.ClipIndex("reel_walk") >= 0;
+				Use(bOwn ? "reel_walk" : bMoving ? "walk" : "idle", bOwn || bMoving ? Stance::Gait : Stance::Loop, Up);
+				St.bRifleDown = !bOwn;
 			}
 			else Use("idle", Stance::Loop, Up);
 			if (St.Clip < 0) { St.Clip = S.ClipIndex("idle"); St.Play = Stance::Loop; }
