@@ -1404,23 +1404,58 @@ const navalSkill = (f: AirFleet): number => (deckBred(f) ? CARRIERS.naval.carrie
  * totals, `by` each fleet's eased share (in step with `a.ships`) and `plain` the class totals before the easing.
  * The hits are not changed, and submarines are never eased.
  */
-export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1): { hits: number; sunk: Ships; count: number; value: number; by?: Ships[]; plain?: Ships } {
-  const S = CARRIERS.strike, H = CARRIERS.harbour;
-  const sunk = noShips();
-  let hits = through * a.naval * S.hit * (1 - a.spoil) * a.again * found;
-  if (m === 'harbour') hits *= H.hit * (a.surprise ? H.surprise : 1);
+export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1): ShipHits {
+  return shipHitsBy(shipLaw(a, m, found), through);
+}
+
+/** What a strike on ships should do (shipHits); `by` and `plain` only where some fleet's damage control is not 1 (ruling 240). */
+export interface ShipHits { hits: number; sunk: Ships; count: number; value: number; by?: Ships[]; plain?: Ships }
+
+/**
+ * The law of a strike on ships, apart from the bombers that get through: what shipHits weighs, kept so an air battle
+ * can say as each box drops what the campaign will make of the bombs dropped so far (ruling 238, b397's law for ships).
+ * `have` is the ships of each class under attack, and `fleets` each fleet's own, in the order fly() books them.
+ */
+export interface ShipLaw {
+  harbour: boolean;
+  naval: number;
+  spoil: number;
+  again: number;
+  found: number;
+  surprise: boolean;
+  have: Ships;
+  fleets: { id: number; nat: string; name: string; ships: Ships }[];
+  /** Ruling 240 (C3): each fleet's damage control, in step with `fleets`; only where some fleet's is not 1 (AirAssess.tough). */
+  tough?: number[];
+}
+
+export function shipLaw(a: AirAssess, m: AirMission, found = 1): ShipLaw {
   const have = noShips();
   for (const x of a.ships) for (const c of SHIPS) have[c] += x.ships[c];
+  return {
+    harbour: m === 'harbour', naval: a.naval, spoil: a.spoil, again: a.again, found, surprise: a.surprise, have,
+    fleets: a.ships.map((x) => ({ id: x.id, nat: x.nat, name: x.name, ships: { ...x.ships } })),
+    ...(a.tough ? { tough: [...a.tough] } : {}),
+  };
+}
+
+/** shipHits on a kept law (the same sums, in the same order). */
+export function shipHitsBy(L: ShipLaw, through: number): ShipHits {
+  const S = CARRIERS.strike, H = CARRIERS.harbour;
+  const sunk = noShips();
+  let hits = through * L.naval * S.hit * (1 - L.spoil) * L.again * L.found;
+  if (L.harbour) hits *= H.hit * (L.surprise ? H.surprise : 1);
+  const have = L.have;
   const weight = SHIPS.reduce((s, c) => s + have[c] * S.aim[c], 0);
   if (weight <= 0 || hits <= 0) return { hits: 0, sunk, count: 0, value: 0 };
   let count = 0;
   for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / S.takes[c]); count += sunk[c]; }
   // No strike sinks more than so much of what it finds.
-  const most = (m === 'harbour' ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
+  const most = (L.harbour ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
   if (count > most) { for (const c of SHIPS) sunk[c] *= most / count; hits *= most / count; count = most; }
-  if (a.tough) {
-    const plain = { ...sunk }, tough = a.tough;
-    const by = a.ships.map((x, i) => {
+  if (L.tough) {
+    const plain = { ...sunk }, tough = L.tough;
+    const by = L.fleets.map((x, i) => {
       const part = noShips();
       for (const c of SHIPS) if (have[c] > 0) part[c] = (plain[c] * (x.ships[c] / have[c])) / (c === 'ss' ? 1 : tough[i] ?? 1);
       return part;
@@ -1804,9 +1839,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       for (const c of SHIPS) {
         if (have[c] <= 0) continue;
         const share = plain[c] * (x.ships[c] / have[c]);
+        // Fought out, the field's own draw stands (ruling 238): the dice are still thrown, so nothing after them moves.
+        // Handed to the staff, what had sunk stays sunk and the staff's dice decide the rest from all the bombs.
+        // (TRIAL: ruling 240's kept-afloat count is the dice's only; the field reports no ships it kept afloat.)
         const [n, n0] = rng.rollBoth(exp.by ? exp.by[i][c] : share, share);
-        const k = Math.min(x.ships[c], n);
-        kept[c] = Math.min(x.ships[c], n0) - k;
+        const field = battle?.sunk?.[x.id]?.[c];
+        const k = Math.min(x.ships[c], field === undefined ? n : staff ? Math.max(field, n) : field);
+        kept[c] = field === undefined ? Math.min(x.ships[c], n0) - k : 0;
         x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k; keptAll[c] += kept[c];
       }
       afloatWatch.tell?.({ route: 'air', nat: x.nat, sunk: struck![i].sunk, saved: kept });
