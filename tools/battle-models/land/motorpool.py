@@ -185,6 +185,27 @@ def bm_bevel(bm, width, segs=1, angle=24.0, profile=0.5):
     return set(res["faces"])
 
 
+def bm_dice(bm, cell, least=0.45):
+    """Cuts a solid's faces into cells about `cell` across, by level planes along each of her three ways (every face
+    a plane crosses is cut, its neighbours with it, so no seam opens). A plate has points only at its corners, and a
+    point is all a file can colour: cut finer, a plate can carry dust that thins as it climbs, stains and uneven
+    paint. Nothing is cut on a solid under `least` in its second longest measure (a fitting takes its colour whole)."""
+    if not bm.verts:
+        return
+    lo = Vector([min(v.co[i] for v in bm.verts) for i in range(3)])
+    hi = Vector([max(v.co[i] for v in bm.verts) for i in range(3)])
+    if sorted(hi - lo)[1] < least:
+        return
+    for i in range(3):
+        n = Vector([1.0 if j == i else 0.0 for j in range(3)])
+        k0, k1 = int(math.floor(lo[i] / cell)), int(math.ceil(hi[i] / cell))
+        for k in range(k0, k1 + 1):
+            c = (k + 0.37) * cell                       # (off the round numbers a builder's own points sit on)
+            if not lo[i] + 0.02 < c < hi[i] - 0.02:
+                continue
+            bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-5, plane_co=n * c, plane_no=n)
+
+
 def outline(xc, af, ar, b, n=2.4, sides=40, yc=0.0, bulge=0.0):
     """An egg-shaped plan: `af` long ahead of its middle and `ar` behind, `b` half-wide; `n` is how square it is
     (2 an ellipse, 4 nearly a box with round corners). Counter-clockwise from the front."""
@@ -340,6 +361,7 @@ class Shop:
         self.m.fedge = self.fedge
         self.belts = {}           # side letter -> what the track clip needs
         self.marks = []
+        self.dice = None          # metres: cut her coat's plates into cells this size as they are made (see bm_dice); None leaves them whole
 
     # -- small conveniences
     def n(self, sides, least=6):
@@ -369,6 +391,12 @@ class Shop:
         if recalc:
             bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
         cut = bm_bevel(bm, bevel, segs, angle) if (bevel > 0.0 and self.fine) else set()
+        if self.dice and self.fine and (callable(paint) or paint in ("upper", "upper2", "shade")):
+            lay = bm.faces.layers.int.new("cut_back")
+            for f in bm.faces:
+                f[lay] = 1 if f in cut else 0
+            bm_dice(bm, self.dice)
+            cut = set(f for f in bm.faces if f[lay])
         bm.verts.index_update()
         verts = [v.co.copy() for v in bm.verts]
         faces = [tuple(v.index for v in f.verts) for f in bm.faces]

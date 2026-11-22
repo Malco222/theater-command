@@ -39,7 +39,10 @@ def main():
         pick["zimmerit"] = True
     v = vehicles.build(name, True, **pick)
     m = v.m
-    ob, arm = works.to_scene(m, dust=float(opt.get("dust", 1.0)), wear=float(opt.get("wear", 1.0)))
+    if opt.get("look") == "file":         # what the game's file carries and nothing more: each paint flat, tinted by the points' own colours
+        ob, arm = works.to_scene(m, look=None)
+    else:
+        ob, arm = works.to_scene(m, dust=float(opt.get("dust", 1.0)), wear=float(opt.get("wear", 1.0)))
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s", flush=True)
     pose = {}
     if "turn" in opt and "turret" in m.part_at:

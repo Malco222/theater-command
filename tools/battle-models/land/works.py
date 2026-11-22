@@ -14,6 +14,8 @@ PARTS of a tracked vehicle (names the game can rely on):
 """
 
 import math
+import random
+import zlib
 
 import bpy
 import numpy as np
@@ -76,11 +78,12 @@ class Works(Shop, Gear, Fittings):
         self.lathe(at, Z, [(0.003, 0.0), (0.003, r - 0.05)], "black", self.n(40, 12), part=part)
 
     def running(self, xs, r, ty, sprocket, idler, rollers=(), wheel=None, track=None, drive="front", top_on_wheels=False, per_axle=None,
-                sprocket_kw=None, idler_kw=None, roller_kw=None, wheel_z=None):
+                sprocket_kw=None, idler_kw=None, roller_kw=None, wheel_z=None, wheel_parent=None):
         """Both sides' running gear in one go: road wheels at `xs` (radius r, track centre `ty` out from the middle),
         the sprocket and idler as (x, z, r), return rollers as (x, z, r), and the track round them all. `drive` says
         which end the sprocket is at. With no rollers and `top_on_wheels`, the top run lies on the road wheels.
-        `per_axle(i)` gives extra road-wheel settings for axle i (interleaved wheels alternate)."""
+        `per_axle(i)` gives extra road-wheel settings for axle i (interleaved wheels alternate). `wheel_parent(letter, i)`
+        names the part a road wheel hangs from (a sprung arm of its own, made before this is called) in place of the vehicle."""
         wheel = dict(wheel or {})
         track = dict(track or {})
         z = r if wheel_z is None else wheel_z
@@ -90,7 +93,8 @@ class Works(Shop, Gear, Fittings):
                 kw = dict(wheel)
                 if per_axle:
                     kw.update(per_axle(i))
-                self.road_wheel(f"wheel_{letter}{i + 1}", "vehicle", x, s * ty, z, r, s, **kw)
+                self.road_wheel(f"wheel_{letter}{i + 1}", wheel_parent(letter, i) if wheel_parent else "vehicle", x, s * ty, z, r, s, **kw)
+                self.use("vehicle")
             self.sprocket(f"sprocket_{letter}", "vehicle", sprocket[0], s * ty, sprocket[1], sprocket[2], s, **(sprocket_kw or {}))
             self.idler(f"idler_{letter}", "vehicle", idler[0], s * ty, idler[1], idler[2], s, **(idler_kw or {}))
             for i, (x, zz, rr) in enumerate(rollers):
@@ -377,6 +381,49 @@ class Works(Shop, Gear, Fittings):
             self.m.weather = weather
         return self
 
+    def worn(self, dust=1.0, grime=1.0):
+        """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
+        all there is). Dust, point by point, in the file's `wear`: thick on her running gear and the foot of her
+        hull, thinning as it climbs and gone by her shoulders, lying a little on whatever looks up, in uneven
+        patches and never a level line (the `rust` colour `wear` goes toward is set to the road's dust). And on
+        `soot`, over what the exhaust and the worn edges already lay there: her paint a little uneven, plate by
+        plate, as weeks of sun, rain and hands leave it. Soft, both: no streak fine enough to read as wood grain.
+        Call it after her last piece is on; plates must have been cut finer (`dice`) for it to show on them."""
+        base = self.m.weather
+        rs = random.Random(zlib.crc32((self.name + ":worn").encode()))
+
+        def field(lo, hi, n=7):
+            ws = []
+            for _ in range(n):
+                d = Vector((rs.gauss(0, 1), rs.gauss(0, 1), rs.gauss(0, 1) * 0.6)).normalized()
+                ws.append((d * (2.0 * math.pi / rs.uniform(lo, hi)), rs.uniform(0.0, 2.0 * math.pi)))
+            return lambda p: 0.5 + 0.5 * sum(math.sin(k.dot(p) + ph) for k, ph in ws) / math.sqrt(n) * 1.25
+        big, small, plates = field(0.9, 2.2), field(0.28, 0.6), field(1.4, 3.0)
+        self.m.info["rust"] = DUST
+        self.m.info.setdefault("file", {})["wear_is"] = ("road dust: `wear` (0 to 100) is how far a point has gone to the dust colour `rust`; thick low on her, "
+                                                         "thin by her shoulders. A game on other ground may put that ground's own colour in `rust`.")
+        takes = ("upper", "upper2", "shade", "rubber", "canvas", "cloth", "wood", "steel", "leather", "rope")
+
+        def weather(p, n, paint, part):
+            w, s = base(p, n, paint, part) if base else (0.0, 0.0)
+            if part.startswith("track") or paint.split(".")[0] not in takes:
+                return w, s
+            p = Vector(p)
+            patch = min(1.5, max(0.25, 0.1 + 1.7 * big(p)))
+            low = max(0.0, min(1.0, (1.95 - p.z) / 1.5)) ** 1.25 * 0.95
+            lying = 0.24 * max(0.0, n[2]) ** 2 * (0.4 + 1.2 * small(p))
+            d = low * patch + lying
+            if part.startswith(("wheel", "sprocket", "idler", "roller", "arm")):
+                d = max(d, 0.5 * patch)
+            if paint == "rubber":
+                d *= 0.45                               # (a tyre's tread is wiped clean every turn; the dust stays in its walls)
+            g = 0.0
+            if paint in COATS:
+                g = 0.17 * max(0.0, min(1.0, 2.4 * plates(p) - 0.75)) + 0.10 * max(0.0, small(p) - 0.5)
+            return max(w, min(0.88, d * dust)), max(s, min(0.3, g * grime))
+        self.m.weather = weather
+        return self
+
     def tank_clips(self, recoil=0.35, kick=0.9, gun_low=-8.0, hatches=(), traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop",
                    gun_cue="tank_gun_01", blow=(-0.9, 2.9, 0.42, 172.0), has_turret=True, mg="coax", exhausts=None, fire_sockets=None, open_lids=1):
         """The clips a tank has. Nothing here moves her over the ground or trains her turret: the game does that (the
@@ -519,6 +566,8 @@ class Works(Shop, Gear, Fittings):
                                      ev(t_blast + 0.3, "smoke_column", "ring")]}
         if m.weather is None:
             self.sooted()
+        if self.dice:
+            self.worn()
         m.info.setdefault("file", {})["controls"] = {
             "turret": {"part": "turret", "what": "trained by the game: + to the right (clockwise from above)", "degrees_per_second": traverse},
             "gun": {"part": "gun", "what": "laid by the game inside its limits: + muzzle up"},
