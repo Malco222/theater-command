@@ -1,8 +1,4 @@
 {
-  "_about": "Neighbours join the fight (release 2; the design director's ruling of 22 November, 03:15Z; src/campaign/join.ts). The switch is stage.json's 'join'. A corps next door comes up in the march engine's own time: the weeks its move into the battle province costs (moveCost: the road over ground held since before this month, the ground, rivers, mines, mud, frost and the railhead), shortened where the two province centres are nearer than 'stepKm' (never under 'nearest' of the march) and by 'rail' where a working railway joins two provinces its side has held since before this month. It counts for the share of the battle it is there for: 1 less its weeks over 'window'. Under 'least' it is no part of the battle. Early, midway and late are the thirds of that share.",
-  "window": 4,
-  "stepKm": 300,
-  "nearest": 0.25,
-  "rail": 0.5,
-  "least": 0.05
+  "_about": "Neighbours join the fight (release 2; the design director's ruling of 22 November, 03:15Z, and his ruling 1 of 11:09Z; src/campaign/join.ts). The switch is stage.json's 'join'. A corps next door comes up by the game's own move rules, the same for the joiner, the staffs and the player: the week of its month it comes up in is weekOf of its move into the battle province (moveCost), out of the weeks it has in hand this month. No corps comes up by train: the railway takes the whole month. It counts for the part of the battle it is there for, 1 less that week over 'window': up in the first week, three quarters (early); in the second, half (midway); in the third, a quarter (late). Up in the last week, it is no part of the battle.",
+  "window": 4
 }

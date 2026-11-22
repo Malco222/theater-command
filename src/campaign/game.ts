@@ -936,9 +936,12 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   return line.length ? [...line, ...guns] : [];
 }
 
-/** Which week of the month a corps reaches after spending this many more action points. */
-export function weekOf(c: Corps, cost: number): number {
-  return clamp(Math.ceil(((c.apMax - c.ap + cost) / Math.max(1, c.apMax)) * 4), 1, 4);
+/**
+ * Which week of the month a corps reaches after spending this many more action points, out of the weeks it has in
+ * hand ('ap', its own by default). A march into a battle next door reads the same (release 2, join.ts marchWeeks).
+ */
+export function weekOf(c: Corps, cost: number, ap = c.ap): number {
+  return clamp(Math.ceil(((c.apMax - ap + cost) / Math.max(1, c.apMax)) * 4), 1, 4);
 }
 
 export function corpsBase(g: Game, c: Corps): number {

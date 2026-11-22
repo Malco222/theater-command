@@ -16,8 +16,12 @@
 //    own corps back (orderHoldBack, turn.ts: on the tray for an army, on the attack card corps by corps); a computer
 //    staff, an ally's included, sends every corps it can, save the main body it keeps for a second wave (ai.ts,
 //    twoWaves: AttackOpts 'spare').
-// 2. When: in the march engine's own time (marchWeeks), never a fixed minute or a draw of the dice. It counts for the
-//    share of the battle it is there for: early, most of its strength; late, little.
+// 2. When: by the game's own move rules, one map for the joiner, the staffs and the player (the design director's
+//    ruling 1, 11:09Z). The week of its month it comes up in is weekOf of its move into the battle province (moveCost),
+//    out of the weeks the corps has in hand this month (marchWeeks): never a fixed minute or a draw of the dice. No
+//    corps comes up by train: the railway takes the whole month. It counts for the part of the battle it is there for:
+//    up in the first week, three quarters of it (early); in the second, half (midway); in the third, a quarter (late).
+//    A corps that comes up in the last week is no part of the battle.
 // 3. Both sides, every nation: assess() reckons the joiners, so the attack card, the battle and every staff's odds are
 //    one reckoning. (A staff's second wave is reckoned without those its first will have spent.)
 // 4. They are in the odds and their losses are booked to them (game.ts), they stay where they stood, and their month
@@ -31,11 +35,9 @@
 import joinData from '../../data/campaign/join.json';
 import { clamp } from '../core/math';
 import type { TicketLine } from '../core/ticket';
-import { km } from './air';
-import { allied, atWar, moveCost } from './game';
+import { allied, atWar, moveCost, weekOf } from './game';
 import { armyOf } from './joint';
 import { lineShut } from './line';
-import { railCut, railsAt } from './rails';
 import { blocked } from './rivers';
 import { fieldCtrl } from './siege';
 import { JOIN } from './stage';
@@ -43,8 +45,8 @@ import { STACK, type Corps, type Game, type JoinWord, type Kind, type Region } f
 
 export { JOIN };
 
-/** The numbers of the rule (join.json): the month's window in weeks, the step of a full march, the least of it, the rail's cut, the least share. */
-export const JOINING = joinData as unknown as { window: number; stepKm: number; nearest: number; rail: number; least: number };
+/** The one number of the rule (join.json): the month's window in weeks. */
+export const JOINING = joinData as unknown as { window: number };
 
 /** True where corps next door join battles: the switch alone, in the grand campaign and the historical scenarios alike. */
 export const joinRules = (): boolean => JOIN.on;
@@ -56,7 +58,7 @@ export interface Joiner {
   id: number; nat: string; name: string; kind: Kind;
   /** The province it comes from, and its name. */
   from: number; fromName: string;
-  /** The weeks its march into the battle province takes, by the march engine. */
+  /** The week of the month it comes up in (weekOf), 1 to 3. */
   weeks: number;
   /** The card's word for when it comes up. */
   word: JoinWord;
@@ -72,25 +74,17 @@ export const joinView = (j: Joiner): JoinView => ({ id: j.id, nat: j.nat, name: 
 /** The card's word for a share of the battle: the first third of the month is early, the last late. */
 export const joinWord = (share: number): JoinWord => (share > 2 / 3 ? 'early' : share > 1 / 3 ? 'midway' : 'late');
 
-/** True where a working railway joins two provinces the corps' side has held since before this month. */
-function byRail(g: Game, c: Corps, to: Region): boolean {
-  const from = g.regions[c.reg];
-  return railsAt(from.id).includes(to.id) && !railCut(g, from.id) && !railCut(g, to.id)
-    && allied(g, c.nat, from.ctrl) && allied(g, c.nat, to.ctrl) && to.since < g.turn;
-}
-
 /**
- * The weeks a corps takes to march from where it stands into the battle province: the move's cost in the march
- * engine (moveCost: the road over ground held since before this month, the ground, the rivers and mines, mud and
- * frost, the railhead), shortened where the two centres are nearer than a full step and where a railway joins them.
- * The same game always gives the same weeks.
+ * The week of its own month a corps comes up in, by the move rules: its move into the battle province costs what any
+ * march there costs (moveCost: the road over ground held since before this month, the ground, the rivers and mines,
+ * mud and frost, the railheads), and weekOf reads that out of the weeks the corps has in hand this month
+ * (weeksInHand), as it does for every move. A whole week, 1 to 4. The same game always gives the same week.
  */
 export function marchWeeks(g: Game, c: Corps, target: Region): number {
-  const part = clamp(km(g, c.reg, target.id) / JOINING.stepKm, JOINING.nearest, 1) * (byRail(g, c, target) ? JOINING.rail : 1);
-  return moveCost(g, c, target, c.reg) * part;
+  return weekOf(c, moveCost(g, c, target, c.reg), weeksInHand(g, c));
 }
 
-/** The share of the battle a corps that marches so many weeks is there for. */
+/** The share of the battle a corps that comes up in that week is there for: 1 less the week over the window. */
 export const joinShare = (weeks: number): number => clamp(1 - weeks / JOINING.window, 0, 1);
 
 /**
@@ -137,8 +131,8 @@ export function mayJoin(g: Game, c: Corps, target: Region): boolean {
   // The move rules, as a march into the battle province would read them (moveCorps): the ground and the bridges, the
   // line a computer staff keeps to, and the weeks it has in hand.
   if (blocked(g, c, target) || (armyOf(c) !== g.human && lineShut(g, armyOf(c), target))) return false;
-  const cost = moveCost(g, c, target, c.reg), weeks = weeksInHand(g, c);
-  return weeks > 0 && weeks >= Math.min(cost, 4);
+  const cost = moveCost(g, c, target, c.reg), hand = weeksInHand(g, c);
+  return hand > 0 && hand >= Math.min(cost, 4);
 }
 
 /**
@@ -155,7 +149,7 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
   for (const c of attackers) inBattle.add(c.id);
   for (const c of defenders) inBattle.add(c.id);
   for (const c of opts.spare ?? []) inBattle.add(c.id);
-  const att: (Joiner & { km: number })[] = [], def: (Joiner & { km: number })[] = [];
+  const att: Joiner[] = [], def: Joiner[] = [];
   for (const j of target.nb) {
     const r = g.regions[j];
     for (const c of r.units) {
@@ -164,13 +158,14 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
       const forA = allied(g, c.nat, attNat) && dN.every((d) => atWar(g, c.nat, d));
       const forD = !forA && allied(g, c.nat, defNat) && aN.every((a) => atWar(g, c.nat, a));
       if ((!forA && !forD) || !mayJoin(g, c, target)) continue;
+      // (Up in the last week, it is no part of the battle.)
       const weeks = marchWeeks(g, c, target), share = joinShare(weeks);
-      if (share < JOINING.least) continue;
-      (forA ? att : def).push({ corps: c, id: c.id, nat: c.nat, name: c.name, kind: c.kind, from: r.id, fromName: r.name, weeks, word: joinWord(share), share, km: km(g, r.id, target.id) });
+      if (share <= 0) continue;
+      (forA ? att : def).push({ corps: c, id: c.id, nat: c.nat, name: c.name, kind: c.kind, from: r.id, fromName: r.name, weeks, word: joinWord(share), share });
     }
   }
   if (!att.length && !def.length) return null;
-  const first = (xs: (Joiner & { km: number })[]): Joiner[] => xs.sort((x, y) => x.weeks - y.weeks || x.km - y.km || x.id - y.id).slice(0, STACK).map(({ km: _, ...j }) => j);
+  const first = (xs: Joiner[]): Joiner[] => xs.sort((x, y) => x.weeks - y.weeks || x.id - y.id).slice(0, STACK);
   return { att: first(att), def: first(def) };
 }
 

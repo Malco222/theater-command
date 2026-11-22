@@ -1,6 +1,7 @@
 // Neighbours join the fight (release 2; the design director's ruling of 22 November 2026, 03:15Z, Brian's approval).
 // A corps next door to a battle, of either side, comes up and fights in it: priced on the campaign card in every
-// battle, fought by hand or settled by the staffs, by the share of the battle the march engine says it is there for.
+// battle, fought by hand or settled by the staffs, by the share of the battle it is there for, from the week of its
+// month the game's own move rules bring it up in (the design director's ruling 1, 11:09Z).
 // It stays where it stood, its losses are booked to it, and its month is spent. Behind its own switch (stage.json
 // 'join', JOIN in stage.ts), off as it ships: off, no corps ever joins and every battle is release 1's.
 //
@@ -12,8 +13,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import stageData from '../data/campaign/stage.json';
 import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.json';
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
-import { addCorps, assess, atWar, battleCost, createGame, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, startPhase, type Assessment } from '../src/campaign/game';
-import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWord, joinersOf, marchWeeks } from '../src/campaign/join';
+import joinData from '../data/campaign/join.json';
+import { addCorps, assess, atWar, battleCost, createGame, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, startPhase, weekOf, type Assessment } from '../src/campaign/game';
+import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWord, joinersOf, marchWeeks, mayJoin, weeksInHand } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -109,13 +111,17 @@ describe('who joins', () => {
     expect(new Set(att.map((j) => j.nat))).toEqual(new Set(['GER']));
     expect(new Set(def.map((j) => j.nat))).toEqual(new Set(['POL']));
     expect(att.some((j) => j.id === iv.id) || def.some((j) => a.defenders.includes(j.corps))).toBe(false);
-    // Seven Polish corps stand next door: the five that come up soonest join, the other two do not.
+    // Seven Polish corps stand next door: the five that come up soonest join, the other two do not. (In the same week,
+    // the corps with the lower number first.)
     const able = nextDoor(g, target).filter((c) => c.nat === 'POL');
     expect(able.length).toBe(7);
-    const last = Math.max(...def.map((j) => j.weeks));
-    for (const c of able.filter((c) => !ids(a, 'def').includes(c.id))) expect(marchWeeks(g, c, target)).toBeGreaterThanOrEqual(last);
-    // Each side's list is in the order they come up.
-    for (const side of [att, def]) for (let i = 1; i < side.length; i++) expect(side[i].weeks).toBeGreaterThanOrEqual(side[i - 1].weeks);
+    const last = def[def.length - 1];
+    for (const c of able.filter((c) => !ids(a, 'def').includes(c.id))) {
+      const w = marchWeeks(g, c, target);
+      expect(w > last.weeks || (w === last.weeks && c.id > last.id)).toBe(true);
+    }
+    // Each side's list is in the order they come up: by the week, then the corps' number.
+    for (const side of [att, def]) for (let i = 1; i < side.length; i++) expect(side[i].weeks > side[i - 1].weeks || (side[i].weeks === side[i - 1].weeks && side[i].id > side[i - 1].id)).toBe(true);
   });
 
   it('never the town guard, a garrison or a corps on ground its side does not hold', () => {
@@ -146,15 +152,15 @@ describe('who joins', () => {
     const { g, lodz: target, iv } = lodz();
     ensureSupply(g);
     const base = assess(g, [iv], target);
-    const prusy = corps(g, 'POL', 'Army Prusy'), poznan = corps(g, 'POL', 'Army Poznan'), krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
-    for (const c of [prusy, poznan, krakow]) expect(ids(base, 'def')).toContain(c.id);
-    prusy.supplied = false;
+    const pomorze = corps(g, 'POL', 'Army Pomorze'), poznan = corps(g, 'POL', 'Army Poznan'), krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
+    for (const c of [pomorze, poznan, krakow]) expect(ids(base, 'def')).toContain(c.id);
+    pomorze.supplied = false;
     // (A battle earlier this month, in another nation's phase; and, Poland's month being still to come, no week of it
     // spent: what Army Krakow left unspent of last month is no part of this one.)
     poznan.fought = true; poznan.foughtIn = g.turn;
     krakow.ap = 0;
     const a = assess(g, [iv], target);
-    for (const c of [prusy, poznan]) expect(ids(a, 'def')).not.toContain(c.id);
+    for (const c of [pomorze, poznan]) expect(ids(a, 'def')).not.toContain(c.id);
     expect(ids(a, 'def')).toContain(krakow.id);
     // Germany's own month has begun: a German corps that has fought since, or has no weeks left of it, stays out.
     const xv = corps(g, 'GER', 'XV Corps'), xiv = corps(g, 'GER', 'XIV Corps');
@@ -162,15 +168,11 @@ describe('who joins', () => {
     xv.fought = true; xiv.ap = 0;
     const a2 = assess(g, [iv], target);
     for (const c of [xv, xiv]) expect(ids(a2, 'att')).not.toContain(c.id);
-    xv.fought = false; xiv.ap = xiv.apMax;
-    // Infantry needs two weeks to march onto enemy ground and tanks one: with one week in hand the tanks come, the infantry does not.
-    const xi = corps(g, 'GER', 'XI Corps'), xvi = corps(g, 'GER', 'XVI Corps');
+    // Infantry needs two weeks to march onto enemy ground: with one week in hand it cannot march in at all.
+    const xi = corps(g, 'GER', 'XI Corps');
     expect(moveCost(g, xi, target)).toBe(2);
-    expect(moveCost(g, xvi, target)).toBe(1);
-    xi.ap = 1; xvi.ap = 1;
-    const b = assess(g, [iv], target);
-    expect(ids(b, 'att')).not.toContain(xi.id);
-    expect(ids(b, 'att')).toContain(xvi.id);
+    xi.ap = 1;
+    expect(mayJoin(g, xi, target)).toBe(false);
   });
 
   it("allies at war with the enemy join; neutrals, and allies not in this war, never do", () => {
@@ -201,20 +203,67 @@ describe('when they come up', () => {
     // A second game of the same seed, in the same state, names the same joiners at the same shares.
     const again = lodz();
     expect(view(assess(again.g, [again.iv], again.lodz))).toEqual(view(a));
+    // (Every joiner: the week the move rules give its march in, out of the weeks it has in hand, and the share and word of that week.)
     for (const j of [...a.join!.att, ...a.join!.def]) {
-      expect(j.weeks).toBeCloseTo(marchWeeks(g, j.corps, target), 12);
-      expect(j.share).toBeCloseTo(1 - j.weeks / JOINING.window, 12);
+      const c = j.corps;
+      expect(j.weeks).toBe(weekOf(c, moveCost(g, c, target), weeksInHand(g, c)));
+      expect(j.weeks).toBe(marchWeeks(g, c, target));
+      expect(Number.isInteger(j.weeks) && j.weeks >= 1 && j.weeks <= 3).toBe(true);
+      expect(j.share).toBe(1 - j.weeks / JOINING.window);
       expect(j.word).toBe(joinWord(j.share));
     }
-    // From the same province tanks come up in half the time infantry takes, so more of them counts.
-    const xvi = a.join!.att.find((j) => j.name === 'XVI Corps')!, xi = a.join!.att.find((j) => j.name === 'XI Corps')!;
-    expect(xvi.from).toBe(xi.from);
-    expect(xi.weeks).toBeCloseTo(2 * xvi.weeks, 12);
-    expect(xvi.share).toBeGreaterThan(xi.share);
+    // From the same province lorries come up in the first week and infantry in the second, so more of them counts.
+    const xiv = a.join!.att.find((j) => j.name === 'XIV Corps')!, x = a.join!.att.find((j) => j.name === 'X Corps')!;
+    expect(xiv.from).toBe(x.from);
+    expect(xiv.weeks).toBe(1);
+    expect(x.weeks).toBe(2);
+    expect(xiv.share).toBeGreaterThan(x.share);
     // Early, midway, late: the thirds of the share.
     expect([joinWord(0.9), joinWord(0.5), joinWord(0.2)]).toEqual(['early', 'midway', 'late']);
     expect(joinShare(JOINING.window)).toBe(0);
     expect(a.join!.att.map((j) => j.word)).toContain('midway');
+  });
+
+  it('the rule carries one number, the window of four weeks: no step, no nearest, no rail, no least, and no share above three quarters', () => {
+    expect(Object.keys(joinData).sort()).toEqual(['_about', 'window']);
+    expect(JOINING.window).toBe(4);
+    const { g, lodz: target, iv } = lodz();
+    const a = assess(g, [iv], target);
+    const all = [...a.join!.att, ...a.join!.def];
+    expect(all.length).toBeGreaterThan(0);
+    for (const j of all) expect([0.75, 0.5, 0.25]).toContain(j.share);
+    expect(Math.max(...all.map((j) => j.share))).toBe(0.75);
+  });
+
+  it('a corps that would come up in the last week of the month is no part of the battle', () => {
+    const { g, lodz: target, iv } = lodz();
+    // (Room among the five: X and XIII Corps have had a battle this month.)
+    for (const n of ['X Corps', 'XIII Corps']) { const c = corps(g, 'GER', n); c.fought = true; c.foughtIn = g.turn; }
+    // XI Corps, infantry with four weeks a month, costs two to march onto enemy ground: with three in hand it is up in the third week, late.
+    const xi = corps(g, 'GER', 'XI Corps'), xvi = corps(g, 'GER', 'XVI Corps');
+    expect(xi.apMax).toBe(4);
+    expect(moveCost(g, xi, target)).toBe(2);
+    xi.ap = 3;
+    let j = assess(g, [iv], target).join!.att.find((x) => x.id === xi.id)!;
+    expect(j.weeks).toBe(3);
+    expect(j.share).toBe(0.25);
+    expect(j.word).toBe('late');
+    // With two in hand it may march in, but it is up in the fourth week: not on the card.
+    xi.ap = 2;
+    expect(mayJoin(g, xi, target)).toBe(true);
+    expect(marchWeeks(g, xi, target)).toBe(4);
+    expect(ids(assess(g, [iv], target), 'att')).not.toContain(xi.id);
+    // XVI Corps, tanks with five weeks, one in hand: the fourth week too.
+    expect(xvi.apMax).toBe(5);
+    expect(moveCost(g, xvi, target)).toBe(1);
+    xvi.ap = 1;
+    expect(mayJoin(g, xvi, target)).toBe(true);
+    expect(marchWeeks(g, xvi, target)).toBe(4);
+    expect(ids(assess(g, [iv], target), 'att')).not.toContain(xvi.id);
+    // (A tank corps fresh for the month comes up in the first.)
+    xvi.ap = xvi.apMax;
+    j = assess(g, [iv], target).join!.att.find((x) => x.id === xvi.id)!;
+    expect(j.weeks).toBe(1);
   });
 
   it('each joiner counts in the odds by its share, on both sides', () => {
@@ -286,7 +335,7 @@ describe('the battle', () => {
   it("a defender's joiner whose own month comes later in the month has it spent too, and the next month is its own again", () => {
     const { g, lodz: target, iv } = lodz();
     const a = assess(g, [iv], target);
-    const pole = a.join!.def[0].corps, other = corps(g, 'POL', 'Army Pomorze');
+    const pole = a.join!.def[0].corps, other = corps(g, 'POL', 'Army Prusy');
     expect(ids(a, 'def')).not.toContain(other.id);
     // It stands in works of two months' digging where it is.
     pole.dug = true; pole.dugFor = 2;
@@ -377,8 +426,8 @@ describe('the battle card', () => {
     const a = assess(g, [iv], target);
     const att = a.lines.find((l) => l.label === JOIN_ATTACK)!, def = a.lines.find((l) => l.label === JOIN_DEFENCE)!;
     expect(att.value).toMatch(/^Early: XVI Corps from Upper Silesia/);
-    expect(att.value).toMatch(/; midway: X Corps from Lower Silesia$/);
-    expect(def.value).toMatch(/^Early: Wyszkow Group from Warsaw/);
+    expect(att.value).toMatch(/; midway: X Corps from Lower Silesia, XIII Corps from Lower Silesia$/);
+    expect(def.value).toMatch(/^Early: Army Pomorze from Pomorze/);
     expect(att.effect).toMatch(/They stay where they stand, and their month is spent$/);
     for (const l of [att, def]) expect(`${l.value} ${l.effect}`).not.toMatch(/undefined|NaN|null/);
     // (Right after the Forces, the ground and the town; the Forces line itself unchanged, so the card's readers still read it.)
@@ -407,7 +456,7 @@ describe('the battle card', () => {
     const seen = attackOutlook(g, [iv], target)!;
     expect(seen.join!.hidden).toBe(false);
     expect(seen.join!.def.map((j) => j.name)).toEqual(a.join!.def.map((j) => j.name));
-    expect(seen.lines.find((l) => l.label === JOIN_DEFENCE)!.value).toMatch(/^Early: Wyszkow Group from Warsaw/);
+    expect(seen.lines.find((l) => l.label === JOIN_DEFENCE)!.value).toMatch(/^Early: Army Pomorze from Pomorze/);
     expect(seen.exact).toBe(true);
     // Every defender known but the enemy next door not: the defence's own lines stand, and only the band says so.
     const g2 = lodz();
@@ -428,7 +477,7 @@ describe('practice battles: the historical scenarios reckon alike', () => {
     const a = assess(g, [iv], target);
     expect(a.join!.att.length).toBeGreaterThan(0);
     expect(a.join!.def.length).toBeGreaterThan(0);
-    for (const j of [...a.join!.att, ...a.join!.def]) expect(j.share).toBeCloseTo(joinShare(marchWeeks(g, j.corps, target)), 12);
+    for (const j of [...a.join!.att, ...a.join!.def]) expect(j.share).toBe(joinShare(marchWeeks(g, j.corps, target)));
     const rep = resolveBattle(g, [iv], target);
     expect(joinedUnits(rep)).toBe(a.join!.att.length + a.join!.def.length);
     expect(rep.lines.some((l) => l.label === JOIN_ATTACK)).toBe(true);
