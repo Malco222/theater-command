@@ -63,7 +63,8 @@ describe("Japan's oil book (ruling 194)", () => {
     const l = lane(g, 'america-japan');
     expect([l.state, l.flow]).toEqual(['open', 1]);
     expect(l.full.oil).toBeCloseTo(0.9 * need, 9);
-    expect([l.oil, l.sup]).toEqual([l.full.oil, 0]);
+    // (With cotton, machines and scrap on the same row: 4 in 100 of its supplies, the supplies book's.)
+    expect([l.oil, l.sup]).toEqual([l.full.oil, 0.04 * needOf(g, 'JAP', 'sup')]);
     // While America sells Japan is not short: what comes in covers what it burns.
     const book = stores(g, 'JAP')!.oil;
     expect(book.made).toBeCloseTo(2 + 0.9 * need, 9);
@@ -171,7 +172,8 @@ describe("Japan's oil book (ruling 194)", () => {
     expect(laneStopped(g, 'south-oil')!.state).toBe('cut');
     // The book keeps the lane's line, with nothing on it and the reason.
     expect(income(g, 'lane:south-oil')).toMatchObject({ amount: 0, note: 'The Luzon Strait is closed to the ships of Japan.' });
-    // It is the one lane read so: a lane that brings a share of need keeps the rule it had, and nothing of Europe's moves.
-    expect(RES.lanes.filter((x) => x.closes).map((x) => x.id)).toEqual(['south-oil']);
+    // Only Japan's lanes are read so (194 point 3, and 195 point 5 for the supplies lanes): nothing of Europe's moves.
+    expect(RES.lanes.filter((x) => x.closes).map((x) => x.to)).toEqual(['JAP', 'JAP', 'JAP', 'JAP', 'JAP']);
+    expect(RES.lanes.filter((x) => x.closes && x.oil + (x.fields?.length ?? 0) > 0).map((x) => x.id)).toEqual(['south-oil']);
   });
 });

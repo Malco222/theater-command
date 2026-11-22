@@ -14,7 +14,7 @@ import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { freezeAt } from './pacific';
 import { TECH } from './tech';
-import { oilAtHome } from './world';
+import { FAR_FIRST, oilAtHome } from './world';
 import { footWorn } from './footing';
 import { bombWorn, oilHeld } from './aircampaigns';
 
@@ -154,6 +154,13 @@ function oilUse(g: Game, nat: string): { fast: number; fastDivs: number; foot: n
 function landYield(g: Game, r: Region, built = false): number {
   return RES.sup.land[r.terrain] + (built ? r.fac : workingFactories(g, r)) * RES.sup.factory;
 }
+
+/**
+ * True for ground that gives its holder no supplies at home with no ship (ruling 195, point 1): a colony or occupied
+ * ground on the far side of the world. Europe's and the Americas' count as they always have, a colony at half and
+ * occupied ground at a quarter; a nation's own home ground on the far side counts at home with the people it feeds.
+ */
+export const overTheWater = (r: Region, nat: string): boolean => r.id >= FAR_FIRST && (r.owner !== nat || !!r.overseas);
 
 const divisions = (g: Game, nat: string): number => g.corps.reduce((s, c) => s + (c.nat === nat && !c.dead ? c.divs : 0), 0);
 
@@ -435,6 +442,9 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
     let land = 0, held = 0, fac = 0, nFac = 0, occ = 0, nOcc = 0, sea = 0, nSea = 0;
     for (const r of g.regions) {
       if (r.ctrl !== nat) continue;
+      // (Ruling 195, point 1: colonies and occupied ground on the far side of the world give nothing at home with no
+      // ship, to anybody. Lanes stand for them, as ruling 194 has it for oil.)
+      if (overTheWater(r, nat)) continue;
       const works = workingFactories(g, r);
       if (r.owner !== nat) { occ += landYield(g, r) * RES.sup.occupied; nOcc++; }
       else if (r.overseas) { sea += landYield(g, r) * RES.sup.overseas; nSea++; }
