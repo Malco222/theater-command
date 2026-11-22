@@ -19,6 +19,13 @@ function west(seed = 7): Game {
   setWar(g, 'GER', 'FRA');
   return g;
 }
+/** Britain at war with Germany and Italy: its bombers can fly a harbour raid (Bremen) and a strike at a fleet at sea. */
+function britain(seed = 7): Game {
+  const g = startOpen(createGame(seed, 'UK'));
+  setWar(g, 'UK', 'GER');
+  setWar(g, 'UK', 'ITA');
+  return g;
+}
 /** Every raid of a kind that can be flown this month, weighed up (at most `most` of them). */
 function plans(g: Game, kind: RaidKind, most = 12): RaidPlan[] {
   const out: RaidPlan[] = [];
@@ -47,22 +54,32 @@ describe("the raid card's guns, each by its own name", () => {
   });
 
   it("names the ships' guns on a strike at a fleet and a raid on a harbour, and nowhere else; the game is untouched", () => {
-    const g = west();
-    const before = saveGame(g);
-    const fleet = plans(g, 'fleet'), port = plans(g, 'harbour');
-    expect(fleet.length + port.length).toBeGreaterThan(0);
-    for (const p of fleet) expect(p.guns.ships, p.title).toBe('sea');
-    for (const p of port) {
-      expect(p.guns.ships, p.title).toBe('harbour');
-      expect(gunsTo(p.guns)).toBe(p.guns.level ? `the ships' guns, flak and level ${p.guns.level} guns` : "the ships' guns and light flak");
-    }
-    for (const kind of ['bomb', 'night', 'strike'] as RaidKind[]) {
-      for (const p of plans(g, kind, 4)) {
-        expect(p.guns.ships, `${kind} ${p.title}`).toBeUndefined();
-        expect(gunsTo(p.guns)).toBe(p.guns.level ? `flak and level ${p.guns.level} guns` : 'light flak');
+    let fleets = 0, ports = 0;
+    // Germany's bombers find fleets at sea; Britain's find a harbour (Bremen) too.
+    for (const g of [west(), britain()]) {
+      const before = saveGame(g);
+      const fleet = plans(g, 'fleet'), port = plans(g, 'harbour');
+      fleets += fleet.length;
+      ports += port.length;
+      for (const p of fleet) {
+        expect(p.guns.ships, p.title).toBe('sea');
+        expect(gunsTo(p.guns), p.title).toBe("the ships' guns");
       }
+      for (const p of port) {
+        expect(p.guns.ships, p.title).toBe('harbour');
+        expect(gunsTo(p.guns), p.title).toBe(p.guns.level ? `the ships' guns, flak and level ${p.guns.level} guns` : "the ships' guns and light flak");
+      }
+      // Bombing by day and by night, and the older strike at shipping (no fleet in it): release 1's words.
+      for (const kind of ['bomb', 'night', 'strike'] as RaidKind[]) {
+        for (const p of plans(g, kind, 4)) {
+          expect(p.guns.ships, `${kind} ${p.title}`).toBeUndefined();
+          expect(gunsTo(p.guns)).toBe(p.guns.level ? `flak and level ${p.guns.level} guns` : 'light flak');
+        }
+      }
+      expect(saveGame(g)).toBe(before);
     }
-    expect(saveGame(g)).toBe(before);
+    expect(fleets).toBeGreaterThan(0);
+    expect(ports).toBeGreaterThan(0);
   });
 
   it("is what the raid card's bombers line says, in the browser and in the 3D game", () => {
