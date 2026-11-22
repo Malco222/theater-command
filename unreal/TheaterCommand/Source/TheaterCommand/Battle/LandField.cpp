@@ -581,6 +581,9 @@ namespace LandField
 		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
 		Col RegionColour(double X, double Y) const;
 		Col RegionFar(double X, double Y) const;
+		/** A region's road across its floor and the slope to the ground beside (A metres from its middle, Half its half
+		 * width): the region's own track, not the bocage's grassed lane and fern walls. */
+		Col RegionLane(double X, double Y, double A, double Half) const;
 		Col Snowed(const Col& C, double X, double Y, bool bFar) const;
 
 		/** The cattle's paths (MakeCowPaths): their segments, each with its half width; and the pieces of trodden earth
@@ -4218,6 +4221,17 @@ namespace LandField
 		return Col{ T.R, T.G, T.B };
 	}
 
+	Col Ground::Impl::RegionLane(double X, double Y, double A, double Half) const
+	{
+		LandScape::Spot S = SpotAt(X, Y, true);
+		S.Kind = LandScape::KLane;
+		S.Lane = A - Half;
+		S.LaneHalf = Half;
+		const LandScape::Tone T = Rg->Colour(S);
+		const Col C{ T.R, T.G, T.B };
+		return SnowLay ? Snowed(C, X, Y, false) : C;
+	}
+
 	Col Ground::Impl::Snowed(const Col& C, double X, double Y, bool bFar) const
 	{
 		const LandScape::Tone Bare{ C.R, C.G, C.B };
@@ -4833,7 +4847,8 @@ namespace LandField
 					const double A = std::fabs(Off);
 					const double N1 = Noise(Q.X / 3.0, Q.Y / 3.0, Seed ^ 0x21), N2 = Noise(Q.X / 0.9, Q.Y / 0.9, Seed ^ 0x22);
 					Col C;
-					if (A <= Half + 0.01)
+					if (Rg && A < Half + LaneWall + 0.01) C = RegionLane(Q.X, Q.Y, A, Half); // (a region's road: its own)
+					else if (A <= Half + 0.01)
 					{
 						C = Varied(Dust, 1.0 + 0.06 * N1 + 0.04 * N2, 0.02 * N1);
 						C = Mixed(C, RutCol, std::exp(-Sq((A - 0.8) / 0.25)) * 0.8);
