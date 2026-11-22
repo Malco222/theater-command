@@ -123,6 +123,11 @@ describe('in a battle (looks only, ruling 217)', () => {
   const b = new LandBattle(ticket()), d = b.drillOn({ sections: true, platoons: true });
   const t = { fights: 0, both: 0, upright: 0, assault: 0, badPose: 0, badEl: 0, badCall: 0 };
   const fire = new Map<number, number[]>(), calls = new Map<number, number[]>();
+  // The platoon cam: how many blocks carry the leading squad's mark at once (by side), marks on fallen men, how often
+  // the lead goes from one block to another, how far the attack's lead is behind its foremost man (both measured to
+  // the nearest enemy man), and how often the lead is seen on the move.
+  const cam = { samples: 0, twoBlocks: 0, onFallen: 0, none: 0, switches: 0, fronts: 0, behind: 0, moving: 0, men: 0 };
+  const leadBlock = new Map<string, number>();
   let last = 0;
   for (let k = 0; !b.over && k < 30000; k++) {
     b.step();
@@ -132,7 +137,34 @@ describe('in a battle (looks only, ruling 217)', () => {
       if ((r.w === 'gun' || r.w === 'mortar') && r.by !== undefined && r.r !== 'kill') { const l = fire.get(r.by) ?? []; l.push(r.t); fire.set(r.by, l); }
     }
     if (k % 5) continue;
-    for (const blk of d.view()) {
+    const view = d.view();
+    if (b.t > 30) {
+      cam.samples++;
+      for (const side of ['att', 'def']) {
+        const mine = view.filter((x) => b.unit(x.id)!.side === side);
+        const marked = mine.filter((x) => x.men.some((m) => m.ld));
+        if (marked.length > 1) cam.twoBlocks++;
+        if (!marked.length && mine.some((x) => b.unit(x.id)!.kind === 'inf')) cam.none++;
+        for (const x of marked) cam.onFallen += x.men.filter((m) => m.ld && m.d !== undefined).length;
+        if (marked.length === 1) {
+          if (leadBlock.has(side) && leadBlock.get(side) !== marked[0].id) cam.switches++;
+          leadBlock.set(side, marked[0].id);
+          if (side === 'att') cam.men += marked[0].men.filter((m) => m.ld).length;
+        }
+        if (side === 'att' && marked.length === 1) {
+          const foes = view.filter((x) => b.unit(x.id)!.side !== side).flatMap((x) => x.men.filter((m) => m.d === undefined));
+          const gap = (m: MenOut): number => foes.reduce((g, f) => Math.min(g, Math.hypot(f.x - m.x, f.y - m.y)), Infinity);
+          const foot = mine.filter((x) => b.unit(x.id)!.kind === 'inf').flatMap((x) => x.men.filter((m) => m.d === undefined && m.r !== 'tank'));
+          if (foes.length && foot.length) {
+            cam.fronts++;
+            const lead = Math.min(...marked[0].men.filter((m) => m.ld).map(gap)), first = Math.min(...foot.map(gap));
+            cam.behind += lead - first;
+          }
+          if (marked[0].men.some((m) => m.ld && m.e === 2)) cam.moving++;
+        }
+      }
+    }
+    for (const blk of view) {
       const u = b.unit(blk.id)!;
       for (const m of [...blk.men, ...(blk.fo ?? [])] as MenOut[]) {
         if (m.d === undefined && !POSES.has(m.p)) t.badPose++;
@@ -176,6 +208,24 @@ describe('in a battle (looks only, ruling 217)', () => {
       expect(after[2] - after[1], `block ${id}`).toBeGreaterThan(2);
     }
     expect(missions).toBeGreaterThan(0);
+  });
+
+  it('the platoon cam: one squad of each side carries the lead mark, a living squad on the move, and the camera is not thrown about', () => {
+    expect(cam.samples).toBeGreaterThan(100);
+    expect(cam.twoBlocks).toBe(0);
+    expect(cam.onFallen).toBe(0);
+    expect(cam.none / cam.samples).toBeLessThan(0.05);
+    // A squad, not a platoon or one man: on average a handful of men up to a dozen.
+    const per = cam.men / Math.max(1, cam.samples - cam.none);
+    expect(per).toBeGreaterThan(3);
+    expect(per).toBeLessThan(16);
+    // The attack's lead is up with the foremost of its men (on average within 40 m of the nearest to the enemy), and it
+    // is an assaulting squad: seen on the move in a good share of the looks (it rushes in turns, and lies firing between).
+    expect(cam.fronts).toBeGreaterThan(50);
+    expect(cam.behind / cam.fronts).toBeLessThan(40);
+    expect(cam.moving / cam.fronts).toBeGreaterThan(0.2);
+    // Each side's lead goes to another block at most about once every 30 seconds of battle, on average.
+    expect(cam.switches / Math.max(1, b.t - 30)).toBeLessThan(2 / 30);
   });
 
   it('only poses the 3D game has; the element is 1 or 2; only the spotter\'s pair carry a call', () => {

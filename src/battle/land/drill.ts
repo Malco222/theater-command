@@ -208,6 +208,8 @@ export interface MenOut {
   /** The drill book (tactics.ts): his element (1 the base of fire, 2 moving), and a signaller's call stamp (the radio
    * man's call_support clip plays once from it). */
   e?: 1 | 2; cl?: number;
+  /** Platoon cam (release 2): one of the squad leading his side's assault (Drill.leads). The camera's button drops onto these men. */
+  ld?: 1;
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -450,6 +452,14 @@ export class Drill {
   private readonly seed: number;
   private settled = false;
   /**
+   * Platoon cam (release 2; Brian, 22 November: "Do 2 and 3"): the squad leading each side's assault, as [block, group
+   * (grp)], chosen every half second (Drill.pickLeads), and the battle time the next choice is made.
+   */
+  private readonly leads = new Map<Side, [number, number]>();
+  private leadAt = 0;
+  /** The battle time each squad ('block:group') was last seen on the move, for the platoon cam. */
+  private readonly rushed = new Map<string, number>();
+  /**
    * Each model drawn as its section (release 2; the 3D ground battle scene for Brian, 21 November 2026, 18:29Z: "the
    * ground battle needs a lot more soldiers in it"): the model's man is its key man, and the rest of his section stand
    * round him (DR.sections). Off, a model is one man, as before.
@@ -615,6 +625,47 @@ export class Drill {
       this.fire(sq);
     }
     this.shellKills.clear(); this.byOf.clear();
+    if (t >= this.leadAt) { this.leadAt = t + 0.5; this.pickLeads(); }
+  }
+
+  /**
+   * The squad leading each side's assault, for the platoon cam (release 2): of the side's foot squads still standing,
+   * those in the assault (on the move now, or within LEAD_RUSH seconds: a squad rushes, drops and fires, and rushes
+   * again on its turn), the one nearest the enemy; where none is, the foot squad nearest the enemy. The camera is not
+   * thrown from squad to squad: the one leading keeps the lead while it stands and is still in the assault (or none
+   * is), unless another is LEAD_BY metres nearer the enemy. Looks only: nothing in the battle reads it.
+   */
+  private pickLeads(): void {
+    const LEAD_BY = 25, LEAD_RUSH = 15, t = this.b.t;
+    const live_ = [...this.squads.values()].filter((sq) => live(sq.u));
+    for (const side of ['att', 'def'] as Side[]) {
+      const foes = live_.filter((sq) => sq.u.side !== side);
+      const near = (x: number, y: number): number => foes.reduce((d, f) => Math.min(d, Math.hypot(f.u.x - x, f.u.y - y)), Infinity);
+      type Cand = { id: number; g: number; d: number; on: boolean };
+      const cands: Cand[] = [];
+      for (const sq of live_) {
+        if (sq.u.side !== side || sq.u.kind === 'arm' || sq.u.kind === 'art' || sq.u.kind === 'fort') continue;
+        const groups = new Map<number, { x: number; y: number; n: number; moving: boolean }>();
+        for (const m of sq.men) {
+          if (!this.stands(sq, m) || m.role === 'holder') continue;
+          const key = grp(m), e = groups.get(key) ?? { x: 0, y: 0, n: 0, moving: false };
+          e.x += m.x; e.y += m.y; e.n++;
+          if (this.byBook ? m.el === 2 : MOVING.has(m.pose)) e.moving = true;
+          groups.set(key, e);
+        }
+        for (const [g, e] of groups) {
+          const key = `${sq.u.id}:${g}`;
+          if (e.moving) this.rushed.set(key, t);
+          const at = this.rushed.get(key);
+          cands.push({ id: sq.u.id, g, d: foes.length ? near(e.x / e.n, e.y / e.n) : 0, on: at !== undefined && t - at <= LEAD_RUSH });
+        }
+      }
+      if (!cands.length) { this.leads.delete(side); continue; }
+      const pool = cands.some((c) => c.on) ? cands.filter((c) => c.on) : cands;
+      const best = pool.reduce((a, c) => (c.d < a.d ? c : a));
+      const was = this.leads.get(side), cur = was && pool.find((c) => c.id === was[0] && c.g === was[1]);
+      this.leads.set(side, cur && best.d > cur.d - LEAD_BY ? was! : [best.id, best.g]);
+    }
   }
 
   /**
@@ -2931,9 +2982,14 @@ export class Drill {
     };
     for (const sq of this.squads.values()) {
       const u = sq.u;
+      const lead = this.leads.get(u.side), mark = lead && lead[0] === u.id ? lead[1] : undefined;
       if (as !== undefined && u.side !== as && !b.known(u)) continue;
       if (u.state === 'withdrawn' && !sq.men.some((m) => m.fell !== undefined)) continue;
-      const men = sq.men.filter((m) => m.fell !== undefined || (this.stands(sq, m) && live(u))).map(one);
+      const men = sq.men.filter((m) => m.fell !== undefined || (this.stands(sq, m) && live(u))).map((m) => {
+        const o = one(m);
+        if (mark !== undefined && m.fell === undefined && grp(m) === mark && m.role !== 'lorry' && m.role !== 'holder') o.ld = 1;
+        return o;
+      });
       for (const v of sq.veh) if (live(u)) men.push(one(v));
       const blk: MenBlock = { id: u.id, ph: sq.phase, men };
       if (sq.fo && live(u)) { blk.fo = sq.fo.map(one); blk.foWith = sq.foWith; blk.foOn = sq.foOn; }
