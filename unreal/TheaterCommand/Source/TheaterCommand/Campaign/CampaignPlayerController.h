@@ -479,6 +479,18 @@ public:
 
 	const FRegionPanelInfo& GetRegionPanel() const { return RegionPanel; }
 	const FArmyTray& GetArmyTray() const { return Tray; }
+	/**
+	 * (Release 2: the map gets the screen; Brian, 22 November 2026.) True from the player's second month on: the frame
+	 * folds the date card to a strip, the chief of staff's list to a line, and the army tray away while nothing is in
+	 * hand. A campaign begun here keeps everything open through its first month, so that a new player sees it all; one
+	 * picked up from a save is folded from the start, since its player has played it before.
+	 */
+	bool IsFrameFolded() const;
+	/**
+	 * (Release 2.) Whether the army tray stands on the screen: while an army or a fleet of his is in hand, and, once the
+	 * frame folds, an army only looked at while its ground is still the one picked on the map.
+	 */
+	bool IsTrayShown() const;
 	const FFaceOff& GetFaceOff() const { return FaceOff; }
 	const FOpening& GetOpening() const { return Opening; }
 	const FWarPrompt& GetWarPrompt() const { return WarPrompt; }
@@ -1405,6 +1417,7 @@ private:
 	bool bHelpSeen = false; // the player has ended a month, or folded the keys away: they are not shown unasked again
 	bool bHelpPinned = false; // the reminder of the keys is kept open by a click on its mark
 	bool bFreshCampaign = false; // a campaign has just been begun, not continued
+	int32 SeatTurn = INDEX_NONE; // (release 2) the month a campaign begun here opened on: the frame stays open through it
 	int32 TurnLaid = -1; // the month the table's holders were last laid for, and for whom: ink spreads only from one month to the next
 	FString HumanLaid;
 	FYearCard LastYear; // the last year's card, to show again
