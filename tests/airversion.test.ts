@@ -8,6 +8,7 @@ import { createGame, setWar } from '../src/campaign/game';
 import { majorsOf } from '../src/campaign/diplomacy';
 import { INTEL, MISSIONS, intelTick, setMission, spyRoom, whyNotMission } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { setSecretWar } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
 import type { Agent, AirFleet, Game, Mission } from '../src/campaign/types';
 
@@ -19,18 +20,30 @@ const keepIntel = structuredClone(INTEL.enemy);
 afterEach(() => { Object.assign(AIRV, structuredClone(keep)); Object.assign(INTEL.enemy, structuredClone(keepIntel)); });
 
 describe('the switches', () => {
-  it('are off for a new campaign, keep with the save, and touch nothing outside the grand campaign', () => {
+  it('a new campaign takes the field on and the guns off, keeps them with the save, and touches nothing outside the grand campaign', () => {
+    // (Brian, 22 November, release 2: WRECK THE AIRFIELD is on for new grand campaigns; the guns stay off.)
+    const g = free();
+    expect(airPiece(g, 'night')).toBe(false);
+    expect(airPiece(g, 'start')).toBe(false);
+    expect(airPiece(g, 'field')).toBe(true);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('av:'))).toEqual(['av:field']);
+    setAirPiece(g, 'night', true);
+    setAirPiece(g, 'field', false);
+    const back = loadGame(saveGame(g))!;
+    expect(airPiece(back, 'night')).toBe(true);
+    expect(airPiece(back, 'field')).toBe(false);
+    const h = createGame(7, null);
+    setAirPiece(h, 'night', true);
+    setAirPiece(h, 'field', true);
+    expect(airPiece(h, 'night')).toBe(false);
+    expect(airPiece(h, 'field')).toBe(false);
+  });
+
+  it('a campaign begun with the data switches off takes none of them', () => {
+    AIRV.nightGuns.on = AIRV.field.on = AIRV.startGuns.on = false;
     const g = free();
     for (const p of ['night', 'start', 'field'] as const) expect(airPiece(g, p)).toBe(false);
     expect(Object.keys(g.flags).some((k) => k.startsWith('av:'))).toBe(false);
-    setAirPiece(g, 'night', true);
-    setAirPiece(g, 'field', true);
-    const back = loadGame(saveGame(g))!;
-    expect(airPiece(back, 'night')).toBe(true);
-    expect(airPiece(back, 'field')).toBe(true);
-    const h = createGame(7, null);
-    setAirPiece(h, 'night', true);
-    expect(airPiece(h, 'night')).toBe(false);
   });
 
   it('a campaign begun with the data switches on takes them', () => {
@@ -110,7 +123,7 @@ describe('wrecking an airfield (ruling 151(b))', () => {
   function scene(on = true): { g: Game; a: Agent; f: AirFleet; bremen: number } {
     const g = free(7, 'UK');
     setWar(g, 'UK', 'GER');
-    if (on) setAirPiece(g, 'field', true);
+    setAirPiece(g, 'field', on);
     const bremen = id(g, 'Bremen');
     const f = g.airFleets.find((x) => x.nat === 'GER' && x.ship === undefined && x.ftr > 0)!;
     f.base = bremen;
@@ -161,9 +174,11 @@ describe('wrecking an airfield (ruling 151(b))', () => {
     INTEL.enemy.chance = 1;
     INTEL.enemy.quiet = 0;
     AIRV.field.enemyShare = 1;
+    // (The plot that strikes at once: spy hunters off, as this test means. With them on, tests/secretwar.test.ts.)
     const g = free(7, 'UK');
     setWar(g, 'UK', 'GER');
     g.flags.spyfrom = 0;
+    setSecretWar(g, 'hunt', false);
     setAirPiece(g, 'field', true);
     intelTick(g, 'UK');
     const line = g.headlines.find((h) => /^Grounded this month: saboteurs wrecked the field at /.test(h.text));
@@ -171,6 +186,8 @@ describe('wrecking an airfield (ruling 151(b))', () => {
     const h = free(7, 'UK');
     setWar(h, 'UK', 'GER');
     h.flags.spyfrom = 0;
+    setSecretWar(h, 'hunt', false);
+    setAirPiece(h, 'field', false);
     intelTick(h, 'UK');
     expect(h.headlines.some((x) => /field/.test(x.text))).toBe(false);
   });

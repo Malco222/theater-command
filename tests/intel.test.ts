@@ -17,6 +17,8 @@ import {
 import { onNet, railCut, ruinedAt, workingFactories } from '../src/campaign/rails';
 import { fieldOut, fieldYield } from '../src/campaign/resources';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { setAirPiece } from '../src/campaign/airversion';
+import { setSecretWar } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
 import {
   agentReport, beginHuman, endHuman, foreignBooks, humanUp, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, runTurnAI,
@@ -55,6 +57,11 @@ function playing(human = 'GER', seed = 3): Game {
   return g;
 }
 const share = (hits: number, of: number): number => hits / of;
+/** The secret war as release 1 had it: no spy hunters, no stolen orders, no wrecked fields, only the great powers' services. */
+function release1(g: Game): Game {
+  setSecretWar(g, 'hunt', false); setSecretWar(g, 'orders', false); setSecretWar(g, 'all', false); setAirPiece(g, 'field', false);
+  return g;
+}
 
 describe('the data', () => {
   it('names missions, ranks, levels and services that exist', () => {
@@ -361,7 +368,13 @@ describe('an agent\'s work', () => {
     expect(whyNotMission(g, 'GER', 9999, 'watch')).toMatch(/no such agent/);
     // The room shows the same answers.
     const view = secretService(g)!.agents.find((x) => x.id === paris.id)!;
-    expect(view.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil', 'bbPlans', 'cvPlans', 'bomberPlans', 'jetPlans', 'rocketPlans', 'guidedPlans']);
+    // (Brian, 22 November, release 2: a new grand campaign has WRECK THE AIRFIELD and STEAL THE ORDERS abroad, and
+    // HUNT ENEMY AGENTS at home; with their switches off, the work offered is as before.)
+    expect(view.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil', 'airfield', 'orders', 'bbPlans', 'cvPlans', 'bomberPlans', 'jetPlans', 'rocketPlans', 'guidedPlans']);
+    expect(secretService(g)!.agents.find((x) => x.id === home.id)!.missions.map((m) => m.id)).toEqual(['guard', 'hunt']);
+    setSecretWar(g, 'hunt', false); setSecretWar(g, 'orders', false); setAirPiece(g, 'field', false);
+    expect(secretService(g)!.agents.find((x) => x.id === paris.id)!.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil', 'bbPlans', 'cvPlans', 'bomberPlans', 'jetPlans', 'rocketPlans', 'guidedPlans']);
+    expect(secretService(g)!.agents.find((x) => x.id === home.id)!.missions.map((m) => m.id)).toEqual(['guard']);
     // (Ruling 235 and its rider b542: a great power steals no plans; it draws and develops its own.)
     expect(view.missions.find((m) => m.id === 'bbPlans')!.why).toMatch(/own designs/);
     expect(view.missions.find((m) => m.id === 'jetPlans')!.why).toBe('Germany develops its own jet fighters.');
@@ -369,7 +382,6 @@ describe('an agent\'s work', () => {
     expect(view.missions.find((m) => m.id === 'watch')!.now).toBe(true);
     expect(view.missions.find((m) => m.id === 'factory')!.success).toBeCloseTo(INTEL.missions.factory.success!, 9);
     expect(view.missions.find((m) => m.id === 'watch')!.success).toBeNull();
-    expect(secretService(g)!.agents.find((x) => x.id === home.id)!.missions.map((m) => m.id)).toEqual(['guard']);
   });
 
   it('needs something to wreck: industry, a working line, a field that is not burning', () => {
@@ -615,7 +627,7 @@ describe('the month\'s secret war', () => {
 
 describe('the other side\'s saboteurs', () => {
   it('leave the player alone at the start, on the easiest level, and at peace', () => {
-    const g = grand('GER');
+    const g = release1(grand('GER'));
     war(g, 'GER', 'FRA'); war(g, 'GER', 'UK');
     expect(threat(g, 'GER').foes).toEqual(expect.arrayContaining(['FRA', 'UK']));
     expect(threat(g, 'GER').each).toBeCloseTo(INTEL.enemy.chance, 9);
@@ -631,7 +643,7 @@ describe('the other side\'s saboteurs', () => {
     expect(threat(g, 'GER').each).toBeCloseTo(INTEL.enemy.chance * INTEL.enemy.level.at(-1)!, 9);
     setLevel(g, DIFFICULTY.start);
     for (const f of [...g.nations.GER.atWar]) peace(g, 'GER', f);
-    expect(threat(g, 'GER')).toEqual({ chance: 0, each: INTEL.enemy.chance, foes: [] });
+    expect(threat(g, 'GER')).toEqual({ chance: 0, each: INTEL.enemy.chance, foes: [], rate: {} });
     // A small country at war with the player has no service to send.
     war(g, 'GER', 'POL');
     expect(threat(g, 'GER').foes).toEqual([]);
@@ -650,7 +662,7 @@ describe('the other side\'s saboteurs', () => {
   it('wreck factories and cut railways on home ground about as often as the odds say', () => {
     let struck = 0, months = 0;
     for (let seed = 1; seed <= 4; seed++) {
-      const g = grand('GER', seed);
+      const g = release1(grand('GER', seed));
       war(g, 'GER', 'FRA'); war(g, 'GER', 'UK');
       g.flags.spyfrom = -99;
       const foes = threat(g, 'GER').foes.length;

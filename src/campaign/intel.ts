@@ -23,7 +23,7 @@ import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
 import { TECH, spyOf } from './tech';
 import { AIRV, airPiece, fieldWrecked, groupsOnField, wreckField } from './airversion';
-import { huntersOn, ordersKnown, ordersOn, pruneOrders } from './secretwar';
+import { SMALLER, everyoneOn, huntersOn, ordersKnown, ordersOn, pruneOrders } from './secretwar';
 import { fieldOrder } from './air';
 
 interface MissionRow { caught: number; success?: number; gain?: number; months?: number; cut?: number }
@@ -40,7 +40,7 @@ export const INTEL = data as unknown as {
   estimate: { round: number };
   reports: { fresh: number; keep: number; drift: number; widest: number; contact: number; unknown: number };
   names: string[];
-  secret: { hunters: { on: boolean; lead: number; here: number; near: number; skill: number }; orders: { on: boolean; ambush: number } };
+  secret: { hunters: { on: boolean; lead: number; here: number; near: number; skill: number }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number } };
 };
 
 /** True when spies and the fog of war are in the game. That is the grand campaign: a historical scenario shows the whole map. */
@@ -761,15 +761,29 @@ function resent(g: Game, a: Agent, host: string): string {
   return ` ${H.name} protests, and thinks the worse of ${b === 'axis' ? 'the Axis' : 'the Allies'} for it.`;
 }
 
-/** The chance each month that the services of the powers at war with this nation strike on its home ground, and who they are. */
-export function threat(g: Game, nat: string): { chance: number; each: number; foes: string[] } {
+/**
+ * The chance each month that the services of the powers at war with this nation strike on its home ground, and who
+ * they are: 'each' is a great power's rate, 'rate' each foe's own. With every country's service at work (Brian,
+ * 22 November, release 2: every country the computer plays runs real spies against the player, sized to the
+ * country) every nation at war with him is a foe, the great powers on enemy.services at their rate and every other
+ * at secret.everyone.smaller times it; with it off, only the great powers, as before.
+ */
+export function threat(g: Game, nat: string): { chance: number; each: number; foes: string[]; rate: Record<string, number> } {
   const E = INTEL.enemy;
   // The other side's services need a few months to get their people into place: nothing happens at the very start.
   const quiet = g.flags.spyfrom !== undefined && g.turn < g.flags.spyfrom + E.quiet;
   const each = intelRules(g) && !quiet ? E.chance * (E.level[levelIndex(g)] ?? 1) : 0;
-  const foes = each > 0 ? g.order.filter((f) => E.services.includes(f) && g.nations[f]?.alive && atWar(g, nat, f)) : [];
-  return { chance: 1 - Math.pow(1 - each, foes.length), each, foes };
+  const all = everyoneOn(g);
+  const foes = each > 0 ? g.order.filter((f) => f !== nat && (all || E.services.includes(f)) && g.nations[f]?.alive && atWar(g, nat, f)) : [];
+  const rate: Record<string, number> = {};
+  for (const f of foes) rate[f] = E.services.includes(f) ? each : each * SMALLER();
+  const chance = all ? 1 - foes.reduce((p, f) => p * (1 - rate[f]), 1) : 1 - Math.pow(1 - each, foes.length);
+  return { chance, each, foes, rate };
 }
+
+/** With every country's service at work and spy hunters on: whether this foe's service has room for another agent on the player's ground. */
+const roomFor = (g: Game, foe: string): boolean =>
+  !everyoneOn(g) || (g.intel.foes ?? []).filter((f) => f.nat === foe).length < mostAgents(foe, g);
 
 /** The chance that this nation's guards stop a plot against a province: best with a guard in it or beside it. */
 export function guardChance(g: Game, nat: string, reg: number): { chance: number; by: Agent | null } {
@@ -833,10 +847,11 @@ function foesMonth(g: Game, nat: string): void {
     note(g, who, r.id, 'struck', text, false);
     headline(g, 'event', text, nat, r.id);
   }
-  // New agents come in where the plots of old would have struck at once.
+  // New agents come in where the plots of old would have struck at once; a service never runs more agents on his
+  // ground at once than it could run at all (Brian, 22 November, release 2).
   const T = threat(g, nat);
   for (const foe of T.foes) {
-    if (draw(g, g.turn, 'plot', foe) >= T.each) continue;
+    if (draw(g, g.turn, 'plot', foe) >= T.rate[foe] || !roomFor(g, foe)) continue;
     const aim = plotAim(g, nat, foe);
     if (!aim) continue;
     const id = g.intel.foeNext ?? 1;
@@ -975,7 +990,7 @@ function plots(g: Game, nat: string): void {
   if (huntersOn(g)) { foesMonth(g, nat); return; }
   const T = threat(g, nat);
   for (const foe of T.foes) {
-    if (draw(g, g.turn, 'plot', foe) >= T.each) continue;
+    if (draw(g, g.turn, 'plot', foe) >= T.rate[foe]) continue;
     const F = g.nations[foe], K = INTEL.enemy.kinds;
     // With the field's switch on, a share of the plots go for an airfield the player flies from (ruling 151(b)).
     if (airPiece(g, 'field') && draw(g, g.turn, 'field', foe) < AIRV.field.enemyShare && plotField(g, nat, foe)) continue;
@@ -1080,8 +1095,11 @@ export interface SpyRoom {
   fog: boolean;
   /** Foreign nations whose books an agent is reading. */
   books: string[];
-  /** The other side's services: the chance of a strike at home this month, and who is behind it. */
-  threat: { chance: number; foes: string[]; guards: number };
+  /**
+   * The other side's services: the chance of a strike at home this month, and who is behind it. 'rate' is each
+   * foe's own monthly chance (with every country's service at work, a smaller nation's is less: release 2).
+   */
+  threat: { chance: number; foes: string[]; guards: number; rate: Record<string, number> };
   /** With spy hunters (ruling 151(c)): the enemy agents uncovered and still at large, each with ARREST. */
   found?: { id: number; nat: string; reg: number; where: string; text: string }[];
   /** With stolen orders (ruling 135): THE ENEMY'S ORDERS. */
@@ -1128,7 +1146,7 @@ export function spyRoom(g: Game, nat: string | null = g.human): SpyRoom | null {
     notes: g.intel.notes.filter((n) => n.nat === nat).slice().reverse(),
     fog: fogOn(g, nat),
     books: Object.values(g.nations).filter((n) => n.alive && !allied(g, n.id, nat) && knowsBooks(g, n.id, nat)).map((n) => n.id),
-    threat: { chance: T.chance, foes: T.foes, guards: mine.filter((a) => a.mission === 'guard' && atWork(g, a) && !abroad(g, a)).length },
+    threat: { chance: T.chance, foes: T.foes, guards: mine.filter((a) => a.mission === 'guard' && atWork(g, a) && !abroad(g, a)).length, rate: T.rate },
     ...(huntersOn(g) ? { found: foesFound(g, nat).map((f) => ({ id: f.id, nat: f.nat, reg: f.reg, where: g.regions[f.reg].name, text: `${/^[AEIOU]/.test(g.nations[f.nat]?.adj ?? '') ? 'An' : 'A'} ${g.nations[f.nat]?.adj ?? 'enemy'} agent at ${g.regions[f.reg].name}, uncovered ${f.found === g.turn ? 'this month' : 'earlier'}` })) } : {}),
     ...(ordersOn(g) ? { orders: enemyOrders(g, nat) } : {}),
   };

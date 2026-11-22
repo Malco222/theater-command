@@ -62,7 +62,7 @@ import {
   manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
   townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
-  sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
+  sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent, orderArrest, whyNotArrestAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
   invasions, previewDeclare, orderCourt, leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
@@ -3931,16 +3931,30 @@ function spiesPage(s: Game, region: number): Page | null {
     return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
   });
   const notes = room.notes.slice(-10).reverse().map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
+  // (Ruling 151(c), switched on by Brian for release 2, 22 November.) The enemy agents his hunters uncovered, each
+  // with ARREST; and (ruling 135) what his agents have read of the enemy's bombing orders.
+  const found: PageRow[] = (room.found ?? []).map((f) => {
+    const why = up ? whyNotArrestAgent(s, f.id) : 'Orders are given in your own month.';
+    return {
+      nat: f.nat, title: `${s.nations[f.nat]?.adj ?? 'Enemy'} agent at ${f.where}`, lines: [`${f.text}. It strikes unless it is arrested.`],
+      buttons: [{ label: 'ARREST', act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? 'Arrest the agent: it is ended before it can strike.' }],
+    };
+  });
+  const orders = room.orders ?? [];
+  // (Brian, 22 November, release 2: every country at war with him spies on him, a smaller one less.) Who, and how often.
+  const who = room.threat.foes.map((f) => `${theName(s, f)} ${pct(room.threat.rate[f] ?? 0)}`).join(', ');
   return {
     id: 'spies', title: 'THE SECRET SERVICE',
     headline: `${room.agents.length} of ${room.most} agents in the service`,
-    note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard.` : 'No enemy service is working against you at home.'}`,
+    note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard. The chance each month, by country: ${who}.` : 'No enemy service is working against you at home.'}`,
     top: [
       { label: `RECRUIT AN AGENT  \u00B7  ${Math.round(room.cost).toLocaleString('en-US')}`, act: 'spy:recruit', ok: up && room.whyNotRecruit === null, tip: room.whyNotRecruit ?? 'A new agent joins the service, at home, and can be sent abroad.' },
       { label: room.fog ? 'LIFT THE FOG OF WAR' : 'LAY THE FOG OF WAR AGAIN', act: room.fog ? 'fog:off' : 'fog:on', ok: true, tip: room.fog ? 'Show every army on the map, as before spies were in the game. Agents and sabotage go on either way.' : 'Hide again what your armies and agents cannot see.' },
     ],
     sections: [
       { heading: 'YOUR AGENTS', text: rows.length ? (here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : 'Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there.') : 'The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there.', rows },
+      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: 'Your hunters have found these enemy agents on your ground. Each strikes when its time comes unless it is arrested first.', rows: found }] : []),
+      ...(orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join('\n'), rows: [] }] : []),
       { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join('\n') : 'Nothing has been reported yet.', rows: [] },
     ],
   };
@@ -5484,6 +5498,7 @@ function act(action: string, region = -1) {
   } else if (action === 'spy:recruit') { const a = orderRecruitAgent(s); ok = !!a; note = a ? `${a.name} joins the service.` : 'No agent could be recruited.'; }
   else if (part[0] === 'spy' && part[1] === 'send') { const why = whyNotSendAgent(s, Number(part[2]), region); ok = orderSendAgent(s, Number(part[2]), region); note = ok ? `The agent sets out for ${s.regions[region]?.name ?? 'the province'}.` : why ?? 'The agent cannot go there.'; }
   else if (part[0] === 'spy' && part[1] === 'mission') { ok = orderAgentMission(s, Number(part[2]), part[3] as Parameters<typeof orderAgentMission>[2]); note = ok ? 'The agent has new orders.' : 'The agent cannot take that work now.'; }
+  else if (part[0] === 'spy' && part[1] === 'arrest') { const why = whyNotArrestAgent(s, Number(part[2])); ok = orderArrest(s, Number(part[2])); note = ok ? '' : why ?? 'The agent cannot be arrested now.'; }
   else if (part[0] === 'spy' && part[1] === 'retire') { ok = orderRetireAgent(s, Number(part[2])); note = ok ? 'The agent has left the service.' : ''; }
   else if (action === 'fog:off' || action === 'fog:on') { ok = orderFog(s, action === 'fog:on'); note = ok ? (action === 'fog:on' ? 'The fog of war lies on the map again.' : 'The fog of war is lifted: every army is shown.') : ''; }
   else if (action === 'dom:ask') { domAsked = 1; ok = true; }
