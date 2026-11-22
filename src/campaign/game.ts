@@ -51,6 +51,7 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { battleHit } from './repairs';
 import { TOWNS, townName, townSize } from './towns';
 import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
@@ -2233,6 +2234,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   }
   // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
   if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
+  // Damaged cities (the grand campaign with its switch): a battle in the province leaves its town damaged, the more so
+  // when it is fought for the town itself or at its gates, and the attackers' guns add to it.
+  const fight = town ? (win ? 'storm' : 'repulsed') : inField || relief || opts.sally ? 'streets' : 'field';
+  const hurt = battleHit(g, target, fight, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === 'art' ? u.divs : 0), 0));
+  if (hurt) rep.city = { region: hurt.region, added: hurt.added, now: hurt.now };
   g.reports.push(rep);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;

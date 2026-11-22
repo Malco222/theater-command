@@ -12927,6 +12927,86 @@
     ai: { share: 0.1, reserve: 30, gang: 12, mix: { market: 4, farm: 2, school: 2, hall: 1, camp: 1, hospital: 1 } }
   };
 
+  // ../../data/campaign/damage.json
+  var damage_default = {
+    _about: {
+      what: `Damaged cities (Brian, 20 November 2026: "when you click the cities there should be a repair button to press to repair the damaged buildings from artillery, bomb runs, and attacks. the production output and money are diminished the more it is damaged so repairing is important but costs money to do so"). The grand campaign only, behind its switch (g.flags.damage, set by the interfaces when a new grand campaign begins). Each province's chief town carries a share of itself in ruins, in percent (flag dmg:<region>). Its factories, its land, its harbour and the seat of government there pay that much less, and so do its town buildings, until the holder pays to repair it. Oilfields and the factory districts outside the walls are not the town: the existing rules for wrecked prizes keep them.`,
+      most: "The most of a town that can lie in ruins, in percent. A town is never wiped out: a fifth of it always works.",
+      raid: "A raid on a province's industry by day or by night ('bomb' or 'night'). 'full' is the bombers through (as fly() counts them, after accuracy and anti-aircraft guns) that leave 'points' percent of the town in ruins; fewer leave their share. By night the bombs fall on the town at large rather than the works, so each bomber through counts 'night' times over for the town.",
+      town: "Bombs on a besieged town ('town'): 'points' percent at a full bombardment (siege.json bombard.raidFull bombers through), less for less.",
+      shell: "Ships' guns: 'points' percent for a full shelling of a besieged town's defences (siege.json bombard.shellFull weight of fire), and 'cityPoints' for a shelling of the city's works ('city'), full at a weight of fire of 'cityFull'.",
+      guns: "A besieging army's artillery: 'perDiv' percent a month for each division of guns (supplied; half unsupplied, as the siege counts them), never more than 'most' in a month.",
+      battle: "A battle fought in the province, in percent: 'field' in the country round the town, 'streets' where the town's guard fights beside the field army (ruling 232) or a relief or sortie comes to its gates, 'storm' for an assault that takes the town, 'repulsed' for one that is thrown back. The attackers' artillery adds 'guns' a division, up to 'gunsMost'. A small fight does less: the whole only where 'full' divisions or more fought on both sides together, and never less than a quarter.",
+      repair: "The price of repairing a town: 'months' of the money its damage costs it (the pay of its factories, land, harbour, seat of government and town buildings, at the holder's own rates, before the nation-wide gains and losses). Never less than 'least' production points. A repair is paid at once and done at once; the player may take it back, with his money, in the month he ordered it.",
+      ai: "A computer nation (and a player's staff with the building desk) repairs out of a purse it fills with 'share' of its income in every month it has a damaged town, keeping 'reserve' production points in hand. It buys only a repair that pays for itself within the price's own 'repair.months' (never a floor-priced repair of a town whose damage costs it next to nothing, an occupier reading its occupied share), repairs the towns whose damage costs it most first, and does not rebuild on the front line: never a town under siege, one beside ground its enemies hold, or one hit in the last 'quiet' months.",
+      worth: "What a raid's lasting damage is worth to the raiders, in aircraft, as fly() and its forecast weigh what a raid achieves: this many for each production point a month the damage takes from the town. (A month's output stopped is worth 200 a factory: air.ts outputWorth.) At 0 the air staffs choose their raids as they always did, and the damage is a consequence of the raids they fly; at 100, in 16 grand wars nobody played (stop 3, seeds 17 to 32), they bombed towns more and Germany fell about four months sooner, so it stays 0 until a ruling asks for more."
+    },
+    most: 80,
+    raid: { full: 300, points: 12, night: 2 },
+    town: { points: 10 },
+    shell: { points: 6, cityPoints: 10, cityFull: 250 },
+    guns: { perDiv: 1.5, most: 6 },
+    battle: { field: 2, streets: 6, storm: 10, repulsed: 5, guns: 1, gunsMost: 4, full: 12 },
+    repair: { months: 4, least: 0.5 },
+    ai: { share: 0.25, reserve: 16, quiet: 2 },
+    worth: 0
+  };
+
+  // ../../src/campaign/citydamage.ts
+  var DAMAGE = damage_default;
+  var damageRules = (g2) => g2.flags.open === 1 && g2.flags.damage === 1;
+  function openDamage(g2, on = true) {
+    if (g2.flags.open !== 1) return;
+    if (on) g2.flags.damage = 1;
+    else delete g2.flags.damage;
+  }
+  var KEYS = [];
+  var HIT = [];
+  var damageKey = (id) => KEYS[id] ?? (KEYS[id] = `dmg:${id}`);
+  var hitKey = (id) => HIT[id] ?? (HIT[id] = `dmgt:${id}`);
+  function damageOf(g2, r) {
+    if (!g2.flags["dmg:any"] || !damageRules(g2)) return 0;
+    const p = g2.flags[damageKey(r.id)];
+    return p === void 0 ? 0 : p / 100;
+  }
+  var keepOf = (g2, r) => 1 - damageOf(g2, r);
+  var lastHit = (g2, r) => g2.flags[hitKey(r.id)];
+  function damageCity(g2, r, pts) {
+    if (!damageRules(g2) || !(pts > 0)) return 0;
+    const was = g2.flags[damageKey(r.id)] ?? 0;
+    const now = Math.round(Math.min(DAMAGE.most, was + pts) * 10) / 10;
+    if (now <= was) return 0;
+    g2.flags[damageKey(r.id)] = now;
+    g2.flags[hitKey(r.id)] = g2.turn;
+    g2.flags["dmg:any"] = 1;
+    return Math.round((now - was) * 10) / 10;
+  }
+  function setDamage(g2, r, pct11) {
+    const p = Math.round(Math.min(DAMAGE.most, Math.max(0, pct11)) * 10) / 10;
+    if (p <= 0) {
+      delete g2.flags[damageKey(r.id)];
+      delete g2.flags[hitKey(r.id)];
+      return;
+    }
+    g2.flags[damageKey(r.id)] = p;
+    g2.flags["dmg:any"] = 1;
+  }
+  var clamp01 = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x;
+  var raidPoints = (through2, stopped, night) => DAMAGE.raid.points * clamp01(through2 * (night ? DAMAGE.raid.night : 1) * (1 - clamp01(stopped)) / DAMAGE.raid.full);
+  var townRaidPoints = (share) => DAMAGE.town.points * clamp01(share);
+  var shellPoints = (share) => DAMAGE.shell.points * clamp01(share);
+  var shellCityPoints = (guns2) => DAMAGE.shell.cityPoints * clamp01(guns2 / DAMAGE.shell.cityFull);
+  var siegeGunPoints = (weight5) => Math.min(DAMAGE.guns.most, DAMAGE.guns.perDiv * Math.max(0, weight5));
+  function battlePoints(kind, divs, guns2) {
+    const B2 = DAMAGE.battle;
+    const size = Math.max(0.25, clamp01(divs / B2.full));
+    return (B2[kind] + Math.min(B2.gunsMost, B2.guns * Math.max(0, guns2))) * size;
+  }
+  function damageWords(name, added, now) {
+    const pct11 = (x) => `${x < 1 ? "<1" : Math.round(x)}%`;
+    return `${name} took ${pct11(added)} more damage and is now ${pct11(now)} in ruins: its factories and its pay are down by as much until it is repaired.`;
+  }
+
   // ../../src/generated/campaign-rivers.json
   var campaign_rivers_default = { rivers: [{ name: "Rhine", pts: [[518.9, 949.6], [478, 953.6], [477.7, 932], [483.4, 912.8], [496.2, 896], [500.3, 876.4], [495.5, 856], [478.2, 841.6], [465.4, 826.8], [461.8, 818.4], [456.9, 807.2], [453, 789.6], [433.8, 782], [414, 780], [398, 779.2], [388.2, 776.8]], ll: [[47.66, 9.18], [47.56, 7.59], [48.1, 7.58], [48.58, 7.8], [49, 8.3], [49.49, 8.46], [50, 8.27], [50.36, 7.6], [50.73, 7.1], [50.94, 6.96], [51.22, 6.77], [51.66, 6.62], [51.85, 5.87], [51.9, 5.1], [51.92, 4.48], [51.98, 4.1]] }, { name: "Meuse", pts: [[426.8, 940], [425.5, 912], [421.2, 889.6], [409.8, 868], [404.2, 865.2], [406.8, 850.8], [408, 837.2], [426, 830.8], [429.1, 822], [441.5, 801.2], [430.4, 785.6], [419.1, 787.2], [401.1, 787.2]], ll: [[47.9, 5.6], [48.6, 5.55], [49.16, 5.38], [49.7, 4.94], [49.77, 4.72], [50.13, 4.82], [50.47, 4.87], [50.63, 5.57], [50.85, 5.69], [51.37, 6.17], [51.76, 5.74], [51.72, 5.3], [51.72, 4.6]] }, { name: "Seine", pts: [[400.3, 942], [387.5, 924], [367.7, 914], [343.2, 901.6], [321.4, 893.2], [311.1, 878.4], [285.7, 876.4]], ll: [[47.85, 4.57], [48.3, 4.07], [48.55, 3.3], [48.86, 2.35], [49.07, 1.5], [49.44, 1.1], [49.49, 0.11]] }, { name: "Loire", pts: [[390.8, 1036], [387.5, 1014.4], [364.1, 976.4], [352.2, 952], [331.9, 940], [300.6, 960.4], [270, 960], [243, 967.2], [226.3, 965.2]], ll: [[45.5, 4.2], [46.04, 4.07], [46.99, 3.16], [47.6, 2.7], [47.9, 1.91], [47.39, 0.69], [47.4, -0.5], [47.22, -1.55], [47.27, -2.2]] }, { name: "Rhone", pts: [[441, 1008], [407.3, 1025.6], [408.6, 1058.8], [406.5, 1098], [401.9, 1108.8], [407.5, 1122.8]], ll: [[46.2, 6.15], [45.76, 4.84], [44.93, 4.89], [43.95, 4.81], [43.68, 4.63], [43.33, 4.85]] }, { name: "Garonne", pts: [[311.1, 1132], [319.9, 1112], [298.8, 1088], [267.9, 1062.4], [255.8, 1032]], ll: [[43.1, 1.1], [43.6, 1.44], [44.2, 0.62], [44.84, -0.58], [45.6, -1.05]] }, { name: "Elbe", pts: [[668.5, 848], [643.8, 829.6], [636.1, 814], [617.1, 793.6], [608.1, 781.2], [581.9, 770.8], [584.9, 736], [539.7, 714], [506.5, 701.2]], ll: [[50.2, 15], [50.66, 14.04], [51.05, 13.74], [51.56, 13], [51.87, 12.65], [52.13, 11.63], [53, 11.75], [53.55, 9.99], [53.87, 8.7]] }, { name: "Oder", pts: [[752.8, 862.4], [743.8, 829.2], [720.7, 811.6], [696.5, 789.6], [668.5, 774], [656.9, 762.4], [659.2, 752.4], [656.9, 718.8], [650.5, 706]], ll: [[49.84, 18.28], [50.67, 17.93], [51.11, 17.03], [51.66, 16.09], [52.05, 15], [52.34, 14.55], [52.59, 14.64], [53.43, 14.55], [53.75, 14.3]] }, { name: "Danube", pts: [[539.7, 920], [593.9, 895.6], [628.9, 913.2], [650.2, 923.6], [703.7, 927.6], [722.8, 930], [748.7, 946], [774.7, 944.8], [772.4, 956], [768.8, 992], [763.4, 1016.4], [793.2, 1046], [808.9, 1063.2], [861.3, 1069.2], [870.8, 1096.4], [912.8, 1106], [950, 1102], [983.7, 1091.2], [1003.5, 1082.4], [1004, 1038.8], [1043.9, 1048]], ll: [[48.4, 9.99], [49.01, 12.1], [48.57, 13.46], [48.31, 14.29], [48.21, 16.37], [48.15, 17.11], [47.75, 18.12], [47.78, 19.13], [47.5, 19.04], [46.6, 18.9], [45.99, 18.69], [45.25, 19.85], [44.82, 20.46], [44.67, 22.5], [43.99, 22.87], [43.75, 24.5], [43.85, 25.95], [44.12, 27.26], [44.34, 28.03], [45.43, 28.05], [45.2, 29.6]] }, { name: "Po", pts: [[480.5, 1053.2], [532.2, 1054], [540.5, 1050.8], [565.7, 1058], [581.1, 1060], [601.6, 1058]], ll: [[45.07, 7.69], [45.05, 9.7], [45.13, 10.02], [44.95, 11], [44.9, 11.6], [44.95, 12.4]] }, { name: "Ebro", pts: [[207, 1148.8], [219.8, 1157.2], [260.2, 1190], [282.8, 1206], [296.2, 1223.6], [305.2, 1227.2]], ll: [[42.68, -2.95], [42.47, -2.45], [41.65, -0.88], [41.25, 0], [40.81, 0.52], [40.72, 0.87]] }, { name: "Douro", pts: [[218.5, 1192], [162, 1194], [135, 1196], [102.8, 1210], [61.5, 1210.4]], ll: [[41.6, -2.5], [41.55, -4.7], [41.5, -5.75], [41.15, -7], [41.14, -8.61]] }, { name: "Tagus", pts: [[231.4, 1240], [190.3, 1254.8], [179.5, 1261.6], [158.6, 1257.6], [105.7, 1267.2], [77.1, 1278], [59.7, 1286.4], [47.8, 1307.2]], ll: [[40.4, -2], [40.03, -3.6], [39.86, -4.02], [39.96, -4.83], [39.72, -6.89], [39.45, -8], [39.24, -8.68], [38.72, -9.14]] }, { name: "Guadalquivir", pts: [[195.4, 1336], [159.9, 1340.8], [128.8, 1360.8], [119.6, 1384.8]], ll: [[38, -3.4], [37.88, -4.78], [37.38, -5.99], [36.78, -6.35]] }, { name: "Vistula", pts: [[795.5, 853.6], [842.1, 828.8], [844.6, 793.6], [823, 766.8], [789.3, 754], [761.1, 735.6], [748.2, 731.2], [764.9, 716.8], [766.2, 692.4], [770.1, 681.6]], ll: [[50.06, 19.94], [50.68, 21.75], [51.56, 21.85], [52.23, 21.01], [52.55, 19.7], [53.01, 18.6], [53.12, 18.1], [53.48, 18.75], [54.09, 18.8], [54.36, 18.95]] }, { name: "Bug", pts: [[902.5, 832], [892.2, 808], [891.9, 772.4], [869, 760], [848.5, 748], [825.3, 756]], ll: [[50.6, 24.1], [51.2, 23.7], [52.09, 23.69], [52.4, 22.8], [52.7, 22], [52.5, 21.1]] }, { name: "Niemen", pts: [[969.3, 716], [895.5, 708.8], [899.9, 688], [897.3, 660], [845.4, 652.8], [830.5, 644]], ll: [[53.5, 26.7], [53.68, 23.83], [54.2, 24], [54.9, 23.9], [55.08, 21.88], [55.3, 21.3]] }, { name: "Dvina", pts: [[1100.5, 624], [1059.3, 648.4], [1023.1, 636.4], [965, 621.2], [948, 596], [902.7, 578], [900.7, 573.6]], ll: [[55.8, 31.8], [55.19, 30.2], [55.49, 28.79], [55.87, 26.53], [56.5, 25.87], [56.95, 24.11], [57.06, 24.03]] }, { name: "Berezina", pts: [[1007.9, 660], [1015.6, 686.8], [1034.1, 730.4], [1060.6, 754]], ll: [[54.9, 28.2], [54.23, 28.5], [53.14, 29.22], [52.55, 30.25]] }, { name: "Pripet", pts: [[920.5, 780], [953.9, 771.6], [1034.9, 774], [1067, 808]], ll: [[51.9, 24.8], [52.11, 26.1], [52.05, 29.25], [51.2, 30.5]] }, { name: "Dnieper", pts: [[1141.6, 648], [1106.9, 664.8], [1065, 675.6], [1062.9, 700], [1055.5, 732.8], [1069.6, 776], [1067.5, 838], [1107.1, 878.4], [1142.1, 893.2], [1184, 917.6], [1186.3, 942.4], [1167.3, 953.2], [1121.3, 990.4], [1105.6, 996]], ll: [[55.2, 33.4], [54.78, 32.05], [54.51, 30.42], [53.9, 30.34], [53.08, 30.05], [52, 30.6], [50.45, 30.52], [49.44, 32.06], [49.07, 33.42], [48.46, 35.05], [47.84, 35.14], [47.57, 34.4], [46.64, 32.61], [46.5, 32]] }, { name: "Desna", pts: [[1166.5, 726], [1138.2, 776], [1087.6, 796], [1068.3, 834]], ll: [[53.25, 34.37], [52, 33.27], [51.5, 31.3], [50.55, 30.55]] }, { name: "Dniester", pts: [[899.9, 888], [964.2, 916], [997.6, 918], [1028.5, 952], [1044.7, 982.4], [1064.5, 1008]], ll: [[49.2, 24], [48.5, 26.5], [48.45, 27.8], [47.6, 29], [46.84, 29.63], [46.2, 30.4]] }, { name: "Prut", pts: [[949.8, 924.4], [982.2, 940], [997.6, 968], [1006.6, 1004], [1007.9, 1037.2]], ll: [[48.29, 25.94], [47.9, 27.2], [47.2, 27.8], [46.3, 28.15], [45.47, 28.2]] }, { name: "Donets", pts: [[1223.9, 832], [1231.6, 868], [1240.6, 888], [1270.1, 900], [1301, 912], [1324.1, 940], [1334.4, 952]], ll: [[50.6, 36.6], [49.7, 36.9], [49.2, 37.25], [48.9, 38.4], [48.6, 39.6], [47.9, 40.5], [47.6, 40.9]] }, { name: "Don", pts: [[1283, 716], [1285.6, 752], [1285.6, 792], [1313.9, 838], [1352.4, 864], [1381.5, 872.8], [1402, 908.4], [1365.3, 950], [1334.4, 956], [1304.1, 967.2], [1293.3, 972]], ll: [[53.5, 38.9], [52.6, 39], [51.6, 39], [50.45, 40.1], [49.8, 41.6], [49.58, 42.73], [48.69, 43.53], [47.65, 42.1], [47.5, 40.9], [47.22, 39.72], [47.1, 39.3]] }, { name: "Oka", pts: [[1210.2, 737.2], [1215.1, 675.6], [1244.4, 659.2], [1279.1, 652], [1304.6, 670.8], [1364, 633.2], [1414.1, 602.8]], ll: [[52.97, 36.07], [54.51, 36.26], [54.92, 37.4], [55.1, 38.75], [54.63, 39.74], [55.57, 42.05], [56.33, 44]] }, { name: "Upper Volga", pts: [[1165.5, 605.6], [1206.1, 581.6], [1247, 556], [1281.5, 534], [1307.9, 550.8], [1349.9, 560], [1414.1, 602.8], [1491.3, 612]], ll: [[56.26, 34.33], [56.86, 35.91], [57.5, 37.5], [58.05, 38.84], [57.63, 39.87], [57.4, 41.5], [56.33, 44], [56.1, 47]] }, { name: "Volga", pts: [[1491.3, 756], [1466.3, 794.8], [1450.1, 852.8], [1427.2, 907.6], [1465.6, 936], [1491.3, 968]], ll: [[52.5, 47], [51.53, 46.03], [50.08, 45.4], [48.71, 44.51], [48, 46], [47.2, 47]] }, { name: "Volkhov", pts: [[1086.8, 515.2], [1103, 480], [1113.3, 452]], ll: [[58.52, 31.27], [59.4, 31.9], [60.1, 32.3]] }, { name: "Svir", pts: [[1195.6, 416], [1145.4, 426.8], [1128.7, 436]], ll: [[61, 35.5], [60.73, 33.55], [60.5, 32.9]] }, { name: "Terek", pts: [[1431.4, 1134], [1430.8, 1106.4], [1483.8, 1102], [1491.3, 1112]], ll: [[43.05, 44.67], [43.74, 44.65], [43.85, 46.71], [43.6, 47]] }, { name: "Sava", pts: [[655.6, 1014], [693.7, 1024], [745.6, 1050], [779.1, 1060], [808.6, 1063.2]], ll: [[46.05, 14.5], [45.8, 15.98], [45.15, 18], [44.9, 19.3], [44.82, 20.45]] }, { name: "Tisza", pts: [[871.6, 932], [833.1, 931.2], [802.2, 968.8], [800.9, 1006], [804.3, 1050.4]], ll: [[48.1, 22.9], [48.12, 21.4], [47.18, 20.2], [46.25, 20.15], [45.14, 20.28]] }, { name: "Maritsa", pts: [[919.2, 1170], [948.8, 1178.8], [965.7, 1189.2], [960.3, 1208], [952.1, 1226.8]], ll: [[42.15, 24.75], [41.93, 25.9], [41.67, 26.56], [41.2, 26.35], [40.73, 26.03]] }, { name: "Nile", pts: [[1076, 1712], [1085.8, 1654], [1078.6, 1624], [1063.7, 1597.6]], ll: [[28.6, 30.85], [30.05, 31.23], [30.8, 30.95], [31.46, 30.37]] }, { name: "Euphrates", pts: [[1259.9, 1384], [1285.6, 1420], [1314.9, 1442.8], [1337, 1480], [1396.1, 1519.2], [1425.2, 1556.8], [1472, 1614], [1491.3, 1620]], ll: [[36.8, 38], [35.9, 39], [35.33, 40.14], [34.4, 41], [33.42, 43.3], [32.48, 44.43], [31.05, 46.25], [30.9, 47]] }, { name: "Tigris", pts: [[1317.5, 1339.6], [1367.9, 1364], [1391.8, 1402.4], [1406.4, 1472], [1424.4, 1522.8], [1460.4, 1556], [1491.3, 1576]], ll: [[37.91, 40.24], [37.3, 42.2], [36.34, 43.13], [34.6, 43.7], [33.33, 44.4], [32.5, 45.8], [32, 47]] }, { name: "Aras", pts: [[1403.8, 1252], [1434.7, 1272], [1470.7, 1300], [1491.3, 1284]], ll: [[40.1, 43.6], [39.6, 44.8], [38.9, 46.2], [39.3, 47]] }], crossings: [[0, 16, 6, 610.8, 784.9], [0, 22, 7, 658.1, 757.2], [1, 4, 6, 546, 717], [4, 18, 6, 582.1, 768.1], [6, 7, 0, 459.3, 812.8], [6, 99, 1, 438.3, 796.8], [7, 10, 0, 476.6, 839.8], [7, 99, 1, 437.9, 807.2], [8, 10, 0, 486.5, 848.5], [9, 10, 0, 497.7, 865.1], [9, 11, 0, 488.4, 906.2], [9, 12, 0, 496.5, 894.7], [11, 67, 0, 482.7, 915], [12, 13, 8, 548.8, 915.9], [13, 14, 8, 574, 904.6], [14, 31, 8, 618.5, 908], [17, 34, 6, 645.9, 831.1], [19, 20, 7, 650.5, 706], [22, 24, 7, 694.5, 788.5], [27, 39, 14, 765.2, 711.7], [27, 40, 14, 767, 690.1], [28, 138, 16, 866.8, 655.8], [30, 175, 8, 746.2, 944.5], [35, 43, 7, 751.5, 857.5], [36, 45, 14, 840.5, 788.5], [36, 48, 15, 865.6, 758], [36, 49, 15, 849.2, 748.4], [37, 41, 14, 794.8, 756.1], [44, 45, 14, 843.4, 810.6], [44, 46, 14, 834.1, 833], [45, 48, 15, 892, 788.9], [45, 52, 15, 895, 814.5], [47, 184, 22, 924.4, 898.7], [49, 50, 16, 898.8, 709.1], [50, 51, 16, 947.5, 713.9], [53, 72, 2, 346.4, 903.2], [57, 58, 2, 291.2, 876.8], [57, 74, 2, 319.8, 891], [62, 79, 3, 251.3, 965], [64, 94, 1, 409.8, 868], [64, 100, 1, 413.4, 874.7], [68, 70, 1, 426.1, 924], [70, 75, 3, 356.7, 961.2], [71, 77, 3, 380.2, 1002.6], [76, 77, 3, 389.2, 1025.3], [83, 84, 4, 404.1, 1114.3], [86, 87, 4, 439.6, 1008.8], [89, 92, 1, 413.7, 835.2], [93, 94, 1, 407, 848.4], [95, 99, 0, 413.9, 780], [96, 99, 1, 407.1, 787.2], [97, 99, 0, 429.4, 781.6], [140, 142, 9, 520.3, 1053.8], [140, 144, 9, 545.3, 1052.2], [143, 144, 9, 577.2, 1059.5], [159, 168, 12, 162.5, 1258.3], [167, 169, 13, 159.1, 1341.3], [175, 176, 8, 770.7, 973.2], [175, 177, 33, 814.9, 953.4], [175, 181, 33, 801.6, 985.3], [176, 192, 8, 764.7, 1010.6], [178, 196, 8, 932.6, 1103.9], [178, 198, 8, 967.1, 1096.5], [182, 187, 8, 863.1, 1074.5], [182, 193, 8, 870.6, 1095.7], [182, 196, 8, 891.2, 1101.1], [183, 185, 23, 1e3, 977.6], [183, 220, 22, 1004.8, 925.9], [184, 220, 22, 976.7, 916.7], [185, 186, 8, 1016.8, 1041.7], [185, 220, 22, 1022.8, 945.7], [185, 221, 22, 1044.3, 981.7], [187, 192, 8, 805.1, 1059], [188, 189, 32, 682.9, 1021.2], [190, 192, 32, 776.1, 1059.1], [204, 205, 34, 959.9, 1209], [209, 234, 29, 1106.7, 469.8], [212, 214, 18, 1014.6, 683.2], [212, 226, 17, 1088.1, 631.3], [214, 215, 18, 1021.8, 701.4], [216, 218, 19, 1049.7, 789.6], [219, 222, 20, 1068.3, 814.3], [219, 241, 20, 1088, 858.9], [219, 248, 20, 1101, 872.1], [223, 248, 20, 1130.3, 888.2], [224, 225, 27, 1211.7, 578.1], [224, 229, 26, 1253.5, 657.3], [228, 239, 26, 1212.4, 709.4], [231, 237, 27, 1353.5, 562.4], [234, 305, 30, 1159.7, 423.7], [240, 242, 25, 1285.6, 788], [242, 257, 25, 1314.1, 838.1], [246, 257, 25, 1344.7, 858.8], [246, 258, 25, 1381.4, 872.8], [248, 249, 20, 1148.6, 897], [249, 250, 20, 1168.6, 908.6], [249, 251, 20, 1173.9, 949.5], [251, 252, 20, 1144.6, 971.6], [256, 257, 24, 1316.4, 930.6], [256, 262, 25, 1322.7, 960.3], [256, 263, 25, 1293.3, 972], [258, 262, 25, 1368.2, 946.7], [258, 371, 25, 1398.6, 902.5], [259, 260, 28, 1438.2, 881.4], [259, 372, 28, 1460, 931.9], [267, 268, 31, 1430.9, 1111.1], [273, 290, 38, 1442.3, 1277.9], [274, 290, 38, 1468.5, 1298.3], [286, 288, 36, 1262.5, 1387.6], [350, 351, 35, 1081.3, 1635.2], [350, 352, 35, 1075.5, 1618.5]] };
 
@@ -16721,6 +16801,214 @@
     return out;
   }
 
+  // ../../src/campaign/repairs.ts
+  var POOR = "The treasury cannot cover it.";
+  var tenth = (x) => Math.round(x * 10) / 10;
+  function lostPay(g2, r, nat = r.ctrl) {
+    const d = damageOf(g2, r);
+    if (d <= 0) return 0;
+    const y = provinceYield(g2, r, nat, true);
+    const parts2 = y.fac + y.land + y.port + y.capital;
+    return parts2 / (1 - d) * d + townMoney(g2, r, nat) * d;
+  }
+  function wholePay(g2, r, nat = r.ctrl) {
+    const d = damageOf(g2, r);
+    const y = provinceYield(g2, r, nat, true);
+    return (y.fac + y.land + y.port + y.capital) / (1 - d) + townMoney(g2, r, nat);
+  }
+  function hitPoints(kind, weight5, stopped = 0, night = false) {
+    return kind === "raid" ? raidPoints(weight5, stopped, night) : kind === "town" ? townRaidPoints(weight5) : kind === "shell" ? shellPoints(weight5) : kind === "shellCity" ? shellCityPoints(weight5) : siegeGunPoints(weight5);
+  }
+  function cityWorthOf(g2, r, pts) {
+    if (!damageRules(g2) || pts <= 0 || !DAMAGE.worth) return 0;
+    const room2 = Math.max(0, Math.min(pts, DAMAGE.most - damageOf(g2, r) * 100));
+    return room2 / 100 * wholePay(g2, r) * DAMAGE.worth;
+  }
+  function cityForecast(g2, r, kind, weight5, stopped = 0, night = false) {
+    if (!damageRules(g2)) return 0;
+    return Math.max(0, Math.min(hitPoints(kind, weight5, stopped, night), DAMAGE.most - damageOf(g2, r) * 100));
+  }
+  function cityHit(g2, r, kind, weight5, stopped = 0, night = false) {
+    if (!damageRules(g2)) return null;
+    return hurt(g2, r, hitPoints(kind, weight5, stopped, night));
+  }
+  function battleHit(g2, r, kind, divs, guns2) {
+    if (!damageRules(g2)) return null;
+    return hurt(g2, r, battlePoints(kind, divs, guns2));
+  }
+  function hurt(g2, r, pts) {
+    const pay = DAMAGE.worth ? wholePay(g2, r) : 0;
+    const added = damageCity(g2, r, pts);
+    if (added <= 0) return null;
+    const now = g2.flags[damageKey(r.id)] ?? 0;
+    return { region: r.id, added, now, worth: added / 100 * pay * DAMAGE.worth, words: damageWords(townName(r), added, now) };
+  }
+  function repairCost(g2, r, nat = r.ctrl) {
+    if (damageOf(g2, r) <= 0) return 0;
+    return Math.max(DAMAGE.repair.least, tenth(lostPay(g2, r, nat) * DAMAGE.repair.months));
+  }
+  function repairGain(g2, nat, regions) {
+    const ids2 = regions.filter((id) => g2.flags[damageKey(id)] !== void 0);
+    if (!ids2.length) return 0;
+    const now = income(g2, nat);
+    const kept2 = ids2.map((id) => g2.flags[damageKey(id)]);
+    for (const id of ids2) g2.flags[damageKey(id)] = 0;
+    try {
+      return Math.max(0, income(g2, nat) - now);
+    } finally {
+      ids2.forEach((id, i) => {
+        g2.flags[damageKey(id)] = kept2[i];
+      });
+    }
+  }
+  function whyNotWork(g2, nat, r) {
+    if (!damageRules(g2)) return "Towns are damaged and repaired only in the grand campaign, with damaged cities switched on.";
+    if (!r) return "There is no such place.";
+    const name = townName(r);
+    if (damageOf(g2, r) <= 0) return `${name} stands undamaged.`;
+    const n = g2.nations[nat];
+    if (!n?.alive) return "A fallen country repairs nothing.";
+    if (r.ctrl !== nat) return `${name} is not yours to repair.`;
+    if (besieged(g2, r)) return `${name} is under siege: no work can be done there until the ring is broken.`;
+    return null;
+  }
+  function whyNotRepair(g2, nat, region) {
+    const r = g2.regions[region];
+    const why = whyNotWork(g2, nat, r);
+    if (why) return why;
+    return g2.nations[nat].pp < repairCost(g2, r, nat) ? POOR : null;
+  }
+  function repairView(g2, region, viewer = g2.human) {
+    const r = g2.regions[region];
+    if (!r) return null;
+    const d = damageOf(g2, r);
+    const undo = viewer !== null && undoable(g2, viewer, r);
+    if (d <= 0 && !undo) return null;
+    const nat = viewer ?? r.ctrl;
+    const mine4 = r.ctrl === nat;
+    const cost = d > 0 ? repairCost(g2, r, r.ctrl) : 0;
+    const lost = mine4 && d > 0 ? repairGain(g2, nat, [r.id]) : 0;
+    const why = viewer === null ? "Only the country that holds a town repairs it." : d > 0 ? whyNotRepair(g2, viewer, region) : `${townName(r)} was repaired this month.`;
+    return {
+      region,
+      town: townName(r),
+      province: r.name,
+      size: townSize(g2, r),
+      damage: d,
+      pct: Math.round(d * 100),
+      holder: r.ctrl,
+      lost,
+      cost,
+      months: lost > 0 ? tenth(cost / lost) : 0,
+      hit: lastHit(g2, r) === g2.turn,
+      why,
+      poor: why === POOR,
+      undo
+    };
+  }
+  function damagedTowns(g2, nat) {
+    if (!damageRules(g2) || !g2.flags["dmg:any"]) return [];
+    const out = [];
+    for (const r of g2.regions) if (r.ctrl === nat && damageOf(g2, r) > 0) out.push(repairView(g2, r.id, nat));
+    return out.sort((a, b) => b.lost - a.lost || b.pct - a.pct || a.region - b.region);
+  }
+  function townsDamaged(g2) {
+    if (!damageRules(g2) || !g2.flags["dmg:any"]) return [];
+    const out = [];
+    for (const r of g2.regions) {
+      const d = damageOf(g2, r);
+      if (d > 0) out.push({ region: r.id, town: townName(r), damage: d, holder: r.ctrl, hit: lastHit(g2, r) === g2.turn });
+    }
+    return out;
+  }
+  function repairAllPlan(g2, nat) {
+    const towns2 = damagedTowns(g2, nat);
+    const pick4 = [];
+    let left = g2.nations[nat]?.pp ?? 0, cost = 0, all = 0, short = 0;
+    for (const t of towns2) {
+      if (t.why && !t.poor) continue;
+      all += t.cost;
+      if (t.cost <= left) {
+        pick4.push(t);
+        left -= t.cost;
+        cost += t.cost;
+      } else short++;
+    }
+    return { towns: towns2, pick: pick4, cost: tenth(cost), gain: repairGain(g2, nat, pick4.map((t) => t.region)), all: tenth(all), short };
+  }
+  var undoable = (g2, nat, r) => nat === g2.human && g2.flags[`rpt:${r.id}`] === g2.turn && r.ctrl === nat;
+  function forget(g2, id) {
+    for (const k of ["rpt", "rpc", "rpo", "rph"]) delete g2.flags[`${k}:${id}`];
+  }
+  function repairCity(g2, nat, region) {
+    if (whyNotRepair(g2, nat, region)) return false;
+    const r = g2.regions[region];
+    const cost = repairCost(g2, r, nat);
+    const was = g2.flags[damageKey(r.id)] ?? 0, hit = lastHit(g2, r);
+    g2.nations[nat].pp -= cost;
+    setDamage(g2, r, 0);
+    if (nat === g2.human) {
+      for (const k of Object.keys(g2.flags)) if (k.startsWith("rpt:") && g2.flags[k] !== g2.turn) forget(g2, Number(k.slice(4)));
+      forget(g2, r.id);
+      g2.flags[`rpt:${r.id}`] = g2.turn;
+      g2.flags[`rpc:${r.id}`] = cost;
+      g2.flags[`rpo:${r.id}`] = was;
+      if (hit !== void 0) g2.flags[`rph:${r.id}`] = hit;
+    }
+    return true;
+  }
+  function undoRepair(g2, nat, region) {
+    const r = g2.regions[region];
+    if (!r || !undoable(g2, nat, r)) return false;
+    g2.nations[nat].pp += g2.flags[`rpc:${r.id}`] ?? 0;
+    setDamage(g2, r, g2.flags[`rpo:${r.id}`] ?? 0);
+    const hit = g2.flags[`rph:${r.id}`];
+    if (hit !== void 0) g2.flags[`dmgt:${r.id}`] = hit;
+    forget(g2, r.id);
+    return true;
+  }
+  function repairAll(g2, nat) {
+    const done = [];
+    for (const t of repairAllPlan(g2, nat).pick) if (repairCity(g2, nat, t.region)) done.push(t.town);
+    return done;
+  }
+  var repairPays = (cost, lost) => cost <= tenth(lost * DAMAGE.repair.months);
+  function aiRepair(g2, nat) {
+    if (!damageRules(g2) || !g2.flags["dmg:any"]) return [];
+    const n = g2.nations[nat];
+    if (!n?.alive) return [];
+    if (nat === g2.human && byHand(g2, nat, "build")) return [];
+    const P = `rpp:${nat}`;
+    const towns2 = [];
+    for (const r of g2.regions) {
+      if (r.ctrl !== nat || damageOf(g2, r) <= 0) continue;
+      const cost = repairCost(g2, r, nat), lost = lostPay(g2, r, nat);
+      if (repairPays(cost, lost)) towns2.push({ r, cost, lost });
+    }
+    if (!towns2.length) {
+      delete g2.flags[P];
+      return [];
+    }
+    const all = towns2.reduce((s, t) => s + t.cost, 0);
+    let purse = Math.min(all, (g2.flags[P] ?? 0) + Math.max(0, income(g2, nat)) * DAMAGE.ai.share);
+    towns2.sort((a, b) => b.lost - a.lost || a.r.id - b.r.id);
+    const foes = new Set(n.atWar);
+    const done = [];
+    for (const t of towns2) {
+      const hit = lastHit(g2, t.r);
+      if (hit !== void 0 && g2.turn - hit < DAMAGE.ai.quiet || besieged(g2, t.r) || t.r.nb.some((j) => foes.has(g2.regions[j].ctrl))) continue;
+      if (t.cost > purse || n.pp < t.cost + DAMAGE.ai.reserve) continue;
+      n.pp -= t.cost;
+      purse -= t.cost;
+      setDamage(g2, t.r, 0);
+      done.push(townName(t.r));
+    }
+    const kept2 = Math.round(purse * 100) / 100;
+    if (kept2 >= 0.01) g2.flags[P] = kept2;
+    else delete g2.flags[P];
+    return done;
+  }
+
   // ../../src/campaign/siege.ts
   var SIEGE = siege_default;
   var siegeRules = (g2) => g2.flags.sieges === 1;
@@ -17348,6 +17636,7 @@
       if (weight5 > 0) {
         breach(g2, r, SIEGE.breach.gun * weight5);
         for (const c of garrisonOf(r)) c.org = Math.max(0.15, c.org - 0.03 * Math.min(4, weight5));
+        cityHit(g2, r, "guns", weight5);
       }
       if (ringClosed(g2, r) && !fed(g2, r)) g2.flags[`sgm:${r.id}`] = monthsShut(g2, r) + 1;
       siegeEnds(g2, r, by2);
@@ -17491,8 +17780,8 @@
   var NONE2 = [];
   var railsAt = (r) => NET.get(r) ?? NONE2;
   var onNet = (r) => NET.has(r);
-  var KEYS = [];
-  var key2 = (r) => KEYS[r] ?? (KEYS[r] = `rail:${r}`);
+  var KEYS2 = [];
+  var key2 = (r) => KEYS2[r] ?? (KEYS2[r] = `rail:${r}`);
   var railCut = (g2, r) => groundRules(g2) && g2.flags[key2(r)] !== void 0;
   var cutOn = (g2, r) => groundRules(g2) ? g2.flags[key2(r)] : void 0;
   var CAUSES = ["bombed", "agent", "saboteurs", "retreat", "hasty", "order"];
@@ -24409,6 +24698,7 @@
     const before = { ...f.ships };
     const defNat = r.ctrl;
     let cut2 = 0, divs = 0, output = 0, nation = 0, works, result;
+    let city = null;
     if (what === "troops") {
       const foes = foesAt(g2, r, f.nat);
       const base = shellCut(r, foes, plan.guns) * rng.range(0.85, 1.15);
@@ -24426,12 +24716,15 @@
       cut2 = hit.org;
       divs = hit.divs;
       result = townHitText(g2, r, hit, "shells", true);
+      city = cityHit(g2, r, "shell", hit.share);
     } else {
       output = plan.output;
       nation = plan.nation;
       raid(g2, f.nat, r.ctrl, nation);
       result = output > 0 ? `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g2.nations[r.ctrl].adj} production.` : "";
+      city = cityHit(g2, r, "shellCity", plan.guns);
     }
+    if (city) result = `${result} ${city.words}`.trim();
     const sunk = plan.reply > 0 ? sinkShips(f, plan.reply, rng, ["ca", "dd"]) : none();
     if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
     f.shelled = g2.turn;
@@ -24461,6 +24754,7 @@
       result
     };
     if (works !== void 0) rep.works = works;
+    if (city) rep.city = { region: city.region, added: city.added, now: city.now };
     g2.shoreReports.push(rep);
     const adj = g2.nations[defNat].adj;
     const news3 = what === "troops" ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : what === "town" ? `The ${f.name} shells the defences of ${townName(r)} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}`;
@@ -28543,14 +28837,14 @@
     const building2 = n.queue.filter((b) => b.what === "ship" && b.item === "tp").map((b) => b.eta).sort((a, b) => a - b);
     return { lift: n.sealift, left: liftLeft(g2, nat), building: building2, room: Math.max(0, ARSENAL.lift.most - liftBought(g2, nat)) };
   }
-  var POOR = "The treasury cannot cover it.";
+  var POOR2 = "The treasury cannot cover it.";
   function offers(g2, nat, sel = -1) {
-    return listOffers(g2, nat, sel).map((o) => ({ ...o, poor: o.why === POOR }));
+    return listOffers(g2, nat, sel).map((o) => ({ ...o, poor: o.why === POOR2 }));
   }
   function listOffers(g2, nat, sel) {
     const n = g2.nations[nat];
     const out = [];
-    const poor = (cost) => n.pp < cost ? POOR : null;
+    const poor = (cost) => n.pp < cost ? POOR2 : null;
     const noMen = (divs) => raisable(g2, nat, divs) < 1 ? `The reserve has not the men: this takes ${menWords(divs * MEN_PER_DIV)} and ${menWords(menLeft(g2, nat) * MEN_PER_DIV)} are left. ${menWords(classNow(g2, nat, govMul(g2, nat, "men")) * MEN_PER_DIV)} come of age each month.` : null;
     const menFor = (divs) => menRules(g2) ? { men: divs * MEN_PER_DIV } : {};
     const r = g2.regions[sel];
@@ -29396,7 +29690,7 @@
     const size = townSize(g2, r);
     const [x, y] = townSite(region);
     const worth3 = worthOf(g2, r);
-    return {
+    const view3 = {
       region,
       name: townName(r),
       province: r.name,
@@ -29412,6 +29706,9 @@
       factories: r.fac,
       vp: r.vp
     };
+    const d = damageOf(g2, r);
+    if (d > 0) view3.damage = d;
+    return view3;
   }
   var townsOf = (g2) => g2.regions.map((r) => townAt(g2, r.id));
   var listed4 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
@@ -29529,14 +29826,15 @@
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
     const pct11 = (x) => `${Math.round(x * 1e3) / 10}%`;
-    if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED))} more a month`);
+    const keep = keepOf(g2, r);
+    if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED) * keep)} more a month`);
     if (l.trade) bits.push(`trade agreements worth ${pct11(l.trade)} more`);
     if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
     if (l.research) bits.push(`research ${pct11(l.research)} faster`);
     if (l.xp) bits.push("corps raised here start more experienced");
     if (l.drafts) bits.push(`replacements ${pct11(l.drafts)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct11(l.rest)} faster`);
-    if (own && l.tax) bits.push(`${cash(l.tax)} more tax a month`);
+    if (own && l.tax) bits.push(`${cash(l.tax * keep)} more tax a month`);
     if (own && l.pc) bits.push(`${l.pc.toFixed(2)} political capital a month`);
     if (!own && l.occupiedShare) bits.push(`the province pays ${pct11(l.occupiedShare)} more of its worth`);
     const s = bits.join(", ");
@@ -29548,14 +29846,15 @@
     const bits = [];
     const cash = (x) => `${Math.round(x * 100)}`;
     const pct11 = (x) => `${Math.round(x * 1e3) / 10}%`;
-    if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share)} a month`);
+    const keep = keepOf(g2, r);
+    if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep)} a month`);
     if (own && l.trade) bits.push(`trade agreements worth ${pct11(l.trade * lv)} more`);
     if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
     if (own && l.research) bits.push(`research ${pct11(l.research * lv)} faster`);
     if (own && l.xp) bits.push("corps raised here start more experienced");
     if (own && l.drafts) bits.push(`replacements ${pct11(l.drafts * lv)} faster`);
     if (l.rest) bits.push(`corps resting here or beside it recover ${pct11(l.rest * lv)} faster`);
-    if (own && l.tax) bits.push(`${cash(l.tax * lv)} tax a month`);
+    if (own && l.tax) bits.push(`${cash(l.tax * lv * keep)} tax a month`);
     if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
     if (!own && l.occupiedShare) bits.push(`the province pays ${pct11(l.occupiedShare * lv)} more of its worth`);
     if (!bits.length) return "Stands idle under occupation.";
@@ -29636,11 +29935,12 @@
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       const own = r.owner === nat;
+      const keep = keepOf(g2, r);
       for (const l of CIVIC.lines) {
         const lv = g2.flags[key3(l.id, r.id)] ?? 0;
         if (lv <= 0) continue;
         s.count++;
-        if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED);
+        if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED) * keep;
         if (l.sup) {
           if (keeps) s.sup += l.sup * lv * (own ? 1 : OCCUPIED);
           else s.farms += (l.moneyElse ?? 0) * lv * (own ? 1 : OCCUPIED);
@@ -29650,7 +29950,7 @@
         if (l.house && lv >= l.house && (r.port || g2.nations[nat].capital === r.id)) s.houses++;
         if (l.research) s.research += l.research * lv;
         if (l.drafts) s.drafts += l.drafts * lv;
-        if (l.tax) s.tax += l.tax * lv;
+        if (l.tax) s.tax += l.tax * lv * keep;
         if (l.pc) s.pc += l.pc * lv;
       }
     }
@@ -29660,6 +29960,18 @@
     s.pc = Math.min(C3.pc, s.pc);
     s.houses = Math.min(C3.houses, s.houses);
     return s;
+  }
+  function townMoney(g2, r, nat = r.ctrl) {
+    if (!g2.flags["cv:any"] || !civicRules(g2)) return 0;
+    const own = r.owner === nat;
+    let m = 0;
+    for (const l of CIVIC.lines) {
+      const lv = g2.flags[key3(l.id, r.id)] ?? 0;
+      if (lv <= 0) continue;
+      if (l.money) m += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED);
+      if (own && l.tax) m += l.tax * lv;
+    }
+    return m;
   }
   function civicHouses(g2, nat) {
     if (!g2.flags["cv:any"] || !civicRules(g2)) return 0;
@@ -32218,14 +32530,14 @@
   function tradeHurt(g2, nat, target, through2) {
     const S3 = AIR.damage.shipping;
     const zone = g2.seas[target];
-    const hurt = {};
+    const hurt2 = {};
     const weight5 = through2 / (through2 + S3.tradeScale) * zone.air;
-    for (const c of NAVY.convoys) if (atWar(g2, nat, c.to) && c.zones.includes(zone.key)) hurt[c.to] = Math.max(hurt[c.to] ?? 0, c.share / c.zones.length * weight5);
+    for (const c of NAVY.convoys) if (atWar(g2, nat, c.to) && c.zones.includes(zone.key)) hurt2[c.to] = Math.max(hurt2[c.to] ?? 0, c.share / c.zones.length * weight5);
     for (const id of zone.coast) {
       const r = g2.regions[id];
-      if (r.port && r.owner === r.ctrl && atWar(g2, nat, r.ctrl)) hurt[r.ctrl] = Math.max(hurt[r.ctrl] ?? 0, S3.coastal * weight5);
+      if (r.port && r.owner === r.ctrl && atWar(g2, nat, r.ctrl)) hurt2[r.ctrl] = Math.max(hurt2[r.ctrl] ?? 0, S3.coastal * weight5);
     }
-    return hurt;
+    return hurt2;
   }
   function fly(g2, nat, m, target, fleets, salt = "", battle) {
     const a = assessAir(g2, fleets, m, target);
@@ -32297,6 +32609,7 @@
     const bombed = fix ? fix.through() : Math.max(0, Math.min(a.B, a.B - lostB + (staff ? Math.min(lostB, battle?.lostAfter ?? 0) - staff.away : 0)));
     const through2 = bombed * (night ? C3.night.accuracy : dayAim(g2, nat, m)) * techMul(g2, nat, "bombers") * a.aim;
     let result = "", value = 0, ground = 0, shipsSunk = 0, notable2 = false;
+    let city = null;
     let struck;
     if (m === "fleet" || m === "harbour") {
       const exp = shipHits(a, m, through2, foundShare(g2, a, nat));
@@ -32374,12 +32687,22 @@
         notable2 = true;
         result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`;
       } else if (!result) result = through2 > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : "No bombers got through.";
+      city = cityHit(g2, r, "raid", through2, gunsStop(a.aa ?? 0), night);
+      if (city) {
+        value += city.worth;
+        result += ` ${city.words}`;
+      }
       result = result.trim();
     } else if (m === "town") {
       const r = g2.regions[target];
       const hit = hitTown(g2, r, "raid", townShare("raid", through2) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
       value += hit.share * hit.divs * SIEGE.bombard.value;
       result = through2 > 0 ? townHitText(g2, r, hit, "bombs", true) : "No bombers got through.";
+      city = cityHit(g2, r, "town", hit.share);
+      if (city) {
+        value += city.worth;
+        result += ` ${city.words}`;
+      }
     } else if (m === "line") {
       const r = g2.regions[target];
       const months3 = lineWear(through2);
@@ -32422,9 +32745,9 @@
         for (const c of SURFACE) sunk[c] += s[c];
       }
       if (sunk.cv && carrierRules(g2)) syncWings(g2);
-      const hurt = tradeHurt(g2, nat, target, through2);
-      for (const [victim, s] of Object.entries(hurt)) raid(g2, nat, victim, s);
-      const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
+      const hurt2 = tradeHurt(g2, nat, target, through2);
+      for (const [victim, s] of Object.entries(hurt2)) raid(g2, nat, victim, s);
+      const worst = Object.entries(hurt2).sort((x, y) => y[1] - x[1])[0];
       shipsSunk = shipCount(sunk);
       value += shipCount(sunk) * 30 + (worst ? worst[1] * 3e3 : 0);
       result = [shipCount(sunk) ? `${cap7(shipList(sunk))} sunk.` : "", worst ? `Merchant shipping losses cost ${g2.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ""].filter(Boolean).join(" ") || "The bombers found little to hit.";
@@ -32496,6 +32819,7 @@
     }
     if (battle && a.B > 0) rep.dropped = bombed;
     if (g2.flags.open === 1) rep.worth = Math.round(value);
+    if (city) rep.city = { region: city.region, added: city.added, now: city.now };
     g2.airReports.push(rep);
     storyAir(g2, m === "fleet" ? "strike" : m === "harbour" || m === "town" ? "bomb" : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns: guns2, ...battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {} });
     const flying3 = fleets.filter((f) => a.att.some((x) => x.f === f));
@@ -33078,7 +33402,7 @@
       const cut2 = Math.min(N.max, through2 / N.scale) * (1 - gunsStop2);
       const pr = groundRules(g2) ? railBombChance(g2, target, through2, gunsStop2) : 0;
       const pf = groundRules(g2) ? ruinChance(g2, r, cut2) : 0;
-      const worth3 = outputWorth(g2, r, cut2) + 10, guns2 = gunsDown(g2, a, true, lost, "night", target);
+      const worth3 = outputWorth(g2, r, cut2) + cityWorthOf(g2, r, cityForecast(g2, r, "raid", through2, gunsStop2, true)) + 10, guns2 = gunsDown(g2, a, true, lost, "night", target);
       for (const ld of fighters) {
         for (const le of fighters) {
           let p = 0;
@@ -33113,6 +33437,7 @@
     let ships, hits;
     let lumps, expected = 0;
     let town;
+    let city;
     if (m === "superiority") {
       const based2 = g2.airFleets.filter((f) => f.base === target && f.ship === void 0 && atWar(g2, f.nat, nat)).length;
       cut2 = based2 ? Math.min(AIR.damage.airfields.max, through2 / AIR.damage.airfields.scale) : 0;
@@ -33128,6 +33453,11 @@
         rail2 = railBombChance(g2, target, through2, a.aa ? a.aa * WORKS.aa.cut : 0);
         ruin = ruinChance(g2, r, cut2);
         if (r.fac <= 0) cut2 = 0;
+      }
+      const pts = cityForecast(g2, r, "raid", through2, gunsStop(a.aa ?? 0), m === "night");
+      if (pts > 0) {
+        city = pts;
+        value += cityWorthOf(g2, r, pts);
       }
     } else if (m === "strike") {
       cut2 = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through2 / (through2 + AIR.damage.shipping.scale)));
@@ -33148,6 +33478,11 @@
       town = planTownHit(g2, g2.regions[target], "raid", townShare("raid", through2) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
       cut2 = town.share;
       value = town.share * town.divs * SIEGE.bombard.value;
+      const pts = cityForecast(g2, g2.regions[target], "town", town.share);
+      if (pts > 0) {
+        city = pts;
+        value += cityWorthOf(g2, g2.regions[target], pts);
+      }
     } else if (m === "line") {
       cut2 = lineWear(through2);
       value = cut2 * g2.regions[target].units.reduce((s, c) => s + (!c.dead && atWar(g2, nat, c.nat) && worksOf(c) > 0 ? c.divs : 0), 0) * AIRWAR.line.value;
@@ -33183,7 +33518,9 @@
       }
       value = expected;
     }
-    return { odds, bomberLoss: a.bomberLoss, cut: cut2, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
+    const fc = { odds, bomberLoss: a.bomberLoss, cut: cut2, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
+    if (city !== void 0) fc.city = city;
+    return fc;
   }
 
   // ../../src/campaign/navy.ts
@@ -36561,11 +36898,22 @@
     const port = r.port && (whole2 || prizeOut(g2, r, "harbour") <= 0) ? BUDGET.port * k * worth3 * (far?.port ?? 1) * share : 0;
     const oil = r.oil ? BUDGET.oil * k * (whole2 ? 1 : 1 - fieldOut(g2, r)) * (far?.oil ?? 1) * share : 0;
     const capital3 = own && g2.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
+    const dmg = bare ? 0 : damageOf(g2, r);
+    if (dmg > 0) return damaged(g2, r, nat, whole2, land2, port, oil, fac, capital3, dmg);
     if (!whole2 && nat === r.ctrl && besieged(g2, r)) {
       const p = SIEGE.pay;
       return { land: land2 * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital3 * p, total: (land2 + port + oil + fac + capital3) * p, siege: true };
     }
     return { land: land2, port, oil, fac, capital: capital3, total: land2 + port + oil + fac + capital3 };
+  }
+  function damaged(g2, r, nat, whole2, land0, port0, oil, fac0, capital0, dmg) {
+    const keep = 1 - dmg;
+    const land2 = land0 * keep, port = port0 * keep, fac = fac0 * keep, capital3 = capital0 * keep;
+    if (!whole2 && nat === r.ctrl && besieged(g2, r)) {
+      const p = SIEGE.pay;
+      return { land: land2 * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital3 * p, total: (land2 + port + oil + fac + capital3) * p, siege: true, damage: dmg };
+    }
+    return { land: land2, port, oil, fac, capital: capital3, total: land2 + port + oil + fac + capital3, damage: dmg };
   }
   var KIND_LABEL = { inf: "Infantry", mtn: "Mountain troops", cav: "Cavalry", mot: "Motorised troops", art: "Artillery", eng: "Engineers", arm: "Armour", fort: "Fortress troops", mg: "Machine-gun brigades", mor: "Mortar brigades" };
   var SHIP_LABEL = { bb: "Battleships", cv: "Carriers", ca: "Cruisers", dd: "Destroyers", ss: "Submarines" };
@@ -37047,7 +37395,7 @@
   // ../../src/campaign/support.ts
   var SUPPORT = support_default;
   var weight2 = (c) => c.divs * c.str;
-  var clamp01 = (x) => Math.max(0, Math.min(1, x));
+  var clamp012 = (x) => Math.max(0, Math.min(1, x));
   var listAnd = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var cap9 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   var supportRules = (g2) => g2.flags.open === 1;
@@ -37102,10 +37450,10 @@
     const works = S3.works[Math.min(S3.works.length - 1, fort)] ?? 0;
     const own = all > 0 ? S3.tanks * (tanks / all) : 0;
     const pieces = guns2 + destroyers + handHeld + artillery;
-    const gunned = pieces > 0 ? clamp01(pieces - armour) : 0;
-    const cover3 = f.tanks > 0 ? clamp01(f.foot * S3.alone.cover / f.tanks) : 1;
+    const gunned = pieces > 0 ? clamp012(pieces - armour) : 0;
+    const cover3 = f.tanks > 0 ? clamp012(f.foot * S3.alone.cover / f.tanks) : 1;
     const alone = f.tanks > 0 ? S3.alone.cut * gunned * (1 - cover3) : 0;
-    return { strength: clamp01(guns2 + destroyers + handHeld + artillery + mines + works + own - armour), guns: guns2, kit, destroyers, handHeld, artillery, mines, works, fort, tanks: own, armour, gunned, cover: cover3, alone };
+    return { strength: clamp012(guns2 + destroyers + handHeld + artillery + mines + works + own - armour), guns: guns2, kit, destroyers, handHeld, artillery, mines, works, fort, tanks: own, armour, gunned, cover: cover3, alone };
   }
   function footShare2(attackers2) {
     let all = 0, foot = 0;
@@ -39361,6 +39709,9 @@
       bookCloseAir(g2, a.air, opts.closeSorties);
       rep.air = { att: a.air.att.strikes, def: a.air.def.strikes };
     }
+    const fight2 = town ? win ? "storm" : "repulsed" : inField || relief || opts.sally ? "streets" : "field";
+    const hurt2 = battleHit(g2, target, fight2, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === "art" ? u.divs : 0), 0));
+    if (hurt2) rep.city = { region: hurt2.region, added: hurt2.added, now: hurt2.now };
     g2.reports.push(rep);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
@@ -40673,6 +41024,8 @@
     canOrder: () => canOrder,
     candidates: () => candidates,
     capitalPlans: () => capitalPlans,
+    cityDamage: () => cityDamage,
+    cityDamageOn: () => cityDamageOn,
     claimsOf: () => claimsOf,
     commandOf: () => commandOf,
     corpsDetail: () => corpsDetail,
@@ -40680,6 +41033,8 @@
     crossingStaffWord: () => crossingStaffWord,
     crossings: () => crossings2,
     current: () => current,
+    damageMarks: () => damageMarks,
+    damagedCities: () => damagedCities,
     declarable: () => declarable,
     depots: () => depots,
     dialOf: () => dialOf,
@@ -40798,6 +41153,8 @@
     orderRebase: () => orderRebase,
     orderRecruitAgent: () => orderRecruitAgent,
     orderRelieve: () => orderRelieve,
+    orderRepair: () => orderRepair,
+    orderRepairAll: () => orderRepairAll,
     orderResearch: () => orderResearch,
     orderRetireAgent: () => orderRetireAgent,
     orderSack: () => orderSack,
@@ -40825,6 +41182,7 @@
     orderTakeField: () => orderTakeField,
     orderTeams: () => orderTeams,
     orderTrade: () => orderTrade,
+    orderUndoRepair: () => orderUndoRepair,
     orderWinterPeace: () => orderWinterPeace,
     orderWreck: () => orderWreck,
     ordersByCity: () => ordersByCity,
@@ -40853,6 +41211,7 @@
     raidMenuOne: () => raidMenuOne,
     raidTargetsFor: () => raidTargetsFor,
     reach: () => reach2,
+    repairAllOutlook: () => repairAllOutlook,
     rivalStaff: () => rivalStaff,
     rivalStaffs: () => rivalStaffs,
     runTurnAI: () => runTurnAI,
@@ -40862,6 +41221,7 @@
     seaPictureOf: () => seaPictureOf,
     searchOptionsFor: () => searchOptionsFor,
     secretService: () => secretService,
+    setCityDamage: () => setCityDamage,
     shipTargets: () => shipTargets,
     shippingLanes: () => shippingLanes,
     siegesInSight: () => siegesInSight,
@@ -41457,6 +41817,7 @@
     return out.sort((a, b) => a.km - b.km || a.id - b.id);
   }
   var VERDICT2 = [[0.8, "Very likely to succeed"], [0.6, "Likely to succeed"], [0.4, "It could go either way"], [0.2, "Likely to fail"], [0, "Very likely to fail"]];
+  var cityLine = (g2, target, pts) => `Should leave about ${pts < 1 ? "under 1" : Math.round(pts)}% more of ${townName(g2.regions[target])} in ruins: its factories and its pay fall by as much until its holder repairs it.`;
   function effectsOf2(g2, kind, target, fc, nat) {
     const out = [];
     const place2 = placeOf2(g2, kind, target);
@@ -41465,6 +41826,7 @@
       out.push(r.fac > 0 ? `Should stop about ${pct7(fc.cut)} of ${place2}'s output for a month: ${tenthPct(fc.nation)} of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place2}: the bombers go for its rail yards.`);
       if (fc.rail) out.push(`About a ${pct7(fc.rail)} chance of cutting the railway through ${place2}, which stays cut until engineers relay it.`);
       if (fc.ruin) out.push(`About a ${pct7(fc.ruin)} chance of wrecking a factory outright.`);
+      if (fc.city) out.push(cityLine(g2, target, fc.city));
     } else if (kind === "superiority") {
       out.push(`Fighter odds ${fc.odds >= 9 ? "overwhelming" : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
       if (fc.cut > 0) out.push(`The air groups based at ${place2} should lose about ${pct7(fc.cut)} of their readiness, and aircraft on the ground.`);
@@ -41479,6 +41841,7 @@
       if (sunk && sunk.cv > 0.15) out.push("A carrier that goes down takes most of its aircraft with it.");
     } else if (kind === "town") {
       if (fc.town) out.push(townHitText(g2, g2.regions[target], fc.town, "bombs", false));
+      if (fc.town && fc.city) out.push(cityLine(g2, target, fc.city));
     } else if (kind === "line") {
       const most = Math.max(0, ...g2.regions[target].units.filter((u) => !u.dead && atWar(g2, nat, u.nat)).map(worksOf));
       const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
@@ -41499,6 +41862,7 @@
       }
       if (fc.rail) f.rail = fc.rail;
       if (fc.ruin) f.factory = fc.ruin;
+      if (fc.city) f.city = fc.city;
     } else if (kind === "superiority") {
       f.odds = fc.odds;
       if (fc.cut > 0) f.readiness = fc.cut;
@@ -41512,7 +41876,10 @@
       f.works = Math.min(fc.cut, most);
       f.worksLeft = Math.max(0, most - fc.cut);
     } else if (kind === "town") {
-      if (fc.town) f.town = { ...fc.town };
+      if (fc.town) {
+        f.town = { ...fc.town };
+        if (fc.city) f.city = fc.city;
+      }
     } else if (kind === "ground") {
       f.organisation = fc.cut;
     }
@@ -42300,6 +42667,7 @@
     aiEngineers(g2, nat);
     campaign(g2, nat);
     aiBridges(g2, nat, (x, from2) => blowBridges(g2, nat, x, from2));
+    aiRepair(g2, nat);
     aiProduction(g2, nat);
     aiTeams(g2, nat);
     aiArsenal(g2, nat);
@@ -44881,8 +45249,10 @@
       if (signed.length) did.push(`signed ${signed.length === 1 ? "a trade agreement" : "trade agreements"} with ${listAnd3(signed)}`);
     }
     const had = new Set(n.queue.map((b) => b.id));
+    let repaired = [];
     const spent = fromPurse(g2, nat, () => {
       shipping2(g2, nat);
+      repaired = aiRepair(g2, nat);
       aiProduction(g2, nat);
       aiTeams(g2, nat);
       aiArsenal(g2, nat);
@@ -44891,6 +45261,7 @@
     });
     const fresh4 = n.queue.filter((b) => !had.has(b.id));
     if (fresh4.length) did.unshift(`ordered ${some(fresh4.map((b) => orderWords(g2, b)), 4)}`);
+    if (repaired.length) did.unshift(`repaired ${some(repaired, 4)}`);
     g2.flags["dk:spent"] = spent;
     if (!did.length) return null;
     return `${listAnd3(did)}.`;
@@ -46432,6 +46803,33 @@
   }
   function orderBuilding(g2, region, line) {
     return humanUp(g2) ? orderCivic(g2, g2.human, region, line) : null;
+  }
+  var cityDamageOn = (g2) => damageRules(g2);
+  function setCityDamage(g2, on) {
+    if (g2.flags.open !== 1) return false;
+    openDamage(g2, on);
+    return damageRules(g2) === on;
+  }
+  function cityDamage(g2, region) {
+    return damageRules(g2) ? repairView(g2, region, g2.human) : null;
+  }
+  function damagedCities(g2) {
+    return g2.human && damageRules(g2) ? damagedTowns(g2, g2.human) : [];
+  }
+  function repairAllOutlook(g2) {
+    return g2.human && damageRules(g2) ? repairAllPlan(g2, g2.human) : null;
+  }
+  function damageMarks(g2) {
+    return townsDamaged(g2);
+  }
+  function orderRepair(g2, region) {
+    return humanUp(g2) && repairCity(g2, g2.human, region);
+  }
+  function orderRepairAll(g2) {
+    return humanUp(g2) ? repairAll(g2, g2.human) : [];
+  }
+  function orderUndoRepair(g2, region) {
+    return humanUp(g2) && undoRepair(g2, g2.human, region);
   }
   function buildingTips(g2, most = 6) {
     const me = g2.human;
@@ -55530,7 +55928,7 @@
           u.clear += DT;
         }
       }
-      const hurt = /* @__PURE__ */ new Map();
+      const hurt2 = /* @__PURE__ */ new Map();
       const kept2 = this.airOn.att || this.airOn.def ? /* @__PURE__ */ new Map() : null;
       for (const u of this.units) {
         if (!fighting2(u)) continue;
@@ -55568,12 +55966,12 @@
           this.airLedger[u.side].withheld += raw2;
           kept2.set(t.id, (kept2.get(t.id) ?? 0) + raw2);
         }
-        const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
+        const h = hurt2.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
         h.dmg += blow2.dmg;
         h.nerve += blow2.nerve;
         if (!blind) h.blind = false;
         h.from.push([u, blow2.dmg]);
-        hurt.set(t.id, h);
+        hurt2.set(t.id, h);
         if (blow2.front) t.pinned = true;
         if (blow2.aspect !== "front" && this.t - t.flankedAt > 20) {
           t.flankedAt = this.t;
@@ -55581,10 +55979,10 @@
         }
       }
       if (kept2) for (const [id, raw2] of kept2) {
-        const h = hurt.get(id), side3 = other2(this.unit(id).side);
+        const h = hurt2.get(id), side3 = other2(this.unit(id).side);
         this.airNerve[side3].set(id, (this.airNerve[side3].get(id) ?? 0) + raw2 * h.nerve);
       }
-      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
+      for (const [id, h] of hurt2) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
       if (this.airOn.att || this.airOn.def) this.flyAir();
       for (const u of this.units) if (live3(u)) this.nerve(u);
       for (const u of this.units) if (live3(u)) this.move(u);
@@ -56718,13 +57116,13 @@
         if (this.contactAt !== null && this.airNext[s] === Infinity && this.airLeft[s] > 0 && this.airCalls[s] === 0) this.airNext[s] = this.contactAt + LAND2.air.first;
         if (this.airReady(s) && this.t >= this.airNext[s] + LAND2.air.wait) this.callAir(s);
       }
-      const hurt = /* @__PURE__ */ new Map();
-      for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt);
-      for (const [id, [d, n]] of hurt) this.suffer(this.unit(id), d, d > 0 ? n / d * LAND2.air.nerve : LAND2.air.nerve, []);
+      const hurt2 = /* @__PURE__ */ new Map();
+      for (const k of this.strikes) if (!k.ended) this.flyStrike(k, hurt2);
+      for (const [id, [d, n]] of hurt2) this.suffer(this.unit(id), d, d > 0 ? n / d * LAND2.air.nerve : LAND2.air.nerve, []);
       this.strikes = this.strikes.filter((k) => !k.ended);
     }
     /** One strike's tick, its legs flown together. What each leg lands this tick is added to 'hurt'. */
-    flyStrike(k, hurt) {
+    flyStrike(k, hurt2) {
       const A = LAND2.air, at3 = k.called + A.eta, led = this.airLedger[k.side];
       let over = true;
       for (const l of k.legs) {
@@ -56754,11 +57152,11 @@
             const share = l.total * step2, mx = r[0] + (r[2] - r[0]) * (from2 + step2 / 2), my = r[1] + (r[3] - r[1]) * (from2 + step2 / 2);
             const on = this.overOwn(k.side, mx, my) ? [] : this.underRun(k.side, mx, my);
             if (!on.length) led.wasted += share;
-            else for (const e of on) this.land(k.side, e, share / on.length, hurt, l, l.total > 0 ? this.sumOf(l.nerve) / l.total : 1);
+            else for (const e of on) this.land(k.side, e, share / on.length, hurt2, l, l.total > 0 ? this.sumOf(l.nerve) / l.total : 1);
           } else {
             for (const [id, v] of l.owed) {
               const e = this.unit(id);
-              if (live3(e)) this.land(k.side, e, v * step2, hurt, l, v > 0 ? (l.nerve.get(id) ?? v) / v : 1);
+              if (live3(e)) this.land(k.side, e, v * step2, hurt2, l, v > 0 ? (l.nerve.get(id) ?? v) / v : 1);
               else this.offField(k.side, id, v * step2);
             }
           }
@@ -56803,16 +57201,16 @@
      * A share of a strike, in open-ground terms, landing on an enemy block: what it takes off it for its ground, and the
      * nerve it costs as the blows it was held from would have (nerve: their weight on nerve, a unit of what was held).
      */
-    land(s, e, raw2, hurt, l, nerve2) {
+    land(s, e, raw2, hurt2, l, nerve2) {
       const led = this.airLedger[s];
       const d = raw2 * this.groundTake(e) * (e.kind === "arm" && l.aimed ? LAND2.air.armour : 1);
       led.landed += raw2;
       led.dealt += d;
       if (this.ticket[s].human) e.found = true;
-      const h = hurt.get(e.id) ?? [0, 0];
+      const h = hurt2.get(e.id) ?? [0, 0];
       h[0] += d;
       h[1] += d * nerve2;
-      hurt.set(e.id, h);
+      hurt2.set(e.id, h);
       l.struck.add(e.id);
     }
     sumOf(m) {
@@ -56887,7 +57285,7 @@
      */
     payAir() {
       if (!this.airOn.att && !this.airOn.def) return;
-      const hurt = /* @__PURE__ */ new Map();
+      const hurt2 = /* @__PURE__ */ new Map();
       for (const { s, id, raw: raw2, nerve: nerve2 } of this.airDues()) {
         const e = this.unit(id), led = this.airLedger[s];
         if (!e) {
@@ -56898,12 +57296,12 @@
           this.offField(s, id, raw2);
           continue;
         }
-        const d = raw2 * this.groundTake(e), h = hurt.get(id) ?? [0, 0];
+        const d = raw2 * this.groundTake(e), h = hurt2.get(id) ?? [0, 0];
         led.landed += raw2;
         led.dealt += d;
         h[0] += d;
         h[1] += d * nerve2;
-        hurt.set(id, h);
+        hurt2.set(id, h);
       }
       for (const s of ["att", "def"]) {
         this.airBank[s].clear();
@@ -56914,7 +57312,7 @@
         for (const l of k.legs) l.done = Math.max(l.done, 1);
         k.ended = true;
       }
-      for (const [id, [d, n]] of hurt) this.suffer(this.unit(id), d, d > 0 ? n / d : 1, []);
+      for (const [id, [d, n]] of hurt2) this.suffer(this.unit(id), d, d > 0 ? n / d : 1, []);
     }
     /**
      * What the fighters on call still owe, each side's, block by block: the bank, and what strikes in the air carry for
@@ -57935,7 +58333,7 @@
     const b = B2.all[seat4];
     return { seat: seat4, name: b.name, mark: b.mark, art: b.art, missions: b.missions, kills: b.kills };
   };
-  var clamp012 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+  var clamp013 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
   var off = (u) => u.state === "gone" || u.state === "withdrawn";
   var flying2 = (u) => !off(u) && u.job.do !== "wait";
   var away = (u) => u.job.do === "home" || u.state === "routing";
@@ -58102,7 +58500,7 @@
           const s = this.place.starts[f.corps];
           if (!s) continue;
           const kind = f.kind === "bmr" ? "bmr" : "ftr";
-          const mor = clamp012(SKY.morale.base + SKY.morale.ready * f.org);
+          const mor = clamp013(SKY.morale.base + SKY.morale.ready * f.org);
           const model = this.place.models?.[f.nat]?.[kind] ?? (kind === "bmr" ? `Bomber:${f.nat}` : `Fighter:${f.nat}`);
           const way = kind === "ftr" ? fighterWay(f.nat, this.when) : { form: "box", style: null };
           const u = {
@@ -58156,7 +58554,7 @@
             away: 0
           };
           this.units.push(u);
-          if (kind === "ftr") this.skill.set(u.id, Math.round(clamp012(SKY.pilots.base + SKY.pilots.leader * f.xp + SKY.pilots.ready * f.org) * 100) / 100);
+          if (kind === "ftr") this.skill.set(u.id, Math.round(clamp013(SKY.pilots.base + SKY.pilots.leader * f.xp + SKY.pilots.ready * f.org) * 100) / 100);
         }
       }
       for (const u of this.units) {
@@ -58454,8 +58852,8 @@
             continue;
           }
           const m0 = this.mor0.get(u.id) ?? u.mor;
-          const byMor = m0 > SKY.morale.routing ? clamp012((m0 - u.mor) / (m0 - SKY.morale.routing)) : 0;
-          const byFight = u.air === "ftr" && u.kit0 > 0 ? clamp012((1 - u.vig) / (1 - SKY.spent)) : 0;
+          const byMor = m0 > SKY.morale.routing ? clamp013((m0 - u.mor) / (m0 - SKY.morale.routing)) : 0;
+          const byFight = u.air === "ftr" && u.kit0 > 0 ? clamp013((1 - u.vig) / (1 - SKY.spent)) : 0;
           if (byFight > byMor) ammo += u.n0 * byFight;
           else nerve2 += u.n0 * byMor;
         }
@@ -58652,7 +59050,7 @@
             hi.band = lo.band;
             hi.to = lo.band;
             hi.alt = SKY.bands.alt[lo.band];
-            if (!hi.rise) lo.mor = clamp012(lo.mor - SKY.morale.bounced);
+            if (!hi.rise) lo.mor = clamp013(lo.mor - SKY.morale.bounced);
             this.say("air:bounce", hi, `${told(this.called(hi), "{N} [dives|dive] on")} ${subjectOf(this.called(lo)).whom} from above.`, { on: lo.id });
           }
           for (const x of [a, d]) if (!before.get(x.id)?.size) {
@@ -58808,7 +59206,7 @@
             const k = Math.min(most, spend * (b.n / Math.max(1, nB)) * cover3 * Math.min(2, this.edge(u)));
             owe(b, u.id, k);
             u.fire.push({ on: b.id, rate: k / dt, ...this.passes.has(`${u.id}:${b.id}`) ? { pass: this.passes.get(`${u.id}:${b.id}`) } : {} });
-            if (cover3 > 1.2) b.mor = clamp012(b.mor - SKY.morale.alone * dt);
+            if (cover3 > 1.2) b.mor = clamp013(b.mor - SKY.morale.alone * dt);
           }
         }
         if (!pool?.has(u.id)) this.tire(u);
@@ -58872,7 +59270,7 @@
           const gun2 = u.air === "ftr" ? this.gunnerOf(u, by2) : null;
           if (u.air === "ftr" && typeof by2 === "number" && this.unit(by2)?.air === "bmr") this.gunKills.set(by2, (this.gunKills.get(by2) ?? 0) + 1);
           u.n--;
-          u.mor = clamp012(u.mor - SKY.morale.perLoss / u.n0);
+          u.mor = clamp013(u.mor - SKY.morale.perLoss / u.n0);
           const over = u.side === "att" ? "enemy" : "own";
           const fall2 = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
           if (fall2.back) u.back++;
@@ -59280,7 +59678,7 @@
      */
     shown(u, dt) {
       if (u.air === "ftr") {
-        const ammo = u.kit0 > 0 ? clamp012((u.vig - SKY.spent) / (1 - SKY.spent)) : 1;
+        const ammo = u.kit0 > 0 ? clamp013((u.vig - SKY.spent) / (1 - SKY.spent)) : 1;
         const q = flying2(u) && !away(u) ? this.after.get(u.id) : void 0;
         u.extra = {
           model: u.model,
@@ -59293,7 +59691,7 @@
           ...q !== void 0 ? { quarry: q } : {},
           skill: this.skill.get(u.id) ?? SKY.pilots.base,
           ...u.def ? { def: u.def } : {},
-          ...u.side === "att" && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp012(u.fuel / Math.max(1, u.fuel0)) * 1e3) / 1e3 } : {},
+          ...u.side === "att" && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp013(u.fuel / Math.max(1, u.fuel0)) * 1e3) / 1e3 } : {},
           fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 1e4) / 1e4 }))
         };
         return;
@@ -64767,7 +65165,7 @@
   function glanceDamage(s, id, see, seen2) {
     const r = s.regions[id];
     if (!see.own && !see.ally && !see.agent && !(seen2[id] > 0)) return null;
-    const ruin = repairView(s, id);
+    const ruin = repairView2(s, id);
     let lost = 0;
     try {
       lost = r.fac > 0 ? Math.max(0, r.fac - workingFactories(s, r)) : 0;
@@ -64848,16 +65246,16 @@
         upFig = sayMonths(next.months);
         upWords = `${next.label}${works.length > 1 ? `, then ${works.length - 1} more` : ""}`;
       }
-      const hurt = glanceDamage(s, r.id, see, seen2);
+      const hurt2 = glanceDamage(s, r.id, see, seen2);
       let dmgFig = "", dmgWords = "";
-      if (hurt) {
-        dmgFig = `${hurt.pct}%`;
+      if (hurt2) {
+        dmgFig = `${hurt2.pct}%`;
         const bits = [];
-        if (hurt.town > 0) bits.push(`the town ${hurt.town}% in ruins`);
-        if (hurt.lost > 0) bits.push(`${hurt.lost} of ${hurt.fac} ${hurt.fac === 1 ? "factory" : "factories"} wrecked`);
-        dmgWords = `${bits.join(", ")}${see.own && hurt.ruin && hurt.ruin.why === null ? `, repair ${moneyWords(hurt.ruin.cost)}` : ""}`;
+        if (hurt2.town > 0) bits.push(`the town ${hurt2.town}% in ruins`);
+        if (hurt2.lost > 0) bits.push(`${hurt2.lost} of ${hurt2.fac} ${hurt2.fac === 1 ? "factory" : "factories"} wrecked`);
+        dmgWords = `${bits.join(", ")}${see.own && hurt2.ruin && hurt2.ruin.why === null ? `, repair ${moneyWords(hurt2.ruin.cost)}` : ""}`;
       }
-      if (!garr && !guardOnly2 && !orderFig && up < 0 && !hurt) continue;
+      if (!garr && !guardOnly2 && !orderFig && up < 0 && !hurt2) continue;
       let quiet2 = false;
       if (guardOnly2 && see.own) {
         if (!reach3) reach3 = guardReach(s, me);
@@ -64878,7 +65276,7 @@
         up,
         upFig,
         upWords,
-        dmg: hurt?.pct ?? 0,
+        dmg: hurt2?.pct ?? 0,
         dmgFig,
         dmgWords
       });
@@ -65030,12 +65428,12 @@
       }
     }
     for (const w of works) tiles.push({ kind: "up", sign: "scaffold", name: w.name, line: w.line, share: w.share, months: w.months, cost: 0, key: "", cause: "" });
-    const hurt = glanceDamage(s, id, see, seen2);
-    if (hurt?.ruin) {
-      const why = hurt.ruin.why;
-      tiles.push({ kind: "damaged", sign: "wrench", name: hurt.ruin.town, line: `${hurt.ruin.pct}% wrecked`, share: 1 - hurt.ruin.damage, months: 0, cost: see.own && why === null ? shown(hurt.ruin.cost) : 0, key: see.own && why === null ? "work:repair" : "", cause: hurt.ruin.hit ? "hit this month" : "" });
+    const hurt2 = glanceDamage(s, id, see, seen2);
+    if (hurt2?.ruin) {
+      const why = hurt2.ruin.why;
+      tiles.push({ kind: "damaged", sign: "wrench", name: hurt2.ruin.town, line: `${hurt2.ruin.pct}% wrecked`, share: 1 - hurt2.ruin.damage, months: 0, cost: see.own && why === null ? shown(hurt2.ruin.cost) : 0, key: see.own && why === null ? "work:repair" : "", cause: hurt2.ruin.hit ? "hit this month" : "" });
     }
-    if (hurt && hurt.lost > 0) {
+    if (hurt2 && hurt2.lost > 0) {
       let key6 = "";
       if (see.own) {
         for (const e of r.units) {
@@ -65055,7 +65453,7 @@
       } catch {
         cause = "";
       }
-      tiles.push({ kind: "damaged", sign: "wrench", name: hurt.lost === 1 ? "A factory" : `${hurt.lost} factories`, line: `${hurt.lost} of ${hurt.fac} wrecked`, share: 1 - hurt.lost / Math.max(1, hurt.fac), months: 0, cost: 0, key: key6, cause: see.own && !key6 ? "engineers rebuild it" : cause });
+      tiles.push({ kind: "damaged", sign: "wrench", name: hurt2.lost === 1 ? "A factory" : `${hurt2.lost} factories`, line: `${hurt2.lost} of ${hurt2.fac} wrecked`, share: 1 - hurt2.lost / Math.max(1, hurt2.fac), months: 0, cost: 0, key: key6, cause: see.own && !key6 ? "engineers rebuild it" : cause });
     }
     const rows = [];
     if (see.own) {
@@ -65528,7 +65926,7 @@
     all: rulesByName["orderRepairAll"],
     undo: rulesByName["orderUndoRepair"]
   };
-  var repairView = (g2, region) => {
+  var repairView2 = (g2, region) => {
     try {
       return repairCalls.view?.(g2, region) ?? null;
     } catch {
@@ -67409,7 +67807,7 @@ ${next.text}` : ""}` : next ? next.also : "";
             out.push({ key: `evac:${c.id}`, label: `Lift ${c.name} off by sea`, detail: "Taken off from the port to a haven or home. It leaves a quarter of its strength and its order behind, and can do no more this month.", ok: can2, why: can2 ? "" : !up ? "It is not your month." : !open2 ? "The enemy holds the sea off this port." : "That corps cannot be given orders now." });
           }
         }
-        const ruin = repairView(s, r.id);
+        const ruin = repairView2(s, r.id);
         if (ruin && ruin.holder === me) {
           if (ruin.undo && ruin.damage <= 0) out.push({ key: "unrepair", label: `Take back the repair of ${ruin.town}`, detail: "Repaired this month. Taken back, the town is as it was and the money comes back.", ok: up, why: up ? "" : "It is not your month." });
           else out.push({ key: "repair", label: `Repair ${ruin.town} · ${moneyWords(ruin.cost)}`, detail: `${ruin.pct}% of the town lies in ruins: it pays ${moneyWords(ruin.lost)} a month less. Paid and done at once; it pays for itself in ${monthsWords(ruin.months)}.`, ok: up && ruin.why === null, why: !up ? "It is not your month." : ruin.why ?? "" });
@@ -67452,7 +67850,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         const lines2 = [];
         const says = groundSays(s, r);
         if (says) lines2.push(says);
-        const ruin = repairView(s, r.id);
+        const ruin = repairView2(s, r.id);
         if (ruin && ruin.damage > 0 && (!me || allied(s, r.ctrl, me) || sight(s)[r.id] > 0)) lines2.push(`${ruin.town} is ${ruin.pct}% in ruins${ruin.hit ? ", hit this month" : ""}: it pays ${r.ctrl === me ? "you" : "its holder"} that much less until it is repaired.`);
         for (const n2 of riverNotes(s, r.id)) {
           lines2.push(`The ${n2.river} lies toward ${s.regions[n2.far].name}: ${n2.down ? "the bridges are down" : "the bridges stand"}.`);
@@ -67610,7 +68008,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       ok2 = orderScorchPolicy(s, a);
       if (ok2) note4 = `Scorched earth policy: ${POLICY_WORD[a] ?? a}. A province's own order still overrides it.`;
     } else if (what === "repair" || what === "unrepair") {
-      const v = repairView(s, region);
+      const v = repairView2(s, region);
       try {
         ok2 = what === "repair" ? !!repairCalls.order?.(s, region) : !!repairCalls.undo?.(s, region);
       } catch {
@@ -69436,7 +69834,7 @@ ${standing5}`,
         note4 = ok2 ? `Repaired: ${listNames(done)}.` : "Nothing could be repaired.";
       } else {
         const at3 = Number(part[1]);
-        const v = repairView(s, at3);
+        const v = repairView2(s, at3);
         try {
           ok2 = !!repairCalls.order?.(s, at3);
         } catch {

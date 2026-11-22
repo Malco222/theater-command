@@ -521,6 +521,8 @@ export interface BattleReport {
   guarded?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */
   relief?: boolean;
+  /** Damaged cities (the grand campaign with its switch): what the fighting did to the province's town, in percent points added, and where it now stands. */
+  city?: { region: number; added: number; now: number };
   /** Close air support (the grand campaign, air.json 'close'): the air strikes each side's groups on ground support flew over the battle. */
   air?: { att: number; def: number };
   /** The garrison of a besieged town came out against the army round it. */
@@ -649,6 +651,8 @@ export interface ShoreReport {
   lines: TicketLine[];
   /** What the shelling did, in a sentence. */
   result: string;
+  /** Damaged cities (the grand campaign with its switch): what the shells did to the town, in percent points added, and where it now stands. */
+  city?: { region: number; added: number; now: number };
 }
 
 /** A battleship or a carrier that went down: her name (null once the record of names runs out), her crew and the men lost with her (hulls.ts). */
@@ -1179,6 +1183,8 @@ export interface AirReport {
   fleet?: number;
   /** True when a harbour was caught unready in the month war was declared. */
   surprise?: boolean;
+  /** Damaged cities (the grand campaign with its switch): what the bombs did to the town, in percent points added, and where it now stands. */
+  city?: { region: number; added: number; now: number };
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */

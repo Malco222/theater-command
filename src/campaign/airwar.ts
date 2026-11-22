@@ -688,9 +688,15 @@ export interface RaidFigures {
   works?: number; worksLeft?: number;
   organisation?: number;
   town?: TownHit;
+  /** Damaged cities: the percent of the town the bombs should leave in ruins, until it is repaired. */
+  city?: number;
 }
 
 const VERDICT: [number, string][] = [[0.8, 'Very likely to succeed'], [0.6, 'Likely to succeed'], [0.4, 'It could go either way'], [0.2, 'Likely to fail'], [0, 'Very likely to fail']];
+
+/** Damaged cities: the forecast's line for the lasting damage the bombs should leave on the town. */
+const cityLine = (g: Game, target: number, pts: number): string =>
+  `Should leave about ${pts < 1 ? 'under 1' : Math.round(pts)}% more of ${townName(g.regions[target])} in ruins: its factories and its pay fall by as much until its holder repairs it.`;
 
 function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeof forecastAir>, nat: string): string[] {
   const out: string[] = [];
@@ -700,6 +706,7 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
     if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${place}, which stays cut until engineers relay it.`);
     if (fc.ruin) out.push(`About a ${pct(fc.ruin)} chance of wrecking a factory outright.`);
+    if (fc.city) out.push(cityLine(g, target, fc.city));
   } else if (kind === 'superiority') {
     out.push(`Fighter odds ${fc.odds >= 9 ? 'overwhelming' : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
     if (fc.cut > 0) out.push(`The air groups based at ${place} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
@@ -714,6 +721,7 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     if (sunk && sunk.cv > 0.15) out.push('A carrier that goes down takes most of its aircraft with it.');
   } else if (kind === 'town') {
     if (fc.town) out.push(townHitText(g, g.regions[target], fc.town, 'bombs', false));
+    if (fc.town && fc.city) out.push(cityLine(g, target, fc.city));
   } else if (kind === 'line') {
     const most = Math.max(0, ...g.regions[target].units.filter((u) => !u.dead && atWar(g, nat, u.nat)).map(worksOf));
     const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
@@ -735,6 +743,7 @@ function figuresOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     if (g.regions[target].fac > 0) { f.output = fc.cut; f.national = fc.nation; }
     if (fc.rail) f.rail = fc.rail;
     if (fc.ruin) f.factory = fc.ruin;
+    if (fc.city) f.city = fc.city;
   } else if (kind === 'superiority') {
     f.odds = fc.odds;
     if (fc.cut > 0) f.readiness = fc.cut;
@@ -748,7 +757,7 @@ function figuresOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     f.works = Math.min(fc.cut, most);
     f.worksLeft = Math.max(0, most - fc.cut);
   } else if (kind === 'town') {
-    if (fc.town) f.town = { ...fc.town };
+    if (fc.town) { f.town = { ...fc.town }; if (fc.city) f.city = fc.city; }
   } else if (kind === 'ground') {
     f.organisation = fc.cut;
   }
