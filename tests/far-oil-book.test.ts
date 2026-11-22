@@ -13,8 +13,9 @@ import { describe, expect, it } from 'vitest';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { NAVY, boatsOut, closedTo, laneLoss, subsWorth, zoneOf } from '../src/campaign/navy';
-import { RES, fieldOverseas, fireField, keepsStores, laneStopped, needOf, stores, storesOf, type Lane, type ResLine } from '../src/campaign/resources';
+import { RES, fieldOverseas, fireField, keepsStores, laneStopped, needOf, plantsMost, plantsSpent, stores, storesOf, type Lane, type ResLine } from '../src/campaign/resources';
 import { startOpen } from '../src/campaign/staff';
+import { TECH, techOf, techRule } from '../src/campaign/tech';
 import type { Fleet, Game, Ships } from '../src/campaign/types';
 import { FAR_SEAS_FIRST } from '../src/campaign/world';
 import farBooks from '../data/campaign/far-books.json';
@@ -177,5 +178,59 @@ describe("Japan's oil book (ruling 194)", () => {
     // Only Japan's lanes are read so (194 point 3, and 195 point 5 for the supplies lanes): nothing of Europe's moves.
     expect(RES.lanes.filter((x) => x.closes).map((x) => x.to)).toEqual(['JAP', 'JAP', 'JAP', 'JAP', 'JAP']);
     expect(RES.lanes.filter((x) => x.closes && x.oil + (x.fields?.length ?? 0) > 0).map((x) => x.id)).toEqual(['south-oil']);
+  });
+});
+
+// Form 2 (i), the design director's ruling of 20:41Z, 22 November 2026, on the historian's
+// japan-oil-1941-45-partial.md. The fault: the technology tree gave Japan's fourteen factories 0.25 each, 3.5 a month,
+// 0.18 of the southern lane's full flow. The record's synthetic plans "failed to yield significant results": 1 million
+// barrels in 1943 against imports at a rate of 21 million a year at their peak, 0.048 of it. On the lane's own scale
+// (19.8 at its full) that is 0.94 a month, the plants' yield at full build.
+describe("Japan's fuel plants make the record's yield", () => {
+  const tech = (g: Game, nat: string): ResLine | undefined => stores(g, nat)!.oil.income.find((l) => l.key === 'tech');
+  const SYN = TECH.techs.find((x) => x.id === 'synthetics')!, HYD = TECH.techs.find((x) => x.id === 'hydrogenation')!;
+
+  it('0.94 a month at full build, an equal share a factory of the homeland, whatever the tree would give', () => {
+    const g = grand();
+    expect(RES.oil.plants).toEqual({ JAP: 0.94 });
+    // The row's own arithmetic: 1 million barrels against 1.75 million a month for a year, of the lane's 19.8.
+    expect(19.8 / (1.75 * 12)).toBeCloseTo(0.94, 2);
+    expect(plantsMost(g, 'JAP')).toBe(0.94);
+    expect(plantsMost(g, 'GER')).toBeNull();
+    expect(tech(g, 'JAP')).toBeUndefined();
+    techOf(g, 'JAP')!.done.push('synthetics');
+    const home = g.regions.filter((r) => r.owner === 'JAP' && !r.overseas);
+    const all = home.reduce((n, r) => n + r.fac, 0);
+    expect(all).toBeGreaterThan(8);
+    expect(tech(g, 'JAP')).toMatchObject({ count: all });
+    expect(tech(g, 'JAP')!.amount).toBeCloseTo(0.94, 9);
+    // The tree's own rate would have given it several times that.
+    expect(SYN.oil! * all).toBeGreaterThan(2);
+    // More of the tree's fuel chemistry adds nothing: the yield is the record's at full build.
+    techOf(g, 'JAP')!.done.push('hydrogenation');
+    expect(tech(g, 'JAP')!.amount).toBeCloseTo(0.94, 9);
+    // A factory lost makes none of its share, and the rest make no more for it.
+    const lost = home.find((r) => r.fac > 0 && r.id !== g.nations.JAP.capital)!;
+    lost.ctrl = 'USA';
+    expect(tech(g, 'JAP')!.amount).toBeCloseTo(0.94 * (all - lost.fac) / all, 9);
+    lost.ctrl = 'JAP';
+    // Germany's plants make the tree's rate, as on the old chart.
+    techOf(g, 'GER')!.done.push('synthetics');
+    expect(tech(g, 'GER')!.amount).toBeCloseTo(SYN.oil! * tech(g, 'GER')!.count!, 9);
+    // The far side off: the row is nobody's.
+    g.flags.world = 0;
+    try { expect(plantsMost(g, 'JAP')).toBeNull(); } finally { g.flags.world = 1; }
+  });
+
+  it('its staff gains nothing by more fuel chemistry once the plants make all they can, and the card says what they make', () => {
+    const g = grand();
+    expect(plantsSpent(g, 'JAP')).toBe(false);
+    expect(techRule(SYN, g, 'JAP')).toContain('With every factory at home working, its fuel plants make 0.94 oil a month between them');
+    expect(techRule(SYN, g, 'GER')).toMatch(/Every working factory at home also makes [\d.]+ oil a month/);
+    techOf(g, 'JAP')!.done.push('synthetics');
+    expect(plantsSpent(g, 'JAP')).toBe(true);
+    expect(techRule(HYD, g, 'JAP')).toContain('its fuel plants make 0.94 oil a month between them');
+    techOf(g, 'GER')!.done.push('synthetics');
+    expect(plantsSpent(g, 'GER')).toBe(false);
   });
 });

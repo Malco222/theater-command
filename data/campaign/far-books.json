@@ -6,6 +6,8 @@
       "home": {"JAP": 1},
       "start": {"JAP": 34},
       "caps": {"JAP": 34},
+      "_plants": "Japan's synthetic fuel plants at full build (the design director's ruling of 20:41Z, 22 November 2026; the historian's japan-oil-1941-45-partial.md). The record: the synthetic plans 'failed to yield significant results' (USSBS, firm); 1 million barrels in 1943, 8% of the target, over half of it in Manchuria (likely: a firmer figure replaces it when found). Imports peaked at 1.75 million barrels a month in August 1943 (firm), a rate of 21 million a year, so the plants made 1 / 21 = 0.0476 of the peak year's import rate. The southern oil lane at its full is 19.8 a month, so the plants make 19.8 / 21 = 0.94 a month, against the 3.5 the technology tree gives Japan's fourteen factories. Every factory of the homeland makes an equal share of it once the tree's fuel chemistry is had. GAP, named and not filled: the record's plants came in late and by steps; the build-up by year is not found, so no date of ours is laid and the yield comes with the technology.",
+      "plants": {"JAP": 0.94},
       "need": {"navy": {"JAP": {"draw": 1.25, "war": 2.1}}}
     },
     "sup": {

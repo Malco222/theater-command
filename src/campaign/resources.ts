@@ -86,6 +86,12 @@ export const RES = data as unknown as {
     start: Record<string, number>; cap: number;
     /** The tanks of a nation that holds more or less than 'cap' months of its need (ruling 194, point 5: a row by nation; the far side lays Japan's). */
     caps?: Record<string, number>;
+    /**
+     * The most a nation's fuel plants make a month with every factory of its homeland working (a row by nation; the
+     * far side lays Japan's, the only row): the record's yield at full build, whatever the technology tree would
+     * give. `plantRate`.
+     */
+    plants?: Record<string, number>;
     short: { attack: number; defence: number; air: number; fleet: number; slowAt: number };
   };
   sup: {
@@ -180,7 +186,33 @@ function treeOil(g: Game, nat: string): { amount: number; factories: number } {
   let fac = g.nations[nat].offmap?.industry ?? 0;
   // (Air campaigns, ruling 236.2: the fuel plants of a province bombed for its oil make that much less.)
   for (const r of g.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) { const b = oilHeld(g, r); fac += b > 0 ? workingFactories(g, r) * (1 - b) : workingFactories(g, r); }
-  return { amount: rate * fac, factories: fac };
+  return { amount: plantRate(g, nat, rate) * fac, factories: fac };
+}
+
+/** The most a nation's fuel plants make a month by the record (the far side's row), or null where the tree's rate stands. */
+export const plantsMost = (g: Game, nat: string): number | null => (farOn(g) ? RES.oil.plants?.[nat] ?? null : null);
+
+/**
+ * What one fuel plant makes a month for a nation whose technology gives `rate` a factory (the far side; the design
+ * director's ruling of 20:41Z, 22 November 2026, on the historian's japan-oil-1941-45-partial.md). The tree's rate;
+ * for a nation with a row in 'plants', no more than an equal share of the record's yield at full build, counted over
+ * every factory of its homeland: its plants never made what the tree gives. A plant bombed or lost makes none of its
+ * share, as before.
+ */
+export function plantRate(g: Game, nat: string, rate: number): number {
+  const most = plantsMost(g, nat);
+  if (most === null) return rate;
+  let all = g.nations[nat].offmap?.industry ?? 0;
+  for (const r of g.regions) if (r.owner === nat && !r.overseas) all += r.fac;
+  return all > 0 ? Math.min(rate, most / all) : rate;
+}
+
+/** True for a nation whose fuel plants already make all the record allows them: more of the tree's fuel chemistry adds no oil. */
+export function plantsSpent(g: Game, nat: string): boolean {
+  if (plantsMost(g, nat) === null) return false;
+  let rate = 0;
+  for (const id of g.nations[nat].tech?.done ?? []) rate += TECH.techs.find((t) => t.id === id)?.oil ?? 0;
+  return rate > 0 && plantRate(g, nat, rate) < rate;
 }
 
 /**
