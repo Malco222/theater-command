@@ -148,6 +148,9 @@ class APlayerController;
  *                         kept while it is put away; shown again it is only recoloured, province by province, where the
  *                         sides have changed. It was laid afresh over the whole world on every press (ShowSides 211 ms
  *                         in run 7). 0: laid afresh every time, as before. The same picture either way.
+ *   tc.Speed.SidesFade    0.18 (default): with SidesKept, the sides view's wash fades in and out over this many seconds,
+ *                         a long frame counted as a thirtieth, so the step is never a jump even where a frame stalls.
+ *                         0: at once, as before.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -197,6 +200,7 @@ namespace TheaterSpeed
 	int32 ShowSpread(); // the points of towns' and trees' squares newly shown in a frame: 0 for no limit, as before
 	bool MonthSpread();
 	bool SidesKept();
+	float SidesFade(); // (tc.Speed.SidesFade) the seconds the sides view fades in and out over: 0 at once, as before
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would

@@ -1331,6 +1331,12 @@ private:
 	TObjectPtr<UProceduralMeshComponent> SidesMesh;
 	TArray<int32> SidesPointRegion;
 	TArray<FString> SidesColouredFor;
+	// (tc.Speed.SidesFade) the kept sides view's own ink, and how far it is faded in (0 put away, 1 full); each frame
+	// moves it toward the view's state, and at nought the mesh is hidden
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SidesInk;
+	float SidesShown = 0.0f;
+	void UpdateSidesFade(float DeltaSeconds);
 	int32 ShownMonth = -1;
 	// The year turning: the look the trees wear (0 summer, 1 September, 2 October, 3 November, 4 winter, 5 March,
 	// 6 April), how hard the winter lies (0 to 1), and what the rivers were last drawn for.

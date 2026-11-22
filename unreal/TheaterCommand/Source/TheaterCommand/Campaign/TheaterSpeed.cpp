@@ -118,6 +118,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarSidesKept(
 		TEXT("tc.Speed.SidesKept"), 1,
 		TEXT("1 lays the sides view once on a mesh of its own, keeps it while it is put away and recolours it where the sides changed; 0 lays it afresh on every press, as before. The same picture either way."));
+	TAutoConsoleVariable<float> CVarSidesFade(
+		TEXT("tc.Speed.SidesFade"), 0.18f,
+		TEXT("(with tc.Speed.SidesKept) The seconds the sides view takes to come up and go away, its wash fading in and out, so that the step is never a jump (the art director: covered by a 0.15 to 0.2 s cross-fade); 0 shows and hides it at once, as before. A long frame counts as a thirtieth of a second, so a stall never eats the fade."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
@@ -487,6 +490,11 @@ namespace TheaterSpeed
 	bool SidesKept()
 	{
 		return CVarSidesKept.GetValueOnGameThread() != 0;
+	}
+
+	float SidesFade()
+	{
+		return FMath::Clamp(CVarSidesFade.GetValueOnGameThread(), 0.0f, 2.0f);
 	}
 
 	FQuietModelling::FQuietModelling(int32 How)

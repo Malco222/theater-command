@@ -12255,6 +12255,7 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 	if (SidesMesh && SidesMesh->IsVisible())
 	{
 		SidesMesh->SetVisibility(false); // (kept there with the switch on)
+		SidesShown = 0.0f;
 	}
 	OrdersMesh->ClearMeshSection(5);
 	if (!bSides)
@@ -12287,9 +12288,11 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 	// again, only the provinces whose side has changed are coloured afresh, in place, rim and all. The same wash either way.)
 	if (!bSides && !bWarmOnly)
 	{
-		if (SidesMesh && SidesMesh->IsVisible())
+		// (tc.Speed.SidesFade: put away, it fades out over the next frames and is hidden at nought, UpdateSidesFade)
+		if (SidesMesh && SidesMesh->IsVisible() && !(SidesInk && TheaterSpeed::SidesFade() > 0.0f))
 		{
 			SidesMesh->SetVisibility(false);
+			SidesShown = 0.0f;
 		}
 		return;
 	}
@@ -12306,6 +12309,16 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 		SidesMesh->SetTranslucentSortPriority(-2);
 		SidesMesh->SetVisibility(false);
 		SidesMesh->RegisterComponent();
+		// (its own ink, the same M_Highlight, so that its "Opacity" can fade it without fading the orders' washes)
+		if (HighlightMaterial)
+		{
+			SidesInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+			if (SidesInk)
+			{
+				SidesInk->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+			}
+		}
+		SidesShown = 0.0f;
 	}
 	FProcMeshSection* Laid = SidesMesh->GetProcMeshSection(0);
 	if (!Laid || Laid->ProcVertexBuffer.Num() == 0 || Laid->ProcVertexBuffer.Num() != SidesPointRegion.Num()
@@ -12322,13 +12335,14 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 				SidesPointRegion.Add(Id);
 			}
 		}
-		if (!Buffers.Commit(SidesMesh, 0, HighlightMaterial))
+		if (!Buffers.Commit(SidesMesh, 0, SidesInk ? static_cast<UMaterialInterface*>(SidesInk) : HighlightMaterial))
 		{
 			// (nothing laid: an old wash left on the mesh is not shown for the new sides)
 			SidesPointRegion.Reset();
 			SidesColouredFor.Reset();
 			SidesMesh->ClearMeshSection(0);
 			SidesMesh->SetVisibility(false);
+			SidesShown = 0.0f;
 			return;
 		}
 		SidesColouredFor = SideOf;
@@ -12371,7 +12385,36 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 	}
 	if (!bWarmOnly && !SidesMesh->IsVisible())
 	{
+		// (shown from nought, faded in by UpdateSidesFade; with no fade, at once and whole)
+		SidesShown = SidesInk && TheaterSpeed::SidesFade() > 0.0f ? 0.0f : 1.0f;
+		if (SidesInk)
+		{
+			SidesInk->SetScalarParameterValue(TEXT("Opacity"), SidesShown);
+		}
 		SidesMesh->SetVisibility(true);
+	}
+}
+
+void ACampaignMapActor::UpdateSidesFade(float DeltaSeconds)
+{
+	// (tc.Speed.SidesFade. The kept sides view comes up and goes away as a fade, not a jump: the art director's cover for
+	// the Y key's step. A long frame counts as a thirtieth of a second, so that a stall on the press does not use the
+	// fade up: the wash still rises over the frames after it.)
+	if (!SidesMesh || !SidesInk || !SidesMesh->IsVisible())
+	{
+		return;
+	}
+	const float Goal = bSides ? 1.0f : 0.0f;
+	if (SidesShown != Goal)
+	{
+		const float Lasts = TheaterSpeed::SidesFade();
+		const float Step = Lasts > 0.0f ? FMath::Min(DeltaSeconds, 1.0f / 30.0f) / Lasts : 1.0f;
+		SidesShown = bSides ? FMath::Min(SidesShown + Step, 1.0f) : FMath::Max(SidesShown - Step, 0.0f);
+		SidesInk->SetScalarParameterValue(TEXT("Opacity"), FMath::SmoothStep(0.0f, 1.0f, SidesShown));
+	}
+	if (!bSides && SidesShown <= 0.0f)
+	{
+		SidesMesh->SetVisibility(false);
 	}
 }
 
@@ -15765,6 +15808,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateClouds();
 	UpdateFlashes();
+	UpdateSidesFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (release 2: the Y key's sides view fades, tc.Speed.SidesFade)
 	UpdateOwnershipPaint();
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
