@@ -27,7 +27,7 @@ import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
-import { agentsOf, atWork, knowsBooks } from './intel';
+import { SIGHT, agentsOf, atWork, knowsBooks, sightOf } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
@@ -2295,8 +2295,9 @@ export function doorQuay(g: Game, nat: string): Region | null {
  * harbour, the most valuable first, up to the sum of the sea lift of every enemy whose ships reach that coast: what
  * they could land there together, and never more than the harbours held. No share of the army is set over it. (As
  * shipped, Germany kept one corps of three divisions in a conquered Norway against the record's 6 to 14, and no
- * rule read the sea off it.) A side's own harbours overseas are not watched, as before, and the treasury's works
- * stay on the homeland's harbours.
+ * rule read the sea off it.) A side's own ground overseas is watched as well (the ruling of 20:15Z the same day):
+ * each piece of it a coast of its own, manned by the corps that stand there and never by a shipped one. The
+ * treasury's works stay on the homeland's harbours. `coastsRead` is the same reading for whoever asks, the player too.
  */
 export function coastWatch(g: Game, nat: string): Record<string, number> {
   const C = OPEN.coast, n = g.nations[nat], D = OPEN.descent;
@@ -2305,11 +2306,40 @@ export function coastWatch(g: Game, nat: string): Record<string, number> {
   const home = homeGround(g, nat);
   const mine = home.list.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat && !r.overseas);
   const coasts = STRATEGY.ops?.watch && mounts(g, nat) ? coastsHeld(g, nat, mine) : null;
-  if (coasts ? !coasts.size : !mine.length) return out;
-  const lifts: { lift: number; seas: Uint8Array }[] = [];
-  // Whose ships: an enemy with sea lift whose army at home is not already at grips with this nation on land. They
-  // sail from the ports he holds and from an ally's where his troops stand, a landing's range and no further, and
-  // not through a strait that is shut to them.
+  if (coasts ? !coasts.length : !mine.length) return out;
+  const ships = shipsInReach(g, nat);
+  if (!ships.any) return out;
+  if (ships.fresh) g.flags[`st:watch:${nat}`] = g.turn;
+  else if (!flag(g, `st:watch:${nat}`) || g.turn - flag(g, `st:watch:${nat}`) >= 12) return out;
+  if (coasts) {
+    // Each coast by itself: what its enemies in reach could land there together, and never more than the harbours held.
+    for (const c of coasts) {
+      const R = readCoast(c, ships.lifts, C.each);
+      let left = R.liftSum;
+      for (let k = 1; k <= C.each && left > 0; k++) for (const r of R.reached) { if (left <= 0) break; out[r.name] = k; left--; }
+    }
+    return out;
+  }
+  const open = mine.filter((r) => r.seas.some((z) => ships.want[z])).sort(byWorth);
+  let left = Math.max(C.least, Math.floor(C.share * g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length));
+  for (let k = 1; k <= C.each && left > 0; k++) for (const r of open) { if (left <= 0) break; out[r.name] = k; left--; }
+  return out;
+}
+
+/** A harbour's worth to its holder: the watch takes the most valuable first. */
+const harbourWorth = (r: Region): number => 2 * r.vp + r.fac + (r.cap ? 8 : 0);
+const byWorth = (a: Region, b: Region): number => harbourWorth(b) - harbourWorth(a) || a.id - b.id;
+
+/**
+ * Whose ships reach a nation's coasts (the coast watch): each enemy with sea lift whose army at home is not already
+ * at grips with this nation on land. They sail from the ports he holds and from an ally's where his troops stand, a
+ * landing's range and no further, and not through a strait that is shut to them. `want`: the seas any of them
+ * reaches; `lifts`: each one's lift and seas; `fresh`: one of them has been quiet a season, or has named this nation
+ * for a descent. It reads the game and writes nothing.
+ */
+function shipsInReach(g: Game, nat: string): { want: Uint8Array; any: boolean; fresh: boolean; lifts: { nat: string; lift: number; seas: Uint8Array }[] } {
+  const n = g.nations[nat], D = OPEN.descent!;
+  const lifts: { nat: string; lift: number; seas: Uint8Array }[] = [];
   const ids = Object.keys(g.nations);
   const want = new Uint8Array(g.seas.length);
   let fresh = false, any = false;
@@ -2325,52 +2355,91 @@ export function coastWatch(g: Game, nat: string): Record<string, number> {
       if (r.ctrl !== e && !(allied(g, e, r.ctrl) && r.units.some((u) => u.nat === e && !u.dead && u.kind !== 'fort'))) continue;
       for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
     }
-    const his = coasts ? new Uint8Array(g.seas.length) : null;
+    const his = new Uint8Array(g.seas.length);
     for (let i = 0; i < q.length; i++) {
       want[q[i]] = 1;
-      if (his) his[q[i]] = 1;
+      his[q[i]] = 1;
       any = true;
       if (d[q[i]] >= NAVY.landing.range) continue;
       for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, e)) { d[j] = d[q[i]] + 1; q.push(j); }
     }
-    if (his && q.length) lifts.push({ lift: x.sealift, seas: his });
+    if (q.length) lifts.push({ nat: e, lift: x.sealift, seas: his });
   }
-  if (!any) return out;
-  if (fresh) g.flags[`st:watch:${nat}`] = g.turn;
-  else if (!flag(g, `st:watch:${nat}`) || g.turn - flag(g, `st:watch:${nat}`) >= 12) return out;
-  const byWorth = (a: Region, b: Region): number => 2 * b.vp + b.fac + (b.cap ? 8 : 0) - (2 * a.vp + a.fac + (a.cap ? 8 : 0)) || a.id - b.id;
-  if (coasts) {
-    // Each country's coast: what its enemies in reach could land there together, and never more than the harbours held.
-    for (const [, coast] of [...coasts].sort(([a], [b]) => Number(b === nat) - Number(a === nat) || (a < b ? -1 : 1))) {
-      const open = coast.filter((r) => r.seas.some((z) => want[z])).sort(byWorth);
-      let left = 0;
-      for (const E of lifts) if (coast.some((r) => r.seas.some((z) => E.seas[z]))) left += E.lift;
-      for (let k = 1; k <= C.each && left > 0; k++) for (const r of open) { if (left <= 0) break; out[r.name] = k; left--; }
-    }
-    return out;
-  }
-  const open = mine.filter((r) => r.seas.some((z) => want[z])).sort(byWorth);
-  let left = Math.max(C.least, Math.floor(C.share * g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length));
-  for (let k = 1; k <= C.each && left > 0; k++) for (const r of open) { if (left <= 0) break; out[r.name] = k; left--; }
-  return out;
+  return { want, any, fresh, lifts };
 }
 
 /**
- * The coasts a side holds, each country's by itself (the war plan's coast watch): its homeland's harbours, with
- * those of its own country that lie apart from the capital's ground, under its own name, and under each conquered
- * country's name the harbours of that country it holds. A country is conquered once it has fallen: while it still
- * fights, the harbours taken from it are a front's, met by the reserves as any front is, and an operation's force
- * there is the operation's until its task ends. Its own harbours overseas are in none.
+ * A coast a side holds (the war plan's coast watch): its homeland's, a fallen country's, or a piece of its own
+ * ground overseas. `id`: the nation's own code for the homeland, the fallen country's code, and for a piece overseas
+ * the nation's code with the name of the piece's most valuable harbour ('UK/Alexandria').
  */
-function coastsHeld(g: Game, nat: string, mine: Region[]): Map<string, Region[]> {
-  const out = new Map<string, Region[]>();
-  if (mine.length) out.set(nat, [...mine]);
-  for (const r of g.regions) {
-    if (!r.port || !r.seas.length || r.ctrl !== nat || (r.owner === nat ? r.overseas || mine.includes(r) : !!g.nations[r.owner]?.alive)) continue;
-    const list = out.get(r.owner);
-    if (list) list.push(r); else out.set(r.owner, [r]);
+export interface Coast { id: string; kind: 'home' | 'conquered' | 'overseas'; harbours: Region[] }
+
+/**
+ * A coast as its holder reads it from the sea: `reached`, its harbours an enemy's ships reach, the most valuable
+ * first (the order the watch takes them); `by`, for each of those the enemies whose ships reach it; `lift`, the sea
+ * lift of each enemy who reaches the coast, in corps a month; `liftSum`, what they could land there together; `ask`,
+ * the harbours to watch: that sum, and never more than the harbours reached.
+ */
+export interface CoastRead extends Coast { reached: Region[]; by: Record<string, string[]>; lift: Record<string, number>; liftSum: number; ask: number }
+
+function readCoast(c: Coast, lifts: { nat: string; lift: number; seas: Uint8Array }[], each: number): CoastRead {
+  const by: Record<string, string[]> = {}, lift: Record<string, number> = {};
+  let liftSum = 0;
+  for (const E of lifts) {
+    let any = false;
+    for (const r of c.harbours) if (r.seas.some((z) => E.seas[z])) { (by[r.name] ??= []).push(E.nat); any = true; }
+    if (any) { lift[E.nat] = E.lift; liftSum += E.lift; }
   }
-  return out;
+  const reached = c.harbours.filter((r) => by[r.name]).sort(byWorth);
+  return { ...c, reached, by, lift, liftSum, ask: Math.min(liftSum, reached.length * each) };
+}
+
+/**
+ * The coasts a side holds and what could come at each from the sea, for whoever asks: the computer's watch reads
+ * this (`coastWatch`), and so does the player's map, of his own ground (the design director's rulings of 22 November
+ * 2026, 20:15Z and 20:18Z: the player never lacks a tool the computer has, and the two read the same figure). Behind
+ * the operations' switch and the watch's own key; the grand campaign. The enemy's figure in it is his sea lift,
+ * which the coast watch's report already tells a player. It reads the game and writes nothing.
+ */
+export function coastsRead(g: Game, nat: string): CoastRead[] {
+  const C = OPEN.coast, n = g.nations[nat];
+  if (!C || !OPEN.descent || !isOpen(g) || !STRATEGY.ops?.on || !STRATEGY.ops.watch || !n || !n.alive || n.capital < 0) return [];
+  const home = homeGround(g, nat);
+  const mine = home.list.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat && !r.overseas);
+  const ships = n.atWar.length ? shipsInReach(g, nat).lifts : [];
+  return coastsHeld(g, nat, mine).map((c) => readCoast(c, ships, C.each));
+}
+
+/**
+ * The coasts a side holds, each by itself (the war plan's coast watch). Its homeland's harbours, with those of its
+ * own country that lie apart from the capital's ground, under its own name. Under each conquered country's name the
+ * harbours of that country it holds: a country is conquered once it has fallen, and while it still fights, the
+ * harbours taken from it are a front's, met by the reserves as any front is, and an operation's force there is the
+ * operation's until its task ends. And its own ground overseas, each piece of it by itself (the harbours joined by
+ * land the side holds): a far piece's watch comes from the corps standing there. The homeland first, then by name.
+ */
+function coastsHeld(g: Game, nat: string, mine: Region[]): Coast[] {
+  const by = new Map<string, Coast>();
+  const add = (id: string, kind: Coast['kind'], r: Region): void => { const c = by.get(id); if (c) c.harbours.push(r); else by.set(id, { id, kind, harbours: [r] }); };
+  for (const r of mine) add(nat, 'home', r);
+  const far: Region[] = [];
+  for (const r of g.regions) {
+    if (!r.port || !r.seas.length || r.ctrl !== nat || mine.includes(r)) continue;
+    if (r.owner !== nat) { if (!g.nations[r.owner]?.alive) add(r.owner, 'conquered', r); }
+    else if (r.overseas) far.push(r);
+    else add(nat, 'home', r);
+  }
+  // Its own ground overseas, piece by piece: the most valuable harbour names the piece.
+  const piece = new Int32Array(g.regions.length).fill(-1);
+  for (const r of [...far].sort(byWorth)) {
+    if (piece[r.id] >= 0) { add(`${nat}/${g.regions[piece[r.id]].name}`, 'overseas', r); continue; }
+    const q = [r.id];
+    piece[r.id] = r.id;
+    for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (piece[j] < 0 && g.regions[j].ctrl === nat) { piece[j] = r.id; q.push(j); }
+    add(`${nat}/${r.name}`, 'overseas', r);
+  }
+  return [...by.values()].sort((a, b) => Number(b.id === nat) - Number(a.id === nat) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** The coast watch's numbers, for the treasury's fortifications (arsenal.ts). */
@@ -2567,7 +2636,9 @@ export function opLodged(g: Game, nat: string, at: Region): void {
  *
  * As ruled on 22 November 2026 (19:36Z), each behind its own key. 'reach': the enemy reckoned with is every enemy
  * corps the staff can see that could strike that ground within a month's march (marches.ts, `strikers`: the reach
- * the player is shown), with no ceiling of ours, since the guard only keeps and never calls a corps in. 'held': the
+ * the player is shown), with no ceiling of ours, since the guard only keeps and never calls a corps in. A corps in
+ * full view counts at its worth; one only glimpsed counts as the player would know it, a corps and no more (20:15Z:
+ * the game holds no figure for a counted corps, so it is read as one of the staff's own, at their mean). 'held': the
  * corps the guard keeps are returned as `keep` and stand where they are for the month (ai.ts): a keep that marches
  * away is no keep. And where the coast watch reads this ground ('ops.watch'), the corps its harbours ask for are
  * found from those standing here, the ones in the watched harbours first: they count as kept, none of them is sent
@@ -2602,7 +2673,15 @@ export function opArmies(g: Game, nat: string): IdleArmy[] {
   const free = mine.filter((u) => !u.hold && !u.town && u.kind !== 'eng' && !u.airborne && u.joint === undefined && u.leave === undefined);
   const size = (c: Corps): number => c.divs * c.str;
   let kept = mine.filter((u) => !free.includes(u)).reduce((s, u) => s + size(u), 0);
-  if (H.reach) foes = strikers(g, nat, (id) => seen[id] === 1).reduce((s, u) => s + size(u), 0);
+  if (H.reach) {
+    // A corps in full view counts at its worth, as the enemy next to the ground always did. One only glimpsed is a
+    // flag and a count to the staff, as it is to the player (intel.json 'sight'): it counts as one corps, at the mean
+    // worth of the staff's own field corps. The computer never knows more than the player (the ruling of 20:15Z).
+    const sight = sightOf(g, nat);
+    const own = g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.town === undefined);
+    const mean = own.length ? own.reduce((s, c) => s + size(c), 0) / own.length : 0;
+    foes = strikers(g, nat, (id) => seen[id] === 1).reduce((s, u) => s + (sight[u.reg] === SIGHT.full ? size(u) : mean), 0);
+  }
   const need = Math.max(H.guard, (OPEN.descent?.feed ?? 2) * foes);
   const weakest = [...free].sort((a, b) => size(a) - size(b) || a.id - b.id);
   // The coast watch on this ground: a corps of two divisions or more for each harbour it asks, those standing in the harbours first.

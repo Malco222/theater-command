@@ -1457,6 +1457,12 @@ export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): 
  * coast watch reports it: his staff mans its harbours, and a player is told. Only a corps that has not moved in
  * the month can embark, so the report always comes a month before the landing can. A coast the attacker's own
  * army could march to is not watched for this: the war there is a land war already.
+ *
+ * The war plan's coast watch (strategy.json 'ops.watch', behind the operations' switch; the design director's
+ * rulings of 22 November 2026, 20:15Z and 20:18Z): every coast the enemy holds is read, not his homeland's alone:
+ * the harbours he holds of a country that has fallen and of his own ground overseas (staff.ts, `coastsRead`). For a
+ * computer's staff where it mounts its operations, and for a player at every stop: he never lacks a tool the
+ * computer has. What is seen against a player is kept for his map as well (`gatherings`).
  */
 /**
  * True when a nation has come ashore from the sea on another's homeland since their war began, and holds or stands
@@ -1480,7 +1486,9 @@ export function coastReport(g: Game, att: string): void {
   for (const d of [...n.atWar].sort()) {
     const x = g.nations[d];
     if (!x?.alive || x.capital < 0) continue;
-    const coasts = g.regions.filter((r) => r.owner === d && r.ctrl === d && !r.overseas && r.seas.length > 0 && !byLand[r.id]);
+    const every = !!STRATEGY.ops?.on && !!STRATEGY.ops.watch && g.flags.open === 1 && (d === g.human || mounts(g, d));
+    const coasts = g.regions.filter((r) => r.ctrl === d && r.seas.length > 0 && !byLand[r.id]
+      && (r.owner === d ? !r.overseas || (every && !!r.port) : every && !!r.port && !g.nations[r.owner]?.alive));
     if (!coasts.length) continue;
     let seen: { quay: Region; coast: Region; corps: number } | null = null;
     for (const q of quays) {
@@ -1494,6 +1502,8 @@ export function coastReport(g: Game, att: string): void {
     if (!seen) continue;
     // His staff mans the harbours of the homeland from now (staff.ts, the coast watch).
     g.flags[`st:watch:${d}`] = g.turn;
+    // (And a player's map shows the quay for as long as the shipping stands there: `gatherings`.)
+    if (every && d === g.human) { g.flags[`cwNow:${att}:${d}`] = g.turn; g.flags[`cwTo:${att}:${d}`] = seen.coast.id + 1; g.flags[`cwOn:${att}:${d}`] = seen.quay.id + 1; g.flags[`cwN:${att}:${d}`] = seen.corps; }
     const key = `cw:${att}:${d}`, at = `cwAt:${att}:${d}`;
     if (g.flags[key] === seen.quay.id + 1 && g.turn - (g.flags[at] ?? -99) < W.every) continue;
     g.flags[key] = seen.quay.id + 1;
@@ -1505,6 +1515,23 @@ export function coastReport(g: Game, att: string): void {
     if (d === g.human) warning(g, 'Coast watch', `The coast watch reports ${n.adj} shipping gathering at ${seen.quay.name}, with troops on the quays: enough to carry ${force}. ${seen.coast.name} is within their reach, and a landing could come as soon as next month.`, d, seen.coast.id, att);
     else if (att === g.human) headline(g, 'info', `${x.adj} coast watchers have seen your shipping and troops gather at ${seen.quay.name}: ${x.name} expects a landing and is manning its harbours.`, att, seen.quay.id);
   }
+}
+
+/**
+ * The shipping the coast watch has seen gathering against a nation as the last month closed (the war plan's coast
+ * watch, for a player's map): the quay, whose it is, how many corps it could carry, and the place of his in its
+ * reach. Each is kept while the shipping stands there and gone the month after it sails. It reads the game and
+ * writes nothing.
+ */
+export function gatherings(g: Game, d: string): { quay: number; by: string; corps: number; coast: number }[] {
+  const out: { quay: number; by: string; corps: number; coast: number }[] = [];
+  for (const att of [...(g.nations[d]?.atWar ?? [])].sort()) {
+    const at = g.flags[`cwNow:${att}:${d}`];
+    if (at === undefined || g.turn - at > 1 || !g.nations[att]?.alive) continue;
+    const quay = (g.flags[`cwOn:${att}:${d}`] ?? 0) - 1, coast = (g.flags[`cwTo:${att}:${d}`] ?? 0) - 1;
+    if (quay >= 0 && coast >= 0) out.push({ quay, by: att, corps: g.flags[`cwN:${att}:${d}`] ?? 0, coast });
+  }
+  return out;
 }
 
 // ---- Fleet orders -------------------------------------------------------------------------------

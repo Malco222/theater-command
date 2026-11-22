@@ -24,7 +24,9 @@ export const STRATEGY = data as unknown as {
      * with is every enemy corps the staff can see that could strike the ground within a month's march (the reach the
      * player is shown, marches.ts), in place of those on the ground and next to it.
      */
-    home?: { guard: number; risk: number; held?: boolean; reach?: boolean }; port?: { size: number; within: number };
+    home?: { guard: number; risk: number; held?: boolean; reach?: boolean };
+    /** `held`: the corps that keeps a foothold's harbour stands for the month, whatever a phase releases (the ruling of 20:15Z the same day: a keep that does not keep is the guard's fault again). */
+    port?: { size: number; within: number; held?: boolean };
     /**
      * The coast watch on every coast a side holds (the same ruling): each country's coast is a watch of its own, the
      * homeland's and each conquered country's, a corps a harbour up to the sum of the sea lift of every enemy whose

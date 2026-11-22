@@ -29,8 +29,8 @@ const war = (seed: number, stop: number, months: number, human: string | null = 
 const planFlags = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^st:cam/.test(k));
 
 describe('the war plan', () => {
-  const was = { on: STRATEGY.on, staffs: STRATEGY.staffs, stops: STRATEGY.stops, recall: STRATEGY.recall!.on, ops: STRATEGY.ops!.on, landing: STRATEGY.ops!.landing!.on, watch: STRATEGY.ops!.watch };
-  afterEach(() => { STRATEGY.on = was.on; STRATEGY.staffs = was.staffs; STRATEGY.stops = was.stops; STRATEGY.recall!.on = was.recall; STRATEGY.ops!.on = was.ops; STRATEGY.ops!.landing!.on = was.landing; STRATEGY.ops!.watch = was.watch; campaignLog.say = null; });
+  const was = { on: STRATEGY.on, staffs: STRATEGY.staffs, stops: STRATEGY.stops, recall: STRATEGY.recall!.on, ops: STRATEGY.ops!.on, landing: STRATEGY.ops!.landing!.on, watch: STRATEGY.ops!.watch, portHeld: STRATEGY.ops!.port!.held };
+  afterEach(() => { STRATEGY.on = was.on; STRATEGY.staffs = was.staffs; STRATEGY.stops = was.stops; STRATEGY.recall!.on = was.recall; STRATEGY.ops!.on = was.ops; STRATEGY.ops!.landing!.on = was.landing; STRATEGY.ops!.watch = was.watch; STRATEGY.ops!.port!.held = was.portHeld; campaignLog.say = null; });
 
   it('ships switched off, with its numbers in order', () => {
     expect(STRATEGY.on).toBe(false);
@@ -143,8 +143,13 @@ describe('the war plan', () => {
     // (Read as it was measured, before the coast watch on every coast, which has tests of its own. With that watch on,
     // Germany keeps two corps more in its home harbours, this war's Norway is fed more slowly, two of the three groups
     // that land are lost, and it falls in seven months, not six. Sent to the design director, 22 November 2026.)
+    // (And before the harbour keeper's hold was made to last its month, 'ops.port.held', ruled at 20:15Z the same day.
+    // With the keeper standing in Oslo whatever the phase releases, the corps beside it wait two months longer for
+    // the odds to break out, the two groups in the north are lost before they are reached, and this war's Norway
+    // falls in eight months with this watch off and in seven with it on. tests/watch-guard.test.ts reads the keeper.)
     STRATEGY.ops!.on = true;
     STRATEGY.ops!.watch = false;
+    STRATEGY.ops!.port!.held = false;
     const said: { t: number; nat: string; what: string; where: string }[] = [];
     campaignLog.say = (g, nat, what, where) => { said.push({ t: g.turn, nat, what, where }); };
     const g = startOpen(createGame(1, null));

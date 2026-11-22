@@ -486,11 +486,12 @@ function campaignMoves(g: Game, nat: string): void {
 }
 
 /**
- * The guard of an operation that is won, held where it stands for this month's moves (the war plan, 'ops.home.held').
- * A phase's release does not let these corps go: a keep that marches away is no keep. (A foothold's harbour keeper
- * is not among them: a release that names its ground still drops its hold in the same month, as before. Seed 1 at
- * stop 3 with the coast watch: III Corps kept Oslo's harbour in July 1940, was released, attacked into Oppland and
- * marched in. Named to the design director, 22 November 2026, and not mended here.)
+ * The corps the war plan keeps where they stand for this month's moves: the guard of an operation that is won
+ * ('ops.home.held') and the keeper of a foothold's harbour ('ops.port.held'). A phase's release does not let these
+ * corps go: a keep that marches away is no keep. (The keeper, before: a release that named its ground dropped its
+ * hold in the same month. Seed 1 at stop 3 with the coast watch: III Corps kept Oslo's harbour in July 1940, was
+ * released, attacked into Oppland and marched in, and the harbour's field stood empty two months. Mended as the
+ * design director ruled on 22 November 2026, 20:15Z: the same fault as the guard's.)
  */
 let monthKept = new Set<Corps>();
 
@@ -515,9 +516,10 @@ function movesOfTheMonth(g: Game, nat: string): void {
   const guard = ops.flatMap((A) => A.keep ?? []).filter((c) => !called.has(c));
   for (const c of guard) c.hold = true;
   // (The war plan: and the corps that keeps the harbour of a foothold stays on it for the month. `portKeepers`.)
-  const keepers = [...portKeepers(g, nat).filter((c) => !going.includes(c)), ...guard];
+  const quay = portKeepers(g, nat).filter((c) => !going.includes(c));
+  const keepers = [...quay, ...guard];
   const stays = new Set(keepers);
-  monthKept = new Set(guard);
+  monthKept = new Set(STRATEGY.ops?.port?.held ? keepers : guard);
   for (const c of away) if (!stays.has(c)) c.hold = true;
   for (const c of going) c.hold = true;
   try {
