@@ -2765,9 +2765,10 @@ namespace LandKit
 		const Part* GunPart = M.Gun >= 0 ? &M.Parts[static_cast<size_t>(M.Gun)] : nullptr;
 		const double GunLo = GunPart && GunPart->bLimits ? GunPart->Lo : -10.0;
 		const double GunHi = GunPart && GunPart->bLimits ? GunPart->Hi : 25.0;
-		const double TurretRate = (M.TurretDps > 0.0 ? M.TurretDps : 15.0) * Step;
-		const double TraverseRate = (M.TraverseDps > 0.0 ? M.TraverseDps : 4.0) * Step;
-		const double LayRate = 4.0 * Step; // an elevating handwheel turned briskly: four degrees a second
+		// (a crew's hands and motors are life's: on the battle's clock, Life times as quick)
+		const double TurretRate = (M.TurretDps > 0.0 ? M.TurretDps : 15.0) * Step * Life;
+		const double TraverseRate = (M.TraverseDps > 0.0 ? M.TraverseDps : 4.0) * Step * Life;
+		const double LayRate = 4.0 * Step * Life; // an elevating handwheel turned briskly: four degrees a second
 		const double Velocity0 = MuzzleVelocity(M.Name);
 		double Turret = 0.0, Lay = bGun ? 2.0 : 0.0, Trav = 0.0, SteerNow = 0.0, Drive = 0.0, RunL = 0.0, RunR = 0.0;
 		double Rise = 0.0, RiseX = -1e9, RiseY = -1e9, RiseAX = -1e9, RiseAY = -1e9;
@@ -2822,7 +2823,7 @@ namespace LandKit
 						Want = std::atan(Wheelbase * W[I] / V[I]) / Rad;
 					}
 					Want = Clamp(Want, -M.SteerLimit, M.SteerLimit);
-					SteerNow += Clamp(Want - SteerNow, -90.0 * Step, 90.0 * Step);
+					SteerNow += Clamp(Want - SteerNow, -90.0 * Step * Life, 90.0 * Step * Life);
 				}
 				Drive = Going[I] ? std::min(1.0, Drive + Step / 0.4) : std::max(0.0, Drive - Step / 0.6);
 				if (I > 0)
@@ -2974,7 +2975,7 @@ namespace LandKit
 			}
 			for (const ClipEvent& E : C->Events)
 			{
-				const double When = At + E.T;
+				const double When = At + E.T / Life; // (a clip's seconds are life's)
 				if (When > Cut + 1e-9 || When > End)
 				{
 					continue;
@@ -3040,7 +3041,7 @@ namespace LandKit
 		const Clip* FireClip = M.FindClip("fire");
 		for (double S : Shots)
 		{
-			AddClip("fire", S, std::min(Gone, S + (FireClip ? FireClip->Long : 2.5)), false, 0.0, 0, nullptr);
+			AddClip("fire", S, std::min(Gone, S + (FireClip ? FireClip->Long : 2.5) / Life), false, 0.0, 0, nullptr);
 		}
 		for (size_t K = 1; K < Hatch.size(); ++K)
 		{
@@ -3260,7 +3261,8 @@ namespace LandKit
 			const double Run = Wh.Side < 0 ? K.RunL : K.RunR;
 			S[static_cast<size_t>(P)].Turn = std::fmod(Run / std::max(Wh.Radius, 0.05), 2.0 * Pi) / Rad;
 		}
-		auto PlayAge = [&M, &S](const char* ClipName, double Age, double Turned)
+		// (an age on the battle's clock: the clip's own, life's seconds, Life times as many)
+		auto PlayAge = [this, &M, &S](const char* ClipName, double Age, double Turned)
 		{
 			if (Age < 0.0)
 			{
@@ -3268,9 +3270,9 @@ namespace LandKit
 			}
 			if (const Clip* C = M.FindClip(ClipName))
 			{
-				if (Age <= C->Long)
+				if (Age * Life <= C->Long)
 				{
-					M.Play(*C, Age, 1.0, S, Turned);
+					M.Play(*C, Age * Life, 1.0, S, Turned);
 				}
 			}
 		};
@@ -3283,7 +3285,7 @@ namespace LandKit
 				{
 					if (const Clip* C = M.FindClip("towed"))
 					{
-						M.Play(*C, T + Phase, 1.0, S); // trails closed and lifted to the hook, the carriage tipped
+						M.Play(*C, T * Life + Phase, 1.0, S); // trails closed and lifted to the hook, the carriage tipped
 					}
 				}
 			}
@@ -3291,13 +3293,13 @@ namespace LandKit
 			{
 				if (const Clip* C = M.FindClip("idle"))
 				{
-					M.Play(*C, T + Phase, 1.0 - K.Drive, S);
+					M.Play(*C, T * Life + Phase, 1.0 - K.Drive, S);
 				}
 				if (K.Drive > 0.0f)
 				{
 					if (const Clip* C = M.FindClip("drive"))
 					{
-						M.Play(*C, T + Phase, K.Drive, S);
+						M.Play(*C, T * Life + Phase, K.Drive, S);
 					}
 				}
 				PlayAge("start", T, 0.0);
@@ -4035,6 +4037,7 @@ namespace LandKit
 		for (size_t I = 0; I < Tracks.size(); ++I)
 		{
 			const Block* B = BlockOf(Tracks[I].Block);
+			All[I].Life = Life;
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}

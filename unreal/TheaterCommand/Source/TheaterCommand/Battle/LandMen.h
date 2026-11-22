@@ -349,6 +349,14 @@ namespace LandMen
 		 * man posed every frame, as before); the scene turns it on.
 		 */
 		void SetThrift(bool bOn);
+		/**
+		 * Life seconds a battle second: the rules' clock runs faster than life (about twice: a man rushing at 6 m/s, a
+		 * tank across a field at 10), so the scene plays the fight at half the battle's clock. The clips are life's: a
+		 * man goes prone, reloads, loops his idle and falls in his clip's own seconds, 1 / Life of them on the battle's
+		 * clock, and a burst's bullets come ten a second of life. His gait stays on the ground (the clip at his speed);
+		 * 1, the default, is as before. Set before Build (the shots are planned there).
+		 */
+		void SetLife(double LifePerBattleSecond);
 		/** Every how many frames he is posed now (1 when not thrifty). */
 		int PoseEvery(int Man) const;
 		/** This Update's events, in time order. */

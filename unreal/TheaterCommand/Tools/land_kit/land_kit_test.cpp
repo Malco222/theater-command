@@ -11,6 +11,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -201,7 +202,10 @@ int main(int argc, char** argv)
 		OutZ = 0.0;
 		OutNormal = V3(0.0, 0.0, 1.0);
 	};
+	// (life seconds a battle second, as the scene plays the fight: LAND_KIT_LIFE, 2 by default; 1 as before)
+	const char* LifeEnv = std::getenv("LAND_KIT_LIFE");
 	Battle B;
+	B.Life = LifeEnv ? std::atof(LifeEnv) : 2.0;
 	const auto L0 = Clock::now();
 	if (!B.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, Error))
 	{
@@ -315,13 +319,13 @@ int main(int argc, char** argv)
 			if (Frame > 0 && !bDead && M.Turret >= 0 && W.Role == "tank")
 			{
 				const double Step = std::fabs(WrapDeg(V.TurretDeg - LastTurret[I]));
-				const double Most = M.TurretDps * Dt + 1e-3;
+				const double Most = M.TurretDps * B.Life * Dt + 1e-3;
 				Trains.Note(Step <= Most, Step / Dt, Who(V) + " " + std::to_string(Step / Dt) + " deg/s at " + std::to_string(T));
 			}
 			if (Frame > 0 && !bDead && M.Traverse >= 0)
 			{
 				const double Step = std::fabs(V.TraverseDeg - LastTraverse[I]);
-				Traverses.Note(Step <= M.TraverseDps * Dt + 1e-3, Step / Dt, Who(V) + " traverse at " + std::to_string(T));
+				Traverses.Note(Step <= M.TraverseDps * B.Life * Dt + 1e-3, Step / Dt, Who(V) + " traverse at " + std::to_string(T));
 			}
 			LastTurret[I] = V.TurretDeg;
 			LastTraverse[I] = V.TraverseDeg;

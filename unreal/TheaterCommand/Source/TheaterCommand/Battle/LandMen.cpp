@@ -1238,6 +1238,8 @@ namespace LandMen
 		double EyeX = 1e9, EyeY = 1e9, EyeZ = 1e9;
 		double Clock = -1.0;  // the battle time of the last Update
 		bool bThrift = false; // far men posed every few frames (SetThrift)
+		/** Life seconds a battle second (SetLife): a clip's seconds are life's, laid on the battle's clock at 1 / Life. */
+		double Life = 1.0;
 		uint64_t Frame = 0;   // Updates since the start, for the thrifty frames' turns
 		bool bBuilt = false;
 		FallMemory Falls;
@@ -1342,6 +1344,13 @@ namespace LandMen
 			else if (Pose == "fire_stand" || Pose == "throw_grenade") { Use("fire_stand", Stance::Hold, Up); St.bFiring = true; }
 			else if (Pose == "fire_kneel" || Pose == "wait") { Use("fire_kneel", Stance::Hold, Kneel); St.bFiring = true; }
 			else if (Pose == "fire_prone" || Pose == "hide") { Use("fire_prone", Stance::Hold, Prone); St.bFiring = true; }
+			else if (Pose == "observe" && S.ClipIndex("radio_call") >= 0)
+			{
+				// The radio man (the American's soldier_USA_radio): kneeling, the handset at his ear, calling the guns in
+				// (radio_call, his own 8 s loop: the squelch, his words, the call going through).
+				Use("radio_call", Stance::Loop, Kneel);
+				St.bRifleDown = true;
+			}
 			else if (Pose == "observe")
 			{
 				// The spotter lying with his glasses up: fire_prone with his rifle laid down in front of him (there is no
@@ -1413,13 +1422,13 @@ namespace LandMen
 			G.bFiring = St.bFiring;
 			G.EndClass = St.Cl;
 			G.LieA = G.LieB = St.Cl == Prone ? 1.f : 0.f;
-			G.Rate = G.How == Segment::Loop ? M.Info.Jitter : 1.f;
+			G.Rate = G.How == Segment::Loop ? M.Info.Jitter * static_cast<float>(Life) : 1.f;
 			G.Phase = M.PhaseSeed;
 			if (bClipShotsRef && *bClipShotsRef && St.bFiring && G.How == Segment::Hold)
 			{
 				// The test's switch: the firing poses loop their own clips again, shots and all.
 				G.How = Segment::Loop;
-				G.Rate = M.Info.Jitter;
+				G.Rate = M.Info.Jitter * static_cast<float>(Life);
 			}
 			return G;
 		}
@@ -1523,13 +1532,14 @@ namespace LandMen
 				{
 					double Avail = Until > At ? Until - At : 0.6 * (NextChange - At);
 					Avail = std::min(Avail, NextShotStart(M, At) - At);
-					const double Natural = T.Natural / std::max(0.5, static_cast<double>(M.Info.Jitter));
+					// (the clips' seconds are life's: on the battle's clock, 1 / Life of them)
+					const double Natural = T.Natural / std::max(0.5, static_cast<double>(M.Info.Jitter)) / Life;
 					double Dur = std::min(Natural, Avail);
-					if (bOffQuick && From == Prone) Dur = std::min(Dur, 0.45);
-					if (bOffQuick && From == Kneel) Dur = std::min(Dur, 0.35);
-					if (Dur >= T.Least * 0.6)
+					if (bOffQuick && From == Prone) Dur = std::min(Dur, 0.45 / Life);
+					if (bOffQuick && From == Kneel) Dur = std::min(Dur, 0.35 / Life);
+					if (Dur >= T.Least * 0.6 / Life)
 					{
-						Dur = std::max(Dur, T.Least * 0.6);
+						Dur = std::max(Dur, T.Least * 0.6 / Life);
 						Segment G = OnceOf(T.Clip, T.From, T.To, At, Dur, St.Cl, 0.15f);
 						G.bShift = T.bShift;
 						G.LieA = T.LieA;
@@ -1677,14 +1687,14 @@ namespace LandMen
 					Sh.Bullets = 6 + static_cast<int>(Unit01(Seed ^ (static_cast<uint64_t>(M.Info.Block) << 40) ^ (static_cast<uint64_t>(M.Info.K) << 24)
 						^ (static_cast<uint64_t>(M.Info.J) << 52) ^ I) * 5.0);
 					Sh.Lead = C.FlashT >= 0.f ? C.FlashT : 0.1f;
-					Sh.Start = Sh.T - Sh.Lead;
-					Sh.End = Sh.T + (Sh.Bullets - 1) * 0.1 + 0.15;
+					Sh.Start = Sh.T - Sh.Lead / Life;
+					Sh.End = Sh.T + (Sh.Bullets - 1) * Gap() + 0.15 / Life;
 				}
 				else
 				{
 					Sh.Lead = Sh.W == Weapon::Grenade ? (C.ReleaseT >= 0.f ? C.ReleaseT : 0.95f) : (C.FlashT >= 0.f ? C.FlashT : 0.1f);
-					Sh.Start = Sh.T - Sh.Lead;
-					Sh.End = Sh.Start + C.Long;
+					Sh.Start = Sh.T - Sh.Lead / Life;
+					Sh.End = Sh.Start + C.Long / Life;
 				}
 			}
 			// A burst ends before his next round whatever it is: one fired on the move just after it included (its bullets
@@ -1694,8 +1704,8 @@ namespace LandMen
 				Shot& A = M.Shots[I];
 				const Shot& B = M.Shots[I + 1];
 				if (A.How != Shot::Burst || B.How == Shot::Clip || B.How == Shot::Burst) continue;
-				if (A.T + (A.Bullets - 1) * 0.1 < B.T) continue;
-				A.Bullets = std::max(1, std::min(A.Bullets, static_cast<int>(std::floor((B.T - A.T) / 0.1))));
+				if (A.T + (A.Bullets - 1) * Gap() < B.T) continue;
+				A.Bullets = std::max(1, std::min(A.Bullets, static_cast<int>(std::floor((B.T - A.T) / Gap()))));
 				A.End = std::min(A.End, B.T);
 			}
 			// Where the next round comes before this one's clip is done, the part after the flash is played faster to
@@ -1711,34 +1721,37 @@ namespace LandMen
 				if (A.End <= B.Start) continue;
 				if (A.How == Shot::Burst)
 				{
-					A.Bullets = std::max(1, std::min(A.Bullets, static_cast<int>(std::floor((B.T - A.T) / 0.1))));
+					A.Bullets = std::max(1, std::min(A.Bullets, static_cast<int>(std::floor((B.T - A.T) / Gap()))));
 					A.End = std::min(A.End, B.Start);
 				}
 				else
 				{
 					const Clip& C = S.Clips[static_cast<size_t>(A.ClipIx)];
-					const double Avail = B.Start - A.Start - A.Lead;
+					const double Avail = (B.Start - A.Start) * Life - A.Lead; // (clip seconds)
 					const double After = C.Long - A.Lead;
 					if (Avail > 0.05 && After > 0.0) A.Rate2 = static_cast<float>(std::min(3.0, After / Avail));
-					A.End = std::max(A.Start + A.Lead, B.Start);
+					A.End = std::max(A.Start + A.Lead / Life, B.Start);
 				}
 			}
 			M.ShotCur = 0;
 			M.bShotsDirty = false;
 		}
 
+		/** A burst's bullets apart on the battle's clock: ten a second of life. */
+		double Gap() const { return 0.1 / Life; }
+
 		/** The shot's clip time at Now (a burst: the aim with a kick each bullet). */
 		float ShotClipTime(const Shot& Sh, const Clip& C, double Now, float& OutKick) const
 		{
 			OutKick = 0.f;
-			const double Tau = Now - Sh.Start;
+			const double Tau = (Now - Sh.Start) * Life; // (clip seconds)
 			if (Tau <= 0.0) return 0.f;
 			if (Sh.How == Shot::Burst)
 			{
 				// Held on aim; each bullet kicks him back to the shot's own frame (the recoil) and he settles before the
 				// next. A gunner's lmg_burst plays itself (its shoulder shake).
 				if (C.Name == "lmg_burst") return static_cast<float>(std::min(Tau, static_cast<double>(C.Long)));
-				const double Since = Now - Sh.T;
+				const double Since = (Now - Sh.T) * Life;
 				if (Since < 0.0) return 0.f;
 				const int B = static_cast<int>(std::floor(Since / 0.1));
 				const double In = Since - B * 0.1;
@@ -1936,7 +1949,7 @@ namespace LandMen
 			{
 				const Clip& C = M.S->Clips[static_cast<size_t>(M.FallClip)];
 				M.Info.FallClip = C.Name;
-				M.FallDur = C.Long;
+				M.FallDur = C.Long / Life;
 				Pose End;
 				Sample(C, C.Long, End);
 				// "Move the root by end_offset": he comes to rest where his pelvis ends, and the turn onto the ground's
@@ -1952,7 +1965,7 @@ namespace LandMen
 			else
 			{
 				M.Info.FallClip = "settle";
-				M.FallDur = 0.6;
+				M.FallDur = 0.6 / Life;
 				M.FallPivot = Vec3();
 				M.State = Man::Settling;
 			}
@@ -2075,7 +2088,7 @@ namespace LandMen
 				const int Bullets = Sh.How == Shot::Burst ? Sh.Bullets : 1;
 				while (Sh.Done < Bullets)
 				{
-					const double Tb = Sh.T + Sh.Done * 0.1;
+					const double Tb = Sh.T + Sh.Done * Gap();
 					if (Tb > Now) break;
 					// A dead man fires no more (a round booked after his fall, or the rest of a burst he was hit in).
 					if (M.Info.Dead >= 0.0 && Tb > M.Info.Dead) { Sh.Done = Bullets; break; }
@@ -2219,9 +2232,11 @@ namespace LandMen
 					if (G.How != Segment::Gait || G.Clip < 0) return;
 					const Clip& C = S.Clips[static_cast<size_t>(G.Clip)];
 					const float Sp = C.Speed();
+					// (his speed is the battle's, its clock Life times life's: on life's clock the clip may play 1.6 times)
+					const float Most = 1.6f * static_cast<float>(Life);
 					float Rate = Sp > 0.f ? M.V / Sp : 0.f;
-					G.bCapped = Rate > 1.6f;
-					Rate = std::min(Rate, 1.6f);
+					G.bCapped = Rate > Most;
+					Rate = std::min(Rate, Most);
 					G.Rate = Rate;
 					if (C.Long > 0.f)
 					{
@@ -2238,7 +2253,7 @@ namespace LandMen
 				if (bPose) SampleSegment(M, M.Cur, Now, P, LieB, TB);
 				else TB = ClipTime(M, M.Cur, Now, LieB);
 				Lie = LieB;
-				const float W = M.Cur.BlendIn > 0.f ? Smooth(static_cast<float>((Now - M.Cur.Start) / M.Cur.BlendIn)) : 1.f;
+				const float W = M.Cur.BlendIn > 0.f ? Smooth(static_cast<float>((Now - M.Cur.Start) * Life / M.Cur.BlendIn)) : 1.f;
 				RifleDown = M.Cur.bRifleDown ? W : 0.f;
 				if (M.bPrev && W < 1.f)
 				{
@@ -2278,9 +2293,9 @@ namespace LandMen
 				for (size_t I = M.ShotCur; I < M.Shots.size(); ++I)
 				{
 					Shot& Sh = M.Shots[I];
-					if (Sh.Start - 0.15 > Now) break;
+					if (Sh.Start - 0.15 / Life > Now) break;
 					if (Sh.How != Shot::Clip && Sh.How != Shot::Burst) continue;
-					if (Now > Sh.End + 0.2) continue;
+					if (Now > Sh.End + 0.2 / Life) continue;
 					const Clip& C = S.Clips[static_cast<size_t>(Sh.ClipIx)];
 					float Kick = 0.f;
 					const float Ct = ShotClipTime(Sh, C, Now, Kick);
@@ -2292,8 +2307,8 @@ namespace LandMen
 						Sample(C, C.FlashT + 0.06f, K);
 						Blend(Q, K, Kick * 0.7f, Q);
 					}
-					const float In = Smooth(static_cast<float>((Now - (Sh.Start - 0.15)) / 0.15));
-					const float OutW = 1.f - Smooth(static_cast<float>((Now - Sh.End) / 0.2));
+					const float In = Smooth(static_cast<float>((Now - (Sh.Start - 0.15 / Life)) * Life / 0.15));
+					const float OutW = 1.f - Smooth(static_cast<float>((Now - Sh.End) * Life / 0.2));
 					const float Ws = std::min(In, OutW);
 					if (Ws > 0.f)
 					{
@@ -2320,9 +2335,9 @@ namespace LandMen
 				if (M.State == Man::Falling)
 				{
 					const Clip& C = S.Clips[static_cast<size_t>(M.FallClip)];
-					const float Ct = static_cast<float>(std::min(Since, static_cast<double>(C.Long)));
+					const float Ct = static_cast<float>(std::min(Since * Life, static_cast<double>(C.Long)));
 					Sample(C, Ct, P);
-					Blend(M.FallFrom, P, Smooth(static_cast<float>(Since / 0.12)), P);
+					Blend(M.FallFrom, P, Smooth(static_cast<float>(Since * Life / 0.12)), P);
 					if (!bQuiet && Ct > M.FallLastT) EmitClipEvents(M, C, M.FallLastT < 0.f ? -1.f : M.FallLastT, Ct, false, true, false, Now, Out);
 					M.FallLastT = Ct;
 					// Over the second half of the fall he comes onto the ground's slope, about where his pelvis will rest.
@@ -2577,6 +2592,8 @@ namespace LandMen
 			// (an anti-tank team: its gunner from the army's _bazooka file, and his number two, the loader who follows
 			// him, from its _loader file, where the army has them: the American's 2.36-inch rocket launcher team)
 			if (Tr.Role == "at" && I.Soldiers.find(File + "_bazooka") != I.Soldiers.end()) File += "_bazooka";
+			// (a battery's spotter with the army's radio man where it has one: the American's SCR-300 on his back)
+			if (Tr.Role == "fo" && I.Soldiers.find(File + "_radio") != I.Soldiers.end()) File += "_radio";
 			if (Tr.Role == "loader" && Tr.J > 0 && I.Soldiers.find(File + "_loader") != I.Soldiers.end())
 			{
 				const auto Key = I.TrackOf.find({ Tr.B, Tr.K, 0 });
@@ -2786,6 +2803,7 @@ namespace LandMen
 		return Mn.State == Impl::Man::Falling || Mn.State == Impl::Man::Settling;
 	}
 	void Crowd::SetThrift(bool bOn) { Inner->bThrift = bOn; }
+	void Crowd::SetLife(double LifePerBattleSecond) { Inner->Life = std::clamp(LifePerBattleSecond, 0.25, 4.0); }
 	int Crowd::PoseEvery(int Man) const { return Inner->bThrift ? Impl::EveryOf(Inner->Men[static_cast<size_t>(Man)]) : 1; }
 
 	bool Crowd::SkinReadsGround(int Man, Lod L) const

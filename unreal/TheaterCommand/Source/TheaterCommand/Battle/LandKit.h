@@ -445,6 +445,10 @@ namespace LandKit
 		/** The pose at battle time T, and every event from the last Update to T into Out (none on a seek back). */
 		void Update(double T, std::vector<Event>* Out);
 
+		/** Life seconds a battle second (Battle::Life): her clips, and her crew's hands on the turret, the gun and the
+		 * wheel, are life's. Set before Build. */
+		double Life = 1.0;
+
 		// Who.
 		const Model& Look() const { return *Shape; }
 		const TrackWords& Words() const { return Track; }
@@ -589,6 +593,10 @@ namespace LandKit
 		/** The models by "Name|Nation" (the lorry as "Truck|USA" and "Truck|GER"). */
 		const std::map<std::string, Model>& Models() const { return Looks; }
 		double End = 0.0;
+		/** Life seconds a battle second (the rules' clock runs about twice as fast as life; the scene plays the fight at
+		 * half of it): the vehicles' clips and their crews' hands timed in life's seconds. 1, the default, is as before.
+		 * Set before Load. */
+		double Life = 1.0;
 		int Year = 1944, Month = 7;
 		/** What has happened since it was last emptied: the caller plays it and clears it. */
 		std::vector<Event> Events;
