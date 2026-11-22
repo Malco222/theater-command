@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 232b6d16 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 19267b61 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -10236,7 +10236,7 @@
         tab: "spies",
         lead: "Your secret service",
         runs: "The service recruits agents, sends them to watch the enemy's front and to read the books in his capital, and keeps a guard at home. It tries no sabotage.",
-        runsMore: "It also keeps a hunter on your front, and deals with every enemy agent that is uncovered: it turns one into a double agent where it can, and arrests the rest.",
+        runsMore: "Once it has an agent to spare it also keeps a hunter where the enemy is thickest on your front, calling one home if it must, and it deals with every enemy agent that is uncovered: it turns one into a double agent where it can, and arrests the rest.",
         hand: "You recruit, post and brief every agent."
       },
       {
@@ -13549,12 +13549,12 @@
       orders: { on: true, ambush: 1 },
       everyone: { on: true, smaller: 0.5 },
       watchers: {
-        _about: "WATCHERS (Brian, 22 November 2026, release 2: 'Busier, mostly watchers'; flag 'sw:watch', set for new grand campaigns with 'on'; it needs HUNTERS on too, since a watcher is one of the hidden agents they search for). Each month, beside the plots above (which go on at their own rate), every service at war with the player has 'chance' (times the campaign's level, as enemy.chance is; a smaller nation's at secret.everyone.smaller times it) of putting a WATCHER on his front: a province he holds beside ground its own side holds, or, with none, beside any enemy's ground, or, with no front at all, a province of his home coast on a sea the enemy's coast is on (any home coast if none is). The more of the enemy's divisions stand beside a province, the likelier it is picked; never one where a watcher already is. It never strikes. From the month after it lands ('ready'), while its country stands and is at war with him, every attack its country or an ally of it makes on that province goes in 'attack' harder: it has mapped the defences. The battle report says so, naming the army that attacks and, where that is an ally's, the agent's country. Hunters find watchers as they find saboteurs, and an uncovered one can be arrested, or turned. A watcher stays until it is arrested or turned, or its country makes peace or falls. When its province is no longer on its front (the front has moved, or the province is lost), it moves to a new place on the front the month after, needing 'ready' months again, and the hunters lose it unless a double agent in its service tells where it went; with no new place to go it is recalled. A service lands a watcher only while it keeps 'reserve' places free for its saboteurs (agents.most, with its Intelligence branch), so the plots strike as often as before. Once every place on a service's front holds a watcher (any service's), its draws land nothing until one is arrested, turned or moves on. The staff that runs the secret service for the player (desks.ts) keeps a hunter on the front with this switch on, and turns an uncovered agent where its service has no double agent of his yet (with double agents on), arresting the rest. With the switch off there are no watchers and the staff does none of this. 'chance' 0.28 with the plots' 0.05 is up to about one agent a season from each great power, most of them watchers, as the card said.",
+        _about: "WATCHERS (Brian, 22 November 2026, release 2: 'Busier, mostly watchers'; flag 'sw:watch', set for new grand campaigns with 'on'; it needs HUNTERS on too, since a watcher is one of the hidden agents they search for). Each month, beside the plots above (which go on at their own rate), every service at war with the player has 'chance' (times the campaign's level, as enemy.chance is; a smaller nation's at secret.everyone.smaller times it) of putting a WATCHER on his front: a province he holds beside ground its own side holds, or, with none, beside any enemy's ground, or, with no front at all, a province of his home coast on a sea the enemy's coast is on (any home coast if none is). The more of the enemy's divisions stand beside a province, the likelier it is picked; never one where a watcher already is. It never strikes. From the month after it lands ('ready'), while its country stands and is at war with him, every attack its country or an ally of it makes on that province goes in 'attack' harder: it has mapped the defences. The battle report says so, naming the army that attacks and, where that is an ally's, the agent's country. Hunters find watchers as they find saboteurs, and an uncovered one can be arrested, or turned. A watcher stays until it is arrested or turned, or its country makes peace or falls. When its province is no longer on its front (the front has moved, or the province is lost), it moves to a new place on the front the month after, needing 'ready' months again, and the hunters lose it unless a double agent in its service tells where it went; with no new place to go it is recalled. A service lands a watcher only while it keeps 'reserve' places free for its saboteurs (agents.most, with its Intelligence branch), and never fewer than hunters.lead (a saboteur stays that many months and a service plots at most once a month), so the plots strike as often as before. Once every place on a service's front holds a watcher (any service's), its draws land nothing until one is arrested, turned or moves on. The staff that runs the secret service for the player (desks.ts) keeps a guard and then a hunter with this switch on: the hunter where the front is busiest (it moves when the province it can search is less than half as busy as the busiest; busy = one and the enemy's divisions beside it), called home from abroad if none is at home or coming. It turns an uncovered agent where its service has no double agent of his yet (with double agents on), arresting the rest. With the switch off there are no watchers and the staff does none of this. 'chance' 0.28 with the plots' 0.05 is up to about one agent a season from each great power, most of them watchers, as the card said.",
         on: true,
         chance: 0.28,
         attack: 0.08,
         ready: 1,
-        reserve: 1
+        reserve: 2
       },
       doubles: {
         _about: "DOUBLES (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign so a false report is never unfair; it overrides HUNTERS' 'no agent is turned'; flag 'sw:double', set for new grand campaigns with 'on'). Both ways, and only ever against or for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. YOU TURN THEIRS: an enemy agent the player's hunters have uncovered can be TURNED instead of arrested, at most 'most' at once in any one nation's service. While a double runs in a nation's service, every new agent that service puts on his ground is uncovered the month it arrives, and he reads that nation's books. Each month a double is found out by its own service with chance 'blown', and is of no more use; it ends quietly when its nation makes peace with him or is gone. THEY TURN YOURS: when one of his agents abroad, in a country at war with him, would be caught, it is turned instead with chance 'share'. Nothing is said. A turned agent is never caught; from the month after it is turned, the month its first quiet report is filed (so the lie never shows without the tell), the books it reads show the army 'lie' smaller than it is, unless an agent of his still loyal reads them too; its sabotage is reported in the usual words and wrecks nothing, so the map shows no damage; it never finds an order; his other agents in its masters' country are caught 'betray' more often (the chance times 1 + betray); and each month it files a quiet report too good to be true, which a loyal agent never files. Brought home, it is found out with chance 'home' each month and arrested.",
@@ -17124,7 +17124,7 @@
     oil: { label: "Fire the oilfield", doing: "preparing to fire the oilfield", text: `The wells are set alight: the field gives ${Math.round((1 - intel_default.missions.oil.cut) * 100)}% of its oil for ${intel_default.missions.oil.months} months. Tried once, next month, and then the agent must lie low.` },
     airfield: { label: "Wreck the airfield", doing: "preparing to wreck the airfield", text: "Runways cratered and the fuel dump set alight: every enemy air group based on the field is grounded for the month. Tried once, next month, and then the agent must lie low." },
     orders: { label: "Steal the orders", doing: "stealing the orders", text: "Next month's orders of the bomber groups on this field: which groups, how many bombers, the target, by day or by night. Tried each month the agent stays on it. A stolen order is never false; the gamble is in getting it." },
-    hunt: { label: "Hunt enemy agents", doing: "hunting enemy agents", text: "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it does more harm." },
+    hunt: { label: "Hunt enemy agents", doing: "hunting enemy agents", text: "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes." },
     // (Read when asked for, not as the module loads: plans.ts and this file import each other through game.ts.)
     get bbPlans() {
       return theftText("bb");
@@ -17434,7 +17434,7 @@
         if (base <= 0 || draw(g2, g2.turn, "hunt", a.id, f.id) >= clamp2(base + SECRET.hunters.skill * (skillOf(a) - 1), 0, 0.95)) continue;
         f.found = g2.turn;
         const F = g2.nations[f.nat], at = g2.regions[f.reg];
-        const text = f.kind === "watch" ? `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent watching your defences at ${at.name}. Arrest it: until you do, the enemy's attacks there go in harder.` : `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent at ${at.name}. Arrest it before it strikes.`;
+        const text = f.kind === "watch" ? `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent watching your defences at ${at.name}. Arrest it: until you do, attacks there by ${F ? theName(F) : "the enemy"} and its allies go in harder.` : `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent at ${at.name}. Arrest it before it strikes.`;
         note2(g2, a, f.reg, "uncovered", text, true);
         headline(g2, "event", text, nat, f.reg);
         learn(g2, a, 1);
@@ -17471,9 +17471,10 @@
     }
     if (!watchersOn(g2)) return;
     const W2 = WATCHERS(), rate2 = watchRate(g2, nat);
+    const keep = Math.max(W2.reserve, SECRET.hunters.lead);
     for (const foe of Object.keys(rate2)) {
       if (draw(g2, g2.turn, "watch", foe) >= rate2[foe]) continue;
-      if (foes.filter((x) => x.nat === foe).length >= mostAgents(foe, g2) - W2.reserve) continue;
+      if (foes.filter((x) => x.nat === foe).length >= mostAgents(foe, g2) - keep) continue;
       const reg = pickPlace(g2, watchPlaces(g2, nat, foe), watched(g2), g2.turn, "watchwhere", foe);
       if (reg === null) continue;
       const id = g2.intel.foeNext ?? 1;
@@ -17786,17 +17787,20 @@
     }
     plots(g2, nat);
   }
+  var enemySends = (g2) => (INTEL.enemy.level[levelIndex(g2)] ?? 1) > 0;
   function watchHelp(g2) {
     const lv = INTEL.enemy.level[levelIndex(g2)] ?? 1, each3 = (INTEL.enemy.chance + WATCHERS().chance) * lv;
     if (each3 <= 0) return "At this level of the campaign the enemy's services send no agents against you.";
-    return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each3))} months, a smaller country half as many, most of them watchers; once every province of your front has one, no more come until you arrest some. With no land front they watch your coast facing the enemy. A watcher maps the defences of its province, and attacks there by its country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder until it is arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
+    const smaller = everyoneOn(g2) ? ", a smaller country half as many" : "";
+    return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each3))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of its province: from the month after it arrives, attacks there by its country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until it is arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
   }
+  var HUNT_WATCH_TEXT = "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes, or, if it is watching your defences, before it helps more of the enemy's attacks.";
   var TURNED_HELP = "An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent's reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.";
   function viewOf(g2, a) {
     const r = g2.regions[a.reg], out = abroad(g2, a), work2 = atWork(g2, a);
     const offers2 = missionsIn(g2).filter((m) => AT_HOME2.includes(m) !== out).map((m) => {
       const why = whyNotMission(g2, a.nat, a.id, m);
-      return { id: m, label: MISSION_TEXT[m].label, text: MISSION_TEXT[m].text, ok: why === null, why: why ?? "", now: a.mission === m, caught: caughtChance(g2, a, m), success: triedOnce(m) ? successChance(a, m, g2) : null };
+      return { id: m, label: MISSION_TEXT[m].label, text: m === "hunt" && watchersOn(g2) ? HUNT_WATCH_TEXT : MISSION_TEXT[m].text, ok: why === null, why: why ?? "", now: a.mission === m, caught: caughtChance(g2, a, m), success: triedOnce(m) ? successChance(a, m, g2) : null };
     });
     const sees = [];
     if (work2 && out) {
@@ -17858,7 +17862,7 @@
           where: g2.regions[f.reg].name,
           watch: f.kind === "watch",
           text: `${aAn(g2.nations[f.nat]?.adj ?? "enemy", true)} ${g2.nations[f.nat]?.adj ?? "enemy"} agent ${f.kind === "watch" ? "watching your defences " : ""}at ${g2.regions[f.reg].name}, uncovered ${f.found === g2.turn ? "this month" : "earlier"}`,
-          then: f.kind === "watch" ? `Until it is arrested, attacks there by ${g2.nations[f.nat] ? theName(g2.nations[f.nat]) : "the enemy"} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : "It strikes unless it is arrested."
+          then: f.kind === "watch" ? `${f.strike > g2.turn ? `${f.strike - g2.turn === 1 ? "From next month" : `In ${f.strike - g2.turn} months`}, until it is arrested, attacks` : "Until it is arrested, attacks"} there by ${g2.nations[f.nat] ? theName(g2.nations[f.nat]) : "the enemy"} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : "It strikes unless it is arrested."
         }))
       } : {},
       ...watchersOn(g2) ? { watchHelp: watchHelp(g2) } : {},
@@ -37402,8 +37406,9 @@
         const spy = intelAttack(g2, c.nat, target);
         if (spy) {
           p *= spy.mul;
-          if (spy.foe) watched2 ?? (watched2 = { nat: spy.foe, by: c.nat, found: !!spy.found, mul: spy.mul });
-          else spied = spy.agent;
+          if (spy.foe) {
+            if (!watched2 || watched2.by !== spy.foe && c.nat === spy.foe) watched2 = { nat: spy.foe, by: c.nat, found: !!spy.found, mul: spy.mul };
+          } else spied = spy.agent;
         }
       }
       p *= heart(c);
@@ -43851,14 +43856,34 @@
     const guards = agentsOf(g2, nat).length > 1 && threat(g2, nat).foes.length ? S2.guards : 0;
     const hunters = watchersOn(g2) && guards && agentsOf(g2, nat).length > guards + 1 ? S2.hunters ?? 0 : 0;
     const home = mine4.filter((a) => !abroad(g2, a));
+    const coming = hunters ? agentsOf(g2, nat).filter((a) => !atWork(g2, a) && !abroad(g2, a)) : [];
+    const toHunt = Math.max(0, Math.min(hunters - coming.filter((a) => a.mission === "hunt").length, home.length - guards));
+    const hunting = home.filter((a) => a.mission === "hunt").slice(0, toHunt);
+    const guarding = home.filter((a) => !hunting.includes(a)).slice(0, guards);
+    hunting.push(...home.filter((a) => !hunting.includes(a) && !guarding.includes(a)).slice(0, toHunt - hunting.length));
     for (const a of mine4) {
       if (abroad(g2, a)) {
         if (!posts.includes(a.reg)) free2.push(a);
         continue;
       }
-      if (home.indexOf(a) >= guards + hunters) free2.push(a);
+      if (!guarding.includes(a) && !hunting.includes(a)) free2.push(a);
     }
-    for (const a of home.slice(guards, guards + hunters)) did.push(...hunt(g2, nat, a));
+    if (watchersOn(g2)) {
+      for (const a of guarding) if (a.mission !== "guard" && whyNotMission(g2, nat, a.id, "guard") === null && setMission(g2, nat, a.id, "guard")) did.push(`put ${a.name} back on guard at ${g2.regions[a.reg].name}`);
+    }
+    for (const a of hunting) did.push(...hunt(g2, nat, a));
+    if (hunting.length + coming.length < hunters) {
+      const out = mine4.filter((a) => abroad(g2, a));
+      const back = out.find((a) => !posts.includes(a.reg)) ?? out.filter((a) => !capitals.includes(a.reg)).sort((x, y) => posts.indexOf(y.reg) - posts.indexOf(x.reg) || x.id - y.id)[0];
+      if (back) {
+        const from = back.reg, went = hunt(g2, nat, back);
+        if (went.length) {
+          did.push(...went);
+          if (free2.includes(back)) free2.splice(free2.indexOf(back), 1);
+          taken2.delete(from);
+        }
+      }
+    }
     for (const a of free2) {
       const to = posts.find((p) => !taken2.has(p) && whyNotSend(g2, nat, a.id, p) === null);
       if (to === void 0) continue;
@@ -43876,31 +43901,31 @@
   }
   function hunt(g2, nat, a) {
     const edge3 = (r) => r.ctrl === nat && r.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl));
-    const here = g2.regions[a.reg];
-    if (!edge3(here) && !here.nb.some((j) => edge3(g2.regions[j]))) {
-      const foe = /* @__PURE__ */ new Map();
-      for (const c of g2.corps) if (!c.dead && c.reg >= 0 && atWar(g2, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
-      let to = -1, most = -1;
-      for (const r of g2.regions) {
-        if (!edge3(r)) continue;
-        const n = r.nb.reduce((t, j) => t + (foe.get(j) ?? 0), 0);
-        if (n > most) {
-          most = n;
-          to = r.id;
-        }
-      }
-      if (to >= 0 && whyNotSend(g2, nat, a.id, to) === null && sendAgent(g2, nat, a.id, to)) {
-        a.mission = "hunt";
-        return [`sent ${a.name} to hunt enemy agents at ${g2.regions[to].name}`];
+    const foe = /* @__PURE__ */ new Map();
+    for (const c of g2.corps) if (!c.dead && c.reg >= 0 && atWar(g2, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
+    const busy = (r) => edge3(r) ? 1 + r.nb.reduce((t, j) => t + (foe.get(j) ?? 0), 0) : 0;
+    let to = -1, most = 0;
+    for (const r of g2.regions) {
+      const n = busy(r);
+      if (n > most) {
+        most = n;
+        to = r.id;
       }
     }
+    const here = g2.regions[a.reg], out = abroad(g2, a);
+    const reach3 = out ? 0 : Math.max(busy(here), ...here.nb.map((j) => busy(g2.regions[j])));
+    if (to >= 0 && reach3 * 2 < most && whyNotSend(g2, nat, a.id, to) === null && sendAgent(g2, nat, a.id, to)) {
+      a.mission = "hunt";
+      return [out ? `called ${a.name} home from ${here.name} to hunt enemy agents at ${g2.regions[to].name}` : `sent ${a.name} to hunt enemy agents at ${g2.regions[to].name}`];
+    }
+    if (out) return [];
     if (a.mission !== "hunt" && whyNotMission(g2, nat, a.id, "hunt") === null && setMission(g2, nat, a.id, "hunt")) return [`set ${a.name} to hunt enemy agents at ${here.name}`];
     return [];
   }
   function deskRuns(g2, id) {
     const d = DEPTH.desks.find((x) => x.id === id);
     if (!d) return "";
-    return id === "spies" && watchersOn(g2) && d.runsMore ? `${d.runs} ${d.runsMore}` : d.runs;
+    return id === "spies" && watchersOn(g2) && enemySends(g2) && d.runsMore ? `${d.runs} ${d.runsMore}` : d.runs;
   }
   function raidWords(g2, r) {
     const at = r.region >= 0 ? g2.regions[r.region] : null;
