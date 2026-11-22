@@ -27,6 +27,7 @@
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
+#include "Battle/LandWalkPan.h"
 
 #include <algorithm>
 #include <chrono>
@@ -556,6 +557,32 @@ int main(int argc, char** argv)
 	};
 	EW.Crop = CornAt;
 	EW.Solid = [&Sight](const Vec& At, int Except) { return static_cast<int>(Sight.At(At, Except)); };
+	{
+		// The walk pan (the Mac recipe's look 7, -TheaterLandWalkPan): a block walking steadily, an eye off its flank with
+		// the sight lines open, its men 25 to 140 m off through the pan; asked every 10 s from 30 s, the first that holds.
+		int Asked = 0, Held = 0;
+		double First = -1.0;
+		LandWalkPan::Plan FirstPlan;
+		for (double T = 30.0; T + 20.0 <= Rec.End; T += 10.0)
+		{
+			++Asked;
+			const LandWalkPan::Plan P = LandWalkPan::Choose(Rec, EW, T, 20.0);
+			const double Near = std::min({ P.FromStart, P.FromMiddle, P.FromEnd }), Far = std::max({ P.FromStart, P.FromMiddle, P.FromEnd });
+			if (P.Block < 0 || !P.bOpen || Near < 35.0 || Far > 120.0) continue;
+			++Held;
+			if (First < 0.0)
+			{
+				First = T;
+				FirstPlan = P;
+			}
+		}
+		if (First >= 0.0)
+			std::printf("walk pan (look 7): %d of %d times asked hold; the first at %.0f s: block %d, %zu men at %.1f m/s, the eye %.1f m up, %.0f, %.0f and %.0f m off\n", Held, Asked, First,
+				FirstPlan.Block, FirstPlan.Men.size(), FirstPlan.Speed, FirstPlan.Eye.Z - GroundAt(FirstPlan.Eye.X, FirstPlan.Eye.Y), FirstPlan.FromStart, FirstPlan.FromMiddle, FirstPlan.FromEnd);
+		else
+			std::printf("walk pan (look 7): none of %d times asked holds\n", Asked);
+		if (Held == 0) Fault("no walk pan found for the Mac's look 7 at any time asked");
+	}
 	// The men and vehicles where the recording has them now (the game asks its own cores: the skinned men, the posed tanks).
 	auto PlaceMovers = [&Rec, &Sight, &GroundAt](double T)
 	{
@@ -1350,9 +1377,16 @@ int main(int argc, char** argv)
 	for (auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\nsound: %d shots, %d taken, %d out of hearing, %d dropped by the limits (%d on the screen), %d heard in a copy already sounding (a volley), %d cracks overhead, %d landings, %d falls; %d takes moved for the 0.15 s rule\n",
 		Mix.ShotsHeard, Mix.ShotTakes, Mix.ShotsOutOfHearing, Mix.ShotsDropped, Mix.ShotsOnScreenDropped, Mix.ShotsMerged, Mix.Cracks, Mix.Landings, Mix.Falls, Mix.Delayed);
-	// (a shot heard in a copy is the last resort of a volley in the picture: more than one in a thousand and the rule is
-	// hiding shots, not sparing a flanged copy)
-	if (Mix.ShotsMerged * 1000 > Mix.ShotsHeard) Fault("more than one shot in a thousand was heard only in a copy already sounding");
+	// (a shot heard in a copy is the last resort of a volley in the picture, every recording it could take crowded at
+	// every pitch near it. Never a shot nearer than its family's far takes: that one is heard on its own, and a merge
+	// would hide it. Far off, in a crowd, it is one crack of the crackle (the live 1,989-man battle's mass wide put
+	// 159 of 34,555 there, all 307 to 470 m off, in seven seconds); more than one in a hundred and the rule is hiding
+	// the battle, not sparing a flanged copy)
+	std::printf("heard in a copy: %d shots (%.2f in a thousand), %d takes of any kind (a shot, a crack, a blast) nearer than their family's far takes; %d machine-gun bursts crowded out of one recording took another on their list, %d another stretch of firing (moreParts)\n",
+		Mix.ShotsMerged, 1000.0 * Mix.ShotsMerged / std::max(1, Mix.ShotsHeard), Mix.SameMergedNear, Mix.MgToOther, Mix.MgToOtherPart);
+	for (const auto& Kv : Mix.MergedNearBy) if (Kv.second > 0) std::printf("  heard in a copy though nearer than its far takes: %s %d\n", Kv.first.c_str(), Kv.second);
+	if (Mix.SameMergedNear > 0) Fault("a take nearer than its family's far takes (a shot, a crack, a blast) was heard only in a copy already sounding (a sound heard on its own, hidden)");
+	if (Mix.ShotsMerged * 100 > Mix.ShotsHeard) Fault("more than one shot in a hundred was heard only in a copy already sounding");
 	std::printf("land: %d bursts cut to their rounds, %d runs of cracks, %d rounds struck the ground near the ear (%d whined off), %d Garand clips pinged (%d reloads), %d shouts (%d voice lines in all), %d shells heard coming in; the longest a take was held for the 0.15 s rule %.2f s, %d started on time at another pitch instead\n",
 		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
 	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");

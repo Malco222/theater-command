@@ -144,6 +144,11 @@ namespace LandSound
 		/** The same-take rule's last step, when no pitch was free: left out off the screen, held to a clear moment on it,
 		 * a close rifle shot moved to a far recording, or (none of those) started at the farthest pitch. */
 		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameToOtherFar = 0, SameCrowded = 0, SameMerged = 0;
+		/** Of those heard in a copy, the ones nearer than their family's far takes (a shot heard on its own, which a merge
+		 * would hide: the test faults on any); and the machine-gun bursts crowded out of one recording that gave way to
+		 * another on their list instead. */
+		int SameMergedNear = 0, MgToOther = 0, MgToOtherPart = 0;
+		std::map<std::string, int> MergedNearBy;
 		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
 		 * pitch instead of held longer (land.sameTake), for the log. */
 		double MostDelay = 0.0, MostBurstOver = -1.0;
@@ -202,6 +207,9 @@ namespace LandSound
 		std::vector<Piece> WhinePieces;
 		double ArmourDb = -4.0, ArmourWhineChance = 0.3;
 		std::map<std::string, std::pair<double, double>> FiringPart;
+		// (a take that fires in several bursts with silences between: its other stretches of firing, besides its part, a
+		// crowded machine gun's next places to play from)
+		std::map<std::string, std::vector<std::pair<double, double>>> MoreParts;
 		double BurstEndFade = 0.04;
 		int ClipEvery = 8;
 		double PingAfter = 0.12, ReloadAfterPing = 0.45, GarandWithin = 60.0;
@@ -269,6 +277,7 @@ namespace LandSound
 		bool WhineOff(const Vec& At, double Far, double Now, double Delay, double Db, double Chance, std::vector<Take>& Out);
 		/** A burst cut to its rounds: From a random point in the take's firing part, Cut to rounds / rate + tail. */
 		void CutBurst(Take& T, const LandPlay::Noise& N);
+		void CutBurstAt(Take& T, const LandPlay::Noise& N, double A, double B);
 		/** A shout in this army's tongue at Where (a man of its side near the ear), Delay real seconds from now, if its side
 		 * is free to speak. */
 		bool Shout(int Side, const std::string& Army, const Vec& Where, double Now, double Delay, const Listener& Ear, std::vector<Take>& Out);

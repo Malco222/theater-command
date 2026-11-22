@@ -263,11 +263,21 @@ namespace LandPlay
 
 	std::string Replay::TankMg(int TrackIndex, double T, int RoundN, const Vec& Toward, const std::string& Gun) const
 	{
-		if (Gun == "roof") return "roof_mg";
-		if (Gun == "hull") return "hull_mg";
+		// (no roof gun drawn on her, World::RoofGun: none fired)
+		const bool bRoof = !Here.RoofGun || TrackIndex < 0 || Here.RoofGun(TrackIndex);
+		if (Gun == "roof") return bRoof ? "roof_mg" : "coax";
 		if (Gun == "coax") return "coax";
-		if (!Rec || TrackIndex < 0) return "coax";
+		if (!Rec || TrackIndex < 0) return Gun == "hull" ? "hull_mg" : "coax";
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
+		// (the hull gunner's ball mount swings some 25 degrees either side of her bow: a burst the rules gave him at a
+		// mark wider of her bow, as the film has her facing then, is the turret's coaxial instead, which turns to it)
+		const auto InBowArc = [&Tr, T, &Toward]()
+		{
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
+			const double Bearing = std::atan2(Toward.X - S.X, Toward.Y - S.Y);
+			return std::fabs(std::remainder(Bearing - S.F, 2.0 * 3.14159265358979)) < 25.0 * 3.14159265358979 / 180.0;
+		};
+		if (Gun == "hull") return InBowArc() ? "hull_mg" : "coax";
 		const LandFeed::Change* C = LandFeed::ChangeAt(Tr, T);
 		const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
 		const std::string Army = B ? B->Army : std::string();
@@ -277,11 +287,8 @@ namespace LandPlay
 		H *= 0xBF58476D1CE4E5B9ull;
 		H ^= H >> 32;
 		const int Roll = static_cast<int>(H % 6);
-		if (C && !C->bButtoned && (Army == "USA" || Army == "GER") && Roll < 2) return "roof_mg";
-		const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
-		const double Bearing = std::atan2(Toward.X - S.X, Toward.Y - S.Y);
-		const double Off = std::fabs(std::remainder(Bearing - S.F, 2.0 * 3.14159265358979));
-		if (Off < 25.0 * 3.14159265358979 / 180.0 && Roll % 2 == 1) return "hull_mg";
+		if (bRoof && C && !C->bButtoned && (Army == "USA" || Army == "GER") && Roll < 2) return "roof_mg";
+		if (Roll % 2 == 1 && InBowArc()) return "hull_mg";
 		return "coax";
 	}
 

@@ -8,6 +8,10 @@
 // LAND_SHOW_THREADS=n (4 by default) times the scene's own skin of the men in the picture over n threads too.
 // LAND_SHOW_LIFE=x: life seconds a battle second (Crowd::SetLife), 2 by default as the scene plays the fight (the rules'
 // clock about twice life's); 1 plays the clips on the battle's clock, as before.
+// LAND_SHOW_LEVELS=1 sets the scene's GS3 levels (Crowd::SetLevels: Near under 8.6 m, the 150 lines of a 1.8 m man at
+// the 50 deg lens and 665 lines; Mid to 80 m, where his shadow ends) and plays the scene's cap of 50 meshes made again
+// a frame: how many men change level a frame, how long the cap keeps one at his old level, and that no man flickers
+// between two levels (back again within half a second).
 #include "land_json.h"
 #include "Battle/LandMen.h"
 
@@ -301,6 +305,17 @@ int main(int Argc, char** Argv)
 	const char* ThreadsEnv = std::getenv("LAND_SHOW_THREADS");
 	const int Threads = std::max(1, ThreadsEnv ? std::atoi(ThreadsEnv) : 4);
 	if (bThrift) std::printf("thrifty: far men posed every 2nd to 4th frame by their distance (Crowd::SetThrift)\n");
+	const char* LevelsEnv = std::getenv("LAND_SHOW_LEVELS");
+	const bool bLevels = LevelsEnv && std::string(LevelsEnv) == "1";
+	const double LevelLines = 1.8 * 665.0 / (2.0 * std::tan(25.0 * 3.14159265358979 / 180.0));
+	const double CullFrom = LevelLines / 2.0;
+	const int RebuildCap = 50;
+	if (bLevels)
+	{
+		C.SetLevels(LevelLines / 150.0, 80.0);
+		std::printf("levels (GS3): Near within %.2f m, Mid to 80 m, Far beyond, none past %.0f m but in the mass shot; at most %d meshes made again a frame\n",
+			LevelLines / 150.0, CullFrom, RebuildCap);
+	}
 
 	// Who is who: armies, faces and helmets.
 	{
@@ -384,6 +399,14 @@ int main(int Argc, char** Argv)
 	int MostNear = 0, MostMid = 0;
 	double SkinnedPoints = 0.0;
 	long NanFrames = 0;
+	// (GS3: each man's level as last updated and as the scene last drew it under the cap, when it last changed and
+	// from what; the changes a frame, the men held back and the longest wait, the flickers, the shadow switches)
+	std::vector<int> LevelWas(static_cast<size_t>(N), -1), LevelBefore(static_cast<size_t>(N), -1), DrawnLevel(static_cast<size_t>(N), -1);
+	std::vector<double> LevelAt(static_cast<size_t>(N), -1e9);
+	std::vector<int> HeldFrames(static_cast<size_t>(N), 0);
+	long LevelChanges = 0, Flickers = 0, ShadowSwitches = 0, HeldTotal = 0, LevelCapFrames = 0, CulledTotal = 0;
+	int MostChanges = 0, LongestHeld = 0, MostHeld = 0;
+	double MostChangesAt = 0.0;
 
 	// Deaths.
 	struct Body
@@ -483,6 +506,56 @@ int main(int Argc, char** Argv)
 			SkinnedPoints += C.Skin(I, L, At[static_cast<size_t>(I)].data(), Facing[static_cast<size_t>(I)].data());
 		}
 		const auto T2 = std::chrono::steady_clock::now();
+		if (bLevels)
+		{
+			int Changes = 0, Rebuilds = RebuildCap, Held = 0;
+			for (int I = 0; I < N; ++I)
+			{
+				const size_t K = static_cast<size_t>(I);
+				if (!C.Visible(I)) continue;
+				if (C.SeenDistance(I) > CullFrom) { ++CulledTotal; continue; }
+				const int L = static_cast<int>(C.LodOf(I));
+				if (LevelWas[K] >= 0 && L != LevelWas[K])
+				{
+					++Changes;
+					// (the test's eye jumps every half second, a cut: a change it made is no flicker, nor its undoing)
+					const bool bCut = Fr % 30 == 0;
+					if (!bCut && L == LevelBefore[K] && T - LevelAt[K] < 0.5)
+					{
+						++Flickers;
+						if (Flickers <= 3)
+						{
+							std::printf("  flicker: man %d back to level %d at %.2f s, %.2f s after leaving it (seen %.2f m)\n", I, L, T, T - LevelAt[K], C.SeenDistance(I));
+						}
+					}
+					LevelBefore[K] = LevelWas[K];
+					LevelAt[K] = bCut ? -1e9 : T;
+				}
+				LevelWas[K] = L;
+				// (the scene's DrawMen: a man whose drawn level differs is made again while the frame's cap lasts; past it,
+				// kept at his old level, and a new man not drawn yet)
+				if (DrawnLevel[K] != L)
+				{
+					if (Rebuilds > 0)
+					{
+						--Rebuilds;
+						if (DrawnLevel[K] >= 0 && (DrawnLevel[K] == static_cast<int>(Far)) != (L == static_cast<int>(Far))) ++ShadowSwitches;
+						DrawnLevel[K] = L;
+						HeldFrames[K] = 0;
+					}
+					else
+					{
+						++Held;
+						LongestHeld = std::max(LongestHeld, ++HeldFrames[K]);
+					}
+				}
+			}
+			LevelChanges += Changes;
+			HeldTotal += Held;
+			LevelCapFrames += Held > 0;
+			MostHeld = std::max(MostHeld, Held);
+			if (Changes > MostChanges) { MostChanges = Changes; MostChangesAt = T; }
+		}
 		UpdateMs.push_back(Ms(T0, T1));
 		SkinMs.push_back(Ms(T1, T2));
 		FrameMs.push_back(Ms(T0, T2));
@@ -1061,6 +1134,125 @@ int main(int Argc, char** Argv)
 		std::printf("\n");
 	}
 
+	// The tank commanders (Crowd::AddRider): each crew file's tank clips on the seats their places name, as the scene
+	// seats him on a tank's commander socket; his feet on the seat, up out of the hatch, his gun put away, nothing NaN,
+	// shown only when the scene says, and the battle's men unchanged around him.
+	{
+		std::printf("\nTHE TANK COMMANDERS (riders)\n");
+		std::map<std::string, std::shared_ptr<Soldier>> Crews;
+		for (const char* Army : { "USA_tanker", "GER_panzer" })
+		{
+			const std::string Text = ReadFile(std::string(Argv[2]) + "/soldier_" + Army + ".json");
+			auto S = std::make_shared<Soldier>();
+			if (Text.empty()) { std::printf("  soldier_%s.json not here: passed over\n", Army); continue; }
+			if (!S->Load(Text, Err)) { Fail("soldier_%s.json: %s", Army, Err.c_str()); continue; }
+			Crews[Army] = S;
+		}
+		Crowd C3;
+		C3.SetLife(Life);
+		for (const auto& KV : Files) C3.AddSoldier(KV.first, KV.second);
+		for (const auto& KV : Crews) C3.AddSoldier(KV.first, KV.second);
+		C3.ReadArmies(ReadFile(Argv[3]), Err);
+		C3.Build(RecText, GroundAt, Err);
+		const int Before = C3.Count();
+		int Checked = 0;
+		double TopLo = 1e9, TopHi = -1e9;
+		for (const auto& KV : Crews)
+		{
+			const Soldier& S = *KV.second;
+			const std::string Army = KV.first.substr(0, 3);
+			const int Man = C3.AddRider(KV.first, Army, 0x5EEDull + static_cast<uint64_t>(Checked));
+			if (Man < 0 || !C3.IsRider(Man) || C3.SoldierFile(KV.first) != &S) { Fail("%s: no rider made", KV.first.c_str()); continue; }
+			const int Head = S.BoneIndex("head"), Neck = S.BoneIndex("chest");
+			const int FootL = S.BoneIndex("ball_l"), FootR = S.BoneIndex("ball_r");
+			const int Gun = S.WeaponBone();
+			for (const char* Name : { "commander_hatch", "commander_roof_mg", "commander_roof_mg_burst", "die_hatch_slump", "die_hatch_drop" })
+			{
+				const int Ci = S.ClipIndex(Name);
+				if (Ci < 0) { Fail("%s: no clip %s", KV.first.c_str(), Name); continue; }
+				const Clip& Cl = S.Clips[static_cast<size_t>(Ci)];
+				if (Cl.Seats.empty()) Fail("%s %s: no places", KV.first.c_str(), Name);
+				for (const Clip::Seat& St : Cl.Seats)
+				{
+					// (the socket on a turret facing east, 2.4 m up; his root the socket moved by the offset)
+					const double SX = 300.0, SY = 200.0, SZ = 2.4;
+					Crowd::Ride R;
+					R.bShown = true;
+					R.Clip = Ci;
+					float* M = R.Seat.R;
+					M[0] = 1.f; M[1] = 0.f; M[2] = 0.f;    // forward east, right south, up
+					M[3] = 0.f; M[4] = -1.f; M[5] = 0.f;
+					M[6] = 0.f; M[7] = 0.f; M[8] = 1.f;
+					R.Seat.T[0] = static_cast<float>(SX + St.Offset.X);
+					R.Seat.T[1] = static_cast<float>(SY - St.Offset.Y);
+					R.Seat.T[2] = static_cast<float>(SZ + St.Offset.Z);
+					const float Times[3] = { 0.1f, Cl.Long * 0.5f, Cl.Long - 0.05f };
+					for (int Ti = 0; Ti < 3; ++Ti)
+					{
+						R.Time = Times[Ti];
+						C3.SetRide(Man, R);
+						C3.Update(1.0 + 0.1 * Ti);
+						++Checked;
+						if (!C3.Visible(Man)) { Fail("%s %s on %s: not shown", KV.first.c_str(), Name, St.Piece.c_str()); continue; }
+						const Xform* F = C3.FramesOf(Man);
+						const Vec3 HeadAt = F[Head].Point(S.Bones[static_cast<size_t>(Head)].Head);
+						const Vec3 ChestAt = F[Neck].Point(S.Bones[static_cast<size_t>(Neck)].Head);
+						const Vec3 LA = F[FootL].Point(S.Bones[static_cast<size_t>(FootL)].Head), RA = F[FootR].Point(S.Bones[static_cast<size_t>(FootR)].Head);
+						const double Rim = SZ + 0.25;
+						// (the head's top some 0.25 m on from the neck, the way the neck runs)
+						const double NX = HeadAt.X - ChestAt.X, NY = HeadAt.Y - ChestAt.Y, NZ = HeadAt.Z - ChestAt.Z;
+						const double Top = HeadAt.Z + 0.25 * NZ / std::max(0.05, std::sqrt(NX * NX + NY * NY + NZ * NZ));
+						const bool bDrop = std::string(Name) == "die_hatch_drop", bSlump = std::string(Name) == "die_hatch_slump";
+						if (!bDrop && !bSlump) { TopLo = std::min(TopLo, Top - Rim); TopHi = std::max(TopHi, Top - Rim); }
+						if (!bDrop && !bSlump && (Top < Rim + 0.3 || Top > Rim + 1.2))
+							Fail("%s %s on %s at %.2f s: his head's top %.2f m over the rim (up out of the hatch: 0.3 to 1.2)", KV.first.c_str(), Name, St.Piece.c_str(), Times[Ti], Top - Rim);
+						if (bDrop && Ti == 2 && Top > Rim)
+							Fail("%s %s on %s at its end: his head's top %.2f m over the rim (down inside)", KV.first.c_str(), Name, St.Piece.c_str(), Top - Rim);
+						if (!bDrop && std::min(LA.Z, RA.Z) < R.Seat.T[2] - 0.15f)
+							Fail("%s %s on %s at %.2f s: a foot %.2f m under the floor he stands on", KV.first.c_str(), Name, St.Piece.c_str(), Times[Ti], R.Seat.T[2] - std::min(LA.Z, RA.Z));
+						if (std::fabs(HeadAt.X - static_cast<float>(SX)) > 1.2 || std::fabs(HeadAt.Y - static_cast<float>(SY)) > 1.2)
+							Fail("%s %s on %s: his head %.2f m east, %.2f m north of the hatch", KV.first.c_str(), Name, St.Piece.c_str(), HeadAt.X - SX, HeadAt.Y - SY);
+						if (Gun >= 0 && (F[Gun].R[0] != 0.f || F[Gun].R[4] != 0.f || F[Gun].R[8] != 0.f))
+							Fail("%s %s: his gun is drawn (its bones not put away)", KV.first.c_str(), Name);
+						double RX = 0.0, RY = 0.0, RZ = 0.0;
+						float RF = 0.f;
+						C3.PlaceOf(Man, RX, RY, RZ, RF);
+						if (std::fabs(RZ - R.Seat.T[2]) > 1e-4 || std::fabs(std::remainder(RF - 1.5707963, 6.2831853)) > 1e-3)
+							Fail("%s %s: his place %.3f m up, facing %.1f deg (the seat's %.3f, 90)", KV.first.c_str(), Name, RZ, RF * 57.29578f, R.Seat.T[2]);
+						for (int L = 0; L < LodCount; ++L)
+						{
+							const int P = C3.PointsOf(Man, static_cast<Lod>(L));
+							std::vector<float> SkAt(static_cast<size_t>(P) * 3), SkFa(static_cast<size_t>(P) * 3);
+							C3.Skin(Man, static_cast<Lod>(L), SkAt.data(), SkFa.data());
+							for (const float V : SkAt) if (!std::isfinite(V)) { Fail("%s %s: NaN skinned", KV.first.c_str(), Name); break; }
+						}
+					}
+					// (blended from the hatch's clip into this one, halfway)
+					R.FromClip = S.ClipIndex("commander_hatch");
+					R.FromTime = 3.f;
+					R.W = 0.5f;
+					C3.SetRide(Man, R);
+					C3.Update(2.0);
+					const Vec3 Mid = C3.FramesOf(Man)[Head].Point(S.Bones[static_cast<size_t>(Head)].Head);
+					if (!Finite(Mid)) Fail("%s %s: NaN blended", KV.first.c_str(), Name);
+				}
+			}
+			// (hidden when the scene says: his hatch shut, his tank hidden)
+			Crowd::Ride Off;
+			C3.SetRide(Man, Off);
+			C3.Update(3.0);
+			if (C3.Visible(Man)) Fail("%s: shown when the scene hides him", KV.first.c_str());
+		}
+		// (the battle's own men unchanged by the riders: each still found as he was, none of them a rider)
+		bool bSame = true;
+		for (int Man = 0; Man < Before && bSame; ++Man) bSame = !C3.IsRider(Man);
+		if (!bSame || C3.Count() != Before + static_cast<int>(Crews.size())) Fail("the riders changed the battle's men (%d men, %d before)", C3.Count(), Before);
+		// (a scrub back: the crowd starts over; a rider is posed again as the scene says)
+		C3.Update(0.5);
+		std::printf("  %d poses of %zu commanders' tank clips on their seats checked (feet on the floor, head up out of the hatch, gun put away, shown as told); "
+			"up in the hatch or at the roof gun, his head's top %.2f to %.2f m over the rim\n", Checked, Crews.size(), TopLo, TopHi);
+	}
+
 	// Frame time.
 	{
 		double Sum = 0.0;
@@ -1092,6 +1284,17 @@ int main(int Argc, char** Argv)
 			Percentile(SceneWallMs, 0.95), Percentile(SceneWallMs, 0.99), OneMean < 3.0 ? "met" : "NOT met", WallMean < 1.5 ? "met" : "NOT met");
 	}
 	if (NanFrames) Fail("%ld frames with NaN", NanFrames);
+	if (bLevels)
+	{
+		const double Fs = static_cast<double>(std::max<size_t>(1, FrameMs.size()));
+		std::printf("\nlevels (GS3): %.2f men change level a frame on average, the most %d (at %.2f s); %ld shadow switches (%.2f a frame); "
+			"the cap of %d held men at their old level in %ld frames (the most %d in a frame, %.2f a frame), the longest wait %d frames (%.0f ms); "
+			"%ld flickers (a man back to his last level within half a second); %.1f men a frame too small to draw (past %.0f m)\n",
+			LevelChanges / Fs, MostChanges, MostChangesAt, ShadowSwitches, ShadowSwitches / Fs, RebuildCap, LevelCapFrames, MostHeld, HeldTotal / Fs, LongestHeld,
+			LongestHeld * Dt * 1000.0, Flickers, CulledTotal / Fs, CullFrom);
+		if (LongestHeld > 30) Fail("a man waited %d frames (over half a second) for his new level under the cap", LongestHeld);
+		if (Flickers > LevelChanges / 50 + 2) Fail("%ld of %ld level changes flicker back within half a second", Flickers, LevelChanges);
+	}
 
 	std::printf("\n%s (%d failures)\n", Fails ? "LAND SHOW FAILED" : "land show ok", Fails);
 	return Fails ? 1 : 0;

@@ -226,6 +226,10 @@ namespace LandField
 		Stubble, // clutter: a cut field's straw stubble in its drill rows, a few straws lying loose
 		Sward,   // clutter: the short grass itself, close round the eye, in the ground's own colour (its tint)
 		Trodden, // clutter: a piece of a cow path's bare trodden earth, laid end to end along the path
+		Stalks,  // clutter: standing corn stalk by stalk, with its leaves and its ears, laid where Wheat is and drawn
+		         // only within a few metres of the lens (the art director's cut 4, fix 4), the Wheat there cleared
+		Rosette, // clutter: a broad-leaved dock and a plantain or two lying close to the ground, in the open grass (the
+		         // bracken keeps to the banks: the art director's cut 5 note)
 		Count
 	};
 
@@ -244,6 +248,14 @@ namespace LandField
 		/** The base's size as built (before an instance's scale): radius round its origin and height. */
 		float Radius = 1.0f, Height = 1.0f;
 	};
+
+	/**
+	 * A tree far off in some 40 triangles (the battle-scale plan's GS9): its trunk a three-sided post and its crown a
+	 * six-sided ball, sized and coloured from From's points (the crown its leafy points, green over red; if none, those
+	 * above a third of its height), the ball's underside darker since it is drawn with no shadow of its own. Empty if
+	 * From is. The same axes, origin and winding as the field's own meshes.
+	 */
+	Mesh CrownOf(const Mesh& From);
 
 	/**
 	 * One instance: the base mesh scaled (X and Y by Scale, Z by ScaleZ), turned Yaw radians counter-clockwise about
@@ -314,6 +326,10 @@ namespace LandField
 		/** The drawn surface's height alone (At's Z), and what is drawn there when asked (At's What), without At's
 		 * normal and effects word: a fifth of its cost, for the camera's many questions a frame. Any thread. */
 		double HeightAt(double X, double Y, Drawn* OutWhat = nullptr) const;
+		/** The near ground's normal at a place as its mesh is lit there (its points' normals mixed across the triangle
+		 * the place is in): for what is laid flat on it, a shell hole's thrown soil, a track's strip, to be lit alike.
+		 * Under a bank or a house the ground's own, not theirs. Any thread. */
+		void DrawnUp(double X, double Y, double& OutX, double& OutY, double& OutZ) const;
 		/** Whether a house's floor or a stone wall's line may be drawn at a place (the field's 2 m raster): where false,
 		 * HeightAt never says Floor or Wall there. A few nanoseconds, so the camera's sight (LandSight) asks HeightAt
 		 * only where it may. Any thread. */
