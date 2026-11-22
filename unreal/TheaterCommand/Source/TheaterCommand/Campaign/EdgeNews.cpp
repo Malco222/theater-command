@@ -130,6 +130,7 @@ namespace
 void FEdgeNewsBoard::LayFrom(const FMonthCard& Card)
 {
 	Seals.Reset();
+	Plain.Reset();
 	Date = Card.Date;
 	std::vector<EdgeSeals::FItem> Listed;
 	EdgeSeals::ListItems(EdgeSeals::FCardCounts{ Card.Bands.Num(), Card.Lead.bValid, Card.Rows.Num(), Card.Home.Num(), Card.Staff.Num(), Card.Elsewhere.Num() }, Listed);
@@ -145,21 +146,35 @@ void FEdgeNewsBoard::LayFrom(const FMonthCard& Card)
 	{
 		Each.Add(EdgeSealOf(Card, Listed[Index], Looks[Index], Said[Index]));
 	}
+	// (folded as each kind of screen draws them: where the seal set is pressed (Seals), and where it is not and every
+	// order sign is the three lines (Plain): "would look the same" is what that screen shows. EdgeNewsLayer stands the
+	// fold it draws)
+	std::vector<EdgeSeals::FAlike> Drawn(Listed.size());
 	std::vector<EdgeSeals::FAlikeRun> Runs;
-	EdgeSeals::FoldAlike(Looks, Runs);
-	// (no more than can stand: the screen folds the rest into "+N", and any it has no room for, counting their items:
-	// EdgeNewsLayer)
-	const int32 Kept = FMath::Min(static_cast<int32>(Runs.size()), MostSeals);
-	for (int32 Index = 0; Index < Kept; ++Index)
+	for (int32 Pass = 0; Pass < 2; ++Pass)
 	{
-		const EdgeSeals::FAlikeRun& Run = Runs[static_cast<size_t>(Index)];
-		Seals.Add(Each[Run.First]);
-		FEdgeNewsSeal& Seal = Seals.Last();
-		Seal.Alike = Run.Count;
-		if (Run.Count > 1)
+		const bool bPressed = Pass == 0;
+		for (size_t Index = 0; Index < Listed.size(); ++Index)
 		{
-			// (the run's items named in card order, and how many more: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more")
-			Seal.Words = FString(UTF8_TO_TCHAR(EdgeSeals::FoldWords(Said, Run).c_str()));
+			Drawn[Index] = EdgeSeals::AsDrawn(Looks[Index], bPressed);
+		}
+		EdgeSeals::FoldAlike(Drawn, Runs);
+		TArray<FEdgeNewsSeal>& Fold = bPressed ? Seals : Plain;
+		// (no more than can stand: the screen folds the rest into "+N", and any it has no room for, counting their
+		// items: EdgeNewsLayer)
+		const int32 Kept = FMath::Min(static_cast<int32>(Runs.size()), MostSeals);
+		for (int32 Index = 0; Index < Kept; ++Index)
+		{
+			const EdgeSeals::FAlikeRun& Run = Runs[static_cast<size_t>(Index)];
+			Fold.Add(Each[Run.First]);
+			FEdgeNewsSeal& Seal = Fold.Last();
+			Seal.First = Run.First;
+			Seal.Alike = Run.Count;
+			if (Run.Count > 1)
+			{
+				// (the run's items named in card order, and how many more: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more")
+				Seal.Words = FString(UTF8_TO_TCHAR(EdgeSeals::FoldWords(Said, Run).c_str()));
+			}
 		}
 	}
 	Rest = FEdgeNewsSeal();
@@ -174,6 +189,7 @@ void FEdgeNewsBoard::LayFrom(const FMonthCard& Card)
 void FEdgeNewsBoard::Clear()
 {
 	Seals.Reset();
+	Plain.Reset();
 	Items = 0;
 	Rest = FEdgeNewsSeal();
 	Date.Reset();
@@ -212,18 +228,32 @@ void ACampaignPlayerController::LayEdgeNews(const FMonthCard* Shown)
 void ACampaignPlayerController::OpenEdgeSeal(int32 Seal)
 {
 	// (INDEX_NONE: the "+N" seal, which opens the card at its head)
+	// (Seal is the slot of a seal standing on the screen, in the fold the screen shows: FEdgeNewsBoard::Shown)
 	const bool bRest = Seal == INDEX_NONE;
-	if ((!bRest && !EdgeNews.Seals.IsValidIndex(Seal)) || EdgeNews.Seals.Num() == 0 || bWatching)
+	if ((!bRest && !EdgeNews.Shown().IsValidIndex(Seal)) || EdgeNews.Shown().Num() == 0 || bWatching)
 	{
 		return;
 	}
 	OpenPage(TEXT("reports"));
-	if (!bPageOpen || !Page.Month.bValid || (!bRest && !EdgeNews.Seals.IsValidIndex(Seal)))
+	if (!bPageOpen || !Page.Month.bValid || (!bRest && !EdgeNews.Shown().IsValidIndex(Seal)))
 	{
 		return; // (no card to open: the seal stays as it was)
 	}
-	FEdgeNewsSeal& Pressed = bRest ? EdgeNews.Rest : EdgeNews.Seals[Seal];
+	FEdgeNewsSeal& Pressed = bRest ? EdgeNews.Rest : EdgeNews.Shown()[Seal];
 	Pressed.bOpened = true;
+	if (!bRest)
+	{
+		// (and every seal of either fold that shares an item with it, so a window moved across 972 high keeps what has
+		// been read)
+		const EdgeSeals::FAlikeRun Opened{ Pressed.First, Pressed.Alike };
+		for (TArray<FEdgeNewsSeal>* Fold : { &EdgeNews.Seals, &EdgeNews.Plain })
+		{
+			for (FEdgeNewsSeal& Other : *Fold)
+			{
+				Other.bOpened = Other.bOpened || EdgeSeals::RunsMeet(Opened, EdgeSeals::FAlikeRun{ Other.First, Other.Alike });
+			}
+		}
+	}
 	EdgeNews.FocusSection = bRest ? -1 : Pressed.Section;
 	EdgeNews.FocusIndex = bRest ? -1 : Pressed.Index;
 	EdgeNews.FocusPage = Page.Revision;

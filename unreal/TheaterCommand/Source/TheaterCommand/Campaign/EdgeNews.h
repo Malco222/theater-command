@@ -19,6 +19,8 @@ struct FEdgeNewsSeal
 	/** The card's part (EdgeSeals::ESection: 0 a band, 1 the lead story, 2 a front's row, 3 home, 4 the staff, 5 elsewhere, 6 "+N") and the item's place in it: a run's first item, where it folds a run (a press opens the card there). */
 	int32 Section = 0;
 	int32 Index = 0;
+	/** Its first item's place in the card's order, counting every item from 0 (with Alike, the run it stands for). */
+	int32 First = 0;
 	/**
 	 * How many items of the card it stands for: 1 for an item of its own; 3 or more for a run of alike items in a row
 	 * (wax, mark, sign and pulse: EdgeSeals::FoldAlike; a dated warning never folds), its count shown on a tab of paper
@@ -60,13 +62,27 @@ struct FEdgeNewsBoard
 	static constexpr int32 MostSeals = 9;
 
 	/**
-	 * The card's first seals, in card order (at most MostSeals), each an item or a folded run of alike items, and how many
-	 * items the card has in all. The runs are folded before the seals are counted, so a run past the ninth item still
-	 * stands as one. Empty until a month's card falls due, and again as the next month resolves. How many of them stand
-	 * is the screen's to say, each frame, from the room the edge has (EdgeSeals::FLayout::LayRanked): the rest fold into
-	 * the "+N" seal, which counts the items they stand for, never the seals.
+	 * The card's first seals, in card order (at most MostSeals), each an item or a folded run of alike items, folded as
+	 * a screen that presses the seal set draws them (a window 972 high and up; Plain is the fold below it, and the
+	 * screen stands the one it draws: Shown), and how many items the card has in all. The runs are folded before the
+	 * seals are counted, so a run past the ninth item still stands as one. Empty until a month's card falls due, and
+	 * again as the next month resolves. How many of them stand is the screen's to say, each frame, from the room the
+	 * edge has (EdgeSeals::FLayout::LayRanked): the rest fold into the "+N" seal, which counts the items they stand for,
+	 * never the seals.
 	 */
 	TArray<FEdgeNewsSeal> Seals;
+	/**
+	 * The same, folded as a screen draws them where the seal set is not pressed (under a window 972 high: every order
+	 * sign the three lines, so a run of seals that look the same there folds though their signs differ; ruling 64(g),
+	 * "would look the same"). EdgeSeals::AsDrawn and Look::SetPressed; Seals is the fold where the set is pressed.
+	 */
+	TArray<FEdgeNewsSeal> Plain;
+	/**
+	 * Whether the screen shows Plain: EdgeNewsLayer says, each frame, by its own measure of the screen (display only,
+	 * as the whole board is, and set through the controller's const view of it, so mutable). A press opens the seal of
+	 * the fold that is shown.
+	 */
+	mutable bool bPlainShown = false;
 	int32 Items = 0;
 	/** The "+N" seal: the items that do not stand, counted; a press opens the card at its head. */
 	FEdgeNewsSeal Rest;
@@ -80,7 +96,11 @@ struct FEdgeNewsBoard
 	int32 FocusPage = -1;
 	double FocusAt = 0.0;
 
-	/** Sets out the seals for a month's card: its items in its order, each alike run of three or more folded into one seal, the first MostSeals of them; and the "+N" seal for the rest. */
+	/** The seals of the fold the screen shows: Plain where it says so, else Seals. */
+	const TArray<FEdgeNewsSeal>& Shown() const { return bPlainShown ? Plain : Seals; }
+	TArray<FEdgeNewsSeal>& Shown() { return bPlainShown ? Plain : Seals; }
+
+	/** Sets out the seals for a month's card: its items in its order, each alike run of three or more folded into one seal, the first MostSeals of them, once as pressed and once as drawn with no sign (Plain); and the "+N" seal for the rest. */
 	void LayFrom(const FMonthCard& Card);
 	/** Takes every seal away (the month that follows resolves). */
 	void Clear();

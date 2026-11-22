@@ -1625,12 +1625,14 @@ static void TestFold()
 		CHECK(bRight);
 
 		const std::vector<FMonth> Months = ReadMonths();
-		int Seats = 0, Folded = 0, Before = 0, After = 0, Lost = 0, Wrong = 0;
+		int Seats = 0, Folded = 0, Before = 0, After = 0, AfterWide = 0, Lost = 0, Wrong = 0;
 		std::string LastSeat;
 		FLayout Layout;
 		std::vector<FSpot> Spots;
 		std::vector<FWant> Wants;
 		std::vector<int> Carries;
+		std::vector<FAlike> Drawn;
+		std::vector<FAlikeRun> PlainRuns;
 		for (const FMonth& Month : Months)
 		{
 			Seats += Month.Seat != LastSeat ? 1 : 0;
@@ -1638,18 +1640,30 @@ static void TestFold()
 			FoldAlike(Month.Looks, Runs);
 			bCover = bCover && RunsCover(Runs, static_cast<int>(Month.Looks.size()));
 			bRight = bRight && RunsRight(Month.Looks, Runs, Why);
-			Before += Fold(static_cast<int>(Month.Looks.size()), 9).Shown + (Fold(static_cast<int>(Month.Looks.size()), 9).More > 0 ? 1 : 0);
-			// (the board keeps the first nine runs; the screen stands what it has room for, the rest in a "+N" of items)
-			const size_t Kept = std::min<size_t>(Runs.size(), 9);
-			Wants.assign(Kept, FWant());
-			Carries.clear();
-			for (size_t Index = 0; Index < Kept; ++Index)
+			// (and as drawn below 972 high, where no order sign is pressed: the fold the screen stands there, 7 below)
+			Drawn.clear();
+			for (const FAlike& Look : Month.Looks)
 			{
-				Carries.push_back(Runs[Index].Count);
+				Drawn.push_back(AsDrawn(Look, false));
+			}
+			FoldAlike(Drawn, PlainRuns);
+			Before += Fold(static_cast<int>(Month.Looks.size()), 9).Shown + (Fold(static_cast<int>(Month.Looks.size()), 9).More > 0 ? 1 : 0);
+			for (size_t Index = 0; Index < std::min<size_t>(Runs.size(), 9); ++Index)
+			{
 				Folded += Runs[Index].Count > 1 ? 1 : 0;
 			}
-			for (const double Wide : { 1595.0, 1296.0 })
+			// (at 1920 by 1080 the fold as pressed, at 1441 by 878 and 1024 by 768 the fold as drawn there; the board keeps
+			// the first nine runs, and the screen stands what it has room for, the rest in a "+N" of items)
+			for (const double Wide : { 1728.0, 1595.0, 1296.0 })
 			{
+				const std::vector<FAlikeRun>& Shown = Wide > 1700.0 ? Runs : PlainRuns;
+				const size_t Kept = std::min<size_t>(Shown.size(), 9);
+				Wants.assign(Kept, FWant());
+				Carries.clear();
+				for (size_t Index = 0; Index < Kept; ++Index)
+				{
+					Carries.push_back(Shown[Index].Count);
+				}
 				FParams Window;
 				Window.ScreenW = Wide;
 				Window.ScreenH = 972.0;
@@ -1662,12 +1676,14 @@ static void TestFold()
 				Lost += Carried + Laid.More != static_cast<int>(Month.Looks.size()) ? 1 : 0;
 				Wrong += Laid.Shown + (Laid.More > 0 ? 1 : 0) > 9 ? 1 : 0;
 				After += Wide == 1595.0 ? Laid.Shown + (Laid.More > 0 ? 1 : 0) : 0;
+				AfterWide += Wide == 1728.0 ? Laid.Shown + (Laid.More > 0 ? 1 : 0) : 0;
 			}
 		}
 		CHECK(Months.size() >= 40 && Seats >= 10 && Folded >= 40);
 		CHECK(bCover && bRight);
 		CHECK(Lost == 0 && Wrong == 0);
-		std::printf("(the fold over %zu real months of %d seats: %d folded seals; %d seals stood before it, %d after, at 1441 by 878)\n", Months.size(), Seats, Folded, Before, After);
+		std::printf("(the fold over %zu real months of %d seats: %d folded seals where the order signs are pressed; %d seals stood before it, %d after at 1920 by 1080, %d at 1441 by 878 as drawn there)\n",
+			Months.size(), Seats, Folded, Before, AfterWide, After);
 
 		// The "+N" counts items, not seals: run 3's month with room for three seals only stands the nine and the news
 		// from Iran, and its "+N" counts the six items of the two seals that do not stand.
@@ -1933,6 +1949,112 @@ static void TestFold()
 			" of the tails clear of the disc %.0f%% shows round one figure's tab, %.0f%% round two figures', %.0f%% round three)\n",
 			Look::FigurePx(878.0 / 972.0), Look::FigurePx(1080.0 / 972.0), Look::FigurePx(768.0 / 972.0), Floor, Look::TabOf(1, 878.0 / 972.0).MaxX - Look::TabOf(1, 878.0 / 972.0).MinX,
 			Look::TabOf(1, 878.0 / 972.0).MaxY - Look::TabOf(1, 878.0 / 972.0).MinY, Shows[0] * 100.0, Shows[1] * 100.0, Shows[2] * 100.0);
+	}
+
+	// 7. "Would look the same" is what the screen draws: below a window 972 high no order sign is pressed (the whole set
+	// is pressed or none, Look::SetPressed), every signed seal shows the three lines, and the month stands folded as so
+	// drawn (AsDrawn; EdgeNews keeps both folds, FEdgeNewsBoard::Plain, and the layer stands the one it draws).
+	{
+		// (the set is pressed where SignHolds says for its 16 of 192 in a 192 by 128 picture: from 972 high up)
+		bool bSet = true;
+		for (int High = 400; High <= 4000; High += 7)
+		{
+			const double P = High / 972.0;
+			bSet = bSet && Look::SetPressed(P) == Look::SignHolds(Look::SealFloor, Look::SignPictureW, Look::SignPictureH, P) && Look::SetPressed(P) == (High >= 972);
+		}
+		CHECK(bSet && Look::SetPressed(1080.0 / 972.0) && Look::SetPressed(1786.0 / 972.0) && !Look::SetPressed(878.0 / 972.0) && !Look::SetPressed(768.0 / 972.0) && Look::SetPressed(0.0));
+		// (a sign pressed stays a sign; not pressed, or with no seal picture to press, it is the three lines; any other mark,
+		// the wax and the pulse are as they were)
+		const FAlike Inf = AlikeOf(ESection::Row, "LOST", -1, "inf"), Nothing = AlikeOf(ESection::Row, "LOST", -1, "fort"), Lines = AlikeOf(ESection::Row, "LOST", -1, "");
+		CHECK(Inf.Glyph == EGlyph::Sign && AsDrawn(Inf, true) == Inf && AsDrawn(Inf, false) == Lines && AsDrawn(Inf, false).Sign.empty());
+		CHECK(Nothing.Glyph == EGlyph::Sign && AsDrawn(Nothing, true) == Lines && AsDrawn(Nothing, false) == Lines);
+		const FAlike War = AlikeOf(ESection::Band, "WAR", -1, ""), Warned = AlikeOf(ESection::Band, "WARNING", -1, ""), Star = AlikeOf(ESection::Row, "", 1, "star");
+		CHECK(AsDrawn(War, false) == War && AsDrawn(Warned, false) == Warned && AsDrawn(Warned, false).IsWarning() && AsDrawn(Star, false) == Star && Star.Glyph == EGlyph::News);
+		// (and a seal opened in one fold marks the seals of the other that share an item with it: RunsMeet, weighed
+		// without an int sum that could overflow)
+		CHECK(RunsMeet({ 3, 21 }, { 5, 1 }) && RunsMeet({ 5, 1 }, { 3, 21 }) && RunsMeet({ 3, 21 }, { 23, 3 }) && !RunsMeet({ 3, 21 }, { 24, 3 }) && !RunsMeet({ 24, 3 }, { 3, 21 }));
+		CHECK(RunsMeet({ 0, 1 }, { 0, 1 }) && !RunsMeet({ 0, 0 }, { 0, 1 }) && !RunsMeet({ INT_MIN, INT_MAX }, { INT_MAX, 1 }) && RunsMeet({ INT_MAX, 1 }, { INT_MAX, INT_MAX }));
+
+		// Over the real months: the fold as drawn below 972 high covers every item in order, each run alike as drawn and
+		// whole, three alike as drawn never left standing apart, and its words say only what the card does; where no item
+		// of a month has a sign pressed, the two folds are one. Where the set is pressed, the fold is AlikeOf's as before
+		// (every sign the months press has its seal picture).
+		const std::vector<FMonth> Months = ReadMonths();
+		std::vector<FAlike> Drawn, Pressed;
+		std::vector<FAlikeRun> PressedRuns;
+		int Differ = 0, Stood = 0, StoodPlain = 0, Bad = 0;
+		bool bCover = true, bRight = true, bSamePressed = true, bOneWhereNoSign = true;
+		std::string Why, First, Poland, Ruhr;
+		for (const FMonth& Month : Months)
+		{
+			Drawn.clear();
+			Pressed.clear();
+			bool bAnySign = false;
+			for (const FAlike& Look : Month.Looks)
+			{
+				Drawn.push_back(AsDrawn(Look, false));
+				Pressed.push_back(AsDrawn(Look, true));
+				bAnySign = bAnySign || Look.Glyph == EGlyph::Sign;
+			}
+			bSamePressed = bSamePressed && Pressed == Month.Looks;
+			FoldAlike(Drawn, Runs);
+			FoldAlike(Month.Looks, PressedRuns);
+			bCover = bCover && RunsCover(Runs, static_cast<int>(Drawn.size()));
+			bRight = bRight && RunsRight(Drawn, Runs, Why);
+			bool bSame = Runs.size() == PressedRuns.size();
+			for (size_t Index = 0; bSame && Index < Runs.size(); ++Index)
+			{
+				bSame = Runs[Index].First == PressedRuns[Index].First && Runs[Index].Count == PressedRuns[Index].Count;
+			}
+			bOneWhereNoSign = bOneWhereNoSign && (bAnySign || bSame);
+			Differ += bSame ? 0 : 1;
+			Stood += static_cast<int>(PressedRuns.size());
+			StoodPlain += static_cast<int>(Runs.size());
+			for (const FAlikeRun& Run : Runs)
+			{
+				const std::string Said = FoldWords(Month.Said, Run);
+				if (Run.Count > 1 && !SaysOnlyTheCard(Month.Said, Run, Said, Why))
+				{
+					++Bad;
+					First = First.empty() ? Said + " (" + Why + ")" : First;
+				}
+			}
+			if (Month.Seat == "POL" && Month.Date == "September 1939")
+			{
+				// (24 brass seals of lines and signs before, more than nine: at 1441 by 878, 8 stood and a "+N". Drawn, the
+				// fronts' 21 rows that all show the three lines in plain brass are one, and home's three another: 8 in all)
+				const bool bFronts = Runs.size() == 8 && Runs[3].First == 3 && Runs[3].Count == 21 && Runs[5].Count == 3 && PressedRuns.size() > 9;
+				CHECK(bFronts);
+				Poland = bFronts ? FoldWords(Month.Said, Runs[3]) : std::string();
+			}
+			if (Month.Seat == "GER" && Month.Date == "November 1939")
+			{
+				// ("Ruhr is bombed", the lead; "Ruhr HIT", a raid's row signed bmr; and a directive at home: three plain
+				// brass seals of three lines side by side, where the bomber is not pressed)
+				CHECK(Runs.size() == 1 && Runs[0].Count == 3 && PressedRuns.size() == 3);
+				Ruhr = Runs.size() == 1 ? FoldWords(Month.Said, Runs[0]) : std::string();
+			}
+		}
+		CHECK(bCover && bRight);
+		CHECK(bSamePressed && bOneWhereNoSign);
+		CHECK(Bad == 0 && Differ >= 5 && StoodPlain < Stood);
+		CHECK(Poland == "Polish Silesia LOST against Germany; 20 more reports on your fronts");
+		CHECK(Ruhr == "Ruhr is bombed; 2 more reports on your fronts and at home");
+		if (Bad > 0)
+		{
+			std::printf("  first: %s\n", First.c_str());
+		}
+		std::printf("(folded as drawn below 972 high, where no order sign is pressed: %d seals over the real months, against %d where the set is pressed; %d months differ. POL September 1939: \"%s\")\n",
+			StoodPlain, Stood, Differ, Poland.c_str());
+		// (Mac run 3's month presses no sign: both folds are its four)
+		const FMonth Three3 = RunThree();
+		std::vector<FAlike> ThreeDrawn;
+		for (const FAlike& Look : Three3.Looks)
+		{
+			ThreeDrawn.push_back(AsDrawn(Look, false));
+		}
+		FoldAlike(ThreeDrawn, Runs);
+		CHECK(Runs.size() == 4 && Runs[0].Count == 9 && Runs[3].Count == 5);
 	}
 }
 

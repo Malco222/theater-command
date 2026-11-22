@@ -22,7 +22,8 @@ struct FSlateBrush;
  * adviser): KeepOffOf fills an array with them, in the window's (paint) measure, as the frame last painted them
  * (EdgeNewsKeepOff).
  * Three or more items in a row that would look the same stand as one seal, its count on a tab of paper under the disc
- * (ruling 64(g) as amended 08:55Z; EdgeNews folds them, a dated warning never). As many stand as the edge has room
+ * (ruling 64(g) as amended 08:55Z; EdgeNews folds them, a dated warning never, and the layer stands the fold its
+ * screen draws: below a window 972 high no order sign is pressed, FEdgeNewsBoard::Plain). As many stand as the edge has room
  * for, in the card's ranking, and the rest fold into the "+N" seal, which counts the items. A seal wears the
  * colour of the row it opens (the art director's ruling of 22 November: EdgeSeals::LookOf): a dated warning is red and
  * pulses slowly until opened; war and peace and the news wear the news band's brass (a freeing his own side did, its

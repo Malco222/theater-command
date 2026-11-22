@@ -197,8 +197,9 @@ namespace EdgeSeals
 	 * Ruling 64(g) as amended 08:55Z, the fold of alike runs: "Three or more in a row that would look the same (wax,
 	 * mark, sign, pulse) stand as one seal with their count at the first item's place, and a press opens the card at
 	 * that run's first row." FAlike is how an item's seal looks on the edge: its wax, what is pressed in it (its drawn
-	 * mark, or the order sign it names) and whether it pulses. A WARNING (the dated warning's red wax, or the warning's
-	 * mark on any wax) never folds, so no run crosses one either.
+	 * mark, or the order sign it names) and whether it pulses; the fold compares the looks as the screen draws them
+	 * (AsDrawn: below 972 high no order sign is pressed). A WARNING (the dated warning's red wax, or the warning's mark
+	 * on any wax) never folds, so no run crosses one either.
 	 */
 	struct FAlike
 	{
@@ -213,6 +214,14 @@ namespace EdgeSeals
 	};
 	/** An item's look, from its part, its word, its tone and the order sign its row names: LookOf's wax and pulse, GlyphOf's mark, the sign where MayPress. */
 	FAlike AlikeOf(ESection Section, const std::string& Word, int Tone, const std::string& Sign);
+	/**
+	 * An item's look as a screen draws it, which is what the fold compares ("would look the same"): where the seal set
+	 * is not pressed (bPressed false, Look::SetPressed: under a window 972 high), and on every screen for an order sign
+	 * with no seal picture (Look::SignFinest 0), the seal shows the three lines in place of its sign, so its look there
+	 * is the News mark, alike with the three lines' seals of its wax and pulse. Any other look is as it is. EdgeNews
+	 * folds the month both ways and the screen stands the fold it draws.
+	 */
+	FAlike AsDrawn(const FAlike& Look, bool bPressed);
 
 	/** A run of the card's items that stands as one seal: the first item's place in card order, and how many (1: a seal of its own). */
 	struct FAlikeRun
@@ -226,6 +235,12 @@ namespace EdgeSeals
 	 * is in one run and one only, in order, and the runs' counts add up to the items.
 	 */
 	void FoldAlike(const std::vector<FAlike>& Looks, std::vector<FAlikeRun>& Out, int Least = 3);
+	/**
+	 * Whether two runs share an item. The month is folded once for each kind of screen (AsDrawn), and a seal opened in
+	 * one fold marks opened every seal of the other that shares an item with it, so a window moved across 972 high
+	 * keeps what has been read.
+	 */
+	bool RunsMeet(const FAlikeRun& A, const FAlikeRun& B);
 
 	/**
 	 * What the card says of one item, for the words of a folded seal: its part; the line its seal's own eight words
@@ -522,6 +537,15 @@ namespace EdgeSeals
 		 * every sign at once; below it, every seal the three lines.
 		 */
 		bool SignHolds(double Finest, double DrawnW, double DrawnH, double PxPerUnit);
+
+		/** The height the seal signs' pictures are drawn at, with SignPictureW (the test reads every picture at 192 by 128). */
+		constexpr double SignPictureH = 128.0;
+		/**
+		 * Whether the seal set is pressed on a screen of PxPerUnit pixels to a unit: SignHolds for its finest part
+		 * (SealFloor) in a picture SignPictureW by SignPictureH, from a window 972 high up. Below it every seal sign is
+		 * drawn as the three lines, and the screen stands the month folded as so drawn (AsDrawn).
+		 */
+		bool SetPressed(double PxPerUnit);
 
 		/** One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees clockwise), a dot (Long across) or a ring (Long across, its line Thick). */
 		enum class EStroke : int

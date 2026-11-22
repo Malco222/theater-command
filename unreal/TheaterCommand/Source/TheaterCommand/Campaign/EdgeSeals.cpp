@@ -344,6 +344,25 @@ namespace EdgeSeals
 		return Alike;
 	}
 
+	FAlike AsDrawn(const FAlike& Look, bool bPressed)
+	{
+		FAlike Drawn = Look;
+		// (a sign the screen does not press, or one with no seal picture to press, shows the three lines: PaintMark)
+		if (Drawn.Glyph == EGlyph::Sign && (!bPressed || Look::SignFinest(Drawn.Sign) <= 0.0))
+		{
+			Drawn.Glyph = EGlyph::News;
+			Drawn.Sign.clear();
+		}
+		return Drawn;
+	}
+
+	bool RunsMeet(const FAlikeRun& A, const FAlikeRun& B)
+	{
+		// (each starts before the other ends; weighed as distances in 64 bits, so no int sum or difference can overflow)
+		const long long Apart = static_cast<long long>(B.First) - static_cast<long long>(A.First);
+		return A.Count >= 1 && B.Count >= 1 && (Apart >= 0 ? Apart < A.Count : -Apart < B.Count);
+	}
+
 	void FoldAlike(const std::vector<FAlike>& Looks, std::vector<FAlikeRun>& Out, int Least)
 	{
 		Out.clear();
@@ -1321,6 +1340,11 @@ namespace EdgeSeals
 			const double Scale = PxPerUnit > 0.0 ? PxPerUnit : 1.0;
 			const double Units = Finest * FitSign(DrawnW, DrawnH).X / SignPictureW;
 			return Finest > 0.0 && Units * Scale >= MinStrokePx;
+		}
+
+		bool SetPressed(double PxPerUnit)
+		{
+			return SignHolds(SealFloor, SignPictureW, SignPictureH, PxPerUnit);
 		}
 
 		namespace
