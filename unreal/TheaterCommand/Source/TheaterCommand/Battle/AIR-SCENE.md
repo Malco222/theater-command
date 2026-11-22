@@ -1058,7 +1058,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the chase: no aircraft should change its paint or its outline as it crosses 300 m or 1.5 km, and none should jump
    or smear as it does. If one does, `-TheaterPlaneCopies=0` draws every aircraft on its own mesh as before, and
    `-TheaterPlaneLightM=3000` moves the light shape out. Every 10 s the log says "Air battle: N aircraft drawn as
-   copies in M meshes, K on their own meshes"; the light shapes are logged as they are made ("Air battle: B17:USA's
+   copies, K on their own meshes, and B bombs falling as copies, in M meshes"; the light shapes are logged as they are made ("Air battle: B17:USA's
    light shape ..."). Read Bremen's game thread and draw thread times with and without `-TheaterPlaneCopies=0`.
 43. **Bombs and torpedoes falling as copies** (AS2 of the battle-scale plan). Each was a six-sided rod laid afresh in
    the small things' mesh every frame; a raid's carpets were hundreds of them rebuilt and sent each frame. Now each is
