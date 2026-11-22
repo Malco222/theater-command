@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 296f8ada 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 74ff14e9 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -10709,6 +10709,11 @@
           ...v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r12(c.at), edge: c.edge, x: r12(c.x), y: r12(c.y), ...c.arrive ? { arrive: c.arrive } : {} })) } : {},
           // (the rider ahead: his own corps' despatch riders, riding in before it)
           ...v.riders?.length ? { riders: v.riders } : {},
+          // (hedge cutters: the gaps cut and being cut that he may know of, each opening as a gateway at t1; smoke on call:
+          // the screens standing now, the enemy's block named only where he knows it. The 3D field opens the hedge and
+          // hangs the smoke; the smoke rounds carry how long each hangs as well)
+          ...this.sim.cutView(this.me ?? void 0),
+          ...this.sim.screenView(this.me ?? void 0),
           ...v.over ? { over: v.over } : {}
         });
       }
