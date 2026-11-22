@@ -2063,7 +2063,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       // A garrison has nowhere to go.
       const to = town || overrun || shattered ? null : retreatTarget(g, c, target, banned);
       const N = g.nations[c.nat];
-      const away = !overrun && !shattered && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
+      // (The far side: and only with ground of its own side's to be landed on: `refugeHeld`.)
+      const dest = !overrun && !shattered && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target) ? refugeHeld(g, c, target) : null;
+      const away = !!dest;
       // The grand campaign: beaten in the field with no way out, a corps falls back into the town if there is room,
       // and nobody leaves his own capital while it can still be held. Under ruling 232 a beaten field army never goes
       // into the town: it falls back to open country, or with nowhere to go and no ship to lift it, lays down its arms.
@@ -2076,11 +2078,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       else if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; if (driveOut(g)) defU[i].to = to.id; }
       else if (away) {
         // Backs to the sea: the navy takes off what it can.
-        const dest = refuge(g, c, target);
-        place(g, c, dest);
+        place(g, c, dest!);
         c.str *= 0.75; c.org = 0.2; c.ap = 0;
         defU[i].fate = 'evacuated';
-        if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
+        if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest!.cap ? '' : ` and taken to ${dest!.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
       } else {
         const left = men(c);
         defU[i].fate = shattered ? 'destroyed' : 'surrendered';
@@ -2953,7 +2954,9 @@ export function capitulate(g: Game, nat: string, by: string): void {
     if (allied(g, c.nat, r.ctrl)) continue;
     if (atWar(g, c.nat, r.ctrl) && hostileUnits(g, r, c.nat).length === 0) continue; // still occupying enemy ground
     const N = g.nations[c.nat];
-    if (N.seaSupply && N.capital >= 0 && (!r.seas.length || seaOpenAt(g, c.nat, r))) {
+    // (The far side: home only while its own side holds the capital: `refugeHeld`. With the capital the enemy's the
+    // corps goes to the nearest ground its side holds, or with none lays down its arms where it stands.)
+    if (N.seaSupply && N.capital >= 0 && (!r.seas.length || seaOpenAt(g, c.nat, r)) && !(farOn(g) && !allied(g, c.nat, g.regions[N.capital].ctrl))) {
       place(g, c, g.regions[N.capital]);
       c.str *= 0.7; c.org = 0.3; c.ap = 0;
       if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are evacuated from the Continent, leaving their heavy equipment behind.`, c.nat, undefined, { arm: 'land', lost: c.nat }); }
@@ -2980,7 +2983,8 @@ export function evacuate(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
   if (!N.seaSupply || !r.port || r.owner === c.nat || N.capital < 0 || !seaOpenAt(g, c.nat, r)) return false;
-  const dest = refuge(g, c, r);
+  const dest = refugeHeld(g, c, r);
+  if (!dest) return false;
   place(g, c, dest);
   c.str *= 0.75; c.org = 0.3; c.ap = 0;
   if (!g.flags[`evac:${g.turn}`]) {
@@ -3007,6 +3011,7 @@ export function whyNotEvacuate(g: Game, c: Corps): string | null {
     const z = [...r.seas].sort((a, b) => gap(a) - gap(b))[0];
     return z === undefined ? `${r.name} has no sea to sail from.` : closedLine(g, z, c.nat);
   }
+  if (!refugeHeld(g, c, r)) return `${g.regions[N.capital].name} is in enemy hands, and no harbour of ${N.name}'s side is near: there is nowhere to be lifted off to.`;
   return null;
 }
 
@@ -3196,6 +3201,18 @@ export function refuge(g: Game, c: Corps, from: Region): Region {
     if (near) return near;
   }
   return g.regions[g.nations[c.nat].capital];
+}
+
+/**
+ * (The far side: troops lifted off a coast are landed only on ground their own side holds. The havens and the near
+ * harbour are asked that already; the capital, the last place tried, was not, and Japanese corps were set down inside
+ * a Tokyo the United States held in 9 of the playtester's 31 far wars of 22 November 2026. With no such ground there
+ * is nowhere to be lifted to, and a beaten corps with its back to the sea lays down its arms as one cut off (ruling
+ * 232(b)): the design director's ruling B1 of 07:22Z, 22 November 2026, every nation. With the far side off, as it was.)
+ */
+export function refugeHeld(g: Game, c: Corps, from: Region): Region | null {
+  const dest = refuge(g, c, from);
+  return farOn(g) && !allied(g, c.nat, dest.ctrl) ? null : dest;
 }
 
 /**
