@@ -114,7 +114,7 @@ import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as w
 import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
-import { NAVY } from '../../../src/campaign/navy';
+import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, theWords } from '../../../src/campaign/game';
@@ -6713,3 +6713,8 @@ function find(name: string) {
   // same orders given from the map are.
   ...battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
 };
+// D1 (ruling 241), the viewing setting `subScene`: TC.subSceneOn(on) turns the rules' record of each month at sea on or off
+// (navy.ts subScene; g.subLook, this month and last, read by no rule). On, the sea scene's stager reads the record; off, nothing
+// is written and every save is as before. The setting is the viewer's and lives outside the save: the screen sets it at
+// start and again after every load.
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
