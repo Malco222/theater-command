@@ -299,18 +299,24 @@ namespace
 
 		/**
 		 * An upright ellipse's line, as EdgeSeals lays it from the disc's middle (MidX, MidY): EllipseSteps short straight
-		 * pieces, each shorter than the line is thick, so none reads as straight. The line is Thick in the geometry's
-		 * units, as CampaignHUD's strokes are drawn. Points is emptied first and keeps its room.
+		 * pieces, each shorter than the line is thick, so none reads as straight; one line of them, so no piece lies over
+		 * the next (rounded bars would, and show beads in the mark's 55% and 60% inks). It is drawn in a child geometry of
+		 * the screen's own pixels, the pen's scale undone (Px, its geometry's pixels a unit, the seal's growth under the
+		 * pointer in it), its points and its thickness given in pixels: so the line is Thick units heavy, as the equator's
+		 * bar beside it is, whether the engine reads a line's thickness in the geometry's units or in the screen's pixels,
+		 * and it grows with the seal. Points is emptied first and keeps its room; the engine copies them into its line.
 		 */
 		void Loop(int32 Layer, double MidX, double MidY, const EdgeSeals::Look::FStroke& Cut, const FLinearColor& Ink, TArray<FVector2D>& Points) const
 		{
+			const double Px = FMath::Max(static_cast<double>(On.Scale), 0.01);
+			const FGeometry Pixels = On.MakeChild(FVector2D(SealBoxW * Px, SealBoxH * Px), FSlateLayoutTransform(static_cast<float>(1.0 / Px), FVector2D::ZeroVector));
 			Points.Reset();
 			for (int32 Step = 0; Step <= EdgeSeals::Look::EllipseSteps; ++Step)
 			{
 				const EdgeSeals::FPoint At = EdgeSeals::Look::EllipsePoint(Cut, Step);
-				Points.Add(FVector2D(MidX + At.X, MidY + At.Y));
+				Points.Add(FVector2D((MidX + At.X) * Px, (MidY + At.Y) * Px));
 			}
-			FSlateDrawElement::MakeLines(Out, Layer, On.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, static_cast<float>(Cut.Thick));
+			FSlateDrawElement::MakeLines(Out, Layer, Pixels.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, static_cast<float>(Cut.Thick * Px));
 		}
 
 		/** A bar with rounded ends, Long by Thick, its middle at (MidX, MidY), turned Degrees clockwise. */
@@ -660,7 +666,8 @@ namespace
 
 		TSharedPtr<FEdgeNewsLaid> Laid;
 		int32 SealSlot = 0;
-		// (the globe's meridian's points, kept from paint to paint so that drawing it again allocates nothing once warm)
+		// (the globe's meridian's points, kept from paint to paint so that the game's own array is not made again each paint;
+		// the engine still copies them into the line it draws)
 		mutable TArray<FVector2D> LoopPoints;
 	};
 

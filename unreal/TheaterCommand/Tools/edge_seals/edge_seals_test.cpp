@@ -4044,6 +4044,16 @@ static void TestGlobe(const char* Folder)
 		++Calls;
 	}
 	CHECK(Calls == 1 && Contains(Text, "Pen.Loop(") && Contains(Text, "FSlateDrawElement::MakeLines("));
+	// (the meridian is the one line the layer draws, and it is drawn in the screen's own pixels: a child geometry with the
+	// pen's scale undone, its points and its thickness in pixels, so its weight is the equator's whichever measure the
+	// engine reads a line's thickness in; the review of the rulings' build, finding 5)
+	size_t Lines = 0;
+	for (size_t At = Text.find("MakeLines("); At != std::string::npos; At = Text.find("MakeLines(", At + 1))
+	{
+		++Lines;
+	}
+	CHECK(Lines == 1 && Contains(Text, "FSlateLayoutTransform(static_cast<float>(1.0 / Px)") && Contains(Text, "MakeLines(Out, Layer, Pixels.ToPaintGeometry(),") && Contains(Text, "static_cast<float>(Cut.Thick * Px)")
+		&& Contains(Text, "Points.Add(FVector2D((MidX + At.X) * Px, (MidY + At.Y) * Px))"));
 	std::printf("(the globe's places: Look::MarkOf in %s; EGlyph::Globe in %s; the ellipse drawn in %s)\n", Asks.c_str(), Globes.c_str(), Ellipses.c_str());
 }
 
