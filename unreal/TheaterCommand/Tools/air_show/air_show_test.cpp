@@ -763,7 +763,8 @@ int main(int Argc, char** Argv)
 	double StickBankMost = 0.0, BayBomberBankMost = 0.0;
 	int StickHits = 0, OneHits = 0;
 	// Drop on the lead and the rally (Brian, 22 November 04:11Z): each level box's spread, the median distance of its
-	// bombers flying in sight from their middle, at its first bomb and the most over the next 120 air seconds.
+	// bombers flying in sight from their middle, at its first bomb and the most over the next 120 air seconds (of the
+	// bombers in its shape: not a straggler fallen out of it, nor a model made still closing up, Checks::NotInBox).
 	std::map<int, double> BoxFirstBomb, BoxSpreadAt, BoxSpreadMost;
 	double BoxNextT = 0.0;
 	// (seen from outside the core: each level box's bombers' first bombs, by her key, and her box; and each bay bomber's
@@ -773,6 +774,13 @@ int main(int Argc, char** Argv)
 	// of those or of the last hit on a ship shown (the bomb or torpedo having struck).
 	long StrikeNeed = 0, StrikeMiss = 0, StrikeOnFrames = 0, StrikeEnds = 0;
 	// The vapour trails (PlaneOut::Vapour, the audit's 4.12): none under the day's trail height; the most seen.
+	// (escorts at their stations by role, the raids answer's Part 3.4: each close escort's or top cover's height over
+	// its bombers and its side of them, sampled each air second while its group is not fighting; and each one's weave,
+	// the air seconds between its turns from one side to the other)
+	std::map<std::string, std::vector<double>> EscortOver;
+	std::map<std::string, std::array<long, 2>> EscortFlank;
+	std::map<int, std::array<double, 4>> EscortWas; // key: lateral, its way (+1/-1), the lateral and air time at its last turn
+	std::map<std::string, std::vector<double>> EscortLegs;
 	// (falls the eye can follow, the audit's 4.3: each falling aircraft's bank frame to frame, and the air time)
 	std::map<int, std::pair<double, double>> FallBankWas;
 	long FallBankSteps = 0, FallBankFast = 0;
@@ -842,6 +850,8 @@ int main(int Argc, char** Argv)
 	double FirstBombAir = -1.0; // (the air clock when the first bombs fall)
 	std::vector<AirSky::Vec> FallsAt; // (where each fall began, and on the air clock when, in Z)
 	std::vector<double> FallsAir;
+	std::map<int, double> FallFromX;                      // (each fall open: where it began, east and west)
+	std::vector<std::pair<double, double>> FallSpans;     // (each fall ended: where it began and where it ended)
 	// Falls and parachutes that end in the air (on a cumulus day, none: every one reaches the sea or runs out of time).
 	std::map<int, double> FallBegan;
 	int FallsEndAloft = 0, ChutesVanished = 0, ChutesDown = 0;
@@ -865,12 +875,24 @@ int main(int Argc, char** Argv)
 	for (const AirFeed::Frame& F : Rec.Views)
 		for (const AirShow::Group& G : F.Groups)
 			Guessed += G.bModelGuessed ? 1 : 0;
+	// (a model falls only for its share of the losses, AR1: the battle's models, each loss's extra.models; a straggler
+	// not shown falling out has her later news told, never shown)
+	int EventsLosses = 0, EventsNoModel = 0;
+	std::set<std::pair<int, int>> StragsNotShown;
 	for (const AirFeed::Frame& F : Rec.Views)
 		for (const AirShow::Event& E : F.Events)
 		{
-			if (E.What == "air:lost") { ++EventsLost; EventsChutes += E.Chutes; ++EventsHow[E.How.empty() ? (E.Kind == "explode" || E.Kind == "spin" ? E.Kind : std::string("burn")) : E.How]; }
+			if (E.What == "air:straggle" && E.Models <= 0) StragsNotShown.insert({ E.Unit, E.Strag });
+			if (E.What == "air:lost")
+			{
+				++EventsLosses;
+				EventsNoModel += E.Models <= 0 ? 1 : 0;
+				EventsLost += std::max(0, E.Models);
+				EventsChutes += E.Models > 0 ? E.Chutes : 0;
+				EventsHow[E.How.empty() ? (E.Kind == "explode" || E.Kind == "spin" ? E.Kind : std::string("burn")) : E.How] += std::max(0, E.Models);
+			}
 			if (E.What == "air:hit") { ++EventsHits; EventsFiresOut += E.Mark == "fireout" ? 1 : 0; }
-			if (E.What == "air:fireout") ++EventsFiresOut;
+			if (E.What == "air:fireout" && !(E.Strag >= 0 && StragsNotShown.count({ E.Unit, E.Strag }))) ++EventsFiresOut;
 			if (E.What == "air:regain") ++EventsRegain;
 		}
 	// The gunnery as the eye will see it (GunWatch, above): a round of every stream flown by the kit's own flight, with
@@ -885,6 +907,9 @@ int main(int Argc, char** Argv)
 		{
 			if (E.bByFlak || (E.What != "air:lost" && E.What != "air:hit" && E.What != "air:straggle")) continue;
 			if (E.What == "air:lost" && (E.How == "struck" || E.How == "collide")) continue;
+			// (a loss that brings no model down, a straggler not shown falling out: nothing is shown, so nothing is owed a
+			// burst; AR1, Event::Models 0)
+			if ((E.What == "air:lost" || E.What == "air:straggle") && E.Models <= 0) continue;
 			if (E.What != "air:lost") ++EventsGunHits;
 			else if (E.By >= 0 || E.GunBox >= 0) { ++EventsGunLost; EventsGunnerLost += E.GunBox >= 0 ? 1 : 0; }
 		}
@@ -1057,7 +1082,7 @@ int main(int Argc, char** Argv)
 				if (Show.AirNow() - First > 300.0 || (Over != Show.Checked().RallyOver.end() && Show.AirNow() > Over->second)) continue;
 				std::vector<double> Xs, Ys, Far;
 				for (const AirShow::PlaneOut& P : PlanesNow)
-					if (P.Group == Box && !P.bFighter && !P.bFalling && P.bShown && !P.bOnGround) { Xs.push_back(P.At.X); Ys.push_back(P.At.Y); }
+					if (P.Group == Box && !P.bFighter && !P.bFalling && P.bShown && !P.bOnGround && !Show.Checked().NotInBox.count(P.Key)) { Xs.push_back(P.At.X); Ys.push_back(P.At.Y); }
 				if (Xs.size() < 3) continue;
 				std::vector<double> Sx = Xs, Sy = Ys;
 				std::nth_element(Sx.begin(), Sx.begin() + Sx.size() / 2, Sx.end());
@@ -1306,6 +1331,7 @@ int main(int Argc, char** Argv)
 				++FallStarts;
 				FallsAt.push_back(AirSky::Vec(E.At.X, E.At.Y, E.At.Z));
 				FallsAir.push_back(Show.AirNow());
+				FallFromX[E.Key] = E.At.X;
 				FallBegan[E.Key] = Show.AirNow();
 				Debris.Take(Show.AirNow(), E);
 				if (E.What != "explode" && E.What != "burn" && E.What != "spin") ++FallStrays;
@@ -1314,6 +1340,15 @@ int main(int Argc, char** Argv)
 			if (E.Kind == AirShow::FxKind::FallMove && !FallsOpen.count(E.Key)) ++FallStrays;
 			if (E.Kind == AirShow::FxKind::FallStop && FallsOpen.erase(E.Key) == 0) ++FallStrays;
 			if (E.Kind == AirShow::FxKind::FallStop && E.What == "boom") FallBegan.erase(E.Key); // (blown apart in the air: it ends there)
+			if (E.Kind == AirShow::FxKind::FallStop)
+			{
+				const auto From = FallFromX.find(E.Key);
+				if (From != FallFromX.end())
+				{
+					if (E.What != "boom") FallSpans.push_back({ From->second, E.At.X });
+					FallFromX.erase(From);
+				}
+			}
 			if (E.Kind == AirShow::FxKind::FallStop && E.What != "boom")
 			{
 				const auto Began = FallBegan.find(E.Key);
@@ -1425,6 +1460,32 @@ int main(int Argc, char** Argv)
 		if (Show.Shown() >= NextSample - 1e-9)
 		{
 			NextSample += 0.5;
+			for (const AirShow::PlaneOut& P : Show.Planes())
+			{
+				const auto Gi = Show.Groups().find(P.Group);
+				if (!P.bFighter || P.bFalling || !P.bShown || P.bOnGround || Gi == Show.Groups().end()) continue;
+				const AirShow::Group& Eg = Gi->second;
+				if (Eg.With < 0 || (Eg.Role != "close" && Eg.Role != "top") || Eg.Doing == AirShow::Act::Fight) { EscortWas.erase(P.Key); continue; }
+				const auto Bi = Show.Groups().find(Eg.With);
+				if (Bi == Show.Groups().end() || Bi->second.bFighter) continue;
+				const AirShow::Group& Bg = Bi->second;
+				const double Lateral = (P.At.X - Bg.X) * std::cos(Bg.Face) - (P.At.Y - Bg.Y) * std::sin(Bg.Face);
+				EscortOver[Eg.Role].push_back(P.At.Z - Bg.Alt);
+				EscortFlank[Eg.Role][Lateral > 0.0 ? 1 : 0]++;
+				auto Was = EscortWas.find(P.Key);
+				if (Was == EscortWas.end()) { EscortWas[P.Key] = { Lateral, 0.0, Lateral, -1.0 }; continue; }
+				std::array<double, 4>& W = Was->second;
+				const double Way = Lateral > W[0] + 1.0 ? 1.0 : Lateral < W[0] - 1.0 ? -1.0 : W[1];
+				// (a turn: its way across reversed, at least 150 m from where it last turned)
+				if (W[1] != 0.0 && Way != W[1] && std::fabs(W[0] - W[2]) > 150.0)
+				{
+					if (W[3] >= 0.0) EscortLegs[Eg.Role].push_back(Show.AirNow() - W[3]);
+					W[2] = W[0];
+					W[3] = Show.AirNow();
+				}
+				W[0] = Lateral;
+				W[1] = Way;
+			}
 			for (const AirShow::PlaneOut& P : Show.Planes())
 				Track << Num(Show.Shown(), 3) << ",plane," << P.Key << "," << P.Group << "," << P.Side << "," << (P.bFighter ? 1 : 0) << ","
 				      << P.Model << "," << Num(P.At.X) << "," << Num(P.At.Y) << "," << Num(P.At.Z) << "," << Num(P.Heading) << ","
@@ -1678,7 +1739,10 @@ int main(int Argc, char** Argv)
 			return { "every gunner's window with an attacker in its arc fires", bOk, Text.empty() ? std::string("no gunner had a fighter in his arc") : Text,
 			         "at least one burst from each window that had a fighter in its arc for an air second" };
 		}(),
-		{ "a model falls for every aircraft lost", C.Falls >= EventsLost - 2 && C.Falls <= EventsLost + 2, std::to_string(C.Falls), "the battle's count, within 2" },
+		{ "a model falls for every aircraft lost", C.Falls >= EventsLost - 2 && C.Falls <= EventsLost + 2 && C.LostUnshown == EventsNoModel,
+		  std::to_string(C.Falls) + " falls for " + std::to_string(EventsLosses) + " losses, the battle's models " + std::to_string(EventsLost) + "; " + std::to_string(C.LostUnshown) +
+		  " told with no model falling (the battle's " + std::to_string(EventsNoModel) + "), " + std::to_string(C.StragUnshown) + " stragglers not shown",
+		  "the battle's models, within 2 (a model falls only for its share of the losses: AR1)" },
 		{ "the kit told of every fall, its moves only while it falls", FallStarts == C.Falls && FallStrays == 0, std::to_string(FallStarts) + " starts, " + std::to_string(FallStrays) + " stray", "a start a fall, 0 stray" },
 		{ "debris within its room", MostDebris <= Debris.Most, std::to_string(MostDebris), "at most the room" },
 		{ "every burning aircraft keeps its trail (room 24)", Trails24.RefusedOwn == 0 && Trails24.Peak <= 24, std::to_string(Trails24.RefusedOwn), "0 refused" },
@@ -1812,6 +1876,27 @@ int main(int Argc, char** Argv)
 		  "a landing heard for each stick, none at the drop" },
 		{ "dive bombers and torpedo planes leave low, never climbing back", C.LeftLowMost <= 500.0, Num(C.LeftLowMost) + " m the highest one flew after her dive or her drop",
 		  "at most 500 m over the ground or the sea, under her bomb's 600 (the design director's ruling: they leave low, never climb back)" },
+		[&]() -> Limit
+		{
+			// The escorts at their stations (the raids answer's Part 3.4): a close escort 600 to 1,200 m over its bombers,
+			// over both flanks, legs of 25 to 30 s; top cover 1,500 to 3,000 m over, legs of 40 to 60 s (the middles).
+			auto Middle = [](std::vector<double> V) { if (V.empty()) return 0.0; std::sort(V.begin(), V.end()); return V[V.size() / 2]; };
+			bool bOk = true;
+			std::string Text;
+			for (const auto& [Role, Overs] : EscortOver)
+			{
+				const double Over = Middle(Overs), Leg = Middle(EscortLegs[Role]);
+				const long Left = EscortFlank[Role][0], Right = EscortFlank[Role][1];
+				const bool bTop = Role == "top";
+				const double Lo = bTop ? 1500.0 : 600.0, Hi = bTop ? 3000.0 : 1200.0, LegLo = bTop ? 40.0 : 25.0, LegHi = bTop ? 60.0 : 30.0;
+				const bool bBoth = bTop || (Left * 4 >= Left + Right && Right * 4 >= Left + Right);
+				bOk = bOk && Over >= Lo && Over <= Hi && bBoth && (EscortLegs[Role].empty() || (Leg >= LegLo && Leg <= LegHi));
+				Text += Role + ": " + Num(Over, 0) + " m over its bombers, " + std::to_string(Left) + " samples on the left and " + std::to_string(Right) + " on the right, legs " + Num(Leg, 1) +
+				        " air s (" + std::to_string(EscortLegs[Role].size()) + "); ";
+			}
+			return { "escorts fly their stations over their bombers", bOk, Text.empty() ? std::string("no close escort or top cover") : Text,
+			         "the middles: close 600 to 1,200 m over, a quarter at least on each flank, legs 25 to 30 s; top 1,500 to 3,000 m, legs 40 to 60 s" };
+		}(),
 		{ "a fall leans and rolls as the eye can follow", FallBankFast == 0,
 		  std::to_string(FallBankSteps) + " frames of falls; the bank turned at most " + Num(FallBankMost) + " degrees an air second; " + std::to_string(FallBankFast) + " frames faster than 600",
 		  "never over 10 degrees in a sixtieth of an air second (600 a second; the audit's 4.3)" },
@@ -3049,6 +3134,25 @@ int main(int Argc, char** Argv)
 		const AirSky::Field Plain = AirSky::Lay(Old.Cloud, AirFeed::PlacingOf(Old, {}, 0));
 		Limits.push_back({ "a ticket with no sky draws cumulus", bRead && !Old.Cloud.bGiven && !Plain.Sky.bDeck && !Plain.Clouds.empty() && Plain.DeckTop == 0.0,
 		                   bRead ? std::to_string(Plain.Clouds.size()) + " cumulus" : "unread", "cumulus, no deck" });
+		// The after card's totals, each side's fighters and bombers lost (the rules' after.lost, afterLost: the sums of
+		// the card's rows): read as the card gives them, and a card from before them summed from its rows the same way.
+		{
+			const char* Rows = "\"groups\":[{\"name\":\"A\",\"side\":\"att\",\"ftr\":40,\"bmr\":0,\"lostFtr\":3,\"lostBmr\":0},"
+			                   "{\"name\":\"B\",\"side\":\"att\",\"ftr\":0,\"bmr\":60,\"lostFtr\":0,\"lostBmr\":9},"
+			                   "{\"name\":\"C\",\"side\":\"def\",\"ftr\":50,\"bmr\":0,\"lostFtr\":7,\"lostBmr\":0}]";
+			AirFeed::Json New, Older;
+			AirFeed::After Card, OldCard;
+			const bool bNew = AirFeed::Parse(std::string("{") + Rows + ",\"lost\":{\"att\":{\"ftr\":3,\"bmr\":9},\"def\":{\"ftr\":7,\"bmr\":0}}}", New, Why) && AirFeed::ReadAfter(New, Card);
+			const bool bOld = AirFeed::Parse(std::string("{") + Rows + "}", Older, Why) && AirFeed::ReadAfter(Older, OldCard);
+			auto Four = [](const AirFeed::After& A)
+			{
+				return std::to_string(A.LostAttFtr) + "/" + std::to_string(A.LostAttBmr) + "/" + std::to_string(A.LostDefFtr) + "/" + std::to_string(A.LostDefBmr);
+			};
+			const bool bOk = bNew && bOld && Four(Card) == "3/9/7/0" && Four(OldCard) == "3/9/7/0" && Card.Groups.size() == 3 && Card.Groups[1].Lost == 9;
+			Limits.push_back({ "the after card's losses read, each side's fighters and bombers", bOk,
+			                   (bNew ? "given " + Four(Card) : std::string("unread")) + "; " + (bOld ? "summed from the rows " + Four(OldCard) : std::string("unread")) + "; this battle's card " + Four(Rec.Card),
+			                   "3/9/7/0 both ways (attacker's fighters/bombers, defender's)" });
+		}
 
 		// Every kind of day (Brian, 20 November: the weather different from battle to battle, "not always cloudy or some
 		// days more cloudy"): this battle's sky laid again at each cover the rules can give, clear to closed. The share
@@ -3376,7 +3480,18 @@ int main(int Argc, char** Argv)
 		// and one that drifts east must still end in the low tile: passing under one tile never lets a fall, a piece
 		// or a parachute through a lower one beside it.
 		{
-			const double SX = FallXs.empty() ? TX : FallXs[FallXs.size() / 2];
+			// (the step laid across the way the most of the main play's falls drifted east, halfway along one of them, so
+			// that some cross it to be judged; the middle of where they began if none drifted east)
+			double SX = FallXs.empty() ? TX : FallXs[FallXs.size() / 2];
+			int Across = 0;
+			for (const auto& [From, To] : FallSpans)
+			{
+				if (To - From < 100.0) continue;
+				const double At = 0.5 * (From + To);
+				int N = 0;
+				for (const auto& [From2, To2] : FallSpans) N += From2 < At - 25.0 && To2 > At + 25.0 ? 1 : 0;
+				if (N > Across) { Across = N; SX = At; }
+			}
 			const double LowFoot = 100.0, LowHide = 3000.0, LowEnds = LowHide - 150.0;
 			AirShow::Show Stepped(Rec.Seed ? Rec.Seed : 238);
 			AirFeed::Apply(Rec.Board, Stepped);

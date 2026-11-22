@@ -600,6 +600,7 @@ namespace AirFeed
 			G.Figures = U["figures"].Int();
 			G.Per = std::max(1, X["per"].Int(1));
 			G.N = X["n"].Int(G.Figures * G.Per);
+			G.Boxes = X["boxes"].Int(0);
 			G.Doing = ActOf(U["act"].Str("march"));
 			G.Engaged = U["engaged"].Int(-1);
 			for (const Json& F : X["fire"].Items)
@@ -623,6 +624,7 @@ namespace AirFeed
 				Row.Cover = St["cover"].Int(-1);
 				Row.Back = St["back"].Num(0.0);
 				Row.Down = St["down"].Num(0.0);
+				Row.bShown = St["model"].Int(1) != 0;
 				G.Strags.push_back(std::move(Row));
 			}
 			for (const Json& Fl : X["flak"].Items) if (Fl.IsString()) G.Flak.push_back(Fl.Text);
@@ -700,6 +702,8 @@ namespace AirFeed
 			Ev.GunSeat = X["gunner"].IsObject() ? X["gunner"]["seat"].Int(-1) : -1;
 			// Where the battle has it hit (engine, wing, tail, cockpit, fuselage): the gunnery lays its strikes there.
 			Ev.Part = X["hit"].Str("");
+			// The models it moves (AR1): a loss's models, a straggler's model (1 where the recording does not say).
+			Ev.Models = Ev.What == "air:lost" ? X["models"].Int(1) : Ev.What == "air:straggle" ? X["model"].Int(1) : 1;
 			Out.Events.push_back(std::move(Ev));
 		}
 
@@ -761,11 +765,28 @@ namespace AirFeed
 			Row.Lost = G["lost"].IsNumber() ? G["lost"].Int(0) : G["lostFtr"].Int(0) + G["lostBmr"].Int(0);
 			Out.Groups.push_back(std::move(Row));
 		}
+		// Each side's fighters and bombers lost: the card's own totals (after.lost, the rules' afterLost, the sums of its
+		// rows); a card from before them (no lost block), the same sums made here from its rows.
 		const Json& Lost = J["lost"];
-		Out.LostAttFtr = Lost["att"]["ftr"].Int();
-		Out.LostAttBmr = Lost["att"]["bmr"].Int();
-		Out.LostDefFtr = Lost["def"]["ftr"].Int();
-		Out.LostDefBmr = Lost["def"]["bmr"].Int();
+		if (Lost.IsObject())
+		{
+			Out.LostAttFtr = Lost["att"]["ftr"].Int();
+			Out.LostAttBmr = Lost["att"]["bmr"].Int();
+			Out.LostDefFtr = Lost["def"]["ftr"].Int();
+			Out.LostDefBmr = Lost["def"]["bmr"].Int();
+			return true;
+		}
+		for (const Json& G : J["groups"].Items)
+		{
+			const std::string Side = G["side"].Str("");
+			if (Side != "att" && Side != "def") continue;
+			int Ftr = G["lostFtr"].Int(0), Bmr = G["lostBmr"].Int(0);
+			// (a row that gives one lost, by its kind)
+			if (!G["lostFtr"].IsNumber() && !G["lostBmr"].IsNumber() && G["lost"].IsNumber())
+				(G["kind"].Str(G["bmr"].Truth(false) ? "bmr" : "ftr") == "bmr" ? Bmr : Ftr) = G["lost"].Int(0);
+			(Side == "att" ? Out.LostAttFtr : Out.LostDefFtr) += Ftr;
+			(Side == "att" ? Out.LostAttBmr : Out.LostDefBmr) += Bmr;
+		}
 		return true;
 	}
 
