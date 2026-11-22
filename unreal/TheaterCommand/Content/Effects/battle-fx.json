@@ -2212,6 +2212,25 @@
    "smoke": "a short puff up the tube's line",
    "smoke_s": 2.5
   },
+  "ship_aa": {
+   "_what": "a ship's high-angle gun firing at aircraft (ShipGuns' heavy guns: the 5-inch, the 12.7 cm, the 4-inch and their like), from her deck over the sea: its flame and its own smoke along the bore, no dust ring (nothing under it but the sea 6 to 16 m below)",
+   "flame_m": 1.5,
+   "light_w": 9000,
+   "smoke_s": [
+    3,
+    6
+   ]
+  },
+  "ship_main": {
+   "_what": "a ship's big gun (a calibre of 200 mm or more) thrown low at a torpedo plane over the sea, as ship_aa but a battleship's flame and smoke",
+   "flame_m": 2.6,
+   "light_w": 16000,
+   "smoke_s": [
+    6,
+    10
+   ],
+   "day_lamp": 1
+  },
   "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z).",
   "veil": {
    "_how": "Art director 06:19Z, the desert: a tank or field gun's shot (any row with dust_ring_m; a towed gun's muzzle socket too) raises the ground round the muzzle in a veil spread along the line of fire, rising a metre or two (every other puff a low dense skirt on the ground, dust.vehicles.low_skirt), that hides the gun and its line of sight for hide_s, then thins to haze_alpha and lingers on the wind. by_ground: where it rises (and how thick); the ring itself takes the ground's own paint and grounds.<g>.dust against earth's.",
@@ -2720,6 +2739,80 @@
    "tracer_life_k": 0.85,
    "streak_s": 0.0245
   },
+  "aa25": {
+   "_what": "a ship's 20 to 25 mm guns (the Oerlikon, the Japanese 25 mm, the German 2 cm, the Italian Breda 20 mm): ShipGuns' light guns of kind aa25, laid by eye along their tracers from her decks (Brian, 21 November 18:06Z: ships fire back at the planes attacking them). The 20 mm cannon's row, a tracer in three (the gunners hosed by the tracer), each burning longer, as a ship's gun reaches out to 1.5 to 2 km",
+   "rate_per_min": 450,
+   "muzzle_mps": 820,
+   "drag": 0.22,
+   "drop": 1,
+   "tracer_every": 3,
+   "tracer_s": 1.9,
+   "spread_mil": 5,
+   "flash_m": 0.9,
+   "licks": 2,
+   "lamp": 0.12,
+   "hot_flash": 1,
+   "smoke_every": 1,
+   "smoke_s": 1.1,
+   "smoke_alpha": 0.16,
+   "strike_m": 1.6,
+   "case_m": 0.11,
+   "case_d_m": 0.03,
+   "link_m": 0,
+   "cannon": 1,
+   "tracer_wide": 1.5,
+   "tracer_life_k": 1.8,
+   "streak_s": 0.0245,
+   "ship_hue": 1,
+   "burn_out_m": 2000,
+   "dwindle_from_m": 300,
+   "dwindle_to": 0.3,
+   "dwindle_wide": 0.6,
+   "tail_fade": 0.6,
+   "core_tail_fade": 0.85,
+   "hose": 0.3,
+   "hose_px": 6.5,
+   "hose_mix": 0.3,
+   "hose_s": 0.5,
+   "_fx_air_r2": "fx-air r2 (art director, Midway 06b and Samar b34a 02): a ship's light AA is a hose of tracer, not a ladder of dashes, and burns out at its reach. hose: each round lays a thin line back to the round fired before it, drawn where both are now (hose its opacity, hose_px its width in the pixels the scene tells the kit, hose_mix how far its colour goes from the glow's to the core's, hose_s the least seconds between its points: a 25 mm's hose runs through every second round), so a burst is one line through its rounds, curving as the gun swings and the rounds slow and drop; a new burst starts a new hose. ship_hue: the nation's ship colours (air_guns.tracers.nations.<n>.ship) where it has them. burn_out_m: a tracer burns until it has flown that far (the art director's 2 km for a 20 mm, 3.5 km for a 40 mm), dwindling from dwindle_from_m to dwindle_to of its strength and dwindle_wide of its width; tail_fade and core_tail_fade: its glow's and core's tail end that much fainter than the head, so each reads as a moving streak; its core keeps its own colour near the eye. drag 0.22 (0.16 for aa40) from the scenes' 0.38 and 0.3: the gunners lay their lead for an average of 0.8 of the muzzle speed (ShipGuns' Tof), which these give out to about 2 km, and the rounds reach their burn-out. Without these keys the row is as the scenes carry it."
+  },
+  "aa40": {
+   "_what": "a ship's 37 to 40 mm guns (the Bofors, the 1.1-inch, the British pom-pom, the German 3.7 cm, the Soviet 37 and 45 mm): ShipGuns' light guns of kind aa40, a slow heavy beat of big red-orange tracers, every round a tracer (their clips were loaded so), each burning out to about 3 km, with a heavy flash and a puff of smoke at every round",
+   "rate_per_min": 120,
+   "muzzle_mps": 881,
+   "drag": 0.16,
+   "drop": 1,
+   "tracer_every": 1,
+   "tracer_s": 1.9,
+   "spread_mil": 3,
+   "flash_m": 1.4,
+   "licks": 2,
+   "lamp": 0.18,
+   "hot_flash": 1,
+   "smoke_every": 1,
+   "smoke_s": 1.6,
+   "smoke_alpha": 0.2,
+   "strike_m": 2.4,
+   "case_m": 0.311,
+   "case_d_m": 0.042,
+   "link_m": 0,
+   "cannon": 1,
+   "tracer_wide": 2.0,
+   "tracer_life_k": 3.0,
+   "streak_s": 0.0245,
+   "ship_hue": 1,
+   "burn_out_m": 3500,
+   "dwindle_from_m": 300,
+   "dwindle_to": 0.3,
+   "dwindle_wide": 0.6,
+   "tail_fade": 0.6,
+   "core_tail_fade": 0.85,
+   "hose": 0.3,
+   "hose_px": 6.5,
+   "hose_mix": 0.3,
+   "hose_s": 0.0,
+   "_fx_air_r2": "As aa25._fx_air_r2."
+  },
   "close": {
    "_how": "The close view: only within licks_within_m of the eye does a row's flicker throw close_licks short side licks raked aft, with a lamp of close_lamp (night only, as every small gun's); only within cases_within_m does every round drop its spent case (case_m long, case_d_m across, case_colour, case_dark on its far face) and belt link (link_m, link_colour) from a chute chute_back_m behind the muzzle and chute_down_m under it, kicked out at throw_mps, torn aft by the air (drag) and falling at case_sink_mps or link_sink_mps, tumbling tumble radians a second and glinting (glint), gone in life_s. Left out first when the room fills.",
    "_art_director_0440": "Art director 04:40Z item 6: close view only: cases and links from the wing gun chutes and from the turrets that dumped them overboard, drawn within 60 m. Heavy machine gun licks 0 to 2, with the small lamp, for guns within 30 m.",
@@ -2807,11 +2900,14 @@
    "always_within_m": 300,
    "one_fan_beyond_m": 1200,
    "one_fan_px": 5.5,
+   "hose_most": 500,
+   "_hose_most": "fx-air r2: no more than hose_most ship guns' hose lines (a row's hose) at once; as the tracers' room passes 0.7 of most, the guns beyond always_within_m lose their hoses first, as their tracers.",
    "glow_soft": 1.0,
    "_glow_soft": "Art director 19:52Z 20 November: solid across, the glow was a bar darker than a pale sky round a sky-pale core, a hollow tube, and end-on a ring. With glow_soft the glow is that strong beside the core and fades smoothly from the core's edge to nothing at its own, with no rim (by day; at dusk it is as it was), and the core stands at least 25 over the sky it crosses (us lands 255,236,212, red only in its glow). one_fan_px: a far gun's one-fan tracer is a solid dash that wide in the core's own colour, never an outlined oval.",
    "_one_fan": "A gun farther than one_fan_beyond_m from the eye fires tracers of one piece (see one_fan_px): its core was a pixel wide there, and a tracer costs half as much. Without the key every tracer is glow and core.",
    "nations": {
     "_lands": "us and gb: core 255,236,212, body 230,80,40. de and it: core 255,250,225, body 240,228,160. jp: core 255,250,225, body 240,236,205. su: core 235,255,235, body 120,225,120, its cannon red as us. default as de.",
+    "_ship": "fx-air r2 (art director, Samar b34a 02, 05:44Z 22 November): a ship's light AA tracer (a row's ship_hue) was 255,253,235, near white. ship: its body written to land about 213,199,104, its core (the head) hotter, 240,222,140; it keeps that colour near the eye. us, gb and su keep their own colours.",
     "us": {
      "body": [
       224,
@@ -2852,7 +2948,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     },
     "it": {
      "body": [
@@ -2866,7 +2976,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     },
     "jp": {
      "body": [
@@ -2880,7 +3004,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     },
     "su": {
      "body": [
@@ -2922,7 +3060,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     }
    }
   }
@@ -4737,6 +4889,163 @@
    "lumps_inner": 0.7,
    "lumps_light": 0.6,
    "lumps_rim": 0.8
+  },
+  "ablaze": {
+   "_rule": "fx-air r2 (art director, Midway 06): a ship burning afloat, the scene's OilFire kind 'ablaze' for a ship lost to fire (AirStage's How 'burn'). A burning carrier's smoke stood hundreds of metres to kilometres high and bent over with the wind: from her deck fires (no burning slick and no flames of its own: her deck Burns are the flames), a narrow root about her beam wide, climbing hard to 250 to 300 m and leaning down the wind as the push dies, then on up slowly as it drifts, a long leaning plume. Black and dense low, browner grey and thinner high (pale_up_m, pale_up_most, pale_up_pow, pale_up_colour, thin_up: by its height over the fire a puff goes that share of the way to pale_up_colour and thins), lit on its sun side (sun_side, lit_colour, going toward pale_up_lit as it pales). An older kit without the row draws it as sunk.",
+   "heads": [
+    2,
+    3
+   ],
+   "head_spread": 0.1,
+   "head_r": [
+    0.08,
+    0.14
+   ],
+   "flame_up_m": 12.0,
+   "flame_every_s": 0.1,
+   "flame_r_m": [
+    2.5,
+    5.0
+   ],
+   "flame_tall": [
+    2.5,
+    4.0
+   ],
+   "flame_life_s": [
+    0.35,
+    0.7
+   ],
+   "column_every_s": 0.4,
+   "column_life_s": [
+    100,
+    130
+   ],
+   "rise_mps": [
+    1.0,
+    2.0
+   ],
+   "burst_mps": [
+    15,
+    19
+   ],
+   "burst_drag": 0.07,
+   "slow_mps2": 0.0,
+   "base_every_s": 0.0,
+   "windage": [
+    1.0,
+    1.5
+   ],
+   "r0": [
+    0.12,
+    0.17
+   ],
+   "r1": [
+    0.36,
+    0.56
+   ],
+   "grow": 0.7,
+   "alpha": [
+    0.8,
+    0.95
+   ],
+   "hold": 0.45,
+   "heart": 0.85,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    52,
+    48,
+    44
+   ],
+   "lamp": 0.0,
+   "lamp_reach": 1.5,
+   "twin_px": 160,
+   "keep": 1,
+   "pall_every_s": 0.0,
+   "pall_life_s": [
+    160,
+    240
+   ],
+   "pall_r1": [
+    0.9,
+    1.4
+   ],
+   "pall_windage": [
+    1.2,
+    1.5
+   ],
+   "pall_alpha": [
+    0.3,
+    0.45
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 80,
+   "pall_hold": 0.35,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.25,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 2.0,
+   "lit_colour": [
+    122,
+    110,
+    98
+   ],
+   "base_life_s": [
+    6,
+    9
+   ],
+   "base_rise_mps": [
+    0.4,
+    1.0
+   ],
+   "base_r": [
+    0.14,
+    0.22
+   ],
+   "base_alpha": [
+    0.6,
+    0.75
+   ],
+   "base_flat": 0.75,
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8,
+   "flame_odds": 0.0,
+   "pale_up_m": 650,
+   "pale_up_most": 0.85,
+   "pale_up_pow": 1.0,
+   "pale_up_colour": [
+    140,
+    134,
+    126
+   ],
+   "pale_up_lit": [
+    190,
+    178,
+    162
+   ],
+   "thin_up": 0.6,
+   "_lumps": "As oil_fires.sunk._lumps."
   },
   "_pall_rest": "pall_rest (art director 18:28Z): a pall puff's middle is never lower than this share of its own radius above the sea (Bit::Rest; 1.3 covers its rough outline), so one that wanders down (pall_drift_mps) is never cut by the sea along a straight line when seen from the air. 0 or no key: as before."
  },

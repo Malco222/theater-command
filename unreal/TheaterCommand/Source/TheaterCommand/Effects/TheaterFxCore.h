@@ -310,6 +310,18 @@ namespace TheaterFx
 		// shape and light change smoothly every frame and never step. 0: none)
 		uint32_t FlickerSeed = 0;
 		double Flicker = 0.0, FlickerLong = 0.0, FlickerWide = 0.0, FlickerLo = 3.0, FlickerHi = 6.0;
+		// (fx-air r2: a ship's light guns and a burning ship's column. Every one 0, as before, unless its recipe key asks.
+		// Hose over 0: a ship gun's hose, a thin line from this round (From, Vel, Born) back to the round fired before
+		// it (Back's From, Vel, Born), laid where both are now, Hose its opacity. BurnOut over 0: a ship tracer's own
+		// reach, air_guns.<kind>.burn_out_m: from DwindleFrom metres flown it thins to DwindleTo of its strength and
+		// narrows to DwindleWide of its width by BurnOut, where it is out. TailFade: its tail end that much fainter than
+		// its head, evenly along it. AlongK over 0: a hose's line as laid, its opacity carried along with those)
+		double Hose = 0.0, BurnOut = 0.0, DwindleFrom = 0.0, DwindleTo = 1.0, DwindleWide = 1.0, TailFade = 0.0, AlongK = 0.0;
+		// (PaleUpM over 0: an oil column's puff, oil_fires.<kind>.pale_up_m. By its height over PaleUpZ, as a share of
+		// PaleUpM to the power PaleUpPow, it goes PaleUpMost of that share of the way to PaleUpCol, its sunlit side to
+		// PaleUpLit, and thins by ThinUp of that share: black and dense low, browner grey and thinner high)
+		double PaleUpM = 0.0, PaleUpMost = 0.0, PaleUpPow = 1.0, ThinUp = 0.0, PaleUpZ = 0.0;
+		Rgb PaleUpCol, PaleUpLit;
 	};
 
 	class Battle
@@ -601,6 +613,13 @@ namespace TheaterFx
 			// air_guns.tracers.life_s; StreakS, its streak's length in seconds of flight, 0 the look's own)
 			bool bCannon = false;
 			double TracerWide = 1.0, TracerLifeK = 1.0, StreakS = 0.0;
+			// (fx-air r2, a ship's light guns: Hose, HosePx, HoseMix, the hose from each round to the one before (see
+			// Bit::Hose), its opacity, width in pixels and how far its colour goes from the glow's to the core's, HoseS
+			// the least seconds between its points;
+			// bShipHue, the nation's ship colours where it has them; BurnOut, DwindleFrom, DwindleTo, DwindleWide,
+			// TailFade and CoreTailFade (the core's), see Bit::BurnOut. 0 or off: as before)
+			double Hose = 0.0, HosePx = 0.0, HoseMix = 0.0, HoseS = 0.0, BurnOut = 0.0, DwindleFrom = 0.0, DwindleTo = 1.0, DwindleWide = 1.0, TailFade = 0.0, CoreTailFade = 0.0;
+			bool bShipHue = false;
 		};
 		/** A ground gun's spent case (ground_cases.<gun>): its size and how it is thrown and lies. */
 		struct CaseRow
@@ -780,6 +799,7 @@ namespace TheaterFx
 			bool bOn = false;
 			double Last = 0.0, Next = 0.0, RateK = 1.0;
 			Vec Muzzle, Dir, Carry;
+			Vec HoseAt, HoseVel; double HoseBorn = 0.0; bool bHose = false; // (fx-air r2: the last round of this burst, for its hose)
 		};
 		struct Flash
 		{
@@ -817,6 +837,9 @@ namespace TheaterFx
 			// (a small fire's column held in one piece, fire.smoke_column only: tight_m, overlap, least_px, least_keep.
 			// See the column's Lay in Run. 0: as before)
 			double TightM = 0.0, Overlap = 0.0, ColumnLeastPx = 0.0, ColumnLeastKeep = 0.0;
+			// (fx-air r2: the column pales and thins as it climbs, pale_up_m and the rest; see Bit::PaleUpM. 0: as before)
+			double PaleUpM = 0.0, PaleUpMost = 0.0, PaleUpPow = 1.0, ThinUp = 0.0;
+			Rgb PaleUpCol, PaleUpLit;
 		};
 		/** A big fire's smoke as a bank of lumps run out down the wind (fire.smoke_bank), read when the fire starts. */
 		struct BankRow
@@ -1028,6 +1051,7 @@ namespace TheaterFx
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		Rgb LayShadow; // (while laying one bit: its shadow side's colour, Bit::ShadowCol in the hour's light, and how far it goes to it)
 		double LayShadowK = 0.0;
+		double LayFadeHead = 1.0, LayFadeTail = 1.0; bool bLayFade = false; // (fx-air r2, while laying one bit: its opacity runs evenly from its tail end to its head, a ship's tracer or hose)
 		double LayHeartRound = 0.0; // (while laying one bit: Bit::HeartRound)
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
 		double LumpsMost = 0.0, LumpsHeld = 0.0, LumpsShown = 0.0, LumpsAt = -1.0e9, LumpsZoom = 0.0; // (the most places asked of late, lumps and all; how long since the count last came near it; LumpsRoom at the last Draw; when that was; and the view's pixels a radian then: see LumpsRoom in Draw)
@@ -1120,7 +1144,7 @@ namespace TheaterFx
 			double BodyOver = 1.0, CoreOver = 1.0;
 		};
 		std::vector<TracerHue> TracerHues;
-		const TracerHue* HueOf(const char* Nation, bool bCannon); // (null: no air look in the recipe)
+		const TracerHue* HueOf(const char* Nation, bool bCannon, bool bShip = false); // (null: no air look in the recipe. bShip: a ship gun's, the nation's ship colours where it has them)
 		// (the air look: AirTracerLife seconds alight, a streak AirStreakS seconds of flight long, dimming from
 		// AirDimFrom of its life to AirDimTo and out over AirOutS; no more than AirTracerMost alight at once, the
 		// guns farthest from the eye going without first)
@@ -1133,6 +1157,7 @@ namespace TheaterFx
 		double AirGlowSoft = 0.0; // (over 0: by day its glow is that strong beside the core and fades smoothly to nothing at its edge, never a solid bar; 0: solid across, as it was)
 		double AirFarPx = 0.0; // (over 0: a one-fan tracer is a solid dash that wide in the core's colour; 0: the glow alone, as it was)
 		std::vector<double> AirTracerEnds; // (when each air tracer now alight goes out)
+		int HoseMost = 0; std::vector<double> HoseEnds; // (fx-air r2: no more than HoseMost ship guns' hose lines at once, and when each goes)
 		std::vector<Firing> Firings; // the air guns
 		std::vector<TrailRow> TrailRows;
 		std::vector<DustRow> DustRows;
@@ -1256,6 +1281,12 @@ namespace TheaterFx
 		void AirTracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, const AirRow& Row, const TracerHue& Hue, bool bOneFan = false);
 		const AirRow& AirRowOf(const std::string& Kind);
 		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D, const TracerHue* Hue = nullptr);
+		// (fx-air r2: a ship gun's hose, the line from this round back to the last; where a hose's two ends are now, as one
+		// streak to lay (false: nothing to lay); how long a tracer burns, to its row's burn_out_m; a column puff's paling)
+		void HoseLink(double T, Firing& F, const Vec& At, const Vec& Vel, const AirRow& Row, const TracerHue* Hue, double Gap);
+		bool HoseNow(const Bit& B, double Now, Bit& Out_) const;
+		double BurnLife(const AirRow& Row, double Mps) const;
+		void PaleUp(const Bit& B, const Vec& P, const View& Eye, Rgb& Col, Rgb& Floor, Rgb& Lit, double& A) const;
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		void Spent(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		const TrailRow& TrailRowOf(const std::string& Kind);

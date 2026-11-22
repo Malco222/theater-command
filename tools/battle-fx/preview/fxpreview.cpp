@@ -1950,6 +1950,273 @@ namespace
 		}
 		return 0;
 	}
+
+	/** The air scene's ships (see the top of the file): a carrier ablaze as the scene lights her, or a carrier's light
+	 * guns firing on a dive bomber, each seen as the scene's own camera sees it. */
+	int Fleet(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		const double Deg = 3.14159265358979 / 180.0;
+		const Vec ZUp(0.0, 0.0, 1.0);
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, &FlatSea, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene: UseAirDistance)
+		const Vec Wind(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", -2.0), 0.0); // (the air scene's own, AirSky::Wind)
+		Fx.SetWind(Wind);
+		const bool bGuns = Shot == "guns";
+		const double Long = EnvNum("FX_SHIP_LONG", bGuns ? 247.6 : 260.7), Beam = EnvNum("FX_SHIP_BEAM", bGuns ? 32.5 : 31.3);
+		const double Turn = EnvNum("FX_SHIP_TURN", 20.0) * Deg;
+		const Vec Bow(std::cos(Turn), std::sin(Turn), 0.0), Abeam(std::sin(Turn), -std::cos(Turn), 0.0);
+		const Vec Ship(0.0, 0.0, 0.0);
+		const double Lens = EnvNum("FX_LENS", bGuns ? 55.0 : 35.0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(Lens, 5.0, 170.0) * Deg * 0.5));
+		const Vec Downwind = Vec(Wind.X, Wind.Y, 0.0).Unit(Abeam * -1.0);
+		// (the dive bomber of the guns shot: FX_PLANE_OUT m out from her (900) and FX_PLANE_UP m up (1100) at 0 s, diving on
+		// her at FX_PLANE_DIVE degrees (70) and FX_PLANE_MPS (110), from FX_PLANE_FROM degrees off her bow (60))
+		const double PlaneFrom = EnvNum("FX_PLANE_FROM", 60.0) * Deg, Dive = EnvNum("FX_PLANE_DIVE", 70.0) * Deg, PlaneMps = EnvNum("FX_PLANE_MPS", 110.0);
+		const Vec PlaneOut = (Bow * std::cos(PlaneFrom) + Abeam * std::sin(PlaneFrom)).Unit(Bow);
+		const Vec Plane0 = Ship + PlaneOut * EnvNum("FX_PLANE_OUT", 900.0) + ZUp * EnvNum("FX_PLANE_UP", 1100.0);
+		const Vec PlaneV = (PlaneOut * -std::cos(Dive) + ZUp * -std::sin(Dive)) * PlaneMps;
+		auto PlaneAt = [&](double T) { return Plane0 + PlaneV * T; };
+		Vec Look;
+		double Away = EnvNum("FX_DIST", 0.0), Down = 0.0;
+		Vec Out;
+		if (bGuns)
+		{
+			// (AAirBattle::AimEye, the guns fire back picture: side-on to the line from her to him, the way upwind and with
+			// the sun behind the eye; the look two fifths of the way to him, 4 degrees down; both in the frame with a quarter
+			// to spare, never nearer than 450 m nor farther than 2.6 km)
+			const Vec Line = PlaneAt(EnvNum("FX_PLANE_EYE_AT", 0.0)) - Ship;
+			const Vec Across(Line.X, Line.Y, 0.0);
+			const Vec Along = Across.Unit(Bow);
+			const Vec Side = ZUp.Cross(Along).Unit(Abeam);
+			Out = Side.Dot(Downwind * -1.0) >= 0.0 ? Side : Side * -1.0;
+			const double Wide = Across.Length(), High = std::fabs(Line.Z);
+			if (!(Away > 0.0))
+			{
+				Away = std::clamp(std::max(0.75 * Wide / std::tan(27.5 * Deg), 0.75 * High / std::tan(16.3 * Deg)), 450.0, 2600.0);
+			}
+			Look = Ship + Line * 0.4;
+			Down = EnvNum("FX_DOWN", 4.0) * Deg;
+		}
+		else
+		{
+			// (AAirBattle::AimEye, the ships picture at sea: from upwind, the look FX_VIEW degrees (55) off the wind's way, of
+			// the two such eyes the one nearer her beam; she fills about a third of the frame; 9 degrees down, the look 0.12
+			// of her length over her waterline)
+			const double View_ = EnvNum("FX_VIEW", 55.0) * Deg;
+			double Best = -1e9;
+			for (const double Sign : { 1.0, -1.0 })
+			{
+				const Vec Way = (Downwind * -std::cos(View_) + ZUp.Cross(Downwind) * (Sign * std::sin(View_))).Unit(Abeam);
+				const double Score = std::fabs(Way.Dot(Abeam));
+				if (Score > Best)
+				{
+					Best = Score;
+					Out = Way;
+				}
+			}
+			const double Shown = std::max(Out.Cross(Bow).Length(), 0.33) * Long;
+			if (!(Away > 0.0))
+			{
+				Away = std::clamp(3.0 * Shown / (2.0 * std::tan(Lens * Deg * 0.5)), 450.0, 1600.0);
+			}
+			Look = Ship + ZUp * (0.12 * Long);
+			Down = EnvNum("FX_DOWN", 9.0) * Deg;
+		}
+		Cam.Forward = (Out * -std::cos(Down) + ZUp * -std::sin(Down)).Unit();
+		Cam.Eye = Look - Cam.Forward * Away;
+		Cam.Eye.Z = std::max(Cam.Eye.Z, 40.0);
+		Cam.Forward = (Look - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		std::printf("eye %.0f m off, %.0f m up\n", (Cam.Eye - Look).Length(), Cam.Eye.Z);
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0); // (FX_KIT_PX: as the air scene tells the kit the window's pixels)
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		if (const char* SunIs = std::getenv("FX_SUN"))
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
+		// (the carrier ablaze, AAirStage::Sink's "burn": FX_EARLY fires (2) her hits lit FX_EARLY_S s (90) before she is lost,
+		// 0.45 of her beam across at her deck; then at FX_LOST_AT s (0) five fires 0.45 of her beam across along her length
+		// for 1800 s (the hits' count toward the five), and her oil burning on the sea round her, 0.6 of her length
+		// (OilFire "sunk", FX_OIL another kind, FX_NO_OIL=1 none))
+		const double LostAt = EnvNum("FX_LOST_AT", 0.0), DeckFire = EnvNum("FX_DECK_FIRE", 9.0);
+		const int Early = bGuns ? 0 : static_cast<int>(std::clamp(EnvNum("FX_EARLY", 2.0), 0.0, 5.0));
+		const double EarlyS = EnvNum("FX_EARLY_S", 90.0);
+		const double Shares[5] = { -0.4, 0.4, 0.0, -0.2, 0.2 };
+		const double EarlyShares[5] = { 0.1, -0.3, 0.3, -0.1, 0.25 };
+		const char* OilIs = std::getenv("FX_OIL");
+		bool bLost = bGuns, bAblazeLit = false;
+		int Lit = 0;
+		// (the guns shot, ShipGuns::Gunnery: FX_MOUNTS (11) twin mounts of FX_GUN (aa25) along her decks 16 m up, port and
+		// starboard by turns, each two streams of FX_RATE rounds a minute (220) at FX_MV m/s (900) in FX_NATION's colours
+		// (jp), in bursts of 2.5 to 6 s with rests of 0.4 to 1.5 s and a 15-round magazine changed in 3.5 s, laid short of
+		// the full lead and wandering about him, called sixty times a second)
+		struct Crew { double Phase = 0.0, W1 = 0.0, W2 = 0.0, Lead = 0.0, Left = 0.0, Burst = 0.0, Rest = 0.0, Change = 0.0; bool bOn = false; };
+		const bool bEscorts = std::getenv("FX_ESCORTS") != nullptr; // (in the carrier shot too: she and her escorts fire as she burns)
+		const int Mounts = bGuns || bEscorts ? static_cast<int>(std::clamp(EnvNum("FX_MOUNTS", 11.0), 0.0, 30.0)) : 0;
+		const char* KindIs = std::getenv("FX_GUN");
+		const std::string Kind = KindIs ? KindIs : "aa25";
+		const char* NationIs = std::getenv("FX_NATION");
+		const std::string Nation = NationIs ? NationIs : "jp";
+		const double Rate = EnvNum("FX_RATE", 220.0), Mv = EnvNum("FX_MV", 900.0), Load = EnvNum("FX_LOAD", 15.0), Change = EnvNum("FX_CHANGE", 3.5);
+		const double Deck = 16.0;
+		// (FX_ESCORTS=n: n more ships firing the same, 700 m apart abeam and 150 m along; FX_ABLAZE=m: a carrier ablaze m metres
+		// astern of her from the first moment, five fires 0.45 of her beam across and her column (OilFire FX_OIL, ablaze, lit
+		// FX_OIL_SINCE s before, 180): the room a burning carrier and her escorts' guns take together)
+		const int Ships = bGuns || bEscorts ? 1 + static_cast<int>(std::clamp(EnvNum("FX_ESCORTS", 0.0), 0.0, 6.0)) : 1;
+		auto ShipAt = [&](int Sh) { return Ship + Abeam * (Sh == 0 ? 0.0 : ((Sh + 1) / 2) * 700.0 * (Sh % 2 ? 1.0 : -1.0)) + Bow * (Sh * 150.0); };
+		std::vector<Crew> Crews(static_cast<size_t>(Mounts * Ships));
+		TheaterFx::Dice Roll(239u);
+		for (Crew& C : Crews)
+		{
+			C.Phase = Roll.U(0.0, 6.2831853);
+			C.W1 = Roll.U(0.25, 0.6);
+			C.W2 = Roll.U(0.35, 0.9);
+			C.Lead = Roll.U(0.5, 0.85);
+			C.Left = Load;
+			C.Burst = Roll.U(1.0, 4.0);
+			C.Rest = Roll.U(0.0, 1.5);
+		}
+		const double FireFrom = EnvNum("FX_FIRE_FROM", -2.5);
+		std::sort(Frames.begin(), Frames.end());
+		const double Step = 1.0 / 60.0;
+		double T = bGuns ? FireFrom - Step : std::min(LostAt - (Early > 0 ? EarlyS : 0.0), 0.0) - Step;
+		Fx.Draw(T, View);
+		for (int Frame : Frames)
+		{
+			const double Now = Frame / 30.0;
+			while (T + Step <= Now + 1e-9)
+			{
+				T += Step;
+				if (!bGuns)
+				{
+					for (; Lit < Early && T >= LostAt - EarlyS + Lit * 20.0; ++Lit)
+					{
+						Fx.Burn(T, Ship + Bow * (EarlyShares[Lit] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, 239000 + Lit);
+					}
+					if (!bLost && T >= LostAt)
+					{
+						bLost = true;
+						for (int K = 0; K < std::max(2, 5 - Early); ++K)
+						{
+							Fx.Burn(T, Ship + Bow * (Shares[K] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0);
+						}
+						if (!std::getenv("FX_NO_OIL"))
+						{
+							Fx.OilFire(T, 238001, Ship, 0.6 * Long, OilIs ? OilIs : "sunk", 0.0, EnvNum("FX_OIL_SINCE", 0.0));
+						}
+					}
+				}
+				if (bGuns && !bAblazeLit && std::getenv("FX_ABLAZE"))
+				{
+					bAblazeLit = true;
+					const Vec Burning = Ship - Bow * EnvNum("FX_ABLAZE", 1200.0);
+					for (int K = 0; K < 5; ++K)
+					{
+						Fx.Burn(T, Burning + Bow * (Shares[K] * 260.7) + ZUp * DeckFire, 31.3 * 0.45, 1800.0);
+					}
+					Fx.OilFire(T, 238001, Burning, 0.6 * 260.7, OilIs ? OilIs : "ablaze", 0.0, EnvNum("FX_OIL_SINCE", 180.0));
+				}
+				for (int MoAll = 0; MoAll < Mounts * Ships && T >= 0.0; ++MoAll)
+				{
+					const int Mo = MoAll % Mounts, Sh = MoAll / Mounts;
+					Crew& C = Crews[static_cast<size_t>(MoAll)];
+					bool bFiring = false;
+					if (C.Change > 0.0) C.Change -= Step;
+					else if (C.Rest > 0.0) C.Rest -= Step;
+					else
+					{
+						bFiring = true;
+						C.Burst -= Step;
+						C.Left -= Rate / 60.0 * Step;
+						if (C.Left <= 0.0)
+						{
+							C.Change = Change * Roll.U(0.8, 1.3);
+							C.Left = Load;
+							C.Burst = 0.0;
+						}
+						if (C.Burst <= 0.0)
+						{
+							C.Burst = Roll.U(2.5, 6.0);
+							C.Rest = Roll.U(0.4, 1.5);
+						}
+					}
+					const double SideK = Mo % 2 == 0 ? 1.0 : -1.0;
+					const Vec Muzzle = ShipAt(Sh) + Bow * (Long * (-0.42 + 0.84 * (Mo + 0.5) / Mounts)) + Abeam * (SideK * Beam * 0.42) + ZUp * (Deck + 1.5);
+					for (int K = 0; K < 2; ++K)
+					{
+						const int Key = (1 << 27) + (7 + Sh) * 64 + Mo * 2 + K;
+						if (!bFiring)
+						{
+							if (C.bOn)
+							{
+								Fx.AirGunStop(Key);
+							}
+							continue;
+						}
+						const Vec P = PlaneAt(T);
+						const double D = (P - Muzzle).Length();
+						const double Tof = D / (Mv * 0.8);
+						const double Lead = std::clamp(C.Lead + 0.22 * std::sin(T * C.W1 + C.Phase), 0.3, 1.1);
+						const Vec Los = (P - Muzzle).Unit(ZUp);
+						const Vec A1 = Los.Cross(ZUp).Unit(Abeam);
+						const Vec A2 = A1.Cross(Los);
+						const double Amp = std::max(12.7 * 1.3, D * 0.011);
+						const Vec Off = A1 * (Amp * std::sin(T * C.W2 + C.Phase * 1.7)) + A2 * (Amp * 0.8 * std::sin(T * C.W2 * 1.37 + C.Phase * 0.6));
+						const Vec Point = P + PlaneV * (Tof * Lead) + Off;
+						const Vec Aim = Point + ZUp * (0.5 * 9.81 * Tof * Tof * 0.85);
+						Fx.AirGun(T, Key, Muzzle + Bow * ((K - 0.5) * 0.6), Aim, Vec(), Kind.c_str(), Rate, Mv, Nation.c_str());
+					}
+					C.bOn = bFiring;
+				}
+				Fx.Draw(T, View);
+			}
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, std::vector<Vec>(), false, true);
+			if (!std::getenv("FX_NO_SHIPS"))
+			{
+				// (her hull to her flight deck, and the deck: so the eye has her size)
+				const double HullCol[3] = { ToLinear(70), ToLinear(72), ToLinear(76) }, DeckCol[3] = { ToLinear(150), ToLinear(138), ToLinear(112) };
+				Box(C, Cam, Ship, Bow, Long * 0.92, Beam * 0.8, 14.0, HullCol, 0);
+				Box(C, Cam, Ship + ZUp * 14.0, Bow, Long, Beam, 2.0, DeckCol, 0);
+				if (bGuns)
+				{
+					const double PlaneCol[3] = { ToLinear(60), ToLinear(64), ToLinear(66) };
+					Box(C, Cam, PlaneAt(Now), Vec(PlaneV.X, PlaneV.Y, 0.0).Unit(Bow), 10.0, 12.7, 1.5, PlaneCol, 1);
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/fleet-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
+		}
+		return 0;
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -2015,6 +2282,10 @@ int main(int Argc, char** Argv)
 	if (Size == "wreck")
 	{
 		return Wreck(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "fleet")
+	{
+		return Fleet(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "air")
 	{

@@ -295,6 +295,8 @@ namespace TheaterFx
 		AirFarPx = SafeNum(Num("air_guns.tracers.one_fan_px", 0.0), 0.0, 64.0, 0.0);
 		TracerHues.clear();
 		AirTracerEnds.clear();
+		HoseMost = static_cast<int>(SafeNum(Num("air_guns.tracers.hose_most", 600.0), 0.0, 6000.0, 600.0)); // (fx-air r2: a ship gun's hose lines at once)
+		HoseEnds.clear();
 		ThinAbove = Range("dust.vehicles.from_above.above_m", 15.0, 25.0);
 		ThinSteep = Range("dust.vehicles.from_above.steep", 0.3, 0.5);
 		ThinNear = Range("dust.vehicles.from_above.near_m", 6.0, 12.0);
@@ -351,6 +353,7 @@ namespace TheaterFx
 		GlanceAt = -1.0e18;
 		GlanceSame = 0;
 		AirTracerEnds.clear();
+		HoseEnds.clear();
 		GunRounds.clear();
 		Firings.clear();
 		Trails.clear();
@@ -4493,7 +4496,7 @@ namespace TheaterFx
 		// streams bend back like water from a hose. 15:38Z (G2): each nation's own colours; the yellow retires.
 		const double StreakS = Row.StreakS > 0.0 ? Row.StreakS : AirStreakS;
 		const double Half = SafeNum(0.5 * StreakS * Vel.Length(), 0.5, 60.0, TracerHalf);
-		const double Life = AirTracerLife * Row.TracerLifeK;
+		const double Life = BurnLife(Row, Vel.Length()); // (fx-air r2: to its row's burn_out_m where it has one; else as before)
 		// (bOneFan, a gun far from the eye: the glow alone, a little toward the core's colour. Its core was a pixel there,
 		// and a tracer costs half as much)
 		for (int Layer = 0; Layer < (bOneFan ? 1 : 2); ++Layer)
@@ -4556,11 +4559,24 @@ namespace TheaterFx
 			B.bLight = true;
 			B.Glow = static_cast<uint8_t>(bDash ? 2 : Layer + 1);
 			B.Nearer = Layer == 1 && B.DayPx > 0.0 ? 0.01 : 0.0;
+			if (Row.BurnOut > 0.0 || Row.TailFade > 0.0 || Row.CoreTailFade > 0.0)
+			{
+				// (fx-air r2, a ship's tracer: see Bit::BurnOut. It dwindles by how far it has flown, not by its age)
+				B.BurnOut = Row.BurnOut;
+				B.DwindleFrom = Row.DwindleFrom;
+				B.DwindleTo = Row.DwindleTo;
+				B.DwindleWide = Row.DwindleWide;
+				B.TailFade = Layer == 0 ? Row.TailFade : Row.CoreTailFade;
+				if (Row.BurnOut > 0.0)
+				{
+					B.DimTo = 1.0;
+				}
+			}
 			Bits.push_back(B);
 		}
 	}
 
-	const Battle::TracerHue* Battle::HueOf(const char* Nation, bool bCannon)
+	const Battle::TracerHue* Battle::HueOf(const char* Nation, bool bCannon, bool bShip)
 	{
 		if (!bAirTracers)
 		{
@@ -4578,7 +4594,11 @@ namespace TheaterFx
 		{
 			Name = "default";
 		}
-		if (bCannon && Has(N + Name + ".cannon.body.0"))
+		if (bShip && Has(N + Name + ".ship.body.0"))
+		{
+			Name += ".ship"; // (fx-air r2: a ship gun's, in its nation's ship colours)
+		}
+		else if (bCannon && Has(N + Name + ".cannon.body.0"))
 		{
 			Name += ".cannon";
 		}
@@ -4662,6 +4682,18 @@ namespace TheaterFx
 			R.TracerWide = SafeNum(Num(P + "tracer_wide", 1.0), 0.25, 4.0, 1.0);
 			R.TracerLifeK = SafeNum(Num(P + "tracer_life_k", 1.0), 0.1, 4.0, 1.0);
 			R.StreakS = SafeNum(Num(P + "streak_s", 0.0), 0.0, 0.2, 0.0);
+			// (fx-air r2, a ship's light guns: see AirRow::Hose)
+			R.Hose = SafeNum(Num(P + "hose", 0.0), 0.0, 1.0, 0.0);
+			R.HosePx = SafeNum(Num(P + "hose_px", 0.0), 0.0, 64.0, 0.0);
+			R.HoseMix = SafeNum(Num(P + "hose_mix", 0.0), 0.0, 1.0, 0.0);
+			R.HoseS = SafeNum(Num(P + "hose_s", 0.0), 0.0, 2.0, 0.0);
+			R.bShipHue = SafeNum(Num(P + "ship_hue", 0.0), 0.0, 1.0, 0.0) > 0.5;
+			R.BurnOut = SafeNum(Num(P + "burn_out_m", 0.0), 0.0, 20000.0, 0.0);
+			R.DwindleFrom = SafeNum(Num(P + "dwindle_from_m", 0.0), 0.0, 20000.0, 0.0);
+			R.DwindleTo = SafeNum(Num(P + "dwindle_to", 1.0), 0.0, 1.0, 1.0);
+			R.DwindleWide = SafeNum(Num(P + "dwindle_wide", 1.0), 0.1, 1.0, 1.0);
+			R.TailFade = SafeNum(Num(P + "tail_fade", 0.0), 0.0, 1.0, 0.0);
+			R.CoreTailFade = SafeNum(Num(P + "core_tail_fade", 0.0), 0.0, 1.0, 0.0);
 		}
 		R.Name = Kind;
 		AirRows.push_back(R);
@@ -4676,7 +4708,7 @@ namespace TheaterFx
 		// the ruled streak, one in five.
 		Gun = std::max(0, Gun);
 		const AirRow& Row = AirRowOf(Kind && *Kind ? Kind : "hmg");
-		const TracerHue* Hue = HueOf(Nation, Row.bCannon);
+		const TracerHue* Hue = HueOf(Nation, Row.bCannon, Row.bShipHue);
 		Firing* F = nullptr;
 		for (Firing& Each : Firings)
 		{
@@ -4708,6 +4740,7 @@ namespace TheaterFx
 			F->Dir = Dir;
 			F->Carry = Carry;
 			F->Next = Now + D.U(0.0, Gap * 0.5);
+			F->bHose = false; // (fx-air r2: a new burst starts its own hose)
 		}
 		const double Between = Now - F->Last;
 		for (int Fired = 0; F->Next <= Now && Fired < 64; ++Fired)
@@ -4718,6 +4751,10 @@ namespace TheaterFx
 			const Vec By = F->Carry + (Carry - F->Carry) * K;
 			const int Which = F->Count++;
 			AirRound(F->Next, At, Way, By, Row, Mps, Which % Row.OneIn == 0, Which % Row.SmokeEvery == 0, D, Hue);
+			if (Row.Hose > 0.0)
+			{
+				HoseLink(F->Next, *F, At, Way * Mps + By, Row, Hue, Gap); // (fx-air r2: the hose back to the last round)
+			}
 			F->Next += Gap;
 		}
 		F->Next = std::max(F->Next, Now); // (a long stall: the rounds of the gap are not made up)
@@ -4736,6 +4773,158 @@ namespace TheaterFx
 				F.bOn = false;
 			}
 		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// fx-air r2: a ship's light guns as hoses of tracer that burn out at their reach, and a burning ship's column that
+	// pales as it climbs
+
+	void Battle::HoseLink(double T, Firing& F, const Vec& At, const Vec& Vel, const AirRow& Row, const TracerHue* Hue, double Gap)
+	{
+		// (the art director on the air scene's 06b: a ship's light AA read as a ladder of dashes, where the film shows
+		// each mount's fire as a hose of tracer curving across the sky. Each round of a row with hose over 0 lays a thin
+		// line back to the round fired before it, drawn where both are now, so a burst is one line through its rounds,
+		// bending as the gun swings and the rounds slow and drop, its tracers bright along it. A new burst, or a round
+		// more than two and a half gaps after the last, starts a new hose: hoses with gaps between bursts, as the
+		// historian's table has them (ship-air-defence.md B2))
+		// (hose_s: the hose's points no closer than that in time, so a fast gun's hose is laid through every second or
+		// third round, at half or a third the cost)
+		if (F.bHose && T > F.HoseBorn && T - F.HoseBorn < Row.HoseS)
+		{
+			return;
+		}
+		const bool bJoin = Hue != nullptr && F.bHose && T > F.HoseBorn && T - F.HoseBorn <= 2.5 * std::max(Gap, Row.HoseS) && RealPlace(At) && RealPlace(F.HoseAt);
+		const Vec WasAt = F.HoseAt, WasVel = F.HoseVel;
+		const double WasBorn = F.HoseBorn;
+		F.HoseAt = At;
+		F.HoseVel = Vel;
+		F.HoseBorn = T;
+		F.bHose = true;
+		if (!bJoin || !(Vel.Length() < 1.0e5) || !(WasVel.Length() < 1.0e5))
+		{
+			return;
+		}
+		// (it goes when the older round burns out. No more than hose_most at once; and as the tracers' room fills, the
+		// guns farthest from the eye lose their hoses first, as they lose their tracers)
+		const double Life = BurnLife(Row, WasVel.Length()) - (T - WasBorn);
+		if (!(Life > 0.01))
+		{
+			return;
+		}
+		HoseEnds.erase(std::remove_if(HoseEnds.begin(), HoseEnds.end(), [T](double End) { return !(End > T) || End > T + 40.0; }), HoseEnds.end());
+		if (HoseEnds.size() >= static_cast<size_t>(std::max(HoseMost, 0)))
+		{
+			return;
+		}
+		const double Fill = AirTracerMost > 0 ? static_cast<double>(AirTracerEnds.size()) / AirTracerMost : 1.0;
+		if (Fill > 0.7 && !(bEyeKnown && (LastEye - At).Length() <= AirTracerNear))
+		{
+			return;
+		}
+		HoseEnds.push_back(T + Life);
+		Bit B;
+		B.Form = Bit::Shape::Streak;
+		B.Hose = Row.Hose;
+		B.Born = T;
+		B.Life = Life;
+		B.From = At;
+		B.Vel = Vel;
+		B.Drag = Row.Drag;
+		B.Gravity = Row.Drop;
+		B.Origin = At;
+		B.Back.From = WasAt;
+		B.Back.Vel = WasVel;
+		B.Back.Born = WasBorn;
+		// (how long it may stand on the screen, for OffScreen: the two rounds' gap now, and room for the gun's swing)
+		const double Go = B.Drag > 1e-6 ? (1.0 - std::exp(-B.Drag * (T - WasBorn))) / B.Drag : T - WasBorn;
+		const double Gone = (WasAt + WasVel * Go + Vec(0.0, 0.0, -0.5 * B.Gravity * (T - WasBorn) * (T - WasBorn)) - At).Length();
+		B.HalfLength = (Gone == Gone ? std::min(Gone, 5000.0) : 0.0) + 50.0;
+		B.R0 = B.R1 = 0.02;
+		B.LeastPx = B.MostPx = B.DayPx = std::max(Row.HosePx, 0.5);
+		B.Col = Hue->Body.Mix(Hue->Core, Row.HoseMix);
+		B.Col2 = B.Col;
+		B.Over = Hue->BodyOver + Row.HoseMix * (Hue->CoreOver - Hue->BodyOver);
+		B.bOwnDay = true;
+		B.Glow = 1;
+		B.bLight = true;
+		B.Alpha = 1.0;
+		B.FadeIn = 0.001;
+		B.Hold = Life > AirOutS ? 1.0 - AirOutS / Life : 0.9;
+		B.Heart = 1.0;
+		B.Rim = 0.2;
+		B.Inner = 0.3;
+		B.BurnOut = Row.BurnOut;
+		B.DwindleFrom = Row.DwindleFrom;
+		B.DwindleTo = Row.DwindleTo;
+		B.DwindleWide = Row.DwindleWide;
+		Bits.push_back(B);
+	}
+
+	bool Battle::HoseNow(const Bit& B, double Now, Bit& Out_) const
+	{
+		// (a hose's line as it is now: from its round to the round before, each where its own flight has it, laid as one
+		// plain streak between them. Nothing where either end is no place, or the two have come together)
+		const double Age = Now - B.Born, AgeWas = Now - B.Back.Born;
+		if (!(Age >= 0.0) || !(Age <= B.Life) || !(AgeWas >= Age))
+		{
+			return false;
+		}
+		auto Flight = [&B](const Vec& From_, const Vec& Vel_, double Age_)
+		{
+			const double Go = B.Drag > 1e-6 ? (1.0 - std::exp(-B.Drag * Age_)) / B.Drag : Age_;
+			return From_ + Vel_ * Go + Vec(0.0, 0.0, -0.5 * B.Gravity * Age_ * Age_);
+		};
+		const Vec Near = Flight(B.From, B.Vel, Age), Far = Flight(B.Back.From, B.Back.Vel, AgeWas);
+		const Vec Run = Far - Near;
+		const double Long = Run.Length();
+		if (!(Long > 0.05) || !(Long < 1.0e4) || !RealPlace(Near) || !RealPlace(Far))
+		{
+			return false;
+		}
+		Out_ = B;
+		Out_.Hose = 0.0;
+		Out_.AlongK = B.Hose;
+		Out_.From = (Near + Far) * 0.5;
+		Out_.Vel = Vec();
+		Out_.Drag = 0.0;
+		Out_.Gravity = 0.0;
+		Out_.Along = Run * (1.0 / Long); // (its head the older round, the farther out)
+		Out_.HalfLength = 0.5 * Long;
+		Out_.BySpeed = 0.0;
+		Out_.bFired = false;
+		Out_.Point = 0.0;
+		Out_.Tail = 0.0;
+		Out_.Back = Bit::Reach();
+		return true;
+	}
+
+	double Battle::BurnLife(const AirRow& Row, double Mps) const
+	{
+		// (how long a tracer burns: as the look has it, or, with burn_out_m (the art director's 2 km for a 20 mm and 3.5 km
+		// for a 40 mm), until it has flown that far at its drag; one that never gets so far burns until it is down to a
+		// twentieth of its speed)
+		const double Own = AirTracerLife * Row.TracerLifeK;
+		if (!(Row.BurnOut > 0.0) || !(Mps > 1.0) || !(Mps < 1.0e5))
+		{
+			return Own;
+		}
+		const double K = Row.Drag;
+		const double T = K > 1e-6 && K < 1e3 ? -std::log(std::max(1.0 - Row.BurnOut * K / Mps, 0.05)) / K : Row.BurnOut / Mps;
+		return std::clamp(T, 0.05, 20.0);
+	}
+
+	void Battle::PaleUp(const Bit& B, const Vec& P, const View& Eye, Rgb& Col, Rgb& Floor, Rgb& Lit, double& A) const
+	{
+		// (the art director on Midway 06: a burning carrier's smoke stood a column hundreds of metres to kilometres high,
+		// bent over by the wind, black and dense low and browner grey and thinner high, lit on its sun side. By its height
+		// over the fire a puff goes toward pale_up_colour, its sunlit side toward pale_up_lit, and it thins)
+		const double Up = (P.Z - B.PaleUpZ) / B.PaleUpM;
+		const double Share = std::pow(Up == Up ? Clamp01(Up) : 0.0, std::clamp(B.PaleUpPow, 0.1, 8.0));
+		const double To = std::clamp(B.PaleUpMost, 0.0, 1.0) * Share;
+		Col = Col.Mix(Rgb(B.PaleUpCol.R * Eye.SmokeLight.R, B.PaleUpCol.G * Eye.SmokeLight.G, B.PaleUpCol.B * Eye.SmokeLight.B), To);
+		Floor = Col * SkyFill;
+		Lit = Lit.Mix(B.PaleUpLit, To);
+		A *= 1.0 - std::clamp(B.ThinUp, 0.0, 1.0) * Share;
 	}
 
 	void Battle::AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D, const TracerHue* Hue)
@@ -4926,7 +5115,7 @@ namespace TheaterFx
 					return;
 				}
 			}
-			AirTracerEnds.push_back(T + AirTracerLife * Row.TracerLifeK);
+			AirTracerEnds.push_back(T + BurnLife(Row, Vel.Length()));
 			AirTracer(T, At, Vel.Unit(Aim), Vel, Row, *Hue, AirOneFanBeyond > 0.0 && bEyeKnown && !((LastEye - At).Length() <= AirOneFanBeyond));
 		}
 	}
@@ -10053,6 +10242,14 @@ namespace TheaterFx
 		Held(R.LumpsInner, 0.0, 0.95, 0.0);
 		Held2(R.LumpsR, 0.05, 1.0, 0.3, 0.45);
 		Held2(R.LumpsOut, 0.0, 1.0, 0.3, 1.0);
+		// (fx-air r2, a ship burning afloat: the column pales and thins as it climbs; see Bit::PaleUpM. None asked: as before)
+		R.PaleUpM = SafeNum(Num(P + "pale_up_m", 0.0), 0.0, 20000.0, 0.0);
+		R.PaleUpMost = SafeNum(Num(P + "pale_up_most", 0.0), 0.0, 1.0, 0.0);
+		R.PaleUpPow = SafeNum(Num(P + "pale_up_pow", 1.0), 0.1, 8.0, 1.0);
+		R.ThinUp = SafeNum(Num(P + "thin_up", 0.0), 0.0, 1.0, 0.0);
+		auto Sane = [](const Rgb& C, const Rgb& Usual) { return C.R == C.R && C.G == C.G && C.B == C.B ? C : Usual; };
+		R.PaleUpCol = Sane(Picture(P + "pale_up_colour", R.Col2), R.Col2);
+		R.PaleUpLit = Sane(Picture(P + "pale_up_lit", R.Lit), R.Lit);
 		// (and never more than some four hundred puffs of a kind alive to a fire, however often the recipe asks)
 		R.ColumnEvery = std::max(R.ColumnEvery, std::max(R.ColumnLife.A, R.ColumnLife.B) / 400.0);
 		if (R.BaseEvery > 0.0)
@@ -10506,6 +10703,17 @@ namespace TheaterFx
 			}
 			// (seen from the air, a wide old puff that has wandered down would be cut by the sea along a straight line)
 			B.Rest = R.PallRest;
+		}
+		if (R.PaleUpM > 0.0)
+		{
+			// (fx-air r2: it pales and thins as it climbs over the fire; see Bit::PaleUpM)
+			B.PaleUpM = R.PaleUpM;
+			B.PaleUpMost = R.PaleUpMost;
+			B.PaleUpPow = R.PaleUpPow;
+			B.ThinUp = R.ThinUp;
+			B.PaleUpZ = S.At.Z;
+			B.PaleUpCol = R.PaleUpCol;
+			B.PaleUpLit = R.PaleUpLit;
 		}
 		Bits.push_back(B);
 	}
@@ -11194,13 +11402,14 @@ namespace TheaterFx
 	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward, const Rgb& Lift, const Vec& TaperB)
 	{
 		const size_t First = static_cast<size_t>(Slot) * PointsPerPuff;
-		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
+		const double FadeLen2 = bLayFade ? AxisA.Dot(AxisA) : 0.0; // (fx-air r2: see LayFadeHead)
+		auto Put = [this, &Middle, &AxisA, FadeLen2](size_t I, const Vec& At, const Rgb& C, double A)
 		{
 			Out[I] = At;
 			OutRgba[I * 4 + 0] = Byte(C.R * PutK);
 			OutRgba[I * 4 + 1] = Byte(C.G * PutK);
 			OutRgba[I * 4 + 2] = Byte(C.B * PutK);
-			OutRgba[I * 4 + 3] = Byte(A);
+			OutRgba[I * 4 + 3] = Byte(FadeLen2 > 1e-18 ? A * (LayFadeTail + (LayFadeHead - LayFadeTail) * Clamp01(0.5 + 0.5 * (At - Middle).Dot(AxisA) / FadeLen2)) : A);
 		};
 		// (Lift: the sunlit face of smoke seen with the sun behind the eye. Art director 23:59Z: each lobe a dome, its
 		// crown on the side toward the sun lit and its underside and edge darker, so the lobes count as lumps. The
@@ -11642,6 +11851,18 @@ namespace TheaterFx
 
 	int Battle::LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room)
 	{
+		if (B.Hose > 0.0)
+		{
+			// (fx-air r2: a ship gun's hose, laid as one streak where its two rounds are now; see HoseLink)
+			Bit Laid;
+			if (!HoseNow(B, Now, Laid))
+			{
+				return 0;
+			}
+			const int Took = LayBit(Slot, Laid, Now, Eye, Room);
+			B.bShown = B.bShown || Laid.bShown;
+			return Took;
+		}
 		const double Age = Now - B.Born;
 		// (a piece of no life is never laid: its share of its life is 0 over 0. A trail's knot with knot_s 0 and 0 was
 		// one: the pre-check on 1fc2904, its cure)
@@ -11912,6 +12133,11 @@ namespace TheaterFx
 				}
 			}
 		}
+		Rgb LitOwn = B.LitCol; // (fx-air r2: its sunlit side's colour, paled as it climbs; see Bit::PaleUpM)
+		if (B.PaleUpM > 0.0 && !B.bLight)
+		{
+			PaleUp(B, P, Eye, Col, Floor, LitOwn, A);
+		}
 		const double Dist = (P - Eye.Eye).Length();
 		if (Dist > (B.bKeep ? KeepBeyond : Beyond))
 		{
@@ -12054,6 +12280,7 @@ namespace TheaterFx
 		bLayGlare = false;
 		LaySquare = 0.0;
 		LayInnerAlong = 0.0;
+		bLayFade = false;
 		LayHub = Vec();
 		bLayLong = false;
 		bLayFarCol = false;
@@ -12113,7 +12340,7 @@ namespace TheaterFx
 				// comes in through the middle of the bank, so the far lumps keep their lit tops)
 				const double Grown = B.SunBy > 0.0 ? B.SunYoung + (1.0 - B.SunYoung) * Clamp01((Age - B.SunFrom) / std::max(B.SunBy - B.SunFrom, 1e-3)) : 1.0;
 				const float L = static_cast<float>(Clamp01(B.SunSide * Grown * Day * W * (0.15 + 0.85 * Clamp01(0.65 + 0.6 * Face))));
-				Lift = Rgb((B.LitCol.R * Eye.SmokeLight.R - Col.R) * L, (B.LitCol.G * Eye.SmokeLight.G - Col.G) * L, (B.LitCol.B * Eye.SmokeLight.B - Col.B) * L);
+				Lift = Rgb((LitOwn.R * Eye.SmokeLight.R - Col.R) * L, (LitOwn.G * Eye.SmokeLight.G - Col.G) * L, (LitOwn.B * Eye.SmokeLight.B - Col.B) * L);
 			}
 			else if (Day > 1e-6)
 			{
@@ -12141,7 +12368,7 @@ namespace TheaterFx
 				Round.Up = RoundUp * std::max(0.0, Eye.Sun.Z);
 				Round.Lobe = 0.25;
 				Round.Rim = 0.0;
-				Lift = Rgb(B.LitCol.R * Eye.SmokeLight.R - Col.R, B.LitCol.G * Eye.SmokeLight.G - Col.G, B.LitCol.B * Eye.SmokeLight.B - Col.B);
+				Lift = Rgb(LitOwn.R * Eye.SmokeLight.R - Col.R, LitOwn.G * Eye.SmokeLight.G - Col.G, LitOwn.B * Eye.SmokeLight.B - Col.B);
 			}
 		}
 		if (!B.bLight && (B.CloudShade > 0.0 || B.Smear > 0.0 || B.SunSide > 0.0) && SunThrough > 0.0 && Dist > 1e-6)
@@ -12467,7 +12694,7 @@ namespace TheaterFx
 				// Day is read from the hour's smoke light: white by day, dim at dusk)
 				const double Day = DayOf(Eye.SmokeLight);
 				Wide = 1.0 + (TracerDayWide - 1.0) * Day;
-				if (B.bOwnDay && B.Glow == 2 && AirWhiteBeyond > 0.0)
+				if (B.bOwnDay && B.Glow == 2 && AirWhiteBeyond > 0.0 && !(B.BurnOut > 0.0)) // (fx-air r2: a ship's tracer, with its own reach, keeps its colour near the eye)
 				{
 					// (art director 15:02Z: the core near white at close range; far off, its nation's own colour)
 					const double Own = std::clamp(B.Over, 1.0, LitGain);
@@ -12603,6 +12830,23 @@ namespace TheaterFx
 						TaperB = Bu * (Width * std::clamp(Run / DeepM, -0.9, 0.9));
 					}
 				}
+			}
+			if (B.BurnOut > 0.0 || B.TailFade > 0.0 || B.AlongK > 0.0)
+			{
+				// (fx-air r2, a ship's tracer or hose: each end as strong as how far it has flown leaves it (Bit::BurnOut),
+				// the tail TailFade fainter than the head, evenly along it; and narrower as it dwindles)
+				auto Spent_ = [&B](double Flown)
+				{
+					return B.BurnOut > B.DwindleFrom && Flown == Flown ? Clamp01((Flown - B.DwindleFrom) / (B.BurnOut - B.DwindleFrom)) : 0.0;
+				};
+				const double Own = B.AlongK > 0.0 ? std::min(B.AlongK, 1.0) : 1.0;
+				const double Gone = 1.0 - std::clamp(B.DwindleTo, 0.0, 1.0);
+				LayFadeHead = Own * (1.0 - Gone * Spent_((Middle + AxA - B.Origin).Length()));
+				LayFadeTail = Own * (1.0 - Gone * Spent_((Middle - AxA - B.Origin).Length())) * (1.0 - std::clamp(B.TailFade, 0.0, 1.0));
+				bLayFade = true;
+				const double Narrow = 1.0 - (1.0 - std::clamp(B.DwindleWide, 0.1, 1.0)) * Spent_((Middle - B.Origin).Length());
+				AxB = AxB * Narrow;
+				TaperB = TaperB * Narrow;
 			}
 			break;
 		}
