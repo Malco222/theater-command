@@ -146,7 +146,7 @@ private:
 
 	TSharedPtr<FSeaBattleState> State;
 	TUniquePtr<FBattleEffects> Effects;
-	TUniquePtr<FConvoyLooks> Looks; // D1 hook (convoy looks)
+	TUniquePtr<FConvoyLooks> SubLooks; // D1 hook (convoy looks)
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;
