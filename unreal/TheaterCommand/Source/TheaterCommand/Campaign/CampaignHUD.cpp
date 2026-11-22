@@ -7,6 +7,7 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
 #include "Battle/LandBattle.h"
+#include "Battle/LandLive.h"
 #include "EngineUtils.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
@@ -14357,6 +14358,7 @@ namespace
 			{
 				TArray<TSharedRef<SWidget>> Cells;
 				Cells.Add(MakePractice());
+				Cells.Add(MakeBattleRules());
 				AddGrid(Cells, 2);
 			}
 		}
@@ -14402,6 +14404,68 @@ namespace
 					}
 					return FReply::Handled();
 				})
+				[
+					Body
+				];
+		}
+
+		/**
+		 * (release 2) The battle rules beside the practice card, each a line he clicks to switch on or off (Brian, 22
+		 * November 17:33Z: "make it where we can toggle it off if someone doesnt want it"). Kept in his settings, read when
+		 * a battle opens (FLandLive's rules).
+		 */
+		TSharedRef<SWidget> MakeBattleRules()
+		{
+			TSharedRef<SVerticalBox> Body = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Battle rules"))).Font(Font(TEXT("Bold"), 14)).ColorAndOpacity(Cream)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 4.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("Click a rule to switch it on or off for your next battle.")))
+				];
+			for (int32 Index = 0; Index < FLandLive::RuleCount(); ++Index)
+			{
+				const FLandLive::FRule& Rule = FLandLive::RuleAt(Index);
+				Body->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 4.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(Rule.Tip))
+					.OnClicked_Lambda([Index]()
+					{
+						FLandLive::SetRule(Index, !FLandLive::RuleOn(Index));
+						return FReply::Handled();
+					})
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(34.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 10))
+								.Text_Lambda([Index]() { return FText::FromString(FLandLive::RuleOn(Index) ? TEXT("ON") : TEXT("OFF")); })
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : Muted); })
+							]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Rule.Label)).Font(Font(TEXT("Bold"), 11))
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? Cream : Muted); })
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Rule.Tip)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+							]
+						]
+					]
+				];
+			}
+			return SNew(SBorder).BorderImage(&PlainButton.Normal).Padding(FMargin(14.0f, 10.0f, 14.0f, 12.0f))
 				[
 					Body
 				];

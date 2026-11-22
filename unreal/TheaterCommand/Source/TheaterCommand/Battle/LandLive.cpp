@@ -5,6 +5,7 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/RunnableThread.h"
 #include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
@@ -61,6 +62,49 @@ FLandLive::~FLandLive()
 	}
 }
 
+namespace
+{
+	/** The player's battle rules, in the order the practice card lists them (FLandLive::FRule). */
+	const FLandLive::FRule LandRuleTable[] = {
+		{ TEXT("cutters"), TEXT("Hedge cutters"), TEXT("Your tanks cut a gap through a hedge where you pick (from July 1944)."), TEXT("TheaterLandNoCutters") },
+		{ TEXT("smoke"), TEXT("Smoke on call"), TEXT("Your men on foot lay a smoke screen along a line you drag."), TEXT("TheaterLandNoSmoke") },
+		{ TEXT("hide"), TEXT("Forest ambushes"), TEXT("Units in woods stay hidden from the enemy until found or firing."), TEXT("TheaterLandNoHide") },
+		{ TEXT("relief"), TEXT("Hold till relieved"), TEXT("A unit digs in to wait for a corps coming up; if help comes late, it breaks sooner."), TEXT("TheaterLandNoRelief") },
+		{ TEXT("rider"), TEXT("Despatch riders"), TEXT("A corps coming up sends a rider ahead; click him for its news."), TEXT("TheaterLandNoRider") },
+	};
+	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
+}
+
+int32 FLandLive::RuleCount()
+{
+	return UE_ARRAY_COUNT(LandRuleTable);
+}
+
+const FLandLive::FRule& FLandLive::RuleAt(int32 Index)
+{
+	return LandRuleTable[FMath::Clamp(Index, 0, RuleCount() - 1)];
+}
+
+bool FLandLive::RuleOn(int32 Index)
+{
+	bool bOn = true;
+	if (GConfig)
+	{
+		GConfig->GetBool(RulesSection, RuleAt(Index).Key, bOn, GGameUserSettingsIni);
+	}
+	return bOn;
+}
+
+void FLandLive::SetRule(int32 Index, bool bOn)
+{
+	if (!GConfig)
+	{
+		return;
+	}
+	GConfig->SetBool(RulesSection, RuleAt(Index).Key, bOn, GGameUserSettingsIni);
+	GConfig->Flush(false, GGameUserSettingsIni);
+}
+
 bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, bool bInSetup)
 {
 	if (Thread)
@@ -71,6 +115,14 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Seed = InSeed;
 	Me = InMe;
 	bSetup = bInSetup;
+	// (the battle rules the player may switch off, read here on the game thread, where his settings are written: each on
+	// unless he switched it off on the practice card, or for one run on the command line)
+	Switches.Reset();
+	for (int32 R = 0; R < RuleCount(); ++R)
+	{
+		const bool bOn = RuleOn(R) && !FParse::Param(FCommandLine::Get(), LandRuleTable[R].OffFlag);
+		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));
+	}
 	Thread = FRunnableThread::Create(this, TEXT("TheaterLandRules"), 0, TPri_Normal);
 	return Thread != nullptr;
 }
@@ -229,14 +281,12 @@ uint32 FLandLive::Run()
 	// at 8 to 20 frames a second until the crowd is skinned on the graphics chip (the Mac builds thread, 22 November
 	// 06:36Z); sections, about 700, are smooth. Brian's rule: as many as the Mac draws smoothly, the ratio said)
 	const bool bPlatoons = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPlatoons"));
-	// (hedge cutters and smoke on call, release 2: Brian, 22 November 14:19Z; on unless switched off. The bocage, tanks
-	// without cutters crossing hedges only at gaps, only when asked while the tactics thread finishes it)
-	const bool bCutters = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCutters"));
-	const bool bSmoke = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoSmoke"));
+	// (the player's battle rules, read as the battle was asked for (Start); the bocage, tanks without cutters crossing
+	// hedges only at gaps, only when asked while the tactics thread finishes it)
 	const bool bBocage = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBocage"));
-	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s,\"platoons\":%s,\"cutters\":%s,\"smoke\":%s,\"bocage\":%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me),
-		bSetup ? TEXT("true") : TEXT("false"), bPlatoons ? TEXT("true") : TEXT("false"), bCutters ? TEXT("true") : TEXT("false"), bSmoke ? TEXT("true") : TEXT("false"),
-		bBocage ? TEXT("true") : TEXT("false"));
+	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s,\"platoons\":%s,\"bocage\":%s%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me),
+		bSetup ? TEXT("true") : TEXT("false"), bPlatoons ? TEXT("true") : TEXT("false"), bBocage ? TEXT("true") : TEXT("false"), *Switches);
+	UE_LOG(LogTheater, Display, TEXT("Land battle (live): the battle's rules %s"), *Options);
 	// (a campaign battle from its ticket: the campaign's look answer as it stands, the same options beside it)
 	const bool bTicket = !Ticket.IsEmpty();
 	const FString Arguments = bTicket ? FString::Printf(TEXT("[%s,%s]"), *Ticket, *Options)
