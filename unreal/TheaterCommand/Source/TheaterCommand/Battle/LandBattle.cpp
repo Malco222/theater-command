@@ -1651,6 +1651,22 @@ bool ALandBattle::Open()
 		Lens->PostProcessSettings.bOverride_FilmGrainIntensity = true;
 		Lens->PostProcessSettings.FilmGrainIntensity = FMath::Clamp(Grain, 0.0f, 1.0f);
 	}
+	// The effects kit under the land battle's grade (the effects thread's dbebfe02, for cut 6): its colours written for
+	// the grade (the clods earth brown, the yellow tracer yellow); fire keeps its orange through the grade (M_FireSpread
+	// on the eye's lens); a flame or a lying piece meets the ground and the hulls softly (0.1 m, the art director's
+	// 14:16Z ruling). "-TheaterLandFireSpread=0" and "-TheaterLandSoftContact=0" leave those passes off for the A/B.
+	if (Effects && Eye)
+	{
+		Effects->SetLandGrade(true);
+		int32 FireSpread = 1, SoftContact = 1;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFireSpread="), FireSpread);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSoftContact="), SoftContact);
+		const bool bSpread = FireSpread != 0 && Effects->SetFireSpread(Eye->GetCameraComponent()->PostProcessSettings);
+		const bool bSoft = SoftContact != 0 && Effects->SetSoftContact(0.1f);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the effects kit's land grade on; fire spread %s; soft contact %s"),
+			bSpread ? TEXT("on") : FireSpread == 0 ? TEXT("off (-TheaterLandFireSpread=0)") : TEXT("off (no M_FireSpread: rebuild TC_REBUILD=M_BattlePuffs,M_FireSpread)"),
+			bSoft ? TEXT("on, 0.1 m") : SoftContact == 0 ? TEXT("off (-TheaterLandSoftContact=0)") : TEXT("off (no M_BattlePuffsSoft: rebuild TC_REBUILD=M_BattlePuffsSoft)"));
+	}
 	// The shade where things meet the ground, for the battle only (the graphics audit, 22 November): the map's speed
 	// trims switched off the soft shade in corners and under things, the contact shadows, and the finer sun shadows for
 	// the whole game, and a battle never had them back, so men and tanks floated on the field. Put back here, and the
