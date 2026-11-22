@@ -54,6 +54,13 @@ namespace
 		return Standing;
 	}
 
+	/** Each sculpted aircraft's schemes' first months, by its model's name, as Sculpted reads them (none: an empty list). */
+	TMap<FString, TArray<int32>>& SchemeMonths()
+	{
+		static TMap<FString, TArray<int32>> Months;
+		return Months;
+	}
+
 	using FPlacing = MiniatureParts::FPlacing;
 }
 
@@ -636,6 +643,20 @@ bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
 
+int32 FMiniatureMesh::SchemeOf(const FString& Name)
+{
+	FString Kind = Name, Whose;
+	Name.Split(TEXT(":"), &Kind, &Whose);
+	if (!SchemeMonths().Contains(Kind))
+	{
+		// (not read yet: read and painted in its far form, as the air battle's first look at a model reads it)
+		FMiniatureMesh Probe;
+		Probe.Sculpted(Kind, Whose, FVector::ZeroVector, 1.0, 0.0, true);
+	}
+	const TArray<int32>* Froms = SchemeMonths().Find(Kind);
+	return Froms ? SchemeStanding(*Froms) : 0;
+}
+
 bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar, const TArray<FLinearColor>* Kit)
 {
 	// (A vehicle's paints are its nation's scheme and the same steel, rubber and canvas for everyone. A figure comes
@@ -925,6 +946,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 							}
 						}
 					}
+					SchemeMonths().Add(Name, Raw->SchemeFrom);
 					if (File->TryGetArrayField(TEXT("marks"), MarkList))
 					{
 						for (const TSharedPtr<FJsonValue>& Value : *MarkList)

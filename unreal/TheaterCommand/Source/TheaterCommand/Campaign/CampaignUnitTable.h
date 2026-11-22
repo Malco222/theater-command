@@ -66,6 +66,11 @@ namespace UnitTable
 	 */
 	int32 Month();
 	/**
+	 * An air battle tells the painter its own month (its year, and its month of the year from 1): its aircraft wear
+	 * the paint of that month. "-TheaterSeason=" still holds the table at one month of the war, for a picture.
+	 */
+	void SetMonth(int32 Year, int32 MonthOfYear);
+	/**
 	 * Which of the country's dated marks stands in the campaign's month: 0 for none, else one more than its place in
 	 * the table's list. A painted model is kept under this as well as under its country, so that a model painted
 	 * before the mark changed is not handed out after.

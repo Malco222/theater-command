@@ -1,6 +1,8 @@
 #include "Campaign/CampaignUnitTable.h"
 #include "Dom/JsonObject.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -295,6 +297,18 @@ void UnitTable::SetTurn(int32 Turn)
 int32 UnitTable::Month()
 {
 	return MonthNow;
+}
+
+void UnitTable::SetMonth(int32 Year, int32 MonthOfYear)
+{
+	// ("-TheaterSeason=48" holds the table at one month of the war, here as on the map: turn 48 is August 1943)
+	int32 Held = 0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held))
+	{
+		SetTurn(Held);
+		return;
+	}
+	MonthNow = Year * 12 + FMath::Clamp(MonthOfYear, 1, 12) - 1;
 }
 
 int32 UnitTable::MarkEra(const FString& Tag)
