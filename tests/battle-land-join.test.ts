@@ -430,27 +430,38 @@ describe('(8) it walks on as a reserve already sent (b407), to where its side is
   }
 });
 
-// Measured 22 November on this commit (40 seeds x odds 1.0 and 1.4, a joiner priced at 0.15 from the field's east):
-// five rows within the tenth (0.025 to 0.087); the defence's late corps (joined 0.2) at 0.113, as a corps that reaches
-// its line at 288 s of 360 is still coming when most fights end (at about three quarters of the day). The production
-// lead's D1: until it is ruled, this measure fails on that row by 0.013.
+// The measure the design director asked for (D1, 12:23Z): on ruling 1's whole-week shares (0.75, 0.5, 0.25), at odds
+// 1.0 and 1.4 over 40 seeds, each against the same card fought whole, a joiner priced at 0.15 coming from its own back
+// edge and from the field's east flank. Each row also counts the battles it came up in and those in which it fought.
+// LONG=1 runs it; the table is printed whether it passes or not. On da5e15b1 all twelve rows were within the tenth
+// (0.000 to 0.100). The attack's joiner fought in 59, 20 and 1 of 80 from behind (early, midway, late) and in 11 of 80
+// from the flank, where its march to the middle of its side (about 230 s on foot) is longer than its share leaves it.
 describe('(9) the field still lands near the card with a joiner priced on it (a measure: LONG=1)', () => {
-  const LONG = !!(globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.LONG;
-  it.runIf(LONG)('each word, each side: the win rate within a tenth of the same card fought whole', () => {
-    const rows: string[] = [];
-    for (const side of ['att', 'def'] as Side[]) for (const joined of [0.85, 0.5, 0.2]) {
-      let w0 = 0, w1 = 0, lr = 0, n = 0;
-      for (let seed = 1; seed <= 40; seed++) for (const odds of [1.0, 1.4]) {
-        const t = sampleTicket('plains', odds, { seed });
-        const a = fight(t), c = fight(withJoiners(t, { [side]: [{ joined, part: 0.15 }] }));
-        signed(a); signed(c);
-        w0 += a.over!.R >= 1.2 ? 1 : 0; w1 += c.over!.R >= 1.2 ? 1 : 0;
-        lr += Math.log(Math.max(1e-6, c.over!.R) / Math.max(1e-6, a.over!.R)); n++;
+  const env = (globalThis as { process?: { env: Record<string, string | undefined>; stdout?: { write(s: string): void } } }).process;
+  const LONG = !!env?.env.LONG;
+  const run = (b: LandBattle, each?: (b: LandBattle) => void): LandBattle => { for (let k = 0; !b.over && k < 30000; k++) { b.step(); each?.(b); } return b; };
+  it.runIf(LONG)('each share, each side, from behind and from a flank: the win rate within a tenth of the same card fought whole', () => {
+    const rows: string[] = [], gaps: number[] = [];
+    const whole = new Map<string, number>();
+    for (let seed = 1; seed <= 40; seed++) for (const odds of [1.0, 1.4]) whole.set(`${seed}:${odds}`, run(fight(sampleTicket('plains', odds, { seed }))).over!.R);
+    for (const [from, toward] of [['its back edge', undefined], ['the east flank', Math.PI / 2]] as [string, number | undefined][]) {
+      for (const side of ['att', 'def'] as Side[]) for (const joined of [0.75, 0.5, 0.25]) {
+        let w0 = 0, w1 = 0, lr = 0, n = 0, came = 0, fought = 0;
+        for (let seed = 1; seed <= 40; seed++) for (const odds of [1.0, 1.4]) {
+          const r0 = whole.get(`${seed}:${odds}`)!;
+          let hit = false;
+          const c = run(fight(withJoiners(sampleTicket('plains', odds, { seed }), { [side]: [{ joined, part: 0.15, toward }] })), (b) => { if (!hit && b.units.some((u) => u.joined !== undefined && u.engaged !== undefined)) hit = true; });
+          w0 += r0 >= 1.2 ? 1 : 0; w1 += c.over!.R >= 1.2 ? 1 : 0;
+          lr += Math.log(Math.max(1e-6, c.over!.R) / Math.max(1e-6, r0)); n++;
+          if (c.over!.forces!.some((f) => f.corps >= 2000 && f.arrived !== null && f.arrived !== undefined)) came++;
+          if (hit) fought++;
+        }
+        gaps.push(Math.abs(w1 - w0) / n);
+        rows.push(`${side === 'att' ? 'attack ' : 'defence'} joiner from ${from}, ${word(joined)} (${joined}): attack wins ${w0}/${n} whole, ${w1}/${n} with it (gap ${(Math.abs(w1 - w0) / n).toFixed(3)}); R ratio ${Math.exp(lr / n).toFixed(3)}; came up in ${came}/${n}, fought in ${fought}/${n}`);
       }
-      rows.push(`${side} ${word(joined)} (${joined}): attack wins ${w0}/${n} whole, ${w1}/${n} with the joiner (gap ${(Math.abs(w1 - w0) / n).toFixed(3)}); R ratio ${Math.exp(lr / n).toFixed(3)}`);
     }
-    console.log(rows.join('\n'));
+    env?.stdout?.write(`\n${rows.join('\n')}\n`);
     // Every row within the field's own net of a tenth; the message carries the whole table.
-    expect(rows.every((r) => Number(/gap ([0-9.]+)/.exec(r)![1]) <= 0.1), rows.join('\n')).toBe(true);
+    expect(gaps.every((g) => g <= 0.1), rows.join('\n')).toBe(true);
   }, 3_600_000);
 });
