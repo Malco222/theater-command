@@ -54,6 +54,9 @@ public:
 		const TCHAR* Label;
 		const TCHAR* Tip;
 		const TCHAR* OffFlag;
+		/** On until he switches it off (most), or off until he switches it on, with OnFlag for one run on the command line. */
+		bool bOnAtFirst;
+		const TCHAR* OnFlag;
 	};
 	static int32 RuleCount();
 	static const FRule& RuleAt(int32 Index);
