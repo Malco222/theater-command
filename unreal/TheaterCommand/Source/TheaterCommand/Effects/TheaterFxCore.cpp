@@ -402,7 +402,44 @@ namespace TheaterFx
 		}
 		Out.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff, Vec());
 		OutRgba.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff * 4, 0);
+		ThrownLong = SafeNum(Num("burst.debris.clods.most_long", 0.0), 0.0, 100.0, 0.0);
+		ReadGradeLooks();
 		Clear();
+	}
+
+	void Battle::SetLandGrade(bool bOn)
+	{
+		if (bLandGrade != bOn)
+		{
+			bLandGrade = bOn;
+			ReadGradeLooks();
+		}
+	}
+
+	double Battle::GradeNum(const std::string& Path, double Fallback) const
+	{
+		if (bLandGrade && Has("land_grade." + Path))
+		{
+			return Num("land_grade." + Path, Num(Path, Fallback));
+		}
+		return Num(Path, Fallback);
+	}
+
+	Battle::Span Battle::GradeRange(const std::string& Path, double Low, double High) const
+	{
+		return Range(bLandGrade && Has("land_grade." + Path + ".0") ? "land_grade." + Path : Path, Low, High);
+	}
+
+	void Battle::ReadGradeLooks()
+	{
+		// (Picture reads land_grade.<path> itself while bLandGrade is set; the paints are read at each burst, so only
+		// what Setup keeps is read again here)
+		ClodShade = GradeNum("burst.debris.clods.shade", 2.5);
+		ClodTint = GradeRange("burst.debris.clods.tint", 0.8, 1.2);
+		TracerCol = Picture("tracer.colour", Rgb::FromPicture(213, 199, 104));
+		TracerPale = TracerCol.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
+		TracerDayCore = Picture("tracer.day_core", Rgb::FromPicture(245, 240, 210));
+		TracerDayEdge = Picture("tracer.day_edge", Rgb::FromPicture(235, 180, 70));
 	}
 
 	void Battle::Clear()
@@ -599,6 +636,12 @@ namespace TheaterFx
 
 	Rgb Battle::Picture(const std::string& Path, const Rgb& Fallback) const
 	{
+		if (bLandGrade && Has("land_grade." + Path + ".0"))
+		{
+			// (SetLandGrade: the colour written for the land battle's grade, where the recipe has one)
+			const std::string Own = "land_grade." + Path;
+			return Rgb::FromPicture(Num(Own + ".0", 0.0), Num(Own + ".1", 0.0), Num(Own + ".2", 0.0));
+		}
 		if (!Has(Path + ".0"))
 		{
 			return Fallback;
@@ -2008,7 +2051,7 @@ namespace TheaterFx
 			}
 		}
 		const size_t ShowerTo = Launch.size();
-		const Span ShowerShade = Range(Sh + "shade", 0.55, 0.9);
+		const Span ShowerShade = GradeRange(Sh + "shade", 0.55, 0.9);
 		const Span ShowerRest = Range(Sh + "rest_s", 1.0, 2.5);
 		const double ShowerPuffR = Num(Sh + "landing_puff_r_m", 0.08);
 		// (a lump thrown past the lens lands beside the eye, where a dust puff fills a sixth of the screen as a flat slab:
@@ -2070,7 +2113,7 @@ namespace TheaterFx
 			B.Gravity = 9.8;
 			B.R0 = B.R1 = LaunchR[I];
 			const bool bShower = I >= ShowerFrom && I < ShowerTo;
-			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : (bShower ? P.Stone : P.Clod)) * (bShower ? ShowerShade.Pick(D) : D.U(0.8, 1.2));
+			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : (bShower ? P.Stone : P.Clod)) * (bShower ? ShowerShade.Pick(D) : ClodTint.Pick(D));
 			B.Col2 = B.Col;
 			B.Alpha = 1.0;
 			B.FadeIn = 0.005;
@@ -14468,6 +14511,12 @@ namespace TheaterFx
 				}
 			}
 			Half = std::max(Half, Width);
+			if (ThrownLong > 0.0 && B.bThrown && !B.bLight && !(B.HalfLength > 0.0))
+			{
+				// (art director on cut 5: a fast clod drawn along its flight was a long dark slab across the men. A thrown
+				// lump is a lump: never longer than ThrownLong times its width)
+				Half = std::min(Half, ThrownLong * Width);
+			}
 			if (SoftGlowDay > 0.0)
 			{
 				// (and seen from behind or far off, short on the screen, the glow closed round its core as a ring: there it

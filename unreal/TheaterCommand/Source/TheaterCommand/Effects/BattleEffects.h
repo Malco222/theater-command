@@ -280,6 +280,10 @@ public:
 	/** Whether a shell leaves the kit's own flat painted crater (on as made). A scene that lays craters of its own in
 	 * the ground (the land battle's torn earth) turns it off after Begin; nothing else of a shell changes. */
 	void SetCraters(bool bOn);
+	/** For a scene that grades its picture as the land battle does: the kit's colours written for that grade where the
+	 * recipe has them (land_grade: the clods earth brown with their form, never black silhouettes; the yellow tracer
+	 * yellow, not khaki), as TheaterFx::Battle::SetLandGrade. Call once after Begin; off as made. */
+	void SetLandGrade(bool bOn);
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);

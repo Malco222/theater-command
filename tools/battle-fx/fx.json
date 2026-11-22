@@ -427,7 +427,9 @@
      2.0
     ],
     "shade": 2.5,
-    "_chunk": "Irregular chunks, never smooth beans (art director 19:36Z): each clod has its own lumpy outline (rough), tumbles as it flies, and has a lit face toward the sun and a dark one away (shade)."
+    "_chunk": "Irregular chunks, never smooth beans (art director 19:36Z): each clod has its own lumpy outline (rough), tumbles as it flies, and has a lit face toward the sun and a dark one away (shade).",
+    "most_long": 3,
+    "_most_long": "Art director on cut 5 (06, 22 November): a fast clod drawn as a streak along its flight was a long dark slab across the men. A thrown lump (clod, shower, lens piece, a gun's kicked dirt; never a spark, an ember or a tracer) is drawn no longer than most_long times its width. Absent or 0: as before."
    },
    "grit": {
     "streaks": true,
@@ -6316,6 +6318,85 @@
     "keep": 0.5,
     "windage": 1.0
    }
+  }
+ },
+ "land_grade": {
+  "_how": "The land battle grades its own picture (most of the colour out of the darks and the middles, contrast 1.42, half a stop down: tools/battle-fx/land_grade.py), not by the game's curve these colours are written for, so a scene under it says so (FBattleEffects::SetLandGrade) and this row stands in for what it names, each at the same path under land_grade. Art director on cut 5 (06, 22 November): the clods were flat black silhouettes, core L 9; lit as earth they are about 45 to 70 in the smoke's shade, brown about 70,58,45, lumps not cards. Written with land_grade.py write: earth 118,99,72 lands 70,58,45; mud, snow and woods the same lift over what they were painted to show (mud 60,49,38, snow 84,74,62, woods 98,81,62); sand's stones 107,89,62 land as the game's curve showed them, 55,45,33 (its clods land 72,59,45 already). The grade is steep (a tenth darker is ten levels darker), so the clods' shade (lit face and dark face) is 0.5 and their tint 0.95 to 1.05, holding a clod within about 40 to 80, and the shower's backlit undersides 0.9 to 1.0 (45 to 60) where 0.55 went black. Art director 13:58Z: the yellow tracer written for the grade lands near 214,207,103 (with the fire's spread 220,207,118; plain, it landed pale khaki 202,197,162 and was lost in the wheat): colour 232,208,0, and by day its edge 255,178,0 (233,193,110 with the spread, aim 229,196,31). Its white-hot core stays as it is.",
+  "grounds": {
+   "earth": {
+    "paint": {
+     "clod": [
+      118,
+      99,
+      72
+     ]
+    }
+   },
+   "mud": {
+    "paint": {
+     "clod": [
+      110,
+      93,
+      69
+     ]
+    }
+   },
+   "snow": {
+    "paint": {
+     "clod": [
+      125,
+      110,
+      89
+     ]
+    }
+   },
+   "woods": {
+    "paint": {
+     "clod": [
+      138,
+      113,
+      79
+     ]
+    }
+   },
+   "sand": {
+    "paint": {
+     "stone": [
+      107,
+      89,
+      62
+     ]
+    }
+   }
+  },
+  "burst": {
+   "debris": {
+    "clods": {
+     "shade": 0.5,
+     "tint": [
+      0.95,
+      1.05
+     ]
+    },
+    "shower": {
+     "shade": [
+      0.9,
+      1.0
+     ]
+    }
+   }
+  },
+  "tracer": {
+   "colour": [
+    232,
+    208,
+    0
+   ],
+   "day_edge": [
+    255,
+    178,
+    0
+   ]
   }
  }
 }

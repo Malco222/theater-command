@@ -1668,6 +1668,31 @@ same in the model, and thin edges no longer mark.
 The ground's yellow tracer is only half brought back: pale khaki and a wheat field seen through thin smoke are the same
 colour on the screen, and the field must stay as graded.
 
+## Clods and tracer under the land battle's grade (after head 95d4019)
+
+The land battle's grade is steep: a clod a tenth darker lands ten levels darker. Earth's clod paint, written to show
+40,33,26 on the game's own curve, landed 17,13,10 under it, and with its dark face (shade 2.5) and the shower's
+backlit undersides (0.55) the clods were flat black silhouettes, core L 9 (the art director's 06 of cut 5); a fast
+one, drawn along its flight, was a long dark slab across the men. The scene now says it is under that grade
+(FBattleEffects::SetLandGrade, after Begin) and the recipe's land_grade row stands in for what it names
+(Battle::Picture, and GradeNum and GradeRange for the clods' shade, tint and the shower's shade). Without the call, or
+without the row, nothing changes.
+
+- Clods, written with land_grade.py write: earth 118,99,72 (lands 70,58,45), mud 110,93,69, snow 125,110,89, woods
+  138,113,79; sand's stones 107,89,62. Their shade 0.5 and tint 0.95 to 1.05, the shower's shade 0.9 to 1.0, so a
+  clod holds within about L 40 to 80 with a lit face and a dark one.
+- burst.debris.clods.most_long 3 (in every scene, not only under the grade): a thrown lump that is not a light (clod,
+  shower, lens piece, a gun's kicked dirt) is drawn no longer than 3 times its width. Sparks, embers and tracers keep
+  their streaks, and the crown's jets their length.
+- The tracer: colour 232,208,0 lands 213,206,154 and, with the fire's spread, 220,207,118 (the art director's
+  214,207,103; plain it was pale khaki 202,197,162). By day its edge 255,178,0 lands 233,193,110 with the spread. Its
+  white-hot core is as it was.
+
+A 105 on earth at 14 m, 1.5 s (stills/clods/clods-ground-grade.png, through the land grade): the clods that changed
+were median 28,26,21 (L 26), now 65,56,44 (L 57, nine in ten between 39 and 79). With the old recipe all 96 check
+frames are the same to the byte; with the new recipe and the grade off only the 500 lb bomb's frames with clods in
+flight change (the 3:1), of 24 heavy frames.
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
