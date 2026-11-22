@@ -887,6 +887,12 @@ namespace LandCrater
 		{
 			return false;
 		}
+		// (on rock a round splinters and scars the stone, it does not dig a bowl: a third as deep; the effects thread's
+		// ask with its "rock" word, 22 November)
+		if (Ground == "rock")
+		{
+			S.Deep *= 0.35;
+		}
 		if (S.Deep > 0.0 && Dig)
 		{
 			// (dug only in open ground, its middle and all round its crest: a lane's floor, a bank or a yard keeps the
@@ -913,7 +919,8 @@ namespace LandCrater
 		// (laid on what is there now: the floor of an older hole where it is torn in one)
 		const HeightFn Surface = [this](double Px, double Py) { return SurfaceAt(Px, Py); };
 		std::vector<double> CutLine;
-		Lay(X, Y, S, SoilOf(Ground == "earth" && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
+		// (rock's thrown soil the region's own earth: the desert's sand, Italy's red earth; else the bocage's loam)
+		Lay(X, Y, S, SoilOf((Ground == "earth" || Ground == "rock") && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
 		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
 		H.X = X;
 		H.Y = Y;
