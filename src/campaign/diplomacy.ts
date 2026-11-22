@@ -9,7 +9,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, turnedRows, turnedShores, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, turnedRows, turnedShores, turnedWings, warning } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -18,7 +18,7 @@ import { fleetsOnFall, gateShutSince } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin, stopDef, stopOf } from './history';
-import { torchBook, torchTurn } from './strategy';
+import { STRATEGY, torchBook, torchTurn } from './strategy';
 import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
@@ -829,6 +829,8 @@ function fire(g: Game, e: DiploEvent): boolean {
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
     endVoyages(g, X.id);
     fleetsOnFall(g, X.id);
+    // (By the record its air rows turn with its army: they are set aside here and sorted out below.)
+    const wings = record ? g.airFleets.filter((f) => f.nat === X.id) : [];
     airOnFall(g, X.id);
     // Where another army stands on the country's ground, that ground is its own to hold: the terms divide the rest.
     if (e.partition.occupied || open) for (const r of g.regions) {
@@ -860,6 +862,7 @@ function fire(g: Game, e: DiploEvent): boolean {
         // (And the corps the roster makes of them forms now, where the largest of them stood: the ports the French
         // army held are not left empty for the month between.)
         turnedRows(g, [...over].sort((x, y) => y[1] - x[1] || x[0] - y[0]).map(([reg]) => reg));
+        turnedWings(g, wings);
       }
       // (And the landings the French threw back on the day go ashore where they lay off: the ceasefire opened the ports.)
       turnedShores(g);
@@ -949,12 +952,16 @@ export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY
  * before it. (The month's opening tries it again, as it does every event.) Nothing with the switch off, or at a stop
  * that is not the book's.
  */
-export function bookTurn(g: Game): void {
+export function bookTurn(g: Game, landed = false): void {
   if (!torchBook(g) || (g.flags.dom ?? 0) > 0) return;
   const e = DIPLOMACY.events.find((x) => torchTurn(g, x.id));
   if (!e || (e.mode && e.mode !== 'open') || g.flags[`event:${e.id}`] || g.turn < e.from) return;
-  if (!(e.if ?? []).every((c) => holds(g, c))) return;
-  if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;
+  // (In the landing's own week, 'torch.week': once every nation of the operation has made its landings this month,
+  // whoever holds the shores. Darlan's order came on the third day, with Casablanca not yet taken. A month in which
+  // only one of them landed keeps the month's end and its test.)
+  if (landed && !STRATEGY.torch!.ops.every((k) => g.flags[`torch:day:${k.split(':')[0]}`] === g.turn)) return;
+  if (!(e.if ?? []).every((c) => (landed && c.startsWith('anyHeld:')) || holds(g, c))) return;
+  if (fire(g, e)) { g.flags[`event:${e.id}`] = g.turn; g.supplyDirty = true; }
 }
 
 export function monthlyDiplomacy(g: Game): void {

@@ -21,7 +21,7 @@ import { DOMINATION, dominating } from './domination';
 import { HISTORY, bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { AIMS, aimHolders, aimMarched, type Aim } from './aims';
 import { lineShut } from './line';
-import { STRATEGY, campaignLog, mounts, plansAhead, sectorTerms, torchBook } from './strategy';
+import { STRATEGY, campaignLog, frontMonth, mounts, plansAhead, sectorTerms, torchBook } from './strategy';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
@@ -42,7 +42,7 @@ import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
-import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frontage, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, marchWeeks, railInto, collapseScore, computeSupply, corpsBase, friendlyUnits, frontage, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -265,9 +265,35 @@ export interface FrontOpts {
 /** Works that divide an attack by this much or more are strong works: a front's depth is counted from the stretches without them. */
 const STRONG_WORKS = 1.5;
 
+/**
+ * A front's month of moves (strategy.json 'fronts.month'; the design director, 22 November 2026, 13:27Z): the weeks'
+ * march by the roads from every province of the front's friendly land to the nearest province on the front, 255
+ * beyond the longest month a corps has, and the provinces a train could bring a corps from.
+ */
+function monthReach(g: Game, nat: string, ours: number[], side: Int8Array, label: Int16Array, areas: Set<number>, mud: boolean): { weeks: Uint8Array; rail: Uint8Array } {
+  const MOST = 8;
+  const weeks = new Uint8Array(g.regions.length).fill(255);
+  const rings: number[][] = Array.from({ length: MOST + 1 }, () => []);
+  for (const id of ours) { weeks[id] = 0; rings[0].push(id); }
+  for (let d = 0; d <= MOST; d++) for (let i = 0; i < rings[d].length; i++) {
+    const at = rings[d][i];
+    if (weeks[at] !== d) continue;
+    // (The march is made toward the front: each step costs what entering the province nearer to it costs.)
+    for (const j of g.regions[at].nb) {
+      if (side[j] !== 1 || !areas.has(label[j])) continue;
+      const w = d + marchWeeks(g, nat, g.regions[at], j, mud);
+      if (w <= MOST && w < weeks[j]) { weeks[j] = w; rings[w].push(j); }
+    }
+  }
+  return { weeks, rail: railInto(g, nat, ours) };
+}
+
 /** Every front this nation has, with the balance of strength on each. */
 export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   const N = g.regions.length;
+  // (The one-map fault's mend, behind its own key: a front counts only what the month's moves can bring to it.)
+  const month = frontMonth(g);
+  const pools = new Map<Front, { came: Map<number, number>; mul: number }>();
   const foe = (id: string): boolean => atWar(g, nat, id) || !!o.extra?.has(id);
   const inPlay = (r: Region): boolean => (o.scope ? o.scope.has(r.id) : !o.skip?.(r));
   // 1 friendly ground, 2 enemy ground.
@@ -377,6 +403,8 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
         season *= sum / far.length;
       }
     }
+    const reach = month ? monthReach(g, nat, ours, side, label, f.areas, wx.mud) : null;
+    const came = new Map<number, number>();
     for (const c of g.corps) {
       if (c.dead || side[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g, nat, c.nat) || !fights(c.nat)) continue;
       const r = g.regions[c.reg];
@@ -385,7 +413,11 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
         // A garrison on the front itself would go in with the rest; one further back stays where it is.
         if (c.kind === 'fort' || c.nat !== nat || !close[c.reg]) continue;
       }
-      atk += atkP(g, c) * season;
+      // (Only what the month's moves can bring: within its month's march of the front, or a train ride from it.)
+      if (reach && !(reach.weeks[c.reg] <= c.apMax || (reach.rail[c.reg] === 1 && c.town === undefined))) continue;
+      const a = atkP(g, c) * season;
+      atk += a;
+      if (reach) came.set(c.id, a);
     }
     // The air forces: whoever is stronger in the air has that much more on the ground.
     const key = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g.regions[edge[0]].ctrl;
@@ -397,7 +429,17 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     // With no way round, the works have to be stormed head-on, and that takes far more than the sums say.
     if (!soft.length) { def *= OPEN.headOn; defNear *= OPEN.headOn; }
     out.push({ key, enemies: [...enemies], ours, edge, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat, fixed, ratio: 0, near: 0, defNear: Math.max(defNear, 0.01) });
+    if (reach) pools.set(out[out.length - 1], { came, mul: 1 + 0.3 * airEdge });
   }
+  // (With the month's key on, another front's need is met first by the corps only it can reach: what is kept back
+  // from this front is what is left of the need, and never more than the corps both can reach.)
+  const spared = (f: Front, x: Front, need: number): number => {
+    const pf = pools.get(f), px = pools.get(x);
+    if (!pf || !px) return need;
+    let both = 0, bothX = 0;
+    for (const [id, a] of px.came) { const b = pf.came.get(id); if (b !== undefined) { both += b * pf.mul; bothX += a * px.mul; } }
+    return Math.min(both, Math.max(0, need - (x.atk - bothX)));
+  };
   // What a front can be given is what the others, reached from the same country, can spare: an offensive already
   // under way elsewhere keeps the force it needs, and a quiet front keeps enough to hold it.
   for (const f of out) {
@@ -405,7 +447,8 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     for (const x of out) {
       if (x === f || ![...x.areas].some((a) => f.areas.has(a))) continue;
       const cover = Math.max(0, 0.55 * x.threat - 0.7 * x.fixed);
-      kept += o.busy?.(x) ? Math.max(cover, Math.min(x.atk, OPEN.commit * x.def)) : cover;
+      const need = o.busy?.(x) ? Math.max(cover, Math.min(x.atk, OPEN.commit * x.def)) : cover;
+      kept += month ? spared(f, x, need) : need;
     }
     f.ratio = Math.max(0, f.atk - kept) / f.def;
     f.near = Math.max(0, f.atk - kept) / f.defNear;

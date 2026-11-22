@@ -9,10 +9,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import open from '../data/campaign/open.json';
-import { createGame, men, torchRowsOnly } from '../src/campaign/game';
+import { bareShore, createGame, groundWorks, men, torchRowsOnly, worksOf } from '../src/campaign/game';
 import { HISTORY, leash, setStop } from '../src/campaign/history';
 import { bookLanding, startOpen } from '../src/campaign/staff';
-import { STRATEGY, torchBook } from '../src/campaign/strategy';
+import { STRATEGY, torchBook, torchWeek } from '../src/campaign/strategy';
+import { techMul } from '../src/campaign/research';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
@@ -22,20 +23,22 @@ const start = (seed: number, stop: number, human: string | null = null): Game =>
   return g;
 };
 type Row = [number, string, string, string, number, string, Record<string, unknown>?];
-const TORCH = (setup as unknown as { torch: { instead: string[]; rows: Row[]; vichy: { nat: string; from: number; ground: string[]; places: [string, number, string][] }; america: { nats: string[] } } }).torch;
+const TORCH = (setup as unknown as { torch: { instead: string[]; rows: Row[]; vichy: { nat: string; from: number; ground: string[]; places: [string, number, string][]; bare: string[]; designs: { field: string; of: string; to: string }; air: [string, number, number][] }; america: { nats: string[] } } }).torch;
 const ROSTER = (setup as unknown as { expeditions: Row[] }).expeditions;
 type Landing = { corps: string; own?: number; to: string[] };
 const LANDINGS = (nat: string): Landing[] => (open as unknown as { ops: Record<string, { id: string; landings?: Landing[] }[]> }).ops[nat].find((o) => o.id === 'torch')!.landings!;
 
 describe('Operation Torch by the book', () => {
-  const was = STRATEGY.torch!.on;
-  afterEach(() => { STRATEGY.torch!.on = was; STRATEGY.torch!.ceasefire = false; });
+  const was = STRATEGY.torch!.on, week = STRATEGY.torch!.week;
+  afterEach(() => { STRATEGY.torch!.on = was; STRATEGY.torch!.ceasefire = false; STRATEGY.torch!.week = week; });
 
   it('ships switched off, with its data in order', () => {
     const T = STRATEGY.torch!;
     expect(T.on).toBe(false);
     // (The step struck on 22 November 2026 is behind its own key, and that key ships off.)
     expect(T.ceasefire).toBe(false);
+    // (The French turn comes in the landing's week, the first of the month: the design director, 13:27Z.)
+    expect(T.week).toBe(1);
     // Only the two stops that keep to the book.
     expect(T.stops.every((s) => s < 3)).toBe(true);
     // Each operation named is on its staff's menu, dated by the book, and marked the book's alone.
@@ -72,6 +75,16 @@ describe('Operation Torch by the book', () => {
     expect(V.places.slice(0, 3).map((x) => x[0])).toEqual(['Algiers', 'Oran', 'Casablanca']);
     expect(V.from).toBeLessThan(39);
     expect(TORCH.america.nats).toEqual(['USA']);
+    // Its arms are the designs of 1940, read on France's own clock; its air is laid at the three landing seats.
+    expect(V.designs).toEqual({ field: 'infantry', of: 'FRA', to: '1940-06' });
+    expect(V.air.map((x) => x[0])).toEqual(['Casablanca', 'Oran', 'Algiers']);
+    for (const [at, ftr, bmr] of V.air) { expect(V.ground, at).toContain(at); expect(ftr).toBeGreaterThan(0); expect(bmr).toBeGreaterThan(0); }
+    expect(V.air.find((x) => x[0] === 'Casablanca')!.slice(1)).toEqual([86, 78]);
+    // America's follow-up is three dated rows found from its own reserve of men, each kept at its own size; no other row is.
+    const usaRows = TORCH.rows.filter((r) => r[1] === 'USA');
+    expect(usaRows.map((r) => r[2])).toEqual(['1st Armored Division', '2nd Armored Division', '34th Infantry Division']);
+    for (const r of TORCH.rows) expect(!!r[6]?.reserve, r[2]).toBe(r[1] === 'USA');
+    for (const r of usaRows) { expect(r[0]).toBeGreaterThanOrEqual(40); expect(r[6]!.est).toBe(r[6]!.str); expect(r[6]!.str as number).toBeLessThan(1); }
   });
 
   it('Vichy stands where the record had it on the day, with no division added or struck; never with the switch off', () => {
@@ -82,20 +95,45 @@ describe('Operation Torch by the book', () => {
     while (off.turn < 39) runTurnAI(off);
     expect(where(off)).toBe('Algiers 3, Casablanca 2, Mareth 3');
     expect(off.flags['torch:vichy']).toBeUndefined();
+    // (And their works are the finished works of three years' standing.)
+    const works = (x: Game, at: string): number => Math.max(0, ...x.corps.filter((c) => c.nat === 'VIC' && !c.dead && x.regions[c.reg].name === at).map(worksOf));
+    expect(works(off, 'Algiers')).toBe(3);
+    expect(works(off, 'Casablanca')).toBe(3);
+    expect(off.corps.some((c) => bareShore(off, c))).toBe(false);
+    // (And its arms are its staff's own, with no air group anywhere.)
+    expect(techMul(off, 'VIC', 'infantry')).toBe(1);
+    expect(off.airFleets.some((f) => f.nat === 'VIC')).toBe(false);
     // On, at stop 1: the 1939 rows until the month the data names, then the record's commands.
     STRATEGY.torch!.on = true;
     const g = start(17, 1);
     while (g.turn < TORCH.vichy.from - 1) runTurnAI(g);
     expect(where(g)).toBe('Algiers 3, Casablanca 2, Mareth 3');
+    expect(techMul(g, 'VIC', 'infantry')).toBe(1);
+    expect(g.airFleets.some((f) => f.nat === 'VIC')).toBe(false);
     const before = count(g);
     runTurnAI(g);
     expect(g.flags['torch:vichy']).toBe(TORCH.vichy.from);
     expect(where(g)).toBe('Algiers 1, Casablanca 1, Constantine 1, Fez 2, Marrakech 1, Oran 1, Tunis 1');
     expect(count(g)).toBe(before);
     for (const c of g.corps) if (c.nat === 'VIC' && TORCH.vichy.ground.includes(g.regions[c.reg].name)) expect(c.hold, c.name).toBe(true);
-    // Once: the next month it is not laid again.
+    // No fieldworks at the three landing ports, the corps' own or left standing; the seats inland keep or dig theirs.
+    expect(TORCH.vichy.bare).toEqual(['Algiers', 'Oran', 'Casablanca']);
+    for (const at of TORCH.vichy.bare) { expect(works(g, at), at).toBe(0); expect(groundWorks(g, g.byName[at].id), at).toBeNull(); }
+    // Its infantry reads the designs of 1940: in October 1942 two behind France's own clock, 0.88. No other nation's changes.
+    expect(techMul(g, 'VIC', 'infantry')).toBeCloseTo(0.88, 6);
+    expect(techMul(g, 'VIC', 'armour')).toBe(techMul(off, 'VIC', 'armour'));
+    // Its air by seat: a group of fighters and one of bombers at each, with the aircraft the data names.
+    const wings = (x: Game): string => x.airFleets.filter((f) => f.nat === 'VIC').map((f) => `${x.regions[f.base].name} ${f.kind} ${f.ftr + f.bmr}`).sort().join(', ');
+    const laid = TORCH.vichy.air.flatMap(([at, ftr, bmr]) => [`${at} bmr ${bmr}`, `${at} ftr ${ftr}`]).sort().join(', ');
+    expect(wings(g)).toBe(laid);
+    // Once: the next month it is not laid again, and a month's standing has dug nothing at the ports.
     runTurnAI(g);
     expect(g.flags['torch:vichy']).toBe(TORCH.vichy.from);
+    expect(g.turn).toBe(39);
+    for (const at of TORCH.vichy.bare) expect(works(g, at), at).toBe(0);
+    expect(works(g, 'Fez')).toBeGreaterThan(0);
+    // (And every air row is still at its seat: Vichy's staff has moved none.)
+    expect(wings(g)).toBe(laid);
     // At a stop that keeps no book, never.
     const free = start(17, 3);
     while (free.turn < 39) runTurnAI(free);
@@ -150,7 +188,7 @@ describe('Operation Torch by the book', () => {
     expect(leash(start(31, 1), 'GER', 'weser').kind).toBe('dated');
   });
 
-  it('on, at stop 1: the landings go in November 1942 at the record\'s three ports from America\'s own corps, the French turn follows that month, and nothing comes twice', () => {
+  it('on, at stop 1: the landings go in November 1942 at the record\'s three ports from America\'s own corps, the French turn in the landing\'s week, and nothing comes twice', () => {
     STRATEGY.torch!.on = true;
     const g = start(17, 1);
     while (g.turn < 39) runTurnAI(g);
@@ -162,6 +200,8 @@ describe('Operation Torch by the book', () => {
     expect(g.corps.some((c) => c.nat === 'USA' && /Task Force|II Corps \(1st Infantry/.test(c.name))).toBe(false);
     expect(g.nations.VIC.alive).toBe(true);
     expect(g.flags['event:darlan']).toBeUndefined();
+    expect(torchWeek(g)).toBe(1);
+    const seen = g.reports.length;
     runTurnAI(g);
     // The day: both staffs went, somebody is ashore in Morocco or Algeria, and the French turned in that month.
     expect(g.flags['st:done:UK:torch']).toBe(39);
@@ -169,20 +209,31 @@ describe('Operation Torch by the book', () => {
     expect(g.flags['event:darlan']).toBe(39);
     expect(g.nations.VIC.alive).toBe(false);
     for (const nm of ['Casablanca', 'Oran', 'Algiers', 'Constantine']) expect(['UK', 'USA'], nm).toContain(g.byName[nm].ctrl);
-    // The landings went where the record's did, and nowhere else: each force is on its own shore or back in a harbour
-    // of its side (the day's fight threw it off), never on another shore of the list. The Center force took Oran.
+    // (In the landing's own week: both nations' landings were made that month, and the turn did not wait for its end.)
+    expect(g.flags['torch:day:UK']).toBe(39);
+    expect(g.flags['torch:day:USA']).toBe(39);
+    // The landings went where the record's did, and nowhere else. The turn cut the fights short in their first week,
+    // so every force is ashore at its own shore, won or undecided, and the day cost a week's toll of the month's.
     const at = (c: { reg: number } | undefined): string | undefined => (c ? g.regions[c.reg].name : undefined);
-    const others = [...LANDINGS('UK'), ...LANDINGS('USA')].flatMap((L) => L.to.slice(1));
-    const e = g.corps.find((c) => c.name === 'First Army: 78th Division' && !c.dead);
-    const w = g.corps.find((c) => c.id === g.flags['st:own:USA:Western Task Force'] - 1 && !c.dead);
-    expect(e && w).toBeTruthy();
-    for (const [c, shore] of [[e!, 'Algiers'], [w!, 'Casablanca']] as const) {
-      expect(others).not.toContain(at(c));
-      if (at(c) !== shore) expect(g.regions[c.reg].port).toBeTruthy();
-    }
+    expect(at(g.corps.find((c) => c.name === 'First Army: 78th Division' && !c.dead))).toBe('Algiers');
+    expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Western Task Force'] - 1 && !c.dead))).toBe('Casablanca');
     expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Center Task Force'] - 1 && !c.dead))).toBe('Oran');
-    // (The struck step's key is off: no force is noted as lying off its shore.)
+    const day = g.reports.slice(seen).filter((r) => r.turn === 39 && r.defNat === 'VIC' && ['Algiers', 'Casablanca', 'Oran'].includes(r.regionName));
+    expect(day.map((r) => r.regionName).sort()).toEqual(['Algiers', 'Casablanca', 'Oran']);
+    for (const r of day) {
+      expect(r.lines.some((l) => l.label === 'Cut short'), r.regionName).toBe(true);
+      // (A month's fight costs the attacker 2% at the very least; a week of it, on 15,000 or 30,000 men, far under that.)
+      expect(r.attLost, r.regionName).toBeLessThan(1500);
+    }
+    // (No force is left noted as lying off its shore.)
     expect(Object.keys(g.flags).some((k) => k.startsWith('torch:off:'))).toBe(false);
+    // Vichy's air turned with its army: no group is Vichy's, and those whose seats came over fly on, British, with no more than they had.
+    expect(g.airFleets.some((f) => f.nat === 'VIC')).toBe(false);
+    expect(Object.keys(g.flags).some((k) => k.startsWith('torch:wing:'))).toBe(false);
+    const came = g.airFleets.filter((f) => f.nat === 'UK' && /Escadre|Groupe|Bomber Group/.test(f.name));
+    expect(came.length).toBeGreaterThan(0);
+    expect(came.reduce((n, f) => n + f.ftr + f.bmr, 0)).toBeLessThanOrEqual(TORCH.vichy.air.reduce((n, x) => n + x[1] + x[2], 0));
+    for (const f of came) expect(f.est).toEqual({ ftr: f.ftr, bmr: f.bmr });
     // America's divisions in French North Africa are the book's rows: nothing of its army stands there but the two picks.
     const picks = new Set(picked.map((k) => g.flags[k] - 1));
     for (const c of g.corps) if (c.nat === 'USA' && !c.dead && TORCH.vichy.ground.includes(g.regions[c.reg].name)) expect(picks.has(c.id), c.name).toBe(true);
@@ -207,11 +258,26 @@ describe('Operation Torch by the book', () => {
     // The next month it is not made again.
     runTurnAI(g);
     expect(g.corps.filter((c) => c.name === 'French XIX Corps').length).toBe(1);
+    // December: the rest of the two armoured divisions come, once each, as the book's rows, at their own size; and
+    // still nothing of America's army stands in French North Africa but its picks and those rows.
+    const rows = new Set(TORCH.rows.filter((r) => r[1] === 'USA').map((r) => r[2]));
+    for (const nm of ['1st Armored Division', '2nd Armored Division']) {
+      const c = g.corps.filter((x) => x.nat === 'USA' && x.name === nm);
+      expect(c.length, nm).toBe(1);
+      expect(c[0].full, nm).toBe(0.65);
+      expect(c[0].str, nm).toBeLessThanOrEqual(0.65 + 1e-9);
+    }
+    expect(g.corps.some((c) => c.name === '34th Infantry Division')).toBe(false);
+    for (const c of g.corps) if (c.nat === 'USA' && !c.dead && TORCH.vichy.ground.includes(g.regions[c.reg].name)) expect(picks.has(c.id) || rows.has(c.name), c.name).toBe(true);
+    runTurnAI(g);
+    expect(g.corps.filter((c) => c.nat === 'USA' && c.name === '34th Infantry Division').length).toBe(1);
   }, 300_000);
 
   it('the struck step, with its own key on: a force thrown back on the day is ashore at its shore after the turn', () => {
     STRATEGY.torch!.on = true;
     STRATEGY.torch!.ceasefire = true;
+    // (With the week's key off: the turn at the month's end, as the step was read.)
+    STRATEGY.torch!.week = 0;
     const g = start(17, 1);
     while (g.turn < 40) runTurnAI(g);
     const at = (c: { reg: number } | undefined): string | undefined => (c ? g.regions[c.reg].name : undefined);

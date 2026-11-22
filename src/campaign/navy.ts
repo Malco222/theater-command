@@ -28,7 +28,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { stopOf } from './history';
-import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment, type AttackOpts } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -1087,7 +1087,7 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
 export interface Landing { ok: boolean; why?: string; taken?: boolean; lostAtSea?: number; report?: BattleReport | null; surprise?: boolean; air?: boolean }
 
 /** Lands corps on an enemy coast. If it is defended they fight their way ashore, at a disadvantage unless the enemy is surprised. */
-export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
+export function landCorps(g: Game, cs: Corps[], to: Region, more?: AttackOpts): Landing {
   const why = whyNotLand(g, cs, to);
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
@@ -1107,7 +1107,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   let taken = true;
   let report: BattleReport | null = null;
   if (hostileUnits(g, to, nat).length) {
-    report = resolveBattle(g, cs, to, landingOpts(g, cs, to));
+    report = resolveBattle(g, cs, to, more ? { ...landingOpts(g, cs, to), ...more } : landingOpts(g, cs, to));
     taken = report.taken;
   } else {
     g.week = 1;
@@ -1118,6 +1118,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   for (const c of cs) if (!c.dead) c.ap = 0;
   const adj = g.nations[nat].adj;
   if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
+  else if (!taken && more?.weeks !== undefined) headline(g, 'battle', `${adj} troops land at ${to.name} from the sea. The fight for the port is not decided.`, nat, to.id, { arm: 'land' });
   else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
   return { ok: true, taken, lostAtSea, report, surprise, air };
 }

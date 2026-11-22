@@ -19,7 +19,8 @@ import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOp
 import { shoreAI } from './fleets';
 import { shoreOpen, stopOf, stormHeldBy } from './history';
 import { afterDeclaring, beyondBeach, builtUp, coastRules, coastWatch, decide, deskQuays, doorQuay, farCamp, footholdPorts, frontAshore, heedsCard, holdsAshore, idleArmies, isOpen, joinsOn, keepsDoor, keptForOps, landingRules, lodgment, mainFirst, nearerDesk, neighbourAcrossTheWater, oceanRuns, onTheAttack, onTheDay, opArmies, opensNow, opensOn, opensSoon, opFoe, opLodged, bookLanding, ownForce, ownPicked, probed, probing, quayGuests, quayNamed, rivalRules, RIVALS, seaBase, seaFoe, seasFrom, seasTo, staffPhase, strengthAsked, strengthWatch, theatreStaff, type IdleArmy } from './staff';
-import { STRATEGY, campaignLog, plansAhead } from './strategy';
+import { STRATEGY, campaignLog, plansAhead, torchWeek } from './strategy';
+import { bookTurn } from './diplomacy';
 import { STRENGTH, followUp, reckon, stands } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
@@ -1283,6 +1284,7 @@ function objectivesFor(g: Game, nat: string): string[] {
  * The main plan sends them from a home port; a theatre's plan (within) from any port its side holds there.
  */
 function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): void {
+  let made = false;
   for (const L of ph.landings ?? []) {
     // (A landing of the book's made from the staff's own corps, Operation Torch: the corps its staff picked for it,
     // waiting at whatever harbour of its side it stands in. staff.ts, `ownForce`.)
@@ -1311,11 +1313,15 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
         if (!within) opFoe(g, nat, to);
         // A defended shore is only stormed at fair odds.
         if (record !== 'day' && hostileUnits(g, to, nat).length && assess(g, force, to, landingOpts(g, force, to)).odds < (L.minOdds ?? 1.2)) continue;
-        const res = landCorps(g, force, to);
+        // (Operation Torch by the book: the French turn falls in the landing's week and cuts the fight short. A force
+        // whose fight was not decided goes ashore where it landed when the turn comes. strategy.ts, `torchWeek`.)
+        const wk = record === 'day' ? torchWeek(g) : 0;
+        const res = landCorps(g, force, to, wk ? { weeks: wk } : undefined);
         ok = res.ok && !!res.taken;
+        if (res.ok && wk) made = true;
         if (res.ok) opWatch.tell?.({ nat, to, force, warned: false, sea: -1, wave: false, taken: ok, from, op: true });
         // (Behind its own key, off: the book's landing thrown back on its day lies off its shore, and should the defenders turn it goes in. game.ts, `turnedShores`.)
-        if (res.ok && !res.taken && record === 'day' && STRATEGY.torch?.ceasefire) for (const x of force) if (!x.dead) g.flags[`torch:off:${g.turn}:${x.id}`] = to.id + 1;
+        if (res.ok && !res.taken && record === 'day' && (STRATEGY.torch?.ceasefire || wk)) for (const x of force) if (!x.dead) g.flags[`torch:off:${g.turn}:${x.id}`] = to.id + 1;
         if (res.ok && !res.taken) break; // beaten off: the corps is back in port and has had its month
         if (ok && !within) opLodged(g, nat, to);
       }
@@ -1323,6 +1329,8 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
       if (ok) { for (const x of force) { x.hold = false; g.flags[`exp:${x.id}`] = ph.to; } break; }
     }
   }
+  // (Operation Torch by the book: the turn is tried right after the landings, in their own week. diplomacy.ts, `bookTurn`.)
+  if (made) { g.flags[`torch:day:${nat}`] = g.turn; bookTurn(g, true); }
 }
 
 /**

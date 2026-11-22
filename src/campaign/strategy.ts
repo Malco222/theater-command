@@ -27,7 +27,9 @@ export const STRATEGY = data as unknown as {
    */
   torch?: { on: boolean; stops: number[]; ops: string[]; turn: string; lead?: number;
     /** A key of its own, off (struck by the design director, 22 November 2026): a force thrown back on the day goes ashore at the French turn. Kept only so that the wars read with it can be run again. */
-    ceasefire?: boolean };
+    ceasefire?: boolean; week?: number };
+  /** The one-map fault's mend (the design director, 22 November 2026, 13:27Z; its own key, off): a front counts only what the month's moves can bring. */
+  fronts?: { month: boolean };
 };
 
 /** True where a computer staff plans campaigns: the grand campaign, at the dial's stops named, never the player's own nation. */
@@ -47,6 +49,18 @@ export const mounts = (g: Game, nat: string): boolean =>
  * names. Its own switch: the operations' and the war plan's need not be on. Off, nothing of it is read.
  */
 export const torchBook = (g: Game): boolean => !!STRATEGY.torch?.on && g.flags.open === 1 && STRATEGY.torch.stops.includes(stopOf(g));
+/**
+ * The week of the landing's month in which the book's French turn falls, where Torch is the book's (strategy.json
+ * 'torch.week'; the design director, 22 November 2026, 13:27Z): the turn fires right after the landings, a landing's
+ * fight is cut short by it, and both sides lose that many quarters of the month's toll. 0 where the turn keeps the
+ * month's end and the fight its month.
+ */
+export const torchWeek = (g: Game): number => (torchBook(g) ? Math.max(0, Math.min(4, STRATEGY.torch!.week ?? 0)) : 0);
+/**
+ * True where a staff's front counts only what the month's moves can bring to it (strategy.json 'fronts.month'): the
+ * grand campaign, every staff, every stop. A key of its own; off, the sum is the one every war was measured with.
+ */
+export const frontMonth = (g: Game): boolean => !!STRATEGY.fronts?.month && g.flags.open === 1;
 /** True for the event that is the French turn where Torch is the book's: its partition runs as the record wrote it. */
 export const torchTurn = (g: Game, eventId: string): boolean => torchBook(g) && STRATEGY.torch!.turn === eventId;
 // (The book's word on its own choices: history.ts asks here whether one of them is switched on.)
