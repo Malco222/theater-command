@@ -417,11 +417,19 @@ void FBattleEffects::BombStick(double Now, int32 Id, const FVector& First, const
 	}
 }
 
-void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id)
+void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id, bool bOnShip)
 {
 	if (IsReady())
 	{
-		Core.Burn(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Id);
+		Core.Burn(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Id, bOnShip);
+	}
+}
+
+void FBattleEffects::FuelBall(const FVector& WorldAt, float AcrossMetres, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.FuelBall(Time(), ToFx(WorldAt), AcrossMetres, ToFx(Velocity));
 	}
 }
 

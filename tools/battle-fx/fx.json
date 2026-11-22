@@ -4396,6 +4396,145 @@
    }
   }
  },
+ "fuel_ball": {
+  "_how": "Fuel going up (FuelBall): a ragged ball of burning fuel about the caller's Across metres wide, its time by its width (small_s at small_m across, big_s at big_m, in proportion between). Its lobes (lobes_per_m of its width, held to lobes), each burning life_share of its time and never going before its smoke can take it, are thrown out and up from a seat 0.3 of its half-width up, each to reach of its half-width and slowed by the air, lobe_r of its half-width at birth growing lobe_grow times; the whole climbs rise_of_across of its width while it burns, faster and faster, and each lobe rolls roll_rad_s as it climbs. Lit from within: each lobe colour taken heart_mix toward hot_colour, and heart_in more at the middle than at the rim, and up to deep_mix (more at the outside) toward edge_colour, so it billows; it holds that colour for cool_from of its life and then cools cool of the way to ember by its end; its rim edge of the way to edge_colour; the middle's lobes are sorted core_nearer of the half width nearer the eye, so from any side the hot middle shows through the cooler lobes round it; near opaque to its edge (rim), rough its torn outline, drawn as two fans past twin_px; the middle burns over times past white. hearts white-hot knots low in the middle for heart_s, heart_r of its half-width. Each lobe goes into black smoke_colour smoke at soot_life of its life (the first for a lobe at the ball's top, the second at its foot, so the dark comes in on top), never before smoke_from_s, born a little above it so the smoke boils off the top; with soot_in_s the smoke is whole that many seconds on and the lobe goes then, so none is seen fading over the sky. The smoke keeps smoke_climb of its lobe's climb (the first at the foot, the second at the top), growing smoke_grow times, climbing smoke_rise_mps, smoke_alpha thick, rough smoke_rough, ageing toward smoke_old and going as linger.fuel says; and from smoke_from_s top_puffs_per_m of its width more boil off its top as it climbs, keeping top_climb of the ball's climb, a black cap. The cloud by cap_s: each puff cap_spread further again out from the ball's upright, level with the ground; any whose top would pass the ceiling (the ball's middle as it went to smoke, cap_top of its half width over that) held cap_flat of that lower, and what stood above the ball's middle carried cap_raise of the way up under it, more the further out, so it is a cap with a flat top and level shoulders; leaning lean_deg down the wind by its height in a wind of lean_full_mps or more. stem_puffs_per_m of its width climb from the seat from smoke_from_s to stem_s, each to its own height up to the ball's middle as it went to smoke, stem_r of its half width widening stem_grow, so a dark stem stands down to the ground. A lamp of lamp times the root of its width, reaching lamp_reach of its width, up as it swells and down as it goes. Every piece of it keeps lens_near_of_across of its width as its own game.lens_cap near_m, so a lens caught inside it dims and never goes black. Without this row: nothing.",
+  "_ruling": "Art director 21 November, section 2: rolling fireballs only from fuel: a vehicle 6 to 10 m for 1 to 1.5 s, an aircraft crash or a fuel dump 15 to 25 m for 1.5 to 2 s; black smoke from its top after 0.5 s. Fire as the air fireball's (06:00Z 20 November): heart near white-yellow, body saturated orange (blue under 60), cooling to deep orange-red and into the black smoke, never peach or salmon.",
+  "_mends": "Art director 08:08Z 22 November on head D: sizes, times, the 0.1 s heart, the climb with its stem and the smoke boiling off the top from 0.5 s passed. 1. Lit hotter, the brightest thing in the frame (it read as popcorn: flat mid orange lumps each with a dark outline): the middle luma 190-220 about 255,190,80 through 0.5 s, down to an orange 150-170 by 1.0 s, the outer lumps 140-170, dark lacing only where soot forms, on top after 0.5 s, and never peach. 2. The big one's smoke too round: by 3 s a flatter top, 1.5-2 times the ball across, leaning 20-30 degrees down the wind, torn edges, a dark stem down to the fire on the ground, thinning as it goes. 3. The drama kept; the camera keeps twice the ball's width off it (its own thread) and the frame never goes black (lens_near_of_across).",
+  "small_m": 8.0,
+  "small_s": [
+   1.0,
+   1.5
+  ],
+  "big_m": 20.0,
+  "big_s": [
+   1.5,
+   2.0
+  ],
+  "lobes_per_m": 10.0,
+  "lobes": [
+   32,
+   160
+  ],
+  "life_share": [
+   0.7,
+   1.0
+  ],
+  "reach": [
+   0.3,
+   0.9
+  ],
+  "lobe_r": [
+   0.1,
+   0.18
+  ],
+  "lobe_grow": [
+   1.8,
+   2.6
+  ],
+  "rise_of_across": 1.0,
+  "roll_rad_s": [
+   1.5,
+   3.0
+  ],
+  "colour": [
+   250,
+   136,
+   22
+  ],
+  "hot_colour": [
+   255,
+   222,
+   90
+  ],
+  "heart_mix": [
+   0.0,
+   0.2
+  ],
+  "heart_in": 0.8,
+  "deep_mix": 0.3,
+  "ember": [
+   240,
+   135,
+   35
+  ],
+  "edge_colour": [
+   232,
+   112,
+   22
+  ],
+  "edge": 0.3,
+  "rim": 0.95,
+  "rough": 0.3,
+  "cool": 1.0,
+  "cool_from": 0.4,
+  "core_nearer": 0.8,
+  "over": 1.3,
+  "twin_px": 40,
+  "hearts": [
+   3,
+   6
+  ],
+  "heart_s": 0.18,
+  "heart_r": 0.2,
+  "heart_colour": [
+   255,
+   226,
+   96
+  ],
+  "smoke_from_s": 0.5,
+  "soot_life": [
+   0.55,
+   0.85
+  ],
+  "soot_in_s": 0.05,
+  "smoke_colour": [
+   34,
+   31,
+   29
+  ],
+  "smoke_old": [
+   96,
+   92,
+   88
+  ],
+  "smoke_alpha": 0.9,
+  "smoke_grow": [
+   1.6,
+   2.2
+  ],
+  "smoke_rise_mps": 1.2,
+  "smoke_rough": 0.55,
+  "smoke_s": [
+   12,
+   20
+  ],
+  "smoke_climb": [
+   0.15,
+   0.6
+  ],
+  "top_puffs_per_m": 1.5,
+  "top_climb": 0.2,
+  "cap_s": 2.5,
+  "cap_top": 0.6,
+  "cap_flat": 0.9,
+  "cap_raise": 0.8,
+  "cap_spread": 0.8,
+  "lean_deg": 25,
+  "lean_full_mps": 1.5,
+  "stem_puffs_per_m": 1.5,
+  "stem_s": 6,
+  "stem_r": [
+   0.2,
+   0.35
+  ],
+  "stem_grow": [
+   1.8,
+   2.6
+  ],
+  "lamp": 0.9,
+  "lamp_reach": 4.0,
+  "lens_near_of_across": 1.0
+ },
  "dust": {
   "vehicles": {
    "_how": "Mediterranean set 03:35Z and art director 06:19Z: every vehicle moving on dry ground trails dust from its dust sockets (dust.left, dust.right; VehicleDust every frame). Pale fine dust, the ground's own colour where it is thrown up (low) going paler as it climbs (high); low and long, drifting on the one wind (SetWind), lingering, never popping; taller and longer at speed (flatten, r1_m to r1_fast_m, life_s to life_fast_s between least_mps and full_mps); tracks throw tracked times more than wheels. A puff every spacing_m (no more than most_a_second); dense for haze_by_s, then a thin haze to its end. by_ground scales it; a ground not listed throws none. Pass check: from a 1.7 m eye a column's dust hides the vehicles behind its lead.",
@@ -5608,6 +5747,20 @@
    "pale_by": 1.0,
    "thick_s": 2,
    "gone_s": 15
+  },
+  "fuel": {
+   "keep": 0.6,
+   "go_by": 0.33,
+   "left_third": 0.3,
+   "left_two_thirds": 0.1,
+   "wide": 2.0,
+   "spread": 0.6,
+   "lift_mps": 0.35,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 2.5,
+   "gone_s": 20
   },
   "_stay_low": "A burst with bulk: a puff at the cloud's foot is stay_low the likelier to stay to the end than the cloud's share, and one at its top that much the less, so the base holds the smoke and thins last while the smoke above lifts (art director 20:50Z 21 November)."
  },

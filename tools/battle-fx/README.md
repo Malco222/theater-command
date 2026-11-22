@@ -646,6 +646,12 @@ Gouges and scorch that stay are the MODEL's to show.
   half (`jet_torn`), a pulse that only takes from its height (`jet_pulse`), a lean with the wind (`jet_lean`),
   sparks up in it (`jet_sparks`), black smoke off its sides and top by the clock (`jet_smoke_every_s`) so the
   column above is one torn piece, and an orange lamp on hull and ground (`jet_lamp`, `jet_lamp_day`).
+- **`Burn(WorldAt, AcrossMetres, Seconds, Id, bOnShip)`.** `bOnShip` true: a fire on a ship's deck (anything
+  afloat). A small, low, still fire on land takes the burning tank's look (`fire.land_tongues`, `fire.land_column`,
+  the land lamp) and joins a fire beside it (`fire.join`); a scene's ground under a ship is her deck, so a deck
+  fire would too. With the flag it never does, and burns as a ship's fire (the pre-check of 22 November: a ship's
+  fire 2.5 m across at rest drew 426 pieces with a column and a lamp four times as strong; with the flag 100, as
+  at 07d21fff). False (the default): as before. The sea scene and the air stage pass it for every fire on a ship.
 - **`Burn(WorldAt, AcrossMetres, Seconds, Id)`, `BurnOut(Id, OverSeconds, How)`** (row `fire.put_out`). The
   flames are eaten back from the edges to the seat, shrinking steadily: half their height by two fifths of the
   time, fewer tongues as it goes, never all gone and back. `How` "water": a surge of the vent's own steam rags
@@ -738,7 +744,9 @@ behind a recipe row or key and throws no dice an old recipe's path throws: the l
 - **Preview.** `fxpreview <recipe> <dir> air <gun row> <frames> WxH <shot>`; shots `far`, `chase`, `close`, `hit`,
   and for an engine's trail `beam` and `quarter` with `FX_TRAIL` (and `FX_TRAIL2`, `FX_TRAIL2_AT` for a change of
   kind), `FX_ENGINE=x,y,z`, `FX_PLANE`, `FX_SPEED`, `FX_SPAN`; `FX_NATION` whose guns. Stills:
-  `battle-fx/stills/air-*.png`.
+  `battle-fx/stills/air-*.png`. For measuring a trail: `FX_FLAT_BACK=r,g,b` paints the sky one flat colour (run it
+  over 0,0,0 and 255,255,255 and the two pictures give the trail's opacity and its own colour), and `FX_WAKE_UP`
+  (250 m) is how high the `wake` shot's eye rides over the trail (0: level with it, seen side-on).
 
 ## The art director's mends to the air look (after head ea8c1ba)
 
@@ -1451,6 +1459,37 @@ Without the `far` row a stick is its bombs as plain `Shell` calls at their momen
 The preview's `raid` shot: `FX_KIT_PX=0.90031 FX_DIST=11000 ./fxpreview recipe.txt out raid earth 120,483,1233
 3200x1800` (see the top of fxpreview.cpp: FX_STICKS, FX_BOMBS, FX_BOX_GAP, FX_EYE_H, FX_BACK_MPS for the hand-over,
 FX_REF=1 for the same bombs as Shell calls).
+
+## Fuel going up: the fuel ball (head D)
+
+The art director's ruling of 21 November, section 2: a shell or bomb burst is earth and smoke, never a petrol
+fireball; rolling fireballs come only from fuel, a vehicle's 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
+dump 15 to 25 m for 1.5 to 2 s, with black smoke from its top after half a second.
+
+- **The call** `FuelBall(Now, At, Across, Velocity)` (the game's `FBattleEffects::FuelBall`). Call it at the moment
+  the fuel goes; a fire that burns on after it is the caller's `Burn`, called with it. Velocity is what it was moving
+  at (a crashing aeroplane's, a truck's); the fire keeps a little of it. Without the recipe's `fuel_ball` row:
+  nothing.
+- **What it draws.** Its time comes from its width (`small_s` at `small_m`, `big_s` at `big_m`). Its lobes are thrown
+  out and up from a seat just above the ground and slowed by the air. The whole ball climbs `rise_of_across` of its
+  width while it burns, faster as it goes, and each lobe rolls as it climbs. The fire is lit from within: white-hot
+  knots (`hearts`) for its first moment, then a yellow-orange middle (`heart_in`, its lobes sorted `core_nearer`
+  toward the eye so the middle shows from any side) inside orange billows, some deeper toward the outside
+  (`deep_mix`). Each holds its colour for `cool_from` of its life, then cools to an orange `ember`, with no dark rim.
+  No lobe goes before its smoke can take it, and with `soot_in_s` a lobe goes the moment its smoke is whole, so none
+  fades pink over the sky. The dark comes in on top first (`soot_life`): from `smoke_from_s` black smoke boils off
+  the top (`top_puffs_per_m`), and lobes lower down turn to smoke later.
+- **The cloud after it** (art director 08:08Z 22 November). By `cap_s` the smoke spreads out (`cap_spread`) under a
+  flat top (`cap_top`, `cap_flat`, `cap_raise`), about twice the ball across, leaning `lean_deg` down the wind, on a
+  dark stem from the ground (`stem_puffs_per_m` up to `stem_s`). It thins as `linger.fuel` says (thick 2.5 s, gone
+  by 20 s, four in ten of its puffs retiring early). A lamp of `lamp` times the root of its width lights the ground
+  while it burns, rising with it. A camera inside it dims and never goes black (`lens_near_of_across`, the
+  `game.lens_cap` backstop); the camera itself keeps twice the ball's width off it.
+- **Preview.** `FX_SCRIPT=fuel` on the wreck shot: her fuel goes up at 0.5 s, `FX_FUEL_M` across (8), at the engine
+  deck, and she burns on. `FX_SCRIPT=crash`: an aeroplane's fuel, 20 m at the ground, coming in at 60 m/s, with no tank.
+  `FX_SCRIPT=dump`: the same standing still. With crash and dump the wreck or the spilt fuel burns on from 1.5 s (a
+  `Burn` 0.3 of its width across, as a scene would light it; `FX_GROUND_FIRE=0` for none). For example
+  `FX_SCRIPT=crash FX_DIST=110 FX_LOOK_H=14 FX_LOOK_X=0 fxpreview recipe.txt out wreck far 18,36,54 960x540`.
 
 ## Oil fires at sea
 

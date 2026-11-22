@@ -112,6 +112,10 @@ namespace TheaterFx
 		double BySpeed = 0.0, DimFrom = 1.0, DimTo = 1.0, DayPx = 0.0;
 		bool bOwnDay = false;
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
+		// (CoolFrom over 0: its colour holds as laid until this share of its life and only then cools, Cool of the way to
+		// Col2 by its end, so a fuel ball's middle stays yellow-orange through its first half second. 0: it cools from
+		// birth, as ever)
+		double CoolFrom = 0.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
 		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
@@ -480,8 +484,18 @@ namespace TheaterFx
 		void BombStick(double Now, int Id, const Vec& First, const Vec& Last, int Count, const char* Size, const char* Ground, double Over = -1.0);
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. Id, 0 or
 		 * more: the caller's own number for this fire, so BurnOut finds it (under 0: none). A fire lit later under the
-		 * same number takes the number; the earlier one burns on as it was. */
-		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
+		 * same number takes the number; the earlier one burns on as it was. bOnShip: a fire on a ship's deck (or
+		 * anything afloat). It never takes a burning tank's look (fire.land_tongues, fire.land_column, the land lamp) and
+		 * never joins another fire (fire.join), however small, low or still it is: the kit cannot tell a deck from the
+		 * ground, and a scene's ground under a ship is her deck. The pre-check of 22 November. */
+		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1, bool bOnShip = false);
+		/** Fuel going up at At (the recipe's fuel_ball; no such row: nothing): a ragged ball of burning fuel about
+		 * Across metres wide that rolls and rises as it burns and turns to black smoke boiling off its top, the art
+		 * director's ruling of 21 November: a vehicle's fuel 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
+		 * dump 15 to 25 m for 1.5 to 2 s, its time by its width. Velocity: what it was moving at (a crashing
+		 * aeroplane's, a truck's), which the fire carries a little of. It lights the ground round it while it burns. A
+		 * fire that burns on after it is the caller's Burn. */
+		void FuelBall(double Now, const Vec& At, double Across, const Vec& Velocity = Vec());
 		/** That fire's crew puts it out (the recipe's fire.put_out; no such row, or no fire burning under that number:
 		 * nothing). Over Over seconds (0 or less: the row's own) its flames are eaten back from the edges to its seat,
 		 * lower and sputtering, never thinner. How "water" (a ship's hoses): a surge of white steam at the seat for the
@@ -1021,6 +1035,7 @@ namespace TheaterFx
 			Vec Vel;
 			double MovedAt = 0.0;
 			bool bMoves = false;
+			bool bOnShip = false; // (a burning thing: lit on a ship's deck, Burn's bOnShip; never the land look, never joined)
 			uint32_t Ride = 0;
 			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			bool bStoodDown = false; // (a big fire's own column: burning oil has stood over her once, so this column never stands again; see fire.smoke_column's most)
@@ -1193,6 +1208,16 @@ namespace TheaterFx
 		std::vector<Bit> Bits; // alive or still to be born
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
+		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)
+		struct BallLamp
+		{
+			Vec At, Vel;
+			double Born = 0.0, Life = 1.0, Strength = 0.0, Radius = 10.0, Lift = 0.0;
+			uint64_t Seed = 0;
+			Rgb Col;
+		};
+		std::vector<BallLamp> BallLamps;
+		bool BallLampAt(const BallLamp& L, double Now, double Day, Lamp& Into) const; // (false when it is not lit at Now)
 		std::vector<Knock> Knocks;
 		std::vector<Source> Sources;
 		std::vector<int> GunRounds; // rounds fired by each gun so far
