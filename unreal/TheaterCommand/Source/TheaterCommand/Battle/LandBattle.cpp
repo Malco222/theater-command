@@ -1942,7 +1942,10 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 		}
 		else if (Touched[K])
 		{
-			Mesh->MarkRenderStateDirty();
+			// (the moved places are already queued, each UpdateInstanceTransform; this only says so: the instances sent
+			// at the frame's end, not the whole mesh made again as MarkRenderStateDirty would. Pre-check on UE 5.8's
+			// InstanceDataManager, 22 November)
+			Mesh->MarkRenderInstancesDirty();
 		}
 		// (out of step with the squares, which should never be: the mesh built again whole from what they hold)
 		if (Mesh->GetInstanceCount() != Carpet->Count(K))
@@ -2237,13 +2240,13 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Job.Offset = Floats;
 		Floats += Job.Points * 3;
 	}
-	// (the banked instances moved this frame sent once a mesh; a mesh holding no one now hidden)
+	// (the banked instances moved this frame sent at the frame's end, only those; a mesh holding no one now hidden)
 	for (int32 K = 0; K < BankCopies.Num(); ++K)
 	{
 		if (BankDirty[K] && BankCopies[K])
 		{
 			BankCopies[K]->SetVisibility(BankLive[K] > 0);
-			BankCopies[K]->MarkRenderStateDirty();
+			BankCopies[K]->MarkRenderInstancesDirty();
 		}
 		BankDirty[K] = 0;
 	}
@@ -2744,7 +2747,7 @@ void ALandBattle::DrawShades()
 	{
 		if (Touched[C] && ShadeCopies.IsValidIndex(C) && ShadeCopies[C])
 		{
-			ShadeCopies[C]->MarkRenderStateDirty();
+			ShadeCopies[C]->MarkRenderInstancesDirty();
 		}
 	}
 }
@@ -2865,7 +2868,7 @@ void ALandBattle::DrawManShades()
 	{
 		if (Touched[K])
 		{
-			ManShadeCopies[K]->MarkRenderStateDirty();
+			ManShadeCopies[K]->MarkRenderInstancesDirty();
 		}
 	}
 }
