@@ -412,8 +412,9 @@ namespace LandSound
 
 	double Mixer::FlashToBang(double Far, double Speed) const
 	{
+		// (Far / 343 is life's seconds: a real second holds Speed x Life of them)
 		if (Far <= FtbFrom) return 0.0;
-		return std::min(FtbMost, Far / std::max(1.0, FtbSpeed)) / std::max(0.05, Speed);
+		return std::min(FtbMost, Far / std::max(1.0, FtbSpeed)) / std::max(0.05, Speed * std::max(0.01, Life));
 	}
 
 	void Mixer::Count(double Now, const std::string& WeightKey, double Far)

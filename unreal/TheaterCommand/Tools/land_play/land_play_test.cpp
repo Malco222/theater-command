@@ -79,6 +79,11 @@ int main(int argc, char** argv)
 	Play.Begin(Rec, PW);
 	LandSound::Mixer Mix;
 	if (!Mix.Begin(MixText, Rec.Seed, Error)) { std::printf("cannot read the mix: %s\n", Error.c_str()); return 2; }
+	// LAND_PLAY_LIFE=2 replays the fight at half the battle clock, as the scene's cut 4 plays it (life seconds a battle
+	// second; the approach stays at 2 battle seconds a real second); 1, the default, keeps the battle clock real.
+	const char* LifeText = std::getenv("LAND_PLAY_LIFE");
+	const double Life = LifeText ? std::max(0.25, std::atof(LifeText)) : 1.0;
+	Mix.Life = Life;
 	// How long each take plays, from the recordings' own headers (Sounds/Real beside Content), as the game reads them:
 	// the limits and the same-piece rule use it. A take not in Sounds/Real is counted (the game would play it silent).
 	std::map<std::string, double> Seconds;
@@ -278,7 +283,7 @@ int main(int argc, char** argv)
 
 	while (Battle < Rec.End + 6.0)
 	{
-		const double Speed = Battle < Contact - 10.0 ? 2.0 : 1.0;
+		const double Speed = Battle < Contact - 10.0 ? 2.0 : 1.0 / Life;
 		const double From = Battle;
 		Battle += Dt * Speed;
 		Real += Dt;
@@ -604,6 +609,7 @@ int main(int argc, char** argv)
 		const size_t BandAt = BandText.find("\"land\": {");
 		std::string Bands = "WRONG";
 		bool bEngine = false;
+		double LifeOne = -1.0, LifeTwo = -1.0;
 		if (BandAt != std::string::npos)
 		{
 			BandText.insert(BandAt + 9, " \"landings\": { \"mortar\": { \"middle\": [\"mortar_probe_mid\"], \"far\": [\"mortar_probe_far\"] } }, \"engines\": { \"Panzer IV\": { \"tank_loop\": \"panzer_probe_loop\" } },");
@@ -626,6 +632,20 @@ int main(int argc, char** argv)
 				}
 				const bool bNear = !Heard[0].empty() && Heard[0].rfind("mortar_probe", 0) != 0;
 				if (bNear && Heard[1] == "mortar_probe_mid" && Heard[2] == "mortar_probe_far") Bands = "near " + Heard[0] + ", 100 m " + Heard[1] + ", 300 m " + Heard[2];
+				// (the battle clock at half life's: Life 2, the fight heard at Speed 0.5; a bang 700 m off still comes
+				// 700 / 343 s after its flash, as at Life 1 and Speed 1)
+				LandPlay::Noise Bang;
+				Bang.Kind = LandPlay::NoiseKind::Landing;
+				Bang.Weapon = "mortar";
+				Bang.Size = "mortar";
+				Bang.At = Vec(700.0, 0.0, 0.0);
+				Cue.clear();
+				Probe.Hear(Bang, 200.0, 200.0, 1.0, Near, Cue);
+				LifeOne = Cue.empty() ? -1.0 : Cue[0].Delay;
+				Probe.Life = 2.0;
+				Cue.clear();
+				Probe.Hear(Bang, 210.0, 210.0, 0.5, Near, Cue);
+				LifeTwo = Cue.empty() ? -1.0 : Cue[0].Delay;
 				bEngine = Probe.EngineTake("Panzer IV", "tank_loop") == "panzer_probe_loop" && Probe.EngineTake("Panzer IV", "tank_idle_loop") == "tank_idle_loop"
 					&& Probe.EngineTake("M4 Sherman", "tank_sherman_drive_loop") == "tank_sherman_drive_loop";
 			}
@@ -634,6 +654,9 @@ int main(int argc, char** argv)
 			Mix.EngineTake("Panzer IV", "tank_loop").c_str(), Mix.EngineTake("Tiger", "tank_loop").c_str());
 		if (Bands == "WRONG") Fault("land.landings did not give a mortar bomb its own takes by band (near keeps the shells')");
 		if (!bEngine) Fault("land.engines did not give a Panzer IV her listed engine, or changed one not listed");
+		const bool bLife = LifeOne > 1.9 && std::fabs(LifeTwo - LifeOne) < 1e-6;
+		std::printf("flash to bang 700 m off: %.2f s at life's clock, %.2f s with the battle clock at half life's (Life 2, Speed 0.5)%s\n", LifeOne, LifeTwo, bLife ? "" : " WRONG");
+		if (!bLife) Fault("a bang's delay after its flash changed with the battle clock's pace against life's (Mixer::Life)");
 		for (const char* Model : { "Panzer IV", "Tiger", "M4 Sherman" })
 		{
 			for (const char* Loop : { "tank_loop", "tank_idle_loop", "tank_sherman_drive_loop", "tank_idle_sherman_loop" })
