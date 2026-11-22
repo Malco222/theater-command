@@ -12,6 +12,7 @@ import { reliefBar } from '../src/campaign/ai';
 import { fallWarning } from '../src/campaign/danger';
 import { addCorps, allied, createGame, declareWar, frontage, railReachFor, removeCorps, victorOf } from '../src/campaign/game';
 import { cutRail } from '../src/campaign/rails';
+import { crossingOf } from '../src/campaign/rivers';
 import { setStop, stopOf } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { joinTown } from '../src/campaign/siege';
@@ -381,6 +382,80 @@ describe('the relief as the computer would send it (the review, 22 November)', (
     take(h, 'GER', 'Friesland');
     yieldMonth(h, 'NED');
     expect(h.flags['blow:NED:GER']).toBe(h.turn);
+  });
+
+  // (The second review, 22 November.)
+  it('counts the corps that stay where they stand before placing those that come: the armour goes where there is room', () => {
+    const g = lowCountries();
+    const rot = R(g, 'Rotterdam');
+    for (const c of [...rot.units]) if (!c.dead && c.nat === 'GER') removeCorps(g, c);
+    rot.ctrl = 'GER';
+    add(g, 'GER', 'Brabant', 4);
+    for (let k = 0; k < 4; k++) add(g, 'FRA', 'Antwerp', 2);
+    add(g, 'FRA', 'Brussels', 4, 'arm');
+    const help = reliefInReach(g, 'NED');
+    expect(help?.by).toBe('FRA');
+    expect(g.regions[help!.target].name).toBe('Brabant');
+    expect(help!.corps).toHaveLength(5);
+  });
+
+  it('a bank across a blown river is no place to attack from: the corps is put where it can cross', () => {
+    const g = open();
+    declareWar(g, 'GER', 'BEL');
+    beatenNED(g, 12);
+    const brab = R(g, 'Brabant'), rot = R(g, 'Rotterdam');
+    for (const c of [...brab.units]) if (!c.dead && c.nat === 'GER') removeCorps(g, c);
+    brab.ctrl = 'NED';
+    add(g, 'GER', 'Gelderland', 12, 'arm');
+    for (const c of rot.units) if (c.nat === 'GER') c.str = 0.5;
+    const river = crossingOf(brab.id, rot.id);
+    expect(river).not.toBeNull();
+    g.flags[`br:${river!.a}:${river!.b}`] = g.turn;
+    const b = add(g, 'BEL', 'Antwerp', 1); b.str = 0.2;
+    add(g, 'FRA', 'Brussels', 6, 'arm');
+    const help = reliefInReach(g, 'NED');
+    expect(help?.by).toBe('FRA');
+    expect(g.regions[help!.target].name).toBe('Rotterdam');
+  });
+
+  it('guns never go ashore alone, and never take the place of a corps that fights in the shipping', () => {
+    const g = open();
+    declareWar(g, 'GER', 'NOR');
+    strip(g, 'NOR');
+    for (const p of ['Oslo', 'Sorlandet', 'Bergen', 'Oppland', 'Trondheim']) { take(g, 'GER', p, 1); for (const c of R(g, p).units) if (c.nat === 'GER') c.str = 0.15; }
+    const bergen = R(g, 'Bergen');
+    const quay = g.regions.find((r) => r.owner === 'UK' && r.ctrl === 'UK' && !r.overseas && r.port && r.seas.some((z) => bergen.seas.includes(z)))!;
+    addCorps(g, 'UK', 'Expeditionary force', 'inf', 4, quay.id, {});
+    g.nations.UK.sealift = 1;
+    expect(reliefInReach(g, 'NOR')?.by).toBe('UK');
+    const guns = addCorps(g, 'UK', 'Expeditionary guns', 'art', 4, quay.id, {});
+    const help = reliefInReach(g, 'NOR');
+    expect(help?.by).toBe('UK');
+    expect(help!.corps).not.toContain(guns.id);
+  });
+
+  it('a corps more than a month\'s march away comes only by train', () => {
+    const g = lowCountries();
+    const f = add(g, 'FRA', 'Lyon', 6, 'arm');
+    f.ap = 0;
+    expect(reliefInReach(g, 'NED')?.by).toBe('FRA');
+    expect(cutRail(g, R(g, 'Lyon').id)).toBe(true);
+    expect(reliefInReach(g, 'NED')).toBeNull();
+  });
+
+  it('comes by ship into a harbour of its side beside the place, no more corps than the shipping carries', () => {
+    const g = lowCountries();
+    const london = R(g, 'London');
+    const a = addCorps(g, 'UK', 'Expeditionary force 1', 'arm', 6, london.id, {});
+    const b = addCorps(g, 'UK', 'Expeditionary force 2', 'arm', 6, london.id, {});
+    g.nations.UK.sealift = 0;
+    expect(reliefInReach(g, 'NED')).toBeNull();
+    g.nations.UK.sealift = 1;
+    const one = reliefInReach(g, 'NED');
+    expect(one?.by).toBe('UK');
+    expect(one!.corps.filter((id) => id === a.id || id === b.id)).toHaveLength(1);
+    g.nations.UK.sealift = 4;
+    expect(reliefInReach(g, 'NED')!.corps.filter((id) => id === a.id || id === b.id)).toHaveLength(2);
   });
 });
 

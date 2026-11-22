@@ -28,6 +28,7 @@ import { skyDenies } from './air';
 import { allied, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, hostileUnits, limitAttackers, railReachFor, theName, thornGround, victorOf } from './game';
 import { stopDef, stopOf } from './history';
 import { whyBarred } from './ground';
+import { blocked } from './rivers';
 import { lineShut } from './line';
 import { standsFreed } from './liberation';
 import { farGround, marchMonths } from './marches';
@@ -103,7 +104,9 @@ function fresh<T>(c: Corps, f: () => T): T {
  */
 function canCome(g: Game, c: Corps, t: Region, steps: Map<number, number>, kept: { rails: Map<number, Set<number>>; ground: Map<number, Map<number, { cost: number }>> }): Coming | null {
   const at = g.regions[c.reg];
-  if (at.id === t.id || t.nb.includes(at.id)) return { from: [at.id], ship: false };
+  // (Where it stands on the place, or beside it with nothing between, it attacks from there; across a blown river it
+  // looks for another bank like a corps further off.)
+  if (at.id === t.id || (t.nb.includes(at.id) && !blocked(g, c, t))) return { from: [at.id], ship: false };
   // (Ground of its side beside the place, clear of the enemy's army: somewhere to stand and attack from.)
   const beside = t.nb.map((j) => g.regions[j]).filter((p) => allied(g, c.nat, p.ctrl) && !hostileUnits(g, p, c.nat).length);
   const from = new Set<number>();
@@ -112,13 +115,13 @@ function canCome(g: Game, c: Corps, t: Region, steps: Map<number, number>, kept:
   if (hops !== undefined && hops <= RAIL_HOPS && beside.length) {
     let r = kept.rails.get(c.id);
     if (!r) { r = fresh(c, () => railReachFor(g, [c])); kept.rails.set(c.id, r); }
-    for (const p of beside) if (r.has(p.id)) from.add(p.id);
+    for (const p of beside) if (r.has(p.id) && !blocked(g, c, t, p.id)) from.add(p.id);
   }
   // By road, a month's march over friendly ground (marches.ts farGround: the march a staff could order, whoever's month it is).
   if (hops !== undefined && hops <= ROAD_HOPS && beside.length) {
     let m = kept.ground.get(c.id);
     if (!m) { m = farGround(g, c); kept.ground.set(c.id, m); }
-    for (const p of beside) { const e = m.get(p.id); if (e && marchMonths(c, e.cost) <= 1) from.add(p.id); }
+    for (const p of beside) { const e = m.get(p.id); if (e && marchMonths(c, e.cost) <= 1 && !blocked(g, c, t, p.id)) from.add(p.id); }
   }
   if (from.size) return { from: [...from], ship: false };
   const n = g.nations[c.nat];
@@ -126,7 +129,7 @@ function canCome(g: Game, c: Corps, t: Region, steps: Map<number, number>, kept:
   // By ship, into a harbour of its side beside the place.
   for (const p of beside) {
     if (!p.port || thornGround(g, p, c.nat) || lineShut(g, c.nat, p) || prizeOut(g, p, 'harbour') > 0 || whyBarred(g, c, p)) continue;
-    if (seaPath(g, c.nat, at, p)) from.add(p.id);
+    if (seaPath(g, c.nat, at, p) && !blocked(g, c, t, p.id)) from.add(p.id);
   }
   if (from.size) return { from: [...from], ship: true };
   // A landing on the place itself, where it is the enemy's.
@@ -144,25 +147,49 @@ export interface Relief { by: string; target: number; odds: number; corps: numbe
 const weight = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
 
 /**
- * The corps that come by land, each put on a province it could attack from while that province has room (STACK, its
- * side's corps already there counted), the strongest first and each where the fewest stand: copies of them standing
- * there, so the attack is weighed from where it would go in (limitAttackers' roads, its sides, assess's rivers and
- * flanks), and nothing in the war is moved.
+ * The corps that come by land, each put on a province it could attack from while that province has room (hasRoom's:
+ * STACK corps, engineers apart up to 2, its side's corps already there counted, those that stay where they stand
+ * first), the strongest first and each where the fewest stand: copies of them standing there, so the attack is weighed
+ * from where it would go in (limitAttackers' roads, its sides, assess's rivers and flanks), and nothing in the war is moved.
  */
 function standThem(g: Game, ally: string, cs: { c: Corps; from: number[] }[]): Corps[] {
-  const mine = new Set(cs.map((x) => x.c));
-  const load = new Map<number, number>();
-  const room = (id: number): number => { if (!load.has(id)) load.set(id, friendlyUnits(g, g.regions[id], ally).filter((u) => !mine.has(u as Corps)).length); return load.get(id)!; };
-  const out: Corps[] = [];
-  for (const { c, from } of [...cs].sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
-    // (One already on the place or beside it attacks from where it stands.)
-    if (from.length === 1 && from[0] === c.reg) { out.push(c); load.set(c.reg, room(c.reg) + 1); continue; }
-    const open = from.filter((id) => room(id) < STACK).sort((a, b) => room(a) - room(b) || a - b);
+  const stays = (x: { c: Corps; from: number[] }): boolean => x.from.length === 1 && x.from[0] === x.c.reg;
+  // (Only those that would move are left out of where they stand now: they are about to leave it.)
+  const movers = new Set(cs.filter((x) => !stays(x)).map((x) => x.c));
+  const load = new Map<number, { line: number; eng: number }>();
+  const at = (id: number): { line: number; eng: number } => {
+    let l = load.get(id);
+    if (!l) {
+      const here = friendlyUnits(g, g.regions[id], ally).filter((u) => !movers.has(u as Corps));
+      const eng = here.filter((u) => u.kind === 'eng').length;
+      l = { line: here.length - eng, eng };
+      load.set(id, l);
+    }
+    return l;
+  };
+  const fits = (c: Corps, id: number): boolean => (c.kind === 'eng' ? at(id).eng < 2 : at(id).line < STACK);
+  const out: Corps[] = cs.filter(stays).map((x) => x.c);
+  for (const { c, from } of cs.filter((x) => !stays(x)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
+    const open = from.filter((id) => fits(c, id)).sort((a, b) => at(a).line - at(b).line || a - b);
     if (!open.length) continue;
-    load.set(open[0], room(open[0]) + 1);
+    if (c.kind === 'eng') at(open[0]).eng++; else at(open[0]).line++;
     out.push({ ...c, reg: open[0] });
   }
   return out;
+}
+
+/**
+ * The strongest `n` of these as limitAttackers ranks them; under the guns rule, where they would be guns alone and a
+ * corps that fights is among them, the strongest that fights takes the weakest place (guns never go alone).
+ */
+function strongest<T>(g: Game, xs: T[], n: number, corps: (x: T) => Corps): T[] {
+  const by = [...xs].sort((a, b) => weight(g, corps(b)) - weight(g, corps(a)) || corps(a).id - corps(b).id);
+  const top = by.slice(0, Math.max(0, n));
+  if (top.length && gunsRule(g) && !top.some((x) => fights(corps(x)))) {
+    const f = by.find((x) => fights(corps(x)));
+    if (f) top[top.length - 1] = f;
+  }
+  return top;
 }
 
 /**
@@ -205,7 +232,7 @@ export function reliefInReach(g: Game, nat: string): Relief | null {
         else (how.ship ? shipped : land).push({ c, from: how.from });
       }
       // By land, with as many shipped up as the shipping carries, the strongest first.
-      const byShip = shipped.sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id).slice(0, Math.max(0, lift));
+      const byShip = strongest(g, shipped, lift, (x) => x.c);
       const force = limitAttackers(g, standThem(g, ally, [...land, ...byShip]), t);
       if (force.length) {
         const odds = assess(g, force, t).odds;
@@ -213,7 +240,7 @@ export function reliefInReach(g: Game, nat: string): Relief | null {
       }
       // Or a landing on the place from one port.
       for (const [, cs] of [...ports].sort(([a], [b]) => a - b)) {
-        const group = cs.sort((a, b) => weight(g, b) - weight(g, a) || a.id - b.id).slice(0, Math.min(lift, STACK));
+        const group = strongest(g, cs, Math.min(lift, STACK), (c) => c);
         if (!group.length || (gunsRule(g) && !group.some(fights))) continue;
         const odds = assess(g, group, t, landingOpts(g, group, t)).odds;
         if (odds >= bar) return { by: ally, target: t.id, odds, corps: group.map((c) => c.id) };
