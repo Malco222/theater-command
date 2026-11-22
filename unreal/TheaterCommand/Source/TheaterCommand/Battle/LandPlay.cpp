@@ -387,7 +387,7 @@ namespace LandPlay
 		N.Track = S;
 		N.Role = Role;
 		// (the same gun the muzzle was put on: TankMg rolls the same for the same round)
-		if (R.W == "mg" && Role == "tank") N.Mount = TankMg(S, R.T, R.N, To);
+		if (R.W == "mg" && Role == "tank") N.Mount = TankMg(S, R.T, R.N, To, R.G);
 		N.bMiss = R.R == Result::Miss;
 		N.LandsAt = R.L;
 
