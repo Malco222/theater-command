@@ -40,6 +40,14 @@ namespace LandMen
  * last man of his component, and the places past the last man are removed at the frame's end, so a component draws
  * only men (GS7; before, his instance was left shrunk to nothing for the next man of his set and level).
  *
+ * Each component keeps every instance's place a frame before (SetHasPerInstancePrevTransforms, set before it is
+ * registered: the engine reads it as the component's draw is made), so a man's walk has its motion vector for the
+ * anti-aliasing, as his limbs have theirs from the poses a frame before. The engine's own update never sets that place
+ * (pre-check, UE 5.8: without it an instance moved inside its component reads as still), so each move sends both: the
+ * new place and the one he stood at the frame before. A man who stops, or is left where he was out of the picture, has
+ * the two made one at the next frame's end, so he does not smear; a place new to him, or filled from his part's end,
+ * is sent with no move.
+ *
  * "-TheaterLandNoVat" draws the men as before (the A/B).
  */
 class FLandVat
@@ -67,7 +75,8 @@ public:
 	bool Place(const LandMen::Crowd& Men, int32 Man, const FTransform& Body, const FTransform* Helmet);
 	/** Gives man Man's instances back (none: nothing). */
 	void Out(int32 Man);
-	/** At the frame's end: the components whose instances moved are sent, and one holding no man is hidden. */
+	/** At the frame's end: the men moved the frame before and not since have their place a frame before made their
+	 * place now, the components whose instances moved are sent, and one holding no man is hidden. */
 	void Send();
 
 	/** The cost of Make (ms) and the pictures' size on the card (MB), for the log. */
@@ -88,6 +97,10 @@ private:
 		int32 Body = -1, BodySlot = -1;
 		int32 Helmet = -1, HelmetSlot = -1;
 		FTransform BodyAt = FTransform::Identity, HelmetAt = FTransform::Identity;
+		/** The place a frame before sent with his place now (the motion vector's other end). */
+		FTransform BodyBefore = FTransform::Identity, HelmetBefore = FTransform::Identity;
+		/** The frame (Frame) his body or helmet was last sent moving; 0: still, its place a frame before his place now. */
+		uint32 BodyMoved = 0, HelmetMoved = 0;
 		float Data[9] = {};
 	};
 
@@ -103,6 +116,8 @@ private:
 	void Put(int32 Man, bool bHelmet, int32 Wanted, const FTransform& At, const float* Data);
 	/** Man Man's body or helmet given back: his place filled by his part's last man, the last place left for Send. */
 	void Drop(int32 Man, bool bHelmet);
+	/** Instance Slot of Copies put at At, its place a frame before Before (the same: no move). */
+	void SetPlace(UInstancedStaticMeshComponent* Copies, int32 Slot, const FTransform& At, const FTransform& Before);
 
 	TWeakObjectPtr<AActor> Owner;
 	TWeakObjectPtr<USceneComponent> Parent;
@@ -113,6 +128,12 @@ private:
 	TArray<FPart> Parts;
 	TMap<int64, int32> PartOf;
 	TArray<FMan> Drawn;
+	/** The frame, counted at each Send (from 1), and the men sent moving this frame and the frame before (Man * 2, plus 1
+	 * for his helmet): those not moved again are made still at Send. */
+	uint32 Frame = 1;
+	TArray<int32> MovingNow, MovingBefore;
+	/** One instance's place and place a frame before, for the engine's batch update (kept: no array made a move). */
+	TArray<FTransform> OneAt, OneBefore;
 	TSet<int32> Keys;
 	double MadeMsTotal = 0.0;
 	double PictureBytes = 0.0;

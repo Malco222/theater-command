@@ -120,6 +120,8 @@ FLandVat::FLandVat(AActor* InOwner, USceneComponent* InParent, UMaterialInterfac
 	, U(InUnitsPerMetre)
 	, Keep(&InKeep)
 {
+	OneAt.SetNum(1);
+	OneBefore.SetNum(1);
 }
 
 bool FLandVat::Make(const LandMen::Crowd& Men)
@@ -323,6 +325,10 @@ int32 FLandVat::AddPart(UStaticMesh* Mesh, UMaterialInterface* PartInk, int32 Le
 	}
 	// (GS7: places removed off the end only; swap-removal keeps its arrays from shrinking and growing again)
 	Copies->SetRemoveSwap();
+	// (each instance's place a frame before kept, for the walk's motion vector: set before the component is registered,
+	// as its draw is made then; never on a static component, which the engine forbids)
+	Copies->SetMobility(EComponentMobility::Movable);
+	Copies->SetHasPerInstancePrevTransforms(true);
 	// (hidden until a man is placed in it)
 	Copies->SetVisibility(false);
 	Copies->RegisterComponent();
@@ -390,16 +396,21 @@ void FLandVat::Put(int32 Man, bool bHelmet, int32 Wanted, const FTransform& At, 
 		Slot = P.Holder.Add(Man);
 		if (Slot < Copies->GetInstanceCount())
 		{
-			Copies->UpdateInstanceTransform(Slot, At, false, false, true);
+			// (a place left by a man given back this frame: its place a frame before is his, so it is set here too, to
+			// this man's place now: no move)
+			SetPlace(Copies, Slot, At, At);
 		}
 		else
 		{
+			// (a place added: the engine gives it its place now as its place a frame before)
 			const int32 Added = Copies->AddInstance(At, false);
 			ensureMsgf(Added == Slot, TEXT("LandVat: a part's instance %d added for its man %d"), Added, Slot);
 		}
 		Part = Wanted;
 		P.bDirty = true;
 		Last = At;
+		(bHelmet ? M.HelmetBefore : M.BodyBefore) = At;
+		(bHelmet ? M.HelmetMoved : M.BodyMoved) = 0;
 		if (Data && !bHelmet)
 		{
 			Copies->SetCustomData(Slot, TArrayView<const float>(Data, Numbers), false);
@@ -407,13 +418,21 @@ void FLandVat::Put(int32 Man, bool bHelmet, int32 Wanted, const FTransform& At, 
 		}
 		return;
 	}
-	// (only what changed: a man lying still is not sent again. Not a jump: the engine keeps his place a frame before, so
-	// his walk has its motion vector for the anti-aliasing, as his limbs have theirs from the poses a frame before. A
-	// place new to him, or filled from the part's end, is sent as a jump above and in Drop)
+	// (only what changed: a man lying still is not sent again. A move is sent with where he stood the frame before, so
+	// his walk has its motion vector for the anti-aliasing, as his limbs have theirs from the poses a frame before; one
+	// who stops is made still at Send. A place new to him, or filled from the part's end, is sent with no move, above
+	// and in Drop)
 	if (!Last.Equals(At, 1e-3))
 	{
-		Copies->UpdateInstanceTransform(Slot, At, false, false, false);
+		SetPlace(Copies, Slot, At, Last);
+		(bHelmet ? M.HelmetBefore : M.BodyBefore) = Last;
 		Last = At;
+		uint32& Moved = bHelmet ? M.HelmetMoved : M.BodyMoved;
+		if (Moved != Frame)
+		{
+			Moved = Frame;
+			MovingNow.Add(Man * 2 + (bHelmet ? 1 : 0));
+		}
 		P.bDirty = true;
 	}
 	if (Data && !bHelmet && FMemory::Memcmp(M.Data, Data, sizeof(float) * Numbers) != 0)
@@ -441,7 +460,8 @@ void FLandVat::Drop(int32 Man, bool bHelmet)
 			FMan& O = Drawn[Moved];
 			if (UInstancedStaticMeshComponent* Copies = P.Copies.Get())
 			{
-				Copies->UpdateInstanceTransform(Slot, bHelmet ? O.HelmetAt : O.BodyAt, false, false, true);
+				// (his place and his own place a frame before, not the given-back man's: his move as it was, no jump)
+				SetPlace(Copies, Slot, bHelmet ? O.HelmetAt : O.BodyAt, bHelmet ? O.HelmetBefore : O.BodyBefore);
 				if (P.bPosed)
 				{
 					Copies->SetCustomData(Slot, TArrayView<const float>(O.Data, Numbers), false);
@@ -458,6 +478,16 @@ void FLandVat::Drop(int32 Man, bool bHelmet)
 	}
 	Part = -1;
 	Slot = -1;
+	(bHelmet ? M.HelmetMoved : M.BodyMoved) = 0;
+}
+
+void FLandVat::SetPlace(UInstancedStaticMeshComponent* Copies, int32 Slot, const FTransform& At, const FTransform& Before)
+{
+	// (the engine's batch update is the one that takes the place a frame before by the instance's place in the
+	// component; in the component's own frame, as the scene's places are; sent with the rest at Send)
+	OneAt[0] = At;
+	OneBefore[0] = Before;
+	Copies->BatchUpdateInstancesTransforms(Slot, OneAt, OneBefore, false, false, false);
 }
 
 void FLandVat::Out(int32 Man)
@@ -472,6 +502,45 @@ void FLandVat::Out(int32 Man)
 
 void FLandVat::Send()
 {
+	// (a man sent moving the frame before and not this frame: stopped, or left where he was out of the picture. His
+	// place a frame before is made his place now, once, or the card would draw him smeared along his last step for as
+	// long as he stands)
+	for (const int32 Entry : MovingBefore)
+	{
+		const int32 Man = Entry / 2;
+		const bool bHelmet = (Entry & 1) != 0;
+		if (!Drawn.IsValidIndex(Man))
+		{
+			continue;
+		}
+		FMan& M = Drawn[Man];
+		uint32& Moved = bHelmet ? M.HelmetMoved : M.BodyMoved;
+		const int32 Part = bHelmet ? M.Helmet : M.Body;
+		const int32 Slot = bHelmet ? M.HelmetSlot : M.BodySlot;
+		if (Moved == 0 || Moved == Frame || !Parts.IsValidIndex(Part) || Slot < 0)
+		{
+			continue;
+		}
+		Moved = 0;
+		const FTransform& At = bHelmet ? M.HelmetAt : M.BodyAt;
+		(bHelmet ? M.HelmetBefore : M.BodyBefore) = At;
+		FPart& P = Parts[Part];
+		if (UInstancedStaticMeshComponent* Copies = P.Copies.Get())
+		{
+			if (Slot < Copies->GetInstanceCount())
+			{
+				SetPlace(Copies, Slot, At, At);
+				P.bDirty = true;
+			}
+		}
+	}
+	Swap(MovingBefore, MovingNow);
+	MovingNow.Reset();
+	++Frame;
+	if (Frame == 0)
+	{
+		Frame = 1;
+	}
 	for (FPart& P : Parts)
 	{
 		if (P.bDirty)

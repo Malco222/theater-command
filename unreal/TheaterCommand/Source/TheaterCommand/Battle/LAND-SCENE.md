@@ -110,8 +110,13 @@ camera comes back to its shot.
   the nearest mid man; facings within 0.02 degrees; every pose inside the grown bounds). Without `M_LandCrowd`, or
   with `-TheaterLandNoVat`, the far men are drawn as above and mid men skinned. A man given back (near again, fallen,
   out of sight) has his place filled by his component's last man, and the places left past the last are removed at
-  the frame's end, so a component draws only men (GS7). A man's move from frame to frame is sent with its motion
-  vector for the anti-aliasing, as his limbs' are; only a place new to him is sent as a jump.
+  the frame's end, so a component draws only men (GS7). A man's move from frame to frame has its motion vector for
+  the anti-aliasing, as his limbs' have: each component keeps every instance's place a frame before
+  (`SetHasPerInstancePrevTransforms`, set before it is registered), and each move sends the new place with the one he
+  stood at the frame before. The engine's own instance update never sets that place (pre-check, UE 5.8: without it a
+  man moving inside his component reads as still). A man who stops, or is left where he was out of the picture, has the
+  two made one at the next frame's end, so he does not smear along his last step. A place new to him is sent with no
+  move, and a man moved into a given-back place keeps his own place a frame before, not the given-back man's.
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
 - **Fuel going up (release 2).** As a tank brews up (her ammunition's blast), and as a lorry is knocked out (its fire
