@@ -9,9 +9,13 @@
 #include "Battle/AirBattleState.h"
 #include "Battle/AirShow.h"
 #include "Battle/AirTally.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "Campaign/CampaignTextures.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -243,7 +247,9 @@ void AAirBattle::MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent
 	Tally->bUseAsyncCooking = false;
 	Tally->RegisterComponent();
 	Tally->CreateMeshSection(0, Points, Corners, Normals, Places, Colours, TArray<FProcMeshTangent>(), false);
-	Tally->SetMaterial(0, TallyInk);
+	// (an ink of its own, so that its strength can follow its own size on the screen)
+	UMaterialInstanceDynamic* Own = UMaterialInstanceDynamic::Create(TallyInk, this);
+	Tally->SetMaterial(0, Own ? Own : TallyInk.Get());
 	Made.Tally = Tally;
 	UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s's %d victories painted on %s (key %d), %d marks in the %s set."),
 		UTF8_TO_TCHAR(Ace.AceName.c_str()), Ace.AceKills, *Made.Model, Key, Corners.Num() / 6, Set);
@@ -299,6 +305,18 @@ void AAirBattle::DrawTally(const FVector& EyeAt)
 	}
 	const int32 Ridden = S.bClose ? S.Subject.Plane : INDEX_NONE;
 	const double U = UnitsPerMetre;
+	// How many pixels a mark is across, from its size, its distance, the lens and the screen: the art director, 18:31Z
+	// 22 November, "let a mark fade into the paint once it falls under about 4 px, rather than shimmer or turn into a
+	// grey block". Full strength from 7 pixels, gone at 4.
+	const double Lens = Eye && Eye->GetCameraComponent() ? FMath::Clamp(static_cast<double>(Eye->GetCameraComponent()->FieldOfView), 5.0, 120.0) : 55.0;
+	double ViewW = 1600.0;
+	if (GEngine && GEngine->GameViewport)
+	{
+		FVector2D Size;
+		GEngine->GameViewport->GetViewportSize(Size);
+		ViewW = FMath::Max(1.0, Size.X);
+	}
+	const double PixelsPerMetreAt1 = ViewW * 0.5 / FMath::Tan(FMath::DegreesToRadians(Lens * 0.5));
 	for (const TPair<int32, int32>& Lead : AceLead)
 	{
 		FPlaneMade* Made = PlaneMade.Find(Lead.Value);
@@ -312,7 +330,12 @@ void AAirBattle::DrawTally(const FVector& EyeAt)
 		const double Away = Mesh ? FVector::Dist(Mesh->GetComponentLocation(), EyeAt) / U : 1e9;
 		// (on its own mesh, its near shape drawn, near the eye: past a few hundred metres a 9 cm mark is under a pixel)
 		const bool bOnShape = !Made->bTwoShapes || Made->bNear;
-		const bool bShow = Found != Groups.end() && Mesh && Mesh->IsVisible() && bOnShape && (Lead.Value == Ridden || Away < TallyNearM);
+		const FAirTallySide* Side = TallyOfShape(Made->Shape);
+		const double Across = 2.0 * (Side && Side->Radius > 0.0 ? Side->Radius / U : 0.05);
+		const double Pixels = Across * PixelsPerMetreAt1 / FMath::Max(Away, 0.1);
+		const double Strength = FMath::Clamp((Pixels - 4.0) / 3.0, 0.0, 1.0);
+		const bool bNear = Lead.Value == Ridden || Away < TallyNearM;
+		const bool bShow = Found != Groups.end() && Mesh && Mesh->IsVisible() && bOnShape && bNear && Strength > 0.0;
 		if (bShow && !Made->bTallyTried)
 		{
 			AirShow::Group Ace = Found->second;
@@ -338,6 +361,13 @@ void AAirBattle::DrawTally(const FVector& EyeAt)
 			if (Tally->IsVisible() != bShow)
 			{
 				Tally->SetVisibility(bShow);
+			}
+			if (bShow)
+			{
+				if (UMaterialInstanceDynamic* Own = Cast<UMaterialInstanceDynamic>(Tally->GetMaterial(0)))
+				{
+					Own->SetScalarParameterValue(TEXT("Strength"), static_cast<float>(Strength));
+				}
 			}
 		}
 	}

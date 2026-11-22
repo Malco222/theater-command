@@ -1073,7 +1073,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    modeller's rules (Battle/AirTally: each nation a row of its own, the commonest first, at most thirty; the oldest of a
    row a little paler), from the modeller's tally sheet as the art director passed it (Content/Data/Tally; M_TallyMark,
    built by Tools/build_content.sh when missing), the dark or light set by the paint under them. Upright on his side,
-   its right toward the tail. Seen within 250 m on its own mesh; soot and holes land on them as on his skin. A model with
+   its right toward the tail. Seen on its own mesh, fading into the paint as a mark falls under 7 pixels across and gone
+   under 4 (the art director, 18:31Z: "rather than shimmer or turn into a grey block"; some 35 to 60 m off on the Mac's
+   screen); soot and holes land on them as on his skin. A model with
    no kill slots flies unpainted (the log says so): today the Mustang, Dauntless, Kate and Val have them; the modeller's
    battle-standard fighters bring them to the rest. His name under the cockpit follows with the modeller's name panel.
    `-TheaterAces=0` paints none; `-TheaterAceTest=att:6:GER=6` gives the raid's first fighter group a test ace (def for

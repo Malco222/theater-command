@@ -701,7 +701,9 @@ def build_tally_mark():
     skin = node(m, unreal.MaterialExpressionPower, -700, 300, const_exponent=2.2)
     connect(colour, "", skin, "Base")
     mark = times(m, (picture, "RGB"), vector(m, "Tin", (1.0, 1.0, 1.0, 1.0), -700, 150), -450, 50)
-    painted = lerp(m, skin, mark, (colour, "A"), -250, 150)
+    # ('Strength' takes the whole mark back into the paint as it shrinks on the screen, the air battle's own reckoning:
+    # the art director, "let a mark fade into the paint once it falls under about 4 px")
+    painted = lerp(m, skin, mark, times(m, (colour, "A"), scalar(m, "Strength", 1.0, -700, 450), -450, 400), -250, 150)
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(scalar(m, "Roughness", 0.9, -250, 350), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(scalar(m, "Specular", 0.15, -250, 450), "", unreal.MaterialProperty.MP_SPECULAR)
