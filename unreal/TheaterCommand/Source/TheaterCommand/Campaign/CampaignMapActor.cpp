@@ -11911,14 +11911,18 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 	{
 		return;
 	}
-	// The ground the enemy could strike next month takes a faint warm wash, and where it ends inside the player's
-	// own country, or an ally's or a neutral's, a dashed line is ruled: this deep, and no deeper. Along the front
-	// itself nothing more is drawn: the front line is there already. (The art director's ruling: the dashes are in
-	// the front line's own vermilion, about three points of the screen wide at working height and heavier from the
-	// staff map's height as the front line is, with no barbs; the wash is warmer, not darker.)
+	// The ground the enemy could strike next month takes a faint lift, and where it ends inside the player's own
+	// country, or an ally's or a neutral's, a dashed line is ruled: this deep, and no deeper. Along the front itself
+	// nothing more is drawn: the front line is there already. (The art director's rulings: the dashes are amber,
+	// about three points of the screen wide at working height and heavier from the staff map's height as the front
+	// line is, with no barbs. The wash was a warm orange; the run 5 read of 22 November makes it a light lift toward
+	// paper-100, lighter with the ground's own hue kept, so that the amber dashes are the only warm line on the map.
+	// The warm wash had tinted the province an army stood in orange, out to the dashes, and read as the border of
+	// that army's own march.)
 	const TSet<int32> In(Danger);
 	FCampaignMeshBuffers Buffers;
-	const FLinearColor Wash(1.0f, 0.34f, 0.12f, 0.1f);
+	FLinearColor Wash(FColor(237, 230, 214)); // (paper-100)
+	Wash.A = 0.1f;
 	for (const int32 Id : In)
 	{
 		if (Data.Regions.IsValidIndex(Id) && !WarFoes.Contains(Data.Regions[Id].Owner))
