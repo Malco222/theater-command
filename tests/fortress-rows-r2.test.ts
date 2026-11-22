@@ -8,10 +8,10 @@ import farWorld from '../data/campaign/far-world.json';
 import stage from '../data/campaign/stage.json';
 import { orderCorps, specOf } from '../src/campaign/economy';
 import { FORT_ROWS, FORT_XP, crewFed, crewMonth, crewStores, fortShape, fortsMonth, storesEaten, storesLeft } from '../src/campaign/fortrows';
-import { DESERT, GUNS, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
+import { DESERT, GUNS, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, moveCorps, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
 import { menLeft } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { SIEGE, besieged, breach, crewClock, garrisonOf, housed, invest, joinTown, siegeSupply, siegeView, sortiePower, storm, stormBar, stormForce, townBonus } from '../src/campaign/siege';
+import { SIEGE, besieged, breach, crewClock, crewsMask, garrisonOf, guardOf, housed, invest, joinTown, siegeSupply, siegeView, sortiePower, storm, stormBar, stormForce, townBonus } from '../src/campaign/siege';
 import { atkPower, sieges } from '../src/campaign/ai';
 import { corpsMood } from '../src/campaign/morale';
 import { drafted, training } from '../src/campaign/stories';
@@ -607,6 +607,194 @@ describe("the besieger reads the crews' clock (the design director's 13:05Z)", (
     const vo = siegeView(off.g, off.town.id)!;
     expect(vo.crew).toBeNull();
     expect(vo.lines.some((l) => /fortress crews/.test(l))).toBe(false);
+  });
+});
+
+
+describe("masked works (the design director's 20:10Z): a town held only by its crews does not stop the army", () => {
+  /**
+   * The Metz crew shut in Lorraine's town with German corps `round` it and every other German corps held; `field` puts a
+   * French field corps inside beside it. `guardIn` (the default): the town's guard went in with the crew from the field,
+   * as game.ts marks it when a crew shelters beside the guard; false, the crew stands in a town its guard holds alone.
+   */
+  function crewTown(on: boolean, round: [Kind, number][], field = false, guardIn = true): { g: Game; town: Region; crew: Corps; corps: Corps[] } {
+    const g = sameCrews(open(on));
+    setWar(g, 'GER', 'FRA');
+    const town = g.byName.Lorraine;
+    const crew = row(g, 'FRA', 'Metz fortified region')!;
+    clear(g, town, (c) => c === crew);
+    town.units.splice(town.units.indexOf(crew), 1);
+    joinTown(g, town, crew);
+    if (guardIn) g.flags[`guardIn:${crew.id}`] = 1;
+    if (field) {
+      const f = addCorps(g, 'FRA', 'Field Corps', 'inf', 2, 'Lorraine', {});
+      town.units.splice(town.units.indexOf(f), 1);
+      joinTown(g, town, f);
+    }
+    for (const c of g.corps) if (c.nat === 'GER' && !c.dead) c.hold = true;
+    const corps = round.map(([k, d], i) => addCorps(g, 'GER', `Round ${i}`, k, d, 'Lorraine', {}));
+    if (corps.length) invest(g, town, 'GER');
+    return { g, town, crew, corps };
+  }
+
+  it('reads the town: crews alone inside, an army round it; a field corps inside, nobody round it, or off, not masked', () => {
+    const on = crewTown(true, [['inf', 4]]);
+    expect(besieged(on.g, on.town)).toBe(true);
+    expect(crewsMask(on.g, on.town)).toBe(true);
+    const off = crewTown(false, [['inf', 4]]);
+    expect(garrisonOf(off.town)).toHaveLength(1);
+    expect(crewsMask(off.g, off.town)).toBe(false);
+    const field = crewTown(true, [['inf', 4]], true);
+    expect(crewsMask(field.g, field.town)).toBe(false);
+    for (const c of on.corps) removeCorps(on.g, c);
+    expect(crewsMask(on.g, on.town)).toBe(false);
+  });
+
+  it('beaten in the field, the crews go into their works and the winners keep their moves; beside a field garrison, they close round it as before', () => {
+    const ap = new Map<number, number>();
+    const run = (field: boolean): { winners: Corps[]; target: Region; g: Game } => {
+      const { g, target, behind } = alsace(true, true);
+      if (field) {
+        const f = addCorps(g, 'FRA', 'Garrison Corps', 'inf', 1, 'Alsace', {});
+        target.units.splice(target.units.indexOf(f), 1);
+        joinTown(g, target, f);
+      }
+      for (let k = 0; k < 4; k++) behind.push(addCorps(g, 'GER', `Rear Corps ${k}`, 'arm', 12, 'Lorraine', {}));
+      for (const c of behind) ap.set(c.id, c.ap);
+      const rep = resolveBattle(g, behind, target);
+      expect(rep.taken).toBe(true);
+      expect(rep.defenders.filter((u) => u.kind === 'fort').every((u) => u.fate === 'sheltered')).toBe(true);
+      expect(target.ctrl).toBe('FRA');
+      expect(besieged(g, target)).toBe(true);
+      // (Where the guard stood in the field beside the crews it went in with them, and each crew is marked so; here it
+      // would have opened its gates to this army at the summons, so it stayed behind its walls and nothing is marked.)
+      for (const c of garrisonOf(target).filter((u) => u.kind === 'fort')) expect(g.flags[`guardIn:${c.id}`], c.name).toBe(rep.guarded ? 1 : undefined);
+      return { g, target, winners: behind.filter((c) => !c.dead && c.reg === target.id) };
+    };
+    const masked = run(false);
+    expect(crewsMask(masked.g, masked.target)).toBe(true);
+    expect(masked.winners.length).toBeGreaterThan(0);
+    for (const c of masked.winners) { expect(c.ap, c.name).toBeGreaterThan(0); expect(c.ap).toBeLessThan(ap.get(c.id)!); }
+    const ringed = run(true);
+    expect(crewsMask(ringed.g, ringed.target)).toBe(false);
+    expect(ringed.winners.length).toBeGreaterThan(0);
+    for (const c of ringed.winners) expect(c.ap, c.name).toBe(0);
+  });
+
+  it('a corps that marches into the field round masked works keeps its moves; round a field garrison, it stops there as before', () => {
+    for (const field of [false, true]) {
+      const { g, town } = crewTown(true, [], field);
+      const c = addCorps(g, 'GER', 'Column', 'inf', 2, 'Saar', {});
+      const before = c.ap;
+      expect(moveCorps(g, c, town)).toBe(true);
+      expect(c.reg).toBe(town.id);
+      expect(besieged(g, town)).toBe(true);
+      expect(town.ctrl).toBe('FRA');
+      if (field) expect(c.ap).toBe(0);
+      else { expect(c.ap).toBeGreaterThan(0); expect(c.ap).toBeLessThan(before); }
+    }
+  });
+
+  it("the staff keeps round masked works the ring the siege rule asks for, and the rest go on; round a field garrison, every corps stays", () => {
+    const round: [Kind, number][] = [['inf', 2], ['inf', 2], ['inf', 2], ['inf', 2], ['inf', 2]];
+    for (const field of [false, true]) {
+      const { g, town, corps } = crewTown(true, round, field);
+      g.flags[`siege:${town.id}`] = g.turn - 1;
+      for (const c of corps) c.hold = false;
+      sieges(g, 'GER');
+      expect(besieged(g, town)).toBe(true);
+      const inside = garrisonOf(town).reduce((s, c) => s + c.divs * c.str, 0) + guardOf(g, town);
+      const kept = corps.filter((c) => c.ap === 0), free = corps.filter((c) => c.ap > 0);
+      if (field) expect(free).toHaveLength(0);
+      else {
+        expect(kept.reduce((s, c) => s + c.divs * c.str, 0)).toBeGreaterThanOrEqual(SIEGE.ring * inside);
+        expect(free.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('a crew in a town its guard holds alone does not mask it; its guard gone in with the crew, the town hungry, or a guard that would open, it does', () => {
+    // (A dated row raised inside a town the enemy already stands round, the reviewers' Minsk: the guard held it before the crew came.)
+    const alone = crewTown(true, [['inf', 4]], false, false);
+    const { g, town, crew } = alone;
+    expect(guardOf(g, town)).toBeGreaterThan(0);
+    expect(crewsMask(g, town)).toBe(false);
+    g.flags[`guardIn:${crew.id}`] = 1;
+    expect(crewsMask(g, town)).toBe(true);
+    delete g.flags[`guardIn:${crew.id}`];
+    // The town's own stores spent: its guard alone would give in to hunger (siegeEnds), so only the crew holds it.
+    g.flags[`sgm:${town.id}`] = 99;
+    expect(crewsMask(g, town)).toBe(true);
+    delete g.flags[`sgm:${town.id}`];
+    // An army round it great enough that the guard alone would open at the summons.
+    for (let k = 0; k < 4; k++) addCorps(g, 'GER', `Big ${k}`, 'arm', 12, 'Lorraine', {});
+    const supplied = crew.supplied;
+    g.supplyDirty = true;
+    expect(crewsMask(g, town)).toBe(true);
+    // (The summons is read with the crew out of sight, but the supply map is never taken in that moment.)
+    expect(garrisonOf(town)).toEqual([crew]);
+    expect(crew.supplied).toBe(supplied);
+  });
+
+  it('defenders who give way leave masked works to the army walking in, which keeps its moves; round a field garrison it stops as before', () => {
+    for (const field of [false, true]) {
+      const { g, town } = crewTown(true, [], field);
+      const fr = addCorps(g, 'FRA', 'Screen Corps', 'inf', 1, 'Lorraine', {});
+      fr.yields = true;
+      const att = [addCorps(g, 'GER', 'Column A', 'arm', 12, 'Saar', {}), addCorps(g, 'GER', 'Column B', 'arm', 12, 'Saar', {})];
+      const rep = resolveBattle(g, att, town);
+      expect(rep.defenders.some((u) => u.fate === 'yielded')).toBe(true);
+      const inside = att.filter((c) => c.reg === town.id);
+      expect(inside.length).toBeGreaterThan(0);
+      expect(town.ctrl).toBe('FRA');
+      expect(besieged(g, town)).toBe(true);
+      for (const c of inside) if (field) expect(c.ap, c.name).toBe(0); else expect(c.ap, c.name).toBeGreaterThan(0);
+    }
+  });
+
+  it('the ring kept round masked works is of corps that fight: guns are not counted in it, so the siege is not left to guns alone', () => {
+    // (Guns that alone would cover the ring, and are the weakest in the line, so that the staff's order takes them first.)
+    const { g, town, crew, corps } = crewTown(true, [['art', 3], ['inf', 5]]);
+    g.flags[`siege:${town.id}`] = g.turn - 1;
+    crew.supplied = false; // (cut off, its stores clock runs: the staff waits for the hunger and does not storm, 13:05Z)
+    const guns = corps[0];
+    expect(atkPower(g, guns)).toBeLessThan(Math.min(...corps.slice(1).map((c) => atkPower(g, c))));
+    expect(guns.divs * guns.str).toBeGreaterThanOrEqual(SIEGE.ring * (crew.divs * crew.str + guardOf(g, town)));
+    for (const c of corps) c.hold = false;
+    sieges(g, 'GER');
+    expect(besieged(g, town)).toBe(true);
+    const inside = garrisonOf(town).reduce((s, c) => s + c.divs * c.str, 0) + guardOf(g, town);
+    const kept = corps.filter((c) => c.ap === 0 && c.kind !== 'art');
+    expect(kept.length).toBeGreaterThan(0);
+    expect(kept.reduce((s, c) => s + c.divs * c.str, 0)).toBeGreaterThanOrEqual(SIEGE.ring * inside);
+    expect(corps.some((c) => c.ap > 0)).toBe(true);
+  });
+
+  it("Lille, a city: its guard stands in the field, goes in with the crews and is marked with them; masked, the winners keep the moves they keep off, where the town falls with the field", () => {
+    const ap = (on: boolean): { moves: number[]; g: Game; lille: Region } => {
+      const g = sameCrews(open(on));
+      setWar(g, 'GER', 'FRA');
+      const lille = g.byName.Lille, namur = g.byName.Namur;
+      clear(g, lille, (c) => c.kind === 'fort');
+      addCorps(g, 'FRA', 'Nord Corps', 'inf', 2, 'Lille', {});
+      clear(g, namur);
+      namur.ctrl = 'GER';
+      const att = [0, 1, 2, 3].map((k) => addCorps(g, 'GER', `Panzer Corps ${k}`, 'arm', 12, 'Namur', {}));
+      const rep = resolveBattle(g, att, lille);
+      expect(rep.taken).toBe(true);
+      expect(rep.guarded).toBe(true);
+      if (on) {
+        expect(lille.ctrl).toBe('FRA');
+        const crews = garrisonOf(lille);
+        expect(crews).toHaveLength(3);
+        for (const c of crews) { expect(c.kind).toBe('fort'); expect(g.flags[`guardIn:${c.id}`], c.name).toBe(1); }
+        expect(crewsMask(g, lille)).toBe(true);
+      } else expect(lille.ctrl).toBe('GER');
+      return { moves: att.map((c) => (c.reg === lille.id ? c.ap : -1)), g, lille };
+    };
+    const on = ap(true), off = ap(false);
+    expect(on.moves.every((m) => m > 0)).toBe(true);
+    expect(on.moves).toEqual(off.moves);
   });
 });
 

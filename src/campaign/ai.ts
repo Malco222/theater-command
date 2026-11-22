@@ -25,7 +25,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
-import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormBar, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
+import { GREAT, SIEGE, arrive, besieged, crewsMask, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormBar, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -430,10 +430,14 @@ export function sieges(g: Game, nat: string, after = false): void {
     // A port that ships can feed is not starved by waiting: after a season round one only the ring stays, and the
     // rest are free to overrun the country behind it (overrun, below) or to go where the staff wants them.
     const fed = prize && sat >= SIEGE.ai.sea.after && (feeders(g, r).length > 0 || fedByBook(g, r));
+    // (The fortress rows, 20:10Z: works held only by the crews sheltered in them are masked. The ring the siege rule
+    // asks for stays to keep them shut in, and the rest of the army goes on, as round a small place held by its guard.
+    // The ring is of corps that fight: guns left alone keep up no siege (siegeMonth), so they are not counted in it.)
+    const crews = crewsMask(g, r);
     const fast = (c: Corps): number => (KIND[c.kind].mobile ? 1 : 0);
     let have = 0;
-    for (const c of mine().filter((u) => u.kind !== 'eng').sort((x, y) => fast(x) - fast(y) || atkPower(g, x) - atkPower(g, y))) {
-      if ((!prize || fed) && have > 0 && have >= SIEGE.ring * inside) break;
+    for (const c of mine().filter((u) => u.kind !== 'eng' && (!crews || fights(u))).sort((x, y) => fast(x) - fast(y) || atkPower(g, x) - atkPower(g, y))) {
+      if ((!prize || fed || crews) && have > 0 && have >= SIEGE.ring * inside) break;
       c.ap = 0;
       have += c.divs * c.str;
     }

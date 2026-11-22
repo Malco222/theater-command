@@ -50,7 +50,7 @@ import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, crewsMask, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
 import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
@@ -1884,7 +1884,8 @@ function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   moveIn(g, attackers, target, opts, attU);
   // In the grand campaign the country is won, and the town with it only if nobody holds it.
   const got = arrive(g, target, attNat);
-  if (!got) closeRound(g, target, attackers);
+  // (The fortress rows, 20:10Z: a town held only by the crews sheltered in it is masked, and the army marches on.)
+  if (!got && !crewsMask(g, target)) closeRound(g, target, attackers);
   // (Ruling 232: an army that gave up the field without a fight left its guard behind the walls, to be stormed or starved.)
   const lines = a.guard && !got ? a.lines.map((l) => l.label === 'The town' ? { label: 'The town', value: `${townName(target)} is held by its own guard`, effect: 'The army gave up the field without a fight, so the guard never fought beside it: the town must now be stormed or starved out' }
     : l.label === 'Forces' ? { ...l, value: l.value.replace(/, and the town guard of about [\d,]+$/, '') } : l) : a.lines;
@@ -2069,6 +2070,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         target.units.splice(target.units.indexOf(c), 1);
         c.org = Math.max(c.org, orgAt.get(c.id) ?? c.org);
         joinTown(g, target, c);
+        // (20:10Z: a guard that stood in the field beside this crew's army goes in with it, which it would not have
+        // done without the crew: the town then holds only because the crew sheltered there. siege.ts crewsMask.)
+        if (inField) g.flags[`guardIn:${c.id}`] = 1;
         defU[i].fate = 'sheltered';
         tallySiege(g, 'works');
         intoWorks = true;
@@ -2127,7 +2131,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       // A town with only its guard may open its gates to the army that has just won the field outside.
       const walls = sieges && !relief && townHeld(g, target);
       held = !arrive(g, target, attNat);
-      if (held) closeRound(g, target, attackers); else gates = walls;
+      // (The fortress rows, 20:10Z: where the town holds only because the crews went into their works, the works
+      // are masked: the winners keep their moves, and the town stays besieged by the siege rule as it is.)
+      if (held && !crewsMask(g, target)) closeRound(g, target, attackers);
+      else if (!held) gates = walls;
     }
   } else {
     // Thrown back from a prepared line, an attack has shot its bolt: those corps do nothing more this month.
@@ -2403,7 +2410,8 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   if (friendly) takeWorks(g, c, to);
   // Ground a corps walks into is taken for the army it marches with: the province too, unless its town is held
   // (the grand campaign), in which case the army has only the country round it and the town is under siege.
-  if (!friendly && !arrive(g, to, armyOf(c))) c.ap = 0; // the town holds: closing round it is the rest of the month's work
+  // (The fortress rows, 20:10Z: not round works held only by the crews sheltered in them, which are masked.)
+  if (!friendly && !arrive(g, to, armyOf(c)) && !crewsMask(g, to)) c.ap = 0; // the town holds: closing round it is the rest of the month's work
   return true;
 }
 

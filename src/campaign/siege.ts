@@ -21,7 +21,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, fortRow, fortRows, roomless, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, ensureSupply, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, fortRow, fortRows, roomless, type Assessment } from './game';
 import { crewStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
 import { bookFed } from './history';
@@ -223,6 +223,34 @@ export const fieldWalls = (g: Game, r: Region, eased: number, open: number): num
 
 /** True while anybody holds the town: a garrison, or its guard. */
 export const townHeld = (g: Game, r: Region): boolean => garrisonOf(r).length > 0 || guardOf(g, r) > 0;
+
+/**
+ * The fortress rows (the design director's 20:10Z): true where the town holds only because fortress crews sheltered
+ * in it. Its garrison is crews alone, an army of the other side stands round it, and without the crews the gates
+ * would be open to that army: the town has no guard; or its guard went in only because the crews did (under ruling
+ * 232 it stood in the field beside the army the crews lost with, and would have been taken with that army: game.ts
+ * marks such a crew 'guardIn'); or the town's hunger would make its guard give in (siegeEnds); or its guard would
+ * open the gates at the summons. A crew raised inside a town its guard already held alone does not mask it. Such
+ * works are masked, not ringed by the whole force: the winners keep their moves (game.ts closeRound does not apply),
+ * the town stays besieged by the siege rule as it is, and a staff keeps round it only what that rule asks to shut it
+ * in (ai.ts sieges). Off, never.
+ */
+export function crewsMask(g: Game, r: Region): boolean {
+  if (!fortRows(g)) return false;
+  const inside = garrisonOf(r);
+  if (!inside.length || !inside.every((c) => fortRow(g, c))) return false;
+  const force = besiegers(g, r);
+  if (!force.length) return false;
+  if (guardOf(g, r) <= 0 || inside.some((c) => g.flags[`guardIn:${c.id}`] !== undefined) || !garrisonFed(g, r)) return true;
+  // The summons, as opensTo reads it, with no crew inside. A city's or a capital's guard never opens.
+  if (SIEGE.summonsNot.includes(townSize(g, r))) return false;
+  // (assess refreshes the supply map if it is due: it is refreshed here first, with the crews inside, so that the
+  // picture is never taken while they are out of sight.)
+  ensureSupply(g);
+  const kept = r.garr;
+  r.garr = undefined;
+  try { return opensTo(g, r, force); } finally { r.garr = kept; }
+}
 
 /** Months the town feeds its defenders once it is closely invested. */
 export const storesOf = (g: Game, r: Region): number => SIEGE.stores[townSize(g, r)] + (r.fort ? SIEGE.fortStores * r.fort.lv : 0);
