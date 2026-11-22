@@ -8,7 +8,7 @@ import { INTEL, foesFound, intelTick, mostAgents, setMission, spyRoom, threat, w
 import { levelIndex } from '../src/campaign/difficulty';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { setAirPiece } from '../src/campaign/airversion';
-import { everyoneOn, flyingOrder, huntersOn, ordersDue, ordersOn, setSecretWar } from '../src/campaign/secretwar';
+import { doublesOn, everyoneOn, flyingOrder, huntersOn, ordersDue, ordersOn, setSecretWar } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
 import type { Agent, Game, Mission } from '../src/campaign/types';
 
@@ -33,10 +33,12 @@ describe('the switches', () => {
     expect(huntersOn(g)).toBe(true);
     expect(ordersOn(g)).toBe(true);
     expect(everyoneOn(g)).toBe(true);
+    expect(doublesOn(g)).toBe(true);
     // Switched off, the campaign plays the old way.
     setSecretWar(g, 'hunt', false);
     setSecretWar(g, 'orders', false);
     setSecretWar(g, 'all', false);
+    setSecretWar(g, 'double', false);
     setAirPiece(g, 'field', false);
     setWar(g, 'UK', 'GER');
     const home = plant(g, 'London', 'guard');
@@ -60,8 +62,9 @@ describe('the switches', () => {
     INTEL.secret.hunters.on = false;
     INTEL.secret.orders.on = false;
     INTEL.secret.everyone.on = false;
+    INTEL.secret.doubles.on = false;
     const g = free();
-    expect(huntersOn(g) || ordersOn(g) || everyoneOn(g)).toBe(false);
+    expect(huntersOn(g) || ordersOn(g) || everyoneOn(g) || doublesOn(g)).toBe(false);
     expect(Object.keys(g.flags).some((k) => k.startsWith('sw:'))).toBe(false);
     const h = createGame(7, 'UK');
     setSecretWar(h, 'all', true);

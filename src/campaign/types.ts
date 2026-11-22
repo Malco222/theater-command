@@ -1283,6 +1283,27 @@ export interface Agent {
   rest?: number;
   /** Quiet months of work abroad, counted toward experience. */
   months?: number;
+  /**
+   * (Double agents, Brian, 22 November, release 2.) The month the enemy turned this agent, and the service it now
+   * works for. Kept from the player: no view he is sent reads them. Only its reports give it away.
+   */
+  turned?: number;
+  turnedFor?: string;
+}
+
+/**
+ * An enemy agent the player turned (Brian, 22 November, release 2: double agents): it stays in its own service and
+ * works for him, warning of every new agent that service sends against him and opening its books, until it is blown.
+ */
+export interface DoubleAgent {
+  id: number;
+  /** A codename from intel.json 'names'. */
+  name: string;
+  /** The service it seems to work for, and the player's nation it truly works for. */
+  of: string;
+  by: string;
+  /** The month it was turned. */
+  since: number;
 }
 
 /**
@@ -1352,6 +1373,9 @@ export interface Intel {
   foeNext?: number;
   /** Enemy air orders the player's agents have read (ruling 135). */
   orders?: StolenOrder[];
+  /** The player's double agents in enemy services (Brian, 22 November, release 2), and the next id. */
+  doubles?: DoubleAgent[];
+  doubleNext?: number;
 }
 
 export const MEN_PER_DIV = 15000;

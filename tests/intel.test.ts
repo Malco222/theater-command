@@ -59,7 +59,7 @@ function playing(human = 'GER', seed = 3): Game {
 const share = (hits: number, of: number): number => hits / of;
 /** The secret war as release 1 had it: no spy hunters, no stolen orders, no wrecked fields, only the great powers' services. */
 function release1(g: Game): Game {
-  setSecretWar(g, 'hunt', false); setSecretWar(g, 'orders', false); setSecretWar(g, 'all', false); setAirPiece(g, 'field', false);
+  setSecretWar(g, 'hunt', false); setSecretWar(g, 'orders', false); setSecretWar(g, 'all', false); setSecretWar(g, 'double', false); setAirPiece(g, 'field', false);
   return g;
 }
 
@@ -448,6 +448,8 @@ describe('sabotage', () => {
     const games: Game[] = [];
     for (let seed = 1; seed <= n; seed++) {
       const g = grand('GER', seed);
+      // (The old path: with double agents on, a share of the agents caught would be turned instead.)
+      setSecretWar(g, 'double', false);
       war(g, 'GER', g.byName[at].ctrl);
       const a = plant(g, at, mission, 'GER', xp);
       intelTick(g, 'GER');

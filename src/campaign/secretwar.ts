@@ -1,7 +1,8 @@
 // The secret war (rulings 151(c), 135 and 153; the design director's b482, item 4): spy hunters and stolen orders,
 // each half behind its own switch in data/campaign/intel.json 'secret', kept with each campaign in g.flags
 // ('sw:hunt', 'sw:orders'); and (Brian, 22 November, release 2) every country at war with the player spying on
-// him, 'sw:all'. The grand campaign only, and only ever against or for the player: the computer's staffs
+// him, 'sw:all'; and (Brian, 22 November, release 2, yes (3)) double agents both ways, with a telltale sign, 'sw:double'.
+// The grand campaign only, and only ever against or for the player: the computer's staffs
 // keep no agents, so a war nobody plays is fought as before.
 //
 // This file holds the switches and the stolen orders' book, which both the secret service (intel.ts) and the air
@@ -12,7 +13,8 @@ import data from '../../data/campaign/intel.json';
 import { headline } from './game';
 import type { Game, StolenOrder } from './types';
 
-const S = (data as unknown as { secret: { hunters: { on: boolean }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number } } }).secret;
+export interface DoublesRules { on: boolean; most: number; blown: number; share: number; lie: number; betray: number; home: number }
+const S = (data as unknown as { secret: { hunters: { on: boolean }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number }; doubles: DoublesRules } }).secret;
 
 /** True in a grand campaign begun with spy hunters (ruling 151(c)). */
 export const huntersOn = (g: Game): boolean => g.flags.open === 1 && g.flags['sw:hunt'] === 1;
@@ -23,6 +25,14 @@ export const ordersOn = (g: Game): boolean => g.flags.open === 1 && g.flags['sw:
  * release 2: every country the computer plays runs real spies against the player, sized to the country).
  */
 export const everyoneOn = (g: Game): boolean => g.flags.open === 1 && g.flags['sw:all'] === 1;
+/**
+ * True in a grand campaign begun with double agents (Brian, 22 November, release 2, yes (3): double agents, with a
+ * telltale sign so a false report is never unfair). The player can turn an enemy agent his hunters uncovered, and the
+ * enemy can turn one of his agents abroad.
+ */
+export const doublesOn = (g: Game): boolean => g.flags.open === 1 && g.flags['sw:double'] === 1;
+/** The double agents' numbers (intel.json secret.doubles). */
+export const DOUBLES = (): DoublesRules => S.doubles;
 /** With everyoneOn: the share of a great power's rate at which a smaller nation's service plots. */
 export const SMALLER = (): number => S.everyone.smaller;
 
@@ -31,10 +41,11 @@ export function openSecretWar(g: Game): void {
   if (S.hunters.on) g.flags['sw:hunt'] = 1;
   if (S.orders.on) g.flags['sw:orders'] = 1;
   if (S.everyone.on) g.flags['sw:all'] = 1;
+  if (S.doubles.on) g.flags['sw:double'] = 1;
 }
 
 /** For tests and probes: one half of the secret war on or off in this campaign. */
-export function setSecretWar(g: Game, part: 'hunt' | 'orders' | 'all', on: boolean): void {
+export function setSecretWar(g: Game, part: 'hunt' | 'orders' | 'all' | 'double', on: boolean): void {
   if (on) g.flags[`sw:${part}`] = 1;
   else delete g.flags[`sw:${part}`];
 }

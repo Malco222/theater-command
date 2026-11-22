@@ -12,7 +12,7 @@
 
 import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
-import type { Agent, Corps, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
+import type { Agent, Corps, DoubleAgent, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
 import { allied, atWar, bloc, declareWar, fieldArmy, headline, theWords } from './game';
 import { ARSENAL, yardLevel } from './arsenal';
 import { PLANS, PLAN_PLACES, PLAN_WORDS, canNowWords, doesWith, givesPlans, grantPlans, isCapitalHull, planRules, plansFrom, whyNoTechPlans, type PlanItem } from './plans';
@@ -23,7 +23,7 @@ import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
 import { TECH, spyOf } from './tech';
 import { AIRV, airPiece, fieldWrecked, groupsOnField, wreckField } from './airversion';
-import { SMALLER, everyoneOn, huntersOn, ordersKnown, ordersOn, pruneOrders } from './secretwar';
+import { DOUBLES, SMALLER, doublesOn, everyoneOn, huntersOn, ordersKnown, ordersOn, pruneOrders, type DoublesRules } from './secretwar';
 import { fieldOrder } from './air';
 
 interface MissionRow { caught: number; success?: number; gain?: number; months?: number; cut?: number }
@@ -40,7 +40,7 @@ export const INTEL = data as unknown as {
   estimate: { round: number };
   reports: { fresh: number; keep: number; drift: number; widest: number; contact: number; unknown: number };
   names: string[];
-  secret: { hunters: { on: boolean; lead: number; here: number; near: number; skill: number }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number } };
+  secret: { hunters: { on: boolean; lead: number; here: number; near: number; skill: number }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number }; doubles: DoublesRules };
 };
 
 /** True when spies and the fog of war are in the game. That is the grand campaign: a historical scenario shows the whole map. */
@@ -410,9 +410,9 @@ function note(g: Game, a: { name: string; nat: string }, reg: number, what: stri
   if (N.length > KEEP_NOTES) N.splice(0, N.length - KEEP_NOTES);
 }
 
-function codename(g: Game, id: number): string {
-  const used = new Set([...g.intel.agents.map((a) => a.name), ...g.intel.notes.map((n) => n.agent)]);
-  const N = INTEL.names, at = hashString(`intelname:${g.seed}:${id}`) % N.length;
+function codename(g: Game, id: number, salt = ''): string {
+  const used = new Set([...g.intel.agents.map((a) => a.name), ...g.intel.notes.map((n) => n.agent), ...(g.intel.doubles ?? []).map((d) => d.name)]);
+  const N = INTEL.names, at = hashString(`intelname:${g.seed}:${salt}${id}`) % N.length;
   for (let k = 0; k < N.length; k++) if (!used.has(N[(at + k) % N.length])) return N[(at + k) % N.length];
   return `${N[at]} ${id}`;
 }
@@ -535,6 +535,21 @@ export function caughtChance(g: Game, a: Agent, m: Mission = a.mission): number 
   return clamp(p, 0, 0.95);
 }
 
+/**
+ * The chance this month that the agent is truly caught, which is not always the one the player is shown (double
+ * agents, Brian, 22 November, release 2): an agent the enemy has turned is never caught, its masters protect it; and
+ * while one works for a country, the player's other agents there are betrayed, caught 'betray' more often. He sees
+ * it only as losses.
+ */
+export function riskNow(g: Game, a: Agent, m: Mission = a.mission): number {
+  if (a.turned !== undefined) return 0;
+  const p = caughtChance(g, a, m);
+  if (!doublesOn(g) || p <= 0) return p;
+  const host = g.regions[a.reg].ctrl;
+  const sold = g.intel.agents.some((b) => b !== a && b.nat === a.nat && b.turned !== undefined && b.turnedFor === host);
+  return sold ? clamp(p * (1 + DOUBLES().betray), 0, 0.95) : p;
+}
+
 /** The chance that an act of sabotage or a theft by this agent comes off: a theft surer with Microfilm (tech.json). */
 export const successChance = (a: Agent, m: Mission, g?: Game): number =>
   clamp((INTEL.missions[m].success ?? 0) + INTEL.skill.success * (skillOf(a) - 1) + (g && isTheft(m) ? spyOf(g, a.nat).theft : 0), 0, 0.95);
@@ -652,13 +667,41 @@ export function knowsBooks(g: Game, of: string, viewer: string | null = g.human)
   if (allied(g, of, viewer)) return true;
   const n = g.nations[of];
   if (!n?.alive || n.capital < 0) return false;
-  return agentsOf(g, viewer).some((a) => a.reg === n.capital && a.mission === 'books' && atWork(g, a) && g.regions[a.reg].ctrl === of);
+  // (A double agent in its service opens its books too: Brian, 22 November, release 2.)
+  return readers(g, of, viewer).length > 0 || doubleIn(g, of, viewer) !== null;
 }
+
+/** The viewer's agents at work reading this nation's books in its capital, loyal or not. */
+const readers = (g: Game, of: string, viewer: string | null): Agent[] => {
+  const n = g.nations[of];
+  return !n?.alive || n.capital < 0 ? [] : agentsOf(g, viewer).filter((a) => a.reg === n.capital && a.mission === 'books' && atWork(g, a) && g.regions[a.reg].ctrl === of);
+};
+
+/** The viewer's double agent at work in this nation's service, or null (double agents, Brian, 22 November, release 2). */
+export function doubleIn(g: Game, of: string, viewer: string | null = g.human): DoubleAgent | null {
+  if (!doublesOn(g) || viewer === null || !g.nations[of]?.alive || !atWar(g, viewer, of)) return null;
+  return (g.intel.doubles ?? []).find((d) => d.of === of && d.by === viewer) ?? null;
+}
+
+/**
+ * True where every source the viewer has on this nation's books is an agent the enemy has turned: no loyal reader, no
+ * double agent. Then the books show the army 'lie' smaller than it is: too good to be true (Brian, 22 November,
+ * release 2: a telltale sign, so a false report is never unfair). A loyal reader's true figures win.
+ */
+function booksLie(g: Game, of: string, viewer: string | null): boolean {
+  if (!doublesOn(g) || viewer === null || allied(g, of, viewer)) return false;
+  const all = readers(g, of, viewer);
+  return all.length > 0 && all.every((a) => a.turned !== undefined) && doubleIn(g, of, viewer) === null;
+}
+
+/** The army as the books show it: the truth, or with a turned reader alone 'lie' smaller. */
+const booksArmy = (g: Game, of: string, viewer: string | null): number => fieldArmy(g, of) * (booksLie(g, of, viewer) ? 1 - DOUBLES().lie : 1);
 
 /** The size of a nation's army as the viewer knows it: to the division with its books open, to the nearest ten without. */
 export function armyKnown(g: Game, of: string, viewer: string | null = g.human): { divs: number; exact: boolean; few?: boolean } {
   const all = fieldArmy(g, of);
-  if (!fogOn(g, viewer) || knowsBooks(g, of, viewer)) return { divs: all, exact: true };
+  if (!fogOn(g, viewer)) return { divs: all, exact: true };
+  if (knowsBooks(g, of, viewer)) return { divs: booksArmy(g, of, viewer), exact: true };
   const k = INTEL.estimate.round;
   // An army too small to round to the nearest ten is known only to be small.
   return all < k / 2 ? { divs: k, exact: false, few: true } : { divs: Math.max(k, Math.round(all / k) * k), exact: false };
@@ -667,6 +710,8 @@ export function armyKnown(g: Game, of: string, viewer: string | null = g.human):
 /** A foreign government's books, as an agent in its capital reads them. */
 export interface Books {
   nat: string; agent: string | null;
+  /** True where the agent is the player's double agent inside that nation's service. */
+  double?: boolean;
   treasury: number; gross: number; upkeep: number; net: number; scale: number;
   divisions: number; corps: number;
   queue: { name: string; what: string; eta: number; region: number }[];
@@ -680,10 +725,12 @@ export function booksOf(g: Game, of: string, viewer: string | null = g.human): B
   if (!intelRules(g) || !n?.alive || !knowsBooks(g, of, viewer)) return null;
   const L = ledger(g, of);
   const a = agentsOf(g, viewer).find((x) => x.reg === n.capital && x.mission === 'books' && atWork(g, x));
+  const d = a ? null : doubleIn(g, of, viewer);
+  const lie = booksLie(g, of, viewer) ? 1 - DOUBLES().lie : 1;
   return {
-    nat: of, agent: a?.name ?? null,
+    nat: of, agent: a?.name ?? d?.name ?? null, ...(d ? { double: true } : {}),
     treasury: L.treasury, gross: L.gross, upkeep: L.upkeepTotal, net: L.net, scale: L.scale,
-    divisions: fieldArmy(g, of), corps: g.corps.filter((c) => c.nat === of && !c.dead).length,
+    divisions: fieldArmy(g, of) * lie, corps: Math.round(g.corps.filter((c) => c.nat === of && !c.dead).length * lie),
     queue: [...n.queue].sort((x, y) => x.eta - y.eta).map((b) => ({ name: b.name, what: b.what, eta: b.eta, region: b.region })),
     research: (n.tech?.work ?? []).map((w) => ({ name: TECH.techs.find((t) => t.id === w.id)?.name ?? w.id, left: Math.max(1, Math.ceil(w.left - 1e-9)) })),
     researched: n.tech?.done.length ?? 0,
@@ -722,7 +769,19 @@ function attempt(g: Game, a: Agent): void {
   const ok = draw(g, g.turn, a.id, 'try') < successChance(a, m, g);
   let text: string;
   let done = false;
-  if (ok && m === 'factory' && wreckFactory(g, r)) { done = true; text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`; }
+  // (Double agents, Brian, 22 November, release 2.) A turned agent's attempt is reported in the usual words and
+  // wrecks nothing, so the map shows no damage: that is the tell. Its masters keep their plans to themselves.
+  const sham = a.turned !== undefined;
+  if (sham && ok && !isTheft(m)) {
+    const k = groupsOnField(g, r.id, (n) => atWar(g, a.nat, n)).length;
+    done = true;
+    text = m === 'factory' ? `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`
+      : m === 'rail' ? `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`
+        : m === 'airfield' ? `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`
+          : `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
+  }
+  else if (sham && ok) text = `Agent ${a.name} cannot get into the ${host.adj} drawing offices at ${r.name}: the plans stay where they are.`;
+  else if (ok && m === 'factory' && wreckFactory(g, r)) { done = true; text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`; }
   else if (ok && m === 'rail' && cutRail(g, r.id, 'agent', a.nat)) { done = true; text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`; }
   else if (ok && m === 'airfield' && wreckField(g, r.id, (n) => atWar(g, a.nat, n))) {
     done = true;
@@ -788,7 +847,8 @@ const roomFor = (g: Game, foe: string): boolean =>
 /** The chance that this nation's guards stop a plot against a province: best with a guard in it or beside it. */
 export function guardChance(g: Game, nat: string, reg: number): { chance: number; by: Agent | null } {
   const E = INTEL.enemy;
-  const guards = agentsOf(g, nat).filter((a) => a.mission === 'guard' && atWork(g, a) && !abroad(g, a));
+  // (A turned agent at home stands guard for its masters, not for him: Brian, 22 November, release 2.)
+  const guards = agentsOf(g, nat).filter((a) => a.mission === 'guard' && atWork(g, a) && !abroad(g, a) && a.turned === undefined);
   if (!guards.length) return { chance: 0, by: null };
   const r = g.regions[reg];
   const near = guards.filter((a) => a.reg === reg || r.nb.includes(a.reg)).sort((x, y) => skillOf(y) - skillOf(x))[0] ?? null;
@@ -809,7 +869,7 @@ const SECRET = INTEL.secret;
 function foesMonth(g: Game, nat: string): void {
   const foes = (g.intel.foes ??= []);
   // His hunters search their province and the provinces around it.
-  for (const a of agentsOf(g, nat).filter((x) => x.mission === 'hunt' && atWork(g, x) && !abroad(g, x)).sort((x, y) => x.id - y.id)) {
+  for (const a of agentsOf(g, nat).filter((x) => x.mission === 'hunt' && atWork(g, x) && !abroad(g, x) && x.turned === undefined).sort((x, y) => x.id - y.id)) {
     const r = g.regions[a.reg];
     for (const f of foes) {
       if (f.found !== undefined) continue;
@@ -856,7 +916,16 @@ function foesMonth(g: Game, nat: string): void {
     if (!aim) continue;
     const id = g.intel.foeNext ?? 1;
     g.intel.foeNext = id + 1;
-    foes.push({ id, nat: foe, reg: aim.reg, kind: aim.kind, strike: g.turn + SECRET.hunters.lead });
+    const f: FoeAgent = { id, nat: foe, reg: aim.reg, kind: aim.kind, strike: g.turn + SECRET.hunters.lead };
+    foes.push(f);
+    // (Brian, 22 November, release 2: a double agent in that service warns of the new agent the month it arrives.)
+    const d = doubleIn(g, foe, nat);
+    if (d) {
+      f.found = g.turn;
+      const text = `Double agent ${d.name} warns of a new ${g.nations[foe].adj} agent at ${g.regions[f.reg].name}.`;
+      note(g, { name: d.name, nat }, f.reg, 'warned', text, true);
+      headline(g, 'event', text, nat, f.reg);
+    }
   }
 }
 
@@ -905,6 +974,61 @@ export function arrest(g: Game, nat: string, id: number): boolean {
   return true;
 }
 
+// ---- Double agents (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign) -------------
+// It overrides ruling 151(c)'s 'no agent is turned'. Both ways, and only ever against or for the player.
+
+/** The player's double agents, each in an enemy service. */
+export const doublesOf = (g: Game, nat: string | null = g.human): DoubleAgent[] =>
+  nat && doublesOn(g) ? (g.intel.doubles ?? []).filter((d) => d.by === nat) : [];
+
+/** Why an uncovered enemy agent cannot be turned, or null. */
+export function whyNotTurn(g: Game, nat: string, id: number): string | null {
+  if (!doublesOn(g)) return 'Not in this campaign.';
+  const why = whyNotArrest(g, nat, id);
+  if (why) return why;
+  const f = g.intel.foes!.find((x) => x.id === id)!, F = g.nations[f.nat];
+  if (!F?.alive || !atWar(g, nat, f.nat)) return 'Its service is no longer at war with you.';
+  const most = DOUBLES().most;
+  if (doublesOf(g, nat).filter((d) => d.of === f.nat).length >= most) return `You already run ${most === 1 ? 'a double agent' : `${most} double agents`} in the ${F.adj} service. Arrest this one.`;
+  return null;
+}
+
+/**
+ * Turns an uncovered enemy agent: it goes back to its service and works for the player, warning of every new agent
+ * that service sends against him and opening its books, until it is blown.
+ */
+export function turnFoe(g: Game, nat: string, id: number): DoubleAgent | null {
+  if (whyNotTurn(g, nat, id)) return null;
+  const foes = g.intel.foes!, f = foes.find((x) => x.id === id)!;
+  foes.splice(foes.indexOf(f), 1);
+  const n = g.intel.doubleNext ?? 1;
+  g.intel.doubleNext = n + 1;
+  const d: DoubleAgent = { id: n, name: codename(g, n, 'double:'), of: f.nat, by: nat, since: g.turn };
+  (g.intel.doubles ??= []).push(d);
+  const F = g.nations[f.nat], r = g.regions[f.reg];
+  const text = `The ${F.adj} agent at ${r.name} is turned. As double agent ${d.name} it goes back to the ${F.adj} service and works for you.`;
+  note(g, { name: d.name, nat }, r.id, 'turned', text, true);
+  headline(g, 'info', text, nat, r.id);
+  return d;
+}
+
+/** The month of the player's double agents: each ends quietly when its service makes peace or is gone, and may be blown. */
+function doublesMonth(g: Game, nat: string): void {
+  const list = g.intel.doubles;
+  if (!list?.length) return;
+  for (const d of [...list].sort((x, y) => x.id - y.id)) {
+    if (d.by !== nat) continue;
+    const F = g.nations[d.of];
+    if (!F?.alive || !atWar(g, nat, d.of)) { list.splice(list.indexOf(d), 1); continue; }
+    if (draw(g, g.turn, 'blown', d.id) >= DOUBLES().blown) continue;
+    list.splice(list.indexOf(d), 1);
+    const text = `${F.adj} intelligence has stopped trusting double agent ${d.name}. It is of no more use.`;
+    note(g, { name: d.name, nat }, F.capital >= 0 ? F.capital : 0, 'blown', text, false);
+    headline(g, 'event', text, nat, F.capital >= 0 ? F.capital : undefined);
+  }
+  if (!list.length) delete g.intel.doubles;
+}
+
 /**
  * An agent on STEAL THE ORDERS tries each month (ruling 135): on a success the strongest bomber group on the field
  * that could fly has next month's order written now, and the player reads it. It does not always work: the agent may
@@ -919,7 +1043,8 @@ function stealOrders(g: Game, a: Agent): void {
     return;
   }
   const host = r.ctrl;
-  const o = fieldOrder(g, host, r.id);
+  // (A turned agent never finds an order: a stolen order is never false, ruling 153, so it cannot bring a false one.)
+  const o = a.turned !== undefined ? null : fieldOrder(g, host, r.id);
   const H = g.nations[host];
   if (!o) {
     const text = `Agent ${a.name}, ${r.name}: no ${H.adj} raid is ordered from the field for next month.`;
@@ -1031,18 +1156,36 @@ function plots(g: Game, nat: string): void {
 export function intelTick(g: Game, nat: string): void {
   if (!intelRules(g) || nat !== g.human || !g.nations[nat]?.alive) return;
   if (g.flags.spyfrom === undefined) g.flags.spyfrom = g.turn;
+  const doubles = doublesOn(g);
   for (const a of [...agentsOf(g, nat)].sort((x, y) => x.id - y.id)) {
     if (!atWork(g, a)) continue;
     const r = g.regions[a.reg];
-    if (!abroad(g, a)) { if (a.mission !== 'hunt' || !huntersOn(g)) a.mission = 'guard'; continue; }
+    if (!abroad(g, a)) {
+      if (a.mission !== 'hunt' || !huntersOn(g)) a.mission = 'guard';
+      // (Double agents, Brian, 22 November, release 2.) A turned agent brought home is soon found out, and arrested.
+      if (doubles && a.turned !== undefined) {
+        if (draw(g, g.turn, a.id, 'home') < DOUBLES().home) {
+          const F = g.nations[a.turnedFor ?? ''];
+          lose(g, a, `Agent ${a.name} has been working for ${F?.name ?? 'the enemy'}. It is arrested.`, 'arrested');
+        } else note(g, a, r.id, 'quiet', `Agent ${a.name}, ${r.name}: all quiet, and not one enemy agent anywhere near.`, true);
+      }
+      continue;
+    }
     // Ground that has changed hands under an agent: a guard finds itself behind the lines, a reader's capital has fallen.
     if (AT_HOME.includes(a.mission) || (a.mission !== 'watch' && whyNotMission(g, nat, a.id, a.mission))) a.mission = 'watch';
     const was = a.mission;
     // The risk is the one the player was shown when the order was given: the alarm an attempt raises counts from next month.
-    const risk = caughtChance(g, a, was);
+    // (With double agents on, the true one: a turned agent is never caught, and betrays the others in its masters' country.)
+    const risk = doubles ? riskNow(g, a, was) : caughtChance(g, a, was);
     if (triedOnce(was)) attempt(g, a);
     if (was === 'orders') stealOrders(g, a);
-    if (draw(g, g.turn, a.id, 'caught') < risk) {
+    const caught = draw(g, g.turn, a.id, 'caught') < risk;
+    // (Double agents, Brian, 22 November, release 2.) A computer's service at war with him may turn the agent instead
+    // of taking it. Nothing is said, and it goes on reporting as before.
+    if (caught && doubles && r.ctrl !== g.human && atWar(g, nat, r.ctrl) && draw(g, g.turn, a.id, 'turned') < DOUBLES().share) {
+      a.turned = g.turn;
+      a.turnedFor = r.ctrl;
+    } else if (caught) {
       const host = g.nations[r.ctrl];
       // (Caught at the field: the enemy changes the orders it may have read.)
       const changed = was === 'orders' ? cancelOrders(g, a) : '';
@@ -1054,7 +1197,10 @@ export function intelTick(g: Game, nat: string): void {
     }
     a.months = (a.months ?? 0) + 1;
     if (a.months % INTEL.agents.watch === 0) learn(g, a, 1);
+    // THE TELL: each month after it is turned, the agent files a quiet report too good to be true, as a loyal agent never does.
+    if (a.turned !== undefined && a.turned < g.turn) note(g, a, r.id, 'quiet', `Agent ${a.name}, ${r.name}: all quiet, and the ${g.nations[r.ctrl]?.adj ?? 'enemy'} forces there are weaker than we feared.`, true);
   }
+  if (doubles) doublesMonth(g, nat);
   for (const k of Object.keys(g.intel.heat)) if (g.intel.heat[+k] <= g.turn) delete g.intel.heat[+k];
   // (A field wrecked in an earlier month is mended: its mark goes.)
   if (airPiece(g, 'field')) for (const k of Object.keys(g.flags)) if (k.startsWith('wreck:') && (g.flags[k] ?? 0) < g.turn) delete g.flags[k];
@@ -1104,7 +1250,17 @@ export interface SpyRoom {
   found?: { id: number; nat: string; reg: number; where: string; text: string }[];
   /** With stolen orders (ruling 135): THE ENEMY'S ORDERS. */
   orders?: { text: string; target: number; turn: number; done?: string }[];
+  /**
+   * With double agents (Brian, 22 November, release 2): the player's double agents in enemy services, and a plain
+   * line for the room's help saying that his own agents can be turned and how to tell. Nothing here, or anywhere the
+   * player is sent, says which of his agents the enemy has turned.
+   */
+  doubles?: { id: number; name: string; of: string; since: number; text: string }[];
+  turnedHelp?: string;
 }
+
+/** The room's warning, in plain words: an agent can be turned, and a turned agent's reports are too good to be true. */
+export const TURNED_HELP = 'An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent\'s reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no mark on the map, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.';
 
 function viewOf(g: Game, a: Agent): AgentView {
   const r = g.regions[a.reg], out = abroad(g, a), work = atWork(g, a);
@@ -1149,5 +1305,9 @@ export function spyRoom(g: Game, nat: string | null = g.human): SpyRoom | null {
     threat: { chance: T.chance, foes: T.foes, guards: mine.filter((a) => a.mission === 'guard' && atWork(g, a) && !abroad(g, a)).length, rate: T.rate },
     ...(huntersOn(g) ? { found: foesFound(g, nat).map((f) => ({ id: f.id, nat: f.nat, reg: f.reg, where: g.regions[f.reg].name, text: `${/^[AEIOU]/.test(g.nations[f.nat]?.adj ?? '') ? 'An' : 'A'} ${g.nations[f.nat]?.adj ?? 'enemy'} agent at ${g.regions[f.reg].name}, uncovered ${f.found === g.turn ? 'this month' : 'earlier'}` })) } : {}),
     ...(ordersOn(g) ? { orders: enemyOrders(g, nat) } : {}),
+    ...(doublesOn(g) ? {
+      doubles: doublesOf(g, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g.nations[d.of]?.adj ?? 'enemy'} service since ${monthOf(d.since)}: it warns of every new ${g.nations[d.of]?.adj ?? 'enemy'} agent sent against you, and opens ${g.nations[d.of]?.name ?? 'that country'}'s books.` })),
+      turnedHelp: TURNED_HELP,
+    } : {}),
   };
 }
