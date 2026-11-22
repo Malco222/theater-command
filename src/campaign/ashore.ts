@@ -9,11 +9,15 @@
 //            against an army farther off counts for a share: it cannot all be brought); and a share of his reserves
 //            farther off, out of the line, on ground of his in one piece with ground he holds within those marches:
 //            his railways bring them within the time (a bigger share where the place is within those marches of
-//            his own country: he defends his own door with more of what he has free). Across ground he does not
+//            his own country: he defends his own door with more of what he has free). Only the holder of the
+//            place brings them from his own country: an ally's army standing in its own home stays there, for its
+//            own coasts (ruling 233(s): the divisions that reached Normandy were Germany's; a place in the hands
+//            of the force's own side has no such holder, and there it is whoever holds ground within the marches). Across ground he does not
 //            hold he must march, so a harbour more than three marches from any ground of his is out of his reach;
 //   ours     the force as it would defend the place, the field corps of its side already within those marches, and
 //            the corps standing ready that the ships can bring in after it within the time.
 // The chance is ours / (ours + theirs). Nothing here changes the game: no flag is written and no dice are thrown.
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
 import { allied, atWar, corpsBase } from './game';
 import { corpsKnown, fogOn } from './intel';
@@ -30,6 +34,8 @@ export interface StrengthRules {
   reserve: number;
   /** That share where the place is within the marches of his own home country and he holds it: he defends his own door. */
   door: number;
+  /** True: only the holder of the place brings reserves from his own country; an ally's corps standing in its own home is no reserve for this place (ruling 233(s)). */
+  own?: boolean;
   /** The chance a staff asks for before it sails. */
   sure: number;
   /** The chance a bold staff sails on. */
@@ -96,6 +102,11 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
   // Whose own country lies within the marches, still in his hands: his reserves come to his own door in greater number.
   const door = new Set<string>();
   for (const id of w) { const r = g.regions[id]; if (!r.overseas && r.owner === held[id]) door.add(r.owner); }
+  // Who brings reserves from his own country (ruling 233(s)): the holder of the place, alone. Where the place is in
+  // the hands of the force's own side there is no such holder: then whoever holds ground within the marches (it is his front).
+  const host = new Set<string>();
+  if (atWar(g, nat, held[at.id])) host.add(held[at.id]);
+  else for (const id of w) host.add(held[id]);
   for (let i = 0; i < w.length; i++) for (const j of g.regions[w[i]].nb) if (!rail[j] && atWar(g, nat, held[j])) { rail[j] = 1; w.push(j); }
   const mine = new Set(force.map((c) => c.id));
   const out: Reckoning = { theirs: 0, near: 0, reserve: 0, corps: 0, behind: 0, ours: 0, force: 0, friends: 0, follow, chance: 1, divs: { theirs: 0, ours: 0 } };
@@ -117,7 +128,8 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
       const share = seen ? seen(u) : 1;
       if (share <= 0) continue;
       const p = strikes(g, u) * share, L = inLine(u, r);
-      const counts = far[id] >= 0 ? (L.tied && !L.here ? S.line : 1) : L.tied ? 0 : door.has(u.nat) ? S.door ?? S.reserve : S.reserve;
+      const atHome = !!S.own && !r.overseas && r.owner === u.nat && !host.has(u.nat);
+      const counts = far[id] >= 0 ? (L.tied && !L.here ? S.line : 1) : L.tied || atHome ? 0 : door.has(u.nat) ? S.door ?? S.reserve : S.reserve;
       if (far[id] >= 0) { out.near += counts * p; out.corps++; }
       else if (counts > 0) { out.reserve += counts * p; out.behind++; }
       out.divs.theirs += counts * share * u.divs * u.str;

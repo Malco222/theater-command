@@ -95,12 +95,13 @@ describe('what a province has, and where it lies', () => {
     const g = playing('GER');
     // Counted on the map of Europe, and on the whole of the wider world the grand campaign is played on.
     const count = (k: PrizeKind, all = false): number => g.regions.filter((r) => (all || !beyondEurope(r)) && hasPrize(g, r, k)).length;
-    expect(count('oil')).toBe(5);
+    // Six with Iran's field at Kermanshah (ruling 228, item 14).
+    expect(count('oil')).toBe(6);
     expect(count('works')).toBe(37);
     expect(count('junction')).toBe(32);
     // Five more in Latin America since Version 76 (Maracaibo and eastern Venezuela, Santander, Talara, Comodoro Rivadavia),
     // and Calgary's Turner Valley field since the cities version (the clerk's reference-cities.md).
-    expect(count('oil', true)).toBe(16);
+    expect(count('oil', true)).toBe(17);
     // On the cities chart the factories of a province went in part to its cities (ruling 210): Houston and Indiana are
     // factory districts now, and Washington, East Texas, Toronto and Rio de Janeiro are not, their factories spread
     // among their cities, one apiece. Buenos Aires and Sao Paulo still are.

@@ -37,12 +37,12 @@
     ]
   },
   "production": {
-    "GER": [[1, 180, 280], [9, 250, 300], [16, 300, 320], [22, 360, 350]],
-    "UK": [[1, 110, 150], [6, 180, 200], [9, 320, 250], [10, 450, 300], [16, 400, 350]],
+    "GER": [[1, 180, 280], [9, 250, 300], [16, 300, 320], [22, 360, 350], [40, 450, 380], [46, 800, 300], [52, 1200, 250], [56, 1800, 200]],
+    "UK": [[1, 110, 150], [6, 180, 200], [9, 320, 250], [10, 450, 300], [16, 450, 350], [28, 600, 450], [40, 820, 520], [52, 890, 650]],
     "FRA": [[1, 120, 60], [7, 250, 120]],
     "ITA": [[1, 120, 100]],
-    "SOV": [[1, 250, 200], [22, 450, 350], [26, 700, 500]],
-    "USA": [[1, 20, 15], [17, 60, 40], [29, 150, 150], [36, 220, 220], [44, 300, 300], [53, 350, 350]]
+    "SOV": [[1, 250, 200], [22, 450, 350], [26, 700, 500], [34, 1000, 800], [46, 1250, 1000]],
+    "USA": [[1, 20, 15], [17, 60, 40], [29, 150, 150], [36, 220, 220], [44, 900, 900], [53, 1300, 1200]]
   },
   "pilots": {
     "home": 0.5,
@@ -58,7 +58,7 @@
   },
   "reserve": {
     "_default": { "ftr": 150, "bmr": 150, "pilots": 100 },
-    "GER": { "ftr": 400, "bmr": 500, "pilots": 250 },
+    "GER": { "ftr": 1200, "bmr": 500, "pilots": 250 },
     "UK": { "ftr": 300, "bmr": 250, "pilots": 200 },
     "SOV": { "ftr": 600, "bmr": 500, "pilots": 400 },
     "USA": { "ftr": 400, "bmr": 400, "pilots": 300 }
@@ -85,7 +85,7 @@
   "airfields": { "holds": 1500 },
   "ready": { "support": 0.15, "rest": 0.35, "flying": 0.1, "sortie": 0.1, "nightSortie": 0.05, "defend": 0.05, "move": 0.25, "floor": 0.3 },
   "fleets": [
-    { "nat": "GER", "name": "Luftflotte 1", "base": "Berlin", "leader": "Alfred Keller", "est": [[1, 300, 500], [10, 80, 150], [20, 250, 450]] },
+    { "nat": "GER", "name": "Luftflotte 1", "base": "Berlin", "leader": "Alfred Keller", "est": [[1, 300, 500], [10, 80, 150], [20, 250, 450], [46, 600, 250], [55, 1100, 150]] },
     { "nat": "GER", "name": "Luftflotte 2", "base": "Westphalia", "leader": "Albert Kesselring", "est": [[1, 250, 450], [10, 650, 750], [20, 400, 550]] },
     { "nat": "GER", "name": "Luftflotte 3", "base": "Frankfurt", "leader": "Hugo Sperrle", "est": [[1, 200, 300], [10, 330, 500], [20, 250, 400]] },
     { "nat": "GER", "name": "Luftflotte 4", "base": "Vienna", "leader": "Alexander Lohr", "est": [[1, 150, 350], [10, 60, 100], [20, 300, 450]] },
@@ -95,7 +95,7 @@
     { "nat": "UK", "name": "No. 12 Group", "base": "East Anglia", "leader": "Trafford Leigh-Mallory", "start": [120, 0], "est": [[1, 140, 0], [9, 190, 0]] },
     { "nat": "UK", "name": "No. 10 Group", "base": "Hampshire", "from": 10, "leader": "Quintin Brand", "start": [60, 0], "est": [[10, 100, 0]] },
     { "nat": "UK", "name": "No. 13 Group", "base": "Northumbria", "leader": "Richard Saul", "start": [70, 0], "est": [[1, 100, 0]] },
-    { "nat": "UK", "name": "Bomber Command", "base": "Lincolnshire", "leader": "Charles Portal", "start": [0, 280], "est": [[1, 0, 300], [9, 0, 450], [22, 0, 600]] },
+    { "nat": "UK", "name": "Bomber Command", "base": "Lincolnshire", "leader": "Arthur Harris", "start": [0, 280], "est": [[1, 0, 300], [9, 0, 450], [22, 0, 600], [34, 0, 800], [46, 0, 1100], [55, 0, 1400]] },
 
     { "nat": "FRA", "name": "Northern Air Zone", "base": "Lille", "leader": "Francois d'Astier", "est": [[1, 300, 150]] },
     { "nat": "FRA", "name": "Eastern Air Zone", "base": "Lorraine", "leader": "Marcel Tetu", "est": [[1, 250, 100]] },
@@ -123,10 +123,10 @@
     { "nat": "USA", "name": "Caribbean Air Force", "base": "Canal Zone", "home": true, "est": [[1, 40, 30], [17, 100, 50], [29, 150, 60], [41, 100, 40]] },
     { "nat": "USA", "name": "Eighth Air Force", "base": "Georgia", "from": 34, "start": [80, 100], "est": [[34, 200, 250]] },
     { "nat": "USA", "name": "Twelfth Air Force", "base": "Washington", "from": 38, "start": [80, 80], "est": [[38, 200, 200]] },
-    { "nat": "USA", "name": "VIII Bomber Command", "base": "Georgia", "from": 44, "start": [0, 150], "est": [[44, 0, 400]] },
-    { "nat": "USA", "name": "VIII Fighter Command", "base": "New York", "from": 52, "start": [100, 0], "ftrRange": 600, "est": [[52, 250, 0]] },
+    { "nat": "USA", "name": "VIII Bomber Command", "base": "Georgia", "from": 44, "start": [0, 150], "est": [[44, 0, 400], [49, 0, 900], [54, 0, 1600]] },
+    { "nat": "USA", "name": "VIII Fighter Command", "base": "New York", "from": 52, "start": [100, 0], "ftrRange": 600, "est": [[52, 250, 0], [55, 600, 0]] },
     { "nat": "USA", "name": "Ninth Air Force", "base": "Georgia", "from": 50, "start": [80, 80], "est": [[50, 200, 200]] },
-    { "nat": "USA", "name": "Fifteenth Air Force", "base": "Washington", "from": 51, "start": [60, 140], "ftrRange": 600, "est": [[51, 150, 350]] }
+    { "nat": "USA", "name": "Fifteenth Air Force", "base": "Washington", "from": 51, "start": [60, 140], "ftrRange": 600, "est": [[51, 150, 350], [56, 300, 800]] }
   ],
   "plan": [
     { "nat": "GER", "from": 11, "to": 11, "name": "The Channel battles", "against": "UK", "orders": [
@@ -178,5 +178,19 @@
       { "fleet": "Second Tactical Air Force", "base": ["Brussels", "Rouen", "Normandy"], "mission": "support" },
       { "fleet": "US Ninth Air Force", "base": ["Champagne", "Paris", "Maine", "Rennes", "Cotentin"], "mission": "support" }
     ] }
-  ]
+  ],
+  "close": {
+    "_note": "Close air support (Brian's ask of 2026-11-18, 18:58Z; the land field thread's seam): a land fighter group given the standing order 'Ground support' flies over its own side's land battles within its fighters' reach, in place of meeting raids and escorting. The grand campaign only, and only while 'on' is true; off, nothing reads this. Each battle a group flies over costs it 'ready' readiness and, per air strike, 'loss' of the aircraft it brings, 'enemySky' times that under the other side's sky; it flies one battle a week, and none below 'least' readiness or in a month it has flown a raid. On the battle card the side's on-call weight W (aircraft x reach x airfields x readiness x technology x fuel) adds most x min(1, W / full) to its side of the air edge, and this term alone reaches past the sky's clamp at 1 (the design director's b536: ground attack paid most where the sky was already won); under the grand campaign's sky row a full term is worth about x1.05 on the attack and x1.03 on the defence; the strikes it makes are W / strike, rounded, between strikes[0] and strikes[1], where it makes at least 'counts' of the side's strength.",
+    "on": true,
+    "most": 0.37,
+    "full": 150,
+    "strike": 60,
+    "strikes": [1, 3],
+    "counts": 0.02,
+    "least": 0.5,
+    "ready": 0.1,
+    "loss": 0.01,
+    "enemySky": 2,
+    "ai": { "_note": "A staff's ground support (b536 asks for it; behind its own switch 'on', so that the player's choice can be on while every war fought by staffs alone stays as it was): while its main army is on the attack, it puts on ground support the land fighter groups that reach the battles of its main effort, nearest first, up to 'share' of its land fighters (by aircraft); the rest patrol and fly its sweeps and escorts. On the defensive, or while the army is brought up, none.", "on": false, "share": 0.34 }
+  }
 }

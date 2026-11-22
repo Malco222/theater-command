@@ -412,6 +412,26 @@ describe('a raid on a harbour', () => {
     put(g, foe, 'natl');
     expect(raidTargets(g, 'harbour', 'UK').some((t) => t.id === port)).toBe(false);
   });
+
+  it("is told in plain words: a place named for its harbour stands alone, one fleet's groups name it once, and the sunk have a verb", () => {
+    const g = britain();
+    const home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
+    home.ships.cv = 6;
+    dock(g, foe);
+    const port = foe.base;
+    g.regions[port].name = 'Test Harbor';
+    const z = g.seas.find((s) => s.coast.includes(port))!;
+    home.zone = z.id; home.stance = 'patrol'; syncWings(g);
+    g.flags['war:UK:GER'] = g.turn;
+    const before = g.headlines.length;
+    const rep = orderRaid(g, 'harbour', port, [wing(g, home, 'bmr').id, wing(g, home, 'ftr').id])!;
+    const text = g.headlines.slice(before).map((h) => h.text).find((t) => /raid Test Harbor/.test(t))!;
+    expect(text).toMatch(/^The Home Fleet's strike wing and carrier fighters raid Test Harbor without warning\. /);
+    expect(text).not.toMatch(/harbour of/);
+    const sunk = rep.ships!.reduce((s, x) => s + shipCount(x.sunk), 0);
+    if (sunk === 1) expect(text).toMatch(/\. One [a-z]+ of the .+ is sunk at anchor\./);
+    else if (sunk > 1) expect(text).toMatch(/\. ([A-Z][a-z]+|\d+) [a-z].* are sunk at anchor\./);
+  });
 });
 
 describe('finding ships at sea', () => {

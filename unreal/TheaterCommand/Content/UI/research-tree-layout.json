@@ -1,0 +1,539 @@
+{
+ "frame": [
+  1600,
+  1000
+ ],
+ "panel": [
+  14,
+  12,
+  1572,
+  976
+ ],
+ "card": [
+  292,
+  38
+ ],
+ "first_column_x": 172,
+ "gutter": 76,
+ "row_gap": 10,
+ "lane_pad": 4,
+ "lane_gap": 6,
+ "grid": [
+  114,
+  896
+ ],
+ "lanes": [
+  {
+   "id": "land",
+   "label": "Land",
+   "top": 114,
+   "h": 142,
+   "rows": 3
+  },
+  {
+   "id": "air",
+   "label": "Air",
+   "top": 262,
+   "h": 142,
+   "rows": 3
+  },
+  {
+   "id": "naval",
+   "label": "Naval",
+   "top": 410,
+   "h": 142,
+   "rows": 3
+  },
+  {
+   "id": "industry",
+   "label": "Industry",
+   "top": 558,
+   "h": 142,
+   "rows": 3
+  },
+  {
+   "id": "doctrine",
+   "label": "Doctrine",
+   "top": 706,
+   "h": 190,
+   "rows": 4
+  }
+ ],
+ "cards": {
+  "motor": {
+   "lane": "land",
+   "row": 1,
+   "step": 1,
+   "x": 172,
+   "y": 118,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "heavyguns": {
+   "lane": "land",
+   "row": 1,
+   "step": 2,
+   "x": 540,
+   "y": 118,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "rockets": {
+   "lane": "land",
+   "row": 1,
+   "step": 3,
+   "x": 908,
+   "y": 118,
+   "line_from": "heavyguns",
+   "line": "straight",
+   "also_needs": []
+  },
+  "tanks": {
+   "lane": "land",
+   "row": 2,
+   "step": 1,
+   "x": 172,
+   "y": 166,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "mediums": {
+   "lane": "land",
+   "row": 2,
+   "step": 2,
+   "x": 540,
+   "y": 166,
+   "line_from": "tanks",
+   "line": "straight",
+   "also_needs": []
+  },
+  "heavies": {
+   "lane": "land",
+   "row": 2,
+   "step": 3,
+   "x": 908,
+   "y": 166,
+   "line_from": "mediums",
+   "line": "straight",
+   "also_needs": []
+  },
+  "latetanks": {
+   "lane": "land",
+   "row": 2,
+   "step": 4,
+   "x": 1276,
+   "y": 166,
+   "line_from": "heavies",
+   "line": "straight",
+   "also_needs": []
+  },
+  "antitank": {
+   "lane": "land",
+   "row": 3,
+   "step": 1,
+   "x": 172,
+   "y": 214,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "smg": {
+   "lane": "land",
+   "row": 3,
+   "step": 2,
+   "x": 540,
+   "y": 214,
+   "line_from": "antitank",
+   "line": "straight",
+   "also_needs": []
+  },
+  "tankdestroyers": {
+   "lane": "land",
+   "row": 3,
+   "step": 3,
+   "x": 908,
+   "y": 214,
+   "line_from": "mediums",
+   "line": "elbow",
+   "also_needs": [
+    "antitank"
+   ]
+  },
+  "assaultrifles": {
+   "lane": "land",
+   "row": 3,
+   "step": 4,
+   "x": 1276,
+   "y": 214,
+   "line_from": "smg",
+   "line": "under",
+   "also_needs": []
+  },
+  "monoplanes": {
+   "lane": "air",
+   "row": 1,
+   "step": 1,
+   "x": 172,
+   "y": 266,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "escorts": {
+   "lane": "air",
+   "row": 1,
+   "step": 3,
+   "x": 908,
+   "y": 266,
+   "line_from": "monoplanes",
+   "line": "straight",
+   "also_needs": []
+  },
+  "jets": {
+   "lane": "air",
+   "row": 1,
+   "step": 4,
+   "x": 1276,
+   "y": 266,
+   "line_from": "escorts",
+   "line": "straight",
+   "also_needs": []
+  },
+  "earlywarning": {
+   "lane": "air",
+   "row": 2,
+   "step": 2,
+   "x": 540,
+   "y": 314,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "gci": {
+   "lane": "air",
+   "row": 2,
+   "step": 3,
+   "x": 908,
+   "y": 314,
+   "line_from": "earlywarning",
+   "line": "straight",
+   "also_needs": []
+  },
+  "mediumbombers": {
+   "lane": "air",
+   "row": 3,
+   "step": 1,
+   "x": 172,
+   "y": 362,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "groundattack": {
+   "lane": "air",
+   "row": 3,
+   "step": 2,
+   "x": 540,
+   "y": 362,
+   "line_from": "mediumbombers",
+   "line": "straight",
+   "also_needs": []
+  },
+  "heavybombers": {
+   "lane": "air",
+   "row": 3,
+   "step": 3,
+   "x": 908,
+   "y": 362,
+   "line_from": "mediumbombers",
+   "line": "under",
+   "also_needs": []
+  },
+  "guided": {
+   "lane": "air",
+   "row": 3,
+   "step": 4,
+   "x": 1276,
+   "y": 362,
+   "line_from": "heavybombers",
+   "line": "straight",
+   "also_needs": []
+  },
+  "sonar": {
+   "lane": "naval",
+   "row": 1,
+   "step": 1,
+   "x": 172,
+   "y": 414,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "escortgroups": {
+   "lane": "naval",
+   "row": 1,
+   "step": 3,
+   "x": 908,
+   "y": 414,
+   "line_from": "sonar",
+   "line": "straight",
+   "also_needs": []
+  },
+  "fleetsubs": {
+   "lane": "naval",
+   "row": 2,
+   "step": 1,
+   "x": 172,
+   "y": 462,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "carriers": {
+   "lane": "naval",
+   "row": 2,
+   "step": 2,
+   "x": 540,
+   "y": 462,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "firecontrol": {
+   "lane": "naval",
+   "row": 2,
+   "step": 3,
+   "x": 908,
+   "y": 462,
+   "line_from": null,
+   "line": null,
+   "also_needs": [
+    "earlywarning"
+   ]
+  },
+  "taskforces": {
+   "lane": "naval",
+   "row": 2,
+   "step": 4,
+   "x": 1276,
+   "y": 462,
+   "line_from": "firecontrol",
+   "line": "straight",
+   "also_needs": [
+    "carriers"
+   ]
+  },
+  "landingcraft": {
+   "lane": "naval",
+   "row": 3,
+   "step": 2,
+   "x": 540,
+   "y": 510,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "fastbuild": {
+   "lane": "naval",
+   "row": 3,
+   "step": 3,
+   "x": 908,
+   "y": 510,
+   "line_from": null,
+   "line": null,
+   "also_needs": [
+    "machinetools"
+   ]
+  },
+  "machinetools": {
+   "lane": "industry",
+   "row": 1,
+   "step": 1,
+   "x": 172,
+   "y": 562,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "assembly": {
+   "lane": "industry",
+   "row": 1,
+   "step": 2,
+   "x": 540,
+   "y": 562,
+   "line_from": "machinetools",
+   "line": "straight",
+   "also_needs": []
+  },
+  "warplan": {
+   "lane": "industry",
+   "row": 1,
+   "step": 3,
+   "x": 908,
+   "y": 562,
+   "line_from": "assembly",
+   "line": "straight",
+   "also_needs": []
+  },
+  "massprod": {
+   "lane": "industry",
+   "row": 1,
+   "step": 4,
+   "x": 1276,
+   "y": 562,
+   "line_from": "warplan",
+   "line": "straight",
+   "also_needs": []
+  },
+  "synthetics": {
+   "lane": "industry",
+   "row": 2,
+   "step": 2,
+   "x": 540,
+   "y": 610,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "hydrogenation": {
+   "lane": "industry",
+   "row": 2,
+   "step": 3,
+   "x": 908,
+   "y": 610,
+   "line_from": "synthetics",
+   "line": "straight",
+   "also_needs": []
+  },
+  "institutes": {
+   "lane": "industry",
+   "row": 3,
+   "step": 1,
+   "x": 172,
+   "y": 658,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "mobilise": {
+   "lane": "industry",
+   "row": 3,
+   "step": 2,
+   "x": 540,
+   "y": 658,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "labs": {
+   "lane": "industry",
+   "row": 3,
+   "step": 3,
+   "x": 908,
+   "y": 658,
+   "line_from": "institutes",
+   "line": "under",
+   "also_needs": []
+  },
+  "staff": {
+   "lane": "doctrine",
+   "row": 1,
+   "step": 1,
+   "x": 172,
+   "y": 710,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "airborne": {
+   "lane": "doctrine",
+   "row": 1,
+   "step": 2,
+   "x": 540,
+   "y": 710,
+   "line_from": "staff",
+   "line": "straight",
+   "also_needs": []
+  },
+  "mobile": {
+   "lane": "doctrine",
+   "row": 2,
+   "step": 2,
+   "x": 540,
+   "y": 758,
+   "line_from": null,
+   "line": null,
+   "also_needs": [
+    "tanks",
+    "motor"
+   ]
+  },
+  "combined": {
+   "lane": "doctrine",
+   "row": 2,
+   "step": 3,
+   "x": 908,
+   "y": 758,
+   "line_from": "mobile",
+   "line": "straight",
+   "also_needs": [
+    "staff"
+   ]
+  },
+  "deep": {
+   "lane": "doctrine",
+   "row": 2,
+   "step": 4,
+   "x": 1276,
+   "y": 758,
+   "line_from": "combined",
+   "line": "straight",
+   "also_needs": []
+  },
+  "depth": {
+   "lane": "doctrine",
+   "row": 3,
+   "step": 2,
+   "x": 540,
+   "y": 806,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "winterkit": {
+   "lane": "doctrine",
+   "row": 3,
+   "step": 3,
+   "x": 908,
+   "y": 806,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "mountain": {
+   "lane": "doctrine",
+   "row": 4,
+   "step": 2,
+   "x": 540,
+   "y": 854,
+   "line_from": null,
+   "line": null,
+   "also_needs": []
+  },
+  "amphibious": {
+   "lane": "doctrine",
+   "row": 4,
+   "step": 3,
+   "x": 908,
+   "y": 854,
+   "line_from": null,
+   "line": null,
+   "also_needs": [
+    "landingcraft"
+   ]
+  }
+ }
+}
