@@ -16,11 +16,11 @@ const n1 = (v: number): number => Math.round(v * 10) / 10;
 const pts = (l: [number, number][]): string => l.map(([x, y]) => `${n1(x)},${n1(y)}`).join(' ');
 const rad = (deg: number): number => (deg * Math.PI) / 180;
 
-/** A ragged ring round (x, y): never a clean circle. */
-function ragged(rng: Rng, x: number, y: number, r: number, k = 10): string {
+/** A ragged ring round (x, y): never a clean circle. 'rough' widens the reach of its points, for broken edges. */
+function ragged(rng: Rng, x: number, y: number, r: number, k = 10, rough = 0.23): string {
   const l: [number, number][] = [];
   const a0 = rng.next() * Math.PI * 2;
-  for (let i = 0; i < k; i++) { const a = a0 + (i / k) * Math.PI * 2, d = r * rng.range(0.72, 1.18); l.push([x + Math.cos(a) * d, y + Math.sin(a) * d]); }
+  for (let i = 0; i < k; i++) { const a = a0 + (i / k) * Math.PI * 2, d = r * rng.range(1 - rough - 0.05, 1 + rough - 0.05); l.push([x + Math.cos(a) * d, y + Math.sin(a) * d]); }
   return pts(l);
 }
 
@@ -107,17 +107,19 @@ function print(id: string, p: PhotoPrint, after: boolean, label: string, frame: 
   for (const [x, y, s] of p.houses) { const l = s * 0.55; shade.push(poly(sweep(box(x, y + s * 0.1 - s / 2 + (s * 0.8) / 2, s, s * 0.8, 0), sx * l, sy * l), 'black')); }
   for (const [x, y, w, h] of p.sheds) { const l = Math.min(14, Math.min(w, h) * 0.45 + 2); shade.push(poly(sweep(box(x + w / 2, y + h / 2, w, h, 0), sx * l, sy * l), 'black')); }
   for (const [x, y, r] of p.tanks) shade.push(`<circle cx="${n1(x + sx * r * 0.6)}" cy="${n1(y + sy * r * 0.6)}" r="${r}"/>`);
-  p.chimneys.forEach(([x, y], i) => { const l = 30 + (i % 3) * 5; shade.push(`<line x1="${x}" y1="${y}" x2="${n1(x + sx * l)}" y2="${n1(y + sy * l)}" stroke-width="1.8" stroke-linecap="round"/>`); });
+  // (a works chimney's long thin shadow, four to six times a shed's: the classic steelworks read, the art director)
+  p.chimneys.forEach(([x, y], i) => { const l = 58 + (i % 3) * 8; shade.push(`<line x1="${x}" y1="${y}" x2="${n1(x + sx * l)}" y2="${n1(y + sy * l)}" stroke-width="1.9" stroke-linecap="butt"/>`); });
   for (const [x, y, l, w, d] of p.wagons) shade.push(poly(box(x + sx * 1.4, y + sy * 1.4, l, w, d), 'black'));
   if (after && p.smoke.length) for (const [x, y, r] of p.smoke) shade.push(`<circle cx="${n1(x + sx * 16)}" cy="${n1(y + sy * 16)}" r="${n1(r * 0.75)}" opacity="0.5"/>`);
 
   // After the raid: the thrown earth round every crater first, so close craters run together; a cut's crater is the
   // largest, with spoil thrown over the tracks beside it.
   if (after) {
-    for (const [x, y, r] of p.craters) spoil.push(poly(ragged(rng, x, y, r * rng.range(1.5, 2)), grey(rng.range(0.76, 0.86))));
+    // (greyer and more broken than a ring, the art director's note at her pass: about 0.7, the edges thrown unevenly)
+    for (const [x, y, r] of p.craters) spoil.push(poly(ragged(rng, x, y, r * rng.range(1.5, 2), 14, 0.4), grey(rng.range(0.66, 0.74))));
     for (const [x, y] of p.cuts) {
-      spoil.push(poly(ragged(rng, x, y, 19, 14), grey(0.8)));
-      for (let i = 0; i < 6; i++) spoil.push(poly(ragged(rng, x + rng.range(-34, 34), y + rng.range(-12, 12), rng.range(3, 6), 7), grey(rng.range(0.74, 0.84))));
+      spoil.push(poly(ragged(rng, x, y, 19, 16, 0.4), grey(0.72)));
+      for (let i = 0; i < 6; i++) spoil.push(poly(ragged(rng, x + rng.range(-34, 34), y + rng.range(-12, 12), rng.range(3, 6), 7, 0.4), grey(rng.range(0.66, 0.74))));
     }
   }
 

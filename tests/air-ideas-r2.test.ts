@@ -22,9 +22,9 @@ const side = (f: AirFleet, ftr: number, lostFtr: number): AirSide => ({ nat: f.n
 const fighterOf = (g: Game, nat: string): AirFleet => airFleetsOf(g, nat).find((f) => f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined)!;
 
 describe('the switches', () => {
-  it('are all off in the data, and fog cannot ship on until its table is sourced', () => {
+  it('are off in the data but the photos (on since the art director passed them, 22 November 18:15Z), and fog cannot ship on until its table is sourced', () => {
     expect(ACES.on).toBe(false);
-    expect(PHOTOS.on).toBe(false);
+    expect(PHOTOS.on).toBe(true);
     expect(FOG.on).toBe(false);
     expect(FOG.sourced).toBe(false);
     expect(fogShipped()).toBe(false);
@@ -95,6 +95,20 @@ describe('named aces (R1, R2)', () => {
     f.rec.kills = 300;
     acesFought(g, [side(f, 100, 0)], [f], [], [], -1, '');
     expect(f.aces!.now!.kills).toBe(Math.round(ACES.share * 300));
+  });
+
+  it('keeps his victories by the nation that put up the most aircraft against him, for his marks, and his lead unit carries him into the battle', () => {
+    const g = grand('UK'); setAces(g, true);
+    const f = fighterOf(g, 'UK'), ger = fighterOf(g, 'GER'), ita = fighterOf(g, 'ITA');
+    f.rec = { kills: 80 };
+    acesFought(g, [side(f, 100, 0)], [f], [side(ger, 60, 0), side(ita, 20, 0)], [ger, ita], -1, '');
+    const a = f.aces!.now!;
+    expect(a.by).toEqual({ GER: a.kills });
+    f.rec.kills = 300;
+    acesFought(g, [side(f, 100, 0)], [f], [side(ita, 50, 0)], [ita], -1, '');
+    expect(a.by).toEqual({ GER: Math.round(ACES.share * 80), ITA: a.kills - Math.round(ACES.share * 80) });
+    expect(Object.values(a.by!).reduce((x, y) => x + y, 0)).toBe(a.kills);
+    expect(aceSeats(g, [f])![f.id]).toEqual({ name: aceTitle('UK', a), kills: a.kills, by: a.by });
   });
 
   it('may fall with his group\'s own loss share that day; then the next man\'s count begins', () => {
