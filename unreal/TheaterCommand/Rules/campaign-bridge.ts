@@ -1654,6 +1654,10 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
     while (g.turn < from) runTurnAI(g);
   }
   if (options?.view === 'grand' || options?.view === 'open') { try { repairCalls.on?.(g, true); } catch { /* rules without damaged cities */ } }
+  // Airfields as targets (Brian's ask; damage.json field.on): set last, as the browser's newGame sets them, after the
+  // air campaigns they need. (The playtester, 22 November 21:26Z: the bridge never set them, so a 3D grand campaign
+  // played with them off.)
+  if (options?.view === 'grand' || options?.view === 'open') openFieldTargets(g);
   g.human = human;
   // How hard the war is to be (the grand campaign only): set once the player has his seat.
   if (human && options?.level) orderLevel(g, options.level);
@@ -1774,6 +1778,15 @@ const acCalls = {
 };
 function openAirCampaigns(g: Game): void {
   try { if (acCalls.shipped?.()) acCalls.on?.(g, true); } catch { /* rules without air campaigns */ }
+}
+// Airfields as targets, the same way: on in a new grand campaign where the data ships them on (damage.json field.on).
+// A saved game keeps the switch it was started with (g.flags.fields, saved with the flags).
+const fieldCalls = {
+  shipped: rulesByName['airfieldTargetsShipped'] as (() => boolean) | undefined,
+  on: rulesByName['setFieldRules'] as ((g: Game, on: boolean) => boolean) | undefined,
+};
+function openFieldTargets(g: Game): void {
+  try { if (fieldCalls.shipped?.()) fieldCalls.on?.(g, true); } catch { /* rules without airfields as targets */ }
 }
 const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
 const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };

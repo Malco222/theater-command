@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8fdf0f03 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a25a58e1 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -77707,6 +77707,7 @@
       } catch {
       }
     }
+    if (options?.view === "grand" || options?.view === "open") openFieldTargets(g);
     g.human = human;
     if (human && options?.level) orderLevel(g, options.level);
     if (human && options?.secure) {
@@ -77824,6 +77825,16 @@
   function openAirCampaigns(g2) {
     try {
       if (acCalls.shipped?.()) acCalls.on?.(g2, true);
+    } catch {
+    }
+  }
+  var fieldCalls = {
+    shipped: rulesByName["airfieldTargetsShipped"],
+    on: rulesByName["setFieldRules"]
+  };
+  function openFieldTargets(g2) {
+    try {
+      if (fieldCalls.shipped?.()) fieldCalls.on?.(g2, true);
     } catch {
     }
   }
