@@ -11874,8 +11874,10 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	const FLinearColor March = bByRail ? FLinearColor(0.62f, 0.8f, 1.0f, 0.2f) : FLinearColor(0.8f, 1.0f, 0.82f, 0.13f);
 	const FLinearColor Attack(0.9f, 0.06f, 0.03f, 0.42f);
 	const FColor AttackRing = FLinearColor(1.0f, 0.25f, 0.18f, 0.9f).ToFColor(false);
-	// Ground across a frontier at peace is amber: the army can go there, but only by declaring war.
-	const FLinearColor War(1.0f, 0.55f, 0.0f, 0.5f);
+	// Ground across a frontier at peace is amber: the army can go there, but only by declaring war. (The art
+	// director, 22 November: the fill came down from 0.5, which painted the ground, to about 0.2; the amber ring
+	// carries it.)
+	const FLinearColor War(1.0f, 0.55f, 0.0f, 0.2f);
 	const FColor WarRing = FLinearColor(1.0f, 0.72f, 0.16f, 0.9f).ToFColor(false);
 	const FColor Edge = FLinearColor(0.045f, 0.03f, 0.022f, 0.9f).ToFColor(false); // (the province lines of ground in reach, at full strength)
 	for (const FReachRegion& Entry : Reach)
