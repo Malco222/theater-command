@@ -42,6 +42,10 @@ FCampaignSession::~FCampaignSession()
 	{
 		AsideRun.Wait();
 	}
+	if (SceneAskRun.IsValid())
+	{
+		SceneAskRun.Wait();
+	}
 }
 
 namespace
@@ -292,6 +296,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 	FString ViewJson;
 	DropAside();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
+	TellSubScene(); // (D1: before the start, which already plays the opening month's war at sea)
 	const double Began = FPlatformTime::Seconds();
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{
@@ -308,6 +313,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 	}
 	View = ParseView(Object);
 	bRunning = true;
+	++WarsBegun;
 	UE_LOG(LogTheater, Display, TEXT("Campaign started on the %s rules: %s, %d corps, the player leads %s"),
 		*View.Rules, *View.Date, View.Corps.Num(), View.Human.IsEmpty() ? TEXT("nobody") : *View.Human);
 	OnViewChanged.Broadcast();
@@ -368,6 +374,8 @@ bool FCampaignSession::Load(const FString& SaveText)
 	}
 	View = ParseView(Object);
 	bRunning = true;
+	++WarsBegun;
+	TellSubScene(); // (D1: the setting is the viewer's, outside the save: told again after every load)
 	UE_LOG(LogTheater, Display, TEXT("Campaign continued: %s, the player leads %s"), *View.Date, View.Human.IsEmpty() ? TEXT("nobody") : *View.Human);
 	OnViewChanged.Broadcast();
 	return true;
@@ -4771,6 +4779,20 @@ struct FCampaignSession::FAside
 	std::atomic<bool> bDone{ false };
 };
 
+/** (D1) The month's scene asked for beside the war: see SubSceneAside. */
+struct FCampaignSession::FSceneAsk
+{
+	FString Arguments;
+	/** Run on the game thread (Deliver), with the answer. */
+	TFunction<void(int32 NextMark, const FString& Recording)> Then;
+	// What came back, written on the rules' thread and read on the game thread once bDone is set.
+	bool bOk = false;
+	FString Error, Recording;
+	int32 Next = -1;
+	double Seconds = 0.0;
+	std::atomic<bool> bDone{ false };
+};
+
 void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJson, bool bAside, TFunction<FHandNext(const TSharedPtr<FJsonObject>&)>&& InGuess, TFunction<void(const TSharedPtr<FJsonObject>&)>&& InThen)
 {
 	// (one order at a time: the controller takes no order while one is being answered, and an earlier one is taken first)
@@ -4921,6 +4943,7 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 
 void FCampaignSession::Settle()
 {
+	WaitSceneAsk(); // (the month's scene being asked for comes first: the rules answer one thing at a time)
 	if (!Aside.IsValid())
 	{
 		return;
@@ -4976,12 +4999,153 @@ void FCampaignSession::Deliver(bool bWait)
 		AsideThen = nullptr;
 		Run();
 	}
+	// (D1) The month's scene asked for, once it is in.
+	if (SceneAsk.IsValid() && (bWait || SceneAsk->bDone.load(std::memory_order_acquire)))
+	{
+		WaitSceneAsk();
+		const TSharedPtr<FSceneAsk, ESPMode::ThreadSafe> Job = MoveTemp(SceneAsk);
+		SceneAsk.Reset();
+		SceneAskRun = TFuture<void>();
+		TheaterSpeed::NoteRulesCall(TEXT("subScene"), Job->Seconds, false);
+		if (!Job->bOk)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Sea scene: the month's scene could not be asked for (%s)"), *Job->Error);
+		}
+		if (Job->Then)
+		{
+			Job->Then(Job->Next, Job->Recording);
+		}
+	}
 }
 
 void FCampaignSession::DropAside()
 {
 	Settle();
 	AsideThen = nullptr;
+	SceneAsk.Reset(); // (its Then unrun: the war it was asked of is going)
+	SceneAskRun = TFuture<void>();
+}
+
+void FCampaignSession::WaitSceneAsk()
+{
+	if (SceneAsk.IsValid() && !SceneAsk->bDone.load(std::memory_order_acquire))
+	{
+		THEATER_SPEED_SCOPE(RulesWait);
+		SceneAskRun.Wait();
+	}
+}
+
+// ---- (D1, ruling 241) The month's submarine scene ---------------------------------------------------------------
+
+FString FCampaignSession::SubSceneFile()
+{
+	// (a run that takes pictures or plays the playtester's steps keeps its own, as it keeps its own notebook)
+	FString Run;
+	const bool bRun = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Run, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Run, false);
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bRun ? TEXT("subscene-runs.json") : TEXT("subscene.json"));
+}
+
+FString FCampaignSession::GetSubScene() const
+{
+	if (!SubScene.IsEmpty())
+	{
+		return SubScene;
+	}
+	auto Known = [](const FString& Word) { return Word == TEXT("all") || Word == TEXT("mine") || Word == TEXT("never") || Word == TEXT("off"); };
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSubScene="), Asked) && Known(Asked.ToLower()))
+	{
+		SubScene = Asked.ToLower();
+		return SubScene;
+	}
+	// (a run that is not about the scene leaves it off, so that its saves and steps are as they were)
+	FString Run;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Run, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Run, false))
+	{
+		SubScene = TEXT("off");
+		return SubScene;
+	}
+	FString Text, Kept;
+	TSharedPtr<FJsonObject> Object;
+	SubScene = FFileHelper::LoadFileToString(Text, *SubSceneFile()) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Object) && Object.IsValid()
+		&& Object->TryGetStringField(TEXT("view"), Kept) && Known(Kept) ? Kept : FString(TEXT("all"));
+	return SubScene;
+}
+
+void FCampaignSession::SetSubScene(const FString& Setting)
+{
+	const FString Word = Setting.ToLower();
+	if (Word != TEXT("all") && Word != TEXT("mine") && Word != TEXT("never") && Word != TEXT("off"))
+	{
+		return;
+	}
+	SubScene = Word;
+	FFileHelper::SaveStringToFile(FString::Printf(TEXT("{\"view\":\"%s\"}\n"), *Word), *SubSceneFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	Settle(); // (an order still being answered is answered first: the rules are told on this thread)
+	TellSubScene();
+}
+
+void FCampaignSession::TellSubScene()
+{
+	if (!Host.IsValid())
+	{
+		return;
+	}
+	// (the record is kept for every setting but "off": "never" plays nothing, but a change back finds this month's record)
+	FString Json, Error;
+	bNoSubScene = !Host->Call(TEXT("subSceneOn"), GetSubScene() == TEXT("off") ? TEXT("[false]") : TEXT("[true]"), Json, Error);
+	if (bNoSubScene)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Sea scene: these rules keep no record of the month at sea (%s)"), *Error); // (the stand-in rules, or rules before D1)
+	}
+}
+
+void FCampaignSession::SubSceneAside(int32 Mark, TFunction<void(int32 NextMark, const FString& Recording)>&& Then)
+{
+	const FString Setting = GetSubScene();
+	if (Setting == TEXT("off") || Setting == TEXT("never") || !bRunning || bNoSubScene)
+	{
+		Then(Mark, FString());
+		return;
+	}
+	// (an order still being answered, or a scene asked before and not yet taken, first: the rules answer one thing at a
+	// time, and each Then in its turn)
+	Deliver(true);
+	if (!bRunning || !Host.IsValid())
+	{
+		Then(Mark, FString());
+		return;
+	}
+	const TSharedRef<FSceneAsk, ESPMode::ThreadSafe> Job = MakeShared<FSceneAsk, ESPMode::ThreadSafe>();
+	Job->Arguments = FString::Printf(TEXT("[%s,%s]"), Mark < 0 ? TEXT("null") : *FString::FromInt(Mark), *JsonQuote(Setting));
+	Job->Next = Mark;
+	Job->Then = MoveTemp(Then);
+	SceneAsk = Job;
+	FRulesHost* Rules = Host.Get();
+	// (a thread of its own, as an order's: the answer is read there too, a recording of a few hundred kilobytes)
+	SceneAskRun = AsyncThread([Rules, Job]()
+	{
+		const double Began = FPlatformTime::Seconds();
+		FString Json;
+		Job->bOk = Rules->Call(TEXT("subScene"), Job->Arguments, Json, Job->Error);
+		TSharedPtr<FJsonObject> Answer;
+		if (Job->bOk && !(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Answer) && Answer.IsValid()))
+		{
+			Job->bOk = false;
+			Job->Error = TEXT("subScene: the answer could not be read");
+		}
+		if (Job->bOk)
+		{
+			double Number = 0.0;
+			if (Answer->TryGetNumberField(TEXT("mark"), Number) && Number >= 0.0)
+			{
+				Job->Next = static_cast<int32>(Number);
+			}
+			Answer->TryGetStringField(TEXT("recording"), Job->Recording); // (null where the month holds no scene for him)
+		}
+		Job->Seconds = FPlatformTime::Seconds() - Began;
+		Job->bDone.store(true, std::memory_order_release);
+	}, 8 * 1024 * 1024);
 }
 
 void FCampaignSession::MoveAside(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds, bool bAside,
