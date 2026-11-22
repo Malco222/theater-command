@@ -628,7 +628,8 @@ int main(int Argc, char** Argv)
 	if (Rec.Board.WindSpeed >= 0.0)
 	{
 		const double Off = std::fabs(std::remainder(WindFrom - Rec.Board.WindFrom, 2.0 * Pi)) * 180.0 / Pi;
-		Limits.push_back({ "the battle's own wind", Off < 0.5 && std::fabs(Flat(P.Wind) - Rec.Board.WindSpeed) < 0.05,
+		// (a calm has no bearing)
+		Limits.push_back({ "the battle's own wind", (Off < 0.5 || Rec.Board.WindSpeed < 0.05) && std::fabs(Flat(P.Wind) - Rec.Board.WindSpeed) < 0.05,
 		                   Num(WindFrom * 180.0 / Pi, 0) + " deg at " + Num(Flat(P.Wind), 1) + " (the field: " + Num(Rec.Board.WindFrom * 180.0 / Pi, 0) + " at " + Num(Rec.Board.WindSpeed, 1) + ")",
 		                   "the field's" });
 	}

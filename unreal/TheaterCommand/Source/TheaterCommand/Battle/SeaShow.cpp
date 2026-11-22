@@ -1719,8 +1719,10 @@ namespace SeaShow
 		// Heel, pitch and heave: outward in a turn by her rate of turn and speed, and her own ride on the sea by her length
 		// and the wind (the art director's table): her roll the most with the sea on her beam, her pitch the most head
 		// or stern on, and she rises and falls by a share of the waves' height (about 0.021 U^2 in a sea the wind has
-		// fully raised).
-		const double Force = std::pow(WindU / 0.836, 2.0 / 3.0), High = 0.021 * WindU * WindU;
+		// fully raised), up to the table's top, Beaufort 6, where her roll and pitch stop too (the pre-check, 22 November:
+		// no top, and a gale's wind would lift her metres).
+		const double Raised = std::min(WindU, 13.8);
+		const double Force = std::pow(WindU / 0.836, 2.0 / 3.0), High = 0.021 * Raised * Raised;
 		for (auto& Pair : Hulls)
 		{
 			Hull& H = Pair.second;

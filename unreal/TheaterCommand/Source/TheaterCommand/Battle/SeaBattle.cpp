@@ -540,7 +540,11 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		const SeaShow::Vec Blow = S.Show.Wind();
 		const double Blowing = S.Show.WindSpeed();
 		const FLinearColor Sky = SeaParts::SkyColour();
-		Stage->SetSeaWind(Blowing > 0.0 ? FMath::Atan2(Blow.X, Blow.Y) : 0.0, Blowing, FLinearColor(Sky.R * 0.97f, Sky.G * 0.97f, Sky.B * 0.97f));
+		// (a recorded calm is a light air on the stage, which takes no speed for no wind given and would lay Pearl's
+		// trade-wind sea: at its least, 2 m/s, the sea lies almost glassy, a whitecap at most here and there; its swell
+		// runs off the field's bearing)
+		Stage->SetSeaWind(Blowing > 0.0 ? FMath::Atan2(Blow.X, Blow.Y) : S.Show.WindFrom() + UE_DOUBLE_PI, FMath::Max(Blowing, 0.5),
+			FLinearColor(Sky.R * 0.97f, Sky.G * 0.97f, Sky.B * 0.97f));
 	}
 	if (!Stage || !Stage->RaiseSea(FVector2D(Middle, Middle), SunAzimuth, SunElevation, UnitsPerMetre, Effects.Get(), Seed))
 	{
