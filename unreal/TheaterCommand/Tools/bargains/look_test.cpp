@@ -142,6 +142,42 @@ namespace
 		return true;
 	}
 
+	/** True where Text is whole UTF-8: every lead byte with all its continuation bytes, none stray and none cut. */
+	bool Utf8Whole(std::string_view Text)
+	{
+		for (size_t K = 0; K < Text.size();)
+		{
+			const unsigned Lead = static_cast<unsigned char>(Text[K]);
+			const size_t Len = Lead < 0x80u ? 1 : (Lead & 0xE0u) == 0xC0u ? 2 : (Lead & 0xF0u) == 0xE0u ? 3 : (Lead & 0xF8u) == 0xF0u ? 4 : 0;
+			if (Len == 0 || K + Len > Text.size())
+			{
+				return false;
+			}
+			for (size_t J = 1; J < Len; ++J)
+			{
+				if ((static_cast<unsigned char>(Text[K + J]) & 0xC0u) != 0x80u)
+				{
+					return false;
+				}
+			}
+			K += Len;
+		}
+		return true;
+	}
+
+	/** A file of the game's, by its path from this folder (Tools/bargains), whole; empty where it is not there. */
+	std::string SourceBeside(const char* Path)
+	{
+		const std::string Here = __FILE__;
+		std::ifstream File(Here.substr(0, Here.find_last_of('/') + 1) + Path);
+		std::ostringstream Whole;
+		if (File.is_open())
+		{
+			Whole << File.rdbuf();
+		}
+		return Whole.str();
+	}
+
 	FRound Round(std::vector<FBid> Bids, std::optional<double> Mine, std::string CanBid, bool bAccept = false)
 	{
 		FRound R;
@@ -1938,6 +1974,86 @@ namespace
 		CHECK(!FitLine("Unterseebootsflottille", Face, 40.0, KitMeasure, Fit) && EndsDots(Fit) && KitMeasure(Fit, Face).X <= 40.0 && Fit == "Unte" + Dots);
 		CHECK(!FitLine(Blue, Face, 2.0, KitMeasure, Fit) && Fit.empty());
 		CHECK(FitLine("", Face, 0.0, KitMeasure, Fit) && Fit.empty());
+		// (the review after the passes, finding 3) One word too long, of letters of one to four bytes, measured by its bytes,
+		// so that a cut inside a letter would be the last to fit were it allowed: at every width each cut is at a whole
+		// letter, valid UTF-8, no wider than the line, and the word's own head with the ellipsis.
+		{
+			const FMeasure Bytes = [](std::string_view Text, const FFace&) { return FPt{ static_cast<double>(Text.size()), 10.0 }; };
+			const std::string Word = "Freiwilligen\xC3\xBC" "bung\xE2\x82\xAC\xF0\x9F\x8E\x96\xC3\xA4\xC3\xB6\xE2\x82\xAC\xF0\x90\x8D\x88\xC3\xBC\xE2\x82\xAC";
+			CHECK(Utf8Whole(Word) && !Utf8Whole(Word.substr(0, 13)) && !Utf8Whole(Word.substr(0, Word.size() - 1)));
+			int Widths = 0, Cut = 0, Fits = 0, Valid = 0, Within = 0, Heads = 0;
+			for (double Width = 0.0; Width <= static_cast<double>(Word.size()) + 2.0; Width += 1.0)
+			{
+				const bool bWhole = FitLine(Word, Face, Width, Bytes, Fit);
+				++Widths;
+				Cut += !bWhole && !Fit.empty() ? 1 : 0;
+				Fits += bWhole && Fit == Word ? 1 : 0;
+				Valid += Utf8Whole(Fit) ? 1 : 0;
+				Within += Fit.empty() || Bytes(Fit, Face).X <= Width ? 1 : 0;
+				Heads += Fit.empty() || Fit == Word || (EndsDots(Fit) && Word.rfind(Fit.substr(0, Fit.size() - Dots.size()), 0) == 0) ? 1 : 0;
+			}
+			CHECK(Cut > 20 && Fits == 3 && Valid == Widths && Within == Widths && Heads == Widths);
+		}
+	}
+
+	/**
+	 * The review after the passes, finding 3: the layer's wiring of the helpers tested here is engine code, which no test
+	 * here compiles. So it is read from BargainLayer.cpp, as the tray flag's size is read from CampaignHUD.cpp, and the
+	 * lines the helpers' tests stand on are pinned in their order: the legion line's left padding (the look review's
+	 * finding 1, option a), the card's own keep-off rect known by its widget (finding 1 of the review after the passes),
+	 * what the layer's own plates and the other seals keep off while the card is shown (the look review's finding 2), and
+	 * the open card's seal laid first (finding 2 of the review after the passes).
+	 */
+	void TestLayerWiring()
+	{
+		const std::string Layer = SourceBeside("../../Source/TheaterCommand/Campaign/BargainLayer.cpp");
+		if (Layer.empty())
+		{
+			std::printf("(BargainLayer.cpp not beside the tests: the layer's wiring is not read against it)\n");
+			return;
+		}
+		size_t At = 0;
+		auto Next = [&Layer, &At](std::string_view Line)
+		{
+			const size_t Found = Layer.find(Line, At);
+			if (Found == std::string::npos)
+			{
+				return false;
+			}
+			At = Found + Line.size();
+			return true;
+		};
+		// The tray's legion line: under the title's text, past the flag and its gap; nothing else pads it.
+		At = 0;
+		CHECK(Next("TSharedRef<SWidget> TrayLegion(int32 CorpsId)"));
+		const size_t Tray = At;
+		CHECK(Next("return SNew(SBox).Padding(FMargin(static_cast<float>(Bargains::TrayLegionIndent(true)), 1.0f, 4.0f, 0.0f))"));
+		CHECK(Next("SNew(Impl::SLegionLine, CorpsId)"));
+		CHECK(Layer.substr(Tray, At - Tray).find(".Padding(") == Layer.substr(Tray, At - Tray).rfind(".Padding("));
+		// The card's own rect in the keep-off, known by its widget wherever it was last painted (no place remembered).
+		At = 0;
+		CHECK(Next("TWeakPtr<SWidget> CardWidget;") && Layer.find("WasCard") == std::string::npos);
+		CHECK(Next("TSharedRef<SWidget> MakeBargainCard(") && Next("Impl::State().CardWidget = Card;") && Next("return Card;"));
+		// The layer's Tick, in its order.
+		At = 0;
+		CHECK(Next("virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override"));
+		CHECK(Next("KeepOffOf(S.KeepOff);"));
+		CHECK(Next("const TSharedPtr<SWidget> CardWidget = S.CardWidget.Pin();"));
+		CHECK(Next("const FSlateRect Own = bOwn ? CardWidget->GetPaintSpaceGeometry().GetLayoutBoundingRect() : FSlateRect();"));
+		CHECK(Next("for (const FSlateRect& Piece : S.KeepOff)"));
+		CHECK(Next("if (bOwn && FMath::Abs(Piece.Left - Own.Left) < 0.5f && FMath::Abs(Piece.Top - Own.Top) < 0.5f && FMath::Abs(Piece.Right - Own.Right) < 0.5f && FMath::Abs(Piece.Bottom - Own.Bottom) < 0.5f)"));
+		CHECK(Next("continue;") && Next("S.Frame.push_back("));
+		CHECK(Next("In.Frame = &S.Frame;") && Next("S.Placed = Bargains::PlaceCard(In);"));
+		CHECK(Next("const bool bCardShown = CardShown();"));
+		CHECK(Next("Bargains::AvoidOf(S.Frame, bCardShown, S.Placed.Card, Px, S.Avoid);"));
+		CHECK(Next("Bargains::OwnPlateShown(S.Eye, Box, S.TownPlates, S.Avoid)"));
+		CHECK(Next("S.Avoid.insert(S.Avoid.end(), S.TownPlates.begin(), S.TownPlates.end());"));
+		CHECK(Next("S.Laid.clear();"));
+		CHECK(Next("if (Bargains::SealOnCard(S.Look.Seals[static_cast<size_t>(Slot)], bCardShown))"));
+		CHECK(Next("const Bargains::FPt Corner = Bargains::CardSealAt(S.Placed.Card);"));
+		CHECK(Next("S.Laid.push_back(Corner);") && Next("continue;"));
+		CHECK(Next("Bargains::SealAt(Bargains::FPt{ Capital.X, Capital.Y }, Px, S.Frame, S.Avoid, S.Laid, At)"));
+		CHECK(Next("S.Laid.push_back(At);"));
 	}
 
 	void TestPlates()
@@ -2425,6 +2541,7 @@ int main(int Count, char** Args)
 	TestCardSeal();
 	TestAvoidCard();
 	TestTrayCard();
+	TestLayerWiring();
 	TestPlates();
 	TestNoAllocation();
 	if (Count > 1)
