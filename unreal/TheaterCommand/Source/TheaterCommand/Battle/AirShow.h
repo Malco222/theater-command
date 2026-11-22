@@ -953,6 +953,16 @@ namespace AirShow
 		std::map<int, Group> Now;            // the groups as shown
 		std::map<int, Band> Bands;
 		std::map<int, Craft> Crafts;
+		/** Each group's crafts' keys, rising (as Crafts has them): made in Make, dropped where Crafts drops them. */
+		std::map<int, std::vector<int>> Members;
+		/** The group's keys, rising: a walk of them finds its crafts in the order a walk of Crafts does. Nothing that
+		 * makes or drops a craft may run inside one. */
+		const std::vector<int>& MembersOf(int GroupId) const
+		{
+			static const std::vector<int> None;
+			const auto M = Members.find(GroupId);
+			return M == Members.end() ? None : M->second;
+		}
 		std::vector<Thing> Small;
 		std::vector<PlaneOut> Out;
 		std::set<int> Firing;
@@ -1253,8 +1263,10 @@ namespace AirShow
 		void BeginDamage();
 		void Unbook(Shot& S, bool bHoldAgain);
 		Moment* MomentOf(int Id);
-		/** A bomber's mounts, one gunner to an opening. */
-		std::vector<MountAt> MountsOf(const Craft& C, const Loadout& L) const;
+		/** A bomber's mounts, one gunner to an opening (worked out once for each loadout and model: MountsKept). */
+		const std::vector<MountAt>& MountsOf(const Craft& C, const Loadout& L) const;
+		/** MountsOf's answers, by loadout and model (an aircraft's shape is its model's, Fit); SetLoadout empties it. */
+		mutable std::map<std::pair<const Loadout*, std::pair<std::string, bool>>, std::vector<MountAt>> MountsKept;
 		/** What the battle laid to a box's gunners, yet to be shown: each given to the gunner who is to carry it, as the
 		 * fighter comes in. */
 		void GiveGunners();

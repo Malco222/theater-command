@@ -105,6 +105,7 @@ namespace AirShow
 	void Show::SetLoadout(const std::string& Nation, bool bFighter, const Loadout& Guns)
 	{
 		Loadouts[Nation + (bFighter ? ":ftr" : ":bmr")] = Guns;
+		MountsKept.clear();
 	}
 
 	double Show::GroundAt(double X, double Y) const
@@ -191,12 +192,22 @@ namespace AirShow
 
 	std::vector<int> Show::LiveOf(int GroupId) const
 	{
-		std::vector<int> Keys;
-		for (const auto& Pair : Crafts)
+		// (the group's own, by key as Crafts has them; sorted by slot on the slots read once, the same comparisons)
+		std::vector<std::pair<int, int>> Slots;
+		const auto M = Members.find(GroupId);
+		if (M != Members.end())
 		{
-			if (Pair.second.Group == GroupId && Live(Pair.second)) Keys.push_back(Pair.first);
+			Slots.reserve(M->second.size());
+			for (int Key : M->second)
+			{
+				const Craft& C = Crafts.find(Key)->second;
+				if (Live(C)) Slots.emplace_back(C.Slot, Key);
+			}
 		}
-		std::sort(Keys.begin(), Keys.end(), [this](int A, int B) { return Find(A)->Slot < Find(B)->Slot; });
+		std::sort(Slots.begin(), Slots.end(), [](const std::pair<int, int>& A, const std::pair<int, int>& B) { return A.first < B.first; });
+		std::vector<int> Keys;
+		Keys.reserve(Slots.size());
+		for (const auto& S : Slots) Keys.push_back(S.second);
 		return Keys;
 	}
 
@@ -475,7 +486,11 @@ namespace AirShow
 	{
 		const Vec F = Ahead(G.Face), R = RightOf(G.Face);
 		double Rt = 0.0, Bk = 0.0, Hi = 0.0, Lat = 100.0, Back = 100.0, Step = 30.0;
-		const Shape S = ShapeOf(G.Model, G.bFighter);
+		// (the model's shape, made once a model: every aircraft asks for its place every step)
+		thread_local std::map<std::pair<std::string, bool>, Shape> Made;
+		auto Mi = Made.find(std::make_pair(G.Model, G.bFighter));
+		if (Mi == Made.end()) Mi = Made.emplace(std::make_pair(G.Model, G.bFighter), ShapeOf(G.Model, G.bFighter)).first;
+		const Shape& S = Mi->second;
 		if (!G.bFighter)
 		{
 			// Bombers in vics of three, the vics stepped up and down: the lead, the high element to the right, the low
@@ -573,6 +588,7 @@ namespace AirShow
 			C.Thrift = 0.02 + 0.12 * Spare;
 		}
 		C.LastP = At;
+		Members[C.Group].push_back(C.Key);
 		return Crafts[C.Key] = C;
 	}
 
@@ -1490,9 +1506,9 @@ namespace AirShow
 	void Show::SetGuards(const Group& G)
 	{
 		std::vector<Craft*> Leaders;
-		for (auto& Pair : Crafts)
+		for (int Key_ : MembersOf(G.Id))
 		{
-			Craft& C = Pair.second;
+			Craft& C = Crafts.find(Key_)->second;
 			if (C.Group == G.Id && C.bFighter && Live(C) && C.Doing != Role::Ground && C.Lead == C.Key) Leaders.push_back(&C);
 		}
 		// An escort keeps pairs by its box: half of a close escort's, a third of a top cover's, one at the least. A
@@ -1558,9 +1574,9 @@ namespace AirShow
 			Sum = 1.0;
 		}
 		std::vector<Craft*> Leaders;
-		for (auto& Pair : Crafts)
+		for (int Key_ : MembersOf(G.Id))
 		{
-			Craft& C = Pair.second;
+			Craft& C = Crafts.find(Key_)->second;
 			if (C.Group == G.Id && C.bFighter && Live(C) && C.Doing != Role::Ground && C.Lead == C.Key && !C.bGuard) Leaders.push_back(&C);
 		}
 		if (Marks.empty() || Leaders.empty()) return;
@@ -1661,9 +1677,9 @@ namespace AirShow
 		// The pairs that have fired longest run dry first, as the group's ammunition goes: up to half of them stand off
 		// with empty guns before the battle calls the whole group spent.
 		std::vector<Craft*> Leaders;
-		for (auto& Pair : Crafts)
+		for (int Key_ : MembersOf(G.Id))
 		{
-			Craft& C = Pair.second;
+			Craft& C = Crafts.find(Key_)->second;
 			if (C.Group == G.Id && C.bFighter && Live(C) && C.Doing != Role::Ground && C.Lead == C.Key) Leaders.push_back(&C);
 		}
 		std::stable_sort(Leaders.begin(), Leaders.end(), [](const Craft* A, const Craft* Bc) { return A->bDry != Bc->bDry ? A->bDry : A->Thrift > Bc->Thrift; });
@@ -1830,9 +1846,9 @@ namespace AirShow
 		const bool bAloft = Up_ != Aloft.end() && Up_->second > 0;
 		int Best = -1;
 		double BestScore = 1e18;
-		for (const auto& Pair : Crafts)
+		for (int Key_ : MembersOf(E.Id))
 		{
-			const Craft& T = Pair.second;
+			const Craft& T = Crafts.find(Key_)->second;
 			if (T.Group != E.Id || !Live(T) || (bAloft && T.Doing == Role::Ground)) continue;
 			// The edge of the box he comes at: its leaders from ahead, its last ships from behind, the near side from
 			// the beam; the nearer to him the better.
@@ -2116,7 +2132,7 @@ namespace AirShow
 		// the scene only chooses whose it is.
 		const int Owed = DueOn(C.Group, F->Group);
 		int Blind = 0;
-		if (Owed) for (const auto& Pair : Crafts) if (Pair.second.Group == C.Group && Pair.second.Key != C.Key && Pair.second.bBlind && Live(Pair.second)) Blind++;
+		if (Owed) for (int Key_ : MembersOf(C.Group)) { const Craft& O = Crafts.find(Key_)->second; if (O.Group == C.Group && O.Key != C.Key && O.bBlind && Live(O)) Blind++; }
 		if (Owed > Blind || C.Marker >= 0)
 		{
 			C.bBlind = true;
@@ -2403,9 +2419,9 @@ namespace AirShow
 		const Vec Middle = EIt != Now.end() ? Vec(EIt->second.X, EIt->second.Y, EIt->second.Alt) : Vec();
 		const Vec Bv = GroupVelocity(Box);
 		int Going = 0;
-		for (const auto& Pair : Crafts)
+		for (int Key_ : MembersOf(GroupId))
 		{
-			const Craft& O = Pair.second;
+			const Craft& O = Crafts.find(Key_)->second;
 			if (O.Group != GroupId || !O.bFighter || O.Lead != O.Key || O.Step != Phase::Run || O.TargetGroup != Box || !Live(O) || O.Doing != Role::Fight) continue;
 			const Vec Rel = Middle - O.P;
 			const double Dist = Len(Rel);
@@ -2426,9 +2442,9 @@ namespace AirShow
 		// (at the bomber the battle names, if she is still in her box)
 		int Seat = -1;
 		for (const Held& Owed : Later) if (Seat < 0 && Owed.bForShot && Owed.E.What == "air:lost" && Owed.E.Unit == G.Id && BoxOf(Owed.E) == E.Id) Seat = Owed.E.GunSeat;
-		for (const auto& Pair : Crafts)
+		if (Seat >= 0) for (int Key_ : MembersOf(E.Id))
 		{
-			const Craft& T = Pair.second;
+			const Craft& T = Crafts.find(Key_)->second;
 			if (Seat >= 0 && T.Group == E.Id && Live(T) && T.Doing == Role::Slot && T.Slot == Seat / std::max(1, E.Per)) C.Target = T.Key;
 		}
 		Hunters[E.Id].push_back(C.Key);
@@ -2469,9 +2485,9 @@ namespace AirShow
 			const double Eta = EtaTo(C, Middle, Bv, 500.0);
 			if (Eta > 24.0) continue;
 			bool bSoonest = true;
-			for (const auto& Pair : Crafts)
+			for (int Key_ : MembersOf(G.Id))
 			{
-				const Craft& O = Pair.second;
+				const Craft& O = Crafts.find(Key_)->second;
 				if (O.Group == G.Id && O.bFighter && O.Key != C.Key && Free(O) && EtaTo(O, Middle, Bv, 500.0) < Eta) bSoonest = false;
 			}
 			if (!bSoonest) continue;
@@ -2497,7 +2513,7 @@ namespace AirShow
 			const Group& E = EIt->second;
 			const Vec Middle(E.X, E.Y, E.Alt);
 			int NextFlight = 0;
-			for (const auto& Pair : Crafts) if (Pair.second.Group == G.Id) NextFlight = std::max(NextFlight, Pair.second.Flight + 1);
+			for (int Key_ : MembersOf(G.Id)) NextFlight = std::max(NextFlight, Crafts.find(Key_)->second.Flight + 1);
 			C.Lead = C.Key;
 			C.Seat = 0;
 			C.Flight = NextFlight;
@@ -2548,9 +2564,9 @@ namespace AirShow
 		}
 		// (as many of his group after each enemy group as it has losses to show)
 		std::map<int, int> Taken;
-		for (const auto& Pair : Crafts)
+		for (int Key_ : MembersOf(G.Id))
 		{
-			const Craft& O = Pair.second;
+			const Craft& O = Crafts.find(Key_)->second;
 			if (O.Group != G.Id || !O.bAnswer || O.Target < 0) continue;
 			const Craft* V = Find(O.Target);
 			if (V) Taken[V->Group]++;
@@ -2698,9 +2714,9 @@ namespace AirShow
 				const Vec Side = RightOf(L.Hdg) * ((C.P - L.P).Dot(RightOf(L.Hdg)) >= 0.0 ? 1.0 : -1.0);
 				double Near = 260.0;
 				Own = nullptr;
-				for (auto& Pair : Crafts)
+				for (int Key_ : MembersOf(T->Group))
 				{
-					Craft& O = Pair.second;
+					Craft& O = Crafts.find(Key_)->second;
 					if (O.Group != T->Group || O.Key == T->Key || !Live(O) || O.Doing != Role::Slot) continue;
 					const Vec Rel = O.P - T->P;
 					const double D = Len(Rel);
@@ -3031,9 +3047,9 @@ namespace AirShow
 		// What the other leaders of his group are after, and which enemies sit on its pilots' tails.
 		std::map<int, int> Claimed;
 		std::set<int> Menacing;
-		for (const auto& Pair : Crafts)
+		for (int Key_ : MembersOf(G.Id))
 		{
-			const Craft& O = Pair.second;
+			const Craft& O = Crafts.find(Key_)->second;
 			if (O.Group != G.Id || O.Key == C.Key || !Live(O)) continue;
 			if (O.Lead == O.Key && O.Target >= 0) Claimed[O.Target]++;
 			if (O.Threat >= 0) Menacing.insert(O.Threat);
@@ -3298,9 +3314,9 @@ namespace AirShow
 		int Before = 0;
 		for (const Held& O : Later) if (O.bForShot && O.E.What == "air:lost" && O.E.Unit == H.E.Unit && BoxOf(O.E) == Box && O.Since < H.Since) Before++;
 		int Coming = 0;
-		for (const auto& Pair : Crafts)
+		for (int Key_ : MembersOf(H.E.Unit))
 		{
-			const Craft& S = Pair.second;
+			const Craft& S = Crafts.find(Key_)->second;
 			if (S.Group != H.E.Unit || !S.bFighter || S.ShotOn != 0 || !Live(S) || S.Doing != Role::Fight || S.TargetGroup != Box) continue;
 			// (a leader on his run, or the wingman going in with him)
 			const Craft* L = S.Lead == S.Key ? &S : S.Step == Phase::Wing ? Find(S.Lead) : nullptr;
@@ -3698,6 +3714,8 @@ namespace AirShow
 				const bool bBelly = C.Falling == FallHow::Glide && Floor > 0.5;
 				Fx& End = Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), bDitching ? "ditch" : bBelly ? "belly" : "plane");
 				End.Size = C.Form.Span;
+				// (the way it was going as it struck, as its last FallMove has it: the scene's fireball keeps a little)
+				End.Vel = Moved;
 				if (bDitching || bBelly)
 				{
 					C.P.Z = Floor + (bDitching ? 0.3 : 1.0);
@@ -4331,11 +4349,13 @@ namespace AirShow
 	const Show::Craft* Show::BoxLead(int GroupId) const
 	{
 		const Craft* Best = nullptr;
-		for (const auto& Pair : Crafts)
+		const auto M = Members.find(GroupId);
+		if (M == Members.end()) return nullptr;
+		for (int Key : M->second)
 		{
-			const Craft& C = Pair.second;
+			const Craft& C = Crafts.find(Key)->second;
 			// (not one still joining: made in the place of one lost, she is not yet with the box)
-			if (C.Group != GroupId || C.bFighter || C.Doing != Role::Slot || C.bJoining) continue;
+			if (C.bFighter || C.Doing != Role::Slot || C.bJoining) continue;
 			if (!Best || C.Slot < Best->Slot || (C.Slot == Best->Slot && C.Key < Best->Key)) Best = &C;
 		}
 		return Best;
@@ -6131,11 +6151,13 @@ namespace AirShow
 		Release(E, Best);
 	}
 
-	std::vector<Show::MountAt> Show::MountsOf(const Craft& C, const Loadout& L) const
+	const std::vector<Show::MountAt>& Show::MountsOf(const Craft& C, const Loadout& L) const
 	{
+		auto [Kept, bNew] = MountsKept.try_emplace(std::make_pair(&L, std::make_pair(C.Model, C.bFighter)));
+		if (!bNew) return Kept->second;
 		// The window of each mount: by where its arc looks, or for a power turret by its socket; one gunner to an
 		// opening.
-		std::vector<MountAt> Mounts;
+		std::vector<MountAt>& Mounts = Kept->second;
 		std::set<std::string> Used;
 		auto ChoicesOf = [](const Gun& Row) -> std::vector<std::string>
 		{
@@ -6255,9 +6277,9 @@ namespace AirShow
 			if (Its == Now.end()) continue;
 			const int Per = std::max(1, Its->second.Per);
 			std::vector<Craft*> Ships;
-			for (auto& Pair : Crafts)
+			for (int Key_ : MembersOf(Box))
 			{
-				Craft& C = Pair.second;
+				Craft& C = Crafts.find(Key_)->second;
 				if (C.Group == Box && !C.bFighter && C.bShown && (C.Doing == Role::Slot || C.Doing == Role::Straggle)) Ships.push_back(&C);
 			}
 			if (Ships.empty()) continue;
@@ -6764,6 +6786,13 @@ namespace AirShow
 		};
 		std::vector<Manned> Crew;
 		GiveGunners();
+		// (the fighters in a fight, by the group each is after, in the order of their keys: nothing below moves them)
+		std::map<int, std::vector<Craft*>> OnBox;
+		for (auto& Pair : Crafts)
+		{
+			Craft& F = Pair.second;
+			if (F.bFighter && F.Doing == Role::Fight) OnBox[F.TargetGroup].push_back(&F);
+		}
 		for (auto& Pair : Crafts)
 		{
 			Craft& C = Pair.second;
@@ -6773,9 +6802,10 @@ namespace AirShow
 			// The nearest enemy fighter on a pass at this box.
 			Craft* Foe = nullptr;
 			double Near = 700.0;
-			for (auto& Other : Crafts)
+			const auto OnIt = OnBox.find(C.Group);
+			if (OnIt != OnBox.end()) for (Craft* Fp : OnIt->second)
 			{
-				Craft& F = Other.second;
+				Craft& F = *Fp;
 				if (!F.bFighter || F.Side == C.Side || F.Doing != Role::Fight || F.TargetGroup != C.Group) continue;
 				const double D = Len(F.P - C.P);
 				if (D < Near) { Near = D; Foe = &F; }
@@ -7362,7 +7392,17 @@ namespace AirShow
 		StrikeNow();
 		for (auto It = Crafts.begin(); It != Crafts.end();)
 		{
-			if (It->second.Doing == Role::Gone) It = Crafts.erase(It);
+			if (It->second.Doing == Role::Gone)
+			{
+				auto M = Members.find(It->second.Group);
+				if (M != Members.end())
+				{
+					const auto K = std::lower_bound(M->second.begin(), M->second.end(), It->first);
+					if (K != M->second.end() && *K == It->first) M->second.erase(K);
+					if (M->second.empty()) Members.erase(M);
+				}
+				It = Crafts.erase(It);
+			}
 			else ++It;
 		}
 		Out.clear();
