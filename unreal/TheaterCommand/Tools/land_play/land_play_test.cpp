@@ -774,6 +774,191 @@ int main(int argc, char** argv)
 	int FollowerShots = 0, FollowerStruck = 0, FollowerOnHim = 0, FollowerBursts = 0, FollowerBurstsBeside = 0;
 	double FollowerWorst = 0.0;
 
+	// The picture run (LAND_PLAY_STILLS; LAND_PLAY_ONLY_STILLS runs it alone): the scene's ten stills as LandBattle asks
+	// them (each asked two battle seconds before it is taken, one film from the start), and for each what the camera made
+	// of it: the shot and its man, placed unfit or not, the men of the battle in the picture, and the share of the picture
+	// that is a house's wall or roof.
+	auto RunStills = [&]()
+	{
+		const double SContact = Rec.Contact >= 0.0 ? Rec.Contact : 30.0;
+		struct Still { const char* Name; double At; int Kind; int Subject; bool bBuilding; };
+		std::vector<Still> Stills;
+		auto Standing = [&Rec](int Side, double At, bool bVehicle) -> int
+		{
+			for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+			{
+				const LandFeed::Track& T = Rec.Tracks[K];
+				const LandFeed::Block* B = Rec.BlockOf(T.Block);
+				if (!B || B->Side != Side || T.bTwin || T.IsVehicle() != bVehicle || T.Start() > At || (T.Fell >= 0.0 && T.Fell < At + 4.0) || (T.Out >= 0.0 && T.Out < At + 4.0)) continue;
+				if (!bVehicle && (T.Role == "mortar" || T.Role == "fo")) continue;
+				return static_cast<int>(K);
+			}
+			return -1;
+		};
+		const int KWide = static_cast<int>(LandEye::Kind::Wide), KShoulder = static_cast<int>(LandEye::Kind::Shoulder), KLow = static_cast<int>(LandEye::Kind::Low);
+		const int KTank = static_cast<int>(LandEye::Kind::Tank), KWatch = static_cast<int>(LandEye::Kind::Watch);
+		Stills.push_back({ "01-opening", 4.0, -1, -1, false });
+		Stills.push_back({ "02-the-advance", std::max(12.0, SContact - 14.0), KWide, -1, false });
+		Stills.push_back({ "03-among-the-men", SContact + 12.0, KShoulder, Standing(0, SContact + 10.0, false), false });
+		Stills.push_back({ "04-in-the-grass", SContact + 45.0, KLow, Standing(0, SContact + 43.0, false), false });
+		{
+			double FirstShot = -1.0;
+			int First = -1, FirstFall = -1, FirstKill = -1, Fallen = -1;
+			for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+			{
+				const LandFeed::Track& T = Rec.Tracks[K];
+				if (T.Role == "tank" && !T.Shots.empty() && (FirstShot < 0.0 || T.Shots.front() < FirstShot)) { FirstShot = T.Shots.front(); First = static_cast<int>(K); }
+				if (T.Fell >= 0.0 && !T.bTwin)
+				{
+					int& Into = T.IsVehicle() ? FirstKill : FirstFall;
+					if (Into < 0 || T.Fell < Rec.Tracks[static_cast<size_t>(Into)].Fell) Into = static_cast<int>(K);
+				}
+				if (T.IsMan() && T.Fell >= 0.0 && T.Fell < Rec.End * 0.75 && !T.bTwin) Fallen = static_cast<int>(K);
+			}
+			if (First >= 0) Stills.push_back({ "05-the-tanks", FirstShot + 0.25, KTank, First, false });
+			if (FirstFall >= 0) Stills.push_back({ "06-a-man-falls", Rec.Tracks[static_cast<size_t>(FirstFall)].Fell + 0.8, KWatch, FirstFall, false });
+			if (FirstKill >= 0) Stills.push_back({ "07-a-tank-knocked-out", Rec.Tracks[static_cast<size_t>(FirstKill)].Fell + 2.0, KWatch, FirstKill, false });
+			Stills.push_back({ "08-the-village", Rec.End * 0.6, KWatch, Standing(1, Rec.End * 0.6 - 2.0, false), true });
+			if (Fallen >= 0) Stills.push_back({ "09-the-fallen", Rec.End * 0.82, KLow, Fallen, false });
+		}
+		std::sort(Stills.begin(), Stills.end(), [](const Still& A, const Still& B) { return A.At < B.At; });
+		// (what a ray from the eye meets first within 250 m: 1 a house, 2 anything else the scene draws or the ground, 0
+		// nothing)
+		auto RayMeets = [&](const Vec& From, const Vec& Dir) -> int
+		{
+			for (double S = 1.0; S < 250.0; S += S < 40.0 ? 0.5 : 1.0)
+			{
+				const Vec P = From + Dir * S;
+				LandField::Drawn What = LandField::Drawn::Pasture;
+				const double Z = Field.HeightAt(P.X, P.Y, &What);
+				if (What == LandField::Drawn::Floor && P.Z < Z + 7.0) return 1;
+				if (P.Z < Z) return 2;
+				if (What == LandField::Drawn::Wall && P.Z < Z + 2.0) return 2;
+				if (What == LandField::Drawn::Bank && P.Z < Z + 3.0) return 2;
+				if (Sight.At(P, -1) != LandSight::Hit::None) return 2;
+			}
+			return 0;
+		};
+		auto HouseShare = [&](const LandEye::Pose& P) -> double
+		{
+			Vec F = P.Look - P.Eye;
+			F = F * (1.0 / std::max(1e-6, F.Length()));
+			Vec R(F.Y, -F.X, 0.0);
+			R = R * (1.0 / std::max(1e-6, R.Length()));
+			const Vec U(R.Y * F.Z - R.Z * F.Y, R.Z * F.X - R.X * F.Z, R.X * F.Y - R.Y * F.X);
+			const double Tv = std::tan(P.Fov * 0.5 * 3.14159265 / 180.0), Th = Tv * 16.0 / 9.0;
+			int Hits = 0, All = 0;
+			for (int Iy = 0; Iy < 9; ++Iy)
+				for (int Ix = 0; Ix < 16; ++Ix)
+				{
+					const double Sx = (Ix + 0.5) / 8.0 - 1.0, Sy = 1.0 - (Iy + 0.5) / 4.5;
+					Vec D = F + R * (Sx * Th) + U * (Sy * Tv);
+					D = D * (1.0 / D.Length());
+					++All;
+					if (RayMeets(P.Eye, D) == 1) ++Hits;
+				}
+			return static_cast<double>(Hits) / All;
+		};
+		// (twice: the second with the film cut every 2.3 s between the asks, a run whose history parts from the first,
+		// as the photographer's light A/Bs part by the dark rule: each asked still must come out the same)
+		struct Took { LandEye::Kind Shot; int Subject; Vec Eye; };
+		std::vector<Took> First(Stills.size(), Took{ LandEye::Kind::Open, -1, Vec() });
+		int Unfit = 0, Empty = 0, NoHouse = 0, Same = 0, Houses = 0;
+		double SlowMs = 0.0, SlowAt = 0.0, FindMs = 0.0;
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			LandEye::Director Pic;
+			Pic.Begin(Rec, EW, ES);
+			// (as the scene's picture run does as the battle opens)
+			const auto H0 = std::chrono::steady_clock::now();
+			Pic.FindHouses();
+			if (Pass == 0) FindMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - H0).count();
+			std::vector<bool> AskedYet(Stills.size(), false), Taken(Stills.size(), false);
+			double B = 0.0, R = 0.0, NextStir = 30.0;
+			const double Last = Stills.empty() ? 0.0 : Stills.back().At;
+			while (B < Last + 0.1)
+			{
+				const double Speed = B < Contact - 10.0 ? 2.0 : 1.0 / Life;
+				B += Dt * Speed;
+				R += Dt;
+				PlaceMovers(B);
+				if (Pass == 1 && R >= NextStir)
+				{
+					NextStir = R + 2.3;
+					bool bNearAsk = false;
+					for (const Still& St : Stills) bNearAsk = bNearAsk || (B > St.At - 2.6 && B < St.At + 0.2);
+					if (!bNearAsk) Pic.CutNow();
+				}
+				for (size_t I = 0; I < Stills.size(); ++I)
+					// (not before the still before it is taken: two asked within 2 s of each other, the later took the
+					// earlier's still, as Sedan's 05 took 06's)
+					if (!AskedYet[I] && Stills[I].Kind >= 0 && B >= Stills[I].At - 2.0 && (I == 0 || Taken[I - 1]))
+					{
+						AskedYet[I] = true;
+						Pic.Ask(static_cast<LandEye::Kind>(Stills[I].Kind), Stills[I].Subject, Stills[I].bBuilding);
+					}
+				const auto U0 = std::chrono::steady_clock::now();
+				const LandEye::Pose P = Pic.Update(B, R, Dt);
+				const double UMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - U0).count();
+				if (Pass == 0 && UMs > SlowMs) { SlowMs = UMs; SlowAt = B; }
+				for (size_t I = 0; I < Stills.size(); ++I)
+				{
+					if (Taken[I] || B < Stills[I].At) continue;
+					Taken[I] = true;
+					const Still& St = Stills[I];
+					const bool bUnfit = St.Kind >= 0 && Pic.AskedUnfit();
+					if (Pass == 1)
+					{
+						const Took& W = First[I];
+						if (W.Shot == P.Shot && W.Subject == P.Subject && (W.Eye - P.Eye).Length() < 0.5) ++Same;
+						else std::printf("  still %s in the stirred run: %s on %d, eye %.1f m from the first run's (%s on %d)\n", St.Name, LandEye::NameOf(P.Shot), P.Subject, (W.Eye - P.Eye).Length(), LandEye::NameOf(W.Shot), W.Subject);
+						continue;
+					}
+					First[I] = { P.Shot, P.Subject, P.Eye };
+					// (the battle's men standing in the picture within 150 m, and seen: no bank, house or wood across)
+					int Men = 0;
+					for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+					{
+						const LandFeed::Track& T = Rec.Tracks[K];
+						if (T.bTwin || !T.IsMan() || T.Start() > B || (T.Out >= 0.0 && B > T.Out)) continue;
+						const LandFeed::Spot Sp = LandFeed::SpotAt(T, B);
+						const Vec Chest(Sp.X, Sp.Y, GroundAt(Sp.X, Sp.Y) + 1.0);
+						if ((Chest - P.Eye).Length() > 150.0 || !LandEye::InPicture(P, Chest, 0.95)) continue;
+						if (std::getenv("LAND_PLAY_STILL_MEN") && (Chest - P.Eye).Length() < 80.0) std::printf("    %s: man %zu at %.1f m, open %d, fell %d\n", St.Name, K, (Chest - P.Eye).Length(), EW.Open(P.Eye, Chest) ? 1 : 0, T.Fell >= 0.0 && T.Fell <= B ? 1 : 0);
+						if (!EW.Open(P.Eye, Chest)) continue;
+						++Men;
+					}
+					const double House = HouseShare(P);
+					std::string Asked = "-";
+					if (St.Subject >= 0)
+					{
+						const LandFeed::Track& T = Rec.Tracks[static_cast<size_t>(St.Subject)];
+						const LandFeed::Change* C = LandFeed::ChangeAt(T, B);
+						Asked = T.Role + " " + (C ? C->Pose : std::string("idle"));
+					}
+					std::printf("still %s at %.1f s: asked %s on %d (%s), took %s on %d%s%s; eye %.2f m up, fov %.0f; %d men in the picture, a house %.0f%% of it\n",
+						St.Name, B, St.Kind >= 0 ? LandEye::NameOf(static_cast<LandEye::Kind>(St.Kind)) : "none", St.Subject, Asked.c_str(), LandEye::NameOf(P.Shot), P.Subject,
+						bUnfit ? " UNFIT" : "", St.bBuilding ? (Pic.HouseInShot() ? " (a house kept in it)" : " (no house fit)") : "", P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), P.Fov, Men, 100.0 * House);
+					if (bUnfit) ++Unfit;
+					const bool bOnMan = St.Subject >= 0 && Rec.Tracks[static_cast<size_t>(St.Subject)].IsMan();
+					if ((St.Kind == KShoulder || St.Kind == KLow || (St.Kind == KWatch && bOnMan)) && Men == 0) ++Empty;
+					Houses = Pic.HousesFound();
+					if (St.bBuilding && Houses > 0 && House < 0.04) ++NoHouse;
+				}
+			}
+		}
+		std::printf("stills: %zu, %d placed unfit, %d on a man with no man of the battle in the picture, %d village shots with no house (%d houses on the field); %d of %d asked the same in a run cut differently between; the camera's slowest frame %.2f ms (battle %.1f s); the houses found in %.1f ms as the battle opens\n", Stills.size(), Unfit, Empty, NoHouse, Houses, Same, static_cast<int>(Stills.size()), SlowMs, SlowAt, FindMs);
+		if (Unfit > 0) Fault("a still's asked shot found no fit place");
+		if (Empty > 0) Fault("a still on a man has no man of the battle in its picture");
+		if (NoHouse > 0) Fault("the village still has no house in the picture");
+		if (Same < static_cast<int>(Stills.size())) Fault("an asked still parts with the run's history");
+	};
+	if (std::getenv("LAND_PLAY_ONLY_STILLS"))
+	{
+		RunStills();
+		return 0;
+	}
+
 	// (LAND_PLAY_ONLY_GEN: the general's view alone, for working on it; the film's counts after it are of nothing)
 	const bool bOnlyGen = std::getenv("LAND_PLAY_ONLY_GEN") != nullptr;
 	while (!bOnlyGen && Battle < Rec.End + 6.0)
@@ -1857,6 +2042,7 @@ int main(int argc, char** argv)
 			if (Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
 		}
 	}
+	if (std::getenv("LAND_PLAY_STILLS")) RunStills();
 	// The shell holes: torn earth, brown, a rim standing over the ground, each round's size; and their cost.
 	{
 		size_t Points = 0, Tris = 0;
