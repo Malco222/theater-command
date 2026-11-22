@@ -13,6 +13,7 @@ import { fallWarning } from '../src/campaign/danger';
 import { addCorps, allied, annexMonth, capitulate, createGame, declareWar, frontage, homeLost, homeOf, overseasRead, railReachFor, removeCorps, victorOf } from '../src/campaign/game';
 import { cutRail } from '../src/campaign/rails';
 import { crossingOf } from '../src/campaign/rivers';
+import { whyNotShip } from '../src/campaign/navy';
 import { setStop, stopOf } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { joinTown } from '../src/campaign/siege';
@@ -1020,6 +1021,25 @@ describe('by sea and land together, found by the odds (the second review of the 
     for (let k = 0; k < 3; k++) corps(g, 'UK', 'Antwerp', 2);
     const x = corps(g, 'UK', 'Flanders', 2, 'inf', 0.9);
     expect(inReach(g, 'Rotterdam')).toContain(x.id);
+  });
+
+  it("a harbour's sailing turned never puts tanks into a steep harbour they cannot use (the third review)", () => {
+    const g = open();
+    declareWar(g, 'GER', 'NOR');
+    declareWar(g, 'GER', 'FIN');
+    for (const c of g.corps.filter((c) => !c.dead && allied(g, c.nat, 'NOR'))) removeCorps(g, c);
+    const fin = R(g, 'Finnmark');
+    for (const c of [...fin.units]) removeCorps(g, c);
+    fin.ctrl = 'GER';
+    addCorps(g, 'GER', 'German corps', 'inf', 2, fin.id, {}).str = 1.4;
+    for (let k = 0; k < 4; k++) corps(g, 'FIN', 'Petsamo', 1, 'inf', 0.02);
+    g.nations.UK.sealift = 2;
+    const arm = corps(g, 'UK', 'Aberdeen', 3, 'arm');
+    corps(g, 'UK', 'Aberdeen', 2);
+    // Narvik is shut to the tanks; Petsamo has room for one; two sailings from Aberdeen are not one month's. No legal
+    // relief reaches the bar, so none is found (before the mend, both corps were put into Narvik at 1.795).
+    expect(whyNotShip(g, arm, R(g, 'Narvik'))).toMatch(/steep/);
+    expect(reliefInReach(g, 'NOR')).toBeNull();
   });
 
   it('with every harbour beside the place full, a landing on the place itself is weighed', () => {

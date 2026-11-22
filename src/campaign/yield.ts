@@ -275,7 +275,8 @@ function searchRelief(g: Game, ally: string, t: Region, bar: number, stays: Corp
             let n: Plan | null = new Map(plan);
             const mates = [...plan].filter(([, x]) => x.quay === w.quay);
             for (const [id] of mates) n.delete(id);
-            for (const [id] of mates) { if (n && why(n, byId.get(id)!, { to: w.to, quay: w.quay }) === 'ok') n = put(n, id, { to: w.to, quay: w.quay }); else n = null; }
+            // (Each mate only where that harbour is one of its own ways: steep ground stays shut to its tanks.)
+            for (const [id] of mates) { const x = byId.get(id)!, to: Way = { to: w.to, quay: w.quay }; if (n && x.ways.some((xw) => same(xw, to)) && why(n, x, to) === 'ok') n = put(n, id, to); else n = null; }
             if (n && why(n, m, w) === 'ok') tryPlan(put(n, m.c.id, w));
           }
           // A corps standing in the way, not yet moving, moved off to make room.
