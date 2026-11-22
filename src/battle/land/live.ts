@@ -322,6 +322,14 @@ export interface LiveOpts {
    */
   bocage?: boolean;
   /**
+   * Field telephones, stretcher bearers and the night patrol (release 2; Brian, 22 November 17:33Z, "make it where we can
+   * toggle it off", and 21:21Z, each starting on; the rules' sim.phones, sim.bearers and sim.patrol): on unless false.
+   * The patrol goes out only where hiding is on (hide). Views carry phones, returns and patrol.
+   */
+  phones?: boolean;
+  bearers?: boolean;
+  patrol?: boolean;
+  /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
    * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
@@ -431,6 +439,9 @@ export class LiveBattle {
     if (opts.cutters !== false) sim.cutters = true;
     if (opts.smoke !== false) sim.smoke = true;
     if (opts.bocage) sim.bocage = true;
+    if (opts.phones !== false) sim.phones = true;
+    if (opts.bearers !== false) sim.bearers = true;
+    if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     // (a corps coming up from next door is in the header from the start, its words and model known, and walks on later:
     // 'joins' says so; the views carry it once it is on the field and, till then, in 'coming')
@@ -516,6 +527,11 @@ export class LiveBattle {
         // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
         // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
         ...this.sim.screenView(this.me ?? undefined),
+        // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
+        // by its t and unit; the night patrol: the attack's own route, and where it was caught)
+        ...this.sim.phonesView(this.me ?? undefined),
+        ...this.sim.bearerView(this.me ?? undefined),
+        ...this.sim.patrolView(this.me ?? undefined),
         ...(v.over ? { over: v.over } : {}),
       });
     }
