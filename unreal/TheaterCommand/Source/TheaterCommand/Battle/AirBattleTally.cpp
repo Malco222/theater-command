@@ -380,3 +380,27 @@ void AAirBattle::DrawTally(const FVector& EyeAt)
 		}
 	}
 }
+
+bool AAirBattle::AceMarksAt(int32 Key, FVector& At, FVector& Out)
+{
+	const FPlaneMade* Made = PlaneMade.Find(Key);
+	const TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(Key);
+	const UProceduralMeshComponent* Mesh = Have ? Have->Get() : nullptr;
+	const FAirTallySide* Side = Made && Mesh ? TallyOfShape(Made->Shape) : nullptr;
+	if (!Side || Side->At.Num() == 0 || Side->Out.Num() != Side->At.Num())
+	{
+		return false;
+	}
+	// (the first row, where a few kills are; slots run from the front of the lowest row)
+	const int32 Row = FMath::Min(Side->At.Num(), AirTally::PerRow);
+	FVector Sum = FVector::ZeroVector, Facing = FVector::ZeroVector;
+	for (int32 K = 0; K < Row; ++K)
+	{
+		Sum += Side->At[K];
+		Facing += Side->Out[K];
+	}
+	const FTransform& Frame = Mesh->GetComponentTransform();
+	At = Frame.TransformPosition(Sum / Row);
+	Out = Frame.TransformVectorNoScale(Facing.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector));
+	return true;
+}

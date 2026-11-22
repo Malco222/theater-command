@@ -282,6 +282,9 @@ private:
 	bool TallyReady();
 	void MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::Group& Ace, const FString& Nation);
 	const FAirTallySide* TallyOfShape(const FString& Shape);
+	/** Where an ace's first row of marks is (the middle of its slots, in the world) and the way they face; false when his
+	 * aircraft has no kill slots or no mesh. */
+	bool AceMarksAt(int32 Key, FVector& At, FVector& Out);
 	static constexpr double TallyNearM = 250.0;
 	/** Each ace's group, and its lead's key (the lowest seen). */
 	TMap<int32, int32> AceLead;
@@ -585,7 +588,7 @@ private:
 	 * both rides fell on a Mustang and the German fighters were small in every frame). bChase: one in the chase view,
 	 * taken as he would take it (his first fighter squadron ridden, then one step along it), its plate in the picture.
 	 * bGuns: "the guns fire back", timed from the first attack run on a ship (GunsRealT). */
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; bool bMarks = false; bool bScrew = false; bool bChutes = false; };
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; bool bMarks = false; bool bScrew = false; bool bChutes = false; bool bAce = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
@@ -604,6 +607,9 @@ private:
 	 * -1 its left), the bomber's eye on that side. */
 	int32 ScrewEyeKey = INDEX_NONE;
 	double ScrewEyeHand = 1.0;
+	/** The ace's close picture's ride (the art director, 18:31Z 22 November: "one close frame and one chase-view frame"):
+	 * the eye 8 m off his marks, square to them; INDEX_NONE for the chase picture, the fighter's own eye behind him. */
+	int32 AceEyeKey = INDEX_NONE;
 	/** The parachutes picture: when three or more open canopies first hung within 1.5 km of each other (real seconds;
 	 * -1 not yet), where; and whether the overview is on them now (ChutesLook), until ChutesLookOffAt. */
 	double ChutesRealT = -1.0, ChutesLookOffAt = -1.0;

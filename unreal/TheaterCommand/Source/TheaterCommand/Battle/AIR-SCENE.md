@@ -49,6 +49,10 @@ battle screen over it.
    - the strike marks (`09-strike-marks`, item 19): 105 s after the meeting, riding the aircraft flying that has been
      struck the most (a cannon shell weighed as three rounds, a heavy shell as six). The log says "Air battle: strike
      marks picture on <model> (key N): ... strikes on it"
+   - an ace's marks, when the battle has an ace or `-TheaterAceTest=` gives one (item 44; the art director's two frames):
+     `12-ace-close`, 30 s after the meeting, the eye 8 m off his first row of marks, square to it, a metre above and a
+     metre behind; and `12b-ace-chase`, 36 s after, the chase view behind him. The log says "Air battle: ace picture
+     ... on key N"; with no ace flying, neither is taken and the log says so
    - the after card
 
    Each ride leaves its fighter half a second after its picture. For a film of the run, `-TheaterAirBattleRideHold=40`
@@ -1084,3 +1088,6 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the defence; more nations after a comma, `GER=14,ITA=6,UK=3`), for frames where the recording has none. Look for: the
    marks square to his side, not mirrored (the Italian tricolour green toward the nose), not floating off the skin or
    sunk into it, no shimmer as he moves off; and only on his aircraft, never moving to another when he falls.
+   The picture run takes `12-ace-close` and `12b-ace-chase` of him (the art director checks only those two): the marks
+   as matte as his paint and never brighter, taking its light, shade and grime; flags and roundels not sticker-bright;
+   no row running on to the wing-root fillet, and no code letter or name panel over the aft end of a full row.

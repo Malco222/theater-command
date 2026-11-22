@@ -1044,6 +1044,8 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("09-strike-marks"), 105.0, true, false, false, false, false, false, true }, // (riding the aircraft struck the most)
 			{ TEXT("10-dead-engine"), 85.0, true, false, false, false, false, false, false, true }, // (riding an aircraft with an engine out)
 			{ TEXT("11-parachutes"), 3.0, false, false, false, false, false, false, false, false, true }, // (after three canopies first hang together)
+			{ TEXT("12-ace-close"), 30.0, true, false, false, false, false, false, false, false, false, true }, // (an ace's marks, 8 m off them)
+			{ TEXT("12b-ace-chase"), 36.0, true, false, false, false, true, false, false, false, false, true }, // (the chase view behind the ace)
 		};
 	}
 	ShowScreen();
@@ -5891,8 +5893,16 @@ void AAirBattle::AimEye(double Real)
 			FVector Flat(CloseAhead.X, CloseAhead.Y, 0.0);
 			Flat = Flat.IsNearlyZero() ? FVector(Ahead.X, Ahead.Y, 0.0).GetSafeNormal() : Flat.GetSafeNormal();
 			const FVector FlatRight = FVector::CrossProduct(FVector::UpVector, Flat).GetSafeNormal();
-			FVector Want, Look;
-			if (Rider->bFighter)
+			FVector Want, Look, AceMarks, AceOut;
+			if (Rider->Key == AceEyeKey && AceMarksAt(Rider->Key, AceMarks, AceOut))
+			{
+				// The ace's close picture (the art director, 18:31Z 22 November: "one close frame"): 8 m off his first row
+				// of marks, square to it, a metre above and a metre behind, looking at it: his rows, the sill above them and the
+				// code letters aft of them in the picture, some 20 px a mark on the Mac's screen.
+				Want = AceMarks + AceOut * 8.0 * U + FVector::UpVector * 1.0 * U - CloseAhead * 1.0 * U;
+				Look = AceMarks;
+			}
+			else if (Rider->bFighter)
 			{
 				// A fighter from 22 m behind along its path and 6 m above it, looking 80 m past it: the aircraft a little
 				// under the middle of the picture, its back, its fin and the tops of its wings toward the eye.
@@ -7724,7 +7734,35 @@ void AAirBattle::TakeShots(double Real)
 			bChutesLook = true;
 			bLookSet = false; // (a cut to them)
 		}
-		if (Shot.bClose && !S.bClose && RealT >= Due - 1.5)
+		if (Shot.bClose && Shot.bAce && !S.bClose && RealT >= Due - 1.5)
+		{
+			// (an ace's lead still flying, the first ace's; with none, as in a battle with no ace and no test ace, no
+			// pictures: the art director's two frames of his marks, close and from the chase view)
+			int32 AceGroup = INDEX_NONE, AceKey = INDEX_NONE;
+			for (const TPair<int32, int32>& Lead : AceLead)
+			{
+				for (const AirShow::PlaneOut& P : S.Show.Planes())
+				{
+					if (AceKey == INDEX_NONE && P.Key == Lead.Value && P.bShown && !P.bFalling && !P.bOnGround)
+					{
+						AceGroup = Lead.Key;
+						AceKey = P.Key;
+					}
+				}
+			}
+			if (AceKey == INDEX_NONE)
+			{
+				Shot.bTaken = true;
+				UE_LOG(LogTheater, Display, TEXT("Air battle: ace picture %s: no ace's aircraft flying, so none taken."), *Shot.Name);
+				continue;
+			}
+			RideOn(AceGroup, AceKey);
+			AceEyeKey = Shot.bChase ? INDEX_NONE : AceKey;
+			CloseOffAt = -1.0;
+			UE_LOG(LogTheater, Display, TEXT("Air battle: ace picture %s on key %d (group %d), %s."), *Shot.Name, AceKey, AceGroup,
+				Shot.bChase ? TEXT("the chase view behind him") : TEXT("the eye 8 m off his marks"));
+		}
+		else if (Shot.bClose && !S.bClose && RealT >= Due - 1.5)
 		{
 			bRideOther = Shot.bOther;
 			int Squadron = -1;
@@ -7847,6 +7885,7 @@ void AAirBattle::TakeShots(double Real)
 		CloseOffAt = -1.0;
 		MarksEyeKey = INDEX_NONE;
 		ScrewEyeKey = INDEX_NONE;
+		AceEyeKey = INDEX_NONE;
 		if (S.bClose)
 		{
 			Press(TEXT("ride"));
