@@ -9061,6 +9061,10 @@ bool ACampaignPlayerController::IsTableBusy() const
 
 bool ACampaignPlayerController::IsAnswering() const
 {
+	if (WarDue || bEnterWhenLaid)
+	{
+		return true; // (tc.Speed.WarSpread: a war is being begun under the opening's plate; no key acts on it until it is entered)
+	}
 	if (LiveBattle.IsValid())
 	{
 		return true; // (his own battle is open: the map takes no order until it is handed back)
