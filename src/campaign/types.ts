@@ -1222,6 +1222,25 @@ export interface AirReport {
   surprise?: boolean;
   /** Damaged cities (the grand campaign with its switch): what the bombs did to the town, in percent points added, and where it now stands. */
   city?: { region: number; added: number; now: number };
+  /** Recon photos (photos.ts, with their switch): the player's raid on works, oil or a railway, photographed the day after. Shown, never counted. */
+  photo?: RaidPhoto;
+}
+
+/**
+ * A raid's photo (photos.ts), from what its count decided: what was aimed at, the bombers that bombed, the share of their
+ * bombs that fell inside the target's fence (hundredths), the share of output stopped for a month, a factory burnt
+ * out, the railway cut, the percent points of damage the town took, a night raid, and cloud over the target.
+ */
+export interface RaidPhoto {
+  aim: 'works' | 'oil' | 'rail';
+  bombed: number;
+  on: number;
+  cut: number;
+  wrecked?: 1;
+  rail?: 1;
+  city?: number;
+  night?: 1;
+  sky?: 'cloud';
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */

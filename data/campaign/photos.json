@@ -1,0 +1,7 @@
+{
+  "_about": "Recon photos after a raid (Brian, 22 November 2026: a before-and-after aerial photo shows whether the bombs hit the factory or the fields next to it). src/campaign/photos.ts. Shown, never counted: the photo is drawn from what the raid's count already decided. 'on' is the switch for a new grand campaign. 'inside' turns the count's accuracy (bombs that found the target, as a share of a perfect raid's: the air war's day accuracy by nation and year, or the night accuracy, times the bombers' tech and the cloud) into the share of bombs that fell inside the target's fence: even the best day raids of 1944 put only about 1 bomb in 3 within the works (the bombing surveys), and the 1941 Butt Report found 1 night bomber in 3 within five miles. 'least' and 'most' bound it.",
+  "on": false,
+  "inside": 0.3,
+  "least": 0.02,
+  "most": 0.6
+}

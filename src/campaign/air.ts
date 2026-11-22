@@ -39,11 +39,12 @@ import { townName } from './towns';
 import { settleFought, type BombLaw, type FoughtAir } from './airfought';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
+import { photosOn, raidPhoto } from './photos';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
-import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
+import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, RaidPhoto, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
 import { seaWhat, seaWhere } from './sea-words';
 
@@ -1825,6 +1826,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // Damaged cities (citydamage.ts): what the bombs did to the town itself, where they did anything.
   let city: CityHit | null = null;
   let struck: SeaSide[] | undefined;
+  // Recon photos (photos.ts): what a raid on works, oil or a railway did, for the photo taken the day after.
+  let photo: RaidPhoto | null = null;
   if (m === 'fleet' || m === 'harbour') {
     // A strike on ships: the hits fall on the classes the crews aim for, and each fleet under attack takes its share.
     const exp = shipHits(a, m, through, foundShare(g, a, nat));
@@ -1922,12 +1925,15 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
     // Fought out as an air battle, the field's own throws decide both (b397), so the campaign cuts the line the field showed cut.
-    if (bombFactories(g, nat, r, cut, battle?.rolls?.ruin)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
-    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0, battle?.rolls?.rail)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
+    const wrecked = bombFactories(g, nat, r, cut, battle?.rolls?.ruin);
+    if (wrecked) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
+    const railCut = bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0, battle?.rolls?.rail);
+    if (railCut) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
     else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
     // Damaged cities: the bombs that fall on the town leave it damaged until its holder pays to repair it.
     city = cityHit(g, r, 'raid', through, gunsStop(a.aa ?? 0), night);
     if (city) { value += city.worth; result += ` ${city.words}`; }
+    if (nat === g.human && photosOn(g)) photo = raidPhoto(g, { aim: acOn(g) ? aimOf(g, fleets) : 'works', fac: r.fac, bombed, through, cut, wrecked, rail: railCut, city: city?.added ?? 0, night, sky: a.sky });
     result = result.trim();
   } else if (m === 'town') {
     // A raid on a town: part of its works are broken down for the assault, and the troops inside are shaken.
@@ -2055,6 +2061,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // The grand campaign keeps what the raid was worth beside what it cost: a staff learns from its own results.
   if (g.flags.open === 1) rep.worth = Math.round(value);
   if (city) rep.city = { region: city.region, added: city.added, now: city.now };
+  if (photo) rep.photo = photo;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
 

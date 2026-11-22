@@ -109,6 +109,8 @@ import { tenthPct } from '../../core/math';
 import { BOMBERS, bomberCard, bomberMark, carriesNames, countWord, flownWord, headStart, tourOf } from '../bombers';
 import { VALOUR, awardTitleOf, heroesOf, heroesWaiting, sendWorth, whyNotSend } from '../valour';
 import { turnToDate } from '../../core/ticket';
+import { photoBlock } from './photoview';
+import { photosShipped, setPhotos } from '../photos';
 import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
 import { EVERYWHERE, Lines, Sheet, boxOf, boxOfLine, meetsAny, piece, pieceAt, within, type Area, type Piece } from './cull';
 import { seaAction, seaHead, seaIs, seaPlural, seaWhat, seaWhere, seaWhereList } from '../sea-words';
@@ -6561,6 +6563,7 @@ function airReportCard(r: AirReport): string {
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">${esc(r.result)}${sky}</div>
+      ${photoBlock(g, r)}
       <div class="vs"><div><h4>${chip(r.attNat)} ${natName(r.attNat)} attacking</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${r.defNat ? natName(r.defNat) : 'No defenders'} ${r.defNat ? chip(r.defNat) : ''}</h4>${side(r.def)}</div></div>
       <h3>What the campaign map fed into the battle</h3>
       ${ticketTable(r.lines)}
@@ -8293,6 +8296,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   // Air campaigns (ruling 236.2): flown in a new grand campaign as shipped (aircampaigns.json `on`; the design director,
   // b623 and b636), set right after startOpen as the war runners set them (TC_AC=1), so the war is the one the gates measured.
   if (grand && airCampaignsShipped()) setAirCampaigns(g, true);
+  // Recon photos after a raid (Brian, 22 November 2026): shown, never counted (photos.json 'on').
+  if (grand && photosShipped()) setPhotos(g, true);
   // Damaged cities (Brian, 20 November 2026): a new grand campaign has them, after any history played to its start.
   if (grand) setCityDamage(g, true);
   g.human = human;
