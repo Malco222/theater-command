@@ -1044,3 +1044,19 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    (SetSky), asked between, comes a frame later. `-TheaterFxOneTick` puts both back on the game thread after the sky,
    as before, to compare. In a trace: AirBattle_EffectsBegin, then AirBattle_DrawSky, then AirBattle_EffectsTick (the
    wait for the workers, short when they finished under the sky).
+42. **Aircraft past 300 m drawn as copies, and a light shape past 1.5 km** (AS1 of the production lead's battle-scale
+   plan, 22 November: "B-17 middle shape (~1,500 triangles); instanced middle and far tiers"). Each aircraft was a
+   mesh of its own, handed to the drawing thread afresh every frame, for the picture, its depth and its shadow: at 150
+   aircraft, 150 of each. Now an aircraft past its near shape (300 m, 450 m going out; never the ridden one, nor one
+   with its bay open) is a copy in one instanced mesh for its model and paint, sent once a frame with where each copy
+   is and where it was the frame before (so the anti-aliasing and the blur see it move). Out to 1.5 km a copy is its
+   far shape, as before; past 1.5 km (the battle's 55 degree lens; a narrower lens moves it out as far as it enlarges)
+   its light shape: its far shape taken down to 500 to 1,500 triangles (Battle/AirLight; a B-17 7,122 to 1,499, a Kate
+   11,002 to 1,500, a fighter some 1,900 to 500), within half a pixel there of the far shape (a pixel is 1.45 m at
+   1.5 km), its paint lines kept. Shadows as item 30: within a kilometre, three on the ground. The near shape, the
+   airscrews, the bay and the strike marks are its own mesh's, as before. Look at the strategy views (01, 04, 07) and
+   the chase: no aircraft should change its paint or its outline as it crosses 300 m or 1.5 km, and none should jump
+   or smear as it does. If one does, `-TheaterPlaneCopies=0` draws every aircraft on its own mesh as before, and
+   `-TheaterPlaneLightM=3000` moves the light shape out. Every 10 s the log says "Air battle: N aircraft drawn as
+   copies in M meshes, K on their own meshes"; the light shapes are logged as they are made ("Air battle: B17:USA's
+   light shape ..."). Read Bremen's game thread and draw thread times with and without `-TheaterPlaneCopies=0`.

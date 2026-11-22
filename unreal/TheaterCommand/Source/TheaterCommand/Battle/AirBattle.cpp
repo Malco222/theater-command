@@ -7,6 +7,7 @@
 #include "Battle/AirBattleScreen.h"
 #include "Battle/AirBattleState.h"
 #include "Battle/AirGround.h"
+#include "Battle/AirLight.h"
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
 #include "Battle/AirStage.h"
@@ -28,6 +29,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/Texture2D.h"
@@ -35,6 +37,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -48,6 +51,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "MeshDescription.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
@@ -60,6 +64,7 @@
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
+#include "StaticMeshAttributes.h"
 #include "SubmixEffects/AudioMixerSubmixEffectDynamicsProcessor.h"
 #include "TheaterCommand.h"
 #include "TimerManager.h"
@@ -3810,6 +3815,143 @@ namespace AirParts
 		}
 		return false;
 	}
+
+	/** A colour as AirLight's paint number, and back. */
+	static uint32_t ToneOf(const FColor& C)
+	{
+		return (static_cast<uint32_t>(C.R) << 24) | (static_cast<uint32_t>(C.G) << 16) | (static_cast<uint32_t>(C.B) << 8) | C.A;
+	}
+	static FColor ColourOf(uint32_t Tone)
+	{
+		return FColor(static_cast<uint8>(Tone >> 24), static_cast<uint8>(Tone >> 16), static_cast<uint8>(Tone >> 8), static_cast<uint8>(Tone));
+	}
+
+	/**
+	 * An aircraft's light shape (AS1; Battle/AirLight), made from its far shape the first time it is asked for and kept
+	 * beside it ("<shape>|light"): null where its far shape is light enough as it is (AirLight::LightMost), or it has none.
+	 */
+	static const FShape* LightOf(const FString& ShapeKey)
+	{
+		TMap<FString, FShape>& Kept = Shapes();
+		const FString Key = ShapeKey + TEXT("|light");
+		if (const FShape* Have = Kept.Find(Key))
+		{
+			return Have->Triangles.Num() > 0 ? Have : nullptr;
+		}
+		FShape Light;
+		if (const FShape* Far = Kept.Find(ShapeKey + TEXT("|far")))
+		{
+			const int32 Most = AirLight::LightMost(Far->Triangles.Num() / 3);
+			if (Most > 0 && Far->Colors.Num() == Far->Points.Num())
+			{
+				AirLight::Shape In;
+				In.Points.reserve(static_cast<size_t>(Far->Points.Num()) * 3);
+				for (const FVector& Point : Far->Points)
+				{
+					In.Points.insert(In.Points.end(), { Point.X, Point.Y, Point.Z });
+				}
+				In.Triangles.assign(Far->Triangles.GetData(), Far->Triangles.GetData() + Far->Triangles.Num());
+				In.Tones.reserve(static_cast<size_t>(Far->Colors.Num()));
+				for (const FColor& Colour : Far->Colors)
+				{
+					In.Tones.push_back(ToneOf(Colour));
+				}
+				const double Began = FPlatformTime::Seconds();
+				const AirLight::Made Made = AirLight::Lighten(In, Most);
+				const int32 Count = static_cast<int32>(Made.Tones.size());
+				Light.Points.Reserve(Count);
+				Light.Normals.Reserve(Count);
+				Light.Colors.Reserve(Count);
+				for (int32 K = 0; K < Count; ++K)
+				{
+					const size_t I = static_cast<size_t>(K) * 3;
+					Light.Points.Add(FVector(Made.Points[I], Made.Points[I + 1], Made.Points[I + 2]));
+					Light.Normals.Add(FVector(Made.Normals[I], Made.Normals[I + 1], Made.Normals[I + 2]));
+					Light.Colors.Add(ColourOf(Made.Tones[static_cast<size_t>(K)]));
+				}
+				Light.Triangles.Append(Made.Triangles.data(), static_cast<int32>(Made.Triangles.size()));
+				UE_LOG(LogTheater, Display, TEXT("Air battle: %s's light shape for its copies past %.0f m, %d triangles from its far shape's %d (%d asked), in %.1f ms."),
+					*ShapeKey, AirLight::LightFromM, Made.Kept, Far->Triangles.Num() / 3, Most, (FPlatformTime::Seconds() - Began) * 1000.0);
+			}
+		}
+		// (kept empty where there is none, so that it is not looked for again)
+		Kept.Add(Key, MoveTemp(Light));
+		const FShape* Laid = Kept.Find(Key);
+		return Laid && Laid->Triangles.Num() > 0 ? Laid : nullptr;
+	}
+
+	/**
+	 * A shape as a mesh the engine keeps (AS1: the aircraft's copies): its points, facings and colours (sRGB bytes, as
+	 * the procedural meshes carry them; the material makes them linear), all on Ink. Null for a shape with no triangles.
+	 * Built as the ground battle builds its crowds' (LandVat), fast, with no collision.
+	 */
+	static UStaticMesh* StillOf(UObject* Owner, const FShape& Shape, UMaterialInterface* Ink)
+	{
+		const int32 Count = Shape.Points.Num();
+		if (!Owner || !Ink || Count == 0 || Shape.Triangles.Num() < 3 || Shape.Colors.Num() != Count)
+		{
+			return nullptr;
+		}
+		FMeshDescription D;
+		FStaticMeshAttributes Attributes(D);
+		Attributes.Register();
+		auto Positions = Attributes.GetVertexPositions();
+		auto Normals = Attributes.GetVertexInstanceNormals();
+		auto Tangents = Attributes.GetVertexInstanceTangents();
+		auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+		auto Colours = Attributes.GetVertexInstanceColors();
+		auto Uvs = Attributes.GetVertexInstanceUVs();
+		Uvs.SetNumChannels(1);
+		const FPolygonGroupID Group = D.CreatePolygonGroup();
+		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ink");
+		D.ReserveNewVertices(Count);
+		D.ReserveNewVertexInstances(Count);
+		D.ReserveNewTriangles(Shape.Triangles.Num() / 3);
+		TArray<FVertexInstanceID> Corners;
+		Corners.SetNum(Count);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const FVertexID Vertex = D.CreateVertex();
+			Positions[Vertex] = FVector3f(Shape.Points[I]);
+			const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+			const FVector3f Normal = Shape.Normals.IsValidIndex(I) ? FVector3f(Shape.Normals[I]).GetSafeNormal(1e-6f, FVector3f::UpVector) : FVector3f::UpVector;
+			Normals[Corner] = Normal;
+			// (no normal map: any tangent across the facing will do)
+			const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
+			Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
+			Signs[Corner] = 1.0f;
+			Colours[Corner] = FVector4f(FLinearColor(Shape.Colors[I]));
+			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			Corners[I] = Corner;
+		}
+		int32 Laid = 0;
+		for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
+		{
+			const int32 A = Shape.Triangles[T], B = Shape.Triangles[T + 1], C = Shape.Triangles[T + 2];
+			if (!Corners.IsValidIndex(A) || !Corners.IsValidIndex(B) || !Corners.IsValidIndex(C) || A == B || B == C || A == C)
+			{
+				continue;
+			}
+			const FVertexInstanceID Three[3] = { Corners[A], Corners[B], Corners[C] };
+			D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+			++Laid;
+		}
+		if (Laid == 0)
+		{
+			return nullptr;
+		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, MakeUniqueObjectName(Owner, UStaticMesh::StaticClass(), FName(TEXT("AirPlaneStill"))));
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		TArray<const FMeshDescription*> Levels;
+		Levels.Add(&D);
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levels, Params);
+		return Made;
+	}
 }
 
 UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span)
@@ -4057,6 +4199,100 @@ void AAirBattle::ShowDiscs(FPlaneMade& Made, bool bShow)
 	}
 }
 
+UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
+{
+	const FString Key = Shape + (bLight ? TEXT("|light") : TEXT("|far"));
+	if (const TObjectPtr<UStaticMesh>* Have = PlaneStills.Find(Key))
+	{
+		return Have->Get();
+	}
+	const AirParts::FShape* From = bLight ? AirParts::LightOf(Shape) : AirParts::Shapes().Find(Key);
+	UStaticMesh* Made = From ? AirParts::StillOf(this, *From, PlaneInk) : nullptr;
+	// (null kept too: a shape with no mesh is drawn on its own mesh, and not tried again)
+	PlaneStills.Add(Key, Made);
+	return Made;
+}
+
+AAirBattle::FPlaneCopies* AAirBattle::CopiesFor(const FString& Shape, bool bLight, bool bShadow, UStaticMesh* Mesh)
+{
+	const FString Key = Shape + (bLight ? TEXT("|light") : TEXT("|far")) + (bShadow ? TEXT("|shadow") : TEXT("|plain"));
+	FPlaneCopies& Group = PlaneCopies.FindOrAdd(Key);
+	if (Group.Copies.IsValid())
+	{
+		return &Group;
+	}
+	if (!Mesh || !PlaneInk)
+	{
+		return nullptr;
+	}
+	UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), FName(TEXT("AirPlaneCopies"))));
+	Copies->SetupAttachment(Root);
+	Copies->SetStaticMesh(Mesh);
+	Copies->SetMaterial(0, PlaneInk);
+	Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Copies->SetCanEverAffectNavigation(false);
+	// (a shadow within ShadowFarM, as the aircraft's own meshes; lit by the light thrown up from under the eye, too)
+	Copies->SetCastShadow(bShadow);
+	Copies->LightingChannels.bChannel1 = true;
+	// (places removed off the end only, as the ground battle's crowds; each place's place a frame before kept, for the
+	// motion: set before the component is registered, and never on a static one, which the engine forbids)
+	Copies->SetRemoveSwap();
+	Copies->SetMobility(EComponentMobility::Movable);
+	Copies->SetHasPerInstancePrevTransforms(true);
+	Copies->SetVisibility(false);
+	Copies->RegisterComponent();
+	PlaneKeep.Add(Copies);
+	Group.Copies = Copies;
+	return &Group;
+}
+
+void AAirBattle::SendCopies()
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_SendCopies);
+	CopiesMeshes = 0;
+	for (TPair<FString, FPlaneCopies>& Pair : PlaneCopies)
+	{
+		FPlaneCopies& Group = Pair.Value;
+		UInstancedStaticMeshComponent* Copies = Group.Copies.Get();
+		const int32 Want = Group.At.Num();
+		if (Copies)
+		{
+			// (as many places as aircraft: the last ones removed, last first, or new ones added at the end, which the
+			// engine gives their place now as their place a frame before; then every place sent with where its aircraft
+			// is and where it was, whichever place it had the frame before)
+			const int32 Have = Copies->GetInstanceCount();
+			if (Have > Want)
+			{
+				TArray<int32> Gone;
+				Gone.Reserve(Have - Want);
+				for (int32 Slot = Have - 1; Slot >= Want; --Slot)
+				{
+					Gone.Add(Slot);
+				}
+				Copies->RemoveInstances(Gone, true);
+			}
+			else if (Have < Want)
+			{
+				const TArray<FTransform> Added(Group.At.GetData() + Have, Want - Have);
+				Copies->AddInstances(Added, false, false);
+			}
+			if (Want > 0)
+			{
+				Copies->BatchUpdateInstancesTransforms(0, Group.At, Group.Before, false, false, false);
+				Copies->MarkRenderInstancesDirty();
+				++CopiesMeshes;
+			}
+			if (Copies->IsVisible() != (Want > 0))
+			{
+				Copies->SetVisibility(Want > 0);
+			}
+		}
+		Group.Keys.Reset();
+		Group.At.Reset();
+		Group.Before.Reset();
+	}
+}
+
 void AAirBattle::Draw(double Real)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_Draw);
@@ -4066,6 +4302,26 @@ void AAirBattle::Draw(double Real)
 	const FQuat HalfRound = FRotator(0.0, 180.0, 0.0).Quaternion();
 	const double U = UnitsPerMetre;
 	const FVector EyeAt = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
+	// AS1: past the near shape, each aircraft a copy in its shape's instanced mesh (PlaneCopies), its light shape past
+	// LightFromM through the battle's own 55 degree lens (a narrower lens, enlarging, moves it out as far as it enlarges).
+	static const bool bCopiesOn = []
+	{
+		int32 On = 1;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneCopies="), On);
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aircraft past their near shape drawn as copies, one mesh a shape (AS1): %s."), On != 0 ? TEXT("on") : TEXT("off, each on its own mesh"));
+		return On != 0;
+	}();
+	static const double LightFromM = []
+	{
+		double Metres = AirLight::LightFromM;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneLightM="), Metres);
+		Metres = FMath::Clamp(Metres, 0.0, 1.0e6);
+		UE_LOG(LogTheater, Display, TEXT("Air battle: the copies' light shapes past %.0f m through the battle's 55 degree lens."), Metres);
+		return Metres;
+	}();
+	const double Lens = Eye && Eye->GetCameraComponent() ? FMath::Clamp(static_cast<double>(Eye->GetCameraComponent()->FieldOfView), 5.0, 120.0) : 55.0;
+	const double Enlarged = FMath::Tan(FMath::DegreesToRadians(55.0 * 0.5)) / FMath::Tan(FMath::DegreesToRadians(Lens * 0.5));
+	CopiesDrawn = 0;
 	TSet<int32> Seen;
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
@@ -4082,6 +4338,9 @@ void AAirBattle::Draw(double Real)
 			if (FPlaneMade* Hidden = PlaneMade.Find(P.Key))
 			{
 				ShowDiscs(*Hidden, false);
+				// (out of the picture: no copy, and no move from where it was when it comes back)
+				Hidden->bCopy = false;
+				Hidden->bWas = false;
 			}
 			continue;
 		}
@@ -4090,14 +4349,15 @@ void AAirBattle::Draw(double Real)
 		{
 			continue;
 		}
-		Mesh->SetVisibility(true);
 		const FQuat Attitude = FRotator(P.Pitch, P.Heading, P.Bank).Quaternion() * HalfRound;
 		const FVector Where = World(P.At.X, P.At.Y, P.At.Z);
-		Mesh->SetWorldLocationAndRotation(Where, Attitude);
-		if (FPlaneMade* Lit = PlaneMade.Find(P.Key))
+		const double Away = FVector::Dist(Where, EyeAt) / U;
+		const FTransform Now(Attitude, Where);
+		FPlaneMade* Lit = PlaneMade.Find(P.Key);
+		if (Lit)
 		{
 			const double Reach = (P.bOnGround ? AirParts::ShadowGroundM : AirParts::ShadowFarM) * AirParts::ShadowScale() * (Lit->bShadow ? 1.1 : 1.0);
-			const bool bShadow = FVector::Dist(Where, EyeAt) / U < Reach;
+			const bool bShadow = Away < Reach;
 			if (bShadow != Lit->bShadow)
 			{
 				Mesh->SetCastShadow(bShadow);
@@ -4105,12 +4365,52 @@ void AAirBattle::Draw(double Real)
 			}
 		}
 		// The near shape within 300 m of the eye (and for the ridden aircraft), the far one past 450 m.
-		if (const FPlaneMade* Made = PlaneMade.Find(P.Key); Made && Made->bTwoShapes)
+		const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
+		// (held on the near shape while its bay doors are open: the far shape has no bay, the art director, 06:48Z)
+		const bool bNearShape = Lit && Lit->bTwoShapes && (bRidden || Away < (Lit->bNear ? 450.0 : 300.0) || (Lit->bNear && Lit->bBay && P.Bay > 0.0));
+		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape)
 		{
-			const double Away = FVector::Dist(Where, EyeAt) / U;
-			const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
-			// (held on the near shape while its bay doors are open: the far shape has no bay, the art director, 06:48Z)
-			PlaneNear(P.Key, Mesh, bRidden || Away < (Made->bNear ? 450.0 : 300.0) || (Made->bNear && Made->bBay && P.Bay > 0.0));
+			const bool bLightWanted = Away * Enlarged > LightFromM * (Lit->bCopy && Lit->bLight ? 0.9 : 1.0);
+			UStaticMesh* Still = bLightWanted ? PlaneStill(Lit->Shape, true) : nullptr;
+			const bool bLight = Still != nullptr;
+			if (!Still)
+			{
+				Still = PlaneStill(Lit->Shape, false);
+			}
+			if (FPlaneCopies* Group = Still ? CopiesFor(Lit->Shape, bLight, Lit->bShadow, Still) : nullptr)
+			{
+				if (!Lit->bCopy)
+				{
+					// (from its own mesh: its near shape put by and the mesh hidden, its airscrews with it)
+					PlaneNear(P.Key, Mesh, false);
+					Mesh->SetVisibility(false);
+					ShowDiscs(*Lit, false);
+					Lit->bCopy = true;
+				}
+				Lit->bLight = bLight;
+				Group->Keys.Add(P.Key);
+				Group->At.Add(Now);
+				Group->Before.Add(Lit->bWas ? Lit->Was : Now);
+				Lit->Was = Now;
+				Lit->bWas = true;
+				++CopiesDrawn;
+				continue;
+			}
+		}
+		// On its own mesh: moved before it is shown, so that one coming back from a copy is not drawn a frame where it
+		// was when it became one.
+		Mesh->SetWorldLocationAndRotation(Where, Attitude);
+		Mesh->SetVisibility(true);
+		if (Lit)
+		{
+			Lit->bCopy = false;
+			Lit->bLight = false;
+			Lit->Was = Now;
+			Lit->bWas = true;
+			if (Lit->bTwoShapes)
+			{
+				PlaneNear(P.Key, Mesh, bNearShape);
+			}
 		}
 		// Its bay doors as the flight core has them, while it is near (turned only when they have moved), and its racked
 		// load gone once its stick begins to fall.
@@ -4178,8 +4478,22 @@ void AAirBattle::Draw(double Real)
 			if (FPlaneMade* Gone = PlaneMade.Find(Pair.Key))
 			{
 				ShowDiscs(*Gone, false);
+				Gone->bCopy = false;
+				Gone->bWas = false;
 			}
 		}
+	}
+	// The copies' places sent, once for all of them; every ten seconds a line of how many (for the Mac's readings).
+	SendCopies();
+	if (bCopiesOn && RealT >= CopiesLogAt)
+	{
+		CopiesLogAt = RealT + 10.0;
+		int32 Own = 0;
+		for (const TPair<int32, TObjectPtr<UProceduralMeshComponent>>& Pair : Planes)
+		{
+			Own += Pair.Value && Pair.Value->IsVisible() ? 1 : 0;
+		}
+		UE_LOG(LogTheater, Display, TEXT("Air battle: %d aircraft drawn as copies in %d meshes, %d on their own meshes (lens %.0f degrees)."), CopiesDrawn, CopiesMeshes, Own, Lens);
 	}
 	// The strikes on those near the eye, laid on their skins; taken up from the rest.
 	DrawMarks(EyeAt);

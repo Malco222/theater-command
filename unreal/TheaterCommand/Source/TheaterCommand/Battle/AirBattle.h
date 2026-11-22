@@ -22,6 +22,8 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class UDecalComponent;
+class UInstancedStaticMeshComponent;
+class UStaticMesh;
 namespace AirShow { struct Fx; struct Shape; }
 class USceneComponent;
 class USkyLightComponent;
@@ -144,6 +146,13 @@ private:
 		bool bBay = false;
 		double BayShown = 0.0;
 		bool bBombsGone = false;
+		/** Drawn this frame as a copy (AS1: PlaneCopies), its own mesh hidden; as a copy of its light shape (past
+		 * AirLight::LightFromM); and where it was drawn the frame before, as a copy or on its own mesh, for the copies'
+		 * motion (bWas false: not drawn the frame before). */
+		bool bCopy = false;
+		bool bLight = false;
+		FTransform Was;
+		bool bWas = false;
 		/**
 		 * Where rounds have struck it (Brian, 22 November 04:12Z: "if a plane gets hit make sure the bullet holes and
 		 * damage shows on the wing or fuselage"): each strike in its mesh's own frame (engine units, its nose toward
@@ -165,6 +174,40 @@ private:
 		TArray<FMark> Marks;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
+	/**
+	 * The aircraft past the near shape drawn as copies (AS1 of the production lead's battle-scale plan, 22 November:
+	 * "instanced middle and far tiers"): one instanced mesh a shape, level and shadow, sent once a frame (SendCopies),
+	 * where each aircraft was one mesh of its own, drawn and shadowed on its own every frame. Its far shape out to
+	 * AirLight::LightFromM, its light shape (AirLight) past it; within 300 m (450 going out), ridden, or with its bay
+	 * open, its own mesh as before, with its near shape, airscrews, bay and strike marks. Each copy is sent with where
+	 * it was the frame before, so it is blurred and smoothed as it moves. "-TheaterPlaneCopies=0" draws every aircraft
+	 * on its own mesh again; "-TheaterPlaneLightM=" moves the light shape's distance.
+	 */
+	struct FPlaneCopies
+	{
+		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies;
+		/** This frame's: the aircraft in each place, where it is, and where it was the frame before. */
+		TArray<int32> Keys;
+		TArray<FTransform> At;
+		TArray<FTransform> Before;
+	};
+	TMap<FString, FPlaneCopies> PlaneCopies;
+	/** The copies' meshes, by shape and level ("<shape>|far", "<shape>|light"; null kept where none can be made); and
+	 * the copies' components, kept from the collector. */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UStaticMesh>> PlaneStills;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> PlaneKeep;
+	/** Aircraft drawn as copies this frame, and in how many meshes (for the picture run's log). */
+	int32 CopiesDrawn = 0;
+	int32 CopiesMeshes = 0;
+	double CopiesLogAt = 0.0;
+	/** The mesh of an aircraft's shape (ShapeKey) at a level: its far shape, or its light one (made the first time). */
+	UStaticMesh* PlaneStill(const FString& Shape, bool bLight);
+	/** The copies of a shape at a level, casting shadows or not (made the first time, hidden until one is placed). */
+	FPlaneCopies* CopiesFor(const FString& Shape, bool bLight, bool bShadow, UStaticMesh* Mesh);
+	/** Each copies mesh's places sent: as many as its aircraft this frame, each where it is and where it was. */
+	void SendCopies();
 	/** The strikes' decals (M_HitMark), one ink a kind of strike; the most strikes kept on one aircraft, and the most
 	 * decals laid at once over all the aircraft near the eye. */
 	UPROPERTY()
