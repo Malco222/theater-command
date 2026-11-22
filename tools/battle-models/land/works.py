@@ -419,7 +419,7 @@ class Works(Shop, Gear, Fittings):
         skin is uneven in patches a foot or two across, lighter and darker, and sits a shade under the rolled plate.
         Soft, all of it: no streak fine enough to read as wood grain. shade: the shadow in her creases too (`shaded`),
         shade_deep how dark the deepest crease goes (1 - shade_deep; the E7 pass: 0.42, so 0.58), with the pass's knee, bounce and film. ground: her home ground
-        (GROUND_DIRT: field, desert, italy, steppe, winter): her dirt in its colour, and every ground's in the file's
+        (GROUND_DIRT: field, desert, italy, steppe, winter, tropic): her dirt in its colour, and every ground's in the file's
         `dust_by_ground`. Call it after her last piece is on; plates must have been cut finer (`dice`) for it to show on them."""
         self._worn = True
         base = self.m.weather
@@ -864,8 +864,9 @@ GROUND_DIRT = {
     "italy": ("A09682", "C4BCA8", "857A66"),      # the pale Italian dust
     "steppe": ("463C32", "9A9282", "6A5E4C"),     # black steppe earth low, a grey dust on top in the dry, brown earth
     "winter": ("4E463C", "A9A9A3", "6E665A"),     # slush and mud
+    "tropic": ("5E4634", None, "4A3426"),         # red-brown mud low (on a dark coat the wetter, darker mud) and no haze on top: a wet climate (the art director, 22 Nov 20:54Z: the Philippines, Guadalcanal)
 }
-GROUND_DIRT_HOW = ("dust_by_ground: the dirt of each ground (field, desert, italy, steppe, winter), worked out for her build coat: on a field of "
+GROUND_DIRT_HOW = ("dust_by_ground: the dirt of each ground (field, desert, italy, steppe, winter, tropic), worked out for her build coat: on a field of "
                    "that ground take `dust` toward its dust_colour and `haze` toward its haze_colour in place of the file's own. A paint "
                    "swap's choice that names its own dust_colour and haze_colour (her desert coat) is already worked out for its ground.")
 
@@ -878,10 +879,10 @@ def ground_dirt(ground, coat):
     low, top, other = GROUND_DIRT[ground]
     c = lightness(coat)
     for cand in (low, other, top):
-        if abs(lightness(cand) - c) >= 9.0:
+        if cand and abs(lightness(cand) - c) >= 9.0:
             low = cand
             break
-    if abs(lightness(top) - c) < 9.0:
+    if top is None or abs(lightness(top) - c) < 9.0:          # (a ground with no haze, or a haze too near the coat: the coat itself)
         top = coat.upper()
     return low, top
 

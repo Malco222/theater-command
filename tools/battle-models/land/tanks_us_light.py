@@ -23,9 +23,10 @@ def stuart(fine=True, tag="USA"):
     """M3A1 light tank: the US Army's and the Marines' light tank of 1942-43 from the Philippines to Guadalcanal and
     Tunisia, and the British 'Honey' of the desert and Burma."""
     v = Works("Stuart", "M3A1 light tank (Stuart)", "tank", tag, fine)
-    # (the art director's E7 surface pass from the first build: shade from her shape, dirt of her ground)
+    # (the art director's E7 surface pass from the first build: shade from her shape, dirt of her ground. Her ground is
+    #  the tropic's wet mud, for the Philippines and Guadalcanal: the art director, 22 Nov 20:54Z)
     v.dice = 0.2
-    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.3, gear=0.8, rim=True)
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="tropic", layers=2, marks=0.3, gear=0.8, rim=True)
     v.root(hull_pivot=(0.0, 0.0, 0.70))
     hw, sw, zg, zr = 0.66, 0.94, 0.95, 1.58      # half-width of the tub between the tracks and of the hull over them; the sponsons' floor; the roof
 
