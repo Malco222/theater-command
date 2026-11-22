@@ -180,9 +180,9 @@ describe('each loss is a bomber by name', () => {
         expect(box.side).not.toBe(victim.side);
         expect(gone.get(box.id)?.has(gun.seat) ?? false).toBe(false);
         expect(gun.name).toBe(tk.place.bombers![box.corps].seats[gun.seat].name);
-        // Who the loss is booked to is as it was: a group of the box's side, never the box.
+        // The loss is booked to the box whose gunners got it (ruling 227).
         const by = (e.extra as { by?: number | 'flak' | null }).by;
-        expect(typeof by === 'number' && s.unit(by)!.air === 'ftr').toBe(true);
+        expect(by).toBe(box.id);
         const at = `${box.corps}:${gun.seat}:${victim.nat}`;
         tally.set(at, (tally.get(at) ?? 0) + 1);
         scored++;
