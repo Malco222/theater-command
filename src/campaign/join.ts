@@ -13,9 +13,14 @@
 //    calendar's, whoever's phase it is: a corps whose nation plays later in the month has its whole month still in
 //    hand, whatever it did last month (weeksInHand, battleThisMonth). Never the town's guard, which is no corps, nor a
 //    town's garrison or fortress troops. At most STACK a side, the earliest to come up first. The player may hold his
-//    own corps back (orderHoldBack, turn.ts: on the tray for an army, on the attack card corps by corps); a computer
-//    staff, an ally's included, sends every corps it can, save the main body it keeps for a second wave (ai.ts,
-//    twoWaves: AttackOpts 'spare').
+//    own corps back (orderHoldBack, turn.ts: on the tray for an army, on the attack card corps by corps). Who stays
+//    (the design director's ruling 3, 11:09Z): a computer staff's corps under a hold stays, as the Berlin garrison and
+//    the Ploiesti guard do (a hold binds a staff, never the player's own corps); and so does one that the staff's own
+//    front rule keeps where it is. That rule is screen (ai.ts advance, game.ts screens): two corps stay to screen any
+//    place that faces the enemy. A corps that has joined a battle this month, or is taken for this one, is gone from
+//    its province's count, so of a province facing the enemy all but two may come up in a month. The player's corps
+//    are under no front rule. Otherwise a staff, an ally's included, sends every corps it can, save the main body it
+//    keeps for a second wave (ai.ts, twoWaves: AttackOpts 'spare').
 // 2. When: by the game's own move rules, one map for the joiner, the staffs and the player (the design director's
 //    ruling 1, 11:09Z). The week of its month it comes up in is weekOf of its move into the battle province (moveCost),
 //    out of the weeks the corps has in hand this month (marchWeeks): never a fixed minute or a draw of the dice. No
@@ -35,7 +40,7 @@
 import joinData from '../../data/campaign/join.json';
 import { clamp } from '../core/math';
 import type { TicketLine } from '../core/ticket';
-import { allied, atWar, moveCost, weekOf } from './game';
+import { NO_MASK, allied, atWar, moveCost, screens, weekOf } from './game';
 import { armyOf } from './joint';
 import { lineShut } from './line';
 import { blocked } from './rivers';
@@ -120,11 +125,13 @@ export function foughtNow(g: Game, c: Corps): void {
 
 /**
  * True where a corps standing in a province next door could come up in a battle there, side apart: in the field,
- * not held back, fed, with no battle yet this month and none joined, on ground its side holds, and able to march in
- * this month by the move rules.
+ * not held back by the player nor under a staff's hold, fed, with no battle yet this month and none joined, on ground
+ * its side holds, and able to march in this month by the move rules.
  */
 export function mayJoin(g: Game, c: Corps, target: Region): boolean {
   if (c.dead || c.kind === 'fort' || c.town !== undefined || c.leave !== undefined || c.fortress || c.holdBack) return false;
+  // (A hold binds a computer staff, never the player's own corps: the Berlin garrison, the Ploiesti guard, the Westwall.)
+  if (armyOf(c) !== g.human && c.hold) return false;
   if (!c.supplied || battleThisMonth(g, c)) return false;
   const here = g.regions[c.reg];
   if (!here.nb.includes(target.id) || !allied(g, c.nat, here.ctrl) || !allied(g, c.nat, fieldCtrl(g, here))) return false;
@@ -164,9 +171,22 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
       (forA ? att : def).push({ corps: c, id: c.id, nat: c.nat, name: c.name, kind: c.kind, from: r.id, fromName: r.name, weeks, word: joinWord(share), share });
     }
   }
-  if (!att.length && !def.length) return null;
-  const first = (xs: Joiner[]): Joiner[] => xs.sort((x, y) => x.weeks - y.weeks || x.id - y.id).slice(0, STACK);
-  return { att: first(att), def: first(def) };
+  // Each side's earliest, by the week and then the corps' number, down to STACK of them; a computer staff's corps that
+  // its front rule (screen) keeps where it is stays: those that have joined this month, and those taken here, are gone.
+  const taken = new Set<number>();
+  const gone = (u: Corps): boolean => u.joinedIn === g.turn || taken.has(u.id);
+  const first = (xs: Joiner[]): Joiner[] => {
+    const out: Joiner[] = [];
+    for (const j of xs.sort((x, y) => x.weeks - y.weeks || x.id - y.id)) {
+      if (out.length >= STACK) break;
+      if (armyOf(j.corps) !== g.human && screens(g, j.corps, j.corps.nat, NO_MASK, gone)) continue;
+      out.push(j);
+      taken.add(j.id);
+    }
+    return out;
+  };
+  const join = { att: first(att), def: first(def) };
+  return join.att.length || join.def.length ? join : null;
 }
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;

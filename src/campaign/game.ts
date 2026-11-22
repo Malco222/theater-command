@@ -560,6 +560,19 @@ export function worksAgainst(g: Game, r: Region, attNat: string): boolean {
   return foes.length ? foes.some((u) => worksFor(g, r, u.nat)) : worksFor(g, r, r.ctrl);
 }
 export const friendlyUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => allied(g, u.nat, nat));
+/** No province masked: every neighbour is read. */
+export const NO_MASK: ReadonlySet<number> = new Set<number>();
+/**
+ * The staffs' front rule, screen (ai.ts advance): two corps stay to screen any place that faces the enemy. True where
+ * the side of `nat` has two units or fewer in the corps' province, leaving out those 'gone' names, and a neighbour
+ * the staff has not masked holds a unit at war with `nat`. A corps next door that comes up in a battle reads the same
+ * rule (release 2, join.ts joinersOf): with no masks, and those that have joined a battle this month gone.
+ */
+export function screens(g: Game, c: Corps, nat: string, masked: ReadonlySet<number> = NO_MASK, gone?: (u: Corps) => boolean): boolean {
+  const here = g.regions[c.reg];
+  const side = friendlyUnits(g, here, nat);
+  return (gone ? side.filter((u) => !gone(u)) : side).length <= 2 && here.nb.some((j) => !masked.has(j) && hostileUnits(g, g.regions[j], nat).length > 0);
+}
 
 /** The army at home and on the Continent, in divisions. Troops in the colonies are not there to defend the homeland, and do not count. */
 export function armySize(g: Game, nat: string): number {

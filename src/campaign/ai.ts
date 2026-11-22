@@ -31,7 +31,7 @@ import { joinRules } from './join';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, screens, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -2181,10 +2181,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
     .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0)
     .sort((a, b) => KIND[a.kind].move - KIND[b.kind].move);
   // Two corps stay to screen any place that faces the enemy, even where the plan has called a halt.
-  const screen = (c: Corps): boolean => {
-    const here = g.regions[c.reg];
-    return friendlyUnits(g, here, nat).length <= 2 && here.nb.some((j) => !masked.has(j) && hostileUnits(g, g.regions[j], nat).length > 0);
-  };
+  const screen = (c: Corps): boolean => screens(g, c, nat, masked);
   for (const c of movers) {
     if (screen(c) || massed.has(c.id)) continue;
     // (A war for a strip of frontier is fought by the troops near it: the rest of the army stays where it stands.)

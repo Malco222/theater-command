@@ -29,7 +29,7 @@ import { monthCard, monthMark, type CardRow, type MonthCard, type MonthMark } fr
 import { garrison, previewSally } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, candidates, canOrder, endHuman, holdsBack, humanUp, joinChoices, orderAttack, orderHoldBack, orderJoin, orderMove, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
-import { type BattleReport, type Corps, type Game } from '../src/campaign/types';
+import { type BattleReport, type Corps, type Game, type Region } from '../src/campaign/types';
 import { type TicketLine } from '../src/core/ticket';
 
 /** The player's first month in a seat: the computer's months before his are played. */
@@ -41,6 +41,23 @@ function seat(nat: string, seed = 3): Game {
 }
 const corps = (g: Game, nat: string, name: string): Corps => g.corps.find((c) => c.nat === nat && c.name === name && !c.dead)!;
 const ids = (a: Assessment, side: 'att' | 'def'): number[] => (a.join?.[side] ?? []).map((j) => j.id);
+/**
+ * The staffs' front rule, screen (ai.ts advance; the design director's ruling 3): two corps stay to screen any place
+ * that faces the enemy, so a computer staff's corps that stand one or two to such a province never come up from it.
+ * Where a test is about something else, two test corps of that side, of the kind of the first corps there, are raised
+ * in each province next door to the battle where the side stands. They have had a battle this month, so they never
+ * come up themselves: they stand in the screen, and the real corps there may come up.
+ */
+function screenFor(g: Game, target: Region, nat: string): void {
+  for (const j of target.nb) {
+    const r = g.regions[j], first = r.units.find((u) => u.nat === nat && u.kind !== 'fort');
+    if (!first) continue;
+    for (const k of [1, 2]) {
+      const c = addCorps(g, nat, `Test Screen ${k} (${r.name})`, first.kind, 1, r.id, {});
+      c.fought = true; c.foughtIn = g.turn;
+    }
+  }
+}
 
 beforeEach(() => { JOIN.on = true; });
 afterEach(() => { JOIN.on = false; });
@@ -91,6 +108,7 @@ describe("2. a staff's two waves", () => {
   function waves(): { g: Game; avail: Corps[]; pool: Corps[]; pole: Corps } {
     const g = seat('GER');
     const target = g.byName['Lodz'];
+    screenFor(g, target, 'POL');
     const avail = g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.ap > 0 && c.kind !== 'fort' && target.nb.includes(c.reg));
     const pool = limitAttackers(g, avail.filter((c) => c.org >= 0.35 && c.name !== 'IV Corps'), target);
     expect(pool).toHaveLength(6);
@@ -150,6 +168,7 @@ describe("3. the month is the calendar's", () => {
   it('a corps whose nation plays later in the month has its whole month in hand, whatever it did last month', () => {
     const g = seat('GER');
     const target = g.byName['Lodz'], iv = corps(g, 'GER', 'IV Corps');
+    screenFor(g, target, 'POL');
     const krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
     ensureSupply(g);
     expect(ids(assess(g, [iv], target), 'def')).toContain(krakow.id);
@@ -269,6 +288,7 @@ describe('6. the landing card', () => {
     // Germany's seat: the Konigsberg garrison lands in the Danzig Corridor; Army Pomorze, not identified, stands next door.
     const g = seat('GER');
     const from = corps(g, 'GER', 'Konigsberg garrison'), beach = g.byName['Danzig Corridor'];
+    screenFor(g, beach, 'POL');
     const a = previewLanding(g, [from], beach.id).assess!;
     expect(a.join!.def.map((j) => j.name)).toEqual(['Army Pomorze']);
     expect(a.lines.find((l) => l.label === JOIN_DEFENCE)!.value).toMatch(/Army Pomorze/);
@@ -296,7 +316,10 @@ describe("7. the month card's men lost", () => {
   /** France's seat: the 3rd Army attacks the Saar from Lorraine, where London District now stands; it and the 5th Army in Alsace come up. */
   function saar(): { g: Game; marks: Record<'FRA' | 'UK', MonthMark>; rep: BattleReport } {
     const g = seat('FRA');
-    relocate(g, corps(g, 'UK', 'London District'), g.byName['Lorraine']);
+    const uk = corps(g, 'UK', 'London District');
+    relocate(g, uk, g.byName['Lorraine']);
+    // (Its hold lifted: a computer staff's corps under a hold stays where it is, the design director's ruling 3.)
+    uk.hold = false;
     const marks = { FRA: monthMark(g, 'FRA'), UK: monthMark(g, 'UK') };
     const rep = orderAttack(g, [corps(g, 'FRA', '3rd Army')], g.byName['Saar'])!;
     return { g, marks, rep };

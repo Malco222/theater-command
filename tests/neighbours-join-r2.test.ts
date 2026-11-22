@@ -14,7 +14,7 @@ import stageData from '../data/campaign/stage.json';
 import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.json';
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
 import joinData from '../data/campaign/join.json';
-import { addCorps, assess, atWar, battleCost, createGame, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, startPhase, weekOf, type Assessment } from '../src/campaign/game';
+import { addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
 import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWord, joinersOf, marchWeeks, mayJoin, weeksInHand } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -30,11 +30,31 @@ function seat(nat: string, seed = 3, open = true): Game {
   return g;
 }
 const corps = (g: Game, nat: string, name: string): Corps => g.corps.find((c) => c.nat === nat && c.name === name && !c.dead)!;
-/** Germany's seat at Lodz, IV Corps to attack it alone. */
-function lodz(open = true): { g: Game; lodz: Region; iv: Corps } {
-  const g = seat('GER', 3, open);
+/**
+ * The staffs' front rule, screen (ai.ts advance; the design director's ruling 3): two corps stay to screen any place
+ * that faces the enemy, so a computer staff's corps that stand one or two to such a province never come up from it.
+ * Where a test is about something else, two test corps of that side, of the kind of the first corps there, are raised
+ * in each province next door to the battle where the side stands. They have had a battle this month, so they never
+ * come up themselves: they stand in the screen, and the real corps there may come up.
+ */
+function screenFor(g: Game, target: Region, nat: string): void {
+  for (const j of target.nb) {
+    const r = g.regions[j], first = r.units.find((u) => u.nat === nat && u.kind !== 'fort');
+    if (!first) continue;
+    for (const k of [1, 2]) {
+      const c = addCorps(g, nat, `Test Screen ${k} (${r.name})`, first.kind, 1, r.id, {});
+      c.fought = true; c.foughtIn = g.turn;
+    }
+  }
+}
+/** Germany's seat at Lodz, IV Corps to attack it alone; with 'screen', Poland's front rule met next door (screenFor). */
+function lodz(o: { open?: boolean; screen?: boolean } = {}): { g: Game; lodz: Region; iv: Corps } {
+  const g = seat('GER', 3, o.open ?? true);
+  if (o.screen) screenFor(g, g.byName['Lodz'], 'POL');
   return { g, lodz: g.byName['Lodz'], iv: corps(g, 'GER', 'IV Corps') };
 }
+/** The real corps of a nation (not the test corps of the screen). */
+const real = (c: Corps): boolean => !c.name.startsWith('Test ');
 const ids = (a: Assessment, side: 'att' | 'def'): number[] => (a.join?.[side] ?? []).map((j) => j.id);
 const joinedUnits = (rep: BattleReport): number => [...rep.attackers, ...rep.defenders].filter((u) => u.joined !== undefined).length;
 /** Everything of the field next door to a province, both sides. */
@@ -93,7 +113,7 @@ describe('the switch', () => {
 
 describe('who joins', () => {
   it('corps of both sides next door, of their own side, in the field and fit to march in: at most five a side, the earliest first', () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     const a = assess(g, [iv], target);
     expect(a.join).toBeDefined();
     const { att, def } = a.join!;
@@ -113,7 +133,7 @@ describe('who joins', () => {
     expect(att.some((j) => j.id === iv.id) || def.some((j) => a.defenders.includes(j.corps))).toBe(false);
     // Seven Polish corps stand next door: the five that come up soonest join, the other two do not. (In the same week,
     // the corps with the lower number first.)
-    const able = nextDoor(g, target).filter((c) => c.nat === 'POL');
+    const able = nextDoor(g, target).filter((c) => c.nat === 'POL' && real(c));
     expect(able.length).toBe(7);
     const last = def[def.length - 1];
     for (const c of able.filter((c) => !ids(a, 'def').includes(c.id))) {
@@ -149,7 +169,7 @@ describe('who joins', () => {
   });
 
   it('not unfed, not after a battle this month, not without the weeks to march in', () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     ensureSupply(g);
     const base = assess(g, [iv], target);
     const pomorze = corps(g, 'POL', 'Army Pomorze'), poznan = corps(g, 'POL', 'Army Poznan'), krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
@@ -181,6 +201,10 @@ describe('who joins', () => {
     expect(przemysl.nb).toContain(slovakia.id);
     expect(przemysl.nb).toContain(debrecen.id);
     const xviii = corps(g, 'GER', 'XVIII Corps'), slovak = corps(g, 'SVK', 'Army Bernolak'), magyar = debrecen.units.find((c) => c.nat === 'HUN')!;
+    // (Slovakia's front rule met, screenFor; and Army Bernolak's hold lifted: a computer staff's corps under a hold
+    // stays where it is, the design director's ruling 3.)
+    screenFor(g, przemysl, 'SVK');
+    slovak.hold = false;
     // An Italian corps beside the Slovaks: Germany's ally, not at war with Poland.
     const italian = addCorps(g, 'ITA', 'Test Italian Corps', 'inf', 2, 'Slovakia', {});
     expect(atWar(g, 'SVK', 'POL') && !atWar(g, 'HUN', 'POL') && !atWar(g, 'ITA', 'POL')).toBe(true);
@@ -189,6 +213,70 @@ describe('who joins', () => {
     expect(ids(a, 'att')).not.toContain(italian.id);
     expect([...ids(a, 'att'), ...ids(a, 'def')]).not.toContain(magyar.id);
     expect(a.join!.def.every((j) => j.nat === 'POL')).toBe(true);
+  });
+});
+
+describe("who stays: a staff's hold, and its front rule (the design director's ruling 3)", () => {
+  it("a computer staff's corps under a hold stays, the Berlin garrison and the Ploiesti guard among them; the player's own does not", () => {
+    // A war nobody plays: Army Poznan falls on Neumark, next door to Berlin; Bulgaria, at war with Romania, on Bucharest, next door to Ploiesti.
+    const g = startOpen(createGame(3, null));
+    const garrison = corps(g, 'GER', 'Berlin garrison'), guard = corps(g, 'ROM', 'Ploiesti guard');
+    expect(garrison.hold && guard.hold).toBe(true);
+    const neumark = g.byName['Neumark'], bucharest = g.byName['Bucharest'];
+    expect(neumark.nb).toContain(garrison.reg);
+    expect(bucharest.nb).toContain(guard.reg);
+    declareWar(g, 'BUL', 'ROM');
+    const poznan = corps(g, 'POL', 'Army Poznan'), bulgar = corps(g, 'BUL', '1st Army');
+    const counted = (): boolean[] => [ids(assess(g, [poznan], neumark), 'def').includes(garrison.id), ids(assess(g, [bulgar], bucharest), 'def').includes(guard.id)];
+    expect(counted()).toEqual([false, false]);
+    // Their holds lifted, both come up.
+    garrison.hold = false; guard.hold = false;
+    expect(counted()).toEqual([true, true]);
+    // In Germany's seat the Berlin garrison is the player's own: a hold binds a staff, never him.
+    const s = seat('GER');
+    const own = corps(s, 'GER', 'Berlin garrison');
+    expect(own.hold).toBe(true);
+    expect(ids(assess(s, [corps(s, 'POL', 'Army Poznan')], s.byName['Neumark']), 'def')).toContain(own.id);
+  });
+
+  it("a staff's corps its front rule keeps stays: two corps stay to screen any place that faces the enemy (screen); the player's are under no front rule", () => {
+    const { g, lodz: target, iv } = lodz();
+    // Poznan holds Army Poznan and the Wielkopolska Cavalry, and faces the Germans next door: the rule keeps both.
+    const at = g.byName['Poznan'], poznan = corps(g, 'POL', 'Army Poznan'), cavalry = corps(g, 'POL', 'Wielkopolska Cavalry');
+    expect(at.units.map((c) => c.id)).toEqual([poznan.id, cavalry.id]);
+    expect(at.nb.some((j) => hostileUnits(g, g.regions[j], 'POL').length > 0)).toBe(true);
+    for (const c of [poznan, cavalry]) {
+      expect(mayJoin(g, c, target)).toBe(true);
+      expect(screens(g, c, 'POL')).toBe(true);
+    }
+    let a = assess(g, [iv], target);
+    for (const c of [poznan, cavalry]) expect(ids(a, 'def')).not.toContain(c.id);
+    // A third Pole raised there: the earliest to come up comes (the week, then the corps' number), and two stay.
+    const third = addCorps(g, 'POL', 'Test Third Pole', 'inf', 1, at.id, {});
+    expect(mayJoin(g, third, target)).toBe(true);
+    a = assess(g, [iv], target);
+    expect(ids(a, 'def')).toContain(poznan.id);
+    for (const c of [cavalry, third]) expect(ids(a, 'def')).not.toContain(c.id);
+    // Once it has joined, it is gone from Poznan's count: Poznan sends nobody to a second card this month.
+    orderAttack(g, [iv], target);
+    expect(poznan.joinedIn).toBe(g.turn);
+    expect(at.units.map((c) => c.id)).toEqual([poznan.id, cavalry.id, third.id]);
+    const pomorze = g.byName['Pomorze'], xix = corps(g, 'GER', 'XIX Corps');
+    expect(pomorze.nb).toContain(at.id);
+    expect(pomorze.nb).toContain(xix.reg);
+    for (const c of [cavalry, third]) expect(mayJoin(g, c, pomorze)).toBe(true);
+    const b = assess(g, [xix], pomorze);
+    expect(ids(b, 'def').some((id) => at.units.some((c) => c.id === id))).toBe(false);
+    // The player's own corps are under no front rule: all three of Lower Silesia come up at Lodz, though it faces the Poles.
+    const s = lodz();
+    const silesians = s.g.byName['Lower Silesia'].units;
+    expect(silesians).toHaveLength(3);
+    expect(s.g.byName['Lower Silesia'].nb.some((j) => hostileUnits(s.g, s.g.regions[j], 'GER').length > 0)).toBe(true);
+    for (const c of silesians) expect(ids(assess(s.g, [s.iv], s.lodz), 'att')).toContain(c.id);
+    // In a war nobody plays the same corps are a staff's: Lower Silesia keeps two, and one comes up.
+    const w = startOpen(createGame(3, null)), lw = w.byName['Lower Silesia'];
+    const nobody = assess(w, [corps(w, 'GER', 'IV Corps')], w.byName['Lodz']);
+    expect(ids(nobody, 'att').filter((id) => lw.units.some((c) => c.id === id))).toHaveLength(lw.units.length - 2);
   });
 });
 
@@ -267,7 +355,7 @@ describe('when they come up', () => {
   });
 
   it('each joiner counts in the odds by its share, on both sides', () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     const on = assess(g, [iv], target);
     JOIN.on = false;
     const off = assess(g, [iv], target);
@@ -285,7 +373,7 @@ describe('when they come up', () => {
 
 describe('the battle', () => {
   it('books losses to the joiners, who stay where they stood with their month spent', () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     const a = assess(g, [iv], target);
     const joiners = [...a.join!.att, ...a.join!.def].map((j) => ({ c: j.corps, reg: j.corps.reg, men: men(j.corps), share: j.share, side: a.join!.att.includes(j) ? 'att' : 'def' }));
     const rep = orderAttack(g, [iv], target)!;
@@ -333,7 +421,7 @@ describe('the battle', () => {
   });
 
   it("a defender's joiner whose own month comes later in the month has it spent too, and the next month is its own again", () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     const a = assess(g, [iv], target);
     const pole = a.join!.def[0].corps, other = corps(g, 'POL', 'Army Prusy');
     expect(ids(a, 'def')).not.toContain(other.id);
@@ -356,7 +444,7 @@ describe('the battle', () => {
   });
 
   it("the bill on the attack card counts the joiners as the battle books them", () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     const a = assess(g, [iv], target);
     const bare: Assessment = { ...a, join: undefined };
     const withJ = battleCost(g, a, [iv], target), without = battleCost(g, bare, [iv], target);
@@ -422,7 +510,7 @@ describe("the computer staffs", () => {
 
 describe('the battle card', () => {
   it('names the joiners early, midway or late; the Forces line is as it was', () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     const a = assess(g, [iv], target);
     const att = a.lines.find((l) => l.label === JOIN_ATTACK)!, def = a.lines.find((l) => l.label === JOIN_DEFENCE)!;
     expect(att.value).toMatch(/^Early: XVI Corps from Upper Silesia/);
@@ -439,7 +527,7 @@ describe('the battle card', () => {
   });
 
   it('to the player an enemy next door his staff has not identified is "armies next door may join": no names, no numbers', () => {
-    const { g, lodz: target, iv } = lodz();
+    const { g, lodz: target, iv } = lodz({ screen: true });
     const a = assess(g, [iv], target);
     const o = attackOutlook(g, [iv], target)!;
     expect(o.join!.hidden).toBe(true);
@@ -459,7 +547,7 @@ describe('the battle card', () => {
     expect(seen.lines.find((l) => l.label === JOIN_DEFENCE)!.value).toMatch(/^Early: Army Pomorze from Pomorze/);
     expect(seen.exact).toBe(true);
     // Every defender known but the enemy next door not: the defence's own lines stand, and only the band says so.
-    const g2 = lodz();
+    const g2 = lodz({ screen: true });
     identify(g2.g, hostileUnits(g2.g, g2.lodz, 'GER'), 'GER');
     const o2 = attackOutlook(g2.g, [g2.iv], g2.lodz)!;
     expect(o2.join!.hidden).toBe(true);
@@ -472,7 +560,7 @@ describe('the battle card', () => {
 
 describe('practice battles: the historical scenarios reckon alike', () => {
   it('the same rule prices and books the joiners in a scenario as in the grand campaign', () => {
-    const { g, lodz: target, iv } = lodz(false);
+    const { g, lodz: target, iv } = lodz({ open: false, screen: true });
     expect(g.flags.open).toBeUndefined();
     const a = assess(g, [iv], target);
     expect(a.join!.att.length).toBeGreaterThan(0);
