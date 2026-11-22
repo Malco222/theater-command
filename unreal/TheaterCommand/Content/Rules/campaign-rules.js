@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2afcb139 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a2ecfc1c 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12884,6 +12884,18 @@
     ai: { share: 0.1, reserve: 30, gang: 12, mix: { market: 4, farm: 2, school: 2, hall: 1, camp: 1, hospital: 1 } }
   };
 
+  // data/campaign/places.json
+  var places_default = {
+    _about: `Places whose names take "the" in running text (the UI director, 17 November 2026): "the Ruhr", "The Ruhr" at the head of a sentence, "the Ruhr's output". Map labels, headings, table rows and buttons keep the bare name. Her rule for any name added later: a place named for a river, a range or hills, a desert, steppe or plateau, a valley, basin, marsh or depression, a coast, peninsula or isthmus, or a group of islands takes "the"; a town or a political division named for none of these stays bare (and the period's British usage: the Crimea, the Lebanon). A longer name that holds one of these keeps its own form ("Army Group Kuban", "Rio Grande do Sul", "Azores Waters"): 'within' names the longer places that hold one. 'in' (the UI director, 22 November 2026: "in" for a region, "at" for a town) names the provinces beyond the towns list that are named for a stretch of country (a state, province, territory, region, island or group of islands) but take no "the": running text says "in Colorado", "in Iceland", never "at Colorado". A province named for its town, and a small island or atoll that is a base, stays "at".`,
+    the: ["Ruhr", "Rhineland", "Saar", "Tyrol", "Somme", "Riviera", "Ardennes", "Midlands", "Highlands", "Basque Country", "Banat", "Peloponnese", "Crimea", "Kuban", "Danzig Corridor", "Vosges", "West Country", "Don Bend", "Kalmyk Steppe", "Qattara Depression", "Lebanon", "Marche", "Alto Adige", "Eifel", "Neumark", "Grenzmark", "Jura", "Cotentin", "Valdai", "Terek", "Ohio Valley", "Dakotas", "White Mountains", "Columbia Plateau", "Hudson Lowlands", "Yukon", "Canary Islands", "Bahamas", "Azores", "Mosquito Coast", "Canal Zone", "Llanos", "Chaco Boreal", "Gran Chaco", "Pampas", "Falkland Islands", "Sertao", "Laurentides", "Rio Grande", "Peten", "Mosquitia", "Alto Orinoco", "Beni", "Mackenzie", "Yukon Flats", "Arctic Slope", "Eastern Marshalls", "Admiralty Islands", "Gobi", "Volga Delta", "Rub al Khali", "Nullarbor", "Seychelles", "Kra", "Vogelkop", "Changtang", "Tsaidam", "Kolyma", "Copper River", "Kuskokwim"],
+    within: {
+      "Rio Grande": [
+        "Rio Grande do Sul"
+      ]
+    },
+    in: ["Amapa", "Atjeh", "Bahrain", "Bali", "Bataan", "Bougainville", "Bristol Bay", "British Columbia", "Cape Verde", "Cape York", "Colorado", "Dauria", "East Texas", "Espiritu Santo", "Etorofu", "Fiji", "Flores", "Formosa", "Greenland", "Guadalcanal", "Guapore", "Hainan", "Halmahera", "Hawaii", "Iceland", "Jehol", "Johore", "Karafuto", "Kauai", "Keewatin", "Koryak", "Leyte", "Maui", "Mauritius", "Mimika", "Mindoro", "New Caledonia", "New Georgia", "North Sakhalin", "Okinawa", "Palawan", "Panay", "Paramushiro", "Puerto Rico", "Reunion", "Samoa", "Shikoku", "Sikang", "Silingol", "Suiyuan", "Tierra del Fuego", "Ungava", "Wyoming"]
+  };
+
   // src/generated/campaign-rivers.json
   var campaign_rivers_default = { rivers: [{ name: "Rhine", pts: [[518.9, 949.6], [478, 953.6], [477.7, 932], [483.4, 912.8], [496.2, 896], [500.3, 876.4], [495.5, 856], [478.2, 841.6], [465.4, 826.8], [461.8, 818.4], [456.9, 807.2], [453, 789.6], [433.8, 782], [414, 780], [398, 779.2], [388.2, 776.8]], ll: [[47.66, 9.18], [47.56, 7.59], [48.1, 7.58], [48.58, 7.8], [49, 8.3], [49.49, 8.46], [50, 8.27], [50.36, 7.6], [50.73, 7.1], [50.94, 6.96], [51.22, 6.77], [51.66, 6.62], [51.85, 5.87], [51.9, 5.1], [51.92, 4.48], [51.98, 4.1]] }, { name: "Meuse", pts: [[426.8, 940], [425.5, 912], [421.2, 889.6], [409.8, 868], [404.2, 865.2], [406.8, 850.8], [408, 837.2], [426, 830.8], [429.1, 822], [441.5, 801.2], [430.4, 785.6], [419.1, 787.2], [401.1, 787.2]], ll: [[47.9, 5.6], [48.6, 5.55], [49.16, 5.38], [49.7, 4.94], [49.77, 4.72], [50.13, 4.82], [50.47, 4.87], [50.63, 5.57], [50.85, 5.69], [51.37, 6.17], [51.76, 5.74], [51.72, 5.3], [51.72, 4.6]] }, { name: "Seine", pts: [[400.3, 942], [387.5, 924], [367.7, 914], [343.2, 901.6], [321.4, 893.2], [311.1, 878.4], [285.7, 876.4]], ll: [[47.85, 4.57], [48.3, 4.07], [48.55, 3.3], [48.86, 2.35], [49.07, 1.5], [49.44, 1.1], [49.49, 0.11]] }, { name: "Loire", pts: [[390.8, 1036], [387.5, 1014.4], [364.1, 976.4], [352.2, 952], [331.9, 940], [300.6, 960.4], [270, 960], [243, 967.2], [226.3, 965.2]], ll: [[45.5, 4.2], [46.04, 4.07], [46.99, 3.16], [47.6, 2.7], [47.9, 1.91], [47.39, 0.69], [47.4, -0.5], [47.22, -1.55], [47.27, -2.2]] }, { name: "Rhone", pts: [[441, 1008], [407.3, 1025.6], [408.6, 1058.8], [406.5, 1098], [401.9, 1108.8], [407.5, 1122.8]], ll: [[46.2, 6.15], [45.76, 4.84], [44.93, 4.89], [43.95, 4.81], [43.68, 4.63], [43.33, 4.85]] }, { name: "Garonne", pts: [[311.1, 1132], [319.9, 1112], [298.8, 1088], [267.9, 1062.4], [255.8, 1032]], ll: [[43.1, 1.1], [43.6, 1.44], [44.2, 0.62], [44.84, -0.58], [45.6, -1.05]] }, { name: "Elbe", pts: [[668.5, 848], [643.8, 829.6], [636.1, 814], [617.1, 793.6], [608.1, 781.2], [581.9, 770.8], [584.9, 736], [539.7, 714], [506.5, 701.2]], ll: [[50.2, 15], [50.66, 14.04], [51.05, 13.74], [51.56, 13], [51.87, 12.65], [52.13, 11.63], [53, 11.75], [53.55, 9.99], [53.87, 8.7]] }, { name: "Oder", pts: [[752.8, 862.4], [743.8, 829.2], [720.7, 811.6], [696.5, 789.6], [668.5, 774], [656.9, 762.4], [659.2, 752.4], [656.9, 718.8], [650.5, 706]], ll: [[49.84, 18.28], [50.67, 17.93], [51.11, 17.03], [51.66, 16.09], [52.05, 15], [52.34, 14.55], [52.59, 14.64], [53.43, 14.55], [53.75, 14.3]] }, { name: "Danube", pts: [[539.7, 920], [593.9, 895.6], [628.9, 913.2], [650.2, 923.6], [703.7, 927.6], [722.8, 930], [748.7, 946], [774.7, 944.8], [772.4, 956], [768.8, 992], [763.4, 1016.4], [793.2, 1046], [808.9, 1063.2], [861.3, 1069.2], [870.8, 1096.4], [912.8, 1106], [950, 1102], [983.7, 1091.2], [1003.5, 1082.4], [1004, 1038.8], [1043.9, 1048]], ll: [[48.4, 9.99], [49.01, 12.1], [48.57, 13.46], [48.31, 14.29], [48.21, 16.37], [48.15, 17.11], [47.75, 18.12], [47.78, 19.13], [47.5, 19.04], [46.6, 18.9], [45.99, 18.69], [45.25, 19.85], [44.82, 20.46], [44.67, 22.5], [43.99, 22.87], [43.75, 24.5], [43.85, 25.95], [44.12, 27.26], [44.34, 28.03], [45.43, 28.05], [45.2, 29.6]] }, { name: "Po", pts: [[480.5, 1053.2], [532.2, 1054], [540.5, 1050.8], [565.7, 1058], [581.1, 1060], [601.6, 1058]], ll: [[45.07, 7.69], [45.05, 9.7], [45.13, 10.02], [44.95, 11], [44.9, 11.6], [44.95, 12.4]] }, { name: "Ebro", pts: [[207, 1148.8], [219.8, 1157.2], [260.2, 1190], [282.8, 1206], [296.2, 1223.6], [305.2, 1227.2]], ll: [[42.68, -2.95], [42.47, -2.45], [41.65, -0.88], [41.25, 0], [40.81, 0.52], [40.72, 0.87]] }, { name: "Douro", pts: [[218.5, 1192], [162, 1194], [135, 1196], [102.8, 1210], [61.5, 1210.4]], ll: [[41.6, -2.5], [41.55, -4.7], [41.5, -5.75], [41.15, -7], [41.14, -8.61]] }, { name: "Tagus", pts: [[231.4, 1240], [190.3, 1254.8], [179.5, 1261.6], [158.6, 1257.6], [105.7, 1267.2], [77.1, 1278], [59.7, 1286.4], [47.8, 1307.2]], ll: [[40.4, -2], [40.03, -3.6], [39.86, -4.02], [39.96, -4.83], [39.72, -6.89], [39.45, -8], [39.24, -8.68], [38.72, -9.14]] }, { name: "Guadalquivir", pts: [[195.4, 1336], [159.9, 1340.8], [128.8, 1360.8], [119.6, 1384.8]], ll: [[38, -3.4], [37.88, -4.78], [37.38, -5.99], [36.78, -6.35]] }, { name: "Vistula", pts: [[795.5, 853.6], [842.1, 828.8], [844.6, 793.6], [823, 766.8], [789.3, 754], [761.1, 735.6], [748.2, 731.2], [764.9, 716.8], [766.2, 692.4], [770.1, 681.6]], ll: [[50.06, 19.94], [50.68, 21.75], [51.56, 21.85], [52.23, 21.01], [52.55, 19.7], [53.01, 18.6], [53.12, 18.1], [53.48, 18.75], [54.09, 18.8], [54.36, 18.95]] }, { name: "Bug", pts: [[902.5, 832], [892.2, 808], [891.9, 772.4], [869, 760], [848.5, 748], [825.3, 756]], ll: [[50.6, 24.1], [51.2, 23.7], [52.09, 23.69], [52.4, 22.8], [52.7, 22], [52.5, 21.1]] }, { name: "Niemen", pts: [[969.3, 716], [895.5, 708.8], [899.9, 688], [897.3, 660], [845.4, 652.8], [830.5, 644]], ll: [[53.5, 26.7], [53.68, 23.83], [54.2, 24], [54.9, 23.9], [55.08, 21.88], [55.3, 21.3]] }, { name: "Dvina", pts: [[1100.5, 624], [1059.3, 648.4], [1023.1, 636.4], [965, 621.2], [948, 596], [902.7, 578], [900.7, 573.6]], ll: [[55.8, 31.8], [55.19, 30.2], [55.49, 28.79], [55.87, 26.53], [56.5, 25.87], [56.95, 24.11], [57.06, 24.03]] }, { name: "Berezina", pts: [[1007.9, 660], [1015.6, 686.8], [1034.1, 730.4], [1060.6, 754]], ll: [[54.9, 28.2], [54.23, 28.5], [53.14, 29.22], [52.55, 30.25]] }, { name: "Pripet", pts: [[920.5, 780], [953.9, 771.6], [1034.9, 774], [1067, 808]], ll: [[51.9, 24.8], [52.11, 26.1], [52.05, 29.25], [51.2, 30.5]] }, { name: "Dnieper", pts: [[1141.6, 648], [1106.9, 664.8], [1065, 675.6], [1062.9, 700], [1055.5, 732.8], [1069.6, 776], [1067.5, 838], [1107.1, 878.4], [1142.1, 893.2], [1184, 917.6], [1186.3, 942.4], [1167.3, 953.2], [1121.3, 990.4], [1105.6, 996]], ll: [[55.2, 33.4], [54.78, 32.05], [54.51, 30.42], [53.9, 30.34], [53.08, 30.05], [52, 30.6], [50.45, 30.52], [49.44, 32.06], [49.07, 33.42], [48.46, 35.05], [47.84, 35.14], [47.57, 34.4], [46.64, 32.61], [46.5, 32]] }, { name: "Desna", pts: [[1166.5, 726], [1138.2, 776], [1087.6, 796], [1068.3, 834]], ll: [[53.25, 34.37], [52, 33.27], [51.5, 31.3], [50.55, 30.55]] }, { name: "Dniester", pts: [[899.9, 888], [964.2, 916], [997.6, 918], [1028.5, 952], [1044.7, 982.4], [1064.5, 1008]], ll: [[49.2, 24], [48.5, 26.5], [48.45, 27.8], [47.6, 29], [46.84, 29.63], [46.2, 30.4]] }, { name: "Prut", pts: [[949.8, 924.4], [982.2, 940], [997.6, 968], [1006.6, 1004], [1007.9, 1037.2]], ll: [[48.29, 25.94], [47.9, 27.2], [47.2, 27.8], [46.3, 28.15], [45.47, 28.2]] }, { name: "Donets", pts: [[1223.9, 832], [1231.6, 868], [1240.6, 888], [1270.1, 900], [1301, 912], [1324.1, 940], [1334.4, 952]], ll: [[50.6, 36.6], [49.7, 36.9], [49.2, 37.25], [48.9, 38.4], [48.6, 39.6], [47.9, 40.5], [47.6, 40.9]] }, { name: "Don", pts: [[1283, 716], [1285.6, 752], [1285.6, 792], [1313.9, 838], [1352.4, 864], [1381.5, 872.8], [1402, 908.4], [1365.3, 950], [1334.4, 956], [1304.1, 967.2], [1293.3, 972]], ll: [[53.5, 38.9], [52.6, 39], [51.6, 39], [50.45, 40.1], [49.8, 41.6], [49.58, 42.73], [48.69, 43.53], [47.65, 42.1], [47.5, 40.9], [47.22, 39.72], [47.1, 39.3]] }, { name: "Oka", pts: [[1210.2, 737.2], [1215.1, 675.6], [1244.4, 659.2], [1279.1, 652], [1304.6, 670.8], [1364, 633.2], [1414.1, 602.8]], ll: [[52.97, 36.07], [54.51, 36.26], [54.92, 37.4], [55.1, 38.75], [54.63, 39.74], [55.57, 42.05], [56.33, 44]] }, { name: "Upper Volga", pts: [[1165.5, 605.6], [1206.1, 581.6], [1247, 556], [1281.5, 534], [1307.9, 550.8], [1349.9, 560], [1414.1, 602.8], [1491.3, 612]], ll: [[56.26, 34.33], [56.86, 35.91], [57.5, 37.5], [58.05, 38.84], [57.63, 39.87], [57.4, 41.5], [56.33, 44], [56.1, 47]] }, { name: "Volga", pts: [[1491.3, 756], [1466.3, 794.8], [1450.1, 852.8], [1427.2, 907.6], [1465.6, 936], [1491.3, 968]], ll: [[52.5, 47], [51.53, 46.03], [50.08, 45.4], [48.71, 44.51], [48, 46], [47.2, 47]] }, { name: "Volkhov", pts: [[1086.8, 515.2], [1103, 480], [1113.3, 452]], ll: [[58.52, 31.27], [59.4, 31.9], [60.1, 32.3]] }, { name: "Svir", pts: [[1195.6, 416], [1145.4, 426.8], [1128.7, 436]], ll: [[61, 35.5], [60.73, 33.55], [60.5, 32.9]] }, { name: "Terek", pts: [[1431.4, 1134], [1430.8, 1106.4], [1483.8, 1102], [1491.3, 1112]], ll: [[43.05, 44.67], [43.74, 44.65], [43.85, 46.71], [43.6, 47]] }, { name: "Sava", pts: [[655.6, 1014], [693.7, 1024], [745.6, 1050], [779.1, 1060], [808.6, 1063.2]], ll: [[46.05, 14.5], [45.8, 15.98], [45.15, 18], [44.9, 19.3], [44.82, 20.45]] }, { name: "Tisza", pts: [[871.6, 932], [833.1, 931.2], [802.2, 968.8], [800.9, 1006], [804.3, 1050.4]], ll: [[48.1, 22.9], [48.12, 21.4], [47.18, 20.2], [46.25, 20.15], [45.14, 20.28]] }, { name: "Maritsa", pts: [[919.2, 1170], [948.8, 1178.8], [965.7, 1189.2], [960.3, 1208], [952.1, 1226.8]], ll: [[42.15, 24.75], [41.93, 25.9], [41.67, 26.56], [41.2, 26.35], [40.73, 26.03]] }, { name: "Nile", pts: [[1076, 1712], [1085.8, 1654], [1078.6, 1624], [1063.7, 1597.6]], ll: [[28.6, 30.85], [30.05, 31.23], [30.8, 30.95], [31.46, 30.37]] }, { name: "Euphrates", pts: [[1259.9, 1384], [1285.6, 1420], [1314.9, 1442.8], [1337, 1480], [1396.1, 1519.2], [1425.2, 1556.8], [1472, 1614], [1491.3, 1620]], ll: [[36.8, 38], [35.9, 39], [35.33, 40.14], [34.4, 41], [33.42, 43.3], [32.48, 44.43], [31.05, 46.25], [30.9, 47]] }, { name: "Tigris", pts: [[1317.5, 1339.6], [1367.9, 1364], [1391.8, 1402.4], [1406.4, 1472], [1424.4, 1522.8], [1460.4, 1556], [1491.3, 1576]], ll: [[37.91, 40.24], [37.3, 42.2], [36.34, 43.13], [34.6, 43.7], [33.33, 44.4], [32.5, 45.8], [32, 47]] }, { name: "Aras", pts: [[1403.8, 1252], [1434.7, 1272], [1470.7, 1300], [1491.3, 1284]], ll: [[40.1, 43.6], [39.6, 44.8], [38.9, 46.2], [39.3, 47]] }], crossings: [[0, 16, 6, 610.8, 784.9], [0, 22, 7, 658.1, 757.2], [1, 4, 6, 546, 717], [4, 18, 6, 582.1, 768.1], [6, 7, 0, 459.3, 812.8], [6, 99, 1, 438.3, 796.8], [7, 10, 0, 476.6, 839.8], [7, 99, 1, 437.9, 807.2], [8, 10, 0, 486.5, 848.5], [9, 10, 0, 497.7, 865.1], [9, 11, 0, 488.4, 906.2], [9, 12, 0, 496.5, 894.7], [11, 67, 0, 482.7, 915], [12, 13, 8, 548.8, 915.9], [13, 14, 8, 574, 904.6], [14, 31, 8, 618.5, 908], [17, 34, 6, 645.9, 831.1], [19, 20, 7, 650.5, 706], [22, 24, 7, 694.5, 788.5], [27, 39, 14, 765.2, 711.7], [27, 40, 14, 767, 690.1], [28, 138, 16, 866.8, 655.8], [30, 175, 8, 746.2, 944.5], [35, 43, 7, 751.5, 857.5], [36, 45, 14, 840.5, 788.5], [36, 48, 15, 865.6, 758], [36, 49, 15, 849.2, 748.4], [37, 41, 14, 794.8, 756.1], [44, 45, 14, 843.4, 810.6], [44, 46, 14, 834.1, 833], [45, 48, 15, 892, 788.9], [45, 52, 15, 895, 814.5], [47, 184, 22, 924.4, 898.7], [49, 50, 16, 898.8, 709.1], [50, 51, 16, 947.5, 713.9], [53, 72, 2, 346.4, 903.2], [57, 58, 2, 291.2, 876.8], [57, 74, 2, 319.8, 891], [62, 79, 3, 251.3, 965], [64, 94, 1, 409.8, 868], [64, 100, 1, 413.4, 874.7], [68, 70, 1, 426.1, 924], [70, 75, 3, 356.7, 961.2], [71, 77, 3, 380.2, 1002.6], [76, 77, 3, 389.2, 1025.3], [83, 84, 4, 404.1, 1114.3], [86, 87, 4, 439.6, 1008.8], [89, 92, 1, 413.7, 835.2], [93, 94, 1, 407, 848.4], [95, 99, 0, 413.9, 780], [96, 99, 1, 407.1, 787.2], [97, 99, 0, 429.4, 781.6], [140, 142, 9, 520.3, 1053.8], [140, 144, 9, 545.3, 1052.2], [143, 144, 9, 577.2, 1059.5], [159, 168, 12, 162.5, 1258.3], [167, 169, 13, 159.1, 1341.3], [175, 176, 8, 770.7, 973.2], [175, 177, 33, 814.9, 953.4], [175, 181, 33, 801.6, 985.3], [176, 192, 8, 764.7, 1010.6], [178, 196, 8, 932.6, 1103.9], [178, 198, 8, 967.1, 1096.5], [182, 187, 8, 863.1, 1074.5], [182, 193, 8, 870.6, 1095.7], [182, 196, 8, 891.2, 1101.1], [183, 185, 23, 1e3, 977.6], [183, 220, 22, 1004.8, 925.9], [184, 220, 22, 976.7, 916.7], [185, 186, 8, 1016.8, 1041.7], [185, 220, 22, 1022.8, 945.7], [185, 221, 22, 1044.3, 981.7], [187, 192, 8, 805.1, 1059], [188, 189, 32, 682.9, 1021.2], [190, 192, 32, 776.1, 1059.1], [204, 205, 34, 959.9, 1209], [209, 234, 29, 1106.7, 469.8], [212, 214, 18, 1014.6, 683.2], [212, 226, 17, 1088.1, 631.3], [214, 215, 18, 1021.8, 701.4], [216, 218, 19, 1049.7, 789.6], [219, 222, 20, 1068.3, 814.3], [219, 241, 20, 1088, 858.9], [219, 248, 20, 1101, 872.1], [223, 248, 20, 1130.3, 888.2], [224, 225, 27, 1211.7, 578.1], [224, 229, 26, 1253.5, 657.3], [228, 239, 26, 1212.4, 709.4], [231, 237, 27, 1353.5, 562.4], [234, 305, 30, 1159.7, 423.7], [240, 242, 25, 1285.6, 788], [242, 257, 25, 1314.1, 838.1], [246, 257, 25, 1344.7, 858.8], [246, 258, 25, 1381.4, 872.8], [248, 249, 20, 1148.6, 897], [249, 250, 20, 1168.6, 908.6], [249, 251, 20, 1173.9, 949.5], [251, 252, 20, 1144.6, 971.6], [256, 257, 24, 1316.4, 930.6], [256, 262, 25, 1322.7, 960.3], [256, 263, 25, 1293.3, 972], [258, 262, 25, 1368.2, 946.7], [258, 371, 25, 1398.6, 902.5], [259, 260, 28, 1438.2, 881.4], [259, 372, 28, 1460, 931.9], [267, 268, 31, 1430.9, 1111.1], [273, 290, 38, 1442.3, 1277.9], [274, 290, 38, 1468.5, 1298.3], [286, 288, 36, 1262.5, 1387.6], [350, 351, 35, 1081.3, 1635.2], [350, 352, 35, 1075.5, 1618.5]] };
 
@@ -13587,8 +13599,8 @@
   };
   var doesWith = (x) => `${PLAN_WORDS[x].verb} ${PLAN_WORDS[x].many}`;
   var PLAN_PLACES = {
-    yard: { got: "its capital or one of its great naval yards", kept: "their capitals and great naval yards", home: "its capital and great naval yards", lack: "There is no great naval yard at" },
-    works: { got: "its capital or one of its great aircraft works", kept: "their capitals and great aircraft works", home: "its capital and great aircraft works", lack: "There are no great aircraft works at" },
+    yard: { got: "its capital or one of its great naval yards", kept: "their capitals and great naval yards", home: "its capital and great naval yards", lack: "There is no great naval yard" },
+    works: { got: "its capital or one of its great aircraft works", kept: "their capitals and great aircraft works", home: "its capital and great aircraft works", lack: "There are no great aircraft works" },
     capital: { got: "its capital", kept: "their capitals", home: "its capital", lack: "" }
   };
   var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -17052,9 +17064,12 @@
     for (let k = 0; k < N.length; k++) if (!used.has(N[(at + k) % N.length])) return N[(at + k) % N.length];
     return `${N[at]} ${id}`;
   }
+  var COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+  var countWord = (n) => COUNT_WORDS[n] ?? String(n);
+  var peaceWords = (host) => `You are at peace with ${host ? theName(host) : "this country"}: sabotage would be an act of war.`;
   var waitWords = (g2, a) => {
     const m = a.ready - g2.turn;
-    return m <= 1 ? "until next month" : `for ${m} more months`;
+    return m <= 1 ? "until next month" : `for ${countWord(m)} more months`;
   };
   var inTraining = (a) => a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
   function whyNotRecruit(g2, nat) {
@@ -17082,8 +17097,8 @@
     const r = g2.regions[to];
     if (!r) return "Pick a province.";
     if (!atWork(g2, a)) return `${a.name} is ${a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months ? "in training" : "on the road"} ${waitWords(g2, a)}.`;
-    if (a.reg === to) return `${a.name} is already at ${r.name}.`;
-    if (g2.nations[r.ctrl]?.dormant) return `There is nothing at ${r.name} to watch.`;
+    if (a.reg === to) return `${a.name} is already ${inOrAt(r)}.`;
+    if (g2.nations[r.ctrl]?.dormant) return `There is nothing ${inOrAt(r)} to watch.`;
     return null;
   }
   function sendAgent(g2, nat, id, to) {
@@ -17182,34 +17197,34 @@
     }
     if (m === "orders") {
       if (!ordersOn(g2)) return "Not in this campaign.";
-      if (!atWar(g2, nat, r.ctrl)) return `You are at peace with ${host?.name ?? "this country"}: its air staff has no orders against you.`;
-      if (!groupsOnField(g2, r.id, (n) => atWar(g2, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${r.name}.`;
+      if (!atWar(g2, nat, r.ctrl)) return peaceWords(host);
+      if (!groupsOnField(g2, r.id, (n) => atWar(g2, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${placeName2(r.name)}.`;
       return null;
     }
     if (isTheft(m)) return whyNoTheft(g2, nat, a, r, THEFT[m]);
-    if (!atWar(g2, nat, r.ctrl)) return `You are at peace with ${host?.name ?? "this country"}. Sabotage is an act of war.`;
+    if (!atWar(g2, nat, r.ctrl)) return peaceWords(host);
     if ((a.rest ?? 0) > g2.turn) {
       const k = a.rest - g2.turn;
-      return `${a.name} is lying low for ${k === 1 ? "another month" : `${k} more months`} after the last attempt.`;
+      return `${a.name} is lying low for ${k === 1 ? "another month" : `${countWord(k)} more months`} after the last attempt.`;
     }
     if (m === "factory") {
-      if (r.fac <= 0) return `There is no industry at ${r.name}.`;
-      if (workingFactories(g2, r) <= 0 || ruinedAt(g2, r) >= ruinMost(r)) return `No factory at ${r.name} is left to wreck.`;
+      if (r.fac <= 0) return `There is no industry ${inOrAt(r)}.`;
+      if (workingFactories(g2, r) <= 0 || ruinedAt(g2, r) >= ruinMost(r)) return `No factory ${inOrAt(r)} is left to wreck.`;
       return null;
     }
     if (m === "rail") {
-      if (!onNet(r.id)) return `No railway runs through ${r.name}.`;
-      if (railCut(g2, r.id)) return `The railway at ${r.name} is already cut.`;
+      if (!onNet(r.id)) return `No railway runs through ${placeName2(r.name)}.`;
+      if (railCut(g2, r.id)) return `The railway ${inOrAt(r)} is already cut.`;
       return null;
     }
     if (m === "airfield") {
       if (!airPiece(g2, "field")) return "Not in this campaign.";
-      if (fieldWrecked(g2, r.id)) return `The field at ${r.name} is already wrecked this month.`;
-      if (!groupsOnField(g2, r.id, (n) => atWar(g2, nat, n)).length) return `No enemy air group flies from ${r.name}.`;
+      if (fieldWrecked(g2, r.id)) return `The field ${inOrAt(r)} is already wrecked this month.`;
+      if (!groupsOnField(g2, r.id, (n) => atWar(g2, nat, n)).length) return `No enemy air group flies from ${placeName2(r.name)}.`;
       return null;
     }
-    if (!r.oil) return `There is no oilfield at ${r.name}.`;
-    if (fieldOut(g2, r) > 0) return `The wells at ${r.name} are already burning.`;
+    if (!r.oil) return `There is no oilfield ${inOrAt(r)}.`;
+    if (fieldOut(g2, r) > 0) return `The wells ${inOrAt(r)} are already burning.`;
     return null;
   }
   function keepsPlans(g2, host, r, x) {
@@ -17234,11 +17249,11 @@
     if (!host?.alive || !PLANS.great.includes(r.ctrl)) return `Plans of ${W2.many} are kept by the great powers, in ${P.kept}. Send the agent to one.`;
     if (r.owner !== r.ctrl) return `${host.name} keeps its plans at home, in ${P.home}: ${r.name} is ground it has taken.`;
     const capital3 = g2.regions[host.capital]?.name ?? "its capital";
-    if (!keepsPlans(g2, r.ctrl, r, x)) return W2.place === "capital" ? `${host.name} keeps its ${W2.one} plans at ${capital3}, its capital.` : `${P.lack} ${r.name}: ${host.name} keeps its plans at ${capital3} and at ${P.home.replace("its capital and ", "its ")}.`;
+    if (!keepsPlans(g2, r.ctrl, r, x)) return W2.place === "capital" ? `${host.name} keeps its ${W2.one} plans at ${capital3}, its capital.` : `${P.lack} ${inOrAt(r)}: ${host.name} keeps its plans at ${capital3} and at ${P.home.replace("its capital and ", "its ")}.`;
     if (!givesPlans(g2, r.ctrl, x)) return hull ? `${host.name} builds no ${W2.many} yet: there are no plans to steal.` : `${host.name} has no ${W2.many} yet: there are no plans to steal.`;
     if ((a.rest ?? 0) > g2.turn) {
       const k = a.rest - g2.turn;
-      return `${a.name} is lying low for ${k === 1 ? "another month" : `${k} more months`} after the last attempt.`;
+      return `${a.name} is lying low for ${k === 1 ? "another month" : `${countWord(k)} more months`} after the last attempt.`;
     }
     return null;
   }
@@ -17687,7 +17702,7 @@
       const t = g2.regions[o.target], F = g2.nations[o.nat];
       const when = o.turn > g2.turn ? "next month" : "this month";
       const state = o.done === "flown" ? " Flown." : o.done === "lapsed" ? " Cancelled." : "";
-      return { text: `${F.adj} bombers from ${g2.regions[o.field].name} against ${t.name} ${when}, ${o.mission === "night" ? "by night" : "by day"}, about ${o.bombers.toLocaleString("en-US")}: read by Agent ${o.agent}.${state}`, target: o.target, turn: o.turn, done: o.done };
+      return { text: `${F.adj} bombers from ${placeName2(g2.regions[o.field].name)} against ${placeName2(t.name)} ${when}, ${o.mission === "night" ? "by night" : "by day"}, about ${o.bombers.toLocaleString("en-US")}: read by Agent ${o.agent}.${state}`, target: o.target, turn: o.turn, done: o.done };
     });
   }
   function plotField(g2, nat, foe) {
@@ -17811,8 +17826,8 @@
     if (each3 <= 0) return "At this level of the campaign the enemy's services send no agents against you.";
     const k = SMALLER(), ready = WATCHERS().ready;
     const smaller = everyoneOn(g2) ? `, a smaller country ${k === 0.5 ? "half as many" : `${Math.round(k * 100)}% as many`}` : "";
-    const from = ready <= 1 ? "from the month after they arrive" : `from ${ready} months after they arrive`;
-    return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each3))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of the province they are in: ${from}, attacks there by their country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until they are arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
+    const from = ready <= 1 ? "from the month after they arrive" : `from ${countWord(ready)} months after they arrive`;
+    return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one ${Math.round(1 / each3) <= 1 ? "a month" : `every ${countWord(Math.round(1 / each3))} months`}${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of the province they are in: ${from}, attacks there by their country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until they are arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
   }
   var HUNT_WATCH_TEXT = "Searches this province and the provinces around it for the other side's agents. An enemy agent uncovered can be arrested before they strike or, if they are watching your defences, before they help more of the enemy's attacks.";
   var TURNED_HELP = "An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent's reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: they will soon be found out.";
@@ -17838,7 +17853,9 @@
     const T = INTEL.agents.skillAt;
     const training2 = !work2 && inTraining(a);
     const chosen = !work2 && !training2 && a.mission !== (out ? "watch" : "guard");
-    const doing = !work2 ? chosen ? `On the road to ${r.name}: will ${MISSION_TEXT[a.mission].label.toLowerCase()} there on arrival` : `${training2 ? "In training" : `On the road to ${r.name}`}: at work ${a.ready - g2.turn <= 1 ? "next month" : `in ${a.ready - g2.turn} months`}` : `${a.mission === "guard" ? "On guard" : a.mission === "hunt" ? "Hunting enemy agents" : a.mission === "watch" ? "Watching" : a.mission === "books" ? "Reading the books" : a.mission === "orders" ? "Stealing the orders: tried each month" : MISSION_TEXT[a.mission].label + ": tried next month"} at ${r.name}`;
+    const to = placeName2(r.name), label = MISSION_TEXT[a.mission].label.toLowerCase();
+    const doing = !work2 ? chosen ? `On the road to ${to}: will ${label} there on arrival` : `${training2 ? "In training" : `On the road to ${to}`}: at work ${a.ready - g2.turn <= 1 ? "next month" : `in ${countWord(a.ready - g2.turn)} months`}` : `${a.mission === "guard" ? "On guard" : a.mission === "hunt" ? "Hunting enemy agents" : a.mission === "watch" ? "Watching" : a.mission === "books" ? "Reading the books" : a.mission === "orders" ? "Stealing the orders: tried each month" : MISSION_TEXT[a.mission].label + ": tried next month"} ${inOrAt(r)}`;
+    const status = training2 ? "in training" : !work2 ? chosen ? `on the road, and will ${label} there on arrival` : "on the road" : a.mission === "watch" ? "watching and reporting" : a.mission === "orders" ? "trying each month to steal the orders" : a.mission === "guard" || a.mission === "hunt" || a.mission === "books" ? MISSION_TEXT[a.mission].doing : `will try to ${label} next month`;
     return {
       id: a.id,
       nat: a.nat,
@@ -17856,6 +17873,7 @@
       wait: Math.max(0, a.ready - g2.turn),
       mission: a.mission,
       doing,
+      status,
       caught: work2 ? caughtChance(g2, a) : 0,
       rest: Math.max(0, (a.rest ?? 0) - g2.turn),
       missions: offers2,
@@ -17883,14 +17901,14 @@
           reg: f.reg,
           where: g2.regions[f.reg].name,
           watch: f.kind === "watch",
-          text: `${aAn(g2.nations[f.nat]?.adj ?? "enemy", true)} ${g2.nations[f.nat]?.adj ?? "enemy"} agent ${f.kind === "watch" ? "watching your defences " : ""}at ${g2.regions[f.reg].name}, uncovered ${f.found === g2.turn ? "this month" : "earlier"}`,
-          then: f.kind === "watch" ? `${f.strike > g2.turn ? `${f.strike - g2.turn === 1 ? "From next month" : `In ${f.strike - g2.turn} months`}, until they are arrested, attacks` : "Until they are arrested, attacks"} there by ${g2.nations[f.nat] ? theName(g2.nations[f.nat]) : "the enemy"} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : "The agent strikes unless they are arrested."
+          text: `${aAn(g2.nations[f.nat]?.adj ?? "enemy", true)} ${g2.nations[f.nat]?.adj ?? "enemy"} agent ${f.kind === "watch" ? "watching your defences " : ""}${inOrAt(g2.regions[f.reg])}, uncovered ${f.found === g2.turn ? "this month" : "earlier"}`,
+          then: f.kind === "watch" ? `${f.strike > g2.turn ? `${f.strike - g2.turn === 1 ? "From next month" : `In ${countWord(f.strike - g2.turn)} months`}, until they are arrested, attacks` : "Until they are arrested, attacks"} there by ${g2.nations[f.nat] ? theName(g2.nations[f.nat]) : "the enemy"} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : "The agent strikes unless they are arrested."
         }))
       } : {},
       ...watchersOn(g2) ? { watchHelp: watchHelp(g2) } : {},
       ...ordersOn(g2) ? { orders: enemyOrders(g2, nat) } : {},
       ...doublesOn(g2) ? {
-        doubles: doublesOf(g2, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g2.nations[d.of]?.adj ?? "enemy"} service since ${monthOf(d.since)}: they warn of every new ${g2.nations[d.of]?.adj ?? "enemy"} agent sent against you, and open ${g2.nations[d.of]?.name ?? "that country"}'s books.` })),
+        doubles: doublesOf(g2, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: theWords(`Double agent ${d.name}, in the ${g2.nations[d.of]?.adj ?? "enemy"} service since ${monthOf(d.since)}: they warn of every new ${g2.nations[d.of]?.adj ?? "enemy"} agent sent against you, and open ${g2.nations[d.of]?.name ?? "that country"}'s books.`) })),
         turnedHelp: TURNED_HELP
       } : {}
     };
@@ -28604,6 +28622,8 @@
   var worldMap = FAR_STAGE ? world_whole_default : world_americas_default;
   var TOWNS = towns_default;
   var townName = (r) => TOWNS.names[r.name] ?? r.name;
+  var IN_PLACES = new Set(places_default.in ?? []);
+  var inOrAt = (r) => TOWNS.names[r.name] !== void 0 || IN_PLACES.has(r.name) || placeName2(r.name) !== r.name ? `in ${placeName2(r.name)}` : `at ${r.name}`;
   function townSize(g2, r) {
     const seat4 = g2.nations[r.owner];
     if (r.cap && seat4 && seat4.capital === r.id && seat4.alive) return "capital";
@@ -36027,17 +36047,6 @@
       spare -= cost;
     }
   }
-
-  // data/campaign/places.json
-  var places_default = {
-    _about: `Places whose names take "the" in running text (the UI director, 17 November 2026): "the Ruhr", "The Ruhr" at the head of a sentence, "the Ruhr's output". Map labels, headings, table rows and buttons keep the bare name. Her rule for any name added later: a place named for a river, a range or hills, a desert, steppe or plateau, a valley, basin, marsh or depression, a coast, peninsula or isthmus, or a group of islands takes "the"; a town or a political division named for none of these stays bare (and the period's British usage: the Crimea, the Lebanon). A longer name that holds one of these keeps its own form ("Army Group Kuban", "Rio Grande do Sul", "Azores Waters"): 'within' names the longer places that hold one.`,
-    the: ["Ruhr", "Rhineland", "Saar", "Tyrol", "Somme", "Riviera", "Ardennes", "Midlands", "Highlands", "Basque Country", "Banat", "Peloponnese", "Crimea", "Kuban", "Danzig Corridor", "Vosges", "West Country", "Don Bend", "Kalmyk Steppe", "Qattara Depression", "Lebanon", "Marche", "Alto Adige", "Eifel", "Neumark", "Grenzmark", "Jura", "Cotentin", "Valdai", "Terek", "Ohio Valley", "Dakotas", "White Mountains", "Columbia Plateau", "Hudson Lowlands", "Yukon", "Canary Islands", "Bahamas", "Azores", "Mosquito Coast", "Canal Zone", "Llanos", "Chaco Boreal", "Gran Chaco", "Pampas", "Falkland Islands", "Sertao", "Laurentides", "Rio Grande", "Peten", "Mosquitia", "Alto Orinoco", "Beni", "Mackenzie", "Yukon Flats", "Arctic Slope", "Eastern Marshalls", "Admiralty Islands", "Gobi", "Volga Delta", "Rub al Khali", "Nullarbor", "Seychelles", "Kra", "Vogelkop", "Changtang", "Tsaidam", "Kolyma", "Copper River", "Kuskokwim"],
-    within: {
-      "Rio Grande": [
-        "Rio Grande do Sul"
-      ]
-    }
-  };
 
   // data/campaign/defence.json
   var defence_default = {
@@ -48423,7 +48432,7 @@
       if (!room2) return none3;
       const live2 = up && !onEve(s);
       const pct100 = (x) => Math.round(x * 100);
-      const home = room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home this month.";
+      const home = room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards === 1 ? "one agent" : `${inWords(room2.threat.guards)} agents`} on guard.` : "No enemy service is working against you at home this month.";
       const firstUp = (m) => m.now ? 0 : m.ok ? 1 : 2;
       return {
         agents: room2.agents.map((a) => ({
@@ -48450,10 +48459,10 @@
           home: a.abroad ? "" : home,
           // (what the work he will take up is, in the rules' words: for the card of an agent still on the road)
           will: a.missions.find((m) => m.id === a.mission)?.text ?? "",
-          work: [...a.missions].sort((x, y) => firstUp(x) - firstUp(y)).map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live2 && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
+          work: [...a.missions].filter((m) => m.ok || m.now || !WORK_NEVER.test(m.why)).sort((x, y) => firstUp(x) - firstUp(y)).map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live2 && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
           sees: a.sees.map((x) => ({ region: x.reg, name: s.regions[x.reg]?.name ?? "", nat: x.nat, corps: x.corps, divs: Math.round(x.divs) }))
         })),
-        agentMarks: room2.notes.filter((n) => n.what === "caught" && n.turn === s.turn).map((n) => ({ region: n.reg, text: n.text }))
+        agentMarks: room2.notes.filter((n) => n.what === "caught" && n.turn === s.turn).map((n) => ({ region: n.reg, text: theWords(n.text) }))
       };
     } catch {
       return none3;
@@ -52046,19 +52055,21 @@ ${next.text}` : ""}` : next ? next.also : "";
   var pct10 = (x) => `${Math.round(x * 100)}%`;
   var WORK_NEEDS = [
     [/keeps its books in its capital/, "a capital"],
-    [/^There is no industry at /, "a factory"],
-    [/^No factory at .* is left to wreck/, "a working factory"],
+    [/^There is no industry /, "a factory"],
+    [/^No factory .* is left to wreck/, "a working factory"],
     [/^No railway runs through /, "a railway"],
-    [/^There is no oilfield at /, "an oilfield"],
+    [/^There is no oilfield /, "an oilfield"],
     [/^No enemy bomber group flies from /, "enemy bombers on the field"],
     [/^No enemy air group flies from /, "enemy aircraft on the field"],
     [/are kept by the great powers|keeps its plans at home|keeps its (.+ )?plans at /, "a great power's plans"]
   ];
   var WORK_NEVER = /^Not in this campaign\.$|only on friendly ground\.$|on its own designs\.$|develops its own |^Every country here |already \S+ .* on \S+ designs\.$| designs once |^Only the great powers develop /;
   var orList = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`;
+  var NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+  var inWords = (n) => NUMBER_WORDS[n] ?? String(n);
   function barredLine(missions, o) {
     const atPeace = (m) => /^You are at peace with /.test(m.why);
-    const peace = `You are at peace with ${o.host}: sabotage is an act of war${missions.some((m) => m.id === "orders" && atPeace(m)) ? ", and its air staff has no orders against you" : ""}.`;
+    const peace = `You are at peace with ${o.host}: sabotage would be an act of war.`;
     const barred3 = missions.filter((m) => !m.ok && !m.now && !WORK_NEVER.test(m.why) && !(o.restSaid && /lying low/.test(m.why))).map((m) => atPeace(m) ? { ...m, why: peace } : m);
     if (!barred3.length) return "";
     const whys = [...new Set(barred3.map((m) => m.why))];
@@ -52080,8 +52091,8 @@ ${next.text}` : ""}` : next ? next.also : "";
     }
     const say = needs.includes("enemy aircraft on the field") ? needs.filter((x) => x !== "enemy bombers on the field") : needs;
     return [
-      n ? `${n === 1 ? "One more needs" : `${n} more need`} ${orList(say)} here.` : "",
-      yet ? `${yet === 1 ? "One more has" : `${yet} more have`} no plans to steal here yet.` : "",
+      n ? `${n === 1 ? "One more needs" : `${upFirst2(inWords(n))} more need`} ${orList(say)} here.` : "",
+      yet ? `${yet === 1 ? "One more has" : `${upFirst2(inWords(yet))} more have`} no plans to steal here yet.` : "",
       ...told
     ].filter(Boolean).join(" ");
   }
@@ -52096,22 +52107,22 @@ ${next.text}` : ""}` : next ? next.also : "";
         label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(),
         act: `spy:mission:${a.id}:${m.id}`,
         ok: up && m.ok && !m.now,
-        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct10(m.success)}.` : ""} Chance of being caught ${pct10(m.caught)}.${m.ok ? "" : ` ${m.why}`}`
+        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct10(m.success)}.` : ""}${a.abroad ? ` Chance of being caught ${pct10(m.caught)}.` : ""}${m.ok ? "" : ` ${m.why}`}`
       }));
-      buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : "SEND TO A PROVINCE", act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here?.name ?? "the province selected on the map"} and sets to work there.` });
+      buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : "SEND TO A PROVINCE", act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here ? placeName2(here.name) : "the province selected on the map"} and sets to work there.` });
       buttons.push({ label: "RETIRE", act: `spy:retire:${a.id}`, ok: up, tip: "The agent leaves the service, which frees a place in it.", danger: true });
-      const lines2 = [`${a.where}${a.abroad ? `, in ${theName2(s, a.host)}` : ", at home"}. ${a.doing}`];
-      if (a.wait > 0) lines2.push(`At work in ${a.wait} month${a.wait === 1 ? "" : "s"}.`);
-      if (a.atWork) lines2.push(`Chance of being caught this month: ${pct10(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
-      const rest = a.training ? "" : barredLine(a.missions, { host: theName2(s, a.host), restSaid: a.atWork && a.rest > 0 });
+      const lines2 = [`${placeName2(a.where, true)}, ${a.host === s.human ? "at home" : `in ${theName2(s, a.host)}`}: ${a.status}.`];
+      if (a.wait > 0) lines2.push(`At work in ${a.wait === 1 ? "a month" : `${inWords(a.wait)} months`}.`);
+      if (a.atWork && a.abroad) lines2.push(`Chance of being caught this month: ${pct10(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest === 1 ? "another month" : `${inWords(a.rest)} more months`} before another act of sabotage.` : ""}`);
+      const rest = a.training ? "" : barredLine(a.missions, { host: theName2(s, a.host), restSaid: a.atWork && a.abroad && a.rest > 0 });
       if (rest) lines2.push(rest);
       for (const x of a.sees.slice(0, 5)) {
         const d = Math.round(x.divs);
-        lines2.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${d} division${d === 1 ? "" : "s"}.`);
+        lines2.push(`In sight ${inOrAt(s.regions[x.reg])}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${d} division${d === 1 ? "" : "s"}.`);
       }
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines: lines2, buttons };
     });
-    const notes = room2.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
+    const notes = room2.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${theWords(n.text)}`);
     const found2 = (room2.found ?? []).map((f) => {
       const why = up ? whyNotArrestAgent(s, f.id) : "Orders are given in your own month.";
       const buttons = [{ label: "ARREST", act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? (f.watch ? "Arrest the agent: they map your defences no more." : "Arrest the agent before they can strike.") }];
@@ -52119,7 +52130,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         const whyTurn = up ? whyNotTurnAgent(s, f.id) : "Orders are given in your own month.";
         buttons.push({ label: "TURN", act: `spy:turn:${f.id}`, ok: whyTurn === null, tip: whyTurn ?? "Turn the agent: they go back to their service and work for you, warning of every new agent the service sends and opening its books, until they are found out." });
       }
-      return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? "Enemy"} ${f.watch ? "watcher" : "agent"} at ${f.where}`, lines: [`${f.text}. ${f.then}`], buttons };
+      return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? "Enemy"} ${f.watch ? "watcher" : "agent"} ${inOrAt(s.regions[f.reg])}`, lines: [`${f.text}. ${f.then}`], buttons };
     });
     const doubles = (room2.doubles ?? []).map((d) => ({ nat: d.of, title: `Double agent ${d.name}`, lines: [d.text], buttons: [] }));
     const orders = room2.orders ?? [];
@@ -52129,14 +52140,14 @@ ${next.text}` : ""}` : next ? next.also : "";
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
       // (The UI director, 22 November, release 2: the head note in about 30 words; the quiet months say only "this month".)
-      note: `Agents abroad see through the fog of war, read books${room2.orders ? ", steal orders" : ""} and sabotage. At home they stand guard. ${room2.threat.foes.length ? `Enemy strike at home this month: ${pct10(room2.threat.chance)}, with ${room2.threat.guards} ${room2.threat.guards === 1 ? "agent" : "agents"} on guard.` : "No enemy service is working against you at home this month."}`,
+      note: `Agents abroad see through the fog of war, read the enemy's books${room2.orders ? ", steal orders" : ""} and sabotage. At home they stand guard. ${room2.threat.foes.length ? `Enemy strike at home this month: ${pct10(room2.threat.chance)}, with ${room2.threat.guards === 1 ? "one agent" : `${inWords(room2.threat.guards)} agents`} on guard.` : "No enemy service is working against you at home this month."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
       ],
       sections: [
         // (The UI director, 22 November, release 2: one sentence here; how the enemy spies on him has its own last section.)
-        { heading: "YOUR AGENTS", text: rows.length ? here ? `Your agents stand on the map: click one to pick it up and right-click where the agent should go, or send one to ${here.name} from here.` : "Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there." : "The service has no agents yet: recruit one above, and the new agent stands on the map at home.", rows },
+        { heading: "YOUR AGENTS", text: rows.length ? here ? `Your agents stand on the map: click one to pick it up and right-click where the agent should go, or send one to ${placeName2(here.name)} from here.` : "Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there." : "The service has no agents yet: recruit one above, and the new agent stands on the map at home.", rows },
         ...found2.length ? [{ heading: "ENEMY AGENTS UNCOVERED", text: `Your hunters have found these enemy agents on your ground. ${room2.watchHelp ? "A saboteur strikes when their time comes, and a watcher helps their side attack, unless they are arrested first." : "Each strikes when their time comes unless they are arrested first."}${room2.doubles ? " One can be turned instead, to work for you inside their own service." : ""}`, rows: found2 }] : [],
         ...doubles.length ? [{ heading: "DOUBLE AGENTS", text: "Enemy agents you have turned. Each works for you inside their own service until that service stops trusting them.", rows: doubles }] : [],
         ...orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join("\n"), rows: [] }] : [],
