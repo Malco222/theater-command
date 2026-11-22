@@ -374,6 +374,10 @@ namespace TheaterFx
 		AboveLeastR = SafeNum(Num("game.from_above.shadow_least_r_m", 1.5), 0.0, 1000.0, 1.5);
 		AboveStretch = SafeNum(Num("game.from_above.shadow_stretch_most", 2.5), 1.0, 8.0, 2.5);
 		AboveMost = static_cast<int>(SafeNum(Num("game.from_above.shadow_most", 300.0), 0.0, 6000.0, 300.0));
+		AboveDarkLit = SafeNum(Num("game.from_above.dark_lit", 0.45), 0.0, 1.0, 0.45);
+		AboveDarkLum = Range("game.from_above.dark_lum", 0.015, 0.04);
+		AboveDarkest = SafeNum(Num("game.from_above.shadow_darkest", 0.55), 0.0, 1.0, 0.55);
+		AboveSoftM = SafeNum(Num("game.from_above.shadow_soft_m", 60.0), 1.0, 10000.0, 60.0);
 		DustRoom = std::max(0.05, std::min(1.0, Num("dust.vehicles.most_of_room", 0.4)));
 		DustFullWithin = std::max(0.0, Num("dust.vehicles.full_within_m", 120.0));
 		// (FX5, room shares by kind: off by default, and then nothing moves. On, every gate but the dust's reads RoomGate,
@@ -541,6 +545,7 @@ namespace TheaterFx
 		CaseMouth = Picture("ground_cases.mouth", Rgb::FromPicture(46, 34, 18));
 		CaseGlint = Picture("ground_cases.glint_colour", Rgb::FromPicture(255, 220, 140));
 		AboveLitCol = Picture("game.from_above.lit_colour", Rgb::FromPicture(176, 170, 160));
+		AboveDarkCol = Picture("game.from_above.dark_lit_colour", Rgb::FromPicture(120, 108, 95));
 		AboveShadowCol = Picture("game.from_above.shadow_colour", Rgb::FromPicture(30, 34, 42));
 	}
 
@@ -13446,6 +13451,14 @@ namespace TheaterFx
 			const Vec N = Round.Right * S + Round.Back * std::sqrt(1.0 - S * S);
 			return Clamp01(Round.Gain * std::max(0.0, Round.Level * N.Dot(Round.Sun) + Round.Up));
 		};
+		// (game.from_above, Round.Top: seen from a high steep eye the column's top takes the light toward its own lit
+		// colour, Round.TopLift, all of it on its sunward side and a little over half on the far side)
+		auto RoundTopK = [this](const Vec& Q)
+		{
+			const double S = std::clamp((Q.X * Round.Right.X + Q.Y * Round.Right.Y - Round.Mid) / Round.R, -1.0, 1.0);
+			const Vec N = Round.Right * S + Round.Back * std::sqrt(1.0 - S * S);
+			return Round.Top * (0.55 + 0.45 * Clamp01(N.Dot(Round.Sun)));
+		};
 		// (bLayGlare: the Lift is a burst's flash, Bit::GlareK. A point is lit by how far round it is toward the flash on
 		// the screen, GlareSide: all of the light on that side, 0.15 of it on the side away. A piece the eye sees from the
 		// flash's side is lit all over; one standing before the flash keeps three tenths, on its edge toward it)
@@ -13613,6 +13626,14 @@ namespace TheaterFx
 				}
 				HeartShaded = Rgb(HeartShaded.R + KHeart * Lift.R, HeartShaded.G + KHeart * Lift.G, HeartShaded.B + KHeart * Lift.B);
 				Shaded = Rgb(Shaded.R + KRim * Lift.R, Shaded.G + KRim * Lift.G, Shaded.B + KRim * Lift.B);
+			}
+			if (Round.bOn && Round.Top > 0.0)
+			{
+				// (game.from_above: the column's top, fading with the puff's own edge as the sun's side does)
+				const double HeartK = Clamp01(HeartAlpha / std::max(Alpha, 1e-6)), RimK = Clamp01(RimAlpha / std::max(Alpha, 1e-6));
+				const float TH = static_cast<float>(RoundTopK(Middle + Dir * (In * Reach)) * HeartK), TR = static_cast<float>(0.5 * RoundTopK(Middle + Dir * Reach) * RimK);
+				HeartShaded = Rgb(HeartShaded.R + TH * Round.TopLift.R, HeartShaded.G + TH * Round.TopLift.G, HeartShaded.B + TH * Round.TopLift.B);
+				Shaded = Rgb(Shaded.R + TR * Round.TopLift.R, Shaded.G + TR * Round.TopLift.G, Shaded.B + TR * Round.TopLift.B);
 			}
 			if (Tube.bOn)
 			{
@@ -14253,6 +14274,32 @@ namespace TheaterFx
 			On.Z = Height(On.X, On.Y) + 0.05;
 			P = On;
 			A *= ShadeTwinA;
+			// (shadow_darkest: where shadows lie over each other, as under a wide plume, the ground keeps at least 1 - shadow_darkest
+			// of its light, so a column's shadow never stacks into a dark puddle on the field (the art director's
+			// 19:59Z mend). Kept by patches of the ground a little smaller than the shadow, one set for each size of
+			// shadow, the darkest of the patch and its eight neighbours ruling)
+			if (AboveDarkest < 1.0)
+			{
+				const int Level = std::clamp(static_cast<int>(std::floor(std::log2(std::max(Rad, 1.0)))), 0, 15);
+				const double Cell = 0.8 * std::ldexp(1.0, Level);
+				const int64_t Cx = static_cast<int64_t>(std::floor(std::clamp(P.X / Cell, -1.0e8, 1.0e8))), Cy = static_cast<int64_t>(std::floor(std::clamp(P.Y / Cell, -1.0e8, 1.0e8)));
+				auto Key = [Level](int64_t X_, int64_t Y_) { return (static_cast<uint64_t>(Level) << 58) ^ ((static_cast<uint64_t>(X_) & 0x1FFFFFFFull) << 29) ^ (static_cast<uint64_t>(Y_) & 0x1FFFFFFFull); };
+				float Left = 1.0f;
+				for (int64_t Dx = -1; Dx <= 1; ++Dx)
+				{
+					for (int64_t Dy = -1; Dy <= 1; ++Dy)
+					{
+						const auto It = ShadowCells.find(Key(Cx + Dx, Cy + Dy));
+						if (It != ShadowCells.end())
+						{
+							Left = std::min(Left, It->second);
+						}
+					}
+				}
+				A = std::min(A, std::max(0.0, 1.0 - (1.0 - AboveDarkest) / std::max(static_cast<double>(Left), 1e-3)));
+				float& Here = ShadowCells.emplace(Key(Cx, Cy), 1.0f).first->second;
+				Here = static_cast<float>(Here * (1.0 - A));
+			}
 			if (!(A >= 0.004))
 			{
 				return 0;
@@ -14444,6 +14491,7 @@ namespace TheaterFx
 			}
 		}
 		Round.bOn = false;
+		Round.Top = 0.0;
 		bLayGlare = false;
 		LaySquare = 0.0;
 		LayInnerAlong = 0.0;
@@ -14571,28 +14619,52 @@ namespace TheaterFx
 				LayGlareAll = FlashFar > 1e-6 ? Clamp01(0.5 + 0.5 * ToFlash.Dot(Eye.Eye - P) / (FlashFar * Dist)) : 1.0;
 			}
 		}
-		if (FromAbove > 0.0 && AboveLit > 0.0 && !B.bLight && !B.bShadeTwin && !Round.bOn && !bLayGlare && Dist > 1e-6 && (B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Upright)
-			&& B.Ribbon <= 0.0 && B.Smear <= 0.0 && std::fabs(Lift.R) + std::fabs(Lift.G) + std::fabs(Lift.B) < 1e-6f)
+		if (FromAbove > 0.0 && !B.bLight && !B.bShadeTwin && !bLayGlare && Dist > 1e-6 && (B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Upright)
+			&& B.Ribbon <= 0.0 && B.Smear <= 0.0)
 		{
 			// (game.from_above, the art director's read of the general's stills, item 5: from 300 m up the smoke was a flat
-			// dark smudge. From a high steep eye, smoke's face toward the sun is lit toward lit_colour: most on each puff's
-			// sunward side (Lay) and on its cloud's; none against the sun, nor at night. Never darker than it was)
-			const double Face = (Eye.Eye - P).Dot(Eye.Sun) / Dist;
+			// dark smudge. From a high steep eye, smoke's face toward the sun is lit: pale smoke and dust up to lit of the
+			// way to lit_colour, black smoke (by its own colour's light, dark_lum) only dark_lit of the way to a warm
+			// brown-grey, as black smoke never goes pale in the sun (her 19:59Z mend). Most on each puff's sunward side
+			// (Lay) and on its cloud's; none against the sun, nor at night; never darker than it was)
+			const double Face = std::max(0.0, (Eye.Eye - P).Dot(Eye.Sun) / Dist);
 			const double Day = Clamp01((Eye.SunLight.R + Eye.SunLight.G + Eye.SunLight.B) / 3.0);
-			double Side = 1.0;
-			if (B.CloudShade > 0.0)
+			const double Light = std::max(1e-3, 0.2126 * Eye.SmokeLight.R + 0.7152 * Eye.SmokeLight.G + 0.0722 * Eye.SmokeLight.B);
+			const double Own = (0.2126 * Col.R + 0.7152 * Col.G + 0.0722 * Col.B) / Light;
+			const double T = Clamp01((Own - AboveDarkLum.A) / std::max(AboveDarkLum.B - AboveDarkLum.A, 1e-6));
+			const double Pale = Round.bOn ? 0.0 : T * T * (3.0 - 2.0 * T); // (1 for pale smoke and dust, 0 for black smoke and every column)
+			const Rgb To = AboveDarkCol.Mix(AboveLitCol, static_cast<float>(Pale));
+			const Rgb ToLift(std::max(0.0f, To.R * Eye.SmokeLight.R - Col.R), std::max(0.0f, To.G * Eye.SmokeLight.G - Col.G), std::max(0.0f, To.B * Eye.SmokeLight.B - Col.B));
+			const double Most = (AboveDarkLit + (AboveLit - AboveDarkLit) * Pale) * FromAbove * Day * LitNow;
+			if (Round.bOn)
 			{
-				const Vec FromMid = P - (B.Centre + Wind * (0.75 * Age) + ZUp * (B.CentreRise * Age));
-				const double Len = FromMid.Length();
-				if (Len > 1e-3)
-				{
-					Side = Clamp01(0.6 + 0.6 * FromMid.Dot(Eye.Sun) / Len * Clamp01(Len / std::max(B.CloudR, 1e-3)));
-				}
+				// (a burning wreck's or an oil fire's column, lit as a round column: its top takes the light too, on its own
+				// sunward side the most (Lay, RoundTopK), and its young smoke low over the fire as little of it as of the
+				// sun's side)
+				// (a column's top faces up, so it takes the light by the sun's height wherever the eye stands round it: all of
+				// it from a sun 45 degrees up or higher)
+				const double Young = B.SunBy > 0.0 ? B.SunYoung + (1.0 - B.SunYoung) * Clamp01((Age - B.SunFrom) / std::max(B.SunBy - B.SunFrom, 1e-3)) : 1.0;
+				const double Up = Clamp01(1.4 * Eye.Sun.Unit(ZUp).Z);
+				Round.Top = Clamp01(Most * Up * Young);
+				Round.TopLift = ToLift;
 			}
-			const float L = static_cast<float>(Clamp01(AboveLit * FromAbove * std::max(0.0, Face) * Day * Side * LitNow));
-			if (L > 0.002f)
+			else if (std::fabs(Lift.R) + std::fabs(Lift.G) + std::fabs(Lift.B) < 1e-6f)
 			{
-				Lift = Rgb(std::max(0.0f, AboveLitCol.R * Eye.SmokeLight.R - Col.R) * L, std::max(0.0f, AboveLitCol.G * Eye.SmokeLight.G - Col.G) * L, std::max(0.0f, AboveLitCol.B * Eye.SmokeLight.B - Col.B) * L);
+				double Side = 1.0;
+				if (B.CloudShade > 0.0)
+				{
+					const Vec FromMid = P - (B.Centre + Wind * (0.75 * Age) + ZUp * (B.CentreRise * Age));
+					const double Len = FromMid.Length();
+					if (Len > 1e-3)
+					{
+						Side = Clamp01(0.6 + 0.6 * FromMid.Dot(Eye.Sun) / Len * Clamp01(Len / std::max(B.CloudR, 1e-3)));
+					}
+				}
+				const float L = static_cast<float>(Clamp01(Most * Face * Side));
+				if (L > 0.002f)
+				{
+					Lift = ToLift * L;
+				}
 			}
 		}
 		const double MetresAPixel = Dist / std::max(1.0, Eye.PixelsPerRadian); // (1 first: a scale that is not a number counts as 1)
@@ -15305,6 +15377,7 @@ namespace TheaterFx
 			return 0;
 		}
 		ShadowCands.clear();
+		ShadowCells.clear();
 		for (size_t I = 0; I < Bits.size(); ++I)
 		{
 			const Bit& B = Bits[I];
@@ -15359,8 +15432,16 @@ namespace TheaterFx
 			S.bHug = S.bNeverUnder = false;
 			S.FlickerSeed = 0;
 			S.DayAlpha = S.LitOver = 1.0;
-			S.Heart = 0.8; // (soft from its middle out: a shadow has no rim of its own)
-			S.Inner = 0.4;
+			// (soft from its middle out: a shadow has no rim of its own, and the higher its puff the softer and wider its edge,
+			// as the sun's own width blurs it: the art director's 19:59Z mend)
+			const Vec Over = Where(B, Now - B.Born);
+			const double Soft = Clamp01((Over.Z - Height(Over.X, Over.Y)) / AboveSoftM);
+			S.Heart = 0.8 - 0.15 * Soft;
+			S.Inner = 0.45 - 0.2 * Soft;
+			S.R0 *= 1.0 + 0.2 * Soft;
+			S.R1 *= 1.0 + 0.2 * Soft;
+			S.RMid *= 1.0 + 0.2 * Soft;
+			S.WakeR *= 1.0 + 0.2 * Soft;
 			S.Rim = 0.0;
 			S.HeartEnd = -1.0;
 			S.HeartRound = 1.0;

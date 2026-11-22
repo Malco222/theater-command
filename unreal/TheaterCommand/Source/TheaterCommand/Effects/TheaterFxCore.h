@@ -5,6 +5,7 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 /**
@@ -1169,6 +1170,8 @@ namespace TheaterFx
 			double Mid = 0.0; // (the column's middle at the puff's height, along Right)
 			double R = 1.0, Gain = 0.0, Level = 1.0, Up = 0.0; // (the column's radius there; how strong; the sun's level and upward shares)
 			double Lobe = 0.25; // (the share of its light a fan takes from its own sunward side, the rest from the column's)
+			double Top = 0.0; // (game.from_above: seen from a high steep eye, this share of the way to TopLift on its top's sunward side, two fifths of it on the far side)
+			Rgb TopLift; // (and the lift it takes toward: smoke's own lit colour from above, dark_lit_colour for black smoke)
 			double Rim = 0.0; // (over 0, a lump on a lump: its rim keeps this share of its light, however see-through it is there)
 		};
 		double RoundUp = 0.35;
@@ -1456,8 +1459,11 @@ namespace TheaterFx
 		double FromAbove = 0.0, ShadeTwinA = 0.0;
 		Span AboveEye{ 100.0, 220.0 }, AboveSteep{ 0.4, 0.7 };
 		double AboveLit = 0.0, AboveShadow = 0.0, AboveWide = 1.5, AboveLeastM = 3.0, AboveLeastR = 1.5, AboveStretch = 2.5;
+		double AboveDarkLit = 0.45, AboveDarkest = 0.55, AboveSoftM = 60.0;
+		Span AboveDarkLum{ 0.015, 0.04 };
 		int AboveEvery = 2, AboveMost = 300;
-		Rgb AboveLitCol, AboveShadowCol;
+		Rgb AboveLitCol, AboveDarkCol, AboveShadowCol;
+		std::unordered_map<uint64_t, float> ShadowCells; // (this Draw's shadows: how much light each patch of ground has left, by the shadows' sizes)
 		int LayShadows(int Slot, double Now, const View& Eye); // (the shadows of the big smoke, laid with the craters: how many slots they took)
 		// (and the room they may take: what the rest left last Draw, eased; how many were laid then; the puffs that may cast
 		// one, by Bit::Serial, so the oldest smoke keeps its shadow when the room is short)

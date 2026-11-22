@@ -2020,11 +2020,22 @@ side toward the sun, and its shadow laid on the ground downwind, and liked the s
   looks down from `steep` 0.4 to 0.7 (the sine of the angle down): a low eye is byte for byte as before.
 - Lit: a smoke or dust puff's face toward the sun goes up to `lit` (0.45) of the way to `lit_colour`, most on its own
   sunward side (as flak's FaceLit) and on its cloud's; none against the sun, at night, or where it would darken.
+- Black smoke (the art director's 19:59Z mend): smoke whose own colour's light is under `dark_lum` (0.015, going
+  over by 0.04) goes only toward `dark_lit_colour` (120,108,95), a warm brown-grey, as black oil smoke never goes pale
+  in the sun. Every burning wreck's or oil fire's column counts as black: its top takes `dark_lit` (0.45) toward that
+  colour by the sun's height (all of it from 45 degrees up), all of it on its sunward side and a little over half on
+  the far side, fading with each puff's edge; its young smoke over the fire takes as little as of the sun's side, so
+  the root stays black. In the side-sun general's still the column measures 0.14 of the way there in the middle, 0.22
+  at its brightest; the barrage's earth smoke is as before.
 - Shadow: one puff in `shadow_every` (2) of the smoke at least `shadow_least_r_m` (1.5) across and `shadow_least_m`
   (3) over the ground, a burning wreck's column too, lays a flat soft piece where the sun's line through it meets the
   ground: `shadow_colour` at `shadow` (0.2) of its own opacity, `shadow_wide` (1.5) as wide, drawn out along the sun's
   way by the sun's height (at most `shadow_stretch_most`). It is the puff itself laid again (`Bit::bShadeTwin`), so it
-  drifts, grows and thins as the puff does. None with the sun under about 9 degrees. Laid with the craters, under all
+  drifts, grows and thins as the puff does. The higher its puff the softer and a fifth wider its edge, fully so by
+  `shadow_soft_m` (60). Where shadows lie over each other the ground keeps at least 1 - `shadow_darkest` (0.55) of
+  its light, kept by patches a little smaller than each size of shadow, so a wide plume never stacks into a dark
+  puddle: in the side-sun still the ground under the column keeps 0.83 near the wreck, 0.73 mid-run, 0.63 at the
+  widest (it was 0.50). None with the sun under about 9 degrees. Laid with the craters, under all
   the smoke, pulled nearer the eye as a lying piece (soft contact).
 - Room: shadows never take smoke's own. They use what the rest left in the last frame, less a twentieth, at most an
   eighth of the room and `shadow_most` (300), eased 25 a frame; when short, the oldest smoke keeps its shadow and the
