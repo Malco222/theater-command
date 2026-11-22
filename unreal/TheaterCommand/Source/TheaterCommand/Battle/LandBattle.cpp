@@ -1727,6 +1727,7 @@ bool ALandBattle::Open()
 	if (Effects && Eye)
 	{
 		Effects->SetLandGrade(true);
+		Effects->SetFromAbove(true); // (inert while game.from_above.on is 0; the Mac flips it with -TheaterFxSet=game.from_above.on=1)
 		int32 FireSpread = 1, SoftContact = 1;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFireSpread="), FireSpread);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSoftContact="), SoftContact);
