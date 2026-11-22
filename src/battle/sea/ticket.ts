@@ -9,8 +9,8 @@
 import { hashString } from '../../core/rng';
 import { turnToDate, type TicketLine } from '../../core/ticket';
 import { deckWorth } from '../../campaign/carriers';
-import { fleetPower, type SeaMeeting } from '../../campaign/navy';
-import { techRules } from '../../campaign/tech';
+import { fleetPower, toughOf, type SeaMeeting } from '../../campaign/navy';
+import { dcOf, shipKit, techRules } from '../../campaign/tech';
 import type { Fleet, Game } from '../../campaign/types';
 import type { ForceTicket, Side, SideTicket } from '../core/types';
 import { DICE, RULES_CLASSES, SEA } from './numbers';
@@ -25,10 +25,15 @@ export function fleetTicket(g: Game, f: Fleet, side: Side): FleetTicket {
   const deck = f.ships.cv > 0 ? deckWorth(g, f) : 1;
   const raw = SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === 'cv' ? deck : 1), 0);
   const bombers = g.airFleets.filter((w) => w.ship === f.id).reduce((n, w) => n + w.bmr, 0);
+  // Ruling 240: the fleet's own share of loss by class where its damage control eases it, and its ships' kit where they
+  // have any; neither is written otherwise, so a ticket with the switches off is release 1's to the byte.
+  const kit = shipKit(g, f.nat);
   return {
     id: f.id, name: f.name, nat: f.nat, side, ships: surfaceOf(f),
     mul: raw > 0 ? fleetPower(g, f) / raw : 1, deck, bombers,
     admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null,
+    ...(dcOf(g, f.nat) !== 1 ? { tough: { bb: toughOf(g, f, 'bb'), cv: toughOf(g, f, 'cv'), ca: toughOf(g, f, 'ca'), dd: toughOf(g, f, 'dd') } } : {}),
+    ...(kit.stage || kit.vt || kit.dc ? { kit } : {}),
   };
 }
 

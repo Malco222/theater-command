@@ -51,7 +51,7 @@ export function seaAhead(g: Game, close: (copy: Game) => void): SeaAhead[] {
 /** A played battle's result as the rules take it: the ratio, the ships each fleet lost by class, and whether the dice finished it. */
 export function foughtOf(r: FieldResult): SeaFought {
   const x = r.extra as SeaLosses | undefined;
-  return { R: r.R, sunk: x?.sunk ?? {}, toDice: x?.toDice };
+  return { R: r.R, sunk: x?.sunk ?? {}, toDice: x?.toDice, ...(x?.kept ? { kept: x.kept } : {}) };
 }
 
 /** What the player fought, keyed by meetingKey: the meeting as the look-ahead saw it, and its result. */

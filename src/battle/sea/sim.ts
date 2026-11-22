@@ -92,8 +92,10 @@ interface Torp { at: number; side: Side; target: number; x: number; y: number; w
 interface Line { order: number[]; hand: number; course: number; speed: number; turned: number }
 
 /** Each fleet's ships lost on the field, by class: sunk, and gone out of the fight burning (past the dice's limit); and
- *  the ships it took home badly hurt, those burning and those afloat at half their hull or less (b458, 3). */
-export interface SeaLosses { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; toDice?: boolean }
+ *  the ships it took home badly hurt, those burning and those afloat at half their hull or less (b458, 3). 'kept'
+ *  (ruling 240, damage control): of those gone out burning, the ships the field would have sunk without damage control
+ *  (its limit at navy.json's toughness); absent where there are none, as with the switch off. */
+export interface SeaLosses { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; kept?: Record<number, SeaShips>; toDice?: boolean }
 
 /** The orders that let a beaten enemy go, given by the side chasing it (b458, 1): hold, break off (a piece, or the whole
  *  fleet with WITHDRAW), or steer for a point on its own sea (STEER, and ownSea). */
@@ -117,6 +119,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private zones: Zone[] = [];
   private readonly caps: Record<Side, SeaShips>;
   private readonly lostShips: Record<Side, SeaShips> = { att: none(), def: none() };
+  /** Ruling 240: the limit by class without damage control (navy.json's toughness), the ships that limit would have let
+   *  go down so far, and by fleet the ships that went out burning that it would have sunk (SeaLosses.kept). */
+  private readonly plainCaps: Record<Side, SeaShips>;
+  private readonly plainLost: Record<Side, SeaShips> = { att: none(), def: none() };
+  private readonly kept: Record<number, SeaShips> = {};
   private readonly weight0: Record<Side, number> = { att: 0, def: 0 };
   /** The coasts' aircraft still in the fight, each side's, in weight: the card counts them in the side's strength. */
   private readonly airLeft: Record<Side, number>;
@@ -259,6 +266,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.weight0.def += this.airLeft.def;
     for (const f of ticket.place.fleets) { this.fleetLoss.sunk[f.id] = none(); this.fleetLoss.burnt[f.id] = none(); }
     this.caps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds);
+    this.plainCaps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds, true);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     // Each side's captains know their main effort from the start: the enemy nearest the middle of their fleet as it is drawn up.
     for (const side of ['att', 'def'] as Side[]) this.focus[side] = this.nearestToMiddle(side);
@@ -1531,6 +1539,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const c = u.extra.cls as SeaClass, side = u.side, fleet = this.info.get(u.id)!.fleet.id;
     u.extra.ships--;
     const one = RULES_CLASSES[c].one, left = Math.round(clamp(hull, 0, 1) * 1000) / 1000;
+    // (Ruling 240: whether she would have gone down at navy.json's toughness. The fleet's damage control lowers only the
+    // limit, so one that goes out burning where she would have is a ship it kept afloat.)
+    const plain = this.plainLost[side][c] < this.plainCaps[side][c];
+    if (plain) this.plainLost[side][c]++;
     if (this.lostShips[side][c] < this.caps[side][c]) {
       this.lostShips[side][c]++;
       u.extra.sunk++;
@@ -1543,6 +1555,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       for (const f of this.units) if (f.side === side && f.id !== u.id && live(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - shake);
     } else {
       this.fleetLoss.burnt[fleet][c]++;
+      if (plain) (this.kept[fleet] ??= none())[c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;
       // Her course home, for the 3D game to draw her limping away from her place in the line (the ship plan's L4): her
       // side's own edge, give or take a hash of the piece and how many it has lost so (no dice), at a fraction of cruising.
@@ -2286,7 +2299,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const hurt: Record<number, SeaShips> = {};
     for (const f of this.ticket.place.fleets) hurt[f.id] = { ...this.fleetLoss.burnt[f.id] };
     for (const u of this.units) if (u.state !== 'gone') hurt[this.info.get(u.id)!.fleet.id][u.extra.cls as SeaClass] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
-    const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt, ...(toDice ? { toDice } : {}) };
+    const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt, ...(Object.keys(this.kept).length ? { kept: this.kept } : {}), ...(toDice ? { toDice } : {}) };
     // The B4 mark: a side with two destroyer pieces outside its screen, against an enemy with a big ship, made a run.
     for (const side of ['att', 'def'] as Side[]) {
       const free = this.units.filter((u) => u.side === side && u.extra.cls === 'dd' && !this.screen.has(u.id)).length;

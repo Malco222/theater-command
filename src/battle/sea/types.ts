@@ -38,6 +38,14 @@ export interface FleetTicket {
   /** Bombers in its carriers' wings, for the strike's count on the card ("24 bombers"). */
   bombers: number;
   admiral: { name: string; level: number } | null;
+  /**
+   * Ruling 240 (damage control): each class's share of loss as the rules read it for this fleet (navy.ts toughOf:
+   * navy.json's tough divided by its nation's damage control), where that is not navy.json's own. Absent with the
+   * switch off, without the research and in every history campaign: the field then reads navy.json's (sunkCaps).
+   */
+  tough?: SeaShips;
+  /** Ruling 240: what the fleet's ships are fitted with (tech.ts shipKit), for the 3D scenes to read and nothing else. Absent where nothing is. */
+  kit?: { stage: 'early' | 'mid' | 'late' | null; vt: boolean; dc: boolean };
 }
 
 /** The sea the battle is fought in, and what the campaign knows of it. */

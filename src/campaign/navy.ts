@@ -2301,9 +2301,10 @@ export interface SeaMeeting { turn: number; zone: number; nat: string; mine: num
  * A fleet action fought out on the field (src/battle/sea): the ratio it came to, which stands in for the dice, and the
  * ships of each class each fleet lost there, by fleet id. Submarines take no part on the field: the dice sink them
  * from R as before. 'toDice': the player handed the rest of the action back to the dice, so the rules sink as they
- * would at R, and never fewer than had already gone down on the field.
+ * would at R, and never fewer than had already gone down on the field. 'kept' (ruling 240): the ships each fleet's
+ * damage control kept afloat on the field, by fleet id (the field caps its sinkings by each fleet's own toughness).
  */
-export interface SeaFought { R: number; sunk: Record<number, Partial<Ships>>; toDice?: boolean }
+export interface SeaFought { R: number; sunk: Record<number, Partial<Ships>>; toDice?: boolean; kept?: Record<number, Partial<Ships>> }
 
 /**
  * The seam to the played fleet action (src/battle/sea/handoff.ts). Unset, as it is everywhere but on a screen that
@@ -2314,10 +2315,12 @@ export const seaField: { fought?: (m: SeaMeeting) => SeaFought | undefined } = {
 /**
  * What a fleet lost in an action fought out on the field: the ships that went down there, and its submarines as the dice
  * sink them. Handed back to the dice, the dice sink with the fleet's damage control as an action the dice fight does
- * (`dc`, `kept`: ruling 240); the ships the field sank are the field's.
+ * (`dc`, `kept`: ruling 240); the ships the field sank are the field's, and so are those its damage control kept
+ * afloat there (SeaFought.kept).
  */
 function sinkFought(f: Fleet, p: SeaFought, frac: number, rng: Rng, dc = 1, kept?: Ships): Ships {
   const out = p.toDice ? sinkShips(f, frac, rng, CLASSES, dc, kept) : sinkShips(f, frac, rng, ['ss'], dc, kept);
+  if (kept && !p.toDice) for (const c of SURFACE) kept[c] += p.kept?.[f.id]?.[c] ?? 0;
   const there = p.sunk[f.id] ?? {};
   for (const c of SURFACE) {
     const more = Math.min(f.ships[c], Math.max(0, (there[c] ?? 0) - (p.toDice ? out[c] : 0)));
@@ -2390,8 +2393,8 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
     // Ruling 240 (C3): each fleet's damage control eases its own losses, its surface ships only, on the same draws.
     // Who wins, the odds, the cost in readiness and who sails home are not touched. `keptA` and `keptD` are the
-    // ships it kept afloat, fleet by fleet. (An action fought out on the field sinks what the field sank; handed back
-    // to the dice, the dice sink with damage control, as here.)
+    // ships it kept afloat, fleet by fleet. (An action fought out on the field sinks what the field sank, and keeps afloat
+    // what its damage control kept there; handed back to the dice, the dice sink with damage control, as here.)
     const keptA = mine.map(() => none()), keptD = met.map(() => none());
     mine.forEach((f, i) => { att[i].sunk = played ? sinkFought(f, played, won ? light : hard, rng, dcOf(g, f.nat), keptA[i]) : sinkShips(f, won ? light : hard, rng, CLASSES, dcOf(g, f.nat), keptA[i]); });
     met.forEach((f, i) => { def[i].sunk = played ? sinkFought(f, played, won ? hard : light, rng, dcOf(g, f.nat), keptD[i]) : sinkShips(f, won ? hard : light, rng, CLASSES, dcOf(g, f.nat), keptD[i]); });
