@@ -210,6 +210,14 @@ namespace LandEye
 		 * into the fight, from what has been fought, and again when its last man is down. Lean: the order the general
 		 * gave a block draws the film's next cut to its men, if one comes within LeanFor real seconds. */
 		double HeroAfter = 20.0, LeanFor = 8.0;
+		/** Radio call, then the barrage (Brian's release 2 camera ask): a forward observer's fresh call for fire (his cl
+		 * marks with their spot; none of his guns' rounds landing from RadioQuiet battle seconds before it to RadioSoonest
+		 * after), whose first salvo lands RadioSoonest to RadioLatest battle seconds after it, RadioRounds or more of his
+		 * rounds within RadioNear metres of the spot in the 15 s from then. The film cuts to him as he calls, then to the
+		 * men under the fire RadioLead real seconds before the first salvo lands, and holds for it; one call in RadioEvery
+		 * real seconds at the most (0: none). A recorded battle only: a live one's rounds are not known ahead. */
+		double RadioEvery = 40.0, RadioLead = 1.2, RadioQuiet = 8.0, RadioSoonest = 4.0, RadioLatest = 14.0, RadioNear = 150.0;
+		int RadioRounds = 3;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -310,6 +318,18 @@ namespace LandEye
 		 * while riding with a unit; let go if no cut comes within Settings::LeanFor. Once: a new order leans anew. */
 		void Lean(int Block);
 		int Leaning() const { return LeanBlock; }
+		/** Radio call, then the barrage (Settings::RadioEvery), for the test: each call the film went to, its stamp, the
+		 * first salvo's landing and its middle, the caller; whether the cut to the men under the fire came (or the shot on
+		 * the screen already showed the spot and held for it). */
+		struct RadioBeat
+		{
+			double T = 0.0, Land = 0.0, X = 0.0, Y = 0.0;
+			int Caller = -1;
+			bool bBarrage = false;
+		};
+		const std::vector<RadioBeat>& RadioBeats() const { return Beats; }
+		/** The fresh calls for fire the film could go to (found once, at the first look). */
+		int RadioCalls() const { return static_cast<int>(Radios.size()); }
 
 		// For the test.
 		int Cuts() const { return CutCount; }
@@ -462,6 +482,24 @@ namespace LandEye
 		/** The block the general last ordered (Lean), -1 none, and the real time the lean lapses (-1: not yet seen). */
 		int LeanBlock = -1;
 		double LeanUntil = -1.0;
+		/** Radio call, then the barrage: the fresh calls for fire (IndexRadios, by their stamps), the next not yet passed,
+		 * the one gone to (RadioStage 1: the cut to the caller asked; 2: on him, the barrage to come), the real time of
+		 * the last; and whether the choice in hand is the radio's. */
+		struct Radio
+		{
+			double T = 0.0, Land = 0.0, X = 0.0, Y = 0.0;
+			int Caller = -1;
+		};
+		std::vector<Radio> Radios;
+		std::vector<RadioBeat> Beats;
+		size_t RadioNext = 0;
+		int RadioStage = 0, RadioNow = -1;
+		double LastRadioReal = -1e9;
+		bool bRadioChoice = false, bRadiosFound = false;
+		void IndexRadios();
+		/** The men the barrage's cut may go to (Out, how many): the two of the side under fire nearest the salvo's middle
+		 * (within 1.5 RadioNear), then the two of the caller's side nearest it, 40 to 600 m off. */
+		int RadioMen(const Radio& Rd, double Battle, int Out[4]) const;
 		/** The block a cut's weighing keeps to (riding or leaning), -1 none. */
 		int ScanBlock = -1;
 		/** The lists made from the recording (Index), kept up with a live one as it grows (KeepUp): the tracks and
@@ -642,6 +680,13 @@ namespace LandEye
 		/** The house of the place being tried and of the shot placed (-1: none), and the point of it the look turns to. */
 		int TryHouse = -1, ShotHouse = -1;
 		Vec TryAim, ShotAim;
+		/** The barrage's cut (radio call, then the barrage): framed as the village still is, the salvo's middle (TryAim)
+		 * beyond the man, so it lands in the picture round him. */
+		bool bTrySalvo = false, bShotSalvo = false;
+		/** The salvo's landing (battle time) the barrage's cut is framed for; the share of the way the look turns from
+		 * the man to the aim (the house: Settings::HouseLook; the salvo: half). */
+		double SalvoLand = -1.0;
+		double AimLook() const { return bShotSalvo ? 0.5 : Set.HouseLook; }
 		int AskAgain = 0;
 		std::vector<Vec> AskLeft;
 		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
@@ -660,6 +705,7 @@ namespace LandEye
 			Vec Stand, Target, TrackOff;
 			int House = -1;
 			Vec Aim;
+			bool bSalvo = false;
 		};
 		ShotKept KeepShot() const;
 		void PutShot(const ShotKept& K);

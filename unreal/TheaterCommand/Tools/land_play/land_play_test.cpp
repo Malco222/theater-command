@@ -686,6 +686,10 @@ int main(int argc, char** argv)
 	// The camera's own share: its slowest frame, its frames over 2 ms, its average.
 	double EyeSlowest = 0.0, EyeTotal = 0.0;
 	int EyeOver2 = 0;
+	// (radio call, then the barrage: the calls the film went to, looked at as their first salvo lands)
+	size_t RadioLooked = 0;
+	int RadioBarrages = 0, RadioSeen = 0;
+	double RadioGapLeast = 1e9, RadioCutAt = -1.0;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
 	// (the frame the whole mass was placed in: its steps and time)
@@ -1135,6 +1139,33 @@ int main(int argc, char** argv)
 		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
+		{
+			const std::vector<LandEye::Director::RadioBeat>& Beats = Eye.RadioBeats();
+			for (; RadioLooked < Beats.size() && Battle >= Beats[RadioLooked].Land; ++RadioLooked)
+			{
+				const LandEye::Director::RadioBeat& Bt = Beats[RadioLooked];
+				if (!Bt.bBarrage) continue;
+				++RadioBarrages;
+				const LandEye::Vec At(Bt.X, Bt.Y, GroundAt(Bt.X, Bt.Y) + 1.0);
+				// (in the picture, and its 15 m across not a speck: a twenty-fifth of the picture's height at the least)
+				const double Off = (At - Pose.Eye).Length();
+				const double Share = 15.0 / (2.0 * std::max(1.0, Off) * std::tan(0.5 * Pose.Fov * 3.14159265358979 / 180.0));
+				if (LandEye::InPicture(Pose, At, 0.95) && Share >= 0.04) ++RadioSeen;
+				else if (std::getenv("LAND_PLAY_RADIO")) std::printf("  radio: the salvo at %.1f not in the picture: %s on %d, %.0f m off, lens %.0f, %.1f%% of its height\n", Bt.Land, LandEye::NameOf(Pose.Shot), Pose.Subject, Off, Pose.Fov, 100.0 * Share);
+				if (std::getenv("LAND_PLAY_RADIO"))
+				{
+					const LandEye::Vec Way = (Pose.Look - Pose.Eye), To = (At - Pose.Eye);
+					const double Apart = std::acos(std::clamp((Way.X * To.X + Way.Y * To.Y + Way.Z * To.Z) / std::max(1e-9, Way.Length() * To.Length()), -1.0, 1.0)) * 180.0 / 3.14159265358979;
+					std::printf("  radio: the salvo at %.1f: %s on %d, %.0f m off, lens %.0f, %.1f%% of its height, %.1f deg off the look\n", Bt.Land, LandEye::NameOf(Pose.Shot), Pose.Subject, Off, Pose.Fov, 100.0 * Share, Apart);
+				}
+			}
+			// (the cuts to a caller: real seconds between them)
+			if (Pose.bCut && !Beats.empty() && Pose.Subject == Beats.back().Caller && Beats.size() > RadioLooked && Real != RadioCutAt)
+			{
+				if (RadioCutAt >= 0.0) RadioGapLeast = std::min(RadioGapLeast, Real - RadioCutAt);
+				RadioCutAt = Real;
+			}
+		}
 		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms (%ld steps) at %.2f: %s%s, why %s\n", EyeMs, FrameSteps, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
 		EyeTotal += EyeMs;
 		// (the film's measuring is the check's own, not the game's: kept out of the frame's time)
@@ -1331,7 +1362,7 @@ int main(int argc, char** argv)
 			if (Real - LastCutReal < ShortestShot && LastCutReal > 0.0 && Eye.LastWhy() != LandEye::Why::Rescue && Eye.LastWhy() != LandEye::Why::Burst) ShortestShot = Real - LastCutReal;
 			LastCutReal = Real;
 			char Line[160];
-			std::snprintf(Line, sizeof(Line), "%6.1f %-8s subject %d", Battle, LandEye::NameOf(Pose.Shot), Pose.Subject);
+			std::snprintf(Line, sizeof(Line), "%6.1f %-8s subject %d (the shot before left: %s)", Battle, LandEye::NameOf(Pose.Shot), Pose.Subject, LandEye::NameOf(Eye.LastWhy()));
 			CutLines.push_back(Line);
 		}
 		ShotSeconds[LandEye::NameOf(Pose.Shot)] += Dt;
@@ -2315,6 +2346,19 @@ int main(int argc, char** argv)
 	std::printf("bar: starts %.3f, ends %.3f (%s won)\n", KnotStart, KnotEnd, Rec.Result.Winner.c_str());
 	std::printf("cores: %.3f ms a frame on average, %.2f ms the slowest, over %d frames; the camera alone %.3f ms on average, %.2f ms the slowest, %d frames over 2 ms\n",
 		Total / std::max(1, Frames), Slowest, Frames, EyeTotal / std::max(1, Frames), EyeSlowest, EyeOver2);
+	// Radio call, then the barrage (Brian's release 2 ask): on a recording with the calls' spots (the tactics thread's
+	// -cam recordings), the film goes to some callers, no more often than RadioEvery, and from each to the men under his
+	// guns' first salvo, in the picture as it lands.
+	if (!bOnlyGen)
+	{
+		const int Calls = Eye.RadioCalls(), Went = static_cast<int>(Eye.RadioBeats().size());
+		std::printf("radio call, then the barrage: %d fresh calls for fire, the film went to %d of the callers (%.0f s apart at the least), %d salvos cut to or held for, %d of them in the picture as they landed\n",
+			Calls, Went, RadioGapLeast < 1e8 ? RadioGapLeast : 0.0, RadioBarrages, RadioSeen);
+		if (Calls >= 3 && Went == 0) Fault("the film went to none of the radio calls");
+		if (RadioGapLeast < ES.RadioEvery - 0.5) Fault("the film went to radio calls more often than RadioEvery");
+		if (Went > 0 && RadioBarrages * 2 < Went) Fault("most radio calls were not followed by their barrage");
+		if (RadioBarrages > 0 && RadioSeen * 4 < RadioBarrages * 3) Fault("a radio call's barrage was cut to but its first salvo landed out of the picture");
+	}
 	{
 		std::vector<long> Sorted = StepsByFrame;
 		std::sort(Sorted.begin(), Sorted.end());

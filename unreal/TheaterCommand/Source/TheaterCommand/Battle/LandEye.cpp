@@ -296,6 +296,9 @@ namespace LandEye
 		LastTankSide = -1;
 		LeanBlock = -1;
 		LeanUntil = -1.0;
+		Beats.clear();
+		LastRadioReal = -1e9;
+		bRadioChoice = false;
 		HeroLooked = -1.0;
 		Index();
 		Nerves = NervesWant = 0.0;
@@ -349,6 +352,11 @@ namespace LandEye
 		LeadMenTracks = 0;
 		LeadBlockNow = -1;
 		LeadLookAt = -1e9;
+		Radios.clear();
+		RadioNext = 0;
+		RadioStage = 0;
+		RadioNow = -1;
+		bRadiosFound = false;
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& Tr = Rec->Tracks[I];
@@ -869,6 +877,124 @@ namespace LandEye
 			MenHead[B] = static_cast<int32_t>(MenAt.size());
 			MenAt.push_back({ static_cast<int>(I), S.X, S.Y });
 		}
+	}
+
+	void Director::IndexRadios()
+	{
+		// The fresh calls for fire, found once: a forward observer's call with its spot (the tactics thread's cl [t, x, y]),
+		// none of his guns' rounds landing from RadioQuiet before it to RadioSoonest after (a correction to a mission
+		// already firing is not a new one), and his guns' first salvo landing near the spot RadioSoonest to RadioLatest
+		// after it, RadioRounds or more of them in the 15 s from then.
+		if (bRadiosFound || !Rec || Rec->bLive || Set.RadioEvery <= 0.0) return;
+		bRadiosFound = true;
+		IndexLandings();
+		auto LandingFrom = [this](double V)
+		{
+			return std::lower_bound(ByLanding.begin(), ByLanding.end(), V, [this](int K, double X) { return Rec->Rounds[static_cast<size_t>(K)].L < X; });
+		};
+		std::vector<int> Near;
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			if (Tr.Calls.empty() || Tr.bTwin) continue;
+			for (const Track::Call& C : Tr.Calls)
+			{
+				if (!C.bSpot) continue;
+				bool bQuiet = true;
+				for (auto It = LandingFrom(C.T - Set.RadioQuiet); It != ByLanding.end() && bQuiet; ++It)
+				{
+					const LandFeed::Round& R = Rec->Rounds[static_cast<size_t>(*It)];
+					if (R.L >= C.T + Set.RadioSoonest) break;
+					bQuiet = R.By != Tr.Block;
+				}
+				if (!bQuiet) continue;
+				Near.clear();
+				for (auto It = LandingFrom(C.T + Set.RadioSoonest); It != ByLanding.end(); ++It)
+				{
+					const LandFeed::Round& R = Rec->Rounds[static_cast<size_t>(*It)];
+					if (R.L > C.T + Set.RadioLatest + 15.0) break;
+					if (R.By == Tr.Block && std::hypot(R.X - C.X, R.Y - C.Y) <= Set.RadioNear) Near.push_back(*It);
+				}
+				// (the first salvo: the first of them with another landing within 1.2 s, else the first alone)
+				size_t First = Near.size();
+				for (size_t K = 0; K < Near.size(); ++K)
+				{
+					const double L = Rec->Rounds[static_cast<size_t>(Near[K])].L;
+					if (L > C.T + Set.RadioLatest) break;
+					if (First == Near.size()) First = K;
+					if (K + 1 < Near.size() && Rec->Rounds[static_cast<size_t>(Near[K + 1])].L - L <= 1.2)
+					{
+						First = K;
+						break;
+					}
+				}
+				if (First == Near.size()) continue;
+				Radio Rd;
+				Rd.T = C.T;
+				Rd.Land = Rec->Rounds[static_cast<size_t>(Near[First])].L;
+				Rd.Caller = static_cast<int>(I);
+				int Count = 0, InSalvo = 0;
+				for (size_t K = First; K < Near.size(); ++K)
+				{
+					const LandFeed::Round& R = Rec->Rounds[static_cast<size_t>(Near[K])];
+					if (R.L > Rd.Land + 15.0) break;
+					++Count;
+					if (R.L > Rd.Land + 1.2) continue;
+					Rd.X += R.X;
+					Rd.Y += R.Y;
+					++InSalvo;
+				}
+				if (Count < Set.RadioRounds) continue;
+				Rd.X /= InSalvo;
+				Rd.Y /= InSalvo;
+				Radios.push_back(Rd);
+			}
+		}
+		std::stable_sort(Radios.begin(), Radios.end(), [](const Radio& A, const Radio& B) { return A.T < B.T; });
+		RadioNext = 0;
+	}
+
+	int Director::RadioMen(const Radio& Rd, double Battle, int Out[4]) const
+	{
+		// (the men the barrage's cut may go to, framed with the salvo beyond them: the two of the other side nearest its
+		// middle, under it; then the two of the caller's own side nearest it, 40 to 600 m off, watching it from their line,
+		// as a war film shows the shells landing on the hedge ahead. Normandy's men under the fire are dug in behind the
+		// hedges, unseen from anywhere a camera stands)
+		const LandFeed::Block* Bc = BlockOfTrack(Rd.Caller);
+		const int OwnSide = Bc ? Bc->Side : -1;
+		int Under[2] = { -1, -1 }, Watch[2] = { -1, -1 };
+		double UnderGap[2] = { Set.RadioNear * 1.5, Set.RadioNear * 1.5 }, WatchGap[2] = { 600.0, 600.0 };
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			// (not one going down before the salvo has landed and been seen: his fall would take the picture with him)
+			if (Tr.bTwin || KindOf(I) != 0 || Tr.Start() > Battle || (Tr.Fell >= 0.0 && Tr.Fell < Rd.Land + Soon(1.5)) || (Tr.Out >= 0.0 && Tr.Out < Rd.Land + Soon(4.0))) continue;
+			const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
+			if (!B) continue;
+			const bool bOwn = B->Side == OwnSide;
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
+			const double Gap = std::hypot(S.X - Rd.X, S.Y - Rd.Y);
+			double* Gaps = bOwn ? WatchGap : UnderGap;
+			int* Men = bOwn ? Watch : Under;
+			if (Gap >= Gaps[1] || (bOwn && Gap < 40.0)) continue;
+			if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+			if (C && C->Pose == "mounted") continue;
+			const int K = Gap < Gaps[0] ? 0 : 1;
+			if (K == 0)
+			{
+				Gaps[1] = Gaps[0];
+				Men[1] = Men[0];
+			}
+			Gaps[K] = Gap;
+			Men[K] = static_cast<int>(I);
+		}
+		RaySteps += static_cast<long>(Rec->Tracks.size() / 16);
+		int N = 0;
+		// (in turn, one under it and one watching: a cut has sixteen tries, and in the hedges the men under it are seldom seen)
+		for (const int M : { Under[0], Watch[0], Under[1], Watch[1] })
+			if (M >= 0) Out[N++] = M;
+		return N;
 	}
 
 	void Director::IndexLandings()
@@ -1574,6 +1700,7 @@ namespace LandEye
 		Shot = K;
 		Subject = TrackIndex;
 		ShotHouse = K == Kind::Watch ? TryHouse : -1;
+		bShotSalvo = K == Kind::Watch && bTrySalvo;
 		ShotAim = TryAim;
 		FellAt = -1.0;
 		bFallEye = false;
@@ -1679,8 +1806,9 @@ namespace LandEye
 		case Kind::Watch:
 		{
 			// The village still: the house behind him or beside him, the eye off the far side of him from it, 22 to 46 m,
-			// a lens wide enough for both (the look turned HouseLook of the way toward the house).
-			if (ShotHouse >= 0)
+			// a lens wide enough for both (the look turned HouseLook of the way toward the house). The barrage's cut the
+			// same, the salvo's middle for the house, 15 m across.
+			if (ShotHouse >= 0 || bShotSalvo)
 			{
 				const double From = LandFeed::FacingTo(ShotAim.X, ShotAim.Y, At.X, At.Y);
 				const double Angle = From + SideSign * (0.22 + 0.2 * Further + Roll() * 0.18);
@@ -1693,9 +1821,11 @@ namespace LandEye
 				const double ManX = At.X - Stand.X, ManY = At.Y - Stand.Y, HouseX = ShotAim.X - Stand.X, HouseY = ShotAim.Y - Stand.Y;
 				const double ManLong = std::hypot(ManX, ManY), HouseLong = std::hypot(HouseX, HouseY);
 				const double Between = ManLong > 0.0 && HouseLong > 0.0 ? std::acos(std::clamp((ManX * HouseX + ManY * HouseY) / (ManLong * HouseLong), -1.0, 1.0)) : 0.0;
-				const double HalfAcross = (1.0 - Set.HouseLook) * Between + std::atan2(std::min(Houses[static_cast<size_t>(ShotHouse)].R, 8.0), std::max(1.0, HouseLong)) + 0.06;
+				const double AimR = ShotHouse >= 0 ? std::min(Houses[static_cast<size_t>(ShotHouse)].R, 8.0) : 15.0;
+				const double HalfAcross = (1.0 - AimLook()) * Between + std::atan2(AimR, std::max(1.0, HouseLong)) + 0.06;
 				const double Needed = 2.0 * std::atan(std::tan(std::min(HalfAcross, 1.4)) * 9.0 / 16.0) * 180.0 / Pi;
-				Now.Fov = std::clamp(std::max(24.0 + Roll() * 8.0, Needed), 18.0, 52.0);
+				// (the barrage from our line hundreds of metres off: a longer lens, no wider than it needs)
+				Now.Fov = bShotSalvo ? std::clamp(std::max(14.0 + Roll() * 6.0, Needed), 12.0, 52.0) : std::clamp(std::max(24.0 + Roll() * 8.0, Needed), 18.0, 52.0);
 				return !Here.Open || Here.Open(Stand, Target);
 			}
 			// Near, for a fall about to come: off his side at a man's height, a long lens. Otherwise from a bank or a rise
@@ -1727,7 +1857,7 @@ namespace LandEye
 		{
 			Vec B;
 			OutLook = BodyOf(Subject, Battle, B) ? B : At + Vec(0.0, 0.0, 1.0);
-			if (ShotHouse >= 0) OutLook = OutLook + (ShotAim - OutLook) * Set.HouseLook;
+			if (ShotHouse >= 0 || bShotSalvo) OutLook = OutLook + (ShotAim - OutLook) * AimLook();
 		}
 		else if (Shot == Kind::Track)
 		{
@@ -1771,6 +1901,23 @@ namespace LandEye
 		{
 			// (the village still: its house in the picture and seen)
 			if (ShotHouse >= 0 && !HouseSeenIn(E, L, Now.Fov, ShotHouse)) return false;
+			// (the barrage's cut: the salvo's middle in the picture)
+			if (bShotSalvo)
+			{
+				Pose Seen;
+				Seen.Eye = E;
+				Seen.Look = L;
+				Seen.Fov = Now.Fov;
+				if (!InPicture(Seen, ShotAim, 0.85)) return false;
+				// (and still in it as it lands, the man having walked on and the look with him)
+				if (SalvoLand > Battle)
+				{
+					Intended(SalvoLand, Seen.Eye, Seen.Look);
+					if (!InPicture(Seen, ShotAim, 0.8)) return false;
+				}
+				// (and not a speck: the salvo's 15 m a twentieth of the picture's height at the least)
+				if (15.0 / (2.0 * std::max(1.0, (ShotAim - E).Length()) * std::tan(0.5 * Now.Fov * Pi / 180.0)) < 0.05) return false;
+			}
 			return !BadPicture(E, L, Now.Fov, bScreenLoose ? Set.ScreenLeave : Set.ScreenMost);
 		}
 		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
@@ -1869,6 +2016,7 @@ namespace LandEye
 		K.TrackOff = TrackOff;
 		K.House = ShotHouse;
 		K.Aim = ShotAim;
+		K.bSalvo = bShotSalvo;
 		return K;
 	}
 
@@ -1893,6 +2041,7 @@ namespace LandEye
 		Target = K.Target;
 		ShotHouse = K.House;
 		ShotAim = K.Aim;
+		bShotSalvo = K.bSalvo;
 		TrackOff = K.TrackOff;
 	}
 
@@ -1934,6 +2083,20 @@ namespace LandEye
 		}
 		TryHouse = -1;
 		AskTries.clear();
+		// (radio call, then the barrage: the cut to the caller asked, or his guns' salvo near enough to be gone to now; a
+		// tank's end or a fall coming, an asked still and the closing aerial first)
+		bRadioChoice = false;
+		bTrySalvo = false;
+		int RadioWho[4] = { -1, -1, -1, -1 }, RadioMany = 0;
+		if (!bAsked && Coming < 0 && RadioStage > 0 && RadioNow >= 0 && !(Battle > Rec->End + 1.0 && !bClosed))
+		{
+			const Radio& Rd = Radios[static_cast<size_t>(RadioNow)];
+			if (RadioStage == 1)
+			{
+				if (!HiddenNow(Rd.Caller) && !OffRide(Rd.Caller)) RadioWho[RadioMany++] = Rd.Caller;
+			}
+			else if (Battle >= Rd.Land - Soon(Set.RadioLead + Set.ShotLeast + 0.5)) RadioMany = RadioMen(Rd, Battle, RadioWho);
+		}
 		if (bAsked)
 		{
 			bAsked = false;
@@ -1954,6 +2117,31 @@ namespace LandEye
 		{
 			// The closing aerial, once.
 			Options.push_back({ Kind::Wide, -1, false });
+			Coming = -1;
+		}
+		else if (RadioMany > 0)
+		{
+			// Radio call, then the barrage: the man calling, near, as he begins; then the men under the fire, from a little
+			// off so the salvo lands in the picture round them.
+			bRadioChoice = true;
+			const bool bCaller = RadioStage == 1;
+			if (!bCaller)
+			{
+				const Radio& Rd = Radios[static_cast<size_t>(RadioNow)];
+				bTrySalvo = true;
+				TryAim = Vec(Rd.X, Rd.Y, HeightAt(Rd.X, Rd.Y) + 1.0);
+				SalvoLand = Rd.Land;
+			}
+			for (int K = 0; K < RadioMany; ++K) Options.push_back({ Kind::Watch, RadioWho[K], bCaller });
+			if (bCaller) Options.push_back({ Kind::Watch, RadioWho[0], false });
+			// (none of them fit: the field weighed away from them, as for any cut that found no place, not the aerial)
+			for (int K = 0; K < 4; ++K) ChoiceTop[K] = K < RadioMany ? Pick{ 0.0, RadioWho[K] } : Pick();
+			bScanOwnTurn = true;
+			bScanTanksOnly = bScanSquadOnly = false;
+			bScanRide = RideBlock >= 0;
+			ScanBlock = RideBlock;
+			bScanFallsDue = Real - LastFallCut >= 6.0;
+			bScanFighting = bFighting;
 			Coming = -1;
 		}
 		else if (MassDue(Battle, Coming))
@@ -2368,7 +2556,11 @@ namespace LandEye
 		// and went with every small change of the field)
 		if (ChoiceStage == 2)
 		{
-			if (bMiddle)
+			// (the barrage's cut has no long lens from a bank in the hedges: framed toward the salvo or not taken, and the
+			// film's own weighing after it framed as ever)
+			const bool bFarBank = bMiddle && !bTrySalvo;
+			bTrySalvo = false;
+			if (bFarBank)
 			{
 				bLoose = true;
 				bNearWatch = false;
@@ -2478,6 +2670,7 @@ namespace LandEye
 		bChoosing = false;
 		bLoose = false;
 		TryHouse = -1;
+		bTrySalvo = false;
 		bShotAsked = bChoiceAsked;
 		if (Shot == Kind::Wide && Battle > Rec->End) bClosed = true;
 		Recent.push_back(Shot);
@@ -2963,6 +3156,51 @@ namespace LandEye
 				break;
 			}
 		}
+		// Radio call, then the barrage (Brian's release 2 ask): a fresh call for fire coming, the film cuts to the man calling
+		// it as he begins (once in RadioEvery); then, his guns' first salvo RadioLead from landing, to the men under it,
+		// unless the shot on the screen already shows the spot near, which then holds for it.
+		IndexRadios();
+		if (RadioStage == 2 && Battle > Radios[static_cast<size_t>(RadioNow)].Land + Soon(0.5)) RadioStage = 0;
+		if (!Radios.empty() && !bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && !bWaiting && !bShotAsked && (FellAt < 0.0 || Real > FellAt + Set.FallSeen))
+		{
+			if (RadioStage == 0 && Real - LastRadioReal >= Set.RadioEvery && Held >= Set.ShotLeast)
+			{
+				while (RadioNext < Radios.size() && Radios[RadioNext].T < Battle - Soon(1.0)) ++RadioNext;
+				if (RadioNext < Radios.size())
+				{
+					const Radio& Rd = Radios[RadioNext];
+					const Track& Tc = Rec->Tracks[static_cast<size_t>(Rd.Caller)];
+					const bool bUp = Tc.Start() <= Battle && !(Tc.Fell >= 0.0 && Tc.Fell < Rd.Land) && !(Tc.Out >= 0.0 && Tc.Out < Rd.Land);
+					if (Battle >= Rd.T - Soon(0.5) && Rd.Land - Battle >= Soon(Set.ShotLeast + Set.RadioLead + 0.3) && bUp && !HiddenNow(Rd.Caller) && !OffRide(Rd.Caller))
+					{
+						RadioNow = static_cast<int>(RadioNext++);
+						RadioStage = 1;
+						bCut = true;
+						Reason = Why::Action;
+					}
+				}
+			}
+			else if (RadioStage == 2)
+			{
+				const Radio& Rd = Radios[static_cast<size_t>(RadioNow)];
+				if (Battle >= Rd.Land - Soon(Set.RadioLead) && Held >= Set.ShotLeast)
+				{
+					const Vec At(Rd.X, Rd.Y, HeightAt(Rd.X, Rd.Y) + 1.0);
+					if (Shot != Kind::Wide && InPicture(Now, At, 0.8) && (At - Now.Eye).Length() < (Now.Fov < 30.0 ? 400.0 : 200.0))
+					{
+						RadioStage = 0;
+						WaitFor = std::max(WaitFor, Rd.Land);
+						ShotLength = std::max(ShotLength, Held + OnScreen(Rd.Land - Battle) + 2.5);
+						if (!Beats.empty()) Beats.back().bBarrage = true;
+					}
+					else
+					{
+						bCut = true;
+						Reason = Why::Action;
+					}
+				}
+			}
+		}
 		// A shell landing at the lens (in the picture within a few metres, or right by it): cut on its flash, as a war film
 		// cuts on an impact, not 0.8 s of dirt and dark smoke filling the picture (the second cut's Tiger shot).
 		if (!bChoosing && Shot != Kind::Open && Shot != Kind::Wide)
@@ -3122,6 +3360,30 @@ namespace LandEye
 			{
 				ChoiceFramesMost = std::max(ChoiceFramesMost, ChoiceFrames);
 				FinishChoice(Battle, Real);
+				// (radio call, then the barrage: on the caller, his guns' salvo to come; on the men under it, held for it)
+				if (RadioStage == 1)
+				{
+					const Radio& Rd = Radios[static_cast<size_t>(RadioNow)];
+					RadioStage = bRadioChoice && Subject == Rd.Caller ? 2 : 0;
+					if (RadioStage == 2)
+					{
+						LastRadioReal = Real;
+						Beats.push_back({ Rd.T, Rd.Land, Rd.X, Rd.Y, Rd.Caller, false });
+					}
+				}
+				else if (RadioStage == 2 && bRadioChoice)
+				{
+					// (placed framed toward the salvo: held for it; else the film's own shot, the barrage let go)
+					const Radio& Rd = Radios[static_cast<size_t>(RadioNow)];
+					RadioStage = 0;
+					if (bShotSalvo)
+					{
+						WaitFor = std::max(WaitFor, Rd.Land);
+						ShotLength = std::max(ShotLength, OnScreen(Rd.Land - Battle) + 2.5);
+						if (!Beats.empty()) Beats.back().bBarrage = true;
+					}
+				}
+				bRadioChoice = false;
 			}
 			else
 			{
@@ -3167,6 +3429,9 @@ namespace LandEye
 			if (Shot == Kind::Watch)
 			{
 				WantLook = bBody ? BodyAt : At + Vec(0.0, 0.0, 1.0);
+				// (the village still and the barrage's cut keep the look turned toward their house or salvo as placed, not
+				// eased back onto the man alone: a salvo framed at the picture's edge slid out of it as it landed)
+				if (ShotHouse >= 0 || bShotSalvo) WantLook = WantLook + (ShotAim - WantLook) * AimLook();
 			}
 			else if (Shot == Kind::Track)
 			{
