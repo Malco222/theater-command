@@ -2589,8 +2589,10 @@ export function bombLaw(g: Game, a: AirAssess, m: AirMission, target: number): B
   const stop = a.aa ? a.aa * WORKS.aa.cut : 0;
   const R = RAILWAYS.bomb, U = RAILWAYS.ruin;
   return {
-    hit: (m === 'night' ? AIR.combat.night.accuracy : 1) * techMul(g, nat, 'bombers'),
-    out: { scale: N.scale, most: N.max, keep: 1 - stop, worth: airWar(g) && r.fac <= 0 ? 0 : 1000 },
+    // As fly() aims them: the air war's day accuracy (227) and the weather on the day (127).
+    hit: (m === 'night' ? AIR.combat.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim,
+    // As fly() prices them: each whole share of output stopped worth what outputWorth says of the province.
+    out: { scale: N.scale, most: N.max, keep: 1 - stop, worth: outputWorth(g, r, 1) },
     // Where the line can be cut at all, and a factory wrecked at all: the rules' own tests, asked at the most.
     rail: railBombChance(g, target, 1e12) > 0 ? { scale: R.scale, most: R.most, stop } : null,
     ruin: ruinChance(g, r, 1) > 0 ? { over: U.over, chance: U.chance, cap: 0.95 } : null,
