@@ -1916,6 +1916,9 @@ static void TestFold()
 		// The art director's floor: 9 px figures at 1441 by 878 and from FigureFloorHigh up, not a pixel lower.
 		const double Floor = Look::FigureFloorHigh();
 		CHECK(Look::FigurePx(878.0 / 972.0) >= 9.0 && Look::FigurePx(Floor / 972.0) >= 9.0 && Look::FigurePx((Floor - 1.0) / 972.0) < 9.0);
+		// (the rule as it stands, until the art director rules how far down the floor reaches: from 806 high, so not at
+		// 1024 by 768, where the figures are 8.6 px. A change of CountPt or of the tab fails here, and the notes must say it)
+		CHECK(Floor > 768.0 && Floor <= 878.0 && Look::FigurePx(768.0 / 972.0) < 9.0 && Look::FigurePx(768.0 / 972.0) > 8.5);
 		CHECK(Look::FigurePx(1080.0 / 972.0) > Look::FigurePx(878.0 / 972.0));
 		// How much of the ribbon's tails shows round the tab (not under the disc, nor under the tab), for the art
 		// director: one figure leaves most of each tail; two or more cover most of what the disc leaves.
