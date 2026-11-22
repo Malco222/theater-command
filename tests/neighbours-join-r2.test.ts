@@ -19,7 +19,7 @@ import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, fo
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, orderHoldBack, previewLanding, runTurnAI, stepAI, whyNotAttack } from '../src/campaign/turn';
+import { attackOutlook, beginHuman, candidates, heldFromStart, humanUp, joinChoices, mayHold, orderAttack, orderHold, previewLanding, runTurnAI, stepAI, whyNotAttack } from '../src/campaign/turn';
 import { fieldCtrl } from '../src/campaign/siege';
 import { STACK, type BattleReport, type Corps, type Game, type Region } from '../src/campaign/types';
 
@@ -76,10 +76,12 @@ describe('the switch', () => {
     expect(joinersOf(g, [iv], target, a.defenders)).toBeNull();
     const o = attackOutlook(g, [iv], target)!;
     expect('join' in o).toBe(false);
-    // The player's hold-back order is refused, and writes nothing.
+    // The player's garrison toggle is refused, and writes nothing.
     const xvi = corps(g, 'GER', 'XVI Corps');
-    expect(orderHoldBack(g, xvi, true)).toBe(false);
+    expect(orderHold(g, xvi, true)).toBe(false);
+    expect(xvi.hold).toBe(false);
     expect('holdBack' in xvi).toBe(false);
+    expect(Object.keys(g.flags).some((k) => k.startsWith('garrison:'))).toBe(false);
     const rep = orderAttack(g, [iv], target)!;
     expect(joinedUnits(rep)).toBe(0);
     // A month of every staff's battles after it: nobody joins one, and no corps carries the new fields.
@@ -235,8 +237,8 @@ describe('who joins', () => {
   });
 });
 
-describe("who stays: a staff's hold, and its front rule (the design director's ruling 3)", () => {
-  it("a computer staff's corps under a hold stays, the Berlin garrison and the Ploiesti guard among them; the player's own does not", () => {
+describe("who stays: the hold, one mark for every corps, and a staff's front rule (the design director's ruling 3, and Q3 folded)", () => {
+  it("a corps under a hold stays, a staff's or the player's: the Berlin garrison and the Ploiesti guard among them", () => {
     // A war nobody plays: Army Poznan falls on Neumark, next door to Berlin; Bulgaria, at war with Romania, on Bucharest, next door to Ploiesti.
     const g = startOpen(createGame(3, null));
     const garrison = corps(g, 'GER', 'Berlin garrison'), guard = corps(g, 'ROM', 'Ploiesti guard');
@@ -251,11 +253,16 @@ describe("who stays: a staff's hold, and its front rule (the design director's r
     // Their holds lifted, both come up.
     garrison.hold = false; guard.hold = false;
     expect(counted()).toEqual([true, true]);
-    // In Germany's seat the Berlin garrison is the player's own: a hold binds a staff, never him.
+    // In Germany's seat the Berlin garrison is the player's own, and its hold from the setup binds it as it binds a
+    // staff's (Q3 folded: "A player never lacks a tool the computer has"; mayJoin reads one mark).
     const s = seat('GER');
-    const own = corps(s, 'GER', 'Berlin garrison');
+    const own = corps(s, 'GER', 'Berlin garrison'), berlinAttack = (): Assessment => assess(s, [corps(s, 'POL', 'Army Poznan')], s.byName['Neumark']);
     expect(own.hold).toBe(true);
-    expect(ids(assess(s, [corps(s, 'POL', 'Army Poznan')], s.byName['Neumark']), 'def')).toContain(own.id);
+    expect(mayJoin(s, own, s.byName['Neumark'])).toBe(false);
+    expect(ids(berlinAttack(), 'def')).not.toContain(own.id);
+    // He lifts it with his toggle, and it comes up.
+    expect(orderHold(s, own, false)).toBe(true);
+    expect(ids(berlinAttack(), 'def')).toContain(own.id);
   });
 
   it("a staff's corps its front rule keeps stays: two corps stay to screen any place that faces the enemy (screen); the player's are under no front rule", () => {
@@ -381,8 +388,8 @@ describe('when they come up', () => {
     JOIN.on = true;
     expect(on.A).toBeGreaterThan(off.A);
     expect(on.D).toBeGreaterThan(off.D);
-    // Every German next door held back, the attack is reckoned as with the switch off and the Polish joiners are still in the defence.
-    for (const c of nextDoor(g, target)) if (c.nat === 'GER') expect(orderHoldBack(g, c, true)).toBe(true);
+    // Every German next door made a garrison, the attack is reckoned as with the switch off and the Polish joiners are still in the defence.
+    for (const c of nextDoor(g, target)) if (c.nat === 'GER') expect(orderHold(g, c, true)).toBe(true);
     const held = assess(g, [iv], target);
     expect(held.join!.att).toHaveLength(0);
     expect(held.A).toBe(off.A);
@@ -475,26 +482,67 @@ describe('the battle', () => {
   });
 });
 
-describe("the player's hold-back", () => {
-  it('keeps his corps out of the battles next door until he lets them go; he cannot hold back the enemy', () => {
+describe("the player's garrison toggle (Q3 folded: one mark, one toggle, worded Garrison)", () => {
+  it('his one toggle sets and lifts the hold, the mark the staffs read: a held corps of his does not join', () => {
     const { g, lodz: target, iv } = lodz();
     const xvi = corps(g, 'GER', 'XVI Corps');
+    expect(xvi.hold).toBe(false);
     expect(ids(assess(g, [iv], target), 'att')).toContain(xvi.id);
-    expect(orderHoldBack(g, xvi, true)).toBe(true);
-    expect(xvi.holdBack).toBe(true);
+    // Pressed: the corps' own hold is set, the very mark a computer staff's corps carries; it stays out.
+    expect(mayHold(g, xvi)).toBe(true);
+    expect(orderHold(g, xvi, true)).toBe(true);
+    expect(xvi.hold).toBe(true);
+    expect('holdBack' in xvi).toBe(false);
+    expect(mayJoin(g, xvi, target)).toBe(false);
     const held = assess(g, [iv], target);
     expect(ids(held, 'att')).not.toContain(xvi.id);
     // (The next corps to come up takes its place among the five.)
     expect(held.join!.att).toHaveLength(STACK);
-    expect(orderHoldBack(g, corps(g, 'POL', 'Army Prusy'), true)).toBe(false);
-    expect(orderHoldBack(g, xvi, false)).toBe(true);
-    expect('holdBack' in xvi).toBe(false);
+    // The attack card names it among his garrisons next door, and offers nothing to press.
+    expect(joinChoices(g, held, target, [iv]).held.map((j) => j.corps)).toContain(xvi);
+    // Not the enemy's corps, nor an ally's that does not march in his army.
+    const prusy = corps(g, 'POL', 'Army Prusy'), slovak = corps(g, 'SVK', 'Army Bernolak');
+    expect(orderHold(g, prusy, true)).toBe(false);
+    expect(prusy.hold).toBe(false);
+    const was = slovak.hold;
+    expect(orderHold(g, slovak, !was)).toBe(false);
+    expect(slovak.hold).toBe(was);
+    // Pressed again: lifted, and it comes up.
+    expect(orderHold(g, xvi, false)).toBe(true);
+    expect(xvi.hold).toBe(false);
     expect(ids(assess(g, [iv], target), 'att')).toContain(xvi.id);
-    // A corps held back fights its own battles as before.
-    orderHoldBack(g, xvi, true);
+    // A garrison of his still fights where he sends it: the move rules never read his holds.
+    orderHold(g, xvi, true);
     const rep = orderAttack(g, [xvi], g.byName['Polish Silesia']);
     expect(rep).not.toBeNull();
     expect(rep!.attackers[0].name).toBe('XVI Corps');
+  });
+
+  it('holds from the setup start set, and say so until he presses the toggle', () => {
+    const g = seat('GER');
+    const mine = g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.hold);
+    // Germany's first-day holds: the Berlin garrison, XII Corps at the Saar and the rest.
+    expect(mine.length).toBeGreaterThan(3);
+    for (const name of ['Berlin garrison', 'XII Corps']) expect(corps(g, 'GER', name).hold).toBe(true);
+    for (const c of mine) expect(heldFromStart(g, c)).toBe(true);
+    const xii = corps(g, 'GER', 'XII Corps');
+    orderHold(g, xii, false);
+    expect(heldFromStart(g, xii)).toBe(false);
+    orderHold(g, xii, true);
+    expect(xii.hold).toBe(true);
+    expect(heldFromStart(g, xii)).toBe(false);
+  });
+
+  it('with the switch off the toggle does not exist: nothing is written, and the holds are release 1\'s', () => {
+    const { g } = lodz();
+    JOIN.on = false;
+    const xvi = corps(g, 'GER', 'XVI Corps'), xii = corps(g, 'GER', 'XII Corps');
+    const flags = JSON.stringify(g.flags);
+    expect(mayHold(g, xvi)).toBe(false);
+    expect(orderHold(g, xvi, true)).toBe(false);
+    expect(orderHold(g, xii, false)).toBe(false);
+    expect([xvi.hold, xii.hold]).toEqual([false, true]);
+    expect(JSON.stringify(g.flags)).toBe(flags);
   });
 });
 
@@ -921,18 +969,44 @@ describe('saves', () => {
   it('keep what the rule writes, and give it back as it was', () => {
     const { g, lodz: target, iv } = lodz();
     const xvi = corps(g, 'GER', 'XVI Corps');
-    orderHoldBack(g, xvi, true);
+    orderHold(g, xvi, true);
     const rep0 = orderAttack(g, [iv], target)!;
     const text = saveGame(g);
     const back = loadGame(text)!;
     expect(saveGame(back)).toBe(text);
     const xviBack = back.corps.find((c) => c.id === xvi.id)!;
-    expect(xviBack.holdBack).toBe(true);
+    expect(xviBack.hold).toBe(true);
+    expect(heldFromStart(back, xviBack)).toBe(false);
     expect(xviBack.joinedIn).toBeUndefined();
     expect(back.corps.filter((c) => c.joinedIn === g.turn).map((c) => c.id).sort()).toEqual([...rep0.attackers, ...rep0.defenders].filter((u) => u.joined !== undefined).map((u) => u.corps!).sort());
     const rep = back.reports[back.reports.length - 1];
     expect(rep).toEqual(rep0);
     expect(rep.attackers.some((u) => u.joined !== undefined && u.arrive !== undefined && u.from !== undefined && u.corps !== undefined)).toBe(true);
+  });
+
+  it("an old save's hold-back loads as that corps' hold, the one mark; with the switch off it is carried and never read", () => {
+    // A save from the build before the fold: XVI Corps held back by the player's old order, its hold not set.
+    const { g } = lodz();
+    const xvi = corps(g, 'GER', 'XVI Corps');
+    xvi.holdBack = true;
+    const text = saveGame(g);
+    expect(text).toContain('"holdBack":true');
+    const back = loadGame(text)!;
+    const x = back.corps.find((c) => c.id === xvi.id)!;
+    expect(x.hold).toBe(true);
+    expect(heldFromStart(back, x)).toBe(false);
+    expect('holdBack' in x).toBe(false);
+    expect(back.corps.some((c) => c.holdBack !== undefined)).toBe(false);
+    expect(mayJoin(back, x, back.byName['Lodz'])).toBe(false);
+    // Lifted with the toggle, like any hold.
+    expect(orderHold(back, x, false)).toBe(true);
+    expect(mayJoin(back, x, back.byName['Lodz'])).toBe(true);
+    // Off: the save loads as it was written.
+    JOIN.on = false;
+    const off = loadGame(text)!;
+    const y = off.corps.find((c) => c.id === xvi.id)!;
+    expect([y.hold, y.holdBack]).toEqual([false, true]);
+    expect(saveGame(off)).toBe(text);
   });
 
   it('saved without the new fields, load as before: nobody held back, nobody spent, and the rule reads them from there', () => {

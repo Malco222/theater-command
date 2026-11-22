@@ -1390,29 +1390,73 @@ export function orderStance(g: Game, c: Corps, posture: Posture): boolean {
 export const postureOf = (c: Corps): Posture => (c.yields ? 'back' : c.digs ? 'dig' : 'stand');
 
 /**
- * Neighbours join the fight (release 2, its switch on): the player's standing order that one of his corps, or an
- * ally's that marches in his army, stays out of the battles next door ('hold' false lets it join them again). His
- * allies' staffs send theirs as they see fit. Refused with the switch off, so that nothing of it is written.
+ * Neighbours join the fight (release 2, its switch on; the design director's ruling of 18:10Z and 18:12Z, Q3 folded:
+ * "A player never lacks a tool the computer has"): the garrison toggle, one press per corps of his army, his own and
+ * an ally's that marches in it (canOrder), as the hold-back order was. It sets ('on') or lifts the corps' hold, the
+ * one mark every corps carries and the computer staffs read: a corps under it stays where it is and joins no battle
+ * next door (mayJoin, join.ts). His holds from the setup start set, and so does an ally's corps that joins his army
+ * under its staff's hold; the mark goes home with it. He can still send a garrison anywhere himself: the move rules
+ * never read his holds. Refused with the switch off: release 1 has no such order, and its holds never touch the
+ * player. (Before the fold this was the hold-back order, a mark of its own: a save that carries one loads as the
+ * corps' hold, save.ts.)
  */
-export function orderHoldBack(g: Game, c: Corps, hold: boolean): boolean {
-  if (!joinRules() || !canOrder(g, c)) return false;
-  if (hold) c.holdBack = true; else delete c.holdBack;
+export function orderHold(g: Game, c: Corps, on: boolean): boolean {
+  if (!mayHold(g, c)) return false;
+  c.hold = on;
+  // (Pressed once, its hold is his own and no longer the setup's: the card's hover says which, heldFromStart.)
+  g.flags[`garrison:${c.id}`] = g.turn;
   return true;
 }
-/** True where the player has ordered a corps to stay out of the battles next door. */
-export const holdsBack = (c: Corps): boolean => !!c.holdBack;
+/** True where the player can press a corps' garrison toggle now: one of his army's, in his month, with the switch on. */
+export const mayHold = (g: Game, c: Corps): boolean => joinRules() && canOrder(g, c);
+/** True where a corps of the player's is a garrison from the start of the campaign: held by the setup, and its toggle never pressed. */
+export const heldFromStart = (g: Game, c: Corps): boolean => c.hold && g.flags[`garrison:${c.id}`] === undefined;
+/**
+ * The garrison's words (release 2, its switch on), for the browser page and any other interface: the design director's
+ * ruling of 18:12Z (one toggle, worded "Garrison") with the UI director's words (words-garrison-hold-r2.md). The tag's
+ * hover is the hold-back's own text, opened for a hold from the setup with the line the words' last section gives it;
+ * the strip's line and the tray's count are the last section's; the toggle's two hovers and the two notices are the
+ * words' first section's, written for the Garrison toggle, the last section having none of its own.
+ */
+export const GARRISON = {
+  tag: 'Garrison',
+  toggle: 'GARRISON',
+  held: 'Kept out of the battles next door: it fights only where you send it, and its month stays its own. Press again to let it come up.',
+  fromStart: 'Garrison from the start of the campaign.',
+  set: 'Make this corps the garrison here: it will not join a battle next door.',
+  lift: 'Free this corps from garrison duty: it can join a battle next door again.',
+} as const;
+/** The hover of the Garrison tag on a corps card of the player's. */
+export const garrisonHover = (g: Game, c: Corps): string => (heldFromStart(g, c) ? `${GARRISON.fromStart} ${GARRISON.held}` : GARRISON.held);
+/** The notice when he presses a corps' toggle: set, or lifted. */
+export const garrisonNotice = (g: Game, c: Corps): string => (c.hold
+  ? `${c.name} is now the garrison at ${g.regions[c.reg].name}: it will not join the battles next door.`
+  : `${c.name} is no longer a garrison: it can join the battles next door.`);
+/** The attack card's plain line for his garrisons next door: "Kept out, will not join: XII Corps, IX Corps and 2 more." Three names, then how many more. */
+export function keptOutLine(cs: Corps[]): string {
+  const names = cs.slice(0, 3).map((c) => c.name), more = cs.length - names.length;
+  const list = more > 0 ? `${names.join(', ')} and ${more === 1 ? 'one more' : `${more} more`}` : names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '';
+  return `Kept out, will not join: ${list}.`;
+}
+/** The tray's count for an army: "Battles next door: 4 join them, 3 stay out." No brackets: a garrison is the one mark that stays out. */
+export function nextDoorCount(cs: Corps[]): string {
+  const out = cs.filter((c) => c.hold).length, join = cs.length - out;
+  const parts = [join ? `${join} ${join === 1 ? 'joins' : 'join'} them` : '', out ? `${out} ${out === 1 ? 'stays' : 'stay'} out` : ''].filter(Boolean);
+  return `Battles next door: ${parts.join(', ')}.`;
+}
 
-/** One of the player's corps next door to a place he attacks, as the attack card offers it (release 2). */
+/** One of the player's corps next door to a place he attacks, as the attack card shows it (release 2). */
 export interface JoinChoice { corps: Corps; word: JoinWord | null; share: number }
 /**
- * The player's corps next door to a place he attacks, as the attack card offers them (release 2, its switch on):
- * those that come up in the attack, with when and for what share of it, and those he holds back from the battles
- * next door ('word' null). Each is pressed to change it (orderHoldBack). Empty with the switch off, or with no attack.
+ * The player's corps next door to a place he attacks, as the attack card shows them (release 2, its switch on): those
+ * that come up in the attack, with when and for what share of it, and his garrisons there, which will not ('word'
+ * null): corps under a hold, set from the setup or by his toggle on the corps' own card (orderHold). The card only
+ * names them; the toggle is on the corps' card alone. Empty with the switch off, or with no attack.
  */
 export function joinChoices(g: Game, a: Assessment | null, target: Region, going: Corps[]): { coming: JoinChoice[]; held: JoinChoice[] } {
   if (!joinRules() || !a) return { coming: [], held: [] };
   const coming = (a.join?.att ?? []).filter((j) => canOrder(g, j.corps)).map((j) => ({ corps: j.corps, word: j.word, share: j.share }));
-  const held = target.nb.flatMap((k) => g.regions[k].units).filter((c) => holdsBack(c) && canOrder(g, c) && !going.includes(c)).map((c) => ({ corps: c, word: null, share: 0 }));
+  const held = target.nb.flatMap((k) => g.regions[k].units).filter((c) => c.hold && canOrder(g, c) && !going.includes(c)).map((c) => ({ corps: c, word: null, share: 0 }));
   return { coming, held };
 }
 

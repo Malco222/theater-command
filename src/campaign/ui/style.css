@@ -2432,6 +2432,17 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .uchip b { font-weight: 600; white-space: nowrap; }
 .uchip small { font-size: 11px; color: #f0b3a5; white-space: nowrap; }
 .uchip small.held { color: var(--ink-3); }
+/* Release 2, its switch on: the garrison toggle under a corps card in the tray, the tray's count of the battles next
+   door, and the attack card's plain line of the garrisons next door (the UI director's words-garrison-hold-r2.md). */
+.ucardw { display: grid; gap: 3px; align-content: start; flex: 0 0 auto; min-width: 0; }
+.gtog { font: inherit; font-size: 10.5px; letter-spacing: .08em; line-height: 1.25; padding: 2px 6px; border-radius: 3px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-3); cursor: pointer; white-space: nowrap; }
+.gtog:hover { border-color: var(--ink-3); color: var(--ink); }
+.gtog.on { border-color: var(--brass); color: var(--ink); box-shadow: inset 0 0 0 1px var(--brass); }
+.tnext { display: flex; align-items: center; flex: 0 0 auto; }
+.tnext small { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.note.massnote.joinnote { flex-wrap: wrap; }
+.note.massnote.joinnote .uchip { flex: none; }
+.note.massnote.joinnote .keptout { flex: 1 0 100%; font-size: 12px; color: var(--ink-2); }
 button.uchip { cursor: pointer; }
 button.uchip:hover { border-color: var(--brass); }
 .uchip.pick { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }

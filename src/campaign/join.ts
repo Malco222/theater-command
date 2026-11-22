@@ -12,16 +12,18 @@
 //    weeks it has in hand this month, the ground, the bridges, the line a computer staff keeps to). The month is the
 //    calendar's, whoever's phase it is: a corps whose nation plays later in the month has its whole month still in
 //    hand, whatever it did last month (weeksInHand, battleThisMonth). Never the town's guard, which is no corps, nor a
-//    town's garrison or fortress troops. At most STACK a side, the earliest to come up first. The player may hold his
-//    own corps back (orderHoldBack, turn.ts: on the tray for an army, on the attack card corps by corps). Who stays
-//    (the design director's ruling 3, 11:09Z): a computer staff's corps under a hold stays, as the Berlin garrison and
-//    the Ploiesti guard do (a hold binds a staff, never the player's own corps); and so does one that the staff's own
-//    front rule keeps where it is. That rule is screen (ai.ts advance, game.ts screens): two corps stay to screen any
-//    place that faces the enemy, read with the staff's own masks (a theatre plan's 'mask': the garrisons it leaves to
-//    others; staffMask, none in free play). A corps that has joined a battle this month, or is taken for this one, is
-//    gone from its province's count, so of a province facing the enemy all but two may come up in a month. The
-//    player's corps are under no front rule. Otherwise a staff, an ally's included, sends every corps it can, save the
-//    main body it keeps for a second wave (ai.ts, twoWaves: AttackOpts 'spare').
+//    town's garrison or fortress troops. At most STACK a side, the earliest to come up first. Who stays (the design
+//    director's ruling 3, 11:09Z, and Q3 folded, 18:10Z and 18:12Z: "A player never lacks a tool the computer has"):
+//    a corps under a hold stays, whoever's it is. The hold is one mark every corps carries, the one the computer
+//    staffs read, as the Berlin garrison and the Ploiesti guard do; the player sets and lifts it on each corps of his
+//    army with one toggle, worded "Garrison" (orderHold, turn.ts), and holds from the setup start set; the toggle
+//    exists only with the switch on. And a staff's corps stays where its own front rule keeps it. That rule is screen
+//    (ai.ts advance, game.ts screens): two corps stay to screen any place that faces the enemy, read with the staff's
+//    own masks (a theatre plan's 'mask': the garrisons it leaves to others; staffMask, none in free play). A corps
+//    that has joined a battle this month, or is taken for this one, is gone from its province's count, so of a
+//    province facing the enemy all but two may come up in a month. The player's corps are under no front rule.
+//    Otherwise a staff, an ally's included, sends every corps it can, save the main body it keeps for a second wave
+//    (ai.ts, twoWaves: AttackOpts 'spare').
 // 2. When: by the game's own move rules, one map for the joiner, the staffs and the player (the design director's
 //    ruling 1, 11:09Z). The week of its month it comes up in is weekOf of its move into the battle province (moveCost),
 //    out of the weeks the corps has in hand this month, of its month's weeks (marchWeeks): never a fixed minute or a
@@ -160,13 +162,13 @@ export function foughtNow(g: Game, c: Corps): void {
 
 /**
  * True where a corps standing in a province next door is fit to come up in a battle there, its month apart: in the
- * field, not held back by the player nor under a staff's hold, fed, on ground its side holds, and not barred from the
- * battle province by the move rules (the ground and the bridges, and the line a computer staff keeps to).
+ * field, under no hold, fed, on ground its side holds, and not barred from the battle province by the move rules (the
+ * ground and the bridges, and the line a computer staff keeps to).
  */
 function standsReady(g: Game, c: Corps, target: Region): boolean {
-  if (c.dead || c.kind === 'fort' || c.town !== undefined || c.leave !== undefined || c.fortress || c.holdBack) return false;
-  // (A hold binds a computer staff, never the player's own corps: the Berlin garrison, the Ploiesti guard, the Westwall.)
-  if (armyOf(c) !== g.human && c.hold) return false;
+  // (The hold is one mark, read alike for every corps, the player's and the staffs': the Berlin garrison, the Ploiesti
+  // guard, the Westwall, and every corps the player has made a garrison with his toggle (orderHold, turn.ts).)
+  if (c.dead || c.kind === 'fort' || c.town !== undefined || c.leave !== undefined || c.fortress || c.hold) return false;
   if (!c.supplied) return false;
   const here = g.regions[c.reg];
   if (!here.nb.includes(target.id) || !allied(g, c.nat, here.ctrl) || !allied(g, c.nat, fieldCtrl(g, here))) return false;

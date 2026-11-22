@@ -7,7 +7,8 @@
 // 3. "This month" is the calendar's: a corps whose nation plays later in the month has its whole month in hand,
 //    whatever it left unspent or fought last month; a battle fought earlier this month in another nation's phase
 //    still counts after its own month has begun (foughtIn).
-// 4. The player's hold-back order can be given in the game: the tray, the attack card's chips, the corps card's tag.
+// 4. The player's hold-back order can be given in the game. Since Q3 was folded (the design director, 18:12Z) it is
+//    the one garrison toggle on each of his corps' cards, and the attack card and the tray only show what it set.
 // 5. A corps on foot that comes up into open desert against tanks and lorries is driven round, as the defenders on
 //    foot outside their box are.
 //
@@ -28,7 +29,7 @@ import { identify } from '../src/campaign/intel';
 import { monthCard, monthMark, type CardRow, type MonthCard, type MonthMark } from '../src/campaign/monthcard';
 import { garrison, previewSally } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, candidates, canOrder, endHuman, holdsBack, humanUp, joinChoices, orderAttack, orderHoldBack, orderJoin, orderMove, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
+import { GARRISON, beginHuman, candidates, canOrder, endHuman, garrisonHover, garrisonNotice, humanUp, joinChoices, keptOutLine, nextDoorCount, orderAttack, orderHold, orderJoin, orderMove, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
 import { type BattleReport, type Corps, type Game, type Region } from '../src/campaign/types';
 import { type TicketLine } from '../src/core/ticket';
 
@@ -70,6 +71,9 @@ describe("1. an ally's corps in the player's army", () => {
     relocate(g, uk, lorraine);
     expect(orderJoin(g, uk)).toBe(true);
     expect(uk.joint).toBe('FRA');
+    // (It came under Britain's hold from the setup, the one mark: a corps in his army is his to free with its toggle.)
+    expect(uk.hold).toBe(true);
+    expect(orderHold(g, uk, false)).toBe(true);
     // The month ends; the next opens with Germany's phase, before France's.
     endHuman(g);
     for (let k = 0; g.turn === 1 && k < 200; k++) stepAI(g);
@@ -210,8 +214,8 @@ describe("3. the month is the calendar's", () => {
   });
 });
 
-describe("4. the player's hold-back order, in the game", () => {
-  it('the attack card offers his corps next door: those that come up, and those he holds back, each pressed to change it', () => {
+describe("4. the player's garrison toggle, in the game (Q3 folded: one mark, one toggle, worded Garrison)", () => {
+  it('the attack card shows his corps next door: those that come up, and his garrisons there, which will not', () => {
     const g = seat('GER');
     const target = g.byName['Lodz'], iv = corps(g, 'GER', 'IV Corps'), xvi = corps(g, 'GER', 'XVI Corps');
     let a = assess(g, [iv], target);
@@ -219,12 +223,13 @@ describe("4. the player's hold-back order, in the game", () => {
     expect(next.coming.map((j) => j.corps.id)).toEqual(ids(a, 'att'));
     expect(next.coming.every((j) => j.word !== null && j.share > 0)).toBe(true);
     expect(next.held).toEqual([]);
-    // Pressed: XVI Corps stays out, and the card offers it to be let go again.
-    expect(orderHoldBack(g, xvi, !holdsBack(xvi))).toBe(true);
+    // His toggle on XVI Corps' card: it is a garrison, and the card names it among those that will not join.
+    expect(orderHold(g, xvi, true)).toBe(true);
     a = assess(g, [iv], target);
     next = joinChoices(g, a, target, [iv]);
     expect(next.coming.map((j) => j.corps)).not.toContain(xvi);
     expect(next.held.map((j) => j.corps)).toEqual([xvi]);
+    expect(keptOutLine(next.held.map((j) => j.corps))).toBe('Kept out, will not join: XVI Corps.');
     // Sent in itself, it is no part of the strip.
     expect(joinChoices(g, assess(g, [iv, xvi], target), target, [iv, xvi]).held).toEqual([]);
     // Not the enemy's, and nothing with the switch off.
@@ -233,20 +238,51 @@ describe("4. the player's hold-back order, in the game", () => {
     expect(joinChoices(g, assess(g, [iv], target), target, [iv])).toEqual({ coming: [], held: [] });
   });
 
-  it('the page gives it: on the tray for the whole army, on the attack card for each corps, and shows it on the corps card', () => {
-    // The tray: a row for the battles next door, shown with the switch on, its buttons wired to the order.
-    expect(page).toMatch(/const able = mine && joinRules\(\) \? field\.filter\(\(c\) => canOrder\(g, c\)\) : \[\];/);
-    expect(page).toContain('data-act="joinnext" data-v="join"');
-    expect(page).toContain('data-act="joinnext" data-v="hold"');
-    expect(page).toMatch(/case 'joinnext': \{[\s\S]*?orderHoldBack\(g, c, hold\)[\s\S]*?refresh\(\); break;/);
-    // The attack card: his corps next door as chips pressed to hold back or let go, and the unsent chips say which.
+  it("the words are the UI director's: the tag, the toggle, the hovers, the notices, the strip's line and the tray's count", () => {
+    const g = seat('GER');
+    const xii = corps(g, 'GER', 'XII Corps'), xvi = corps(g, 'GER', 'XVI Corps');
+    // A hold from the setup: its hover opens with the line for it, then the hold-back's own text.
+    expect(GARRISON.tag).toBe('Garrison');
+    expect(GARRISON.toggle).toBe('GARRISON');
+    expect(garrisonHover(g, xii)).toBe(`Garrison from the start of the campaign. ${GARRISON.held}`);
+    expect(GARRISON.held).toBe('Kept out of the battles next door: it fights only where you send it, and its month stays its own. Press again to let it come up.');
+    expect(GARRISON.set).toBe('Make this corps the garrison here: it will not join a battle next door.');
+    expect(GARRISON.lift).toBe('Free this corps from garrison duty: it can join a battle next door again.');
+    orderHold(g, xvi, true);
+    expect(garrisonHover(g, xvi)).toBe(GARRISON.held);
+    expect(garrisonNotice(g, xvi)).toBe(`XVI Corps is now the garrison at ${g.regions[xvi.reg].name}: it will not join the battles next door.`);
+    orderHold(g, xvi, false);
+    expect(garrisonNotice(g, xvi)).toBe('XVI Corps is no longer a garrison: it can join the battles next door.');
+    // Three names, then how many more.
+    const five = g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.kind !== 'fort').slice(0, 5);
+    expect(keptOutLine(five)).toBe(`Kept out, will not join: ${five.slice(0, 3).map((c) => c.name).join(', ')} and 2 more.`);
+    expect(keptOutLine(five.slice(0, 4))).toBe(`Kept out, will not join: ${five.slice(0, 3).map((c) => c.name).join(', ')} and one more.`);
+    expect(keptOutLine(five.slice(0, 2))).toBe(`Kept out, will not join: ${five[0].name} and ${five[1].name}.`);
+    // The tray's count, with no brackets.
+    const seven = g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.kind !== 'fort' && !c.hold).slice(0, 7);
+    for (const c of seven.slice(4)) c.hold = true;
+    expect(nextDoorCount(seven)).toBe('Battles next door: 4 join them, 3 stay out.');
+    expect(nextDoorCount(seven.slice(0, 4))).toBe('Battles next door: 4 join them.');
+    expect(nextDoorCount(seven.slice(3, 5))).toBe('Battles next door: 1 joins them, 1 stays out.');
+  });
+
+  it('the page gives it: one toggle under each of his corps cards in the tray, and no second control anywhere', () => {
+    // The corps card in the tray: the Garrison tag on a held corps of his, and the toggle, lit while it is set.
+    expect(page).toMatch(/joinRules\(\) && mine && c\.hold && c\.kind !== 'fort' \? `<span class="tag" title="\$\{esc\(garrisonHover\(g, c\)\)\}">\$\{GARRISON\.tag\}<\/span>`/);
+    expect(page).toMatch(/if \(!\(mine && mayHold\(g, c\)\)\) return box;/);
+    expect(page).toContain('<button class="gtog${c.hold ? \' on\' : \'\'}" data-act="hold" data-id="${c.id}" aria-pressed="${c.hold ? \'true\' : \'false\'}" title="${esc(c.hold ? GARRISON.lift : GARRISON.set)}">${GARRISON.toggle}</button>');
+    // (Its own action, "hold": "garrison" is already the order into a town, and a second case of it would never run.)
+    expect(page.match(/case 'hold':/g)).toHaveLength(1);
+    expect(page).toMatch(/case 'hold': \{[\s\S]*?orderHold\(g, c, !c\.hold\)\) \{ ui\.msg = garrisonNotice\(g, c\); queueSave\(\); \}[\s\S]*?refresh\(\); break;/);
+    // The corps row: his own held corps carry the word too, with the switch on (off, as release 1: another's only).
+    expect(page).toContain("if (c.hold && (!mine || joinRules())) tags.push(`<span class=\"tag\">${GARRISON.tag}</span>`);");
+    // The tray's row is a count, and the attack card's strip a plain line: nothing there is pressed.
+    expect(page).toContain('${esc(nextDoorCount(able))}');
+    expect(page).toContain('<span class="keptout">${esc(keptOutLine(next.held.map((j) => j.corps)))}</span>');
     expect(page).toMatch(/const nextDoor = joinChoices\(g, a, target, chosen\);/);
     expect(page).toContain('${joinStrip(nextDoor)}');
-    expect(page).toContain('data-act="joinhold" data-id="${c.id}"');
-    expect(page).toMatch(/case 'joinhold': \{[\s\S]*?orderHoldBack\(g, c, !holdsBack\(c\)\)[\s\S]*?redrawCard\(\); break;/);
+    for (const gone of ['data-act="joinnext"', 'data-act="joinhold"', 'orderHoldBack', 'holdsBack', 'Stays out', 'Stay out']) expect(page).not.toContain(gone);
     expect(page).toMatch(/note: why\(c\) \|\| joinNote\(c\)/);
-    // The corps card's tag.
-    expect(page).toMatch(/joinRules\(\) && holdsBack\(c\) \? `<span class="tag" title="\$\{esc\(JOIN_HELD\)\}">Stays out<\/span>`/);
   });
 });
 
@@ -323,8 +359,11 @@ describe("7. the month card's men lost", () => {
     const g = seat('FRA');
     const uk = corps(g, 'UK', 'London District');
     relocate(g, uk, g.byName['Lorraine']);
-    // (Its hold lifted: a computer staff's corps under a hold stays where it is, the design director's ruling 3.)
+    // (Its hold lifted: a computer staff's corps under a hold stays where it is, the design director's ruling 3. And the
+    // 5th Army's, a hold of his from the setup, lifted with its toggle: under a hold it would stay, as Q3 folded has it.
+    // With the switch off the toggle does not exist and the setup hold stays, as in release 1.)
     uk.hold = false;
+    expect(orderHold(g, corps(g, 'FRA', '5th Army'), false)).toBe(JOIN.on);
     const marks = { FRA: monthMark(g, 'FRA'), UK: monthMark(g, 'UK') };
     const rep = orderAttack(g, [corps(g, 'FRA', '3rd Army')], g.byName['Saar'])!;
     return { g, marks, rep };

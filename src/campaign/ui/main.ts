@@ -21,7 +21,7 @@ import {
 import {
   EVE_NO_RAID, beginEve, beginHuman, canOrder, candidates, current, declarable, gunsLeftAlone, marchOrder, whyNotLead, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
-  holdsBack, joinChoices, orderHoldBack, type JoinChoice,
+  GARRISON, garrisonHover, garrisonNotice, joinChoices, keptOutLine, mayHold, nextDoorCount, orderHold, type JoinChoice,
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, ticketSeen, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
@@ -2282,7 +2282,8 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (c.job) tags.push(`<span class="tag good" title="${esc(jobLine(g, c))}">At work</span>`);
   else if (c.kind === 'eng' && c.nat === g.human && groundRules(g)) tags.push('<span class="tag" title="Give it work from the list under the forces: bridges, railways, bombed factories, fortifications, minefields or demolition.">Engineers: ready for work</span>');
   if (c.airborne) tags.push(`<span class="tag good" title="Parachute and glider troops. Once a month they can be flown from a friendly coast to an enemy one across a single sea, with no ships and whoever holds the water. They fight there at ${Math.round(NAVY.landing.airborne * 100)}%, without heavy weapons, and not under a sky the enemy's fighters hold.">Airborne</span>`);
-  if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
+  // (Release 2, its switch on: the hold is one mark, and his own held corps carry the word too, as the UI director's words have it.)
+  if (c.hold && (!mine || joinRules())) tags.push(`<span class="tag">${GARRISON.tag}</span>`);
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
   if (c.dug) tags.push(`<span class="tag good${autoDig() && worksOf(c) < 0.95 ? ' worn' : ''}" title="${esc(autoDig() ? `${worksWords(c)} ${STANCE_HOLD}` : STANCE_DIG)}">${autoDig() ? `Dug in · ${worksTag(c)}` : 'Dug in'}</span>`);
   else if (c.digging && autoDig()) tags.push(`<span class="tag good worn" title="${esc('Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.')}">Digging · no works yet</span>`);
@@ -2406,12 +2407,16 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${joinRules() && holdsBack(c) ? `<span class="tag" title="${esc(JOIN_HELD)}">Stays out</span>` : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
-  return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
+  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${joinRules() && mine && c.hold && c.kind !== 'fort' ? `<span class="tag" title="${esc(garrisonHover(g, c))}">${GARRISON.tag}</span>` : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const box = `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
     <span class="chits">${card.divisions.map((d) => chit(d)).join('')}</span>${carryRow(c)}
     ${moodMeters(c, card.mood)}${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
+  // The garrison toggle (release 2, its switch on; Q3 folded): one press per corps of his own, under its card, lit while
+  // it is set. Off, the card is release 1's. (A fort's works take no orders and never come up: neither toggle nor tag.)
+  if (!(mine && mayHold(g, c))) return box;
+  return `<div class="ucardw">${box}<button class="gtog${c.hold ? ' on' : ''}" data-act="hold" data-id="${c.id}" aria-pressed="${c.hold ? 'true' : 'false'}" title="${esc(c.hold ? GARRISON.lift : GARRISON.set)}">${GARRISON.toggle}</button></div>`;
 }
 
 /**
@@ -2558,13 +2563,10 @@ function drawTray(): void {
       ? `<button class="${!under.has('back') ? 'on' : ''}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_HOLD)}">Stand and dig in</button>`
       : `<button class="${all('stand')}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_STAND)}">Stand</button><button class="${all('dig')}" data-act="ifattacked" data-v="dig" title="${esc(STANCE_DIG)}">Dig in</button>`}<button class="${all('back')}" data-act="ifattacked" data-v="back" title="${esc(STANCE_BACK)}">Fall back</button></div>`
     : '';
-  // Battles next door (release 2, its switch on): the army comes up in them where it can reach them in time, or he
-  // keeps it out of them and its month stays its own. The whole army in the tray takes the order together.
+  // Battles next door (release 2, its switch on): how many of the army come up in them where they can reach them in
+  // time, and how many are garrisons and stay out. Only a count: the one control is each corps' own toggle (Q3 folded).
   const able = mine && joinRules() ? field.filter((c) => canOrder(g, c)) : [];
-  const outs = able.filter(holdsBack).length;
-  const nextDoor = able.length
-    ? `<div class="tstance" role="group" aria-label="Battles next door"><small>Battles next door${outs && outs < able.length ? ' · mixed' : ''}</small><button class="${!outs ? 'on' : ''}" data-act="joinnext" data-v="join" title="${esc(JOIN_GO)}">Join them</button><button class="${outs === able.length ? 'on' : ''}" data-act="joinnext" data-v="hold" title="${esc(JOIN_HELD)}">Stay out</button></div>`
-    : '';
+  const nextDoor = able.length ? `<div class="tnext" title="${esc(JOIN_GO)}"><small>${esc(nextDoorCount(able))}</small></div>` : '';
   // STAND THIS MONTH (Version 82): the one small order that takes the army in hand out of NEXT ARMY's round until next month.
   const st = mine && !onEve(g) ? armyStands(g, a.reg) : null;
   const standRow = st
@@ -7562,23 +7564,25 @@ function softenFold(target: Region, chosen: Corps[], look: Outlook | null): stri
   return foldBlock('attack:soften', 'Soften the line first', can.length ? can.join(', ') : 'nothing can be done to it this month', `<div class="softbody">${s?.html ?? ''}${scout ? `<div class="softopt">${scout}</div>` : ''}</div>`, open);
 }
 
-/** What the hold-back order does, said on its buttons and its tag (release 2). */
-const JOIN_HELD = 'Kept out of the battles next door: it fights only where you send it, and its month stays its own. Press again to let it come up.';
+/** What joining a battle next door does, said on the tray's count (release 2). The garrison's own words are turn.ts's GARRISON. */
 const JOIN_GO = 'Comes up in a battle next door, either side, where it can march in before the fighting is over. It counts for the part of the battle it is there for, takes its share of the losses, stays where it stands, and its month is spent.';
 
 /**
- * Release 2, its switch on: his corps next door that come up in this attack, and those he holds back from the
- * battles next door, each a chip pressed to change it. Nothing where there are none.
+ * Release 2, its switch on: his corps next door that come up in this attack, as chips with when they come up, and
+ * under them his garrisons there, which will not, in one plain line (the UI director's words). Nothing here is
+ * pressed: a garrison is set and freed on its own card (orderHold). Nothing where there are none.
  */
 function joinStrip(next: { coming: JoinChoice[]; held: JoinChoice[] }): string {
   if (!next.coming.length && !next.held.length) return '';
   const chipOf = (j: JoinChoice): string => {
-    const c = j.corps, on = j.word !== null;
-    const title = `${corpsNamed(g, c.nat, c.name)} at ${g.regions[c.reg].name} · ${on ? `comes up ${j.word}, for about ${Math.round(j.share * 100)}% of the battle, and its month is spent · press to keep it out` : 'kept out of the battles next door · press to let it come up'}`;
-    return `<button class="uchip${on ? ' pick' : ' out'}" data-act="joinhold" data-id="${c.id}" aria-pressed="${on ? 'true' : 'false'}" title="${esc(title)}">${icon(c)}<b>${esc(corpsNamed(g, c.nat, c.name))}</b>${c.joint ? chip(c.nat) : ''}<small class="held">${on ? esc(j.word!) : 'stays out'}</small></button>`;
+    const c = j.corps;
+    const title = `${corpsNamed(g, c.nat, c.name)} at ${g.regions[c.reg].name} · comes up ${j.word}, for about ${Math.round(j.share * 100)}% of the battle, and its month is spent`;
+    return `<span class="uchip pick" title="${esc(title)}">${icon(c)}<b>${esc(corpsNamed(g, c.nat, c.name))}</b>${c.joint ? chip(c.nat) : ''}<small class="held">${esc(j.word!)}</small></span>`;
   };
   const n = next.coming.length;
-  return `<div class="note massnote joinnote"><span><b>${n ? `${n === 1 ? 'One of your corps comes' : `${n} of your corps come`} up from next door.</b> ${n === 1 ? 'It counts' : 'They count'} for the part of the battle ${n === 1 ? 'it reaches' : 'they reach'} in time, stay${n === 1 ? 's' : ''} where ${n === 1 ? 'it stands' : 'they stand'}, and ${n === 1 ? 'its' : 'their'} month is spent. ` : '<b>Next door, kept out.</b> '}Press a corps to keep it out of the battles next door, or to let it come up again.</span><span class="fchips">${[...next.coming, ...next.held].map(chipOf).join('')}</span></div>`;
+  const lead = n ? `<span><b>${n === 1 ? 'One of your corps comes' : `${n} of your corps come`} up from next door.</b> ${n === 1 ? 'It counts' : 'They count'} for the part of the battle ${n === 1 ? 'it reaches' : 'they reach'} in time, stay${n === 1 ? 's' : ''} where ${n === 1 ? 'it stands' : 'they stand'}, and ${n === 1 ? 'its' : 'their'} month is spent.</span><span class="fchips">${next.coming.map(chipOf).join('')}</span>` : '';
+  const kept = next.held.length ? `<span class="keptout">${esc(keptOutLine(next.held.map((j) => j.corps)))}</span>` : '';
+  return `<div class="note massnote joinnote">${lead}${kept}</div>`;
 }
 
 function attackCard(): string {
@@ -7611,12 +7615,12 @@ function attackCard(): string {
   const foeEst = sure ? null : armyAt(g, target.id, foes[0]?.nat ?? target.ctrl)?.est ?? null;
   const why = (c: Corps): string => (c.joint && !hostileUnits(g, target, c.nat).length ? `${g.nations[c.nat].name} is not at war with them` : barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (!chosen.length && whyNotLead(g, [c], target.id) ? whyNotLead(g, [c], target.id)!.split('.')[0] : g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
   // (Guns or engineers picked with no infantry or tanks: the box gives ruling 211(a)'s reason, the foot's own words, never the roads.)
-  // (Release 2, its switch on: a corps not sent in still comes up from next door, unless he holds it back.)
+  // (Release 2, its switch on: a corps not sent in still comes up from next door, unless it is a garrison.)
   const nextDoor = joinChoices(g, a, target, chosen);
   const joinNote = (c: Corps): string => {
     if (inSet.has(c.id)) return '';
     const j = nextDoor.coming.find((x) => x.corps === c);
-    return j ? `joins ${j.word}` : nextDoor.held.some((x) => x.corps === c) ? 'stays out' : '';
+    return j ? `joins ${j.word}` : nextDoor.held.some((x) => x.corps === c) ? 'garrison' : '';
   };
   const ours: Side = {
     nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: rollDivs(chosen),
@@ -8997,20 +9001,6 @@ function onClick(e: MouseEvent): void {
         : `The army at ${at} takes no orders this month.`;
       refresh(); break;
     }
-    case 'joinnext': {
-      // The whole army in the tray stays out of the battles next door, or comes up in them again (release 2).
-      const a = trayArmy;
-      if (!a || a.nat !== g.human) break;
-      const hold = t.dataset.v === 'hold';
-      const at = g.regions[a.reg].name;
-      const field = g.regions[a.reg].units.filter((c) => armyOf(c) === a.nat && c.kind !== 'fort');
-      const told = field.filter((c) => orderHoldBack(g, c, hold)).length;
-      ui.msg = !told ? `The army at ${at} takes no orders this month.`
-        : hold ? `The army at ${at} stays out of the battles next door: it fights only where you send it.`
-        : `The army at ${at} comes up in the battles next door that it can reach in time.`;
-      if (told) queueSave();
-      refresh(); break;
-    }
     case 'unpick': ui.picked.clear(); ui.rail = ui.ship = ui.land = false; refresh(); break;
     case 'ship': ui.ship = !ui.ship; ui.rail = ui.land = false; refresh(); break;
     case 'shipto': shipPicked(id); break;
@@ -9470,11 +9460,12 @@ function onClick(e: MouseEvent): void {
       if (m.chosen.has(id)) m.chosen.delete(id); else m.chosen.add(id);
       redrawCard(); break;
     }
-    case 'joinhold': {
-      // A corps next door kept out of the battles there, or let come up again (release 2): a standing order.
+    case 'hold': {
+      // The garrison toggle on a corps' card (release 2, its switch on; Q3 folded): one press sets or lifts its hold.
+      // (Its action is "hold": "garrison" is the order that sends a corps into a town, below.)
       const c = g.corps.find((x) => x.id === id);
-      if (c && orderHoldBack(g, c, !holdsBack(c))) { ui.msg = holdsBack(c) ? `${c.name} stays out of the battles next door.` : `${c.name} comes up in the battles next door again.`; queueSave(); }
-      redrawCard(); break;
+      if (c && orderHold(g, c, !c.hold)) { ui.msg = garrisonNotice(g, c); queueSave(); }
+      refresh(); break;
     }
     case 'probe': {
       // One corps feels out the line: the card is read again with what it found.

@@ -391,8 +391,9 @@ export interface Corps extends Storied {
   /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
   town?: number;
   /**
-   * Neighbours join the fight (release 2, its switch on: join.ts): the player's standing order that this corps stays
-   * out of battles next door. Absent, it joins one whenever it can. Only the player sets it, and only with the switch on.
+   * Neighbours join the fight (release 2): the player's hold-back order of the build before Q3 was folded (the design
+   * director, 18:12Z). Nothing writes it now: the hold is the one mark (orderHold, turn.ts). A save that carries
+   * it loads, with the switch on, as the corps' hold (save.ts); with the switch off it is carried and never read.
    */
   holdBack?: boolean;
   /** The month it last joined a battle next door (release 2, its switch on): its month is spent, and it stayed where it stood. */

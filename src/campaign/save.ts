@@ -22,6 +22,7 @@ import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
 import { WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
 import { openWinter } from './winter';
+import { JOIN } from './stage';
 import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
@@ -187,6 +188,11 @@ export function loadGame(text: string): Game | null {
     delete r.garr;
   });
   g.corps = d.corps as Corps[];
+  // Neighbours join the fight (release 2, its switch on): a save from the build before the hold was folded carries the
+  // player's hold-back order as a mark of its own. It loads as that corps' hold, the one mark (orderHold, turn.ts),
+  // and as his own, not the setup's (heldFromStart). With the switch off it is carried as it is and never read:
+  // release 1 has no such order.
+  if (JOIN.on) for (const c of g.corps) if (c.holdBack !== undefined) { if (c.holdBack) { c.hold = true; g.flags[`garrison:${c.id}`] = g.turn; } delete c.holdBack; }
   const byId = new Map(g.corps.map((c) => [c.id, c]));
   g.regions.forEach((r, i) => {
     const ids = d.regions[i][6] as number[] | undefined;
