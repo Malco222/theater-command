@@ -18,7 +18,7 @@ import { unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import { SKY } from '../air/book';
 import { AirSim } from '../air/sim';
-import { airTicket, foughtAir, raidGroups } from '../air/ticket';
+import { airTicket, escortPair, foughtAir, raidGroups, type EscortPair } from '../air/ticket';
 import type { AirPlace, AirUnit } from '../air/types';
 import { BAND_WORD, SOUTH, drawAir, live, planeSvg, shown, takeEvents, type AirScene } from './air-draw';
 import { toField, toScreen } from './draw';
@@ -82,13 +82,17 @@ const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
  * The raids the first slice can fight, from the grand campaign's opening in September 1939, as its raid card picks them.
  * A night raid is not among them: the staff settles it (the design director, b384(c)).
  */
-const OFFERS: { nat: string; wars: string[]; kind: RaidKind; name: string }[] = [
+const OFFERS: { nat: string; wars: string[]; kind: RaidKind; name: string; pair?: true }[] = [
   { nat: 'GER', wars: ['UK', 'FRA'], kind: 'bomb', name: 'Alsace' },
   { nat: 'GER', wars: ['UK', 'FRA'], kind: 'superiority', name: 'Alsace' },
-  // The third raid: France's, escorted (the design director, b401 as ruled 07:38Z on 22 November). Its fighters reach
-  // 220 km in September 1939, and no French field is that near the Ruhr (Lorraine, the nearest, is 268 km off), so it
-  // flies against France's nearest industrial target its escort can reach: the Saar, 65 km from Lorraine.
-  { nat: 'FRA', wars: ['GER'], kind: 'bomb', name: 'Saar' },
+  // The third raid: France's, on the nearest industrial target its escort can reach (the design director, b401 as ruled
+  // 07:38Z on 22 November): its fighters reach 220 km in September 1939, and no French field is that near the Ruhr
+  // (Lorraine, the nearest, is 268 km off), so it is the Saar, 65 km from Lorraine. Its choice is the escort itself (b401
+  // as re-ruled 08:48Z and 08:50Z): the same raid offered alone and escorted, side by side, both cards from one
+  // reckoning (escortPair), and the escort's worth as the difference between them. Both cards are foregone, on purpose:
+  // day bombers without fighters overhead were cut to pieces in 1939 and 1940, and an escort changed that. The battles
+  // before it carry the uncertain outcome (the raid on Alsace, about 4 in 10).
+  { nat: 'FRA', wars: ['GER'], kind: 'bomb', name: 'Saar', pair: true },
 ];
 
 /**
@@ -105,7 +109,8 @@ let since: { who: string; had: string; left: string; foe: number | null; n: numb
 /** Battles fought on this page so far: each one is the campaign's month played again, with its own luck. */
 let battles = 0;
 
-function raidOf(i: number): Raid | null {
+/** The i-th offer's September: the game it is flown from, with this battle's luck and the losses carried, and its target. */
+function openingOf(i: number): { g: Game; target: number } | null {
   const o = OFFERS[i];
   const g = startOpen(createGame(7, o.nat));
   for (const w of o.wars) setWar(g, o.nat, w);
@@ -114,12 +119,35 @@ function raidOf(i: number): Raid | null {
   g.flags.airBattles = battles;
   for (const f of g.airFleets) { const c = carried.get(f.id); if (c) { f.ftr = c.ftr; f.bmr = c.bmr; } }
   const t = raidTargets(g, o.kind, o.nat).find((x) => planRaid(g, o.kind, x.id, undefined, o.nat).place === o.name);
-  if (!t) return null;
-  // The staff's pick and every fighter group that can go with it by day, from the nation's own airfields (b397).
-  const ids = raidGroups(g, o.kind, t.id, o.nat);
-  const { ticket } = airTicket(g, o.kind, t.id, ids, o.nat);
-  return ticket ? { g, nat: o.nat, kind: o.kind, target: t.id, ids, ticket } : null;
+  return t ? { g, target: t.id } : null;
 }
+
+function raidOf(i: number): Raid | null {
+  const o = OFFERS[i], at = openingOf(i);
+  if (!at) return null;
+  const { g, target } = at;
+  // The staff's pick and every fighter group that can go with it by day, from the nation's own airfields (b397).
+  const ids = raidGroups(g, o.kind, target, o.nat);
+  const { ticket } = airTicket(g, o.kind, target, ids, o.nat);
+  return ticket ? { g, nat: o.nat, kind: o.kind, target, ids, ticket } : null;
+}
+
+/** The same raid alone and escorted (b401 as re-ruled): one game, both cards from one reckoning, each a raid to fly. */
+interface Pair { alone: Raid; escorted: Raid; worth: EscortPair['worth'] }
+
+function pairOf(i: number): Pair | null {
+  const o = OFFERS[i], at = openingOf(i);
+  if (!at) return null;
+  const { g, target } = at;
+  const p = escortPair(g, o.kind, target, o.nat);
+  if (!p) return null;
+  const raid = (x: EscortPair['alone']): Raid => ({ g, nat: o.nat, kind: o.kind, target, ids: x.ids, ticket: x.ticket });
+  sameAim.set(p.alone.ticket, p.escorted.ticket);
+  return { alone: raid(p.alone), escorted: raid(p.escorted), worth: p.worth };
+}
+
+/** The bombers a raid sends up. */
+const bombersOf = (t: FieldTicket<AirPlace>): number => t.att.forces.filter((f) => f.kind === 'bmr').reduce((s, f) => s + f.men, 0);
 
 /** "300 bombers and 96 fighters": what a side sends up. */
 function forceWords(t: FieldTicket<AirPlace>, side: Side): string {
@@ -152,9 +180,16 @@ function aimWords(t: FieldTicket<AirPlace>): string {
   return `The aim: ${P.name}, which has nothing the bombs can harm. The raid counts only if the ${them} lose more aircraft than you.`;
 }
 
+/**
+ * A pair's alone card names the aim its escorted card does (b401 as re-ruled: the same raid). What a raid is sent to do
+ * does not change with its escort, though the harm its card expects from the bombs that get through does: read from the
+ * alone card's own reckoning, the Saar's factories would turn into its rail yards.
+ */
+const sameAim = new WeakMap<FieldTicket<AirPlace>, FieldTicket<AirPlace>>();
+
 /** What a raid is sent to do: the sky, the factories, the rail yards, or nothing the bombs can harm. */
 function aimOf(t: FieldTicket<AirPlace>): 'sky' | 'factories' | 'rail' | 'none' {
-  const P = t.place;
+  const P = (sameAim.get(t) ?? t).place;
   if (P.mission === 'superiority') return 'sky';
   if (P.reckon.value >= 1 || P.reckon.ruin > 0) return 'factories';
   return P.reckon.rail > 0 ? 'rail' : 'none';
@@ -196,7 +231,10 @@ function kindWords(t: FieldTicket<AirPlace>): string {
 function showChooser(): void {
   S.screen = 'choose'; S.sim = null; S.raid = null;
   guard();
-  const raids = OFFERS.map((_, i) => raidOf(i));
+  const offered = OFFERS.map((o, i): Raid | Pair | null => (o.pair ? pairOf(i) : raidOf(i)));
+  const isPair = (x: Raid | Pair): x is Pair => 'worth' in x;
+  // Every raid that can be flown from here, in the order shown: a pair's alone card, then its escorted one.
+  const raids: Raid[] = offered.flatMap((x) => (!x ? [] : isPair(x) ? [x.alone, x.escorted] : [x]));
   // Each card: the title and the staff's chance; which side he flies and what each side sends up; when and what kind
   // (the UI director, newcomer review 4).
   const offer = (r: Raid, i: number): string => {
@@ -207,12 +245,34 @@ function showChooser(): void {
         <span class="otop"><b class="tc-title-3">${esc(withThe(t.title))}</b><span class="tc-data ochance">${esc(chanceWords(p))}</span></span>
         <span class="tc-data omid">${facts([`You fly ${esc(sideWords(t, me))}`, `${esc(forceWords(t, me))} against ${esc(forceWords(t, foe))}`])}</span>
         <span class="oaim">${esc(withThe(aimWords(t)))}</span>
-        <span class="tc-data olow">${facts([t.place.night ? 'By night' : 'By day', kind])}</span></button>`;
+        <span class="tc-data olow">${facts([t.place.night ? 'By night' : 'By day', kind])}</span>${lost(t, me)}</button>`;
+  };
+  // On a pair's cards, the bombers each card expects lost: the very number the escort's worth is read from.
+  const lost = (t: FieldTicket<AirPlace>, me: Side): string => {
+    if (!pairs.has(t) || me !== 'att') return '';
+    const n = bombersOf(t), x = Math.round(t.place.forecast.bmr);
+    return `<span class="tc-data olost">The staff expects about ${x}${NB}of the ${n}${NB}bombers lost</span>`;
+  };
+  const pairs = new Set(offered.flatMap((x) => (x && isPair(x) ? [x.alone.ticket, x.escorted.ticket] : [])));
+  /**
+   * The same raid alone and escorted, side by side, and the escort's worth under them: the escorted card less the alone
+   * one, in the numbers the two cards show, so that the sum can be checked by eye.
+   */
+  const pairHtml = (p: Pair): string => {
+    const a = p.alone.ticket, e = p.escorted.ticket, ia = raids.indexOf(p.alone), ie = raids.indexOf(p.escorted);
+    const pa = Math.round(a.place.chance * 100), pe = Math.round(e.place.chance * 100);
+    const la = Math.round(a.place.forecast.bmr), le = Math.round(e.place.forecast.bmr);
+    const chance = pe === pa ? 'leaves the staff\'s chance where it was' : `takes the staff's chance from about ${pa}% to about ${pe}%, ${Math.abs(pe - pa)}${NB}points ${pe > pa ? 'up' : 'down'}`;
+    const saved = la === le ? 'saves no bombers' : la > le ? `saves about ${la - le}${NB}of the ${la}${NB}bombers the raid alone would lose` : `costs about ${le - la}${NB}bombers more`;
+    return `<section class="pair">
+        <div class="tc-label phead">${esc(withThe(`${a.place.name}: the same raid, alone or escorted`))}</div>
+        <div class="offers ptwo">${offer(p.alone, ia)}${offer(p.escorted, ie)}</div>
+        <p class="pworth"><b>What the escort is worth</b>, the one card against the other: it ${chance}, and ${saved}.</p>
+      </section>`;
   };
   // An enemy group's line says how many of what it has left rise against the raids offered now (the UI director, b384
   // review 6, passed 20:38Z): "French Groupe de Chasse 3: 223 fighters left; 156 of them rise to meet you."
   const rise = (id: number): number[] => raids.flatMap((r) => {
-    if (!r) return [];
     const t = r.ticket, foe: Side = t.att.human ? 'def' : 'att';
     const n = t[foe].forces.filter((f) => f.corps === id).reduce((a, f) => a + f.men, 0);
     return n > 0 ? [n] : [];
@@ -230,7 +290,8 @@ function showChooser(): void {
       <section class="tc-paper intro"><p><b>The campaign settles every raid from its raid card until you choose to fly one here.</b> Each air group is a formation that fights as one; the raid comes on as one stream and the defenders rise to meet it. Height is yours to choose: a group above its enemy dives on it and strikes first. What happens here goes back to the campaign as the aircraft each side lost and the bombers that bombed, and you can hand the rest to the staff at any moment.</p></section>
       <h2 class="tc-label shead">From the campaign · September 1939</h2>
       ${since.length ? `<section class="tc-paper since"><div class="tc-label">Since your last battle</div><ul>${since.map((l) => `<li>${sinceLine(l)}</li>`).join('')}</ul></section>` : ''}
-      <div class="offers">${raids.map((r, i) => (r ? offer(r, i) : '')).join('')}</div>
+      <div class="offers">${offered.map((x) => (!x || isPair(x) ? '' : offer(x, raids.indexOf(x)))).join('')}</div>
+      ${offered.map((x) => (x && isPair(x) ? pairHtml(x) : '')).join('')}
     </div></div>`;
   app.querySelectorAll<HTMLElement>('[data-raid]').forEach((el) => el.addEventListener('click', () => { const r = raids[Number(el.dataset.raid)]; if (r) startBattle(r); }));
 }
@@ -814,7 +875,7 @@ function showAfter(): void {
 }
 
 // A handle for the page's own checks (screenshots, the playtester's harness). Not used by the page itself.
-(window as unknown as { __air: unknown }).__air = { state: S, give, showChooser, startBattle, raidOf, OFFERS, toScreen };
+(window as unknown as { __air: unknown }).__air = { state: S, give, showChooser, startBattle, raidOf, pairOf, OFFERS, toScreen };
 
 showChooser();
 requestAnimationFrame(frame);

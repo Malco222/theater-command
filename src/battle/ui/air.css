@@ -89,3 +89,10 @@
 /* The staff's chance on its own line under each raid card's title, left-aligned, so the cards read alike (review 5). */
 .air .offer .otop { flex-direction: column; align-items: flex-start; }
 .air .offer .otop .ochance { margin-left: 0; }
+/* The same raid alone and escorted (b401 as re-ruled): the two cards side by side under one heading, and what the
+   escort is worth under them, read from the two cards' own numbers. */
+.air .pair { margin-top: 18px; }
+.air .pair .phead { margin: 0 0 8px; }
+.air .pair .ptwo { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.air .offer .olost { display: block; margin-top: 4px; font-size: 13px; color: var(--paper-200); }
+.air .pair .pworth { margin: 10px 0 0; font: 400 15px/1.45 var(--font-serif); color: var(--paper-200); text-wrap: pretty; }

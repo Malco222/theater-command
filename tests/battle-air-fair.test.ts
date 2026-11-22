@@ -14,13 +14,13 @@ import { startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
 import { SKY } from '../src/battle/air/book';
 import { airBattle, type AirSim } from '../src/battle/air/sim';
-import { airTicket, foughtAir, raidGroups } from '../src/battle/air/ticket';
+import { airTicket, escortPair, foughtAir, raidGroups } from '../src/battle/air/ticket';
 
 const WARS: Record<string, string[]> = { GER: ['UK', 'FRA'], UK: ['GER'], FRA: ['GER'] };
 const RUNS = 30;
-// The play file's three (b401, as the design director ruled at 07:38Z on 22 November: the third France's, escorted, on
-// the nearest industrial target its escort reaches; its card between 3 and 7 in 10 says the page offers a choice).
-const RAIDS: [string, RaidKind, string][] = [['GER', 'bomb', 'Alsace'], ['GER', 'superiority', 'Alsace'], ['FRA', 'bomb', 'Saar']];
+// The play file's raids (b401, as the design director ruled at 07:38Z on 22 November and re-ruled at 08:48Z and 08:50Z:
+// the third France's, on the nearest industrial target its escort reaches, offered alone and escorted, both flown).
+const RAIDS: [string, RaidKind, string, 'alone'?][] = [['GER', 'bomb', 'Alsace'], ['GER', 'superiority', 'Alsace'], ['FRA', 'bomb', 'Saar'], ['FRA', 'bomb', 'Saar', 'alone']];
 
 /** The play file's k-th battle: the September 1939 opening, with that battle's own luck (air-page.ts raidOf). */
 function game(k: number, nat: string): Game {
@@ -31,10 +31,14 @@ function game(k: number, nat: string): Game {
   return g;
 }
 
-/** The raid on a named province with the groups the play file sends (raidGroups: from the nation's own airfields). */
-function raid(g: Game, nat: string, kind: RaidKind, name: string) {
+/**
+ * The raid on a named province with the groups the play file sends (raidGroups: from the nation's own airfields); flown
+ * 'alone', the pair's alone card (escortPair: the same bombers and no fighter group).
+ */
+function raid(g: Game, nat: string, kind: RaidKind, name: string, alone?: 'alone') {
   const t = raidTargets(g, kind, nat).find((x) => planRaid(g, kind, x.id, undefined, nat).place === name);
   if (!t) throw new Error(`no ${kind} raid on ${name} for ${nat}`);
+  if (alone) { const p = escortPair(g, kind, t.id, nat); if (!p) throw new Error(`no pair on ${name}`); return { target: t.id, ...p.alone }; }
   const ids = raidGroups(g, kind, t.id, nat);
   const { ticket, why } = airTicket(g, kind, t.id, ids, nat);
   if (!ticket) throw new Error(why ?? 'no ticket');
@@ -60,13 +64,13 @@ function space(s: AirSim): void {
 }
 
 describe('the plain order honours the raid card (ruling 226, mark 4; b397)', () => {
-  for (const [nat, kind, name] of RAIDS) {
+  for (const [nat, kind, name, alone] of RAIDS) {
     for (const [how, play] of [['what a newcomer does', newcomer], ['Space alone', space]] as [string, (s: AirSim) => void][]) {
-      it(`${kind === 'superiority' ? 'the fight for the sky over' : 'the day raid on'} ${name}: ${how}`, () => {
+      it(`${kind === 'superiority' ? 'the fight for the sky over' : 'the day raid on'} ${name}${alone ? ', flown alone' : ''}: ${how}`, () => {
         let won = 0, chance = 0;
         for (let k = 0; k < RUNS; k++) {
           const g = game(k, nat);
-          const r = raid(g, nat, kind, name);
+          const r = raid(g, nat, kind, name, alone);
           chance = r.ticket.place.chance;
           const s = airBattle(r.ticket);
           s.ai.def = true;
@@ -81,14 +85,46 @@ describe('the plain order honours the raid card (ruling 226, mark 4; b397)', () 
     }
   }
 
-  it('the third raid is escorted, on the nearest industrial target its escort reaches, and its card sits between 3 and 7 in 10 (b401)', () => {
-    // France's fighters do not reach the Ruhr from any French field in September 1939: its raid there flies alone.
+  it('the third raid is the same raid alone and escorted, both cards from one reckoning, the escort worth the difference (b401)', () => {
+    // France's fighters do not reach the Ruhr from any French field in September 1939: its raid there flies alone, so
+    // the third raid is on the nearest industrial target its escort reaches, the Saar.
     expect(raid(game(0, 'FRA'), 'FRA', 'bomb', 'Ruhr').ticket.att.forces.every((f) => f.kind === 'bmr')).toBe(true);
-    const r = raid(game(0, 'FRA'), 'FRA', 'bomb', 'Saar');
-    expect(r.ticket.att.forces.some((f) => f.kind === 'bmr') && r.ticket.att.forces.some((f) => f.kind !== 'bmr')).toBe(true);
-    expect(r.ticket.place.chance).toBeGreaterThanOrEqual(0.3);
-    expect(r.ticket.place.chance).toBeLessThanOrEqual(0.7);
-    expect(r.ticket.def.forces.length).toBeGreaterThan(0);
+    for (let k = 0; k < 4; k++) {
+      const g = game(k, 'FRA');
+      const t = raidTargets(g, 'bomb', 'FRA').find((x) => planRaid(g, 'bomb', x.id, undefined, 'FRA').place === 'Saar')!;
+      const before = JSON.stringify(g);
+      const p = escortPair(g, 'bomb', t.id, 'FRA')!;
+      // Both cards present: the same bombers, alone and with every fighter group that can go with them.
+      expect(p, `battle ${k}`).not.toBeNull();
+      const bmr = (ts: typeof p.alone.ticket) => ts.att.forces.filter((f) => f.kind === 'bmr').map((f) => `${f.corps}:${f.men}`).join(' ');
+      expect(p.alone.ticket.att.forces.every((f) => f.kind === 'bmr')).toBe(true);
+      expect(p.escorted.ticket.att.forces.some((f) => f.kind !== 'bmr')).toBe(true);
+      expect(bmr(p.alone.ticket)).toBe(bmr(p.escorted.ticket));
+      expect(p.escorted.ids).toEqual(raidGroups(g, 'bomb', t.id, 'FRA'));
+      // From one reckoning: the game is not touched, and each card is the raid card's own (airTicket on the same game,
+      // the same month and luck), so the two differ only by the escort.
+      expect(JSON.stringify(g)).toBe(before);
+      expect(p.alone.ticket).toEqual(airTicket(g, 'bomb', t.id, p.alone.ids, 'FRA').ticket);
+      expect(p.escorted.ticket).toEqual(airTicket(g, 'bomb', t.id, p.escorted.ids, 'FRA').ticket);
+      expect(p.alone.ticket.seed).toBe(p.escorted.ticket.seed);
+      expect(p.alone.ticket.def.forces.length).toBeGreaterThan(0);
+      // No new number: the escort's worth is the one card less the other, and nothing of its own.
+      expect(p.worth).toEqual({
+        chance: p.escorted.ticket.place.chance - p.alone.ticket.place.chance,
+        bmr: p.alone.ticket.place.forecast.bmr - p.escorted.ticket.place.forecast.bmr,
+      });
+      expect(Object.keys(p).sort()).toEqual(['alone', 'escorted', 'worth']);
+      expect(Object.keys(p.worth).sort()).toEqual(['bmr', 'chance']);
+    }
+    // No band. Struck, not deleted: b401 re-ruled 22 Nov by the DD: the band was set for an unescorted raid; the third
+    // raid's choice is now the escort, shown as the same raid alone and escorted. Both cards are foregone, on purpose,
+    // and nobody should move the raid toward the middle: it is the record's lesson of 1939 and 1940, day bombers without
+    // an escort cut to pieces (alone about 1 in 100, 60 of its 100 bombers lost, the 0.6 day cap) and fighters overhead
+    // changing that (escorted about 99 in 100, 4.5 lost). The uncertain outcome is carried by the battles before it,
+    // the raid on Alsace about 4 in 10. (The figures inside, the 0.6 day cap and the escort's 18 lost, stand pending the
+    // count-switch rulings.)
+    //   expect(r.ticket.place.chance).toBeGreaterThanOrEqual(0.3);
+    //   expect(r.ticket.place.chance).toBeLessThanOrEqual(0.7);
   });
 
   it("a raid's groups fly from the nation's own airfields: Bremen would be the RAF's, not the Home Fleet's (b397)", () => {

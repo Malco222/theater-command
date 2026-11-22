@@ -185,6 +185,40 @@ export function raidGroups(g: Game, kind: RaidKind, target: number, nat: string)
   return [...picked, ...seats.filter((x) => x.kind === 'ftr' && !picked.includes(x.id)).map((x) => x.id)];
 }
 
+/** One raid's card twice from one reckoning: flown alone, and escorted; and what the escort is worth between them. */
+export interface EscortPair {
+  /** The bombers raidGroups sends, and no fighter group. */
+  alone: { ids: number[]; ticket: FieldTicket<AirPlace> };
+  /** The same bombers with every fighter group that can go with them by day (raidGroups). */
+  escorted: { ids: number[]; ticket: FieldTicket<AirPlace> };
+  /**
+   * The escort's worth, as the difference between the two cards and nothing of its own: the staff's chance it adds,
+   * and the bombers the card expects lost that it saves.
+   */
+  worth: { chance: number; bmr: number };
+}
+
+/**
+ * The same day raid flown alone and escorted, both cards from one reckoning (the design director, b401 as re-ruled at
+ * 08:48Z and 08:50Z on 22 November): one game, one month, one target, the same bombers, the card worked out by airTicket
+ * for each, and the escort's worth as the difference between the two. Null where either cannot be flown, or where no
+ * fighter can go with the bombers, so that there is no choice to show.
+ */
+export function escortPair(g: Game, kind: RaidKind, target: number, nat: string): EscortPair | null {
+  if (kind === 'night' || kind === 'superiority') return null;
+  const ids = raidGroups(g, kind, target, nat);
+  const bombers = ids.filter((id) => (g.airFleets.find((f) => f.id === id)?.bmr ?? 0) > 0);
+  if (!bombers.length || bombers.length === ids.length) return null;
+  const alone = airTicket(g, kind, target, bombers, nat).ticket;
+  const escorted = airTicket(g, kind, target, ids, nat).ticket;
+  if (!alone || !escorted || !escorted.att.forces.some((f) => f.kind !== 'bmr')) return null;
+  return {
+    alone: { ids: bombers, ticket: alone },
+    escorted: { ids, ticket: escorted },
+    worth: { chance: escorted.place.chance - alone.place.chance, bmr: alone.place.forecast.bmr - escorted.place.forecast.bmr },
+  };
+}
+
 /** Where a raid's groups fly from, by whether each comes off a carrier. */
 function fromOf(decks: boolean[]): 'land' | 'sea' | 'both' {
   return decks.length && decks.every(Boolean) ? 'sea' : decks.some(Boolean) ? 'both' : 'land';
