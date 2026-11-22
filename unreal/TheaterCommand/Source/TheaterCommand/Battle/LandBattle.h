@@ -470,6 +470,13 @@ private:
 	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
 	double LogAt = 0.0, SlowestFrame = 0.0, CoresMs = 0.0, MenMs = 0.0, ArmourMs = 0.0, FieldMs = 0.0;
+	/** ...and the camera's own line (the production lead's CD0, the Mac gate's 10 s line): LandEye's frame and the
+	 * general's view, ms over the span and the slowest, the most ray steps in a frame; the cuts; and the longest gap
+	 * between two frames, with how many frames it came after a cut (0: the cut's own frame), to split a shot change's
+	 * hitch between the camera's choice and the renderer's start afresh. */
+	double EyeMs = 0.0, EyeMostMs = 0.0, GenEyeMs = 0.0, GenEyeMostMs = 0.0, LongestGapMs = 0.0;
+	int64 EyeStepsMost = 0;
+	int32 EyeCuts = 0, FramesSinceCut = 1000, LongestGapSinceCut = 1000;
 	/** ...and the drawing's own parts (the men's meshes, the tanks', the effects kit, the sound), the men in the picture
 	 * and their meshes made again or held at the old level (the GS3 cap) over the span; the most in one frame. */
 	double DrawMenMs = 0.0, DrawArmourMs = 0.0, EffectsMs = 0.0, SoundMs = 0.0;
@@ -491,7 +498,7 @@ private:
 	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
 	 * back, or with no game viewport, as in the editor). "-TheaterLandNoDarkRead" leaves it off (the rule never asked). */
 	TSharedPtr<FFrameGrabber> DarkGrab;
-	double DarkShare = -1.0, DarkAskAt = 0.0;
+	double DarkShare = -1.0, DarkAskAt = 0.0, DarkGotAt = 0.0;
 	int32 DarkReads = 0;
 	void StartDarkRead();
 	void ReadDark(double Real);

@@ -4659,10 +4659,32 @@ void ALandBattle::Tick(float DeltaSeconds)
 		S.Eye.Hold(true);
 	}
 	LandParts::PlaceMovers(S);
-	S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
+	{
+		// (the camera's own ms, for its 10 s line)
+		const double EyeMark = LandParts::Seconds();
+		const long StepsWere = S.Eye.Steps();
+		S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
+		const double EyeFrameMs = (LandParts::Seconds() - EyeMark) * 1000.0;
+		EyeMs += EyeFrameMs;
+		EyeMostMs = FMath::Max(EyeMostMs, EyeFrameMs);
+		EyeStepsMost = FMath::Max(EyeStepsMost, static_cast<int64>(S.Eye.Steps() - StepsWere));
+		EyeCuts += S.Pose.bCut ? 1 : 0;
+		// (the gap since the last frame began, against how many frames since the last cut)
+		const double GapMs = Real * 1000.0;
+		if (GapMs > LongestGapMs)
+		{
+			LongestGapMs = GapMs;
+			LongestGapSinceCut = S.Pose.bCut ? 0 : FMath::Min(FramesSinceCut + 1, 1000);
+		}
+		FramesSinceCut = S.Pose.bCut ? 0 : FMath::Min(FramesSinceCut + 1, 1000);
+	}
 	if (Live.IsValid())
 	{
+		const double GenMark = LandParts::Seconds();
 		GeneralView(Real);
+		const double GenFrameMs = (LandParts::Seconds() - GenMark) * 1000.0;
+		GenEyeMs += GenFrameMs;
+		GenEyeMostMs = FMath::Max(GenEyeMostMs, GenFrameMs);
 	}
 	WalkPan(Real);
 	ReadDark(Real);
@@ -4804,6 +4826,16 @@ void ALandBattle::Tick(float DeltaSeconds)
 			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
 			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid,
 			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs, PuffsMost, PuffsMostAsked);
+		// (the camera's line, CD0: what the camera's choice costs, and whether the span's longest gap between frames
+		// came on a shot change: 0 or 1 frames after a cut, with the camera's cut frames cheap, is the renderer's start
+		// afresh, not the choice)
+		const FString GapWhen = LongestGapSinceCut >= 1000 ? FString(TEXT("no cut before it in the span")) : FString::Printf(TEXT("%d frames after a cut"), LongestGapSinceCut);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the camera %.3f ms a frame, the slowest %.2f ms, the most ray steps in a frame %lld (%d cuts); the general's view %.3f ms a frame, the slowest %.2f; the longest gap between frames %.1f ms, %s"),
+			EyeMs / LogFrames, EyeMostMs, static_cast<long long>(EyeStepsMost), EyeCuts, GenEyeMs / LogFrames, GenEyeMostMs, LongestGapMs, *GapWhen);
+		EyeMs = EyeMostMs = GenEyeMs = GenEyeMostMs = LongestGapMs = 0.0;
+		EyeStepsMost = 0;
+		EyeCuts = 0;
+		LongestGapSinceCut = 1000;
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
@@ -4902,6 +4934,7 @@ void ALandBattle::StartDarkRead()
 	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
 	DarkGrab->StartCapturingFrames();
 	DarkAskAt = 0.0;
+	DarkGotAt = 0.0;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36 four times a second, its share under L 25 for the camera's dark rule"));
 }
 
@@ -4920,8 +4953,14 @@ void ALandBattle::ReadDark(double Real)
 	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
 	if (Frames.Num() == 0)
 	{
+		// (no frame back for a second: the last reading is stale, so the rule is told there is none; pre-check's note)
+		if (DarkShare >= 0.0 && Real - DarkGotAt > 1.0)
+		{
+			DarkShare = -1.0;
+		}
 		return;
 	}
+	DarkGotAt = Real;
 	// (a result card up: the whole picture dimmed under it, so no reading till it goes)
 	if (State.IsValid() && State->bCard)
 	{

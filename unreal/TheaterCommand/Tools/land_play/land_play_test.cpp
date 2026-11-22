@@ -901,7 +901,7 @@ int main(int argc, char** argv)
 		// as the photographer's light A/Bs part by the dark rule: each asked still must come out the same)
 		struct Took { LandEye::Kind Shot; int Subject; Vec Eye; };
 		std::vector<Took> First(Stills.size(), Took{ LandEye::Kind::Open, -1, Vec() });
-		int Unfit = 0, Empty = 0, NoHouse = 0, Same = 0, Houses = 0;
+		int Unfit = 0, Empty = 0, NoHouse = 0, Same = 0, Houses = 0, NearMan = 0;
 		double SlowMs = 0.0, SlowAt = 0.0, FindMs = 0.0;
 		for (int Pass = 0; Pass < 2; ++Pass)
 		{
@@ -966,6 +966,37 @@ int main(int argc, char** argv)
 						if (!EW.Open(P.Eye, Chest)) continue;
 						++Men;
 					}
+					// (the art director on 83749bb4: other men 2 m off a still's lens, wholly in frame or out; nearer only
+					// running past, within 2 m no more than half a second on the screen and never within 0.9 m)
+					double Nearest = 1e9, Held = 0.0;
+					for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+					{
+						const LandFeed::Track& T = Rec.Tracks[K];
+						if (static_cast<int>(K) == P.Subject || T.bTwin || !T.IsMan() || T.Start() > B || (T.Out >= 0.0 && B > T.Out)) continue;
+						const LandFeed::Spot Sp = LandFeed::SpotAt(T, B);
+						const double Gap = std::hypot(Sp.X - P.Eye.X, Sp.Y - P.Eye.Y);
+						if (Gap >= 2.0) continue;
+						const Vec Head(Sp.X, Sp.Y, GroundAt(Sp.X, Sp.Y) + 1.0);
+						if (!LandEye::InPicture(P, Head, 1.4)) continue;
+						const bool bDown = T.Fell >= 0.0 && T.Fell <= B;
+						double Span = 0.0, Least = Gap;
+						for (int Way = -1; Way <= 1; Way += 2)
+							for (double U = Way < 0 ? 0.01 : 0.0; U < 5.0; U += 0.01)
+							{
+								const double At = B + Way * U;
+								if (At < T.Start()) break;
+								const LandFeed::Spot S2 = LandFeed::SpotAt(T, At);
+								const double G2 = std::hypot(S2.X - P.Eye.X, S2.Y - P.Eye.Y);
+								if (G2 >= 2.0) break;
+								Least = std::min(Least, G2);
+								Span += 0.01;
+							}
+						// (battle seconds to the screen's: the fight runs at 1 / Life of the screen's pace)
+						const double OnScreen = bDown ? 99.0 : Span * Life;
+						Nearest = std::min(Nearest, Least);
+						Held = std::max(Held, OnScreen);
+					}
+					if (Held > 0.55 || Nearest < 0.85) ++NearMan;
 					const double House = HouseShare(P);
 					std::string Asked = "-";
 					if (St.Subject >= 0)
@@ -974,9 +1005,11 @@ int main(int argc, char** argv)
 						const LandFeed::Change* C = LandFeed::ChangeAt(T, B);
 						Asked = T.Role + " " + (C ? C->Pose : std::string("idle"));
 					}
-					std::printf("still %s at %.1f s: asked %s on %d (%s), took %s on %d%s%s; eye %.2f m up, fov %.0f; %d men in the picture, a house %.0f%% of it\n",
+					char NearText[96] = "";
+					if (Nearest < 1e8) std::snprintf(NearText, sizeof(NearText), "; a man %.2f m off the lens, within 2 m %.2f s", Nearest, Held);
+					std::printf("still %s at %.1f s: asked %s on %d (%s), took %s on %d%s%s; eye %.2f m up, fov %.0f; %d men in the picture, a house %.0f%% of it%s\n",
 						St.Name, B, St.Kind >= 0 ? LandEye::NameOf(static_cast<LandEye::Kind>(St.Kind)) : "none", St.Subject, Asked.c_str(), LandEye::NameOf(P.Shot), P.Subject,
-						bUnfit ? " UNFIT" : "", St.bBuilding ? (Pic.HouseInShot() ? " (a house kept in it)" : " (no house fit)") : "", P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), P.Fov, Men, 100.0 * House);
+						bUnfit ? " UNFIT" : "", St.bBuilding ? (Pic.HouseInShot() ? " (a house kept in it)" : " (no house fit)") : "", P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), P.Fov, Men, 100.0 * House, NearText);
 					if (bUnfit) ++Unfit;
 					const bool bOnMan = St.Subject >= 0 && Rec.Tracks[static_cast<size_t>(St.Subject)].IsMan();
 					if ((St.Kind == KShoulder || St.Kind == KLow || (St.Kind == KWatch && bOnMan)) && Men == 0) ++Empty;
@@ -985,12 +1018,75 @@ int main(int argc, char** argv)
 				}
 			}
 		}
-		std::printf("stills: %zu, %d placed unfit, %d on a man with no man of the battle in the picture, %d village shots with no house (%d houses on the field); %d of %d asked the same in a run cut differently between; the camera's slowest frame %.2f ms (battle %.1f s); the houses found in %.1f ms as the battle opens\n", Stills.size(), Unfit, Empty, NoHouse, Houses, Same, static_cast<int>(Stills.size()), SlowMs, SlowAt, FindMs);
+		std::printf("stills: %zu, %d placed unfit, %d on a man with no man of the battle in the picture, %d village shots with no house (%d houses on the field), %d with a man held within 2 m of the lens; %d of %d asked the same in a run cut differently between; the camera's slowest frame %.2f ms (battle %.1f s); the houses found in %.1f ms as the battle opens\n", Stills.size(), Unfit, Empty, NoHouse, Houses, NearMan, Same, static_cast<int>(Stills.size()), SlowMs, SlowAt, FindMs);
 		if (Unfit > 0) Fault("a still's asked shot found no fit place");
 		if (Empty > 0) Fault("a still on a man has no man of the battle in its picture");
 		if (NoHouse > 0) Fault("the village still has no house in the picture");
+		if (NearMan > 0) Fault("a still holds a man within 2 m of its lens, or one passes within 0.9 m");
 		if (Same < static_cast<int>(Stills.size())) Fault("an asked still parts with the run's history");
 	};
+	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
+	// is held just over the ears, never among the stalks.
+	auto RunCorn = [&]()
+	{
+		// (up to six men well in the corn, each 20 m from the others: since the art director's 2 m for asked stills
+		// (14:32Z) a man in the corn among his section's men is no place for the lens, and the ask goes to another man,
+		// at Sedan off the corn's edge; the corn's rule is then tried on the next man in it)
+		struct InCornAt { int Track; double At; LandFeed::Spot Sp; };
+		std::vector<InCornAt> Tries;
+		for (size_t K = 0; K < Rec.Tracks.size() && Tries.size() < 6; ++K)
+		{
+			const LandFeed::Track& T = Rec.Tracks[K];
+			if (T.bTwin || !T.IsMan() || T.Role == "mortar" || T.Role == "fo") continue;
+			for (double When = std::max(T.Start(), Contact); When < Rec.End - 6.0; When += 5.0)
+			{
+				if (T.Fell >= 0.0 && T.Fell < When + 6.0) break;
+				const LandFeed::Spot Sp = LandFeed::SpotAt(T, When);
+				// (well in it, the corn all round him: at a field's edge the low eye beside him stands on the grass, as
+				// the platoon recording's first man in the corn did)
+				bool bDeep = CornAt(Sp.X, Sp.Y) > 0.5;
+				for (int Q = 0; Q < 8 && bDeep; ++Q) bDeep = CornAt(Sp.X + 2.5 * std::sin(Q * 0.785398), Sp.Y + 2.5 * std::cos(Q * 0.785398)) > 0.5;
+				for (const InCornAt& Was : Tries) bDeep = bDeep && std::hypot(Was.Sp.X - Sp.X, Was.Sp.Y - Sp.Y) >= 20.0;
+				if (bDeep) { Tries.push_back({ static_cast<int>(K), When, Sp }); break; }
+			}
+		}
+		int Among = 0, Tried = 0, Seen = 0;
+		for (const InCornAt& Try : Tries)
+		{
+			const int InCorn = Try.Track;
+			const double AskAt = Try.At;
+			++Tried;
+			LandEye::Director Asked;
+			Asked.Begin(Rec, EW, ES);
+			int TakenOn = -1;
+			double Least = 1e9;
+			Seen = 0;
+			for (int F = 0; F < 4 * 60; ++F)
+			{
+				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
+				PlaceMovers(AskAt + F * Dt);
+				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
+				if (std::getenv("LAND_PLAY_CORN") && F % 20 == 0) std::printf("  corn ask frame %d: %s on %d, eye corn %.2f, eye %.2f over the ground, man corn %.2f\n", F, LandEye::NameOf(P.Shot), P.Subject, CornAt(P.Eye.X, P.Eye.Y), P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), CornAt(LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).X, LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).Y));
+				if (P.Shot != LandEye::Kind::Low) continue;
+				if (TakenOn < 0) TakenOn = P.Subject;
+				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
+				if (Corn <= 0.0) continue;
+				++Seen;
+				const double Over = P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y) - Corn;
+				Least = std::min(Least, Over);
+				if (Over < 0.05) ++Among;
+			}
+			std::printf("corn: a low shot asked of track %d in the corn at %.0f s (taken on %d): %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, TakenOn, Seen, Seen ? Least : 0.0);
+			if (Seen > 0) break;
+		}
+		if (Among > 0) Fault("an asked low shot is down among the corn");
+		if (!Tries.empty() && Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
+	};
+	if (std::getenv("LAND_PLAY_ONLY_CORN"))
+	{
+		RunCorn();
+		return 0;
+	}
 	if (std::getenv("LAND_PLAY_ONLY_STILLS"))
 	{
 		RunStills();
@@ -2128,51 +2224,7 @@ int main(int argc, char** argv)
 		if (Longest > ES.DarkHold + 0.6) Fault("a shot held a dark picture past the dark rule");
 		if (Again > 0) Fault("a shot stood again where one was left for a dark picture");
 	}
-	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
-	// is held just over the ears, never among the stalks.
-	{
-		int InCorn = -1;
-		double AskAt = 0.0;
-		for (size_t K = 0; K < Rec.Tracks.size() && InCorn < 0; ++K)
-		{
-			const LandFeed::Track& T = Rec.Tracks[K];
-			if (T.bTwin || !T.IsMan() || T.Role == "mortar" || T.Role == "fo") continue;
-			for (double When = std::max(T.Start(), Contact); When < Rec.End - 6.0; When += 5.0)
-			{
-				if (T.Fell >= 0.0 && T.Fell < When + 6.0) break;
-				const LandFeed::Spot Sp = LandFeed::SpotAt(T, When);
-				// (well in it, the corn all round him: at a field's edge the low eye beside him stands on the grass, as
-				// the platoon recording's first man in the corn did)
-				bool bDeep = CornAt(Sp.X, Sp.Y) > 0.5;
-				for (int Q = 0; Q < 8 && bDeep; ++Q) bDeep = CornAt(Sp.X + 2.5 * std::sin(Q * 0.785398), Sp.Y + 2.5 * std::cos(Q * 0.785398)) > 0.5;
-				if (bDeep) { InCorn = static_cast<int>(K); AskAt = When; break; }
-			}
-		}
-		if (InCorn >= 0)
-		{
-			LandEye::Director Asked;
-			Asked.Begin(Rec, EW, ES);
-			int Seen = 0, Among = 0;
-			double Least = 1e9;
-			for (int F = 0; F < 4 * 60; ++F)
-			{
-				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
-				PlaceMovers(AskAt + F * Dt);
-				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
-				if (std::getenv("LAND_PLAY_CORN") && F % 20 == 0) std::printf("  corn ask frame %d: %s on %d, eye corn %.2f, eye %.2f over the ground, man corn %.2f\n", F, LandEye::NameOf(P.Shot), P.Subject, CornAt(P.Eye.X, P.Eye.Y), P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), CornAt(LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).X, LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).Y));
-				if (P.Shot != LandEye::Kind::Low) continue;
-				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
-				if (Corn <= 0.0) continue;
-				++Seen;
-				const double Over = P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y) - Corn;
-				Least = std::min(Least, Over);
-				if (Over < 0.05) ++Among;
-			}
-			std::printf("corn: a low shot asked of track %d in the corn at %.0f s: %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, Seen, Seen ? Least : 0.0);
-			if (Among > 0) Fault("an asked low shot is down among the corn");
-			if (Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
-		}
-	}
+	RunCorn();
 	if (std::getenv("LAND_PLAY_STILLS")) RunStills();
 	// The shell holes: torn earth, brown, a rim standing over the ground, each round's size; and their cost.
 	{
