@@ -1452,22 +1452,28 @@ def build_battle_puffs():
 
 
 # The fire's spread, after the scene's grade: in the post-process input (the picture as the screen shows it), a pixel
-# the kit marked and the opaque world does not hide, and whose colour is fire's (orange to yellow, deep or bright but
-# never grey), has its colour spread from its own grey by Spread and its green raised by Warm; all else is left as it
-# was. "heat" feathers it by hue, depth of colour and brightness, so there is no seam at a flame's edge.
+# the kit marked and the opaque world does not hide has its colour spread from its own grey by Spread when it is fire's
+# (orange to yellow, deep in colour, or bright and a little coloured) or a coloured light of another hue (bright and
+# coloured: a red or green tracer, a flash, which the grade leaves pink or grey-green). The whitest are left as they
+# are (a white-hot core stays as ruled). Warm raises green on orange only (on yellow it went lime). All else is left
+# as it was. "heat" feathers it, so there is no seam at a flame's edge. tools/battle-fx/land_grade.py is the same sums.
 FIRE_SPREAD_HLSL = """
 float3 c = saturate(C.rgb);
 if (!(Marked.r < MarkFar && Marked.r <= Solid.r * 1.001 + 1.0) || Spread <= 1.0) return C.rgb;
 float mx = max(c.r, max(c.g, c.b));
 float mn = min(c.r, min(c.g, c.b));
 float s = (mx - mn) / max(mx, 1e-4);
-float h = degrees(atan2(1.7320508 * (c.g - c.b), 2.0 * c.r - c.g - c.b));
+float hx = 2.0 * c.r - c.g - c.b;
+float hy = 1.7320508 * (c.g - c.b);
+float h = (abs(hx) + abs(hy) > 1e-5) ? degrees(atan2(hy, hx)) : 0.0;
 float hue = smoothstep(-25.0, -12.0, h) * (1.0 - smoothstep(55.0, 65.0, h));
 float y = dot(c, float3(0.2126, 0.7152, 0.0722));
-float sat = max(smoothstep(0.30, 0.45, s), smoothstep(0.55, 0.75, y) * smoothstep(0.08, 0.18, s));
-float heat = hue * sat * smoothstep(0.01, 0.04, y);
+float top = 1.0 - smoothstep(0.85, 0.95, y);
+float fire = hue * max(smoothstep(0.30, 0.45, s), smoothstep(0.70, 0.85, y) * smoothstep(0.08, 0.18, s) * top);
+float lit = (1.0 - hue) * smoothstep(0.66, 0.78, y) * smoothstep(0.12, 0.20, s) * top;
+float heat = max(fire, lit) * smoothstep(0.01, 0.04, y);
 float3 o = y + (c - y) * (1.0 + (Spread - 1.0) * heat);
-o.g *= 1.0 + (Warm - 1.0) * heat;
+o.g *= 1.0 + (Warm - 1.0) * heat * (1.0 - smoothstep(32.0, 42.0, h));
 return saturate(o);
 """
 
@@ -1499,7 +1505,7 @@ def build_fire_spread():
         texture = node(m, unreal.MaterialExpressionSceneTexture, -600, y, scene_texture_id=which)
         connect(texture, "Color", spread, name)
     # (MarkFar: a custom depth this far or more is a pixel no piece marked; the cleared value is far beyond any battle)
-    for name, default, y in (("Spread", 2.2, 480), ("Warm", 1.2, 600), ("MarkFar", 1.0e8, 720)):
+    for name, default, y in (("Spread", 2.0, 480), ("Warm", 1.2, 600), ("MarkFar", 1.0e8, 720)):
         connect(scalar(m, name, default, -600, y), "", spread, name)
     to_property(spread, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     finish(m)

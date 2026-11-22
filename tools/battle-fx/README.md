@@ -1626,23 +1626,40 @@ at best).
 So it is mended after the grade, on the picture as the screen shows it. M_BattlePuffs marks the kit's pixels in the
 custom depth (translucent custom depth writes, wherever a piece is a tenth seen or more), and M_FireSpread, a
 post-process after tonemapping (Tools/build_content.py), finds the marked pixels the opaque world does not hide and,
-of those, only the ones of fire's colour: hue between orange-red and yellow, and deep colour or bright and a little
-coloured, never grey. Their colour is spread from their own grey by Spread (2.2) and their green raised by Warm (1.2),
+of those, only two sorts: fire's colour (hue between orange-red and yellow, and deep colour, or bright and a little
+coloured), and a coloured light of any other hue (bright and coloured: a red or green tracer, which the grade leaves
+pink or grey-green). The whitest are left alone, so a white-hot core stays as ruled. Their colour is spread from their
+own grey by Spread (2.0, the art director's) and the green of the orange raised by Warm (1.2; on yellow it went lime),
 feathered by that "heat" so there is no seam at a flame's edge. Smoke, dust, earth and the field seen through a thin
 flame stay as the grade left them. A scene asks for it with FBattleEffects::SetFireSpread(its eye's lens), after
-Begin; it costs the custom depth pass for the kit's mesh. Without the materials it says so and does nothing.
+Begin; it costs the custom depth pass for the kit's mesh. Without the materials it says so and does nothing. The mark
+cannot say which kind of piece made a pixel (the mesh carries places and colours only), so a tracer is known by being
+bright and coloured, not by its kind.
 
 Modelled on the wreck at 14 m through the land battle's grade (land_grade.py here: lands_land is the grade,
-fire_spread the same sums as the material's code; the picture is stills/hot-fire/fire-spread-model.png):
+fire_spread the same sums as the material's code; the picture is stills/hot-fire/fire-spread-model-2.png):
 
-| | Fire median | Flame tips | Rims | Field behind thin flame |
-|---|---|---|---|---|
-| game's own curve (the aim) | 221,129,36 | about 67,26,24 | | |
-| ground grade today | 174,116,89 | | peach | as graded |
-| ground grade + spread | 231,123,44 | 110,54,17 | no peach band | as graded (not lime) |
+| | Fire median | Flame tips | Bright core | Rims | Field behind thin flame |
+|---|---|---|---|---|---|
+| game's own curve (the aim) | 221,129,36 | about 67,26,24 | 254,208,101 | 174,189,203 | |
+| ground grade today | 174,116,89 | | 240,210,188 | 164,174,184 | 192,194,168 |
+| ground grade + spread | 221,125,51 | 108,55,21 | 255,246,160 | as graded | as graded (not lime) |
 
-Earth and dust in marked pixels move a little: earth brown 70,58,45 lands 74,61,39 and a sandy dust 150,130,100 lands
-153,133,95, both a touch warmer, as their hue is fire's and their colour a little deep.
+The kit's other colours, written as the recipe has them, on the game's curve, through the ground grade, and after:
+
+| | Game's curve | Ground grade | + spread |
+|---|---|---|---|
+| US and British tracer glow | 231,85,46 | 175,87,78 | 244,83,51 |
+| Soviet tracer glow | 119,225,121 | 167,210,170 | 135,222,143 |
+| ground tracer (the ruled yellow) | 214,207,103 | 202,197,162 | 204,197,148 |
+| white-hot cores (tracer, muzzle root) | as ruled | as ruled | unchanged |
+| muzzle flash orange | 234,156,0 | 201,146,102 | 248,164,50 |
+| sand dust | 206,193,156 | 190,181,163 | unchanged |
+| clod earth (written 118,99,72) | 119,87,45 | 72,59,45 | 77,64,37 |
+| grey and pale smoke | | | unchanged |
+
+The ground's yellow tracer is only half brought back: pale khaki and a wheat field seen through thin smoke are the same
+colour on the screen, and the field must stay as graded.
 
 ## Bomb carpets far off (after head b0f46c5)
 

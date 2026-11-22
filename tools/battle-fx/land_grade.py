@@ -70,8 +70,9 @@ def write_for_land(target, most_over=4.0, **kw):
     return gc.encode(scene / over), over, lands_land(scene, **kw)
 
 
-SPREAD = dict(Spread=2.2, Warm=1.2, SatLo=0.30, SatHi=0.45, BrightLo=0.55, BrightHi=0.75, PaleLo=0.08, PaleHi=0.18,
-              HueA=-25.0, HueB=-12.0, HueC=55.0, HueD=65.0, LumLo=0.01, LumHi=0.04)
+SPREAD = dict(Spread=2.0, Warm=1.2, SatLo=0.30, SatHi=0.45, BrightLo=0.70, BrightHi=0.85, PaleLo=0.08, PaleHi=0.18,
+              TopLo=0.85, TopHi=0.95, LitLo=0.66, LitHi=0.78, LitSatLo=0.12, LitSatHi=0.20,
+              HueA=-25.0, HueB=-12.0, HueC=55.0, HueD=65.0, WarmHueLo=32.0, WarmHueHi=42.0, LumLo=0.01, LumHi=0.04)
 
 
 def _ss(a, b, x):
@@ -80,19 +81,27 @@ def _ss(a, b, x):
 
 
 def fire_spread(c, mask=None, p=SPREAD):
-    """Screen colours 0..1 (n x 3) of pixels the kit marked (mask 1) after M_FireSpread, and each one's heat."""
+    """Screen colours 0..1 (n x 3) of pixels the kit marked (mask 1) after M_FireSpread, and each one's heat.
+
+    fire: orange to yellow (hue), deep in colour or bright and a little coloured. lit: a bright, coloured pixel of
+    any other hue (a red or green tracer, a flash), which the grade leaves pink or grey-green. Neither touches the
+    whitest (top: a white-hot core stays as ruled). Warm raises green only on orange (to yellow it went lime)."""
     c = np.clip(np.atleast_2d(np.asarray(c, float)), 0, 1)
     mask = np.ones(len(c)) if mask is None else np.asarray(mask, float)
     mx = c.max(1)
     mn = c.min(1)
     s = (mx - mn) / np.maximum(mx, 1e-4)
-    h = np.degrees(np.arctan2(np.sqrt(3.0) * (c[:, 1] - c[:, 2]), 2 * c[:, 0] - c[:, 1] - c[:, 2]))
+    hx = 2 * c[:, 0] - c[:, 1] - c[:, 2]
+    hy = np.sqrt(3.0) * (c[:, 1] - c[:, 2])
+    h = np.where(np.abs(hx) + np.abs(hy) > 1e-5, np.degrees(np.arctan2(hy, hx)), 0.0)
     hue = _ss(p["HueA"], p["HueB"], h) * (1 - _ss(p["HueC"], p["HueD"], h))
     y = c @ np.array([0.2126, 0.7152, 0.0722])
-    sat = np.maximum(_ss(p["SatLo"], p["SatHi"], s), _ss(p["BrightLo"], p["BrightHi"], y) * _ss(p["PaleLo"], p["PaleHi"], s))
-    heat = mask * hue * sat * _ss(p["LumLo"], p["LumHi"], y)
+    top = 1 - _ss(p["TopLo"], p["TopHi"], y)
+    fire = hue * np.maximum(_ss(p["SatLo"], p["SatHi"], s), _ss(p["BrightLo"], p["BrightHi"], y) * _ss(p["PaleLo"], p["PaleHi"], s) * top)
+    lit = (1 - hue) * _ss(p["LitLo"], p["LitHi"], y) * _ss(p["LitSatLo"], p["LitSatHi"], s) * top
+    heat = mask * np.maximum(fire, lit) * _ss(p["LumLo"], p["LumHi"], y)
     o = y[:, None] + (c - y[:, None]) * (1 + (p["Spread"] - 1) * heat)[:, None]
-    o[:, 1] *= 1 + (p["Warm"] - 1) * heat
+    o[:, 1] *= 1 + (p["Warm"] - 1) * heat * (1 - _ss(p["WarmHueLo"], p["WarmHueHi"], h))
     return np.clip(o, 0, 1), heat
 
 
