@@ -797,6 +797,9 @@ int main(int argc, char** argv)
 	};
 	LandEye::Settings ES;
 	ES.Seed = Rec.Seed;
+	// (the choice's share by steps alone, so a run is the same on any machine; LAND_PLAY_CHOOSE_MS=ms tries the clock's
+	// share as the game has it, ms a frame)
+	ES.ChooseMs = std::getenv("LAND_PLAY_CHOOSE_MS") ? std::atof(std::getenv("LAND_PLAY_CHOOSE_MS")) : 0.0;
 	LandEye::Director Eye;
 	Eye.Begin(Rec, EW, ES);
 	LandDesk::Desk Desk;

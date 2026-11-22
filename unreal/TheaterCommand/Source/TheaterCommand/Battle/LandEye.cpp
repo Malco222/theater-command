@@ -2307,6 +2307,16 @@ namespace LandEye
 		bChoosing = true;
 	}
 
+	bool Director::ShareSpent(long Start, long Budget) const
+	{
+		if (RaySteps - Start >= Budget) return true;
+		if (Set.ChooseMs <= 0.0 || Budget >= std::numeric_limits<long>::max() / 4) return false;
+		// (some steps every frame whatever the clock, so a choice always goes on: the frame's other work alone may run
+		// past the share on a slow machine)
+		if (RaySteps - Start < Set.ChooseLeast) return false;
+		return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - FrameClock).count() >= Set.ChooseMs;
+	}
+
 	bool Director::ScanChoice(long Start, long Budget)
 	{
 		// The men and tanks still up, by what is about to happen round them, most of all in the next two seconds (cut on
@@ -2320,7 +2330,7 @@ namespace LandEye
 		};
 		for (; ChoiceScan < Rec->Tracks.size(); ++ChoiceScan)
 		{
-			if (RaySteps - Start >= Budget) return false;
+			if ((ChoiceScan & 15) == 0 ? ShareSpent(Start, Budget) : RaySteps - Start >= Budget) return false;
 			const size_t I = ChoiceScan;
 			const Track& Tr = Rec->Tracks[I];
 			// (the scan's own walk over the tracks: a sixteenth of a ray's step each, in the frame's count, so a battle of
@@ -2456,7 +2466,7 @@ namespace LandEye
 		// (its parts judged as of when it was placed, the next part left to the next frame once the share is spent)
 		for (const int Parts = FitsParts(); TryPart < Parts; ++TryPart)
 		{
-			if (TryPart > 0 && RaySteps - Start >= Budget)
+			if (TryPart > 0 && ShareSpent(Start, Budget))
 			{
 				TryShot = KeepShot();
 				return -1;
@@ -2479,7 +2489,7 @@ namespace LandEye
 		// (a frame's share of the weighing and the tries, by the ground asked under their rays and the heat looked at:
 		// past it, they go on where they left off next frame, a try's parts too)
 		const long Start = RaySteps;
-		auto Spent = [&] { return RaySteps - Start >= Budget; };
+		auto Spent = [&] { return ShareSpent(Start, Budget); };
 		if (bScanning)
 		{
 			if (!ScanChoice(Start, Budget)) return false;
@@ -3043,6 +3053,7 @@ namespace LandEye
 	{
 		Now.bCut = false;
 		if (!Rec) return Now;
+		FrameClock = std::chrono::steady_clock::now();
 		// (the scene's answers asked once a frame, such as which blocks are hidden, are asked afresh)
 		++FrameStamp;
 		// (the frame's work so far, by the ground asked under the camera's rays: a cut's choice has what is left of the
@@ -3701,16 +3712,16 @@ namespace LandEye
 			if (Now.bCut)
 			{
 				bFocusShot = Want > 0.0 && Want <= Set.FocusFar;
-				FocusEased = std::clamp(Want, 0.5, Set.FocusMost);
+				FocusEased = std::clamp(Want, 0.5, std::max(0.5, Set.FocusMost));
 				FocusSwing = 0.0;
 			}
 			else if (bFocusShot && Want > 0.0)
 			{
 				const double W = Set.FocusPull;
-				const double Off = std::log(FocusEased) - std::log(std::clamp(Want, 0.5, Set.FocusMost));
+				const double Off = std::log(FocusEased) - std::log(std::clamp(Want, 0.5, std::max(0.5, Set.FocusMost)));
 				const double Mix = FocusSwing + Off * W;
 				const double Decay = std::exp(-W * RealDt);
-				FocusEased = std::clamp(Want, 0.5, Set.FocusMost) * std::exp((Off + Mix * RealDt) * Decay);
+				FocusEased = std::clamp(Want, 0.5, std::max(0.5, Set.FocusMost)) * std::exp((Off + Mix * RealDt) * Decay);
 				FocusSwing = (FocusSwing - Mix * (W * RealDt)) * Decay;
 			}
 			Now.Focus = bFocusShot ? FocusEased : 0.0;
