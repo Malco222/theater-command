@@ -1080,7 +1080,8 @@ int main(int argc, char** argv)
 			if (Seen > 0) break;
 		}
 		if (Among > 0) Fault("an asked low shot is down among the corn");
-		if (!Tries.empty() && Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
+		// (Tried > 0 exactly when Tries is not empty: read here so clang's unused-but-set check passes, as run.sh builds it)
+		if (Tried > 0 && Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
 	};
 	if (std::getenv("LAND_PLAY_ONLY_CORN"))
 	{
