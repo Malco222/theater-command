@@ -11,7 +11,8 @@ import { FORT_ROWS, FORT_XP, crewFed, crewMonth, crewStores, fortShape, fortsMon
 import { DESERT, GUNS, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
 import { menLeft } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { SIEGE, besieged, breach, garrisonOf, housed, joinTown, siegeSupply, sortiePower, storm, townBonus } from '../src/campaign/siege';
+import { SIEGE, besieged, breach, crewClock, garrisonOf, housed, invest, joinTown, siegeSupply, siegeView, sortiePower, storm, stormBar, stormForce, townBonus } from '../src/campaign/siege';
+import { atkPower, sieges } from '../src/campaign/ai';
 import { corpsMood } from '../src/campaign/morale';
 import { drafted, training } from '../src/campaign/stories';
 import { ENGINEERING } from '../src/campaign/rivers';
@@ -520,3 +521,92 @@ describe("the crews are trained, not green (the design director's 11:56Z)", () =
     expect(field.xp).toBeGreaterThan(training(g, 'FRA'));
   });
 });
+
+describe("the besieger reads the crews' clock (the design director's 13:05Z)", () => {
+  /** Metz's crew shut in Nancy, cut off, `sat` months into the siege, with these German corps round it and every other German corps held where it stands. */
+  function shutIn(on: boolean, sat: number, round: [Kind, number][], next: [Kind, number][] = []): { g: Game; town: Region; crew: Corps; near: Corps[] } {
+    const g = sameCrews(open(on));
+    setWar(g, 'GER', 'FRA');
+    const town = g.byName.Lorraine;
+    const crew = row(g, 'FRA', 'Metz fortified region')!;
+    clear(g, town, (c) => c === crew);
+    town.units.splice(town.units.indexOf(crew), 1);
+    joinTown(g, town, crew);
+    for (const c of g.corps) if (c.nat === 'GER' && !c.dead) c.hold = true;
+    round.forEach(([k, d], i) => addCorps(g, 'GER', `Round ${i}`, k, d, 'Lorraine', {}));
+    const near = next.map(([k, d], i) => addCorps(g, 'GER', `Next door ${i}`, k, d, 'Saar', {}));
+    invest(g, town, 'GER');
+    g.flags[`siege:${town.id}`] = g.turn - sat;
+    crew.supplied = false;
+    return { g, town, crew, near };
+  }
+  const odds = (g: Game, town: Region): number => assess(g, stormForce(g, town.units.filter((c) => c.nat === 'GER'), town), town, { town: true }).odds;
+  const stormed = (g: Game, town: Region): number => g.reports.filter((r) => r.region === town.id && r.turn === g.turn).length;
+
+  it('its bar does not fall while hunger would take the crews before the siege comes to its gamble; fed, or off, it falls as before', () => {
+    const { g, town, crew } = shutIn(true, 1, [['inf', 6]]);
+    expect(crewClock(g, town)).toBe(3);
+    for (const sat of [0, 1, 2, 3]) expect(stormBar(g, town, sat)).toBe(SIEGE.ai.hasty);
+    // (Three months of stores four months in would end past the gamble's month: the bar falls as it did.)
+    expect(stormBar(g, town, 4)).toBe(SIEGE.ai.late);
+    g.flags[`eaten:${crew.id}`] = 2;
+    expect(crewClock(g, town)).toBe(1);
+    expect(stormBar(g, town, 5)).toBe(SIEGE.ai.hasty);
+    expect(stormBar(g, town, 6)).toBe(SIEGE.ai.last.odds);
+    // Fed, the crew has no clock running: the bar falls with the months.
+    crew.supplied = true;
+    expect(crewClock(g, town)).toBeNull();
+    expect(stormBar(g, town, 1)).toBe(SIEGE.ai.assault);
+    const off = shutIn(false, 1, [['inf', 6]]);
+    expect(crewClock(off.g, off.town)).toBeNull();
+    expect(stormBar(off.g, off.town, 1)).toBe(SIEGE.ai.assault);
+  });
+
+  it('a staff round a crew-held town waits for the hunger at odds it would once have stormed at; off, it storms', () => {
+    const round: [Kind, number][] = [['inf', 6], ['inf', 6], ['inf', 5]];
+    const on = shutIn(true, 1, round), off = shutIn(false, 1, round);
+    const o = odds(on.g, on.town);
+    expect(o).toBeGreaterThanOrEqual(SIEGE.ai.assault);
+    expect(o).toBeLessThan(SIEGE.ai.hasty);
+    expect(odds(off.g, off.town)).toBeGreaterThanOrEqual(SIEGE.ai.assault);
+    sieges(on.g, 'GER');
+    sieges(off.g, 'GER');
+    expect(stormed(on.g, on.town)).toBe(0);
+    expect(besieged(on.g, on.town)).toBe(true);
+    expect(stormed(off.g, off.town)).toBe(1);
+  });
+
+  it("the staff calls up guns and engineers by the storm's own odds, not by their worth in the line; off, by worth", () => {
+    // Four corps round the town leave one place among the five; next door stand guns, a corps of the line, and engineers (who take no place).
+    const round: [Kind, number][] = [['inf', 2], ['inf', 2], ['inf', 2], ['inf', 2]];
+    const next: [Kind, number][] = [['art', 2], ['inf', 4], ['eng', 1]];
+    const on = shutIn(true, 1, round, next), off = shutIn(false, 1, round, next);
+    const [gunsOn, lineOn, engOn] = on.near;
+    // The guns add more to the storm than the line corps would, though they are worth less in the line (ai.ts atkPower, the off ranking).
+    const base = on.town.units.filter((c) => c.nat === 'GER');
+    const w = (c: Corps): number => assess(on.g, stormForce(on.g, [...base, { ...c, reg: on.town.id }], on.town), on.town, { town: true }).odds;
+    expect(w(gunsOn)).toBeGreaterThan(w(lineOn));
+    expect(atkPower(on.g, gunsOn)).toBeLessThan(atkPower(on.g, lineOn));
+    sieges(on.g, 'GER');
+    sieges(off.g, 'GER');
+    expect(gunsOn.reg).toBe(on.town.id);
+    expect(engOn.reg).toBe(on.town.id);
+    expect(lineOn.reg).not.toBe(on.town.id);
+    const [gunsOff, lineOff, engOff] = off.near;
+    expect(lineOff.reg).toBe(off.town.id);
+    expect(gunsOff.reg).not.toBe(off.town.id);
+    expect(engOff.reg).not.toBe(off.town.id);
+  });
+
+  it("the siege card shows the crews' stores to both sides, as the staffs read them; off, nothing", () => {
+    const { g, town } = shutIn(true, 1, [['inf', 6]]);
+    const v = siegeView(g, town.id)!;
+    expect(v.crew).toEqual({ left: 3, months: 3 });
+    expect(v.lines).toContain("Its fortress crews live on their works' own stores: 3 months of them left. When they run out the crews give in, whatever the town's own stores.");
+    const off = shutIn(false, 1, [['inf', 6]]);
+    const vo = siegeView(off.g, off.town.id)!;
+    expect(vo.crew).toBeNull();
+    expect(vo.lines.some((l) => /fortress crews/.test(l))).toBe(false);
+  });
+});
+

@@ -21,7 +21,8 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, fortRow, roomless, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, fortRow, fortRows, roomless, type Assessment } from './game';
+import { crewStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
@@ -807,6 +808,39 @@ export function stormForce(g: Game, corps: Corps[], r: Region, lead?: string): C
   return [...first, ...fit.filter((c) => c.kind === 'eng')];
 }
 
+/**
+ * The months until hunger takes the fortress crews that hold a town (the fortress rows; the design director's 13:05Z):
+ * the most of the stores left among the crews in its garrison, the game's own clock (fortrows.ts storesLeft). Null where
+ * hunger does not take them: no crew there, a crew fed (in supply and not living on a port's stores), or a row with no
+ * clock. Off, null.
+ */
+export function crewClock(g: Game, r: Region): number | null {
+  if (!fortRows(g)) return null;
+  const crews = garrisonOf(r).filter((c) => !c.dead && fortRow(g, c));
+  if (!crews.length) return null;
+  let most = 0;
+  for (const c of crews) {
+    if (c.supplied && !onPortStores(g, c)) return null;
+    const left = storesLeft(g, c);
+    if (left === null) return null;
+    most = Math.max(most, left);
+  }
+  return most;
+}
+
+/**
+ * The odds a computer staff asks before it storms a town it has stood round for `sat` months (siege.json 'ai'): off
+ * the march only what it is sure to carry; after a month round the place what it probably will; when the siege has
+ * dragged on, less, and at last a gamble. Under the fortress rows (the design director's 13:05Z) the bar does not fall
+ * while hunger would take the town's fortress crews before the siege comes to its gamble: the staff storms only what
+ * it is sure to carry, or waits for the hunger. Every staff, every crew-held town; no number of its own.
+ */
+export function stormBar(g: Game, r: Region, sat: number): number {
+  const clock = crewClock(g, r);
+  if (clock !== null && sat + clock <= SIEGE.ai.last.after) return SIEGE.ai.hasty;
+  return sat >= SIEGE.ai.last.after ? SIEGE.ai.last.odds : sat >= 2 ? SIEGE.ai.late : sat >= 1 ? SIEGE.ai.assault : SIEGE.ai.hasty;
+}
+
 /** The odds of an assault, with its Battle Ticket. */
 export function previewStorm(g: Game, corps: Corps[], r: Region): Assessment | null {
   const going = stormForce(g, corps, r);
@@ -1117,6 +1151,12 @@ export interface SiegeView {
    * the lake (history.json 'restraint', 'fed'), and whether the ring is closed.
    */
   stores: number; left: number; bySea: boolean; byBook: boolean; closed: boolean;
+  /**
+   * The fortress crews' own stores (the fortress rows; the design director's 13:05Z): the months left before hunger
+   * takes the crews that hold the town, and the most months they were stocked for; null where hunger does not take
+   * them. Both sides read it, as the computer's staffs do (stormBar).
+   */
+  crew: { left: number; months: number } | null;
   /** How much stronger its defenders fight inside (1.45 is 45% stronger), and the share of its works broken down. */
   bonus: number; broken: number;
   /** Corps the town can hold and corps inside, and the town's own guard in divisions' worth. */
@@ -1133,6 +1173,8 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   const stores = storesOf(g, r), shut = monthsShut(g, r), bySea = fedBySea(g, r), byBook = fedByBook(g, r);
   const inside = garrisonOf(r).length, guard = guardOf(g, r), bonus = townBonus(g, r), broken = breachOf(g, r);
   const left = Math.max(0, stores - shut);
+  const clock = by ? crewClock(g, r) : null;
+  const crew = clock === null ? null : { left: clock, months: Math.max(...garrisonOf(r).filter((c) => !c.dead && fortRow(g, c)).map((c) => crewStores(c) ?? 0)) };
   const lines: string[] = [];
   const pct = Math.round((bonus - 1) * 100);
   lines.push(`Troops inside ${townName(r)} fight ${pct}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ''}. It has room for ${roomIn(g, r) === 1 ? 'one corps' : `${roomIn(g, r)} corps`}.`);
@@ -1147,6 +1189,8 @@ export function siegeView(g: Game, region: number): SiegeView | null {
       : !closed ? 'The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it.'
       : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? 'one more month' : `${left} more months`}; after that they go hungry.`
       : inside ? 'Its stores are gone: the garrison is starving, and loses men and heart every month.' : 'Its stores are gone: it is about to give in.');
+    // The crews' own clock, read alike by both sides and by the computer's staffs (13:05Z).
+    if (crew) lines.push(`Its fortress crews live on their works' own stores: ${crew.left === 1 ? 'one month' : `${crew.left} months`} of them left. When they run out the crews give in, whatever the town's own stores.`);
     // A capital shut in: the government loses its hold on the country month by month.
     if (closed && r.cap && r.owner === r.ctrl) {
       const sat = Math.max(0, g.turn - investedOn(g, r));
@@ -1158,7 +1202,7 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   }
   return {
     region, town: townName(r), size, sizeWord: TOWNS.words[size], holder: r.ctrl, by, since: investedOn(g, r), months: shut,
-    stores, left, bySea, byBook, closed: by ? ringClosed(g, r) : false, bonus, broken, room: roomIn(g, r), inside, guard, lines,
+    stores, left, bySea, byBook, closed: by ? ringClosed(g, r) : false, crew, bonus, broken, room: roomIn(g, r), inside, guard, lines,
   };
 }
 

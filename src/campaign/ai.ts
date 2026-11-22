@@ -25,11 +25,11 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
-import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
+import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormBar, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
+  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
@@ -331,7 +331,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
  * true), it sends the troops that have just won the country round a town straight on into it, if the odds allow:
  * a garrison that has just been beaten in the field is at its weakest.
  */
-function sieges(g: Game, nat: string, after = false): void {
+export function sieges(g: Game, nat: string, after = false): void {
   if (!siegeRules(g)) return;
   const n = g.nations[nat];
   // A city or a garrisoned town whose defenders have all gone inside: the army beside it closes round it in one
@@ -365,7 +365,8 @@ function sieges(g: Game, nat: string, after = false): void {
     const sat = g.turn - investedOn(g, r);
     // Off the march it storms only what it is sure to carry; after a month round the place, what it probably will;
     // and when the siege has dragged on, it settles for less and at last for a gamble.
-    const need = sat >= SIEGE.ai.last.after ? SIEGE.ai.last.odds : sat >= 2 ? SIEGE.ai.late : sat >= 1 ? SIEGE.ai.assault : SIEGE.ai.hasty;
+    // (Under the fortress rows, not while hunger would take the town's crews first: siege.ts stormBar, 13:05Z.)
+    const need = stormBar(g, r, sat);
     // By the book (b509(c)): before Leningrad a computer Germany, and any computer ally round the town with it, keeps
     // the ring and does not storm; and the book feeds the town across the lake, so hunger does not take it either.
     const heldBy = stormHeldBy(g, r.name);
@@ -390,23 +391,34 @@ function sieges(g: Game, nat: string, after = false): void {
     if (!after && prize && ((!noStorm && now < need) || !shut())) {
       const far = hops(g, r.id, (x) => within(x) && allied(g, nat, fieldCtrl(g, x)));
       const front = (x: Region): boolean => x.nb.some((j) => atWar(g, nat, fieldCtrl(g, g.regions[j])));
+      // Under the fortress rows (the design director's 13:05Z) the staff weighs each corps it could call by the storm's
+      // own odds with that corps standing round the place, so guns and engineers count for the works and walls they
+      // would break (game.ts's easing), not for their worth in the line alone; engineers are called too. Off, by worth.
+      const weigh = fortRows(g);
+      const standing = (c: Corps): Corps => ({ ...c, reg: r.id });
+      const stormOdds = (xs: Corps[]): number => { const f = stormForce(g, xs, r); return f.length ? assess(g, f, r, { town: true }).odds : 0; };
       const call = g.corps
-        .filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && !spared(g, c) && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && c.ap > 0
-          && !besieged(g, g.regions[c.reg]) && (far[c.reg] === 1 ? c.ap >= Math.min(moveCost(g, c, r), 4) : !front(g.regions[c.reg])))
-        .sort((x, y) => far[x.reg] - far[y.reg] || atkPower(g, y) - atkPower(g, x) || x.id - y.id);
+        .filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && !spared(g, c) && c.kind !== 'fort' && (c.kind !== 'eng' || weigh) && c.joint === undefined && c.leave === undefined && c.ap > 0
+          && !besieged(g, g.regions[c.reg]) && (far[c.reg] === 1 ? c.ap >= Math.min(moveCost(g, c, r), 4) : !front(g.regions[c.reg])));
+      const gain = new Map<number, number>();
+      if (weigh) { const here = mine(); for (const c of call) gain.set(c.id, stormOdds([...here, standing(c)])); }
+      call.sort((x, y) => (weigh ? (gain.get(y.id) ?? 0) - (gain.get(x.id) ?? 0) : 0) || far[x.reg] - far[y.reg] || atkPower(g, y) - atkPower(g, x) || x.id - y.id);
       // What is on its way counts for what it will be worth when it arrives.
       const force = stormForce(g, mine(), r);
       const a0 = force.length ? assess(g, force, r, { town: true }) : null;
       let coming = 0, power = 0, men = 0;
+      const onWay: Corps[] = [];
       for (const c of call) {
-        const enough = (noStorm || (a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need)) && (shut() || outside() + men >= SIEGE.ring * inside);
-        if (enough || mine().filter((u) => u.kind !== 'eng' && !roomless(g, u)).length + coming >= STACK) break;
+        const enough = (noStorm || (weigh ? Math.max(now, stormOdds([...mine(), ...onWay])) >= need : a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need)) && (shut() || outside() + men >= SIEGE.ring * inside);
+        if (enough) break;
+        // Five places full: off, the call ends there; under the fortress rows engineers, who take no place, still come.
+        if (mine().filter((u) => u.kind !== 'eng' && !roomless(g, u)).length + coming >= STACK) { if (!weigh) break; if (c.kind !== 'eng') continue; }
         if (far[c.reg] === 1) {
           if (!hasRoom(g, r, c)) continue;
           if (moveCorps(g, c, r)) now = odds();
         } else {
           walkToward(g, c, r);
-          if (c.reg === r.id) now = odds(); else { coming++; power += atkPower(g, c); men += c.divs * c.str; }
+          if (c.reg === r.id) now = odds(); else { if (c.kind !== 'eng') coming++; power += atkPower(g, c); men += c.divs * c.str; onWay.push(standing(c)); }
         }
         if (!besieged(g, r)) break; // it opened its gates to the bigger army
       }
