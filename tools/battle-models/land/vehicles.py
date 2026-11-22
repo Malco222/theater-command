@@ -105,7 +105,8 @@ ABOUT = {
 
 # What a builder takes to build everything the game's file carries (both of a Panzer IV's guns), and the faces a
 # vehicle showed through the war, for the sheet of them: (words, what to pass the builder).
-WHOLE = {"PanzerIV": {"gun": "all", "skirts": True, "zimmerit": True}, "StuG3": {"mantlet": "all", "skirts": True}, "Tiger": {"zimmerit": True}}
+WHOLE = {"PanzerIV": {"gun": "all", "skirts": True, "zimmerit": True}, "StuG3": {"mantlet": "all", "skirts": True}, "Tiger": {"zimmerit": True},
+         "Panther": {"ambush": True}}
 FACES = {
     "PanzerIV": [("1939 to early 1942: the short gun, dark grey", {"gun": "short", "paint": "grey"}),
                  ("1942: the long gun, dark grey", {"gun": "long", "paint": "grey"}),
@@ -114,6 +115,8 @@ FACES = {
                  ("1944: the ribbed paste (zimmerit) on her plates and her turret's shield", {"gun": "long", "paint": "yellow", "skirts": "l3", "zimmerit": True})],
     "Tiger": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"}),
               ("1944: the ribbed paste (zimmerit) on her plates", {"paint": "yellow", "zimmerit": True})],
+    "Panther": [("1943 on: dark yellow", {"paint": "yellow"}), ("1943 on: olive green and red-brown sprayed over it", {"paint": "camo"}),
+                ("Late 1944: the ambush dots over the three colours", {"paint": "camo", "ambush": True})],
     "Hanomag": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "leFH18": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "StuG3": [("1942 to early 1943: the box shield round her gun, dark grey", {"paint": "grey"}),

@@ -59,6 +59,143 @@ def spray(v, paint, **kw):
     return done
 
 
+AMBUSH_HOW = ("ambush: the dapple of the late summer of 1944 ('Hinterhalt'), on her three-colour coat only: small dots of another of "
+              "her colours sprinkled over every patch, dark yellow on the green and the brown, green or brown on the yellow. Each dot is "
+              "a dab of its own lying a few millimetres proud of her plate, and takes its colour from `blend` and `blend2` as the coat "
+              "does (so on a one-colour coat it shows nothing): show the choice's parts, or scale them to nothing. Near mesh only.")
+
+
+def ambush_dots(v, step=0.17, r=0.03, hosts=("hull", "turret", "gun"), lift=0.004, sides=10, seed=None):
+    """The ambush dapple ('Hinterhalt', from the order of 19 August 1944): over her sprayed coat, dots of another of
+    her colours a few centimetres across (`r` their mean radius, `sides` to each) and about `step` apart, dabbed on
+    by hand at the factory: dark yellow on the green and the brown, green or brown on the yellow. A point is all a
+    file can colour and her plates are cut no finer than 0.2 m, so a dot cannot be painted into her points: each is
+    a small dab of its own, `lift` proud of the plate and bent to it, that carries `blend` and `blend2` as the coat
+    does. Only where it lies whole on one open run of her plate (never over an edge, a fitting or a hatch, never in
+    the shadow of a wheel or a grille, never on her national marks or where two colours meet). Comes after `spray`;
+    returns the parts that hold them."""
+    import random
+    import zlib
+    from mathutils.bvhtree import BVHTree
+    from motorpool import frame
+    m = v.m
+    nv = len(m.verts)
+    if not v.fine or "upper3" not in m.paint_at or len(getattr(m, "vblend2", [])) != nv or len(getattr(m, "fnormal", [])) != len(m.faces):
+        return []
+    rs = random.Random(zlib.crc32((m.name + ":ambush").encode()) if seed is None else seed)
+    up = m.paint_at["upper"]
+    want = {m.part_at[h]: h for h in hosts if h in m.part_at}
+    tree = BVHTree.FromPolygons([tuple(p) for p in m.verts], [tuple(f) for f in m.faces])
+    marks = [(Vector((mk["at"][0], -mk["at"][1], mk["at"][2])), mk["radius"]) for mk in m.marks]
+
+    def newell(f):
+        n = Vector()
+        for i in range(len(f)):
+            a, b = m.verts[f[i]], m.verts[f[(i + 1) % len(f)]]
+            n += Vector(((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y)))
+        return n * 0.5
+
+    def under(q, n, host):
+        """Where a line down onto her plate from just over q meets it: (point, smooth facing, blend, blend2) or None."""
+        hit = tree.ray_cast(q + n * 0.02, -n, 0.035)
+        if hit[0] is None or not 0.008 < hit[3] < 0.032:
+            return None
+        fi = hit[2]
+        if m.fpaint[fi] != up or m.fpart[fi] != host or m.fcoat[fi]:
+            return None
+        f = m.faces[fi]
+        w = [1.0 / ((m.verts[i] - hit[0]).length_squared + 1e-6) for i in f]
+        tw = sum(w)
+        nn = sum((Vector(c) * wi for c, wi in zip(m.fnormal[fi], w)), Vector()).normalized()
+        if nn.dot(n) < 0.95:
+            return None
+        g = sum(m.vblend[i] * wi for i, wi in zip(f, w)) / tw
+        b = sum(m.vblend2[i] * wi for i, wi in zip(f, w)) / tw
+        return hit[0], nn, g, b
+
+    # dart throwing: candidates over her open coat by area, kept where none already lies within `step`
+    cand = []
+    for fi, f in enumerate(m.faces):
+        if m.fpaint[fi] != up or m.fpart[fi] not in want or m.fcoat[fi]:
+            continue
+        n = newell(f)
+        area = n.length
+        if area < 1e-4 or n.z / area < -0.3:
+            continue
+        n /= area
+        pts = [m.verts[i] for i in f]
+        tris = [(pts[0], pts[k], pts[k + 1]) for k in range(1, len(pts) - 1)]
+        ta = [max(0.0, (b - a).cross(c - a).length * 0.5) for a, b, c in tris]
+        for _ in range(int(3.0 * area / (step * step) + rs.random())):
+            a, b, c = rs.choices(tris, weights=ta)[0] if sum(ta) > 0 else tris[0]
+            u, w = rs.random(), rs.random()
+            if u + w > 1.0:
+                u, w = 1.0 - u, 1.0 - w
+            cand.append((a + (b - a) * u + (c - a) * w, n, m.fpart[fi]))
+    rs.shuffle(cand)
+    cell, grid = step, {}
+    dots = {h: [] for h in want}
+    for p, n, host in cand:
+        key = tuple(int(math.floor(x / cell)) for x in p)
+        if any((p - q).length < step for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1) for q in grid.get((key[0] + dx, key[1] + dy, key[2] + dz), ())):
+            continue
+        if any((p - c).length < rr + 0.08 for c, rr in marks):
+            continue
+        if tree.ray_cast(p + n * 0.006, n, 0.9)[0] is not None:          # (something stands over it: a fitting, a grille, a wheel)
+            continue
+        mid = under(p, n, host)
+        if mid is None:
+            continue
+        g, b = mid[2], mid[3]
+        if 0.3 < b < 0.7 or (b <= 0.3 and 0.3 < g < 0.7):              # (where two colours meet, no dot)
+            continue
+        if b >= 0.7 or g >= 0.7:
+            colour = (0.0, 0.0)                                        # (yellow on the green and the brown)
+        else:
+            colour = (1.0, 0.0) if rs.random() < 0.55 else (0.0, 1.0)  # (green or brown on the yellow)
+        _, s1, s2 = frame(mid[1])
+        rr, turn = r * rs.uniform(0.7, 1.3), rs.uniform(0.0, 2.0 * math.pi)
+        rim = []
+        for k in range(sides):
+            a = turn + 2.0 * math.pi * k / sides
+            q = mid[0] + (s1 * math.cos(a) + s2 * math.sin(a)) * (rr * rs.uniform(0.88, 1.08))
+            got = under(q, mid[1], host)
+            if got is None:
+                break
+            rim.append((got[0] + got[1] * lift, got[1]))
+        if len(rim) < sides:
+            continue
+        grid.setdefault(key, []).append(p)
+        dots[host].append((rim, colour))
+    parts = []
+    for hi, ds in dots.items():
+        if not ds:
+            continue
+        host = want[hi]
+        name = "ambush_" + host
+        v.part(name, host, tuple(m.parts[hi].pivot), kind="fixed", note="the ambush dots on her " + host + " (shown with the ambush swap)")
+        parts.append(name)
+        verts, faces, blend, blend2, nors = [], [], [], [], []
+        for rim, (g, b) in ds:
+            k0 = len(verts)
+            pts = [q for q, _ in rim]
+            face = tuple(range(k0, k0 + sides))
+            if (pts[1] - pts[0]).cross(pts[2] - pts[0]).dot(rim[0][1]) < 0.0:
+                face = face[::-1]
+            verts += pts
+            faces.append(face)
+            blend += [g] * sides
+            blend2 += [b] * sides
+            nors.append(tuple(tuple(rim[i - k0][1]) for i in face))
+        before = len(m.faces)
+        m.raw(verts, faces, ["upper"] * len(faces), name, blend=blend)
+        m.vblend2.extend(blend2)
+        m.fnormal.extend(nors)
+        v.fedge.extend([0.0] * (len(m.faces) - before))
+    m.info["ambush"] = {want[h]: len(ds) for h, ds in dots.items()}
+    return parts
+
+
 def coats(v, default="grey", only=None):
     """The paint swap as the file tells it: for each coat, the three colours to put in place of upper, upper2, shade.
     `only`: the coats she ever wore (a Panther came after the grey and never wore it)."""
@@ -101,6 +238,63 @@ def zimmerit_swap(parts):
         "on": {"what": "ribbed paste on her upright plates", "years": "tanks built 1943-09 to 1944-09", "parts": parts}}}
 
 
+# The machine gun on her roof that only her commander fires (Brian, 22 November) is a swap of its own: the German rail
+# came with the cupolas of 1943 (Panzer IV Ausf. H, the Tiger's seven-periscope cupola, the Panther Ausf. A), and on
+# every tank the gun on it was optional, often kept inside; British and Commonwealth Shermans mostly ran without the .50.
+ROOF_MG_HOW = ("roof_mg: the machine gun on her roof that only her commander fires. `on`: show the choice's parts; `off`: scale them to "
+               "nothing, and then the game must not aim or fire a roof gun at all (no roof_mg_burst; controls.roof_mg left alone).")
+
+
+# Measured mesh against mesh (22 November), for the art director's review of the roof guns and hatches:
+# - MG34_LIFT: the MG 34 turns about the cupola's middle, so its butt always hangs over the open hatch; tipping the
+#   muzzle up swings the butt down into it. At 15 degrees the butt plate's lowest corner is 3 cm over the hatch's dark
+#   disc, at 17 it is 1 cm, by 18 it is in (at 45 it is 23 cm in). The same on all three German tanks.
+#   KEPT AT 45 all the same: the dark disc is the open hatch, where the commander stands, and the butt going down into it
+#   at his shoulder is what the real mount did when he fired up at aircraft. A 15 degree cap would leave the gun no
+#   use against planes, which is half of why it was there.
+# - The seven-periscope cupola's lid (Tiger, Panther): its post on the cupola's top ring at the left-rear (-130, + to the
+#   right), 0.33 out from the middle; it lifts 3 cm and swings 105 degrees clockwise seen from above, to lie behind the
+#   cupola, its middle 0.52 out (clear of the hole). Swinging, it crosses the rail's circle from 119 to 221.5 degrees, so
+#   the rail is cut away from 116 to 225 (the real rail had such a gap). The mount rides the rail up to 108 to the right
+#   (the gap, less the carriage's half-width and 3 degrees) and to -118 to the left (from -122 the carriage meets the
+#   lid's post; 4 degrees kept).
+# - The Tiger's hull lids, hung on their outboard edges, cleared the turret's front corners but their inboard edges
+#   still rose into the ends of the mantlet (which hangs 9 cm over the roof) between 10 and 30 degrees open: their
+#   middles moved 10 cm forward, to x 1.65, they clear the turret and the mantlet all the way, gun level or drooped.
+MG34_LIFT = 45.0
+CUPOLA_POST, CUPOLA_SWING, CUPOLA_LIFT = -130.0, 105.0, 0.03
+TIGER_RAIL_GAP, TIGER_MG_ARC = (116.0, 225.0), (-118.0, 108.0)
+PANTHER_RAIL_GAP, PANTHER_MG_ARC = (116.0, 225.0), (-118.0, 108.0)
+TIGER_HULL_LID, TIGER_HULL_LID_X = 105.0, 1.65
+
+
+def roof_mg_swap(parts, default, on_what, on_years, off_years, **more):
+    return {"default": default, "choices": {
+        "off": {"what": "no gun on her roof: the game must then not aim or fire a roof gun (no roof_mg_burst)", "years": off_years, "parts": []},
+        "on": {"what": on_what, "years": on_years, "parts": parts}}, **more}
+
+
+def roof_mg_months(rows, first_on):
+    """A by_month table with the roof_mg column added: off in the months before `first_on` ("YYYY-MM"), on from it.
+    A row that runs across that month is cut in two there (both halves keep the rest of the row)."""
+    y, mo = int(first_on[:4]), int(first_on[5:])
+    prev = "%04d-%02d" % ((y, mo - 1) if mo > 1 else (y - 1, 12))
+
+    def row_of(lo, hi, row, mg):
+        r = {**({"from": lo} if lo else {}), **({"to": hi} if hi else {})}
+        r.update({k: x for k, x in row.items() if k not in ("from", "to")})
+        r["roof_mg"] = mg
+        return r
+    out = []
+    for row in rows:
+        lo, hi = row.get("from"), row.get("to")
+        if (lo or "0000-00") < first_on <= (hi or "9999-99"):
+            out += [row_of(lo, prev, row, "off"), row_of(first_on, hi, row, "on")]
+        else:
+            out.append(row_of(lo, hi, row, "on" if (lo or "0000-00") >= first_on else "off"))
+    return out
+
+
 # The Panzer IV's faces by the month (the historian, 18 Nov: the two guns served side by side through 1942, about a
 # third of them long by the middle of the year and most by its end; medium-low on the shares).
 PZ4_MONTHS = [{"to": "1942-03", "gun": "short", "paint": "grey", "skirts": "off", "zimmerit": "off"},
@@ -113,6 +307,13 @@ PZ4_MONTHS = [{"to": "1942-03", "gun": "short", "paint": "grey", "skirts": "off"
 # The Tiger's: grey to early 1943, dark yellow after, the paste as on the others.
 TIGER_MONTHS = [{"to": "1943-01", "paint": "grey", "zimmerit": "off"}, {"from": "1943-02", "to": "1943-08", "paint": "yellow", "zimmerit": "off"}] + [
     {**row, "paint": "yellow"} for row in ZIMMERIT_MONTHS]
+
+# The Panther's: she came after the grey (her first battle, July 1943), dark yellow with the units' green and brown over
+# it; from the order of 19 August 1944 the factories sprayed the three colours themselves and dotted them (the ambush
+# dapple), and the tanks built so served on beside the older ones until the end (our own shares, low on the numbers).
+PANTHER_MONTHS = [{"to": "1944-08", "paint": "yellow", "ambush": "off"},
+                  {"from": "1944-09", "to": "1944-11", "paint": "camo", "ambush": {"mix": {"off": 0.7, "on": 0.3}, "one": "off"}},
+                  {"from": "1944-12", "paint": "camo", "ambush": {"mix": {"off": 0.55, "on": 0.45}, "one": "off"}}]
 
 
 def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=None, mark_z=1.22, under=False, bent=None):
@@ -463,7 +664,11 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     cup = v.cupola((x0 - 0.56, 0.0, 2.285), 0.335, 0.34, slits=5, start=math.radians(36))
     v.hatch_round("hatch_commander", "turret", cup + Z * 0.0, 0.25, Z, -X, thick=0.03, opens=105.0)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
-    v.use("turret")
+    # the MG 34 on the anti-aircraft rail round the cupola: only he fires it, standing up in it (Brian, 22 November);
+    # all round but where his lid stands open behind him: to the right as far as 125 degrees, to the left only 110 (its
+    # belt drum hangs on the gun's left and met the lid from -120). Its lift stops where the butt, swinging down
+    # over the open hatch, and goes down into it as the muzzle lifts at aircraft (MG34_LIFT: see there)
+    v.roof_gun("mg34", cup, arc=(-110.0, 125.0), lay=(-10.0, MG34_LIFT), ring=0.335 + 0.045)
     v.vent((x0 + 0.42, -0.2, 2.245), 0.12, 0.05)
     v.port((x0 + 0.2, 0.32, 2.262), Z, 0.05)
     # turret face: the gunner's sight port and a visor each side of the gun
@@ -556,10 +761,14 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     swaps = {"how": "one model for the whole war. gun: show the chosen gun's parts and scale the other's to nothing (a part scaled to "
                     "nothing is not drawn), and use its sockets in place of the default ones. paint: put the chosen coat's colours "
                     "in place of the paints of the same names. " + BY_MONTH_HOW,
-             "paint": coats(v, paint or "grey"), "by_month": sprayed(PZ4_MONTHS)}
+             "paint": coats(v, paint or "grey"), "by_month": sprayed(roof_mg_months(PZ4_MONTHS, "1943-05"))}
     if zim:
         swaps["how"] += " " + ZIMMERIT_HOW
         swaps["zimmerit"] = zimmerit_swap(zim)
+    swaps["how"] += " " + ROOF_MG_HOW
+    swaps["roof_mg"] = roof_mg_swap(["roof_mg", "roof_mg_cradle", "roof_mg_rail"], "off",
+                                    "an MG 34 on the anti-aircraft rail round her cupola", "1943-05 on (Ausf. H and J)",
+                                    "1939 to April 1943: no rail on her cupola (and a tank of any year whose crew kept the gun inside)")
     if gun == "all":
         swaps["gun"] = {"default": "long", "choices": {
             "long": {"what": "7.5 cm L/43 and L/48, double-baffle muzzle brake", "years": "1942 on", "parts": ["barrel_long"], "sockets": {"muzzle": "muzzle"}, "muzzle_brake": True},
@@ -578,10 +787,13 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     return v
 
 
-def panther(fine=True, tag="GER", paint=None):
+def panther(fine=True, tag="GER", paint=None, ambush=False):
     """Panther Ausf. G: 6.87 m hull, 3.27 m wide, 2.99 m high; sloped plate all round, eight axles of big interleaved
-    wheels a side with the track lying on them, drive at the front; the long 7.5 cm L/70 in a rounded mantlet."""
+    wheels a side with the track lying on them, drive at the front; the long 7.5 cm L/70 in a rounded mantlet.
+    paint "yellow" (dark yellow) or "camo" (olive green and red-brown sprayed over it); ambush: the dots of the late
+    summer of 1944 over the sprayed coat (parts of their own, for the file's `ambush` swap)."""
     v = Works("Panther", "Panther", "tank", tag, fine, paint=GER_COATS[paint or "yellow"][0])       # (she came after the grey: dark yellow from her first day)
+    v.dice = 0.2
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, st, zf, zr = 0.90, 1.63, 1.26, 1.10, 1.76
     # ---- the hull: a tub between the tracks; over them a box whose every side leans in ---------------
@@ -595,11 +807,21 @@ def panther(fine=True, tag="GER", paint=None):
         return sw - (z - zf) * (sw - st) / (zr - zf)
     # the nose: the hull machine gun in its ball on the right of the glacis, towing eyes, the track guards' front flaps
     g_at = lambda u, y: Vector((3.36, y, 1.00)) + gl * u + gn * 0.002      # noqa: E731  (a place on the glacis, u metres up it)
-    v.mg_ball(g_at(0.62, -0.62), gn, 0.12, socket="hull_mg")
+    # (the ball sits square in the sloped plate, but its gun looks ahead over the ground, not up the glacis)
+    mb, rb_, aim = g_at(0.62, -0.62), 0.12, Vector((1.0, 0.0, -0.03)).normalized()
+    v.lathe(mb - gn * 0.02, gn, [(0.035, rb_ * 0.95), (0.035, rb_ * 1.28), (0.0, rb_ * 1.36), (0.0, 0.0)], "upper", v.n(20, 8))       # the cast ring
+    v.bolts(mb + gn * 0.016, gn, rb_ * 1.2, 8, r=0.011)
+    v.lathe(mb - gn * 0.02, gn, [(rb_ * 0.86, 0.0)] + [(math.sin(a) * rb_, math.cos(a) * rb_) for a in (math.radians(d) for d in (62, 44, 26, 8))], "upper", v.n(20, 8))
+    v.mg(mb + aim * 0.095, aim, 0.36)
+    v.socket("hull_mg", mb + aim * 0.455, aim)
     if fine:
         v.weld(g_at(0.18, -0.86), g_at(0.18, 0.86), gn)
-        for y in (-0.3, 0.3):                                        # the gun's travel crutch, folded
-            v.rod(g_at(0.95, y), g_at(1.16, y * 0.4), 0.018, "upper", 6)
+        v.weld(g_at(1.30, -st + 0.04), g_at(1.30, st - 0.04), gn)           # where the glacis meets the roof
+        for s in (LEFT, RIGHT):                                      # and where it meets each side plate: the side plate's tenons come through it
+            a, b = Vector((3.21, s * sw, zf)), Vector((2.27, s * st, zr))
+            for k in range(4):
+                c = a.lerp(b, (k + 0.55) / 4.0) - Y * s * 0.045 + gn * 0.011
+                v.put(bm_box((0.09, 0.05, 0.022), c, rot(0, math.degrees(math.atan2(gl.z, gl.x)))), "upper", 0.004)
     for s in (LEFT, RIGHT):
         v.hook((3.22, s * 0.84, 0.86), X, 0.1)
         v.hook((-3.14, s * 0.80, 0.72), -X, 0.1)
@@ -620,6 +842,19 @@ def panther(fine=True, tag="GER", paint=None):
             v.handle((x, -0.12, zr + 0.025), (x, 0.12, zr + 0.025), Z, 0.008, 0.04, "steel")
         for y in (-0.3, 0.3):
             v.ball((-2.4, y, zr + 0.025), 0.1, "upper", 12, 6, dome=True, squash=0.5)
+        # the big hatch is bolted down all round
+        for k in range(7):
+            x = -3.1 + 1.38 * k / 6.0
+            for y in (-0.47, 0.47):
+                v.bolt((x, y, zr + 0.025), Z, 0.012, 0.007)
+        for x in (-3.15, -1.67):
+            for y in (-0.25, 0.0, 0.25):
+                v.bolt((x, y, zr + 0.025), Z, 0.012, 0.007)
+        # the gun's travel lock at the back of the deck, folded down (she travelled with her turret turned about)
+        v.slab((-3.33, -0.2, zr), (-3.25, 0.2, zr + 0.05), "upper", 0.006)
+        for y in (-0.15, 0.15):
+            v.rod((-3.29, y, zr + 0.045), (-3.0, y * 0.55, zr + 0.052), 0.02, "upper", 6)
+        v.slab((-3.0, -0.11, zr + 0.03), (-2.94, 0.11, zr + 0.08), "upper", 0.008)
     for s in (LEFT, RIGHT):
         v.fan_grille((-2.40, s * 0.90, zr), 0.30)
         for x in (-1.84, -2.96):
@@ -639,6 +874,10 @@ def panther(fine=True, tag="GER", paint=None):
     for s in (LEFT, RIGHT):
         v.bin(r_at(0.42, s * 0.5) + rn * 0.001, r_at(1.0, s * 1.16) + rn * 0.3, bevel=0.02, latches=2, lid_side=(-1, 0, 0))
     v.jack(r_at(0.2, 0.0) + rn * 0.06, 90.0)
+    if fine:
+        # the convoy lamp over the left bin
+        v.lathe(r_at(1.085, 0.82), rn, [(0.0, 0.0), (0.0, 0.05), (0.05, 0.05), (0.06, 0.03), (0.06, 0.0)], "upper", 12)
+        v.lathe(r_at(1.085, 0.82) + rn * 0.061, rn, [(0.0, 0.0), (0.0, 0.025)], "lamp", 8)
     # along the sides: skirts over the tracks, the cleaning rods' tube on the left, tools, the tow cable on the roof edge
     v.skirts(-3.0, 3.0, 1.66, 0.84, 1.10, count=6)
     zt_ = 1.52
@@ -660,7 +899,8 @@ def panther(fine=True, tag="GER", paint=None):
               per_axle=lambda i: {"gap": 0.34} if i % 2 == 0 else {"gap": 0.05, "bolts": 0},
               sprocket_kw=dict(teeth=17, wide=0.44, tooth=0.035, holes=0, bolts=12, sides=30, hub=0.36),
               idler_kw=dict(wide=0.4, kind="spoke", spokes=8),
-              track=dict(pitch=0.15, wide=0.66, thick=0.03, sag=0.02, style={"kind": "plate", "horn": "twin", "horn_gap": 0.148, "horn_high": 0.08, "grouser": 0.016, "cleats": True}))
+              track=dict(pitch=0.15, wide=0.66, thick=0.03, sag=0.02, style={"kind": "plate", "horn": "twin", "horn_gap": 0.148, "horn_high": 0.08, "grouser": 0.016, "cleats": True}),
+              sprung=(0.10, 0.16))          # (two torsion bars to an axle: each wheel rides on a spring of its own)
     v.use("hull")
     for s in (LEFT, RIGHT):
         v.lathe((2.95, s * 0.88, 0.80), Y * s, [(0.2, 0.0), (0.2, 0.15), (0.12, 0.24), (0.0, 0.27), (0.0, 0.0)], "upper", v.n(22, 8))
@@ -676,13 +916,28 @@ def panther(fine=True, tag="GER", paint=None):
     v.lathe((x0, 0, zt - 0.03), Z, [(0.06, 0.86), (0.0, 0.88), (0.0, 0.0)], "shade", v.n(36, 12))
     roof = zt + th
     cup = v.cupola((x0 - 0.42, 0.36, roof), 0.36, 0.27, slits=7, start=0.2)
-    v.hatch_round("hatch_commander", "turret", cup, 0.26, Z, Y, thick=0.03, opens=105.0)
+    # (what she carries, as the Tiger does: damp earth low and a pale haze on top, the shadow in her creases; her mantlet
+    #  and her cupola are castings, uneven in patches)
+    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, rim=True,
+                     cast=lambda p, part: part == "gun" or (part == "turret" and p.z > roof - 0.02 and (p - cup).length < 0.48))
+    # the seven-periscope cupola of the Ausf. A on, with the rail round it, much as the Tiger's from July 1943: its lid
+    # is cranked up out of its seat and swung flat about a post (here on its left-rear, as the Tiger's), back through the
+    # gap in the rail. (The Ausf. D of July and August 1943 had a drum cupola whose lid flipped up: not modelled.)
+    v.hatch_swing("hatch_commander", "turret", cup, 0.26, post=CUPOLA_POST, swing=CUPOLA_SWING, lift=CUPOLA_LIFT)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
+    # the MG 34 on the anti-aircraft rail round it, as on the Panzer IV and the Tiger: only he fires it (Brian, 22
+    # November); its mount rides the rail from the gap's one end to the other, clear of the lid swung back across it
+    v.roof_gun("mg34", cup, arc=PANTHER_MG_ARC, lay=(-10.0, MG34_LIFT), ring=0.36 + 0.045, gap=PANTHER_RAIL_GAP)
     v.use("turret")
     v.vent((x0 + 0.42, -0.1, roof), 0.12, 0.05)
     v.periscope((x0 + 0.45, -0.42, roof), X, (0.08, 0.16, 0.06))
     for at in ((x0 + 0.62, 0.42), (x0 + 0.62, -0.42), (x0 - 0.85, 0.0)):
         v.lift_eye((at[0], at[1], roof), Z, X if at[1] else Y, 0.035)
+    if fine:
+        # the close-defence projector's round housing in the roof behind the loader, its plug bolted down
+        nd = Vector((x0 - 0.50, -0.40, roof))
+        v.lathe(nd, Z, [(0.0, 0.0), (0.0, 0.1), (0.035, 0.1), (0.05, 0.085), (0.05, 0.0)], "upper", v.n(20, 8))
+        v.bolts(nd + Z * 0.05, Z, 0.06, 4, r=0.01, high=0.007)
     # the round door in the turret's back plate
     bn = Vector((-math.cos(math.radians(24.6)), 0, math.sin(math.radians(24.6))))
     bc = Vector((x0 - 1.30 + 0.35 * 0.5, 0.0, zt + 0.02 + (th - 0.02) * 0.5)) + bn * 0.002
@@ -705,6 +960,10 @@ def panther(fine=True, tag="GER", paint=None):
     v.socket("muzzle", (tx + 0.8 + 3.86, 0, tz), X)
     v.m.info["bore"] = 0.075
 
+    # (the yellow keeps about half of what is seen, and the barrel stays in it; the blotches laid from a seed that puts
+    #  a patch across her mantlet, as a crew spraying her face would)
+    spray(v, paint, cover=(0.30, 0.26), seed=71)
+    dots = ambush_dots(v) if ambush else []
     # ---- sockets for what happens to her ----------------------------------------------------------------------
     v.socket("engine", (-2.4, 0.0, zr + 0.03), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-2.4, 0.9, zr + 0.03), Z, part="hull")
@@ -719,8 +978,21 @@ def panther(fine=True, tag="GER", paint=None):
     v.socket("case", (x0 - 1.1, 0.0, zt + 0.4), -X, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.45, kick=0.8, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=15.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-1.2, 3.2, 0.45, 168.0))
-    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: the coat's colours stand in place of the paints of the same names. She wore dark yellow all her life.",
-                                                "paint": coats(v, "yellow", only=("yellow",))}
+    swaps = {"how": "paint: the coat's colours stand in place of the paints of the same names. She wore dark yellow all her life, from 1943 with "
+                    "olive green and red-brown sprayed over it. " + BY_MONTH_HOW + " " + ROOF_MG_HOW,
+             "paint": coats(v, "yellow", only=("yellow", "camo")), "by_month": sprayed(roof_mg_months(PANTHER_MONTHS, "1943-09")),
+             "roof_mg": roof_mg_swap(["roof_mg", "roof_mg_cradle", "roof_mg_rail"], "on",
+                                     "an MG 34 on the anti-aircraft rail round her cupola", "1943-09 on (Ausf. A and G)",
+                                     "July and August 1943: the Ausf. D's first cupola had no rail (and a tank of any year whose crew kept the gun inside)")}
+    if dots:
+        swaps["how"] += " " + AMBUSH_HOW
+        swaps["ambush"] = {"default": "off", "choices": {
+            "off": {"what": "her sprayed coat as it is", "years": "all her life", "parts": []},
+            "on": {"what": "dots of another of her colours over every patch of the three-colour coat", "years": "tanks built from late August 1944",
+                   "parts": dots, "with": {"paint": "camo"}}}}
+    else:
+        swaps["by_month"] = [{k: x for k, x in row.items() if k != "ambush"} for row in swaps["by_month"]]
+    v.m.info.setdefault("file", {})["swaps"] = swaps
     v.kill_rings("barrel")                                             # no name: a German crew painted rings round the barrel (b477)
     return v
 
@@ -753,9 +1025,13 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
         v.slab((-3.16, s * 1.55, zf - 0.012), (2.3, s * 1.80, zf), "upper", 0.003)
         v.plate([(2.3, s * 0.96, zf), (2.3, s * 1.80, zf), (3.12, s * 1.80, 1.02), (3.12, s * 0.96, 1.02)][::int(s)], 0.008, "upper", 0.003)
         v.plate([(-3.16, s * 1.80, zf), (-3.16, s * 0.96, zf), (-3.42, s * 0.96, 0.86), (-3.42, s * 1.80, 0.86)][::int(s)], 0.008, "upper", 0.003)
-    # the roof: round lids for the driver and the wireless operator, their periscopes, the ventilator
-    v.hatch_round("hatch_driver", "hull", (1.55, 0.86, zr), 0.25, Z, -X, thick=0.03, opens=105.0)
-    v.hatch_round("hatch_radio", "hull", (1.55, -0.86, zr), 0.25, Z, -X, thick=0.03, opens=105.0)
+    # the roof: round lids for the driver and the wireless operator, their periscopes, the ventilator. Each lid is hung
+    # on its outboard edge and opens up and out over the track, away from the turret: the lids were placed out
+    # beside the men, half over the sponsons, so that they would not foul the turret (Henschel's drawing J2877). Until
+    # 22 November they were hung on their back edges and stood up into the turret's front corners and the mantlet; now
+    # they also sit 10 cm further forward (TIGER_HULL_LID_X), clear of the mantlet's overhanging ends as they rise.
+    for nm, s in (("hatch_driver", LEFT), ("hatch_radio", RIGHT)):
+        v.hatch_round(nm, "hull", (TIGER_HULL_LID_X, s * 0.86, zr), 0.25, Z, Y * s, thick=0.03, opens=TIGER_HULL_LID)
     v.use("hull")
     v.vent((1.85, 0.0, zr), 0.12, 0.05)
     # the engine deck: the long hatch down the middle, grilles over the radiators and fans each side
@@ -833,8 +1109,15 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.lathe((x0, 0, zt - 0.03), Z, [(0.06, 0.95), (0.0, 0.97), (0.0, 0.0)], "shade", v.n(36, 12))
     roof = zt + th
     cup = v.cupola((x0 - 0.36, 0.5, roof), 0.36, 0.2, slits=7, start=0.2)
-    v.hatch_round("hatch_commander", "turret", cup, 0.26, Z, -Y, thick=0.03, opens=105.0)
+    # the seven-periscope cupola of July 1943 on: its lid is cranked up out of its seat and swung flat about a post on
+    # its left, back through the gap left for it in the rail (tiger1.info: hinged on the left; mirrored almost at once
+    # so that it swung to the rear, not the front). Tigers built before July 1943 had the tall drum cupola, whose lid
+    # flipped up: not modelled, this one lid serves her whole war.
+    v.hatch_swing("hatch_commander", "turret", cup, 0.26, post=CUPOLA_POST, swing=CUPOLA_SWING, lift=CUPOLA_LIFT)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
+    # the MG 34 on the anti-aircraft rail round the cupola: only he fires it (Brian, 22 November); its mount rides the
+    # rail all round from the gap's one end to the other, clear of the lid lying swung back across the gap
+    v.roof_gun("mg34", cup, arc=TIGER_MG_ARC, lay=(-10.0, MG34_LIFT), ring=0.36 + 0.045, gap=TIGER_RAIL_GAP)
     v.hatch_rect("hatch_loader", "turret", (x0 + 0.12, -0.5, roof), (0.52, 0.44), Z, X, hinge="front", opens=100.0, thick=0.028)
     v.use("turret")
     v.vent((x0 - 0.5, -0.1, roof), 0.13, 0.05)
@@ -903,7 +1186,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.socket("engine", (-2.2, 0.0, zr + 0.03), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-2.2, 1.0, zr + 0.03), Z, part="hull")
     v.socket("fire.2", (cup.x, cup.y, cup.z + 0.1), Z, part="turret", note="out of the commander's hatch")
-    v.socket("fire.3", (1.55, 0.86, zr + 0.02), Z, part="hull", note="out of the driver's hatch")
+    v.socket("fire.3", (TIGER_HULL_LID_X, 0.86, zr + 0.02), Z, part="hull", note="out of the driver's hatch")
     v.socket("ring", (x0, 0.0, zt), Z, part="hull", note="the turret ring: where the blast comes from when her ammunition goes")
     v.socket("hit.front", f_at(0.1, 1.5), fn, part="hull")
     v.socket("hit.left", (0.2, sw, 1.5), Y, part="hull")
@@ -912,11 +1195,14 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.socket("hit.turret", (x0 + 0.3, 0.96, zt + 0.4), Y, part="turret")
     v.socket("case", (x0 + 0.12, -0.5, roof), Z, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.55, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
-                 traverse=6.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
-    swaps = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + ZIMMERIT_HOW + " " + BY_MONTH_HOW,
-             "paint": coats(v, paint or "grey"), "by_month": sprayed(TIGER_MONTHS)}
+                 traverse=10.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
+    swaps = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + ZIMMERIT_HOW + " " + BY_MONTH_HOW + " " + ROOF_MG_HOW,
+             "paint": coats(v, paint or "grey"), "by_month": sprayed(roof_mg_months(TIGER_MONTHS, "1943-07"))}
     if zim:
         swaps["zimmerit"] = zimmerit_swap(zim)
+    swaps["roof_mg"] = roof_mg_swap(["roof_mg", "roof_mg_cradle", "roof_mg_rail"], "off",
+                                    "an MG 34 on the anti-aircraft rail round her seven-periscope cupola", "1943-07 on",
+                                    "1942 to June 1943: the first, drum-shaped cupola had no rail (and a tank of any year whose crew kept the gun inside)")
     v.m.info.setdefault("file", {})["swaps"] = swaps
     v.kill_rings("barrel")                                             # no name: a German crew painted rings round the barrel (b477)
     return v

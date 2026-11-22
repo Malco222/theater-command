@@ -225,13 +225,24 @@ month (ours, low on the numbers). Near mesh only: about 10,800 triangles on the 
 short of triangles can leave the parts off at its second level). The Tiger's wheels are interleaved as hers were: the
 first axle's wheels outermost, the next axle's close behind.
 
+**The ambush dots** (the Panther only). Her `camo` coat can wear the dapple of the late summer of 1944 ('Hinterhalt'):
+small dots of another of her colours over every patch, dark yellow on the green and the brown, green or brown on the
+yellow. A file colours only its points and her plates are cut no finer than 0.2 m, so each dot is a ten-sided dab of
+its own lying 4 mm proud of the plate and bent to it, coloured through `blend` and `blend2` as the coat is (on a
+one-colour coat they show nothing). They are parts of their own (`ambush_hull`, `ambush_turret`, `ambush_gun`), shown
+by the swap `ambush` (`on` goes with the paint `camo`) and given by month in `swaps.by_month`. Laid by
+`tanks_ger.ambush_dots` after `spray`, and only where a dot lies whole on one open run of her plate. Near mesh only,
+about 600 dots and 5,000 triangles; `landlook.py Panther <out> front 32 1280x720 paint=camo ambush=1` shows them.
+
 **The two paints the ground scene gave** (the art director, 21 Nov, so a file matches the Normandy scene's own
 colours): American olive drab 585139 with 46402D and shade 363123, German dark yellow 8E7E58 with 726546 and shade
 584E36 (`motorpool.TONES` holds each coat's two darker tones where she gave them; any other coat's are worked out).
 Ground vehicles only: the planes' swatches are their own.
 
 **Budget.** About 50,000 triangles near and 5,000 far for a medium tank (the two with the paste run to 65,000 and
-63,000 with it shown).
+63,000 with it shown). The three German tanks brought to the planes' benchmark (plates cut at 0.2 m for their dirt,
+the sprayed coat, sprung wheels) stay under about 80,000 as the game draws them: the Tiger 80,749 with her paste, the
+Panzer IV 78,616, the Panther 72,444 with her ambush dots (5,483 far).
 
 ## How a vehicle is made to look made
 

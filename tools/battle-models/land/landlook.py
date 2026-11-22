@@ -1,6 +1,6 @@
 """Quick looks at a vehicle while she is being built: stills from fixed places.
 
-    python landlook.py <Name> <out folder> [views] [samples] [WxH] [pose=clip@t,clip@t] [turn=deg] [lift=deg] [gun= paint= mantlet= skirts= zimmerit=1]
+    python landlook.py <Name> <out folder> [views] [samples] [WxH] [pose=clip@t,clip@t] [turn=deg] [lift=deg] [gun= paint= mantlet= skirts= zimmerit=1 ambush=1]
 
 views: front, rear, side, top, gear (the running gear, close), game (the game's camera: 16 m off, 30 degrees down),
 low, turret, deck. Default: front,rear,gear,game.
@@ -37,6 +37,8 @@ def main():
         pick["skirts"] = True if opt["skirts"] in ("all", "1", "yes") else opt["skirts"]
     if opt.get("zimmerit"):
         pick["zimmerit"] = True
+    if opt.get("ambush"):
+        pick["ambush"] = True
     v = vehicles.build(name, True, **pick)
     m = v.m
     if opt.get("look") == "file":         # what the game's file carries and nothing more: each paint flat, tinted by the points' own colours
@@ -49,9 +51,19 @@ def main():
         pose = rigid.merge(pose, rigid.aim(m, "turret", float(opt["turn"])))
     if "lift" in opt and "gun" in m.part_at:
         pose = rigid.merge(pose, rigid.aim(m, "gun", float(opt["lift"])))
+    if "roof" in opt and "roof_mg" in m.part_at:          # roof=bearing[,lift]: the roof machine gun swung and tipped
+        a, _, b = opt["roof"].partition(",")
+        pose = rigid.merge(pose, rigid.aim(m, "roof_mg", float(a)))
+        if b:
+            pose = rigid.merge(pose, rigid.aim(m, "roof_mg_cradle", float(b)))
     for item in (opt.get("pose", "").split(",") if opt.get("pose") else []):
         clip, at = item.split("@")
         pose = rigid.merge(pose, rigid.pose_of(m, m.clips[clip], float(at)))
+    if opt.get("lids") == "wrong":                       # (for a before picture: every lid turned the way it went before 22 November, into the hull)
+        for p in m.parts:
+            if p.note == "a hatch: + opens" and p.name in pose:
+                q, mv, sc = pose[p.name]
+                pose[p.name] = (q.conjugated(), mv, sc)
     if pose:
         rigid.apply_pose(arm, pose, model=m)
     landmarks.put(m, ob, arm, name=opt.get("name"), rings=int(opt.get("rings", 0)))
@@ -83,6 +95,10 @@ def main():
         "rearlow": ((cx - L * 0.9, -L * 0.55, 1.0), (cx - L * 0.2, 0, H * 0.4), 50),
         "nose": ((cx + L * 0.62, -L * 0.2, H * 0.62), (cx + L * 0.36, 0.1, H * 0.36), 55),
     }
+    if "roof_mg_cradle" in m.part_at:                     # close on the roof machine gun: from ahead and to her right, and from behind the commander
+        rt = m.parts[m.part_at["roof_mg_cradle"]].pivot
+        shots["roofgun"] = (tuple(rt + Vector((1.7, -1.6, 0.75))), tuple(rt + Vector((0.15, 0.0, -0.12))), 45)
+        shots["roofback"] = (tuple(rt + Vector((-1.9, -1.2, 0.95))), tuple(rt + Vector((0.25, 0.0, -0.15))), 45)
     os.makedirs(out, exist_ok=True)
     for vw in views:
         eye, tgt, lens = shots[vw]
