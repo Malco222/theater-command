@@ -173,6 +173,64 @@ namespace LandCrater
 				}
 			}
 		}
+
+		/** The drawn ground's own normal at a place, as its near tiles' points are lit: Lit's (the ground's own, exact),
+		 * or the slope across the tiles' spacing (250 m tiles of 60 squares, LandField's NearQuads); not the fine slope a hole's or a strip's own few
+		 * triangles take from the ground under them. What lies flat on the ground lit as the ground round it is, in a low
+		 * sun: a thrown soil's edge lit by its own slope stood out as a ruled polygon, a track's strip as a flat stripe
+		 * (the art director's cut 4, shot 07, 22 November). */
+		struct Up
+		{
+			float X = 0.0f, Y = 0.0f, Z = 1.0f;
+		};
+		Up GroundUp(const UpFn& Lit, const HeightFn& Height, double X, double Y)
+		{
+			if (Lit)
+			{
+				double Nx = 0.0, Ny = 0.0, Nz = 1.0;
+				Lit(X, Y, Nx, Ny, Nz);
+				Up U;
+				if (Nz == Nz && Nz > 0.0)
+				{
+					U.X = static_cast<float>(Nx);
+					U.Y = static_cast<float>(Ny);
+					U.Z = static_cast<float>(Nz);
+				}
+				return U;
+			}
+			constexpr double S = 250.0 / 60.0;
+			const double Dx = (Height(X + S, Y) - Height(X - S, Y)) / (2.0 * S), Dy = (Height(X, Y + S) - Height(X, Y - S)) / (2.0 * S);
+			const double Long = std::sqrt(Dx * Dx + Dy * Dy + 1.0);
+			Up U;
+			if (Long == Long && Long > 0.0)
+			{
+				U.X = static_cast<float>(-Dx / Long);
+				U.Y = static_cast<float>(-Dy / Long);
+				U.Z = static_cast<float>(1.0 / Long);
+			}
+			return U;
+		}
+		/** Point K's normal W of the way from its own to Ground's (unit again). */
+		void LeanTo(LandField::Mesh& M, size_t K, const Up& Ground, double W)
+		{
+			float* N = &M.Normals[K * 3];
+			const double Nx = N[0] + (Ground.X - N[0]) * W, Ny = N[1] + (Ground.Y - N[1]) * W, Nz = N[2] + (Ground.Z - N[2]) * W;
+			const double Long = std::sqrt(Nx * Nx + Ny * Ny + Nz * Nz);
+			if (Long > 1e-9)
+			{
+				N[0] = static_cast<float>(Nx / Long);
+				N[1] = static_cast<float>(Ny / Long);
+				N[2] = static_cast<float>(Nz / Long);
+			}
+		}
+		/** A hash of a place (to the centimetre) and a salt, as a share 0 to 1: the same at a piece's end as at the next
+		 * piece's start, so a strip's ragged edge runs on unbroken. */
+		double PlaceShare(double X, double Y, uint64_t Salt)
+		{
+			const uint64_t Qx = static_cast<uint64_t>(static_cast<int64_t>(std::llround(X * 100.0)));
+			const uint64_t Qy = static_cast<uint64_t>(static_cast<int64_t>(std::llround(Y * 100.0)));
+			return static_cast<double>(Mix(Mix(Qx, Qy), Salt) >> 11) * (1.0 / 9007199254740992.0);
+		}
 	}
 
 	Size SizeOf(const std::string& Name, double CalibreMm)
@@ -292,7 +350,7 @@ namespace LandCrater
 	}
 
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under, std::vector<double>* OutCut)
+		const ColourFn& Under, std::vector<double>* OutCut, const UpFn& Lit)
 	{
 		if (OutCut)
 		{
@@ -540,6 +598,23 @@ namespace LandCrater
 			}
 		}
 		Normals(Out, FirstPoint, FirstIndex);
+		// The thrown soil lit as the ground it lies on: its thin edge wholly by the ground's own normal (lit by its own
+		// slope down from the lip, a low sun drew the edge as a ruled polygon, brighter on one side and darker on the
+		// other: the art director's cut 4, shot 07), the rings inside it more and more by their own, the lip by its own.
+		for (int Ring = 0; Ring < NRings; ++Ring)
+		{
+			const RingOf& Rg = Rings[Ring];
+			if (!Rg.bOut)
+			{
+				continue;
+			}
+			const double W = Rg.T >= 1.0 ? 1.0 : Rg.T >= 0.6 ? 0.9 : Rg.T >= 0.32 ? 0.55 : 0.15;
+			for (int K = 0; K < N; ++K)
+			{
+				const size_t I = static_cast<size_t>(Index[static_cast<size_t>(Ring * N + K)]);
+				LeanTo(Out, I, GroundUp(Lit, Height, Out.Positions[I * 3], Out.Positions[I * 3 + 1]), W);
+			}
+		}
 	}
 
 	void Field::Begin(HeightFn InHeight, uint64_t InSeed, ColourFn InUnder)
@@ -623,7 +698,7 @@ namespace LandCrater
 		// (laid on what is there now: the floor of an older hole where it is torn in one)
 		const HeightFn Surface = [this](double Px, double Py) { return SurfaceAt(Px, Py); };
 		std::vector<double> CutLine;
-		Lay(X, Y, S, SoilOf(Ground == "earth" && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr);
+		Lay(X, Y, S, SoilOf(Ground == "earth" && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
 		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
 		H.X = X;
 		H.Y = Y;
@@ -1294,7 +1369,8 @@ namespace LandCrater
 		return P;
 	}
 
-	void Ruts::Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift) const
+	void Ruts::Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift,
+		uint64_t Salt) const
 	{
 		const double Dx = BX - AX, Dy = BY - AY;
 		const double Long = std::sqrt(Dx * Dx + Dy * Dy);
@@ -1302,27 +1378,47 @@ namespace LandCrater
 		{
 			return;
 		}
-		// (across her way, left to right: the faded edge, the pressed strip, the faded edge; laid counter-clockwise)
+		// Across her way, left to right: the ground's own colour at the outer edge, a feathered band part paint and part
+		// ground, the pressed strip (two points), the band, the edge; laid counter-clockwise, lit as the ground round it.
+		// Each end its own widths and tones from its place, so the edges run ragged and the pressed strip mottled piece to
+		// piece, and one piece's end is the next one's start (the art director's cut 4, shot 07: "the track marks are
+		// hard-edged flat stripes", "feather it").
 		const double Nx = -Dy / Long, Ny = Dx / Long;
-		const double Off[4] = { Half + Edge, Half, -Half, -(Half + Edge) };
-		const size_t FirstPoint = Out.Colours.size(), FirstIndex = Out.Triangles.size();
-		uint32_t A[4], B[4];
-		for (int K = 0; K < 4; ++K)
+		uint32_t A[StripAcross], B[StripAcross];
+		for (int End = 0; End < 2; ++End)
 		{
-			const bool bEdge = K == 0 || K == 3;
-			for (int End = 0; End < 2; ++End)
+			const double Cx = End ? BX : AX, Cy = End ? BY : AY;
+			const Up Here = GroundUp(Lit, Height, Cx, Cy);
+			double Off[StripAcross];
+			Rgb8 Colour[StripAcross];
+			for (int Side = 0; Side < 2; ++Side)
 			{
-				const double Px = (End ? BX : AX) + Nx * Off[K], Py = (End ? BY : AY) + Ny * Off[K];
-				const Rgb8 Ground = UnderColour ? UnderColour(Px, Py) : Paint;
-				(End ? B : A)[K] = Put(Out, Px, Py, Height(Px, Py) + Lift, bEdge ? Ground : Paint);
+				const uint64_t Own = Salt * 2u + static_cast<uint64_t>(Side);
+				const double Sign = Side ? -1.0 : 1.0;
+				const int OuterK = Side ? StripAcross - 1 : 0, BandK = Side ? StripAcross - 2 : 1, PressK = Side ? StripAcross - 3 : 2;
+				Off[OuterK] = Sign * (Half + Edge * (0.75 + 0.55 * PlaceShare(Cx, Cy, Own ^ 0x0e1ull)));
+				Off[BandK] = Sign * (Half + Edge * (0.25 + 0.3 * PlaceShare(Cx, Cy, Own ^ 0xba2ull)));
+				Off[PressK] = Sign * Half * (0.78 + 0.22 * PlaceShare(Cx, Cy, Own ^ 0x9e3ull));
+				const Rgb8 Ground = UnderColour ? UnderColour(Cx + Nx * Off[OuterK], Cy + Ny * Off[OuterK]) : Paint;
+				Colour[OuterK] = Ground;
+				Colour[BandK] = Mixed(Paint, Ground, 0.35 + 0.3 * PlaceShare(Cx, Cy, Own ^ 0x5f4ull));
+				Colour[PressK] = Toned(Paint, 0.88 + 0.18 * PlaceShare(Cx, Cy, Own ^ 0x7c5ull));
+			}
+			for (int K = 0; K < StripAcross; ++K)
+			{
+				const double Px = Cx + Nx * Off[K], Py = Cy + Ny * Off[K];
+				const uint32_t P = Put(Out, Px, Py, Height(Px, Py) + Lift, Colour[K]);
+				Out.Normals[static_cast<size_t>(P) * 3] = Here.X;
+				Out.Normals[static_cast<size_t>(P) * 3 + 1] = Here.Y;
+				Out.Normals[static_cast<size_t>(P) * 3 + 2] = Here.Z;
+				(End ? B : A)[K] = P;
 			}
 		}
-		for (int K = 0; K < 3; ++K)
+		for (int K = 0; K + 1 < StripAcross; ++K)
 		{
 			Tri(Out, A[K], A[K + 1], B[K + 1]);
 			Tri(Out, A[K], B[K + 1], B[K]);
 		}
-		Normals(Out, FirstPoint, FirstIndex);
 	}
 
 	bool Ruts::Drive(int V, double LX, double LY, double RX, double RY, double Width)
@@ -1367,12 +1463,13 @@ namespace LandCrater
 		Patch& P = PatchFor(0.5 * (MX + PX), 0.5 * (MY + PY), In);
 		LandField::Mesh& Out = P.Sections[static_cast<size_t>(In.Section)];
 		const double Own = 0.001 * (V % 16); // (each tank her own millimetre, so two crossing never flicker, nor a column on one line)
-		// In standing corn, the corn between her tracks (and under them) laid flat: straw pressed down, a little paler
-		// and greyer than the standing ears.
+		// In standing corn, the corn between her tracks (and under them) laid flat: straw pressed down, greyer than the
+		// standing ears and darker than the open ground, its stalks' shadows and the earth showing between them (a paler
+		// straw read as a mat laid under her: the art director's cut 4, shot 07), its edges as ragged as the tracks'.
 		if (Mid == Under::Corn && Apart > Width)
 		{
-			const Rgb8 Laid_ = Mixed(UnderColour ? UnderColour(MX, MY) : Rgb(150, 136, 96), Rgb(150, 136, 98), 0.45);
-			Strip(Out, PX, PY, MX, MY, 0.5 * Apart, 0.35, Laid_, 0.012 + Own);
+			const Rgb8 Laid_ = Mixed(UnderColour ? UnderColour(MX, MY) : Rgb(150, 136, 96), Rgb(118, 104, 72), 0.5);
+			Strip(Out, PX, PY, MX, MY, 0.5 * Apart, 0.6, Laid_, 0.012 + Own, static_cast<uint64_t>(V) * 3u);
 		}
 		// Each track's own strip: pressed grass with the soil in it, crushed straw in the soil, or a dark rut.
 		for (int Side = 0; Side < 2; ++Side)
@@ -1384,10 +1481,11 @@ namespace LandCrater
 				continue;
 			}
 			const Rgb8 Ground = UnderColour ? UnderColour(0.5 * (AX + BX), 0.5 * (AY + BY)) : Rgb(100, 100, 70);
-			const Rgb8 Paint = Here == Under::Grass ? Mixed(Ground, Rgb(84, 78, 50), 0.5)
+			const Rgb8 Paint = Here == Under::Grass ? Mixed(Ground, Rgb(80, 74, 48), 0.55)
 				: Here == Under::Corn ? Mixed(Ground, Rgb(108, 92, 64), 0.6)
 				: Mixed(Ground, Rgb(70, 58, 43), 0.55);
-			Strip(Out, AX, AY, BX, BY, 0.42 * Width, 0.22 * Width, Paint, 0.02 + Own);
+			// (pressed across most of her track, then a wide feathered band: the plates' ends and the turf they tore)
+			Strip(Out, AX, AY, BX, BY, 0.36 * Width, 0.5 * Width, Paint, 0.02 + Own, static_cast<uint64_t>(V) * 3u + 1u + static_cast<uint64_t>(Side));
 		}
 		Piece Pc;
 		Pc.AX = PX;
@@ -1432,6 +1530,7 @@ namespace LandCrater
 		{
 			return false;
 		}
+		const double Share = PlaceShare(X, Y, 0xf1a7ull);
 		for (const int K : Found->second)
 		{
 			const Piece& Pc = Laid[static_cast<size_t>(K)];
@@ -1446,8 +1545,11 @@ namespace LandCrater
 			{
 				continue;
 			}
-			const double Across = std::fabs(((X - Pc.AX) * Dy - (Y - Pc.AY) * Dx) / std::sqrt(Long2));
-			if (Pc.bCorn ? Across <= 0.5 * Pc.Apart + 0.5 * Pc.Width : std::fabs(Across - 0.5 * Pc.Apart) <= 0.5 * Pc.Width)
+			// (each thing its own reach, by its place: crushed to a ragged edge, some at a track's edge left standing and
+			// some past it bent down, never a band ruled straight through the grass; the art director's cut 4, shot 07)
+			const double Off = std::fabs(((X - Pc.AX) * Dy - (Y - Pc.AY) * Dx) / std::sqrt(Long2));
+			const double Reach = 0.5 * Pc.Width * (0.55 + 0.75 * Share);
+			if (Pc.bCorn ? Off <= 0.5 * Pc.Apart + Reach : std::fabs(Off - 0.5 * Pc.Apart) <= Reach)
 			{
 				return true;
 			}

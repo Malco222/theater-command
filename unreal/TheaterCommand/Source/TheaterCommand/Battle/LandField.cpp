@@ -590,6 +590,10 @@ namespace LandField
 		/** The nearest lane's half width (its floor), 2.2 where none is near. */
 		double LaneHalfAt(double X, double Y) const;
 		double Top(double X, double Y, Drawn* What) const;
+		/** The ground under everything laid on it, as the tiles take it: the far tiles' height. */
+		double UnderZ(double X, double Y) const;
+		/** The near tiles' height: carved for the lanes, a little lower under a lane's own mesh. */
+		double NearZ(double X, double Y) const;
 		int HouseAt(double X, double Y) const;
 
 		// raster lookups
@@ -3551,7 +3555,10 @@ namespace LandField
 		const Col PastureLush = Rgb(76, 102, 50);    // a wetter, ungrazed pasture
 		// (the pale crops a step darker: the second cut's stubble lit near white, 236 228 176, where the art director
 		// asks open ground lit 120 to 160; 21 November)
-		const Col HayCut = Rgb(134, 136, 82);        // a meadow mown in June: pale aftermath, hay-coloured
+		// (the mown meadow a step darker and greener again: it lit 170 to 190 behind the knocked-out Tiger on the fourth
+		// cut's frames, where the art director asks open ground 120 to 160; the aftermath coming green through the
+		// cut stems three weeks on, 22 November)
+		const Col HayCut = Rgb(114, 120, 70);        // a meadow mown in June: the aftermath, hay-coloured stems over new green
 		const Col Meadow = Rgb(126, 128, 74);        // standing grass gone to seed: buff over green
 		const Col Wheat = Rgb(166, 140, 76);         // wheat ripening, gold with green in it (a stand of it, its stalks shading one another)
 		const Col Barley = Rgb(166, 148, 94);        // barley, ripe and paler
@@ -3807,7 +3814,8 @@ namespace LandField
 		{
 			// Grass: darker tufts where the cattle left it, paler where they grazed it down; thistles and docks.
 			C = Varied(C, 1.0 + 0.08 * N1, 0.03 * N1);
-			C = Mixed(C, Q.Crop == CpHayCut ? Meadow : PastureLush, 0.3 * Smooth(0.2, 0.55, N2));
+			// (a mown meadow's patches the regrowth's green, not the standing meadow's buff: the hay lifted, the clover under it)
+			C = Mixed(C, Q.Crop == CpHayCut ? PastureGrazed : PastureLush, (Q.Crop == CpHayCut ? 0.45 : 0.3) * Smooth(0.2, 0.55, N2));
 			C = Mixed(C, Margin, 0.45 * Smooth(5.0, 1.0, Edge));
 		}
 		C = Mixed(C, HedgeFoot, 0.55 * Smooth(2.6, 0.6, Edge));
@@ -4426,6 +4434,20 @@ namespace LandField
 	 * The field's tiles (and the band's): the ground at two levels; the lanes' floors, walls and ruts and the banks swept
 	 * in the near level, the banks as ridges in the far; the walls, houses, barns and the church in Built.
 	 */
+	double Ground::Impl::UnderZ(double X, double Y) const
+	{
+		// (the steppe's railway bank is swept at its own points: the ground's mesh leaves it out and sinks a little under it)
+		return Sp ? Land(X, Y) - (Sp->HasRail() ? 0.25 * Smooth(8.4, 7.4, Sp->RailDistance(X, Y)) : 0.0) : Terrain(X, Y);
+	}
+
+	double Ground::Impl::NearZ(double X, double Y) const
+	{
+		double Edge = 1e6, Z = UnderZ(X, Y);
+		if (!InRaster(X, Y) || LaneD[Pix(X, Y)] < LaneWall + 3.0f) Z = Carve(X, Y, Z, &Edge);
+		// Under a lane's mesh the ground drops a little more, so the lane is always the one seen.
+		return Z - 0.35 * (1.0 - Smooth(LaneWall + 0.4, LaneWall + 1.0, Edge));
+	}
+
 	void Ground::Impl::MakeTiles()
 	{
 		const int TX = TilesX(), TY = TilesY();
@@ -4435,15 +4457,9 @@ namespace LandField
 			if (I < 0 || J < 0 || I >= TX || J >= TY) return nullptr;
 			return &TileList[static_cast<size_t>(J) * TX + I];
 		};
-		// (the steppe's railway bank is swept at its own points: the ground's mesh leaves it out and sinks a little under it)
-		auto Under = [this](double X, double Y) { return Sp ? Land(X, Y) - (Sp->HasRail() ? 0.25 * Smooth(8.4, 7.4, Sp->RailDistance(X, Y)) : 0.0) : Terrain(X, Y); };
-		auto NearZ = [this, Under](double X, double Y) {
-			double Edge = 1e6, Z = Under(X, Y);
-			if (!InRaster(X, Y) || LaneD[Pix(X, Y)] < LaneWall + 3.0f) Z = Carve(X, Y, Z, &Edge);
-			// Under a lane's mesh the ground drops a little more, so the lane is always the one seen.
-			return Z - 0.35 * (1.0 - Smooth(LaneWall + 0.4, LaneWall + 1.0, Edge));
-		};
-		auto FarZ = [Under](double X, double Y) { return Under(X, Y); };
+		// (the heights as members: Ground::DrawnUp asks them again, to light what is laid on the ground as these tiles are)
+		auto NearZ_ = [this](double X, double Y) { return NearZ(X, Y); };
+		auto FarZ = [this](double X, double Y) { return UnderZ(X, Y); };
 		auto NearCol = [this](double X, double Y) { return GroundColour(X, Y); };
 		for (int J = 0; J < TY; ++J)
 			for (int I = 0; I < TX; ++I)
@@ -4461,7 +4477,7 @@ namespace LandField
 				G.NX = G.NY = bInner ? NearQuads : BandQuads;
 				G.Skirt = 1.0;
 				T.Spacing = TileSize / G.NX;
-				GridMesh(T.Near, G, NearZ, NearCol);
+				GridMesh(T.Near, G, NearZ_, NearCol);
 				G.NX = G.NY = FarQuads;
 				const double Sub = TileSize / FarQuads / 3.0;
 				GridMesh(T.Far, G, FarZ, [this, Sub](double X, double Y) {
@@ -6007,6 +6023,41 @@ namespace LandField
 		return Z;
 	}
 
+	void Ground::DrawnUp(double X, double Y, double& OutX, double& OutY, double& OutZ) const
+	{
+		// As GridMesh lays a near tile: its square's corners lit by the slope across their neighbours, the square cut
+		// along its flatter diagonal, the normal mixed across the triangle the place is in.
+		const Impl& G = *In;
+		const int TI = static_cast<int>(std::floor((X + Band) / TileSize)), TJ = static_cast<int>(std::floor((Y + Band) / TileSize));
+		const double X0 = -Band + TI * TileSize, Y0 = -Band + TJ * TileSize;
+		const bool bInner = X0 >= 0.0 && Y0 >= 0.0 && X0 + TileSize <= G.FW + 1e-6 && Y0 + TileSize <= G.FH + 1e-6;
+		const int Q = bInner ? NearQuads : BandQuads;
+		const double Step = TileSize / Q;
+		const int I = std::clamp(static_cast<int>(std::floor((X - X0) / Step)), 0, Q - 1), J = std::clamp(static_cast<int>(std::floor((Y - Y0) / Step)), 0, Q - 1);
+		double Z[4][4]; // (corners I-1 to I+2, J-1 to J+2; the four outer corners never asked)
+		for (int B = 0; B < 4; ++B)
+			for (int A = 0; A < 4; ++A)
+				Z[B][A] = ((A == 0 || A == 3) && (B == 0 || B == 3)) ? 0.0 : G.NearZ(X0 + (I - 1 + A) * Step, Y0 + (J - 1 + B) * Step);
+		auto Corner = [&Z, Step](int A, int B) { return Unit3({ -(Z[B][A + 1] - Z[B][A - 1]) / (2.0 * Step), -(Z[B + 1][A] - Z[B - 1][A]) / (2.0 * Step), 1.0 }); };
+		const V3 Na = Corner(1, 1), Nb = Corner(2, 1), Nc = Corner(2, 2), Nd = Corner(1, 2);
+		const double U = std::clamp((X - X0) / Step - I, 0.0, 1.0), V = std::clamp((Y - Y0) / Step - J, 0.0, 1.0);
+		V3 N;
+		if (std::fabs(Z[1][1] - Z[2][2]) <= std::fabs(Z[1][2] - Z[2][1]))
+		{
+			// (A, B, C and A, C, D: cut from the square's first corner to its far one)
+			N = U >= V ? Na * (1.0 - U) + Nb * (U - V) + Nc * V : Na * (1.0 - V) + Nc * U + Nd * (V - U);
+		}
+		else
+		{
+			// (A, B, D and B, C, D)
+			N = U + V <= 1.0 ? Na * (1.0 - U - V) + Nb * U + Nd * V : Nb * (1.0 - V) + Nc * (U + V - 1.0) + Nd * (1.0 - U);
+		}
+		N = Unit3(N);
+		OutX = N.X;
+		OutY = N.Y;
+		OutZ = N.Z;
+	}
+
 	bool Ground::MayBeBuilt(double X, double Y) const
 	{
 		// (Top says Floor only inside a house's footprint pixels, and Wall only on a wall's, both in the raster)
@@ -6239,7 +6290,13 @@ namespace LandField
 					double InClump = -1.0, Thick = 1.0;
 					if (What == Drawn::Pasture && !G.Sp)
 					{
-						const double Clump = Noise(X / 4.5, Y / 4.5, G.Seed ^ 0x7AF7) + 0.4 * Noise(X / 1.6, Y / 1.6, G.Seed ^ 0x7AF8);
+						// (the noise's squares turned off the field's axes, each its own way, and pushed about a little: its
+						// lattice laid the clumps out on a 4.5 m grid, read as rows of tufts from a low lens; the art director's
+						// cut 4, shot 08)
+						const double Wx = 1.3 * Noise(X / 7.3 + 3.1, Y / 7.3 - 1.7, G.Seed ^ 0x7AF9), Wy = 1.3 * Noise(X / 7.3 - 5.3, Y / 7.3 + 2.9, G.Seed ^ 0x7AFA);
+						const double Ax = 0.809 * X - 0.588 * Y + Wx, Ay = 0.588 * X + 0.809 * Y + Wy;   // (36 degrees)
+						const double Bx = 0.276 * X + 0.961 * Y, By = -0.961 * X + 0.276 * Y;             // (74 degrees the other way)
+						const double Clump = Noise(Ax / 4.5, Ay / 4.5, G.Seed ^ 0x7AF7) + 0.4 * Noise(Bx / 1.6, By / 1.6, G.Seed ^ 0x7AF8);
 						InClump = Smooth(-0.3, 0.3, Clump);
 						const double Path = G.CowPath(X, Y);
 						if (Path < 0.0 && Keep > 0.05) continue;
@@ -6296,9 +6353,16 @@ namespace LandField
 						}
 						break;
 					case Base::Tuft:
-						Scale = 0.7 + 0.7 * U4;
-						ScaleZ = 0.6 + 0.7 * U5;
+					{
+						// (most tufts small, a few big, each its own height for its spread and its own green or straw: the
+						// same big tuft over and over read as rows of one model; the art director's cut 4, shot 08)
+						Scale = 0.55 + 0.95 * std::pow(U4, 1.6);
+						ScaleZ = Scale * (0.6 + 0.6 * U5);
 						if (Crop == CpHayCut) ScaleZ *= 0.6;
+						const double Dry = Unit(Hash(H, 7));
+						TR = 0.92 + 0.2 * Dry;
+						TG = 0.97 + 0.07 * Dry;
+						TB = 0.88 + 0.18 * Dry;
 						if (Crop == CpRoots && What == Drawn::Crop)
 						{
 							Scale *= 1.6;
@@ -6308,6 +6372,7 @@ namespace LandField
 							TB = 0.74;
 						}
 						break;
+					}
 					case Base::TallGrass:
 						Scale = 0.8 + 0.5 * U4;
 						ScaleZ = 0.8 + 0.45 * U5;

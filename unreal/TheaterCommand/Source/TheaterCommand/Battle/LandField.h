@@ -316,6 +316,10 @@ namespace LandField
 		/** The drawn surface's height alone (At's Z), and what is drawn there when asked (At's What), without At's
 		 * normal and effects word: a fifth of its cost, for the camera's many questions a frame. Any thread. */
 		double HeightAt(double X, double Y, Drawn* OutWhat = nullptr) const;
+		/** The near ground's normal at a place as its mesh is lit there (its points' normals mixed across the triangle
+		 * the place is in): for what is laid flat on it, a shell hole's thrown soil, a track's strip, to be lit alike.
+		 * Under a bank or a house the ground's own, not theirs. Any thread. */
+		void DrawnUp(double X, double Y, double& OutX, double& OutY, double& OutZ) const;
 		/** Whether a house's floor or a stone wall's line may be drawn at a place (the field's 2 m raster): where false,
 		 * HeightAt never says Floor or Wall there. A few nanoseconds, so the camera's sight (LandSight) asks HeightAt
 		 * only where it may. Any thread. */

@@ -118,6 +118,17 @@ camera comes back to its shot.
   the slowest frame during the barrage. The grass and corn laid round the eye are left out of a hole
   and laid again when a hole lands within 20 m of the eye or 15 m of what it looks at, at most every 2 s. The effects kit's own flat painted craters are turned off
   in this scene (`SetCraters(false)`); the rest of a shell is unchanged.
+- **Holes and tracks lit as the ground they lie on (cut 4, shot 07).** In a low sun a hole's thrown soil, lit by its
+  own slope down from the lip, drew a ruled polygon round the hole, a tenth brighter on one side and darker on the
+  other; a tank's tracks read as flat stripes on a mat. Now the thrown soil leans to the near ground's own normal toward
+  its edge (`Ground::DrawnUp`: the tile's points' normals mixed across the triangle the place is in, as the mesh is
+  lit), wholly at the thin edge, and each track strip is lit by it outright. Each strip is six points across instead
+  of four: the ground's colour at the edge, a feathered band part paint and part ground, the pressed strip mottled; its
+  widths and tones change at every 1.2 m piece by a hash of the place, so the edges run ragged and one piece's end
+  meets the next one's start. The flattened corn between a Tiger's tracks is darker than the open ground, and the grass
+  and corn crushed under the tracks are cut to a ragged edge, each thing by its own place. The field test checks the
+  edges against the drawn ground's lighting (95% within a degree). The holes' and tracks' heights now come from
+  `HeightAt`, a fifth of `At`'s cost: a track piece costs less than before for all its extra points.
 - **The camera stays out of the corn.** `LandEye`'s world now has `Crop(x, y)`. The scene builds it from the field's
   own clutter: the tallest wheat or tall grass laid within 0.7 m, the same stalks it draws. A lens near the ground (the
   low shot, the shoulder, beside a tank) rises to 0.12 m over the ears. It rises at once and comes down slowly. A

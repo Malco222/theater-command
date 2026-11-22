@@ -230,6 +230,45 @@ namespace
 		return Best;
 	}
 
+	/** The normal the drawn mesh is lit by at a place, seen from above: its highest triangle's points' normals, mixed by
+	 * where the place is in it (as the card draws it); false where no triangle is. */
+	bool MeshUp(const LandField::Mesh& M, double X, double Y, double& OutZ, double Out[3])
+	{
+		bool bFound = false;
+		for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+		{
+			const uint32_t Ia = M.Triangles[T], Ib = M.Triangles[T + 1], Ic = M.Triangles[T + 2];
+			const float* A = &M.Positions[Ia * 3];
+			const float* B = &M.Positions[Ib * 3];
+			const float* C = &M.Positions[Ic * 3];
+			const double Den = (B[1] - C[1]) * (A[0] - C[0]) + (C[0] - B[0]) * (A[1] - C[1]);
+			if (std::fabs(Den) < 1e-9) continue;
+			const double L1 = ((B[1] - C[1]) * (X - C[0]) + (C[0] - B[0]) * (Y - C[1])) / Den;
+			const double L2 = ((C[1] - A[1]) * (X - C[0]) + (A[0] - C[0]) * (Y - C[1])) / Den;
+			const double L3 = 1.0 - L1 - L2;
+			if (L1 < -1e-7 || L2 < -1e-7 || L3 < -1e-7) continue;
+			const double Z = L1 * A[2] + L2 * B[2] + L3 * C[2];
+			if (bFound && Z <= OutZ) continue;
+			bFound = true;
+			OutZ = Z;
+			double Len = 0.0;
+			for (int K = 0; K < 3; ++K)
+			{
+				Out[K] = L1 * M.Normals[Ia * 3 + K] + L2 * M.Normals[Ib * 3 + K] + L3 * M.Normals[Ic * 3 + K];
+				Len += Out[K] * Out[K];
+			}
+			Len = std::sqrt(std::max(Len, 1e-12));
+			for (int K = 0; K < 3; ++K) Out[K] /= Len;
+		}
+		return bFound;
+	}
+	/** The angle, degrees, between a point's normal (unit) in a mesh and a unit normal. */
+	double DegreesOff(const LandField::Mesh& M, size_t I, const double Up[3])
+	{
+		const double D = M.Normals[I * 3] * Up[0] + M.Normals[I * 3 + 1] * Up[1] + M.Normals[I * 3 + 2] * Up[2];
+		return std::acos(std::clamp(D, -1.0, 1.0)) * 57.29577951308232;
+	}
+
 	double Pctl(std::vector<double> V, double Q)
 	{
 		if (V.empty()) return 0.0;
@@ -1706,12 +1745,27 @@ int main(int Argc, char** Argv)
 	{
 		const LandCrater::HeightFn Height = [&G](double X, double Y) { return G.At(X, Y).Z; };
 		const LandCrater::ColourFn Under = [&G](double X, double Y) { return G.ColourAt(X, Y); };
+		const LandCrater::UpFn GroundLit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		uint64_t S = 0x5eedull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
 		const char* Names[] = { "mortar", "gun75", "howitzer" };
 		auto Diff = [](const LandField::Rgb8& A, const LandField::Rgb8& B) { return std::abs(A.R - B.R) + std::abs(A.G - B.G) + std::abs(A.B - B.B); };
 		double Before = 0.0, After = 0.0, Inner = 0.0, InnerWas = 0.0;
 		int Edges = 0, Moved = 0, Holes = 0, Worst = 0;
+		// (and lit as the ground round it: the thin edge's normal against the drawn ground's under it)
+		auto DrawnUp = [&G](double X, double Y, double Up[3]) {
+			double Best = -1e30, Z = 0.0, Here[3];
+			bool bAny = false;
+			for (const LandField::Tile& C : G.Tiles())
+				if (X >= C.X0 - 4.0 && X < C.X1 + 4.0 && Y >= C.Y0 - 4.0 && Y < C.Y1 + 4.0 && MeshUp(C.Near, X, Y, Z, Here) && Z > Best)
+				{
+					Best = Z;
+					bAny = true;
+					for (int K = 0; K < 3; ++K) Up[K] = Here[K];
+				}
+			return bAny;
+		};
+		std::vector<double> EdgeLit, BandLit;
 		for (int K = 0; K < 300; ++K)
 		{
 			const double X = 30.0 + U() * (F.Width() - 60.0), Y = 30.0 + U() * (F.Depth() - 60.0);
@@ -1720,8 +1774,8 @@ int main(int Argc, char** Argv)
 			const LandCrater::Size Sz = LandCrater::SizeOf(Names[K % 3], 0.0);
 			const LandCrater::Soil Paint = LandCrater::SoilOf(Here.Fx);
 			LandField::Mesh Plain, Faded;
-			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Plain);
-			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Faded, Under);
+			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Plain, LandCrater::ColourFn(), nullptr, GroundLit);
+			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Faded, Under, nullptr, GroundLit);
 			if (Plain.Positions != Faded.Positions || Plain.Triangles != Faded.Triangles) ++Moved;
 			const size_t N = static_cast<size_t>(std::clamp(Sz.Sides, 8, 48));
 			if (Faded.Colours.size() < 1 + 9 * N) continue;
@@ -1740,6 +1794,12 @@ int main(int Argc, char** Argv)
 				InnerWas += Diff(Plain.Colours[I], Gc);
 				Inner += Diff(Faded.Colours[I], Gc);
 			}
+			if (K % 3 == 0)
+			{
+				double Up[3];
+				for (size_t I = 1 + 7 * N; I < 1 + 9 * N; ++I)
+					if (DrawnUp(Faded.Positions[3 * I], Faded.Positions[3 * I + 1], Up)) (I >= 1 + 8 * N ? EdgeLit : BandLit).push_back(DegreesOff(Faded, I, Up));
+			}
 		}
 		const double E = std::max(1, Edges);
 		std::printf("  shell holes: %d laid; their thin edge off the ground's colour by %.2f (was %.1f, worst now %d), the ring inside %.1f (was %.1f), summed RGB steps\n",
@@ -1747,6 +1807,12 @@ int main(int Argc, char** Argv)
 		// (the mesh keeps its points as floats: the colour read there again may be a step off the one laid)
 		Check(Holes > 200 && Moved == 0 && After / E < 0.5 && Worst <= 3, "a shell hole's thin edge is the ground's own colour, its shape unchanged",
 			Fmt("%.0f holes, %.0f changed shape, edge off by %.2f, worst %.0f", Holes, Moved, After / E, Worst));
+		std::printf("  shell holes lit as the ground: the thin edge's normal off the drawn ground's by median %.2f, 95%% %.2f, worst %.2f degrees (%zu points); the ring inside it median %.2f, 95%% %.2f\n",
+			Pctl(EdgeLit, 0.5), Pctl(EdgeLit, 0.95), Pctl(EdgeLit, 1.0), EdgeLit.size(), Pctl(BandLit, 0.5), Pctl(BandLit, 0.95));
+		// (the art director's cut 4, shot 07: lit by its own slope down from the lip, a hole's edge drew a ruled polygon in
+		// a low sun, a degree or two either way a tenth brighter or darker than the field)
+		Check(EdgeLit.size() > 500 && Pctl(EdgeLit, 0.95) < 1.0 && Pctl(BandLit, 0.95) < 8.0, "a shell hole's thrown soil is lit as the ground it lies on, its edge drawing no outline",
+			Fmt("edge 95%% %.2f, ring inside 95%% %.2f degrees off the ground's", Pctl(EdgeLit, 0.95), Pctl(BandLit, 0.95)));
 	}
 	// A body lies on a shell hole's face (Field::TopAt, the men's ground in the game): wherever a hole's floor, wall,
 	// crest, thrown soil or clod stands, TopAt is at least that high, so nothing of the hole shows through a body laid
@@ -1754,6 +1820,7 @@ int main(int Argc, char** Argv)
 	{
 		LandCrater::Field Holes;
 		Holes.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, 77u, [&G](double X, double Y) { return G.ColourAt(X, Y); });
+		Holes.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		uint64_t S = 0xb0d1e5ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
 		const char* Names[] = { "grenade", "mortar", "gun75", "howitzer", "heavy" };
@@ -1839,6 +1906,7 @@ int main(int Argc, char** Argv)
 		LandCrater::Dug Ground;
 		Ground.Begin(&G.Tiles());
 		Holes.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, 91u, [&G](double X, double Y) { return G.ColourAt(X, Y); });
+		Holes.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		Holes.Dig = LandCrater::Field::DigOn(G);
 		uint64_t S = 0xd1665ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
@@ -1990,7 +2058,9 @@ int main(int Argc, char** Argv)
 	// cheap enough for every tank every frame.
 	{
 		LandCrater::Ruts R;
-		R.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, [&G](double X, double Y) { return G.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(G));
+		// (the game's own heights: HeightAt, At's height alone)
+		R.Begin([&G](double X, double Y) { return G.HeightAt(X, Y); }, [&G](double X, double Y) { return G.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(G));
+		R.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		const LandCrater::Ruts::KindFn Kind = LandCrater::Ruts::KindOn(G);
 		uint64_t S = 0x7aac5ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
@@ -2031,7 +2101,9 @@ int main(int Argc, char** Argv)
 				if (bLaid || !bHad) { PX = X; PY = Y; bHad = true; }
 			}
 		}
-		// The strips' points: 8 a strip, across her way edge, pressed, pressed, edge, each at the piece's two ends.
+		// The strips' points: StripAcross at each of the piece's two ends, across her way edge, band, pressed, pressed,
+		// band, edge.
+		constexpr size_t Across = static_cast<size_t>(LandCrater::Ruts::StripAcross);
 		auto Diff = [](const LandField::Rgb8& A, const LandField::Rgb8& B) { return std::abs(A.R - B.R) + std::abs(A.G - B.G) + std::abs(A.B - B.B); };
 		auto DrawnTop = [&G](double X, double Y) {
 			double Z = std::nan("");
@@ -2046,7 +2118,22 @@ int main(int Argc, char** Argv)
 		long Points = 0, Edges = 0, Tris = 0;
 		int WorstEdge = 0;
 		double EdgeOff = 0.0;
-		std::vector<double> Over;
+		std::vector<double> Over, Lit;
+		// (the edge and the band no more alike than the band and the pressed strip: a feathered edge, not a stripe)
+		double EdgeBand = 0.0, BandPress = 0.0;
+		long Bands = 0;
+		auto DrawnUp = [&G](double X, double Y, double Up[3]) {
+			double Best = -1e30, Z = 0.0, Here[3];
+			bool bAny = false;
+			for (const LandField::Tile& C : G.Tiles())
+				if (X >= C.X0 - 4.0 && X < C.X1 + 4.0 && Y >= C.Y0 - 4.0 && Y < C.Y1 + 4.0 && MeshUp(C.Near, X, Y, Z, Here) && Z > Best)
+				{
+					Best = Z;
+					bAny = true;
+					for (int K = 0; K < 3; ++K) Up[K] = Here[K];
+				}
+			return bAny;
+		};
 		for (int P = 0; P < R.Patches(); ++P)
 			for (const LandField::Mesh& M : R.PatchAt(P).Sections)
 			{
@@ -2055,20 +2142,29 @@ int main(int Argc, char** Argv)
 				Tris += static_cast<long>(M.Triangles.size() / 3);
 				for (size_t I = 0; I < N; ++I)
 				{
-					const size_t Across = I % 8;
+					const size_t K = I % Across;
 					const double Px = M.Positions[I * 3], Py = M.Positions[I * 3 + 1], Pz = M.Positions[I * 3 + 2];
-					if (Across <= 1 || Across >= 6)
+					if (K == 0 || K == Across - 1)
 					{
 						const int D = Diff(M.Colours[I], G.ColourAt(Px, Py));
 						EdgeOff += D;
 						WorstEdge = std::max(WorstEdge, D);
 						++Edges;
 					}
+					else if (K == 1 || K == Across - 2)
+					{
+						const size_t Edge_ = K == 1 ? I - 1 : I + 1, Press = K == 1 ? I + 1 : I - 1;
+						EdgeBand += Diff(M.Colours[Edge_], M.Colours[I]);
+						BandPress += Diff(M.Colours[I], M.Colours[Press]);
+						++Bands;
+					}
 					else if (I % 37 == 2 && Over.size() < 2500)
 					{
 						const double Z = DrawnTop(Px, Py);
 						if (!std::isnan(Z)) Over.push_back(Pz - Z);
 					}
+					double Up[3];
+					if (I % 41 == 3 && Lit.size() < 2500 && DrawnUp(Px, Py, Up)) Lit.push_back(DegreesOff(M, I, Up));
 				}
 			}
 		const double Buried = static_cast<double>(std::count_if(Over.begin(), Over.end(), [](double O) { return O < -0.002; })) / std::max<size_t>(1, Over.size());
@@ -2113,6 +2209,12 @@ int main(int Argc, char** Argv)
 		Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] > 100, "tanks driven across the field leave their marks in corn and on grass",
 			Fmt("%.0f pieces, %.0f in corn, %.0f on grass", R.Pieces(), ByKind[2], ByKind[1]));
 		Check(EdgeOff / std::max(1L, Edges) < 0.5 && WorstEdge <= 3, "a track mark's edge is the ground's own colour", Fmt("off by %.2f, worst %.0f", EdgeOff / std::max(1L, Edges), WorstEdge));
+		const double Eb = EdgeBand / std::max(1L, Bands), Bp = BandPress / std::max(1L, Bands);
+		std::printf("  track marks feathered and lit: edge to band %.1f, band to pressed %.1f summed RGB steps; normals off the drawn ground's by median %.2f, 95%% %.2f, worst %.2f degrees (%zu points)\n",
+			Eb, Bp, Pctl(Lit, 0.5), Pctl(Lit, 0.95), Pctl(Lit, 1.0), Lit.size());
+		// (the art director's cut 4, shot 07: "the track marks are hard-edged flat stripes")
+		Check(Bands > 1000 && Eb > 4.0 && Bp > 4.0 && Lit.size() > 1000 && Pctl(Lit, 0.95) < 1.0, "a track mark feathers into the ground and is lit as the ground is, not a flat stripe",
+			Fmt("edge to band %.1f, band to pressed %.1f, lit 95%% %.2f degrees off", Eb, Bp, Pctl(Lit, 0.95)));
 		Check(Over.size() > 1000 && Buried < 0.03 && Pctl(Over, 0.95) < 0.12, "a track mark lies on the ground drawn, not under it", Fmt("%.1f%% under, 95%% %.3f m over", 100.0 * Buried, Pctl(Over, 0.95)));
 		Check(CornMid > 50 && CornMidFlat >= CornMid * 0.98 && OtherMid > 50 && OtherMidFlat <= OtherMid * 0.03 && UnderFlat >= Under_ * 0.98 && BeyondFlat <= Beyond * 0.03,
 			"the corn between a tank's tracks lies flat, and only there", Fmt("corn %.0f of %.0f, grass %.0f of %.0f, ", CornMidFlat, CornMid, OtherMidFlat, OtherMid) + Fmt("under %.0f of %.0f, beyond %.0f of ", UnderFlat, Under_, BeyondFlat) + Fmt("%.0f", Beyond));

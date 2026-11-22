@@ -1282,9 +1282,14 @@ bool ALandBattle::Open()
 		Effects->SetWind(Rec.Weather.bWind ? WorldWay(Rec.Weather.WindX, Rec.Weather.WindY, 0.0) : WorldWay(2.6, 1.2, 0.0));
 	}
 
-	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
-	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1,
+	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle, the thrown soil lit as
+	// the ground round it is (by the near ground's own normals: lit by its own slope, a hole's edge drew a ruled polygon
+	// in a low sun; the art director's cut 4, shot 07). (Their heights, and the tracks', by HeightAt, At's height alone
+	// at a fifth of its cost, now that each point asks the ground's normal as well.)
+	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1,
 		[FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); });
+	const LandCrater::UpFn GroundLit = [FieldPtr](double X, double Y, double& NX, double& NY, double& NZ) { FieldPtr->DrawnUp(X, Y, NX, NY, NZ); };
+	S.Holes.Lit = GroundLit;
 	// (Brian, 22 November: "explosions should create craters": a mortar bomb's or a shell's hole dug into open ground,
 	// the ground drawn cut away over its bowl; "-TheaterLandShallowHoles" lays them all over the ground as before)
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShallowHoles")))
@@ -1320,12 +1325,13 @@ bool ALandBattle::Open()
 		S.Holes.SetEarth("blackearth"); // (the steppe's chernozem, not the bocage's loam)
 	}
 	// And the tracks' marks, on the same ground and paint (none across a dug hole's bowl).
-	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
+	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
 		LandCrater::Ruts::KindOn(*FieldPtr));
 	{
 		const LandCrater::Field* DugHoles = &S.Holes;
 		S.Ruts.DugAt = [DugHoles](double X, double Y) { return DugHoles->InCut(X, Y); };
 	}
+	S.Ruts.Lit = GroundLit; // (each strip lit as the ground under it: a flat stripe no more)
 
 	Took = LandParts::Seconds();
 	LayField();
