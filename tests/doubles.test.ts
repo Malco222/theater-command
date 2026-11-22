@@ -36,6 +36,8 @@ function scene(seed = 7): Game {
   const g = free(seed);
   setWar(g, 'UK', 'GER');
   INTEL.enemy.chance = 0;
+  // (And no watchers, release 2, unless a test wants them: tests/watchers.test.ts.)
+  INTEL.secret.watchers.chance = 0;
   return g;
 }
 /** Every month the other side's services plot, at once. */

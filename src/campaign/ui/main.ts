@@ -5029,7 +5029,7 @@ function spiesPane(): string {
     // (Double agents, Brian, 22 November, release 2: TURN beside ARREST.)
     const whyTurn = room.doubles ? whyNotTurnAgent(g, f.id) : null;
     const turn = room.doubles ? `<button class="btn small" data-act="turnfoe" data-id="${f.id}" ${can && !whyTurn ? '' : 'disabled'} title="${esc(whyTurn ?? 'Turn the agent: it goes back to its service and works for you, warning of every new agent it sends and opening its books, until it is found out.')}">TURN</button>` : '';
-    return `<div class="snote bad"><span>${esc(f.text)}. It strikes unless it is arrested.</span><button class="btn small" data-act="arrest" data-id="${f.id}" ${can ? '' : 'disabled'} title="Arrest the agent: it is ended before it can strike.">ARREST</button>${turn}</div>`;
+    return `<div class="snote bad"><span>${esc(f.text)}. ${esc(f.then)}</span><button class="btn small" data-act="arrest" data-id="${f.id}" ${can ? '' : 'disabled'} title="${f.watch ? 'Arrest the agent: it maps your defences no more.' : 'Arrest the agent: it is ended before it can strike.'}">ARREST</button>${turn}</div>`;
   }).join('')}` : ''}
     ${room.doubles?.length ? `<h3>Double agents</h3>${room.doubles.map((d) => `<div class="snote good">${chip(d.of)}<span>${esc(d.text)}</span></div>`).join('')}` : ''}
     ${room.orders?.length ? `<h3>The enemy's orders</h3>${room.orders.map((o) => `<div class="snote ${o.done ? '' : 'good'}"><span>${esc(o.text)}</span><button class="btn small" data-act="showmap" data-id="${o.target}">Show on map</button></div>`).join('')}` : ''}
@@ -5040,6 +5040,7 @@ function spiesPane(): string {
       <li>Against a country you are at war with, an agent can wreck a factory, blow a railway or fire an oilfield. The attempt is made as the month turns, and afterwards the agent must lie low for ${INTEL.risk.lieLow} months.</li>
       <li>Every month abroad an agent may be caught, and a caught agent is gone for good. Capitals, countries at war with you and provinces on alert after sabotage are the most dangerous. A neutral that catches your spy thinks the worse of your side.</li>
       <li>Work that comes off earns experience. An ${esc(INTEL.agents.ranks[1].toLowerCase())} and then a ${esc(INTEL.agents.ranks[2].toLowerCase())} are harder to catch and surer in sabotage.</li>
+      ${room.watchHelp ? `<li>${esc(room.watchHelp)}</li>` : ''}
       ${room.turnedHelp ? `<li>${esc(room.turnedHelp)}</li><li>An enemy agent your hunters uncover can be turned instead of arrested. As your double agent it warns of every new agent its service sends against you, and opens its country's books, until its own side stops trusting it.</li>` : ''}
     </ul></details>
     ${file ? `<h3>The service's file</h3><div class="sfile">${file}</div>` : ''}`;

@@ -1,7 +1,8 @@
 // The secret war (rulings 151(c), 135 and 153; the design director's b482, item 4): spy hunters and stolen orders,
 // each half behind its own switch in data/campaign/intel.json 'secret', kept with each campaign in g.flags
 // ('sw:hunt', 'sw:orders'); and (Brian, 22 November, release 2) every country at war with the player spying on
-// him, 'sw:all'; and (Brian, 22 November, release 2, yes (3)) double agents both ways, with a telltale sign, 'sw:double'.
+// him, 'sw:all'; and (Brian, 22 November, release 2, yes (3)) double agents both ways, with a telltale sign, 'sw:double';
+// and (Brian, 22 November, release 2: 'Busier, mostly watchers') enemy agents watching his front, 'sw:watch'.
 // The grand campaign only, and only ever against or for the player: the computer's staffs
 // keep no agents, so a war nobody plays is fought as before.
 //
@@ -14,7 +15,8 @@ import { headline } from './game';
 import type { Game, StolenOrder } from './types';
 
 export interface DoublesRules { on: boolean; most: number; blown: number; share: number; lie: number; betray: number; home: number }
-const S = (data as unknown as { secret: { hunters: { on: boolean }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number }; doubles: DoublesRules } }).secret;
+export interface WatchersRules { on: boolean; chance: number; attack: number; ready: number; reserve: number }
+const S = (data as unknown as { secret: { hunters: { on: boolean }; orders: { on: boolean; ambush: number }; everyone: { on: boolean; smaller: number }; watchers: WatchersRules; doubles: DoublesRules } }).secret;
 
 /** True in a grand campaign begun with spy hunters (ruling 151(c)). */
 export const huntersOn = (g: Game): boolean => g.flags.open === 1 && g.flags['sw:hunt'] === 1;
@@ -31,6 +33,14 @@ export const everyoneOn = (g: Game): boolean => g.flags.open === 1 && g.flags['s
  * enemy can turn one of his agents abroad.
  */
 export const doublesOn = (g: Game): boolean => g.flags.open === 1 && g.flags['sw:double'] === 1;
+/**
+ * True in a grand campaign begun with enemy watchers (Brian, 22 November, release 2: 'Busier, mostly watchers'): the
+ * other side's services put agents on the player's front that map its defences for their attacks. A watcher is one
+ * of the hidden agents the spy hunters search for, so it needs them on too.
+ */
+export const watchersOn = (g: Game): boolean => huntersOn(g) && g.flags['sw:watch'] === 1;
+/** The watchers' numbers (intel.json secret.watchers). */
+export const WATCHERS = (): WatchersRules => S.watchers;
 /** The double agents' numbers (intel.json secret.doubles). */
 export const DOUBLES = (): DoublesRules => S.doubles;
 /** With everyoneOn: the share of a great power's rate at which a smaller nation's service plots. */
@@ -42,10 +52,11 @@ export function openSecretWar(g: Game): void {
   if (S.orders.on) g.flags['sw:orders'] = 1;
   if (S.everyone.on) g.flags['sw:all'] = 1;
   if (S.doubles.on) g.flags['sw:double'] = 1;
+  if (S.watchers.on) g.flags['sw:watch'] = 1;
 }
 
 /** For tests and probes: one half of the secret war on or off in this campaign. */
-export function setSecretWar(g: Game, part: 'hunt' | 'orders' | 'all' | 'double', on: boolean): void {
+export function setSecretWar(g: Game, part: 'hunt' | 'orders' | 'all' | 'double' | 'watch', on: boolean): void {
   if (on) g.flags[`sw:${part}`] = 1;
   else delete g.flags[`sw:${part}`];
 }

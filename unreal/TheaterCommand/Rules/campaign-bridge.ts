@@ -3939,13 +3939,13 @@ function spiesPage(s: Game, region: number): Page | null {
   // with ARREST; and (ruling 135) what his agents have read of the enemy's bombing orders.
   const found: PageRow[] = (room.found ?? []).map((f) => {
     const why = up ? whyNotArrestAgent(s, f.id) : 'Orders are given in your own month.';
-    const buttons: PageButton[] = [{ label: 'ARREST', act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? 'Arrest the agent: it is ended before it can strike.' }];
+    const buttons: PageButton[] = [{ label: 'ARREST', act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? (f.watch ? 'Arrest the agent: it maps your defences no more.' : 'Arrest the agent: it is ended before it can strike.') }];
     // (Double agents, Brian, 22 November, release 2: TURN beside ARREST.)
     if (room.doubles) {
       const whyTurn = up ? whyNotTurnAgent(s, f.id) : 'Orders are given in your own month.';
       buttons.push({ label: 'TURN', act: `spy:turn:${f.id}`, ok: whyTurn === null, tip: whyTurn ?? 'Turn the agent: it goes back to its service and works for you, warning of every new agent it sends and opening its books, until it is found out.' });
     }
-    return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? 'Enemy'} agent at ${f.where}`, lines: [`${f.text}. It strikes unless it is arrested.`], buttons };
+    return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? 'Enemy'} ${f.watch ? 'watcher' : 'agent'} at ${f.where}`, lines: [`${f.text}. ${f.then}`], buttons };
   });
   // (Double agents) The player's own, each in an enemy service: name, which service, since when.
   const doubles: PageRow[] = (room.doubles ?? []).map((d) => ({ nat: d.of, title: `Double agent ${d.name}`, lines: [d.text], buttons: [] }));
@@ -3961,8 +3961,8 @@ function spiesPage(s: Game, region: number): Page | null {
       { label: room.fog ? 'LIFT THE FOG OF WAR' : 'LAY THE FOG OF WAR AGAIN', act: room.fog ? 'fog:off' : 'fog:on', ok: true, tip: room.fog ? 'Show every army on the map, as before spies were in the game. Agents and sabotage go on either way.' : 'Hide again what your armies and agents cannot see.' },
     ],
     sections: [
-      { heading: 'YOUR AGENTS', text: `${rows.length ? (here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : 'Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there.') : 'The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there.'}${room.turnedHelp ? ` ${room.turnedHelp}` : ''}`, rows },
-      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. Each strikes when its time comes unless it is arrested first.${room.doubles ? ' One can be turned instead, to work for you inside its own service.' : ''}`, rows: found }] : []),
+      { heading: 'YOUR AGENTS', text: `${rows.length ? (here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : 'Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there.') : 'The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there.'}${room.watchHelp ? ` ${room.watchHelp}` : ''}${room.turnedHelp ? ` ${room.turnedHelp}` : ''}`, rows },
+      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. ${room.watchHelp ? 'A saboteur strikes when its time comes, and a watcher helps its army attack, unless it is arrested first.' : 'Each strikes when its time comes unless it is arrested first.'}${room.doubles ? ' One can be turned instead, to work for you inside its own service.' : ''}`, rows: found }] : []),
       ...(doubles.length ? [{ heading: 'DOUBLE AGENTS', text: 'Enemy agents you have turned. Each works for you inside its own service until that service stops trusting it.', rows: doubles }] : []),
       ...(orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join('\n'), rows: [] }] : []),
       { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join('\n') : 'Nothing has been reported yet.', rows: [] },

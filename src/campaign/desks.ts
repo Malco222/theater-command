@@ -20,7 +20,8 @@ import { keepsStores } from './resources';
 import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
-import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
+import { INTEL, abroad, agentsOf, arrest, atWork, foesFound, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
+import { huntersOn } from './secretwar';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
 import { atSea, crossingsOf, fleetsOf, navalAI, numberWord, plannedCrossing } from './navy';
@@ -302,6 +303,12 @@ function spies(g: Game, nat: string): string | null {
     const a = recruit(g, nat);
     if (a) { g.flags['dk:alw'] = Math.max(0, allowance(g, nat) - INTEL.agents.cost); did.push(`recruited agent ${a.name}`); }
   }
+  // (Spy hunters, switched on for release 2; and the enemy's watchers, Brian, 22 November: 'Busier, mostly watchers'.)
+  // Every enemy agent the hunters have uncovered is arrested at once. Turning one is left to the player.
+  if (huntersOn(g)) {
+    const caught = foesFound(g, nat).map((f) => f.id).filter((id) => arrest(g, nat, id));
+    if (caught.length) did.push(`arrested ${plural(caught.length, 'enemy agent')}`);
+  }
   if (!war.length && !S.peace) return did.length ? `${listAnd(did)}.` : null;
   const mine = agentsOf(g, nat).filter((a) => atWork(g, a)).sort((x, y) => x.id - y.id);
   // Where an agent is worth having: the capital of the strongest enemy, for its books, and then the ground
@@ -319,11 +326,14 @@ function spies(g: Game, nat: string): string | null {
   for (const a of agentsOf(g, nat)) if (posts.includes(a.reg) && abroad(g, a)) taken.add(a.reg);
   // The guard at home is the last to go abroad: kept back once the service has more than one agent and somebody is plotting.
   const guards = agentsOf(g, nat).length > 1 && threat(g, nat).foes.length ? S.guards : 0;
+  // With spy hunters, and a service big enough to keep one more back, the next agent at home hunts on the front.
+  const hunters = huntersOn(g) && guards && agentsOf(g, nat).length > guards + 1 ? S.hunters ?? 0 : 0;
   const home = mine.filter((a) => !abroad(g, a));
   for (const a of mine) {
     if (abroad(g, a)) { if (!posts.includes(a.reg)) free.push(a); continue; }
-    if (home.indexOf(a) >= guards) free.push(a);
+    if (home.indexOf(a) >= guards + hunters) free.push(a);
   }
+  for (const a of home.slice(guards, guards + hunters)) did.push(...hunt(g, nat, a));
   for (const a of free) {
     const to = posts.find((p) => !taken.has(p) && whyNotSend(g, nat, a.id, p) === null);
     if (to === undefined) continue;
@@ -336,6 +346,27 @@ function spies(g: Game, nat: string): string | null {
     if (a.mission !== m) setMission(g, nat, a.id, m);
   }
   return did.length ? `${listAnd(did)}.` : null;
+}
+
+/**
+ * The service's hunter: it hunts where it stands while that is on the front, and otherwise goes to the province of
+ * the front with the most of the enemy's divisions beside it (with no front at all, it hunts where it is).
+ */
+function hunt(g: Game, nat: string, a: ReturnType<typeof agentsOf>[number]): string[] {
+  const foe = new Map<number, number>();
+  for (const c of g.corps) if (!c.dead && c.reg >= 0 && atWar(g, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
+  const edge = (r: Region): boolean => r.ctrl === nat && r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl));
+  if (!edge(g.regions[a.reg])) {
+    let to = -1, most = -1;
+    for (const r of g.regions) {
+      if (!edge(r)) continue;
+      const n = r.nb.reduce((t, j) => t + (foe.get(j) ?? 0), 0);
+      if (n > most) { most = n; to = r.id; }
+    }
+    if (to >= 0 && whyNotSend(g, nat, a.id, to) === null && sendAgent(g, nat, a.id, to)) return [`sent ${a.name} to hunt enemy agents at ${g.regions[to].name}`];
+  }
+  if (a.mission !== 'hunt' && whyNotMission(g, nat, a.id, 'hunt') === null) setMission(g, nat, a.id, 'hunt');
+  return [];
 }
 
 // ---- The air war --------------------------------------------------------------------------------------

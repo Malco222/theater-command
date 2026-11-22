@@ -1315,9 +1315,12 @@ export interface FoeAgent {
   /** The service it works for. */
   nat: string;
   reg: number;
-  /** What it means to strike at. */
-  kind: 'factory' | 'rail' | 'airfield';
-  /** The month it strikes. */
+  /**
+   * What it means to strike at; or 'watch' (Brian, 22 November, release 2: 'Busier, mostly watchers'), an agent that
+   * never strikes and maps the province's defences for its own side's attacks.
+   */
+  kind: 'factory' | 'rail' | 'airfield' | 'watch';
+  /** The month it strikes; for a watcher, the month from which its side's attacks on the province go in harder. */
   strike: number;
   /** The month a hunter of the player's uncovered it, if one has. */
   found?: number;

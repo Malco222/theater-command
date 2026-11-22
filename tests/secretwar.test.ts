@@ -8,7 +8,7 @@ import { INTEL, foesFound, intelTick, mostAgents, setMission, spyRoom, threat, w
 import { levelIndex } from '../src/campaign/difficulty';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { setAirPiece } from '../src/campaign/airversion';
-import { doublesOn, everyoneOn, flyingOrder, huntersOn, ordersDue, ordersOn, setSecretWar } from '../src/campaign/secretwar';
+import { doublesOn, everyoneOn, flyingOrder, huntersOn, ordersDue, ordersOn, setSecretWar, watchersOn } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
 import type { Agent, Game, Mission } from '../src/campaign/types';
 
@@ -63,8 +63,9 @@ describe('the switches', () => {
     INTEL.secret.orders.on = false;
     INTEL.secret.everyone.on = false;
     INTEL.secret.doubles.on = false;
+    INTEL.secret.watchers.on = false;
     const g = free();
-    expect(huntersOn(g) || ordersOn(g) || everyoneOn(g) || doublesOn(g)).toBe(false);
+    expect(huntersOn(g) || ordersOn(g) || everyoneOn(g) || doublesOn(g) || watchersOn(g)).toBe(false);
     expect(Object.keys(g.flags).some((k) => k.startsWith('sw:'))).toBe(false);
     const h = createGame(7, 'UK');
     setSecretWar(h, 'all', true);
@@ -77,6 +78,8 @@ describe('spies who hunt spies (ruling 151(c))', () => {
     const g = free();
     setWar(g, 'UK', 'GER');
     setSecretWar(g, 'hunt', true);
+    // (The watchers, release 2, have tests of their own: tests/watchers.test.ts.)
+    setSecretWar(g, 'watch', false);
     busy(g);
     const before = g.headlines.length;
     intelTick(g, 'UK');
