@@ -7,6 +7,7 @@
 #include "Battle/LandBattleState.h"
 #include "Battle/LandCarpet.h"
 #include "Battle/LandFell.h"
+#include "Battle/LandLive.h"
 #include "Battle/LandCrowd.h" // TK1
 #include "Battle/LandShade.h"
 #include "Battle/LandVat.h" // SO1
