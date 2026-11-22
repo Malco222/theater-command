@@ -29,6 +29,7 @@ import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
 import { nameLosses, nameSide } from './hulls';
 import { loseStars, mendStars } from './stars';
+import { loseRows, mendRows } from './shiprows';
 import { groundRules } from './ground';
 import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
@@ -1854,9 +1855,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         // than 1 there is no `kept` from the field and n0 is n: none, and nothing is said.
         kept[c] = field !== undefined && (!staff || field >= n) ? battle?.kept?.[x.id]?.[c] ?? 0 : Math.min(x.ships[c], n0) - k;
         x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k; keptAll[c] += kept[c];
-        loseStars(x, c, k);
+        loseStars(x, c, k); loseRows(x, c, k);
       }
-      mendStars(x);
+      mendStars(x); mendRows(x);
       afloatWatch.tell?.({ route: 'air', nat: x.nat, sunk: struck![i].sunk, saved: kept });
       // (The report keeps them beside the sinkings, for the after card of a fought raid: never with the switch off.)
       if (shipCount(kept)) { afloat.push({ x, kept }); struck![i].kept = { ...kept }; }

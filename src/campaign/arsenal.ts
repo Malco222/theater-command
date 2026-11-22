@@ -23,6 +23,7 @@ import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { onPlans, whyNoPlans } from './plans';
 import { mendStars } from './stars';
+import { ROW_KINDS, addRows, buildRow, rowRules, stepOf } from './shiprows';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
 export type Wing = 'ftr' | 'bmr';
@@ -707,7 +708,11 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   n.pp -= o.cost;
   const b: Build = { id: g.nextBuild++, what: group as 'air' | 'ship' | 'work', item, name: '', region: o.at, ordered: g.turn, eta: g.turn + o.months, cost: o.cost };
   if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = o.from ? `${o.label} from ${theName(g.nations[o.from])} for ${r.name}` : `${o.label} for ${r.name}`; if (o.from) b.from = o.from; }
-  else if (group === 'ship') { b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; }
+  else if (group === 'ship') {
+    b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`;
+    // (Ships by class: her design is chosen as she is laid down, at the step her navy holds now. Plan 4.3.)
+    if (rowRules(g) && ROW_KINDS.includes(item as ShipClass)) b.step = stepOf(g, nat);
+  }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
   n.queue.push(b);
   return b;
@@ -786,6 +791,8 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
     // New ships join at the back of their class, with no battle stars (stars.ts).
     mendStars(f, hull);
+    // (Ships by class: they join with the row of the design they were laid down to; route 2, Q4.)
+    if (rowRules(g) && ROW_KINDS.includes(hull as ShipClass)) addRows(f, hull as ShipClass, Array.from({ length: count }, () => buildRow(g, nat, hull as ShipClass, b.step ?? stepOf(g, nat))));
     f.ships[hull] += count;
     // A new carrier joins with its aircraft aboard (the grand campaign).
     const decks = hull === 'cv' && carrierRules(g);

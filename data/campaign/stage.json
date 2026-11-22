@@ -6,5 +6,7 @@
   "_fortRows": "The fortress rows (the design director's 05:38Z-06:21Z of 22 November 2026; data/campaign/fortrows.json): the book's fortress crews by date, taking no place among the five, their works holding all round, and beaten crews staying in their works as the town's garrison on their own stores. Off, the game is release 1's, war for war. A run outside the browser can force it: TC_FORTS=1 or TC_FORTS=0.",
   "fortRows": false,
   "_yieldRule": "The yield form (the design director's 05:30Z, 06:41Z and 07:20Z of 22 November 2026; data/campaign/capitulations.json; src/campaign/yield.ts): a beaten country yields when its field army is beaten and no ally's relief can reach it, and at stops 1-2 a computer-run country yields in the record's month after the first blow. A second way in beside the fall that release 1 has. Off, the game is release 1's, war for war. A run outside the browser can force it: TC_YIELD=1 or TC_YIELD=0.",
-  "yieldRule": false
+  "yieldRule": false,
+  "_shipRows": "Ships by class and navy (Brian's ask of 22 November 2026; the design director's 08:49Z and 11:09Z; data/campaign/shiprows.json; src/campaign/shiprows.ts): each hull bears her class's row of the record, and a fleet weighs the sum of its hulls' worths. Off, the game is release 1's, war for war. On: the campaigns opened from now on carry the flag 'shipRows' (set at a campaign's start only). It ships off until the historian has sourced every class of the 1939 fleets and the named arrivals (Q5). A run outside the browser can force it: TC_SHIPROWS=1 or TC_SHIPROWS=0.",
+  "shipRows": false
 }

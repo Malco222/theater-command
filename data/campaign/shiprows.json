@@ -1,0 +1,48 @@
+{
+  "_about": "Ships by class and navy, the card side (Brian's ask of 22 November 2026, 04:03Z; the design director's rulings of 08:49Z and 11:09Z on the naval thread's plan v3, naval-battles/ships-by-class-plan.md). A class's worth is the square root of its gunfire times its armour, each against a yardstick: F, the kilograms of shell a minute (guns x rounds a minute x shell kg), against 12,240; P, the square root of its thickest belt plate times its thickest deck plate, against the square root of 305 x 127 (Q1, Q2). The yardstick is the median of the seven 1939-41 newest classes. Worths are rebased per kind so that the fleets at the start of a campaign keep their total (src/campaign/shiprows.ts rebase). Off unless the campaign carries the flag 'shipRows' (data/campaign/stage.json 'shipRows'): off, nothing here is read.",
+  "_marks": "Marks as the record gives them: H, M, L the historian's; r recalled (UNCONFIRMED); W a web figure read by the naval thread's re-verify, not yet in the record. A row with 'worth' and no inputs is one whose inputs the record already holds (record sections 2 and 3) but which the naval thread worked out from them (its check-numbers.py); the inputs are to be copied here when the historian's 1939 pass lands.",
+  "yardstick": { "F": 12240, "belt": 305, "deck": 127 },
+  "steps": {
+    "_about": "The record's periods (plan 4.2). A step is held by research only, never by a date: step 1 with 'firecontrol', step 2 with 'taskforces' (tech.json), in the grand campaign. A history campaign keeps no research tree, and builds no battleships. Route 2 (Q4): a navy builds its own best row of the steps it holds, lifted to the step's median once it holds step 1 or 2. 'periods' are the rows whose median is the step's: steps 0 and 1 the seven navies, step 2 six (Italy leaves the record's table after September 1943).",
+    "techs": ["firecontrol", "taskforces"],
+    "periods": [
+      ["usa-north-carolina", "uk-kgv", "jap-nagato", "ger-bismarck", "ita-littorio", "fra-dunkerque", "sov-gangut"],
+      ["usa-south-dakota", "uk-kgv", "jap-yamato", "ger-bismarck", "ita-littorio", "fra-richelieu", "sov-gangut"],
+      ["usa-iowa", "uk-kgv", "jap-yamato", "ger-bismarck", "fra-richelieu", "sov-gangut"]
+    ],
+    "labels": ["", "a new design of 1942-43", "a new design of 1944-45"]
+  },
+  "rows": {
+    "bb": [
+      { "id": "usa-north-carolina", "nat": "USA", "step": 0, "label": "North Carolina class", "guns": 9, "rate": 2, "shell": 1225, "belt": 305, "deck": 127, "mark": "H", "hulls": ["North Carolina", "Washington"] },
+      { "id": "usa-south-dakota", "nat": "USA", "step": 1, "label": "South Dakota class", "guns": 9, "rate": 2, "shell": 1225, "belt": 310, "deck": 154, "mark": "H", "hulls": ["South Dakota", "Indiana", "Massachusetts", "Alabama"] },
+      { "id": "usa-iowa", "nat": "USA", "step": 2, "label": "Iowa class", "guns": 9, "rate": 2, "shell": 1225, "belt": 307, "deck": 152, "mark": "H", "hulls": ["Iowa", "New Jersey", "Wisconsin", "Missouri"] },
+      { "id": "uk-kgv", "nat": "UK", "step": 0, "label": "King George V class", "guns": 10, "rate": 2, "shell": 721.2, "belt": 373, "deck": 149, "mark": "H; magazine plates (machinery 349 / 124)", "hulls": ["King George V", "Prince of Wales", "Duke of York", "Anson", "Howe"] },
+      { "id": "uk-nelson", "nat": "UK", "step": 0, "label": "Nelson class", "worth": 1.11, "mark": "H; shell M (16-inch/45 Mark I, 929 kg)", "hulls": ["Nelson", "Rodney"] },
+      { "id": "uk-qe", "nat": "UK", "step": 0, "label": "Queen Elizabeth class, rebuilt", "worth": 1.09, "mark": "H; shell M (15-inch/42, 879 kg)", "hulls": ["Warspite", "Valiant", "Queen Elizabeth"] },
+      { "id": "uk-revenge", "nat": "UK", "step": 0, "label": "Revenge class", "worth": 0.96, "mark": "H; shell M (15-inch/42, 879 kg)", "hulls": ["Revenge", "Resolution", "Royal Oak", "Royal Sovereign", "Ramillies"] },
+      { "id": "jap-nagato", "nat": "JAP", "step": 0, "label": "Nagato class", "guns": 8, "rate": 1.5, "shell": 1020, "belt": 305, "deck": 152, "mark": "H", "hulls": ["Nagato", "Mutsu"] },
+      { "id": "jap-yamato", "nat": "JAP", "step": 1, "label": "Yamato class", "guns": 9, "rate": 1.5, "shell": 1460, "belt": 410, "deck": 230, "mark": "H; deck 230 over a quarter (thickest plate, Q2)", "hulls": ["Yamato", "Musashi"] },
+      { "id": "ger-scharnhorst", "nat": "GER", "step": 0, "label": "Scharnhorst class", "worth": 0.89, "mark": "H; shell M (28 cm, 330 kg); deck the 105 mm slope (Q2)", "hulls": ["Scharnhorst", "Gneisenau"] },
+      { "id": "ger-bismarck", "nat": "GER", "step": 0, "label": "Bismarck class", "guns": 8, "rate": 2.3, "shell": 800, "belt": 320, "deck": 120, "mark": "H", "hulls": ["Bismarck", "Tirpitz"] },
+      { "id": "ita-littorio", "nat": "ITA", "step": 0, "label": "Littorio class", "guns": 9, "rate": 1.3, "shell": 884.8, "belt": 280, "deck": 150, "mark": "H", "hulls": ["Littorio", "Vittorio Veneto", "Roma"] },
+      { "id": "fra-dunkerque", "nat": "FRA", "step": 0, "label": "Dunkerque", "guns": 8, "rate": 1.5, "shell": 560, "belt": 225, "deck": 125, "mark": "H; rate and shell r", "hulls": ["Dunkerque"] },
+      { "id": "fra-strasbourg", "nat": "FRA", "step": 0, "label": "Strasbourg", "guns": 8, "rate": 1.5, "shell": 560, "belt": 283, "deck": 125, "mark": "H; rate and shell r", "hulls": ["Strasbourg"] },
+      { "id": "fra-richelieu", "nat": "FRA", "step": 1, "label": "Richelieu class", "guns": 8, "rate": 1.3, "shell": 884, "belt": 327, "deck": 170, "mark": "H", "hulls": ["Richelieu", "Jean Bart"] },
+      { "id": "sov-gangut", "nat": "SOV", "step": 0, "label": "Gangut class", "guns": 12, "rate": 1.8, "shell": 471, "belt": 225, "deck": 38, "mark": "H; rate W (navweaps; the record's class cell is 2.2)", "hulls": ["Marat", "Oktyabrskaya Revolyutsiya", "Petropavlovsk"] },
+      { "id": "sov-parizhskaya", "nat": "SOV", "step": 0, "label": "Parizhskaya Kommuna", "guns": 12, "rate": 2.2, "shell": 471, "belt": 225, "deck": 75, "mark": "H", "hulls": ["Parizhskaya Kommuna", "Sevastopol"] }
+    ]
+  },
+  "_unsourced": "Hulls the record cannot yet price (plan 3.1, the narrowed ask to the historian). They read today's weight for the kind (Q5: worth 1 after the rebase), never the yardstick. A small navy's battleship reads the row of the navy that built her class once the historian names it ('builder'). The switch does not ship until these are sourced.",
+  "unsourced": {
+    "bb": [
+      "Hood", "Repulse", "Renown", "Barham", "Malaya",
+      "Provence", "Bretagne", "Lorraine", "Courbet", "Paris",
+      "Conte di Cavour", "Giulio Cesare", "Caio Duilio", "Andrea Doria",
+      "Arizona", "Oklahoma", "Nevada", "Pennsylvania", "California", "Tennessee", "Colorado", "Maryland", "West Virginia", "Idaho", "Mississippi", "New Mexico", "Arkansas", "New York", "Texas", "Wyoming",
+      "Kongo", "Haruna", "Hiei", "Kirishima", "Fuso", "Yamashiro", "Ise", "Hyuga",
+      "Minas Geraes", "São Paulo", "Rivadavia", "Moreno", "Almirante Latorre"
+    ]
+  },
+  "builder": {}
+}

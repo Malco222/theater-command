@@ -33,6 +33,7 @@ import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SHIPROWS_STAGE } from './stage';
 import { drafted, newStories, schoolMonth, wearMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -145,6 +146,9 @@ export function createGame(seed: number, human: string | null): Game {
     links: md.links, x0: 0, width: md.width, height: md.height, land: md.land,
   };
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
+  // Ships by class (stage.ts SHIPROWS_STAGE): the switch is set as the campaign opens, before its fleets form, so that
+  // each lays its hulls' rows (shiprows.ts). Off, the game is release 1's.
+  if (SHIPROWS_STAGE) g.flags.shipRows = 1;
   setupNavy(g);
   setupAir(g);
   setupResearch(g);

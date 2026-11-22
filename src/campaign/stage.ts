@@ -47,3 +47,9 @@ export const FORTS_STAGE: boolean = forts !== undefined ? !!forts && forts !== '
 const yields = (globalThis as { TC_YIELD?: unknown }).TC_YIELD ?? G.process?.env?.TC_YIELD;
 /** True where a beaten country yields by cause, and at stops 1-2 by the record's month (src/campaign/yield.ts). */
 export const YIELD_STAGE: boolean = yields !== undefined ? !!yields && yields !== '0' : (stage as { yieldRule?: boolean }).yieldRule === true;
+
+// Ships by class and navy (data/campaign/stage.json 'shipRows'; the design director's 08:49Z of 22 November 2026):
+// forced by TC_SHIPROWS, as the far side's switch is by TC_FAR. Off, nothing of the rows is read or written.
+const rows = (globalThis as { TC_SHIPROWS?: unknown }).TC_SHIPROWS ?? G.process?.env?.TC_SHIPROWS;
+/** True where the campaigns opened from now on play their ships by class (src/campaign/shiprows.ts). */
+export const SHIPROWS_STAGE: boolean = rows !== undefined ? !!rows && rows !== '0' : (stage as { shipRows?: boolean }).shipRows === true;

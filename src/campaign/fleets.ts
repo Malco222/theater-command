@@ -24,6 +24,7 @@ import { dcOf } from './tech';
 import { townName } from './towns';
 import { cityHit, type CityHit } from './repairs';
 import { joinStars, splitStars, starRow, type StarRow } from './stars';
+import { joinRows, splitRows } from './shiprows';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
 import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 import { seaWhat, seaWhere } from './sea-words';
@@ -498,6 +499,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   const s = taken(take);
   // The ships that go take their battle stars with them: the last of each class (stars.ts).
   const stars = splitStars(f, s);
+  // And their rows of the record, the same last hulls (ships by class: shiprows.ts).
+  const rows = splitRows(f, s);
   for (const c of CLASSES) f.ships[c] -= s[c];
   const wanted = name?.trim();
   const sq: Fleet = {
@@ -510,6 +513,7 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
   if (stars) sq.stars = stars;
+  if (rows) sq.rows = rows;
   g.fleets.push(sq);
   // Carriers that go take their aircraft with them.
   moveWings(g, f, sq, s.cv, f.ships.cv + s.cv);
@@ -534,6 +538,7 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   b.ready = nb + na > 0 ? (b.ready * nb + a.ready * na) / (nb + na) : b.ready;
   // Its ships bring their battle stars, in at the back of b's (stars.ts).
   joinStars(a, b);
+  joinRows(a, b);
   for (const c of CLASSES) { b.ships[c] += a.ships[c]; b.lost[c] += a.lost[c]; }
   if (!b.admiral && a.admiral) b.admiral = a.admiral;
   if (a.shelled !== undefined && (b.shelled ?? -1) < a.shelled) b.shelled = a.shelled;

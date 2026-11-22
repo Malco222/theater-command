@@ -286,6 +286,8 @@ export interface Build {
   ordered: number;
   eta: number;
   cost: number;
+  /** A battleship from the arsenal where the campaign plays ships by class: the research step her navy held when she was ordered (shiprows.ts; plan 4.3). */
+  step?: number;
   /** A corps raised again under the name of one that was destroyed: that formation's place on the memorial wall. */
   revive?: number;
   /** One of the nation's special formations (the grand campaign): the id of its unit in traits.json. */
@@ -626,6 +628,12 @@ export interface Fleet extends Storied {
    * back with none are left off, and a fleet with none has no record. Kept in step with the counts by stars.ts.
    */
   stars?: Partial<Record<ShipClass, number[][]>>;
+  /**
+   * Ships by class (the design director's 08:49Z of 22 November 2026; shiprows.ts), where the campaign plays them: for
+   * each kind that has rows, the row of the record each hull bears (null: none), in the stars' order. Hulls at the back
+   * with no row are left off, and a fleet with none has no record. Never written with the switch off.
+   */
+  rows?: Partial<Record<ShipClass, (string | null)[]>>;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
