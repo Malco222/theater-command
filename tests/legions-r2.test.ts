@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import {
-  LEGIONS, attackedBy, friendAttacked, genericEst, landing, legionDrafts, legionFeeds, legionOffers, legionRules, legionsMonth, legionsView,
-  recallLegion, sendLegion, startLegions, whyNoLegion,
+  LEGIONS, attackedBy, friendAttacked, frontSteps, genericEst, landing, legionDrafts, legionFeeds, legionOffers, legionRules, legionsMonth, legionsView,
+  recallLegion, sendLegion, standsAgainst, startLegions, whyNoLegion,
 } from '../src/campaign/legions';
 import { bargainsMonth, patienceOf, startBargains } from '../src/campaign/bargains';
 import { PRODUCTION } from '../src/campaign/economy';
@@ -58,6 +58,11 @@ const peace = (g: Game, a: string, b: string): void => {
   g.nations[b].atWar = g.nations[b].atWar.filter((x) => x !== a);
 };
 const legionOf = (g: Game, home: string): Corps | undefined => g.corps.find((c) => c.vol === home && !c.dead);
+/** The legions' form (1): a country the enemy struck while it stood outside both sides, in a war ended `ago` months back. */
+const struck = (g: Game, victim: string, by: string, ago = 6): void => {
+  g.flags[`shock:${victim}`] = g.turn - ago;
+  g.flags[`opening:${by}:${victim}`] = g.turn - ago;
+};
 const r2 = (x: number): number => Math.round(x * 1000) / 1000;
 
 describe('the switch', () => {
@@ -311,6 +316,8 @@ describe('the computer\'s judgment at stops 3 to 5', () => {
     const g = world(3);
     // (Overland, through ground held by nobody at war with the patron: here France has made its peace.)
     peace(g, 'GER', 'FRA');
+    // (The legions' form: only against an enemy that struck the sender itself. Here Poland once struck Spain.)
+    struck(g, 'ESP', 'POL');
     g.nations.ESP.opinion = 80;
     g.nations.ESP.pc = 10;
     legionsMonth(g);
@@ -335,6 +342,7 @@ describe('the computer\'s judgment at stops 3 to 5', () => {
 
   it('volunteers go only where they can get to: not across an enemy of the patron', () => {
     const g = world(3);
+    struck(g, 'ESP', 'POL');
     g.nations.ESP.opinion = 80;
     g.nations.ESP.pc = 10;
     expect(whyNoLegion(g, 'ESP', 'GER', 'POL', false)).toMatch(/no front .* for volunteers to reach/);
@@ -346,19 +354,24 @@ describe('the computer\'s judgment at stops 3 to 5', () => {
   it('a patron takes one legion at a time', () => {
     const g = world(3);
     peace(g, 'GER', 'FRA');
-    for (const n of ['ESP', 'POR']) { g.nations[n].opinion = 80; g.nations[n].pc = 10; }
+    for (const n of ['ESP', 'POR']) { g.nations[n].opinion = 80; g.nations[n].pc = 10; struck(g, n, 'POL'); }
     legionsMonth(g);
     const sent = Object.values(g.legions!.abroad).filter((L) => L.patron === 'GER');
     expect(sent).toHaveLength(1);
     expect(whyNoLegion(g, sent[0] === g.legions!.abroad.ESP ? 'POR' : 'ESP', 'GER', 'POL', false)).toMatch(/one legion at a time/);
   });
 
-  it('a country leaning only a little sends none', () => {
+  it('a country leaning only a little sends none: a country the enemy struck sends at 50, not at 40', () => {
     const g = world(3);
+    peace(g, 'GER', 'FRA');
+    struck(g, 'ESP', 'POL');
     g.nations.ESP.opinion = 40;
     g.nations.ESP.pc = 10;
     legionsMonth(g);
     expect(g.legions!.abroad.ESP).toBeUndefined();
+    g.nations.ESP.opinion = LEGIONS.send;
+    legionsMonth(g);
+    expect(g.legions!.abroad.ESP).toMatchObject({ patron: 'GER', against: 'POL' });
   });
 
   it('a friend attacked: Sweden sends its volunteers to Finland, under the record\'s name', () => {
@@ -395,6 +408,83 @@ describe('the computer\'s judgment at stops 3 to 5', () => {
     legionsMonth(g);
     expect(g.legions!.abroad.USA).toBeUndefined();
     expect(whyNoLegion(g, 'USA', 'UK', 'GER')).toMatch(/great power/);
+  });
+});
+
+describe('the legions\' form at stops 3 to 5 (the design director\'s 18:10Z: a row, or leaning toward a great power against an enemy that struck the sender)', () => {
+  it('leaning alone is not enough: a country leaning far toward Germany is refused against an enemy that never struck it', () => {
+    const g = world(3);
+    peace(g, 'GER', 'FRA');
+    g.nations.ESP.opinion = 80;
+    g.nations.ESP.pc = 10;
+    expect(whyNoLegion(g, 'ESP', 'GER', 'POL', false)).toMatch(/never struck it/);
+    legionsMonth(g);
+    expect(g.legions!.abroad.ESP).toBeUndefined();
+    // The player's offer is unchanged: his public's leaning is enough.
+    expect(whyNoLegion(g, 'ESP', 'GER', 'POL', true)).toBeNull();
+  });
+
+  it('a country the enemy struck, at peace again and holding all its ground, sends its men to a great power only, and not while the enemy holds its ground', () => {
+    const g = world(3);
+    peace(g, 'GER', 'FRA');
+    war(g, 'ITA', 'POL', false);
+    struck(g, 'HUN', 'POL');
+    g.nations.HUN.opinion = 80;
+    g.nations.HUN.pc = 10;
+    expect(standsAgainst(g, 'HUN', 'GER', 'POL')).toBe(true);
+    expect(whyNoLegion(g, 'HUN', 'GER', 'POL', false)).toBeNull();
+    // (B: Slovakia, on the same side and at war with Poland, is no great power.)
+    expect(atWar(g, 'SVK', 'POL')).toBe(true);
+    expect(whyNoLegion(g, 'HUN', 'SVK', 'POL', false)).toMatch(/only to a great power/);
+    // Poland holding a province Hungary owns: none, whatever the leaning (ownership: ground ceded is no longer its own).
+    const home = g.regions.find((r) => r.owner === 'HUN' && !r.overseas)!;
+    const was = home.ctrl;
+    home.ctrl = 'POL';
+    expect(standsAgainst(g, 'HUN', 'GER', 'POL')).toBe(false);
+    expect(whyNoLegion(g, 'HUN', 'GER', 'POL', false)).toMatch(/holds ground of its own/);
+    home.ctrl = was;
+    legionsMonth(g);
+    expect(g.legions!.abroad.HUN?.against).toBe('POL');
+    expect(['GER', 'ITA']).toContain(g.legions!.abroad.HUN?.patron);
+  });
+
+  it('a friend attacked gets no legion of its own, whoever struck it (A): by a great power, or by a lesser power alone', () => {
+    const g = world(3);
+    g.nations.SWE.opinion = 0;
+    g.nations.SWE.pc = 10;
+    // Denmark, struck by Germany.
+    war(g, 'GER', 'DEN');
+    expect(friendAttacked(g, 'SWE', 'DEN', 'GER')).toBe(true);
+    expect(whyNoLegion(g, 'SWE', 'DEN', 'GER', false)).toMatch(/friend attacked gets no legion/);
+    // Norway, struck by Estonia standing alone (Peru's Ecuador, 1941: nobody sent men).
+    war(g, 'EST', 'NOR');
+    expect(friendAttacked(g, 'SWE', 'NOR', 'EST')).toBe(true);
+    expect(whyNoLegion(g, 'SWE', 'NOR', 'EST', false)).toMatch(/friend attacked gets no legion/);
+    legionsMonth(g);
+    expect(g.legions!.abroad.SWE).toBeUndefined();
+    // The player may still send them: his offer is unchanged.
+    expect(whyNoLegion(g, 'SWE', 'NOR', 'EST', true)).not.toMatch(/friend attacked/);
+  });
+
+  it('where two choices score alike, the legion goes to the nearer front: between two enemies, and between two patrons', () => {
+    // Two enemies: Hungary struck by France and by Poland, both at war with Germany. By the alphabet France; Poland's front is nearer.
+    const g = world(3);
+    struck(g, 'HUN', 'FRA');
+    struck(g, 'HUN', 'POL');
+    g.nations.HUN.opinion = 80;
+    g.nations.HUN.pc = 10;
+    expect(frontSteps(g, 'HUN', 'GER', 'POL')).toBeLessThan(frontSteps(g, 'HUN', 'GER', 'FRA'));
+    legionsMonth(g);
+    expect(g.legions!.abroad.HUN).toMatchObject({ patron: 'GER', against: 'POL' });
+    // Two patrons: Switzerland struck by France, Germany and Italy both at war with it. By the alphabet Germany; Italy's front is nearer.
+    const h = world(3);
+    war(h, 'ITA', 'FRA', false);
+    struck(h, 'SUI', 'FRA');
+    h.nations.SUI.opinion = 80;
+    h.nations.SUI.pc = 10;
+    expect(frontSteps(h, 'SUI', 'ITA', 'FRA')).toBeLessThan(frontSteps(h, 'SUI', 'GER', 'FRA'));
+    legionsMonth(h);
+    expect(h.legions!.abroad.SUI).toMatchObject({ patron: 'ITA', against: 'FRA' });
   });
 });
 

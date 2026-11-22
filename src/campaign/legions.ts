@@ -11,8 +11,12 @@
 // Who sends one: the player, from the trade office, to a patron his public leans toward or to a friend that has been
 // attacked, for political capital as courting costs. A computer-run country at stops 1 and 2 sends the record's
 // legions by their dates and no others (the Spanish Blue Division and the Blue Legion after it, the Swedish volunteers
-// in Finland); at stops 3 to 5 it sends one when it leans far toward a patron and against its enemy, or when a friend
-// has been attacked. A legion comes home on recall, at its tour's end, when its patron makes peace with the enemy it
+// in Finland). At stops 3 to 5 it sends by the legions' form (the design director's 18:10Z of 22 November 2026,
+// rules-builder/release2/legions-form.md): a record's row, as the row's own pairing; or, leaning far toward a great
+// power against an enemy, only where that enemy struck the sender itself and holds none of the ground it owns (Finland
+// after its Winter War). A friend attacked brings no legion of its own there: the record's governments judged whether
+// the attacker could come at all, and a friend struck by a lesser power alone (Peru's Ecuador, 1941) got none either.
+// Where two choices score alike, the legion goes to the nearer front. A legion comes home on recall, at its tour's end, when its patron makes peace with the enemy it
 // was sent to fight, or when its home goes to war itself. Its men go back to the reserve and its veterans teach the
 // army at home. Destroyed in the field, its men are lost.
 //
@@ -108,26 +112,49 @@ function frontOf(g: Game, patron: string, against: string): Region[] {
  * home however the way lies ('record').
  */
 export function landing(g: Game, home: string, patron: string, against: string, record = false): Region | null {
+  return walkTo(g, home, patron, against, record)?.r ?? null;
+}
+
+/**
+ * The way to the front (landing's walk) and how many steps it takes: the patron's own blocking, ground held by a
+ * country at war with the patron not crossed. Infinity where the volunteers cannot get there (or go by the record).
+ * The legions' form reads it to break a tie of score: the nearer front.
+ */
+export function frontSteps(g: Game, home: string, patron: string, against: string): number {
+  return walkTo(g, home, patron, against, false)?.steps ?? Infinity;
+}
+
+function walkTo(g: Game, home: string, patron: string, against: string, record: boolean): { r: Region; steps: number } | null {
   const front = frontOf(g, patron, against);
   const cap = g.nations[home]?.capital ?? -1;
   if (!front.length) return null;
-  if (cap < 0) return record ? front[0] : null;
-  const seen = new Uint8Array(g.regions.length);
+  if (cap < 0) return record ? { r: front[0], steps: Infinity } : null;
+  const depth = new Int32Array(g.regions.length).fill(-1);
   const q = [cap];
-  seen[cap] = 1;
+  depth[cap] = 0;
   const want = new Set(front.map((r) => r.id));
   for (let i = 0; i < q.length; i++) {
     const at = q[i];
-    if (want.has(at)) return g.regions[at];
+    if (want.has(at)) return { r: g.regions[at], steps: depth[at] };
     for (const j of g.regions[at].nb) {
-      if (seen[j]) continue;
-      seen[j] = 1;
+      if (depth[j] >= 0) continue;
+      depth[j] = depth[at] + 1;
       const R = g.regions[j];
       if (!record && R.ctrl !== home && R.ctrl !== patron && atWar(g, R.ctrl, patron)) continue;
       q.push(j);
     }
   }
-  return record ? front[0] : null;
+  return record ? { r: front[0], steps: Infinity } : null;
+}
+
+/**
+ * The legions' form, (1): leaning alone sends a computer-run country's legion only to a great power, and only against
+ * an enemy that struck the sender itself (attackedBy: struck while it stood outside both sides, in a war now ended) and
+ * holds none of the ground the sender owns at home. Ownership on purpose: ground ceded at a peace is no longer the
+ * sender's, and a lease or a garrison changes no owner (Finland's Hanko, 1940-41).
+ */
+export function standsAgainst(g: Game, home: string, patron: string, against: string): boolean {
+  return majorsOf(g).includes(patron) && attackedBy(g, home, against) && !g.regions.some((r) => r.owner === home && !r.overseas && r.ctrl === against);
 }
 
 /** The country whose volunteers already serve with this patron, if any: a patron takes one legion at a time. */
@@ -153,6 +180,12 @@ export function whyNoLegion(g: Game, home: string, patron: string, against: stri
     return player
       ? `Your public does not lean toward ${the(patron, g)}'s side against ${the(against, g)}: ${LEGIONS.leanAt} points are needed, or a friend attacked.`
       : 'It does not lean that way.';
+  }
+  // The legions' form at stops 3 to 5 (a computer-run country is asked only there): a row as its own pairing, or (1).
+  if (!player && !rowFor(home, patron, against) && !standsAgainst(g, home, patron, against)) {
+    if (friend) return 'A friend attacked gets no legion of its own.';
+    if (!majorsOf(g).includes(patron)) return 'Leaning alone sends volunteers only to a great power.';
+    return attackedBy(g, home, against) ? `${The(against, g)} holds ground of its own.` : `${The(against, g)} never struck it.`;
   }
   if (H.pc < LEGIONS.cost) return `A legion costs ${LEGIONS.cost} political capital; you have ${Math.floor(H.pc)}.`;
   const est = rowFor(home, patron, against)?.est ?? genericEst(g, home);
@@ -314,13 +347,15 @@ export function legionsMonth(g: Game): void {
     }
     return;
   }
-  // At stops 3 to 5 each computer-run country's judgment: the patron it leans to most, or the friend attacked. A
-  // patron takes one legion at a time: the record's legion first, then the friend's, then the strongest leaning.
+  // At stops 3 to 5 each computer-run country's judgment, by the legions' form (whyNoLegion): a record's row, or the
+  // great power it leans to most against an enemy that struck it. A patron takes one legion at a time: the record's
+  // legion first, then the strongest leaning. Where two score alike, the nearer front (one walk per patron, by its
+  // own blocking); ids only between fronts equally near.
   const at = Object.values(g.nations).filter((n) => n.alive && !n.dormant && n.atWar.length).map((n) => n.id).sort();
   const wish: { home: string; p: string; e: string; score: number }[] = [];
   for (const home of Object.keys(g.nations).sort()) {
     if (home === g.human || bk.abroad[home] || !canSend(g, home) || g.nations[home].pc < LEGIONS.cost) continue;
-    let best: { home: string; p: string; e: string; score: number } | null = null;
+    let best: { home: string; p: string; e: string; score: number; steps?: number } | null = null;
     for (const p of at) {
       if (p === home) continue;
       const lean = leanTo(g, home, p);
@@ -328,10 +363,15 @@ export function legionsMonth(g: Game): void {
         const friend = friendAttacked(g, home, p, e);
         if (!friend && (lean < LEGIONS.send || leanTo(g, home, e) >= 0)) continue;
         const score = (rowFor(home, p, e) ? 1000 : 0) + (friend ? 100 : 0) + lean;
-        if ((!best || score > best.score) && whyNoLegion(g, home, p, e, false) === null) best = { home, p, e, score };
+        if (best && score < best.score) continue;
+        if (best && score === best.score) {
+          best.steps ??= frontSteps(g, home, best.p, best.e);
+          if (!(frontSteps(g, home, p, e) < best.steps)) continue;
+        }
+        if (whyNoLegion(g, home, p, e, false) === null) best = { home, p, e, score };
       }
     }
-    if (best) wish.push(best);
+    if (best) wish.push({ home: best.home, p: best.p, e: best.e, score: best.score });
   }
   wish.sort((a, b) => b.score - a.score || (a.home < b.home ? -1 : 1));
   for (const w of wish) {
