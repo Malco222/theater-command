@@ -346,6 +346,20 @@ namespace TheaterFx
 		 * piece of smoke or dirt that would stand under sea.gone_px across takes no place, so the room goes to what can
 		 * be seen. A recipe without the sea row: the air's distance, no floors, nothing left out. */
 		void UseSea();
+		/**
+		 * For a scene whose camera stands among the bursts (the land battle; the air and sea scenes never call it, and
+		 * keep what they had). A puff is laid flat to the lens, so one whose middle is level with the lens or a little
+		 * in front of it, a few metres to the side, is laid across the whole lens: a 105's smoke 12 m to the side of a
+		 * man's shoulder was a huge dark soft disc hanging in the sky. Here smoke and dust (never a light, a thrown
+		 * clod, a trail or a kept column) thin out by how far in front of the lens their near side is (the depth of
+		 * the middle less half the size, the long way counted): nothing of one within Gone metres of the lens, all of
+		 * it from Whole on; and no puff of any kind is laid whose middle is behind the lens or within Plane metres in
+		 * front of it. The fade by distance (game.near_eye_fade_m) holds as before. Gone and Whole 0: off, as made.
+		 */
+		void SetLensFade(double Gone, double Whole, double Plane = 0.3);
+		/** Whether a shell leaves its flat painted crater (Scar) in the kit's own mesh: on as made. A scene that lays
+		 * craters of its own in the ground (the land battle's torn earth) turns it off; nothing else of a shell changes. */
+		void SetScars(bool bOn) { bScars = bOn; }
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -480,6 +494,16 @@ namespace TheaterFx
 		void OilFire(double Now, int Id, const Vec& At, double Reach, const char* Kind = "sunk", double Until = 0.0, double Since = 0.0);
 		/** That oil fire goes out: no new flame or smoke; what is in the air thins away on its own. */
 		void OilStop(double Now, int Id);
+		/** A smoke screen where a smoke round came down (the drill book's screens, 22 November): at At, its burst, and
+		 * then a low white wall laid from where it landed for Seconds, Across metres wide at its fullest, drifting down
+		 * the wind (SetWind) with its lumps swelling as they go, so it stands as one screen through its middle with rags
+		 * at its edges; after Seconds it is laid no more and thins away over its lumps' lives. Kind "wp" (white
+		 * phosphorus, the American mortars' round): a hard white burst throwing burning streamers in a dome, each
+		 * trailing its own white smoke and curling over as it falls, and the wall built from where they came down;
+		 * "canister" (a burning smoke bomb's or a base-ejection shell's, the British and German): no burst, a gush of
+		 * white from the ground that thickens into the wall over its first seconds. Never a crater, never a black or
+		 * grey cloud. Its numbers are the recipe's smoke_screen row. Id 0 or more: the caller's own number for it. */
+		void Screen(double Now, const Vec& At, double Across, double Seconds, const char* Kind = "wp", int Id = -1);
 
 		/** What the eye is: where it is, which way its screen's right, up and forward point, and how many pixels a
 		 * radian across the screen is (the screen's width / (2 tan(field of view / 2))). Smoke takes SmokeLight (the
@@ -852,7 +876,8 @@ namespace TheaterFx
 			size_t PopNext = 0;
 			double JetAt = 0.0, JetEnd = 0.0, JetTall = 0.0, JetDip = 0.0;
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
-			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off
+			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off, 6 a smoke screen
+			bool bPhos = false; // (a smoke screen: a phosphorus round's, its wall laid from where its streamers fell, Heads; Flames is when it is laid no more)
 			// (on a moving ship, BurnMove, SteamMove, CookOffMove: bMoves once it has been moved; Vel the ship's velocity
 			// there, metres a second, as last told at MovedAt; Ride, its own number for the pieces that lie on the ship)
 			Vec Vel;
@@ -865,7 +890,7 @@ namespace TheaterFx
 			uint64_t Seed = 1;
 			OilRow Oil; // (an oil fire: its row)
 			BankRow Bank; // (a burning thing: its smoke as a bank of lumps, when the recipe asks and it is big enough)
-			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts)
+			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts; a smoke screen: the seats its wall is laid from)
 		};
 		struct Paint
 		{
@@ -992,6 +1017,9 @@ namespace TheaterFx
 		// distance leaves until TrailLeastWhole, so no strip is ever drawn through the eye's own plane)
 		double TrailNearGone = 0.0, TrailNearWhole = 0.0, TrailLoomsWhole = 0.0, TrailLoomsGone = 0.0, TrailLeastGone = 0.0, TrailLeastWhole = 0.0;
 		double TrailNearK(double OffEye, double HalfWide) const;
+		// (SetLensFade: the land battle's fade by depth in front of the lens, and its near plane. 0, 0: none)
+		double LensGone = 0.0, LensWhole = 0.0, LensPlane = 0.0;
+		bool bScars = true; // (SetScars)
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
@@ -1180,6 +1208,8 @@ namespace TheaterFx
 		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
+		/** A smoke screen's wall (Kind 6): its lumps laid up to Now. */
+		void ScreenLumps(Source& S, double Now);
 		void Prune(double Now);
 		/** Smoke that fades gradually into the air (Brian, 21 November 18:00Z: "have the smoke effects gradually fade
 		 * away into the air not disappear right away"; the art director's ruling of 19:58Z). A row of the recipe's
