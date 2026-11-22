@@ -607,25 +607,72 @@ def build_stage_sea():
     painted = lerp(m, painted, vector(m, "ReefColour", (0.021, 0.30, 0.26, 1.0), -650, -1000), times(m, reef, scalar(m, "ReefShare", 0.6, -800, -900), -650, -900), -400, -950)
     painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, times(m, coral, scalar(m, "CoralDark", 0.45, -800, -1250), -650, -1200), -500, -1200), -300, -1000)
     painted = times(m, painted, lerp(m, scalar(m, "SlickLight", 1.12, -550, -800), scalar(m, "GustDark", 0.88, -550, -700), gust, -400, -750), -250, -600)
-    # THE SKY ON THE WATER (the sea battle's low eye, Brian, 21 November 23:37Z: "make the water more realistic"). Looked
-    # at low across it, water mirrors the sky, more the lower the look (Schlick's Fresnel, a fifth of a twentieth
-    # straight down): the sea lightens toward the horizon to nearly the sky's own colour, and the paint's long patches,
-    # which a low look squeezed into stripes, give way to it. The facet the sky is seen in is the waves' slope at
-    # "SkyLean" of it (a shading normal hides nothing behind a crest, so the full slope would mirror the sky in the
-    # backs of the waves too). "SkyReflect" how much (0 for Pearl, which keeps the engine's own reflection alone),
-    # "SkyColour" the sky's colour at the horizon; the foam covers it.
+    # THE SKY ON THE WATER (the sea battle's low eye, Brian, 21 November 23:37Z: "make the water more realistic"; the
+    # art director's fleet water targets, 23:44Z). Water mirrors the sky, more the lower it is looked at (Schlick's
+    # Fresnel, a fiftieth straight down). But the sea is rough: of its facets, a low eye sees those leaning toward it
+    # (the others hide behind them), which mirror higher, darker sky, and less of it. So each point is seen as a facet
+    # leaning toward the eye by "SkyTilt" (radians: the wind's slopes, Cox and Munk's, set by the game), less the lower
+    # it is looked at ("SkyTiltFall"), and by the drawn waves' own slope toward the eye at "SkyLean" of it (so near
+    # water keeps dark faces and bright backs). The sky it mirrors falls off above the horizon: "SkyColour" there,
+    # going to "SkyHigh" over "SkyBend" radians up (both light, as the engine takes it, not a still's pixels). Far off
+    # the air between lifts the sea toward "HazeTop" of the sky's colour (half way at "HazeReach", in the world's
+    # units), so the horizon stays a line, a little darker than the sky, and the wave detail is gone into it. Fitted
+    # to the Mac's first frames (22 November): the sea 0.85 of the sky at the horizon, 0.5 to 0.7 of it where the
+    # ships are, a third to a half of it near. "SkyReflect" how much (0 for Pearl, which keeps the engine's own
+    # reflection alone); the foam covers it.
     reflect = scalar(m, "SkyReflect", 0.0, -650, 1400)
-    sky_level = node(m, unreal.MaterialExpressionConstant, -650, 1650, r=0.0)
-    facet = one_in(m, unreal.MaterialExpressionNormalize, plus(m, up, pair(m, times(m, slope, scalar(m, "SkyLean", 0.5, -650, 1550), -500, 1550), sky_level, -350, 1550), -200, 1500), -50, 1500)
-    facing = node(m, DOT, 100, 1500)
-    connect(facet, "", facing, "A")
-    connect(node(m, unreal.MaterialExpressionCameraVectorWS, -50, 1650), "", facing, "B")
-    grazing = one_in(m, unreal.MaterialExpressionOneMinus, one_in(m, SAT, one_in(m, unreal.MaterialExpressionAbs, facing, 250, 1500), 400, 1500), 550, 1500)
-    fifth = node(m, unreal.MaterialExpressionPower, 700, 1500, const_exponent=5.0)
-    connect(grazing, "", fifth, "Base")
-    schlick = plus(m, times(m, fifth, 0.98, 850, 1500), 0.02, 1000, 1500)
-    mirrored = one_in(m, SAT, times(m, schlick, reflect, 1150, 1450), 1300, 1450)
+    eye = node(m, unreal.MaterialExpressionCameraVectorWS, -900, 1650)
+    low = node(m, unreal.MaterialExpressionMax, -600, 1650, const_b=0.0)
+    connect(node_from(m, MASK, eye, -750, 1650, r=False, g=False, b=True, a=False), "", low, "A")
+    eye_flat = node_from(m, MASK, eye, -750, 1800, r=True, g=True, b=False, a=False)
+    flat_sq = node(m, DOT, -600, 1800)
+    connect(eye_flat, "", flat_sq, "A")
+    connect(eye_flat, "", flat_sq, "B")
+    flat_len = node(m, unreal.MaterialExpressionMax, -300, 1800, const_b=0.2)
+    connect(one_in(m, unreal.MaterialExpressionSquareRoot, flat_sq, -450, 1800), "", flat_len, "A")
+    lean_dot = node(m, DOT, -600, 1950)
+    connect(slope, "", lean_dot, "A")
+    connect(eye_flat, "", lean_dot, "B")
+    toward = node(m, unreal.MaterialExpressionDivide, -300, 1950)
+    connect(lean_dot, "", toward, "A")
+    connect(flat_len, "", toward, "B")
+    unseen = node(m, unreal.MaterialExpressionMax, -150, 1700, const_b=0.0)
+    connect(plus(m, scalar(m, "SkyTilt", 0.124, -600, 1550), times(m, low, times(m, scalar(m, "SkyTiltFall", 0.1, -600, 1500), -1.0, -450, 1500), -300, 1550), -200, 1600), "", unseen, "A")
+    tilt = plus(m, unseen, times(m, toward, scalar(m, "SkyLean", 0.5, -300, 2050), -150, 1950), 0, 1750)
+    graze_low = node(m, unreal.MaterialExpressionMax, 250, 1650, const_b=0.002)
+    connect(plus(m, low, tilt, 150, 1650), "", graze_low, "A")
+    graze = node(m, unreal.MaterialExpressionMin, 350, 1650, const_b=1.5)
+    connect(graze_low, "", graze, "A")
+    # (the sine of the grazing angle, to its cube)
+    sine = times(m, graze, plus(m, times(m, times(m, graze, graze, 450, 1750), -1.0 / 6.0, 600, 1750), 1.0, 750, 1750), 900, 1650)
+    fifth = node(m, unreal.MaterialExpressionPower, 1200, 1650, const_exponent=5.0)
+    connect(one_in(m, SAT, one_in(m, unreal.MaterialExpressionOneMinus, sine, 1000, 1650), 1100, 1650), "", fifth, "Base")
+    schlick = plus(m, times(m, fifth, 0.98, 1300, 1650), 0.02, 1400, 1650)
+    rise = node(m, unreal.MaterialExpressionMax, 300, 1900, const_b=0.0)
+    connect(plus(m, low, times(m, tilt, 2.0, 150, 1950), 200, 1900), "", rise, "A")
+    bend = node(m, unreal.MaterialExpressionDivide, 450, 1900)
+    connect(rise, "", bend, "A")
+    connect(scalar(m, "SkyBend", 0.105, 300, 2000), "", bend, "B")
+    open_sky = node(m, unreal.MaterialExpressionDivide, 750, 1900, const_a=1.0)
+    connect(plus(m, times(m, bend, bend, 600, 1950), 1.0, 650, 1900), "", open_sky, "B")
+    sky_colour = vector(m, "SkyColour", (0.56, 0.60, 0.70, 1.0), 900, 2100)
+    sky_at = lerp(m, vector(m, "SkyHigh", (0.095, 0.12, 0.16, 1.0), 900, 2000), sky_colour, open_sky, 1050, 1950)
+    seen = times(m, sky_at, schlick, 1500, 1800)
+    reach = node(m, unreal.MaterialExpressionDivide, 300, 2200)
+    connect(node(m, unreal.MaterialExpressionPixelDepth, 150, 2200), "", reach, "A")
+    connect(scalar(m, "HazeReach", 500000.0, 150, 2300), "", reach, "B")
+    reach_sq = times(m, reach, reach, 450, 2200)
+    hazed = node(m, unreal.MaterialExpressionDivide, 750, 2200)
+    connect(reach_sq, "", hazed, "A")
+    connect(plus(m, reach_sq, 1.0, 600, 2250), "", hazed, "B")
+    lit = lerp(m, seen, times(m, sky_colour, scalar(m, "HazeTop", 0.6, 1050, 2300), 1200, 2250), hazed, 1650, 1900)
+    mirrored = one_in(m, SAT, times(m, schlick, reflect, 1500, 1450), 1600, 1450)
     painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, mirrored, -400, -300), -300, -450)
+    # (the air between dims the water's own colour as it lifts it)
+    painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, times(m, hazed, one_in(m, SAT, reflect, -500, -250), -450, -250), -350, -250), -250, -350)
+    # (a whitecap's tail "TailShare" as strong: Pearl's from high up whole; the fleet camera's low look at a darker sea
+    # wants it faint, the water +15 to +40 at first, the art director's targets)
+    tail = times(m, tail, scalar(m, "TailShare", 1.0, -400, -550), -300, -550)
     painted = lerp(m, painted, vector(m, "TailColour", (0.50, 0.62, 0.62, 1.0), -250, -450), tail, -100, -500)
     painted = lerp(m, painted, vector(m, "HeadColour", (0.79, 0.81, 0.82, 1.0), -100, -350), head, 50, -450)
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
@@ -637,8 +684,7 @@ def build_stage_sea():
     rough = times(m, lerp(m, scalar(m, "Roughness", 0.07, -500, 600), scalar(m, "RoughFar", 0.22, -500, 700), far, -300, 650),
                   lerp(m, scalar(m, "SlickRough", 0.3, -500, 800), scalar(m, "GustRough", 1.35, -500, 900), gust, -300, 850), -200, 700)
     frothy = lerp(m, head, 1.0, times(m, tail, 0.8, -300, 1000), -150, 950)
-    sky = times(m, times(m, vector(m, "SkyColour", (0.85, 0.86, 0.88, 1.0), 1150, 1650), mirrored, 1300, 1600),
-                one_in(m, unreal.MaterialExpressionOneMinus, frothy, 1300, 1700), 1450, 1650)
+    sky = times(m, times(m, lit, reflect, 1800, 1800), one_in(m, unreal.MaterialExpressionOneMinus, frothy, 1800, 1900), 1950, 1850)
     to_property(sky, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     to_property(lerp(m, rough, 0.6, frothy, -100, 650), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(lerp(m, scalar(m, "SlickSpecular", 0.7, -500, 1100), scalar(m, "GustSpecular", 0.4, -500, 1200), gust, -300, 1150),

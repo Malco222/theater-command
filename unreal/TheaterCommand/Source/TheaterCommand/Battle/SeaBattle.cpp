@@ -370,6 +370,32 @@ namespace SeaParts
 		return Sky;
 	}
 
+	/** The light (as the engine takes it, before the battle's grade) that a battle camera shows as a still's pixel (0 to
+	 * 1): the grade and its tone curve undone, as the Mac's first sea frames fit them (22 November: the engine's ACES
+	 * curve at 1.58 of the light, within two levels; the grade keeping red 1.01, green 0.97 and blue 0.87 of the sea's
+	 * own light). */
+	static FLinearColor LightOfStill(const FLinearColor& Still)
+	{
+		auto One = [](double V, double Gain)
+		{
+			V = FMath::Clamp(V, 0.0, 0.999);
+			const double Shown = V <= 0.04045 ? V / 12.92 : FMath::Pow((V + 0.055) / 1.055, 2.4);
+			// (ACES fitted, Shown = X (2.51 X + 0.03) / (X (2.43 X + 0.59) + 0.14), solved for X: its one root above 0)
+			const double A = 2.43 * Shown - 2.51, B = 0.59 * Shown - 0.03, C = 0.14 * Shown;
+			const double X = (-B - FMath::Sqrt(FMath::Max(B * B - 4.0 * A * C, 0.0))) / (2.0 * A);
+			return static_cast<float>(X / 1.58 / Gain);
+		};
+		return FLinearColor(One(Still.R, 1.01), One(Still.G, 0.97), One(Still.B, 0.87), 1.0f);
+	}
+
+	/** The sky's light at the horizon for the sea to mirror: "-TheaterSeaSky=" (a still's pixel) undone through the
+	 * grade, or the Mac's first sea frames' sky, a still's 229, 230, 231. */
+	static FLinearColor SeaSkyLight()
+	{
+		const bool bAsked = FString(FCommandLine::Get()).Contains(TEXT("TheaterSeaSky="));
+		return LightOfStill(bAsked ? SkyColour() : FLinearColor(229.0f / 255.0f, 230.0f / 255.0f, 231.0f / 255.0f));
+	}
+
 	/** Tells the kit the horizon's haze, where the kit takes it (the effects head 86d71f2: smoke far off pales into it,
 	 * a mid grey until it is told), so this builds on the kit before and after. "-TheaterSeaSky=red,green,blue" (0 to
 	 * 255, as a still's pixel) tries another. The scene's sky and hour are set once a battle and have no weather yet,
@@ -536,15 +562,15 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	{
 		// (its sea the battle's own wind's, Brian's 23:37Z "make the water more realistic": the waves run the way it
 		// blows, as long, as steep and as broken by whitecaps as its speed raises them; and the sky it mirrors low across
-		// it, the sky a still shows over the horizon at about 0.97 of its light, the battle's grade bringing it back up)
+		// it, the sky's light over the horizon as the engine takes it, SeaSkyLight)
 		const SeaShow::Vec Blow = S.Show.Wind();
 		const double Blowing = S.Show.WindSpeed();
-		const FLinearColor Sky = SeaParts::SkyColour();
+		const FLinearColor Sky = SeaParts::SeaSkyLight();
 		// (a recorded calm is a light air on the stage, which takes no speed for no wind given and would lay Pearl's
 		// trade-wind sea: at its least, 2 m/s, the sea lies almost glassy, a whitecap at most here and there; its swell
 		// runs off the field's bearing)
 		Stage->SetSeaWind(Blowing > 0.0 ? FMath::Atan2(Blow.X, Blow.Y) : S.Show.WindFrom() + UE_DOUBLE_PI, FMath::Max(Blowing, 0.5),
-			FLinearColor(Sky.R * 0.97f, Sky.G * 0.97f, Sky.B * 0.97f));
+			Sky);
 	}
 	if (!Stage || !Stage->RaiseSea(FVector2D(Middle, Middle), SunAzimuth, SunElevation, UnitsPerMetre, Effects.Get(), Seed))
 	{

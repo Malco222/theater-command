@@ -811,7 +811,9 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	static const double CapSizes[4] = { 0.8, 1.2, 2.0, 3.0 }, FoamLives[4] = { 0.3, 1.0, 1.6, 2.0 };
 	const double ChopScale = FMath::Clamp(FMath::Square(Wind / 7.5), 0.35, 2.4), SwellScale = FMath::Clamp(Wind / 7.5, 0.6, 1.6);
 	const double Steep = FMath::Clamp(0.8 + 0.4 * (Wind - 4.0) / 7.0, 0.75, 1.25);
-	const double CapScale = Knots(Forces, CapSizes) / 1.2;
+	// (the whitecaps' picture's own caps are 1.9 m across on the whole, 0.8 m to 4.7 m: Pearl's from high up passed at
+	// that, but the fleet camera's low eye saw them ten times too big as smudges, the Mac's first sea frames)
+	const double CapScale = Knots(Forces, CapSizes) / 1.9;
 	const FVector Way = GetActorTransform().TransformVectorNoScale(FVector(FMath::Cos(Downwind), FMath::Sin(Downwind), 0.0)).GetSafeNormal2D();
 	const double Base = FMath::Atan2(Way.Y, Way.X);
 	// Each read: the picture's length in metres (its slopes run from a seventh of it down to a fifty-sixth); its
@@ -1836,16 +1838,37 @@ bool AAirStage::RaiseSea(const FVector2D& Middle, double InSunAzimuth, double In
 	// ships are, and keeps its blue-grey near; the waves' detail folds into a smooth mirror by about 5 km, and the open
 	// sea's long patches tilt it a degree or so, not five (which a low eye squeezed into stripes 40 levels deep). Without
 	// the material, or with -TheaterFlatSea, the still sea as before. "-TheaterSeaReflect=" scales how much of the sky
-	// the sea mirrors (1 as set; 0 none), "-TheaterSeaTint=r,g,b" its paint.
+	// the sea mirrors (1 as set; 0 none), "-TheaterSeaHigh=" the sky higher up that near water mirrors (1 as set),
+	// "-TheaterSeaHaze=" how far the horizon lifts toward the sky (0.6 of it), "-TheaterSeaTint=r,g,b" its paint.
 	if (UMaterialInstanceDynamic* Moving = MovingSea(false))
 	{
 		SeaInk = Moving;
 		float Reflect = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaReflect="), Reflect);
-		const FLinearColor Sky = SeaSky.A > 0.0f ? SeaSky : FLinearColor(0.85f, 0.86f, 0.88f);
+		// (the sky's light at the horizon, as the engine takes it: SetSeaWind's, or the Mac's first sea frames' sky, a
+		// still's 229, 230, 231 through the battle's grade undone; and higher up a fifth of it and bluer, as those frames
+		// show the sky 13 degrees up; "-TheaterSeaHigh=" scales that)
+		const FLinearColor Sky = SeaSky.A > 0.0f ? SeaSky : FLinearColor(0.57f, 0.62f, 0.71f);
+		float Upper = 1.0f, Haze = 0.6f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaHigh="), Upper);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaHaze="), Haze);
+		Upper = FMath::Max(Upper, 0.0f);
 		Moving->SetScalarParameterValue(TEXT("SkyReflect"), FMath::Max(Reflect, 0.0f));
 		Moving->SetVectorParameterValue(TEXT("SkyColour"), FLinearColor(Sky.R, Sky.G, Sky.B, 1.0f));
+		Moving->SetVectorParameterValue(TEXT("SkyHigh"), FLinearColor(Sky.R * 0.17f * Upper, Sky.G * 0.20f * Upper, Sky.B * 0.23f * Upper, 1.0f));
+		// (the facets a low eye sees lean toward it by 3 degrees and four tenths of the wind's slopes, Cox and Munk's
+		// mean square 0.003 + 0.00512 U, less a tenth of how low it looks: fitted to a rough sea's mirror worked out over
+		// its slopes; the sky falls off over 6 degrees up)
+		const double Slopes = FMath::Atan(FMath::Sqrt(0.003 + 0.00512 * FMath::Clamp(SeaWind, 2.0, 14.0)));
+		Moving->SetScalarParameterValue(TEXT("SkyTilt"), static_cast<float>(FMath::DegreesToRadians(3.0) + 0.4 * Slopes));
+		Moving->SetScalarParameterValue(TEXT("SkyTiltFall"), 0.1f);
+		Moving->SetScalarParameterValue(TEXT("SkyBend"), static_cast<float>(FMath::DegreesToRadians(6.0)));
 		const double WorldPerMetre = UnitsPerMetre * FMath::Max(GetActorScale3D().X, 0.0001);
+		// (the air between: half way to "-TheaterSeaHaze=" of the sky's colour, 0.6, at 5 km)
+		Moving->SetScalarParameterValue(TEXT("HazeReach"), static_cast<float>(5000.0 * WorldPerMetre));
+		Moving->SetScalarParameterValue(TEXT("HazeTop"), FMath::Clamp(Haze, 0.0f, 1.5f));
+		// (the whitecaps' tails faint on the darker sea: the water +15 to +40 at first, the art director's targets)
+		Moving->SetScalarParameterValue(TEXT("TailShare"), 0.4f);
 		Moving->SetScalarParameterValue(TEXT("FarDepth"), static_cast<float>(3500.0 * WorldPerMetre));
 		Moving->SetScalarParameterValue(TEXT("FarLean"), 0.2f);
 		// (the whitecaps out to 1.6 km in a light breeze and 3.4 km in a strong one, gone 2.5 km further)
