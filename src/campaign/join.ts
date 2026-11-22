@@ -47,12 +47,13 @@
 //    order the staffs' relief and counter-attacks walk the map in): a reading put to the design director, not the
 //    fight's own order. Its cost: a reserve kept for a province the mover does not fight that month joins nothing.
 //    A corps next door is kept for the first province next to it, by number, where the nation now playing could fight
-//    a battle it would join: an enemy of that nation stands there; a corps of its army, not the joiner itself, that
-//    could attack it by the game's own attack rules stands next to it (weeks in hand, a fight this month or not; no
-//    staff's hold; not barred from that ground: couldAttack), and the battle being reckoned counts its own attackers;
-//    and the joiner would come up. Every card and every battle reads it there alone; once it has come up its month is
-//    spent (spendJoiner). A reserve that no battle on land can reach this month is kept for the first shore next to it,
-//    by number, where it would come up, and comes up to a landing there (keptAshore). A corps kept for a battle but cut
+//    a battle it would join: an enemy of that nation stands there, in ground it may attack (at war with whoever holds
+//    it: attackable); a corps of its army, not the joiner itself, that could attack it by the game's own attack rules
+//    stands next to it (weeks in hand, a fight this month or not; no staff's hold; not barred from that ground:
+//    couldAttack), and the battle being reckoned counts its own attackers; and the joiner would come up. Every card
+//    and every battle reads it there alone; once it has come up its month is spent (spendJoiner). A reserve that no
+//    battle on land can reach this month is kept for the first enemy shore next to it, by number, where it would come
+//    up, and comes up to a landing there (keptAshore). A corps kept for a battle but cut
 //    there by the five a side joins nothing in it. One that gave ground in a battle (giveWay) was in that battle and
 //    joins none for the rest of the calendar month (foughtNow). A battle's second reckoning, after defenders have given
 //    ground, reads the joiners its first named and no others (AttackOpts 'joined').
@@ -196,24 +197,36 @@ function couldAttack(g: Game, u: Corps, P: Region, attNat: string): boolean {
     && !(armyOf(u) !== g.human && u.hold) && !blocked(g, u, P) && !lineShut(g, attNat, P);
 }
 
+/**
+ * True where the army of attNat may attack province P at all, by whom P belongs to, as the game's attack rules read
+ * it: a computer staff attacks only a province whose field is held by a nation it is at war with (ai.ts: its
+ * offensive, its local attacks and its counter-attacks all ask atWar of fieldCtrl); the player, in free play, only one
+ * that belongs to his ally or his enemy (whyNotAttack, turn.ts), and in the historical campaign any.
+ */
+function attackable(g: Game, P: Region, attNat: string): boolean {
+  if (attNat !== g.human) return atWar(g, attNat, fieldCtrl(g, P));
+  return g.flags.open !== 1 || allied(g, attNat, P.ctrl) || atWar(g, attNat, P.ctrl);
+}
+
 /** A battle being reckoned: its province, and the corps that attack it. */
 export interface Fight { target: number; attackers: Corps[] }
 
 /**
  * Where the keeping sends a corps next door this month (the design director's ruling 4, as read here; see the head
  * comment, 6): the first province next to it, by the map's order (its number), where the army of attNat, the nation
- * now playing, could fight a battle the corps would join. An enemy of that army stands there; a corps of that army,
- * other than this one, that could attack it this month stands next to it (couldAttack; and the attackers of the
- * battle being reckoned, 'fight', at its own province, so a battle being fought is always one the mover could fight);
+ * now playing, could fight a battle the corps would join. An enemy of that army stands there, in a province that
+ * army may attack (attackable: it is at war with whoever holds it); a corps of that army, other than this one, that
+ * could attack it this month stands next to it (couldAttack; and the attackers of the battle being reckoned, 'fight',
+ * at its own province, so a battle being fought is always one the mover could fight);
  * and the corps would come up there, on one side or the other (sideOf, mayJoin, and a share above nothing). Null where
  * there is no such province. Reads the game and leaves it as it was.
  */
 export function keptFor(g: Game, c: Corps, attNat: string, fight?: Fight): number | null {
   for (const p of [...g.regions[c.reg].nb].sort((x, y) => x - y)) {
-    const P = g.regions[p], foes = hostileUnits(g, P, attNat);
-    if (!foes.length) continue;
+    const P = g.regions[p], foes = hostileUnits(g, P, attNat), here = fight !== undefined && fight.target === p;
+    if (!foes.length || (!here && !attackable(g, P, attNat))) continue;
     const aN = new Set<string>();
-    if (fight && fight.target === p) for (const u of fight.attackers) if (u !== c) aN.add(u.nat);
+    if (here) for (const u of fight.attackers) if (u !== c) aN.add(u.nat);
     for (const k of P.nb) for (const u of g.regions[k].units) if (u !== c && couldAttack(g, u, P, attNat)) aN.add(u.nat);
     if (!aN.size) continue;
     const dN = [...new Set(foes.map((u) => u.nat))];
@@ -225,14 +238,16 @@ export function keptFor(g: Game, c: Corps, attNat: string, fight?: Fight): numbe
 
 /**
  * Where a reserve that no battle on land can reach this month (keptFor, null) comes up to a landing: the first
- * province next to it, by number, that a landing can come to (a coast; the landing's own place counts as one) where
- * it would come up against the army of attNat, whose landing force is of the nations aN (sideOf, mayJoin, a share
- * above nothing). One place, so a reserve next to two beaches stands on one landing's card at most. Null where none.
+ * province next to it, by number, that a landing can come to (a coast that is enemy ground to the landing force, as
+ * whyNotLand in navy.ts reads it: no ally's, and held by a nation every landing nation is at war with; the landing's
+ * own place counts as one) where it would come up against the army of attNat, whose landing force is of the nations
+ * aN (sideOf, mayJoin, a share above nothing). One place, so a reserve next to two beaches stands on one landing's
+ * card at most. Null where none.
  */
 export function keptAshore(g: Game, c: Corps, attNat: string, aN: string[], landing: number): number | null {
   for (const p of [...g.regions[c.reg].nb].sort((x, y) => x - y)) {
     const P = g.regions[p];
-    if (p !== landing && !P.seas.length) continue;
+    if (p !== landing && (!P.seas.length || allied(g, attNat, P.ctrl) || aN.some((n) => !atWar(g, n, P.ctrl)))) continue;
     const foes = hostileUnits(g, P, attNat);
     if (!foes.length) continue;
     const dN = [...new Set(foes.map((u) => u.nat))];

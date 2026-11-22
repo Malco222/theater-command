@@ -19,7 +19,8 @@ import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, fo
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, orderHoldBack, previewLanding, runTurnAI, stepAI } from '../src/campaign/turn';
+import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, orderHoldBack, previewLanding, runTurnAI, stepAI, whyNotAttack } from '../src/campaign/turn';
+import { fieldCtrl } from '../src/campaign/siege';
 import { STACK, type BattleReport, type Corps, type Game, type Region } from '../src/campaign/types';
 
 /** The player's first month in a seat: the computer's months before his are played. */
@@ -686,6 +687,32 @@ describe('who could attack, a landing, and the second reckoning (the review of r
     expect(keptFor(h.g, m2, 'GER')).toBe(h.g.byName['Warsaw'].id);
   });
 
+  it("a province held by a nation the mover is not at war with keeps no reserve: neither a staff nor the player in free play may attack it", () => {
+    const g = startOpen(createGame(3, null));
+    const warsaw = g.byName['Warsaw'], lodzR = g.byName['Lodz'];
+    screenFor(g, lodzR, 'POL');
+    const modlin = corps(g, 'POL', 'Army Modlin');
+    expect(keptFor(g, modlin, 'GER')).toBe(warsaw.id);
+    // Warsaw handed to a nation Germany is not at war with: the Poles still stand there, but no staff attacks it.
+    warsaw.ctrl = 'SOV';
+    expect(hostileUnits(g, warsaw, 'GER').length).toBeGreaterThan(0);
+    expect(atWar(g, 'GER', fieldCtrl(g, warsaw))).toBe(false);
+    expect(keptFor(g, modlin, 'GER')).toBe(lodzR.id);
+    // The battle being reckoned there still counts its own attackers.
+    const near = warsaw.nb.flatMap((j) => g.regions[j].units).filter((u) => u.nat === 'GER');
+    expect(keptFor(g, modlin, 'GER', { target: warsaw.id, attackers: near })).toBe(warsaw.id);
+    // The player in free play may attack only his ally's ground or his enemy's (whyNotAttack); in the historical
+    // campaign there is no such bar.
+    for (const open of [true, false]) {
+      const h = lodz({ screen: true, open });
+      const w = h.g.byName['Warsaw'], m2 = corps(h.g, 'POL', 'Army Modlin');
+      expect(keptFor(h.g, m2, 'GER')).toBe(w.id);
+      w.ctrl = 'SOV';
+      expect(whyNotAttack(h.g, w, 'GER') === '').toBe(!open);
+      expect(keptFor(h.g, m2, 'GER')).toBe(open ? h.lodz.id : w.id);
+    }
+  });
+
   it('a reserve next to two shores is kept for the first, by number: it stands on one landing card', () => {
     const g = seat('GER');
     const from = corps(g, 'GER', 'Konigsberg garrison'), beach = g.byName['Danzig Corridor'], elbing = g.byName['Elbing'];
@@ -702,6 +729,10 @@ describe('who could attack, a landing, and the second reckoning (the review of r
     for (const u of [...elbing.units]) if (u.nat === 'GER') relocate(g, u, g.regions[from.reg]);
     addCorps(g, 'POL', 'Test Elbing', 'inf', 1, elbing.id, {});
     expect(hostileUnits(g, elbing, 'GER').map((u) => u.name)).toContain('Test Elbing');
+    // While Elbing is Germany's own ground no landing comes to it (whyNotLand: not enemy ground), whoever stands there.
+    expect(elbing.ctrl).toBe('GER');
+    expect(keptAshore(g, pomorze, 'GER', ['GER'], beach.id)).toBe(beach.id);
+    elbing.ctrl = 'POL';
     expect(keptAshore(g, pomorze, 'GER', ['GER'], beach.id)).toBe(elbing.id);
     expect(keptAshore(g, pomorze, 'GER', ['GER'], elbing.id)).toBe(elbing.id);
     expect(ids(assess(g, [from], beach, { sea: 1 }), 'def')).not.toContain(pomorze.id);
