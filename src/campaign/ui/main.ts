@@ -6218,7 +6218,7 @@ function groupIcon(kind: 'ftr' | 'bmr' | 'mixed', nat: string): string {
 /** Fog over an airfield (fog.ts): a pale lid over the pad with the weather map's three bars for fog. No side's colour: the weather takes no side. */
 function fogLid(w: number, h: number): string {
   const bars = [-0.28, 0, 0.28].map((k) => `M${(-w * 0.34).toFixed(1)} ${(h * k).toFixed(1)}H${(w * 0.34).toFixed(1)}`).join('');
-  return `<g class="affog"><title>Fog has closed this airfield this month: nothing there can take off.</title><rect x="${(-w / 2 - 1.5).toFixed(1)}" y="${(-h / 2 - 1.5).toFixed(1)}" width="${(w + 3).toFixed(1)}" height="${(h + 3).toFixed(1)}" rx="3" fill="#d9dde0" fill-opacity="0.82" stroke="#9aa1a6" stroke-width="0.6"/><path d="${bars}" stroke="#6f777d" stroke-width="1.3" stroke-linecap="round" fill="none"/></g>`;
+  return `<g class="affog"><title>Fog has closed this airfield this month: nothing there can take off.</title><rect x="${(-w / 2 - 1.5).toFixed(1)}" y="${(-h / 2 - 1.5).toFixed(1)}" width="${(w + 3).toFixed(1)}" height="${(h + 3).toFixed(1)}" rx="3" fill="#d9dde0" fill-opacity="0.6" stroke="#9aa1a6" stroke-width="0.6"/><path d="${bars}" stroke="#6f777d" stroke-width="1.3" stroke-linecap="round" fill="none"/></g>`;
 }
 
 function airfieldMarks(): Piece[] {
