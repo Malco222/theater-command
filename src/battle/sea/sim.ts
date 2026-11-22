@@ -103,6 +103,9 @@ interface Line { order: number[]; hand: number; course: number; speed: number; t
 export interface SeaLosses {
   sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; toDice?: boolean;
   abandoned?: Record<number, SeaShips>; sailors?: Record<Side, SeaMen>; rescue?: SeaRescue[];
+  /** Ships by class (plan 5.1, c3): for each fleet and kind the ticket gave by row, the rows of the ships it lost to the
+   *  campaign (sunk, and abandoned early), in the order they went: as many as it lost of the kind. */
+  rows?: Record<number, Partial<Record<SeaClass, (string | null)[]>>>;
 }
 
 /**
@@ -332,6 +335,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly aboard = new Map<number, Map<Wreck, number>>();
   /** The sinkings of ships their men abandoned, told 'abandon.afloat' seconds after (a looks-only knob): booked already. */
   private sinkings: { at: number; w: Wreck; lit: boolean; text: string; extra: Record<string, unknown> }[] = [];
+  /** Ships by class (plan 4.7, c3): the rows of each piece's hulls still with it, by unit id, where its fleet gives its
+   *  kind by row; and the rows each fleet has lost to the campaign, by kind (SeaLosses.rows). */
+  private readonly hullsLeft = new Map<number, (string | null)[]>();
+  private readonly lostRows: Record<number, Partial<Record<SeaClass, (string | null)[]>>> = {};
 
   constructor(ticket: SeaTicket) {
     this.ticket = ticket;
@@ -354,6 +361,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.owe[u.id] = 0;
       if (u.extra.cls === 'cv') u.extra.planes = 1;
       this.weight0[u.side] += this.weightOf(u);
+      const p = info.get(u.id)!;
+      if (p.rows) { this.hullsLeft.set(u.id, [...p.rows]); ((this.lostRows[p.fleet.id] ??= {})[u.extra.cls as SeaClass] ??= []); }
     }
     // The card counts the coasts' aircraft in each side's strength (navy.ts seaBattles), so the field does: they are
     // worn down with the fleet and a side breaks off on the whole of what it brought (b415).
@@ -1902,11 +1911,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private loseShip(u: SeaUnit, hull = 0): void {
     const c = u.extra.cls as SeaClass, side = u.side, fleet = this.info.get(u.id)!.fleet.id;
     u.extra.ships--;
+    // Ships by class (plan 4.7): which of the piece's hulls she is, by a fixed rotation over those still with it (the
+    // piece's losses so far, modulo the hulls left; no draw): one row only, unless rows were merged past the limit.
+    const hs = this.hullsLeft.get(u.id), row = hs?.length ? hs.splice((this.info.get(u.id)!.rows!.length - hs.length) % hs.length, 1)[0] : undefined;
     const one = RULES_CLASSES[c].one, left = Math.round(clamp(hull, 0, 1) * 1000) / 1000;
     if (this.lostShips[side][c] < this.caps[side][c]) {
       this.lostShips[side][c]++;
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
+      if (row !== undefined) this.lostRows[fleet][c]!.push(row);
       // With men in the water (SeaSailors): under her side's call to abandon early her men leave her first, in good order
       // (form C3), unless she went too fast for any call to matter (sudden); told before her sinking, so her boats are
       // in the water first. Her men otherwise, and her oil, are told after it, in the same second, at her wreck.
@@ -1926,6 +1939,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // the fight she is gone exactly as a ship going out burning is, so who wins never moves; and a ship that fell out
       // of the line with hull left (fallOut) still makes for port, since she can steam.
       this.fleetLoss.abandoned[fleet][c]++;
+      if (row !== undefined) this.lostRows[fleet][c]!.push(row);
       const z = this.smoke(u, 'sunk'), ship = (this.wreckOf.get(u.id) ?? 0) + 1;
       this.say({ what: 'sea:abandon', unit: u.id, side, x: z.x, y: z.y, text: `A ${one} ${ofFleet(u.extra.fleet)} is abandoned: her men leave her before she can take them with her.`, extra: { ship, cls: c, fleet, early: true } });
       this.sinkLater(this.inWater(u, z, true), `The abandoned ${one} ${ofFleet(u.extra.fleet)} goes down.`, { cls: c, fleet, hull: left, abandoned: true });
@@ -2922,6 +2936,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const f of this.ticket.place.fleets) hurt[f.id] = { ...this.fleetLoss.burnt[f.id] };
     for (const u of this.units) if (u.state !== 'gone') hurt[this.info.get(u.id)!.fleet.id][u.extra.cls as SeaClass] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
     const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt, ...(toDice ? { toDice } : {}) };
+    // Ships by class (c3): the rows of the ships lost, only where the ticket gave rows.
+    if (this.hullsLeft.size) extra.rows = this.lostRows;
     // Men in the water (SeaSailors): the ships each fleet's own call abandoned, and who was picked up after the fight,
     // with a line for each side's men on the after-action card (form 129(d)). Nothing here moves who won or by how much.
     if (this.sail) {

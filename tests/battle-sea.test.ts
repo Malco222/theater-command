@@ -4,12 +4,14 @@
 import { describe, expect, it } from 'vitest';
 import { runOut } from '../src/battle/core/clock';
 import { DT, type FieldEvent, type Zone } from '../src/battle/core/types';
-import { drawUp, groupSizes } from '../src/battle/sea/pieces';
+import { drawUp, groupSizes, hullsOf } from '../src/battle/sea/pieces';
 import { RULES_CLASSES, SEA } from '../src/battle/sea/numbers';
 import { diceRange, lossShares, seaChance, seaLevel, seaRatio, shipWords, sunkCaps } from '../src/battle/sea/result';
 import { SeaSim, seaWind, seaWindSpeed, type SeaLosses } from '../src/battle/sea/sim';
-import { carriersOnly, fieldFights, plainTicket, type PlainFleet } from '../src/battle/sea/ticket';
-import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit } from '../src/battle/sea/types';
+import { carriersOnly, fieldFights, fleetTicket, plainTicket, rowsOf, type PlainFleet } from '../src/battle/sea/ticket';
+import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit, type ShipRow } from '../src/battle/sea/types';
+import { createGame } from '../src/campaign/game';
+import { fleetPower } from '../src/campaign/navy';
 import { foughtOf } from '../src/battle/sea/handoff';
 import { PRACTICE, practiceTicket } from '../src/battle/sea/practice';
 import { headCount, hurtAfloat, ofFleet, repairLines, theFleet } from '../src/battle/sea/words';
@@ -3657,5 +3659,157 @@ describe("ships comb the tracks (the ship plan's R6; the design director, 05:17Z
     while (!s.over) s.step();
     expect(checked).toBeGreaterThan(1000);
     expect(regaining).toBeGreaterThan(100);
+  });
+});
+
+describe('ships by class on the field (naval-battles/ships-by-class-plan.md 5.1 c1 and c3, tests 6.1)', () => {
+  const row = (id: string | null, worth: number, n: number, label = id ?? ''): ShipRow => ({ id, label, worth, n });
+  /** Two lines whose battleships and destroyers come by row: the attacker's two classes of battleship and three of
+   *  destroyer, the defender's one of each with hulls past its rows. */
+  const RA: PlainFleet = { name: 'Atlantic Fleet', nat: 'USA', ships: { bb: 4, ca: 3, dd: 12 }, rows: { bb: [row('nc', 1.3, 2), row('ny', 0.8, 2)], dd: [row('fl', 1.1, 4), row('bn', 0.9, 4), row('sm', 1.0, 4)] } };
+  const RB: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 3, ca: 3, dd: 12 }, rows: { bb: [row('bi', 1.2, 2)], dd: [row('z', 1.05, 6)] } };
+  const plain = (f: PlainFleet): PlainFleet => { const { rows: _, ...rest } = f; return rest; };
+  const sideW = (units: SeaUnit[], info: Map<number, { weight: number }>, side: 'att' | 'def'): number => units.filter((u) => u.side === side).reduce((n, u) => n + info.get(u.id)!.weight * u.extra.ships0, 0);
+
+  it('1. no rows, no change: a ticket with none carries none and draws up as ever; rows of worth 1 in one row fight the same battle to the bit', () => {
+    const t = plainTicket({ att: [HOME], def: [BATTLE], seed: 3 });
+    for (const f of t.place.fleets) expect('rows' in f).toBe(false);
+    expect(rowsOf(undefined, { bb: 2, cv: 0, ca: 0, dd: 0 })).toBeUndefined();
+    const { info } = drawUp(t.place.fleets);
+    for (const p of info.values()) expect('rows' in p).toBe(false);
+    const flat = (f: PlainFleet): PlainFleet => ({ ...f, rows: Object.fromEntries(SEA_CLASSES.filter((c) => (f.ships[c] ?? 0) > 0).map((c) => [c, [row(null, 1, f.ships[c]!)]])) });
+    const play = (att: PlainFleet, def: PlainFleet): { s: SeaSim; ev: string } => {
+      const s = new SeaSim(plainTicket({ att: [att], def: [def], seed: 7, human: null }));
+      runOut(s);
+      return { s, ev: JSON.stringify(s.view().events) };
+    };
+    const a = play(HOME, BATTLE), b = play(flat(HOME), flat(BATTLE));
+    expect(b.ev).toBe(a.ev);
+    const ra = a.s.over!, rb = b.s.over!;
+    expect(rb.R).toBe(ra.R);
+    const { rows, ...rest } = rb.extra as unknown as SeaLosses;
+    expect(rest).toEqual(ra.extra);
+    expect(rows).toBeDefined();
+    expect((ra.extra as unknown as SeaLosses).rows).toBeUndefined();
+  });
+
+  it("2. weight kept: each side's pieces weigh what its ticket does, rows or none; a fleet's ticket weighs its fleet power whatever its rows, and rows of worth 1 leave its multiplier as it was", () => {
+    for (const odds of [undefined, 1, 1.15]) {
+      const t = plainTicket({ att: [RA], def: [RB], seed: 3, odds, air: { def: 5 } });
+      const { units, info } = drawUp(t.place.fleets);
+      expect(Math.abs(sideW(units, info, 'att') - t.reckoning.A)).toBeLessThan(1e-9);
+      expect(Math.abs(sideW(units, info, 'def') - (t.reckoning.D - t.place.air.def))).toBeLessThan(1e-9);
+      // Each kind's weight is its hulls' worths times the kind's weight.
+      for (const f of t.place.fleets) for (const c of SEA_CLASSES) {
+        const w = units.filter((u) => u.corps === f.id && u.extra.cls === c).reduce((n, u) => n + info.get(u.id)!.weight * u.extra.ships0, 0);
+        expect(Math.abs(w - hullsOf(f, c) * RULES_CLASSES[c].power * (c === 'cv' ? f.deck : 1) * f.mul)).toBeLessThan(1e-9);
+      }
+    }
+    const g = createGame(3, null);
+    const f = g.fleets.find((x) => x.ships.bb >= 2 && x.ships.dd >= 2)!;
+    const was = fleetTicket(g, f, 'att');
+    const ones = fleetTicket(g, f, 'att', { bb: [row(null, 1, f.ships.bb)] });
+    expect(ones.mul).toBe(was.mul);
+    const two = fleetTicket(g, f, 'att', { bb: [row('a', 1.25, 1), row('b', 0.9, f.ships.bb - 1)], ss: [row('x', 3, 2)] });
+    const weigh = (x: typeof was): number => SEA_CLASSES.reduce((n, c) => n + hullsOf(x, c) * RULES_CLASSES[c].power * (c === 'cv' ? x.deck : 1) * x.mul, 0);
+    expect(Math.abs(weigh(two) - fleetPower(g, f)) / fleetPower(g, f)).toBeLessThan(1e-12);
+    expect(Math.abs(weigh(was) - fleetPower(g, f)) / fleetPower(g, f)).toBeLessThan(1e-12);
+    expect(Object.keys(two.rows!)).toEqual(['bb']); // submarines fight no fleet action
+  });
+
+  it("3. the same rule both sides: a piece's rows come only from its own fleet's list; rows swapped between the sides draw up the same pieces turned half round", () => {
+    const t = plainTicket({ att: [RA], def: [RB], seed: 3 });
+    const { units, info } = drawUp(t.place.fleets);
+    for (const u of units) {
+      const p = info.get(u.id)!, own = (p.fleet.rows?.[u.extra.cls as SeaClass] ?? []).map((r) => r.id);
+      for (const id of p.rows ?? []) expect(id === null || own.includes(id), `${u.name} ${id}`).toBe(true);
+      expect(p.fleet.id).toBe(u.corps);
+    }
+    // The same fleets the other way round: the same pieces, each side's from its own list.
+    const r = plainTicket({ att: [{ ...RB, nat: 'USA' }], def: [{ ...RA, nat: 'GER' }], seed: 3 });
+    const back = drawUp(r.place.fleets);
+    const shape = (us: SeaUnit[], inf: Map<number, { weight: number; rows?: (string | null)[] }>, side: 'att' | 'def') => us.filter((u) => u.side === side).map((u) => [u.extra.cls, u.extra.ships0, inf.get(u.id)!.weight, (inf.get(u.id)!.rows ?? []).join()]);
+    expect(shape(back.units, back.info, 'def')).toEqual(shape(units, info, 'att'));
+    expect(shape(back.units, back.info, 'att')).toEqual(shape(units, info, 'def'));
+  });
+
+  it("5. hand-back: the rows of the ships each fleet lost add up to its ships lost of the kind, sunk and abandoned early, merged pieces too; foughtOf's sunk is unchanged", () => {
+    let seen = 0;
+    for (const seed of [3, 5, 8, 13]) {
+      for (const sailors of [undefined, { water: 'cold' as const, early: [1] }]) {
+        const s = new SeaSim(plainTicket({ att: [RA], def: [RB], seed, human: null, sailors }));
+        runOut(s);
+        const x = s.over!.extra as unknown as SeaLosses;
+        for (const f of s.ticket.place.fleets) for (const c of SEA_CLASSES) {
+          const given = f.rows?.[c];
+          const lost = x.sunk[f.id][c] + (x.abandoned?.[f.id]?.[c] ?? 0);
+          if (!given) { expect(x.rows![f.id]?.[c]).toBeUndefined(); continue; }
+          const ids = x.rows![f.id][c]!;
+          expect(ids.length, `${seed} ${f.name} ${c}`).toBe(lost);
+          seen += ids.length;
+          // No row lost more often than the fleet had hulls of it.
+          for (const r of given) expect(ids.filter((i) => i === r.id).length).toBeLessThanOrEqual(r.n + (r.id === null ? f.ships[c] : 0));
+        }
+        expect(foughtOf(s.over!).sunk).toEqual(sailors ? Object.fromEntries(Object.keys(x.sunk).map((id) => [id, Object.fromEntries(SEA_CLASSES.map((c) => [c, x.sunk[+id][c] + (x.abandoned?.[+id]?.[c] ?? 0)]))])) : x.sunk);
+      }
+    }
+    expect(seen).toBeGreaterThan(10);
+    // Past the field's limit, with the fleet's call to abandon early: ships abandoned are lost to the campaign, rows and all.
+    const a = new SeaSim(plainTicket({ att: [RA], def: [RB], seed: 3, human: null, sailors: { water: 'cold', early: [1] } })) as any;
+    const dd = a.units.find((v: SeaUnit) => v.side === 'att' && v.extra.cls === 'dd')!;
+    a.caps.att.dd = 1;
+    a.wear(dd, a.hullOf(dd) * 1.01);
+    const xa = a.fleetLoss;
+    expect([xa.sunk[1].dd, xa.abandoned[1].dd]).toEqual([1, 3]);
+    expect(a.lostRows[1].dd).toEqual(['fl', 'fl', 'fl', 'fl']);
+    // A merged piece gives up its hulls by a fixed rotation: one of each row before a second of either.
+    const s = new SeaSim(plainTicket({ att: [RA], def: [RB], seed: 3, human: null })) as any;
+    const u = s.units.find((v: SeaUnit) => v.side === 'att' && v.extra.cls === 'dd')!;
+    s.hullsLeft.set(u.id, ['fl', 'fl', 'bn', 'bn']); s.info.get(u.id).rows = ['fl', 'fl', 'bn', 'bn'];
+    const lostTo = (): (string | null)[] => s.lostRows[1].dd;
+    for (let k = 0; k < 3; k++) s.loseShip(u);
+    expect(lostTo()).toEqual(['fl', 'bn', 'fl']);
+  });
+
+  it('6. a row on the ticket carries only its id, label, worth and n; the field\'s kinds only; never more hulls than the kind has', () => {
+    const given = { bb: [{ id: 'a', label: 'A class', worth: 1.2, n: 2, reach: 30000 } as ShipRow, row('b', 0.9, 5)], ss: [row('s', 2, 3)] } as Partial<Record<string, ShipRow[]>>;
+    const rows = rowsOf(given, { bb: 4, cv: 0, ca: 0, dd: 0 })!;
+    expect(Object.keys(rows)).toEqual(['bb']);
+    expect(rows.bb!.map((r) => Object.keys(r).sort())).toEqual([['id', 'label', 'n', 'worth'], ['id', 'label', 'n', 'worth']]);
+    expect(rows.bb!.map((r) => r.n)).toEqual([2, 2]);
+    const t = plainTicket({ att: [{ ...RA, rows: given as PlainFleet['rows'] }], def: [RB], seed: 1 });
+    for (const f of t.place.fleets) for (const c of SEA_CLASSES) for (const r of f.rows?.[c] ?? []) expect(Object.keys(r).sort()).toEqual(['id', 'label', 'n', 'worth']);
+  });
+
+  it("8. pieces by row: below the limit every piece holds one row; past it rows of one kind within one fleet merge, closest worths first, and no side passes the limit", () => {
+    const t = plainTicket({ att: [RA], def: [RB], seed: 3 });
+    const { units, info } = drawUp(t.place.fleets);
+    for (const u of units) { const r = info.get(u.id)!.rows; if (r) expect(new Set(r).size, u.name).toBe(1); }
+    // The attacker's destroyers sail in fours, a piece to each of its three rows; the defender's six of one row and six with none.
+    const dds = (side: 'att' | 'def'): string[] => units.filter((u) => u.side === side && u.extra.cls === 'dd').map((u) => info.get(u.id)!.rows!.join());
+    expect(dds('att')).toEqual(['fl,fl,fl,fl', 'bn,bn,bn,bn', 'sm,sm,sm,sm']);
+    expect(dds('def')).toEqual(['z,z,z,z', 'z,z', ',,,', ',']);
+    // Many rows of destroyers past the limit: they merge within the fleet and kind, the closest worths first.
+    const many: PlainFleet = { name: 'Many', nat: 'USA', ships: { bb: 6, ca: 6, dd: 30 }, rows: { dd: [row('a', 1.0, 3), row('b', 1.3, 3), row('c', 1.01, 3), row('d', 0.7, 3), row('e', 1.31, 3), row('f', 0.71, 3), row('g', 1.0, 3), row('h', 1.2, 3), row('i', 0.9, 3), row('j', 1.1, 3)] } };
+    const m = plainTicket({ att: [many, { ...many, name: 'More', rows: undefined }], def: [RB], seed: 3 });
+    const per = groupSizes(m.place.fleets.filter((f) => f.side === 'att'));
+    const d = drawUp(m.place.fleets);
+    const att = d.units.filter((u) => u.side === 'att');
+    expect(att.length).toBeLessThanOrEqual(SEA.pieces.most);
+    const mixed = att.filter((u) => new Set(d.info.get(u.id)!.rows ?? []).size > 1);
+    expect(mixed.length).toBeGreaterThan(0);
+    for (const u of mixed) {
+      expect(u.extra.cls).toBe('dd');
+      expect(d.info.get(u.id)!.fleet.name).toBe('Many');
+      expect(u.extra.ships0).toBeLessThanOrEqual(per.dd);
+    }
+    // Closest worths first: 'a' and 'g' (both 1.0) come together, as do 'd' and 'f' (0.7 and 0.71); the merged rows then
+    // sail ten hulls a piece, in the list's order.
+    const holding = (id: string): string[] => mixed.filter((u) => d.info.get(u.id)!.rows!.includes(id)).map((u) => [...new Set(d.info.get(u.id)!.rows)].join());
+    expect(holding('a')).toEqual(['a,g,c,h']);
+    expect(holding('d')).toEqual(['e,d,f,i']);
+    expect(att.filter((u) => u.extra.cls === 'dd' && d.info.get(u.id)!.fleet.name === 'Many').map((u) => u.extra.ships0)).toEqual([10, 10, 10]);
+    // Weight still kept.
+    expect(Math.abs(sideW(d.units, d.info, 'att') - m.reckoning.A)).toBeLessThan(1e-9);
   });
 });

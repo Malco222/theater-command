@@ -20,6 +20,14 @@ export const SEA_CLASSES: SeaClass[] = ['bb', 'cv', 'ca', 'dd'];
 /** Ships by class, as the rules count them (types.ts Ships), without submarines. */
 export type SeaShips = Record<SeaClass, number>;
 
+/**
+ * One row of a fleet's ships of a kind (ships by class and navy: naval-battles/ships-by-class-plan.md 5.1, c1): the hulls
+ * of one class of the record, its words ('King George V class', or '' for hulls with no row), the worth the rules' fleet
+ * power gives each of them (navy.ts fleetPower through shiprows.ts hullWorth), and how many; in the fleet's list order.
+ * Only these four keys (plan 6.1, test 6).
+ */
+export interface ShipRow { id: string | null; label: string; worth: number; n: number }
+
 /** One campaign fleet as the field receives it. */
 export interface FleetTicket {
   /** The fleet's id in the campaign: what it lost is reported back against it. */
@@ -38,6 +46,9 @@ export interface FleetTicket {
   /** Bombers in its carriers' wings, for the strike's count on the card ("24 bombers"). */
   bombers: number;
   admiral: { name: string; level: number } | null;
+  /** Its ships by row, for the kinds the campaign plays by class (ships by class, with the campaign's switch on): hulls
+   *  past the rows' count have no row and the kind's weight. Absent, every ship of a kind weighs alike, as ever. */
+  rows?: Partial<Record<SeaClass, ShipRow[]>>;
 }
 
 /** The sea the battle is fought in, and what the campaign knows of it. */
