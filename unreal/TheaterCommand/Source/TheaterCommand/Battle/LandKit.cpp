@@ -976,6 +976,33 @@ namespace LandKit
 		/** The nation's coat for a model that has none of its own (the lorry stands in for every army's). */
 		bool NationCoat(const Dress& D, std::string& OutName, std::string& OutUpper, std::string& OutUpper2, std::string& OutShade)
 		{
+			if (D.Terrain == "desert")
+			{
+				// On a desert field the lorry wears her owner's desert coat, as the tanks' files pick theirs there
+				// (swaps.paint.by_ground; tools/battle-models/land tanks_ger.py and motorpool.py): the Germans' order of
+				// March 1941 (brown-yellow, the grey-green blotched where the lorry's file lays them) to February 1942,
+				// then that of March 1942 (light brown, grey) to May 1943; the British Light Stone and the Italians' own
+				// sand khaki, one colour all over. Everyone else (the Americans' olive drab) as on any other ground.
+				const int Key = D.Year * 12 + D.Month;
+				if (D.Nation == "GER" && Key <= 1943 * 12 + 5)
+				{
+					const bool b41 = Key <= 1942 * 12 + 2;
+					OutName = b41 ? "desert41" : "desert42";
+					OutUpper = b41 ? "A2814F" : "B49B6C";
+					OutUpper2 = b41 ? "6B6243" : "7F7D72";
+					OutShade = b41 ? "644F30" : "6F6042";
+					return true;
+				}
+				if (D.Nation == "UK" || D.Nation == "ITA")
+				{
+					const bool bUK = D.Nation == "UK";
+					OutName = bUK ? "stone" : "sand";
+					OutUpper = bUK ? "C9B88E" : "8A7F5E";
+					OutUpper2 = OutUpper;
+					OutShade = bUK ? "7C7258" : "554E3A";
+					return true;
+				}
+			}
 			if (D.Nation == "USA")
 			{
 				// Olive drab, one colour all over (the camouflage file: a nation with one colour fills upper2 with upper),
