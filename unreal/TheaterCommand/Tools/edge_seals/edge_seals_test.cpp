@@ -4055,6 +4055,25 @@ static void TestGlobe(const char* Folder)
 	CHECK(Lines == 1 && Contains(Text, "FSlateLayoutTransform(static_cast<float>(1.0 / Px)") && Contains(Text, "MakeLines(Out, Layer, Pixels.ToPaintGeometry(),") && Contains(Text, "static_cast<float>(Cut.Thick * Px)")
 		&& Contains(Text, "Points.Add(FVector2D((MidX + At.X) * Px, (MidY + At.Y) * Px))"));
 	std::printf("(the globe's places: Look::MarkOf in %s; EGlyph::Globe in %s; the ellipse drawn in %s)\n", Asks.c_str(), Globes.c_str(), Ellipses.c_str());
+
+	// (and the card's ELSEWHERE IN THE WAR rows, which the report is: each row draws its flag, Flag(Each.Tag), the card's
+	// SImage of FlagBrush, which is a nation's flag or, where a row has none, WatchBrush, a plain grey rounded box. No
+	// mark of the seals, no globe. The lines are printed, so the answer to ruling 6 can be checked in the source)
+	const std::string Hud = SourceText(Folder, "CampaignHUD.cpp");
+	auto LineOf = [&Hud](size_t At) { return At == std::string::npos ? 0L : 1L + static_cast<long>(std::count(Hud.begin(), Hud.begin() + static_cast<std::ptrdiff_t>(At), '\n')); };
+	const size_t Rows = Hud.find("for (const FMonthElse& Each : Card.Elsewhere)");
+	const size_t Boxed = Rows == std::string::npos ? std::string::npos : Hud.find("Boxed(TEXT(\"ELSEWHERE IN THE WAR\")", Rows);
+	const std::string Drawn = Rows != std::string::npos && Boxed != std::string::npos ? Hud.substr(Rows, Boxed - Rows) : std::string();
+	const size_t RowFlag = Rows == std::string::npos ? std::string::npos : Hud.find("Flag(Each.Tag, ", Rows);
+	const size_t CardFlag = Hud.find("auto Flag = [this](const FString& Tag, float Wide, float High) -> TSharedRef<SWidget> { return SNew(SBox).WidthOverride(Wide).HeightOverride(High)[SNew(SImage).Image(FlagBrush(Tag))]; };");
+	const size_t Brush = Hud.find("const FSlateBrush* FlagBrush(const FString& Tag)");
+	const size_t BrushEnd = Brush == std::string::npos ? std::string::npos : Hud.find("\n\t\t}\n", Brush);
+	const std::string BrushBody = Brush != std::string::npos && BrushEnd != std::string::npos ? Hud.substr(Brush, BrushEnd - Brush) : std::string();
+	const size_t Watch = Hud.find("WatchBrush = FSlateRoundedBoxBrush(");
+	CHECK(!Drawn.empty() && Contains(Drawn, "Flag(Each.Tag, ") && !Contains(Drawn, "SImage") && !Contains(Drawn, "MakeBox") && !Contains(Drawn, "Brush") && !Contains(Drawn, "Glyph") && !Contains(Drawn, "MarkOf"));
+	CHECK(CardFlag != std::string::npos && CardFlag < Rows && !BrushBody.empty() && Contains(BrushBody, "return &WatchBrush;") && Contains(BrushBody, "GetFlagTexture(Tag)") && !Contains(BrushBody, "Glyph") && Watch != std::string::npos);
+	std::printf("(the card's ELSEWHERE IN THE WAR rows, CampaignHUD.cpp %ld-%ld: each row's Flag(Each.Tag) at %ld, the card's Flag at %ld, an SImage of FlagBrush (%ld-%ld): a nation's flag, or WatchBrush (%ld), a plain grey rounded box; no mark of the seals)\n",
+		LineOf(Rows), LineOf(Boxed), LineOf(RowFlag), LineOf(CardFlag), LineOf(Brush), LineOf(BrushEnd) + 1, LineOf(Watch));
 }
 
 static void TestCountFace(const char* Folder)
