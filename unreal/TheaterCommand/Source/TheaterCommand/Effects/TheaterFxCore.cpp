@@ -379,6 +379,8 @@ namespace TheaterFx
 		Sticks.clear();
 		InSight = HeldAtDraw = TwinBits = 0;
 		SeenBits = SeenTwin = 0;
+		Serials = 0;
+		Numbered = 0;
 		CaseOff = 0;
 		bEyeWas = false;
 		EyeMoved = EyeTurned = 0.0;
@@ -12393,7 +12395,24 @@ namespace TheaterFx
 	void Battle::Prune(double Now)
 	{
 		auto Gone = [Now](const Bit& B) { return Now > B.Born + B.Life && (!Unseen(B) || Now > B.Born + 0.5); };
-		Bits.erase(std::remove_if(Bits.begin(), Bits.end(), Gone), Bits.end());
+		// (the production lead's FX2: a piece is 1.8 kB, and erase(remove_if) moved every piece after the first one gone,
+		// most of the battle's pieces each frame. Now each gone piece takes the last one in its place, a piece moved
+		// for each gone. Nothing holds a place in Bits from one Draw to the next, and the order they are drawn in is
+		// their depth and then Bit::Serial, so the picture does not depend on where they lie)
+		for (size_t I = 0; I < Bits.size();)
+		{
+			if (!Gone(Bits[I]))
+			{
+				++I;
+				continue;
+			}
+			if (I + 1 < Bits.size())
+			{
+				Bits[I] = Bits.back();
+			}
+			Bits.pop_back();
+		}
+		Numbered = Bits.size();
 		BallLamps.erase(std::remove_if(BallLamps.begin(), BallLamps.end(), [Now](const BallLamp& L) { return !(Now <= L.Born + L.Life + 1.0); }), BallLamps.end());
 		// (a flash goes once its lamp has had its two frames, or after half a second unseen)
 		Flashes.erase(std::remove_if(Flashes.begin(), Flashes.end(), [this, Now](const Flash& F) { return (F.FirstFrame >= 0 && FrameNo - F.FirstFrame >= 2) || Now > F.Born + 0.5; }), Flashes.end());
@@ -14499,6 +14518,12 @@ namespace TheaterFx
 		UpWas = Eye.Up;
 		bEyeWas = true;
 		Run(Now);
+		// (Bit::Serial: what was made since the last Draw lies at the end of Bits in the order it was made; numbered so
+		// before Prune moves anything)
+		for (size_t I = std::min(Numbered, Bits.size()); I < Bits.size(); ++I)
+		{
+			Bits[I].Serial = ++Serials;
+		}
 		Prune(Now);
 		++FrameNo;
 		// (art director 06:48Z: on the overview, or any eye above about 25 m looking steeply down, the dust within about
@@ -14711,7 +14736,7 @@ namespace TheaterFx
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
 			if (!bOff)
 			{
-				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight || (B.FarRep >= 2 && bFarKept), B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0 });
+				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight || (B.FarRep >= 2 && bFarKept), B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0, B.Serial });
 			}
 			if (B.OilId >= 0)
 			{
@@ -14748,11 +14773,14 @@ namespace TheaterFx
 		InSight = SeenBits + OffSight;
 		HeldAtDraw = Bits.size();
 		DustSince = 0;
-		for (const Bit& B : Roots)
+		for (size_t I = 0; I < Roots.size(); ++I)
 		{
-			Sorted.push_back(Order{ &B, (B.From - Eye.Eye).Dot(Eye.Forward), false });
+			// (a trail's root, laid for this frame alone: after every piece of Bits, in the order laid)
+			const Bit& B = Roots[I];
+			Sorted.push_back(Order{ &B, (B.From - Eye.Eye).Dot(Eye.Forward), false, 0.0, (uint64_t{1} << 62) + I });
 		}
-		std::sort(Sorted.begin(), Sorted.end(), [](const Order& L, const Order& R) { return L.Deep > R.Deep; });
+		// (far to near; two as deep in the order they were made: Bit::Serial)
+		std::sort(Sorted.begin(), Sorted.end(), [](const Order& L, const Order& R) { return L.Deep != R.Deep ? L.Deep > R.Deep : L.Serial < R.Serial; });
 		// (out of room: the farthest go. Counted from the nearest back, a twin taking two slots, so the nearest are never
 		// the ones left out)
 		const size_t Left = static_cast<size_t>(std::max(0, MaxPuffs - Slot));

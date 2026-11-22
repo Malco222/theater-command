@@ -115,11 +115,43 @@ bool FBattleFxRecipe::FindWord(const char* Path, std::string& Out) const
 
 FBattleEffects::FBattleEffects() = default;
 
-// (nothing of the engine's is touched here: it may be run while the world is being torn down; End does that)
-FBattleEffects::~FBattleEffects() = default;
+// (nothing of the engine's is touched here: it may be run while the world is being torn down; End does that. Only the
+// kit's own Draw, if it is still on its worker, is waited for: it uses this)
+FBattleEffects::~FBattleEffects()
+{
+	if (bDrawing && Drawing.IsValid())
+	{
+		Drawing.Wait();
+	}
+}
+
+template <typename FWork>
+void FBattleEffects::Do(FWork&& Work, bool bWhenReady)
+{
+	// (the production lead's FX2: while the kit draws on its worker, TickBegin to TickEnd, what is asked of it waits
+	// here, in the order asked, with its arguments copied, and TickEnd does it. Otherwise it is done now, as ever)
+	if (bWhenReady && !IsReady())
+	{
+		return;
+	}
+	if (bDrawing)
+	{
+		Held.Emplace(Forward<FWork>(Work));
+		return;
+	}
+	Work();
+}
 
 void FBattleEffects::End()
 {
+	// (the kit drawing on its worker: waited for, and what was asked of it meanwhile let go with the rest)
+	if (bDrawing && Drawing.IsValid())
+	{
+		Drawing.Wait();
+	}
+	Drawing = UE::Tasks::TTask<int32>();
+	bDrawing = false;
+	Held.Reset();
 	if (Mesh.IsValid())
 	{
 		Mesh->DestroyComponent();
@@ -276,12 +308,12 @@ bool FBattleEffects::IsReady() const
 
 int32 FBattleEffects::PuffsDrawn() const
 {
-	return Core.PuffsDrawn();
+	return LastDrawn; // (as at the last Tick or TickEnd: never read from the kit while it may be drawing)
 }
 
 int32 FBattleEffects::PuffsAsked() const
 {
-	return Core.PuffsAsked();
+	return LastAsked;
 }
 
 std::string FBattleEffects::Named(const FString& Text)
@@ -292,310 +324,316 @@ std::string FBattleEffects::Named(const FString& Text)
 
 void FBattleEffects::Shell(const FVector& WorldAt, const FString& Calibre, const FString& Ground, bool bOnArmour)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		const std::string Size = Core.SizeOfCalibre(Named(Calibre).c_str());
 		Core.Shell(Time(), ToFx(WorldAt), Size.c_str(), Named(Ground).c_str(), bOnArmour);
-	}
+	});
 }
 
 void FBattleEffects::ShellOfSize(const FVector& WorldAt, const FString& Size, const FString& Ground, bool bOnArmour)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Shell(Time(), ToFx(WorldAt), Named(Size).c_str(), Named(Ground).c_str(), bOnArmour);
-	}
+	});
 }
 
 void FBattleEffects::Skip(const FVector& WorldAt, const FVector& Heading, const FString& Ground)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Skip(Time(), ToFx(WorldAt), ToFxWay(Heading), Named(Ground).c_str());
-	}
+	});
 }
 
 void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str(), Named(Ground).c_str());
-	}
+	});
 }
 
 void FBattleEffects::VehicleDust(int32 Id, const FVector& SocketAt, const FVector& Velocity, const FString& Ground, bool bTracked)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.VehicleDust(Time(), Id, ToFx(SocketAt), ToFx(Velocity), Named(Ground).c_str(), bTracked);
-	}
+	});
 }
 
 void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Shots(Time(), Gun, ToFx(From), ToFx(To), Named(Weapon).c_str(), Rounds, PerSecond, Named(Ground).c_str());
-	}
+	});
 }
 
 void FBattleEffects::AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute, float MuzzleSpeed, const FString& Nation)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		// (velocities are world units a second, as places are: the same ToFx turns both to metres)
 		Core.AirGun(Now, Gun, ToFx(Muzzle), ToFx(Aim), ToFx(ShooterVelocity), Named(Kind).c_str(), RatePerMinute, MuzzleSpeed / UnitsPerMetre, Named(Nation).c_str());
-	}
+	});
 }
 
 void FBattleEffects::AirGunStop(int32 Gun)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.AirGunStop(Gun);
-	}
+	});
 }
 
 void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal, const FVector& AircraftVelocity, const FString& Kind)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.AirHit(Now, ToFx(At), ToFxWay(Normal), ToFx(AircraftVelocity), Named(Kind).c_str());
-	}
+	});
 }
 
 void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, int32 Look)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, Look);
-	}
+	});
 }
 
 void FBattleEffects::TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity, float Power)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.TrailMove(Now, Id, ToFx(At), ToFx(Velocity), Power);
-	}
+	});
 }
 
 void FBattleEffects::TrailStop(int32 Id)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.TrailStop(Id);
-	}
+	});
 }
 
 void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ, int32 Look, bool bBombs)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre, Look, bBombs);
-	}
+	});
 }
 
 void FBattleEffects::AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.AirFallMove(Now, Id, ToFx(At), ToFx(Velocity));
-	}
+	});
 }
 
 void FBattleEffects::AirFallStop(int32 Id)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.AirFallStop(Id);
-	}
+	});
 }
 
 void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.AirFlak(Now, ToFx(At), Named(Kind).c_str());
-	}
+	});
 }
 
 void FBattleEffects::BombStick(double Now, int32 Id, const FVector& First, const FVector& Last, int32 Count, const FString& Size, const FString& Ground, float OverSeconds)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.BombStick(Now, Id, ToFx(First), ToFx(Last), Count, Named(Size).c_str(), Named(Ground).c_str(), OverSeconds);
-	}
+	});
 }
 
 void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id, bool bOnShip)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Burn(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Id, bOnShip);
-	}
+	});
 }
 
 void FBattleEffects::FuelBall(const FVector& WorldAt, float AcrossMetres, const FVector& Velocity)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.FuelBall(Time(), ToFx(WorldAt), AcrossMetres, ToFx(Velocity));
-	}
+	});
 }
 
 void FBattleEffects::BurnOut(int32 Id, float OverSeconds, const FString& How)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.BurnOut(Time(), Id, OverSeconds, Named(How).c_str());
-	}
+	});
 }
 
 void FBattleEffects::BurnMove(int32 Id, const FVector& WorldAt, const FVector& Velocity)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.BurnMove(Time(), Id, ToFx(WorldAt), ToFx(Velocity));
-	}
+	});
 }
 
 void FBattleEffects::Steam(int32 Id, const FVector& WorldAt, const FVector& Way, float AcrossMetres, float Seconds, const FString& Kind)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Steam(Time(), Id, ToFx(WorldAt), ToFxWay(Way), AcrossMetres, Seconds, Named(Kind).c_str());
-	}
+	});
 }
 
 void FBattleEffects::SteamStop(int32 Id)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.SteamStop(Time(), Id);
-	}
+	});
 }
 
 void FBattleEffects::SteamMove(int32 Id, const FVector& WorldAt, const FVector& Way, const FVector& Velocity)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.SteamMove(Time(), Id, ToFx(WorldAt), ToFxWay(Way), ToFx(Velocity));
-	}
+	});
 }
 
 void FBattleEffects::CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds, int32 Id)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.CookOff(Time(), ToFx(WorldAt), ToFxWay(Up), AcrossMetres, Pops, OverSeconds, JetSeconds, JetFromSeconds, Id);
-	}
+	});
 }
 
 void FBattleEffects::CookOffMove(int32 Id, const FVector& WorldAt, const FVector& Up, const FVector& Velocity)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.CookOffMove(Time(), Id, ToFx(WorldAt), ToFxWay(Up), ToFx(Velocity));
-	}
+	});
 }
 
 void FBattleEffects::Glance(const FVector& WorldAt, const FVector& Incoming, const FVector& Normal, float CalibreMm, const FString& Ground)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Glance(Time(), ToFx(WorldAt), ToFxWay(Incoming), ToFxWay(Normal), CalibreMm, Named(Ground).c_str());
-	}
+	});
 }
 
 void FBattleEffects::OilFire(int32 Id, const FVector& WorldAt, float ReachMetres, const FString& Kind, double UntilSeconds, float SinceSeconds)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.OilFire(Time(), Id, ToFx(WorldAt), ReachMetres, Named(Kind).c_str(), UntilSeconds, SinceSeconds);
-	}
+	});
 }
 
 void FBattleEffects::OilStop(int32 Id)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.OilStop(Time(), Id);
-	}
+	});
 }
 
 void FBattleEffects::SmokeScreen(const FVector& WorldAt, float AcrossMetres, float Seconds, const FString& Kind, int32 Id)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.Screen(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Named(Kind).c_str(), Id);
-	}
+	});
 }
 
 void FBattleEffects::ScreenLay(int32 Id, const FVector& WorldAt, const FVector& Velocity, bool bFunnel)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.ScreenLay(Time(), Id, ToFx(WorldAt), ToFx(Velocity), bFunnel);
-	}
+	});
 }
 
 void FBattleEffects::ScreenLayStop(int32 Id)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.ScreenLayStop(Time(), Id);
-	}
+	});
 }
 
 void FBattleEffects::SeaSplash(const FVector& WorldAt, float CalibreMm, const FString& Dye)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.SeaSplash(Time(), ToFx(WorldAt), CalibreMm, Named(Dye).c_str());
-	}
+	});
 }
 
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
-	Core.SetWind(ToFxWay(MetresPerSecond));
+	Do([=, this]()
+	{
+		Core.SetWind(ToFxWay(MetresPerSecond));
+	}, false);
 }
 
 void FBattleEffects::SetSky(const FLinearColor& OnScreen)
 {
-	Core.SetSky(255.0 * OnScreen.R, 255.0 * OnScreen.G, 255.0 * OnScreen.B);
+	Do([=, this]()
+	{
+		Core.SetSky(255.0 * OnScreen.R, 255.0 * OnScreen.G, 255.0 * OnScreen.B);
+	}, false);
 }
 
 void FBattleEffects::UseAirDistance()
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.SetDrawBeyond(Core.AirBeyond());
-	}
+	});
 }
 
 void FBattleEffects::UseSeaDistance()
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.UseSea();
-	}
+	});
 }
 
 void FBattleEffects::SetLensFade(float GoneMetres, float WholeMetres, float PlaneMetres)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.SetLensFade(GoneMetres, WholeMetres, PlaneMetres);
-	}
+	});
 }
 
 void FBattleEffects::SetCraters(bool bOn)
 {
-	if (IsReady())
+	Do([=, this]()
 	{
 		Core.SetScars(bOn);
-	}
+	});
 }
 
 void FBattleEffects::SetSun(const FVector& TowardSun)
@@ -605,6 +643,7 @@ void FBattleEffects::SetSun(const FVector& TowardSun)
 
 void FBattleEffects::Clear()
 {
+	TickEnd(); // (the kit drawing on its worker: it ends that frame first)
 	Core.Clear();
 	TestShots.Reset();
 	TestStart = -1.0;
@@ -694,10 +733,64 @@ void FBattleEffects::Hide()
 
 FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight)
 {
+	// (all on this thread, as before FX2: the air and sea scenes' way)
+	TickEnd();
 	FBattleJolt Jolt;
+	TheaterFx::Battle::View Sight;
+	double Day = 1.0;
+	if (Ahead(Now, Eye, Facing, FieldOfViewDegrees, ViewWidth, HourLight, ViewHeight, Jolt, Sight, Day))
+	{
+		Lay(Now, Eye, Core.Draw(Now, Sight), Day);
+	}
+	return Jolt;
+}
+
+FBattleJolt FBattleEffects::TickBegin(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight)
+{
+	TickEnd(); // (a TickBegin never ended: ended now)
+	FBattleJolt Jolt;
+	TheaterFx::Battle::View Sight;
+	double Day = 1.0;
+	if (Ahead(Now, Eye, Facing, FieldOfViewDegrees, ViewWidth, HourLight, ViewHeight, Jolt, Sight, Day))
+	{
+		// (the production lead's FX2: the kit's own frame, all it does in Draw (its sources run, the old pieces go, the
+		// living ones laid far to near into its points and colours), on a worker while the scene draws its men and
+		// tanks; TickEnd sends what it laid. Nothing else touches the kit until then: calls are held, Do)
+		DrawNow = Now;
+		DrawEye = Eye;
+		DrawDay = Day;
+		bDrawing = true;
+		Drawing = UE::Tasks::Launch(TEXT("Battle effects: the kit's Draw"), [this, Now, Sight]() { return static_cast<int32>(Core.Draw(Now, Sight)); });
+	}
+	return Jolt;
+}
+
+void FBattleEffects::TickEnd()
+{
+	if (!bDrawing)
+	{
+		return;
+	}
+	const int32 Drawn = Drawing.GetResult(); // (waits for the worker, if it is still at it)
+	Drawing = UE::Tasks::TTask<int32>();
+	bDrawing = false;
+	Lay(DrawNow, DrawEye, Drawn, DrawDay);
+	// (what the scene asked of the kit while it drew, in the order asked: each stamped as it was asked, with this
+	// frame's time, so it is first seen at the next frame, as a call made after a Tick is)
+	TArray<TUniqueFunction<void()>> Asked = MoveTemp(Held);
+	Held.Reset();
+	for (TUniqueFunction<void()>& Work : Asked)
+	{
+		Work();
+	}
+}
+
+bool FBattleEffects::Ahead(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight, FBattleJolt& Jolt, TheaterFx::Battle::View& Sight, double& Day)
+{
+	// (what must be done on this thread before the kit draws: the test barrage, the camera's jolt, the view)
 	if (!IsReady())
 	{
-		return Jolt;
+		return false;
 	}
 	Clock = Now;
 	PlayTest(Now);
@@ -711,11 +804,13 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	if (!Core.Busy(Now))
 	{
 		Hide();
-		return Jolt;
+		LastDrawn = 0;
+		LastAsked = Core.PuffsAsked();
+		return false;
 	}
 
 	const FRotationMatrix Looking(Facing);
-	TheaterFx::Battle::View Sight;
+	Sight = TheaterFx::Battle::View();
 	Sight.Eye = EyeAt;
 	Sight.Forward = ToFxWay(Looking.GetUnitAxis(EAxis::X));
 	Sight.Right = ToFxWay(Looking.GetUnitAxis(EAxis::Y));
@@ -731,8 +826,17 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	Sight.Sun = ToFxWay(Sun);
 	const float SunUp = static_cast<float>(Core.DayOf(Sight.SmokeLight)); // (the sun's own light: full by day, none at night)
 	Sight.SunLight = TheaterFx::Rgb(SunUp, SunUp, SunUp);
-	const int32 Drawn = Core.Draw(Now, Sight);
+	Day = Core.DayOf(Sight.SmokeLight);
+	return true;
+}
 
+void FBattleEffects::Lay(double Now, const FVector& Eye, int32 Drawn, double Day)
+{
+	// (after the kit's Draw, on this thread: its puffs into the mesh, and the lamps)
+	if (!IsReady())
+	{
+		return;
+	}
 	const int32 PerPuff = Core.PerPuff();
 	const std::vector<TheaterFx::Vec>& From = Core.Points();
 	const std::vector<uint8_t>& Rgba = Core.Colours();
@@ -772,6 +876,8 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 		}
 	}
 	SectionsUsed = Used;
+	LastDrawn = Drawn;
+	LastAsked = Core.PuffsAsked();
 	RoomLog(Now, Drawn);
 	if (!bShown)
 	{
@@ -781,7 +887,7 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 
 	// the lamps: the strongest flashes now, out the moment they are spent
 	TheaterFx::Battle::Lamp Lit[MostLamps];
-	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse, Core.DayOf(Sight.SmokeLight)); // (after Draw: a flash's lamp goes by the frames it is drawn in)
+	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse, Day); // (after Draw: a flash's lamp goes by the frames it is drawn in)
 	// (-TheaterFxLampLog: a line for each frame a lamp is lit, and one for the first frame after with none)
 	static const bool bLampLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterFxLampLog"));
 	if (bLampLog && (NLit > 0 || LampsLitBefore > 0))
@@ -814,7 +920,6 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 		Lamp->SetIntensity(static_cast<float>(L.Strength * LampCandela));
 		Lamp->SetVisibility(true);
 	}
-	return Jolt;
 }
 
 bool FBattleEffects::WantsTest()

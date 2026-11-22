@@ -1454,6 +1454,36 @@ puffs; no trail longer than about 2 km; an engine hit grey-brown, only burning f
   `thin_hold` 0.4, and the wake past the tail kept at 5 to 6 m (`tail_wide_m`, her ruling of 20 November; 4.0 to
   5.4 m measured at 0.2 s). "1-2 m at the source" is the engine hit's.
 
+## The kit at scale: the mesh in sections, and its Draw on a worker (FX1, FX2, after head 13388a4)
+
+The production lead's battle-scale plan (/mnt/project-files/production/battle-scale-1122/plan.md), items FX1 and FX2.
+
+- **FX1, the mesh made once.** The kit's room (3,000 puffs) is made at the first frame with something to draw as
+  sections of 300 puffs, and never rebuilt. Each frame sends only the sections that hold puffs, points and colours
+  only; a section that empties is folded flat once and hidden (`SetMeshSectionVisible`). The kit lays its puffs far
+  to near and section k holds puffs k x 300 on, so the far-to-near order holds across sections.
+- **Readouts.** `FBattleEffects::PuffsDrawn()` and `PuffsAsked()`: the last frame's puffs drawn and room asked.
+  `-TheaterFxRoomLog`: a line every 10 s of the kit's clock (Tick's Now): the most drawn, when, the room asked then,
+  the room and the sections in use.
+- **FX2, old pieces go cheaply.** A piece (`Bit`) is about 1.8 kB. Prune used to close each gap by moving every piece
+  after it; now the last piece fills each gap. Two pieces equally deep are drawn in the order they were made
+  (`Bit::Serial`, numbered at the Draw after they are made), so the picture does not depend on where they lie: the
+  96 old frames byte for byte, and 23 of 24 heavy frames (6 pixels one level apart in the raid shot, an exact tie).
+  A barrage of 6 shells a second seen from a hill (16,500 asked of the room): Draw 6.8 ms against 7.3 (median of 5).
+- **FX2, Draw on a worker.** `TickBegin(...)` takes what `Tick` takes, does on the game thread what must be done there
+  (the test barrage, the camera's jolt, the view), starts the kit's Draw on a worker (`UE::Tasks`) and returns the
+  jolt. `TickEnd()` waits for it, sends the mesh and lights the lamps, then does what was asked of the kit in
+  between, in order. Between the two:
+  - every call on the kit is held, its arguments copied, and done at `TickEnd` with this frame's time, as a call
+    made after a `Tick`: first seen at the next frame. So call `TickBegin` after the frame's shells and fires where
+    you can, and only what comes after (a vehicle's dust) waits;
+  - `GroundUnder` and `GroundColour` are called from the worker: nothing may change what they read (the field's
+    heights, craters, ruts) until `TickEnd`;
+  - `PuffsDrawn`/`PuffsAsked` give the last frame's; `Clear` and `End` wait for the worker first; a `TickBegin`
+    with no `TickEnd` is ended by the next `TickBegin` or `Tick`.
+  `Tick` is both at once on the game thread, as before (the air and sea scenes). The kit keeps no shared state: two
+  kits drawing at once on two threads ran clean under the thread sanitiser and drew what each drew alone.
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can

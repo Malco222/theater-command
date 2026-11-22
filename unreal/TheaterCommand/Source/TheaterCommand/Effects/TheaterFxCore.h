@@ -328,6 +328,10 @@ namespace TheaterFx
 		// PaleUpM to the power PaleUpPow, it goes PaleUpMost of that share of the way to PaleUpCol, its sunlit side to
 		// PaleUpLit, and thins by ThinUp of that share: black and dense low, browner grey and thinner high)
 		double PaleUpM = 0.0, PaleUpMost = 0.0, PaleUpPow = 1.0, ThinUp = 0.0, PaleUpZ = 0.0;
+		// (the production lead's FX2: its number in the order the battle made its pieces, given at the first Draw after
+		// it was made. Prune fills each gap with the last piece, so Bits keeps no order; two pieces equally deep are
+		// drawn in this order, the older first, as they were when Bits kept the order they were made in)
+		uint64_t Serial = 0;
 		Rgb PaleUpCol, PaleUpLit;
 		// (the far form, Battle::FarLay: 0, anything else, drawn as ever. 1, a piece of a near burst that has a far form
 		// too (a bomb of a stick), drawn while FarAt, where it struck, is within the draw range; 2, a piece of that far
@@ -1213,7 +1217,11 @@ namespace TheaterFx
 		double LastPpr = 1000.0; // (the last frame's pixels a radian: a water column far off in the picture is fewer pieces)
 		Vec LastSun; // (the way to the sun in the last frame drawn; none before the first: a steam plume's rags on its far side from the sun are born in its shade)
 		bool bEyeKnown = false; // (the eye of the last frame drawn: a hit close to it throws clods past the lens)
-		std::vector<Bit> Bits; // alive or still to be born
+		std::vector<Bit> Bits; // alive or still to be born (in no order: Prune puts the last into each gap)
+		// (Bit::Serial: the last number given, and how many of Bits have theirs. Pieces made since the last Draw are at
+		// the end, in the order made, and are numbered in that order before Prune moves any)
+		uint64_t Serials = 0;
+		size_t Numbered = 0;
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
 		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)
@@ -1294,6 +1302,7 @@ namespace TheaterFx
 			double Deep;
 			bool bKeep; // (counted first when the room is short: a kept oil column, or a light)
 			double Far = 0.0; // (a puff that may carry lumps, Bit::Lumps: how far it is from the eye; else 0)
+			uint64_t Serial = 0; // (Bit::Serial: two as deep are laid in the order they were made, wherever they lie in Bits)
 		};
 		std::vector<Order> Sorted;
 		struct ColumnSpan
