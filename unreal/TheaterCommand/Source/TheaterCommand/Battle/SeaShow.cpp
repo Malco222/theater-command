@@ -619,6 +619,8 @@ namespace SeaShow
 		E.Side = H.Side;
 		++Check.Sinks;
 		++Check.SinksBy[H.How];
+		// (her men over the side, her rafts, wreckage and oil: RunWrecks)
+		Abandon(H);
 	}
 
 	void Show::LeaveLine(Hull& H, const std::string& Words)
@@ -1136,6 +1138,17 @@ namespace SeaShow
 			R.Until = E.T + 600.0;
 			R.Side = By->Side;
 			++Check.Rescues;
+			// (her men swim to the rescuer, and her rafts and boats are pulled to her, while she lies stopped: RunWrecks)
+			Wreck* Of = nullptr;
+			for (Wreck& W : Wrecked)
+			{
+				if (Lost ? W.Ship == Lost->Key : Flat(W.OilEnd - Where) < 3000.0 && (!Of || Flat(W.OilEnd - Where) < Flat(Of->OilEnd - Where))) Of = &W;
+			}
+			if (Of)
+			{
+				Of->Rescuer = By->Key;
+				Of->RescueUntil = E.T + 600.0;
+			}
 			return;
 		}
 	}
@@ -2865,6 +2878,667 @@ namespace SeaShow
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
+	// Where a ship went down (Brian, 22 November 05:32Z to 05:33Z: "sailors should jump in the water if the boat is going
+	// down", "have them use the models we have for the soldiers for the sailors", "there should be debris floating in the
+	// water. maybe oil pools?"): her men over the side, swimming, holding on to her wreckage, in her rafts and boats, and
+	// picked up; her wreckage and her oil drifting down the wind. Looks only: the battle books every loss and every life.
+	// Each man's and each piece's own hash, never the battle's dice, so the ships' tracks are the same with it or without.
+
+	namespace
+	{
+		/** A ship's company and what floats off her, by class: her men (roughly: a battleship 1,800 to 2,700, a fleet carrier
+		 * 2,200 to 3,000, a heavy cruiser 900 to 1,100, a light 850, a destroyer 300, an escort 200, a boat 50 to 60, a
+		 * merchant 40 to 60); her Carley floats or life rafts; her whaleboats or lifeboats; pieces of her that float; her
+		 * deck's height over the sea (metres); her oil, against a destroyer's. */
+		struct Company
+		{
+			int Men, Rafts, Boats, Bits;
+			double Free, Oil;
+		};
+		Company CompanyOf(const std::string& Class)
+		{
+			if (Class == "bb") return { 1800, 30, 2, 70, 8.0, 1.6 };
+			if (Class == "cv") return { 2200, 36, 2, 80, 12.0, 1.6 };
+			if (Class == "ca") return { 950, 16, 2, 50, 7.0, 1.3 };
+			if (Class == "cl") return { 850, 14, 2, 45, 6.5, 1.25 };
+			if (Class == "de") return { 200, 4, 1, 20, 4.5, 0.9 };
+			if (Class == "ss") return { 55, 1, 0, 10, 2.5, 0.8 };
+			if (Class == "mv") return { 50, 2, 4, 50, 6.0, 1.2 };
+			return { 300, 6, 1, 30, 5.0, 1.0 }; // a destroyer
+		}
+		/** Her men by the way she went: the share of her company in the water (the rest went down with her), of them the
+		 * share dead, and between what shares of her going down they go over the side. */
+		struct Leaving
+		{
+			double Into, Dead, Start, End;
+		};
+		Leaving LeavingOf(const std::string& How)
+		{
+			// (a magazine's blast leaves few; a ship that settles slowly, or is scuttled, most; a boat crushed deep, none)
+			if (How == "explode") return { 0.08, 0.5, 0.02, 0.3 };
+			if (How == "break") return { 0.45, 0.25, 0.05, 0.6 };
+			if (How == "capsize") return { 0.4, 0.25, 0.1, 0.7 };
+			if (How == "sink") return { 0.75, 0.12, 0.1, 0.8 };
+			if (How == "burn") return { 0.7, 0.2, 0.15, 0.85 };
+			if (How == "scuttled") return { 0.95, 0.02, 0.02, 0.5 };
+			if (How == "crushed") return { 0.0, 0.0, 0.0, 0.0 };
+			if (How == "rammed") return { 0.5, 0.3, 0.05, 0.7 };
+			if (How == "shelled") return { 0.6, 0.3, 0.05, 0.7 };
+			return { 0.85, 0.08, 0.1, 0.85 }; // settle
+		}
+		/** What floats: its size (metres along and across), the men it takes aboard and lets hold on, the share of the wind
+		 * it drifts at. */
+		struct Kind
+		{
+			const char* Name;
+			double Long, Beam;
+			int Room, Hold;
+			double Leeway;
+		};
+		const Kind& WreckageOf(double R)
+		{
+			static const Kind Kinds[] = { { "plank", 3.0, 0.3, 0, 1, 0.025 }, { "spar", 6.0, 0.4, 0, 3, 0.025 }, { "crate", 1.0, 0.8, 0, 1, 0.025 },
+				{ "drum", 0.9, 0.6, 0, 1, 0.025 }, { "hatch", 2.0, 1.5, 0, 4, 0.025 }, { "ring", 0.8, 0.8, 0, 1, 0.03 } };
+			static const double Odds[] = { 0.35, 0.12, 0.18, 0.12, 0.13, 0.10 };
+			for (int I = 0; I < 6; ++I)
+			{
+				if (R < Odds[I]) return Kinds[I];
+				R -= Odds[I];
+			}
+			return Kinds[0];
+		}
+		const Kind RaftBig = { "raft", 3.0, 1.8, 10, 12, 0.035 };  // a Carley float
+		const Kind RaftSmall = { "raft", 2.4, 1.5, 6, 6, 0.035 }; // a boat's dinghy, a merchant's life raft
+		const Kind Lifeboat = { "boat", 8.0, 2.3, 24, 4, 0.03 };  // a whaleboat or a lifeboat
+		/** The deck's height over the sea of a ship of the class (a rescuer's side, for a man climbing it). */
+		double FreeOf(const std::string& Class) { return CompanyOf(Class).Free; }
+		/** A man's place on a float, in its own frame (x along, y across): aboard, or round it in the water holding on. */
+		Vec SlotOn(const FloatOut& O, int Slot, bool bIn, int Room, int Hold)
+		{
+			if (bIn)
+			{
+				if (O.Kind == "boat")
+				{
+					// (on the thwarts, two by two, bow to stern)
+					const int Rows = std::max(1, (Room + 1) / 2);
+					const double Along = Rows > 1 ? -0.38 + 0.76 * (Slot / 2) / (Rows - 1.0) : 0.0;
+					return Vec(Along * O.Long, (Slot % 2 ? 0.25 : -0.25) * O.Beam, 0.0);
+				}
+				// (round its rim, inside)
+				const double A = 2.0 * Pi * (Slot + 0.5) / std::max(1, Room);
+				return Vec(std::cos(A) * (0.5 * O.Long - 0.35), std::sin(A) * (0.5 * O.Beam - 0.35), 0.0);
+			}
+			const double A = 2.0 * Pi * (Slot + 0.25) / std::max(1, Hold);
+			return Vec(std::cos(A) * (0.5 * O.Long + 0.35), std::sin(A) * (0.5 * O.Beam + 0.35), 0.0);
+		}
+		/** A place in a thing's own frame (x along its heading, y across to its right) put on the sea. */
+		Vec OnFrame(const Vec& At, double Heading, const Vec& Off)
+		{
+			return Vec(At.X, At.Y, 0.0) + Ahead(Heading) * Off.X + RightOf(Heading) * Off.Y;
+		}
+		/** Pushes a point out of a hull (her middle, heading and half her length less her beam) to Clear metres from her
+		 * keel's line; true where it moved. */
+		bool PushOut(Vec& P, const Vec& At, double Hdg, double Half, double Clear)
+		{
+			const Vec A = Ahead(Hdg);
+			if (std::fabs(P.X - At.X) > Half + Clear || std::fabs(P.Y - At.Y) > Half + Clear) return false;
+			const double U = Clamp((P.X - At.X) * A.X + (P.Y - At.Y) * A.Y, -Half, Half);
+			const double CX = At.X + A.X * U, CY = At.Y + A.Y * U;
+			double DX = P.X - CX, DY = P.Y - CY;
+			const double L = std::hypot(DX, DY);
+			if (L >= Clear) return false;
+			if (L < 1e-6)
+			{
+				const Vec R = RightOf(Hdg);
+				DX = R.X;
+				DY = R.Y;
+			}
+			else
+			{
+				DX /= L;
+				DY /= L;
+			}
+			P.X = CX + DX * Clear;
+			P.Y = CY + DY * Clear;
+			return true;
+		}
+		int FreeSlot(uint32_t Mask, int Of)
+		{
+			for (int I = 0; I < Of && I < 32; ++I)
+				if (!(Mask & (1u << I))) return I;
+			return -1;
+		}
+		/** The keys of the oil fires the show lights where a ship's oil burns (apart from the battle's zones' own). */
+		constexpr int SlickFireKeys = 100000;
+	}
+
+	Show::Floater* Show::FloatByKey(int Key)
+	{
+		return Key >= 1 && Key <= static_cast<int>(Afloat.size()) ? &Afloat[Key - 1] : nullptr;
+	}
+
+	void Show::Abandon(const Hull& H)
+	{
+		for (const Wreck& Was : Wrecked)
+			if (Was.Ship == H.Key) return;
+		const Company C = CompanyOf(H.Class);
+		const Leaving L = LeavingOf(H.How);
+		const ClassSize& Sz = SizeOf(H.Class);
+		Wreck W;
+		W.Ship = H.Key;
+		W.Side = H.Side;
+		W.Class = H.Class;
+		W.Nation = H.Nation;
+		W.How = H.How;
+		W.Long = Sz.Long;
+		W.Beam = Sz.Beam;
+		W.Free = C.Free;
+		W.T0 = H.SinkAt;
+		W.For = std::max(10.0, H.SinkFor);
+		W.Start = W.T0 + L.Start * W.For;
+		W.End = W.T0 + std::max(L.Start + 0.05, L.End) * W.For;
+		W.Seed = F.Seed * 0x9E3779B97F4A7C15ULL + static_cast<uint64_t>(H.Key) * 1000003ULL;
+		W.Real = static_cast<int>(std::lround(C.Men * L.Into * (0.85 + 0.3 * Mix(W.Seed + 1))));
+		W.DeadShare = L.Dead;
+		// The room (Brian's standing rule, 22 November 04:14Z: the real numbers, as many as the Mac draws smoothly): the men
+		// in the water and those still to go over from other ships against the most the show keeps; a ship's men take half
+		// what is left, and at least a dozen (the dead of earlier ships going under to make it, RunWrecks).
+		int Taken = 0;
+		for (const Man& M : Swimmers) Taken += M.bGoing ? 0 : 1;
+		for (const Wreck& O : Wrecked) Taken += O.Men - O.Out;
+		const int Room = std::max(0, F.MenMost - Taken);
+		W.Men = std::min(W.Real, std::max(std::min(W.Real, 12), Room / 2));
+		// Her rafts float free or are thrown over; her boats are lowered only where she goes slowly enough; her wreckage.
+		const bool bSlow = H.How == "sink" || H.How == "settle" || H.How == "burn" || H.How == "scuttled";
+		W.Rafts = H.How == "crushed" ? 0 : std::max(H.Class == "ss" ? 1 : 0, static_cast<int>(std::lround(C.Rafts * (0.5 + 0.5 * L.Into))));
+		W.Boats = bSlow ? C.Boats : H.How == "shelled" ? C.Boats / 2 : 0;
+		W.Bits = static_cast<int>(std::lround(C.Bits * (H.How == "explode" ? 1.3 : H.How == "break" ? 1.2 : H.How == "crushed" ? 0.3 : 1.0)));
+		// (her men go over on her windward side, most of them, so she does not drift down on them)
+		W.Lee = RightOf(H.Hdg).Dot(Ahead(WindFromR)) >= 0.0 ? 1.0 : -1.0;
+		W.Oil0 = Vec(H.P.X, H.P.Y, 0.0);
+		W.OilEnd = W.Oil0;
+		W.TrackHdg = H.Hdg;
+		// (her oil alight: a ship that burned or blew up, and a merchant now and then, a tanker or her bunkers afire)
+		W.Burn = H.How == "burn" ? 0.6 : H.How == "explode" ? 0.5 : (H.Class == "mv" && Mix(W.Seed + 2) < 0.3) ? 0.45 : 0.0;
+		W.BurnUntil = W.Burn > 0.0 ? W.T0 + 0.6 * W.For + 180.0 + 120.0 * Mix(W.Seed + 3) : -1.0;
+		W.Slick = static_cast<int>(Oil.size()) + 1;
+		SlickOut S;
+		S.Key = W.Slick;
+		S.Ship = H.Key;
+		S.At = W.Oil0;
+		S.Heading = H.Hdg;
+		Oil.push_back(S);
+		W.Middle = W.Oil0;
+		W.Spread = 0.5 * W.Long;
+		// (the ships near her now; RunWrecks looks again each second)
+		for (const auto& Pair : Hulls)
+			if (Pair.second.Doing != Fate::Gone && Flat(Pair.second.P - H.P) < 1500.0) W.Near.push_back(Pair.first);
+		Wrecked.push_back(W);
+		++Check.Wrecks;
+		++Check.Slicks;
+		Check.MenReal += W.Real;
+		Check.MenKept += W.Men;
+	}
+
+	void Show::RunWrecks(double Dt)
+	{
+		if (Wrecked.empty()) return;
+		bWrecksMoved = true;
+		const Vec Blow(WindV.X, WindV.Y, 0.0);
+		const double DownWind = Bearing(Vec(), Blow);
+		const long Beat = std::lround(ShownT / Fixed);
+		auto Under = [this](const Hull& S) { return S.Class == "ss" && S.Keel > SurfacedKeel(S.Class) + 1.0; };
+
+		// The ships near each wreck's men and wreckage, looked for once a second (and found again each step).
+		if (Beat % 20 == 0)
+		{
+			std::vector<double> SX(Wrecked.size(), 0.0), SY(Wrecked.size(), 0.0);
+			std::vector<int> N(Wrecked.size(), 0);
+			for (const Man& M : Swimmers) { SX[M.W] += M.O.At.X; SY[M.W] += M.O.At.Y; ++N[M.W]; }
+			for (const Floater& Fl : Afloat) { SX[Fl.W] += Fl.O.At.X; SY[Fl.W] += Fl.O.At.Y; ++N[Fl.W]; }
+			for (size_t WI = 0; WI < Wrecked.size(); ++WI)
+			{
+				Wreck& W = Wrecked[WI];
+				W.Middle = N[WI] ? Vec(SX[WI] / N[WI], SY[WI] / N[WI], 0.0) : W.OilEnd;
+				W.Spread = 0.5 * W.Long;
+			}
+			for (const Man& M : Swimmers) Wrecked[M.W].Spread = std::max(Wrecked[M.W].Spread, Flat(M.O.At - Wrecked[M.W].Middle));
+			for (const Floater& Fl : Afloat) Wrecked[Fl.W].Spread = std::max(Wrecked[Fl.W].Spread, Flat(Fl.O.At - Wrecked[Fl.W].Middle) + 0.5 * Fl.O.Long);
+			for (Wreck& W : Wrecked)
+			{
+				W.Near.clear();
+				W.Nearest = 1e9;
+				W.NearAt = ShownT;
+				for (const auto& Pair : Hulls)
+				{
+					const Hull& S = Pair.second;
+					if (S.Doing == Fate::Gone || Under(S)) continue;
+					const double D = Flat(S.P - W.Middle);
+					if (S.Key != W.Ship) W.Nearest = std::min(W.Nearest, D);
+					if (D < W.Spread + 0.5 * SizeOf(S.Class).Long + S.Spd * 1.5 + 60.0) W.Near.push_back(S.Key);
+				}
+			}
+		}
+
+		// What goes over each one's side, or floats off her, now; her oil.
+		for (size_t WI = 0; WI < Wrecked.size(); ++WI)
+		{
+			Wreck& W = Wrecked[WI];
+			const Hull* H = FindHull(W.Ship);
+			const bool bAfloat = H && H->Doing == Fate::Sinking;
+			if (bAfloat) W.OilEnd = Vec(H->P.X, H->P.Y, 0.0);
+			else W.bGone = true;
+			W.NearNow.clear();
+			W.NearHalf.clear();
+			W.NearR.clear();
+			for (const int Key : W.Near)
+			{
+				const Hull* S = FindHull(Key);
+				if (!S || S->Doing == Fate::Gone || Under(*S)) continue;
+				const ClassSize& Sz = SizeOf(S->Class);
+				W.NearNow.push_back(S);
+				W.NearHalf.push_back(std::max(0.0, 0.5 * (Sz.Long - Sz.Beam)));
+				W.NearR.push_back(0.5 * Sz.Beam);
+			}
+			const Vec At = bAfloat ? Vec(H->P.X, H->P.Y, 0.0) : W.OilEnd;
+			const double Hdg = bAfloat ? H->Hdg : W.TrackHdg, Spd = bAfloat ? H->Spd : 0.0;
+			const double Half = std::max(0.0, 0.5 * (W.Long - W.Beam)), R = 0.5 * W.Beam;
+			// (a point on her side: along her from amidships, on one side, so far out from it)
+			auto SideOf = [&](double Along, double Side, double Out)
+			{
+				const double Over = std::fabs(Along) > Half ? std::sqrt(std::max(0.0, R * R - (std::fabs(Along) - Half) * (std::fabs(Along) - Half))) : R;
+				return At + Ahead(Hdg) * Along + RightOf(Hdg) * (Side * (Over + Out));
+			};
+			auto AddFloat = [&](const Kind& K, const Vec& P, double Heading, const Vec& V, double Turn)
+			{
+				Floater Fl;
+				Fl.O.Key = NextFloat++;
+				Fl.O.Ship = W.Ship;
+				Fl.O.Kind = K.Name;
+				Fl.O.At = Vec(P.X, P.Y, 0.0);
+				Fl.O.Heading = Heading;
+				Fl.O.Long = K.Long;
+				Fl.O.Beam = K.Beam;
+				Fl.V = Vec(V.X, V.Y, 0.0);
+				Fl.Leeway = K.Leeway;
+				Fl.Turn = Turn;
+				Fl.Room = K.Room;
+				Fl.Hold = K.Hold;
+				Fl.W = static_cast<int>(WI);
+				Afloat.push_back(Fl);
+				W.Floats.push_back(Fl.O.Key);
+				++Check.Floats;
+				if (K.Room > 0 && std::string(K.Name) == "raft") ++Check.Rafts;
+				if (std::string(K.Name) == "boat") ++Check.Boats;
+			};
+			const double Share = Clamp((ShownT - W.Start) / std::max(1.0, W.End - W.Start), 0.0, 1.0);
+			const double Down = Clamp((ShownT - W.T0) / W.For, 0.0, 1.0);
+			// Her men over the side: from her deck's edge, the living jumping and the dead fallen or thrown.
+			const int MenDue = bAfloat ? static_cast<int>(std::floor(W.Men * Share)) : W.Men;
+			while (W.Out < MenDue)
+			{
+				const uint64_t S = W.Seed + 7919ULL * static_cast<uint64_t>(W.Out + 1);
+				Man M;
+				M.O.Key = NextMan++;
+				M.O.Ship = W.Ship;
+				M.O.Side = W.Side;
+				M.O.Nation = W.Nation;
+				M.O.Look = static_cast<uint32_t>(Mix(S + 3) * 4294967295.0);
+				M.W = static_cast<int>(WI);
+				M.Pace = 0.45 + 0.35 * Mix(S + 5);
+				M.Next = ShownT + 1.0 + 2.0 * Mix(S + 7);
+				const double Side = Mix(S + 17) < 0.7 ? W.Lee : -W.Lee;
+				const Vec Out = RightOf(Hdg) * Side;
+				const Vec Edge = SideOf((Mix(S + 13) - 0.5) * 0.8 * W.Long, Side, 0.9);
+				if (Mix(S + 11) < W.DeadShare)
+				{
+					M.O.Doing = Swim::Dead;
+					M.O.At = Edge + Out * (1.0 + 8.0 * Mix(S + 19));
+					M.O.At.Z = 0.0;
+					M.O.Heading = Mix(S + 23) * 2.0 * Pi;
+					++W.Dead;
+					++Check.MenDead;
+				}
+				else
+				{
+					M.O.Doing = Swim::Jump;
+					M.O.Drop = std::max(0.6, W.Free * (1.0 - 0.8 * Down));
+					M.O.At = Vec(Edge.X, Edge.Y, M.O.Drop);
+					M.V = Ahead(Hdg) * (Spd * 0.8) + Out * (1.6 + 0.8 * Mix(S + 29));
+					M.V.Z = 0.8;
+					M.O.Heading = Bearing(Vec(), Out);
+				}
+				Swimmers.push_back(M);
+				++W.Out;
+			}
+			if (!W.bDue && W.Real > 0 && ShownT >= W.Start + 10.0)
+			{
+				W.bDue = true;
+				++Check.WrecksDue;
+				if (W.Out > 0) ++Check.WrecksManned;
+			}
+			// Her rafts, thrown over or floating free, mostly on the side her men go; her boats lowered, early on.
+			const int RaftsDue = bAfloat ? static_cast<int>(std::ceil(W.Rafts * Share - 1e-9)) : W.Rafts;
+			while (W.RaftsOut < RaftsDue)
+			{
+				const uint64_t S = W.Seed + 104729ULL * static_cast<uint64_t>(W.RaftsOut + 1);
+				const double Side = Mix(S + 1) < 0.8 ? W.Lee : -W.Lee;
+				const Vec P = SideOf((Mix(S + 2) - 0.5) * 0.85 * W.Long, Side, 2.0 + 4.0 * Mix(S + 3));
+				AddFloat(W.Class == "ss" || W.Class == "mv" ? RaftSmall : RaftBig, P, Mix(S + 4) * 2.0 * Pi, RightOf(Hdg) * (Side * (0.3 + 0.3 * Mix(S + 5))), (Mix(S + 6) - 0.5) * 0.04);
+				++W.RaftsOut;
+			}
+			const double BoatShare = Clamp((ShownT - W.Start) / std::max(1.0, 0.5 * (W.End - W.Start)), 0.0, 1.0);
+			const int BoatsDue = bAfloat ? static_cast<int>(std::ceil(W.Boats * BoatShare - 1e-9)) : W.Boats;
+			while (W.BoatsOut < BoatsDue)
+			{
+				const uint64_t S = W.Seed + 1299709ULL * static_cast<uint64_t>(W.BoatsOut + 1);
+				const double Side = W.BoatsOut % 2 ? -W.Lee : W.Lee;
+				const Vec P = SideOf((W.BoatsOut / 2 % 2 ? -0.25 : 0.2) * W.Long, Side, 3.0);
+				AddFloat(Lifeboat, P, Wrap(Hdg + (Mix(S + 1) - 0.5) * 0.3), RightOf(Hdg) * (Side * 0.3), 0.0);
+				++W.BoatsOut;
+			}
+			// Her wreckage: some as she goes, most as she goes under (and what comes up after a boat lost deep).
+			const int Early = static_cast<int>(std::lround(W.Bits * 0.3));
+			const double Late = W.bGone ? Clamp((ShownT - (W.T0 + W.For)) / 15.0, 0.0, 1.0) : 0.0;
+			const int BitsDue = static_cast<int>(std::lround(Early * Down)) + static_cast<int>(std::lround((W.Bits - Early) * Late));
+			while (W.BitsOut < BitsDue)
+			{
+				const uint64_t S = W.Seed + 15485863ULL * static_cast<uint64_t>(W.BitsOut + 1);
+				const Kind& K = WreckageOf(Mix(S + 1));
+				Vec P, V;
+				if (W.BitsOut < Early)
+				{
+					const double Side = Mix(S + 2) < 0.5 ? 1.0 : -1.0;
+					P = SideOf((Mix(S + 3) - 0.5) * 0.9 * W.Long, Side, 1.0 + 6.0 * Mix(S + 4));
+					V = RightOf(Hdg) * (Side * (0.2 + 0.4 * Mix(S + 5)));
+				}
+				else
+				{
+					// (up where she went under, over her length and a beam and a half across, spreading from it)
+					const Vec Along = Ahead(W.TrackHdg) * ((Mix(S + 3) - 0.5) * 0.9 * W.Long), Across = RightOf(W.TrackHdg) * ((Mix(S + 4) - 0.5) * 1.4 * W.Beam);
+					P = W.OilEnd + Along + Across;
+					const Vec Away = (Along * 0.3 + Across).Unit(Ahead(Mix(S + 6) * 2.0 * Pi));
+					V = Vec(Away.X, Away.Y, 0.0) * (0.3 + 0.7 * Mix(S + 5));
+				}
+				AddFloat(K, P, Mix(S + 7) * 2.0 * Pi, V, (Mix(S + 8) - 0.5) * 0.06);
+				++W.BitsOut;
+			}
+			// Her oil: from where she was hit along her track to where she went under, spreading and thinning, drawn out down
+			// the wind once she is gone, and drifting at a thirtieth of the wind's speed; alight for a while where it burns.
+			{
+				SlickOut& S = Oil[W.Slick - 1];
+				const double Age = ShownT - W.T0;
+				W.Drift += Blow * (0.03 * Dt);
+				W.TrackLen = Flat(W.OilEnd - W.Oil0);
+				if (W.TrackLen > 1.0) W.TrackHdg = Bearing(W.Oil0, W.OilEnd);
+				const double Rad = W.Beam * 0.5 + 6.0 * std::sqrt(std::max(0.0, Age)) * CompanyOf(W.Class).Oil;
+				const double Turned = Clamp((ShownT - (W.T0 + W.For)) / 300.0, 0.0, 1.0);
+				// (an oval has no fore and aft: its long way along her track turned the nearer way to the wind's)
+				double Along = W.TrackHdg;
+				if (std::fabs(Wrap(DownWind - Along)) > 0.5 * Pi) Along = Wrap(Along + Pi);
+				S.At = (W.Oil0 + W.OilEnd) * 0.5 + W.Drift;
+				S.At.Z = 0.0;
+				S.Heading = W.TrackLen > Rad ? Wrap(Along + Wrap(DownWind - Along) * Turned) : DownWind;
+				S.Long = W.TrackLen * (1.0 - 0.5 * Turned) + 2.0 * Rad * (1.0 + (0.2 + 0.05 * WindU) * (0.3 + 0.7 * Turned));
+				S.Wide = 2.0 * Rad * 0.85;
+				S.Dark = Clamp(Age / 6.0, 0.0, 1.0) * (Age < 600.0 ? 0.5 - 0.2 * Age / 600.0 : std::max(0.22, 0.3 - 0.08 * (Age - 600.0) / 1200.0));
+				S.Burning = W.Burn > 0.0 && ShownT < W.BurnUntil
+					? W.Burn * Clamp((ShownT - W.T0 - 0.2 * W.For) / 10.0, 0.0, 1.0) * Clamp((W.BurnUntil - ShownT) / 60.0, 0.0, 1.0) : 0.0;
+				S.Age = Age;
+				if (S.Burning > 0.0 && !W.bLit)
+				{
+					// (the kit's oil fire where it burns: a fire on the sea stays where it is lit)
+					W.bLit = true;
+					Fx& E = Emit(FxKind::OilFire, S.At, "burning", SlickFireKeys + W.Slick);
+					E.Size = Clamp((W.Beam * 0.5 + 6.0 * std::sqrt(Age + 120.0) * CompanyOf(W.Class).Oil) * std::sqrt(W.Burn), 20.0, 250.0);
+					E.Until = W.BurnUntil;
+					E.Since = 0.0;
+					E.Side = W.Side;
+					++Check.SlicksAlight;
+				}
+			}
+		}
+
+		// Her rafts, boats and wreckage: spreading from her and easing, drifting down the wind (a raft at about a thirtieth of
+		// its speed, wreckage a fortieth), turning slowly; a raft or boat with men in it paddled or pulled to a ship picking
+		// them up; pushed aside by any ship's bow.
+		for (Floater& Fl : Afloat)
+		{
+			Wreck& W = Wrecked[Fl.W];
+			Fl.O.Aboard = 0;
+			Fl.O.Holding = 0;
+			Fl.O.At += (Fl.V + Blow * Fl.Leeway) * Dt;
+			Fl.V = Fl.V * (1.0 - Dt / 40.0);
+			Fl.O.Heading = Wrap(Fl.O.Heading + Fl.Turn * Dt);
+			Fl.Turn *= 1.0 - Dt / 90.0;
+			if (Fl.Room > 0 && Fl.InMask && W.Rescuer >= 0 && ShownT < W.RescueUntil)
+			{
+				const Hull* By = FindHull(W.Rescuer);
+				if (By && By->Doing != Fate::Gone && By->Spd < 3.0 && Flat(By->P - Fl.O.At) < 900.0)
+				{
+					const Vec To = By->P - Fl.O.At;
+					const Vec Want = Vec(To.X, To.Y, 0.0).Unit(Vec()) * (Fl.O.Kind == "boat" ? 0.8 : 0.4);
+					Fl.V += (Want - Fl.V) * Clamp(Dt / 5.0, 0.0, 1.0);
+				}
+			}
+			// (its middle kept so far from her side that its ends and the men holding on to it are clear of her too)
+			const double Body = 0.5 * std::max(Fl.O.Long, Fl.O.Beam) + 0.8;
+			for (size_t K = 0; K < W.NearNow.size(); ++K) PushOut(Fl.O.At, W.NearNow[K]->P, W.NearNow[K]->Hdg, W.NearHalf[K], W.NearR[K] + Body);
+			Fl.O.At.Z = 0.0;
+		}
+
+		// Her men.
+		int InWater = 0;
+		for (Man& M : Swimmers)
+		{
+			Wreck& W = Wrecked[M.W];
+			M.O.Since += Dt;
+			Floater* On = M.O.On >= 0 ? FloatByKey(M.O.On) : nullptr;
+			auto Let = [&]()
+			{
+				// (his place on his float given up)
+				if (On && M.Slot >= 0)
+				{
+					if (M.bIn) On->InMask &= ~(1u << M.Slot);
+					else On->HoldMask &= ~(1u << M.Slot);
+				}
+				M.O.On = -1;
+				M.Slot = -1;
+				On = nullptr;
+			};
+			auto Into = [&](Swim Doing)
+			{
+				if (M.O.Doing != Doing) M.O.Since = 0.0;
+				M.O.Doing = Doing;
+			};
+			// Looking about him, every few seconds.
+			if (ShownT >= M.Next && M.O.Doing != Swim::Jump && M.O.Doing != Swim::Climb && M.O.Doing != Swim::Dead)
+			{
+				M.Next = ShownT + 2.0 + 2.0 * Mix(static_cast<uint64_t>(M.O.Key) * 131 + static_cast<uint64_t>(Beat));
+				const SlickOut& S = Oil[W.Slick - 1];
+				const double FromOil = Flat(M.O.At - S.At);
+				const double Fire = S.Burning > 0.0 ? 0.5 * S.Wide * std::sqrt(S.Burning) : 0.0;
+				const Hull* By = W.Rescuer >= 0 && ShownT < W.RescueUntil ? FindHull(W.Rescuer) : nullptr;
+				if (By && (By->Doing == Fate::Gone || By->Spd >= 3.0 || Flat(By->P - M.O.At) > 900.0)) By = nullptr;
+				if (Fire > 0.0 && FromOil < Fire + 10.0 && M.O.Doing != Swim::Raft && M.O.Doing != Swim::Boat)
+				{
+					// (burning oil: out of it, away from its middle)
+					Let();
+					M.To = -1;
+					M.Goal = M.O.At + (M.O.At - S.At).Unit(Ahead(Wrap(DownWind + Pi))) * (Fire - FromOil + 25.0);
+					Into(Swim::Swim);
+				}
+				else if (By && ((M.O.Doing != Swim::Raft && M.O.Doing != Swim::Boat) || (On && Flat(On->O.At - By->P) < 0.5 * SizeOf(By->Class).Long + 0.5 * SizeOf(By->Class).Beam + 8.0)))
+				{
+					// (a ship stopped to pick them up: to her side, the nearest place along it, and up it)
+					const ClassSize& Sz = SizeOf(By->Class);
+					const Vec Rel = M.O.At - By->P;
+					const double Along = Clamp(Rel.Dot(Ahead(By->Hdg)), -0.35 * Sz.Long, 0.35 * Sz.Long);
+					const double Side = Rel.Dot(RightOf(By->Hdg)) >= 0.0 ? 1.0 : -1.0;
+					Let();
+					M.To = By->Key;
+					M.Off = Vec(Along, Side * (0.5 * Sz.Beam + 1.0), 0.0);
+					Into(Swim::Swim);
+				}
+				else if (M.O.Doing == Swim::Tread || (M.O.Doing == Swim::Swim && !On && M.To < 0 && Flat(M.Goal - M.O.At) < 1.0))
+				{
+					// (something to hold on to, or a place in a raft or boat, near him)
+					Floater* Best = nullptr;
+					double BestD = 150.0;
+					bool bBestIn = false;
+					for (const int Key : W.Floats)
+					{
+						Floater& Fl = Afloat[Key - 1];
+						const double D = Flat(Fl.O.At - M.O.At);
+						if (D > BestD + 30.0) continue;
+						const bool bIn = FreeSlot(Fl.InMask, Fl.Room) >= 0;
+						if (!bIn && FreeSlot(Fl.HoldMask, Fl.Hold) < 0) continue;
+						const double Score = D - (bIn ? 30.0 : 0.0);
+						if (Score < BestD)
+						{
+							BestD = Score;
+							Best = &Fl;
+							bBestIn = bIn;
+						}
+					}
+					if (Best)
+					{
+						Let();
+						M.Slot = bBestIn ? FreeSlot(Best->InMask, Best->Room) : FreeSlot(Best->HoldMask, Best->Hold);
+						M.bIn = bBestIn;
+						if (bBestIn) Best->InMask |= 1u << M.Slot;
+						else Best->HoldMask |= 1u << M.Slot;
+						M.O.On = Best->O.Key;
+						On = Best;
+						M.Off = SlotOn(Best->O, M.Slot, M.bIn, Best->Room, Best->Hold);
+						Into(Swim::Swim);
+					}
+					else Into(Swim::Tread);
+				}
+				// (treading water with a ship in sight: an arm up now and then)
+				M.O.bWave = W.Nearest < 1500.0 && Mix(static_cast<uint64_t>(M.O.Key) * 7 + 1) < 0.4;
+			}
+			switch (M.O.Doing)
+			{
+			case Swim::Jump:
+				M.O.At += Vec(M.V.X, M.V.Y, 0.0) * Dt;
+				M.V.Z -= Gee * Dt;
+				M.O.At.Z += M.V.Z * Dt;
+				if (M.O.At.Z <= 0.0)
+				{
+					// (in: swimming away from her, then looking about him)
+					M.O.At.Z = 0.0;
+					M.V = Vec();
+					const Hull* Her = FindHull(W.Ship);
+					const Vec From = Her && Her->Doing != Fate::Gone ? Her->P : W.OilEnd;
+					const Vec Away = Vec(M.O.At.X - From.X, M.O.At.Y - From.Y, 0.0).Unit(Ahead(M.O.Heading));
+					M.Goal = M.O.At + Away * (15.0 + 30.0 * Mix(static_cast<uint64_t>(M.O.Key) * 17 + 5));
+					M.Next = ShownT + 6.0 + 4.0 * Mix(static_cast<uint64_t>(M.O.Key) * 19 + 3);
+					Into(Swim::Swim);
+				}
+				break;
+			case Swim::Swim:
+			{
+				// (to his float's place, to a rescuer's side, or where he is making for)
+				const Hull* By = M.To >= 0 ? FindHull(M.To) : nullptr;
+				if (M.To >= 0 && (!By || By->Doing == Fate::Gone)) { M.To = -1; By = nullptr; M.Goal = M.O.At; }
+				const Vec Goal = On ? OnFrame(On->O.At, On->O.Heading, M.Off) : By ? OnFrame(By->P, By->Hdg, M.Off) : M.Goal;
+				const Vec To(Goal.X - M.O.At.X, Goal.Y - M.O.At.Y, 0.0);
+				const double D = Flat(To);
+				if (D > 1e-6) M.O.Heading = Bearing(Vec(), To);
+				M.O.At += To * (std::min(D, M.Pace * Dt) / std::max(D, 1e-6));
+				if (D <= M.Pace * Dt + 0.05)
+				{
+					if (On) Into(On->O.Kind == "boat" && M.bIn ? Swim::Boat : M.bIn ? Swim::Raft : Swim::Cling);
+					else if (By)
+					{
+						// (up her side on a scrambling net or a line, her own height in some fifteen to twenty-five seconds)
+						const double Up = 15.0 + 10.0 * Mix(static_cast<uint64_t>(M.O.Key) * 23 + 9);
+						M.Off = Vec(M.Off.X, M.Off.Y > 0.0 ? 0.5 * SizeOf(By->Class).Beam + 0.3 : -(0.5 * SizeOf(By->Class).Beam + 0.3), Up);
+						M.Until = ShownT + Up;
+						Into(Swim::Climb);
+					}
+					else Into(Swim::Tread);
+				}
+				break;
+			}
+			case Swim::Cling:
+			case Swim::Raft:
+			case Swim::Boat:
+				if (!On) { Into(Swim::Tread); break; }
+				M.O.At = OnFrame(On->O.At, On->O.Heading, M.Off);
+				M.O.Heading = M.O.Doing == Swim::Boat ? Wrap(On->O.Heading + Pi) : Bearing(M.O.At, On->O.At);
+				break;
+			case Swim::Climb:
+			{
+				const Hull* By = FindHull(M.To);
+				if (!By || By->Doing == Fate::Gone)
+				{
+					M.O.At.Z = 0.0;
+					M.To = -1;
+					M.Goal = M.O.At;
+					Into(Swim::Tread);
+					break;
+				}
+				M.O.At = OnFrame(By->P, By->Hdg, M.Off);
+				M.O.At.Z = FreeOf(By->Class) * Clamp(1.0 - (M.Until - ShownT) / std::max(1.0, M.Off.Z), 0.0, 1.0);
+				M.O.Heading = Bearing(Vec(), RightOf(By->Hdg) * (M.Off.Y > 0.0 ? -1.0 : 1.0));
+				if (ShownT >= M.Until)
+				{
+					// (aboard her: picked up)
+					M.O.Key = -M.O.Key;
+					++Check.MenPicked;
+				}
+				break;
+			}
+			default:
+				break;
+			}
+			// (in the water and not holding on: drifting with the wind's push on the sea, a sixtieth of its speed)
+			if (M.O.Doing == Swim::Swim || M.O.Doing == Swim::Tread || M.O.Doing == Swim::Dead) M.O.At += Blow * (0.015 * Dt);
+			if (M.bGoing)
+			{
+				M.O.At.Z = -2.5 * Clamp(1.0 - (M.Until - ShownT) / 10.0, 0.0, 1.0);
+				if (ShownT >= M.Until && M.O.Key > 0) M.O.Key = -M.O.Key;
+			}
+			// (never inside a ship: pushed aside by her bow or her side, his own ship's too, falling as in the water; a man
+			// holding on goes with his float, pushed already)
+			if (M.O.Doing == Swim::Swim || M.O.Doing == Swim::Tread || M.O.Doing == Swim::Dead || M.O.Doing == Swim::Jump)
+			{
+				for (size_t K = 0; K < W.NearNow.size(); ++K)
+				{
+					if (PushOut(M.O.At, W.NearNow[K]->P, W.NearNow[K]->Hdg, W.NearHalf[K], W.NearR[K] + 0.8) && !M.bSwept)
+					{
+						M.bSwept = true;
+						++Check.MenSwept;
+					}
+				}
+			}
+			if (On && M.Slot >= 0 && M.O.Doing != Swim::Swim)
+			{
+				if (M.bIn) ++On->O.Aboard;
+				else ++On->O.Holding;
+			}
+			if (!M.bGoing && M.O.Key > 0) ++InWater;
+		}
+		Swimmers.erase(std::remove_if(Swimmers.begin(), Swimmers.end(), [](const Man& M) { return M.O.Key < 0; }), Swimmers.end());
+		Check.MostMen = std::max(Check.MostMen, InWater);
+		// (room for the men of the next ship to go down: past most of the room, the longest dead go under, one a step)
+		if (InWater > F.MenMost * 0.85)
+		{
+			Man* Oldest = nullptr;
+			for (Man& M : Swimmers)
+				if (M.O.Doing == Swim::Dead && !M.bGoing && (!Oldest || M.O.Key < Oldest->O.Key)) Oldest = &M;
+			if (Oldest)
+			{
+				Oldest->bGoing = true;
+				Oldest->Until = ShownT + 10.0;
+				++Check.MenUnder;
+			}
+		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
 	// The clock.
 
 	void Show::Advance(double T)
@@ -2898,6 +3572,7 @@ namespace SeaShow
 			FlyStrikes(Fixed);
 			CoverFleet(Fixed);
 			LayScreens();
+			RunWrecks(Fixed);
 			// The seamanship's checks over the step: no pop, no slide, no turn or rudder past the class's, for ships in a line.
 			for (auto& Pair : Lines)
 			{
@@ -3027,6 +3702,16 @@ namespace SeaShow
 			O.bFalling = A.bFalling;
 			OutPlanes.push_back(O);
 		}
+		if (bWrecksMoved)
+		{
+			// (laid out once a step: a man swims under a metre a second, and the steps are a twentieth of a second apart)
+			bWrecksMoved = false;
+			OutFloats.clear();
+			for (const Floater& Fl : Afloat) OutFloats.push_back(Fl.O);
+			OutSlicks = Oil;
+			OutMen.clear();
+			for (const Man& M : Swimmers) OutMen.push_back(M.O);
+		}
 		OutTorps.clear();
 		for (const Torp& T : Torps)
 		{
@@ -3052,6 +3737,14 @@ namespace SeaShow
 				S.At.X, S.At.Y, S.Heading, S.Speed, S.Heel, S.Train, S.bFiring ? " FIRE" : "", S.bScreen ? " smoke" : "", S.Doing == Fate::Sinking ? (" " + S.How).c_str() : "");
 			Out += Line;
 		}
+		for (const Wreck& W : Wrecked)
+		{
+			std::snprintf(Line, sizeof(Line), "  wreck %d %s %s: %d men in the water of %d (%d dead), %d rafts, %d boats, %d pieces\n", W.Ship, W.Class.c_str(), W.How.c_str(), W.Out, W.Real,
+				W.Dead, W.RaftsOut, W.BoatsOut, W.BitsOut);
+			Out += Line;
+		}
+		std::snprintf(Line, sizeof(Line), "  in the water at the end: %zu men, %zu floats\n", Swimmers.size(), Afloat.size());
+		Out += Line;
 		for (const PlaneOut& P : OutPlanes)
 		{
 			std::snprintf(Line, sizeof(Line), "  air %d %s %s at %.0f,%.0f,%.0f hdg %.0f%s\n", P.Key, P.Model.c_str(), P.Role.c_str(), P.At.X, P.At.Y, P.At.Z, P.Heading, P.bFalling ? " falling" : "");

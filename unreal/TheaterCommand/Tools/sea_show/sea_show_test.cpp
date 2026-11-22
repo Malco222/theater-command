@@ -161,6 +161,12 @@ namespace
 		int BoatSwings = 0;                             // a boat's angle swinging 4 degrees one way or the other (a dive is two: down, level)
 		std::map<int, std::pair<double, int>> BoatSwing; // by boat: the last extreme of her angle, which way it is going (+1, -1, 0)
 		int ChargesOffBoat = 0;                         // depth charges booked on a boat that burst out of her reach
+		// where ships went down (Brian, 22 November 05:32Z): men in the water and wreckage never inside a ship, no man popping
+		int MenInHull = 0, FloatsInHull = 0;
+		std::string MenInHullFirst;
+		double MostManPop = 0.0;
+		std::string ManPopAt;
+		int MostMenSeen = 0, MostFloatsSeen = 0;
 		int SinkingAhead = 0;
 		std::map<int, Vec> EndAt;  // each ship afloat at the end, by key
 		std::string EndWords;
@@ -195,6 +201,10 @@ namespace
 		std::map<int, Vec> Last;
 		std::map<int, double> LastSpeed;
 		std::map<int, Vec> LastPlane;
+		std::vector<Vec> LastMan;   // by key (the show's men are numbered from 1)
+		std::vector<long> LastManFrame;
+		std::vector<SeaShow::Swim> LastManDoing;
+		double NextWreckLook = 0.0;
 		std::set<int> ScreensOpen, TracksOpen;
 		const double Dt = 1.0 / Fps;
 		double T = Rec.Views.front().Head.T;
@@ -360,6 +370,55 @@ namespace
 				}
 			}
 			if (bTouching) ++Out.TouchingFrames;
+			// Men in the water: none popping from frame to frame (falling from a deck, or climbing a moving rescuer's side, the
+			// most), and twice a second, none inside a ship afloat but a man jumping from her or climbing her side, nor any
+			// raft, boat or piece of wreckage.
+			{
+				const std::vector<SeaShow::ManOut>& Men = Show.Men();
+				Out.MostMenSeen = std::max(Out.MostMenSeen, static_cast<int>(Men.size()));
+				Out.MostFloatsSeen = std::max(Out.MostFloatsSeen, static_cast<int>(Show.Floats().size()));
+				for (const SeaShow::ManOut& M : Men)
+				{
+					if (M.Key >= static_cast<int>(LastMan.size())) { LastMan.resize(M.Key + 1024); LastManFrame.resize(M.Key + 1024, -9); LastManDoing.resize(M.Key + 1024); }
+					if (LastManFrame[M.Key] == Out.Frames - 1)
+					{
+						const double Pop = (M.At - LastMan[M.Key]).Length() - (17.0 * Dt + 0.8);
+						if (Pop > Out.MostManPop)
+						{
+							Out.MostManPop = Pop;
+							Out.ManPopAt = "man " + std::to_string(M.Key) + " of ship " + std::to_string(M.Ship) + " at " + Num(Show.Shown(), 2) + " s, moved " + Num((M.At - LastMan[M.Key]).Length(), 2) + " m, " +
+							               std::to_string(static_cast<int>(LastManDoing[M.Key])) + " to " + std::to_string(static_cast<int>(M.Doing)) + (M.On >= 0 ? " on " + std::to_string(M.On) : std::string());
+						}
+					}
+					LastMan[M.Key] = M.At;
+					LastManFrame[M.Key] = Out.Frames;
+					LastManDoing[M.Key] = M.Doing;
+				}
+				if (Show.Shown() >= NextWreckLook && (!Men.empty() || !Show.Floats().empty()))
+				{
+					NextWreckLook = Show.Shown() + 0.5;
+					for (const SeaShow::ShipOut& S : Ships)
+					{
+						if (S.Doing == SeaShow::Fate::Gone || S.Dived > 1.0) continue;
+						const double Reach = S.Long * 0.5 + 10.0;
+						for (const SeaShow::ManOut& M : Men)
+						{
+							if (M.Doing == SeaShow::Swim::Jump || M.Doing == SeaShow::Swim::Climb) continue;
+							if (std::fabs(M.At.X - S.At.X) > Reach || std::fabs(M.At.Y - S.At.Y) > Reach) continue;
+							if (Inside(Vec(M.At.X, M.At.Y, 0.0), S) > 0.3)
+							{
+								if (!Out.MenInHull) Out.MenInHullFirst = "man " + std::to_string(M.Key) + " of ship " + std::to_string(M.Ship) + " in ship " + std::to_string(S.Key) + " at " + Num(Show.Shown(), 1) + " s";
+								++Out.MenInHull;
+							}
+						}
+						for (const SeaShow::FloatOut& Fl : Show.Floats())
+						{
+							if (std::fabs(Fl.At.X - S.At.X) > Reach || std::fabs(Fl.At.Y - S.At.Y) > Reach) continue;
+							if (Inside(Vec(Fl.At.X, Fl.At.Y, 0.0), S) > 0.3) ++Out.FloatsInHull;
+						}
+					}
+				}
+			}
 			for (const SeaShow::PlaneOut& P : Show.Planes())
 			{
 				auto Was = LastPlane.find(P.Key);
@@ -556,6 +615,10 @@ int main(int Argc, char** Argv)
 	std::printf("  hits owed by gunfire %.1f, left unshown %.1f; screens %d (%d at once), tracks %d (%d at once), aircraft up %d at the most, cover up %d\n", C.OwedAll, C.OwedLeft,
 	            C.Screens, C.MostScreens, C.TracksRun, C.MostTracks, C.MostPlanes, C.CoverUp);
 	std::printf("  followers giving way to their own line crossing ahead: %.1f s; ships keeping clear of others: %d, %.1f ship-seconds altered\n", C.GaveWay, C.ClearShips, C.KeptClear);
+	std::printf("  where ships went down: %d (%d with men in the water of %d due); men in the water %d in truth, %d shown (%.0f%%), %d at once at the most (%d drawn), %d dead, %d picked up, "
+	            "%d pushed aside by a ship, %d dead gone under for room; %d floats (%d rafts, %d boats), %d slicks (%d alight)\n",
+	            C.Wrecks, C.WrecksManned, C.WrecksDue, C.MenReal, C.MenKept, C.MenReal ? 100.0 * C.MenKept / C.MenReal : 100.0, C.MostMen, P.MostMenSeen, C.MenDead, C.MenPicked,
+	            C.MenSwept, C.MenUnder, C.Floats, C.Rafts, C.Boats, C.Slicks, C.SlicksAlight);
 	std::printf("  worst turn: %s; rudder: %s; heel: %s; lead: %s; off the track: %s; stations kept up to %.0f m off the battle's place\n", C.TurnWorst.c_str(),
 	            C.RudderWorst.c_str(), C.HeelWorst.c_str(), C.LeadWorst.c_str(), C.GapWorst.c_str(), C.MostKeep);
 	if (P.MostPlanePop > 0.0) std::printf("  worst aircraft step: %s\n", P.PlanePopAt.c_str());
@@ -692,6 +755,15 @@ int main(int Argc, char** Argv)
 		                   "the field's" });
 	}
 	Limits.push_back({ "the zig-zag steadied a minute after contact", C.MostZigAfter <= 1.0, Num(C.MostZigAfter, 2) + " m", "1 m or less" });
+	// Where ships went down (Brian, 22 November 05:32Z to 05:33Z): her men in the water, her wreckage and her oil.
+	Limits.push_back({ "every ship gone down leaves her oil, and her men in the water where her way down leaves any", C.Slicks == C.Sinks && C.WrecksManned == C.WrecksDue,
+	                   std::to_string(C.Slicks) + " slicks for " + std::to_string(C.Sinks) + " sunk, " + std::to_string(C.WrecksManned) + " of " + std::to_string(C.WrecksDue) + " with men",
+	                   "all" });
+	Limits.push_back({ "no man in the water nor any wreckage inside a ship", P.MenInHull == 0 && P.FloatsInHull == 0,
+	                   std::to_string(P.MenInHull) + " man-looks, " + std::to_string(P.FloatsInHull) + " float-looks" + (P.MenInHull ? " (first " + P.MenInHullFirst + ")" : std::string()), "0" });
+	Limits.push_back({ "no man in the water pops", P.MostManPop <= 0.0, P.MostManPop > 0.0 ? Num(P.MostManPop, 2) + " m over (" + P.ManPopAt + ")" : "none", "none" });
+	Limits.push_back({ "the men in the water within the show's room", C.MostMen <= Rec.Board.MenMost, std::to_string(C.MostMen) + " (room " + std::to_string(Rec.Board.MenMost) + ")",
+	                   "the room or fewer" });
 	// A convoy's night (ruling 241: the submarine scene). Where the recording has none of it, each holds at nothing.
 	if (Boats > 0 || DiveEvents + ChargeEvents + ChargeHits + Starshells + Rescues > 0)
 	{

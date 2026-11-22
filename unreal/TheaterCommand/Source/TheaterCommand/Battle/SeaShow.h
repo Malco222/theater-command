@@ -101,6 +101,9 @@ namespace SeaShow
 		double ScopeKeel = 13.0, DeepKeel = 60.0, CrushKeel = 250.0, DivedTop = 3.9;
 		/** Depth charges (dc{sink, lethal}): how fast one sinks (metres a second) and how near it kills (metres). */
 		double ChargeSink = 3.0, ChargeLethal = 6.0;
+		/** The men in the water: the most the show keeps at once (each one man while there is room: Brian's standing rule,
+		 * 22 November 04:14Z, the real numbers; past it each ship's men are thinned, and the share is told). */
+		int MenMost = 2400;
 	};
 
 	/** One piece as a view gives it (battle-bridge.ts unitOut for a sea piece). */
@@ -255,6 +258,65 @@ namespace SeaShow
 		double Speed = 0.0;
 	};
 
+	/**
+	 * Where a ship went down (Brian, 22 November 05:32Z to 05:33Z: "sailors should jump in the water if the boat is going
+	 * down", "have them use the models we have for the soldiers for the sailors", "there should be debris floating in
+	 * the water. maybe oil pools?"). Her crew, her boats and rafts, her wreckage and her oil: the show's looks only. The
+	 * battle books every loss and every life; nothing here is counted.
+	 */
+	struct FloatOut
+	{
+		int Key = 0;          // its own
+		int Ship = 0;         // the ship it came from
+		/** "plank", "spar", "crate", "drum", "hatch", "ring" (a life ring), "raft" (a Carley float or life raft), "boat" (a
+		 * whaleboat or lifeboat) */
+		std::string Kind;
+		Vec At;               // its middle, on the sea (Z 0)
+		double Heading = 0.0; // radians, its long way
+		double Long = 1.0, Beam = 0.5;
+		int Aboard = 0, Holding = 0; // men in it, men holding on to it
+	};
+
+	/** Her oil on the sea: an oval drawn out down the wind, spreading and thinning as it ages, alight in part for a while. */
+	struct SlickOut
+	{
+		int Key = 0, Ship = 0;
+		Vec At;               // its middle
+		double Heading = 0.0; // radians: its long way (down the wind)
+		double Long = 0.0, Wide = 0.0; // metres from edge to edge, along and across
+		double Dark = 0.0;    // 0 to 1: how thick it shows
+		double Burning = 0.0; // 0 to 1: the share of it alight (0: none)
+		double Age = 0.0;     // seconds since it began
+	};
+
+	/** What a man in the water is doing (his clip: the soldier files' sailors, the soldier modeller's, 22 November). */
+	enum class Swim : uint8_t
+	{
+		Jump,  // over her side, falling: At.Z his feet's height above the sea, Drop the height he went from
+		Swim,  // swimming (swim_breast)
+		Tread, // treading water (tread; wave now and then)
+		Cling, // holding on to wreckage or a raft's lines (cling)
+		Raft,  // in a raft (sit_raft)
+		Boat,  // in a boat (row)
+		Climb, // up a rescuer's side (climb_net): At.Z his feet's height
+		Dead,  // face down (float_dead)
+	};
+
+	struct ManOut
+	{
+		int Key = 0;          // his own
+		int Ship = 0, Side = 0;
+		std::string Nation;
+		Swim Doing = Swim::Tread;
+		Vec At;               // where he is: on the sea's surface in the water (Z 0), his feet's height jumping or climbing
+		double Heading = 0.0; // radians, the way he faces
+		double Since = 0.0;   // seconds he has been doing it (his clip's phase)
+		double Drop = 0.0;    // a jump: the height he went from (metres)
+		int On = -1;          // the float he holds or sits in (FloatOut::Key), or swims to; -1 none
+		uint32_t Look = 0;    // his own hash (face, dress, an officer or a gun crew's helmet)
+		bool bWave = false;   // treading, an arm up to a ship coming
+	};
+
 	/** What the show asks of the effects kit, the scene and the sound this frame. */
 	enum class FxKind
 	{
@@ -373,6 +435,12 @@ namespace SeaShow
 		int SunkUnmatched = 0, BurningUnmatched = 0, TorpedoHitUnmatched = 0;
 		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
 		double KeptClear = 0.0;     // ship-seconds any ship held an alteration of course or way to keep clear of another
+		// Where ships went down: her crew in the water (the real number, and those the show keeps), the most at once, those
+		// picked up, those pushed aside by a ship's bow; her floats and her oil.
+		int Wrecks = 0, WrecksManned = 0, WrecksDue = 0; // ships gone down; with men in the water; that should have them
+		int MenReal = 0, MenKept = 0, MostMen = 0, MenPicked = 0, MenSwept = 0, MenDead = 0;
+		int Floats = 0, Rafts = 0, Boats = 0, Slicks = 0, SlicksAlight = 0;
+		int MenUnder = 0;           // dead men let go under to make room for the living of a later ship
 		int ClearShips = 0;         // ships that altered so, once or more
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
 		double OwedAll = 0.0;       // hits the battle took off hulls by gunfire, in all
@@ -412,6 +480,12 @@ namespace SeaShow
 		/** Ships whose dodge is not yet judged (the cloud test: still under attack as the battle ends). */
 		int OpenDodges() const;
 		const std::vector<TorpOut>& Torpedoes() const { return OutTorps; }
+		/** Where ships went down: her wreckage, boats and rafts; her oil; her men in the water. */
+		const std::vector<FloatOut>& Floats() const { return OutFloats; }
+		const std::vector<SlickOut>& Slicks() const { return OutSlicks; }
+		const std::vector<ManOut>& Men() const { return OutMen; }
+		/** The share of the men in the water the show keeps (1: every man; less where there were more than the room). */
+		double MenShare() const { return Check.MenReal > 0 ? static_cast<double>(Check.MenKept) / Check.MenReal : 1.0; }
 		/** What has happened since it was last emptied: the caller plays it and clears it. */
 		std::vector<Fx> Effects;
 		ColumnRoom Columns;
@@ -624,6 +698,73 @@ namespace SeaShow
 		std::vector<ShipOut> OutShips;
 		std::vector<PlaneOut> OutPlanes;
 		std::vector<TorpOut> OutTorps;
+		std::vector<FloatOut> OutFloats;
+		std::vector<SlickOut> OutSlicks;
+		std::vector<ManOut> OutMen;
+		/** Where a ship went down: when her crew go over the side and how many, her rafts and wreckage still to come, her
+		 * oil, and the ship picking her men up. */
+		struct Wreck
+		{
+			int Ship = 0, Side = 0;
+			std::string Class, Nation, How;
+			double Long = 100.0, Beam = 10.0, Free = 5.0; // her length, beam and height of deck over the sea
+			double T0 = 0.0, For = 100.0;                 // she began to go, and took this long
+			double Start = 0.0, End = 0.0;                // her men go over the side between these
+			int Men = 0, Out = 0, Dead = 0;               // men the show keeps, gone over so far, of them dead
+			int Rafts = 0, RaftsOut = 0, Boats = 0, BoatsOut = 0, Bits = 0, BitsOut = 0;
+			Vec Oil0;                                     // where her oil began
+			int Slick = -1;                               // its key
+			double Burn = 0.0, BurnUntil = -1.0;          // the share of it alight, and until when
+			double Lee = 1.0;                             // her windward side (+1 starboard, -1 port)
+			int Rescuer = -1;                             // the ship picking her men up (key), -1 none
+			double RescueUntil = -1.0;
+			uint64_t Seed = 0;                            // her own hash's start
+			int Real = 0;                                 // men of hers who went into the water in truth
+			double DeadShare = 0.0;                       // of them, the share dead in it
+			Vec OilEnd, Drift;                            // where her oil ended (where she went under), and how far it has drifted
+			double TrackHdg = 0.0, TrackLen = 0.0;        // her oil's way along her last track
+			bool bGone = false, bLit = false, bDue = false;
+			// (the ships near her men and her wreckage, looked for each second, and found again each step)
+			std::vector<int> Near;
+			std::vector<const Hull*> NearNow;
+			std::vector<double> NearHalf, NearR;          // (theirs: half their length less their beam, half their beam)
+			double NearAt = -1e9, Nearest = 1e9;          // when; how far the nearest ship afloat is from her middle
+			Vec Middle;                                   // the middle of her men and wreckage
+			double Spread = 0.0;                          // how far from it the farthest is
+			std::vector<int> Floats;                      // her rafts, boats and wreckage (their keys)
+		};
+		struct Floater
+		{
+			FloatOut O;
+			Vec V;                // its own way through the water (spreading), easing off
+			double Leeway = 0.03; // a share of the wind it drifts at
+			double Turn = 0.0;    // radians a second
+			int Room = 0, Hold = 0; // men it takes aboard, men it lets hold on
+			uint32_t InMask = 0, HoldMask = 0; // the places aboard and round it taken (or promised to a man swimming to it)
+			int W = 0;            // its wreck (Wrecked's place)
+		};
+		struct Man
+		{
+			ManOut O;
+			Vec V;                // his way over the jump
+			Vec Goal;             // where he is swimming to
+			double Pace = 0.7;    // metres a second he swims
+			double Next = 0.0;    // battle time he next looks about him
+			Vec Off;              // on a float or a rescuer's side: where on it (its own frame: x along, y across)
+			int W = 0;            // his wreck (Wrecked's place)
+			int Slot = -1;        // his place on his float (On), -1 none
+			bool bIn = false;     // that place aboard it (else holding on round it)
+			bool bGoing = false;  // dead, going under (to make room for the living)
+			bool bSwept = false;  // pushed aside by a ship's bow, once or more
+			double Until = 0.0;   // climbing: when he is aboard; going under: when he is gone
+			int To = -1;          // climbing: the rescuer (her key)
+		};
+		std::vector<Wreck> Wrecked;
+		std::vector<Floater> Afloat;
+		std::vector<Man> Swimmers;
+		std::vector<SlickOut> Oil;
+		int NextFloat = 1, NextMan = 1;
+		bool bWrecksMoved = false; // a step has moved them since Output last laid them out
 		/** The ships' clock (stepped by Fixed) and the moment drawn, a little after it. */
 		double ShownT = 0.0, DrawT = 0.0, ContactT = -1.0;
 		static constexpr double Fixed = 0.05;
@@ -652,6 +793,11 @@ namespace SeaShow
 		/** (returns how much of the swell still moves her, 1 surfaced; OutSink: metres a second her keel is going down) */
 		double Trim(Hull& H, const Piece* P, double Dt, double& OutSink);
 		void BurstCharges();
+		/** Where she goes down: her crew, her rafts and boats, her wreckage and her oil, set going (Sink). */
+		void Abandon(const Hull& H);
+		/** Her men, rafts, wreckage and oil over a step: over the side, swimming, holding on, drifting, picked up. */
+		void RunWrecks(double Dt);
+		Floater* FloatByKey(int Key);
 		/** A boat's keel surfaced (metres: her draught). */
 		double SurfacedKeel(const std::string& Class) const;
 		/** Each leader's station (bSettle: at the start, each column laid at it at once). */
