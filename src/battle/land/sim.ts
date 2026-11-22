@@ -15,7 +15,7 @@ import { STYLE, styleFor, type Style } from './styles';
 import { BEND, buildField, coverAt, diggable, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
-import { LAND, MOTION, bearerShare, gunsOf, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
+import { LAND, MOTION, bearerShare, gunsOf, killedShare, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
 import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
 import { turnToDate } from '../../core/ticket';
 import { patrolSize } from './rules';
@@ -46,7 +46,7 @@ export interface Cut { t0: number; t1: number; unit: number; side: Side; x: numb
  */
 export interface NightPatrol {
   side: Side; unit: number; men: number; t0: number; t1: number; from: [number, number]; to: [number, number];
-  found: { unit: number; x: number; y: number; kind: string } | null; alerted: boolean; post: number | null; lost: number; flares: [number, number, number][];
+  route: [number, number, number][]; found: { unit: number; x: number; y: number; kind: string } | null; alerted: boolean; post: number | null; lost: number; flares: [number, number, number][];
 }
 /**
  * A smoke screen (smoke on call, release 2; ruling 242): laid by block 'unit' of 'side' at battle second t along x0, y0
@@ -2251,10 +2251,19 @@ export class LandBattle implements BattleSim<LandUnit> {
     const men = patrolSize(by.nat);
     const r1 = (v: number): number => Math.round(v * 10) / 10;
     // Where it went: to the post it found, else to the enemy block nearest it; caught, it was caught there.
-    const near = found && post ? post : this.units.filter((u) => u.side === foe && live(u)).sort((a, b) => dist(a.x, a.y, by.x, by.y) - dist(b.x, b.y, by.x, by.y) || a.id - b.id)[0];
+    // Never toward a post still hidden: the drawn walk and its flares would show where it lies (only blocks the attack can see).
+    const near = found && post ? post : this.units.filter((u) => u.side === foe && live(u) && !u.hid).sort((a, b) => dist(a.x, a.y, by.x, by.y) - dist(b.x, b.y, by.x, by.y) || a.id - b.id)[0];
     const to: [number, number] = near ? [r1(near.x), r1(Math.max(0, near.y - near.d / 2 - 40))] : [r1(by.x), r1(by.y + by.d / 2 + 200)];
+    // Its way in the night (looks only, for the 3D game's prelude): out from its block to 'to' by the middle of the night and
+    // back by t1, through two points a little to one side (fixed by the seed, never a rule's stream).
+    const from: [number, number] = [r1(by.x), r1(by.y + by.d / 2)];
+    const w = (j: number): number => (mix(Math.imul(this.ticket.seed >>> 0, 0x85ebca6b) + j) - 0.5) * 60;
+    const tm = Math.round((P.night.t0 + P.night.t1) / 2), at = (f: number, j: number): [number, number] => [r1(from[0] + (to[0] - from[0]) * f + w(j)), r1(from[1] + (to[1] - from[1]) * f)];
+    const route: [number, number, number][] = [
+      [P.night.t0, from[0], from[1]], [Math.round((P.night.t0 + tm) / 2), ...at(0.5, 1)], [tm, to[0], to[1]], [Math.round((tm + P.night.t1) / 2), ...at(0.5, 2)], [P.night.t1, from[0], from[1]],
+    ];
     const night: NightPatrol = {
-      side, unit: by.id, men, t0: P.night.t0, t1: P.night.t1, from: [r1(by.x), r1(by.y + by.d / 2)], to,
+      side, unit: by.id, men, t0: P.night.t0, t1: P.night.t1, from, to, route,
       found: null, alerted: caught, post: null, lost: 0, flares: [],
     };
     this.nightPatrol = night;
@@ -2299,7 +2308,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (!this.patrol || !p) return {};
     const flares = p.flares.map((f): [number, number, number] => [f[0], f[1], f[2]]);
     if (as === undefined || as === p.side) {
-      return { patrol: { side: p.side, unit: p.unit, t0: p.t0, t1: p.t1, men: p.men, from: [p.from[0], p.from[1]], to: [p.to[0], p.to[1]], found: p.found ? { x: p.found.x, y: p.found.y, kind: p.found.kind } : null, alerted: p.alerted, flares } };
+      return { patrol: { side: p.side, unit: p.unit, t0: p.t0, t1: p.t1, men: p.men, from: [p.from[0], p.from[1]], to: [p.to[0], p.to[1]], route: p.route.map((r): [number, number, number] => [r[0], r[1], r[2]]), found: p.found ? { x: p.found.x, y: p.found.y, kind: p.found.kind } : null, alerted: p.alerted, flares } };
     }
     return p.alerted ? { patrol: { side: p.side, t0: p.t0, t1: p.t1, men: p.men, to: [p.to[0], p.to[1]], found: null, alerted: true, flares } } : {};
   }
@@ -3108,7 +3117,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const B = LAND.bearers, L = B.light;
     let l = this.litters.get(u.id);
     if (!l) { l = { all: bearerShare(u.nat) * u.str0, out: 0, trips: [], waiting: 0, light: [], aid: this.aidOf(u), told: false }; this.litters.set(u.id, l); }
-    const hurt = d * (1 - B.killed), light = hurt * L.share, foot = LAND.speed.inf;
+    const hurt = d * (1 - killedShare(u.nat)), light = hurt * L.share, foot = LAND.speed.inf;
     const at = Math.round((this.t + (L.at > 0 ? L.at / (foot * L.out) : 0) + L.dress + (L.at > 0 ? L.at / (foot * L.back) : 0)) * 1000) / 1000;
     const last = l.light[l.light.length - 1];
     if (last && last.at === at) last.n += light; else if (light > 0) l.light.push({ at, n: light });
@@ -3136,7 +3145,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (u.str <= was) continue;
         let r: (typeof this.returns)[number] | undefined;
         for (let i = this.returns.length - 1; i >= 0 && !r; i--) if (this.returns[i].unit === u.id) r = this.returns[i];
-        if (r && Math.floor(r.t) === Math.floor(t)) r.n += u.str - was;
+        if (r && Math.floor(r.t + 1e-9) === Math.floor(t + 1e-9)) r.n += u.str - was;
         else this.returns.push({ t: Math.round(t * 1000) / 1000, unit: u.id, n: u.str - was });
       }
       if (!fighting(u) || l.waiting <= 1e-12) continue;
@@ -3163,13 +3172,16 @@ export class LandBattle implements BattleSim<LandUnit> {
    * The bearers' part of the view, a side's own blocks (every side's with no side given, as a recording is): each block's
    * bearers out and litter cases waiting, in men (strength times its men at full strength), and the battle second the
    * next of its bearers are back (null with none out); the aid post of each block that has had wounded; and the light
-   * cases back in the line in the last two battle seconds (when, the block, how many men), each told once by its t and
-   * block. Left out with the switch off, and before anyone is hurt.
+   * cases back in the line in the two battle seconds before this one (when, the block, how many men), each told once by
+   * its t and block: a battle second is shown only once it is over, so an entry never changes after it is shown (a
+   * block's returns in one second are summed), and one of no whole man is left out. Every side's where the view is
+   * unfogged (the card knew the defence), as the telephone lines are. Left out with the switch off, and before anyone
+   * is hurt.
    */
   bearerView(as?: Side): Pick<BattleView, 'bearers' | 'aid' | 'returns'> {
     if (!this.bearers || !this.litters.size) return {};
     const r1 = (v: number): number => Math.round(v * 10) / 10;
-    const ours = (u: LandUnit | undefined): u is LandUnit => !!u && (as === undefined || u.side === as);
+    const ours = (u: LandUnit | undefined): u is LandUnit => !!u && (as === undefined || u.side === as || !this.fog);
     const men = (u: LandUnit, s: number): number => Math.round((s * u.men0) / Math.max(1e-9, u.str0));
     const bearers: NonNullable<BattleView['bearers']> = [], aid: NonNullable<BattleView['aid']> = [], returns: NonNullable<BattleView['returns']> = [];
     for (const [id, l] of [...this.litters].sort((a, c) => a[0] - c[0])) {
@@ -3179,9 +3191,12 @@ export class LandBattle implements BattleSim<LandUnit> {
       const out = men(u, l.out), waiting = men(u, l.waiting);
       if (out > 0 || waiting > 0) bearers.push({ unit: id, out, waiting, back: l.trips.length ? l.trips[0].back : null });
     }
+    const now = Math.floor(this.t + 1e-9);
     for (const r of this.returns) {
-      const u = this.unit(r.unit);
-      if (r.t >= this.t - 2 - 1e-9 && ours(u)) returns.push({ t: r.t, unit: r.unit, n: men(u, r.n) });
+      const u = this.unit(r.unit), sec = Math.floor(r.t + 1e-9);
+      if (sec >= now || sec < now - 2 || !ours(u)) continue;
+      const n = men(u, r.n);
+      if (n > 0) returns.push({ t: r.t, unit: r.unit, n });
     }
     return { ...(bearers.length ? { bearers } : {}), ...(aid.length ? { aid } : {}), ...(returns.length ? { returns } : {}) };
   }

@@ -578,9 +578,14 @@ export const LAND = {
    * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
    * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
    * nerve, its count or its size). Nothing here draws on the dice.
-   *   killed: the share of each loss killed, 3 wounded to 1 killed: the US figure, 3.1 (Army Battle Casualties and
-   *     Nonbattle Deaths in World War II: 189,696 killed in action, 592,170 wounded and injured), for every army (Q4:
-   *     B1's 3:1 is looks only). The drill draws the rest of the men who fall as wounded.
+   *   killed: the share of each loss killed, by army (the design director, 19:14Z, from the historian's
+   *     /mnt/project-files/historian/three-ideas-readings-1122.md; died of wounds counted as killed). The drill draws
+   *     the rest of the men who fall as wounded. Sourced, no knob of ours:
+   *     USA 0.192: 4.22 wounded to 1 killed (Dupuy).
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.230: 3.35 to 1 (Hansard, 27 June 1944, Italy to Rome).
+   *     GER 0.279: 2.58 to 1 (OKW to January 1945, all fronts).
+   *     JAP 0.271: 2.69 to 1 (China, 1937 to 1941).
+   *     '_', every other army (SOV, ITA, FRA, VIC and the rest): 0.227, the middle of the laid ratios, 3.40 to 1.
    *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
    *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
    *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
@@ -609,7 +614,7 @@ export const LAND = {
    *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
    */
   bearers: {
-    killed: 0.25,
+    killed: { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271, _: 0.227 } as Record<string, number>,
     share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 } as Record<string, number>,
     litter: 4,
     aid: 503,
@@ -634,3 +639,5 @@ export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; clos
 export const smokeMeans = (nat: string): SmokeMeans | null => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
 /** An army's stretcher bearers, as a share of a block's men (LAND.bearers.share): its own, or every other army's. */
 export const bearerShare = (nat: string): number => LAND.bearers.share[nat] ?? LAND.bearers.share._;
+/** An army's share of each loss killed, the rest wounded (LAND.bearers.killed): its own, or every other army's. */
+export const killedShare = (nat: string): number => LAND.bearers.killed[nat] ?? LAND.bearers.killed._;

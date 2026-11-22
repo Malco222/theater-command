@@ -267,6 +267,39 @@ describe('(4) caught: one more hidden post, the computer\'s reserve forward at o
     expect(a.lostShares().att - z.lostShares().att).toBeCloseTo((blk.power0 * a.nightPatrol!.lost) / blk.str0 / all, 12);
     expect(a.lostShares().def).toBe(z.lostShares().def);
   });
+  it('with nothing found, its way, its end and its flares lead to a block the attack can see, never to a post still hidden', () => {
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    const front = (u: LandUnit): [number, number] => [r1(u.x), r1(Math.max(0, u.y - u.d / 2 - 40))];
+    const night = (seed: number, caught: number): { b: LandBattle; p: NonNullable<LandBattle['nightPatrol']> } => {
+      odds(0, caught);
+      const b = forest(seed, true);
+      inside(b).hideStart();
+      return { b, p: b.nightPatrol! };
+    };
+    let aimed = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      // Not caught: its end is short of a block of the defence in plain sight, else 200 m out from its own block.
+      const { b, p } = night(seed, 0);
+      expect(p.found).toBeNull();
+      const at = (u: LandUnit): boolean => front(u)[0] === p.to[0] && front(u)[1] === p.to[1];
+      expect(b.units.filter((u) => u.side === 'def' && u.hid && at(u))).toEqual([]);
+      if (b.units.some((u) => u.side === 'def' && !u.hid && at(u))) aimed++;
+      else { const by = b.unit(p.unit)!; expect(p.to).toEqual([r1(by.x), r1(by.y + by.d / 2 + 200)]); }
+      // Its way: five points, out from its block's front at t0, at its end at the night's middle, home by t1.
+      expect(p.route).toHaveLength(5);
+      expect(p.route.map((r) => r[0])).toEqual([...p.route.map((r) => r[0])].sort((a, c) => a - c));
+      expect(p.route[0]).toEqual([LAND.patrol.night.t0, p.from[0], p.from[1]]);
+      expect(p.route[2].slice(1)).toEqual(p.to);
+      expect(p.route[4]).toEqual([LAND.patrol.night.t1, p.from[0], p.from[1]]);
+      // Caught: the same end and way (chosen before the defence moved a block to its new post), the flares over it.
+      const c = night(seed, 1);
+      expect(c.p.alerted).toBe(true);
+      expect(c.p.to).toEqual(p.to);
+      expect(c.p.route).toEqual(p.route);
+      for (const [, x, y] of c.p.flares) { expect(Math.abs(x - p.to[0])).toBeLessThanOrEqual(120); expect(Math.abs(y - p.to[1])).toBeLessThanOrEqual(60); }
+    }
+    expect(aimed).toBeGreaterThan(0);
+  });
   it('a methodical computer defence\'s held reserve walks toward the attack before its line is struck, as a bold one does; off, it stands', () => {
     odds(0, 1);
     const walked = (on: boolean): { moved: boolean; shift: boolean } => {

@@ -578,7 +578,7 @@ describe('(8) never the battle\'s dice; the fog; the words; the bridge', () => {
       const g = newCampaign();
       const TC = battleCalls({ game: () => g, attack: (ids, to, f) => ({ report: orderAttack(g, ids.map((i) => g.corps.find((c) => c.id === i)!), g.regions[to], f) }) });
       const o = offers(g)[0];
-      const st = TC.battleStart(o.corps.map((c) => c.id), o.target.id, on ? { phones: true } : undefined)!;
+      const st = TC.battleStart(o.corps.map((c) => c.id), o.target.id, on ? { phones: true } : { phones: false })!;
       expect((st.view as Record<string, unknown>).phones).toBeUndefined();
       TC.battleSpeed(1);
       const v = TC.battleTick(1) as { phones?: { wires: { side: string }[] }; units: { side: string; wire?: number }[]; me: string };
@@ -589,4 +589,20 @@ describe('(8) never the battle\'s dice; the fog; the words; the bridge', () => {
       expect(v.me).toBe('att');
     }
   });
+  it('the bridge: on unless asked off (Brian, 21:21Z: "new rules start switched on"); an enemy block\'s order delay never shown', () => {
+    type V = { me: string; units: { side: string; orderIn?: number; wire?: number }[]; phones?: unknown };
+    const run = (opts?: { phones?: boolean }): V[] => {
+      const g = newCampaign();
+      const TC = battleCalls({ game: () => g, attack: (ids, to, f) => ({ report: orderAttack(g, ids.map((i) => g.corps.find((c) => c.id === i)!), g.regions[to], f) }) });
+      const o = offers(g)[0];
+      TC.battleStart(o.corps.map((c) => c.id), o.target.id, opts);
+      TC.battleSpeed(4);
+      const vs: V[] = [];
+      for (let i = 0; i < 80; i++) vs.push(TC.battleTick(1) as unknown as V);
+      return vs;
+    };
+    const plain = run(), on = run({ phones: true });
+    expect(JSON.stringify(plain)).toBe(JSON.stringify(on));
+    for (const v of plain) for (const u of v.units) if (u.side !== v.me) { expect(u.orderIn).toBeUndefined(); expect(u.wire).toBeUndefined(); }
+  }, 300_000);
 });

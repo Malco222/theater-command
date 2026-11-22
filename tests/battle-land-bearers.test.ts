@@ -7,7 +7,7 @@
 // to the last number.
 import { describe, expect, it } from 'vitest';
 import type { FieldEvent, FieldTicket, Side } from '../src/battle/core';
-import { LAND, LandBattle, PRACTICE_AIR, PRACTICE_AIR_DATE, bearerShare, sampleTicket, withJoiners, withTeams, type LandPlace, type LandUnit, type MenBlock, type MenOut } from '../src/battle/land';
+import { LAND, LandBattle, PRACTICE_AIR, PRACTICE_AIR_DATE, bearerShare, killedShare, sampleTicket, withJoiners, withTeams, type LandPlace, type LandUnit, type MenBlock, type MenOut } from '../src/battle/land';
 import { newCampaign, offers } from '../src/battle/ui/campaign';
 import { orderAttack } from '../src/campaign/turn';
 import { Rng, hashString } from '../src/core/rng';
@@ -136,8 +136,12 @@ describe('(1) switched off: the battle of ec6f8e9c, and nothing of the bearers',
 // ---- (2) the bearers go out and come back ---------------------------------------------------------------------------
 
 describe('(2) the bearers go out after the first loss and are back 330 s later', () => {
-  it('the table: a quarter killed, 4 to a stretcher, the aid post 503 m back, at 3.048 m a second: 330 s a trip', () => {
-    expect(B.killed).toBe(0.25);
+  it('the table: killed by army (the design director, 19:14Z), 4 to a stretcher, the aid post 503 m back, at 3.048 m a second: 330 s a trip', () => {
+    const want: Record<string, number> = { USA: 0.192, UK: 0.23, CAN: 0.23, AUS: 0.23, NZL: 0.23, SAF: 0.23, IND: 0.23, GER: 0.279, JAP: 0.271 };
+    for (const [nat, k] of Object.entries(want)) { expect(B.killed[nat]).toBe(k); expect(killedShare(nat)).toBe(k); }
+    // The Soviets, Italy, France, Vichy and every other army: the middle of the laid ratios, 3.40 wounded to 1 killed.
+    for (const nat of ['SOV', 'ITA', 'FRA', 'VIC', 'CHN', 'POL', 'HUN']) expect(killedShare(nat)).toBe(0.227);
+    expect(Object.keys(B.killed).sort()).toEqual([...Object.keys(want), '_'].sort());
     expect(B.litter).toBe(4);
     expect(B.aid).toBe(503);
     expect(B.pace).toBe(3.048);
@@ -153,7 +157,7 @@ describe('(2) the bearers go out after the first loss and are back 330 s later',
     hit(b, u, d);
     const l = b.litter(u)!;
     expect(l.all).toBeCloseTo(bearerShare('USA') * u.str0, 12);
-    expect(l.waiting).toBeCloseTo(d * (1 - B.killed) * (1 - B.light.share), 12);
+    expect(l.waiting).toBeCloseTo(d * (1 - killedShare(u.nat)) * (1 - B.light.share), 12);
     expect(l.trips).toEqual([]);
     expect(l.out).toBe(0);
     // The aid post: 503 m behind where it started, toward the attack's own edge (south), on the field.
@@ -161,7 +165,7 @@ describe('(2) the bearers go out after the first loss and are back 330 s later',
     b.step();
     expect(l.trips.length).toBe(1);
     expect(l.trips[0].back - t0).toBeCloseTo(TRIP, 2);
-    expect(l.out).toBeCloseTo(d * (1 - B.killed) * (1 - B.light.share) * B.litter, 12);
+    expect(l.out).toBeCloseTo(d * (1 - killedShare(u.nat)) * (1 - B.light.share) * B.litter, 12);
     expect(l.waiting).toBeCloseTo(0, 12);
     // Its side told, once, in his words; never the computer's.
     const told = b.log.filter((e) => e.what === 'land:bearers');
@@ -193,7 +197,7 @@ describe('(2) the bearers go out after the first loss and are back 330 s later',
     b.step();
     const l = b.litter(u)!, all = l.all;
     expect(l.out).toBeCloseTo(all, 12);
-    expect(l.waiting).toBeCloseTo(0.1 * 0.75 * 0.83 - all / B.litter, 12);
+    expect(l.waiting).toBeCloseTo(0.1 * (1 - killedShare(u.nat)) * 0.83 - all / B.litter, 12);
     const w0 = l.waiting, back = l.trips[0].back;
     while (b.t + 1e-9 < back && !b.over) b.step();
     expect(l.waiting).toBe(w0);
@@ -256,7 +260,7 @@ describe('(4) the light cases are back in the line 30 s after they fell, up to i
     steps(b, 10);
     const d = 0.05, t0 = b.t;
     hit(b, u, d);
-    const s1 = u.str, n = d * (1 - B.killed) * B.light.share, lot = b.litter(u)!.light;
+    const s1 = u.str, n = d * (1 - killedShare(u.nat)) * B.light.share, lot = b.litter(u)!.light;
     expect(lot.length).toBe(1);
     expect(lot[0].at).toBe(Math.round((t0 + 30) * 1000) / 1000);
     expect(lot[0].n).toBeCloseTo(n, 12);
@@ -270,15 +274,41 @@ describe('(4) the light cases are back in the line 30 s after they fell, up to i
     expect(u.mor).toBe(mor);
     expect(b.litter(u)!.light).toEqual([]);
     expect(b.returns).toEqual([{ t: Math.round(b.t * 1000) / 1000, unit: u.id, n: u.str - s1 }]);
-    b.step();
-    const r = b.returns[0];
-    expect(b.view('att').returns).toEqual([{ t: r.t, unit: u.id, n: Math.round((r.n * u.men0) / u.str0) }]);
-    expect(b.view('att').returns![0].n).toBeGreaterThan(0);
+    const r = b.returns[0], sec = Math.floor(r.t + 1e-9), want = [{ t: r.t, unit: u.id, n: Math.round((r.n * u.men0) / u.str0) }];
+    expect(want[0].n).toBeGreaterThan(0);
+    // Not shown while its battle second runs (more of the block's may come back in it); shown once it is over.
+    expect(b.view('att').returns).toBeUndefined();
+    while (Math.floor(b.t + 1e-9) <= sec && !b.over) { expect(b.view('att').returns).toBeUndefined(); b.step(); }
+    b.fog = true;
+    expect(b.view('att').returns).toEqual(want);
     expect(b.view('def').returns).toBeUndefined();
-    // Two battle seconds on, the view has told it.
-    steps(b, 25);
+    // The same entry, unchanged, for the two battle seconds after its own; then told.
+    while (Math.floor(b.t + 1e-9) < sec + 3 && !b.over) { expect(b.view('att').returns).toEqual(want); b.step(); }
     expect(b.view('att').returns).toBeUndefined();
     expect(b.returns.length).toBe(1);
+  }, 300_000);
+  it('a block\'s light cases back in one battle second: one entry, the sum, never changed once shown', () => {
+    const b = quiet(), u = footOf(b, 'att');
+    steps(b, 10);
+    hit(b, u, 0.05);
+    steps(b, 3);
+    hit(b, u, 0.05);
+    const lot = b.litter(u)!.light;
+    expect(lot.length).toBe(2);
+    expect(Math.floor(lot[0].at + 1e-9)).toBe(Math.floor(lot[1].at + 1e-9));
+    const seen = new Map<string, number>();
+    let shown = 0;
+    for (let k = 0; k < 400 && !b.over; k++) {
+      b.step();
+      for (const x of b.view('att').returns ?? []) {
+        const key = `${x.t}:${x.unit}`;
+        if (seen.has(key)) expect(x.n).toBe(seen.get(key));
+        else { seen.set(key, x.n); shown += x.n; }
+      }
+    }
+    expect(b.returns.length).toBe(1);
+    expect(seen.size).toBe(1);
+    expect(shown).toBe(Math.round((b.returns[0].n * u.men0) / u.str0));
   }, 300_000);
   it('never above its strength at the start', () => {
     const b = quiet(), u = footOf(b, 'att');
@@ -507,8 +537,9 @@ describe('(8) the drill draws the wounded, the stretchers and the light cases ba
 // ---- (9) the view by side, and the bridge ------------------------------------------------------------------------------
 
 describe('(9) the view: each side its own blocks\' (all of them with no side, as a recording is); the bridge', () => {
-  it('his own bearers, aid posts and men back; the enemy\'s only in a view asked with no side', () => {
+  it('his own bearers, aid posts and men back; the enemy\'s only in a view asked with no side, or unfogged', () => {
     const b = quiet(), u = footOf(b, 'att'), foe = footOf(b, 'def');
+    b.fog = true;
     steps(b, 10);
     hit(b, u, 0.05); hit(b, foe, 0.05);
     b.step();
@@ -521,6 +552,10 @@ describe('(9) the view: each side its own blocks\' (all of them with no side, as
     // The defence's aid post: behind it, toward the north edge.
     const a = b.view().aid!.find((x) => x.unit === foe.id)!;
     expect(a.y).toBeCloseTo(Math.min(b.field.h, foe.home[1] + 503), 1);
+    // Unfogged (the card knew the defence): every side's, as the telephone lines are.
+    b.fog = false;
+    expect(sides('att').sort((x, y) => x - y)).toEqual([u.id, foe.id].sort((x, y) => x - y));
+    expect(sides('def').sort((x, y) => x - y)).toEqual([u.id, foe.id].sort((x, y) => x - y));
   });
   const rig = () => {
     const g = newCampaign();
@@ -536,10 +571,10 @@ describe('(9) the view: each side its own blocks\' (all of them with no side, as
     for (let i = 0; i < 600 && !v.over && !until(v); i++) { v = TC.battleTick(1) as unknown as V; said.push(...v.events); TC.battleMen(); }
     return { v, said };
   };
-  it('off: no bearers, aid posts or men back in the view, and no man wounded or bearing', () => {
+  it('off ({ bearers: false }): no bearers, aid posts or men back in the view, and no man wounded or bearing', () => {
     const { g, TC } = rig();
     const o = offers(g)[0];
-    TC.battleStart(o.corps.map((c) => c.id), o.target.id);
+    TC.battleStart(o.corps.map((c) => c.id), o.target.id, { bearers: false });
     TC.battleMen();
     const { v, said } = run(TC, (x) => x.units.some((u) => u.side === 'att') && (x as unknown as { t: number }).t > 400);
     expect(v.bearers ?? v.aid ?? v.returns).toBeUndefined();

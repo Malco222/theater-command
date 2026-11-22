@@ -49,7 +49,8 @@
 //                                   and flushes out what hides within 60 m of it; the computer's attack does it too once it
 //                                   has been ambushed. Orders by radio wait by each army's sets (LAND.radio.nations)
 //                                   Night patrol (release 2; Brian, 22 November 17:33Z; the design director 18:36Z, Q6 to Q8):
-//                                   { patrol: true }, with { hide: true } (it needs hiding: with hiding off no patrol goes
+//                                   on unless { patrol: false } (Brian, 21:21Z: new rules start switched on, his toggle
+//                                   kept), with { hide: true } (it needs hiding: with hiding off no patrol goes
 //                                   out and nothing is drawn, so the general's toggle must say "needs hiding on"). The night
 //                                   before, the attack sends one patrol: the computer's always, from its most forward block
 //                                   on foot; his only by his order while he places his army ({ setup: true }), TC.battleOrder
@@ -113,7 +114,8 @@
 //                                   and the screen's rounds in TC.battleMen (w smoke, hang) draw it; with it on, the drill's
 //                                   own smoke salvoes are not fired. Off: no block ever carries smoke, and there are no screens
 //                                   Field telephone lines (release 2; Brian, 22 November 17:33Z; the design director, 18:36Z,
-//                                   PHONES Q1 to Q3): { phones: true }: as the clock starts every block of the defence on the
+//                                   PHONES Q1 to Q3): on unless { phones: false } (Brian, 21:21Z: new rules start switched
+//                                   on, his toggle kept): as the clock starts every block of the defence on the
 //                                   field has a telephone wire from the defence's headquarters (the middle of its zone's back
 //                                   edge; a corps that comes up from next door later has none). Each blow from an enemy gun
 //                                   block or mortar team on the block (each tenth of a battle second it is struck) cuts a line
@@ -128,8 +130,10 @@
 //                                   (below), the lineman in TC.battleMen (ln, below), and land:wire and land:mend events
 //                                   say the rest. Off: there are no wires, no block carries wire, and orders go as ever
 //                                   Stretcher bearers (release 2; Brian, 22 November 17:33Z: "make it where we can toggle it
-//                                   off"; the design director's Q4 and Q5, 18:36Z): { bearers: true }: of each block's
-//                                   losses a quarter are killed and the rest wounded; its stretcher bearers (2 to 3.5% of its
+//                                   off"; the design director's Q4 and Q5, 18:36Z): on unless { bearers: false } (Brian,
+//                                   21:21Z: new rules start switched on, his toggle kept): of each block's losses its
+//                                   army's share are killed (a fifth to a quarter and more, LAND.bearers.killed) and the
+//                                   rest wounded; its stretcher bearers (2 to 3.5% of its
 //                                   men, by army) carry the wounded back to its aid post, 503 m behind where it started, and
 //                                   back (330 battle seconds a trip), its blows the weaker by the men away while they are
 //                                   out; its light cases (17% of the wounded) are back in the line 30 battle seconds after
@@ -225,15 +229,17 @@
 // is one man, outside the drill (TC.battleMen) and outside the battle's N. A click on him shows 'says' (the corps, its
 // divisions, men and strength, when and where it comes up, and the time it reaches his line where his staff fights it,
 // also as 'line'). Nothing in the fight reads him.
-// Night patrol (release 2), only with { patrol: true } and hiding on, once a patrol has gone out (from the first view
+// Night patrol (release 2), only with the patrol on (the default; { patrol: false } turns it off) and hiding on, once a patrol has gone out (from the first view
 // after the clock starts): patrol, { side, unit, t0, t1, men, from, to, found, alerted, flares }: the attack's patrol the
 // night before, out from battle second t0 to t1 (negative: -2400 to -600, the night before; looks only), 'men' men of
-// block 'unit', from its block's front 'from' ([x, y]) to 'to' ([x, y]: the hidden post it found, else the enemy block
-// nearest it, and where it was caught when it was). found: { x, y, kind } of the hidden post it found (kind its block's
+// block 'unit', from its block's front 'from' ([x, y]) to 'to' ([x, y]: the hidden post it found, else short of the
+// enemy block nearest it that the attack can see, never a post still hidden, and where it was caught when it was);
+// route, [[t, x, y], ...], its way out and back through the night (five points, from 'from' at t0 to 'to' at the night's
+// middle and home by t1, bending a little left and right; walk it straight between them). found: { x, y, kind } of the hidden post it found (kind its block's
 // kind, or its team 'mg' or 'mor'), null where none. alerted: it was caught. flares: [[t, x, y], ...], three flares the
 // defence put up over it when caught, at battle second t (within t0 to t1) at x, y; none otherwise. The attack sees all
 // of it. The defence sees it only once alerted, as { side, t0, t1, men, to, found: null, alerted: true, flares }: the
-// patrol's men where it caught them and the flares, never the block they came from. Draw the night scene as the
+// patrol's men where it caught them and the flares, never the block they came from nor its route. Draw the night scene as the
 // recording plays it; nothing in the fight reads it after the clock starts.
 // Hedge cutters (release 2, ruling 242), only with { cutters: true }: cuts, each { t0, t1, unit, x, y, yaw, width }: a
 // tank block 'unit' cuts a gap 'width' metres wide (3.2, the gateways' own) through the hedge at x, y, the hedge running
@@ -246,7 +252,7 @@
 // until 'until' (draw it thick from t, thinning towards until; gone then); listed while it stands. Smoke is seen by both
 // sides: 'unit' is left out for an enemy block he has not met. Event { what: 'land:smoke', unit, side, x, y, extra: {
 // screen, until } } as one is laid ("1st Regiment lays a smoke screen."). Its rounds come in TC.battleMen (below).
-// Field telephone lines (release 2; the design director, 18:36Z), only with { phones: true }: phones, { hq: [x, y],
+// Field telephone lines (release 2; the design director, 18:36Z), only with the lines on (the default; { phones: false }): phones, { hq: [x, y],
 // wires, cuts, mends, held }, from the first battle step, for the defence's own side, and everything where the view is
 // unfogged (the card knew the defence): hq, the defence's headquarters (draw a command post dugout there). wires, each
 // { id, side, pts, hq, unit, lines, cut }: a telephone wire from hq to block 'unit', pts [hq, the block's middle now]
@@ -264,13 +270,15 @@
 // the two telephone lines to 21st Infantry Division is cut. Orders still go by the other."; by: 'runner' or 'radio';
 // mend: when the lineman will have it mended), and { what: 'land:mend', unit, side, x, y, extra: { wire, man } } ("The
 // line to 21st Infantry Division is mended."). A recording names them wires, wireCuts and wireMends.
-// Stretcher bearers (release 2; the design director's Q4 and Q5, 18:36Z), only with { bearers: true }, his own side's
-// blocks (every side's in a view asked with no side, as a recording is): bearers, each { unit, out, waiting, back } for a
+// Stretcher bearers (release 2; the design director's Q4 and Q5, 18:36Z), only with the bearers on (the default; { bearers: false }), his own side's
+// blocks (every side's where the view is unfogged, the card having known the defence, and in a view asked with no side,
+// as a recording is): bearers, each { unit, out, waiting, back } for a
 // block with bearers out carrying ('out', men) or wounded lying for them ('waiting', men), and the battle second the
 // next of its bearers are back ('back', null with none out); aid, each { side, unit, x, y }: the aid post of a block
 // that has had wounded (draw a dressing station there: a stretcher carries its wounded to it, and they stay there);
 // returns, each { t, unit, n }: the light cases of block 'unit' back in the line at battle second t, n men (a block's in
-// one battle second together), those of the last two battle seconds: tell each once by its t and unit. Event { what:
+// one battle second together), those of the two battle seconds before this one: a second is listed only once it is
+// over, so an entry never changes once shown; tell each once by its t and unit. Event { what:
 // 'land:bearers', unit, side, x, y } to his own side the first time a block's bearers go out. The men (TC.battleMen,
 // below) draw the wounded and the stretchers. Looks and numbers: the fight is the bearers' own rule, never the drill's.
 // Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
@@ -502,14 +510,14 @@
 //   spotter (fo) goes up with the friendly foot block foWith when its guns first fire at block foOn from further than
 //   500 m, and the pair stays out to the battle's end (foOn absent while the guns are quiet): a new foWith or foOn
 //   sends the same pair there on foot, so it moves, never jumps.
-//   Field telephone lines (release 2), only with { phones: true }: ln on a block of the defence, the linemen out on its
+//   Field telephone lines (release 2), only with the lines on (the default): ln on a block of the defence, the linemen out on its
 //   wire (shown where view.phones is), each a man { k, r, x, y, f, p, v, c, ln: 1 } outside its squads and outside the
 //   battle's N, k 300 and on by his mend's man (view.phones.mends). He leaves the headquarters at the mend's t0 in
 //   pose reel (walking, the cable reel in his hands), walks the wire to the cut at 6 m a battle second, kneels there in
 //   pose splice (the two ends in his hands) from t1 until the mend's t, then walks back along the wire (walk) and leaves
 //   the list at the headquarters. He is never struck. r rifle (a signaller's rifle slung).
-//   Stretcher bearers (release 2; { bearers: true }; the recording keys of the ground thread, 17:37Z and 18:18Z): a quarter
-//   of the men who fall are killed (down, as ever); the rest carry wd, the battle time they fell, and lie wounded (p
+//   Stretcher bearers (release 2; on unless { bearers: false }; the recording keys of the ground thread, 17:37Z and
+//   18:18Z): its army's share of the men who fall are killed (down, as ever; LAND.bearers.killed); the rest carry wd, the battle time they fell, and lie wounded (p
 //   wounded) for the bearers. The block's stretcher bearers carry br: 1 (riflemen, two to a stretcher, as many stretchers
 //   as its bearers carry at once). A pair walks to a wounded man (walk), kneels by him (wait) while they turn to the way,
 //   and carries him head first to the block's aid post (view.aid) at 3 m a battle second: he is p carried, facing the
@@ -728,7 +736,9 @@ export function unitOut(u: UnitBase, t = 0, me?: Side, sim?: LandBattle): Record
     ...(land.hid ? { hid: 1 } : {}),
     ...(land.unloc !== undefined && t < land.unloc ? { vague: 1 } : {}),
     ...(land.search ? { search: [Math.round(land.search[0]), Math.round(land.search[1])] } : {}),
-    ...(land.orderAt !== undefined ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
+    // The seconds till an order reaches it: the player's own blocks only (an enemy's would give away his cut wire or his
+    // headquarters hit).
+    ...(land.orderAt !== undefined && (me === undefined || u.side === me) ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
     // Hold until relieved (release 2): waiting for help, the player's own blocks only (never giving the enemy's away).
     ...(land.waits && me !== undefined && u.side === me ? { waits: { due: land.waits.due, ...(land.waits.late ? { late: true } : {}), ...(land.waits.free ? { free: true } : {}) } } : {}),
     // Hedge cutters (release 2): a tank block carrying them, either side's (kit is seen; never on an enemy hidden from
@@ -813,12 +823,12 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     ...(v.coming ? { coming: v.coming } : {}),
     // The rider ahead (release 2, land): the player's own side's despatch riders, only with { rider: true }.
     ...(v.riders ? { riders: v.riders } : {}),
-    // Night patrol (release 2, land): the night's patrol as his side sees it, only with { patrol: true }.
+    // Night patrol (release 2, land): the night's patrol as his side sees it, only with the patrol on (the default).
     ...(v.patrol ? { patrol: v.patrol } : {}),
     // Hedge cutters and smoke on call (release 2, land): the cuts and screens his side sees, only with their switches.
     ...(v.cuts ? { cuts: v.cuts } : {}),
     ...(v.screens ? { screens: v.screens } : {}),
-    // Field telephone lines (release 2, land): the defence's wires, as his side sees them, only with { phones: true }.
+    // Field telephone lines (release 2, land): the defence's wires, as his side sees them, only with the lines on (the default).
     ...(v.phones ? { phones: v.phones } : {}),
     // Stretcher bearers (release 2, land): his own blocks' bearers, aid posts and light cases back, only with the switch.
     ...(v.bearers ? { bearers: v.bearers } : {}),
@@ -911,7 +921,9 @@ export function battleCalls(h: BattleHooks) {
       // Hidden in the woods (release 2): blocks in woods when the clock starts are hidden from the other side.
       if (opts?.hide) sim.hideOn();
       // Night patrol (release 2): the attack's patrol the night before; it needs hiding on (with it off, none goes out).
-      if (opts?.patrol) sim.patrol = true;
+      // On unless asked off (Brian, 21:21Z: "new rules start switched on"; his toggle kept): the 3D game's two-argument
+      // call has it. The rules' own LandBattle keeps it off, so a battle fought without the bridge is as before.
+      sim.patrol = opts?.patrol !== false;
       // Measured armour (release 2): each tank's armour by face and range weighs the blows on her.
       if (opts?.armour) sim.measured = true;
       // Army names (release 2): the regiment blocks named as their armies named a third of a division (the historian).
@@ -923,9 +935,9 @@ export function battleCalls(h: BattleHooks) {
       if (opts?.cutters) sim.cutters = true;
       if (opts?.smoke) sim.smoke = true;
       // Field telephone lines (release 2; the design director, 18:36Z): by its own switch.
-      if (opts?.phones) sim.phones = true;
-      // Stretcher bearers (release 2): by its own switch.
-      if (opts?.bearers) sim.bearers = true;
+      sim.phones = opts?.phones !== false;
+      // Stretcher bearers (release 2): by its own switch, on unless asked off as the lines and the patrol are.
+      sim.bearers = opts?.bearers !== false;
       const f = sim.field;
       return {
         field: {

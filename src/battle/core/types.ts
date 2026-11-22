@@ -553,7 +553,7 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * patrol's men where it was caught and the flares (no 'unit', 'from' or what was found). Looks and words only beyond
    * what the rules settled at the start. Left out where no patrol went out.
    */
-  patrol?: { side: Side; unit?: number; t0: number; t1: number; men: number; from?: [number, number]; to: [number, number]; found: { x: number; y: number; kind: string } | null; alerted: boolean; flares: [number, number, number][] };
+  patrol?: { side: Side; unit?: number; t0: number; t1: number; men: number; from?: [number, number]; to: [number, number]; route?: [number, number, number][]; found: { x: number; y: number; kind: string } | null; alerted: boolean; flares: [number, number, number][] };
   /**
    * Land, hedge cutters (release 2; ruling 242; LandBattle.cutters on): the gaps tank blocks have cut through hedges, the
    * side's own and those cut by enemy blocks it knew as the cut began (all of them with no side given, as a recording

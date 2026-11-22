@@ -37,7 +37,7 @@
 import data from '../../../data/battle/drill.json';
 import { DT, type Side, type Zone } from '../core/types';
 import { GROUNDS, type Ground, type LandField } from './field';
-import { LAND, MOTION, bearerShare, type Kind, type Team } from './rules';
+import { LAND, MOTION, bearerShare, killedShare, type Kind, type Team } from './rules';
 import type { LandBattle, Screen } from './sim';
 import type { LandUnit } from './units';
 import { fateOf } from './armour';
@@ -977,7 +977,7 @@ export class Drill {
   private hurt(sq: Squad, m: Man): void {
     if (VEHICLE.has(m.role) || CREWED.has(m.role) || m.wd !== undefined) return;
     const B = LAND.bearers, u = sq.u;
-    if (roll(this.seed, u.id, m.n, 71) >= 1 - B.killed) return;
+    if (roll(this.seed, u.id, m.n, 71) >= 1 - killedShare(u.nat)) return;
     m.wd = this.b.t; m.pose = 'wounded';
     if (m.j !== undefined && roll(this.seed, u.id, m.n, 72) < B.light.share) { m.light = true; (sq.dressing ??= []).push(m); }
     else (sq.lying ??= []).push(m);
