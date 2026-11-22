@@ -71,6 +71,7 @@ namespace AirShow
 		bool bFire = false;    // its dead engine burning
 		int Cover = -1;        // the escort group over it
 		double Back = 0.0, Down = 0.0; // metres behind and below its box, along the box's heading
+		bool bShown = true;    // shown as a model fallen out of its box (the view's model 1; AR1); else counted, never shown
 	};
 
 	/** Whom a fighter group is firing at this tick, and how hard (extra.fire). */
@@ -105,6 +106,10 @@ namespace AirShow
 		int Quarry = -1, With = -1;
 		double Skill = -1.0;
 		int Figures = 0, Per = 1, N = 0;
+		/** The boxes its models fly in, in trail (the view's extra.boxes, AR2: a bomber box of 24 models, SlotOf's eight
+		 * vics of three; a fighter one of 20, five fours); 0 where an older recording does not say. SlotOf lays every
+		 * model's box from its slot alone, so this is a reading only. */
+		int Boxes = 0;
 		Act Doing = Act::March;
 		int Engaged = -1;
 		std::vector<Fire> Firing;
@@ -153,6 +158,10 @@ namespace AirShow
 		int GunBox = -1;           // air:lost, air:hit, a fighter: the box whose gunners brought it down or hit it (-1: not gunners)
 		int GunSeat = -1;          // (and that bomber's seat in its group, as the battle numbers them; -1: not said)
 		std::string Part;          // air:lost: where it was hit, as the battle says (engine, wing, tail, cockpit, fuselage)
+		/** The models it moves in the picture (AR1, a model falls only for its share of the losses): air:lost, how many
+		 * fall (0 none: told, never shown; the last loss, the rest of the group); air:straggle, 1 a model falls out of
+		 * its box, 0 none. 1 where an older recording does not say, as every loss was a fall. */
+		int Models = 1;
 	};
 
 	/** A ship under attack, as the view's ships give it. */
@@ -407,6 +416,9 @@ namespace AirShow
 		 * to close up a box flying on him after its bombs (RallyFrame). */
 		std::map<int, double> RallyOver;
 		double RallyMadeFar = 0.0;
+		/** The bombers out of their box's shape this frame, by key: a straggler fallen out of it, or a model made still
+		 * closing up to its slot (neither is in the box's turn, nor its spread). */
+		std::set<int> NotInBox;
 		int Rushes = 0; // falling bombs' rushes given (bomb_release, ending at the landing, within 400 m of the eye)
 		std::map<std::string, int> FallsBy;  // falls begun, by the way down they play
 		int FallsOnTime = 0, FallsOffTime = 0; // falls that struck the sea or ground within a quarter of the battle's dur, or not
@@ -438,6 +450,8 @@ namespace AirShow
 		std::vector<std::string> TorpedoDropModel;
 		int FallsLow = 0;
 		int FallsTrue = 0;                 // falls from a height drawn over the battle's band, as long as an aeroplane takes from there
+		/** Losses told with no model falling, stragglers counted but not shown falling out (AR1: Event::Models 0). */
+		int LostUnshown = 0, StragUnshown = 0;
 		/** Dive bombers after their pull-out and torpedo planes after their drop: the highest one flew over the ground or the sea
 		 * (they leave low and never climb back). */
 		double LeftLowMost = 0.0;
@@ -446,6 +460,9 @@ namespace AirShow
 		int BurstsAsked = 0;               // of the bursts, those a pilot opened because a hit the battle had counted was his to make
 		long AimSteps = 0;                 // steps a pilot flew his sight on to an aircraft the battle had counted his to hit
 		int GunnerBursts = 0, GunnerBurstsOn = 0; // bomber gunners' bursts; those that struck a fighter
+		/** By the gunner's window (nose, chin, top, radio, ball, waistL, waistR, tail): the steps a fighter was in his arc
+		 * (the nearest to his bomber, or the one the battle gave him), and the bursts he fired. */
+		std::map<std::string, long> GunnerSees, GunnerFires;
 		int Strikes = 0, GroundStrikes = 0; // Hit effects on aircraft; on the ground or the sea
 		int ToGuns = 0;                    // aircraft the battle lost to guns (a fighter group's, or a box's gunners')
 		int ToGunsStruck = 0;              // of those, falling as the stream that brought them down struck them
@@ -811,6 +828,7 @@ namespace AirShow
 			double FightAt = -1.0;             // a fighter group: the air time its fight began (-1: in none)
 			double ShareAt = -1e9;             // a fighter group: the air time its pairs may next be shared out again
 			int Pending = 0;                   // losses of the group held for the guns to bear (Held::bForShot)
+			int Extra = 0;                     // the further models still to fall with a held loss of several (Event::Models)
 			std::map<int, std::string> Pass;   // the pass its contact named against each group
 			std::map<std::string, double> FlakNext;
 			std::deque<double> Owed;           // air times of models fallen before the group's figures dropped
@@ -1078,6 +1096,16 @@ namespace AirShow
 		double Chasing(const Craft& C) const;
 		/** The highest ground or sea under an aircraft and on its way over the next 3 s (high ground coming up). */
 		double FloorAhead(const Craft& C) const;
+		/** An escort's station by its role, as the record has it (the raids answer's Part 3.4; the audit's 4.6), drawn from
+		 * its bombers' place (the battle's own place for the escort is kept for the fight's reckoning): close, 600 to
+		 * 1,200 m over them, its fours split over both flanks about 900 m out, S-turns either side of their track in legs
+		 * of 25 to 30 s; top, 1,500 to 3,000 m over, a little behind, legs of 40 to 60 s. False for a sweep (flown where
+		 * the battle has it, ahead) and a group with no role or no bombers. */
+		bool EscortStation(const Craft& C, const Group& G, Vec& To, Vec& ToVel) const;
+		/** The close escort's and top cover's numbers: metres over the bombers and out on a flank, the weave's swing
+		 * either side and the air seconds of a leg. */
+		double CloseOverM = 900.0, CloseOutM = 900.0, CloseSwingM = 550.0, CloseLegS = 27.5;
+		double TopOverM = 2000.0, TopOutM = 600.0, TopSwingM = 900.0, TopLegS = 50.0;
 		void Ease(const Craft& C, Cmd& K, double Most) const;
 		/** A command sharpened for the last of a firing pass: his nose on to the aim as hard as his aircraft turns. */
 		void Bear(const Craft& C, Cmd& K) const;
@@ -1151,6 +1179,19 @@ namespace AirShow
 		/** Whether an aircraft going down will be passing so close to a place T seconds on that no strike could be
 		 * drawn there (Masked, then); But: the one the strike is for. */
 		bool Shadowed(const Vec& Place, double T, int But) const;
+		/** Some gun's rounds drawn in the last few air seconds have yet to pass within Room metres of an aircraft made
+		 * now at Place, flying on at Vel (RoundsOut, each round's straight way from its muzzle). A model is never made
+		 * there (Reconcile): rounds already on their way would be drawn through it. */
+		bool InStream(const Vec& Place, const Vec& Vel, double Room) const;
+		/** Each Gun effect sent, for InStream: the air time, the muzzle, the rounds' velocity (the muzzle's and the
+		 * aircraft's) and their life; kept 3 air s. */
+		struct RoundOut
+		{
+			double T = 0.0;
+			Vec From, Vel;
+			double Life = 0.0;
+		};
+		std::deque<RoundOut> RoundsOut;
 		/** What a bomber is drawn lifted by at an air time, her load just gone (Advance): rounds are sent to where
 		 * she is drawn. */
 		double LiftAt(const Craft& C, double At) const;
@@ -1243,6 +1284,7 @@ namespace AirShow
 		 * plays as it did. */
 		ShipGuns::Gunnery Gunners;
 		std::set<int> ShipsAfloat, ShipsDown; // ships seen afloat; ships whose sinking has been shown
+		std::set<std::pair<int, int>> StragsUnshown; // (group, straggler) counted but never shown falling out (AR1)
 		std::vector<ShipGuns::Hull> Hulls() const;
 		ShipGuns::Plane PlaneOf(const Craft& C) const;
 		void ShotsOut(const std::vector<ShipGuns::Shot>& Fired);

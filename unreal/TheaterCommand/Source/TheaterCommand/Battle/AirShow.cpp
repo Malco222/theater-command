@@ -503,12 +503,19 @@ namespace AirShow
 			Lat = std::max(G.W * 0.25, S.Span * 6.0);
 			Back = Lat;
 			Step = 12.0;
+			// Boxes of FighterBox (20: five fours, a squadron and its spares), in trail, each about three box-depths
+			// behind the one before, as the bombers' boxes fly (AR2, the view's extra.boxes): a big group is a stream,
+			// never one line abreast growing with it. Each box is laid out alike.
+			constexpr int FighterBox = 20;
+			const int Trail = Slot / FighterBox;
+			Slot %= FighterBox;
+			Bk = Trail * 4.5;
 			if (G.Form == "line")
 			{
 				// Fours in line astern, the fours abreast.
 				const int Four = Slot / 4, K = Slot % 4;
 				Rt = (Four % 2 == 0 ? -1.0 : 1.0) * ((Four + 1) / 2) * 1.6;
-				Bk = K * 0.45;
+				Bk += K * 0.45;
 				Hi = -K * 0.1 + Four * 0.2;
 			}
 			else if (G.Form == "fours")
@@ -517,7 +524,7 @@ namespace AirShow
 				static const double Finger[4][3] = { { 0, 0, 0 }, { -0.45, 0.3, -0.05 }, { 0.65, 0.22, 0.08 }, { 1.1, 0.5, 0.12 } };
 				const int Four = Slot / 4, K = Slot % 4;
 				Rt = Finger[K][0] + (Four % 2 == 0 ? -1.0 : 1.0) * ((Four + 1) / 2) * 2.6;
-				Bk = Finger[K][1] + Four * 0.25;
+				Bk += Finger[K][1] + Four * 0.25;
 				Hi = Finger[K][2] + Four * 0.6;
 			}
 			else
@@ -527,7 +534,7 @@ namespace AirShow
 				const int V = Slot / 3, K = Slot % 3;
 				const double Tight = G.Form == "vic" ? 0.6 : 1.0;
 				Rt = (Three[K][0] + (V % 2 == 0 ? -1.0 : 1.0) * ((V + 1) / 2) * 1.5) * Tight;
-				Bk = (Three[K][1] + V * 0.3) * Tight;
+				Bk += (Three[K][1] + V * 0.3) * Tight;
 				Hi = Three[K][2] + V * 0.5;
 			}
 		}
@@ -668,7 +675,10 @@ namespace AirShow
 				// (never on top of another: two gaps that close within a moment of each other would have the second made
 				// where the first still is, one airframe inside the other, and a gunner's rounds drawn through both. It
 				// comes in a length or two farther back, behind the one before it)
+				// (nor in a stream: a gunner's rounds on their way where it came in would be drawn through it. It comes in
+				// farther back, clear of them; still in one, it waits a moment)
 				const double Clear = G.bFighter ? 60.0 : 90.0;
+				bool bStreamed = false;
 				for (int Try = 0; bAirborne && Try < 8; ++Try)
 				{
 					bool bTaken = false;
@@ -677,9 +687,11 @@ namespace AirShow
 						const Craft& O = Pair.second;
 						if (O.Doing != Role::Gone && Len(O.P - At) < Clear) { bTaken = true; break; }
 					}
-					if (!bTaken) break;
+					bStreamed = InStream(At, RallyLead ? LeadVel : GroupVelocity(G.Id), 35.0);
+					if (!bTaken && !bStreamed) break;
 					At = At - F * Clear;
 				}
+				if (bStreamed) break;
 				// (and never made under the sea or in the ground: a box drawn low, its lower vics stepped down under it)
 				if (bAirborne) At.Z = std::max(At.Z, GroundAt(At.X, At.Y) + TorpedoLowM);
 				if (RallyLead) Check.RallyMadeFar = std::max(Check.RallyMadeFar, Len(At - LeadAt));
@@ -691,7 +703,7 @@ namespace AirShow
 				if (bIntoFight) ComeIn(C, G);
 			}
 		}
-		else if (Have - B.Pending > Want)
+		else if (Have - B.Pending - B.Extra > Want)
 		{
 			// One model too many (a loss still held for the guns to bear is a model yet to fall, not one too many): a
 			// fighter already out of the fight first, then the youngest joining, else the last in the formation, peels
@@ -706,7 +718,7 @@ namespace AirShow
 				return Ra != Rb ? Ra < Rb : Ca.Slot > Cb.Slot;
 			});
 			// (never one a burst the battle counted is on now, its rounds on their way: another goes, or it waits)
-			int Go = Have - B.Pending - Want;
+			int Go = Have - B.Pending - B.Extra - Want;
 			for (size_t K = 0; K < Order.size() && Go > 0; ++K)
 			{
 				Craft& Off = *Find(Order[K]);
@@ -1114,8 +1126,10 @@ namespace AirShow
 			const auto Box = Bands.find(C.Group);
 			if (Box != Bands.end() && Box->second.bDropped && Rally(C, *G, Box->second, Dt)) return;
 		}
-		// In its place: the formation's speed, a slow escort weaving beside its bombers.
+		// In its place: the formation's speed, a slow escort weaving beside its bombers; an escort with a role at its
+		// station over them (EscortStation).
 		Vec To = SlotPlace(*G, C.Slot), ToVel = GV;
+		const bool bStation = C.bFighter && G->Doing != Act::Fight && EscortStation(C, *G, To, ToVel);
 		// How near the enemy the rules have it making for (its quarry; an escort's, the enemy coming for its bombers):
 		// nothing at 7 km, all of it inside 3 km.
 		double Near = 0.0;
@@ -1156,7 +1170,7 @@ namespace AirShow
 				}
 			}
 		}
-		if (C.bFighter && Len(GV) < 105.0)
+		if (C.bFighter && Len(GV) < 105.0 && !bStation)
 		{
 			// Wide, slow esses: the escort keeps its speed up (about 85 to 120 m/s) and its turns gentle (400 m and more).
 			// With the enemy coming it swings wider and a little higher, to have fighting speed in hand when he arrives.
@@ -1668,6 +1682,34 @@ namespace AirShow
 	{
 		Check.LeastFightSpeed = std::min(Check.LeastFightSpeed, C.Spd);
 		Check.MostFightSpeed = std::max(Check.MostFightSpeed, C.Spd);
+	}
+
+	bool Show::EscortStation(const Craft& C, const Group& G, Vec& To, Vec& ToVel) const
+	{
+		if (!C.bFighter || G.With < 0) return false;
+		const bool bTop = G.Role == "top";
+		if (!bTop && G.Role != "close") return false;
+		const auto BIt = Now.find(G.With);
+		if (BIt == Now.end() || BIt->second.bFighter || BIt->second.Side != G.Side || BIt->second.Doing == Act::Down) return false;
+		const Group& Bx = BIt->second;
+		Vec Box(Bx.X, Bx.Y, Bx.Alt), BoxVel = GroupVelocity(Bx.Id);
+		double Face = Bx.Face;
+		RallyFrame(Bx.Id, Box, Face, BoxVel);
+		const Vec F = Ahead(Face), R = RightOf(Face);
+		const int Four = C.Slot / 4;
+		// (close: its fours one to each flank in turn, a flank's fours one behind another; top cover all on one side,
+		// behind the lead box; the group's flights weave together, the two flanks out and in as one)
+		const double Side = bTop ? 1.0 : Four % 2 == 0 ? 1.0 : -1.0;
+		const double Leg = bTop ? TopLegS : CloseLegS, Swing = bTop ? TopSwingM : CloseSwingM;
+		const double W = AirT * Pi / Leg + 0.7 * G.Id;
+		const Vec Own = SlotOf(G, C.Slot % 4) - SlotOf(G, 0);
+		const int Row = bTop ? Four : Four / 2;
+		To = Box + R * (Side * ((bTop ? TopOutM : CloseOutM) + Swing * std::sin(W))) + Up * ((bTop ? TopOverM : CloseOverM) + Row * 60.0)
+		     - F * ((bTop ? 1000.0 : 0.0) + Row * 450.0) + Own;
+		// (over bombers drawn low, torpedo planes at wave-top: never under 600 m over the ground or the sea)
+		To.Z = std::max(To.Z, GroundAt(To.X, To.Y) + 600.0);
+		ToVel = BoxVel + R * (Side * Swing * Pi / Leg * std::cos(W));
+		return true;
 	}
 
 	double Show::FloorAhead(const Craft& C) const
@@ -2782,14 +2824,18 @@ namespace AirShow
 			C.Task = "covering";
 			return true;
 		}
-		// By the box: above it and out to one side, weaving wide to hold the bombers' speed with fighting speed in hand.
+		// By the box: as the record has the close escort (the raids answer's Part 3.4), over it and out on its flank,
+		// outside its gunners' reach, in S-turns either side of its track to hold the bombers' speed with fighting speed
+		// in hand; top cover higher (EscortStation's numbers).
 		const double Side = C.Flight % 2 == 0 ? 1.0 : -1.0;
-		const double Wv = AirT * 2.0 * Pi / 30.0 + C.Weave * 0.2;
-		Vec To = Box + Rb * (Side * 620.0 + 600.0 * std::sin(Wv)) + Up * 400.0 + Fb * (C.Seat >= 2 ? -350.0 : 150.0);
+		const bool bTop = G.Role == "top";
+		const double Leg = bTop ? TopLegS : CloseLegS, Swing = bTop ? TopSwingM : CloseSwingM;
+		const double Wv = AirT * Pi / Leg + C.Weave * 0.2;
+		Vec To = Box + Rb * (Side * ((bTop ? TopOutM : CloseOutM) + Swing * std::sin(Wv))) + Up * (bTop ? TopOverM : CloseOverM) + Fb * (C.Seat >= 2 ? -350.0 : 150.0);
 		// (over bombers let down low, torpedo planes at wave-top: high above them, as Midway's Wildcats flew over their
 		// Devastators, never weaving down at the sea)
 		To.Z = std::max(To.Z, GroundAt(To.X, To.Y) + 1200.0);
-		Cmd K = Steer(C, To, Bv + Rb * (600.0 * 2.0 * Pi / 30.0 * std::cos(Wv)), 0.1, 130.0, C.VMax);
+		Cmd K = Steer(C, To, Bv + Rb * (Side * Swing * Pi / Leg * std::cos(Wv)), 0.1, 130.0, C.VMax);
 		MindGround(C, K);
 		Fly(C, K, Dt, true);
 		C.Task = "escorting";
@@ -4555,6 +4601,17 @@ namespace AirShow
 		// strike it: a loss 20 to 24 s (longer as a fight opens, and for a heavy bomber, which took its time to fall
 		// out of its box), a hit 10, a straggler 12. The battle's count is the same; only the moment it shows is the
 		// scene's. Nothing is held once the battle's end is told (the wait below lets it go at once).
+		// A model falls only for its share of the losses (AR1): a loss that brings no model down, a straggler not shown
+		// falling out, is told (the dispatch, the tag) and never shown; no gun is sent to it, nothing is owed the box.
+		if ((E.What == "air:lost" || E.What == "air:straggle") && E.Models <= 0)
+		{
+			(E.What == "air:lost" ? Check.LostUnshown : Check.StragUnshown)++;
+			if (E.What == "air:straggle" && E.Strag >= 0) StragsUnshown.insert({ E.Unit, E.Strag });
+			Release(E);
+			return;
+		}
+		// (a loss of several, the group's last: the rest of its models fall with it, and are no models too many meanwhile)
+		if (E.What == "air:lost" && E.Models > 1) Bands[E.Unit].Extra += E.Models - 1;
 		Event Ev = E;
 		if (Ev.What == "air:hit" && Ev.By < 0 && !Ev.bByFlak && Ev.GunBox < 0)
 		{
@@ -4657,6 +4714,7 @@ namespace AirShow
 		}
 		if (E.What == "air:lost")
 		{
+			if (E.Models <= 0) return;
 			int Key = PickToFall(E, Victim);
 			if (Key < 0 && GroupIt != Now.end())
 			{
@@ -4675,11 +4733,31 @@ namespace AirShow
 				StartFall(*Find(Key), E);
 				Bands[E.Unit].Owed.push_back(AirT);
 			}
+			// (a loss of several models, the group's last: the rest fall with it, the crews' parachutes the first's)
+			if (E.Models > 1)
+			{
+				Event More = E;
+				More.Chutes = 0;
+				More.ChuteAt.clear();
+				More.ChuteCue.clear();
+				More.Text.clear();
+				for (int K = 1; K < E.Models; ++K)
+				{
+					const int Next = PickToFall(More, -1);
+					if (Next < 0) break;
+					StartFall(*Find(Next), More);
+					Bands[E.Unit].Owed.push_back(AirT);
+				}
+				Band& Bd = Bands[E.Unit];
+				Bd.Extra = std::max(0, Bd.Extra - (E.Models - 1));
+			}
 			return;
 		}
 		// (a drop's own cue, the rules' bomb_stick_01, is not played at the drop: the stick is heard where and when it
 		// lands, from its first bomb's BombHit)
 		if (!E.Cue.empty() && E.What != "air:bombs" && E.What != "air:jettison") Emit(FxKind::Sound, At, E.Cue);
+		// (a straggler never shown falling out: her fire put out, her engine caught again, told and not shown)
+		if ((E.What == "air:fireout" || E.What == "air:regain") && E.Strag >= 0 && StragsUnshown.count({ E.Unit, E.Strag })) return;
 		if (E.What == "air:hit" || E.What == "air:fireout" || E.What == "air:regain")
 		{
 			HitSurvived(E, Victim, Spot);
@@ -4699,6 +4777,7 @@ namespace AirShow
 		}
 		if (E.What == "air:straggle")
 		{
+			if (E.Models <= 0) return;
 			// A bomber falls out of the box: one at the box's edge, smoke from the engine it lost.
 			// (one in its slot; else, the box being in its run, a bomber diving or in a fight)
 			std::vector<int> Keys = LiveOf(E.Unit);
@@ -5401,6 +5480,21 @@ namespace AirShow
 			First.Strike = ThroughT;
 		}
 		return First;
+	}
+
+	bool Show::InStream(const Vec& Place, const Vec& Vel, double Room) const
+	{
+		// (each frame's rounds of a gun on their straight way from its muzzle, the aircraft flying on at Vel from Place:
+		// how near they come, from now to the end of their life. Drag only slows them along that way.)
+		for (const RoundOut& R : RoundsOut)
+		{
+			const double Age = AirT - R.T;
+			if (Age < 0.0 || Age > R.Life) continue;
+			const Vec R0 = R.From - Place + Vel * Age, Dv = R.Vel - Vel;
+			const double S = Clamp(-R0.Dot(Dv) / std::max(1.0, Dv.Dot(Dv)), Age, R.Life);
+			if (Len(R0 + Dv * S) < Room) return true;
+		}
+		return false;
 	}
 
 	bool Show::Shadowed(const Vec& Place, double T, int But) const
@@ -6716,6 +6810,7 @@ namespace AirShow
 				}
 				if (!Man.X) continue;
 				if (!Man.Shot && !Bears(C, M, L->second, *Man.X)) continue;
+				Check.GunnerSees[M.Window]++;
 				// (he fires in bursts while he is on it; all through the one that carries a hit)
 				Man.bFire = Man.Shot != 0 ? bBears : (AirT >= Lays[Key].HoldUntil && std::sin(AirT * 1.7 + C.Key * 0.37 + M.Index) > -0.25);
 				Man.Far = Man.Shot ? -1.0 : Len(Local(C, M.Station) - Eye);
@@ -6886,7 +6981,11 @@ namespace AirShow
 				const Vec In = Norm(Way * (Row.Mv * std::exp(-B.Fl.Drag * StrikeTof)) + B.Carry - Vec(0.0, 0.0, B.Fl.Drop * StrikeTof) - (Run.At[1].P - Run.At[0].P) * (1.0 / Dt)) * -1.0;
 				SendStrike(*S, StrikeTof, Row.Kind, In, StrikeAt);
 			}
-			if (AirT - G.Fired > 0.3) Check.GunnerBursts++;
+			if (AirT - G.Fired > 0.3)
+			{
+				Check.GunnerBursts++;
+				Check.GunnerFires[Man.M.Window]++;
+			}
 			G.Fired = AirT;
 		}
 
@@ -6894,11 +6993,13 @@ namespace AirShow
 		std::sort(Asked.begin(), Asked.end(), [](const Want& A, const Want& B) { return A.Far < B.Far; });
 		if (static_cast<int>(Asked.size()) > MostGuns) Asked.resize(static_cast<size_t>(std::max(0, MostGuns)));
 		std::set<int> Kept, Landing_;
+		while (!RoundsOut.empty() && AirT - RoundsOut.front().T > 3.0) RoundsOut.pop_front();
 		for (const Want& W : Asked)
 		{
 			if (Kept.count(W.F.Key)) { Check.SharedWindows++; continue; }
 			Kept.insert(W.F.Key);
 			Effects.push_back(W.F);
+			RoundsOut.push_back(RoundOut{ AirT, W.F.At, Norm(W.F.Aim - W.F.At) * W.F.Mv + W.F.Vel, W.F.Tof > 0.0 ? W.F.Tof : 2.5 });
 			if (!W.bGround) continue;
 			// Every round of it strikes, as the walking line of a strafing run does: a spurt of dust, or a splash, where
 			// it comes down and when it gets there (LandStray). The first as its stream first comes down, so none ends
@@ -7266,9 +7367,11 @@ namespace AirShow
 		}
 		Out.clear();
 		Out.reserve(Crafts.size());
+		Check.NotInBox.clear();
 		for (const auto& Pair : Crafts)
 		{
 			const Craft& C = Pair.second;
+			if (!C.bFighter && (C.Doing == Role::Straggle || (C.Doing == Role::Slot && C.bJoining))) Check.NotInBox.insert(C.Key);
 			PlaneOut P;
 			P.Key = C.Key;
 			P.Group = C.Group;
