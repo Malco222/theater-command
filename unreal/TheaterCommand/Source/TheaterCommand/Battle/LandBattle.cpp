@@ -1900,6 +1900,8 @@ void ALandBattle::LayThings()
 			Copies->RegisterComponent();
 			if (bClutter)
 			{
+				// (GS7: its places removed off the end only; swap-removal keeps its arrays from shrinking and growing again)
+				Copies->SetRemoveSwap();
 				const int32 Index = ClutterCopies.Add(Copies);
 				ClutterCopyOf[Kind * Shades + Shade] = Index;
 				if (bCornTwin)
@@ -1921,6 +1923,7 @@ void ALandBattle::LayThings()
 						Shadowed->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
 					}
 					Shadowed->RegisterComponent();
+					Shadowed->SetRemoveSwap();
 					const int32 TwinIndex = ClutterCopies.Add(Shadowed);
 					while (ClutterTwin.Num() <= TwinIndex)
 					{
@@ -2141,14 +2144,15 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 		}
 		if (Now[K] < Had[K])
 		{
-			// (the places given back off the mesh's end, last first: nothing after them moves)
+			// (the places given back off the mesh's end, last first: nothing after them moves. In UE 5.8 a removal of
+			// the last place is a change sent with the instances, not the mesh made again: pre-check, 22 November)
 			TArray<int32> Gone;
 			Gone.Reserve(Had[K] - Now[K]);
 			for (int32 Slot = Had[K] - 1; Slot >= Now[K]; --Slot)
 			{
 				Gone.Add(Slot);
 			}
-			Mesh->RemoveInstances(Gone);
+			Mesh->RemoveInstances(Gone, true);
 			Touched[K] = true;
 		}
 		if (Added[K].Num() > 0 && Filled[K] == Added[K].Num())

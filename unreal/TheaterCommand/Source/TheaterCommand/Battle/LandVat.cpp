@@ -321,6 +321,8 @@ int32 FLandVat::AddPart(UStaticMesh* Mesh, UMaterialInterface* PartInk, int32 Le
 	{
 		Copies->SetNumCustomDataFloats(Numbers);
 	}
+	// (GS7: places removed off the end only; swap-removal keeps its arrays from shrinking and growing again)
+	Copies->SetRemoveSwap();
 	// (hidden until a man is placed in it)
 	Copies->SetVisibility(false);
 	Copies->RegisterComponent();
@@ -484,7 +486,7 @@ void FLandVat::Send()
 					{
 						Gone.Add(Slot);
 					}
-					Copies->RemoveInstances(Gone);
+					Copies->RemoveInstances(Gone, true);
 				}
 				Copies->SetVisibility(P.Holder.Num() > 0);
 				Copies->MarkRenderInstancesDirty();
