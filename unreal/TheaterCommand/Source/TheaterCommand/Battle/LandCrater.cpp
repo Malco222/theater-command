@@ -443,7 +443,8 @@ namespace LandCrater
 					{
 						// the bowl: its floor sooty at the middle where the burst was, damp dark earth, the wall's foot
 						// lightening toward the dry soil it rises to
-						Over = BowlAt(Rg.T) * D.U(0.92, 1.06) + D.U(-0.02, 0.02) * Deep;
+						const double Bowl = BowlAt(Rg.T) * D.U(0.92, 1.06);
+						Over = Bowl + D.U(-0.02, 0.02) * Deep;
 						Colour = Rg.T < 0.4 ? Mixed(Paint.Hollow, Soot, D.U(0.15, 0.3)) : Rg.T < 0.6 ? Mixed(Paint.Hollow, Paint.Wall, 0.18) : Mixed(Paint.Hollow, Paint.Wall, 0.55);
 					}
 					else if (Rg.T <= 0.56)
@@ -570,7 +571,8 @@ namespace LandCrater
 			double A = D.U(0.0, 2.0 * Pi);
 			if (Rays > 0 && D.U() < 0.5)
 			{
-				A = RayOf[static_cast<size_t>(D.Whole(0, Rays - 1))].first + D.U(-0.2, 0.2);
+				const double Ray = RayOf[static_cast<size_t>(D.Whole(0, Rays - 1))].first;
+				A = Ray + D.U(-0.2, 0.2);
 			}
 			const double Far = R * (1.08 + std::pow(D.U(), 1.4) * (ReachOf - 1.0) * 1.35);
 			const double Cx = X + std::cos(A) * Far, Cy = Y + std::sin(A) * Far;
@@ -580,7 +582,10 @@ namespace LandCrater
 			const Rgb8 Side = Toned(Paint.Clod, D.U(0.85, 1.1));
 			const Rgb8 Turf = Under ? Mixed(Paint.Turf, Under(Cx, Cy), 0.7) : Paint.Turf;
 			const Rgb8 Top = bTurf ? Toned(Turf, D.U(0.85, 1.1)) : Toned(Mixed(Paint.Clod, Paint.Crest, 0.4), D.U(0.9, 1.1));
-			const uint32_t Peak = Put(Out, Cx + D.U(-0.2, 0.2) * Big, Cy + D.U(-0.2, 0.2) * Big, Gz + Base + Big * (bTurf ? D.U(0.22, 0.36) : D.U(0.32, 0.55)), Top); // (a low lump, never a cone)
+			const double PeakX = Cx + D.U(-0.2, 0.2) * Big;
+			const double PeakY = Cy + D.U(-0.2, 0.2) * Big;
+			const double PeakZ = Gz + Base + Big * (bTurf ? D.U(0.22, 0.36) : D.U(0.32, 0.55));
+			const uint32_t Peak = Put(Out, PeakX, PeakY, PeakZ, Top); // (a low lump, never a cone)
 			constexpr int Around = 5;
 			uint32_t Foot[Around];
 			const double Turned = D.U(0.0, 2.0 * Pi);
