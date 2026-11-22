@@ -10,7 +10,7 @@ import {
 } from '../src/campaign/bargains';
 import { fieldClass } from '../src/campaign/air';
 import { ledger, upkeep } from '../src/campaign/economy';
-import { atWar, createGame } from '../src/campaign/game';
+import { addCorps, atWar, createGame } from '../src/campaign/game';
 import { DIPLOMACY } from '../src/campaign/diplomacy';
 import { setStop, stopOf } from '../src/campaign/history';
 import { airfieldOpenTo } from '../src/campaign/prizes';
@@ -19,7 +19,7 @@ import { TRADE, tradeRoute, type WayRead } from '../src/campaign/trade';
 import { NAVY, oceanOf, oceanRisk, seaRisk, seaSide } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { BARGAINS_STAGE } from '../src/campaign/stage';
-import { startOpen } from '../src/campaign/staff';
+import { FIT_ORG, startOpen } from '../src/campaign/staff';
 import { beginHuman, endHuman, humanUp, orderBid, orderHistory, orderSellTo, runTurnAI, stepAI } from '../src/campaign/turn';
 import type { BargainHeld, Game } from '../src/campaign/types';
 
@@ -796,12 +796,49 @@ describe("the cargo across the ocean (the design director's 11:25Z)", () => {
     expect(cargo.lost).toBe(Math.min(TRADE.sea.most, oceanRisk(g, cargo.seas, 'UK') * TRADE.sea.loss));
   });
 
-  it("a border with the buyer's ground overseas is no way in: Iraq's goods for Britain must reach Britain", () => {
+  it("Iraq's goods reach Britain's field army in Palestine by land through Transjordan, and not once that army is unfit (11:38Z)", () => {
     const g = world(1);
     const r1 = tradeRoute(g, 'IRQ', 'UK');
     expect(r1.way).toBe('land');
     expect(r1.via).toBeDefined();
+    const cargo = tradeRoute(g, 'IRQ', 'UK', new Map(), CARGO);
+    expect(cargo.way).toBe('land');
+    expect(cargo.via).toBe(r1.via);
+    // Every British corps overseas below the staffs' fit line: no field army stands there, and no way is open to Britain.
+    for (const c of g.corps) if (c.nat === 'UK' && !c.dead && g.regions[c.reg].overseas) c.org = FIT_ORG - 0.01;
     expect(tradeRoute(g, 'IRQ', 'UK', new Map(), CARGO).way).toBe('none');
+  });
+
+  it("a bare harbour overseas is no destination: the Falklands with no army, Gibraltar with only its fortress crew", () => {
+    const g = world(1);
+    expect(g.regions.some((r) => r.ctrl === 'UK' && r.overseas && r.port && r.seas.some((z) => g.seas[z].name === 'Falkland Waters'))).toBe(true);
+    const beef = tradeRoute(g, 'ARG', 'UK', new Map(), CARGO);
+    expect(beef.seas.length).toBeGreaterThan(1);
+    expect(homePort(g, 'UK', beef.seas[beef.seas.length - 1])).toBe(true);
+    const gib = g.regions.find((r) => r.name === 'Gibraltar')!;
+    expect(gib.units.filter((c) => c.nat === 'UK' && !c.dead).every((c) => c.kind === 'fort')).toBe(true);
+    const wolfram = tradeRoute(g, 'ESP', 'UK', new Map(), CARGO);
+    expect(wolfram.way).toBe('sea');
+    expect(homePort(g, 'UK', wolfram.seas[wolfram.seas.length - 1])).toBe(true);
+  });
+
+  it("home first: with the way home shut, Turkey's chrome goes to Britain's army in Egypt by sea, and with that army unfit it has no way", () => {
+    const g = world(1);
+    const home = tradeRoute(g, 'TUR', 'UK', new Map(), CARGO);
+    expect(home.way).toBe('sea');
+    expect(homePort(g, 'UK', home.seas[home.seas.length - 1])).toBe(true);
+    // The Mediterranean shut to Britain west of Malta: the Italian fleet in the Western Mediterranean in strength.
+    war(g, 'ITA', 'UK');
+    const west = sea(g, 'Western Mediterranean');
+    const it = g.fleets.find((f) => f.nat === 'ITA')!;
+    it.zone = west; it.stance = 'patrol';
+    for (const f of g.fleets) if (f.nat === 'UK' || f.nat === 'FRA') f.stance = 'port';
+    const army = tradeRoute(g, 'TUR', 'UK', new Map(), CARGO);
+    expect(army.way).toBe('sea');
+    const end = army.seas[army.seas.length - 1];
+    expect(g.regions.some((r) => r.ctrl === 'UK' && r.overseas && r.port && r.seas.includes(end) && r.units.some((c) => c.nat === 'UK' && !c.dead && c.kind !== 'fort'))).toBe(true);
+    for (const c of g.corps) if (c.nat === 'UK' && !c.dead && g.regions[c.reg].overseas) c.org = FIT_ORG - 0.01;
+    expect(tradeRoute(g, 'TUR', 'UK', new Map(), CARGO).way).toBe('none');
   });
 
   it("a term held across the ocean shows the sea where the enemy's ships are strongest, and says why the cargoes are sunk", () => {

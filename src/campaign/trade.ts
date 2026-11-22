@@ -10,7 +10,8 @@ import diplomacyData from '../../data/campaign/diplomacy.json';
 import { civicHouses, civicSum } from './buildings';
 import { govMul } from './government';
 import { provinceYield } from './economy';
-import { atWar, bloc, headline, overseasRead } from './game';
+import { atWar, bloc, ensureSupply, fights, headline, overseasRead } from './game';
+import { FIT_ORG } from './staff';
 import { canPass, closedTo, oceanRisk, seaRisk, zoneOf } from './navy';
 import { WORLD, worldOn } from './world';
 import type { Game, Nation, Region, TradeDeal } from './types';
@@ -93,11 +94,37 @@ const NONE: TradeRoute = { way: 'none', seas: [], lost: 0, keeps: 0 };
 
 /**
  * How a way is read. Release 1's trade reads none of these. The bargains' cargo reads both (the design director's
- * 11:25Z of 22 November 2026): 'home' lands the goods on the buyer's home chart, as the score reads its home, where they
- * feed it (any harbour it holds if it has none there; a border with its ground overseas is no way in); 'ocean' weighs a
- * way by sea against the enemy's navy in the whole ocean it crosses (navy.ts oceanRisk), not only the seas it passes.
+ * 11:25Z and 11:38Z of 22 November 2026): 'home' brings the goods to the buyer where it uses them (cargoRoute: home
+ * first, else ground it holds where its own field army stands); 'ocean' weighs a way by sea against the enemy's navy in
+ * the whole ocean it crosses (navy.ts oceanRisk), not only the seas it passes.
  */
 export interface WayRead { home?: boolean; ocean?: boolean }
+
+/** A field army of the nation's own standing in the province, in supply: corps that fight, at the staffs' fit line (the yield form's own test). */
+const armyStands = (r: Region, nat: string): boolean =>
+  r.units.some((c) => !c.dead && c.nat === nat && c.kind !== 'fort' && c.town === undefined && c.leave === undefined && c.supplied && fights(c) && c.org >= FIT_ORG);
+
+/**
+ * Where the bargains' goods reach a buyer where it uses them (WayRead 'home'): the provinces it holds on its home chart as
+ * the score reads its home, those it holds overseas where its own field army stands in supply, and whatever it holds that
+ * joins them by land. A bare harbour overseas (an island with no army, a fortress crew alone) is none. Worked out once
+ * for a set of routes.
+ */
+const FED = new WeakMap<TradeCtx, Map<string, Set<number>>>();
+function fedGround(g: Game, nat: string, ctx: TradeCtx): Set<number> {
+  let m = FED.get(ctx);
+  if (!m) FED.set(ctx, (m = new Map()));
+  let fed = m.get(nat);
+  if (fed) return fed;
+  // (The supply picture as it stands now, as the yield form reads it.)
+  ensureSupply(g);
+  fed = new Set<number>();
+  const q: number[] = [];
+  for (const r of g.regions) if (r.ctrl === nat && (!overseasRead(g, r) || armyStands(r, nat))) { fed.add(r.id); q.push(r.id); }
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!fed.has(j) && g.regions[j].ctrl === nat) { fed.add(j); q.push(j); }
+  m.set(nat, fed);
+  return fed;
+}
 
 /** What is worked out once for a nation and reused while several routes are looked at. */
 interface SeaView { shut: boolean[]; risk: number[]; from: number[] }
@@ -171,16 +198,14 @@ function landWay(g: Game, a: string, b: string, ctx: TradeCtx): string[] | null 
  * overland across countries at peace with both.
  */
 export function tradeRoute(g: Game, a: string, b: string, ctx: TradeCtx = new Map(), read: WayRead = {}): TradeRoute {
+  if (read.home) return cargoRoute(g, a, b, ctx, read);
   let colony = -1;
   for (const r of g.regions) {
     if (r.ctrl !== a) continue;
     for (const j of r.nb) {
       const o = g.regions[j];
       if (o.ctrl !== b) continue;
-      if (read.home) {
-        if (!overseasRead(g, r) && !overseasRead(g, o)) return { way: 'land', seas: [], lost: 0, keeps: 1 };
-        if (overseasRead(g, o)) continue;
-      } else if (!r.overseas && !o.overseas) return { way: 'land', seas: [], lost: 0, keeps: 1 };
+      if (!r.overseas && !o.overseas) return { way: 'land', seas: [], lost: 0, keeps: 1 };
       if (colony < 0) colony = r.id;
     }
   }
@@ -192,23 +217,68 @@ export function tradeRoute(g: Game, a: string, b: string, ctx: TradeCtx = new Ma
   }
   const sea = seaRoute(g, a, b, ctx, read);
   if (sea.way === 'sea') ways.push(sea);
+  return bestWay(ways);
+}
+
+/** The way that leaves most of the goods' worth. */
+function bestWay(ways: TradeRoute[]): TradeRoute {
   let best = NONE;
   for (const w of ways) if (w.keeps * (1 - w.lost) > best.keeps * (1 - best.lost) + 1e-9) best = w;
   return best;
 }
 
-/** Where the bargains' goods land (WayRead 'home'): a harbour on the nation's home chart, or any it holds if it has none there. */
-function homeHarbours(g: Game, nat: string, any: number[]): number[] {
+/** The harbours' seas of the provinces that pass the test. */
+function harbours(g: Game, ok: (r: Region) => boolean): number[] {
   const at = new Set<number>();
-  for (const r of g.regions) if (r.ctrl === nat && r.port && !overseasRead(g, r)) for (const z of r.seas) at.add(z);
-  const off = g.nations[nat].offmap;
-  if (off) { const z = zoneOf(g, off.sea); if (z >= 0) at.add(z); }
-  return at.size ? [...at] : any;
+  for (const r of g.regions) if (r.port && ok(r)) for (const z of r.seas) at.add(z);
+  return [...at];
 }
 
-function seaRoute(g: Game, a: string, b: string, ctx: TradeCtx, read: WayRead = {}): TradeRoute {
+/**
+ * The bargains' cargo (WayRead 'home', the design director's 11:25Z and 11:38Z): the goods go to the buyer where it uses
+ * them. Home first, by release 1's ways (a border, across other countries, or by sea to a harbour on its home chart). With
+ * no way home, to ground it holds overseas where its own field army stands (fedGround): across a border with that ground,
+ * or by sea to a harbour of it. A buyer with no such harbour at all takes them at any harbour it holds. Every way by sea
+ * still faces the ocean ('ocean').
+ */
+function cargoRoute(g: Game, a: string, b: string, ctx: TradeCtx, read: WayRead): TradeRoute {
+  const fed = fedGround(g, b, ctx);
+  let toHome = -1, toArmy = -1;
+  for (const r of g.regions) {
+    if (r.ctrl !== a) continue;
+    for (const j of r.nb) {
+      const o = g.regions[j];
+      if (o.ctrl !== b) continue;
+      const away = overseasRead(g, o);
+      if (!overseasRead(g, r) && !away) return { way: 'land', seas: [], lost: 0, keeps: 1 };
+      if (!away) { if (toHome < 0) toHome = r.id; } else if (fed.has(o.id) && toArmy < 0) toArmy = r.id;
+    }
+  }
+  const home: TradeRoute[] = [];
+  if (toHome >= 0) home.push({ way: 'land', seas: [], lost: 0, keeps: TRADE.colony, via: toHome });
+  else {
+    const through = landWay(g, a, b, ctx);
+    if (through?.length) home.push({ way: 'land', seas: [], lost: 0, keeps: Math.max(TRADE.farLeast, 1 - TRADE.transit.toll * through.length), through });
+  }
+  const atHome = harbours(g, (r) => r.ctrl === b && !overseasRead(g, r));
+  const off = g.nations[b].offmap;
+  if (off) { const z = zoneOf(g, off.sea); if (z >= 0 && !atHome.includes(z)) atHome.push(z); }
+  if (atHome.length) { const s = seaRoute(g, a, b, ctx, read, atHome); if (s.way === 'sea') home.push(s); }
+  const went = bestWay(home);
+  if (went.way !== 'none') return went;
+  const army: TradeRoute[] = [];
+  if (toArmy >= 0) army.push({ way: 'land', seas: [], lost: 0, keeps: TRADE.colony, via: toArmy });
+  const atArmy = harbours(g, (r) => r.ctrl === b && overseasRead(g, r) && fed.has(r.id));
+  if (atArmy.length) { const s = seaRoute(g, a, b, ctx, read, atArmy); if (s.way === 'sea') army.push(s); }
+  const met = bestWay(army);
+  if (met.way !== 'none' || atHome.length || atArmy.length) return met;
+  return seaRoute(g, a, b, ctx, read);
+}
+
+/** The way by sea, landing at the buyer's harbours (or at `to`, the harbours' seas the bargains' cargo is bound for). */
+function seaRoute(g: Game, a: string, b: string, ctx: TradeCtx, read: WayRead = {}, to?: number[]): TradeRoute {
   const A = seaView(g, a, ctx), B = seaView(g, b, ctx);
-  const land = read.home ? homeHarbours(g, b, B.from) : B.from;
+  const land = to ?? B.from;
   if (!A.from.length || !land.length) return NONE;
   const N = g.seas.length;
   const shut = (z: number): boolean => A.shut[z] || B.shut[z];
