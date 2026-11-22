@@ -1483,7 +1483,7 @@ int main(int Argc, char** Argv)
 		Check(T.ParcelMean >= 80.0 && T.ParcelMean <= 200.0, "parcels 80 to 200 m across", Fmt("mean %.0f m", T.ParcelMean));
 		Check(T.Gates > T.Parcels / 3, "a gate in most parcels", Fmt("%.0f gates, %.0f parcels", T.Gates, T.Parcels));
 		// The floor (the art director's review of 22 November, item 3): the June hay in cocks in half the mown meadows or
-		// more, 1.2 to 1.6 m; the cattle's paths along the pastures' hedges and out of their gateways, bare; the grass
+		// more, 1.0 to 1.6 m (cut 5); the cattle's paths along the pastures' hedges and out of their gateways, bare; the grass
 		// in clumps, not spread even.
 		{
 			std::vector<double> High;
@@ -1495,8 +1495,9 @@ int main(int Argc, char** Argv)
 				if (!Mid || std::hypot(P.X - F.Width() / 2.0, P.Y - F.Depth() / 2.0) < std::hypot(Mid->X - F.Width() / 2.0, Mid->Y - F.Depth() / 2.0)) Mid = &P;
 			std::printf("  hay: %d mown meadows, %d with their hay in cocks, %d cocks (%.2f to %.2f m, median %.2f); the cock nearest the middle at %.0f, %.0f\n", T.HayFields,
 			            T.HayFieldsCocked, T.Haycocks, Pctl(High, 0.1), Pctl(High, 0.9), Pctl(High, 0.5), Mid ? Mid->X : 0.0, Mid ? Mid->Y : 0.0);
-			Check(T.HayFields == 0 || (T.HayFieldsCocked * 2 >= T.HayFields && Pctl(High, 0.1) >= 1.15 && Pctl(High, 0.9) <= 1.65),
-			      "the June hay in cocks 1.2 to 1.6 m high, in half the mown meadows or more",
+			// (cocks of every size, 1.0 to 1.6 m: the art director's cut 5, item 5, saw them all one size)
+			Check(T.HayFields == 0 || (T.HayFieldsCocked * 2 >= T.HayFields && Pctl(High, 0.1) >= 0.95 && Pctl(High, 0.9) <= 1.65 && Pctl(High, 0.9) - Pctl(High, 0.1) >= 0.25),
+			      "the June hay in cocks 1.0 to 1.6 m high and of mixed sizes, in half the mown meadows or more",
 			      Fmt("%.0f of %.0f meadows, 10%% %.2f m, 90%% %.2f m", T.HayFieldsCocked, T.HayFields, Pctl(High, 0.1), Pctl(High, 0.9)));
 			// Every gateway into a pasture with beasts: its paths, and the grass off them.
 			int Into = 0, Pathed = 0;
