@@ -93,7 +93,7 @@ namespace LandParts
 	 * under the haze); "-TheaterLandGrade=darks,middles,red,blue,stops" tries other numbers over either (leave one
 	 * empty to keep it); "-TheaterNoBattleGrade" leaves both off.
 	 */
-	static void Grade(FPostProcessSettings& Lens, const LandFeed::Sky* Sky = nullptr)
+	static void Grade(FPostProcessSettings& Lens, const LandFeed::Sky* Sky = nullptr, const LandScape::Air* Look = nullptr)
 	{
 		BattleLook::Grade(Lens);
 		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterNoBattleGrade")))
@@ -103,6 +103,19 @@ namespace LandParts
 		// (and half a stop down: the art director on the third cut's field sheets, 22 November: the stop brings hay,
 		// wheat, barley and meadow into 120-165 and keeps the contrast's shadows, where a softer contrast flattens them)
 		double Darks = 0.45, Middles = 0.48, Red = 1.0, Blue = 1.02, Stops = -0.5;
+		// (a ground other than the bocage carries its own grade, the art director's per theatre (theatres-sheet-rulings-
+		// 1122.md item 1): its contrast, stop and toe always, its colour where the recording gives none)
+		double Contrast = -1.0, Toe = -1.0;
+		if (Look && Look->bSet)
+		{
+			Darks = Look->Grade[0];
+			Middles = Look->Grade[1];
+			Red = Look->Grade[2];
+			Blue = Look->Grade[3];
+			Stops = Look->Stops;
+			Contrast = Look->Contrast;
+			Toe = Look->Toe;
+		}
 		if (Sky && Sky->bGrade)
 		{
 			Darks = Sky->Grade[0];
@@ -131,12 +144,23 @@ namespace LandParts
 		Lens.ColorGain = FVector4(Red, 1.0, Blue, 1.0);
 		Lens.bOverride_AutoExposureBias = true;
 		Lens.AutoExposureBias = static_cast<float>(Stops);
+		if (Contrast > 0.0)
+		{
+			Lens.bOverride_ColorContrast = true;
+			Lens.ColorContrast = FVector4(Contrast, Contrast, Contrast, 1.0);
+		}
+		if (Toe > 0.0)
+		{
+			Lens.bOverride_FilmToe = true;
+			Lens.FilmToe = static_cast<float>(Toe);
+		}
 		static bool bSaid = false;
 		if (!bSaid)
 		{
 			bSaid = true;
-			UE_LOG(LogTheater, Display, TEXT("Land battle look: the ground battle's grade over the battles' own: colour kept in the darks %.2f, the middle tones %.2f; red %.2f and blue %.2f; %.2f stops"),
-				Darks, Middles, Red, Blue, Stops);
+			UE_LOG(LogTheater, Display, TEXT("Land battle look: the ground battle's grade over the battles' own: colour kept in the darks %.2f, the middle tones %.2f; red %.2f and blue %.2f; %.2f stops; contrast %s, toe %s"),
+				Darks, Middles, Red, Blue, Stops, Contrast > 0.0 ? *FString::Printf(TEXT("%.2f (the ground's)"), Contrast) : TEXT("the battles' own"),
+				Toe > 0.0 ? *FString::Printf(TEXT("%.2f (the ground's)"), Toe) : TEXT("Unreal's own"));
 		}
 	}
 
@@ -1542,21 +1566,9 @@ bool ALandBattle::Open()
 		// (a narrow shutter: the staccato, crisp look of a war film's battle, not a smear)
 		Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
-		// (the recording's grade where it gives one; else the look's own where its ground is not the bocage's: LandScape)
-		LandFeed::Sky Graded = Rec.Weather;
-		if (!Graded.bGrade)
-		{
-			const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying());
-			if (LookAir.bSet)
-			{
-				Graded.bGrade = true;
-				for (int32 K = 0; K < 4; ++K)
-				{
-					Graded.Grade[K] = LookAir.Grade[K];
-				}
-			}
-		}
-		LandParts::Grade(Lens->PostProcessSettings, &Graded);
+		// (the recording's grade where it gives one, over the look's own where its ground is not the bocage's: LandScape)
+		const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying());
+		LandParts::Grade(Lens->PostProcessSettings, &Rec.Weather, &LookAir);
 		// The grain of the film stock, a little (the art director's to tune: "-TheaterLandGrain=0.3").
 		float Grain = 0.25f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrain="), Grain);
@@ -4113,7 +4125,12 @@ void ALandBattle::HideTheTable()
 			Over->bEnabled = true;
 			Over->Priority = 0.0f;
 			Over->BlendWeight = 1.0f;
-			LandParts::Grade(Over->Settings, State.IsValid() ? &State->Rec.Weather : nullptr);
+			LandScape::Air LookAir;
+			if (State.IsValid() && State->Field)
+			{
+				LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying());
+			}
+			LandParts::Grade(Over->Settings, State.IsValid() ? &State->Rec.Weather : nullptr, &LookAir);
 			Day.Grade = Over;
 		}
 	}
@@ -4688,10 +4705,32 @@ void ALandBattle::Tick(float DeltaSeconds)
 		S.Eye.Hold(true);
 	}
 	LandParts::PlaceMovers(S);
-	S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
+	{
+		// (the camera's own ms, for its 10 s line)
+		const double EyeMark = LandParts::Seconds();
+		const long StepsWere = S.Eye.Steps();
+		S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
+		const double EyeFrameMs = (LandParts::Seconds() - EyeMark) * 1000.0;
+		EyeMs += EyeFrameMs;
+		EyeMostMs = FMath::Max(EyeMostMs, EyeFrameMs);
+		EyeStepsMost = FMath::Max(EyeStepsMost, static_cast<int64>(S.Eye.Steps() - StepsWere));
+		EyeCuts += S.Pose.bCut ? 1 : 0;
+		// (the gap since the last frame began, against how many frames since the last cut)
+		const double GapMs = Real * 1000.0;
+		if (GapMs > LongestGapMs)
+		{
+			LongestGapMs = GapMs;
+			LongestGapSinceCut = S.Pose.bCut ? 0 : FMath::Min(FramesSinceCut + 1, 1000);
+		}
+		FramesSinceCut = S.Pose.bCut ? 0 : FMath::Min(FramesSinceCut + 1, 1000);
+	}
 	if (Live.IsValid())
 	{
+		const double GenMark = LandParts::Seconds();
 		GeneralView(Real);
+		const double GenFrameMs = (LandParts::Seconds() - GenMark) * 1000.0;
+		GenEyeMs += GenFrameMs;
+		GenEyeMostMs = FMath::Max(GenEyeMostMs, GenFrameMs);
 	}
 	WalkPan(Real);
 	ReadDark(Real);
@@ -4833,6 +4872,16 @@ void ALandBattle::Tick(float DeltaSeconds)
 			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
 			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid,
 			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs, PuffsMost, PuffsMostAsked);
+		// (the camera's line, CD0: what the camera's choice costs, and whether the span's longest gap between frames
+		// came on a shot change: 0 or 1 frames after a cut, with the camera's cut frames cheap, is the renderer's start
+		// afresh, not the choice)
+		const FString GapWhen = LongestGapSinceCut >= 1000 ? FString(TEXT("no cut before it in the span")) : FString::Printf(TEXT("%d frames after a cut"), LongestGapSinceCut);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the camera %.3f ms a frame, the slowest %.2f ms, the most ray steps in a frame %lld (%d cuts); the general's view %.3f ms a frame, the slowest %.2f; the longest gap between frames %.1f ms, %s"),
+			EyeMs / LogFrames, EyeMostMs, static_cast<long long>(EyeStepsMost), EyeCuts, GenEyeMs / LogFrames, GenEyeMostMs, LongestGapMs, *GapWhen);
+		EyeMs = EyeMostMs = GenEyeMs = GenEyeMostMs = LongestGapMs = 0.0;
+		EyeStepsMost = 0;
+		EyeCuts = 0;
+		LongestGapSinceCut = 1000;
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;

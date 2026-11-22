@@ -221,7 +221,10 @@ namespace LandScape
 			return All && Water * 12 > All ? Look::Island : Look::Jungle;
 		}
 		// Normandy, Brittany and Maine (the bocage proper) and the hedged fields of England keep the bocage.
-		if (Is(C, "temperate") && F.Lon < 2.6 && F.Lat > 46.5) return Look::Bocage;
+		// (the bocage proper: Normandy, Maine, Brittany and the Vendée; Flanders, Picardy and Champagne east of it are open
+		// farmland, and so is France in 1940 from Sedan to the Somme: the production lead, 22 November)
+		if (Is(C, "temperate") && F.Lon < 0.6 && F.Lon > -5.5 && F.Lat > 46.5 && F.Lat < 49.9) return Look::Bocage;
+		if (Is(C, "temperate") && F.Lon < 1.8 && F.Lon > -6.0 && F.Lat >= 49.9 && F.Lat < 55.5) return Look::Bocage; // (England's hedged fields)
 		// The open country of central and eastern Europe, the steppe without a recording's lay, the northern forest.
 		return Look::Farmland;
 	}
@@ -255,7 +258,19 @@ namespace LandScape
 	{
 		Air A;
 		auto Ink = [](double* To, double R, double G, double B) { To[0] = R; To[1] = G; To[2] = B; };
-		auto Grade = [&A](double D, double M, double R, double B) { A.Grade[0] = D; A.Grade[1] = M; A.Grade[2] = R; A.Grade[3] = B; };
+		// (the art director's starting grades, one per ground, art-director/battles/theatres-sheet-rulings-1122.md item 1:
+		// darks, middles, contrast, stops, toe and the gain's red and blue; Normandy's stays as passed; a recording's own
+		// sky.grade stands over the first four)
+		auto Grade = [&A](double D, double M, double C, double St, double T, double R, double B)
+		{
+			A.Grade[0] = D;
+			A.Grade[1] = M;
+			A.Grade[2] = R;
+			A.Grade[3] = B;
+			A.Contrast = C;
+			A.Stops = St;
+			A.Toe = T;
+		};
 		switch (L)
 		{
 		case Look::Desert:
@@ -266,7 +281,7 @@ namespace LandScape
 			Ink(A.HazeOvercast, 0.64, 0.61, 0.56);
 			A.HazeDensity = 0.0048;
 			A.SkyDust = 1.15;
-			Grade(0.5, 0.56, 1.0, 0.97);
+			Grade(0.55, 0.66, 1.25, -0.6, 0.55, 1.02, 0.96);
 			break;
 		case Look::Med:
 			A.bSet = true;
@@ -274,7 +289,7 @@ namespace LandScape
 			Ink(A.HazeOvercast, 0.54, 0.55, 0.56);
 			A.HazeDensity = 0.0055;
 			A.SkyDust = 0.85;
-			Grade(0.47, 0.53, 1.0, 1.0);
+			Grade(0.50, 0.58, 1.35, -0.5, 0.55, 1.02, 0.97);
 			break;
 		case Look::Jungle:
 			A.bSet = true;
@@ -282,7 +297,7 @@ namespace LandScape
 			Ink(A.HazeOvercast, 0.52, 0.56, 0.55);
 			A.HazeDensity = 0.011;
 			A.SkyDust = 0.5;
-			Grade(0.48, 0.52, 0.99, 1.0);
+			Grade(0.60, 0.66, 1.15, -0.2, 0.45, 1.0, 1.0);
 			break;
 		case Look::Island:
 			A.bSet = true;
@@ -290,7 +305,7 @@ namespace LandScape
 			Ink(A.HazeOvercast, 0.56, 0.60, 0.62);
 			A.HazeDensity = 0.0062;
 			A.SkyDust = 0.5;
-			Grade(0.47, 0.52, 0.98, 1.03);
+			Grade(0.60, 0.66, 1.15, -0.2, 0.45, 1.0, 1.0); // (the Pacific islands take the jungle's)
 			break;
 		case Look::Farmland:
 			A.bSet = true;
@@ -310,10 +325,14 @@ namespace LandScape
 			A.HazeOvercast[2] = Lerp(A.HazeOvercast[2], 0.68, K);
 			A.HazeDensity = Lerp(A.HazeDensity, 0.009, K);
 			A.SkyDust = Lerp(A.SkyDust, 0.45, K);
-			A.Grade[0] = Lerp(A.Grade[0], 0.42, K);
-			A.Grade[1] = Lerp(A.Grade[1], 0.44, K);
-			A.Grade[2] = Lerp(A.Grade[2], 0.98, K);
-			A.Grade[3] = Lerp(A.Grade[3], 1.05, K);
+			// (the art director's winter grade: snow lit 220-235 with blue over green 1.02-1.05, its shade blue-grey)
+			A.Grade[0] = Lerp(A.Grade[0], 0.45, K);
+			A.Grade[1] = Lerp(A.Grade[1], 0.50, K);
+			A.Grade[2] = Lerp(A.Grade[2], 0.99, K);
+			A.Grade[3] = Lerp(A.Grade[3], 1.03, K);
+			A.Contrast = Lerp(A.Contrast, 1.30, K);
+			A.Stops = Lerp(A.Stops, -0.7, K);
+			A.Toe = Lerp(A.Toe, 0.55, K);
 		}
 		return A;
 	}

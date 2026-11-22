@@ -978,12 +978,14 @@ namespace LandKit
 			if (D.Nation == "USA")
 			{
 				// Olive drab, one colour all over (the camouflage file: a nation with one colour fills upper2 with upper),
-				// leaning brown as the paint did: red a little over green, blue about two thirds of red (the art
-				// director's mend, 21 November 2026: the old 565C3A read lime in the light).
+				// leaning brown as the paint did (the art director's mend, 21 November 2026: the old 565C3A read lime in
+				// the light). Written with about twice the colour wanted on the screen, since the ground's grade keeps
+				// 0.48 of the middle tones' colour (her cut 5 read, item 7: 585139 landed blue-grey, 98,108,106); the
+				// same coat as the American vehicles' files (tools/battle-models/land/motorpool.py).
 				OutName = "olive drab";
-				OutUpper = "585139";
-				OutUpper2 = "585139";
-				OutShade = "363123";
+				OutUpper = "625024";
+				OutUpper2 = "625024";
+				OutShade = "3B3015";
 				return true;
 			}
 			if (D.Nation == "GER")
