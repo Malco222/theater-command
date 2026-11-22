@@ -924,3 +924,36 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 21. **Every parachute** (the audit: only the nearest 16 were drawn). When three B-17s go down together some twenty to
    thirty canopies hang in the sky at once, all drawn: the near ones with their rigging, past 600 m with fewer sides,
    past 2.5 km as a plain canopy and its man. Only past 240 are the farthest left out.
+22. **Clouds: a few big ones and many small** (the art director on 2b177386's frames, 22 November 04:16Z: "popcorn:
+   one size, even spacing"). On Pearl Harbor and Midway (three eighths of cumulus) the big ones, 1.5 to 3.5 km across,
+   are laid first and take half the cover, about a hundred of them in the 44 km square; a few hundred middling ones,
+   600 m to 1.5 km, a quarter; and some 1,900 small ones, 200 to 600 m, the rest, most of them gathered round the
+   bigger and a few out in the open sky. A small one is drawn out to 34 times its width (a 200 m one to about 7 km),
+   so the sky draws 5 to 27 per cent fewer puffs than 2b177386's did. Look at Pearl 01, 02 and 07 and the Midway
+   flyover: big heaps with small rags round them and open sky between, not a field of one size. The cloud check's
+   pictures are in /mnt/project-files/air-battles/scene/round-r2e/clouds/. Build-ups over Oahu's mountains are not
+   done yet.
+23. **The paint flat, not shiny.** The aircraft are now painted 0.78 rough with 0.3 specular (was 0.5 and 0.45): the
+   P-40's olive drab on Pearl 05 read sand, (198,180,161), where the low sun ahead glanced off its wing. Look at
+   Pearl 05 and Bremen 02: olive drab reads olive drab near the art director's matte #555A47, no sand or pale sheen.
+   The log says "Air battle: the aircraft's paint 0.78 rough, 0.30 specular." "-TheaterPlaneInk=0.7,0.35" tries
+   others (roughness, then specular). The canopies are in the same paint, so they are duller too; say if they read
+   as painted over.
+24. **Haze over the sea bluer.** Over the sea (Pearl Harbor and Midway) the haze band at the horizon now takes the
+   sea's haze, (0.40,0.53,0.76), not the land's, and the air's white dust is 0.6 of the battle look's. The log says
+   "... the air's dust 0.60 of the battle look's over the sea". Measure the horizon on Midway 01 and Pearl 02: pale
+   blue near (196,212,230), fading over less than a third of the frame, not (215,218,225). If still milky try
+   "-TheaterSeaDust=0.4" and "-TheaterSeaHazeInk=0.36,0.5,0.76"; if the sea's far edge shows a line, say so. Bremen,
+   over land, is unchanged.
+25. **Quays grey; Battleship Row in Measure 1.** Oahu's concrete is a cool grey, 8A8D90 (was the warm 8F8B83 that
+   read tan under the morning sun); the pads and aprons too, on both stages. The American ships on the stage are in
+   Measure 1: Dark Gray 5-D for the kit's navy grey, and their wooden decks stained Deck Blue 20-B. The log says
+   "Stage: Battleship:USA in Measure 1 ...". Look at Pearl 06: the battleships cool dark grey from above, not tan.
+   The map's own miniatures keep the kit's paint.
+26. **The strategy view on the aircraft.** It now follows the crowd it frames as the crowd moves and eases only a
+   jump to another crowd: before, at the clock's x10 it trailed the raid by a kilometre and more, and Pearl 01,
+   Midway 01 and Bremen 01 showed empty sky. It also stands at 800 m and 12 degrees down (was 1,100 m and 14). Look
+   at 01, 04 and 07 in every battle: aircraft in the frame, a B-17 about 70 pixels across at 1920. The guns fire
+   back picture, 06b, frames ship and aircraft with an eighth to spare (was a quarter), 350 m at the nearest.
+27. **The ride's log.** While riding, the dispatches show only the last four, at least 34 characters wide beside
+   the aircraft ridden. Look at 03 and 05.

@@ -919,22 +919,53 @@ namespace AirSky
 			// cumulus, wider than tall and evenly spread; a heavy day's fewer, bigger, taller heaps, some towering, merging
 			// into clusters with wide gaps between, their bases darker. Three eighths as she passed it, the same draws)
 			const double Fair = Smooth((DefaultCumulus - D.CoverLaid()) / (DefaultCumulus - 0.12));
-			const double SmallShare = 0.45 - 0.2 * Fatter + 0.25 * Fair, MiddleShare = 0.85 - 0.15 * Fatter + 0.12 * Fair;
+			// (sizes by the cover each takes, laid biggest first: the art director on 2b177386's frames, 22 November 04:16Z,
+			// "popcorn: one size, even spacing ... wanted: a few big ones and many small". Drawn at random among sizes, the
+			// big ones were the likeliest to find no room, and the middling took half the cover, 600 clouds of one size.
+			// Now the big ones (1.5 to 3.5 km) are laid first and take half the sky's cover, a few middling (600 m to
+			// 1.5 km) a quarter or so, and the small ones (200 to 600 m) the rest, many of them round the bigger; within each
+			// even on a log scale. A cloudier day's cover goes more to the big ones, a fair day's more to the small)
+			const double BigShare = 0.5 + 0.15 * Fatter - 0.3 * Fair, SmallShare = 0.22 - 0.08 * Fatter + 0.25 * Fair;
+			const double UpTo[3] = { BigShare, 1.0 - SmallShare, 1.0 };
 			double Covered = 0.0;
-			for (int Try = 0; Try < 120000 && Covered < Wanted; ++Try)
+			int Pass = 0, PassTries = 0;
+			for (int Try = 0; Try < 120000 && Pass < 3; ++Try)
 			{
+				// (a size's pass ends when the cover is laid up to its share, or after 40,000 tries; a clear day, wanting none,
+				// passes all three at once and lays no cloud)
+				while (Pass < 3 && (Covered >= Wanted * UpTo[Pass] || PassTries >= 40000))
+				{
+					++Pass;
+					PassTries = 0;
+				}
+				if (Pass >= 3)
+				{
+					break;
+				}
+				++PassTries;
 				const double X = F.Origin.X + Roll.U(0.0, Period), Y = F.Origin.Y + Roll.U(0.0, Period);
-				// (sizes on a steep power law, the brief: of those tried, nine in twenty under 600 m across, eight in twenty
-				// 600 m to 1.5 km, three in twenty 1.5 to 3.5 km, and within each even on a log scale; most of the cover from
-				// the few big ones. As laid, about six in ten are small, the big ones the likeliest to find no room. Six in
-				// ten small among those tried made 2,300 clouds and 22,000 puffs, and the painter's room overflowed)
-				// (on a cloudier day than the art director's three eighths, the clouds grow rather than crowd: fewer small, more
-				// big ones, as cumulus fattens toward a broken sky, and the painter's room holds them; the same draws, so a
-				// day at three eighths or less lies as it did)
-				const double Kind = Roll.U(), Within = Roll.U();
+				const double Within = Roll.U();
 				auto Between = [Within](double Least, double Most) { return Least * std::pow(Most / Least, Within); };
-				const double W = Kind < SmallShare ? Between(300.0, 600.0) : Kind < MiddleShare ? Between(600.0, 1500.0) : Between(1500.0, 3500.0);
+				const double W = Pass == 0 ? Between(1500.0, 3500.0) : Pass == 1 ? Between(600.0, 1500.0) : Between(200.0, 600.0);
 				const bool bSmall = W < 600.0;
+				// (the small ones gather round the bigger, as a field of cumulus does, a few out in the open sea between:
+				// none of them spread evenly over it)
+				if (bSmall)
+				{
+					double Gap = 1e9;
+					for (const Cloud& O : F.Clouds)
+					{
+						if (O.W >= 600.0)
+						{
+							const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y);
+							Gap = std::min(Gap, std::sqrt(Dx * Dx + Dy * Dy) - 0.5 * O.W);
+						}
+					}
+					if (Roll.U() > 0.12 + 0.88 * std::exp(-std::max(0.0, Gap) / 900.0))
+					{
+						continue;
+					}
+				}
 				// (the bigger ones keep to the streets; the small ones scatter in the lanes a little more)
 				// (a fair day's evenly over the sea; a heavy day's crowding harder, the gaps wider)
 				const double Street = (bSmall ? 0.1 : 0.06) + (bSmall ? 0.9 : 0.94) * Smooth((Crowd(X, Y) - 0.25 - 0.1 * Fatter) / (0.45 - 0.15 * Fatter));
@@ -996,7 +1027,9 @@ namespace AirSky
 				for (int K = 0; K < Layers; ++K)
 				{
 					const double Hk = static_cast<double>(K) / (Layers - 1);
-					const double Rk = Rb * (1.0 - 0.35 * Hk);
+					// (a small one's top as broad as its base: narrowing, the 200 m ones of 22 November stood on their wider
+					// grey bases as mushrooms seen from under them)
+					const double Rk = Rb * (1.0 - (bSmall ? 0.15 : 0.35) * Hk);
 					// (its base layer narrower than the body over it, so that from above the lit dome hides it and no grey
 					// plate shows round the cloud)
 					const double Wk = W * 0.5 * (1.0 - 0.45 * std::pow(Hk, 1.5)) * (K == 0 ? 0.8 : 1.0);
@@ -1035,7 +1068,7 @@ namespace AirSky
 						const double Lee = Clamp(((PX - X) * Down.X + (PY - Y) * Down.Y) / std::max(1.0, W * 0.5), 0.0, 1.0);
 						// (its base soft at the sides with a straight, crisp underside, solid enough to stand darker than the
 						// sky behind it; the lumps over it crisp where the sun catches their edges, softer and thinner to lee)
-						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * (bSmall && K > 0 ? Roll.U(0.55, 1.25) : Roll.U(0.7, 1.2)) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
+						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * (bSmall && K > 0 ? Roll.U(0.75, 1.2) : Roll.U(0.7, 1.2)) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
 						Lump.Soft = K == 0 ? 0.45 : 0.2 + 0.28 * Lee;
 						Lump.bFlatFoot = K == 0;
 					}
@@ -1494,7 +1527,11 @@ namespace AirSky
 			// far body alone)
 			const Vec Middle(LX, LY, C.At.Z + Here.Lift + 0.5 * Here.Squash * C.H);
 			const double Far = (Middle - Seen).Length();
-			const double Haze = Smooth((Reach - Far) / (Reach / 3.0));
+			// (a small cloud, under 600 m across, is drawn out to SmallSight times its width, thinning over the last fifth: a
+			// 200 m one to 6.8 km, a 600 m one to the reach, each about 1.7 degrees across where it goes. Farther it is a few
+			// pixels in the haze, and the many small ones the art director asked for on 22 November cost the painter a
+			// puff each out to the reach)
+			const double Haze = Smooth((Reach - Far) / (Reach / 3.0)) * (C.W < 600.0 ? Smooth((SmallSight * C.W - Far) / (0.2 * SmallSight * C.W)) : 1.0);
 			if (Haze <= 0.0)
 			{
 				continue;

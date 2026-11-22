@@ -237,10 +237,12 @@ namespace AirParts
 	/** The haze's colour over the sea: bluer and a little dimmer than AirHazeInk, so that it reads pale blue and not
 	 * white (the art director on the Mac's release 2 Midway 01 and Oahu 02, 19:32Z: the haze there read 220 to 225
 	 * with blue over red by 5, and filled the top 40% of the picture; she asks blue over red by 10 to 20, white only at
-	 * the horizon, where the haze band stands). "-TheaterSeaHazeInk=0.44,0.55,0.74" tries another. */
+	 * the horizon, where the haze band stands). Bluer again, 22 November: on 2b177386's frames the horizon read
+	 * (215,218,225), "only +10 blue", where pale blue is about (196,212,230); the haze band over the sea takes it too.
+	 * "-TheaterSeaHazeInk=0.40,0.53,0.76" tries another. */
 	static FLinearColor SeaHazeInk()
 	{
-		double R = 0.44, G = 0.55, B = 0.74;
+		double R = 0.40, G = 0.53, B = 0.76;
 		FString Asked;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaHazeInk="), Asked, false))
 		{
@@ -731,7 +733,29 @@ bool AAirBattle::Open(const FString& Why)
 			Made->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
 			return Made;
 		};
-		PlaneInk = Ink(0.5f, 0.45f);
+		// (the aircraft's paint flat, as service paint was: at 0.5 rough and 0.45 specular a low sun ahead lit an olive
+		// drab P-40's near wing sand, (198,180,161), with a pale sheen farther out (the art director on 2b177386's Pearl
+		// 05, 22 November 04:16Z: Warhawk.json is 4F5236, "matte #555A47"). "-TheaterPlaneInk=0.78,0.3" tries another,
+		// roughness then specular)
+		double PaintRough = 0.78, PaintSpec = 0.3;
+		{
+			FString Asked;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneInk="), Asked, false))
+			{
+				TArray<FString> Parts;
+				Asked.ParseIntoArray(Parts, TEXT(","), false);
+				double* const Into[] = { &PaintRough, &PaintSpec };
+				for (int32 K = 0; K < Parts.Num() && K < 2; ++K)
+				{
+					if (!Parts[K].TrimStartAndEnd().IsEmpty())
+					{
+						*Into[K] = FMath::Clamp(FCString::Atod(*Parts[K]), 0.0, 1.0);
+					}
+				}
+			}
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the aircraft's paint %.2f rough, %.2f specular."), PaintRough, PaintSpec);
+		}
+		PlaneInk = Ink(static_cast<float>(PaintRough), static_cast<float>(PaintSpec));
 		PlainInk = Ink(0.85f, 0.2f);
 		if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight")))
 		{
@@ -1612,12 +1636,27 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 	// (The battle's sky is the battle look's, made on this actor in AirSkyBegin and taken away with it.)
 	TArray<USkyAtmosphereComponent*> Atmospheres;
 	GetComponents(Atmospheres);
+	// (and over the sea the air's dust thinner, a clear trade-wind day's: the battle look's white dust, the same over
+	// the sea as over Bremen's land, made the horizon read (215,218,225), "only +10 blue", where pale blue is about
+	// (196,212,230), the art director on 2b177386's frames, 22 November 04:16Z. "-TheaterSeaDust=0.6" tries another
+	// share; once to each sky the battle look makes, by its tag)
+	double SeaDust = 0.6;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaDust="), SeaDust);
+	SeaDust = FMath::Clamp(SeaDust, 0.0, 2.0);
+	const bool bSkyOverSea = !(State.IsValid() && State->Board.StageKey.empty() && !State->Board.Land.empty());
+	static const FName SeaDustTag(TEXT("TheaterSeaDust"));
 	for (USkyAtmosphereComponent* Atmosphere : Atmospheres)
 	{
 		Atmosphere->SetMieAnisotropy(static_cast<float>(HazeForward));
+		if (bSkyOverSea && !Atmosphere->ComponentTags.Contains(SeaDustTag))
+		{
+			Atmosphere->ComponentTags.Add(SeaDustTag);
+			Atmosphere->SetMieScatteringScale(Atmosphere->MieScatteringScale * static_cast<float>(SeaDust));
+		}
 	}
-	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies); its light through the air %s"),
-		DiscWide, DiscShare, HazeForward, Atmospheres.Num(), bAirByHeight ? TEXT("over each point") : TEXT("as at sea level"));
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies); its light through the air %s; the air's dust %s"),
+		DiscWide, DiscShare, HazeForward, Atmospheres.Num(), bAirByHeight ? TEXT("over each point") : TEXT("as at sea level"),
+		bSkyOverSea ? *FString::Printf(TEXT("%.2f of the battle look's over the sea"), SeaDust) : TEXT("the battle look's over the land"));
 }
 
 void AAirBattle::LightTheBattle()
@@ -2180,7 +2219,10 @@ void AAirBattle::LayHazeBand()
 	HazeBand->RegisterComponent();
 	HazeBandInk = UMaterialInstanceDynamic::Create(Ink, this);
 	HazeBandInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
-	HazeBandInk->SetVectorParameterValue(TEXT("Tint"), AirParts::AirHazeInk * static_cast<float>(HazeBandStrength));
+	// (over the sea the band is the sea's haze, bluer: the art director on 2b177386's frames, 22 November 04:16Z, "haze is
+	// still milky", the band in the land's colour over Midway and Pearl)
+	const bool bBandOverLand = S.Board.StageKey.empty() && !S.Board.Land.empty();
+	HazeBandInk->SetVectorParameterValue(TEXT("Tint"), (bBandOverLand ? AirParts::AirHazeInk : AirParts::SeaHazeInk()) * static_cast<float>(HazeBandStrength));
 	HazeBandInk->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
 	HazeBandLaidAt = FVector(1e30, 1e30, 1e30);
 	HazeBandShown = -1.0;
@@ -5063,15 +5105,32 @@ void AAirBattle::AimEye(double Real)
 			GunsEyeHeading = (-Way).Rotation().Yaw;
 			UE_LOG(LogTheater, Display, TEXT("Air battle: the guns fire back picture, heading %.0f, the aircraft %.0f m along and %.0f m up from her"), GunsEyeHeading, Across.Size() / U, Line.Z / U);
 		}
-		// (both in the frame with a quarter to spare: at 55 degrees it is 2 tan 27.5 of the way wide, and at 16:9
-		// 2 tan 16.3 of it high; never nearer than 450 m, never farther than 2.6 km)
+		// (both in the frame with an eighth to spare: at 55 degrees it is 2 tan 27.5 of the way wide, and at 16:9
+		// 2 tan 16.3 of it high; never nearer than 350 m, never farther than 2.6 km. With a quarter to spare, and 450 m
+		// at least, both were small: "frame both tighter", the art director on 2b177386's 06b, 22 November 04:16Z)
 		const double Wide = Across.Size() / U, High = FMath::Abs(Line.Z) / U;
-		Away = FMath::Clamp(FMath::Max(0.75 * Wide / FMath::Tan(FMath::DegreesToRadians(27.5)), 0.75 * High / FMath::Tan(FMath::DegreesToRadians(16.3))), 450.0, 2600.0);
+		Away = FMath::Clamp(FMath::Max(0.68 * Wide / FMath::Tan(FMath::DegreesToRadians(27.5)), 0.68 * High / FMath::Tan(FMath::DegreesToRadians(16.3))), 350.0, 2600.0);
 		Wanted = GunShip + Line * 0.4;
 		Down = -4.0;
 		Heading = GunsEyeHeading;
 	}
-	LookAt = bLookSet && !bOnShip && !bOnGuns ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
+	// (the look carried with the crowd as it moves, and only a jump to another crowd eased: eased all the way, at the
+	// clock's x10 the look trailed the raid by a kilometre and more, and the strategy pictures before the meeting showed
+	// empty sky, the art director on 2b177386's Pearl 01, Midway 01 and Bremen 01, 22 November 04:16Z)
+	if (bLookSet && !bOnShip && !bOnGuns)
+	{
+		const FVector Moved = Wanted - LookWanted;
+		if (Moved.Size() < 150.0 * U)
+		{
+			LookAt += Moved;
+		}
+		LookAt = FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2));
+	}
+	else
+	{
+		LookAt = Wanted;
+	}
+	LookWanted = Wanted;
 	bLookSet = true;
 	const FRotator Facing(Down, Heading, 0.0);
 	FVector From = LookAt - Facing.Vector() * Away * U;

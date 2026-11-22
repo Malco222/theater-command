@@ -71,6 +71,8 @@ namespace AirSky
 	/** Past this distance a cloud is drawn as its far body and its veil only (the rest fading out over the next
 	 * 1.5 km). The far body is drawn from NearAll out, the core under its far puffs. */
 	constexpr double FarAll = 10000.0;
+	/** A small cloud, under 600 m across, is drawn out to this many times its width, thinning over the last fifth. */
+	constexpr double SmallSight = 34.0;
 
 	/** The day's sky as the battle gives it (sky.place.cloud). Absent (a rules bundle from before it): cumulus. */
 	struct Day

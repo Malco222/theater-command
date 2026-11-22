@@ -469,6 +469,13 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 				Live.Add({ Wide(D.Text), Fade, D.bMine });
 			}
 		}
+		// (riding, the last four only, and never narrower than 34 characters of its type: beside the aircraft ridden it
+		// broke into a column of a few words a line, the art director on 2b177386's frames, 22 November 04:16Z)
+		if (bRidden && Live.Num() > 4)
+		{
+			Live.RemoveAt(0, Live.Num() - 4);
+		}
+		const double LeastRoom = WideOf(TEXT("the quick brown fox jumps over a la"), Face) + 12.0;
 		// (the lines broken to a width, the newest's top at Newest, against the left edge or the right; the box they fill)
 		auto LayOut = [&](double Room, double Newest, bool bRight)
 		{
@@ -505,22 +512,23 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		};
 		const double Newest = Size.Y - 90.0;
 		LayOut(Size.X * 0.5, Newest, false);
-		if (Covers() && RiddenL - 18.0 >= 220.0)
+		if (Covers() && RiddenL - 18.0 >= LeastRoom)
 		{
 			LayOut(RiddenL - 18.0, Newest, false);
 		}
-		if (Covers() && Size.X - 18.0 - RiddenR >= 220.0)
+		if (Covers() && Size.X - 18.0 - RiddenR >= LeastRoom)
 		{
 			LayOut(Size.X - 18.0 - RiddenR, Newest, true);
 		}
 		if (Covers())
 		{
 			// (over it, the oldest lines let go until the rest fit under the top bar's panels)
-			LayOut(Size.X * 0.4, RiddenT - 17.0, false);
+			const double Over = FMath::Max(Size.X * 0.4, LeastRoom);
+			LayOut(Over, RiddenT - 17.0, false);
 			while (SentLines.Num() > 0 && SentT < BarH + 170.0)
 			{
 				Live.RemoveAt(0);
-				LayOut(Size.X * 0.4, RiddenT - 17.0, false);
+				LayOut(Over, RiddenT - 17.0, false);
 			}
 		}
 	}

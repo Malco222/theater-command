@@ -58,6 +58,47 @@ namespace StageParts
 	}
 
 	/**
+	 * An American ship in the stage's paint, Measure 1 of 1941: the miniature kit's navy grey (the unit table's 5F6E80,
+	 * a light blue-grey) to Dark Gray 5-D, and her wooden decks (the kit's B79E74) stained Deck Blue 20-B, as the
+	 * battleships at Pearl Harbor wore them. From above, her planks were most of what showed, and Battleship Row read
+	 * tan (the art director on 2b177386's Pearl 06, 22 November 04:16Z: "Measure 1 is a cool dark grey"). Each colour
+	 * within a few levels of the kit's is moved by the same step, so any shading the kit laid on it stays; the map's
+	 * own miniatures keep the kit's paint. Returns how many points were repainted.
+	 */
+	static int32 InStagePaint(FMiniatureMesh& Model, const FString& Nation)
+	{
+		if (Nation != TEXT("USA"))
+		{
+			return 0;
+		}
+		struct FRepaint
+		{
+			FColor From, To;
+		};
+		static const FRepaint Repaints[] = {
+			{ FColor(0x5F, 0x6E, 0x80), FColor(0x4E, 0x54, 0x5A) }, // (navy grey to Dark Gray 5-D)
+			{ FColor(0xB7, 0x9E, 0x74), FColor(0x3E, 0x47, 0x55) }, // (teak planks to Deck Blue 20-B)
+		};
+		int32 Count = 0;
+		for (FColor& C : Model.Colors)
+		{
+			for (const FRepaint& R : Repaints)
+			{
+				const int32 DR = static_cast<int32>(C.R) - R.From.R, DG = static_cast<int32>(C.G) - R.From.G, DB = static_cast<int32>(C.B) - R.From.B;
+				if (FMath::Abs(DR) <= 14 && FMath::Abs(DG) <= 14 && FMath::Abs(DB) <= 14)
+				{
+					C.R = static_cast<uint8>(FMath::Clamp(R.To.R + DR, 0, 255));
+					C.G = static_cast<uint8>(FMath::Clamp(R.To.G + DG, 0, 255));
+					C.B = static_cast<uint8>(FMath::Clamp(R.To.B + DB, 0, 255));
+					++Count;
+					break;
+				}
+			}
+		}
+		return Count;
+	}
+
+	/**
 	 * The kit's model of her class stretched to her own size (AirFeed::HullOf): along her length, across her beam, and
 	 * up by the beam's share, so that her upperworks keep their look; the normals follow. The kit has one model a class
 	 * and navy (the American battleship an Iowa, 270 m), and Battleship Row's 1941 berths are laid for ships of 178 to
@@ -148,7 +189,10 @@ namespace StageParts
 	static const FLinearColor RoofPaint = FLinearColor(FColor::FromHex(TEXT("6F6E68")));
 	// The yard's (the historian's 1941 blocks): the pads, the apron and the docks' coping a weathered concrete, a
 	// drained dock's floor dark, the floating dock's steel the grey of the ships beside it.
-	static const FLinearColor ConcretePaint = FLinearColor(FColor::FromHex(TEXT("8F8B83"))); // (about 140 luma: the art director, 17:45Z)
+	// (about 140 luma: the art director, 17:45Z; a cool grey, 22 November: the warm 8F8B83 read tan under the morning
+	// sun, "the quays should be grey, not tan", the art director on 2b177386's frames, 04:16Z; Oahu's stage paints its
+	// quays the same)
+	static const FLinearColor ConcretePaint = FLinearColor(FColor::FromHex(TEXT("8A8D90")));
 	static const FLinearColor DockFloorPaint = FLinearColor(FColor::FromHex(TEXT("4A4844")));
 	static const FLinearColor DockSteelPaint = FLinearColor(FColor::FromHex(TEXT("5C6062")));
 	static constexpr double YardSkirt = -4.5; // metres under a yard block's ground its sides reach down to
@@ -1197,6 +1241,13 @@ void AAirStage::LayShip(const FStageShip& Given)
 				return;
 			}
 		}
+		const int32 Repainted = StageParts::InStagePaint(Model, Given.Nation);
+		static bool bRepaintTold = false;
+		if (Repainted > 0 && !bRepaintTold)
+		{
+			bRepaintTold = true;
+			UE_LOG(LogTheater, Display, TEXT("Stage: %s in Measure 1, Dark Gray 5-D with her decks Deck Blue 20-B (%d of %d points repainted)."), *Name, Repainted, Model.Colors.Num());
+		}
 		StageParts::FitHull(Model, Given, UnitsPerMetre);
 		FBox Bounds(ForceInit);
 		for (const FVector& Point : Model.Vertices)
@@ -1341,6 +1392,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 			TGuardValue<uint8> Painted(Model.Finish, 128);
 			Model.Vehicle(FString(StageParts::KindOf(Ship->Given.Class)) + TEXT(":") + Ship->Given.Nation, FVector::ZeroVector, UnitsPerMetre, 0.0);
 		}
+		StageParts::InStagePaint(Model, Ship->Given.Nation);
 		StageParts::FitHull(Model, Ship->Given, UnitsPerMetre);
 		TArray<int32> Stern, Bow;
 		for (int32 K = 0; K + 2 < Model.Triangles.Num(); K += 3)

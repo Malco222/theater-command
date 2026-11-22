@@ -303,8 +303,11 @@ private:
 	bool bOwnInput = false;
 	// The strategy camera: what it looks at (board metres), how far, which way.
 	FVector LookAt = FVector::ZeroVector;
-	// (from 2,600 m the aircraft were specks: the art director's note on the first Mac run)
-	double Distance = 1100.0, Yaw = 200.0, Pitch = -14.0;
+	/** Where the crowd it follows was last frame: the look is carried with it, and only a jump to another crowd eased. */
+	FVector LookWanted = FVector::ZeroVector;
+	// (from 2,600 m the aircraft were specks: the art director's note on the first Mac run; from 1,100 m still specks in
+	// the strategy pictures, a B-17 50 pixels across, the art director on 2b177386's frames, 22 November 04:16Z)
+	double Distance = 800.0, Yaw = 200.0, Pitch = -12.0;
 	/** The aircraft the strategy camera's crowd is held on (AirDesk::CrowdOf); -1 none yet. */
 	int FocusAnchor = -1;
 	bool bLookSet = false;
