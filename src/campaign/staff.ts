@@ -108,6 +108,9 @@ const OPEN = openData as unknown as {
   ward?: { stops: number[]; corps: number };
 };
 
+/** The organisation a corps needs before a staff counts it fit to send into battle (the staffs' own fit line; the yield form reads it too). */
+export const FIT_ORG = 0.35;
+
 /** True in a free-play war: the computer's nations make their own decisions. */
 export const isOpen = (g: Game): boolean => g.flags.open === 1;
 
@@ -687,7 +690,7 @@ const busyElsewhere = (g: Game, e: string, nat: string): boolean => Object.keys(
 function sector(g: Game, nat: string, f: Front, least: number, beside?: Region): { target: Region; odds: number } | null {
   const ours = new Set(f.ours);
   const prize = objectives(g, f).slice(0, 8);
-  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= 0.35;
+  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= FIT_ORG;
   let best: { target: Region; odds: number; score: number } | null = null;
   for (const id of f.edge) {
     const t = g.regions[id];
