@@ -118,6 +118,25 @@ export function fieldYield(g: Game, r: Region, nat: string = r.ctrl): number {
  */
 export const fieldOverseas = (r: Region): boolean => r.oil && !!r.overseas;
 
+const oilGround = new WeakMap<Region[], Region[]>();
+
+/**
+ * A fleet based beside the oil (ruling 194, point (g)): true when a working oilfield overseas that this nation's side
+ * holds stands on one of these seas. In 1944 Japan's battle line lay near Singapore and at Tawi-Tawi, and sailed for
+ * Leyte from Brunei, because the oil was there and the tankers to bring it home were not. (An oilfield at home is in
+ * the nation's own stock already: a harbour beside Akita's wells is as dry as the rest of Japan.)
+ */
+export function oilBeside(g: Game, nat: string, seas: number[]): boolean {
+  let fields = oilGround.get(g.regions);
+  if (!fields) { fields = g.regions.filter((r) => fieldOverseas(r)); oilGround.set(g.regions, fields); }
+  for (const r of fields) {
+    if (!r.seas.some((z) => seas.includes(z))) continue;
+    const holder = prizeTaker(g, r, 'oil');
+    if (holder && (holder === nat || allied(g, holder, nat)) && fieldYield(g, r, holder) > 0) return true;
+  }
+  return false;
+}
+
 /** The share of an oilfield's yield lost to sabotage this month: wells set alight burn for months. 0 for a field at work. */
 export const fieldOut = (g: Game, r: Region): number => (resRules(g) && (g.flags[`oilout:${r.id}`] ?? 0) > g.turn ? (g.flags[`oilcut:${r.id}`] ?? 0) / 100 : 0);
 

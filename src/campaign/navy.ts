@@ -36,7 +36,7 @@ import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendl
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
-import { RES, fuelFleet, laneStopped } from './resources';
+import { RES, fuelFleet, laneStopped, oilBeside } from './resources';
 import {
   MEN_PER_DIV, STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Nation, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
 } from './types';
@@ -357,7 +357,27 @@ export function openingStations(g: Game): void {
 // ---- Who holds a sea ------------------------------------------------------------------------
 
 /** How fit a fleet is to fight: its readiness, and in the grand campaign whether it has the fuel to steam. */
-export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fuelFleet(g, f.nat);
+export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fleetFuel(g, f);
+
+/**
+ * True for a fleet based beside the oil (ruling 194, point (g)): its base is a harbour on a sea of the far side that
+ * touches a working oilfield overseas its side holds (resources.ts oilBeside). Read in the far side's seas alone, so
+ * no fleet of Europe's moves.
+ */
+export function besideOil(g: Game, f: Fleet): boolean {
+  if (f.base < 0 || !farOn(g)) return false;
+  const seas = g.regions[f.base]?.seas.filter((z) => z >= FAR_SEAS_FIRST) ?? [];
+  return seas.length > 0 && oilBeside(g, f.nat, seas);
+}
+
+/**
+ * What a fuel shortage leaves of a fleet's fitness for sea: its nation's share, or nothing lost for a fleet based
+ * beside the oil while the nation's stock is dry. Its need stays in the nation's book.
+ */
+export function fleetFuel(g: Game, f: Fleet): number {
+  const k = fuelFleet(g, f.nat);
+  return k < 1 && besideOil(g, f) ? 1 : k;
+}
 const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel * (f.admiral.level - 1) : 0);
 
 /** A fleet's weight in a fleet action. */
