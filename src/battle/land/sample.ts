@@ -7,8 +7,9 @@ import { ENGINEERING } from '../../campaign/rivers';
 import { antiTank, snipedIn, tollFor, tollOf, type Facing } from '../../campaign/support';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type Kind, type Region } from '../../campaign/types';
 import type { AirOnCall, FieldTicket, ForceTicket, Side, SideTicket } from '../core/types';
-import type { LandPlace, Terrain } from './field';
+import { groundAt, type LandField, type LandPlace, type Terrain } from './field';
 import { LAND } from './rules';
+import { turnToDate } from '../../core/ticket';
 
 const force = (corps: number, name: string, nat: string, kind: string, divs: number, share: number, dug = false, first = 1, str = 0.9): ForceTicket =>
   ({ corps, name, nat, kind, divs, men: divs * 15000 * str, str, org: 0.85, xp: 0.3, mor: 0.65, share, dug, first });
@@ -272,4 +273,52 @@ export function withJoiners(t: FieldTicket<LandPlace>, js: Partial<Record<Side, 
     };
   };
   return { ...t, att: add(t.att, 'att'), def: add(t.def, 'def') };
+}
+
+/**
+ * Test hedges (hedge cutters, release 2): three hedge lines straight across the middle of a field, between the armies,
+ * each with two gateways (the 3D game's own width), in the shape LandBattle.hedgesOn takes. For the 2D test kitchen
+ * (?hedges: the browser's fields have none) and the tests; no campaign field is laid with them.
+ */
+export function practiceHedges(w: number, h: number): { hedges: { kind: string; points: [number, number][] }[]; gates: { x: number; y: number; yaw: number; width: number; kind: string }[] } {
+  const hedges: { kind: string; points: [number, number][] }[] = [], gates: { x: number; y: number; yaw: number; width: number; kind: string }[] = [];
+  for (const f of [0.42, 0.5, 0.58]) {
+    const y = Math.round(h * f);
+    hedges.push({ kind: 'hedge', points: [[Math.round(w * 0.03), y], [Math.round(w * 0.97), y]] });
+    for (const g of [0.3, 0.7]) gates.push({ x: Math.round(w * g), y, yaw: 0, width: LAND.cutters.width, kind: 'gate' });
+  }
+  return { hedges, gates };
+}
+
+/**
+ * The test hedges laid on a given field (the bocage, ruling 242 C1-B): practiceHedges, with a gateway too wherever a
+ * line crosses a road or a bridge (the middle of each stretch of road or deck it crosses), as the 3D game leaves its
+ * lanes open: a hedge line is never laid across a road or a bridge. For the 2D test kitchen and the bocage's measure;
+ * the pins fought with practiceHedges itself keep it.
+ */
+export function fieldHedges(f: LandField): ReturnType<typeof practiceHedges> {
+  const H = practiceHedges(f.w, f.h);
+  for (const h of H.hedges) {
+    const [[x0, y], [x1]] = h.points;
+    let run: number[] = [];
+    const flush = (): void => { if (run.length) H.gates.push({ x: Math.round((run[0] + run[run.length - 1]) / 2), y, yaw: 0, width: LAND.cutters.width, kind: 'gate' }); run = []; };
+    for (let x = x0; x <= x1; x += f.cell / 5) { const g = groundAt(f, x, y); if (g === 'road' || g === 'bridge') run.push(x); else flush(); }
+    flush();
+  }
+  return H;
+}
+
+/**
+ * The 2D test kitchen's practice ticket, with its URL flags: ?teams, each side a machine-gun team and a mortar team;
+ * ?join, a corps comes up from next door for each side, his midway on his east flank, theirs late from behind their
+ * line (the test kitchen until the campaign's cards carry them); ?july44, the field fought in July 1944, its date with
+ * it, when tanks carry hedge cutters (LAND.cutters.from). The date is a flag of its own: it moves the fight (tank models,
+ * armour, radio, calibres), so ?cutters alone changes nothing but the cuts (ruling 242 C1-A).
+ */
+export function kitchenTicket(t0: FieldTicket<LandPlace>, flagged: (f: string) => boolean): FieldTicket<LandPlace> {
+  const t1 = flagged('teams') ? withTeams(t0) : t0;
+  const t2 = flagged('join') ? withJoiners(t1, { att: [{ joined: 0.5, toward: Math.PI / 2 }], def: [{ joined: 0.3 }] }) : t1;
+  if (!flagged('july44')) return t2;
+  const turn = Math.max(t2.turn, LAND.cutters.from);
+  return { ...t2, turn, date: turnToDate(turn).label };
 }

@@ -15,7 +15,7 @@ import { STYLE, styleFor, type Style } from './styles';
 import { BEND, buildField, coverAt, diggable, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
-import { LAND, MOTION, gunsOf, reachOf, type Kind, type Motion } from './rules';
+import { LAND, MOTION, gunsOf, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
 import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
 import { turnToDate } from '../../core/ticket';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
@@ -27,12 +27,32 @@ const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 export interface Hedge { kind: string; points: [number, number][] }
 /** A gate or gap in a hedge: where it is, which way the hedge runs (radians from east), and how wide. */
 export interface Gate { x: number; y: number; yaw?: number; width?: number; kind?: string }
+/**
+ * A gap cut through a hedge (hedge cutters, release 2; ruling 242): begun at t0 by a tank block of 'side' (its front at
+ * the hedge), open as a gate from t1; where, the way the hedge runs there (radians from east) and how wide. 'known':
+ * the player knew the block as the cut began (known(): an enemy's cut shows in his view only then). 'open': its gate is
+ * on the field.
+ */
+export interface Cut { t0: number; t1: number; unit: number; side: Side; x: number; y: number; yaw: number; width: number; known: boolean; open: boolean }
+/**
+ * A smoke screen (smoke on call, release 2; ruling 242): laid by block 'unit' of 'side' at battle second t along x0, y0
+ * to x1, y1, standing while t < until. Numbered from 1 in the order laid.
+ */
+export interface Screen { id: number; side: Side; unit: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }
 /** The squares the hedge lines are mapped by, for hiding (metres). */
 const HEDGE_CELL = 10;
 /** Ground with nothing to hide men on the move: caught there by an ambush, they are shaken worst (LAND.hide.surprise.open). */
 const OPEN_GROUND: Ground[] = ['open', 'field', 'road', 'bridge', 'marsh'];
 /** The squares the hedge segments are filed by (metres), how far from where a man's way meets a hedge a gate still serves him, and how near a gate's own run ends may be to it. */
 const GATE_CELL = 25, GATE_REACH = 120;
+/**
+ * The bocage (hedge cutters' C1-B, LandBattle.bocage): a tank block without cutters finds its way over the field's own
+ * cells (FIELD.cell, 25 m), so a hedge line bars the cells whose middles lie within HEDGE_BAR cells of it (a band about
+ * two cells deep, which no way walked straight or cell by cell can slip through), except those within HEDGE_GAP cells
+ * of a gap in it (a gateway, or a gap cut and open). At the field's own grain: such a block's middle crosses a hedge
+ * within a cell or so of a gap. Neither is a number of the fight, only how finely the hedges are laid on the cells.
+ */
+const HEDGE_BAR = 0.75, HEDGE_GAP = 1.25;
 /** Where along a-b (0 to 1) it crosses c-d, or null. */
 function segHit(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): number | null {
   const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy, den = rx * sy - ry * sx;
@@ -72,13 +92,15 @@ export function coveredTanks(t: FieldTicket<LandPlace>, units: LandUnit[]): Set<
  * A block's way round ground it cannot enter: how it moves, the cell it was making for, the turning points, and whether
  * the way gets there or only as near as the block can go.
  */
-interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean }
+interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean; bars?: number }
 /**
  * How a block finds its way: as its kind moves; or, foot of a corps the card brings on over dry ground, as foot that
  * will not wade (b464(5)): sent at an enemy beyond where the river bends, it goes round the bend by dry ground, as the
- * card counts it, never through it. Only the way it chooses: a block already in the water still wades out.
+ * card counts it, never through it. Only the way it chooses: a block already in the water still wades out. 'hedged': a
+ * tank block without cutters on a field with hedges, the bocage switch on (hedge cutters' C1-B): as tracks go, over no
+ * hedge line but at a gap.
  */
-type Going = Motion | 'ashore';
+type Going = Motion | 'ashore' | 'hedged';
 /**
  * A strike called in (air support): who called it, which of the side's groups flies it, when, and its legs, one flight
  * each. A strike the player aims is one leg down his run, carrying all the side's bank spread along it; the staff's
@@ -251,8 +273,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   readonly flanking = new Map<number, { target: number; at: [number, number]; since: number }>();
   /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
   private models = new Map<number, string | null>();
-  /** The player's orders on the air (radio): each block's, with the battle time it lands. */
-  private pending: { at: number; id: number; go: () => void }[] = [];
+  /**
+   * The player's orders on the air (radio): each block's, with the battle time it lands; 'smoke' (smoke on call, release
+   * 2) a smoke order, which rides beside the block's other order on the air, neither replacing it nor replaced by it.
+   */
+  private pending: { at: number; id: number; go: () => void; smoke?: true }[] = [];
   /**
    * Neighbours join the fight (release 2): the blocks of corps coming up from next door, not yet on the field, earliest
    * first: each with its corps' ticket, the battle second it comes on, the edge and the place there. Empty where none
@@ -273,6 +298,35 @@ export class LandBattle implements BattleSim<LandUnit> {
   private riders: { corps: number; side: Side; f: ForceTicket; from: [number, number]; mid: [number, number]; to: [number, number]; there: number; comes: number; edge: Edge }[] = [];
   /** The joining corps a block has waited for this battle (hold until relieved): each relieves one block a battle. */
   private waitedFor = new Set<number>();
+  /**
+   * Hedge cutters (release 2; Brian, 22 November 14:19Z; ruling 242; LAND.cutters; "Hedge cutters" below): a tank block
+   * carries cutters, may be told to cut a gap through a hedge where the player picks, and the staffs' cut where their
+   * way crosses one. Off unless whoever opens the field turns it on (the 2D page's ?cutters, the bridge's { cutters:
+   * true }); off, nothing below is read.
+   */
+  cutters = false;
+  /** Every cut begun this battle (hedge cutters), in the order begun. Empty while the switch is off. */
+  readonly cuts: Cut[] = [];
+  /**
+   * Smoke on call (release 2; Brian, 22 November 14:19Z; ruling 242; LAND.smoke; "Smoke on call" below): a block on foot
+   * whose army has the means may lay a smoke screen before it, and both staffs lay one as they go in. Off unless whoever
+   * opens the field turns it on (the 2D page's ?smoke, the bridge's { smoke: true }); off, nothing below is read.
+   */
+  smoke = false;
+  /**
+   * The bocage (release 2; ruling 242 C1-B, as amended 17:45Z: "unfitted tanks cross only at gaps"; "The bocage" below):
+   * on a field with hedges, a tank block without hedge cutters crosses a hedge line only at a gap in it, a gateway or a
+   * gap cut and open, and finds its way round to one. Its own switch, so cutters alone stays the fight it was (C1-B:
+   * "under its own switch, measured against the card"). Off unless whoever opens the field turns it on (the 2D page's
+   * ?bocage, the bridge's { bocage: true }); off, nothing below is read.
+   */
+  bocage = false;
+  /** The bocage: the field's cells a hedge line bars to a tank block without cutters (barrier()); null until asked, and again whenever a gap opens. */
+  private bars: Uint8Array | null = null;
+  /** How many times the barred cells have been laid afresh (a gap opened): a way found before is looked for again. */
+  private barsLaid = 0;
+  /** Every screen laid this battle (smoke on call), in the order laid: standing while t < until. Empty while the switch is off. */
+  readonly screens: Screen[] = [];
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -702,7 +756,7 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** The wait order landing (by radio, the player's): where it may no longer wait, it holds as the core's hold does. */
   private wait(u: LandUnit): void {
-    u.order = null; u.path = []; u.keepFace = null; delete u.aim; delete u.search; delete u.searchR;
+    u.order = null; u.path = []; u.keepFace = null; delete u.aim; delete u.search; delete u.searchR; delete u.cut;
     if (this.waitWhy(u) !== null) return;
     const d = this.dueAt(u)!;
     u.waits = { corps: d.corps, due: d.due, at: [u.x, u.y], since: this.t };
@@ -824,6 +878,320 @@ export class LandBattle implements BattleSim<LandUnit> {
     return due;
   }
 
+  // ---- Hedge cutters (release 2) ----------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 14:19Z ("Let's do 1 and 2": "bladed Shermans punch a gap through a hedgerow where the player
+  // picks"); the design director's ruling 242, C1-A to C4-A (LAND.cutters). A tank block carries cutters from July 1944
+  // on a field with hedges, whatever its army. Told to cut at a point on a hedge line, it drives for that point and on
+  // through it till its rear stands LAND.cutters.near metres beyond, an order like any other (by radio, the player's,
+  // and gated again as it lands). As its front reaches the hedge the cut begins (t0, a land:cut event), and LAND.cutters.secs later
+  // a gap stands open there (t1): a Gate of kind 'cut' the drawn men of every block on either side walk through from
+  // then. A block its staff runs cuts wherever its own way crosses a hedge line with no gap near, with no order at all
+  // (C4-A); the player's own blocks only where he orders it. Looks only (C1-A): the gates are read by the drill alone
+  // (drill.ts via and gateOn: no number of the fight reads this.gates, and gateOn's only caller is the drill), the
+  // block's way is its move's own, and nothing here draws on the dice; so the fight is the same, cut or not. With the
+  // bocage switch on as well (C1-B, "The bocage" below), the gates are read by the way a tank block without cutters
+  // finds (barrier()): there a gap open is a way through for any tank, and the fight changes, measured.
+
+  /** Whether this block carries hedge cutters: the switch on, a tank block, from LAND.cutters.from, on a field with hedges. */
+  cutterOf(u: LandUnit): boolean {
+    return this.cutters && u.kind === 'arm' && this.ticket.turn >= LAND.cutters.from && this.hedges.length > 0;
+  }
+
+  /**
+   * Why this block may not cut through the hedge at (x, y) now, in the player's words (129(d)); null where it may. With
+   * no point, whether it may cut anywhere. Whose block it is, is the caller's to ask (the bridge's words).
+   */
+  cutWhy(u: LandUnit, x?: number, y?: number): string | null {
+    if (!this.cutters) return 'Your tanks carry no hedge cutters.';
+    if (!fighting(u) || u.kind === 'fort') return 'It is out of the fight.';
+    if (u.kind !== 'arm') return 'Only tanks carry hedge cutters.';
+    if (this.ticket.turn < LAND.cutters.from) return 'Hedge cutters come in July 1944.';
+    if (!this.hedges.length) return 'There are no hedges on this field.';
+    if (x === undefined && y === undefined) return null;
+    const px = Number(x), py = Number(y);
+    // (What the move there would refuse: a point off the field.)
+    if (!Number.isFinite(px) || !Number.isFinite(py) || px < 0 || py < 0 || px > this.field.w || py > this.field.h) return 'Off the field.';
+    if (!this.hedgeNear(px, py, LAND.cutters.near)) return 'There is no hedge there.';
+    return null;
+  }
+
+  /**
+   * The nearest point of a hedge line to (x, y) within r metres, and the way the line runs there (radians from east, as
+   * a Gate's yaw); null where none passes that near.
+   */
+  hedgeNear(x: number, y: number, r: number): { x: number; y: number; yaw: number } | null {
+    let best: { x: number; y: number; yaw: number } | null = null, bd = r;
+    const seen = new Set<number[]>();
+    for (let c = Math.floor((x - r) / GATE_CELL); c <= Math.floor((x + r) / GATE_CELL); c++)
+      for (let q = Math.floor((y - r) / GATE_CELL); q <= Math.floor((y + r) / GATE_CELL); q++)
+        for (const s of this.hedgeSegs.get(c * 4096 + q) ?? []) {
+          if (seen.has(s)) continue;
+          seen.add(s);
+          const dx = s[2] - s[0], dy = s[3] - s[1], l = dx * dx + dy * dy;
+          if (l <= 0) continue;
+          const k = Math.max(0, Math.min(1, ((x - s[0]) * dx + (y - s[1]) * dy) / l)), px = s[0] + k * dx, py = s[1] + k * dy, d = Math.hypot(x - px, y - py);
+          if (d <= bd) { bd = d; best = { x: px, y: py, yaw: Math.atan2(dy, dx) }; }
+        }
+    return best;
+  }
+
+  /**
+   * The cut order landing (by radio, the player's): where it may no longer cut there, it holds, as the core's hold does
+   * (as wait does). Else it drives for the nearest point of the hedge line and on through it, the cut its order's.
+   */
+  private cutGo(u: LandUnit, x: number, y: number): void {
+    if (this.cutWhy(u, x, y) !== null) { u.order = null; u.path = []; u.keepFace = null; delete u.aim; delete u.search; delete u.searchR; delete u.cut; return; }
+    const p = this.hedgeNear(x, y, LAND.cutters.near)!;
+    const k = Math.hypot(p.x - u.x, p.y - u.y), [ux, uy] = k > 1e-6 ? [(p.x - u.x) / k, (p.y - u.y) / k] : ahead(u.face);
+    const on = u.d / 2 + LAND.cutters.near;
+    this.send(u, { kind: 'move', x: p.x + ux * on, y: p.y + uy * on });
+    u.cut = { x: p.x, y: p.y, yaw: p.yaw };
+  }
+
+  /** The point lies on this block's front or inside its ground: its front has reached it. */
+  private fronted(u: LandUnit, x: number, y: number): boolean {
+    const [fx, fy] = ahead(u.face), dx = x - u.x, dy = y - u.y;
+    const along = dx * fx + dy * fy, across = Math.abs(dx * fy - dy * fx);
+    return along <= u.d / 2 + 0.5 && along >= -u.d / 2 && across <= u.w / 2;
+  }
+
+  /** A block its staff runs: the computer's, or one of the player's his staff fights (one he has not taken in hand). */
+  private staffRuns(u: LandUnit): boolean { return this.ai[u.side] && !u.taken; }
+
+  /** A gap within LAND.cutters.width of (x, y): a gate, or a cut under way. */
+  private gapNear(x: number, y: number): boolean {
+    const W = LAND.cutters.width;
+    return this.gates.some((g) => Math.hypot(g.x - x, g.y - y) <= W) || this.cuts.some((c) => !c.open && Math.hypot(c.x - x, c.y - y) <= W);
+  }
+
+  /**
+   * Each tick, once the blocks have moved ('before': where each stood; 'moved': where its own move took it, before the
+   * blocks were eased apart): a block whose front has reached the hedge it was sent to cut begins its cut, unless a gap
+   * stands there already (another block's cut, or a gateway: it goes through that); one whose way there has ended short
+   * of it drops it. A block its staff runs that carries cutters, whose own way this tick (its move, never a shove from a
+   * neighbour) crossed a hedge line with no gap near the crossing, cuts there. Geometry only.
+   */
+  private cutOn(before: Map<number, [number, number]>, moved: Map<number, [number, number]>): void {
+    for (const u of this.units) {
+      if (u.cut) {
+        const c = u.cut;
+        if (!fighting(u)) delete u.cut;
+        else if (this.fronted(u, c.x, c.y)) { delete u.cut; if (!this.gapNear(c.x, c.y)) this.cutBegin(u, c.x, c.y, c.yaw); }
+        else if (u.order?.kind !== 'move') delete u.cut;
+        continue;
+      }
+      if (!live(u) || !this.staffRuns(u) || !this.cutterOf(u)) continue;
+      const b0 = before.get(u.id), b1 = moved.get(u.id);
+      if (!b0 || !b1 || (b0[0] === b1[0] && b0[1] === b1[1])) continue;
+      const p = this.hedgeCross(b0[0], b0[1], b1[0], b1[1]);
+      if (!p || this.gapNear(p[0], p[1])) continue;
+      const d = this.hedgeDir(p[0], p[1]);
+      this.cutBegin(u, p[0], p[1], d ? Math.atan2(d[1], d[0]) : 0);
+    }
+  }
+
+  /**
+   * A cut begins: kept, and told (a land:cut event, with when the gap opens, the hedge's yaw and the gap's width). Its
+   * words go to the player for his own blocks; an enemy's is told with no words, for the 3D game alone (as every event
+   * of a block he has not met is kept from him).
+   */
+  private cutBegin(u: LandUnit, x: number, y: number, yaw: number): void {
+    const C = LAND.cutters, r1 = (v: number): number => Math.round(v * 10) / 10, r3 = (v: number): number => Math.round(v * 1000) / 1000;
+    const c: Cut = { t0: r3(this.t), t1: r3(this.t + C.secs), unit: u.id, side: u.side, x: r1(x), y: r1(y), yaw: r3(yaw), width: C.width, known: this.known(u), open: false };
+    this.cuts.push(c);
+    const words = this.ticket[u.side].human || !this.ticket[other(u.side)].human;
+    this.say({ what: 'land:cut', unit: u.id, side: u.side, text: words ? `${this.named(u)} cuts a gap through the hedge.` : '', x: c.x, y: c.y, extra: { t1: c.t1, yaw: c.yaw, width: c.width } });
+  }
+
+  /** Each tick, as the clock moves on: a cut whose time is up stands open as a gate, for the drawn men from now. */
+  private openCuts(): void {
+    for (const c of this.cuts) {
+      if (c.open || this.t < c.t1 - 1e-9) continue;
+      c.open = true;
+      this.gates.push({ x: c.x, y: c.y, yaw: c.yaw, width: c.width, kind: 'cut' });
+      // The bocage (C1-B): once a gap is open, any tank uses it.
+      if (this.bocage) { this.bars = null; this.barsLaid++; }
+    }
+  }
+
+  /** The cuts a side sees: its own, and those of enemy blocks it knew as they cut; every one with no side (a recording). */
+  cutView(as?: Side): Pick<BattleView, 'cuts'> {
+    if (!this.cutters || !this.cuts.length) return {};
+    const l = this.cuts.filter((c) => as === undefined || c.side === as || c.known);
+    return l.length ? { cuts: l.map((c) => ({ t0: c.t0, t1: c.t1, unit: c.unit, x: c.x, y: c.y, yaw: c.yaw, width: c.width })) } : {};
+  }
+
+  // ---- The bocage (release 2) ---------------------------------------------------------------------------------------
+  //
+  // The design director's ruling 242 C1-B, built as amended 17:45Z from the historian ("unfitted tanks cross only at
+  // gaps"): the device's real point (the readings, C1-B: tanks without cutters "diving into the ditches nose first, to
+  // be stuck there and become easy targets"; the historian's K21). On a field with hedges, with the bocage switch on, a
+  // tank block that carries no cutters (before July 1944, or with the cutters switch off) crosses a hedge line only at a
+  // gap in it: a gateway the 3D game laid, or a gap a cutter tank has cut and that stands open ("Once a gap is open, any
+  // vehicle uses it"). It finds its way round to one, as round a river to its bridge (going 'hedged': the hedge lines
+  // bar the cells about them, barrier()), and is never eased over one. A tank block carrying cutters goes on as before:
+  // its cut is drawn (C1-A), and takes none of its time (the cut's LAND.cutters.secs stays the drawing's: the historian's
+  // bound of 3 real minutes or less, a breach and the drive to the next bank, holds it). Lorries, guns and foot are not
+  // held: the ruling holds tanks. Only the way changes: nothing here draws on the dice, and a block's way is found the
+  // same each time. It changes the fight (slower tanks in the bocage): measured against off (the cutters and smoke
+  // tests' (10b), LONG=1).
+
+  /** Whether a straight way from (x0, y0) to (x1, y1) crosses a hedge line where it is barred (barrier()): not at a gap. */
+  private barredCross(x0: number, y0: number, x1: number, y1: number): boolean {
+    const bar = this.barrier(), len = Math.hypot(x1 - x0, y1 - y0);
+    for (let skip = 0, p = this.hedgeCross(x0, y0, x1, y1); p; p = this.hedgeCross(x0, y0, x1, y1, skip)) {
+      if (bar[this.cellAt(p[0], p[1])]) return true;
+      skip = Math.hypot(p[0] - x0, p[1] - y0) + 0.01;
+      if (skip >= len) break;
+    }
+    return false;
+  }
+
+  /** Held back by hedges (the bocage on): a tank block without cutters, on a field with hedges. */
+  heldBack(u: LandUnit): boolean {
+    return this.bocage && u.kind === 'arm' && this.hedges.length > 0 && !this.cutterOf(u);
+  }
+
+  /**
+   * The field's cells a hedge line bars to a tank block without cutters: each cell whose middle lies within HEDGE_BAR
+   * cells of a hedge line, but for those within HEDGE_GAP cells of a gap in it (this.gates: a gateway, or a cut open).
+   * Laid when first asked and again once a gap opens.
+   */
+  private barrier(): Uint8Array {
+    if (this.bars) return this.bars;
+    const f = this.field, C = f.cols, R = f.rows, cs = f.cell, bar = new Uint8Array(C * R), r = HEDGE_BAR * cs;
+    const mid = (i: number): [number, number] => [(i % C) * cs + cs / 2, Math.floor(i / C) * cs + cs / 2];
+    for (const h of this.hedges) for (let k = 1; k < h.points.length; k++) {
+      const [ax, ay] = h.points[k - 1], [bx, by] = h.points[k];
+      const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - r) / cs)), c1 = Math.min(C - 1, Math.floor((Math.max(ax, bx) + r) / cs));
+      const r0 = Math.max(0, Math.floor((Math.min(ay, by) - r) / cs)), r1 = Math.min(R - 1, Math.floor((Math.max(ay, by) + r) / cs));
+      for (let q = r0; q <= r1; q++) for (let c = c0; c <= c1; c++) if (segGap(c * cs + cs / 2, q * cs + cs / 2, ax, ay, bx, by) <= r) bar[q * C + c] = 1;
+    }
+    const gr = HEDGE_GAP * cs;
+    for (const g of this.gates) {
+      const c0 = Math.max(0, Math.floor((g.x - gr) / cs)), c1 = Math.min(C - 1, Math.floor((g.x + gr) / cs));
+      const r0 = Math.max(0, Math.floor((g.y - gr) / cs)), r1 = Math.min(R - 1, Math.floor((g.y + gr) / cs));
+      for (let q = r0; q <= r1; q++) for (let c = c0; c <= c1; c++) { const [mx, my] = mid(q * C + c); if (Math.hypot(mx - g.x, my - g.y) <= gr) bar[q * C + c] = 0; }
+    }
+    return (this.bars = bar);
+  }
+
+  // ---- Smoke on call (release 2) ----------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 14:19Z ("a section lays a smoke line to cover a crossing, when and where the player orders it");
+  // the design director's ruling 242, S1-A to S6, as amended 17:45Z (LAND.smoke). A block on foot, or lorried infantry,
+  // whose army has the means lays a screen along a line he draws: clipped to its own front about the line's middle,
+  // which must lie within its army's reach of its front (an army whose means is set down at its own front lays it there,
+  // for a line drawn on its ground or within LAND.smoke.front of its front), at once as the order lands (by radio, the
+  // player's, on its own place on the air beside his other order, gated again then); one at a time, its army's count a
+  // battle. While it stands (t < until), a direct blow whose line from the shooter's middle to the target's middle
+  // crosses it, either side's screen, strikes at LAND.smoke.share, never on top of the vague share nor of fire on cover
+  // at a block still hidden (blow); and, with hiding on, no hidden block is seen through it (spotHidden). Fire from far
+  // back is not touched: guns beyond LAND.guns.closeAt, mortar teams, and the air (the share a side holds back for its
+  // air strikes is held back from the blow whole, as if no screen stood). It gives no cover, does no harm and shakes no
+  // one. Both staffs lay one as a foot block of theirs goes in (ai.ts smokeIn). The drill draws each screen as the rounds
+  // that lay it, in place of its own salvoes (S6).
+  // The dice: where a screen acts it draws nothing and spares no draw. A screened blow draws its luck as it would; the
+  // veil (spotHidden) draws nothing. What follows from it changes the fight, and so the draws that come after, as every
+  // rule that changes the fight does: a weaker blow breaks a block later, and a block kept hidden by the veil (S1-A as the
+  // build spec reads it: nobody seen through a screen) is not fired on until it is found, so the blows it would have
+  // drawn are not drawn. That is the screen's effect, measured with the rest (S5-A), not a draw of its own.
+
+  /** This block's section smoke: the switch on, a block on foot or lorried infantry (not a support team) of an army with the means. */
+  smokeOf(u: LandUnit): SmokeMeans | null {
+    if (!this.smoke || u.team || (MOTION[u.kind] !== 'foot' && u.kind !== 'mot')) return null;
+    return smokeMeans(u.nat);
+  }
+
+  /** The screen this block laid that still stands, if any. */
+  screenOf(u: LandUnit): Screen | undefined { return this.screens.find((s) => s.unit === u.id && this.t < s.until); }
+
+  /** Metres from (x, y) to this block's front edge. */
+  private frontGap(u: LandUnit, x: number, y: number): number {
+    const [fx, fy] = ahead(u.face), cx = u.x + (fx * u.d) / 2, cy = u.y + (fy * u.d) / 2, hw = u.w / 2;
+    return segGap(x, y, cx - fy * hw, cy + fx * hw, cx + fy * hw, cy - fx * hw);
+  }
+
+  /**
+   * Why this block may not lay smoke now, in the player's words (129(d)); null where it may. With a line (x0, y0 to x1,
+   * y1, or only its middle x0, y0), whether it may lay it there; with none, whether it may lay one at all. Whose block it
+   * is, is the caller's to ask (the bridge's words).
+   */
+  smokeWhy(u: LandUnit, x0?: number, y0?: number, x1?: number, y1?: number): string | null {
+    if (!this.smoke) return 'There is no smoke to lay in this battle.';
+    if (!fighting(u) || u.kind === 'fort') return 'It is out of the fight.';
+    if (u.team || (MOTION[u.kind] !== 'foot' && u.kind !== 'mot')) return 'Only troops on foot lay smoke.';
+    const m = smokeMeans(u.nat);
+    if (!m) return 'Your army has no smoke to lay.';
+    if ((u.smokeLeft ?? m.count ?? LAND.smoke.count) <= 0) return 'They have no smoke left.';
+    if (this.screenOf(u)) return 'Their last screen still stands.';
+    if (x0 === undefined && y0 === undefined) return null;
+    const a = Number(x0), b = Number(y0), c = x1 === undefined ? a : Number(x1), d = y1 === undefined ? b : Number(y1);
+    if (![a, b, c, d].every(Number.isFinite)) return 'Off the field.';
+    const mx = (a + c) / 2, my = (b + d) / 2;
+    if (m.reach > 0 && this.frontGap(u, mx, my) > m.reach + 1e-9) return `They can lay smoke up to ${m.reach} m ahead.`;
+    // An army that sets its smoke down along its own front lays it there: a line drawn far off is not where it would go.
+    if (m.reach <= 0 && !this.fronted(u, mx, my) && this.frontGap(u, mx, my) > LAND.smoke.front + 1e-9) return 'They set their smoke down along their own front.';
+    return null;
+  }
+
+  /**
+   * Where this block lays its screen for the line drawn: along it, at most its own front long, about the line's middle
+   * (a point: its front long, square to its face); set down along its own front where its army's means is (reach 0).
+   */
+  private smokeLine(u: LandUnit, l: number[], m: SmokeMeans): [number, number, number, number] {
+    const [fx, fy] = ahead(u.face), r1 = (v: number): number => Math.round(v * 10) / 10;
+    let mx: number, my: number, dx = fy, dy = -fx, half = u.w / 2;
+    if (m.reach <= 0) { mx = u.x + (fx * u.d) / 2; my = u.y + (fy * u.d) / 2; }
+    else {
+      const [x0, y0, x1, y1] = l, len = Math.hypot(x1 - x0, y1 - y0);
+      mx = (x0 + x1) / 2; my = (y0 + y1) / 2;
+      if (len > 1e-6) { dx = (x1 - x0) / len; dy = (y1 - y0) / len; half = Math.min(len / 2, u.w / 2); }
+    }
+    return [r1(mx - dx * half), r1(my - dy * half), r1(mx + dx * half), r1(my + dy * half)];
+  }
+
+  /**
+   * The smoke order landing (by radio, the player's): where it may no longer lay it there, nothing is laid and it goes
+   * on as it was. Else the screen is laid at once, its count goes down, and it is told (land:smoke); the drill draws its
+   * rounds. Its order is not touched: a block lays smoke as it goes.
+   */
+  private lay(u: LandUnit, l: number[]): void {
+    if (this.smokeWhy(u, l[0], l[1], l[2], l[3]) !== null) return;
+    const m = this.smokeOf(u)!, [x0, y0, x1, y1] = this.smokeLine(u, l, m);
+    const s: Screen = { id: this.screens.length + 1, side: u.side, unit: u.id, x0, y0, x1, y1, t: Math.round(this.t * 1000) / 1000, until: Math.round((this.t + m.hang) * 1000) / 1000 };
+    this.screens.push(s);
+    u.smokeLeft = (u.smokeLeft ?? m.count ?? LAND.smoke.count) - 1;
+    this.say({ what: 'land:smoke', unit: u.id, side: u.side, text: `${this.named(u)} lays a smoke screen.`, x: Math.round(((x0 + x1) / 2) * 10) / 10, y: Math.round(((y0 + y1) / 2) * 10) / 10, extra: { screen: s.id, until: s.until } });
+    this.drill?.screen(s);
+  }
+
+  /** A live screen lies across the line from (ax, ay) to (bx, by). */
+  screened(ax: number, ay: number, bx: number, by: number): boolean {
+    for (const s of this.screens) if (this.t < s.until && segHit(ax, ay, bx, by, s.x0, s.y0, s.x1, s.y1) !== null) return true;
+    return false;
+  }
+
+  /** A blow struck straight at what it sees (foot, tanks, a machine-gun team, a gun over open sights), not from far back (guns beyond their close range, a mortar team). */
+  private direct(u: LandUnit, t: LandUnit): boolean {
+    if (u.team === 'mor') return false;
+    return !(u.kind === 'art' && !u.team && this.gap(u, t) >= gunsOf(u).closeAt);
+  }
+
+  /** The screens standing now, as a side sees them: every one, the laying block named where the side has met it. */
+  screenView(as?: Side): Pick<BattleView, 'screens'> {
+    if (!this.smoke || !this.screens.length) return {};
+    const on = this.screens.filter((s) => this.t < s.until);
+    if (!on.length) return {};
+    return {
+      screens: on.map((s) => {
+        const u = this.unit(s.unit), named = as === undefined || s.side === as || !u || this.known(u);
+        return { id: s.id, side: s.side, ...(named ? { unit: s.unit } : {}), x0: s.x0, y0: s.y0, x1: s.x1, y1: s.y1, t: s.t, until: s.until };
+      }),
+    };
+  }
+
   /**
    * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
    * or the card identified its corps (b476(3)), once one of his has fought it or it has struck one of his in contact
@@ -858,7 +1226,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // The battle time he gave it, as the 3D game shows it (it runs the rules a little ahead of the picture): the radio's
     // wait counts from there, never from before it. Absent: now.
     const said = (c as { at?: unknown }).at, from = typeof said === 'number' && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
-    const give = (u: LandUnit, go: () => void): void => this.order(u, go, air, from);
+    const give = (u: LandUnit, go: () => void, smoke = false): void => this.order(u, go, air, from, smoke);
     switch (c.do) {
       case 'move': {
         const us = mine(c.units);
@@ -922,7 +1290,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       case 'hold': {
         const us = mine(c.units);
         hands(us);
-        for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; delete u.search; delete u.searchR; });
+        for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; delete u.search; delete u.searchR; delete u.cut; });
         return us.length > 0;
       }
       case 'withdraw': {
@@ -947,7 +1315,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (c.side !== by && !this.ai[c.side]) return false;
         this.ai[c.side] = c.on;
         // Handed to the computer, the whole side is its staff's again (direct command, release 2).
-        if (c.on) for (const u of this.units) if (u.side === c.side) delete u.taken;
+        if (c.on) for (const u of this.units) if (u.side === c.side) { delete u.taken; delete u.cut; }
         return true;
       }
       case 'dice': {
@@ -985,10 +1353,44 @@ export class LandBattle implements BattleSim<LandUnit> {
           for (const u of us) give(u, () => this.wait(u));
           return true;
         }
+        // Hedge cutters (release 2): { do: 'land:cut', units, x, y } sends tank blocks to cut a gap through the hedge at
+        // that point and drive on through it (cutWhy). Gated again as it lands: where one may no longer cut there, it holds.
+        if (c.do === 'land:cut') {
+          if (!this.cutters) return false;
+          const x = Number(c.x), y = Number(c.y);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+          const us = mine((c.units ?? []) as number[]).filter((u) => this.cutWhy(u, x, y) === null);
+          if (!us.length) return false;
+          hands(us);
+          // Several blocks told to cut at one point keep the group's shape, as a move does: each cuts its own gap at its
+          // place in the group along the hedge there, where the hedge runs that far; else it makes for the point, and goes
+          // through the gap cut there (cutOn: never a second cut on one gap).
+          const p = this.hedgeNear(x, y, LAND.cutters.near)!, ax = Math.cos(p.yaw), ay = Math.sin(p.yaw);
+          const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
+          for (const u of us) {
+            const k = (u.x - cx) * ax + (u.y - cy) * ay, q = us.length > 1 ? this.hedgeNear(p.x + ax * k, p.y + ay * k, LAND.cutters.near) : null;
+            const [px, py] = q ? [q.x, q.y] : [x, y];
+            give(u, () => this.cutGo(u, px, py));
+          }
+          return true;
+        }
+        // Smoke on call (release 2): { do: 'land:smoke', units, x0, y0, x1, y1 } has blocks on foot lay a screen along that
+        // line (smokeWhy). Gated again as it lands: where one may no longer lay it, nothing is laid. A block laying smoke
+        // keeps its order, and the one still on the air for it (the smoke has its own place on the air: order()), and is
+        // not taken from the staff for it (it lays smoke as it goes).
+        if (c.do === 'land:smoke') {
+          if (!this.smoke) return false;
+          const l = [c.x0, c.y0, c.x1 ?? c.x0, c.y1 ?? c.y0].map(Number);
+          if (!l.every(Number.isFinite)) return false;
+          const us = mine((c.units ?? []) as number[]).filter((u) => this.smokeWhy(u, l[0], l[1], l[2], l[3]) === null);
+          if (!us.length) return false;
+          for (const u of us) give(u, () => this.lay(u, l), true);
+          return true;
+        }
         // Direct command (release 2): { do: 'land:staff', units } hands blocks the player took back to his staff.
         if (c.do === 'land:staff') {
           const us = mine((c.units ?? []) as number[]).filter((u) => u.taken);
-          for (const u of us) delete u.taken;
+          for (const u of us) { delete u.taken; delete u.cut; }
           return us.length > 0;
         }
         if (c.do === 'land:begin') {
@@ -1005,7 +1407,7 @@ export class LandBattle implements BattleSim<LandUnit> {
           const us = mine((c.units ?? []) as number[]).filter((u) => u.kind !== 'fort');
           if (!Number.isFinite(x) || !Number.isFinite(y) || !us.length) return false;
           hands(us);
-          for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; u.search = [x, y]; delete u.searchR; });
+          for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; u.search = [x, y]; delete u.searchR; delete u.cut; });
           return true;
         }
         if (c.do === 'land:fire') {
@@ -1013,7 +1415,7 @@ export class LandBattle implements BattleSim<LandUnit> {
           const guns = mine((c.units ?? []) as number[]).filter((u) => u.kind === 'art');
           if (!t || t.side === by || !live(t) || t.hid || !guns.length) return false;
           hands(guns);
-          for (const u of guns) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; });
+          for (const u of guns) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; delete u.cut; });
           return true;
         }
         return false;
@@ -1029,17 +1431,20 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /**
    * An order for one block: at once, or by radio (direct command, release 2), landing LAND.radio's delay later, longer
-   * when its headquarters is hit. A later order on the air replaces the one still on the way.
+   * when its headquarters is hit. A later order on the air replaces the one still on the way. A smoke order (smoke on
+   * call, release 2: 'smoke') has a place of its own on the air: it replaces only a smoke order of that block's still on
+   * the way, never its move or attack, nor is replaced by one, so "move, then smoke to cover it" lands both; and it
+   * leaves the block's orderAt (its move's or attack's) alone.
    */
-  private order(u: LandUnit, go: () => void, air: boolean, from = this.t): void {
+  private order(u: LandUnit, go: () => void, air: boolean, from = this.t, smoke = false): void {
     if (!air) { go(); return; }
     const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
     const at = Math.round((from + R.delay * (hit ? R.cut : 1) * this.radioOf(u)) * 1000) / 1000;
-    this.pending = this.pending.filter((p) => p.id !== u.id);
+    this.pending = this.pending.filter((p) => p.id !== u.id || !p.smoke !== !smoke);
     // Given long enough ago (as shown) that it is due already: carried out now.
-    if (at <= this.t + 1e-9) { delete u.orderAt; go(); return; }
-    this.pending.push({ at, id: u.id, go });
-    u.orderAt = at;
+    if (at <= this.t + 1e-9) { if (!smoke) delete u.orderAt; go(); return; }
+    this.pending.push(smoke ? { at, id: u.id, go, smoke } : { at, id: u.id, go });
+    if (!smoke) u.orderAt = at;
   }
 
   /** The player's orders on the air that have reached their blocks (radio): carried out, if the block still fights. */
@@ -1051,7 +1456,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const p of due) {
       const u = this.unit(p.id);
       if (!u) continue;
-      delete u.orderAt;
+      if (!p.smoke) delete u.orderAt;
       if (fighting(u)) p.go();
     }
   }
@@ -1071,8 +1476,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     u.order = o;
     u.keepFace = o.face ?? null;
-    // Any other order lifts a gun's aim (fire on, stay put), and fire on cover.
-    delete u.aim; delete u.search; delete u.searchR;
+    // Any other order lifts a gun's aim (fire on, stay put), and fire on cover; and a cut it was sent to make (cutGo sets
+    // it again after).
+    delete u.aim; delete u.search; delete u.searchR; delete u.cut;
     // An attack's way is the one it will walk: to its place in the lane before its target, as the march works it out.
     const t = o.kind === 'attack' && o.target !== undefined ? this.unit(o.target) : undefined;
     const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
@@ -1097,9 +1503,12 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** By how it moves: the cells within a few of ground it can hardly cross or not at all (a river, rock, marsh). */
   private hardNear: Partial<Record<Going, Uint8Array>> = {};
   // (A joiner over dry ground keeps off the water only where the river bends away from the dry lanes; with no bend it wades.)
-  private going(u: LandUnit): Going { return u.dry && MOTION[u.kind] === 'foot' && (u.joined === undefined || this.field.bend) ? 'ashore' : MOTION[u.kind]; }
+  private going(u: LandUnit): Going {
+    if (this.bocage && this.heldBack(u)) return 'hedged';
+    return u.dry && MOTION[u.kind] === 'foot' && (u.joined === undefined || this.field.bend) ? 'ashore' : MOTION[u.kind];
+  }
   private ashore: Record<Ground, number> | null = null;
-  private paceOf(m: Going): Record<Ground, number> { return m === 'ashore' ? (this.ashore ??= { ...LAND.pace.foot, water: 0, blown: 0 }) : LAND.pace[m]; }
+  private paceOf(m: Going): Record<Ground, number> { return m === 'ashore' ? (this.ashore ??= { ...LAND.pace.foot, water: 0, blown: 0 }) : m === 'hedged' ? LAND.pace.tracks : LAND.pace[m]; }
   private route(u: LandUnit, x: number, y: number): [number, number][] {
     const m = this.going(u), f = this.field;
     if (m === 'fixed') return [[x, y]];
@@ -1110,8 +1519,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const near = (a: number, b: number): boolean => Math.abs((a % f.cols) - (b % f.cols)) <= 2 && Math.abs(Math.floor(a / f.cols) - Math.floor(b / f.cols)) <= 2;
     let w = this.ways.get(u.id), fresh = false;
     for (;;) {
-      if (!w || w.m !== m || !near(w.goal, goal)) {
-        w = { m, goal, ...this.findWay(m, u.x, u.y, x, y) };
+      if (!w || w.m !== m || !near(w.goal, goal) || (m === 'hedged' && w.bars !== this.barsLaid)) {
+        w = { m, goal, ...this.findWay(m, u.x, u.y, x, y), ...(m === 'hedged' ? { bars: this.barsLaid } : {}) };
         this.ways.set(u.id, w);
         fresh = true;
       }
@@ -1140,8 +1549,10 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Nothing where it stands on ground it can enter.
    */
   private exit(m: Going, x: number, y: number): [number, number][] | null {
-    const f = this.field, C = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y);
-    const go = (i: number): boolean => pace[GROUNDS[f.ground[i]]] > 0;
+    const f = this.field, C = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y), bar = m === 'hedged' ? this.barrier() : null;
+    const go = (i: number): boolean => pace[GROUNDS[f.ground[i]]] > 0 && !(bar && bar[i]);
+    // A tank block without cutters standing at a hedge (the bocage) walks out on its own side of it, never over it.
+    const mine = (i: number): boolean => !bar || !this.barredCross(x, y, (i % C) * f.cell + f.cell / 2, Math.floor(i / C) * f.cell + f.cell / 2);
     if (go(s)) return null;
     const wet = (i: number): boolean => GROUNDS[f.ground[i]] === 'water' || GROUNDS[f.ground[i]] === 'blown';
     const inWet = wet(s), back = new Map<number, number>([[s, -1]]);
@@ -1154,7 +1565,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         const c = (i % C) + dc, r = Math.floor(i / C) + dr, j = r * C + c;
         if (c < 0 || c >= C || r < 0 || r >= f.rows || back.has(j)) continue;
         back.set(j, i);
-        if (go(j)) {
+        if (go(j) && mine(j)) {
           const d = dist(x, y, ...mid(j));
           if (d < bd || (d === bd && j < best)) { bd = d; best = j; }
         } else if (inWet || !wet(j)) next.push(j);
@@ -1175,9 +1586,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * walk straight between. Where the place cannot be reached, the way ends at the nearest cell that can, and says so.
    */
   private findWay(m: Going, sx: number, sy: number, x: number, y: number): { pts: [number, number][]; whole: boolean } {
-    const f = this.field, C = f.cols, n = f.ground.length, pace = this.paceOf(m);
+    const f = this.field, C = f.cols, n = f.ground.length, pace = this.paceOf(m), bar = m === 'hedged' ? this.barrier() : null;
     const top = Math.max(...Object.values(pace)), s = this.cellAt(sx, sy), g = this.cellAt(x, y), gc = g % C, gr = Math.floor(g / C);
-    const go = (i: number): number => pace[GROUNDS[f.ground[i]]];
+    const go = (i: number): number => (bar && bar[i] ? 0 : pace[GROUNDS[f.ground[i]]]);
     const h = (i: number): number => {
       const dc = Math.abs((i % C) - gc), dr = Math.abs(Math.floor(i / C) - gr);
       return (Math.max(dc, dr) + (Math.SQRT2 - 1) * Math.min(dc, dr)) / top;
@@ -1254,13 +1665,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     const stepX = dx ? cs / Math.abs(dx) : Infinity, stepY = dy ? cs / Math.abs(dy) : Infinity;
     let tx = dx ? (sx > 0 ? (c + 1) * cs - x0 : x0 - c * cs) / Math.abs(dx) : Infinity;
     let ty = dy ? (sy > 0 ? (r + 1) * cs - y0 : y0 - r * cs) / Math.abs(dy) : Infinity;
-    const pace = this.paceOf(m);
+    const pace = this.paceOf(m), bar = m === 'hedged' ? this.barrier() : null;
     for (let n = Math.abs(c1 - c) + Math.abs(r1 - r); n > 0 && (c !== c1 || r !== r1); n--) {
       if (Math.abs(tx - ty) < 1e-9) { tx += stepX; ty += stepY; c += sx; r += sy; n--; }
       else if (tx < ty) { tx += stepX; c += sx; }
       else { ty += stepY; r += sy; }
       if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) return true;
       if (pace[GROUNDS[f.ground[r * f.cols + c]]] <= 0) return false;
+      if (bar && bar[r * f.cols + c]) return false;
     }
     return true;
   }
@@ -1349,7 +1761,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   private place(u: LandUnit, x: number, y: number, face?: number): void {
     u.x = x; u.y = y; u.face = face ?? (u.side === 'att' ? 0 : Math.PI);
     u.order = null; u.path = []; u.keepFace = face ?? null;
-    delete u.aim; delete u.search; delete u.searchR; delete u.stand; delete u.standFor; delete u.standFace; delete u.closing;
+    delete u.aim; delete u.search; delete u.searchR; delete u.stand; delete u.standFor; delete u.standFace; delete u.closing; delete u.cut;
     this.ways.delete(u.id);
     u.home = [x, y];
     u.cover = groundAt(this.field, x, y);
@@ -1437,6 +1849,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.hedges = keep;
     this.gates = gates.filter((g) => Number.isFinite(g.x) && Number.isFinite(g.y) && g.x >= 0 && g.x <= W && g.y >= 0 && g.y <= H);
     this.hedgeMap = keep.length ? map : null;
+    this.bars = null;
     this.hedgeSegs.clear();
     for (const h of keep) for (let i = 1; i < h.points.length; i++) {
       const [ax, ay] = h.points[i - 1], [bx, by] = h.points[i], seg = [ax, ay, bx, by];
@@ -1623,8 +2036,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (!live(u)) { delete u.hid; continue; }
       if (!this.inCover(u)) { this.reveal(u, 'out'); continue; }
       const heard = u.speed > 0.5 ? H.heard[MOTION[u.kind]] : 0;
-      const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= Math.max(sight, heard));
-      if (by) this.reveal(u, this.gap(u, by) <= sight ? 'seen' : 'heard', by);
+      // Smoke on call (release 2): nobody sees it through a screen standing between them (it may still be heard).
+      const veiled = (e: LandUnit): boolean => this.smoke && this.screens.length > 0 && this.screened(e.x, e.y, u.x, u.y);
+      const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= Math.max(sight, heard) && (this.gap(u, e) <= heard || !veiled(e)));
+      if (by) this.reveal(u, this.gap(u, by) <= sight && !veiled(by) ? 'seen' : 'heard', by);
     }
   }
 
@@ -1678,10 +2093,12 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (this.rng.next() < 1 - (1 - F.odds) ** (DT / F.every)) this.reveal(t, 'searched', u);
       }
       // A side with air strikes still to call holds back the card's share for them, owed to the block it fell on, in
-      // what it would be on open ground (air support, below).
+      // what it would be on open ground (air support, below). Held back from the blow as it would be with no smoke
+      // screen across it: a screen spoils the ground's aim, not the air's (smoke on call, ruling 242 S1-A), so only the
+      // part fired from the ground now is struck at the screen's share.
       if (this.airLeft[u.side] > 0) {
-        const held = blow.dmg * this.airOn[u.side]!.share, raw = held / blow.ground;
-        blow.dmg -= held;
+        const full = blow.dmg / blow.screen, held = full * this.airOn[u.side]!.share, raw = held / blow.ground;
+        blow.dmg = (full - held) * blow.screen;
         this.airBank[u.side].set(t.id, (this.airBank[u.side].get(t.id) ?? 0) + raw);
         this.airLedger[u.side].withheld += raw;
         kept!.set(t.id, (kept!.get(t.id) ?? 0) + raw);
@@ -1705,10 +2122,18 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
+    // Hedge cutters (release 2): where each block stood before it moved, to find where its way crossed a hedge.
+    const at = (): Map<number, [number, number]> => new Map(this.units.map((u): [number, [number, number]] => [u.id, [u.x, u.y]]));
+    const before = this.cutters && this.hedges.length ? at() : null;
     for (const u of this.units) if (live(u)) this.move(u);
+    // And where its own move took it, before the blocks are eased apart: a shove is no way of its own.
+    const moved = before ? at() : null;
     this.spread();
+    if (before) this.cutOn(before, moved!);
     if (this.hide) this.spotHidden();
     this.t = Math.round((this.t + DT) * 1000) / 1000;
+    // Cuts whose time is up stand open as gaps, before the drill's men walk this tick (hedge cutters, release 2).
+    if (this.cuts.length) this.openCuts();
     this.judge();
     this.drill?.step();
   }
@@ -1728,6 +2153,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       const there = groundAt(this.field, x, y), here = groundAt(this.field, u.x, u.y);
       if (inRiver(there) && !inRiver(here)) return false;
       const to = pace[there];
+      // The bocage (C1-B): a tank block without cutters is never eased over a hedge line but at a gap.
+      if (this.bocage && this.going(u) === 'hedged' && this.barredCross(u.x, u.y, x, y)) return false;
       return to > LAND.queue.hard || (to > 0 && to >= pace[here]);
     };
     const go = (u: LandUnit, ux: number, uy: number, push: number): void => {
@@ -1898,7 +2325,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     return take;
   }
 
-  private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number } {
+  /**
+   * One block's blow on another this tick: its weight (dmg), its nerve's multiplier, whether it lands on the front and
+   * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across
+   * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
+   */
+  private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number } {
     const gu = coverAt(this.field, u.x, u.y);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
     if (u.state === 'wavering') p *= LAND.wavering;
@@ -1919,7 +2351,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     if (u.team === 'mor' && this.hide && this.units.some((f) => f.side === u.side && f.sprung !== undefined && this.t - f.sprung < SP.secs && f.engaged === t.id)) p *= SP.mortar;
     // Found by its fire but not yet located: the fire back at it is half aimed (LAND.hide.locate).
-    if (t.unloc !== undefined && this.t < t.unloc) p *= LAND.hide.locate.fire;
+    const vague = t.unloc !== undefined && this.t < t.unloc;
+    if (vague) p *= LAND.hide.locate.fire;
+    // Smoke on call (release 2, ruling 242 S1-A): a direct blow across a screen standing between the shooter's middle and
+    // the target's is fired at a place, not a seen target, as the vague share is, and as fire on cover at a block still
+    // hidden is (blind: LAND.hide.search.blow, in step): never both. Fire from far back is not touched (direct). Strength
+    // only: no draw of the dice is added or taken away.
+    const screen = this.smoke && !vague && !t.hid && this.screens.length && this.direct(u, t) && this.screened(u.x, u.y, t.x, t.y) ? LAND.smoke.share : 1;
+    p *= screen;
     if (u.kind === 'art') {
       const G = gunsOf(u), close = this.gap(u, t) < G.closeAt;
       p *= close ? G.close : G.punch;
@@ -1944,7 +2383,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (t.order?.kind === 'move' && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
     const dmg = p * am * amx * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
-    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground };
+    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground, screen };
   }
 
   /**
@@ -3108,8 +3547,9 @@ export class LandBattle implements BattleSim<LandUnit> {
   view(as?: Side): BattleView<LandUnit> {
     const ev = this.events;
     this.events = [];
-    void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView() };
+    // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
+    // and screens a side sees (hedge cutters, smoke on call; release 2).
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as) };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

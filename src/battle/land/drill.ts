@@ -38,7 +38,7 @@ import data from '../../../data/battle/drill.json';
 import { DT, type Side, type Zone } from '../core/types';
 import { GROUNDS, type Ground, type LandField } from './field';
 import { LAND, MOTION, type Kind, type Team } from './rules';
-import type { LandBattle } from './sim';
+import type { LandBattle, Screen } from './sim';
 import type { LandUnit } from './units';
 import { fateOf } from './armour';
 import { BOOK, Suppression, boundOf, missionStep, schoolNums, turnOf, turns, type Bound, type Mission } from './tactics';
@@ -214,6 +214,12 @@ export interface Round {
   cm?: 1;
   /** A tank knocked out ('kill'): how she ends, out of the fight, burning, or blown up (armour.ts fateOf: by her model and the face struck). */
   fate?: 'out' | 'burn' | 'blow';
+  /**
+   * Smoke on call (release 2, ruling 242 S6): a round of a screen the rules laid (LandBattle.screens), battle seconds its
+   * smoke hangs once it lands (the screen's until less l); such a round is fired at no block (on -1). Absent on every
+   * other round, the drill book's own smoke among them.
+   */
+  hang?: number;
 }
 
 /** A block's men as the 3D game reads them (LandBattle.menView). Numbers rounded; absent fields are off. */
@@ -434,6 +440,8 @@ interface Squad {
   /** The drill book's smoke: when its platoons last laid smoke on the enemy's flank, and the rounds still to come. */
   smokeAt?: number;
   smokeLeft?: number;
+  /** Smoke on call (release 2): the screen the rules laid for it, being drawn as rounds, the next i of n. */
+  screenQ?: { s: Screen; i: number; n: number };
 }
 
 /** A block's men on their feet this step (Drill.memo). */
@@ -692,7 +700,7 @@ export class Drill {
       // fast seconds wears off then, and is gone once it has stood a second.
       sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
       this.falls(sq);
-      if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); }
+      if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (sq.screenQ) this.screenRound(sq); }
       this.walk(sq);
       this.fire(sq);
     }
@@ -1859,8 +1867,9 @@ export class Drill {
     const away: [number, number] | undefined = e && near < BOOK.lift.mg + 15 ? [e.x + fx * e.d / 2, e.y + fy * e.d / 2] : undefined;
     const out = assault.size > 0;
     // Smoke on the enemy's flank as the assault goes out (its platoons' own light mortars), a round a think.
-    if (BOOK.smoke.on && !home && e && out && S.smoke > 0 && (sq.smokeAt === undefined || t - sq.smokeAt >= BOOK.smoke.every)) { sq.smokeAt = t; sq.smokeLeft = S.smoke; }
-    if (sq.smokeLeft && e && !home) { sq.smokeLeft--; this.smoke(sq, e, men.filter((m) => !assault.has(m)), S.smoke - sq.smokeLeft - 1, S.smoke); }
+    // With smoke on call (release 2, ruling 242 S6) the screens are the rules' (screen): none of the book's own.
+    if (BOOK.smoke.on && !b.smoke && !home && e && out && S.smoke > 0 && (sq.smokeAt === undefined || t - sq.smokeAt >= BOOK.smoke.every)) { sq.smokeAt = t; sq.smokeLeft = S.smoke; }
+    if (sq.smokeLeft && e && !home && !b.smoke) { sq.smokeLeft--; this.smoke(sq, e, men.filter((m) => !assault.has(m)), S.smoke - sq.smokeLeft - 1, S.smoke); }
     for (const m of men) {
       if (m.role === 'officer') continue; // he walks his line (officer)
       const [a, l] = this.slot(sq, m, 'line');
@@ -1936,6 +1945,43 @@ export class Drill {
     if (by.j !== undefined) r.j = by.j;
     this.book(r);
     by.v = 0; by.spot = [by.x, by.y]; by.pose = 'wait'; by.aim = [ax, ay]; by.until = t + 1.5;
+  }
+
+  /**
+   * Smoke on call (release 2, ruling 242 S6): a screen the rules just laid (LandBattle.lay), drawn as the rounds that lay
+   * it, one round for each BOOK.smoke.per metres of its line (at most BOOK.smoke.most; looks only), one a think from the
+   * block's base of fire, as the book's own smoke is fired (smoke). A screen laid while one is still being drawn takes its
+   * place.
+   */
+  screen(s: Screen): void {
+    const sq = this.squads.get(s.unit);
+    if (!sq) return;
+    const n = clamp(Math.ceil(Math.hypot(s.x1 - s.x0, s.y1 - s.y0) / BOOK.smoke.per), 1, BOOK.smoke.most);
+    sq.screenQ = { s, i: 0, n };
+  }
+
+  /**
+   * The next round of the screen being drawn: from the platoon's headquarters (its light mortar) or a rifleman standing,
+   * else from the block's front, onto its place along the line ((i + 1/2) of n), scattered a little as a mortar's round;
+   * it hangs from its landing to the screen's end (hang). No harm, at no block (on -1). The shooter's stamp is the round's
+   * only change to his drill: he stands and fires it.
+   */
+  private screenRound(sq: Squad): void {
+    const q = sq.screenQ!, u = sq.u, b = this.b, t = b.t, R = DR.rounds, s = q.s;
+    if (q.i >= q.n || !live(u) || t >= s.until) { delete sq.screenQ; return; }
+    const men = this.up(sq), squads = platoonOf(u.nat).squads;
+    const by = men.find((m) => (m.sub ?? 0) >= squads && m.role === 'rifle') ?? men.find((m) => m.role === 'rifle');
+    const k = (q.i + 0.5) / q.n, ax = s.x0 + (s.x1 - s.x0) * k, ay = s.y0 + (s.y1 - s.y0) * k, z = Math.round(t * 10);
+    const [fx, fy] = fwd(u.face), ox = by ? by.x : u.x + (fx * u.d) / 2, oy = by ? by.y : u.y + (fy * u.d) / 2, n = by ? by.n : 0;
+    const range = Math.hypot(ax - ox, ay - oy), [i0, i1] = R.indirect.mortar, sg = i0 + i1 * range;
+    const x = clamp(ax + gauss(roll(this.seed, u.id, n, z, 81), roll(this.seed, u.id, n, z, 82)) * sg * 0.35, 1, b.field.w - 1);
+    const y = clamp(ay + gauss(roll(this.seed, u.id, n, z, 83), roll(this.seed, u.id, n, z, 84)) * sg * 0.35, 1, b.field.h - 1);
+    const l = Math.round((t + range / R.speed.mortar) * 10) / 10;
+    const r: Round = { t: Math.round(t * 10) / 10, l, by: u.id, w: 'smoke', on: -1, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: 'miss', hang: Math.max(0, Math.round((s.until - l) * 10) / 10) };
+    if (by) { r.k = by.k; if (by.j !== undefined) r.j = by.j; }
+    this.book(r);
+    if (by) { by.v = 0; by.spot = [by.x, by.y]; by.pose = 'wait'; by.aim = [ax, ay]; by.until = t + 1.5; }
+    if (++q.i >= q.n) delete sq.screenQ;
   }
 
   /** Whether a mate lies within arm's length of him, down. */

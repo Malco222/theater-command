@@ -193,6 +193,17 @@ export interface LandUnit extends UnitBase {
    */
   debt?: number;
   debtN?: number;
+  /**
+   * Hedge cutters (release 2; ruling 242; LandBattle.cutters): the cut its order sends it to make, where its front will
+   * reach the hedge, at (x, y) on the hedge line, the line there running 'yaw' (radians from east, as a Gate's). Absent
+   * on every other block, and on every block while the switch is off.
+   */
+  cut?: { x: number; y: number; yaw: number };
+  /**
+   * Smoke on call (release 2; ruling 242; LandBattle.smoke): the screens it may still lay this battle. Absent until it
+   * first lays one, and on every block while the switch is off.
+   */
+  smokeLeft?: number;
 }
 
 const ORD =(n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };

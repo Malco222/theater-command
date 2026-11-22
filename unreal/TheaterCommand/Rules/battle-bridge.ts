@@ -75,9 +75,47 @@
 //                                   enemy's blocks. Off: no block ever carries waits
 //                                   The rider ahead (release 2): { rider: true }: view.riders, his own side's despatch riders
 //                                   (below). Looks and words only
+//                                   Hedge cutters (release 2; Brian, 22 November 14:19Z; the design director's ruling 242,
+//                                   C1-A to C4-A): { cutters: true }: from July 1944 (turn 59), on a field with hedges
+//                                   (TC.battleHedges), every army's tank blocks carry hedge cutters (units carry cutter, both
+//                                   sides', as kit is seen: the share of the block's drawn tanks that wear the blades, 0.6,
+//                                   three in five: LAND.cutters.share; draw them on that share). TC.battleOrder({ do:
+//                                   'land:cut', units, x, y[, at] }) sends his tank blocks to cut a gap through the hedge at
+//                                   that point and drive on through it (TC.battleCutWhy first, for the card's why); his staff's
+//                                   tanks, and the computer's, cut wherever their way crosses a hedge with no gap near.
+//                                   view.cuts (below) and a land:cut event say where and when; the gap opens 6 battle seconds
+//                                   after the cut begins, and the drawn men walk through it from then. Looks only: the fight
+//                                   is the same, cut or not. Off: no block ever carries cutter, and there are no cuts
+//                                   The bocage (release 2; ruling 242 C1-B, as amended 17:45Z): { bocage: true }: on a field
+//                                   with hedges, a tank block without cutters (before July 1944, or without { cutters })
+//                                   crosses a hedge line only at a gap, a gateway or a cut once open (drawn as cuts below),
+//                                   and goes round to one: draw its tanks filing through the gap. The fight changes with it
+//                                   (slower tanks in hedge country). Off: tanks cross hedges anywhere, as before
+//                                   Smoke on call (release 2; ruling 242, S1-A to S6, as amended 17:45Z): { smoke: true }: TC.
+//                                   battleOrder({ do: 'land:smoke', units, x0, y0, x1, y1[, at] }) has his blocks on foot (or
+//                                   lorried infantry) lay a smoke screen along that line, clipped to the block's own front about
+//                                   the line's middle (TC.battleSmokeWhy first; a click is a 160 m line across the front there).
+//                                   By radio it has its own place on the air: it never replaces his move or attack order still
+//                                   on the way to that block, nor is replaced by one (orderIn stays the move's or attack's).
+//                                   His own blocks with smoke to lay carry smoke: N (the screens they have left). While a
+//                                   screen stands, a direct blow across it strikes at half its weight (guns firing from far
+//                                   back, mortar teams and the air are not touched), and no hidden block is seen through it.
+//                                   Both staffs lay screens as their foot goes in. view.screens (below), a land:smoke event,
+//                                   and the screen's rounds in TC.battleMen (w smoke, hang) draw it; with it on, the drill's
+//                                   own smoke salvoes are not fired. Off: no block ever carries smoke, and there are no screens
 //   TC.battleWaitWhy(id)         -> { why, due }: hold until relieved, before he gives the wait order to one of his blocks:
 //                                   why, null where it may wait, else the reason in words for its card (the design director,
 //                                   129(d)); due, the battle second help could reach it there, or null. Moves nothing
+//   TC.battleCutWhy(id[, x, y])  -> { why }: hedge cutters, before he gives the cut order to one of his tank blocks: null
+//                                   where it may cut through the hedge at that point (with no point, whether it may cut at
+//                                   all), else the reason in words for its card (129(d)): "Only tanks carry hedge cutters.", "Hedge cutters come in July 1944.", "There
+//                                   is no hedge there.", "It is out of the fight." ... Moves nothing
+//   TC.battleSmokeWhy(id[, x0, y0, x1, y1]) -> { why }: smoke on call, the same for the smoke order: with no line, whether
+//                                   the block may lay smoke at all; with a line (or only its middle, x0, y0), whether there:
+//                                   "Only troops on foot lay smoke.", "Your army has no smoke to lay.", "They can lay smoke up
+//                                   to 195 m ahead.", "They set their smoke down along their own front." (Italy's pot: a line
+//                                   on its own ground or within 30 m of its front, laid along its front), "Their last screen
+//                                   still stands.", "They have no smoke left." ... Moves nothing
 //   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
 //                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
 //                                   red ghost with the words beside it). Moves nothing (release 2)
@@ -147,6 +185,17 @@
 // is one man, outside the drill (TC.battleMen) and outside the battle's N. A click on him shows 'says' (the corps, its
 // divisions, men and strength, when and where it comes up, and the time it reaches his line where his staff fights it,
 // also as 'line'). Nothing in the fight reads him.
+// Hedge cutters (release 2, ruling 242), only with { cutters: true }: cuts, each { t0, t1, unit, x, y, yaw, width }: a
+// tank block 'unit' cuts a gap 'width' metres wide (3.2, the gateways' own) through the hedge at x, y, the hedge running
+// at 'yaw' (radians from east, as a gate's), from battle second t0 (draw its lead tank at the hedge, the blades biting),
+// open from t1 (draw the gap; the drawn men walk through it, as through a gate, from then). The player's own cuts and
+// those of enemy blocks he knew as they cut; listed to the battle's end. Event { what: 'land:cut', unit, side, x, y,
+// extra: { t1, yaw, width } } as one begins (words for his own blocks: "1st Armoured cuts a gap through the hedge.").
+// Smoke on call (release 2, ruling 242), only with { smoke: true }: screens, each { id, side, unit?, x0, y0, x1, y1, t,
+// until }: a smoke screen along the line x0, y0 to x1, y1 laid at battle second t by block 'unit' of 'side', standing
+// until 'until' (draw it thick from t, thinning towards until; gone then); listed while it stands. Smoke is seen by both
+// sides: 'unit' is left out for an enemy block he has not met. Event { what: 'land:smoke', unit, side, x, y, extra: {
+// screen, until } } as one is laid ("1st Regiment lays a smoke screen."). Its rounds come in TC.battleMen (below).
 // Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
 // cover, loop, order }, and cal where a land block has one ("Explosions" below). Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
@@ -347,6 +396,10 @@
 //   (b on her men). fate, on a round that knocked out a tank (r kill): out (she stops, crew bail out), burn (she
 //   catches fire) or blow (she burns and her ammunition goes up), by her measured armour and the face struck (a hit in
 //   a German tank's rear burns and blows up more often). Looks only: draw it; where a kill round has none, draw your own.
+//   Smoke (w smoke): no harm, it only lands and smokes. With smoke on call ({ smoke: true }) every screen the rules lay
+//   (view.screens) comes as rounds from the block's base of fire along its line, one each 15 m (12 at most), each with
+//   hang (battle seconds it smokes once it lands, to the screen's until) and on -1 (fired at no block); the drill's own
+//   smoke salvoes on the enemy's flank are not fired then.
 //   Poses, as the soldier's clips (battle-models/land/soldier/README.md): idle, walk, run, advance, creep, crawl, flee,
 //   fire_stand, fire_kneel, fire_prone, lmg_burst, throw_grenade, cower play as named; wait is kneeling, rifle up,
 //   watching (fire_kneel's aim held, no shot); hide is lying still in cover (fire_prone's aim held); observe a spotter
@@ -553,7 +606,7 @@ function airLoop(a: AirUnit): string {
 /** A block whose corps has no time in the line on record (a practice battle's, or fresh): new uniforms. */
 const WEAR_FRESH = STORIES.wear.fresh;
 
-export function unitOut(u: UnitBase, t = 0, me?: Side): Record<string, unknown> {
+export function unitOut(u: UnitBase, t = 0, me?: Side, sim?: LandBattle): Record<string, unknown> {
   const land = u as LandUnit;
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
@@ -583,6 +636,12 @@ export function unitOut(u: UnitBase, t = 0, me?: Side): Record<string, unknown> 
     ...(land.orderAt !== undefined ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
     // Hold until relieved (release 2): waiting for help, the player's own blocks only (never giving the enemy's away).
     ...(land.waits && me !== undefined && u.side === me ? { waits: { due: land.waits.due, ...(land.waits.late ? { late: true } : {}), ...(land.waits.free ? { free: true } : {}) } } : {}),
+    // Hedge cutters (release 2): a tank block carrying them, either side's (kit is seen; never on an enemy hidden from
+    // him, in the woods or not yet met: hiddenOut).
+    // cutter: the share of its drawn tanks that wear the blades (LAND.cutters.share, three in five: ruling 242 C2-A).
+    ...(sim?.cutters && sim.cutterOf(land) && !(land.hid && u.side !== me) ? { cutter: LAND.cutters.share } : {}),
+    // Smoke on call (release 2): the screens one of the player's own blocks has left to lay (never the enemy's).
+    ...(sim?.smoke && me !== undefined && u.side === me ? smokeOut(sim, land) : {}),
     // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line; and the
     // share of its men new this month, in new kit (0 none), which 'wear' counts in.
     ...(land.short ? { wear: land.wear ?? WEAR_FRESH, fresh: land.fresh ?? 0 } : {}),
@@ -599,6 +658,12 @@ export function unitOut(u: UnitBase, t = 0, me?: Side): Record<string, unknown> 
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };
+}
+
+/** Smoke on call: a block's screens left, where its army has the means (LAND.smoke). */
+function smokeOut(sim: LandBattle, u: LandUnit): { smoke?: number } {
+  const m = sim.smokeOf(u);
+  return m ? { smoke: u.smokeLeft ?? m.count ?? LAND.smoke.count } : {};
 }
 
 /**
@@ -631,7 +696,7 @@ function fogged(by: Record<Side, BreakCause>, me: Side): Record<Side, Partial<Br
 function viewOut(s: Session, v: BattleView): Record<string, unknown> {
   const land = s.sim instanceof LandBattle ? s.sim : null;
   return {
-    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u, v.t, s.me))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
+    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u, v.t, s.me, land ?? undefined))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
     ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
     // What drives each bar (b496(2)): plain numbers, to three places already. Under fog, of the enemy only its bar
     // until the battle is over, as its blocks are hidden (hiddenOut).
@@ -652,6 +717,9 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     ...(v.coming ? { coming: v.coming } : {}),
     // The rider ahead (release 2, land): the player's own side's despatch riders, only with { rider: true }.
     ...(v.riders ? { riders: v.riders } : {}),
+    // Hedge cutters and smoke on call (release 2, land): the cuts and screens his side sees, only with their switches.
+    ...(v.cuts ? { cuts: v.cuts } : {}),
+    ...(v.screens ? { screens: v.screens } : {}),
   };
 }
 
@@ -692,7 +760,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -745,6 +813,10 @@ export function battleCalls(h: BattleHooks) {
       // Hold until relieved and the rider ahead (release 2): each by its own switch.
       if (opts?.relief) sim.relief = true;
       if (opts?.rider) sim.rider = true;
+      // Hedge cutters and smoke on call (release 2, ruling 242): each by its own switch.
+      if (opts?.cutters) sim.cutters = true;
+      if (opts?.bocage) sim.bocage = true;
+      if (opts?.smoke) sim.smoke = true;
       const f = sim.field;
       return {
         field: {
@@ -764,6 +836,23 @@ export function battleCalls(h: BattleHooks) {
       if (u.side !== ses.me) return { why: 'Only your own troops take your orders.', due: null };
       const why = land.waitWhy(u);
       return { why, due: why === null ? land.dueAt(u)?.due ?? null : null };
+    },
+    battleCutWhy(id: number, x?: number, y?: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      if (!land || !u) return { why: 'Nothing to order.' };
+      if (u.side !== ses.me) return { why: 'Only your own troops take your orders.' };
+      return { why: x === undefined && y === undefined ? land.cutWhy(u) : land.cutWhy(u, Number(x), Number(y)) };
+    },
+    battleSmokeWhy(id: number, x0?: number, y0?: number, x1?: number, y1?: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      if (!land || !u) return { why: 'Nothing to order.' };
+      if (u.side !== ses.me) return { why: 'Only your own troops take your orders.' };
+      const n = (v?: number): number | undefined => (v === undefined || v === null ? undefined : Number(v));
+      return { why: land.smokeWhy(u, n(x0), n(y0), n(x1), n(y1)) };
     },
     battleCanPlace(id: number, x: number, y: number) {
       const ses = need();

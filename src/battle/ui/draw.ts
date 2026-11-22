@@ -45,6 +45,11 @@ export interface Scene {
   avoid?: [number, number, number, number][];
   /** The rider ahead (release 2): the corps whose rider is under the pointer, for his label. */
   rider?: number | null;
+  /**
+   * Hedge cutters or smoke on call armed (release 2: C or K): the next click on the field gives that order to the blocks
+   * in hand; for smoke, the line being dragged out (field metres). Null when not armed.
+   */
+  arm?: { kind: 'cut' | 'smoke'; line: [number, number, number, number] | null } | null;
 }
 
 export const toScreen = (s: Scene, x: number, y: number): [number, number] => [s.W / 2 + (x - s.cam.x) * s.cam.z, s.H / 2 - (y - s.cam.y) * s.cam.z];
@@ -216,6 +221,9 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   const colour: Record<Side, string> = s.colours ?? { att: b.ticket.att.color, def: b.ticket.def.color };
   const byId = new Map(b.units.map((u) => [u.id, u]));
 
+  // Hedges, the gaps cut through them and the smoke screens standing (release 2), under the orders and the blocks.
+  hedgeMarks(x, b, s);
+
   // Orders of the player's own blocks (the UI director, 6): the lines of those in hand in the selection gold; once put
   // down, the staff's pencil, ink and thinner. Gold is what you hold, pencil is what stands ordered; never red. An
   // attack ends in a small head at its target, a march in a dot.
@@ -311,6 +319,38 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
     x.lineWidth = 2; x.beginPath(); x.arc(a, c, 6 + 16 * k, 0, Math.PI * 2); x.stroke();
   }
   x.restore();
+}
+
+/**
+ * Hedges and what is done to them (release 2), plainly: each hedge line a thin dark green line; a gap cut through one
+ * (hedge cutters) a short bright brass bar across it from the moment it opens (a faint one while it is being cut); a
+ * smoke screen standing (smoke on call) a soft grey band along its line, thinning towards its end; a smoke line being
+ * dragged out, brass. As the player's side sees them (the view's cuts and screens).
+ */
+function hedgeMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void {
+  if (b.hedges.length) {
+    x.strokeStyle = 'rgba(38,74,34,.85)'; x.lineWidth = Math.max(1, Math.min(3, 2.5 * s.cam.z)); x.lineCap = 'round';
+    x.beginPath();
+    for (const h of b.hedges) h.points.forEach(([px, py], i) => { const [a, c] = toScreen(s, px, py); if (i) x.lineTo(a, c); else x.moveTo(a, c); });
+    x.stroke();
+  }
+  for (const c of b.cutView(s.me).cuts ?? []) {
+    const open = b.t >= c.t1, [a, e] = toScreen(s, c.x, c.y), half = Math.max(4, (c.width / 2) * s.cam.z);
+    const dx = Math.cos(c.yaw) * half, dy = -Math.sin(c.yaw) * half;
+    x.strokeStyle = open ? BRASS : 'rgba(224,184,114,.45)'; x.lineWidth = open ? 3 : 2;
+    x.beginPath(); x.moveTo(a - dx, e - dy); x.lineTo(a + dx, e + dy); x.stroke();
+  }
+  for (const sc of b.screenView(s.me).screens ?? []) {
+    const k = Math.max(0, Math.min(1, (sc.until - b.t) / Math.max(1e-6, sc.until - sc.t)));
+    const [a, c] = toScreen(s, sc.x0, sc.y0), [d, e] = toScreen(s, sc.x1, sc.y1);
+    x.strokeStyle = `rgba(214,214,208,${(0.2 + 0.5 * k).toFixed(3)})`; x.lineWidth = Math.max(4, 24 * s.cam.z); x.lineCap = 'round';
+    x.beginPath(); x.moveTo(a, c); x.lineTo(d, e); x.stroke();
+  }
+  if (s.arm?.line) {
+    const [a, c] = toScreen(s, s.arm.line[0], s.arm.line[1]), [d, e] = toScreen(s, s.arm.line[2], s.arm.line[3]);
+    x.strokeStyle = BRASS; x.lineWidth = 2; x.setLineDash([6, 4]); x.beginPath(); x.moveTo(a, c); x.lineTo(d, e); x.stroke(); x.setLineDash([]);
+  }
+  x.lineCap = 'butt';
 }
 
 function airMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: Record<Side, string>): void {

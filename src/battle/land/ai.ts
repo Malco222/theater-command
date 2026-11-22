@@ -86,11 +86,41 @@ export function thinkFor(b: LandBattle, side: Side): void {
     else plain(b, side, line, foes);
     if (b.measured) seekFlanks(b, side, mine);
     if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
+    if (b.smoke) smokeIn(b, side, mine, foes);
     return;
   }
   defend(b, side, style, mine, foes, stand);
   // A reserve sent in at a tank block goes round her too; the line's own tanks hold where they stand.
   if (b.measured) seekFlanks(b, side, mine.filter((u) => u.reserve === 'sent'));
+  if (b.smoke) smokeIn(b, side, mine, foes);
+}
+
+/**
+ * Smoke on call (release 2, ruling 242 S5-A: both staffs alike). A block of foot (or lorried infantry) going in at a
+ * block of theirs, with smoke to lay and no screen of its own standing, lays one once its target is within its fire's
+ * reach (LAND.reach): the attack's in its assault (an attack with a plan, once its main effort has gone in; the pinning
+ * line too from then), the defence's in a counter-attack, a reserve sent forward; never a block standing in its works
+ * (within LAND.hold.within of its place, as the drill's 'home'). So on the defence only a reserve sent forward lays
+ * smoke: a line block gone out after a wavering enemy, or round a neighbour's flank, is never further from its place
+ * than its leash (every style's defLeash, 300 m, LAND.hold.within's own), so it fights from its works. The screen
+ * lies square to the way to its target, its front long, its middle min(its army's reach, half the gap) beyond the
+ * middle of its front: across the ground it must cross. Ordered as every staff order is (no radio).
+ */
+function smokeIn(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[]): void {
+  const P = b.plan[side];
+  if (side === 'att' && P && P.went === null) return;
+  for (const u of mine) {
+    if (!hasTarget(u, foes) || (u.waits && !u.waits.free)) continue;
+    if (side === 'def' && u.reserve !== 'sent' && dist(u.x, u.y, u.home[0], u.home[1]) < LAND.hold.within) continue;
+    if (b.smokeWhy(u) !== null) continue;
+    const t = foes.find((f) => f.id === u.order!.target)!, gap = b.gap(u, t);
+    if (gap > reachOf(u)) continue;
+    const m = b.smokeOf(u)!, k = Math.hypot(t.x - u.x, t.y - u.y);
+    if (k < 1e-6) continue;
+    const dx = (t.x - u.x) / k, dy = (t.y - u.y) / k, [fx, fy] = [Math.sin(u.face), Math.cos(u.face)];
+    const on = Math.min(m.reach, gap / 2), mx = u.x + (fx * u.d) / 2 + dx * on, my = u.y + (fy * u.d) / 2 + dy * on, h = u.w / 2;
+    b.command({ do: 'land:smoke', units: [u.id], x0: mx - dy * h, y0: my + dx * h, x1: mx + dy * h, y1: my - dx * h }, side);
+  }
 }
 
 /**
