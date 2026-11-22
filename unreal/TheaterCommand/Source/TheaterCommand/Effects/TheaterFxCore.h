@@ -654,6 +654,11 @@ namespace TheaterFx
 		int LandHitsMade() const { return static_cast<int>(std::min<size_t>(LandHits, 1000000000u)); }
 		int LandHitsThinned() const { return static_cast<int>(std::min<size_t>(LandHitsFew, 1000000000u)); }
 		double LandKeptMean() const { return LandHits > 0 ? LandFewSum / static_cast<double>(LandHits) : 1.0; }
+		/** game.smoke_budget (FX9): the smoke the last Draw laid, in screens of fill (its pieces' areas on the screen,
+		 *  each clipped to one screen, over the screen's), and the share of the big smoke near the lens left out then.
+		 *  0 and 0 with the row off, or the view's width not given. For a scene's log, beside PuffsDrawn. */
+		double SmokeScreens() const { return SmokeLaidScreens; }
+		double SmokeThinned() const { return ThinShare; }
 		const std::vector<Vec>& Points() const { return Out; }
 		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
 		bool Busy(double Now) const;
@@ -1250,6 +1255,17 @@ namespace TheaterFx
 		double LieNearer = 0.0, LieNearerK = 1.5; // (SetSoftContact: how much nearer the eye a lying piece is drawn; game.soft_contact.lie_nearer)
 		double LayNear = 1.0; // (while laying one bit: every point of it this share of the way from the eye to where it is, LayEye; see SetSoftContact)
 		Vec LayEye;
+		// (FX9, game.smoke_budget, the production lead's battle-scale plan of 22 November: a budget for the screen's area
+		// of smoke. A piece of smoke under skip_px.0 across at its biggest takes no place and is not laid, whole by
+		// skip_px.1; past screens of fill, the big smoke near the lens, over thin_from_px across, is thinned: a share of
+		// its pieces left out, by each one's own lot, and the rest that much darker, so a cloud of many keeps its weight.
+		// The share follows what is asked over thin_s seconds, never more than thin_most. on 0 or no row: as before.
+		// Smoke here is a puff or a low skirt of a burst or a fire, not a light, a column kept, a trail, a thrown piece,
+		// a far form or a funnel's even plume: Smoky)
+		double SkipPxLo = 0.0, SkipPxHi = 0.0, ThinScreens = 0.0, ThinFromPx = 150.0, ThinMost = 0.5, ThinS = 1.0, ThinBand = 0.15;
+		double ThinShare = 0.0, ThinAt = -1.0e9, ScreenPx = 0.0, ScreenHalfX = 0.0, ScreenHalfY = 0.0, FillSmall = 0.0, FillBig = 0.0, FillLaid = 0.0, SmokeLaidScreens = 0.0;
+		bool Smoky(const Bit& B) const;
+		double MostRad(const Bit& B, double Now) const; // (a piece's radius at its biggest by Now, its long way: never under what LayBit lays)
 		/** What the scene's grade changes (SetLandGrade), read at Setup and again when it changes: the clods' shade and
 		 * tint and every colour Setup keeps (Picture), each from land_grade.<its path> where the scene is under that grade. */
 		void ReadGradeLooks();

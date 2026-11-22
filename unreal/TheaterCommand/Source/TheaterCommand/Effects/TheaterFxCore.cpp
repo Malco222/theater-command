@@ -408,6 +408,21 @@ namespace TheaterFx
 		ThrownLong = SafeNum(Num("burst.debris.clods.most_long", 0.0), 0.0, 100.0, 0.0);
 		ThrownLong = ThrownLong > 0.0 ? std::max(1.0, ThrownLong) : 0.0; // (never shorter than it is wide: the pre-check on d487b717)
 		LieNearerK = SafeNum(Num("game.soft_contact.lie_nearer", 1.5), 1.0, 10.0, 1.5);
+		// (FX9, game.smoke_budget: see SkipPxLo. on 0, or no row: none of it, as before)
+		SkipPxLo = SkipPxHi = ThinScreens = 0.0;
+		if (Num("game.smoke_budget.on", 0.0) >= 0.5)
+		{
+			if (Has("game.smoke_budget.skip_px.0"))
+			{
+				SkipPxLo = SafeNum(Num("game.smoke_budget.skip_px.0", 2.0), 0.0, 64.0, 2.0);
+				SkipPxHi = SafeNum(Num("game.smoke_budget.skip_px.1", 1.5 * SkipPxLo), SkipPxLo + 0.01, 128.0, 1.5 * SkipPxLo + 0.01);
+			}
+			ThinScreens = Has("game.smoke_budget.screens") ? SafeNum(Num("game.smoke_budget.screens", 2.0), 0.0, 100.0, 0.0) : 0.0;
+			ThinFromPx = SafeNum(Num("game.smoke_budget.thin_from_px", 150.0), 8.0, 1.0e5, 150.0);
+			ThinMost = SafeNum(Num("game.smoke_budget.thin_most", 0.5), 0.0, 0.9, 0.5);
+			ThinS = SafeNum(Num("game.smoke_budget.thin_s", 1.0), 0.0, 30.0, 1.0);
+			ThinBand = SafeNum(Num("game.smoke_budget.thin_band", 0.15), 0.02, 0.5, 0.15);
+		}
 		ReadGradeLooks();
 		Clear();
 	}
@@ -494,6 +509,8 @@ namespace TheaterFx
 		BallLamps.clear();
 		LampsKept.clear(); // (the pre-check, 22 November: kept lamps outlived a Clear, so a fire lit again with the clock set back
 		LampsAt = -1.0e18; // had no lamp until the clock passed where it was)
+		ThinShare = FillSmall = FillBig = FillLaid = SmokeLaidScreens = 0.0; // (FX9: no memory of another battle's smoke)
+		ThinAt = -1.0e9;
 		for (size_t I = 0; I < OutRgba.size(); ++I)
 		{
 			OutRgba[I] = 0;
@@ -14664,6 +14681,58 @@ namespace TheaterFx
 			break;
 		}
 		}
+		if ((SkipPxLo > 0.0 || ThinScreens > 0.0) && Smoky(B))
+		{
+			// (FX9, game.smoke_budget: see SkipPxLo. Its size on the screen as it is laid: its two half-ways in pixels)
+			const double Ha = AxA.Length() / std::max(MetresAPixel, 1e-9), Hb = AxB.Length() / std::max(MetresAPixel, 1e-9);
+			const double Px = 2.0 * std::max(Ha, Hb);
+			if (SkipPxLo > 0.0)
+			{
+				const double T = Clamp01((Px - SkipPxLo) / (SkipPxHi - SkipPxLo));
+				A *= T * T * (3.0 - 2.0 * T);
+			}
+			if (A >= 0.004 && ScreenPx > 0.0)
+			{
+				// (its fill: each fan's area on the screen, as much of it as its box has on the screen and no more than the
+				// screen; one whose middle is behind the eye counted whole. The big share over thin_from_px, whole at a
+				// quarter as wide again)
+				const double T = Clamp01((Px - ThinFromPx) / (0.25 * ThinFromPx));
+				const double Big = ThinScreens > 0.0 ? T * T * (3.0 - 2.0 * T) : 0.0;
+				const double Fans = B.TwinPx > 0.0 && Room >= 2 && 2.0 * Rad >= B.TwinPx * MetresAPixel ? 2.0 : 1.0;
+				const Vec Seen = Middle - Eye.Eye;
+				const double Deep = Seen.Dot(Eye.Forward), Half = 0.5 * Px;
+				double OnScreen = 1.0;
+				if (Deep > 1e-3 && Half > 0.0)
+				{
+					const double Sx = Seen.Dot(Eye.Right) / Deep * Eye.PixelsPerRadian, Sy = Seen.Dot(Eye.Up) / Deep * Eye.PixelsPerRadian;
+					const double InX = std::max(0.0, std::min(Sx + Half, ScreenHalfX) - std::max(Sx - Half, -ScreenHalfX));
+					const double InY = std::max(0.0, std::min(Sy + Half, ScreenHalfY) - std::max(Sy - Half, -ScreenHalfY));
+					OnScreen = InX * InY / (4.0 * Half * Half);
+					OnScreen = OnScreen == OnScreen ? Clamp01(OnScreen) : 1.0;
+				}
+				const double Area = std::min(Pi * Ha * Hb * OnScreen, ScreenPx) * Fans;
+				FillSmall += Area * (1.0 - Big);
+				FillBig += Area * Big;
+				const double Share = ThinShare * Big;
+				if (Share > 0.0)
+				{
+					// (its own lot, the same every frame, against the share left out: one whose lot is under that goes, by
+					// degrees over ThinBand of lots so it fades and never goes at a stroke; the rest are as much darker as
+					// the share of them still laid (Kept): the light they let through to that power, so a cloud of many
+					// keeps its weight)
+					const double Lot = static_cast<double>(Mix64(B.Serial * 0x9E3779B97F4A7C15ull + 0x5F9ull) >> 11) * (1.0 / 9007199254740992.0);
+					const double L = Share * (1.0 + ThinBand) - ThinBand, W = Clamp01((Lot - L) / ThinBand);
+					if (!(W > 0.0))
+					{
+						return 0;
+					}
+					const double Lo = Clamp01(L), Hi = Clamp01(L + ThinBand);
+					const double Kept = std::max(0.05, ((Hi - L) * (Hi - L) - (Lo - L) * (Lo - L)) / (2.0 * ThinBand) + 1.0 - Hi);
+					A = (1.0 - std::pow(1.0 - std::clamp(A, 0.0, 0.999), 1.0 / Kept)) * W;
+				}
+				FillLaid += Area;
+			}
+		}
 		if (A < 0.004 && !bTailShows)
 		{
 			return 0;
@@ -14813,6 +14882,15 @@ namespace TheaterFx
 		LastSun = Eye.Sun;
 		LastPpr = Eye.PixelsPerRadian;
 		bEyeKnown = true;
+		// (FX9, game.smoke_budget: the screen's pixels, for the smoke's fill. The view's width not given: 0, and none of
+		// the big smoke is thinned)
+		{
+			const double Across = 2.0 * Eye.HalfAcross * Eye.PixelsPerRadian, Up = 2.0 * (Eye.HalfUp > 0.0 ? Eye.HalfUp : 0.5625 * Eye.HalfAcross) * Eye.PixelsPerRadian;
+			ScreenPx = Across > 0.0 && Up > 0.0 && Across * Up < 1.0e12 ? Across * Up : 0.0;
+			ScreenHalfX = ScreenPx > 0.0 ? 0.5 * Across : 0.0;
+			ScreenHalfY = ScreenPx > 0.0 ? 0.5 * Up : 0.0;
+			FillSmall = FillBig = FillLaid = 0.0;
+		}
 		// (how far the eye came and turned since the last frame: see EyeMoved)
 		EyeMoved = bEyeWas ? (Eye.Eye - EyeWas).Length() : 0.0;
 		EyeTurned = bEyeWas ? std::max(std::acos(std::clamp(Eye.Forward.Dot(AheadWas), -1.0, 1.0)), std::acos(std::clamp(Eye.Up.Dot(UpWas), -1.0, 1.0))) : 0.0;
@@ -15028,6 +15106,14 @@ namespace TheaterFx
 						continue;
 					}
 				}
+			}
+			if (SkipPxLo > 0.0 && Smoky(B) && 2.0 * MostRad(B, Now) * std::max(Eye.PixelsPerRadian, 1.0) < SkipPxLo * (At - Eye.Eye).Length())
+			{
+				// (FX9, game.smoke_budget.skip_px: a piece of smoke under skip_px.0 across at its biggest takes no place and
+				// is not laid, near or far. At the wide shot of a barrage 518 of the 3,000 places went to smoke under 2 px
+				// across, specks no one reads, and the battle in front of the eye was cut for them. It comes in over
+				// skip_px.1, in LayBit, so none appears at a stroke)
+				continue;
 			}
 			const bool bCase = B.bThrown && B.Form == Bit::Shape::Plate;
 			if (bCase && (At - Eye.Eye).Length() > CaseFar)
@@ -15308,6 +15394,19 @@ namespace TheaterFx
 				Slot += LayBit(Slot, *Sorted[I].B, Now, Eye, MaxPuffs - Slot);
 			}
 		}
+		// (FX9, game.smoke_budget: the smoke laid, in screens, and the share of the big smoke left out from the next frame
+		// on: enough that what this frame asked would come within screens, never more than thin_most, followed over
+		// thin_s seconds so the big smoke thins and comes back by degrees. A second or more since the last Draw, or
+		// time gone back: this frame's own)
+		SmokeLaidScreens = ScreenPx > 0.0 ? FillLaid / ScreenPx : 0.0;
+		if (ThinScreens > 0.0)
+		{
+			const double Target = ScreenPx > 0.0 && FillBig > 0.0 ? std::clamp(1.0 - (ThinScreens * ScreenPx - FillSmall) / FillBig, 0.0, ThinMost) : 0.0;
+			const double Since = Now - ThinAt;
+			ThinShare = Since >= 0.0 && Since < 1.0 && ThinS > 0.0 ? ThinShare + (Target - ThinShare) * (1.0 - std::exp(-Since / ThinS)) : Target;
+			ThinShare = ThinShare == ThinShare ? std::clamp(ThinShare, 0.0, ThinMost) : 0.0;
+			ThinAt = Now;
+		}
 		// fold away what was drawn last frame and is not now
 		for (int S = Slot; S < LastDrawn; ++S)
 		{
@@ -15320,6 +15419,33 @@ namespace TheaterFx
 		}
 		LastDrawn = Slot;
 		return Slot;
+	}
+
+	bool Battle::Smoky(const Bit& B) const
+	{
+		// (FX9: what the smoke's budget may leave out or thin. A light, a kept column or an oil fire's, a trail, a thrown
+		// piece, a piece with a floor of its own on the screen, a far form and a funnel's even plume are each held to
+		// their own law, and are left alone)
+		return (B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Upright) && !B.bKeep && !B.bLight && !B.bThrown && !(B.LeastPx > 0.0) && !(B.Ribbon > 0.0) && !(B.Smear > 0.0) && B.FarRep == 0 && !(B.Hose > 0.0) && B.Even < 0 && B.OilId < 0 && !(B.WakeBy > 0.0);
+	}
+
+	double Battle::MostRad(const Bit& B, double Now) const
+	{
+		// (as burst.far's: its radius by its age, at the most; one that lingers its tail's end wider again; its long way,
+		// a flame's swell, a two-stage grower's middle size. Never under what LayBit lays, so a piece skip_px would lay
+		// is never left out for it)
+		const double Grown = Clamp01((Now - B.Born) / std::max(B.Life, 1e-6));
+		double Most = B.bTail ? std::max(B.R0, B.R1) * (1.0 + std::clamp(B.TailWide, 0.0, 4.0)) : std::max(B.R0, B.R0 + (B.R1 - B.R0) * std::pow(Grown, B.Grow));
+		if (B.GrowBy > 0.0)
+		{
+			Most = std::max({ Most, B.RMid, B.R1 });
+		}
+		Most *= std::max({ 1.0, B.Stretch, B.StretchFrom, B.Flatten }) * (1.0 + Clamp01(B.FlickerWide)) * (1.0 + Clamp01(B.FlickerLong));
+		if (B.LowBy > 0.0)
+		{
+			Most /= std::sqrt(B.LowFlat == B.LowFlat ? std::clamp(B.LowFlat, 0.1, 1.0) : 1.0); // (a low mound is wider than its radius: Bit::LowBy)
+		}
+		return Most == Most ? std::max(Most, B.HalfLength) : 1.0e9;
 	}
 
 	bool Battle::OffScreen(const Bit& B, const Vec& At, const View& Eye) const

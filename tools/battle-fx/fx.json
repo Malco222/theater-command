@@ -4797,6 +4797,19 @@
   "soft_contact": {
    "_how": "The land battle's soft contact (the art director's cut 5, still 07, 22 November: a burning wreck's flame cut along a hard straight line where it met the hull; ruling 14:16Z, B). With the scene's FBattleEffects::SetSoftContact(metres) its material (M_BattlePuffsSoft) fades every piece where it comes within that depth in front of the ground or a hull, so a flame or smoke meets them softly. A piece lying on the ground would fade with it: a thrown clod or fragment come to rest, a spent case, a crater's mark. So each is laid lie_nearer times that depth nearer the eye along its own line of sight and smaller to match, the same picture to the pixel, every point of it that far in front of what it lies on: it stays whole, from any height of eye (a lift straight up would not: from above, 3 cm is 3 cm of depth; along the line of sight it is the full depth). Within four times that of the eye it is laid where it is. Off unless the scene calls it; the air and sea scenes never do.",
    "lie_nearer": 1.5
+  },
+  "smoke_budget": {
+   "_how": "FX9 of the production lead's battle-scale plan (22 November): a budget for the screen's area of smoke, pre-built and OFF (on 0) until the Mac's gate shows the smoke's fill is what costs. on 1: a piece of smoke (a burst's or a fire's puff or low skirt; not a light, a kept or oil column, a trail, a thrown piece, a far form or a funnel's even plume) under skip_px.0 across at its biggest takes no place and is not laid, coming in by degrees to whole at skip_px.1. And past screens of the smoke's fill a frame (each piece's area on the screen, over the screen's), the big smoke near the lens, over thin_from_px across (whole at a quarter as wide again), is thinned: a share of its pieces left out, each by its own lot and fading out over thin_band of lots, and the rest that much darker (the light they let through, to the power of one over the share kept), so a cloud of many keeps its weight. That share is what would bring this frame within screens, never over thin_most, followed over thin_s seconds so the smoke thins and comes back by degrees. The cloud rig (a 1.5 km front, 6 shells a second): the wide shot, 810 m back, fills 0.6 screens; the battle camera 150 m back fills 3.0, 1.7 of it 61 puffs over 200 px. No row, or on 0: as before.",
+   "on": 0,
+   "skip_px": [
+    2.0,
+    3.0
+   ],
+   "screens": 2.0,
+   "thin_from_px": 150.0,
+   "thin_most": 0.5,
+   "thin_s": 1.0,
+   "thin_band": 0.15
   }
  },
  "air_flak": {
