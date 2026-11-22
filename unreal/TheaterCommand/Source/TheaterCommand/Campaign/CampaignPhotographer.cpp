@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
@@ -2155,6 +2156,22 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 				ClipEvery = ClipGap.IsEmpty() ? 0.25f : FMath::Clamp(FCString::Atof(*ClipGap), 0.05f, 5.0f);
 				ClipTaken = 0;
 				ClipAt = Clock + ClipEvery;
+				// (Release 2, the art director's read of run 4, 22 November: the clip of his own order taking Pomorze had the
+				// middle of the province German already in its first frame. A picture is taken a tick, and a tick is as long as
+				// the computer takes over it: the still's tick carried the whole order, fought at once in a run that takes
+				// pictures, and the still itself, so the first frame came up to 0.4 s of play after it (the engine's longest
+				// step), not 0.05; and each picture after it, written out in the frame it is taken in, put as much again between
+				// it and the next. The ink's second was run within the first few frames. While the clip is taken the game is
+				// stepped by the clip's own gap instead, however long a tick takes, so that its frames are that far apart in the
+				// game's own time. Not for a gap longer than 0.4 s, the engine's longest step: the world would still go on 0.4 s a
+				// tick, and the pictures would fall on the steps either side of the gap.)
+				if (ClipFrames > 0 && ClipEvery <= 0.4f && !FApp::IsBenchmarking() && !FApp::UseFixedTimeStep())
+				{
+					bClipStepped = true;
+					ClipStepWas = FApp::GetFixedDeltaTime();
+					FApp::SetFixedDeltaTime(ClipEvery);
+					FApp::SetUseFixedTimeStep(true);
+				}
 			}
 		}
 		// (Release 2, the art director's read of run 3, 22 November: "-TheaterConfirm" sends in the order the first
@@ -2179,6 +2196,13 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		if (ClipTaken == ClipFrames)
 		{
 			ClipAt = Clock + 1.0f; // (and a second for the last of them to be written)
+			if (bClipStepped)
+			{
+				// (the clip is taken: the game keeps the computer's own time again)
+				bClipStepped = false;
+				FApp::SetUseFixedTimeStep(false);
+				FApp::SetFixedDeltaTime(ClipStepWas);
+			}
 		}
 		return;
 	}
