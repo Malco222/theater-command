@@ -27,9 +27,9 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { stopOf } from './history';
-import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, placed, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules, housed } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
@@ -649,11 +649,11 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
     // A town under siege with its harbour still open: ships can run more troops into the garrison, if it has room.
     if (!siegeRules(g)) return `${to.name} is not in friendly hands.`;
     if (c.kind === 'eng') return `The enemy holds the country round ${to.name}: only fighting troops are run into the town.`;
-    if (garrisonOf(to).length >= roomIn(g, to)) return `${to.name} is under siege, and the town has no room for another corps.`;
+    if (housed(g, to) >= roomIn(g, to)) return `${to.name} is under siege, and the town has no room for another corps.`;
   }
   const steep = whyBarred(g, c, to);
   if (steep) return steep;
-  if (friendlyUnits(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
+  if (placed(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
   if (liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   if (!seaPath(g, c.nat, from, to)) return 'The enemy holds the sea between.';
   return null;

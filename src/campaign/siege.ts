@@ -21,7 +21,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, fortRow, roomless, type Assessment } from './game';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
@@ -78,6 +78,8 @@ export const tallySiege = (g: Game, what: string, by = 1): void => { g.flags[`sg
 
 /** The corps inside the town. */
 export const garrisonOf = (r: Region): Corps[] => r.garr ?? NONE;
+/** The corps inside that take a place of the town's room: fortress crews, under the fortress rows, take none (06:15Z (b)). */
+export const housed = (g: Game, r: Region): number => (r.garr ? r.garr.filter((c) => !roomless(g, c)).length : 0);
 
 /** The corps in the field of a province that are at war with whoever holds its town. */
 export function besiegers(g: Game, r: Region): Corps[] {
@@ -261,6 +263,7 @@ export function fedBySea(g: Game, r: Region): boolean {
 
 /** True where the town's stores do not run down however closely it is ringed: ships still reach it, or the book feeds it (history.json 'restraint'). */
 export const fed = (g: Game, r: Region): boolean => fedBySea(g, r) || fedByBook(g, r);
+const fedFrom = fed;
 
 /** True for a town the book feeds against the ring round it now: Leningrad against a computer Germany, at stops 1 and 2. */
 // (Each besieger by the army it fights in: a corps lent to a player stands in the player's ring.)
@@ -386,7 +389,7 @@ function mouths(g: Game, nat: string, pocket: number[], town: Region): number {
   for (const id of pocket) {
     const x = g.regions[id];
     for (const c of x.units) if (c.nat === nat && !c.dead && c.kind !== 'fort') corps++;
-    for (const c of garrisonOf(x)) if (c.nat === nat && !c.dead) corps++;
+    for (const c of garrisonOf(x)) if (c.nat === nat && !c.dead && !roomless(g, c)) corps++;
   }
   return Math.max(1, corps / Math.max(1, roomIn(g, town)));
 }
@@ -524,7 +527,7 @@ export function startGarrisons(g: Game): void {
   for (const s of SIEGE.startIn ?? []) {
     const c = g.corps.find((x) => x.nat === s.nat && x.name === s.corps && !x.dead && x.town === undefined);
     const r = c ? g.regions[c.reg] : undefined;
-    if (!c || !r || r.ctrl !== s.nat || r.owner !== s.nat || garrisonOf(r).length >= roomIn(g, r)) continue;
+    if (!c || !r || r.ctrl !== s.nat || r.owner !== s.nat || housed(g, r) >= roomIn(g, r)) continue;
     r.units.splice(r.units.indexOf(c), 1);
     joinTown(g, r, c);
     c.name = s.name;
@@ -565,7 +568,7 @@ export function manRings(g: Game, nat: string): void {
  * ground at all if every province is full. Null if the town has room, or there is no such ground.
  */
 export function musterNear(g: Game, nat: string, r: Region): Region | null {
-  if (garrisonOf(r).length < roomIn(g, r)) return null;
+  if (housed(g, r) < roomIn(g, r)) return null;
   const seen = new Uint8Array(g.regions.length);
   const q = [r.id];
   seen[r.id] = 1;
@@ -573,7 +576,7 @@ export function musterNear(g: Game, nat: string, r: Region): Region | null {
   for (let i = 0; i < q.length; i++) {
     const x = g.regions[q[i]];
     if (x !== r && allied(g, nat, x.ctrl) && allied(g, nat, fieldCtrl(g, x))) {
-      if (x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat)).length < STACK) return x;
+      if (x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat) && !roomless(g, u)).length < STACK) return x;
       crowded ??= x;
     }
     for (const j of x.nb) if (!seen[j]) { seen[j] = 1; q.push(j); }
@@ -602,7 +605,7 @@ export function whyNotGarrison(g: Game, c: Corps): string | null {
   if (c.leave !== undefined) return 'It is out of the line this month.';
   if (!allied(g, c.nat, r.ctrl)) return `${name} is not in friendly hands.`;
   const room = roomIn(g, r);
-  if (garrisonOf(r).length >= room) return `${name} has room for ${room === 1 ? 'one corps' : `${room} corps`} only.`;
+  if (housed(g, r) >= room) return `${name} has room for ${room === 1 ? 'one corps' : `${room} corps`} only.`;
   return null;
 }
 
@@ -620,7 +623,7 @@ export function whyNotTakeField(g: Game, c: Corps): string | null {
   if (!c.town || c.dead) return 'It is not in a garrison.';
   const r = g.regions[c.reg];
   if (besieged(g, r)) return `The enemy holds the country round ${townName(r)}: the garrison can come out only if the siege is raised.`;
-  const here = r.units.filter((u) => allied(g, u.nat, c.nat) && u.kind !== 'eng').length;
+  const here = r.units.filter((u) => allied(g, u.nat, c.nat) && u.kind !== 'eng' && !roomless(g, u)).length;
   if (here >= STACK) return `There is no room in the field at ${r.name} for another corps.`;
   return null;
 }
@@ -638,7 +641,7 @@ export function takeField(g: Game, c: Corps): boolean {
 
 /** True if a beaten corps with nowhere to go can fall back into the town instead of laying down its arms. */
 export function canShelter(g: Game, c: Corps, r: Region): boolean {
-  return siegeRules(g) && c.kind !== 'fort' && c.kind !== 'eng' && allied(g, c.nat, r.ctrl) && garrisonOf(r).length < roomIn(g, r);
+  return siegeRules(g) && c.kind !== 'fort' && c.kind !== 'eng' && allied(g, c.nat, r.ctrl) && housed(g, r) < roomIn(g, r);
 }
 
 // ---- News ---------------------------------------------------------------------------------------
@@ -888,8 +891,9 @@ export function siegeSweep(g: Game): void {
     for (const c of [...r.garr]) if (!allied(g, c.nat, r.ctrl)) sendHome(g, c);
     // A town whose works were blown up, or that shrank, holds fewer than it did: the last corps in come out again,
     // into the country round it if no enemy stands there, and otherwise to the nearest ground their side holds.
-    while (r.garr && r.garr.length > roomIn(g, r)) {
-      const c = r.garr[r.garr.length - 1];
+    while (r.garr && housed(g, r) > roomIn(g, r)) {
+      // (Fortress crews take no room, and stay in their works.)
+      const c = [...r.garr].reverse().find((x) => !roomless(g, x))!;
       if (!takeField(g, c)) { const to = musterNear(g, c.nat, r); if (!to) break; relocate(g, c, to); c.ap = 0; }
       if (r.garr?.includes(c)) break;
     }
@@ -1014,7 +1018,10 @@ export function siegeSupply(g: Game): void {
   for (const r of g.regions) {
     if (!r.garr || !r.garr.length || !besieged(g, r)) continue;
     const fed = garrisonFed(g, r);
-    for (const c of r.garr) c.supplied = fed;
+    // (A fortress crew inside eats none of the town's stores, the fortress rows' 06:15Z (b): it lives on its own, and
+    // is fed only where food still reaches the town from outside, by sea or across a lake.)
+    const outside = r.garr.some((c) => fortRow(g, c)) ? fedFrom(g, r) : false;
+    for (const c of r.garr) c.supplied = fortRow(g, c) ? outside : fed;
   }
 }
 

@@ -21,3 +21,8 @@ const forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
 
 /** True where the grand campaign plays on the whole world: the far side's chart is read and its countries exist. */
 export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== '0' : (stage as { far: boolean }).far === true;
+
+// The fortress rows (data/campaign/stage.json 'fortRows'): forced by TC_FORTS, as the far side's switch is by TC_FAR.
+const forts = (globalThis as { TC_FORTS?: unknown }).TC_FORTS ?? G.process?.env?.TC_FORTS;
+/** True where a grand campaign opens with the fortress rows (the flag is set as it opens: game.ts fortRows). */
+export const FORTS_STAGE: boolean = forts !== undefined ? !!forts && forts !== '0' : (stage as { fortRows?: boolean }).fortRows === true;
