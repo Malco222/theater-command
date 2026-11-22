@@ -453,6 +453,12 @@ namespace LandParts
 		return Base >= static_cast<int32>(LandField::Base::Tuft) && Base < static_cast<int32>(LandField::Base::Count);
 	}
 
+	/** The corn near the lens (the art director's cut 4, fix 4): its bundles cleared within StalkClear metres of the eye
+	 * (along the ground), where each clump is drawn as its own stalks (LandField's Stalks, on M_LandStalks), while the
+	 * eye is under StalkEyeLow metres over the ground; again over StalkEyeHigh, the bundles back and the stalks hidden
+	 * (the stalks reach only 5.5 m from the lens: from higher, a clearing would be a bald ring in the corn). */
+	static constexpr double StalkClear = 3.5, StalkEyeLow = 2.5, StalkEyeHigh = 3.0;
+
 	/** A body of a battle model (model axes, metres from its pivot: x forward, y right, z up, as Unreal's own) as the
 	 * engine takes it, its colours taken toward the burnt colour by Soot. */
 	static void FromBody(const LandKit::Mesh& M, const uint8_t* Burnt, double Soot, double U, TArray<FVector>& P, TArray<FVector>& N, TArray<FColor>& C, TArray<int32>* T)
@@ -725,6 +731,27 @@ void ALandBattle::LoadInks()
 		{
 			bToldNoLeaves = true;
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandLeaves is missing (run Tools/build_content.sh): the hedges and trees carry their solid sprigs."));
+		}
+	}
+	// The corn's stalks near a low lens (M_LandStalks, build_content.py; the art director's cut 4, fix 4): without it, the
+	// bundles to the lens, said once. Shown from NearFrom + NearSpan of depth past the lens, gone from FarTo along the
+	// ground, where the bundles (cleared within LandParts::StalkClear) take over.
+	UMaterialInterface* Stalks = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandStalks.M_LandStalks"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	StalkInk = Stalks ? UMaterialInstanceDynamic::Create(Stalks, this) : nullptr;
+	if (StalkInk)
+	{
+		StalkInk->SetScalarParameterValue(TEXT("NearFrom"), 0.6f);
+		StalkInk->SetScalarParameterValue(TEXT("NearSpan"), 0.3f);
+		StalkInk->SetScalarParameterValue(TEXT("FarTo"), static_cast<float>(LandParts::StalkClear + 1.5));
+		StalkInk->SetScalarParameterValue(TEXT("FarSpan"), 1.5f);
+	}
+	else
+	{
+		static bool bToldNoStalks = false;
+		if (!bToldNoStalks)
+		{
+			bToldNoStalks = true;
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandStalks is missing (run Tools/build_content.sh): the corn keeps its bundles to the lens."));
 		}
 	}
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
@@ -1494,6 +1521,7 @@ void ALandBattle::LayThings()
 	WarmEdges.Init(FVector2f(-1e9f, 1e9f), Kinds * 3);
 	ClutterReach.Init(1e9f, Kinds);
 	ClutterCopyOf.Init(-1, Kinds * Shades);
+	bStalksMade = false;
 	// The clutter's shades from a sample of it (it is laid round the eye later): nine squares 120 m across, laid once
 	// in three rows of three over the field, so that a crop or a grass that is not in the field's middle has its own
 	// tints too (one square in the middle left the corn of an open wheat map at its built colour everywhere).
@@ -1605,7 +1633,9 @@ void ALandBattle::LayThings()
 		}
 		const FVector3f Mean = Them.empty() ? FVector3f(1.0f, 1.0f, 1.0f) : All / static_cast<float>(Them.size());
 		const LandField::BaseMesh& Shape = G.BaseOf(Base);
-		if (Shape.Near.Empty())
+		// (the corn's stalks only on their own material: without it, none, and the bundles go to the lens)
+		const bool bStalks = Base == LandField::Base::Stalks;
+		if (Shape.Near.Empty() || (bStalks && !StalkInk))
 		{
 			continue;
 		}
@@ -1622,7 +1652,8 @@ void ALandBattle::LayThings()
 			}
 			const FVector3f Tint = Number[Shade] > 0 ? Sum[Shade] / static_cast<float>(Number[Shade]) : Mean;
 			const FString Name = FString::Printf(TEXT("LandThing_%s_%d"), *LandParts::Wide(Shape.Name), Shade);
-			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, ThingInk, LeafInk, U);
+			UMaterialInterface* Paint = bStalks ? StalkInk.Get() : ThingInk.Get();
+			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, Paint, bStalks ? nullptr : LeafInk.Get(), U);
 			if (!Mesh)
 			{
 				continue;
@@ -1635,14 +1666,14 @@ void ALandBattle::LayThings()
 															 : NewObject<UHierarchicalInstancedStaticMeshComponent>(this, FName(*Name));
 			Copies->SetupAttachment(Root);
 			Copies->SetStaticMesh(Mesh);
-			Copies->SetMaterial(0, ThingInk);
+			Copies->SetMaterial(0, Paint);
 			if (LeafInk && Mesh->GetStaticMaterials().Num() > 1)
 			{
 				Copies->SetMaterial(1, LeafInk);
 			}
 			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Copies->SetCanEverAffectNavigation(false);
-			Copies->SetCastShadow(!bClutter || Base == LandField::Base::Wheat);
+			Copies->SetCastShadow(!bClutter || Base == LandField::Base::Wheat || bStalks);
 			// (a thing with no far level is not drawn past where the field gives it up: gates, the well, the cart, the
 			// clutter)
 			if (Shape.Far.Empty())
@@ -1653,6 +1684,12 @@ void ALandBattle::LayThings()
 			if (bClutter)
 			{
 				ClutterCopyOf[Kind * Shades + Shade] = ClutterCopies.Add(Copies);
+				if (bStalks)
+				{
+					// (hidden until the eye comes down into the corn)
+					Copies->SetVisibility(false);
+					bStalksMade = true;
+				}
 				continue;
 			}
 			Places.Reset();
@@ -1686,6 +1723,9 @@ void ALandBattle::LayThings()
 	{
 		return !State.IsValid() || (!State->Holes.Bare(One.X, One.Y) && !State->Ruts.Flat(One.X, One.Y));
 	};
+	// (the corn's clearing round the lens: none until the eye is low, LayClutter)
+	Carpet->Clear.assign(static_cast<size_t>(Kinds), 0.0);
+	bStalksShown = false;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground's things: %d meshes, %d instances, made in %.2f s"), Meshes, Instances, LandParts::Seconds() - Began);
 }
 
@@ -1716,14 +1756,39 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 	// The grass round the eye and round what it looks at: its squares coming into reach laid, those leaving it given
 	// back, every frame (nothing to do while the eye stays within its squares).
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
-	LayClutter(EyeAt, LookAt, State->Pose.bCut);
+	LayClutter(EyeAt, LookAt, State->Pose.bCut, EyeWorld.Z / UnitsPerMetre - GroundZ(EyeAt.X, EyeAt.Y));
 }
 
-void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut)
+void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut, double EyeHigh)
 {
 	if (ClutterCopies.Num() == 0 || !State->Field || !Carpet.IsValid())
 	{
 		return;
+	}
+	// The corn stalk by stalk round a low lens, its bundles cleared there (the art director's cut 4, fix 4); from higher
+	// the bundles again and no stalks (the carpet gives the cleared bundles back in this update).
+	if (bStalksMade)
+	{
+		const bool bLow = bStalksShown ? EyeHigh < LandParts::StalkEyeHigh : EyeHigh < LandParts::StalkEyeLow;
+		if (bLow != bStalksShown)
+		{
+			bStalksShown = bLow;
+			const int32 Kind = static_cast<int32>(LandField::Base::Stalks);
+			const int32 KindShades = ClutterCopyOf.Num() / static_cast<int32>(LandField::Base::Count);
+			for (int32 Shade = 0; Shade < KindShades; ++Shade)
+			{
+				const int32 Slot = Kind * KindShades + Shade;
+				if (ClutterCopyOf.IsValidIndex(Slot) && ClutterCopies.IsValidIndex(ClutterCopyOf[Slot]) && ClutterCopies[ClutterCopyOf[Slot]])
+				{
+					ClutterCopies[ClutterCopyOf[Slot]]->SetVisibility(bLow);
+				}
+			}
+			const size_t Wheat = static_cast<size_t>(LandField::Base::Wheat);
+			if (Wheat < Carpet->Clear.size())
+			{
+				Carpet->Clear[Wheat] = bLow ? LandParts::StalkClear : 0.0;
+			}
+		}
 	}
 	const int32 Copies = ClutterCopies.Num();
 	TArray<int32> Before;

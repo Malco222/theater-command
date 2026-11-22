@@ -72,6 +72,12 @@ namespace LandCarpet
 		/** Whether it still stands (not in a shell hole's bare earth, not flattened under a tank). Asked each time a
 		 * square is laid. */
 		std::function<bool(const LandField::Placed&)> Stands;
+		/** Per kind (LandField::Base), how near the eye a thing is cleared away, metres (none, or 0: never): the corn's
+		 * bundles round the lens, where its stalks are drawn one by one (the art director's cut 4, fix 4). Kept as the
+		 * eye moves, a thing at a time, and given back as it leaves the clearing. The caller may change it between
+		 * updates (the scene clears the corn only while the eye is low, where the stalks are drawn): the next update
+		 * hides or gives back what the change takes in or lets out. */
+		std::vector<double> Clear;
 
 		/** Brings the squares round the eye and what it looks at up to date: those within AtOnce made now, and at most
 		 * MakeMost others, nearest first (CutFollow while a cut's, or the first frame's, are still being made). Now:
@@ -80,6 +86,18 @@ namespace LandCarpet
 		{
 			Tally T;
 			const bool bLook = std::hypot(LookX - EyeX, LookY - EyeY) >= LookApart;
+			// (the clearing round the eye moves with it: squares laid this frame lay round where it is now; those held
+			// from before are mended at the end)
+			const double WasX = ClearX, WasY = ClearY, WasMost = ClearMost;
+			const bool bClearChanged = Clear != ClearWas;
+			ClearWas = Clear;
+			ClearX = EyeX;
+			ClearY = EyeY;
+			ClearMost = 0.0;
+			for (const double C : Clear)
+			{
+				ClearMost = std::max(ClearMost, C);
+			}
 			// A cut far away lets go of every square: the meshes emptied whole, not hidden place by place.
 			bool bAny = false;
 			for (const auto& [K, Sq] : Held)
@@ -172,6 +190,7 @@ namespace LandCarpet
 				Sq.Things.swap(Made);
 				Sq.Copy.assign(Sq.Things.size(), -1);
 				Sq.Slot.assign(Sq.Things.size(), -1);
+				Sq.Cleared.assign(Sq.Things.size(), 0);
 				for (size_t K = 0; K < Sq.Things.size(); ++K)
 				{
 					Sq.Copy[K] = CopyOf ? CopyOf(Sq.Things[K]) : -1;
@@ -182,6 +201,7 @@ namespace LandCarpet
 				++T.Made;
 			}
 			bFollowing = bFollowing && T.Waiting > 0;
+			Clearing(WasX, WasY, WasMost, bClearChanged, Out, T);
 			return T;
 		}
 
@@ -247,6 +267,7 @@ namespace LandCarpet
 			std::vector<LandField::Placed> Things;
 			std::vector<int32_t> Copy; // a thing's mesh (-1: none)
 			std::vector<int32_t> Slot; // its place in the mesh (-1: not laid)
+			std::vector<uint8_t> Cleared; // 1: not laid for being in the clearing round the eye
 			double LaidNear = 0.0;     // the square's nearest point to the eye when last laid
 			double LaidAt = 0.0;
 			bool bMarked = false;
@@ -258,6 +279,9 @@ namespace LandCarpet
 		};
 
 		std::unordered_map<uint64_t, Square> Held;
+		/** The clearing's middle (the eye), the widest kind's reach of it, and the reaches as last used. */
+		double ClearX = 1e30, ClearY = 1e30, ClearMost = 0.0;
+		std::vector<double> ClearWas;
 		std::vector<int32_t> Size;
 		std::vector<std::vector<int32_t>> Free;
 		std::vector<std::pair<int, int>> Wanted;
@@ -332,12 +356,94 @@ namespace LandCarpet
 			return Size[C]++;
 		}
 
+		/** Whether a thing is in the clearing round the eye (its kind's Clear). */
+		bool InClearing(const LandField::Placed& P) const
+		{
+			const size_t Kind = static_cast<size_t>(P.Kind);
+			return Kind < Clear.size() && Clear[Kind] > 0.0 && std::hypot(P.X - ClearX, P.Y - ClearY) < Clear[Kind];
+		}
+
+		/** The squares held from before round where the clearing was and where it is: each clearable thing come into it
+		 * hidden, each gone out of it laid again (if it still stands and is in its reach). WasMost: the widest reach
+		 * before; bChanged: the reaches changed since. */
+		void Clearing(double WasX, double WasY, double WasMost, bool bChanged, std::vector<Op>& Out, Tally& T)
+		{
+			const double Most = std::max(ClearMost, WasMost);
+			const bool bMoved = std::fabs(WasX - ClearX) >= 1e-3 || std::fabs(WasY - ClearY) >= 1e-3;
+			if (Most <= 0.0 || (!bMoved && !bChanged))
+			{
+				return;
+			}
+			if (WasX >= 1e29)
+			{
+				Clearing(Out, T, ClearX - Most, ClearY - Most, ClearX + Most, ClearY + Most);
+				return;
+			}
+			// (a jump, a cut: where the clearing was and where it is now mended each on its own, not all the ground
+			// between them; what it left behind is given back even where its squares are still held)
+			if (std::fabs(WasX - ClearX) > 2.0 * Most + Side || std::fabs(WasY - ClearY) > 2.0 * Most + Side)
+			{
+				Clearing(Out, T, WasX - Most, WasY - Most, WasX + Most, WasY + Most);
+				Clearing(Out, T, ClearX - Most, ClearY - Most, ClearX + Most, ClearY + Most);
+				return;
+			}
+			Clearing(Out, T, std::min(ClearX, WasX) - Most, std::min(ClearY, WasY) - Most, std::max(ClearX, WasX) + Most, std::max(ClearY, WasY) + Most);
+		}
+
+		void Clearing(std::vector<Op>& Out, Tally& T, double X0, double Y0, double X1, double Y1)
+		{
+			const int I0 = static_cast<int>(std::floor(X0 / Side)), I1 = static_cast<int>(std::floor(X1 / Side));
+			const int J0 = static_cast<int>(std::floor(Y0 / Side)), J1 = static_cast<int>(std::floor(Y1 / Side));
+			for (int J = J0; J <= J1; ++J)
+			{
+				for (int I = I0; I <= I1; ++I)
+				{
+					const auto Found = Held.find(Key(I, J));
+					if (Found == Held.end())
+					{
+						continue;
+					}
+					Square& Sq = Found->second;
+					for (size_t N = 0; N < Sq.Things.size(); ++N)
+					{
+						const LandField::Placed& P = Sq.Things[N];
+						const size_t Kind = static_cast<size_t>(P.Kind);
+						if (Sq.Copy[N] < 0 || (!Sq.Cleared[N] && (Kind >= Clear.size() || Clear[Kind] <= 0.0)))
+						{
+							continue;
+						}
+						const bool bIn = InClearing(P);
+						if (bIn && Sq.Slot[N] >= 0)
+						{
+							Free[static_cast<size_t>(Sq.Copy[N])].push_back(Sq.Slot[N]);
+							Out.push_back({ Sq.Copy[N], Sq.Slot[N], true, P });
+							Sq.Slot[N] = -1;
+							Sq.Cleared[N] = 1;
+							++T.Hidden;
+						}
+						else if (!bIn && Sq.Cleared[N])
+						{
+							Sq.Cleared[N] = 0;
+							if ((Kind < Reach.size() && Sq.LaidNear >= Reach[Kind]) || (Stands && !Stands(P)))
+							{
+								continue;
+							}
+							Sq.Slot[N] = Take(Sq.Copy[N]);
+							Out.push_back({ Sq.Copy[N], Sq.Slot[N], false, P });
+							++T.Put;
+						}
+					}
+				}
+			}
+		}
+
 		void Lay(Square& Sq, std::vector<Op>& Out, Tally& T)
 		{
 			for (size_t N = 0; N < Sq.Things.size(); ++N)
 			{
 				const LandField::Placed& P = Sq.Things[N];
 				const int32_t Copy = Sq.Copy[N];
+				Sq.Cleared[N] = 0;
 				if (Copy < 0)
 				{
 					continue;
@@ -350,6 +456,11 @@ namespace LandCarpet
 				if (Stands && !Stands(P))
 				{
 					continue; // (blown away, or laid flat under a tank's tracks)
+				}
+				if (InClearing(P))
+				{
+					Sq.Cleared[N] = 1; // (round the lens, where its stalks are drawn one by one)
+					continue;
 				}
 				Sq.Slot[N] = Take(Copy);
 				Out.push_back({ Copy, Sq.Slot[N], false, P });

@@ -147,6 +147,10 @@ private:
 	 * without it, and then the shrubs and trees carry their solid sprigs instead. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> LeafInk;
+	/** The corn's stalks near a low lens (M_LandStalks: lit as foliage, faded in past the lens and out where the bundles
+	 * take over; build_content.py); none without it, and then the corn keeps its bundles to the lens. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> StalkInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
 	UPROPERTY()
@@ -190,6 +194,11 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
 	TArray<int32> ClutterCopyOf;
 	TSharedPtr<LandCarpet::Squares> Carpet;
+	/** The corn drawn stalk by stalk round the lens (the art director's cut 4, fix 4): whether the stalks' meshes were
+	 * made (StalkInk), and whether the eye is low enough for them now (they are shown, and the bundles cleared within
+	 * StalkClear of it, only then: from above, a clearing would be a bald ring in the corn). */
+	bool bStalksMade = false;
+	bool bStalksShown = false;
 	/** The shell holes (LandCrater): torn earth on the ground's own paint, one mesh a patch (a 64 m square of the
 	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
@@ -433,7 +442,7 @@ private:
 	 * that is not clutter). */
 	int32 ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const;
 	void ShowField(const FVector& EyeWorld, double Battle);
-	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut);
+	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut, double EyeHigh);
 	void MakeMen();
 	void DrawMen(const FVector& EyeWorld);
 	void MakeArmour();

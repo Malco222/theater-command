@@ -113,6 +113,17 @@ camera comes back to its shot.
   low shot the camera chooses for itself where the crop stands over 0.45 m becomes a shoulder shot instead. A low shot
   asked for by name keeps its subject and rises over the ears. The cloud test fails if any frame of those shots has its
   lens fewer than 0.05 m over the crop.
+- **Near the lens the corn is stalks, not bundles (the art director's cut 4, fix 4).** While the eye is under 2.5 m
+  over the ground (until it rises past 3 m), the wheat's bundles within 3.5 m of it along the ground are taken away
+  and each clump is drawn as its own stalks (`LandField`'s `Stalks`: 48 thin stems of two strips, two or three
+  drooping leaves, an ear of crossed zigzag strips, the stem's foot taking the soil's colour; the poppies have cups of
+  four petals and nodding buds). They are on `M_LandStalks` (`build_content.py`): lit as foliage, faded in by dither
+  from 0.6 to 0.9 m of depth so no stalk stands across the lens, and out from 3.5 to 5 m along the ground where the
+  bundles take over, with whole shadows. From higher, the stalks are hidden and the bundles are back (a clearing seen
+  from above would be a bald ring in the corn). The grass squares (`LandCarpet::Clear`) hide and give back the bundles
+  a thing at a time as the eye moves, rises or jumps; the cloud test checks that no bundle is laid within 3.5 m of a
+  low eye and that they come back under a risen one. Without `M_LandStalks` the corn keeps its bundles to the lens,
+  said once in the log.
 - **The camera keeps the art director's rules (her notes on the first film).** A fifth of that film was over 40 per
   cent black: the lens pressed on a German turret for 17 s, under a tree's crown, on a dark hedge, under the ground,
   inside a GI. Now:

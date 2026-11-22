@@ -226,6 +226,8 @@ namespace LandField
 		Stubble, // clutter: a cut field's straw stubble in its drill rows, a few straws lying loose
 		Sward,   // clutter: the short grass itself, close round the eye, in the ground's own colour (its tint)
 		Trodden, // clutter: a piece of a cow path's bare trodden earth, laid end to end along the path
+		Stalks,  // clutter: standing corn stalk by stalk, with its leaves and its ears, laid where Wheat is and drawn
+		         // only within a few metres of the lens (the art director's cut 4, fix 4), the Wheat there cleared
 		Count
 	};
 
