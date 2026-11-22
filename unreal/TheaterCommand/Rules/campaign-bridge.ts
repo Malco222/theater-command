@@ -34,8 +34,12 @@
 //   TC.court(nation)                    -> { ok, note, view }: courts a neutral
 //   TC.warPlan(nation, regionId?)       -> { ok, lead, friends, lines }: what declaring war would mean, for the question asked first
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
+//   TC.school([corpsId, ...], go)       -> { ok, note, view }: sends them to the battle schools for the month (go true), or calls them back (release 2).
+//                                          Each corps in the view carries school (at the schools now), schoolTo (the grade it would come back) and schoolWhy (why it cannot go, '' if it can)
+//                                          and wear, how worn its uniforms look, 0.1 fresh to 1 after six weeks in the line (its battles' blocks carry the same)
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
+import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
@@ -103,8 +107,8 @@ import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrder
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
 import type { RaidKind, RaidPlan, RaidWay } from '../../../src/campaign/airwar';
-import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts } from '../../../src/campaign/turn';
-import { whyNotCash } from '../../../src/campaign/stories';
+import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSchool } from '../../../src/campaign/turn';
+import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
@@ -618,6 +622,10 @@ function drawView() {
       carry: carriedBy(s, c), digging: !c.dug && ((c as { digging?: number }).digging ?? 0) > 0,
       // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
       lean: !!c.lean,
+      // (Release 2) the battle schools: at them this month, the grade a month there brings it to, and why it cannot go ('' if it can).
+      school: !!c.school, schoolTo: grade(drillTo(c.xp)), schoolWhy: c.nat === s.human && !c.school ? whyNoSchool(s, c) ?? '' : '',
+      // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
+      wear: wearOf(c), fresh: c.fresh ?? 0,
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
@@ -652,7 +660,8 @@ function drawView() {
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
-    // branch fields its later models early, and one that neglects it keeps the old ones longer.
+    // branch fields its later models early, and one that neglects it keeps the old ones longer. The tanks' year is
+    // also armourYear in src/campaign/tech.ts, which the field battle's shells read: keep the two in step.
     designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.alive && (n.lab || techOf(s, n.id))).map((n) => {
       const year = 1939 + Math.floor((Math.max(1, s.turn) + 7) / 12);
       if (techOf(s, n.id)) {
@@ -1592,6 +1601,8 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   // (Version 66) How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of
   // war. The staff goes to work when his first month opens. A game started with no depth is the full game.
   if (human && options?.view === 'grand' && options?.depth) { try { orderDepth(g, options.depth); } catch { /* no depths in this game */ } }
+  // The support teams (release 2, src/campaign/teams.ts): on in a grand campaign once release 2 opens them; release 1 never.
+  if (options?.view === 'grand' && TEAMS_RELEASE) setTeams(g, true);
   // (Version 70) The history dial, for a campaign that starts at a stop other than the third: a watched war included.
   if (options?.view === 'grand' && options?.history && options.history !== 3) { try { dialCalls.order?.(g, options.history, true); } catch { /* no dial in these rules */ } }
   // The month the player took his seat, kept with the game (the chimneys of an idle country stand cold only from his second month).
@@ -6151,6 +6162,19 @@ function draftsFor(ids: number[], take: boolean) {
   return { ok: n > 0, note: n ? (take ? 'They take drafts as they come: their ranks fill, and the new men water down their experience.' : 'They keep their veterans together and take no drafts: they stay seasoned, and do not recover their strength.') : 'That order cannot be given to them.', view: view() };
 }
 
+/** (Release 2) Sends the picked corps to the battle schools for this month, or calls them back. */
+function schoolFor(ids: number[], go: boolean) {
+  const s = game();
+  const cs = corpsById(s, ids);
+  const why = go ? cs.map((c) => whyNoSchool(s, c)).find((w) => !!w) ?? '' : '';
+  let n = 0;
+  for (const c of cs) if (orderSchool(s, c, go)) n++;
+  const note = !n ? (why || 'That order cannot be given to them.')
+    : go ? `${n === 1 ? 'The corps goes' : `${n} corps go`} to the battle schools for the month. Left in peace, ${n === 1 ? 'it comes' : 'they come'} back a grade better when your next month opens, and ${n === 1 ? 'takes' : 'take'} no orders till then.`
+      : `${n === 1 ? 'The corps is' : `${n} corps are`} called back from the battle schools, and ready for orders. ${n === 1 ? 'It has' : 'They have'} had no term.`;
+  return { ok: n > 0, note, view: view() };
+}
+
 /** Places the army as the staff advises, on the eve of war. */
 function evePlanGo() {
   const s = game();
@@ -6613,7 +6637,7 @@ function find(name: string) {
 
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
-  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
+  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard };

@@ -1,7 +1,8 @@
 import type { Rng } from '../core/rng';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
-export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng';
+/** The arms of a corps. 'mg' and 'mor' are the support teams (release 2, src/campaign/teams.ts): off unless switched on. */
+export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng' | 'mg' | 'mor';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountain' | 'marsh' | 'urban' | 'desert';
 export type Align = 'allies' | 'allies_cobelligerent' | 'leaning_allies' | 'independent' | 'leaning_axis' | 'axis_cobelligerent' | 'axis';
 
@@ -374,6 +375,17 @@ export interface Corps extends Storied {
   lean?: boolean;
   /** Sent home on a bond tour or to the training schools: out of the line until this month. */
   leave?: number;
+  /**
+   * At the battle schools this month (release 2): the player's order, for one month, to a corps standing on its own
+   * country's soil. It takes no orders while it is there, and comes back a grade better if it is left in peace. No computer nation sets it.
+   */
+  school?: boolean;
+  /** Weeks in the line since it was last rested or formed (release 2, looks only): see stories.json "wear". */
+  line?: number;
+  /** How worn its uniforms and kit look, 0.1 (fresh) to 1 (six weeks or more in the line); absent: fresh. Looks only. */
+  wear?: number;
+  /** Its share of men who joined it this month, in new kit (release 2, looks only): absent, none. 'wear' counts them in. */
+  fresh?: number;
   /** The work an engineer corps has in hand: what, where, and the month it is finished. Lost if the corps leaves the place. */
   job?: { what: string; reg: number; eta: number; ap?: number };
   /** The rivalry it is part of: an id on the list of rivalries. */
@@ -497,6 +509,12 @@ export interface BattleReport {
   town?: boolean;
   /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */
   siege?: boolean;
+  /**
+   * Fought by hand on the field in a capital's or a city's streets (src/battle/land/field.ts streetsOf): the field drew the
+   * battle in its outer streets, so the after card says so, and that its old town holds out under a siege (the third
+   * playtester's hand check of 4086e97).
+   */
+  streets?: 'capital' | 'city';
   /** The field was won and the town, held only by its guard, opened its gates without a fight (the grand campaign). */
   gates?: boolean;
   /** The town's guard fought beside the field army (ruling 232, the grand campaign): won, the town fell with the field. */
@@ -1047,6 +1065,8 @@ export interface AirReport {
   hold: number;
   /** What the bombers did, in a sentence. */
   result: string;
+  /** A raid fought out as an air battle (src/battle/air): the bombers that bombed, for its after card. */
+  dropped?: number;
   /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
   worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
@@ -1367,6 +1387,11 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
   art: { label: 'Artillery', atk: 14, def: 8, move: 2, mobile: false },
   // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
   eng: { label: 'Engineers', atk: 4, def: 9, move: 2, mobile: false },
+  // Support teams (release 2, src/campaign/teams.ts): a machine-gun brigade and a mortar brigade, a division's worth
+  // each. Their own weight is small; what they do besides (a defence stiffened against foot, works broken up) is on the
+  // attack card. Never raised while the teams are off.
+  mg: { label: 'Machine guns', atk: 3, def: 7, move: 2, mobile: false },
+  mor: { label: 'Mortars', atk: 6, def: 4, move: 2, mobile: false },
 };
 
 export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };

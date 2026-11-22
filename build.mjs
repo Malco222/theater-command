@@ -5,8 +5,12 @@ import { build } from 'esbuild';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 mkdirSync('dist', { recursive: true });
+// The land field's own stylesheet, for FIGHT IT YOURSELF on the attack card: the field opens over the campaign in a
+// layer of its own and wears it there (src/battle/ui/page.ts, fightOnField).
+const FIELD_CSS = ['src/battle/ui/kit/tokens.css', 'src/battle/ui/kit/kit.css', 'src/battle/ui/battle.css'].map((f) => readFileSync(f, 'utf8')).join('\n');
 const out = await build({
   entryPoints: ['src/campaign/ui/main.ts'],
+  define: { FIELD_CSS: JSON.stringify(FIELD_CSS) },
   bundle: true,
   format: 'iife',
   target: 'es2020',
@@ -20,7 +24,7 @@ const PICTURES = ['troops', 'fieldworks', 'town', 'fleet', 'factories', 'rail-ya
 const pictures = PICTURES.map((k) => `.tpic.k-${k} { background-image: url("data:image/svg+xml;base64,${readFileSync(`src/campaign/ui/pictures/target-${k}.svg`).toString('base64')}"); }`).join('\n');
 // FIRST COMMAND's notes, pointer and Guide (firsthour.ts) come after the page's own rules.
 const css = `${readFileSync('src/campaign/ui/style.css', 'utf8')}\n${pictures}\n${readFileSync('src/campaign/ui/firsthour.css', 'utf8')}\n`;
-const fonts = '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Courier+Prime:wght@400;700&family=PT+Serif:wght@400;700&display=swap" rel="stylesheet">';
+const fonts = '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Courier+Prime:wght@400;700&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">';
 const page = `<title>Theater Command</title>
 ${fonts}
 <style>

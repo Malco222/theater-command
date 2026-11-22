@@ -1,6 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
+import type { FoughtAir } from './airfought';
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
@@ -16,7 +17,7 @@ import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders'
 import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
-  type Assessment, type CostOf, type GroundWorks, type ProbeReport,
+  type Assessment, type CostOf, type FieldBill, type GroundWorks, type ProbeReport,
   worksMonth,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
@@ -43,7 +44,7 @@ import { phaseFor, runAI } from './ai';
 import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
-import { awardOf, cashHonour } from './stories';
+import { awardOf, cashHonour, whyNoSchool } from './stories';
 import { takeWinterPeace, whyNotWinterPeace, winterMonth } from './winter';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, liberationMonth, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
@@ -314,8 +315,8 @@ export function runTurnAI(g: Game): void {
 // ---- The player's orders -----------------------------------------------------------------
 
 export function canOrder(g: Game, c: Corps): boolean {
-  // A corps sent home on a bond tour or to the schools takes no orders until it is back.
-  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined) return false;
+  // A corps sent home on a bond tour or to the schools takes no orders until it is back; nor does one at the battle schools this month.
+  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined || c.school) return false;
   // An ally's corps that marches with the player's army takes his orders too (the grand campaign).
   return c.nat === g.human || (c.joint === g.human && allied(g, c.nat, g.human));
 }
@@ -567,11 +568,12 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   };
 }
 
-export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
+export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number, field?: FieldBill): BattleReport | null {
   if (onEve(g)) return null;
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
-  return resolveBattle(g, ok, target);
+  // (src/battle) A battle the player fought out hands back the ratio it came to, in place of the dice.
+  return resolveBattle(g, ok, target, fought === undefined ? {} : { fought, ...(field ? { field } : {}) });
 }
 
 // ---- Softening a line, handing it over, and folding corps together (the grand campaign) -------------------------
@@ -1820,8 +1822,8 @@ export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: numbe
 export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
-export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
-  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human) : null;
+export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[], fought?: FoughtAir): AirReport | null {
+  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human, fought) : null;
 }
 
 /**
@@ -1914,6 +1916,22 @@ export function orderCash(g: Game, award: number, how: Cash): boolean {
 export function orderSeen(g: Game, award: number): void {
   const a = awardOf(g, award);
   if (a && a.nat === g.human) a.seen = true;
+}
+
+/**
+ * The player sends a corps to the battle schools for this month, or calls it back before the month is out (release 2).
+ * See whyNoSchool for who can go. A corps called back has had no term: it is free to march and fight again.
+ */
+export function orderSchool(g: Game, c: Corps, go: boolean): boolean {
+  if (g.human === null || current(g) !== g.human || c.nat !== g.human || c.dead) return false;
+  if (!go) {
+    if (!c.school) return false;
+    delete c.school;
+    return true;
+  }
+  if (whyNoSchool(g, c) !== null) return false;
+  c.school = true;
+  return true;
 }
 
 /** The player's standing order for a corps: take drafts as they come, or keep the veterans together and take none. */

@@ -2155,6 +2155,36 @@ export function seaIncomeLoss(g: Game, nat: string): number {
 
 const sideOf = (f: Fleet): SeaSide => ({ nat: f.nat, fleet: f.name, admiral: f.admiral?.name ?? null, ships: { ...f.ships }, sunk: none() });
 
+/** A fleet action about to be fought, as the rules weigh it, for a screen that lets the player fight it out (src/battle/sea). */
+export interface SeaMeeting { turn: number; zone: number; nat: string; mine: number[]; met: number[]; A: number; D: number; airA: number; airD: number }
+
+/**
+ * A fleet action fought out on the field (src/battle/sea): the ratio it came to, which stands in for the dice, and the
+ * ships of each class each fleet lost there, by fleet id. Submarines take no part on the field: the dice sink them
+ * from R as before. 'toDice': the player handed the rest of the action back to the dice, so the rules sink as they
+ * would at R, and never fewer than had already gone down on the field.
+ */
+export interface SeaFought { R: number; sunk: Record<number, Partial<Ships>>; toDice?: boolean }
+
+/**
+ * The seam to the played fleet action (src/battle/sea/handoff.ts). Unset, as it is everywhere but on a screen that
+ * offers the player his fleet actions, every action is settled by the dice exactly as before.
+ */
+export const seaField: { fought?: (m: SeaMeeting) => SeaFought | undefined } = {};
+
+/** What a fleet lost in an action fought out on the field: the ships that went down there, and its submarines as the dice sink them. */
+function sinkFought(f: Fleet, p: SeaFought, frac: number, rng: Rng): Ships {
+  const out = p.toDice ? sinkShips(f, frac, rng) : sinkShips(f, frac, rng, ['ss']);
+  const there = p.sunk[f.id] ?? {};
+  for (const c of SURFACE) {
+    const more = Math.min(f.ships[c], Math.max(0, (there[c] ?? 0) - (p.toDice ? out[c] : 0)));
+    f.ships[c] -= more;
+    f.lost[c] += more;
+    out[c] += more;
+  }
+  return out;
+}
+
 function afterAction(g: Game, f: Fleet, side: SeaSide, won: boolean, rng: Rng): void {
   f.fought = g.turn;
   f.ready = Math.max(0, f.ready - (won ? NAVY.ready.won : NAVY.ready.lost));
@@ -2198,12 +2228,14 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
       continue;
     }
     const att = mine.map(sideOf), def = met.map(sideOf);
-    const R = (A / D) * rng.range(0.8, 1.2);
+    // (src/battle/sea) An action the player fought out on the field hands back the ratio it came to and the ships it cost.
+    const played = seaField.fought?.({ turn: g.turn, zone: z, nat, mine: mine.map((f) => f.id), met: met.map((f) => f.id), A, D, airA, airD });
+    const R = played ? played.R : (A / D) * rng.range(0.8, 1.2);
     const won = R >= 1;
     const edge = won ? R : 1 / R;
     const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
-    mine.forEach((f, i) => { att[i].sunk = sinkShips(f, won ? light : hard, rng); });
-    met.forEach((f, i) => { def[i].sunk = sinkShips(f, won ? hard : light, rng); });
+    mine.forEach((f, i) => { att[i].sunk = played ? sinkFought(f, played, won ? light : hard, rng) : sinkShips(f, won ? light : hard, rng); });
+    met.forEach((f, i) => { def[i].sunk = played ? sinkFought(f, played, won ? hard : light, rng) : sinkShips(f, won ? hard : light, rng); });
     const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
     const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
     const lines: TicketLine[] = [

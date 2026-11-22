@@ -1,0 +1,19 @@
+{
+  "_doc": [
+    "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
+    "Each arm keeps its own style numbers and grows by its own experience and research (land: data/battle/land-styles.json). '_' is every nation not listed.",
+    "A leaning not built yet (night, last-stand: item 6, after release 1) is fought as its stand-in. Japan's land column attacks by night and defends to the last; until item 6 every arm fights those as bold (ruling 239(3)).",
+    "Germany and Britain differ at sea (historian, H): Germany's heavy ships broke off when pressed, the Royal Navy sought action."
+  ],
+  "lean": {
+    "GER": { "land": "bold", "sea": "methodical", "air": "methodical" },
+    "UK": { "land": "methodical", "sea": "bold", "air": "methodical" },
+    "USA": { "land": "methodical", "sea": "methodical", "air": "methodical" },
+    "ITA": { "land": "methodical", "sea": "methodical", "air": "methodical" },
+    "FRA": { "land": "methodical", "sea": "methodical", "air": "methodical" },
+    "SOV": { "land": "mass", "sea": "mass", "air": "mass" },
+    "JAP": { "land": { "att": "night", "def": "last-stand" }, "sea": "night", "air": "bold" },
+    "_": { "land": "methodical", "sea": "methodical", "air": "methodical" }
+  },
+  "standIn": { "night": "bold", "last-stand": "bold" }
+}

@@ -24,7 +24,7 @@ import {
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
-  orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
+  orderCash, orderDrafts, orderSchool, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
@@ -72,6 +72,8 @@ import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFo
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
+import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
+import { fieldOpen, fightOnField } from '../../battle/ui/page';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
@@ -95,9 +97,10 @@ import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vac
 import { DIVISIONS, ordinal, type DivisionCard } from '../armies';
 import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
-import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
+import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { setTeams, TEAMS_RELEASE } from '../teams';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
@@ -141,7 +144,7 @@ const ui = {
   /** True once the player has asked to see every line of a Battle Ticket on a narrow screen, where it opens folded to the lines that matter most. */
   ticketAll: false,
   /** A battle won as forecast, told by a slip on its province (ruling 204): it lies there until the next press anywhere. */
-  result: null as null | { id: number; region: number },
+  result: null as null | { id: number; region: number; /** The battle the staff settled in place of the field (b464(4)). */ staff?: boolean },
   /** How each order that was fought this sitting was told: '' for the slip, else why its card opened. */
   resultLog: [] as { turn: number; id: number; why: string }[],
   /** True once the player has opened the tray's unit cards on a narrow screen, where the tray is folded to one row so that the map stays open to a finger. */
@@ -367,6 +370,9 @@ function symbol(kind: Kind, w: number, h: number): string {
     case 'art': return `<circle class="symf" cx="${w / 2}" cy="${h / 2}" r="${h * 0.24}"/>`;
     // Engineers: a bridge span on its piers.
     case 'eng': return `<path class="sym" d="M${w * 0.22} ${h * 0.72}V${h * 0.32}H${w * 0.78}V${h * 0.72}M${w / 2} ${h * 0.32}V${h * 0.6}"/>`;
+    // Support teams (release 2): machine guns, a weapon's upward arrow on its tripod; mortars, a tube's arc over its plate.
+    case 'mg': return `<path class="sym" d="M${w / 2} ${h * 0.78}V${h * 0.22}M${w * 0.38} ${h * 0.4}L${w / 2} ${h * 0.22}L${w * 0.62} ${h * 0.4}M${w * 0.36} ${h * 0.78}H${w * 0.64}"/>`;
+    case 'mor': return `<path class="sym" d="M${w * 0.32} ${h * 0.75}Q${w / 2} ${h * 0.05} ${w * 0.68} ${h * 0.75}"/><circle class="symf" cx="${w / 2}" cy="${h * 0.75}" r="${h * 0.1}"/>`;
   }
 }
 
@@ -386,6 +392,8 @@ function badge(kind: Kind): string {
     case 'fort': s = `<path class="bsym" d="M2 ${h - 1.3}V1.7H3.6V2.9H5.4V1.7H7V${h - 1.3}Z"/>`; break;
     case 'art': s = `<circle class="bsymf" cx="${w / 2}" cy="${h / 2}" r="1.7"/>`; break;
     case 'eng': s = `<path class="bsym" d="M2 ${h - 1.4}V2H${w - 2}V${h - 1.4}M${w / 2} 2V${h - 2.2}"/>`; break;
+    case 'mg': s = `<path class="bsym" d="M${w / 2} ${h - 1.2}V1.2M${w / 2 - 1.6} 2.8L${w / 2} 1.2L${w / 2 + 1.6} 2.8"/>`; break;
+    case 'mor': s = `<path class="bsym" d="M2.2 ${h - 1.3}Q${w / 2} 0 ${w - 2.2} ${h - 1.3}"/>`; break;
   }
   return `<g class="badge" transform="translate(14.4 8.2)"><rect width="${w}" height="${h}" rx="1"/>${s}</g>`;
 }
@@ -647,8 +655,10 @@ function mount(): void {
   document.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', forgetKeys);
   // A result's slip lies on the map until the next press anywhere (ruling 204). The press still does its own work.
+  // The staff's slip after a reload is not put down by a press on a card that came up over it (the month's first card):
+  // it waits on the map until the card is down (b464(4)).
   document.addEventListener('pointerdown', (e) => {
-    if (ui.result && !(e.target as Element | null)?.closest?.('#rslip')) { ui.result = null; drawResult(); }
+    if (ui.result && !(ui.result.staff && ui.modal) && !(e.target as Element | null)?.closest?.('#rslip')) { ui.result = null; drawResult(); }
   }, true);
   // A press on a button that is off is answered on the paper line with the sentence its hover carries (ruling 204: no silent press).
   document.addEventListener('pointerup', (e) => {
@@ -1762,6 +1772,31 @@ function readSave(): string | null {
   try { return localStorage.getItem(SAVE_KEY); } catch { return null; }
 }
 
+/**
+ * The battle the staff booked in place of the field (the design director, b464(4)). Opening the field keeps the attack
+ * settled by the staff; this mark, kept beside the save and never in it, names that battle and stamps the save's text.
+ * The field's own result, once kept, takes the mark away. A save continued with the mark on it, unchanged since, opens
+ * with the staff's result slip, once.
+ */
+const STAFF_KEY = 'theater-command-staff-v1';
+/** A save's text in one number (djb2 over its code units); its length goes beside it. */
+const stampOf = (text: string): number => { let h = 5381; for (let i = 0; i < text.length; i++) h = (Math.imul(h, 33) ^ text.charCodeAt(i)) >>> 0; return h; };
+function markStaff(text: string, id: number): void {
+  try { localStorage.setItem(STAFF_KEY, JSON.stringify({ id, n: text.length, stamp: stampOf(text) })); } catch { /* the save stands; only its slip is lost */ }
+}
+function unmarkStaff(): void { try { localStorage.removeItem(STAFF_KEY); } catch { /* storage is off */ } }
+/** The staff's battle, where `text` is the save kept as the field opened and nothing has been kept since. Read once. */
+function staffBooked(text: string, at: Game): BattleReport | null {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(STAFF_KEY); } catch { return null; }
+  if (raw === null) return null;
+  unmarkStaff();
+  try {
+    const m = JSON.parse(raw) as { id?: unknown; n?: unknown; stamp?: unknown };
+    return m.n === text.length && m.stamp === stampOf(text) ? at.reports.find((r) => r.id === m.id) ?? null : null;
+  } catch { return null; }
+}
+
 const sumDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
 /** Divisions as the cards of a face-off count them: every division on the roll, whatever its strength, as the corps cards beneath do. */
 const rollDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs, 0);
@@ -2404,7 +2439,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const flags = `${mine ? marchTag(c) : ''}${c.school && mine ? '<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>' : resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
@@ -4556,6 +4591,7 @@ function storyTags(c: Corps): string[] {
   if (isGuards(g, c)) out.push(`<span class="tag hon" title="Named in the order of the day: the highest honour a formation can earn.">${esc(designation(c.nat))}</span>`);
   if (c.leave !== undefined) out.push(`<span class="tag" title="At home with its fame. It cannot be given orders until it is back.">At home until ${date(c.leave)}</span>`);
   if (c.lean && mine) out.push('<span class="tag" title="This corps takes no drafts. It stays as small as its losses leave it, and keeps what it knows.">Veterans only</span>');
+  if (c.school && mine) out.push('<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>');
   const r = rivalryOf(g, c.rival);
   if (r && !r.over && mine) out.push(`<span class="tag hon" title="The two have met ${r.met} times. This corps fights ${Math.round(STORIES.rivals.edge * 100)}% harder in any battle its old enemy is in.">Old enemy: ${esc(r.theirsName)}</span>`);
   if (mine && c.rec?.exile && c.home !== undefined) out.push(`<span class="tag bad" title="The place this corps was raised in is in enemy hands.">${esc(g.regions[c.home].name)} lost</span>`);
@@ -4674,6 +4710,17 @@ function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
       const t = Math.round(training(g, c.nat) * 100);
       extra += `<h3>Replacements</h3><p class="sub" style="margin:0 0 7px">Drafts bring a corps back to strength, but men who have never been under fire thin out what it knows. Drafts reach the front at experience ${t} (${esc(grade(t / 100).toLowerCase())}); this corps stands at ${Math.round(c.xp * 100)}. A corps kept to veterans only stays as small as its losses leave it and keeps its edge.</p>
         <div class="seg"><button class="btn small${c.lean ? '' : ' on'}" data-act="drafts" data-id="${c.id}" data-v="take" ${up ? '' : 'disabled'}>Take drafts</button><button class="btn small${c.lean ? ' on' : ''}" data-act="drafts" data-id="${c.id}" data-v="lean" ${up ? '' : 'disabled'}>Veterans only</button></div>`;
+      // The battle schools (release 2): a quiet month at home, and the corps comes back a grade better.
+      if (g.flags.open === 1) {
+        const no = c.school ? null : whyNoSchool(g, c);
+        const to = drillTo(c.xp);
+        extra += `<h3>Battle school</h3><p class="sub" style="margin:0 0 7px">${c.school
+          ? `At the battle schools this month. If it is left in peace it comes back ${esc(grade(to).toLowerCase())} when your next month opens. It takes no orders until then.`
+          : `A whole quiet month at the battle schools at home brings a corps up one grade${to > c.xp ? `: this one would come back ${esc(grade(to).toLowerCase())}` : ''}. It takes no orders while it is there, and if it has to fight the term is lost. The schools teach drill; only battle makes an elite.`}${no ? ` <b>${esc(no)}</b>` : ''}</p>
+        <div class="seg">${c.school
+          ? `<button class="btn small" data-act="school" data-id="${c.id}" data-v="back" ${up ? '' : 'disabled'}>Call it back</button>`
+          : `<button class="btn small" data-act="school" data-id="${c.id}" data-v="go" ${up && !no ? '' : 'disabled'}>Send to battle school</button>`}</div>`;
+      }
     }
   } else if (kind === 'air') {
     const f = u as AirFleet;
@@ -7200,14 +7247,14 @@ function battleCard(c: Corps, opts: { act?: boolean; on?: boolean; note?: string
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders', sheltered: 'fell back into the town' };
 
 /** A corps after the battle: what it lost and what became of it. */
-function fateCard(u: BattleReport['attackers'][number], won: boolean): string {
+function fateCard(u: BattleReport['attackers'][number], won: boolean, streets = false): string {
   const left = u.men > 0 ? Math.max(0, 1 - u.lost / u.men) : 0;
   const gone = u.fate === 'surrendered' || u.fate === 'destroyed';
-  const fate = u.fate === '' && !won ? 'fell back' : FATE[u.fate];
+  const fate = u.fate === '' && !won ? 'fell back' : u.fate === 'sheltered' && streets ? 'fell back into the heart of the city' : FATE[u.fate];
   const named = corpsNamed(g, u.nat, u.name);
-  return `<div class="ucard${gone ? ' gone' : ''}" title="${esc(named)} · ${num(u.men)} men, lost ${num(u.lost)}">
+  return `<div class="ucard${gone ? ' gone' : ''}" title="${esc(named)} · ${num(u.men)} men, ${u.lost > 0 ? `lost ${num(u.lost)}` : 'lost none'}">
     <span class="utop"><svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[u.nat].color}"/>${symbol(u.kind, 24, 15)}</svg></span><b>${esc(named)}</b>
-    <span class="um">${u.divs} ${KIND[u.kind].label.toLowerCase()} div${u.divs > 1 ? 's' : ''} · lost ${num(u.lost)}</span>
+    <span class="um">${u.divs} ${KIND[u.kind].label.toLowerCase()} div${u.divs > 1 ? 's' : ''} · ${u.lost > 0 ? `lost ${num(u.lost)}` : 'lost none'}</span>
     <span class="meter" title="${Math.round(left * 100)}% of its men left"><i class="${left < 0.5 ? 'low' : ''}" style="width:${Math.round(left * 100)}%"></i></span>
     <span class="tags"><span class="tag ${gone || u.fate === 'retreated' ? 'bad' : u.fate === 'advanced' ? 'good' : ''}">${fate}</span></span></div>`;
 }
@@ -7351,17 +7398,22 @@ function tellResult(rep: BattleReport, was: BeforeBattle): void {
   refresh();
   openModal(why ? { kind: 'report', id: rep.id } : null);
 }
+/** What holds out in a besieged province, by its size: a capital or a city is a city, the rest a town (the UI director, 19:06). */
+const walled = (r: Region): string => { const s = townSize(g, r); return s === 'capital' || s === 'city' ? 'city' : 'town'; };
+
 /** The slip's sentence: what was won, and what it cost each side. */
 function resultLine(r: BattleReport): string {
   const place = g.regions[r.region], town = townName(place), me = g.human;
   const mine = place.ctrl === me;
   const held = mine ? `${r.regionName} is yours.` : me && allied(g, me, place.ctrl) ? `${r.regionName} is freed.` : `${r.regionName} is taken.`;
   const and = town === r.regionName ? (mine ? ' and is yours.' : '.') : `. ${held}`;
-  const what = r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : r.guarded && r.taken ? `${town} is taken${and}` : held;
+  // (An attack thrown back, and a battle he defended, are told by a slip only where the staff settled them: b464(4).)
+  const what = !r.taken && !r.siege ? `The attack on ${r.regionName} was thrown back.` : r.siege ? (r.streets ? `${town}'s outer streets are won. The heart of the city holds out.` : `The country round ${town} is won. The ${walled(place)} holds out.`) : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : r.guarded && r.taken ? `${town} is taken${and}` : held;
   if (r.yielded) return `${what} The defenders fell back before the blow.`;
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
+  const [ours, theirs] = defending(r) ? [d, a] : [a, d];
   const went = driveWords(r);
-  return `${what}${went ? ` ${went}` : ''} You lost ${num(a.lost)} men, they lost ${num(d.lost)}.`;
+  return `${what}${went ? ` ${went}` : ''} You lost ${num(ours.lost)} men, they lost ${num(theirs.lost)}.`;
 }
 /**
  * Ruling 232: where a beaten field army went, in the ruling's words. "The Panamanian army falls back to Darien." or
@@ -7382,6 +7434,8 @@ function driveWords(r: BattleReport): string {
   }
   return out.join(' ');
 }
+/** Whether the player fought a battle on the defending side, as verdictFor reads it. */
+const defending = (r: BattleReport): boolean => !!g.human && r.attNat !== g.human && !r.attackers.some((u) => u.nat === g.human) && r.defenders.some((u) => u.nat === g.human);
 /** Where a province's town stands on the map. */
 const spotOf = (region: number): { x: number; y: number } => towns(g)[region] ?? g.regions[region];
 /** The slip itself: the verdict in the card's own word, the sentence, and the way to the full report. It takes no press. */
@@ -7389,7 +7443,10 @@ function drawResult(): void {
   const el = $('#rslip');
   const rep = ui.result ? g.reports.find((r) => r.id === ui.result!.id) : null;
   if (!rep || !g.human) { ui.result = null; if (!el.hidden) { el.hidden = true; el.innerHTML = ''; } return; }
-  el.innerHTML = `<b class="rv">${esc(verdictFor(rep).text)}</b><span class="rl">${esc(theWords(resultLine(rep)))}</span><button class="rread" data-act="report" data-id="${rep.id}">Read the report</button>`;
+  const v = verdictFor(rep);
+  // A battle the staff settled in place of the field says so first (the design director, b464(4); the UI director's words).
+  const staff = ui.result?.staff ? `<span class="rl">The staff settled ${defending(rep) ? 'the defence of' : 'the attack on'} ${esc(rep.regionName)}: a battle on the field is not kept in a save.</span>` : '';
+  el.innerHTML = `<b class="rv${v.cls === 'loss' ? ' loss' : ''}">${esc(v.text)}</b>${staff}<span class="rl">${esc(theWords(resultLine(rep)))}</span><button class="rread" data-act="report" data-id="${rep.id}">Read the report</button>`;
   el.hidden = false;
   placeResult();
 }
@@ -7437,7 +7494,7 @@ function reportCard(r: BattleReport): string {
       // A joint army attacks under the flag of the nation that commands it.
       nats: [...new Set(role === 'attacking' ? [r.attNat, ...us.map((u) => u.nat)] : us.map((u) => u.nat))], role, men: total, corps: us.filter((u) => !u.guard).length, divs: us.reduce((s, u) => s + u.divs, 0),
       under: `<div class="floss"><span class="meter"><i class="low" style="width:${Math.round(share * 100)}%"></i></span><small>${line}</small></div>`,
-      cards: us.map((u) => fateCard(u, won)).join(''),
+      cards: us.map((u) => fateCard(u, won, !!r.streets)).join(''),
     };
   };
   const share = r.aPower / Math.max(1e-9, r.aPower + r.dPower);
@@ -7453,7 +7510,9 @@ function reportCard(r: BattleReport): string {
   const told = r.town ? (r.taken ? (one ? `${town} was stormed and has fallen.` : `${town} was stormed: ${esc(r.regionName)} has fallen.`) : `The assault on ${town} was thrown back. The siege goes on.`)
     : r.sally ? (r.taken ? `The garrison of ${town} drove off the army round it. The siege is raised.` : `The sortie from ${town} was beaten back inside the walls. The siege goes on.`)
     : r.relief ? (r.taken ? `The army round ${town} was driven off. The siege is raised.` : `The attempt to relieve ${town} failed. The siege goes on.`)
-    : r.siege ? `The country round ${town} was won, but the town holds out. ${esc(r.regionName)} does not change hands until the town is stormed, starved out or opens its gates.`
+    // A battle fought by hand in a capital's or a city's streets was for its outer streets: the heart of the city holds
+    // out. A capital or a city is named as one, a town as a town (the UI director, 19:06).
+    : r.siege ? `${r.streets ? `The battle in ${town}'s outer streets was won, but the heart of the city holds out.` : `The country round ${town} was won, but the ${walled(place)} holds out.`} ${esc(r.regionName)} does not change hands until the ${walled(place)} is stormed, starved out or opens its gates.`
     : r.gates ? `The army outside was beaten, and ${town} opened its gates without a fight. ${one ? 'It' : esc(r.regionName)} has fallen.`
     : r.guarded && r.taken ? (one ? `The army outside was beaten, and ${town} is taken.` : `The army outside was beaten, and ${town} is taken. ${esc(r.regionName)} has fallen.`)
     : r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`;
@@ -7553,6 +7612,16 @@ function softenFold(target: Region, chosen: Corps[], look: Outlook | null): stri
   return foldBlock('attack:soften', 'Soften the line first', can.length ? can.join(', ') : 'nothing can be done to it this month', `<div class="softbody">${s?.html ?? ''}${scout ? `<div class="softopt">${scout}</div>` : ''}</div>`, open);
 }
 
+/** The field battle's own stylesheet, carried in by the campaign's build (build.mjs) for FIGHT IT YOURSELF. */
+declare const FIELD_CSS: string;
+/**
+ * FIGHT IT YOURSELF on the attack card (the design director, b439): the same attack fought on the land field, its
+ * result handed back through the campaign's own attack order. Behind ruling 226's gate (ON_CAMPAIGN in the field's
+ * offered.ts), which the design director opened on 18 November (b507); a page opened with ?field shows it either way.
+ */
+const fieldShown = (): boolean => ON_CAMPAIGN || /[?&]field(=|&|$)/.test(location.search);
+const FIELD_HOVER = 'You command the battle on the field, at the card\'s odds, and its result stands in the campaign. You can hand it to the staff at any time.';
+
 function attackCard(): string {
   const m = ui.modal!;
   const target = g.regions[m.target];
@@ -7635,9 +7704,15 @@ function attackCard(): string {
   const said = a && look ? verdictOf(look) : null;
   const dark = said?.tone === 'loss';
   const calloff = dark ? ` data-say="${esc(`Called off: ${lowerFirst(said!.word)}. To attack all the same, give the order again and click SEND THEM IN.`)}"` : '';
+  // FIGHT IT YOURSELF stays on the card where the field cannot fight this battle at the card's odds, off, with the
+  // staff's sentence at the foot's left; where SEND THEM IN is off too, only its reason is said (the UI director, b439).
+  const fieldT = fieldShown() && a ? landTicket(g, cands.filter((c) => m.chosen.has(c.id)), target) : null;
+  const staff = fieldT ? staffOnly(fieldT) ?? '' : '';
+  const fieldOn = !!fieldT && !staff;
+  const field = fieldShown() && (fieldT || !a) ? `<button class="btn" data-act="field" ${fieldOn ? '' : 'disabled'} title="${esc(fieldOn ? FIELD_HOVER : off || staff)}">Fight it yourself</button>` : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The attack · ${date(g.turn)}</div><h2>The attack on ${esc(target.name)}</h2></header>
     <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${peaceNote(target)}${verdict}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
-    <footer>${whyOff(off)}<button class="btn${dark ? ' go' : ''}" data-act="${dark ? 'calloff' : 'close'}"${calloff} title="Call the attack off. Nothing is spent.">Call it off</button><button class="btn${dark ? '' : ' go'}" data-act="attack" ${a ? '' : 'disabled'} title="${a ? 'The battle is settled at once from the Battle Ticket.' : esc(off)}">Send them in</button></footer>`;
+    <footer${field ? ' class="atkfoot"' : ''}>${whyOff(off || staff)}<button class="btn${dark ? ' go' : ''}" data-act="${dark ? 'calloff' : 'close'}"${calloff} title="Call the attack off. Nothing is spent.">Call it off</button>${field}<button class="btn${dark ? '' : ' go'}" data-act="attack" ${a ? '' : 'disabled'} title="${a ? 'The battle is settled at once from the Battle Ticket.' : esc(off)}">Send them in</button></footer>`;
 }
 
 /** The news that changes the war, a declaration or a fall, set out as a card of its own. */
@@ -8070,6 +8145,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   // How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of war.
   // (The staff goes to work when his first month opens. A game started with no depth is the full game.)
   if (grand && human && depth) setDepth(g, depth);
+  // The support teams (release 2, teams.ts): on in a grand campaign once release 2 opens them, or with ?teams.
+  if (grand && (TEAMS_RELEASE || /[?&]teams(=|&|$)/.test(location.search))) setTeams(g, true);
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) openGoals(g, human, from);
@@ -8099,8 +8176,11 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
 
 /** Picks up the campaign saved in this browser. Returns false if there is none that can be read. */
 function continueGame(): boolean {
-  const loaded = loadGame(readSave() ?? '');
+  const text = readSave() ?? '';
+  const loaded = loadGame(text);
   if (!loaded) return false;
+  // The page closed in the middle of a field battle: the staff settled it, and its slip is the first thing on the map (b464(4)).
+  const staff = staffBooked(text, loaded);
   stopAuto();
   dropPassing();
   g = loaded;
@@ -8111,9 +8191,10 @@ function continueGame(): boolean {
   drawStatic();
   const me = g.human;
   const cap = me ? g.nations[me].capital : -1;
-  const focus = cap >= 0 ? g.regions[cap] : g.byName['Paris'];
+  const focus = staff ? g.regions[staff.region] : cap >= 0 ? g.regions[cap] : g.byName['Paris'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: 620 };
   applyView();
+  if (staff) { ui.result = { id: staff.id, region: staff.region, staff: true }; slipAt = performance.now(); }
   if (me && !humanUp(g)) advanceToHuman(false); else { if (me) ui.mark = markFor(g); refresh(); }
   return true;
 }
@@ -8585,8 +8666,8 @@ function stopAuto(): void {
 // ---- Clicks -------------------------------------------------------------------------------
 
 function onClick(e: MouseEvent): void {
-  // While the other staffs work no order is taken.
-  if (working) return;
+  // While the other staffs work no order is taken, nor while a battle is fought on the field over the campaign.
+  if (working || fieldOpen()) return;
   const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
   if (!t) { if (e.target === $('#veil') && ui.modal && ui.modal.kind !== 'start') openModal(ui.modal.back ?? null); return; }
   const act = t.dataset.act!;
@@ -8786,6 +8867,13 @@ function onClick(e: MouseEvent): void {
     case 'drafts': {
       const c = g.corps.find((x) => x.id === id);
       if (c && orderDrafts(g, c, t.dataset.v === 'take')) queueSave();
+      refresh();
+      openModal({ kind: 'unit', type: 'corps', id });
+      break;
+    }
+    case 'school': {
+      const c = g.corps.find((x) => x.id === id);
+      if (c && orderSchool(g, c, t.dataset.v === 'go')) { ui.picked.delete(c.id); queueSave(); }
       refresh();
       openModal({ kind: 'unit', type: 'corps', id });
       break;
@@ -9574,6 +9662,61 @@ function onClick(e: MouseEvent): void {
         }
         tellResult(rep, was);
       } else openModal(null);
+      break;
+    }
+    case 'field': {
+      // The attack fought on the field: the army the card shows (the corps chosen that can still go in: one spent on a
+      // probe has dropped off it), the same ticket, and the result back through the attack order.
+      const m = ui.modal!;
+      const target = g.regions[m.target];
+      const corps = candidates(g, target).filter((c) => m.chosen.has(c.id));
+      const ticket = fieldShown() && corps.length ? landTicket(g, corps, target) : null;
+      if (!ticket || staffOnly(ticket)) break;
+      const ids = new Set(corps.map((c) => c.id));
+      const h = g.headlines.length;
+      const before = g.regions.map((r) => r.ctrl);
+      const was = beforeBattle(m.look ?? null, 'attack', target.id);
+      const css = typeof FIELD_CSS === 'string' ? FIELD_CSS : '';
+      // Opening the field commits the attack, as SEND THEM IN does (the design director, b453): until the field's own
+      // result is booked, the campaign kept in this browser is this one with the attack settled by the staff, so a page
+      // closed or reloaded in the middle of the fight comes back to that, never to the attack unmade.
+      if (ui.live) {
+        try {
+          const staffs = loadGame(saveGame(g));
+          const theirs = staffs ? orderAttack(staffs, staffs.corps.filter((c) => ids.has(c.id)), staffs.regions[target.id]) : null;
+          if (staffs && theirs) {
+            if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+            const text = saveGame(staffs);
+            localStorage.setItem(SAVE_KEY, text);
+            markStaff(text, theirs.id);
+          }
+        } catch { /* storage is off or full: the game still plays */ }
+      }
+      // A defence the card did not know: the field shows the card's band, never its own odds, until the fight ends (b453),
+      // and the after card's staff gives the card's own best guess (b464(6)).
+      // The after card speaks the chance as this card printed it, never a figure it did not show (b476(4)).
+      const look = m.look ?? null;
+      const band = look && !look.exact ? { lo: look.lo, hi: look.hi, guess: look.guess, said: { end: chanceEndOf(look), lo: oddsPct(look.chanceLo), hi: oddsPct(look.chanceHi), guess: look.wide ? oddsPct(look.guess) : null } } : undefined;
+      // The field's result, once booked, is kept at once in place of the staff's: a page closed on the after card comes
+      // back to what that card said, with no word of the staff.
+      const keep = (): void => {
+        if (!ui.live) return;
+        if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+        try { localStorage.setItem(SAVE_KEY, saveGame(g)); unmarkStaff(); } catch { /* storage is off or full: the game still plays */ }
+      };
+      fightOnField(g, { target, corps, odds: ticket.reckoning.odds, ticket, ...(band ? { band } : {}) }, css, (rep) => {
+        ui.unread += g.headlines.length - h;
+        ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
+        if (rep) {
+          ui.seenReports = g.reports.length;
+          if (rep.taken) {
+            const own = target.units.filter((c) => canOrder(g, c)), fresh = own.filter((c) => c.ap > 0);
+            ui.sel = target.id;
+            ui.picked = new Set((fresh.length ? fresh : own.filter((c) => c.kind !== 'fort')).map((c) => c.id));
+          }
+          tellResult(rep, was);
+        } else { refresh(); openModal(null); }
+      }, keep);
       break;
     }
   }

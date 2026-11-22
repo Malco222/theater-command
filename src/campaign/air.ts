@@ -34,6 +34,7 @@ import { fuelAir } from './resources';
 import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
+import { settleFought, type FoughtAir } from './airfought';
 import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
@@ -1598,7 +1599,7 @@ function tradeHurt(g: Game, nat: string, target: number, through: number): Recor
  * Flies one air campaign and files its report. `salt` gives a raid planned and flown at once (the grand campaign's
  * air war) dice of its own, so that two raids on one target in a month do not fall out alike.
  */
-export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = ''): AirReport | null {
+export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir): AirReport | null {
   const a = assessAir(g, fleets, m, target);
   if (a.why) return null;
   const C = AIR.combat, I = intensity(m);
@@ -1606,7 +1607,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // The sea fought over: the one struck, or the one the fleet struck is in.
   const zone = m === 'fleet' ? a.ships[0].zone : target;
   const rng = airRng(g, `${m}:${target}:${nat}${salt}`);
-  const luck = (): number => rng.range(1 - C.luck, 1 + C.luck);
+  // A raid fought out as an air battle (airfought.ts) is paid at even luck, inside the dice's run; otherwise the dice roll.
+  // Handed to the staff partway, the dice roll as for any raid, and the battle's part is added to what they give the rest.
+  const staff = battle?.staff;
+  const luck = (): number => (battle && !staff ? 1 : rng.range(1 - C.luck, 1 + C.luck));
   const before = (f: AirFleet): AirSide => {
     const side: AirSide = { nat: f.nat, fleet: f.name, id: f.id, base: f.base, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 };
     if (f.ship !== undefined) { const p = groupAt(g, f); side.at = [p.x, p.y]; }
@@ -1624,28 +1628,40 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const bLoss = a.B * Math.min(mostBomberLoss(g, night), a.bomberLoss * luck());
   // The bombers' guns bring down some of the fighters that close with them, the more the better their defence (ruling 227).
   const gunKills = gunsDown(g, a, night, bLoss, m, target);
+  // A raid fought out: its losses stand, held within the dice's run for the same raid, the bombers' guns' kills with them.
+  const fix = battle && !staff ? settleFought(battle, { foe: dLoss + gunKills, ftr: eLoss, bmr: bLoss }, {
+    def: a.def.map((x) => ({ f: x.f, share: a.D > 0 ? (x.f.ftr * x.w) / a.D : 0 })),
+    esc: a.att.filter((x) => x.ftr > 0).map((x) => ({ f: x.f, share: a.E > 0 ? x.ftr / a.E : 0 })),
+    bmr: a.att.filter((x) => x.bmr > 0).map((x) => ({ f: x.f, share: a.B > 0 ? x.bmr / a.B : 0 })),
+  }, a.B) : null;
   // Pilots who come down over their own ground mostly fly again; over the enemy's, or the sea, few do.
   const saved = (home: boolean): number => (sea ? (AIR.pilots.home + AIR.pilots.away) / 2 : home ? AIR.pilots.home : AIR.pilots.away);
-  const down = (f: AirFleet, side: AirSide, n: number, home: boolean): void => {
-    const k = Math.min(f.ftr, rng.roll(Math.max(0, n)));
+  // What the battle had already cost a group when it was handed to the staff (none when it was not).
+  const had = (f: AirFleet) => (staff ? battle!.lost[f.id] : undefined) ?? { ftr: 0, bmr: 0, back: 0 };
+  const down = (f: AirFleet, side: AirSide, n: number, home: boolean, rest = 1): void => {
+    // Handed to the staff: what was lost stands, and the dice settle the rest's share of the pool (rest 1 at once).
+    const h = had(f), rolled = fix ? 0 : rng.roll(Math.max(0, n * rest));
+    const k = Math.min(f.ftr, fix ? fix.ftr(f) : h.ftr + rolled);
     if (!k) return;
     const p = airPool(g, f.nat);
-    const back = rng.roll(k * saved(home));
+    const back = fix ? fix.back(f, k) : Math.min(k, h.back) + rng.roll(Math.max(0, k - h.ftr) * saved(home));
     f.ftr -= k; f.lost.ftr += k; side.lostFtr += k;
     p.lostFtr += k; p.pilots += back; p.lostPilots += k - back;
   };
   const bomber = (f: AirFleet, side: AirSide, n: number): void => {
-    const k = Math.min(f.bmr, rng.roll(Math.max(0, n)));
+    const k = Math.min(f.bmr, fix ? fix.bmr(f) : had(f).bmr + rng.roll(Math.max(0, n * (staff ? staff.rest.bmr : 1))));
     f.bmr -= k; f.lost.bmr += k; side.lostBmr += k;
     airPool(g, f.nat).lostBmr += k;
   };
-  a.def.forEach((x, i) => down(x.f, def[i], a.D > 0 ? (dLoss + gunKills) * ((x.f.ftr * x.w) / a.D) : 0, true));
+  a.def.forEach((x, i) => down(x.f, def[i], a.D > 0 ? (dLoss + gunKills) * ((x.f.ftr * x.w) / a.D) : 0, true, staff?.rest.foe));
   a.att.forEach((x, i) => {
-    down(x.f, att[i], a.E > 0 ? eLoss * (x.ftr / a.E) : 0, false);
+    down(x.f, att[i], a.E > 0 ? eLoss * (x.ftr / a.E) : 0, false, staff?.rest.ftr);
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
+  // The bombers that bomb: fought, held to the run; handed to the staff, all but those that had turned back.
+  const bombed = fix ? fix.through(Math.max(0, a.B - lostB)) : Math.max(0, a.B - lostB - (staff ? staff.away : 0));
+  const through = bombed * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
@@ -1826,6 +1842,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     attNat: nat, defNat, att, def, lines: a.lines, odds: a.Dpow > 0 ? a.Epow / a.Dpow : 9, level, won, sky, hold, result,
   };
   if (struck) { rep.ships = struck; if (m === 'fleet') rep.fleet = target; if (a.surprise) rep.surprise = true; }
+  // A raid fought out as an air battle keeps how many bombers bombed, for the battle's after card.
+  if (battle && a.B > 0) rep.dropped = bombed;
   // The grand campaign keeps what the raid was worth beside what it cost: a staff learns from its own results.
   if (g.flags.open === 1) rep.worth = Math.round(value);
   g.airReports.push(rep);
