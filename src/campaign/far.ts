@@ -322,6 +322,14 @@ export function farGround(g: Game): void {
     const r = g.byName[name];
     if (r && r.id < FAR_FIRST) r.oil = false;
   }
+  // The depots a far file lays: the map's own mark (game.ts computeSupply), put on a province of the far side by
+  // name. (The design director's 13:43Z of 22 November 2026: Italian East Africa was cut off from Italy from June
+  // 1940 and lived on its own stocks until each seat was taken; as laid, with no depot on its ground and the sea to
+  // its ports shut, its whole army starved in the fourth month of its war.)
+  for (const name of FAR_SETUP.depots) {
+    const r = g.byName[name];
+    if (r && r.id >= FAR_FIRST) g.flags['depot:' + r.id] = 1;
+  }
 }
 
 /**

@@ -99,8 +99,8 @@ const FILES: [string, Obj][] = [
   ['far-air', farAir],
   // (The far chart's town guard, land by land: siege.json's 'farGuard', read by guardOf alone.)
   ['far-guards', farGuards],
-  // (Italian East Africa and the Sahara posts, the design director's C of 22 November 2026: dated rows only. Before
-  // the shores file, which stays last.)
+  // (Italian East Africa and the Sahara posts, the design director's C of 22 November 2026: dated rows and the six
+  // seats' depot marks. Before the shores file, which stays last.)
   ['far-africa', farAfrica],
   // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
   ['far-shores', farShores],
@@ -121,9 +121,15 @@ export interface FarSetup {
   wars: [string, string][];
   /** Provinces of the old chart whose oil mark comes off once the whole world is on the chart (ruling 231: the Caspian's oil stands at Baku). */
   unmark: string[];
+  /**
+   * Provinces of the far side that carry the map's depot mark: their owner's army is fed from them while he holds
+   * them, as from a depot of the old chart (the design director's 13:43Z of 22 November 2026: Italian East Africa's
+   * six command seats, far-africa.json).
+   */
+  depots: string[];
 }
 
-export const FAR_SETUP: FarSetup = { held: {}, capitals: {}, drop: [], wars: [], unmark: [] };
+export const FAR_SETUP: FarSetup = { held: {}, capitals: {}, drop: [], wars: [], unmark: [], depots: [] };
 
 /** A seat's path, as the front door prints it under ITS PATH: nation, words. */
 export const FAR_PATHS: Record<string, string> = {};

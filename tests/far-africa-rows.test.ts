@@ -11,7 +11,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame, estAt, startPhase } from '../src/campaign/game';
+import { atWar, computeSupply, createGame, declareWar, estAt, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import { current, stepAI } from '../src/campaign/turn';
@@ -23,6 +23,8 @@ import setup from '../data/campaign/setup-1939.json';
 type Row = [number, string, string, string, number, string, Record<string, any>];
 const ROWS = (africa as any)['setup-1939'].expeditions as Row[];
 const SAHARA = ['Kufra', 'Murzuk', 'Ghat'];
+/** The six command seats, which carry the map's depot mark (the design director's 13:43Z of 22 November 2026). */
+const SEATS = ['Asmara', 'Gondar', 'Addis Ababa', 'Jimma', 'Harar', 'Mogadishu'];
 const ITALY = ROWS.filter((r) => r[1] === 'ITA' && !SAHARA.includes(r[5]));
 const worth = (r: Row, month: number): number => r[4] * (estAt(r[6].est, month) ?? 1);
 const sum = (rows: Row[], month: number): number => rows.reduce((s, r) => s + worth(r, month), 0);
@@ -79,6 +81,19 @@ describe('Italian East Africa and the Sahara posts: the file beside the record (
     const names = new Set(ROWS.map((r) => `${r[1]}:${r[2]}`));
     expect(names.size).toBe(ROWS.length);
     expect(laid.filter((r) => names.has(`${r[1]}:${r[2]}`)).length).toBe(ROWS.length);
+  });
+
+  it('the six command seats carry the depot mark, each on Italy\'s own ground, and no other province of the file does', () => {
+    const g = startOpen(createGame(3, null));
+    expect((africa as any).setup.depots).toEqual(SEATS);
+    for (const name of SEATS) {
+      const r = g.byName[name];
+      expect(r.owner, name).toBe('ITA');
+      expect(r.ctrl, name).toBe('ITA');
+      expect(g.flags[`depot:${r.id}`], name).toBe(1);
+    }
+    const places = new Set(ROWS.map((r) => r[5]));
+    for (const name of places) if (!SEATS.includes(name)) expect(g.flags[`depot:${g.byName[name].id}`], name).toBeUndefined();
   });
 
   it('the five garrisons that stood there before Italy\'s war are laid a month before it, and every other row in its own month', () => {
@@ -140,6 +155,18 @@ describe('Italian East Africa by the record: one war at the book\'s first stop, 
     for (const nm of ended) expect(said.some((t) => /^Italian forces lay down their arms: /.test(t) && t.includes(nm)), nm).toBe(true);
     expect(said.some((t) => /lent to the campaign/.test(t) && /Somalia command/.test(t))).toBe(false);
     // (The rows whose months have not come stand on.)
-    for (const r of ITALY.filter((x) => x[6].until > 18)) expect(alive(r[2]), r[2]).toBeTruthy();
+    const on = ITALY.filter((x) => x[6].until > 18);
+    for (const r of on) expect(alive(r[2]), r[2]).toBeTruthy();
+    // Italy's war with Britain, by hand if the book has not opened it: the rows are fed from the six seats, each a
+    // depot of Italy's on its own ground. Without the marks none of them is: the army as first laid starved in the
+    // fourth month of its war.
+    if (!atWar(g, 'ITA', 'UK')) declareWar(g, 'ITA', 'UK');
+    const marks = SEATS.map((name) => `depot:${g.byName[name].id}`);
+    for (const k of marks) expect(g.flags[k], k).toBe(1);
+    computeSupply(g);
+    for (const r of on) expect(alive(r[2])!.supplied, r[2]).toBe(true);
+    for (const k of marks) delete g.flags[k];
+    computeSupply(g);
+    for (const r of on) expect(alive(r[2])!.supplied, r[2]).toBe(false);
   });
 });
