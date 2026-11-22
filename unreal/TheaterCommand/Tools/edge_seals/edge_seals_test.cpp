@@ -1,14 +1,19 @@
 // The news seals' cloud test (release 2, campaign map item 5): Campaign/EdgeSeals, the game's own code, with no engine.
 // Run by Tools/edge_seals/run.sh.
+// (0010) Also the under-frame watch: a seal's box held against the frame's pieces, both in the window's measure, meets
+// none when the keep-off boxes are read in that measure, and meets the top bar, as Mac run 3's "+N" did, when they are
+// read in the desktop's.
 
 #include "Campaign/EdgeSeals.h"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 #include <new>
 #include <random>
 #include <string>
@@ -35,7 +40,8 @@ namespace
 
 #define CHECK(Condition) Check((Condition), #Condition, __LINE__)
 
-void* operator new(std::size_t Size)
+// (not inlined: where g++ inlines the pair it sees std::free take what operator new gave, and warns of a mismatch)
+[[gnu::noinline]] void* operator new(std::size_t Size)
 {
 	++Allocations;
 	if (void* Block = std::malloc(Size == 0 ? 1 : Size))
@@ -45,12 +51,12 @@ void* operator new(std::size_t Size)
 	throw std::bad_alloc();
 }
 
-void operator delete(void* Block) noexcept
+[[gnu::noinline]] void operator delete(void* Block) noexcept
 {
 	std::free(Block);
 }
 
-void operator delete(void* Block, std::size_t) noexcept
+[[gnu::noinline]] void operator delete(void* Block, std::size_t) noexcept
 {
 	std::free(Block);
 }
@@ -196,7 +202,7 @@ static void TestWords()
 	// (a band's item that found no band is a row with its band's word and no other side: its news is its sentence)
 	CHECK(RowLine("Germany", "WAR", "", "", "Germany declares war on Poland.") == "Germany WAR: Germany declares war on Poland.");
 	CHECK(EightWords(RowLine("Germany", "WAR", "", "", "Germany declares war on Poland.")) == "Germany WAR: Germany declares war on Poland.");
-	CHECK(EightWords(RowLine("Coast watch", "WARNING", "", "", "Italy masses troops on the Yugoslav border.")) == "Coast watch WARNING: Italy masses troops on the");
+	CHECK(EightWords(RowLine("Coast watch", "WARNING", "", "", "Italy masses troops on the Yugoslav border.")) == "Coast watch WARNING: Italy masses troops");
 	// (a sea or air row never names the other side with a join word: SUNK, HIT, BLOCKED, MISSED)
 	CHECK(EightWords(RowLine("North Sea", "SUNK", "", "", "A U-boat sinks two transports.")) == "North Sea SUNK: A U-boat sinks two transports.");
 	CHECK(EightWords(RowLine("Ruhr", "HIT", "", "", "Our bombers hit the Ruhr's works, and three are lost.")) == "Ruhr HIT: Our bombers hit the Ruhr's works");
@@ -208,12 +214,12 @@ static void TestWords()
 	CHECK(EightWords("") .empty() && EightWords("   ").empty());
 	CHECK(EightWords("one two three four five six seven eight") == "one two three four five six seven eight");
 	CHECK(EightWords("one two three four five six seven eight nine ten") == "one two three four five six seven eight");
-	CHECK(EightWords("Paris falls, and the French government leaves for Bordeaux tonight") == "Paris falls, and the French government leaves for");
+	CHECK(EightWords("Paris falls, and the French government leaves for Bordeaux tonight") == "Paris falls, and the French government leaves");
 	CHECK(EightWords("The siege of Leningrad tightens, and the last road across the lake is shelled") == "The siege of Leningrad tightens");
 	CHECK(EightWords("one two three four five six seven, eight nine") == "one two three four five six seven");
 	CHECK(EightWords("one, two three four five six seven eight nine") == "one, two three four five six seven eight");
 	CHECK(EightWords("one two three four five six seven \xE2\x80\x94 eight nine") == "one two three four five six seven");
-	CHECK(EightWords("Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack from the west today") == "Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack from");
+	CHECK(EightWords("Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack from the west today") == "Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack");
 	CHECK(EightWords("a b c", 2) == "a b" && EightWords("a b c", 0) == "a");
 }
 
@@ -682,6 +688,186 @@ static void TestMotion()
 	CHECK(bInside);
 }
 
+namespace
+{
+	/** A box in the layer's units as painted on a screen of PxPerUnit, the layer at the window's corner: the window's pixels. */
+	FBox Painted(const FBox& Units, double PxPerUnit)
+	{
+		return FBox{ Units.MinX * PxPerUnit, Units.MinY * PxPerUnit, Units.MaxX * PxPerUnit, Units.MaxY * PxPerUnit };
+	}
+
+	/**
+	 * The frame's pieces (in the window's pixels, as FrameRects keeps them) brought into the layer's units: by the
+	 * layer's last paint (the window's measure, as 0010 reads them), or by its Tick geometry (the desktop's measure, as
+	 * Mac run 3 read them), which takes the window's place on the desktop off every box.
+	 */
+	std::vector<FBox> KeptOff(const std::vector<FBox>& PiecesPx, double PxPerUnit, double WindowX, double WindowY, bool bDesktop)
+	{
+		std::vector<FBox> Out;
+		const double OffX = bDesktop ? WindowX : 0.0, OffY = bDesktop ? WindowY : 0.0;
+		for (const FBox& Piece : PiecesPx)
+		{
+			Out.push_back(FBox{ (Piece.MinX - OffX) / PxPerUnit, (Piece.MinY - OffY) / PxPerUnit, (Piece.MaxX - OffX) / PxPerUnit, (Piece.MaxY - OffY) / PxPerUnit });
+		}
+		return Out;
+	}
+
+	/** How many of the seals laid would the watch find painted under a piece of the frame. */
+	int UnderCount(const FParams& Params, const std::vector<FSpot>& Spots, const std::vector<FBox>& PiecesPx, double PxPerUnit)
+	{
+		int Under = 0;
+		for (const FSpot& Spot : Spots)
+		{
+			if (Spot.bShown && UnderPiece(Painted(SealBox(Params, Spot), PxPerUnit), PiecesPx) >= 0)
+			{
+				++Under;
+			}
+		}
+		return Under;
+	}
+}
+
+/**
+ * (0010) The under-frame watch, and the fault it is there to catch: Mac run 3 laid the "+N" seal under the top bar,
+ * the keep-off boxes having been read in the desktop's measure (the layer's Tick geometry) where they are kept in the
+ * window's (its paint geometry).
+ */
+static void TestUnderFrame()
+{
+	// Meet is FSlateRect::DoRectanglesIntersect's test: touching meets, a hair apart does not.
+	const FBox Ten{ 0.0, 0.0, 10.0, 10.0 };
+	CHECK(Meet(Ten, FBox{ 5.0, 5.0, 15.0, 15.0 }) && Meet(Ten, FBox{ 10.0, 0.0, 20.0, 10.0 }) && Meet(Ten, FBox{ 0.0, 10.0, 10.0, 20.0 }));
+	CHECK(!Meet(Ten, FBox{ 10.001, 0.0, 20.0, 10.0 }) && !Meet(Ten, FBox{ 0.0, -20.0, 10.0, -0.001 }));
+	CHECK(Meet(Ten, FBox{ 2.0, 2.0, 3.0, 3.0 }) && Meet(FBox{ 2.0, 2.0, 3.0, 3.0 }, Ten));
+	CHECK(UnderPiece(Ten, {}) == -1 && UnderPiece(Ten, { FBox{ 20.0, 20.0, 30.0, 30.0 }, FBox{ 9.0, 9.0, 12.0, 12.0 } }) == 1);
+
+	// The watch looks once per laying and slot, and only at a seal on the screen that has slid all the way in.
+	{
+		FUnderWatch Watch;
+		CHECK(!Watch.Due(0, 1, false, false) && !Watch.Due(0, 1, true, false) && !Watch.Due(0, 1, false, true));
+		CHECK(Watch.Due(0, 1, true, true) && !Watch.Due(0, 1, true, true));
+		CHECK(Watch.Due(1, 1, true, true) && Watch.Due(0, 2, true, true) && !Watch.Due(0, 2, true, true) && !Watch.Due(1, 1, true, true));
+		CHECK(Watch.Due(0, 0, true, true) && Watch.Due(8, 0, true, true));
+		CHECK(!Watch.Due(-1, 1, true, true) && !Watch.Due(FUnderWatch::Slots, 1, true, true));
+		// (and again where, in the same laying, the slot comes to hold the "+N" in place of its item, or the item back: a
+		// "+N" laid after the first look, as when the tray comes up, is looked at too, once)
+		FUnderWatch Later;
+		CHECK(Later.Due(3, 7, true, true, 0) && !Later.Due(3, 7, true, true, 0));
+		CHECK(Later.Due(3, 7, true, true, 1) && !Later.Due(3, 7, true, true, 1) && Later.Due(3, 7, true, true, 0));
+		CHECK(!Later.Due(3, 7, true, false, 1) && !Later.Due(4, 7, false, true, 1));
+	}
+
+	// Run 3's fault, as a model (not its frame, which is not known here): Brian's window, 1.84 px a unit, 1566 by 971
+	// units, at 29 px in and 130 px down the desktop (centred, and under the Mac's menu bar), with a bar across the top
+	// edge from 24 to 72 units high. Read right, the bar takes the whole top lane and the stack goes to the foot; read
+	// in the desktop's measure, the bar rises 71 units and lets the lane free, the stack stands at the top's middle, and
+	// is painted under the bar. The watch sees it; laid right, it sees nothing.
+	{
+		const double Px = 1.84;
+		FParams Mac;
+		Mac.ScreenW = 1566.0;
+		Mac.ScreenH = 971.0;
+		const std::vector<FBox> PiecesPx = { Painted(FBox{ 24.0, 24.0, 1542.0, 72.0 }, Px), Painted(FBox{ 1566.0 - 24.0 - 320.0, 86.0, 1542.0, 520.0 }, Px) };
+		std::vector<FWant> Wants(5); // (no place: home, the staff, elsewhere, and the "+N")
+		FLayout Layout;
+		std::vector<FSpot> Right, Wrong;
+		Layout.LayRanked(Mac, Wants, 12, 9, KeptOff(PiecesPx, Px, 29.0, 130.0, false), Right);
+		Layout.LayRanked(Mac, Wants, 12, 9, KeptOff(PiecesPx, Px, 29.0, 130.0, true), Wrong);
+		bool bRightAway = !Right.empty(), bWrongTop = !Wrong.empty();
+		for (const FSpot& Spot : Right)
+		{
+			bRightAway = bRightAway && Spot.bShown && Spot.Edge != EEdge::Top;
+		}
+		for (const FSpot& Spot : Wrong)
+		{
+			bWrongTop = bWrongTop && Spot.bShown && Spot.Edge == EEdge::Top;
+		}
+		CHECK(bRightAway);
+		CHECK(bWrongTop);
+		CHECK(UnderCount(Mac, Right, PiecesPx, Px) == 0);
+		CHECK(UnderCount(Mac, Wrong, PiecesPx, Px) == static_cast<int>(Wrong.size()));
+		// (a window at the desktop's corner reads the same either way: the fault showed only in a window placed off it)
+		std::vector<FSpot> Corner;
+		Layout.LayRanked(Mac, Wants, 12, 9, KeptOff(PiecesPx, Px, 0.0, 0.0, true), Corner);
+		bool bSame = Corner.size() == Right.size();
+		for (size_t Index = 0; bSame && Index < Corner.size(); ++Index)
+		{
+			bSame = Corner[Index].Edge == Right[Index].Edge && Corner[Index].Centre.X == Right[Index].Centre.X && Corner[Index].Centre.Y == Right[Index].Centre.Y;
+		}
+		CHECK(bSame);
+	}
+
+	// Random frames, windows anywhere on the desktop and every scale from 0.7 to 2.2 px a unit: laid in the right
+	// measure no seal is ever painted under a piece (they keep Keep clear, so they never even touch); in the desktop's
+	// measure the watch finds them under it in many.
+	{
+		std::mt19937 Dice(2026);
+		std::uniform_real_distribution<double> Unit(0.0, 1.0);
+		FLayout Layout;
+		std::vector<FSpot> Spots;
+		int RightUnder = 0, WrongRounds = 0, Rounds = 0;
+		for (int Round = 0; Round < 3000; ++Round)
+		{
+			const double Px = 0.7 + 1.5 * Unit(Dice);
+			FParams Window;
+			Window.ScreenW = 900.0 + 1000.0 * Unit(Dice);
+			Window.ScreenH = 650.0 + 500.0 * Unit(Dice);
+			std::vector<FBox> PiecesPx;
+			const int Pieces = 1 + static_cast<int>(Unit(Dice) * 6.0);
+			for (int Piece = 0; Piece < Pieces; ++Piece)
+			{
+				const double W = 60.0 + 600.0 * Unit(Dice), H = 30.0 + 300.0 * Unit(Dice);
+				const double X = 24.0 + (Window.ScreenW - 48.0 - W) * Unit(Dice);
+				const double Y = Unit(Dice) < 0.5 ? 24.0 : Window.ScreenH - 24.0 - H;
+				PiecesPx.push_back(Painted(FBox{ X, Y, X + W, Y + H }, Px));
+			}
+			std::vector<FWant> Wants(1 + static_cast<size_t>(Unit(Dice) * 9.0));
+			for (FWant& Want : Wants)
+			{
+				Want.bPlace = Unit(Dice) < 0.6;
+				Want.At = FPoint{ (Unit(Dice) * 1.4 - 0.2) * Window.ScreenW, (Unit(Dice) * 1.4 - 0.2) * Window.ScreenH };
+			}
+			const int Total = static_cast<int>(Wants.size()) + static_cast<int>(Unit(Dice) * 5.0);
+			const double WindowX = 300.0 * Unit(Dice), WindowY = 25.0 + 200.0 * Unit(Dice);
+			Layout.LayRanked(Window, Wants, Total, 9, KeptOff(PiecesPx, Px, WindowX, WindowY, false), Spots);
+			RightUnder += UnderCount(Window, Spots, PiecesPx, Px);
+			Layout.LayRanked(Window, Wants, Total, 9, KeptOff(PiecesPx, Px, WindowX, WindowY, true), Spots);
+			WrongRounds += UnderCount(Window, Spots, PiecesPx, Px) > 0 ? 1 : 0;
+			++Rounds;
+		}
+		std::printf("(under the frame, %d random windows: laid right %d seals under a piece; read in the desktop's measure, %d windows with one or more)\n", Rounds, RightUnder, WrongRounds);
+		CHECK(RightUnder == 0);
+		CHECK(WrongRounds > Rounds / 10);
+	}
+}
+
+/** (0010) The photographer's asks of the seals, "-TheaterSeal=open:N,hover:N,slide", as the layer reads them once. */
+static void TestSealAsk()
+{
+	const FSealAsk None = ReadSealAsk("");
+	CHECK(None.Open == 0 && None.Hover == 0 && !None.bSlide && None.Unknown == 0);
+	const FSealAsk Open = ReadSealAsk("open:3");
+	CHECK(Open.Open == 3 && Open.Hover == 0 && !Open.bSlide && Open.Unknown == 0);
+	const FSealAsk All = ReadSealAsk("hover:2,slide,open:1");
+	CHECK(All.Open == 1 && All.Hover == 2 && All.bSlide && All.Unknown == 0);
+	// (letters in either case, spaces about the parts, an empty part, and the last of two asks of a kind stand)
+	const FSealAsk Loose = ReadSealAsk(" Hover:4 ,, SLIDE,open:2,open:7");
+	CHECK(Loose.Open == 7 && Loose.Hover == 4 && Loose.bSlide && Loose.Unknown == 0);
+	// (a seal past the most that may stand, nine, names none: it is not known, and the ask before it stands; with room
+	// for twelve, it is a seal)
+	const FSealAsk Past = ReadSealAsk("open:2,open:10,hover:99", 9);
+	CHECK(Past.Open == 2 && Past.Hover == 0 && Past.Unknown == 2);
+	CHECK(ReadSealAsk("open:9,hover:9").Open == 9 && ReadSealAsk("open:9,hover:9").Hover == 9 && ReadSealAsk("open:12", 12).Open == 12);
+	// (a long number is no seal, and is never read as one: no count past what an int holds, whatever is typed)
+	const FSealAsk Long = ReadSealAsk("open:4294967299,hover:99999999999999999999,open:3");
+	CHECK(Long.Open == 3 && Long.Hover == 0 && Long.Unknown == 2);
+	// (a seal is named from 1, in at most two figures: anything else is not known, and left out)
+	const FSealAsk Wrong = ReadSealAsk("open:0,hover:-1,open:x,hover:,open,slid,hover:123,ping:2");
+	CHECK(Wrong.Open == 0 && Wrong.Hover == 0 && !Wrong.bSlide && Wrong.Unknown == 8);
+	const FSealAsk Some = ReadSealAsk("open:2,glow");
+	CHECK(Some.Open == 2 && Some.Unknown == 1);
+}
+
 /** The art director's ruling of 22 November, section 1: a seal wears the colour of the row it opens, and which pulse. */
 static void TestColours()
 {
@@ -809,6 +995,12 @@ namespace
 		{
 			const Look::FStroke& Cut = Strokes[Index];
 			double HalfX = Cut.Long * 0.5, HalfY = Cut.Long * 0.5, Far = std::hypot(Cut.X, Cut.Y) + Cut.Long * 0.5;
+			if (Cut.Kind == Look::EStroke::Ellipse)
+			{
+				// (an upright ellipse: Wide across and Long high)
+				HalfX = Cut.Wide * 0.5;
+				Far = std::hypot(Cut.X, Cut.Y) + std::max(Cut.Wide, Cut.Long) * 0.5;
+			}
 			if (Cut.Kind == Look::EStroke::Bar)
 			{
 				// (a bar with round ends: its two ends' middles, and the round end's half width round them)
@@ -825,6 +1017,1747 @@ namespace
 		}
 		return Box;
 	}
+}
+
+namespace
+{
+	/** A stroke as a segment and a half width (a bar's round ends, a dot): the ink is every point within Half of it. */
+	struct FCapsule
+	{
+		double AX = 0.0, AY = 0.0, BX = 0.0, BY = 0.0, Half = 0.0;
+	};
+
+	FCapsule CapsuleOf(const Look::FStroke& Cut)
+	{
+		if (Cut.Kind == Look::EStroke::Dot)
+		{
+			return FCapsule{ Cut.X, Cut.Y, Cut.X, Cut.Y, Cut.Long * 0.5 };
+		}
+		const double Turn = Cut.Degrees * 3.141592653589793 / 180.0, Reach = (Cut.Long - Cut.Thick) * 0.5;
+		return FCapsule{ Cut.X - Reach * std::cos(Turn), Cut.Y - Reach * std::sin(Turn), Cut.X + Reach * std::cos(Turn), Cut.Y + Reach * std::sin(Turn), Cut.Thick * 0.5 };
+	}
+
+	double PointToSegment(double PX, double PY, const FCapsule& S)
+	{
+		const double DX = S.BX - S.AX, DY = S.BY - S.AY, Length2 = DX * DX + DY * DY;
+		const double T = Length2 > 0.0 ? std::clamp(((PX - S.AX) * DX + (PY - S.AY) * DY) / Length2, 0.0, 1.0) : 0.0;
+		return std::hypot(PX - (S.AX + T * DX), PY - (S.AY + T * DY));
+	}
+
+	/** The clear ground between two strokes' ink (negative where they overlap): segments that do not cross. */
+	double Clear(const FCapsule& A, const FCapsule& B)
+	{
+		const double Least = std::min({ PointToSegment(A.AX, A.AY, B), PointToSegment(A.BX, A.BY, B), PointToSegment(B.AX, B.AY, A), PointToSegment(B.BX, B.BY, A) });
+		return Least - A.Half - B.Half;
+	}
+}
+
+/**
+ * (0010) The war mark as crossed swords (the art director, 22 November, 08:36Z: the plain X read "cancel"): long blades
+ * narrowing to their points above the crossing, a guard across each near its foot and a short grip below, and a small
+ * pommel where it holds 1.5 px on the screen; as heavy and about as large as the X was, and the same on both sides. The
+ * review of 0010: the outline must say "sword" without the pommel (it read as the X with a notch across each lower
+ * arm at 1441 by 878 and 1024 by 768), each part that must hold 1.5 px is measured on each side, as the eye sees it
+ * (the guard past the blade at its full width, the pommel past its grip), and nothing swells on a screen of no size.
+ */
+static void TestSwords()
+{
+	auto High = [](double Height) { return (1000.0 / 900.0) * (Height / 1080.0); };
+	const double Full = High(1080.0), Mac = High(1786.0), Reference = High(1000.0), Small = High(878.0), Least = High(768.0);
+	// (Brian's window, 2881 by 1786 on the Mac's fine pixels at 2.0: 1.84 px a unit, the disc about 27 of the Mac's
+	// points across, 55 of its pixels)
+	CHECK(std::fabs(Mac - 1.8374) < 0.001 && std::fabs(Full - 1.1111) < 0.001);
+	const double Screens[] = { Least, Small, High(971.0), Reference, Full, High(1440.0), Mac, 2.0, 2.0 * Mac, 3.0 };
+
+	// The parts hold 1.5 px on every screen from 1024 by 768 up, each measured on each side: the guard's width, how far
+	// it stands past the blade at its full width (its round end left out), the grip, the point; the blade is the X's
+	// weight, 2.4 units, and the point narrower than the blade wherever the screen lets it be.
+	{
+		bool bHolds = true, bNarrows = true;
+		for (const double Scale : Screens)
+		{
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			bHolds = bHolds && Sword.GuardThick * Scale >= 1.5 - 1e-9 && (Sword.Overhang - Sword.GuardThick * 0.5) * Scale >= 1.5 - 1e-9 && Sword.GripThick * Scale >= 1.5 - 1e-9
+				&& Sword.PointThick * Scale >= 1.5 - 1e-9 && Sword.BladeThick == Look::Stroke(2.4, Scale);
+			bNarrows = bNarrows && Sword.PointThick < Sword.BladeThick;
+		}
+		CHECK(bHolds);
+		CHECK(bNarrows);
+		const Look::FSword AtFull = Look::SwordOf(Full), AtSmall = Look::SwordOf(Small), AtLeast = Look::SwordOf(Least);
+		std::printf("(the swords: the guard past the blade at its full width %.2f px at 1920 by 1080, %.2f at 1441 by 878, %.2f at 1024 by 768; the point %.2f px against the blade's %.2f at 1441 by 878)\n",
+			(AtFull.Overhang - AtFull.GuardThick * 0.5) * Full, (AtSmall.Overhang - AtSmall.GuardThick * 0.5) * Small, (AtLeast.Overhang - AtLeast.GuardThick * 0.5) * Least,
+			AtSmall.PointThick * Small, AtSmall.BladeThick * Small);
+	}
+	// The pommel stands only where its neck and how far it stands past its grip on each side both hold 1.5 px: drawn
+	// 3.2 across on a grip of 1.6, from 1.875 px a unit (a window 1823 high). Below it, at 1920 by 1080 and in Brian's
+	// window too, the grip ends round, and the mark is eight bars.
+	{
+		bool bDropped = true, bShown = true;
+		for (const double Scale : Screens)
+		{
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const bool bHolds = Sword.Neck * Scale >= 1.5 - 1e-9 && (Sword.PommelD - Sword.GripThick) * 0.5 * Scale >= 1.5 - 1e-9;
+			if (Scale < 1.875)
+			{
+				bDropped = bDropped && !Sword.bPommel && !bHolds && Count == 8 && Sword.GripEnd > Sword.Pommel;
+				for (int Each = 0; Each < Count; ++Each)
+				{
+					bDropped = bDropped && Strokes[Each].Kind == Look::EStroke::Bar;
+				}
+			}
+			else
+			{
+				bShown = bShown && Sword.bPommel && bHolds && Count == 10 && Sword.GripEnd == Sword.Pommel && Strokes[4].Kind == Look::EStroke::Dot && Strokes[9].Kind == Look::EStroke::Dot;
+			}
+		}
+		CHECK(bDropped);
+		CHECK(bShown);
+		CHECK(Look::SwordOf(1.875).bPommel && !Look::SwordOf(1.875 - 1e-6).bPommel && !Look::SwordOf(Full).bPommel && !Look::SwordOf(Mac).bPommel);
+		// (a screen of no measure is taken at a pixel a unit; and however small a screen is measured, the guard never
+		// stands out more than 4 units, nor goes past the hollow's size: the review's denormal scale made it endless)
+		CHECK(!Look::SwordOf(0.0).bPommel && Look::SwordOf(0.0).Overhang == Look::SwordOf(1.0).Overhang);
+		bool bBounded = true;
+		for (const double Tiny : { std::numeric_limits<double>::denorm_min(), 1e-300, 0.01, 0.1, 0.25 })
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Tiny, Strokes);
+			const Look::FSword Sword = Look::SwordOf(Tiny);
+			bBounded = bBounded && Sword.Overhang <= 4.0 && std::isfinite(Sword.Lift) && Count == 8;
+			for (int Each = 0; Each < Count; ++Each)
+			{
+				bBounded = bBounded && std::isfinite(Strokes[Each].Long) && std::isfinite(Strokes[Each].X) && std::isfinite(Strokes[Each].Y) && Strokes[Each].Long <= 2.0 * Look::HollowR;
+			}
+		}
+		CHECK(bBounded);
+	}
+	// The mark is the same on both sides: the second sword is the first in a mirror, stroke for stroke.
+	{
+		bool bMirror = true;
+		for (const double Scale : Screens)
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const int Half = Count / 2;
+			bMirror = bMirror && Count % 2 == 0;
+			for (int Each = 0; Each < Half; ++Each)
+			{
+				const Look::FStroke& A = Strokes[Each];
+				const Look::FStroke& B = Strokes[Each + Half];
+				bMirror = bMirror && A.Kind == B.Kind && std::fabs(A.X + B.X) < 1e-9 && std::fabs(A.Y - B.Y) < 1e-9 && A.Long == B.Long && A.Thick == B.Thick
+					&& std::fabs(A.Degrees + B.Degrees) < 1e-9;
+			}
+		}
+		CHECK(bMirror);
+	}
+	// About as large as the X was (two strokes 20 long and 2.4 thick, crossed 36 degrees off the level), within a unit
+	// and a half each way, and centred on the disc's middle on every screen; the points up and out, the guards and hilts
+	// down and out.
+	{
+		const double Reach = (20.0 - 2.4) * 0.5, OldW = 2.0 * (Reach * std::cos(36.0 * 3.141592653589793 / 180.0) + 1.2), OldH = 2.0 * (Reach * std::sin(36.0 * 3.141592653589793 / 180.0) + 1.2);
+		bool bSize = true, bCentred = true, bWays = true;
+		for (const double Scale : { Small, Reference, Full, Mac })
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const FMarkBox Box = MarkBox(Strokes, Count);
+			bSize = bSize && std::fabs((Box.MaxX - Box.MinX) - OldW) <= 1.5 && std::fabs((Box.MaxY - Box.MinY) - OldH) <= 1.5;
+			bCentred = bCentred && std::fabs(Box.MaxX + Box.MinX) < 1e-9 && std::fabs(Box.MaxY + Box.MinY) < 1e-9;
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			const FCapsule Point = CapsuleOf(Strokes[1]), Guard = CapsuleOf(Strokes[2]), Grip = CapsuleOf(Strokes[3]);
+			bWays = bWays && std::min(Point.AY, Point.BY) < Sword.Lift - 4.0 && Guard.AY > Sword.Lift && Guard.BY > Sword.Lift && std::max(Grip.AY, Grip.BY) > Sword.Lift + 3.0;
+		}
+		CHECK(bSize);
+		CHECK(bCentred);
+		CHECK(bWays);
+		Look::FStroke Strokes[Look::MarkMost];
+		const FMarkBox Box = MarkBox(Strokes, Look::MarkOf(EGlyph::War, Full, Strokes));
+		std::printf("(the swords' box %.2f by %.2f units at 1920 by 1080, the X's %.2f by %.2f)\n", Box.MaxX - Box.MinX, Box.MaxY - Box.MinY, OldW, OldH);
+	}
+	// The outline says "sword" without the pommel: from where the two cross, each blade runs to its point a third again
+	// as far as its hilt runs to the grip's end (the X's four arms were equal), and narrows to that point.
+	{
+		bool bLong = true;
+		for (const double Scale : Screens)
+		{
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			const double Hilt = Sword.bPommel ? -Sword.Pommel + Sword.PommelD * 0.5 : -Sword.GripEnd + Sword.GripThick * 0.5;
+			bLong = bLong && (Sword.bPommel || Sword.Tip >= 1.2 * Hilt) && Sword.Point >= 2.0;
+		}
+		CHECK(bLong);
+	}
+	// No part runs into another it should stand apart from, by 1.5 px, on every screen from 1024 by 768 up: a guard and
+	// the other sword's blade and point, the two guards, a pommel and its own guard, the two hilts.
+	{
+		bool bApart = true;
+		double Tightest = 1e9;
+		for (const double Scale : Screens)
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const int Half = Count / 2; // (each sword: 0 blade, 1 point, 2 guard, 3 grip, 4 pommel where it stands)
+			auto Gap = [&](int A, int B) { return Clear(CapsuleOf(Strokes[A]), CapsuleOf(Strokes[B])) * Scale; };
+			const double Least2 = std::min({ Gap(2, Half + 0), Gap(2, Half + 1), Gap(Half + 2, 0), Gap(Half + 2, 1), Gap(2, Half + 2), Gap(3, Half + 3) });
+			Tightest = std::min(Tightest, Least2);
+			bApart = bApart && Least2 >= 1.5 - 1e-9;
+			if (Half == 5)
+			{
+				bApart = bApart && Gap(4, 2) >= 1.5 - 1e-9 && Gap(4, Half + 4) >= 1.5 && Gap(4, Half + 3) >= 1.5;
+			}
+		}
+		CHECK(bApart);
+		std::printf("(the swords' parts that stand apart: %.2f px at the least)\n", Tightest);
+	}
+}
+
+namespace
+{
+	/** The real months' cards (real_months.inc, from the rules bundle): one line a month, then one an item, tab-separated. */
+	const char* const RealMonths =
+#include "real_months.inc"
+		;
+
+	/** One month of the card as the edge's seals see it: each item's look and what the card says of it, in card order. */
+	struct FMonth
+	{
+		std::string Seat;
+		std::string Date;
+		std::vector<FAlike> Looks;
+		std::vector<FSaid> Said;
+	};
+
+	std::vector<std::string> Fields(const std::string& Line)
+	{
+		std::vector<std::string> Out;
+		size_t At = 0;
+		for (;;)
+		{
+			const size_t Tab = Line.find('\t', At);
+			Out.push_back(Line.substr(At, Tab == std::string::npos ? std::string::npos : Tab - At));
+			if (Tab == std::string::npos)
+			{
+				break;
+			}
+			At = Tab + 1;
+		}
+		Out.resize(std::max<size_t>(Out.size(), 8));
+		return Out;
+	}
+
+	/** An item as EdgeNews.cpp's EdgeSealOf makes it: its look (AlikeOf, the lead's sign from its picture) and its words. */
+	void AddItem(FMonth& Month, ESection Section, const std::string& Word, int Tone, const std::string& Sign, const std::string& A, const std::string& B, const std::string& C, const std::string& Text)
+	{
+		Month.Looks.push_back(AlikeOf(Section, Word, Tone, Section == ESection::Lead ? LeadSign(Sign) : Sign));
+		if (Section == ESection::Row)
+		{
+			Month.Said.push_back(RowSaid(A, Word, B, C, Text));
+		}
+		else if (Section == ESection::Home)
+		{
+			std::string Said = A.empty() ? Text : A + " " + Text;
+			Said += B.empty() ? "" : ", " + B;
+			Month.Said.push_back(PlainSaid(Section, Said));
+		}
+		else
+		{
+			Month.Said.push_back(PlainSaid(Section, Text));
+		}
+	}
+
+	std::vector<FMonth> ReadMonths()
+	{
+		std::vector<FMonth> Months;
+		const std::string All(RealMonths);
+		size_t At = 0;
+		while (At < All.size())
+		{
+			const size_t End = std::min(All.find('\n', At), All.size());
+			const std::string Line = All.substr(At, End - At);
+			At = End + 1;
+			if (Line.empty())
+			{
+				continue;
+			}
+			const std::vector<std::string> F = Fields(Line);
+			if (F[0] == "M")
+			{
+				Months.push_back(FMonth{ F[1], F[2], {}, {} });
+			}
+			else if (!Months.empty())
+			{
+				AddItem(Months.back(), static_cast<ESection>(std::atoi(F[0].c_str())), F[1], std::atoi(F[2].c_str()), F[3], F[4], F[5], F[6], F[7]);
+			}
+		}
+		return Months;
+	}
+
+	/** Mac run 3's month (USA, grand, from January 1942, seed 1939): the card of January 1942 as the rules gave it. */
+	FMonth RunThree()
+	{
+		FMonth Month{ "USA", "January 1942", {}, {} };
+		AddItem(Month, ESection::Band, "WAR", -1, "", "", "", "", "Cuba declares war on Germany");
+		AddItem(Month, ESection::Band, "WAR", -1, "", "", "", "", "Panama declares war on Germany");
+		for (const char* Place : { "Costa Rica", "Nicaragua", "Honduras", "El Salvador", "Guatemala", "Haiti", "Dominican Republic" })
+		{
+			const std::string Named = std::string(Place) == "Dominican Republic" ? "The Dominican Republic" : Place;
+			AddItem(Month, ESection::Row, "WAR", -1, "", Place, "", "", Named + " declares war on Germany.");
+		}
+		AddItem(Month, ESection::Row, "NEWS", 0, "", "Soviet Union", "", "", "British and Soviet troops have entered Iran.");
+		AddItem(Month, ESection::Home, "", 0, "", "", "", "", "German envoys are courting Buenos Aires.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "Soviet troops close round Helsinki: the capital of Finland is under siege, with one corps inside.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "Soviet troops blow the bridges over the Oka at Kaluga as German forces reach the river.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "Scorched earth: German troops tore up the railway at Kaluga as they were driven off.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "No. 4 Group bombs Berlin by night.");
+		AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", "4\xC2\xAA Divisione Aerea strikes at shipping in the Western Mediterranean.");
+		return Month;
+	}
+
+	/** The runs cover every item once, in card order: each starts where the last ended, and their counts add up. */
+	bool RunsCover(const std::vector<FAlikeRun>& Runs, int Items)
+	{
+		int Next = 0;
+		for (const FAlikeRun& Run : Runs)
+		{
+			if (Run.First != Next || Run.Count < 1)
+			{
+				return false;
+			}
+			Next += Run.Count;
+		}
+		return Next == Items;
+	}
+
+	/** Each run is alike, holds no warning where it folds, and is whole: a fold is never 2, and no item next to it looks the same. */
+	bool RunsRight(const std::vector<FAlike>& Looks, const std::vector<FAlikeRun>& Runs, std::string& Why)
+	{
+		for (size_t Index = 0; Index < Runs.size(); ++Index)
+		{
+			const FAlikeRun& Run = Runs[Index];
+			const FAlike& First = Looks[static_cast<size_t>(Run.First)];
+			if (Run.Count == 2)
+			{
+				Why = "a fold of two";
+				return false;
+			}
+			for (int Each = Run.First; Each < Run.First + Run.Count; ++Each)
+			{
+				if (!(Looks[static_cast<size_t>(Each)] == First) || (Run.Count > 1 && Looks[static_cast<size_t>(Each)].IsWarning()))
+				{
+					Why = "a fold of items that are not alike, or of a warning";
+					return false;
+				}
+			}
+			const int Before = Run.First - 1, After = Run.First + Run.Count;
+			if (Run.Count > 1 && ((Before >= 0 && Looks[static_cast<size_t>(Before)] == First) || (After < static_cast<int>(Looks.size()) && Looks[static_cast<size_t>(After)] == First)))
+			{
+				Why = "a fold that stops short of an alike item";
+				return false;
+			}
+			// (three alike in a row that are not a warning always fold)
+			if (Run.Count == 1 && !First.IsWarning() && Index + 2 < Runs.size() && Runs[Index + 1].Count == 1 && Runs[Index + 2].Count == 1
+				&& Looks[static_cast<size_t>(Runs[Index + 1].First)] == First && Looks[static_cast<size_t>(Runs[Index + 2].First)] == First)
+			{
+				Why = "three alike left unfolded";
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool Contains(const std::string& Text, const std::string& Part)
+	{
+		return Text.find(Part) != std::string::npos;
+	}
+
+	bool StartsWith(const std::string& Text, const std::string& Part)
+	{
+		return Text.compare(0, Part.size(), Part) == 0;
+	}
+
+	/** A sentence with its "its" and "his" read as "their", as a folded seal's words say them of more than one. */
+	std::string Theirs(const std::string& Sentence)
+	{
+		std::string Out = " " + Sentence + " ";
+		for (const char* Own : { " its ", " his " })
+		{
+			for (size_t At = Out.find(Own); At != std::string::npos; At = Out.find(Own, At + 1))
+			{
+				Out.replace(At, 5, " their ");
+			}
+		}
+		return Out.substr(1, Out.size() - 2);
+	}
+
+	/**
+	 * The test's own reading of an item's short line, for a folded seal that lists its items (the design director,
+	 * 64(g)(4)): a front's row's title as the card prints it, its line up to the colon before its text ("Ruhr HIT",
+	 * "Polish Silesia LOST against Germany"); else its eight words. No stop or full stop at its end.
+	 */
+	std::string ShortSaid(const FSaid& Item)
+	{
+		std::string Out = Item.Section == ESection::Row && !Item.Head.empty() ? Item.Line.substr(0, Item.Line.find(": ", Item.Name.size())) : EightWords(Item.Line);
+		while (!Out.empty() && (Out.back() == '.' || Out.back() == ',' || Out.back() == ':' || Out.back() == ';' || Out.back() == '!' || Out.back() == '?' || Out.back() == ' '))
+		{
+			Out.pop_back();
+		}
+		return Out;
+	}
+
+	/** The test's own count of the letters some words set in the typed face: each one advance, whatever bytes UTF-8 gives it. */
+	int LettersSet(const std::string& Words)
+	{
+		int Letters = 0;
+		for (const char Letter : Words)
+		{
+			const unsigned Byte = static_cast<unsigned char>(Letter);
+			Letters += Byte < 0x80 || Byte >= 0xC0 ? 1 : 0;
+		}
+		return Letters;
+	}
+
+	/**
+	 * One line of the hover, as the test reckons it: 1000 units of wrap over a letter of 1228/2048 of 9.5 points' em, 4/3
+	 * units a point, set at a whole pixel's advance, on the screen where that holds fewest: a window 640 high, where the
+	 * letter's 4.5 px are set 5 (TipLines wraps at it).
+	 */
+	constexpr int HoverLine = 118;
+
+	/** The test's own whole-pixel line: 1000 units at Scale pixels a unit over the letter's advance rounded to a pixel. */
+	int LineAt(double Scale)
+	{
+		const double Px = std::max(std::round(1228.0 / 2048.0 * 9.5 * 4.0 / 3.0 * Scale), 1.0);
+		return static_cast<int>(std::floor(1000.0 * Scale / Px + 1e-9));
+	}
+
+	/**
+	 * The short lines a folded seal can list: each item's in card order, up to the first item with no words of its own;
+	 * a row whose title is listed already gives its own eight words (the review of the rulings' build: "Stalino HIT"
+	 * twice read as one line said twice).
+	 */
+	std::vector<std::string> ShortLines(const std::vector<FSaid>& Said, const FAlikeRun& Run)
+	{
+		std::vector<std::string> Lines;
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
+		{
+			const FSaid& Item = Said[static_cast<size_t>(Index)];
+			std::string Line = ShortSaid(Item);
+			if (Line.empty())
+			{
+				break;
+			}
+			if (Item.Section == ESection::Row && !Item.Head.empty() && std::find(Lines.begin(), Lines.end(), Line) != Lines.end())
+			{
+				Line = EightWords(Item.Line);
+				while (!Line.empty() && (Line.back() == '.' || Line.back() == ',' || Line.back() == ':' || Line.back() == ';' || Line.back() == '!' || Line.back() == '?' || Line.back() == ' '))
+				{
+					Line.pop_back();
+				}
+			}
+			Lines.push_back(Line);
+		}
+		return Lines;
+	}
+
+	/** How many of a folded seal's listed lines (the first Named of its short lines) say a line the list gave already, where the card's lines for them differ. */
+	int ListedTwice(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Named)
+	{
+		const std::vector<std::string> Lines = ShortLines(Said, Run);
+		int Twice = 0;
+		for (size_t Index = 1; Index < Lines.size() && Index < static_cast<size_t>(Named); ++Index)
+		{
+			for (size_t Before = 0; Before < Index; ++Before)
+			{
+				const bool bSame = Lines[Before] == Lines[Index] && Said[static_cast<size_t>(Run.First) + Before].Line != Said[static_cast<size_t>(Run.First) + Index].Line;
+				Twice += bSame ? 1 : 0;
+			}
+		}
+		return Twice;
+	}
+
+	/** The first Named of those lines (the first as given), "; " between, and "and N more" for the rest of the run. */
+	std::string Listed(const std::vector<std::string>& Lines, size_t Named, const std::string& FirstLine, int Count)
+	{
+		std::string Out;
+		for (size_t Index = 0; Index < Named; ++Index)
+		{
+			Out += (Index == 0 ? FirstLine : "; " + Lines[Index]);
+		}
+		const int Rest = Count - static_cast<int>(Named);
+		return Rest > 0 ? Out + (Out.empty() ? "and " : "; and ") + std::to_string(Rest) + " more" : Out;
+	}
+
+	/** Whether a folded seal's words name its items (its count, then a colon), as the names and the rows' head do. */
+	bool NamesItsItems(const FAlikeRun& Run, const std::string& Words)
+	{
+		const std::string Count = std::to_string(Run.Count);
+		return Words.compare(0, Count.size() + 1, Count + " ") == 0 && Words.find(": ") != std::string::npos;
+	}
+
+	/**
+	 * How many of a folded seal's items its words name: the names' and the rows' head's list up to four whole, more as
+	 * three; else the short lines it gives (one where the first's is cut to fit); none where it gives the count alone.
+	 */
+	int ItemsNamed(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words)
+	{
+		if (NamesItsItems(Run, Words))
+		{
+			return Run.Count > 4 ? 3 : Run.Count;
+		}
+		const std::vector<std::string> Lines = ShortLines(Said, Run);
+		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		{
+			if (Words == Listed(Lines, Named, Lines[0], Run.Count))
+			{
+				return static_cast<int>(Named);
+			}
+		}
+		return Lines.empty() ? 0 : 1;
+	}
+
+	/**
+	 * Nothing the card does not say: a folded seal's words begin with its count, name its first items in card order
+	 * (each from its own sentence or its row's place), and say how many more; or they are its items' own short lines in
+	 * card order, "; " between, as many as one line of the hover holds, and "and N more" for the rest; or, where no item
+	 * has words of its own, its count and the parts of the card those are in.
+	 */
+	bool SaysOnlyTheCard(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words, std::string& Why)
+	{
+		const std::string Count = std::to_string(Run.Count);
+		const FSaid& First = Said[static_cast<size_t>(Run.First)];
+		const size_t Colon = Words.find(": ");
+		if (StartsWith(Words, Count + " ") && Colon != std::string::npos)
+		{
+			const std::string Says = Words.substr(Count.size() + 1, Colon - Count.size() - 1);
+			const std::string Names = Words.substr(Colon + 2);
+			// (the words after the verb are on every item's sentence, or the head on every row)
+			const size_t Space = Says.find(' ');
+			const std::string Tail = Space == std::string::npos ? std::string() : Says.substr(Space);
+			const int Named = Run.Count > 4 ? 3 : Run.Count;
+			size_t From = 0;
+			for (int Index = 0; Index < Run.Count; ++Index)
+			{
+				const FSaid& Item = Said[static_cast<size_t>(Run.First + Index)];
+				const bool bHead = Item.Head == Says;
+				if (!bHead && !Contains(Theirs(Item.Sentence), Tail))
+				{
+					Why = "a folded seal's words say what an item's sentence does not";
+					return false;
+				}
+				if (Index < Named)
+				{
+					// (its name, where the list has it, in card order: its row's place, or the words of its own sentence before
+					// its verb, the word before the rest)
+					std::string Sentence = Theirs(Item.Sentence);
+					while (!Sentence.empty() && Sentence.back() == '.')
+					{
+						Sentence.pop_back();
+					}
+					const size_t Rest = Tail.empty() ? Sentence.size() : Sentence.find(Tail);
+					const size_t Verb = Rest == std::string::npos || Rest == 0 ? std::string::npos : Sentence.rfind(' ', Rest - 1);
+					std::string Name = bHead ? Item.Name : Verb == std::string::npos ? std::string() : Sentence.substr(0, Verb);
+					if (StartsWith(Name, "The "))
+					{
+						Name[0] = 't';
+					}
+					const size_t Found = Names.find(Name, From);
+					if (Found == std::string::npos || Name.empty())
+					{
+						Why = "a name not in card order, or not the card's";
+						return false;
+					}
+					From = Found + Name.size();
+				}
+			}
+			const std::string Rest = Run.Count > 4 ? " and " + std::to_string(Run.Count - 3) + " more" : std::string();
+			if (Names.size() < Rest.size() || Names.compare(Names.size() - Rest.size(), Rest.size(), Rest) != 0)
+			{
+				Why = "a folded seal's words that do not say how many more";
+				return false;
+			}
+			return true;
+		}
+		// (else each item's own short line in card order, "; " between, as many as one line of the hover holds, then "and
+		// N more", which is one more of the list, never more of the line before it)
+		if (LettersSet(Words) > HoverLine)
+		{
+			Why = "a folded seal's words longer than one line of the hover";
+			return false;
+		}
+		const std::vector<std::string> Lines = ShortLines(Said, Run);
+		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		{
+			if (Words != Listed(Lines, Named, Lines[0], Run.Count))
+			{
+				continue;
+			}
+			// (and none more would have fitted)
+			for (size_t More = Named + 1; More <= Lines.size(); ++More)
+			{
+				if (LettersSet(Listed(Lines, More, Lines[0], Run.Count)) <= HoverLine)
+				{
+					Why = "a folded seal that lists fewer of its items than one line of the hover holds";
+					return false;
+				}
+			}
+			return true;
+		}
+		// (or, where even the first line does not fit with its "and N more", that line itself cut shorter, and that; never a
+		// row's title cut, which would leave a place without what happened)
+		const std::string Tail = "; and " + std::to_string(Run.Count - 1) + " more";
+		if (!Lines.empty() && !(First.Section == ESection::Row && !First.Head.empty() && !First.Name.empty()))
+		{
+			const bool bTail = Words.size() > Tail.size() && Words.compare(Words.size() - Tail.size(), Tail.size(), Tail) == 0;
+			const std::string Cut = bTail ? Words.substr(0, Words.size() - Tail.size()) : std::string();
+			if (Cut.empty() || !StartsWith(Lines[0], Cut) || LettersSet(Listed(Lines, 1, Lines[0], Run.Count)) <= HoverLine)
+			{
+				Why = "a folded seal's words that are neither its names nor its items' own short lines, as many as fit, and how many more";
+				return false;
+			}
+			return true;
+		}
+		// (or, where no item has words the list could name, the count and the parts of the card they are in)
+		std::string Where;
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
+		{
+			const ESection Part = Said[static_cast<size_t>(Index)].Section;
+			const std::string Named = Part == ESection::Row ? "on your fronts" : Part == ESection::Home ? "at home" : Part == ESection::Staff ? "from your staff" : Part == ESection::Elsewhere ? "elsewhere in the war" : "?";
+			if (!Contains(Where, Named))
+			{
+				Where += (Where.empty() ? " " : " and ") + Named;
+			}
+		}
+		Where = Contains(Where, "?") ? std::string(" in the month's report") : Where;
+		// (three parts are listed "a, b and c": the test takes them as "a and b and c")
+		std::string Given = Words;
+		const size_t Comma = Given.find(", ");
+		Given = Comma == std::string::npos ? Given : Given.replace(Comma, 2, " and ");
+		if (Given != Count + Where)
+		{
+			Why = "a folded seal with no words of its items' own that does not give its count and where they are";
+			return false;
+		}
+		return true;
+	}
+}
+
+/**
+ * Ruling 64(g) as amended 08:55Z: three or more alike in a row stand as one seal with their count, at the first item's
+ * place; a press opens the card at the run's first row. Mac run 3's month, the warnings, the order and the counts over
+ * every real month, the card left as it was, the words under the pointer, the "+N" counting items, and the tab.
+ */
+static void TestFold()
+{
+	// 1. Mac run 3's month (January 1942, USA): sixteen items, so eight seals and a "+8" before the fold. Folded: four,
+	// the nine declarations of war as one, the news from Iran, home's line, and elsewhere's five as one; no "+N".
+	const FMonth Three = RunThree();
+	std::vector<FAlikeRun> Runs;
+	FoldAlike(Three.Looks, Runs);
+	CHECK(Three.Looks.size() == 16 && Runs.size() == 4);
+	CHECK(Runs.size() == 4 && Runs[0].First == 0 && Runs[0].Count == 9 && Runs[1].Count == 1 && Runs[2].Count == 1 && Runs[3].First == 11 && Runs[3].Count == 5);
+	CHECK(Three.Looks[0].Wax == EWax::Band && Three.Looks[0].Glyph == EGlyph::War && Three.Looks[0].bPulse && Three.Looks[9].Glyph == EGlyph::News && Three.Looks[9].bPulse);
+	CHECK(Three.Looks[10].Wax == EWax::Brass && !Three.Looks[10].bPulse && Three.Looks[11].Wax == EWax::Grey && Three.Looks[11].Glyph == EGlyph::Globe);
+	// (elsewhere's five were five grey seals of their own before the fold: no two items ever shared a seal)
+	CHECK(Fold(16, 9).Shown == 8 && Fold(16, 9).More == 8);
+	if (Runs.size() == 4)
+	{
+		const std::string War = FoldWords(Three.Said, Runs[0]), Iran = FoldWords(Three.Said, Runs[1]), Home = FoldWords(Three.Said, Runs[2]), Elsewhere = FoldWords(Three.Said, Runs[3]);
+		CHECK(War == "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more");
+		CHECK(Iran == EightWords(Three.Said[9].Line) && Iran == "Soviet Union NEWS: British and Soviet troops");
+		CHECK(Home == "German envoys are courting Buenos Aires.");
+		CHECK(Elsewhere == "Soviet troops close round Helsinki; Soviet troops blow the bridges over the Oka; and 3 more");
+		std::printf("(run 3's month folded: \"%s\"; \"%s\")\n", War.c_str(), Elsewhere.c_str());
+		// Laid at 1441 by 878 and at 1024 by 768 (the layer is 972 units high: 1595 by 972, 1296 by 972), with the frame:
+		// all four stand, and no "+N".
+		FLayout Layout;
+		std::vector<FSpot> Spots;
+		const std::vector<int> Carries = { 9, 1, 1, 5 };
+		for (const double Wide : { 1441.0 / 878.0 * 972.0, 1024.0 / 768.0 * 972.0 })
+		{
+			FParams Window;
+			Window.ScreenW = std::floor(Wide);
+			Window.ScreenH = 972.0;
+			std::vector<FWant> Wants(4);
+			Wants[0] = FWant{ true, FPoint{ Window.ScreenW * 0.3, Window.ScreenH * 0.6 }, -1 }; // (Cuba, south-west on the map)
+			Wants[1] = FWant{ true, FPoint{ Window.ScreenW * 0.9, Window.ScreenH * 0.4 }, -1 }; // (Iran, off to the east)
+			const FFold Laid = Layout.LayRanked(Window, Wants, Carries, 16, 9, SmallFrame(Window.ScreenW, Window.ScreenH), Spots);
+			std::string Why;
+			CHECK(Laid.Shown == 4 && Laid.More == 0 && Spots.size() == 4 && Spots[0].bShown && Spots[3].bShown);
+			CHECK(LaidClear(Window, SmallFrame(Window.ScreenW, Window.ScreenH), Spots, Why));
+		}
+	}
+
+	// 2. A warning never folds, and no run crosses one: three warnings in a row stand as three; alike seals either side
+	// of one are two runs, each folded only where it is three or more on its own.
+	{
+		FMonth Warned;
+		for (int Each = 0; Each < 3; ++Each)
+		{
+			AddItem(Warned, ESection::Band, "WARNING", -1, "", "", "", "", "Act by March.");
+		}
+		AddItem(Warned, ESection::Lead, "LAST MONTH", -1, "troops", "", "", "", "The last month to hold the line.");
+		for (int Each = 0; Each < 2; ++Each)
+		{
+			AddItem(Warned, ESection::Row, "WAR", -1, "", "A", "", "", "A declares war on B.");
+		}
+		AddItem(Warned, ESection::Row, "WARNING", -1, "", "C", "", "", "Act by April.");
+		for (int Each = 0; Each < 3; ++Each)
+		{
+			AddItem(Warned, ESection::Row, "WAR", -1, "", "D", "", "", "D declares war on B.");
+		}
+		FoldAlike(Warned.Looks, Runs);
+		CHECK(Warned.Looks[0].IsWarning() && Warned.Looks[3].IsWarning() && Warned.Looks[6].IsWarning() && !Warned.Looks[4].IsWarning());
+		CHECK(Runs.size() == 8 && Runs[0].Count == 1 && Runs[1].Count == 1 && Runs[2].Count == 1 && Runs[3].Count == 1);
+		CHECK(Runs.size() == 8 && Runs[4].Count == 1 && Runs[5].Count == 1 && Runs[6].Count == 1 && Runs[7].First == 7 && Runs[7].Count == 3);
+		// (with a fold of two allowed, the warnings still stand alone)
+		FoldAlike(Warned.Looks, Runs, 2);
+		bool bAlone = true;
+		for (const FAlikeRun& Run : Runs)
+		{
+			bAlone = bAlone && (Run.Count == 1 || !Warned.Looks[static_cast<size_t>(Run.First)].IsWarning());
+		}
+		CHECK(bAlone && Runs.size() == 7 && Runs[4].Count == 2);
+		// (a WARNING is the warning's mark too, on whatever wax: three such in a row stand as three; and a run either side
+		// of a warning in its middle is cut there, each side folded only where it is three or more on its own)
+		const FAlike Marked = AlikeOf(ESection::Lead, "WARNING", -1, "");
+		CHECK(Marked.Glyph == EGlyph::Warning && Marked.IsWarning());
+		FoldAlike({ Marked, Marked, Marked }, Runs);
+		CHECK(Runs.size() == 3);
+		const FAlike Declared = AlikeOf(ESection::Band, "WAR", -1, ""), Warning = AlikeOf(ESection::Band, "WARNING", -1, "");
+		FoldAlike({ Declared, Declared, Warning, Declared, Declared, Declared }, Runs);
+		CHECK(Runs.size() == 4 && Runs[0].Count == 1 && Runs[1].Count == 1 && Runs[2].Count == 1 && Runs[3].First == 3 && Runs[3].Count == 3);
+	}
+
+	// 3. Order kept and counts adding up, over random cards (warnings among them) and over every real month of every
+	// seat in real_months.inc; and the "+N" counts items: what stands carries, and the "+N" counts, every item.
+	{
+		const FAlike Palette[] = { AlikeOf(ESection::Band, "WAR", -1, ""), AlikeOf(ESection::Band, "WARNING", -1, ""), AlikeOf(ESection::Row, "", 0, ""),
+			AlikeOf(ESection::Row, "LOST", -1, "inf"), AlikeOf(ESection::Row, "LOST", -1, "arm"), AlikeOf(ESection::Elsewhere, "", 0, "") };
+		std::mt19937 Dice(64);
+		std::uniform_int_distribution<int> Pick(0, 5), Length(0, 30), Stay(0, 2);
+		bool bCover = true, bRight = true;
+		std::string Why;
+		for (int Round = 0; Round < 20000; ++Round)
+		{
+			std::vector<FAlike> Looks;
+			const int Items = Length(Dice);
+			int Last = Pick(Dice);
+			for (int Each = 0; Each < Items; ++Each)
+			{
+				Last = Stay(Dice) > 0 ? Last : Pick(Dice);
+				Looks.push_back(Palette[Last]);
+			}
+			FoldAlike(Looks, Runs);
+			bCover = bCover && RunsCover(Runs, Items);
+			bRight = bRight && RunsRight(Looks, Runs, Why);
+		}
+		CHECK(bCover);
+		CHECK(bRight);
+
+		const std::vector<FMonth> Months = ReadMonths();
+		int Seats = 0, Folded = 0, Before = 0, After = 0, AfterWide = 0, Lost = 0, Wrong = 0;
+		std::string LastSeat;
+		FLayout Layout;
+		std::vector<FSpot> Spots;
+		std::vector<FWant> Wants;
+		std::vector<int> Carries;
+		std::vector<FAlike> Drawn;
+		std::vector<FAlikeRun> PlainRuns;
+		for (const FMonth& Month : Months)
+		{
+			Seats += Month.Seat != LastSeat ? 1 : 0;
+			LastSeat = Month.Seat;
+			FoldAlike(Month.Looks, Runs);
+			bCover = bCover && RunsCover(Runs, static_cast<int>(Month.Looks.size()));
+			bRight = bRight && RunsRight(Month.Looks, Runs, Why);
+			// (and as drawn below 972 high, where no order sign is pressed: the fold the screen stands there, 7 below)
+			Drawn.clear();
+			for (const FAlike& Look : Month.Looks)
+			{
+				Drawn.push_back(AsDrawn(Look, false));
+			}
+			FoldAlike(Drawn, PlainRuns);
+			Before += Fold(static_cast<int>(Month.Looks.size()), 9).Shown + (Fold(static_cast<int>(Month.Looks.size()), 9).More > 0 ? 1 : 0);
+			for (size_t Index = 0; Index < std::min<size_t>(Runs.size(), 9); ++Index)
+			{
+				Folded += Runs[Index].Count > 1 ? 1 : 0;
+			}
+			// (at 1920 by 1080 the fold as pressed, at 1441 by 878 and 1024 by 768 the fold as drawn there; the board keeps
+			// the first nine runs, and the screen stands what it has room for, the rest in a "+N" of items)
+			for (const double Wide : { 1728.0, 1595.0, 1296.0 })
+			{
+				const std::vector<FAlikeRun>& Shown = Wide > 1700.0 ? Runs : PlainRuns;
+				const size_t Kept = std::min<size_t>(Shown.size(), 9);
+				Wants.assign(Kept, FWant());
+				Carries.clear();
+				for (size_t Index = 0; Index < Kept; ++Index)
+				{
+					Carries.push_back(Shown[Index].Count);
+				}
+				FParams Window;
+				Window.ScreenW = Wide;
+				Window.ScreenH = 972.0;
+				const FFold Laid = Layout.LayRanked(Window, Wants, Carries, static_cast<int>(Month.Looks.size()), 9, SmallFrame(Wide, 972.0), Spots);
+				int Carried = 0;
+				for (int Index = 0; Index < Laid.Shown; ++Index)
+				{
+					Carried += Carries[static_cast<size_t>(Index)];
+				}
+				Lost += Carried + Laid.More != static_cast<int>(Month.Looks.size()) ? 1 : 0;
+				Wrong += Laid.Shown + (Laid.More > 0 ? 1 : 0) > 9 ? 1 : 0;
+				After += Wide == 1595.0 ? Laid.Shown + (Laid.More > 0 ? 1 : 0) : 0;
+				AfterWide += Wide == 1728.0 ? Laid.Shown + (Laid.More > 0 ? 1 : 0) : 0;
+			}
+		}
+		CHECK(Months.size() >= 40 && Seats >= 10 && Folded >= 40);
+		CHECK(bCover && bRight);
+		CHECK(Lost == 0 && Wrong == 0);
+		std::printf("(the fold over %zu real months of %d seats: %d folded seals where the order signs are pressed; %d seals stood before it, %d after at 1920 by 1080, %d at 1441 by 878 as drawn there)\n",
+			Months.size(), Seats, Folded, Before, AfterWide, After);
+
+		// The "+N" counts items, not seals: run 3's month with room for three seals only stands the nine and the news
+		// from Iran, and its "+N" counts the six items of the two seals that do not stand.
+		FParams Window;
+		Window.ScreenW = 1595.0;
+		Window.ScreenH = 972.0;
+		const FFold Three3 = Layout.LayRanked(Window, std::vector<FWant>(4), { 9, 1, 1, 5 }, 16, 3, {}, Spots);
+		CHECK(Three3.Shown == 2 && Three3.More == 6 && Spots.size() == 3);
+		// (each item a seal of its own, as before the fold: the same as LayRanked without carries, every time)
+		std::mt19937 Again(9);
+		std::uniform_int_distribution<int> Count(0, 14);
+		bool bSame = true;
+		std::vector<FSpot> Others;
+		for (int Round = 0; Round < 500; ++Round)
+		{
+			const int Given = Count(Again), Total = Given + Count(Again) / 3;
+			const std::vector<FWant> Some(static_cast<size_t>(Given));
+			const FFold A = Layout.LayRanked(Window, Some, Total, 9, SmallFrame(1595.0, 972.0), Spots);
+			const FFold B = Layout.LayRanked(Window, Some, std::vector<int>(static_cast<size_t>(Given), 1), Total, 9, SmallFrame(1595.0, 972.0), Others);
+			bSame = bSame && A.Shown == B.Shown && A.More == B.More && Spots.size() == Others.size();
+		}
+		CHECK(bSame);
+		// (and laying the carried seals again allocates nothing, once warm)
+		const std::vector<FBox> Frame = SmallFrame(1595.0, 972.0);
+		const std::vector<FWant> Four(4);
+		const std::vector<int> Carry = { 9, 1, 1, 5 };
+		Layout.LayRanked(Window, Four, Carry, 16, 9, Frame, Spots);
+		const long Was = Allocations;
+		Layout.LayRanked(Window, Four, Carry, 16, 9, Frame, Spots);
+		CHECK(Allocations == Was);
+	}
+
+	// 4. The card is unchanged: the fold reads the items and changes none of them, nor their order; the runs give back
+	// every item in card order, and a folded seal is its first item's (so a press opens the card at the run's first row).
+	{
+		const FMonth Three2 = RunThree();
+		const FMonth Kept = Three2;
+		FoldAlike(Three2.Looks, Runs);
+		for (const FAlikeRun& Run : Runs)
+		{
+			FoldWords(Three2.Said, Run);
+		}
+		bool bSame = Kept.Looks == Three2.Looks && Kept.Said.size() == Three2.Said.size();
+		for (size_t Index = 0; bSame && Index < Kept.Said.size(); ++Index)
+		{
+			const FSaid& A = Kept.Said[Index];
+			const FSaid& B = Three2.Said[Index];
+			bSame = A.Section == B.Section && A.Line == B.Line && A.Sentence == B.Sentence && A.Name == B.Name && A.Head == B.Head;
+		}
+		CHECK(bSame);
+		std::vector<FItem> Items;
+		ListItems(FCardCounts{ 2, false, 8, 1, 0, 5 }, Items);
+		std::vector<int> Back;
+		for (const FAlikeRun& Run : Runs)
+		{
+			for (int Each = Run.First; Each < Run.First + Run.Count; ++Each)
+			{
+				Back.push_back(Each);
+			}
+		}
+		bool bInOrder = Back.size() == Items.size();
+		for (size_t Index = 0; bInOrder && Index < Back.size(); ++Index)
+		{
+			bInOrder = Back[Index] == static_cast<int>(Index);
+		}
+		CHECK(bInOrder && Items[static_cast<size_t>(Runs[0].First)].Section == ESection::Band && Items[static_cast<size_t>(Runs[3].First)].Section == ESection::Elsewhere && Items[static_cast<size_t>(Runs[3].First)].Index == 0);
+	}
+
+	// 5. The words under the pointer: the names in card order, how many more, nothing the card does not say.
+	{
+		auto Words = [](const std::vector<std::pair<std::string, std::string>>& Items)
+		{
+			FMonth Month;
+			for (const auto& Item : Items)
+			{
+				if (Item.first.empty())
+				{
+					AddItem(Month, ESection::Elsewhere, "", 0, "", "", "", "", Item.second);
+				}
+				else
+				{
+					AddItem(Month, ESection::Row, "HIT", -1, "bmr", Item.first, "", "", Item.second);
+				}
+			}
+			return FoldWords(Month.Said, FAlikeRun{ 0, static_cast<int>(Items.size()) });
+		};
+		CHECK(Words({ { "", "Paris falls." }, { "", "Rome falls." }, { "", "Oslo falls." } }) == "3 fall: Paris, Rome and Oslo");
+		CHECK(Words({ { "", "Paris has fallen." }, { "", "Rome has fallen." }, { "", "Oslo has fallen." }, { "", "Riga has fallen." } }) == "4 have fallen: Paris, Rome, Oslo and Riga");
+		CHECK(Words({ { "", "Bernard Montgomery reports for duty and is waiting for a command." }, { "", "Harold Alexander reports for duty and is waiting for a command." }, { "", "Alan Brooke reports for duty and is waiting for a command." } })
+			== "3 report for duty and are waiting for a command: Bernard Montgomery, Harold Alexander and Alan Brooke");
+		CHECK(Words({ { "", "The Dominican Republic declares war on Germany." }, { "", "Haiti declares war on Germany." }, { "", "Cuba declares war on Germany." } }) == "3 declare war on Germany: the Dominican Republic, Haiti and Cuba");
+		// (the rows' head and their places, where their sentences name no one: the card's "Ruhr HIT" three times)
+		CHECK(Words({ { "Ruhr", "Their bombers hit its factories by night." }, { "Hamburg", "Their bombers hit its factories by night." }, { "Bohemia", "Their bombers hit its factories by night." } }) == "3 HIT: Ruhr, Hamburg and Bohemia");
+		// (else each item's own short line, in card order, as many as one line of the hover holds, and "and N more" for the
+		// rest (the design director, 64(g)(4)): a name twice, a stop in the name, a capital after it, or different words after it)
+		CHECK(Words({ { "", "Soviet troops close round Riga." }, { "", "Soviet troops close round Pskov." }, { "", "Soviet troops close round Narva." } })
+			== "Soviet troops close round Riga; Soviet troops close round Pskov; Soviet troops close round Narva");
+		CHECK(Words({ { "", "Scorched earth: German troops tore up the railway." }, { "", "Scorched earth: Soviet troops tore up the railway." }, { "", "Scorched earth: Finnish troops tore up the railway." } })
+			== "Scorched earth: German troops tore up the railway; Scorched earth: Soviet troops tore up the railway; and 1 more");
+		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls; Paris falls; Rome falls");
+		// (two rows of one place and head, GER August 1942 as drawn: the second gives its own first words, so the list
+		// never seems to say one line twice; the first keeps its title, as the ruling has it)
+		CHECK(Words({ { "Kharkov", "Their bombers hit its factories." }, { "Stalino", "Their bombers hit its factories." }, { "Dnepropetrovsk", "Their bombers hit its factories." },
+				  { "Kiev", "Their bombers hit its factories." }, { "Stalino", "The Black Sea Fleet shelled the troops ashore." }, { "Ruhr", "Their bombers hit its factories." } })
+			== "Kharkov HIT; Stalino HIT; Dnepropetrovsk HIT; Kiev HIT; Stalino HIT: The Black Sea Fleet shelled; Ruhr HIT");
+		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } })
+			== "No. 3 Group bombs Paris by night; No. 4 Group bombs Rome by night; No. 5 Group bombs Turin by night");
+		// (a list's "and" is never the verb, nor a name with one in it listed; words that run on into a second sentence are
+		// not made plural; and an item with no words of its own gives the count and its part of the card. Three such lines
+		// are more than the hover's 118 letters, so two are listed and "and 1 more")
+		CHECK(Words({ { "", "Britain and France declare war on Germany." }, { "", "Canada and France declare war on Germany." }, { "", "India and France declare war on Germany." } })
+			== "Britain and France declare war on Germany; Canada and France declare war on Germany; and 1 more");
+		CHECK(Words({ { "", "Montgomery reports for duty. He was in Egypt." }, { "", "Alexander reports for duty. He was in Egypt." }, { "", "Brooke reports for duty. He was in Egypt." } })
+			== "Montgomery reports for duty. He was in Egypt; Alexander reports for duty. He was in Egypt; and 1 more");
+		CHECK(Words({ { "", "U-47 torpedoes a battleship." }, { "", "U-99 torpedoes a battleship." }, { "", "U-100 torpedoes a battleship." } }) == "3 torpedo a battleship: U-47, U-99 and U-100");
+		CHECK(Words({ { "", "" }, { "", "" }, { "", "" } }) == "3 elsewhere in the war");
+		// (the review's cards, on the rules' own sentences: a thing named after a nation's adjective is the name's, never
+		// the verb, navy.ts's "${adj} troops land at X from the sea" and diplomacy.ts's envoys; the predicate is said up to
+		// a colon in it, a stop on the verb kept off its plural, and "its" made "their"; a second verb after "and", or a
+		// "her", is not split; and a front's rows list "The sky over" as "the sky over", as the names do)
+		auto Each = [&Words](std::initializer_list<const char*> Names, const std::string& Says)
+		{
+			std::vector<std::pair<std::string, std::string>> Items;
+			for (const char* Name : Names)
+			{
+				Items.emplace_back("", std::string(Name) + " " + Says);
+			}
+			return Words(Items);
+		};
+		CHECK(Each({ "German troops", "British troops", "French troops" }, "land at Narvik from the sea.") == "3 land at Narvik from the sea: German troops, British troops and French troops");
+		CHECK(Each({ "German airborne troops", "Italian airborne troops", "Japanese airborne troops" }, "take Crete from the air.")
+			== "3 take Crete from the air: German airborne troops, Italian airborne troops and Japanese airborne troops");
+		CHECK(Each({ "German envoys", "Italian envoys", "Japanese envoys" }, "are courting Buenos Aires.") == "3 are courting Buenos Aires: German envoys, Italian envoys and Japanese envoys");
+		CHECK(Each({ "Germany", "Italy", "Japan" }, "rearms: more of its industry goes over to war work.") == "3 rearm: Germany, Italy and Japan");
+		CHECK(Each({ "Argentina", "Chile", "Spain" }, "leans toward the Axis: trade and treaties, but not at war.") == "3 lean toward the Axis: Argentina, Chile and Spain");
+		CHECK(Each({ "Hungary", "Romania", "Bulgaria" }, "lets its claim to Transylvania rest for now.") == "3 let their claim to Transylvania rest for now: Hungary, Romania and Bulgaria");
+		CHECK(Each({ "Hungary", "Romania", "Finland" }, "joins the Axis and declares war on the Soviet Union.")
+			== "Hungary joins the Axis and declares war; Romania joins the Axis and declares war; and 1 more");
+		CHECK(Each({ "Hood", "Repulse", "Barham" }, "loses her captain.") == "Hood loses her captain; Repulse loses her captain; Barham loses her captain");
+		// (a name's own small word is the name's; but the verb is the first other word in small letters, so a run that does
+		// not split there splits nowhere: never "3 her captain: Hood loses, Repulse sinks and Barham rams")
+		CHECK(Each({ "Charles de Gaulle", "Bernard Montgomery", "Alan Brooke" }, "reports for duty.") == "3 report for duty: Charles de Gaulle, Bernard Montgomery and Alan Brooke");
+		CHECK(Words({ { "", "Hood loses her captain." }, { "", "Repulse sinks her captain." }, { "", "Barham rams her captain." } }) == "Hood loses her captain; Repulse sinks her captain; Barham rams her captain");
+		CHECK(PluralVerb("rearms:") == "rearm:" && PluralVerb("declares,") == "declare," && PluralVerb("is;") == "are;");
+		{
+			FMonth Sky;
+			for (const char* Place : { "The sky over Lodz", "The sky over Rzhev", "The sky over Novgorod" })
+			{
+				AddItem(Sky, ESection::Row, "LOST", -1, "ftr", Place, "", "", "Our fighters were driven from it.");
+			}
+			std::string Why;
+			const std::string Said = FoldWords(Sky.Said, FAlikeRun{ 0, 3 });
+			CHECK(Said == "3 LOST: the sky over Lodz, the sky over Rzhev and the sky over Novgorod" && SaysOnlyTheCard(Sky.Said, FAlikeRun{ 0, 3 }, Said, Why));
+			// (a run that is not wholly on the card says nothing, and its end is weighed without overflowing)
+			CHECK(FoldWords(Sky.Said, FAlikeRun{ INT_MAX, 2 }).empty() && FoldWords(Sky.Said, FAlikeRun{ 2, INT_MAX }).empty() && FoldWords(Sky.Said, FAlikeRun{ 1, 3 }).empty());
+		}
+		CHECK(PluralVerb("focuses") == "focus" && PluralVerb("echoes") == "echo" && PluralVerb("vetoes") == "veto" && PluralVerb("uses") == "use" && PluralVerb("causes") == "cause");
+		CHECK(PluralVerb("declares") == "declare" && PluralVerb("carries") == "carry" && PluralVerb("dies") == "die" && PluralVerb("presses") == "press" && PluralVerb("reaches") == "reach");
+		CHECK(PluralVerb("closes") == "close" && PluralVerb("seizes") == "seize" && PluralVerb("goes") == "go" && PluralVerb("tore") == "tore" && PluralVerb("WAR") == "WAR" && PluralVerb("pass") == "pass");
+		// Over every folded seal of the real months: nothing the card does not say.
+		const std::vector<FMonth> Months = ReadMonths();
+		int Told = 0, Named = 0, Bad = 0;
+		std::string Why, First;
+		for (const FMonth& Month : Months)
+		{
+			FoldAlike(Month.Looks, Runs);
+			for (const FAlikeRun& Run : Runs)
+			{
+				const std::string Said = FoldWords(Month.Said, Run);
+				if (Run.Count == 1)
+				{
+					Bad += Said == EightWords(Month.Said[static_cast<size_t>(Run.First)].Line) ? 0 : 1;
+					continue;
+				}
+				++Told;
+				Named += StartsWith(Said, std::to_string(Run.Count) + " ") ? 1 : 0;
+				if (!SaysOnlyTheCard(Month.Said, Run, Said, Why))
+				{
+					++Bad;
+					First = First.empty() ? Said + " (" + Why + ")" : First;
+				}
+			}
+		}
+		CHECK(Bad == 0 && Told >= 40 && Named >= 10);
+		if (Bad > 0)
+		{
+			std::printf("  first: %s\n", First.c_str());
+		}
+		std::printf("(the real months' %d folded seals: %d name their items, the rest list their items' own lines)\n", Told, Named);
+	}
+
+	// 6. The tab: the date strip's paper over the tails, under the disc's foot (never on the wax, nor its figures), inside
+	// the seal's box (a folded seal is the size of any other), on every screen from 600 to 2160 high: its figures on
+	// paper alone, TabPaper of it between their ink and each side's edge (the edge at its sides only, held to 1.5 px), and
+	// 9 px tall or more from a window FigureFloorHigh high at CountPt, grown to 9 px under it (ruling 3 of 64(g)(4)).
+	{
+		const double Highs[] = { 600.0, 720.0, 754.0, 768.0, 805.0, 806.0, 878.0, 972.0, 1000.0, 1080.0, 1440.0, 1786.0, 2160.0 };
+		bool bUnder = true, bPaper = true, bEdge = true, bCentred = true;
+		for (const double High : Highs)
+		{
+			const double P = High / 972.0;
+			for (int Figures = 1; Figures <= Look::CountMostFigures; ++Figures)
+			{
+				const FBox Tab = Look::TabOf(Figures, P), Ink = Look::FiguresOf(Figures, P);
+				const double Edge = Look::TabEdge(P);
+				bUnder = bUnder && Tab.MinX >= 0.0 && Tab.MaxX <= Look::BoxW && Tab.MinY >= 0.0 && Tab.MaxY <= Look::BoxH;
+				bUnder = bUnder && Tab.MinY > Look::MidY + Look::DiscR && Ink.MinY > Look::MidY + Look::DiscR;
+				for (const Look::FRun& Run : Look::Runs)
+				{
+					const double Turn = Run.Degrees * 3.141592653589793 / 180.0;
+					bUnder = bUnder && Look::MidY + Run.Out * std::sin(Turn) + Run.Radius < Tab.MinY;
+				}
+				// (the paper runs the tab's full height and lies between the two edges: the ink is on it, top to foot, with
+				// TabPaper of it each side of one or two figures, which is all a month's run ever has; three, for a run of a
+				// hundred, are drawn in a tab the box's width, inside it)
+				bPaper = bPaper && Ink.MinY >= Tab.MinY - 1e-9 && Ink.MaxY <= Tab.MaxY + 1e-9;
+				bPaper = bPaper && (Figures > 2 ? Ink.MinX >= Tab.MinX && Ink.MaxX <= Tab.MaxX && Tab.MaxX - Tab.MinX >= Look::BoxW - 1e-9
+					: Ink.MinX - (Tab.MinX + Edge) >= Look::TabPaper - 1e-9 && (Tab.MaxX - Edge) - Ink.MaxX >= Look::TabPaper - 1e-9);
+				bEdge = bEdge && Edge * P >= 1.5 - 1e-9 && Edge >= 1.0;
+				bCentred = bCentred && std::fabs((Tab.MinX + Tab.MaxX) * 0.5 - Look::MidX) < 1e-9 && std::fabs((Ink.MinX + Ink.MaxX) * 0.5 - Look::MidX) < 1e-9;
+				bCentred = bCentred && std::fabs((Ink.MinY + Ink.MaxY) * 0.5 - (Tab.MinY + Tab.MaxY) * 0.5) < 1e-9;
+			}
+		}
+		CHECK(bUnder);
+		CHECK(bPaper);
+		CHECK(bEdge);
+		CHECK(bCentred);
+		CHECK(Look::FiguresIn(9) == 1 && Look::FiguresIn(10) == 2 && Look::FiguresIn(99) == 2 && Look::FiguresIn(100) == 3);
+		// The layer sets the count's line, from the face's ascent to its descent, with its middle FigureLift below the
+		// tab's middle: the figures' ink, FigureTop above the baseline to FigureBottom, is then where FiguresOf has it.
+		// (and so where they are drawn larger, the line and its lift grown with them)
+		for (const double P : { 1.0, 768.0 / 972.0, 720.0 / 972.0 })
+		{
+			const double Em = Look::CountEmAt(P), Lift = Look::FigureLift(P);
+			const FBox Tab = Look::TabOf(2, P), Ink = Look::FiguresOf(2, P);
+			const double LineTop = (Tab.MinY + Tab.MaxY) * 0.5 + Lift - (Look::Ascent + Look::Descent) * Em * 0.5;
+			const double InkTop = LineTop + (Look::Ascent - Look::FigureTop) * Em, InkFoot = LineTop + (Look::Ascent - Look::FigureBottom) * Em;
+			CHECK(std::fabs(InkTop - Ink.MinY) < 1e-9 && std::fabs(InkFoot - Ink.MaxY) < 1e-9);
+			// (the face's figures stand a little above the middle of its line, which reaches further up than down)
+			CHECK(Lift > 0.0 && Lift < 0.1 * Em);
+		}
+		// The art director's floor: 9 px figures at 1441 by 878 and from FigureFloorHigh up at CountPt, which is not raised.
+		const double Floor = Look::FigureFloorHigh();
+		auto AtCountPt = [](double P) { return Look::FigureH * Look::CountEm() * P; };
+		CHECK(Look::CountPt == 13.5 && Look::FigureFloorPx == 9.0);
+		CHECK(AtCountPt(878.0 / 972.0) >= 9.0 && AtCountPt(Floor / 972.0) >= 9.0 && AtCountPt((Floor - 1.0) / 972.0) < 9.0 && Floor == 806.0);
+		CHECK(Look::FigurePx(1080.0 / 972.0) > Look::FigurePx(878.0 / 972.0));
+		// Ruling 3 of 64(g)(4): the numerals at the larger of today's size and 9 px. Only windows under 806 high grow; every
+		// window from 806 high up keeps today's figures and today's tab exactly (the test's own reckoning of 0010's tab).
+		bool bKept = true, bGrown = true;
+		for (int High = 400; High <= 2400; ++High)
+		{
+			const double P = High / 972.0;
+			for (int Figures = 1; Figures <= Look::CountMostFigures; ++Figures)
+			{
+				const double TodayHalfW = std::min(((Look::FigureInk + Look::FigureAdvance * (Figures - 1)) * Look::CountEm()) * 0.5 + Look::TabPaper + Look::TabEdge(P), Look::BoxW * 0.5);
+				const FBox Tab = Look::TabOf(Figures, P);
+				if (High >= 806)
+				{
+					bKept = bKept && Look::FigureGrow(P) == 1.0 && Look::CountEmAt(P) == Look::CountEm() && Look::FigurePx(P) == AtCountPt(P)
+						&& Tab.MinX == Look::MidX - TodayHalfW && Tab.MaxX == Look::MidX + TodayHalfW && Tab.MinY == Look::TabTop && Tab.MaxY == Look::TabBottom;
+				}
+				else
+				{
+					// (grown to 9 px, or as near as the tab's height lets them: never less than today's, never taller than the tab)
+					const FBox Ink = Look::FiguresOf(Figures, P);
+					bGrown = bGrown && Look::FigureGrow(P) > 1.0 && Look::FigurePx(P) > AtCountPt(P) && Look::FigurePx(P) <= 9.0 + 1e-9 && Ink.MaxY - Ink.MinY <= Look::TabBottom - Look::TabTop + 1e-9
+						&& (Look::FigurePx(P) >= 9.0 - 1e-9 || Ink.MaxY - Ink.MinY >= Look::TabBottom - Look::TabTop - 1e-9) && Tab.MaxX - Tab.MinX >= 2.0 * TodayHalfW - 1e-9;
+				}
+			}
+		}
+		CHECK(bKept);
+		CHECK(bGrown);
+		// (1024 by 768: 9 px, where 0010 drew 8.58; the tab a few per cent wider. 1600 by 1000: as it was, 11.17 px)
+		const double At768 = 768.0 / 972.0, At1000 = 1000.0 / 972.0;
+		const double Wider1 = (Look::TabOf(1, At768).MaxX - Look::TabOf(1, At768).MinX) / (2.0 * (Look::FigureInk * Look::CountEm() * 0.5 + Look::TabPaper + Look::TabEdge(At768)));
+		const double Wider2 = (Look::TabOf(2, At768).MaxX - Look::TabOf(2, At768).MinX) / (2.0 * ((Look::FigureInk + Look::FigureAdvance) * Look::CountEm() * 0.5 + Look::TabPaper + Look::TabEdge(At768)));
+		CHECK(std::fabs(Look::FigurePx(At768) - 9.0) < 1e-9 && AtCountPt(At768) < 8.6 && AtCountPt(At768) > 8.5 && Look::FigureGrow(At768) > 1.04 && Look::FigureGrow(At768) < 1.06);
+		CHECK(Wider1 > 1.02 && Wider1 < 1.06 && Wider2 > 1.02 && Wider2 < 1.06);
+		CHECK(std::fabs(Look::FigurePx(At1000) - 11.17) < 0.01 && Look::FigureGrow(At1000) == 1.0);
+		// (where the tab holds 9 px of figures: from 754 high; under it they fill the tab's height)
+		double Holds9 = 0.0;
+		for (int High = 806; High >= 400 && Look::FigurePx(High / 972.0) >= 9.0 - 1e-9; --High)
+		{
+			Holds9 = High;
+		}
+		CHECK(Holds9 >= 750.0 && Holds9 <= 756.0);
+		std::printf("(ruling 3: the count %.2f px at 1024 by 768 (0010: %.2f), %.2f at 1600 by 1000 (as it was); grown %.1f%% under 806 high at 1024 by 768, the tab %.1f%% wider for one figure and %.1f%% for two; 9 px from %.0f high, the tab's height under it (%.2f px at 720 high))\n",
+			Look::FigurePx(At768), AtCountPt(At768), Look::FigurePx(At1000), (Look::FigureGrow(At768) - 1.0) * 100.0, (Wider1 - 1.0) * 100.0, (Wider2 - 1.0) * 100.0, Holds9, Look::FigurePx(720.0 / 972.0));
+		// Ruling 4 of 64(g)(4): a two-figure tab stands as wide as it was; its two figures are set 1 px closer than the face
+		// sets them, so each side of the tab has half a pixel more paper and the figures never touch its edges ("21" did,
+		// TabPaper of a unit being 0.8 px at 1024 by 768); never by drawing them smaller (FigurePx as ruling 3 has it).
+		bool bTracked = true, bApart = true, bOnPaper = true;
+		double Least = 1e9, LeastPaper = 1e9;
+		for (int High = 400; High <= 2400; ++High)
+		{
+			const double P = High / 972.0, Em = Look::CountEmAt(P), Track = Look::FigureTrack(P);
+			const FBox Tab = Look::TabOf(2, P), Ink = Look::FiguresOf(2, P);
+			const double Step = Look::FigureAt(1, 2, P) - Look::FigureAt(0, 2, P), Paper = (Ink.MinX - (Tab.MinX + Look::TabEdge(P))) * P;
+			// (1 px closer, from a window 562 high up; never so close that two of the widest figures' ink meets)
+			bTracked = bTracked && (High < 562 || std::fabs(Track * P - 1.0) < 1e-9) && Track <= 0.75 * (Look::FigureAdvance - Look::FigureInk) * Em + 1e-12;
+			bTracked = bTracked && std::fabs(Step - (Look::FigureAdvance * Em - Track)) < 1e-9 && std::fabs((Look::FigureAt(0, 2, P) + Look::FigureAt(1, 2, P)) * 0.5 - Look::MidX) < 1e-9;
+			// (the ink as FigureAt sets it, centred; the paper each side half the tracking more than TabPaper)
+			bOnPaper = bOnPaper && std::fabs(Ink.MinX - (Look::FigureAt(0, 2, P) - Look::FigureInk * Em * 0.5)) < 1e-9 && std::fabs(Ink.MaxX - (Look::FigureAt(1, 2, P) + Look::FigureInk * Em * 0.5)) < 1e-9;
+			bOnPaper = bOnPaper && std::fabs(Paper - (Look::TabPaper * P + Track * P * 0.5)) < 1e-9 && (High < 562 || Paper >= Look::TabPaper * P + 0.5 - 1e-9);
+			const double Gap = ((Look::FigureAdvance - Look::FigureInk) * Em - Track) * P;
+			bApart = bApart && Gap > 0.0;
+			if (High >= 600)
+			{
+				Least = std::min(Least, Gap);
+				LeastPaper = std::min(LeastPaper, Paper);
+			}
+		}
+		CHECK(bTracked);
+		CHECK(bOnPaper);
+		CHECK(bApart);
+		// (one figure has no neighbour: as it was; three are tracked the same; none at all on a screen of no size)
+		CHECK(std::fabs(Look::FigureAt(0, 1, 1.0) - Look::MidX) < 1e-9 && std::fabs(Look::FigureAt(2, 3, 1.0) - Look::FigureAt(1, 3, 1.0) - (Look::FigureAdvance * Look::CountEm() - 1.0)) < 1e-9 && Look::FigureTrack(0.0) == 0.0);
+		// (1024 by 768 and 1441 by 878: the paper beside "21", which was a unit, 0.79 and 0.90 px)
+		const double Paper768 = (Look::FiguresOf(2, At768).MinX - (Look::TabOf(2, At768).MinX + Look::TabEdge(At768))) * At768;
+		const double Paper878 = (Look::FiguresOf(2, 878.0 / 972.0).MinX - (Look::TabOf(2, 878.0 / 972.0).MinX + Look::TabEdge(878.0 / 972.0))) * (878.0 / 972.0);
+		CHECK(std::fabs(Paper768 - (Look::TabPaper * At768 + 0.5)) < 1e-9 && std::fabs(Paper878 - (Look::TabPaper * 878.0 / 972.0 + 0.5)) < 1e-9 && Look::FigurePx(At768) >= 9.0 - 1e-9);
+		std::printf("(ruling 4: two figures 1 px closer, the tab as wide as it was; paper beside them %.2f px at 1024 by 768 (0010: %.2f), %.2f at 1441 by 878 (0010: %.2f), at least %.2f px from 600 high; the widest figures' ink at least %.2f px apart from 600 high)\n",
+			Paper768, Look::TabPaper * At768, Paper878, Look::TabPaper * 878.0 / 972.0, LeastPaper, Least);
+		// How much of the ribbon's tails shows round the tab (not under the disc, nor under the tab), for the art
+		// director: one figure leaves most of each tail; two or more cover most of what the disc leaves.
+		double Shows[3] = { 0.0, 0.0, 0.0 };
+		for (int Figures = 1; Figures <= 3; ++Figures)
+		{
+			const FBox Tab = Look::TabOf(Figures, 878.0 / 972.0);
+			int Out = 0, Seen = 0;
+			for (const Look::FTail& Tail : Look::Tails)
+			{
+				const double Turn = Tail.Degrees * 3.141592653589793 / 180.0, AlongX = std::cos(Turn), AlongY = std::sin(Turn);
+				for (int I = 0; I <= 160; ++I)
+				{
+					for (int J = 0; J <= 40; ++J)
+					{
+						const double Along = (I / 160.0 - 0.5) * Tail.Long, Across = (J / 40.0 - 0.5) * Tail.Thick;
+						const double X = Tail.X + Along * AlongX - Across * AlongY, Y = Tail.Y + Along * AlongY + Across * AlongX;
+						if (std::hypot(X - Look::MidX, Y - Look::MidY) <= Look::DiscR)
+						{
+							continue;
+						}
+						++Out;
+						Seen += X >= Tab.MinX && X <= Tab.MaxX && Y >= Tab.MinY && Y <= Tab.MaxY ? 0 : 1;
+					}
+				}
+			}
+			Shows[Figures - 1] = Out > 0 ? static_cast<double>(Seen) / Out : 0.0;
+		}
+		CHECK(Shows[0] >= 0.5 && Shows[1] < Shows[0]);
+		std::printf("(the count's figures %.2f px tall at 1441 by 878, %.2f at 1920 by 1080, %.2f at 1024 by 768; 9 px at CountPt from a window %.0f high; the tab %.1f by %.1f units for one figure at 1441 by 878;"
+			" of the tails clear of the disc %.0f%% shows round one figure's tab, %.0f%% round two figures', %.0f%% round three)\n",
+			Look::FigurePx(878.0 / 972.0), Look::FigurePx(1080.0 / 972.0), Look::FigurePx(768.0 / 972.0), Floor, Look::TabOf(1, 878.0 / 972.0).MaxX - Look::TabOf(1, 878.0 / 972.0).MinX,
+			Look::TabOf(1, 878.0 / 972.0).MaxY - Look::TabOf(1, 878.0 / 972.0).MinY, Shows[0] * 100.0, Shows[1] * 100.0, Shows[2] * 100.0);
+	}
+
+	// 7. "Would look the same" is what the screen draws: below a window 972 high no order sign is pressed (the whole set
+	// is pressed or none, Look::SetPressed), every signed seal shows the three lines, and the month stands folded as so
+	// drawn (AsDrawn; EdgeNews keeps both folds, FEdgeNewsBoard::Plain, and the layer stands the one it draws).
+	{
+		// (the set is pressed where SignHolds says for its 16 of 192 in a 192 by 128 picture: from 972 high up)
+		bool bSet = true;
+		for (int High = 400; High <= 4000; High += 7)
+		{
+			const double P = High / 972.0;
+			bSet = bSet && Look::SetPressed(P) == Look::SignHolds(Look::SealFloor, Look::SignPictureW, Look::SignPictureH, P) && Look::SetPressed(P) == (High >= 972);
+		}
+		CHECK(bSet && Look::SetPressed(1080.0 / 972.0) && Look::SetPressed(1786.0 / 972.0) && !Look::SetPressed(878.0 / 972.0) && !Look::SetPressed(768.0 / 972.0) && Look::SetPressed(0.0));
+		// (a sign pressed stays a sign; not pressed, or with no seal picture to press, it is the three lines; any other mark,
+		// the wax and the pulse are as they were)
+		const FAlike Inf = AlikeOf(ESection::Row, "LOST", -1, "inf"), Nothing = AlikeOf(ESection::Row, "LOST", -1, "fort"), Lines = AlikeOf(ESection::Row, "LOST", -1, "");
+		CHECK(Inf.Glyph == EGlyph::Sign && AsDrawn(Inf, true) == Inf && AsDrawn(Inf, false) == Lines && AsDrawn(Inf, false).Sign.empty());
+		CHECK(Nothing.Glyph == EGlyph::Sign && AsDrawn(Nothing, true) == Lines && AsDrawn(Nothing, false) == Lines);
+		const FAlike War = AlikeOf(ESection::Band, "WAR", -1, ""), Warned = AlikeOf(ESection::Band, "WARNING", -1, ""), Star = AlikeOf(ESection::Row, "", 1, "star");
+		CHECK(AsDrawn(War, false) == War && AsDrawn(Warned, false) == Warned && AsDrawn(Warned, false).IsWarning() && AsDrawn(Star, false) == Star && Star.Glyph == EGlyph::News);
+		// (and a seal opened in one fold marks the seals of the other that share an item with it: RunsMeet, weighed
+		// without an int sum that could overflow)
+		CHECK(RunsMeet({ 3, 21 }, { 5, 1 }) && RunsMeet({ 5, 1 }, { 3, 21 }) && RunsMeet({ 3, 21 }, { 23, 3 }) && !RunsMeet({ 3, 21 }, { 24, 3 }) && !RunsMeet({ 24, 3 }, { 3, 21 }));
+		CHECK(RunsMeet({ 0, 1 }, { 0, 1 }) && !RunsMeet({ 0, 0 }, { 0, 1 }) && !RunsMeet({ INT_MIN, INT_MAX }, { INT_MAX, 1 }) && RunsMeet({ INT_MAX, 1 }, { INT_MAX, INT_MAX }));
+
+		// Over the real months: the fold as drawn below 972 high covers every item in order, each run alike as drawn and
+		// whole, three alike as drawn never left standing apart, and its words say only what the card does; where no item
+		// of a month has a sign pressed, the two folds are one. Where the set is pressed, the fold is AlikeOf's as before
+		// (every sign the months press has its seal picture).
+		const std::vector<FMonth> Months = ReadMonths();
+		std::vector<FAlike> Drawn, Pressed;
+		std::vector<FAlikeRun> PressedRuns;
+		int Differ = 0, Stood = 0, StoodPlain = 0, Bad = 0;
+		bool bCover = true, bRight = true, bSamePressed = true, bOneWhereNoSign = true;
+		std::string Why, First, Poland, Ruhr;
+		for (const FMonth& Month : Months)
+		{
+			Drawn.clear();
+			Pressed.clear();
+			bool bAnySign = false;
+			for (const FAlike& Look : Month.Looks)
+			{
+				Drawn.push_back(AsDrawn(Look, false));
+				Pressed.push_back(AsDrawn(Look, true));
+				bAnySign = bAnySign || Look.Glyph == EGlyph::Sign;
+			}
+			bSamePressed = bSamePressed && Pressed == Month.Looks;
+			FoldAlike(Drawn, Runs);
+			FoldAlike(Month.Looks, PressedRuns);
+			bCover = bCover && RunsCover(Runs, static_cast<int>(Drawn.size()));
+			bRight = bRight && RunsRight(Drawn, Runs, Why);
+			bool bSame = Runs.size() == PressedRuns.size();
+			for (size_t Index = 0; bSame && Index < Runs.size(); ++Index)
+			{
+				bSame = Runs[Index].First == PressedRuns[Index].First && Runs[Index].Count == PressedRuns[Index].Count;
+			}
+			bOneWhereNoSign = bOneWhereNoSign && (bAnySign || bSame);
+			Differ += bSame ? 0 : 1;
+			Stood += static_cast<int>(PressedRuns.size());
+			StoodPlain += static_cast<int>(Runs.size());
+			for (const FAlikeRun& Run : Runs)
+			{
+				const std::string Said = FoldWords(Month.Said, Run);
+				if (Run.Count > 1 && !SaysOnlyTheCard(Month.Said, Run, Said, Why))
+				{
+					++Bad;
+					First = First.empty() ? Said + " (" + Why + ")" : First;
+				}
+			}
+			if (Month.Seat == "POL" && Month.Date == "September 1939")
+			{
+				// (24 brass seals of lines and signs before, more than nine: at 1441 by 878, 8 stood and a "+N". Drawn, the
+				// fronts' 21 rows that all show the three lines in plain brass are one, and home's three another: 8 in all)
+				const bool bFronts = Runs.size() == 8 && Runs[3].First == 3 && Runs[3].Count == 21 && Runs[5].Count == 3 && PressedRuns.size() > 9;
+				CHECK(bFronts);
+				Poland = bFronts ? FoldWords(Month.Said, Runs[3]) : std::string();
+			}
+			if (Month.Seat == "GER" && Month.Date == "November 1939")
+			{
+				// ("Ruhr is bombed", the lead; "Ruhr HIT", a raid's row signed bmr; and a directive at home: three plain
+				// brass seals of three lines side by side, where the bomber is not pressed)
+				CHECK(Runs.size() == 1 && Runs[0].Count == 3 && PressedRuns.size() == 3);
+				Ruhr = Runs.size() == 1 ? FoldWords(Month.Said, Runs[0]) : std::string();
+			}
+		}
+		CHECK(bCover && bRight);
+		CHECK(bSamePressed && bOneWhereNoSign);
+		CHECK(Bad == 0 && Differ >= 5 && StoodPlain < Stood);
+		CHECK(Poland == "Polish Silesia LOST against Germany; Krakow LOST against Germany; Lwow LOST against Germany; and 18 more");
+		CHECK(Ruhr == "Ruhr is bombed; Ruhr HIT; A directive from the war cabinet: Take Lodz");
+		if (Bad > 0)
+		{
+			std::printf("  first: %s\n", First.c_str());
+		}
+		std::printf("(folded as drawn below 972 high, where no order sign is pressed: %d seals over the real months, against %d where the set is pressed; %d months differ. POL September 1939: \"%s\")\n",
+			StoodPlain, Stood, Differ, Poland.c_str());
+		// (Mac run 3's month presses no sign: both folds are its four)
+		const FMonth Three3 = RunThree();
+		std::vector<FAlike> ThreeDrawn;
+		for (const FAlike& Look : Three3.Looks)
+		{
+			ThreeDrawn.push_back(AsDrawn(Look, false));
+		}
+		FoldAlike(ThreeDrawn, Runs);
+		CHECK(Runs.size() == 4 && Runs[0].Count == 9 && Runs[3].Count == 5);
+	}
+}
+
+namespace
+{
+	/**
+	 * The test's own list of the joining and small words a cut never ends on, kept apart from EdgeSeals' own: the rules'
+	 * LITTLE (src/campaign/monthcard.ts, the card's own cut), and "her". A word of stops only, or a dash, counts too.
+	 */
+	bool IsSmall(std::string Word)
+	{
+		while (!Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'))
+		{
+			Word.pop_back();
+		}
+		if (Word.empty() || Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94")
+		{
+			return true;
+		}
+		for (char& Letter : Word)
+		{
+			Letter = Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+		}
+		for (const char* Small : { "a", "an", "the", "of", "at", "in", "on", "to", "with", "for", "from", "by", "and", "or", "but", "its", "their", "his", "is", "are", "was",
+				 "were", "be", "been", "has", "have", "had", "can", "could", "will", "would", "may", "must", "not", "no", "it", "they", "he", "we", "that", "which",
+				 "as", "if", "so", "than", "then", "when", "while", "before", "after", "until", "because", "about", "out", "up", "off", "into", "over", "under",
+				 "near", "round", "against", "between", "who", "whose", "her" })
+		{
+			if (Word == Small)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A line's words, split at spaces. */
+	std::vector<std::string> WordsOf(const std::string& Line)
+	{
+		std::vector<std::string> Out;
+		size_t At = 0;
+		while (At < Line.size())
+		{
+			while (At < Line.size() && Line[At] == ' ')
+			{
+				++At;
+			}
+			const size_t Start = At;
+			while (At < Line.size() && Line[At] != ' ')
+			{
+				++At;
+			}
+			if (At > Start)
+			{
+				Out.push_back(Line.substr(Start, At - Start));
+			}
+		}
+		return Out;
+	}
+}
+
+/**
+ * The eight-word cut never ends on a joining or small word (the rules' LITTLE: at, in, on, of, to, by, for, from, with,
+ * and, or, the, a, an, its, his, their, is, has, have, been, under, round...; and her), on a dash or on stops standing
+ * apart, nor leaves a bracket open: it steps back to the last word that says something. A seal's own words and each
+ * line a folded seal lists alike ("The Baltic Fleet shells the Finnish troops at, and 2 more" was 0010's first form),
+ * over the 48 real months, every cut's last word shown.
+ */
+static void TestCuts()
+{
+	// Each small word, in any case and with a stop after it, as the eighth word: the cut steps back to the seventh.
+	bool bBack = true;
+	for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their", "is", "are", "was",
+			 "were", "be", "been", "has", "have", "had", "as", "but", "into", "over", "under", "round", "against", "between", "because", "whose" })
+	{
+		const std::string Lower(Small);
+		std::string Upper = Lower;
+		Upper[0] = static_cast<char>(Upper[0] - 'a' + 'A');
+		bBack = bBack && EightWords("one two three four five six seven " + Lower + " nine ten") == "one two three four five six seven";
+		bBack = bBack && EightWords("one two three four five six seven " + Upper + " nine ten") == "one two three four five six seven";
+		bBack = bBack && EightWords("one two three four five six seven " + Lower + ", nine ten") == "one two three four five six seven";
+	}
+	CHECK(bBack);
+	// (a word that only starts or ends like one is a word that says something)
+	CHECK(EightWords("one two three four five six seven another nine") == "one two three four five six seven another");
+	CHECK(EightWords("one two three four five six seven theirs nine") == "one two three four five six seven theirs");
+	CHECK(EightWords("one two three four five six seven Inn nine") == "one two three four five six seven Inn");
+	CHECK(EightWords("one two three four five six seven forth nine") == "one two three four five six seven forth");
+	// (several in a row, and a dash among them, all go; a stop the cut then ends on is dropped, as at any cut)
+	CHECK(EightWords("one two three four five six of the nine ten") == "one two three four five six");
+	CHECK(EightWords("one two three four five six \xE2\x80\x94 of nine ten") == "one two three four five six");
+	CHECK(EightWords("one two three four five six, and the nine ten") == "one two three four five six");
+	// (a line that is not cut keeps its own last word, whatever it is; nor does a line of nothing else lose its first)
+	CHECK(EightWords("The siege is lifted at last and") == "The siege is lifted at last and");
+	CHECK(EightWords("of the a an in on at to by", 8) == "of" && EightWords("a b c", 2) == "a b" && EightWords("a b c", 0) == "a");
+	// (the review's: stops standing apart, a dash with a stop on it, and the space before them, are all stepped back
+	// past; a bracket the cut would leave open goes back to before the word that opened it; one the line closes stays)
+	CHECK(EightWords("The fleet moves on Malta and the ; convoy waits off Alexandria") == "The fleet moves on Malta");
+	CHECK(EightWords("German troops close round Kiev \xE2\x80\x94, the city holds out against them") == "German troops close round Kiev");
+	CHECK(EightWords("one two three four five six seven -; nine") == "one two three four five six seven");
+	CHECK(EightWords(", Paris falls today", 1) == "Paris" && EightWords(" ; Paris falls") == "Paris falls" && EightWords(" ; , ").empty());
+	CHECK(EightWords("Fifth Army: VI Corps (36th and 34th Infantry Divisions) loses 1,073 men to enemy ships") == "Fifth Army: VI Corps");
+	CHECK(EightWords("VI Corps (two divisions) loses 1,073 men to enemy ships and aircraft") == "VI Corps (two divisions) loses 1,073 men");
+	CHECK(EightWords("(one two three four five six seven eight nine") == "(one two three four five six seven eight");
+	CHECK(EightWords("Charles de Gaulle reports for duty and is waiting for a command.") == "Charles de Gaulle reports for duty");
+	CHECK(EightWords("Soviet Union NEWS: British and Soviet troops have entered Iran.") == "Soviet Union NEWS: British and Soviet troops");
+	// 0010's own: elsewhere's first item, and a run of three of them. (The cuts TestWords holds that ended on a small
+	// word, "troops on the", "leaves for", "the attack from", now end a word or two sooner.)
+	const std::string Baltic = "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland.";
+	CHECK(EightWords(Baltic) == "The Baltic Fleet shells the Finnish troops");
+	{
+		// (a folded seal's lines are each item's eight words, as its own seal's are: the eight-word cut stands for every
+		// seal, ruling 5 of 64(g)(4); a row's line is its title, place and head)
+		std::vector<FSaid> Said;
+		Said.push_back(PlainSaid(ESection::Elsewhere, Baltic));
+		Said.push_back(PlainSaid(ESection::Elsewhere, "Hungary joins the Axis."));
+		Said.push_back(PlainSaid(ESection::Elsewhere, "Romania joins the Axis."));
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; Hungary joins the Axis; Romania joins the Axis");
+		Said[0] = PlainSaid(ESection::Elsewhere, "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland and the Aaland Islands.");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; Hungary joins the Axis; Romania joins the Axis");
+		Said[0] = PlainSaid(ESection::Elsewhere, "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Hungary joins the Axis; Romania joins the Axis");
+		// (items of other parts of the card: each its own line; a row's, its title)
+		Said[1] = PlainSaid(ESection::Home, "Research complete: Radar.");
+		Said[2] = PlainSaid(ESection::Staff, "Your staff on the fighting at Sedan.");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Research complete: Radar; Your staff on the fighting at Sedan");
+		CHECK(FoldWords(Said, FAlikeRun{ 1, 2 }) == "Research complete: Radar; Your staff on the fighting at Sedan");
+		Said[2] = RowSaid("Ruhr", "HIT", "", "", "Their bombers hit its factories by night.");
+		CHECK(ShortLine(Said[2]) == "Ruhr HIT" && FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Research complete: Radar; Ruhr HIT");
+		CHECK(ShortLine(RowSaid("Polish Silesia", "LOST", "against", "Germany", "Our troops were driven from it.")) == "Polish Silesia LOST against Germany");
+	}
+
+	// Over the 48 real months: every item's own words, and every line a folded seal lists, cut or not; every cut's last
+	// word is one that says something, and the cut is the line's own first words.
+	const std::vector<FMonth> Months = ReadMonths();
+	std::vector<FAlikeRun> Runs;
+	std::vector<std::pair<std::string, int>> Last;
+	int Items = 0, Cuts = 0, Bad = 0, Short = 0, FoldCuts = 0, FoldBad = 0;
+	std::string FirstBad, FoldLast;
+	for (const FMonth& Month : Months)
+	{
+		for (const FSaid& Said : Month.Said)
+		{
+			++Items;
+			const std::string Cut = EightWords(Said.Line);
+			const std::vector<std::string> Whole = WordsOf(Said.Line), Kept = WordsOf(Cut);
+			if (Kept.size() >= Whole.size())
+			{
+				continue;
+			}
+			++Cuts;
+			std::string End = Kept.empty() ? std::string() : Kept.back();
+			while (!End.empty() && (End.back() == ',' || End.back() == ';' || End.back() == ':'))
+			{
+				End.pop_back();
+			}
+			const bool bOwn = Said.Line.compare(0, Cut.size(), Cut) == 0;
+			if (Kept.empty() || IsSmall(End) || !bOwn)
+			{
+				++Bad;
+				FirstBad = FirstBad.empty() ? Cut : FirstBad;
+			}
+			Short += Kept.size() < 4 ? 1 : 0;
+			auto Found = std::find_if(Last.begin(), Last.end(), [&End](const std::pair<std::string, int>& Each) { return Each.first == End; });
+			if (Found == Last.end())
+			{
+				Last.emplace_back(End, 1);
+			}
+			else
+			{
+				++Found->second;
+			}
+		}
+		// (a folded seal that lists its items' own lines: each line it lists that is cut)
+		FoldAlike(Month.Looks, Runs);
+		for (const FAlikeRun& Run : Runs)
+		{
+			const std::string Words = FoldWords(Month.Said, Run);
+			if (Run.Count < 2 || NamesItsItems(Run, Words))
+			{
+				continue;
+			}
+			const int Named = ItemsNamed(Month.Said, Run, Words);
+			for (int Index = Run.First; Index < Run.First + Named; ++Index)
+			{
+				const FSaid& Each = Month.Said[static_cast<size_t>(Index)];
+				const std::string Line = ShortLine(Each);
+				if (WordsOf(Line).size() >= WordsOf(Each.Line).size() || (Each.Section == ESection::Row && !Each.Head.empty()))
+				{
+					continue;
+				}
+				++FoldCuts;
+				const std::vector<std::string> Kept = WordsOf(Line);
+				const std::string End = Kept.empty() ? std::string() : Kept.back();
+				FoldBad += Kept.empty() || IsSmall(End) || !Contains(Words, Line) ? 1 : 0;
+				FoldLast += (FoldLast.empty() ? "" : "; ") + Line + " [" + End + "]";
+			}
+		}
+	}
+	CHECK(Months.size() == 48 && Cuts >= 40 && Bad == 0 && Short == 0);
+	CHECK(FoldCuts >= 1 && FoldBad == 0);
+	if (Bad > 0)
+	{
+		std::printf("  first: %s\n", FirstBad.c_str());
+	}
+	std::sort(Last.begin(), Last.end(), [](const std::pair<std::string, int>& A, const std::pair<std::string, int>& B) { return A.second != B.second ? A.second > B.second : A.first < B.first; });
+	std::string Shown;
+	for (const std::pair<std::string, int>& Each : Last)
+	{
+		Shown += (Shown.empty() ? "" : ", ") + Each.first + (Each.second > 1 ? " x" + std::to_string(Each.second) : std::string());
+	}
+	std::printf("(the real months' eight words: %d of %d items cut, %d ending on a small word; every cut's last word: %s)\n", Cuts, Items, Bad, Shown.c_str());
+	std::printf("(the real months' folded seals' listed lines that are cut: %d, %d ending on a small word: %s)\n", FoldCuts, FoldBad, FoldLast.c_str());
+}
+
+namespace
+{
+	/** A source file of the game's, read whole: "" where it cannot be read. */
+	std::string SourceText(const char* Folder, const char* Name)
+	{
+		const std::filesystem::path Path = std::filesystem::path(Folder) / ".." / ".." / "Source" / "TheaterCommand" / "Campaign" / Name;
+		std::FILE* File = std::fopen(Path.string().c_str(), "rb");
+		std::string Text;
+		if (!File)
+		{
+			return Text;
+		}
+		char Block[4096];
+		for (size_t Got; (Got = std::fread(Block, 1, sizeof(Block), File)) > 0;)
+		{
+			Text.append(Block, Got);
+		}
+		std::fclose(File);
+		return Text;
+	}
+
+	/**
+	 * The words 0010 gave a folded seal that cannot name its run, to measure today's hover by: the first item's line
+	 * whole where it is one clause (no , ; : and no sentence's end before its last word) of at most 16 words, else its
+	 * eight words; then how many more reports, and the parts of the card they are in.
+	 */
+	std::string TodaysWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words)
+	{
+		if (Run.Count < 2 || NamesItsItems(Run, Words))
+		{
+			return Words;
+		}
+		const std::string& Line = Said[static_cast<size_t>(Run.First)].Line;
+		const std::vector<std::string> All = WordsOf(Line);
+		bool bClause = !All.empty() && All.size() <= 16;
+		for (size_t Index = 0; bClause && Index < All.size(); ++Index)
+		{
+			const char Last = All[Index].back();
+			bClause = Last != ',' && Last != ';' && Last != ':' && Last != '!' && Last != '?' && (Last != '.' || Index + 1 == All.size());
+		}
+		std::string Own = bClause ? Line : EightWords(Line);
+		while (!Own.empty() && (Own.back() == '.' || Own.back() == ',' || Own.back() == ':' || Own.back() == ';' || Own.back() == ' '))
+		{
+			Own.pop_back();
+		}
+		if (Own.empty())
+		{
+			return Words;
+		}
+		std::vector<std::string> Parts;
+		for (int Index = Run.First + 1; Index < Run.First + Run.Count; ++Index)
+		{
+			const ESection Part = Said[static_cast<size_t>(Index)].Section;
+			const std::string Named = Part == ESection::Row ? " on your fronts" : Part == ESection::Home ? " at home" : Part == ESection::Staff ? " from your staff" : Part == ESection::Elsewhere ? " elsewhere in the war" : "?";
+			if (std::find(Parts.begin(), Parts.end(), Named) == Parts.end())
+			{
+				Parts.push_back(Named);
+			}
+		}
+		std::string Where;
+		for (size_t Index = 0; Index < Parts.size(); ++Index)
+		{
+			Where += Index == 0 ? Parts[Index] : (Index + 1 == Parts.size() ? " and" : ",") + Parts[Index];
+		}
+		Where = Contains(Where, "?") ? std::string() : Where;
+		const int More = Run.Count - 1;
+		return Own + "; " + std::to_string(More) + (More == 1 ? " more report" : " more reports") + Where;
+	}
+
+	/** The lines the engine's tip sets some words on, wrapped at a word where the next would pass one line's letters; Widest, its longest line's. */
+	int TipLines(const std::string& Words, int& Widest)
+	{
+		int Lines = 0, Letters = 0;
+		Widest = 0;
+		for (const std::string& Word : WordsOf(Words))
+		{
+			const int Long = LettersSet(Word);
+			if (Lines == 0 || Letters + 1 + Long > HoverLine)
+			{
+				++Lines;
+				Letters = Long;
+			}
+			else
+			{
+				Letters += 1 + Long;
+			}
+			Widest = std::max(Widest, Letters);
+		}
+		return Lines;
+	}
+}
+
+/**
+ * The design director's ruling 64(g)(4), 13:00Z: a folded seal that cannot name its run lists each item's own short
+ * line, in card order, as many as the hover's own size holds, then "and N more". The hover is the engine's own tip,
+ * sized to its words and wrapped at 1000 units, in the typed face at 9.5 points (CampaignHUD's "ToolTip.Font"), which
+ * the layer leaves as it is. Slate sets each letter at a whole pixel's advance at the tip's scale, which is the game
+ * layer's (the window's height over 1080) or the desktop's: so one line of it is 125 letters at 1920 by 1080, and 118
+ * where it is fewest, a window 640 high (the review of the rulings' build: 131 held only were the advance fractional).
+ * No hover grows: every hover the real months stand, in either fold, is one such line on every screen, where today's
+ * tallest is two; and none is wider than the tip's wrap, nor than one line of it. The card and the press are as they
+ * were (FoldAlike's runs, the card's rows: not touched). Every folded seal's hover is printed, with how many of its
+ * items it names and whether it says "and N more".
+ */
+static void TestHover(const char* Folder)
+{
+	// 1. The hover's own size: 118 letters to its line on every screen the seals are held to (from a window 600 high to
+	// 3 px a unit, and a desktop of 1 to 3 px a point), each letter its whole pixel's advance; 119 wrap in a window 640
+	// high. 125 at 1920 by 1080, 120 at 783 high, 133 at two pixels a unit; 131 only with fractional advances.
+	const double Letter = TipAdvance * TipPt * 4.0 / 3.0;
+	CHECK(TipLetters() == HoverLine && TipLettersAt(640.0 / 1080.0) == HoverLine && TipLettersAt(1.0) == 125 && TipLettersAt(783.0 / 1080.0) == 120 && TipLettersAt(2.0) == 133);
+	CHECK(static_cast<int>(std::floor(TipWrap / Letter)) == 131 && TipLettersAt(0.0) == 125);
+	{
+		bool bEvery = true, bLeast = false;
+		for (int High = 600; High <= 3240; ++High)
+		{
+			const double Scale = High / 1080.0;
+			const double Px = std::round(Letter * Scale);
+			bEvery = bEvery && TipLettersAt(Scale) == LineAt(Scale) && HoverLine * Px <= TipWrap * Scale + 1e-9 && TipLettersAt(Scale) >= HoverLine;
+			bLeast = bLeast || (HoverLine + 1) * Px > TipWrap * Scale;
+		}
+		for (int Quarters = 4; Quarters <= 12; ++Quarters)
+		{
+			bEvery = bEvery && TipLettersAt(Quarters / 4.0) == LineAt(Quarters / 4.0) && TipLettersAt(Quarters / 4.0) >= HoverLine;
+		}
+		CHECK(bEvery && bLeast);
+	}
+	CHECK(LettersOf("Soviet troops") == 13 && LettersOf("4\xC2\xAA Armata") == 9 && LettersOf("\xC5\x81\xC3\xB3" "d\xC5\xBA") == 4 && LettersOf("") == 0);
+	if (Folder)
+	{
+		// (the tip's face is the HUD's, at TipPt; the layer gives its words to the engine's tip and nothing of its own: no
+		// tip widget, no wrap; nor does the game set the engine's wrap anywhere in its source)
+		const std::string Hud = SourceText(Folder, "CampaignHUD.cpp"), Layer = SourceText(Folder, "EdgeNewsLayer.cpp");
+		const std::string Key = "Style->Set(\"ToolTip.Font\", Typed(";
+		const size_t Font = Hud.find(Key);
+		char* After = nullptr;
+		const double Size = Font == std::string::npos ? 0.0 : std::strtod(Hud.c_str() + Font + Key.size(), &After);
+		CHECK(!Hud.empty() && Font != std::string::npos && std::fabs(Size - TipPt) < 1e-9 && After != nullptr && std::string(After).rfind("f));", 0) == 0);
+		CHECK(Hud.find("\"ToolTip.Font\"", Font + Key.size()) == std::string::npos);
+		CHECK(!Layer.empty() && Contains(Layer, "SetToolTipText(") && !Contains(Layer, "SToolTip") && !Contains(Layer, "SetToolTip(") && !Contains(Layer, "WrapTextAt"));
+		bool bWrapSet = false;
+		for (const char* Name : { "CampaignHUD.cpp", "EdgeNewsLayer.cpp", "EdgeNews.cpp", "EdgeSeals.cpp" })
+		{
+			bWrapSet = bWrapSet || Contains(SourceText(Folder, Name), "ToolTipWrapWidth");
+		}
+		CHECK(!bWrapSet);
+	}
+	else
+	{
+		std::printf("(the order signs' folder was not given: the HUD's tip face was not read)\n");
+	}
+
+	// 2. Mac run 3's elsewhere five: two of their own lines and how many more.
+	{
+		const FMonth Three = RunThree();
+		const std::string Elsewhere = FoldWords(Three.Said, FAlikeRun{ 11, 5 });
+		CHECK(Elsewhere == "Soviet troops close round Helsinki; Soviet troops blow the bridges over the Oka; and 3 more");
+		// (a smaller room lists fewer; with none for even the first whole, the first a word shorter at a time)
+		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 60) == "Soviet troops close round Helsinki; and 4 more");
+		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 31) == "Soviet troops close; and 4 more" && FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 30) == "Soviet troops; and 4 more");
+		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 5) == "5 elsewhere in the war");
+		// (a front's rows: the first line, the row's title, is never cut, so that no place stands without what happened;
+		// with no room for it and its "and N more", the count and where. The three are one place, so form 2 lists none)
+		FMonth Rows;
+		AddItem(Rows, ESection::Row, "HIT", -1, "bmr", "Ruhr", "", "", "Their bombers hit its factories.");
+		AddItem(Rows, ESection::Row, "HIT", -1, "bmr", "Ruhr", "", "", "Their bombers hit its rail yards.");
+		AddItem(Rows, ESection::Row, "HIT", -1, "bmr", "Ruhr", "", "", "Their bombers hit its docks.");
+		CHECK(FoldWords(Rows.Said, FAlikeRun{ 0, 3 }) == "Ruhr HIT; Ruhr HIT: Their bombers hit its rail yards; Ruhr HIT: Their bombers hit its docks");
+		CHECK(FoldWords(Rows.Said, FAlikeRun{ 0, 3 }, 20) == "Ruhr HIT; and 2 more" && FoldWords(Rows.Said, FAlikeRun{ 0, 3 }, 19) == "3 on your fronts");
+		std::string Why;
+		CHECK(SaysOnlyTheCard(Rows.Said, FAlikeRun{ 0, 3 }, "3 on your fronts", Why) && !SaysOnlyTheCard(Rows.Said, FAlikeRun{ 0, 3 }, "Ruhr; and 2 more", Why));
+	}
+
+	// 3. Over the 48 real months, both folds (pressed, and as drawn below 972 high): every hover that stands, a seal's own
+	// words, a folded seal's or the "+N"'s, on one line of the tip; today's tallest was two.
+	const std::vector<FMonth> Months = ReadMonths();
+	std::vector<FAlike> Drawn;
+	std::vector<FAlikeRun> Pressed, Plain;
+	int PressedFolded = 0, PressedMore = 0, Hovers = 0, Over = 0, Longest = 0, TodaysLongest = 0, TodaysTallest = 0, TodaysWidest = 0, TodaysOver = 0, Widest = 0, Folded = 0, Whole = 0, More = 0, NamedAll = 0, Bad = 0, Twice = 0;
+	int ByNamed[5] = { 0, 0, 0, 0, 0 };
+	std::string Why, First, LongestSaid;
+	for (const FMonth& Month : Months)
+	{
+		Drawn.clear();
+		for (const FAlike& Look : Month.Looks)
+		{
+			Drawn.push_back(AsDrawn(Look, false));
+		}
+		FoldAlike(Month.Looks, Pressed);
+		FoldAlike(Drawn, Plain);
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			const std::vector<FAlikeRun>& Runs = Pass == 0 ? Pressed : Plain;
+			int Kept = 0, Items = 0;
+			for (const FAlikeRun& Run : Runs)
+			{
+				const std::string Said = Run.Count == 1 ? EightWords(Month.Said[static_cast<size_t>(Run.First)].Line) : FoldWords(Month.Said, Run);
+				const std::string Today = Run.Count == 1 ? Said : TodaysWords(Month.Said, Run, Said);
+				int Wide = 0, TodaysWide = 0;
+				const int Lines = TipLines(Said, Wide), TodaysLines = TipLines(Today, TodaysWide);
+				++Hovers;
+				Over += Lines > 1 || LettersSet(Said) > HoverLine ? 1 : 0;
+				Widest = std::max(Widest, Wide);
+				TodaysTallest = std::max(TodaysTallest, TodaysLines);
+				TodaysWidest = std::max(TodaysWidest, TodaysWide);
+				TodaysLongest = std::max(TodaysLongest, LettersSet(Today));
+				TodaysOver += LettersSet(Today) > HoverLine ? 1 : 0;
+				if (LettersSet(Said) > Longest)
+				{
+					Longest = LettersSet(Said);
+					LongestSaid = Said;
+				}
+				++Kept;
+				Items += Run.Count;
+				if (Run.Count < 2)
+				{
+					continue;
+				}
+				if (!SaysOnlyTheCard(Month.Said, Run, Said, Why))
+				{
+					++Bad;
+					First = First.empty() ? Said + " (" + Why + ")" : First;
+				}
+				// (each folded seal once: the plain fold's runs that are the pressed fold's say the same)
+				bool bAgain = false;
+				for (const FAlikeRun& Other : Pressed)
+				{
+					bAgain = bAgain || (Pass == 1 && Other.First == Run.First && Other.Count == Run.Count);
+				}
+				if (bAgain)
+				{
+					continue;
+				}
+				const int Named = ItemsNamed(Month.Said, Run, Said);
+				Twice += NamesItsItems(Run, Said) ? 0 : ListedTwice(Month.Said, Run, Named);
+				++Folded;
+				PressedFolded += Pass == 0 ? 1 : 0;
+				PressedMore += Pass == 0 && Named < Run.Count ? 1 : 0;
+				Whole += NamesItsItems(Run, Said) ? 0 : 1;
+				NamedAll += Named == Run.Count ? 1 : 0;
+				More += Named < Run.Count ? 1 : 0;
+				++ByNamed[std::min(Named, 4)];
+				std::printf("  %s %s, %s, %d alike: names %d%s, %d letters: %s\n", Month.Seat.c_str(), Month.Date.c_str(), Pass == 0 ? "pressed" : "as drawn", Run.Count, Named,
+					Named < Run.Count ? (", and " + std::to_string(Run.Count - Named) + " more").c_str() : "", LettersSet(Said), Said.c_str());
+			}
+			// (the "+N", where more stand than the edge holds: at most the month's items less one)
+			const std::string Rest = std::to_string(std::max(Items - 1, 1)) + " more in the month's report";
+			++Hovers;
+			Over += LettersSet(Rest) > HoverLine ? 1 : 0;
+			(void)Kept;
+		}
+	}
+	CHECK(Months.size() == 48 && Hovers >= 500 && Over == 0 && Bad == 0);
+	CHECK(Longest <= HoverLine && Widest <= HoverLine && Widest * Letter <= TipWrap && Widest * std::round(Letter * 640.0 / 1080.0) <= TipWrap * 640.0 / 1080.0 && TodaysTallest == 2 && TodaysLongest > HoverLine);
+	CHECK(Folded >= 40 && Whole >= 20 && More >= 10 && NamedAll >= 20);
+	// (no listed line says one the list gave already, where the card's lines for them differ)
+	CHECK(Twice == 0);
+	if (Bad > 0)
+	{
+		std::printf("  first: %s\n", First.c_str());
+	}
+	std::printf("(the hover: one line of %d letters on every screen, each at its whole pixel's advance (%d at 1920 by 1080, %d at 783 high, %d at 640, %d with fractional advances); %d hovers over the real months in both folds, none of more than one line, the longest %d letters (\"%s\"); today %d are longer than that line, the longest %d letters on %d lines, its widest line %d)\n",
+		TipLetters(), TipLettersAt(1.0), TipLettersAt(783.0 / 1080.0), TipLettersAt(640.0 / 1080.0), static_cast<int>(std::floor(TipWrap / Letter)), Hovers, Longest, LongestSaid.c_str(), TodaysOver, TodaysLongest, TodaysTallest, TodaysWidest);
+	std::printf("(the real months' %d folded seals, %d where the set is pressed and %d more as drawn below 972 high: %d name every item, %d say \"and N more\" (%d of the pressed); %d list their items' own lines; naming 1: %d, 2: %d, 3: %d, 4 or more: %d, none: %d)\n",
+		Folded, PressedFolded, Folded - PressedFolded, NamedAll, More, PressedMore, Whole, ByNamed[1], ByNamed[2], ByNamed[3], ByNamed[4], ByNamed[0]);
+	// (one names a single item: SOV January 1944's three lines of 60 letters and more, where two and "and 1 more" pass the line)
+	CHECK(ByNamed[1] <= 1 && ByNamed[0] == 0);
 }
 
 /** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
@@ -857,9 +2790,9 @@ static void TestSealLook()
 	{
 		for (const double Scale : Scales)
 		{
-			Look::FStroke Strokes[4];
+			Look::FStroke Strokes[Look::MarkMost];
 			const int Count = Look::MarkOf(Glyph, Scale, Strokes);
-			bSome = bSome && Count > 0 && Count <= 4;
+			bSome = bSome && Count > 0 && Count <= Look::MarkMost;
 			const FMarkBox Box = MarkBox(Strokes, Count);
 			bInside = bInside && Box.Far + Look::WallOf(Scale) * std::sqrt(2.0) <= Look::HollowR + 1e-9;
 			for (int Index = 0; Index < Count; ++Index)
@@ -1873,6 +3806,322 @@ static void TestSealSigns(const char* Folder)
 	CHECK(bStray);
 }
 
+/**
+ * The count's face as the HUD gives it: the layer takes TabFace as it comes (it never sets its size), so the HUD's mount
+ * line (CampaignHUD.cpp, the call to MakeEdgeNewsLayer) must ask the kit's typed face, bold, at Look::CountPt, the size
+ * the tab and its 9 px floor are measured for. The source is found from the order signs' folder (Content/CityOrders).
+ */
+namespace
+{
+	/**
+	 * Whether a drawn mark has a straight upright stroke: a bar standing within 30 degrees of upright, a straight piece
+	 * of an ellipse's line as long as the line is thick (the old globe's meridian, a bar 16.4 long turned 90), or an
+	 * ellipse whose line fills its inside (no room between its two sides: an upright lens, a bar).
+	 */
+	bool HasUprightBar(const Look::FStroke* Strokes, int Count, std::string& Why)
+	{
+		for (int Index = 0; Index < Count; ++Index)
+		{
+			const Look::FStroke& Cut = Strokes[Index];
+			if (Cut.Kind == Look::EStroke::Bar && std::fabs(std::sin(Cut.Degrees * 3.141592653589793 / 180.0)) > 0.5)
+			{
+				Why = "a bar within 30 degrees of upright";
+				return true;
+			}
+			if (Cut.Kind != Look::EStroke::Ellipse)
+			{
+				continue;
+			}
+			if (Cut.Wide - 2.0 * Cut.Thick <= 0.0)
+			{
+				Why = "an ellipse whose line fills its inside, an upright lens";
+				return true;
+			}
+			// (each piece of the line shorter than the line is thick, and each turning the same way as the last, by a degree
+			// at the least: no two in line, so no straight run however short its pieces)
+			double LastTurn = 0.0;
+			for (int Step = 0; Step < Look::EllipseSteps; ++Step)
+			{
+				const FPoint A = Look::EllipsePoint(Cut, Step), B = Look::EllipsePoint(Cut, Step + 1), C = Look::EllipsePoint(Cut, Step + 2);
+				const double Piece = std::hypot(B.X - A.X, B.Y - A.Y);
+				const double Turn = std::atan2((B.X - A.X) * (C.Y - B.Y) - (B.Y - A.Y) * (C.X - B.X), (B.X - A.X) * (C.X - B.X) + (B.Y - A.Y) * (C.Y - B.Y)) * 180.0 / 3.141592653589793;
+				if (Piece >= Cut.Thick || std::fabs(Turn) < 1.0 || (Step > 0 && Turn * LastTurn <= 0.0))
+				{
+					Why = "a straight piece of the ellipse's line as long as it is thick, or two in line";
+					return true;
+				}
+				LastTurn = Turn;
+			}
+		}
+		return false;
+	}
+
+	/** How many of the game's source files under Source/TheaterCommand say Words, as a whole name, and which. */
+	int SourcesSaying(const char* Folder, const std::string& Words, std::string& Which)
+	{
+		int Files = 0;
+		const std::filesystem::path Root = std::filesystem::path(Folder) / ".." / ".." / "Source" / "TheaterCommand";
+		std::error_code Error;
+		for (std::filesystem::recursive_directory_iterator It(Root, Error), End; !Error && It != End; It.increment(Error))
+		{
+			const std::filesystem::path& Path = It->path();
+			if (!It->is_regular_file(Error) || (Path.extension() != ".cpp" && Path.extension() != ".h"))
+			{
+				continue;
+			}
+			std::FILE* File = std::fopen(Path.string().c_str(), "rb");
+			if (!File)
+			{
+				continue;
+			}
+			std::string Text;
+			char Block[4096];
+			for (size_t Got; (Got = std::fread(Block, 1, sizeof(Block), File)) > 0;)
+			{
+				Text.append(Block, Got);
+			}
+			std::fclose(File);
+			// (said as a whole name: the letter before it is none of a name's, so the bargains' SeaMarkOf is not MarkOf)
+			bool bSays = false;
+			for (size_t At = Text.find(Words); !bSays && At != std::string::npos; At = Text.find(Words, At + 1))
+			{
+				const char Before = At == 0 ? ' ' : Text[At - 1];
+				bSays = !((Before >= 'A' && Before <= 'Z') || (Before >= 'a' && Before <= 'z') || (Before >= '0' && Before <= '9') || Before == '_');
+			}
+			if (bSays)
+			{
+				++Files;
+				Which += (Which.empty() ? "" : " ") + Path.filename().string();
+			}
+		}
+		return Files;
+	}
+}
+
+/**
+ * The art director's ruling on the globe, 64(g)(4): the rest of the war's mark redrawn as a ring, one level equator and
+ * one curved meridian, an upright ellipse about 0.45 of the ring's width; no straight upright bar anywhere (the old
+ * straight meridian read as a cross in a circle). The 1.5 px floor (Look::Stroke) and the size, about 16.9 px at 1600 by
+ * 1000, are kept: every stroke holds 1.5 px on every screen the old one did. And the mend draws wherever the old sign
+ * drew (ruling 6): every drawn mark is laid by Look::MarkOf and painted by the layer's PaintMark alone, for a seal of one
+ * item and a folded one alike; the card's rows and the report draw no mark of the seals.
+ */
+static void TestGlobe(const char* Folder)
+{
+	const double Reference = (1000.0 / 900.0) * (1000.0 / 1080.0);
+	auto High = [](double Height) { return (1000.0 / 900.0) * (Height / 1080.0); };
+	const double Scales[] = { High(600.0), High(720.0), High(768.0), High(878.0), Reference, High(1080.0), High(1440.0), High(1786.0), 2.0 * Reference, 3.0 };
+	std::string Why;
+	// (the old globe, as 0010 drew it: a ring, a level bar and an upright one)
+	auto OldGlobe = [](double Scale, Look::FStroke (&Out)[Look::MarkMost])
+	{
+		Out[0] = Look::FStroke{ Look::EStroke::Ring, 0.0, 0.0, 16.4, Look::Stroke(1.7, Scale), 0.0, 0.0 };
+		Out[1] = Look::FStroke{ Look::EStroke::Bar, 0.0, 0.0, 16.4, Look::Stroke(1.6, Scale), 0.0, 0.0 };
+		Out[2] = Look::FStroke{ Look::EStroke::Bar, 0.0, 0.0, 16.4, Look::Stroke(1.6, Scale), 90.0, 0.0 };
+		return 3;
+	};
+	bool bShape = true, bNoBar = true, bOldBar = true, bThick = true, bSteps = true;
+	double RingGap = 1e9, MeridianGap = 1e9;
+	std::string Under;
+	for (const double Scale : Scales)
+	{
+		Look::FStroke Strokes[Look::MarkMost], Old[Look::MarkMost];
+		const int Count = Look::MarkOf(EGlyph::Globe, Scale, Strokes);
+		const int OldCount = OldGlobe(Scale, Old);
+		// (a ring 16.4 across; one level bar across it, the equator; and an upright ellipse 0.45 of the ring across, its
+		// middle line meeting the ring's at the poles; all three on the disc's middle)
+		const Look::FStroke& Ring = Strokes[0];
+		const Look::FStroke& Equator = Strokes[1];
+		const Look::FStroke& Meridian = Strokes[2];
+		bShape = bShape && Count == 3 && Ring.Kind == Look::EStroke::Ring && std::fabs(Ring.Long - 16.4) < 1e-9 && Equator.Kind == Look::EStroke::Bar && Equator.Degrees == 0.0
+			&& std::fabs(Equator.Long - Ring.Long) < 1e-9 && Meridian.Kind == Look::EStroke::Ellipse && std::fabs(Meridian.Wide / Ring.Long - 0.45) < 0.01 && Meridian.Long > Meridian.Wide
+			&& std::fabs((Meridian.Long - Meridian.Thick) * 0.5 - (Ring.Long - Ring.Thick) * 0.5) < 1e-9 && Ring.X == 0.0 && Ring.Y == 0.0 && Meridian.X == 0.0 && Meridian.Y == 0.0 && Equator.Y == 0.0;
+		// (no straight upright stroke; the old one had its upright bar)
+		std::string Said;
+		bNoBar = bNoBar && !HasUprightBar(Strokes, Count, Why);
+		bOldBar = bOldBar && HasUprightBar(Old, OldCount, Said);
+		// (every stroke 1.5 px, where every one of the old held it; and each as heavy as the old stroke it stands for)
+		for (int Index = 0; Index < Count; ++Index)
+		{
+			bThick = bThick && Strokes[Index].Thick * Scale >= Look::MinStrokePx - 1e-9 && Strokes[Index].Thick >= Old[Index].Thick - 1e-12;
+		}
+		for (int Index = 0; Index < OldCount; ++Index)
+		{
+			bThick = bThick && Old[Index].Thick * Scale >= Look::MinStrokePx - 1e-9;
+		}
+		// (the ellipse's line closes on itself)
+		const FPoint Top = Look::EllipsePoint(Meridian, 0), Again = Look::EllipsePoint(Meridian, Look::EllipseSteps), Side = Look::EllipsePoint(Meridian, Look::EllipseSteps / 4);
+		bSteps = bSteps && std::fabs(Top.X - Again.X) < 1e-9 && std::fabs(Top.Y - Again.Y) < 1e-9 && std::fabs(Top.X) < 1e-9 && Side.X > 0.0 && std::fabs(Side.Y) < 1e-9;
+		// (the counters: between the ring and the meridian at their widest, and inside the meridian, in px)
+		const double Between = (Ring.Long * 0.5 - Ring.Thick - Meridian.Wide * 0.5) * Scale, Inside = (Meridian.Wide - 2.0 * Meridian.Thick) * Scale;
+		if (Scale >= High(720.0) - 1e-12)
+		{
+			RingGap = std::min(RingGap, Between);
+			MeridianGap = std::min(MeridianGap, Inside);
+		}
+		else if (Between < Look::MinStrokePx || Inside < Look::MinStrokePx)
+		{
+			char Line[96];
+			std::snprintf(Line, sizeof(Line), "%.0f high: %.2f and %.2f px", Scale * 972.0, Between, Inside);
+			Under += (Under.empty() ? "" : "; ") + std::string(Line);
+		}
+	}
+	CHECK(bShape);
+	CHECK(bNoBar);
+	CHECK(bOldBar);
+	CHECK(bThick);
+	CHECK(bSteps);
+	CHECK(RingGap >= Look::MinStrokePx && MeridianGap >= Look::MinStrokePx);
+	if (!bNoBar)
+	{
+		std::printf("  the globe: %s\n", Why.c_str());
+	}
+	// (the size kept: 16.4 across, about 16.9 px at 1600 by 1000; and inside the hollow with its wall, as every mark is)
+	Look::FStroke Strokes[Look::MarkMost];
+	const int Count = Look::MarkOf(EGlyph::Globe, Reference, Strokes);
+	const FMarkBox Box = MarkBox(Strokes, Count);
+	const double Across = std::max(Box.MaxX - Box.MinX, Box.MaxY - Box.MinY) * Reference;
+	CHECK(std::fabs(Across - 16.9) < 0.1 && std::fabs(Box.MaxX - Box.MinX - 16.4) < 1e-9 && std::fabs(Box.MaxY - Box.MinY - 16.4) < 1e-9);
+	// (the least of the counters from a window 720 high up, where the floor and the counters are both judged: the ring's
+	// to the meridian from about 647 high, the meridian's own from about 593)
+	double FromRing = 0.0, FromMeridian = 0.0;
+	bool bMade = true;
+	for (int Height = 2000; bMade && Height >= 400; --Height)
+	{
+		const double Scale = Height / 972.0;
+		bMade = Look::MarkOf(EGlyph::Globe, Scale, Strokes) == 3;
+		if (!bMade)
+		{
+			break;
+		}
+		FromRing = (Strokes[0].Long * 0.5 - Strokes[0].Thick - Strokes[2].Wide * 0.5) * Scale >= Look::MinStrokePx ? Height : FromRing;
+		FromMeridian = (Strokes[2].Wide - 2.0 * Strokes[2].Thick) * Scale >= Look::MinStrokePx ? Height : FromMeridian;
+	}
+	CHECK(bMade && FromRing >= 640.0 && FromRing <= 655.0 && FromMeridian == 400.0);
+	// (the meridian's inside open on every screen down to the least Look::Stroke measures (0.25 px a unit, a window 243
+	// high), and holding 1.5 px wherever three strokes of 1.5 px fit the ring's width (from 267 high): so it never fills
+	// in to an upright lens; 0.45 of the ring from 593 high up, as the ruling has it; never wider than the ring)
+	bool bOpen = true, bHeld = true, bAsRuled = true;
+	double Narrowest = 1e9;
+	for (int Height = 3000; Height >= 200; --Height)
+	{
+		const double Scale = Height / 972.0;
+		Look::FStroke Cuts[Look::MarkMost];
+		const int Made = Look::MarkOf(EGlyph::Globe, Scale, Cuts);
+		std::string Said;
+		const double Inside = Cuts[2].Wide - 2.0 * Cuts[2].Thick;
+		Narrowest = std::min(Narrowest, Inside * std::max(Scale, 0.25));
+		bOpen = bOpen && Made == 3 && Inside > 0.0 && !HasUprightBar(Cuts, Made, Said) && Cuts[2].Wide <= Cuts[0].Long + 1e-12;
+		bHeld = bHeld && (Height < 267 || Inside * Scale >= Look::MinStrokePx - 1e-9);
+		bAsRuled = bAsRuled && (Height < 593 || std::fabs(Cuts[2].Wide - 16.4 * Look::GlobeMeridian) < 1e-12);
+	}
+	CHECK(bOpen && bHeld && bAsRuled);
+	{
+		// (a filled ellipse is a bar: the meridian at 0.45 of the ring with its line made 6 units thick fills in)
+		Look::FStroke Lens[1] = { Look::FStroke{ Look::EStroke::Ellipse, 0.0, 0.0, 16.4, 6.0, 0.0, 16.4 * Look::GlobeMeridian } };
+		std::string Said;
+		CHECK(HasUprightBar(Lens, 1, Said));
+	}
+	std::printf("(the globe: a ring of %.2f px at 1600 by 1000, the meridian an ellipse %.2f of its width; %d pieces to its line, none as long as it is thick; the counters at least %.2f px (ring to meridian) and %.2f px (inside the meridian) from 720 high, holding 1.5 px from %.0f and %.0f high; under: %s; the meridian's inside open on every screen, at least %.2f px, widened under 593 high)\n",
+		Across, Look::GlobeMeridian, Look::EllipseSteps, RingGap, MeridianGap, FromRing, FromMeridian, Under.empty() ? "none" : Under.c_str(), Narrowest);
+
+	// Ruling 6: wherever the old sign drew. Every drawn mark is laid by Look::MarkOf, which only the layer's PaintMark
+	// asks, for every seal (one item's, a folded seal's with its tab, the "+N"'s none); the layer draws the ellipse; the
+	// card's rows and the report (CampaignHUD) draw no mark of the seals, their own flags or the watch box instead.
+	if (!Folder)
+	{
+		std::printf("(the order signs' folder was not given: the source was not read for the globe's places)\n");
+		return;
+	}
+	std::string Asks, Globes, Ellipses, Layer;
+	CHECK(SourcesSaying(Folder, "MarkOf(", Asks) == 3 && Contains(Asks, "EdgeSeals.h") && Contains(Asks, "EdgeSeals.cpp") && Contains(Asks, "EdgeNewsLayer.cpp"));
+	CHECK(SourcesSaying(Folder, "EGlyph::Globe", Globes) == 1 && Globes == "EdgeSeals.cpp");
+	CHECK(SourcesSaying(Folder, "EStroke::Ellipse", Ellipses) == 2 && Contains(Ellipses, "EdgeSeals.cpp") && Contains(Ellipses, "EdgeNewsLayer.cpp"));
+	const std::string Text = SourceText(Folder, "EdgeNewsLayer.cpp");
+	size_t Calls = 0;
+	for (size_t At = Text.find("Look::MarkOf("); At != std::string::npos; At = Text.find("Look::MarkOf(", At + 1))
+	{
+		++Calls;
+	}
+	CHECK(Calls == 1 && Contains(Text, "Pen.Loop(") && Contains(Text, "FSlateDrawElement::MakeLines("));
+	// (the meridian is the one line the layer draws, and it is drawn in the screen's own pixels: a child geometry with the
+	// pen's scale undone, its points and its thickness in pixels, so its weight is the equator's whichever measure the
+	// engine reads a line's thickness in; the review of the rulings' build, finding 5)
+	size_t Lines = 0;
+	for (size_t At = Text.find("MakeLines("); At != std::string::npos; At = Text.find("MakeLines(", At + 1))
+	{
+		++Lines;
+	}
+	CHECK(Lines == 1 && Contains(Text, "FSlateLayoutTransform(static_cast<float>(1.0 / Px)") && Contains(Text, "MakeLines(Out, Layer, Pixels.ToPaintGeometry(),") && Contains(Text, "static_cast<float>(Cut.Thick * Px)")
+		&& Contains(Text, "Points.Add(FVector2D((MidX + At.X) * Px, (MidY + At.Y) * Px))"));
+	std::printf("(the globe's places: Look::MarkOf in %s; EGlyph::Globe in %s; the ellipse drawn in %s)\n", Asks.c_str(), Globes.c_str(), Ellipses.c_str());
+
+	// (and the card's ELSEWHERE IN THE WAR rows, which the report is: each row draws its flag, Flag(Each.Tag), the card's
+	// SImage of FlagBrush, which is a nation's flag or, where a row has none, WatchBrush, a plain grey rounded box. No
+	// mark of the seals, no globe. The lines are printed, so the answer to ruling 6 can be checked in the source)
+	const std::string Hud = SourceText(Folder, "CampaignHUD.cpp");
+	auto LineOf = [&Hud](size_t At) { return At == std::string::npos ? 0L : 1L + static_cast<long>(std::count(Hud.begin(), Hud.begin() + static_cast<std::ptrdiff_t>(At), '\n')); };
+	const size_t Rows = Hud.find("for (const FMonthElse& Each : Card.Elsewhere)");
+	const size_t Boxed = Rows == std::string::npos ? std::string::npos : Hud.find("Boxed(TEXT(\"ELSEWHERE IN THE WAR\")", Rows);
+	const std::string Drawn = Rows != std::string::npos && Boxed != std::string::npos ? Hud.substr(Rows, Boxed - Rows) : std::string();
+	const size_t RowFlag = Rows == std::string::npos ? std::string::npos : Hud.find("Flag(Each.Tag, ", Rows);
+	const size_t CardFlag = Hud.find("auto Flag = [this](const FString& Tag, float Wide, float High) -> TSharedRef<SWidget> { return SNew(SBox).WidthOverride(Wide).HeightOverride(High)[SNew(SImage).Image(FlagBrush(Tag))]; };");
+	const size_t Brush = Hud.find("const FSlateBrush* FlagBrush(const FString& Tag)");
+	const size_t BrushEnd = Brush == std::string::npos ? std::string::npos : Hud.find("\n\t\t}\n", Brush);
+	const std::string BrushBody = Brush != std::string::npos && BrushEnd != std::string::npos ? Hud.substr(Brush, BrushEnd - Brush) : std::string();
+	const size_t Watch = Hud.find("WatchBrush = FSlateRoundedBoxBrush(");
+	CHECK(!Drawn.empty() && Contains(Drawn, "Flag(Each.Tag, ") && !Contains(Drawn, "SImage") && !Contains(Drawn, "MakeBox") && !Contains(Drawn, "Brush") && !Contains(Drawn, "Glyph") && !Contains(Drawn, "MarkOf"));
+	CHECK(CardFlag != std::string::npos && CardFlag < Rows && !BrushBody.empty() && Contains(BrushBody, "return &WatchBrush;") && Contains(BrushBody, "GetFlagTexture(Tag)") && !Contains(BrushBody, "Glyph") && Watch != std::string::npos);
+	std::printf("(the card's ELSEWHERE IN THE WAR rows, CampaignHUD.cpp %ld-%ld: each row's Flag(Each.Tag) at %ld, the card's Flag at %ld, an SImage of FlagBrush (%ld-%ld): a nation's flag, or WatchBrush (%ld), a plain grey rounded box; no mark of the seals)\n",
+		LineOf(Rows), LineOf(Boxed), LineOf(RowFlag), LineOf(CardFlag), LineOf(Brush), LineOf(BrushEnd) + 1, LineOf(Watch));
+}
+
+static void TestCountFace(const char* Folder)
+{
+	if (!Folder)
+	{
+		std::printf("(the order signs' folder was not given: the HUD's mount line was not read)\n");
+		return;
+	}
+	const std::filesystem::path Hud = std::filesystem::path(Folder) / ".." / ".." / "Source" / "TheaterCommand" / "Campaign" / "CampaignHUD.cpp";
+	std::FILE* File = std::fopen(Hud.string().c_str(), "rb");
+	CHECK(File != nullptr);
+	if (!File)
+	{
+		return;
+	}
+	std::string Text;
+	char Block[4096];
+	for (size_t Got; (Got = std::fread(Block, 1, sizeof(Block), File)) > 0;)
+	{
+		Text.append(Block, Got);
+	}
+	std::fclose(File);
+	int Mounts = 0;
+	bool bFace = false;
+	for (size_t At = Text.find("MakeEdgeNewsLayer("); At != std::string::npos; At = Text.find("MakeEdgeNewsLayer(", At + 1))
+	{
+		++Mounts;
+		const size_t LineEnd = Text.find('\n', At);
+		const std::string Line = Text.substr(At, LineEnd == std::string::npos ? std::string::npos : LineEnd - At);
+		const size_t Typed = Line.rfind("Typed(");
+		if (Typed == std::string::npos)
+		{
+			continue;
+		}
+		char* After = nullptr;
+		const double Size = std::strtod(Line.c_str() + Typed + 6, &After);
+		bFace = std::fabs(Size - Look::CountPt) < 1e-6 && After != nullptr && std::string(After).rfind("f, true)", 0) == 0;
+	}
+	CHECK(Mounts == 1 && bFace);
+	// (the tab's figures are made once, one string each, when the slot's count changes, and the tab's paint makes none:
+	// the review of the rulings' build, finding 6)
+	const std::string Layer = SourceText(Folder, "EdgeNewsLayer.cpp");
+	const size_t Tab = Layer.find("void PaintTab("), Mark = Layer.find("void PaintMark(");
+	const std::string Paint = Tab != std::string::npos && Mark != std::string::npos && Mark > Tab ? Layer.substr(Tab, Mark - Tab) : std::string();
+	CHECK(!Paint.empty() && Contains(Paint, "Here.AlikeFigures[Index]") && !Contains(Paint, "Mid(") && !Contains(Paint, "FString Figure") && Contains(Layer, "Seal.AlikeFigures.Add(Seal.AlikeCount.Mid("));
+}
+
 int main(int ArgCount, char** Args)
 {
 	TestItems();
@@ -1884,6 +4133,14 @@ int main(int ArgCount, char** Args)
 	TestColours();
 	TestSealLook();
 	TestSealSigns(ArgCount > 1 ? Args[1] : nullptr);
+	TestUnderFrame();
+	TestSealAsk();
+	TestSwords();
+	TestFold();
+	TestCountFace(ArgCount > 1 ? Args[1] : nullptr);
+	TestCuts();
+	TestHover(ArgCount > 1 ? Args[1] : nullptr);
+	TestGlobe(ArgCount > 1 ? Args[1] : nullptr);
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

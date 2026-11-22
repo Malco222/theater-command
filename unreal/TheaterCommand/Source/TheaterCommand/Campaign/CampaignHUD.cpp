@@ -230,7 +230,7 @@ namespace
 		return Typed(9.0f, true, 40);
 	}
 
-	/** Where the pieces of the frame are on the screen this frame (absolute): a town's plate or a province's name is not drawn under one. */
+	/** Where the pieces of the frame are on the screen this frame, in the window's (paint) measure, as each was last painted: a town's plate or a province's name is not drawn under one. */
 	TArray<FSlateRect> FrameRects;
 
 	// The frame is made of the things on a staff officer's desk in 1939: calendar paper and typing paper, written
@@ -5851,7 +5851,7 @@ namespace
 					// Their signs are the seal set's (SealSignBrush), not the badges'.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return SealSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11))
+						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return SealSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11), Typed(13.5f, true))
 					]
 					// R2 bargains hook: the one bid card, opaque over the map and so a piece of the frame; collapsed while none is open.
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(TAttribute<FMargin>::CreateLambda([]() { return BargainLayer::CardPadding(); }))
@@ -8645,14 +8645,18 @@ namespace
 				{
 					GEngine->GameViewport->GetViewportSize(ViewSize);
 				}
-				const FVector2D Local = AllottedGeometry.GetLocalSize();
+				// (FrameRects are in the window's (paint) measure, so they are read through the overlay's own last paint, a
+				// frame old and in that measure too; the Tick's AllottedGeometry is the desktop's, which put every piece up
+				// and to the left by the window's place on the desktop. The overlay fills the window: the lag is harmless)
+				const FGeometry& Painted = GetPaintSpaceGeometry();
+				const FVector2D Local = Painted.GetLocalSize();
 				TArray<FBox2D> OnScreen;
 				if (Local.X > 1.0 && Local.Y > 1.0 && ViewSize.X > 1.0 && ViewSize.Y > 1.0)
 				{
 					const FVector2D Scale(ViewSize.X / Local.X, ViewSize.Y / Local.Y);
 					for (const FSlateRect& Rect : FrameRects)
 					{
-						OnScreen.Add(FBox2D(AllottedGeometry.AbsoluteToLocal(FVector2D(Rect.Left, Rect.Top)) * Scale, AllottedGeometry.AbsoluteToLocal(FVector2D(Rect.Right, Rect.Bottom)) * Scale));
+						OnScreen.Add(FBox2D(Painted.AbsoluteToLocal(FVector2D(Rect.Left, Rect.Top)) * Scale, Painted.AbsoluteToLocal(FVector2D(Rect.Right, Rect.Bottom)) * Scale));
 					}
 				}
 				Controller->SetFrameOnScreen(MoveTemp(OnScreen));

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -50,11 +51,11 @@ namespace EdgeSeals
 	{
 		Sign = 0, // the order sign named by the item, its seal picture (Content/CityOrders/Seal), where it may be pressed (MayPress)
 		Warning, // a warning that needs his decision: an upright stroke and a dot
-		War, // war declared: two strokes crossed
+		War, // war declared: two swords crossed, each with a guard near its foot (and a pommel where it holds: Look::SwordOf)
 		Fallen, // a country fallen: a chevron pointing down
 		Freed, // a country freed: a chevron pointing up
 		News, // news with a title of its own, and a line of home or of the staff: three short lines
-		Globe, // the rest of the war: a ring, its meridian and its equator
+		Globe, // the rest of the war: a ring, its equator and one curved meridian
 		More, // the "+N" seal: its count
 	};
 
@@ -181,9 +182,143 @@ namespace EdgeSeals
 	 * The row's eight words, for the pointer on its seal: the line whole where it has no more than Most words, else cut
 	 * at a whole word, at the last comma, colon or semicolon that leaves at least half of them where there is one. No
 	 * dots are added (the UI director's review of build 1628: nothing is cut with three dots), and no stop is left
-	 * hanging at the cut. UTF-8 in and out: only spaces and the ASCII stops are read, so a name is never split.
+	 * hanging at the cut. Nor does a cut end on a lone dash (a stop after it or not), on stops standing apart, or on a
+	 * joining or small word (the rules' own list for their cut, monthcard.ts LITTLE: at, in, on, of, to, by, for, from,
+	 * with, and, or, but, the, a, an, its, his, their, is, are, was, were, been, has, have, had, as, into, over, under,
+	 * round, against, between and the like; and her): it steps back to the last word that says something, so that
+	 * neither a seal's words nor a folded seal's first words stop short ("the Finnish troops at", "reports for duty and
+	 * is"). Nor does it leave a bracket open: it goes back to before the word that opened it ("VI Corps (36th and 34th
+	 * Infantry" is "VI Corps"). A line that is not cut keeps its own last word. UTF-8 in and out: only spaces, the ASCII
+	 * stops and brackets are read, so a name is never split.
 	 */
 	std::string EightWords(const std::string& Text, int Most = 8);
+
+	/**
+	 * Ruling 64(g) as amended 08:55Z, the fold of alike runs: "Three or more in a row that would look the same (wax,
+	 * mark, sign, pulse) stand as one seal with their count at the first item's place, and a press opens the card at
+	 * that run's first row." FAlike is how an item's seal looks on the edge: its wax, what is pressed in it (its drawn
+	 * mark, or the order sign it names) and whether it pulses; the fold compares the looks as the screen draws them
+	 * (AsDrawn: below 972 high no order sign is pressed). A WARNING (the dated warning's red wax, or the warning's mark
+	 * on any wax) never folds, so no run crosses one either.
+	 */
+	struct FAlike
+	{
+		EWax Wax = EWax::Brass;
+		EGlyph Glyph = EGlyph::News;
+		std::string Sign; // the order sign pressed in it, where Glyph is Sign; empty otherwise
+		bool bPulse = false;
+
+		/** A WARNING: the dated warning's red wax, or anything pressed with the warning's mark (GlyphOf: "WARNING", "LAST MONTH"). */
+		bool IsWarning() const { return Wax == EWax::Red || Glyph == EGlyph::Warning; }
+		bool operator==(const FAlike& Other) const = default;
+	};
+	/** An item's look, from its part, its word, its tone and the order sign its row names: LookOf's wax and pulse, GlyphOf's mark, the sign where MayPress. */
+	FAlike AlikeOf(ESection Section, const std::string& Word, int Tone, const std::string& Sign);
+	/**
+	 * An item's look as a screen draws it, which is what the fold compares ("would look the same"): where the seal set
+	 * is not pressed (bPressed false, Look::SetPressed: under a window 972 high), and on every screen for an order sign
+	 * with no seal picture (Look::SignFinest 0), the seal shows the three lines in place of its sign, so its look there
+	 * is the News mark, alike with the three lines' seals of its wax and pulse. Any other look is as it is. EdgeNews
+	 * folds the month both ways and the screen stands the fold it draws.
+	 */
+	FAlike AsDrawn(const FAlike& Look, bool bPressed);
+
+	/** A run of the card's items that stands as one seal: the first item's place in card order, and how many (1: a seal of its own). */
+	struct FAlikeRun
+	{
+		int First = 0;
+		int Count = 1;
+	};
+	/**
+	 * The card's items as the seals that stand for them, in card order, into Out: each run of Least or more alike items
+	 * in a row as one, every other item as its own. Display only: the card and its items are not changed, every item
+	 * is in one run and one only, in order, and the runs' counts add up to the items.
+	 */
+	void FoldAlike(const std::vector<FAlike>& Looks, std::vector<FAlikeRun>& Out, int Least = 3);
+	/**
+	 * Whether two runs share an item. The month is folded once for each kind of screen (AsDrawn), and a seal opened in
+	 * one fold marks opened every seal of the other that shares an item with it, so a window moved across 972 high
+	 * keeps what has been read.
+	 */
+	bool RunsMeet(const FAlikeRun& A, const FAlikeRun& B);
+
+	/**
+	 * What the card says of one item, for the words of a folded seal: its part; the line its seal's own eight words
+	 * are cut from (Line); the card's sentence for it (Sentence: a band's or a row's text, the lead's headline, the line
+	 * of home as said, the staff's, elsewhere's); and for a front's row its place (Name) and the rest of its head as the
+	 * card prints it (Head: "LOST against Germany", "HIT").
+	 */
+	struct FSaid
+	{
+		ESection Section = ESection::Band;
+		std::string Line;
+		std::string Sentence;
+		std::string Name;
+		std::string Head;
+	};
+	/** A front's row as FSaid: its line (RowLine), its sentence (its text, else its line), its place, and its head where it has a tag. */
+	FSaid RowSaid(const std::string& Place, const std::string& Tag, const std::string& Join, const std::string& JoinName, const std::string& Text);
+	/** Any other item as FSaid: its line and its sentence are the same words. */
+	FSaid PlainSaid(ESection Section, const std::string& Text);
+
+	/**
+	 * The hover: the engine's own tip, which the layer gives a seal's words (SWidget::SetToolTipText, EdgeNewsLayer) and
+	 * the frame dresses as it dresses every tip (CampaignHUD, "ToolTip.Font": the typed face at TipPt). The layer gives
+	 * it no size of its own: the engine sizes it to its words and wraps them at Slate.ToolTipWrapWidth, TipWrap units
+	 * (the engine's own 1000). The face is Courier Prime, every letter of it TipAdvance of an em wide (1228 of 2048, from
+	 * the font file), so TipPt's em is TipPt * 4/3 units and a letter 7.6 of them. But Slate sets each letter a whole
+	 * pixel's advance at the scale it draws the tip (the shaped glyph's advance is a whole number of pixels, the face
+	 * hinted), so on a screen of Scale pixels a unit a letter is round(7.6 * Scale) / Scale units, and one line holds
+	 * TipLettersAt(Scale) letters: 125 at a pixel a unit (1920 by 1080), 133 at two, 120 in a window 783 high, 118 in
+	 * one 640 high; 131 only were the advance not a whole pixel. The tip is drawn at the game layer's scale (the window's
+	 * height over 1080, Unreal's own curve) or, where the engine gives it a window of its own, at the desktop's (one to
+	 * three pixels a point); which is not read here, as Unreal is not installed. So the hover's own size is the least
+	 * line of either on every screen the seals are held to: TipLetters, 118 letters. A hover of more wraps to a second
+	 * line on some screen. Today four of the real months' hovers are longer than that, the longest a folded seal's of 132
+	 * letters, which wraps at 1920 by 1080.
+	 */
+	constexpr double TipPt = 9.5;
+	constexpr double TipWrap = 1000.0;
+	constexpr double TipAdvance = 1228.0 / 2048.0;
+	constexpr double TipLeastHigh = 600.0; // the least window the seals are held to, as their strokes' 1.5 px floor is (Look::Stroke)
+	constexpr double TipMostScale = 3.0; // the most pixels a unit (and a desktop's pixels a point) they are held to
+	/** The letters one line of the hover holds on a screen of Scale pixels a unit: as many as are no wider, together, than TipWrap, each at its whole-pixel advance. */
+	int TipLettersAt(double Scale);
+	/**
+	 * The letters one line of the hover holds on every screen: the least TipLettersAt of the game layer's scale for
+	 * every window from TipLeastHigh to TipMostScale * 1080 high, and of the desktop's from 1 to TipMostScale in quarters.
+	 */
+	int TipLetters();
+	/** How many letters some words are (UTF-8 in: each letter one advance of the typed face, "4ª" two). */
+	int LettersOf(const std::string& Words);
+
+	/**
+	 * An item's own short line, for a folded seal that lists its items: a front's row's title as the card prints it, its
+	 * place and its head ("Polish Silesia LOST against Germany", "Ruhr HIT"); any other item's first words, cut at a
+	 * whole word by EightWords' own rules ("Soviet troops blow the bridges over the Oka"). No stop or full stop at its end.
+	 */
+	std::string ShortLine(const FSaid& Said);
+
+	/**
+	 * The words under the pointer for a folded seal: the run's items named in card order, and how many more, in nothing
+	 * the card does not say, on one line of the hover at most (Room letters: TipLetters).
+	 * - Where each sentence is a name (one to four words, none named twice; a thing named after a nation's adjective,
+	 *   "German troops", is the name's) and then the same words, those words up to any colon, their verb made plural
+	 *   and "its" made "their", and the names: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more".
+	 * - Else, where each is a front's row with the same head, that head and the places: "3 HIT: Ruhr, Hamburg and Bohemia".
+	 * - Else (the design director, 64(g)(4), 13:00Z) each item's own short line (ShortLine), in card order, one after
+	 *   another, as many as the hover's one line holds, then "and N more" for the rest: "Soviet troops close round
+	 *   Helsinki; Soviet troops blow the bridges over the Oka; and 3 more". The lines stand apart by "; ", so the "and N
+	 *   more" is one more of the list, never more of the line before it. A row whose title the list gives already gives
+	 *   its own first words ("Stalino HIT: The Black Sea Fleet shelled"). A first line too long for the hover with its
+	 *   "and N more" is cut a word shorter until it fits, never into a row's title ("Ruhr HIT", never "Ruhr"); where it
+	 *   cannot, or no item has words of its own, the count and where on the card they are ("3 elsewhere in the war").
+	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more"; a
+	 * name's "The" is "the" in the list.
+	 */
+	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room = TipLetters());
+	/** A verb as it stands after more than one name: "declares" "declare", "has" "have", "is" "are", "carries" "carry". A word with no third person's -s (a past, a word in capitals) is left as it is. */
+	std::string PluralVerb(const std::string& Word);
 
 	/** The sizes the seals are laid out with, in the screen's units (the frame's own, before its scale). */
 	struct FParams
@@ -248,6 +383,15 @@ namespace EdgeSeals
 		 */
 		FFold LayRanked(const FParams& Params, const std::vector<FWant>& Items, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out);
 
+		/**
+		 * The same, for seals that may each stand for a run of alike items (FoldAlike): Seals holds what each seal wants,
+		 * in card order, and Carries how many items each stands for (one where Carries has no entry for it). Every seal
+		 * given stands, with no "+N", only where they are no more than Most and carry all Total items; else at most Most - 1
+		 * stand and the "+N" seal counts the items the rest carry, and the items past them. Returns how many seals stand
+		 * (Shown) and how many items the "+N" counts (More): the "+N" counts items, never seals.
+		 */
+		FFold LayRanked(const FParams& Params, const std::vector<FWant>& Seals, const std::vector<int>& Carries, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out);
+
 	private:
 		/** Of the points of an edge where a box of the given half sizes stands clear of every obstacle, the one nearest Wanted. */
 		bool FreeNearest(const FParams& Params, EEdge Edge, double Wanted, double HalfAlong, double& OutAt);
@@ -259,6 +403,60 @@ namespace EdgeSeals
 		std::vector<std::pair<double, double>> Blocked;
 		std::vector<FWant> Trial;
 	};
+
+	/**
+	 * The under-frame watch (Mac run 3: the "+N" seal was laid and painted under the top bar, its keep-off boxes read in
+	 * the wrong measure). Not in shipping builds: each seal, once per laying, once it is on the screen and has slid all
+	 * the way in, is held against every box it keeps off, both as last painted (the window's measure), and a warning is
+	 * logged where it meets one. Meet is FSlateRect::DoRectanglesIntersect's test: boxes that only touch meet too (a seal
+	 * laid right keeps Keep clear of every piece, so it never even touches one). UnderPiece is the first of Pieces a
+	 * seal's box meets, -1 for none: the layer's watch calls it with the boxes as painted, so the test holds what runs.
+	 */
+	bool Meet(const FBox& A, const FBox& B);
+	int UnderPiece(const FBox& Seal, const std::vector<FBox>& Pieces);
+
+	/**
+	 * When the watch looks: once for each laying (the board's Revision) and slot, the first time its seal is live and has
+	 * arrived; and once more each time the slot comes to hold another seal in the same laying (Holding: 1 for the "+N",
+	 * 0 for the board's own), as when the tray comes up and the last items fold into a "+N" that takes the slot of one
+	 * that stood. Mac run 3's fault was a "+N" under the top bar: a "+N" laid after the first look is looked at too.
+	 */
+	class FUnderWatch
+	{
+	public:
+		static constexpr int Slots = 16;
+		bool Due(int Slot, int Revision, bool bLive, bool bArrived, int Holding = 0);
+
+	private:
+		bool bSeen[Slots] = {};
+		int SeenRevision[Slots] = {};
+		int SeenHolding[Slots] = {};
+	};
+
+	/**
+	 * The photographer's asks of the seals: "-TheaterSeal=" on the command line, its parts joined by commas (a
+	 * development tool, not part of the game; EdgeNewsLayer reads the line once, as the layer is made). A seal is
+	 * named by its place among the seals standing on the edge, in card order, from 1 (the "+N" counted where it stands,
+	 * as the under-frame watch names them).
+	 * - "open:N": the Nth seal shows as opened, in its dull grey (on the screen only: no card opens).
+	 * - "hover:N": the Nth seal as if the pointer rested on it: it grows, the brass ring goes round it, and the ping
+	 *   spreads from its place on the map. Its words go to the log, since the engine's tip is not in a picture.
+	 * - "slide": each laying waits beyond the edge until a picture is taken, and sets off as that picture is taken, so
+	 *   that the photographer's clip after its first picture ("-TheaterClip=30,0.05") holds the slide-in. With it the
+	 *   layer times the slide-in, the call and the ping on the world's clock, which the clip steps by its own gap, not
+	 *   on the computer's, which a tick that takes a picture runs on by a quarter of a second and more.
+	 * A part it does not know, or a number under 1 or past Most (the most seals that may stand, FEdgeNewsBoard::MostSeals),
+	 * is counted in Unknown and left out. A seal named that does not stand on this month's edge is said so in the log
+	 * (EdgeNewsLayer), and nothing is shown for it.
+	 */
+	struct FSealAsk
+	{
+		int Open = 0;
+		int Hover = 0;
+		bool bSlide = false;
+		int Unknown = 0;
+	};
+	FSealAsk ReadSealAsk(const std::string& Asked, int Most = 9);
 
 	/** An edge's lane: the line the middles of its seals lie on (Fixed), and the stretch of it they may take (Low to High). */
 	struct FLane
@@ -381,12 +579,26 @@ namespace EdgeSeals
 		 */
 		bool SignHolds(double Finest, double DrawnW, double DrawnH, double PxPerUnit);
 
-		/** One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees clockwise), a dot (Long across) or a ring (Long across, its line Thick). */
+		/** The height the seal signs' pictures are drawn at, with SignPictureW (the test reads every picture at 192 by 128). */
+		constexpr double SignPictureH = 128.0;
+		/**
+		 * Whether the seal set is pressed on a screen of PxPerUnit pixels to a unit: SignHolds for its finest part
+		 * (SealFloor) in a picture SignPictureW by SignPictureH, from a window 972 high up. Below it every seal sign is
+		 * drawn as the three lines, and the screen stands the month folded as so drawn (AsDrawn).
+		 */
+		bool SetPressed(double PxPerUnit);
+
+		/**
+		 * One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees
+		 * clockwise), a dot (Long across), a ring (Long across, its line Thick) or an upright ellipse (Long high and Wide
+		 * across, its line Thick; drawn as EllipseSteps short pieces, EllipsePoint).
+		 */
 		enum class EStroke : int
 		{
 			Bar = 0,
 			Dot,
 			Ring,
+			Ellipse,
 		};
 		struct FStroke
 		{
@@ -396,14 +608,77 @@ namespace EdgeSeals
 			double Long = 0.0;
 			double Thick = 0.0;
 			double Degrees = 0.0;
+			double Wide = 0.0;
 		};
 
 		/**
-		 * The strokes of a drawn mark (Warning, War, Fallen, Freed, News, Globe), about SignW across and inside the
-		 * hollow, none thinner than MinStrokePx on a screen of PxPerUnit: how many (at most 4). 0 for the order sign and
-		 * the "+N", which are drawn otherwise.
+		 * The globe's meridian (the art director, 64(g)(4)): an upright ellipse GlobeMeridian of the ring's width across,
+		 * meeting the ring at its poles, so that no straight upright stroke stands in the globe (the old straight
+		 * meridian made it read as a cross in a circle). Under a window 593 high, where its line is thickened to hold
+		 * 1.5 px, it is widened to keep 1.5 px open inside it (up to the ring's width), so it never fills in to a bar.
 		 */
-		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4]);
+		constexpr double GlobeMeridian = 0.45;
+		/** How many short straight pieces an ellipse stroke's line is drawn in: each shorter than its line is thick, so none reads as straight. */
+		constexpr int EllipseSteps = 48;
+		/** The point Step of EllipseSteps on an ellipse stroke's middle line, from the disc's middle: 0 at its top, then round clockwise; EllipseSteps is the top again. */
+		FPoint EllipsePoint(const FStroke& Cut, int Step);
+
+		/** The most strokes a drawn mark has (the crossed swords' ten: each a blade, its point, a guard, a grip and a pommel). */
+		constexpr int MarkMost = 10;
+
+		/**
+		 * The strokes of a drawn mark (Warning, War, Fallen, Freed, News, Globe), about SignW across and inside the
+		 * hollow, none thinner than MinStrokePx on a screen of PxPerUnit, into Out, which has Room for so many: how many
+		 * it wrote (at most MarkMost; a mark with more strokes than Room is cut short, so give it MarkMost). 0 for the
+		 * order sign and the "+N", which are drawn otherwise.
+		 */
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke* Out, int Room);
+		template <std::size_t Room>
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[Room])
+		{
+			return MarkOf(Glyph, PxPerUnit, Out, static_cast<int>(Room));
+		}
+
+		/**
+		 * The war mark's two swords (the art director, 22 November, 08:36Z: the plain X read "cancel"). They cross flat,
+		 * as the X did and as sabres are, Turn degrees off the level, the points up and out and the hilts down and out;
+		 * the second is the first seen in a mirror. Each is a blade from its guard to its point, long above the crossing
+		 * and narrowing over its last Point units to the tip (PointThick); a short guard across the blade near its foot;
+		 * a short grip under the guard; and, where it holds 1.5 px, a small round pommel at the grip's end. So the
+		 * outline is two swords, long blades rising and short hilts below, not the X's four equal arms. Along a sword,
+		 * from where the two cross (Lift below the disc's middle, so that the mark's box is centred on it): the tip at
+		 * Tip, the guard's middle at Guard, the grip's end at GripEnd, the pommel's middle at Pommel (all but the tip
+		 * below, so negative). The blade is as heavy as the X's strokes were, and the whole about as large: about 18
+		 * across and 13 high, inside the hollow.
+		 *
+		 * What must hold 1.5 px on the screen, as every stroke of a mark does, each measured as the eye sees it, on each
+		 * side: the guard's width (GuardThick), and how far it stands out past the blade at its full width (Overhang less
+		 * the guard's round end, GuardThick / 2: made longer on a small screen so that it holds, to at most 4 units);
+		 * and for the pommel, the grip left bare between the guard and the pommel (Neck) and how far the pommel stands
+		 * past its grip on each side (half of PommelD less GripThick), without which it would read as the grip's own end.
+		 * Where either is under 1.5 px, the pommel is left off (bPommel false) and the grip ends round: as drawn, under
+		 * 1.875 px a unit, a window 1823 high (the art director's call: the floor per side, or across the pommel).
+		 */
+		struct FSword
+		{
+			double Turn = 36.0;
+			double Lift = 0.0;
+			double Tip = 0.0;
+			double BladeThick = 0.0;
+			double Point = 0.0;
+			double PointThick = 0.0;
+			double Guard = 0.0;
+			double GuardLong = 0.0;
+			double GuardThick = 0.0;
+			double Overhang = 0.0;
+			double GripThick = 0.0;
+			double GripEnd = 0.0;
+			double Pommel = 0.0;
+			double PommelD = 0.0;
+			double Neck = 0.0;
+			bool bPommel = false;
+		};
+		FSword SwordOf(double PxPerUnit);
 
 		/**
 		 * How far the pressed sign's other wall is drawn from it, along the light's diagonal (both X and Y): about a
@@ -444,5 +719,92 @@ namespace EdgeSeals
 			double Ring = 0.0;
 		};
 		FCall CallOf(double Since, double Period = 2.4);
+
+		/**
+		 * A folded seal's count (ruling 64(g) as amended 08:55Z): a small tab of the date strip's paper laid over the
+		 * ribbon's tails under the disc, its figures in dark ink in the kit's typed face (Courier Prime Bold,
+		 * CampaignHUD's Typed) at CountPt. The tab lies wholly under the disc's foot and its rim (TabTop), so the figures
+		 * are never on the wax, and inside the seal's box, which stays 34 by 44: a folded seal is the size of any other,
+		 * and breathes and grows under the pointer as one.
+		 *
+		 * The paper runs the tab's full height, from TabTop to the box's foot, so the figures stand on paper and on
+		 * nothing else: the tab is edged in the ribbon's darker fold at its two sides only (TabEdge, a line held to
+		 * 1.5 px), which parts it from the tails, and between the edge and the figures' ink lies TabPaper of paper at the
+		 * least. (Edged all round, the edge drawn inside the tab lay under the figures' tops and feet: 13 to 35% of their
+		 * ink was on it, by the screen.) So the tab is as wide as its figures, two edges and their paper, by the screen.
+		 * One figure stands over the tails' roots; two cover most of the tails, which is the art director's to rule on (the
+		 * two figures need about 19 units of ink, and the tails part by 7 to 15 below the disc). Three, for a run of a
+		 * hundred (which no month's card has), are drawn in a tab as wide as the box, their outer figures over its edges.
+		 *
+		 * The face's measures, in ems (from the font file, CourierPrime-Bold.ttf, 2048 to the em): the figures' ink runs
+		 * from FigureBottom (the round ones' overshoot) to FigureTop (the 1) about the baseline, FigureH in all, and is at
+		 * most FigureInk wide (the 4) inside an advance of FigureAdvance; the line Slate measures runs from Ascent above
+		 * the baseline to Descent below it (the face has no line gap). A Slate point is 4/3 of a unit (96 a inch), so
+		 * CountPt's em is CountPt * 4/3 units, and its figures stand 9.8 px tall at 1441 by 878 and 12.1 at 1920 by 1080.
+		 * The art director's floor of 9 px (FigureFloorPx) holds at CountPt from a window 806 high up (FigureFloorHigh).
+		 * Under it the figures are drawn larger, never CountPt raised (the art director, 64(g)(4), ruling 3: the numerals
+		 * at the larger of CountPt's size and 9 px): FigureGrow, so 9 px at 1024 by 768, where the tab widens with its
+		 * figures, about 3 to 4%; every window from 806 high up keeps its tab and its figures exactly as they were. The
+		 * figures are never taller than the tab, which holds 9 px from a window 754 high. FigurePx is how tall they are
+		 * drawn. CampaignHUD's mount line asks Typed for CountPt (13.5): the layer takes the face as it is given and draws
+		 * it FigureGrow larger (the test reads the mount line and holds the two to each other).
+		 */
+		constexpr double TabTop = 32.4;
+		constexpr double TabBottom = BoxH;
+		constexpr double TabPaper = 1.0; // the paper between a side's edge and the figures' ink, at the least
+		constexpr double TabRound = 1.6;
+		constexpr double CountPt = 13.5;
+		constexpr double FigureTop = 0.592;
+		constexpr double FigureBottom = -0.011;
+		constexpr double FigureH = FigureTop - FigureBottom;
+		constexpr double FigureInk = 0.48;
+		constexpr double FigureAdvance = 0.6;
+		constexpr double Ascent = 0.78125;
+		constexpr double Descent = 0.341796875;
+		constexpr int CountMostFigures = 3; // a run is never so long; a longer count is drawn in the tab of three
+		constexpr double FigureFloorPx = 9.0; // the art director's floor for the count's figures
+
+		/** The count's em at CountPt, in units. */
+		constexpr double CountEm() { return CountPt * 4.0 / 3.0; }
+		/**
+		 * How much larger than CountPt's the figures are drawn on a screen of PxPerUnit: enough for them to stand
+		 * FigureFloorPx tall, and no taller than the tab; exactly 1 where CountPt's stand so tall already, from a window
+		 * FigureFloorHigh high up.
+		 */
+		double FigureGrow(double PxPerUnit);
+		/** The em the figures are drawn at on a screen of PxPerUnit, in units: CountEm grown by FigureGrow. */
+		double CountEmAt(double PxPerUnit);
+		/** How far above the middle of its line, as Slate measures it, the figures' ink has its middle on a screen of PxPerUnit, in units: the line is set this much below the tab's middle. */
+		double FigureLift(double PxPerUnit);
+		/** The fold-coloured edge at each side of the tab, on a screen of PxPerUnit: a unit, held to 1.5 px. */
+		double TabEdge(double PxPerUnit);
+		/**
+		 * The tab for a count of Figures figures (1 to CountMostFigures) on a screen of PxPerUnit, centred under the
+		 * disc: the figures' ink as the face sets them, TabPaper of paper and TabEdge of edge either side, as wide as the
+		 * seal's box at the most. The figures stand FigureTrack closer than the face sets them, so the paper at each side
+		 * of two figures is half a pixel more than TabPaper.
+		 */
+		FBox TabOf(int Figures, double PxPerUnit);
+		/**
+		 * Where the figures' ink lies on it: centred in the tab, as wide as Figures figures set FigureTrack closer than the
+		 * face sets them, FigureH tall at the em they are drawn at.
+		 */
+		FBox FiguresOf(int Figures, double PxPerUnit);
+		/**
+		 * How much closer than the face's advance two neighbouring figures stand (the art director, 64(g)(4), ruling 4):
+		 * 1 px, in units, so that two figures leave half a pixel more paper at each side of a tab no wider than before,
+		 * and never touch its edges, as "21" did. Never more than three quarters of the room between two of the widest
+		 * figures' ink, so they never touch each other (which binds only under a window 562 high). The figures are
+		 * never drawn smaller to save width.
+		 */
+		double FigureTrack(double PxPerUnit);
+		/** Where the middle of figure Index (from 0, of Figures) stands across the seal's box, in units: one advance less FigureTrack from the next, the figures centred on the tab. */
+		double FigureAt(int Index, int Figures, double PxPerUnit);
+		/** How tall the figures' ink is drawn on a screen of PxPerUnit pixels to a unit (grown by FigureGrow). */
+		double FigurePx(double PxPerUnit);
+		/** The lowest window, in pixels high, from which CountPt's own figures stand FigureFloorPx tall or more (a unit is the window's height over 972): under it they are grown. */
+		double FigureFloorHigh();
+		/** How many figures a count has. */
+		int FiguresIn(int Count);
 	}
 }

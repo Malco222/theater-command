@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 
 namespace EdgeSeals
 {
@@ -17,11 +18,58 @@ namespace EdgeSeals
 			return Letter == ' ' || Letter == '\t' || Letter == '\n' || Letter == '\r';
 		}
 
-		/** A word that is only a dash (-, the en dash or the em dash in UTF-8): no word to end a cut line on. */
+		/** Where a word ends once any stops or full stops after it are taken off. */
+		size_t BareEnd(const std::string& Text, size_t Start, size_t End)
+		{
+			while (End > Start && (IsStop(Text[End - 1]) || Text[End - 1] == '.'))
+			{
+				--End;
+			}
+			return End;
+		}
+
+		/** A word that is only stops (",", ";", ":", "."), standing apart from the word before it: no word to end a cut line on. */
+		bool IsStopsWord(const std::string& Text, size_t Start, size_t End)
+		{
+			return BareEnd(Text, Start, End) == Start;
+		}
+
+		/** A word that is only a dash (-, the en dash or the em dash in UTF-8), with or without a stop after it: no word to end a cut line on. */
 		bool IsDashWord(const std::string& Text, size_t Start, size_t End)
 		{
-			const std::string Word = Text.substr(Start, End - Start);
+			const std::string Word = Text.substr(Start, BareEnd(Text, Start, End) - Start);
 			return Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94";
+		}
+
+		/**
+		 * A joining or small word, in any case, with any stop or full stop after it: no word to end a cut line on ("the
+		 * Finnish troops at", "reports for duty and is"). The rules' own list for the same job (monthcard.ts, LITTLE: the
+		 * articles, prepositions, conjunctions, pronouns and the verbs that only help another), and "her".
+		 */
+		bool IsSmallWord(const std::string& Text, size_t Start, size_t End)
+		{
+			End = BareEnd(Text, Start, End);
+			if (End == Start || End - Start > 7)
+			{
+				return false;
+			}
+			std::string Word;
+			for (size_t At = Start; At < End; ++At)
+			{
+				const char Letter = Text[At];
+				Word += Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+			}
+			for (const char* Small : { "a", "an", "the", "of", "at", "in", "on", "to", "with", "for", "from", "by", "and", "or", "but", "its", "their", "his", "her",
+					 "is", "are", "was", "were", "be", "been", "has", "have", "had", "can", "could", "will", "would", "may", "must", "not", "no", "it", "they", "he",
+					 "we", "that", "which", "as", "if", "so", "than", "then", "when", "while", "before", "after", "until", "because", "about", "out", "up", "off",
+					 "into", "over", "under", "near", "round", "against", "between", "who", "whose" })
+			{
+				if (Word == Small)
+				{
+					return true;
+				}
+			}
+			return false;
 		}
 
 		double ClampTo(double Value, double Low, double High)
@@ -213,7 +261,8 @@ namespace EdgeSeals
 			{
 				++At;
 			}
-			if (At > Start)
+			// (stops standing before the first word say nothing, and are no word to begin on either)
+			if (At > Start && (!Words.empty() || !IsStopsWord(Text, Start, At)))
 			{
 				Words.emplace_back(Start, At);
 			}
@@ -236,21 +285,642 @@ namespace EdgeSeals
 					break;
 				}
 			}
-			// (a lone dash is no word to end on)
-			while (Kept > 1 && IsDashWord(Text, Words[Kept - 1].first, Words[Kept - 1].second))
+			for (;;)
 			{
-				--Kept;
+				// (a lone dash is no word to end on, nor stops standing on their own, nor a joining or small word: back to
+				// the last word that says something)
+				while (Kept > 1 && (IsStopsWord(Text, Words[Kept - 1].first, Words[Kept - 1].second) || IsDashWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)
+						   || IsSmallWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)))
+				{
+					--Kept;
+				}
+				// (nor is a bracket left open: "VI Corps (36th and 34th Infantry" goes back to before the word that opened it)
+				int Depth = 0;
+				size_t Opened = 0;
+				for (size_t Word = 0; Word < Kept; ++Word)
+				{
+					for (size_t At = Words[Word].first; At < Words[Word].second; ++At)
+					{
+						if (Text[At] == '(')
+						{
+							Opened = Depth == 0 ? Word : Opened;
+							++Depth;
+						}
+						else if (Text[At] == ')' && Depth > 0)
+						{
+							--Depth;
+						}
+					}
+				}
+				if (Depth == 0 || Opened == 0)
+				{
+					break;
+				}
+				Kept = Opened;
 			}
 		}
 		std::string Out = Text.substr(Words[0].first, Words[Kept - 1].second - Words[0].first);
 		if (Kept < Words.size())
 		{
-			while (!Out.empty() && IsStop(Out.back()))
+			while (!Out.empty() && (IsStop(Out.back()) || IsSpace(Out.back())))
 			{
 				Out.pop_back();
 			}
 		}
 		return Out;
+	}
+
+	FAlike AlikeOf(ESection Section, const std::string& Word, int Tone, const std::string& Sign)
+	{
+		const FLook Worn = LookOf(Section, Word, Tone);
+		FAlike Alike;
+		Alike.Wax = Worn.Wax;
+		Alike.bPulse = Worn.bPulse;
+		Alike.Glyph = GlyphOf(Section, Word, MayPress(Sign));
+		if (Alike.Glyph == EGlyph::Sign)
+		{
+			Alike.Sign = Sign;
+		}
+		return Alike;
+	}
+
+	FAlike AsDrawn(const FAlike& Look, bool bPressed)
+	{
+		FAlike Drawn = Look;
+		// (a sign the screen does not press, or one with no seal picture to press, shows the three lines: PaintMark)
+		if (Drawn.Glyph == EGlyph::Sign && (!bPressed || Look::SignFinest(Drawn.Sign) <= 0.0))
+		{
+			Drawn.Glyph = EGlyph::News;
+			Drawn.Sign.clear();
+		}
+		return Drawn;
+	}
+
+	bool RunsMeet(const FAlikeRun& A, const FAlikeRun& B)
+	{
+		// (each starts before the other ends; weighed as distances in 64 bits, so no int sum or difference can overflow)
+		const long long Apart = static_cast<long long>(B.First) - static_cast<long long>(A.First);
+		return A.Count >= 1 && B.Count >= 1 && (Apart >= 0 ? Apart < A.Count : -Apart < B.Count);
+	}
+
+	void FoldAlike(const std::vector<FAlike>& Looks, std::vector<FAlikeRun>& Out, int Least)
+	{
+		Out.clear();
+		const int Count = static_cast<int>(Looks.size());
+		const int Fewest = std::max(Least, 2);
+		for (int First = 0; First < Count;)
+		{
+			int End = First + 1;
+			// (a WARNING stands alone, the red wax or the warning's mark: it never folds, and as it looks like nothing else that
+			// folds, no run goes past it)
+			if (!Looks[static_cast<size_t>(First)].IsWarning())
+			{
+				while (End < Count && Looks[static_cast<size_t>(End)] == Looks[static_cast<size_t>(First)])
+				{
+					++End;
+				}
+			}
+			if (End - First >= Fewest)
+			{
+				Out.push_back(FAlikeRun{ First, End - First });
+			}
+			else
+			{
+				for (int Each = First; Each < End; ++Each)
+				{
+					Out.push_back(FAlikeRun{ Each, 1 });
+				}
+			}
+			First = End;
+		}
+	}
+
+	namespace
+	{
+		void SplitWords(const std::string& Text, std::vector<std::string>& Out)
+		{
+			Out.clear();
+			for (size_t At = 0; At < Text.size();)
+			{
+				while (At < Text.size() && IsSpace(Text[At]))
+				{
+					++At;
+				}
+				const size_t Start = At;
+				while (At < Text.size() && !IsSpace(Text[At]))
+				{
+					++At;
+				}
+				if (At > Start)
+				{
+					Out.push_back(Text.substr(Start, At - Start));
+				}
+			}
+			// (the sentence's own full stop is no part of what it says of each)
+			while (!Out.empty())
+			{
+				std::string& Last = Out.back();
+				while (!Last.empty() && (Last.back() == '.' || Last.back() == '!' || Last.back() == '?'))
+				{
+					Last.pop_back();
+				}
+				if (!Last.empty())
+				{
+					break;
+				}
+				Out.pop_back();
+			}
+		}
+
+		std::string JoinWords(const std::vector<std::string>& Words, size_t From, size_t To)
+		{
+			std::string Out;
+			for (size_t Index = From; Index < To; ++Index)
+			{
+				Out += Index > From ? " " : "";
+				Out += Words[Index];
+			}
+			return Out;
+		}
+
+		/** The rules' listNames: two as "A and B", three or four whole, more as the first three "and N more". */
+		std::string ListNames(const std::vector<std::string>& Names)
+		{
+			const size_t Count = Names.size();
+			if (Count <= 2)
+			{
+				return Count == 0 ? std::string() : Count == 1 ? Names[0] : Names[0] + " and " + Names[1];
+			}
+			std::string Out;
+			const size_t Whole = Count > 4 ? 3 : Count - 1;
+			for (size_t Index = 0; Index < Whole; ++Index)
+			{
+				Out += Index > 0 ? ", " : "";
+				Out += Names[Index];
+			}
+			return Count > 4 ? Out + " and " + std::to_string(Count - 3) + " more" : Out + " and " + Names[Count - 1];
+		}
+
+		bool StartsLower(const std::string& Word)
+		{
+			return !Word.empty() && Word[0] >= 'a' && Word[0] <= 'z';
+		}
+
+		bool EndsStopped(const std::string& Word)
+		{
+			return !Word.empty() && (IsStop(Word.back()) || Word.back() == '.');
+		}
+
+		/** A word that joins names in a list ("Britain and France"): never the verb a name's words end at, nor part of one name. */
+		bool IsJoin(const std::string& Word)
+		{
+			return Word == "and" || Word == "or" || Word == "nor" || Word == "&";
+		}
+
+		/** A word that ends a sentence: the words after it are another sentence, which a folded seal's words never run on into. */
+		bool EndsSentence(const std::string& Word)
+		{
+			return !Word.empty() && (Word.back() == '.' || Word.back() == '!' || Word.back() == '?');
+		}
+
+		bool EndsWith(const std::string& Word, const char* Tail)
+		{
+			const std::string Wanted(Tail);
+			return Word.size() >= Wanted.size() && Word.compare(Word.size() - Wanted.size(), Wanted.size(), Wanted) == 0;
+		}
+
+		/**
+		 * A word the rules put after a nation's adjective as the thing it names ("German troops land", "Italian envoys
+		 * are courting"): part of the name, never the verb. (src/campaign: every word after an adjective's "${adj}".)
+		 */
+		bool IsNamedThing(const std::string& Word)
+		{
+			for (const char* Thing : { "troops", "army", "armies", "corps", "air", "airborne", "fighters", "bombers", "aircraft", "agents", "sabotage", "industry",
+					 "hands", "forces", "fleet", "fleets", "fieldworks", "command", "train", "ships", "shipping", "raid", "production", "navy", "landing", "honour",
+					 "envoys", "drawing", "designs", "counter", "coast", "submarine", "submarines", "guns", "tanks", "divisions" })
+			{
+				if (Word == Thing)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/** A name's own small word: "Charles de Gaulle", "Army of the Rhine". */
+		bool IsNameParticle(const std::string& Word)
+		{
+			for (const char* Particle : { "de", "du", "da", "di", "del", "della", "der", "den", "van", "von", "la", "le", "of", "the", "y", "al", "bin", "ibn" })
+			{
+				if (Word == Particle)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/** A word with any stops after it taken off ("rearms:" "rearms"). */
+		std::string Bare(const std::string& Word)
+		{
+			size_t End = Word.size();
+			while (End > 0 && (IsStop(Word[End - 1]) || Word[End - 1] == '.'))
+			{
+				--End;
+			}
+			return Word.substr(0, End);
+		}
+
+		/**
+		 * The sentences of a run as a name each and the same words after it (the predicate): where each sentence is one
+		 * to four words with no stop in them, none named twice, and then the same words, the first of them in small
+		 * letters (a verb, never another name). Out: the names, "The" made "the" for the list. A list's joining word
+		 * ("and", "or") is never the verb, and a name with one in it is not listed ("Britain and France declare war"
+		 * three times over would read "3 and France declare war"); nor are words that run on past the end of a sentence
+		 * ("... for a command. He was ..."), whose second sentence the plural would not fit. Nor is a thing named after a
+		 * nation's adjective ("German troops land at Narvik") taken for the verb: it is part of the name. The predicate
+		 * is said up to a colon in it, never past it ("3 rearm: Germany, Italy and Japan"), its "its" and "his" made
+		 * "their"; where a second verb after "and" would want its plural too ("joins the Axis and declares war"), or a
+		 * "her" would want "their" or stay, the sentences are not split.
+		 */
+		bool SplitNames(const std::vector<FSaid>& Said, const FAlikeRun& Run, std::vector<std::string>& OutNames, std::string& OutSays)
+		{
+			std::vector<std::string> First, Each;
+			SplitWords(Said[static_cast<size_t>(Run.First)].Sentence, First);
+			for (size_t Lead = 1; Lead <= 4 && Lead < First.size(); ++Lead)
+			{
+				if (!StartsLower(First[Lead]))
+				{
+					continue;
+				}
+				// (a word in small letters that may be part of a name: a list's joining word, a thing named after a nation's
+				// adjective, a name's own small word, "Charles de Gaulle". Any other is the verb: where the run does not split
+				// at it, it splits nowhere, and no later word is taken for the verb with it inside a name, "3 captain: Hood
+				// loses her")
+				const bool bNamePart = IsJoin(First[Lead]) || IsNamedThing(Bare(First[Lead])) || IsNameParticle(First[Lead]);
+				if (EndsStopped(First[Lead - 1]) || IsJoin(First[Lead]) || IsNamedThing(Bare(First[Lead])))
+				{
+					if (bNamePart)
+					{
+						continue;
+					}
+					return false;
+				}
+				bool bOneSentence = true;
+				for (size_t Word = Lead; Word + 1 < First.size(); ++Word)
+				{
+					bOneSentence = bOneSentence && !EndsSentence(First[Word]);
+				}
+				if (!bOneSentence)
+				{
+					continue;
+				}
+				const size_t Says = First.size() - Lead;
+				bool bAll = true;
+				OutNames.clear();
+				for (int Index = Run.First; bAll && Index < Run.First + Run.Count; ++Index)
+				{
+					SplitWords(Said[static_cast<size_t>(Index)].Sentence, Each);
+					const size_t Named = Each.size() > Says ? Each.size() - Says : 0;
+					bAll = Named >= 1 && Named <= 4;
+					for (size_t Word = 0; bAll && Word < Each.size(); ++Word)
+					{
+						bAll = Word < Named ? !EndsStopped(Each[Word]) && !IsJoin(Each[Word]) : Each[Word] == First[Lead + Word - Named];
+					}
+					if (bAll)
+					{
+						std::string Name = JoinWords(Each, 0, Named);
+						if (Name.compare(0, 4, "The ") == 0)
+						{
+							Name[0] = 't';
+						}
+						bAll = std::find(OutNames.begin(), OutNames.end(), Name) == OutNames.end();
+						OutNames.push_back(Name);
+					}
+				}
+				if (bAll)
+				{
+					std::vector<std::string> Words(First.begin() + static_cast<std::ptrdiff_t>(Lead), First.end());
+					// (up to a colon, never past it: what follows it is the card's gloss on one, not the names' list)
+					for (size_t Word = 0; Word < Words.size(); ++Word)
+					{
+						if (!Words[Word].empty() && Words[Word].back() == ':')
+						{
+							Words.resize(Word + 1);
+							Words[Word] = Bare(Words[Word]);
+							break;
+						}
+					}
+					// (the verb made plural, and an "is", "has" or "was" after an "and" with it: "report for duty and are waiting";
+					// "its" and "his" made "their")
+					Words[0] = PluralVerb(Words[0]);
+					bool bSplit = true;
+					for (size_t Word = 0; Word < Words.size(); ++Word)
+					{
+						const std::string Plain = Bare(Words[Word]);
+						if (Word > 0 && Words[Word - 1] == "and" && (Plain == "is" || Plain == "has" || Plain == "was"))
+						{
+							Words[Word] = PluralVerb(Words[Word]);
+						}
+						else if (Word > 0 && IsJoin(Words[Word - 1]) && PluralVerb(Plain) != Plain)
+						{
+							bSplit = false; // (a second verb, "and declares": it would want its plural, which a noun must not get)
+						}
+						if (Plain == "its" || Plain == "his")
+						{
+							Words[Word] = "their" + Words[Word].substr(Plain.size());
+						}
+						bSplit = bSplit && Plain != "her";
+					}
+					if (bSplit)
+					{
+						OutSays = JoinWords(Words, 0, Words.size());
+						return true;
+					}
+				}
+				if (!bNamePart)
+				{
+					return false;
+				}
+			}
+			return false;
+		}
+	}
+
+	FSaid RowSaid(const std::string& Place, const std::string& Tag, const std::string& Join, const std::string& JoinName, const std::string& Text)
+	{
+		FSaid Said;
+		Said.Section = ESection::Row;
+		Said.Line = RowLine(Place, Tag, Join, JoinName, Text);
+		Said.Sentence = Text.empty() ? Said.Line : Text;
+		Said.Name = Place;
+		if (!Tag.empty())
+		{
+			Said.Head = !Join.empty() && !JoinName.empty() ? Tag + " " + Join + " " + JoinName : Tag;
+		}
+		return Said;
+	}
+
+	FSaid PlainSaid(ESection Section, const std::string& Text)
+	{
+		FSaid Said;
+		Said.Section = Section;
+		Said.Line = Text;
+		Said.Sentence = Text;
+		return Said;
+	}
+
+	std::string PluralVerb(const std::string& Said)
+	{
+		// (a stop after it is kept as it was: "rearms:" "rearm:")
+		size_t Bare = Said.size();
+		while (Bare > 0 && IsStop(Said[Bare - 1]))
+		{
+			--Bare;
+		}
+		if (Bare < Said.size())
+		{
+			return PluralVerb(Said.substr(0, Bare)) + Said.substr(Bare);
+		}
+		const std::string& Word = Said;
+		if (Word == "is")
+		{
+			return "are";
+		}
+		if (Word == "has")
+		{
+			return "have";
+		}
+		if (Word == "was")
+		{
+			return "were";
+		}
+		// (and a few the rules below would cut wrong: "torpedoes" "torpedo", "echoes" "echo", "vetoes" "veto", "focuses" "focus")
+		if (Word == "does" || Word == "goes" || Word == "torpedoes" || Word == "echoes" || Word == "vetoes" || Word == "focuses")
+		{
+			return Word.substr(0, Word.size() - 2);
+		}
+		if (!StartsLower(Word) || Word.size() < 3 || Word.back() != 's' || EndsWith(Word, "ss") || EndsWith(Word, "us") || EndsWith(Word, "is"))
+		{
+			return Word;
+		}
+		// (carries carry, but dies die and lies lie)
+		if (EndsWith(Word, "ies"))
+		{
+			return Word.size() > 4 ? Word.substr(0, Word.size() - 3) + "y" : Word.substr(0, Word.size() - 1);
+		}
+		// (presses press, pushes push, reaches reach, taxes tax, buzzes buzz; but closes close, seizes seize)
+		if (EndsWith(Word, "sses") || EndsWith(Word, "shes") || EndsWith(Word, "ches") || EndsWith(Word, "xes") || EndsWith(Word, "zzes"))
+		{
+			return Word.substr(0, Word.size() - 2);
+		}
+		return Word.substr(0, Word.size() - 1);
+	}
+
+	namespace
+	{
+		/** Where on the card a part's items are, for a folded seal's words: "" for a band or the lead story, which the words do not place. */
+		const char* PartWords(ESection Section)
+		{
+			return Section == ESection::Row ? " on your fronts" : Section == ESection::Home ? " at home" : Section == ESection::Staff ? " from your staff" : Section == ESection::Elsewhere ? " elsewhere in the war" : "";
+		}
+
+		/**
+		 * Where on the card the items From to To (not To) are: their parts' words in card order, each once ("at home and
+		 * from your staff"); "" where one is a band or the lead story, which the words do not place.
+		 */
+		std::string PartsOf(const std::vector<FSaid>& Said, int From, int To)
+		{
+			std::vector<std::string> Parts;
+			for (int Index = From; Index < To; ++Index)
+			{
+				const std::string Part = PartWords(Said[static_cast<size_t>(Index)].Section);
+				if (Part.empty())
+				{
+					return std::string();
+				}
+				if (std::find(Parts.begin(), Parts.end(), Part) == Parts.end())
+				{
+					Parts.push_back(Part);
+				}
+			}
+			std::string Out;
+			for (size_t Index = 0; Index < Parts.size(); ++Index)
+			{
+				Out += Index == 0 ? Parts[Index] : (Index + 1 == Parts.size() ? " and" : ",") + Parts[Index];
+			}
+			return Out;
+		}
+
+		/** Words with no stop or full stop at their end: a short line goes on in the list. */
+		std::string Unstopped(std::string Words)
+		{
+			while (!Words.empty() && (IsStop(Words.back()) || Words.back() == '.' || Words.back() == '!' || Words.back() == '?' || IsSpace(Words.back())))
+			{
+				Words.pop_back();
+			}
+			return Words;
+		}
+
+		/** Whether an item is a front's row with a title as the card prints it: its place and its head ("Ruhr HIT"). */
+		bool HasTitle(const FSaid& Said)
+		{
+			return Said.Section == ESection::Row && !Said.Name.empty() && !Said.Head.empty();
+		}
+
+		/** The list a folded seal names: the short lines given, "; " between, and "and N more" for the Rest after them. */
+		std::string ListLines(const std::vector<std::string>& Lines, size_t Named, int Rest)
+		{
+			std::string Out;
+			for (size_t Index = 0; Index < Named; ++Index)
+			{
+				Out += (Index == 0 ? "" : "; ") + Lines[Index];
+			}
+			if (Rest > 0)
+			{
+				Out += (Out.empty() ? "and " : "; and ") + std::to_string(Rest) + " more";
+			}
+			return Out;
+		}
+	}
+
+	int TipLettersAt(double Scale)
+	{
+		// (a screen of no measure is taken at a pixel a unit; a letter is never set under a pixel)
+		const double At = Scale > 0.0 ? Scale : 1.0;
+		const double Advance = std::max(std::floor(TipAdvance * TipPt * 4.0 / 3.0 * At + 0.5), 1.0);
+		return static_cast<int>(std::floor(TipWrap * At / Advance + 1e-9));
+	}
+
+	int TipLetters()
+	{
+		// (worked out once: the least is at a window 640 high, where a letter of 4.5 px is set 5)
+		static const int Least = []()
+		{
+			int Most = TipLettersAt(1.0);
+			for (int High = static_cast<int>(TipLeastHigh); High <= static_cast<int>(TipMostScale * 1080.0); ++High)
+			{
+				Most = std::min(Most, TipLettersAt(static_cast<double>(High) / 1080.0));
+			}
+			for (int Quarters = 4; Quarters <= static_cast<int>(TipMostScale * 4.0); ++Quarters)
+			{
+				Most = std::min(Most, TipLettersAt(static_cast<double>(Quarters) / 4.0));
+			}
+			return Most;
+		}();
+		return Least;
+	}
+
+	int LettersOf(const std::string& Words)
+	{
+		int Letters = 0;
+		for (const char Byte : Words)
+		{
+			// (each letter's first byte; the bytes that follow it in UTF-8 are 10xxxxxx)
+			Letters += (static_cast<unsigned char>(Byte) & 0xC0) != 0x80 ? 1 : 0;
+		}
+		return Letters;
+	}
+
+	std::string ShortLine(const FSaid& Said)
+	{
+		if (HasTitle(Said))
+		{
+			return Unstopped(Said.Name + " " + Said.Head);
+		}
+		return Unstopped(EightWords(Said.Line));
+	}
+
+	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room)
+	{
+		// (a run that is not wholly on the card says nothing; its end is weighed without adding, which could overflow)
+		if (Run.First < 0 || Run.Count < 1 || static_cast<size_t>(Run.First) > Said.size() || static_cast<size_t>(Run.Count) > Said.size() - static_cast<size_t>(Run.First))
+		{
+			return std::string();
+		}
+		const FSaid& Head = Said[static_cast<size_t>(Run.First)];
+		if (Run.Count == 1)
+		{
+			return EightWords(Head.Line);
+		}
+		const std::string Count = std::to_string(Run.Count);
+		std::vector<std::string> Names;
+		std::string Says;
+		if (SplitNames(Said, Run, Names, Says))
+		{
+			return Count + " " + Says + ": " + ListNames(Names);
+		}
+		// (a front's rows that share their head: its place on each, and the head as the card prints it; "The" made "the" in
+		// the list, as SplitNames makes it)
+		bool bRows = !Head.Head.empty();
+		Names.clear();
+		for (int Index = Run.First; bRows && Index < Run.First + Run.Count; ++Index)
+		{
+			const FSaid& Row = Said[static_cast<size_t>(Index)];
+			std::string Name = Row.Name;
+			if (Name.compare(0, 4, "The ") == 0)
+			{
+				Name[0] = 't';
+			}
+			bRows = Row.Section == ESection::Row && Row.Head == Head.Head && !Name.empty() && std::find(Names.begin(), Names.end(), Name) == Names.end();
+			Names.push_back(Name);
+		}
+		if (bRows)
+		{
+			return Count + " " + Head.Head + ": " + ListNames(Names);
+		}
+		// (else each item's own short line, in card order, as many as the hover's line holds, and how many more: each line
+		// stands apart by "; ", so "and 4 more" is one more of the list, never four more of the line before it. The lines
+		// stop at an item with no words of its own, which the list could not name)
+		std::vector<std::string> Lines;
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
+		{
+			const std::string Line = ShortLine(Said[static_cast<size_t>(Index)]);
+			if (Line.empty())
+			{
+				break;
+			}
+			Lines.push_back(Line);
+		}
+		// (a row whose title the list gives already, two rows of one place and head, gives its first words in its place,
+		// cut by EightWords' own rules, so the list never seems to say one line twice: "Stalino HIT; ...; Stalino HIT: The
+		// Black Sea Fleet shelled". Where those words are the title still, as a row with another side named, it stays)
+		for (size_t Index = 1; Index < Lines.size(); ++Index)
+		{
+			const FSaid& Item = Said[static_cast<size_t>(Run.First) + Index];
+			if (HasTitle(Item) && std::find(Lines.begin(), Lines.begin() + static_cast<std::ptrdiff_t>(Index), Lines[Index]) != Lines.begin() + static_cast<std::ptrdiff_t>(Index))
+			{
+				Lines[Index] = Unstopped(EightWords(Item.Line));
+			}
+		}
+		// (the most lines that fit: one fewer can be longer, for "; and 1 more" is longer than a short last line)
+		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		{
+			const std::string Out = ListLines(Lines, Named, Run.Count - static_cast<int>(Named));
+			if (LettersOf(Out) <= Room)
+			{
+				return Out;
+			}
+		}
+		// (no line fits whole with its "and N more": the first line the list gives, cut a word shorter until it does. Never
+		// into a row's title, which alone says where and what happened: never "Ruhr" for "Ruhr HIT"; the count, then)
+		const int Least = HasTitle(Head) ? LettersOf(ShortLine(Head)) : 1;
+		for (int Most = 7; !Lines.empty() && Most >= 1; --Most)
+		{
+			std::vector<std::string> Cut{ Unstopped(EightWords(Lines[0], Most)) };
+			if (LettersOf(Cut[0]) < Least)
+			{
+				break;
+			}
+			const std::string Out = ListLines(Cut, 1, Run.Count - 1);
+			if (LettersOf(Out) <= Room)
+			{
+				return Out;
+			}
+		}
+		// (no item with words the list could name: the count, and where on the card they are)
+		const std::string Where = PartsOf(Said, Run.First, Run.First + Run.Count);
+		return Count + (Where.empty() ? std::string(" in the month's report") : Where);
 	}
 
 	FLane LaneOf(const FParams& Params, EEdge Edge)
@@ -513,14 +1183,39 @@ namespace EdgeSeals
 
 	FFold FLayout::LayRanked(const FParams& Params, const std::vector<FWant>& Items, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out)
 	{
+		// (each item a seal of its own: an empty list of carries, which allocates nothing)
+		return LayRanked(Params, Items, std::vector<int>(), Total, Most, Reserved, Out);
+	}
+
+	FFold FLayout::LayRanked(const FParams& Params, const std::vector<FWant>& Seals, const std::vector<int>& Carries, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out)
+	{
 		const int Count = std::max(Total, 0);
 		const int Room = std::max(Most, 1);
-		// (the most items that may stand: all of them where they and no "+N" fit in Most seals, else Most - 1)
-		const int Start = std::min(static_cast<int>(Items.size()), Count <= Room ? Count : Room - 1);
+		// (the items the first Standing seals stand for)
+		auto CarriedBy = [&Carries](int Standing)
+		{
+			int Carried = 0;
+			for (int Index = 0; Index < Standing; ++Index)
+			{
+				Carried += static_cast<size_t>(Index) < Carries.size() ? std::max(Carries[static_cast<size_t>(Index)], 1) : 1;
+			}
+			return Carried;
+		};
+		// (the most seals that may stand: all of them where they are no more than Most and carry every item, so that no
+		// "+N" is needed; else Most - 1, and the "+N")
+		int Start = std::min(static_cast<int>(Seals.size()), Room);
+		while (Start > 0 && CarriedBy(Start - 1) >= Count)
+		{
+			--Start; // (and no more seals than it takes to carry every item)
+		}
+		if (CarriedBy(Start) < Count)
+		{
+			Start = std::min(Start, Room - 1);
+		}
 		for (int Standing = Start; Standing >= 0; --Standing)
 		{
-			const int More = Count - Standing;
-			Trial.assign(Items.begin(), Items.begin() + Standing);
+			const int More = std::max(Count - CarriedBy(Standing), 0);
+			Trial.assign(Seals.begin(), Seals.begin() + Standing);
 			if (More > 0)
 			{
 				Trial.push_back(FWant()); // (the "+N" seal: it has no place, and waits in the stack at the top)
@@ -538,6 +1233,94 @@ namespace EdgeSeals
 		}
 		Out.clear();
 		return FFold{ 0, 0 };
+	}
+
+	bool Meet(const FBox& A, const FBox& B)
+	{
+		// (FSlateRect::DoRectanglesIntersect: apart only where one lies wholly beyond the other; touching is meeting)
+		return !(B.MaxX < A.MinX || A.MaxX < B.MinX || B.MaxY < A.MinY || A.MaxY < B.MinY);
+	}
+
+	int UnderPiece(const FBox& Seal, const std::vector<FBox>& Pieces)
+	{
+		for (size_t Index = 0; Index < Pieces.size(); ++Index)
+		{
+			if (Meet(Seal, Pieces[Index]))
+			{
+				return static_cast<int>(Index);
+			}
+		}
+		return -1;
+	}
+
+	bool FUnderWatch::Due(int Slot, int Revision, bool bLive, bool bArrived, int Holding)
+	{
+		if (Slot < 0 || Slot >= Slots || !bLive || !bArrived || (bSeen[Slot] && SeenRevision[Slot] == Revision && SeenHolding[Slot] == Holding))
+		{
+			return false;
+		}
+		bSeen[Slot] = true;
+		SeenRevision[Slot] = Revision;
+		SeenHolding[Slot] = Holding;
+		return true;
+	}
+
+	FSealAsk ReadSealAsk(const std::string& Asked, int Most)
+	{
+		FSealAsk Ask;
+		size_t At = 0;
+		while (At <= Asked.size())
+		{
+			const size_t End = std::min(Asked.find(',', At), Asked.size());
+			std::string Part;
+			for (size_t Index = At; Index < End; ++Index)
+			{
+				const char Letter = Asked[Index];
+				if (!IsSpace(Letter))
+				{
+					Part += Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+				}
+			}
+			At = End + 1;
+			if (Part.empty())
+			{
+				continue;
+			}
+			if (Part == "slide")
+			{
+				Ask.bSlide = true;
+				continue;
+			}
+			// ("open:N", "hover:N": N a whole number from 1 to Most, at most two figures. The figures are read only once
+			// they are known to be two digits or fewer, so a long number can never overflow the count)
+			const size_t Colon = Part.find(':');
+			const std::string Word = Part.substr(0, Colon == std::string::npos ? Part.size() : Colon);
+			const std::string Number = Colon == std::string::npos ? std::string() : Part.substr(Colon + 1);
+			bool bNumber = !Number.empty() && Number.size() <= 2;
+			for (const char Figure : Number)
+			{
+				bNumber = bNumber && Figure >= '0' && Figure <= '9';
+			}
+			int Value = 0;
+			for (size_t Index = 0; bNumber && Index < Number.size(); ++Index)
+			{
+				Value = Value * 10 + (Number[Index] - '0');
+			}
+			const bool bSeal = bNumber && Value >= 1 && Value <= std::max(Most, 1);
+			if (bSeal && Word == "open")
+			{
+				Ask.Open = Value;
+			}
+			else if (bSeal && Word == "hover")
+			{
+				Ask.Hover = Value;
+			}
+			else
+			{
+				++Ask.Unknown;
+			}
+		}
+		return Ask;
 	}
 
 	double SlideShare(double Since, int Order, double Stagger, double Slide)
@@ -655,7 +1438,87 @@ namespace EdgeSeals
 			return Finest > 0.0 && Units * Scale >= MinStrokePx;
 		}
 
-		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4])
+		bool SetPressed(double PxPerUnit)
+		{
+			return SignHolds(SealFloor, SignPictureW, SignPictureH, PxPerUnit);
+		}
+
+		namespace
+		{
+			/**
+			 * The two swords' strokes, as Sword sets them, into Out (room for MarkMost): for each, its blade, its point, its
+			 * guard, its grip and, where it holds, its pommel; the second sword the first in a mirror. How many.
+			 */
+			int SwordStrokes(const FSword& Sword, FStroke* Out)
+			{
+				const double Turn = Sword.Turn * 0.017453292519943295;
+				const double AlongX = std::cos(Turn), AlongY = -std::sin(Turn); // (the first sword, from its foot toward its point)
+				const double PointFrom = Sword.Tip - Sword.Point; // (where the blade's full width ends and its point begins)
+				int Count = 0;
+				for (const double Side : { 1.0, -1.0 })
+				{
+					// (a point at S along the sword, from where the two cross; the second sword mirrored left for right)
+					auto At = [&](double S) { return FPoint{ Side * S * AlongX, Sword.Lift + S * AlongY }; };
+					const double Blade = -Side * Sword.Turn, Across = Side * (90.0 - Sword.Turn);
+					const FPoint BladeAt = At((Sword.Guard + PointFrom) * 0.5), PointAt = At((PointFrom - Sword.BladeThick + Sword.Tip) * 0.5);
+					const FPoint GuardAt = At(Sword.Guard), GripAt = At((Sword.Guard + Sword.GripEnd) * 0.5), PommelAt = At(Sword.Pommel);
+					Out[Count++] = FStroke{ EStroke::Bar, BladeAt.X, BladeAt.Y, PointFrom - Sword.Guard, Sword.BladeThick, Blade };
+					// (the point: a narrower bar from inside the blade's end out to the tip, so the blade narrows to it)
+					Out[Count++] = FStroke{ EStroke::Bar, PointAt.X, PointAt.Y, Sword.Tip - (PointFrom - Sword.BladeThick), Sword.PointThick, Blade };
+					Out[Count++] = FStroke{ EStroke::Bar, GuardAt.X, GuardAt.Y, Sword.GuardLong, Sword.GuardThick, Across };
+					Out[Count++] = FStroke{ EStroke::Bar, GripAt.X, GripAt.Y, Sword.Guard - Sword.GripEnd + Sword.GripThick, Sword.GripThick, Blade };
+					if (Sword.bPommel)
+					{
+						Out[Count++] = FStroke{ EStroke::Dot, PommelAt.X, PommelAt.Y, Sword.PommelD, 0.0, 0.0 };
+					}
+				}
+				return Count;
+			}
+		}
+
+		FSword SwordOf(double PxPerUnit)
+		{
+			// (a screen of no measure is taken at a pixel a unit, as Stroke takes it)
+			const double Scale = PxPerUnit > 0.0 ? PxPerUnit : 1.0;
+			FSword Sword;
+			Sword.Turn = 36.0; // (as flat as the X's strokes were)
+			// (the blade runs long from the crossing to its point, the hilt short below it: so the outline is two swords,
+			// not the X's four equal arms. The blade is the X's own weight, and narrows to a point over its last 3 units)
+			Sword.Tip = 10.3;
+			Sword.BladeThick = Stroke(2.4, PxPerUnit);
+			Sword.Point = 3.0;
+			Sword.PointThick = std::min(Stroke(1.2, PxPerUnit), Sword.BladeThick);
+			Sword.Guard = -5.4;
+			Sword.GuardThick = Stroke(1.8, PxPerUnit);
+			// (the guard stands out past the blade on each side by 1.5 px at its full width, its round end beyond that: 2
+			// units at the least, more on a small screen, and never more than 4, however small a screen is measured)
+			Sword.Overhang = std::min(std::max(2.0, MinStrokePx / Scale + Sword.GuardThick * 0.5), 4.0);
+			Sword.GuardLong = Sword.BladeThick + 2.0 * Sword.Overhang;
+			Sword.GripThick = Stroke(1.6, PxPerUnit);
+			Sword.Pommel = -8.8;
+			Sword.PommelD = 3.2;
+			Sword.Neck = (Sword.Guard - Sword.GuardThick * 0.5) - (Sword.Pommel + Sword.PommelD * 0.5);
+			// (the pommel where its neck and how far it stands past its grip on each side both hold 1.5 px, as the guard is
+			// measured: drawn 3.2 across on a grip of 1.6, from 1.875 px a unit up, a window 1823 high; else the grip ends round)
+			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * 0.5 * Scale >= MinStrokePx - 1e-9;
+			Sword.GripEnd = Sword.bPommel ? Sword.Pommel : -7.4;
+			// (the two swords' box, point to hilt, centred on the disc's middle on every screen)
+			FStroke Made[MarkMost];
+			const int Count = SwordStrokes(Sword, Made);
+			double Top = 0.0, Bottom = 0.0;
+			for (int Index = 0; Index < Count; ++Index)
+			{
+				const FStroke& Cut = Made[Index];
+				const double Reach = Cut.Kind == EStroke::Dot ? Cut.Long * 0.5 : std::max(Cut.Long - Cut.Thick, 0.0) * 0.5 * std::fabs(std::sin(Cut.Degrees * 0.017453292519943295)) + Cut.Thick * 0.5;
+				Top = Index == 0 ? Cut.Y - Reach : std::min(Top, Cut.Y - Reach);
+				Bottom = Index == 0 ? Cut.Y + Reach : std::max(Bottom, Cut.Y + Reach);
+			}
+			Sword.Lift = -(Top + Bottom) * 0.5;
+			return Sword;
+		}
+
+		/** The strokes of a drawn mark, all of them (MarkOf hands on as many as its caller has room for). */
+		static int MarkStrokes(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[MarkMost])
 		{
 			auto Bar = [PxPerUnit](double X, double Y, double Long, double Thick, double Degrees)
 			{
@@ -674,10 +1537,10 @@ namespace EdgeSeals
 				Out[1] = FStroke{ EStroke::Dot, 0.0, 6.0, std::max(3.6, Stroke(2.6, PxPerUnit)), 0.0, 0.0 };
 				return 2;
 			case EGlyph::War:
-				// (two strokes crossed flat, as sabres are: about 17 across, 13 high)
-				Out[0] = Bar(0.0, 0.0, 20.0, 2.4, 36.0);
-				Out[1] = Bar(0.0, 0.0, 20.0, 2.4, -36.0);
-				return 2;
+				// (two swords crossed flat, as sabres are, the points up and out: each a blade narrowing to its point, a guard,
+				// a short grip and, where it holds, a pommel; the second the first in a mirror. About 18 across and 13 high,
+				// as the X was: SwordOf)
+				return SwordStrokes(SwordOf(PxPerUnit), Out);
 			case EGlyph::Fallen:
 				Out[0] = FStroke{ EStroke::Bar, -3.75, 0.0, ArmLong, ArmThick, ArmTurn };
 				Out[1] = FStroke{ EStroke::Bar, 3.75, 0.0, ArmLong, ArmThick, -ArmTurn };
@@ -693,16 +1556,45 @@ namespace EdgeSeals
 				Out[2] = Bar(-3.0, 4.6, 11.0, 2.2, 0.0);
 				return 3;
 			case EGlyph::Globe:
-				// (a ring 16.4 across, its equator and its meridian)
-				Out[0] = FStroke{ EStroke::Ring, 0.0, 0.0, 16.4, Stroke(1.7, PxPerUnit), 0.0 };
+			{
+				// (a ring 16.4 across, its level equator, and one curved meridian: an upright ellipse GlobeMeridian of the
+				// ring's width across, its middle line meeting the ring's at the poles. No straight upright stroke: the art
+				// director, 64(g)(4), the old straight meridian read as a cross in a circle)
+				const double Ring = Stroke(1.7, PxPerUnit), Meridian = Stroke(1.6, PxPerUnit);
+				// (and its inside open on every screen: where its line is made thicker to hold 1.5 px, the ellipse is made
+				// wider to keep 1.5 px between its two sides, up to the ring's own width, so it never fills in to an upright
+				// lens, which would read as a bar again. Only under a window 593 high; from there up it is 0.45 of the ring)
+				const double Scale = PxPerUnit > 0.0 ? std::max(PxPerUnit, 0.25) : 1.0;
+				const double Wide = std::min(std::max(16.4 * GlobeMeridian, 2.0 * Meridian + MinStrokePx / Scale), 16.4);
+				Out[0] = FStroke{ EStroke::Ring, 0.0, 0.0, 16.4, Ring, 0.0 };
 				Out[1] = Bar(0.0, 0.0, 16.4, 1.6, 0.0);
-				Out[2] = Bar(0.0, 0.0, 16.4, 1.6, 90.0);
+				Out[2] = FStroke{ EStroke::Ellipse, 0.0, 0.0, 16.4 - Ring + Meridian, Meridian, 0.0, Wide };
 				return 3;
+			}
 			case EGlyph::Sign:
 			case EGlyph::More:
 				break;
 			}
 			return 0;
+		}
+
+		FPoint EllipsePoint(const FStroke& Cut, int Step)
+		{
+			const double Turn = 6.283185307179586 * static_cast<double>(Step % EllipseSteps) / static_cast<double>(EllipseSteps);
+			const double HalfWide = std::max(Cut.Wide - Cut.Thick, 0.0) * 0.5, HalfHigh = std::max(Cut.Long - Cut.Thick, 0.0) * 0.5;
+			return FPoint{ Cut.X + HalfWide * std::sin(Turn), Cut.Y - HalfHigh * std::cos(Turn) };
+		}
+
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke* Out, int Room)
+		{
+			FStroke Made[MarkMost];
+			const int Count = MarkStrokes(Glyph, PxPerUnit, Made);
+			const int Given = std::max(std::min(Count, Room), 0);
+			for (int Index = 0; Index < Given; ++Index)
+			{
+				Out[Index] = Made[Index];
+			}
+			return Given;
 		}
 
 		double WallOf(double PxPerUnit)
@@ -730,6 +1622,81 @@ namespace EdgeSeals
 			Call.RingW = 1.6;
 			Call.Ring = 0.55 * std::min(Spread / 0.1, 1.0) * (1.0 - Spread);
 			return Call;
+		}
+
+		double FigureGrow(double PxPerUnit)
+		{
+			// (9 px of ink over CountPt's, where that is more; never more than the tab's height holds. Where CountPt's figures
+			// stand 9 px already the larger of the two is 1 exactly, so the tab and the figures are as they were)
+			const double Drawn = FigureH * CountEm();
+			if (!(PxPerUnit > 0.0))
+			{
+				return 1.0;
+			}
+			return std::min(std::max(FigureFloorPx / (Drawn * PxPerUnit), 1.0), std::max((TabBottom - TabTop) / Drawn, 1.0));
+		}
+
+		double CountEmAt(double PxPerUnit)
+		{
+			return CountEm() * FigureGrow(PxPerUnit);
+		}
+
+		double FigureLift(double PxPerUnit)
+		{
+			// (the line's middle, and the middle of the figures' ink standing on its baseline, both from the line's top)
+			return ((Ascent + Descent) * 0.5 - (Ascent - (FigureTop + FigureBottom) * 0.5)) * CountEmAt(PxPerUnit);
+		}
+
+		double TabEdge(double PxPerUnit)
+		{
+			return Stroke(1.0, PxPerUnit);
+		}
+
+		FBox TabOf(int Figures, double PxPerUnit)
+		{
+			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
+			const double HalfW = std::min(((FigureInk + FigureAdvance * (Shown - 1)) * CountEmAt(PxPerUnit)) * 0.5 + TabPaper + TabEdge(PxPerUnit), BoxW * 0.5);
+			return FBox{ MidX - HalfW, TabTop, MidX + HalfW, TabBottom };
+		}
+
+		FBox FiguresOf(int Figures, double PxPerUnit)
+		{
+			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
+			const FBox Tab = TabOf(Shown, PxPerUnit);
+			const double Em = CountEmAt(PxPerUnit);
+			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * Em * 0.5, HalfW = ((FigureInk + FigureAdvance * (Shown - 1)) * Em - (Shown - 1) * FigureTrack(PxPerUnit)) * 0.5;
+			return FBox{ MidX - HalfW, Middle - HalfH, MidX + HalfW, Middle + HalfH };
+		}
+
+		double FigureTrack(double PxPerUnit)
+		{
+			return PxPerUnit > 0.0 ? std::min(1.0 / PxPerUnit, 0.75 * (FigureAdvance - FigureInk) * CountEmAt(PxPerUnit)) : 0.0;
+		}
+
+		double FigureAt(int Index, int Figures, double PxPerUnit)
+		{
+			const int Shown = std::max(Figures, 1);
+			return MidX + (Index - (Shown - 1) * 0.5) * (FigureAdvance * CountEmAt(PxPerUnit) - FigureTrack(PxPerUnit));
+		}
+
+		double FigurePx(double PxPerUnit)
+		{
+			return FigureH * CountEmAt(PxPerUnit) * PxPerUnit;
+		}
+
+		double FigureFloorHigh()
+		{
+			return std::ceil(FigureFloorPx / (FigureH * CountEm()) * 972.0);
+		}
+
+		int FiguresIn(int Count)
+		{
+			int Figures = 1;
+			for (int Left = std::max(Count, 0); Left >= 10; Left /= 10)
+			{
+				++Figures;
+			}
+			return Figures;
 		}
 	}
 }
