@@ -916,3 +916,11 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    skin of ...". If the marks are too faint at the ride's distance, say so; their sizes are in `MarkLooks`
    (AirBattleMarks.cpp). The cloud check fitted every hit in all three battles to the aircraft it struck (365 at
    Bremen, 352 at Pearl Harbor, 595 at Midway; ships' hits to the aircraft they name).
+20. **Dead engines' airscrews** (the realism audit of 22 November: every airscrew turned on, dead or not). A B-17 that
+   has lost an engine, seen near: that engine's airscrew either windmills at about half the others' turn, or, once
+   feathered, stands still, its blades edge on to the wind (dark strips from the boss to the tips, the turning disc
+   gone). The right engine: engine 1 is the port outer, as the crews counted, and the flight core's trail of smoke
+   comes from the same nacelle.
+21. **Every parachute** (the audit: only the nearest 16 were drawn). When three B-17s go down together some twenty to
+   thirty canopies hang in the sky at once, all drawn: the near ones with their rigging, past 600 m with fewer sides,
+   past 2.5 km as a plain canopy and its man. Only past 240 are the farthest left out.

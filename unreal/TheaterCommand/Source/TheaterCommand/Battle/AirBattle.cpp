@@ -3521,6 +3521,45 @@ namespace AirParts
 	}
 
 	/**
+	 * An airscrew stopped, its blades feathered (turned edge on to the wind, so the dead engine is not dragged round):
+	 * each blade a strip from the boss to the tip, its chord along the shaft, with a thin face across it so it reads from
+	 * ahead as well as from the side. In the disc's frame (the shaft along X); both faces; near black.
+	 */
+	static void BladesOf(double Radius, int32 Blades, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours)
+	{
+		const double Steps[4] = { 0.12, 0.45, 0.8, 1.0 };
+		const double Chords[4] = { 0.15, 0.16, 0.12, 0.07 };
+		for (int32 Blade = 0; Blade < Blades; ++Blade)
+		{
+			const double A = UE_DOUBLE_TWO_PI * Blade / FMath::Max(1, Blades);
+			const FVector Along(0.0, FMath::Sin(A), FMath::Cos(A));
+			const FVector Across(0.0, FMath::Cos(A), -FMath::Sin(A));
+			// (the chord along the shaft, then the thin face in the disc's plane)
+			for (int32 Face = 0; Face < 2; ++Face)
+			{
+				const FVector Wide = Face == 0 ? FVector(1.0, 0.0, 0.0) : Across * 0.3;
+				const FVector Facing = Face == 0 ? Across : FVector(1.0, 0.0, 0.0);
+				const int32 First = Points.Num();
+				for (int32 K = 0; K < 4; ++K)
+				{
+					for (int32 Side = 0; Side < 2; ++Side)
+					{
+						Points.Add(Along * Radius * Steps[K] + Wide * Radius * Chords[K] * (Side == 0 ? -0.5 : 0.5));
+						Normals.Add(Facing);
+						Colours.Add(FColor(38, 38, 40, 255));
+					}
+				}
+				for (int32 K = 0; K < 3; ++K)
+				{
+					const int32 P0 = First + K * 2, P1 = P0 + 1, P2 = P0 + 2, P3 = P0 + 3;
+					Triangles.Append({ P0, P1, P3, P0, P3, P2 });
+					Triangles.Append({ P0, P3, P1, P0, P2, P3 });
+				}
+			}
+		}
+	}
+
+	/**
 	 * A stand-in's coat in the paint its navy flew (the art director's note on the first Mac run: three orange-yellow
 	 * aircraft over Oahu, whose side could not be told). The plain machines wear their country's colour on the map; the
 	 * carrier aircraft of 1941-42 wore the Japanese navy's grey, or the American navy's blue-grey. Every point whose
@@ -3736,6 +3775,15 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 			AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours);
 			Disc->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 			Disc->SetMaterial(0, DiscInk);
+			// (and its blades standing still, shown in place of the turning disc once its engine is dead and feathered)
+			Points.Reset();
+			Normals.Reset();
+			Triangles.Reset();
+			Colours.Reset();
+			AirParts::BladesOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours);
+			Disc->CreateMeshSection(1, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			Disc->SetMaterial(1, PlainInk);
+			Disc->SetMeshSectionVisible(1, false);
 			Made->Discs.Add(Disc);
 		}
 	}
@@ -3752,6 +3800,35 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 	}
 	Made->bNear = bNear;
 	ShowDiscs(*Made, bNear);
+}
+
+void AAirBattle::TakeDiscEngines(FPlaneMade& Made, const AirShow::Shape& Shape)
+{
+	// Each disc's engine (from 1, as the model's engine.N the flight core names its dead by): the engine whose place
+	// across the span is nearest the disc's hub's (engine.1 the port outer; the shape's frame has its right hand toward
+	// -Y). A single engine is engine 1.
+	const double SpanUnits = FMath::Max(1.0, Made.Span * UnitsPerMetre);
+	Made.DiscEngine.Init(1, Made.Discs.Num());
+	Made.DiscStill.Init(false, Made.Discs.Num());
+	for (int32 K = 0; K < Made.Discs.Num(); ++K)
+	{
+		const UProceduralMeshComponent* Disc = Made.Discs[K].Get();
+		if (!Disc || Shape.Engines.size() < 2)
+		{
+			continue;
+		}
+		const double Across = -Disc->GetRelativeLocation().Y / SpanUnits;
+		double Nearest = TNumericLimits<double>::Max();
+		for (size_t N = 0; N < Shape.Engines.size(); ++N)
+		{
+			const double Off = FMath::Abs(Shape.Engines[N].Y / FMath::Max(1.0, Shape.Span) - Across);
+			if (Off < Nearest)
+			{
+				Nearest = Off;
+				Made.DiscEngine[K] = static_cast<int32>(N) + 1;
+			}
+		}
+	}
 }
 
 void AAirBattle::ShowDiscs(FPlaneMade& Made, bool bShow)
@@ -3835,18 +3912,35 @@ void AAirBattle::Draw(double Real)
 				}
 			}
 		}
-		// Its airscrews turning while it is near: a dead engine's falling aircraft windmills slower.
+		// Its airscrews turning while it is near: a falling aircraft's windmill slower. A dead engine's airscrew (the
+		// audit of 22 November: they all turned on) windmills slower, or once feathered stands still, its blades edge on
+		// to the wind.
 		if (FPlaneMade* Turning = PlaneMade.Find(P.Key); Turning && Turning->bNear && Turning->Discs.Num() > 0)
 		{
 			ShowDiscs(*Turning, true); // (shown again with an aircraft that was out of sight while near)
+			if (Turning->DiscEngine.Num() != Turning->Discs.Num())
+			{
+				TakeDiscEngines(*Turning, AirShow::ShapeOf(P.Model, P.bFighter));
+			}
 			const double Turns = P.bFalling ? ScrewTurns * 0.3 : ScrewTurns;
 			const double Angle = FMath::Fmod(RealT * Turns * 360.0 + Turning->Phase, 360.0);
 			for (int32 K = 0; K < Turning->Discs.Num(); ++K)
 			{
-				if (UProceduralMeshComponent* Disc = Turning->Discs[K].Get())
+				UProceduralMeshComponent* Disc = Turning->Discs[K].Get();
+				if (!Disc)
 				{
-					Disc->SetRelativeRotation(FRotator(0.0, 0.0, Angle + K * 23.0));
+					continue;
 				}
+				const bool bDead = std::find(P.DeadEngines.begin(), P.DeadEngines.end(), Turning->DiscEngine[K]) != P.DeadEngines.end();
+				const bool bStill = bDead && P.bFeathered;
+				if (Turning->DiscStill[K] != bStill && Disc->GetNumSections() > 1)
+				{
+					Turning->DiscStill[K] = bStill;
+					Disc->SetMeshSectionVisible(0, !bStill);
+					Disc->SetMeshSectionVisible(1, bStill);
+				}
+				const double Own = bStill ? Turning->Phase : bDead ? FMath::Fmod(RealT * ScrewTurns * 0.45 * 360.0 + Turning->Phase, 360.0) : Angle;
+				Disc->SetRelativeRotation(FRotator(0.0, 0.0, Own + K * 23.0));
 			}
 		}
 	}
@@ -3866,9 +3960,10 @@ void AAirBattle::Draw(double Real)
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling, a bomb or a torpedo falling.
 	FMiniatureMesh Things;
-	// (a real crew gets out, up to ten from a B-17, so three lost together may hang twenty canopies or more: past the
-	// nearest MostChutes, those over 600 m from the eye are left out, the farthest first, as the trails are thinned)
-	constexpr int32 MostChutes = 16;
+	// (a real crew gets out, up to ten from a B-17, so three lost together hang thirty canopies: every one is drawn, the
+	// audit of 22 November; past 600 m from the eye with fewer sides and no rigging, past 2.5 km as a plain canopy and
+	// its man, and only past the nearest MostChutes, the farthest first, are any left out)
+	constexpr int32 MostChutes = 240;
 	double ChuteFar = TNumericLimits<double>::Max();
 	{
 		TArray<double> Aways;
@@ -3891,24 +3986,31 @@ void AAirBattle::Draw(double Real)
 		switch (T.Kind)
 		{
 		case AirShow::ThingKind::Chute:
-			if (FVector::Dist(At, EyeAt) / U > ChuteFar)
+		{
+			const double Away = FVector::Dist(At, EyeAt) / U;
+			if (Away > ChuteFar)
 			{
 				break;
 			}
+			const int32 Sides = Away < 600.0 ? 14 : Away < 2500.0 ? 8 : 5;
 			if (T.bOpen)
 			{
-				Things.Pillar(At + FVector(0.0, 0.0, 5.2 * U), 3.6 * U, 0.9 * U, 1.7 * U, AirParts::Silk, 14);
-				for (const double Side : { -1.0, 1.0 })
+				Things.Pillar(At + FVector(0.0, 0.0, 5.2 * U), 3.6 * U, 0.9 * U, 1.7 * U, AirParts::Silk, Sides);
+				if (Away < 600.0)
 				{
-					Things.Rod(At + FVector(0.0, 0.0, 1.6 * U), At + FVector(Side * 3.2 * U, 0.0, 5.2 * U), 0.03 * U, AirParts::Silk, 3);
+					for (const double Side : { -1.0, 1.0 })
+					{
+						Things.Rod(At + FVector(0.0, 0.0, 1.6 * U), At + FVector(Side * 3.2 * U, 0.0, 5.2 * U), 0.03 * U, AirParts::Silk, 3);
+					}
 				}
 			}
 			else
 			{
-				Things.Limb(At + FVector(0.0, 0.0, 1.6 * U), At + FVector(0.0, 0.0, 4.0 * U), 0.15 * U, 0.35 * U, AirParts::Silk, 6);
+				Things.Limb(At + FVector(0.0, 0.0, 1.6 * U), At + FVector(0.0, 0.0, 4.0 * U), 0.15 * U, 0.35 * U, AirParts::Silk, FMath::Min(6, Sides));
 			}
-			Things.Limb(At, At + FVector(0.0, 0.0, 1.7 * U), 0.22 * U, 0.2 * U, AirParts::Airman, 6);
+			Things.Limb(At, At + FVector(0.0, 0.0, 1.7 * U), 0.22 * U, 0.2 * U, AirParts::Airman, FMath::Min(6, Sides));
 			break;
+		}
 		case AirShow::ThingKind::Piece:
 		{
 			const double Turn = FMath::RadiansToDegrees(T.Spin * T.Age) + T.Key * 37.0;

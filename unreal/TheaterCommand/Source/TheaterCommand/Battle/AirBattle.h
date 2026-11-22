@@ -22,7 +22,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class UDecalComponent;
-namespace AirShow { struct Fx; }
+namespace AirShow { struct Fx; struct Shape; }
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
@@ -133,6 +133,10 @@ private:
 		 * zero's propeller didnt spin"); and where in its turn each aircraft's screws start, so that no two turn as one. */
 		TArray<TWeakObjectPtr<UProceduralMeshComponent>> Discs;
 		double Phase = 0.0;
+		/** Each disc's engine (from 1, the model's engine.N), taken when its discs are first turned; and whether it is
+		 * shown standing still (its engine dead and feathered: its blades, section 1, in place of the turning disc). */
+		TArray<int32> DiscEngine;
+		TArray<bool> DiscStill;
 		/** Its near shape has a bay (sections 2 and 3 its doors, 4 its racked load); the doors' opening as last drawn,
 		 * 0 shut to 1 open; and its load gone with its stick. */
 		bool bBay = false;
@@ -280,6 +284,8 @@ private:
 	double ScrewTurns = 1.9;
 	/** An aircraft's discs shown or not, with its near shape. */
 	void ShowDiscs(FPlaneMade& Made, bool bShow);
+	/** Which engine each of an aircraft's discs is (FPlaneMade::DiscEngine), from its model's engines across the span. */
+	void TakeDiscEngines(FPlaneMade& Made, const AirShow::Shape& Shape);
 	/** Each formation's engines, by group, and the kind of loop each was chosen as (B-17, fourEngined, ...). */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UAudioComponent>> Engines;
