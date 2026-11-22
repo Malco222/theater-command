@@ -303,7 +303,7 @@ describe('Operation Torch by the book', () => {
     // (Tunis was Vichy's when Germany's November opened); the 10th Panzer, of its last week, and the 334th, of late
     // December, are not in the game yet.
     const weekly = TORCH.rows.filter((r) => (r[6] as { week?: number } | undefined)?.week !== undefined).map((r) => [r[0], r[2].slice(0, 8), (r[6] as { week: number }).week]);
-    expect(weekly).toEqual([[39, 'XC Corps', 2], [39, 'Tunis ai', 2], [39, '10th Pan', 4], [40, '334th In', 4]]);
+    expect(weekly).toEqual([[39, 'XC Corps', 2], [39, 'Tunis ai', 2], [39, '10th Pan', 4], [40, '334th In', 4], [40, '50th Spe', 2], [40, 'Heavy Ta', 2]]);
     const sent = (nm: string): number | undefined => g.flags[`sent:t${TORCH.rows.findIndex((r) => r[2].startsWith(nm))}`];
     expect(g.byName.Tunis.ctrl).toBe('GER');
     // (The airlift is a row of its own, worth a division: 15,273 men had come by air by 30 November, 1,867 by sea.)
@@ -313,6 +313,8 @@ describe('Operation Torch by the book', () => {
     expect(sent('Tunis airlift')).toBeTruthy();
     expect(sent('10th Panzer Division')).toBeUndefined();
     expect(g.corps.some((c) => c.name === '10th Panzer Division' || c.name === '334th Infantry Division')).toBe(false);
+    // (December's units by unit, the design director, 18:46Z: none of them is in the game in November.)
+    for (const nm of ['Heavy Tank Battalion 501', '50th Special Brigade', 'Panzer Battalion 190']) expect(sent(nm), nm).toBeUndefined();
     // The next month it is not made again.
     runTurnAI(g);
     expect(g.corps.filter((c) => c.name === 'French XIX Corps').length).toBe(1);
@@ -324,6 +326,15 @@ describe('Operation Torch by the book', () => {
     expect(sent('334th Infantry Division')).toBeUndefined();
     expect(g.corps.some((c) => c.name === '334th Infantry Division')).toBe(false);
     for (const r of g.reports) if (r.turn === 40) expect(r.defenders.some((u) => /^334th/.test(u.name)), r.regionName).toBe(false);
+    // December's own rows (18:46Z): the rest of Heavy Tank Battalion 501, a sixth of an armoured division by the rule
+    // for a tank battalion, and the 50th Special Brigade, each once; Panzer Battalion 190 is January's.
+    const dec = TORCH.rows.filter((r) => /^(Heavy Tank Battalion 501|50th Special Brigade|Panzer Battalion 190)/.test(r[2]));
+    expect(dec.map((r) => [r[0], r[1], r[3], r[5], (r[6] as { str: number }).str])).toEqual([[40, 'ITA', 'inf', 'Mareth', 0.3], [40, 'GER', 'arm', 'Tunis', 0.17], [41, 'GER', 'arm', 'Sfax', 0.17]]);
+    expect(sent('Heavy Tank Battalion 501')).toBeTruthy();
+    expect(sent('50th Special Brigade')).toBeTruthy();
+    expect(sent('Panzer Battalion 190')).toBeUndefined();
+    for (const nm of ['Heavy Tank Battalion 501', '50th Special Brigade']) expect(g.corps.filter((c) => c.name.startsWith(nm)).length, nm).toBeLessThanOrEqual(1);
+    expect(g.corps.some((c) => c.name === 'Panzer Battalion 190')).toBe(false);
     // December: the rest of the two armoured divisions come, once each, as the book's rows, at their own size; and
     // still nothing of America's army stands in French North Africa but its picks and those rows.
     const rows = new Set(TORCH.rows.filter((r) => r[1] === 'USA').map((r) => r[2]));
