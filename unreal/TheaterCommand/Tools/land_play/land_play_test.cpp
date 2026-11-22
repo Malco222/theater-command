@@ -1039,12 +1039,11 @@ int main(int argc, char** argv)
 				if (bDeep) { Tries.push_back({ static_cast<int>(K), When, Sp }); break; }
 			}
 		}
-		int Among = 0, Tried = 0, Seen = 0;
+		int Among = 0, Seen = 0;
 		for (const InCornAt& Try : Tries)
 		{
 			const int InCorn = Try.Track;
 			const double AskAt = Try.At;
-			++Tried;
 			LandEye::Director Asked;
 			Asked.Begin(Rec, EW, ES);
 			int TakenOn = -1;
