@@ -311,8 +311,8 @@ namespace EdgeSeals
 	 *   Helsinki; Soviet troops blow the bridges over the Oka; and 3 more". The lines stand apart by "; ", so the "and N
 	 *   more" is one more of the list, never more of the line before it. A row whose title the list gives already gives
 	 *   its own first words ("Stalino HIT: The Black Sea Fleet shelled"). A first line too long for the hover with its
-	 *   "and N more" is cut a word shorter until it fits; where no item has words of its own, the count and where on the
-	 *   card they are ("3 elsewhere in the war").
+	 *   "and N more" is cut a word shorter until it fits, never into a row's title ("Ruhr HIT", never "Ruhr"); where it
+	 *   cannot, or no item has words of its own, the count and where on the card they are ("3 elsewhere in the war").
 	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more"; a
 	 * name's "The" is "the" in the list.
 	 */

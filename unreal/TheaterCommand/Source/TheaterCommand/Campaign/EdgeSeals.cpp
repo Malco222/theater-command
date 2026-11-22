@@ -902,12 +902,18 @@ namespace EdgeSeals
 				return Out;
 			}
 		}
-		// (no line fits whole with its "and N more": the first, cut a word shorter until it does)
+		// (no line fits whole with its "and N more": the first line the list gives, cut a word shorter until it does. Never
+		// into a row's title, which alone says where and what happened: never "Ruhr" for "Ruhr HIT"; the count, then)
+		const int Least = HasTitle(Head) ? LettersOf(ShortLine(Head)) : 1;
 		for (int Most = 7; !Lines.empty() && Most >= 1; --Most)
 		{
-			std::vector<std::string> Cut{ Unstopped(EightWords(Head.Line, Most)) };
-			const std::string Out = Cut[0].empty() ? std::string() : ListLines(Cut, 1, Run.Count - 1);
-			if (!Out.empty() && LettersOf(Out) <= Room)
+			std::vector<std::string> Cut{ Unstopped(EightWords(Lines[0], Most)) };
+			if (LettersOf(Cut[0]) < Least)
+			{
+				break;
+			}
+			const std::string Out = ListLines(Cut, 1, Run.Count - 1);
+			if (LettersOf(Out) <= Room)
 			{
 				return Out;
 			}

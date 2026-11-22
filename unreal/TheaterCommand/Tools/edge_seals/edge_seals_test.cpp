@@ -1602,13 +1602,14 @@ namespace
 			}
 			return true;
 		}
-		// (or, where even the first line does not fit with its "and N more", its own first words, cut shorter, and that)
+		// (or, where even the first line does not fit with its "and N more", that line itself cut shorter, and that; never a
+		// row's title cut, which would leave a place without what happened)
 		const std::string Tail = "; and " + std::to_string(Run.Count - 1) + " more";
-		if (!Lines.empty())
+		if (!Lines.empty() && !(First.Section == ESection::Row && !First.Head.empty() && !First.Name.empty()))
 		{
 			const bool bTail = Words.size() > Tail.size() && Words.compare(Words.size() - Tail.size(), Tail.size(), Tail) == 0;
 			const std::string Cut = bTail ? Words.substr(0, Words.size() - Tail.size()) : std::string();
-			if (Cut.empty() || !StartsWith(First.Line, Cut) || LettersSet(Listed(Lines, 1, Lines[0], Run.Count)) <= HoverLine)
+			if (Cut.empty() || !StartsWith(Lines[0], Cut) || LettersSet(Listed(Lines, 1, Lines[0], Run.Count)) <= HoverLine)
 			{
 				Why = "a folded seal's words that are neither its names nor its items' own short lines, as many as fit, and how many more";
 				return false;
@@ -2651,6 +2652,16 @@ static void TestHover(const char* Folder)
 		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 60) == "Soviet troops close round Helsinki; and 4 more");
 		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 31) == "Soviet troops close; and 4 more" && FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 30) == "Soviet troops; and 4 more");
 		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 5) == "5 elsewhere in the war");
+		// (a front's rows: the first line, the row's title, is never cut, so that no place stands without what happened;
+		// with no room for it and its "and N more", the count and where. The three are one place, so form 2 lists none)
+		FMonth Rows;
+		AddItem(Rows, ESection::Row, "HIT", -1, "bmr", "Ruhr", "", "", "Their bombers hit its factories.");
+		AddItem(Rows, ESection::Row, "HIT", -1, "bmr", "Ruhr", "", "", "Their bombers hit its rail yards.");
+		AddItem(Rows, ESection::Row, "HIT", -1, "bmr", "Ruhr", "", "", "Their bombers hit its docks.");
+		CHECK(FoldWords(Rows.Said, FAlikeRun{ 0, 3 }) == "Ruhr HIT; Ruhr HIT: Their bombers hit its rail yards; Ruhr HIT: Their bombers hit its docks");
+		CHECK(FoldWords(Rows.Said, FAlikeRun{ 0, 3 }, 20) == "Ruhr HIT; and 2 more" && FoldWords(Rows.Said, FAlikeRun{ 0, 3 }, 19) == "3 on your fronts");
+		std::string Why;
+		CHECK(SaysOnlyTheCard(Rows.Said, FAlikeRun{ 0, 3 }, "3 on your fronts", Why) && !SaysOnlyTheCard(Rows.Said, FAlikeRun{ 0, 3 }, "Ruhr; and 2 more", Why));
 	}
 
 	// 3. Over the 48 real months, both folds (pressed, and as drawn below 972 high): every hover that stands, a seal's own
