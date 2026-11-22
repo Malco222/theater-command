@@ -2924,21 +2924,21 @@ namespace LandField
 		}
 
 		/**
-		 * A bocage hedge's tree and its height over the bank's top (the bank lifts it some 1.2 m more, to 10 to 15 m over
-		 * the field): oak most, a third of all of them pollarded (a thick stub and a bushy head), elm and ash, a beech now
-		 * and then; a row of pollards all pollards.
+		 * A bocage hedge's tree and its height over the bank's top (the bank lifts it some 1.2 m more): standards of oak,
+		 * elm and ash 14 to 22 m, a beech now and then, and a third of all of them pollarded (a thick stub and a bushy head,
+		 * 6.5 to 10 m); a row of pollards all pollards.
 		 */
 		Base BocageTree(Rng& R, bool bPollards, double& High)
 		{
 			const double U = R.Next();
-			const Base B = bPollards || U < 0.34 ? Base::Pollard : U < 0.64 ? Base::Oak : U < 0.77 ? Base::Elm : U < 0.95 ? Base::Ash : Base::Beech;
+			const Base B = bPollards || U < 0.28 ? Base::Pollard : U < 0.6 ? Base::Oak : U < 0.75 ? Base::Elm : U < 0.94 ? Base::Ash : Base::Beech;
 			switch (B)
 			{
-			case Base::Oak: High = R.Range(10.0, 14.0); break;
-			case Base::Elm: High = R.Range(10.5, 14.5); break;
-			case Base::Ash: High = R.Range(9.5, 13.5); break;
-			case Base::Beech: High = R.Range(10.5, 14.0); break;
-			default: High = R.Range(8.5, 11.5); break;
+			case Base::Oak: High = R.Range(15.0, 21.0); break;
+			case Base::Elm: High = R.Range(16.0, 22.0); break;
+			case Base::Ash: High = R.Range(14.0, 19.0); break;
+			case Base::Beech: High = R.Range(15.0, 20.0); break;
+			default: High = R.Range(6.5, 10.0); break;
 			}
 			return B;
 		}
@@ -3042,20 +3042,25 @@ namespace LandField
 						}
 			return false;
 		};
-		// The hedges. A hedgerow's bank and a lane's carry a dense hedge with no gap but the gateways and the ways: its
-		// shrubs a metre and a half apart along the bank's top (so its faces of earth and grass show under them), its
-		// height running smoothly along it, 2 to 2.8 m over the bank (so it reads as one green wall, not a row of bushes),
-		// and a tree every 5 to 15 m, oak, elm and ash and many of them pollards, 10 to 15 m over the field. A wood's
-		// edge and a garden's hedge are lower and looser.
+		// The hedges. A hedgerow's bank and a lane's carry a dense hedge with no gap but the gateways and the breaches, as
+		// Normandy's were in 1944, untrimmed: its shrubs a metre and a half apart along the bank's top, broad enough to
+		// spill over its faces, its top ragged, 2.5 to 3.2 m over the bank on the whole and rising and falling a metre or
+		// more in every 6 to 10 m along it, and every 5 to 9 m a clump of hazel or elder grown up to 4 or 5 m; brambles
+		// hanging over both faces. In it a tree every 5 to 15 m, oak, elm and ash standing 15 to 22 m, a third of them
+		// pollards (their bushy heads at 6 to 10 m), and between them young oak, ash and pollard shoots 3.5 to 6 m, so
+		// from the field the leaves run up from the hedge into the crowns with little sky between (the bocage's walls 4 to
+		// 6 m high in all). A wood's edge and a garden's hedge are lower and looser.
+		const auto InField = [this](V2 P) { return P.X > -60.0 && P.Y > -60.0 && P.X < FW + 60.0 && P.Y < FH + 60.0; };
 		for (const Run& Rn : Runs)
 		{
 			Rng R(Rn.Key ^ 0x9A17);
 			const double Total = LineLength(Rn.P);
 			const bool bGarden = Rn.Kind == HkGarden, bBocage = Rn.Kind == HkHedgerow || Rn.Kind == HkLaneBank;
 			const double Thin = bBocage ? 0.0 : R.Next() < 0.15 ? 0.3 : 0.06;
-			const bool bPollards = bBocage && R.Next() < 0.2;
+			const bool bPollards = bBocage && R.Next() < 0.12;
 			const double TreeStep = bGarden ? 1e9 : !bBocage ? 45.0 : bPollards ? R.Range(6.0, 8.5) : R.Range(7.5, 11.0);
-			const double Level = R.Range(2.0, 2.5), Along = static_cast<double>(Rn.Key % 1013);
+			const double Level = bBocage ? R.Range(2.0, 2.6) : R.Range(2.0, 2.5), Along = static_cast<double>(Rn.Key % 1013);
+			const double Wave = R.Range(6.0, 10.0), Swell = R.Range(1.0, 1.4);
 			const double Lo = bGarden ? 1.4 : 1.6, Hi = bGarden ? 2.0 : 3.2;
 			size_t Seg = 0;
 			double Before = 0.0;
@@ -3071,7 +3076,7 @@ namespace LandField
 			};
 			// The shrubs: their kind changes every dozen metres or so, as a hedge's planting does.
 			Base Kind = Base::ShrubA;
-			double NextKind = 0.0;
+			double NextKind = 0.0, NextTall = R.Range(2.0, 10.0);
 			const double Start = bBocage ? R.Range(0.6, 1.0) : R.Range(0.3, 1.0), End = bBocage ? 0.6 : 0.3;
 			for (double S = Start; S < Total - End; S += bGarden ? R.Range(1.1, 1.5) : bBocage ? R.Range(1.15, 1.6) : R.Range(1.9, 2.7))
 			{
@@ -3094,10 +3099,19 @@ namespace LandField
 				else if (!ManClear(P, Way)) continue;
 				const double Shade = R.Range(0.9, 1.1);
 				double Scale, High;
+				Base What = Kind;
 				if (bBocage)
 				{
-					Scale = R.Range(0.78, 0.95);
-					High = Level + 0.3 * Noise(S / 13.0, Along, Seed ^ 0x9A18) + R.Range(-0.12, 0.12);
+					Scale = R.Range(0.9, 1.35);
+					High = std::max(1.4, Level + Swell * Noise(S / Wave, Along, Seed ^ 0x9A18) + 0.75 * Noise(S / 2.5, Along, Seed ^ 0x9A19) + R.Range(-0.4, 0.4));
+					// (a clump grown up: hazel or elder, 3.9 to 5 m over the bank; where a man went over, the next one)
+					if (S >= NextTall && !bTrod)
+					{
+						NextTall = S + R.Range(8.0, 14.0);
+						What = R.Next() < 0.6 ? Base::ShrubC : Base::ShrubB;
+						Scale = R.Range(1.1, 1.4);
+						High = R.Range(3.9, 5.0);
+					}
 				}
 				else
 				{
@@ -3105,12 +3119,16 @@ namespace LandField
 					High = R.Range(Lo, Hi);
 				}
 				if (bTrod) High *= 0.85;
-				Plant(Kind, P.X, P.Y, R.Range(0.0, 2.0 * Pi), Scale, High / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)), bThrough);
-				// Brambles and nettles spill from the bank's foot, here and there (not where he goes over).
-				if (!bGarden && !bTrod && R.Next() < (bBocage ? 0.12 : 0.22))
+				Plant(What, P.X, P.Y, R.Range(0.0, 2.0 * Pi), Scale, High / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)), bThrough);
+				// Brambles and nettles: on a bocage bank in the field, hanging over both its faces most of their length; else
+				// spilling from the bank's foot here and there (not where he goes over).
+				if (bGarden || bTrod) continue;
+				const double Wide = Rn.W[std::min(Seg, Rn.W.size() - 1)];
+				for (const double Side : { -1.0, 1.0 })
 				{
-					const double Foot = 0.5 * Rn.W[std::min(Seg, Rn.W.size() - 1)] * (R.Next() < 0.5 ? -1.0 : 1.0);
-					const V2 F = P + Perp(Way) * Foot;
+					const bool bFaces = bBocage && InField(P);
+					if (R.Next() >= (bFaces ? 0.3 : bBocage ? 0.06 : 0.11)) continue;
+					const V2 F = P + Perp(Way) * (Side * Wide * (bFaces ? R.Range(0.25, 0.45) : 0.5));
 					if (Clear(F.X, F.Y, Built | OcMan) && LaneD[Pix(F.X, F.Y)] > 0.8f)
 						Plant(Base::Bramble, F.X, F.Y, R.Range(0.0, 2.0 * Pi), R.Range(0.7, 1.2), R.Range(0.6, 1.1), Tint8(1, 1, 1));
 				}
@@ -3129,6 +3147,21 @@ namespace LandField
 				const Base B = bBocage ? BocageTree(R, bPollards, High) : HedgeTree(R, false, High);
 				const double Spread = R.Range(0.85, 1.15);
 				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.06), R.Range(0.9, 1.04)));
+			}
+			// The young shoots between them (in the field and a little round it): oak, ash and pollard growth 3.5 to 6 m,
+			// every 4 to 7 m, their crowns down in the hedge's top.
+			if (!bBocage) continue;
+			Seg = 0;
+			Before = 0.0;
+			for (double S = R.Range(1.5, 6.0); S < Total - 2.0; S += R.Range(4.0, 7.0))
+			{
+				V2 Way;
+				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.35, 0.35);
+				if (!InField(P) || !Clear(P.X, P.Y, Built) || !Nudged(P, Way, 0.9, 0.45, 1.5)) continue;
+				const double U = R.Next();
+				const Base B = U < 0.45 ? Base::Oak : U < 0.75 ? Base::Ash : Base::Pollard;
+				const double High = R.Range(3.5, 6.0);
+				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * R.Range(1.0, 1.35), High / TreeHigh(B), Tint8(R.Range(0.95, 1.08), R.Range(0.97, 1.08), R.Range(0.9, 1.02)));
 			}
 		}
 		// The woods: trees some 7.5 m apart (clearings here and there), undergrowth thick in their edges.
@@ -5206,6 +5239,9 @@ namespace LandField
 		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4, LeafOval, LeafRound }, S + 3);
 		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2, LeafThorn, LeafOak }, S + 4);
 		for (const Base B : { Base::ShrubA, Base::ShrubB, Base::ShrubC, Base::Bramble }) At(B).FarFrom = 60.0f;
+		// (brambles low under the hedges and in the woods' edges, drawn near only, out to 70 m as the grass is)
+		At(Base::Bramble).Far = Mesh();
+		At(Base::Bramble).FarFrom = 70.0f;
 
 		// The trees, each built at its TreeHigh: the hedgerow oak broad and ragged on spreading limbs; the elm tall, its
 		// crown pulled in at the waist; the ash airy, small sprays far apart and pale; the beech dense and domed; the pollard

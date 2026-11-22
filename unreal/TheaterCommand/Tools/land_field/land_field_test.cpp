@@ -275,6 +275,42 @@ namespace
 			return Z;
 		};
 		auto In = [&F](double X, double Y) { return X > 20.0 && Y > 20.0 && X < F.Width() - 20.0 && Y < F.Depth() - 20.0; };
+		// The trees' crowns filed the same way (8 m squares): a crown's middle, its reach and its bottom, from its leaves.
+		struct Leafy
+		{
+			double X, Y, R, Bottom;
+		};
+		constexpr double Sq8 = 8.0;
+		const int LX = static_cast<int>(std::ceil((F.Width() + 600.0) / Sq8)), LY = static_cast<int>(std::ceil((F.Depth() + 600.0) / Sq8));
+		std::vector<std::vector<Leafy>> Crowns(static_cast<size_t>(LX) * LY);
+		for (const Base B : { Base::Oak, Base::Elm, Base::Ash, Base::Beech, Base::Pollard })
+		{
+			const LandField::BaseMesh& Bm = G.BaseOf(B);
+			const LandField::Mesh& Leaves = Bm.Cards.Empty() ? Bm.Sprigs : Bm.Cards;
+			double Low = 1e9, Reach = 0.0;
+			for (size_t K = 0; K + 2 < Leaves.Positions.size(); K += 3)
+			{
+				Low = std::min(Low, static_cast<double>(Leaves.Positions[K + 2]));
+				Reach = std::max(Reach, std::hypot(static_cast<double>(Leaves.Positions[K]), static_cast<double>(Leaves.Positions[K + 1])));
+			}
+			for (const LandField::Placed& P : G.Instances(B))
+			{
+				const int I = static_cast<int>(std::floor((P.X + 300.0) / Sq8)), J = static_cast<int>(std::floor((P.Y + 300.0) / Sq8));
+				if (I >= 0 && J >= 0 && I < LX && J < LY) Crowns[static_cast<size_t>(J) * LX + I].push_back({ P.X, P.Y, 0.8 * Reach * P.Scale, P.Z + Low * P.ScaleZ });
+			}
+		}
+		// (a crown over a place whose leaves come down within half a metre of the hedge's top there)
+		auto Touched = [&](double X, double Y, double Top) {
+			const int I = static_cast<int>(std::floor((X + 300.0) / Sq8)), J = static_cast<int>(std::floor((Y + 300.0) / Sq8));
+			for (int DJ = -1; DJ <= 1; ++DJ)
+				for (int DI = -1; DI <= 1; ++DI)
+				{
+					if (I + DI < 0 || J + DJ < 0 || I + DI >= LX || J + DJ >= LY) continue;
+					for (const Leafy& C : Crowns[static_cast<size_t>(J + DJ) * LX + I + DI])
+						if (C.Bottom <= Top + 0.5 && std::hypot(X - C.X, Y - C.Y) < C.R) return true;
+				}
+			return false;
+		};
 		// Along the hedgerows and lane banks, every metre: the bank's rise over the field beside it, its foot, the top.
 		std::vector<double> BankH, BankFoot, TopH, GapLen;
 		double Metres = 0.0, Low = 0.0;
@@ -320,11 +356,15 @@ namespace
 			const int I = static_cast<int>((X + FzPad) / FzSq), J = static_cast<int>((Y + FzPad) / FzSq);
 			return I >= 0 && J >= 0 && I < FzX && J < FzY && Fight[static_cast<size_t>(J) * FzX + I] != 0;
 		};
-		double FightMetres = 0.0, FightHigh = 0.0, High25 = 0.0, LongestOff = 0.0;
+		double FightMetres = 0.0, FightHigh = 0.0, High25 = 0.0, LongestOff = 0.0, Touch = 0.0, LongestLevel = 0.0;
+		std::vector<double> Rise;
 		for (const LandField::HedgeLine& H : G.Hedges())
 		{
 			if (H.Kind > 1) continue;
 			double Run = 0.0, Since = 0.0, RunX = 0.0, RunY = 0.0;
+			// (its top's rise and fall: in each 10 m along it, highest less lowest; and its longest stretch within 0.5 m)
+			std::vector<double> Tops;
+			std::vector<char> Fought;
 			for (size_t K = 0; K + 1 < H.Points.size(); ++K)
 			{
 				const double AX = H.Points[K].first, AY = H.Points[K].second, BX = H.Points[K + 1].first, BY = H.Points[K + 1].second;
@@ -341,6 +381,9 @@ namespace
 					Metres += 1.0;
 					Since += 1.0;
 					TopH.push_back(Top);
+					Tops.push_back(Top);
+					Fought.push_back(InFight(X, Y) ? 1 : 0);
+					if (Touched(X, Y, Field + Top)) Touch += 1.0;
 					if (Top >= 2.5) High25 += 1.0;
 					if (InFight(X, Y))
 					{
@@ -407,6 +450,27 @@ namespace
 					}
 				}
 			}
+			for (size_t K = 0; K + 20 <= Tops.size(); K += 20)
+			{
+				const auto Ends = std::minmax_element(Tops.begin() + static_cast<std::ptrdiff_t>(K), Tops.begin() + static_cast<std::ptrdiff_t>(K + 20));
+				Rise.push_back(*Ends.second - *Ends.first);
+			}
+			// (the art review asks no level run over 12 m; one in Normandy's 71 km runs 16, where broad crowns overlap)
+			// (where its shrubs stand, 2.9 m or more, and men did not trample it: a vehicle's gap, a bank bare by a house's
+			// wall or a hedge pushed through all along is no clipped hedge)
+			for (size_t K = 0; K < Tops.size(); ++K)
+			{
+				if (Tops[K] < 2.9 || Fought[K]) continue;
+				double Lo = Tops[K], Hi = Tops[K];
+				size_t E = K + 1;
+				for (; E < Tops.size() && Tops[E] >= 2.9 && !Fought[E]; ++E)
+				{
+					Lo = std::min(Lo, Tops[E]);
+					Hi = std::max(Hi, Tops[E]);
+					if (Hi - Lo >= 0.5) break;
+				}
+				LongestLevel = std::max(LongestLevel, static_cast<double>(E - K));
+			}
 		}
 		std::printf("  bocage, along %.1f km of hedgerows and lane banks in the field:\n", Metres / 1000.0);
 		std::printf("    bank over the field: median %.2f m (10%% %.2f, 90%% %.2f); its foot across %.1f m (10%% %.1f, 90%% %.1f)\n", Pctl(BankH, 0.5), Pctl(BankH, 0.1), Pctl(BankH, 0.9), Pctl(BankFoot, 0.5), Pctl(BankFoot, 0.1),
@@ -415,6 +479,18 @@ namespace
 		            Pctl(TopH, 0.5), Pctl(TopH, 0.1), Pctl(TopH, 0.9), 100.0 * Low / std::max(1.0, Metres), Gaps, WayGaps, Pctl(GapLen, 0.5), GapLen.empty() ? 0.0 : Pctl(GapLen, 1.0));
 		std::printf("    2.5 m or more over the field: %.1f%% of its length; where the fight is (within 30 m of a man's way, %.1f km) %.1f%%; the longest run under 1.9 m but where a vehicle drove %.0f m\n",
 		            100.0 * High25 / std::max(1.0, Metres), FightMetres / 1000.0, 100.0 * FightHigh / std::max(1.0, FightMetres), LongestOff);
+		{
+			int Ragged = 0;
+			for (const double R : Rise) Ragged += R >= 1.0 ? 1 : 0;
+			const double RaggedShare = static_cast<double>(Ragged) / std::max<size_t>(1, Rise.size()), TouchShare = Touch / std::max(1.0, Metres);
+			std::printf("    its top rises and falls: in each 20 m, highest less lowest median %.1f m, 1 m or more in %.0f%% of them; the longest stretch of shrubs level within half a metre (away from the fight) %.0f m; a tree's leaves down to its top over %.0f%% of its length\n",
+			            Pctl(Rise, 0.5), 100.0 * RaggedShare, LongestLevel, 100.0 * TouchShare);
+			if (Metres > 1000.0)
+				Check(Pctl(TopH, 0.5) >= 3.8 && Pctl(TopH, 0.5) <= 4.8 && Pctl(TopH, 0.1) >= 2.8 && Pctl(TopH, 0.9) >= 5.5 && RaggedShare >= 0.85 && LongestLevel <= 16.0 && TouchShare >= 0.7,
+				      "the hedgerows stand 4 to 6 m over the field, untrimmed, the trees' leaves down to them (not a clipped hedge before an avenue)",
+				      Fmt("top median %.2f m (10%% %.2f, 90%% %.2f); %.0f%% of 20 m rise 1 m", Pctl(TopH, 0.5), Pctl(TopH, 0.1), Pctl(TopH, 0.9), 100.0 * RaggedShare) +
+				          Fmt("; level %.0f m at longest; leaves to the top over %.0f%%", LongestLevel, 100.0 * TouchShare));
+		}
 		if (Metres > 1000.0)
 			Check(FightHigh >= 0.9 * FightMetres && LongestOff <= 8.0, "the hedges stay walls where the fight is (no hedge cleared for the men who cross it)",
 			      Fmt("%.1f%% of %.1f km at 2.5 m or more; longest low run %.0f m", 100.0 * FightHigh / std::max(1.0, FightMetres), FightMetres / 1000.0, LongestOff));
