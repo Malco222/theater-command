@@ -16,7 +16,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { runAI } from '../src/campaign/ai';
-import { atWar, capitulate, createGame, declareWar } from '../src/campaign/game';
+import { addCorps, atWar, capitulate, createGame, declareWar } from '../src/campaign/game';
 import { raisedQuality, setStop } from '../src/campaign/history';
 import { menLeft } from '../src/campaign/manpower';
 import { PACIFIC, demand, pacificOpening } from '../src/campaign/pacific';
@@ -122,6 +122,66 @@ describe("Japan's own troops under the agreement come with the demand", () => {
     expect(g.flags['pac:demand']).toBe(23);
     expect(corps(g, FRENCH[0])!.nat).toBe('JAP');
     expect(corps(g, POSTS[0][2])).toBeTruthy();
+  });
+});
+
+// (The design director's ruling of 08:48Z of 22 November 2026, on Canton's rows: a post may name the corps on the
+// board it is made from, as a formations row does since Oahu's split. The states are set by hand: a test regiment
+// stands at Canton, and Hanoi's post is told to be made from it for the length of the case.)
+describe('a post made from a corps on the board takes its strength from it', () => {
+  const NAME = 'a test regiment (Canton)';
+  const from = <T>(run: () => T): T => {
+    const p = POSTS[0] as unknown as unknown[], was = p[3];
+    p[3] = [NAME];
+    try { return run(); } finally { if (was === undefined) p.length = 3; else p[3] = was; }
+  };
+  const regiment = (g: Game, str: number): Corps => { const c = addCorps(g, 'JAP', NAME, 'inf', 1, 'Canton', { xp: 0.35, est: Math.max(str, 0.3) }); c.str = str; return c; };
+
+  it('the post takes its worth out of the corps wherever it stands; the corps emptied is struck off, and no men are drawn for it', () => {
+    const g = france(3, 21);
+    regiment(g, 0.3);
+    const had = menLeft(g, 'JAP');
+    from(() => demand(g));
+    expect(corps(g, NAME)).toBeUndefined();
+    const post = corps(g, POSTS[0][2])!;
+    expect([post.nat, at(g, post), r3(post.divs * post.str), post.hold, !!post.stay]).toEqual(['JAP', 'Hanoi', 0.3, true, true]);
+    // (The two posts that are made from nobody are drawn as before: 0.1 and 0.035.)
+    expect(r3(had - menLeft(g, 'JAP'))).toBe(0.135);
+  });
+
+  it('never more than the corps holds: a regiment at 0.2 makes a post of 0.2, which fills to its own 0.3 and no further', () => {
+    const g = france(3, 21);
+    regiment(g, 0.2);
+    from(() => demand(g));
+    expect(corps(g, NAME)).toBeUndefined();
+    const post = corps(g, POSTS[0][2])!;
+    expect([r3(post.divs * post.str), post.full]).toEqual([0.2, 0.3]);
+  });
+
+  it('a corps that holds more keeps the rest where it stands', () => {
+    const g = france(3, 21);
+    regiment(g, 0.5);
+    from(() => demand(g));
+    const left = corps(g, NAME)!;
+    expect([at(g, left), r3(left.divs * left.str)]).toEqual(['Canton', 0.2]);
+    expect(r3(corps(g, POSTS[0][2])!.str)).toBe(0.3);
+  });
+
+  it('with the corps gone the post is not made; the others come as they did, and the French army keeps Hanoi', () => {
+    const g = france(3, 21);
+    from(() => demand(g));
+    expect(corps(g, POSTS[0][2])).toBeUndefined();
+    for (const [place, worth, name] of POSTS.slice(1)) { const c = corps(g, name)!; expect([at(g, c), r3(c.divs * c.str)], name).toEqual([place, worth]); }
+    expect(g.byName.Hanoi.units.filter((u) => !u.dead).map((u) => [u.nat, u.name])).toEqual([['JAP', FRENCH[0]]]);
+  });
+
+  it("at the book's stops it is the same: the post is the corps' own men, in the demand's month", () => {
+    const b = france(1, 23);
+    regiment(b, 0.3);
+    const book = menLeft(b, 'JAP');
+    from(() => pacificOpening(b));
+    expect(b.flags['pac:demand']).toBe(23);
+    expect([corps(b, NAME), r3(corps(b, POSTS[0][2])!.str), menLeft(b, 'JAP')]).toEqual([undefined, 0.3, book]);
   });
 });
 

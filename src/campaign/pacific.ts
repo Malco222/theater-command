@@ -129,8 +129,11 @@ interface Rules {
     of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string;
     /** At stops 4 and 5: the staff's chance each month by its character, times 'busy' while `war` is on (demandMonth). */
     choose?: Record<string, number> & { busy: number };
-    /** Japan's own troops under the agreement, who come with the demand: [place, divisions' worth, the row's name], at experience `xp` (demand). */
-    posts?: [place: string, worth: number, name: string][]; xp?: number;
+    /**
+     * Japan's own troops under the agreement, who come with the demand: [place, divisions' worth, the row's name], at
+     * experience `xp` (demand). A fourth word, `from`, names the corps on the board a post is made from.
+     */
+    posts?: [place: string, worth: number, name: string, from?: string[]][]; xp?: number;
     /** The month of the record's coup, the kept French army's end at the book's stops (coupMonth). */
     coup?: number;
   };
@@ -406,12 +409,30 @@ export function demand(g: Game): boolean {
   g.airFleets = g.airFleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
   g.fleets = g.fleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
   for (const r of ground) { r.ctrl = J.id; r.cap = false; r.since = g.turn; station(g, r, J.id); }
-  for (const [place, worth, name] of D.posts ?? []) {
+  for (const [place, worth, name, from] of D.posts ?? []) {
     const r = g.byName[place];
     if (!r || !ids.has(r.id) || !(worth > 0)) continue;
-    if (!stopDef(g).book) drawMen(g, J.id, worth);
+    // (The far side: a post made from corps on the board, `from`, as a formations row is since Oahu's split
+    // (game.ts startPhase): the design director's ruling of 08:48Z of 22 November 2026, on Canton's rows. The post
+    // takes its strength out of the corps it names, in their order, wherever they stand, and never more than they
+    // hold; a corps emptied is struck off; with none of them left the post is not made. Its men are the corps' own:
+    // nothing is drawn for it from the reserve of men, and nobody is counted twice. Every country's alike.)
+    const made = farOn(g) && Array.isArray(from) ? from.flatMap((nm) => g.corps.filter((x) => x.nat === J.id && !x.dead && x.name === nm)) : null;
+    if (made && !made.length) continue;
+    if (!made && !stopDef(g).book) drawMen(g, J.id, worth);
     const c = addCorps(g, J.id, name, 'inf', 1, r.id, { xp: D.xp ?? 0.3, est: worth, hold: 1, stay: 1 });
     c.str = worth;
+    if (made) {
+      const want = c.divs * c.str;
+      let got = 0;
+      for (const x of made) {
+        const has = x.divs * x.str, take = Math.min(has, want - got);
+        if (take <= 0) continue;
+        got += take;
+        if (has - take < 1e-9) removeCorps(g, x); else x.str = (has - take) / x.divs;
+      }
+      c.str = got / c.divs;
+    }
   }
   g.flags['pac:demand'] = g.turn;
   g.supplyDirty = true;
