@@ -1,5 +1,6 @@
 #include "Battle/AirBattle.h"
 
+#include "AudioMixerBlueprintLibrary.h"
 #include "Async/Async.h"
 #include "Async/ParallelFor.h"
 
@@ -9,11 +10,13 @@
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
 #include "Battle/AirStage.h"
+#include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
+#include "Campaign/CampaignGameMode.h"
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
@@ -50,9 +53,11 @@
 #include "ProceduralMeshComponent.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "AudioDevice.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
+#include "SubmixEffects/AudioMixerSubmixEffectDynamicsProcessor.h"
 #include "TheaterCommand.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
@@ -228,6 +233,30 @@ namespace AirParts
 	/** The air battle's haze colour (the fog's inscattering, set by HideTheTable; the haze band takes it too). */
 	static const FLinearColor AirHazeInk(0.55f, 0.66f, 0.78f);
 
+	/** The haze's colour over the sea: bluer and a little dimmer than AirHazeInk, so that it reads pale blue and not
+	 * white (the art director on the Mac's release 2 Midway 01 and Oahu 02, 19:32Z: the haze there read 220 to 225
+	 * with blue over red by 5, and filled the top 40% of the picture; she asks blue over red by 10 to 20, white only at
+	 * the horizon, where the haze band stands). "-TheaterSeaHazeInk=0.44,0.55,0.74" tries another. */
+	static FLinearColor SeaHazeInk()
+	{
+		double R = 0.44, G = 0.55, B = 0.74;
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaHazeInk="), Asked, false))
+		{
+			TArray<FString> Parts;
+			Asked.ParseIntoArray(Parts, TEXT(","), false);
+			double* const Into[] = { &R, &G, &B };
+			for (int32 K = 0; K < Parts.Num() && K < 3; ++K)
+			{
+				if (!Parts[K].TrimStartAndEnd().IsEmpty())
+				{
+					*Into[K] = FMath::Clamp(FCString::Atod(*Parts[K]), 0.0, 4.0);
+				}
+			}
+		}
+		return FLinearColor(static_cast<float>(R), static_cast<float>(G), static_cast<float>(B));
+	}
+
 	/** A haze's colour, by the name this engine gives it. */
 	template <typename TFog>
 	static FLinearColor HazeColour(const TFog* Fog, const FLinearColor& Else)
@@ -315,6 +344,48 @@ namespace AirParts
 		return Default;
 	}
 
+	/** A true/false from the mix, at a path of fields ("buses.master.limiterAnalogDetector"), or Default. */
+	static bool MixFlag(const TSharedPtr<FJsonObject>& Mix, const FString& Path, bool Default)
+	{
+		TArray<FString> Steps;
+		Path.ParseIntoArray(Steps, TEXT("."));
+		TSharedPtr<FJsonObject> At = Mix;
+		for (int32 K = 0; At.IsValid() && K < Steps.Num(); ++K)
+		{
+			if (K == Steps.Num() - 1)
+			{
+				bool Value = Default;
+				return At->TryGetBoolField(Steps[K], Value) ? Value : Default;
+			}
+			const TSharedPtr<FJsonObject>* Next = nullptr;
+			At = At->TryGetObjectField(Steps[K], Next) ? *Next : nullptr;
+		}
+		return Default;
+	}
+
+	/** How many engines an aircraft of this model has (mix.json air.engineLost: its drone drops as they die). */
+	static int32 EnginesOf(const std::string& Model, bool bFighter)
+	{
+		// (as many as the flight core gives the aircraft's shape, AirShow::ShapeOf, so that its dead engines, numbered on
+		// that shape, are counted out of the same: a B-24 or an unnamed twin flies on what the shape gives it)
+		static std::map<std::pair<std::string, bool>, int32> Known;
+		const std::pair<std::string, bool> Which(Model, bFighter);
+		auto Found = Known.find(Which);
+		if (Found == Known.end())
+		{
+			Found = Known.emplace(Which, FMath::Max(1, static_cast<int32>(AirShow::ShapeOf(Model, bFighter).Engines.size()))).first;
+		}
+		return Found->second;
+	}
+
+	/** An aircraft's engines still turning, as a share of its drone's energy: 10 log10(left / engines) dB, as a gain. */
+	static float LiveEngines(const std::string& Model, bool bFighter, const std::vector<int>& Dead, int32& OutLeft, int32& OutAll)
+	{
+		OutAll = EnginesOf(Model, bFighter);
+		OutLeft = FMath::Max(0, OutAll - static_cast<int32>(Dead.size()));
+		return FMath::Sqrt(static_cast<float>(OutLeft) / static_cast<float>(FMath::Max(1, OutAll)));
+	}
+
 	static TSharedPtr<FJsonObject> MixObject(const TSharedPtr<FJsonObject>& Mix, const FString& Path)
 	{
 		TArray<FString> Steps;
@@ -372,6 +443,23 @@ AAirBattle::AAirBattle()
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = Root;
+}
+
+namespace
+{
+	/** A ship's name (else her class) by her key, and whether she is a battleship or a carrier: the guns fire back
+	 * picture's ship and its log line. */
+	void NoteShip(TMap<int32, FString>& Names, TSet<int32>& Capitals, const AirShow::Ship& Ship)
+	{
+		if (!Ship.Name.empty() || !Names.Contains(Ship.Id))
+		{
+			Names.Add(Ship.Id, AirParts::Wide(Ship.Name.empty() ? "a " + Ship.Class : Ship.Name));
+		}
+		if (Ship.Class == "bb" || Ship.Class == "bc" || Ship.Class == "cv" || Ship.Class == "cvl")
+		{
+			Capitals.Add(Ship.Id);
+		}
+	}
 }
 
 bool AAirBattle::WantsReplay(FString& OutKey)
@@ -465,6 +553,12 @@ bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships);
+	for (const AirShow::Ship& Ship : First.Ships)
+	{
+		// (a ship's light guns' tracers in her navy's colours: their keys name her as an aircraft's name it)
+		GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
+		NoteShip(ShipNames, CapitalShips, Ship);
+	}
 	S.Desk.Take(First);
 	S.BattleT = S.FedT = First.Head.T;
 	// (the bridge's battle opens paused: it is run here a battle second at a time, ahead of what is shown)
@@ -513,6 +607,66 @@ bool AAirBattle::Open(const FString& Why)
 		if (!Mix.IsValid())
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Air battle: Content/Data/Sound/mix.json is missing: the battle is silent."));
+		}
+		// The master limiter (mix.json buses.master): stacked guns, flak and passes never past the ceiling. On the
+		// master while the battle runs, so whatever records the game's sound records it limited; taken off at EndPlay.
+		USubmixEffectDynamicsProcessorPreset* MadeLimiter = nullptr;
+		if (Mix.IsValid() && !Limiter)
+		{
+			USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
+			FSubmixEffectDynamicsProcessorSettings Settings;
+			Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
+			Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
+			// (both channels limited by the louder: a gun hard to one side never passes the ceiling in that ear)
+			Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
+			Settings.ThresholdDb = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
+			// (the attack near instant, 0.02 ms, about one sample: a gun crack's first peak lasts about 0.1 ms, and with a
+			// 1 ms attack the detector hardly rose before it had passed, so the Mac's first runs with this limiter really on
+			// still reached 0.00 dBFS whatever the look-ahead. With the attack instant, the look-ahead only has to hold the
+			// gain down until the peak leaves the delay: the envelope's release over it is the one leak left, 40 x look-ahead
+			// / release dB with the digital detector, so 1 ms and 500 ms leak under 0.1 dB. A digital 500 ms release is
+			// the analog ~110 ms curve. Modelled in sound/limiter-model/; the ground scene's limiter takes the same numbers)
+			Settings.bAnalogMode = AirParts::MixFlag(Mix, TEXT("buses.master.limiterAnalogDetector"), false);
+			Settings.LookAheadMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterLookAheadMs"), 1.0));
+			Settings.AttackTimeMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterAttackMs"), 0.02));
+			Settings.ReleaseTimeMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 500.0));
+			Settings.InputGainDb = 0.0f;
+			Settings.OutputGainDb = 0.0f;
+			Settings.KneeBandwidthDb = 0.0f; // (a hard ceiling: the default 10 dB knee began pressing 5 dB under it)
+			// (the preset's own Settings as well as SetSettings: SetSettings fills only the copy the effects read, and
+			// a preset's first effect refills that copy from Settings (EFFECT_PRESET_METHODS' Init), so with SetSettings
+			// alone the master most likely ran the default dynamics settings, not this limiter: the Bremen chase film
+			// passed the ceiling 28 times, for up to 96 ms. Set again once the effect is made, whichever comes first)
+			Made->Settings = Settings;
+			Made->SetSettings(Settings);
+			Limiter = Made;
+			UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
+			Made->SetSettings(Settings);
+			MadeLimiter = Made;
+		}
+		// (how many voices the engine plays at once: DefaultEngine.ini's audio quality level and AudioMaxChannels. The Mac
+		// run's log line shows whether it is the 128 asked for, or still the engine's 32)
+		if (Here)
+		{
+			FAudioDeviceHandle Device = Here->GetAudioDevice();
+			if (Device.IsValid())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air battle sound: the engine plays up to %d voices at once."), Device->GetMaxChannels());
+				if (MadeLimiter)
+				{
+					// (read back from the copy the effects read, GetSettings, not from the numbers asked for: if the master
+					// still ran the engine's default dynamics, this line says compressor, -6 dBFS, a 10 dB knee)
+					const FSubmixEffectDynamicsProcessorSettings Running = MadeLimiter->GetSettings();
+					const bool bIsLimiter = Running.DynamicsProcessorType == ESubmixEffectDynamicsProcessorType::Limiter;
+					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master %s on, read back from the effect's settings: ceiling %.1f dBFS, knee %.1f dB, look-ahead %.2f ms, attack %.3f ms, release %.0f ms, %s detector."),
+						bIsLimiter ? TEXT("limiter") : TEXT("COMPRESSOR (not the limiter asked for)"), Running.ThresholdDb, Running.KneeBandwidthDb, Running.LookAheadMsec,
+						Running.AttackTimeMsec, Running.ReleaseTimeMsec, Running.bAnalogMode ? TEXT("analog") : TEXT("digital"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle sound: the world has no audio device, so no master limiter and no sound."));
+			}
 		}
 	}
 	// The paint: the campaign's own surface, coloured by each point's colour, as the stage's ships are.
@@ -714,6 +868,7 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("05-ride-again"), 70.0, true, false, false, true }, // (riding the other side)
 			{ TEXT("05c-chase-view"), 95.0, true, false, false, false, true }, // (the chase view, its plate and a step)
 			{ TEXT("06-the-ships"), 5.0, false, true, false },     // (after the first ship goes down)
+			{ TEXT("06b-guns-fire-back"), 2.5, false, false, false, false, false, true }, // (after the first attack run on a ship begins)
 			{ TEXT("07-the-fight-goes-on"), 120.0, false, false, false },
 		};
 	}
@@ -1280,14 +1435,18 @@ void AAirBattle::HideTheTable()
 				Fog->SetFogDensity(0.00045f);
 				Fog->SetFogHeightFalloff(0.006f);
 				Fog->SetFogMaxOpacity(0.8f);
-				Fog->SetFogInscatteringColor(AirParts::AirHazeInk);
 				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye. Over land
 				// with no stage, a haze that thickens with distance: about her h1 over the near 10 km, so the town stays
 				// darker than the fields, and her h2.5 by 25 to 30 km, the far ground pale blue-grey and meeting the sky
 				// with no edge; from 7.5 km, 2.6 times as thick, by the haze's own reckoning as the ground's pictures
 				// take it, Tools/air_show/air_land_picture.cpp. The art director, 20 November 20:09Z, round 18d)
+				// (Over the sea it began 15 km off at twice as thick, and from bomber height it hid the sea from 15 or
+				// 20 km on, the top 40% of the picture a white wall. From 30 km at 1.2 times, the sea's own face reads
+				// out to 35 or 40 km, about a quarter of the way down from the horizon, and the haze still closes well
+				// short of the sea's edge, 200 km off; the art director on the Mac's release 2 check, 19:32Z)
 				const bool bOverLand = State.IsValid() && State->Board.StageKey.empty() && !State->Board.Land.empty();
-				BattleLook::AirHaze(*Fog, UnitsPerMetre, bOverLand ? 7500.0 : 15000.0, bOverLand ? 2.6 : 2.0);
+				Fog->SetFogInscatteringColor(bOverLand ? AirParts::AirHazeInk : AirParts::SeaHazeInk());
+				BattleLook::AirHaze(*Fog, UnitsPerMetre, bOverLand ? 7500.0 : 30000.0, bOverLand ? 2.6 : 1.2);
 			}
 			// The lamps: the key turned to the battle's sun, every lamp at its day strength and white (a battle opened
 			// in the table's night kept the moon's), the sky's light the day's.
@@ -1304,6 +1463,7 @@ void AAirBattle::HideTheTable()
 				Kept.Temperature = Light->Temperature;
 				Kept.SourceAngle = Light->LightSourceAngle;
 				Kept.SunDisc = Light->AtmosphereSunDiskColorScale;
+				Kept.bAirByHeight = Light->bPerPixelAtmosphereTransmittance != 0;
 				Kept.LightFunction = Light->LightFunctionMaterial;
 				Kept.LightFunctionFade = Light->LightFunctionFadeDistance;
 				Kept.LightFunctionDisabled = Light->DisabledBrightness;
@@ -1383,6 +1543,20 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 	HazeForward = FMath::Clamp(HazeForward, 0.0, 0.999);
 	Key.LightSourceAngle = static_cast<float>(DiscWide);
 	Key.AtmosphereSunDiskColorScale = FLinearColor(static_cast<float>(DiscShare), static_cast<float>(DiscShare), static_cast<float>(DiscShare));
+	// The sun's light through the air above each point, not through the whole of it as at sea level. The engine gives
+	// every surface the sun as it reaches the ground, and at Bremen's 13 degrees that light has crossed some four
+	// thicknesses of the air and the ozone over it: about 1.45 as much red as green and 0.6 as much blue, which turned
+	// the B-17's olive drab (hue 63) to a tan of hue 40 in sun while its white star, near the top of the scale, hid
+	// the cast (the art director on the Mac's release 2 film, 19:32Z; the paint itself is hue-neutral, M_MapSurface).
+	// A bomber 7.5 km up has about four tenths of the air over it: some 1.25 red to green and 0.9 blue. The ground and
+	// the sea, at the bottom of the air, keep the light they had. "-TheaterAirByHeight=0" lights all as before.
+	static const bool bAirByHeight = []
+	{
+		int32 Asked = 1;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirByHeight="), Asked);
+		return Asked != 0;
+	}();
+	Key.bPerPixelAtmosphereTransmittance = bAirByHeight;
 	Key.MarkRenderStateDirty();
 	// (The battle's sky is the battle look's, made on this actor in AirSkyBegin and taken away with it.)
 	TArray<USkyAtmosphereComponent*> Atmospheres;
@@ -1391,8 +1565,8 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 	{
 		Atmosphere->SetMieAnisotropy(static_cast<float>(HazeForward));
 	}
-	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies)"),
-		DiscWide, DiscShare, HazeForward, Atmospheres.Num());
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies); its light through the air %s"),
+		DiscWide, DiscShare, HazeForward, Atmospheres.Num(), bAirByHeight ? TEXT("over each point") : TEXT("as at sea level"));
 }
 
 void AAirBattle::LightTheBattle()
@@ -1522,10 +1696,12 @@ void AAirBattle::ShowTheTable()
 				Light->SetLightFunctionFadeDistance(Kept.LightFunctionFade);
 				Light->SetLightFunctionDisabledBrightness(Kept.LightFunctionDisabled);
 			}
-			if (!FMath::IsNearlyEqual(Light->LightSourceAngle, Kept.SourceAngle) || !Light->AtmosphereSunDiskColorScale.Equals(Kept.SunDisc))
+			if (!FMath::IsNearlyEqual(Light->LightSourceAngle, Kept.SourceAngle) || !Light->AtmosphereSunDiskColorScale.Equals(Kept.SunDisc)
+				|| (Light->bPerPixelAtmosphereTransmittance != 0) != Kept.bAirByHeight)
 			{
 				Light->LightSourceAngle = Kept.SourceAngle;
 				Light->AtmosphereSunDiskColorScale = Kept.SunDisc;
+				Light->bPerPixelAtmosphereTransmittance = Kept.bAirByHeight;
 				Light->MarkRenderStateDirty();
 			}
 		}
@@ -2364,16 +2540,19 @@ void AAirBattle::WeatherAt(const FVector& EyeWorld)
 	WeatherSun = bDeckShade ? 1.0 : Day.Sun;
 	WeatherSky = Day.Sky;
 	// (the light from below: over the cloud tops, the share of the view down that is sunlit cloud, lit as the sun's
-	// height lights it; under the base the dark sea or ground; "-TheaterBounce=0.6" how bright a whole sunlit deck
-	// throws it, against the sky light's own)
+	// height lights it; under the base the dark sea or ground; "-TheaterBounce=1" scales it)
 	static const double BounceStrength = []
 	{
-		float Asked = 0.6f;
+		float Asked = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterBounce="), Asked);
 		return FMath::Clamp(static_cast<double>(Asked), 0.0, 4.0);
 	}();
 	const double OverTops = FMath::Clamp((High - Sky.Top) / 300.0, 0.0, 1.0);
-	const double SunUp = FMath::Clamp(TowardSun().GetSafeNormal().Z * 2.5, 0.3, 1.0);
+	// (how bright a whole sunlit deck throws it, against the sky light's own: the sky's light on the tops and the sun's
+	// by its height. A deck under a low sun still reads near white from above, 220 to 245 on Bremen's frames, and the
+	// bellies over it read 38 to 41, about a third of the light they want, so a winter sun of 13 degrees gives 1 where
+	// it gave 0.34; a high sun at most 1.4; the art director on the Mac's release 2 check, 19:32Z)
+	const double SunUp = FMath::Clamp(0.55 + 2.0 * TowardSun().GetSafeNormal().Z, 0.6, 1.4);
 	const double FromBelow = 0.06;
 	// (none by night: a deck under the moon throws back next to nothing; the key under a deck is dimmed by night as by
 	// day, an overcast night darker than a clear one)
@@ -2921,9 +3100,14 @@ void AAirBattle::Tick(float DeltaSeconds)
 void AAirBattle::Feed()
 {
 	FAirBattleState& S = *State;
-	auto Take = [&S](const AirFeed::Frame& View)
+	auto Take = [this, &S](const AirFeed::Frame& View)
 	{
 		S.Show.Take(View.Head.T, View.Groups, View.Events, View.Ships);
+		for (const AirShow::Ship& Ship : View.Ships)
+		{
+			GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
+			NoteShip(ShipNames, CapitalShips, Ship);
+		}
 		S.Desk.Take(View);
 		S.FedT = View.Head.T;
 	};
@@ -3379,6 +3563,19 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 		}
 		Shapes.Add(ShapeKey, MoveTemp(Near));
 	}
+	// (her bay's racked load, for where her stick's bombs leave her: the flight core's BaysOf, in metres forward, to the
+	// right and up from the point she is drawn about; the shape has her nose toward -X and her right hand at -Y)
+	const AirParts::FShape* Bayed = Shapes.Find(ShapeKey);
+	if (State && Bayed && Bayed->Doors.Num() == 2 && Bayed->Racked.Points.Num() > 0)
+	{
+		const FBox Load(Bayed->Racked.Points);
+		AirShow::Show::BayPlace Bay;
+		Bay.Fore = -Load.Min.X / UnitsPerMetre;
+		Bay.Aft = -Load.Max.X / UnitsPerMetre;
+		Bay.Up = Load.GetCenter().Z / UnitsPerMetre;
+		Bay.Half = FMath::Clamp(Load.GetExtent().Y / UnitsPerMetre * 0.5, 0.1, 0.4);
+		State->Show.BaysOf[AirParts::Narrow(Model)] = Bay;
+	}
 	const AirParts::FShape* Far = Shapes.Find(ShapeKey + TEXT("|far"));
 	const AirParts::FShape* First = Far ? Far : Shapes.Find(ShapeKey);
 	// (a name of its own: one made again for its own model must not take the name of the one just taken down)
@@ -3673,6 +3870,22 @@ void AAirBattle::PlayEffects()
 	const double Now = S.Show.AirNow();
 	const double U = UnitsPerMetre;
 	const FVector Listener = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
+	// A fighter's fixed guns of one kind fire together, and are heard as one take: one recording laid once a barrel on
+	// the same frame adds up in step (four barrels +12 dB, eight +18, and locked together, into the limiter), where real
+	// guns firing out of step add up as their power, 10 log10 N. So each aircraft's fixed guns of a kind share one key
+	// (below every real gun's key), and its take plays at the square root of how many of them fire this frame.
+	auto WingKey = [](int32 Key, const std::string& What)
+	{
+		return -1 - ((Key / 64) * 4 + (What == "cannon20" ? 0 : What == "hmg" ? 1 : 2));
+	};
+	TMap<int32, int32> WingBarrels;
+	for (const AirShow::Fx& E : S.Show.Effects)
+	{
+		if (E.Kind == AirShow::FxKind::Gun && E.Text == "fixed" && !ShipGuns::IsStream(E.Key))
+		{
+			++WingBarrels.FindOrAdd(WingKey(E.Key, E.What));
+		}
+	}
 	for (const AirShow::Fx& E : S.Show.Effects)
 	{
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
@@ -3680,6 +3893,36 @@ void AAirBattle::PlayEffects()
 		{
 		case AirShow::FxKind::Gun:
 		{
+			// The first attack run on a ship (the guns-fire-back picture): her light guns laid on an attacker within
+			// GunsReach of her, a battleship or a carrier where the battle has one (Pearl Harbor's first was a destroyer
+			// in a nest, and the picture is for Battleship Row). He is the aircraft nearest where they are laid (their
+			// lead puts him a little short of it).
+			if (GunsRealT < 0.0 && ShipGuns::IsStream(E.Key) && !S.bFlying
+				&& (CapitalShips.Num() == 0 || CapitalShips.Contains((E.Key - ShipGuns::StreamBase) / 64)))
+			{
+				const AirShow::PlaneOut* On = nullptr;
+				double Nearest = 400.0;
+				for (const AirShow::PlaneOut& P : S.Show.Planes())
+				{
+					const double Off = (P.At - E.Aim).Length();
+					if (P.bShown && !P.bOnGround && !P.bFalling && Off < Nearest)
+					{
+						Nearest = Off;
+						On = &P;
+					}
+				}
+				const double Range = On ? (On->At - E.At).Length() : GunsReach + 1.0;
+				if (On && Range <= GunsReach)
+				{
+					GunsRealT = RealT;
+					GunsShip = (E.Key - ShipGuns::StreamBase) / 64;
+					GunsOn = On->Key;
+					GunsPlane = World(On->At.X, On->At.Y, On->At.Z);
+					const FString* Name = ShipNames.Find(GunsShip);
+					UE_LOG(LogTheater, Display, TEXT("Air battle: guns fire back picture on %s, her light guns on a %s %.0f m off, %.0f m up"),
+						Name ? **Name : TEXT("a ship"), *AirParts::Wide(On->Model), Range, On->At.Z);
+				}
+			}
 			// (in the kit for the muzzle's height, kept while the gun fires unless it passes the clouds' base)
 			FBattleEffects* const* Was = GunKits.Find(E.Key);
 			FBattleEffects* const Before = Was ? *Was : nullptr;
@@ -3695,16 +3938,33 @@ void AAirBattle::PlayEffects()
 				AirParts::AirGun(Kit, Now, E.Key, At, World(E.Aim.X, E.Aim.Y, E.Aim.Z), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Rate),
 				                 static_cast<float>(E.Mv * U), Nation ? *Nation : FString());
 			}
-			// The burst heard (mix.json air.gunsByCalibre): a take laid on while the trigger is down, never the same
-			// take under the mix's gap after itself.
-			const double* Heard = GunHeardAt.Find(E.Key);
-			if (!Heard || RealT - *Heard > 0.9)
+			// The burst heard (mix.json air.gunsByCalibre): takes laid end to end while the trigger is down, each the
+			// mix's part of its recording (the firing, without the range's echo), the next one due as that part ends.
+			// Every gun seen firing is heard (Brian, 21 November 16:21Z: "when ever there is gun fire make sure the sound
+			// of the guns happens. that didnt happen with the german plane"): the ridden aircraft's own guns at the eye,
+			// unplaced (air.closeView.ownGuns), the rest at the muzzle and carried along with it while they play.
+			const bool bOwnGuns = S.bClose && E.Key / 64 == S.Subject.Plane;
+			// (a ship's light guns of one kind are heard as one battery, under one key: ShipGuns::HeardKey; laid where
+			// its mount fires, and left there, as the ship hardly moves while a take plays)
+			const bool bShip = ShipGuns::IsStream(E.Key);
+			const bool bWing = !bShip && E.Text == "fixed";
+			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : bWing ? WingKey(E.Key, E.What) : E.Key;
+			if (bWing && !WingOf.Contains(E.Key))
 			{
-				GunHeardAt.Add(E.Key, RealT);
+				WingOf.Add(E.Key, SoundKey);
+				++WingLive.FindOrAdd(SoundKey);
+			}
+			const double* Due = GunHeardAt.Find(SoundKey);
+			if (!Due)
+			{
+				++GunBursts;
+			}
+			if (!Due || RealT >= *Due)
+			{
 				const TSharedPtr<FJsonObject> Calibre = AirParts::MixObject(Mix, TEXT("air.gunsByCalibre"));
 				FString Take;
 				float Cut = 0.0f;
-				if (E.What == "cannon20")
+				if (E.What == "cannon20" || E.What == "aa25" || E.What == "aa40")
 				{
 					const TSharedPtr<FJsonObject> Cannon = AirParts::MixObject(Calibre, TEXT("cannon"));
 					Take = AirParts::MixTake(Cannon, TEXT("take"));
@@ -3716,28 +3976,110 @@ void AAirBattle::PlayEffects()
 				}
 				else if (E.What == "hmg")
 				{
-					Take = AirParts::MixTake(AirParts::MixObject(Calibre, TEXT("heavy")), E.Text == "fixed" ? TEXT("wing") : E.Text == "turret" ? TEXT("turret") : TEXT("handHeld"));
+					const TSharedPtr<FJsonObject> Heavy = AirParts::MixObject(Calibre, TEXT("heavy"));
+					Take = AirParts::MixTake(Heavy, E.Text == "fixed" ? TEXT("wing") : E.Text == "turret" ? TEXT("turret") : TEXT("handHeld"));
+					// (partByTake: each heavy take's own stretch of firing, mix v3)
+					const TSharedPtr<FJsonObject> Parts = AirParts::MixObject(Heavy, TEXT("partByTake"));
+					const TArray<TSharedPtr<FJsonValue>>* Part = nullptr;
+					if (Parts.IsValid() && !Take.IsEmpty() && Parts->TryGetArrayField(Take, Part) && Part->Num() == 2)
+					{
+						Cut = static_cast<float>((*Part)[1]->AsNumber());
+					}
 				}
 				else
 				{
 					Take = AirParts::MixTake(AirParts::MixObject(Calibre, E.Text == "hand" ? TEXT("handHeldRifle") : TEXT("rifle")), TEXT("takes"), E.Key);
 				}
-				if (!Take.IsEmpty())
+				// The next take is due as this one's part ends (a hair early, so the bursts run on without a hole), or
+				// at its end where the mix plays it whole; never sooner than the mix's gap after itself.
+				double Again = 0.9;
+				USoundBase* const Recording = Take.IsEmpty() ? nullptr : SoundOf(*Take);
+				if (Recording)
 				{
-					if (UAudioComponent* Played = Sound(*Take, At, TEXT("air_guns"), 1.0f, 0.0f, Cut))
+					const double Whole = Recording->GetDuration();
+					Again = Cut > 0.0f ? Cut : (Whole > 0.0 && Whole < 10.0 ? Whole : 0.9);
+				}
+				Again = FMath::Clamp(Again - 0.02, FMath::Max(0.3, AirParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15)), 2.0);
+				GunHeardAt.Add(SoundKey, RealT + Again);
+				// (a wing's barrels as their power: the square root of how many fire now. The engine's voices: guns near
+				// the eye before the far ones, so a near gun is never the one dropped; given before the take begins)
+				const float Together = bWing ? FMath::Sqrt(static_cast<float>(FMath::Max(1, WingBarrels.FindRef(SoundKey)))) : 1.0f;
+				const float Voice = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
+				UAudioComponent* Played = nullptr;
+				if (Recording)
+				{
+					Played = bOwnGuns ? SoundAtEye(*Take, Together, Cut, false, Voice) : Sound(*Take, At, TEXT("air_guns"), Together, 0.0f, Cut, 0.0f, Voice);
+				}
+				if (Played)
+				{
+					++GunTakesLaid;
+					// (its takes still playing kept, the finished ones let go)
+					TArray<TWeakObjectPtr<UAudioComponent>> Had;
+					GunTakes.MultiFind(SoundKey, Had);
+					GunTakes.Remove(SoundKey);
+					for (const TWeakObjectPtr<UAudioComponent>& Take_ : Had)
 					{
-						// (its takes still playing kept, the finished ones let go)
-						TArray<TWeakObjectPtr<UAudioComponent>> Had;
-						GunTakes.MultiFind(E.Key, Had);
-						GunTakes.Remove(E.Key);
-						for (const TWeakObjectPtr<UAudioComponent>& Take_ : Had)
+						if (Take_.IsValid() && Take_->IsPlaying())
 						{
-							if (Take_.IsValid() && Take_->IsPlaying())
+							GunTakes.Add(SoundKey, Take_);
+						}
+					}
+					GunTakes.Add(SoundKey, Played);
+				}
+				else if (Recording)
+				{
+					++GunTakesFar; // (past its family's silent distance: nothing to hear)
+				}
+				else
+				{
+					++GunTakesLost;
+				}
+			}
+			else if (!bOwnGuns && !bShip)
+			{
+				// (a take laid at the muzzle goes along with the aircraft while it plays: a fighter covers 100 m in one)
+				TArray<TWeakObjectPtr<UAudioComponent>> Playing;
+				GunTakes.MultiFind(SoundKey, Playing);
+				for (const TWeakObjectPtr<UAudioComponent>& Take_ : Playing)
+				{
+					if (Take_.IsValid() && Take_->IsPlaying() && Take_->GetAttachParent() == nullptr)
+					{
+						Take_->SetWorldLocation(At);
+					}
+				}
+			}
+			// Rounds passing the eye (air.roundsPassing): a gun not the ridden aircraft's whose line of fire passes
+			// within the mix's `within` of the eye, more than 30 m out from its muzzle, cracks there now and then.
+			if (!bOwnGuns && Eye)
+			{
+				const FVector Aim = World(E.Aim.X, E.Aim.Y, E.Aim.Z);
+				const FVector Line = Aim - At;
+				const double Long = Line.Size();
+				if (Long > 1.0)
+				{
+					// (the rounds fly on past the guns' convergence, where the line is aimed, to air.roundsPassing.reach)
+					const double Flies = FMath::Max(Long, AirParts::MixNumber(Mix, TEXT("air.roundsPassing.reach"), 1000.0) * U);
+					const double Along = FMath::Clamp(FVector::DotProduct(Listener - At, Line / Long), 0.0, Flies);
+					const FVector Nearest = At + Line / Long * Along;
+					const double Within = AirParts::MixNumber(Mix, TEXT("air.roundsPassing.within"), 40.0) * U;
+					// (by the aircraft, not the barrel: its converging guns' lines pass together, and crack as one)
+					const int32 Shooter = E.Key / 64;
+					const double* Cracked = CrackHeardAt.Find(Shooter);
+					if (Along > 30.0 * U && FVector::Dist(Nearest, Listener) < Within && (!Cracked || RealT >= *Cracked))
+					{
+						CrackHeardAt.Add(Shooter, RealT + FMath::FRandRange(0.12, 0.3));
+						const FString Crack = AirParts::MixTake(AirParts::MixObject(Mix, TEXT("air.roundsPassing")), TEXT("takes"), FMath::RandRange(0, 9));
+						const FName CrackTake(Crack.IsEmpty() ? TEXT("bullet_crack") : *Crack);
+						// (the same take never again inside air.sameTakeGap, whoever fires it: closer, two of them comb)
+						const double* Began = TakeStartedAt.Find(CrackTake);
+						if (!Began || RealT - *Began >= AirParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15))
+						{
+							if (Sound(*CrackTake.ToString(), Nearest, TEXT("air_guns"), 1.0f, 0.0f, 0.0f, 0.0f, 3.0f))
 							{
-								GunTakes.Add(E.Key, Take_);
+								TakeStartedAt.Add(CrackTake, RealT);
+								++CracksHeard;
 							}
 						}
-						GunTakes.Add(E.Key, Played);
 					}
 				}
 			}
@@ -3751,10 +4093,25 @@ void AAirBattle::PlayEffects()
 				Kit->AirGunStop(E.Key);
 			}
 			GunHeardAt.Remove(E.Key);
+			// (a barrel of a wing: the wing's take goes on while any of its barrels still fires, and stops with the last)
+			int32 StopKey = E.Key;
+			int32 Wing = 0;
+			if (WingOf.RemoveAndCopyValue(E.Key, Wing))
+			{
+				int32& Live = WingLive.FindOrAdd(Wing);
+				Live = FMath::Max(0, Live - 1);
+				if (Live > 0)
+				{
+					break;
+				}
+				WingLive.Remove(Wing);
+				GunHeardAt.Remove(Wing);
+				StopKey = Wing;
+			}
 			// The burst heard stops with the gun (Brian 11-20 14:20Z: "after the bomber crew bails out, they can't keep
 			// shooting"): a take still playing is faded out at once, not left to run to its end after the trigger is up.
 			TArray<TWeakObjectPtr<UAudioComponent>> Playing;
-			GunTakes.MultiFind(E.Key, Playing);
+			GunTakes.MultiFind(StopKey, Playing);
 			for (const TWeakObjectPtr<UAudioComponent>& Take : Playing)
 			{
 				if (Take.IsValid())
@@ -3762,15 +4119,50 @@ void AAirBattle::PlayEffects()
 					Take->FadeOut(0.08f, 0.0f);
 				}
 			}
-			GunTakes.Remove(E.Key);
+			GunTakes.Remove(StopKey);
 			break;
 		}
 		case AirShow::FxKind::Hit:
+		{
 			if (FBattleEffects* Kit = KitAt(At))
 			{
 				Kit->AirHit(Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What));
 			}
+			// Rounds striking a plane, heard near the eye (mix.json air.roundsHit: within `within` metres, no closer together
+			// than `every`). A strike on the ridden aircraft is heard at the eye, unplaced, as its own guns are. Until the
+			// mix names its takes (round seven's hits, when Brian has marked them) this is silent.
+			const TSharedPtr<FJsonObject> Hits = AirParts::MixObject(Mix, TEXT("air.roundsHit"));
+			if (Hits.IsValid() && (HitHeardAt < 0.0 || RealT - HitHeardAt >= AirParts::MixNumber(Mix, TEXT("air.roundsHit.every"), 0.08))
+			    && FVector::Dist(At, Listener) < AirParts::MixNumber(Mix, TEXT("air.roundsHit.within"), 60.0) * U)
+			{
+				const FString Take = AirParts::MixTake(Hits, TEXT("takes"), FMath::RandRange(0, 11));
+				if (!Take.IsEmpty())
+				{
+					HitHeardAt = RealT;
+					bool bOwn = false;
+					if (S.bClose)
+					{
+						for (const AirShow::PlaneOut& P : S.Show.Planes())
+						{
+							if (P.Key == S.Subject.Plane)
+							{
+								bOwn = FVector::Dist(At, World(P.At.X, P.At.Y, P.At.Z)) < P.Span * 0.75 * U;
+								break;
+							}
+						}
+					}
+					if (bOwn)
+					{
+						SoundAtEye(*Take, 1.0f, 0.0f, false, 4.0f);
+					}
+					else
+					{
+						Sound(*Take, At, TEXT("air_guns"), 1.0f, 0.0f, 0.0f, 0.0f, 3.0f);
+					}
+				}
+			}
 			break;
+		}
 		case AirShow::FxKind::TrailStart:
 		{
 			// (the scene's room for trails, S.Trails: 24 on the newer kit, 10 on an older; a burning aircraft's own
@@ -3853,6 +4245,34 @@ void AAirBattle::PlayEffects()
 			}
 			break;
 		}
+		case AirShow::FxKind::ShipGun:
+		{
+			// A ship's heavy gun fired (ShipGuns: its shell's burst, or its splash ahead of a torpedo plane, follows when
+			// it gets there). The flash and smoke along the bore at her deck (muzzle.ship_aa, a main battery's gun
+			// muzzle.ship_main: no dust ring, as the guns stand over the sea), and the boom: the mix's flak firing take,
+			// after the flash by the distance (none within 150 m, at most 3 s), no closer together than its soundEvery.
+			if (FBattleEffects* Kit = GroundKit())
+			{
+				const FVector Bore = (World(E.Aim.X, E.Aim.Y, E.Aim.Z) - At).GetSafeNormal();
+				Kit->Muzzle(At, Bore.IsNearlyZero() ? FVector::UpVector : Bore, E.Size >= 200.0 ? TEXT("ship_main") : TEXT("ship_aa"), TEXT("water"));
+			}
+			const TSharedPtr<FJsonObject> Flak = AirParts::MixObject(Mix, TEXT("air.flak"));
+			const double Every = AirParts::MixNumber(Mix, TEXT("air.flak.soundEvery"), 0.6);
+			if (RealT - ShipGunHeardAt >= Every)
+			{
+				ShipGunHeardAt = RealT;
+				const double Metres = FVector::Dist(At, Listener) / U;
+				const float After = Metres < 150.0 ? 0.0f : static_cast<float>(FMath::Min(3.0, Metres / 343.0));
+				const FString Boom = AirParts::MixTake(Flak, TEXT("fire"), 0);
+				FString Family;
+				if (!Flak.IsValid() || !Flak->TryGetStringField(TEXT("fireFamily"), Family) || Family.IsEmpty())
+				{
+					Family = TEXT("big_guns");
+				}
+				Sound(Boom.IsEmpty() ? TEXT("flak_heavy_fire_01") : *Boom, At, *Family, 1.0f, After);
+			}
+			break;
+		}
 		case AirShow::FxKind::Flak:
 		{
 			if (FBattleEffects* Kit = KitAt(At))
@@ -3862,12 +4282,19 @@ void AAirBattle::PlayEffects()
 			// Flak heard when it is seen (handoff 10, gap 6): the burst at its point, after the flash by the distance
 			// over the speed of sound (none within 150 m, at most 3 s), no closer together than the mix's soundEvery.
 			const double Every = AirParts::MixNumber(Mix, TEXT("air.flak.soundEvery"), 0.6);
-			if (RealT - FlakHeardAt >= Every)
+			const double Metres = FVector::Dist(At, Listener) / U;
+			// (a burst close to the eye, mix.json air.closeView.closeFlak: a real close blast in place of the far burst,
+			// whatever the view; within 20 m a big moment by big.alsoWhenCloserThan. It is always heard: soundEvery keeps
+			// only the bursts farther off from crowding, never the one beside the eye)
+			const TSharedPtr<FJsonObject> Close = AirParts::MixObject(Mix, TEXT("air.closeView.closeFlak"));
+			FString CloseTake;
+			const bool bCloseBurst = Close.IsValid() && Metres < AirParts::MixNumber(Mix, TEXT("air.closeView.closeFlak.within"), 100.0)
+				&& Close->TryGetStringField(TEXT("take"), CloseTake) && SoundOf(*CloseTake);
+			if (bCloseBurst || RealT - FlakHeardAt >= Every)
 			{
 				FlakHeardAt = RealT;
-				const double Metres = FVector::Dist(At, Listener) / U;
 				const float After = Metres < 150.0 ? 0.0f : static_cast<float>(FMath::Min(3.0, Metres / 343.0));
-				const FString Burst = AirParts::MixTake(AirParts::MixObject(Mix, TEXT("air.flak")), TEXT("burst"), static_cast<int32>(RealT * 7.0));
+				const FString Burst = bCloseBurst ? CloseTake : AirParts::MixTake(AirParts::MixObject(Mix, TEXT("air.flak")), TEXT("burst"), static_cast<int32>(RealT * 7.0));
 				Sound(Burst.IsEmpty() ? TEXT("flak_burst_01") : *Burst, At, TEXT("explosions"), 1.0f, After);
 			}
 			break;
@@ -4219,6 +4646,7 @@ void AAirBattle::AimEye(double Real)
 	AirShow::Vec Focus(S.Board.TargetX, S.Board.TargetY, 3000.0);
 	int Count = 0;
 	AirShow::Vec Sum;
+	std::vector<int> Picked;
 	for (const auto& Pair : S.Show.Groups())
 	{
 		const AirShow::Group& G = Pair.second;
@@ -4230,6 +4658,7 @@ void AAirBattle::AimEye(double Real)
 		if (!S.Hand.empty() ? bInHand : G.Doing == AirShow::Act::Fight)
 		{
 			Sum = Sum + AirShow::Vec(G.X, G.Y, G.Alt);
+			Picked.push_back(G.Id);
 			++Count;
 		}
 	}
@@ -4241,11 +4670,18 @@ void AAirBattle::AimEye(double Real)
 			if (G.Side == S.Desk.MySideIndex() && !G.bFighter && G.Doing != AirShow::Act::Down)
 			{
 				Sum = Sum + AirShow::Vec(G.X, G.Y, G.Alt);
+				Picked.push_back(G.Id);
 				++Count;
 			}
 		}
 	}
-	if (Count > 0)
+	// (on the thickest crowd of their aircraft, not the middle of their groups, which kilometres apart was empty sky)
+	AirShow::Vec Crowd;
+	if (AirDesk::CrowdOf(S.Show.Planes(), Picked, 1200.0, FocusAnchor, Crowd))
+	{
+		Focus = Crowd;
+	}
+	else if (Count > 0)
 	{
 		Focus = Sum * (1.0 / Count);
 	}
@@ -4390,7 +4826,56 @@ void AAirBattle::AimEye(double Real)
 			Heading = ShipsEyeHeading;
 		}
 	}
-	LookAt = bLookSet && !bOnShip ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
+	// "The guns fire back" picture (item 14; the Mac builder on r2d: no picture showed a ship's guns at work, the ships
+	// picture coming after the raid or on a carrier already ablaze): the ship of the first attack run on a ship, seen
+	// side-on to the line from her to the aircraft her guns are on, so that her tracers and the heavy bursts climb across
+	// the picture toward him. The look is at two fifths of the way from her to him, 4 degrees down: she sits low in the
+	// frame with the sea round her, he high against the sky, the horizon between. Its way is chosen once (of the two
+	// side-on ways the one upwind, so her smoke leans away, and with the sun behind the eye) and held to its end.
+	FVector GunShip;
+	const bool bOnGuns = !bOnShip && GunsLook >= 0 && Stage && Stage->IsRaised() && Stage->ShipAt(GunsLook, GunShip);
+	if (bOnGuns)
+	{
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			if (P.Key == GunsOn && P.bShown)
+			{
+				GunsPlane = World(P.At.X, P.At.Y, P.At.Z);
+				break;
+			}
+		}
+		const FVector Line = GunsPlane - GunShip;
+		const FVector Across(Line.X, Line.Y, 0.0);
+		if (GunsEyeFor != GunsLook)
+		{
+			GunsEyeFor = GunsLook;
+			FVector Along = Across.GetSafeNormal();
+			if (Along.IsNearlyZero())
+			{
+				// (he is straight over her: side-on to her length)
+				double Long = 0.0;
+				FVector Bow;
+				bool bHarbour = true;
+				Along = Stage->ShipLie(GunsLook, Long, Bow, bHarbour) ? Bow.GetSafeNormal() : FRotator(0.0, Yaw, 0.0).Vector();
+			}
+			const FVector Side = FVector::CrossProduct(FVector::UpVector, Along).GetSafeNormal();
+			FVector Sun = Stage->TowardSun();
+			Sun.Z = 0.0;
+			Sun = Sun.GetSafeNormal();
+			const FVector Upwind = -WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0).GetSafeNormal();
+			const FVector Way = FVector::DotProduct(Side, Upwind) + FVector::DotProduct(Side, Sun) >= 0.0 ? Side : -Side;
+			GunsEyeHeading = (-Way).Rotation().Yaw;
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the guns fire back picture, heading %.0f, the aircraft %.0f m along and %.0f m up from her"), GunsEyeHeading, Across.Size() / U, Line.Z / U);
+		}
+		// (both in the frame with a quarter to spare: at 55 degrees it is 2 tan 27.5 of the way wide, and at 16:9
+		// 2 tan 16.3 of it high; never nearer than 450 m, never farther than 2.6 km)
+		const double Wide = Across.Size() / U, High = FMath::Abs(Line.Z) / U;
+		Away = FMath::Clamp(FMath::Max(0.75 * Wide / FMath::Tan(FMath::DegreesToRadians(27.5)), 0.75 * High / FMath::Tan(FMath::DegreesToRadians(16.3))), 450.0, 2600.0);
+		Wanted = GunShip + Line * 0.4;
+		Down = -4.0;
+		Heading = GunsEyeHeading;
+	}
+	LookAt = bLookSet && !bOnShip && !bOnGuns ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
 	bLookSet = true;
 	const FRotator Facing(Down, Heading, 0.0);
 	FVector From = LookAt - Facing.Vector() * Away * U;
@@ -4428,6 +4913,17 @@ void AAirBattle::Orbit(const FVector2D& DeltaPixels)
 	Pitch = FMath::Clamp(Pitch - DeltaPixels.Y * 0.2, -80.0, 10.0);
 }
 
+UTexture2D* AAirBattle::FlagPicture(const FString& Tag)
+{
+	ACampaignMapActor* Map = Table.Get();
+	if (!Map && GetWorld())
+	{
+		TActorIterator<ACampaignMapActor> It(GetWorld());
+		Map = It ? *It : nullptr;
+	}
+	return Map && !Tag.IsEmpty() ? Map->GetFlagTexture(Tag) : nullptr;
+}
+
 void AAirBattle::Zoom(float Steps)
 {
 	Distance = FMath::Clamp(Distance * FMath::Pow(0.85, static_cast<double>(Steps)), 120.0, 20000.0);
@@ -4463,6 +4959,44 @@ void AAirBattle::PlaceTags()
 			&& OnScreen.X >= 0.0 && OnScreen.Y >= 0.0 && OnScreen.X <= S.ViewportPixels.X && OnScreen.Y <= S.ViewportPixels.Y)
 		{
 			S.TagAt[T.Id] = OnScreen;
+		}
+	}
+	// The ridden aircraft's box on the screen (the Mac's release 2 check: the dispatches covered it in Bremen, Midway
+	// and Oahu 03 and 05, and a group's tag sat on it in Oahu 05): the corners of its wings, nose, tail and fin, as
+	// it flies.
+	S.bRiddenOn = false;
+	if (S.bClose)
+	{
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			if (P.Key != S.Subject.Plane || !P.bShown)
+			{
+				continue;
+			}
+			const FQuat Attitude = FRotator(P.Pitch, P.Heading, P.Bank).Quaternion();
+			const FVector Body = World(P.At.X, P.At.Y, P.At.Z);
+			const double Half = 0.5 * FMath::Max(P.Span, 8.0) * UnitsPerMetre;
+			const FVector Ways[3] = { Attitude.GetForwardVector() * Half * 0.85, Attitude.GetRightVector() * Half, Attitude.GetUpVector() * Half * 0.3 };
+			FVector2D Min(1e9, 1e9), Max(-1e9, -1e9);
+			int32 Seen = 0;
+			for (int32 Corner = 0; Corner < 8; ++Corner)
+			{
+				const FVector At = Body + Ways[0] * ((Corner & 1) ? 1.0 : -1.0) + Ways[1] * ((Corner & 2) ? 1.0 : -1.0) + Ways[2] * ((Corner & 4) ? 1.0 : -1.0);
+				FVector2D OnScreen;
+				if (Controller->ProjectWorldLocationToScreen(At, OnScreen, false))
+				{
+					Min = FVector2D(FMath::Min(Min.X, OnScreen.X), FMath::Min(Min.Y, OnScreen.Y));
+					Max = FVector2D(FMath::Max(Max.X, OnScreen.X), FMath::Max(Max.Y, OnScreen.Y));
+					++Seen;
+				}
+			}
+			if (Seen == 8)
+			{
+				S.RiddenMin = FVector2D(FMath::Max(Min.X, 0.0), FMath::Max(Min.Y, 0.0));
+				S.RiddenMax = FVector2D(FMath::Min(Max.X, S.ViewportPixels.X), FMath::Min(Max.Y, S.ViewportPixels.Y));
+				S.bRiddenOn = S.RiddenMax.X > S.RiddenMin.X && S.RiddenMax.Y > S.RiddenMin.Y;
+			}
+			break;
 		}
 	}
 }
@@ -4785,6 +5319,28 @@ void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 			Pair.Value->Stop();
 		}
 	}
+	if (OwnEngine)
+	{
+		OwnEngine->Stop();
+		OwnEngine = nullptr;
+	}
+	if (AirBed)
+	{
+		AirBed->Stop();
+		AirBed = nullptr;
+	}
+	if (Limiter)
+	{
+		UAudioMixerBlueprintLibrary::RemoveMasterSubmixEffect(this, Limiter);
+		Limiter = nullptr;
+	}
+	if (bScoreBegun)
+	{
+		if (ACampaignGameMode* Mode = GetWorld() ? Cast<ACampaignGameMode>(GetWorld()->GetAuthGameMode()) : nullptr)
+		{
+			Mode->StopBattleScore();
+		}
+	}
 	if (Effects)
 	{
 		Effects->End();
@@ -4866,6 +5422,14 @@ USoundBase* AAirBattle::SoundOf(const TCHAR* Name, bool bLoop)
 	const FName Key(Name);
 	if (TObjectPtr<USoundBase>* Found = Sounds.Find(Key))
 	{
+		// (a loop asked for by a take first loaded to play once: looped from now on)
+		if (bLoop)
+		{
+			if (USoundWave* Wave = Cast<USoundWave>(Found->Get()))
+			{
+				Wave->bLooping = true;
+			}
+		}
 		return Found->Get();
 	}
 	if (SoundsMissing.Contains(Key))
@@ -4919,7 +5483,10 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
 	const TArray<TSharedPtr<FJsonValue>>* Lpf = nullptr;
 	if (Family->TryGetArrayField(TEXT("lpf"), Lpf) && Lpf->Num() >= 2)
 	{
-		const TArray<TSharedPtr<FJsonValue>>& Near = (*Lpf)[1]->AsArray();
+		// (the first point is the near one: full brightness out to it. Taking the second as the near point had every
+		// gun inside 600 m cut at 4 kHz and every engine inside 3 km at 3.5 kHz, their crack and edge gone; the sound
+		// director, 21 November, on the Bremen film)
+		const TArray<TSharedPtr<FJsonValue>>& Near = (*Lpf)[0]->AsArray();
 		const TArray<TSharedPtr<FJsonValue>>& Far = Lpf->Last()->AsArray();
 		if (Near.Num() == 2 && Far.Num() == 2)
 		{
@@ -4934,7 +5501,41 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
 	return Made;
 }
 
-UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut, float From)
+UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float PitchBy, bool bAutoDestroy)
+{
+	// (made, given its voice priority, and only then begun: UAudioComponent::Play hands the priority to the sound the
+	// engine runs, so a priority set after the spawn, as the release 2 air patch first did, reached nothing)
+	if (Where && Family && Eye)
+	{
+		// (past its family's silent distance from the eye, the listener: not made at all, as the engine's own spawn did not)
+		const double Reach = Family->Attenuation.AttenuationShapeExtents.X + Family->Attenuation.FalloffDistance;
+		if (FVector::DistSquared(*Where, Eye->GetActorLocation()) > Reach * Reach)
+		{
+			return nullptr;
+		}
+	}
+	UAudioComponent* Player = UGameplayStatics::CreateSound2D(this, Played, Volume, PitchBy, 0.0f, nullptr, false, bAutoDestroy);
+	if (!Player)
+	{
+		return nullptr;
+	}
+	Player->bIsUISound = false; // (CreateSound2D makes an interface sound, which would play on through a pause)
+	if (Where)
+	{
+		Player->bAllowSpatialization = true;
+		Player->AttenuationSettings = Family;
+		Player->SetWorldLocation(*Where);
+	}
+	if (Priority > 0.0f)
+	{
+		Player->bOverridePriority = true;
+		Player->Priority = Priority;
+	}
+	Player->Play(From);
+	return Player;
+}
+
+UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut, float From, float Priority)
 {
 	if (After > 0.0f)
 	{
@@ -4946,7 +5547,10 @@ UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, cons
 	{
 		return nullptr;
 	}
-	UAudioComponent* Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, From, FamilyOf(Family));
+	// (laid on at the battle's level now: louder riding an aircraft, and as the strategy camera draws back. A big moment
+	// plays at its full level and dips the rest; anything else laid on while one is dipping is laid on dipped)
+	const bool bBig = BigMoment(Name, Where);
+	UAudioComponent* Player = Lay(Played, &Where, FamilyOf(Family), Volume * MasterGain * (bBig ? 1.0f : DuckCloseGain), From, bBig ? FMath::Max(Priority, 3.5f) : Priority);
 	if (Player && Cut > 0.0f)
 	{
 		// (only the first part of the take: the rest is the ground's echo, which the sky does not have)
@@ -4959,6 +5563,71 @@ UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, cons
 				Weak->FadeOut(0.08f, 0.0f);
 			}
 		}), Cut, false);
+	}
+	return Player;
+}
+
+bool AAirBattle::BigMoment(const TCHAR* Name, const FVector& Where)
+{
+	// A big moment (mix.json big): one of big.names, or a take nearer than its big.alsoWhenCloserThan. Within
+	// air.bigDuck.within of the eye it dips the rest (attack, hold, release); farther off it plays but dips nothing.
+	const TSharedPtr<FJsonObject> Big = AirParts::MixObject(Mix, TEXT("big"));
+	if (!Big.IsValid())
+	{
+		return false;
+	}
+	const double Metres = Eye ? FVector::Dist(Where, Eye->GetActorLocation()) / UnitsPerMetre : 1e9;
+	bool bBig = false;
+	const TArray<TSharedPtr<FJsonValue>>* Names = nullptr;
+	if (Big->TryGetArrayField(TEXT("names"), Names))
+	{
+		for (const TSharedPtr<FJsonValue>& One : *Names)
+		{
+			if (One.IsValid() && One->AsString() == Name)
+			{
+				bBig = true;
+				break;
+			}
+		}
+	}
+	if (!bBig)
+	{
+		const TSharedPtr<FJsonObject> Near = AirParts::MixObject(Big, TEXT("alsoWhenCloserThan"));
+		double Closer = 0.0;
+		bBig = Near.IsValid() && Near->TryGetNumberField(FString(Name), Closer) && Metres < Closer;
+	}
+	if (bBig && Metres <= AirParts::MixNumber(Mix, TEXT("air.bigDuck.within"), 1000.0))
+	{
+		// (a second big moment while one is dipping carries on from where the dip stands, never back up and down again)
+		const double Attack = AirParts::MixNumber(Mix, TEXT("big.attackMs"), 50.0) / 1000.0;
+		DuckFrom = RealT - Attack * DuckLevel;
+	}
+	return bBig;
+}
+
+UAudioComponent* AAirBattle::SoundAtEye(const TCHAR* Name, float Volume, float Cut, bool bLoop, float Priority)
+{
+	USoundBase* Played = SoundOf(Name, bLoop);
+	if (!Played || !Eye)
+	{
+		return nullptr;
+	}
+	// (unplaced, with no distance rule: heard as the mix sets it wherever the eye goes)
+	UAudioComponent* Player = Lay(Played, nullptr, nullptr, Volume * MasterGain, 0.0f, Priority);
+	if (Player)
+	{
+		if (Cut > 0.0f)
+		{
+			TWeakObjectPtr<UAudioComponent> Weak(Player);
+			FTimerHandle Handle;
+			GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([Weak]()
+			{
+				if (Weak.IsValid())
+				{
+					Weak->FadeOut(0.08f, 0.0f);
+				}
+			}), Cut, false);
+		}
 	}
 	return Player;
 }
@@ -5024,8 +5693,335 @@ void AAirBattle::Play(double Real)
 			continue;
 		}
 		PassHeardAt.Add(P.Group, RealT);
-		Sound(TEXT("fighter_pass"), At, TEXT("aircraft"), 1.2f);
+		// (the plane's own engine passing, by its model: mix.json air.passByPlane, else fighter_pass; +1.5 dB, air.passes.
+		// The ridden aircraft's group passes nobody: its engines are at the eye.)
+		if (S.bClose && P.Group == S.RiddenGroup())
+		{
+			continue;
+		}
+		FString Pass;
+		if (const TSharedPtr<FJsonObject> ByModel = AirParts::MixObject(Mix, TEXT("air.passByPlane")))
+		{
+			if (!ByModel->TryGetStringField(AirParts::Wide(P.Model), Pass))
+			{
+				ByModel->TryGetStringField(TEXT("*"), Pass);
+			}
+		}
+		if (Pass.IsEmpty() || !SoundOf(*Pass))
+		{
+			Pass = TEXT("fighter_pass");
+		}
+		Sound(*Pass, At, TEXT("aircraft"), 1.19f, 0.0f, 0.0f, 0.0f, 2.0f);
 	}
+	AirLevels(Real);
+	// The guns' tally (the Mac run's log: every gun seen firing heard).
+	if (RealT >= GunTallyAt)
+	{
+		GunTallyAt = RealT + 20.0;
+		UE_LOG(LogTheater, Display, TEXT("Air battle sound: %d bursts begun, %d takes laid on, %d takes that could not play, %d out of earshot, %d rounds heard passing; level %+.1f dB%s; air intensity %.2f, music %+.0f dB."),
+			GunBursts, GunTakesLaid, GunTakesLost, GunTakesFar, CracksHeard, 20.0 * FMath::LogX(10.0, FMath::Max(1e-4, static_cast<double>(MasterGain))), S.bClose ? TEXT(" (riding)") : TEXT(""),
+			AirIntensity, ScoreShownDb);
+	}
+}
+
+void AAirBattle::AirLevels(double Real)
+{
+	FAirBattleState& S = *State;
+	const FVector Listener = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
+	// Big moments (mix.json big; BigMoment): each layer dips by its big.duckDb at the full of it, over attack, hold, release.
+	DuckLevel = 0.0;
+	if (DuckFrom >= 0.0)
+	{
+		const double Attack = FMath::Max(1e-3, AirParts::MixNumber(Mix, TEXT("big.attackMs"), 50.0) / 1000.0);
+		const double Hold = AirParts::MixNumber(Mix, TEXT("big.holdMs"), 800.0) / 1000.0;
+		const double Release = FMath::Max(1e-3, AirParts::MixNumber(Mix, TEXT("big.releaseMs"), 1500.0) / 1000.0);
+		const double T = RealT - DuckFrom;
+		DuckLevel = T < Attack ? FMath::Max(0.0, T / Attack) : T < Attack + Hold ? 1.0 : FMath::Max(0.0, 1.0 - (T - Attack - Hold) / Release);
+	}
+	auto Dipped = [this](const TCHAR* Layer, double Default)
+	{
+		return static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, FString(TEXT("big.duckDb.")) + Layer, Default) * DuckLevel / 20.0));
+	};
+	DuckBedGain = Dipped(TEXT("bed"), -6.0);
+	DuckLoopsGain = Dipped(TEXT("loops"), -4.0);
+	DuckCloseGain = Dipped(TEXT("close"), -4.0);
+	DuckMusicDb = AirParts::MixNumber(Mix, TEXT("big.duckDb.music"), -6.0) * DuckLevel;
+	// The battle's end (mix.json music.end): the battle sounds come down under the stinger, stingerDucksAllDb over
+	// battleSoundsFade seconds from the over line.
+	if (S.bOver)
+	{
+		const float Under = static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, TEXT("music.end.stingerDucksAllDb"), -10.0) / 20.0));
+		const double Over = FMath::Max(0.1, AirParts::MixNumber(Mix, TEXT("music.end.battleSoundsFade"), 4.0));
+		EndGain = FMath::Max(Under, EndGain - static_cast<float>((1.0 - Under) * Real / Over));
+	}
+	// The battle's level: riding an aircraft, the close view's (air.closeView.masterDb); else by how far the strategy
+	// camera stands from the fight (air.masterDbByCameraDistance, metres to dB, straight lines between).
+	double Db = 0.0;
+	if (S.bClose)
+	{
+		Db = AirParts::MixNumber(Mix, TEXT("air.closeView.masterDb"), 3.0);
+	}
+	else
+	{
+		double Nearest = 1e12;
+		for (const auto& Pair : S.Show.Groups())
+		{
+			AirShow::Vec Middle;
+			double Face = 0.0;
+			if (Pair.second.Doing != AirShow::Act::Down && Pair.second.Doing != AirShow::Act::Idle && S.Show.Middle(Pair.first, Middle, Face))
+			{
+				Nearest = FMath::Min(Nearest, FVector::Dist(World(Middle.X, Middle.Y, Middle.Z), Listener) / UnitsPerMetre);
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* DbTable = nullptr;
+		if (Nearest < 1e11 && AirParts::MixObject(Mix, TEXT("air")).IsValid() && AirParts::MixObject(Mix, TEXT("air"))->TryGetArrayField(TEXT("masterDbByCameraDistance"), DbTable) && DbTable->Num() >= 2)
+		{
+			for (int32 K = 0; K < DbTable->Num(); ++K)
+			{
+				const TArray<TSharedPtr<FJsonValue>>& Row = (*DbTable)[K]->AsArray();
+				const double M = Row[0]->AsNumber(), D = Row[1]->AsNumber();
+				if (K == 0 && Nearest <= M)
+				{
+					Db = D;
+					break;
+				}
+				if (K == DbTable->Num() - 1)
+				{
+					Db = D;
+					break;
+				}
+				const TArray<TSharedPtr<FJsonValue>>& Next = (*DbTable)[K + 1]->AsArray();
+				const double M2 = Next[0]->AsNumber(), D2 = Next[1]->AsNumber();
+				if (Nearest <= M2)
+				{
+					Db = D + (D2 - D) * (Nearest - M) / FMath::Max(1.0, M2 - M);
+					break;
+				}
+			}
+		}
+	}
+	// (eased by the clock, about a second to settle as the mix has it, so a cut does not jump the whole battle's level,
+	// whatever the frame rate)
+	const float Want = static_cast<float>(FMath::Pow(10.0, Db / 20.0)) * EndGain;
+	MasterGain += (Want - MasterGain) * static_cast<float>(1.0 - FMath::Exp(-FMath::Clamp(Real, 0.0, 0.25) / 0.33));
+
+	// The ridden aircraft's own engines (air.closeView.bed): its air.loops take, unplaced at the eye, gainDb over
+	// the rest. A bomber's heard through its airframe (lpfHz); a fighter's, ridden from behind it, open. A bomber
+	// recorded from inside (bed.interior) plays that recording, open, at interiorGainDb instead.
+	int32 Ridden = -1;
+	FString OwnLoop;
+	bool bOwnBomber = false;
+	bool bOwnInterior = false;
+	float OwnLive = 1.0f;
+	if (S.bClose)
+	{
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			if (P.Key == S.Subject.Plane && !P.bFalling && P.bShown)
+			{
+				Ridden = P.Key;
+				bOwnBomber = !P.bFighter;
+				const FString RiddenModel = AirParts::Wide(P.Model);
+				OwnLoop = EngineLoop(RiddenModel);
+				// (inside a B-17: b17_interior_loop, Brian's Good of 21 Nov; a model not listed, or a take not yet in
+				// the game, keeps its drone through the filter)
+				if (bOwnBomber)
+				{
+					const TCHAR* Own = RiddenModel == TEXT("B17") ? TEXT("B-17") : RiddenModel == TEXT("B24") ? TEXT("B-24") : nullptr;
+					const TSharedPtr<FJsonObject> Inside = AirParts::MixObject(Mix, TEXT("air.closeView.bed.interior"));
+					FString Take;
+					if (Own && Inside.IsValid() && Inside->TryGetStringField(Own, Take) && SoundOf(*Take, true))
+					{
+						OwnLoop = Take;
+						bOwnInterior = true;
+					}
+				}
+				// (its dead engines: the drone down by 10 log10(left / engines), air.engineLost; none left, a whisper)
+				int32 Left = 0, All = 1;
+				OwnLive = FMath::Max(0.3f, AirParts::LiveEngines(P.Model, P.bFighter, P.DeadEngines, Left, All));
+				break;
+			}
+		}
+	}
+	const float BedGain = static_cast<float>(FMath::Pow(10.0, (bOwnInterior ? AirParts::MixNumber(Mix, TEXT("air.closeView.bed.interiorGainDb"), 2.0)
+		: AirParts::MixNumber(Mix, TEXT("air.closeView.bed.gainDb"), 6.0)) / 20.0));
+	if (Ridden != OwnEngineFor)
+	{
+		if (OwnEngine)
+		{
+			OwnEngine->FadeOut(0.4f, 0.0f);
+			OwnEngine = nullptr;
+		}
+		OwnEngineFor = Ridden;
+		if (Ridden >= 0 && !OwnLoop.IsEmpty())
+		{
+			OwnEngine = SoundAtEye(*OwnLoop, BedGain, 0.0f, true, 4.0f);
+			if (OwnEngine)
+			{
+				if (bOwnBomber && !bOwnInterior)
+				{
+					OwnEngine->SetLowPassFilterEnabled(true);
+					OwnEngine->SetLowPassFilterFrequency(static_cast<float>(AirParts::MixNumber(Mix, TEXT("air.closeView.bed.lpfHz"), 200.0)));
+				}
+			}
+		}
+	}
+	else if (OwnEngine)
+	{
+		OwnEngine->SetVolumeMultiplier(BedGain * MasterGain * DuckBedGain * OwnLive);
+	}
+
+	// The far air bed (beds.list's air row: air_battle_far_loop), unplaced, by the share of the battle's groups in a
+	// fight (air.intensity), eased over a few seconds: in from 0 at `in` to full at `full`, at its gainDb.
+	int32 Groups = 0, Fighting = 0;
+	for (const auto& Pair : S.Show.Groups())
+	{
+		if (Pair.second.Doing == AirShow::Act::Down || Pair.second.Doing == AirShow::Act::Idle)
+		{
+			continue;
+		}
+		++Groups;
+		Fighting += Pair.second.Doing == AirShow::Act::Fight ? 1 : 0;
+	}
+	const double Share = Groups > 0 ? static_cast<double>(Fighting) / Groups : 0.0;
+	// (rising over intensity.rise seconds, falling over intensity.fall: a fight calms slowly, as in a film)
+	const double Tau = FMath::Max(0.05, AirParts::MixNumber(Mix, Share > AirIntensity ? TEXT("intensity.rise") : TEXT("intensity.fall"), Share > AirIntensity ? 1.5 : 10.0));
+	AirIntensity += (Share - AirIntensity) * (1.0 - FMath::Exp(-FMath::Clamp(Real, 0.0, 0.25) / Tau));
+	double In = 0.02, Full = 0.15, BedDb = -12.0;
+	FString BedTake = TEXT("air_battle_far_loop");
+	const TArray<TSharedPtr<FJsonValue>>* Beds = nullptr;
+	if (const TSharedPtr<FJsonObject> BedsAt = AirParts::MixObject(Mix, TEXT("beds")); BedsAt.IsValid() && BedsAt->TryGetArrayField(TEXT("list"), Beds))
+	{
+		for (const TSharedPtr<FJsonValue>& Row : *Beds)
+		{
+			const TSharedPtr<FJsonObject>* Bed = nullptr;
+			bool bAir = false;
+			if (Row->TryGetObject(Bed) && (*Bed)->TryGetBoolField(TEXT("air"), bAir) && bAir)
+			{
+				(*Bed)->TryGetStringField(TEXT("name"), BedTake);
+				(*Bed)->TryGetNumberField(TEXT("in"), In);
+				(*Bed)->TryGetNumberField(TEXT("full"), Full);
+				(*Bed)->TryGetNumberField(TEXT("gainDb"), BedDb);
+				break;
+			}
+		}
+	}
+	const float BedLevel = static_cast<float>(FMath::Clamp((AirIntensity - In) / FMath::Max(0.01, Full - In), 0.0, 1.0) * FMath::Pow(10.0, BedDb / 20.0));
+	if (!AirBed && BedLevel > 0.001f)
+	{
+		// (begun at its level, never at nothing: a sound begun silent can be set aside by the engine and not come back)
+		AirBed = SoundAtEye(*BedTake, BedLevel, 0.0f, true, 2.0f);
+	}
+	if (AirBed)
+	{
+		AirBed->SetVolumeMultiplier(FMath::Max(0.0001f, BedLevel * MasterGain * DuckBedGain));
+	}
+	BattleScore(Real);
+}
+
+void AAirBattle::BattleScore(double Real)
+{
+	// The battle's music (mix.json music; Brian's stamps of 19 November): Zero Hour until first contact, crossfading into
+	// the battle's piece at onContact.db; down to thickOfIt.db while the air battle's meter is over its mark, back to
+	// lull.db when it has stayed under the lull's mark long enough; nearBreak.db while either side is three quarters of
+	// the way to breaking off; dipped by a big moment; at the end the stinger, The Field Is Ours or The Line Gives Way.
+	// (The map's moods wait while it plays: ACampaignGameMode::BeginBattleScore.)
+	FAirBattleState& S = *State;
+	ACampaignGameMode* Mode = GetWorld() ? Cast<ACampaignGameMode>(GetWorld()->GetAuthGameMode()) : nullptr;
+	if (!Mode || !Mix.IsValid())
+	{
+		return;
+	}
+	if (!bScoreBegun)
+	{
+		bScoreBegun = true;
+		ScoreWantDb = ScoreShownDb = AirParts::MixNumber(Mix, TEXT("music.beforeContact.db"), 0.0);
+		Mode->BeginBattleScore();
+	}
+	if (!bScoreContact && S.Desk.Head().Contact >= 0.0)
+	{
+		bScoreContact = true;
+		ScoreWantDb = ScoreShownDb = AirParts::MixNumber(Mix, TEXT("music.onContact.db"), -8.0);
+		Mode->BattleScoreContact(static_cast<float>(ScoreShownDb + DuckMusicDb), static_cast<float>(AirParts::MixNumber(Mix, TEXT("music.onContact.fromBeforeContact.crossfade"), 3.0)));
+	}
+	if (bScoreContact && !S.bOver)
+	{
+		double Want = ScoreWantDb, Fade = 3.0;
+		double LullUnder = 0.3, LullFor = 15.0;
+		const TArray<TSharedPtr<FJsonValue>>* Under = nullptr;
+		if (const TSharedPtr<FJsonObject> Lull = AirParts::MixObject(Mix, TEXT("music.lull")); Lull.IsValid() && Lull->TryGetArrayField(TEXT("whenIntensityUnderFor"), Under) && Under->Num() == 2)
+		{
+			LullUnder = (*Under)[0]->AsNumber();
+			LullFor = (*Under)[1]->AsNumber();
+		}
+		if (AirIntensity > AirParts::MixNumber(Mix, TEXT("music.thickOfIt.whenIntensityOver"), 0.6))
+		{
+			Want = AirParts::MixNumber(Mix, TEXT("music.thickOfIt.db"), -18.0);
+			Fade = AirParts::MixNumber(Mix, TEXT("music.thickOfIt.fade"), 4.0);
+			LullSince = -1.0;
+		}
+		else if (AirIntensity < LullUnder)
+		{
+			LullSince = LullSince < 0.0 ? RealT : LullSince;
+			if (RealT - LullSince >= LullFor)
+			{
+				Want = AirParts::MixNumber(Mix, TEXT("music.lull.db"), -8.0);
+				Fade = AirParts::MixNumber(Mix, TEXT("music.lull.fade"), 6.0);
+			}
+		}
+		else
+		{
+			LullSince = -1.0;
+		}
+		// (the swing of the battle: either side three quarters of the way to breaking off)
+		if (FMath::Max(S.Words.MyBar, S.Words.TheirBar) >= 0.75)
+		{
+			Want = AirParts::MixNumber(Mix, TEXT("music.nearBreak.db"), -4.0);
+			Fade = AirParts::MixNumber(Mix, TEXT("music.nearBreak.fade"), 3.0);
+		}
+		if (FMath::Abs(Want - ScoreWantDb) > 0.01)
+		{
+			ScoreRampDbPerS = FMath::Abs(Want - ScoreShownDb) / FMath::Max(0.1, Fade);
+			ScoreWantDb = Want;
+		}
+	}
+	// (the level eased toward its mark at the rule's own fade, in straight dB)
+	const double Step = ScoreRampDbPerS * FMath::Clamp(Real, 0.0, 0.25);
+	ScoreShownDb = ScoreShownDb < ScoreWantDb ? FMath::Min(ScoreWantDb, ScoreShownDb + Step) : FMath::Max(ScoreWantDb, ScoreShownDb - Step);
+	if (!S.bOver)
+	{
+		Mode->SetBattleScoreLevel(static_cast<float>(ScoreShownDb + DuckMusicDb), 0.1f);
+	}
+	if (S.bOver && !bScoreEnded && S.OverRealT >= AirParts::MixNumber(Mix, TEXT("music.end.stingerAfter"), 1.0))
+	{
+		bScoreEnded = true;
+		const int32 Won = AirFeed::SideOf(S.Desk.Head().Winner);
+		Mode->EndBattleScore(Won < 0 ? -1 : Won == S.Desk.MySideIndex() ? 1 : 0);
+	}
+}
+
+FString AAirBattle::EngineLoop(const FString& Model)
+{
+	// An aircraft's own engines by its model (mix.json air.loops): the B-17 and the B-24 their own drones, the Stuka
+	// its own; other four-engined and twin-engined bombers theirs; every fighter, and the carriers' single-engined
+	// bombers, which have no recording of their own, the fighter's. A take not yet in the game gives way to its kind's.
+	const TSharedPtr<FJsonObject> Loops = AirParts::MixObject(Mix, TEXT("air.loops"));
+	if (!Loops.IsValid())
+	{
+		return FString();
+	}
+	const bool bFour = Model == TEXT("Lancaster") || Model == TEXT("Halifax") || Model == TEXT("B24");
+	const bool bTwin = Model == TEXT("He111") || Model == TEXT("Betty") || Model == TEXT("G4M") || Model == TEXT("Bomber");
+	const TCHAR* Kind = bFour ? TEXT("fourEngined") : bTwin ? TEXT("twinEngined") : TEXT("fighter");
+	const TCHAR* Own = Model == TEXT("B17") ? TEXT("B-17") : Model == TEXT("B24") ? TEXT("B-24") : Model == TEXT("Stuka") ? TEXT("Ju 87") : nullptr;
+	FString Loop;
+	if (Own && Loops->TryGetStringField(Own, Loop) && SoundOf(*Loop, true))
+	{
+		return Loop;
+	}
+	Loop.Reset();
+	Loops->TryGetStringField(Kind, Loop);
+	return Loop;
 }
 
 void AAirBattle::EngineSounds()
@@ -5039,6 +6035,18 @@ void AAirBattle::EngineSounds()
 	// Each formation's own engines at its middle, by its model (mix.json air.loops, SKY.cues.engines): the B-17 its
 	// own drone; four-engined and twin-engined bombers theirs; every fighter, and the carriers' single-engined
 	// bombers, which have no recording of their own, the fighter's.
+	// (its drone as its engines stand, air.engineLost: 10 log10 of the engines turning over the most it has flown with,
+	// so a box that loses aircraft and engines grows thinner; a formation with none left, a whisper)
+	TMap<int32, int32> Turning;
+	for (const AirShow::PlaneOut& P : S.Show.Planes())
+	{
+		if (P.bShown && !P.bFalling)
+		{
+			int32 Left = 0, All = 1;
+			AirParts::LiveEngines(P.Model, P.bFighter, P.DeadEngines, Left, All);
+			Turning.FindOrAdd(P.Group) += Left;
+		}
+	}
 	for (const auto& Pair : S.Show.Groups())
 	{
 		const AirShow::Group& G = Pair.second;
@@ -5056,13 +6064,11 @@ void AAirBattle::EngineSounds()
 			}
 			continue;
 		}
-		const bool bFour = G.Model == "Lancaster" || G.Model == "Halifax" || G.Model == "B24";
-		const bool bTwin = G.Model == "He111" || G.Model == "Betty" || G.Model == "G4M" || G.Model == "Bomber";
-		const TCHAR* Kind = G.Model == "B17" ? TEXT("B-17") : bFour ? TEXT("fourEngined") : bTwin ? TEXT("twinEngined") : TEXT("fighter");
+		const FString Loop = EngineLoop(AirParts::Wide(G.Model));
 		if (Have)
 		{
 			const FName* Was = EngineKind.Find(G.Id);
-			if (!Was || *Was != FName(Kind))
+			if (!Was || *Was != FName(*Loop))
 			{
 				// (a group first seen with the place's stand-in model, its own named since: its own engines)
 				if (*Have)
@@ -5076,24 +6082,41 @@ void AAirBattle::EngineSounds()
 		}
 		if (!Have)
 		{
-			EngineKind.Add(G.Id, FName(Kind));
-			FString Loop;
-			Loops->TryGetStringField(Kind, Loop);
 			USoundBase* Played = Loop.IsEmpty() ? nullptr : SoundOf(*Loop, true);
 			if (!Played)
 			{
+				EngineKind.Add(G.Id, FName(*Loop));
 				Engines.Add(G.Id, nullptr);
 				continue;
 			}
-			const float Loud = static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, TEXT("air.groupLoopDb"), 0.0) / 20.0));
-			UAudioComponent* Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, World(Middle.X, Middle.Y, Middle.Z), FRotator::ZeroRotator, Loud,
-				G.bFighter ? 1.0f : 0.97f + 0.06f * static_cast<float>(G.Id % 3) / 2.0f, 0.0f, FamilyOf(TEXT("aircraft")), nullptr, false);
-			Engines.Add(G.Id, Player);
+			// (in the mix's family for formation loops, air.loopsFamily: heard out to 14 km, where the aircraft family is
+			// silent at 6. Past it, not begun, and tried again as the formation comes nearer: before, a formation that
+			// began out of earshot stayed silent all battle)
+			FString LoopsFamily = TEXT("air_far");
+			if (const TSharedPtr<FJsonObject> Air = AirParts::MixObject(Mix, TEXT("air")))
+			{
+				Air->TryGetStringField(TEXT("loopsFamily"), LoopsFamily);
+			}
+			USoundAttenuation* Family = FamilyOf(*LoopsFamily);
+			const FVector Where = World(Middle.X, Middle.Y, Middle.Z);
+			const float Loud = static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, TEXT("air.groupLoopDb"), 0.0) / 20.0)) * MasterGain * DuckLoopsGain;
+			UAudioComponent* Player = Lay(Played, &Where, Family ? Family : FamilyOf(TEXT("aircraft")), Loud, 0.0f, 2.0f,
+				G.bFighter ? 1.0f : 0.97f + 0.06f * static_cast<float>(G.Id % 3) / 2.0f, false);
+			if (Player)
+			{
+				EngineKind.Add(G.Id, FName(*Loop));
+				Engines.Add(G.Id, Player);
+			}
 			continue;
 		}
 		if (*Have)
 		{
 			(*Have)->SetWorldLocation(World(Middle.X, Middle.Y, Middle.Z));
+			const int32 Spinning = Turning.FindRef(G.Id);
+			int32& Most = GroupEnginesMost.FindOrAdd(G.Id);
+			Most = FMath::Max(Most, Spinning);
+			const float Live = Most > 0 ? FMath::Max(0.3f, FMath::Sqrt(static_cast<float>(Spinning) / static_cast<float>(Most))) : 1.0f;
+			(*Have)->SetVolumeMultiplier(static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, TEXT("air.groupLoopDb"), 0.0) / 20.0)) * MasterGain * DuckLoopsGain * Live);
 		}
 	}
 }
@@ -5130,12 +6153,12 @@ void AAirBattle::TakeShots(double Real)
 		{
 			continue;
 		}
-		const double Base = Shot.bShips ? ShipRealT : MetRealT;
+		const double Base = Shot.bGuns ? GunsRealT : Shot.bShips ? ShipRealT : MetRealT;
 		if (Base < 0.0)
 		{
 			// (the approach is taken before the formations meet: the clock's x10 brings them together in some 20 s;
 			// after the flyover, when there is one)
-			if (Shot.At < 0.0 && !Shot.bShips && !S.bFlying && RealT >= FMath::Max(8.0, S.FlyEndRealT + 4.0))
+			if (Shot.At < 0.0 && !Shot.bShips && !Shot.bGuns && !S.bFlying && RealT >= FMath::Max(8.0, S.FlyEndRealT + 4.0))
 			{
 				Shot.bTaken = true;
 				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
@@ -5144,9 +6167,10 @@ void AAirBattle::TakeShots(double Real)
 			continue;
 		}
 		const double Due = Base + Shot.At;
-		if (Shot.bClose && ShipsLook >= 0 && RealT >= Due - 1.5)
+		if (((Shot.bClose && ShipsLook >= 0) || (!Shot.bGuns && GunsLook >= 0) || (Shot.bGuns && ShipsLook >= 0)) && RealT >= Due - 1.5)
 		{
-			// (the ships picture holds the eye: a ride picture due now waits until two seconds after it)
+			// (the ships picture holds the eye: a ride picture due now waits until two seconds after it; the guns fire
+			// back picture holds it from every other, and waits for the ships picture)
 			Shot.At = RealT + 2.0 - Base;
 			continue;
 		}
@@ -5178,7 +6202,7 @@ void AAirBattle::TakeShots(double Real)
 				Press(TEXT("ride"));
 			}
 		}
-		if (Shot.bShips && ShipsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)
+		if (Shot.bShips && ShipsLook < 0 && GunsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)
 		{
 			if (S.bClose)
 			{
@@ -5186,6 +6210,15 @@ void AAirBattle::TakeShots(double Real)
 				CloseOffAt = -1.0; // (the ride is off: its old time must not take the next ride off a tick after it begins)
 			}
 			ShipsLook = FirstSunk;
+		}
+		if (Shot.bGuns && GunsLook < 0 && ShipsLook < 0 && GunsShip >= 0 && RealT >= Due - 2.0)
+		{
+			if (S.bClose)
+			{
+				Press(TEXT("ride"));
+				CloseOffAt = -1.0;
+			}
+			GunsLook = GunsShip;
 		}
 		if (RealT >= Due)
 		{
@@ -5200,7 +6233,18 @@ void AAirBattle::TakeShots(double Real)
 			{
 				ShipsLookOffAt = RealT + 0.5;
 			}
+			if (Shot.bGuns)
+			{
+				GunsLookOffAt = RealT + 0.5;
+			}
 		}
+	}
+	if (GunsLookOffAt >= 0.0 && RealT >= GunsLookOffAt)
+	{
+		GunsLookOffAt = -1.0;
+		GunsLook = -1;
+		GunsEyeFor = -1;
+		bLookSet = false; // (a cut back to the fight)
 	}
 	if (ShipsLookOffAt >= 0.0 && RealT >= ShipsLookOffAt)
 	{

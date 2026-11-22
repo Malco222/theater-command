@@ -56,6 +56,10 @@ struct FAirBattleState
 	int Question = 0;
 	/** Each tag's place on the screen this frame, in the viewport's pixels; off the screen or behind the eye: absent. */
 	std::map<int, FVector2D> TagAt;
+	/** In the close view, the box the ridden aircraft fills on the screen this frame, in the viewport's pixels (no tag
+	 * and no dispatch covers it); bRiddenOn false when there is none. */
+	FVector2D RiddenMin = FVector2D::ZeroVector, RiddenMax = FVector2D::ZeroVector;
+	bool bRiddenOn = false;
 	/** The tags as the screen last drew them, in the viewport's pixels: a click inside one takes its group. A block of
 	 * tags that touched shows two and a line for the rest; that line is its first tag's. */
 	struct FTagBox

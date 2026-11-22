@@ -15,7 +15,7 @@
 // 'harbour' (target: a province) are raids like the rest.
 
 import type { Game } from './types';
-import { SHIP_AIR_TIP, airWar, carrierRules, groupAt, overOcean } from './air';
+import { SHIP_AIR_TIP, airWar, carrierRules, closeRules, groupAt, overOcean } from './air';
 import type { GroupRow, RaidKind, RaidPlan } from './airwar';
 import {
   airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderGroupJob, orderRaid, orderScout, orderSearch, previewRaid, raidMenu,
@@ -62,7 +62,7 @@ function airfieldPage(g: Game, region: number): Page | null {
   return {
     id: 'airfield', title: `${(c.field?.word ?? 'NO AIRFIELD').toUpperCase()} AT ${c.name.toUpperCase()}`,
     headline: !c.field ? 'No aircraft can be based here' : c.hidden ? 'What flies from here is not known' : rows.length ? `${rows.length} air group${rows.length === 1 ? '' : 's'} based here` : 'No air group is based here',
-    note: `${c.note} ${c.build} Aircraft take off from an airfield and come back to it. A fighter group patrols its sky, sticks with a bomber group as escort, or rests; any group can fly one raid a month, planned from its target.`,
+    note: `${c.note} ${c.build} Aircraft take off from an airfield and come back to it. A fighter group patrols its sky, sticks with a bomber group as escort, ${closeRules(g) ? 'flies ground support for the armies, ' : ''}or rests; any group can fly one raid a month, planned from its target.`,
     top: [{ label: 'PLAN A RAID', act: 'open:raids', ok: up, tip: 'Pick the kind of raid, then the target: you see the chance of success and the losses to expect, then choose which groups fly it together.' }],
     sections: [{ heading: 'THE AIR GROUPS', text: rows.length || c.hidden ? '' : c.field ? 'Order aircraft from the ARSENAL, or move a group here from another airfield.' : '', rows }],
   };

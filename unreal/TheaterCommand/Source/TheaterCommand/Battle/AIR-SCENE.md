@@ -37,6 +37,13 @@ battle screen over it.
    - the chase view (`05c-chase-view`): his first fighter squadron ridden as a double click takes it, then one step
      along it, the plate reading its second aircraft
    - the ships (the overview cut to the first ship that went down)
+   - the guns fire back (`06b-guns-fire-back`, release 2's item 14): 2.5 s after a ship's light guns are first laid
+     on an attacker within 1.6 km of her (a battleship or a carrier where the battle has one; at Pearl Harbor the
+     first such run fell on a destroyer in a nest), the camera on her, side-on to the line from her to him, the look at
+     two fifths of the way from her to him and 4 degrees down: she low in the frame, he high against the sky, her
+     streams and the heavy bursts between. The log says "Air battle: guns fire back picture on <ship>". The cloud test
+     finds the same moment (Pearl Harbor: Nevada under a Val's dive at 7:03 of the battle; Midway: Kaga under a
+     Dauntless's at 6:59). Every other picture due meanwhile waits until it is taken, as one waits for the ships.
    - the fight going on
    - the after card
 
@@ -221,6 +228,25 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   tags keep clear of it. While the view picks its own, the plate says THE VIEW FOLLOWS THE FIGHT. It is a view, not
   an order, so it works in a recorded battle too. The cloud test steps every squadron's line round both ways each
   second and checks a fall steps on (on Oahu, Midway and Bremen: 6,546 lines, 71,155 aircraft, 3,622 falls, 0 wrong).
+- **The tug-of-war bar** (release 2; Brian, 21 November 05:55Z: "have each sides flag on either end of the bar and
+  then have it be like a tug of war in real time so you can see which side is winning the raid/engagement", and
+  14:58Z: "Can we put the country flags instead of country names"; the air thread's rule and the UI director's
+  ruling of 14:47Z, `/mnt/project-files/ui-director/tug-of-war-bar.md`: "the battle bar is the release 1 card's bar,
+  moving"). It takes the place of the strength fill and its start mark at the top middle; HOW NEAR TO BREAKING OFF
+  stays under it. His flag at the left end, the enemy's at the right (the table's own, `CampaignFlags`, as the
+  release 1 card draws them: 27 by 18, 8 clear of the bar; a plain chip where no table is up). His colour, a brass
+  gold (C9A24A), runs from his flag and the enemy's slate (6F7B88) from theirs; they meet at the knot with the
+  card's 3-pixel gap, so the side that is winning holds more of the bar, like a front line pushed toward the loser's
+  flag. The colours never swap and neither is red. A pale mark at the middle; no ticks, no handle, no words.
+  The knot (`AirDesk::KnotOf`) is the running form of the result the battle is judged by: x is the view's
+  `sky.score.ratio` (aircraft the defender lost + what the bombs were worth + 10, over aircraft the raider lost + 10;
+  1 or more a win), the knot x / (1 + x) from the raider's flag, and a defending player's the mirror (1 / x). Level
+  until the first loss; it follows the views as the battle shown reaches them, eased with about 1.5 s of lag on the
+  screen's clock (`KnotEase`); once the battle is over it lies at least 0.05 past the middle on the side the stamp
+  names (a side that held the field won whatever the exchange said). On the recordings it ends at 0.45 on Bremen (a
+  close defeat), 0.91 at Midway and 0.90 at Pearl Harbor. Until the flight core counts the losses the picture has
+  shown (the air thread, after the gunnery), it can move up to a fall or two before the fall is seen. The cloud test
+  checks it level before the first loss, eased, the other side's the exact mirror, and on the winner's side at the end.
 
 **The aircraft.** A sculpted model (`Content/Models`) has two shapes: its far one (a few thousand points) for every
 aircraft, and its near one (tens of thousands) made only for an aircraft within 300 m of the eye, or the one ridden,
@@ -563,12 +589,55 @@ what it says:
   smooth pale sheet (from below, its base grey; from over it, its sunlit top). `-TheaterDeckSheet=` sets how solid it
   is (0.4 to 1 by cover); `-TheaterNoDeckSheet` turns it off.
 - **Light bounced off the deck.** Over a deck in sun, the aircraft's bellies take light from below off its sunlit top
-  (the sky light's lower half, recaptured only when it changes); under it, almost none. `-TheaterBounce=0.6` sets it.
+  (the sky light's lower half, recaptured only when it changes); under it, almost none. `-TheaterBounce=1` scales it (release 2: a sunlit deck under a winter sun throws three times what it did).
+- **The sun through the air by height** (release 2; the olive drab read mustard, about 20 degrees of hue warm, on the
+  Mac's check). The engine lights every surface with the sun as it reaches the sea, through the whole air: at Bremen's
+  13 degrees that is about 1.45 red over green and 0.6 blue over green (the air's scatter and its ozone), which turns a
+  green-brown drab mustard; the white star clips, so it hides the cast. The key light now works out its light through
+  the air above each point (`bPerPixelAtmosphereTransmittance`), so a bomber at 7.5 km takes about 1.25 and 0.9, and the
+  ground keeps its own. `-TheaterAirByHeight=0` lights everything as at sea level, as before. The log line after "the
+  sun a disc" says which.
+- **The haze over the sea** (release 2; the Mac's check: a white wall, the sea unreadable). Over a stage at sea the
+  haze is pale blue (`-TheaterSeaHazeInk=0.44,0.55,0.74`, blue over red by about +15 on the frame) and starts 30 km
+  out at 1.2 times the scene's density, so it whitens only at the horizon; over land (Bremen) it stays as it was
+  (7.5 km, 2.6 times, its own ink).
 - **Land raids' light** (the art director, 23:31Z, on build 1786's tan ground): over land with no stage (Bremen), the
   sun is 6,500 K, not 4,900, and the grade's warm gain is taken off (red and blue gain 1, in sun and under a deck), so
   the sunlit ground reads grey-green (her target: saturation 0.10 to 0.18, blue under red by 5 to 12) and the town
   grey-brown, never orange. `-TheaterKeyWarmth=4900` and `-TheaterLandGrade=red,blue` try others. Pearl Harbor and
   Midway keep their 4,900 K.
+
+## The ships fire back (release 2)
+
+Brian, 21 November 18:06Z: "for the ships being attacked by planes, they can fire machine gun fire and flak guns at
+them just like real life". The historian's research is `/mnt/project-files/naval-battles/ship-air-defence.md` (part B
+is for the scenes). The battle still decides every loss; the guns only show the fire those losses and misses came from.
+
+- **`ShipGuns.h/.cpp`** (plain C++, shared with the sea battle scene). It holds each ship's anti-aircraft guns as her
+  navy fitted them that month (`BatteryOf`: USA, Japan, Britain and the Commonwealth, Germany, Italy, the USSR,
+  France, and any other navy's usual small fit, by class bb, cv, ca, dd, ss, ag). The guns change with the war: the
+  American .50 calibre gives way to the 20 mm through 1942, the 40 mm comes from late 1942, and the Japanese 25 mm
+  doubles and doubles again from mid 1943. The Midway carriers have their own fits. `Gunnery::Fire` lays each crew on a
+  plane every frame. The heavy guns (5-inch, 12.7 cm, 4-inch, 10.5 cm and their like) are directed: time-fuzed
+  bursts where the plane was going to be, mostly behind it or off to the side, at most four rounds shown a second
+  (the nearest ships first). Against a torpedo plane low over the sea, they fire into the water ahead of it, and so
+  do the destroyers' and battleships' low-angle main guns. The light guns (.50 calibre, 20 and 25 mm, 1.1-inch,
+  40 mm, pom-pom) fire tracer streams from mounts along her decks. The streams come in bursts with their drums and
+  clips changed, hose about the plane and walk across it now and then (about 1 frame in 100 on it). A few rounds are
+  seen striking. The ships hold fire on a plane their own fighters are going in on.
+- **The kills.** A plane the battle says the ships' guns brought down falls under the nearest ship's light guns
+  (their streams go on it and a few rounds strike home as its fall begins), or, past them, to one burst of her
+  heavy guns. With no ship near, it keeps the one burst it had.
+- **The scene.** Streams are the kit's `AirGun` (new rows `air_guns.aa25` and `aa40`: a tracer in three for the
+  20 to 25 mm; every round a big tracer, a heavy flash and a puff of smoke for the 40 mm, at about 120 a minute). Heavy
+  rounds are `FxKind::ShipGun`: a flash and smoke at her deck (new muzzle rows `ship_aa` and `ship_main`, with no
+  dust ring over the sea), the flak firing take after its flash by distance, then the shell's burst (`AirFlak`,
+  heavy) or a splash. A ship's light guns of one kind are heard as one battery (the cannon take for 20 to 40 mm, the
+  hand-held heavy take for the machine guns). Tracers are in her navy's colours.
+- **Proximity fuzes.** `Hull.bProxFuze` hugs the bursts to the plane (part B2). It stays off until the rules give a
+  side the `proxfuze` research.
+- The cloud test checks every stream is from her own decks and in reach, at most 1 frame in 5 on the plane, some
+  hits and some bursts, and nothing with no ships (Bremen). It prints each ship's guns and the guns that fired.
 
 ## Bomb bays and sticks (release 1)
 
@@ -582,8 +651,17 @@ which you see and hear drop to the ground".
   10 air seconds of its run (`BayLead`): a sea raid's view carries the run, and a land
   raid's box is timed from when it comes inside the target ring (`TargetR`, the rules' run is 45 air s there). The
   bombs leave the bay one after another, 0.15 s apart (`StickGap`), from the hinge line, moving as she moves. Doors
-  held open 3 s after the last bomb, then shut over 2.5 s (`BayShutS`), eased. A jettisoned stick opens the doors at once and lets go as
-  they come open. A dive bomber, a torpedo and a fighter's bomb go at once, with no doors.
+  held open 1.5 s after the last bomb (`StickSteady`), then shut over 2.5 s (`BayShutS`), eased, as she rolls into
+  the rally turn. A jettisoned stick opens the doors at once and lets go as they come open. A dive bomber, a torpedo
+  and a fighter's bomb go at once, with no doors.
+- **The run held steady** (release 2; the coordinator, 21 November 13:57Z, from the films of the cut: the bomber
+  banked 50 to 60 degrees as the first bomb left; the art director's figures, 14:01Z). A level bomber with a stick
+  holds her heading at the drop (`RunHdg`), wings level, until 1.5 s after her last bomb: no bank past 2 degrees
+  (`RunBankMost`) from her doors opening to then, in her slot or straggling. Then the box's rally turn: a
+  four-engined bomber (two engines or more, or a span of 20 m or more) in her slot banks at most 20 degrees
+  (`RallyBankMost`), rolling in no faster than 5 degrees a second (`HeavyRollMost`); out of her slot, 30 at most
+  (`HeavyBankMost`). A falling bomber is not held. The flight core's check: "a stick let go wings level, a bomber's
+  turns gentle" (at most 3 degrees on the run, 30 ever).
 - **The model** (the modeller's batch, `battle-models/game-bay`): B17, Lancaster, He111 and Bomber carry `near.part`
   and `parts` (bay.port, bay.starboard: kind turn, pivot, axis, limits 0 to 85; bombs: the racked load). `TakeBay`
   lifts the doors and the load out of the near shape (sections 2, 3 and 4 of the aircraft's mesh); `Draw` turns each
@@ -734,9 +812,13 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 8. **The bomb bays.** Bremen, the camera near a B-17 box on its run: about 10 s before the bombs, both doors swing
    slowly down (2.5 s, eased) from the belly's keel to hang nearly straight down (80 degrees); twelve bombs leave
    each bomber one after another, each leaving with her speed, dropping away beneath her and nosing down over its
-   first 2 to 3 s; the racked load inside gone with the last; she lifts a little; the doors shut slowly about 3 s
-   after the last. If a door turns up into the fuselage instead of down, the sign of the turn is wrong: negate the
-   angle in `AirParts::TurnDoor`'s call in `Draw`. If a door swings about the wrong line, the pivot's mapping in
+   first 2 to 3 s; the racked load inside gone with the last; she lifts a little; her wings stay level from the
+   doors opening until about 1.5 s after the last bomb, then the doors start to shut slowly as she rolls gently into
+   the rally turn (no more than about 20 degrees, rolling in over 4 s or so; never past 30). Each bomb leaves from
+   inside the bay, between the doors (release 2's Mac check: they fell from the wing), and no bomber banks or twitches
+   from the doors opening to the last bomb gone (the cloud test's "a stick let go wings level"). If a door turns up into
+   the fuselage instead of down, the sign of the turn is wrong: negate the angle in `AirParts::TurnDoor`'s call in
+   `Draw`. If a door swings about the wrong line, the pivot's mapping in
    `TakeBay` (the file's x forward, y right; the shape's nose to -X, right hand at -Y) is off. Then the stick landing:
    one rolling stick of blasts as it walks across the ground, after its flash by the distance.
 9. **The moving sea** (release 2). Pearl Harbor from the close view and from the flyover: the harbour and the sea
@@ -750,7 +832,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    reef flats turquoise-green with darker coral heads. Close (40 m): the foam's edges soft, no thin white rims, the
    heads a narrow bright line with lacy foam behind (the art director's checks on v3). The `Stage:` log line gives
    the shore picture's time (about 0.5 s on Oahu); if whitecaps show in the lochs or the surf lies off the reef, the
-   shore picture's placing (`ShoreU`, `ShoreV` in `MovingSea`) is off. If the waves read as too rough or too calm,
+   shore picture's placing is off: it is now carried on the sea mesh's first texture coordinate (`AAirStage::ShoreAt`,
+   worked out on the CPU in doubles), as the world position on the GPU misplaced it on release 2's Mac check (whitecaps
+   inside Pearl Harbor, the harbour no greener). Far off, a whitecap flashes white only at its head, never as a slab. If the waves read as too rough or too calm,
    `-TheaterSeaWaves=0.6` or `1.4` (it scales the whitecaps, the surf and the gusts too; 0 is a still sheet). If the
    glitter crawls the wrong way, the reads' heading in `MovingSea` is turned (the waves should run 070 to 250, as the
    patches do). The `Stage:` log line says if `M_StageSea` is missing.
@@ -762,3 +846,44 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    Prime; if they show as boxes the screen's font lacks them. If arrows turn the camera instead, something before the
    screen took the keys (the screen must have the keyboard focus, as for H and C). The picture run's
    `05c-chase-view` shows the plate; tags must not sit on it.
+11. **The undersides** (release 2; the art director, 21 November 14:01Z). Bremen, a B-17 seen from below against the
+   sky: her belly should read 60 to 90 (of 255) on the frame, a neutral grey with a little sky blue in it, not near
+   black (the release 1 cut measures 9 to 19). Round 18d lifts the bellies with the light from the deck below (item
+   7); if they still read under 60 on this base, the belly's fill from the sky is short, not the paint. Release 2's
+   Mac check read 38 to 41: the sea or deck's bounce is now three times as strong, more with the sun higher
+   (`WeatherAt`'s bounce; `-TheaterBounce=` scales it again).
+12. **The olive drab** (release 2; the art director, 14:01Z). The same B-17's sunlit upper side should read as a
+   green-brown drab, not mustard: saturation 0.15 to 0.25, red over blue by 8 to 20 (the cut measures about 110, 100,
+   60, saturation 0.46). If it reads mustard, test in turn: the paint's base colour (the model's drab swatch), the
+   sun's warmth on this day's weather, and the grade (the battle's grade may be missing on this base). The game-wide
+   curve and bloom stay as they are. Release 2's Mac check found the warmth the sun's, through the whole air: the key
+   light now takes the air above each point (`-TheaterAirByHeight=1`, "The sun through the air by height" above); if
+   it still reads warm with that on, the model's drab swatch goes to the planes thread (about #4F583E).
+13. **The tug-of-war bar** (release 2). Any battle, the top middle: his flag at the left end and the enemy's at the
+   right, each about a line of text high, the same flags as on the battle card; gold from his flag, slate from
+   theirs, meeting in the middle at the start with a small dark gap and a pale mark at the middle. As the first
+   aircraft go down the meeting point slides, smoothly, never a jump; on Bremen it drifts toward his flag (the
+   Germans winning) and at Midway and Pearl Harbor it swings well toward the enemy's flag once the bombs land; when
+   the stamp comes it sits on the winner's side. No old strength fill, no start mark, no words beside the bar. If a
+   flag shows as a dark chip, the table was not found (`AAirBattle::FlagPicture`); if the flags read squashed, the
+   brush's size (96 by 64) is off for the picture the table paints.
+14. **The ships fire back** (release 2). Pearl Harbor, the camera on Battleship Row once the dive bombers come down:
+   short red-orange streams of .50 calibre and the 1.1-inch climbing from the ships' decks (never from the water or
+   the land beside them), in bursts with gaps, hosing about the planes and nearly all passing behind them; black
+   bursts of the 5-inch higher up, mostly behind and off to the side of the formations; a flash and a puff of smoke
+   at a ship's side for each heavy round, the boom after it by distance. Midway, near Akagi or Hiryu as the
+   Dauntlesses dive: the Japanese 25 mm in short bursts, its tracer pale yellow-white (Japan's colours in the kit), the
+   12.7 cm bursts among the dive bombers. Now and then a few sparks on a plane; a plane the ships bring down starts
+   its fall under their streams. If a stream starts off a ship's deck, its mounts are laid by `Hull.Long` and `Beam`
+   (the stage's hull sizes, `AirFeed::ReadView`). The cloud test's `ships' guns` lines list what each ship carries.
+   The picture run's `06b-guns-fire-back` is this item's frame (release 2's r2d run had none: its ships picture came
+   after the raid, or on a carrier already ablaze).
+15. **The screen in the close view** (release 2's Mac check: the dispatches covered the ridden aircraft in Bremen,
+   Midway and Oahu 03 and 05, a tag sat on it in Oahu 05). Riding any aircraft, no dispatch line and no tag over it:
+   the dispatches broken to the room left of it, else laid at the bottom right, else raised above it; the tags stepped
+   off it. Their plates darker (the oldest line still reads over white cloud), the tags' and the chase plate's count
+   lines in paper, no tags under the after card, and no line said twice while it is on the screen.
+16. **The quays** (release 2's Mac check: Pearl Harbor's quays and walls flat tan cards). From 1 to 2 km over the navy
+   yard and Ford Island, the quays' and piers' tops paved in slabs about 10 m square, each a little lighter or
+   darker, with the yard's patching and stains, the slabs running along each quay (the cloud test's ground line
+   counts them, and checks no crack opens between them).

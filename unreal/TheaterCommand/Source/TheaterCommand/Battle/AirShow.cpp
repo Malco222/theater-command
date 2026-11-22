@@ -16,6 +16,8 @@ namespace AirShow
 
 		double Wrap(double A)
 		{
+			// A huge or endless angle never comes down a turn at a time (the pre-check's guard from the sea show, 805a95c0).
+			if (!(std::fabs(A) <= 1.0e3)) A = std::isfinite(A) ? std::remainder(A, 2.0 * Pi) : 0.0;
 			while (A > Pi) A -= 2.0 * Pi;
 			while (A <= -Pi) A += 2.0 * Pi;
 			return A;
@@ -748,8 +750,18 @@ namespace AirShow
 			const double Omega = Clamp(Turn * 0.8, -OmegaMost, OmegaMost);
 			BankWant = std::atan(S * Omega / Gee); // bank = atan(v squared / (g r))
 		}
+		// (a bomber of two engines or more, flying, banks no more than her pilot would with a load and a box about her:
+		// wings level on her run, a gentle rally turn in her box, rolled into slowly)
+		double RollMost = C.RollMax;
+		if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0) && C.Doing != Role::Fall)
+		{
+			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
+			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
+			BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
+			if (C.Doing == Role::Slot && !bOnRun) RollMost = std::min(RollMost, HeavyRollMost * Deg);
+		}
 		// Roll toward it, no faster than the airframe rolls.
-		const double Roll_ = Clamp(Wrap(BankWant - C.Bank), -C.RollMax * Dt, C.RollMax * Dt);
+		const double Roll_ = Clamp(Wrap(BankWant - C.Bank), -RollMost * Dt, RollMost * Dt);
 		C.Bank = Wrap(C.Bank + Roll_);
 		// The turn the bank gives (none on its back or on its side: a half-roll turns the nose down, not round).
 		double Omega = 0.0;
@@ -871,6 +883,20 @@ namespace AirShow
 			StandDown(C);
 		}
 		const Vec GV = GroupVelocity(C.Group);
+		// A level bomber letting her stick go, in her place or falling back hurt, holds her heading wings level until it
+		// has all gone and a moment after; then she turns after her box (and closes on her place in it, or limps on).
+		// (and from her doors full open on her run, in her place, before it goes)
+		const bool bRunHeld = C.bRunHeld && !C.bDropped && C.Doing == Role::Slot;
+		if (!C.bFighter && (bRunHeld || (C.bStickBay && (C.Doing == Role::Slot || C.Doing == Role::Straggle)
+			&& (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)))))
+		{
+			Cmd K;
+			K.Hdg = C.RunHdg;
+			K.Gam = 0.0;
+			K.Spd = C.Spd;
+			Fly(C, K, Dt, true);
+			return;
+		}
 		if (C.Doing == Role::Straggle)
 		{
 			const Strag* Mine = nullptr;
@@ -3565,7 +3591,7 @@ namespace AirShow
 		C.FallDeck = DeckFor(C.P);
 		Check.Falls++;
 		Check.FallsBy[C.FallName]++;
-		if (E.bByFlak) Emit(FxKind::Flak, C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0)), "heavy"); // (the one burst laid on a model: this one falls to it)
+		if (E.bByFlak) FlakKill(C); // (under a ship's guns as she brings it down; else the one burst laid on it: this one falls to it)
 		if (!E.Cue.empty()) Emit(FxKind::Sound, C.P, E.Cue);
 		const Vec V = Velocity(C);
 		{
@@ -3899,11 +3925,24 @@ namespace AirShow
 		// open; a dive bomber's one bomb, a fighter's and a torpedo slung under her go at once.
 		C.StickSize = C.StickLeft = bTorpedo ? 1 : BombsOf(C.Model, C.Form.Span, C.bFighter);
 		C.bStickTorpedo = bTorpedo;
+		if (!C.bRunHeld) C.RunHdg = C.Hdg;
 		const auto G = Now.find(C.Group);
 		C.bStickBay = !C.bFighter && !bTorpedo && C.Doing != Role::Dive && C.StickSize > 1 && (G == Now.end() || G->second.Strike != "dive");
 		C.StickNext = C.bStickBay && C.Bay < 1.0 ? AirT + (1.0 - C.Bay) * BayOpenS + 0.1 : AirT;
 		Check.Sticks++;
 		Bays(0.0);
+	}
+
+	Vec Show::BombStation(const std::string& Model, int K, int Size) const
+	{
+		const double Side = (K % 2) ? 1.0 : -1.0;
+		const auto Known = BaysOf.find(Model);
+		if (Known == BaysOf.end()) return Vec(0.0, Side * 0.25, -1.2);
+		const BayPlace& B = Known->second;
+		// (two rows, the bombs of each pair side by side, the pairs from the bay's fore end to its aft one)
+		const int Rows = std::max(1, (Size + 1) / 2);
+		const double Share = (std::clamp(K / 2, 0, Rows - 1) + 0.5) / Rows;
+		return Vec(B.Fore + (B.Aft - B.Fore) * Share, Side * B.Half, B.Up);
 	}
 
 	void Show::Bays(double Dt)
@@ -3931,8 +3970,12 @@ namespace AirShow
 			const auto Ring = RingT.find(C.Group);
 			const double Run = G == Now.end() ? 0.0 : G->second.Run > 0.0 ? G->second.Run : Ring == RingT.end() ? 0.0 : std::min(1.0, Ring->second / 45.0);
 			const bool bOnRun = bLevel && !C.bDropped && Run >= 1.0 - Lead && Run > 0.0;
-			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + 3.0)));
+			// (held open through the stick until she rolls into her rally turn, StickSteady after the last bomb)
+			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)));
 			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / std::max(0.1, BayOpenS)) : std::max(0.0, C.Bay - Dt / std::max(0.1, BayShutS));
+			// (her doors full open on her run: from now her heading is held until her stick has gone, Pilot)
+			if (bOnRun && C.Bay >= 1.0 && !C.bRunHeld) { C.bRunHeld = true; C.RunHdg = C.Hdg; }
+			if (!bOnRun && !C.bDropped) C.bRunHeld = false;
 			if (!bWant && C.Bay > 0.0 && C.StickDone >= 0.0 && AirT > C.StickDone + 8.0) { Check.BaysLeftOpen++; C.Bay = 0.0; }
 			// The bombs due out of the bay: each from its station under her, moving as she moves; one due a while ago (a
 			// frame at speed) is where it would be by now.
@@ -3946,7 +3989,7 @@ namespace AirShow
 				B.bTorpedo = C.bStickTorpedo;
 				B.Lead = K == 0 ? C.StickSize : 0;
 				B.Key = C.Key;
-				B.At = Local(C, Vec(0.0, ((K % 2) ? 0.25 : -0.25), -1.2)) - V * Ago + Vec(0.0, 0.0, -0.5 * Gee * Ago * Ago);
+				B.At = Local(C, BombStation(C.Model, K, C.StickSize)) - V * Ago + Vec(0.0, 0.0, -0.5 * Gee * Ago * Ago);
 				B.Vel = V + Vec(0.0, 0.0, -Gee * Ago);
 				B.Size = C.bStickTorpedo ? 5.5 : C.Form.Span > 25.0 ? 2.2 : 1.8;
 				B.Heading = C.Hdg;
@@ -4093,6 +4136,7 @@ namespace AirShow
 		}
 		if (E.What == "air:ship-sunk")
 		{
+			ShipsDown.insert(E.Ship);
 			Fx& S = Emit(FxKind::ShipSunk, At, E.How, E.Ship);
 			S.Size = E.bBig ? 1.0 : 0.0;
 			S.Text = E.Name;
@@ -5489,20 +5533,25 @@ namespace AirShow
 				}
 			}
 		}
-		// (four keys a window, numbered as they are manned: with eight windows at most, every gun's key stays its own
-		// aircraft's)
+		// Her gunners' keys are 32 to 63 of her own 64, one gun to a key: the sound hears a key as one gun, and the key
+		// after 63 is the next aircraft's first gun (four keys to every row of her loadout gave a B-17's ninth row 64:
+		// the sound director's review, 21 November). They are numbered as her windows are manned, four keys a window,
+		// so a mount's guns are its first key and those after it, the same every frame; a mount of more than four guns
+		// takes a key for each. A window whose guns would pass 63 is not manned.
 		int Index = 32;
 		for (const Gun& Row : L.Guns)
 		{
 			const auto Its = Windows.find(&Row);
 			if (Its == Windows.end()) continue;
+			const int Of = std::max(1, static_cast<int>(Row.At.size()));
+			if (Index + Of > 64) break;
 			MountAt M;
 			M.Row = &Row;
 			M.Window = Its->second;
 			M.Station = C.Form.Stations.at(Its->second);
 			M.Index = Index;
 			Mounts.push_back(M);
-			Index += 4;
+			Index += std::max(4, Of);
 		}
 		return Mounts;
 	}
@@ -6664,6 +6713,7 @@ namespace AirShow
 			for (int Key : Firing) Emit(FxKind::GunStop, Vec(), std::string(), Key);
 			Firing.clear();
 		}
+		ShipFire(AirDt);
 		for (auto It = Crafts.begin(); It != Crafts.end();)
 		{
 			if (It->second.Doing == Role::Gone) It = Crafts.erase(It);
@@ -6733,5 +6783,139 @@ namespace AirShow
 			Text += Line;
 		}
 		return Text;
+	}
+
+	// The ships' anti-aircraft guns (ShipGuns: Brian, 21 November 18:06Z, "for the ships being attacked by planes, they
+	// can fire machine gun fire and flak guns at them just like real life"). The gunnery is shared with the sea battle
+	// scene; here the show hands it its ships and its aircraft and plays what comes back as its own effects.
+
+	std::vector<ShipGuns::Hull> Show::Hulls() const
+	{
+		std::vector<ShipGuns::Hull> Hs;
+		Hs.reserve(ShipsNow.size());
+		for (const Ship& S : ShipsNow)
+		{
+			ShipGuns::Hull H;
+			H.Id = S.Id;
+			H.At = S.At;
+			H.Face = S.Face;
+			H.Nation = S.Nation;
+			H.Class = S.Class;
+			H.Name = S.Name;
+			H.Side = S.Side;
+			H.Long = S.Long;
+			H.Beam = S.Beam;
+			H.Manned = S.Manned;
+			// (her guns fire on until her sinking is shown, as at Battleship Row; one sunk before the battle, never)
+			H.bSunk = ShipsDown.count(S.Id) > 0 || (S.bSunk && !ShipsAfloat.count(S.Id));
+			Hs.push_back(H);
+		}
+		return Hs;
+	}
+
+	ShipGuns::Plane Show::PlaneOf(const Craft& C) const
+	{
+		ShipGuns::Plane P;
+		P.Key = C.Key;
+		P.P = C.P;
+		P.V = C.Doing == Role::Fall ? C.FallV : Velocity(C);
+		P.Hdg = C.Hdg;
+		P.Gam = C.Gam;
+		P.Bank = C.Bank;
+		P.Span = C.Form.Span;
+		P.Long = C.Form.Long;
+		P.Side = C.Side;
+		P.bFighter = C.bFighter;
+		P.bFighting = C.bFighter && C.Doing == Role::Fight;
+		P.bFalling = C.Doing == Role::Fall;
+		return P;
+	}
+
+	void Show::ShotsOut(const std::vector<ShipGuns::Shot>& Fired)
+	{
+		// (Fired, not Shots: that name is the gunnery's own dice)
+		for (const ShipGuns::Shot& S : Fired)
+		{
+			switch (S.Kind)
+			{
+			case ShipGuns::ShotKind::Stream:
+			{
+				Fx& F = Emit(FxKind::Gun, S.At, S.Kit, S.Key);
+				F.Aim = S.Aim;
+				F.Vel = S.Vel;
+				F.Text = "ship";
+				F.Rate = S.Rate;
+				F.Mv = S.Mv;
+				break;
+			}
+			case ShipGuns::ShotKind::StreamStop:
+				Emit(FxKind::GunStop, Vec(), std::string(), S.Key);
+				break;
+			case ShipGuns::ShotKind::Round:
+			{
+				Fx& F = Emit(FxKind::ShipGun, S.At, S.What, S.Ship);
+				F.Aim = S.Aim;
+				F.Size = S.Size;
+				break;
+			}
+			case ShipGuns::ShotKind::Burst:
+				Emit(FxKind::Flak, S.At, "heavy");
+				break;
+			case ShipGuns::ShotKind::Splash:
+			{
+				// (a battleship's main battery throws a bomb's column, a 5-inch a shell's; on land, its dust)
+				const double Floor = GroundAt(S.At.X, S.At.Y);
+				const bool bLand = Floor > 0.5;
+				Emit(bLand ? FxKind::Crash : FxKind::Splash, Vec(S.At.X, S.At.Y, Floor), "shell").Size = bLand ? 2.0 : S.Size >= 200.0 ? 10.0 : 5.0;
+				break;
+			}
+			case ShipGuns::ShotKind::Hit:
+			{
+				Fx& F = Emit(FxKind::Hit, S.At, S.Kit, S.Key);
+				F.Normal = S.Normal;
+				F.Vel = S.Vel;
+				F.Text = S.What == "kill" ? "kill" : "ship";
+				break;
+			}
+			}
+		}
+	}
+
+	void Show::ShipFire(double Dt)
+	{
+		if (ShipsNow.empty()) return;
+		for (const Ship& S : ShipsNow) if (!S.bSunk) ShipsAfloat.insert(S.Id);
+		Gunners.Year = Year;
+		Gunners.Month = Month;
+		Gunners.MostStreams = MostShipGuns;
+		Gunners.RoundsMost = ShipRoundsMost;
+		Gunners.Eye = Eye;
+		std::vector<ShipGuns::Plane> Planes;
+		Planes.reserve(Crafts.size());
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& C = Pair.second;
+			if (C.Doing == Role::Gone || C.Doing == Role::Ground || !C.bShown) continue;
+			Planes.push_back(PlaneOf(C));
+		}
+		std::vector<ShipGuns::Shot> Fired;
+		Gunners.Fire(AirT, Dt, Hulls(), Planes, Fired);
+		ShotsOut(Fired);
+	}
+
+	void Show::FlakKill(const Craft& C)
+	{
+		// (the burst laid as before, its dice thrown as before, so the rest of the show plays as it did)
+		const Vec Burst = C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0));
+		if (!ShipsNow.empty())
+		{
+			std::vector<ShipGuns::Shot> Fired;
+			if (Gunners.Kill(AirT, PlaneOf(C), Hulls(), Fired))
+			{
+				ShotsOut(Fired);
+				return;
+			}
+		}
+		Emit(FxKind::Flak, Burst, "heavy");
 	}
 }

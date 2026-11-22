@@ -1,5 +1,5 @@
 {
- "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section. The air battle's second sound pass (21 November 2026, release 2) adds each fighter's own pass, rounds cracking past, the far air bed, and the B-24's and the Stuka's own engines.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -942,6 +942,209 @@
      "creator": "none",
      "licence": "CC0",
      "page": "https://freesound.org/people/LOVEBURD/sounds/329616/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "fw190_pass",
+   "recording": "fw190_pass",
+   "what": "A Focke-Wulf 190 flies past (radial-engined fighters: the Fw 190, the Zero, the Wildcat)",
+   "sources": [
+    {
+     "title": "Fw-190 Flyby",
+     "creator": "Fight2FlyPhoto",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/Fight2FlyPhoto/sounds/143562/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "p51_pass",
+   "recording": "p51_pass",
+   "what": "A P-51 Mustang flies past (and the P-40 Warhawk)",
+   "sources": [
+    {
+     "title": "P51 with supercharger",
+     "creator": "doubletrigger",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/doubletrigger/sounds/110736/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "p47_pass",
+   "recording": "p47_pass",
+   "what": "A P-47 Thunderbolt flies past (and the Hellcat, the same engine)",
+   "sources": [
+    {
+     "title": "P-47 Flyby",
+     "creator": "Fight2FlyPhoto",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/Fight2FlyPhoto/sounds/143560/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "spitfire_pass",
+   "recording": "spitfire_pass",
+   "what": "A Spitfire flies past (and the Hurricane, the Bf 109 and the Yak, V12-engined)",
+   "sources": [
+    {
+     "title": "Spitfire 2 passes Military od",
+     "creator": "Cheeseheadburger",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Cheeseheadburger/sounds/170477/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bullet_crack",
+   "recording": "bullet_crack",
+   "what": "Rounds crack past the camera",
+   "sources": [
+    {
+     "title": "Real Bullet Flyby Sound",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/qubodup/sounds/855248/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "air_battle_far_loop",
+   "recording": "air_battle_far_loop",
+   "what": "An air battle far off, as the strategy camera hears it",
+   "sources": [
+    {
+     "title": "G07-18_B-17 4 Engine Prop Steady Engine Noise",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/437862/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Explosions-LS100155",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Fw-190 Flyby",
+     "creator": "Fight2FlyPhoto",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/Fight2FlyPhoto/sounds/143562/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "M2 browning",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M2_browning.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "MG 42 (Solo) WW2",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338242/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "P-47 Flyby",
+     "creator": "Fight2FlyPhoto",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/Fight2FlyPhoto/sounds/143560/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "P51 with supercharger",
+     "creator": "doubletrigger",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/doubletrigger/sounds/110736/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "Spitfire 2 passes Military od",
+     "creator": "Cheeseheadburger",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Cheeseheadburger/sounds/170477/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "b24_drone_loop",
+   "recording": "b24_drone_loop",
+   "what": "A B-24's four engines drone",
+   "sources": [
+    {
+     "title": "b24",
+     "creator": "relwin",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/relwin/sounds/391516/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "stuka_drone_loop",
+   "recording": "stuka_drone_loop",
+   "what": "A Stuka's engine drones",
+   "sources": [
+    {
+     "title": "G04-07-WWII Stuka engine drone",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/437771/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "grenade_blast",
+   "recording": "grenade_blast",
+   "what": "A flak shell bursts close to the camera (a real close blast, in place of the far burst)",
+   "sources": [
+    {
+     "title": "Explosions-LS100152",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "b17_interior_loop",
+   "recording": "b17_interior_loop",
+   "what": "Riding a B-17 in the air battle: its four engines heard from inside the aircraft",
+   "sources": [
+    {
+     "title": "G07-06_B-17 4 Engine Prop Ambience.wav",
+     "creator": "none",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/437850/",
      "archive": "Freesound"
     }
    ]

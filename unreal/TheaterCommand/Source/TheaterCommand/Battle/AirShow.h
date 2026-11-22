@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Battle/ShipGuns.h"
 #include "Effects/TheaterFxCore.h"
 
 #include <cstdint>
@@ -158,6 +159,13 @@ namespace AirShow
 		double Face = 0.0;
 		std::string Class;
 		bool bSunk = false;
+		/** Whose she is (the recording's nation), her name, her side (0 the raiders', 1 the defenders'), her length and
+		 * beam (metres), and the share of her guns manned (the view's ships.guns: Pearl's crews reach theirs as the
+		 * attack goes on). Her anti-aircraft guns fire by them (ShipGuns, Show::ShipFire). */
+		std::string Nation, Name;
+		int Side = 1;
+		double Long = 180.0, Beam = 20.0;
+		double Manned = 1.0;
 	};
 
 	/** What the show asks of the effects kit, the stage and the sound this frame (all on the air clock). */
@@ -193,6 +201,9 @@ namespace AirShow
 		ShipHit,    // the stage's Hit: Key (ship), What (strike)
 		ShipSunk,   // the stage's Sink: Key (ship), What (how), Size (1 the biggest blast), Text (the line)
 		Smoke,      // a bombed target's column (air:rail, air:ruin): At
+		ShipGun,    // a ship's heavy anti-aircraft gun firing: Key (the ship), At (its muzzle), Aim (where it is laid), What
+		            //   (the gun, as ShipGuns names it), Size (its calibre, mm); its shell's burst follows as Flak (or a
+		            //   Splash ahead of a torpedo plane) when it gets there
 	};
 
 	struct Fx
@@ -452,6 +463,12 @@ namespace AirShow
 		Vec Eye;
 		/** The most guns fired at once (the effects kit's budget: about 17 puffs a machine gun, 3,000 in all). */
 		int MostGuns = 150;
+		/** The battle's year and month, 1 to 12 (SKY's date): which anti-aircraft guns each ship has (ShipGuns::BatteryOf). */
+		int Year = 1942, Month = 6;
+		/** The ships' light guns' streams drawn at once (the nearest the eye first), and the heavy guns' rounds shown in
+		 * an air second (each a burst of about a dozen of the kit's puffs, hanging 9 s), the nearest ships' first. */
+		int MostShipGuns = 64;
+		double ShipRoundsMost = 4.0;
 		/** A bomber's bay doors open this many air seconds before its group's run is done (BOOK run: 45 s), and its
 		 * stick's bombs leave the bay this far apart. */
 		double BayLead = 10.0, StickGap = 0.15;
@@ -459,6 +476,32 @@ namespace AirShow
 		 * hydraulics, never a snap); and how high a bomber lifts as her load goes (metres, over about a second, trimmed
 		 * out over the next six; the battle models' bombs_away clip). */
 		double BayOpenS = 2.5, BayShutS = 2.5, StickLift = 0.4;
+		/**
+		 * The bomb run held steady (the coordinator on the Mac film of release 1's bays: the B-17 banked 50 to 60 degrees
+		 * as her first bomb left, so most of the stick fell from a plane on her side; the art director's figures, 14:01Z).
+		 * A level bomber flies wings level (within RunBankMost degrees) from her doors opening, holds her heading from her
+		 * doors full open (the Mac film of release 2: chasing her place in the box, she flicked 2 degrees of bank a moment
+		 * before her first bomb) until StickSteady air seconds after her last bomb, and her doors start to shut as she then rolls into her
+		 * box's rally turn. A bomber of two engines or more (or 20 m of span) banks no more than RallyBankMost degrees in
+		 * her place in a box, rolling no faster than HeavyRollMost degrees a second, and no more than HeavyBankMost out of
+		 * it (straggling, covering, going home); falling, she goes as she falls.
+		 */
+		double StickSteady = 1.5, RunBankMost = 2.0, RallyBankMost = 20.0, HeavyBankMost = 30.0, HeavyRollMost = 5.0;
+		/**
+		 * A bomber's bay as her model has it, by the battle's model name (the scene sets it from the shape it draws, the
+		 * cloud test from the same model file): the load racked there from Fore to Aft (metres ahead of the point she is
+		 * drawn about), its middle Up over that point (below it, minus), and Half, how far either side of her keel its
+		 * two rows hang. Her stick's bombs leave from their stations along it, the first forward, a row to each side in
+		 * turn (the Mac film of release 2: from her middle point they fell out of solid belly 3 m aft of the doors). A
+		 * model with no bay here lets them go from under her middle point, as before.
+		 */
+		struct BayPlace
+		{
+			double Fore = 0.0, Aft = 0.0, Up = -1.2, Half = 0.25;
+		};
+		std::map<std::string, BayPlace> BaysOf;
+		/** Where a stick's bomb K of Size leaves her, in her own frame (forward, right, up), by BaysOf. */
+		Vec BombStation(const std::string& Model, int K, int Size) const;
 		/** The target ring's radius (BOOK target.r): a land raid's view carries no run, so a box's run is timed from
 		 * when it comes inside the ring (the rules' run is held there 45 air s). */
 		double TargetR = 6000.0;
@@ -516,6 +559,8 @@ namespace AirShow
 		/** The groups as shown now (interpolated), for labels and the camera. */
 		const std::map<int, Group>& Groups() const { return Now; }
 		const Checks& Checked() const { return Check; }
+		/** The ships' guns' own count (the cloud test reads it). */
+		const ShipGuns::Tally& ShipTally() const { return Gunners.Tallied(); }
 		/** One line an aircraft: its role, its phase, its quarry (a debug overlay; the cloud test's trace). */
 		std::string Describe() const;
 
@@ -653,6 +698,8 @@ namespace AirShow
 			double Bay = 0.0;        // (the doors' travel, even in time: the picture's opening is this eased)
 			double StickDone = -1.0;
 			double StickBegan = -1.0; // (when the first bomb of a bay's stick left: her lift)
+			double RunHdg = 0.0;      // (her heading as she dropped: held, wings level, until her stick has gone)
+			bool bRunHeld = false;    // (her doors full open on her run: her heading held from then, as her bombardier flew her)
 			Vec LastP;
 			bool bHasLast = false;
 			// The gunnery (AirShow.cpp, "The gunnery"):
@@ -1076,6 +1123,20 @@ namespace AirShow
 		 * ground or the sea this frame, and flak's splinters on the aircraft it hit. */
 		void LandStray();
 		void FlakRound(double Dt);
+		/** The ships' anti-aircraft guns this frame (ShipGuns.cpp): the light guns' streams at the raiders in their reach,
+		 * the heavy guns' rounds bursting where the raiders were going to be, a few rounds striking home. With no air
+		 * time passing (Dt 0), every stream stopped. */
+		void ShipFire(double Dt);
+		/** A plane the battle says flak brought down: under the nearest ship's light guns, their streams on it and its
+		 * hits seen as it goes; else the one heavy burst laid on it, as before. */
+		void FlakKill(const Craft& C);
+		/** The ships' gun crews and their directors (ShipGuns::Gunnery), with their own dice, so the rest of the show
+		 * plays as it did. */
+		ShipGuns::Gunnery Gunners;
+		std::set<int> ShipsAfloat, ShipsDown; // ships seen afloat; ships whose sinking has been shown
+		std::vector<ShipGuns::Hull> Hulls() const;
+		ShipGuns::Plane PlaneOf(const Craft& C) const;
+		void ShotsOut(const std::vector<ShipGuns::Shot>& Fired);
 		void SmallThings(double Dt);
 		void StartFall(Craft& C, const Event& E);
 		/** A falling aircraft blown apart: the flash, the pieces, the model gone (explode, or a burning one's boom). */

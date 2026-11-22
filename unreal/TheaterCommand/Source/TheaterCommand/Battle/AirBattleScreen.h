@@ -7,7 +7,8 @@ class AAirBattle;
 
 /**
  * The air battle's screen over the 3D scene (the UI director's words, handoff sections 1, 4, 6 and 8): the top bar
- * (the sides, the card's chance and the chance now, the balance, HOW NEAR TO BREAKING OFF), the clock and its tag, the
+ * (the sides, the card's chance and the chance now, the tug-of-war bar between the two flags, HOW NEAR TO BREAKING
+ * OFF), the clock and its tag, the
  * aim slip, the near line, a tag over each formation, the dispatches, the orders strip for the groups in hand, the
  * speed, the staff's question, and the after card with CONTINUE. Everything it writes is AirDesk's; it only draws.
  *
@@ -47,6 +48,8 @@ private:
 		FString Action;
 	};
 	mutable TArray<FButton> Buttons;
+	/** The flags at the ends of the tug-of-war bar, by nation, made once each from the table's own pictures. */
+	mutable TMap<FString, TSharedPtr<struct FSlateBrush>> FlagBrushes;
 	FVector2D PressedAt = FVector2D::ZeroVector;
 	bool bDragging = false;
 	bool bLeftDown = false;

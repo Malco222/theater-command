@@ -181,6 +181,43 @@ def bomb_shape(mesh, at, length, girth, part, sides=8):
             mesh.quad(ids[0], ids[1], ids[2], ids[3], facing)
 
 
+def belly_under(skin, x, y):
+    """The height of the shut doors' skin straight under (x, y): the highest of the door triangles over that point, or
+    None where none is."""
+    top = None
+    for a, b, c in skin:
+        if x < min(a[0], b[0], c[0]) or x > max(a[0], b[0], c[0]) or y < min(a[1], b[1], c[1]) or y > max(a[1], b[1], c[1]):
+            continue
+        den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(den) < 1e-12:
+            continue
+        u = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / den
+        v = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / den
+        w = 1.0 - u - v
+        if min(u, v, w) < -1e-9:
+            continue
+        z = u * a[2] + v * b[2] + w * c[2]
+        top = z if top is None else max(top, z)
+    return top
+
+
+def rack_lift(skin, xc, yc, length, girth, z):
+    """How far a bomb racked with its middle at (xc, yc, z) must be lifted so that, the doors shut, all of it (its fins
+    too) stays inside them, a centimetre above their skin: 0 where it already does."""
+    r = girth * 0.51
+    need = None
+    for su in range(17):
+        x = xc - length / 2.0 + length * su / 16.0
+        for sv in range(11):
+            dy = -r + 2.0 * r * sv / 10.0
+            zs = belly_under(skin, x, yc + dy)
+            if zs is None:
+                continue
+            low = zs + 0.01 + math.sqrt(max(0.0, r * r - dy * dy))
+            need = low if need is None else max(need, low)
+    return 0.0 if need is None or need <= z else need - z
+
+
 def block(mesh, lo, hi, paint):
     """A box with square sides, each face its own points (sharp edges), every face outward but the top."""
     x0, y0, z0 = lo
@@ -358,7 +395,10 @@ def cut(model, spec, plane, fine):
         pivot = tuple(round((back[j] + front[j]) / 2.0, 4) for j in range(3))
         parts[side] = {"pivot": list(pivot), "axis": [round(c, 4) for c in axis]}
 
-    # The load, racked from the doors up: bottom row first, two racks either side of the middle.
+    # The load, racked from the doors up: bottom row first, two racks either side of the middle. Each rack stands clear
+    # of the shut doors under it: where the belly rises (a Lancaster's toward her tail) its bombs are lifted, and a place
+    # that lifted would not clear the beam is left empty. (Pre-check, 2026-11-21: her aft bombs, racked at one height
+    # from the bay's lowest point, showed through her shut doors.)
     loaded = 0
     if fine and spec.get("bombs"):
         length, girth = spec["bomb"]
@@ -366,7 +406,9 @@ def cut(model, spec, plane, fine):
         along = max(1, int((xf - xb - 0.1) // (length + 0.1)))
         layers = max(1, int((roof - 0.13 - box_lo - 0.12) // (girth + 0.05)))     # (clear of the beam)
         gap_x = (xf - xb) / along
-        for layer in range(layers):
+        skin = [tuple(mesh.P[i] for i in tri) for _, tri in doors]
+        lifts = {}
+        for layer in range(layers + 2):
             for k in range(along):
                 for side in (-1.0, 1.0):
                     for j in range(across):
@@ -374,6 +416,13 @@ def cut(model, spec, plane, fine):
                             break
                         y = side * (half - 0.02 - girth / 2.0 - j * (girth + 0.03))
                         z = box_lo + 0.08 + girth / 2.0 + layer * (girth + 0.05)
+                        if (k, side, j) not in lifts:
+                            lifts[(k, side, j)] = rack_lift(skin, xb + gap_x * (k + 0.5), y, length, girth, box_lo + 0.08 + girth / 2.0)
+                        lift = lifts[(k, side, j)]
+                        if lift > 0.0 or layer >= layers:
+                            z += lift
+                            if z + girth * 0.51 > roof - 0.14:
+                                continue
                         bomb_shape(mesh, (xb + gap_x * (k + 0.5), y, z), length, girth, 3)
                         loaded += 1
     mesh.write()

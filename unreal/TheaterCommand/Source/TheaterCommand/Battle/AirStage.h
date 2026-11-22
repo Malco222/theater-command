@@ -192,6 +192,10 @@ private:
 	 * made from this stage's land, reef and works when it is raised. */
 	UPROPERTY()
 	TObjectPtr<UTexture2D> SeaShore;
+	/** Where the shore picture lies on the stage (metres: its west and south edges and its side), as SeaFace::MakeShore
+	 * laid it; the sea and the shallows carry where each of their points falls on it as their first texture
+	 * coordinate (ShoreAt). */
+	double ShoreWest = -1.0, ShoreSouth = -1.0, ShoreSpan = 2.0;
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
@@ -212,6 +216,10 @@ private:
 	 * out; else the open sea everywhere); null where the material has not been built yet (Tools/build_content.sh), or
 	 * with -TheaterFlatSea. */
 	UMaterialInstanceDynamic* MovingSea(bool bShore);
+	/** Where a stage point (metres east, north) falls on the shore picture: M_StageSea reads the picture there, from the
+	 * mesh's own first texture coordinate (the Mac's release 2 check: placed from the world's position on the GPU, the
+	 * picture missed Pearl Harbor, and the lochs drew whitecaps and no green). */
+	FVector2D ShoreAt(double East, double North) const;
 	void LayShip(const FStageShip& Given);
 	void MoveShip(FShip& Ship, double Now);
 	void Blast(FShip& Ship, bool bBig);
