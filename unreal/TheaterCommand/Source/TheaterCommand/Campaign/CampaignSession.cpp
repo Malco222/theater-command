@@ -415,6 +415,15 @@ namespace
 		static const TSet<FString> Beside = { TEXT("lessonNow"), TEXT("lessonDeed"), TEXT("lessonAct"), TEXT("notebook"), TEXT("guide") };
 		return Beside.Contains(Function);
 	}
+
+	/**
+	 * (Release 2, tc.Speed.SaveAside) The war written out (TC.save, the war as JSON text) changes nothing in it: given
+	 * aside it keeps the questions kept, as Save at once always has (it calls the rules without CallRules).
+	 */
+	bool IsWrittenOut(const FString& Function)
+	{
+		return Function == TEXT("save");
+	}
 }
 
 bool FCampaignSession::CallBattle(const FString& Function, const FString& ArgumentsJson, FString& OutJson, FString& OutError)
@@ -4829,9 +4838,9 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 		InThen(Object);
 		return;
 	}
-	if (!IsQuestion(Function))
+	if (!IsQuestion(Function) && !IsWrittenOut(Function))
 	{
-		RulesMemo.Reset(); // (an order: nothing asked before it holds; a question asked aside, PreviewAside's, changes nothing)
+		RulesMemo.Reset(); // (an order: nothing asked before it holds; a question asked aside, PreviewAside's, changes nothing, nor does the war written out)
 	}
 	const TSharedRef<FAside, ESPMode::ThreadSafe> Job = MakeShared<FAside, ESPMode::ThreadSafe>();
 	Job->Function = Function;
@@ -4986,7 +4995,7 @@ void FCampaignSession::Settle()
 		View = MoveTemp(Job->View);
 		OnViewChanged.Broadcast();
 	}
-	if (!IsQuestion(Job->Function))
+	if (!IsQuestion(Job->Function) && !IsWrittenOut(Job->Function))
 	{
 		RulesMemo.Reset(); // (the order changed the war; what was asked ahead after it holds)
 	}
@@ -5226,6 +5235,26 @@ void FCampaignSession::PreviewAside(const TArray<int32>& CorpsIds, int32 RegionI
 		[RegionId, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
 		{
 			Then(Answer.IsValid() ? ReadPreview(Answer, RegionId) : FAttackPreview());
+		});
+}
+
+void FCampaignSession::SaveAside(bool bAside, TFunction<void(FString)>&& InThen)
+{
+	if (!bAside || CVarRulesAside.GetValueOnGameThread() == 0 || !bRunning || !Host.IsValid())
+	{
+		InThen(Save()); // (at once, as before)
+		return;
+	}
+	// (the war as JSON text, and the answer that carries it read, on the rules' thread: by August 1944 some 2.3 MB)
+	Order(TEXT("save"), TEXT("[]"), true, nullptr,
+		[Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			FString Written;
+			if (Answer.IsValid())
+			{
+				Answer->TryGetStringField(TEXT("text"), Written);
+			}
+			Then(MoveTemp(Written));
 		});
 }
 

@@ -130,6 +130,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarWarSpread(
 		TEXT("tc.Speed.WarSpread"), 1,
 		TEXT("1 begins a war from the opening screen under a plate: the rules start it a few frames after the press, and the table is laid a step a frame before the war is entered (map run 8: 1.2 to 1.4 s of laying in a 2.2 to 2.5 s frame); 0 does it all in the press's frame, as before. The same table either way."));
+	TAutoConsoleVariable<int32> CVarSaveAside(
+		TEXT("tc.Speed.SaveAside"), 1,
+		TEXT("1 writes the month's save out on the rules' own thread and onto the disk on a worker thread, a frame or a few after the month (some 2.3 MB of text by August 1944); 0 writes it in the month's frames, as before. The same file either way."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
@@ -509,6 +512,11 @@ namespace TheaterSpeed
 	bool CardAside()
 	{
 		return CVarCardAside.GetValueOnGameThread() != 0;
+	}
+
+	bool SaveAside()
+	{
+		return CVarSaveAside.GetValueOnGameThread() != 0;
 	}
 
 	double TreesSpread()

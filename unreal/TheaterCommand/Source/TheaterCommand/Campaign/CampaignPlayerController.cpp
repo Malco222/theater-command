@@ -11135,7 +11135,7 @@ void ACampaignPlayerController::FinishMonth()
 		{
 			if (ACampaignGameMode* Mode = GetMode())
 			{
-				Mode->SaveCampaign();
+				Mode->SaveCampaign(!bScripted); // (release 2, tc.Speed.SaveAside: written out off the game thread; a run that takes pictures keeps it at once)
 			}
 		});
 	}

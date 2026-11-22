@@ -47,6 +47,13 @@ public:
 
 	/** The whole campaign as text, to be written to a file. Empty if there is no campaign. */
 	FString Save();
+	/**
+	 * (Release 2, tc.Speed.SaveAside) Save, worked out on the rules' own thread as an order is (the war written out
+	 * changes nothing in it, so nothing kept is forgotten for it): Then is given the text on the game thread, from
+	 * Deliver, a frame or a few later, or empty where there is no campaign or the rules failed. bAside false (or the
+	 * rules not given aside) asks it at once, as Save does, and gives it to Then before returning.
+	 */
+	void SaveAside(bool bAside, TFunction<void(FString)>&& Then);
 
 	/** One line about a saved campaign ("Germany, October 1939"), or empty if the text is not a campaign that can be continued. */
 	FString DescribeSave(const FString& SaveText);

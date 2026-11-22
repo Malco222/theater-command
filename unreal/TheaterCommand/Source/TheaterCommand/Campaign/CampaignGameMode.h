@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "Templates/Function.h"
+#include "Async/Future.h"
 #include "CampaignGameMode.generated.h"
 
 class FCampaignSession;
@@ -24,6 +25,8 @@ public:
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	virtual void BeginPlay() override;
+	/** (Release 2, tc.Speed.SaveAside) A save still being written is finished before the game lets the campaign go. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Turns the music off, or on again. Returns true if it is now playing. */
 	bool ToggleMusic();
@@ -61,8 +64,12 @@ public:
 	/** (The playtester's click-through.) The campaign as it stood when this text was saved, laid on the table again. */
 	bool RestoreCampaign(const FString& SaveText);
 
-	/** Writes the campaign to this computer, so it can be continued another day. */
-	void SaveCampaign();
+	/**
+	 * Writes the campaign to this computer, so it can be continued another day. bAside (release 2, the month's own
+	 * save, tc.Speed.SaveAside): the war is written out on the rules' own thread and onto the disk on a worker thread,
+	 * a frame or a few later, and nothing of it is done in this frame. Otherwise at once, as before.
+	 */
+	void SaveCampaign(bool bAside = false);
 
 	/** A line about the campaign saved on this computer, or empty if there is none. */
 	FString DescribeSavedCampaign();
@@ -77,6 +84,13 @@ private:
 	bool bLayInSteps = false;
 	TArray<TFunction<void()>> LaySteps;
 	static FString SaveFile();
+	/** (tc.Speed.SaveAside) The text onto the disk on a worker thread, after any written before it: a file beside the save, then put in its place. */
+	void WriteSave(FString&& Text);
+	/** Waits for a save still being written, where there is one: before the save is read, or one is written at once. */
+	void WaitForSave();
+	TFuture<void> SaveWriting;
+	/** Each save asked for, counted: a save given aside is written only where none was asked after it. */
+	int32 SavesAsked = 0;
 
 	TSharedPtr<FCampaignSession> Session;
 

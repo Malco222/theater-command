@@ -22,6 +22,8 @@
 #include "Engine/World.h"
 #include "GameFramework/GameUserSettings.h"
 #include "HAL/IConsoleManager.h"
+#include "Async/Async.h"
+#include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -368,23 +370,74 @@ FString ACampaignGameMode::SaveFile()
 	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bPictures ? TEXT("campaign-pictures.json") : TEXT("campaign.json"));
 }
 
-void ACampaignGameMode::SaveCampaign()
+void ACampaignGameMode::SaveCampaign(bool bAside)
 {
 	THEATER_SPEED_SCOPE(SaveCampaign); // (release 2, map run 7: the monthly save, written out, named in the speed log)
 	if (!Session.IsValid() || !Session->IsRunning())
 	{
 		return;
 	}
+	const int32 Asked = ++SavesAsked;
+	if (bAside && TheaterSpeed::SaveAside())
+	{
+		// (Release 2, tc.Speed.SaveAside.) The war written out on the rules' thread; its text onto the disk off this one.
+		// A save asked after this one, at once or aside, is the one kept: this one is not written over it.
+		const TWeakObjectPtr<ACampaignGameMode> Self(this);
+		Session->SaveAside(true, [Self, Asked](FString Written)
+		{
+			ACampaignGameMode* Mode = Self.Get();
+			if (Mode && Asked == Mode->SavesAsked && !Written.IsEmpty())
+			{
+				Mode->WriteSave(MoveTemp(Written));
+			}
+		});
+		return;
+	}
 	const FString Text = Session->Save();
+	WaitForSave(); // (a save still being written is finished first, so that it never lands over this one)
 	if (!Text.IsEmpty())
 	{
 		FFileHelper::SaveStringToFile(Text, *SaveFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	}
 }
 
+void ACampaignGameMode::WriteSave(FString&& Text)
+{
+	THEATER_SPEED_SCOPE(SaveWrite);
+	WaitForSave(); // (one at a time, in the order they were asked)
+	const FString Path = SaveFile();
+	// (Written beside the save and then put in its place: a game that stops part way through leaves the last save whole.)
+	SaveWriting = Async(EAsyncExecution::ThreadPool, [Written = MoveTemp(Text), Path]()
+	{
+		const FString Beside = Path + TEXT(".writing");
+		if (FFileHelper::SaveStringToFile(Written, *Beside, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)
+			&& !IFileManager::Get().Move(*Path, *Beside, true, true))
+		{
+			FFileHelper::SaveStringToFile(Written, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM); // (it could not be put in place: written where it belongs)
+		}
+	});
+}
+
+void ACampaignGameMode::WaitForSave()
+{
+	if (SaveWriting.IsValid())
+	{
+		THEATER_SPEED_SCOPE(SaveWait);
+		SaveWriting.Wait();
+		SaveWriting = TFuture<void>();
+	}
+}
+
+void ACampaignGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	WaitForSave();
+	Super::EndPlay(EndPlayReason);
+}
+
 FString ACampaignGameMode::DescribeSavedCampaign()
 {
 	FString Text;
+	WaitForSave(); // (tc.Speed.SaveAside: the save is read once it is wholly written)
 	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()))
 	{
 		return FString();
@@ -395,6 +448,7 @@ FString ACampaignGameMode::DescribeSavedCampaign()
 bool ACampaignGameMode::ContinueCampaign()
 {
 	FString Text;
+	WaitForSave(); // (tc.Speed.SaveAside: the save is read once it is wholly written)
 	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()))
 	{
 		return false;
