@@ -367,7 +367,7 @@ describe("the 14th Army's rows that land with a division (the Lingayen reading)"
       // The North Luzon Force is one row of four: the 11th 6,750, the 21st 8,500, the 31st 6,000, the 71st 6,750.
       const nlf = us('North Luzon Force');
       expect([nlf.divs, nlf.full], `stop ${stop}`).toEqual([4, 0.467]);
-      expect(Math.abs(nlf.divs * nlf.full * 15000 - 28000)).toBeLessThan(50);
+      expect(Math.abs(nlf.divs * nlf.full! * 15000 - 28000)).toBeLessThan(50);
       expect([PA('91st'), PA('41st'), PA('51st'), PA('61st'), PA('81st'), PA('101st')].map((nm) => us(nm).full), `stop ${stop}`).toEqual([0.4, 0.45, 0.45, 0.35, 0.35, 0.35]);
       // The first-day row is the 1st Regular Division: 0.45 at its most, from the small regular army of 1939.
       expect(us('Philippine Army').full, `stop ${stop}`).toBe(0.45);
