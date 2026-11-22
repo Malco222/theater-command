@@ -128,6 +128,16 @@ namespace LandMen
 		float FlashT = -1.f;            // the first muzzle_flash's time (the shot), -1 none
 		float ReleaseT = -1.f;          // grenade_release's, -1 none
 		float LeftFoot = -1.f;          // the left foot's (or elbow's) step as a share of the loop, for keeping step
+		/** A tank clip's places (its "places"): the vehicle model (Piece, its file's name: "Sherman") and its socket his
+		 * root goes to, moved by Offset (forward, right, up of the socket's facing). Empty for a man on his feet. */
+		struct Seat
+		{
+			std::string Piece, Socket;
+			Vec3 Offset;
+		};
+		std::vector<Seat> Seats;
+		/** The seat on that model, or none. */
+		const Seat* SeatOn(const std::string& Piece) const;
 		float Speed() const { return Long > 0.f && Stride > 0.f ? Stride / Long : 0.f; }
 	};
 
@@ -342,6 +352,34 @@ namespace LandMen
 		 * about 13 ms: a loading moment.
 		 */
 		bool Extend(const std::string& DeltaText, std::string& OutError);
+
+		/**
+		 * Riders: a tank's commander up in his hatch (the soldiers thread's soldier_USA_tanker and soldier_GER_panzer and
+		 * their tank clips). He is no track of the recording's: the scene says each frame, before Update, whether he is
+		 * shown, where his root goes (the floor at his feet: the vehicle's commander socket moved by the clip's
+		 * root_offset) and which clip he plays how far in (SetRide); he is drawn, skinned and given his level of detail
+		 * as every man is, never banked, never fades, fires no shot and sends no event. While a clip whose weapon is
+		 * "none" plays (every tank clip: his gun is put away 2 m under his feet), his gun's bones are not drawn. FileArmy: his soldier file's
+		 * ("USA_tanker"); Army: his army's colours ("USA"); Seed: his own (his face). Appended after the men there are
+		 * (call after Build); -1 where the file was not added.
+		 */
+		int AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed);
+		struct Ride
+		{
+			bool bShown = false;
+			/** His own axes on the field (x forward, y right, z up, as WorldOf makes a man's), at his root. */
+			Xform Seat;
+			int Clip = -1;          // his soldier file's clip (Soldier::ClipIndex)
+			float Time = 0.f;       // into it: a loop wraps, a one-shot holds its ends
+			/** The clip he is leaving, blended out as he takes up Clip: W 0 all FromClip, 1 all Clip (no blend). */
+			int FromClip = -1;
+			float FromTime = 0.f;
+			float W = 1.f;
+		};
+		void SetRide(int Man, const Ride& R);
+		bool IsRider(int Man) const;
+		/** The soldier file added under that name (AddSoldier), or none. */
+		const Soldier* SoldierFile(const std::string& FileArmy) const;
 
 		/**
 		 * A round a man fires (the rounds' t, w, and by/k mapped to the man by Find). His shot is played so the flash

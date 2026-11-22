@@ -66,6 +66,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <tuple>
 
 namespace LandParts
 {
@@ -647,7 +648,7 @@ namespace LandParts
 		{
 			for (int Man = 0; Man < S.Men->Count(); ++Man)
 			{
-				if (!S.Men->Visible(Man) || static_cast<size_t>(Man) >= S.TrackOfMan.size())
+				if (!S.Men->Visible(Man) || static_cast<size_t>(Man) >= S.TrackOfMan.size() || S.Men->IsRider(Man))
 				{
 					continue;
 				}
@@ -1101,7 +1102,21 @@ bool ALandBattle::Open()
 			return true;
 		};
 	}
+	{
+		// (a roof gun only where her model draws one this month and for her nation: the tank modeller's swaps)
+		TWeakPtr<FLandBattleState> Weak(State);
+		PlayWorld.RoofGun = [Weak](int Track)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || !Pinned->Armour || Track < 0 || static_cast<size_t>(Track) >= Pinned->VehicleOf.size() || Pinned->VehicleOf[static_cast<size_t>(Track)] < 0)
+			{
+				return true;
+			}
+			return Pinned->Armour->Vehicles()[static_cast<size_t>(Pinned->VehicleOf[static_cast<size_t>(Track)])].Look().RoofGun();
+		};
+	}
 	S.Play.Begin(Rec, PlayWorld);
+	MakeRiders();
 
 	// The camera's world: the ground drawn, where it can stand, what it can see through, where each man and tank is.
 	{
@@ -1247,6 +1262,11 @@ bool ALandBattle::Open()
 		float Hand = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHand="), Hand);
 		Set.Hand = FMath::Clamp(static_cast<double>(Hand), 0.0, 3.0);
+		// (the production lead's A/B: the whole mass's wide, the dearest shot until the men are instanced, turned off)
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoMassWide")))
+		{
+			Set.MassFrom = 0.0;
+		}
 		S.EyeWorld = EyeWorld;
 		S.Eye.Begin(Rec, EyeWorld, Set);
 	}
@@ -2019,7 +2039,8 @@ void ALandBattle::MakeMen()
 	}
 	// (and each army's files for its other men where it has them: the American's BAR gunner, squad leader, bazooka
 	// gunner and his loader, soldier_USA_bar, _nco, _bazooka and _loader; a file not made yet is passed over below)
-	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader"), TEXT("_radio") };
+	// (and the tank commanders' files, soldier_USA_tanker and soldier_GER_panzer: ridden on their tanks, MakeRiders)
+	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader"), TEXT("_radio"), TEXT("_tanker"), TEXT("_panzer") };
 	for (const FString& Army : TArray<FString>(Armies.Array()))
 	{
 		for (const TCHAR* Suffix : OtherMen)
@@ -2471,6 +2492,262 @@ void ALandBattle::MakeArmour()
 	MakeBodies(0);
 }
 
+void ALandBattle::MakeRiders()
+{
+	FLandBattleState& S = *State;
+	using FRider = FLandBattleState::FRider;
+	S.Riders.clear();
+	S.RoofManned.assign(S.Armour ? S.Armour->Vehicles().size() : 0, 1);
+	if (!S.Men || !S.Armour || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCommanders")))
+	{
+		return;
+	}
+	static const char* const ClipNames[FRider::Kinds] = { "commander_hatch", "commander_roof_mg", "commander_roof_mg_burst", "die_hatch_slump", "die_hatch_drop" };
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	// (each vehicle's rider by her track's words, for her rounds below)
+	std::map<std::tuple<int, int, int>, size_t> ByWords;
+	for (size_t V = 0; V < All.size(); ++V)
+	{
+		const LandKit::Vehicle& Veh = All[V];
+		const LandKit::Model& Look = Veh.Look();
+		if (Look.Kind != "tank" || Look.SocketIndex("commander") < 0 || V >= S.TrackOfVehicle.size() || S.TrackOfVehicle[V] < 0)
+		{
+			continue;
+		}
+		const std::string File = Veh.Nation == "USA" ? "USA_tanker" : Veh.Nation == "GER" ? "GER_panzer" : std::string();
+		const LandMen::Soldier* Crew = File.empty() ? nullptr : S.Men->SoldierFile(File);
+		const LandKit::TrackWords& W = Veh.Words();
+		const LandFeed::Block* B = S.Rec.BlockOf(W.Block);
+		if (!Crew || !B)
+		{
+			continue;
+		}
+		// (his clips' places name her by her model's file: Sherman, PanzerIV, Tiger; a tank they do not name has no
+		// commander drawn yet)
+		FRider R;
+		R.Vehicle = static_cast<int>(V);
+		bool bAll = true;
+		for (int K = 0; K < FRider::Kinds && bAll; ++K)
+		{
+			R.Clips[K] = Crew->ClipIndex(ClipNames[K]);
+			const LandMen::Clip* C = R.Clips[K] >= 0 ? &Crew->Clips[static_cast<size_t>(R.Clips[K])] : nullptr;
+			const LandMen::Clip::Seat* Seat = C ? C->SeatOn(B->Model) : nullptr;
+			bAll = Seat && Seat->Socket == "commander";
+			if (!bAll)
+			{
+				break;
+			}
+			R.Offsets[K] = Seat->Offset;
+			R.Long[K] = C->Long;
+			for (const LandMen::ClipEvent& E : C->Events)
+			{
+				if (K == FRider::Drop && E.Fx == "hide")
+				{
+					R.DropHide = E.T;
+				}
+			}
+		}
+		if (!bAll)
+		{
+			continue;
+		}
+		const uint64_t Seed = (S.Rec.Seed ? S.Rec.Seed : 1) * 0x9E3779B97F4A7C15ull ^ (static_cast<uint64_t>(V) + 1) * 0xC2B2AE3D27D4EB4Full;
+		R.Phase = static_cast<float>((Seed >> 20) % 1000) * 0.01f;
+		// His end up in the hatch: her kill while he was up (by the rules' own hatch: not buttoned then). Thrown with
+		// her turret when she blows up; else he slumps over the rim or drops inside, by her own draw.
+		const LandFeed::Track& Tr = S.Rec.Tracks[static_cast<size_t>(S.TrackOfVehicle[V])];
+		if (Veh.Died >= 0.0)
+		{
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Veh.Died - 0.05);
+			if (C && !C->bButtoned)
+			{
+				R.Killed = Veh.Died;
+				R.Dies = Veh.bBrewUp ? static_cast<int>(FRider::Kinds) : ((Seed >> 41) & 1) ? static_cast<int>(FRider::Slump) : static_cast<int>(FRider::Drop);
+			}
+		}
+		R.Man = S.Men->AddRider(File, Veh.Nation, Seed);
+		if (R.Man < 0)
+		{
+			continue;
+		}
+		ByWords[std::make_tuple(W.Block, W.K, W.J)] = S.Riders.size();
+		S.Riders.push_back(R);
+	}
+	// Her roof gun's bursts (the replay's own pick of her gun for each burst, TankMg), and a round that struck him up
+	// in his hatch (the rules' cm: he drops inside; she fights on buttoned up).
+	int Bursts = 0, Struck = 0;
+	for (const LandFeed::Round& Rd : S.Rec.Rounds)
+	{
+		if (Rd.W == "mg")
+		{
+			const auto Found = ByWords.find(std::make_tuple(Rd.By, Rd.K, Rd.J));
+			if (Found != ByWords.end())
+			{
+				FRider& R = S.Riders[Found->second];
+				const int Track = S.TrackOfVehicle[static_cast<size_t>(R.Vehicle)];
+				if (S.Play.TankMg(Track, Rd.T, Rd.N, LandPlay::Vec(Rd.X, Rd.Y, 0.0), Rd.G) == "roof_mg" && (R.Killed < 0.0 || Rd.T < R.Killed))
+				{
+					R.Bursts.push_back(Rd.T);
+					++Bursts;
+				}
+			}
+		}
+		if (Rd.bCm)
+		{
+			const auto Found = ByWords.find(std::make_tuple(Rd.On, Rd.Ok, Rd.Oj));
+			if (Found != ByWords.end())
+			{
+				FRider& R = S.Riders[Found->second];
+				const double At = Rd.T + FMath::Max(0.0, Rd.L);
+				if (R.Killed < 0.0 || At < R.Killed)
+				{
+					R.Killed = At;
+					R.Dies = FRider::Drop;
+					++Struck;
+				}
+			}
+		}
+	}
+	for (FRider& R : S.Riders)
+	{
+		std::sort(R.Bursts.begin(), R.Bursts.end());
+		while (!R.Bursts.empty() && R.Killed >= 0.0 && R.Bursts.back() >= R.Killed)
+		{
+			R.Bursts.pop_back();
+		}
+	}
+	MenDrawn.SetNum(S.Men->Count());
+	int Killed = 0;
+	for (const FRider& R : S.Riders)
+	{
+		Killed += R.Killed >= 0.0;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: %d tank commanders up in their hatches (soldier_USA_tanker, soldier_GER_panzer): %d roof-gun bursts, %d killed up there (%d by a round at him)"),
+		static_cast<int32>(S.Riders.size()), Bursts, Killed, Struck);
+}
+
+void ALandBattle::RideTanks()
+{
+	FLandBattleState& S = *State;
+	using FRider = FLandBattleState::FRider;
+	if (!S.Men || !S.Armour || S.Riders.empty())
+	{
+		return;
+	}
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	if (S.RoofManned.size() < All.size())
+	{
+		S.RoofManned.resize(All.size(), 1);
+	}
+	const double Now = S.Battle;
+	const double Life = S.Life;
+	for (FRider& R : S.Riders)
+	{
+		if (R.Man < 0 || !S.Men->IsRider(R.Man) || R.Vehicle < 0 || static_cast<size_t>(R.Vehicle) >= All.size())
+		{
+			continue;
+		}
+		const LandKit::Vehicle& V = All[static_cast<size_t>(R.Vehicle)];
+		S.RoofManned[static_cast<size_t>(R.Vehicle)] = 0;
+		int Want = -1;
+		float Time = 0.f;
+		double Rise = 0.0;
+		float Blend = 0.35f;
+		if (R.Killed >= 0.0 && Now >= R.Killed)
+		{
+			// Killed up there: his end played from the moment, where he stood (not seen if he was down inside, or
+			// thrown with her turret; gone from sight once a drop has taken him under the rim).
+			const float Since = static_cast<float>((Now - R.Killed) * Life);
+			Rise = R.Rise;
+			if (R.Dies != FRider::Kinds && Rise > 0.03 && !(R.Dies == FRider::Drop && Since >= R.DropHide))
+			{
+				Want = R.Dies;
+				Time = Since;
+				Blend = 0.12f;
+			}
+		}
+		else
+		{
+			// Up as her lid swings open, from 40% open, and down again as it shuts.
+			const double Open = FMath::Clamp((V.HatchOpen - 0.4) / 0.55, 0.0, 1.0);
+			Rise = Open * Open * (3.0 - 2.0 * Open);
+			R.Rise = static_cast<float>(Rise);
+			if (Rise > 0.03)
+			{
+				// At the roof gun from some seconds before her bursts to some after, firing each burst; else looking
+				// about with his glasses.
+				const double BurstSpan = R.Long[FRider::Burst] / FMath::Max(0.25, Life);
+				const auto Next = std::lower_bound(R.Bursts.begin(), R.Bursts.end(), Now + 0.02);
+				const double Last = Next != R.Bursts.begin() ? *(Next - 1) : -1e9;
+				const double Coming = Next != R.Bursts.end() ? *Next : 1e9;
+				if (Now - Last < BurstSpan)
+				{
+					Want = FRider::Burst;
+					Time = static_cast<float>((Now - Last) * Life);
+					Blend = 0.1f;
+				}
+				else if (Now - Last < 5.0 || Coming - Now < 3.0)
+				{
+					Want = FRider::Roof;
+					Time = static_cast<float>(Now * Life) + R.Phase;
+				}
+				else
+				{
+					Want = FRider::Hatch;
+					Time = static_cast<float>(Now * Life) + R.Phase;
+				}
+			}
+		}
+		LandMen::Crowd::Ride Ride;
+		LandKit::V3 At, Facing;
+		if (Want < 0 || R.Clips[Want] < 0 || V.Fade < 0.5 || HiddenVehicle(R.Vehicle) || !V.SocketNow("commander", At, Facing))
+		{
+			// (out of sight: what he played is forgotten, so he comes back up as he is, unblended)
+			R.Now = R.Was = -1;
+			S.Men->SetRide(R.Man, Ride);
+			continue;
+		}
+		if (Want != R.Now)
+		{
+			R.Was = R.Now;
+			R.WasTime = R.NowTime;
+			R.SwitchedAt = Now;
+			R.Now = Want;
+		}
+		R.NowTime = Time;
+		S.RoofManned[static_cast<size_t>(R.Vehicle)] = Want == FRider::Roof || Want == FRider::Burst;
+		// (the clip left, blended out: a loop runs on, a one-shot holds its end)
+		const double Since = Now - R.SwitchedAt;
+		const float W = R.Was < 0 || Since < 0.0 ? 1.f : static_cast<float>(FMath::Clamp(Since * Life / Blend, 0.0, 1.0));
+		LandMen::Vec3 Off = R.Offsets[Want];
+		if (W < 1.f)
+		{
+			const LandMen::Vec3& From = R.Offsets[R.Was];
+			Off = LandMen::Vec3{ From.X + (Off.X - From.X) * W, From.Y + (Off.Y - From.Y) * W, From.Z + (Off.Z - From.Z) * W };
+			Ride.FromClip = R.Clips[R.Was];
+			Ride.FromTime = R.WasTime + static_cast<float>(Since * Life);
+			Ride.W = W;
+		}
+		// His seat: her commander socket, its facing (her turret's) along the turret roof, her hull's up; his root the
+		// socket moved by the clip's offset, and lower by what he has not yet risen.
+		const LandKit::V3 Up = V.Root.Way(LandKit::V3(0.0, 0.0, 1.0)).Unit();
+		const LandKit::V3 Forward = (Facing - Up * Facing.Dot(Up)).Unit(LandKit::V3(0.0, 1.0, 0.0));
+		const LandKit::V3 Right = Forward.Cross(Up);
+		const LandKit::V3 Feet = At + Forward * Off.X + Right * Off.Y + Up * (Off.Z - (1.0 - Rise) * 1.1);
+		float* M = Ride.Seat.R;
+		M[0] = static_cast<float>(Forward.X); M[1] = static_cast<float>(Right.X); M[2] = static_cast<float>(Up.X);
+		M[3] = static_cast<float>(Forward.Y); M[4] = static_cast<float>(Right.Y); M[5] = static_cast<float>(Up.Y);
+		M[6] = static_cast<float>(Forward.Z); M[7] = static_cast<float>(Right.Z); M[8] = static_cast<float>(Up.Z);
+		Ride.Seat.T[0] = static_cast<float>(Feet.X);
+		Ride.Seat.T[1] = static_cast<float>(Feet.Y);
+		Ride.Seat.T[2] = static_cast<float>(Feet.Z);
+		Ride.bShown = true;
+		Ride.Clip = R.Clips[Want];
+		Ride.Time = Time;
+		S.Men->SetRide(R.Man, Ride);
+	}
+}
+
 void ALandBattle::MakeBodies(int32 FromVehicle)
 {
 	FLandBattleState& S = *State;
@@ -2517,6 +2794,9 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			D.Body = static_cast<int32>(B);
 			D.bTrack = Body.bTrack;
 			D.bNear = !Body.Near.Triangles.empty();
+			// (a German roof gun, the MG 34 in its cradle on the cupola's rail, is drawn only while her commander mans
+			// it: the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post)
+			D.bWhileManned = Body.Name == "roof_mg_cradle" && Model.Nation == "GER";
 		}
 	}
 }
@@ -2542,7 +2822,8 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		const LandKit::Vehicle& V = All[static_cast<size_t>(D.Vehicle)];
 		const LandKit::Model& Model = V.Look();
 		const LandKit::Body& Body = Model.Bodies[static_cast<size_t>(D.Body)];
-		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle);
+		const bool bManned = !D.bWhileManned || static_cast<size_t>(D.Vehicle) >= S.RoofManned.size() || S.RoofManned[static_cast<size_t>(D.Vehicle)] != 0;
+		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle) && bManned;
 		Mesh->SetVisibility(bShown);
 		if (!bShown)
 		{
@@ -2826,7 +3107,7 @@ void ALandBattle::DrawManShades()
 		int32 Kind = -1;
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
-		if (Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && Crowd.SeenDistance(Man) < 150.0f && !HiddenMan(Man) && Crowd.PlaceOf(Man, X, Y, Z, Facing))
+		if (Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && Crowd.SeenDistance(Man) < 150.0f && !HiddenMan(Man) && !Crowd.IsRider(Man) && Crowd.PlaceOf(Man, X, Y, Z, Facing))
 		{
 			Kind = Crowd.Frozen(Man) ? 2 : Crowd.PlayingOf(Man).Lie > 0.5f ? 1 : 0;
 		}
@@ -3789,6 +4070,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// the near ones they look; the battle-scale plan's GS3)
 		const double Zoom = FMath::Tan(FMath::DegreesToRadians(25.0)) / FMath::Max(0.02, FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(S.Pose.Fov, 2.0, 120.0) * 0.5)));
 		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
+		// (the tank commanders on their tanks as just posed)
+		RideTanks();
 		S.Men->Update(S.Battle);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;

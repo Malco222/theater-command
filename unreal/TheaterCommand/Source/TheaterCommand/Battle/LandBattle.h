@@ -251,6 +251,8 @@ private:
 		int32 Vehicle = 0, Body = 0;
 		bool bTrack = false;
 		bool bNear = true;
+		/** Drawn only while her roof gun is manned (a German tank's MG 34, its cradle part). */
+		bool bWhileManned = false;
 		double SootShown = 0.0;
 	};
 	TArray<FBodyDrawn> BodiesDrawn;
@@ -472,6 +474,11 @@ private:
 	void MakeMen();
 	void DrawMen(const FVector& EyeWorld);
 	void MakeArmour();
+	/** The tank commanders: a rider in the crowd for each American and German tank his crew file has a place on, with
+	 * her roof gun's bursts and his end read from the recording (after the replay has begun: its TankMg). */
+	void MakeRiders();
+	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
+	void RideTanks();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */

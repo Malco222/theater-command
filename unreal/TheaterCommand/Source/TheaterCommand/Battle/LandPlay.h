@@ -48,6 +48,10 @@ namespace LandPlay
 		/** Where round Round struck a vehicle's skin (the rules' face: front, left, right, rear, top; U across, -1..1;
 		 * H up, 0..1) at battle time T, and the skin's outward way there. False: not known. */
 		std::function<bool(int Track, int Round, double T, const std::string& Face, double U, double H, Vec& OutAt, Vec& OutNormal)> Skin;
+		/** Whether a tank (track index Track) carries a roof machine gun as drawn (her model's roof_mg swap this month,
+		 * and for her nation: no .50 on a British Sherman, no MG 34 on an early Tiger's roof). False: TankMg never gives
+		 * her roof gun, so her commander never fires one she has not got. Empty: every American and German tank has one. */
+		std::function<bool(int Track)> RoofGun;
 	};
 
 	/** One thing for the effects kit (BattleEffects), at battle time T. */
@@ -195,7 +199,8 @@ namespace LandPlay
 		Vec MuzzleOf(int Track, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward, int RoundN = -1, const std::string& Gun = std::string()) const;
 	public:
 		/**
-		 * A tank's machine gun for one of her bursts: the rules' own where the round names it (Gun: coax, hull, roof).
+		 * A tank's machine gun for one of her bursts: the rules' own where the round names it (Gun: coax, hull, roof;
+		 * a roof round from a tank the scene says carries none, World::RoofGun, comes from her coaxial).
 		 * Where it does not (a recording from before they did), the scene picks: the commander's on her roof when he is
 		 * up in his hatch (not buttoned) and his army mounted one there (the Americans' .50, the Germans' MG 34 on the
 		 * cupola's ring), a burst in three; else the hull gunner's ball-mounted gun where the foot are within 25 degrees

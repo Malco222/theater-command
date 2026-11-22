@@ -326,6 +326,9 @@ namespace LandKit
 		int PartIndex(const std::string& PartName) const;
 		int SocketIndex(const std::string& SocketName) const;
 		const Clip* FindClip(const std::string& ClipName) const;
+		/** She carries a roof machine gun as drawn (a roof_mg part not scaled to nothing by her swaps this month, or for
+		 * her nation): only then may her commander fire one. */
+		bool RoofGun() const;
 		/** The links of a track side (-1 left, +1 right), in the order their points run in the track body's Near. */
 		const std::vector<int>& Links(int Side) const { return Side < 0 ? LinksL : LinksR; }
 		/**

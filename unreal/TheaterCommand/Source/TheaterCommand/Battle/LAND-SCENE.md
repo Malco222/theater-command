@@ -94,6 +94,23 @@ camera comes back to its shot.
   his frame mirrors (left-handed to the field's right-handed), and the field-to-Unreal swap mirrors back.
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
+- **Tank commanders up in their hatches (release 2).** Each American Sherman and German Panzer IV and Tiger has her
+  commander drawn: the soldiers thread's `soldier_USA_tanker` and `soldier_GER_panzer` (Content/Models/Soldiers), a
+  man of the crowd with no track of his own (`Crowd::AddRider`), seated each frame on her `commander` socket, moved by
+  his clip's place for her model (`root_offset`: forward, right and up of the socket; the turret's facing, the hull's
+  up). He rises out of the hatch as the lid swings open (from 40% open) and sinks as it shuts; down inside he is not
+  drawn. Up there he looks about with his glasses; from some seconds before her roof gun's bursts to some after he
+  is at the gun, and fires each burst (`MakeRiders` reads each burst's gun from the replay's own `TankMg`). Killed
+  with her while he was up (the rules' hatch open at her end), he slumps over the rim or drops inside, by her own draw;
+  thrown with her turret when she blows up; a round that struck him up there (the rules' `cm`) drops him inside and
+  she fights on buttoned up. His rifle is put away (its bones drawn to a point). No shade on the ground, no place in the
+  camera's movers (she stands for him). `-TheaterLandNoCommanders` leaves them out.
+- **Roof guns as the models draw them.** A German tank's MG 34 on the cupola's rail (`roof_mg_cradle`) is drawn only
+  while her commander mans it; the Sherman's .50 stays on its post. A tank whose model draws no roof gun this month or
+  for her nation (an early Tiger; a British Sherman, `swaps.roof_mg.by_nation`, now read) never fires one: the replay
+  asks the scene (`World::RoofGun`) and gives her coaxial instead.
+- **A/B switches for the production lead.** `-TheaterLandNoMassWide` turns off the camera's whole-army wide (the
+  dearest shot until the far men are instanced).
 - **Smoke at the lens.** The effects kit lays each puff flat to the lens. The land camera stands among the bursts, so a
   shell's smoke whose middle was level with the camera a few metres to one side was laid across the whole picture as
   one dark disc. The land scene now calls `SetLensFade(1, 5, 0.3)` on the effects: smoke and dust thin out as their near

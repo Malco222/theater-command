@@ -1001,6 +1001,12 @@ namespace LandKit
 		}
 	}
 
+	bool Model::RoofGun() const
+	{
+		const int I = PartIndex("roof_mg");
+		return I >= 0 && Parts[static_cast<size_t>(I)].bShown;
+	}
+
 	int Model::PartIndex(const std::string& PartName) const
 	{
 		for (size_t I = 0; I < Parts.size(); ++I)
@@ -1391,6 +1397,12 @@ namespace LandKit
 				continue;
 			}
 			std::string Pick = ChoiceIn(Row, Group);
+			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
+			// Sherman without the American's .50 on her roof)
+			if (Pick.empty() && S["by_nation"].IsObject())
+			{
+				Pick = S["by_nation"][D.Nation].Str("");
+			}
 			if (Pick.empty() || !S["choices"][Pick].IsObject())
 			{
 				Pick = S["default"].Str("");

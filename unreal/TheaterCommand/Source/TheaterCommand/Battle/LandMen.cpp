@@ -821,6 +821,17 @@ namespace LandMen
 				Cl.Events.push_back(E);
 			}
 			std::sort(Cl.Events.begin(), Cl.Events.end(), [](const ClipEvent& A, const ClipEvent& B) { return A.T < B.T; });
+			// (a tank clip's places: the vehicle and socket his root goes to, and its offset; the tank commanders' files)
+			const J& Ps = C["places"];
+			for (size_t K = 0; K < Ps.Size(); ++K)
+			{
+				const J& P = Ps.At(K);
+				Clip::Seat St;
+				St.Piece = P["piece"].Text();
+				St.Socket = P["socket"].Text();
+				St.Offset = V3(P["root_offset"]);
+				if (!St.Piece.empty() && !St.Socket.empty()) Cl.Seats.push_back(std::move(St));
+			}
 			Clips.push_back(std::move(Cl));
 		}
 		for (Clip& Cl : Clips)
@@ -971,6 +982,15 @@ namespace LandMen
 			if (Bones[I].Name == N) return static_cast<int>(I);
 		}
 		return -1;
+	}
+
+	const Clip::Seat* Clip::SeatOn(const std::string& Piece) const
+	{
+		for (const Seat& St : Seats)
+		{
+			if (St.Piece == Piece) return &St;
+		}
+		return nullptr;
 	}
 
 	int Soldier::SocketIndex(const std::string& N) const
@@ -1526,6 +1546,10 @@ namespace LandMen
 			// Looks.
 			bool bLook[LodCount] = { false, false, false };
 			Look Looks[LodCount];
+			// A rider (a tank's commander in his hatch, Crowd::AddRider): no track; posed each frame by what the scene
+			// says (SetRide).
+			bool bRider = false;
+			Crowd::Ride RideNow;
 		};
 
 		std::map<std::string, std::shared_ptr<const Soldier>> Soldiers;
@@ -2721,11 +2745,54 @@ namespace LandMen
 			return M.EyeD < 50.f ? 2 : M.EyeD < 120.f ? 3 : 4;
 		}
 
+		/** A rider one frame: shown or not as the scene says; posed by his clip at its time, his root on his seat. */
+		static void StepRider(Man& M, double Now)
+		{
+			const Crowd::Ride& R = M.RideNow;
+			const int NC = M.S ? static_cast<int>(M.S->Clips.size()) : 0;
+			M.bVisible = R.bShown && R.Clip >= 0 && R.Clip < NC;
+			M.Fade = 1.f;
+			if (!M.bVisible) return;
+			const Soldier& S = *M.S;
+			const Clip& C = S.Clips[static_cast<size_t>(R.Clip)];
+			Sample(C, R.Time, M.Now);
+			if (R.W < 1.f && R.FromClip >= 0 && R.FromClip < NC)
+			{
+				// (the clip he leaves, blended out: a rider never falls, so the fall's pose is free to hold it)
+				Sample(S.Clips[static_cast<size_t>(R.FromClip)], R.FromTime, M.FallFrom);
+				Blend(M.FallFrom, M.Now, std::max(0.f, R.W), M.Now);
+			}
+			BoneFrames(S, M.Now, M.Model);
+			M.World = R.Seat;
+			// (his gun put away under his feet while a tank clip plays: its bones drawn to a point, so not drawn at all)
+			const bool bStowed = C.Weapon == "none";
+			const size_t NB = S.Bones.size();
+			for (size_t B = 0; B < NB; ++B)
+			{
+				M.Frames[B] = Compose(M.World, M.Model[B]);
+				if (bStowed && S.OnWeapon(static_cast<int>(B)))
+				{
+					for (float& E : M.Frames[B].R) E = 0.f;
+				}
+			}
+			M.X = R.Seat.T[0];
+			M.Y = R.Seat.T[1];
+			// (his heading: his forward, the seat's first column, as (sin f, cos f))
+			M.F = std::atan2(R.Seat.R[0], R.Seat.R[3]);
+			M.Last = Now;
+			++M.Stamp;
+		}
+
 		/** One man one frame. bPose false (a thrifty frame, far from the eye): all he does, his place, his turns of
 		 * pose, his shots and his clips' events, but not his bones (they keep the last frame's; his Stamp stays). A man
 		 * who starts to fall is posed. */
 		void Step(Man& M, double Now, double Dt, std::vector<Event>& Out, bool bQuiet, bool bPose = true)
 		{
+			if (M.bRider)
+			{
+				StepRider(M, Now);
+				return;
+			}
 			if (M.State == Man::Rest || !M.bVisible) return;
 			const Soldier& S = *M.S;
 			const TrackData& Tr = Tracks[static_cast<size_t>(M.Track)];
@@ -3892,7 +3959,7 @@ namespace LandMen
 		I.bBankOn = true;
 		for (Impl::Man& M : I.Men)
 		{
-			if (M.S) I.AttachBank(M);
+			if (M.S && !M.bRider) I.AttachBank(M);
 		}
 		return true;
 	}
@@ -4048,9 +4115,60 @@ namespace LandMen
 		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
 		OutX = Mn.X;
 		OutY = Mn.Y;
-		OutZ = Inner->GroundAt ? Inner->GroundAt(Mn.X, Mn.Y).Height : 0.0;
+		OutZ = Mn.bRider ? static_cast<double>(Mn.World.T[2]) : Inner->GroundAt ? Inner->GroundAt(Mn.X, Mn.Y).Height : 0.0;
 		OutFacing = Mn.F;
 		return true;
+	}
+
+	int Crowd::AddRider(const std::string& FileArmy, const std::string& Army, uint64_t Seed)
+	{
+		Impl& I = *Inner;
+		const auto Sol = I.Soldiers.find(FileArmy);
+		if (!I.bBuilt || Sol == I.Soldiers.end() || !Sol->second) return -1;
+		static const ArmyColours Plain;
+		const auto Colours = I.Armies.find(Army);
+		// (made in place: a man is some 9 KB)
+		Impl::Man& Mn = I.Men.emplace_back();
+		Mn.bRider = true;
+		Mn.Track = -1;
+		Mn.S = Sol->second.get();
+		Mn.Colours = Colours != I.Armies.end() ? &Colours->second : &Plain;
+		Mn.Info.Block = -1;
+		Mn.Info.K = -1;
+		Mn.Info.Role = "commander";
+		Mn.Info.Army = Army;
+		Mn.Info.FileArmy = FileArmy;
+		const Soldier& S = *Mn.S;
+		Mn.Info.Face = S.Faces.empty() ? 0 : static_cast<int>(Mix(Seed ^ 0xFACEull) % 8ull) % static_cast<int>(S.Faces.size());
+		// (his own head: the tank helmet and goggles, the side cap and headphones; no steel helmet's finish over them)
+		Mn.Info.Finish = -1;
+		Mn.PhaseSeed = static_cast<float>(Unit01(Seed ^ 0x57E9ull));
+		Mn.bVisible = false;
+		RestPose(Mn.Now);
+		for (int L = 0; L < LodCount; ++L)
+		{
+			Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, true, L, Mn.Info.Face);
+			Mn.Var[L] = &I.VariantOf(Mn.S, true, L);
+		}
+		return static_cast<int>(I.Men.size()) - 1;
+	}
+
+	void Crowd::SetRide(int Man, const Ride& R)
+	{
+		if (Man < 0 || Man >= Count()) return;
+		Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		if (Mn.bRider) Mn.RideNow = R;
+	}
+
+	bool Crowd::IsRider(int Man) const
+	{
+		return Man >= 0 && Man < Count() && Inner->Men[static_cast<size_t>(Man)].bRider;
+	}
+
+	const Soldier* Crowd::SoldierFile(const std::string& FileArmy) const
+	{
+		const auto Found = Inner->Soldiers.find(FileArmy);
+		return Found == Inner->Soldiers.end() ? nullptr : Found->second.get();
 	}
 
 	Playing Crowd::PlayingOf(int Man) const
