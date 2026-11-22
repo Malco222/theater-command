@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import {
-  BARGAINS, bargainCost, bargainLanes, bargainOutputLoss, bargainRules, bargainSales, bargainsMonth, bargainsView, baseRight, carvedShare, trades,
+  BARGAINS, bargainCost, bargainLanes, bargainOutputLoss, bargainRules, bargainSales, bargainsMonth, bargainsView, baseField, baseRight, carvedShare, trades,
   biddersOf, feedClaims, heldOf, lapseFeedClaims, patienceOf, placeBid, recordBuyer, replacedDeal, rowById, rowsOf, sells, startBargains, whyNoBargain,
 } from '../src/campaign/bargains';
 import { fieldClass } from '../src/campaign/air';
@@ -472,7 +472,6 @@ describe('goodwill: a sale makes a country lean, never join (the design director
   });
 });
 
-
 describe('a seller that joins its buyer\'s side (the design director, 08:20 UTC)', () => {
   it('keeps its term running: the goods go, the buyer pays, the map shows it', () => {
     const g = world(1);
@@ -525,6 +524,48 @@ describe('a seller that joins its buyer\'s side (the design director, 08:20 UTC)
     bargainsMonth(g);
     expect(h.buyer).toBe('UK');
     expect(carvedShare(g, carved.lane)).toBeCloseTo(carved.share, 9);
+  });
+
+  it('never for a bargain that replaces a deal: Romania\'s oil goes back to release 1\'s deal, which reads who holds Ploiesti', () => {
+    const g = world(1);
+    const row = rowById(g, 'rom-oil')!, h = heldOf(g, 'rom-oil')!;
+    expect(row.replaces).toBe('ploiesti');
+    expect(h.buyer).toBe('GER');
+    g.nations.ROM.align = 'axis';
+    expect(trades(g, row)).toBe(false);
+    expect(replacedDeal(g, 'ploiesti')).toBe(false);
+    bargainsMonth(g);
+    expect(h.buyer).toBeNull();
+  });
+
+  it('a base right that runs on counts its field only while the seller holds the place', () => {
+    const g = world(1);
+    const row = rowById(g, 'bra-airfields')!, at = g.byName[row.gives.base!];
+    g.bargains!.rows['bra-airfields'] = { buyer: 'UK', price: 1, since: g.turn, until: g.turn + 11, way: 'land', seas: [], lost: 0, share: 1 };
+    g.nations.BRA.align = 'allies';
+    expect(trades(g, row)).toBe(true);
+    expect(fieldClass(g, at.id)).toBeGreaterThanOrEqual(row.gives.field!);
+    const was = at.ctrl;
+    at.ctrl = 'GER';
+    expect(baseField(g, at.id)).toBe(0);
+    at.ctrl = was;
+    expect(baseField(g, at.id)).toBe(row.gives.field);
+  });
+
+  it('a term that ran on and ends because its buyer has fallen says so', () => {
+    const g = world(1);
+    const h = heldOf(g, 'irl-food')!;
+    g.nations.IRL.align = 'allies';
+    bargainsMonth(g);
+    expect(h.buyer).toBe('UK');
+    g.human = 'IRL';
+    g.nations.UK.alive = false;
+    g.turn++;
+    const at = g.headlines.length;
+    bargainsMonth(g);
+    expect(h.buyer).toBeNull();
+    expect(g.headlines.slice(at).some((x) => /can no longer take/.test(x.text))).toBe(true);
+    expect(g.headlines.slice(at).some((x) => /no longer sells/.test(x.text))).toBe(false);
   });
 
   it('neither draws a seller that has chosen its side nor costs it the patience of its buyer\'s enemies', () => {
