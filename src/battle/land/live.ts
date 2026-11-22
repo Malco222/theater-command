@@ -615,6 +615,14 @@ export class LiveBattle {
     return this.sim.smokeWhy(u, x0, y0, x1, y1);
   }
 
+  /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */
+  patrolWhy(id: number): string | null {
+    const u = this.sim.unit(id);
+    if (!u) return 'Nothing to order.';
+    if (!this.me || u.side !== this.me) return 'Only your own troops take your orders.';
+    return this.sim.patrolWhy(u);
+  }
+
   /** Why a block may not stand there in the setup step, or null where it may. */
   canPlace(id: number, x: number, y: number): string | null {
     const u = this.sim.units.find((v) => v.id === id);

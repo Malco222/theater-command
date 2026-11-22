@@ -122,6 +122,9 @@ function need(): LiveBattle {
     const p = c as { x?: number; y?: number; x0?: number; y0?: number; x1?: number; y1?: number };
     if (!ok && o.do === 'land:cut' && o.units?.length) return { ok, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? '' };
     if (!ok && o.do === 'land:smoke' && o.units?.length) return { ok, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? '' };
+    // (and a night patrol refused)
+    const n = c as { unit?: number };
+    if (!ok && o.do === 'land:patrol') return { ok, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? '' };
     return { ok };
   },
 
