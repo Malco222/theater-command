@@ -1614,8 +1614,19 @@ namespace EdgeSeals
 			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
 			const FBox Tab = TabOf(Shown, PxPerUnit);
 			const double Em = CountEmAt(PxPerUnit);
-			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * Em * 0.5, HalfW = (FigureInk + FigureAdvance * (Shown - 1)) * Em * 0.5;
+			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * Em * 0.5, HalfW = ((FigureInk + FigureAdvance * (Shown - 1)) * Em - (Shown - 1) * FigureTrack(PxPerUnit)) * 0.5;
 			return FBox{ MidX - HalfW, Middle - HalfH, MidX + HalfW, Middle + HalfH };
+		}
+
+		double FigureTrack(double PxPerUnit)
+		{
+			return PxPerUnit > 0.0 ? std::min(1.0 / PxPerUnit, 0.75 * (FigureAdvance - FigureInk) * CountEmAt(PxPerUnit)) : 0.0;
+		}
+
+		double FigureAt(int Index, int Figures, double PxPerUnit)
+		{
+			const int Shown = std::max(Figures, 1);
+			return MidX + (Index - (Shown - 1) * 0.5) * (FigureAdvance * CountEmAt(PxPerUnit) - FigureTrack(PxPerUnit));
 		}
 
 		double FigurePx(double PxPerUnit)

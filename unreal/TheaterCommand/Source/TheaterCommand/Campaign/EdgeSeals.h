@@ -764,11 +764,26 @@ namespace EdgeSeals
 		double TabEdge(double PxPerUnit);
 		/**
 		 * The tab for a count of Figures figures (1 to CountMostFigures) on a screen of PxPerUnit, centred under the
-		 * disc: the figures' ink, TabPaper of paper and TabEdge of edge either side, as wide as the seal's box at the most.
+		 * disc: the figures' ink as the face sets them, TabPaper of paper and TabEdge of edge either side, as wide as the
+		 * seal's box at the most. The figures stand FigureTrack closer than the face sets them, so the paper at each side
+		 * of two figures is half a pixel more than TabPaper.
 		 */
 		FBox TabOf(int Figures, double PxPerUnit);
-		/** Where the figures' ink lies on it: centred in the tab, as wide as Figures figures, FigureH tall. */
+		/**
+		 * Where the figures' ink lies on it: centred in the tab, as wide as Figures figures set FigureTrack closer than the
+		 * face sets them, FigureH tall at the em they are drawn at.
+		 */
 		FBox FiguresOf(int Figures, double PxPerUnit);
+		/**
+		 * How much closer than the face's advance two neighbouring figures stand (the art director, 64(g)(4), ruling 4):
+		 * 1 px, in units, so that two figures leave half a pixel more paper at each side of a tab no wider than before,
+		 * and never touch its edges, as "21" did. Never more than three quarters of the room between two of the widest
+		 * figures' ink, so they never touch each other (which binds only under a window 562 high). The figures are
+		 * never drawn smaller to save width.
+		 */
+		double FigureTrack(double PxPerUnit);
+		/** Where the middle of figure Index (from 0, of Figures) stands across the seal's box, in units: one advance less FigureTrack from the next, the figures centred on the tab. */
+		double FigureAt(int Index, int Figures, double PxPerUnit);
 		/** How tall the figures' ink is drawn on a screen of PxPerUnit pixels to a unit (grown by FigureGrow). */
 		double FigurePx(double PxPerUnit);
 		/** The lowest window, in pixels high, from which CountPt's own figures stand FigureFloorPx tall or more (a unit is the window's height over 972): under it they are grown. */

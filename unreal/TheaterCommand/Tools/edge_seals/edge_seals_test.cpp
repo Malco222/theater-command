@@ -2056,6 +2056,41 @@ static void TestFold()
 		CHECK(Holds9 >= 750.0 && Holds9 <= 756.0);
 		std::printf("(ruling 3: the count %.2f px at 1024 by 768 (0010: %.2f), %.2f at 1600 by 1000 (as it was); grown %.1f%% under 806 high at 1024 by 768, the tab %.1f%% wider for one figure and %.1f%% for two; 9 px from %.0f high, the tab's height under it (%.2f px at 720 high))\n",
 			Look::FigurePx(At768), AtCountPt(At768), Look::FigurePx(At1000), (Look::FigureGrow(At768) - 1.0) * 100.0, (Wider1 - 1.0) * 100.0, (Wider2 - 1.0) * 100.0, Holds9, Look::FigurePx(720.0 / 972.0));
+		// Ruling 4 of 64(g)(4): a two-figure tab stands as wide as it was; its two figures are set 1 px closer than the face
+		// sets them, so each side of the tab has half a pixel more paper and the figures never touch its edges ("21" did,
+		// TabPaper of a unit being 0.8 px at 1024 by 768); never by drawing them smaller (FigurePx as ruling 3 has it).
+		bool bTracked = true, bApart = true, bOnPaper = true;
+		double Least = 1e9, LeastPaper = 1e9;
+		for (int High = 400; High <= 2400; ++High)
+		{
+			const double P = High / 972.0, Em = Look::CountEmAt(P), Track = Look::FigureTrack(P);
+			const FBox Tab = Look::TabOf(2, P), Ink = Look::FiguresOf(2, P);
+			const double Step = Look::FigureAt(1, 2, P) - Look::FigureAt(0, 2, P), Paper = (Ink.MinX - (Tab.MinX + Look::TabEdge(P))) * P;
+			// (1 px closer, from a window 562 high up; never so close that two of the widest figures' ink meets)
+			bTracked = bTracked && (High < 562 || std::fabs(Track * P - 1.0) < 1e-9) && Track <= 0.75 * (Look::FigureAdvance - Look::FigureInk) * Em + 1e-12;
+			bTracked = bTracked && std::fabs(Step - (Look::FigureAdvance * Em - Track)) < 1e-9 && std::fabs((Look::FigureAt(0, 2, P) + Look::FigureAt(1, 2, P)) * 0.5 - Look::MidX) < 1e-9;
+			// (the ink as FigureAt sets it, centred; the paper each side half the tracking more than TabPaper)
+			bOnPaper = bOnPaper && std::fabs(Ink.MinX - (Look::FigureAt(0, 2, P) - Look::FigureInk * Em * 0.5)) < 1e-9 && std::fabs(Ink.MaxX - (Look::FigureAt(1, 2, P) + Look::FigureInk * Em * 0.5)) < 1e-9;
+			bOnPaper = bOnPaper && std::fabs(Paper - (Look::TabPaper * P + Track * P * 0.5)) < 1e-9 && (High < 562 || Paper >= Look::TabPaper * P + 0.5 - 1e-9);
+			const double Gap = ((Look::FigureAdvance - Look::FigureInk) * Em - Track) * P;
+			bApart = bApart && Gap > 0.0;
+			if (High >= 600)
+			{
+				Least = std::min(Least, Gap);
+				LeastPaper = std::min(LeastPaper, Paper);
+			}
+		}
+		CHECK(bTracked);
+		CHECK(bOnPaper);
+		CHECK(bApart);
+		// (one figure has no neighbour: as it was; three are tracked the same; none at all on a screen of no size)
+		CHECK(std::fabs(Look::FigureAt(0, 1, 1.0) - Look::MidX) < 1e-9 && std::fabs(Look::FigureAt(2, 3, 1.0) - Look::FigureAt(1, 3, 1.0) - (Look::FigureAdvance * Look::CountEm() - 1.0)) < 1e-9 && Look::FigureTrack(0.0) == 0.0);
+		// (1024 by 768 and 1441 by 878: the paper beside "21", which was a unit, 0.79 and 0.90 px)
+		const double Paper768 = (Look::FiguresOf(2, At768).MinX - (Look::TabOf(2, At768).MinX + Look::TabEdge(At768))) * At768;
+		const double Paper878 = (Look::FiguresOf(2, 878.0 / 972.0).MinX - (Look::TabOf(2, 878.0 / 972.0).MinX + Look::TabEdge(878.0 / 972.0))) * (878.0 / 972.0);
+		CHECK(std::fabs(Paper768 - (Look::TabPaper * At768 + 0.5)) < 1e-9 && std::fabs(Paper878 - (Look::TabPaper * 878.0 / 972.0 + 0.5)) < 1e-9 && Look::FigurePx(At768) >= 9.0 - 1e-9);
+		std::printf("(ruling 4: two figures 1 px closer, the tab as wide as it was; paper beside them %.2f px at 1024 by 768 (0010: %.2f), %.2f at 1441 by 878 (0010: %.2f), at least %.2f px from 600 high; the widest figures' ink at least %.2f px apart from 600 high)\n",
+			Paper768, Look::TabPaper * At768, Paper878, Look::TabPaper * 878.0 / 972.0, LeastPaper, Least);
 		// How much of the ribbon's tails shows round the tab (not under the disc, nor under the tab), for the art
 		// director: one figure leaves most of each tail; two or more cover most of what the disc leaves.
 		double Shows[3] = { 0.0, 0.0, 0.0 };
