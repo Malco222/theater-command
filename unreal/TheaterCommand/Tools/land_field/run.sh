@@ -4,7 +4,8 @@
 # (default: every recording in Content/Data/LandBattles).
 # LAND_FIELD_PICTURES=<folder> also paints each ground: a soldier's eye toward the village, 30 m up over the bocage,
 # and the whole field from above (PNG, 1600 pixels wide; ImageMagick's convert writes them). LAND_FIELD_EYE="x y
-# bearing" puts the soldier's eye at a place of one's own (metres from the field's south-west corner, degrees from north).
+# angle" puts the soldier's eye at a place of one's own (metres from the field's south-west corner; the angle in degrees
+# from east, counter-clockwise: 90 looks north. The test prints it back as degrees from north).
 # LAND_FIELD_GAPS=1 lists every run of hedgerow 8 m or longer that a man's eye sees over (what is near it, and why).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
