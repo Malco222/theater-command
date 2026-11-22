@@ -1258,6 +1258,7 @@ namespace TheaterFx
 		std::vector<TrailCut> TrailCuts;
 		double TrailCutFade = 3.0;
 		void CutTrails();
+		double CutOf(uint32_t Run_, double Born, double Was) const;
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
 		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)

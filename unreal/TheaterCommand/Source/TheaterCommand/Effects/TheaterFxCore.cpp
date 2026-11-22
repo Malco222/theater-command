@@ -39,7 +39,11 @@ namespace TheaterFx
 				}
 				return Made;
 			}();
-			return Table[static_cast<size_t>(std::lround(Clamp01(V) * 65535.0))];
+			if (!(V > 0.0))
+			{
+				return 0; // (and a colour that is no number is black, as Byte gives: the pre-check on 8b88db15)
+			}
+			return V >= 1.0 ? 255 : Table[static_cast<size_t>(std::lround(V * 65535.0))];
 		}
 
 		uint64_t Mix64(uint64_t V)
@@ -12532,45 +12536,36 @@ namespace TheaterFx
 		return Into.Strength > 1e-4;
 	}
 
+	double Battle::CutOf(uint32_t Run_, double Born, double Was) const
+	{
+		// (Bit::CutAt: of the cuts TrailMove asked since the last Draw, sorted by CutTrails, the soonest that reaches a
+		// piece of that run laid no later than it)
+		auto Low = std::lower_bound(TrailCuts.begin(), TrailCuts.end(), Run_, [](const TrailCut& C, uint32_t R) { return C.Run < R; });
+		for (; Low != TrailCuts.end() && Low->Run == Run_; ++Low)
+		{
+			if (Born <= Low->LaidBy)
+			{
+				Was = std::min(Was, Low->End);
+			}
+		}
+		return Was;
+	}
+
 	void Battle::CutTrails()
 	{
-		// (Bit::CutAt: the cuts TrailMove asked since the last Draw, in one pass over the pieces, and over what the
-		// trails keep to reach back to)
+		// (the cuts TrailMove asked since the last Draw: sorted here and laid on what the trails keep to reach back to;
+		// the pieces take theirs in Prune's own pass over them, the pre-check's cost note on 5833912a: a pass of its own
+		// over every piece cost about 2 ms a frame with 300 trails changing speed)
 		if (TrailCuts.empty())
 		{
 			return;
 		}
 		std::sort(TrailCuts.begin(), TrailCuts.end(), [](const TrailCut& L, const TrailCut& R) { return L.Run != R.Run ? L.Run < R.Run : L.LaidBy < R.LaidBy; });
-		auto CutOf = [this](uint32_t Run_, double Born, double Was)
-		{
-			auto Low = std::lower_bound(TrailCuts.begin(), TrailCuts.end(), Run_, [](const TrailCut& C, uint32_t R) { return C.Run < R; });
-			for (; Low != TrailCuts.end() && Low->Run == Run_; ++Low)
-			{
-				if (Born <= Low->LaidBy)
-				{
-					Was = std::min(Was, Low->End);
-				}
-			}
-			return Was;
-		};
-		for (Bit& B : Bits)
-		{
-			if (B.TrailRun == 0)
-			{
-				continue;
-			}
-			B.CutAt = CutOf(B.TrailRun, B.Born, B.CutAt);
-			if (B.Back.bOn)
-			{
-				B.Back.CutAt = CutOf(B.TrailRun, B.Back.Born, B.Back.CutAt);
-			}
-		}
 		for (Trailing& Tr : Trails)
 		{
 			Tr.Kept.CutAt = CutOf(Tr.Run, Tr.Kept.Born, Tr.Kept.CutAt);
 			Tr.Prev.CutAt = CutOf(Tr.Run, Tr.Prev.Born, Tr.Prev.CutAt);
 		}
-		TrailCuts.clear();
 	}
 
 	void Battle::Prune(double Now)
@@ -12580,8 +12575,18 @@ namespace TheaterFx
 		// most of the battle's pieces each frame. Now each gone piece takes the last one in its place, a piece moved
 		// for each gone. Nothing holds a place in Bits from one Draw to the next, and the order they are drawn in is
 		// their depth and then Bit::Serial, so the picture does not depend on where they lie)
+		const bool bCuts = !TrailCuts.empty(); // (CutTrails sorted them)
 		for (size_t I = 0; I < Bits.size();)
 		{
+			if (bCuts && Bits[I].TrailRun != 0)
+			{
+				Bit& B = Bits[I];
+				B.CutAt = CutOf(B.TrailRun, B.Born, B.CutAt);
+				if (B.Back.bOn)
+				{
+					B.Back.CutAt = CutOf(B.TrailRun, B.Back.Born, B.Back.CutAt);
+				}
+			}
 			if (!Gone(Bits[I]))
 			{
 				++I;
@@ -12594,6 +12599,7 @@ namespace TheaterFx
 			Bits.pop_back();
 		}
 		Numbered = Bits.size();
+		TrailCuts.clear();
 		BallLamps.erase(std::remove_if(BallLamps.begin(), BallLamps.end(), [Now](const BallLamp& L) { return !(Now <= L.Born + L.Life + 1.0); }), BallLamps.end());
 		// (a flash goes once its lamp has had its two frames, or after half a second unseen)
 		Flashes.erase(std::remove_if(Flashes.begin(), Flashes.end(), [this, Now](const Flash& F) { return (F.FirstFrame >= 0 && FrameNo - F.FirstFrame >= 2) || Now > F.Born + 0.5; }), Flashes.end());

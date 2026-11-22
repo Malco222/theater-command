@@ -1511,6 +1511,15 @@ About 70 m is the spacing of the pieces themselves. Longest: the slow stretch la
 until the first fast piece goes, then fades (it was 5,200 m before, with the hole). At a steady speed nothing is
 cut: the 96 old frames and the 24 heavy frames are byte for byte as before.
 
+The cut is now laid in the pass the kit already makes over every piece each frame (Prune), not in a pass of its
+own: CutTrails only sorts the frame's cuts and mends the trails' own records, and each piece of a cut trail looks
+its cut up as Prune walks past it (Battle::CutOf, a search of the sorted cuts). The pre-check's cost note on head
+5833912: the own pass walked all the pieces again in any frame with a cut, and with many trails speeding up and
+slowing, that was most frames. With 300 trails swinging between slow and fast (60,000 pieces), five runs each,
+taken in turn: the pictures' fingerprints are the same to the last byte, before and after (and with 300 at a
+steady speed), and the draw's middle run is 12.1 ms against 14.0 before, lower in four of the five pairs. The
+96 old frames and the 24 heavy frames are again byte for byte as before.
+
 ## Far bursts: fewer, bigger pieces (FX3, after head 5833912)
 
 The production lead's FX3 (/mnt/project-files/production/battle-scale-1122/plan.md): on the ground scene's whole-army
@@ -1533,14 +1542,18 @@ the front showed only dots. Recipe row `burst.far` (no row: as before, byte for 
 - **Readout.** `-TheaterFxRoomLog` adds the land hits so far, how many kept fewer pieces, and the mean share kept.
 
 Measured with a probe on the kit (the wide shot: 1,080 x 670, a 1.5 km front 500 m deep, the eye 810 m back and
-470 m up; shells of 60 mm to 250 lb mixed; how many 0.3-8 s old bursts change at least 6 pixels of the picture):
+470 m up; shells of 60 mm to 250 lb mixed; the kit's crater marks off, as the ground scene has them; how many 0.3-8 s
+old bursts change at least 6 pixels of the picture at 15, 30, 45 and 59 s; with `alpha_pow`, below):
 
 | Wide shot | Room asked (mean) | Pieces held | Draw (median of 3) | Bursts that show |
 |---|---|---|---|---|
-| 6 shells a second, before | 18,436 | 19,530 | 6.7 ms | 25 of 74 |
-| 6 shells a second, now | 3,161 | 3,767 | 3.6 ms | 70 of 74 |
-| 7.6 shells a second (Prokhorovka's busiest), before | 22,939 | 24,284 | 7.5 ms | 10 of 37 |
-| 7.6 shells a second, now | 3,703 | 4,433 | 4.5 ms | 107 of 116 |
+| 6 shells a second, before | 18,436 | 19,530 | 7.9 ms | 35 of 101 |
+| 6 shells a second, now | 3,161 | 3,767 | 3.5 ms | 96 of 101 |
+| 7.6 shells a second (Prokhorovka's busiest), before | 22,941 | 24,286 | 10.9 ms | 37 of 153 |
+| 7.6 shells a second, now | 3,704 | 4,434 | 4.7 ms | 147 of 153 |
+
+(First measured with the kit's marks on, which the ground scene never lays: 25 of 74 before and 70 of 74 after. The
+marks were never what emptied the far half; the bursts' own pieces asked for six times the room.)
 
 From a hill 350 m off at 6 a second (1,600 px wide): Draw 5.7 ms before and 4.0 now, asked at the end 15,811 and 4,643. A
 single burst at the preview's own distance draws as before, byte for byte; the 96 old frames and 24 heavy frames

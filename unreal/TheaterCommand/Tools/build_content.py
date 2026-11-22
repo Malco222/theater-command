@@ -241,34 +241,6 @@ def build_highlight():
     finish(m)
 
 
-def build_battle_puffs():
-    """The battle effects kit's smoke, dust, fire and flashes (Effects/BattleEffects): M_Highlight's light that is not
-    shaded, see-through by the mesh's own alpha, "Brightness" times its colour (picture.lit_gain, so the hottest flames
-    burn past white) and "Tint", but the colour is stored as a picture file stores it (sRGB) and made linear here, as
-    M_MapSurface's. In plain bytes, a charcoal smoke written four times darker was one to four steps a channel, so its
-    red, green and blue rounded apart: specks of red and blue in dark smoke at dusk, and a big far piece of dark earth
-    read olive over grass (the art director, 22 November). The kit writes its bytes to suit when it finds this
-    material (TheaterFx::Battle::SetSrgbBytes); without it, M_Highlight and plain bytes, as before."""
-    m = new_material("M_BattlePuffs")
-    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
-    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
-    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
-    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
-    connect(colour, "", to_linear, "Base")
-    glow = node(m, unreal.MaterialExpressionMultiply, -450, 0)
-    connect(to_linear, "", glow, "A")
-    connect(scalar(m, "Brightness", 1.0, -700, 200), "", glow, "B")
-    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
-    connect(glow, "", tinted, "A")
-    connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, -160), "", tinted, "B")
-    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    faded = node(m, unreal.MaterialExpressionMultiply, -450, 200)
-    connect(colour, "A", faded, "A")
-    connect(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
-    to_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
-    finish(m)
-
-
 def build_wake():
     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
@@ -1446,6 +1418,34 @@ for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid
         build()
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
+def build_battle_puffs():
+    """The battle effects kit's smoke, dust, fire and flashes (Effects/BattleEffects): M_Highlight's light that is not
+    shaded, see-through by the mesh's own alpha, "Brightness" times its colour (picture.lit_gain, so the hottest flames
+    burn past white) and "Tint", but the colour is stored as a picture file stores it (sRGB) and made linear here, as
+    M_MapSurface's. In plain bytes, a charcoal smoke written four times darker was one to four steps a channel, so its
+    red, green and blue rounded apart: specks of red and blue in dark smoke at dusk, and a big far piece of dark earth
+    read olive over grass (the art director, 22 November). The kit writes its bytes to suit when it finds this
+    material (TheaterFx::Battle::SetSrgbBytes); without it, M_Highlight and plain bytes, as before."""
+    m = new_material("M_BattlePuffs")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    glow = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(to_linear, "", glow, "A")
+    connect(scalar(m, "Brightness", 1.0, -700, 200), "", glow, "B")
+    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(glow, "", tinted, "A")
+    connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, -160), "", tinted, "B")
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    faded = node(m, unreal.MaterialExpressionMultiply, -450, 200)
+    connect(colour, "A", faded, "A")
+    connect(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
+    to_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
 # (M_BattlePuffs, the battle effects kit's: built when missing, or with TC_REBUILD=M_BattlePuffs or all. Without it the
 # kit draws with M_Highlight in plain bytes, as before)
 if REBUILD == "all" or "M_BattlePuffs" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_BattlePuffs"):
