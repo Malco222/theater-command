@@ -532,6 +532,17 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * is coming.
    */
   coming?: { id: number; side: Side; corps: number; kind: string; at: number; edge: 'south' | 'north' | 'west' | 'east'; x: number; y: number; arrive?: 'early' | 'midway' | 'late' }[];
+  /**
+   * Land, the rider ahead (release 2; Brian, 22 November 12:48Z; LandBattle.rider on): the despatch rider each corps
+   * coming up from next door on the player's own side sends ahead, never the enemy's. He rides from his corps' edge at
+   * the first step to the middle of his side, at the field's fastest pace, and stands there until his corps comes up;
+   * one whose corps would beat him comes on with it and is never listed. Each: where he is (x, y, face; speed his pace
+   * while he rides, 0 standing), the battle seconds he gets there ('there') and his corps comes up ('comes'), the edge
+   * it comes by, the second it reaches its line ('line') only while its staff fights it, the corps (name, kind,
+   * divisions, men and strength as its blocks will walk on) and the words a click on him shows ('says'). Looks and words
+   * only: nothing in the fight reads him. Left out where none rides.
+   */
+  riders?: { corps: number; side: Side; x: number; y: number; face: number; speed: number; there: number; comes: number; edge: 'south' | 'north' | 'west' | 'east'; line?: number; name: string; kind: string; divs: string[]; men: number; str: number; says: string }[];
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

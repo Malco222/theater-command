@@ -61,6 +61,23 @@
 //                                   from the campaign, pulled down by its share of fresh drafts; a practice battle's are fresh.
 //                                   With it, fresh: the share of its men who joined this month (0 to 1). wear is the whole
 //                                   block's; drawing that share clean (0.1), the rest read (wear - 0.1 x fresh) / (1 - fresh)
+//                                   Hold until relieved (release 2; Brian, 22 November 12:48Z; the design director 13:43Z):
+//                                   { relief: true }: TC.battleOrder({ do: 'land:wait', units }) tells his blocks on foot to
+//                                   dig in and wait for a corps coming up from next door (TC.battleWaitWhy first, for the
+//                                   card's why). A waiting block of his carries waits: { due, late?, free? } (due: the battle
+//                                   second help can reach it; late: help never came; free: no longer waiting, by his own order
+//                                   or giving ground, but still let down). While waits has no free, draw it dug in (the works
+//                                   line) where it stands, late or not; with late, its men let down (they break sooner) until
+//                                   relieved or broken. Events, his
+//                                   side only: land:waits (it digs in), land:relieved (help reached it), land:late (no help
+//                                   came). The order card warns (the design director, 133(a)): they dig in, and if help has
+//                                   not come by its time they break sooner (words: the UI director's). Never sent for the
+//                                   enemy's blocks. Off: no block ever carries waits
+//                                   The rider ahead (release 2): { rider: true }: view.riders, his own side's despatch riders
+//                                   (below). Looks and words only
+//   TC.battleWaitWhy(id)         -> { why, due }: hold until relieved, before he gives the wait order to one of his blocks:
+//                                   why, null where it may wait, else the reason in words for its card (the design director,
+//                                   129(d)); due, the battle second help could reach it there, or null. Moves nothing
 //   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
 //                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
 //                                   red ghost with the words beside it). Moves nothing (release 2)
@@ -119,6 +136,17 @@
 // for any id new to 'units', never from the event, as one 'land:joined' event a corps tells of its coming and names only
 // the corps' first block. An enemy corps the player has not identified is never in 'coming': its blocks come into
 // 'units' as hidden blocks (known false, below), and no event is sent about them (b464(2)).
+// The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+// strength and arrival time"), only with { rider: true }: riders, the player's own side's despatch riders, never the
+// enemy's, each { corps, side, x, y, face, speed, there, comes, edge, line?, name, kind, divs, men, str, says }. He is
+// first listed after the first step, at his corps' edge, and rides straight in at 'speed' (m/s; the field's fastest
+// pace) to the middle of his army, reaching it at battle second 'there'; he stands there (speed 0) until his corps comes
+// up ('comes', when its blocks join 'units'), then he leaves the list: let him go where he stands, never ride him back.
+// A corps that would beat him there brings him with it, and he is never listed. Draw one despatch rider on a motorcycle
+// in his army's kit, with no dust and no trail; where x, y is water, he is crossing out of sight: draw nothing there. He
+// is one man, outside the drill (TC.battleMen) and outside the battle's N. A click on him shows 'says' (the corps, its
+// divisions, men and strength, when and where it comes up, and the time it reaches his line where his staff fights it,
+// also as 'line'). Nothing in the fight reads him.
 // Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
 // cover, loop, order }, and cal where a land block has one ("Explosions" below). Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
@@ -525,7 +553,7 @@ function airLoop(a: AirUnit): string {
 /** A block whose corps has no time in the line on record (a practice battle's, or fresh): new uniforms. */
 const WEAR_FRESH = STORIES.wear.fresh;
 
-export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
+export function unitOut(u: UnitBase, t = 0, me?: Side): Record<string, unknown> {
   const land = u as LandUnit;
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
@@ -553,6 +581,8 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     ...(land.unloc !== undefined && t < land.unloc ? { vague: 1 } : {}),
     ...(land.search ? { search: [Math.round(land.search[0]), Math.round(land.search[1])] } : {}),
     ...(land.orderAt !== undefined ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
+    // Hold until relieved (release 2): waiting for help, the player's own blocks only (never giving the enemy's away).
+    ...(land.waits && me !== undefined && u.side === me ? { waits: { due: land.waits.due, ...(land.waits.late ? { late: true } : {}), ...(land.waits.free ? { free: true } : {}) } } : {}),
     // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line; and the
     // share of its men new this month, in new kit (0 none), which 'wear' counts in.
     ...(land.short ? { wear: land.wear ?? WEAR_FRESH, fresh: land.fresh ?? 0 } : {}),
@@ -601,7 +631,7 @@ function fogged(by: Record<Side, BreakCause>, me: Side): Record<Side, Partial<Br
 function viewOut(s: Session, v: BattleView): Record<string, unknown> {
   const land = s.sim instanceof LandBattle ? s.sim : null;
   return {
-    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u, v.t))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
+    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u, v.t, s.me))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
     ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
     // What drives each bar (b496(2)): plain numbers, to three places already. Under fog, of the enemy only its bar
     // until the battle is over, as its blocks are hidden (hiddenOut).
@@ -620,6 +650,8 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     ...((v as BattleView & { ships?: unknown }).ships ? { ships: (v as BattleView & { ships?: unknown }).ships } : {}),
     // Corps coming up from next door (release 2, land): still on the march, the player's own and those the player knows.
     ...(v.coming ? { coming: v.coming } : {}),
+    // The rider ahead (release 2, land): the player's own side's despatch riders, only with { rider: true }.
+    ...(v.riders ? { riders: v.riders } : {}),
   };
 }
 
@@ -660,7 +692,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -710,6 +742,9 @@ export function battleCalls(h: BattleHooks) {
       if (opts?.armour) sim.measured = true;
       // Army names (release 2): the regiment blocks named as their armies named a third of a division (the historian).
       if (opts?.names) sim.namesOn();
+      // Hold until relieved and the rider ahead (release 2): each by its own switch.
+      if (opts?.relief) sim.relief = true;
+      if (opts?.rider) sim.rider = true;
       const f = sim.field;
       return {
         field: {
@@ -720,6 +755,15 @@ export function battleCalls(h: BattleHooks) {
         going, view: viewOut(ses, sim.view(ses.me)),
         ...(sim.setup ? { setup: { room: sim.setupRoom() } } : {}),
       };
+    },
+    battleWaitWhy(id: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      if (!land || !u) return { why: 'Nothing to order.', due: null };
+      if (u.side !== ses.me) return { why: 'Only your own troops take your orders.', due: null };
+      const why = land.waitWhy(u);
+      return { why, due: why === null ? land.dueAt(u)?.due ?? null : null };
     },
     battleCanPlace(id: number, x: number, y: number) {
       const ses = need();

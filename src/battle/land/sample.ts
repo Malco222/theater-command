@@ -247,3 +247,29 @@ export function withTeams(t: FieldTicket<LandPlace>, share = 0.04): FieldTicket<
   };
   return { ...t, att: add(t.att, 9000), def: add(t.def, 9100) };
 }
+
+/** A joining corps as a test or the 2D page writes it: its share of the battle, the way it comes from, and the card's part for it. */
+export interface JoinerOpts { joined: number; toward?: number; kind?: 'inf' | 'mot' | 'arm' | 'art'; divs?: number; part?: number; nat?: string; cross?: boolean }
+const joinWord = (s: number): 'early' | 'midway' | 'late' => (s > 2 / 3 ? 'early' : s > 1 / 3 ? 'midway' : 'late');
+
+/**
+ * The ticket with corps joining from next door (neighbours join the fight, release 2), as the campaign's card would carry
+ * them until part (a) puts them on its tickets: the tests', and the 2D page's ?join. The card prices each at its part
+ * of its side's power, and the side's own corps are cut to make room, so the card's A and D stay as they were.
+ */
+export function withJoiners(t: FieldTicket<LandPlace>, js: Partial<Record<Side, JoinerOpts[]>>): FieldTicket<LandPlace> {
+  const add = (s: SideTicket, side: Side): SideTicket => {
+    const l = js[side] ?? [];
+    if (!l.length) return s;
+    const room = 1 - l.reduce((a, j) => a + (j.part ?? 0.1), 0);
+    return {
+      ...s, forces: s.forces.map((f) => ({ ...f, share: f.share * room })),
+      joiners: l.map((j, i) => ({
+        corps: (side === 'att' ? 2001 : 2101) + i, name: `Joining Corps ${i + 1}`, nat: j.nat ?? s.forces[0].nat, kind: j.kind ?? 'inf',
+        divs: j.divs ?? 2, men: (j.divs ?? 2) * 13500, str: 0.9, org: 0.85, xp: 0.3, mor: 0.65, share: j.part ?? 0.1, first: 41 + 3 * i,
+        joined: j.joined, from: 900 + i, arrive: joinWord(j.joined), ...(j.toward !== undefined ? { toward: j.toward } : {}), ...(j.cross === false ? { cross: false } : {}),
+      })),
+    };
+  };
+  return { ...t, att: add(t.att, 'att'), def: add(t.def, 'def') };
+}

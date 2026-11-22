@@ -16,13 +16,13 @@ import { RATIO, levelOf } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceBill, practiceTicket, withTeams, wornWords, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceBill, practiceTicket, withJoiners, withTeams, wornWords, type PracticeGround } from '../land/sample';
 import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
 import { cardKnows, pursuitLine } from '../land/ticket';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type CardSaid, type Offer } from './campaign';
-import { drawFrame, signSvg, toField, toScreen, type Scene } from './draw';
+import { drawFrame, riderAt, riderNews, signSvg, toField, toScreen, type Scene } from './draw';
 import { paintField, type Painted } from './paint';
 
 const KEY_GUARD = 0.5;
@@ -90,7 +90,7 @@ interface State {
   /** The first card the tray shows, when the army has more than fit (ruling 226(9)). */
   trayFrom: number;
   /** A tag on the field for a moment: RUNNING ×2, THE ARMIES MEET, and when it goes (real seconds). */
-  /** A passing word on the field; 'air' marks air support's own, shown even while paused (the player is aiming then). */
+  /** A passing word on the field; 'air' marks one shown even while paused (the player is giving an order then): air support's, and why a block may not wait for help. */
   tag: { text: string; until: number; air?: boolean } | null;
   /** The clock was running at the last frame, and the armies had met: for the tags when either changes. */
   wasRunning: boolean;
@@ -202,7 +202,10 @@ function showChooser(): void {
     const p = PRACTICE_GROUNDS[Number(el.dataset.ground)];
     const t0 = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceTitle(p) });
     // ?teams (release 2): each side brings a machine-gun team and a mortar team.
-    const t = flagged('teams') ? withTeams(t0) : t0;
+    const t1 = flagged('teams') ? withTeams(t0) : t0;
+    // ?join (release 2, the test kitchen until the campaign's cards carry them): a corps comes up from next door for
+    // each side, his midway on his east flank, theirs late from behind their line.
+    const t = flagged('join') ? withJoiners(t1, { att: [{ joined: 0.5, toward: Math.PI / 2 }], def: [{ joined: 0.3 }] }) : t1;
     startBattle(t, null, p);
   }));
   app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
@@ -255,7 +258,9 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.b = b; S.offer = o; S.ground = o ? null : ground; S.screen = 'battle';
   S.field = paintField(b.field, t.place.terrain, t.seed);
   S.scene.me = t.att.human ? 'att' : 'def';
-  S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null; S.scene.air = null;
+  S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null; S.scene.air = null; S.scene.rider = null;
+  // ?relief (release 2): his blocks on foot may dig in to wait for a corps coming up (U); ?rider: its rider rides ahead.
+  b.relief = flagged('relief'); b.rider = flagged('rider');
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false; S.rushByHand = false;
@@ -298,7 +303,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="ftop"><div class="dispatch tc-paper" id="dispatch"></div><div class="fwarn tc-paper" id="fwarn" hidden>Your army is near breaking: pull back the worn, or hand it to the staff.</div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
-    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
+    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(b.relief && b.hasJoiners(S.scene.me) ? ['<span class="tc-key">U</span> dig in, wait for help'] : []), ...(b.rider && b.hasJoiners(S.scene.me) ? ['Click a rider: his news'] : []), ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
     <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.allBlocks().filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = byId('field') as HTMLCanvasElement;
@@ -364,6 +369,8 @@ function doingWord(u: LandUnit): string {
   if (o?.kind === 'attack') return 'attacking';
   if (o?.kind === 'withdraw') return 'falling back off the field';
   if (o?.kind === 'move') return u.act === 'run' ? 'at the double' : 'marching';
+  // Waiting for help (hold until relieved, release 2); words for the UI director.
+  if (u.waits && !u.waits.free) return u.waits.late ? 'no help has come' : `dug in, help due ${mmss(u.waits.due)}`;
   if (S.holding.has(u.id)) return 'holding';
   return u.act === 'fight' || u.engaged !== undefined ? 'in action' : 'standing';
 }
@@ -691,7 +698,11 @@ function wireBattle(): void {
     }
     if (!down) {
       // Armed, the run is what he is pointing with: no block's hover over it.
-      if (sc.air) { sc.hover = null; return; }
+      if (sc.air) { sc.hover = null; sc.rider = null; return; }
+      // A rider (release 2): his mark is the one under the pointer, over any block.
+      const r = b.rider ? riderAt(b, sc, px, py, 7) : null;
+      sc.rider = r;
+      if (r !== null) { sc.hover = null; canvas.style.cursor = 'pointer'; return; }
       const u = unitAt(b.units, fx, fy, Math.max(85, 16 / sc.cam.z), sc.me);
       sc.hover = u ? u.id : null;
       canvas.style.cursor = u && u.side !== sc.me && sc.sel.size ? 'crosshair' : u && u.side === sc.me ? 'pointer' : 'default';
@@ -699,6 +710,8 @@ function wireBattle(): void {
     }
     if (Math.hypot(px - down.x, py - down.y) > 6) down.moved = true;
     if (!down.moved) return;
+    // A drag is no click: no rider's news under it.
+    sc.rider = null;
     if (carry !== null) { const u = b.unit(carry)!; sc.place = { id: carry, x: fx, y: fy, ok: b.placeWhy(u, fx, fy) === null }; down.px = px; down.py = py; return; }
     if (down.touch || down.button === 1) {
       // Drag the map.
@@ -749,7 +762,7 @@ function wireBattle(): void {
       return;
     }
     if (d.touch) {
-      if (!d.moved) pickAt(px, py, false);
+      if (!d.moved && !tellRider(px, py, 16)) pickAt(px, py, false);
       return;
     }
     if (d.button === 0) {
@@ -759,7 +772,7 @@ function wireBattle(): void {
         if (!e.shiftKey) sc.sel.clear();
         for (const u of got) sc.sel.add(u.id);
         sc.box = null;
-      } else pickAt(px, py, e.shiftKey);
+      } else if (e.shiftKey || !tellRider(px, py, 7)) pickAt(px, py, e.shiftKey);
     } else if (d.button === 2) {
       if (sc.line) {
         const ids = chosen();
@@ -773,7 +786,7 @@ function wireBattle(): void {
   canvas.addEventListener('pointercancel', () => { down = null; carry = null; sc.place = null; sc.box = null; sc.line = null; });
   // The hover goes the moment the pointer leaves the field, as hovers do everywhere else in the game: one left standing
   // over the tray reads as a fact about a division he is no longer pointing at (the UI director).
-  canvas.addEventListener('pointerleave', () => { if (!down) { sc.hover = null; canvas.style.cursor = 'default'; } });
+  canvas.addEventListener('pointerleave', () => { if (!down) { sc.hover = null; sc.rider = null; canvas.style.cursor = 'default'; } });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const [px, py] = pos(e);
@@ -875,7 +888,7 @@ function toggleAir(): void {
   if (sc.air) { sc.air = null; canvas.style.cursor = 'default'; return; }
   const why = b.airWhyNot(sc.me);
   if (why) { S.tag = { text: why, until: now() + 2, air: true }; return; }
-  sc.air = { run: null, ok: true };
+  sc.air = { run: null, ok: true }; sc.rider = null;
   canvas.style.cursor = 'crosshair';
 }
 function callAir(run: [number, number, number, number]): void {
@@ -886,6 +899,17 @@ function callAir(run: [number, number, number, number]): void {
     sc.ping = { x: (run[0] + run[2]) / 2, y: (run[1] + run[3]) / 2, at: now(), kind: 'attack' };
     sc.air = null; canvas.style.cursor = 'default';
   } else S.tag = { text: b.airWhyNot(sc.me, b.airRun(run)) ?? 'Not now', until: now() + 2, air: true };
+}
+
+/** The rider ahead (release 2): a click on a rider puts his news in the dispatch line; what is in hand stays. */
+function tellRider(px: number, py: number, reach: number): boolean {
+  const b = S.b!;
+  if (!b.rider) return false;
+  const r = riderAt(b, S.scene, px, py, reach), text = r === null ? null : riderNews(b, r);
+  if (!text) return false;
+  S.dispatch = { t: b.t, what: 'land:rider', text }; S.dispatchAge = 0;
+  updateTop(true);
+  return true;
 }
 
 function pickAt(px: number, py: number, add: boolean): void {
@@ -928,6 +952,15 @@ window.addEventListener('keydown', (e) => {
     case '3': if (!S.asking && !b.over) { beginIfPlacing(); setSpeed(4); } break;
     case 'f': toggleAir(); break;
     case 'h': give({ do: 'hold', units: chosen() }); break;
+    // Hold until relieved (release 2): where none may wait, the first one picked says why (the design director, 129(d)).
+    case 'u': if (b.relief) {
+      // Each block that may not wait keeps its order, and the first one's reason shows (one block a joining corps).
+      const ids = chosen();
+      if (!ids.length) break;
+      const why = b.waitWhyAll(ids.map((i) => b.unit(i)).filter((u): u is LandUnit => !!u)).find((w) => w !== null);
+      give({ do: 'land:wait', units: ids });
+      if (why) S.tag = { text: why, until: now() + 2, air: true };
+    } break;
     case 'r': give({ do: 'withdraw', units: chosen() }); break;
     // Esc changes nothing: it closes the question if one is open, else drops the blocks in hand.
     case 'Escape': if (S.asking) answered(); else if (sc.air) { sc.air = null; canvas.style.cursor = 'default'; } else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
@@ -997,7 +1030,7 @@ function frame(): void {
   const v = b.view(S.scene.me);
   // What stands over the field's top, for a hover label to keep clear of (the UI director, b464): read only while
   // there is a hover to place.
-  S.scene.avoid = S.scene.hover === null ? [] : overField();
+  S.scene.avoid = S.scene.hover === null && S.scene.rider == null ? [] : overField();
   // The opening line says the clock is stopped: once it runs, the first fact replaces it.
   // With no orders given it stands, and says so (the UI director, after the retest).
   if (b.t > 0 && S.dispatch?.t === 0 && S.dispatch.what === 'contact' && !S.dispatch.unit) {

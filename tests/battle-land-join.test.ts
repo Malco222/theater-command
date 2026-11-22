@@ -5,10 +5,10 @@
 // facing the province it comes from would bring it there then, and walks on from that edge as a b407 reserve sent to
 // where its side's line is struck hardest. A ticket with no joiners is today's battle to the last figure.
 import { describe, expect, it } from 'vitest';
-import type { FieldEvent, FieldTicket, Side, SideTicket } from '../src/battle/core';
+import type { FieldEvent, FieldTicket, Side } from '../src/battle/core';
 import { DT } from '../src/battle/core';
 import { calFor } from '../src/battle/land/shells';
-import { joinEdge, LAND, LandBattle, PRACTICE_GROUNDS, practiceTicket, sampleTicket, streamFor, wetUnder, withTeams, type LandPlace, type LandUnit } from '../src/battle/land';
+import { joinEdge, LAND, LandBattle, PRACTICE_GROUNDS, practiceTicket, sampleTicket, streamFor, wetUnder, withJoiners, withTeams, type LandPlace, type LandUnit } from '../src/battle/land';
 import { hashString } from '../src/core/rng';
 
 type T = FieldTicket<LandPlace>;
@@ -75,11 +75,12 @@ const BEFORE: Record<string, [number, number, string]> = {
 };
 
 const PRINT = !!(globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.PRINT;
-const fought = (name: string): [number, number, string] => {
+const fought = (name: string, also?: (b: LandBattle) => void): [number, number, string] => {
   const [, make, setup, during] = CASES.find((c) => c[0] === name)!;
   const b = new LandBattle(make());
   b.ai.att = b.ai.def = true;
   setup?.(b);
+  also?.(b);
   const s = signed(b, during);
   return [Math.round(b.over!.R * 1000) / 1000, b.over!.seconds, digest(s)];
 };
@@ -94,31 +95,18 @@ describe('(1) switched off: the same battle to the last figure', () => {
   }
 });
 
+// Hold until relieved and the rider ahead (release 2; the design director, 13:43Z: "each switch on alone with no order
+// and no joiner identical"): with nobody coming up from next door, either switched on is the same battle.
+describe('(1b) hold until relieved, and the rider ahead, each switched on alone with no joiner: the same battle', () => {
+  for (const [name] of CASES) {
+    it(`${name}: relief on`, () => { expect(fought(name, (b) => { b.relief = true; })).toEqual(BEFORE[name]); }, 300_000);
+    it(`${name}: rider on`, () => { expect(fought(name, (b) => { b.rider = true; })).toEqual(BEFORE[name]); }, 300_000);
+  }
+});
+
 // ---- (2) switched on ------------------------------------------------------------------------------------------------
 
-/** A joining corps as a test writes it: its share of the battle, the way it comes from, and the card's part for it. */
-interface J { joined: number; toward?: number; kind?: 'inf' | 'mot' | 'arm' | 'art'; divs?: number; part?: number; nat?: string; cross?: boolean }
 const word = (s: number): 'early' | 'midway' | 'late' => (s > 2 / 3 ? 'early' : s > 1 / 3 ? 'midway' : 'late');
-/**
- * The ticket with corps joining from next door. The card prices each at its part of its side's power, and the side's
- * own corps are cut to make room, so the card's A and D stay as they were (part (a) shares them out the same way).
- */
-function withJoiners(t: T, js: Partial<Record<Side, J[]>>): T {
-  const add = (s: SideTicket, side: Side): SideTicket => {
-    const l = js[side] ?? [];
-    if (!l.length) return s;
-    const room = 1 - l.reduce((a, j) => a + (j.part ?? 0.1), 0);
-    return {
-      ...s, forces: s.forces.map((f) => ({ ...f, share: f.share * room })),
-      joiners: l.map((j, i) => ({
-        corps: (side === 'att' ? 2001 : 2101) + i, name: `Joining Corps ${i + 1}`, nat: j.nat ?? s.forces[0].nat, kind: j.kind ?? 'inf',
-        divs: j.divs ?? 2, men: (j.divs ?? 2) * 13500, str: 0.9, org: 0.85, xp: 0.3, mor: 0.65, share: j.part ?? 0.1, first: 41 + 3 * i,
-        joined: j.joined, from: 900 + i, arrive: word(j.joined), ...(j.toward !== undefined ? { toward: j.toward } : {}), ...(j.cross === false ? { cross: false } : {}),
-      })),
-    };
-  };
-  return { ...t, att: add(t.att, 'att'), def: add(t.def, 'def') };
-}
 const fight = (t: T): LandBattle => { const b = new LandBattle(t); b.ai.att = b.ai.def = true; return b; };
 const ofCorps = (b: LandBattle, corps: number): LandUnit[] => b.allBlocks().filter((u) => u.corps === corps);
 /** Runs to the step in which the block first stands on the field: the clock before that step (null if it never came). */

@@ -43,6 +43,8 @@ export interface Scene {
    * group. A hover label keeps 8 clear of them (the UI director, b464).
    */
   avoid?: [number, number, number, number][];
+  /** The rider ahead (release 2): the corps whose rider is under the pointer, for his label. */
+  rider?: number | null;
 }
 
 export const toScreen = (s: Scene, x: number, y: number): [number, number] => [s.W / 2 + (x - s.cam.x) * s.cam.z, s.H / 2 - (y - s.cam.y) * s.cam.z];
@@ -262,6 +264,10 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   // while it makes it.
   airMarks(x, b, s, colour);
 
+  // The rider ahead (release 2): each despatch rider of a corps coming up on his side, a small disc in his army's colour
+  // with a tick the way he rides; nothing at the edge before him, no trail. A click on him puts his news in the dispatch.
+  riderMarks(x, b, s, colour);
+
   // A line being drawn: the ghosts of where the blocks will stand.
   if (s.line) {
     const [a, c] = toScreen(s, s.line.x0, s.line.y0), [d, e] = toScreen(s, s.line.x1, s.line.y1);
@@ -323,6 +329,58 @@ function airMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: 
     x.beginPath(); x.moveTo(0, -k * 1.4); x.lineTo(k, k); x.lineTo(0, k * 0.4); x.lineTo(-k, k); x.closePath();
     x.fillStyle = colour[f.side]; x.fill(); x.strokeStyle = INK; x.lineWidth = 1.2; x.stroke();
     x.restore();
+  }
+}
+
+/** Where each rider listed in the view stands on the screen: riders on one spot stand a mark apart, by corps. */
+function riderSpots(b: LandBattle, s: Scene): { r: NonNullable<ReturnType<LandBattle['riderView']>['riders']>[number]; px: number; py: number }[] {
+  const rs = b.riderView().riders ?? [];
+  const seen = new Map<string, number>();
+  return rs.map((r) => {
+    const [px, py] = toScreen(s, r.x, r.y), key = `${Math.round(px / 14)}:${Math.round(py / 14)}`, n = seen.get(key) ?? 0;
+    seen.set(key, n + 1);
+    return { r, px: px + n * 14, py };
+  });
+}
+
+/** The rider under a point on the screen, within 'reach' pixels: his corps, or null. */
+export function riderAt(b: LandBattle, s: Scene, px: number, py: number, reach: number): number | null {
+  let best: number | null = null, d = reach;
+  for (const m of riderSpots(b, s)) { const e = Math.hypot(m.px - px, m.py - py); if (e <= d) { d = e; best = m.r.corps; } }
+  return best;
+}
+
+/** The rider's words for a click, for his corps. */
+export function riderNews(b: LandBattle, corps: number): string | null {
+  return b.riderView().riders?.find((r) => r.corps === corps)?.says ?? null;
+}
+
+function riderMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: Record<Side, string>): void {
+  const k = 7;
+  for (const { r, px, py } of riderSpots(b, s)) {
+    const hot = s.rider === r.corps;
+    x.save(); x.translate(px, py);
+    if (hot) { x.beginPath(); x.arc(0, 0, k * 1.2, 0, Math.PI * 2); x.fillStyle = 'rgba(224,184,114,.45)'; x.fill(); }
+    x.beginPath(); x.arc(0, 0, k * 0.7, 0, Math.PI * 2);
+    x.fillStyle = colour[r.side]; x.fill(); x.strokeStyle = INK; x.lineWidth = 1.2; x.stroke();
+    x.beginPath(); x.arc(0, 0, k * 0.4, 0, Math.PI * 2); x.strokeStyle = PAPER; x.lineWidth = 1; x.stroke();
+    if (r.speed > 0) { x.rotate(r.face); x.beginPath(); x.moveTo(0, -k * 0.75); x.lineTo(0, -k * 1.5); x.strokeStyle = INK; x.lineWidth = 1.5; x.stroke(); }
+    x.restore();
+    if (hot) {
+      const label = `Rider from ${r.name} · Click for his news`;
+      x.save();
+      x.font = '700 12px "Courier Prime", ui-monospace, monospace';
+      const tw = x.measureText(label).width, lx = Math.min(s.W - tw - 14, Math.max(6, px - tw / 2 - 6));
+      let ly = Math.min(s.H - 24, py + k + 8);
+      // Never under the dispatch, the tag or the zoom group (as a block's hover label, b464): below them, 8 clear.
+      const under = (y: number): [number, number, number, number] | undefined => s.avoid?.find((q) => lx < q[2] + 8 && lx + tw + 12 > q[0] - 8 && y < q[3] + 8 && y + 20 > q[1] - 8);
+      for (let q = under(ly), n = 0; q && n < 4; q = under(ly), n++) ly = q[3] + 8;
+      ly = Math.min(s.H - 24, ly);
+      x.fillStyle = '#e2d7bc'; x.strokeStyle = '#cdbf9c'; x.lineWidth = 1;
+      x.fillRect(lx, ly, tw + 12, 20); x.strokeRect(lx, ly, tw + 12, 20);
+      x.fillStyle = '#2a2118'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText(label, lx + 6, ly + 10.5);
+      x.restore();
+    }
   }
 }
 
@@ -468,7 +526,9 @@ function hoverLabel(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandB
   const mine = u.side === s.me;
   x.save();
   {
-    const st = u.fellBack ? ' · Falling back' : u.state === 'steady' ? '' : ` · ${u.state[0].toUpperCase()}${u.state.slice(1)}`;
+    // Waiting for help (hold until relieved, release 2): his own blocks' only.
+    const wait = mine && u.waits && u.state !== 'routing' ? (u.waits.late ? ' · No help has come' : u.waits.free ? '' : ' · Waiting for help') : '';
+    const st = (u.fellBack ? ' · Falling back' : u.state === 'steady' ? '' : ` · ${u.state[0].toUpperCase()}${u.state.slice(1)}`) + wait;
     const attack = s.sel.size ? ' · Right-click to attack' : '';
     // One he has not met (b464(2), the UI director's words): his country and "troops", never a division, a strength or a state.
     const label = mine ? `${u.name}${st}` : !b.known(u) ? `${b.ticket[u.side].adj} troops, not identified${attack}` : `${b.ticket[u.side].adj} ${u.name} · Strength ${Math.round(u.str * 100)}${st}${attack}`;
@@ -521,6 +581,8 @@ function inWorks(u: LandUnit, b: LandBattle): boolean {
   if (u.state === 'routing') return false;
   const atHome = Math.hypot(u.x - u.home[0], u.y - u.home[1]);
   if (u.dug && atHome < LAND.dug.keep) return true;
+  // Dug in to wait for help (hold until relieved, release 2): the player's own only, never giving away the enemy's.
+  if (u.waits && !u.waits.free && b.ticket[u.side].human && Math.hypot(u.x - u.waits.at[0], u.y - u.waits.at[1]) <= LAND.dug.keep) return true;
   // The defenders' front row behind fortress works stands in them while it holds its place.
   if (u.side === 'def' && b.ticket.place.fort > 0 && atHome < 40) {
     const front = Math.min(...b.units.filter((x) => x.side === 'def' && x.kind !== 'art' && x.joined === undefined).map((x) => x.home[1]));
