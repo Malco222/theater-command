@@ -1510,6 +1510,19 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	return CardsH;
 }
 
+bool SLandBattleScreen::PressDrawn(const FString& Action)
+{
+	for (const FButton& Shown : Buttons)
+	{
+		if (Shown.Action == Action)
+		{
+			Do(Action);
+			return true;
+		}
+	}
+	return false;
+}
+
 void SLandBattleScreen::Do(const FString& Action)
 {
 	ALandBattle* Scene = Battle.Get();

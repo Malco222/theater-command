@@ -65,6 +65,11 @@ public:
 	/** Whether the player has it on (his settings; on when never set). The command line's off is not counted here. */
 	static bool RuleOn(int32 Index);
 	static void SetRule(int32 Index, bool bOn);
+	/** A click on the rule's switch on the Battle rules card: it turns over, is saved, and the log says what it now reads.
+	 * "-TheaterRulesFlip=phones,bearers,patrol" clicks the named switches once when the card is first drawn, for the
+	 * Mac's click-through, which cannot point at the opening screen. */
+	static void FlipRule(int32 Index);
+	static void FlipFromCommandLine();
 
 	FLandLive();
 	virtual ~FLandLive() override;

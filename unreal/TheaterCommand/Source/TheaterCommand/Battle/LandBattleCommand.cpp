@@ -11,6 +11,8 @@
 // the battle itself only shows it a moment later): a mark where he clicked, the route, the tag's RADIO chip.
 
 #include "Battle/LandBattle.h"
+#include "Battle/LandBattleScreen.h"
+#include "Battle/LandLive.h"
 
 #include "Battle/LandBattleState.h"
 #include "Battle/LandFell.h"
@@ -1509,6 +1511,31 @@ void ALandBattle::TickScript()
 		{
 			return;
 		}
+		// (the night patrol's button, pressed as his click would press it, while he places his army: the Mac's
+		// click-through of the Battle rules card's night patrol, 22 November)
+		if (!FLandLive::RuleNow(TEXT("patrol")) || !FLandLive::RuleNow(TEXT("hide")))
+		{
+			Say(Screen.IsValid() && Screen->PressDrawn(TEXT("general:patrol"))
+				? FString(TEXT("SEND A PATROL TONIGHT was on his screen with night patrol switched off: A FAULT"))
+				: FString(TEXT("night patrol (or forest ambushes) switched off on the Battle rules card: no SEND A PATROL TONIGHT button, as it should be")));
+		}
+		else if (Screen.IsValid() && Screen->PressDrawn(TEXT("general:patrol")))
+		{
+			Say(TEXT("SEND A PATROL TONIGHT pressed (his click on the button)"));
+		}
+		else
+		{
+			Say(Clip.Waiters().empty() ? FString(TEXT("no SEND A PATROL TONIGHT button: no men on foot left in his hand"))
+				: FString(TEXT("SEND A PATROL TONIGHT NOT on his screen though night patrol is on and men on foot are in hand: A FAULT")));
+		}
+		ScriptNext(7);
+		return;
+	case 7:
+		if (Since < 2.0)
+		{
+			return;
+		}
+		ScriptStill(TEXT("03b-patrol"));
 		GeneralDo(TEXT("begin"));
 		Say(TEXT("the battle begun (his BEGIN)"));
 		ScriptNext(6);
