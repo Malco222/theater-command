@@ -409,9 +409,10 @@ namespace SeaShow
 			int Out = 0;
 			for (const Event& E : Between)
 			{
-				if (E.Unit != Pair.first || (E.What != "sea:sunk" && E.What != "sea:burning")) continue;
+				// (and one abandoned, sea:abandon: she leaves the fight with her hull, as one sunk)
+				if (E.Unit != Pair.first || (E.What != "sea:sunk" && E.What != "sea:burning" && E.What != "sea:abandon")) continue;
 				const double Own = Out == 0 ? Was->second.Str * Ships0 - (Was->second.Ships - 1) : 0.5;
-				if (E.What == "sea:sunk") Left += Clamp(Own, 0.0, 1.0);
+				if (E.What != "sea:burning") Left += Clamp(Own, 0.0, 1.0);
 				else Left += E.Hull >= 0.0 ? E.Hull : Clamp(Own, 0.0, 0.5);
 				++Out;
 			}
@@ -771,13 +772,49 @@ namespace SeaShow
 			bSunk ? ++Check.SunkEvents : ++Check.BurningEvents;
 			const Zone* Z = ZoneFor(bSunk ? "sunk" : "burning");
 			Hull* H = ByZone(E.Unit, Z);
+			// (one her crew have left already, sea:abandon: the ship the battle sends down is her, where it names her, where
+			// her piece has no other, or where its smoke is laid nearer her than the one of her line it would name)
+			Hull* Left = nullptr;
+			if (bSunk)
+			{
+				const auto Named = E.Ship > 0 ? LostShips.find({ E.Unit, E.Ship }) : LostShips.end();
+				for (auto& Pair : Hulls)
+				{
+					Hull& A = Pair.second;
+					if (A.Piece != E.Unit || !A.bAbandoned || A.Doing != Fate::Sinking) continue;
+					if (Named != LostShips.end() ? Named->second == A.Key : !Left || A.SinkAt < Left->SinkAt) Left = &A;
+				}
+				if (Left && Named == LostShips.end() && H && Z && Flat(Vec(Z->X, Z->Y, 0.0) - H->P) < Flat(Vec(Z->X, Z->Y, 0.0) - Left->P)) Left = nullptr;
+				if (Left) H = Left;
+			}
 			if (!H)
 			{
 				bSunk ? ++Check.SunkUnmatched : ++Check.BurningUnmatched;
 				if (Z) LightZone(*Z, nullptr);
 				return;
 			}
-			if (bSunk) Sink(*H, E.Text, E.How);
+			if (Left)
+			{
+				// (her going down now: she settles the rest of the way from as far down as she is, as one that settles)
+				const double Was = Clamp((ShownT - H->SinkAt) / std::max(1.0, H->SinkFor), 0.0, 0.9);
+				const double Rest = 200.0 * Roll.U(0.8, 1.25);
+				H->bAbandoned = false;
+				H->SinkFor = Rest / (1.0 - Was);
+				H->SinkAt = ShownT - Was * H->SinkFor;
+				for (Wreck& W : Wrecked)
+					if (W.Ship == H->Key) W.For = std::max(10.0, ShownT + Rest - W.T0);
+				Fx& Down = Emit(FxKind::Sink, H->P, H->How, H->Key);
+				Down.Size = 0.0;
+				Down.Text = E.Text;
+				Down.Side = H->Side;
+				++Check.Sinks;
+				++Check.SinksBy[H->How];
+			}
+			else if (bSunk)
+			{
+				Sink(*H, E.Text, E.How);
+				NoteLost(*H, E.Ship);
+			}
 			else
 			{
 				LeaveLine(*H, E.Text);
@@ -1185,35 +1222,140 @@ namespace SeaShow
 			++Check.Starshells;
 			return;
 		}
+		// The men in the water as the naval rules count them (22 November): a ship's crew ordered off her, the men of a ship
+		// lost in the water and her oil, by her piece and her number in it.
+		if (E.What == "sea:abandon")
+		{
+			++Check.AbandonEvents;
+			// (the ship of her piece nearest where the battle has her: in its line, or out of it burning)
+			Hull* H = nullptr;
+			double BestD = 1e18;
+			for (auto& Pair : Hulls)
+			{
+				Hull& A = Pair.second;
+				if (A.Piece != E.Unit || (A.Doing != Fate::Line && A.Doing != Fate::Limping)) continue;
+				const double D = E.bAt ? Flat(A.P - Vec(E.X, E.Y, 0.0)) : A.Doing == Fate::Line ? 0.0 : 1.0;
+				if (D < BestD) { BestD = D; H = &A; }
+			}
+			if (!H) return;
+			AbandonShip(*H, E.Text);
+			NoteLost(*H, E.Ship);
+			++Check.Abandons;
+			return;
+		}
+		if (E.What == "sea:men")
+		{
+			++Check.MenEvents;
+			Wreck* W = WreckOf(E.Unit, E.Ship);
+			if (!W || E.Men < 0) return;
+			++Check.MenMatched;
+			// Her men in the water as the battle counts them (alive, and the dead afloat), and the share of them the show
+			// keeps, as Abandon reckons it: half the room left by the men of other wrecks, and at least a dozen.
+			const int Dead = std::max(0, E.Dead), Real = E.Men + Dead;
+			int Taken = 0;
+			for (const Man& M : Swimmers) Taken += M.bGoing || &Wrecked[static_cast<size_t>(M.W)] == W ? 0 : 1;
+			for (const Wreck& O : Wrecked) Taken += &O == W ? 0 : O.Men - O.Out;
+			const int Room = std::max(0, F.MenMost - Taken);
+			Check.MenReal += Real - W->Real;
+			Check.MenKept -= W->Men;
+			W->Real = Real;
+			W->DeadShare = Real > 0 ? static_cast<double>(Dead) / Real : 0.0;
+			W->Men = std::max(W->Out, std::min(Real, std::max(std::min(Real, 12), Room / 2)));
+			Check.MenKept += W->Men;
+			return;
+		}
+		if (E.What == "sea:oil")
+		{
+			++Check.OilEvents;
+			Wreck* W = WreckOf(E.Unit, E.Ship);
+			if (!W) return;
+			++Check.OilMatched;
+			// (her slick spreads to the battle's spread across at the most; the share of it alight (by its area) burns until
+			// the battle's hour, or none)
+			if (E.OilR > 0.0) W->OilR = E.OilR;
+			W->LitR = E.OilR > 0.0 && E.LitR > 0.0 ? std::min(E.LitR, E.OilR) : 0.0;
+			W->Burn = W->LitR > 0.0 ? (W->LitR / E.OilR) * (W->LitR / E.OilR) : 0.0;
+			W->BurnUntil = W->Burn > 0.0 ? (E.OilUntil > E.T ? E.OilUntil : F.Limit + 600.0) : -1.0;
+			return;
+		}
 		if (E.What == "sea:rescue")
 		{
 			++Check.RescueEvents;
-			// Where the ship lost went down (the latest of her piece's ships to go), and the ship of the rescuer's piece nearest.
+			// Where the ship lost went down: the wreck the battle names ({piece, ship}, the naval rules), else the latest of her
+			// piece's ships to go (a convoy's night); and the ship of the rescuer's piece nearest.
 			const Hull* Lost = nullptr;
-			for (const auto& Pair : Hulls)
+			Wreck* Of = nullptr;
+			if (E.WreckOf >= 0)
 			{
-				const Hull& L = Pair.second;
-				if (L.Piece != E.On || (L.Doing != Fate::Sinking && L.Doing != Fate::Gone)) continue;
-				if (!Lost || L.SinkAt > Lost->SinkAt) Lost = &L;
+				Of = WreckOf(E.WreckOf, E.WreckShip);
+				Lost = Of ? FindHull(Of->Ship) : nullptr;
 			}
-			const Vec Where = Lost ? Vec(Lost->P.X, Lost->P.Y, 0.0) : E.bAim ? Vec(E.AimX, E.AimY, 0.0) : At;
-			Hull* By = NearestOf(E.Unit, Where.X, Where.Y);
+			else
+			{
+				for (const auto& Pair : Hulls)
+				{
+					const Hull& L = Pair.second;
+					if (L.Piece != E.On || (L.Doing != Fate::Sinking && L.Doing != Fate::Gone)) continue;
+					if (!Lost || L.SinkAt > Lost->SinkAt) Lost = &L;
+				}
+			}
+			const Vec Where = Lost ? Vec(Lost->P.X, Lost->P.Y, 0.0) : Of ? Of->OilEnd : E.bAim ? Vec(E.AimX, E.AimY, 0.0) : At;
+			// (the battle's count of those picked up so far: the share of the men the show keeps that may be drawn aboard)
+			auto Count = [&E](const Wreck& W) { return W.Real > 0 ? static_cast<int>(std::lround(E.Men * static_cast<double>(W.Men) / W.Real)) : 0; };
+			// (a rescue under way from this wreck by this piece: the battle's count as it goes on, and her leaving when done)
+			const Hull* Was = Of && Of->Rescuer >= 0 ? FindHull(Of->Rescuer) : nullptr;
+			if (E.WreckOf >= 0 && Was && Was->Piece == E.Unit)
+			{
+				if (E.Men >= 0) Of->PickCap = std::max(Of->PickCap, Count(*Of));
+				Of->RescueUntil = E.bDone ? std::min(Of->RescueUntil, E.T) : std::max(Of->RescueUntil, E.T + 600.0);
+				++Check.Rescues;
+				return;
+			}
+			// (the naval rules' order: of a line of more than one, the follower nearest her wreck goes in and lies off it, out
+			// of the wake; a ship alone is drawn where the battle has her piece, which lies off it already)
+			Hull* By = nullptr;
+			bool bSend = false;
+			if (E.WreckOf >= 0 && Of)
+			{
+				const auto Line = Lines.find(E.Unit);
+				double BestD = 1e18;
+				if (Line != Lines.end())
+				{
+					for (size_t K = 1; K < Line->second.Line.size(); ++K)
+					{
+						Hull* Mate = FindHull(Line->second.Line[K]);
+						if (!Mate || Mate->bLyingOff || Mate->Doing != Fate::Line) continue;
+						const double D = Flat(Mate->P - Where);
+						if (D < BestD) { BestD = D; By = Mate; }
+					}
+				}
+				bSend = By != nullptr;
+			}
+			if (!By) By = NearestOf(E.Unit, Where.X, Where.Y);
 			if (!By) return;
+			if (bSend)
+			{
+				By->bLyingOff = true;
+				By->LieFor = static_cast<int>(Of - Wrecked.data());
+			}
 			Fx& R = Emit(FxKind::Rescue, Vec(By->P.X, By->P.Y, 0.0), std::string(), By->Key);
 			R.Aim = Where;
-			R.Until = E.T + 600.0;
+			R.Until = E.bDone ? E.T : E.T + 600.0;
 			R.Side = By->Side;
 			++Check.Rescues;
 			// (her men swim to the rescuer, and her rafts and boats are pulled to her, while she lies stopped: RunWrecks)
-			Wreck* Of = nullptr;
-			for (Wreck& W : Wrecked)
+			if (E.WreckOf < 0)
 			{
-				if (Lost ? W.Ship == Lost->Key : Flat(W.OilEnd - Where) < 3000.0 && (!Of || Flat(W.OilEnd - Where) < Flat(Of->OilEnd - Where))) Of = &W;
+				for (Wreck& W : Wrecked)
+				{
+					if (Lost ? W.Ship == Lost->Key : Flat(W.OilEnd - Where) < 3000.0 && (!Of || Flat(W.OilEnd - Where) < Flat(Of->OilEnd - Where))) Of = &W;
+				}
 			}
 			if (Of)
 			{
 				Of->Rescuer = By->Key;
-				Of->RescueUntil = E.T + 600.0;
+				Of->RescueUntil = R.Until;
+				if (E.WreckOf >= 0 && E.Men >= 0) Of->PickCap = Count(*Of);
 			}
 			return;
 		}
@@ -1564,6 +1706,56 @@ namespace SeaShow
 			Hull* H = FindHull(C.Line[K]);
 			if (!H) continue;
 			const double Want0 = static_cast<double>(K) * C.Spacing;
+			if (H->bLyingOff)
+			{
+				// Sent to pick men out of the water (the battle's sea:rescue): out of the wake, she makes for a spot off the
+				// edge of the men and their rafts on her side of them, slowing to lie stopped there; when done, back to her
+				// place astern of the ship ahead of her, and into the line once there. (Her place is the battle's piece's:
+				// she is still of it, and the ships astern keep theirs.)
+				const ClassSize& Own = SizeOf(H->Class);
+				const Wreck* W = H->LieFor >= 0 && H->LieFor < static_cast<int>(Wrecked.size()) ? &Wrecked[static_cast<size_t>(H->LieFor)] : nullptr;
+				const bool bServing = W && W->Rescuer == H->Key && ShownT < W->RescueUntil;
+				const Hull* Ahead1 = K == 1 ? Lead : FindHull(C.Line[K - 1]);
+				Vec Spot;
+				double Hd = H->Hdg, Sp = 0.0;
+				bool bBack = false;
+				if (bServing)
+				{
+					const Vec Mid = W->Spread > 0.0 ? W->Middle : W->OilEnd;
+					const double Off = std::max(Clamp(0.5 * W->Spread, 60.0, 200.0), W->bGone ? 0.0 : 0.5 * W->Long + 0.5 * Own.Beam + 40.0);
+					Spot = Mid + Vec(H->P.X - Mid.X, H->P.Y - Mid.Y, 0.0).Unit(Ahead(H->Hdg + Pi)) * Off;
+					const double D = Flat(Spot - H->P);
+					Sp = Clamp((D - 10.0) / 40.0, 0.0, std::min(10.0, Own.Speed));
+					if (D > 20.0) Hd = Bearing(H->P, Spot);
+				}
+				else if (Ahead1)
+				{
+					Spot = Ahead1->P - Ahead(Ahead1->Hdg) * C.Spacing;
+					const double D = Flat(Spot - H->P);
+					Sp = Clamp(Ahead1->Spd + D / 30.0, 0.0, Own.Speed * 1.05);
+					Hd = D > 30.0 ? Bearing(H->P, Spot) : Ahead1->Hdg;
+					bBack = D < 25.0 && std::fabs(Wrap(H->Hdg - Ahead1->Hdg)) < 10.0 * Deg;
+				}
+				const double Rudder = Own.Turn * 1.25 / 3.0;
+				ClearWay(*H, Own, 0.15, Dt, Hd, Sp);
+				const double Most = MostRateAt(Own, H->Spd);
+				const double Rate = Clamp(Wrap(Hd - H->Hdg) * 0.4, -Most, Most);
+				H->Rate += Clamp(Rate - H->Rate, -Rudder * Dt, Rudder * Dt);
+				H->Hdg = Wrap(H->Hdg + H->Rate * Dt);
+				H->Spd += Clamp(Sp - H->Spd, -AbandonedSlowing * Dt, 0.15 * Dt);
+				H->P += Ahead(H->Hdg) * (H->Spd * Dt);
+				if (bBack)
+				{
+					// (in her place again: on his track there, closed up, her judging of her gap put off as after keeping clear)
+					H->bLyingOff = false;
+					H->LieFor = -1;
+					H->Back = Want0;
+					H->SOn = SLead - Want0;
+					H->OffTrack = 0.0;
+					H->ClearLast = ShownT;
+				}
+				continue;
+			}
 			// (closing up at up to five knots over his speed, easing as she comes to her place: her way never jumps)
 			if (H->Back > Want0) H->Back = std::max(Want0, H->Back - std::min(2.5, 0.08 * (H->Back - Want0) + 0.05) * Dt);
 			else H->Back = Want0;
@@ -2375,7 +2567,7 @@ namespace SeaShow
 			}
 			else if (H.Doing == Fate::Sinking)
 			{
-				H.Spd = std::max(0.0, H.Spd - 0.12 * Dt);
+				H.Spd = std::max(0.0, H.Spd - (H.bAbandoned ? AbandonedSlowing : 0.12) * Dt);
 				const double Most = MostRateAt(Own, H.Spd);
 				const double Rate = Clamp(Wrap(H.Away - H.Hdg) * 0.4, -Most, Most);
 				H.Rate += Clamp(Rate - H.Rate, -Rudder * Dt, Rudder * Dt);
@@ -3158,6 +3350,58 @@ namespace SeaShow
 		Check.MenKept += W.Men;
 	}
 
+	void Show::AbandonShip(Hull& H, const std::string& Words)
+	{
+		(void)Words; // (her words are the battle's dispatch, told as every event's)
+		TakeOut(H);
+		// She sheers out of her line away from the nearest enemy, as one going down, her engines stopped (she loses her way
+		// in a minute or so), settling a little while her men leave her; the battle says when she goes (sea:sunk).
+		const Piece* Near = nullptr;
+		double BestD = 1e18;
+		for (const auto& Pair : Now)
+		{
+			const Piece& P = Pair.second;
+			if (P.Side == H.Side) continue;
+			const double D = Flat(Vec(P.X, P.Y, 0.0) - H.P);
+			if (D < BestD) { BestD = D; Near = &P; }
+		}
+		const double Starboard = Near ? (Vec(Near->X, Near->Y, 0.0) - H.P).Dot(RightOf(H.Hdg)) : (Mix(static_cast<uint64_t>(H.Key)) - 0.5);
+		H.Away = Wrap(H.Hdg + (Starboard > 0.0 ? -1.0 : 1.0) * 40.0 * Deg);
+		H.Doing = Fate::Sinking;
+		H.bAbandoned = true;
+		H.How = "settle";
+		H.SinkAt = ShownT;
+		H.SinkFor = AbandonedFor;
+		H.ScreenUntil = -1.0;
+		Abandon(H);
+		// (her men over the side once she has nearly lost her way, over two minutes; her boats lowered in the first of it)
+		for (Wreck& W : Wrecked)
+		{
+			if (W.Ship != H.Key) continue;
+			W.Start = ShownT + std::min(40.0, 0.8 * H.Spd / AbandonedSlowing);
+			W.End = W.Start + 120.0;
+		}
+	}
+
+	void Show::NoteLost(const Hull& H, int N)
+	{
+		int& Count = LostCount[H.Piece];
+		const int K = N > 0 ? N : Count + 1;
+		Count = std::max(Count, K);
+		LostShips[{ H.Piece, K }] = H.Key;
+	}
+
+	Show::Wreck* Show::WreckOf(int Piece, int Ship)
+	{
+		const auto Many = LostCount.find(Piece);
+		const int K = Ship > 0 ? Ship : Many != LostCount.end() ? Many->second : 0;
+		const auto It = LostShips.find({ Piece, K });
+		if (It == LostShips.end()) return nullptr;
+		for (Wreck& W : Wrecked)
+			if (W.Ship == It->second) return &W;
+		return nullptr;
+	}
+
 	void Show::RunWrecks(double Dt)
 	{
 		if (Wrecked.empty()) return;
@@ -3352,7 +3596,8 @@ namespace SeaShow
 				W.Drift += Blow * (0.03 * Dt);
 				W.TrackLen = Flat(W.OilEnd - W.Oil0);
 				if (W.TrackLen > 1.0) W.TrackHdg = Bearing(W.Oil0, W.OilEnd);
-				const double Rad = W.Beam * 0.5 + 6.0 * std::sqrt(std::max(0.0, Age)) * CompanyOf(W.Class).Oil;
+				const double Grown = W.Beam * 0.5 + 6.0 * std::sqrt(std::max(0.0, Age)) * CompanyOf(W.Class).Oil;
+				const double Rad = W.OilR > 0.0 ? std::min(Grown, std::max(0.5 * W.Beam, 0.5 * W.OilR)) : Grown;
 				const double Turned = Clamp((ShownT - (W.T0 + W.For)) / 300.0, 0.0, 1.0);
 				// (an oval has no fore and aft: its long way along her track turned the nearer way to the wind's)
 				double Along = W.TrackHdg;
@@ -3371,7 +3616,8 @@ namespace SeaShow
 					// (the kit's oil fire where it burns: a fire on the sea stays where it is lit)
 					W.bLit = true;
 					Fx& E = Emit(FxKind::OilFire, S.At, "burning", SlickFireKeys + W.Slick);
-					E.Size = Clamp((W.Beam * 0.5 + 6.0 * std::sqrt(Age + 120.0) * CompanyOf(W.Class).Oil) * std::sqrt(W.Burn), 20.0, 250.0);
+					E.Size = W.LitR > 0.0 ? Clamp(0.5 * W.LitR, 20.0, 250.0)
+						: Clamp((W.Beam * 0.5 + 6.0 * std::sqrt(Age + 120.0) * CompanyOf(W.Class).Oil) * std::sqrt(W.Burn), 20.0, 250.0);
 					E.Until = W.BurnUntil;
 					E.Since = 0.0;
 					E.Side = W.Side;
@@ -3464,7 +3710,7 @@ namespace SeaShow
 				const Hull* By = W.Rescuer >= 0 && ShownT < W.RescueUntil ? FindHull(W.Rescuer) : nullptr;
 				if (By && (By->Doing == Fate::Gone || By->Spd >= 3.0 || Flat(By->P - M.O.At) > 900.0)) By = nullptr;
 				// (the ship he was swimming for no longer standing by: he gives her up, and looks for something to hold on to)
-				if (M.To >= 0 && M.O.Doing == Swim::Swim && (!By || By->Key != M.To))
+				if (M.To >= 0 && (M.O.Doing == Swim::Swim || M.O.Doing == Swim::Tread) && (!By || By->Key != M.To))
 				{
 					M.To = -1;
 					M.Goal = M.O.At;
@@ -3476,6 +3722,10 @@ namespace SeaShow
 					M.To = -1;
 					M.Goal = M.O.At + (M.O.At - S.At).Unit(Ahead(Wrap(DownWind + Pi))) * (Fire - FromOil + 25.0);
 					Into(Swim::Swim);
+				}
+				else if (By && M.To == By->Key && M.O.Doing == Swim::Tread && W.PickCap >= 0 && W.Picked >= W.PickCap)
+				{
+					// (at her side, waiting his turn up it: the battle has picked up no more of them yet)
 				}
 				else if (By && ((M.O.Doing != Swim::Raft && M.O.Doing != Swim::Boat) || (On && Flat(On->O.At - By->P) < 0.5 * SizeOf(By->Class).Long + 0.5 * SizeOf(By->Class).Beam + 8.0)))
 				{
@@ -3559,9 +3809,12 @@ namespace SeaShow
 				if (D <= M.Pace * Dt + 0.05)
 				{
 					if (On) Into(On->O.Kind == "boat" && M.bIn ? Swim::Boat : M.bIn ? Swim::Raft : Swim::Cling);
+					else if (By && W.PickCap >= 0 && W.Picked >= W.PickCap) Into(Swim::Tread); // (at her side, his turn up it to come)
 					else if (By)
 					{
 						// (up her side on a scrambling net or a line, her own height in some fifteen to twenty-five seconds)
+						++W.Picked;
+						if (W.PickCap >= 0 && W.Picked > W.PickCap) ++Check.PickedOver;
 						const double Up = 15.0 + 10.0 * Mix(static_cast<uint64_t>(M.O.Key) * 23 + 9);
 						M.Off = Vec(M.Off.X, M.Off.Y > 0.0 ? 0.5 * SizeOf(By->Class).Beam + 0.3 : -(0.5 * SizeOf(By->Class).Beam + 0.3), Up);
 						M.Until = ShownT + Up;

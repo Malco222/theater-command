@@ -222,6 +222,19 @@ namespace SeaFeed
 			Out.Lost = Field("lost").IsString() ? Field("lost").Str("") : std::string();
 			Out.Fish = std::clamp(Field("fish").Int(0), 0, 12);
 			Out.bWakeless = Field("wakeless").Truth(false);
+			// The men in the water (the naval rules' sailor events): counts never below none, a crew at most a carrier's few
+			// thousand (a count past it is not read); the oil's spreads to a few kilometres.
+			auto Count = [&X](const char* Name) { return X[Name].IsNumber() && X[Name].Num() >= 0.0 && X[Name].Num() <= 10000.0 ? X[Name].Int() : -1; };
+			Out.Ship = X["ship"].IsNumber() ? std::clamp(X["ship"].Int(), 0, 64) : 0;
+			Out.Men = Count("men");
+			Out.Dead = Count("dead");
+			Out.OilR = X["r"].IsNumber() ? std::clamp(X["r"].Num(), 0.0, 5000.0) : -1.0;
+			Out.LitR = X["litR"].IsNumber() ? std::clamp(X["litR"].Num(), 0.0, 5000.0) : -1.0;
+			Out.OilUntil = X["until"].IsNumber() ? X["until"].Num() : -1.0;
+			const Json& Wreck = X["wreck"];
+			Out.WreckOf = Wreck.IsObject() && Wreck["unit"].IsNumber() ? Wreck["unit"].Int() : -1;
+			Out.WreckShip = Wreck.IsObject() && Wreck["ship"].IsNumber() ? std::clamp(Wreck["ship"].Int(), 0, 64) : 0;
+			Out.bDone = X["done"].Truth(false);
 		}
 	}
 

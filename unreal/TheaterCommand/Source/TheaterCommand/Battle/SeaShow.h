@@ -188,6 +188,14 @@ namespace SeaShow
 		int Fish = 0;         // sea:torpedo from a boat: the torpedoes of her salvo (0: not said)
 		double Fan = 0.0;     // sea:torpedo from a boat: the salvo's spread, degrees across
 		bool bWakeless = false; // sea:torpedo: electric torpedoes, leaving almost no track
+		// The men in the water (the naval rules' sailor events, 22 November: sea:men, sea:oil, sea:abandon, sea:rescue), where
+		// the event gives them. A wreck is keyed {piece, ship}: the piece's first ship lost is 1, the next 2.
+		int Ship = 0;         // sea:men, sea:oil, sea:abandon: which of the piece's ships lost (0 not said)
+		int Men = -1;         // sea:men: alive in the water; sea:rescue: picked up so far (below 0 not said)
+		int Dead = -1;        // sea:men: killed going in, their bodies afloat (below 0 not said)
+		double OilR = -1.0, LitR = -1.0, OilUntil = -1.0; // sea:oil: the slick's spread and its burning part's (metres), and when it burns out
+		int WreckOf = -1, WreckShip = 0; // sea:rescue: the wreck she is picking up from ({piece, ship}), -1 not said
+		bool bDone = false;   // sea:rescue: she has finished (left, the wreck empty, or the fight over)
 	};
 
 	/** A smoke zone (a ship lost: 'sunk', where she went down; 'burning', where she left the line) or a torpedo salvo's
@@ -560,6 +568,11 @@ namespace SeaShow
 		int MenReal = 0, MenKept = 0, MostMen = 0, MenPicked = 0, MenSwept = 0, MenDead = 0;
 		int Floats = 0, Rafts = 0, Boats = 0, Slicks = 0, SlicksAlight = 0;
 		int MenUnder = 0;           // dead men let go under to make room for the living of a later ship
+		// The naval rules' sailor events (sea:men, sea:oil, sea:abandon): told, and found their wreck (or ship); the wrecks
+		// whose men the battle counted, the real number the show took from it against the battle's own (men and dead), and
+		// men drawn taken aboard a rescuer beyond the share of the battle's count of those picked up (none allowed).
+		int MenEvents = 0, MenMatched = 0, OilEvents = 0, OilMatched = 0, AbandonEvents = 0, Abandons = 0;
+		int MenCounted = 0, MenCountOff = 0, PickedOver = 0;
 		int ClearShips = 0;         // ships that altered so, once or more
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
 		double OwedAll = 0.0;       // hits the battle took off hulls by gunfire, in all
@@ -663,6 +676,12 @@ namespace SeaShow
 			double LeftAt = -1.0, Away = 0.0, NextFire = 0.0, LimpSpd = 5.0;
 			std::string How;
 			double SinkAt = -1.0, SinkFor = 120.0;
+			// abandoned (sea:abandon): her men leaving her, she settling and losing way, until the battle says she goes
+			bool bAbandoned = false;
+			// sent to pick men out of the water (sea:rescue, a follower of her line): she lies off her wreck (Wrecked's place)
+			// out of the wake, and comes back astern of the ship ahead of her when done
+			bool bLyingOff = false;
+			int LieFor = -1;
 			// smoke laid
 			double ScreenUntil = -1.0;
 			bool bScreen = false;
@@ -823,6 +842,10 @@ namespace SeaShow
 		double GunDue = 0.0;         // battle seconds since they were last laid
 		std::set<int> ZonesLit;
 		std::map<int, int> ZoneShip;       // by zone id: the ship it was laid for (sunk, burning)
+		/** The ships each piece has lost, in order ({piece, 1} its first): her key, for the sailor events that name a wreck
+		 * so; and how many each piece has lost. */
+		std::map<std::pair<int, int>, int> LostShips;
+		std::map<int, int> LostCount;
 		std::vector<ShipOut> OutShips;
 		std::vector<PlaneOut> OutPlanes;
 		std::vector<TorpOut> OutTorps;
@@ -846,6 +869,8 @@ namespace SeaShow
 			double Lee = 1.0;                             // her windward side (+1 starboard, -1 port)
 			int Rescuer = -1;                             // the ship picking her men up (key), -1 none
 			double RescueUntil = -1.0;
+			int Picked = 0, PickCap = -1;                 // her men drawn taken aboard, and the most the battle's count allows (-1 no count)
+			double OilR = -1.0, LitR = -1.0;              // the battle's spread of her oil and of its burning part, across (metres; below 0 not said)
 			uint64_t Seed = 0;                            // her own hash's start
 			int Real = 0;                                 // men of hers who went into the water in truth
 			double DeadShare = 0.0;                       // of them, the share dead in it
@@ -896,6 +921,9 @@ namespace SeaShow
 		/** The ships' clock (stepped by Fixed) and the moment drawn, a little after it. */
 		double ShownT = 0.0, DrawT = 0.0, ContactT = -1.0;
 		static constexpr double Fixed = 0.05;
+		/** An abandoned ship (sea:abandon): her going down drawn over this long until the battle says she goes (she settles
+		 * a sixtieth of the way a minute while her men leave her), and the way she loses a second, her engines stopped. */
+		static constexpr double AbandonedFor = 3600.0, AbandonedSlowing = 0.3;
 		bool bStarted = false;
 		bool bBigBlast = false;
 		int NextKey = 1;
@@ -923,6 +951,13 @@ namespace SeaShow
 		void BurstCharges();
 		/** Where she goes down: her crew, her rafts and boats, her wreckage and her oil, set going (Sink). */
 		void Abandon(const Hull& H);
+		/** Her crew ordered off her (sea:abandon): out of her line, losing way and settling, her men and boats going over
+		 * the side, until the battle says she goes (sea:sunk). */
+		void AbandonShip(Hull& H, const std::string& Words);
+		/** A lost ship's own number in her piece ({piece, n}), counted as each goes (n, where the battle gives it, else the
+		 * next); and her wreck by the battle's {piece, ship} (nullptr where none). */
+		void NoteLost(const Hull& H, int N);
+		Wreck* WreckOf(int Piece, int Ship);
 		/** Her men, rafts, wreckage and oil over a step: over the side, swimming, holding on, drifting, picked up. */
 		void RunWrecks(double Dt);
 		Floater* FloatByKey(int Key);

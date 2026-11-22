@@ -539,6 +539,7 @@ int main(int Argc, char** Argv)
 	// What the battle said, for the show to be held to.
 	int Events = 0, Told = 0, LineTurns = 0, Sunk = 0, Burning = 0, TorpSalvos = 0, TorpFull = 0, TorpHits = 0, Strikes = 0, StrikesLanded = 0, Raids = 0;
 	int DiveEvents = 0, ChargeEvents = 0, ChargeHits = 0, Starshells = 0, Rescues = 0, Boats = 0; // a convoy's night (ruling 241)
+	int MenTold = 0, OilTold = 0, AbandonTold = 0; // the naval rules' sailor events (22 November)
 	bool bGunfire = false;
 	std::set<int> Pieces;
 	for (const SeaFeed::Frame& F : Rec.Views)
@@ -565,6 +566,9 @@ int main(int Argc, char** Argv)
 			else if (E.What == "sea:depthChargeHit") ++ChargeHits;
 			else if (E.What == "sea:starshell") ++Starshells;
 			else if (E.What == "sea:rescue") ++Rescues;
+			else if (E.What == "sea:men") ++MenTold;
+			else if (E.What == "sea:oil") ++OilTold;
+			else if (E.What == "sea:abandon") ++AbandonTold;
 		}
 	}
 	const SeaFeed::Frame& Last = Rec.Views.back();
@@ -764,6 +768,16 @@ int main(int Argc, char** Argv)
 	Limits.push_back({ "no man in the water pops", P.MostManPop <= 0.0, P.MostManPop > 0.0 ? Num(P.MostManPop, 2) + " m over (" + P.ManPopAt + ")" : "none", "none" });
 	Limits.push_back({ "the men in the water within the show's room", C.MostMen <= Rec.Board.MenMost, std::to_string(C.MostMen) + " (room " + std::to_string(Rec.Board.MenMost) + ")",
 	                   "the room or fewer" });
+	// The men in the water as the naval rules count them (22 November). Where the recording has none of it, each holds.
+	if (MenTold + OilTold + AbandonTold > 0)
+	{
+		Limits.push_back({ "every ship abandoned leaves her line, and every count of her men and her oil finds her wreck",
+		                   C.Abandons == AbandonTold && C.AbandonEvents == AbandonTold && C.MenMatched == MenTold && C.MenEvents == MenTold && C.OilMatched == OilTold && C.OilEvents == OilTold,
+		                   std::to_string(C.Abandons) + " of " + std::to_string(AbandonTold) + " abandoned, " + std::to_string(C.MenMatched) + " of " + std::to_string(MenTold) + " men, " +
+		                       std::to_string(C.OilMatched) + " of " + std::to_string(OilTold) + " oil",
+		                   "all" });
+		Limits.push_back({ "no more men drawn picked up than the battle's count of them", C.PickedOver == 0, std::to_string(C.PickedOver) + " over", "0" });
+	}
 	// A convoy's night (ruling 241: the submarine scene). Where the recording has none of it, each holds at nothing.
 	if (Boats > 0 || DiveEvents + ChargeEvents + ChargeHits + Starshells + Rescues > 0)
 	{
