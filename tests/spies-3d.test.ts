@@ -44,3 +44,15 @@ describe("the page's note", () => {
     expect(show(g).note).toMatch(/ The chance each month, by country: .*Germany \d+%.*\.$/);
   });
 });
+
+describe('an airfield wrecked by saboteurs on the 3D sea', () => {
+  it('is never drawn as a ship wreck (wreck:<region> is a field, wreck:<raid>:<n> a ship)', () => {
+    const g = startOpen(createGame(7, 'UK'));
+    setWar(g, 'UK', 'GER');
+    // A field wrecked this month: the mark's value is the month, which as a ship wreck would decode to a sea zone.
+    for (let id = 0; id < 40; id++) g.flags[`wreck:${id}`] = g.turn;
+    expect(TC.load(saveGame(g))).not.toBeNull();
+    const v = (TC as unknown as { view: () => { wrecks: unknown[] } }).view();
+    expect(v.wrecks).toEqual([]);
+  });
+});

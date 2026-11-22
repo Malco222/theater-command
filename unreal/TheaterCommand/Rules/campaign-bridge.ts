@@ -1047,6 +1047,9 @@ function wrecksOf(s: Game): { zone: number; nat: string; cls: string; turn: numb
     const nats = Object.keys(s.nations);
     for (const key of Object.keys(s.flags)) {
       if (!key.startsWith('wreck:')) continue;
+      // (A ship's wreck is 'wreck:<raid>:<n>'. 'wreck:<region>', one part, is an airfield saboteurs wrecked this
+      // month (airversion.ts, ruling 151(b), switched on for release 2): not a ship, and never drawn as one.)
+      if (key.split(':').length !== 3) continue;
       const v = s.flags[key];
       const zone = v % 1000, a = Math.floor(v / 1000), cls = a % 10, b = Math.floor(a / 10), nat = nats[b % 100], turn = Math.floor(b / 100);
       const bits = key.split(':');
