@@ -186,9 +186,9 @@ describe('the law with hit rates by kind', () => {
     const sea = kindTakesOf(false), anchor = kindTakesOf(true);
     expect(sea.bomb).toEqual({ bb: null, cv: 30.876, ca: 8, dd: 3, ss: 1 });
     expect(sea.torpedo).toEqual({ bb: 5.25, cv: 3.036, ca: 9, dd: 1.5, ss: 1 });
-    expect(anchor.bomb.bb).toBe(10);
+    expect(anchor.bomb).toEqual({ bb: 16.5, cv: 5, ca: 6.3333, dd: 3, ss: 1 });
     expect(anchor.torpedo.bb).toBe(6);
-    expect(anchor.bomb.cv).toBe(30.876);
+    expect(anchor.torpedo).toEqual(sea.torpedo.bb === 5.25 ? { ...sea.torpedo, bb: 6 } : {});
   });
 
   // The tests before code (air-battles/hitrates/form-aim-and-kind-1122.md; the design director's 19:54Z): each case's
@@ -232,20 +232,27 @@ describe('the law with hit rates by kind', () => {
     expect(sunkByKind('bb', 2, 6.5, true, true)).toBe(sunkByKind('bb', 2, 6.5, true));
   });
 
-  it('sinks Pearl\'s battleships at anchor by both kinds (CINCPAC\'s report): the eight together as the record has them', () => {
-    expect(sunkByKind('bb', 10, 0, true)).toBeCloseTo(1, 6); // bombs 10 at anchor: Arizona's middle 5 and the three that lived
-    expect(sunkByKind('bb', 0, 6, true)).toBeCloseTo(1, 6); // torpedoes 6 (Oklahoma's middle)
-    expect(sunkByKind('bb', 2, 6.5, true)).toBeGreaterThan(1); // West Virginia (1.28)
-    expect(sunkByKind('bb', 5.5, 1, true)).toBeCloseTo(0.72, 2); // Nevada, beached (half)
-    // California (1.5 bombs, 2.5 torpedoes) comes to 0.57 against sunk: a reading (her open hatches, not her count).
-    expect(sunkByKind('bb', 1.5, 2.5, true)).toBeCloseTo(0.57, 2);
-    // Every count the middle of its sources: Arizona 5 + 1, Oklahoma, West Virginia, California, Nevada, Tennessee,
-    // Maryland, Pennsylvania: 4.73 against 4.5 sunk.
+  it('sinks ships at anchor on the record\'s moored cases (the design director\'s 20:47Z): Pearl, Taranto, Tirpitz, Kure', () => {
+    // Battleship bombs 16.5: Arizona 5, Haruna 14, Hyuga 10, Ise 17 sunk; Tennessee 2, Maryland 2, Pennsylvania 1, Tirpitz 15 lived.
+    const bb = [5, 14, 10, 17, 2, 2, 1, 15].reduce((s, b) => s + sunkByKind('bb', b, 0, true), 0);
+    expect(bb).toBeCloseTo(4, 6);
+    expect(sunkByKind('bb', 15, 0, true)).toBeLessThan(1); // Tirpitz, her armour deck unpierced
+    expect(sunkByKind('bb', 17, 0, true)).toBeGreaterThan(1); // Ise
+    // Readings: Haruna (0.85) and Hyuga (0.61) settled short of the take; Arizona (0.47 with her torpedo) blew up.
+    expect(sunkByKind('bb', 14, 0, true)).toBeCloseTo(0.85, 2);
+    // Torpedoes 6: Oklahoma, and Taranto's six with Cavour settled.
+    expect(sunkByKind('bb', 0, 12, true)).toBeCloseTo(2, 6);
+    // Pearl's eight on the middles of their sources: 3.98 against 4.5 settled (was 4.73 on the Pearl row alone).
     const eight = [[5, 1], [0, 6], [2, 6.5], [1.5, 2.5], [5.5, 1], [2, 0], [2, 0], [1, 0]].reduce((s, [b, t]) => s + sunkByKind('bb', b, t, true), 0);
-    expect(eight).toBeCloseTo(4.73, 2);
-    // Helena and Raleigh lived at anchor: the cruiser's takes, 0.13 and 0.25.
+    expect(eight).toBeCloseTo(3.98, 2);
+    expect(sunkByKind('bb', 2, 6.5, true)).toBeGreaterThan(1); // West Virginia
+    // Cruisers at anchor, bombs 6.33: Tone 5, Aoba 5, Oyodo 9 settled; Helena and Raleigh lived (torpedoes, the row under way).
+    expect([5, 5, 9].reduce((s, b) => s + sunkByKind('ca', b, 0, true), 0)).toBeCloseTo(3, 3);
     expect(sunkByKind('ca', 0, 1, true)).toBeLessThan(1);
     expect(sunkByKind('ca', 1, 1, true)).toBeLessThan(1);
+    // Carriers at anchor, off deck, bombs 5: Amagi 2.5 capsized, Katsuragi 2.5 lived; armed aboard, the armed row stands.
+    expect(sunkByKind('cv', 2.5, 0, true) + sunkByKind('cv', 2.5, 0, true)).toBeCloseTo(1, 6);
+    expect(sunkByKind('cv', 3.25, 0, true, true)).toBeCloseTo(1, 6);
   });
 
   it('sinks cruisers and destroyers by their own takes: Mikuma and Mogami one between them, Sims by 3 bombs, 3 by 5 torpedoes', () => {
@@ -297,7 +304,7 @@ describe('the law with hit rates by kind', () => {
     // At anchor (Pearl, turn 28), bombs sink battleships too.
     const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
     const ab = at.kinds!.dive + at.kinds!.level + at.kinds!.mast, atT = at.kinds!.torpedo;
-    expect(at.sunk.bb).toBeCloseTo((ab * part('bb')) / 10 + (atT * part('bb')) / 6, 8);
+    expect(at.sunk.bb).toBeCloseTo((ab * part('bb')) / 16.5 + (atT * part('bb')) / 6, 8);
   });
 
   it('puts every hit on the destroyers when they are all a strike finds (Sims)', () => {
