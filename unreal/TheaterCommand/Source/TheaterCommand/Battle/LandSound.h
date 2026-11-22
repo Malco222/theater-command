@@ -146,10 +146,14 @@ namespace LandSound
 		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameToOtherFar = 0, SameCrowded = 0, SameMerged = 0;
 		/** Close rifle shots kept on their own recording at a half step of pitch the whole steps skipped. */
 		int SameCloseHalf = 0;
+		/** Other takes nearer than their family's far takes (a Maxim's burst) kept on their recording at a half step. */
+		int SameNearHalf = 0;
 		/** Of those heard in a copy, the ones nearer than their family's far takes (a shot heard on its own, which a merge
 		 * would hide: the test faults on any); and the machine-gun bursts crowded out of one recording that gave way to
 		 * another on their list instead. */
 		int SameMergedNear = 0, MgToOther = 0, MgToOtherPart = 0;
+		/** Near MG bursts that, every stretch long enough crowded, played the longest stretch they fit, cut at its end. */
+		int MgShortPart = 0;
 		std::map<std::string, int> MergedNearBy;
 		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
 		 * pitch instead of held longer (land.sameTake), for the log. */
