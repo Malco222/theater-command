@@ -260,7 +260,10 @@ class Gear:
                         out.append((pts, fs, "rubber", None))
                 for vv in (-1.0, 1.0):
                     v0, v1 = (W / 2 - 0.035, W / 2) if vv > 0 else (-W / 2, -W / 2 + 0.035)
-                    box(L / 2 - 0.035, L / 2 + pitch * 0.14, v0, v1, 0.002, thick - 0.004, "steel")
+                    if style.get("connector"):          # (a hung spare: its end connectors bare and rusted, standing a little proud of the rubber)
+                        box(L / 2 - 0.04, L / 2 + pitch * 0.2, v0 - 0.004 * (vv < 0), v1 + 0.004 * (vv > 0), 0.002, thick + 0.006, style["connector"])
+                    else:
+                        box(L / 2 - 0.035, L / 2 + pitch * 0.14, v0, v1, 0.002, thick - 0.004, "steel")
         elif kind == "skeleton":
             # an open (skeleton) link: two rails and cross bars
             for vv in (-W / 2, W / 2 - W * 0.22):

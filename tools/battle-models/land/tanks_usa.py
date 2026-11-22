@@ -209,6 +209,9 @@ def sherman(fine=True, tag="USA"):
     her nose."""
     v = Works("Sherman", "M4 Sherman", "tank", tag, fine)
     v.dice = 0.16
+    # (her turret, gun shield and nose are castings; her bedrolls and packs are olive canvas, darker than a truck's tilt)
+    v.worn_kw = dict(cast=lambda p, part: part in ("turret", "gun") or (part == "hull" and p.x > 2.3 and p.z < 1.1))
+    v.m.paints["canvas"], v.m.paints["cloth"] = "66684A", "5C5E44"
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, zs, zr = 0.80, 1.31, 1.06, 1.74        # half-width between the tracks and over them; the sponson's floor; the roof
 
@@ -284,7 +287,7 @@ def sherman(fine=True, tag="USA"):
         v.weld(Vector((1.372, -0.80, zr + 0.002)), Vector((1.372, 0.80, zr + 0.002)), (Z + gn).normalized(), r=0.008)
         # spare track links across the front plate under the hoods (the crews hung them there for the armour as much as the spares)
         v.spare_links(g_at(0.50, -0.20), g_at(0.50, 1.02), 8, 0.152, 0.42, gn, thick=0.04,
-                      style={"kind": "block", "chevron": True, "horn": None, "grouser": 0.012})
+                      style={"kind": "block", "chevron": True, "horn": None, "grouser": 0.012, "connector": "rust"})
         # the barrel's travel lock, folded down on the front plate; the siren under its guard by the left lamp
         for s in (LEFT, RIGHT):
             v.tube([g_at(0.84, s * 0.13), g_at(0.84, s * 0.13) + gn * 0.035, g_at(1.02, s * 0.05) + gn * 0.035], 0.014, "upper", 6)

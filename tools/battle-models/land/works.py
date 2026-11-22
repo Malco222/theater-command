@@ -78,23 +78,39 @@ class Works(Shop, Gear, Fittings):
         self.lathe(at, Z, [(0.003, 0.0), (0.003, r - 0.05)], "black", self.n(40, 12), part=part)
 
     def running(self, xs, r, ty, sprocket, idler, rollers=(), wheel=None, track=None, drive="front", top_on_wheels=False, per_axle=None,
-                sprocket_kw=None, idler_kw=None, roller_kw=None, wheel_z=None, wheel_parent=None):
+                sprocket_kw=None, idler_kw=None, roller_kw=None, wheel_z=None, wheel_parent=None, sprung=None):
         """Both sides' running gear in one go: road wheels at `xs` (radius r, track centre `ty` out from the middle),
         the sprocket and idler as (x, z, r), return rollers as (x, z, r), and the track round them all. `drive` says
         which end the sprocket is at. With no rollers and `top_on_wheels`, the top run lies on the road wheels.
         `per_axle(i)` gives extra road-wheel settings for axle i (interleaved wheels alternate). `wheel_parent(letter, i)`
-        names the part a road wheel hangs from (a sprung arm of its own, made before this is called) in place of the vehicle."""
+        names the part a road wheel hangs from (a sprung arm of its own, made before this is called) in place of the vehicle.
+        `sprung` (down, up), metres: every road wheel hangs from a part of its own (`axle_<l><n>`) that slides up and down
+        on its spring by that much, and the file's `suspension` table lists them, so a game can work each wheel over the ground."""
         wheel = dict(wheel or {})
         track = dict(track or {})
         z = r if wheel_z is None else wheel_z
+        table = []
         for letter, s in SIDES:
             self.use("vehicle")
             for i, x in enumerate(xs):
                 kw = dict(wheel)
                 if per_axle:
                     kw.update(per_axle(i))
-                self.road_wheel(f"wheel_{letter}{i + 1}", wheel_parent(letter, i) if wheel_parent else "vehicle", x, s * ty, z, r, s, **kw)
+                hangs = wheel_parent(letter, i) if wheel_parent else "vehicle"
+                if sprung and not wheel_parent:
+                    hangs = f"axle_{letter}{i + 1}"
+                    self.part(hangs, "vehicle", (x, s * ty, z), slide=(0, 0, 1), slide_limits=[-sprung[0], sprung[1]], axis=Y, kind="slide",
+                              note="a road wheel's spring: + lifts the wheel (metres)")
+                    table.append({"part": hangs, "wheel": f"wheel_{letter}{i + 1}", "side": "left" if s > 0 else "right", "x": round(x, 3), "limits": [-sprung[0], sprung[1]]})
+                self.road_wheel(f"wheel_{letter}{i + 1}", hangs, x, s * ty, z, r, s, **kw)
                 self.use("vehicle")
+        if table:
+            self.m.info.setdefault("file", {})["suspension"] = {
+                "kind": "slides", "wheels": table,
+                "how": "each road wheel hangs on a spring of its own: slide its part up by how far the ground under that wheel stands above the level she rests "
+                       "on (metres, inside its limits), and the wheel rides up with it. Leave them at 0 on level ground."}
+        for letter, s in SIDES:
+            self.use("vehicle")
             self.sprocket(f"sprocket_{letter}", "vehicle", sprocket[0], s * ty, sprocket[1], sprocket[2], s, **(sprocket_kw or {}))
             self.idler(f"idler_{letter}", "vehicle", idler[0], s * ty, idler[1], idler[2], s, **(idler_kw or {}))
             for i, (x, zz, rr) in enumerate(rollers):
@@ -381,13 +397,17 @@ class Works(Shop, Gear, Fittings):
             self.m.weather = weather
         return self
 
-    def worn(self, dust=1.0, grime=1.0):
+    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, foot=0.95, top=1.45, tracks=0.27, marks=0.75):
         """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
         all there is). Dust, point by point, in the file's `wear`: thick on her running gear and the foot of her
-        hull, thinning as it climbs and gone by her shoulders, lying a little on whatever looks up, in uneven
-        patches and never a level line (the `rust` colour `wear` goes toward is set to the road's dust). And on
-        `soot`, over what the exhaust and the worn edges already lay there: her paint a little uneven, plate by
-        plate, as weeks of sun, rain and hands leave it. Soft, both: no streak fine enough to read as wood grain.
+        hull, thinning fast between `foot` and `top` (metres up) so that her upper plates stay her own paint, lying a
+        little on whatever looks up, less on what faces the way she goes and more on her tail, in uneven patches and
+        never a level line (the `rust` colour `wear` goes toward is set to the road's dust, or to `colour`). Her
+        tracks carry it too (`tracks`), and her national marks are dulled by it (`marks`: each mark's own `wear`).
+        And on `soot`, over what the exhaust and the worn edges already lay there: her paint a little uneven, plate by
+        plate, as weeks of sun, rain and hands leave it. `cast(point, part)` says where she is a casting: a casting's
+        skin is uneven in patches a foot or two across, lighter and darker, and sits a shade under the rolled plate.
+        Soft, all of it: no streak fine enough to read as wood grain.
         Call it after her last piece is on; plates must have been cut finer (`dice`) for it to show on them."""
         base = self.m.weather
         rs = random.Random(zlib.crc32((self.name + ":worn").encode()))
@@ -399,28 +419,56 @@ class Works(Shop, Gear, Fittings):
                 ws.append((d * (2.0 * math.pi / rs.uniform(lo, hi)), rs.uniform(0.0, 2.0 * math.pi)))
             return lambda p: 0.5 + 0.5 * sum(math.sin(k.dot(p) + ph) for k, ph in ws) / math.sqrt(n) * 1.25
         big, small, plates = field(0.9, 2.2), field(0.28, 0.6), field(1.4, 3.0)
-        self.m.info["rust"] = DUST
-        self.m.info.setdefault("file", {})["wear_is"] = ("road dust: `wear` (0 to 100) is how far a point has gone to the dust colour `rust`; thick low on her, "
-                                                         "thin by her shoulders. A game on other ground may put that ground's own colour in `rust`.")
-        takes = ("upper", "upper2", "shade", "rubber", "canvas", "cloth", "wood", "steel", "leather", "rope")
+        skin = field(0.45, 0.95, 6)
+        self.m.info["rust"] = colour or DUST
+        self.m.info.setdefault("file", {})["wear_colour"] = self.m.info["rust"]
+        self.m.info["file"]["wear_is"] = ("road dust: `wear` (0 to 100) is how far a point's paint has gone to `wear_colour` (not to the paint named rust); thick "
+                                          "low on her, thin by her shoulders, on her tracks too. A mark's own `wear` dulls it the same way: paint the mark, then "
+                                          "take it that far to `wear_colour`. Work it out on the coat she wears (after a paint swap), from these numbers: the "
+                                          ".glb's COLOR_0 is the same thing worked out for the coat she was built in. A game on other ground may use that ground's "
+                                          "own colour for `wear_colour`.")
+        for mk in self.m.marks:
+            mk["wear"] = round(100 * marks * dust)
+        takes = ("upper", "upper2", "shade", "rubber", "canvas", "cloth", "wood", "steel", "leather", "rope", "rust")
+        spots = [(Vector(c), r, least) for c, r, least in getattr(self, "dusted", [])]
 
         def weather(p, n, paint, part):
             w, s = base(p, n, paint, part) if base else (0.0, 0.0)
-            if part.startswith("track") or paint.split(".")[0] not in takes:
-                return w, s
+            kind = paint.split(".")[0]
             p = Vector(p)
+            if part.startswith("track"):
+                # (every link goes round and round through the same dust: all alike, a little uneven)
+                if kind in ("track", "rubber", "steel"):
+                    w = max(w, min(0.6, tracks * dust * (0.75 + 0.5 * small(p))))
+                return w, s
+            if kind not in takes:
+                return w, s
             patch = min(1.5, max(0.25, 0.1 + 1.7 * big(p)))
             low = max(0.0, min(1.0, (1.95 - p.z) / 1.5)) ** 1.25 * 0.95
+            t = max(0.0, min(1.0, (p.z - foot) / max(top - foot, 1e-3)))
+            low *= 1.0 - 0.75 * t * t * (3.0 - 2.0 * t)
             lying = 0.24 * max(0.0, n[2]) ** 2 * (0.4 + 1.2 * small(p))
             d = low * patch + lying
-            if part.startswith(("wheel", "sprocket", "idler", "roller", "arm")):
+            if p.x > 0.0:
+                d *= 1.0 - 0.6 * max(0.0, n[0])                 # (the wind of her going keeps her face cleaner)
+            d *= 1.0 + 0.15 * max(0.0, -n[0])                   # (and her tail rides in her own dust)
+            if part.startswith(("wheel", "sprocket", "idler", "roller", "arm", "axle")):
                 d = max(d, 0.5 * patch)
-            if paint == "rubber":
+            if kind == "rubber":
                 d *= 0.45                               # (a tyre's tread is wiped clean every turn; the dust stays in its walls)
+            for c, r, least in spots:                   # (what hangs on her and is never wiped: spare links)
+                if (p - c).length_squared < r * r:
+                    d = max(d, least * (0.7 + 0.6 * small(p)) * (0.6 + 0.6 * max(0.0, n[2])))
             g = 0.0
-            if paint in COATS:
+            if kind in COATS:
                 g = 0.17 * max(0.0, min(1.0, 2.4 * plates(p) - 0.75)) + 0.10 * max(0.0, small(p) - 0.5)
-            return max(w, min(0.88, d * dust)), max(s, min(0.3, g * grime))
+                if cast and cast(p, part):
+                    x = 0.05 + 0.36 * (max(0.0, min(1.0, skin(p))) - 0.5)
+                    if x >= 0.0:
+                        d, g = max(d, x), 0.0
+                    else:
+                        g = max(g * 0.5, -2.0 * x)
+            return max(w, min(0.88, d * dust)), max(s, min(0.38, g * grime))
         self.m.weather = weather
         return self
 
@@ -567,7 +615,7 @@ class Works(Shop, Gear, Fittings):
         if m.weather is None:
             self.sooted()
         if self.dice:
-            self.worn()
+            self.worn(**getattr(self, "worn_kw", {}))
         m.info.setdefault("file", {})["controls"] = {
             "turret": {"part": "turret", "what": "trained by the game: + to the right (clockwise from above)", "degrees_per_second": traverse},
             "gun": {"part": "gun", "what": "laid by the game inside its limits: + muzzle up"},

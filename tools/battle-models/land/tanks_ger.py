@@ -666,6 +666,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     """Tiger I: 6.32 m hull, 3.56 m wide, 3.00 m high; a flat-sided box on broad tracks, eight axles of interleaved
     wheels a side, drive at the front; the 8.8 cm L/56 in a horseshoe turret with a flat slab of a mantlet."""
     v = Works("Tiger", "Tiger", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
+    v.dice = 0.16
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, zf, zr = 0.92, 1.57, 1.20, 1.80
     # ---- the hull ------------------------------------------------------------------------------------------
@@ -716,6 +717,17 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
         v.cable([(1.9, 1.3, zr + 0.016), (0.4, 1.42, zr + 0.016), (-1.2, 1.42, zr + 0.016), (-1.5, 1.2, zr + 0.016), (-0.4, 1.18, zr + 0.016), (1.5, 1.18, zr + 0.016)], 0.016)
         v.cable([(1.9, -1.3, zr + 0.016), (0.4, -1.42, zr + 0.016), (-1.2, -1.42, zr + 0.016)], 0.016)
         v.shovel((2.0, 0.3, 1.24), 90.0, 0.9)
+        # on the front roof, what her crew mend a track with: the sledge, the wire cutters, two bars; the cleaning rods along her right side
+        v.rod((2.02, -0.75, 1.262), (2.02, -0.05, 1.262), 0.016, "wood", 8)
+        v.box((0.07, 0.07, 0.16), (2.02, -0.80, 1.275), "steel", 0.008, turn=rot(0.0, 0.0, 90.0))
+        for k in range(3):
+            v.rod((1.2 - 0.02 * k, -1.44 + 0.045 * k, zr + 0.02), (-1.1 - 0.02 * k, -1.44 + 0.045 * k, zr + 0.02), 0.014, "wood", 6)
+        for x in (0.9, -0.8):
+            v.slab((x - 0.02, -1.47, zr), (x + 0.02, -1.32, zr + 0.042), "upper", 0.003)
+        # the tail: the convoy lamp on the left, the starting handle's cover between the silencers, the track tools' box
+        v.lathe((-3.165, 1.25, 1.02), -X, [(0.0, 0.0), (0.0, 0.05), (0.05, 0.05), (0.06, 0.03), (0.06, 0.0)], "upper", 12)
+        v.lathe((-3.165, 0.0, 1.02), -X, [(0.0, 0.0), (0.0, 0.07), (0.02, 0.07), (0.03, 0.05), (0.03, 0.0)], "upper", 14)
+        v.bolts((-3.195, 0.0, 1.02), -X, 0.05, 4, r=0.01, high=0.008)
         v.crowbar((0.3, -1.25, zr + 0.016), 0.0, 1.6)
         v.axe((1.0, 1.0, zr + 0.016), 0.0, 0.8)
     for s in (LEFT, RIGHT):
@@ -729,10 +741,21 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
               per_axle=lambda i: {"gap": 0.40} if i % 2 == 1 else {"gap": 0.19, "bolts": 0},      # interleaved: the first axle's wheels outermost, the next axle's close behind them and half hidden
               sprocket_kw=dict(teeth=20, wide=0.5, tooth=0.035, bolts=12, sides=30, hub=0.34),
               idler_kw=dict(wide=0.44, kind="dish", holes=0),
-              track=dict(pitch=0.13, wide=0.725, thick=0.032, sag=0.02, style={"kind": "plate", "horn": "twin", "horn_gap": 0.17, "horn_high": 0.085, "grouser": 0.016, "cleats": True}))
+              track=dict(pitch=0.13, wide=0.725, thick=0.032, sag=0.02, style={"kind": "plate", "horn": "twin", "horn_gap": 0.17, "horn_high": 0.085, "grouser": 0.016, "cleats": True}),
+              sprung=(0.08, 0.14))
     v.use("hull")
     for s in (LEFT, RIGHT):
         v.lathe((2.72, s * 0.90, 0.85), Y * s, [(0.2, 0.0), (0.2, 0.16), (0.12, 0.26), (0.0, 0.29), (0.0, 0.0)], "upper", v.n(22, 8))
+        if fine:
+            v.bolts((2.72, s * (0.90 + 0.165), 0.85), Y * s, 0.2, 12, r=0.014, high=0.01)
+            # a shackle hanging in each towing eye, front and back
+            v.tube([(3.02, s * 0.74, 0.72), (3.10, s * 0.74, 0.64), (3.12, s * 0.80, 0.56), (3.10, s * 0.86, 0.64), (3.02, s * 0.86, 0.72)], 0.02, "steel", 6)
+            v.tube([(-3.22, s * 0.74, 0.82), (-3.30, s * 0.74, 0.74), (-3.32, s * 0.80, 0.66), (-3.30, s * 0.86, 0.74), (-3.22, s * 0.86, 0.82)], 0.02, "steel", 6)
+            # the track guard along her side is four plates, each bolted on: the joins and their bolts
+            for x in (-1.80, -0.44, 0.92):
+                v.slab((x - 0.006, s * 1.56, zf - 0.016), (x + 0.006, s * 1.80, zf + 0.004), "shade")
+                for dx in (-0.06, 0.06):
+                    v.bolt((x + dx, s * 1.62, zf), Z, 0.011, 0.007)
 
     # ---- the turret: one plate bent round in a horseshoe ----------------------------------------------------
     x0, zt = 0.12, zr
@@ -758,8 +781,20 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
         for s, n_links in ((1.0, 5), (-1.0, 3)):
             a, b = Vector((x0 + 0.98, s * 0.79, zt + 0.42)), Vector((x0 + 0.1, s * 0.985, zt + 0.42))
             way = (b - a).normalized()
-            out = Vector((way.y, -way.x, 0)) * -s
+            out = Vector((way.y, -way.x, 0)) * s
             v.spare_links(a + out * 0.012, a + out * 0.012 + way * (0.13 * n_links), n_links, 0.13, 0.58, out, style={"kind": "plate", "grouser": 0.016, "cleats": True}, bar=False)
+        # the loader's escape hatch in the right of the turret's back, and the plugged port opposite it
+        for s, big in ((-1.0, True), (1.0, False)):
+            ang = math.radians(118.0 * s)
+            o = Vector((math.cos(ang), math.sin(ang), 0.0))
+            c = Vector((x0 + cx, 0.0, zt + 0.40)) + o * (R + 0.006)
+            if big:
+                v.lathe(c, o, [(0.0, 0.0), (0.0, 0.25), (0.028, 0.25), (0.04, 0.22), (0.04, 0.0)], "upper", v.n(26, 10))
+                v.bolts(c + o * 0.04, o, 0.12, 4, r=0.014, high=0.01)
+                side = Vector((-o.y, o.x, 0.0))
+                v.slab(c + o * 0.02 + side * 0.25 - Z * 0.07 - Vector((0.02, 0.02, 0)), c + o * 0.05 + side * 0.31 + Z * 0.07 + Vector((0.02, 0.02, 0)), "upper", 0.006)      # its hinge
+            else:
+                v.lathe(c, o, [(0.0, 0.0), (0.0, 0.085), (0.03, 0.075), (0.045, 0.04), (0.045, 0.0)], "upper", v.n(16, 8))
     for s in (LEFT, RIGHT):
         ang = math.radians(150.0 * s)
         v.mark("GER", (x0 + cx + (R + 0.012) * math.cos(ang), (R + 0.012) * math.sin(ang), zt + 0.42), (math.cos(ang), math.sin(ang), 0), 0.16, part="turret")
