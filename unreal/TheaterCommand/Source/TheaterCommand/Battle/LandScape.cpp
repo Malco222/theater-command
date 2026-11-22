@@ -536,11 +536,17 @@ namespace LandScape
 		NZ = std::fabs(NZ) + 0.6; // (lit as grass is: from above, both faces)
 		const double NN = std::sqrt(NX * NX + NY * NY + NZ * NZ);
 		NX /= NN; NY /= NN; NZ /= NN;
+		// Each face its own points, its normal leaning out of its own side: a face seen from behind is lit as its front
+		// (its normal turned toward the eye), so the back face given the front's normal had it turned down, and drew
+		// near black (the art director's black triangles on leaves, 22 November).
 		const uint32_t A = Vert(X0 - AX * H, Y0 - AY * H, Z0, NX, NY, NZ, Foot);
 		const uint32_t B = Vert(X0 + AX * H, Y0 + AY * H, Z0, NX, NY, NZ, Foot);
 		const uint32_t C = Vert(X1, Y1, Z1, NX, NY, NZ, Tip);
 		Tri(A, B, C);
-		Tri(B, A, C);
+		const uint32_t BA = Vert(X0 - AX * H, Y0 - AY * H, Z0, -NX, -NY, NZ, Foot);
+		const uint32_t BB = Vert(X0 + AX * H, Y0 + AY * H, Z0, -NX, -NY, NZ, Foot);
+		const uint32_t BC = Vert(X1, Y1, Z1, -NX, -NY, NZ, Tip);
+		Tri(BB, BA, BC);
 	}
 
 	void Writer::Rock(double CX, double CY, double Radius, double Height, uint64_t RockSeed, const Tone& Lit, const Tone& Under)

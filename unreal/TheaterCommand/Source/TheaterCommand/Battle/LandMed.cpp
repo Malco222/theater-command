@@ -1,6 +1,7 @@
 #include "Battle/LandScape.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
@@ -158,16 +159,16 @@ namespace LandScape
 			}
 		}
 
-		/** A flat oval pad (the prickly pear's): its middle, its long axis A and its short axis B (unit, square to each
-		 * other), its half length and half width; both faces, a little domed. */
-		void Pad(Writer& W, const double C[3], const double A[3], const double B[3], double Long, double Wide, const Tone& Col)
+		/** A flat oval pad (the prickly pear's, a fennel's umbel): its middle, its long axis A and its short axis B (unit,
+		 * square to each other), its half length and half width, Rim points round; both faces, each domed Dome out of
+		 * its side, its normals leaning Tilt out to the rim. */
+		void Pad(Writer& W, const double C[3], const double A[3], const double B[3], double Long, double Wide, const Tone& Col, double Dome = 0.025, double Tilt = 0.45, int Rim = 8)
 		{
 			const double N[3] = { A[1] * B[2] - A[2] * B[1], A[2] * B[0] - A[0] * B[2], A[0] * B[1] - A[1] * B[0] };
-			constexpr int Rim = 8;
 			for (int Face = 0; Face < 2; ++Face)
 			{
 				const double S = Face == 0 ? 1.0 : -1.0;
-				const uint32_t Mid = W.Vert(C[0] + 0.025 * S * N[0], C[1] + 0.025 * S * N[1], C[2] + 0.025 * S * N[2], S * N[0], S * N[1], S * N[2], Col);
+				const uint32_t Mid = W.Vert(C[0] + Dome * S * N[0], C[1] + Dome * S * N[1], C[2] + Dome * S * N[2], S * N[0], S * N[1], S * N[2], Col);
 				for (int K = 0; K < Rim; ++K)
 				{
 					const double T = 2.0 * Pi * K / Rim, CT = std::cos(T), ST = std::sin(T);
@@ -175,7 +176,7 @@ namespace LandScape
 					for (int I = 0; I < 3; ++I)
 					{
 						P[I] = C[I] + CT * Long * A[I] + ST * Wide * B[I];
-						Nr[I] = S * N[I] + 0.45 * (CT * A[I] + ST * B[I]);
+						Nr[I] = S * N[I] + Tilt * (CT * A[I] + ST * B[I]);
 					}
 					const double L = std::sqrt(Nr[0] * Nr[0] + Nr[1] * Nr[1] + Nr[2] * Nr[2]);
 					W.Vert(P[0], P[1], P[2], Nr[0] / L, Nr[1] / L, Nr[2] / L, Varied(Col, 0.94, 0.0));
@@ -186,6 +187,26 @@ namespace LandScape
 					if (Face == 0) W.Tri(Mid, P0, P1);
 					else W.Tri(Mid, P1, P0);
 				}
+			}
+		}
+
+		/** A small round thing (a fruit, a thistle's head): its middle, Rad round and Tall high, Top its colour above and
+		 * Foot below; its normals out. */
+		void Bead(Writer& W, double X, double Y, double Z, double Rad, double Tall, const Tone& Top, const Tone& Foot)
+		{
+			constexpr int Round = 6;
+			const uint32_t T = W.Vert(X, Y, Z + 0.5 * Tall, 0.0, 0.0, 1.0, Top);
+			const uint32_t B = W.Vert(X, Y, Z - 0.5 * Tall, 0.0, 0.0, -1.0, Foot);
+			uint32_t Ring[Round];
+			for (int K = 0; K < Round; ++K)
+			{
+				const double A = 2.0 * Pi * K / Round, CA = std::cos(A), SA = std::sin(A);
+				Ring[K] = W.Vert(X + Rad * CA, Y + Rad * SA, Z, CA, SA, 0.0, Mixed(Foot, Top, 0.55));
+			}
+			for (int K = 0; K < Round; ++K)
+			{
+				W.Tri(T, Ring[K], Ring[(K + 1) % Round]);
+				W.Tri(B, Ring[(K + 1) % Round], Ring[K]);
 			}
 		}
 
@@ -582,18 +603,39 @@ namespace LandScape
 				return Out;
 			}
 
+			/** The way a parcel's strips and its rows run (DC, DS, a unit): the nearest road's way where it lies, turned up
+			 * to 10 degrees the parcel's own way, so an area's strips share one or two ways (the art director's read of the
+			 * mend, 22 November: the map shattered when each ran its parcel's own way). */
+			void StripWay(const Spot& S, double& DC, double& DS) const
+			{
+				if (RoadDir.empty())
+				{
+					DC = std::cos(S.Angle);
+					DS = std::sin(S.Angle);
+					return;
+				}
+				const int I = std::clamp(static_cast<int>(std::floor((S.X + RoadMargin) / RoadStep)), 0, RNX - 1);
+				const int J = std::clamp(static_cast<int>(std::floor((S.Y + RoadMargin) / RoadStep)), 0, RNY - 1);
+				const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(RNX) + static_cast<size_t>(I));
+				const double RC = RoadDir[K], RS = RoadDir[K + 1];
+				const double Turn_ = 0.17 * (2.0 * Unit(Mix(S.Key ^ 0x57A4)) - 1.0), TC = 1.0 - 0.5 * Turn_ * Turn_;
+				DC = RC * TC - RS * Turn_;
+				DS = RS * TC + RC * Turn_;
+			}
+
 			/** The crop at a place: its parcel's, or where an arable parcel is worked in strips (a holding's wheat field part
-			 * stubble, part ploughed already, a strip left fallow) its strip's: strips 26 to 42 m wide along the parcel's
-			 * grain, each its own, so the fields read some 30 to 90 m (LandField's parcels are 0.8 ha at the least). Some
-			 * three arable parcels in five are. */
+			 * stubble, part ploughed already, a strip left fallow) its strip's: strips 26 to 42 m wide along the nearest
+			 * road's way give or take 10 degrees (StripWay), each its own, so the fields read some 30 to 90 m (LandField's
+			 * parcels are 0.8 ha at the least). Some three arable parcels in five are. */
 			int CropAt(const Spot& S) const
 			{
 				const int C = S.Crop >= 0 ? S.Crop : S.Kind == KRough ? Maquis : S.Kind == KWoods ? Olive : Fallow;
 				if ((C != Grain && C != Fallow && C != Plough) || S.Key == 0 || (S.Kind != KOpen && S.Kind != KField)) return C;
 				if (Unit(Mix(S.Key ^ 0x57A1)) > 0.6) return C;
 				const double W = 26.0 + 16.0 * Unit(Mix(S.Key ^ 0x57A2));
-				const int64_t Strip = static_cast<int64_t>(std::floor(S.Across / W + 0.5));
-				if (Strip == 0) return C;
+				double DC = 1.0, DS = 0.0;
+				StripWay(S, DC, DS);
+				const int64_t Strip = static_cast<int64_t>(std::floor((DC * S.Y - DS * S.X) / W + Unit(Mix(S.Key ^ 0x57A5))));
 				// (by turns: the wheat's, the plough's, the fallow's; every other strip another's than the parcel's own, the
 				// rest the parcel's own on half of them, two or three side by side then reading as one wider field)
 				const int Of3 = C == Grain ? 0 : C == Plough ? 1 : 2;
@@ -785,8 +827,20 @@ namespace LandScape
 
 			bool Dress(LandField::Placed& P, const Spot& S, double U4, double U5, double U6, double U7) const override
 			{
+				if (P.Kind == LandField::Base::Stubble)
+				{
+					// the stubble along the strips' way (the nearest road's), either way round
+					double DC = 1.0, DS = 0.0;
+					StripWay(S, DC, DS);
+					P.Yaw = static_cast<float>(std::atan2(DS, DC) + (U6 < 0.5 ? 0.0 : Pi) + 0.06 * (U4 - 0.5));
+					P.Scale = static_cast<float>(0.85 + 0.3 * U4);
+					P.ScaleZ = static_cast<float>(0.8 + 0.4 * U5);
+					const double L = 0.95 + 0.1 * U7;
+					P.Tint = Tint(L, L, L);
+					return true;
+				}
 				const int C = static_cast<int>(P.Kind) - static_cast<int>(LandField::Base::Clut0);
-				if (C < 0 || C > 5) return false; // (the stubble along its rows and the sward in the ground's colour: LandField's)
+				if (C < 0 || C > 5) return false; // (the sward in the ground's colour: LandField's)
 				switch (C)
 				{
 				case CGrass:
@@ -845,8 +899,10 @@ namespace LandScape
 					P.ScaleZ = static_cast<float>(0.7 + 0.4 * U5);
 					if (Wet > 0.6)
 					{
-						// (the winter's: built wet and dark, the water standing between them along the furrows)
-						P.Yaw = static_cast<float>(S.Angle + 0.15 * (U7 - 0.5));
+						// (the winter's: built wet and dark, the water standing between them along the furrows, the strips' way)
+						double DC = 1.0, DS = 0.0;
+						StripWay(S, DC, DS);
+						P.Yaw = static_cast<float>(std::atan2(DS, DC) + 0.15 * (U7 - 0.5));
 						const double L = 0.88 + 0.24 * U6;
 						P.Tint = Tint(L, L, L);
 						return true;
@@ -896,40 +952,36 @@ namespace LandScape
 				}
 				case CStalk:
 				{
-					// wild fennel gone to seed: three tall stems, each with its umbel's rays spread flat at the top, small
-					// umbels on their ends
+					// wild fennel gone to seed: three tall stems, each with its umbel at the top, flat and yellow-green, some 10
+					// to 15 cm across, its rays spreading under it
 					for (int B = 0; B < 3; ++B)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.0, 1.55), Lean = R.Range(0.05, 0.2);
+						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.0, 1.55), Lean = R.Range(0.05, 0.2), Half = R.Range(0.05, 0.075);
+						const double Round_ = R.Range(0.85, 1.0), Light = R.Range(0.92, 1.06);
 						const double X1 = Lean * std::cos(A), Y1 = Lean * std::sin(A);
 						W.Blade(0.0, 0.0, -0.02, X1, Y1, High, 0.035, Rgb(116, 100, 70), Rgb(150, 130, 88));
-						for (int H = 0; H < 7; ++H)
+						for (int H = 0; H < 8; ++H)
 						{
-							const double B2 = H * 2.0 * Pi / 7.0 + R.Range(-0.3, 0.3), Spray = R.Range(0.1, 0.17), Top = R.Range(0.06, 0.11);
-							const double X2 = X1 + Spray * std::cos(B2), Y2 = Y1 + Spray * std::sin(B2), Z2 = High + Top;
-							W.Blade(X1, Y1, High - 0.03, X2, Y2, Z2, 0.012, Rgb(136, 116, 78), Rgb(166, 142, 92));
-							// (its umbellet: a tuft of short seed-stalks standing up from the ray's end, so the umbel's top is
-							// flat, as an umbrella's)
-							for (int U = 0; U < 3; ++U)
-							{
-								const double UA = B2 + U * 2.0 * Pi / 3.0;
-								W.Blade(X2, Y2, Z2 - 0.005, X2 + 0.018 * std::cos(UA), Y2 + 0.018 * std::sin(UA), Z2 + 0.035, 0.016, Rgb(160, 136, 86), Rgb(178, 154, 98));
-							}
+							const double B2 = H * 2.0 * Pi / 8.0 + R.Range(-0.2, 0.2);
+							W.Blade(X1, Y1, High - 0.06, X1 + 0.85 * Half * std::cos(B2), Y1 + 0.85 * Half * std::sin(B2), High + 0.02, 0.01, Rgb(122, 118, 70), Rgb(146, 144, 74));
 						}
+						const double C[3] = { X1, Y1, High + 0.03 }, AX[3] = { std::cos(A), std::sin(A), 0.0 }, AY[3] = { -std::sin(A), std::cos(A), 0.0 };
+						Pad(W, C, AX, AY, Half, Half * Round_, Varied(Rgb(152, 150, 64), Light, 0.0), 0.012, 0.25);
 					}
-					// and a thistle beside it: a stiff stem, its spiny leaves at the foot, two heads
+					// and a thistle beside it: a stiff stem, its spiny leaves at the foot, two round heads, grey-purple over
+					// their grey-green bracts
 					{
 						const double TX = 0.32, TY = 0.12, High = R.Range(0.55, 0.8);
 						for (int L = 0; L < 6; ++L)
 						{
-							const double A = L * 2.0 * Pi / 6.0 + R.Range(-0.25, 0.25), Reach = R.Range(0.18, 0.26);
-							W.Blade(TX, TY, 0.02, TX + Reach * std::cos(A), TY + Reach * std::sin(A), R.Range(0.06, 0.14), 0.06, Rgb(120, 112, 84), Rgb(150, 140, 106));
+							const double A = L * 2.0 * Pi / 6.0 + R.Range(-0.25, 0.25), Reach = R.Range(0.18, 0.26), Up = R.Range(0.06, 0.14);
+							W.Blade(TX, TY, 0.02, TX + Reach * std::cos(A), TY + Reach * std::sin(A), Up, 0.06, Rgb(120, 112, 84), Rgb(150, 140, 106));
 						}
 						W.Blade(TX, TY, -0.02, TX + 0.03, TY, High, 0.03, Rgb(122, 110, 82), Rgb(150, 136, 98));
 						for (int Hd = 0; Hd < 2; ++Hd)
 						{
-							const double HX = TX + (Hd ? 0.09 : 0.03), HZ = High - (Hd ? 0.12 : 0.0);
-							W.Box(HX, TY, HZ, 0.035, 0.035, 0.04, 0.4 * Hd, Rgb(150, 134, 108));
+							const double HX = TX + (Hd ? 0.09 : 0.03), HZ = High - (Hd ? 0.12 : 0.0), Size = Hd ? 0.8 : 1.0;
+							Bead(W, HX, TY, HZ, 0.036 * Size, 0.06 * Size, Rgb(142, 106, 140), Rgb(112, 116, 96));
 						}
 					}
 					M.FarFrom = 55.0f;
@@ -1103,7 +1155,11 @@ namespace LandScape
 					for (int P = 0; P < 6; ++P) F.Box(-2.52 + 1.01 * P, 0.03 * ((P * 5) % 3 - 1), 0.5 * Tops[P], 0.52, 0.5 - 0.03 * (P % 2), 0.5 * Tops[P], 0.04 * ((P * 7) % 3 - 1), Varied(Rgb(152, 139, 114), Lit[P], 0.0));
 					break;
 				}
-				case KPear: Stands(0.5f, 0.5f, 0.8f, 0.0f, 110.0f); break;
+				case KPear:
+					// (lit as the agave: its pads' shaded side lifted by the light through and round them, near black else)
+					Stands(0.5f, 0.5f, 0.8f, 0.0f, 110.0f);
+					M.Paint = 1;
+					break;
 				case KAgave: M.FarFrom = 90.0f; M.Paint = 1; break;
 				case KSpike: M.FarFrom = 160.0f; M.Paint = 1; break;
 				case KStook:
@@ -1131,9 +1187,13 @@ namespace LandScape
 				switch (K)
 				{
 				case KPear:
-					Pear(W, R);
-					F.Rock(0.0, 0.0, 0.95, 1.6, 61, Rgb(110, 126, 82), Rgb(72, 84, 54));
+				{
+					// (far off the same clump, each pad a flat diamond, no fruit: never a ball)
+					Rng Same = R;
+					Pear(W, R, false);
+					Pear(F, Same, true);
 					return;
+				}
 				case KAgave:
 				case KSpike:
 					Agave(W, R, K == KSpike);
@@ -1176,9 +1236,10 @@ namespace LandScape
 				M.FarFrom = 400.0f;
 			}
 
-			/** The prickly pear: a clump of flat oval pads, each grown from the rim of the one below, some 1.6 m; the
-			 * oldest at the foot woody and grey-brown, the young ones fresher grey-green. */
-			static void Pear(Writer& W, Rng& R)
+			/** The prickly pear: a branching clump of flat oval paddles, each grown from the rim of the one below, some
+			 * 1.8 m; the oldest at the foot woody and grey-brown, the rest grey-green; a few dull red-orange fruits on the
+			 * rims of the upper ones. Far (bFar): the same clump, each pad a flat diamond, no fruit. */
+			static void Pear(Writer& W, Rng& R, bool bFar)
 			{
 				struct Bud
 				{
@@ -1188,16 +1249,16 @@ namespace LandScape
 				std::vector<Bud> Todo;
 				for (int K = 0; K < 5; ++K)
 				{
-					const double Az = K * 2.0 * Pi / 5.0 + R.Range(-0.4, 0.4), Out = R.Range(0.05, 0.4), Lean = R.Range(0.15, 0.55);
+					const double Az = K * 2.0 * Pi / 5.0 + R.Range(-0.4, 0.4), Out = R.Range(0.05, 0.35), Lean = R.Range(0.1, 0.45);
 					const double L = std::sqrt(1.0 + Lean * Lean);
 					Todo.push_back({ { Out * std::cos(Az), Out * std::sin(Az), 0.0 }, { Lean * std::cos(Az) / L, Lean * std::sin(Az) / L, 1.0 / L }, 0 });
 				}
-				for (size_t Next = 0; Next < Todo.size() && Next < 70; ++Next)
+				for (size_t Next = 0; Next < Todo.size() && Next < 64; ++Next)
 				{
 					const Bud Bd = Todo[Next];
-					const double Long = 0.27 - 0.015 * Bd.Depth, Wide = 0.19 - 0.01 * Bd.Depth;
+					const double Long = 0.2 - 0.008 * Bd.Depth, Wide = 0.13 - 0.005 * Bd.Depth;
 					// the pad's face, turned about its axis
-					const double Yaw = R.Range(0.0, 2.0 * Pi), Shade = R.Range(0.9, 1.08);
+					const double Yaw = R.Range(0.0, 2.0 * Pi), Shade = R.Range(0.9, 1.08), Fruit = R.Next();
 					double B[3] = { std::cos(Yaw), std::sin(Yaw), 0.0 };
 					const double Dot = B[0] * Bd.A[0] + B[1] * Bd.A[1];
 					for (int I = 0; I < 3; ++I) B[I] -= Dot * Bd.A[I];
@@ -1211,17 +1272,19 @@ namespace LandScape
 					}
 					for (double& V : B) V /= BL;
 					const double C[3] = { Bd.P[0] + Long * Bd.A[0], Bd.P[1] + Long * Bd.A[1], Bd.P[2] + Long * Bd.A[2] };
-					const Tone Col = Bd.Depth == 0 ? Varied(Rgb(128, 122, 96), Shade, 0.0) : Varied(Mixed(Rgb(102, 122, 78), Rgb(122, 140, 88), Bd.Depth / 4.0), Shade, 0.0);
-					Pad(W, C, Bd.A, B, Long, Wide, Col);
+					// (grey-green, the art director's 110,125,80; the oldest woody)
+					const Tone Col = Bd.Depth == 0 ? Varied(Rgb(126, 120, 96), Shade, 0.0) : Varied(Mixed(Rgb(104, 120, 76), Rgb(118, 132, 86), Bd.Depth / 5.0), Shade, 0.0);
+					if (bFar) Pad(W, C, Bd.A, B, Long, Wide, Col, 0.0, 0.2, 4);
+					else Pad(W, C, Bd.A, B, Long, Wide, Col, 0.01, 0.2);
 					// its children from its rim, one or two (three low down), leaning out and up
 					const double Kids = R.Next();
-					const int N = Bd.Depth >= 4 ? 0 : 1 + (Kids < 0.55 ? 1 : 0) + (Bd.Depth < 2 && Kids < 0.2 ? 1 : 0);
+					const int N = Bd.Depth >= 5 ? 0 : 1 + (Kids < 0.5 ? 1 : 0) + (Bd.Depth < 2 && Kids < 0.2 ? 1 : 0);
 					for (int Kd = 0; Kd < N; ++Kd)
 					{
 						const double Turn = R.Range(-0.9, 0.9), Where = R.Range(-0.5, 0.5);
 						Bud Kid;
 						for (int I = 0; I < 3; ++I) Kid.A[I] = std::cos(Turn) * Bd.A[I] + std::sin(Turn) * B[I];
-						Kid.A[2] += 0.35;
+						Kid.A[2] += 0.45;
 						const double AL = std::sqrt(Kid.A[0] * Kid.A[0] + Kid.A[1] * Kid.A[1] + Kid.A[2] * Kid.A[2]);
 						for (int I = 0; I < 3; ++I)
 						{
@@ -1230,6 +1293,17 @@ namespace LandScape
 						}
 						Kid.Depth = Bd.Depth + 1;
 						Todo.push_back(Kid);
+					}
+					// (on some of the upper pads two to four fruits along the top of its rim, dull red-orange)
+					if (Bd.Depth < 2 || Fruit > 0.45) continue;
+					const int Fruits = 2 + static_cast<int>(Fruit * 4.0) % 3;
+					for (int Q = 0; Q < Fruits; ++Q)
+					{
+						const double T = (Q - 0.5 * (Fruits - 1)) * 0.45, Ripe = R.Next();
+						if (bFar) continue;
+						double At[3];
+						for (int I = 0; I < 3; ++I) At[I] = C[I] + 1.02 * (std::cos(T) * Long * Bd.A[I] + std::sin(T) * Wide * B[I]);
+						Bead(W, At[0], At[1], At[2] + 0.015, 0.022, 0.045, Mixed(Rgb(150, 86, 54), Rgb(170, 104, 58), Ripe), Rgb(128, 104, 64));
 					}
 				}
 			}
@@ -1397,6 +1471,47 @@ namespace LandScape
 			void Sites(Host& H) override
 			{
 				Rng R(H.Seed() ^ 0x51E5);
+				// (the nearest road's way by 100 m squares over the field and 400 m round it, for the strips' way)
+				if (H.Lanes() > 0)
+				{
+					RNX = static_cast<int>(std::ceil((FW + 2.0 * RoadMargin) / RoadStep));
+					RNY = static_cast<int>(std::ceil((FH + 2.0 * RoadMargin) / RoadStep));
+					RoadDir.assign(2 * static_cast<size_t>(RNX) * static_cast<size_t>(RNY), 0.0f);
+					// (the roads in pieces some 25 m long at the least: cheap, and their way the same for squares 100 m)
+					std::vector<std::array<double, 4>> Pieces;
+					for (size_t L = 0; L < H.Lanes(); ++L)
+					{
+						const auto& Line = H.LaneLine(L);
+						size_t From = 0;
+						for (size_t K = 1; K < Line.size(); ++K)
+						{
+							const double AX = Line[From].first, AY = Line[From].second, BX = Line[K].first, BY = Line[K].second;
+							if (std::hypot(BX - AX, BY - AY) < 25.0 && K + 1 < Line.size()) continue;
+							if (std::hypot(BX - AX, BY - AY) > 1e-6) Pieces.push_back({ AX, AY, BX, BY });
+							From = K;
+						}
+					}
+					for (int J = 0; J < RNY; ++J)
+						for (int I = 0; I < RNX; ++I)
+						{
+							const double X = -RoadMargin + (I + 0.5) * RoadStep, Y = -RoadMargin + (J + 0.5) * RoadStep;
+							double Best = 1e18, DX = 1.0, DY = 0.0;
+							for (const auto& Pc : Pieces)
+							{
+								const double D2 = SegDist(X, Y, Pc[0], Pc[1], Pc[2], Pc[3]);
+								if (D2 < Best)
+								{
+									Best = D2;
+									DX = Pc[2] - Pc[0];
+									DY = Pc[3] - Pc[1];
+								}
+							}
+							const double DL = std::hypot(DX, DY), Sign = DY < 0.0 || (DY == 0.0 && DX < 0.0) ? -1.0 : 1.0;
+							const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(RNX) + static_cast<size_t>(I));
+							RoadDir[K] = static_cast<float>(Sign * DX / DL);
+							RoadDir[K + 1] = static_cast<float>(Sign * DY / DL);
+						}
+				}
 				int Built = 0, Hurt = 0, Steads = 0;
 				double TX = 0.0, TY = 0.0, TR = 0.0;
 				const bool bTown = H.Town(TX, TY, TR);
@@ -1622,7 +1737,7 @@ namespace LandScape
 								const int Pears = 2 + static_cast<int>(More * 3.0);
 								for (int K = 0; K < Pears; ++K)
 								{
-									const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(11.0, 22.0), PearYaw = R.Range(0.0, 2.0 * Pi), Sz = R.Range(0.95, 1.5), Tall = R.Range(0.85, 1.2);
+									const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(11.0, 22.0), PearYaw = R.Range(0.0, 2.0 * Pi), Sz = R.Range(0.95, 1.25), Tall = R.Range(0.9, 1.15);
 									const double PX = X + D * std::cos(A), PY = Y + D * std::sin(A);
 									if (H.Free(PX, PY, 1.6)) H.Plant(KitOf(KPear), PX, PY, PearYaw, Sz, Sz * Tall, Tint(1.0, 1.0, 1.0));
 								}
@@ -2219,7 +2334,7 @@ namespace LandScape
 					// (the south's field edges and roadsides: prickly pear, agave, now and then an agave's dry flower pole)
 					if (bPears && C != Maquis && (S.Edge < 2.5 || (S.Lane > 2.6 && S.Lane < 6.0)) && Keep >= 0.5 && Keep < 0.65 && H.Free(X, Y, 1.4))
 					{
-						if (Keep < 0.5975) H.Plant(KitOf(KPear), X, Y, Yaw, Size * 1.15, Size * Lerp(0.9, 1.3, Tall), Tint(Shade, Shade, Shade));
+						if (Keep < 0.5975) H.Plant(KitOf(KPear), X, Y, Yaw, Size * 0.95, Size * Lerp(0.95, 1.15, Tall), Tint(Shade, Shade, Shade));
 						else if (Keep < 0.6375) H.Plant(KitOf(KAgave), X, Y, Yaw, Size, Size * Lerp(0.85, 1.15, Tall), Tint(Shade, Shade, Shade));
 						else H.Plant(KitOf(KSpike), X, Y, Yaw, Size * 0.9, Lerp(0.9, 1.1, Tall), Tint(Shade, Shade, Shade));
 						continue;
@@ -2260,14 +2375,14 @@ namespace LandScape
 				HillTown(H, R);
 			}
 
-			/** Walk a parcel's lattice slot by slot out from where it was found (GA apart along its grain, GC across it, the
-			 * rows wavering by Wave metres), calling Lay(X, Y, Spot) at each slot inside it. */
+			/** Walk a parcel's lattice slot by slot out from where it was found (GA apart along the way (Ca, Sa) from its
+			 * middle (OX, OY), GC across it, the rows wavering by Wave metres), calling Lay(X, Y, Spot) at each slot inside
+			 * it. */
 			template <typename F>
-			static void Lattice(Host& H, const Spot& S, double GA, double GC, double Wave, F&& Lay)
+			static void Lattice(Host& H, const Spot& S, double OX, double OY, double Ca, double Sa, double GA, double GC, double Wave, F&& Lay)
 			{
 				const uint64_t Key = S.Key;
-				const double Ca = std::cos(S.Angle), Sa = std::sin(S.Angle);
-				const double OX = S.X - (S.Along * Ca - S.Across * Sa), OY = S.Y - (S.Along * Sa + S.Across * Ca);
+				const double SAlong = (S.X - OX) * Ca + (S.Y - OY) * Sa, SAcross = -(S.X - OX) * Sa + (S.Y - OY) * Ca;
 				const double A0 = GA * Unit(Mix(Key ^ 0x0A3)), C0 = GC * Unit(Mix(Key ^ 0x0A4));
 				auto Slot = [&](int I, int J, double& OutX, double& OutY) {
 					const double Along = A0 + I * GA, Across = C0 + J * GC + Wave * Noise(Along / 45.0, J * 1.7, Key);
@@ -2278,7 +2393,7 @@ namespace LandScape
 				// outside it, is walked all the same)
 				std::unordered_set<int64_t> Done;
 				std::vector<std::pair<int, int>> Todo;
-				const int I0 = static_cast<int>(std::lround((S.Along - A0) / GA)), J0 = static_cast<int>(std::lround((S.Across - C0) / GC));
+				const int I0 = static_cast<int>(std::lround((SAlong - A0) / GA)), J0 = static_cast<int>(std::lround((SAcross - C0) / GC));
 				for (int DI = -1; DI <= 1; ++DI)
 					for (int DJ = -1; DJ <= 1; ++DJ)
 					{
@@ -2321,7 +2436,12 @@ namespace LandScape
 						{
 							// (sheaves stooked in rows some 9 m apart, a stook every 7 m along them)
 							if (Unit(Mix(Key ^ 0x5700)) > 0.85) continue;
-							Lattice(H, S, 7.0, 9.0, 0.6, [&](double PX, double PY, const Spot& Q) {
+							// (along the strips: the nearest road's way)
+							double DC = 1.0, DS = 0.0;
+							StripWay(S, DC, DS);
+							const double Ca = std::cos(S.Angle), Sa = std::sin(S.Angle);
+							const double OX = S.X - (S.Along * Ca - S.Across * Sa), OY = S.Y - (S.Along * Sa + S.Across * Ca);
+							Lattice(H, S, OX, OY, DC, DS, 7.0, 9.0, 0.6, [&](double PX, double PY, const Spot& Q) {
 								const double Miss = R.Next(), JX = R.Range(-0.8, 0.8), JY = R.Range(-0.8, 0.8), Yaw = R.Range(0.0, 2.0 * Pi), Sz = R.Range(0.9, 1.1), Tall = R.Range(0.92, 1.08);
 								if (Miss < 0.15 || Q.Edge < 3.0 || CropAt(Q) != Grain) return;
 								const double X = PX + JX, Y = PY + JY;
@@ -2333,7 +2453,9 @@ namespace LandScape
 						const bool bOld = S.Kind == KOpen;
 						const double GA = bAlmond ? 6.5 + 1.0 * Unit(Mix(Key ^ 0x0A1)) : 8.5 + 2.5 * Unit(Mix(Key ^ 0x0A1));
 						const double GC = bAlmond ? 7.0 + 1.0 * Unit(Mix(Key ^ 0x0A2)) : 9.5 + 2.0 * Unit(Mix(Key ^ 0x0A2));
-						Lattice(H, S, GA, GC, bAlmond ? 0.4 : 1.4, [&](double PX, double PY, const Spot& Q) {
+						const double Ca = std::cos(S.Angle), Sa = std::sin(S.Angle);
+						const double OX = S.X - (S.Along * Ca - S.Across * Sa), OY = S.Y - (S.Along * Sa + S.Across * Ca);
+						Lattice(H, S, OX, OY, Ca, Sa, GA, GC, bAlmond ? 0.4 : 1.4, [&](double PX, double PY, const Spot& Q) {
 							const double Miss = R.Next(), JX = R.Range(-1.4, 1.4), JY = R.Range(-1.4, 1.4), Yaw = R.Range(0.0, 2.0 * Pi);
 							const double Age = R.Next(), Silver = R.Range(0.0, 1.0), Tall = R.Range(0.9, 1.12);
 							if (Miss < (bAlmond ? 0.08 : bOld ? 0.3 : 0.12) || Q.Edge < 2.5) return;
@@ -2514,6 +2636,9 @@ namespace LandScape
 			static constexpr double MotStep = 8.0, MotMargin = 400.0;
 			std::vector<float> MotGrid; // (M, Mid, Warm, the soil's red: four to a point)
 			int MNX = 0, MNY = 0;
+			static constexpr double RoadStep = 100.0, RoadMargin = 400.0;
+			std::vector<float> RoadDir; // (the nearest road's way by 100 m squares: its cosine and sine, two to a square)
+			int RNX = 0, RNY = 0;
 			int GridNX = 0, GridNY = 0;
 			std::vector<std::pair<double, double>> TerraceTrees;
 			double TowerX = 0.0, TowerY = 0.0, CemX = 0.0, CemY = 0.0, CemYaw = 0.0;
