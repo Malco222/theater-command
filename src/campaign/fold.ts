@@ -28,6 +28,8 @@ export function whyNotFold(g: Game, keep: Corps, gone: Corps): string | null {
   if (keep.reg !== gone.reg || keep.town !== undefined || gone.town !== undefined) return 'The two corps must stand together in the field, in the same province.';
   if (keep.kind !== gone.kind) return 'The two corps must be of the same kind.';
   if ((keep.elite ?? '') !== (gone.elite ?? '') || !!keep.airborne !== !!gone.airborne) return 'A special formation folds only into another of its own.';
+  // A volunteer legion keeps its own name and flag (legions.ts; release 2): it is never folded into its patron's corps.
+  if ((keep.vol ?? '') !== (gone.vol ?? '')) return 'Volunteers fold only into a legion of their own country.';
   if (keep.joint || gone.joint) return 'A corps marching with an ally cannot be folded.';
   if (keep.leave !== undefined || gone.leave !== undefined) return 'A corps at home cannot be folded.';
   if (!keep.supplied || !gone.supplied) return 'Cut off, the cadre has no way home.';

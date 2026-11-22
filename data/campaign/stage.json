@@ -2,5 +2,7 @@
   "_about": "How far the grand campaign's chart reaches. 'far' false: Europe and the Americas with their cities, as the cities version plays them. 'far' true: the whole world, with the Pacific and the globe laid after them (step 13 and the globe's stage) and the countries that live there. One line, flipped by the rules builder when the far side ships; until then nothing of the far side is read, so no campaign and no war moves. A test of the far side turns it on for its own file alone (src/campaign/stage.ts).",
   "far": false,
   "_bargains": "A neutral's bargains (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and ruling of 03:47 UTC). Off: nothing of src/campaign/bargains.ts runs and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'bargains', and their neutrals sell their goods to whichever country at war bids best (data/campaign/bargains.json). A test turns it on for its own games by setting that flag; a run outside the browser by TC_BARGAINS=1.",
-  "bargains": false
+  "bargains": false,
+  "_legions": "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC). Off: nothing of src/campaign/legions.ts runs and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'legions', and a country at peace outside both sides may send one legion of volunteers at a time to fight in a patron's army (data/campaign/legions.json). A test turns it on for its own games by setting that flag; a run outside the browser by TC_LEGIONS=1.",
+  "legions": false
 }

@@ -79,6 +79,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
 import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
+import { legionsMonth, recallLegion, sendLegion } from './legions';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -117,6 +118,8 @@ function closePhase(g: Game, nat: string): void {
     monthlyDiplomacy(g);
     // A neutral's bargains (release 2, switched off in release 1): terms end, bids open and close, patience moves.
     bargainsMonth(g);
+    // Volunteer legions (release 2, switched off in release 1): they reach the line, come home, or are sent.
+    legionsMonth(g);
     // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
     winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
@@ -2053,6 +2056,16 @@ export function orderBid(g: Game, id: string, pp: number): string | null {
 /** The player, as the seller, chooses a buyer for a bargain from the bids that stand, or nobody (release 2). */
 export function orderSellTo(g: Game, id: string, buyer: string | null): string | null {
   return humanUp(g) ? chooseBuyer(g, g.human!, id, buyer) : 'It is not your month.';
+}
+
+/** The player, at peace outside both sides, sends a legion of volunteers to a patron against its enemy (release 2). Returns why not, or null when it is sent. */
+export function orderLegion(g: Game, patron: string, against: string): string | null {
+  return humanUp(g) ? sendLegion(g, g.human!, patron, against) : 'It is not your month.';
+}
+
+/** The player calls his legion home: it leaves at the next month's start (release 2). Returns why not, or null. */
+export function orderRecall(g: Game): string | null {
+  return humanUp(g) ? recallLegion(g, g.human!) : 'It is not your month.';
 }
 
 // ---- Spies and the fog of war (the grand campaign) -----------------------------------------------------

@@ -24,8 +24,15 @@ export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== 
 
 // A neutral's bargains (release 2): the grand campaigns opened while this is true carry the flag 'bargains'
 // (bargains.ts). A run outside the browser can be given it by its environment: TC_BARGAINS=1 node ...
-const B = globalThis as { TC_BARGAINS?: unknown; process?: { env?: Record<string, string | undefined> } };
+const B = globalThis as { TC_BARGAINS?: unknown; TC_LEGIONS?: unknown; process?: { env?: Record<string, string | undefined> } };
 const bargainsForced = B.TC_BARGAINS ?? B.process?.env?.TC_BARGAINS;
 
 /** True where new grand campaigns open with a neutral's bargains (data/campaign/stage.json 'bargains'). */
 export const BARGAINS_STAGE: boolean = bargainsForced !== undefined ? !!bargainsForced && bargainsForced !== '0' : (stage as { bargains?: boolean }).bargains === true;
+
+// Volunteer legions (release 2): the grand campaigns opened while this is true carry the flag 'legions' (legions.ts).
+// A run outside the browser can be given it by its environment: TC_LEGIONS=1 node ...
+const legionsForced = B.TC_LEGIONS ?? B.process?.env?.TC_LEGIONS;
+
+/** True where new grand campaigns open with volunteer legions (data/campaign/stage.json 'legions'). */
+export const LEGIONS_STAGE: boolean = legionsForced !== undefined ? !!legionsForced && legionsForced !== '0' : (stage as { legions?: boolean }).legions === true;

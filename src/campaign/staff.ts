@@ -44,6 +44,7 @@ import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, compu
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { openBargains } from './bargains';
+import { openLegions } from './legions';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -158,6 +159,9 @@ export function startOpen(g: Game, wide = true): Game {
   numberDivisions(g);
   // (After the numbers: a garrison keeps its divisions' numbers under the record's name for the command. Ruling 232, b566.)
   startGarrisons(g);
+  // Volunteer legions (release 2): only where stage.json switches them on. (After the reserves of men are opened: the
+  // record's legions in the line on the first day are raised from them.)
+  openLegions(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
   if (wide) computeSupply(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.

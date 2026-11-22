@@ -276,6 +276,32 @@ export interface BargainBook {
   got: Record<string, number>;
 }
 
+/** A volunteer legion abroad (legions.ts; release 2, with its switch on), by its home. */
+export interface LegionAbroad {
+  /** Its corps in the patron's army; -1 in the month it is on its way. */
+  corps: number;
+  patron: string;
+  /** The enemy it was sent to fight. */
+  against: string;
+  name: string;
+  /** The record's row it is (legions.json), if it is one. */
+  row?: string;
+  /** Its size in divisions' worth of men. */
+  est: number;
+  /** The month it reaches the line, and the last month of its tour. */
+  since: number;
+  until: number;
+  /** Its home has called it back: it leaves at the next month's start. */
+  recall?: boolean;
+}
+
+/** The volunteer legions (legions.ts; release 2): who has one abroad, and the record's rows already played out. */
+export interface LegionBook {
+  abroad: Record<string, LegionAbroad>;
+  /** By the record's row: the month it ended. */
+  done: Record<string, number>;
+}
+
 /** A power's stocks of oil and supplies, and the share of last month's need of each that was met (1 unless the depots ran dry). */
 export interface Stores {
   oil: number; sup: number; oilMet: number; supMet: number;
@@ -424,6 +450,8 @@ export interface Corps extends Storied {
   nos?: number[];
   /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
   town?: number;
+  /** A volunteer legion (legions.ts; release 2): the country at peace whose men these are. It fights in its patron's army under its own name and flag. */
+  vol?: string;
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
@@ -1239,6 +1267,8 @@ export interface Game {
   ac?: AirWarMemory;
   /** A neutral's bargains (bargains.ts; release 2): absent while the switch is off. */
   bargains?: BargainBook;
+  /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
+  legions?: LegionBook;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;

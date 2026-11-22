@@ -32,6 +32,7 @@ import { BARGAINS_STAGE } from './stage';
 import { turnToDate } from '../core/ticket';
 import { fronts } from './staff';
 import { knowsBooks } from './intel';
+import { LEGIONS, legionFeeds } from './legions';
 import type { BargainBook, BargainHeld, Game, Nation } from './types';
 
 export interface BargainRow {
@@ -427,10 +428,13 @@ function goodwill(g: Game): void {
   }
 }
 
-/** Each great power at war with a buyer loses patience with the seller that feeds it, and gets it back in other months. */
+/**
+ * Each great power at war with a buyer loses patience with the seller that feeds it, and gets it back in other months.
+ * (A neutral's volunteer legion fighting a great power costs its home that power's patience as well: legions.ts.)
+ */
 function patience(g: Game): void {
   const bk = book(g), P = BARGAINS.patience;
-  const feeds = new Map<string, Set<string>>(), loud = new Set<string>();
+  const feeds = new Map<string, Set<string>>(), loud = new Set<string>(), fallOf = new Map<string, number>(), legion = new Map<string, string>();
   for (const row of rowsOf(g)) {
     const h = bk.rows[row.id];
     if (!h?.buyer || h.share <= 0) continue;
@@ -440,9 +444,24 @@ function patience(g: Game): void {
       const k = `${p}:${row.seller}`;
       if (!feeds.has(k)) feeds.set(k, new Set());
       feeds.get(k)!.add(row.name);
+      fallOf.set(k, P.fall);
       if (named(row)) loud.add(k);
     }
   }
+  for (const f of legionFeeds(g)) {
+    const k = `${f.power}:${f.home}`;
+    if (!feeds.has(k)) feeds.set(k, new Set());
+    legion.set(k, f.name);
+    fallOf.set(k, (fallOf.get(k) ?? 0) + LEGIONS.legionFall);
+    loud.add(k);
+  }
+  // What the power holds against the seller, as its news says it.
+  // (Told to the seller, to the power, or to the world.)
+  const cause = (k: string, goods: Set<string>, to: 'seller' | 'power' | 'world'): string => {
+    const sold = goods.size ? `${to === 'seller' ? 'your' : 'its'} ${[...goods].join(' and ')} goes to ${to === 'power' ? 'your' : 'its'} enemies` : '';
+    const fights = legion.has(k) ? `${legion.get(k)} fights ${to === 'power' ? 'you' : 'it'}` : '';
+    return [sold, fights].filter(Boolean).join(', and ');
+  };
   for (const k of Object.keys(bk.patience).sort()) if (!feeds.has(k)) {
     const v = Math.min(100, bk.patience[k] + P.heal);
     if (v >= 100) delete bk.patience[k]; else bk.patience[k] = v;
@@ -455,11 +474,23 @@ function patience(g: Game): void {
     }
   }
   for (const [k, goods] of [...feeds].sort(([a], [b]) => (a < b ? -1 : 1))) {
-    const was = bk.patience[k] ?? 100, now = Math.max(0, was - P.fall);
+    const was = bk.patience[k] ?? 100, now = Math.max(0, was - (fallOf.get(k) ?? P.fall));
     bk.patience[k] = now;
     const [p, seller] = k.split(':');
     const N = g.nations[p], S = g.nations[seller];
     const what = [...goods].join(' and ');
+    if (legion.has(k)) {
+      // (A legion's news: what it does said as it is. A seller whose goods alone feed the power reads as it always did.)
+      if (was > P.half && now <= P.half) {
+        if (g.human === seller) warning(g, 'Patience running out', `${The(N)} is losing patience: ${cause(k, goods, 'seller')}. Half of its patience is gone.`, seller, S.capital, p);
+        else if (g.human === p) headline(g, 'info', `Your patience with ${theName(S)} is half gone: ${cause(k, goods, 'power')}.`, p, S.capital);
+      } else if (was > 0 && now === 0) {
+        const late = stopOf(g) >= 4 && p !== g.human;
+        if (g.human === seller) warning(g, 'Patience spent', `${The(N)} has lost patience with you: ${cause(k, goods, 'seller')}.${late ? ' Its staff may now press a claim on your ground.' : ''}`, seller, S.capital, p);
+        else headline(g, g.human === p ? 'info' : 'event', `${The(N)} has lost patience with ${theName(S)}: ${cause(k, goods, g.human === p ? 'power' : 'world')}.`, p, S.capital);
+      }
+      continue;
+    }
     if (was > P.half && now <= P.half) {
       if (g.human === seller) warning(g, 'Patience running out', `${The(N)} is losing patience: your ${what} goes to its enemies. Half of its patience is gone.`, seller, S.capital, p);
       else if (g.human === p) headline(g, 'info', `Your patience with ${theName(S)} is half gone: its ${what} goes to your enemies.`, p, S.capital);
@@ -619,7 +650,9 @@ export function feedClaims(g: Game): FeedClaim[] {
     if (!ground.length && went) ground = g.regions.filter((r) => r.owner === seller && !r.overseas).map((r) => r.name);
     if (!ground.length) continue;
     const goods = rowsOf(g).filter((row) => row.seller === seller).map((row) => row.name);
-    out.push({ id, nat: p, on: seller, ground, name: `the ${S.adj} border`, why: `${S.name} sells ${goods[0] ?? 'its goods'} to ${theName(P)}'s enemies`, feeds: true, stop: 4 });
+    // (A home whose volunteer legion fights the power: that is the grievance named. legions.ts.)
+    const vol = legionFeeds(g).find((f) => f.power === p && f.home === seller);
+    out.push({ id, nat: p, on: seller, ground, name: `the ${S.adj} border`, why: vol ? `${S.adj} volunteers fight ${theName(P)} in ${vol.name}` : `${S.name} sells ${goods[0] ?? 'its goods'} to ${theName(P)}'s enemies`, feeds: true, stop: 4 });
   }
   return out;
 }
