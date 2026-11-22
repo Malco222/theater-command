@@ -57,6 +57,11 @@ def main():
     for item in (opt.get("pose", "").split(",") if opt.get("pose") else []):
         clip, at = item.split("@")
         pose = rigid.merge(pose, rigid.pose_of(m, m.clips[clip], float(at)))
+    if opt.get("lids") == "wrong":                       # (for a before picture: every lid turned the way it went before 22 November, into the hull)
+        for p in m.parts:
+            if p.note == "a hatch: + opens" and p.name in pose:
+                q, mv, sc = pose[p.name]
+                pose[p.name] = (q.conjugated(), mv, sc)
     if pose:
         rigid.apply_pose(arm, pose, model=m)
     landmarks.put(m, ob, arm, name=opt.get("name"), rings=int(opt.get("rings", 0)))

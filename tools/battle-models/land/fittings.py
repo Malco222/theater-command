@@ -341,12 +341,12 @@ class Fittings:
             t = f + X * reach + Z * high
             b = t.z + 0.03
             # the rail round the cupola's top, on short stays (fixed to the turret)
-            k_n = self.n(40, 12)
+            k_n = self.n(28, 12)
             rail = [f + Vector((math.cos(a) * ring, math.sin(a) * ring, 0.035)) for a in (2 * math.pi * k / k_n for k in range(k_n))]
-            self.tube(rail, 0.011, "upper", 6, closed=True)
+            self.tube(rail, 0.011, "upper", 5, closed=True)
             if fine:
-                for k in range(6):
-                    a = 2 * math.pi * (k + 0.5) / 6
+                for k in range(4):
+                    a = 2 * math.pi * (k + 0.5) / 4
                     w = Vector((math.cos(a), math.sin(a), 0.0))
                     self.rod(f + w * (ring - 0.05) - Z * 0.05, f + w * ring + Z * 0.03, 0.009, "upper", 6)
             self.part("roof_mg", parent, f, axis=(0, 0, -1), limits=list(arc), kind="turn",
@@ -355,9 +355,6 @@ class Fittings:
             # the carriage on the rail, and the arm up to the gun's trunnions
             self.box((0.10, 0.07, 0.045), f + X * ring + Z * 0.04, "upper", 0.006 if fine else 0.0)
             if fine:
-                for s in (LEFT, RIGHT):
-                    self.lathe(f + X * (ring - 0.03) + Y * (s * 0.036) + Z * 0.035, Y * s, [(0.012, 0.0), (0.012, 0.016), (0.0, 0.016), (0.0, 0.0)], steel, 8)
-                    self.lathe(f + X * (ring + 0.03) + Y * (s * 0.036) + Z * 0.035, Y * s, [(0.012, 0.0), (0.012, 0.016), (0.0, 0.016), (0.0, 0.0)], steel, 8)
                 self.tube([f + X * ring + Z * 0.06, f + X * (ring + 0.02) + Z * (high * 0.55), t - Z * 0.04], 0.016, "upper", 8)
                 self.box((0.05, 0.075, 0.04), t - Z * 0.035, "upper", 0.004)
             self.part("roof_mg_cradle", "roof_mg", t, axis=(0, -1, 0), limits=list(lay), kind="turn", note="the gun tips in its mount: + muzzle up")
@@ -376,17 +373,17 @@ class Fittings:
                 self.tube([(t.x - 0.20, t.y, b - 0.025), (t.x - 0.205, t.y, b - 0.06), (t.x - 0.235, t.y, b - 0.065)], 0.004, steel, 4)   # the trigger guard
                 # the jacket, full of holes; the muzzle's booster cone; the front sight
                 self.lathe((t.x - 0.005, t.y, b), X, [(0.465, 0.0), (0.465, 0.0215), (0.0, 0.0215), (0.0, 0.0)], steel, 14)
-                for k in range(8):
-                    for a in (math.radians(d) for d in (30, 90, 150, 210, 270, 330)):
+                for k in range(6):                           # (the holes on the sides and top that the eye reads; none underneath)
+                    for a in (math.radians(d) for d in (0, 60, 120, 180)):
                         w = Vector((0.0, math.cos(a), math.sin(a)))
-                        self.lathe(Vector((t.x + 0.03 + 0.052 * k + (0.026 if (int(math.degrees(a)) // 60) % 2 else 0.0), t.y, b)) + w * 0.022, w,
-                                   [(0.0, 0.0), (0.0, 0.0065)], "black", 6)
-                self.lathe((t.x + 0.46, t.y, b), X, [(0.11, 0.0), (0.11, 0.013), (0.075, 0.022), (0.0, 0.0235), (0.0, 0.0)], steel, 12)
+                        self.lathe(Vector((t.x + 0.04 + 0.07 * k + (0.035 if (int(math.degrees(a)) // 60) % 2 else 0.0), t.y, b)) + w * 0.022, w,
+                                   [(0.0, 0.0), (0.0, 0.007)], "black", 6)
+                self.lathe((t.x + 0.46, t.y, b), X, [(0.11, 0.0), (0.11, 0.013), (0.075, 0.022), (0.0, 0.0235), (0.0, 0.0)], steel, 10)
                 self.lathe((t.x + 0.5702, t.y, b), X, [(0.0, 0.0), (0.0, 0.0055)], "black", 8)
                 self.slab((t.x + 0.40, t.y - 0.003, b + 0.02), (t.x + 0.415, t.y + 0.003, b + 0.05), steel)
                 # the belt drum hung on the left of the feed, and the belt's end going in
                 drum = Vector((t.x - 0.19, t.y + 0.085, b - 0.04))
-                self.lathe(drum - X * 0.05, X, [(0.10, 0.0), (0.10, 0.058), (0.09, 0.064), (0.012, 0.068), (0.0, 0.066), (0.0, 0.0)], steel, 18)
+                self.lathe(drum - X * 0.05, X, [(0.10, 0.0), (0.10, 0.058), (0.09, 0.064), (0.012, 0.068), (0.0, 0.066), (0.0, 0.0)], steel, 14)
                 self.slab((t.x - 0.215, t.y + 0.02, b - 0.005), (t.x - 0.165, t.y + 0.055, b + 0.012), brass)
                 self.handle(drum - X * 0.03 + Z * 0.066, drum + X * 0.03 + Z * 0.066, Z, 0.004, 0.018, steel)
             else:
