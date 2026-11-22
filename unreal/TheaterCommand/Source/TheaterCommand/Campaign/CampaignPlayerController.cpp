@@ -1575,6 +1575,7 @@ void ACampaignPlayerController::SchoolCorps(int32 CorpsId)
 		return;
 	}
 	bool bGo = true;
+	bool bBackInTown = false;
 	int32 Where = INDEX_NONE;
 	{
 		// (read before the press: the view is laid afresh once the rules have answered)
@@ -1584,6 +1585,7 @@ void ACampaignPlayerController::SchoolCorps(int32 CorpsId)
 			return;
 		}
 		bGo = !Unit->bSchool;
+		bBackInTown = Unit->bInTown; // (the order moves nobody through a town's walls: it holds after the press)
 		Where = Unit->Region;
 	}
 	TArray<int32> Ids;
@@ -1592,6 +1594,7 @@ void ACampaignPlayerController::SchoolCorps(int32 CorpsId)
 	const bool bOk = Session->SendToSchool(Ids, bGo, Note);
 	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
 	bool bTakenUp = false;
+	bool bKeptOut = false;
 	if (bOk)
 	{
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
@@ -1599,18 +1602,48 @@ void ACampaignPlayerController::SchoolCorps(int32 CorpsId)
 		{
 			PickedCorps.Remove(CorpsId); // (it takes no orders until it is back)
 		}
-		else if (ArmyRegion == Where)
+		else
 		{
-			PickedCorps.AddUnique(CorpsId); // (back, and ready for orders: it comes along with the army in hand)
-		}
-		else if (ArmyRegion == INDEX_NONE)
-		{
-			bTakenUp = PickUpArmyIn(Where); // (the whole army was at the schools, only looked at: called back, it is in hand)
+			// Back, and ready for orders. The army in hand stays on one side of the town's walls (the code checker's rule
+			// of 17 November; Campaign/BattleSchool decides): it comes along, or the field army is picked up afresh, or a
+			// garrison stays out of the field army's hand and its card says why.
+			BattleSchool::FHandFacts HandNow;
+			HandNow.bNoHand = ArmyRegion == INDEX_NONE;
+			HandNow.bHandHere = ArmyRegion == Where;
+			HandNow.bBackInTown = bBackInTown;
+			for (const int32 PickedId : PickedCorps)
+			{
+				if (const FViewCorps* InHand = Session->GetView().Corps.FindByPredicate([PickedId](const FViewCorps& Each) { return Each.Id == PickedId; }))
+				{
+					(InHand->bInTown ? HandNow.bHandInTown : HandNow.bHandInField) = true;
+				}
+			}
+			const BattleSchool::EBackInHand Step = BattleSchool::HandOnBack(HandNow);
+			if (Step == BattleSchool::EBackInHand::Join)
+			{
+				PickedCorps.AddUnique(CorpsId);
+			}
+			else if (Step == BattleSchool::EBackInHand::PickUp)
+			{
+				bTakenUp = PickUpArmyIn(Where); // (it prefers the army in the field, and deals the cards itself)
+			}
+			bKeptOut = Step == BattleSchool::EBackInHand::KeepOut;
 		}
 	}
 	if (!bTakenUp)
 	{
 		RefreshOrders(); // (the cards dealt again: its button turns over, and a corps at the schools drops out of the hand)
+	}
+	if (bKeptOut)
+	{
+		// (the garrison's card is greyed with the rules' reason, 84.2.4: the same words are said with the note)
+		if (const FTrayCard* KeptOut = Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& Each) { return Each.CorpsId == CorpsId; }))
+		{
+			if (!KeptOut->Apart.IsEmpty())
+			{
+				Note = Note.IsEmpty() ? KeptOut->Apart : Note + TEXT(" ") + KeptOut->Apart;
+			}
+		}
 	}
 	RefreshRegionPanel(SelectedRegion);
 	if (!Note.IsEmpty())

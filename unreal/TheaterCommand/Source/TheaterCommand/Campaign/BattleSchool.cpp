@@ -51,4 +51,22 @@ namespace BattleSchool
 			+ " It takes no orders while it is there, and if it has to fight the term is lost.";
 		return Out;
 	}
+
+	EBackInHand HandOnBack(const FHandFacts& Hand)
+	{
+		if (Hand.bNoHand)
+		{
+			return EBackInHand::PickUp; // (the whole army was at the schools, only looked at: called back, it is in hand)
+		}
+		if (!Hand.bHandHere)
+		{
+			return EBackInHand::Untouched;
+		}
+		if (Hand.bBackInTown)
+		{
+			return Hand.bHandInField ? EBackInHand::KeepOut : EBackInHand::Join;
+		}
+		// (back in the field: a hand that held the town's garrison, for want of anyone outside, gives way to the field army)
+		return Hand.bHandInTown ? EBackInHand::PickUp : EBackInHand::Join;
+	}
 }

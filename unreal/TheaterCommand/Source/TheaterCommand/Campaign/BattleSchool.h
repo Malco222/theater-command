@@ -46,6 +46,32 @@ namespace BattleSchool
 	/** The card's school button for a corps, from what the view says of it. */
 	FButton ButtonFor(const FCorpsFacts& Corps);
 
+	/**
+	 * A corps called back from the schools, and the army in hand (the code checker's rule of 17 November: the army in
+	 * hand stays on one side of a town's walls. The army picked up is the army in the field, and the town's garrison is
+	 * never slipped in among it, or it is handed marches it cannot make).
+	 */
+	struct FHandFacts
+	{
+		bool bNoHand = false;      // no army in hand at all (a whole army at the schools is only looked at)
+		bool bHandHere = false;    // the army in hand stands where the corps called back does
+		bool bBackInTown = false;  // the corps called back is in the town (a garrison); the order moves nobody through the walls
+		bool bHandInTown = false;  // the hand holds a corps in the town
+		bool bHandInField = false; // the hand holds a corps in the field
+	};
+
+	enum class EBackInHand
+	{
+		Untouched, // the army in hand stands somewhere else: it is left as it is
+		Join,      // it comes along with the army in hand, which is on its side of the walls (or holds nobody)
+		PickUp,    // the army where it stands is picked up afresh (the controller's PickUpArmyIn): nothing was in hand, or
+		           // only the town's garrison, and a corps back in the field makes the field army the army in hand again
+		KeepOut    // a garrison called back while the field army is in hand: it stays out, and its card says why
+	};
+
+	/** What a press of BRING BACK does to the army in hand. */
+	EBackInHand HandOnBack(const FHandFacts& Hand);
+
 	/** A grade as it is written inside a sentence: "Veteran" becomes "veteran". Letters outside plain ASCII are left as they are. */
 	std::string GradeInSentence(const std::string& Grade);
 }
