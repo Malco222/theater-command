@@ -87,7 +87,8 @@
 // The data is history.json, 'stations' (the far side's rows: far-pacific-war.json); with none, nothing here happens.
 
 import { DEFENCE, allied, atWar, friendlyUnits, hostileUnits, limitAttackers, men, relocate, removeCorps, resolveBattle, withWorksAside, type AttackOpts } from './game';
-import { HISTORY, bookDate, onBook, stopDef } from './history';
+import { HISTORY, bookDate, onBook, stopDef, theatreOf } from './history';
+import { lineShut } from './line';
 import { appoint, generalOf } from './commanders';
 import { NAVY, canPass, fleetReach, landCorps, onOwnShipping, rebase, whyNotLand, zoneOf } from './navy';
 import { arrive, besieged, fieldCtrl, takeField } from './siege';
@@ -116,6 +117,11 @@ export interface Attack {
    * place's works set aside, the defenders' fieldworks counted.
    */
   works?: true | string[];
+  /**
+   * The dated choice whose book this row is in, where that is not the table's own (`"JAP:ichigo"`; the design
+   * director's rulings of 07:44Z and 07:46Z, 22 November 2026): see `ownBook`.
+   */
+  book?: string;
 }
 /** A covering fleet by the record: from `month` to `until` (that month alone with none) it patrols the sea named. */
 interface Cover { nat?: string; month: number; until?: number; fleet: string; sea?: string; base?: string[] }
@@ -161,6 +167,36 @@ export function stationsBind(g: Game, nat: string): boolean {
 }
 
 /**
+ * True while a dated attack that names its own choice (`book`) is asked (the design director's rulings of 07:44Z and
+ * 07:46Z, 22 November 2026, on Nanning's trace). The table is the Pacific's: its theatre, its great choice's
+ * calendar, and its last month, the summer of 1942. China's offensive of 1944 has a book of its own, and its rows
+ * laid in the table were never asked. Such a row is asked at a stop that keeps the book, computer against computer
+ * as the table's are, once its own choice has gone and while that choice's theatre keeps the book. The table's last
+ * month and the table's theatre do not bind it. It is asked in its own month as written, with no slide: the month
+ * list its theatre keeps (line.ts) does not slide either, so the row and the list read the same months (the choice
+ * of 1944 is dated 56 and goes in 57 in every war read, and the list's plain months are what met the record). And
+ * the list stays the leave it is: the row is not asked at a place the list keeps shut that month (`bookAttacks`).
+ * It lapses with its own `until`, or with nothing done when its book is closed.
+ */
+function ownBook(g: Game, B: Stations, nat: string, row: Attack): boolean {
+  if (row.book === undefined || nat === g.human || g.human === B.taker || !stopDef(g).book) return false;
+  const [n, op] = row.book.split(':');
+  return (g.flags[`st:done:${row.book}`] ?? 0) > 0 && onBook(g, theatreOf(n, op));
+}
+
+/**
+ * How far a dated attack's months have moved in this war, or null while the row is not asked at all: the table's
+ * slide for a row of the table, while the stations bind (and, where `fallen` asks it, once the great blow has
+ * fallen); none for a row with a book of its own, while that book asks it (`ownBook`).
+ */
+function slideOf(g: Game, B: Stations, nat: string, row: Attack, fallen: boolean): number | null {
+  if (row.book !== undefined) return ownBook(g, B, nat, row) ? 0 : null;
+  if (!stationsBind(g, nat)) return null;
+  const cal = calendar(g, B)!;
+  return fallen && !cal.went ? null : cal.slide;
+}
+
+/**
  * True while the plan's own landings are the book's (rider b626 to ruling 234): the invader's computer staff, in the
  * month its great blow fell by the book and the month after, while that blow's landings are still going ashore
  * (staff.ts). They sail on the record's own shipping, as the table's dated landings do (navy.ts onOwnShipping).
@@ -202,10 +238,14 @@ function letGo(g: Game, c: Corps): void {
  * to take), and is let go when that row is no longer owed. Where the book no longer binds, all of them are
  * (`bookStations`).
  */
-function landedFree(g: Game, B: Stations, cal: { slide: number }, i: number): void {
+function landedFree(g: Game, B: Stations, i: number): void {
   const A = B.attacks!;
-  const goes = (r: Attack, k: number, c: Corps): boolean => k !== i && !g.flags[`ba:${k}`] && r.force.includes(c.name)
-    && !(r.until !== undefined && g.turn > r.until + cal.slide) && r.at.some((nm) => !!g.byName[nm] && !allied(g, B.taker, g.byName[nm].ctrl));
+  // (Each row by its own calendar: the table's, or its own book's. `slideOf`.)
+  const goes = (r: Attack, k: number, c: Corps): boolean => {
+    if (k === i || g.flags[`ba:${k}`] || !r.force.includes(c.name)) return false;
+    const slide = slideOf(g, B, B.taker, r, false);
+    return slide !== null && !(r.until !== undefined && g.turn > r.until + slide) && r.at.some((nm) => !!g.byName[nm] && !allied(g, B.taker, g.byName[nm].ctrl));
+  };
   for (const c of g.corps) {
     if (g.flags[`bkl:${c.id}`] !== i + 1) continue;
     let j = -1;
@@ -225,10 +265,13 @@ function landedFree(g: Game, B: Stations, cal: { slide: number }, i: number): vo
  */
 export function bookedAhead(g: Game, c: Corps): boolean {
   const B = stations();
-  if (!B?.attacks || c.nat !== B.taker || !stationsBind(g, c.nat)) return false;
-  const cal = calendar(g, B)!;
-  return B.attacks.some((r, k) => !g.flags[`ba:${k}`] && r.force.includes(c.name) && !(r.until !== undefined && g.turn > r.until + cal.slide)
-    && r.at.some((nm) => !!g.byName[nm] && !allied(g, c.nat, g.byName[nm].ctrl)));
+  if (!B?.attacks || c.nat !== B.taker) return false;
+  // (A row with a book of its own is read by that book: the table's last month does not let its corps go. `ownBook`.)
+  return B.attacks.some((r, k) => {
+    if (g.flags[`ba:${k}`] || !r.force.includes(c.name)) return false;
+    const slide = slideOf(g, B, c.nat, r, false);
+    return slide !== null && !(r.until !== undefined && g.turn > r.until + slide) && r.at.some((nm) => !!g.byName[nm] && !allied(g, c.nat, g.byName[nm].ctrl));
+  });
 }
 
 /** True where a corps can fall back to: ground its side holds, no enemy in the field, and a retreat's room. */
@@ -420,6 +463,13 @@ const placesOf = (s: Step): string[] => (Array.isArray(s[1]) ? s[1] : [s[1]]);
 export const bookWatch: { tell: ((e: { row: Attack; what: 'due' | 'made' | 'owed' | 'over'; why?: string; to?: Region; force?: Corps[]; odds?: number; taken?: boolean; held?: boolean; report?: BattleReport }) => void) | null } = { tell: null };
 
 /**
+ * For the measuring harness: told of each corps a dated attack puts down at its door from where it stood (the design
+ * director's bound of 07:44Z, 22 November 2026: a jump of more than a month's march is data to check against the
+ * record, not a rule to change). Nothing in the game listens.
+ */
+export const broughtWatch: { tell: ((e: { row: Attack; corps: Corps; from: Region; to: Region }) => void) | null } = { tell: null };
+
+/**
  * The staff's own reckoning of a book row's later tries at a place (`made`; the design director's ruling of 06:53Z,
  * 21 November 2026): null where its staff would send the force in, or why not. The staff sets it (ai.ts). Unset, a
  * later try goes in as the first did.
@@ -524,9 +574,13 @@ function fallBack(g: Game, B: Stations, cal: { slide: number; date: number }, be
  */
 export function bookAttacks(g: Game, nat: string): void {
   const B = stations();
-  if (!B?.attacks || nat !== B.taker || !stationsBind(g, nat)) return;
-  const cal = calendar(g, B)!;
-  if (!cal.went) return;
+  if (!B?.attacks || nat !== B.taker) return;
+  // The table's own calendar, while the stations bind and the great blow has fallen. A row that names its own choice
+  // is asked by that choice's book instead, in its own month as written (`ownBook`).
+  const T = stationsBind(g, nat) ? calendar(g, B)! : null;
+  const table = T && T.went ? T : null;
+  const slideFor = (r: Attack): number | null => (r.book === undefined ? (table ? table.slide : null) : ownBook(g, B, nat, r) ? 0 : null);
+  if (!table && !B.attacks.some((r) => r.book !== undefined && ownBook(g, B, nat, r))) return;
   const riders = B.rows.filter((r) => r.nat === nat && r.beside);
   // (By their months, and within a month in the table's order, which is the record's date order: a row owed from an
   // earlier month goes in before the month's own, as the record's did: rider b599 (i).)
@@ -534,12 +588,13 @@ export function bookAttacks(g: Game, nat: string): void {
   order.forEach((i) => {
     const row = B.attacks![i];
     const key = `ba:${i}`;
-    if (g.flags[key] || g.turn < row.month + cal.slide || !g.nations[nat].alive) return;
+    const slide = slideFor(row);
+    if (slide === null || g.flags[key] || g.turn < row.month + slide || !g.nations[nat].alive) return;
     // A fight at the record's figures that was lost this month, or a row whose place held this month, is not tried again in it.
     if (g.flags[`bat:${i}`] === g.turn) return;
-    if (row.until !== undefined && g.turn > row.until + cal.slide) { g.flags[key] = g.turn; landedFree(g, B, cal, i); bookWatch.tell?.({ row, what: 'over', why: 'the record\'s attack was called off' }); return; }
+    if (row.until !== undefined && g.turn > row.until + slide) { g.flags[key] = g.turn; landedFree(g, B, i); bookWatch.tell?.({ row, what: 'over', why: 'the record\'s attack was called off' }); return; }
     const to = row.at.map((nm) => g.byName[nm]).find((r) => !!r && !allied(g, nat, r.ctrl));
-    if (!to) { g.flags[key] = g.turn; landedFree(g, B, cal, i); bookWatch.tell?.({ row, what: 'over', why: 'the place is its side\'s' }); return; }
+    if (!to) { g.flags[key] = g.turn; landedFree(g, B, i); bookWatch.tell?.({ row, what: 'over', why: 'the place is its side\'s' }); return; }
     const force = row.force.map((nm) => g.corps.find((x) => x.nat === nat && !x.dead && x.name === nm)).filter((x): x is Corps => !!x);
     // The rows that go with another (the tank regiments, rider b581) go in with their divisions and wait for nobody.
     const tanks = force.filter((c) => riders.some((r) => r.corps === c.name)), main = force.filter((c) => !tanks.includes(c));
@@ -551,20 +606,24 @@ export function bookAttacks(g: Game, nat: string): void {
     if (!atWar(g, nat, to.ctrl)) return owed('no war with its holder');
     // Computer against computer: ground a player holds, or his corps, are met by the staff alone.
     if (g.human !== null && (to.ctrl === g.human || hostileUnits(g, to, nat).some((u) => u.nat === g.human))) return owed('the player holds it');
-    for (const c of tanks) follow(g, riders.find((r) => r.corps === c.name)!, cal.slide);
+    // (The month list stays the leave it is: a row with a book of its own is not asked at a place the list keeps shut
+    // this month. It stays owed, and goes in when the list opens the place. The table's rows as they were.)
+    if (row.book !== undefined && lineShut(g, nat, to)) return owed('the month list keeps the place shut');
+    for (const c of tanks) follow(g, riders.find((r) => r.corps === c.name)!, table ? table.slide : calendar(g, B)?.slide ?? 0);
     const line = hostileUnits(g, to, nat);
     // Made only when its place is taken, and a row of several places only with the last of them; while its place
     // holds it stays owed, and is asked again next month. With this place taken and another still to take, it goes
     // on to that one at its next ask.
     const made = (): boolean => {
-      if (row.at.every((nm) => !g.byName[nm] || allied(g, nat, g.byName[nm].ctrl))) { g.flags[key] = g.turn; landedFree(g, B, cal, i); return true; }
+      if (row.at.every((nm) => !g.byName[nm] || allied(g, nat, g.byName[nm].ctrl))) { g.flags[key] = g.turn; landedFree(g, B, i); return true; }
       if (!allied(g, nat, to.ctrl)) g.flags[`bat:${i}`] = g.turn;
       return false;
     };
     // (A fight at the record's figures that is won still sends the line it broke back by the book, the town held or not.)
     const done = (won: boolean): boolean => {
       const ok = made();
-      if (won && row.met) fallBack(g, B, cal, line, row.back);
+      // (The broken line goes back by the table's own steps, on the table's calendar: none where the table no longer binds.)
+      if (won && row.met && table) fallBack(g, B, table, line, row.back);
       return ok;
     };
     // Its first try at each place is the book's; after it, the staff's own reckoning (`made`). (One mark for each of
@@ -580,7 +639,8 @@ export function bookAttacks(g: Game, nat: string): void {
     for (const j of order) {
       if (j === i) break;
       const r = B.attacks![j];
-      if (g.flags[`ba:${j}`] || g.turn < r.month + cal.slide || (r.until !== undefined && g.turn > r.until + cal.slide)) continue;
+      const s = slideFor(r);
+      if (g.flags[`ba:${j}`] || s === null || g.turn < r.month + s || (r.until !== undefined && g.turn > r.until + s)) continue;
       const at = r.at.map((nm) => g.byName[nm]).find((x) => !!x && !allied(g, nat, x.ctrl));
       if (at) shut.add(at.id);
     }
@@ -644,6 +704,7 @@ export function bookAttacks(g: Game, nat: string): void {
       if (next(c)) continue;
       // (One standing in the town of a province at the door comes out of it; any other is put down at the first door open.)
       const at = to.nb.includes(c.reg) ? g.regions[c.reg] : doors.find((r) => door(g, c, r));
+      if (at && at.id !== c.reg) broughtWatch.tell?.({ row, corps: c, from: g.regions[c.reg], to: at });
       if (at) bring(g, c, at);
     }
     if (!main.every(next)) return owed('not all of its corps stand next to the place');
