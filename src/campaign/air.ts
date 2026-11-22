@@ -23,7 +23,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
-import { NAVY, afloatWatch, atSea, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, wholeShares, zoneOf } from './navy';
+import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
@@ -1826,8 +1826,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     result = through <= 0 ? 'No bombers got through.'
       // ("Two battleships, 3 carriers ... of the Pacific Fleet are sunk at anchor": a small opening figure in words, and a verb.)
       : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? 'is' : 'are'} sunk${m === 'harbour' ? ' at anchor' : ''}.`
-      // (Ruling 240, the UI director's rider 2: a ship saved and none sunk is one sentence in the past, for every fleet struck.)
-      : afloat.length ? `Ships of ${whom} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.`
+      // (Ruling 240, the UI director's rider 2: a ship saved and none sunk is one sentence in the past, for every fleet struck;
+      // rider 3: several fleets by name, three and then "and N more".)
+      : afloat.length ? `Ships of ${a.ships.length === 1 ? whom : fleetsNamed(a.ships)} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.`
       : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
     // (Ruling 240: beside ships sunk, the ships damage control kept afloat: after the one fleet struck, named once ("One of
     // its cruisers is ..."); with several fleets, a line for each that has any.)
@@ -2798,14 +2799,14 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
     const afloat = g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? surfaceShips(f) : 0), 0);
     const worst = Math.max(0, ...Object.values(tradeHurt(g, nat, target, through)));
-    // Ruling 240 (C3; the design director, 22 November 03:57Z): the fight eases each fleet's losses by its own damage
-    // control (sinkShips, given tech.ts dcOf of the fleet's nation), so the forecast counts each struck fleet's surface
-    // ships over that same figure: in the worth the staffs weigh (carriers.ts bestBlow) and in the card's share, which is
-    // eased by the same figure. Only damage control comes in, never the classes' own toughness (the design director's
-    // after-release item). With the switch off, or nobody there holding the research, every figure is exactly 1 and
-    // this is release 1's expression to the bit.
-    const eased = shipRule(g, 'dc') ? g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? surfaceShips(f) / dcOf(g, f.nat) : 0), 0) : afloat;
-    if (eased !== afloat) { value = cut * eased * 30 + worst * 3000; cut *= eased / afloat; }
+    // Ruling 240 (C3), rider 4 (the design director, 22 November 11:12Z; item (d) of 03:57Z before it): the fight sinks
+    // each class of each fleet at the strike's share times navy.ts toughOf, navy.json's `tough` for the class over the
+    // fleet's own damage control (sinkShips through dueAt). With the dc switch on the forecast counts each struck fleet's
+    // surface ships at that same figure, class by class, so the worth the staffs weigh (carriers.ts bestBlow) and the
+    // card's share are the fight's expected loss: the staff weighs what it fights. With the switch off every figure here
+    // is release 1's to the bit.
+    const fought = shipRule(g, 'dc') ? g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? SURFACE.reduce((n, c) => n + f.ships[c] * toughOf(g, f, c), 0) : 0), 0) : afloat;
+    if (fought !== afloat) { value = cut * fought * 30 + worst * 3000; cut *= fought / afloat; }
     else value = cut * afloat * 30 + worst * 3000;
   } else if (m === 'fleet' || m === 'harbour') {
     const exp = shipHits(a, m, through, foundShare(g, a, nat));

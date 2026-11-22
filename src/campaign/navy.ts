@@ -1538,33 +1538,55 @@ const aShip = (one: string, head: boolean): string => `${/^[aeiou]/i.test(one) ?
 const andList = (parts: string[]): string => (parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`);
 
 /**
- * How the line for ships kept afloat names their fleet (ruling 240; the UI director's words of 21 November and rider 2
- * of 22 November): 'fleet' names it, for news every side reads and where nothing before has named it; 'its' follows a
- * lead-in that has just named the one fleet, so the fleet is named once; 'yours' is for a text addressed to the fleet's
- * owner alone.
+ * How the line for ships kept afloat names their fleet (ruling 240; the UI director's words of 21 November and riders 2
+ * and 3 of 22 November): 'fleet' names it, for news every side reads and where nothing before has named it; 'its' only
+ * where the sentence just before names the fleet, so the fleet is named once; "fleet's" where the fleet was named
+ * earlier but another sentence stands between ("The shore batteries sink a destroyer. One of the fleet's cruisers is
+ * ..."); 'yours' is for a text addressed to the fleet's owner alone. With several classes, 'its' and "fleet's" say "of
+ * the fleet" once (rider 3): "A cruiser and 2 destroyers of the fleet are badly hit, ...".
  */
-export type KeptForm = 'fleet' | 'its' | 'yours';
+export type KeptForm = 'fleet' | 'its' | "fleet's" | 'yours';
 
 /**
  * Ruling 240: the one line that tells of ships damage control kept afloat, in the UI director's words of 21 November and
  * its riders. The game counts ships and never names them: "A cruiser of the Home Fleet is badly hit, but the repair
  * parties keep the ship afloat." A count that opens the sentence is a word, a count inside it a figure, and a count of
  * one is "a" ("Two destroyers of ...", "A cruiser and 2 destroyers of ...", "A battleship and a cruiser of ...").
- * After a lead-in that names the fleet: "One of its cruisers is badly hit, ...". To the owner alone: "One of your
- * cruisers is ...". No pronoun for a ship. Empty when nothing was saved. (`true` is 'yours' and `false` 'fleet', as the
- * third argument was before the forms had names.)
+ * After a sentence that names the fleet: "One of its cruisers is badly hit, ..."; with another sentence between: "One
+ * of the fleet's cruisers is ..."; several classes in either: "A cruiser and 2 destroyers of the fleet are ...". To the
+ * owner alone: "One of your cruisers is ...", and with several classes "One of your cruisers and 2 of your destroyers
+ * are ...". No pronoun for a ship. `past` (rider 3: the line takes the tense of the sentence before it) tells it in the
+ * past, for a report of what happened: "A cruiser of the Home Fleet was badly hit, but the repair parties kept the ship
+ * afloat." Empty when nothing was saved. (`true` is 'yours' and `false` 'fleet', as the third argument was before the
+ * forms had names.)
  */
-export function keptAfloat(f: { name: string }, saved: Ships, how: KeptForm | boolean = 'fleet'): string {
+export function keptAfloat(f: { name: string }, saved: Ships, how: KeptForm | boolean = 'fleet', past = false): string {
   const n = shipCount(saved);
   if (!n) return '';
   const form: KeptForm = how === true ? 'yours' : how === false ? 'fleet' : how;
   const head = (k: number): string => COUNT_WORD[k] ?? String(k);
-  const parts = CLASSES.filter((c) => saved[c] > 0).map((c, i) => {
+  const classes = CLASSES.filter((c) => saved[c] > 0);
+  // ("One of its ..." for one class; with several, the fleet form says "of the fleet" once. The owner's form passes as built.)
+  const owned = form === 'yours' || (form !== 'fleet' && classes.length === 1);
+  const whose = form === 'yours' ? 'your' : form === 'its' ? 'its' : "the fleet's";
+  const parts = classes.map((c, i) => {
     const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
-    if (form !== 'fleet') return `${i ? (k === 1 ? 'one' : k) : head(k)} of ${form === 'its' ? 'its' : 'your'} ${many}`;
+    if (owned) return `${i ? (k === 1 ? 'one' : k) : head(k)} of ${whose} ${many}`;
     return k === 1 ? aShip(one, !i) : `${i ? k : head(k)} ${many}`;
   });
-  return `${andList(parts)}${form === 'fleet' ? ` of ${fleetName(f)}` : ''} ${n === 1 ? 'is' : 'are'} badly hit, but the repair parties keep the ${n === 1 ? 'ship' : 'ships'} afloat.`;
+  const of = owned ? '' : form === 'fleet' ? ` of ${fleetName(f)}` : ' of the fleet';
+  const verb = past ? (n === 1 ? 'was' : 'were') : n === 1 ? 'is' : 'are';
+  return `${andList(parts)}${of} ${verb} badly hit, but the repair parties ${past ? 'kept' : 'keep'} the ${n === 1 ? 'ship' : 'ships'} afloat.`;
+}
+
+/**
+ * Ruling 240, rider 3 (22 November): the fleets a strike hit, by name, for the line of ships kept afloat when none was
+ * sunk: "the Home Fleet and the Mediterranean Fleet"; three names, then "and N more". (Release 1's "the 2 fleets"
+ * elsewhere is left as it is.)
+ */
+export function fleetsNamed(fs: { name: string }[]): string {
+  const names = fs.map((f) => fleetName(f));
+  return names.length <= 3 ? andList(names) : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
 }
 
 /**
