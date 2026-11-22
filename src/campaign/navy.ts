@@ -1274,6 +1274,12 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
 export interface Landing { ok: boolean; why?: string; taken?: boolean; lostAtSea?: number; report?: BattleReport | null; surprise?: boolean; air?: boolean }
 
 /**
+ * Reading only: a probe is told each landing that sails, once its crossing is run: who, from which coast, to which
+ * shore, by which seas in order, and what the sea took. It changes nothing, and no rule reads it.
+ */
+export const landWatch: { tell: ((e: { nat: string; from: Region; to: Region; path: number[]; surprise: boolean; force: Corps[]; lostAtSea: number }) => void) | null } = { tell: null };
+
+/**
  * Lands corps on an enemy coast. If it is defended they fight their way ashore, at a disadvantage unless the enemy is surprised.
  * A row that goes with a corps of the force (stations.ts, rider b604 to ruling 234) lands in that corps' lift, and is
  * its staff's own once ashore. A computer's staff takes such rows along where they stand with the corps on the quay;
@@ -1302,6 +1308,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
     // (And the ground itself, for the coast watch: a landing on this enemy's homeland is not news to come.)
     g.flags[`landedAt:${to.id}:${nat}`] = g.turn;
+    landWatch.tell?.({ nat, from, to, path, surprise, force: cs, lostAtSea });
   }
   let taken = true;
   let report: BattleReport | null = null;
