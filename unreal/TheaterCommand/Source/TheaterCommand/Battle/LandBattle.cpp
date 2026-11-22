@@ -2126,7 +2126,7 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 				{
 					Tile.NearParts[Part]->SetVisibility(bNear);
 				}
-				if (const FTornPiece* Piece = Torn.Find(TornKey(2, TileIndex, Part)))
+				if (const FTornPiece* Piece = TornPieces.Find(TornKey(2, TileIndex, Part)))
 				{
 					if (UStaticMeshComponent* Baked = Piece->Baked.Get())
 					{
@@ -5097,8 +5097,8 @@ void ALandBattle::TornChanged(int32 Kind, int32 A, int32 B)
 	{
 		return;
 	}
-	const int64 Key = TornKey(Kind, A, B);
-	FTornPiece& Piece = Torn.FindOrAdd(Key);
+	const int64 PieceKey = TornKey(Kind, A, B);
+	FTornPiece& Piece = TornPieces.FindOrAdd(PieceKey);
 	Piece.Kind = Kind;
 	Piece.A = A;
 	Piece.B = B;
@@ -5113,7 +5113,7 @@ void ALandBattle::TornChanged(int32 Kind, int32 A, int32 B)
 	if (!Piece.bHot)
 	{
 		Piece.bHot = true;
-		TornHot.Add(Key);
+		TornHot.Add(PieceKey);
 	}
 }
 
@@ -5130,8 +5130,8 @@ void ALandBattle::SettleTorn()
 	const double Began = LandParts::Seconds();
 	for (int32 I = 0; I < TornHot.Num() && (LandParts::Seconds() - Began) * 1000.0 < TornBakeMs;)
 	{
-		const int64 Key = TornHot[I];
-		FTornPiece* Piece = Torn.Find(Key);
+		const int64 PieceKey = TornHot[I];
+		FTornPiece* Piece = TornPieces.Find(PieceKey);
 		if (!Piece || !Piece->bHot)
 		{
 			TornHot.RemoveAtSwap(I);

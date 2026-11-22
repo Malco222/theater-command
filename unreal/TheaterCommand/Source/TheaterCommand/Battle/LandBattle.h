@@ -239,7 +239,7 @@ private:
 	{
 		return (static_cast<int64>(Kind) << 56) | (static_cast<int64>(A & 0xFFFFFF) << 28) | static_cast<int64>(B & 0xFFFFFFF);
 	}
-	TMap<int64, FTornPiece> Torn;
+	TMap<int64, FTornPiece> TornPieces;
 	TArray<int64> TornHot;
 	UPROPERTY()
 	TArray<TObjectPtr<UStaticMeshComponent>> TornBaked;
