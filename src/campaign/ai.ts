@@ -29,6 +29,7 @@ import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { aiRepair } from './repairs';
+import { aiFieldRepair } from './fieldstate';
 import {
   DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
@@ -171,6 +172,8 @@ export function runAI(g: Game, nat: string): void {
   // Damaged towns are repaired out of their own purse before new corps are bought (repairs.ts): a town repaired pays
   // for itself in a few months.
   aiRepair(g, nat);
+  // Airfields as targets: damaged fields are repaired from the treasury (fieldstate.ts), before new builds.
+  aiFieldRepair(g, nat, (x) => allied(g, nat, x));
   aiProduction(g, nat);
   aiArsenal(g, nat);
   aiFortify(g, nat, Object.keys(coastWatch(g, nat)), coastRules());

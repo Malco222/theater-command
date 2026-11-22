@@ -54,6 +54,7 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { damageRules, openDamage } from './citydamage';
+import { FIELD, fieldRules, fieldView, fieldsDamaged, fieldsMonth, openFields, orderFieldRepair, undoFieldRepair, type FieldView } from './fieldstate';
 import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
 import { gateViews, type GateView } from './gates';
@@ -108,6 +109,8 @@ function closePhase(g: Game, nat: string): void {
     // Works held outright from one month's end to the next are taken over by the side that holds them.
     worksMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
+    // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
+    fieldsMonth(g);
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
@@ -2055,6 +2058,39 @@ export function orderRepairAll(g: Game): string[] {
 /** Takes back a repair the player ordered this month: the town as it was, and the money back. */
 export function orderUndoRepair(g: Game, region: number): boolean {
   return humanUp(g) && undoRepair(g, g.human!, region);
+}
+
+// ---- Airfields as targets (fieldstate.ts; the grand campaign's air war with its switch) ----------------------------
+
+/** True when airfields are targets in this war. */
+export const airfieldTargetsOn = (g: Game): boolean => fieldRules(g);
+
+/** True when new grand campaigns are opened with airfields as targets (damage.json field.on; false as shipped). */
+export const airfieldTargetsShipped = (): boolean => FIELD.on === true;
+
+/** Turns airfields as targets on or off for a grand campaign. Off, the war plays as release 1 did. */
+export function setAirfieldTargets(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  openFields(g, on);
+  return (g.flags.fields === 1) === on;
+}
+
+/** A province's airfield as the city glance and the airfield card show it: tier, room, shut, levels burned, the repair, its price and why not. Null without a field or with the switch off. */
+export function airfieldState(g: Game, region: number): FieldView | null {
+  return fieldView(g, region, g.human);
+}
+
+/** Every damaged field on the map, for the map's marks (the 3D table shows only those the player may know of). */
+export const airfieldMarks = (g: Game): ReturnType<typeof fieldsDamaged> => fieldsDamaged(g);
+
+/** Repairs one of the player's fields, paid at once: the runway opens next month, a burned level each month after. */
+export function orderAirfieldRepair(g: Game, region: number): boolean {
+  return humanUp(g) && orderFieldRepair(g, g.human!, region);
+}
+
+/** Takes back a field repair the player ordered this month, with his money. */
+export function orderUndoAirfieldRepair(g: Game, region: number): boolean {
+  return humanUp(g) && undoFieldRepair(g, g.human!, region);
 }
 
 export interface BuildingTip { region: number; town: string; province: string; offer: CivicOffer }

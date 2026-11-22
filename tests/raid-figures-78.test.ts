@@ -30,7 +30,7 @@ function plans(g: Game, kind: RaidKind, most = 12): RaidPlan[] {
 const KEYS: Record<RaidKind, (keyof RaidFigures)[]> = {
   bomb: ['output', 'national', 'rail', 'factory'], night: ['output', 'national', 'rail', 'factory'],
   superiority: ['odds', 'readiness'], strike: ['ships'], fleet: ['hits', 'sunk'], harbour: ['hits', 'sunk'],
-  line: ['works', 'worksLeft'], ground: ['organisation'], town: ['town'], recon: [],
+  line: ['works', 'worksLeft'], ground: ['organisation'], town: ['town'], recon: [], airfield: ['odds', 'field'],
 };
 
 describe('a raid plan gives its figures as numbers (Version 78)', () => {
