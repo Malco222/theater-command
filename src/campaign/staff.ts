@@ -67,6 +67,8 @@ export interface Op {
   /** A side operation: no build-up, and the main army is not taken for it. */
   side?: boolean;
   landings?: PlanPhase['landings'];
+  /** The harbour a landing's own corps are shipped to where they stand out of reach of their beach ('own' landings). */
+  quay?: string;
   staging?: Record<string, number>;
   join?: 'allies' | 'axis';
   /**
@@ -2586,6 +2588,74 @@ export function seasTo(d: Int16Array, to: Region): number {
   let k = Infinity;
   for (const z of to.seas) if (d[z] > 0 && d[z] < k) k = d[z];
   return k;
+}
+
+// ---- A landing of the book's made from the staff's own corps (strategy.json 'torch') ----------------------
+//
+// The design director's rulings of 22 November 2026. A country that raises and ships its own army is sent none of
+// the roster's dated rows (world.ts, `shipsItsOwn`), so the record's task forces are nobody's to land: America's
+// landings in Operation Torch are made from America's own corps, with no new men. The book names the beach, the day
+// and the worth the record sent; the staff's corps nearest to that in size, standing at a harbour within a landing's
+// reach of the beach, is the force. It is kept at its quay from 'lead' months before the day, and one that stands
+// out of reach is shipped first to the operation's 'quay', the harbour the record's convoys passed (Gibraltar).
+
+type OpLanding = NonNullable<Op['landings']>[number];
+const ownKey = (nat: string, L: OpLanding): string => `st:own:${nat}:${L.corps}`;
+/** The corps of a staff's own picked for a landing of the book's (`ownForce`), while it lives. Reads only. */
+export function ownPicked(g: Game, nat: string, L: OpLanding): Corps | undefined {
+  const id = flag(g, ownKey(nat, L)) - 1;
+  return id >= 0 ? g.corps.find((c) => c.id === id && c.nat === nat && !c.dead) : undefined;
+}
+
+/**
+ * The month's word on the landings a staff makes from its own corps: for each of its dated choices that has such a
+ * landing, from 'lead' months before the day until the month after it, the corps picked for each (chosen once and
+ * kept while it serves: it lives, and stands on the beach or at a harbour its side holds). `kept` are those still to
+ * sail, which stand at their quays for the month; `ship` those that stand out of a landing's reach of their beach
+ * before the day, with the quay they are to be shipped to. Nothing where no such choice is dated: with the switch
+ * off no staff has one (history.ts, `leash`).
+ */
+export function ownForce(g: Game, nat: string): { kept: Corps[]; ship: { c: Corps; to: Region }[] } {
+  const out = { kept: [] as Corps[], ship: [] as { c: Corps; to: Region }[] };
+  const T = STRATEGY.torch;
+  if (!T?.on || nat === g.human || g.flags.open !== 1) return out;
+  const range = NAVY.landing.range;
+  for (const op of ops(nat)) {
+    if (!op.landings?.some((L) => L.own !== undefined)) continue;
+    const lead = leash(g, nat, op.id), done = flag(g, `st:done:${nat}:${op.id}`);
+    if (lead.kind !== 'dated' || done < 0 || (done > 0 && g.turn - done > 1)) continue;
+    if (!done && (g.turn < lead.date! - (T.lead ?? 3) || g.turn > (op.to ?? 999) || !(bookIf(nat, op.id) ?? op.if ?? []).every((c) => cond(g, nat, c, [])))) continue;
+    const quay = op.quay ? g.byName[op.quay] : undefined;
+    const harbour = (r: Region): boolean => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl) && !hostileUnits(g, r, nat).length;
+    const reach = new Map<number, Int16Array>();
+    const inReach = (r: Region, L: OpLanding): boolean => {
+      if (!harbour(r)) return false;
+      let d = reach.get(r.id);
+      if (!d) reach.set(r.id, (d = seasFrom(g, nat, r)));
+      return L.to.some((nm) => { const to = g.byName[nm]; return !!to && seasTo(d!, to) <= range; });
+    };
+    const taken = new Set<number>();
+    for (const L of op.landings) if (L.own !== undefined) { const c = ownPicked(g, nat, L); if (c) taken.add(c.id); }
+    for (const L of op.landings) {
+      if (L.own === undefined) continue;
+      let c = ownPicked(g, nat, L);
+      const ashore = (x: Corps): boolean => L.to.includes(g.regions[x.reg].name);
+      if (c && !ashore(c) && !harbour(g.regions[c.reg])) { taken.delete(c.id); c = undefined; }
+      if (!c && !done) {
+        // The staff's own field corps at a harbour: one within reach of the beach before one that is not, then the
+        // nearest in size to what the record sent, the larger, the older.
+        const size = (x: Corps): number => Math.abs(x.divs * x.str - L.own!);
+        c = g.corps.filter((x) => x.nat === nat && !x.dead && !x.hold && !x.stay && x.kind !== 'fort' && x.kind !== 'eng' && x.kind !== 'art' && x.town === undefined && !x.airborne
+          && x.joint === undefined && x.leave === undefined && !taken.has(x.id) && harbour(g.regions[x.reg]))
+          .sort((a, b) => Number(inReach(g.regions[b.reg], L)) - Number(inReach(g.regions[a.reg], L)) || size(a) - size(b) || b.divs - a.divs || a.id - b.id)[0];
+        if (c) { g.flags[ownKey(nat, L)] = c.id + 1; taken.add(c.id); campaignLog.say?.(g, nat, 'ownForce', g.regions[c.reg].name, { corps: c.id, divs: c.divs }); }
+      }
+      if (!c || ashore(c)) continue;
+      out.kept.push(c);
+      if (!done && quay && c.reg !== quay.id && !inReach(g.regions[c.reg], L)) out.ship.push({ c, to: quay });
+    }
+  }
+  return out;
 }
 
 /**

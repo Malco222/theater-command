@@ -42,6 +42,8 @@ export const HISTORY = data as unknown as {
   /** The conditions that stand in for a dated choice's own while the book dates it. */
   bookIf?: Record<string, string[] | string>;
   unhistoric: string[];
+  /** Choices that are the book's alone: on a staff's menu only where the book dates them and their own switch is on (Operation Torch). */
+  bookOnly?: { ops: string[]; with?: Record<string, string> };
   joined: { axis: string[]; allies: string[] };
   theatre: Record<string, string>;
   /**
@@ -179,6 +181,9 @@ export interface Leash {
 
 /** The month the book gives one of the great choices in this war: history's, give or take the stop's slack by the war's seed. */
 export function bookDate(g: Game, nat: string, opId: string): number | null {
+  // (An operation two countries mount together has one month, the first-named's: Operation Torch.)
+  const lead = HISTORY.bookOnly?.with?.[`${nat}:${opId}`]?.split(':');
+  if (lead && lead.length === 2 && `${lead[0]}:${lead[1]}` !== `${nat}:${opId}`) return bookDate(g, lead[0], lead[1]);
   const date = HISTORY.dates[nat]?.[opId];
   if (date === undefined) return null;
   const slack = stopDef(g).slack ?? 0;
@@ -191,8 +196,17 @@ export function bookIf(nat: string, opId: string): string[] | null {
   return Array.isArray(c) ? c : null;
 }
 
+/**
+ * Asked of a choice that is the book's alone ('bookOnly'): is its own switch on in this game? The switch lives with
+ * the rule it belongs to (strategy.ts sets the test for Operation Torch); with nobody to ask, it is off.
+ */
+export const bookOnlyOn: { test: ((g: Game, nat: string, opId: string) => boolean) | null } = { test: null };
+
 export function leash(g: Game, nat: string, opId: string): Leash {
   const S = stopDef(g);
+  // A choice that is the book's alone (Operation Torch) is on no staff's menu off the book, at a stop that keeps none,
+  // or where its own switch is off.
+  if (HISTORY.bookOnly?.ops.includes(`${nat}:${opId}`) && !(S.book && onBook(g, theatreOf(nat, opId)) && bookOnlyOn.test?.(g, nat, opId))) return { kind: 'never', chance: 0, nerve: 1, early: 0 };
   const un = HISTORY.unhistoric.includes(`${nat}:${opId}`);
   // Off the book, or at a stop that keeps none: the staff decides, and a choice history never took is weighed by the stop.
   if (!S.book) return { kind: 'free', chance: un ? S.other : 1, nerve: 1, early: S.early ?? 0 };

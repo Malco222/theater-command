@@ -77,7 +77,12 @@ describe('the dial', () => {
 
   it('changes nothing at the middle stop', () => {
     const g = grand(7);
-    for (const [nat, list] of Object.entries(OPS)) for (const op of list) expect(leash(g, nat, op.id)).toEqual({ kind: 'free', chance: 1, nerve: 1, early: 0 });
+    for (const [nat, list] of Object.entries(OPS)) for (const op of list) {
+      // (A choice that is the book's alone, Operation Torch, is on no staff's menu off the book: history.json 'bookOnly'.
+      // The middle stop keeps no book, so there it is never taken, and the staffs choose as they always did.)
+      if (HISTORY.bookOnly?.ops.includes(`${nat}:${op.id}`)) expect(leash(g, nat, op.id).kind).toBe('never');
+      else expect(leash(g, nat, op.id)).toEqual({ kind: 'free', chance: 1, nerve: 1, early: 0 });
+    }
     expect(moodMul(g)).toBe(1);
     expect(leagueMul(g)).toBe(1);
     const w = RIVALS.lean.GER;

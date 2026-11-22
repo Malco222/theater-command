@@ -40,7 +40,7 @@ import {
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
-import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
+import { RELATIONS, bookTurn, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
@@ -101,6 +101,8 @@ function closePhase(g: Game, nat: string): void {
     // An alliance finishes its war together (ruling 115): Vichy ends with a France that is free again, and a great
     // power's fall this month turns its conquerors on the great powers their allies still fight.
     finishMonthEnd(g);
+    // (Operation Torch by the book: the French turn comes in the landing's own month. diplomacy.ts; nothing with its switch off.)
+    bookTurn(g);
     // (And no country is left at war with its own side's members, whatever path took it to that side: ruling 229, 3.)
     sidesAtPeace(g);
     // Works held outright from one month's end to the next are taken over by the side that holds them.

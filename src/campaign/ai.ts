@@ -18,7 +18,7 @@ import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, laneBar, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, surpriseOn, useLift, whyNotLand } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen, stopOf, stormHeldBy } from './history';
-import { afterDeclaring, beyondBeach, builtUp, coastRules, coastWatch, decide, deskQuays, doorQuay, farCamp, footholdPorts, frontAshore, heedsCard, holdsAshore, idleArmies, isOpen, joinsOn, keepsDoor, keptForOps, landingRules, lodgment, mainFirst, nearerDesk, neighbourAcrossTheWater, oceanRuns, onTheAttack, onTheDay, opArmies, opensNow, opensOn, opensSoon, opFoe, opLodged, probed, probing, quayGuests, quayNamed, rivalRules, RIVALS, seaBase, seaFoe, seasFrom, seasTo, staffPhase, strengthAsked, strengthWatch, theatreStaff, type IdleArmy } from './staff';
+import { afterDeclaring, beyondBeach, builtUp, coastRules, coastWatch, decide, deskQuays, doorQuay, farCamp, footholdPorts, frontAshore, heedsCard, holdsAshore, idleArmies, isOpen, joinsOn, keepsDoor, keptForOps, landingRules, lodgment, mainFirst, nearerDesk, neighbourAcrossTheWater, oceanRuns, onTheAttack, onTheDay, opArmies, opensNow, opensOn, opensSoon, opFoe, opLodged, ownForce, ownPicked, probed, probing, quayGuests, quayNamed, rivalRules, RIVALS, seaBase, seaFoe, seasFrom, seasTo, staffPhase, strengthAsked, strengthWatch, theatreStaff, type IdleArmy } from './staff';
 import { STRATEGY, campaignLog, plansAhead } from './strategy';
 import { STRENGTH, followUp, reckon, stands } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
@@ -474,6 +474,17 @@ function sorties(g: Game, nat: string): void {
 }
 
 function campaignMoves(g: Game, nat: string): void {
+  // (Operation Torch by the book: the staff's own corps that a landing of the book's is made from stand at their quays
+  // until the day, whatever the month's desks would do with them; one out of its beach's reach is shipped to the
+  // operation's quay first, as the ships and the room allow. staff.ts, `ownForce`. Nothing with the switch off.)
+  const own = ownForce(g, nat);
+  for (const s of own.ship) shipMove(g, s.c, s.to);
+  const booked = own.kept.filter((c) => !c.hold);
+  for (const c of booked) c.hold = true;
+  try { movesOfTheMonth(g, nat); } finally { for (const c of booked) c.hold = false; }
+}
+
+function movesOfTheMonth(g: Game, nat: string): void {
   const n = g.nations[nat];
   // An army overseas fights its own war to its own plan. It stands aside while the main plan is
   // carried out, and the main army stands aside in its turn.
@@ -1273,11 +1284,14 @@ function objectivesFor(g: Game, nat: string): string[] {
  */
 function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): void {
   for (const L of ph.landings ?? []) {
-    const c = g.corps.find((x) => x.nat === nat && x.name === L.corps && !x.dead);
+    // (A landing of the book's made from the staff's own corps, Operation Torch: the corps its staff picked for it,
+    // waiting at whatever harbour of its side it stands in. staff.ts, `ownForce`.)
+    const own = L.own !== undefined;
+    const c = own ? ownPicked(g, nat, L) : g.corps.find((x) => x.nat === nat && x.name === L.corps && !x.dead);
     if (!c) continue;
     const from = g.regions[c.reg];
     // Only a corps still waiting in port: one already overseas has made its landing.
-    const waiting = from.port && (within ? within.has(from.id) && allied(g, nat, from.ctrl) && !L.to.includes(from.name) : from.owner === nat);
+    const waiting = from.port && (within ? within.has(from.id) && allied(g, nat, from.ctrl) && !L.to.includes(from.name) : own ? allied(g, nat, from.ctrl) && !L.to.includes(from.name) : from.owner === nat);
     if (!waiting) continue;
     // Others the plan sends in the same lift, if they are standing on the same quay. (No more than the floor at home
     // lets go: ruling 229, 1b.)

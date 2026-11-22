@@ -7,7 +7,7 @@
 // (the armies and the ships). Off by default: with the switch off nothing here is read and the game is release 1's.
 
 import data from '../../data/campaign/strategy.json';
-import { stopOf } from './history';
+import { bookOnlyOn, stopOf } from './history';
 import type { Game } from './types';
 
 export const STRATEGY = data as unknown as {
@@ -20,6 +20,12 @@ export const STRATEGY = data as unknown as {
   ops?: { on: boolean; stops: number[]; keep: boolean; lead?: number; front: boolean; home?: { guard: number; risk: number }; port?: { size: number; within: number };
     /** The landing as the design director ruled it on 22 November 2026: the first wave, the quay, the wait for the sky, the fleets, the beach's worth. */
     landing?: { on: boolean; wave: boolean; quay: boolean; wait: boolean; defer: boolean; allies?: boolean; patience?: number; fleet: boolean; beyond?: { marches: number; share: number } } };
+  /**
+   * Operation Torch by the book (the design director's rulings of 22 November 2026; its own switch and stops): the
+   * choices of open.json that are the book's alone, the event that is the French turn, and the months before the day
+   * that a landing's own corps are kept at their quay.
+   */
+  torch?: { on: boolean; stops: number[]; ops: string[]; turn: string; lead?: number };
 };
 
 /** True where a computer staff plans campaigns: the grand campaign, at the dial's stops named, never the player's own nation. */
@@ -33,6 +39,16 @@ export const plansAhead = (g: Game, nat: string): boolean =>
  */
 export const mounts = (g: Game, nat: string): boolean =>
   !!STRATEGY.ops?.on && g.flags.open === 1 && nat !== g.human && STRATEGY.ops.stops.includes(stopOf(g));
+
+/**
+ * True where Operation Torch is the book's (strategy.json 'torch'): the grand campaign, at the stops that switch
+ * names. Its own switch: the operations' and the war plan's need not be on. Off, nothing of it is read.
+ */
+export const torchBook = (g: Game): boolean => !!STRATEGY.torch?.on && g.flags.open === 1 && STRATEGY.torch.stops.includes(stopOf(g));
+/** True for the event that is the French turn where Torch is the book's: its partition runs as the record wrote it. */
+export const torchTurn = (g: Game, eventId: string): boolean => torchBook(g) && STRATEGY.torch!.turn === eventId;
+// (The book's word on its own choices: history.ts asks here whether one of them is switched on.)
+bookOnlyOn.test = (g, nat, opId) => torchBook(g) && STRATEGY.torch!.ops.includes(`${nat}:${opId}`);
 
 /**
  * What a campaign's sector is worth beyond the staff's own sums: a hook for the terms other rules add (ruling 239's

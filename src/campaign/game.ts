@@ -44,6 +44,7 @@ import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
+import { torchBook } from './strategy';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -3329,9 +3330,53 @@ function landVoyages(g: Game, nat: string): void {
   if (!g.atSea.length) delete g.atSea;
 }
 
+/**
+ * Operation Torch by the book: a row made from the French army that came over at the turn ('turned') forms at the turn
+ * itself, where the largest of that army stood (`stood`, largest first), else at its own place or second quays. The
+ * ports the French held are then not left empty for the month between. Called by the turn (diplomacy.ts) and by
+ * nobody else; a row it cannot place comes in its own month like any other. Never the player's: his rows are the roster's.
+ */
+export function turnedRows(g: Game, stood: number[]): void {
+  if (!TORCH || !torchBook(g) || !((g.flags['torch:turned'] ?? 0) > 0)) return;
+  TORCH.rows.forEach((row, k) => {
+    const o = row[6] ?? {}, nat = row[1] as string, key = `sent:t${k}`;
+    if (!o.turned || g.flags[key] || nat === g.human || !g.nations[nat]?.alive || shipsItsOwn(g, nat) || (o.war && !warOn(g, o.war))) return;
+    const ok = (r: Region | undefined): r is Region => !!r && allied(g, nat, r.ctrl) && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length < STACK;
+    const places = [...stood.map((id) => g.regions[id]), g.byName[row[5]], ...((o.or as string[] | undefined) ?? []).map((nm) => g.byName[nm])];
+    // (Its own country's ground before an ally's.)
+    const reg = places.find((r) => ok(r) && r.ctrl === nat) ?? places.find(ok);
+    if (!reg) return;
+    g.flags[key] = 1;
+    const c = addCorps(g, nat, row[2], row[3], Math.min(row[4], g.flags['torch:turned']), reg.id, o);
+    if (o.str !== undefined) c.str = o.str;
+    g.supplyDirty = true;
+  });
+}
+
+/**
+ * Operation Torch by the book (strategy.json 'torch'; the design director's rulings of 22 November 2026, on the
+ * historian's rows): where it is the book's, a computer's staff is sent the roster's Torch and Tunisia rows as the
+ * record corrects them ('torch' in setup-1939.json). 'rows' are dated rows read like any others, kept apart from the
+ * roster's list so that no row of that list changes its number; a row of the roster named under 'instead' is not
+ * sent where these are (its corrected form is among them, or the record gives its men to another row: the Pistoia
+ * and La Spezia Divisions came into Tunisia with the army from Libya). Nothing is sent twice: a row of either list
+ * whose namesake in the other has already come never comes. 'or' names a second quay for a row whose first is full;
+ * 'turned' marks the row made from the French army that came over at the turn, which comes only where that army
+ * still stood and with no more divisions than it had (diplomacy.ts).
+ */
+type TorchRows = { instead: string[]; rows: any[] };
+const TORCH = (setup as unknown as { torch?: TorchRows }).torch;
+
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
-  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+  const roster = (setup as any).expeditions as any[] ?? [];
+  const torch = !!TORCH && nat !== g.human && torchBook(g);
+  const one = (row: any, i: number | string): void => {
+    if (torch && row[1] === nat) {
+      // (The record's form of a roster row stands in for it; and whichever of the two came first, the other never comes.)
+      if (typeof i === 'number') { if (TORCH!.instead.includes(row[2])) return; }
+      else if (!g.flags[`sent:${i}`] && roster.some((r, k) => r[1] === nat && r[2] === row[2] && g.flags[`sent:${k}`] === 1)) { g.flags[`sent:${i}`] = 2; return; }
+    }
     const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
     // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
     // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
@@ -3380,6 +3425,12 @@ function expeditions(g: Game, nat: string): void {
       if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
       // Nor is it put down in a friendly country that is at peace: it forms at home instead.
       if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
+      // (A row with second quays, Operation Torch's: where the first is lost to the enemy or full, the next its side
+      // holds with room. It is asked before the fall-back harbour: these rows name their own.)
+      if (reg && Array.isArray(o.or) && (allied(g, nat, reg.ctrl) ? friendlyUnits(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK : atWar(g, nat, reg.ctrl))) {
+        const alt = (o.or as string[]).map((nm) => g.byName[nm]).find((r) => !!r && allied(g, nat, r.ctrl) && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length < STACK);
+        if (alt) reg = alt;
+      }
       // A place its side has lost to the enemy: it lands at the nearest harbour its side holds on that front, and is
       // not cancelled for the loss (ruling 229, 1c). It holds nothing in place there: the place it was to hold is gone.
       // (A place held by a country it is not at war with, Vichy's or a neutral's, is waited for as before.)
@@ -3400,6 +3451,8 @@ function expeditions(g: Game, nat: string): void {
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
     // (A row that stands in for another, in a war where that other has already landed, never comes: ruling 229, 1c.)
     if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; return; }
+    // (The row made from the French army that came over at the turn waits for the turn: no army, no row.)
+    if (o.turned && !((g.flags['torch:turned'] ?? 0) > 0)) return;
     const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
     if (old) {
       g.flags[`sent:${i}`] = 1;
@@ -3423,7 +3476,7 @@ function expeditions(g: Game, nat: string): void {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
+    const c = addCorps(g, nat, row[2], row[3], o.turned ? Math.min(row[4], g.flags['torch:turned']) : g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
     if (o.str !== undefined) c.str = o.str;
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
@@ -3454,7 +3507,13 @@ function expeditions(g: Game, nat: string): void {
     if (o.news) headline(g, 'event', o.news, nat, reg.id);
     else if (o.gen) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
     else if (nat === g.human) headline(g, 'info', `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
+  };
+  roster.forEach((row, i) => {
+    // (A roster row whose record's form has already come, in a month when Torch was the book's, never comes as well.)
+    if (TORCH && row[1] === nat && !g.flags[`sent:${i}`] && TORCH.rows.some((r, k) => r[1] === nat && r[2] === row[2] && g.flags[`sent:t${k}`] === 1)) { g.flags[`sent:${i}`] = 2; return; }
+    one(row, i);
   });
+  if (torch) TORCH!.rows.forEach((row, k) => one(row, `t${k}`));
   if (gone.length) {
     const where = theatreName(g.regions[gone[0].reg]);
     const names = gone.map((c) => c.name);
