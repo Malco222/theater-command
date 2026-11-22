@@ -266,7 +266,12 @@ describe("the book's massings: rows that take their men from rows on the board, 
     g.turn = 37; startPhase(g, 'JAP');
     for (const nm of ['13th Army (15th Division, for Chekiang)', '13th Army (detachments of the 32nd and 116th Divisions)', '13th Army (mixed brigades, for Chekiang)']) expect(of(g, nm), nm).toBeUndefined();
     const home = g.corps.filter((c) => c.name === '13th Army (15th Division, Nanking)' && !c.dead);
-    expect(home.map((c) => [g.regions[c.reg].name, Math.round(c.str * 20) / 20, c.hold, !!c.stay])).toEqual([['Nanking', 0.9, true, true]]);
+    expect(home.map((c) => [g.regions[c.reg].name, c.hold, !!c.stay])).toEqual([['Nanking', true, true]]);
+    // (Its row's 0.9 and the month's drafts, a little: read with room, not rounded to the twentieth. The drafts' share
+    // stood at 0.9248 and moves by a hair with whatever else draws them that month: 0.9251 once the tank divisions
+    // formed short of their lent regiments, the lent rows' commit of 22 November 2026.)
+    expect(home[0].str).toBeGreaterThanOrEqual(0.9);
+    expect(home[0].str).toBeLessThan(0.95);
     // (The planner's row of month 54, the 15th for Mandalay, still finds it.)
     expect(dated('15th Division')[6].from).toEqual(['13th Army (15th Division, Nanking)']);
   });
