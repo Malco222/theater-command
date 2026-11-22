@@ -106,6 +106,7 @@ namespace LandScape
 				bArdennes = F.Lat >= 49.85 && F.Lat <= 51.0 && F.Lon >= 4.6 && F.Lon <= 7.6; // (Sedan, at 49.7, is the Meuse's farmland)
 				bSlate = (F.Lat >= 49.3 && F.Lon < 7.6) || F.Terrain == "hills" || F.Terrain == "mountain";
 				SnowLying = SnowOf(F, Look::Farmland);
+				bSpruceTrial = F.Tried("spruce");
 				bBare = Month >= 11 || Month <= 3;
 				// the share of the woods' blocks that are conifer: the Ardennes' spruce plantations most
 				Conifers = bArdennes ? 0.72 : bEast ? 0.45 : 0.28;
@@ -579,6 +580,18 @@ namespace LandScape
 					M.SightAcross = 0.75f;
 					M.SightTrunk = 0.35f;
 					M.FarFrom = 220.0f;
+					// (on trial: the snow-laden spruce far off, as the map and the high eyes see a wood of it, a dark mass
+					// some 40,55,45 flecked with snow, not a grey static: its boughs darkened, one snow point in three kept
+					// white; the art director's winter carry, 20:08Z. Near, as built.)
+					if (bSpruceTrial && SnowLying > 0.2)
+						for (size_t P = 0; P < M.Far.Colours.size(); ++P)
+						{
+							const Tone C = Tone{ static_cast<double>(M.Far.Colours[P].R), static_cast<double>(M.Far.Colours[P].G), static_cast<double>(M.Far.Colours[P].B) };
+							const double L = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
+							const Tone Bough = Varied(Rgb(40, 55, 45), 0.85 + 0.3 * Unit(Hash(Seed ^ 0x5E5, P)), 0.0);
+							const Tone T = L > 170.0 && Unit(Hash(Seed ^ 0x5E6, P)) < 0.34 ? C : L > 170.0 ? Bough : Mixed(C, Bough, 0.75);
+							M.Far.Colours[P] = LandField::Rgb8{ static_cast<uint8_t>(std::clamp(T.R, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.G, 0.0, 255.0)), static_cast<uint8_t>(std::clamp(T.B, 0.0, 255.0)) };
+						}
 					break;
 				case KBirch:
 					M.bTree = true;
@@ -777,6 +790,19 @@ namespace LandScape
 				};
 				auto RoofOf = [this, &R]() { return bSlate ? (R.Next() < 0.88 ? 0 : 1) : (R.Next() < 0.25 ? 0 : 1); };
 				const double WhiteShare = bArdennes ? 0.4 : bEast ? 0.6 : 0.18;
+				// The church first, at the village's heart, its nave east and west (its own draws: the houses' as before; on
+				// trial, Fd.Tried("church"))
+				if (Fd.Tried("church"))
+				{
+					Rng RC(H.Seed() ^ 0xC4C4);
+					bool bChurch = false;
+					for (int Ring = 0; Ring < 10 && !bChurch; ++Ring)
+						for (int K = 0; K < 12 && !bChurch; ++K)
+						{
+							const double A = K * 2.0 * Pi / 12.0 + Ring * 0.37, D = Ring * 8.0;
+							bChurch = H.Church(TX + D * std::cos(A), TY + D * std::sin(A), RC.Range(-0.1, 0.1), RC.Next() < 0.3 ? 1 : 0);
+						}
+				}
 				// Houses fronting the roads through the village, both sides, a few metres back; now and then a long-house
 				// (house and barn under one roof) or a barn behind.
 				for (size_t L = 0; L < H.Lanes(); ++L)
@@ -1529,6 +1555,8 @@ namespace LandScape
 			const LandField::Field& F() const { return Fd; }
 			int Month = 7;
 			bool bEast = false, bRussia = false, bArdennes = false, bSlate = true, bBare = false;
+			/** The winter spruce on trial (Field::Tried("spruce")): from above a dark mass flecked with snow (KitLook). */
+			bool bSpruceTrial = false;
 			double SnowLying = 0.0, Conifers = 0.3, Ca = 1.0, Sa = 0.0;
 			Tone Soil = Rgb(126, 102, 78), GrassT = Rgb(92, 134, 54);
 			/** The breakup's grid (2 a point: Lt, Wm), 10 m. */

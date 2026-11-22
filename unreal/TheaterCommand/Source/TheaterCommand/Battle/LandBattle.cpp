@@ -1257,6 +1257,16 @@ bool ALandBattle::Open()
 		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there,
 		// and laid whole where a hedge cutter will tear it)
 		LandField::Field Lay = LandSight::FieldOf(Rec);
+		// (the looks on trial, each behind its switch until the art director passes it and the Mac holds its frame rate:
+		// "-TheaterLandTrial=church,walltop,spruce,edge,kunai" or "=all"; LandField::Field::Trial)
+		{
+			FString Trial;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTrial="), Trial, false) && !Trial.IsEmpty())
+			{
+				Lay.Trial = LandParts::Narrow(Trial);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: -TheaterLandTrial=%s: these looks on trial are ON"), *Trial);
+			}
+		}
 		if (Lay.Steppe.bOn)
 		{
 			// The steppe's cottages, ruins, poles, wattle, sweeps, ricks and birches: the east kit's models

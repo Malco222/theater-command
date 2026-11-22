@@ -111,6 +111,26 @@ namespace LandField
 		double Lat = 49.0, Lon = 0.0;
 		double Snow = -1.0;
 		std::map<std::string, std::string> Kit;
+		/**
+		 * The looks on trial (release 2), each behind its switch until the art director passes it and the Mac holds its
+		 * frame rate: words between commas ("church": a church in the farmland's villages; "walltop": Italy's walls
+		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
+		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
+		 * every ground as passed.
+		 */
+		std::string Trial;
+		bool Tried(const std::string& Word) const
+		{
+			if (Trial == "all") return true;
+			for (size_t P = 0; P <= Trial.size();)
+			{
+				size_t E = Trial.find(',', P);
+				if (E == std::string::npos) E = Trial.size();
+				if (Trial.compare(P, E - P, Word) == 0) return true;
+				P = E + 1;
+			}
+			return false;
+		}
 
 		/**
 		 * Where men and vehicles go, if known (a recording's men tracks, each man's kept points): a hedge they cross is

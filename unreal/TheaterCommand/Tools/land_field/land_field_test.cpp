@@ -805,6 +805,7 @@ int main(int Argc, char** Argv)
 	if (const char* V = std::getenv("LAND_FIELD_LOOK")) F.Look = V;
 	if (const char* V = std::getenv("LAND_FIELD_LATLON")) std::sscanf(V, "%lf %lf", &F.Lat, &F.Lon);
 	if (const char* V = std::getenv("LAND_FIELD_SNOW")) F.Snow = std::atof(V);
+	if (const char* V = std::getenv("LAND_FIELD_TRIAL")) F.Trial = V; // (the looks on trial: Field::Trial)
 	if (const char* V = std::getenv("LAND_FIELD_MONTH")) F.Month = std::atoi(V);
 	if (const char* V = std::getenv("LAND_FIELD_TERRAIN")) F.Terrain = V;
 	// The open steppe, where the recording lays it (field.steppe), and the east kit's models beside the recordings

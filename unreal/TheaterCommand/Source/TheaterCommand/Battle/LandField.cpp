@@ -666,6 +666,8 @@ namespace LandField
 		void MakeWays();
 		double WayRoom(V2 P, bool bVehicles = false) const;
 		void MakeSites();
+		struct House ChurchYard(V2 C, double Yaw) const;
+		void LayChurch(V2 C, double Yaw, int Hurt);
 		void MakeSteppeSites();
 		bool Fits(const House& H, double Margin) const;
 		void Stamp(const House& H, double Margin);
@@ -787,6 +789,12 @@ namespace LandField
 			G.FloorOf(H);
 			G.Stamp(H, 1.0);
 			G.Houses.push_back(H);
+			return true;
+		}
+		bool Church(double X, double Y, double Yaw, int Hurt) override
+		{
+			if (G.Count.bChurch || !G.Fits(G.ChurchYard({ X, Y }, Yaw), 0.5)) return false;
+			G.LayChurch({ X, Y }, Yaw, Hurt > 0 ? DmRoofHole : DmNone);
 			return true;
 		}
 		void Wall(const std::vector<std::pair<double, double>>& Points, double High, double Thick) override
@@ -1423,7 +1431,16 @@ namespace LandField
 	bool Ground::Impl::WoodsBeyond(double X, double Y) const
 	{
 		// (on the steppe the oak woods are few: some one ground in twenty-five, the groves in the balkas' heads)
-		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > (Sp ? 0.43 : Rg ? Rg->WoodsEdge() : 0.27);
+		double Edge = Sp ? 0.43 : Rg ? Rg->WoodsEdge() : 0.27;
+		// (on trial, "edge": the woods held back from the field's edge along a wandering line, out to some 160 m, so a
+		// forest's edge bays and juts and never runs straight along the field's: the art director's winter carry, the
+		// Ardennes' straight outer band, for every ground)
+		if (!Sp && !Fd.Trial.empty() && Fd.Tried("edge"))
+		{
+			const double Out = std::max({ 0.0, -X, X - Fd.Width(), -Y, Y - Fd.Depth() });
+			Edge += 0.45 * Smooth(90.0, 0.0, Out + 70.0 * Noise(X / 110.0, Y / 110.0, Seed ^ 0x5B2E));
+		}
+		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > Edge;
 	}
 
 	void Ground::Impl::MakeRaster()
@@ -1870,44 +1887,8 @@ namespace LandField
 					const double A = K * 2.0 * Pi / 16.0 + Ring * 0.37, D = Ring * 7.0;
 					const V2 C{ Fd.TownX + D * std::cos(A), Fd.TownY + D * std::sin(A) };
 					const double Yaw = 0.18 * (Unit(Hash(Seed, 0xC4C4, static_cast<uint64_t>(Ring * 16 + K))) - 0.5);
-					const V2 U{ std::cos(Yaw), std::sin(Yaw) }, V = Perp(U);
-					House Yard;
-					Yard.C = C + U * 0.7;
-					Yard.Yaw = Yaw;
-					Yard.Long = 31.0 + 12.0;
-					Yard.Deep = 8.6 + 12.0;
-					if (!Fits(Yard, 0.5)) continue;
-					House Nave, Chancel, Tower;
-					Nave.C = C;
-					Nave.Long = 18.0;
-					Nave.Deep = 8.6;
-					Chancel.C = C + U * (9.0 + 3.6);
-					Chancel.Long = 7.2;
-					Chancel.Deep = 6.6;
-					Chancel.Part = 1;
-					Tower.C = C - U * (9.0 + 2.9);
-					Tower.Long = Tower.Deep = 5.8;
-					Tower.Part = 2;
-					for (House* H : { &Nave, &Chancel, &Tower })
-					{
-						H->Yaw = Yaw;
-						H->Type = HtChurch;
-						H->Roof = 0;
-						H->Front = 1;
-						H->Key = Hash(Seed, 0xC4C5, static_cast<uint64_t>(H->Part));
-						FloorOf(*H);
-					}
-					Nave.Hurt = R.Next() < 0.35 ? DmRoofHole : DmNone;
-					Chancel.Floor = Tower.Floor = Nave.Floor;
-					// The churchyard: walled, its gate at the west end before the tower's door.
-					Stamp(Yard, 0.0);
-					const double U0 = -14.8 - 6.0 + 0.7 - 0.7, U1 = 16.2 + 6.0;
-					Line West{ C + U * U0 + V * 1.6, C + U * U0 + V * 10.3, C + U * U1 + V * 10.3, C + U * U1 + V * -10.3, C + U * U0 + V * -10.3, C + U * U0 + V * -1.6 };
-					AddWall(West, 1.3, 0.6, Hash(Seed, 0xC4C6));
-					Houses.push_back(Nave);
-					Houses.push_back(Chancel);
-					Houses.push_back(Tower);
-					Count.bChurch = true;
+					if (!Fits(ChurchYard(C, Yaw), 0.5)) continue;
+					LayChurch(C, Yaw, R.Next() < 0.35 ? DmRoofHole : DmNone);
 					bDone = true;
 				}
 			// Houses fronting the lanes through the village, each side walked along its lane.
@@ -2094,6 +2075,57 @@ namespace LandField
 	 * November). Then the farm's own long sheds and its granary at the edge, whitewashed, under plank or straw. No church,
 	 * no stone wall, no farmstead out in the fields: the collective farm worked the steppe from the village.
 	 */
+	/** The churchyard's ground: the church's footprint with room round it for its wall. */
+	House Ground::Impl::ChurchYard(V2 C, double Yaw) const
+	{
+		const V2 U{ std::cos(Yaw), std::sin(Yaw) };
+		House Yard;
+		Yard.C = C + U * 0.7;
+		Yard.Yaw = Yaw;
+		Yard.Long = 31.0 + 12.0;
+		Yard.Deep = 8.6 + 12.0;
+		return Yard;
+	}
+
+	/** The village church (nave, chancel, the tower at its west end) in its walled churchyard, its middle at C, its nave
+	 * along Yaw; the frame's village lays it, and a region's (Host::Church). Its yard must fit (ChurchYard). */
+	void Ground::Impl::LayChurch(V2 C, double Yaw, int Hurt)
+	{
+		const V2 U{ std::cos(Yaw), std::sin(Yaw) }, V = Perp(U);
+		const House Yard = ChurchYard(C, Yaw);
+		House Nave, Chancel, Tower;
+		Nave.C = C;
+		Nave.Long = 18.0;
+		Nave.Deep = 8.6;
+		Chancel.C = C + U * (9.0 + 3.6);
+		Chancel.Long = 7.2;
+		Chancel.Deep = 6.6;
+		Chancel.Part = 1;
+		Tower.C = C - U * (9.0 + 2.9);
+		Tower.Long = Tower.Deep = 5.8;
+		Tower.Part = 2;
+		for (House* H : { &Nave, &Chancel, &Tower })
+		{
+			H->Yaw = Yaw;
+			H->Type = HtChurch;
+			H->Roof = 0;
+			H->Front = 1;
+			H->Key = Hash(Seed, 0xC4C5, static_cast<uint64_t>(H->Part));
+			FloorOf(*H);
+		}
+		Nave.Hurt = Hurt;
+		Chancel.Floor = Tower.Floor = Nave.Floor;
+		// The churchyard: walled, its gate at the west end before the tower's door.
+		Stamp(Yard, 0.0);
+		const double U0 = -14.8 - 6.0 + 0.7 - 0.7, U1 = 16.2 + 6.0;
+		Line West{ C + U * U0 + V * 1.6, C + U * U0 + V * 10.3, C + U * U1 + V * 10.3, C + U * U1 + V * -10.3, C + U * U0 + V * -10.3, C + U * U0 + V * -1.6 };
+		AddWall(West, 1.3, 0.6, Hash(Seed, 0xC4C6));
+		Houses.push_back(Nave);
+		Houses.push_back(Chancel);
+		Houses.push_back(Tower);
+		Count.bChurch = true;
+	}
+
 	void Ground::Impl::MakeSteppeSites()
 	{
 		if (!Fd.bTown) return;
@@ -5116,6 +5148,7 @@ namespace LandField
 			Sweep(FarSecs, FarOf);
 		}
 		// The stone walls: a face each side, a crowned coping, their ends squared.
+		const bool WallsBroken = Rg && Rg->WallBroken();
 		for (const WallRun& Wr : Walls)
 		{
 			if (Wr.P.size() < 2) continue;
@@ -5127,12 +5160,50 @@ namespace LandField
 				Builder B(T->Built);
 				const V2 N = Perp(Unit2(Bp - A)) * (0.5 * Wr.Thick);
 				const double GA = Carve(A.X, A.Y, Terrain(A.X, A.Y), nullptr), GB = Carve(Bp.X, Bp.Y, Terrain(Bp.X, Bp.Y), nullptr);
-				const double TA = GA + Wr.H[K], TB = GB + Wr.H[K + 1];
+				// (a region's walls broken along their tops, on trial: Region::WallBroken, Italy's "walltop": each point's top
+				// a stone higher or lower, a stone's middle between, one length in five with its coping fallen)
+				const bool bBroken = WallsBroken;
+				// (broken: the top fallen lower along wandering stretches some metres long, each stone a little uneven; never
+				// higher than asked, so a wall inside the kit's stone stays inside it)
+				auto Fallen = [&](size_t I) {
+					const double Lane = static_cast<double>(Wr.Key % 977) + 0.5;
+					return -0.22 * Smooth(-0.1, 0.55, Noise(static_cast<double>(I) / 3.0, Lane, Seed ^ 0x70B)) - 0.03 * Unit(Hash(Wr.Key ^ 0x70A, I));
+				};
+				const double JagA = bBroken ? Fallen(K) : 0.0, JagB = bBroken ? Fallen(K + 1) : 0.0;
+				const double TA = GA + Wr.H[K] + JagA, TB = GB + Wr.H[K + 1] + JagB;
 				const uint64_t Hk = Hash(Wr.Key, K);
 				const LandScape::Tone Own = Rg ? Rg->WallStone() : LandScape::Rgb(168, 160, 142); // (a region's walls: its own stone)
 				const Col Stone = Varied(Rgb(Own.R, Own.G, Own.B), 0.9 + 0.16 * Unit(Hk), 0.03 * (Unit(Mix(Hk)) - 0.5));
 				const double Ivy = Smooth(0.25, 0.6, Noise((A.X + A.Y) / 7.0, static_cast<double>(Wr.Key % 101), Seed ^ 0x41));
 				const Col Face = Mixed(Stone, Rgb(58, 74, 40), (Rg ? Rg->WallIvy() : 0.8) * Ivy), Foot = Mixed(Face, Rg ? Stone : Rgb(96, 98, 78), 0.5);
+				if (bBroken)
+				{
+					// (each point its own stone's tone, shared with the next length, so no length reads as a cast panel)
+					auto StoneAt = [&](uint64_t I) {
+						const Col C = Varied(Rgb(Own.R, Own.G, Own.B), 0.84 + 0.24 * Unit(Hash(Wr.Key ^ 0x70C, I)), 0.05 * (Unit(Hash(Wr.Key ^ 0x70D, I)) - 0.5));
+						return Mixed(C, Rgb(58, 74, 40), (Rg ? Rg->WallIvy() : 0.8) * Ivy);
+					};
+					const V2 Mid = (A + Bp) * 0.5;
+					const double GM = 0.5 * (GA + GB);
+					// (and a stone gone from the top here and there: one length in seven)
+					double TM = 0.5 * (TA + TB) - 0.02 * Unit(Hash(Wr.Key ^ 0x70F, K));
+					if (Unit(Hash(Wr.Key ^ 0x70E, K)) < 1.0 / 7.0) TM -= 0.15 + 0.15 * Unit(Hash(Wr.Key ^ 0x710, K));
+					TM = std::max(TM, GM + 0.35);
+					const V2 Pt[3] = { A, Mid, Bp };
+					const double Gd[3] = { GA, GM, GB }, Tp[3] = { TA, TM, TB };
+					const Col Cs[3] = { StoneAt(2 * K), StoneAt(2 * K + 1), StoneAt(2 * K + 2) };
+					for (int Half = 0; Half < 2; ++Half)
+						for (int S = -1; S <= 1; S += 2)
+						{
+							const V2 O = N * static_cast<double>(S), P0 = Pt[Half], P1 = Pt[Half + 1];
+							const Col F0 = Cs[Half], F1 = Cs[Half + 1];
+							B.Quad(V3{ P0.X + O.X, P0.Y + O.Y, Gd[Half] - 0.3 }, V3{ P1.X + O.X, P1.Y + O.Y, Gd[Half + 1] - 0.3 }, V3{ P1.X + O.X, P1.Y + O.Y, Tp[Half + 1] - 0.08 },
+								V3{ P0.X + O.X, P0.Y + O.Y, Tp[Half] - 0.08 }, Varied(F0, 0.8, 0.0), Varied(F1, 0.8, 0.0), F1, F0, V3{ O.X, O.Y, 0.0 });
+							B.Quad(V3{ P0.X + O.X, P0.Y + O.Y, Tp[Half] - 0.08 }, V3{ P1.X + O.X, P1.Y + O.Y, Tp[Half + 1] - 0.08 }, V3{ P1.X, P1.Y, Tp[Half + 1] + 0.04 },
+								V3{ P0.X, P0.Y, Tp[Half] + 0.04 }, Varied(F0, 1.08, 0.0), Varied(F1, 1.08, 0.0), Varied(F1, 1.08, 0.0), Varied(F0, 1.08, 0.0), V3{ O.X, O.Y, 1.2 });
+						}
+				}
+				else
 				for (int S = -1; S <= 1; S += 2)
 				{
 					const V2 O = N * static_cast<double>(S);
@@ -6733,6 +6804,7 @@ namespace LandField
 				Rg->KitLook(K, M);
 			}
 			for (int K = 0; K < 6; ++K) Rg->ClutterMesh(K, At(static_cast<Base>(static_cast<int>(Base::Clut0) + K)));
+			for (int K = static_cast<int>(Base::Tuft); K < static_cast<int>(Base::Clut0); ++K) Rg->OwnClutter(static_cast<Base>(K), At(static_cast<Base>(K)));
 		}
 		// Snow over it all: the broadleaf trees bare, snow on what faces up (a kit's middle level, which the snow does not
 		// reach, dropped: its near level is drawn to its far one).

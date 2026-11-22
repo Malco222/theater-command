@@ -215,6 +215,7 @@ namespace LandScape
 		public:
 			Med(const LandField::Field& F, uint64_t S) : Region(F, S)
 			{
+				bWallTrial = F.Tried("walltop");
 				FW = F.Width();
 				FH = F.Depth();
 				const int M = std::clamp(F.Month, 1, 12) - 1;
@@ -1961,7 +1962,7 @@ namespace LandScape
 						}
 					}
 					Fine.push_back(Ring.back());
-					H.Wall(Fine, 2.1, 0.55);
+					H.Wall(Fine, bWallTrial ? 1.2 + 0.3 * Unit(Hash(H.Seed(), 0xCE3)) : 2.1, 0.55); // (on trial the art director's 1.2 to 1.5 m)
 				}
 			}
 			std::unordered_set<uint64_t> WoodCells;
@@ -2617,6 +2618,7 @@ namespace LandScape
 			// shade a dark grey-brown, never black)
 			Tone WallStone() const override { return Rgb(142, 130, 106); }
 			double WallIvy() const override { return 0.08; }
+			bool WallBroken() const override { return bWallTrial; }
 
 		private:
 			static constexpr double Margin = 300.0, FarmCell = 100.0;
@@ -2631,6 +2633,8 @@ namespace LandScape
 			std::vector<std::vector<uint32_t>> FarmGrid;
 			int FarmNX = 0, FarmNY = 0;
 			bool bTower = false, bCemetery = false;
+			/** The walls on trial (Field::Tried("walltop")): broken along their tops, the cemetery's 1.2 to 1.5 m, not 2.1. */
+			bool bWallTrial = false;
 			std::vector<float> LiftGrid;
 			double GridX0 = 0.0, GridY0 = 0.0, GridStep = 50.0;
 			static constexpr double MotStep = 8.0, MotMargin = 400.0;

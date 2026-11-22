@@ -236,6 +236,10 @@ namespace LandScape
 		 * Hurt 0 whole, 1 a hole in its roof, 2 a gable down, 3 shelled. Its floor levelled, kept clear. False where it
 		 * does not fit. */
 		virtual bool Building(double X, double Y, double Yaw, double Long, double Deep, int Type, int Storeys, int Roof, bool bWhite, int Hurt) = 0;
+		/** The village church of the ground's own builder (the bocage's: nave, chancel, the tower at its west end, a walled
+		 * churchyard some 43 by 21 m), its middle at X, Y, its nave along Yaw (the tower on the -Yaw side); Hurt 0 whole,
+		 * 1 a hole in its roof. One a field; false where it does not fit or one stands already. */
+		virtual bool Church(double X, double Y, double Yaw, int Hurt) = 0;
 		/** A dry-stone wall along a line (points about 2 m apart or fewer), High and Thick metres, built into the tiles'
 		 * built mesh (as the bocage's yard walls are): men stand behind it; vehicles' ways cut it. */
 		virtual void Wall(const std::vector<std::pair<double, double>>& Line, double High, double Thick) = 0;
@@ -302,6 +306,9 @@ namespace LandScape
 		 * 0.8). */
 		virtual Tone WallStone() const { return Rgb(168, 160, 142); }
 		virtual double WallIvy() const { return 0.3; }
+		/** Its walls broken along their tops (each stone's top its own, one length in five with its coping fallen) and each
+		 * stone its own tone, not a cast panel: Italy's on trial ("walltop"). */
+		virtual bool WallBroken() const { return false; }
 		/** Woods, trees, scrub, rocks and the kit's things in the open. */
 		virtual void Plants(Host& H) { (void)H; }
 
@@ -338,6 +345,10 @@ namespace LandScape
 		virtual int DrawStep() const;
 		/** A clutter slot's mesh (Clut0..Clut5), built here. */
 		virtual void ClutterMesh(int Slot, LandField::BaseMesh& M) const { (void)Slot; (void)M; }
+		/** A clutter base of the frame's own (Tuft to Rosette) that this region never lays, made one of the region's here
+		 * (its mesh as ClutterMesh makes them; its things laid by Dress setting Placed::Kind to it): true where it is. The
+		 * jungle's plumed kunai on trial in Poppies' slot. */
+		virtual bool OwnClutter(LandField::Base B, LandField::BaseMesh& M) const { (void)B; (void)M; return false; }
 
 		// ---- the effects
 		/** The effects kit's ground word for a rules ground name (its number: 0 earth, 1 town, 2 woods, 3 water, 4 mud,

@@ -205,6 +205,7 @@ namespace LandScape
 				// (the mainland of Asia: paddies in its fields and bamboo in its forest; Papua's clay yellow-brown, the
 				// Solomons' and Burma's laterite red)
 				bMainland = F.Lon < 106.0 && F.Lat > 4.0;
+				bPlumeTrial = F.Tried("kunai");
 				bClay = F.Lon > 140.0 && F.Lon < 151.5 && F.Lat < -2.0 && F.Lat > -11.0;
 				// The dry season (the kunai straw, the tracks hard): south of the line May to October, north of it
 				// November to April (Burma's monsoon from late May).
@@ -731,6 +732,13 @@ namespace LandScape
 					Size(0.85 + 0.4 * U4, High);
 					const double Straw = Clamp01(Dry + 0.35 * (U6 - 0.5));
 					P.Tint = S.Kind == KMarsh ? Tint(0.82, 1.0, 0.86) : Tint(0.97 + 0.08 * Straw, 1.0, 0.9 + 0.08 * U7);
+					// (on trial, one clump in six its plumed twin, drawn in Poppies' slot, which the jungle never lays: KunaiClump)
+					if (bPlumeTrial)
+					{
+						const uint64_t QX = static_cast<uint64_t>(static_cast<int64_t>(std::lround(P.X * 4.0f)));
+						const uint64_t QY = static_cast<uint64_t>(static_cast<int64_t>(std::lround(P.Y * 4.0f)));
+						if (Unit(Hash(Seed ^ 0x6B1Eull, QX, QY)) < 1.0 / 6.0) P.Kind = B::Poppies;
+					}
 					return true;
 				}
 				case B::Clut1:
@@ -1391,6 +1399,56 @@ namespace LandScape
 				M.FarFrom = 300.0f;
 			}
 
+			/** The kunai's clump (clutter Clut0), and on trial (Fd.Tried("kunai")) the clump with its plume in Poppies' place,
+			 * laid for one clump in six: the art director's "keep about 1 in 6", 19:57Z. Its blades the same either way. */
+			void KunaiClump(LandField::BaseMesh& M, bool bPlume) const
+			{
+				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
+				Writer W(M.Near);
+				Rng R(Seed ^ 0xC10);
+				// Kunai: a patch of it some 1.3 m across, saw-edged blades 0.75-1.5 m from many feet, leaning every way and
+				// bending over, pale yellow-green, straw at their tips; one slim stem with a small soft plume of fine
+				// filaments, low among the blades.
+				for (int B = 0; B < 46; ++B)
+				{
+					const double A = R.Range(0.0, 2.0 * Pi), R0 = 0.62 * std::sqrt(R.Next()), High = R.Range(0.75, 1.5), Lean = R.Range(0.1, 0.5);
+					const double Bend = R.Range(0.1, 0.45), Green = R.Next(), Turn = R.Range(-1.1, 1.1);
+					const V3 Out{ std::cos(A + Turn), std::sin(A + Turn), 0.0 };
+					const V3 Foot{ R0 * std::cos(A), R0 * std::sin(A), 0.0 };
+					const std::vector<V3> Line = { Foot, Foot + Out * (0.25 * Lean * High) + V3{ 0, 0, 0.5 * High }, Foot + Out * (0.65 * Lean * High) + V3{ 0, 0, 0.85 * High },
+												   Foot + Out * ((Lean + Bend) * High) + V3{ 0, 0, (0.95 - Bend) * High } };
+					const Tone Tip = Mixed(Rgb(160, 152, 104), Rgb(140, 142, 90), Green);
+					// (lit as from above and a little outward, as a thin blade turned from the sun draws near black)
+					Ribbon(W, Line, { 0.022, 0.018, 0.012, 0.0 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 144, 96), Tip, 1.8); // (pale at the foot as kunai is, never a dark reed)
+				}
+				if (bPlume)
+				{
+					const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.3, 1.5);
+					const V3 Out{ std::cos(A), std::sin(A), 0.0 };
+					const V3 Top = Out * 0.12 + V3{ 0, 0, High };
+					Ribbon(W, { V3{}, Out * 0.05 + V3{ 0, 0, 0.6 * High }, Top }, { 0.008, 0.007, 0.005 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 146, 98), Rgb(164, 154, 104), 1.8);
+					for (int F = 0; F < 16; ++F)
+					{
+						// (the plume: a soft spindle of fine silky hairs up the stem's last hand's breadth, a dull cream,
+						// never a star of white strips)
+						const double Fa = A + 2.4 * F, At = 0.012 * F, Up = 1.0 - 0.04 * F;
+						const V3 Dir = Norm(V3{ 0.32 * std::cos(Fa) + 0.25 * Out.X, 0.32 * std::sin(Fa) + 0.25 * Out.Y, Up });
+						const V3 Root = Top + V3{ 0, 0, At - 0.06 }, Mid = Root + Dir * 0.05, End = Root + Dir * (0.09 + 0.002 * F);
+						Ribbon(W, { Root, Mid, End }, { 0.002, 0.007, 0.0 }, V3{ -Dir.Y, Dir.X, 0.0 }, Rgb(150, 142, 118), Rgb(176, 168, 146), 1.8);
+					}
+				}
+				M.FarFrom = 48.0f;
+				M.Paint = 2;
+			}
+
+			bool OwnClutter(LandField::Base B, LandField::BaseMesh& M) const override
+			{
+				if (B != LandField::Base::Poppies || !bPlumeTrial) return false;
+				KunaiClump(M, true);
+				return true;
+			}
+
 			void ClutterMesh(int K, LandField::BaseMesh& M) const override
 			{
 				M.Near = LandField::Mesh();
@@ -1400,41 +1458,8 @@ namespace LandScape
 				switch (K)
 				{
 				case 0:
-				{
-					// Kunai: a patch of it some 1.3 m across, saw-edged blades 0.75-1.5 m from many feet, leaning every way and
-					// bending over, pale yellow-green, straw at their tips; one slim stem with a small soft plume of fine
-					// filaments, low among the blades.
-					for (int B = 0; B < 46; ++B)
-					{
-						const double A = R.Range(0.0, 2.0 * Pi), R0 = 0.62 * std::sqrt(R.Next()), High = R.Range(0.75, 1.5), Lean = R.Range(0.1, 0.5);
-						const double Bend = R.Range(0.1, 0.45), Green = R.Next(), Turn = R.Range(-1.1, 1.1);
-						const V3 Out{ std::cos(A + Turn), std::sin(A + Turn), 0.0 };
-						const V3 Foot{ R0 * std::cos(A), R0 * std::sin(A), 0.0 };
-						const std::vector<V3> Line = { Foot, Foot + Out * (0.25 * Lean * High) + V3{ 0, 0, 0.5 * High }, Foot + Out * (0.65 * Lean * High) + V3{ 0, 0, 0.85 * High },
-													   Foot + Out * ((Lean + Bend) * High) + V3{ 0, 0, (0.95 - Bend) * High } };
-						const Tone Tip = Mixed(Rgb(160, 152, 104), Rgb(140, 142, 90), Green);
-						// (lit as from above and a little outward, as a thin blade turned from the sun draws near black)
-						Ribbon(W, Line, { 0.022, 0.018, 0.012, 0.0 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 144, 96), Tip, 1.8); // (pale at the foot as kunai is, never a dark reed)
-					}
-					{
-						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.3, 1.5);
-						const V3 Out{ std::cos(A), std::sin(A), 0.0 };
-						const V3 Top = Out * 0.12 + V3{ 0, 0, High };
-						Ribbon(W, { V3{}, Out * 0.05 + V3{ 0, 0, 0.6 * High }, Top }, { 0.008, 0.007, 0.005 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 146, 98), Rgb(164, 154, 104), 1.8);
-						for (int F = 0; F < 16; ++F)
-						{
-							// (the plume: a soft spindle of fine silky hairs up the stem's last hand's breadth, a dull cream,
-							// never a star of white strips)
-							const double Fa = A + 2.4 * F, At = 0.012 * F, Up = 1.0 - 0.04 * F;
-							const V3 Dir = Norm(V3{ 0.32 * std::cos(Fa) + 0.25 * Out.X, 0.32 * std::sin(Fa) + 0.25 * Out.Y, Up });
-							const V3 Root = Top + V3{ 0, 0, At - 0.06 }, Mid = Root + Dir * 0.05, End = Root + Dir * (0.09 + 0.002 * F);
-							Ribbon(W, { Root, Mid, End }, { 0.002, 0.007, 0.0 }, V3{ -Dir.Y, Dir.X, 0.0 }, Rgb(150, 142, 118), Rgb(176, 168, 146), 1.8);
-						}
-					}
-					M.FarFrom = 48.0f;
-					M.Paint = 2;
+					KunaiClump(M, !bPlumeTrial);
 					break;
-				}
 				case 1:
 				{
 					// The forest floor's growth: fern fronds arching out, their leaflets either side; broad leaves of ginger
@@ -2008,6 +2033,8 @@ namespace LandScape
 
 		private:
 			bool bIsland = false;
+			/** The plumed kunai on trial (Field::Tried("kunai")): one clump in six with its plume, the rest without (KunaiClump). */
+			bool bPlumeTrial = false;
 			bool bMainland = false, bClay = false;
 			double Dry = 0.5;
 			double SeaZ = 0.0;
