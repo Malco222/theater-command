@@ -23,7 +23,7 @@ import { FAR_STAGE } from './stage';
 import { turnToDate } from '../core/ticket';
 import type { AirCampaign, AirFleet, AirMission, AirReport, AirWarMemory, BombStock, CampaignKind, CampaignMonth, Game, Region, SkyFight, SkyState } from './types';
 import {
-  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, cover, crowding, fieldRoom, guardsLand, km, kmTo, rebaseAir, whyNotBase, whyNotMission,
+  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, closeStaffRules, cover, crowding, fieldRoom, guardsLand, km, kmTo, rebaseAir, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline, theWords } from './game';
 import { hasTech } from './tech';
@@ -44,6 +44,7 @@ interface BookRow { nat: string; kind: string; what: string; targets: string; ti
 interface RepairRow { target: string; perMonth: number; dispersed?: number }
 
 export const AC = data as unknown as {
+  on?: boolean;
   sky: { months: number; keep: number; knocked: number; idle: number };
   stock: { most: number; least: number };
   use: { night: string; day: string; oilfield: string; oil: string };
@@ -88,7 +89,15 @@ export function recordField(g: Game, region: number): number {
   return out;
 }
 
-/** Turns the air campaigns on or off (a new game, or the test kitchen). */
+/**
+ * True when a new grand campaign opens with air campaigns flown (aircampaigns.json `on`; on as shipped: the design
+ * director, 22 November 12:28Z, b623 and b636). The interfaces read it as a grand campaign starts, right after
+ * startOpen, where the war runners set g.flags.ac with TC_AC=1. Scenarios and history campaigns never read it, and a
+ * saved game keeps the switch it was started with: one saved without the flag plays on with air campaigns off.
+ */
+export const airCampaignsShipped = (): boolean => AC.on === true;
+
+/** Turns the air campaigns on or off (a new grand campaign as shipped, or the test kitchen). The bridge calls it by name. */
 export function setAirCampaigns(g: Game, on: boolean): void {
   if (on) g.flags.ac = 1;
   else delete g.flags.ac;
@@ -607,7 +616,7 @@ export function campaignOrders(g: Game, nat: string): void {
       for (const f of ready) {
         f.camp = c.id;
         if (f.bmr <= 0 || f.kind === 'ftr') {
-          if (closeRules(g)) { f.mission = 'support'; f.target = -1; f.close = true; delete f.escorts; }
+          if (byHand(g, nat, 'air') ? closeRules(g) : closeStaffRules(g)) { f.mission = 'support'; f.target = -1; f.close = true; delete f.escorts; }
           else if (sky >= 0 && whyNotMission(g, f, 'superiority', sky) === null) { f.mission = 'superiority'; f.target = sky; }
           continue;
         }

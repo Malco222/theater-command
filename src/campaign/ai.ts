@@ -7,7 +7,7 @@ import { chartDist } from './wrap';
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyNotBase } from './air';
-import { aiProduction, armyWorn, gunsWanted, income } from './economy';
+import { aiProduction, aiTeams, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal, aiFortify, aiProgramme, isCity } from './arsenal';
@@ -30,12 +30,14 @@ import { frontArmys, lineAny, lineGives, lineKeepWatch, lineKeeps, lineLeaves, l
 import { alongside, bookAttacks, bookFleets, bookKept, bookReckoning, bookSails, bookStations, bookedAhead, ceilinged, goesWith, ridersOf } from './stations';
 import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, hopMade, hopsRead, offFront, onFront, planWaits, plansHold, plansKeep, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
-import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormBar, stormForce, takeField, townHeld, whyNotSally, housed } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
+import { isTeam, TEAMS, teamsOn } from './teams';
+import { aiRepair } from './repairs';
 import {
-  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
+  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
+  hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, sailOn, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -266,6 +268,8 @@ function blowOwes(g: Game, nat: string, ph: PlanPhase | null): Set<string> | und
 /** Runs one nation's month. */
 export function runAI(g: Game, nat: string): void {
   blow = null;
+  // (The far side's ship move: corps bound by sea further than a month's sailing sail their next leg first. Nothing on the old chart.)
+  sailOn(g, nat);
   // (By the book its corps on a station take the record's place and posture for the month first: stations.ts. Nothing with the far side off.)
   bookStations(g, nat);
   // The engineers go to their work before the staff moves anyone.
@@ -276,7 +280,12 @@ export function runAI(g: Game, nat: string): void {
   blow = null;
   // With the month's moves made, a defence on a river blows its bridges.
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
+  // Damaged towns are repaired out of their own purse before new corps are bought (repairs.ts): a town repaired pays
+  // for itself in a few months.
+  aiRepair(g, nat);
   aiProduction(g, nat);
+  // The support teams (release 2): nothing unless they are switched on.
+  aiTeams(g, nat);
   aiArsenal(g, nat);
   aiFortify(g, nat, Object.keys(coastWatch(g, nat)), coastRules());
   // Its ships and aircraft come last of all (rulings 68(b) and 70(a)): after the corps, the guns and the works.
@@ -371,7 +380,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
   };
   for (const r of g.regions) {
     if (r.ctrl !== nat || besieged(g, r)) continue;
-    let inside = garrisonOf(r).filter((c) => c.nat === nat);
+    let inside = garrisonOf(r).filter((c) => c.nat === nat && !roomless(g, c));
     // Ruling 232, riders b587 and b588 (the late garrison): with an enemy field army one march away, a computer staff
     // at the dial's looser stops orders into its capital, or a great city of its own, up to the town's room, its
     // worn corps: those standing in the province (the ones that fell back into it among them), and those in a
@@ -385,16 +394,16 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       const worn = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && !plans?.has(c.name) && (c.str / (c.full ?? 1) < LATE.str || c.org < LATE.org);
       const wear = (x: Corps, y: Corps): number => x.str * x.org - y.str * y.org;
       for (const c of r.units.filter(worn).sort(wear)) {
-        if (garrisonOf(r).length >= room) break;
+        if (housed(g, r) >= room) break;
         garrison(g, c);
       }
       // (b588: one march wider, worn corps only.)
       const beside = r.nb.map((j) => g.regions[j]).filter((q) => allied(g, nat, ctl(g, q)) && !hostileUnits(g, q, nat).length).flatMap((q) => q.units.filter(worn)).sort(wear);
       for (const c of beside) {
-        if (garrisonOf(r).length >= room) break;
+        if (housed(g, r) >= room) break;
         if (moveCorps(g, c, r)) garrison(g, c);
       }
-      inside = garrisonOf(r).filter((c) => c.nat === nat);
+      inside = garrisonOf(r).filter((c) => c.nat === nat && !roomless(g, c));
     }
     if (!post) {
       // (A record garrison with the fortress mark stays in: rider b606.)
@@ -450,7 +459,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
  * true), it sends the troops that have just won the country round a town straight on into it, if the odds allow:
  * a garrison that has just been beaten in the field is at its weakest.
  */
-function sieges(g: Game, nat: string, after = false): void {
+export function sieges(g: Game, nat: string, after = false): void {
   if (!siegeRules(g)) return;
   const n = g.nations[nat];
   // A city or a garrisoned town whose defenders have all gone inside: the army beside it closes round it in one
@@ -484,7 +493,8 @@ function sieges(g: Game, nat: string, after = false): void {
     const sat = g.turn - investedOn(g, r);
     // Off the march it storms only what it is sure to carry; after a month round the place, what it probably will;
     // and when the siege has dragged on, it settles for less and at last for a gamble.
-    const need = sat >= SIEGE.ai.last.after ? SIEGE.ai.last.odds : sat >= 2 ? SIEGE.ai.late : sat >= 1 ? SIEGE.ai.assault : SIEGE.ai.hasty;
+    // (Under the fortress rows, not while hunger would take the town's crews first: siege.ts stormBar, 13:05Z.)
+    const need = stormBar(g, r, sat);
     // By the book (b509(c)): before Leningrad a computer Germany, and any computer ally round the town with it, keeps
     // the ring and does not storm; and the book feeds the town across the lake, so hunger does not take it either.
     const heldBy = stormHeldBy(g, r.name);
@@ -509,23 +519,34 @@ function sieges(g: Game, nat: string, after = false): void {
     if (!after && prize && ((!noStorm && now < need) || !shut())) {
       const far = hops(g, r.id, (x) => within(x) && allied(g, nat, fieldCtrl(g, x)));
       const front = (x: Region): boolean => x.nb.some((j) => atWar(g, nat, fieldCtrl(g, g.regions[j])));
+      // Under the fortress rows (the design director's 13:05Z) the staff weighs each corps it could call by the storm's
+      // own odds with that corps standing round the place, so guns and engineers count for the works and walls they
+      // would break (game.ts's easing), not for their worth in the line alone; engineers are called too. Off, by worth.
+      const weigh = fortRows(g);
+      const standing = (c: Corps): Corps => ({ ...c, reg: r.id });
+      const stormOdds = (xs: Corps[]): number => { const f = stormForce(g, xs, r); return f.length ? assess(g, f, r, { town: true }).odds : 0; };
       const call = g.corps
-        .filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && !spared(g, c) && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && c.ap > 0
-          && !besieged(g, g.regions[c.reg]) && (far[c.reg] === 1 ? c.ap >= Math.min(moveCost(g, c, r), 4) : !front(g.regions[c.reg])))
-        .sort((x, y) => far[x.reg] - far[y.reg] || atkPower(g, y) - atkPower(g, x) || x.id - y.id);
+        .filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && !spared(g, c) && c.kind !== 'fort' && (c.kind !== 'eng' || weigh) && c.joint === undefined && c.leave === undefined && c.ap > 0
+          && !besieged(g, g.regions[c.reg]) && (far[c.reg] === 1 ? c.ap >= Math.min(moveCost(g, c, r), 4) : !front(g.regions[c.reg])));
+      const gain = new Map<number, number>();
+      if (weigh) { const here = mine(); for (const c of call) gain.set(c.id, stormOdds([...here, standing(c)])); }
+      call.sort((x, y) => (weigh ? (gain.get(y.id) ?? 0) - (gain.get(x.id) ?? 0) : 0) || far[x.reg] - far[y.reg] || atkPower(g, y) - atkPower(g, x) || x.id - y.id);
       // What is on its way counts for what it will be worth when it arrives.
       const force = stormForce(g, mine(), r);
       const a0 = force.length ? assess(g, force, r, { town: true }) : null;
       let coming = 0, power = 0, men = 0;
+      const onWay: Corps[] = [];
       for (const c of call) {
-        const enough = (noStorm || (a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need)) && (shut() || outside() + men >= SIEGE.ring * inside);
-        if (enough || mine().filter((u) => u.kind !== 'eng').length + coming >= STACK) break;
+        const enough = (noStorm || (weigh ? Math.max(now, stormOdds([...mine(), ...onWay])) >= need : a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need)) && (shut() || outside() + men >= SIEGE.ring * inside);
+        if (enough) break;
+        // Five places full: off, the call ends there; under the fortress rows engineers, who take no place, still come.
+        if (mine().filter((u) => u.kind !== 'eng' && !roomless(g, u)).length + coming >= STACK) { if (!weigh) break; if (c.kind !== 'eng') continue; }
         if (far[c.reg] === 1) {
           if (!hasRoom(g, r, c)) continue;
           if (moveCorps(g, c, r)) now = odds();
         } else {
           walkToward(g, c, r);
-          if (c.reg === r.id) now = odds(); else { coming++; power += atkPower(g, c); men += c.divs * c.str; }
+          if (c.reg === r.id) now = odds(); else { if (c.kind !== 'eng') coming++; power += atkPower(g, c); men += c.divs * c.str; onWay.push(standing(c)); }
         }
         if (!besieged(g, r)) break; // it opened its gates to the bigger army
       }
@@ -707,7 +728,7 @@ function overseas(g: Game, nat: string): void {
       for (const p of phases) if (p.from <= g.turn) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) enemies.add(e);
       for (const id of ids[k]) { const r = g.regions[id]; if (n.atWar.includes(r.ctrl)) enemies.add(r.ctrl); }
       // An army overseas brings its guns up as the main army does: the guns go where the works are (the grand campaign).
-      if (enemies.size) gunsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null);
+      if (enemies.size) { gunsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null); teamsUp(g, nat, enemies, ph?.targets ? new Set(ph.targets) : null); }
       if (ph?.posture === 'attack' && enemies.size) {
         const only = ph.targets ? new Set(ph.targets) : null;
         // Nothing outside the theatre, and nothing the plan has not named, draws this army on.
@@ -907,7 +928,7 @@ function lineMarch(g: Game, nat: string, t: number): void {
     for (let step = 0; step < 6 && c.ap > 0 && c.reg !== goal.id; step++) {
       let next: Region | null = null;
       for (const j of g.regions[c.reg].nb) {
-        if (back[j] < 0 || back[j] >= back[c.reg] || friendlyUnits(g, g.regions[j], nat).length >= STACK) continue;
+        if (back[j] < 0 || back[j] >= back[c.reg] || placed(g, g.regions[j], nat).length >= STACK) continue;
         if (!next || back[j] < back[next.id]) next = g.regions[j];
       }
       if (!next || !moveTo(g, c, next)) break;
@@ -978,6 +999,7 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
   const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
   gunsUp(g, nat, enemies, only);
+  teamsUp(g, nat, enemies, only);
   // (The month a main effort is named the army masses and attacks nowhere: the word of it runs ahead of the blow.)
   if (!ph?.massing) {
     softenLine(g, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
@@ -1124,7 +1146,7 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
       .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && (own(g.regions[c.reg]).length >= 2 || (first && spare(c, 2))))
       .sort((a, b) => d[a.reg] - d[b.reg] || atkPower(g, b) - atkPower(g, a));
     for (const c of pool) {
-      if (have >= count || friendlyUnits(g, r, nat).length >= STACK) break;
+      if (have >= count || placed(g, r, nat).length >= STACK) break;
       if (own(g.regions[c.reg]).length < 2 && !(first && spare(c, 2))) continue;
       walkToward(g, c, r);
       if (c.reg === r.id) { massed.add(c.id); have++; }
@@ -1140,12 +1162,12 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
         .filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind === 'inf' && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && spare(c, 2))
         .sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id);
       for (const c of far) {
-        if (have >= count || friendlyUnits(g, r, nat).length >= STACK) break;
+        if (have >= count || placed(g, r, nat).length >= STACK) break;
         if (!spare(c, 2)) continue;
         if (railCorps(g, c, r)) { massed.add(c.id); have++; }
         else if (railToward(g, c, r)) have++;
       }
-    } else if (have < count && !pool.length && ph.watch?.includes(name) && friendlyUnits(g, r, nat).length < STACK) {
+    } else if (have < count && !pool.length && ph.watch?.includes(name) && placed(g, r, nat).length < STACK) {
       const far = g.corps
         .filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind === 'inf' && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && own(g.regions[c.reg]).length >= 3)
         .sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id);
@@ -1168,7 +1190,7 @@ function fallBack(g: Game, nat: string, cap = g.nations[nat].capital): void {
     .sort((a, b) => home[a.reg] - home[b.reg]);
   // Where the one road home is full of the nation's own troops, one of them goes a stage further to make room.
   const makeRoom = (r: Region, depth = 0): boolean => {
-    if (friendlyUnits(g, r, nat).length < STACK) return true;
+    if (placed(g, r, nat).length < STACK) return true;
     if (depth > 3) return false;
     const movers = r.units.filter((u) => u.nat === nat && !u.hold && u.kind !== 'fort' && u.ap > 0);
     const nexts = r.nb.map((j) => g.regions[j]).filter((x) => allied(g, nat, ctl(g, x)) && home[x.id] >= 0 && home[x.id] < home[r.id]).sort((a, b) => friendlyUnits(g, a, nat).length - friendlyUnits(g, b, nat).length);
@@ -1183,11 +1205,11 @@ function fallBack(g: Game, nat: string, cap = g.nations[nat].capital): void {
     // goes a stage further if those still coming behind would not all fit where he stands.
     const behind = scope ? leaving.length - 1 - i : 0;
     for (let step = 0; step < 6 && c.ap > 0; step++) {
-      if (!given.has(c.reg) && (!scope || friendlyUnits(g, g.regions[c.reg], nat).length + behind <= STACK)) break;
+      if (!given.has(c.reg) && (!scope || placed(g, g.regions[c.reg], nat).length + behind <= STACK)) break;
       let to: Region | null = null;
       for (const j of g.regions[c.reg].nb) {
         const r = g.regions[j];
-        if (!allied(g, nat, ctl(g, r)) || home[j] < 0 || home[j] >= home[c.reg] || friendlyUnits(g, r, nat).length >= STACK || blocked(g, c, r)) continue;
+        if (!allied(g, nat, ctl(g, r)) || home[j] < 0 || home[j] >= home[c.reg] || placed(g, r, nat).length >= STACK || blocked(g, c, r)) continue;
         // Out of the ground being given up if there is a way, and by the emptier road.
         const worse = (x: Region): number => (given.has(x.id) ? 10 : 0) + friendlyUnits(g, x, nat).length;
         if (!to || worse(r) < worse(to)) to = r;
@@ -1327,7 +1349,7 @@ function stepBack(g: Game, nat: string): void {
       let to: Region | null = null;
       const worse = (x: Region): number => (given.has(x.id) ? 1000 : 0) + 10 * home[x.id] + friendlyUnits(g, x, nat).length;
       for (const x of ways(g.regions[c.reg])) {
-        if (friendlyUnits(g, x, nat).length >= STACK || blocked(g, c, x) || c.ap < Math.min(moveCost(g, c, x), 4)) continue;
+        if (placed(g, x, nat).length >= STACK || blocked(g, c, x) || c.ap < Math.min(moveCost(g, c, x), 4)) continue;
         if (!to || worse(x) < worse(to)) to = x;
       }
       if (!to || !moveCorps(g, c, to)) break;
@@ -1352,7 +1374,7 @@ function relieve(g: Game, nat: string): void {
   const foeAt = (x: Region): boolean => hostileUnits(g, x, nat).length > 0;
   const inLine = (x: Region): boolean => x.nb.some((j) => foeAt(g.regions[j]));
   const home = hops(g, n.capital, friendly);
-  const room = (x: Region, c: Corps, from: number): boolean => friendly(x) && home[x.id] >= 0 && !given.has(x.id) && !foeAt(x) && friendlyUnits(g, x, nat).length < STACK && !blocked(g, c, x, from);
+  const room = (x: Region, c: Corps, from: number): boolean => friendly(x) && home[x.id] >= 0 && !given.has(x.id) && !foeAt(x) && placed(g, x, nat).length < STACK && !blocked(g, c, x, from);
   const quiet = (x: Region): boolean => !inLine(x);
   const field = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.town === undefined;
   const mine = (c: Corps): boolean => field(c) && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined && !massed.has(c.id) && !aside(g, g.regions[c.reg], nat);
@@ -1408,7 +1430,7 @@ function gather(g: Game, nat: string, ph: PlanPhase | null): void {
   const places = Object.keys(ph.concentrate).map((nm) => g.byName[nm]).filter((r) => r && allied(g, nat, r.ctrl));
   const at = new Set(places.map((r) => r.id));
   const fast = (r: Region): Corps[] => r.units.filter((u) => u.nat === nat && KIND[u.kind].mobile);
-  const crowd = (r: Region): number => friendlyUnits(g, r, nat).length;
+  const crowd = (r: Region): number => placed(g, r, nat).length;
   for (const r of places) {
     const want = ph.concentrate[r.name];
     for (let guard = 0; guard < want && fast(r).length < want; guard++) {
@@ -1888,7 +1910,7 @@ function homeAgain(g: Game, nat: string): void {
   for (const c of walked) {
     const here = g.regions[c.reg];
     if (here.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) continue;
-    const home = here.nb.map((j) => g.regions[j]).filter((r) => r.owner === nat && r.ctrl === nat && friendlyUnits(g, r, nat).length < STACK).sort((a, b) => a.id - b.id)[0];
+    const home = here.nb.map((j) => g.regions[j]).filter((r) => r.owner === nat && r.ctrl === nat && placed(g, r, nat).length < STACK).sort((a, b) => a.id - b.id)[0];
     if (home && moveCorps(g, c, home)) c.hold = false;
   }
   const havens = g.regions.filter((r) => r.owner === nat && !r.overseas && r.port && r.ctrl === nat);
@@ -1903,7 +1925,7 @@ function homeAgain(g: Game, nat: string): void {
     }
     if (liftLeft(g, nat) < 1) break;
     const way = havens
-      .filter((p) => friendlyUnits(g, p, nat).length < STACK)
+      .filter((p) => placed(g, p, nat).length < STACK)
       .map((p) => ({ p, far: seaPath(g, nat, here, p)?.length ?? Infinity }))
       .filter((x) => x.far < Infinity)
       .sort((a, b) => a.far - b.far || a.p.id - b.p.id);
@@ -2238,13 +2260,13 @@ function crossSea(g: Game, nat: string, slot: number): void {
       // still bring, the men ashore would not be expected to hold.)
       for (const c of ready) {
         if (liftLeft(g, nat) < 1) break;
-        if (ashore.ports.some((p) => friendlyUnits(g, p, nat).length < STACK && holdsAshore(g, nat, p, [c], followUp(g, nat, quay, [c], p)) && shipMove(g, c, p))) { c.hold = false; g.flags[`sf:${c.id}`] = 1; }
+        if (ashore.ports.some((p) => placed(g, p, nat).length < STACK && holdsAshore(g, nat, p, [c], followUp(g, nat, quay, [c], p)) && shipMove(g, c, p))) { c.hold = false; g.flags[`sf:${c.id}`] = 1; }
       }
       return;
     }
     if (ashore?.short) {
       // The harbour town still holds out and no ship can dock: the next wave goes in over the beach, beside the men ashore.
-      const wave = ready.slice(0, Math.min(liftLeft(g, nat), STACK - friendlyUnits(g, ashore.at, nat).length));
+      const wave = ready.slice(0, Math.min(liftLeft(g, nat), STACK - placed(g, ashore.at, nat).length));
       if (wave.length) {
         const plan = planLanding(g, wave, ashore.at);
         // (Not where its own forecast says the sea behind the beach could be closed: more men would only share the trap.)
@@ -2297,7 +2319,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
   const lodged = g.regions[(g.flags[`st:lodged:${nat}${sfx}`] ?? 0) - 1];
   if (lodged && lodged.ctrl === nat && lodged.port && lodged.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) {
     let sent = 0;
-    for (const c of force) if (c.nat === nat && friendlyUnits(g, lodged, nat).length < STACK && holdsAshore(g, nat, lodged, [c], followUp(g, nat, quay, [c], lodged)) && shipMove(g, c, lodged)) sent++;
+    for (const c of force) if (c.nat === nat && placed(g, lodged, nat).length < STACK && holdsAshore(g, nat, lodged, [c], followUp(g, nat, quay, [c], lodged)) && shipMove(g, c, lodged)) sent++;
     if (sent) { went(2); return; }
   }
   // (Against an enemy on the staff's own side of the ocean nobody waits for a day to be picked: he is attacked the
@@ -2386,7 +2408,7 @@ export function ferry(g: Game, nat: string): void {
   // narrow sea (no further than a landing can go) into a harbour its side already holds is a reinforcement and not
   // a venture: it has a ceiling of its own ('hop').
   const sails = (c: Corps, p: Region): boolean => {
-    if (friendlyUnits(g, p, nat).length >= STACK) return false;
+    if (placed(g, p, nat).length >= STACK) return false;
     const path = seaPath(g, nat, g.regions[c.reg], p);
     if (!path) return false;
     const limit = path.length <= NAVY.landing.range ? Math.max(O.risk, O.hop ?? 0) : O.risk;
@@ -2454,7 +2476,7 @@ export function ferry(g: Game, nat: string): void {
     const pool = home().filter((c) => c.kind === 'inf' && !c.hold && c.reg !== door.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && free(c)).sort(byWorth);
     let have = kept.length;
     for (const c of pool) {
-      if (have >= want || friendlyUnits(g, door, nat).length >= STACK) break;
+      if (have >= want || placed(g, door, nat).length >= STACK) break;
       if (!lone(c) && railToward(g, c, door)) { massed.add(c.id); have++; }
     }
   }
@@ -2504,7 +2526,7 @@ export function ferry(g: Game, nat: string): void {
     // (Nor is a corps taken from another run's quay, but for this run's own formation: one run's corps are not the other's.)
     const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && (!quays.has(c.reg) || (!!lead && c.elite === lead)) && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && !theirs(c)).sort(inOrder);
     for (const c of pool) {
-      if (friendlyUnits(g, run.from, nat).length >= STACK || (have >= want && !(lacks && c.elite === lead))) break;
+      if (placed(g, run.from, nat).length >= STACK || (have >= want && !(lacks && c.elite === lead))) break;
       if (railToward(g, c, run.from) && c.reg === run.from.id) { massed.add(c.id); have++; if (c.elite === lead) lacks = false; }
     }
   }
@@ -2552,7 +2574,7 @@ function reinforce(g: Game, nat: string): void {
     const path = seaPath(g, nat, from, p);
     return !!path && (!by.size || path.every((z) => by.has(z))) && crossingRisk(g, nat, path) <= R.risk;
   };
-  const room = (p: Region): boolean => friendlyUnits(g, p, nat).length < STACK;
+  const room = (p: Region): boolean => placed(g, p, nat).length < STACK;
   // Never the corps the staff keeps at its quay for a landing, nor the one that stands alone in a harbour on the coast watch.
   const quay = g.turn - (g.flags[`st:quayAt:${nat}`] ?? -99) < 6 ? (g.flags[`st:quay:${nat}`] ?? 0) - 1 : -1;
   const watch = coastWatch(g, nat);
@@ -2597,7 +2619,7 @@ function reinforce(g: Game, nat: string): void {
   let have = best.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.hold).length;
   const want = Math.min(mayLeave(g, nat), n.sealift);
   for (const c of waiting) {
-    if (have >= want || friendlyUnits(g, best, nat).length >= STACK) break;
+    if (have >= want || placed(g, best, nat).length >= STACK) break;
     if (c.reg !== best.id && railToward(g, c, best) && c.reg === best.id) have++;
   }
 }
@@ -2766,6 +2788,46 @@ function doorstep(g: Game, nat: string, goal: Region | null): Int16Array | null 
 }
 
 /**
+ * The support teams (release 2, src/campaign/teams.ts): a machine-gun or mortar brigade that stands beside no enemy
+ * goes to the nearest sector of its army's front, the sectors opposite the staff's targets first (and for mortars,
+ * those facing works), where a fighting corps of its own stands and the sector has not its teams already. Nothing
+ * while the teams are off.
+ */
+export function teamsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<string> | null): void {
+  if (!teamsOn(g)) return;
+  const teams = g.corps.filter((c) => c.nat === nat && !c.dead && isTeam(c) && !c.hold && !c.town && c.ap > 0 && c.joint === undefined && c.leave === undefined && !massed.has(c.id));
+  if (!teams.length) return;
+  const foe = (x: Region): boolean => enemies.has(ctl(g, x)) && atWar(g, nat, ctl(g, x));
+  const works = (x: Region): boolean => !!x.fort || hostileUnits(g, x, nat).some((u) => u.dug);
+  const facing = (r: Region, c: Corps): number => {
+    let best = 0;
+    for (const j of r.nb) {
+      const x = g.regions[j];
+      if (!foe(x)) continue;
+      best = Math.max(best, (!targets || targets.has(x.name) ? 2 : 1) + (c.kind === 'mor' && works(x) ? 1 : 0));
+    }
+    return best;
+  };
+  const teamsAt = (r: Region): number => r.units.filter((u) => u.nat === nat && !u.dead && isTeam(u)).length;
+  for (const c of teams) {
+    const here = g.regions[c.reg];
+    const now = facing(here, c);
+    if (now >= 2) continue;
+    const far = hops(g, c.reg, (x) => within(x) && allied(g, nat, ctl(g, x)));
+    let best: Region | null = null, bv = now ? now * 10 : 0;
+    for (const r of g.regions) {
+      const d = far[r.id];
+      if (d < 1 || d > 4) continue;
+      const f = facing(r, c);
+      if (!f || teamsAt(r) >= TEAMS.frontage || friendlyUnits(g, r, nat).length >= STACK || !r.units.some((u) => u.nat === nat && !u.dead && fights(u))) continue;
+      const v = f * 10 - d;
+      if (v > bv) { bv = v; best = r; }
+    }
+    if (best) walkToward(g, c, best);
+  }
+}
+
+/**
  * The grand campaign: the guns go where the works are. Before the month's attacks an artillery corps that stands
  * beside no dug-in enemy and no fortress is sent to the nearest sector of its army's front that does, the sectors
  * opposite the staff's targets first, as long as other troops stand there and the sector has not its guns already.
@@ -2791,14 +2853,14 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
       const d = far[r.id];
       if (d < 1 || d > 4) continue;
       const f = facing(r);
-      if (!f || gunsAt(r) >= DEFENCE.frontage.guns || !r.units.some((u) => u.nat === nat && u.kind !== 'art' && u.kind !== 'eng')) continue;
+      if (!f || gunsAt(r) >= DEFENCE.frontage.guns || !r.units.some((u) => u.nat === nat && u.kind !== 'art' && u.kind !== 'eng' && !isTeam(u))) continue;
       const v = f * 10 - d;
       if (v > bv) { bv = v; best = r; }
     }
     if (!best) continue;
     // An army overseas has one road, and the sector at the end of it stands full. Its weakest corps on foot, one the
     // road would not carry into the attack in any case, steps back to where the guns stood and they take its place.
-    if (scope && here.nb.includes(best.id) && friendlyUnits(g, best, nat).length >= STACK) {
+    if (scope && here.nb.includes(best.id) && placed(g, best, nat).length >= STACK) {
       const out = best.units
         .filter((u) => u.nat === nat && !u.dead && u.kind === 'inf' && !u.hold && !u.town && u.ap > 0 && u.joint === undefined && u.leave === undefined && !massed.has(u.id))
         .sort((a, b) => atkPower(g, a) - atkPower(g, b) || a.id - b.id)[0];
@@ -3119,7 +3181,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   const N = g.regions.length;
   const dist = new Float32Array(N).fill(1e9);
   const atFront = new Uint8Array(N);
-  const full = (r: Region): boolean => friendlyUnits(g, r, nat).length >= STACK;
+  const full = (r: Region): boolean => placed(g, r, nat).length >= STACK;
   const q: number[] = [];
   for (const r of g.regions) {
     // An army closes up to its own front, not to an ally's. Overseas the allies share one front.
@@ -3163,7 +3225,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
         let to: Region | null = null;
         for (const j of g.regions[c.reg].nb) {
           const r = g.regions[j];
-          if (door[j] < 0 || door[j] >= door[c.reg] || friendlyUnits(g, r, nat).length >= STACK || blocked(g, c, r)) continue;
+          if (door[j] < 0 || door[j] >= door[c.reg] || placed(g, r, nat).length >= STACK || blocked(g, c, r)) continue;
           if (!to || door[j] < door[to.id]) to = r;
         }
         if (!to || (wave > 0 && weekOf(c, moveCost(g, c, to)) > wave) || !moveCorps(g, c, to)) break;
@@ -3178,7 +3240,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
       let to: Region | null = null, bd = dist[c.reg] - 1, bu = 99;
       for (const r of g.regions) {
         if (r.since >= g.turn || dist[r.id] > bd || byRail[r.id] < 0 || !allied(g, nat, r.ctrl)) continue;
-        const u = friendlyUnits(g, r, nat).length;
+        const u = placed(g, r, nat).length;
         if (u >= STACK || blocked(g, c, r)) continue;
         if (dist[r.id] < bd || u < bu) { to = r; bd = dist[r.id]; bu = u; }
       }
@@ -3191,7 +3253,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
       for (const j of g.regions[here].nb) {
         const r = g.regions[j];
         if (!allied(g, nat, ctl(g, r)) || dist[j] >= bd + (to ? 0.001 : 0)) continue;
-        const u = friendlyUnits(g, r, nat).length;
+        const u = placed(g, r, nat).length;
         if (u >= STACK || blocked(g, c, r)) continue;
         if (dist[j] < bd || u < bu) { to = r; bd = dist[j]; bu = u; }
       }
@@ -3207,7 +3269,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
 function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): void {
   const engaged = (c: Corps): boolean => g.regions[c.reg].nb.some((j) => enemies.has(ctl(g, g.regions[j])) && atWar(g, nat, ctl(g, g.regions[j])));
   const free = (): Corps[] => g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap >= 4 && !engaged(c));
-  const room = (r: Region): boolean => allied(g, nat, ctl(g, r)) && friendlyUnits(g, r, nat).length < STACK;
+  const room = (r: Region): boolean => allied(g, nat, ctl(g, r)) && placed(g, r, nat).length < STACK;
   const nearest = (list: Corps[], to: Region): Corps | null => {
     const d = hops(g, to.id, (r) => allied(g, nat, ctl(g, r)));
     let best: Corps | null = null, bd = 1e9;
@@ -3393,7 +3455,7 @@ function defend(g: Game, nat: string, line = true): void {
     const d = hops(g, here.id, (r) => allied(g, nat, ctl(g, r)) && within(r));
     let to: Region | null = null, bs = 0;
     for (const r of g.regions) {
-      if (!mine(r) || d[r.id] <= 0 || friendlyUnits(g, r, nat).length >= STACK) continue;
+      if (!mine(r) || d[r.id] <= 0 || placed(g, r, nat).length >= STACK) continue;
       const s = need(r) / (1 + 0.5 * d[r.id]);
       if (s > bs) { bs = s; to = r; }
     }
@@ -3476,13 +3538,13 @@ function railToward(g: Game, c: Corps, to: Region): boolean {
 
 function walkToward(g: Game, c: Corps, to: Region): void {
   // The way there, going round any region too packed with troops to march through.
-  const d = hops(g, to.id, (r) => allied(g, c.nat, ctl(g, r)) && within(r) && (r.id === c.reg || friendlyUnits(g, r, c.nat).length < STACK));
+  const d = hops(g, to.id, (r) => allied(g, c.nat, ctl(g, r)) && within(r) && (r.id === c.reg || placed(g, r, c.nat).length < STACK));
   for (let step = 0; step < 6 && c.ap > 0 && c.reg !== to.id; step++) {
     let next: Region | null = null;
     for (const j of g.regions[c.reg].nb) {
       if (d[j] < 0 || d[j] >= d[c.reg]) continue;
       const r = g.regions[j];
-      if (friendlyUnits(g, r, c.nat).length >= STACK || blocked(g, c, r)) continue;
+      if (placed(g, r, c.nat).length >= STACK || blocked(g, c, r)) continue;
       if (!next || d[j] < d[next.id]) next = r;
     }
     if (!next || !moveCorps(g, c, next)) return;
@@ -3557,7 +3619,7 @@ function evacuations(g: Game, nat: string): void {
       const d = hops(g, c.reg, (r) => allied(g, c.nat, ctl(g, r)) && within(r));
       let port: Region | null = null;
       for (const r of g.regions) {
-        if (!r.port || r.owner === c.nat || d[r.id] < 0 || friendlyUnits(g, r, c.nat).length >= STACK) continue;
+        if (!r.port || r.owner === c.nat || d[r.id] < 0 || placed(g, r, c.nat).length >= STACK) continue;
         if (!port || d[r.id] < d[port.id]) port = r;
       }
       if (port) walkToward(g, c, port);

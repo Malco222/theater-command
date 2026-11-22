@@ -19,7 +19,7 @@
 // The chance is ours / (ours + theirs). Nothing here changes the game: no flag is written and no dice are thrown.
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import openData from '../../data/campaign/open.json';
-import { allied, atWar, corpsBase } from './game';
+import { allied, atWar, corpsBase, roomless } from './game';
 import { corpsKnown, fogOn } from './intel';
 import { fieldCtrl } from './siege';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type Region } from './types';
@@ -171,7 +171,7 @@ export function followUp(g: Game, nat: string, quay: Region, wave: Corps[], at: 
   const S = STRENGTH;
   if (!S) return 0;
   const gone = new Set([...wave, ...counted].map((c) => c.id));
-  const there = at.units.filter((u) => !u.dead && (u.nat === nat || allied(g, nat, u.nat))).length;
+  const there = at.units.filter((u) => !u.dead && (u.nat === nat || allied(g, nat, u.nat)) && !roomless(g, u)).length;
   const room = Math.max(0, Math.min((S.months - 1) * g.nations[nat].sealift, STACK - wave.length - there, most));
   if (room <= 0) return 0;
   const ours = (c: string): boolean => c === nat || allied(g, nat, c);

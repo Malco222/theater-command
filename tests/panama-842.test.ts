@@ -65,7 +65,8 @@ describe('the last corps ordered out of a gate\'s province: the gate is left to 
     expect(left.gate).toBe(gateOf(g, /Panama/));
     expect(left.region).toBe(zone.id);
     // (The figure is the one the province card gives for a place held by its town guard only.)
-    const men = guardMen(g, zone).toLocaleString('en-US');
+    // (the UI director's HUD read, 22 November: the figure after "about" is rounded, to the nearest thousand from 1,000)
+    const men = (Math.round(guardMen(g, zone) / 1000) * 1000).toLocaleString('en-US');
     expect(left.men).toBe(guardMen(g, zone));
     expect(left.men).toBeGreaterThan(4000);
     expect(left.ifLine).toBe(`If they go, the Panama Canal is left to its town guard: about ${men} men, and no army.`);

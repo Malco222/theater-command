@@ -181,7 +181,7 @@
   ],
   "close": {
     "_note": "Close air support (Brian's ask of 2026-11-18, 18:58Z; the land field thread's seam): a land fighter group given the standing order 'Ground support' flies over its own side's land battles within its fighters' reach, in place of meeting raids and escorting. The grand campaign only, and only while 'on' is true; off, nothing reads this. Each battle a group flies over costs it 'ready' readiness and, per air strike, 'loss' of the aircraft it brings, 'enemySky' times that under the other side's sky; it flies one battle a week, and none below 'least' readiness or in a month it has flown a raid. On the battle card the side's on-call weight W (aircraft x reach x airfields x readiness x technology x fuel) adds most x min(1, W / full) to its side of the air edge, and this term alone reaches past the sky's clamp at 1 (the design director's b536: ground attack paid most where the sky was already won); under the grand campaign's sky row a full term is worth about x1.05 on the attack and x1.03 on the defence; the strikes it makes are W / strike, rounded, between strikes[0] and strikes[1], where it makes at least 'counts' of the side's strength.",
-    "on": false,
+    "on": true,
     "most": 0.37,
     "full": 150,
     "strike": 60,
@@ -191,6 +191,6 @@
     "ready": 0.1,
     "loss": 0.01,
     "enemySky": 2,
-    "ai": { "_note": "A staff's ground support (b536 asks for it): while its main army is on the attack, it puts on ground support the land fighter groups that reach the battles of its main effort, nearest first, up to 'share' of its land fighters (by aircraft); the rest patrol and fly its sweeps and escorts. On the defensive, or while the army is brought up, none.", "share": 0.34 }
+    "ai": { "_note": "A staff's ground support (b536 asks for it; behind its own switch 'on', so that the player's choice can be on while every war fought by staffs alone stays as it was): while its main army is on the attack, it puts on ground support the land fighter groups that reach the battles of its main effort, nearest first, up to 'share' of its land fighters (by aircraft); the rest patrol and fly its sweeps and escorts. On the defensive, or while the army is brought up, none.", "on": false, "share": 0.34 }
   }
 }

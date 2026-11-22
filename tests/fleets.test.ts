@@ -277,7 +277,8 @@ describe('shelling a coast', () => {
     expect(whyNotBombard(g, dover, r, 'troops')).toMatch(/too few heavy guns/);
     const med = named(g, 'Mediterranean Fleet');
     sail(g, med, med.home, 'patrol');
-    expect(whyNotBombard(g, med, r, 'troops')).toMatch(/is not on the/);
+    // Where the fleet is comes first, as the UI director's sea words say it (13:29Z): "in the X", "off the Y".
+    expect(whyNotBombard(g, med, r, 'troops')).toBe(`The ${med.name} is in the ${g.seas[med.zone].name}, and ${r.name} is not on that sea.`);
     const own = g.seas[z].coast.map((id) => g.regions[id]).find((x) => x.ctrl === 'UK')!;
     expect(whyNotBombard(g, home, own)).toMatch(/not in enemy hands/);
     home.ready = 0.3;

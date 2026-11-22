@@ -6,6 +6,9 @@
 // What comes out is an ordinary plan phase, so the armies carry it out by the same rules as in
 // Historical mode. The numbers and the list of choices live in data/campaign/open.json.
 
+import { raiseForts, trainCrews } from './fortrows';
+import { FORTS_STAGE } from './stage';
+import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
 import { openTech } from './tech';
@@ -42,8 +45,9 @@ import { drawMen, menLeft, menRules, openManpower } from './manpower';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
-import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
+import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
+import { CONVOY_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import type { PlanFront } from './planfronts';
 
@@ -132,6 +136,9 @@ const OPEN = openData as unknown as {
   rear?: { stops: number[]; xp?: number; says?: [one: string, several: string]; by: Record<string, { each: number; name: string; says?: [one: string, several: string]; of: string[]; towns: Record<string, [worth: number, name?: string]> }> };
 };
 
+/** The organisation a corps needs before a staff counts it fit to send into battle (the staffs' own fit line; the yield form reads it too). */
+export const FIT_ORG = 0.35;
+
 /** True in a free-play war: the computer's nations make their own decisions. */
 export const isOpen = (g: Game): boolean => g.flags.open === 1;
 
@@ -143,6 +150,13 @@ export function startOpen(g: Game, wide = true): Game {
   // (Ruling 232, rider b606: the garrisons that are the ruling's own join the roster before anything is counted from it.)
   raiseGarrisons(g);
   g.flags.open = 1;
+  // The fortress rows (stage.ts FORTS_STAGE): the switch is set as the campaign opens, and the book's crews of the
+  // first day join the roster with the garrisons, before anything is counted from it. (A test may set the flag on the
+  // game it opens.)
+  if (FORTS_STAGE || g.flags.fortRows === 1) { g.flags.fortRows = 1; trainCrews(g); raiseForts(g); }
+  // The yield form (stage.ts YIELD_STAGE): the switch is set as the campaign opens. (A test may set the flag on the
+  // game it opens.)
+  if (YIELD_STAGE || g.flags.yieldRule === 1) g.flags.yieldRule = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
@@ -171,6 +185,8 @@ export function startOpen(g: Game, wide = true): Game {
   openMorale(g);
   openEscorts(g);
   openTrade(g);
+  // The convoy battle (release 2, ruling 241): set at a campaign's start only, where stage.json switches it on.
+  if (CONVOY_STAGE) g.flags.convoyBattle = 1;
   openGovernment(g);
   openFooting(g);
   openWeather(g);
@@ -1444,7 +1460,7 @@ const busyElsewhere = (g: Game, e: string, nat: string): boolean => Object.keys(
 function sector(g: Game, nat: string, f: Front, least: number, beside?: Region): { target: Region; odds: number } | null {
   const ours = new Set(f.ours);
   const prize = objectives(g, f).slice(0, 8);
-  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= 0.35;
+  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= FIT_ORG;
   let best: { target: Region; odds: number; score: number } | null = null;
   for (const id of f.edge) {
     const t = g.regions[id];
@@ -1460,7 +1476,7 @@ function sector(g: Game, nat: string, f: Front, least: number, beside?: Region):
     for (const j of doors) {
       const r = g.regions[j];
       for (const c of r.units) if (fit(c)) front.push(c);
-      room += Math.max(0, STACK - r.units.filter((u) => allied(g, nat, u.nat)).length);
+      room += Math.max(0, STACK - r.units.filter((u) => allied(g, nat, u.nat) && !roomless(g, u)).length);
     }
     for (const j of doors) for (const k of g.regions[j].nb) {
       if (seen.has(k)) continue;
@@ -2510,7 +2526,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at = `st:quayAt:${nat}:o`, none = `st:far:${nat}`;
   const foe = ids[flag(g, kf) - 1], quay = g.regions[flag(g, kq) - 1];
   // A quay must have room for the force among whatever corps of its allies stand there: three Americans can never stand in a harbour five British corps fill.
-  const room = (p: Region): boolean => STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length >= D.force;
+  const room = (p: Region): boolean => STACK - placed(g, p, nat).filter((u) => u.nat !== nat).length >= D.force;
   if (foe && quay && g.nations[foe].alive && atWar(g, nat, foe) && allied(g, nat, quay.ctrl) && room(quay) && (g.turn - flag(g, at) < 3 || lodgment(g, nat, 1)?.short)) return { foe, quay };
   if (flag(g, none) === g.turn) return null;
   const drop = (): null => { delete g.flags[kf]; delete g.flags[kq]; g.flags[none] = g.turn; return null; };
@@ -2619,7 +2635,7 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   const D = OPEN.descent;
   // (The target the quay was chosen for: the enemy, and the countries of the list's shores it may land on or plan for.)
   const target = D.afresh ? 1 + (hashString(`${you}:${[...new Set(listed.map((r) => r.owner))].sort().join(',')}`) % 1000000) : 0;
-  const room = (p: Region): boolean => !D.room || STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
+  const room = (p: Region): boolean => !D.room || STACK - placed(g, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
   const kept = g.regions[flag(g, key) - 1];
   const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6 && (!target || flag(g, tk) === target);
   if (fresh && room(kept) && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;

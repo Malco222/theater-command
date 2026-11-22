@@ -16,7 +16,8 @@
 import data from '../../data/campaign/morale.json';
 import { clamp } from '../core/math';
 import type { Corps, Game, Region } from './types';
-import { allied, atWar } from './game';
+import { allied, atWar, fortRow, onPortStores } from './game';
+import { crewStores, storesLeft } from './fortrows';
 import { cmdRally } from './commanders';
 
 export const MORALE = data as unknown as {
@@ -186,6 +187,11 @@ export interface Mood {
   why: MoodReason[];
   /** True if the corps will count as rested, should it neither march nor fight this month. */
   resting: boolean;
+  /**
+   * A fortress crew living on its works' own stores (the fortress rows): the months of them it has left, and the months
+   * it was stocked for. Its rest holds while they last (the design director's 09:06Z), so this is what runs down.
+   */
+  stores?: { left: number; months: number };
 }
 
 const lower = (s: string): string => s[0].toLowerCase() + s.slice(1);
@@ -195,12 +201,15 @@ const listed = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.s
 export function corpsMood(g: Game, c: Corps): Mood {
   const rest = clamp(c.org, 0, 1);
   const quiet = resting(g, c);
-  const restLine = !c.supplied ? 'Cut off from supply: it gets no rest at all.'
+  const left = fortRow(g, c) && (!c.supplied || onPortStores(g, c)) ? storesLeft(g, c) : null;
+  const stores = left !== null ? { left, months: crewStores(c)! } : undefined;
+  const restLine = stores ? `${restWord(rest)}: living on its works' own stores, ${stores.left === 1 ? 'one month' : `${stores.left} months`} of them left. It holds its rest while they last, but gets no more; when they run out it is starved into surrender.`
+    : !c.supplied ? 'Cut off from supply: it gets no rest at all.'
     : c.fought ? `${restWord(rest)}: it has fought this month, and will get back less of its rest for it.`
     : quiet ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.`
     : `${restWord(rest)}: it has marched this month. A month where it neither marches nor fights would rest it properly.`;
   if (c.mor === undefined) {
-    return { morale: null, moraleWord: '', trend: 'steady', rest, restWord: restWord(rest), line: '', restLine: !c.supplied ? restLine : `${restWord(rest)}.`, why: [], resting: false };
+    return { morale: null, moraleWord: '', trend: 'steady', rest, restWord: restWord(rest), line: '', restLine: !c.supplied || stores ? restLine : `${restWord(rest)}.`, why: [], resting: false, ...(stores ? { stores } : {}) };
   }
   const why: MoodReason[] = (c.mw ?? [])
     .filter((e) => Math.abs(e[1]) >= 0.005)
@@ -216,7 +225,7 @@ export function corpsMood(g: Game, c: Corps): Mood {
     : told.length ? `${word} and ${trend}: ${listed(told)}.`
     : trend === 'falling' ? `${word}, and settling back towards its usual temper.`
     : `${word}, and recovering with time.`;
-  return { morale: c.mor, moraleWord: word, trend, rest, restWord: restWord(rest), line, restLine, why, resting: quiet };
+  return { morale: c.mor, moraleWord: word, trend, rest, restWord: restWord(rest), line, restLine, why, resting: quiet, ...(stores ? { stores } : {}) };
 }
 
 /** The morale of a force as one number: its corps weighed by their divisions. Null where no morale is kept. */

@@ -1,7 +1,8 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import type { FoughtAir } from './airfought';
+import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type CrewOrder, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, plannedStrike, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
@@ -10,13 +11,13 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
-  type Assessment, type CostOf, type GroundWorks, type ProbeReport,
+  type Assessment, type CostOf, type FieldBill, type GroundWorks, type ProbeReport,
   worksMonth,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
@@ -43,10 +44,13 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
 import { RELATIONS, closeDiplomacy, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
+import { yieldMonth } from './yield';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
-import { awardOf, cashHonour } from './stories';
+import { awardOf, cashHonour, whyNoSchool } from './stories';
 import { takeWinterPeace, whyNotWinterPeace, winterMonth } from './winter';
+import { setCrewOrder } from './bombers';
+import { sendHero } from './valour';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, liberationMonth, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
@@ -55,6 +59,8 @@ export { gunsLeftAlone } from './siege';
 import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
+import { damageRules, openDamage } from './citydamage';
+import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
 import { gateViews, type GateView } from './gates';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
@@ -134,6 +140,8 @@ export function stepAI(g: Game): string {
   const nat = current(g);
   g.week = 1;
   startPhase(g, nat);
+  // (The yield form, behind its switch: a beaten country with no relief in reach yields as its month opens.)
+  yieldMonth(g, nat);
   if (g.nations[nat].alive) runAI(g, nat);
   closePhase(g, nat);
   return nat;
@@ -145,6 +153,8 @@ export function beginHuman(g: Game): void {
   startPhase(g, current(g));
   // (The far side: the rear garrison of a port he took last month comes to a player as to a computer's staff, staff.ts rearMonth.)
   rearMonth(g, current(g));
+  // (The yield form: the player's country is told the month the cause is met, and yields at the next opening.)
+  yieldMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
@@ -320,8 +330,8 @@ export function runTurnAI(g: Game): void {
 // ---- The player's orders -----------------------------------------------------------------
 
 export function canOrder(g: Game, c: Corps): boolean {
-  // A corps sent home on a bond tour or to the schools takes no orders until it is back.
-  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined) return false;
+  // A corps sent home on a bond tour or to the schools takes no orders until it is back; nor does one at the battle schools this month.
+  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined || c.school) return false;
   // (The far side: Vichy's corps that stayed at their posts in Indochina on the demand take no orders from Japan, pacific.ts atItsPost.)
   if (atItsPost(c)) return false;
   // An ally's corps that marches with the player's army takes his orders too (the grand campaign).
@@ -577,11 +587,12 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   };
 }
 
-export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
+export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number, field?: FieldBill): BattleReport | null {
   if (onEve(g)) return null;
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
-  return resolveBattle(g, ok, target);
+  // (src/battle) A battle the player fought out hands back the ratio it came to, in place of the dice.
+  return resolveBattle(g, ok, target, fought === undefined ? {} : { fought, ...(field ? { field } : {}) });
 }
 
 // ---- Softening a line, handing it over, and folding corps together (the grand campaign) -------------------------
@@ -1141,7 +1152,11 @@ export function asForecast(look: Outlook | null | undefined, rep: BattleReport, 
   return lost <= AS_FORECAST_LOSS * said.ours;
 }
 
-const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
+/**
+ * Men after "about", rounded (the UI director's HUD read, 22 November: "about 5,000 men", never "about 4,973 men"): to
+ * the nearest thousand from 1,000, the nearest hundred under it. Every line that uses it says "about" before it.
+ */
+export const menWord = (n: number): string => (n >= 1000 ? Math.round(n / 1000) * 1000 : n >= 100 ? Math.round(n / 100) * 100 : Math.round(n)).toLocaleString('en-US');
 
 /**
  * A forecast read off a copy of the campaign, kept with the save the copy was made from. The pointer resting over a
@@ -1408,7 +1423,7 @@ export function orderRail(g: Game, c: Corps, to: number): boolean {
 export function shipTargets(g: Game, c: Corps): Region[] {
   const from = g.regions[c.reg];
   if (g.nations[c.nat].sealift <= 0 || !from.port || c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return [];
-  return g.regions.filter((r) => r.port && r.id !== from.id && whyNotShip(g, c, r) === null);
+  return g.regions.filter((r) => r.port && r.id !== from.id && canShip(g, c, r));
 }
 
 /** Enemy coasts the player's chosen corps could land on from the port they stand in. */
@@ -1830,8 +1845,8 @@ export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: numbe
 export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
-export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
-  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human) : null;
+export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[], fought?: FoughtAir): AirReport | null {
+  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human, fought) : null;
 }
 
 /**
@@ -1920,10 +1935,36 @@ export function orderCash(g: Game, award: number, how: Cash): boolean {
   return humanUp(g) && cashHonour(g, award, how);
 }
 
+/** The player's standing order for bomber crews who finish their tour: the schools, a war bond tour, or one and then the other (bombers.ts). */
+export function orderCrews(g: Game, how: CrewOrder): boolean {
+  return humanUp(g) && setCrewOrder(g, how);
+}
+
+/** The player sends a holder of the highest award home: on a war bond tour, or to train recruits (valour.ts). */
+export function orderHero(g: Game, id: number, how: Cash): boolean {
+  return humanUp(g) && sendHero(g, id, how);
+}
+
 /** The player has read a citation. */
 export function orderSeen(g: Game, award: number): void {
   const a = awardOf(g, award);
   if (a && a.nat === g.human) a.seen = true;
+}
+
+/**
+ * The player sends a corps to the battle schools for this month, or calls it back before the month is out (release 2).
+ * See whyNoSchool for who can go. A corps called back has had no term: it is free to march and fight again.
+ */
+export function orderSchool(g: Game, c: Corps, go: boolean): boolean {
+  if (g.human === null || current(g) !== g.human || c.nat !== g.human || c.dead) return false;
+  if (!go) {
+    if (!c.school) return false;
+    delete c.school;
+    return true;
+  }
+  if (whyNoSchool(g, c) !== null) return false;
+  c.school = true;
+  return true;
 }
 
 /** The player's standing order for a corps: take drafts as they come, or keep the veterans together and take none. */
@@ -2012,6 +2053,64 @@ export function townBuildings(g: Game, region: number): TownBuildings | null {
 /** Orders the next level of a line of building ('market', 'farm', 'school', 'camp', 'hospital', 'hall') in one of the player's provinces. */
 export function orderBuilding(g: Game, region: number, line: string): Build | null {
   return humanUp(g) ? orderCivic(g, g.human!, region, line) : null;
+}
+
+// ---- Damaged cities (the grand campaign with its switch: citydamage.ts, repairs.ts) ----------------------
+
+/** True when towns take damage and are repaired in this war. */
+export const cityDamageOn = (g: Game): boolean => damageRules(g);
+
+/**
+ * Turns damaged cities on or off for a grand campaign (the interfaces turn it on when a new one begins). Off, the
+ * war is played exactly as it was before there were damaged cities; damage already done stays on the books but
+ * neither costs nor shows anything until it is turned on again.
+ */
+export function setCityDamage(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  openDamage(g, on);
+  return damageRules(g) === on;
+}
+
+// ---- Air campaigns (aircampaigns.ts; the grand campaign's air war, ruling 236.2) ---------------------------------
+
+// On in a new grand campaign as shipped (aircampaigns.json `on`; the design director, 22 November 12:28Z, b623 and
+// b636). The browser's newGame and the campaign bridge's start turn it on right after startOpen, where the war runners
+// set g.flags.ac with TC_AC=1. The bridge asks for both by name, so it builds on rules without the switch too.
+export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
+
+/** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
+export function cityDamage(g: Game, region: number): RepairView | null {
+  return damageRules(g) ? repairView(g, region, g.human) : null;
+}
+
+/** Every damaged town the player holds, the ones whose damage costs him most first. */
+export function damagedCities(g: Game): RepairView[] {
+  return g.human && damageRules(g) ? damagedTowns(g, g.human) : [];
+}
+
+/** What 'Repair all' would do now: the towns the treasury can pay for, best first, their price and what they bring back each month. */
+export function repairAllOutlook(g: Game): RepairAll | null {
+  return g.human && damageRules(g) ? repairAllPlan(g, g.human) : null;
+}
+
+/** Every damaged town on the map, for the map's marks: where and how badly. */
+export function damageMarks(g: Game): ReturnType<typeof townsDamaged> {
+  return townsDamaged(g);
+}
+
+/** Repairs one of the player's towns, paid at once. True if it was done. */
+export function orderRepair(g: Game, region: number): boolean {
+  return humanUp(g) && repairCity(g, g.human!, region);
+}
+
+/** Repairs every one of the player's damaged towns the treasury can pay for, best first. Returns the towns repaired. */
+export function orderRepairAll(g: Game): string[] {
+  return humanUp(g) ? repairAll(g, g.human!) : [];
+}
+
+/** Takes back a repair the player ordered this month: the town as it was, and the money back. */
+export function orderUndoRepair(g: Game, region: number): boolean {
+  return humanUp(g) && undoRepair(g, g.human!, region);
 }
 
 export interface BuildingTip { region: number; town: string; province: string; offer: CivicOffer }

@@ -12,24 +12,26 @@
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
 import { atWar, bloc, headline } from './game';
 import { turnToDate } from '../core/ticket';
-import { BUDGET, PRODUCTION, aiProduction, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
+import { BUDGET, PRODUCTION, aiProduction, aiTeams, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
 import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './arsenal';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
-import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf } from './tech';
+import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf, workOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
 import { atSea, crossingsOf, fleetsOf, navalAI, numberWord, plannedCrossing } from './navy';
+import { seaHead, seaIs, seaPlural, seaWhat, seaWhere } from './sea-words';
 import { landingForce } from './staff';
 import { staysOut } from './history';
 import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
 import { gatherMonth } from './readiness';
 import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
+import { aiRepair } from './repairs';
 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** A list cut to its first few, with the rest counted. */
@@ -185,10 +187,10 @@ export function crossingWord(g: Game, nat: string): CrossingWord | null {
   if (wanting.length) return { ...plan, state: 'waiting', text: `Your staff is preparing ${way}. Still wanting: ${listAnd(wanting)}.` };
   const h = x.account.hold;
   if (!h.open) return { ...plan, state: 'warned', text: h.island
-    ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close the ${g.seas[h.sea].name} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.`
-    : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g.seas[h.sea].name} behind it. The order to sail under that warning is yours alone.` };
+    ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close ${seaWhat(g.seas[h.sea].name)} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.`
+    : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close ${seaWhat(g.seas[h.sea].name)} behind it. The order to sail under that warning is yours alone.` };
   const lost = Math.round(x.account.loss * 100);
-  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}.${h.contested ? ` The ${g.seas[h.sea].name} behind the beach is yours today, but the enemy can bring ships enough to fight you for it.` : ''} The order to land is yours.` };
+  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}.${h.contested ? ` ${seaHead(g.seas[h.sea].name)} behind the beach ${seaIs(g.seas[h.sea].name)} yours today, but the enemy can bring ships enough to fight you for ${seaPlural(g.seas[h.sea].name) ? 'them' : 'it'}.` : ''} The order to land is yours.` };
 }
 
 /** The month's report on the named crossing: said once in the news when it is ready, or prepared and held back by the card's warning. */
@@ -222,15 +224,20 @@ function build(g: Game, nat: string): string | null {
   // Then the month's orders: troopships for the crossing the player has named, and then as a computer nation's
   // staff places them: new corps, guns round bombed industry, building in the towns.
   const had = new Set(n.queue.map((b) => b.id));
+  let repaired: string[] = [];
   const spent = fromPurse(g, nat, () => {
     shipping(g, nat);
+    // Damaged towns first: a repair pays for itself in a few months (repairs.ts).
+    repaired = aiRepair(g, nat);
     aiProduction(g, nat);
+    aiTeams(g, nat);
     aiArsenal(g, nat);
     civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
     machines(g, nat);
   });
   const fresh = n.queue.filter((b) => !had.has(b.id));
   if (fresh.length) did.unshift(`ordered ${some(fresh.map((b) => orderWords(g, b)), 4)}`);
+  if (repaired.length) did.unshift(`repaired ${some(repaired, 4)}`);
   g.flags['dk:spent'] = spent;
   if (!did.length) return null;
   return `${listAnd(did)}.`;
@@ -343,7 +350,7 @@ function spies(g: Game, nat: string): string | null {
 
 function raidWords(g: Game, r: AirReport): string {
   const at = r.region >= 0 ? g.regions[r.region] : null;
-  if (!at) return `ships in the ${g.seas[r.zone]?.name ?? r.place}`;
+  if (!at) return `ships ${g.seas[r.zone] ? seaWhere(g.seas[r.zone].name) : `in ${r.place}`}`;
   switch (r.mission) {
     case 'bomb': return at.fac > 0 ? `the factories at ${at.name}` : `the railway at ${at.name}`;
     case 'night': return `${at.name} by night`;
@@ -384,7 +391,7 @@ function navy(g: Game, nat: string): string | null {
   for (const f of fleetsOf(g, nat)) {
     const w = was.get(f.id);
     if (!w || (w.zone === f.zone && w.stance === f.stance)) continue;
-    if (atSea(f)) out.push(`the ${f.name} into the ${g.seas[f.zone].name}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
+    if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g.seas[f.zone].name)}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
     else if (w.stance !== 'port') back.push(`the ${f.name}`);
   }
   if (out.length) did.push(`sent ${some(out)}`);
@@ -524,8 +531,9 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     case 'research': {
       const s = techOf(g, nat), teams = teamsOf(g, nat) + spyTeamsOf(g, nat);
       if (!s) return '';
-      const at = s.work.map((w) => `${techById(w.id)?.name ?? w.id} (${months(Math.max(1, Math.ceil(w.left)))})`);
-      return at.length ? `${s.work.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
+      // (Ruling 240: work on a row whose switch is off is not listed.)
+      const at = workOf(s).map((w) => `${techById(w.id)?.name ?? w.id} (${months(Math.max(1, Math.ceil(w.left)))})`);
+      return at.length ? `${at.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
     }
     case 'build': {
       const corps = n.queue.filter((b) => b.what === 'corps').length, other = n.queue.length - corps;

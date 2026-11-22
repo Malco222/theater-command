@@ -13,7 +13,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { STACK, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
 import { ENGINEERING, bridgeDown, crossingsAt, downBetween, farBank, rebuildAt, riverName, type Crossing } from './rivers';
-import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach } from './game';
+import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach, placed } from './game';
 import { orderCorps, raiseSite } from './economy';
 import { mendRail, onNet, railCut, railheads, railsAt, rebuildFactory, ruinedAt } from './rails';
 import { AIRWAR, airWar, airfieldsHold } from './air';
@@ -155,7 +155,7 @@ export function startEngineers(g: Game): void {
     for (let k = 0; k < ENGINEERING.start.corps; k++) {
       const cap = g.regions[n.capital];
       // At the capital if there is room, else the nearest home province with any.
-      const at = [cap, ...cap.nb.map((j) => g.regions[j])].find((r) => r.ctrl === nat && r.owner === nat && friendlyUnits(g, r, nat).length < STACK);
+      const at = [cap, ...cap.nb.map((j) => g.regions[j])].find((r) => r.ctrl === nat && r.owner === nat && placed(g, r, nat).length < STACK);
       if (!at) break;
       addCorps(g, nat, `${ORD[k] ?? `${k + 1}th`} Engineer Corps`, 'eng', (arsenalData.land as Record<string, { divs: number }>).eng.divs, at.id, {});
     }

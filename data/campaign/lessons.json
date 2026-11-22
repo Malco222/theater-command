@@ -71,7 +71,7 @@
     { "id": "cut", "text": "A red lamp: this line is cut. Send engineers to relay the track. Guns in this province would have stopped some of the bombers.", "when": "cut" }
   ],
   "names": {
-    "_about": "Each game's own word for a control, where it is not the list's. The browser game: END MONTH is its button; a railway journey is ordered on blue ground, not a station dot; a month card's line goes to its place by its pin; the arsenal is the BUILD page, which at Field command stands under STAFF (lesson 10's sentence is turned round to keep it to 30 words); the goals are on the REGION page; the Guide is the GUIDE on the top bar. The 3D game (the design director's ruling b425): the desks are YOUR STAFF and the raid is planned from the aircraft on the map; a month card's line goes to its place by its pin; the Guide is the GUIDE. (Its closing note says YOUR STAFF, which ruling b429 made room for by cutting both \"the\"s from the desks; NEXT IN THE REAR and STAND THIS MONTH read the same in both games.)",
+    "_about": "Each game's own word for a control, where it is not the list's. The browser game: END MONTH is its button; a railway journey is ordered on blue ground, not a station dot; a month card's line goes to its place by its pin; the arsenal is the BUILD page, which at Field command stands under STAFF (lesson 10's sentence is turned round to keep it to 30 words); the goals are on the REGION page; the Guide is the GUIDE on the top bar. The 3D game (the design director's ruling b425): the desks are YOUR STAFF and the raid is planned from the aircraft on the map; a month card's line goes to its place by its pin; the Guide is the GUIDE; from release 2 the month's news comes as seals at the map's edge, so lesson 1 says so in 3D, at 30 words. (Its closing note says YOUR STAFF, which ruling b429 made room for by cutting both \"the\"s from the desks; NEXT IN THE REAR and STAND THIS MONTH read the same in both games.)",
     "browser": [
       ["END THE MONTH", "END MONTH"],
       ["Right-click a station dot to ride there", "Right-click blue ground to ride there"],
@@ -87,7 +87,8 @@
       ["Click a line to go to its place", "Click a line's pin to go to its place"],
       ["Click one line of the card.", "Click the pin on one line of the card."],
       ["STAFF hands you each desk when you want it", "YOUR STAFF hands you each desk when you want it"],
-      ["in the Guide", "in the GUIDE"]
+      ["in the Guide", "in the GUIDE"],
+      ["This card opens every month: read it first.", "Later news comes as seals: press one, or R."]
     ]
   }
 }
