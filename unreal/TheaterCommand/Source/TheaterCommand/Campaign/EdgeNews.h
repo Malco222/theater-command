@@ -31,6 +31,8 @@ struct FEdgeNewsSeal
 	/** What is pressed into it (EdgeSeals::EGlyph), and the order sign its row names ("inf", "hull"...; a "star" is never pressed: EdgeSeals::MayPress). */
 	int32 Glyph = 0;
 	FString Sign;
+	/** The sign's thinnest stroke, in pixels of its picture (EdgeSeals::Look::SignThinnest): it is pressed only on a screen where that holds 1.5 px, else the seal takes its drawn mark. */
+	double SignThinnest = 0.0;
 	/** The row's eight words, for the pointer. */
 	FString Words;
 	/** Its place: a province, or a sea of the chart; INDEX_NONE for neither. */

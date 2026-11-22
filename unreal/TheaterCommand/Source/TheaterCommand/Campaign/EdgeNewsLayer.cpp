@@ -85,7 +85,7 @@ namespace
 	/** The inks one seal is drawn in. */
 	struct FSealInks
 	{
-		FLinearColor Wax; // the disc, its side toward the light; the call's glow and ring take it too
+		FLinearColor Wax; // the disc, its side toward the light; the call's glow takes it too, and its ring but on the news band's seal
 		FLinearColor Shade; // the disc's side away from the light, and the runs
 		FLinearColor Hollow; // the hollow the die pressed
 		FLinearColor Rim;
@@ -93,6 +93,7 @@ namespace
 		FLinearColor Dark; // its wall in shadow
 		FLinearColor Mark; // the pressed sign
 		FLinearColor MarkWall; // the sign's other wall: lit (a dark sign) or in shadow (a brass-300 one)
+		FLinearColor Call; // the call's spreading ring: the wax, or the news band's brass-300 rim
 		bool bWallLit = true;
 		float Shown = 1.0f;
 	};
@@ -114,6 +115,9 @@ namespace
 			Inks.Mark = SealLitBrass;
 			Inks.MarkWall = SealShade(SealBandShade, 0.45f);
 			Inks.bWallLit = false;
+			// (its ring is its rim's brass-300: the band's dark wax, at 55% or less, would hardly be seen spreading over the
+			// map. At 55% or less it is still dimmer than the rim it comes from, so never brighter than the seal)
+			Inks.Call = SealLitBrass;
 		}
 		else
 		{
@@ -127,11 +131,12 @@ namespace
 			Inks.Mark = Inks.Dark;
 			Inks.MarkWall = Inks.Lit;
 			Inks.bWallLit = true;
+			Inks.Call = Inks.Wax;
 		}
 		if (Seal.bOpened)
 		{
 			// (opened: the wax goes dull and grey, and the seal stands back until the next month's are laid)
-			FLinearColor* const Each[] = { &Inks.Wax, &Inks.Shade, &Inks.Hollow, &Inks.Rim, &Inks.Lit, &Inks.Dark, &Inks.Mark, &Inks.MarkWall };
+			FLinearColor* const Each[] = { &Inks.Wax, &Inks.Shade, &Inks.Hollow, &Inks.Rim, &Inks.Lit, &Inks.Dark, &Inks.Mark, &Inks.MarkWall, &Inks.Call };
 			for (FLinearColor* Ink : Each)
 			{
 				const float Grey = 0.3f * Ink->R + 0.59f * Ink->G + 0.11f * Ink->B;
@@ -162,6 +167,9 @@ namespace
 		/** The board's laying these are for: a new one slides the seals in again. */
 		int32 Revision = INDEX_NONE;
 		double LaidAt = -1.0;
+
+		/** The screen's pixels to one of the layer's units, as Tick measures it (the viewport's pixels over the layer's size); 0 until measured. */
+		double PxPerUnit = 0.0;
 
 		int32 Hovered = INDEX_NONE;
 		double HoveredAt = 0.0;
@@ -354,22 +362,23 @@ namespace
 			const EdgeSeals::Look::FCall Call = bCalling ? EdgeSeals::Look::CallOf(Now - Laid->LaidAt) : EdgeSeals::Look::FCall();
 			const FSealInks Inks = SealInksOf(Seal);
 			const float Shown = Inks.Shown;
-			// (the frame's units to the screen's pixels, to hold the pressed sign's strokes to 1.5 px: the layer stands
-			// inside the frame's SDPIScaler, so its paint scale is FrameScale times Unreal's own for the window, the same
-			// product CampaignHUD measures units to pixels by)
-			const double PxPerUnit = FMath::Max(static_cast<double>(Geometry.Scale), 0.01);
+			// (the frame's units to the screen's pixels, to hold the pressed sign's strokes to 1.5 px: as the layer measures
+			// it each frame, the viewport's pixels over its own size, about 1.84 in Brian's window on the Mac's fine pixels.
+			// Before the first measure, the paint's own scale: FrameScale times Unreal's for the window)
+			const double PxPerUnit = Laid->PxPerUnit > 0.0 ? Laid->PxPerUnit : FMath::Max(static_cast<double>(Geometry.Scale), 0.01);
 
 			const double Grow = bHot ? EdgeSeals::Look::HoverGrow : Call.Grow;
 			const FGeometry Face = Geometry.MakeChild(FVector2D(SealBoxW, SealBoxH), FSlateLayoutTransform(static_cast<float>(Grow), FVector2D(SealMidX, SealMidY) * (1.0 - Grow)));
 			const FSealPen Pen{ OutDrawElements, Face };
 			int32 Layer = LayerId;
 
-			// The call: the glow and the spreading ring, both in the seal's own wax and never as opaque as the seal, so
-			// never brighter than it; the ring fades as it spreads and is no wider than twice the disc.
+			// The call: the glow in the seal's own wax and the spreading ring in its wax (the news band's: its brass-300
+			// rim), never more than 55% opaque, so never brighter than the seal; the ring rises from nothing at the rim,
+			// fades as it spreads and is no wider than twice the disc.
 			if (bCalling)
 			{
 				Pen.Disc(Layer, SealMidX, SealMidY, Call.GlowR, Inks.Wax.CopyWithNewOpacity(static_cast<float>(Call.Glow)));
-				Pen.Ring(Layer + 1, SealMidX, SealMidY, Call.RingR, Call.RingW, Inks.Wax.CopyWithNewOpacity(static_cast<float>(Call.Ring)));
+				Pen.Ring(Layer + 1, SealMidX, SealMidY, Call.RingR, Call.RingW, Inks.Call.CopyWithNewOpacity(static_cast<float>(Call.Ring)));
 				Layer += 2;
 			}
 			// The ribbon's two short tails, from under the disc: neither longer than the disc is tall.
@@ -393,7 +402,8 @@ namespace
 			}
 			if (Seal.bOpened)
 			{
-				// (opened: one flat disc, so that it stands back at 55% and no two layers of it add up to more)
+				// (opened: one flat disc at 55%, neither shaded nor lit. The rim, the hollow and its lips and the sign still
+				// lie over it and so read darker: the hollow about 80%, the sign about 90 to 95%)
 				Pen.Disc(Layer + 1, SealMidX, SealMidY, SealDiscR, Inks.Wax);
 			}
 			else
@@ -435,7 +445,9 @@ namespace
 			if (Glyph == EdgeSeals::EGlyph::Sign)
 			{
 				const FSlateBrush* Sign = Laid->SignOf && !Seal.Sign.IsEmpty() ? Laid->SignOf(Seal.Sign) : nullptr;
-				if (Sign)
+				// (the order sign is pressed only where its own thinnest stroke holds 1.5 px on this screen: under that it
+				// turns to a smudge, and the seal takes its drawn mark instead. Look::SignHolds)
+				if (Sign && EdgeSeals::Look::SignHolds(Seal.SignThinnest, Sign->ImageSize.X, Sign->ImageSize.Y, PxPerUnit))
 				{
 					// (the order sign, fitted into 18 by 12.5 as it was drawn: Look::FitSign)
 					const EdgeSeals::FPoint Fitted = EdgeSeals::Look::FitSign(Sign->ImageSize.X, Sign->ImageSize.Y);
@@ -443,7 +455,7 @@ namespace
 					FSlateDrawElement::MakeBox(Pen.Out, Layer, Pen.On.ToPaintGeometry(Size, FSlateLayoutTransform(FVector2D(MX, MY) - Size * 0.5)), Sign, ESlateDrawEffect::None, Ink);
 					return;
 				}
-				Glyph = EdgeSeals::EGlyph::News; // (a sign not drawn yet: the plain mark)
+				Glyph = EdgeSeals::EGlyph::News; // (a sign not drawn yet, or too fine for this screen: the plain mark)
 			}
 			if (Glyph == EdgeSeals::EGlyph::More)
 			{
@@ -557,6 +569,9 @@ namespace
 				GEngine->GameViewport->GetViewportSize(View);
 			}
 			const FVector2D PerUnit = View.X > 1.0 && View.Y > 1.0 ? FVector2D(View.X / Local.X, View.Y / Local.Y) : FVector2D(1.0, 1.0);
+			// (and so the pixels a unit of the seals takes on the screen, whatever scales Unreal and the frame put between
+			// them: the seals hold their strokes to 1.5 px by it)
+			Shared.PxPerUnit = View.X > 1.0 && View.Y > 1.0 ? PerUnit.Y : 0.0;
 			const ACampaignMapActor* Table = Player->GetMap();
 			auto PlaceOf = [Player, Table, PerUnit](const FEdgeNewsSeal& Seal, FVector2D& OutAt)
 			{

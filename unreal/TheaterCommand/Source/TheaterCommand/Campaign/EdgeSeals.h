@@ -125,8 +125,8 @@ namespace EdgeSeals
 		Band, // war and peace and the news (class 2): the kit's tc-band--news, its wax (108,80,36) to (85,63,29), rim and sign brass-300
 		Green, // good news, and a FREED his own side won
 		Amber, // something that blocks or warns
-		Brass, // plain brass: neither good nor bad, and bad news (nothing that arrives wears red)
-		Grey, // elsewhere in the war, and next month's at home
+		Brass, // plain brass: home's and the staff's lines, a lead story that is neither good nor bad, the "+N", and bad news (nothing that arrives wears red)
+		Grey, // a row of plain news (the card edges it in its muted grey), elsewhere in the war, and next month's at home
 	};
 
 	/** A seal's colour, and whether it pulses until it is opened. */
@@ -146,7 +146,9 @@ namespace EdgeSeals
 	 * - WAR, FALLEN, FREED and NEWS (class 2) wear the news band's brass and pulse; one his own side won (Tone 1)
 	 *   keeps the card's green, and pulses.
 	 * - The rest wear their row's tone, green, amber, plain brass or grey (elsewhere is grey; the "+N" plain brass),
-	 *   and do not pulse.
+	 *   and do not pulse. A front's row of plain news (Tone 0: a ship sunk or a raid with no side named, no tag) is
+	 *   grey, as the card edges it (MonthRowOf's muted A89F8D); home's lines of this month stay plain brass, as the
+	 *   card draws them (BrightBrass), and so do the staff's lines and a lead story that is neither good nor bad.
 	 */
 	FLook LookOf(ESection Section, const std::string& Word, int Tone);
 
@@ -283,7 +285,8 @@ namespace EdgeSeals
 	 * The seal as EdgeNewsLayer draws it, in the frame's units (its box is FParams' 34 by 44, the disc at its head), to
 	 * the art director's look limits of 22 November, section 2, which the test holds it to. On the screen a unit is
 	 * the frame's FrameScale times Unreal's own scale for the window: about a pixel at 1600 by 1000, 0.74 of one in a
-	 * window 720 high. What must hold in pixels is measured at that scale (PxPerUnit).
+	 * window 720 high, about 1.84 in Brian's window on the Mac's fine pixels (1786 high). What must hold in pixels is
+	 * measured at that scale (PxPerUnit: EdgeNewsLayer measures it, the viewport's pixels over the layer's units).
 	 */
 	namespace Look
 	{
@@ -330,6 +333,25 @@ namespace EdgeSeals
 
 		/** An order sign's picture, DrawnW by DrawnH, fitted into SignW by SignH as it was drawn: its size (X wide, Y high). */
 		FPoint FitSign(double DrawnW, double DrawnH);
+
+		/** The width the order signs' pictures are drawn at (Content/CityOrders, 192 by 128): SignThinnest's measure. */
+		constexpr double SignPictureW = 192.0;
+
+		/**
+		 * An order sign's thinnest stroke, in pixels of its picture as drawn SignPictureW wide: the narrowest part the
+		 * sign is drawn with (a bar, a pole, a cord, a ray, a barrel, a fin's cut end), as measured from the pictures.
+		 * Points and corners are left out: the tip of a bayonet, a nose or an ear narrows to nothing at any size, and is
+		 * no stroke. 0 for a sign not measured: it is not pressed until it is.
+		 */
+		double SignThinnest(const std::string& Sign);
+
+		/**
+		 * Whether an order sign whose thinnest stroke is Thinnest (SignThinnest), its picture DrawnW by DrawnH, keeps that
+		 * stroke at MinStrokePx or more once fitted into SignW by SignH (FitSign) on a screen of PxPerUnit pixels to a
+		 * unit (none, or no measure, is taken at a pixel a unit). Where it does not, the seal takes its drawn mark: under
+		 * 1.5 px a sign turns to a smudge (the art director's ruling of 22 November, section 2).
+		 */
+		bool SignHolds(double Thinnest, double DrawnW, double DrawnH, double PxPerUnit);
 
 		/** One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees clockwise), a dot (Long across) or a ring (Long across, its line Thick). */
 		enum class EStroke : int
@@ -378,9 +400,11 @@ namespace EdgeSeals
 
 		/**
 		 * The call of a seal that pulses, Since seconds after the seals were laid: it breathes (Grow), a glow comes and
-		 * goes under it, and a ring spreads from its rim and fades. The glow and the ring are drawn in the seal's own wax
-		 * and never more opaque than it, so neither is ever brighter than the seal; the ring at its widest, under the
-		 * pointer's grow too, is no wider than twice the disc.
+		 * goes under it, and a ring spreads from its rim, rising over the first tenth of its spread (it never pops in)
+		 * and fading to nothing at its widest. The glow and the ring are drawn in the seal's own colours (the glow in its
+		 * wax, the ring in its wax or, for the news band's seal, its brass-300 rim) and never more opaque than 55%, so
+		 * neither is ever brighter than the seal; the ring at its widest, under the pointer's grow too, is no wider than
+		 * twice the disc.
 		 */
 		struct FCall
 		{

@@ -11510,7 +11510,13 @@ namespace
 		TSharedRef<SWidget> MonthRowOf(const FMonthRow& Told)
 		{
 			const FLinearColor Good(FColor(147, 181, 108)), Bad(FColor(208, 86, 61)), Warn(FColor(224, 161, 60)), Ink(FColor::FromHex(TEXT("1F1808")));
-			const FLinearColor Edge = Told.Tone == 1 ? Good : Told.Tone == -1 ? Bad : Told.Tone == 2 ? Warn : Muted;
+			// (Release 2, news at the map's edge: merge by hand) Ruling 160, as the web card has it: a band's item that found
+			// no band keeps its band's colours, so that it and its seal match (the art director's ruling of 22 November).
+			// WAR, FALLEN, FREED and NEWS stand on the news band's brass ground, their edge and tag brass-300 (a freeing his
+			// own side did keeps its green edge); a WARNING on the red band's ground.
+			const bool bNewsRow = Told.Tag == TEXT("WAR") || Told.Tag == TEXT("FALLEN") || Told.Tag == TEXT("FREED") || Told.Tag == TEXT("NEWS");
+			const FSlateBrush* const Ground = bNewsRow ? &MonthNewsBrush : Told.Tag == TEXT("WARNING") ? &MonthBandBrush : &MonthBoxBrush;
+			const FLinearColor Edge = bNewsRow && Told.Tone != 1 ? BrightBrass : Told.Tone == 1 ? Good : Told.Tone == -1 ? Bad : Told.Tone == 2 ? Warn : Muted; // (news at the map's edge: merge by hand)
 			TSharedRef<SHorizontalBox> Top = SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
@@ -11632,7 +11638,7 @@ namespace
 			}
 			const TSharedRef<SBox> Row = SNew(SBox).HeightOverride(71.0f)
 				[
-					SNew(SBorder).BorderImage(&MonthBoxBrush).Padding(FMargin(0.0f))[Line]
+					SNew(SBorder).BorderImage(Ground).Padding(FMargin(0.0f))[Line] // (news at the map's edge: merge by hand)
 				];
 			// (Rules 84.3.3) A line that carries a pin is one lesson 6 points at, the whole line framed.
 			return Told.Region >= 0 || Told.Sea >= 0 ? Aimed(TEXT("line"), Row) : Row;

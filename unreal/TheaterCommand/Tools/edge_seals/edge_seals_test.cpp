@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <new>
 #include <random>
 #include <string>
@@ -708,7 +709,10 @@ static void TestColours()
 	CHECK(Is(LookOf(ESection::Row, "BLOCKED", 2), EWax::Amber, false));
 	CHECK(Is(LookOf(ESection::Row, "WON", 1), EWax::Green, false));
 	CHECK(Is(LookOf(ESection::Lead, "WON", 1), EWax::Green, false));
-	CHECK(Is(LookOf(ESection::Row, "", 0), EWax::Brass, false));
+	// (a front's row of plain news, tagless: the card edges it in its muted grey, and its seal is grey; home's lines of
+	// this month, which the card draws in brass-300, stay plain brass, and so does a lead that is neither good nor bad)
+	CHECK(Is(LookOf(ESection::Row, "", 0), EWax::Grey, false));
+	CHECK(Is(LookOf(ESection::Lead, "", 0), EWax::Brass, false));
 	CHECK(Is(LookOf(ESection::Home, "", 0), EWax::Brass, false));
 	CHECK(Is(LookOf(ESection::Staff, "", 0), EWax::Brass, false));
 	CHECK(Is(LookOf(ESection::More, "", 0), EWax::Brass, false));
@@ -744,6 +748,35 @@ static void TestColours()
 	CHECK(bBandOnly);
 	CHECK(bPulseOnly);
 	CHECK(bStill);
+	// A front's row and its seal match on the Unreal card: the row's edge as CampaignHUD's MonthRowOf draws it (with
+	// this patch's hook, ruling 160: a band's word that found no band on the news band's brass-300 unless his own side
+	// freed it), in the seals' colours. The one difference is ruled: a row of bad news is edged red, its seal plain brass.
+	auto CardEdge = [](const std::string& Tag, int Tone)
+	{
+		const bool bNews = Tag == "WAR" || Tag == "FALLEN" || Tag == "FREED" || Tag == "NEWS";
+		if (bNews && Tone != 1)
+		{
+			return EWax::Band;
+		}
+		return Tone == 1 ? EWax::Green : Tone == -1 ? EWax::Red : Tone == 2 ? EWax::Amber : EWax::Grey;
+	};
+	bool bMatch = true;
+	for (const char* Word : Words)
+	{
+		for (int Tone = -1; Tone <= 3; ++Tone)
+		{
+			if (std::string(Word) == "WARNING" && Tone != -1)
+			{
+				continue; // (a warning's row is always edged red: the card gives it the tone "bad")
+			}
+			const EWax Seal = LookOf(ESection::Row, Word, Tone).Wax, Edge = CardEdge(Word, Tone);
+			bMatch = bMatch && (Seal == Edge || (Edge == EWax::Red && std::string(Word) != "WARNING" && Seal == EWax::Brass));
+		}
+	}
+	CHECK(bMatch);
+	CHECK(CardEdge("NEWS", 0) == EWax::Band && LookOf(ESection::Row, "NEWS", 0).Wax == EWax::Band);
+	CHECK(CardEdge("WAR", -1) == EWax::Band && LookOf(ESection::Row, "WAR", -1).Wax == EWax::Band);
+	CHECK(CardEdge("", 0) == EWax::Grey && LookOf(ESection::Row, "", 0).Wax == EWax::Grey);
 	// Our own order signs are pressed in; no star (the ruling's section 2), nor the night raid's moon and star.
 	CHECK(MayPress("inf") && MayPress("hull") && MayPress("ftr") && MayPress("art") && MayPress("aa"));
 	CHECK(!MayPress("star") && !MayPress("night") && !MayPress(""));
@@ -840,6 +873,42 @@ static void TestSealLook()
 		Look::FStroke Strokes[4];
 		CHECK(Look::MarkOf(EGlyph::Sign, Reference, Strokes) == 0 && Look::MarkOf(EGlyph::More, Reference, Strokes) == 0);
 	}
+	// The order signs' own strokes: a sign is pressed only where its thinnest stroke holds 1.5 px on the screen, else
+	// the seal takes its drawn mark (never a smudge). Brian's window on the Mac's fine pixels is about 1786 high: 1.84 px
+	// a unit; 1600 by 1000, the reference, 1.03; a 1080 window 1.11.
+	{
+		const double Mac = (1000.0 / 900.0) * (1786.0 / 1080.0), Full = 1000.0 / 900.0;
+		auto Holds = [](const char* Sign, double Scale) { return Look::SignHolds(Look::SignThinnest(Sign), 192.0, 128.0, Scale); };
+		bool bMacHolds = true, bThin = true, bThickSigns = true;
+		for (const char* Sign : { "arm", "art", "bmr", "cav", "cv", "eng", "ftr", "hull", "inf", "mot", "ss", "tp" })
+		{
+			bMacHolds = bMacHolds && Holds(Sign, Mac);
+		}
+		CHECK(bMacHolds);
+		// (the four whose thinnest stroke falls under 1.5 px even there: the gun's bar, the rays, the flag's pole, the cord)
+		CHECK(!Holds("aa", Mac) && !Holds("day", Mac) && !Holds("mtn", Mac) && !Holds("para", Mac));
+		for (const char* Sign : { "aa", "arm", "bmr", "day", "eng", "ftr", "inf", "mot", "mtn", "para" })
+		{
+			bThin = bThin && !Holds(Sign, Reference) && !Holds(Sign, Full);
+		}
+		for (const char* Sign : { "art", "cav", "cv", "hull", "ss", "tp" })
+		{
+			bThickSigns = bThickSigns && Holds(Sign, Reference) && Holds(Sign, Full);
+		}
+		CHECK(bThin);
+		CHECK(bThickSigns);
+		// (the measure is the thinnest stroke at the screen's scale, at the edge of 1.5 px: the rifle at 13.6 of 192)
+		const double Edge = 1.5 / (13.6 * Look::FitSign(192.0, 128.0).X / Look::SignPictureW);
+		CHECK(Holds("inf", Edge * 1.0001) && !Holds("inf", Edge * 0.9999));
+		// (the same sign drawn twice as large keeps the same measure: it is a share of the picture's width)
+		CHECK(Look::SignHolds(13.6, 384.0, 256.0, Mac) == Holds("inf", Mac));
+		// (a sign not measured is not pressed; nor the star or the night raid's, which MayPress refuses)
+		CHECK(Look::SignThinnest("star") == 0.0 && Look::SignThinnest("night") == 0.0 && Look::SignThinnest("") == 0.0);
+		CHECK(!Holds("star", 3.0) && !Holds("", 3.0) && !Look::SignHolds(0.0, 192.0, 128.0, 100.0));
+		// (a screen of no measure is taken at a pixel a unit)
+		CHECK(Holds("art", 0.0) == Holds("art", 1.0) && Holds("inf", std::nan("")) == Holds("inf", 1.0));
+	}
+
 	// A stroke is kept as drawn where it is thick enough, made thicker where it is not, and never swells past 6 units.
 	CHECK(Look::Stroke(2.0, Reference) == 2.0);
 	CHECK(std::fabs(Look::Stroke(1.2, Reference) * Reference - 1.5) < 1e-9);
@@ -909,9 +978,51 @@ static void TestSealLook()
 	CHECK(bDim);
 	CHECK(bCalm && Look::Breath <= 0.05);
 	CHECK(Look::CallOf(2.4 - 1e-6).Ring < 0.01 && std::fabs(Look::CallOf(1.2).Grow - (1.0 + Look::Breath)) < 1e-9 && Look::CallOf(0.0).Grow == 1.0);
+	// (the ring rises from nothing at the rim, so that it never pops in, and never jumps, across the cycle's turn too)
+	bool bSmooth = true;
+	double Most = 0.0;
+	for (int Step = 0; Step <= 2000; ++Step)
+	{
+		const double Now = Look::CallOf(Step * 0.005).Ring, Next = Look::CallOf((Step + 1) * 0.005).Ring;
+		bSmooth = bSmooth && std::fabs(Next - Now) <= 0.02;
+		Most = std::max(Most, Now);
+	}
+	CHECK(Look::CallOf(0.0).Ring == 0.0 && Look::CallOf(2.4).Ring < 1e-9 && Look::CallOf(4.8 + 1e-9).Ring < 1e-6);
+	CHECK(bSmooth);
+	CHECK(Most > 0.45 && Most <= 0.55);
 }
 
-int main()
+/** Every order sign in Content/CityOrders that may be pressed has its thinnest stroke measured, so none is pressed unseen. */
+static void TestSignsMeasured(const char* Folder)
+{
+	if (!Folder)
+	{
+		std::printf("(the order signs' folder was not given: their measures were not checked against it)\n");
+		return;
+	}
+	int Found = 0;
+	bool bMeasured = true;
+	std::error_code Failed;
+	for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(Folder, Failed))
+	{
+		const std::string Name = Entry.path().filename().string();
+		if (Name.size() <= 10 || Name.compare(0, 6, "order-") != 0 || Name.compare(Name.size() - 4, 4, ".png") != 0)
+		{
+			continue;
+		}
+		const std::string Sign = Name.substr(6, Name.size() - 10);
+		++Found;
+		if (MayPress(Sign) && Look::SignThinnest(Sign) <= 0.0)
+		{
+			bMeasured = false;
+			std::printf("not measured: %s\n", Sign.c_str());
+		}
+	}
+	CHECK(!Failed && Found >= 16);
+	CHECK(bMeasured);
+}
+
+int main(int ArgCount, char** Args)
 {
 	TestItems();
 	TestWords();
@@ -921,6 +1032,7 @@ int main()
 	TestMotion();
 	TestColours();
 	TestSealLook();
+	TestSignsMeasured(ArgCount > 1 ? Args[1] : nullptr);
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

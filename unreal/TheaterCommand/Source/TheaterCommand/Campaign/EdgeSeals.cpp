@@ -117,6 +117,11 @@ namespace EdgeSeals
 		{
 			return FLook{ EWax::Brass, false };
 		}
+		// (a front's row of plain news: the card edges it in its muted grey, MonthRowOf's A89F8D, and so it is grey)
+		if (Section == ESection::Row && Tone == 0)
+		{
+			return FLook{ EWax::Grey, false };
+		}
 		// (bad news is no warning: it wears plain brass, never red)
 		return FLook{ Tone == 1 ? EWax::Green : Tone == 2 ? EWax::Amber : Tone == 3 ? EWax::Grey : EWax::Brass, false };
 	}
@@ -573,6 +578,52 @@ namespace EdgeSeals
 			return FPoint{ W * Fit, H * Fit };
 		}
 
+		double SignThinnest(const std::string& Sign)
+		{
+			struct FMeasured
+			{
+				const char* Sign;
+				double Px;
+			};
+			// (measured on 22 November from each picture's ink, four times finer than its pixels: for every part, the
+			// widest disc that fits in it. The thinnest stroke each sign is drawn with, its points and corners aside. The
+			// star and the night raid's sign are never pressed: MayPress)
+			static constexpr FMeasured Measured[] = {
+				{ "aa", 7.8 }, // the bar the gun stands on
+				{ "arm", 14.2 }, // the gun
+				{ "art", 17.0 }, // the trail
+				{ "bmr", 9.2 }, // the tail's cut ends
+				{ "cav", 40.0 }, // (the head: nothing thinner, its ear a point)
+				{ "cv", 28.0 }, // the island
+				{ "day", 7.2 }, // the rays, at their inner ends
+				{ "eng", 14.2 }, // the river's wave
+				{ "ftr", 9.4 }, // the tail's cut ends
+				{ "hull", 26.0 }, // the superstructure
+				{ "inf", 13.6 }, // the rifle, under the bayonet's point
+				{ "mot", 12.1 }, // the chassis between the wheels
+				{ "mtn", 6.2 }, // the flag's pole
+				{ "para", 8.2 }, // the middle cord
+				{ "ss", 32.0 }, // the tower
+				{ "tp", 17.0 }, // the funnels
+			};
+			for (const FMeasured& Each : Measured)
+			{
+				if (Sign == Each.Sign)
+				{
+					return Each.Px;
+				}
+			}
+			return 0.0;
+		}
+
+		bool SignHolds(double Thinnest, double DrawnW, double DrawnH, double PxPerUnit)
+		{
+			// (as Stroke takes a screen of no measure: a pixel a unit)
+			const double Scale = PxPerUnit > 0.0 ? PxPerUnit : 1.0;
+			const double Units = Thinnest * FitSign(DrawnW, DrawnH).X / SignPictureW;
+			return Thinnest > 0.0 && Units * Scale >= MinStrokePx;
+		}
+
 		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4])
 		{
 			auto Bar = [PxPerUnit](double X, double Y, double Long, double Thick, double Degrees)
@@ -642,10 +693,11 @@ namespace EdgeSeals
 			Call.Grow = 1.0 + Breath * Beat;
 			Call.GlowR = DiscR + 2.5;
 			Call.Glow = 0.2 * Beat;
-			// (from just off the rim out to 24.5, fading as it goes, so that it is gone at its widest and starts again unseen)
+			// (from just off the rim out to 24.5: it rises over the first tenth of its spread and fades as it goes, so that
+			// it starts again unseen at the rim and is gone at its widest)
 			Call.RingR = DiscR + 1.5 + 8.0 * Spread;
 			Call.RingW = 1.6;
-			Call.Ring = 0.55 * (1.0 - Spread);
+			Call.Ring = 0.55 * std::min(Spread / 0.1, 1.0) * (1.0 - Spread);
 			return Call;
 		}
 	}
