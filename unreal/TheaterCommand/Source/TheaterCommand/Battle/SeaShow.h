@@ -275,6 +275,7 @@ namespace SeaShow
 		double Heading = 0.0; // radians, its long way
 		double Long = 1.0, Beam = 0.5;
 		int Aboard = 0, Holding = 0; // men in it, men holding on to it
+		double Way = 0.0;     // a boat: her own way through the water under oars, metres a second (0: adrift)
 	};
 
 	/** Her oil on the sea: an oval drawn out down the wind, spreading and thinning as it ages, alight in part for a while. */

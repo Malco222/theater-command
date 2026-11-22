@@ -223,12 +223,11 @@ private:
 	TMap<int32, TArray<FWakePoint>> Wakes;
 	TMap<int32, FTrackLine> Tracks;
 	// The wrecks as drawn: each wreck's navy (the kit's rows) and the merchant ships among them; how black with oil each
-	// man in the water is (0 to 1); each boat's last place, when, and her way through the water (m/s, eased); the floats
-	// and men in the far mesh as last laid, and when; the battle time last drawn; the most points laid in a frame.
+	// man in the water is (0 to 1); the floats and men in the far mesh as last laid, and when; the battle time last drawn;
+	// the most points laid in a frame.
 	TMap<int32, FString> WreckNavy;
 	TSet<int32> WreckMerchants;
 	TMap<int32, float> OilOnMen;
-	TMap<int32, FVector4> BoatsSeen;
 	TSet<int32> FarFloats, FarMen;
 	// (the men going over the side now, and when each landed in the water: his splash, DrawMarks)
 	TSet<int32> MenJumping;

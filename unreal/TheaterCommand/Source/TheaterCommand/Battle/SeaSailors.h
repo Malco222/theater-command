@@ -13,7 +13,8 @@
  * boat is going down", "have them use the models we have for the soldiers for the sailors"). The soldiers thread's sailor
  * files (battle-models/land/soldier/README.md, "The sailors"; Content/Models/Soldiers/soldier_<ARMY>_sailor.json) are
  * soldier.py's man on the same 32 bones with the clips of a man going over the side and in the water; LandMen reads and
- * skins them (a byte copy of the ground thread's Battle/LandMen, claude/project-thread-uhhxrn b888182f: keep it so).
+ * skins them (a byte copy of the ground thread's Battle/LandMen, claude/project-thread-uhhxrn 982b6300, the same at
+ * f8503669: keep it so).
  *
  * The show (SeaShow) decides where every man is and what he is doing; this file says only which clip shows it, how far
  * into it he is, and where its root stands (the README's roots: `surface` on the sea where he is, `feet` under him as he
@@ -101,6 +102,12 @@ namespace SeaSailors
 	constexpr double ThwartTop = 0.47, Boards = 0.12, RaftTop = 0.26, RaftHold = 0.22;
 	/** The row clip's rowlock out to his side (metres, the file's `oar`): where his oar crosses her gunwale. */
 	constexpr double LockOut = 0.6;
+	/** A man in the water (root at the sea's top): a hand or a boot whose joint (wrist, ankle) is under SinkFrom metres
+	 * over the sea is drawn SinkTo under it, every point of it, so no hand shows above the water with the arm behind it
+	 * under (read as a hand cut off) and no boot tip breaks it alone (read as a fin): the art director, 22 November 12:17Z.
+	 * The breaststroke's glide lifts the hands up to 0.13 m and its kick the boot tips 0.05 m over a wrist or ankle under
+	 * the water. A hand on a raft's tube, an arm up to wave: its wrist is out of the water, so it shows. */
+	constexpr float SinkFrom = 0.03f, SinkTo = 0.03f;
 
 	class Crew
 	{
@@ -133,7 +140,8 @@ namespace SeaSailors
 		float PoseTime(int K, Act A, int Pose) const;
 
 		/** Skins file K doing A at Time at level L, in his own axes, metres: Points * 3 floats each into OutAt and
-		 * OutFacing (resized). Returns the points; 0 where the clip is missing. */
+		 * OutFacing (resized). Returns the points; 0 where the clip is missing. In the water's clips (root at the sea's
+		 * top) a hand or boot under the water at its joint is sunk whole (SinkFrom). */
 		int Skin(int K, Act A, float Time, LandMen::Lod L, std::vector<float>& OutAt, std::vector<float>& OutFacing) const;
 		/** The middle of his two hands (his own axes), doing A at Time. */
 		LandMen::Vec3 Hands(int K, Act A, float Time) const;
@@ -154,6 +162,10 @@ namespace SeaSailors
 			std::shared_ptr<LandMen::Soldier> S;
 			int Clip[Acts] = {};
 			int HandL = -1, HandR = -1;
+			// (the four ends a man in the water may lift alone: each one's joint bone (hand_l, hand_r, foot_l, foot_r), and
+			// each bone's end, -1 for none: the hand's, its fingers' and thumb's; the foot's and its ball's)
+			int EndJoint[4] = { -1, -1, -1, -1 };
+			std::vector<int8_t> EndOf;
 			// (the file's colours for the army paints, 0 to 14, where it gives them; its oar: the rowlock and the handle's
 			// track, t x y z)
 			uint32_t Own[16] = {};

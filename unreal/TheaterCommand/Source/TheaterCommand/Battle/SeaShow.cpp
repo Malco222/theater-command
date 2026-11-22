@@ -3234,7 +3234,10 @@ namespace SeaShow
 				const uint64_t S = W.Seed + 1299709ULL * static_cast<uint64_t>(W.BoatsOut + 1);
 				const double Side = W.BoatsOut % 2 ? -W.Lee : W.Lee;
 				const Vec P = SideOf((W.BoatsOut / 2 % 2 ? -0.25 : 0.2) * W.Long, Side, 3.0);
-				AddFloat(Lifeboat, P, Wrap(Hdg + (Mix(S + 1) - 0.5) * 0.3), RightOf(Hdg) * (Side * 0.3), 0.0);
+				// (pushed off and pulled clear bow first, her head out from the side and a little aft: the art director, 22
+				// November 12:17Z)
+				const double Out = Wrap(Hdg + Side * (0.5 * Pi + 0.35 + (Mix(S + 1) - 0.5) * 0.3));
+				AddFloat(Lifeboat, P, Out, Ahead(Out) * 0.3, 0.0);
 				++W.BoatsOut;
 			}
 			// Her wreckage: some as she goes, most as she goes under (and what comes up after a boat lost deep).
@@ -3321,10 +3324,32 @@ namespace SeaShow
 					Fl.V += (Want - Fl.V) * Clamp(Dt / 5.0, 0.0, 1.0);
 				}
 			}
-			// (its middle kept so far from her side that its ends and the men holding on to it are clear of her too)
+			// (its middle kept so far from her side that its ends and the men holding on to it are clear of her too; its way
+			// into her side stopped there, only its way along her left)
 			const double Body = 0.5 * std::max(Fl.O.Long, Fl.O.Beam) + 0.8;
-			for (size_t K = 0; K < W.NearNow.size(); ++K) PushOut(Fl.O.At, W.NearNow[K]->P, W.NearNow[K]->Hdg, W.NearHalf[K], W.NearR[K] + Body);
+			for (size_t K = 0; K < W.NearNow.size(); ++K)
+			{
+				const Vec Was = Fl.O.At;
+				if (PushOut(Fl.O.At, W.NearNow[K]->P, W.NearNow[K]->Hdg, W.NearHalf[K], W.NearR[K] + Body))
+				{
+					const Vec Out = Vec(Fl.O.At.X - Was.X, Fl.O.At.Y - Was.Y, 0.0).Unit(Vec());
+					const double Into = Fl.V.X * Out.X + Fl.V.Y * Out.Y;
+					if (Into < 0.0) Fl.V = Fl.V - Out * Into;
+				}
+			}
 			Fl.O.At.Z = 0.0;
+			// (a boat with men in her making her own way, pushed off or pulled for a ship, goes bow first, her oarsmen's backs
+			// to the way she goes: her coxswain brings her head round to it at a steering oar's 17 degrees a second, and she
+			// no longer turns on her own; adrift, or held against a hull, she lies as the sea turns her. The art director, 22
+			// November 12:17Z)
+			Fl.O.Way = 0.0;
+			if (Fl.O.Kind == "boat" && Fl.InMask && Flat(Fl.V) > 0.15)
+			{
+				const double Off = Wrap(Bearing(Vec(), Fl.V) - Fl.O.Heading);
+				Fl.O.Heading = Wrap(Fl.O.Heading + Clamp(Off, -0.3 * Dt, 0.3 * Dt));
+				Fl.Turn = 0.0;
+				Fl.O.Way = Flat(Fl.V);
+			}
 		}
 
 		// Her men.

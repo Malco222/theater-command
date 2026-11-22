@@ -356,7 +356,7 @@ namespace SeaParts
 	 * frame or three). An oar's blade OarOutboard metres out from its rowlock (a whaleboat's 14 to 15 foot oar, with the
 	 * clip's handle to rowlock).
 	 */
-	static constexpr int32 LiveMost = 10, SailorBuilds = 4, LiveNewMost = 3;
+	static constexpr int32 LiveMost = 10, SailorBuilds = 4, SailorBuildsAtCut = 10, LiveNewMost = 3;
 	static constexpr double LiveLeast = 30.0, NearLodFrom = 70.0, MidLodFrom = 14.0, OarOutboard = 3.6;
 	/** The most men in the water with a ring of white water about them (DrawMarks): the nearest. */
 	static constexpr int32 MostFoamRings = 240;
@@ -743,6 +743,13 @@ namespace SeaParts
 		return 0.5 + 0.2 * U * U;
 	}
 
+	/** A boat's tiller: how far forward of her sternpost it reaches, how far to starboard and how high over her waterline
+	 * its end lies (metres), by her coxswain's right hand; her coxswain's place on her boards facing forward, his hips this
+	 * far forward of her stern. A man sitting knees up (the sailor files' sit_raft) reaches 0.27 m behind his hips and 0.59
+	 * m ahead of them, 0.32 m to either side; her stroke oarsmen's boots come 0.73 m aft of their thwart. So he has her
+	 * stern sheets to himself, his back clear of her narrowing stern and his boots of her oarsmen's. */
+	static constexpr double TillerLong = 0.7, TillerAcross = 0.33, TillerLow = 0.45, CoxAt = 0.65;
+
 	/** A pulling boat: her sides from under the water to the gunwale, the inside of them, the gunwale's capping, her
 	 * bottom boards and four thwarts. */
 	static void DrawBoat(FWreckMesh& M, const FWreckFrame& Fr, double Long, double Beam, const FColor& Hull, const FColor& Inside, const FColor& Wood)
@@ -781,6 +788,14 @@ namespace SeaParts
 			const double U = 2.0 * (-0.38 + 0.76 * Row / 11.0);
 			M.Box(Fr, U * 0.5 * Long, 0.0, SeaSailors::ThwartTop - 0.025, 0.24, 2.0 * FMath::Max(BoatHalf(U, Beam) - 0.07, 0.1), 0.05, Wood, Shaded(Wood, 1.08));
 		}
+		// (a double-ended boat told bow from stern, the art director, 22 November 12:17Z: at her stern a rudder hung on her
+		// sternpost down past her keel, its tiller forward over her stern sheets by her coxswain's right hip; at her bow her
+		// stem standing a hand over her gunwale. Her oarsmen face her stern.)
+		const double Aft = -0.5 * Long, Fore = 0.5 * Long, AftTop = BoatSheer(-1.0) + 0.06, ForeTop = BoatSheer(1.0) + 0.16;
+		M.Box(Fr, Aft - 0.17, 0.0, 0.5 * (AftTop - 0.5), 0.3, 0.05, AftTop + 0.5, Hull, Shaded(Hull, 1.08));
+		M.Box(Fr, Aft - 0.01, 0.0, 0.5 * (AftTop - 0.12), 0.06, 0.07, AftTop + 0.12, Wood, Wood);
+		M.Rod(Fr.At(Aft - 0.04, 0.0, AftTop - 0.03), Fr.At(Aft + TillerLong, TillerAcross, TillerLow), 0.025, 4, Wood);
+		M.Box(Fr, Fore + 0.01, 0.0, 0.5 * (ForeTop - 0.12), 0.07, 0.07, ForeTop + 0.12, Wood, Wood);
 	}
 
 	/** One thing afloat where a ship went down (SeaShow's FloatOut): a Carley float, a pulling boat, or her wreckage:
@@ -3014,27 +3029,6 @@ void ASeaBattle::DrawWrecks()
 			}
 		}
 	}
-	// The boats' way through the water (eased): a boat under way is pulled by her oars.
-	for (const SeaShow::FloatOut& F : S.Show.Floats())
-	{
-		if (F.Kind != "boat")
-		{
-			continue;
-		}
-		FVector4* Seen = BoatsSeen.Find(F.Key);
-		if (!Seen)
-		{
-			BoatsSeen.Add(F.Key, FVector4(F.At.X, F.At.Y, Now, 0.0));
-			continue;
-		}
-		const double Gap = Now - Seen->Z;
-		if (Gap > 0.2)
-		{
-			const double Moved = FMath::Sqrt(FMath::Square(F.At.X - Seen->X) + FMath::Square(F.At.Y - Seen->Y)) / Gap;
-			*Seen = FVector4(F.At.X, F.At.Y, Now, Seen->W + (Moved - Seen->W) * FMath::Min(1.0, Gap / 2.0));
-		}
-	}
-
 	// How big a thing looks: pixels a metre at a distance, by the eye's field and the window's width.
 	int32 ViewW = 1920, ViewH = 1080;
 	if (UWorld* Here = GetWorld())
@@ -3139,7 +3133,7 @@ void ASeaBattle::DrawWrecks()
 			One.Value.bSeen = false;
 		}
 	}
-	int32 Builds = SailorBuilds, LiveNew = LiveNewMost;
+	int32 Builds = TicksSinceCut == 0 ? SailorBuildsAtCut : SailorBuilds, LiveNew = LiveNewMost;
 	static const FColor OarWood(150, 128, 92);
 	// (an oar: its loom from its handle out through its rowlock, its blade the last 0.55 m, flat to the water)
 	auto DrawOar = [&NearMesh](const FVector& From, const FVector& Tip)
@@ -3149,6 +3143,79 @@ void ASeaBattle::DrawWrecks()
 		const FVector Side = (Flat ^ FVector::UpVector).GetSafeNormal() * 0.08;
 		NearMesh.Quad(Tip - Flat * 0.55 - Side, Tip - Side, Tip + Side, Tip - Flat * 0.55 + Side, FVector::UpVector, OarWood);
 	};
+	// (each boat's coxswain: the man of her farthest row aft, where that is aft of her oarsmen (her rows 0 and 1 of twelve),
+	// the lower numbered of its two; he sits at her tiller facing forward. By row, not by place: the two of a row sit level
+	// with each other, and a hair's difference in their places as she turns must not change which of them steers. The
+	// stern sheets are his: the other men of those rows sit forward instead, on her boards in places no man of hers has,
+	// from her row next to her bow aft to her oarsmen (her row at her very bow, where she is narrowest, last), the lowest
+	// numbered man first)
+	struct FCoxOf
+	{
+		int32 Row = 0;
+		int32 Key = 0;
+		uint32 Taken = 0; // her places (row * 2, and one more on her starboard side) with a man in them
+		TArray<int32> Others;
+	};
+	auto BoatRow = [](const SeaShow::FloatOut& F, const SeaShow::ManOut& Man)
+	{
+		const double Along = (Man.At.X - F.At.X) * FMath::Sin(F.Heading) + (Man.At.Y - F.At.Y) * FMath::Cos(F.Heading);
+		return FMath::RoundToInt32((Along / F.Long + 0.38) / 0.76 * 11.0);
+	};
+	auto BoatSide = [](const SeaShow::FloatOut& F, const SeaShow::ManOut& Man)
+	{
+		return (Man.At.X - F.At.X) * FMath::Cos(F.Heading) - (Man.At.Y - F.At.Y) * FMath::Sin(F.Heading) >= 0.0 ? 1 : 0;
+	};
+	TMap<int32, FCoxOf> Coxswains;
+	for (const SeaShow::ManOut& Man : Men)
+	{
+		const int32* Index = Man.Doing == Swim::Boat && Man.On >= 0 ? FloatAt.Find(Man.On) : nullptr;
+		if (!Index)
+		{
+			continue;
+		}
+		const SeaShow::FloatOut& F = Floats[*Index];
+		const int32 Row = BoatRow(F, Man);
+		FCoxOf& Cox = Coxswains.FindOrAdd(F.Key);
+		if (Cox.Taken == 0 || Row < Cox.Row || (Row == Cox.Row && Man.Key < Cox.Key))
+		{
+			Cox.Row = Row;
+			Cox.Key = Man.Key;
+		}
+		if (Row >= 0 && Row <= 11)
+		{
+			Cox.Taken |= 1u << (Row * 2 + BoatSide(F, Man));
+		}
+	}
+	for (const SeaShow::ManOut& Man : Men)
+	{
+		const int32* Index = Man.Doing == Swim::Boat && Man.On >= 0 ? FloatAt.Find(Man.On) : nullptr;
+		FCoxOf* Cox = Index ? Coxswains.Find(Floats[*Index].Key) : nullptr;
+		if (Cox && Cox->Row <= 1 && Cox->Key != Man.Key && BoatRow(Floats[*Index], Man) <= 1)
+		{
+			Cox->Others.Add(Man.Key);
+		}
+	}
+	TMap<int32, int32> SeatedForward; // a man of her stern rows other than her coxswain: the place (row * 2 + side) he sits in
+	static const int32 Places[] = { 20, 21, 18, 19, 16, 17, 14, 15, 22, 23 };
+	const int32 PlaceCount = UE_ARRAY_COUNT(Places);
+	for (TPair<int32, FCoxOf>& Boat : Coxswains)
+	{
+		Boat.Value.Others.Sort();
+		int32 Next = 0;
+		for (const int32 Key : Boat.Value.Others)
+		{
+			while (Next < PlaceCount && (Boat.Value.Taken & (1u << Places[Next])))
+			{
+				++Next;
+			}
+			if (Next >= PlaceCount)
+			{
+				break;
+			}
+			SeatedForward.Add(Key, Places[Next]);
+			Boat.Value.Taken |= 1u << Places[Next];
+		}
+	}
 	int32 Detailed = 0;
 	for (const SeaShow::ManOut& Man : Men)
 	{
@@ -3178,7 +3245,8 @@ void ASeaBattle::DrawWrecks()
 		SeaSailors::Aboard Where;
 		FWreckFrame BoatFrame;
 		double BoatU = 0.0, BoatAlong = 0.0, BoatAcross = 0.0, BoatLong = 0.0, BoatBeam = 0.0;
-		bool bOarsman = false, bInBoat = false;
+		bool bOarsman = false, bInBoat = false, bCoxswain = false;
+		double SeatAlong = 0.0, SeatAcross = 0.0;
 		if ((Man.Doing == Swim::Raft || Man.Doing == Swim::Boat) && Man.On >= 0)
 		{
 			if (const int32* Index = FloatAt.Find(Man.On))
@@ -3190,14 +3258,26 @@ void ASeaBattle::DrawWrecks()
 				Where.Ride = Lift;
 				if (Man.Doing == Swim::Boat)
 				{
-					const FVector4* Seen = BoatsSeen.Find(F.Key);
-					const bool bUnderWay = Seen && Seen->W > 0.25;
+					// (under way: her own way through the water under oars, the show's; a boat only drifting down the wind
+					// is not rowed)
+					const bool bUnderWay = F.Way > 0.0;
 					const FWreckFrame Fr = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading);
 					const FVector Off(Man.At.X - F.At.X, Man.At.Y - F.At.Y, 0.0);
 					const double Along = FVector::DotProduct(Off, Fr.X), Across = FVector::DotProduct(Off, Fr.Y);
 					const double U = FMath::Clamp(Along / (0.5 * F.Long), -0.95, 0.95);
-					const int32 Row = FMath::RoundToInt32((Along / F.Long + 0.38) / 0.76 * 11.0);
+					const int32 Row = BoatRow(F, Man);
 					bInBoat = true;
+					if (const FCoxOf* Cox = Coxswains.Find(F.Key))
+					{
+						bCoxswain = Cox->Row <= 1 && Cox->Key == Man.Key;
+					}
+					SeatAlong = Along;
+					SeatAcross = Across;
+					if (const int32* Place = SeatedForward.Find(Man.Key))
+					{
+						SeatAlong = (-0.38 + 0.76 * (*Place / 2) / 11.0) * F.Long;
+						SeatAcross = (*Place % 2 ? 0.25 : -0.25) * F.Beam;
+					}
 					BoatFrame = Fr;
 					BoatU = U;
 					BoatAlong = Along;
@@ -3246,14 +3326,23 @@ void ASeaBattle::DrawWrecks()
 				P.X += Shift.X;
 				P.Y += Shift.Y;
 			}
+			else if (bCoxswain && P.What != SeaSailors::Act::Row)
+			{
+				// (her coxswain on her boards at her tiller, on her middle line facing forward, his boots toward her oarsmen)
+				const FVector Shift = BoatFrame.X * (-0.5 * BoatLong + CoxAt - BoatAlong) + BoatFrame.Y * (-BoatAcross);
+				P.X += Shift.X;
+				P.Y += Shift.Y;
+				P.Heading = FMath::UnwindRadians(P.Heading + UE_DOUBLE_PI);
+			}
 			else if (bInBoat && P.What != SeaSailors::Act::Row)
 			{
-				// (one sitting on her boards, facing aft, his knees up and his boots 0.55 m aft of him: all of him inside her
-				// sides and her ends, where she narrows toward them)
+				// (one sitting on her boards, facing aft, his knees up: his back 0.27 m forward of his hips, his boots 0.59 m
+				// aft of them, his elbows and knees 0.32 m to either side; all of him inside her sides and her ends, where she
+				// narrows toward them; a man of her stern rows other than her coxswain, in his place forward)
 				const double Half = 0.5 * BoatLong;
-				const double Along = FMath::Clamp(BoatAlong, -Half + 1.05, Half - 0.7);
-				const double Room = FMath::Min(BoatHalf(Along / Half, BoatBeam), BoatHalf((Along - 0.55) / Half, BoatBeam)) - 0.3;
-				const double Across = FMath::Clamp(BoatAcross, -FMath::Max(0.0, Room), FMath::Max(0.0, Room));
+				const double Along = FMath::Clamp(SeatAlong, -Half + 1.05, Half - 0.7);
+				const double Room = FMath::Min(BoatHalf((Along + 0.27) / Half, BoatBeam), BoatHalf((Along - 0.59) / Half, BoatBeam)) - 0.34;
+				const double Across = FMath::Clamp(SeatAcross, -FMath::Max(0.0, Room), FMath::Max(0.0, Room));
 				const FVector Shift = BoatFrame.X * (Along - BoatAlong) + BoatFrame.Y * (Across - BoatAcross);
 				P.X += Shift.X;
 				P.Y += Shift.Y;
@@ -3284,7 +3373,7 @@ void ASeaBattle::DrawWrecks()
 					Mesh->bUseAsyncCooking = false;
 					Mesh->RegisterComponent();
 					Slot = SailorLive.Add(Mesh);
-					SailorLiveOf.AddDefaulted_GetRef();
+					SailorLiveOf.AddDefaulted();
 				}
 				const LandMen::Lod Level = Pixels >= NearLodFrom ? LandMen::Near : LandMen::Mid;
 				const int64 Made = SailorKey(File, Dress, 0, 0, static_cast<int32>(Level), P.bMirror, bOiled);
@@ -3346,10 +3435,41 @@ void ASeaBattle::DrawWrecks()
 				const int32 Level = Pixels >= MidLodFrom ? LandMen::Mid : LandMen::Far;
 				const int32 Pose = S.Crew.PoseOf(File, P.What, P.Time);
 				const int64 Key = SailorKey(File, Dress, static_cast<int32>(P.What), Pose, Level, P.bMirror, bOiled);
-				const int32 Copy = SailorCopy(Key, File, Dress, static_cast<int32>(P.What), Pose, Level, P.bMirror, bOiled, Builds);
+				int32 Copy = SailorCopy(Key, File, Dress, static_cast<int32>(P.What), Pose, Level, P.bMirror, bOiled, Builds);
+				int32 ShownPose = Pose;
+				if (Copy == -1)
+				{
+					// (this frame's builds spent, as after a cut: the nearest pose of his act already made, at his level or
+					// the other, rather than a stand-in)
+					const int32 Poses = SeaSailors::PosesOf(P.What);
+					const bool bLoop = P.What != SeaSailors::Act::Enter;
+					for (int32 Step = 1; Copy < 0 && Step < Poses; ++Step)
+					{
+						for (const int32 Sign : { -1, 1 })
+						{
+							int32 Other = Pose + Sign * Step;
+							Other = bLoop ? ((Other % Poses) + Poses) % Poses : Other;
+							for (const int32 Lv : { Level, Level == LandMen::Mid ? static_cast<int32>(LandMen::Far) : static_cast<int32>(LandMen::Mid) })
+							{
+								const int32* Made = Copy < 0 && Other >= 0 && Other < Poses ? SailorCopyOf.Find(SailorKey(File, Dress, static_cast<int32>(P.What), Other, Lv, P.bMirror, bOiled)) : nullptr;
+								if (Made && *Made >= 0)
+								{
+									Copy = *Made;
+									ShownPose = Other;
+								}
+							}
+						}
+					}
+					if (Copy < 0)
+					{
+						const int32 OtherLevel = Level == LandMen::Mid ? LandMen::Far : LandMen::Mid;
+						const int32* Made = SailorCopyOf.Find(SailorKey(File, Dress, static_cast<int32>(P.What), Pose, OtherLevel, P.bMirror, bOiled));
+						Copy = Made && *Made >= 0 ? *Made : Copy;
+					}
+				}
 				if (Copy >= 0)
 				{
-					Shown = S.Crew.PoseTime(File, P.What, Pose);
+					Shown = S.Crew.PoseTime(File, P.What, ShownPose);
 					FBankedSailor* Had = SailorBanked.Find(Man.Key);
 					if (!Had)
 					{
@@ -3519,7 +3639,7 @@ int32 ASeaBattle::SailorCopy(int64 Key, int32 File, int32 Dress, int32 What, int
 	Copies->RegisterComponent();
 	const int32 Index = SailorCopies.Add(Copies);
 	SailorMeshes.Add(Mesh);
-	SailorFree.AddDefaulted_GetRef();
+	SailorFree.AddDefaulted();
 	SailorDirty.Add(0);
 	SailorCopyOf.Add(Key, Index);
 	return Index;

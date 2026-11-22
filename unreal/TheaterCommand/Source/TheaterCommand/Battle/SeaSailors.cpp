@@ -9,8 +9,6 @@ namespace SeaSailors
 {
 	namespace
 	{
-		constexpr double Pi = 3.14159265358979323846;
-
 		/** 0 to 1 from a man's own number (his clip's phase, so two men side by side are not in step). */
 		double Phase01(uint32_t Look, uint32_t Salt)
 		{
@@ -34,6 +32,12 @@ namespace SeaSailors
 		bool IsLoop(Act A)
 		{
 			return A != Act::Enter;
+		}
+
+		/** The clips whose root is at the sea's top (the README's `surface`): the man in the water. */
+		bool InWater(Act A)
+		{
+			return A == Act::Enter || A == Act::Tread || A == Act::Wave || A == Act::Swim || A == Act::Dead || A == Act::Cling;
 		}
 
 		/** The colours in a flat object of the text (its braces at Open and Close): each "name": "RRGGBB" with its colour
@@ -189,6 +193,24 @@ namespace SeaSailors
 		{
 			OutError = "no hands or no mesh";
 			return false;
+		}
+		{
+			// (the ends a man in the water may lift alone; a file without one of these bones keeps that end as it is)
+			F.EndOf.assign(F.S->Bones.size(), static_cast<int8_t>(-1));
+			const char* Joints[4] = { "hand_l", "hand_r", "foot_l", "foot_r" };
+			const char* Parts[4][3] = { { "hand_l", "fingers_l", "thumb_l" }, { "hand_r", "fingers_r", "thumb_r" }, { "foot_l", "ball_l", nullptr }, { "foot_r", "ball_r", nullptr } };
+			for (int E = 0; E < 4; ++E)
+			{
+				F.EndJoint[E] = F.S->BoneIndex(Joints[E]);
+				for (const char* Name : Parts[E])
+				{
+					const int B = Name ? F.S->BoneIndex(Name) : -1;
+					if (B >= 0 && static_cast<size_t>(B) < F.EndOf.size())
+					{
+						F.EndOf[static_cast<size_t>(B)] = static_cast<int8_t>(E);
+					}
+				}
+			}
 		}
 		// (the file's own colours for the army paints it wears: his skin, his boots, his soles)
 		const std::vector<std::string>& Names = LandMen::PaintNames();
@@ -417,7 +439,8 @@ namespace SeaSailors
 		}
 		if (IsLoop(A))
 		{
-			return static_cast<int>(std::lround(N * static_cast<double>(Time) / L)) % N;
+			// (on the loop's own time first, so a negative or a very late time gives a pose in range)
+			return static_cast<int>(std::lround(N * static_cast<double>(Wrapped(Time, L)) / L)) % N;
 		}
 		return std::clamp(static_cast<int>(std::lround((N - 1) * static_cast<double>(Time) / L)), 0, N - 1);
 	}
@@ -449,6 +472,39 @@ namespace SeaSailors
 		OutAt.resize(static_cast<size_t>(M.Points) * 3);
 		OutFacing.resize(OutAt.size());
 		LandMen::SkinMesh(M, Fr, OutAt.data(), OutFacing.data());
+		if (InWater(A))
+		{
+			// (a hand or boot under the water at its wrist or ankle: all of it under, SinkTo down)
+			const FileRead& F = Read[static_cast<size_t>(K)];
+			bool bSink[4] = { false, false, false, false };
+			bool bAny = false;
+			for (int E = 0; E < 4; ++E)
+			{
+				const int B = F.EndJoint[E];
+				if (B >= 0 && B < LandMen::MaxBones && static_cast<size_t>(B) < F.S->Bones.size())
+				{
+					bSink[E] = Fr[B].Point(F.S->Bones[static_cast<size_t>(B)].Head).Z < SinkFrom;
+					bAny = bAny || bSink[E];
+				}
+			}
+			const size_t Points = static_cast<size_t>(M.Points);
+			if (bAny && M.Part.size() >= Points)
+			{
+				const bool bTwo = M.Part2.size() >= Points && M.W2.size() >= Points;
+				for (size_t I = 0; I < Points; ++I)
+				{
+					int E = M.Part[I] < F.EndOf.size() ? F.EndOf[M.Part[I]] : -1;
+					if (E < 0 && bTwo && M.W2[I] > 0.f && M.Part2[I] < F.EndOf.size())
+					{
+						E = F.EndOf[M.Part2[I]];
+					}
+					if (E >= 0 && bSink[E])
+					{
+						OutAt[I * 3 + 2] = std::min(OutAt[I * 3 + 2], -SinkTo);
+					}
+				}
+			}
+		}
 		return M.Points;
 	}
 
