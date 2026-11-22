@@ -3988,6 +3988,15 @@ struct FLandSky
 	FVector DriftShown = FVector(1e30, 0.0, 0.0);
 	int32 NearTurns = 0, BothTurns = 0;
 	double TurnSeconds = 0.0, TurnsSaidAt = 0.0;
+	// GS6: or turned on the graphics chip (LaySky): the chip's table of the puffs, far to near, the one mesh it is read
+	// by (made once) and the float picture it is sent in; how often it was laid again, what that cost this thread and
+	// what it sent.
+	TUniquePtr<AirSky::Chip> Chip;
+	TWeakObjectPtr<UProceduralMeshComponent> Turned;
+	TWeakObjectPtr<UTexture2D> Table;
+	int32 Lays = 0;
+	double LaySeconds = 0.0, LayBytes = 0.0;
+	bool bDroppedSaid = false;
 	// The grade laid over the whole world while the battle stands, under the eye's own (KeepTheLook), and its check.
 	TWeakObjectPtr<APostProcessVolume> Grade;
 	bool bLookSaid = false, bTargetSaid = false;
@@ -4045,6 +4054,32 @@ namespace LandLook
 				}
 			}
 		}
+	}
+
+	/** GS6: the chip's table (its first Rows rows, four floats a texel) sent to its picture; the copy is the renderer's
+	 * until it has read it. */
+	static void SendTable(UTexture2D* Table, const std::vector<float>& Cells, int32 Rows)
+	{
+		if (!Table || !Table->GetResource() || Rows <= 0)
+		{
+			return;
+		}
+		const int32 Wide = Table->GetSizeX();
+		Rows = FMath::Min(Rows, Table->GetSizeY());
+		const size_t Floats = static_cast<size_t>(Wide) * static_cast<size_t>(Rows) * 4;
+		if (Cells.size() < Floats)
+		{
+			return;
+		}
+		float* Copy = static_cast<float*>(FMemory::Malloc(Floats * sizeof(float)));
+		FMemory::Memcpy(Copy, Cells.data(), Floats * sizeof(float));
+		FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, Wide, Rows);
+		Table->UpdateTextureRegions(0, 1, Region, Wide * 4 * sizeof(float), 4 * sizeof(float), reinterpret_cast<uint8*>(Copy),
+			[](uint8* Data, const FUpdateTextureRegion2D* Regions)
+			{
+				FMemory::Free(Data);
+				delete Regions;
+			});
 	}
 }
 
@@ -4469,9 +4504,117 @@ void ALandBattle::LaySky()
 	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
 	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
 	Day.Rooms.SetInk(CloudBright);
-	// The first turn, to an eye over the field's middle; DrawSky turns them as the battle's eye moves.
 	const AirSky::Vec Drift = Day.Clouds.DriftAt(State->Battle);
 	const double MidX = 0.5 * Rec.Ground.W, MidY = 0.5 * Rec.Ground.H;
+
+	// GS6 (the speed gate's clouds on the graphics chip): the same puffs, turned to the eye where the points are placed,
+	// every frame, by M_CloudTurned (Battle/AirSkyChip.inl, the painter's own arithmetic, checked point by point against
+	// it by Tools/air_show/air_sky_chip_test). This thread lays a table of the puffs, far to near, in a float picture,
+	// and lays it again only when that order has gone stale (a few times a second as the eye flies, now and then as it
+	// walks); one mesh, made once, reads it. Nothing is turned or sent from here as the eye moves. "-TheaterSkyChip=0"
+	// turns them here as before (the two rooms below); "-TheaterSkyChipSort=" the order's staleness, a share of the
+	// nearest drawn puff's distance (0.025). Without M_CloudTurned (Tools/build_content.sh) they are turned here.
+	int32 ChipAsked = 1;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSkyChip="), ChipAsked);
+	UMaterialInterface* TurnedMaterial = Day.bShapes && ChipAsked != 0
+		? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_CloudTurned.M_CloudTurned")) : nullptr;
+	if (Day.bShapes && ChipAsked != 0 && !TurnedMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle look: M_CloudTurned is missing (run Tools/build_content.sh): the clouds are turned on the game's thread, as before."));
+	}
+	if (TurnedMaterial)
+	{
+		TUniquePtr<AirSky::Chip> Chip = MakeUnique<AirSky::Chip>();
+		double Sort = AirSky::Chip::DefaultOrderTurn;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSkyChipSort="), Sort);
+		Chip->SetOrderTurn(Sort);
+		Chip->SetInk(CloudBright);
+		const int32 Wide = AirSky::Chip::Wide, High = Chip->Rows();
+		UTexture2D* ChipTable = UTexture2D::CreateTransient(Wide, High, PF_A32B32G32R32F, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("LandCloudTable")));
+		if (ChipTable && ChipTable->GetPlatformData() && ChipTable->GetPlatformData()->Mips.Num() > 0)
+		{
+			ChipTable->SRGB = false;
+			ChipTable->Filter = TF_Nearest;
+			ChipTable->AddressX = TA_Clamp;
+			ChipTable->AddressY = TA_Clamp;
+			ChipTable->NeverStream = true;
+			// The first lay, for an eye over the field's middle, in the picture as it is made.
+			Chip->Lay(Day.Clouds, AirSky::Vec(MidX, MidY, GroundZ(MidX, MidY) + 2.0), Drift, Day.Sun, Day.Light);
+			{
+				FTexture2DMipMap& Mip = ChipTable->GetPlatformData()->Mips[0];
+				const int64 Bytes = static_cast<int64>(Wide) * High * 4 * static_cast<int64>(sizeof(float));
+				Mip.BulkData.Lock(LOCK_READ_WRITE);
+				void* Out = Mip.BulkData.Realloc(Bytes);
+				FMemory::Memzero(Out, Bytes);
+				FMemory::Memcpy(Out, Chip->Table().data(), FMath::Min<int64>(Bytes, static_cast<int64>(Chip->Table().size() * sizeof(float))));
+				Mip.BulkData.Unlock();
+			}
+			ChipTable->UpdateResource();
+			UMaterialInstanceDynamic* TurnedInk = UMaterialInstanceDynamic::Create(TurnedMaterial, this);
+			TurnedInk->SetTextureParameterValue(TEXT("Sheet"), Sheet);
+			TurnedInk->SetTextureParameterValue(TEXT("Table"), ChipTable);
+			TurnedInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+			TurnedInk->SetScalarParameterValue(TEXT("UnitsPerMetre"), static_cast<float>(UnitsPerMetre));
+			// The mesh: every slot's points with the painter's triangles, each point's place round its puff and its slot's
+			// texel in the table. The chip places every point, so they are made at the mesh's own middle (two a centimetre
+			// off, to give it a size), and its bounds are stretched over every cloud it can draw (200 km round, a little
+			// past the drawn 20 km and the wind's carry over a long battle): it is never left out of the picture, and if
+			// the material ever fails the points stay where they are made, where nothing is seen.
+			std::vector<float> RingPlaces, SlotPlaces;
+			Chip->PointPlaces(RingPlaces, SlotPlaces);
+			const int32 Count = static_cast<int32>(RingPlaces.size() / 2);
+			TArray<FVector> Points;
+			Points.Init(FVector::ZeroVector, Count);
+			TArray<FVector2D> Rings, Slots;
+			Rings.SetNum(Count);
+			Slots.SetNum(Count);
+			for (int32 Index = 0; Index < Count; ++Index)
+			{
+				const size_t P = static_cast<size_t>(Index) * 2;
+				Rings[Index] = FVector2D(RingPlaces[P], RingPlaces[P + 1]);
+				Slots[Index] = FVector2D(SlotPlaces[P], SlotPlaces[P + 1]);
+			}
+			if (Count > 1)
+			{
+				Points[0] = FVector(-1.0, -1.0, -1.0);
+				Points[Count - 1] = FVector(1.0, 1.0, 1.0);
+			}
+			const std::vector<int> Made = Chip->Triangles();
+			TArray<int32> Triangles;
+			Triangles.Reserve(static_cast<int32>(Made.size()));
+			for (const int Index : Made)
+			{
+				Triangles.Add(Index);
+			}
+			TArray<FVector> Normals;
+			Normals.Init(FVector::UpVector, Count);
+			UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, TEXT("LandCloudsTurned"));
+			Mesh->bUseAsyncCooking = false;
+			Mesh->SetupAttachment(Root);
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetCastShadow(false);
+			Mesh->SetTranslucentSortPriority(-20);
+			Mesh->SetBoundsScale(2.0e7f);
+			Mesh->RegisterComponent();
+			const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * UnitsPerMetre;
+			Mesh->SetRelativeLocation(Carried);
+			Mesh->CreateMeshSection(0, Points, Triangles, Normals, Rings, Slots, TArray<FVector2D>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(0, TurnedInk);
+			Day.Turned = Mesh;
+			Day.Table = ChipTable;
+			Day.DriftShown = Carried;
+			Day.Lays = 1;
+			Day.LayBytes = static_cast<double>(Chip->RowsUsed()) * Wide * 16.0;
+			UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky, %s from %.0f to %.0f m, %d clouds of %d puffs, %.0f%% of the sky, drawn as the sheet's shapes, turned to the eye on the graphics chip (M_CloudTurned: %d puffs' room in one mesh made once, %d laid, %d left out; -TheaterSkyChip=0 turns them on the game's thread)."),
+				Day.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), Day.Clouds.Base, Day.Clouds.Top, static_cast<int32>(Day.Clouds.Clouds.size()),
+				static_cast<int32>(Day.Clouds.Puffs.size()), Day.Clouds.Cover * 100.0, Chip->Room(), Chip->Laid(), Chip->Dropped());
+			Day.Chip = MoveTemp(Chip);
+			return;
+		}
+		UE_LOG(LogTheater, Warning, TEXT("Land battle look: the clouds' table could not be made: the clouds are turned on the game's thread, as before."));
+	}
+
+	// The first turn, to an eye over the field's middle; DrawSky turns them as the battle's eye moves.
 	Day.Rooms.PaintBoth(Day.Clouds, AirSky::Vec(MidX, MidY, GroundZ(MidX, MidY) + 2.0), Drift, Day.Sun, Day.Light);
 	const double U = UnitsPerMetre;
 	const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * U;
@@ -4532,6 +4675,52 @@ void ALandBattle::DrawSky()
 		return;
 	}
 	FLandSky& Day = *SkyDay;
+	if (Day.Chip.IsValid())
+	{
+		// GS6: turned on the graphics chip; here only the wind's carry and, when the puffs' order has gone stale, the
+		// table laid again and sent (a few hundred kilobytes, no points).
+		UProceduralMeshComponent* TurnedMesh = Day.Turned.Get();
+		UTexture2D* ChipTable = Day.Table.Get();
+		if (!TurnedMesh || !ChipTable)
+		{
+			return;
+		}
+		const AirSky::Vec Drift = Day.Clouds.DriftAt(State->Battle);
+		const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * UnitsPerMetre;
+		if (!Carried.Equals(Day.DriftShown, 1.0))
+		{
+			Day.DriftShown = Carried;
+			TurnedMesh->SetRelativeLocation(Carried);
+		}
+		const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
+		const AirSky::Vec Seen(At.Y, At.X, At.Z);
+		AirSky::Chip& Chip = *Day.Chip;
+		if (Chip.Wants(Seen, Drift))
+		{
+			const double Began = LandParts::Seconds();
+			Chip.Lay(Day.Clouds, Seen, Drift, Day.Sun, Day.Light);
+			LandLook::SendTable(ChipTable, Chip.Table(), Chip.RowsUsed());
+			++Day.Lays;
+			Day.LayBytes += static_cast<double>(FMath::Min(Chip.RowsUsed(), ChipTable->GetSizeY())) * AirSky::Chip::Wide * 16.0;
+			Day.LaySeconds += LandParts::Seconds() - Began;
+			if (Chip.Dropped() > 0 && !Day.bDroppedSaid)
+			{
+				Day.bDroppedSaid = true;
+				UE_LOG(LogTheater, Warning, TEXT("Land battle sky: the chip's table had no room for %d of the farthest puffs (room %d; said once)."), Chip.Dropped(), Chip.Room());
+			}
+		}
+		// (the sky's clock in the log every 30 s: how often the table was laid, what a lay cost this thread, what it sent)
+		if (RealT - Day.TurnsSaidAt >= 30.0)
+		{
+			UE_LOG(LogTheater, Log, TEXT("Land battle sky, %.0f s, on the graphics chip: %d table lays, %.2f ms a lay, %.2f MB sent; %d puffs laid, the nearest %.0f m off, laid again past %.1f m"),
+				RealT - Day.TurnsSaidAt, Day.Lays, Day.Lays > 0 ? Day.LaySeconds * 1000.0 / Day.Lays : 0.0, Day.LayBytes / 1.0e6, Chip.Laid(), Chip.Nearest(), Chip.Slack());
+			Day.TurnsSaidAt = RealT;
+			Day.Lays = 0;
+			Day.LaySeconds = 0.0;
+			Day.LayBytes = 0.0;
+		}
+		return;
+	}
 	UProceduralMeshComponent* FarMesh = Day.Far.Get();
 	UProceduralMeshComponent* NearMesh = Day.Near.Get();
 	if (!FarMesh || !NearMesh)
@@ -4676,7 +4865,7 @@ void ALandBattle::ShowTheTable()
 			Over->Destroy();
 		}
 		SkyDay->Grade.Reset();
-		for (UProceduralMeshComponent* Mesh : { SkyDay->Far.Get(), SkyDay->Near.Get() })
+		for (UProceduralMeshComponent* Mesh : { SkyDay->Far.Get(), SkyDay->Near.Get(), SkyDay->Turned.Get() })
 		{
 			if (Mesh)
 			{
