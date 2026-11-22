@@ -1586,6 +1586,18 @@ bool ALandBattle::Open()
 		float Hand = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHand="), Hand);
 		Set.Hand = FMath::Clamp(static_cast<double>(Hand), 0.0, 3.0);
+		// (the film's shallow focus, E9: OFF until the Mac's A/B holds 45 fps and the art director passes its stills, the
+		// production lead's rule for every new look, 22 Nov 23:28Z; "-TheaterLandFocusLive=1" turns it on. Off, the camera
+		// asks nothing for it a frame)
+		{
+			int32 FocusLive = 0;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFocusLive="), FocusLive);
+			bFocusLive = FocusLive != 0;
+			if (!bFocusLive)
+			{
+				Set.FocusFar = 0.0;
+			}
+		}
 		// (the production lead's A/B: the whole mass's wide, the dearest shot until the men are instanced, turned off)
 		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoMassWide")))
 		{
@@ -1768,6 +1780,16 @@ bool ALandBattle::Open()
 			BattleKey->ContactShadowLengthInWS = Contact > 0.0f;
 			BattleKey->ContactShadowLength = Contact > 0.0f ? FMath::Clamp(Contact, 0.02f, 3.0f) * static_cast<float>(UnitsPerMetre) : 0.05f;
 			BattleKey->MarkRenderStateDirty();
+		}
+	}
+	// The film's shallow focus (the graphics audit's E9, Brian's D3): depth of field drawn only while the camera holds a
+	// close follow shot (LandEye::Pose::Focus), the map's trims keeping it off everywhere else; put back as it ends.
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.DepthOfFieldQuality")))
+		{
+			FocusQualityKept = Variable->GetInt();
+			FocusQualityNow = FocusQualityKept;
+			KeptTrims.Add(TPair<FString, FString>(TEXT("r.DepthOfFieldQuality"), Variable->GetString()));
 		}
 	}
 	int32 LandSize = 0;
@@ -5940,10 +5962,23 @@ void ALandBattle::AimEye(float DeltaSeconds)
 	FPostProcessSettings& Grade = Lens->PostProcessSettings;
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoFocus")))
 	{
+		// (the camera's close follow shots name the distance held sharp, pulled after the man; the quality is switched
+		// only as such a shot starts or ends, never inside one, and on while the shaders are first made, so the pass is
+		// ready before the first close shot asks for it)
+		const bool bShallow = bFocusLive && S.Pose.Focus > 0.0;
+		const int32 Want = bShallow || (bFocusLive && !bShadersReady) ? FMath::Max(1, FocusQualityKept) : FocusQualityKept;
+		if (FocusQualityKept >= 0 && Want != FocusQualityNow)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.DepthOfFieldQuality")))
+			{
+				Variable->Set(Want, ECVF_SetByCode);
+				FocusQualityNow = Want;
+			}
+		}
 		Grade.bOverride_DepthOfFieldFocalDistance = true;
 		Grade.bOverride_DepthOfFieldFstop = true;
-		Grade.DepthOfFieldFocalDistance = static_cast<float>((To - From).Size());
-		Grade.DepthOfFieldFstop = S.Pose.Shot == LandEye::Kind::Watch || S.Pose.Shot == LandEye::Kind::Track ? 2.8f : 11.0f;
+		Grade.DepthOfFieldFocalDistance = static_cast<float>(bShallow ? S.Pose.Focus * UnitsPerMetre : (To - From).Size());
+		Grade.DepthOfFieldFstop = bShallow ? 2.8f : 11.0f;
 	}
 	// The ear: the mix's listener stands over what the eye looks at; down among the men it is the eye.
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
