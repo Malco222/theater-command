@@ -30,6 +30,7 @@
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformTime.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/Material.h"
@@ -3449,14 +3450,18 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	}
 	FSeaBattleState& S = *State;
 	const double Dt = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
-	// (the frame before this one, timed: the battle's own frames, from its second second on)
+	// (the frame before this one, timed on the real clock: the battle's own frames, from its second second on; a gap
+	// over half a minute is the game held, not a frame)
+	const double TickClock = FPlatformTime::Seconds();
+	const double Took = LastTickClock >= 0.0 ? TickClock - LastTickClock : static_cast<double>(DeltaSeconds);
+	LastTickClock = TickClock;
 	if (bLastFrameApart)
 	{
 		++FramesLeftOut;
 	}
-	else if (RealT >= 1.0 && FrameTimes.Num() < 1000000)
+	else if (RealT >= 1.0 && Took < 30.0 && FrameTimes.Num() < 1000000)
 	{
-		FrameTimes.Add(DeltaSeconds);
+		FrameTimes.Add(static_cast<float>(Took));
 	}
 	bLastFrameApart = false;
 	RealT += Dt;

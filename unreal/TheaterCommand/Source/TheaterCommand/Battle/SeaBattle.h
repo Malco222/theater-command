@@ -244,6 +244,9 @@ private:
 	 * picture's own frame: those counted apart), for the frame-time line at the end (SayFrameTimes); whether the last
 	 * frame was one of those; and whether the line is said. */
 	TArray<float> FrameTimes;
+	/** (the real clock at the last tick, FPlatformTime: the engine holds a tick's DeltaSeconds to 0.4 s at the most,
+	 * so a stall would read short; the pre-check, 22 November) */
+	double LastTickClock = -1.0;
 	int32 FramesLeftOut = 0;
 	bool bLastFrameApart = false;
 	bool bFrameTimesSaid = false;
