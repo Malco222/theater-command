@@ -928,7 +928,10 @@ int main(int argc, char** argv)
 			{ "PanzerIV", "GER", 1941, 6, "desert41" }, { "PanzerIV", "GER", 1942, 2, "desert41" }, { "PanzerIV", "GER", 1942, 3, "desert42" },
 			{ "PanzerIV", "GER", 1943, 5, "desert42" }, { "PanzerIV", "GER", 1943, 6, "" }, { "StuG3", "GER", 1942, 11, "desert42" },
 			{ "leFH18", "GER", 1941, 4, "desert41" }, { "Tiger", "GER", 1943, 2, "desert42" }, { "Tiger", "GER", 1943, 7, "" },
-			{ "Matilda", "UK", 1941, 6, "stone" }, { "Sherman", "USA", 1943, 3, "" } };
+			{ "Matilda", "UK", 1941, 6, "stone" }, { "Sherman", "USA", 1943, 3, "" },
+			// (the lorry stands in for every army's: her owner's desert coat, from LandKit's NationCoat, not her file)
+			{ "Truck", "GER", 1941, 6, "desert41" }, { "Truck", "GER", 1942, 3, "desert42" }, { "Truck", "GER", 1943, 5, "desert42" },
+			{ "Truck", "GER", 1943, 6, "" }, { "Truck", "UK", 1942, 10, "stone" }, { "Truck", "ITA", 1941, 1, "sand" }, { "Truck", "USA", 1943, 3, "" } };
 		Tally Picked;
 		for (const Want& W : Wants)
 		{
@@ -964,6 +967,8 @@ int main(int argc, char** argv)
 			std::string Why;
 			Doc.Parse(Text, Why);
 			const Json::Value Rows = Doc.Root()["swaps"]["paint"]["by_ground"]["desert"];
+			const bool bOwners = !Doc.Root()["swaps"]["paint"]["choices"].IsObject()
+				&& (Doc.Root()["nation"].Str("") == "any" || Doc.Root()["camouflage"].IsObject());
 			for (const char* Nation : Nations)
 			{
 				for (int Key = 1939 * 12 + 8; Key <= 1945 * 12 + 7; ++Key)
@@ -983,6 +988,13 @@ int main(int argc, char** argv)
 							Row = Rows.At(I)["paint"].Str("");
 							break;
 						}
+					}
+					if (bOwners && Row.empty())
+					{
+						// (a model in her owner's coat, the lorry and the shared light tank: her desert coat is her owner's,
+						// in LandKit's NationCoat, not rows of her file)
+						const std::string N = Nation;
+						Row = N == "GER" ? (Key <= 1942 * 12 + 1 ? "desert41" : Key <= 1943 * 12 + 4 ? "desert42" : "") : N == "UK" ? "stone" : "";
 					}
 					Desert += Row.empty() ? 0 : 1;
 					Same.Note(bOk && Plains == None && Steppe == None && Sand == (Row.empty() ? None : Row), 0.0,
@@ -1018,7 +1030,7 @@ int main(int argc, char** argv)
 			{
 				const auto Other = OnHome.Models().find(Key);
 				const std::string Was = Other != OnHome.Models().end() ? Other->second.Coat : std::string("?");
-				const bool bGerman = M.Dressed.Nation == "GER" && Key.rfind("Truck", 0) != 0;
+				const bool bGerman = M.Dressed.Nation == "GER";      // (the lorry too: her owner's desert coat)
 				std::printf("  %-16s November 1942 on its own ground: %-9s on the desert: %s\n", Key.c_str(), Was.c_str(), M.Coat.c_str());
 				Whole.Note(bGerman ? M.Coat == "desert42" : M.Coat == Was, 0.0, Key + " on the desert in November 1942: " + M.Coat + " (on its own ground " + Was + ")");
 			}
