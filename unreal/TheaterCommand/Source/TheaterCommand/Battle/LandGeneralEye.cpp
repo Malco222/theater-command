@@ -504,8 +504,10 @@ namespace LandGeneralEye
 		}
 		if (bBrake) Need = std::max(Need, BrakeNeed);
 		// (gliding fast and low, as a drone flies: lifted with its speed, so the trees on its way are under it, not met in
-		// a frame between two looks ahead; it settles as the glide slows)
-		if (bLow && bGliding && !bFirst) Need = std::max(Need, std::min(Set.LiftMost, Set.GlideLift * std::hypot(SwingX, SwingY)));
+		// a frame between two looks ahead; it settles as the glide slows. Never past the Ceiling over it: under a crown the
+		// glide's own lift would leave the lift short of its need, and the stuck rule would cut for nothing seen; the
+		// pre-check's read of 6240956e)
+		if (bLow && bGliding && !bFirst) Need = std::max(Need, std::min({ Set.LiftMost, Set.GlideLift * std::hypot(SwingX, SwingY), Ceiling }));
 		if (bFirst)
 		{
 			PushX = PushWant.X;
