@@ -35,14 +35,15 @@
 
 namespace
 {
-	/** The test ace ("-TheaterAceTest=att:6:GER=6", or def, its victims' nations after the kills, and a name after
-	 * those if wanted): Side -1 when none is asked. */
+	/** The test ace ("-TheaterAceTest=att:6:GER=6", or def, its victims' nations after the kills, and a title after
+	 * those if wanted, as the rules give one: "Flight Lieutenant Tom Harland"; else his nation's sample): Side -1 when
+	 * none is asked. */
 	struct FTestAce
 	{
 		int32 Side = -1;
 		int32 Kills = 0;
 		std::map<std::string, int> By;
-		std::string Name = "Test ace";
+		std::string Name;
 	};
 
 	const FTestAce& TestAce()
@@ -162,86 +163,248 @@ bool AAirBattle::TallyReady()
 	return true;
 }
 
+namespace
+{
+	/** The letters' index (Content/Data/Tally/name-letters.json), read once. */
+	AirTally::Letters& NameHand()
+	{
+		static AirTally::Letters Hand;
+		return Hand;
+	}
+
+	/** One part of an ace's record, one section of his tally's mesh: its squares' corners, their places on its sheet,
+	 * the paint under each (its alpha the mark's strength), and its triangles. */
+	struct FTallyPart
+	{
+		TArray<FVector> Corners3;
+		TArray<FVector> Normals;
+		TArray<FVector2D> Places;
+		TArray<FColor> Colours;
+		TArray<int32> Triangles;
+
+		/** A square on her skin facing Out: its middle, its right R and up V, its half width and height, the sheet's
+		 * box (u0, v0, u1, v1: its top left at the corner nearest her nose and the sky). */
+		void Add(const FVector& Middle, const FVector& R, const FVector& V, double HalfW, double HalfH, const FVector4& Box, const FColor& Under, const FVector& Out)
+		{
+			const int32 First = Corners3.Num();
+			Corners3.Append({ Middle - R * HalfW + V * HalfH, Middle + R * HalfW + V * HalfH, Middle + R * HalfW - V * HalfH, Middle - R * HalfW - V * HalfH });
+			Places.Append({ FVector2D(Box.X, Box.Y), FVector2D(Box.Z, Box.Y), FVector2D(Box.Z, Box.W), FVector2D(Box.X, Box.W) });
+			for (int32 K = 0; K < 4; ++K)
+			{
+				Normals.Add(Out);
+				Colours.Add(Under);
+			}
+			// (each triangle's corners the way round the engine draws as facing out, as FMiniatureMesh::Face lays them)
+			for (const FIntVector& Tri : { FIntVector(0, 1, 2), FIntVector(0, 2, 3) })
+			{
+				const FVector Facing = FVector::CrossProduct(Corners3[First + Tri.Y] - Corners3[First + Tri.Z], Corners3[First + Tri.X] - Corners3[First + Tri.Z]);
+				if (FVector::DotProduct(Facing, Out) >= 0.0)
+				{
+					Triangles.Append({ First + Tri.X, First + Tri.Y, First + Tri.Z });
+				}
+				else
+				{
+					Triangles.Append({ First + Tri.X, First + Tri.Z, First + Tri.Y });
+				}
+			}
+		}
+	};
+
+	/** Upright on her side: up along her skin toward the sky, right toward her tail (seen from outside her port side the
+	 * tail is on the right, so a name reads from her nose aft). */
+	void Upright(const FVector& Out, FVector& Right, FVector& Up)
+	{
+		Up = FVector::UpVector - Out * FVector::DotProduct(FVector::UpVector, Out);
+		Up = Up.GetSafeNormal(UE_SMALL_NUMBER, FVector::BackwardVector);
+		Right = FVector::CrossProduct(Out, Up).GetSafeNormal();
+	}
+
+	unsigned RgbOf(const FColor& C)
+	{
+		return (static_cast<unsigned>(C.R) << 16) | (static_cast<unsigned>(C.G) << 8) | static_cast<unsigned>(C.B);
+	}
+
+	FLinearColor TinOf(unsigned Rgb)
+	{
+		return FLinearColor(FColor(static_cast<uint8>((Rgb >> 16) & 0xFF), static_cast<uint8>((Rgb >> 8) & 0xFF), static_cast<uint8>(Rgb & 0xFF), 255));
+	}
+}
+
+bool AAirBattle::LettersReady()
+{
+	if (bLettersTried)
+	{
+		return NameSheet != nullptr;
+	}
+	bLettersTried = true;
+	if (!TallyReady())
+	{
+		return false;
+	}
+	// The sheet: one byte a pixel, how much of it is letter (Tools/name_letters.py), and its index; read as bytes, so
+	// a name's letters keep their own spelling (UTF-8).
+	const FString Folder = FPaths::ProjectContentDir() / TEXT("Data") / TEXT("Tally");
+	TArray<uint8> Index, Bytes;
+	AirTally::Letters& Hand = NameHand();
+	if (!FFileHelper::LoadFileToArray(Index, *(Folder / TEXT("name-letters.json")))
+		|| !AirTally::ReadLetters(std::string(reinterpret_cast<const char*>(Index.GetData()), static_cast<size_t>(Index.Num())), Hand)
+		|| !FFileHelper::LoadFileToArray(Bytes, *(Folder / TEXT("name-letters.a8"))) || Bytes.Num() != Hand.Width * Hand.Height)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: aces: the letters' sheet is missing or not as its index says (Content/Data/Tally/name-letters), so no ace's name is painted."));
+		return false;
+	}
+	// (white everywhere, so the smaller copies draw no dark rim; the ink is each name's own Tin)
+	TArray<FColor> Pixels;
+	Pixels.SetNumUninitialized(Bytes.Num());
+	for (int32 K = 0; K < Bytes.Num(); ++K)
+	{
+		Pixels[K] = FColor(255, 255, 255, Bytes[K]);
+	}
+	NameSheet = CampaignTextures::Create(Hand.Width, Hand.Height, Pixels, true, false, TEXT("AirNameLetters"));
+	if (!NameSheet)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: aces: the letters' sheet could not be made, so no ace's name is painted."));
+	}
+	return NameSheet != nullptr;
+}
+
 void AAirBattle::MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::Group& Ace, const FString& Nation)
 {
 	Made.bTallyTried = true;
 	const FAirTallySide* Side = TallyOfShape(Made.Shape);
-	if (!Side || Side->At.Num() == 0)
+	// (Germany's habit: her kills as white bars on her rudder, her name alone under the cockpit; the painter's nation
+	// decides, as the modeller's marks.record does, so a Finnish Bf 109 wears her victims' marks on her side)
+	const bool bBars = Side && Nation == TEXT("GER");
+	const bool bKills = Side && !bBars && Side->At.Num() > 0 && Ace.AceKills > 0;
+	const bool bRudder = Side && bBars && Side->Bars.Num() > 0 && Ace.AceKills > 0;
+	const bool bName = Side && Side->Line.Num() >= 2 && !Ace.AceName.empty();
+	if (!bKills && !bRudder && !bName)
 	{
-		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s (%s) has no kill slots in its model, so %s flies unpainted."),
-			*Made.Model, *Made.Shape, UTF8_TO_TCHAR(Ace.AceName.c_str()));
-		return;
-	}
-	if (Side->Habit == TEXT("bars"))
-	{
-		// (Germany's habit, the Me 262's tally.rudder: a white bar a kill on the rudder, turning with it. The sheet has no
-		// bar yet and the marks ride the fuselage, so she is left bare rather than given roundels her pilots never painted.)
-		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s (%s) carries her victories as bars on the rudder, not yet painted, so %s flies unpainted."),
-			*Made.Model, *Made.Shape, UTF8_TO_TCHAR(Ace.AceName.c_str()));
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s (%s) has no %s in its model, so %s flies unpainted."),
+			*Made.Model, *Made.Shape, bBars ? TEXT("rudder bars or name line") : TEXT("kill slots or name line"), UTF8_TO_TCHAR(Ace.AceName.c_str()));
 		return;
 	}
 	if (!TallyReady())
 	{
 		return;
 	}
-	const std::vector<AirTally::Mark> Marks = AirTally::Fill(TCHAR_TO_UTF8(*Nation), 0, Ace.AceKills, Ace.AceBy, 0, Side->At.Num(), Key);
-	const TCHAR* Set = Side->bLight ? TEXT("light") : TEXT("dark");
 	const double U = UnitsPerMetre;
-	TArray<FVector> Points, Normals;
-	TArray<FVector2D> Places;
-	TArray<FColor> Colours;
-	TArray<int32> Corners;
-	for (const AirTally::Mark& Mark : Marks)
+	const std::string Painter = TCHAR_TO_UTF8(*Nation);
+	FTallyPart Parts[3];
+	for (double& Size : Made.TallySize)
 	{
-		const FVector4* Cell = TallyCells.Find(FString(UTF8_TO_TCHAR(Mark.Tag.c_str())) + TEXT("|") + Set);
-		if (!Mark.bKill || !Cell || !Side->At.IsValidIndex(Mark.Slot))
+		Size = 0.0;
+	}
+	// 0: his kills, in the victims' symbols, on her kill slots (the tally sheet).
+	const TCHAR* Set = Side->bLight ? TEXT("light") : TEXT("dark");
+	if (bKills)
+	{
+		const std::vector<AirTally::Mark> Marks = AirTally::Fill(Painter, 0, Ace.AceKills, Ace.AceBy, 0, Side->At.Num(), Key, Side->PerRow);
+		for (const AirTally::Mark& Mark : Marks)
 		{
-			continue;
-		}
-		const FVector Out = Side->Out[Mark.Slot];
-		// Upright on her side: its up along her skin toward the sky, its right toward her tail (seen from outside
-		// her port side the tail is on the right), then the painter's hand where the file gives it: turned by its
-		// lean (anticlockwise seen from outside), sized, and moved along toward the tail and up her skin.
-		FVector Up = FVector::UpVector - Out * FVector::DotProduct(FVector::UpVector, Out);
-		Up = Up.GetSafeNormal(UE_SMALL_NUMBER, FVector::BackwardVector);
-		const FVector Right = FVector::CrossProduct(Out, Up).GetSafeNormal();
-		FVector4 Hand(0.0, 1.0, 0.0, 0.0);
-		if (Side->Hand.Num() > 0)
-		{
-			Hand = Side->Hand[(Mark.Slot + 37 * (Key & 0xFFFF)) % Side->Hand.Num()];
-		}
-		const double Lean = FMath::DegreesToRadians(Hand.X);
-		const FVector R = Right * FMath::Cos(Lean) + Up * FMath::Sin(Lean);
-		const FVector V = Up * FMath::Cos(Lean) - Right * FMath::Sin(Lean);
-		const double Half = TallySpan * Side->Radius * Hand.Y;
-		// (two millimetres off the skin, so it never sinks into a fuselage's curve)
-		const FVector Middle = Side->At[Mark.Slot] + Out * (0.002 * U) + Right * Hand.Z + Up * Hand.W;
-		FColor Under = Side->Skin.IsValidIndex(Mark.Slot) ? Side->Skin[Mark.Slot] : FColor(96, 96, 96);
-		Under.A = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Mark.Fade * 255.0), 0, 255));
-		const int32 First = Points.Num();
-		// (the cell's top left at the mark's upper corner nearest the nose)
-		Points.Append({ Middle - R * Half + V * Half, Middle + R * Half + V * Half, Middle + R * Half - V * Half, Middle - R * Half - V * Half });
-		Places.Append({ FVector2D(Cell->X, Cell->Y), FVector2D(Cell->Z, Cell->Y), FVector2D(Cell->Z, Cell->W), FVector2D(Cell->X, Cell->W) });
-		for (int32 K = 0; K < 4; ++K)
-		{
-			Normals.Add(Out);
-			Colours.Add(Under);
-		}
-		// (each triangle's corners the way round the engine draws as facing out, as FMiniatureMesh::Face lays them)
-		for (const FIntVector& Tri : { FIntVector(0, 1, 2), FIntVector(0, 2, 3) })
-		{
-			const FVector Facing = FVector::CrossProduct(Points[First + Tri.Y] - Points[First + Tri.Z], Points[First + Tri.X] - Points[First + Tri.Z]);
-			if (FVector::DotProduct(Facing, Out) >= 0.0)
+			const FVector4* Cell = TallyCells.Find(FString(UTF8_TO_TCHAR(Mark.Tag.c_str())) + TEXT("|") + Set);
+			if (!Mark.bKill || !Cell || !Side->At.IsValidIndex(Mark.Slot))
 			{
-				Corners.Append({ First + Tri.X, First + Tri.Y, First + Tri.Z });
+				continue;
 			}
-			else
+			const FVector Out = Side->Out[Mark.Slot];
+			// Upright on her side, then the painter's hand where the file gives it: turned by its lean (anticlockwise
+			// seen from outside), sized, and moved along toward the tail and up her skin.
+			FVector Right, Up;
+			Upright(Out, Right, Up);
+			FVector4 Hand(0.0, 1.0, 0.0, 0.0);
+			if (Side->Hand.Num() > 0)
 			{
-				Corners.Append({ First + Tri.X, First + Tri.Z, First + Tri.Y });
+				Hand = Side->Hand[(Mark.Slot + 37 * (Key & 0xFFFF)) % Side->Hand.Num()];
 			}
+			const double Lean = FMath::DegreesToRadians(Hand.X);
+			const FVector R = Right * FMath::Cos(Lean) + Up * FMath::Sin(Lean);
+			const FVector V = Up * FMath::Cos(Lean) - Right * FMath::Sin(Lean);
+			const double Half = TallySpan * Side->Radius * Hand.Y;
+			// (two millimetres off the skin, so it never sinks into a fuselage's curve)
+			const FVector Middle = Side->At[Mark.Slot] + Out * (0.002 * U) + Right * Hand.Z + Up * Hand.W;
+			FColor Under = Side->Skin.IsValidIndex(Mark.Slot) ? Side->Skin[Mark.Slot] : FColor(96, 96, 96);
+			Under.A = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Mark.Fade * 255.0), 0, 255));
+			Parts[0].Add(Middle, R, V, Half, Half, *Cell, Under, Out);
+		}
+		Made.TallySize[0] = 2.0 * Side->Radius / U;
+	}
+	// 1: his name under the cockpit (the modeller's tally.name and acepanel's rules): each letter its own small square
+	// at its place along the line, upright, facing her skin there; in one ink for the paint under the line.
+	FString Painted;
+	double PaintedCap = 0.0;
+	unsigned Ink = 0;
+	if (bName && LettersReady())
+	{
+		const AirTally::Letters& Hand = NameHand();
+		const AirTally::NameLaid Laid = AirTally::LayName(AirTally::NameTries(Painter, Ace.AceName), Hand, Side->Long, Side->Cap, Side->CapMin);
+		Ink = AirTally::NameInk(RgbOf(Side->NameSkin), Painter);
+		const double CapU = Laid.Cap * Side->Scale;
+		for (const AirTally::NameLetter& Letter : Laid.Letters)
+		{
+			const auto Found = Hand.Cells.find(Letter.Ch);
+			if (Found == Hand.Cells.end())
+			{
+				continue;
+			}
+			// (where it falls on her line, between the two points about it)
+			int32 K = 0;
+			while (K + 2 < Side->LineAft.Num() && Side->LineAft[K + 1] < Letter.Middle)
+			{
+				++K;
+			}
+			const double Gap = Side->LineAft[K + 1] - Side->LineAft[K];
+			const double T = Gap > 1e-9 ? FMath::Clamp((Letter.Middle - Side->LineAft[K]) / Gap, 0.0, 1.0) : 0.0;
+			const FVector Out = FMath::Lerp(Side->LineOut[K], Side->LineOut[K + 1], T).GetSafeNormal(UE_SMALL_NUMBER, Side->LineOut[K]);
+			const FVector On = FMath::Lerp(Side->Line[K], Side->Line[K + 1], T);
+			FVector Right, Up;
+			Upright(Out, Right, Up);
+			// Its cell, trimmed across to its letter and a little room; the capitals' middle (the cell's row Mid) on the
+			// line.
+			const double CellX = Found->second.Col * Hand.CellW + 0.5 * Hand.CellW;
+			const double HalfPx = FMath::Min(0.5 * Hand.CellW, (0.5 * Found->second.Wide + 0.2) * Hand.Cap);
+			const FVector4 Box((CellX - HalfPx) / Hand.Width, static_cast<double>(Found->second.Row * Hand.CellH) / Hand.Height,
+				(CellX + HalfPx) / Hand.Width, static_cast<double>((Found->second.Row + 1) * Hand.CellH) / Hand.Height);
+			const double Above = static_cast<double>(Hand.Mid) / Hand.Cap * CapU;
+			const double Below = static_cast<double>(Hand.CellH - Hand.Mid) / Hand.Cap * CapU;
+			const FVector Middle = On + Out * (0.002 * U) + Up * (0.5 * (Above - Below));
+			Parts[1].Add(Middle, Right, Up, HalfPx / Hand.Cap * CapU, 0.5 * (Above + Below), Box, Side->NameSkin, Out);
+		}
+		if (!Laid.Missing.empty())
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air battle: aces: the letters' sheet has no %s, left out of %s's name."), UTF8_TO_TCHAR(Laid.Missing.c_str()), UTF8_TO_TCHAR(Ace.AceName.c_str()));
+		}
+		Painted = UTF8_TO_TCHAR(Laid.Text.c_str());
+		PaintedCap = Laid.Cap;
+		Made.TallySize[1] = CapU / U;
+	}
+	// 2: a German pilot's kills, a white bar each on her rudder, first from the front (the modeller's tally.rudder).
+	int32 BarsPainted = 0;
+	if (bRudder && LettersReady())
+	{
+		const AirTally::Letters& Hand = NameHand();
+		const auto Found = Hand.Cells.find("BAR");
+		if (Found != Hand.Cells.end())
+		{
+			// (the middle half of the solid cell, clear of its edge in the smaller copies)
+			const double X0 = Found->second.Col * Hand.CellW, Y0 = Found->second.Row * Hand.CellH;
+			const FVector4 Box((X0 + 0.25 * Hand.CellW) / Hand.Width, (Y0 + 0.25 * Hand.CellH) / Hand.Height,
+				(X0 + 0.75 * Hand.CellW) / Hand.Width, (Y0 + 0.75 * Hand.CellH) / Hand.Height);
+			BarsPainted = FMath::Min(Ace.AceKills, Side->Bars.Num());
+			for (int32 K = 0; K < BarsPainted; ++K)
+			{
+				const FVector Out = Side->BarsOut[K];
+				FVector Right, Up;
+				Upright(Out, Right, Up);
+				FColor Under = Side->BarsSkin.IsValidIndex(K) ? Side->BarsSkin[K] : FColor(96, 96, 96);
+				Under.A = 255;
+				// (the modeller's bar: 0.6 of its radius wide, its whole height twice the radius)
+				Parts[2].Add(Side->Bars[K] + Out * (0.002 * U), Right, Up, 0.3 * Side->BarRadius, Side->BarRadius, Box, Under, Out);
+			}
+			Made.TallySize[2] = 2.0 * Side->BarRadius / U;
 		}
 	}
-	if (Corners.Num() == 0)
+	if (Parts[0].Triangles.Num() + Parts[1].Triangles.Num() + Parts[2].Triangles.Num() == 0)
 	{
 		return;
 	}
@@ -254,13 +417,46 @@ void AAirBattle::MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent
 	Tally->LightingChannels.bChannel1 = true;
 	Tally->bUseAsyncCooking = false;
 	Tally->RegisterComponent();
-	Tally->CreateMeshSection(0, Points, Corners, Normals, Places, Colours, TArray<FProcMeshTangent>(), false);
-	// (an ink of its own, so that its strength can follow its own size on the screen)
-	UMaterialInstanceDynamic* Own = UMaterialInstanceDynamic::Create(TallyInk, this);
-	Tally->SetMaterial(0, Own ? Own : TallyInk.Get());
+	for (int32 Section = 0; Section < 3; ++Section)
+	{
+		const FTallyPart& Part = Parts[Section];
+		if (Part.Triangles.Num() == 0)
+		{
+			Made.TallySize[Section] = 0.0;
+			continue;
+		}
+		// (an ink of its own, so that its strength can follow its own size on the screen; his name and the bars from
+		// the letters' sheet, in their own colour)
+		UMaterialInstanceDynamic* Own = UMaterialInstanceDynamic::Create(TallyInk, this);
+		if (Section > 0)
+		{
+			if (!Own)
+			{
+				Made.TallySize[Section] = 0.0;
+				continue;
+			}
+			Own->SetTextureParameterValue(TEXT("Sheet"), NameSheet);
+			Own->SetVectorParameterValue(TEXT("Tin"), TinOf(Section == 1 ? Ink : AirTally::BarWhite));
+		}
+		Tally->CreateMeshSection(Section, Part.Corners3, Part.Triangles, Part.Normals, Part.Places, Part.Colours, TArray<FProcMeshTangent>(), false);
+		Tally->SetMaterial(Section, Own ? Own : TallyInk.Get());
+	}
 	Made.Tally = Tally;
-	UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s's %d victories painted on %s (key %d), %d marks in the %s set."),
-		UTF8_TO_TCHAR(Ace.AceName.c_str()), Ace.AceKills, *Made.Model, Key, Corners.Num() / 6, Set);
+	if (Parts[0].Triangles.Num() > 0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s's %d victories painted on %s (key %d), %d marks in the %s set."),
+			UTF8_TO_TCHAR(Ace.AceName.c_str()), Ace.AceKills, *Made.Model, Key, Parts[0].Triangles.Num() / 6, Set);
+	}
+	if (Parts[1].Triangles.Num() > 0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: \"%s\" painted under %s's cockpit (key %d), capitals %.1f cm, %s ink."),
+			*Painted, *Made.Model, Key, PaintedCap * 100.0, Ink == 0x1A1A1Au ? TEXT("black") : Ink == 0xD9B43Au ? TEXT("yellow") : TEXT("off-white"));
+	}
+	if (Parts[2].Triangles.Num() > 0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s's %d victories painted as %d bars on %s's rudder (key %d)."),
+			UTF8_TO_TCHAR(Ace.AceName.c_str()), Ace.AceKills, BarsPainted, *Made.Model, Key);
+	}
 }
 
 void AAirBattle::DrawTally(const FVector& EyeAt)
@@ -338,10 +534,21 @@ void AAirBattle::DrawTally(const FVector& EyeAt)
 		const double Away = Mesh ? FVector::Dist(Mesh->GetComponentLocation(), EyeAt) / U : 1e9;
 		// (on its own mesh, its near shape drawn, near the eye: past a few hundred metres a 9 cm mark is under a pixel)
 		const bool bOnShape = !Made->bTwoShapes || Made->bNear;
-		const FAirTallySide* Side = TallyOfShape(Made->Shape);
-		const double Across = 2.0 * (Side && Side->Radius > 0.0 ? Side->Radius / U : 0.05);
-		const double Pixels = Across * PixelsPerMetreAt1 / FMath::Max(Away, 0.1);
-		const double Strength = FMath::Clamp((Pixels - 4.0) / 3.0, 0.0, 1.0);
+		// (each part by its own size: a kill mark across, his name's capitals, a rudder bar's height; before it is made,
+		// as its model gives them)
+		double Sizes[3] = { Made->TallySize[0], Made->TallySize[1], Made->TallySize[2] };
+		if (!Made->bTallyTried)
+		{
+			const FAirTallySide* Side = TallyOfShape(Made->Shape);
+			Sizes[0] = Side && Side->Radius > 0.0 ? 2.0 * Side->Radius / U : 0.1;
+			Sizes[1] = Side && Side->Line.Num() >= 2 ? Side->Cap * Side->Scale / U : 0.0;
+			Sizes[2] = Side && Side->Bars.Num() > 0 ? 2.0 * Side->BarRadius / U : 0.0;
+		}
+		auto StrengthOf = [PixelsPerMetreAt1, Away](double Size)
+		{
+			return Size > 0.0 ? FMath::Clamp((Size * PixelsPerMetreAt1 / FMath::Max(Away, 0.1) - 4.0) / 3.0, 0.0, 1.0) : 0.0;
+		};
+		const double Strength = FMath::Max3(StrengthOf(Sizes[0]), StrengthOf(Sizes[1]), StrengthOf(Sizes[2]));
 		const bool bNear = Lead.Value == Ridden || Away < TallyNearM;
 		const bool bShow = Found != Groups.end() && Mesh && Mesh->IsVisible() && bOnShape && bNear && Strength > 0.0;
 		if (bShow && !Made->bTallyTried)
@@ -349,7 +556,7 @@ void AAirBattle::DrawTally(const FVector& EyeAt)
 			AirShow::Group Ace = Found->second;
 			if (Lead.Key == TestGroup && Ace.AceKills <= 0)
 			{
-				Ace.AceName = Test.Name;
+				Ace.AceName = Test.Name.empty() ? AirTally::SampleTitle(Ace.Nation) : Test.Name;
 				Ace.AceKills = Test.Kills;
 				Ace.AceBy = Test.By;
 			}
@@ -372,9 +579,16 @@ void AAirBattle::DrawTally(const FVector& EyeAt)
 			}
 			if (bShow)
 			{
-				if (UMaterialInstanceDynamic* Own = Cast<UMaterialInstanceDynamic>(Tally->GetMaterial(0)))
+				for (int32 Section = 0; Section < 3; ++Section)
 				{
-					Own->SetScalarParameterValue(TEXT("Strength"), static_cast<float>(Strength));
+					if (Made->TallySize[Section] <= 0.0)
+					{
+						continue;
+					}
+					if (UMaterialInstanceDynamic* Own = Cast<UMaterialInstanceDynamic>(Tally->GetMaterial(Section)))
+					{
+						Own->SetScalarParameterValue(TEXT("Strength"), static_cast<float>(StrengthOf(Made->TallySize[Section])));
+					}
 				}
 			}
 		}
@@ -387,20 +601,46 @@ bool AAirBattle::AceMarksAt(int32 Key, FVector& At, FVector& Out)
 	const TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(Key);
 	const UProceduralMeshComponent* Mesh = Have ? Have->Get() : nullptr;
 	const FAirTallySide* Side = Made && Mesh ? TallyOfShape(Made->Shape) : nullptr;
-	if (!Side || Side->At.Num() == 0 || Side->Out.Num() != Side->At.Num())
+	if (!Side)
 	{
 		return false;
 	}
-	// (the first row, where a few kills are; slots run from the front of the lowest row)
-	const int32 Row = FMath::Min(Side->At.Num(), AirTally::PerRow);
+	// The middle of what he wears: his name, and his first row of marks (slots run from the front of the lowest row)
+	// or, a German pilot's, his first bars on the rudder.
 	FVector Sum = FVector::ZeroVector, Facing = FVector::ZeroVector;
-	for (int32 K = 0; K < Row; ++K)
+	int32 Parts = 0;
+	auto Take = [&Sum, &Facing, &Parts](const TArray<FVector>& Points, const TArray<FVector>& Ways, int32 Most)
 	{
-		Sum += Side->At[K];
-		Facing += Side->Out[K];
+		const int32 N = FMath::Min3(Points.Num(), Ways.Num(), Most);
+		if (N <= 0)
+		{
+			return;
+		}
+		FVector Here = FVector::ZeroVector, Way = FVector::ZeroVector;
+		for (int32 K = 0; K < N; ++K)
+		{
+			Here += Points[K];
+			Way += Ways[K];
+		}
+		Sum += Here / N;
+		Facing += Way.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+		++Parts;
+	};
+	Take(Side->Line, Side->LineOut, Side->Line.Num());
+	if (Made->TallySize[2] > 0.0)
+	{
+		Take(Side->Bars, Side->BarsOut, AirTally::PerRow);
+	}
+	else
+	{
+		Take(Side->At, Side->Out, Side->PerRow);
+	}
+	if (Parts == 0)
+	{
+		return false;
 	}
 	const FTransform& Frame = Mesh->GetComponentTransform();
-	At = Frame.TransformPosition(Sum / Row);
+	At = Frame.TransformPosition(Sum / Parts);
 	Out = Frame.TransformVectorNoScale(Facing.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector));
 	return true;
 }

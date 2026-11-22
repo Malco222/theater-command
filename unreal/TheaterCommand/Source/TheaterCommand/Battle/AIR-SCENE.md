@@ -50,8 +50,8 @@ battle screen over it.
      struck the most (a cannon shell weighed as three rounds, a heavy shell as six). The log says "Air battle: strike
      marks picture on <model> (key N): ... strikes on it"
    - an ace's marks, when the battle has an ace or `-TheaterAceTest=` gives one (item 44; the art director's two frames):
-     `12-ace-close`, 30 s after the meeting, the eye 8 m off his first row of marks, square to it, a metre above and a
-     metre behind; and `12b-ace-chase`, 36 s after, the chase view behind him. The log says "Air battle: ace picture
+     `12-ace-close`, 30 s after the meeting, the eye 8 m off his record (his name and first row of marks; a German's
+     name and rudder bars), square to it, two metres above and a metre behind; and `12b-ace-chase`, 36 s after, the chase view behind him. The log says "Air battle: ace picture
      ... on key N"; with no ace flying, neither is taken and the log says so
    - the after card
 
@@ -1081,9 +1081,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    under 4 (the art director, 18:31Z: "rather than shimmer or turn into a grey block"; some 35 to 60 m off on the Mac's
    screen); soot and holes land on them as on his skin. A model with
    no kill slots flies unpainted (the log says so): today the Mustang, Hellcat, Wildcat, C.202, Devastator, Dauntless,
-   Kate and Val have them; the modeller's battle-standard fighters bring them to the rest. A model whose habit is bars
-   (the Me 262: Germany's white bar a kill on the rudder, turning with it) also flies bare for now, rather than wearing
-   roundels her pilots never painted, until the sheet has a bar and the marks can ride the rudder. His name under the cockpit follows with the modeller's name panel.
+   Kate and Val have them; the modeller's battle-standard fighters bring them to the rest. A German pilot wears his
+   kills as white bars on the rudder instead, and his name and theirs are painted as item 46 says.
    `-TheaterAces=0` paints none; `-TheaterAceTest=att:6:GER=6` gives the raid's first fighter group a test ace (def for
    the defence; more nations after a comma, `GER=14,ITA=6,UK=3`), for frames where the recording has none. Look for: the
    marks square to his side, not mirrored (the Italian tricolour green toward the nose), not floating off the skin or
@@ -1091,3 +1090,27 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    The picture run takes `12-ace-close` and `12b-ace-chase` of him (the art director checks only those two): the marks
    as matte as his paint and never brighter, taking its light, shade and grime; flags and roundels not sticker-bright;
    no row running on to the wing-root fillet, and no code letter or name panel over the aft end of a full row.
+   His name (item 46) is painted with them.
+
+46. **A named ace's name under his cockpit, and a German's bars on his rudder** (Brian's named aces, release 2; the
+   modeller's tally.name on every fighter, battle-models/air-next/ACES.md, after the art director's pass of 19:47Z 22
+   November). Over his kill rows, on the line the modeller laid under the port cockpit sill: his rank short as his nation
+   wrote it, his initials and surname, in plain block capitals (`F/LT T. HARLAND`, `OBLT. K. VOSSLER`, `ST. LT. I.
+   VERESOV`; Japan's and the nations ACES.md gives no short ranks for, initial and surname: `T. KAWANO`). At the
+   file's `cap` (5 cm; 4 on the Bf 109 and Me 262, 7 on the Hurricane, Warhawk and the plain fighters), smaller down to
+   `cap_min` to fit the line, then shortened: rank and surname, then the surname alone (Battle/AirTally NameTries and
+   LayName, the rules of acepanel.py). One small square a letter at its place along the line, upright, facing her skin
+   there, so the name follows her curve; drawn with M_TallyMark from the letters' sheet (Content/Data/Tally/name-letters,
+   Tools/name_letters.py: the modeller's hand, DejaVu Sans Bold narrowed to 0.72, 100 capitals with the accented ones the
+   rules' Polish, Hungarian, Finnish and Romanian names use). One ink for the paint under the middle of the line: yellow
+   D9B43A on an American machine's olive drab, else black 1A1A1A on paint of L* 50 or more and off-white F2F0E8 under
+   it. A German pilot (the painter's nation decides, as the modeller's marks.record does) wears no victims' marks on his
+   side: his kills are white bars (DAD8CE) on his rudder's port face, one a kill, from the modeller's tally.rudder; the
+   scene's rudders do not turn. Each part fades by its own size (a capital, a mark, a bar) from 7 px to 4. A fighter's
+   marks to a row are her file's (`per_row`: the Spitfire's nine, her number covering a tenth column, 27 at most). The
+   test ace without a title takes his nation's sample (`Flight Lieutenant Tom Harland`). The log says "Air battle:
+   aces: "F/LT T. HARLAND" painted under Spitfire's cockpit (key N), capitals 5.0 cm, off-white ink" and "... painted as
+   N bars on Bf109's rudder". The game's fighters carry the line once the staged models are imported (held for Brian's
+   word, as the modeller's move into battle-models/air/ is); until then a model without one flies with its marks only.
+   Look for: the letters upright and reading from the nose aft (not mirrored), on her skin, not over the sill, the glass
+   or the number; even spacing; the ink as the rule says; no shimmer as he moves off.

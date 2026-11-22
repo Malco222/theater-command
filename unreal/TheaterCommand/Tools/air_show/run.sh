@@ -29,7 +29,7 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 # modeller's own layout (tallies.fill).
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_tally_test.cpp" "$SRC/Battle/AirTally.cpp" -o "$OUT/air_tally_test"
-"$OUT/air_tally_test" || STATUS=1
+"$OUT/air_tally_test" "$ROOT/Content/Data/Tally/name-letters.json" || STATUS=1
 # The clouds turned on the graphics chip (Battle/AirSky's Chip and Battle/AirSkyChip.inl, the text the chip runs):
 # every point the chip draws against the painter's, on the ground's two skies and every recording given.
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

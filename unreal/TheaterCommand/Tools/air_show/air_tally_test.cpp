@@ -2,12 +2,18 @@
 // reference (tools/battle-models/tallies.py on claude/project-thread-3vdnfu, battle-models/air/tally/README.md). The
 // README's two worked examples, then fifty records laid out by the reference itself (ten chosen, forty drawn at random:
 // own nations that paint their own symbol, kills past thirty, kills with no nation, more nations than rows, missions
-// past the slots), each mark's slot, symbol or tin, and fade to a thousandth. Usage: air_tally_test.
+// past the slots), each mark's slot, symbol or tin, and fade to a thousandth. Then a fighter's own marks to a row (the
+// Spitfire's nine), and an ace's name under his cockpit (battle-models/air-next/ACES.md, acepanel.py): his title as the
+// rules give it in the forms that may be painted, its ink for the paint under it, the letters' sheet
+// (Tools/name_letters.py) holding every capital the rules' names use, and every name fitting every fighter's line.
+// Usage: air_tally_test [name-letters.json]
 #include "Battle/AirTally.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <sstream>
 #include <string>
@@ -127,7 +133,83 @@ namespace
 	}
 }
 
-int main()
+namespace
+{
+	int Check(bool bOk, const char* What, const std::string& Got)
+	{
+		std::printf("  %s  %s%s%s\n", bOk ? "ok  " : "FAIL", What, Got.empty() ? "" : ": ", Got.c_str());
+		return bOk ? 0 : 1;
+	}
+
+	/** Each fighter's name line and kill rows as the modeller staged them (battle-models/air-next, after the art
+	 * director's 19:47Z pass): her name, the capitals' height, its least, the line's length, her kills to a row and her
+	 * kill slots. */
+	struct Line
+	{
+		const char* Name;
+		double Cap, CapMin, Long;
+		int PerRow, Slots;
+	};
+	const Line Lines[] = {
+		{ "Bf109", 0.04, 0.035, 1.18, 10, 30 },
+		{ "C202", 0.05, 0.035, 1.18, 10, 30 },
+		{ "CarrierFighter", 0.07, 0.035, 1.18, 10, 30 },
+		{ "Fighter", 0.07, 0.035, 1.18, 10, 30 },
+		{ "Fw190", 0.05, 0.035, 1.18, 10, 30 },
+		{ "Hellcat", 0.05, 0.035, 1.18, 10, 30 },
+		{ "Hurricane", 0.07, 0.035, 1.18, 10, 30 },
+		{ "Me262", 0.04, 0.035, 1.18, 10, 30 },
+		{ "Mustang", 0.05, 0.035, 1.18, 10, 30 },
+		{ "Spitfire", 0.05, 0.035, 1.06, 9, 27 },
+		{ "Warhawk", 0.07, 0.035, 1.18, 10, 30 },
+		{ "WhatIf_EscortFighter", 0.05, 0.035, 1.18, 10, 30 },
+		{ "WhatIf_NightFighter", 0.05, 0.035, 1.18, 10, 30 },
+		{ "Wildcat", 0.05, 0.035, 1.18, 10, 30 },
+		{ "Yak", 0.05, 0.035, 1.18, 10, 30 },
+		{ "Zero", 0.05, 0.035, 1.18, 10, 30 },
+	};
+
+	/** Titles as the rules give them (aces.ts aceTitle, aces.json's ranks and names), and what is painted. */
+	struct Title
+	{
+		const char* Nation;
+		const char* Given;
+		const char* Painted;
+	};
+	const Title Titles[] = {
+		{ "UK", "Flight Lieutenant Tom Harland", "F/LT T. HARLAND" },
+		{ "CAN", "Pilot Officer Harry Pryce", "P/O H. PRYCE" },
+		{ "AUS", "Wing Commander Arthur Dawlish", "W/CDR A. DAWLISH" },
+		{ "USA", "Captain Don Merrick", "CAPT. D. MERRICK" },
+		{ "USA", "Lieutenant Colonel Jack Calder", "LT. COL. J. CALDER" },
+		{ "USA", "Lieutenant Ray Ashford", "LT. R. ASHFORD" },
+		{ "GER", "Oberleutnant Kurt Vossler", "OBLT. K. VOSSLER" },
+		{ "GER", "Feldwebel Hans Albrecht", "FW. H. ALBRECHT" },
+		{ "SOV", "Senior Lieutenant Ivan Veresov", "ST. LT. I. VERESOV" },
+		{ "SOV", "Lieutenant Colonel Pyotr Gromov", "P. GROMOV" },
+		{ "JAP", "Petty Officer Takeo Kawano", "T. KAWANO" },
+		{ "JAP", "Lieutenant Commander Kenji Matsuda", "K. MATSUDA" },
+		{ "ITA", "Tenente Giorgio Rossetti", "TEN. G. ROSSETTI" },
+		{ "ITA", "Sergente Maggiore Luigi Galli", "SERG. MAGG. L. GALLI" },
+		{ "POL", "Porucznik Stanisław Zieliński", "S. ZIELIŃSKI" },
+		{ "NED", "Luitenant Jan de Vries", "J. DE VRIES" },
+		{ "FIN", "Luutnantti Väinö Mäkelä", "V. MÄKELÄ" },
+		{ "HUN", "Főhadnagy László Kovács", "L. KOVÁCS" },
+		{ "FRA", "Sergent-chef Jean Arnaud", "J. ARNAUD" },
+		{ "ROM", "Căpitan Ion Popescu", "I. POPESCU" },
+		{ "CHN", "Captain Wang Wei", "WANG W." },
+		{ "GRE", "Squadron Leader Tom Pryce", "S/LDR T. PRYCE" },
+	};
+
+	std::string Joined(const std::vector<std::string>& All)
+	{
+		std::string Out;
+		for (const std::string& One : All) Out += (Out.empty() ? "" : " | ") + One;
+		return Out;
+	}
+}
+
+int main(int Argc, char** Argv)
 {
 	int Bad = 0;
 	// The README's examples: "8 German and 4 Italian kills: eight crosses on the first row, four tricolours on the
@@ -158,6 +240,124 @@ int main()
 	}
 	std::printf("  %s  %d of %d records laid out as the modeller's tallies.fill lays them\n", Wrong == 0 ? "ok  " : "FAIL", Count - Wrong, Count);
 	Bad += Wrong > 0 ? 1 : 0;
+
+	// A fighter's own marks to a row: the Spitfire's nine (her number covers a tenth column), three rows, 27 at most.
+	{
+		std::string Why;
+		const std::vector<AirTally::Mark> A = AirTally::Fill("USA", 0, 12, { { "GER", 8 }, { "ITA", 4 } }, 0, 27, 0, 9);
+		const bool bA = Same("K0:GER:0.850 K1:GER:0.871 K2:GER:0.893 K3:GER:0.914 K4:GER:0.936 K5:GER:0.957 K6:GER:0.979 K7:GER:1.000 "
+			"K9:ITA:0.850 K10:ITA:0.900 K11:ITA:0.950 K12:ITA:1.000", A, Why);
+		Bad += Check(bA, "nine to a row: eight crosses, the tricolours from the second row's first slot", bA ? "" : Why + "; got " + Laid(A));
+		const std::vector<AirTally::Mark> B = AirTally::Fill("UK", 0, 30, { { "GER", 30 } }, 0, 27, 0, 9);
+		bool bB = B.size() == 27;
+		for (size_t K = 0; bB && K < B.size(); ++K) bB = B[K].Slot == static_cast<int>(K) && B[K].Row == static_cast<int>(K) / 9 && B[K].Tag == "KILL-GER";
+		Bad += Check(bB, "nine to a row: 30 kills fill her 27 slots, three rows of nine", bB ? "" : Laid(B));
+		const std::vector<AirTally::Mark> C = AirTally::Fill("USA", 0, 12, { { "GER", 8 }, { "ITA", 4 } }, 0, 30, 0);
+		const bool bC = Same("K0:GER:0.850 K1:GER:0.871 K2:GER:0.893 K3:GER:0.914 K4:GER:0.936 K5:GER:0.957 K6:GER:0.979 K7:GER:1.000 "
+			"K10:ITA:0.850 K11:ITA:0.900 K12:ITA:0.950 K13:ITA:1.000", C, Why);
+		Bad += Check(bC, "ten to a row as before where the model says nothing", bC ? "" : Laid(C));
+	}
+
+	// His title in the forms that may be painted: rank short as his nation wrote it, initials and surname.
+	{
+		int Wrong2 = 0;
+		for (const Title& T : Titles)
+		{
+			const std::vector<std::string> Tries = AirTally::NameTries(T.Nation, T.Given);
+			if (Tries.empty() || Tries.front() != T.Painted)
+			{
+				++Wrong2;
+				std::printf("  FAIL  %s \"%s\": wants \"%s\", got %s\n", T.Nation, T.Given, T.Painted, Joined(Tries).c_str());
+			}
+		}
+		Bad += Check(Wrong2 == 0, "titles painted as ACES.md writes them", std::to_string(std::size(Titles) - static_cast<size_t>(Wrong2)) + " of " + std::to_string(std::size(Titles)));
+		const std::vector<std::string> Tries = AirTally::NameTries("UK", "Flight Lieutenant Tom Harland");
+		const bool bOrder = Tries.size() == 3 && Tries[1] == "F/LT HARLAND" && Tries[2] == "HARLAND";
+		Bad += Check(bOrder, "shortened in order: rank and surname, then the surname alone", Joined(Tries));
+		bool bSamples = true;
+		for (const char* Nation : { "UK", "USA", "GER", "SOV", "JAP", "ITA", "FRA", "POL", "FIN", "NED", "NOR", "ROM", "HUN", "CHN" })
+			bSamples = bSamples && !AirTally::NameTries(Nation, AirTally::SampleTitle(Nation)).empty();
+		Bad += Check(bSamples, "every nation's test ace has a name to paint", "");
+	}
+
+	// His ink: yellow on an American machine's olive drab, else black on light paint and off-white on dark.
+	{
+		const bool bInk = AirTally::NameInk(0x4F5236, "USA") == 0xD9B43Au && AirTally::NameInk(0x4C4B35, "USA") == 0xD9B43Au
+			&& AirTally::NameInk(0x565C3A, "USA") == 0xD9B43Au && AirTally::NameInk(0x4F5236, "UK") == 0xF2F0E8u
+			&& AirTally::NameInk(0xC0C4C8, "USA") == 0x1A1A1Au && AirTally::NameInk(0x5A6E8C, "USA") == 0xF2F0E8u
+			&& AirTally::NameInk(0xD8CFAE, "ITA") == 0x1A1A1Au && AirTally::NameInk(0x2E2E2E, "GER") == 0xF2F0E8u;
+		Bad += Check(bInk, "his ink for the paint under his name (the owner decides the olive drab)", "");
+	}
+
+	// The letters' sheet: every capital the rules' names use, each cell's ink inside its cell, and every name fitting
+	// every fighter's line.
+	{
+		const std::string Path = Argc > 1 ? Argv[1] : "Content/Data/Tally/name-letters.json";
+		std::ifstream In(Path, std::ios::binary);
+		const std::string Json((std::istreambuf_iterator<char>(In)), std::istreambuf_iterator<char>());
+		AirTally::Letters Hand;
+		const bool bRead = AirTally::ReadLetters(Json, Hand);
+		Bad += Check(bRead, "the letters' sheet's index read", Path);
+		if (bRead)
+		{
+			std::string Missing;
+			for (const char* Ch : { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
+				"W", "X", "Y", "Z", ".", "/", "(", ")", "-", "Á", "Ä", "É", "Ó", "Ö", "Ø", "Ă", "Ą", "Ł", "Ń", "Ő", "Ż", "Ș", "Ț", "BAR" })
+				if (!Hand.Cells.count(Ch)) Missing += std::string(Missing.empty() ? "" : " ") + Ch;
+			Bad += Check(Missing.empty(), "a cell for every capital the rules' names use, and the bar", Missing.empty() ? std::to_string(Hand.Cells.size()) + " cells" : "none for " + Missing);
+			const std::string Bytes = Path.substr(0, Path.size() - 5) + ".a8";
+			std::ifstream Sheet(Bytes, std::ios::binary);
+			const std::string Pixels((std::istreambuf_iterator<char>(Sheet)), std::istreambuf_iterator<char>());
+			bool bSize = Pixels.size() == static_cast<size_t>(Hand.Width) * static_cast<size_t>(Hand.Height);
+			int Empty = 0, Edge = 0;
+			for (const auto& [Ch, Cell] : Hand.Cells)
+			{
+				if (!bSize) break;
+				int Ink = 0;
+				for (int Y = 0; Y < Hand.CellH; ++Y)
+					for (int X = 0; X < Hand.CellW; ++X)
+					{
+						const unsigned char A = static_cast<unsigned char>(Pixels[static_cast<size_t>((Cell.Row * Hand.CellH + Y) * Hand.Width + Cell.Col * Hand.CellW + X)]);
+						if (A == 0) continue;
+						++Ink;
+						// (a letter's ink kept two pixels in from its cell's edge, so its neighbours never bleed into it)
+						if (Ch != "BAR" && (X < 2 || Y < 2 || X >= Hand.CellW - 2 || Y >= Hand.CellH - 2)) ++Edge;
+					}
+				Empty += Ink == 0 ? 1 : 0;
+			}
+			Bad += Check(bSize && Empty == 0 && Edge == 0, "the sheet as its index says, every cell inked inside its edge",
+				bSize ? std::to_string(Empty) + " empty, " + std::to_string(Edge) + " pixels at an edge" : "the sheet is " + std::to_string(Pixels.size()) + " bytes");
+
+			// Every title on every fighter's line: at her capitals' height or smaller, never under the least unless his
+			// surname alone, within her line, left-aligned, letters in order and apart.
+			int Fits = 0, Short = 0, Wrong3 = 0;
+			std::string First;
+			for (const Line& L : Lines)
+			{
+				for (const Title& T : Titles)
+				{
+					const AirTally::NameLaid Laid = AirTally::LayName(AirTally::NameTries(T.Nation, T.Given), Hand, L.Long, L.Cap, L.CapMin);
+					bool bOk = Laid.Cap <= L.Cap + 1e-12 && Laid.Run <= L.Long + 1e-9 && !Laid.Letters.empty() && Laid.Missing.empty()
+						&& Laid.Letters.front().Middle - 0.5 * Laid.Letters.front().Wide >= -1e-9 && Laid.Letters.back().Middle + 0.5 * Laid.Letters.back().Wide <= L.Long + 1e-9;
+					for (size_t K = 1; bOk && K < Laid.Letters.size(); ++K)
+						bOk = Laid.Letters[K].Middle - Laid.Letters[K - 1].Middle >= 0.5 * (Laid.Letters[K].Wide + Laid.Letters[K - 1].Wide) - 1e-9;
+					if (Laid.Cap < L.CapMin - 1e-12 && Laid.Text.find(' ') != std::string::npos) bOk = false;
+					Fits += bOk ? 1 : 0;
+					Short += Laid.Text != T.Painted ? 1 : 0;
+					if (!bOk && ++Wrong3 <= 3)
+						First += std::string(First.empty() ? "" : "; ") + L.Name + " " + T.Given + " -> " + Laid.Text + " at " + std::to_string(Laid.Cap);
+				}
+			}
+			Bad += Check(Wrong3 == 0, "every title fits every fighter's line", std::to_string(Fits) + " of " + std::to_string(std::size(Lines) * std::size(Titles))
+				+ " (" + std::to_string(Short) + " shortened)" + (First.empty() ? "" : ": " + First));
+			// (a long one on the Spitfire's short line: shrunk to the least, then shortened, never under the least but
+			// his surname alone)
+			const std::vector<std::string> LongTries = AirTally::NameTries("UK", "Wing Commander Christopher Montgomery-Fotheringham-Whitcombe");
+			const AirTally::NameLaid Long = AirTally::LayName(LongTries, Hand, 1.06, 0.05, 0.035);
+			Bad += Check(LongTries.size() == 3 && Long.Text != LongTries.front() && (Long.Cap >= 0.035 || Long.Text == LongTries.back()),
+				"a long name shortened as ACES.md says", Long.Text + " at " + std::to_string(Long.Cap) + " m");
+		}
+	}
 	std::printf(Bad == 0 ? "tallies: all checks pass\n" : "tallies: %d checks FAILED\n", Bad);
 	return Bad == 0 ? 0 : 1;
 }

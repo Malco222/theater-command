@@ -3841,7 +3841,8 @@ namespace AirParts
 	/**
 	 * A model's kill slots (its file's tally.kills, the modeller's: each [x, y, z, nx, ny, nz] in the file's axes, x
 	 * forward and y to the right), brought into the shape's frame as its points were; with the paint under each (the
-	 * nearest point of the shape facing the same way) and whether that paint is light. Nothing where the file has none.
+	 * nearest point of the shape facing the same way) and whether that paint is light; and, where the file has them, the
+	 * ace's name line (tally.name) and the rudder's bars (tally.rudder). Nothing where the file has none.
 	 */
 	static void TakeTally(FShape& Shape, const FString& Kind, const FVector& Middle, double Fit, double U)
 	{
@@ -3873,26 +3874,121 @@ namespace AirParts
 		{
 			return;
 		}
+		FAirTallySide& Side = Shape.Kills;
+		Tally->TryGetStringField(TEXT("habit"), Side.Habit);
+		Side.Scale = U * Fit;
+		// (a slot as the file gives it, [x, y, z, nx, ny, nz]: the file has x forward and y to the right, the shape its
+		// nose toward -X and its right hand at -Y; and its x, for how far aft it is)
+		auto TakeSlot = [U, &Middle, Fit](const TSharedPtr<FJsonValue>& Slot, FVector& At, FVector& Out, double& X)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Six = nullptr;
+			if (!Slot.IsValid() || !Slot->TryGetArray(Six) || Six->Num() < 6)
+			{
+				return false;
+			}
+			auto Of = [Six](int32 K) { return (*Six)[K]->AsNumber(); };
+			At = (FVector(-Of(0), -Of(1), Of(2)) * U - Middle) * Fit;
+			Out = FVector(-Of(3), -Of(4), Of(5)).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+			X = Of(0);
+			return true;
+		};
+		// The paint under a point: the nearest point of the shape that faces the same way (not a stripe's edge on the
+		// other side of a seam).
+		auto PaintUnder = [&Shape](const FVector& At, const FVector& Out)
+		{
+			double Best = TNumericLimits<double>::Max();
+			FColor Under(96, 96, 96, 255);
+			for (int32 P = 0; P < Shape.Points.Num() && P < Shape.Colors.Num() && P < Shape.Normals.Num(); ++P)
+			{
+				if (FVector::DotProduct(Shape.Normals[P], Out) < 0.5)
+				{
+					continue;
+				}
+				const double D = FVector::DistSquared(Shape.Points[P], At);
+				if (D < Best)
+				{
+					Best = D;
+					Under = Shape.Colors[P];
+				}
+			}
+			Under.A = 255;
+			return Under;
+		};
+		// His name's line (the modeller's tally.name: ACES.md), and the paint under its middle for its ink.
+		const TSharedPtr<FJsonObject>* NameAt = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+		if (Tally->TryGetObjectField(TEXT("name"), NameAt) && (*NameAt)->TryGetArrayField(TEXT("line"), Points) && Points->Num() >= 2)
+		{
+			double Front = 0.0;
+			for (const TSharedPtr<FJsonValue>& Point : *Points)
+			{
+				FVector At, Out;
+				double X = 0.0;
+				if (!TakeSlot(Point, At, Out, X))
+				{
+					continue;
+				}
+				if (Side.Line.Num() == 0)
+				{
+					Front = X;
+				}
+				Side.Line.Add(At);
+				Side.LineOut.Add(Out);
+				Side.LineAft.Add(Front - X);
+			}
+			Side.Cap = (*NameAt)->HasField(TEXT("cap")) ? (*NameAt)->GetNumberField(TEXT("cap")) : 0.05;
+			Side.CapMin = (*NameAt)->HasField(TEXT("cap_min")) ? (*NameAt)->GetNumberField(TEXT("cap_min")) : 0.035;
+			Side.Long = (*NameAt)->HasField(TEXT("long")) ? (*NameAt)->GetNumberField(TEXT("long")) : (Side.LineAft.Num() > 0 ? Side.LineAft.Last() : 0.0);
+			if (Side.Line.Num() >= 2)
+			{
+				const int32 Mid = Side.Line.Num() / 2;
+				Side.NameSkin = PaintUnder(Side.Line[Mid], Side.LineOut[Mid]);
+			}
+			else
+			{
+				Side.Line.Reset();
+				Side.LineOut.Reset();
+				Side.LineAft.Reset();
+			}
+		}
+		// The rudder's bars (Germany's habit: tally.rudder, a white bar a kill; the scene's rudders do not turn).
+		const TSharedPtr<FJsonObject>* RudderAt = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* BarSlots = nullptr;
+		if (Tally->TryGetObjectField(TEXT("rudder"), RudderAt) && (*RudderAt)->TryGetArrayField(TEXT("slots"), BarSlots))
+		{
+			Side.BarRadius = ((*RudderAt)->HasField(TEXT("radius")) ? (*RudderAt)->GetNumberField(TEXT("radius")) : 0.045) * U * Fit;
+			for (const TSharedPtr<FJsonValue>& Slot : *BarSlots)
+			{
+				FVector At, Out;
+				double X = 0.0;
+				if (TakeSlot(Slot, At, Out, X))
+				{
+					Side.Bars.Add(At);
+					Side.BarsOut.Add(Out);
+					Side.BarsSkin.Add(PaintUnder(At, Out));
+				}
+			}
+		}
 		const TSharedPtr<FJsonObject>* KillsAt = nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* Slots = nullptr;
 		if (!Tally->TryGetObjectField(TEXT("kills"), KillsAt) || !(*KillsAt)->TryGetArrayField(TEXT("slots"), Slots))
 		{
 			return;
 		}
-		FAirTallySide& Side = Shape.Kills;
-		Tally->TryGetStringField(TEXT("habit"), Side.Habit);
 		Side.Radius = (*KillsAt)->HasField(TEXT("radius")) ? (*KillsAt)->GetNumberField(TEXT("radius")) * U * Fit : 0.045 * U * Fit;
+		if ((*KillsAt)->HasField(TEXT("per_row")))
+		{
+			Side.PerRow = FMath::Clamp(static_cast<int32>((*KillsAt)->GetNumberField(TEXT("per_row"))), 1, 20);
+		}
 		for (const TSharedPtr<FJsonValue>& Slot : *Slots)
 		{
-			const TArray<TSharedPtr<FJsonValue>>* Six = nullptr;
-			if (!Slot.IsValid() || !Slot->TryGetArray(Six) || Six->Num() < 6)
+			FVector At, Out;
+			double X = 0.0;
+			if (TakeSlot(Slot, At, Out, X))
 			{
-				continue;
+				Side.At.Add(At);
+				Side.Out.Add(Out);
 			}
-			auto At = [Six](int32 K) { return (*Six)[K]->AsNumber(); };
-			// (the file has x forward and y to the right; the shape its nose toward -X and its right hand at -Y)
-			Side.At.Add((FVector(-At(0), -At(1), At(2)) * U - Middle) * Fit);
-			Side.Out.Add(FVector(-At(3), -At(4), At(5)).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector));
 		}
 		// (the painter's hand, where the file gives one: kills.hand, or the tally's hand.kills)
 		const TArray<TSharedPtr<FJsonValue>>* Hand = nullptr;
@@ -3912,27 +4008,11 @@ namespace AirParts
 				}
 			}
 		}
-		// The paint under each slot: the nearest point of the shape that faces the same way (not a stripe's edge on
-		// the other side of a seam), and the panel's lightness from them all (the sheet's light set at L* 50 or more).
+		// The paint under each slot, and the panel's lightness from them all (the sheet's light set at L* 50 or more).
 		double Sum[3] = { 0.0, 0.0, 0.0 };
 		for (int32 K = 0; K < Side.At.Num(); ++K)
 		{
-			double Best = TNumericLimits<double>::Max();
-			FColor Under(96, 96, 96, 255);
-			for (int32 P = 0; P < Shape.Points.Num() && P < Shape.Colors.Num() && P < Shape.Normals.Num(); ++P)
-			{
-				if (FVector::DotProduct(Shape.Normals[P], Side.Out[K]) < 0.5)
-				{
-					continue;
-				}
-				const double D = FVector::DistSquared(Shape.Points[P], Side.At[K]);
-				if (D < Best)
-				{
-					Best = D;
-					Under = Shape.Colors[P];
-				}
-			}
-			Under.A = 255;
+			const FColor Under = PaintUnder(Side.At[K], Side.Out[K]);
 			Side.Skin.Add(Under);
 			const FLinearColor Lin(Under);
 			Sum[0] += Lin.R;
@@ -5896,10 +5976,12 @@ void AAirBattle::AimEye(double Real)
 			FVector Want, Look, AceMarks, AceOut;
 			if (Rider->Key == AceEyeKey && AceMarksAt(Rider->Key, AceMarks, AceOut))
 			{
-				// The ace's close picture (the art director, 18:31Z 22 November: "one close frame"): 8 m off his first row
-				// of marks, square to it, a metre above and a metre behind, looking at it: his rows, the sill above them and the
-				// code letters aft of them in the picture, some 20 px a mark on the Mac's screen.
-				Want = AceMarks + AceOut * 8.0 * U + FVector::UpVector * 1.0 * U - CloseAhead * 1.0 * U;
+				// The ace's close picture (the art director, 18:31Z 22 November: "one close frame"): 8 m off his record
+				// (his name and first row of marks, or a German's name and rudder bars), square to it, two metres above
+				// and a metre behind, looking at it: some 20 px a mark on the Mac's screen. (A little above, as the camera
+				// rules frame him: the modeller's check, 19:45Z, found a mid-set wing (the Wildcat's) or a resting
+				// propeller (the Night Fighter's) hides a few slots only from dead level.)
+				Want = AceMarks + AceOut * 8.0 * U + FVector::UpVector * 2.0 * U - CloseAhead * 1.0 * U;
 				Look = AceMarks;
 			}
 			else if (Rider->bFighter)

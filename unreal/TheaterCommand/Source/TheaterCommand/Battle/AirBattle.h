@@ -48,6 +48,26 @@ struct FAirTallySide
 	double Radius = 0.0;
 	bool bLight = false;
 	FString Habit;  // the model's tally.habit: victims, bombs, own, or bars (a bar a kill on the rudder)
+	int32 PerRow = 10;  // the model's kills.per_row (the Spitfire's nine: her number covers a tenth column)
+	/** Engine units for one of the file's metres (the shape's own scale: a stand-in sized to the battle's span). */
+	double Scale = 100.0;
+	/** His name's line (the file's tally.name, battle-models/air-next/ACES.md): points on the middle of the capitals'
+	 * height from its front to its back, each with the way out of her skin there, in the shape's frame; how far each is
+	 * aft of the front, in the file's metres; the capitals' height wanted and the least it may be set at, and the
+	 * line's length, in the file's metres; and the paint under its middle. Empty where the file has none. */
+	TArray<FVector> Line;
+	TArray<FVector> LineOut;
+	TArray<double> LineAft;
+	double Cap = 0.05;
+	double CapMin = 0.035;
+	double Long = 0.0;
+	FColor NameSkin = FColor(96, 96, 96, 255);
+	/** The rudder's bars (the file's tally.rudder: Germany's habit, a white bar a kill, first from the front), in the
+	 * shape's frame, with the paint under each; half a bar's height in engine units. */
+	TArray<FVector> Bars;
+	TArray<FVector> BarsOut;
+	TArray<FColor> BarsSkin;
+	double BarRadius = 0.0;
 };
 
 /**
@@ -193,6 +213,9 @@ private:
 		 * it was looked at, painted or not. */
 		TWeakObjectPtr<UProceduralMeshComponent> Tally;
 		bool bTallyTried = false;
+		/** How big each part of it is, in metres, for its strength on the screen: section 0 a kill mark across, 1 his
+		 * name's capitals, 2 a rudder bar's height (0 where none is painted). */
+		double TallySize[3] = { 0.0, 0.0, 0.0 };
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/**
@@ -282,9 +305,15 @@ private:
 	bool TallyReady();
 	void MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::Group& Ace, const FString& Nation);
 	const FAirTallySide* TallyOfShape(const FString& Shape);
-	/** Where an ace's first row of marks is (the middle of its slots, in the world) and the way they face; false when his
-	 * aircraft has no kill slots or no mesh. */
+	/** Where an ace's record is (the middle of his name and his first row of marks, or of his name and his rudder's
+	 * bars, in the world) and the way it faces; false when his aircraft has none of them or no mesh. */
 	bool AceMarksAt(int32 Key, FVector& At, FVector& Out);
+	/** His name's letters (Content/Data/Tally/name-letters, Tools/name_letters.py) and the German pilots' bars, drawn
+	 * with M_TallyMark as his marks are, each part its own ink (its Tin); read once. */
+	bool LettersReady();
+	bool bLettersTried = false;
+	UPROPERTY()
+	TObjectPtr<UTexture2D> NameSheet;
 	static constexpr double TallyNearM = 250.0;
 	/** Each ace's group, and its lead's key (the lowest seen). */
 	TMap<int32, int32> AceLead;
