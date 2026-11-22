@@ -16,6 +16,10 @@ namespace ShipLookParts
 	constexpr bool HasCookOff = requires(TKit* K, const FVector& A, const FVector& U, float C, int32 P, float O, float J) { K->CookOff(A, U, C, P, O, J); };
 	template <typename TKit>
 	constexpr bool HasBurnOut = requires(TKit* K, const FVector& A, float C, float S, int32 I) { K->Burn(A, C, S, I); K->BurnOut(I, C); };
+	// (the effects kit's 08a18f21, cleared 22 November 11:31Z: a fire on anything afloat burns as a ship's fire, never as
+	// a burning tank's, however small, low or still; every fire these looks light is on a ship)
+	template <typename TKit>
+	constexpr bool HasShipFire = requires(TKit* K, const FVector& A, float C, float S, int32 I) { K->Burn(A, C, S, I, true); };
 	template <typename TKit>
 	constexpr bool HasGlance = requires(TKit* K, const FVector& A, const FVector& I, const FVector& N, float Mm, const FString& G) { K->Glance(A, I, N, Mm, G); };
 	// (78f6edf, 21 November: a fire, a leak and a cook-off ride with a ship under way)
@@ -121,7 +125,14 @@ namespace ShipLookParts
 		{
 			if (Kit)
 			{
-				Kit->Burn(At, Across, Seconds, Id);
+				if constexpr (HasShipFire<TKit>)
+				{
+					Kit->Burn(At, Across, Seconds, Id, true);
+				}
+				else
+				{
+					Kit->Burn(At, Across, Seconds, Id);
+				}
 				return true;
 			}
 		}
@@ -225,9 +236,9 @@ bool FShipLooks::Begin(uint64 Seed)
 	Picker = MakeUnique<Fates::Director>(*Table, Seed);
 	UE_LOG(LogTheater, Log, TEXT("Ship looks: %d looks read."), static_cast<int32>(Table->Ways().size()));
 	auto Has = [](bool bHas) { return bHas ? TEXT("yes") : TEXT("no"); };
-	UE_LOG(LogTheater, Log, TEXT("Ship looks: the effects kit has steam %s, cook-off %s, a fire beaten out %s, a glancing shot %s; riding a ship under way: fires %s, steam %s, cook-offs %s."),
-		Has(ShipLookParts::HasSteam<FBattleEffects>), Has(ShipLookParts::HasCookOff<FBattleEffects>), Has(ShipLookParts::HasBurnOut<FBattleEffects>), Has(ShipLookParts::HasGlance<FBattleEffects>),
-		Has(ShipLookParts::HasBurnMove<FBattleEffects>), Has(ShipLookParts::HasSteamMove<FBattleEffects>), Has(ShipLookParts::HasCookOffMove<FBattleEffects>));
+	UE_LOG(LogTheater, Log, TEXT("Ship looks: the effects kit has steam %s, cook-off %s, a fire beaten out %s, a ship's own fire %s, a glancing shot %s; riding a ship under way: fires %s, steam %s, cook-offs %s."),
+		Has(ShipLookParts::HasSteam<FBattleEffects>), Has(ShipLookParts::HasCookOff<FBattleEffects>), Has(ShipLookParts::HasBurnOut<FBattleEffects>), Has(ShipLookParts::HasShipFire<FBattleEffects>),
+		Has(ShipLookParts::HasGlance<FBattleEffects>), Has(ShipLookParts::HasBurnMove<FBattleEffects>), Has(ShipLookParts::HasSteamMove<FBattleEffects>), Has(ShipLookParts::HasCookOffMove<FBattleEffects>));
 	return true;
 }
 
