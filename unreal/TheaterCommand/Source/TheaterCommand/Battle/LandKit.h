@@ -570,6 +570,27 @@ namespace LandKit
 		std::string Side, Nation, Kind, Model, Cal;
 	};
 
+	/**
+	 * How a vehicle pierced on one face ends, as measured (Content/Data/Battle/performance-land.json, the modeller's:
+	 * vehicles[name].fire_when_pierced and explodes_of_fires). Brian, 22 November: a rear hit on a Tiger or a Panther
+	 * raises the chance she blows up; the scene's kills read it.
+	 */
+	struct FireOdds
+	{
+		double Front = 0.0, Side = 0.0, Rear = 0.0; // the chance she burns, pierced on that face
+		double Explodes = 0.0;                       // of those fires, the share that set off her ammunition at once
+	};
+
+	/** Every vehicle's fire odds from performance-land.json's text, by its model name; false (and why) on a fault. */
+	bool ReadFireOdds(const std::string& Text, std::map<std::string, FireOdds>& Out, std::string& OutError);
+
+	/**
+	 * Her end by the face struck ("front", "side", "rear", "top"; empty: the three faces' mean): "blow" (her ammunition
+	 * goes up: the fates' turret off), "burn" (she brews up or burns) or "still" (knocked out, no fire), for draws U1
+	 * (fire) and U2 (blast), each 0..1.
+	 */
+	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2);
+
 	class Battle
 	{
 	public:
@@ -599,6 +620,12 @@ namespace LandKit
 		 * Set before Load. */
 		double Life = 1.0;
 		int Year = 1944, Month = 7;
+		/** The vehicles' fire odds by model name (ReadFireOdds): a kill's end is drawn by them and the face struck, and
+		 * the fates table shows that end. Empty: the table's own weights alone, as before. Set before Load. */
+		std::map<std::string, FireOdds> Fires;
+		/** How each kill ended, after Load: the track's index, the face struck and the end drawn ("" where no odds). */
+		struct KillEnd { int Track = -1; std::string Model, Face, End, Fate; };
+		std::vector<KillEnd> Ends;
 		/** What has happened since it was last emptied: the caller plays it and clears it. */
 		std::vector<Event> Events;
 

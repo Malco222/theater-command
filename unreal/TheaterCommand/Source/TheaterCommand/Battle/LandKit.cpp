@@ -3955,9 +3955,54 @@ namespace LandKit
 		return true;
 	}
 
+	bool ReadFireOdds(const std::string& Text, std::map<std::string, FireOdds>& Out, std::string& OutError)
+	{
+		Json Doc;
+		if (!Doc.Parse(Text, OutError))
+		{
+			OutError = "the performance file: " + OutError;
+			return false;
+		}
+		const Json::Value List = Doc.Root()["vehicles"];
+		if (!List.IsObject())
+		{
+			OutError = "the performance file has no vehicles";
+			return false;
+		}
+		for (size_t I = 0; I < List.Count(); ++I)
+		{
+			const Json::Value V = List.At(I);
+			const Json::Value F = V["fire_when_pierced"];
+			if (!F.IsObject())
+			{
+				continue;
+			}
+			FireOdds O;
+			O.Front = Clamp(F["front"].Num(), 0.0, 1.0);
+			O.Side = Clamp(F["side"].Num(), 0.0, 1.0);
+			O.Rear = Clamp(F["rear"].Num(), 0.0, 1.0);
+			O.Explodes = Clamp(V["explodes_of_fires"].Num(), 0.0, 1.0);
+			Out[List.Name(I)] = O;
+		}
+		return true;
+	}
+
+	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2)
+	{
+		// (a plunging shot through her roof or her engine deck: as through her side)
+		const double Fire = Aspect == "front" ? O.Front : Aspect == "rear" ? O.Rear : Aspect == "side" || Aspect == "top" ? O.Side
+			: (O.Front + O.Side + O.Rear) / 3.0;
+		if (U1 >= Fire)
+		{
+			return "still";
+		}
+		return U2 < O.Explodes ? "blow" : "burn";
+	}
+
 	bool Battle::Load(const std::string& RecordingText, const ReadFn& Read, const GroundFn& InGround,
 		const Fates::Table* FatesTable, uint64_t Seed, std::string& OutError)
 	{
+		Ends.clear();
 		All.clear();
 		Looks.clear();
 		Events.clear();
@@ -4063,6 +4108,15 @@ namespace LandKit
 			Bl.bMoving = SpeedBefore(W, W.Died) > 0.5;
 			Bl.Unit = W.Block;
 			Bl.Model = W.K;
+			// Her end by her own odds and the face struck (a tank or a self-propelled gun: the fates' tank ways name
+			// theirs, blow, burn or still); the table then picks how that end looks.
+			const Block* Of = BlockOf(W.Block);
+			const auto Odds = Fires.find(Of ? Of->Model : M.Name); // (by the model's file name, as performance-land.json keys it)
+			if (Odds != Fires.end() && (Bl.Family.compare(0, 5, "tank_") == 0 || Bl.Family == "spgun"))
+			{
+				const uint64_t H = Mix(Seed ^ 0xF17Eull, static_cast<uint64_t>(W.Block) * 977u + static_cast<uint64_t>(W.K), static_cast<uint64_t>(W.J) + 1u);
+				Bl.How = FireEnd(Odds->second, Bl.Aspect, Unit01(H), Unit01(Mix(H, 0xB10Bull)));
+			}
 			return Bl;
 		};
 		if (FatesTable)
@@ -4070,9 +4124,25 @@ namespace LandKit
 			Fates::Director Picker(*FatesTable, Seed);
 			for (size_t I : Order)
 			{
-				const Fates::Fate F = Picker.Choose(BlowOf(I));
+				Fates::Blow Bl = BlowOf(I);
+				const std::string Drawn = Bl.How;
+				Fates::Fate F = Picker.Choose(Bl);
+				// (a self-propelled gun has no turret to throw: her ammunition going up burns her out instead; a table
+				// with no ways for the end drawn shows any)
+				if (F.Key.empty() && Bl.How == "blow")
+				{
+					Bl.How = "burn";
+					F = Picker.Choose(Bl);
+				}
+				if (F.Key.empty() && !Bl.How.empty())
+				{
+					Bl.How.clear();
+					F = Picker.Choose(Bl);
+				}
 				FateOf[I] = F.Key;
 				Brew[I] = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
+				const Block* Of = BlockOf(Tracks[I].Block);
+				Ends.push_back({ static_cast<int>(I), Of ? Of->Model : Looks[KeyOf[I]].Name, Bl.Aspect, Drawn, F.Key });
 			}
 		}
 		else

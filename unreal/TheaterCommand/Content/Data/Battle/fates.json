@@ -8,7 +8,7 @@
     "aspects": "Where a blow on land struck from, when the scene cannot tell: drawn by these odds (most hits on tanks were on the front, as tanks fought facing the enemy).",
     "sizes": "The effects kit's size row for each weapon (battle-fx.json sizes): the dial $size.",
     "glances": "The kit's Glance size for a shot that glances off armour: the dial $glance.",
-    "ways": "Each way: key; group (the memory's: ship, tank, soft, gun, man, men); words (plain, for logs and the sheets); domain; families it can show on; on: the numbers' results it can show (worn, lost, out, waver, rout, rally); how: where the numbers named the end in words, only blows with that how; weight; final (the model is lost); once (never twice on one model); by: a weight for each value of weapon, family, aspect, ground, fuel or stowage ('*' any other; a value not listed and no '*' rules the way out); if / unless: a weight when the flag harbour, moving, cover or night is set / not set; lean: the weight at nerve (or hurt) 0 and at 1, straight between; min_hurt, max_hurt, min_nerve, max_nerve, from_year, to_year: hard limits; dials; beats.",
+    "ways": "Each way: key; group (the memory's: ship, tank, soft, gun, man, men); words (plain, for logs and the sheets); domain; families it can show on; on: the numbers' results it can show (worn, lost, out, waver, rout, rally); how: where the numbers named the end in words, only blows with that how; weight; final (the model is lost); once (never twice on one model); by: a weight for each value of weapon, family, aspect, ground, fuel or stowage ('*' any other; a value not listed and no '*' rules the way out); if / unless: a weight when the flag harbour, moving, cover or night is set / not set; lean: the weight at nerve (or hurt) 0 and at 1, straight between; min_hurt, max_hurt, min_nerve, max_nerve, from_year, to_year: hard limits; dials; beats. A tank's lost ways name their end in how: blow (her ammunition goes up), burn or still (knocked out, no fire); the ground scene draws it from the vehicle's fire_when_pierced by the face struck and explodes_of_fires (Content/Data/Battle/performance-land.json, Brian 22 November: a rear hit on a Tiger or Panther blows her up more often).",
     "dials": "Drawn once for the look, in the order written; a step names one with '$name' ('$-side' is its negative). A number; [low, high] drawn evenly; a list, one drawn; { range, lean: nerve- | nerve+ | hurt- | hurt+ } half luck, half the crew's nerve or the hull's hurt (nerve- puts a steadier crew toward the low end: a shorter fire); { pick, w } drawn by weights; { from: dial, map: { value: spec } } drawn by the spec the earlier dial's value names; sticky: true keeps the unit's first value (a ship floods on the side she was struck). Built in: $aspect, $weapon, $family, $size, $glance. A range shies a fifth of its width from last time's value; a list or pick from last time's value.",
     "beats": "Each step: t (seconds after the blow), do, at (a place), kind, a, b, c, n; p (it happens only that often); times and gap (again and again, each the gap after the last). Any of them a number, a [low, high] range, a list (one drawn) or a dial.",
     "do_sea": "blast: a burst at 'at' (kind: size; a 1 = on armour or a steel deck, bright and no crater). column: a column of water beside her at 'at' (b: the side, -1 port, 1 starboard). fire: flames at 'at', a = across as a share of her beam, b = seconds, c = 1 if her crew beat it out (the kit's BurnOut) else it dies on its own; kind side: in her side under the deck's edge, on her hit side (a carrier's hangar openings). smoke: kind black, grey or white, a = across (share of beam), b = seconds. steam: a = the vent's width in metres, b = seconds, kind up or side. cookoff: a = across (m), n = pops, b = over seconds, c = the jet's seconds (0: none). glance: kind = the kit's glance size. spark: sparks of a hit on steel. silence: the guns at 'at' fall silent (a scene that has turrets stops their fire). list: a = degrees to the side b over c seconds. right: counter-flooding, she keeps a share a of her list over c seconds. trim: a = degrees, plus down by the bow, over c seconds. settle: a = metres down, over c seconds.",
@@ -366,7 +366,7 @@
     },
 
     {
-      "key": "tank.brew_up", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.brew_up", "group": "tank", "domain": "land", "on": ["lost"], "how": "burn", "final": true,
       "words": "Brewed up: the shot goes in, smoke curls from the hatches, then flame; one or two of the crew get out before the ammunition goes, popping and roaring from the hatches, and she burns for the rest of the battle.",
       "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 1,
       "by": {
@@ -389,7 +389,7 @@
       ]
     },
     {
-      "key": "tank.knocked_out_bail", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.knocked_out_bail", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
       "words": "Knocked out, no fire: the shot goes in, hatches fly open and most of the crew bail out and run or crawl back; the tank stands silent with a wisp of smoke.",
       "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 1.2,
       "by": {
@@ -408,7 +408,7 @@
       ]
     },
     {
-      "key": "tank.knocked_out_later_burns", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.knocked_out_later_burns", "group": "tank", "domain": "land", "on": ["lost"], "how": "burn", "final": true,
       "words": "Knocked out, and the crew get clear; a minute later the smoke thickens and she catches fire, then burns on.",
       "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.7,
       "by": {
@@ -430,7 +430,7 @@
       ]
     },
     {
-      "key": "tank.turret_off", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.turret_off", "group": "tank", "domain": "land", "on": ["lost"], "how": "blow", "final": true,
       "words": "The ammunition goes up all at once: a huge blast throws the turret into the air, it lands upside down beside the hull, and the hull burns.",
       "families": ["tank_light", "tank_medium", "tank_heavy", "armoured_car"], "weight": 0.25,
       "by": {
@@ -448,7 +448,7 @@
       ]
     },
     {
-      "key": "tank.immobilised_abandoned", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.immobilised_abandoned", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
       "words": "Hit in the tracks: she lurches, slews round and stops with a track run off; the crew stay a moment, then bail out and leave her.",
       "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.8,
       "by": {
@@ -467,7 +467,7 @@
       ]
     },
     {
-      "key": "tank.crew_killed", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.crew_killed", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
       "words": "The shot goes in and the crew are killed or wounded: she rolls to a stop, her gun drooping, and no one gets out.",
       "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.35,
       "by": {
@@ -482,7 +482,7 @@
       ]
     },
     {
-      "key": "tank.engine_fire", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.engine_fire", "group": "tank", "domain": "land", "on": ["lost"], "how": "burn", "final": true,
       "words": "Hit in the engine: fire on the engine deck, the crew bail out, and the fire slowly takes the whole tank.",
       "families": ["tank_light", "tank_medium", "tank_heavy", "spgun", "armoured_car"], "weight": 0.8,
       "by": {
@@ -501,7 +501,7 @@
       ]
     },
     {
-      "key": "tank.overturned", "group": "tank", "domain": "land", "on": ["lost"], "final": true,
+      "key": "tank.overturned", "group": "tank", "domain": "land", "on": ["lost"], "how": "still", "final": true,
       "words": "A bomb or a heavy shell bursts beside her and throws her onto her side.",
       "families": ["tank_light", "armoured_car", "tank_medium", "spgun"], "weight": 0.12,
       "by": { "family": { "tank_light": 2, "armoured_car": 2, "tank_medium": 0.5, "spgun": 0.7 }, "weapon": { "bomb": 3, "heavy": 1.5, "howitzer": 0.3 } },
