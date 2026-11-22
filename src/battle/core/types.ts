@@ -73,7 +73,7 @@ export interface ForceTicket {
   first?: number;
   /** Its divisions as the campaign's army tray shows them (land): the name and short name, strength, experience, men. */
   divisions?: { name: string; short: string; str: number; xp: number; men: number }[];
-  /** Its share of its side's power in the reckoning, 0..1. The shares of a side add up to 1. */
+  /** Its share of its side's power in the reckoning, 0..1. The shares of a side, its joiners' too, add up to 1. */
   share: number;
   /** The battles it has come through before this one, staff-settled or fought (its record): from the third, a tank unit's crews name their tanks (b477). */
   battles?: number;
@@ -91,6 +91,26 @@ export interface ForceTicket {
   wear?: number;
   /** Land, looks only: its share of men who joined it this month, in new kit (Corps.fresh). Absent, none. */
   fresh?: number;
+  /**
+   * Neighbours join the fight (release 2; the design director's ruling of 22 November 03:15Z): set only on a corps that
+   * comes up from a province next door, which its side ticket carries in 'joiners', never in 'forces'. As the battle
+   * report keeps it (ReportUnit joined, from, arrive and corps): joined is the share of the battle it is there for, 0 to
+   * 1, from its march weeks (the campaign's joinShare). The field has it reach its side's line at (1 - joined) of the
+   * battle's own clock, never a fixed minute or a draw, and draws it arriving; its 'share' is what the card priced it at (its
+   * weight for the part of the battle it is there for, over the side's), so the field moves when its harm lands, never
+   * how much (b415, b418).
+   */
+  joined?: number;
+  /** The province it comes from (the campaign's region id): words and the result only. */
+  from?: number;
+  /** The card's word for when it comes up: words only. */
+  arrive?: 'early' | 'midway' | 'late';
+  /**
+   * The way from the battle to the province it comes from, as the field lies (radians clockwise from the field's north,
+   * which is the attack's heading on the campaign map: ticket.ts joinToward). It picks the edge the corps comes on by,
+   * never the enemy's own back edge. Absent: its own side's back edge.
+   */
+  toward?: number;
 }
 
 export interface SideTicket {
@@ -120,6 +140,11 @@ export interface SideTicket {
    * 'bold', 'methodical' or 'mass' (data/battle/land-styles.json). The campaign never sets it. Never the player's.
    */
   style?: string;
+  /**
+   * Land, neighbours join the fight (release 2): the corps coming up from next door, earliest first, as the card priced
+   * them (ForceTicket.joined, from, arrive, toward). Left out or empty: the field is exactly as it was.
+   */
+  joiners?: ForceTicket[];
 }
 
 /**
@@ -436,8 +461,12 @@ export interface FieldResult {
   level: VictoryLevel;
   /** What happened, in a few plain lines. */
   lines: string[];
-  /** Each campaign force's share of its strength lost on the field, for a domain that pays some of the bill exactly. */
-  forces: { corps: number; side: Side; lost: number }[];
+  /**
+   * Each campaign force's share of its strength lost on the field, for a domain that pays some of the bill exactly. A
+   * corps that came up from next door (land, ForceTicket.joined) also carries 'arrived': the battle second it came on,
+   * or null where the day ended before it did (its loss then 0).
+   */
+  forces: { corps: number; side: Side; lost: number; arrived?: number | null }[];
   /** The side whose army broke on the field (routed, or driven from it); absent where it withdrew, held or was handed over. */
   broke?: Side;
   /**
@@ -496,6 +525,24 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * side with no style.
    */
   plan?: Partial<Record<Side, { style: string; phase?: 'guns' | 'assault' | 'hook' | 'shift'; main?: number[]; startY?: number | null; reserve?: number[] }>>;
+  /**
+   * Land, neighbours join the fight (release 2): the blocks of corps from next door still on the march, for the 3D game
+   * to draw them coming up: each block, its corps, kind, the battle second it comes on ('at'), the edge it comes on by
+   * and where. Under fog only those of the player's own side and those his staff has identified. Left out where none
+   * is coming.
+   */
+  coming?: { id: number; side: Side; corps: number; kind: string; at: number; edge: 'south' | 'north' | 'west' | 'east'; x: number; y: number; arrive?: 'early' | 'midway' | 'late' }[];
+  /**
+   * Land, the rider ahead (release 2; Brian, 22 November 12:48Z; LandBattle.rider on): the despatch rider each corps
+   * coming up from next door on the player's own side sends ahead, never the enemy's. He rides from his corps' edge at
+   * the first step to the middle of his side, at the field's fastest pace, and stands there until his corps comes up;
+   * one whose corps would beat him comes on with it and is never listed. Each: where he is (x, y, face; speed his pace
+   * while he rides, 0 standing), the battle seconds he gets there ('there') and his corps comes up ('comes'), the edge
+   * it comes by, the second it reaches its line ('line') only while its staff fights it, the corps (name, kind,
+   * divisions, men and strength as its blocks will walk on) and the words a click on him shows ('says'). Looks and words
+   * only: nothing in the fight reads him. Left out where none rides.
+   */
+  riders?: { corps: number; side: Side; x: number; y: number; face: number; speed: number; there: number; comes: number; edge: 'south' | 'north' | 'west' | 'east'; line?: number; name: string; kind: string; divs: string[]; men: number; str: number; says: string }[];
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

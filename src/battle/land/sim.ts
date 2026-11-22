@@ -9,16 +9,16 @@ import { ONE_SHOTS } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
-import { DT, type AirFlown, type AirOnCall, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Flight, type Side, type Zone } from '../core/types';
+import { DT, type AirFlown, type AirOnCall, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Flight, type ForceTicket, type Side, type Zone } from '../core/types';
 import { thinkFor, type AttackPlan } from './ai';
 import { STYLE, styleFor, type Style } from './styles';
-import { BEND, buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
+import { BEND, buildField, coverAt, diggable, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, gunsOf, reachOf, type Kind, type Motion } from './rules';
 import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
 import { turnToDate } from '../../core/ticket';
-import { armyNames, bendAt, deploy, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
+import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -95,6 +95,30 @@ interface Leg { flight: Flight; owed: Map<number, number>; nerve: Map<number, nu
 const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
+/** A block's weight as its army's bar and break count it: the card's part for a corps come up from next door, else its power0. */
+const weightOf = (u: LandUnit): number => u.priced ?? u.power0;
+
+/** A field edge: the attack's own is the south, the defence's the north. */
+export type Edge = 'south' | 'north' | 'west' | 'east';
+/** Inward from each edge (x, y) and the facing that looks into the field. */
+const INWARD: Record<Edge, [number, number, number]> = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
+
+/**
+ * The edge a corps from next door comes on by (neighbours join the fight, release 2): the one facing the province it
+ * comes from ('toward', the field's frame), never the enemy's own back edge, which folds to the nearer flank (west
+ * where level, as ticket.ts dryEnd). Its own back edge where 'toward' is not given. On a field whose river bends away
+ * from the attack's dry corps (b464(5)), a corps of the attack keeps to its own side of the river ('own': the dry
+ * flank for one that comes on over dry ground, the wet for one that crosses): never the other flank, but its own edge
+ * in its own lanes.
+ */
+export function joinEdge(side: Side, toward: number | undefined, own?: 'west' | 'east'): Edge {
+  if (toward === undefined || !Number.isFinite(toward)) return side === 'att' ? 'south' : 'north';
+  const sn = Math.sin(toward), cs = Math.cos(toward);
+  let e: Edge = Math.abs(cs) >= Math.abs(sn) ? (cs > 0 ? 'north' : 'south') : sn > 0 ? 'east' : 'west';
+  if (e === (side === 'att' ? 'north' : 'south')) e = sn > 1e-9 ? 'east' : 'west';
+  if (own && (e === 'west' || e === 'east') && e !== own) e = 'south';
+  return e;
+}
 /** A number from 0 to under 1 fixed by a whole number: where a wreck lies, never drawn from the battle's dice. */
 const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 
@@ -217,12 +241,38 @@ export class LandBattle implements BattleSim<LandUnit> {
    * it on; off, nothing here is read.
    */
   measured = false;
+  /**
+   * Hold until relieved (release 2; Brian, 22 November 12:48Z; "Hold until relieved" below): a block on foot may be told
+   * to dig in and wait for a corps coming up from next door. Off unless whoever opens the field turns it on (the 2D
+   * page's ?relief, the bridge's { relief: true }); off, nothing below is read.
+   */
+  relief = false;
   /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
   readonly flanking = new Map<number, { target: number; at: [number, number]; since: number }>();
   /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
   private models = new Map<number, string | null>();
   /** The player's orders on the air (radio): each block's, with the battle time it lands. */
   private pending: { at: number; id: number; go: () => void }[] = [];
+  /**
+   * Neighbours join the fight (release 2): the blocks of corps coming up from next door, not yet on the field, earliest
+   * first: each with its corps' ticket, the battle second it comes on, the edge and the place there. Empty where none
+   * comes, and then nothing below reads it.
+   */
+  private coming: { u: LandUnit; f: ForceTicket; at: number; edge: Edge; x: number; y: number; lanes: [number, number] | null }[] = [];
+  /** The battle second each joining corps came on. */
+  private joinedAt = new Map<number, number>();
+  /** The corps that come up from next door. */
+  private joinCorps = new Set<number>();
+  /**
+   * The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+   * strength and arrival time"; the design director, 13:43Z): off unless whoever opens the field turns it on (the 2D
+   * page's ?rider, the bridge's { rider: true }); off, nothing reads him. Looks and words only: the fight never does.
+   */
+  rider = false;
+  /** Each joining corps' rider, worked out with its time (comeOn): where he sets out and stands, and when. */
+  private riders: { corps: number; side: Side; f: ForceTicket; from: [number, number]; mid: [number, number]; to: [number, number]; there: number; comes: number; edge: Edge }[] = [];
+  /** The joining corps a block has waited for this battle (hold until relieved): each relieves one block a battle. */
+  private waitedFor = new Set<number>();
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -256,9 +306,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
     const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
     this.power = { att: A, def: D };
-    const att = makeBlocks('att', ticket.att, A, 1);
-    const def = makeBlocks('def', ticket.def, D, att.length + 1);
+    const att = makeBlocks('att', ticket.att, A, 1, undefined, ticket.turn);
+    const def = makeBlocks('def', ticket.def, D, att.length + 1, undefined, ticket.turn);
     this.units = [...att, ...def];
+    // Corps from next door (release 2): built with the rest, numbered after both armies, held off the field (comeOn).
+    const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
     this.covered = coveredTanks(ticket, this.units);
     const works = ticket.place.fort >= 1 || def.some((u) => u.kind === 'fort');
     // A support team (release 2) is no block of the line: a side's count is its divisions' and regiments'.
@@ -269,6 +321,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     // marks are.
     // A mortar team throws mortar bombs; a machine-gun team throws none (release 2).
     for (const u of this.units) { const c = u.team ? (u.team === 'mor' ? 'mortar' : undefined) : calFor(u.kind, u.nat, ticket.turn); if (c) u.cal = c; }
+    for (const u of joining) {
+      const c = crewFor(u, ticket[u.side].joiners?.find((f) => f.corps === u.corps)?.battles ?? 0);
+      if (c) u.crew = c;
+      const k = u.team ? (u.team === 'mor' ? 'mortar' : undefined) : calFor(u.kind, u.nat, ticket.turn);
+      if (k) u.cal = k;
+    }
     // Where some of the attack's corps cross the river and some come on over dry ground, the river lies only before
     // those that cross: it bends away from the lanes of the others, at their end of the field (the design director,
     // b464(5)). Where all cross, or there is no river, the field is as it always was.
@@ -276,6 +334,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     const dry = ticket.place.dryEnd ?? 'west';
     const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf(FIELD.w, FIELD.h).att, dry), dry } : undefined;
     if (!bend) for (const u of att) delete u.dry;
+    // A joiner over dry ground: the attack's keeps it where there is a river (the river's hold is not counted against
+    // its blows; on a bend field it keeps to the dry lanes); a defence's never needs it.
+    for (const u of joining) if (u.side === 'def' || !ticket.place.river) delete u.dry;
     // Read once the bend is settled: a river with none of the attack dry is crossed by all of it, armour too (b494).
     const armour = att.filter((u) => MOTION[u.kind] === 'tracks' || MOTION[u.kind] === 'wheels'), all = armour.reduce((a, u) => a + u.power0, 0);
     this.armourWet = all > 0 ? armour.filter((u) => !u.dry).reduce((a, u) => a + u.power0, 0) / all : 0;
@@ -285,6 +346,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND.city.clock * builtShare(this.field))) };
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
+    // Corps from next door (release 2): their time is reckoned from where the armies stand as the battle opens.
+    if (joining.length) this.comeOn(joining);
     // A city's own river up the field with the whole defence drawn up on one bank of it, or a second river along the
     // defence's flank to meet one across behind it (b596): its line ends on the river.
     const St = this.field.stream, held = this.units.filter((u) => u.side === 'def');
@@ -325,10 +388,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    * And only as far as the attack's tanks and lorries had to cross with it (armourWet): an attack on foot crosses at no
    * cost the field must make up, so a river never makes an attack better than none (b494).
    */
-  private holdTake(u: LandUnit): number {
+  private holdTake(u: LandUnit, t: LandUnit): number {
     const p = this.ticket.place, H = LAND.hold;
     const streets = streetsOf(p);
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+    // (A corps come up from next door holds no works: the card prices it with none.)
+    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === undefined ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
   }
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
@@ -356,6 +420,410 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   unit(id: number): LandUnit | undefined { return this.units.find((u) => u.id === id); }
 
+  /** Every block of the battle: those on the field, then those of corps still coming up from next door (release 2). */
+  allBlocks(): LandUnit[] { return this.coming.length ? [...this.units, ...this.coming.map((c) => c.u)] : this.units; }
+
+  // ---- Neighbours join the fight (release 2) ----------------------------------------------------------------------
+  //
+  // The design director's ruling of 22 November 03:15Z: a corps next door that joins a battle is priced on the
+  // campaign card, and the field only draws it coming up. It reaches its side's line at (1 - joined) of the battle's
+  // own clock, worked out from its march weeks, never a fixed minute or a draw: it stands off the field until its own
+  // march from the edge facing the province it comes from would bring it there then, and walks on from that edge as a
+  // b407 reserve already sent, to where its side's line is struck hardest. Until then nothing on the field sees it,
+  // strikes it or is sent at it; the bar and the break count it at the card's figure.
+
+  /**
+   * Holds each joiner off the field: its time, its edge and each block's place there, side by side along the edge.
+   * Nothing here draws on the dice.
+   */
+  private comeOn(joining: LandUnit[]): void {
+    const B = this.field.bend, F = this.field, J = LAND.join;
+    for (const corps of [...new Set(joining.map((u) => u.corps))]) {
+      const us = joining.filter((u) => u.corps === corps), u0 = us[0], side = u0.side;
+      const f = this.ticket[side].joiners!.find((x) => x.corps === corps)!;
+      // On a bend field each corps of the attack keeps to its own side of the river (b464(5), standWhy): one that comes
+      // on over dry ground by the dry flank or the dry lanes of its own edge, one that crosses by the wet.
+      const own = side === 'att' && B ? (u0.dry ? B.dry : B.dry === 'west' ? 'east' : 'west') : undefined;
+      const edge = joinEdge(side, f.toward, own);
+      const lanes: [number, number] | null = own && B && edge === 'south' ? (own === 'west' ? [10, B.x - BEND.clear] : [B.x + BEND.clear, F.w - 10]) : null;
+      const [x, y] = this.edgeAt(side, edge, f.toward, u0.w, lanes);
+      const along = edge === 'south' || edge === 'north', [lo, hi] = lanes ?? [10, F.w - 10];
+      // It reaches its side's line at (1 - joined) of the battle's own day (a city's longer one too), so it comes on that
+      // much earlier by its own march from its edge to the middle of its side as the battle opens: worked out from the
+      // ground, never a draw. Come on at the edge at that time instead, a joiner of the defence was still on the march when
+      // most fights ended, and the field missed its card by up to a fifth (the field's net is a tenth, b418; measured).
+      const own0 = this.units.filter((v) => v.side === side);
+      const cx = own0.length ? own0.reduce((a, v) => a + v.x, 0) / own0.length : x, cy = own0.length ? own0.reduce((a, v) => a + v.y, 0) / own0.length : y;
+      const walk = Math.hypot(x - cx, y - cy) / Math.max(1, LAND.speed[u0.kind]);
+      const at = Math.round(Math.max(0, (1 - u0.joined!) * this.ticket.limit - walk) * 1000) / 1000;
+      // The rider ahead (release 2): a corps still off the field as the clock starts sends a rider from this same spot
+      // to the middle of its side, dry and clear of every block, at the field's fastest pace (the design director,
+      // 13:43Z: an existing number, no pace of his own). Pure reckoning, never a draw: worked out whether he is shown or not.
+      if (at > 0) {
+        this.riders.push({ corps, side, f, from: [x, y], mid: [cx, cy], to: [x, y], there: 0, comes: at, edge });
+        this.riderTo(this.riders[this.riders.length - 1]);
+      }
+      us.forEach((u, i) => {
+        const off = (i - (us.length - 1) / 2) * (u.w + J.gap);
+        const px = along ? clamp(x + off, lo + u.w / 2, Math.max(lo + u.w / 2, hi - u.w / 2)) : x, py = along ? y : clamp(y + off, 40, F.h - 40);
+        this.coming.push({ u, f, edge, x: px, y: py, lanes, at });
+      });
+      this.joinCorps.add(corps);
+    }
+    this.coming.sort((a, c) => a.at - c.at || a.u.id - c.u.id);
+  }
+
+  /** Where on its edge a joining corps comes on: across a back edge by the way it comes, at a flank its side's own depth. */
+  private edgeAt(side: Side, edge: Edge, toward: number | undefined, w: number, lanes: [number, number] | null): [number, number] {
+    const F = this.field, z = F.zones[side], J = LAND.join;
+    if (edge === 'west' || edge === 'east') return [edge === 'west' ? w / 2 + 10 : F.w - w / 2 - 10, (z[1] + z[3]) / 2];
+    const [lo, hi] = lanes ?? [z[0], z[2]];
+    const q = toward !== undefined && Number.isFinite(toward) ? toward : 0;
+    return [clamp(F.w / 2 + (F.w / 2) * Math.sin(q), lo + w / 2, Math.max(lo + w / 2, hi - w / 2)), edge === 'south' ? J.edge : F.h - J.edge];
+  }
+
+  /** The joiners whose time has come: each corps' blocks walk on together, and its coming is told. */
+  private arrive(): void {
+    const due: typeof this.coming = [];
+    while (this.coming.length && this.t >= this.coming[0].at - 1e-9) due.push(this.coming.shift()!);
+    for (const corps of [...new Set(due.map((c) => c.u.corps))]) {
+      const g = due.filter((c) => c.u.corps === corps);
+      for (const c of g) this.walkOn(c);
+      this.joinedAt.set(corps, Math.round(this.t * 10) / 10);
+      const u = g[0].u, f = g[0].f, side = u.side;
+      this.say({
+        what: 'land:joined', unit: u.id, side, x: u.x, y: u.y,
+        text: `${this.ticket[side].human ? f.name : `The ${this.ticket[side].adj} ${f.name}`} comes up from next door${f.arrive ? `, ${f.arrive === 'early' ? 'early' : f.arrive === 'midway' ? 'midway through the fight' : 'late in the day'}` : ''}.`,
+      });
+    }
+  }
+
+  /**
+   * Sets one joining block on its edge, clear of the river and of every block, and starts it in: a reserve already
+   * sent (b407; its guns stand as guns), walking its LAND.join.walk metres onto the field, its ground where it stops.
+   */
+  private walkOn(c: (typeof this.coming)[number]): void {
+    const u = c.u, J = LAND.join, [nx, ny, face] = INWARD[c.edge];
+    [u.x, u.y] = this.clearSpot(u, c.x, c.y, nx, ny, c.lanes);
+    u.face = face;
+    u.cover = groundAt(this.field, u.x, u.y);
+    if (u.kind !== 'art') u.reserve = 'sent';
+    // After every block already on the field: no block's place in the list, or its id, moves.
+    this.units.push(u);
+    this.drill?.join(u);
+    const o: LandOrder = { kind: 'move', x: u.x + nx * J.walk, y: u.y + ny * J.walk, face: u.side === 'att' ? 0 : Math.PI };
+    // Its staff's order, never the player's: it is not taken in hand, and goes by no radio.
+    this.send(u, o);
+    u.home = [o.x, o.y];
+  }
+
+  /**
+   * The first spot at or in from (x, y) where a block can stand: on ground it can stand on, out of the water, and clear
+   * of every block on the field. Tried in a fixed order (in from the edge a cell at a time, and along it either way), so
+   * the same battle always finds the same spot; where none is clear it keeps (x, y) and the march sorts it out.
+   */
+  private clearSpot(u: LandUnit, x: number, y: number, nx: number, ny: number, lanes: [number, number] | null): [number, number] {
+    const F = this.field, J = LAND.join, m = Math.max(u.w, u.d), cell = F.cell;
+    const [lo, hi] = lanes ?? [10, F.w - 10];
+    // Held inside its lanes (a bend field's own side of the river), never pushed across to the field's middle.
+    const fit = (px: number, py: number): [number, number] => [clamp(px, lo + m / 2, Math.max(lo + m / 2, hi - m / 2)), clamp(py, 40, F.h - 40)];
+    const clear = (px: number, py: number): boolean => {
+      if (this.wet(u, px, py, false) || wetUnder(F, { x: px, y: py, w: m, d: m })) return false;
+      for (const o of this.units) if (live(o) && Math.abs(o.x - px) < (o.w + m) / 2 + LAND.placeClear && Math.abs(o.y - py) < (o.d + m) / 2 + LAND.placeClear) return false;
+      return true;
+    };
+    for (let k = 0; k <= J.inward; k++) for (let j = 0; j <= 2 * J.across; j++) {
+      const a = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2);
+      const [px, py] = fit(x + nx * k * cell + ny * a * cell, y + ny * k * cell + nx * a * cell);
+      if (clear(px, py)) return [px, py];
+    }
+    return fit(x, y);
+  }
+
+  /** Where a rider rides to and stands, and when he is there: worked out as the clock is set, and again once the setup step has placed the guns. */
+  private riderTo(r: (typeof this.riders)[number]): void {
+    r.to = this.riderSpot(r.mid[0], r.mid[1]);
+    r.there = Math.round((Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) / Math.max(...Object.values(LAND.speed))) * 1000) / 1000;
+  }
+
+  /** Where a rider stands: the nearest point to (x, y), outward a half cell at a time, out of the water and off a bridge, clear of every block. */
+  private riderSpot(x: number, y: number): [number, number] {
+    const F = this.field, c = LAND.placeClear;
+    const ok = (px: number, py: number): boolean => {
+      if (px < 10 || py < 10 || px > F.w - 10 || py > F.h - 10) return false;
+      const g = groundAt(F, px, py);
+      return !inRiver(g) && g !== 'bridge' && !this.units.some((o) => live(o) && Math.abs(o.x - px) < o.w / 2 + c && Math.abs(o.y - py) < o.d / 2 + c);
+    };
+    // (Rounded first, then tested: the spot he is shown at is the one that is dry and clear.)
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    if (ok(r1(x), r1(y))) return [r1(x), r1(y)];
+    for (let r = F.cell / 2; r <= 1000; r += F.cell / 2) for (let a = 0; a < 16; a++) {
+      const px = r1(x + Math.sin((a * Math.PI) / 8) * r), py = r1(y + Math.cos((a * Math.PI) / 8) * r);
+      if (ok(px, py)) return [px, py];
+    }
+    return [r1(x), r1(y)];
+  }
+
+  /**
+   * The riders the player sees: his own side's only (a courier's news is his own army's), from the first step until his
+   * corps comes up; none whose corps would beat him there (he comes on with it), none once the day is over.
+   */
+  riderView(): Pick<BattleView, 'riders'> {
+    if (!this.rider || !this.riders.length || this.over || this.t <= 0) return {};
+    const still = new Set(this.coming.map((c) => c.u.corps));
+    const on = this.riders.filter((r) => this.ticket[r.side].human && still.has(r.corps) && r.there <= r.comes);
+    if (!on.length) return {};
+    const r3 = (v: number): number => Math.round(v * 1000) / 1000, r1 = (v: number): number => Math.round(v * 10) / 10;
+    const KIND: Record<string, string> = { inf: 'infantry', mtn: 'mountain', cav: 'cavalry', eng: 'engineer', mot: 'motorized', arm: 'armoured', art: 'artillery', fort: 'fortress' };
+    const mmss = (t: number): string => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    return {
+      riders: on.map((r) => {
+        const k = r.there > 0 ? Math.min(1, this.t / r.there) : 1;
+        const us = this.coming.filter((c) => c.u.corps === r.corps).map((c) => c.u).sort((a, b) => a.id - b.id);
+        const men = us.reduce((a, u) => a + u.men0, 0), str = men > 0 ? us.reduce((a, u) => a + u.str0 * u.men0, 0) / men : r.f.str;
+        const divs = us.map((u) => u.short), kind = KIND[r.f.kind] ?? r.f.kind;
+        const staff = this.ai[r.side], line = (1 - (us[0]?.joined ?? 1)) * this.ticket.limit;
+        const back = r.edge === (r.side === 'att' ? 'south' : 'north'), by = back ? 'from behind your line' : `on your ${r.edge} flank`;
+        const list = divs.length > 1 ? `${divs.slice(0, -1).join(', ')} and ${divs[divs.length - 1]}` : divs[0] ?? '';
+        const says = `${r.f.name}: ${divs.length} ${kind} division${divs.length === 1 ? '' : 's'} (${list}), ${Math.round(men).toLocaleString('en-GB')} men, strength ${Math.round(str * 100)}. ` +
+          `It comes up ${by} at ${mmss(r.comes)}${staff ? ` and reaches your line at about ${mmss(line)}` : ', and waits there for your orders'}.`;
+        return {
+          corps: r.corps, side: r.side, x: r1(r.from[0] + (r.to[0] - r.from[0]) * k), y: r1(r.from[1] + (r.to[1] - r.from[1]) * k),
+          face: r3(bearing(r.from[0], r.from[1], r.to[0], r.to[1])), speed: k < 1 ? Math.max(...Object.values(LAND.speed)) : 0,
+          there: r3(r.there), comes: r3(r.comes), edge: r.edge, ...(staff ? { line: r3(line) } : {}),
+          name: r.f.name, kind: r.f.kind, divs, men: Math.round(men), str: r3(str), says,
+        };
+      }),
+    };
+  }
+
+  /** The joiners still coming, as the view shows them: those of the player's side and those the player's staff knows. */
+  private comingView(): Pick<BattleView, 'coming'> {
+    if (!this.coming.length || this.over) return {};
+    const shown = this.coming.filter((c) => this.known(c.u));
+    return shown.length ? { coming: shown.map((c) => ({ id: c.u.id, side: c.u.side, corps: c.u.corps, kind: c.u.kind, at: c.at, edge: c.edge, x: c.x, y: c.y, ...(c.f.arrive ? { arrive: c.f.arrive } : {}) })) } : {};
+  }
+
+  // ---- Hold until relieved (release 2) -----------------------------------------------------------------------------
+  //
+  // Brian, 22 November 12:48Z ("Do 2 and 3"): "a unit ordered to wait for help digs in harder, but breaks faster if help
+  // never comes"; the design director's rulings of 13:43Z. A block on foot told to wait for a corps coming up from next
+  // door stands where it is, fires on what comes into its reach and never advances; its staff never orders it. While it
+  // keeps to its spot it takes the field's light cover (LAND.cover[LAND.wreck.cover], the wrecks' own figure, within
+  // LAND.dug.keep, never better than its ground gives), and what that cover spares it is kept: the field moves when harm
+  // lands, never how much (b415, b418). It lands with the block if it breaks; else, once the cover ends, it is paid out at
+  // the pace it was spared, shared by men with the blocks that relieved it, never as one blow on men whose friends have
+  // just come; whatever is left lands at the end of the fight. Help is due when the corps' nearest block could reach it
+  // at its own pace, the joiners' own reckoning (comeOn), never a draw; it is relieved once a block of a joining corps
+  // stands beside it (LAND.alone.near). Past due unrelieved, or its corps out of the fight, help never came: the men are
+  // let down, and break where a block starts to waver (LAND.nerve.waver), not at the rout's mark, until relieved. The
+  // player's own order to move, attack, line up or withdraw ends the wait without that mark: men re-ordered are not let
+  // down. Each joining corps relieves one block a battle, the player's and every staff's alike (ai.ts relieve). Nothing
+  // here draws on the dice.
+
+  /**
+   * Whether this battle has corps coming up from next door, on the field yet or not; with a side, whether that side has
+   * (a side's own help: the player is never told by it of an enemy's that his staff has not identified).
+   */
+  hasJoiners(side?: Side): boolean {
+    if (side === undefined) return this.joinCorps.size > 0;
+    return this.coming.some((c) => c.u.side === side) || this.units.some((u) => u.side === side && u.joined !== undefined);
+  }
+
+  /** A block of a joining corps that helps this one: its side's, of another corps, in the fight, not guns or a team. */
+  private helps(r: LandUnit, u: LandUnit): boolean {
+    return r.side === u.side && r.joined !== undefined && r.corps !== u.corps && fighting(r) && r.kind !== 'art';
+  }
+
+  /** Help stands beside this block: a block of a joining corps within LAND.alone.near of it, edge to edge. */
+  private relieved(u: LandUnit): boolean {
+    return this.units.some((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near);
+  }
+
+  /** This corps still has a block that is not guns coming up or in the fight: its help may yet come. */
+  private canHelp(corps: number): boolean {
+    return this.coming.some((c) => c.u.corps === corps && c.u.kind !== 'art') || this.units.some((r) => r.corps === corps && r.joined !== undefined && fighting(r) && r.kind !== 'art');
+  }
+
+  /**
+   * When help could reach this block, and whose: of its side's joining corps not yet waited for, the one whose nearest
+   * block (not guns) could be there soonest, from where it stands, or from its place on its edge at its time while it is
+   * still coming, at its own pace over open ground (comeOn's own reckoning). Null where none can come.
+   */
+  dueAt(u: LandUnit, skip?: ReadonlySet<number>): { corps: number; due: number } | null {
+    let corps = -1, due = Infinity;
+    const take = (c: number, d: number): void => { if (d < due - 1e-9 || (Math.abs(d - due) <= 1e-9 && c < corps)) { corps = c; due = d; } };
+    for (const c of this.coming) {
+      if (c.u.side !== u.side || c.u.corps === u.corps || c.u.kind === 'art' || this.waitedFor.has(c.u.corps) || skip?.has(c.u.corps)) continue;
+      take(c.u.corps, Math.max(this.t, c.at) + Math.hypot(c.x - u.x, c.y - u.y) / Math.max(1, LAND.speed[c.u.kind]));
+    }
+    for (const r of this.units) if (this.helps(r, u) && !this.waitedFor.has(r.corps) && !skip?.has(r.corps)) take(r.corps, this.t + Math.hypot(r.x - u.x, r.y - u.y) / Math.max(1, LAND.speed[r.kind]));
+    return corps < 0 ? null : { corps, due: Math.round(due * 1000) / 1000 };
+  }
+
+  /**
+   * Why this block may not wait for help now, in the player's words; null where it may (words for the UI director).
+   * 'skip': corps already spoken for by blocks before it in the same order (waitWhyAll).
+   */
+  waitWhy(u: LandUnit, skip?: ReadonlySet<number>): string | null {
+    if (!this.relief || !this.hasJoiners(u.side)) return 'No help is coming up from next door.';
+    if (!fighting(u) || u.kind === 'fort') return 'It is out of the fight.';
+    if (MOTION[u.kind] !== 'foot') return 'Only men on foot dig in to wait for help.';
+    if (u.waited) return u.waits && !u.waits.free ? 'It is waiting for help already.' : 'It has waited for help once today.';
+    if (!diggable(coverAt(this.field, u.x, u.y))) return 'There is no digging in here.';
+    if (this.relieved(u)) return 'Help is beside it already.';
+    const d = this.dueAt(u, skip);
+    if (!d) {
+      const any = this.coming.some((c) => c.u.side === u.side && c.u.corps !== u.corps && c.u.kind !== 'art') || this.units.some((r) => this.helps(r, u));
+      return any ? 'Each corps coming up relieves one block, and each is spoken for.' : 'No help is coming up from next door.';
+    }
+    if (d.due > this.ticket.limit) return 'Help could not reach it before the day is out.';
+    return null;
+  }
+
+  /**
+   * Why each of these blocks, told together and in this order, may not wait: each one that may speaks for its corps
+   * before the next is asked, as their orders will land (one block a joining corps).
+   */
+  waitWhyAll(us: LandUnit[]): (string | null)[] {
+    const claimed = new Set<number>();
+    return us.map((u) => {
+      const why = this.waitWhy(u, claimed);
+      if (why === null) claimed.add(this.dueAt(u, claimed)!.corps);
+      return why;
+    });
+  }
+
+  /** The joining corps' name as the dispatches give it. */
+  private corpsName(side: Side, corps: number): string {
+    const f = this.ticket[side].joiners?.find((x) => x.corps === corps);
+    return f ? (this.ticket[side].human ? f.name : `the ${this.ticket[side].adj} ${f.name}`) : 'help';
+  }
+
+  /** The wait order landing (by radio, the player's): where it may no longer wait, it holds as the core's hold does. */
+  private wait(u: LandUnit): void {
+    u.order = null; u.path = []; u.keepFace = null; delete u.aim; delete u.search; delete u.searchR;
+    if (this.waitWhy(u) !== null) return;
+    const d = this.dueAt(u)!;
+    u.waits = { corps: d.corps, due: d.due, at: [u.x, u.y], since: this.t };
+    u.waited = true;
+    this.waitedFor.add(d.corps);
+    if (this.ticket[u.side].human) this.say({ what: 'land:waits', unit: u.id, side: u.side, text: `${this.named(u)} digs in to wait for ${this.corpsName(u.side, d.corps)}.`, x: u.x, y: u.y });
+  }
+
+  /**
+   * Each tick, before the staffs think: a waiting block with help beside it is relieved; one whose help is overdue, or
+   * whose corps can no longer come, has waited in vain.
+   */
+  private waitOn(): void {
+    for (const u of this.units) {
+      if (!u.waits || !fighting(u)) continue;
+      if (this.relieved(u)) this.endWait(u, 'relieved');
+      else if (!u.waits.late && (this.t >= u.waits.due - 1e-9 || !this.canHelp(u.waits.corps))) this.endWait(u, 'late');
+    }
+  }
+
+  /**
+   * A wait ends, or help is late. Late, the block is still waiting: it keeps its spot, its cover and what that cover has
+   * spared it, and now carries the mark of help that never came. Relieved, its wait is over and the mark lifts. The
+   * player's own order, or giving ground at the brink (b496(1)), ends it, keeping the mark only where help was late
+   * already (men let down stay let down until relieved or broken: the design director, 13:43Z). What its cover spared
+   * lands at once if it broke, else, once the wait is over, is paid out from then at the pace it was spared (repay),
+   * shared with the blocks that relieved it.
+   */
+  private endWait(u: LandUnit, how: 'relieved' | 'late' | 'off' | 'broke' | 'gives'): void {
+    const w = u.waits;
+    if (!w) return;
+    if (how === 'late') w.late = true;
+    else if ((how === 'off' || how === 'gives') && w.late) w.free = true;
+    else delete u.waits;
+    if (how === 'broke') this.landNow(u);
+    else if (how !== 'late' && u.debt !== undefined) {
+      const by = how === 'relieved' ? this.units.filter((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near).map((r) => r.id) : [];
+      const d = u.debt, n = u.debtN ?? 0;
+      delete u.debt; delete u.debtN;
+      if (d > 0) this.repay.push({ held: u.id, by, left: d, nerve: n / d, rate: d / Math.max(DT, this.t - w.since) });
+    }
+    if (!this.ticket[u.side].human) return;
+    if (how === 'relieved') this.say({ what: 'land:relieved', unit: u.id, side: u.side, text: `${this.corpsName(u.side, w.corps)} has reached ${this.named(u)}.`, x: u.x, y: u.y });
+    if (how === 'late') this.say({ what: 'land:late', unit: u.id, side: u.side, text: `No help has reached ${this.named(u)}; its men are losing heart.`, x: u.x, y: u.y });
+  }
+
+  /**
+   * What waits' cover spared, being paid out: each held block's, at the pace it was spared, shared by men with the blocks
+   * that relieved it (the design director, 13:43Z). Empty with no waits, and then nothing reads it.
+   */
+  private repay: { held: number; by: number[]; left: number; nerve: number; rate: number }[] = [];
+
+  /** Each tick, after the blows: a tick's worth of each repayment lands. */
+  private repayNow(): void {
+    for (const p of this.repay) { const d = Math.min(p.left, p.rate * DT); p.left -= d; this.repayOn(p, d); }
+    this.repay = this.repay.filter((p) => p.left > 1e-12);
+  }
+
+  /**
+   * The blocks a repayment lands on, each with its share by the men it has now: the held block and its relievers, on the
+   * field or not (one that has left still pays its share, off its strength, as the air's dues are paid: leaving never
+   * escapes it, nor hands it to the others).
+   */
+  private repayShares(p: (typeof this.repay)[number]): [LandUnit, number][] {
+    const on = [p.held, ...p.by].map((id) => this.unit(id)).filter((x): x is LandUnit => !!x);
+    const men = on.map((x) => x.men0 * (Math.max(0, x.str) / Math.max(1e-9, x.str0))), all = men.reduce((a, m) => a + m, 0);
+    return on.map((x, i) => [x, all > 0 ? men[i] / all : 1 / on.length]);
+  }
+
+  /** Lands d of a repayment on its blocks: on the field as a blow, off it off their strength (harm). */
+  private repayOn(p: (typeof this.repay)[number], d: number): void {
+    if (d <= 0) return;
+    for (const [x, k] of this.repayShares(p)) this.harm(x, d * k, p.nerve);
+  }
+
+  /** What a wait's cover spared a block, kept or still being paid out, lands on it at once (it broke). */
+  private landNow(u: LandUnit): void {
+    const d = u.debt, n = u.debtN ?? 0;
+    delete u.debt; delete u.debtN;
+    if (d !== undefined && d > 0) this.harm(u, d, n / d);
+    for (const p of this.repay) if (p.held === u.id && p.left > 0) { const left = p.left; p.left = 0; this.harm(u, left, p.nerve); }
+    this.repay = this.repay.filter((p) => p.left > 1e-12);
+  }
+
+  /**
+   * Kept harm landing on a block: where it still stands, as a blow from whoever had struck it most (whose shells its lost
+   * men go to: looks only); off the field, off its strength alone.
+   */
+  private harm(u: LandUnit, d: number, nerve: number): void {
+    if (d <= 0) return;
+    if (!live(u)) { this.offStrength(u, d); return; }
+    const owed = u.owed ?? {};
+    let by: LandUnit | undefined;
+    for (const id of Object.keys(owed)) { const s = this.unit(Number(id)); if (s && live(s) && (!by || owed[s.id] > owed[by.id])) by = s; }
+    this.suffer(u, d, nerve, by ? [[by, d]] : [], false, true);
+  }
+
+  /** Harm off a block's strength alone, as the air's dues are paid off the field (offField). */
+  private offStrength(u: LandUnit, d: number): void {
+    u.str = Math.max(0, u.str - (d / Math.max(1e-9, u.power0)) * u.str0);
+    u.figures = u.str <= 0 ? 0 : Math.max(1, Math.ceil(u.tray * u.str));
+  }
+
+  /** The day is done: what waits' cover spared, kept or still being paid out, lands before the count. */
+  private payWaits(): void {
+    if (!this.relief) return;
+    for (const p of this.repay) { const left = p.left; p.left = 0; this.repayOn(p, left); }
+    this.repay = [];
+    for (const u of this.units) if (u.debt !== undefined) { const d = u.debt, n = u.debtN ?? 0; delete u.debt; delete u.debtN; if (d > 0) this.harm(u, d, n / d); }
+  }
+
+  /** What blocks on the field are owed, were the day settled now: the fighters on call's, and every wait's (the staff's chance). */
+  private dueNow(): Map<number, number> | undefined {
+    let due = this.airDue();
+    if (!this.relief) return due;
+    const add = (id: number, d: number): void => { due ??= new Map(); due.set(id, (due.get(id) ?? 0) + d); };
+    for (const u of this.units) if (u.debt && live(u)) add(u.id, u.debt);
+    for (const p of this.repay) for (const [x, k] of this.repayShares(p)) if (live(x)) add(x.id, p.left * k);
+    return due;
+  }
+
   /**
    * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
    * or the card identified its corps (b476(3)), once one of his has fought it or it has struck one of his in contact
@@ -379,7 +847,9 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   command(c: Command, by: Side): boolean {
     if (this.over) return false;
-    const mine = (ids: number[]): LandUnit[] => ids.map((i) => this.unit(i)).filter((u): u is LandUnit => !!u && u.side === by && fighting(u) && u.kind !== 'fort');
+    // A block waiting for help (hold until relieved, release 2) is never its staff's to order: only the player's own
+    // order calls its wait off.
+    const mine = (ids: number[]): LandUnit[] => ids.map((i) => this.unit(i)).filter((u): u is LandUnit => !!u && u.side === by && fighting(u) && u.kind !== 'fort' && !(this.staffing && u.waits && !u.waits.free));
     // Direct command (release 2): the player's own orders, not his staff's. The blocks he orders are his (perUnit), and
     // his orders go by radio once the clock runs (radio); his staff's, and the computer's, as ever.
     const player = !this.staffing && this.ticket[by].human;
@@ -463,8 +933,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
       case 'withdrawAll': {
         if (c.side !== by) return false;
-        // What the fighters on call still owe lands before the army goes (air support): pulling out never escapes it.
+        // What the fighters on call still owe lands before the army goes (air support), and what waits' cover spared
+        // (hold until relieved): pulling out never escapes either.
         this.payAir();
+        this.payWaits();
         // How near breaking it stood when it pulled out, before its blocks leave the count (b474).
         this.bar[by] = this.breaking(by);
         for (const u of this.units) if (u.side === by && fighting(u)) { u.state = 'withdrawn'; u.act = 'down'; }
@@ -501,6 +973,18 @@ export class LandBattle implements BattleSim<LandUnit> {
           this.place(u, x, y, f !== undefined && Number.isFinite(f) ? f : undefined);
           return true;
         }
+        // Hold until relieved (release 2): { do: 'land:wait', units } tells blocks on foot to dig in and wait for a corps
+        // coming up from next door (waitWhy). Gated again as it lands: where one may no longer wait, it holds.
+        if (c.do === 'land:wait') {
+          if (!this.relief) return false;
+          // Gated block by block, in order: one that may not wait (its corps spoken for by one before it) keeps its order.
+          const all = mine((c.units ?? []) as number[]), whys = this.waitWhyAll(all);
+          const us = all.filter((_, i) => whys[i] === null);
+          if (!us.length) return false;
+          hands(us);
+          for (const u of us) give(u, () => this.wait(u));
+          return true;
+        }
         // Direct command (release 2): { do: 'land:staff', units } hands blocks the player took back to his staff.
         if (c.do === 'land:staff') {
           const us = mine((c.units ?? []) as number[]).filter((u) => u.taken);
@@ -510,6 +994,8 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (c.do === 'land:begin') {
           if (by !== this.setup) return false;
           this.setup = null; this.room = null;
+          // The rider ahead: his standing spot clear of the guns just placed (looks only).
+          for (const r of this.riders) this.riderTo(r);
           return true;
         }
         // Reconnaissance by fire (the historian's check, release 2): { do: 'land:fire', units, x, y } with no target:
@@ -571,6 +1057,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   }
 
   private send(u: LandUnit, o: LandUnit['order'] & object): void {
+    // A block waiting for help given any order but hold calls its wait off: from where it stands, help never came.
+    if (u.waits && !u.waits.free) this.endWait(u, 'off');
     o.x = clamp(o.x, u.w / 2, this.field.w - u.w / 2);
     // A block falling back makes for its own edge of the field itself, where it leaves (b418: it stopped 10 m short).
     if (o.kind !== 'withdraw') o.y = clamp(o.y, 10, this.field.h - 10);
@@ -608,7 +1096,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private ways = new Map<number, Way>();
   /** By how it moves: the cells within a few of ground it can hardly cross or not at all (a river, rock, marsh). */
   private hardNear: Partial<Record<Going, Uint8Array>> = {};
-  private going(u: LandUnit): Going { return u.dry && MOTION[u.kind] === 'foot' ? 'ashore' : MOTION[u.kind]; }
+  // (A joiner over dry ground keeps off the water only where the river bends away from the dry lanes; with no bend it wades.)
+  private going(u: LandUnit): Going { return u.dry && MOTION[u.kind] === 'foot' && (u.joined === undefined || this.field.bend) ? 'ashore' : MOTION[u.kind]; }
   private ashore: Record<Ground, number> | null = null;
   private paceOf(m: Going): Record<Ground, number> { return m === 'ashore' ? (this.ashore ??= { ...LAND.pace.foot, water: 0, blown: 0 }) : LAND.pace[m]; }
   private route(u: LandUnit, x: number, y: number): [number, number][] {
@@ -779,7 +1268,27 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
   /** The squad brain, made the first time it is asked for (drill.ts). */
-  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean }): Drill { return (this.drill ??= new Drill(this, opts)); }
+  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; scale?: boolean | number }): Drill {
+    if (this.drill) return this.drill;
+    const { scale, ...rest } = opts ?? {};
+    // True: the battle's own N; a number: that N (a recording or a test that sets its own).
+    const n = scale === true ? this.scale() : typeof scale === 'number' ? scale : undefined;
+    return (this.drill = new Drill(this, n !== undefined ? { ...rest, scale: n } : rest));
+  }
+
+  /**
+   * The battle's one N (GR1, LAND.scale): every man both sides bring (their blocks' men0, as the battle opens) over the
+   * figure budget, rounded up to a multiple of the step; 1 when they fit the budget whole. Sedan, Normandy, Prokhorovka
+   * and Kursk give 20, 20, 35 and 125. Looks only. menOf: a block's men as counted (a fogged field counts what the
+   * player can know: the bridge's battleStart); a figure that is no number counts none. budget: the figures it is set
+   * for (the 2D page's dots: LAND.scale.page). The blocks of corps still coming up from next door count too.
+   */
+  scale(menOf: (u: LandUnit) => number = (u) => u.men0, budget: number = LAND.scale.budget): number {
+    // (Corps from next door count from the start: they are men the side brings, and their coming must not overflow it.)
+    const S = LAND.scale, men = this.allBlocks().reduce((s, u) => { const m = menOf(u); return s + (Number.isFinite(m) ? Math.max(0, m) : 0); }, 0);
+    const raw = men / budget;
+    return raw <= 1 ? 1 : Math.ceil(raw / S.step) * S.step;
+  }
 
   /**
    * Opens the setup step for one side (release 2): only before the first step. Its guns and support teams may then be
@@ -808,7 +1317,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   placeWhy(u: LandUnit, x: number, y: number): string | null {
     if (!this.setup || u.side !== this.setup) return 'The battle has begun.';
     if (this.placeAll ? u.kind === 'fort' || !fighting(u) : u.kind !== 'art' || !fighting(u)) return this.placeAll ? 'Fortifications stay where they are built.' : 'Only guns and support teams are placed.';
-    if (u.dug) return 'It is dug in where it stands.';
+    // (A block waiting for help is dug in where it was told to wait.)
+    if (u.dug || u.waits) return 'It is dug in where it stands.';
     return this.standWhy(u, x, y, this.room!);
   }
 
@@ -873,7 +1383,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * tank block needs a model the sheet has duels for); null hands it back to vehicleOf.
    */
   vehicleIs(id: number, model: string | null): boolean {
-    const u = this.unit(id);
+    const u = this.unit(id) ?? this.coming.find((c) => c.u.id === id)?.u;
     if (!u) return false;
     if (model === null) { this.models.delete(id); return true; }
     if (!ARMOUR.models[model] || (u.kind === 'arm' && !ARMOUR.duels[model])) return false;
@@ -1124,8 +1634,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Hidden in the woods (release 2): as the clock starts, the computer's defence lays its ambushes and every block
     // then standing in woods is hidden from the other side.
     if (this.hide && !this.hidStarted) this.hideStart();
+    // Corps from next door whose time has come walk on (release 2): seen by both staffs this same tick.
+    if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
     // The player's orders on the air that have reached their blocks (direct command, release 2).
     this.landOrders();
+    // Hold until relieved (release 2): who is relieved, and whose help is overdue, before the staffs think.
+    if (this.relief && this.joinCorps.size) this.waitOn();
     if (this.t >= this.nextThink) {
       this.nextThink = this.t + LAND.think;
       this.staffing = true;
@@ -1187,6 +1701,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it.
     if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve); }
     for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind);
+    // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
+    if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
     for (const u of this.units) if (live(u)) this.move(u);
@@ -1423,7 +1939,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     let take = ground;
     // Tanks that have left their infantry on close ground take the card's own figure for tanks alone there (item 7).
     if (t.kind === 'arm' && LAND.alone.on) take *= this.alone(t, u);
-    if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u);
+    if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
     // Upright and running in the open, at the double: struck harder (direct command, release 2).
     if (t.order?.kind === 'move' && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
@@ -1437,9 +1953,17 @@ export class LandBattle implements BattleSim<LandUnit> {
    * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
-  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false): void {
+  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false): void {
     // A hidden block struck (planes over the woods) is found (release 2); fire on cover alone finds it by its own odds.
-    if (t.hid && dmg > 0 && !blind) this.reveal(t, 'struck');
+    // Kept harm landing ('bare', hold until relieved) is no blow of anyone's that tick, and finds no one.
+    if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, 'struck');
+    // Waiting for help, dug in where it was told to wait (hold until relieved, release 2), whether help is late or not:
+    // the field's light cover, never better than its ground gives; what it spares is kept, with the nerve it would have
+    // cost, and lands when the wait ends (endWait). 'bare': that harm landing.
+    if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
+      const take = this.groundTake(t), f = Math.min(take, LAND.cover[LAND.wreck.cover]) / Math.max(1e-9, take);
+      if (f < 1) { const spared = dmg * (1 - f); t.debt = (t.debt ?? 0) + spared; t.debtN = (t.debtN ?? 0) + spared * nerveMul; dmg *= f; }
+    }
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
     const before = t.str, had = t.figures;
@@ -1535,7 +2059,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       return;
     }
     if (u.still > N.still) u.mor = Math.min(u.mor0, u.mor + N.recover * DT);
-    if (u.str <= N.shattered * u.str0 || u.mor < N.rout) { this.rout(u); return; }
+    // Help that never came (hold until relieved, release 2): it breaks where a block starts to waver, until relieved.
+    if (u.str <= N.shattered * u.str0 || u.mor < (u.waits?.late ? N.waver : N.rout)) { this.rout(u); return; }
     const was = u.state;
     u.state = u.mor < N.waver ? 'wavering' : 'steady';
     if (was === 'steady' && u.state === 'wavering') this.say({ what: 'wavering', unit: u.id, side: u.side, text: `${this.named(u)} is wavering.`, x: u.x, y: u.y });
@@ -1547,6 +2072,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.say({ what: 'routing', unit: u.id, side: u.side, text: `${this.named(u)} breaks and runs.`, x: u.x, y: u.y });
     // Friends nearby see it go.
     for (const f of this.units) if (f !== u && f.side === u.side && fighting(f) && dist(f.x, f.y, u.x, u.y) < LAND.nerve.near) f.mor = Math.max(0, f.mor - LAND.nerve.friendRuns);
+    // Waiting for help, it waits no longer (hold until relieved): what its cover spared lands with the break.
+    if (u.waits) this.endWait(u, 'broke');
+    else if (this.repay.length) this.landNow(u);
   }
 
   private move(u: LandUnit): void {
@@ -1861,14 +2389,16 @@ export class LandBattle implements BattleSim<LandUnit> {
       const k = u.state === 'routing' ? 0.3 : 1;
       // 'due': damage owed it by the enemy's fighters on call, as it would stand once paid (airDue, for the staff's chance).
       const d = due?.get(u.id), str = d === undefined ? u.str : Math.max(0, u.str - (d / Math.max(1e-9, u.power0)) * u.str0);
-      s[u.side] += (u.power0 * (str / u.str0) * k) / tot;
+      // A corps come up from next door stands at the card's part for it, less the harm it has taken.
+      s[u.side] += u.priced === undefined ? (u.power0 * (str / u.str0) * k) / tot : (Math.max(0, u.priced - u.power0 * (1 - str / u.str0)) * k) / tot;
     }
+    for (const c of this.coming) s[c.u.side] += c.u.priced! / tot;
     return s;
   }
 
   private brokenShare(s: Side): number {
     let gone = 0;
-    for (const u of this.units) if (u.side === s && (u.state === 'routing' || u.state === 'gone')) gone += u.power0;
+    for (const u of this.units) if (u.side === s && (u.state === 'routing' || u.state === 'gone')) gone += weightOf(u);
     return gone / this.power[s];
   }
 
@@ -1908,8 +2438,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const r3 = (x: number): number => Math.round(x * 1000) / 1000;
     const b = this.brink(s), w = b.worn / LAND.spent[s], r = b.running / LAND.breaks;
     const mine = this.units.filter((u) => u.side === s), nearer = r >= w && r > 0 ? 'running' : 'worn';
-    const on = mine.filter((u) => u.state !== 'withdrawn'), p0 = on.reduce((a, u) => a + u.power0, 0);
-    const steady = p0 > 0 ? on.filter((u) => u.state === 'steady').reduce((a, u) => a + u.power0, 0) / p0 : 0;
+    const on = mine.filter((u) => u.state !== 'withdrawn'), p0 = on.reduce((a, u) => a + weightOf(u), 0);
+    const steady = p0 > 0 ? on.filter((u) => u.state === 'steady').reduce((a, u) => a + weightOf(u), 0) / p0 : 0;
     return {
       side: s, bar: r3(b.bar), by: Math.max(w, r) < 1 ? 'none' : nearer, nearer,
       worn: r3(b.worn), spent: LAND.spent[s], running: r3(b.running), breaks: LAND.breaks,
@@ -1930,7 +2460,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private freshShare(s: Side): number {
     let n = 0;
-    for (const u of this.units) if (u.side === s && fighting(u) && this.fresh(u)) n += u.power0;
+    for (const u of this.units) if (u.side === s && fighting(u) && this.fresh(u)) n += weightOf(u);
+    // A corps still coming up from next door has not been in the fight: it holds its army at the brink.
+    for (const c of this.coming) if (c.u.side === s) n += c.u.priced!;
     return n / this.power[s];
   }
 
@@ -1952,6 +2484,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.gives || this.fresh(u)) continue;
       u.gives = true;
       if (u.order?.kind === 'withdraw') continue;
+      // Waiting for help, it ends its wait as it goes; men already let down stay so (hold until relieved).
+      if (u.waits) this.endWait(u, 'gives');
       this.send(u, { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h });
       u.engaged = undefined;
       // The UI director's words (16:37Z): "gives ground" read as ground lost.
@@ -2028,6 +2562,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // What the fighters on call still owe is paid where it is owed before the day's count (air support): the card counted
     // their share, and the field delivers all of it, however soon the day ends.
     this.payAir();
+    // So does what every wait's cover spared (hold until relieved, release 2).
+    this.payWaits();
     const lost = this.lostShares();
     // Men counted as the shares are, with what the runners and the fled leave behind, so the two never tell two stories.
     const men = { att: 0, def: 0 };
@@ -2045,28 +2581,28 @@ export class LandBattle implements BattleSim<LandUnit> {
       f.lost += u.power0 * (1 - u.str / u.str0); f.p += u.power0;
       forces.set(u.corps, f);
     }
+    // A corps from next door that never came up: nothing lost on the field.
+    for (const c of this.coming) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
     const loser = other(winner);
     // "about 4%", or under one in a hundred "less than 1%", never "about 0%" (the UI director's words, b358).
     // Where nothing was lost at all, it says "none" (b408).
     const pct = (p: number): string => (p < 1e-4 ? 'none' : p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
     const cap = (t: string): string => t[0].toUpperCase() + t.slice(1);
     const line = this.practice && this.ticket.def.human ? 'Your line' : this.practice ? 'Their line' : `The ${this.ticket.def.adj} line`;
+    // Broken, when and why in one line (the UI director, 18:26Z: "broke" said twice read as two events): the break's
+    // figure is its men along the line at the break; the strength line under it is the whole day's, the rout counted.
+    const told = how === 'rout' && why && why.by !== 'none';
     const lines = [
-      how === 'rout' ? this.brokeAfter(loser)
+      how === 'rout' ? this.brokeAfter(loser, told ? why : undefined)
         : how === 'withdrew' ? `${this.army(loser)} withdrew from the field.`
           : how === 'time' ? `${line} held until the day was done.`
             : how === 'destroyed' ? `${this.army(loser)} was driven from the field.`
               : this.staffLine(),
     ];
-    // Broken, why, in the past: straight after the line that says when (the UI director, 14:44Z). So after a rout the
-    // strength line is the third, and the pursuit's line comes after it. Its figure is at the break, the strength line's
-    // at the end, so the strength line opens "In all," under it (the UI director, 16:37Z).
-    const told = how === 'rout' && why && why.by !== 'none';
-    if (told) lines.push(breakLine(why, this.whose(loser), true));
     // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
     // campaign's bill for the whole day (the design director, b356). Handed over before a shot, the staff's line says so
     // already, and there is no figure to give (the UI director, after the retest).
-    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : `${told ? `In all, ${this.sideOf('att', 'attack')}` : cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
+    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : (told ? `By the day's end, counting the rout, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.` : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`));
     else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     // The battle is over: nothing marches on (the blocks' cards and the 3D models alike), and none is left standing in the
     // river: one still wading it is set on the nearer bank (b464(5)). The figures above are already counted.
@@ -2075,7 +2611,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.over = {
       winner: verdict, how, seconds: Math.round(this.t), lost, men, R: Math.round(r * 1000) / 1000,
       level: levelOf(r, men.att > men.def), lines,
-      forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round((f.lost / f.p) * 1000) / 1000 : 0 })),
+      forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round((f.lost / f.p) * 1000) / 1000 : 0, ...(this.joinCorps.has(f.corps) ? { arrived: this.joinedAt.get(f.corps) ?? null } : {}) })),
       ...(how === 'rout' || how === 'destroyed' ? { broke: loser, ...(why ? { brokeBy: why } : {}) } : {}),
       // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
       ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1000) / 1000 } } : {}),
@@ -2109,14 +2645,18 @@ export class LandBattle implements BattleSim<LandUnit> {
    * minute (b464(6)). Whole minutes made everything from half a minute to a minute and a half "a minute", the span most
    * routs at odds the card calls sure or hopeless fall in.
    */
-  private brokeAfter(s: Side): string {
+  private brokeAfter(s: Side, why?: BreakCause): string {
     const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
     // "Of fighting" on every form (the UI director, b464).
     const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
-    if (halves === 0) return `${who} broke within half a minute of fighting.`;
     const n = ['', 'a', 'two', 'three', 'four', 'five', 'six'][m] ?? `${m}`;
-    const span = m === 0 ? 'half a minute' : m === 1 ? (half ? 'a minute and a half' : 'a minute') : `${n}${half ? ' and a half' : ''} minutes`;
-    return `${who} broke after ${span} of fighting.`;
+    const span = halves === 0 ? 'within half a minute' : `after ${m === 0 ? 'half a minute' : m === 1 ? (half ? 'a minute and a half' : 'a minute') : `${n}${half ? ' and a half' : ''} minutes`}`;
+    const when = `${who} broke ${span} of fighting`;
+    // (and why, where told, in the same line: breakLine's past words after its "broke")
+    if (!why) return `${when}.`;
+    const said = breakLine(why, who, true);
+    const after = said.startsWith(`${who} broke`) ? said.slice(`${who} broke`.length) : `: ${said}`;
+    return `${when}${after.startsWith(':') ? after : `,${after}`}`;
   }
 
   /** Each side's standing power against what it brought, as the staff reckons the day now. */
@@ -2131,8 +2671,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * STAFF's question (ruling 226(5)).
    */
   chanceNow(): number {
-    // As toDice would roll it: what the fighters on call still owe paid first.
-    const k = this.ticket.reckoning, sh = this.standingShares(this.airDue());
+    // As toDice would roll it: what the fighters on call still owe paid first, and what waits' cover spared.
+    const k = this.ticket.reckoning, sh = this.standingShares(this.dueNow());
     if (k.odds * k.dice[0] >= RATIO.carry) return 1;
     if (k.odds * k.dice[1] < RATIO.carry) return 0;
     const now = k.odds * (Math.max(1e-6, sh.att) / Math.max(1e-6, sh.def));
@@ -2144,7 +2684,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * where the card did not know the defence (b453), so HAND IT TO THE STAFF gives a range and never the true chance.
    */
   chanceAt(card: number): number {
-    const k = this.ticket.reckoning, bal = this.standing(this.airDue()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+    const k = this.ticket.reckoning, bal = this.standing(this.dueNow()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
     if (card * k.dice[0] >= RATIO.carry) return 1;
     if (card * k.dice[1] < RATIO.carry) return 0;
     const now = card * r;
@@ -2158,6 +2698,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // The strikes not yet flown are the staff's to fly in the settlement: the bill counts them (the card priced them).
     for (const s of ['att', 'def'] as Side[]) if (this.airOn[s]) this.airSettled[s] = this.airLeft[s];
     this.payAir();
+    this.payWaits();
     const R = diceNow(k.odds, k.dice, this.standingShares(), this.rng.next());
     this.finish(R >= RATIO.carry ? 'att' : 'def', 'objective', R);
   }
@@ -2570,7 +3111,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView() };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView() };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

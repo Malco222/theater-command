@@ -40,5 +40,15 @@ public class TheaterCommand : ModuleRules
 		// The seal signs are read into an image and given their smaller copies by hand (FImage::CopyTo in
 		// CampaignHUD.cpp), which lives in ImageCore. Without it the game compiles but does not link on the Mac.
 		PrivateDependencyModuleNames.Add("ImageCore");
+
+		// The ground battle's hedges, trees and grass: meshes made while the game runs, for instancing.
+		PrivateDependencyModuleNames.AddRange(new string[] { "MeshDescription", "StaticMeshDescription" });
+
+		// The battles' master limiter (mix.json buses.master.limiterCeilingDb): the engine's own submix limiter. (The air
+		// battle's sound patch adds the same module: keep one line when the two meet.)
+		if (!PrivateDependencyModuleNames.Contains("AudioMixer"))
+		{
+			PrivateDependencyModuleNames.Add("AudioMixer");
+		}
 	}
 }
