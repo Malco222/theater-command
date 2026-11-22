@@ -1,5 +1,7 @@
 #include "Battle/LandField.h"
 
+#include "Battle/LandSteppe.h"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -396,7 +398,11 @@ namespace LandField
 			CpGarden,
 			CpYard,
 			CpWoods,
-			CpOther
+			CpOther,
+			// the steppe's (LandSteppe): winter rye ripe and tall, the collective farm's pasture and hay, black fallow
+			CpRye,
+			CpSteppe,
+			CpFallow
 		};
 
 		struct Lane
@@ -467,6 +473,8 @@ namespace LandField
 			int Part = 0;  // a church's: 0 nave, 1 chancel, 2 tower
 			uint64_t Key = 0;
 			double Floor = 0.0, Foot = 0.0;
+			bool bKit = false;   // the steppe's cottage: the east kit's Khata stands here (planted, not built)
+			bool bWhite = false; // the steppe's farm buildings: whitewashed, their roofs plank or straw
 		};
 
 		/** A farmstead's yard: its frame (U along the lane, V away from it) and its box in that frame. */
@@ -533,6 +541,16 @@ namespace LandField
 			int What = 0; // 0 well, 1 cart, 2 rubble stones
 		};
 		std::vector<Spot> Props;
+		/** The steppe (Fd.Steppe on): its farm fields, railway and bank; and the kit's things to plant (burnt cottages,
+		 * wattle, well sweeps, haystacks), each where MakeSites put it. */
+		std::unique_ptr<LandSteppe::Plan> Sp;
+		struct KitSpot
+		{
+			Base B = Base::Haystack;
+			V2 P;
+			double Yaw = 0.0, Scale = 1.0, ScaleZ = 1.0;
+		};
+		std::vector<KitSpot> Kits;
 
 		std::vector<HedgeLine> HedgeOut;
 		std::vector<std::vector<std::pair<double, double>>> LaneOut;
@@ -549,10 +567,12 @@ namespace LandField
 		double Outside(double X, double Y) const;
 		double Land(double X, double Y) const;
 		double Ridges(double X, double Y) const;
-		double Terrain(double X, double Y) const { return Land(X, Y) + Ridges(X, Y); }
+		double Terrain(double X, double Y) const { return Land(X, Y) + (Sp ? Sp->BankRise(X, Y) : Ridges(X, Y)); }
 		double Sunk(double X, double Y) const;
 		double Carve(double X, double Y, double Z, double* OutEdge) const;
 		double BankAt(double X, double Y) const;
+		/** The nearest lane's half width (its floor), 2.2 where none is near. */
+		double LaneHalfAt(double X, double Y) const;
 		double Top(double X, double Y, Drawn* What) const;
 		int HouseAt(double X, double Y) const;
 
@@ -583,6 +603,7 @@ namespace LandField
 		void MakeWays();
 		double WayRoom(V2 P) const;
 		void MakeSites();
+		void MakeSteppeSites();
 		bool Fits(const House& H, double Margin) const;
 		void Stamp(const House& H, double Margin);
 		void FloorOf(House& H) const;
@@ -595,6 +616,7 @@ namespace LandField
 
 		// meshes
 		Col GroundColour(double X, double Y) const;
+		Col SteppeColour(double X, double Y) const;
 		Col FarColour(double X, double Y) const;
 		void MakeTiles();
 		void MakeRing();
@@ -692,6 +714,8 @@ namespace LandField
 	/** Beyond the field: the country rolls in long swells of a few metres, as the bocage round Saint-Lo does. */
 	double Ground::Impl::Rolling(double X, double Y) const
 	{
+		// (the steppe's swells are half as high and longer, its balkas cut into them)
+		if (Sp) return MeanZ + 9.0 * Fbm(X, Y, 3400.0, 3, Seed ^ 0xB1) + 2.0 * Fbm(X, Y, 900.0, 2, Seed ^ 0xB2);
 		return MeanZ + 18.0 * Fbm(X, Y, 2600.0, 3, Seed ^ 0xB1) + 5.0 * Fbm(X, Y, 700.0, 2, Seed ^ 0xB2);
 	}
 
@@ -732,7 +756,8 @@ namespace LandField
 	/** How deep a lane runs below the fields: 0.6 to 1.4 m in the bocage, little in the village, none out past the band. */
 	double Ground::Impl::Sunk(double X, double Y) const
 	{
-		double D = 0.6 + 0.8 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1));
+		// (a steppe road is no sunken lane: a dirt track worn a hand or two into the black earth by carts and lorries)
+		double D = Sp ? 0.15 + 0.15 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1)) : 0.6 + 0.8 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1));
 		if (Fd.bTown) D *= 0.15 + 0.85 * Smooth(Fd.TownR * 0.55, Fd.TownR * 1.1, std::hypot(X - Fd.TownX, Y - Fd.TownY));
 		D *= 1.0 - Smooth(Band - 80.0, Band - 15.0, Outside(X, Y));
 		return D;
@@ -766,6 +791,25 @@ namespace LandField
 		}
 		if (OutEdge) *OutEdge = Edge;
 		return Out;
+	}
+
+	double Ground::Impl::LaneHalfAt(double X, double Y) const
+	{
+		const std::vector<uint32_t>* Near = LGrid.At(X, Y);
+		double Best = 1e18, Half = 2.2;
+		if (Near)
+			for (const uint32_t Id : *Near)
+			{
+				const LaneSeg& S = LSegs[Id];
+				double T;
+				const double D = SegDist({ X, Y }, S.A, S.B, T);
+				if (D < Best)
+				{
+					Best = D;
+					Half = Lanes[static_cast<size_t>(S.Lane)].Half;
+				}
+			}
+		return Half;
 	}
 
 	/** The highest bank's rise above the ground here (0 off the banks). */
@@ -1092,6 +1136,7 @@ namespace LandField
 			for (const V2& Q : Ln.P)
 				if (Fd.bTown && std::hypot(Q.X - Fd.TownX, Q.Y - Fd.TownY) < Fd.TownR) bVillage = true;
 			Ln.Half = bVillage ? 2.6 : 2.0 + 0.4 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index)));
+			if (Sp) Ln.Half = (bVillage ? 3.4 : 2.8) + 0.8 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))); // (wide, rutted, unfenced)
 			Lanes.push_back(std::move(Ln));
 			++Index;
 		}
@@ -1153,7 +1198,8 @@ namespace LandField
 	/** Woods out beyond the field: some one ground in six, in blocks of a few hundred metres. */
 	bool Ground::Impl::WoodsBeyond(double X, double Y) const
 	{
-		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > 0.27;
+		// (on the steppe the oak woods are few: some one ground in twenty-five, the groves in the balkas' heads)
+		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > (Sp ? 0.43 : 0.27);
 	}
 
 	void Ground::Impl::MakeRaster()
@@ -1305,6 +1351,15 @@ namespace LandField
 	 */
 	int Ground::Impl::Plot(double X, double Y, double* OutGap, uint8_t* OutKind) const
 	{
+		if (Sp)
+		{
+			// The steppe: the collective farm's great fields as the recording laid them, half a kilometre and more across,
+			// one crop to a field. The number carries the crop (its last three bits), so CropOf reads it back.
+			int Crop = LandSteppe::CropPasture;
+			const int Id = Sp->FieldAt(X, Y, Crop, OutGap);
+			if (OutKind) *OutKind = LandSteppe::IsCorn(Crop) ? static_cast<uint8_t>(RgField) : static_cast<uint8_t>(RgOpen);
+			return (Id % 120000) * 8 + Crop;
+		}
 		const V2 P = PlotFrame(X, Y);
 		auto Corner = [this](int64_t I, int64_t J) {
 			const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x9A05);
@@ -1398,6 +1453,14 @@ namespace LandField
 	int Ground::Impl::CropOf(int SeedIndex, int Kind) const
 	{
 		const double U = Unit(Hash(Seed ^ 0xC80B, static_cast<uint64_t>(SeedIndex), static_cast<uint64_t>(Kind)));
+		if (Sp && SeedIndex >= 0 && (Kind == RgField || Kind == RgOpen))
+		{
+			// (the steppe's field: its crop in its number's last three bits; where the rules' cell and the field disagree
+			// at an edge, the cell's kind wins and the crop follows it)
+			const int Crop = SeedIndex % 8;
+			if (Kind == RgField) return Crop == LandSteppe::CropRye ? CpRye : CpWheat;
+			return Crop == LandSteppe::CropFallow ? CpFallow : CpSteppe;
+		}
 		switch (Kind)
 		{
 		case RgField: return U < 0.46 ? CpWheat : U < 0.66 ? CpBarley : U < 0.78 ? CpOats : U < 0.86 ? CpGreenWheat : U < 0.94 ? CpStubble : CpRoots;
@@ -1519,6 +1582,11 @@ namespace LandField
 	 */
 	void Ground::Impl::MakeSites()
 	{
+		if (Sp)
+		{
+			MakeSteppeSites();
+			return;
+		}
 		Rng R(Seed ^ 0x5173);
 		auto Hurt = [&R](House& H, double Odds) {
 			const double U = R.Next() / Odds;
@@ -1751,6 +1819,156 @@ namespace LandField
 		}
 	}
 
+
+	/**
+	 * The steppe's farm (the state farm on the dry run, its whitewashed cottages strung along the lanes): each household a
+	 * plot along its lane, 18 to 30 m of frontage, its cottage (the east kit's Khata, long side or gable to the lane) set
+	 * back behind a wattle fence, its haystack behind, a well sweep at one plot in four; some two in five of them burnt to
+	 * their stove and chimney (the kit's ruin share for a village fought over in 1943, the art director's ruling of 19
+	 * November). Then the farm's own long sheds and its granary at the edge, whitewashed, under plank or straw. No church,
+	 * no stone wall, no farmstead out in the fields: the collective farm worked the steppe from the village.
+	 */
+	void Ground::Impl::MakeSteppeSites()
+	{
+		if (!Fd.bTown) return;
+		Rng R(Seed ^ 0x5174);
+		constexpr double KhataLong = 9.18, KhataDeep = 6.46, Panel = 4.11;
+		int Burnt = 0;
+		// Near-only marks round a ruin: no tree, shrub or shed on its ash, but men walk through it.
+		auto MarkNear = [this](V2 C, double Reach) {
+			const int I0 = std::max(0, static_cast<int>((C.X - Reach - RX0) / Res)), I1 = std::min(NX - 1, static_cast<int>((C.X + Reach - RX0) / Res));
+			const int J0 = std::max(0, static_cast<int>((C.Y - Reach - RY0) / Res)), J1 = std::min(NY - 1, static_cast<int>((C.Y + Reach - RY0) / Res));
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I)
+					if (std::hypot(RX0 + (I + 0.5) * Res - C.X, RY0 + (J + 0.5) * Res - C.Y) < Reach) OccR[static_cast<size_t>(J) * NX + I] |= OcNear;
+		};
+		auto Free = [this](V2 C) { return InRaster(C.X, C.Y) && !(OccR[Pix(C.X, C.Y)] & (OcHouse | OcVehicle)) && LaneD[Pix(C.X, C.Y)] > 0.5f; };
+		// A run of wattle along a line, in the kit's panels (4.11 m) stretched a little to fit; a gap left at Gap (metres
+		// along it, negative for none), now and then a panel down.
+		auto Fence = [&](V2 A, V2 B, double Gap) {
+			const double L = Len(B - A);
+			if (L < 2.0) return;
+			const int N = std::max(1, static_cast<int>(std::lround(L / Panel)));
+			const V2 T = Unit2(B - A);
+			const double Each = L / N, Yaw = std::atan2(T.Y, T.X);
+			for (int K = 0; K < N; ++K)
+			{
+				const double Mid = (K + 0.5) * Each;
+				if (Gap >= 0.0 && std::fabs(Mid - Gap) < 0.5 * Each) continue;
+				if (R.Next() < 0.1) continue; // knocked down
+				Kits.push_back({ Base::Wattle, A + T * Mid, Yaw + R.Range(-0.03, 0.03), Each / Panel, R.Range(0.85, 1.08) });
+			}
+		};
+		int Placed = 0;
+		for (size_t L = 0; L < Lanes.size(); ++L)
+		{
+			const Line& P = Lanes[L].P;
+			const double Half = Lanes[L].Half;
+			for (int Side = -1; Side <= 1; Side += 2)
+			{
+				size_t K = 0;
+				while (K + 2 < P.size() && Placed < 70)
+				{
+					const V2 At = P[K];
+					if (std::hypot(At.X - Fd.TownX, At.Y - Fd.TownY) > Fd.TownR * 1.1)
+					{
+						++K;
+						continue;
+					}
+					const double Front = R.Range(18.0, 30.0);
+					size_t KE = K;
+					while (KE + 1 < P.size() && Len(P[KE] - At) < Front) ++KE;
+					const V2 T = Unit2(P[KE] - At), N = Perp(T) * static_cast<double>(Side);
+					const double Line0 = Half + LaneWall + 0.6; // the fence, just off the road's edge
+					const bool bGable = R.Next() < 0.3;
+					const double Along = bGable ? KhataDeep : KhataLong, Across = bGable ? KhataLong : KhataDeep;
+					const double Back = R.Range(4.0, 9.0), U = R.Range(0.5 * Along + 2.0, std::max(0.5 * Along + 2.5, Front - 0.5 * Along - 2.0));
+					House H;
+					H.Type = HtHouse;
+					H.bKit = true;
+					H.Long = KhataLong;
+					H.Deep = KhataDeep;
+					H.C = At + T * U + N * (Line0 + Back + 0.5 * Across);
+					H.Yaw = std::atan2(T.Y, T.X) + (bGable ? 0.5 * Pi : 0.0) + R.Range(-0.05, 0.05) + (R.Next() < 0.5 ? Pi : 0.0);
+					H.Key = Mix(R.State);
+					const bool bRuin = R.Next() < 0.4;
+					if (!Fits(H, 1.5))
+					{
+						K += 2;
+						continue;
+					}
+					if (bRuin)
+					{
+						Kits.push_back({ Base::Chimney, H.C, H.Yaw, 1.0, R.Range(0.9, 1.05) });
+						MarkNear(H.C, 6.5);
+						++Burnt;
+					}
+					else
+					{
+						FloorOf(H);
+						Stamp(H, 1.2);
+						Houses.push_back(H);
+					}
+					++Placed;
+					// Its fence along the lane, the gate before the door; a fence down one side now and then.
+					const V2 F0 = At + N * Line0, F1 = At + T * Front + N * Line0;
+					if (R.Next() < 0.85) Fence(F0, F1, U + R.Range(-2.0, 2.0));
+					if (R.Next() < 0.5) Fence(F0 + T * 0.3, F0 + T * 0.3 + N * (Back + Across + R.Range(6.0, 14.0)), -1.0);
+					// The well sweep by the fence, the haystack behind the cottage.
+					if (R.Next() < 0.25)
+					{
+						const V2 W = At + T * R.Range(2.0, std::max(2.5, Front - 2.0)) + N * (Line0 + R.Range(1.6, 3.2));
+						if (Free(W) && Len(W - H.C) > 0.5 * KhataLong + 2.5) Kits.push_back({ Base::Sweep, W, R.Range(0.0, 2.0 * Pi), 1.0, R.Range(0.92, 1.08) });
+					}
+					if (R.Next() < 0.55)
+					{
+						const V2 S = H.C + N * (0.5 * Across + R.Range(4.0, 9.0)) + T * R.Range(-4.0, 4.0);
+						if (Free(S))
+						{
+							const double Sz = R.Range(0.8, 1.15);
+							Kits.push_back({ Base::Haystack, S, R.Range(0.0, 2.0 * Pi), Sz, Sz * R.Range(0.85, 1.1) });
+							MarkNear(S, 2.5);
+						}
+					}
+					K = KE;
+				}
+			}
+		}
+		// The farm's long sheds (cattle, the tractors) and its granary at the village's edge, set to the fields' grain.
+		int Sheds = 0;
+		const double Grain = Sp ? Sp->Lay.Turn : 0.0;
+		for (int Ring = 0; Ring < 8 && Sheds < 4; ++Ring)
+			for (int K = 0; K < 24 && Sheds < 4; ++K)
+			{
+				const double A = K * 2.0 * Pi / 24.0 + Ring * 0.41, D = Fd.TownR * (0.7 + 0.12 * Ring);
+				House H;
+				H.Type = Sheds == 1 ? HtBarn : HtByre;
+				H.bWhite = true;
+				H.Long = H.Type == HtBarn ? R.Range(22.0, 28.0) : R.Range(36.0, 50.0);
+				H.Deep = H.Type == HtBarn ? R.Range(10.0, 12.0) : R.Range(9.0, 11.0);
+				H.C = V2{ Fd.TownX + D * std::cos(A), Fd.TownY + D * std::sin(A) };
+				H.Yaw = Grain + (R.Next() < 0.5 ? 0.0 : 0.5 * Pi) + R.Range(-0.04, 0.04);
+				H.Roof = R.Next() < 0.5 ? 0 : 1;
+				H.Front = R.Next() < 0.5 ? 1 : -1;
+				H.Key = Mix(R.State ^ 0x54ED);
+				const double U = R.Next();
+				H.Hurt = U < 0.15 ? DmShell : U < 0.35 ? DmGable : U < 0.6 ? DmRoofHole : DmNone;
+				if (!Fits(H, 3.0)) continue;
+				FloorOf(H);
+				Stamp(H, 2.0);
+				Houses.push_back(H);
+				++Sheds;
+			}
+		Count.Farmsteads = 0;
+		for (const House& H : Houses)
+		{
+			++Count.Houses;
+			if (H.Hurt != DmNone) ++Count.Damaged;
+		}
+		Count.Houses += Burnt;
+		Count.Damaged += Burnt;
+	}
+
 	// ====================================================================== the parcels
 
 	void Ground::Impl::MakeParcels()
@@ -1970,7 +2188,7 @@ namespace LandField
 			Q.Seed = CompLabel[C] >= 0 && CompLabel[C] < VBase * 16 ? static_cast<int>(CompLabel[C] >> 4) : -1;
 			Q.Crop = CropOf(Q.Seed, Q.Kind);
 			if (Q.Kind == RgVillage && Q.Area > 500.0 && Unit(Mix(Q.Key)) < 0.4) Q.bOrchard = true;
-			if (Q.Kind == RgOpen && Fd.bTown && std::hypot(Q.CX - Fd.TownX, Q.CY - Fd.TownY) < Fd.TownR + 300.0 && Unit(Mix(Q.Key ^ 0x0C)) < 0.12) Q.bOrchard = true;
+			if (Q.Kind == RgOpen && !Sp && Fd.bTown && std::hypot(Q.CX - Fd.TownX, Q.CY - Fd.TownY) < Fd.TownR + 300.0 && Unit(Mix(Q.Key ^ 0x0C)) < 0.12) Q.bOrchard = true;
 			if (IsFarmland(Q.Kind) && Q.CX > -Band && Q.CY > -Band)
 			{
 				FarmArea += Q.Area;
@@ -2188,6 +2406,13 @@ namespace LandField
 	 */
 	void Ground::Impl::MakeHedges()
 	{
+		if (Sp)
+		{
+			// The steppe has no hedges: the fields meet in a grassy strip, the gardens behind their wattle (MakeSteppeSites).
+			BGrid.Init(-Band - 20.0, -Band - 20.0, FW + Band + 20.0, FH + Band + 20.0, 8.0);
+			Inst.assign(static_cast<size_t>(Base::Count), {});
+			return;
+		}
 		auto Kind = [this](int32_t P) { return Parcels[static_cast<size_t>(P)].Kind; };
 		auto Keep = [&Kind](int32_t A, int32_t B) {
 			const int KA = Kind(A), KB = Kind(B);
@@ -2554,6 +2779,7 @@ namespace LandField
 			case Base::Beech: return 18.0;
 			case Base::Pollard: return 8.0;
 			case Base::Apple: return 5.5;
+			case Base::Birch: return 15.0;
 			default: return 1.0;
 			}
 		}
@@ -2583,6 +2809,22 @@ namespace LandField
 			default: High = R.Range(6.0, 9.0); break;
 			}
 			if (bWood) High *= 1.08;
+			return B;
+		}
+
+		/** A tree of the steppe's oak woods and its balkas' groves: oak most, birch, ash, a few elm; no beech (it grows no
+		 * farther east than Poland). */
+		Base SteppeTree(Rng& R, double& High)
+		{
+			const double U = R.Next();
+			const Base B = U < 0.45 ? Base::Oak : U < 0.72 ? Base::Birch : U < 0.9 ? Base::Ash : Base::Elm;
+			switch (B)
+			{
+			case Base::Oak: High = R.Range(11.0, 17.0); break;
+			case Base::Birch: High = R.Range(13.0, 18.0); break;
+			case Base::Ash: High = R.Range(11.0, 16.0); break;
+			default: High = R.Range(13.0, 18.0); break;
+			}
 			return B;
 		}
 
@@ -2755,7 +2997,7 @@ namespace LandField
 					if (Noise(PX / 55.0, PY / 55.0, Seed ^ 0x3006) > 0.5 && R.Next() < 0.75) continue;
 					if (!Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle) || LaneD[Pix(PX, PY)] < LaneWall + 1.5f) continue;
 					double High = 0.0;
-					const Base B = HedgeTree(R, true, High);
+					const Base B = Sp ? SteppeTree(R, High) : HedgeTree(R, true, High);
 					Plant(B, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * R.Range(0.85, 1.1), High / TreeHigh(B), Tint8(R.Range(0.9, 1.05), R.Range(0.92, 1.06), R.Range(0.9, 1.04)));
 				}
 			const double Under = 3.4;
@@ -2813,7 +3055,25 @@ namespace LandField
 							Plant(Base::Apple, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(Base::Apple) * R.Range(0.9, 1.15), High / TreeHigh(Base::Apple), Tint8(R.Range(0.94, 1.06), 1.0, R.Range(0.94, 1.04)));
 						}
 				}
-				else if (Q.Kind == RgOpen && Q.Area > 6000.0 && Unit(Q.Key ^ 0xF1E1D) < 0.2)
+				else if (Sp && Q.Kind == RgOpen && Q.Crop == CpSteppe && Q.Area > 20000.0)
+				{
+					// The steppe's hay: ricks in twos to fours, some one group to ten hectares of pasture.
+					const int Groups = static_cast<int>(std::lround(Q.Area / 100000.0 * R.Range(0.6, 1.4)));
+					for (int Gr = 0; Gr < Groups; ++Gr)
+					{
+						const double Reach = std::sqrt(Q.Area) * 0.4;
+						const double GX = Q.CX + R.Range(-Reach, Reach), GY = Q.CY + R.Range(-Reach, Reach);
+						const int Stacks = 2 + R.Below(3);
+						for (int K = 0; K < Stacks; ++K)
+						{
+							const double PX = GX + R.Range(-12.0, 12.0), PY = GY + R.Range(-12.0, 12.0);
+							if (!InRaster(PX, PY) || static_cast<size_t>(Pid[Pix(PX, PY)]) != C || DistE[Pix(PX, PY)] < 12.0f || !Clear(PX, PY, OcHouse | OcNear | OcMan | OcVehicle)) continue;
+							const double Sz = R.Range(0.8, 1.2);
+							Plant(Base::Haystack, PX, PY, R.Range(0.0, 2.0 * Pi), Sz, Sz * R.Range(0.85, 1.1), Tint8(R.Range(0.95, 1.05), 1.0, R.Range(0.92, 1.04)));
+						}
+					}
+				}
+				else if (Q.Kind == RgOpen && Q.Area > 6000.0 && Unit(Q.Key ^ 0xF1E1D) < (Sp ? 0.08 : 0.2))
 				{
 					const double PX = Q.CX + R.Range(-15.0, 15.0), PY = Q.CY + R.Range(-15.0, 15.0);
 					if (InRaster(PX, PY) && static_cast<size_t>(Pid[Pix(PX, PY)]) == C && DistE[Pix(PX, PY)] > 18.0f && Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle))
@@ -2845,6 +3105,33 @@ namespace LandField
 			if (S.What == 0) Plant(Base::Well, S.P.X, S.P.Y, S.Yaw, 1.0, 1.0, Tint8(1, 1, 1));
 			else if (S.What == 1) Plant(Base::Cart, S.P.X, S.P.Y, S.Yaw, 1.0, 1.0, Tint8(1, 1, 1));
 		}
+		// The steppe's: the kit's cottages on their floors, the ruins, wattle, sweeps and ricks where the farm put them,
+		// and the telegraph poles along the railway, every 50 m, 8 m to its west, a kilometre on past the tiles each way.
+		if (Sp)
+		{
+			Rng R(Seed ^ 0x6417);
+			for (const House& H : Houses)
+			{
+				if (!H.bKit) continue;
+				std::vector<Placed>& L = Inst[static_cast<size_t>(Base::Khata)];
+				const size_t Was = L.size();
+				Plant(Base::Khata, H.C.X, H.C.Y, H.Yaw, 1.0, 1.0, Tint8(R.Range(0.96, 1.03), R.Range(0.96, 1.02), R.Range(0.95, 1.02)));
+				if (L.size() > Was) L.back().Z = static_cast<float>(H.Floor - 0.13); // (its plinth on the highest ground under it)
+			}
+			for (const KitSpot& K : Kits) Plant(K.B, K.P.X, K.P.Y, K.Yaw, K.Scale, K.ScaleZ, Tint8(R.Range(0.95, 1.04), R.Range(0.95, 1.03), R.Range(0.94, 1.03)));
+			if (Sp->HasRail())
+			{
+				std::vector<std::pair<double, double>> At;
+				std::vector<double> Yaw;
+				LandSteppe::PolesAlongRail(*Sp, -Band - 1000.0, -Band + TilesY() * TileSize + 1000.0, 50.0, 8.0, At, Yaw);
+				for (size_t K = 0; K < At.size(); ++K)
+				{
+					const size_t Was = Inst[static_cast<size_t>(Base::Pole)].size();
+					Plant(Base::Pole, At[K].first, At[K].second, Yaw[K] + R.Range(-0.04, 0.04), 1.0, R.Range(0.94, 1.05), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.04), 1.0));
+					if (Inst[static_cast<size_t>(Base::Pole)].size() > Was) ++Count.Poles;
+				}
+			}
+		}
 		for (const std::vector<Placed>& L : Inst) Count.Instances += L.size();
 	}
 }
@@ -2865,7 +3152,14 @@ namespace LandField
 		const Col Barley = Rgb(166, 148, 94);        // barley, ripe and paler
 		const Col Oats = Rgb(150, 144, 84);          // oats, greener gold
 		const Col GreenWheat = Rgb(120, 128, 68);    // a late field, still green
-		const Col Stubble = Rgb(166, 150, 106);      // barley cut: pale stubble
+		// Barley cut by the binder: the straw's stubble in its rows over brown earth, with the clover undersown and the
+		// weeds coming green between them. The stubble lit 198 on the third cut's frames with the grade's half stop
+		// down, and as flat as a sheet (its spread, darkest tenth to brightest, 40); the art director asked it a fifth
+		// darker and spread 60 or more (22 November): the straw itself a little darker, and the earth and the green
+		// showing through in bands along the lands and in patches.
+		const Col Stubble = Rgb(160, 144, 100);       // the straw stubble, standing
+		const Col StubbleEarth = Rgb(104, 86, 62);   // the earth between its rows, where the sheaves' stooks stood and the carts went
+		const Col Regrowth = Rgb(98, 106, 60);       // clover undersown, and the weeds: green coming through the stubble
 		const Col Roots = Rgb(74, 98, 50);           // beet or potatoes in their rows
 		const Col RoughGrass = Rgb(118, 120, 72);    // tussocky rough grazing
 		const Col BrambleGreen = Rgb(66, 80, 42);    // brambles, nettles
@@ -2909,10 +3203,20 @@ namespace LandField
 			case CpGarden: return Garden;
 			case CpYard: return YardEarth;
 			case CpWoods: return Litter;
+			case CpRye: return Rgb(162, 146, 104);
+			case CpSteppe: return Rgb(130, 128, 80);
+			case CpFallow: return Rgb(76, 70, 52);
 			default: return PastureGrazed;
 			}
 		}
-		bool IsCorn(int Crop) { return Crop == CpWheat || Crop == CpBarley || Crop == CpOats || Crop == CpGreenWheat; }
+		bool IsCorn(int Crop) { return Crop == CpWheat || Crop == CpBarley || Crop == CpOats || Crop == CpGreenWheat || Crop == CpRye; }
+		/** A parcel's crop as the steppe's colours know it. */
+		int SteppeCrop(int Crop)
+		{
+			return Crop == CpWheat ? LandSteppe::CropWheat : Crop == CpRye ? LandSteppe::CropRye : Crop == CpFallow ? LandSteppe::CropFallow : LandSteppe::CropPasture;
+		}
+		Col OfTone(const LandSteppe::Tone& T) { return Col{ T.R, T.G, T.B }; }
+		LandSteppe::Tone ToTone(const Col& C) { return LandSteppe::Tone{ C.R, C.G, C.B }; }
 
 		/** Writes meshes: points with their normals and colours, triangles counter-clockwise seen from their front. */
 		struct Builder
@@ -3031,6 +3335,7 @@ namespace LandField
 	 */
 	Col Ground::Impl::GroundColour(double X, double Y) const
 	{
+		if (Sp) return SteppeColour(X, Y);
 		if (!InRaster(X, Y)) return FarColour(X, Y);
 		const size_t P = Pix(X, Y);
 		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
@@ -3084,7 +3389,13 @@ namespace LandField
 			// (strong enough to read from a hill or a turret, or a field of corn is a flat yellow sheet)
 			C = Varied(C, 1.0 + 0.09 * Lands + 0.08 * Streak + 0.1 * N1, 0.0);
 			if (IsCorn(Q.Crop)) C = Mixed(C, GreenWheat, 0.4 * Smooth(0.2, 0.6, N2 + 0.6 * N1));
-			if (Q.Crop == CpStubble) C = Mixed(C, Margin, 0.25 * Smooth(0.2, 0.6, N1));
+			if (Q.Crop == CpStubble)
+			{
+				// Bare in bands along the lands (the binder's swath and the carts' wheels) and in patches; green in others.
+				const double Bare = Smooth(0.1, 0.35, 0.5 * Lands + 0.6 * N2 + 0.3 * Streak);
+				C = Mixed(C, StubbleEarth, 0.85 * Bare);
+				C = Mixed(C, Regrowth, 0.6 * Smooth(0.1, 0.35, N1 + 0.35 * Noise(X / 11.0, Y / 11.0, Seed ^ 0x17)));
+			}
 			C = Mixed(C, Margin, 0.55 * Smooth(5.0, 1.5, Edge)); // the headland: thin corn, weeds
 		}
 		else
@@ -3099,15 +3410,112 @@ namespace LandField
 		return Varied(C, 1.0 + 0.06 * N2 + 0.05 * Broad, 0.02 * Broad);
 	}
 
+
+	/**
+	 * The steppe's ground (LandSteppe's colours): each farm field its crop, wheat banded by the tractor's drill and
+	 * streaked along its rows, the grassy strip where two fields meet; the balka's and the waste ground's dry grass,
+	 * greener in the hollows; the dirt roads black earth worn to grey dust, their ruts darker, grass along their verges;
+	 * the railway's bank its ballast and cinders, grass taking its sides; the gardens and yards as the bocage's.
+	 */
+	Col Ground::Impl::SteppeColour(double X, double Y) const
+	{
+		if (!InRaster(X, Y)) return FarColour(X, Y);
+		const size_t P = Pix(X, Y);
+		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
+		const double Edge = Bilinear(DistE, X, Y);
+		const double N1 = Fbm(X, Y, 30.0, 2, Seed ^ 0x11), N2 = Noise(X / 7.0, Y / 7.0, Seed ^ 0x12);
+		const double Broad = Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
+		Col C;
+		bool bStrip = true; // (the strip at its edge still to lay)
+		switch (Rgn[P])
+		{
+		case RgWoods:
+			C = Mixed(Litter, WoodGreen, 0.35 + 0.5 * N1 + 0.4 * Smooth(7.0, 1.0, Edge));
+			C = Varied(C, 1.0 + 0.1 * N2, 0.03 * N1);
+			break;
+		case RgWater: return WaterCol;
+		case RgMarsh: return Varied(MarshCol, 1.0 + 0.08 * N1, 0.0);
+		case RgLane:
+		{
+			bStrip = false;
+			const double D = Bilinear(LaneD, X, Y);
+			if (D < 0.0)
+			{
+				// (two ruts a cart's width apart either side of the middle, the middle grassed a little)
+				const double Off = std::fabs(D + LaneHalfAt(X, Y));
+				const double Rut = Smooth(0.5, 0.15, std::fabs(Off - 0.75));
+				C = Mixed(OfTone(LandSteppe::RoadDust()), OfTone(LandSteppe::RoadRut()), 0.7 * Rut);
+				C = Mixed(C, Rgb(110, 110, 72), 0.3 * Smooth(0.35, 0.0, Off) * (0.5 + 0.5 * N1));
+				C = Varied(C, 1.0 + 0.06 * N2, 0.01);
+			}
+			// (its verge: the floor's dust into the grassy strip the fields beside it end in, by the lane's edge)
+			else C = Mixed(Varied(OfTone(LandSteppe::RoadDust()), 1.0 + 0.06 * N2, 0.01), OfTone(LandSteppe::StripTone(N2, Broad)), Smooth(0.0, LaneWall + 0.3, D));
+			break;
+		}
+		case RgYard:
+			C = Mixed(YardEarth, Muck, Smooth(0.1, 0.5, N1));
+			C = Varied(C, 1.0 + 0.08 * N2, 0.02 * N1);
+			break;
+		case RgVillage:
+			C = Mixed(Garden, Rgb(104, 112, 60), 0.5 + 0.5 * N1);
+			C = Varied(C, 1.0 + 0.08 * N2 + 0.05 * Broad, 0.02 * N1);
+			break;
+		case RgWorks:
+			C = Mixed(Rgb(82, 72, 58), Rgb(96, 84, 66), Smooth(0.0, 0.45, N1 + 0.3 * N2)); // black earth dug and thrown up
+			C = Mixed(C, OfTone(LandSteppe::RoughColour(N1, N2)), 0.35 * Smooth(0.2, -0.3, N1));
+			C = Varied(C, 1.0 + 0.07 * N2, 0.0);
+			break;
+		default:
+			if (Q.Kind == RgRough) C = OfTone(LandSteppe::RoughColour(N1, N2));
+			else if (Rgn[P] == RgOpen || Rgn[P] == RgField)
+			{
+				// (the tractor's drill bands across the field's length, some 20 to 30 m apart; its rows streak along it)
+				const double Ca = std::cos(Q.Angle), Sa = std::sin(Q.Angle);
+				const double Along = (X - Q.CX) * Ca + (Y - Q.CY) * Sa, Across = -(X - Q.CX) * Sa + (Y - Q.CY) * Ca;
+				const double Lands = std::cos(2.0 * Pi * Across / (1.6 * Q.Lands));
+				const double Streak = Noise(Along / 40.0, Across / 2.5, Seed ^ 0x14);
+				C = OfTone(LandSteppe::FieldColour(SteppeCrop(Q.Crop), N1, N2, Broad, Lands, Streak, Edge));
+				bStrip = false; // (its own strip at its edge)
+			}
+			else C = OfTone(LandSteppe::RoughColour(N1, N2));
+			break;
+		}
+		// Every edge between two kinds of ground the same grassy strip, so the colour runs on unbroken across it.
+		if (bStrip) C = Mixed(C, OfTone(LandSteppe::StripTone(N2, Broad)), LandSteppe::StripShare(Edge));
+		if (Sp->HasRail())
+		{
+			const double D = Sp->RailDistance(X, Y);
+			if (D < 10.0) C = OfTone(LandSteppe::BankColour(D, N1, N2, ToTone(C)));
+		}
+		return C;
+	}
+
 	/** Beyond the band: the same parcels by their seeds, their crops, woods; hedges as a darkening along the parcels' edges. */
 	Col Ground::Impl::FarColour(double X, double Y) const
 	{
 		const double Broad = Fbm(X, Y, 500.0, 2, Seed ^ 0x15), N1 = Fbm(X, Y, 90.0, 2, Seed ^ 0x16);
 		if (WoodsBeyond(X, Y)) return Varied(CanopyCol, 1.0 + 0.12 * N1, 0.02 * Broad);
+		if (Sp)
+		{
+			// (the steppe's fields on to the haze, the strip between them a faint line; the railway's bank running on)
+			int Crop = LandSteppe::CropPasture;
+			double Gap = 0.0;
+			Sp->FieldAt(X, Y, Crop, &Gap);
+			Col C = OfTone(LandSteppe::FarFieldColour(Crop, N1, Broad, Gap));
+			if (Sp->HasRail())
+			{
+				const double D = Sp->RailDistance(X, Y);
+				if (D < 10.0) C = OfTone(LandSteppe::BankColour(D, N1, 0.0, ToTone(C)));
+			}
+			return C;
+		}
 		double Gap = 0.0;
 		uint8_t Kind = RgOpen;
 		const int S = Plot(X, Y, &Gap, &Kind);
-		Col C = CropColour(CropOf(S, Kind));
+		const int Crop = CropOf(S, Kind);
+		Col C = CropColour(Crop);
+		// (a stubble far off: its straw, earth and green together, as the near ground's paint comes out on the whole)
+		if (Crop == CpStubble) C = Mixed(Mixed(C, StubbleEarth, 0.3), Regrowth, 0.2);
 		C = Varied(C, 1.0 + 0.08 * N1 + 0.05 * Broad, 0.02 * Broad);
 		return Mixed(C, FarHedge, 0.5 * Smooth(9.0, 1.0, Gap));
 	}
@@ -3276,6 +3684,15 @@ namespace LandField
 				L.Shutter = Paints[R.Below(4)];
 				L.Door = R.Next() < 0.5 ? Rgb(70, 54, 42) : Scaled(L.Shutter, 0.8);
 				L.Frame = Rgb(176, 172, 160);
+				if (H.bWhite)
+				{
+					// The steppe farm's sheds: whitewash over clay and brick, greyed and flaking, under weathered planks or straw.
+					L.Stone = Varied(Rgb(198, 194, 180), Tone, 0.5 * Warm);
+					L.Dressed = Mixed(L.Stone, Rgb(150, 140, 124), 0.25);
+					L.Roof = H.Roof == 1 ? Varied(Rgb(128, 110, 78), R.Range(0.9, 1.06), 0.0) : Varied(Rgb(96, 92, 86), R.Range(0.9, 1.08), 0.0);
+					L.Shutter = Rgb(84, 104, 108);
+					L.Door = Rgb(88, 74, 58);
+				}
 			}
 			const V2 U{ std::cos(H.Yaw), std::sin(H.Yaw) }, V = Perp(U);
 			auto W = [&](double Uu, double Vv, double Z) { return V3{ H.C.X + U.X * Uu + V.X * Vv, H.C.Y + U.Y * Uu + V.Y * Vv, Z }; };
@@ -3613,13 +4030,15 @@ namespace LandField
 			if (I < 0 || J < 0 || I >= TX || J >= TY) return nullptr;
 			return &TileList[static_cast<size_t>(J) * TX + I];
 		};
-		auto NearZ = [this](double X, double Y) {
-			double Edge = 1e6, Z = Terrain(X, Y);
+		// (the steppe's railway bank is swept at its own points: the ground's mesh leaves it out and sinks a little under it)
+		auto Under = [this](double X, double Y) { return Sp ? Land(X, Y) - (Sp->HasRail() ? 0.25 * Smooth(8.4, 7.4, Sp->RailDistance(X, Y)) : 0.0) : Terrain(X, Y); };
+		auto NearZ = [this, Under](double X, double Y) {
+			double Edge = 1e6, Z = Under(X, Y);
 			if (!InRaster(X, Y) || LaneD[Pix(X, Y)] < LaneWall + 3.0f) Z = Carve(X, Y, Z, &Edge);
 			// Under a lane's mesh the ground drops a little more, so the lane is always the one seen.
 			return Z - 0.35 * (1.0 - Smooth(LaneWall + 0.4, LaneWall + 1.0, Edge));
 		};
-		auto FarZ = [this](double X, double Y) { return Terrain(X, Y); };
+		auto FarZ = [Under](double X, double Y) { return Under(X, Y); };
 		auto NearCol = [this](double X, double Y) { return GroundColour(X, Y); };
 		for (int J = 0; J < TY; ++J)
 			for (int I = 0; I < TX; ++I)
@@ -3785,11 +4204,23 @@ namespace LandField
 				}
 			}
 		}
-		// The buildings.
+		// The buildings (the steppe's cottages are the kit's, planted).
 		for (const House& H : Houses)
 		{
+			if (H.bKit) continue;
 			Tile* T = TileOf(H.C.X, H.C.Y);
 			if (T) BuildHouse(T->Built, H);
+		}
+		// The steppe's railway on its bank: ballast, sleepers and rails near, the bank and its ballast far.
+		if (Sp && Sp->HasRail())
+		{
+			const std::function<double(double, double)> Ground = [this](double X, double Y) { return Terrain(X, Y); };
+			const std::function<LandSteppe::Tone(double, double)> Paint = [this](double X, double Y) { return ToTone(GroundColour(X, Y)); };
+			const std::function<Mesh*(double, double)> Near = NearOf, Far = FarOf;
+			double Km = 0.0;
+			LandSteppe::LayRail(*Sp, -Band, -Band + TilesY() * TileSize, false, Ground, Paint, Near, Km);
+			Count.RailKm += Km;
+			LandSteppe::LayRail(*Sp, -Band, -Band + TilesY() * TileSize, true, Ground, Paint, Far, Km);
 		}
 		for (Tile& T : TileList)
 		{
@@ -3811,12 +4242,12 @@ namespace LandField
 	 */
 	double Ground::Impl::Canopy(double X, double Y) const
 	{
-		const double F = Fbm(X, Y, 520.0, 3, Seed ^ 0xD5);
-		if (F <= 0.27) return 0.0;
+		const double F = Fbm(X, Y, 520.0, 3, Seed ^ 0xD5), Edge = Sp ? 0.43 : 0.27;
+		if (F <= Edge) return 0.0;
 		const double OutX = std::max({ 0.0, -Band - X, X - (TilesX() * TileSize - Band) });
 		const double OutY = std::max({ 0.0, -Band - Y, Y - (TilesY() * TileSize - Band) });
 		const double Crowns = 15.5 + 2.5 * Noise(X / 35.0, Y / 35.0, Seed ^ 0xD6) + 1.5 * Noise(X / 90.0, Y / 90.0, Seed ^ 0xDA);
-		return Crowns * Smooth(0.27, 0.29, F) * Smooth(0.0, 30.0, std::hypot(OutX, OutY));
+		return Crowns * Smooth(Edge, Edge + 0.02, F) * Smooth(0.0, 30.0, std::hypot(OutX, OutY));
 	}
 
 	/**
@@ -3877,6 +4308,30 @@ namespace LandField
 			const int K = Which[static_cast<size_t>(J) * NXT + I];
 			return K >= 0 ? &RingList[static_cast<size_t>(K)].Near : nullptr;
 		};
+		if (Sp)
+		{
+			// The steppe has no hedgerows to the horizon. Its railway runs on: in full a kilometre past the tiles each way,
+			// then its bank and ballast alone out to the ring's edge.
+			if (Sp->HasRail())
+			{
+				const std::function<double(double, double)> Ground = [this](double X, double Y) { return Terrain(X, Y); };
+				const std::function<LandSteppe::Tone(double, double)> Paint = [this](double X, double Y) { return ToTone(GroundColour(X, Y)); };
+				const std::function<Mesh*(double, double)> Target = RingOf;
+				double Km = 0.0;
+				LandSteppe::LayRail(*Sp, IY0 - 1000.0, IY0, false, Ground, Paint, Target, Km);
+				Count.RailKm += Km;
+				LandSteppe::LayRail(*Sp, IY1, IY1 + 1000.0, false, Ground, Paint, Target, Km);
+				Count.RailKm += Km;
+				LandSteppe::LayRail(*Sp, IY0 - RingOut, IY0 - 1000.0, true, Ground, Paint, Target, Km);
+				LandSteppe::LayRail(*Sp, IY1 + 1000.0, IY1 + RingOut, true, Ground, Paint, Target, Km);
+			}
+			for (Tile& T : RingList)
+			{
+				Bounds(T);
+				Count.RingTris += T.Near.Tris();
+			}
+			return;
+		}
 		// The near ring's hedgerows: the parcels' edges traced on an 8 m raster a kilometre out from the tiles.
 		constexpr double HR = 8.0, Reach = 1000.0;
 		const double HX0 = IX0 - Reach, HY0 = IY0 - Reach;
@@ -4102,11 +4557,12 @@ namespace LandField
 		void Measure(BaseMesh& B)
 		{
 			float R = 0.0f, H = 0.0f;
-			for (size_t K = 0; K + 2 < B.Near.Positions.size(); K += 3)
-			{
-				R = std::max(R, std::hypot(B.Near.Positions[K], B.Near.Positions[K + 1]));
-				H = std::max(H, B.Near.Positions[K + 2]);
-			}
+			for (const Mesh* M : { &B.Near, &B.Cards, &B.Sprigs })
+				for (size_t K = 0; K + 2 < M->Positions.size(); K += 3)
+				{
+					R = std::max(R, std::hypot(M->Positions[K], M->Positions[K + 1]));
+					H = std::max(H, M->Positions[K + 2]);
+				}
 			B.Radius = R;
 			B.Height = H;
 		}
@@ -4158,6 +4614,44 @@ namespace LandField
 				B.Vert(P[K], Unit3(Own * (1.0 - Bend) + Soft(P[K]) * Bend, Own), Paint(P[K], S[K]));
 			}
 			for (const auto& Fc : F) B.Tri(Base0 + Fc[0], Base0 + Fc[1], Base0 + Fc[2]);
+		}
+
+		/** The leaves' picture's quarters (T_LandLeaves, Tools/land_look/make_leaf_textures.py): which spray a card carries. */
+		enum LeafCell : int
+		{
+			LeafThorn = 0, // hawthorn, blackthorn: small lobed leaves, close set
+			LeafRound = 1, // hazel, field maple: round leaves
+			LeafOak = 2,   // oak: lobed leaves bunched at the twigs' ends
+			LeafOval = 3   // elm, beech, apple, holly, elder: oval leaves to a point
+		};
+
+		/**
+		 * A leaf card: a flat W by H card at C carrying one spray of the leaves' picture (its Cell), its twig's foot at the
+		 * card's foot, Up the way from foot to tip, turned to face Out (the shrub's or the spray's outward there). One face:
+		 * the leaves' material draws both, lit alike. Normals bent Bend of the way toward Soft, as Cluster's are, so the
+		 * cards light as one soft mass; painted by Paint at each corner, as a cluster is.
+		 */
+		void LeafCard(Mesh& M, V3 C, V3 Face, V3 Up, double W, double H, int Cell, V3 Out, const std::function<V3(V3)>& Soft, double Bend, const std::function<Col(V3, V3)>& Paint)
+		{
+			Face = Unit3(Face, Out);
+			if (Dot3(Face, Out) < 0.0) Face = Face * -1.0;
+			Up = Up - Face * Dot3(Up, Face);
+			Up = Unit3(Up, Unit3(Cross(Face, V3{ 1, 0, 0 }), V3{ 0, 1, 0 }));
+			const V3 Rt = Cross(Up, Face); // the viewer's right, seen from the front
+			const double U0 = 0.5 * (Cell % 2), V0 = 0.5 * (Cell / 2), E = 0.004;
+			const V3 Corner[4] = { C - Up * (0.5 * H) - Rt * (0.5 * W), C - Up * (0.5 * H) + Rt * (0.5 * W), C + Up * (0.5 * H) + Rt * (0.5 * W),
+								   C + Up * (0.5 * H) - Rt * (0.5 * W) };
+			const double Uv[4][2] = { { U0 + E, V0 + 0.5 - E }, { U0 + 0.5 - E, V0 + 0.5 - E }, { U0 + 0.5 - E, V0 + E }, { U0 + E, V0 + E } };
+			Builder B(M);
+			const uint32_t Base0 = static_cast<uint32_t>(M.Points());
+			for (int K = 0; K < 4; ++K)
+			{
+				B.Vert(Corner[K], Unit3(Face * (1.0 - Bend) + Soft(Corner[K]) * Bend, Face), Paint(Corner[K], Out));
+				M.Uvs.push_back(static_cast<float>(Uv[K][0]));
+				M.Uvs.push_back(static_cast<float>(Uv[K][1]));
+			}
+			B.Tri(Base0, Base0 + 1, Base0 + 2);
+			B.Tri(Base0, Base0 + 2, Base0 + 3);
 		}
 
 		/**
@@ -4223,6 +4717,7 @@ namespace LandField
 			double SprayR, LumpLo, LumpHi, Flat, Jag, Deep, Light;
 			Col Leaf, Bark;
 			bool bLeader, bPollard;
+			int Cell; // its leaves' spray on the cards (LeafCell)
 		};
 
 		/**
@@ -4386,6 +4881,9 @@ namespace LandField
 			{
 				const auto SoftS = Soft(S);
 				const auto PaintS = Paint(S);
+				// (the heart's clusters: in the shade of the leaves on the cards round them, a little smaller and darker,
+				// the crown's depth seen through its gaps, not smooth green lumps of their own)
+				const auto Shaded = [&PaintS](V3 P, V3 Dir) { return Mixed(PaintS(P, Dir), Rgb(30, 44, 30), 0.3); };
 				const int N = T.Heart + T.Twigs + R.Below(5) - 2;
 				for (int J = 0; J < N; ++J)
 				{
@@ -4396,7 +4894,24 @@ namespace LandField
 					const double Lr = R.Range(T.LumpLo, T.LumpHi) * (J == 0 ? 1.15 : bSprig ? 0.66 : 1.0);
 					V3 O = S.C + V3{ U.X * D, U.Y * D, U.Z * D * 0.75 };
 					O.Z = std::min(O.Z, T.High - Lr * T.Flat);
-					Cluster(Bm.Near, O, Lr, T.Flat * R.Range(0.85, 1.1), T.Jag, R, SoftS, 0.75, PaintS, bSprig);
+					if (bSprig) Cluster(Bm.Sprigs, O, Lr, T.Flat * R.Range(0.85, 1.1), T.Jag, R, SoftS, 0.75, PaintS, true);
+					else Cluster(Bm.Near, O, 0.85 * Lr, T.Flat * R.Range(0.85, 1.1), T.Jag, R, SoftS, 0.75, Shaded, false);
+				}
+				// The leaves themselves on cards over the spray's skin, more of them than the sprigs they stand in for
+				// (a card is two triangles, a sprig eight), each turned out from the spray, its twig's foot toward it, a
+				// sprig's breadth and a half across; a few set in, the light falling through to the heart's dark.
+				Rng RC(Seed ^ (0xCA4D + 977u * static_cast<uint64_t>(&S - Sp.data())));
+				const int Cards = (T.Twigs * 8) / 5 + RC.Below(5);
+				for (int J = 0; J < Cards; ++J)
+				{
+					const V3 U = Unit3(AnyWay(RC) + S.Out * 0.5 + V3{ 0, 0, 0.3 }, S.Out);
+					const double D = S.Rad * RC.Range(0.45, 1.05);
+					const double Size = RC.Range(T.LumpLo, T.LumpHi) * RC.Range(1.2, 1.6);
+					V3 O = S.C + V3{ U.X * D, U.Y * D, U.Z * D * 0.75 };
+					O.Z = std::min(O.Z, T.High - 0.4 * Size);
+					const V3 Face = Unit3(U + AnyWay(RC) * 0.35, U);
+					const V3 Up = Unit3(U * 0.6 + V3{ 0, 0, 0.5 } + AnyWay(RC) * 0.7, U);
+					LeafCard(Bm.Cards, O, Face, Up, Size, Size, T.Cell, U, SoftS, 0.7, PaintS);
 				}
 			}
 
@@ -4435,6 +4950,7 @@ namespace LandField
 			double LumpLo, LumpHi, Jag, Sprigs;
 			Col Leaf, Second;
 			double Other;
+			int Cell, CellOther; // the leaves' sprays on its cards (its Leaf's, its Second's: LeafCell)
 		};
 
 		/**
@@ -4485,8 +5001,32 @@ namespace LandField
 					if (bSprig && Zf > 0.4 && R.Next() < 0.4) P.Z += R.Range(0.0, Sh.Sprigs);
 					P.Z = std::min(P.Z, Sh.Top - 0.8 * Lr);
 					const bool bOther = R.Next() < Sh.Other;
-					Cluster(Bm.Near, P, Lr, bSprig ? R.Range(0.65, 0.9) : R.Range(0.8, 1.0), Sh.Jag, R, Soft, 0.45, Paint(bOther ? Sh.Second : Sh.Leaf, R.Range(0.86, 1.14)), bSprig);
+					const auto Painted = Paint(bOther ? Sh.Second : Sh.Leaf, R.Range(0.86, 1.14));
+					// (the clusters under the cards a little smaller and in their shade: the hedge's depth, not lumps)
+					const auto Shaded = [&Painted](V3 Q, V3 Dir) { return Mixed(Painted(Q, Dir), Rgb(28, 40, 28), 0.25); };
+					if (bSprig) Cluster(Bm.Sprigs, P, Lr, R.Range(0.65, 0.9), Sh.Jag, R, Soft, 0.45, Painted, true);
+					else Cluster(Bm.Near, P, 0.9 * Lr, R.Range(0.8, 1.0), Sh.Jag, R, Soft, 0.45, Shaded, false);
 				}
+			}
+			// The leaves on cards over the body's skin, as the sprigs are spread (a spiral, its top to below the bank's
+			// face), a third more of them: each turned out from the shrub, its twig's foot toward the body, a few rising
+			// above the top as loose shoots; the Second's leaves (field maple, elder) on their own spray.
+			Rng RC(Seed ^ 0xCA4D);
+			const int Cards = (Sh.Leaves * 4) / 3;
+			for (int K = 0; K < Cards; ++K)
+			{
+				const double Zf = 1.0 - 1.85 * (K + 0.5) / Cards;
+				const double An = K * 2.39996 + 0.7 + RC.Range(-0.5, 0.5);
+				const double Ring = std::sqrt(std::max(0.0, 1.0 - Zf * Zf));
+				const V3 S{ Ring * std::cos(An), Ring * std::sin(An), Zf };
+				const double Size = RC.Range(Sh.LumpLo, Sh.LumpHi) * RC.Range(1.5, 2.0);
+				V3 P = O + S * (Surface(S) * RC.Range(0.9, 1.08));
+				if (Zf > 0.4 && RC.Next() < 0.35) P.Z += RC.Range(0.0, Sh.Sprigs);
+				P.Z = std::min(P.Z, Sh.Top - 0.35 * Size);
+				const bool bOther = RC.Next() < Sh.Other;
+				const V3 Face = Unit3(S + AnyWay(RC) * 0.5, S);
+				const V3 Up = Unit3(S * 0.5 + V3{ 0, 0, 0.6 } + AnyWay(RC) * 0.8, S);
+				LeafCard(Bm.Cards, P, Face, Up, Size, Size, bOther ? Sh.CellOther : Sh.Cell, S, Soft, 0.5, Paint(bOther ? Sh.Second : Sh.Leaf, RC.Range(0.86, 1.14)));
 			}
 			// The far shrub: seven big ragged clusters, three low, three above them between, one on top.
 			Rng RF(Seed ^ 0xFA4);
@@ -4505,7 +5045,8 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
+		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
 		const uint64_t S = 0xBA5E;
@@ -4513,22 +5054,22 @@ namespace LandField
 		// The hedge shrubs, built ShrubHigh (2.8 m) tall: hawthorn and blackthorn dark, dense and upright-sided; hazel and
 		// field maple lighter and rounder; holly and elder (dark and light clusters mixed) tall and loose, their sprigs above
 		// the rest. Bramble low and sprawling, a metre high.
-		BuildShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(50, 68, 34), Rgb(58, 74, 36), 0.25 }, S + 1);
-		BuildShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(72, 94, 42), Rgb(84, 100, 46), 0.3 }, S + 2);
-		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4 }, S + 3);
-		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2 }, S + 4);
+		BuildShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(50, 68, 34), Rgb(58, 74, 36), 0.25, LeafThorn, LeafThorn }, S + 1);
+		BuildShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(72, 94, 42), Rgb(84, 100, 46), 0.3, LeafRound, LeafOak }, S + 2);
+		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4, LeafOval, LeafRound }, S + 3);
+		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2, LeafThorn, LeafOak }, S + 4);
 		for (const Base B : { Base::ShrubA, Base::ShrubB, Base::ShrubC, Base::Bramble }) At(B).FarFrom = 60.0f;
 
 		// The trees, each built at its TreeHigh: the hedgerow oak broad and ragged on spreading limbs; the elm tall, its
 		// crown pulled in at the waist; the ash airy, small sprays far apart and pale; the beech dense and domed; the pollard
 		// a thick stub, a knobbly knuckle and a bushy head of straight sprouts; the orchard apple low and wide on a short,
 		// crooked, leaning trunk.
-		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 0.15, 0.5, 9.0, 6.3, 4.6, 0.0, 6, 16, 4, 22, 2.2, 0.62, 1.12, 0.72, 0.38, 0.45, 0.2, Rgb(62, 84, 38), Rgb(88, 82, 70), true, false }, S + 10);
-		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 0.1, 0.3, 11.8, 4.8, 5.8, 0.3, 4, 16, 3, 24, 1.9, 0.5, 0.95, 0.75, 0.35, 0.35, 0.16, Rgb(56, 78, 36), Rgb(78, 70, 60), true, false }, S + 11);
-		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 0.1, 0.3, 10.0, 5.3, 4.4, 0.0, 5, 16, 2, 20, 1.7, 0.42, 0.75, 0.65, 0.4, 0.15, 0.26, Rgb(80, 100, 46), Rgb(118, 114, 102), true, false }, S + 12);
-		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 0.05, 0.15, 11.2, 6.8, 5.8, 0.0, 5, 16, 4, 24, 2.2, 0.65, 1.1, 0.72, 0.3, 0.5, 0.18, Rgb(66, 92, 38), Rgb(128, 126, 116), true, false }, S + 13);
-		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 0.0, 0.6, 5.5, 3.0, 2.3, 0.0, 0, 14, 2, 16, 1.25, 0.4, 0.7, 0.8, 0.4, 0.35, 0.18, Rgb(68, 90, 40), Rgb(86, 80, 68), false, true }, S + 14);
-		BuildTree(At(Base::Apple), { 5.5, 1.2, 0.17, 0.8, 1.0, 3.6, 3.2, 1.45, 0.0, 4, 12, 3, 18, 1.3, 0.4, 0.68, 0.72, 0.38, 0.3, 0.22, Rgb(72, 96, 44), Rgb(92, 82, 70), false, false }, S + 15);
+		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 0.15, 0.5, 9.0, 6.3, 4.6, 0.0, 6, 16, 4, 22, 2.2, 0.62, 1.12, 0.72, 0.38, 0.45, 0.2, Rgb(62, 84, 38), Rgb(88, 82, 70), true, false, LeafOak }, S + 10);
+		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 0.1, 0.3, 11.8, 4.8, 5.8, 0.3, 4, 16, 3, 24, 1.9, 0.5, 0.95, 0.75, 0.35, 0.35, 0.16, Rgb(56, 78, 36), Rgb(78, 70, 60), true, false, LeafOval }, S + 11);
+		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 0.1, 0.3, 10.0, 5.3, 4.4, 0.0, 5, 16, 2, 20, 1.7, 0.42, 0.75, 0.65, 0.4, 0.15, 0.26, Rgb(80, 100, 46), Rgb(118, 114, 102), true, false, LeafOval }, S + 12);
+		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 0.05, 0.15, 11.2, 6.8, 5.8, 0.0, 5, 16, 4, 24, 2.2, 0.65, 1.1, 0.72, 0.3, 0.5, 0.18, Rgb(66, 92, 38), Rgb(128, 126, 116), true, false, LeafOval }, S + 13);
+		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 0.0, 0.6, 5.5, 3.0, 2.3, 0.0, 0, 14, 2, 16, 1.25, 0.4, 0.7, 0.8, 0.4, 0.35, 0.18, Rgb(68, 90, 40), Rgb(86, 80, 68), false, true, LeafOval }, S + 14);
+		BuildTree(At(Base::Apple), { 5.5, 1.2, 0.17, 0.8, 1.0, 3.6, 3.2, 1.45, 0.0, 4, 12, 3, 18, 1.3, 0.4, 0.68, 0.72, 0.38, 0.3, 0.22, Rgb(72, 96, 44), Rgb(92, 82, 70), false, false, LeafOval }, S + 15);
 		for (const Base B : { Base::Oak, Base::Elm, Base::Ash, Base::Beech, Base::Pollard, Base::Apple }) At(B).FarFrom = 140.0f;
 
 		// A five-bar field gate on its hinge post, weathered silver-grey: the hinge at the origin, the gate along +x 3.6 m.
@@ -4741,7 +5282,71 @@ namespace LandField
 				Strip(M, P, { 0.01, 0.1, 0.13, 0.11, 0.07, 0.0 }, { -Out.Y, Out.X, 0 }, Rgb(82, 110, 44), Rgb(112, 138, 58));
 			}
 		}
-		for (const Base B : { Base::Tuft, Base::TallGrass, Base::Wheat, Base::Poppies, Base::Flowers, Base::Stone, Base::Fern }) At(B).FarFrom = 70.0f;
+		// A barley stubble: the binder cut it a hand's breadth up, so its stalks stand 8 to 15 cm in the drill rows, 17 cm
+		// apart, pale and hollow, their feet in shade; and a few straws the binder dropped lie loose along the rows.
+		// (1.4 m along seven rows; the field turns it to its own rows. The art director, 22 November: "straw rows over
+		// brown earth", the third cut's stubble a flat pale sheet.) Each stalk drawn is a few stalks seen together.
+		{
+			Mesh& M = At(Base::Stubble).Near;
+			constexpr int Rows = 7, Stalks = 11;
+			constexpr double Apart = 0.17, Along = 1.4;
+			for (int Row = 0; Row < Rows; ++Row)
+			{
+				const double Y = (Row - 0.5 * (Rows - 1)) * Apart + R.Range(-0.015, 0.015);
+				for (int K = 0; K < Stalks; ++K)
+				{
+					const double X = ((K + R.Range(0.15, 0.85)) / Stalks - 0.5) * Along;
+					const V3 Foot{ X, Y + R.Range(-0.012, 0.012), -0.01 };
+					const double High = R.Range(0.08, 0.15), A = R.Range(0.0, Pi);
+					const V3 Lean{ R.Range(-0.02, 0.02), R.Range(-0.02, 0.02), 0 };
+					Strip(M, { Foot, Foot + Lean + V3{ 0, 0, High } }, { 0.008, 0.005 }, { std::cos(A), std::sin(A), 0 },
+						  Rgb(112, 98, 66), Varied(Rgb(178, 160, 110), R.Range(0.9, 1.08), R.Range(-0.03, 0.03)));
+				}
+			}
+			for (int K = 0; K < 8; ++K)
+			{
+				// a loose straw: lying along the rows, give or take, a little off the ground at one end
+				const double A = R.Range(-0.5, 0.5), Long = R.Range(0.18, 0.4);
+				const V3 Mid{ R.Range(-0.6, 0.6), R.Range(-0.55, 0.55), 0.005 };
+				const V3 Way{ std::cos(A), std::sin(A), 0 };
+				Strip(M, { Mid - Way * (0.5 * Long), Mid + Way * (0.5 * Long) + V3{ 0, 0, 0.02 } }, { 0.006, 0.005 }, { -Way.Y, Way.X, 0 }, Rgb(150, 134, 92),
+					  Rgb(184, 166, 116));
+			}
+		}
+		// The sward: the grass itself, a hand high, three dozen blades in a patch, grazed short. Built grey, so that its
+		// tint (the ground's own colour where it grows, Clutter) is its colour: the feet in shade, the tips lit, a few dead
+		// and straw-coloured. Close round the eye only (25 m), where the painted ground alone read as a flat green felt
+		// with tufts stuck on it (Brian, 22 November: "i want the grass and bushes and plants to look more realistic").
+		{
+			Mesh& M = At(Base::Sward).Near;
+			for (int K = 0; K < 36; ++K)
+			{
+				const V3 Foot = Around(0.42);
+				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.05, 0.14);
+				const V3 Lean{ std::cos(A) * High * R.Range(0.15, 0.55), std::sin(A) * High * R.Range(0.15, 0.55), 0 };
+				const bool bDead = R.Next() < 0.1;
+				const double L = R.Range(0.88, 1.12);
+				const Col Tip = bDead ? Rgb(148, 138, 108) : Varied(Rgb(132, 138, 124), L, 0.0);
+				Strip(M, { Foot - V3{ 0, 0, 0.01 }, Foot + Lean * 0.4 + V3{ 0, 0, High * 0.55 }, Foot + Lean + V3{ 0, 0, High } }, { 0.008, 0.006, 0.0 }, AcrossOf(Lean, A),
+					  Varied(Rgb(84, 88, 80), L, 0.0), Tip);
+			}
+		}
+		for (const Base B : { Base::Tuft, Base::TallGrass, Base::Wheat, Base::Poppies, Base::Flowers, Base::Stone, Base::Fern, Base::Stubble }) At(B).FarFrom = 70.0f;
+		At(Base::Sward).FarFrom = 25.0f;
+		// The steppe's, from the east kit (each file's text in Fd.Steppe.Kit); plain stand-ins for a model not given.
+		for (const Base B : { Base::Khata, Base::Chimney, Base::Pole, Base::Wattle, Base::Sweep, Base::Haystack, Base::Birch })
+		{
+			BaseMesh& M = At(B);
+			const auto Found = Fd.Steppe.Kit.find(LandSteppe::KitName(B));
+			std::string Error;
+			const double FarFrom = B == Base::Wattle ? 60.0 : B == Base::Pole ? 110.0 : 150.0;
+			if (Found == Fd.Steppe.Kit.end() || !LandSteppe::ReadKit(Found->second, FarFrom, M, Error))
+			{
+				M.Near = Mesh();
+				M.Far = Mesh();
+				LandSteppe::PlainKit(B, M);
+			}
+		}
 		for (BaseMesh& B : Bases) Measure(B);
 	}
 }
@@ -4761,6 +5366,7 @@ namespace LandField
 		FW = Fd.Width();
 		FH = Fd.Depth();
 		Seed = Mix(Fd.Seed ^ 0x1A2DF1E1Dull);
+		if (Fd.Steppe.bOn) Sp = std::make_unique<LandSteppe::Plan>(Fd.Steppe);
 		ReadCells();
 		MakeLanes();
 		MakeRaster();
@@ -4881,7 +5487,7 @@ namespace LandField
 			double Density = 0.0;
 			Base Kind = Base::Count;
 		};
-		Growth Grow(Drawn What, int Crop, double Edge, double LaneEdge, uint8_t Occ, double Pick)
+		Growth Grow(Drawn What, int Crop, double Edge, double LaneEdge, uint8_t Occ, double Pick, bool bSteppe)
 		{
 			auto Of = [Pick](double Density, std::initializer_list<std::pair<double, Base>> Odds) {
 				Growth G;
@@ -4902,22 +5508,26 @@ namespace LandField
 				if (IsCorn(Crop))
 					G = Edge > 4.0 ? Of(2.0, { { 0.93, Base::Wheat }, { 0.04, Base::Poppies }, { 0.02, Base::Tuft }, { 0.01, Base::Flowers } })
 								   : Of(1.4, { { 0.4, Base::Wheat }, { 0.22, Base::Poppies }, { 0.18, Base::TallGrass }, { 0.1, Base::Flowers }, { 0.1, Base::Tuft } });
-				else if (Crop == CpStubble) G = Of(0.5, { { 0.7, Base::Tuft }, { 0.15, Base::Poppies }, { 0.15, Base::Flowers } });
+				else if (Crop == CpStubble) G = Of(1.0, { { 0.84, Base::Stubble }, { 0.11, Base::Tuft }, { 0.03, Base::Poppies }, { 0.02, Base::Flowers } });
 				else G = Of(1.6, { { 1.0, Base::Tuft } });
 				break;
 			case Drawn::Pasture:
-				if (Edge < 3.0) G = Of(1.2, { { 0.35, Base::TallGrass }, { 0.15, Base::Fern }, { 0.2, Base::Flowers }, { 0.3, Base::Tuft } });
-				else if (Crop == CpLush) G = Of(1.2, { { 0.6, Base::Tuft }, { 0.3, Base::TallGrass }, { 0.1, Base::Flowers } });
-				else if (Crop == CpHayCut) G = Of(0.6, { { 0.9, Base::Tuft }, { 0.1, Base::Flowers } });
-				else if (Crop == CpMeadow) G = Of(1.4, { { 0.2, Base::Tuft }, { 0.55, Base::TallGrass }, { 0.15, Base::Flowers }, { 0.1, Base::Poppies } });
-				else G = Of(1.0, { { 0.86, Base::Tuft }, { 0.08, Base::Flowers }, { 0.06, Base::TallGrass } });
+				// (the steppe's: its pasture tussocky, feather grass in it; its fallow weedy; the strip between fields tall)
+				if (bSteppe && Edge < 3.0) G = Of(1.4, { { 0.5, Base::TallGrass }, { 0.3, Base::Tuft }, { 0.2, Base::Flowers } });
+				else if (Crop == CpSteppe) G = Of(1.3, { { 0.45, Base::Tuft }, { 0.42, Base::TallGrass }, { 0.13, Base::Flowers } });
+				else if (Crop == CpFallow) G = Of(0.9, { { 0.5, Base::Tuft }, { 0.3, Base::TallGrass }, { 0.2, Base::Flowers } });
+				else if (Edge < 3.0) G = Of(1.2, { { 0.35, Base::TallGrass }, { 0.15, Base::Fern }, { 0.2, Base::Flowers }, { 0.3, Base::Tuft } });
+				else if (Crop == CpLush) G = Of(1.45, { { 0.35, Base::Sward }, { 0.4, Base::Tuft }, { 0.18, Base::TallGrass }, { 0.07, Base::Flowers } });
+				else if (Crop == CpHayCut) G = Of(1.2, { { 0.55, Base::Sward }, { 0.4, Base::Tuft }, { 0.05, Base::Flowers } });
+				else if (Crop == CpMeadow) G = Of(1.45, { { 0.2, Base::Sward }, { 0.15, Base::Tuft }, { 0.45, Base::TallGrass }, { 0.12, Base::Flowers }, { 0.08, Base::Poppies } });
+				else G = Of(1.45, { { 0.6, Base::Sward }, { 0.32, Base::Tuft }, { 0.05, Base::Flowers }, { 0.03, Base::TallGrass } });
 				break;
 			case Drawn::Rough: G = Of(1.2, { { 0.5, Base::TallGrass }, { 0.35, Base::Tuft }, { 0.15, Base::Fern } }); break;
 			case Drawn::Works: G = Of(0.3, { { 1.0, Base::Tuft } }); break; // (its few stones: the clumped pass below)
 			case Drawn::Village:
 			case Drawn::Yard:
 				G = (Occ & OcNear) || What == Drawn::Yard ? Of(0.25, { { 0.8, Base::Tuft }, { 0.2, Base::Stone } })
-														   : Of(0.8, { { 0.6, Base::Tuft }, { 0.3, Base::Flowers }, { 0.1, Base::TallGrass } });
+														   : Of(1.2, { { 0.4, Base::Sward }, { 0.36, Base::Tuft }, { 0.18, Base::Flowers }, { 0.06, Base::TallGrass } });
 				break;
 			case Drawn::Lane:
 				// The floor's edges and its middle strip grass over; between, the ruts' stones. The walls: ferns and grass.
@@ -4929,9 +5539,11 @@ namespace LandField
 			case Drawn::Woods: G = Of(0.5, { { 0.65, Base::Fern }, { 0.35, Base::Tuft } }); break;
 			case Drawn::Wall: G = Of(0.2, { { 0.5, Base::TallGrass }, { 0.5, Base::Fern } }); break;
 			case Drawn::Marsh: G = Of(1.5, { { 0.8, Base::TallGrass }, { 0.2, Base::Tuft } }); break;
-			case Drawn::Beyond: G = Of(0.8, { { 0.85, Base::Tuft }, { 0.1, Base::TallGrass }, { 0.05, Base::Flowers } }); break;
+			case Drawn::Beyond: G = Of(1.2, { { 0.45, Base::Sward }, { 0.45, Base::Tuft }, { 0.06, Base::TallGrass }, { 0.04, Base::Flowers } }); break;
 			default: break; // a floor or water: nothing
 			}
+			// (no bracken on the steppe: dry grass where the bocage has fern)
+			if (bSteppe && G.Kind == Base::Fern) G.Kind = Base::TallGrass;
 			// Trodden: gateways, and where the recording's men and vehicles went.
 			if (Occ & OcVehicle) G.Density *= 0.35;
 			else if (Occ & OcGate) G.Density *= 0.3;
@@ -4959,13 +5571,14 @@ namespace LandField
 					if (X < X0 || X >= X1 || Y < Y0 || Y >= Y1) continue;
 					const double Keep = Unit(Hash(H, 1)), Pick = Unit(Hash(H, 2));
 					int Crop = CpOther;
-					double Edge = 99.0, LaneEdge = 99.0;
+					double Edge = 99.0, LaneEdge = 99.0, RowAngle = 0.0;
 					uint8_t Occ = 0;
 					if (G.InRaster(X, Y))
 					{
 						const size_t P = G.Pix(X, Y);
 						const ParcelInfo& Q = G.Parcels[static_cast<size_t>(G.Pid[P])];
 						Crop = Q.Crop;
+						RowAngle = Q.Angle;
 						Edge = G.DistE[P];
 						LaneEdge = G.LaneD[P];
 						Occ = G.OccR[P];
@@ -4974,7 +5587,8 @@ namespace LandField
 					}
 					Drawn What = Drawn::Beyond;
 					const double Z = G.Top(X, Y, &What);
-					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick);
+					if (G.Sp && G.Sp->HasRail() && G.Sp->RailDistance(X, Y) < 3.0) continue; // (nothing grows on the railway's ballast)
+					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
 					if (Gr.Kind == Base::Count || Keep >= Gr.Density / 2.0) continue;
 					Placed P;
 					P.Kind = Gr.Kind;
@@ -5011,6 +5625,14 @@ namespace LandField
 							TG = 0.84;
 							TB = 0.7;
 						}
+						else if (Crop == CpRye)
+						{
+							// (winter rye, ripe and chest high: greyer and paler than the wheat)
+							ScaleZ *= 1.35;
+							TR = 0.98;
+							TG = 0.97;
+							TB = 1.06;
+						}
 						break;
 					case Base::Tuft:
 						Scale = 0.7 + 0.7 * U4;
@@ -5024,20 +5646,44 @@ namespace LandField
 							TG = 0.86;
 							TB = 0.74;
 						}
-						if (Crop == CpStubble && What == Drawn::Crop)
-						{
-							TR = 1.12;
-							TG = 1.04;
-							TB = 0.92;
-						}
 						break;
 					case Base::TallGrass:
 						Scale = 0.8 + 0.5 * U4;
 						ScaleZ = 0.8 + 0.45 * U5;
+						if (G.Sp && U6 < 0.45)
+						{
+							// (feather grass, its awns silvering in the wind; the rest of the steppe's grass gone buff)
+							TR = 1.18;
+							TG = 1.12;
+							TB = 1.12;
+						}
+						else if (G.Sp)
+						{
+							TR = 1.1;
+							TG = 1.0;
+							TB = 0.86;
+						}
 						break;
 					case Base::Stone:
 						Scale = 0.6 + 1.2 * U4;
 						ScaleZ = 0.7 + 0.6 * U5;
+						break;
+					case Base::Sward:
+					{
+						// the ground's own colour where it grows (built grey, 128 a tint is as built)
+						const Col Here = G.GroundColour(X, Y);
+						TR = Here.R / 118.0;
+						TG = Here.G / 118.0;
+						TB = Here.B / 118.0;
+						Scale = 0.8 + 0.4 * U4;
+						ScaleZ = Crop == CpHayCut || Crop == CpGrazed ? 0.7 + 0.4 * U5 : 0.9 + 0.5 * U5;
+						break;
+					}
+					case Base::Stubble:
+						// along the field's own drill rows (its ploughed lands' way), either way round
+						P.Yaw = static_cast<float>(RowAngle + (U6 < 0.5 ? 0.0 : Pi) + 0.06 * (U4 - 0.5));
+						Scale = 0.85 + 0.3 * U4;
+						ScaleZ = 0.8 + 0.4 * U5;
 						break;
 					default: break;
 					}
@@ -5066,6 +5712,7 @@ namespace LandField
 					const bool bLaneSide = What == Drawn::Lane && G.LaneD[Px] > -1.0f && G.LaneD[Px] < 0.3f;
 					const bool bWorks = What == Drawn::Works;
 					if (!bGate && !bFieldFoot && !bLaneSide && !bWorks) continue;
+					if (G.Sp && !bWorks) continue; // (the black earth has no stones)
 					// Clumps: a stretch of bank foot here and there, the rest bare (on the works fewer and sparser: some 0.007
 					// a square metre over them all).
 					const double Clump = Noise(X / 6.0, Y / 6.0, G.Seed ^ 0x5703ull);

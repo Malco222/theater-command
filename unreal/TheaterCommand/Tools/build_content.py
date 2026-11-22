@@ -1425,9 +1425,12 @@ def build_sea():
 LAND_TEXTURES = "/Game/Campaign/Textures/Land"
 
 
-def land_texture(name):
-    """One of the ground's own detail pictures, painted by Tools/land_look/make_ground_textures.py and kept beside it:
-    brought in under /Game/Campaign/Textures/Land as plain numbers (not colours), wrapping, kept as BC7."""
+def land_texture(name, cut_out=False):
+    """One of the ground's own detail pictures, painted by Tools/land_look/make_ground_textures.py (or, the leaves,
+    make_leaf_textures.py) and kept beside it: brought in under /Game/Campaign/Textures/Land as plain numbers (not
+    colours), wrapping, kept as BC7. A cut-out picture (the leaves) keeps its leaves in its smaller pictures: each
+    made so that as much of it is over the material's clip (a half) as in the full one, so a hedge does not thin to
+    twigs with distance."""
     import os
     source = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Tools", "land_look", name + ".png")
     if not os.path.isfile(source):
@@ -1445,6 +1448,12 @@ def land_texture(name):
         raise RuntimeError(f"{LAND_TEXTURES}/{name} was not imported")
     texture.set_editor_property("srgb", False)
     texture.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_BC7)
+    if cut_out:
+        try:
+            texture.set_editor_property("do_scale_mips_for_alpha_coverage", True)
+            texture.set_editor_property("alpha_coverage_thresholds", unreal.Vector4(0.0, 0.0, 0.0, 0.5))
+        except Exception as e:  # (an engine without these: the leaves thin a little with distance, nothing worse)
+            unreal.log_warning(f"Theater Command: {name}'s smaller pictures not scaled for their cut-out: {e}")
     eal.save_asset(texture.get_path_name(), only_if_is_dirty=False)
     unreal.log(f"Theater Command: wrote {texture.get_path_name()}")
     return texture
@@ -1599,6 +1608,54 @@ def build_land_surface():
     finish(m)
 
 
+def build_land_leaves():
+    """THE HEDGES' AND THE TREES' LEAVES (release 2; Brian, 22 November: "i want the grass and bushes and plants to
+    look more realistic"). The ground battle's shrubs and trees carry their leaves on flat cards (LandField's LeafCard),
+    each a spray of the leaves' picture (T_LandLeaves, Tools/land_look/make_leaf_textures.py): its twigs and leaves cut
+    out by the picture's alpha, the gaps between them open to the sky and the light, both faces drawn. The card's
+    vertex colour is its paint (sRGB, made linear, as M_MapSurface's), the picture's colour a number about it (0.5 as
+    painted: each leaf a little lighter or darker, a pale midrib, the twigs dark). Lit as foliage: what the sun shines
+    through from behind glows a little, yellow-green ("Through", "ThroughStrength"). Instanced, as the shrubs and trees
+    are. Without it (build_content.py not run since it came) the game draws the old solid sprigs instead, said once."""
+    m = new_material("M_LandLeaves")
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    m.set_editor_property("two_sided", True)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWOSIDED_FOLIAGE)
+    m.set_editor_property("opacity_mask_clip_value", 0.5)
+    leaves_picture = land_texture("T_LandLeaves", cut_out=True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    leaves = node(m, unreal.MaterialExpressionTextureSample, -900, 300, texture=leaves_picture, sampler_type=sampler_for(leaves_picture))
+    # (the picture's numbers: 0.5 as painted)
+    painted = times(m, times(m, to_linear, (leaves, "RGB"), -500, 100), scalar(m, "LeafValue", 2.0, -500, 220), -350, 100)
+    to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -350, 300), -200, 250),
+                    scalar(m, "ThroughStrength", 0.6, -350, 400), -50, 300)
+    to_property(through, "", unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
+    to_property((leaves, "A") if False else node_from(m, unreal.MaterialExpressionComponentMask, (leaves, "A"), -500, 500, r=True, g=False, b=False, a=False),
+                "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    to_property(scalar(m, "Roughness", 0.75, -200, 600), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.3, -200, 700), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_land_leaves_or_tell():
+    """M_LandLeaves is the ground battle's alone, and the battle falls back to its solid sprigs without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_leaves()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandLeaves was not built (the ground battle draws its solid sprigs):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandLeaves"):
+                eal.delete_asset(f"{MATERIALS}/M_LandLeaves")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed:\n" + traceback.format_exc())
+
+
 def build_land_surface_or_tell():
     """M_LandSurface is the ground battle's alone, and the battle falls back to M_MapSurface without it: whatever goes
     wrong in it is told, and the rest of the content is built as before."""
@@ -1720,8 +1777,9 @@ def build_flak_lit():
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
 # (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
-# build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
+# M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

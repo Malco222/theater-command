@@ -436,6 +436,12 @@ namespace LandPlay
 			}
 			return;
 		}
+		// A smoke round (the drill book's screens, 22 November) is not high explosive: no burst, no hole, no blast's
+		// noise. Its screen is drawn apart; until it is, nothing (never a shell's burst and crater by mistake).
+		if (R.W == "smoke")
+		{
+			return;
+		}
 		const bool bAgainstArmour = R.W == "tank" || R.W == "at";
 		const bool bTargetArmour = (On && (On->Kind == "arm")) || bOnVehicle;
 		if (bAgainstArmour && (bTargetArmour || bOnVehicle))

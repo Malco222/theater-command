@@ -96,6 +96,10 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> GroundInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ThingInk;
+	/** The hedges' and trees' leaves on their cards (M_LandLeaves: cut out, both faces lit; build_content.py); none
+	 * without it, and then the shrubs and trees carry their solid sprigs instead. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> LeafInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
 	UPROPERTY()
@@ -108,6 +112,8 @@ private:
 	{
 		FBox2D Box;
 		TWeakObjectPtr<UProceduralMeshComponent> Near, Far, Built;
+		/** Once a hole is dug in it, its near ground by parts (LandCrater::Dug), drawn in Near's place. */
+		TArray<TWeakObjectPtr<UProceduralMeshComponent>> NearParts;
 		bool bNearShown = false;
 		double FarFrom = 0.0;
 	};
@@ -122,8 +128,15 @@ private:
 	TArray<TObjectPtr<UStaticMesh>> ThingMeshes;
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ThingCopies;
-	/** Each base's two shade edges (the brightness of an instance's tint, R + G + B) and its shades' tints. */
+	/** Each base's two shade edges (the brightness of an instance's tint, R + G + B), and for the clutter each
+	 * brightness third's two warmth edges (R - G; WarmEdges, three a kind): a thing's shade is its brightness third, and
+	 * the clutter's is that third split again in thirds by warmth, nine a kind, so that a blade of grass takes about its
+	 * own ground's hue (a hay field's straw yellow, a lush one's green) and not the whole field's mean. */
 	TArray<FVector2f> ShadeEdges;
+	TArray<FVector2f> WarmEdges;
+	/** How far from the eye each clutter kind is laid, metres: where it is no longer drawn (its cull) and the 12 m the
+	 * eye may move before it is laid again. */
+	TArray<float> ClutterReach;
 	/** The grass, corn, flowers and stones round the eye and round what it looks at (LandField::Clutter), laid again
 	 * when either has moved some metres: one instanced mesh a clutter kind and shade (ClutterCopyOf, -1 none). */
 	UPROPERTY()
@@ -279,6 +292,8 @@ private:
 	void LayField();
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
 	void LayThings();
+	/** A thing's shade, 0 to 8: three times its brightness third, and its warmth third (the middle one, 1, for a thing
+	 * that is not clutter). */
 	int32 ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const;
 	void ShowField(const FVector& EyeWorld, double Battle);
 	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt);
@@ -302,6 +317,8 @@ private:
 	void MakeCraters();
 	/** This frame's tracks on the ground: each moving tank's and lorry's marks, the corn laid flat behind her. */
 	void MakeRuts();
+	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */
+	void SendDug();
 	void PlayArmourEvents();
 	void PlayMenEvents();
 	void PlaySound(double RealDt);

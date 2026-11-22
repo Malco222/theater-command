@@ -16,9 +16,13 @@
  * earth colours, never a black disc. Sized by the round: a mortar bomb, a 75 or an 88's high explosive, a 105. Every
  * hole stays for the whole battle (the art director's ruling).
  *
- * The ground is drawn opaque and nothing may sink under it, so a hole is laid over the ground, its floor a few
- * centimetres up: what reads as depth is the rim standing round it, the dark hollow and its walls' shading from dark at
- * the foot to dry soil at the crest. Colours are 8-bit sRGB vertex colours for the game's M_MapSurface (made linear
+ * Brian, 22 November: "explosions should create craters". A hole of a mortar bomb or bigger is dug: its bowl goes down
+ * into the ground (a mortar's 0.35 m, a 105's 0.8 m, a 150's 1.2 m at its middle) and the ground drawn over it is cut
+ * away inside the bowl's wall (Dug), so a man stands in it, a low camera sees into it and its far wall shades as earth
+ * does. The cut runs where the hole's own wall already stands over the ground (the 0.86 ring, short of the crest), so
+ * the ground's cut edge is never seen. A grenade's scuff and a small round's hole are laid over the ground as before,
+ * their floor a few centimetres up. Older holes, the tracks' marks and the ground are cut alike by a new hole's cut,
+ * and a new hole is laid on what is there: the floor of an older one where it was torn in it. Colours are 8-bit sRGB vertex colours for the game's M_MapSurface (made linear
  * there), as LandField's are; the meshes are LandField::Mesh, in the field's frame (metres, x east, y north, z up),
  * counter-clockwise seen from above.
  *
@@ -46,6 +50,8 @@ namespace LandCrater
 		double Clod = 0.1;
 		/** Points round each ring (fewer for the small holes). */
 		int Sides = 20;
+		/** How deep its bowl goes under the ground at its middle, metres (0: laid over the ground, nothing cut). */
+		double Deep = 0.0;
 	};
 
 	/**
@@ -77,10 +83,23 @@ namespace LandCrater
 	 * flicker (Field gives each hole its own few millimetres). Nothing for a size of no width. Under, when given, is the
 	 * ground's own colour: the thrown soil's thin edge takes it exactly and the ring inside it leans to it, so the hole
 	 * fades into whatever it was torn in (stubble, corn, pasture) with no outline; torn turf takes the ground's colour
-	 * too. The same seed lays the same shape with it or without it.
+	 * too. The same seed lays the same shape with it or without it. A size with Deep digs its bowl under Height and,
+	 * when OutCut is given, writes there the outline to cut the ground by (x, y pairs, counter-clockwise, convex: the
+	 * hull of its wall's 0.86 ring, where the wall already stands over the ground).
 	 */
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under = ColourFn());
+		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr);
+
+	/**
+	 * Cuts out of a mesh what lies inside a convex outline seen from above (x, y pairs, counter-clockwise): every
+	 * triangle that reaches into it is replaced by the pieces of it left outside, on its own plane, their points'
+	 * normals and colours taken across it, so the surface outside is unchanged to the last millimetre. Triangles from
+	 * index KeepFrom to KeepTo (in Triangles, by threes) are left as they are (a new hole's own). Returns whether
+	 * anything was cut.
+	 */
+	bool CutOut(LandField::Mesh& M, const std::vector<double>& Outline, size_t KeepFrom = 0, size_t KeepTo = 0);
+	/** Whether X, Y lies inside a convex outline (x, y pairs, counter-clockwise). */
+	bool Inside(const std::vector<double>& Outline, double X, double Y);
 
 	/** All of a battle's holes, kept for the whole battle, grouped by place for the game's meshes. */
 	class Field
@@ -110,9 +129,41 @@ namespace LandCrater
 
 		/** InUnder: the ground's own colour (Lay's Under), or none for the earth colours alone. */
 		void Begin(HeightFn InHeight, uint64_t InSeed, ColourFn InUnder = ColourFn());
+		/** The soil a hole on plain ground ("earth") throws, where the ground is not the bocage's loam: "blackearth" on
+		 * the steppe. Empty for the loam. */
+		void SetEarth(const std::string& Word) { Earth = Word; }
 		/** A round landed at X, Y on Ground (the effects kit's word): its hole laid, by its name and calibre (SizeOf).
-		 * False when it leaves none (a name of no size, water, the guard reached). */
+		 * False when it leaves none (a name of no size, water, the guard reached). Dug only where Dig says it may be
+		 * (open ground: a field, a pasture, a garden; not a lane, a bank, a yard), when Dig is given. */
 		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground);
+		/** Where a hole may be dug (set before the first Add; none: anywhere). */
+		std::function<bool(double X, double Y)> Dig;
+		/** The game's and the checks' one reading of Dig: open ground (a field of corn or stubble, a pasture, rough
+		 * grass, the country beyond), not a lane, a bank, a yard, a garden or orchard, the woods (a tree or a hedge would
+		 * hang over a bowl dug under it), a floor, a wall's line, water or marsh. G must outlive the function. */
+		static std::function<bool(double X, double Y)> DigOn(const LandField::Ground& G)
+		{
+			const LandField::Ground* Gp = &G;
+			return [Gp](double X, double Y) {
+				switch (Gp->At(X, Y).What)
+				{
+				case LandField::Drawn::Crop:
+				case LandField::Drawn::Pasture:
+				case LandField::Drawn::Rough:
+				case LandField::Drawn::Beyond:
+					return true;
+				default:
+					return false;
+				}
+			};
+		}
+		/** The cuts made since the last call (each an outline for CutOut): the game cuts its ground and the tracks'
+		 * marks by them. Older holes are cut here, by Add. */
+		std::vector<std::vector<double>> TakeCuts();
+		/** Whether a point is inside a dug hole's cut (the ground is gone there: what stands on it stands on TopAt). */
+		bool InCut(double X, double Y) const;
+		/** The surface there now: TopAt inside a cut, else the ground (Begin's Height). */
+		double SurfaceAt(double X, double Y) const;
 		/** The sections a hole was laid in since the last call, in the order laid: each to be sent to its patch's mesh
 		 * again, whole. A patch is numbered when its first hole is laid, so a new patch's number is always the next. */
 		std::vector<Place> TakeChanged();
@@ -124,9 +175,10 @@ namespace LandCrater
 		bool Bare(double X, double Y) const;
 		/**
 		 * The holes' own face at a point: the highest of their floors, walls, crests, thrown soil and clods over X, Y
-		 * (OutZ, metres, the field's height), read from the triangles laid; false where no hole reaches. A hole's floor
-		 * and its rim stand over the drawn ground (a 105's crest some 0.19 m, a 150's 0.27 m), so a body lying across a
-		 * rim is laid on this face, not on the ground under it.
+		 * (OutZ, metres, the field's height), read from the triangles laid; false where no hole reaches. A hole's rim
+		 * stands over the drawn ground (a 105's crest some 0.19 m, a 150's 0.27 m), so a body lying across a rim is laid
+		 * on this face, not on the ground under it; inside a dug hole's cut it is the bowl's floor, under the ground. A
+		 * hole is not read where a later hole's cut has taken it away.
 		 */
 		bool TopAt(double X, double Y, double& OutZ) const;
 
@@ -142,6 +194,9 @@ namespace LandCrater
 			int Sides = 0, Clods = 0;
 			/** How far its thrown soil reaches from its middle at the farthest, metres. */
 			double Out = 0.0;
+			/** A dug hole's bowl depth and its cut's outline (x, y pairs; empty: laid over the ground). */
+			double Deep = 0.0;
+			std::vector<double> Cut;
 		};
 		const std::vector<Hole>& All() const { return Holes; }
 
@@ -149,14 +204,55 @@ namespace LandCrater
 		HeightFn Height;
 		ColourFn Under;
 		uint64_t Seed = 1;
+		std::string Earth;
 		std::vector<Hole> Holes;
 		/** The patches by number, and their numbers by square. */
 		std::vector<Patch> PatchList;
 		std::unordered_map<int64_t, int> PatchOf;
 		std::vector<Place> Changed;
+		std::vector<std::vector<double>> Cuts;
 		/** The holes by 8 m squares of the field. */
 		std::unordered_map<int64_t, std::vector<int>> Squares;
 		static int64_t SquareOf(int I, int J);
+		/** Whether a hole laid after hole After has cut X, Y away. */
+		bool CutAfter(int After, double X, double Y) const;
+	};
+
+	/**
+	 * The ground drawn, cut by the dug holes: a field tile's near ground (LandField::Tile::Near, 250 m) is split, the
+	 * first time a hole is dug in it, into Split x Split parts by each triangle's middle (nothing moves, so no seam), each
+	 * its own mesh in the game from then on: a new hole then sends only the part or two it is cut in (some 600 triangles,
+	 * a 62 m square of shadows), never the tile. The far level is left whole: at 700 m a hole is a few pixels, and its
+	 * rim and thrown soil, laid over the ground, still show it.
+	 */
+	class Dug
+	{
+	public:
+		static constexpr int Split = 4;
+		struct Place
+		{
+			int Tile = 0, Part = 0;
+		};
+		/** The field's tiles (LandField::Ground::Tiles(); it must outlive this). */
+		void Begin(const std::vector<LandField::Tile>* InTiles);
+		/** A hole's cut (Field::TakeCuts): the parts it reaches cut. */
+		void Cut(const std::vector<double>& Outline);
+		/** The tiles split since the last call: their near ground is drawn by parts from now on. */
+		std::vector<int> TakeSplit();
+		/** The parts cut since the last call (each to be sent again, whole). */
+		std::vector<Place> TakeChanged();
+		bool IsSplit(int Tile) const { return Tile >= 0 && static_cast<size_t>(Tile) < Parts.size() && !Parts[static_cast<size_t>(Tile)].empty(); }
+		const LandField::Mesh& PartOf(const Place& Where) const { return Parts[static_cast<size_t>(Where.Tile)][static_cast<size_t>(Where.Part)]; }
+		int Cuts() const { return CutCount; }
+
+	private:
+		const std::vector<LandField::Tile>* Tiles = nullptr;
+		std::vector<std::vector<LandField::Mesh>> Parts;
+		std::vector<std::vector<float>> Boxes; // per tile, per part: x0, y0, x1, y1
+		std::vector<int> Split_;
+		std::vector<Place> Changed;
+		int CutCount = 0;
+		void SplitTile(int T);
 	};
 
 	/**
@@ -239,6 +335,10 @@ namespace LandCrater
 		int Pieces() const { return Count; }
 		/** Whether a point is under a track's mark, or between a tank's tracks where she laid the corn flat. */
 		bool Flat(double X, double Y) const;
+		/** A dug hole's cut (Field::TakeCuts): the marks inside it cut away. */
+		void Cut(const std::vector<double>& Outline);
+		/** Where the ground is cut (Field::InCut): no mark is laid across it. */
+		std::function<bool(double X, double Y)> DugAt;
 
 	private:
 		struct Last
