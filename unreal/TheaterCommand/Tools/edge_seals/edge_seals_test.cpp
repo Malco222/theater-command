@@ -1057,8 +1057,9 @@ namespace
  * narrowing to their points above the crossing, a guard across each near its foot and a short grip below, and a small
  * pommel where it holds 1.5 px on the screen; as heavy and about as large as the X was, and the same on both sides. The
  * review of 0010: the outline must say "sword" without the pommel (it read as the X with a notch across each lower
- * arm at 1441 by 878 and 1024 by 768), each part that must hold 1.5 px is measured on each side, as the eye sees it
- * (the guard past the blade at its full width, the pommel past its grip), and nothing swells on a screen of no size.
+ * arm at 1441 by 878 and 1024 by 768), each part that must hold 1.5 px is measured as the eye sees it (the guard past
+ * the blade at its full width, on each side; the pommel past its grip across the whole pommel, the art director's call
+ * of 20:26Z), and nothing swells on a screen of no size.
  */
 static void TestSwords()
 {
@@ -1088,9 +1089,10 @@ static void TestSwords()
 			(AtFull.Overhang - AtFull.GuardThick * 0.5) * Full, (AtSmall.Overhang - AtSmall.GuardThick * 0.5) * Small, (AtLeast.Overhang - AtLeast.GuardThick * 0.5) * Least,
 			AtSmall.PointThick * Small, AtSmall.BladeThick * Small);
 	}
-	// The pommel stands only where its neck and how far it stands past its grip on each side both hold 1.5 px: drawn
-	// 3.2 across on a grip of 1.6, from 1.875 px a unit (a window 1823 high). Below it, at 1920 by 1080 and in Brian's
-	// window too, the grip ends round, and the mark is eight bars.
+	// The pommel stands only where its neck and how far it stands past its grip, across the whole pommel (the art
+	// director, 20:26Z: not on each side), both hold 1.5 px: drawn 3.2 across on a grip of 1.6, its neck of 0.9 units
+	// holds from 5/3 px a unit (a window 1620 high), and so it stands in Brian's window. Below it, at 1920 by 1080 too,
+	// the grip ends round, and the mark is eight bars.
 	{
 		bool bDropped = true, bShown = true;
 		for (const double Scale : Screens)
@@ -1098,8 +1100,8 @@ static void TestSwords()
 			const Look::FSword Sword = Look::SwordOf(Scale);
 			Look::FStroke Strokes[Look::MarkMost];
 			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
-			const bool bHolds = Sword.Neck * Scale >= 1.5 - 1e-9 && (Sword.PommelD - Sword.GripThick) * 0.5 * Scale >= 1.5 - 1e-9;
-			if (Scale < 1.875)
+			const bool bHolds = Sword.Neck * Scale >= 1.5 - 1e-9 && (Sword.PommelD - Sword.GripThick) * Scale >= 1.5 - 1e-9;
+			if (Scale < 5.0 / 3.0 - 1e-9)
 			{
 				bDropped = bDropped && !Sword.bPommel && !bHolds && Count == 8 && Sword.GripEnd > Sword.Pommel;
 				for (int Each = 0; Each < Count; ++Each)
@@ -1114,7 +1116,7 @@ static void TestSwords()
 		}
 		CHECK(bDropped);
 		CHECK(bShown);
-		CHECK(Look::SwordOf(1.875).bPommel && !Look::SwordOf(1.875 - 1e-6).bPommel && !Look::SwordOf(Full).bPommel && !Look::SwordOf(Mac).bPommel);
+		CHECK(Look::SwordOf(5.0 / 3.0).bPommel && !Look::SwordOf(5.0 / 3.0 - 1e-6).bPommel && !Look::SwordOf(Full).bPommel && Look::SwordOf(Mac).bPommel);
 		// (a screen of no measure is taken at a pixel a unit; and however small a screen is measured, the guard never
 		// stands out more than 4 units, nor goes past the hollow's size: the review's denormal scale made it endless)
 		CHECK(!Look::SwordOf(0.0).bPommel && Look::SwordOf(0.0).Overhang == Look::SwordOf(1.0).Overhang);
@@ -3159,6 +3161,72 @@ namespace
 }
 
 /**
+ * The art director's call of 20:26Z on the swords' pommel: "measure the floor across the whole pommel, not per side.
+ * Draw it as a filled knob, never an outlined ring (an outline can't hold 1.5 px a side at these sizes). Make it at
+ * least the blade's stroke plus half a pixel, so it reads as a knob and not as more grip." On every screen from a
+ * window 600 high to 3240, a pixel at a time: where the pommel stands, it is a dot (EStroke::Dot), its neck and how far
+ * it stands past its grip across hold 1.5 px, and it is the blade's width and half a pixel or more across; it stands
+ * from a window 1620 high, where its neck holds, and below it never. The layer draws a dot as a filled disc (Pen.Disc,
+ * a rounded box filled with the ink and no outline), never as a ring.
+ */
+static void TestPommel(const char* Folder)
+{
+	int From = 0;
+	bool bKnob = true, bFloor = true, bWide = true, bOnly = true;
+	double LeastMargin = 1e9;
+	for (int Height = 600; Height <= 3240; ++Height)
+	{
+		const double Scale = (1000.0 / 900.0) * (Height / 1080.0);
+		const Look::FSword Sword = Look::SwordOf(Scale);
+		Look::FStroke Strokes[Look::MarkMost];
+		const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+		bOnly = bOnly && Sword.bPommel == (Height >= 1620);
+		if (!Sword.bPommel)
+		{
+			continue;
+		}
+		From = From == 0 ? Height : From;
+		int Dots = 0;
+		for (int Each = 0; Each < Count; ++Each)
+		{
+			const bool bDot = Strokes[Each].Kind == Look::EStroke::Dot;
+			Dots += bDot ? 1 : 0;
+			bKnob = bKnob && (!bDot || (Strokes[Each].Long == Sword.PommelD && Strokes[Each].Thick == 0.0));
+		}
+		bKnob = bKnob && Dots == 2 && Count == 10;
+		bFloor = bFloor && Sword.Neck * Scale >= 1.5 - 1e-9 && (Sword.PommelD - Sword.GripThick) * Scale >= 1.5 - 1e-9;
+		bWide = bWide && Sword.PommelD * Scale >= Sword.BladeThick * Scale + 0.5 - 1e-9;
+		LeastMargin = std::min(LeastMargin, (Sword.PommelD - Sword.BladeThick) * Scale);
+	}
+	CHECK(From == 1620 && bOnly && bKnob && bFloor && bWide && LeastMargin >= 0.5);
+	// (3.2 units across is the blade's 2.4 and half a pixel from 0.625 px a unit up; below that the knob would grow, but it
+	// stands nowhere there; and nothing grows without end on a screen measured as nothing)
+	CHECK(Look::SwordOf(0.625).PommelD == 3.2 && Look::SwordOf(0.5).PommelD > 3.2 && std::isfinite(Look::SwordOf(std::numeric_limits<double>::denorm_min()).PommelD)
+		&& Look::SwordOf(std::numeric_limits<double>::denorm_min()).PommelD <= 8.0);
+	const double Mac = (1000.0 / 900.0) * (1786.0 / 1080.0), At1620 = (1000.0 / 900.0) * (1620.0 / 1080.0);
+	const Look::FSword InMac = Look::SwordOf(Mac), AtFrom = Look::SwordOf(At1620);
+	std::printf("(the pommel: a filled knob from a window %d high; across it stands %.2f px past its grip at 1620 high, %.2f in Brian's window; %.2f px across against the blade's %.2f and half a pixel at 1620 high, %.2f against %.2f in Brian's window; its neck %.2f px at 1620 high)\n",
+		From, (AtFrom.PommelD - AtFrom.GripThick) * At1620, (InMac.PommelD - InMac.GripThick) * Mac, AtFrom.PommelD * At1620, AtFrom.BladeThick * At1620, InMac.PommelD * Mac,
+		InMac.BladeThick * Mac, AtFrom.Neck * At1620);
+	if (Folder)
+	{
+		const std::string Layer = SourceText(Folder, "EdgeNewsLayer.cpp");
+		const size_t Dot = Layer.find("case EdgeSeals::Look::EStroke::Dot:");
+		const size_t Break = Dot == std::string::npos ? std::string::npos : Layer.find("break;", Dot);
+		const std::string DotCase = Break == std::string::npos ? std::string() : Layer.substr(Dot, Break - Dot);
+		const size_t Disc = Layer.find("void Disc(");
+		const size_t DiscEnd = Disc == std::string::npos ? std::string::npos : Layer.find("\n\t\t}", Disc);
+		const std::string DiscBody = DiscEnd == std::string::npos ? std::string() : Layer.substr(Disc, DiscEnd - Disc);
+		CHECK(Contains(DotCase, "Pen.Disc(") && !Contains(DotCase, "Pen.Ring("));
+		CHECK(Contains(DiscBody, "const FSlateRoundedBoxBrush Round(Ink, static_cast<float>(Radius));") && !Contains(DiscBody, "Hollow") && !Contains(DiscBody, "Width"));
+	}
+	else
+	{
+		std::printf("(the order signs' folder was not given: the layer's drawing of the pommel was not read)\n");
+	}
+}
+
+/**
  * The design director's ruling 64(g)(4), 13:00Z: a folded seal that cannot name its run lists each item's own short
  * line, in card order, as many as the hover's own size holds, then "and N more" (and, since 20:27Z, each line its whole
  * clause where the line holds it: TestWholeClause). The hover is the engine's own tip,
@@ -4716,6 +4784,7 @@ int main(int ArgCount, char** Args)
 	TestUnderFrame();
 	TestSealAsk();
 	TestSwords();
+	TestPommel(ArgCount > 1 ? Args[1] : nullptr);
 	TestFold();
 	TestCountFace(ArgCount > 1 ? Args[1] : nullptr);
 	TestCuts();

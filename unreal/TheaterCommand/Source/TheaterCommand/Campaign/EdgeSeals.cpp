@@ -1765,11 +1765,16 @@ namespace EdgeSeals
 			Sword.GuardLong = Sword.BladeThick + 2.0 * Sword.Overhang;
 			Sword.GripThick = Stroke(1.6, PxPerUnit);
 			Sword.Pommel = -8.8;
-			Sword.PommelD = 3.2;
+			// (a filled knob, drawn as a dot (EStroke::Dot, the layer's Disc), never an outlined ring, which cannot hold 1.5 px
+			// a side at these sizes; at least the blade's stroke and half a pixel across, so that it reads as a knob and not
+			// as more grip: the art director, 20:26Z. 3.2 units, which is that from 0.625 px a unit up; a tiny screen is taken
+			// at a quarter pixel a unit, as Stroke takes it, so that nothing swells without end)
+			Sword.PommelD = std::max(3.2, Sword.BladeThick + 0.5 / std::max(Scale, 0.25));
 			Sword.Neck = (Sword.Guard - Sword.GuardThick * 0.5) - (Sword.Pommel + Sword.PommelD * 0.5);
-			// (the pommel where its neck and how far it stands past its grip on each side both hold 1.5 px, as the guard is
-			// measured: drawn 3.2 across on a grip of 1.6, from 1.875 px a unit up, a window 1823 high; else the grip ends round)
-			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * 0.5 * Scale >= MinStrokePx - 1e-9;
+			// (the pommel where its neck, the grip left bare under the guard, holds 1.5 px, and how far it stands past its grip
+			// does too, measured across the whole pommel, not on each side (the art director, 20:26Z): its neck of 0.9 units
+			// holds from 5/3 px a unit up, a window 1620 high, and so Brian's window; else the grip ends round)
+			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * Scale >= MinStrokePx - 1e-9;
 			Sword.GripEnd = Sword.bPommel ? Sword.Pommel : -7.4;
 			// (the two swords' box, point to hilt, centred on the disc's middle on every screen)
 			FStroke Made[MarkMost];

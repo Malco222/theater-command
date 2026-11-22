@@ -703,9 +703,11 @@ namespace EdgeSeals
 		 * side: the guard's width (GuardThick), and how far it stands out past the blade at its full width (Overhang less
 		 * the guard's round end, GuardThick / 2: made longer on a small screen so that it holds, to at most 4 units);
 		 * and for the pommel, the grip left bare between the guard and the pommel (Neck) and how far the pommel stands
-		 * past its grip on each side (half of PommelD less GripThick), without which it would read as the grip's own end.
-		 * Where either is under 1.5 px, the pommel is left off (bPommel false) and the grip ends round: as drawn, under
-		 * 1.875 px a unit, a window 1823 high (the art director's call: the floor per side, or across the pommel).
+		 * past its grip, measured across the whole pommel, not on each side (PommelD less GripThick: the art director,
+		 * 20:26Z), without which it would read as the grip's own end. Where either is under 1.5 px, the pommel is left off
+		 * (bPommel false) and the grip ends round: as drawn, under 5/3 px a unit, a window 1620 high, where the neck is
+		 * what fails. The pommel is a filled knob (a Dot), never an outlined ring, and at least the blade's stroke and half
+		 * a pixel across (PommelD), so that it reads as a knob and not as more grip.
 		 */
 		struct FSword
 		{
