@@ -146,6 +146,9 @@ namespace LandCommand
 		CountDrawn(Rec);
 		Shown.clear();
 		Coming.clear();
+		RidersNow.clear();
+		bHelp = false;
+		ReadAt = T;
 		const LandFeed::View* A = Rec.ViewAt(T);
 		if (!A)
 		{
@@ -185,6 +188,24 @@ namespace LandCommand
 		const size_t At = static_cast<size_t>(A - Rec.Views.data());
 		const LandFeed::View* B = At + 1 < Rec.Views.size() ? &Rec.Views[At + 1] : nullptr;
 		const double K = B && B->T > A->T ? std::clamp((T - A->T) / (B->T - A->T), 0.0, 1.0) : 0.0;
+		// (his own despatch riders, eased toward the next view as the blocks are; one gone by then stands where he was)
+		for (const LandFeed::Rider& R : A->Riders)
+		{
+			if (Me < 0 || R.Side != Me) continue;
+			LandFeed::Rider Now = R;
+			if (B && K > 0.0)
+			{
+				for (const LandFeed::Rider& N : B->Riders)
+				{
+					if (N.Corps != R.Corps || N.Side != R.Side) continue;
+					Now.X += (N.X - R.X) * K;
+					Now.Y += (N.Y - R.Y) * K;
+					break;
+				}
+			}
+			RidersNow.push_back(std::move(Now));
+		}
+		for (const Neighbour& N : Coming) bHelp = bHelp || N.bMine;
 		for (const LandFeed::Unit& U : A->Units)
 		{
 			Tag G;
@@ -237,6 +258,10 @@ namespace LandCommand
 			G.SearchY = U.SearchY;
 			G.bCutter = G.bMine && U.bCutter;
 			G.Smoke = G.bMine ? U.Smoke : -1;
+			G.bWaits = G.bMine && U.bWaits;
+			G.bWaitLate = G.bWaits && U.bWaitLate;
+			G.bWaitFree = G.bWaits && U.bWaitFree;
+			G.WaitDue = G.bWaits ? U.WaitDue : -1.0;
 			G.OrderIn = U.OrderIn;
 			G.OrderKind = U.OrderKind;
 			G.OrderX = U.OrderX;
@@ -522,6 +547,40 @@ namespace LandCommand
 			if (G && G->Smoke > 0) Out.push_back(Id);
 		}
 		return Out;
+	}
+
+	std::vector<int> General::Waiters() const
+	{
+		std::vector<int> Out;
+		for (int Id : Chosen())
+		{
+			const Tag* G = TagOf(Id);
+			const bool bFoot = G && (G->Kind == "inf" || G->Kind == "mtn" || G->Kind == "cav" || G->Kind == "eng");
+			if (bFoot && !(G->bWaits && !G->bWaitFree)) Out.push_back(Id);
+		}
+		return Out;
+	}
+
+	std::string General::Wait() const
+	{
+		const std::vector<int> Ids = Waiters();
+		return Ids.empty() ? std::string() : "{\"do\":\"land:wait\",\"units\":" + Units(Ids) + "}";
+	}
+
+	int General::RiderAt(double X, double Y, double Reach) const
+	{
+		int Best = -1;
+		double Near = Reach;
+		for (size_t K = 0; K < RidersNow.size(); ++K)
+		{
+			const double D = std::hypot(RidersNow[K].X - X, RidersNow[K].Y - Y);
+			if (D <= Near)
+			{
+				Near = D;
+				Best = static_cast<int>(K);
+			}
+		}
+		return Best;
 	}
 
 	std::string General::Cut(double X, double Y) const

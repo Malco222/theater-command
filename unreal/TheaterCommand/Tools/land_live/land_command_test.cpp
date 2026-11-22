@@ -440,6 +440,10 @@ int main(int Argc, char** Argv)
 		Check(Me >= 0 && Me <= 1 && !Joiners[0].empty() && !Joiners[1].empty(), "the header names joiners on both sides");
 		int Told = 0, FoeTold = 0, CorpsMen = 0;
 		double LastIn = 1e9, LastToldAt = -1.0, ArrivedAt = -1.0;
+		// (hold until relieved and the rider ahead: join-check.ts tells one of his blocks to wait, and his corps sends a rider)
+		int Waiting = -1, WaitTags = 0, WaitWrong = 0, Riders = 0, RiderPicked = 0, HelpSaid = 0;
+		double WaitDue = -1.0;
+		std::string RiderSays, WaitOrder;
 		std::string CorpsName, CorpsEdge;
 		for (const std::string& Text : JoinDeltas)
 		{
@@ -453,6 +457,39 @@ int main(int Argc, char** Argv)
 			const double Screen = Join.Fought - 2.0;
 			if (Screen < 0.0 || Me < 0 || Me > 1) continue;
 			J.Update(Join, Screen);
+			for (const LandCommand::Tag& T : J.Tags())
+			{
+				if (!T.bWaits) continue;
+				if (!T.bMine || (Waiting >= 0 && T.Block != Waiting)) ++WaitWrong;
+				Waiting = T.Block;
+				WaitDue = T.WaitDue;
+				++WaitTags;
+			}
+			for (const LandFeed::Rider& R : J.Riders())
+			{
+				Check(R.Side == Me && !R.Says.empty() && R.Men > 0, "a rider is his own side's, and says what is coming");
+				++Riders;
+				RiderSays = R.Says;
+				if (J.RiderAt(R.X + 3.0, R.Y - 2.0, 10.0) >= 0) ++RiderPicked;
+			}
+			if (J.HelpComing()) ++HelpSaid;
+			if (WaitOrder.empty() && J.HelpComing())
+			{
+				// (HOLD TILL RELIEVED with everything of his in hand: only those on foot are told)
+				std::vector<int> All;
+				for (const LandCommand::Tag& T : J.Tags())
+				{
+					if (T.bOrderable) All.push_back(T.Block);
+				}
+				J.Choose(All, false);
+				WaitOrder = J.Wait();
+				for (int Id : J.Waiters())
+				{
+					const LandCommand::Tag* T = J.TagOf(Id);
+					Check(T && T->Kind != "arm" && T->Kind != "art" && T->Kind != "mot", "only blocks on foot are told to wait");
+				}
+				J.Clear();
+			}
 			const LandCommand::Neighbour* Own = nullptr;
 			for (const LandCommand::Neighbour& N : J.Neighbours())
 			{
@@ -494,6 +531,11 @@ int main(int Argc, char** Argv)
 		Check(ArrivedAt >= 0.0, "his corps walks on");
 		Check(ArrivedAt < 0.0 || LastToldAt < 0.0 || ArrivedAt - LastToldAt <= 1.01, "it is on the field the moment it stops coming");
 		Check(LastIn <= 1.01, "its time runs down to its coming");
+		std::printf("hold until relieved: block %d waits (help due at %.1f) in %d screens, help coming said in %d; the wait order %s; the rider in %d screens (%d found by a click near him): %s\n",
+			Waiting, WaitDue, WaitTags, HelpSaid, WaitOrder.c_str(), Riders, RiderPicked, RiderSays.c_str());
+		Check(WaitTags > 0 && WaitWrong == 0 && WaitDue > 0.0, "his waiting block's tag says it waits and when help is due, and no other's does");
+		Check(IsJson(WaitOrder, "land:wait"), "the wait order is the rules' JSON");
+		Check(Riders > 0 && RiderPicked == Riders, "his corps' despatch rider is read and found by a click near him");
 	}
 
 	std::printf(Failures ? "FAIL (%d)\n" : "clipboard held\n", Failures);

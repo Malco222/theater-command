@@ -505,10 +505,19 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			: Kind == "mtn" ? TEXT("MOUNTAIN") : Kind == "cav" ? TEXT("CAVALRY") : Kind == "fort" ? TEXT("WORKS") : TEXT("");
 	};
 	// A chip's words and colours: his staff's, his own, on the air (with the seconds where the views say them).
-	auto ChipOf = [](const LandCommand::Tag& T, FString& OutWords, FLinearColor& OutPaper, FLinearColor& OutInk)
+	auto ChipOf = [ClockNow = Clip.Now()](const LandCommand::Tag& T, FString& OutWords, FLinearColor& OutPaper, FLinearColor& OutInk)
 	{
 		OutWords.Reset();
 		if (T.State == "routing") { OutWords = TEXT("RUNNING"); OutPaper = Alarm; OutInk = Cream; return; }
+		// (holding until relieved, dug in: when help is due; help late, its men break sooner)
+		if (T.bWaits && !T.bWaitFree && T.Says != LandCommand::Chip::Radio)
+		{
+			const int32 Secs = FMath::Max(0, FMath::CeilToInt32(T.WaitDue - ClockNow));
+			OutWords = T.bWaitLate ? FString(TEXT("HELP LATE")) : Secs > 0 ? FString::Printf(TEXT("HELP IN %d:%02d"), Secs / 60, Secs % 60) : FString(TEXT("DUG IN"));
+			OutPaper = T.bWaitLate ? Alarm : LeafInk;
+			OutInk = Cream;
+			return;
+		}
 		switch (T.Says)
 		{
 		case LandCommand::Chip::Staff: OutWords = TEXT("STAFF"); OutPaper = Track; OutInk = Cream; break;
@@ -682,6 +691,65 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		Write(Under, CX + 8.0, CY + 19.0, UnderFace, SoonInk, 9);
 	}
 
+	// ---- His despatch riders (the rider ahead, release 2): a motorcycle mark where each rides; a click on one reads out his
+	// despatch beside him. ----
+	for (const FLandGeneralShown::RiderMark& R : G.RiderMarks)
+	{
+		const FVector2D At = Local(R.X, R.Y);
+		const bool bRead = R.Corps == G.RiderRead;
+		const FLinearColor Ink = bRead ? BrightBrass : Brass;
+		// (two wheels, the frame between, the man on it)
+		TArray<FVector2D> Back, Front;
+		for (int32 K = 0; K <= 12; ++K)
+		{
+			const double A = 2.0 * UE_DOUBLE_PI * K / 12.0;
+			Back.Add(At + FVector2D(-7.0 + FMath::Cos(A) * 4.5, FMath::Sin(A) * 4.5));
+			Front.Add(At + FVector2D(7.0 + FMath::Cos(A) * 4.5, FMath::Sin(A) * 4.5));
+		}
+		Fill(At.X - 13.0, At.Y - 16.0, 26.0, 23.0, Plate, 6);
+		Lines(Back, Ink, 1.5f, 7);
+		Lines(Front, Ink, 1.5f, 7);
+		Lines({ At + FVector2D(-7.0, 0.0), At + FVector2D(-1.0, -5.0), At + FVector2D(7.0, 0.0) }, Ink, 1.5f, 7);
+		Fill(At.X - 2.5, At.Y - 13.0, 5.0, 6.0, Ink, 7);
+		if (bRead && !R.Says.empty())
+		{
+			const FSlateFontInfo Face = Serif(TEXT("Regular"), 13.0f), Head = Typed(10.5f, true, 30);
+			const double Room = 340.0;
+			TArray<FString> Said;
+			{
+				TArray<FString> Pieces;
+				Wide(R.Says).ParseIntoArray(Pieces, TEXT(" "), true);
+				FString Now;
+				for (const FString& Piece : Pieces)
+				{
+					const FString Tried = Now.IsEmpty() ? Piece : Now + TEXT(" ") + Piece;
+					if (!Now.IsEmpty() && WideOf(Tried, Face) > Room)
+					{
+						Said.Add(Now);
+						Now = Piece;
+					}
+					else
+					{
+						Now = Tried;
+					}
+				}
+				if (!Now.IsEmpty())
+				{
+					Said.Add(Now);
+				}
+			}
+			const double CW = Room + 20.0, CH = 30.0 + 19.0 * Said.Num();
+			const double CX = FMath::Clamp(At.X + 20.0, 10.0, Size.X - CW - 10.0), CY = FMath::Clamp(At.Y - CH - 8.0, 70.0, Size.Y - CH - 10.0);
+			Fill(CX - 1.0, CY - 1.0, CW + 2.0, CH + 2.0, Brass, 10);
+			Fill(CX, CY, CW, CH, Paper, 10);
+			Write(TEXT("DESPATCH RIDER"), CX + 10.0, CY + 6.0, Head, InkSoft, 11);
+			for (int32 K = 0; K < Said.Num(); ++K)
+			{
+				Write(Said[K], CX + 10.0, CY + 24.0 + 19.0 * K, Face, DeskInk, 11);
+			}
+		}
+	}
+
 	// ---- His drag: the box, the line and where each would stand on it, a block carried. ----
 	if (G.bBox)
 	{
@@ -797,6 +865,11 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Parts.Add({ TEXT("LAY SMOKE"), TEXT(""), TEXT("general:smoke"), G.Armed == "smoke", false });
 			}
 			Parts.Add({ TEXT("FALL BACK"), TEXT("R"), TEXT("general:fallback"), false, !bHand });
+			// (hold until relieved: while a corps of his is coming up from next door)
+			if (Clip.HelpComing())
+			{
+				Parts.Add({ TEXT("HOLD TILL RELIEVED"), TEXT(""), TEXT("general:wait"), false, Clip.Waiters().empty() });
+			}
 			Parts.Add({ TEXT("BACK TO STAFF"), TEXT(""), TEXT("general:staff"), false, !bHand });
 			Parts.Add({ TEXT("PAUSE"), TEXT("SPACE"), TEXT("speed:0"), S.SpeedNow <= 0.0, false });
 			Parts.Add({ TEXT("\u00D71"), TEXT("1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0), false });

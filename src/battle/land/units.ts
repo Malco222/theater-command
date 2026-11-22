@@ -176,9 +176,26 @@ export interface LandUnit extends UnitBase {
    * count it at this, from the first second, as the card did.
    */
   priced?: number;
+  /**
+   * Hold until relieved (release 2; Brian, 22 November 12:48Z; LandBattle.relief): told to wait for a corps coming up
+   * from next door. It stands and fires, never advances, and its staff never orders it; dug in harder while it keeps
+   * within LAND.dug.keep of 'at'. 'corps' is the corps whose help it waits for, 'due' the battle second that help can
+   * reach it, 'since' the second it began to wait. 'late': help never came (the due passed, or its corps is out of the
+   * fight): its men are let down, and break sooner until relieved. 'free': late, then given another order by the player:
+   * it no longer stands, but keeps the mark. Absent on every other block, and on every block while the switch is off.
+   */
+  waits?: { corps: number; due: number; at: [number, number]; since: number; late?: true; free?: true };
+  /** It has waited for help once this battle: never again (hold until relieved). */
+  waited?: true;
+  /**
+   * What the cover of waiting spared it, in power, and the nerve that would have cost: kept while it waits, then landed
+   * (LandBattle.endWait): the field moves when harm lands, never how much (b415, b418).
+   */
+  debt?: number;
+  debtN?: number;
 }
 
-const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+const ORD =(n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 const KIND_WORD: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain', cav: 'Cavalry', eng: 'Engineers', mot: 'Motorized', arm: 'Armoured', art: 'Artillery', fort: 'Fortress' };
 const TEAM_WORD: Record<Team, string> = { mg: 'Machine-Gun Battalion', mor: 'Mortar Battalion' };
 /** The team a ticket force makes, where its kind is one (release 2). */

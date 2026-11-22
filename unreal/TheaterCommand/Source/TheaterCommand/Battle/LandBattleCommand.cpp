@@ -461,6 +461,23 @@ void ALandBattle::ShowGeneral()
 			G.Comers.push_back(std::move(C));
 		}
 	}
+	// His despatch riders (the rider ahead, release 2): where each is on the screen; a despatch read out for 15 s, or till
+	// his rider has gone (his corps come up).
+	G.RiderMarks.clear();
+	bool bReadStill = false;
+	for (const LandFeed::Rider& R : G.Clipboard.Riders())
+	{
+		FVector2D P;
+		bReadStill = bReadStill || R.Corps == G.RiderRead;
+		if (PixelOf(R.X, R.Y, 2.5, P) && OnView(P, 40.0))
+		{
+			G.RiderMarks.push_back({ R.Corps, P.X, P.Y, R.Says });
+		}
+	}
+	if (!bReadStill || RealT - G.RiderReadAt > 15.0)
+	{
+		G.RiderRead = -1;
+	}
 	// The mark answering his last order, a second and a bit.
 	LandFell::Phase("general: the ping");
 	FVector2D Ping;
@@ -549,6 +566,10 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 		else if (Mine >= 0)
 		{
 			G.Would = "PICK UP";
+		}
+		else if (G.Armed.empty() && bGround && Clip.RiderAt(X, Y, FMath::Max(Reach * 0.6, 15.0)) >= 0)
+		{
+			G.Would = "READ HIS DESPATCH";
 		}
 		else if (Hand.empty())
 		{
@@ -748,6 +769,14 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	if (Button == 0 && Mine >= 0)
 	{
 		Clip.Pick(Mine, bShift);
+		return;
+	}
+	// (his despatch rider: a click reads out what his corps coming up brings, and when; Brian, 22 November 12:48Z)
+	const int Rider = Button == 0 && G.Armed.empty() && bGround ? Clip.RiderAt(X, Y, FMath::Max(Reach * 0.6, 15.0)) : -1;
+	if (Rider >= 0)
+	{
+		G.RiderRead = G.RiderRead == Clip.Riders()[static_cast<size_t>(Rider)].Corps ? -1 : Clip.Riders()[static_cast<size_t>(Rider)].Corps;
+		G.RiderReadAt = RealT;
 		return;
 	}
 	const std::vector<int> Hand = Clip.Chosen();
@@ -1133,6 +1162,27 @@ void ALandBattle::GeneralDo(const FString& Word)
 		{
 			G.Armed = G.Armed == "smoke" ? std::string() : std::string("smoke");
 			Say(G.Armed.empty() ? "" : "CLICK WHERE THE SMOKE GOES, OR DRAG A LINE FOR IT");
+		}
+	}
+	else if (Word == TEXT("wait"))
+	{
+		// (hold until relieved, release 2: those in hand on foot dig in and wait for a corps coming up from next door; the
+		// rules take one a corps and say why for the rest. The warning in the UI director's words, as the order card has it)
+		const std::vector<int> Foot = Clip.Waiters();
+		if (Foot.empty())
+		{
+			Say("ONLY MEN ON FOOT DIG IN TO WAIT FOR HELP");
+		}
+		else
+		{
+			TArray<int32> Only;
+			for (int Id : Foot)
+			{
+				Only.Add(Id);
+			}
+			GiveGeneral(WideOf(Clip.Wait()), TEXT("hold"), -1, TArray<FVector2D>(), 0.0, 0.0, Only);
+			G.PingAt = -10.0;
+			Say("THEY DIG IN TO WAIT FOR HELP. IF HELP HAS NOT COME BY ITS TIME, THEY BREAK SOONER");
 		}
 	}
 	else if (Word == TEXT("hold"))

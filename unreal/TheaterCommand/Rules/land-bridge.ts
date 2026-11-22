@@ -10,7 +10,7 @@
 // The game calls these by name through the global object TC (this engine's own; the campaign's TC is another):
 //
 //   TC.landPieces()                        -> [{ key, title, date, att, def, seeds }]: the set pieces that can be fought
-//   TC.landStart(key, seed, { me, setup, platoons, staff, radio }) -> the recording's header: the field, the blocks,
+//   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider }) -> the recording's header: the field, the blocks,
 //                                             the sky, and the setup room when the player deploys first. me 'att' | 'def'
 //                                             | null (a film). staff and radio (direct command) are on unless false
 //   TC.landTick(seconds, maxSteps)         -> a delta: what was fought in up to `seconds` more (none while setup is open).
@@ -21,6 +21,10 @@
 //                                             withdraw, land:fire, land:staff { units } (back to his staff), auto. Each
 //                                             may carry at: the battle time shown when he gave it (the rules run ahead of
 //                                             the screen; by radio the wait counts from then)
+//                                             land:wait { units } (hold until relieved: dig in for a corps coming up
+//                                             from next door; release 2, the rules' sim.relief)
+//   TC.landWaitWhy(id)                     -> { why, due }: why that block of his may not wait for help (null where it
+//                                             may), and the battle second help could reach it there (null where not)
 //   TC.landCanPlace(id, x, y)              -> { ok, why }: whether a block may stand there in the setup step
 //   TC.landPlace(id, x, y, face)           -> { ok, why }: places it; the next delta starts the men again (reset)
 //   TC.landBegin()                         -> { ok }: ends the setup step; the clock runs
@@ -55,10 +59,10 @@ function need(): LiveBattle {
     }));
   },
 
-  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean } | null) {
+  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean } | null) {
     live = livePiece(key, seed ?? undefined, {
       me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
-      hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false,
+      hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
     });
     return live.header();
   },
@@ -72,7 +76,15 @@ function need(): LiveBattle {
   },
 
   landOrder(c: Command) {
-    return { ok: need().order(c) };
+    const ok = need().order(c);
+    // (a wait refused says why in the rules' own words: the first of its blocks' reason, for the general's note)
+    const o = c as { do?: string; units?: number[] };
+    if (!ok && o.do === 'land:wait' && o.units?.length) return { ok, why: need().waitWhy(Number(o.units[0])).why ?? '' };
+    return { ok };
+  },
+
+  landWaitWhy(id: number) {
+    return need().waitWhy(Number(id));
   },
 
   landCanPlace(id: number, x: number, y: number) {

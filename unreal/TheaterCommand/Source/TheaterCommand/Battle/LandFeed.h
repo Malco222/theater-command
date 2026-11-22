@@ -184,6 +184,11 @@ namespace LandFeed
 		 * cutters that can punch a gap at a hedge point he picks; and the smoke a section can still lay (-1 none said). */
 		bool bCutter = false;
 		int Smoke = -1;
+		/** Hold until relieved (release 2; Brian, 22 November 12:48Z; his own only): told to wait for a corps coming up from
+		 * next door; the battle second help can reach it; help never came (its men break sooner); no longer waiting (his
+		 * re-order or giving ground). Dug in where it stands while waiting and not free. */
+		bool bWaits = false, bWaitLate = false, bWaitFree = false;
+		double WaitDue = -1.0;
 		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
 		 * path's corners. Empty kind: no order. */
 		std::string OrderKind;
@@ -214,6 +219,24 @@ namespace LandFeed
 		double At = 0.0, X = 0.0, Y = 0.0;
 	};
 
+	/**
+	 * The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+	 * strength and arrival time"): his own corps coming up from next door sends a despatch rider on a motorcycle first. He
+	 * rides from its edge to the middle of his army (there: the battle second he reaches it) and stands there until his
+	 * corps comes up (comes), then leaves the views. Says: the relief's strength and times in words for a click. Looks and
+	 * words only: nothing in the fight reads him.
+	 */
+	struct Rider
+	{
+		int Corps = 0, Side = -1;
+		double X = 0.0, Y = 0.0, Face = 0.0, Speed = 0.0, There = 0.0, Comes = 0.0;
+		/** When his staff fights it, the battle second it reaches his line (-1 where it waits for his orders). */
+		double Line = -1.0;
+		std::string Edge, Name, Kind, Says;
+		int Men = 0;
+		double Str = 1.0;
+	};
+
 	/** One battle second's view: the bars and the blocks' stands. */
 	struct View
 	{
@@ -224,6 +247,8 @@ namespace LandFeed
 		std::vector<Unit> Units;
 		/** The blocks of corps still coming up from next door that the player may know of (empty: none). */
 		std::vector<Arrival> Coming;
+		/** His own corps' despatch riders riding in ahead of them (empty: none). */
+		std::vector<Rider> Riders;
 	};
 
 	struct Field

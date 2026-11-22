@@ -215,7 +215,7 @@ export class LiveKeeper {
 }
 
 /** One block as the 3D game reads it: the bridge's unitOut for land, plus whether the player has met it. */
-export function landUnitOut(u: LandUnit, t: number, known = true): Record<string, unknown> {
+export function landUnitOut(u: LandUnit, t: number, known = true, mine = false): Record<string, unknown> {
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
   const town = u.act === 'fight' && (u.cover === 'buildings' || u.cover === 'suburb' || u.cover === 'industry') && !!loops && motion !== 'guns';
@@ -246,6 +246,9 @@ export function landUnitOut(u: LandUnit, t: number, known = true): Record<string
     // Hidden in the woods from the other side (release 2, LAND.hide): his own show the forest mark, the enemy's are not drawn.
     ...(u.hid ? { hid: 1 } : {}),
     ...(u.orderAt !== undefined ? { orderIn: Math.max(0, r1(u.orderAt - t)) } : {}),
+    // Hold until relieved (release 2, sim.relief), his own blocks only: waiting for a corps coming up from next door, dug in
+    // where it stands while not free; late, help never came and its men break sooner.
+    ...(mine && u.waits ? { waits: { due: r1(u.waits.due), ...(u.waits.late ? { late: true } : {}), ...(u.waits.free ? { free: true } : {}) } } : {}),
     order: u.order ? { kind: u.order.kind, x: r1(u.order.x), y: r1(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r1(x), r1(y)]) } : null,
   };
 }
@@ -282,6 +285,14 @@ export interface LiveOpts {
    * own word for a third of a division over its division's full name. On unless turned off.
    */
   names?: boolean;
+  /**
+   * Hold until relieved (release 2; Brian, 22 November 12:48Z; the design director's R1 to R5, 13:43Z; the rules'
+   * sim.relief): a block of his on foot told to wait ('land:wait') digs in for a corps coming up from next door, and
+   * breaks sooner if help never comes. On for the player unless turned off.
+   */
+  relief?: boolean;
+  /** The rider ahead (release 2; the rules' sim.rider): his own corps coming up sends a despatch rider first (view riders). */
+  rider?: boolean;
 }
 
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
@@ -320,6 +331,8 @@ export class LiveBattle {
     if (opts.hide !== false) sim.hideOn();
     if (opts.armour !== false) sim.measured = true;
     if (opts.names !== false) sim.namesOn();
+    if (this.me && opts.relief !== false) sim.relief = true;
+    if (this.me && opts.rider !== false) sim.rider = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     // (a corps coming up from next door is in the header from the start, its words and model known, and walks on later:
     // 'joins' says so; the views carry it once it is on the field and, till then, in 'coming')
@@ -390,13 +403,15 @@ export class LiveBattle {
     if (Math.floor(t) !== this.lastView || v.over) {
       this.lastView = Math.floor(t);
       this.views.push({
-        t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit))), balance: v.balance, zones: v.zones,
+        t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit), !!this.me && u.side === this.me)), balance: v.balance, zones: v.zones,
         ...(v.breaking ? { breaking: { att: r3(v.breaking.att), def: r3(v.breaking.def) } } : {}),
         ...(v.contact !== undefined ? { contact: v.contact } : {}),
         ...(v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p!.phase, main: p!.main ?? [], startY: p!.startY ?? null }])) } : {}),
         ...(v.setup ? { setup: v.setup } : {}),
         // (the corps still coming up from next door that the player may know of: where on its edge and when)
         ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
+        // (the rider ahead: his own corps' despatch riders, riding in before it)
+        ...(v.riders?.length ? { riders: v.riders } : {}),
         ...(v.over ? { over: v.over } : {}),
       });
     }
@@ -440,6 +455,18 @@ export class LiveBattle {
   order(c: Command): boolean {
     if (!this.me) return false;
     return this.sim.command(c, this.me);
+  }
+
+  /**
+   * Hold until relieved: why one of his blocks may not wait for help (null where it may), and the battle second help
+   * could reach it there (null where it may not wait).
+   */
+  waitWhy(id: number): { why: string | null; due: number | null } {
+    const u = this.sim.unit(id);
+    if (!u) return { why: 'No such block.', due: null };
+    if (!this.me || u.side !== this.me) return { why: 'Only your own troops take your orders.', due: null };
+    const why = this.sim.waitWhy(u);
+    return { why, due: why === null ? this.sim.dueAt(u)?.due ?? null : null };
   }
 
   /** Why a block may not stand there in the setup step, or null where it may. */

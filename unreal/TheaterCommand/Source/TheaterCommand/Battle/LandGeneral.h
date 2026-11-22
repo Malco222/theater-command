@@ -46,6 +46,17 @@ struct FLandGeneralShown
 		double WayX = 0.0, WayY = 1.0;
 	};
 	std::vector<Comer> Comers;
+	/** His despatch riders on the screen this frame (the rider ahead, release 2): the corps each rides for, where he is (on
+	 * the screen), and the despatch read out by a click on him (his corps, -1 none) and when (real seconds). */
+	struct RiderMark
+	{
+		int Corps = 0;
+		double X = 0.0, Y = 0.0;
+		std::string Says;
+	};
+	std::vector<RiderMark> RiderMarks;
+	int RiderRead = -1;
+	double RiderReadAt = -10.0;
 
 	/** An order's route on the ground: from the block along its path to where it goes or whom it attacks. */
 	struct Route

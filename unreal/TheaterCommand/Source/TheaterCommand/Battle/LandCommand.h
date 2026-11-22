@@ -70,6 +70,10 @@ namespace LandCommand
 		/** His own: a tank with hedge cutters (it can punch a gap in a hedge), and the smoke it can still lay (-1 none). */
 		bool bCutter = false;
 		int Smoke = -1;
+		/** His own, holding until relieved: waiting (dug in where it stands while not free), the battle second help can
+		 * reach it, help never came (its men break sooner), no longer waiting. */
+		bool bWaits = false, bWaitLate = false, bWaitFree = false;
+		double WaitDue = -1.0;
 		/** Seconds till his order reaches it, -1 none on the air. */
 		double OrderIn = -1.0;
 		Chip Says = Chip::Staff;
@@ -121,8 +125,14 @@ namespace LandCommand
 		const Tag* TagOf(int Block) const;
 		/** The corps still coming up from next door at the screen's time, soonest first (none: empty). */
 		const std::vector<Neighbour>& Neighbours() const { return Coming; }
+		/** His own corps' despatch riders at the screen's time, each eased toward the next view (none: empty). */
+		const std::vector<LandFeed::Rider>& Riders() const { return RidersNow; }
+		/** The rider nearest the point within Reach metres, as an index into Riders(); -1 none. */
+		int RiderAt(double X, double Y, double Reach) const;
 		/** 0 the attack, 1 the defence, -1 a film. */
 		int Side() const { return Me; }
+		/** The battle time the tags were last read at (the screen's). */
+		double Now() const { return ReadAt; }
 		/** The setup step is open: he stands his blocks on his ground, the clock still. */
 		bool Deploying() const { return bSetup; }
 
@@ -172,6 +182,14 @@ namespace LandCommand
 		/** Those in hand with smoke lay a line of it from (X0, Y0) to (X1, Y1). */
 		std::string SmokeLine(double X0, double Y0, double X1, double Y1) const;
 
+		// ---- Hold until relieved (release 2; Brian, 22 November 12:48Z; the rules decide who may, and say why not) ----
+		/** A corps of his is coming up from next door, or is on the field: help that a block of his may wait for. */
+		bool HelpComing() const { return bHelp; }
+		/** Those in hand on foot, not waiting already (the rules take one a corps and say why for the rest). */
+		std::vector<int> Waiters() const;
+		/** Those in hand on foot dig in and wait for help. */
+		std::string Wait() const;
+
 		/**
 		 * An order he has just given, shown at once: the screen runs a couple of battle seconds behind the rules, so the
 		 * views only say what they made of it once the screen reaches the moment it was given (Until: the rules' time
@@ -214,6 +232,9 @@ namespace LandCommand
 		void CountDrawn(const LandFeed::Recording& Rec);
 		std::vector<Tag> Shown;
 		std::vector<Neighbour> Coming;
+		std::vector<LandFeed::Rider> RidersNow;
+		bool bHelp = false;
+		double ReadAt = 0.0;
 		std::vector<Pending> Given;
 		std::vector<int> Hand;
 		int Me = -1;

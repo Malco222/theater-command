@@ -125,6 +125,14 @@ namespace LandFeed
 				Row.bVague = U["vague"].Truth(false);
 				Row.bCutter = U["cutter"].Truth(false);
 				Row.Smoke = U["smoke"].Int(-1);
+				const Json& Waits = U["waits"];
+				if (Waits.IsObject())
+				{
+					Row.bWaits = true;
+					Row.WaitDue = Waits["due"].Num(-1.0);
+					Row.bWaitLate = Waits["late"].Truth(false);
+					Row.bWaitFree = Waits["free"].Truth(false);
+				}
 				const Json& Search = U["search"];
 				if (Search.IsArray() && Search.Count() >= 2)
 				{
@@ -157,6 +165,27 @@ namespace LandFeed
 				Row.X = C["x"].Num(0.0);
 				Row.Y = C["y"].Num(0.0);
 				V.Coming.push_back(std::move(Row));
+			}
+			// (the rider ahead, release 2: his own corps' despatch riders)
+			for (const Json& R : J["riders"].Items)
+			{
+				Rider Row;
+				Row.Corps = R["corps"].Int(0);
+				Row.Side = SideOf(R["side"].Str());
+				Row.X = R["x"].Num(0.0);
+				Row.Y = R["y"].Num(0.0);
+				Row.Face = R["face"].Num(0.0);
+				Row.Speed = R["speed"].Num(0.0);
+				Row.There = R["there"].Num(0.0);
+				Row.Comes = R["comes"].Num(0.0);
+				Row.Line = R["line"].IsNumber() ? R["line"].Num() : -1.0;
+				Row.Edge = R["edge"].Str("");
+				Row.Name = R["name"].Str("");
+				Row.Kind = R["kind"].Str("");
+				Row.Says = R["says"].Str("");
+				Row.Men = R["men"].Int(0);
+				Row.Str = R["str"].Num(1.0);
+				V.Riders.push_back(std::move(Row));
 			}
 		}
 
