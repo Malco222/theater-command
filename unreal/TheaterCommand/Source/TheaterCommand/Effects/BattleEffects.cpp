@@ -655,6 +655,14 @@ void FBattleEffects::SetLandGrade(bool bOn)
 	});
 }
 
+void FBattleEffects::SetFromAbove(bool bOn)
+{
+	Do([=, this]()
+	{
+		Core.SetFromAbove(bOn);
+	});
+}
+
 void FBattleEffects::SetSun(const FVector& TowardSun)
 {
 	Sun = TowardSun.GetSafeNormal(UE_SMALL_NUMBER, FVector(-0.45, -0.35, 0.82));

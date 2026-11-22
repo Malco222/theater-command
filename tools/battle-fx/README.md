@@ -2008,3 +2008,68 @@ RunTest, again and again, for test pictures.
 `-TheaterFxLampLog` writes a log line for each frame a lamp is lit (where it hangs, in world units; how strong, in
 candelas; how far it reaches; its colour), and one for the first frame after with none. A 105 mm shell's lamp shows
 once at full strength, once at half, then out.
+
+## Smoke seen from above: a lit top and its shadow on the ground (game.from_above, OFF)
+
+The art director's read of the general's stills (`art-director/battles/general-cf671cb9/general-stills-read.md`, item
+5, 22 November): from the general's height, 300 m and up, smoke was a flat dark smudge. She asked for a lit top, a pale
+side toward the sun, and its shadow laid on the ground downwind, and liked the smoke at ground level as it is.
+
+- The scene: `FBattleEffects::SetFromAbove(true)` after Begin (the land battle only), and `game.from_above.on` 1 in
+  the recipe. Either missing: nothing changes. Only as the eye climbs from `eye_m` 100 to 220 m over the ground and
+  looks down from `steep` 0.4 to 0.7 (the sine of the angle down): a low eye is byte for byte as before.
+- Lit: a smoke or dust puff's face toward the sun goes up to `lit` (0.45) of the way to `lit_colour`, most on its own
+  sunward side (as flak's FaceLit) and on its cloud's; none against the sun, at night, or where it would darken.
+- Black smoke (the art director's 19:59Z mend): smoke whose own colour's light is under `dark_lum` (0.015, going
+  over by 0.04) goes only toward `dark_lit_colour` (120,108,95), a warm brown-grey, as black oil smoke never goes pale
+  in the sun. Every burning wreck's or oil fire's column counts as black: its top takes `dark_lit` (0.45) toward that
+  colour by the sun's height (all of it from 45 degrees up), all of it on its sunward side and a little over half on
+  the far side, fading with each puff's edge; its young smoke over the fire takes as little as of the sun's side, so
+  the root stays black. In the side-sun general's still the column measures 0.14 of the way there in the middle, 0.22
+  at its brightest; the barrage's earth smoke is as before.
+- Shadow: one puff in `shadow_every` (2) of the smoke at least `shadow_least_r_m` (1.5) across and `shadow_least_m`
+  (3) over the ground, a burning wreck's column too, lays a flat soft piece where the sun's line through it meets the
+  ground: `shadow_colour` at `shadow` (0.2) of its own opacity, `shadow_wide` (1.5) as wide, drawn out along the sun's
+  way by the sun's height (at most `shadow_stretch_most`). It is the puff itself laid again (`Bit::bShadeTwin`), so it
+  drifts, grows and thins as the puff does. The higher its puff the softer and a fifth wider its edge, fully so by
+  `shadow_soft_m` (60). Where shadows lie over each other the ground keeps at least 1 - `shadow_darkest` (0.55) of
+  its light, kept by patches a little smaller than each size of shadow, so a wide plume never stacks into a dark
+  puddle: in the side-sun still the ground under the column keeps 0.83 near the wreck, 0.73 mid-run, 0.63 at the
+  widest (it was 0.50). None with the sun under about 9 degrees. Laid with the craters, under all
+  the smoke, pulled nearer the eye as a lying piece (soft contact).
+- Room: shadows never take smoke's own. They use what the rest left in the last frame, less a twentieth, at most an
+  eighth of the room and `shadow_most` (300), eased 25 a frame; when short, the oldest smoke keeps its shadow and the
+  last 20 laid fade, so none blinks. At the 300 m bench (12 burning tanks, 6 shells a second, room full) the most
+  drawn is the same with it on or off.
+- Preview: `FX_FROM_ABOVE=1` with a recipe whose `game.from_above.on` is 1; the wreck shot now reads `FX_SUN` too.
+  General's eye: `FX_DIST=150 FX_EYE_H=300 FX_LOOK_H=0 FX_LOOK_X=0 ... wreck tall`, or `... how105 earth F WxH 150 300`
+  with `FX_LOOK_HIT=0 FX_BARRAGE=8 FX_BARRAGE_STEP=25`.
+- Stills: `battle-fx/stills/from-above/from-above-sheet.png` (today left, on right).
+
+## Rock ground: a low pale spray, skittering chips, a pale bruise (grounds.rock, drawn only when the scene passes "rock")
+
+The production lead's theatre ask (17:46Z 22 November), with the environments thread: Italy's hills, the desert's
+escarpments and stony steppe were drawn as earth (the game's own ground table maps its rock cells to earth today).
+The art director's 20:25Z read of the first look gave rock its own shape: "earth throws a tall dark brown fountain,
+rock a low pale grey spray".
+
+- Shape: rock can't be dug, so the blast vents sideways. `crown_low` (0.6) and `crown_wide` (1.35), new for any ground
+  (none written: 1, byte for byte as before), squash the crown's fan: each jet's way and reach, the spikes, the body,
+  the foot, the lumps and the shower, so the fan stands 0.6 as tall and spreads wider. Its jets pale grey (`soil`
+  150, `heavy` 132, `foot` 150 with `foot_dust` 0.6), granular (`grain` 0.75), dark lumps a minority (`clods` 0.25).
+  The darkest tenth of the burst measures 112,103,95 at 0.1 s and 107,103,97 at 0.7 s (earth 77,64,56 and 71,62,54).
+- Chips (`grounds.rock.chips`, new): 24 to 36 stone splinters 10 to 25 cm across, flung 3 to 12 degrees above level
+  out to 30 to 60 m, their fresh faces catching the sun as they turn (`glint`, Bit::bChip); 3 in 10 skitter on along
+  the ground keeping 0.4 to 0.6 of their speed, kicking up a little dust where they strike and come down again; they
+  lie 1.5 to 3 s. Their own dice; fewer far off (burst.far).
+- Scar (`paint.bruise`, new): a pale powder splash (175,170,160) with 4 to 6 broad, short, soft lobes, a small dark
+  middle 0.4 of its radius (`paint.scar`), and pale chips scattered 3 to 5 m out. `crater_k` (new, any ground)
+  scales the size's crater; rock's is 1.
+- Cloud (`smoke_of_ground`, new): the ground's own colour where the game can say (SetGroundColour), pulled `grey`
+  (0.4) of the way to its own grey, `shade` (0.9) times as light and its top `top_shade` (0.78) times, written to
+  land on that. One rule, no table: pale limestone 182,174,156 gives a warm pale cloud (162,158,148), a tan
+  escarpment 168,142,108 a tan one (156,143,127), grey steppe stone 124,122,118 a neutral one (143,142,140). Where
+  the game cannot say, `paint.smoke`.
+- Switch: the word itself. Until the scene passes "rock" (the land field's FxWords table), nothing changes.
+- Preview: `FX_GROUND=138,132,122 ./fxpreview recipe out how105 rock 3,21,300 960x540`.
+- Stills: `battle-fx/stills/rock/rock-mend-*.png`.
