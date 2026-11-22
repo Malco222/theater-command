@@ -920,6 +920,7 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("06-the-ships"), 5.0, false, true, false },     // (after the first ship goes down)
 			{ TEXT("06b-guns-fire-back"), 2.5, false, false, false, false, false, true }, // (after the first attack run on a ship begins)
 			{ TEXT("07-the-fight-goes-on"), 120.0, false, false, false },
+			{ TEXT("09-strike-marks"), 105.0, true, false, false, false, false, false, true }, // (riding the aircraft struck the most)
 		};
 	}
 	ShowScreen();
@@ -3564,6 +3565,7 @@ namespace AirParts
 
 UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span)
 {
+	TArray<FPlaneMade::FMark> Struck; // (an aircraft made again keeps the strikes it took, laid again on its new skin)
 	if (TObjectPtr<UProceduralMeshComponent>* Found = Planes.Find(Key))
 	{
 		const FPlaneMade* Was = PlaneMade.Find(Key);
@@ -3584,6 +3586,12 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 				{
 					Disc->DestroyComponent();
 				}
+			}
+			LiftMarks(*Old);
+			Struck = MoveTemp(Old->Marks);
+			for (FPlaneMade::FMark& Mark : Struck)
+			{
+				Mark.bOnSkin = false;
 			}
 		}
 		Planes.Remove(Key);
@@ -3675,6 +3683,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Made.Shape = ShapeKey;
 	Made.bTwoShapes = Far != nullptr;
 	Made.Phase = static_cast<double>(GetTypeHash(Key) % 360u);
+	Made.Marks = MoveTemp(Struck);
 	PlaneMade.Add(Key, Made);
 	return Mesh;
 }
@@ -3852,6 +3861,8 @@ void AAirBattle::Draw(double Real)
 			}
 		}
 	}
+	// The strikes on those near the eye, laid on their skins; taken up from the rest.
+	DrawMarks(EyeAt);
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling, a bomb or a torpedo falling.
 	FMiniatureMesh Things;
@@ -4201,6 +4212,7 @@ void AAirBattle::PlayEffects()
 		}
 		case AirShow::FxKind::Hit:
 		{
+			MarkStrike(E); // (kept on the aircraft it struck, and laid on its skin while it is near: AirBattleMarks.cpp)
 			if (FBattleEffects* Kit = KitAt(At))
 			{
 				Kit->AirHit(Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What));
@@ -6283,7 +6295,20 @@ void AAirBattle::TakeShots(double Real)
 				}
 			}
 			const int Leader = Squadron >= 0 ? AirDesk::RideStep(S.Show.Planes(), Squadron, -1, 0) : -1;
-			if (Leader >= 0)
+			const int32 Marked = Shot.bMarks ? MostMarked() : INDEX_NONE;
+			if (Marked != INDEX_NONE)
+			{
+				for (const AirShow::PlaneOut& P : S.Show.Planes())
+				{
+					if (P.Key == Marked)
+					{
+						RideOn(P.Group, P.Key);
+						UE_LOG(LogTheater, Display, TEXT("Air battle: strike marks picture on %s (key %d): %d strikes on it, %d laid near the eye, %d kept in all."),
+							*AirParts::Wide(P.Model), P.Key, PlaneMade.Contains(P.Key) ? PlaneMade[P.Key].Marks.Num() : 0, MarkDecals, MarkStrikes);
+					}
+				}
+			}
+			else if (Leader >= 0)
 			{
 				RideOn(Squadron, Leader);
 				Press(TEXT("ride:next"));

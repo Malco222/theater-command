@@ -304,6 +304,57 @@ def build_cloud():
     finish(m)
 
 
+def build_hit_mark():
+    """A STRIKE ON AN AIRCRAFT (Brian, 22 November 2026: "if a plane gets hit make sure the bullet holes and damage
+    shows on the wing or fuselage"): a deferred decal the air battle lays where rounds struck an aircraft that is near
+    the eye, carried with it. Across the decal, from its middle: the hole, black; a narrow lip of torn skin, bare metal
+    that shines; and soot blown back over the paint, thinning to nothing at the decal's edge. The edges are ragged
+    (the engine's own noise), so no two strikes look stamped. "Hole" is the hole's share of the decal's half width
+    (a rifle round's small, a cannon shell's or a flak splinter's tear large); "Soot" how dark the soot lies; "Ragged"
+    how torn the edges are. The C++ turns each decal its own way about the strike."""
+    m = new_material("M_HitMark")
+    m.set_editor_property("material_domain", unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    try:
+        m.set_editor_property("decal_blend_mode", unreal.DecalBlendMode.DBM_TRANSLUCENT)
+    except Exception:
+        pass  # (newer engines take the decal's blend from the blend mode and the outputs connected)
+    uv = node(m, unreal.MaterialExpressionTextureCoordinate, -1600, 0)
+    middle = node(m, unreal.MaterialExpressionConstant2Vector, -1600, 150, r=0.5, g=0.5)
+    out = node(m, unreal.MaterialExpressionDistance, -1400, 0)
+    connect(uv, "", out, "A")
+    connect(middle, "", out, "B")
+    # (0 at the strike, 1 at the decal's edge; pushed in and out by the noise, two sizes of it)
+    noise = unreal.load_asset("/Engine/MapTemplates/TilingNoise05")
+    coarse = node(m, unreal.MaterialExpressionTextureSample, -1400, 300, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    connect(times(m, uv, 0.9, -1600, 300), "", coarse, "UVs")
+    fine = node(m, unreal.MaterialExpressionTextureSample, -1400, 550, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    connect(times(m, uv, 3.1, -1600, 550), "", fine, "UVs")
+    tear = plus(m, plus(m, (coarse, "R"), times(m, (fine, "R"), 0.5, -1200, 550), -1050, 400), -0.75, -900, 400)
+    ragged = times(m, tear, scalar(m, "Ragged", 0.45, -900, 520), -750, 400)
+    r = plus(m, times(m, out, 2.0, -1200, 0), ragged, -600, 0)
+    hole_at = scalar(m, "Hole", 0.3, -600, 200)
+    # The hole: black where r is inside it, its edge a little soft.
+    hole = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, hole_at, times(m, r, -1.0, -450, 100), -300, 150), 24.0, -150, 150), 0, 150)
+    # The lip: torn skin bent out round the hole, half as wide again as the hole.
+    lip_at = times(m, hole_at, 1.55, -450, 300)
+    lip = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, lip_at, times(m, r, -1.0, -450, 400), -300, 350), 16.0, -150, 350), 0, 350),
+                one_in(m, unreal.MaterialExpressionOneMinus, hole, 0, 450), 150, 400)
+    # The soot: darkest at the lip, gone at the edge.
+    left = one_in(m, unreal.MaterialExpressionSaturate, plus(m, 1.0, times(m, r, -1.0, -450, 600), -300, 600), -150, 600)
+    soot = times(m, times(m, left, left, 0, 600), scalar(m, "Soot", 0.85, 0, 700), 150, 650)
+    opacity = one_in(m, unreal.MaterialExpressionSaturate, plus(m, plus(m, hole, lip, 300, 300), soot, 450, 450), 600, 450)
+    soot_colour = vector(m, "SootColour", (0.018, 0.016, 0.014, 1.0), 300, -300)
+    metal_colour = vector(m, "MetalColour", (0.5, 0.51, 0.52, 1.0), 300, -150)
+    hole_colour = vector(m, "HoleColour", (0.004, 0.004, 0.004, 1.0), 300, 0)
+    colour = lerp(m, lerp(m, soot_colour, metal_colour, lip, 500, -200), hole_colour, hole, 700, -100)
+    to_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    to_property(times(m, lip, 0.9, 700, 100), "", unreal.MaterialProperty.MP_METALLIC)
+    to_property(lerp(m, 0.92, 0.3, lip, 700, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
 def build_deck_shade():
     """THE DECK'S SHADE (the art director, 20 November 2026 22:37Z: under a broken deck the ground and the sea darker
     and flat, sunlit patches where the sun comes through its holes, about 5 km down-sun of each with Bremen's 13 degree
@@ -1836,7 +1887,7 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

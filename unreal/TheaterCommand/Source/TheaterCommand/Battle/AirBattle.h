@@ -21,6 +21,8 @@ class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UProceduralMeshComponent;
+class UDecalComponent;
+namespace AirShow { struct Fx; }
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
@@ -136,8 +138,50 @@ private:
 		bool bBay = false;
 		double BayShown = 0.0;
 		bool bBombsGone = false;
+		/**
+		 * Where rounds have struck it (Brian, 22 November 04:12Z: "if a plane gets hit make sure the bullet holes and
+		 * damage shows on the wing or fuselage"): each strike in its mesh's own frame (engine units, its nose toward
+		 * -X), and once laid on its skin, the way out of the skin there; the half width of its soot and the share of
+		 * that its hole takes (metres); which ink it wears (0 a rifle or machine-gun round, 1 a cannon shell, 2 a
+		 * heavy shell or flak); and its decal while the aircraft is near the eye (AirBattleMarks.cpp). Kept for the
+		 * aircraft's whole flight, at most MostMarks of them, the bigger strikes kept when it is full.
+		 */
+		struct FMark
+		{
+			FVector At = FVector::ZeroVector;
+			FVector Out = FVector::UpVector;
+			bool bOnSkin = false;
+			double Soot = 0.2, Hole = 0.3;
+			int32 Kind = 0;
+			int32 Turn = 0;
+			TWeakObjectPtr<UDecalComponent> Decal;
+		};
+		TArray<FMark> Marks;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
+	/** The strikes' decals (M_HitMark), one ink a kind of strike; the most strikes kept on one aircraft, and the most
+	 * decals laid at once over all the aircraft near the eye. */
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> MarkInks;
+	static constexpr int32 MostMarks = 24;
+	static constexpr int32 MostMarkDecals = 240;
+	int32 MarkDecals = 0;
+	/** Strikes kept so far (each one's turn and size are drawn from it and its aircraft's key); the ink looked for once;
+	 * the first decal's line written. */
+	int32 MarkStrikes = 0;
+	bool bMarkInksTried = false;
+	bool bMarkLaidLogged = false;
+	/** A strike the flight core shows on an aircraft (its Hit): kept on the aircraft it struck, in its own frame. */
+	void MarkStrike(const AirShow::Fx& E);
+	/** The strikes on each aircraft near the eye (the ridden one, and those within MarkNearM metres) laid as decals on
+	 * its skin; taken up again from the others. */
+	void DrawMarks(const FVector& EyeAt);
+	static constexpr double MarkNearM = 400.0;
+	/** An aircraft's decals taken up (it has gone far, out of sight, or is made again). */
+	void LiftMarks(FPlaneMade& Made);
+	/** The aircraft flying that has been struck the most, a cannon shell's tear weighed as three rounds and a heavy
+	 * shell's as six (the picture run's strike-marks ride); INDEX_NONE when none has been struck. */
+	int32 MostMarked() const;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;
@@ -384,7 +428,7 @@ private:
 	 * both rides fell on a Mustang and the German fighters were small in every frame). bChase: one in the chase view,
 	 * taken as he would take it (his first fighter squadron ridden, then one step along it), its plate in the picture.
 	 * bGuns: "the guns fire back", timed from the first attack run on a ship (GunsRealT). */
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; };
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; bool bMarks = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;

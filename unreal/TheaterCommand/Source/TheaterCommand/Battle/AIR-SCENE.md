@@ -13,6 +13,7 @@ battle screen over it.
 | `AirFeed.h/.cpp` | Reads the bridge's JSON (sky, views, after card, recordings) into the flight core's terms. Plain C++. |
 | `AirDesk.h/.cpp` | The screen's words and clock: the top bar, the aim slip, the near line, the dispatches, the tags, the after card, the orders as `TC.battleOrder` takes them, and the close camera's subject. Plain C++. |
 | `AirBattleState.h` | The plain state above, kept out of the actor's header. |
+| `AirBattleMarks.cpp` | The strikes on the aircraft (Brian, 22 November): each of the core's hits kept on the aircraft it struck, in its own frame, and laid on its skin as a decal (`M_HitMark`) while it is near the eye. |
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
@@ -45,6 +46,9 @@ battle screen over it.
      finds the same moment (Pearl Harbor: Nevada under a Val's dive at 7:03 of the battle; Midway: Kaga under a
      Dauntless's at 6:59). Every other picture due meanwhile waits until it is taken, as one waits for the ships.
    - the fight going on
+   - the strike marks (`09-strike-marks`, item 19): 105 s after the meeting, riding the aircraft flying that has been
+     struck the most (a cannon shell weighed as three rounds, a heavy shell as six). The log says "Air battle: strike
+     marks picture on <model> (key N): ... strikes on it"
    - the after card
 
    Each ride leaves its fighter half a second after its picture. For a film of the run, `-TheaterAirBattleRideHold=40`
@@ -899,3 +903,16 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    "Air battle: the air's smoke pales into the sky behind it, on screen 202, 209, 221" (over the sea; 219, 224, 230
    over Bremen; greyer under a deck). If old smoke reads as a darker or lighter blot against the sky, measure the sky
    behind it and try "-TheaterSmokeSky=r,g,b" (0 to 255) with that measure (AirParts::SkyBehind).
+19. **Bullet holes and damage** (Brian, 22 November 04:12Z: "if a plane gets hit make sure the bullet holes and damage
+   shows on the wing or fuselage"). Rebuild the decal first: `TC_REBUILD=M_HitMark Tools/build_content.sh`. Every hit
+   the flight core shows is kept on the aircraft it struck for the rest of its flight: a machine-gun strike as a stitch
+   of three small holes within about a metre, a 20 or 25 mm shell as a plate-sized tear with a hole beside it, a 37 or
+   40 mm as a tear a head could go through. Each hole is black, ringed by a narrow lip of torn bare metal that catches
+   the light, with soot blown back over the paint round it, its edge ragged. They are drawn on the ridden aircraft and
+   any within 400 m (at most 24 an aircraft, 240 in all), and stay put on the skin as it banks and rolls. Look at
+   `09-strike-marks`: the marks on the wings and fuselage, none floating off the skin or lying on the airscrew disc,
+   none showing through on the far side of the fuselage. A shell's tear may show on both faces of a thin wing (it went
+   through). The log's first lines: "Air battle: strike marks: the first kept on ..." and "... the first laid on the
+   skin of ...". If the marks are too faint at the ride's distance, say so; their sizes are in `MarkLooks`
+   (AirBattleMarks.cpp). The cloud check fitted every hit in all three battles to the aircraft it struck (365 at
+   Bremen, 352 at Pearl Harbor, 595 at Midway; ships' hits to the aircraft they name).
