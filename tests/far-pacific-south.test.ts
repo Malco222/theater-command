@@ -427,9 +427,12 @@ describe("Japan's month of December 1941", () => {
     // By the book the ten landings of the great blow sail on the record's own shipping, each in its record month, and
     // draw nothing from the month's lift of six (rider b626 to ruling 234: the record shows the shipping sufficed).
     // With Guam's garrison at the record's size (ruling 234(b): some 750 men, not a brigade) the South Seas
-    // Detachment lands in December as it did, and the Kawaguchi Detachment is at Brunei, as on the 16th.
+    // Detachment lands in December as it did. The Kawaguchi Detachment, ashore at Miri and Seria on the 16th, has gone
+    // on by the book's dated rows to Brunei overland and to Kuching by sea, which fell on the 24th and 25th (the design
+    // director's rulings of 03:59Z and 04:06Z, 22 November 2026: tests/far-borneo-book.test.ts). It stood at Brunei at
+    // the month's end before those rows were laid.
     expect(at(g, 'South Seas Detachment')).toBe('Guam');
-    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Brunei');
+    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Kuching');
     // All ten are ashore in December: nine stand on their own shores, and the 5th Division, landed at Singora, has been
     // carried on to Ipoh. The month's lift of six is not spent on them.
     const ashore = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).map((l) => l.corps);
