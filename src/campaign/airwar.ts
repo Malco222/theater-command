@@ -638,7 +638,24 @@ export interface RaidSeat {
 }
 
 /** A raid weighed up before it is flown. */
-export interface RaidGuns { level: number; loss: number; lossN: number; stop: number }
+export interface RaidGuns {
+  level: number; loss: number; lossN: number; stop: number;
+  /** Where ships' own guns fire too (a strike on ships): at sea, or in a harbour beside the guns ashore. Screen only. */
+  ships?: 'sea' | 'harbour';
+}
+
+/**
+ * Whose guns bring down the bombers the card counts lost to guns ("about 3 to ..."), each share by its own name: the UI
+ * director's rider 3 table and rider 4 (22 November, 09:01Z and 12:53Z), for everyone, every switch. Over land, release
+ * 1's words: "light flak", or "flak and level 2 guns". A strike on a fleet at sea: "the ships' guns". A harbour, where
+ * the ships' guns fire beside those ashore: "the ships' guns and light flak", or "the ships' guns, flak and level 2
+ * guns". (Release 1 called the ships' guns "light flak". The words are screen text only: no word of them is saved.)
+ */
+export function gunsTo(guns: RaidGuns): string {
+  if (guns.ships === 'sea') return "the ships' guns";
+  if (guns.ships === 'harbour') return guns.level ? `the ships' guns, flak and level ${guns.level} guns` : "the ships' guns and light flak";
+  return guns.level ? `flak and level ${guns.level} guns` : 'light flak';
+}
 
 export interface RaidPlan {
   kind: RaidKind;
@@ -872,6 +889,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.figures = figuresOf(g, kind, target, fc, nat);
   // (The guns stop part of the bombing of industry and of a town; over a harbour they only bring bombers down.)
   plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== 'harbour' ? gunsStop(a.aa) : 0 };
+  // (A strike on ships: the ships' own guns are part of that toll, and the card names them.)
+  if (a.flak > 0) plan.guns.ships = kind === 'harbour' ? 'harbour' : 'sea';
   if (kind === 'line') plan.wear = fc.cut;
   // What meeting up is worth: each bomber group alone, with the fighters from its own airfield, beside all of them together.
   const bombers = going.filter((f) => f.bmr > 0);

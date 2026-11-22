@@ -72,7 +72,7 @@ import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { nearX, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
-import { groupRow, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
+import { groupRow, gunsTo, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
@@ -6452,7 +6452,7 @@ function raidCard(): string {
   else if (p.why) head = `<div class="verdict loss" style="font-size:22px">${esc(p.why)}</div>`;
   else {
     const cls = p.success >= 0.6 ? 'win' : p.success >= 0.4 ? '' : 'loss';
-    const loss = [p.bombers ? `<div class="fact"><span>Bombers likely lost</span><b>${num(p.bomberLossN)} of ${num(p.bombers)}</b><small>${pctOf(p.bomberLoss)}${p.guns.lossN > 0 ? ` · about ${num(p.guns.lossN)} to ${p.guns.level ? `flak and level ${p.guns.level} guns` : 'light flak'}` : ''}</small></div>` : '', p.fighters ? `<div class="fact"><span>Fighters likely lost</span><b>${num(p.fighterLossN)} of ${num(p.fighters)}</b></div>` : '', `<div class="fact"><span>Enemy fighters likely lost</span><b>${num(p.foeLossN)}</b></div>`].join('');
+    const loss = [p.bombers ? `<div class="fact"><span>Bombers likely lost</span><b>${num(p.bomberLossN)} of ${num(p.bombers)}</b><small>${pctOf(p.bomberLoss)}${p.guns.lossN > 0 ? ` · about ${num(p.guns.lossN)} to ${gunsTo(p.guns)}` : ''}</small></div>` : '', p.fighters ? `<div class="fact"><span>Fighters likely lost</span><b>${num(p.fighterLossN)} of ${num(p.fighters)}</b></div>` : '', `<div class="fact"><span>Enemy fighters likely lost</span><b>${num(p.foeLossN)}</b></div>`].join('');
     head = `<div class="verdict ${cls}" style="font-size:24px">${esc(p.verdict)}</div>
       <div class="oddsbar" title="The chance the raid costs the enemy more than it costs you"><i style="width:${Math.round(p.success * 100)}%;background:var(--brass)"></i><i style="flex:1;background:var(--panel-3)"></i></div>
       <div class="facts raidfacts"><div class="fact"><span>Chance of success</span><b>${pctOf(p.success)}</b></div>${loss}</div>
