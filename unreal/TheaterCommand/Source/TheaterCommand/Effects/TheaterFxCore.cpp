@@ -14694,15 +14694,16 @@ namespace TheaterFx
 			if (A >= 0.004 && ScreenPx > 0.0)
 			{
 				// (its fill: each fan's area on the screen, as much of it as its box has on the screen and no more than the
-				// screen; one whose middle is behind the eye counted whole. The big share over thin_from_px, whole at a
-				// quarter as wide again)
+				// screen. A fan lies square to the eye's forward, so one whose middle is within 0.1 m of the eye's plane, or
+				// behind it, is all clipped away and fills nothing. The big share over thin_from_px, whole at a quarter as
+				// wide again)
 				const double T = Clamp01((Px - ThinFromPx) / (0.25 * ThinFromPx));
 				const double Big = ThinScreens > 0.0 ? T * T * (3.0 - 2.0 * T) : 0.0;
 				const double Fans = B.TwinPx > 0.0 && Room >= 2 && 2.0 * Rad >= B.TwinPx * MetresAPixel ? 2.0 : 1.0;
 				const Vec Seen = Middle - Eye.Eye;
 				const double Deep = Seen.Dot(Eye.Forward), Half = 0.5 * Px;
-				double OnScreen = 1.0;
-				if (Deep > 1e-3 && Half > 0.0)
+				double OnScreen = 0.0;
+				if (Deep > 0.1 && Half > 0.0)
 				{
 					const double Sx = Seen.Dot(Eye.Right) / Deep * Eye.PixelsPerRadian, Sy = Seen.Dot(Eye.Up) / Deep * Eye.PixelsPerRadian;
 					const double InX = std::max(0.0, std::min(Sx + Half, ScreenHalfX) - std::max(Sx - Half, -ScreenHalfX));
