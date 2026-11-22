@@ -39,7 +39,7 @@ COMMON = {
 
 # The art director's vehicle paints (unit-table.json, "as built"), and a second colour where the army camouflaged.
 NATION = {
-    "GER": ("4E5459", None), "POL": ("66684A", "7A6A48"), "UK": ("65704E", None), "USA": ("585139", None),
+    "GER": ("4E5459", None), "POL": ("66684A", "7A6A48"), "UK": ("65704E", None), "USA": ("625024", None),
     "SOV": ("4F5E3E", None), "FRA": ("5E6A48", "7A5C40"), "ITA": ("8A7F5E", "5E6A48"), "JAP": ("988256", "5E6442"),
     "_": ("60664A", None),
 }
@@ -52,7 +52,11 @@ def dark(hx, k):
 # A coat's two darker tones (its `upper2` where the army did not camouflage, and its `shade`) are worked out from it,
 # but for these two coats the art director gave all three herself (ruling of 21 Nov for the Normandy scene: American olive drab and
 # German dark yellow, so a vehicle's file matches the ground scene's own paint). Ground vehicles only.
-TONES = {"585139": ("46402D", "363123"), "8E7E58": ("726546", "584E36")}
+# American olive drab, 22 Nov (her cut 5 read, item 7, and the 13:29Z note): 585139 landed blue-grey (98,108,106) through the
+# ground's grade, which keeps 0.48 of the middle tones' colour; written with about twice the colour wanted, 625024 lands
+# 106,106,79 there (red at green, blue/green 0.74), modelled in tools/battle-fx land_grade.py. The game's LandKit NationCoat
+# (the lorry) uses the same three.
+TONES = {"625024": ("4D3F1C", "3B3015"), "8E7E58": ("726546", "584E36")}
 
 
 def livery(tag, paint=None):
