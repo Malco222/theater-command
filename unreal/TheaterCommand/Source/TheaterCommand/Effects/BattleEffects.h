@@ -286,13 +286,14 @@ public:
 	/** Fire keeps its orange under the scene's colour grade (the art director, 22 November: the land battle's grade,
 	 * made for its fields, drained a burning wreck's flame to salmon and peach). The kit's mesh marks its pixels in the
 	 * custom depth, and M_FireSpread, drawn after the tonemapper, spreads the colour of only those marked pixels that
-	 * are fire's colour (orange to yellow, deep or bright, never grey) or a coloured light of another hue (a red or
-	 * green tracer, bright and coloured) by Spread from their own grey, and raises the green of the orange by Warm. A
-	 * white-hot core stays as ruled. Smoke, dust and earth stay as the grade leaves them, and so does the field
+	 * are fire's colour (orange to yellow, deep or bright, never grey; a red tracer's too) or a bright green light (a
+	 * Soviet tracer) by Spread from their own grey, and raises the green of fire's orange by Warm. A white-hot core
+	 * stays as ruled, and so does the sky's blue. Smoke, dust and earth stay as the grade leaves them, and so does the field
 	 * behind a thin flame.
 	 * Call it after Begin with the lens the scene's eye looks through (its camera's or post-process volume's settings:
 	 * one the engine keeps, as the lens holds the material); again to change the numbers; Spread 1 or less takes it
-	 * off. Costs the custom depth pass for the kit's mesh. False, with a log line, without M_BattlePuffs and
+	 * off. One lens at a time: it is taken out only of the lens it is given, so take it off one (Spread 1) before
+	 * putting it on another. Costs the custom depth pass for the kit's mesh. False, with a log line, without M_BattlePuffs and
 	 * M_FireSpread (Tools/build_content.sh with TC_REBUILD=M_BattlePuffs,M_FireSpread). */
 	bool SetFireSpread(FPostProcessSettings& Lens, float Spread = 2.0f, float Warm = 1.2f);
 	/** Everything gone: a new battle. */

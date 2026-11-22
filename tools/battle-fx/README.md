@@ -1627,9 +1627,10 @@ So it is mended after the grade, on the picture as the screen shows it. M_Battle
 custom depth (translucent custom depth writes, wherever a piece is a tenth seen or more), and M_FireSpread, a
 post-process after tonemapping (Tools/build_content.py), finds the marked pixels the opaque world does not hide and,
 of those, only two sorts: fire's colour (hue between orange-red and yellow, and deep colour, or bright and a little
-coloured), and a coloured light of any other hue (bright and coloured: a red or green tracer, which the grade leaves
-pink or grey-green). The whitest are left alone, so a white-hot core stays as ruled. Their colour is spread from their
-own grey by Spread (2.0, the art director's) and the green of the orange raised by Warm (1.2; on yellow it went lime),
+coloured; a red tracer is in it), and a bright green light (a Soviet tracer, which the grade leaves grey-green; blue
+and violet are the sky's and left alone). The whitest are left alone, so a white-hot core stays as ruled. Their colour
+is spread from their own grey by Spread (2.0, the art director's) and the green of fire's orange raised by Warm (1.2;
+on yellow it went lime, and on a sky seen through smoke cyan, the pre-check's find),
 feathered by that "heat" so there is no seam at a flame's edge. Smoke, dust, earth and the field seen through a thin
 flame stay as the grade left them. A scene asks for it with FBattleEffects::SetFireSpread(its eye's lens), after
 Begin; it costs the custom depth pass for the kit's mesh. Without the materials it says so and does nothing. The mark
@@ -1657,6 +1658,12 @@ The kit's other colours, written as the recipe has them, on the game's curve, th
 | sand dust | 206,193,156 | 190,181,163 | unchanged |
 | clod earth (written 118,99,72) | 119,87,45 | 72,59,45 | 77,64,37 |
 | grey and pale smoke | | | unchanged |
+
+The mark is every piece a tenth seen or more, smoke and dust too, so the colour alone decides: a field seen through
+thin dust whose colour on the screen is deep orange-brown or gold (ripe wheat at 215,180,95 would go 249,179,9) is
+spread in the piece's shape. Under the land battle's grade a field lands far paler than that, but if dust over wheat
+shows a patch on the Mac, M_BattlePuffs' opacity_mask_clip_value (0.1) is the lever: at 0.3 the wreck's fire is the
+same in the model, and thin edges no longer mark.
 
 The ground's yellow tracer is only half brought back: pale khaki and a wheat field seen through thin smoke are the same
 colour on the screen, and the field must stay as graded.

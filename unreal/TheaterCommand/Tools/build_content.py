@@ -1453,10 +1453,11 @@ def build_battle_puffs():
 
 # The fire's spread, after the scene's grade: in the post-process input (the picture as the screen shows it), a pixel
 # the kit marked and the opaque world does not hide has its colour spread from its own grey by Spread when it is fire's
-# (orange to yellow, deep in colour, or bright and a little coloured) or a coloured light of another hue (bright and
-# coloured: a red or green tracer, a flash, which the grade leaves pink or grey-green). The whitest are left as they
-# are (a white-hot core stays as ruled). Warm raises green on orange only (on yellow it went lime). All else is left
-# as it was. "heat" feathers it, so there is no seam at a flame's edge. tools/battle-fx/land_grade.py is the same sums.
+# (orange to yellow, deep in colour, or bright and a little coloured) or a green light (bright and coloured: a Soviet
+# tracer, which the grade leaves grey-green; red is fire's hue already, and blue and violet are the sky's, left
+# alone). The whitest are left as they are (a white-hot core stays as ruled). Warm raises green on fire's orange only
+# (on yellow it went lime, on the sky cyan: the pre-check). All else is left as it was. "heat" feathers it, so there
+# is no seam at a flame's edge. tools/battle-fx/land_grade.py is the same sums.
 FIRE_SPREAD_HLSL = """
 float3 c = saturate(C.rgb);
 if (!(Marked.r < MarkFar && Marked.r <= Solid.r * 1.001 + 1.0) || Spread <= 1.0) return C.rgb;
@@ -1470,10 +1471,12 @@ float hue = smoothstep(-25.0, -12.0, h) * (1.0 - smoothstep(55.0, 65.0, h));
 float y = dot(c, float3(0.2126, 0.7152, 0.0722));
 float top = 1.0 - smoothstep(0.85, 0.95, y);
 float fire = hue * max(smoothstep(0.30, 0.45, s), smoothstep(0.70, 0.85, y) * smoothstep(0.08, 0.18, s) * top);
-float lit = (1.0 - hue) * smoothstep(0.66, 0.78, y) * smoothstep(0.12, 0.20, s) * top;
-float heat = max(fire, lit) * smoothstep(0.01, 0.04, y);
+float green = smoothstep(70.0, 85.0, h) * (1.0 - smoothstep(160.0, 175.0, h));
+float lit = green * smoothstep(0.66, 0.78, y) * smoothstep(0.12, 0.20, s) * top;
+float dim = smoothstep(0.01, 0.04, y);
+float heat = max(fire, lit) * dim;
 float3 o = y + (c - y) * (1.0 + (Spread - 1.0) * heat);
-o.g *= 1.0 + (Warm - 1.0) * heat * (1.0 - smoothstep(32.0, 42.0, h));
+o.g *= 1.0 + (Warm - 1.0) * fire * dim * (1.0 - smoothstep(32.0, 42.0, h));
 return saturate(o);
 """
 
@@ -1486,7 +1489,9 @@ def build_fire_spread():
     field behind a thin flame stay as the grade left them. Added to a scene's lens by FBattleEffects::SetFireSpread."""
     m = new_material("M_FireSpread")
     m.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
-    after = getattr(unreal.BlendableLocation, "BL_SCENE_COLOR_AFTER_TONEMAPPING", None) or unreal.BlendableLocation.BL_AFTER_TONEMAPPING
+    after = getattr(unreal.BlendableLocation, "BL_SCENE_COLOR_AFTER_TONEMAPPING", None)
+    if after is None:
+        after = unreal.BlendableLocation.BL_AFTER_TONEMAPPING  # (its name before 5.4; hidden, and not in python, since)
     m.set_editor_property("blendable_location", after)
     spread = node(m, unreal.MaterialExpressionCustom, -200, 0,
                   code=FIRE_SPREAD_HLSL,
