@@ -109,22 +109,27 @@ if (hidden !== woods.length) fail(`only ${hidden} of the walk's ${woods.length} 
     const f = foot[0], line = { x0: f.x + Math.cos(f.face) * 150 - 50, y0: f.y + Math.sin(f.face) * 150, x1: f.x + Math.cos(f.face) * 150 + 50, y1: f.y + Math.sin(f.face) * 150 };
     const smokeNo = H.smokeWhy(f.id, line.x0, line.y0, line.x1, line.y1);
     const smoke = smokeNo === null && H.order({ do: 'land:smoke', units: [f.id], ...line } as Command);
-    let cutSaid = 0, smokeSaid = 0, cutterShown = 0, smokeShown = -1;
+    let cutSaid = 0, smokeSaid = 0, cutterShown = 0, smokeShown = -1, cutViews = 0, screenViews = 0, hang = -1;
     for (let i = 0; i < 400 && !H.sim.over; i++) {
       const d = i === 0 ? d0 : H.tick(0.5, 100);
       for (const e of d.events as { what?: string; unit?: number }[]) {
         if (e.what === 'land:cut' && e.unit === tank.id) cutSaid++;
         if (e.what === 'land:smoke' && e.unit === f.id) smokeSaid++;
       }
-      const v = d.views[d.views.length - 1] as { units?: { id: number; cutter?: number; smoke?: number }[] } | undefined;
+      for (const r of d.rounds as { w?: string; by?: number; hang?: number }[]) if (r.w === 'smoke' && r.by === f.id && r.hang !== undefined) hang = Math.max(hang, r.hang);
+      const v = d.views[d.views.length - 1] as { units?: { id: number; cutter?: number; smoke?: number }[]; cuts?: { unit: number }[]; screens?: { unit?: number }[] } | undefined;
+      if (v?.cuts?.some((c) => c.unit === tank.id)) cutViews++;
+      if (v?.screens?.some((c) => c.unit === f.id)) screenViews++;
       if (v?.units?.find((u) => u.id === tank.id)?.cutter) cutterShown++;
       const s = v?.units?.find((u) => u.id === f.id)?.smoke;
       if (s !== undefined) smokeShown = s;
-      if (cutSaid && smokeSaid) break;
+      if (cutSaid && smokeSaid && cutViews > 2 && screenViews > 2 && hang >= 0) break;
     }
     console.log(`cutters and smoke: with no hedge "${noHedge}"; tank ${tank.id} told to cut ${cut ? 'taken' : `refused (${cutNo})`}, began ${cutSaid ? 'yes' : 'no'}, cutters shown in ${cutterShown} views; section ${f.id} told to lay smoke ${smoke ? 'taken' : `refused (${smokeNo})`}, laid ${smokeSaid ? 'yes' : 'no'}, ${smokeShown} screens left`);
     if (!cut || !cutSaid || !cutterShown) fail('his tank did not cut the gap he picked');
     if (!smoke || !smokeSaid) fail('his section did not lay the screen he dragged');
+    console.log(`  the 3D field hears of them: the cut in ${cutViews} views, the screen in ${screenViews}, its smoke rounds hang ${hang} s`);
+    if (!cutViews || !screenViews || hang < 0) fail('the views do not carry the cut and the screen for the 3D field');
   }
 }
 console.log(failures ? `FAIL (${failures})` : 'the rules took every order');

@@ -506,6 +506,11 @@ export class LiveBattle {
         ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
         // (the rider ahead: his own corps' despatch riders, riding in before it)
         ...(v.riders?.length ? { riders: v.riders } : {}),
+        // (hedge cutters: the gaps cut and being cut that he may know of, each opening as a gateway at t1; smoke on call:
+        // the screens standing now, the enemy's block named only where he knows it. The 3D field opens the hedge and
+        // hangs the smoke; the smoke rounds carry how long each hangs as well)
+        ...this.sim.cutView(this.me ?? undefined),
+        ...this.sim.screenView(this.me ?? undefined),
         ...(v.over ? { over: v.over } : {}),
       });
     }
