@@ -19,7 +19,7 @@ import { holds, leavings, majorsOf } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
-import { lineShut } from './line';
+import { lineOwes, lineShut } from './line';
 import { blocked } from './rivers';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { isCity, openSmallAir } from './arsenal';
@@ -1092,8 +1092,32 @@ export function attackMembers(g: Game, nat: string, skip?: FrontOpts['skip']): (
   const own = fronts(g, nat, { skip }).filter((f) => ownFront(g, f));
   const M = membershipOf(own[0]);
   if (!M) return null;
-  const on = own.filter((f) => onSince(g, nat, f) > 0 && aimed(g, nat, f, M));
-  return on.length ? (c) => on.some((f) => M.counts(c, f)) : null;
+  const live = own.filter((f) => onSince(g, nat, f) > 0);
+  const on = live.filter((f) => aimed(g, nat, f, M));
+  // (By the book a front between two of the record's places keeps what stands on it: `waits`.)
+  const idle = stopDef(g).book ? live.filter((f) => !on.includes(f) && waits(g, nat, f)) : [];
+  if (!on.length && !idle.length) return null;
+  const stood = idle.map((f) => new Set(f.ours));
+  return (c) => on.some((f) => M.counts(c, f)) || idle.some((f, k) => stood[k].has(c.reg) && M.counts(c, f));
+}
+
+/**
+ * A front between offensives (the design director's 11:41Z of 22 November 2026, on Hengyang's fall in month 67 of
+ * one war in six): by the book, a front whose offensive is on, that the record's line shuts for the month but still
+ * owes a place, keeps what stands on its own ground. The record's 11th Army paused after Changsha before Hengyang;
+ * with Changsha taken in month 58 and Hengyang's month 60, the front had no target for two months, kept nobody, and
+ * the reserve rule took its rows north to Shasi and Linfen.
+ *
+ * Owed by its own operation: the place it waits for is given by a span whose kind is a dated choice of the book's
+ * that has gone (Ichigo's places, from the month Ichigo goes). A span of no operation (a raid, a lasting gain: the
+ * small front before Yencheng, shut from 1939 and owed Yencheng in 1941) is waited for by nobody, and such a front
+ * keeps nobody, as ruled at 22:12Z of 21 November 2026.
+ */
+function waits(g: Game, nat: string, f: Front): boolean {
+  const gone = ops(nat).filter((op) => flag(g, `st:done:${nat}:${op.id}`) > 0).map((op) => op.id);
+  if (!gone.length) return false;
+  const u = underOrders(g, nat, f, []);
+  return !!u && u.edge.some((id) => lineOwes(g, nat, g.regions[id], gone));
 }
 
 /**

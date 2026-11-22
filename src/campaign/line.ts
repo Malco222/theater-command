@@ -170,6 +170,18 @@ export function lineShut(g: Game, nat: string, r: Region): boolean {
   return false;
 }
 
+/**
+ * True where the line shuts a province to the invader's side this month and still owes it to him: a span of the
+ * province's opens in a later month of this war (as the stop moves it). `kinds` narrows the spans read.
+ */
+export function lineOwes(g: Game, nat: string, r: Region, kinds?: string[]): boolean {
+  if (!lines().length || nat === g.human) return false;
+  const L = lineOn(g, r);
+  if (!L || r.ctrl === g.human || !lineBinds(g, L) || !withSide(g, nat, L.taker) || inLine(g, L, r, g.turn)) return false;
+  const spans = L.spans[r.name] ?? [], m = monthsOf(g, L, r.name);
+  return spans.some((s, k) => (!kinds || kinds.includes(s.kind)) && m[k][0] > g.turn);
+}
+
 /** True for a corps of the invader's side standing on ground the line leaves out in month `t`: it goes back inside. */
 export function lineLeaves(g: Game, nat: string, r: Region, t: number): boolean {
   if (!lines().length || nat === g.human) return false;
