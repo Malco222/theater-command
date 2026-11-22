@@ -2,6 +2,7 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
+import capData from '../../data/campaign/capitulations.json';
 import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
@@ -2678,9 +2679,17 @@ export function railSays(g: Game, corps: Corps[], beyond: number | number[], pre
 }
 
 /** The share of a nation's home country, by worth, that is in enemy hands. */
+/**
+ * Whether a province is overseas as the score reads its home: the map's mark, and with the yield form on its
+ * corrections (the design director's 09:05Z: Syria and Albania, unmarked where Lebanon beside Syria is marked;
+ * capitulations.json 'overseas'). Off, the map's mark alone, as release 1 has it.
+ */
+export const overseasRead = (g: Game, r: Region): boolean => !!r.overseas || (g.flags.open === 1 && g.flags.yieldRule === 1 && HOME_FIX.has(r.name));
+const HOME_FIX = new Set<string>((capData as unknown as { overseas?: string[] }).overseas ?? []);
+
 export function homeLost(g: Game, nat: string): number {
   let vp = 0, held = 0;
-  for (const r of g.regions) if (r.owner === nat && !r.overseas) { vp += r.vp; if (allied(g, nat, r.ctrl)) held += r.vp; }
+  for (const r of g.regions) if (r.owner === nat && !overseasRead(g, r)) { vp += r.vp; if (allied(g, nat, r.ctrl)) held += r.vp; }
   return vp ? 1 - held / vp : 0;
 }
 
@@ -2774,7 +2783,7 @@ export function victorOf(g: Game, nat: string): string | null {
   const score: Record<string, number> = {};
   const add = (who: string, v: number): void => { if (atWar(g, nat, who) && g.nations[who]?.alive) score[who] = (score[who] ?? 0) + v; };
   for (const r of g.regions) {
-    if (r.owner !== nat || r.overseas) continue;
+    if (r.owner !== nat || overseasRead(g, r)) continue;
     add(r.ctrl, 2 + r.vp);
     for (const u of r.units) if (!u.dead) add(u.nat, 0.5 * u.divs * u.str);
     if (allied(g, nat, r.ctrl)) for (const j of r.nb) { const x = g.regions[j]; if (x.owner !== nat) for (const u of x.units) if (!u.dead) add(u.nat, 0.1 * u.divs * u.str); }

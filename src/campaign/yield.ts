@@ -25,7 +25,8 @@
 import data from '../../data/campaign/capitulations.json';
 import { reliefBar } from './ai';
 import { skyDenies } from './air';
-import { allied, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, hostileUnits, limitAttackers, railReachFor, theName, thornGround, victorOf } from './game';
+import { allied, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, hostileUnits, limitAttackers, overseasRead, railReachFor, theName, thornGround, victorOf } from './game';
+import { FIT_ORG } from './staff';
 import { stopDef, stopOf } from './history';
 import { whyBarred } from './ground';
 import { blocked } from './rivers';
@@ -52,23 +53,33 @@ const RAIL_HOPS = 16;
 /** A corps standing in the field of a province on the home chart, on its side's ground (not inside a town, not at sea, not overseas). */
 function inField(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
-  return !!r && !r.overseas && r.units.includes(c) && allied(g, c.nat, fieldCtrl(g, r));
+  return !!r && !overseasRead(g, r) && r.units.includes(c) && allied(g, c.nat, fieldCtrl(g, r));
 }
 
+/** Its own home ground, as the score reads it (game.ts homeLost, with the yield form's corrections: overseasRead). */
+const onHome = (g: Game, nat: string, c: Corps): boolean => { const r = g.regions[c.reg]; return !!r && r.owner === nat && !overseasRead(g, r); };
+
 /**
- * (i) The country's field army: its own corps in the field on the home chart, in supply, that are not fortress crews
- * and not on leave. Beaten is none of them left: gone, shut in towns, or every one cut off. No new number.
+ * (i) The country's field army (the design director's 09:04Z and 09:05Z): its own corps in the field on its own home
+ * ground (the home the score counts), in supply, not fortress crews, not inside a town and not on leave, that fight
+ * (fights(), ruling 146: not guns or engineers alone) and stand at or above the staffs' own fit line (staff.ts FIT_ORG).
+ * Beaten is none of them left, and none of its own off its home that could strike the enemy on its home ground as an
+ * ally's relief could (ownRelief). No new number.
  */
 export function fieldArmy(g: Game, nat: string): Corps[] {
   // (The supply picture as it stands now: a corps raised or moved since it was last drawn reads as fed until it is.)
   ensureSupply(g);
-  return g.corps.filter((c) => !c.dead && c.nat === nat && c.kind !== 'fort' && c.town === undefined && c.leave === undefined && c.supplied && inField(g, c));
+  return g.corps.filter((c) => !c.dead && c.nat === nat && c.kind !== 'fort' && c.town === undefined && c.leave === undefined && c.supplied && fights(c) && c.org >= FIT_ORG && onHome(g, nat, c) && inField(g, c));
 }
-export const fieldBeaten = (g: Game, nat: string): boolean => fieldArmy(g, nat).length === 0;
+/** (i) off its home: its own corps there count only as a relief, by (ii)'s own ways and bar: one rule for its own and its allies'. */
+export function ownRelief(g: Game, nat: string): Relief | null {
+  return reliefFrom(g, nat, [nat], (c) => !onHome(g, nat, c));
+}
+export const fieldBeaten = (g: Game, nat: string): boolean => fieldArmy(g, nat).length === 0 && !ownRelief(g, nat);
 
 /** The country's home ground where the enemy's army stands, holding it or round its town: where a relief would strike. */
 function enemyOnHome(g: Game, nat: string, foes: Set<string>): Region[] {
-  return g.regions.filter((r) => r.owner === nat && !r.overseas && r.units.some((u) => !u.dead && foes.has(u.nat)));
+  return g.regions.filter((r) => r.owner === nat && !overseasRead(g, r) && r.units.some((u) => !u.dead && foes.has(u.nat)));
 }
 
 /** Provinces within `most` steps of the place, by land, with their distance. */
@@ -205,13 +216,19 @@ function strongest<T>(g: Game, xs: T[], n: number, corps: (x: T) => Corps): T[] 
 export function reliefInReach(g: Game, nat: string): Relief | null {
   const foes = new Set(g.nations[nat].atWar.filter((e) => g.nations[e]?.alive));
   if (!foes.size) return null;
+  const friends = Object.values(g.nations).filter((n) => n.alive && n.id !== nat && allied(g, n.id, nat) && n.atWar.some((e) => foes.has(e))).map((n) => n.id);
+  return reliefFrom(g, nat, friends, () => true);
+}
+
+/** A relief of these countries' corps (those `may` lets count), reckoned country by country as reliefInReach describes. */
+function reliefFrom(g: Game, nat: string, friends: string[], may: (c: Corps) => boolean): Relief | null {
+  const foes = new Set(g.nations[nat].atWar.filter((e) => g.nations[e]?.alive));
+  if (!foes.size || !friends.length) return null;
   const targets = enemyOnHome(g, nat, foes);
   if (!targets.length) return null;
   // (Drawn before the pool is chosen: weighing the first ally's odds would otherwise redraw it halfway through.)
   ensureSupply(g);
-  const friends = Object.values(g.nations).filter((n) => n.alive && n.id !== nat && allied(g, n.id, nat) && n.atWar.some((e) => foes.has(e))).map((n) => n.id);
-  if (!friends.length) return null;
-  const free = g.corps.filter((c) => !c.dead && friends.includes(c.nat) && c.kind !== 'fort' && c.town === undefined && c.leave === undefined && c.supplied && g.regions[c.reg]?.units.includes(c));
+  const free = g.corps.filter((c) => !c.dead && friends.includes(c.nat) && c.kind !== 'fort' && c.town === undefined && c.leave === undefined && c.supplied && g.regions[c.reg]?.units.includes(c) && may(c));
   if (!free.length) return null;
   const kept = { rails: new Map<number, Set<number>>(), ground: new Map<number, Map<number, { cost: number }>>() };
   for (const t of targets) {
@@ -264,10 +281,10 @@ function noteBlows(g: Game, nat: string): void {
       const rep = g.reports[i];
       if (rep.turn < g.turn - 1) break;
       const r = g.regions[rep.region];
-      if (rep.attNat === e && r && r.owner === nat && !r.overseas) at = Math.min(at ?? rep.turn, rep.turn);
+      if (rep.attNat === e && r && r.owner === nat && !overseasRead(g, r)) at = Math.min(at ?? rep.turn, rep.turn);
     }
     // (With no battle to date it: an enemy that plays after the country in the month came in its own phase of the last.)
-    if (at === undefined && g.regions.some((r) => r.owner === nat && !r.overseas && (r.ctrl === e || r.units.some((u) => !u.dead && u.nat === e)))) at = g.order.indexOf(e) > g.order.indexOf(nat) ? g.turn - 1 : g.turn;
+    if (at === undefined && g.regions.some((r) => r.owner === nat && !overseasRead(g, r) && (r.ctrl === e || r.units.some((u) => !u.dead && u.nat === e)))) at = g.order.indexOf(e) > g.order.indexOf(nat) ? g.turn - 1 : g.turn;
     if (at !== undefined) g.flags[key] = at;
   }
 }

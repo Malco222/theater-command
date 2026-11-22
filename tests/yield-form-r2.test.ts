@@ -10,16 +10,16 @@ import nations from '../data/campaign/nations.json';
 import stage from '../data/campaign/stage.json';
 import { reliefBar } from '../src/campaign/ai';
 import { fallWarning } from '../src/campaign/danger';
-import { addCorps, allied, createGame, declareWar, frontage, railReachFor, removeCorps, victorOf } from '../src/campaign/game';
+import { addCorps, allied, createGame, declareWar, frontage, homeLost, overseasRead, railReachFor, removeCorps, victorOf } from '../src/campaign/game';
 import { cutRail } from '../src/campaign/rails';
 import { crossingOf } from '../src/campaign/rivers';
 import { setStop, stopOf } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { joinTown } from '../src/campaign/siege';
-import { startOpen } from '../src/campaign/staff';
+import { FIT_ORG, startOpen } from '../src/campaign/staff';
 import { YIELD_STAGE } from '../src/campaign/stage';
 import { runTurnAI } from '../src/campaign/turn';
-import { YIELD_ROWS, fieldArmy, fieldBeaten, reliefInReach, yieldBand, yieldCause, yieldMonth, yieldRule } from '../src/campaign/yield';
+import { YIELD_ROWS, fieldArmy, fieldBeaten, ownRelief, reliefInReach, yieldBand, yieldCause, yieldMonth, yieldRule } from '../src/campaign/yield';
 import type { Corps, Game, Kind, Region } from '../src/campaign/types';
 
 /** A 1939 grand campaign with the yield form on (or off), at a stop of the dial, the computer or a player in a seat. */
@@ -589,5 +589,124 @@ describe('the book, stops 1-2', () => {
     yieldMonth(g, 'HUN');
     expect(g.nations.HUN.alive).toBe(false);
     expect(g.nations.HUN.fellOn?.to).toBe('GER');
+  });
+});
+
+describe("what counts, and what home is (the design director's 09:05Z)", () => {
+  it("counts only corps that fight, at or above the staffs' own fit line: Norway's 6th Division in Finnmark counts", () => {
+    const g = open();
+    declareWar(g, 'GER', 'NOR');
+    const sixth = g.corps.find((c) => c.nat === 'NOR' && !c.dead && c.name === '6th Division')!;
+    expect(g.regions[sixth.reg].name).toBe('Finnmark');
+    expect(fieldArmy(g, 'NOR')).toContain(sixth);
+    for (const c of g.corps.filter((c) => c.nat === 'NOR' && !c.dead && c !== sixth)) removeCorps(g, c);
+    expect(fieldArmy(g, 'NOR')).toEqual([sixth]);
+    expect(fieldBeaten(g, 'NOR')).toBe(false);
+    sixth.org = FIT_ORG - 0.01;
+    expect(fieldArmy(g, 'NOR')).toEqual([]);
+    expect(fieldBeaten(g, 'NOR')).toBe(true);
+    sixth.org = FIT_ORG;
+    expect(fieldArmy(g, 'NOR')).toEqual([sixth]);
+  });
+
+  it('guns and engineers alone are no field army (ruling 146)', () => {
+    const g = open();
+    declareWar(g, 'GER', 'NOR');
+    strip(g, 'NOR');
+    const guns = add(g, 'NOR', 'Finnmark', 1, 'art');
+    const sappers = add(g, 'NOR', 'Finnmark', 1, 'eng');
+    expect(guns.supplied && sappers.supplied).toBe(true);
+    expect(fieldArmy(g, 'NOR')).toEqual([]);
+    expect(fieldBeaten(g, 'NOR')).toBe(true);
+    const foot = add(g, 'NOR', 'Finnmark', 1);
+    g.supplyDirty = true;
+    expect(fieldArmy(g, 'NOR')).toEqual([foot]);
+  });
+
+  it("Syria and Albania read overseas with the form on, and only then; every other mark is the map's", () => {
+    const names = (cap as unknown as { overseas: string[] }).overseas;
+    expect(names).toEqual(['Syria', 'Albania']);
+    const g = open();
+    for (const n of names) {
+      const rs = g.regions.filter((r) => r.name === n);
+      expect(rs).toHaveLength(1);
+      expect(!!rs[0].overseas).toBe(false);
+      expect(overseasRead(g, rs[0])).toBe(true);
+    }
+    expect(overseasRead(g, g.regions.find((r) => r.name === 'Lebanon')!)).toBe(true);
+    expect(overseasRead(g, R(g, 'Corsica'))).toBe(false);
+    for (const r of g.regions) if (!names.includes(r.name)) expect(overseasRead(g, r)).toBe(!!r.overseas);
+
+    if (YIELD_STAGE) return; // (a run with TC_YIELD set has no off)
+    const off = open(false);
+    for (const r of off.regions) expect(overseasRead(off, r)).toBe(!!r.overseas);
+  });
+
+  it('the Army of the Levant holds nothing up: France with no army at home has no field army, the corps in Syria notwithstanding', () => {
+    const g = open();
+    strip(g, 'FRA');
+    const levant = add(g, 'FRA', 'Syria', 4);
+    expect(levant.supplied).toBe(true);
+    expect(fieldArmy(g, 'FRA')).toEqual([]);
+    const home = add(g, 'FRA', 'Lorraine', 4);
+    g.supplyDirty = true;
+    expect(fieldArmy(g, 'FRA')).toEqual([home]);
+  });
+
+  it("the score reads the same map: a Greek army in Albania takes nothing of Italy's home with the form on", () => {
+    const g = open();
+    declareWar(g, 'ITA', 'GRE');
+    take(g, 'GRE', 'Albania', 4);
+    R(g, 'Albania').vp = 2; // (worth none on the map: given some, to show the score's share)
+    expect(homeLost(g, 'ITA')).toBe(0);
+    expect(victorOf(g, 'ITA')).not.toBe('GRE');
+
+    if (YIELD_STAGE) return; // (a run with TC_YIELD set has no off)
+    const off = open(false);
+    declareWar(off, 'ITA', 'GRE');
+    take(off, 'GRE', 'Albania', 4);
+    R(off, 'Albania').vp = 2;
+    expect(homeLost(off, 'ITA')).toBeGreaterThan(0);
+    expect(victorOf(off, 'ITA')).toBe('GRE');
+  });
+
+  it('off its home, its own corps count only as a relief that could win at the bar, by the same ways as an ally\'s', () => {
+    // France, its home army gone, the Germans at Sedan, its own corps over the border in Belgium.
+    const g = open();
+    declareWar(g, 'GER', 'BEL');
+    strip(g, 'FRA');
+    take(g, 'GER', 'Sedan', 2);
+    expect(R(g, 'Sedan').owner).toBe('FRA');
+    expect(R(g, 'Namur').owner).toBe('BEL');
+    expect(fieldArmy(g, 'FRA')).toEqual([]);
+    expect(ownRelief(g, 'FRA')).toBeNull();
+    const weak = add(g, 'FRA', 'Namur', 1);
+    weak.str = 0.3;
+    g.supplyDirty = true;
+    expect(weak.supplied).toBe(true);
+    expect(ownRelief(g, 'FRA')).toBeNull();
+    expect(fieldBeaten(g, 'FRA')).toBe(true);
+    removeCorps(g, weak);
+    const strong = add(g, 'FRA', 'Namur', 6, 'arm');
+    g.supplyDirty = true;
+    const help = ownRelief(g, 'FRA');
+    expect(help?.by).toBe('FRA');
+    expect(help!.corps).toContain(strong.id);
+    expect(g.regions[help!.target].name).toBe('Sedan');
+    expect(help!.odds).toBeGreaterThanOrEqual(reliefBar(g, g.regions[help!.target]));
+    expect(fieldArmy(g, 'FRA')).toEqual([]);
+    expect(fieldBeaten(g, 'FRA')).toBe(false);
+  });
+
+  it('a corps of its own off its home and cut off from supply counts for nothing, however strong', () => {
+    const g = open();
+    declareWar(g, 'GER', 'BEL');
+    beatenNED(g, 2);
+    const exiles = add(g, 'NED', 'Antwerp', 6, 'arm');
+    g.supplyDirty = true;
+    expect(fieldArmy(g, 'NED')).toEqual([]);
+    expect(exiles.supplied).toBe(false);
+    expect(ownRelief(g, 'NED')).toBeNull();
+    expect(fieldBeaten(g, 'NED')).toBe(true);
   });
 });
