@@ -113,11 +113,15 @@ describe('a main effort leaves one corps in a city or port next to the enemy (th
     setStop(g, 1, true);
     while (g.turn < 3) stepAI(g);
     const canton = at(g, 'Canton');
-    expect(garrisonOf(canton).map((c) => c.name)).toEqual(['21st Army (Canton)']);
+    // (The record's rows of 22 November 2026, china-setup.json `_canton`: the 104th Division's fourth regiment is a
+    // row of its own at Canton from the first month. A staff garrisons with its weakest row on foot, so the town's row
+    // is the regiment's, and the 104th stands in the field beside the 38th. The case is as it was: neither is Canton's
+    // last while a row of the 21st Army holds the town.)
+    expect(garrisonOf(canton).map((c) => c.name)).toEqual(['21st Army (170th Infantry Regiment, of the 104th Division)']);
     const field = japans(g, 'Canton');
-    expect(field.map((c) => c.name)).toEqual(['38th Division (Canton)']);
+    expect(field.map((c) => c.name).sort()).toEqual(['21st Army (Canton)', '38th Division (Canton)']);
     expect(cityBound(g, 'JAP', canton)).toBe(true);
-    expect(effortKeeps(g, field[0])).toBe(false);
+    for (const c of field) expect(effortKeeps(g, c), c.name).toBe(false);
     expect(effortSends(g, 'JAP', field)).toEqual(field);
   }, 120000);
 

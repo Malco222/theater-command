@@ -56,7 +56,9 @@ describe("the China file's amendments and the rows its dated rows take", () => {
   it('each amendment names the tool-written file whose row it amends, and that file holds the row', () => {
     const SRC: Record<string, any> = { 'far-world': farWorld, 'far-seats-pacific': farSeats };
     const lines = (chinaSetup as any).rows.amend as { file: string; list: string; nat: string; name: string; src: string }[];
-    expect(lines).toHaveLength(10);
+    // (Ten of 21 November 2026 and Canton's three of 22 November: the 104th and the 18th at the chart's full division,
+    // and the 38th's last month. tests/far-canton-rows.test.ts.)
+    expect(lines).toHaveLength(13);
     for (const a of lines) {
       expect(Object.keys(SRC), a.name).toContain(a.src);
       const rows = (SRC[a.src][a.file]?.[a.list] ?? []) as any[][];
@@ -74,7 +76,12 @@ describe("the China file's amendments and the rows its dated rows take", () => {
   // (The five guards: the director's 16:44Z of 21 November 2026. Dated at the book's stops as before; at stops 3 to 5
   // they fold into the rear garrison that comes by cause, staff.ts rearMonth, at the same figures: far-rear-garrison.)
   it("the book's own rows are marked for stops 1 and 2, and so are the five guards; the brigades and the garrisons stand at every stop", () => {
-    for (const r of MINE.filter((x) => x[0] >= 24)) expect(r[6].stops, r[2]).toEqual([1, 2]);
+    // (Canton's formations are no rows of the book's massings: the brigades of 1942 and the divisions of 1945 stand at
+    // every stop, and the 51st and the 170th Infantry have a line for the book's stops and one for the others: the
+    // design director's 07:55Z and 08:10Z of 22 November 2026, tests/far-canton-rows.test.ts.)
+    const canton = (r: any[]): boolean => /^23rd Army \((51st Division|19th Independent Mixed Brigade|22nd Independent Mixed Brigade|129th Division|130th Division)\)$/.test(r[2]);
+    for (const r of MINE.filter((x) => x[0] >= 24 && !canton(x))) expect(r[6].stops, r[2]).toEqual([1, 2]);
+    expect(MINE.filter((x) => x[0] >= 24 && canton(x))).toHaveLength(6);
     for (const r of GUARDS) expect(r[6].stops, r[2]).toEqual([1, 2]);
     expect(GUARDS).toHaveLength(5);
   });

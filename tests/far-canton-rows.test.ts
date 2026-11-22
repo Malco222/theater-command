@@ -1,0 +1,178 @@
+// Canton's rows as the record had them (the design director's rulings of 07:52Z, 07:55Z and 08:10Z of 22 November
+// 2026 on the second rules builder's Nanning trace; the historian's canton-rows-1939-45.md).
+//
+// Data only, behind the far switch, in data/campaign/china-setup.json. The chart's '21st Army (Canton)' is the 104th
+// Division: it keeps its name and stands at 1.0, the chart's full division, as the 18th Division does at Tungkun. The
+// 104th's fourth regiment, the 170th, is a row of its own (0.3) that leaves in January 1941 at the book's stops and
+// stands at the others. The 38th Division ends at the book's stops in February 1942, as its regiments' rows sail.
+// The 51st Division stands at Canton from September 1941: to November 1942 at the book's stops, and as its staff's at
+// the others. The 19th and 22nd Independent Mixed Brigades come in January 1942, and the 129th and 130th Divisions in
+// April 1945, the 130th raised from the 19th brigade.
+import { vi } from 'vitest';
+vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
+
+import { describe, expect, it } from 'vitest';
+import { createGame, startPhase } from '../src/campaign/game';
+import { setStop } from '../src/campaign/history';
+import { startOpen } from '../src/campaign/staff';
+import type { Corps, Game } from '../src/campaign/types';
+import setup from '../data/campaign/setup-1939.json';
+import world from '../data/campaign/world.json';
+import chinaSetup from '../data/campaign/china-setup.json';
+
+const MINE = (chinaSetup as any)['setup-1939'].expeditions as any[][];
+const AMEND = (chinaSetup as any).rows.amend as { file: string; list: string; nat: string; name: string; src: string; set?: any }[];
+const first = (name: string): any[] => ((world as any).corps as any[]).find((r) => r[1] === name)!;
+const dated = (name: string): any[][] => ((setup as any).expeditions as any[][]).filter((r) => r[2] === name);
+const war = (stop: number): Game => { const g = startOpen(createGame(5, null)); if (stop !== 3) setStop(g, stop, true); return g; };
+const of = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.nat === 'JAP' && c.name === name && !c.dead);
+const at = (g: Game, name: string): string | undefined => { const c = of(g, name); return c ? g.regions[c.reg].name : undefined; };
+/** Canton with Tungkun, the province between it and Hong Kong: a row formed where Canton is full is put down on the nearest ground with room, the game's rule for every dated row. */
+const AREA = ['Canton', 'Tungkun'];
+/** Japan's month opens, for each month given in turn: its dated rows come and go. */
+const months = (g: Game, ...ts: number[]): Game => { for (const t of ts) { g.turn = t; startPhase(g, 'JAP'); } return g; };
+
+const R104 = '21st Army (Canton)', R18 = '21st Army (18th Division)', R38 = '38th Division (Canton)';
+const R170 = '21st Army (170th Infantry Regiment, of the 104th Division)', R51 = '23rd Army (51st Division)';
+const B19 = '23rd Army (19th Independent Mixed Brigade)', B22 = '23rd Army (22nd Independent Mixed Brigade)';
+const D129 = '23rd Army (129th Division)', D130 = '23rd Army (130th Division)';
+const CANTON = [R170, R51, B19, B22, D129, D130];
+
+describe("Canton's rows in the China file", () => {
+  it('the 104th and the 18th are amended to 1.0, the chart\'s full division, and the 38th to end in month 30', () => {
+    const line = (name: string) => AMEND.find((a) => a.name === name)!;
+    expect(line(R104)).toEqual({ file: 'world', list: 'corps', nat: 'JAP', name: R104, src: 'far-world', set: { str: 1 } });
+    expect(line(R18)).toEqual({ file: 'world', list: 'corps', nat: 'JAP', name: R18, src: 'far-world', set: { str: 1 } });
+    expect(line(R38)).toEqual({ file: 'setup-1939', list: 'expeditions', nat: 'JAP', name: R38, src: 'far-world', set: { until: 30 } });
+    expect(first(R104).slice(0, 5)).toEqual(['JAP', R104, 'inf', 1, 'Canton']);
+    expect(first(R104)[5].str).toBe(1);
+    expect(first(R18).slice(0, 5)).toEqual(['JAP', R18, 'inf', 1, 'Tungkun']);
+    expect(first(R18)[5].str).toBe(1);
+    // (The 38th stands at the book's stops alone, far-shores.json; both amendments lie on the one row.)
+    expect(dated(R38)).toHaveLength(1);
+    expect([dated(R38)[0][0], dated(R38)[0][5], dated(R38)[0][6].stops, dated(R38)[0][6].until]).toEqual([2, 'Canton', [1, 2], 30]);
+  });
+
+  it('the new rows: eight lines for six formations, no row above a division\'s worth, each at Canton', () => {
+    const rows = MINE.filter((r) => CANTON.includes(r[2]));
+    expect(rows.map((r) => [r[0], r[2], r[4], r[5], r[6].str, r[6].stops ?? 'every stop', r[6].until ?? null])).toEqual([
+      [1, R170, 1, 'Canton', 0.3, [1, 2], 17], [1, R170, 1, 'Canton', 0.3, [3, 4, 5], null],
+      [25, R51, 1, 'Canton', 1, [1, 2], 39], [25, R51, 1, 'Canton', 1, [3, 4, 5], null],
+      [29, B19, 1, 'Canton', 0.35, 'every stop', null], [29, B22, 1, 'Canton', 0.35, 'every stop', null],
+      [68, D129, 1, 'Canton', 0.6, 'every stop', null], [68, D130, 1, 'Canton', 0.6, 'every stop', null],
+    ]);
+    for (const r of rows) expect(r[1] === 'JAP' && r[3] === 'inf' && r[6].str <= 1, r[2]).toBe(true);
+    // (A row under a division's worth never fills past its own size.)
+    for (const r of rows.filter((x) => x[6].str < 1)) expect(r[6].est, r[2]).toBe(r[6].str);
+    // (One row becomes the other: the 130th is raised from the 19th brigade, and nothing else here takes a row.)
+    expect(rows.filter((r) => r[6].from).map((r) => [r[2], r[6].from])).toEqual([[D130, [B19]]]);
+  });
+});
+
+describe('the 104th Division, the 18th and the 170th Infantry', () => {
+  it('on the first day the 104th stands at Canton and the 18th at Tungkun, each at 1.0, at every stop', () => {
+    for (const stop of [1, 3]) {
+      const g = war(stop);
+      expect([at(g, R104), of(g, R104)!.str, of(g, R104)!.full], `stop ${stop}`).toEqual(['Canton', 1, undefined]);
+      expect([at(g, R18), of(g, R18)!.str, of(g, R18)!.full], `stop ${stop}`).toEqual(['Tungkun', 1, undefined]);
+    }
+  });
+
+  it('the 170th stands at Canton from the first month at 0.3, a row that never fills past it', () => {
+    for (const stop of [1, 3]) {
+      const g = months(war(stop), 1);
+      const c = of(g, R170)!;
+      expect([at(g, R170), c.str, c.full, c.hold, !!c.stay], `stop ${stop}`).toEqual(['Canton', 0.3, 0.3, false, false]);
+    }
+  });
+
+  it('at the book\'s stops it leaves in January 1941, month 17, and not before', () => {
+    for (const stop of [1, 2]) {
+      const g = months(war(stop), 1, 16);
+      expect(at(g, R170), `stop ${stop}, month 16`).toBe('Canton');
+      months(g, 17);
+      expect(of(g, R170), `stop ${stop}, month 17`).toBeUndefined();
+      // (The 104th itself stays.)
+      expect(at(g, R104), `stop ${stop}`).toBe('Canton');
+    }
+  });
+
+  it('at stops 3 to 5 it stands on and is its staff\'s', () => {
+    const g = months(war(3), 1, 17, 30);
+    expect(at(g, R170)).toBe('Canton');
+  });
+});
+
+describe('the 38th Division ends as its regiments sail', () => {
+  it('at the book\'s stops it comes in month 2, stands in 29 and is gone in 30', () => {
+    for (const stop of [1, 2]) {
+      const g = months(war(stop), 2);
+      expect([at(g, R38), of(g, R38)!.str], `stop ${stop}`).toEqual(['Canton', 1]);
+      months(g, 29);
+      expect(of(g, R38), `stop ${stop}, month 29`).toBeDefined();
+      months(g, 30);
+      expect(of(g, R38), `stop ${stop}, month 30`).toBeUndefined();
+    }
+  });
+
+  it('at stops 3 to 5 it comes as its three regiments and nothing ends by date', () => {
+    const g = months(war(3), 2, 30, 40);
+    expect(of(g, R38)).toBeUndefined();
+    for (const nm of ['228th Infantry Regiment (the Ito Detachment)', "229th Infantry Regiment (with the 38th Division's headquarters)", '230th Infantry Regiment (the Shoji Detachment)']) expect(of(g, nm), nm).toBeDefined();
+  });
+});
+
+describe('the 51st Division at Canton', () => {
+  it('comes in September 1941, month 25, at 1.0, at every stop', () => {
+    for (const stop of [1, 3]) {
+      const g = months(war(stop), 24);
+      expect(of(g, R51), `stop ${stop}, month 24`).toBeUndefined();
+      months(g, 25);
+      expect([at(g, R51), of(g, R51)!.str, of(g, R51)!.hold], `stop ${stop}`).toEqual(['Canton', 1, false]);
+      // (One row of the two comes at any stop.)
+      expect(g.corps.filter((c) => c.name === R51 && !c.dead), `stop ${stop}`).toHaveLength(1);
+    }
+  });
+
+  it('at the book\'s stops it leaves in November 1942, month 39; at stops 3 to 5 it stands as its staff\'s', () => {
+    for (const stop of [1, 2]) {
+      const g = months(war(stop), 25, 38);
+      expect(at(g, R51), `stop ${stop}, month 38`).toBe('Canton');
+      months(g, 39);
+      expect(of(g, R51), `stop ${stop}, month 39`).toBeUndefined();
+    }
+    const g = months(war(3), 25, 39, 50);
+    expect(at(g, R51)).toBe('Canton');
+  });
+});
+
+describe('the brigades of 1942 and the divisions of 1945', () => {
+  it('the 19th and 22nd brigades come in January 1942, month 29, at 0.35 each, at every stop, neither held', () => {
+    for (const stop of [1, 3]) {
+      const g = months(war(stop), 28);
+      expect([of(g, B19), of(g, B22)], `stop ${stop}, month 28`).toEqual([undefined, undefined]);
+      months(g, 29);
+      for (const nm of [B19, B22]) { const c = of(g, nm)!; expect(AREA, `${nm} at stop ${stop}`).toContain(at(g, nm)); expect([c.str, c.full, c.hold, !!c.stay], `${nm} at stop ${stop}`).toEqual([0.35, 0.35, false, false]); }
+    }
+  });
+
+  it('in April 1945, month 68, the 129th comes and the 19th brigade becomes the 130th: one row, not both', () => {
+    for (const stop of [1, 3]) {
+      const g = months(war(stop), 29, 67);
+      expect([of(g, D129), of(g, D130)], `stop ${stop}, month 67`).toEqual([undefined, undefined]);
+      months(g, 68);
+      for (const nm of [D129, D130]) { const c = of(g, nm)!; expect(AREA, `${nm} at stop ${stop}`).toContain(at(g, nm)); expect([c.str, c.full], `${nm} at stop ${stop}`).toEqual([0.6, 0.6]); }
+      expect(of(g, B19), `stop ${stop}`).toBeUndefined();
+      expect(AREA, `stop ${stop}`).toContain(at(g, B22));
+    }
+  });
+
+  it('the 130th comes at its own worth where the 19th brigade has been lost', () => {
+    const g = months(war(1), 29);
+    const c = of(g, B19)!, r = g.regions[c.reg];
+    c.dead = true; r.units.splice(r.units.indexOf(c), 1);
+    months(g, 68);
+    expect(AREA).toContain(at(g, D130));
+    expect(of(g, D130)!.str).toBe(0.6);
+  });
+});
