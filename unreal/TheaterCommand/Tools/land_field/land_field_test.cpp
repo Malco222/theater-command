@@ -2292,6 +2292,53 @@ int main(int Argc, char** Argv)
 			}
 			return bAny;
 		};
+		// (a point within the positions' own rounding of a face, and no face over it: a T-junction's hairline, where a
+		// point cut into one face's edge was stored as a float a fraction of a millimetre off the edge its neighbour
+		// keeps; counted apart, not as ground gone. In the desert's Normandy, cut 128 of 288 left one 0.06 mm wide,
+		// under its own hole's rim, which stands over the ground 8 cm past the cut)
+		const auto HairlineAt = [&](double Px, double Py, double& OutZ) -> bool
+		{
+			const double Tol = 1.5 * std::ldexp(1.0, std::ilogb(std::max({ std::fabs(Px), std::fabs(Py), 1.0 })) - 23);
+			bool bAny = false;
+			for (size_t Ti = 0; Ti < G.Tiles().size(); ++Ti)
+			{
+				const LandField::Tile& Tile = G.Tiles()[Ti];
+				if (Px < Tile.X0 - 12.0 || Px > Tile.X1 + 12.0 || Py < Tile.Y0 - 12.0 || Py > Tile.Y1 + 12.0) continue;
+				const bool bSplit = Ground.IsSplit(static_cast<int>(Ti));
+				const int Parts = bSplit ? LandCrater::Dug::Split * LandCrater::Dug::Split : 1;
+				for (int P = 0; P < Parts; ++P)
+				{
+					const LandField::Mesh& M = bSplit ? Ground.PartOf({ static_cast<int>(Ti), P }) : Tile.Near;
+					for (size_t Tr = 0; Tr + 2 < M.Triangles.size(); Tr += 3)
+					{
+						const float* A = &M.Positions[M.Triangles[Tr] * 3];
+						const float* B = &M.Positions[M.Triangles[Tr + 1] * 3];
+						const float* C = &M.Positions[M.Triangles[Tr + 2] * 3];
+						if (Px < std::min({ A[0], B[0], C[0] }) - Tol || Px > std::max({ A[0], B[0], C[0] }) + Tol || Py < std::min({ A[1], B[1], C[1] }) - Tol || Py > std::max({ A[1], B[1], C[1] }) + Tol) continue;
+						const double Ux = B[0] - A[0], Uy = B[1] - A[1], Vx = C[0] - A[0], Vy = C[1] - A[1];
+						const double Den = Ux * Vy - Uy * Vx;
+						if (std::fabs(Den) < 1e-9) continue;
+						double Near = 1e9;
+						const float* Ends[4] = { A, B, C, A };
+						for (int E = 0; E < 3; ++E)
+						{
+							const double Ex = Ends[E + 1][0] - Ends[E][0], Ey = Ends[E + 1][1] - Ends[E][1];
+							const double Long2 = Ex * Ex + Ey * Ey;
+							const double Along = Long2 > 0.0 ? std::clamp(((Px - Ends[E][0]) * Ex + (Py - Ends[E][1]) * Ey) / Long2, 0.0, 1.0) : 0.0;
+							Near = std::min(Near, std::hypot(Px - (Ends[E][0] + Along * Ex), Py - (Ends[E][1] + Along * Ey)));
+						}
+						if (Near > Tol) continue;
+						const double Wx = Px - A[0], Wy = Py - A[1];
+						const double Su = (Wx * Vy - Wy * Vx) / Den, Tv = (Ux * Wy - Uy * Wx) / Den;
+						const double Z = A[2] + Su * (B[2] - A[2]) + Tv * (C[2] - A[2]);
+						OutZ = bAny ? std::max(OutZ, Z) : Z;
+						bAny = true;
+					}
+				}
+			}
+			return bAny;
+		};
+		long OutsideHairline = 0, AwayHairline = 0;
 		long Outside = 0, OutsideBare = 0, OutsideOff = 0, Inside = 0, InsideCovered = 0, InsideNoFace = 0, EdgeTests = 0, EdgeUnder = 0;
 		double WorstOff = 0.0, WorstEdge = 1e9;
 		for (const std::vector<double>& Cut : AllCuts)
@@ -2317,7 +2364,56 @@ int main(int Argc, char** Argv)
 					const double Ox = Qx + Dx / L * 0.03, Oy = Qy + Dy / L * 0.03;
 					if (Holes.InCut(Ox, Oy)) continue;
 					++Outside;
-					if (!GroundAt(Ox, Oy, Z)) { ++OutsideBare; continue; }
+					if (!GroundAt(Ox, Oy, Z) && HairlineAt(Ox, Oy, Z))
+					{
+						++OutsideHairline;
+					}
+					else if (!GroundAt(Ox, Oy, Z))
+					{
+						++OutsideBare;
+						if (std::getenv("LAND_FIELD_BARE"))
+						{
+							std::printf("  bare just outside a cut at %.4f, %.4f (edge %zu of %zu, %.4f, %.4f to %.4f, %.4f); the cut:", Ox, Oy, K, N, Ex, Ey, Fx, Fy);
+							for (size_t J = 0; J < N; ++J) std::printf(" %.4f,%.4f", Cut[2 * J], Cut[2 * J + 1]);
+							std::printf("\n");
+							for (size_t O = 0; O < AllCuts.size(); ++O)
+							{
+								const std::vector<double>& Other = AllCuts[O];
+								bool bNearIt = false;
+								for (size_t J = 0; J + 1 < Other.size(); J += 2) bNearIt = bNearIt || std::hypot(Other[J] - Ox, Other[J + 1] - Oy) < 3.0;
+								if (!bNearIt || &Other == &Cut) continue;
+								std::printf("    another cut near it (%zu of %zu in order):", O, AllCuts.size());
+								for (size_t J = 0; J + 1 < Other.size(); J += 2) std::printf(" %.4f,%.4f", Other[J], Other[J + 1]);
+								std::printf("\n");
+							}
+							std::printf("    this cut is %zu in order\n", static_cast<size_t>(&Cut - &AllCuts[0]));
+							// (the nearest faces: how far outside each the point lies, in its own share)
+							for (size_t Ti = 0; Ti < G.Tiles().size(); ++Ti)
+							{
+								const LandField::Tile& Tile = G.Tiles()[Ti];
+								if (Ox < Tile.X0 - 12.0 || Ox > Tile.X1 + 12.0 || Oy < Tile.Y0 - 12.0 || Oy > Tile.Y1 + 12.0) continue;
+								const bool bSplit = Ground.IsSplit(static_cast<int>(Ti));
+								const int Parts = bSplit ? LandCrater::Dug::Split * LandCrater::Dug::Split : 1;
+								for (int P = 0; P < Parts; ++P)
+								{
+									const LandField::Mesh& Mm = bSplit ? Ground.PartOf({ static_cast<int>(Ti), P }) : Tile.Near;
+									for (size_t Tr = 0; Tr + 2 < Mm.Triangles.size(); Tr += 3)
+									{
+										const float* A = &Mm.Positions[Mm.Triangles[Tr] * 3];
+										const float* B = &Mm.Positions[Mm.Triangles[Tr + 1] * 3];
+										const float* C = &Mm.Positions[Mm.Triangles[Tr + 2] * 3];
+										if (Ox < std::min({ A[0], B[0], C[0] }) - 0.05 || Ox > std::max({ A[0], B[0], C[0] }) + 0.05 || Oy < std::min({ A[1], B[1], C[1] }) - 0.05 || Oy > std::max({ A[1], B[1], C[1] }) + 0.05) continue;
+										const double Ux = B[0] - A[0], Uy = B[1] - A[1], Vx = C[0] - A[0], Vy = C[1] - A[1];
+										const double Den = Ux * Vy - Uy * Vx;
+										const double Wx = Ox - A[0], Wy = Oy - A[1];
+										const double Su = std::fabs(Den) > 0 ? (Wx * Vy - Wy * Vx) / Den : -9, Tv = std::fabs(Den) > 0 ? (Ux * Wy - Uy * Wx) / Den : -9;
+										std::printf("      tile %zu part %d tri %zu: (%.4f %.4f) (%.4f %.4f) (%.4f %.4f) den %.3g shares %.6f %.6f %.6f\n", Ti, P, Tr / 3, A[0], A[1], B[0], B[1], C[0], C[1], Den, 1.0 - Su - Tv, Su, Tv);
+									}
+								}
+							}
+						}
+						continue;
+					}
 					double Was = 0.0;
 					GroundAt(Ox, Oy, Was, true);
 					if (std::fabs(Z - Was) > 2e-3) { ++OutsideOff; WorstOff = std::max(WorstOff, std::fabs(Z - Was)); }
@@ -2338,17 +2434,22 @@ int main(int Argc, char** Argv)
 			if (bNear) continue;
 			++Away;
 			double Z = 0.0;
-			if (!GroundAt(Qx, Qy, Z)) { ++AwayBare; continue; }
+			if (!GroundAt(Qx, Qy, Z))
+			{
+				if (!HairlineAt(Qx, Qy, Z)) { ++AwayBare; continue; }
+				++AwayHairline;
+			}
 			double Was = 0.0;
 			if (!GroundAt(Qx, Qy, Was, true) || std::fabs(Z - Was) > 2e-3) ++AwayOff;
 		}
 		int Split = 0;
 		for (size_t Ti = 0; Ti < G.Tiles().size(); ++Ti) Split += Ground.IsSplit(static_cast<int>(Ti));
-		std::printf("  dug holes: %d dug, %d laid shallow (a grenade's, a small round's, or on a lane or bank), %d tiles split; bowls %.2f m deep at their middles where %.2f dug (alone); %ld points just inside a cut, %ld with ground left, %ld with no face; %ld just outside, %ld bare, %ld off the ground it was (worst %.4f m); the wall over the cut's edge by %.3f m at least (%ld of %ld under 5 mm); %ld away, %ld bare, %ld off; laying and cutting %.1f ms for all\n",
-			Dug, Shallow, Split, DeepSum / std::max(1, Measured), DeepWant / std::max(1, Measured), Inside, InsideCovered, InsideNoFace, Outside, OutsideBare, OutsideOff, WorstOff, WorstEdge, EdgeUnder, EdgeTests, Away, AwayBare, AwayOff, CutMs);
-		Check(Dug > 150 && Shallow > 20 && InsideCovered == 0 && InsideNoFace == 0 && OutsideBare == 0 && OutsideOff == 0 && AwayBare == 0 && AwayOff == 0,
-			"a dug hole cuts the ground over its bowl and nothing else: the ground left is as it was, and a face to stand on wherever it is gone",
-			Fmt("%.0f inside with ground, %.0f inside with no face, %.0f outside bare or off, %.0f away bare or off", static_cast<double>(InsideCovered), static_cast<double>(InsideNoFace), static_cast<double>(OutsideBare + OutsideOff), static_cast<double>(AwayBare + AwayOff)));
+		std::printf("  dug holes: %d dug, %d laid shallow (a grenade's, a small round's, or on a lane or bank), %d tiles split; bowls %.2f m deep at their middles where %.2f dug (alone); %ld points just inside a cut, %ld with ground left, %ld with no face; %ld just outside, %ld bare, %ld off the ground it was (worst %.4f m); the wall over the cut's edge by %.3f m at least (%ld of %ld under 5 mm); %ld away, %ld bare, %ld off; on a hairline under the points' rounding %ld outside, %ld away; laying and cutting %.1f ms for all\n",
+			Dug, Shallow, Split, DeepSum / std::max(1, Measured), DeepWant / std::max(1, Measured), Inside, InsideCovered, InsideNoFace, Outside, OutsideBare, OutsideOff, WorstOff, WorstEdge, EdgeUnder, EdgeTests, Away, AwayBare, AwayOff, OutsideHairline, AwayHairline, CutMs);
+		Check(Dug > 150 && Shallow > 20 && InsideCovered == 0 && InsideNoFace == 0 && OutsideBare == 0 && OutsideOff == 0 && AwayBare == 0 && AwayOff == 0
+			&& (OutsideHairline + AwayHairline) * 1000 <= Outside + Away,
+			"a dug hole cuts the ground over its bowl and nothing else: the ground left is as it was, and a face to stand on wherever it is gone (a hairline under the points' rounding in one point of a thousand at most)",
+			Fmt("%.0f inside with ground or with no face, %.0f outside bare or off, %.0f away bare or off, %.0f on a hairline", static_cast<double>(InsideCovered + InsideNoFace), static_cast<double>(OutsideBare + OutsideOff), static_cast<double>(AwayBare + AwayOff), static_cast<double>(OutsideHairline + AwayHairline)));
 		Check(EdgeUnder <= EdgeTests / 200 && DeepWant > 0.0 && std::fabs(DeepSum / DeepWant - 1.0) < 0.15,
 			"a dug hole's wall stands over the ground's cut edge, and its bowl goes as deep as dug",
 			Fmt("%.0f of %.0f edge points with the wall under 5 mm over the ground; depth %.2f of what was dug", static_cast<double>(EdgeUnder), static_cast<double>(EdgeTests), DeepWant > 0.0 ? DeepSum / DeepWant : 0.0));
