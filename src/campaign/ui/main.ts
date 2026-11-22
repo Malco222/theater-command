@@ -2562,7 +2562,7 @@ function fleetFuelLine(card: FleetCard): string {
   const F = card.fuel;
   if (!F) return '';
   if (F.kind === 'wells') return `<small class="sub fuel" style="color:var(--ink)"><b>Fuelled from the wells at ${esc(F.field)}:</b> it is not short of fuel while it is based there.</small>`;
-  return `<small class="sub fuel short" style="color:#e9c987"><b>Short of fuel:</b> ${F.less}% less fit for sea.</small><small class="sub fuel" style="color:var(--ink)">What helps: oil in stock at home, or a base beside a working oilfield of your own.</small>`;
+  return `<small class="sub fuel short" style="color:#e9c987"><b>Short of fuel:</b> its strength at sea is ${F.less}% lower.</small><small class="sub fuel" style="color:var(--ink)">What helps: oil in stock at home, or a base beside a working oilfield of your own.</small>`;
 }
 
 /**
@@ -2577,7 +2577,7 @@ function harbourPatrolLine(card: FleetCard): string {
 
 /** The fleet tray's line on the boats out on patrol (the far side's one measure; the UI director's words of 22 November 2026). */
 function boatsOutWords(out: number, boats: number): string {
-  if (boats === 1) return out >= 1 ? 'Its submarine is out on patrol' : 'Its submarine is not out on patrol';
+  if (boats === 1) return out >= 1 ? 'Its one submarine is out on patrol' : 'Its one submarine is not out on patrol';
   return out <= 0 ? `None of its ${boats} submarines out on patrol` : out >= boats ? `All ${boats} of its submarines out on patrol` : `${out} of its ${boats} submarines out on patrol`;
 }
 
@@ -8891,7 +8891,7 @@ function onSea(z: number): void {
       // A sea its submarines alone can reach (the far side's beats): the click sends them to raid there, whatever work was lit, and says so.
       if (ui.stance !== 'raid' && !fleetReach(g, fl).includes(z) && orderFleet(g, fl.id, z, 'raid')) {
         ui.stance = 'raid';
-        ui.msg = `Ordered: the ${fl.name} sails to raid shipping ${seaWhere(g.seas[z].name)}. That sea is beyond its patrols from ${fl.port}: its submarines can only raid there.`;
+        ui.msg = `Ordered: the ${fl.name} sails to raid shipping ${seaWhere(g.seas[z].name)}. That sea is beyond its patrols from ${fl.port}: its submarines can raid shipping there, but not patrol.`;
       } else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = gateBar(g, fl, z)?.line ?? `${seaHead(g.seas[z].name)} ${seaIs(g.seas[z].name)} out of reach of the ${fl.name} from ${fl.port}.`;
       // The piece does not move when only its work changes, so the line says what was ordered.
       else ui.msg = stayed ? `The ${fl.name} stays ${seaWhere(g.seas[z].name)} and will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`

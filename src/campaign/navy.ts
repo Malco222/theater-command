@@ -2900,12 +2900,16 @@ export function torpedoFault(g: Game, nat: string): { share: number; until: numb
   if (since <= 0) return { share: S.share, until: null };
   return g.turn - since + 1 >= S.month ? null : { share: S.share, until: since + S.month - 1 };
 }
-/** The sentence: "Faulty torpedoes: your submarines raid at a quarter of their worth until September 1943." `boats` is "your submarines", "these boats" or "your boats". */
+/**
+ * The sentence: "Faulty torpedoes: your submarines raid at a quarter of their worth until September 1943." `boats` is
+ * "your submarines", "these boats" or "your boats". Where no month can be named yet it ends "until the fault is
+ * found" (the UI director's words of 20:04Z, 22 November 2026).
+ */
 export function torpedoWords(g: Game, nat: string, boats: string, month = true): string | null {
   const t = torpedoFault(g, nat);
   if (!t) return null;
   const share = t.share === 0.25 ? 'a quarter' : t.share === 0.5 ? 'half' : `${Math.round(t.share * 100)}%`;
-  return `Faulty torpedoes: ${boats} raid at ${share} of their worth${month && t.until !== null ? ` until ${turnToDate(t.until).label}` : ''}.`;
+  return `Faulty torpedoes: ${boats} raid at ${share} of their worth${!month ? '' : t.until !== null ? ` until ${turnToDate(t.until).label}` : ' until the fault is found'}.`;
 }
 /** Whether a navy's faulty boats are among the raiders in these seas: a fleet of its own at sea there with boats, raiding or on patrol, in a sea of the far side. */
 export const faultyRaiders = (g: Game, nat: string, zones: number[]): boolean =>

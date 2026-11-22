@@ -38,7 +38,7 @@ describe('faulty torpedoes, as the cards say them (sheet 24, box 3)', () => {
     const g = grand();
     const S = NAVY.subs!.USA;
     expect(torpedoFault(g, 'USA')).toEqual({ share: 0.25, until: null });
-    expect(torpedoWords(g, 'USA', 'your submarines')).toBe('Faulty torpedoes: your submarines raid at a quarter of their worth.');
+    expect(torpedoWords(g, 'USA', 'your submarines')).toBe('Faulty torpedoes: your submarines raid at a quarter of their worth until the fault is found.');
     g.turn = 30;
     declareWar(g, 'JAP', 'USA');
     const until = 30 + S.month - 1;
