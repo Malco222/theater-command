@@ -4713,6 +4713,8 @@ namespace LandMen
 		return Found == Inner->Soldiers.end() ? nullptr : Found->second.get();
 	}
 
+	float Crowd::LieOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Lie; }
+
 	Playing Crowd::PlayingOf(int Man) const
 	{
 		Playing P;

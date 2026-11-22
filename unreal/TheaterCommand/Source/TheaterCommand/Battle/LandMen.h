@@ -507,6 +507,8 @@ namespace LandMen
 		bool PlaceAsPosed(int Man, double& OutX, double& OutY, double& OutZ, float& OutFacing) const;
 		/** The clip he shows now, for tests and debug lines. */
 		Playing PlayingOf(int Man) const;
+		/** How far he lies now (PlayingOf's Lie, without the clip's name). */
+		float LieOf(int Man) const;
 		/** Prop keys Track of the clip he shows now (Clip::Props: "reel", "hands", "grips") at its time now: each field
 		 * after the time into Out, in his own axes (WorldFrame takes them to the field). False: he is not on his feet in
 		 * a clip that has them. */

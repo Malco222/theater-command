@@ -437,6 +437,11 @@ private:
 		int32 Kind = -1, Slot = -1;
 		FVector At = FVector::ZeroVector;
 		float Yaw = 0.0f;
+		/** His place as last posed (field metres, PlaceAsPosed): unchanged, nothing of the ground is asked. */
+		FVector Gate = FVector(1e30);
+		/** The ground's up where it was last read (field metres), read again once he is half a metre from there. */
+		FVector UpAt = FVector(1e30);
+		FVector Up = FVector::UpVector;
 	};
 	TArray<FManShade> ManShades;
 	TArray<TArray<int32>> ManShadeFree;

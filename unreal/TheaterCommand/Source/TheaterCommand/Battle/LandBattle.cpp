@@ -4108,9 +4108,11 @@ void ALandBattle::DrawManShades()
 		int32 Kind = -1;
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
-		if (Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && Crowd.SeenDistance(Man) < 150.0f && !HiddenMan(Man) && !Crowd.IsRider(Man) && Crowd.PlaceOf(Man, X, Y, Z, Facing))
+		// (his place as last posed: a living man's height is the ground's under him then, so nothing of the ground is
+		// asked for the some thousand men near enough each frame; the frame-rate lane, 22 November)
+		if (Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && Crowd.SeenDistance(Man) < 150.0f && !HiddenMan(Man) && !Crowd.IsRider(Man) && Crowd.PlaceAsPosed(Man, X, Y, Z, Facing))
 		{
-			Kind = Crowd.Frozen(Man) ? 2 : Crowd.PlayingOf(Man).Lie > 0.5f ? 1 : 0;
+			Kind = Crowd.Frozen(Man) ? 2 : Crowd.LieOf(Man) > 0.5f ? 1 : 0;
 		}
 		if (Kind != D.Kind)
 		{
@@ -4133,20 +4135,34 @@ void ALandBattle::DrawManShades()
 		{
 			continue;
 		}
-		const FVector At = World(X, Y, Z);
 		// (his heading is clockwise from north, the field's y: in Unreal's frame, x north and y east, that is a yaw)
 		const float Yaw = FMath::RadiansToDegrees(Facing);
+		const FVector Gate(X, Y, Z);
+		if (Gate.Equals(D.Gate, 0.01) && (Kind != 1 || FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, D.Yaw)) < 1.0f))
+		{
+			continue;
+		}
+		D.Gate = Gate;
+		// (a body, or a man falling, by the ground at his root as it is now: his last posing read it under his pivot)
+		if (Kind == 2 || Crowd.IsFalling(Man))
+		{
+			Crowd.PlaceOf(Man, X, Y, Z, Facing);
+		}
+		const FVector At = World(X, Y, Z);
 		if (At.Equals(D.At, 1.0) && (Kind != 1 || FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, D.Yaw)) < 1.0f))
 		{
 			continue;
 		}
 		D.At = At;
 		D.Yaw = Yaw;
-		FVector Up = FVector::UpVector;
-		if (S.Field)
+		// (the ground's up read again once he is half a metre on from where it was last read, and for a body)
+		FVector Up = D.Up;
+		if (S.Field && (Kind == 2 || FMath::Square(X - D.UpAt.X) + FMath::Square(Y - D.UpAt.Y) >= 0.25))
 		{
+			D.UpAt = FVector(X, Y, 0.0);
 			const LandField::Surface Under = S.Field->At(X, Y);
 			Up = FVector(Under.NY, Under.NX, Under.NZ).GetSafeNormal(1e-6, FVector::UpVector);
+			D.Up = Up;
 		}
 		const FQuat Q = FQuat::FindBetweenNormals(FVector::UpVector, Up) * FQuat(FVector::UpVector, static_cast<double>(Facing));
 		ManShadeCopies[Kind]->UpdateInstanceTransform(D.Slot, FTransform(Q, At, FVector::OneVector), true, false, true);
