@@ -1,0 +1,252 @@
+// Neighbours join the fight (release 2): the five findings of the independent review of 22 November, each held here.
+//
+// 1. An ally's corps in the player's army that joined a battle earlier in the month keeps its month spent when the
+//    player's month opens (jointMonth reads joinedIn as startPhase does for his own corps).
+// 2. A staff's two-wave plan keeps its main body out of the first wave's battle, and reckons the second wave without
+//    those the first will have spent (the first wave itself, and whoever joined it on either side).
+// 3. "This month" is the calendar's: a corps whose nation plays later in the month has its whole month in hand,
+//    whatever it left unspent or fought last month; a battle fought earlier this month in another nation's phase
+//    still counts after its own month has begun (foughtIn).
+// 4. The player's hold-back order can be given in the game: the tray, the attack card's chips, the corps card's tag.
+// 5. A corps on foot that comes up into open desert against tanks and lorries is driven round, as the defenders on
+//    foot outside their box are.
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import page from '../src/campaign/ui/main.ts?raw';
+import { DESERT, addCorps, assess, createGame, declareWar, ensureSupply, limitAttackers, relocate, resolveBattle, startPhase, type Assessment } from '../src/campaign/game';
+import { twoWaves } from '../src/campaign/ai';
+import { JOIN, battleThisMonth, weeksInHand } from '../src/campaign/join';
+import { startOpen } from '../src/campaign/staff';
+import { beginHuman, candidates, canOrder, endHuman, holdsBack, humanUp, joinChoices, orderAttack, orderHoldBack, orderJoin, stepAI } from '../src/campaign/turn';
+import { type Corps, type Game } from '../src/campaign/types';
+
+/** The player's first month in a seat: the computer's months before his are played. */
+function seat(nat: string, seed = 3): Game {
+  const g = startOpen(createGame(seed, nat));
+  for (let k = 0; !humanUp(g) && k < 200; k++) stepAI(g);
+  beginHuman(g);
+  return g;
+}
+const corps = (g: Game, nat: string, name: string): Corps => g.corps.find((c) => c.nat === nat && c.name === name && !c.dead)!;
+const ids = (a: Assessment, side: 'att' | 'def'): number[] => (a.join?.[side] ?? []).map((j) => j.id);
+
+beforeEach(() => { JOIN.on = true; });
+afterEach(() => { JOIN.on = false; });
+
+describe("1. an ally's corps in the player's army", () => {
+  it('that joined a battle earlier in the month has it spent when his month opens, and the next month is its own again', () => {
+    // France's seat: London District has crossed to Lorraine and marches with the French army there.
+    const g = seat('FRA');
+    const uk = corps(g, 'UK', 'London District'), lorraine = g.byName['Lorraine'], alsace = g.byName['Alsace'], saar = g.byName['Saar'];
+    relocate(g, uk, lorraine);
+    expect(orderJoin(g, uk)).toBe(true);
+    expect(uk.joint).toBe('FRA');
+    // The month ends; the next opens with Germany's phase, before France's.
+    endHuman(g);
+    for (let k = 0; g.turn === 1 && k < 200; k++) stepAI(g);
+    expect(g.turn).toBe(2);
+    expect(g.order[g.phase]).toBe('GER');
+    // A German corps from the Saar falls on Alsace: London District comes up from Lorraine next door, in defence.
+    const german = saar.units.find((c) => c.nat === 'GER' && c.kind !== 'fort')!;
+    expect(german).toBeDefined();
+    ensureSupply(g);
+    const a = assess(g, [german], alsace);
+    expect(ids(a, 'def')).toContain(uk.id);
+    resolveBattle(g, [german], alsace);
+    expect(uk.joinedIn).toBe(2);
+    expect(uk.ap).toBe(0);
+    // France's month opens: the corps that marches in the player's army has spent this month already.
+    g.phase = g.order.indexOf('FRA');
+    beginHuman(g);
+    expect(canOrder(g, uk)).toBe(true);
+    expect(uk.ap).toBe(0);
+    expect(candidates(g, saar)).not.toContain(uk);
+    expect(orderAttack(g, [uk], saar)).toBeNull();
+    // A French corps that joined nothing has its month as ever.
+    const french = g.corps.find((c) => c.nat === 'FRA' && !c.dead && c.kind !== 'fort' && c.town === undefined && c.joinedIn === undefined && c.leave === undefined)!;
+    expect(french.ap).toBe(french.apMax);
+    // The next month it is the army's again.
+    g.turn += 1;
+    startPhase(g, 'UK');
+    startPhase(g, 'FRA');
+    expect(uk.joint).toBe('FRA');
+    expect(uk.ap).toBe(uk.apMax);
+  });
+});
+
+describe("2. a staff's two waves", () => {
+  /** Germany at Lodz: IV Corps the first wave, the six corps the roads carry behind it the main body; Poland's corps next door spent but the last to come up. */
+  function waves(): { g: Game; avail: Corps[]; pool: Corps[]; pole: Corps } {
+    const g = seat('GER');
+    const target = g.byName['Lodz'];
+    const avail = g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.ap > 0 && c.kind !== 'fort' && target.nb.includes(c.reg));
+    const pool = limitAttackers(g, avail.filter((c) => c.org >= 0.35 && c.name !== 'IV Corps'), target);
+    expect(pool).toHaveLength(6);
+    // (One Polish corps next door can still come up, the one that comes up last; the others have had a battle this month.)
+    const def = assess(g, [corps(g, 'GER', 'IV Corps')], target).join!.def;
+    const pole = def[def.length - 1].corps;
+    for (const j of target.nb) for (const c of g.regions[j].units) if (c.nat === 'POL' && c !== pole) { c.fought = true; c.foughtIn = g.turn; }
+    // (And it is worn down to a quarter of its men, so that IV Corps alone still comes at the odds a first wave needs.)
+    pole.str = 0.25;
+    return { g, avail, pool, pole };
+  }
+
+  it('keep the main body out of the first battle, and reckon the second without those the first spends', () => {
+    const { g, avail, pool, pole } = waves();
+    const target = g.byName['Lodz'];
+    const two = twoWaves(g, avail, pool, target, 0.01)!;
+    expect(two).not.toBeNull();
+    expect(two.corps.map((c) => c.name)).toEqual(['IV Corps']);
+    expect(two.keep).toEqual(pool);
+    // The first wave's odds: none of the main body come up in it; the Pole next door does.
+    const a1 = assess(g, two.corps, target, { spare: two.keep });
+    expect(ids(a1, 'att').some((id) => pool.some((c) => c.id === id))).toBe(false);
+    expect(ids(a1, 'def')).toEqual([pole.id]);
+    // The main body's odds count neither the first wave nor the Pole as joiners: as the plan used to, they read higher.
+    const asWas = assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear } });
+    expect(ids(asWas, 'att')).toContain(two.corps[0].id);
+    expect(ids(asWas, 'def')).toContain(pole.id);
+    const plan = assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear }, spare: [...two.corps, pole] });
+    expect(plan.join).toBeUndefined();
+    expect(two.then).toBe(plan.odds);
+    // The first wave goes in as the staff sends it: the main body is left whole for the second.
+    const rep = resolveBattle(g, two.corps, target, { spare: two.keep });
+    expect(rep.attackers.filter((u) => u.joined !== undefined)).toHaveLength(0);
+    for (const c of pool) {
+      expect(c.ap).toBeGreaterThan(0);
+      expect(c.fought).toBe(false);
+      expect(c.joinedIn).toBeUndefined();
+    }
+    expect(pole.joinedIn).toBe(g.turn);
+    // And the second battle has the joiners the plan reckoned: none.
+    if (!rep.taken) expect(assess(g, pool, target).join).toBeUndefined();
+  });
+
+  it('off, plan as they always did', () => {
+    const { g, avail, pool } = waves();
+    JOIN.on = false;
+    const target = g.byName['Lodz'];
+    const two = twoWaves(g, avail, pool, target, 0.01)!;
+    expect(two).not.toBeNull();
+    expect('keep' in two).toBe(false);
+    const a1 = assess(g, two.corps, target);
+    expect(two.then).toBe(assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear } }).odds);
+  });
+});
+
+describe("3. the month is the calendar's", () => {
+  it('a corps whose nation plays later in the month has its whole month in hand, whatever it did last month', () => {
+    const g = seat('GER');
+    const target = g.byName['Lodz'], iv = corps(g, 'GER', 'IV Corps');
+    const krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
+    ensureSupply(g);
+    expect(ids(assess(g, [iv], target), 'def')).toContain(krakow.id);
+    // Last month it marched its weeks away and fought a battle (Poland plays after Germany).
+    krakow.ap = 0; krakow.fought = true; krakow.foughtIn = g.turn - 1;
+    expect(g.order.indexOf('POL')).toBeGreaterThan(g.phase);
+    expect(weeksInHand(g, krakow)).toBe(krakow.apMax);
+    expect(battleThisMonth(g, krakow)).toBe(false);
+    expect(ids(assess(g, [iv], target), 'def')).toContain(krakow.id);
+    // Had Poland's month begun, that would be this month's: no weeks left, and a battle since it began.
+    const was = g.phase;
+    g.phase = g.order.indexOf('POL');
+    expect(weeksInHand(g, krakow)).toBe(0);
+    expect(battleThisMonth(g, krakow)).toBe(true);
+    g.phase = was;
+  });
+
+  it('a battle fought in an earlier phase of the month still counts once its own month has begun, and no longer the next month', () => {
+    const g = seat('GER');
+    const target = g.byName['Lodz'], iv = corps(g, 'GER', 'IV Corps');
+    const rep = orderAttack(g, [iv], target)!;
+    // Everyone in the battle has fought this month, written with the switch on.
+    for (const u of rep.defenders.filter((x) => !x.guard && x.joined === undefined)) {
+      const c = corps(g, u.nat, u.name);
+      if (c) expect(c.foughtIn).toBe(g.turn);
+    }
+    expect(iv.foughtIn).toBe(g.turn);
+    const lodzArmy = corps(g, 'POL', 'Army Lodz');
+    expect(lodzArmy.foughtIn).toBe(g.turn);
+    // Poland's month opens: its 'fought' is cleared, the battle of Germany's phase is not forgotten.
+    startPhase(g, 'POL');
+    expect(lodzArmy.fought).toBe(false);
+    expect(battleThisMonth(g, lodzArmy)).toBe(true);
+    // The next month it is free of it.
+    g.turn += 1;
+    startPhase(g, 'POL');
+    expect('foughtIn' in lodzArmy).toBe(false);
+    expect(battleThisMonth(g, lodzArmy)).toBe(false);
+  });
+});
+
+describe("4. the player's hold-back order, in the game", () => {
+  it('the attack card offers his corps next door: those that come up, and those he holds back, each pressed to change it', () => {
+    const g = seat('GER');
+    const target = g.byName['Lodz'], iv = corps(g, 'GER', 'IV Corps'), xvi = corps(g, 'GER', 'XVI Corps');
+    let a = assess(g, [iv], target);
+    let next = joinChoices(g, a, target, [iv]);
+    expect(next.coming.map((j) => j.corps.id)).toEqual(ids(a, 'att'));
+    expect(next.coming.every((j) => j.word !== null && j.share > 0)).toBe(true);
+    expect(next.held).toEqual([]);
+    // Pressed: XVI Corps stays out, and the card offers it to be let go again.
+    expect(orderHoldBack(g, xvi, !holdsBack(xvi))).toBe(true);
+    a = assess(g, [iv], target);
+    next = joinChoices(g, a, target, [iv]);
+    expect(next.coming.map((j) => j.corps)).not.toContain(xvi);
+    expect(next.held.map((j) => j.corps)).toEqual([xvi]);
+    // Sent in itself, it is no part of the strip.
+    expect(joinChoices(g, assess(g, [iv, xvi], target), target, [iv, xvi]).held).toEqual([]);
+    // Not the enemy's, and nothing with the switch off.
+    expect([...next.coming, ...next.held].every((j) => j.corps.nat === 'GER')).toBe(true);
+    JOIN.on = false;
+    expect(joinChoices(g, assess(g, [iv], target), target, [iv])).toEqual({ coming: [], held: [] });
+  });
+
+  it('the page gives it: on the tray for the whole army, on the attack card for each corps, and shows it on the corps card', () => {
+    // The tray: a row for the battles next door, shown with the switch on, its buttons wired to the order.
+    expect(page).toMatch(/const able = mine && joinRules\(\) \? field\.filter\(\(c\) => canOrder\(g, c\)\) : \[\];/);
+    expect(page).toContain('data-act="joinnext" data-v="join"');
+    expect(page).toContain('data-act="joinnext" data-v="hold"');
+    expect(page).toMatch(/case 'joinnext': \{[\s\S]*?orderHoldBack\(g, c, hold\)[\s\S]*?refresh\(\); break;/);
+    // The attack card: his corps next door as chips pressed to hold back or let go, and the unsent chips say which.
+    expect(page).toMatch(/const nextDoor = joinChoices\(g, a, target, chosen\);/);
+    expect(page).toContain('${joinStrip(nextDoor)}');
+    expect(page).toContain('data-act="joinhold" data-id="${c.id}"');
+    expect(page).toMatch(/case 'joinhold': \{[\s\S]*?orderHoldBack\(g, c, !holdsBack\(c\)\)[\s\S]*?redrawCard\(\); break;/);
+    expect(page).toMatch(/note: why\(c\) \|\| joinNote\(c\)/);
+    // The corps card's tag.
+    expect(page).toMatch(/joinRules\(\) && holdsBack\(c\) \? `<span class="tag" title="\$\{esc\(JOIN_HELD\)\}">Stays out<\/span>`/);
+  });
+});
+
+describe('5. open desert', () => {
+  /** Italy against Britain in the Western Desert: the 7th Armoured holds Sidi Barrani, the 4th Indian (on foot) stands next door at Mersa Matruh. */
+  function desert(mobile: boolean): { a: Assessment; off: Assessment; indian: Corps } {
+    JOIN.on = true;
+    const g = startOpen(createGame(3, null));
+    declareWar(g, 'ITA', 'UK');
+    const sidi = g.byName['Sidi Barrani'];
+    relocate(g, corps(g, 'UK', '7th Armoured Division'), sidi);
+    const indian = corps(g, 'UK', '4th Indian Division');
+    expect(indian.reg).toBe(g.byName['Mersa Matruh'].id);
+    const xxi = corps(g, 'ITA', 'XXI Corps, 10th Army');
+    const att = mobile ? [xxi, addCorps(g, 'ITA', 'Test Motorised Corps', 'mot', 2, 'Bardia', {})] : [xxi];
+    ensureSupply(g);
+    const a = assess(g, att, sidi);
+    JOIN.on = false;
+    const off = assess(g, att, sidi);
+    JOIN.on = true;
+    return { a, off, indian };
+  }
+
+  it('foot that comes up against tanks and lorries counts at the open desert cut, and the card says so', () => {
+    const moving = desert(true), plain = desert(false);
+    for (const x of [moving, plain]) expect(ids(x.a, 'def')).toEqual([x.indian.id]);
+    // The 4th Indian's part of the defence, with and without anything on wheels or tracks in the attack.
+    const cut = (moving.a.D - moving.off.D) / (plain.a.D - plain.off.D);
+    expect(cut).toBeCloseTo(DESERT.open, 9);
+    // The armour that holds the ground is not driven round: off, there is no open desert line; on, the joiner brings it.
+    expect(moving.off.lines.some((l) => l.label === 'Open desert')).toBe(false);
+    expect(moving.a.lines.find((l) => l.label === 'Open desert')!.effect).toBe(`Foot infantry defends at ${Math.round(DESERT.open * 100)}%`);
+    expect(plain.a.lines.some((l) => l.label === 'Open desert')).toBe(false);
+  });
+});

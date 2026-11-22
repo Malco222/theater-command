@@ -27,6 +27,7 @@ import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
+import { joinRules } from './join';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
@@ -1858,7 +1859,7 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
  * first, to wear the works and tire the men in them, and the main body after them the same month. Returns the first
  * wave and the odds the main body will then have, or null where two waves would not do it either.
  */
-export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region, need: number): { corps: Corps[]; then: number } | null {
+export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region, need: number): { corps: Corps[]; then: number; keep?: Corps[] } | null {
   if (g.flags.open !== 1) return null;
   const H = DEFENCE.hammer;
   const spare = avail.filter((c) => c.org >= 0.35 && !pool.includes(c));
@@ -1866,10 +1867,15 @@ export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region,
   // (A first wave of tanks alone is not thrown at a gunned line either: infantry goes in with it, or there is no first wave.)
   const first = cut.length ? footBeside(g, cut, spare, target) : null;
   if (!first?.length) return null;
-  const a1 = assess(g, first, target);
+  // Where corps next door join battles (release 2), the main body is kept out of the first wave's battle, or it would
+  // spend its month there; and the second is reckoned without everyone the first will have spent, either side: the
+  // first wave itself and whoever joined it. Off, nobody joins, and both reckonings are as they always were.
+  const keep = joinRules() ? { spare: pool } : {};
+  const a1 = assess(g, first, target, keep);
   if (a1.odds < H.first) return null;
-  const a2 = assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear } });
-  return a2.odds >= need * H.second ? { corps: first, then: a2.odds } : null;
+  const spent = joinRules() ? { spare: [...first, ...(a1.join ? [...a1.join.att, ...a1.join.def].map((j) => j.corps) : [])] } : {};
+  const a2 = assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear }, ...spent });
+  return a2.odds >= need * H.second ? { corps: first, then: a2.odds, ...(joinRules() ? { keep: pool } : {}) } : null;
 }
 
 function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}): void {
@@ -1921,7 +1927,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           list.push(c);
         }
       }
-      let best: { score: number; target: Region; corps: Corps[]; battle: boolean; wave?: boolean } | null = null;
+      let best: { score: number; target: Region; corps: Corps[]; battle: boolean; wave?: boolean; keep?: Corps[] } | null = null;
       for (const [j, avail] of cand) {
         const target = g.regions[j];
         const value = target.vp * 2 + (target.cap ? 8 : 0) + pull[j];
@@ -1952,7 +1958,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           }
           // Against a line that is dug in and fed the staff asks for longer odds (the grand campaign), and it does
           // not come straight back at a town whose siege has just been raised unless it has much the stronger force.
-          let wave = false;
+          let wave = false, keep: Corps[] | undefined;
           if (!pick) {
             const sore = g.flags.open === 1 && g.turn - (g.flags[`relieved:${j}`] ?? -99) <= SIEGE.ai.relieved.months ? SIEGE.ai.relieved.odds : 0;
             const need = (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore;
@@ -1961,7 +1967,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
               // Not at these odds in one blow: in two, if there are the corps for it.
               const two = single || (waved.get(j) ?? 0) >= waves - 1 ? null : twoWaves(g, avail, pool, target, need);
               if (!two) continue;
-              pick = two.corps; odds = two.then; wave = true;
+              pick = two.corps; odds = two.then; wave = true; keep = two.keep;
             }
           }
           // Tanks do not go alone at a gunned line: infantry goes in with them, or they do not go.
@@ -1972,13 +1978,14 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           }
           // (A place that needs two waves is a dearer prize than one that falls to one.)
           const score = value + Math.min(odds, 4) - (wave ? 0.5 : 0);
-          if (!best || score > best.score) best = { score, target, corps: pick, battle: true, wave };
+          if (!best || score > best.score) best = { score, target, corps: pick, battle: true, wave, ...(keep ? { keep } : {}) };
         }
       }
       if (!best) break;
       let taken: boolean;
       if (best.battle) {
-        taken = resolveBattle(g, best.corps, best.target).taken;
+        // (A first wave goes in with the main body kept out of its battle for the second: release 2.)
+        taken = resolveBattle(g, best.corps, best.target, best.keep ? { spare: best.keep } : {}).taken;
         // A slow command does not get a second assault organised in the same month, and some plans allow only one.
         // (Two waves laid on beforehand are one operation: the main body goes in behind the first wave.)
         if (best.wave) waved.set(best.target.id, (waved.get(best.target.id) ?? 0) + 1);

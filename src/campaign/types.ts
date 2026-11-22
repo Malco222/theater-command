@@ -397,6 +397,12 @@ export interface Corps extends Storied {
   holdBack?: boolean;
   /** The month it last joined a battle next door (release 2, its switch on): its month is spent, and it stayed where it stood. */
   joinedIn?: number;
+  /**
+   * The month it last fought a battle or probed a line (release 2, its switch on): 'fought' is cleared when its own
+   * month begins, so a battle earlier in the month, in another nation's phase, is known by this. Gone when its month
+   * begins after one with none.
+   */
+  foughtIn?: number;
 }
 
 /** When a corps from next door comes up in a battle it joins, as the battle card says it (release 2, join.ts). */

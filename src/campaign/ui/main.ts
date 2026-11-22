@@ -21,6 +21,7 @@ import {
 import {
   EVE_NO_RAID, beginEve, beginHuman, canOrder, candidates, current, declarable, gunsLeftAlone, marchOrder, whyNotLead, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
+  holdsBack, joinChoices, orderHoldBack, type JoinChoice,
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
@@ -45,6 +46,7 @@ import {
 import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
+import { joinRules } from '../join';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
@@ -2404,7 +2406,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${joinRules() && holdsBack(c) ? `<span class="tag" title="${esc(JOIN_HELD)}">Stays out</span>` : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
@@ -2556,6 +2558,13 @@ function drawTray(): void {
       ? `<button class="${!under.has('back') ? 'on' : ''}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_HOLD)}">Stand and dig in</button>`
       : `<button class="${all('stand')}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_STAND)}">Stand</button><button class="${all('dig')}" data-act="ifattacked" data-v="dig" title="${esc(STANCE_DIG)}">Dig in</button>`}<button class="${all('back')}" data-act="ifattacked" data-v="back" title="${esc(STANCE_BACK)}">Fall back</button></div>`
     : '';
+  // Battles next door (release 2, its switch on): the army comes up in them where it can reach them in time, or he
+  // keeps it out of them and its month stays its own. The whole army in the tray takes the order together.
+  const able = mine && joinRules() ? field.filter((c) => canOrder(g, c)) : [];
+  const outs = able.filter(holdsBack).length;
+  const nextDoor = able.length
+    ? `<div class="tstance" role="group" aria-label="Battles next door"><small>Battles next door${outs && outs < able.length ? ' · mixed' : ''}</small><button class="${!outs ? 'on' : ''}" data-act="joinnext" data-v="join" title="${esc(JOIN_GO)}">Join them</button><button class="${outs === able.length ? 'on' : ''}" data-act="joinnext" data-v="hold" title="${esc(JOIN_HELD)}">Stay out</button></div>`
+    : '';
   // STAND THIS MONTH (Version 82): the one small order that takes the army in hand out of NEXT ARMY's round until next month.
   const st = mine && !onEve(g) ? armyStands(g, a.reg) : null;
   const standRow = st
@@ -2571,7 +2580,7 @@ function drawTray(): void {
   const slip = mine && !slipSeen() && spentInHand() && heldCorps().some((c) => c.reg === a.reg)
     ? `<div class="mslip"><span class="grow"><b>No moves left this month</b>${fingers() ? 'Press and hold' : 'Right-click'} a friendly place and this army marches there by itself, starting next month.</span><button data-act="gotmarch">Got it</button></div>`
     : '';
-  el.innerHTML = `${slip}<div class="thead">${head}${standRow}${tally}${trayFold(cs.length, 'corps', 'corps')}${stance}${mine ? railLine(a.reg) : ''}${marching}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
+  el.innerHTML = `${slip}<div class="thead">${head}${standRow}${tally}${trayFold(cs.length, 'corps', 'corps')}${stance}${nextDoor}${mine ? railLine(a.reg) : ''}${marching}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
   articled(el);
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);
@@ -7553,6 +7562,25 @@ function softenFold(target: Region, chosen: Corps[], look: Outlook | null): stri
   return foldBlock('attack:soften', 'Soften the line first', can.length ? can.join(', ') : 'nothing can be done to it this month', `<div class="softbody">${s?.html ?? ''}${scout ? `<div class="softopt">${scout}</div>` : ''}</div>`, open);
 }
 
+/** What the hold-back order does, said on its buttons and its tag (release 2). */
+const JOIN_HELD = 'Kept out of the battles next door: it fights only where you send it, and its month stays its own. Press again to let it come up.';
+const JOIN_GO = 'Comes up in a battle next door, either side, where it can march in before the fighting is over. It counts for the part of the battle it is there for, takes its share of the losses, stays where it stands, and its month is spent.';
+
+/**
+ * Release 2, its switch on: his corps next door that come up in this attack, and those he holds back from the
+ * battles next door, each a chip pressed to change it. Nothing where there are none.
+ */
+function joinStrip(next: { coming: JoinChoice[]; held: JoinChoice[] }): string {
+  if (!next.coming.length && !next.held.length) return '';
+  const chipOf = (j: JoinChoice): string => {
+    const c = j.corps, on = j.word !== null;
+    const title = `${corpsNamed(g, c.nat, c.name)} at ${g.regions[c.reg].name} · ${on ? `comes up ${j.word}, for about ${Math.round(j.share * 100)}% of the battle, and its month is spent · press to keep it out` : 'kept out of the battles next door · press to let it come up'}`;
+    return `<button class="uchip${on ? ' pick' : ' out'}" data-act="joinhold" data-id="${c.id}" aria-pressed="${on ? 'true' : 'false'}" title="${esc(title)}">${icon(c)}<b>${esc(corpsNamed(g, c.nat, c.name))}</b>${c.joint ? chip(c.nat) : ''}<small class="held">${on ? esc(j.word!) : 'stays out'}</small></button>`;
+  };
+  const n = next.coming.length;
+  return `<div class="note massnote joinnote"><span><b>${n ? `${n === 1 ? 'One of your corps comes' : `${n} of your corps come`} up from next door.</b> ${n === 1 ? 'It counts' : 'They count'} for the part of the battle ${n === 1 ? 'it reaches' : 'they reach'} in time, stay${n === 1 ? 's' : ''} where ${n === 1 ? 'it stands' : 'they stand'}, and ${n === 1 ? 'its' : 'their'} month is spent. ` : '<b>Next door, kept out.</b> '}Press a corps to keep it out of the battles next door, or to let it come up again.</span><span class="fchips">${[...next.coming, ...next.held].map(chipOf).join('')}</span></div>`;
+}
+
 function attackCard(): string {
   const m = ui.modal!;
   const target = g.regions[m.target];
@@ -7583,9 +7611,16 @@ function attackCard(): string {
   const foeEst = sure ? null : armyAt(g, target.id, foes[0]?.nat ?? target.ctrl)?.est ?? null;
   const why = (c: Corps): string => (c.joint && !hostileUnits(g, target, c.nat).length ? `${g.nations[c.nat].name} is not at war with them` : barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (!chosen.length && whyNotLead(g, [c], target.id) ? whyNotLead(g, [c], target.id)!.split('.')[0] : g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
   // (Guns or engineers picked with no infantry or tanks: the box gives ruling 211(a)'s reason, the foot's own words, never the roads.)
+  // (Release 2, its switch on: a corps not sent in still comes up from next door, unless he holds it back.)
+  const nextDoor = joinChoices(g, a, target, chosen);
+  const joinNote = (c: Corps): string => {
+    if (inSet.has(c.id)) return '';
+    const j = nextDoor.coming.find((x) => x.corps === c);
+    return j ? `joins ${j.word}` : nextDoor.held.some((x) => x.corps === c) ? 'stays out' : '';
+  };
   const ours: Side = {
     nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: rollDivs(chosen),
-    cards: cands.map((c) => corpsChip(c, { act: true, on: inSet.has(c.id), note: why(c) })).join(''),
+    cards: cands.map((c) => corpsChip(c, { act: true, on: inSet.has(c.id), note: why(c) || joinNote(c) })).join(''),
   };
   // The town's guard fighting beside them where no garrison stands (ruling 232): a defender on the card, with the odds.
   const watch = a?.guard ?? 0, watchMen = watch > 0 ? guardMen(g, target) : 0;
@@ -7636,7 +7671,7 @@ function attackCard(): string {
   const dark = said?.tone === 'loss';
   const calloff = dark ? ` data-say="${esc(`Called off: ${lowerFirst(said!.word)}. To attack all the same, give the order again and click SEND THEM IN.`)}"` : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The attack · ${date(g.turn)}</div><h2>The attack on ${esc(target.name)}</h2></header>
-    <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${peaceNote(target)}${verdict}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
+    <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${peaceNote(target)}${verdict}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${joinStrip(nextDoor)}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
     <footer>${whyOff(off)}<button class="btn${dark ? ' go' : ''}" data-act="${dark ? 'calloff' : 'close'}"${calloff} title="Call the attack off. Nothing is spent.">Call it off</button><button class="btn${dark ? '' : ' go'}" data-act="attack" ${a ? '' : 'disabled'} title="${a ? 'The battle is settled at once from the Battle Ticket.' : esc(off)}">Send them in</button></footer>`;
 }
 
@@ -8962,6 +8997,20 @@ function onClick(e: MouseEvent): void {
         : `The army at ${at} takes no orders this month.`;
       refresh(); break;
     }
+    case 'joinnext': {
+      // The whole army in the tray stays out of the battles next door, or comes up in them again (release 2).
+      const a = trayArmy;
+      if (!a || a.nat !== g.human) break;
+      const hold = t.dataset.v === 'hold';
+      const at = g.regions[a.reg].name;
+      const field = g.regions[a.reg].units.filter((c) => armyOf(c) === a.nat && c.kind !== 'fort');
+      const told = field.filter((c) => orderHoldBack(g, c, hold)).length;
+      ui.msg = !told ? `The army at ${at} takes no orders this month.`
+        : hold ? `The army at ${at} stays out of the battles next door: it fights only where you send it.`
+        : `The army at ${at} comes up in the battles next door that it can reach in time.`;
+      if (told) queueSave();
+      refresh(); break;
+    }
     case 'unpick': ui.picked.clear(); ui.rail = ui.ship = ui.land = false; refresh(); break;
     case 'ship': ui.ship = !ui.ship; ui.rail = ui.land = false; refresh(); break;
     case 'shipto': shipPicked(id); break;
@@ -9419,6 +9468,12 @@ function onClick(e: MouseEvent): void {
     case 'atkpick': {
       const m = ui.modal!;
       if (m.chosen.has(id)) m.chosen.delete(id); else m.chosen.add(id);
+      redrawCard(); break;
+    }
+    case 'joinhold': {
+      // A corps next door kept out of the battles there, or let come up again (release 2): a standing order.
+      const c = g.corps.find((x) => x.id === id);
+      if (c && orderHoldBack(g, c, !holdsBack(c))) { ui.msg = holdsBack(c) ? `${c.name} stays out of the battles next door.` : `${c.name} comes up in the battles next door again.`; queueSave(); }
       redrawCard(); break;
     }
     case 'probe': {

@@ -56,7 +56,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
-import { joinLines, joinersOf, spendJoiner, type Join } from './join';
+import { foughtNow, joinLines, joinersOf, spendJoiner, type Join } from './join';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -1093,6 +1093,12 @@ export interface AttackOpts {
    * flew, by group id. Unset, each group flies the strikes the battle card gave its side.
    */
   closeSorties?: Record<number, number>;
+  /**
+   * Neighbours join the fight (release 2, its switch on: join.ts): corps next door that come up on neither side of
+   * this battle. A staff planning two waves keeps its main body out of the first, and reckons the second without
+   * those the first will have spent. Off, nobody joins and it is not read.
+   */
+  spare?: Corps[];
 }
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
@@ -1313,8 +1319,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const watch = town ? guardPower(g, target) * walls : guarded > 0 ? guardPower(g, target) * guardWalls : 0;
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
   // Corps that join the defence from next door (release 2): in the strength, after the day's luck is set, and in none of the works.
+  // (Foot that comes up into open desert against tanks and lorries has no works there to box it in: it is driven
+  // round as the defenders on foot outside their box are, and the card says so.)
   if (join) for (const j of join.def) {
-    const p = joinDefence(g, j.corps, target, wide);
+    const turnedJ = openDesert && !KIND[j.corps.kind].mobile && j.corps.kind !== 'fort';
+    if (turnedJ) { turned = true; turnedTo = Math.min(turnedTo, DESERT.open); }
+    const p = joinDefence(g, j.corps, target, wide) * (turnedJ ? DESERT.open : 1);
     const lead = cmdDefence(g, j.corps);
     rawD += j.share * p;
     cmdD += j.share * p * lead;
@@ -2033,6 +2043,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
+    foughtNow(g, c);
     attU[i].lost = before - men(c);
     attLost += attU[i].lost;
     if (before > 0) bled.set(c.id, attU[i].lost / before);
@@ -2062,6 +2073,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
+    foughtNow(g, c);
     defU[i].lost = before - men(c);
     defLost += defU[i].lost;
     if (before > 0) bled.set(c.id, defU[i].lost / before);
@@ -2272,6 +2284,7 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
   c.org = clamp(c.org - P.org, 0, 1);
   c.ap = Math.max(0, c.ap - P.ap);
   c.fought = true;
+  foughtNow(g, c);
   let works = 0, left = 0;
   for (const d of defenders) {
     if (d.dug) { const w = worksOf(d); works = Math.max(works, w); d.dugFor = Math.max(0, w - reach); left = Math.max(left, worksOf(d)); }
@@ -3830,6 +3843,9 @@ export function startPhase(g: Game, nat: string): void {
     if (c.town) c.ap = 0;
     // A corps that joined a battle next door earlier this month has spent it (release 2); one that joined last month is fresh.
     if (c.joinedIn !== undefined) { if (c.joinedIn === g.turn) c.ap = 0; else delete c.joinedIn; }
+    // (A battle fought earlier this month, in another nation's phase, stays on its record for the rest of the month; one of
+    // an earlier month is dropped: release 2, join.ts.)
+    if (c.foughtIn !== undefined && c.foughtIn !== g.turn) delete c.foughtIn;
   });
   if (drafted_ > 0) drawMen(g, nat, drafted_);
   if (menRules(g) && nat === g.human) {

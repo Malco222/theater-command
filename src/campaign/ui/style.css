@@ -2446,6 +2446,9 @@ button.uchip:hover { border-color: var(--brass); }
 .body.atk .prizeline { margin: 10px 0 0; }
 .body.atk .facepart { margin: 10px 0 0; }
 .body.atk .note.massnote { margin: 10px 0 0; }
+/* Neighbours join the fight (release 2): his corps next door, under the sentence that says what joining costs. */
+.note.massnote.joinnote { flex-wrap: wrap; }
+.note.massnote.joinnote > .fchips { flex: 1 1 100%; }
 /* A fold: a brass arrow, the name, and what is inside said beside it. */
 .tcfolds { display: flex; flex-wrap: wrap; gap: 2px 26px; margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
 .tcfold { flex: 0 1 auto; min-width: 0; }

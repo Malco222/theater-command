@@ -62,8 +62,8 @@ describe('the switch', () => {
     // A month of every staff's battles after it: nobody joins one, and no corps carries the new fields.
     runTurnAI(g);
     expect(g.reports.every((r) => joinedUnits(r) === 0)).toBe(true);
-    expect(g.corps.some((c) => 'joinedIn' in c || 'holdBack' in c)).toBe(false);
-    expect(saveGame(g)).not.toMatch(/"joinedIn"|"holdBack"/);
+    expect(g.corps.some((c) => 'joinedIn' in c || 'holdBack' in c || 'foughtIn' in c)).toBe(false);
+    expect(saveGame(g)).not.toMatch(/"joinedIn"|"holdBack"|"foughtIn"/);
   });
 
   it('on, with nobody next door able to come up, the card, the odds, the dice and the bill are those of the switch off', () => {
@@ -71,7 +71,7 @@ describe('the switch', () => {
       JOIN.on = on;
       const { g, lodz: target, iv } = lodz();
       // Everyone next door has fought already this month: nobody can join.
-      for (const c of nextDoor(g, target)) c.fought = true;
+      for (const c of nextDoor(g, target)) { c.fought = true; c.foughtIn = g.turn; }
       const a = assess(g, [iv], target);
       const cost = JSON.stringify(battleCost(g, a, [iv], target));
       const rep = resolveBattle(g, [iv], target);
@@ -142,17 +142,27 @@ describe('who joins', () => {
     expect([...a.join!.att, ...a.join!.def].every((j) => g.corps.includes(j.corps))).toBe(true);
   });
 
-  it('not unfed, not after a battle of its own, not without the weeks to march in', () => {
+  it('not unfed, not after a battle this month, not without the weeks to march in', () => {
     const { g, lodz: target, iv } = lodz();
     ensureSupply(g);
     const base = assess(g, [iv], target);
     const prusy = corps(g, 'POL', 'Army Prusy'), poznan = corps(g, 'POL', 'Army Poznan'), krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
     for (const c of [prusy, poznan, krakow]) expect(ids(base, 'def')).toContain(c.id);
     prusy.supplied = false;
-    poznan.fought = true;
+    // (A battle earlier this month, in another nation's phase; and, Poland's month being still to come, no week of it
+    // spent: what Army Krakow left unspent of last month is no part of this one.)
+    poznan.fought = true; poznan.foughtIn = g.turn;
     krakow.ap = 0;
     const a = assess(g, [iv], target);
-    for (const c of [prusy, poznan, krakow]) expect(ids(a, 'def')).not.toContain(c.id);
+    for (const c of [prusy, poznan]) expect(ids(a, 'def')).not.toContain(c.id);
+    expect(ids(a, 'def')).toContain(krakow.id);
+    // Germany's own month has begun: a German corps that has fought since, or has no weeks left of it, stays out.
+    const xv = corps(g, 'GER', 'XV Corps'), xiv = corps(g, 'GER', 'XIV Corps');
+    for (const c of [xv, xiv]) expect(ids(a, 'att')).toContain(c.id);
+    xv.fought = true; xiv.ap = 0;
+    const a2 = assess(g, [iv], target);
+    for (const c of [xv, xiv]) expect(ids(a2, 'att')).not.toContain(c.id);
+    xv.fought = false; xiv.ap = xiv.apMax;
     // Infantry needs two weeks to march onto enemy ground and tanks one: with one week in hand the tanks come, the infantry does not.
     const xi = corps(g, 'GER', 'XI Corps'), xvi = corps(g, 'GER', 'XVI Corps');
     expect(moveCost(g, xi, target)).toBe(2);

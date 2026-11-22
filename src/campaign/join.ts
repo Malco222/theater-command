@@ -7,18 +7,22 @@
 // coming up. Nothing joins on the field that the card did not price.
 //
 // 1. Who: a corps of either side (an ally's too, where its country is at war with every nation on the other side)
-//    standing in the field of a province next door to the battle, which its side holds, fed, that has fought no
-//    battle since its own month began and joined none this month, and that could march into the battle province
-//    this month by the move rules (the weeks it has in hand, the ground, the bridges, the line a computer staff
-//    keeps to). Never the town's guard, which is no corps, nor a town's garrison or fortress troops. At most STACK
-//    a side, the earliest to come up first. The player may hold his own corps back (orderHoldBack, turn.ts); a
-//    computer staff, an ally's included, sends every corps it can.
+//    standing in the field of a province next door to the battle, which its side holds, fed, that has had no battle
+//    yet this month and joined none, and that could march into the battle province this month by the move rules (the
+//    weeks it has in hand this month, the ground, the bridges, the line a computer staff keeps to). The month is the
+//    calendar's, whoever's phase it is: a corps whose nation plays later in the month has its whole month still in
+//    hand, whatever it did last month (weeksInHand, battleThisMonth). Never the town's guard, which is no corps, nor a
+//    town's garrison or fortress troops. At most STACK a side, the earliest to come up first. The player may hold his
+//    own corps back (orderHoldBack, turn.ts: on the tray for an army, on the attack card corps by corps); a computer
+//    staff, an ally's included, sends every corps it can, save the main body it keeps for a second wave (ai.ts,
+//    twoWaves: AttackOpts 'spare').
 // 2. When: in the march engine's own time (marchWeeks), never a fixed minute or a draw of the dice. It counts for the
 //    share of the battle it is there for: early, most of its strength; late, little.
 // 3. Both sides, every nation: assess() reckons the joiners, so the attack card, the battle and every staff's odds are
-//    one reckoning.
+//    one reckoning. (A staff's second wave is reckoned without those its first will have spent.)
 // 4. They are in the odds and their losses are booked to them (game.ts), they stay where they stood, and their month
-//    is spent: no weeks left, and counted as having fought.
+//    is spent: no weeks left, and counted as having fought; one in the player's army as well (joint.ts, jointMonth).
+//    A corps on foot that comes up into open desert against tanks and lorries is driven round as the defenders there are.
 // 5. The card names them, early, midway or late; to the player an enemy next door his staff has not identified is
 //    "armies next door may join", with no names and no numbers (turn.ts, outlookOf).
 // The historical scenarios reckon them alike: the rule is keyed on its switch alone.
@@ -89,34 +93,67 @@ export function marchWeeks(g: Game, c: Corps, target: Region): number {
 export const joinShare = (weeks: number): number => clamp(1 - weeks / JOINING.window, 0, 1);
 
 /**
+ * True where a nation's month has begun: its phase has come round this month, so that what its corps have spent and
+ * fought since is this month's. (A nation outside the order of play reads as it stands.)
+ */
+function begun(g: Game, nat: string): boolean {
+  const at = g.order.indexOf(nat);
+  return at < 0 || at <= g.phase;
+}
+
+/**
+ * The weeks a corps has in hand this month: what is left of them where the month of the army it marches with has
+ * begun (or where it left that army this month, its month had with it), and the whole month where that month is
+ * still to come. What it did not spend last month is no part of this one.
+ */
+export function weeksInHand(g: Game, c: Corps): number {
+  return begun(g, armyOf(c)) || g.flags[`back:${c.id}`] === g.turn ? c.ap : c.apMax;
+}
+
+/**
+ * True where a corps has had a battle this month, in whoever's phase it was fought: joined one, fought one since its
+ * own month began, or fought one this month before that (foughtIn). A battle of last month is not this month's.
+ */
+export function battleThisMonth(g: Game, c: Corps): boolean {
+  return c.joinedIn === g.turn || c.foughtIn === g.turn || (c.fought && begun(g, c.nat));
+}
+
+/** Notes that a corps has fought a battle this month (release 2, its switch on); off, nothing is written. */
+export function foughtNow(g: Game, c: Corps): void {
+  if (JOIN.on) c.foughtIn = g.turn;
+}
+
+/**
  * True where a corps standing in a province next door could come up in a battle there, side apart: in the field,
- * not held back, fed, with no battle of its own month behind it and none joined this month, on ground its side
- * holds, and able to march in this month by the move rules.
+ * not held back, fed, with no battle yet this month and none joined, on ground its side holds, and able to march in
+ * this month by the move rules.
  */
 export function mayJoin(g: Game, c: Corps, target: Region): boolean {
   if (c.dead || c.kind === 'fort' || c.town !== undefined || c.leave !== undefined || c.fortress || c.holdBack) return false;
-  if (!c.supplied || c.fought || c.joinedIn === g.turn) return false;
+  if (!c.supplied || battleThisMonth(g, c)) return false;
   const here = g.regions[c.reg];
   if (!here.nb.includes(target.id) || !allied(g, c.nat, here.ctrl) || !allied(g, c.nat, fieldCtrl(g, here))) return false;
   // The move rules, as a march into the battle province would read them (moveCorps): the ground and the bridges, the
   // line a computer staff keeps to, and the weeks it has in hand.
   if (blocked(g, c, target) || (armyOf(c) !== g.human && lineShut(g, armyOf(c), target))) return false;
-  const cost = moveCost(g, c, target, c.reg);
-  return c.ap > 0 && c.ap >= Math.min(cost, 4);
+  const cost = moveCost(g, c, target, c.reg), weeks = weeksInHand(g, c);
+  return weeks > 0 && weeks >= Math.min(cost, 4);
 }
 
 /**
  * The corps next door that join this battle, each side's earliest first, at most STACK a side; null where nobody
  * does, or the switch is off. Not for a storm of a town or a garrison's sortie: those are fought by the army round
- * the town and the garrison inside it. Reads the game and leaves it as it was.
+ * the town and the garrison inside it, nor for the corps 'spare' names. Reads the game and leaves it as it was.
  */
-export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: { town?: boolean; sally?: boolean } = {}): Join | null {
+export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: { town?: boolean; sally?: boolean; spare?: Corps[] } = {}): Join | null {
   if (!JOIN.on || opts.town || opts.sally || !attackers.length || !defenders.length) return null;
   const attNat = armyOf(attackers[0]), defNat = defenders[0].nat;
   const aN = [...new Set(attackers.map((c) => c.nat))], dN = [...new Set(defenders.map((c) => c.nat))];
+  // (Those in the battle itself, and those kept out of it: a staff's main body held for its second wave.)
   const inBattle = new Set<number>();
   for (const c of attackers) inBattle.add(c.id);
   for (const c of defenders) inBattle.add(c.id);
+  for (const c of opts.spare ?? []) inBattle.add(c.id);
   const att: (Joiner & { km: number })[] = [], def: (Joiner & { km: number })[] = [];
   for (const j of target.nb) {
     const r = g.regions[j];

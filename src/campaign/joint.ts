@@ -121,6 +121,8 @@ export function jointMonth(g: Game, nat: string): void {
       headline(g, 'info', `Left with none of your troops beside it, ${c.name} at ${r.name} has gone back to ${g.nations[c.nat].adj} command.`, nat, r.id);
       continue;
     }
-    c.ap = c.apMax;
+    // (One that joined a battle next door earlier this month has spent it, as startPhase reads it for the player's
+    // own corps: release 2, join.ts. Off, nobody joins and every corps is ready.)
+    c.ap = c.joinedIn === g.turn ? 0 : c.apMax;
   }
 }

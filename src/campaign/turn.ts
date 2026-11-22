@@ -1,7 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type JoinWord, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
@@ -1389,6 +1389,20 @@ export function orderHoldBack(g: Game, c: Corps, hold: boolean): boolean {
 }
 /** True where the player has ordered a corps to stay out of the battles next door. */
 export const holdsBack = (c: Corps): boolean => !!c.holdBack;
+
+/** One of the player's corps next door to a place he attacks, as the attack card offers it (release 2). */
+export interface JoinChoice { corps: Corps; word: JoinWord | null; share: number }
+/**
+ * The player's corps next door to a place he attacks, as the attack card offers them (release 2, its switch on):
+ * those that come up in the attack, with when and for what share of it, and those he holds back from the battles
+ * next door ('word' null). Each is pressed to change it (orderHoldBack). Empty with the switch off, or with no attack.
+ */
+export function joinChoices(g: Game, a: Assessment | null, target: Region, going: Corps[]): { coming: JoinChoice[]; held: JoinChoice[] } {
+  if (!joinRules() || !a) return { coming: [], held: [] };
+  const coming = (a.join?.att ?? []).filter((j) => canOrder(g, j.corps)).map((j) => ({ corps: j.corps, word: j.word, share: j.share }));
+  const held = target.nb.flatMap((k) => g.regions[k].units).filter((c) => holdsBack(c) && canOrder(g, c) && !going.includes(c)).map((c) => ({ corps: c, word: null, share: 0 }));
+  return { coming, held };
+}
 
 /** What the player's engineer corps could do where it stands this month (the grand campaign). */
 export function engineerJobs(g: Game, c: Corps): JobOffer[] {
