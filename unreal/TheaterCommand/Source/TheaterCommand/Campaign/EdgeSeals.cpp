@@ -1511,16 +1511,28 @@ namespace EdgeSeals
 				Out[2] = Bar(-3.0, 4.6, 11.0, 2.2, 0.0);
 				return 3;
 			case EGlyph::Globe:
-				// (a ring 16.4 across, its equator and its meridian)
-				Out[0] = FStroke{ EStroke::Ring, 0.0, 0.0, 16.4, Stroke(1.7, PxPerUnit), 0.0 };
+			{
+				// (a ring 16.4 across, its level equator, and one curved meridian: an upright ellipse GlobeMeridian of the
+				// ring's width across, its middle line meeting the ring's at the poles. No straight upright stroke: the art
+				// director, 64(g)(4), the old straight meridian read as a cross in a circle)
+				const double Ring = Stroke(1.7, PxPerUnit), Meridian = Stroke(1.6, PxPerUnit);
+				Out[0] = FStroke{ EStroke::Ring, 0.0, 0.0, 16.4, Ring, 0.0 };
 				Out[1] = Bar(0.0, 0.0, 16.4, 1.6, 0.0);
-				Out[2] = Bar(0.0, 0.0, 16.4, 1.6, 90.0);
+				Out[2] = FStroke{ EStroke::Ellipse, 0.0, 0.0, 16.4 - Ring + Meridian, Meridian, 0.0, 16.4 * GlobeMeridian };
 				return 3;
+			}
 			case EGlyph::Sign:
 			case EGlyph::More:
 				break;
 			}
 			return 0;
+		}
+
+		FPoint EllipsePoint(const FStroke& Cut, int Step)
+		{
+			const double Turn = 6.283185307179586 * static_cast<double>(Step % EllipseSteps) / static_cast<double>(EllipseSteps);
+			const double HalfWide = std::max(Cut.Wide - Cut.Thick, 0.0) * 0.5, HalfHigh = std::max(Cut.Long - Cut.Thick, 0.0) * 0.5;
+			return FPoint{ Cut.X + HalfWide * std::sin(Turn), Cut.Y - HalfHigh * std::cos(Turn) };
 		}
 
 		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke* Out, int Room)

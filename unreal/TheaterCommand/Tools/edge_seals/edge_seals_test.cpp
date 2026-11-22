@@ -995,6 +995,12 @@ namespace
 		{
 			const Look::FStroke& Cut = Strokes[Index];
 			double HalfX = Cut.Long * 0.5, HalfY = Cut.Long * 0.5, Far = std::hypot(Cut.X, Cut.Y) + Cut.Long * 0.5;
+			if (Cut.Kind == Look::EStroke::Ellipse)
+			{
+				// (an upright ellipse: Wide across and Long high)
+				HalfX = Cut.Wide * 0.5;
+				Far = std::hypot(Cut.X, Cut.Y) + std::max(Cut.Wide, Cut.Long) * 0.5;
+			}
 			if (Cut.Kind == Look::EStroke::Bar)
 			{
 				// (a bar with round ends: its two ends' middles, and the round end's half width round them)
@@ -3644,6 +3650,212 @@ static void TestSealSigns(const char* Folder)
  * line (CampaignHUD.cpp, the call to MakeEdgeNewsLayer) must ask the kit's typed face, bold, at Look::CountPt, the size
  * the tab and its 9 px floor are measured for. The source is found from the order signs' folder (Content/CityOrders).
  */
+namespace
+{
+	/**
+	 * Whether a drawn mark has a straight upright stroke: a bar standing within 30 degrees of upright, or a straight
+	 * piece of an ellipse's line as long as the line is thick (the old globe's meridian, a bar 16.4 long turned 90).
+	 */
+	bool HasUprightBar(const Look::FStroke* Strokes, int Count, std::string& Why)
+	{
+		for (int Index = 0; Index < Count; ++Index)
+		{
+			const Look::FStroke& Cut = Strokes[Index];
+			if (Cut.Kind == Look::EStroke::Bar && std::fabs(std::sin(Cut.Degrees * 3.141592653589793 / 180.0)) > 0.5)
+			{
+				Why = "a bar within 30 degrees of upright";
+				return true;
+			}
+			if (Cut.Kind != Look::EStroke::Ellipse)
+			{
+				continue;
+			}
+			// (each piece of the line shorter than the line is thick, and each turning the same way as the last, by a degree
+			// at the least: no two in line, so no straight run however short its pieces)
+			double LastTurn = 0.0;
+			for (int Step = 0; Step < Look::EllipseSteps; ++Step)
+			{
+				const FPoint A = Look::EllipsePoint(Cut, Step), B = Look::EllipsePoint(Cut, Step + 1), C = Look::EllipsePoint(Cut, Step + 2);
+				const double Piece = std::hypot(B.X - A.X, B.Y - A.Y);
+				const double Turn = std::atan2((B.X - A.X) * (C.Y - B.Y) - (B.Y - A.Y) * (C.X - B.X), (B.X - A.X) * (C.X - B.X) + (B.Y - A.Y) * (C.Y - B.Y)) * 180.0 / 3.141592653589793;
+				if (Piece >= Cut.Thick || std::fabs(Turn) < 1.0 || (Step > 0 && Turn * LastTurn <= 0.0))
+				{
+					Why = "a straight piece of the ellipse's line as long as it is thick, or two in line";
+					return true;
+				}
+				LastTurn = Turn;
+			}
+		}
+		return false;
+	}
+
+	/** How many of the game's source files under Source/TheaterCommand say Words, as a whole name, and which. */
+	int SourcesSaying(const char* Folder, const std::string& Words, std::string& Which)
+	{
+		int Files = 0;
+		const std::filesystem::path Root = std::filesystem::path(Folder) / ".." / ".." / "Source" / "TheaterCommand";
+		std::error_code Error;
+		for (std::filesystem::recursive_directory_iterator It(Root, Error), End; !Error && It != End; It.increment(Error))
+		{
+			const std::filesystem::path& Path = It->path();
+			if (!It->is_regular_file(Error) || (Path.extension() != ".cpp" && Path.extension() != ".h"))
+			{
+				continue;
+			}
+			std::FILE* File = std::fopen(Path.string().c_str(), "rb");
+			if (!File)
+			{
+				continue;
+			}
+			std::string Text;
+			char Block[4096];
+			for (size_t Got; (Got = std::fread(Block, 1, sizeof(Block), File)) > 0;)
+			{
+				Text.append(Block, Got);
+			}
+			std::fclose(File);
+			// (said as a whole name: the letter before it is none of a name's, so the bargains' SeaMarkOf is not MarkOf)
+			bool bSays = false;
+			for (size_t At = Text.find(Words); !bSays && At != std::string::npos; At = Text.find(Words, At + 1))
+			{
+				const char Before = At == 0 ? ' ' : Text[At - 1];
+				bSays = !((Before >= 'A' && Before <= 'Z') || (Before >= 'a' && Before <= 'z') || (Before >= '0' && Before <= '9') || Before == '_');
+			}
+			if (bSays)
+			{
+				++Files;
+				Which += (Which.empty() ? "" : " ") + Path.filename().string();
+			}
+		}
+		return Files;
+	}
+}
+
+/**
+ * The art director's ruling on the globe, 64(g)(4): the rest of the war's mark redrawn as a ring, one level equator and
+ * one curved meridian, an upright ellipse about 0.45 of the ring's width; no straight upright bar anywhere (the old
+ * straight meridian read as a cross in a circle). The 1.5 px floor (Look::Stroke) and the size, about 16.9 px at 1600 by
+ * 1000, are kept: every stroke holds 1.5 px on every screen the old one did. And the mend draws wherever the old sign
+ * drew (ruling 6): every drawn mark is laid by Look::MarkOf and painted by the layer's PaintMark alone, for a seal of one
+ * item and a folded one alike; the card's rows and the report draw no mark of the seals.
+ */
+static void TestGlobe(const char* Folder)
+{
+	const double Reference = (1000.0 / 900.0) * (1000.0 / 1080.0);
+	auto High = [](double Height) { return (1000.0 / 900.0) * (Height / 1080.0); };
+	const double Scales[] = { High(600.0), High(720.0), High(768.0), High(878.0), Reference, High(1080.0), High(1440.0), High(1786.0), 2.0 * Reference, 3.0 };
+	std::string Why;
+	// (the old globe, as 0010 drew it: a ring, a level bar and an upright one)
+	auto OldGlobe = [](double Scale, Look::FStroke (&Out)[Look::MarkMost])
+	{
+		Out[0] = Look::FStroke{ Look::EStroke::Ring, 0.0, 0.0, 16.4, Look::Stroke(1.7, Scale), 0.0, 0.0 };
+		Out[1] = Look::FStroke{ Look::EStroke::Bar, 0.0, 0.0, 16.4, Look::Stroke(1.6, Scale), 0.0, 0.0 };
+		Out[2] = Look::FStroke{ Look::EStroke::Bar, 0.0, 0.0, 16.4, Look::Stroke(1.6, Scale), 90.0, 0.0 };
+		return 3;
+	};
+	bool bShape = true, bNoBar = true, bOldBar = true, bThick = true, bSteps = true;
+	double RingGap = 1e9, MeridianGap = 1e9;
+	std::string Under;
+	for (const double Scale : Scales)
+	{
+		Look::FStroke Strokes[Look::MarkMost], Old[Look::MarkMost];
+		const int Count = Look::MarkOf(EGlyph::Globe, Scale, Strokes);
+		const int OldCount = OldGlobe(Scale, Old);
+		// (a ring 16.4 across; one level bar across it, the equator; and an upright ellipse 0.45 of the ring across, its
+		// middle line meeting the ring's at the poles; all three on the disc's middle)
+		const Look::FStroke& Ring = Strokes[0];
+		const Look::FStroke& Equator = Strokes[1];
+		const Look::FStroke& Meridian = Strokes[2];
+		bShape = bShape && Count == 3 && Ring.Kind == Look::EStroke::Ring && std::fabs(Ring.Long - 16.4) < 1e-9 && Equator.Kind == Look::EStroke::Bar && Equator.Degrees == 0.0
+			&& std::fabs(Equator.Long - Ring.Long) < 1e-9 && Meridian.Kind == Look::EStroke::Ellipse && std::fabs(Meridian.Wide / Ring.Long - 0.45) < 0.01 && Meridian.Long > Meridian.Wide
+			&& std::fabs((Meridian.Long - Meridian.Thick) * 0.5 - (Ring.Long - Ring.Thick) * 0.5) < 1e-9 && Ring.X == 0.0 && Ring.Y == 0.0 && Meridian.X == 0.0 && Meridian.Y == 0.0 && Equator.Y == 0.0;
+		// (no straight upright stroke; the old one had its upright bar)
+		std::string Said;
+		bNoBar = bNoBar && !HasUprightBar(Strokes, Count, Why);
+		bOldBar = bOldBar && HasUprightBar(Old, OldCount, Said);
+		// (every stroke 1.5 px, where every one of the old held it; and each as heavy as the old stroke it stands for)
+		for (int Index = 0; Index < Count; ++Index)
+		{
+			bThick = bThick && Strokes[Index].Thick * Scale >= Look::MinStrokePx - 1e-9 && Strokes[Index].Thick >= Old[Index].Thick - 1e-12;
+		}
+		for (int Index = 0; Index < OldCount; ++Index)
+		{
+			bThick = bThick && Old[Index].Thick * Scale >= Look::MinStrokePx - 1e-9;
+		}
+		// (the ellipse's line closes on itself)
+		const FPoint Top = Look::EllipsePoint(Meridian, 0), Again = Look::EllipsePoint(Meridian, Look::EllipseSteps), Side = Look::EllipsePoint(Meridian, Look::EllipseSteps / 4);
+		bSteps = bSteps && std::fabs(Top.X - Again.X) < 1e-9 && std::fabs(Top.Y - Again.Y) < 1e-9 && std::fabs(Top.X) < 1e-9 && Side.X > 0.0 && std::fabs(Side.Y) < 1e-9;
+		// (the counters: between the ring and the meridian at their widest, and inside the meridian, in px)
+		const double Between = (Ring.Long * 0.5 - Ring.Thick - Meridian.Wide * 0.5) * Scale, Inside = (Meridian.Wide - 2.0 * Meridian.Thick) * Scale;
+		if (Scale >= High(720.0) - 1e-12)
+		{
+			RingGap = std::min(RingGap, Between);
+			MeridianGap = std::min(MeridianGap, Inside);
+		}
+		else if (Between < Look::MinStrokePx || Inside < Look::MinStrokePx)
+		{
+			char Line[96];
+			std::snprintf(Line, sizeof(Line), "%.0f high: %.2f and %.2f px", Scale * 972.0, Between, Inside);
+			Under += (Under.empty() ? "" : "; ") + std::string(Line);
+		}
+	}
+	CHECK(bShape);
+	CHECK(bNoBar);
+	CHECK(bOldBar);
+	CHECK(bThick);
+	CHECK(bSteps);
+	CHECK(RingGap >= Look::MinStrokePx && MeridianGap >= Look::MinStrokePx);
+	if (!bNoBar)
+	{
+		std::printf("  the globe: %s\n", Why.c_str());
+	}
+	// (the size kept: 16.4 across, about 16.9 px at 1600 by 1000; and inside the hollow with its wall, as every mark is)
+	Look::FStroke Strokes[Look::MarkMost];
+	const int Count = Look::MarkOf(EGlyph::Globe, Reference, Strokes);
+	const FMarkBox Box = MarkBox(Strokes, Count);
+	const double Across = std::max(Box.MaxX - Box.MinX, Box.MaxY - Box.MinY) * Reference;
+	CHECK(std::fabs(Across - 16.9) < 0.1 && std::fabs(Box.MaxX - Box.MinX - 16.4) < 1e-9 && std::fabs(Box.MaxY - Box.MinY - 16.4) < 1e-9);
+	// (the least of the counters from a window 720 high up, where the floor and the counters are both judged: the ring's
+	// to the meridian from about 647 high, the meridian's own from about 593)
+	double FromRing = 0.0, FromMeridian = 0.0;
+	bool bMade = true;
+	for (int Height = 2000; bMade && Height >= 400; --Height)
+	{
+		const double Scale = Height / 972.0;
+		bMade = Look::MarkOf(EGlyph::Globe, Scale, Strokes) == 3;
+		if (!bMade)
+		{
+			break;
+		}
+		FromRing = (Strokes[0].Long * 0.5 - Strokes[0].Thick - Strokes[2].Wide * 0.5) * Scale >= Look::MinStrokePx ? Height : FromRing;
+		FromMeridian = (Strokes[2].Wide - 2.0 * Strokes[2].Thick) * Scale >= Look::MinStrokePx ? Height : FromMeridian;
+	}
+	CHECK(bMade && FromRing >= 640.0 && FromRing <= 655.0 && FromMeridian >= 585.0 && FromMeridian <= 600.0);
+	std::printf("(the globe: a ring of %.2f px at 1600 by 1000, the meridian an ellipse %.2f of its width; %d pieces to its line, none as long as it is thick; the counters at least %.2f px (ring to meridian) and %.2f px (inside the meridian) from 720 high, holding 1.5 px from %.0f and %.0f high; under: %s)\n",
+		Across, Strokes[2].Wide / Strokes[0].Long, Look::EllipseSteps, RingGap, MeridianGap, FromRing, FromMeridian, Under.empty() ? "none" : Under.c_str());
+
+	// Ruling 6: wherever the old sign drew. Every drawn mark is laid by Look::MarkOf, which only the layer's PaintMark
+	// asks, for every seal (one item's, a folded seal's with its tab, the "+N"'s none); the layer draws the ellipse; the
+	// card's rows and the report (CampaignHUD) draw no mark of the seals, their own flags or the watch box instead.
+	if (!Folder)
+	{
+		std::printf("(the order signs' folder was not given: the source was not read for the globe's places)\n");
+		return;
+	}
+	std::string Asks, Globes, Ellipses, Layer;
+	CHECK(SourcesSaying(Folder, "MarkOf(", Asks) == 3 && Contains(Asks, "EdgeSeals.h") && Contains(Asks, "EdgeSeals.cpp") && Contains(Asks, "EdgeNewsLayer.cpp"));
+	CHECK(SourcesSaying(Folder, "EGlyph::Globe", Globes) == 1 && Globes == "EdgeSeals.cpp");
+	CHECK(SourcesSaying(Folder, "EStroke::Ellipse", Ellipses) == 2 && Contains(Ellipses, "EdgeSeals.cpp") && Contains(Ellipses, "EdgeNewsLayer.cpp"));
+	const std::string Text = SourceText(Folder, "EdgeNewsLayer.cpp");
+	size_t Calls = 0;
+	for (size_t At = Text.find("Look::MarkOf("); At != std::string::npos; At = Text.find("Look::MarkOf(", At + 1))
+	{
+		++Calls;
+	}
+	CHECK(Calls == 1 && Contains(Text, "Pen.Loop(") && Contains(Text, "FSlateDrawElement::MakeLines("));
+	std::printf("(the globe's places: Look::MarkOf in %s; EGlyph::Globe in %s; the ellipse drawn in %s)\n", Asks.c_str(), Globes.c_str(), Ellipses.c_str());
+}
+
 static void TestCountFace(const char* Folder)
 {
 	if (!Folder)
@@ -3702,6 +3914,7 @@ int main(int ArgCount, char** Args)
 	TestCountFace(ArgCount > 1 ? Args[1] : nullptr);
 	TestCuts();
 	TestHover(ArgCount > 1 ? Args[1] : nullptr);
+	TestGlobe(ArgCount > 1 ? Args[1] : nullptr);
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

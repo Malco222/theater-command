@@ -55,7 +55,7 @@ namespace EdgeSeals
 		Fallen, // a country fallen: a chevron pointing down
 		Freed, // a country freed: a chevron pointing up
 		News, // news with a title of its own, and a line of home or of the staff: three short lines
-		Globe, // the rest of the war: a ring, its meridian and its equator
+		Globe, // the rest of the war: a ring, its equator and one curved meridian
 		More, // the "+N" seal: its count
 	};
 
@@ -573,12 +573,17 @@ namespace EdgeSeals
 		 */
 		bool SetPressed(double PxPerUnit);
 
-		/** One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees clockwise), a dot (Long across) or a ring (Long across, its line Thick). */
+		/**
+		 * One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees
+		 * clockwise), a dot (Long across), a ring (Long across, its line Thick) or an upright ellipse (Long high and Wide
+		 * across, its line Thick; drawn as EllipseSteps short pieces, EllipsePoint).
+		 */
 		enum class EStroke : int
 		{
 			Bar = 0,
 			Dot,
 			Ring,
+			Ellipse,
 		};
 		struct FStroke
 		{
@@ -588,7 +593,19 @@ namespace EdgeSeals
 			double Long = 0.0;
 			double Thick = 0.0;
 			double Degrees = 0.0;
+			double Wide = 0.0;
 		};
+
+		/**
+		 * The globe's meridian (the art director, 64(g)(4)): an upright ellipse GlobeMeridian of the ring's width across,
+		 * meeting the ring at its poles, so that no straight upright stroke stands in the globe (the old straight
+		 * meridian made it read as a cross in a circle).
+		 */
+		constexpr double GlobeMeridian = 0.45;
+		/** How many short straight pieces an ellipse stroke's line is drawn in: each shorter than its line is thick, so none reads as straight. */
+		constexpr int EllipseSteps = 48;
+		/** The point Step of EllipseSteps on an ellipse stroke's middle line, from the disc's middle: 0 at its top, then round clockwise; EllipseSteps is the top again. */
+		FPoint EllipsePoint(const FStroke& Cut, int Step);
 
 		/** The most strokes a drawn mark has (the crossed swords' ten: each a blade, its point, a guard, a grip and a pommel). */
 		constexpr int MarkMost = 10;

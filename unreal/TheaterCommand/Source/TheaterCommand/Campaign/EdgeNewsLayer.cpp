@@ -297,6 +297,22 @@ namespace
 			FSlateDrawElement::MakeBox(Out, Layer, On.ToPaintGeometry(Size, FSlateLayoutTransform(From)), &Paper, ESlateDrawEffect::None, Paper.TintColor.GetSpecifiedColor());
 		}
 
+		/**
+		 * An upright ellipse's line, as EdgeSeals lays it from the disc's middle (MidX, MidY): EllipseSteps short straight
+		 * pieces, each shorter than the line is thick, so none reads as straight. The line is Thick in the geometry's
+		 * units, as CampaignHUD's strokes are drawn. Points is emptied first and keeps its room.
+		 */
+		void Loop(int32 Layer, double MidX, double MidY, const EdgeSeals::Look::FStroke& Cut, const FLinearColor& Ink, TArray<FVector2D>& Points) const
+		{
+			Points.Reset();
+			for (int32 Step = 0; Step <= EdgeSeals::Look::EllipseSteps; ++Step)
+			{
+				const EdgeSeals::FPoint At = EdgeSeals::Look::EllipsePoint(Cut, Step);
+				Points.Add(FVector2D(MidX + At.X, MidY + At.Y));
+			}
+			FSlateDrawElement::MakeLines(Out, Layer, On.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, static_cast<float>(Cut.Thick));
+		}
+
 		/** A bar with rounded ends, Long by Thick, its middle at (MidX, MidY), turned Degrees clockwise. */
 		void Bar(int32 Layer, double MidX, double MidY, double Long, double Thick, double Degrees, const FLinearColor& Ink) const
 		{
@@ -621,12 +637,17 @@ namespace
 				case EdgeSeals::Look::EStroke::Ring:
 					Pen.Ring(Layer, MX + Cut.X, MY + Cut.Y, Cut.Long * 0.5, Cut.Thick, Ink);
 					break;
+				case EdgeSeals::Look::EStroke::Ellipse:
+					Pen.Loop(Layer, MX, MY, Cut, Ink, LoopPoints);
+					break;
 				}
 			}
 		}
 
 		TSharedPtr<FEdgeNewsLaid> Laid;
 		int32 SealSlot = 0;
+		// (the globe's meridian's points, kept from paint to paint so that drawing it again allocates nothing once warm)
+		mutable TArray<FVector2D> LoopPoints;
 	};
 
 	/** The layer: the ping under the seals, and the seals, each placed where EdgeSeals lays it and slid in from its edge. */
