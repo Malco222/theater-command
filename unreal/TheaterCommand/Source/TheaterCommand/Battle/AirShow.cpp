@@ -519,10 +519,18 @@ namespace AirShow
 		if (Have + Waiting < Want)
 		{
 			// A replacement: the next model of the group closing up from behind, as a formation closed up its gaps.
+			// (a level box that has bombed flies on its lead until it has rallied: her place is laid in his frame, his
+			// heading and way, never in the battle's own formation already turned for home kilometres off, RallyFrame)
+			Vec LeadAt, LeadVel;
+			double LeadFace = G.Face;
+			const Craft* RallyLead = bAirborne && !G.bFighter && RallyFrame(G.Id, LeadAt, LeadFace, LeadVel) ? BoxLead(G.Id) : nullptr;
 			for (int K = Have + Waiting; K < Want; ++K)
 			{
-				const Vec F = Ahead(G.Face);
-				Vec At = SlotPlace(G, K) - F * 250.0 - Up * 40.0;
+				Group Frame = G;
+				if (RallyLead) Frame.Face = LeadFace;
+				const Vec F = Ahead(Frame.Face);
+				Vec At = SlotPlace(Frame, K) - F * 250.0 - Up * 40.0;
+				if (RallyLead) At += LeadAt - SlotPlace(Frame, RallyLead->Slot);
 				// (into a fight: the next of the group coming in from well behind and above it, at fighting speed)
 				const bool bIntoFight = bAirborne && G.bFighter && G.Doing == Act::Fight && G.Engaged >= 0;
 				if (bIntoFight)
@@ -552,8 +560,9 @@ namespace AirShow
 					if (!bTaken) break;
 					At = At - F * Clear;
 				}
-				const Vec Vel = GroupVelocity(G.Id);
-				Craft& C = Make(G, At, G.Face, bIntoFight ? 140.0 : bAirborne ? std::max(Len(Vel) * 1.05, G.bFighter ? 95.0 : 75.0) : 0.0, Doing);
+				if (RallyLead) Check.RallyMadeFar = std::max(Check.RallyMadeFar, Len(At - LeadAt));
+				const Vec Vel = RallyLead ? LeadVel : GroupVelocity(G.Id);
+				Craft& C = Make(G, At, Frame.Face, bIntoFight ? 140.0 : bAirborne ? std::max(Len(Vel) * 1.05, G.bFighter ? 95.0 : 75.0) : 0.0, Doing);
 				C.Slot = K;
 				C.bJoining = bAirborne && !bIntoFight;
 				// (or on a box whose gunners the battle has counted one of the group lost to)
@@ -3972,7 +3981,10 @@ namespace AirShow
 	bool Show::RallyFrame(int GroupId, Vec& At, double& Face, Vec& Vel) const
 	{
 		const auto Box = Bands.find(GroupId);
-		if (Box == Bands.end() || Box->second.RallyAt < 0.0 || Box->second.bRallied) return false;
+		// (from the box's bombs, while it flies on wings level on his heading, through its turn, until it has rallied)
+		const auto G = Now.find(GroupId);
+		if (Box == Bands.end() || !Box->second.bDropped || Box->second.bRallied) return false;
+		if (G == Now.end() || G->second.bFighter || G->second.Strike == "dive" || G->second.Strike == "torpedo") return false;
 		const Craft* L = BoxLead(GroupId);
 		if (!L) return false;
 		At = L->P;
@@ -4003,8 +4015,12 @@ namespace AirShow
 			}
 			if (!bAllGone && B.LeadBombAt >= 0.0 && AirT < B.LeadBombAt + 15.0)
 			{
+				// (wings level: her heading is his run's, held from her doors full open; chasing a degree of it would
+				// bank her seven, and she would roll into his turn from the wrong side)
 				Cmd K;
 				K.Hdg = L->RunHdg;
+				K.bBank = true;
+				K.Bank = 0.0;
 				K.Gam = 0.0;
 				K.Spd = C.Spd;
 				Fly(C, K, Dt, true);
@@ -4021,10 +4037,13 @@ namespace AirShow
 			Check.Rallies++;
 		}
 		const double Left = Wrap(Home - L->Hdg);
-		const bool bTurning = std::fabs(Left) > 3.0 * Deg && AirT - B.RallyAt < 300.0;
+		// (one turn: once he has rolled out on his heading for home it is done, and what is left is closing on his place)
+		if (std::fabs(Left) <= 3.0 * Deg || AirT - B.RallyAt >= 300.0) B.bTurnDone = true;
+		const bool bTurning = !B.bTurnDone;
 		if (!bTurning && Len(SlotPlace(G, L->Slot) - L->P) < RallyCloseM)
 		{
 			B.bRallied = true;
+			Check.RallyOver[C.Group] = AirT;
 			return false;
 		}
 		if (C.Key == L->Key)
@@ -4071,6 +4090,13 @@ namespace AirShow
 		const double Want = std::atan(S * Clamp(Wrap(K.Hdg - C.Hdg) * 0.8, -S / C.RMin, S / C.RMin) / Gee);
 		K.bBank = true;
 		K.Bank = Clamp(Want, -RallyBankMost * Deg, RallyBankMost * Deg);
+		// (in the turn every wing of the box goes down the lead's way, as a box turned: one ahead of her place or inside
+		// it eases her bank toward level and her throttle back, she never rolls against him; closing on his place after
+		// it, her wings follow his, within a few degrees of level while his are)
+		if (bTurning) K.Bank = B.RallyWay > 0.0 ? std::max(0.0, K.Bank) : std::min(0.0, K.Bank);
+		else if (L->Bank > 2.0 * Deg) K.Bank = std::max(0.0, K.Bank);
+		else if (L->Bank < -2.0 * Deg) K.Bank = std::min(0.0, K.Bank);
+		else K.Bank = Clamp(K.Bank, -4.0 * Deg, 4.0 * Deg);
 		Fly(C, K, Dt, true);
 		if (bTurning)
 		{
@@ -4126,8 +4152,9 @@ namespace AirShow
 			const auto Box = Bands.find(C.Group);
 			const bool bBoxDone = Box != Bands.end() && Box->second.bDropped;
 			const bool bOnRun = bLevel && !C.bDropped && ((!bBoxDone && Run >= 1.0 - Lead && Run > 0.0) || C.DropDue >= 0.0);
-			// (held open through the stick until she rolls into her rally turn, StickSteady after the last bomb)
-			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)));
+			// (held open through the stick; as its last bomb leaves her bombardier closes them, shut BayShutS later, while
+			// she still flies wings level on her heading StickSteady more, and then she rolls into her box's rally turn)
+			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && C.StickLeft > 0);
 			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / std::max(0.1, BayOpenS)) : std::max(0.0, C.Bay - Dt / std::max(0.1, BayShutS));
 			// (her doors full open on her run: from now her heading is held until her stick has gone, Pilot)
 			if (bOnRun && C.Bay >= 1.0 && !C.bRunHeld) { C.bRunHeld = true; C.RunHdg = C.Hdg; }
@@ -4473,7 +4500,9 @@ namespace AirShow
 					Craft& C = *Find(Key);
 					if (C.Key == L.Key || C.Doing == Role::Ground || C.bDropped || C.DropDue >= 0.0) continue;
 					const double Share = std::fmod(static_cast<double>(static_cast<uint32_t>(C.Key) * 2654435761u) / 4294967296.0, 1.0);
-					C.DropDue = First + DropOnLeadLeast + (DropOnLeadMost - DropOnLeadLeast) * Share;
+					// (DropOnLeadLateS inside DropOnLeadMost: her stick goes on the first frame at or after her moment, and a
+					// frame late must still be inside it)
+					C.DropDue = First + DropOnLeadLeast + (DropOnLeadMost - DropOnLeadLeast - DropOnLeadLateS) * Share;
 					// (on his heading, as the box flies its run on its lead: none of them drifting off it while she waits)
 					C.bRunHeld = true;
 					C.RunHdg = L.RunHdg;

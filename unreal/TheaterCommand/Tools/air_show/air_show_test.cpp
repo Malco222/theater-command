@@ -766,6 +766,12 @@ int main(int Argc, char** Argv)
 	// bombers flying in sight from their middle, at its first bomb and the most over the next 120 air seconds.
 	std::map<int, double> BoxFirstBomb, BoxSpreadAt, BoxSpreadMost;
 	double BoxNextT = 0.0;
+	// (seen from outside the core: each level box's bombers' first bombs, by her key, and her box; and each bay bomber's
+	// doors, the air time they were shut again after her last bomb, and those still open BayShutS after it as she flew)
+	std::map<int, int> StickBox;
+	std::map<int, double> BayShutAt;
+	std::set<int> BayShutLate;
+	double BayShutMost = 0.0;
 	std::map<int, bool> GunOn;
 	// The ships' anti-aircraft guns (Brian, 21 November 18:06Z: "for the ships being attacked by planes, they can fire
 	// machine gun fire and flak guns at them just like real life"): every stream from a muzzle on its own ship, she
@@ -980,8 +986,11 @@ int main(int Argc, char** Argv)
 				{
 					if (P.Key != Th.Key || P.bFighter) continue;
 					const auto Box = Show.Groups().find(P.Group);
-					if (Box != Show.Groups().end() && Box->second.Strike != "dive" && Box->second.Strike != "torpedo" && !BoxFirstBomb.count(P.Group))
-						BoxFirstBomb[P.Group] = Show.AirNow();
+					if (Box != Show.Groups().end() && Box->second.Strike != "dive" && Box->second.Strike != "torpedo")
+					{
+						if (!BoxFirstBomb.count(P.Group)) BoxFirstBomb[P.Group] = Show.AirNow();
+						StickBox[P.Key] = P.Group;
+					}
 				}
 				// (her first bomb, in her own frame: inside her bay's racked load, where her model has one)
 				for (const AirShow::PlaneOut& P : PlanesNow)
@@ -1012,6 +1021,15 @@ int main(int Argc, char** Argv)
 			BayBomberBankMost = std::max(BayBomberBankMost, std::fabs(P.Bank));
 			if (P.bBombsGone && !BombsGoneAt.count(P.Key)) BombsGoneAt[P.Key] = Show.AirNow();
 			const auto Gone = BombsGoneAt.find(P.Key);
+			if (Gone != BombsGoneAt.end() && !BayShutAt.count(P.Key))
+			{
+				if (P.Bay <= 0.0)
+				{
+					BayShutAt[P.Key] = Show.AirNow();
+					BayShutMost = std::max(BayShutMost, Show.AirNow() - Gone->second);
+				}
+				else if (Show.AirNow() > Gone->second + Show.BayShutS + 0.1) BayShutLate.insert(P.Key);
+			}
 			const auto Open = BayOpenAt.find(P.Key);
 			if (Open != BayOpenAt.end() && (Gone == BombsGoneAt.end() || Show.AirNow() < Gone->second + 1.0))
 				StickBankMost = std::max(StickBankMost, std::fabs(P.Bank));
@@ -1021,7 +1039,9 @@ int main(int Argc, char** Argv)
 			BoxNextT = Show.AirNow() + 0.5;
 			for (const auto& [Box, First] : BoxFirstBomb)
 			{
-				if (Show.AirNow() - First > 120.0) continue;
+				// (from its first bomb through its turn for home, until it has rallied: at most 300 air s)
+				const auto Over = Show.Checked().RallyOver.find(Box);
+				if (Show.AirNow() - First > 300.0 || (Over != Show.Checked().RallyOver.end() && Show.AirNow() > Over->second)) continue;
 				std::vector<double> Xs, Ys, Far;
 				for (const AirShow::PlaneOut& P : PlanesNow)
 					if (P.Group == Box && !P.bFighter && !P.bFalling && P.bShown && !P.bOnGround) { Xs.push_back(P.At.X); Ys.push_back(P.At.Y); }
@@ -1646,6 +1666,34 @@ int main(int Argc, char** Argv)
 		  std::to_string(C.DropsOnLead) + " sticks on their lead's, " + (C.DropsOnLead ? Num(C.OnLeadLeast, 2) + " to " + Num(C.OnLeadMost, 2) + " air s after his first bomb" : std::string("none")) +
 		  "; " + std::to_string(C.DropsBeforeLead) + " before his",
 		  "none before his; each 0.6 to 1.8 air s after his first bomb" },
+		// (the same, seen from outside the core: in each level box one first bomb leaves before all the others, and each
+		// other's 0.6 to 1.8 air s after it, to a frame)
+		[&]() {
+			std::map<int, std::vector<double>> Firsts;
+			for (const auto& [Key, Box] : StickBox) Firsts[Box].push_back(StickAt[Key]);
+			int Boxes = 0, Off = 0, Tied = 0;
+			double Least = 1e9, Most = 0.0;
+			for (auto& [Box, Ts] : Firsts)
+			{
+				if (Ts.size() < 2) continue;
+				++Boxes;
+				std::sort(Ts.begin(), Ts.end());
+				Tied += Ts[1] - Ts[0] < 0.02 ? 1 : 0;
+				for (size_t K = 1; K < Ts.size(); ++K)
+				{
+					const double After = Ts[K] - Ts[0];
+					Least = std::min(Least, After);
+					Most = std::max(Most, After);
+					Off += After < 0.6 - 0.05 || After > 1.8 + 0.05 ? 1 : 0;
+				}
+			}
+			return Limit{ "in each box one first bomb leads, the others 0.6 to 1.8 air s on", Off == 0 && Tied == 0,
+				Boxes ? std::to_string(Boxes) + " boxes; the others " + Num(Least, 2) + " to " + Num(Most, 2) + " air s after their lead's; " + std::to_string(Off) + " outside, " + std::to_string(Tied) + " boxes with two first" : std::string("no level boxes"),
+				"the lead's alone first; each other 0.6 to 1.8 air s after (to a frame, 0.05)" };
+		}(),
+		{ "each bay's doors shut within BayShutS of her last bomb", BayShutLate.empty(),
+		  std::to_string(BayShutAt.size()) + " shut, the last " + Num(BayShutMost, 2) + " air s after her last bomb; " + std::to_string(BayShutLate.size()) + " still open past it",
+		  "shut within BayShutS (2.5 air s) and a frame, none open past it" },
 		[&]() {
 			bool bTight = true;
 			std::string Boxes;
@@ -1655,11 +1703,11 @@ int main(int Argc, char** Argv)
 				bTight = bTight && Most <= At * 1.5 + 30.0;
 				Boxes += (Boxes.empty() ? "" : ", ") + std::string("box ") + std::to_string(Box) + " " + Num(At, 0) + " m at its first bomb, at most " + Num(Most, 0);
 			}
-			const bool bOk = (C.Rallies > 0 || BoxSpreadAt.empty()) && C.RallyAgainst * 20 <= std::max<long>(C.RallySteps, 1) && C.RallyBankSeen <= 25.0 && bTight;
+			const bool bOk = (C.Rallies > 0 || BoxSpreadAt.empty()) && C.RallyAgainst == 0 && C.RallyBankSeen <= 25.0 && bTight && C.RallyMadeFar <= 1500.0;
 			return Limit{ "each box turns for home on its lead, one way round, together", bOk,
 				std::to_string(C.Rallies) + " rallies; " + std::to_string(C.RallyAgainst) + " of " + std::to_string(C.RallySteps) + " steps banked against the lead's way; most bank " + Num(C.RallyBankSeen, 1) +
-				" deg; " + (Boxes.empty() ? std::string("no level boxes") : Boxes),
-				"under 1 step in 20 against his way, at most 25 deg, each box's middle spread at most 1.5 times (+30 m) its spread at its first bomb, for 120 air s" };
+				" deg; " + (Boxes.empty() ? std::string("no level boxes") : Boxes) + "; models made on the lead at most " + Num(C.RallyMadeFar, 0) + " m from him",
+				"every wing his way round, at most 25 deg, each box's middle spread at most 1.5 times (+30 m) its spread at its first bomb until it has rallied, a model made meanwhile within 1.5 km of its lead" };
 		}(),
 		{ "the strategy camera on aircraft", FocusSamples > 0 && FocusThin * 20 <= FocusSamples,
 		  std::to_string(FocusThin) + " of " + std::to_string(FocusSamples) + " seconds' focus with under 3 aircraft within 1.2 km (the middle of the groups, as before: " + std::to_string(FocusOldEmpty) + " with none)",

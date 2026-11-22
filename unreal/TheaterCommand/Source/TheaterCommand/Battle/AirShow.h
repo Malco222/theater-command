@@ -395,6 +395,10 @@ namespace AirShow
 		int Rallies = 0;
 		long RallySteps = 0, RallyAgainst = 0;
 		double RallyBankSeen = 0.0;
+		/** Each box's rally over, its air time, by group; and the farthest from the box's lead (metres) a model was made
+		 * to close up a box flying on him after its bombs (RallyFrame). */
+		std::map<int, double> RallyOver;
+		double RallyMadeFar = 0.0;
 		int Rushes = 0; // falling bombs' rushes given (bomb_release, ending at the landing, within 400 m of the eye)
 		std::map<std::string, int> FallsBy;  // falls begun, by the way down they play
 		int FallsOnTime = 0, FallsOffTime = 0; // falls that struck the sea or ground within a quarter of the battle's dur, or not
@@ -492,8 +496,8 @@ namespace AirShow
 		 * as her first bomb left, so most of the stick fell from a plane on her side; the art director's figures, 14:01Z).
 		 * A level bomber flies wings level (within RunBankMost degrees) from her doors opening, holds her heading from her
 		 * doors full open (the Mac film of release 2: chasing her place in the box, she flicked 2 degrees of bank a moment
-		 * before her first bomb) until StickSteady air seconds after her last bomb, and her doors start to shut as she then rolls into her
-		 * box's rally turn. A bomber of two engines or more (or 20 m of span) banks no more than RallyBankMost degrees in
+		 * before her first bomb) until StickSteady air seconds after her last bomb, and then rolls into her box's rally turn;
+		 * her doors start to shut as her last bomb leaves and are shut BayShutS later. A bomber of two engines or more (or 20 m of span) banks no more than RallyBankMost degrees in
 		 * her place in a box, rolling no faster than HeavyRollMost degrees a second, and no more than HeavyBankMost out of
 		 * it (straggling, covering, going home); falling, she goes as she falls.
 		 */
@@ -504,10 +508,11 @@ namespace AirShow
 		 * DropOnLeadMost air seconds after his first (each craft its own, from its key, the same every run). Her doors
 		 * shut after her stick; then the box turns for home on its lead: he picks the way round once and banks
 		 * RallyLeadBank degrees, the rest fly their places on him (the box's frame turning with his heading, not jumping
-		 * to the battle's reversed one), and they keep on him until he has his heading for home and is within
-		 * RallyCloseM metres of his own place.
+		 * to the battle's reversed one), every wing down his way round, none rolling against him, and they keep on him
+		 * until he has his heading for home and is within RallyCloseM metres of his own place. A model made to close up
+		 * the box meanwhile joins it in his frame too.
 		 */
-		double DropOnLeadLeast = 0.6, DropOnLeadMost = 1.8, RallyLeadBank = 12.0, RallyCloseM = 300.0;
+		double DropOnLeadLeast = 0.6, DropOnLeadMost = 1.8, DropOnLeadLateS = 0.07, RallyLeadBank = 12.0, RallyCloseM = 300.0;
 		/**
 		 * A bomber's bay as her model has it, by the battle's model name (the scene sets it from the shape it draws, the
 		 * cloud test from the same model file): the load racked there from Fore to Aft (metres ahead of the point she is
@@ -777,6 +782,7 @@ namespace AirShow
 			double LeadBombAt = -1.0;
 			double RallyAt = -1.0, RallyWay = 0.0;
 			bool bRallied = false;
+			bool bTurnDone = false;   // (its lead rolled out on his heading for home: the turn is over, he closes on his place)
 		};
 
 		struct Held
