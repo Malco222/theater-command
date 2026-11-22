@@ -172,6 +172,14 @@ void AAirBattle::MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent
 			*Made.Model, *Made.Shape, UTF8_TO_TCHAR(Ace.AceName.c_str()));
 		return;
 	}
+	if (Side->Habit == TEXT("bars"))
+	{
+		// (Germany's habit, the Me 262's tally.rudder: a white bar a kill on the rudder, turning with it. The sheet has no
+		// bar yet and the marks ride the fuselage, so she is left bare rather than given roundels her pilots never painted.)
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s (%s) carries her victories as bars on the rudder, not yet painted, so %s flies unpainted."),
+			*Made.Model, *Made.Shape, UTF8_TO_TCHAR(Ace.AceName.c_str()));
+		return;
+	}
 	if (!TallyReady())
 	{
 		return;

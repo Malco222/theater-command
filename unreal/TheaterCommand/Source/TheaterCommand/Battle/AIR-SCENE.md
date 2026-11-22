@@ -1076,8 +1076,10 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    its right toward the tail. Seen on its own mesh, fading into the paint as a mark falls under 7 pixels across and gone
    under 4 (the art director, 18:31Z: "rather than shimmer or turn into a grey block"; some 35 to 60 m off on the Mac's
    screen); soot and holes land on them as on his skin. A model with
-   no kill slots flies unpainted (the log says so): today the Mustang, Dauntless, Kate and Val have them; the modeller's
-   battle-standard fighters bring them to the rest. His name under the cockpit follows with the modeller's name panel.
+   no kill slots flies unpainted (the log says so): today the Mustang, Hellcat, Wildcat, C.202, Devastator, Dauntless,
+   Kate and Val have them; the modeller's battle-standard fighters bring them to the rest. A model whose habit is bars
+   (the Me 262: Germany's white bar a kill on the rudder, turning with it) also flies bare for now, rather than wearing
+   roundels her pilots never painted, until the sheet has a bar and the marks can ride the rudder. His name under the cockpit follows with the modeller's name panel.
    `-TheaterAces=0` paints none; `-TheaterAceTest=att:6:GER=6` gives the raid's first fighter group a test ace (def for
    the defence; more nations after a comma, `GER=14,ITA=6,UK=3`), for frames where the recording has none. Look for: the
    marks square to his side, not mirrored (the Italian tricolour green toward the nose), not floating off the skin or

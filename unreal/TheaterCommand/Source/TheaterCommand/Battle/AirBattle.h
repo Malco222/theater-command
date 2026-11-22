@@ -47,6 +47,7 @@ struct FAirTallySide
 	TArray<FVector4> Hand;
 	double Radius = 0.0;
 	bool bLight = false;
+	FString Habit;  // the model's tally.habit: victims, bombs, own, or bars (a bar a kill on the rudder)
 };
 
 /**

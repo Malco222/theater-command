@@ -3639,6 +3639,7 @@ namespace AirParts
 			return;
 		}
 		FAirTallySide& Side = Shape.Kills;
+		Tally->TryGetStringField(TEXT("habit"), Side.Habit);
 		Side.Radius = (*KillsAt)->HasField(TEXT("radius")) ? (*KillsAt)->GetNumberField(TEXT("radius")) * U * Fit : 0.045 * U * Fit;
 		for (const TSharedPtr<FJsonValue>& Slot : *Slots)
 		{
