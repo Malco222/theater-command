@@ -11,6 +11,7 @@ class ACampaignEnvironment;
 class ACampaignMapActor;
 class FJsonObject;
 class FLandCrowd; // TK1
+class FLandVat; // SO1
 class FLandLive;
 class SLandBattleScreen;
 class SWidget;
@@ -244,6 +245,19 @@ private:
 	/** How many banked men's meshes were made this battle, and their cost (ms), for the log. */
 	int32 BankMade = 0;
 	double BankMadeMs = 0.0;
+
+	// ---- The mid and far men as one crowd of posed instances (SO1's draw: Battle/LandVat) ----
+	/** None without M_LandCrowd or with -TheaterLandNoVat: then far men are drawn a mesh a set and pose (above) and mid
+	 * men skinned, as before. What it makes is held in VatKept. */
+	TSharedPtr<FLandVat> Vat;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> VatKept;
+	/** In the wide mass shot a far man is drawn no smaller than MassMinPx of the picture's lines (GS3's measure): grown
+	 * about his feet ("-TheaterLandMassMinPx=", 2; 0 none). For the 10 s log: men placed as instances (mid, far), men
+	 * grown and the most grown, and the card's own frame time (ms, summed). */
+	double MassMinPx = 2.0;
+	int32 VatMid = 0, VatFar = 0, MassGrown = 0;
+	double MostGrow = 1.0, GpuMs = 0.0;
 
 	// ---- The tanks, guns and lorries (LandKit) ----
 	struct FBodyDrawn

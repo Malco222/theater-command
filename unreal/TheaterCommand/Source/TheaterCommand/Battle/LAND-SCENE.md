@@ -69,6 +69,9 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      this; 0 black), `-TheaterLandFootShade=` (1: the footprint shade under tanks, guns and men, M_LandShade; 0 none),
      `-TheaterLandTopLight=` (0.08) and `-TheaterLandMapLight`.
    - `-TheaterLandNoPoseBank`: every man skinned, as before the pose bank (SO1).
+   - `-TheaterLandNoVat` (the men's crowd off: far men a mesh a pose, mid men skinned, as before SO1's draw),
+     `-TheaterLandNoVatMid` (the crowd for far men only; mid men skinned), `-TheaterLandMassMinPx=` (2: in the wide
+     mass shot a far man is drawn no smaller than this many of the picture's lines; 0 none).
 
 Keys on the battle screen: Space holds the clock or lets it run, 1 to 4 the speeds (half, life, twice, four times), C
 cuts to a new shot, H holds this shot, Enter CONTINUE on the after card. A drag looks a little aside; let go and the
@@ -92,6 +95,21 @@ camera comes back to its shot.
   yet is skinned as before for those frames. A mesh holding no one is hidden. The log gives the bank's sets and bake
   time, and the meshes' cost at 50, 200 and 500 made. The instances turn his own axes to Unreal's with a plain turn:
   his frame mirrors (left-handed to the field's right-handed), and the field-to-Unreal swap mirrors back.
+- **Mid and far men as one crowd (SO1's draw, `LandVat`, release 2).** With `M_LandCrowd` (built by
+  `Tools/build_content.sh`) the men past the near level (some 8.6 m as seen, GS3) are not skinned at all. Each body set
+  (men alike out to 25 m but for helmet and face: Normandy has 7, Prokhorovka 2) is one mesh at rest and one instanced
+  component at each of the mid and far levels; every pose of the bank is in one picture made at load (a column a
+  point, two rows a pose: each point's way from its rest and its facing, half floats; 37.6 MB on the card for
+  Normandy, 9.7 for Prokhorovka). Each man is one instance: his place and nine numbers, the two poses his clip is
+  between and the share of the second (so he goes smoothly between them, not pose to pose), the same a frame before
+  (for the anti-aliasing), and his face's tone. The card moves every point. His helmet is an instance of its own, one
+  component for each set, finish and level, riding his head. Mid men cast their shadow, far men none, as before. In
+  the wide mass shot a far man is grown about his feet to stand at least 2 of the picture's lines, so the whole army
+  reads as men. The packing is checked in the cloud by `Tools/land_show/land_vat_pack_test.cpp` (every set, level,
+  pose and point: the material's lookup lands on its own texel; the halfs' rounding at worst 1.7 mm, 0.14 of a line at
+  the nearest mid man; facings within 0.02 degrees; every pose inside the grown bounds). Without `M_LandCrowd`, or
+  with `-TheaterLandNoVat`, the far men are drawn as above and mid men skinned. Not yet: an instance's move is sent
+  as a jump (no motion vector for his walk, only for his limbs), and a given-back place is shrunk, not parked (GS7).
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
 - **Fuel going up (release 2).** As a tank brews up (her ammunition's blast), and as a lorry is knocked out (its fire
@@ -143,8 +161,10 @@ camera comes back to its shot.
   The wrecks' soot steps are spread over frames (40,000 points a frame). `-TheaterLandNoCrowd`,
   `-TheaterLandLinksAlways` turn them off.
 - **The speed log.** Every 10 s, after the cores' line, a second line: what a frame's drawing cost (the men's meshes,
-  the tanks', the effects kit's tick, the sound), the men in the picture a frame and the most in one frame, and the
-  meshes made again or held at the old level a frame.
+  the tanks', the effects kit's tick, the sound), the card's own frame time (for A/Bs of the field's and the men's
+  draw), the men in the picture a frame and the most in one frame, the meshes made again or held at the old level a
+  frame, and the men's crowd (SO1): men drawn as its instances a frame, mid and far, and in the mass shot how many far
+  men were grown to the least size and the most, times his size.
 - **Smoke at the lens.** The effects kit lays each puff flat to the lens. The land camera stands among the bursts, so a
   shell's smoke whose middle was level with the camera a few metres to one side was laid across the whole picture as
   one dark disc. The land scene now calls `SetLensFade(1, 5, 0.3)` on the effects: smoke and dust thin out as their near

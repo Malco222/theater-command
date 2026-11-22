@@ -8,6 +8,7 @@
 #include "Battle/LandCarpet.h"
 #include "Battle/LandCrowd.h" // TK1
 #include "Battle/LandShade.h"
+#include "Battle/LandVat.h" // SO1
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -51,6 +52,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
+#include "RHI.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Sound/SoundAttenuation.h"
@@ -2237,9 +2239,46 @@ void ALandBattle::MakeMen()
 		const double Lines = 1.8 * 665.0 / (2.0 * FMath::Tan(FMath::DegreesToRadians(25.0)));
 		Crowd->SetLevels(Lines / FMath::Max(1.0f, NearPx), ShadowTo);
 		S.MenCullFrom = CullPx > 0.0f ? Lines / CullPx : 1e12;
+		S.MenLines = Lines;
 		S.MenRebuildsMax = FMath::Clamp(Rebuilds, 1, 100000);
 		UE_LOG(LogTheater, Display, TEXT("Land battle: the men drawn Near within %.1f m, Mid to %.0f m (their shadows end there), Far beyond, none past %.0f m but in the mass shot; at most %d meshes made again a frame"),
 			Lines / FMath::Max(1.0f, NearPx), FMath::Max(Lines / FMath::Max(1.0f, NearPx), static_cast<double>(ShadowTo)), S.MenCullFrom, S.MenRebuildsMax);
+	}
+	// SO1's draw (Battle/LandVat): the mid and far men as one crowd of posed instances on M_LandCrowd (build_content.py),
+	// a component for each body set and level, every pose in one picture; mid men banked too (SetPoseBankMid), so
+	// nobody past the near level is skinned. Without M_LandCrowd, or with "-TheaterLandNoVat", far men are drawn a
+	// mesh a set and pose and mid men skinned, as before; "-TheaterLandNoVatMid" keeps mid men skinned. In the wide
+	// mass shot a far man is drawn no smaller than "-TheaterLandMassMinPx=" (2) of the picture's lines.
+	{
+		float MinPx = 2.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandMassMinPx="), MinPx);
+		MassMinPx = FMath::Clamp(static_cast<double>(MinPx), 0.0, 50.0);
+	}
+	if (Crowd->PoseBankOn() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVat")))
+	{
+		UMaterialInterface* CrowdInk = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandCrowd.M_LandCrowd"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!CrowdInk || !ManInk)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandCrowd is missing (run Tools/build_content.sh): far men are drawn a mesh a pose, mid men skinned."));
+		}
+		else
+		{
+			const bool bMid = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVatMid"));
+			Crowd->SetPoseBankMid(bMid);
+			Vat = MakeShared<FLandVat>(this, Root.Get(), CrowdInk, ManInk.Get(), UnitsPerMetre, VatKept);
+			if (!Vat->Make(*Crowd))
+			{
+				Crowd->SetPoseBankMid(false);
+				Vat.Reset();
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: the men's crowd (SO1) could not be made: far men are drawn a mesh a pose, mid men skinned."));
+			}
+			else if (bMid && !Vat->HasAll(static_cast<int32>(LandMen::Mid)))
+			{
+				// (a set missing at mid would show the far mesh there: every mid man skinned instead)
+				Crowd->SetPoseBankMid(false);
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: a body set could not be made at the mid level: mid men are skinned as before."));
+			}
+		}
 	}
 	S.Men = std::move(Crowd);
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
@@ -2319,17 +2358,80 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 					D.Mesh->SetVisibility(false);
 				}
 				BankOut(D);
+				if (Vat.IsValid())
+				{
+					Vat->Out(Man);
+				}
 			}
 			continue;
 		}
-		// Banked far (SO1): an instance of his set's mesh in the bank's pose, put where his frame is (again only when it
-		// moved or the pose changed); nothing skinned, no mesh of his own sent.
 		const int32 Pose = Crowd.BankPose(Man);
+		// Banked mid or far (SO1's draw, Battle/LandVat): an instance of his body set at his level, between the bank's
+		// two poses his clip is between, placed by his frame; his helmet another, by its own. Nothing skinned, nothing of
+		// his own sent but his place and his numbers. In the wide mass shot a far man is grown about his feet to stand
+		// at least MassMinPx of the picture's lines (GS3's measure), so the army reads as men, not as nothing.
+		if (Pose >= 0 && Vat.IsValid())
+		{
+			const int32 Level = Crowd.BankLevel(Man);
+			FTransform Body = LandParts::BankedAt(Crowd.WorldFrame(Man), UnitsPerMetre);
+			double Grow = 1.0;
+			if (bMass && Level == static_cast<int32>(LandMen::Far) && MassMinPx > 0.0)
+			{
+				Grow = FMath::Max(1.0, MassMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines));
+			}
+			FTransform Helmet;
+			LandMen::Xform Worn;
+			const bool bHelmet = Crowd.HelmetOf(Man) >= 0 && Crowd.HelmetFrame(Man, Worn);
+			if (bHelmet)
+			{
+				Helmet = LandParts::BankedAt(Worn, UnitsPerMetre);
+			}
+			if (Grow > 1.0)
+			{
+				const FVector Feet = Body.GetLocation();
+				Body.SetScale3D(Body.GetScale3D() * Grow);
+				if (bHelmet)
+				{
+					Helmet.SetLocation(Feet + (Helmet.GetLocation() - Feet) * Grow);
+					Helmet.SetScale3D(Helmet.GetScale3D() * Grow);
+				}
+			}
+			if (Vat->Place(Crowd, Man, Body, bHelmet ? &Helmet : nullptr))
+			{
+				BankOut(D);
+				if (D.Mesh.IsValid())
+				{
+					D.Mesh->SetVisibility(false);
+				}
+				// (skinned afresh when he leaves the bank)
+				D.Stamp = 0xFFFFFFFFu;
+				if (Level == static_cast<int32>(LandMen::Mid))
+				{
+					++VatMid;
+				}
+				else
+				{
+					++VatFar;
+				}
+				if (Grow > 1.0)
+				{
+					++MassGrown;
+					MostGrow = FMath::Max(MostGrow, Grow);
+				}
+				continue;
+			}
+		}
+		// Banked far, the crowd not made (SO1 before its draw): an instance of his set's mesh in the bank's pose, put
+		// where his frame is (again only when it moved or the pose changed); nothing skinned, no mesh of his own sent.
 		if (Pose >= 0)
 		{
 			const int32 Copy = BankCopyFor(Crowd.BankKey(Man), Pose, Builds);
 			if (Copy >= 0)
 			{
+				if (Vat.IsValid())
+				{
+					Vat->Out(Man);
+				}
 				const LandMen::Xform& W = Crowd.WorldFrame(Man);
 				float Frame[12];
 				FMemory::Memcpy(Frame, W.R, sizeof(W.R));
@@ -2393,6 +2495,10 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			}
 		}
 		BankOut(D);
+		if (Vat.IsValid())
+		{
+			Vat->Out(Man);
+		}
 		// (banked but his set's mesh not made yet: his stamp holds while only his place moves, so he is skinned each frame)
 		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Crowd.Stamp(Man) && Pose < 0)
 		{
@@ -2415,6 +2521,10 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			BankCopies[K]->MarkRenderInstancesDirty();
 		}
 		BankDirty[K] = 0;
+	}
+	if (Vat.IsValid())
+	{
+		Vat->Send();
 	}
 	if (Jobs.Num() == 0)
 	{
@@ -4384,6 +4494,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The log, every 10 s: the frames, the slowest, and what each part cost.
 	const double FrameMs = (LandParts::Seconds() - FrameBegan) * 1000.0;
 	SlowestFrame = FMath::Max(SlowestFrame, FrameMs);
+	// (the card's own time for its last whole frame: what an A/B of the field's or the men's draw moves)
+	GpuMs += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
 	++LogFrames;
 	if (RealT - LogAt >= 10.0)
 	{
@@ -4392,14 +4504,20 @@ void ALandBattle::Tick(float DeltaSeconds)
 			S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), LogFrames / Span, SlowestFrame, CoresMs / LogFrames, MenMs / LogFrames, ArmourMs / LogFrames, FieldMs / LogFrames,
 			S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped, S.Mix.Cracks, S.Mix.Falls);
 		// (the drawing's own parts, the battle-scale plan's speed log: what the Mac's frame goes on)
-		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f"),
-			DrawMenMs / LogFrames, DrawArmourMs / LogFrames, EffectsMs / LogFrames, SoundMs / LogFrames, static_cast<double>(MenInPicture) / LogFrames, MostInPicture,
-			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames);
+		// (and the card's frame, ms: the art director's A/B of -TheaterLandTreeFarFrom=80 against the default reads here;
+		// SO1: men drawn as the crowd's instances, mid and far, a frame, and in the wide mass shot how many far men were
+		// grown to MassMinPx of the picture's lines and the most, x times his size)
+		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f"),
+			DrawMenMs / LogFrames, DrawArmourMs / LogFrames, EffectsMs / LogFrames, SoundMs / LogFrames, GpuMs / LogFrames, static_cast<double>(MenInPicture) / LogFrames, MostInPicture,
+			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
+			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow);
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
-		DrawMenMs = DrawArmourMs = EffectsMs = SoundMs = 0.0;
+		DrawMenMs = DrawArmourMs = EffectsMs = SoundMs = GpuMs = 0.0;
 		MenInPicture = MenRebuilt = RebuildsPut = MostInPicture = 0;
+		VatMid = VatFar = MassGrown = 0;
+		MostGrow = 1.0;
 	}
 }
 

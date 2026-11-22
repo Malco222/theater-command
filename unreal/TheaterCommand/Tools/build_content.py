@@ -76,19 +76,27 @@ def world_uv(material, tiling_name, tiling_default, x, y):
     return scaled
 
 
-def build_map_surface(name="M_MapSurface", soot=False):
+def build_map_surface(name="M_MapSurface", soot=False, crowd=False):
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
     The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
     (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
     paint taken toward "BurntColour" by its soot weight, the mesh's first texture coordinate's U, times how far her
-    burning has gone, the instance's custom number 0, in the sRGB the mesh keeps, as the near meshes' colours are in C++.)"""
+    burning has gone, the instance's custom number 0, in the sRGB the mesh keeps, as the near meshes' colours are in C++.)
+    (SO1: with crowd, M_LandCrowd, the ground battle's mid and far men as instances in the pose bank's poses: see
+    crowd_poses.)"""
     m = new_material(name)
     # (the ground battle draws its hedges, trees and grass with this surface by instancing)
     m.set_editor_property("used_with_instanced_static_meshes", True)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
     # The mesh stores its colours the way a picture file does (sRGB); the renderer wants them linear.
     to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
-    if soot:
+    posed_facing = None
+    if crowd:
+        # SO1
+        m.set_editor_property("tangent_space_normal", False)  # his posed facing is given in the world
+        toned, posed_facing = crowd_poses(m, colour)
+        connect(toned, "", to_linear, "Base")
+    elif soot:
         # TK1
         weight = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 150), -1300, 150,
                            r=True, g=False, b=False, a=False)
@@ -189,7 +197,7 @@ def build_map_surface(name="M_MapSurface", soot=False):
                                              scalar(m, "ChipSharp", 9.0, -50, -1850), 150, -1750), 300, -1750), metal, 450, -1750), wear, 600, -1750)
     # (and what faces the sky is paler than what faces the side: the light from above, and the dust that settles)
     skyward = node(m, unreal.MaterialExpressionComponentMask, -900, -2100, r=False, g=False, b=True, a=False)
-    connect(node(m, unreal.MaterialExpressionVertexNormalWS, -1100, -2100), "", skyward, "")
+    connect(posed_facing if crowd else node(m, unreal.MaterialExpressionVertexNormalWS, -1100, -2100), "", skyward, "")
     lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, -750, -2100), scalar(m, "TopLight", 0.26, -750, -2000), -600, -2050),
                                  times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)
     weathered = times(m, times(m, tinted, lerp(m, 1.0, plus(m, times(m, (blot, "R"), 0.42, -350, -1500), 0.8, -200, -1500),
@@ -206,7 +214,7 @@ def build_map_surface(name="M_MapSurface", soot=False):
     # says so, which only the pieces' material does: the land, the towns and the woods are as they were. No light
     # is added to the scene and nothing throws a new shadow.)
     figure_sun = vector(m, "FigureSun", (0.0, 0.0, 1.0, 0.0), 900, -2600)
-    facing = node(m, unreal.MaterialExpressionVertexNormalWS, 900, -2400)
+    facing = posed_facing if crowd else node(m, unreal.MaterialExpressionVertexNormalWS, 900, -2400)
     to_sun = node(m, unreal.MaterialExpressionDotProduct, 1100, -2500)
     connect(facing, "", to_sun, "A")
     connect(figure_sun, "", to_sun, "B")
@@ -235,7 +243,8 @@ def build_map_surface(name="M_MapSurface", soot=False):
     connect(flat, "", tooth, "A")
     connect(bump, "RGB", tooth, "B")
     connect(scalar(m, "Tooth", 0.35, -850, 1250), "", tooth, "Alpha")
-    to_property(tooth, "", unreal.MaterialProperty.MP_NORMAL)
+    # (a posed man: his facing as posed, in the world; the men's ink has no tooth)
+    to_property(posed_facing if crowd else tooth, "", unreal.MaterialProperty.MP_NORMAL)
 
     # (bare metal is smoother than paint: the lamp glints on the chips)
     to_property(lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
@@ -501,6 +510,118 @@ def picture(material, name, uv, x, y, numbers=False):
     if uv is not None:
         connect(uv, "", n, "UVs")
     return n
+
+
+def over(material, a, b, x=0, y=0):
+    n = node(material, unreal.MaterialExpressionDivide, x, y)
+    _feed(material, n, "A", a)
+    _feed(material, n, "B", b)
+    return n
+
+
+def crowd_poses(m, colour):
+    """THE MEN AS ONE CROWD (the true-scale plan's SO1, the vertex-animation form; the soldiers thread's bake, LandMen's
+    BankBody). Each body set of men alike out there is one mesh at rest, drawn by instancing; every pose of the bank is
+    in one picture handed in by C++ ("Poses", plain numbers kept as half floats, read texel by texel): a row a pose, a
+    column a point of the mesh, each point's way from its rest (Unreal's units, his own axes) in the first "PoseCount"
+    rows and its facing in the next as many. The mesh's second texture coordinate's U is the point's number (a whole
+    number, which a half float holds exactly up to 2048: C++ keeps a set under that), "Columns" the picture's width,
+    "Rows" its height (two rows a pose), "PoseCount" how many.
+
+    The instance's own numbers say what he shows (LandMen's BankShow): 0 and 1 the two poses and 2 the share of the
+    second (so he goes smoothly between them), 3 to 5 the same a frame before (BankShowBefore, for the anti-aliasing's
+    sense of movement), and 6 to 8 his face's tone, which multiplies his skin's colour (the mesh's first texture
+    coordinate's U is 1 on skin) in the sRGB the mesh keeps, as LandMen's MakeLook does for a skinned man.
+
+    All of it is read where the points are placed (the vertex shader), at the picture's first level; the facing and the
+    toned colour are carried to the pixels. Returns the toned colour (sRGB, to be made linear as any other) and his
+    facing in the world, unit length, in place of the mesh's."""
+    stand = stand_in(True)
+    columns = scalar(m, "Columns", 1.0, -4200, 1600)
+    rows = scalar(m, "Rows", 2.0, -4200, 1700)
+    poses = scalar(m, "PoseCount", 1.0, -4200, 1800)
+    point = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -4400, 1500, coordinate_index=1), -4200, 1500,
+                      r=True, g=False, b=False, a=False)
+    u = over(m, plus(m, point, 0.5, -4000, 1500), columns, -3850, 1550)
+    numbers = {}
+
+    def own(index, default=0.0):
+        if index not in numbers:
+            n = node(m, unreal.MaterialExpressionPerInstanceCustomData, -4200, 2000 + 100 * index, data_index=index)
+            if default != 0.0:
+                try:
+                    n.set_editor_property("const_default_value", default)
+                except Exception:  # (an engine that names it otherwise: his tone is always handed in)
+                    pass
+            numbers[index] = n
+        return numbers[index]
+
+    def read(row, x, y):
+        """The picture's numbers at this point in row 'row' (a node)."""
+        v = over(m, plus(m, row, 0.5, x - 300, y), rows, x - 150, y)
+        n = node(m, unreal.MaterialExpressionTextureSampleParameter2D, x, y, parameter_name="Poses", texture=stand, sampler_type=sampler_for(stand),
+                 mip_value_mode=unreal.TextureMipValueMode.TMVM_MIP_LEVEL, const_mip_value=0)
+        connect(pair(m, u, v, x - 100, y + 60), "", n, "UVs")
+        return (n, "RGB")
+
+    def to_world(v, x, y):
+        n = node(m, unreal.MaterialExpressionTransform, x, y,
+                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+        connect(*(v if isinstance(v, tuple) else (v, "")), n, "")
+        return n
+
+    def moved(first, y):
+        """His points' way from rest, in the world, by the own numbers first (pose A), first + 1 (pose B), first + 2 (B's share)."""
+        a = read(own(first), -3500, y)
+        b = read(own(first + 1), -3500, y + 150)
+        return to_world(lerp(m, a, b, own(first + 2), -3200, y + 75), -3000, y + 75)
+
+    now = moved(0, 2000)
+    before = moved(3, 2400)
+    # (the frame before, where the anti-aliasing asks: an engine without the switch, or naming its pins otherwise,
+    # takes this frame's for both, said in the log)
+    offset = now
+    try:
+        switch = node(m, unreal.MaterialExpressionPreviousFrameSwitch, -2700, 2200)
+        for current_pin, previous_pin in (("Current Frame", "Previous Frame"), ("CurrentFrame", "PreviousFrame")):
+            if mel.connect_material_expressions(now, "", switch, current_pin) and mel.connect_material_expressions(before, "", switch, previous_pin):
+                offset = switch
+                break
+        if offset is not switch:
+            unreal.log_warning("Theater Command: M_LandCrowd: the frame-before switch's pins were not found; the men's poses give the anti-aliasing this frame's only")
+    except Exception as e:
+        unreal.log_warning(f"Theater Command: M_LandCrowd: no frame-before switch ({e}); the men's poses give the anti-aliasing this frame's only")
+    to_property(offset, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    # His facing as posed (the rows after the positions), turned into the world, carried to the pixels and made unit long.
+    fa = read(plus(m, own(0), poses, -3800, 2800), -3500, 2800)
+    fb = read(plus(m, own(1), poses, -3800, 2950), -3500, 2950)
+    facing = to_world(lerp(m, fa, fb, own(2), -3200, 2875), -3000, 2875)
+    facing = one_in(m, unreal.MaterialExpressionNormalize, one_in(m, unreal.MaterialExpressionVertexInterpolator, facing, -2800, 2875), -2600, 2875)
+
+    # His face's tone on his skin, worked where the points are and carried to the pixels.
+    skin = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -4400, 3200, coordinate_index=0), -4200, 3200,
+                     r=True, g=False, b=False, a=False)
+    tone = pair(m, pair(m, own(6, 1.0), own(7, 1.0), -4000, 3300), own(8, 1.0), -3850, 3300)
+    toned = one_in(m, unreal.MaterialExpressionVertexInterpolator, lerp(m, colour, times(m, colour, tone, -3600, 3300), skin, -3400, 3250), -3200, 3250)
+    return toned, facing
+
+
+def build_land_crowd_or_tell():
+    """SO1: M_LandCrowd (M_MapSurface's paint on the pose bank's men drawn as instances: crowd_poses) is the ground
+    battle's alone, and the battle falls back to a mesh a set and pose without it (LandBattle's BankCopyFor; mid men
+    then skinned as before): whatever goes wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_map_surface("M_LandCrowd", crowd=True)
+    except Exception:
+        unreal.log_error("Theater Command: M_LandCrowd was not built (far men are drawn a mesh a pose, mid men skinned):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandCrowd"):
+                eal.delete_asset(f"{MATERIALS}/M_LandCrowd")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandCrowd could not be removed:\n" + traceback.format_exc())
 
 
 def sky_over(m, c, place, x, y, full=True):
@@ -1924,8 +2045,9 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.
 # M_LandShade, the footprint shade under tanks, guns and men, the same; M_LandStalks, the corn's stalks near the lens,
 # the same. M_LandSteel, the far vehicles' instanced pieces with their soot (TK1), the same: TC_REBUILD=M_LandSteel
-# after a change to M_MapSurface.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# after a change to M_MapSurface. M_LandCrowd, the mid and far men as posed instances (SO1), the same:
+# TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
