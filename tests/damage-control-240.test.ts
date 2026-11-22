@@ -6,8 +6,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Rng, hashString } from '../src/core/rng';
 import { CARRIERS, assessAir, fly, forecastAir, shipHits, type AirAssess } from '../src/campaign/air';
-import { planRaid, shippingWords } from '../src/campaign/airwar';
+import { planRaid, shippingWords, shipsLose } from '../src/campaign/airwar';
 import page from '../src/campaign/ui/main.ts?raw';
+import bridge from '../unreal/TheaterCommand/Rules/campaign-bridge.ts?raw';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { bombard, planBombard } from '../src/campaign/fleets';
 import { createGame, relocate, setWar } from '../src/campaign/game';
@@ -620,7 +621,7 @@ describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the
     expect(card(loadGame(snap)!)).toBe(`Warships caught at sea there could lose up to ${Math.round(r1.cut * 100)}% of their number, and merchant ships in those waters will be sunk.`);
   });
 
-  it("says it in the UI director's words of rider 4 with the switch on, on both cards, and release 1's with it off", () => {
+  it("says it in the UI director's words of rider 4 with the switch on, on every card, and release 1's with it off", () => {
     const { g } = sea();
     const line = (cut: number, waters?: 'those' | 'these'): string => shippingWords(g, cut, waters);
     R.dc.on = false;
@@ -628,7 +629,12 @@ describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the
     expect(line(0.034)).toBe('Warships caught at sea there could lose up to 3% of their number, and merchant ships in those waters will be sunk.');
     expect(line(0.034, 'these')).toBe('Warships caught at sea there could lose up to 3% of their number, and merchant ships in these waters will be sunk.');
     expect(line(0.004)).toBe('Warships caught at sea there could lose up to 0% of their number, and merchant ships in those waters will be sunk.');
+    expect(shipsLose(g, 0.034)).toBe('could lose up to 3%');
     R.dc.on = true;
+    // The 3D game's air order page says the share in its own shorter line, with the same verb (campaign-bridge.ts raidPage).
+    expect(shipsLose(g, 0.034)).toBe('should lose about 3%');
+    expect(shipsLose(g, 0.004)).toBe('should lose almost none');
+    expect(bridge).toContain('Warships caught at sea there ${shipsLose(s, fc.cut)} of their number.');
     expect(line(0.034)).toBe('Warships caught at sea there should lose about 3% of their number, and merchant ships in those waters will be sunk.');
     // "those waters" in both places, as the sentence has already said "there".
     expect(line(0.034, 'these')).toBe(line(0.034));

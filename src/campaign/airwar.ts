@@ -51,9 +51,14 @@ const kindRow = (k: RaidKind) => AIRWAR.raids.kinds.find((x) => x.key === k)!;
  * order's card (logged for release 2).
  */
 export function shippingWords(g: Game, cut: number, waters: 'those' | 'these' = 'those'): string {
+  return `Warships caught at sea there ${shipsLose(g, cut)} of their number, and merchant ships in ${shipRule(g, 'dc') ? 'those' : waters} waters will be sunk.`;
+}
+
+/** The verb and the share of shippingWords, for a card of another shape (the 3D game's air order page): "should lose about
+ * 3%" or "should lose almost none" with the dc switch on, release 1's "could lose up to 3%" with it off. */
+export function shipsLose(g: Game, cut: number): string {
   const n = Math.round(cut * 100);
-  if (!shipRule(g, 'dc')) return `Warships caught at sea there could lose up to ${n}% of their number, and merchant ships in ${waters} waters will be sunk.`;
-  return `Warships caught at sea there should lose ${n > 0 ? `about ${n}%` : 'almost none'} of their number, and merchant ships in those waters will be sunk.`;
+  return shipRule(g, 'dc') ? `should lose ${n > 0 ? `about ${n}%` : 'almost none'}` : `could lose up to ${n}%`;
 }
 /** What a raid goes for, in words. A fleet is named only to someone who has it identified. */
 function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null = null): string {
