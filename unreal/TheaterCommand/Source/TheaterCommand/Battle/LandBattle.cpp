@@ -7,6 +7,7 @@
 #include "Battle/LandBattleState.h"
 #include "Battle/LandCarpet.h"
 #include "Battle/LandCrowd.h" // TK1
+#include "Battle/LandScape.h"
 #include "Battle/LandShade.h"
 #include "Battle/LandVat.h" // SO1
 #include "Camera/CameraActor.h"
@@ -1112,6 +1113,30 @@ bool ALandBattle::Open()
 				}
 			}
 		}
+		else
+		{
+			// Every other ground's look (LandScape: the desert, the Mediterranean, the jungle, the islands, the farmland):
+			// its region's kit (Content/Models/<its folder>, from battle-models/<folder>/models); a model not found is drawn
+			// plainly, and said.
+			std::string Folder;
+			std::vector<std::string> Names;
+			if (LandScape::KitWanted(Lay, Folder, Names))
+			{
+				const FString Kit = FPaths::ProjectContentDir() / TEXT("Models") / LandParts::Wide(Folder);
+				for (const std::string& Name : Names)
+				{
+					FString Text;
+					if (FFileHelper::LoadFileToString(Text, *(Kit / (LandParts::Wide(Name) + TEXT(".json")))))
+					{
+						Lay.Kit[Name] = LandParts::Narrow(Text);
+					}
+					else
+					{
+						UE_LOG(LogTheater, Warning, TEXT("Land battle: the %s kit's %s is not in Content/Models/%s; drawn plainly"), *LandParts::Wide(Folder), *LandParts::Wide(Name), *LandParts::Wide(Folder));
+					}
+				}
+			}
+		}
 		S.Field = std::make_unique<LandField::Ground>(Lay);
 		S.Sight.Lay(S.Field.get());
 	}
@@ -1479,6 +1504,10 @@ bool ALandBattle::Open()
 	{
 		S.Holes.SetEarth("blackearth"); // (the steppe's chernozem, not the bocage's loam)
 	}
+	else if (*FieldPtr->EarthWord())
+	{
+		S.Holes.SetEarth(FieldPtr->EarthWord()); // (a region's own: the desert's sand, Italy's red earth, ...)
+	}
 	// And the tracks' marks, on the same ground and paint (none across a dug hole's bowl).
 	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
 		LandCrater::Ruts::KindOn(*FieldPtr));
@@ -1503,7 +1532,21 @@ bool ALandBattle::Open()
 		// (a narrow shutter: the staccato, crisp look of a war film's battle, not a smear)
 		Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
-		LandParts::Grade(Lens->PostProcessSettings, &Rec.Weather);
+		// (the recording's grade where it gives one; else the look's own where its ground is not the bocage's: LandScape)
+		LandFeed::Sky Graded = Rec.Weather;
+		if (!Graded.bGrade)
+		{
+			const LandScape::Air LookAir = LandScape::AirOf(LandScape::LookOf(FieldPtr->LookWord()), FieldPtr->SnowLying());
+			if (LookAir.bSet)
+			{
+				Graded.bGrade = true;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					Graded.Grade[K] = LookAir.Grade[K];
+				}
+			}
+		}
+		LandParts::Grade(Lens->PostProcessSettings, &Graded);
 		// The grain of the film stock, a little (the art director's to tune: "-TheaterLandGrain=0.3").
 		float Grain = 0.25f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrain="), Grain);
@@ -3889,11 +3932,20 @@ void ALandBattle::HideTheTable()
 	// 0.0069 lifts 1 - 2^-0.69 = 38 per cent at a kilometre. The opening aerial (170 m up) sees about 25 per cent at a
 	// kilometre and 57 at three, a little more than cut 1's 15 and 45.
 	// "-TheaterLandHaze=start metres,density,falloff,most" tries other numbers (the density at the field's ground).
-	double HazeStart = 0.0, HazeDensity = 0.0069, HazeFalloff = 0.1, HazeMost = 0.98;
+	// (a ground not the bocage's has its own air, LandScape's: the desert's pale warm dust, the jungle's thick damp
+	// haze, the winter's cold grey-blue; the bocage's and the steppe's are these numbers as they were)
+	LandScape::Air LookAir;
+	if (State.IsValid() && State->Field)
+	{
+		LookAir = LandScape::AirOf(LandScape::LookOf(State->Field->LookWord()), State->Field->SnowLying());
+	}
+	double HazeStart = 0.0, HazeDensity = LookAir.bSet ? LookAir.HazeDensity : 0.0069, HazeFalloff = 0.1, HazeMost = 0.98;
 	LandLook::Asked(TEXT("TheaterLandHaze="), { &HazeStart, &HazeDensity, &HazeFalloff, &HazeMost });
 	HazeFalloff = FMath::Max(0.0, HazeFalloff);
 	// (a warm grey-blue on a fair day, the summer haze over the bocage, not the sea's blue; greyer under overcast)
-	const FLinearColor HazeInk = FMath::Lerp(FLinearColor(0.62f, 0.66f, 0.70f), FLinearColor(0.50f, 0.52f, 0.54f), static_cast<float>(Day.Overcast));
+	const FLinearColor HazeFair = LookAir.bSet ? FLinearColor(static_cast<float>(LookAir.HazeInk[0]), static_cast<float>(LookAir.HazeInk[1]), static_cast<float>(LookAir.HazeInk[2])) : FLinearColor(0.62f, 0.66f, 0.70f);
+	const FLinearColor HazeDull = LookAir.bSet ? FLinearColor(static_cast<float>(LookAir.HazeOvercast[0]), static_cast<float>(LookAir.HazeOvercast[1]), static_cast<float>(LookAir.HazeOvercast[2])) : FLinearColor(0.50f, 0.52f, 0.54f);
+	const FLinearColor HazeInk = FMath::Lerp(HazeFair, HazeDull, static_cast<float>(Day.Overcast));
 	// (old smoke pales into the air behind it, the effects kit's slow smoke: the horizon's haze as the screen shows it,
 	// its sRGB pixel; the haze's own colour stands for it, the stills' horizon reading within a few levels of it)
 	if (Effects)
@@ -4024,7 +4076,7 @@ void ALandBattle::HideTheTable()
 	// sky's light the air battle's 1.3 (it is lit by the key, which gives the shade its share now: the sky stands at
 	// about two thirds of cut 1's), and darker under cloud. "-TheaterLandSky=bright,air,dust,haze over the sky" tries
 	// others (each against the engine's own numbers, as -TheaterAirSky's).
-	double SkyBright = 1.3, SkyAir = 1.0, SkyDust = 0.6, HazeOver = 1.0;
+	double SkyBright = 1.3, SkyAir = 1.0, SkyDust = LookAir.bSet ? LookAir.SkyDust : 0.6, HazeOver = 1.0;
 	LandLook::Asked(TEXT("TheaterLandSky="), { &SkyBright, &SkyAir, &SkyDust, &HazeOver });
 	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast));
 	TArray<USkyAtmosphereComponent*> Atmospheres;

@@ -205,6 +205,11 @@ namespace LandFeed
 		std::vector<uint8_t> Storeys;
 		double TownX = 0.0, TownY = 0.0, TownR = 0.0;
 		std::string Region, PlaceName, Terrain, TownName, TownSize;
+		/** field.look and field.snow, where the recording names them (LandField::Field::Look, Snow): the look of the land
+		 * ("desert", "med", "jungle", "island", "farmland", "bocage"; empty: by the place) and the snow lying (0 to 1;
+		 * less than 0: by the place and the month). */
+		std::string Look;
+		double Snow = -1.0;
 		/** The deployment zones [x0, y0, x1, y1] of the attacker and the defender. */
 		double ZoneAtt[4] = { 0, 0, 0, 0 };
 		double ZoneDef[4] = { 0, 0, 0, 0 };

@@ -20,6 +20,9 @@ namespace LandFieldPicture
 		/** The clock's hours ahead of Greenwich: Normandy in July 1944 kept double summer time (both armies' clocks). */
 		double Zone = 2.0;
 		double Cover = 0.45, Base = 900.0;
+		/** The look's own air (LandScape::AirOf) against the bocage's: the haze's colour by channel and its thickness. */
+		double HazeTint[3] = { 1.0, 1.0, 1.0 };
+		double HazeThick = 1.0;
 	};
 
 	/** Paints <Key>-field-eye.png, <Key>-field-oblique.png and <Key>-field-map.png into Dir. False if one could not be written. */

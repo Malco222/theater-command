@@ -161,6 +161,11 @@ namespace LandSight
 		F.Terrain = G.Terrain.empty() ? std::string("plains") : G.Terrain;
 		F.Month = MonthOf(Rec.Date);
 		F.Seed = Rec.Seed ? Rec.Seed : 1;
+		// (the look of the land: the recording's word and snow where it names them, else by the place and the month)
+		F.Look = G.Look;
+		F.Snow = G.Snow;
+		F.Lat = Rec.Weather.Lat;
+		F.Lon = Rec.Weather.Lon;
 		// (the open steppe, where the recording lays it; the kit's models are the caller's to give, F.Steppe.Kit)
 		if (G.Steppe.bOn)
 		{
@@ -239,12 +244,17 @@ namespace LandSight
 		for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
 		{
 			const LandField::Base Kind = static_cast<LandField::Base>(B);
+			const LandField::BaseMesh& Built = Ground->BaseOf(Kind);
 			Shape S;
-			if (!ShapeOf(Kind, S))
+			if (Built.bSight)
+			{
+				// (a region's kit: its own shape, LandScape's KitLook)
+				S = { Built.SightMid, Built.SightHalf, Built.SightAcross, Built.SightTrunk };
+			}
+			else if (!ShapeOf(Kind, S))
 			{
 				continue;
 			}
-			const LandField::BaseMesh& Built = Ground->BaseOf(Kind);
 			for (const LandField::Placed& P : Ground->Instances(Kind))
 			{
 				Thing T;
