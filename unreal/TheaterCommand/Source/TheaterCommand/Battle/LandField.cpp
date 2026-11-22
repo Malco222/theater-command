@@ -6217,7 +6217,11 @@ namespace LandField
 				const double L = RR.Range(0.9, 1.08);
 				const Col Foot = Varied(Rgb(60, 82, 28), L, 0.0), Tip = Varied(bYellow ? Rgb(118, 108, 36) : Rgb(80, 102, 32), L, 0.0);
 				const Col Rib = K % 3 == 0 ? Rgb(118, 72, 46) : Rgb(104, 114, 54);
-				Leaf({ 0, 0, 0 }, A, Long, Wide, bInner ? RR.Range(0.35, 0.5) : RR.Range(0.12, 0.2), RR.Range(0.12, 0.22), Foot, Tip, Rgb(112, 122, 80), Rib);
+				// (each draw into its own name first: a call's arguments are taken in no set order, and g++ and clang take
+				// them differently, so the cloud's dock and the Mac's would differ leaf by leaf. The pre-check, 22 November)
+				const double Rise = bInner ? RR.Range(0.35, 0.5) : RR.Range(0.12, 0.2);
+				const double Lift = RR.Range(0.12, 0.22);
+				Leaf({ 0, 0, 0 }, A, Long, Wide, Rise, Lift, Foot, Tip, Rgb(112, 122, 80), Rib);
 			}
 			for (int Pl = 0; Pl < 2; ++Pl)
 			{
@@ -6227,8 +6231,10 @@ namespace LandField
 				for (int K = 0; K < 5; ++K)
 				{
 					const double Long = RR.Range(0.08, 0.13);
-					Leaf(Crown, Turn + K * 2.0 * Pi / 5.0 + RR.Range(-0.25, 0.25), Long, Long * RR.Range(0.3, 0.36), RR.Range(0.05, 0.1), 0.1, Varied(Rgb(76, 98, 34), L, 0.0),
-						 Varied(Rgb(92, 112, 38), L, 0.0), Rgb(118, 128, 84), Rgb(116, 124, 70));
+					const double A = Turn + K * 2.0 * Pi / 5.0 + RR.Range(-0.25, 0.25);
+					const double Wide = Long * RR.Range(0.3, 0.36);
+					const double Rise = RR.Range(0.05, 0.1);
+					Leaf(Crown, A, Long, Wide, Rise, 0.1, Varied(Rgb(76, 98, 34), L, 0.0), Varied(Rgb(92, 112, 38), L, 0.0), Rgb(118, 128, 84), Rgb(116, 124, 70));
 				}
 				for (int Spike = 0; Spike < 1 + Pl; ++Spike)
 				{

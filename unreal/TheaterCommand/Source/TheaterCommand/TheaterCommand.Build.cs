@@ -37,6 +37,10 @@ public class TheaterCommand : ModuleRules
 		// Only for the development photographer, which reports how long a frame takes to draw.
 		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI" });
 
+		// The ground battle's dark reading (the camera director's dark rule): the drawn frame copied small a few times a
+		// second, without waiting on the card (the engine's frame grabber).
+		PrivateDependencyModuleNames.Add("MovieSceneCapture");
+
 		// The ground battle's hedges, trees and grass: meshes made while the game runs, for instancing.
 		PrivateDependencyModuleNames.AddRange(new string[] { "MeshDescription", "StaticMeshDescription" });
 

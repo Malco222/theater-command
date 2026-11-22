@@ -233,6 +233,7 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	const double BarH = 66.0;
 	Fill(0.0, 0.0, Size.X, BarH, Leather, 0);
 	Fill(0.0, BarH, Size.X, 1.0, Brass, 1);
+	LastTopShare = Size.Y > 0.0 ? FMath::Clamp((BarH + 1.0) / Size.Y, 0.0, 0.5) : 0.0;
 	Write(Wide(W.Title), 22.0, 9.0, Serif(TEXT("Bold"), 16.0f), Cream, 2);
 	Write(Wide(W.Place.empty() ? W.Date : W.Place + ", " + W.Date), 22.0, 36.0, Typed(10.0f), Muted, 2);
 	{
