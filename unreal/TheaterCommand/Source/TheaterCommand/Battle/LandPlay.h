@@ -102,6 +102,9 @@ namespace LandPlay
 		std::string Weapon, Size, Army;
 		/** A shot's shooter's role (rifle, officer, leader, mg ...), empty when unknown. */
 		std::string Role;
+		/** A tank's machine-gun burst: which of her guns fired it ("coax", "hull_mg" or "roof_mg", as TankMg), for its
+		 * sound (the Sherman's roof gun is a .50, her others .30s); empty for any other shot. */
+		std::string Mount;
 		int Side = -1;
 		int Rounds = 1;
 		double PerSecond = 1.0;
