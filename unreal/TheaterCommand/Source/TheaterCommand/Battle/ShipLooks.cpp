@@ -18,6 +18,50 @@ namespace ShipLookParts
 	constexpr bool HasBurnOut = requires(TKit* K, const FVector& A, float C, float S, int32 I) { K->Burn(A, C, S, I); K->BurnOut(I, C); };
 	template <typename TKit>
 	constexpr bool HasGlance = requires(TKit* K, const FVector& A, const FVector& I, const FVector& N, float Mm, const FString& G) { K->Glance(A, I, N, Mm, G); };
+	// (78f6edf, 21 November: a fire, a leak and a cook-off ride with a ship under way)
+	template <typename TKit>
+	constexpr bool HasBurnMove = requires(TKit* K, int32 I, const FVector& A, const FVector& V) { K->BurnMove(I, A, V); };
+	template <typename TKit>
+	constexpr bool HasSteamMove = requires(TKit* K, int32 I, const FVector& A, const FVector& W, const FVector& V) { K->SteamMove(I, A, W, V); };
+	template <typename TKit>
+	constexpr bool HasCookOffMove = requires(TKit* K, const FVector& A, const FVector& U, float C, int32 P, float O, float J, float F, int32 I) { K->CookOff(A, U, C, P, O, J, F, I); K->CookOffMove(I, A, U, A); };
+
+	/** Whether the kit can move what a look lit (0 a fire, 1 a leak, 2 a cook-off) with her as she goes. */
+	template <typename TKit>
+	constexpr bool Rides(uint8 What)
+	{
+		return What == 0 ? HasBurnMove<TKit> : What == 1 ? HasSteamMove<TKit> : HasCookOffMove<TKit>;
+	}
+
+	template <typename TKit>
+	static void Move(TKit* Kit, uint8 What, int32 Id, const FVector& At, const FVector& Way, const FVector& Velocity)
+	{
+		if (!Kit)
+		{
+			return;
+		}
+		if (What == 0)
+		{
+			if constexpr (HasBurnMove<TKit>)
+			{
+				Kit->BurnMove(Id, At, Velocity);
+			}
+		}
+		else if (What == 1)
+		{
+			if constexpr (HasSteamMove<TKit>)
+			{
+				Kit->SteamMove(Id, At, Way, Velocity);
+			}
+		}
+		else
+		{
+			if constexpr (HasCookOffMove<TKit>)
+			{
+				Kit->CookOffMove(Id, At, Way, Velocity);
+			}
+		}
+	}
 
 	/** Kind: the kit's "vent" (a deck vent, a hole in her side) or "funnel" (the escape pipes on a funnel: a tall plume). */
 	template <typename TKit>
@@ -46,10 +90,19 @@ namespace ShipLookParts
 		}
 	}
 
+	/** Id: 0 or more for one that can ride with her (where the kit takes one); under 0, none. */
 	template <typename TKit>
-	static bool CookOff(TKit* Kit, const FVector& At, float Across, int32 Pops, float Over, float Jet)
+	static bool CookOff(TKit* Kit, const FVector& At, float Across, int32 Pops, float Over, float Jet, int32 Id = -1)
 	{
-		if constexpr (HasCookOff<TKit>)
+		if constexpr (HasCookOffMove<TKit>)
+		{
+			if (Kit)
+			{
+				Kit->CookOff(At, FVector::UpVector, Across, Pops, Over, Jet, -1.0f, Id);
+				return true;
+			}
+		}
+		else if constexpr (HasCookOff<TKit>)
 		{
 			if (Kit)
 			{
@@ -172,8 +225,9 @@ bool FShipLooks::Begin(uint64 Seed)
 	Picker = MakeUnique<Fates::Director>(*Table, Seed);
 	UE_LOG(LogTheater, Log, TEXT("Ship looks: %d looks read."), static_cast<int32>(Table->Ways().size()));
 	auto Has = [](bool bHas) { return bHas ? TEXT("yes") : TEXT("no"); };
-	UE_LOG(LogTheater, Log, TEXT("Ship looks: the effects kit has steam %s, cook-off %s, a fire beaten out %s, a glancing shot %s."),
-		Has(ShipLookParts::HasSteam<FBattleEffects>), Has(ShipLookParts::HasCookOff<FBattleEffects>), Has(ShipLookParts::HasBurnOut<FBattleEffects>), Has(ShipLookParts::HasGlance<FBattleEffects>));
+	UE_LOG(LogTheater, Log, TEXT("Ship looks: the effects kit has steam %s, cook-off %s, a fire beaten out %s, a glancing shot %s; riding a ship under way: fires %s, steam %s, cook-offs %s."),
+		Has(ShipLookParts::HasSteam<FBattleEffects>), Has(ShipLookParts::HasCookOff<FBattleEffects>), Has(ShipLookParts::HasBurnOut<FBattleEffects>), Has(ShipLookParts::HasGlance<FBattleEffects>),
+		Has(ShipLookParts::HasBurnMove<FBattleEffects>), Has(ShipLookParts::HasSteamMove<FBattleEffects>), Has(ShipLookParts::HasCookOffMove<FBattleEffects>));
 	return true;
 }
 
@@ -191,8 +245,10 @@ void FShipLooks::End()
 	Leaks.Reset();
 	LeakStops.Reset();
 	CookStops.Reset();
+	Riders.Reset();
 	Kit = nullptr;
 	NextBurn = 0;
+	NextCook = 0;
 }
 
 void FShipLooks::Hit(int32 Id, const FString& Class, const FString& Strike, bool bHarbour, double Hurt, double Now)
@@ -321,6 +377,7 @@ void FShipLooks::StopLeaks(int32 Id)
 		}
 	}
 	Leaks.Remove(Id);
+	Riders.RemoveAll([Id](const FRider& R) { return R.Ship == Id && R.What == 1; });
 }
 
 bool FShipLooks::IsBurst(const Fates::Beat& Step)
@@ -370,6 +427,73 @@ void FShipLooks::Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(
 			Play(Step, Lie, Effects, Now);
 		}
 	}
+	// What her looks lit rides with her while she is under way (the kit's BurnMove, SteamMove and CookOffMove; the sea
+	// scene, 21 November 13:34Z): each frame its place in her own frame is put back into the world where she lies now,
+	// its velocity its way from its last place; once more with none when she stops. A ship lying still is never moved.
+	for (int32 K = Riders.Num() - 1; K >= 0; --K)
+	{
+		FRider& Rider = Riders[K];
+		FShipLie Lie;
+		if (Rider.Until <= Now || !LieOf(Rider.Ship, Lie))
+		{
+			// (left where it was last, still: the kit would go on leaning its smoke at her last speed)
+			if (Rider.bMoving)
+			{
+				ShipLookParts::Move(Effects, Rider.What, Rider.Id, Rider.Last, Rider.LastWay, FVector::ZeroVector);
+			}
+			Riders.RemoveAtSwap(K, 1, EAllowShrinking::No);
+			continue;
+		}
+		const double Since = Now - Rider.LastAt;
+		if (Since <= 0.0)
+		{
+			continue;
+		}
+		const FVector At = InWorld(Lie, Rider.Mine), Way = WayInWorld(Lie, Rider.Way);
+		const FVector Velocity = (At - Rider.Last) / Since;
+		const bool bMoves = Velocity.SizeSquared() > FMath::Square(0.05 * Lie.UnitsPerMetre);
+		if (bMoves || Rider.bMoving)
+		{
+			ShipLookParts::Move(Effects, Rider.What, Rider.Id, At, Way, bMoves ? Velocity : FVector::ZeroVector);
+		}
+		Rider.bMoving = bMoves;
+		Rider.Last = At;
+		Rider.LastWay = Way;
+		Rider.LastAt = Now;
+	}
+}
+
+FVector FShipLooks::InWorld(const FShipLie& Lie, const FVector& Mine)
+{
+	const FRotator Turned(0.0, Lie.Yaw, 0.0);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+	return Lie.World.TransformPosition(Lie.Base + (Along * Mine.X + Abeam * Mine.Y + FVector(0.0, 0.0, Mine.Z)) * Lie.UnitsPerMetre);
+}
+
+FVector FShipLooks::WayInWorld(const FShipLie& Lie, const FVector& Mine)
+{
+	const FRotator Turned(0.0, Lie.Yaw, 0.0);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+	return Lie.World.TransformVectorNoScale(Along * Mine.X + Abeam * Mine.Y + FVector(0.0, 0.0, Mine.Z)).GetSafeNormal();
+}
+
+void FShipLooks::Ride(int32 Ship, uint8 What, int32 Id, const FShipLie& Lie, const FVector& Mine, const FVector& Way, double Now, double Until)
+{
+	if (!ShipLookParts::Rides<FBattleEffects>(What))
+	{
+		return;
+	}
+	Riders.RemoveAll([What, Id](const FRider& R) { return R.What == What && R.Id == Id; });
+	FRider& Rider = Riders.AddDefaulted_GetRef();
+	Rider.Ship = Ship;
+	Rider.What = What;
+	Rider.Id = Id;
+	Rider.Mine = Mine;
+	Rider.Way = Way;
+	Rider.Until = Until;
+	Rider.Last = InWorld(Lie, Mine);
+	Rider.LastWay = WayInWorld(Lie, Way);
+	Rider.LastAt = Now;
 }
 
 void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Effects, double Now)
@@ -386,11 +510,16 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	const FRotator Turned(0.0, Lie.Yaw, 0.0);
 	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
 	const double Side = SideOf(Item.Ship) != 0.0 ? SideOf(Item.Ship) : ((Item.Mix & 1u) ? 1.0 : -1.0);
-	FVector Local = Lie.Base + Along * (ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long * U) + FVector(0.0, 0.0, ShipLookParts::HeightOf(At, Lie.High) * U);
-	const FVector Place = Lie.World.TransformPosition(Local);
+	// (a place in her own frame, metres: along her from amidships, plus toward her stern; across, plus to starboard; up
+	// from her waterline)
+	const FVector Mine(ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long, 0.0, ShipLookParts::HeightOf(At, Lie.High));
+	const FVector Place = InWorld(Lie, Mine);
 	if (Do == TEXT("blast"))
 	{
-		Effects->ShellOfSize(Place, Kind.IsEmpty() ? FString(TEXT("bomb250")) : Kind, TEXT("town"), Step.A > 0.5);
+		// (a burst on her bridge, funnel or a turret is on steel, where it is put: the kit lays any other burst at the
+		// ground under it, which a scene makes her deck)
+		const bool bAbove = At == TEXT("bridge") || At == TEXT("funnel") || At.StartsWith(TEXT("turret"));
+		Effects->ShellOfSize(Place, Kind.IsEmpty() ? FString(TEXT("bomb250")) : Kind, TEXT("town"), Step.A > 0.5 || bAbove);
 	}
 	else if (Do == TEXT("column"))
 	{
@@ -413,13 +542,13 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		// go out as she goes under (Settle). (a beaten fire burns a little past its time, for the crew to end it)
 		const int32 Burn = 239000 + (NextBurn++ % 4000);
 		// (kind "side": in her side under the deck's edge, on the side she was hit, as out of a carrier's hangar openings)
-		const FVector FirePlace = Kind == TEXT("side")
-			? Lie.World.TransformPosition(Lie.Base + Along * (ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long * U) + Abeam * ((Lie.Beam * 0.5 + 1.0) * U * Side)
-				+ FVector(0.0, 0.0, ShipLookParts::HeightOf(At, Lie.High) * 0.7 * U))
-			: Place;
+		const FVector FireMine = Kind == TEXT("side") ? FVector(Mine.X, (Lie.Beam * 0.5 + 1.0) * Side, Mine.Z * 0.7) : Mine;
+		const FVector FirePlace = InWorld(Lie, FireMine);
 		if (ShipLookParts::BurnWithId(Effects, FirePlace, Across, bBeaten ? Seconds + 60.0f : Seconds, Burn))
 		{
 			Burns.FindOrAdd(Item.Ship).Add(Burn);
+			// (its smoke outlasts its flames by the kit's fire.column_s: it rides with her until that is gone too)
+			Ride(Item.Ship, 0, Burn, Lie, FireMine, FVector::UpVector, Now, Now + (bBeaten ? Seconds + 60.0 : Seconds) + FireSmokeSeconds);
 			if (bBeaten)
 			{
 				Fates::Beat Out;
@@ -441,6 +570,16 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	else if (Do == TEXT("burnout"))
 	{
 		ShipLookParts::BurnOut(Effects, Step.N, static_cast<float>(Step.A));
+		// (put out over A seconds, its embers glowing up to 20 s after, its smoke gone a minute after the call: the
+		// kit's fire.put_out.gone_s. A call that comes after its flames are over, as across a picture run's skip, the
+		// kit leaves alone, and its smoke goes on as its own: so does its ride.)
+		for (FRider& Rider : Riders)
+		{
+			if (Rider.What == 0 && Rider.Id == Step.N && Now < Rider.Until - FireSmokeSeconds)
+			{
+				Rider.Until = FMath::Min(Rider.Until, Now + FMath::Max(Step.A + 22.0, 62.0));
+			}
+		}
 	}
 	else if (Do == TEXT("steam"))
 	{
@@ -453,12 +592,13 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 			return;
 		}
 		const bool bFunnel = Kind != TEXT("side") && At == TEXT("funnel");
-		const FVector Way = Kind == TEXT("side") ? (Abeam * Side * 0.8 + FVector(0.0, 0.0, 0.6)).GetSafeNormal() : FVector::UpVector;
+		const FVector WayMine = Kind == TEXT("side") ? FVector(0.0, Side * 0.8, 0.6).GetSafeNormal() : FVector::UpVector;
 		const int32 Leak = 300000 + Item.Ship * 4 + (bFunnel ? 0 : Kind == TEXT("side") ? 1 : 2);
-		if (ShipLookParts::Steam(Effects, Leak, Place, Way, static_cast<float>(FMath::Clamp(Step.A, 0.2, 4.0)), static_cast<float>(FMath::Clamp(Step.B, 2.0, 60.0)), bFunnel ? FString(TEXT("funnel")) : FString(TEXT("vent"))))
+		if (ShipLookParts::Steam(Effects, Leak, Place, WayInWorld(Lie, WayMine), static_cast<float>(FMath::Clamp(Step.A, 0.2, 4.0)), static_cast<float>(FMath::Clamp(Step.B, 2.0, 60.0)), bFunnel ? FString(TEXT("funnel")) : FString(TEXT("vent"))))
 		{
 			Leaks.FindOrAdd(Item.Ship).AddUnique(Leak);
 			LeakStops.Add(Now + FMath::Clamp(Step.B, 2.0, 60.0));
+			Ride(Item.Ship, 1, Leak, Lie, Mine, WayMine, Now, Now + FMath::Clamp(Step.B, 2.0, 60.0));
 		}
 	}
 	else if (Do == TEXT("cookoff"))
@@ -470,7 +610,13 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		}
 		CookStops.Add(Now + FMath::Clamp(Step.B, 1.0, 120.0));
 		const int32 Pops = FMath::Clamp(Step.N, 1, 10);
-		if (!ShipLookParts::CookOff(Effects, Place, static_cast<float>(FMath::Clamp(Step.A, 0.3, 10.0)), Pops, static_cast<float>(FMath::Clamp(Step.B, 1.0, 120.0)), static_cast<float>(FMath::Clamp(Step.C, 0.0, 10.0))))
+		const int32 Cook = 310000 + (NextCook++ % 1000);
+		if (ShipLookParts::CookOff(Effects, Place, static_cast<float>(FMath::Clamp(Step.A, 0.3, 10.0)), Pops, static_cast<float>(FMath::Clamp(Step.B, 1.0, 120.0)), static_cast<float>(FMath::Clamp(Step.C, 0.0, 10.0)), Cook))
+		{
+			// (its jet comes after the last pop, and its last embers a few seconds after that)
+			Ride(Item.Ship, 2, Cook, Lie, Mine, FVector::UpVector, Now, Now + FMath::Clamp(Step.B, 1.0, 120.0) + FMath::Clamp(Step.C, 0.0, 10.0) + 8.0);
+		}
+		else
 		{
 			// A deck park going up plane by plane: small bursts over the look's time, at most four (a stand-in the kit's
 			// CookOff replaces; the art director sees it as such, never as the cook-off itself).
@@ -601,6 +747,7 @@ void FShipLooks::Cleared()
 	Leaks.Reset();
 	LeakStops.Reset();
 	CookStops.Reset();
+	Riders.Reset();
 }
 
 bool FShipLooks::ReelAim(int32 Id, double High, double& OutAlong, double& OutUp, double& OutSide) const
