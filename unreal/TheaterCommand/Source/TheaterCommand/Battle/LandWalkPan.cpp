@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <map>
 
 namespace LandWalkPan
@@ -30,6 +31,56 @@ namespace LandWalkPan
 			OutX = X / N;
 			OutY = Y / N;
 			return true;
+		}
+
+		/** The eye off the flank of the middle of Best's walk or drive over the pan: each height of Ups, each distance of
+		 * Offs off the middle, either side, the first whose sight lines to the start, middle and end are open (else the
+		 * first free place, bOpen false); with its distances to the start, middle and end. */
+		Plan EyeOff(const LandFeed::Recording& Rec, const LandEye::World& Here, double T0, double For, Plan Best, std::initializer_list<double> Ups,
+			std::initializer_list<double> Offs)
+		{
+			const double T1 = T0 + For;
+			double X0 = 0.0, Y0 = 0.0, Xm = 0.0, Ym = 0.0, X1 = 0.0, Y1 = 0.0;
+			MiddleOf(Rec, Best.Men, T0, X0, Y0);
+			MiddleOf(Rec, Best.Men, T0 + 0.5 * For, Xm, Ym);
+			MiddleOf(Rec, Best.Men, T1, X1, Y1);
+			const double Way = std::max(1e-6, std::hypot(X1 - X0, Y1 - Y0));
+			const double Nx = -(Y1 - Y0) / Way, Ny = (X1 - X0) / Way;
+			const double W = Rec.Ground.W > 0.0 ? Rec.Ground.W : 1e9, H = Rec.Ground.H > 0.0 ? Rec.Ground.H : 1e9;
+			const LandPlay::Vec A(X0, Y0, GroundOf(Here, X0, Y0) + 1.2), M(Xm, Ym, GroundOf(Here, Xm, Ym) + 1.2), B(X1, Y1, GroundOf(Here, X1, Y1) + 1.2);
+			bool bFound = false;
+			LandPlay::Vec Fallback;
+			bool bFallback = false;
+			for (const double Up : Ups)
+				for (const double Off : Offs)
+					for (const double Side : { 1.0, -1.0 })
+					{
+						if (bFound) break;
+						const double Ex = Xm + Nx * Side * Off, Ey = Ym + Ny * Side * Off;
+						if (Ex < 10.0 || Ey < 10.0 || Ex > W - 10.0 || Ey > H - 10.0) continue;
+						const LandPlay::Vec E(Ex, Ey, GroundOf(Here, Ex, Ey) + Up);
+						if (Here.Free && !Here.Free(E)) continue;
+						if (!bFallback)
+						{
+							Fallback = E;
+							bFallback = true;
+						}
+						const bool bOpen = !Here.Open || (Here.Open(E, A) && Here.Open(E, M) && Here.Open(E, B));
+						if (!bOpen) continue;
+						Best.Eye = E;
+						Best.bOpen = true;
+						bFound = true;
+					}
+			if (!bFound)
+			{
+				if (!bFallback) return Plan();
+				Best.Eye = Fallback;
+				Best.bOpen = false;
+			}
+			Best.FromStart = std::hypot(X0 - Best.Eye.X, Y0 - Best.Eye.Y);
+			Best.FromMiddle = std::hypot(Xm - Best.Eye.X, Ym - Best.Eye.Y);
+			Best.FromEnd = std::hypot(X1 - Best.Eye.X, Y1 - Best.Eye.Y);
+			return Best;
 		}
 	}
 
@@ -74,48 +125,56 @@ namespace LandWalkPan
 		}
 		if (Best.Block < 0) return Best;
 		// The eye off the flank of the walk's middle: both sides, near to far, a man's height and then a bank's.
-		double X0 = 0.0, Y0 = 0.0, Xm = 0.0, Ym = 0.0, X1 = 0.0, Y1 = 0.0;
-		MiddleOf(Rec, Best.Men, T0, X0, Y0);
-		MiddleOf(Rec, Best.Men, T0 + 0.5 * For, Xm, Ym);
-		MiddleOf(Rec, Best.Men, T1, X1, Y1);
-		const double Way = std::max(1e-6, std::hypot(X1 - X0, Y1 - Y0));
-		const double Nx = -(Y1 - Y0) / Way, Ny = (X1 - X0) / Way;
-		const double W = Rec.Ground.W > 0.0 ? Rec.Ground.W : 1e9, H = Rec.Ground.H > 0.0 ? Rec.Ground.H : 1e9;
-		const LandPlay::Vec A(X0, Y0, GroundOf(Here, X0, Y0) + 1.2), M(Xm, Ym, GroundOf(Here, Xm, Ym) + 1.2), B(X1, Y1, GroundOf(Here, X1, Y1) + 1.2);
-		bool bFound = false;
-		LandPlay::Vec Fallback;
-		bool bFallback = false;
-		for (const double Up : { 1.7, 3.5 })
-			for (const double Off : { 70.0, 55.0, 85.0, 45.0, 100.0 })
-				for (const double Side : { 1.0, -1.0 })
-				{
-					if (bFound) break;
-					const double Ex = Xm + Nx * Side * Off, Ey = Ym + Ny * Side * Off;
-					if (Ex < 10.0 || Ey < 10.0 || Ex > W - 10.0 || Ey > H - 10.0) continue;
-					const LandPlay::Vec E(Ex, Ey, GroundOf(Here, Ex, Ey) + Up);
-					if (Here.Free && !Here.Free(E)) continue;
-					if (!bFallback)
-					{
-						Fallback = E;
-						bFallback = true;
-					}
-					const bool bOpen = !Here.Open || (Here.Open(E, A) && Here.Open(E, M) && Here.Open(E, B));
-					if (!bOpen) continue;
-					Best.Eye = E;
-					Best.bOpen = true;
-					bFound = true;
-				}
-		if (!bFound)
-		{
-			if (!bFallback) return Plan();
-			Best.Eye = Fallback;
-			Best.bOpen = false;
-		}
-		Best.FromStart = std::hypot(X0 - Best.Eye.X, Y0 - Best.Eye.Y);
-		Best.FromMiddle = std::hypot(Xm - Best.Eye.X, Ym - Best.Eye.Y);
-		Best.FromEnd = std::hypot(X1 - Best.Eye.X, Y1 - Best.Eye.Y);
-		return Best;
+		return EyeOff(Rec, Here, T0, For, Best, { 1.7, 3.5 }, { 70.0, 55.0, 85.0, 45.0, 100.0 });
 	}
+
+	Plan ChooseTank(const LandFeed::Recording& Rec, const LandEye::World& Here, double T0, double For)
+	{
+		Plan Best;
+		const double T1 = T0 + For;
+		double BestScore = 0.0;
+		for (size_t I = 0; I < Rec.Tracks.size(); ++I)
+		{
+			const LandFeed::Track& Tr = Rec.Tracks[I];
+			if (Tr.Role != "tank" || Tr.bTwin || Tr.At.empty() || Tr.bPinned) continue;
+			if (Tr.Start() > T0 || Tr.End() < T1) continue;
+			if ((Tr.Fell >= 0.0 && Tr.Fell < T1) || (Tr.Out >= 0.0 && Tr.Out < T1)) continue;
+			const std::vector<int> Her{ static_cast<int>(I) };
+			double X0 = 0.0, Y0 = 0.0, X1 = 0.0, Y1 = 0.0;
+			if (!MiddleOf(Rec, Her, T0, X0, Y0) || !MiddleOf(Rec, Her, T1, X1, Y1)) continue;
+			const double Speed = std::hypot(X1 - X0, Y1 - Y0) / std::max(1.0, For);
+			if (Speed < 2.0 || Speed > 9.0) continue;
+			// (steady: her way over each quarter near her way over the whole, so the lens follows a drive, not a halt)
+			double Wander = 0.0, Px = X0, Py = Y0;
+			bool bAll = true;
+			for (int Q = 1; Q <= 4; ++Q)
+			{
+				double Qx = 0.0, Qy = 0.0;
+				if (!MiddleOf(Rec, Her, T0 + For * Q / 4.0, Qx, Qy))
+				{
+					bAll = false;
+					break;
+				}
+				const double Want = Speed * For / 4.0, Got = std::hypot(Qx - Px, Qy - Py);
+				Wander += std::fabs(Got - Want) / std::max(0.5, Want);
+				Px = Qx;
+				Py = Qy;
+			}
+			if (!bAll) continue;
+			const double Score = std::exp(-std::pow((Speed - 5.0) / 2.5, 2.0)) / (1.0 + Wander);
+			if (Score <= BestScore) continue;
+			BestScore = Score;
+			Best = Plan();
+			Best.Block = Tr.Block;
+			Best.Men = Her;
+			Best.Speed = Speed;
+		}
+		if (Best.Block < 0) return Best;
+		// The eye off the flank of her drive's middle, past the hand-over: both sides, near to far, a man on a bank's
+		// height, then a roof's, then a church tower's (Normandy's hedges).
+		return EyeOff(Rec, Here, T0, For, Best, { 2.5, 6.0, 10.0 }, { 190.0, 170.0, 215.0, 240.0 });
+	}
+
 
 	bool Middle(const LandFeed::Recording& Rec, const LandEye::World& Here, const Plan& P, double T, LandPlay::Vec& Out)
 	{

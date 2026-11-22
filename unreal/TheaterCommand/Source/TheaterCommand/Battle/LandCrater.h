@@ -105,6 +105,24 @@ namespace LandCrater
 	/** Whether X, Y lies inside a convex outline (x, y pairs, counter-clockwise). */
 	bool Inside(const std::vector<double>& Outline, double X, double Y);
 
+	/**
+	 * A hedge cutter's breach (release 2; Brian, 22 November 14:19Z, "Let's do 1 and 2": bladed Shermans punch a gap
+	 * through a hedgerow where the player picks). Where the bank stood, its earth is torn out down to the field over
+	 * the gap; the bank's cut ends are left as ragged faces of fresh earth falling into it, a lip of torn turf at their
+	 * tops; the spoil and torn turf she pushed lie heaped on the side she drove out to, a little spilled on the other;
+	 * clods strewn. The ground drawn is cut over the bank's footprint (as a dug hole's bowl is), so the tank and the men
+	 * go through on the gap's floor. X, Y: the gap's middle on the bank's line; Yaw: the bank's heading there (radians
+	 * from east); Half: half the gap at the field's level; Foot: how far the bank's foot reaches either side of its
+	 * line; Through: the side she drove out to, +1 to the left of Yaw, -1 to its right.
+	 */
+	struct Breach
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, Half = 2.0, Foot = 1.4;
+		int Through = 1;
+	};
+	/** The banks' rise over the land at a place (LandField::Ground::BankRise): what a breach takes away. */
+	using RiseFn = std::function<double(double X, double Y)>;
+
 	/** All of a battle's holes, kept for the whole battle, grouped by place for the game's meshes. */
 	class Field
 	{
@@ -140,6 +158,14 @@ namespace LandCrater
 		 * False when it leaves none (a name of no size, water, the guard reached). Dug only where Dig says it may be
 		 * (open ground: a field, a pasture, a garden; not a lane, a bank, a yard), when Dig is given. */
 		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground);
+		/** A hedge cutter's breach torn (Breach), laid as a hole is: its own points in its patch's section, the ground
+		 * drawn and older holes cut over the bank's footprint (TakeCuts), the grass round the eye left bare over it and
+		 * its spoil. Rise: the banks' rise (the gap's floor is Begin's Height less it). Ground: the effects kit's word
+		 * for the soil. False with no Rise, a gap of no width, or past the guard. */
+		bool AddBreach(const Breach& B, const RiseFn& Rise, const std::string& Ground);
+		/** The floor a vehicle drives on inside a breach's cut (its torn earth, without the clods): false outside every
+		 * breach's cut. */
+		bool BreachFloor(double X, double Y, double& OutZ) const;
 		/** Where a hole may be dug (set before the first Add; none: anywhere). */
 		std::function<bool(double X, double Y)> Dig;
 		/** The drawn ground's normal, to light the thrown soil by (Lay's Lit; set before the first Add). */
@@ -203,6 +229,12 @@ namespace LandCrater
 			/** A dug hole's bowl depth and its cut's outline (x, y pairs; empty: laid over the ground). */
 			double Deep = 0.0;
 			std::vector<double> Cut;
+			/** A hedge cutter's breach (AddBreach), not a shell's hole: its points a grid in the bank's frame (u along
+			 * Yaw, v to its left), NU by NV from First, Step apart from U0, V0; the gap's cut CutU along and CutV across,
+			 * the spoil out to SpoilOut on the Through side, BackOut on the other. */
+			bool bBreach = false;
+			double Yaw = 0.0, U0 = 0.0, V0 = 0.0, Step = 0.3, CutU = 0.0, CutV = 0.0, SpoilOut = 0.0, BackOut = 0.0;
+			int NU = 0, NV = 0, Through = 1;
 		};
 		const std::vector<Hole>& All() const { return Holes; }
 
@@ -222,6 +254,13 @@ namespace LandCrater
 		static int64_t SquareOf(int I, int J);
 		/** Whether a hole laid after hole After has cut X, Y away. */
 		bool CutAfter(int After, double X, double Y) const;
+		/** The patch and section a new hole at X, Y is laid in (its patch numbered when its first hole is). */
+		Place PlaceFor(double X, double Y);
+		/** A new hole laid in Into's section from FirstIndex on: older holes cut by its cut (CutLine, kept in H and
+		 * TakeCuts), filed by the 8 m squares its Reach touches, its section listed as changed. */
+		void Keep(Hole& H, std::vector<double>&& CutLine, size_t FirstIndex, double Reach);
+		/** A breach's grid face at X, Y (false off its grid). */
+		bool OnBreach(const Hole& H, double X, double Y, double& OutZ) const;
 	};
 
 	/**

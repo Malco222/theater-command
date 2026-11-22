@@ -193,6 +193,18 @@ namespace LandFeed
 		std::vector<std::pair<double, double>> OrderPath;
 	};
 
+	/**
+	 * A hedge cutter's cut (release 2; Brian, 22 November 14:19Z; the tactics thread's rules, "cuts"): T0 she starts
+	 * to push into the bank, T1 it gives way and the gap is open from then on (men use it from T1); Unit her track
+	 * (Tracks' index, -1 where not given); X, Y the gap's middle on the bank's line; Yaw the way she drives through
+	 * (radians from east); Width the gap, bank end to bank end (metres).
+	 */
+	struct Cut
+	{
+		double T0 = 0.0, T1 = 0.0, X = 0.0, Y = 0.0, Yaw = 0.0, Width = 4.0;
+		int Unit = -1;
+	};
+
 	/** A crater the field keeps (view zones, kind crater). */
 	struct Crater
 	{
@@ -297,6 +309,8 @@ namespace LandFeed
 		std::vector<Round> Rounds;
 		std::vector<Track> Tracks;
 		std::vector<Crater> Craters;
+		/** The hedge cutters' cuts, by T1 (none where the rules' cutters switch is off). */
+		std::vector<Cut> Cuts;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header

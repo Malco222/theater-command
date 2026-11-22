@@ -447,6 +447,24 @@ namespace LandFeed
 		return &*(It - 1);
 	}
 
+	/** The hedge cutters' cuts in a recording or a delta ("cuts": { t0, t1, unit, x, y, yaw, width }), added in T1's order. */
+	static void ReadCuts(const Json& List, std::vector<Cut>& Out)
+	{
+		for (const Json& C : List.Items)
+		{
+			Cut Row;
+			Row.T1 = C["t1"].Num(C["t0"].Num(0.0));
+			Row.T0 = std::min(C["t0"].Num(Row.T1), Row.T1);
+			Row.X = C["x"].Num(0.0);
+			Row.Y = C["y"].Num(0.0);
+			Row.Yaw = C["yaw"].Num(0.0);
+			Row.Width = std::clamp(C["width"].Num(4.0), 2.5, 8.0);
+			Row.Unit = C["unit"].IsNumber() ? C["unit"].Int(-1) : -1;
+			Out.push_back(Row);
+		}
+		std::stable_sort(Out.begin(), Out.end(), [](const Cut& A, const Cut& B) { return A.T1 < B.T1; });
+	}
+
 	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError)
 	{
 		Json Root;
@@ -545,6 +563,7 @@ namespace LandFeed
 			ReadEvent(E, Row);
 			Out.Events.push_back(std::move(Row));
 		}
+		ReadCuts(Root["cuts"], Out.Cuts);
 		for (const Json& R : Root["rounds"].Items)
 		{
 			Round Row;
@@ -719,6 +738,7 @@ namespace LandFeed
 			ReadEvent(E, Row);
 			R.Events.push_back(std::move(Row));
 		}
+		ReadCuts(Root["cuts"], R.Cuts);
 		std::map<int, Crater> Craters;
 		for (const Json& V : Root["views"].Items)
 		{
