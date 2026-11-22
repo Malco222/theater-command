@@ -923,7 +923,7 @@ namespace AirSky
 			// "popcorn: one size, even spacing ... wanted: a few big ones and many small". Drawn at random among sizes, the
 			// big ones were the likeliest to find no room, and the middling took half the cover, 600 clouds of one size.
 			// Now the big ones (1.5 to 3.5 km) are laid first and take half the sky's cover, a few middling (600 m to
-			// 1.5 km) a quarter or so, and the small ones (200 to 600 m) the rest, many of them round the bigger; within each
+			// 1.5 km) a quarter or so, and the small ones (100 to 600 m) the rest, many of them round the bigger; within each
 			// even on a log scale. A cloudier day's cover goes more to the big ones, a fair day's more to the small)
 			const double BigShare = 0.5 + 0.15 * Fatter - 0.3 * Fair, SmallShare = 0.22 - 0.08 * Fatter + 0.25 * Fair;
 			const double UpTo[3] = { BigShare, 1.0 - SmallShare, 1.0 };
@@ -946,7 +946,7 @@ namespace AirSky
 				const double X = F.Origin.X + Roll.U(0.0, Period), Y = F.Origin.Y + Roll.U(0.0, Period);
 				const double Within = Roll.U();
 				auto Between = [Within](double Least, double Most) { return Least * std::pow(Most / Least, Within); };
-				const double W = Pass == 0 ? Between(1500.0, 3500.0) : Pass == 1 ? Between(600.0, 1500.0) : Between(200.0, 600.0);
+				const double W = Pass == 0 ? Between(1500.0, 3500.0) : Pass == 1 ? Between(600.0, 1500.0) : Between(100.0, 600.0);
 				const bool bSmall = W < 600.0;
 				// (the small ones gather round the bigger, as a field of cumulus does, a few out in the open sea between:
 				// none of them spread evenly over it)
@@ -992,16 +992,19 @@ namespace AirSky
 				}
 				// Its height from its width, 1 to 2.5 times as wide as it is tall (never a ball), capped a little under the
 				// day's top, where the inversion stops most of them in one broken level; one big one in about twenty a tower
-				// to the day's top (the brief's flat bases and capped tops). A small one 150 m deep or more.
-				const double Least = bSmall ? 150.0 : 250.0;
+				// to the day's top (the brief's flat bases and capped tops). A small one two fifths to a little over half as
+				// deep as it is wide, 50 m at least (it was 150 m at least, and from above the 200 to 300 m ones stood as
+				// round balls of one size: the art director on r2e's cloud sheets, 22 November 06:21Z, "flatter, height
+				// about half their width ... some near 100 m")
+				const double Least = bSmall ? std::max(50.0, W * Roll.U(0.4, 0.55)) : 250.0;
 				// (a fair day's shallow, two to three and a half times as wide as tall; a heavy day's taller, a third of its big
 				// ones towering to the day's top)
 				const double Cap = Thick * Roll.U(0.8, 0.9) * (1.0 - 0.45 * Fair);
 				const bool bTower = W >= 1500.0 && Roll.U() < 0.05 + 0.3 * Fatter;
 				double H = bTower ? Thick : std::min(Cap, W / Roll.U(1.0 + 1.0 * Fair - 0.1 * Fatter, 2.5 + 1.0 * Fair - 0.7 * Fatter));
 				H = std::max(H, std::min(Thick, Least));
-				// (a small one no taller than two fifths of its width, 150 m at least: in two layers, a taller one's top lumps
-				// floated clear of its base, the art director on round 18c, oahu eye 7)
+				// (a small one no taller than two fifths of its width, or its own Least: in two layers, a taller one's top
+				// lumps floated clear of its base, the art director on round 18c, oahu eye 7)
 				// (what it would have stood, its draws for turrets made by that, so the day's other clouds lie where they did)
 				const double Tall = H;
 				H = bSmall ? std::min(H, std::max(Least, 0.4 * W)) : H;
@@ -1011,7 +1014,9 @@ namespace AirSky
 				auto Leaned = [&Down, Lean, Foot](double PX, double PY, double PZ) { return Vec(PX + Down.X * Lean * (PZ - Foot), PY + Down.Y * Lean * (PZ - Foot), PZ); };
 				// (layers close enough that the puffs of one overlap the next: no gap between a cloud's base and its top; a
 				// small cloud two layers at most, of three puffs)
-				const double Rb = Clamp(W * 0.25, 90.0, 480.0);
+				// (a small one's lumps in scale with it, down to 30 m: at 90 m at least, a 100 to 300 m one was two or three
+				// lumps as big as itself, a ball)
+				const double Rb = bSmall ? Clamp(W * 0.28, 30.0, 480.0) : Clamp(W * 0.25, 90.0, 480.0);
 				const int Layers = static_cast<int>(Clamp(std::ceil(std::max(0.0, H - 0.5 * Rb - 0.55 * Rb) / (0.5 * Rb)) + 1.0, 2.0, bSmall ? 2.0 : 6.0));
 				Cloud& C = F.Clouds.emplace_back();
 				C.At = Vec(X, Y, Foot);
@@ -1069,7 +1074,8 @@ namespace AirSky
 						// (its base soft at the sides with a straight, crisp underside, solid enough to stand darker than the
 						// sky behind it; the lumps over it crisp where the sun catches their edges, softer and thinner to lee)
 						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * (bSmall && K > 0 ? Roll.U(0.75, 1.2) : Roll.U(0.7, 1.2)) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
-						Lump.Soft = K == 0 ? 0.45 : 0.2 + 0.28 * Lee;
+						// (a small one's lumps softer, its edges torn: the art director on r2e's sheets)
+						Lump.Soft = K == 0 ? 0.45 : bSmall ? 0.32 + 0.3 * Lee : 0.2 + 0.28 * Lee;
 						Lump.bFlatFoot = K == 0;
 					}
 					TopW = Wk;
@@ -1528,7 +1534,7 @@ namespace AirSky
 			const Vec Middle(LX, LY, C.At.Z + Here.Lift + 0.5 * Here.Squash * C.H);
 			const double Far = (Middle - Seen).Length();
 			// (a small cloud, under 600 m across, is drawn out to SmallSight times its width, thinning over the last fifth: a
-			// 200 m one to 6.8 km, a 600 m one to the reach, each about 1.7 degrees across where it goes. Farther it is a few
+			// 100 m one to 3.4 km, a 600 m one to the reach, each about 1.7 degrees across where it goes. Farther it is a few
 			// pixels in the haze, and the many small ones the art director asked for on 22 November cost the painter a
 			// puff each out to the reach)
 			const double Haze = Smooth((Reach - Far) / (Reach / 3.0)) * (C.W < 600.0 ? Smooth((SmallSight * C.W - Far) / (0.2 * SmallSight * C.W)) : 1.0);
