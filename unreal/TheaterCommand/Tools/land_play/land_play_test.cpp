@@ -90,10 +90,19 @@ namespace
 		int FuelFrames = 0;
 		double FuelSince = -1.0, FuelLongest = 0.0, FuelAt = 0.0, FuelNearest = 1e18, FuelNearestAt = 0.0;
 		std::vector<int> Burnt;
+		// (the production lead's GS3 note: men the scene would draw at its near level by their height on the screen, over
+		// 150 of the 665 pixels drawn, by the kind of shot; the long lens's Track and far Watch must not put more men near)
+		bool bNearReport = false;
+		long NearSum[7] = {}, NearFrames[7] = {};
+		int NearMost[7] = {};
+		double NearMostAt[7] = {};
 		// (the whole mass, the production lead's CD1: one wide shot in its window holding 80% of the men drawn in its
 		// picture, every frame of it; every man on the field the player can see, the batteries far back and the fallen too)
 		int MassShots = 0, MassMen = 0;
 		bool bMassGate = true;
+		double MassTallLeast = 1.0, MassWholeLeast = 1.0, MassStretchWide = 0.0;
+		bool MassStretched = false;
+		int MassStretchMen = 0;
 		double MassFrom = 0.0, MassTo = 0.0, MassStart = -1.0, MassReal = 0.0, MassLeast = 1.0, MassLeastAt = 0.0, MassHeight = 0.0, MassFar = 0.0;
 
 		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
@@ -120,17 +129,68 @@ namespace
 					MassFar = std::hypot(P.Look.X - P.Eye.X, P.Look.Y - P.Eye.Y);
 				}
 				MassReal += Dt;
-				int Men = 0, In = 0;
+				int Men = 0, In = 0, Tall = 0, StretchMen = 0, StretchIn = 0;
+				// (a front too wide for one picture: the share of the men in the stretch it holds is the gate, the whole
+				// front's logged beside it; a man is in the stretch by where he stood at the cut)
+				Vec SAt, SAlong;
+				double SFrom = 0.0, STo = 0.0;
+				const bool bStretched = D.MassStretch(SAt, SAlong, SFrom, STo);
+				// (and how many of them stand 2 px or more tall on the 665 px the Mac draws: the ground scene's GS3 culls the
+				// men under that, so they are seen in the wide only as the men over it)
+				const Vec Fwd = (P.Look - P.Eye).Unit();
+				const double PxAMetre = 665.0 / (2.0 * std::tan(P.Fov * 0.5 * 3.14159265358979 / 180.0));
 				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 				{
 					const LandFeed::Track& Tr = Rec->Tracks[I];
 					if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > B || (Tr.Out >= 0.0 && Tr.Out < B) || D.HiddenNow(static_cast<int>(I))) continue;
 					const LandFeed::Spot S = LandFeed::SpotAt(Tr, B);
 					++Men;
-					if (LandEye::InPicture(P, Vec(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9))) ++In;
+					const Vec At(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9);
+					bool bInStretch = false;
+					if (bStretched)
+					{
+						const LandFeed::Spot S0 = LandFeed::SpotAt(Tr, D.MassAt());
+						const double U = (Vec(S0.X, S0.Y, 0.0) - Vec(SAt.X, SAt.Y, 0.0)).Dot(SAlong);
+						bInStretch = U >= SFrom && U <= STo;
+						StretchMen += bInStretch ? 1 : 0;
+					}
+					if (!LandEye::InPicture(P, At)) continue;
+					++In;
+					StretchIn += bInStretch ? 1 : 0;
+					const double Depth = (At - P.Eye).Dot(Fwd);
+					if (Depth > 0.5 && 1.8 / Depth * PxAMetre >= 2.0) ++Tall;
 				}
-				const double Share = static_cast<double>(In) / std::max(1, Men);
+				MassTallLeast = std::min(MassTallLeast, static_cast<double>(Tall) / std::max(1, In));
+				const double Whole = static_cast<double>(In) / std::max(1, Men);
+				MassWholeLeast = std::min(MassWholeLeast, Whole);
+				const double Share = bStretched ? static_cast<double>(StretchIn) / std::max(1, StretchMen) : Whole;
+				if (bStretched) { MassStretched = true; MassStretchMen = StretchMen; MassStretchWide = STo - SFrom; }
 				if (Share < MassLeast) { MassLeast = Share; MassLeastAt = B; MassMen = Men; }
+			}
+			if (bNearReport)
+			{
+				const Vec Way = P.Look - P.Eye;
+				const double TanV = std::tan(P.Fov * 0.5 * 3.14159265358979 / 180.0);
+				int Near = 0;
+				if (Way.Length() > 1e-6)
+				{
+					const Vec Fwd = Way.Unit();
+					// (a man 1.8 m tall stands over 150 px of 665 within this depth)
+					const double Within = 1.8 / (2.0 * TanV * (150.0 / 665.0));
+					for (const LandFeed::Track& Tr : Rec->Tracks)
+					{
+						if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > B || (Tr.Out >= 0.0 && Tr.Out < B)) continue;
+						const LandFeed::Spot S = LandFeed::SpotAt(Tr, B);
+						const Vec At(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9);
+						const double Depth = (At - P.Eye).Dot(Fwd);
+						if (Depth > Within || Depth < 0.5) continue;
+						if (LandEye::InPicture(P, At)) ++Near;
+					}
+				}
+				const int Kd = static_cast<int>(P.Shot);
+				NearSum[Kd] += Near;
+				++NearFrames[Kd];
+				if (Near > NearMost[Kd]) { NearMost[Kd] = Near; NearMostAt[Kd] = B; }
 			}
 			// A shell landing at the lens this frame: the shot must be cut on its flash.
 			// (on the screen's clock: the scene plays the fight at half the battle's)
@@ -268,10 +328,19 @@ namespace
 			std::printf("; within %.0f m of a vehicle's fuel ball in its first %.0f s %d frames, the longest %.2f s (battle %.1f), the nearest %.0f m (battle %.1f)",
 				Set.FuelVehicle, Set.FuelFor, FuelFrames, FuelLongest, FuelAt, FuelNearest < 1e17 ? FuelNearest : -1.0, FuelNearestAt);
 			if (FuelLongest > 0.35) Fault("the lens stayed within a fuel ball's reach past its flash (the art director: cut on the flash)");
+			if (bNearReport)
+			{
+				std::printf("; men near by their height on the screen (over 150 of 665 px), a frame on average and at the most, by shot:");
+				for (int Kd = 0; Kd < 7; ++Kd)
+					if (NearFrames[Kd] > 0) std::printf(" %s %.1f, %d (battle %.0f)", LandEye::NameOf(static_cast<LandEye::Kind>(Kd)), static_cast<double>(NearSum[Kd]) / NearFrames[Kd], NearMost[Kd], NearMostAt[Kd]);
+			}
 			std::printf("; the whole mass %d shot%s", MassShots, MassShots == 1 ? "" : "s");
 			if (MassShots > 0)
 				std::printf(", at battle %.1f s (its window %.0f to %.0f s) for %.1f s, %.0f m up and %.0f m from where it looks, the men drawn in its picture %.0f%% at the least (battle %.1f, %d men)",
 					MassStart, MassFrom, MassTo, MassReal, MassHeight, MassFar, 100.0 * MassLeast, MassLeastAt, MassMen);
+			if (MassShots > 0 && MassStretched)
+				std::printf(" (the front too wide for one picture: those of the densest %.0f m of it, %d men; the whole front's %.0f%% at the least)", MassStretchWide, MassStretchMen, 100.0 * MassWholeLeast);
+			if (MassShots > 0) std::printf(", of them 2 px tall or more on the 665 px drawn %.0f%% at the least", 100.0 * MassTallLeast);
 			if (bMassGate && Rec->End >= MassTo && MassFrom > 0.0 && MassShots != 1) Fault("the whole mass was not shot once in its window (CD1)");
 			if (MassShots > 0 && (MassStart < MassFrom - 0.05 || MassStart > MassTo + 0.05)) Fault("the whole mass was shot outside its window (CD1)");
 			if (MassShots > 0 && MassLeast < 0.80) Fault("the whole mass's picture held under 80% of the men drawn (CD1)");
@@ -524,6 +593,7 @@ int main(int argc, char** argv)
 	FilmMeasure Film;
 	Film.Rec = &Rec;
 	Film.Set = ES;
+	Film.bNearReport = true;
 
 	const double Fps = 60.0, Dt = 1.0 / Fps;
 	// The clock: twice life before the armies meet, then as life (the scene's own default), to the end and 6 s more.
@@ -569,6 +639,102 @@ int main(int argc, char** argv)
 	double ScreenedSince = -1.0, LongestScreened = 0.0, LongestScreenedAt = 0.0;
 	std::map<std::string, int> CutsWhy;
 	const double Contact = Rec.Contact >= 0.0 ? Rec.Contact : 0.0;
+	// The general's battle, fought as it is shown (release 2, live): the same battle grown delta by delta (Tools/land_live
+	// deltas.ts writes header.json and deltas.jsonl; the recording given here is its whole.json), the screen kept 2.5
+	// battle seconds behind the rules as the scene keeps it (LandBattleLive.cpp's LiveLead) and waiting on them, and the
+	// general's orders deltas.ts gives leaned to (Director::Lean). The film keeps every rule it keeps on the battle read
+	// whole, with nothing of it known past what the rules have fought, and goes to the men he sent.
+	if (const char* LiveDir = std::getenv("LAND_PLAY_LIVE"))
+	{
+		std::string HeaderText;
+		LandFeed::Recording Live;
+		std::ifstream Deltas(std::string(LiveDir) + "/deltas.jsonl");
+		if (!LandJson::ReadFile(std::string(LiveDir) + "/header.json", HeaderText) || !LandFeed::ReadRecording(HeaderText, Live, Error) || !Deltas)
+			Fault("live: cannot read the live battle's header or deltas");
+		else
+		{
+			LandEye::Director Ld;
+			Ld.Begin(Live, EW, ES);
+			FilmMeasure LiveFilm;
+			LiveFilm.Rec = &Rec;
+			LiveFilm.Set = ES;
+			std::vector<int> Mine;
+			for (const LandFeed::Block& Bk : Live.Blocks) if (Bk.Side == Live.Me) Mine.push_back(Bk.Id);
+			// (deltas.ts's orders: an attack by his first block at 20 s, a run by his second at 25; and one more in the thick
+			// of the fight, to his third)
+			const double OrderAt[3] = { 20.0, 25.0, 120.0 };
+			double LeanAskedAt[3] = { -1.0, -1.0, -1.0 }, LeanMetAt[3] = { -1.0, -1.0, -1.0 };
+			const int Orders = std::min<int>(3, static_cast<int>(Mine.size()));
+			double B = 0.0, R = 0.0, Waited = 0.0;
+			int Deltas_ = 0, Frames_ = 0;
+			long MostSteps = 0;
+			double SlowestMs = 0.0, SumMs = 0.0;
+			std::string Line;
+			bool bMore = true;
+			while (B < Rec.End + 6.0)
+			{
+				const double BFrom = B;
+				const double Step = Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
+				// (the rules kept ahead: 2.5 battle seconds at life's pace, more as the screen runs faster)
+				const double Lead = 2.5 * std::max(1.0, Step / Dt);
+				while (bMore && !Live.bOver && Live.Fought < B + Step + Lead)
+				{
+					if (!std::getline(Deltas, Line)) { bMore = false; break; }
+					LandFeed::Grown G;
+					if (!LandFeed::AppendDelta(Line, Live, G, Error)) { Fault("live: a delta not read"); bMore = false; break; }
+					++Deltas_;
+				}
+				// (the screen waits on the rules: never within LiveMargin, a battle second, of what they have fought)
+				const double Cap = Live.bOver ? 1e18 : Live.Fought - 1.0;
+				if (B + Step > Cap) Waited += Dt;
+				B = std::max(BFrom, std::min(B + Step, Cap));
+				R += Dt;
+				++Frames_;
+				PlaceMovers(B);
+				for (int K = 0; K < Orders; ++K)
+					if (LeanAskedAt[K] < 0.0 && B >= OrderAt[K]) { Ld.Lean(Mine[static_cast<size_t>(K)]); LeanAskedAt[K] = R; }
+				const long Steps0 = Ld.Steps();
+				const auto Lt0 = std::chrono::steady_clock::now();
+				const LandEye::Pose P = Ld.Update(B, R, Dt);
+				const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Lt0).count();
+				SlowestMs = std::max(SlowestMs, Ms);
+				if (Ms > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow live eye %.2f ms (%ld steps) at battle %.2f: %s%s, why %s, tracks %zu rounds %zu\n", Ms, Ld.Steps() - Steps0, B, LandEye::NameOf(P.Shot), P.bCut ? " (cut)" : "", LandEye::NameOf(Ld.LastWhy()), Live.Tracks.size(), Live.Rounds.size());
+				SumMs += Ms;
+				MostSteps = std::max(MostSteps, Ld.Steps() - Steps0);
+				LiveFilm.Feed(Ld, P, BFrom, B, R, Dt);
+				if (std::getenv("LAND_PLAY_LIVE_CUTS") && P.bCut)
+					std::printf("  live cut at battle %.1f (real %.1f): %s on %d (block %d), why %s, leaning %d\n", B, R, LandEye::NameOf(P.Shot), P.Subject,
+						P.Subject >= 0 ? Live.Tracks[static_cast<size_t>(P.Subject)].Block : -1, LandEye::NameOf(Ld.LastWhy()), Ld.Leaning());
+				for (int K = 0; K < Orders; ++K)
+					if (LeanAskedAt[K] >= 0.0 && LeanMetAt[K] < 0.0 && P.Subject >= 0 && Live.Tracks[static_cast<size_t>(P.Subject)].Block == Mine[static_cast<size_t>(K)])
+						LeanMetAt[K] = R;
+			}
+			std::printf("live: %d deltas, %d frames, the screen waited on the rules %.1f s; the film's own section block %d section %d; the camera's work at most %ld ray steps a frame, %.3f ms on average and %.2f ms the slowest (the lists kept up with the battle included); %d cuts",
+				Deltas_, Frames_, Waited, Ld.SquadBlock(), Ld.SquadK(), MostSteps, SumMs / std::max(1, Frames_), SlowestMs, Ld.Cuts());
+			// (an order followed by the next before the film came to its men gives way to the next: the film goes to the
+			// men last sent)
+			bool bGaveWay[3] = { false, false, false };
+			for (int K = 0; K < Orders; ++K)
+			{
+				bGaveWay[K] = K + 1 < Orders && LeanAskedAt[K + 1] >= 0.0 && (LeanMetAt[K] < 0.0 || LeanMetAt[K] > LeanAskedAt[K + 1]);
+				if (bGaveWay[K]) std::printf("; the order to block %d at %.0f s: the next order came first", Mine[static_cast<size_t>(K)], OrderAt[K]);
+				else std::printf("; the order to block %d at %.0f s: on its men %.1f s after", Mine[static_cast<size_t>(K)], OrderAt[K], LeanMetAt[K] >= 0.0 ? LeanMetAt[K] - LeanAskedAt[K] : -1.0);
+			}
+			LiveFilm.Report("live");
+			std::printf("\n");
+			if (Ld.SquadBlock() < 0) Fault("live: the film's own section was never chosen");
+			if (MostSteps > 6000) Fault("live: the camera's work in a frame past 6,000 ray steps");
+			// (the second order comes while the first's shot may still hold its least: each met within ShotLeast, the
+			// choice and the next order's own shot)
+			for (int K = 0; K < Orders; ++K)
+				if (!bGaveWay[K] && (LeanMetAt[K] < 0.0 || LeanMetAt[K] - LeanAskedAt[K] > 2.0 * ES.ShotLeast + 1.0)) Fault("live: the film did not go to the men the general sent");
+		}
+		if (std::getenv("LAND_PLAY_ONLY_LIVE"))
+		{
+			std::printf("%s\n", Faults == 0 ? "PASS" : ("FAIL: " + std::to_string(Faults) + " faults").c_str());
+			return Faults == 0 ? 0 : 1;
+		}
+	}
 	double KnotStart = -1.0, KnotEnd = -1.0;
 	double LowestEye = 1e9;
 	std::vector<std::string> CutLines;
@@ -639,6 +805,7 @@ int main(int argc, char** argv)
 			if (!Eye.Roomy(Pose)) ++LensCrowded;
 			const double Screened = Eye.Screened(Pose);
 			if (Screened > ES.ScreenMost) ++LensScreened;
+			if (Screened > ES.ScreenMost && std::getenv("LAND_PLAY_SCREEN")) std::printf("  screened %.0f%% at battle %.2f: %s on %d, %.1f s into it, lens %.0f, eye %.1f over the ground\n", 100.0 * Screened, Battle, LandEye::NameOf(Pose.Shot), Pose.Subject, Real - LastCutReal, Pose.Fov, Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y));
 			if (Screened > ES.ScreenLeave)
 			{
 				++LensScreenedLeave;
@@ -652,7 +819,11 @@ int main(int argc, char** argv)
 		{
 			++CutsWhy[LandEye::NameOf(Eye.LastWhy())];
 			// (the whole mass is the one wide shot asked for in the middle: CD1)
-			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End && !Eye.MassShot()) ++MiddleAerials;
+			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End && !Eye.MassShot())
+			{
+				++MiddleAerials;
+				if (std::getenv("LAND_PLAY_SCREEN")) std::printf("  aerial in the middle at battle %.2f, why %s\n", Battle, LandEye::NameOf(Eye.LastWhy()));
+			}
 		}
 		const double Ground = Rec.Ground.HeightAt(Pose.Look.X, Pose.Look.Y);
 		LandSound::Listener Ear;
