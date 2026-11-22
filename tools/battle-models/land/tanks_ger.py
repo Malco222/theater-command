@@ -917,7 +917,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.socket("hit.turret", (x0 + 0.3, 0.96, zt + 0.4), Y, part="turret")
     v.socket("case", (x0 + 0.12, -0.5, roof), Z, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.55, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
-                 traverse=6.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
+                 traverse=10.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
     swaps = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + ZIMMERIT_HOW + " " + BY_MONTH_HOW,
              "paint": coats(v, paint or "grey"), "by_month": sprayed(TIGER_MONTHS)}
     if zim:
