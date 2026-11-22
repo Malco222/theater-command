@@ -135,7 +135,7 @@ namespace LandSound
 		double CloseDb(double CameraHeight) const { return CloseView.At(CameraHeight, 0.0); }
 
 		// The log (the director's: shots heard against takes started).
-		int ShotsHeard = 0, ShotTakes = 0, ShotsOutOfHearing = 0, ShotsDropped = 0, ShotsOnScreenDropped = 0, Cracks = 0, Landings = 0, Falls = 0, Delayed = 0;
+		int ShotsHeard = 0, ShotTakes = 0, ShotsOutOfHearing = 0, ShotsDropped = 0, ShotsOnScreenDropped = 0, ShotsMerged = 0, Cracks = 0, Landings = 0, Falls = 0, Delayed = 0;
 		/** The ground battle's own (land): bursts heard cut to their rounds, runs of cracks, rounds striking the ground
 		 * near the ear (in the earth, whining off), Garand clips and reloads, shouts, shells heard coming in. */
 		int ShotsByClip = 0, SmgBursts = 0, BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
@@ -143,12 +143,19 @@ namespace LandSound
 		int ArmourRings = 0;
 		/** The same-take rule's last step, when no pitch was free: left out off the screen, held to a clear moment on it,
 		 * a close rifle shot moved to a far recording, or (none of those) started at the farthest pitch. */
-		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameCrowded = 0;
+		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameToOtherFar = 0, SameCrowded = 0, SameMerged = 0;
 		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
 		 * pitch instead of held longer (land.sameTake), for the log. */
 		double MostDelay = 0.0, MostBurstOver = -1.0;
 		int Repitched = 0;
 		std::map<std::string, int> TakesByName;
+		/** A tank's close machine-gun bursts by her gun, army and the take picked ("roof_mg USA gunner_burst"), for the log. */
+		std::map<std::string, int> TankMgTakes;
+		/** Those whose take fires for less than the burst, so it played whole (its row holds a take too short). */
+		int TankMgWhole = 0;
+		/** Whether a take is on a list the mix names (byNation.mg.GER, tankMg.roof.USA ...), for the test. */
+		bool InList(const std::string& ListName, const std::string& Name) const;
+		bool HasList(const std::string& ListName) const { return Lists.count(ListName) > 0; }
 		/** The heat each weight key has added over the run (weight x closeness), for the log. */
 		std::map<std::string, double> HeatBy;
 
@@ -243,6 +250,7 @@ namespace LandSound
 		double CrackAt = -1e9;
 		/** The last Start found its take past its family's silent distance. */
 		bool bLastTooFar = false;
+		bool bLastMerged = false;  // the last Start heard its shot in a copy already sounding (a volley)
 		uint64_t Dice = 0x9E3779B97F4A7C15ull;
 
 		double Roll();

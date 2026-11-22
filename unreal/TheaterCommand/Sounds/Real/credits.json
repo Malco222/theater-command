@@ -1,5 +1,5 @@
 {
- "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section. The ground battle's own recordings (the Normandy dry run: each army's rifles, machine guns and sub-machine guns, the tanks' guns and engines, artillery and mortars, the shells landing, the men's falls, orders and kit) follow them, played by the mix's land section.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section. The ground battle's own recordings (the Normandy dry run: each army's rifles, machine guns and sub-machine guns, the tanks' guns and engines, artillery and mortars, the shells landing, the men's falls, orders and kit) follow them, played by the mix's land section. The Prokhorovka battle's Soviet recordings (the Maxim, the Mosin's bolt, four orders), from the same approved battle pack, close the list.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -2714,6 +2714,90 @@
      "licence": "Public domain",
      "page": "https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_16_Stug_IIIG.webm",
      "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "maxim_burst",
+   "recording": "maxim_burst",
+   "what": "A Soviet machine gun fires (Maxim; also the Soviet tanks' DT)",
+   "sources": [
+    {
+     "title": "Maxim Russian machinegun",
+     "creator": "poissonmort",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/poissonmort/sounds/160773/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bolt_mosin",
+   "recording": "bolt_mosin",
+   "what": "A Soviet rifleman works his bolt (Mosin-Nagant)",
+   "sources": [
+    {
+     "title": "Mosin Nagant Bolt Action Cycle",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Zott820/sounds/370345/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_01",
+   "recording": "russian_order_01",
+   "what": "A Soviet order: \"Ogon! Ogon!\" (fire!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_02",
+   "recording": "russian_order_02",
+   "what": "A Soviet order: \"Strelyat!\" (open fire!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_03",
+   "recording": "russian_order_03",
+   "what": "A Soviet shout: \"Pobeda!\" (victory!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "russian_order_04",
+   "recording": "russian_order_04",
+   "what": "A Soviet order: \"Davai! Davai!\" (come on!)",
+   "sources": [
+    {
+     "title": "Russian Cheeky Soldier Voice",
+     "creator": "qubodup",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/qubodup/sounds/212429/",
+     "archive": "Freesound"
     }
    ]
   }

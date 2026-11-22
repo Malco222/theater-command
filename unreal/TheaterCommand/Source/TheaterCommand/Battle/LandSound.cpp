@@ -137,6 +137,12 @@ namespace LandSound
 		return It == Lists.end() ? std::vector<std::string>() : It->second;
 	}
 
+	bool Mixer::InList(const std::string& ListName, const std::string& Name) const
+	{
+		auto It = Lists.find(ListName);
+		return It != Lists.end() && std::find(It->second.begin(), It->second.end(), Name) != It->second.end();
+	}
+
 	bool Mixer::IsCloseRifle(const std::string& Name) const
 	{
 		for (const auto& L : Lists)
@@ -321,6 +327,18 @@ namespace LandSound
 		{
 			if (Mg.Values[K].IsArray() && Mg.Keys[K][0] != '_') Lists["byNation.mg." + Mg.Keys[K]] = Takes(Mg.Values[K]);
 		}
+		// (a tank's machine guns, by army, over the infantry's: land.tankMg; its roof row the guns on a commander's
+		// hatch where they differ from her others, the Sherman's .50)
+		const Json& TankMg = Land["tankMg"];
+		for (size_t K = 0; K < TankMg.Keys.size(); ++K)
+		{
+			if (TankMg.Values[K].IsArray() && TankMg.Keys[K][0] != '_') Lists["tankMg." + TankMg.Keys[K]] = Takes(TankMg.Values[K]);
+		}
+		const Json& Roof = TankMg["roof"];
+		for (size_t K = 0; K < Roof.Keys.size(); ++K)
+		{
+			if (Roof.Values[K].IsArray() && Roof.Keys[K][0] != '_') Lists["tankMg.roof." + Roof.Keys[K]] = Takes(Roof.Values[K]);
+		}
 		const Json& Parts = Mg["parts"];
 		for (size_t K = 0; K < Parts.Keys.size(); ++K)
 		{
@@ -428,6 +446,7 @@ namespace LandSound
 	bool Mixer::Start(Take T, double Now, double Far, bool bOnScreen, std::vector<Take>& Out)
 	{
 		bLastTooFar = false;
+		bLastMerged = false;
 		if (T.Name.empty()) return false;
 		const Family& F = FamilyOf(T.Family);
 		// Past the family's silent distance the mix's own law has it at nothing: not a drop, out of hearing.
@@ -569,27 +588,82 @@ namespace LandSound
 							++SameHeldClear;
 							Best = T.Pitch;
 						}
-						else if (T.Family == "small_arms" && T.From <= 0.0 && T.Cut <= 0.0 && IsCloseRifle(T.Name))
+						else if (T.Family == "small_arms" && T.From <= 0.0 && T.Cut <= 0.0 && !ListOf("rifle.far").empty()
+							&& (IsCloseRifle(T.Name) || InList("rifle.far", T.Name)))
 						{
-							// (else a rifle's single close shot gives way to one of the far ones, a different recording: so many
-							// rifles at once, in the picture, are heard as the crowd's crackle, no copy laid on itself. Only a
-							// whole rifle shot: a crack, a whine, a ring or a Thompson's cut burst keeps its own take)
+							// (else a rifle's single shot gives way to another of the far ones, a different recording: so many
+							// rifles at once, in the picture, are heard as the crowd's crackle, no copy laid on itself. Each far
+							// recording is tried at the pitch farthest from its own copies near this moment, and the one with
+							// the most room taken: with 2,000 men a single random pick could land on a recording as crowded as
+							// the first. Only a whole rifle shot: a crack, a whine, a ring or a Thompson's cut burst keeps its own
+							// take)
 							const std::vector<std::string>& FarTakes = ListOf("rifle.far");
-							if (!FarTakes.empty() && std::find(FarTakes.begin(), FarTakes.end(), T.Name) == FarTakes.end())
+							const bool bWasClose = !InList("rifle.far", T.Name);
+							const size_t N = FarTakes.size(), O = std::min(N - 1, static_cast<size_t>(Roll() * static_cast<double>(N)));
+							std::string Other;
+							double OtherPitch = Best, OtherGap = bWasClose ? -1.0 : BestGap;
+							for (size_t I = 0; I < N && OtherGap < Repitch; ++I)
 							{
-								T.Name = Pick("rifle.far");
-								++SameToFar;
-								return Start(T, Now, Far, bOnScreen, Out);
+								const std::string& Name = FarTakes[(O + I) % N];
+								if (Name == T.Name) continue;
+								const double ApartC = std::min(0.15, std::max(0.02, Length ? Length(Name) : 1.5));
+								char KeyC[32];
+								std::snprintf(KeyC, sizeof(KeyC), "@%.3f", 0.0);
+								auto CIt = Copies.find(Name + KeyC);
+								auto GapC = [&](double Try)
+								{
+									double Least = 1e9;
+									if (CIt == Copies.end()) return Least;
+									for (const auto& Copy : CIt->second)
+									{
+										if (Copy.first >= Now - 1.0 && std::abs(StartsAt - Copy.first) < ApartC && Copy.second > 0.0)
+											Least = std::min(Least, std::abs(Try / Copy.second - 1.0));
+									}
+									return Least;
+								};
+								// (in half steps over the same reach as above: in a volley the copies' pitches lie at random, and
+								// the room between two of them is often off the whole steps)
+								double PitchC = Base, G = GapC(Base);
+								for (int K = 1; K <= 8 && G < Repitch; ++K)
+								{
+									for (const double Sign : { Way, -Way })
+									{
+										const double Try = Base * (1.0 + Sign * K * Step * 0.5);
+										const double GT = GapC(Try);
+										if (GT > G) { G = GT; PitchC = Try; }
+										if (G >= Repitch) break;
+									}
+								}
+								if (G > OtherGap) { OtherGap = G; OtherPitch = PitchC; Other = Name; }
+							}
+							// (and when every far recording is as crowded, a volley in the picture with every pitch near this one
+							// already sounding a copy of the same recording, this shot is heard in that copy: one more copy
+							// would only flange it. Not a drop: the flash has its sound)
+							if (OtherGap < Repitch)
+							{
+								++SameMerged;
+								bLastMerged = true;
+								return false;
+							}
+							if (!Other.empty())
+							{
+								T.Name = Other;
+								Best = OtherPitch;
+								BestGap = OtherGap;
+								++(bWasClose ? SameToFar : SameToOtherFar);
 							}
 						}
-						if (!bClear) ++SameCrowded;
+						if (!bClear && BestGap < Repitch) ++SameCrowded;
 					}
 					T.Pitch = Best;
 				}
 				++Repitched;
 			}
 		}
-		Seen.push_back({ Now + T.Delay, T.Pitch });
+		// (a shot moved to another recording is a copy of that one)
+		char KeyNow[32];
+		std::snprintf(KeyNow, sizeof(KeyNow), "@%.3f", T.From);
+		(T.Name + KeyNow == PieceKey ? Seen : Copies[T.Name + KeyNow]).push_back({ Now + T.Delay, T.Pitch });
 		// Down among the men the whole battle is louder (land.closeView).
 		T.Db += CloseView.At(EarHeight, 0.0);
 		const double Long = Length ? Length(T.Name) : 1.5;
@@ -782,13 +856,22 @@ namespace LandSound
 			// (whether the shot itself was past hearing, taken as its own take is started: the crack, the strike, a bolt
 			// or a case started after it set bLastTooFar again, and a far rifle under a near round's crack was counted
 			// as a shot on the screen dropped)
-			bool bStarted = false, bTooFar = false;
+			bool bStarted = false, bTooFar = false, bMerged = false;
 			if (N.Weapon == "rifle" || N.Weapon == "mg")
 			{
 				const bool bMg = N.Weapon == "mg";
 				T.Family = bMg ? "mg" : "small_arms";
 				const Family& F = FamilyOf(T.Family);
-				T.Name = Pick(Far > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : Nation(bMg ? "mg" : "rifle"));
+				// (a tank's machine guns are her own row, by army: a German tank's MG 34 is not her infantry's MG 42, the
+				// Sherman's roof .50 not her coaxial .30; an army with no row of its own takes the infantry's)
+				std::string MgList = Nation("mg");
+				if (bMg && N.Role == "tank")
+				{
+					const std::string Roof = "tankMg.roof." + Army, Own = "tankMg." + Army;
+					MgList = N.Mount == "roof_mg" && Lists.count(Roof) ? Roof : Lists.count(Own) ? Own : Lists.count("tankMg.*") ? std::string("tankMg.*") : MgList;
+				}
+				const bool bFarMg = bMg && Far > F.FarFrom;
+				T.Name = Pick(Far > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : bMg ? MgList : Nation("rifle"));
 				if (bMg)
 				{
 					// (a take whose firing is shorter than the burst gives way to one long enough, where the list has one)
@@ -797,7 +880,14 @@ namespace LandSound
 					{
 						auto Part = FiringPart.find(T.Name);
 						if (Part == FiringPart.end() || Part->second.second - Part->second.first >= Want) break;
-						T.Name = Pick(Far > F.FarFrom ? "mg.far" : Nation("mg"));
+						T.Name = Pick(bFarMg ? "mg.far" : MgList);
+					}
+					if (N.Role == "tank" && !bFarMg)
+					{
+						++TankMgTakes[(N.Mount.empty() ? std::string("?") : N.Mount) + " " + Army + " " + T.Name];
+						// (a take on a tank's row shorter than her burst plays whole: more rounds than she fired)
+						auto Part = FiringPart.find(T.Name);
+						if (Part != FiringPart.end() && Part->second.second - Part->second.first < Want) ++TankMgWhole;
 					}
 					CutBurst(T, N);
 				}
@@ -808,6 +898,7 @@ namespace LandSound
 				{
 					bStarted = Start(T, Now, Far, bOnScreen, Out);
 					bTooFar = bLastTooFar;
+					bMerged = bLastMerged;
 				}
 				Count(Now, bMg ? "mg" : "small_arms", Far);
 				if (!bMg && N.Track >= 0)
@@ -909,6 +1000,7 @@ namespace LandSound
 			}
 			if (bStarted) ++ShotTakes;
 			else if (bTooFar) ++ShotsOutOfHearing;
+			else if (bMerged) ++ShotsMerged;
 			else
 			{
 				++ShotsDropped;

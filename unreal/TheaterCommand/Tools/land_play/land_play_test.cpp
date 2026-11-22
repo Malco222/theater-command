@@ -779,14 +779,38 @@ int main(int argc, char** argv)
 	}
 	std::printf("effects:");
 	for (auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
-	std::printf("\nsound: %d shots, %d taken, %d out of hearing, %d dropped by the limits (%d on the screen), %d cracks overhead, %d landings, %d falls; %d takes moved for the 0.15 s rule\n",
-		Mix.ShotsHeard, Mix.ShotTakes, Mix.ShotsOutOfHearing, Mix.ShotsDropped, Mix.ShotsOnScreenDropped, Mix.Cracks, Mix.Landings, Mix.Falls, Mix.Delayed);
+	std::printf("\nsound: %d shots, %d taken, %d out of hearing, %d dropped by the limits (%d on the screen), %d heard in a copy already sounding (a volley), %d cracks overhead, %d landings, %d falls; %d takes moved for the 0.15 s rule\n",
+		Mix.ShotsHeard, Mix.ShotTakes, Mix.ShotsOutOfHearing, Mix.ShotsDropped, Mix.ShotsOnScreenDropped, Mix.ShotsMerged, Mix.Cracks, Mix.Landings, Mix.Falls, Mix.Delayed);
+	// (a shot heard in a copy is the last resort of a volley in the picture: more than one in a thousand and the rule is
+	// hiding shots, not sparing a flanged copy)
+	if (Mix.ShotsMerged * 1000 > Mix.ShotsHeard) Fault("more than one shot in a thousand was heard only in a copy already sounding");
 	std::printf("land: %d bursts cut to their rounds, %d runs of cracks, %d rounds struck the ground near the ear (%d whined off), %d Garand clips pinged (%d reloads), %d shouts (%d voice lines in all), %d shells heard coming in; the longest a take was held for the 0.15 s rule %.2f s, %d started on time at another pitch instead\n",
 		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
 	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");
+	{
+		// A tank's machine guns are her own (land.tankMg, by army; its roof row the guns on her commander's hatch):
+		// every close burst from a tank plays a take on her army's row, the roof's where it has one.
+		std::printf("tank machine guns heard close, by gun, army and take:");
+		int OffRow = 0, RoofOff = 0;
+		for (const auto& Kv : Mix.TankMgTakes)
+		{
+			std::printf(" %s %d;", Kv.first.c_str(), Kv.second);
+			const size_t A = Kv.first.find(' '), B = Kv.first.find(' ', A + 1);
+			const std::string Gun = Kv.first.substr(0, A), Army = Kv.first.substr(A + 1, B - A - 1), Name = Kv.first.substr(B + 1);
+			const std::string Roof = "tankMg.roof." + Army;
+			const std::string Row = Mix.HasList("tankMg." + Army) ? "tankMg." + Army : Mix.HasList("tankMg.*") ? std::string("tankMg.*")
+				: Mix.HasList("byNation.mg." + Army) ? "byNation.mg." + Army : std::string("byNation.mg.*");
+			if (Gun == "roof_mg" && Mix.HasList(Roof)) { if (!Mix.InList(Roof, Name)) RoofOff += Kv.second; }
+			else if (!Mix.InList(Row, Name)) OffRow += Kv.second;
+		}
+		std::printf("\n");
+		if (OffRow > 0) Fault("a tank's machine gun played a take off her army's tank row");
+		if (RoofOff > 0) Fault("a roof gun played a take off its roof row");
+		if (Mix.TankMgWhole > 0) Fault("a tank's burst played a take shorter than the burst, whole (her row holds a take too short for her bursts)");
+	}
 	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
-	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots moved to a far recording, %d at the farthest pitch\n",
-		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameToFar, Mix.SameCrowded);
+	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots moved to a far recording, %d far rifle shots moved to another far recording, %d heard in a copy (every far recording crowded), %d at the farthest pitch\n",
+		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameToFar, Mix.SameToOtherFar, Mix.SameMerged, Mix.SameCrowded);
 	{
 		// The GI's clip cues: a reload is two pieces of garand_reload (clip in now, the rod slamming 0.246 s later, the
 		// slam's onset at 2.744 s into the file landing 0.33 s after the cue), and the squad leader's Thompson is 4
