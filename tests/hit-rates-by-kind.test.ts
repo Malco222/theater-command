@@ -177,16 +177,16 @@ describe('the law with hit rates by kind', () => {
     expect(sum).toBeCloseTo(h.hits, 6);
   });
 
-  it('keeps the all-kind takes of 19:48Z as the reference: battleship 6.25 (7 at anchor), carrier 5.7, cruiser 8, destroyer 2.25', () => {
+  it('keeps the all-kind takes as the reference: battleship 6.25 (8 at anchor, CINCPAC), carrier 5.7, cruiser 8, destroyer 2.25', () => {
     expect(takesOf(false)).toEqual({ bb: 6.25, cv: 5.7, ca: 8, dd: 2.25, ss: 1 });
-    expect(takesOf(true).bb).toBe(7);
+    expect(takesOf(true).bb).toBe(8);
   });
 
   it('lays the kind form\'s takes: bombs and torpedoes each against their own, from the record\'s pure cases', () => {
     const sea = kindTakesOf(false), anchor = kindTakesOf(true);
     expect(sea.bomb).toEqual({ bb: null, cv: 6.5, ca: 8, dd: 3, ss: 1 });
-    expect(sea.torpedo).toEqual({ bb: 5.25, cv: 4, ca: 8, dd: 1.6667, ss: 1 });
-    expect(anchor.bomb.bb).toBe(7);
+    expect(sea.torpedo).toEqual({ bb: 5.25, cv: 4.3333, ca: 8, dd: 1.6667, ss: 1 });
+    expect(anchor.bomb.bb).toBe(13);
     expect(anchor.torpedo.bb).toBe(6);
     expect(anchor.bomb.cv).toBe(6.5);
   });
@@ -201,27 +201,31 @@ describe('the law with hit rates by kind', () => {
   });
 
   it('sinks the carriers as the record has them: Yorktown afloat on 4 June, Lexington and Hornet sunk, all five together', () => {
-    expect(sunkByKind('cv', 3, 2, false)).toBeCloseTo(0.96, 2); // Yorktown, 4 June: afloat
+    expect(sunkByKind('cv', 3, 2, false)).toBeCloseTo(0.92, 2); // Yorktown, 4 June: afloat
     expect(sunkByKind('cv', 3, 2, false)).toBeLessThan(1);
-    expect(sunkByKind('cv', 2, 3.5, false)).toBeGreaterThan(1); // Lexington, sunk (1.18)
-    expect(sunkByKind('cv', 3, 3, false)).toBeGreaterThan(1); // Hornet, sunk (1.21)
+    expect(sunkByKind('cv', 2, 3.5, false)).toBeCloseTo(1.12, 2); // Lexington, sunk
+    expect(sunkByKind('cv', 5, 3, false)).toBeCloseTo(1.46, 2); // Hornet, sunk (5 bombs, the crashes left out)
     // Taiho 1 torpedo, Shokaku 3.5, Lexington, Hornet, and Yorktown in the end (3 bombs, 4 torpedoes): 5 sunk.
-    const five = [[0, 1], [0, 3.5], [2, 3.5], [3, 3], [3, 4]].reduce((s, [b, t]) => s + sunkByKind('cv', b, t, false), 0);
-    expect(five).toBeCloseTo(5, 1);
-    // A reading, not a fault: Taiho (0.25) and Shokaku (0.88) sank by fuel vapour and damage control, which the field does not know.
-    expect(sunkByKind('cv', 0, 1, false)).toBeCloseTo(0.25, 6);
-    expect(sunkByKind('cv', 0, 3.5, false)).toBeCloseTo(0.875, 6);
+    const five = [[0, 1], [0, 3.5], [2, 3.5], [5, 3], [3, 4]].reduce((s, [b, t]) => s + sunkByKind('cv', b, t, false), 0);
+    expect(five).toBeCloseTo(5, 2);
+    // A reading, not a fault: Taiho (0.23) and Shokaku (0.81) sank by fuel vapour and damage control, which the field does not know.
+    expect(sunkByKind('cv', 0, 1, false)).toBeCloseTo(0.23, 2);
+    expect(sunkByKind('cv', 0, 3.5, false)).toBeCloseTo(0.81, 2);
   });
 
-  it('sinks battleships at anchor by both kinds: West Virginia sunk, Nevada beached, the four together over the record by a fifth', () => {
-    expect(sunkByKind('bb', 7, 0, true)).toBeCloseTo(1, 6); // bombs 7 at anchor
-    expect(sunkByKind('bb', 0, 6, true)).toBeCloseTo(1, 6); // torpedoes 6 (Oklahoma)
-    expect(sunkByKind('bb', 2, 6.5, true)).toBeGreaterThan(1); // West Virginia (1.37)
-    expect(sunkByKind('bb', 6, 1, true)).toBeCloseTo(1.02, 2); // Nevada, beached (half)
-    // California (2 bombs, 2.5 torpedoes) comes to 0.70 against sunk: a reading, the four together 3.1 against 2.5.
-    expect(sunkByKind('bb', 2, 2.5, true)).toBeCloseTo(0.70, 2);
-    const four = [[2, 6.5], [2, 2.5], [6, 1]].reduce((s, [b, t]) => s + sunkByKind('bb', b, t, true), 0);
-    expect(four).toBeCloseTo(3.1, 1);
+  it('sinks Pearl\'s battleships at anchor by both kinds (CINCPAC\'s report): the eight together as the record has them', () => {
+    expect(sunkByKind('bb', 13, 0, true)).toBeCloseTo(1, 6); // bombs 13 at anchor: Arizona's eight and the three that lived
+    expect(sunkByKind('bb', 0, 6, true)).toBeCloseTo(1, 6); // torpedoes 6 (Oklahoma's middle)
+    expect(sunkByKind('bb', 2, 6.5, true)).toBeGreaterThan(1); // West Virginia (1.24)
+    expect(sunkByKind('bb', 5.5, 1, true)).toBeCloseTo(0.59, 2); // Nevada, beached (half)
+    // California (1.5 bombs, 2.5 torpedoes, the middles) comes to 0.53 against sunk: a reading.
+    expect(sunkByKind('bb', 1.5, 2.5, true)).toBeCloseTo(0.53, 2);
+    // Arizona 8, Oklahoma, West Virginia, California, Nevada, Tennessee, Maryland, Pennsylvania: 4.36 against 4.5 sunk.
+    const eight = [[8, 0], [0, 6], [2, 6.5], [1.5, 2.5], [5.5, 1], [2, 0], [2, 0], [1, 0]].reduce((s, [b, t]) => s + sunkByKind('bb', b, t, true), 0);
+    expect(eight).toBeCloseTo(4.36, 2);
+    // Helena and Raleigh lived at anchor: the cruiser's takes, 0.13 and 0.25.
+    expect(sunkByKind('ca', 0, 1, true)).toBeLessThan(1);
+    expect(sunkByKind('ca', 1, 1, true)).toBeLessThan(1);
   });
 
   it('sinks cruisers and destroyers by their own takes: Mikuma and Mogami one between them, Sims by 3 bombs, 3 by 5 torpedoes', () => {
@@ -245,12 +249,12 @@ describe('the law with hit rates by kind', () => {
     const bombs = j.kinds!.dive + j.kinds!.level + j.kinds!.mast, torps = j.kinds!.torpedo;
     expect(torps).toBeGreaterThan(0);
     expect(j.sunk.bb).toBeCloseTo((torps * 40 * 2) / weight / 5.25, 8);
-    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 3) / weight / 6.5 + (torps * 40 * 3) / weight / 4, 8);
+    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 3) / weight / 6.5 + (torps * 40 * 3) / weight / 4.3333, 8);
     expect(j.sunk.dd).toBeCloseTo((bombs * 160 * 0.5) / weight / 3 + (torps * 160 * 0.5) / weight / 1.6667, 8);
     // At anchor (Pearl, turn 28), bombs sink battleships too.
     const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
     const ab = at.kinds!.dive + at.kinds!.level + at.kinds!.mast, atT = at.kinds!.torpedo;
-    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 2) / weight / 7 + (atT * 40 * 2) / weight / 6, 8);
+    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 2) / weight / 13 + (atT * 40 * 2) / weight / 6, 8);
   });
 
   it('reads a strike on a fleet with the switch on, and says the hits by kind on the raid card', () => {
