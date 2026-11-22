@@ -30,6 +30,8 @@ BUILDERS = {
     "Matilda": tanks_uk.matilda,
     "CharB1": tanks_fra.char_b1,
     "M13": tanks_ita.m13,
+    "Semovente": tanks_ita.semovente,
+    "L3": tanks_ita.l3,
     "Type97": tanks_jap.type97,
     "7TP": tanks_pol.tp7,
     "LightTank": tanks_any.light_tank,
@@ -71,6 +73,8 @@ ABOUT = {
     "Matilda": {"nation": "UK", "role": "infantry tank", "years": "1939-42", "units": "armor (Britain and the Commonwealth to 1942; Australia throughout)"},
     "CharB1": {"nation": "FRA", "role": "heavy tank", "years": "1936-40", "units": "armor (France, Vichy France, Free France)"},
     "M13": {"nation": "ITA", "role": "medium tank", "years": "1940-43", "units": "armor (Italy)"},
+    "Semovente": {"nation": "ITA", "role": "assault gun", "years": "1941-43", "units": "assault guns beside Italy's armor (from 1941-11)"},
+    "L3": {"nation": "ITA", "role": "tankette", "years": "1935-43", "units": "armor (Italy, 1939 to 1940; the light tanks beside the M13 after)"},
     "Type97": {"nation": "JAP", "role": "medium tank", "years": "1938-45", "units": "armor (Japan)"},
     "7TP": {"nation": "POL", "role": "light tank", "years": "1937-39", "units": "armor (Poland)"},
     "LightTank": {"nation": "any", "role": "light tank", "years": "1936-42", "units": "armor (every nation without a tank of its own; the United States to 1942, the Soviet Union to 1941)"},
@@ -143,3 +147,14 @@ def build(name, fine=True, tag=None, whole=False, **choice):
         import works
         works.choice_dirt(v.m, getattr(v, "worn_kw", {}).get("ground"))
     return v
+
+
+# ---- The Eastern Front's additions (the KV-1, from the Eastern Front thread's 7b6d455c; appended so no other lines move)
+import tanks_kv  # noqa: E402
+
+BUILDERS["KV1"] = tanks_kv.kv1
+ABOUT["KV1"] = {"nation": "SOV", "role": "heavy tank", "years": "1939-43",
+                "units": "armor (Soviet Union, 1941-42, beside the T-34: one tank in four of a block, the unit table's call); the Soviet heavy tank wherever a heavy kind is drawn"}
+WHOLE["KV1"] = {"turret": "all"}
+FACES["KV1"] = [("1941: the welded turret", {"turret": "welded"}),
+                ("1942 on: the cast turret (beside the welded one through 1942)", {"turret": "cast"})]
