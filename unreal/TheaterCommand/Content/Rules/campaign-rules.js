@@ -52105,7 +52105,10 @@ ${next.text}` : ""}` : next ? next.also : "";
       if (a.atWork) lines2.push(`Chance of being caught this month: ${pct10(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
       const rest = a.training ? "" : barredLine(a.missions, { host: theName2(s, a.host), restSaid: a.atWork && a.rest > 0 });
       if (rest) lines2.push(rest);
-      for (const x of a.sees.slice(0, 5)) lines2.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
+      for (const x of a.sees.slice(0, 5)) {
+        const d = Math.round(x.divs);
+        lines2.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${d} division${d === 1 ? "" : "s"}.`);
+      }
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines: lines2, buttons };
     });
     const notes = room2.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
