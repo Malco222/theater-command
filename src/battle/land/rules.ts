@@ -63,6 +63,17 @@ export const LAND = {
    */
   /** The setup step (release 2): metres a placed gun or team keeps clear of every other block. */
   placeClear: 12,
+  /**
+   * Direct command (release 2; Brian, 22 November: "I want to be able to click a unit and point where I want them to
+   * go"). At the double: a 'move' with run goes LAND.double.pace faster by its motion (foot run; lorries and tanks at
+   * their best; guns are towed as fast as they go), is struck 'exposed' harder while on the run (upright men in the
+   * open), and strikes 'blows' as hard for 'winded' seconds after (men getting their breath). Orders by radio: an order
+   * of the player's reaches a block 'delay' seconds after he gives it, 'cut' times that when its headquarters is hit
+   * (wavering, or under 'hqAt' of its strength: the runners go instead of the wireless). Neither is felt unless the
+   * player orders a run, or the battle is opened with radio on.
+   */
+  double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 } as Record<Motion, number>, exposed: 1.25, blows: 0.75, winded: 20 },
+  radio: { delay: 5, cut: 2.5, hqAt: 0.5 },
   teams: {
     mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
     mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },

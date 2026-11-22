@@ -62,7 +62,8 @@ export interface AttackPlan {
 const MAIN = 100000;
 
 export function thinkFor(b: LandBattle, side: Side): void {
-  const mine = b.units.filter((u) => u.side === side && ok(u) && u.kind !== 'fort');
+  // A block the player has taken in hand is his, not his staff's (direct command, release 2: LandUnit.taken).
+  const mine = b.units.filter((u) => u.side === side && ok(u) && u.kind !== 'fort' && !u.taken);
   const foes = b.units.filter((u) => u.side !== side && ok(u));
   if (!foes.length) return;
   const style = b.style[side];

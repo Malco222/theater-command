@@ -849,7 +849,7 @@ export class Drill {
     }
     // The main effort lying at its start line under its guns (ai.ts: the plan's 'guns' phase).
     const P = b.plan[u.side];
-    if (P && P.phase === 'guns' && P.role[u.id] === 'main' && near < DR.ranges.column) return 'startline';
+    if (P && P.phase === 'guns' && P.role[u.id] === 'main' && !u.taken && near < DR.ranges.column) return 'startline';
     if (u.reserve === 'held' && near > 250) return 'rest';
     return near < DR.ranges.column || u.side === 'def' ? 'hold' : 'rest';
   }
@@ -1535,12 +1535,14 @@ export class Drill {
     // Leapfrog only where a man can run the block's whole cycle of ground in his rush; faster, the rolling advance.
     const vLeap = book ? (CATCH_UP * 0.85 * bk.rush) / bk.cyc : 4.7 * N.rush / (N.rush + N.halt);
     sq.leap = sq.leap ? v < vLeap * 1.1 : v < vLeap * 0.9;
+    // At the double (the player's run, release 2): every man up and running with the block, no fire and movement.
+    const dbl = u.order?.kind === 'move' && !!u.order.run;
     for (const m of this.up(sq)) {
       const [a, l] = this.slot(sq, m, 'line');
       const s = toWorld(u, u.face, a, l);
-      if (!under) {
+      if (!under || dbl) {
         m.aim = undefined; m.until = t + 1; m.el = undefined;
-        this.follow(sq, m, s, close ? 'advance' : 'walk');
+        this.follow(sq, m, s, dbl ? 'run' : close ? 'advance' : 'walk');
         continue;
       }
       if (m.role === 'officer' && sq.leap) {

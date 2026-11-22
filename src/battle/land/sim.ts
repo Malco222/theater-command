@@ -16,7 +16,7 @@ import { BEND, buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt,
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, gunsOf, reachOf, type Kind, type Motion } from './rules';
-import { bendAt, deploy, makeBlocks, wetUnder, type LandUnit } from './units';
+import { bendAt, deploy, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -157,6 +157,20 @@ export class LandBattle implements BattleSim<LandUnit> {
   setup: Side | null = null;
   /** Where the placing side may put a block: its zone, grown to take in every block of its own where it was drawn up. */
   private room: [number, number, number, number] | null = null;
+  /** The setup step places every block of the side, not only its guns and teams (release 2, the general's controls). */
+  private placeAll = false;
+  /**
+   * Direct command (release 2; Brian, 22 November: "I want to be able to click a unit and point where I want them to
+   * go", and 03:09Z "do 1 2 and 3"). perUnit: a block the player orders is his (LandUnit.taken), and his staff thinks
+   * for the rest of his side (while ai[side] is on), never for his. radio: his orders reach a block by radio, after
+   * LAND.radio's delay. Both off unless whoever opens the field turns them on; off, nothing here is read.
+   */
+  perUnit = false;
+  radio = false;
+  /** True while a staff (ai.ts) is giving its orders: those are the computer's, never taken in hand nor sent by radio. */
+  private staffing = false;
+  /** The player's orders on the air (radio): each block's, with the battle time it lands. */
+  private pending: { at: number; id: number; go: () => void }[] = [];
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -314,13 +328,24 @@ export class LandBattle implements BattleSim<LandUnit> {
   command(c: Command, by: Side): boolean {
     if (this.over) return false;
     const mine = (ids: number[]): LandUnit[] => ids.map((i) => this.unit(i)).filter((u): u is LandUnit => !!u && u.side === by && fighting(u) && u.kind !== 'fort');
+    // Direct command (release 2): the player's own orders, not his staff's. The blocks he orders are his (perUnit), and
+    // his orders go by radio once the clock runs (radio); his staff's, and the computer's, as ever.
+    const player = !this.staffing && this.ticket[by].human;
+    const hands = (us: LandUnit[]): void => { if (this.perUnit && player) for (const u of us) this.take(u); };
+    const air = this.radio && player && this.t > 0;
+    const give = (u: LandUnit, go: () => void): void => this.order(u, go, air);
     switch (c.do) {
       case 'move': {
         const us = mine(c.units);
         if (!us.length) return false;
-        // A group keeps its shape: each block goes to the point plus its place in the group.
+        hands(us);
+        // A group keeps its shape: each block goes to the point plus its place in the group. At the double (run): the
+        // player's run (release 2).
         const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
-        for (const u of us) this.send(u, { kind: 'move', x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face });
+        for (const u of us) {
+          const o: LandOrder = { kind: 'move', x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...(c.run ? { run: true } : {}) };
+          give(u, () => this.send(u, o));
+        }
         this.say({ what: 'contact', side: by, text: '' });
         this.events.pop(); this.log.pop();
         return true;
@@ -328,9 +353,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       case 'line': {
         const us = mine(c.units);
         if (!us.length) return false;
+        hands(us);
         for (const p of lineUp(us, by, c.x0, c.y0, c.x1, c.y1, 150)) {
           const u = this.unit(p.id)!;
-          this.send(u, { kind: 'move', x: p.x, y: p.y, face: p.face });
+          give(u, () => this.send(u, { kind: 'move', x: p.x, y: p.y, face: p.face }));
         }
         return true;
       }
@@ -338,6 +364,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         const t = this.unit(c.target);
         const us = mine(c.units);
         if (!t || t.side === by || !live(t) || !us.length) return false;
+        hands(us);
         // Several blocks sent at one: they come on abreast, each in its own lane, the outer ones round the target's
         // flanks, instead of all making for its middle. One block alone goes straight for it (the computer general's way).
         const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
@@ -359,20 +386,23 @@ export class LandBattle implements BattleSim<LandUnit> {
             const e = foes.reduce((m, f) => (dist(f.x, f.y, px, py) < dist(m.x, m.y, px, py) ? f : m), t);
             // Still in its own lane, now before the block it falls on: each block its own stretch of their front (and
             // of the far bank, over a river), never every block on one enemy's middle (the art director, b439).
-            if (e !== t) { this.send(u, { kind: 'attack', x: e.x, y: e.y, target: e.id, press: true, lane: lane - ((e.x - t.x) * rx + (e.y - t.y) * ry), axis, ...together }); return; }
+            if (e !== t) { const o: LandOrder = { kind: 'attack', x: e.x, y: e.y, target: e.id, press: true, lane: lane - ((e.x - t.x) * rx + (e.y - t.y) * ry), axis, ...together }; give(u, () => this.send(u, o)); return; }
           }
-          this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id, press: us.length > 1, ...(us.length > 1 ? { lane, axis } : {}), ...together });
+          const o: LandOrder = { kind: 'attack', x: t.x, y: t.y, target: t.id, press: us.length > 1, ...(us.length > 1 ? { lane, axis } : {}), ...together };
+          give(u, () => this.send(u, o));
         });
         return true;
       }
       case 'hold': {
         const us = mine(c.units);
-        for (const u of us) { u.order = null; u.path = []; u.keepFace = null; delete u.aim; }
+        hands(us);
+        for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; });
         return us.length > 0;
       }
       case 'withdraw': {
         const us = mine(c.units);
-        for (const u of us) this.send(u, { kind: 'withdraw', x: u.x, y: by === 'att' ? 0 : this.field.h });
+        hands(us);
+        for (const u of us) give(u, () => this.send(u, { kind: 'withdraw', x: u.x, y: by === 'att' ? 0 : this.field.h }));
         return us.length > 0;
       }
       case 'withdrawAll': {
@@ -388,6 +418,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       case 'auto': {
         if (c.side !== by && !this.ai[c.side]) return false;
         this.ai[c.side] = c.on;
+        // Handed to the computer, the whole side is its staff's again (direct command, release 2).
+        if (c.on) for (const u of this.units) if (u.side === c.side) delete u.taken;
         return true;
       }
       case 'dice': {
@@ -405,11 +437,19 @@ export class LandBattle implements BattleSim<LandUnit> {
         // the computer's aim given to the player, never aimed sharper than the player (b533). Other blocks are left be.
         // The setup step (release 2): { do: 'land:place', units: [id], x, y } puts one gun block there; { do:
         // 'land:begin' } ends the step, and the clock may run.
+        // { do: 'land:place', ..., face } turns it that way (release 2, radians as the core's).
         if (c.do === 'land:place') {
           const u = this.unit(Number((c.units as number[] | undefined)?.[0])), x = Number(c.x), y = Number(c.y);
           if (!u || this.placeWhy(u, x, y) !== null || by !== this.setup) return false;
-          this.place(u, x, y);
+          const f = c.face === undefined ? undefined : Number(c.face);
+          this.place(u, x, y, f !== undefined && Number.isFinite(f) ? f : undefined);
           return true;
+        }
+        // Direct command (release 2): { do: 'land:staff', units } hands blocks the player took back to his staff.
+        if (c.do === 'land:staff') {
+          const us = mine((c.units ?? []) as number[]).filter((u) => u.taken);
+          for (const u of us) delete u.taken;
+          return us.length > 0;
         }
         if (c.do === 'land:begin') {
           if (by !== this.setup) return false;
@@ -420,11 +460,45 @@ export class LandBattle implements BattleSim<LandUnit> {
           const t = this.unit(Number(c.target));
           const guns = mine((c.units ?? []) as number[]).filter((u) => u.kind === 'art');
           if (!t || t.side === by || !live(t) || !guns.length) return false;
-          for (const u of guns) { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; }
+          hands(guns);
+          for (const u of guns) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; });
           return true;
         }
         return false;
       }
+    }
+  }
+
+  /** The player takes a block in hand (direct command): his staff leaves it be; a held reserve he orders is committed. */
+  private take(u: LandUnit): void {
+    u.taken = true;
+    if (u.reserve === 'held') u.reserve = 'sent';
+  }
+
+  /**
+   * An order for one block: at once, or by radio (direct command, release 2), landing LAND.radio's delay later, longer
+   * when its headquarters is hit. A later order on the air replaces the one still on the way.
+   */
+  private order(u: LandUnit, go: () => void, air: boolean): void {
+    if (!air) { go(); return; }
+    const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
+    const at = Math.round((this.t + R.delay * (hit ? R.cut : 1)) * 1000) / 1000;
+    this.pending = this.pending.filter((p) => p.id !== u.id);
+    this.pending.push({ at, id: u.id, go });
+    u.orderAt = at;
+  }
+
+  /** The player's orders on the air that have reached their blocks (radio): carried out, if the block still fights. */
+  private landOrders(): void {
+    if (!this.pending.length) return;
+    const due = this.pending.filter((p) => p.at <= this.t + 1e-9);
+    if (!due.length) return;
+    this.pending = this.pending.filter((p) => p.at > this.t + 1e-9);
+    for (const p of due) {
+      const u = this.unit(p.id);
+      if (!u) continue;
+      delete u.orderAt;
+      if (fighting(u)) p.go();
     }
   }
 
@@ -645,8 +719,10 @@ export class LandBattle implements BattleSim<LandUnit> {
    * every other block; the computer's stand where they were drawn up. Every other order is taken as before the clock
    * starts. False if the battle has begun.
    */
-  setupOn(side: Side): boolean {
+  setupOn(side: Side, all = false): boolean {
     if (this.t > 0 || this.over) return false;
+    // Every block of the side, not only its guns and teams (release 2: the player as the general places his army).
+    this.placeAll = all;
     const z = this.field.zones[side];
     const mine = this.units.filter((u) => u.side === side);
     this.room = [
@@ -663,7 +739,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Why a block may not stand there in the setup step, or null where it may (release 2). */
   placeWhy(u: LandUnit, x: number, y: number): string | null {
     if (!this.setup || u.side !== this.setup) return 'The battle has begun.';
-    if (u.kind !== 'art' || !fighting(u)) return 'Only guns and support teams are placed.';
+    if (this.placeAll ? u.kind === 'fort' || !fighting(u) : u.kind !== 'art' || !fighting(u)) return this.placeAll ? 'Fortifications stay where they are built.' : 'Only guns and support teams are placed.';
     if (u.dug) return 'It is dug in where it stands.';
     if (!Number.isFinite(x) || !Number.isFinite(y)) return 'Off the field.';
     const r = this.room!, hw = u.w / 2, hd = u.d / 2;
@@ -686,10 +762,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     return null;
   }
 
-  /** Puts a block where the setup step placed it: drawn up there, facing the enemy, with no order. */
-  private place(u: LandUnit, x: number, y: number): void {
-    u.x = x; u.y = y; u.face = u.side === 'att' ? 0 : Math.PI;
-    u.order = null; u.path = []; u.keepFace = null;
+  /** Puts a block where the setup step placed it: drawn up there, facing the enemy (or the way it was turned), with no order. */
+  private place(u: LandUnit, x: number, y: number, face?: number): void {
+    u.x = x; u.y = y; u.face = face ?? (u.side === 'att' ? 0 : Math.PI);
+    u.order = null; u.path = []; u.keepFace = face ?? null;
     delete u.aim; delete u.stand; delete u.standFor; delete u.standFace; delete u.closing;
     this.ways.delete(u.id);
     u.home = [x, y];
@@ -700,9 +776,13 @@ export class LandBattle implements BattleSim<LandUnit> {
   step(): void {
     if (this.setup) return;
     if (this.over) { this.drill?.step(); return; }
+    // The player's orders on the air that have reached their blocks (direct command, release 2).
+    this.landOrders();
     if (this.t >= this.nextThink) {
       this.nextThink = this.t + LAND.think;
+      this.staffing = true;
       for (const s of ['att', 'def'] as Side[]) if (this.ai[s]) thinkFor(this, s);
+      this.staffing = false;
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
@@ -934,6 +1014,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // never its turned back (b496(1)).
     const rearguard = this.givingGround(t);
     if ((u.order && u.path.length && u.speed > 0.5) || rearguard) p *= LAND.moving;
+    // Men getting their breath after a run at the double strike softer (direct command, release 2).
+    if (u.winded !== undefined && this.t < u.winded) p *= LAND.double.blows;
     let nerveMul = 1;
     if (u.kind === 'art') {
       const G = gunsOf(u), close = this.gap(u, t) < G.closeAt;
@@ -952,6 +1034,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Tanks that have left their infantry on close ground take the card's own figure for tanks alone there (item 7).
     if (t.kind === 'arm' && LAND.alone.on) take *= this.alone(t, u);
     if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u);
+    // Upright and running in the open, at the double: struck harder (direct command, release 2).
+    if (t.order?.kind === 'move' && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
     const dmg = p * am * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
     return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground };
@@ -1088,7 +1172,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       let t = this.unit(u.order.target!);
       // An attack pressed by several blocks carries on: when its block breaks or leaves, it takes the nearest enemy
       // still fighting within reach of the march, as the computer general would (ruling 226(4)).
-      if (u.order.press && t && !fighting(t) && !this.ai[u.side]) {
+      if (u.order.press && t && !fighting(t) && (!this.ai[u.side] || u.taken)) {
         const next = this.units.filter((e) => e.side !== u.side && fighting(e) && dist(e.x, e.y, u.x, u.y) < LAND.press)
           .reduce<LandUnit | null>((m, e) => (!m || dist(e.x, e.y, u.x, u.y) < dist(m.x, m.y, u.x, u.y) ? e : m), null);
         if (next) {
@@ -1167,7 +1251,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     const up = inRiver(g) ? 0 : heightAt(this.field, u.x + Math.sin(head) * 20, u.y + Math.cos(head) * 20) - heightAt(this.field, u.x, u.y);
     pace *= up > 0 ? Math.max(0.4, 1 - (up / 20) * 1.5) : 1;
     const top = u.team ? LAND.teams[u.team].speed : LAND.speed[k];
-    let v = top * Math.max(0.12, pace) * (run ? 1.15 : 1) * (u.state === 'wavering' ? 0.85 : 1);
+    // At the double (direct command, release 2): faster, and winded for a while after.
+    const double = !run && u.order?.kind === 'move' && !!u.order.run;
+    if (double) u.winded = this.t + LAND.double.winded;
+    let v = top * Math.max(0.12, pace) * (run ? 1.15 : 1) * (double ? LAND.double.pace[m] : 1) * (u.state === 'wavering' ? 0.85 : 1);
     const d = dist(u.x, u.y, to[0], to[1]);
     const stepLen = Math.min(d, v * DT);
     const [ax, ay] = ahead(head);

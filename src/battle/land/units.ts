@@ -29,6 +29,8 @@ export interface LandOrder {
    * tanks can find them. A group with no foot ignores it.
    */
   together?: number;
+  /** At the double (release 2, the player's 'move' with run): foot go LAND.double faster, upright and winded after. */
+  run?: boolean;
 }
 
 export interface LandUnit extends UnitBase {
@@ -85,6 +87,15 @@ export interface LandUnit extends UnitBase {
    * A block that is sent no longer goes back to the ground it was drawn up on.
    */
   reserve?: 'held' | 'sent';
+  /**
+   * The player has taken this block in hand (release 2, per-unit command: LandBattle.perUnit): the staff thinks for the
+   * rest of his side, never for it, until a 'land:staff' order hands it back.
+   */
+  taken?: boolean;
+  /** Battle time its run at the double ends being felt: its blows are weaker till then (LAND.double.winded). */
+  winded?: number;
+  /** Orders by radio (release 2, LandBattle.radio): the battle time the player's last order reaches it, while it is on the way. */
+  orderAt?: number;
   /** Models on its tray at full strength: a division's, or a third of them for a regiment. */
   tray: number;
   /** The divisions it carries, by their strength as the card weighs them (divs x str): a regiment a third (item 7's count). */

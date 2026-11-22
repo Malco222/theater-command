@@ -28,10 +28,16 @@
 //                                   on the setup step: the player places his guns and support teams before the clock
 //                                   runs ("The setup step" below), and setup is { room: [x0, y0, x1, y1] }, where they
 //                                   may stand. Two arguments: no setup step, as always
+//                                   Direct command (release 2; Brian, 22 November): { setup: true } places every block of his
+//                                   side, not only his guns and teams ({ do: 'land:place', units: [id], x, y, face? }); { staff:
+//                                   true }: a block he orders is his (view units carry taken: true) and his staff fights the
+//                                   rest ({ do: 'land:staff', units } hands blocks back); { radio: true }: his orders reach a
+//                                   block a few seconds later, longer when its headquarters is hit (units carry orderIn, the
+//                                   seconds left). A 'move' with run: true goes at the double. Off unless asked
 //   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
 //                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
 //                                   red ghost with the words beside it). Moves nothing (release 2)
-//   TC.battlePlace(id, x, y)     -> { ok, why, view }: the setup step, on the drop: the gun or team put there (ok), or
+//   TC.battlePlace(id, x, y[, face])-> { ok, why, view }: the setup step, on the drop: the gun or team put there (ok), or
 //                                   why it may not stand there, and it stays where it was (release 2)
 //   TC.battleBegin()             -> { view }: ends the setup step and starts the clock at ×1, the rush still on
 //                                   (release 2). A speed chosen while placing (TC.battleSpeed) begins it too
@@ -490,6 +496,9 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     ...(land.short ? { short: land.short, parent: land.parent } : {}),
     // A tank block's crews' own marks (b477): names, with their English meaning, or Germany's kill rings, per tank.
     ...(land.crew ? { crew: land.crew } : {}),
+    // Direct command (release 2): a block the player has taken in hand, and the seconds till his order on the air reaches it.
+    ...(land.taken ? { taken: true } : {}),
+    ...(land.orderAt !== undefined ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
     // What its guns throw, as the art director's explosions sheet sizes it (src/battle/land/shells.ts).
     ...(land.cal ? { cal: land.cal } : {}),
     // A tank block that has left its foot on close ground and is paying for it this second (item 7): buttoned up,
@@ -591,7 +600,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -623,8 +632,12 @@ export function battleCalls(h: BattleHooks) {
         return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
       });
       if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
-      // The setup step (release 2): only when asked; the 3D game's two-argument call never opens it.
-      if (opts?.setup) sim.setupOn(ses.me);
+      // The setup step (release 2): only when asked; the 3D game's two-argument call never opens it. Every block of his
+      // side is placed in it (the general's controls).
+      if (opts?.setup) sim.setupOn(ses.me, true);
+      // Direct command (release 2): his staff fights the blocks he has not taken in hand, and his orders go by radio.
+      if (opts?.staff) { sim.perUnit = true; sim.ai[ses.me] = true; }
+      if (opts?.radio) sim.radio = true;
       const f = sim.field;
       return {
         field: {
@@ -640,14 +653,14 @@ export function battleCalls(h: BattleHooks) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
       const u = land?.unit(Number(id));
-      return { why: !land || !u ? 'Nothing to place.' : u.side !== ses.me ? 'Only your own guns and support teams are placed.' : land.placeWhy(u, Number(x), Number(y)) };
+      return { why: !land || !u ? 'Nothing to place.' : u.side !== ses.me ? 'Only your own troops are placed.' : land.placeWhy(u, Number(x), Number(y)) };
     },
-    battlePlace(id: number, x: number, y: number) {
+    battlePlace(id: number, x: number, y: number, face?: number) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
       const u = land?.unit(Number(id));
       const why = !land || !u ? 'Nothing to place.' : land.placeWhy(u, Number(x), Number(y));
-      const ok = why === null && ses.sim.command({ do: 'land:place', units: [Number(id)], x: Number(x), y: Number(y) }, ses.me);
+      const ok = why === null && ses.sim.command({ do: 'land:place', units: [Number(id)], x: Number(x), y: Number(y), ...(face !== undefined ? { face: Number(face) } : {}) }, ses.me);
       return { ok, why: ok ? null : why, view: viewOut(ses, ses.sim.view(ses.me)) };
     },
     battleBegin() {
