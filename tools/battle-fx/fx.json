@@ -304,6 +304,8 @@
    "root_solid": 0.6,
    "_root": "Art director 19:43Z: earth flying up is heavy at the root and thins only near the tip, with side edges broken as the clods are. Up to root_solid of a heavy jet's length its puffs are denser, and at each step a dense lumpy clump bulges out of its side (side_clumps is the chance).",
    "side_clumps": 0.2,
+   "side_clump_rim": 0,
+   "_side_clump_rim": "Art director 14:09Z (clods sheet, 1.0 s): the clumps bulging from a jet's root read as hard straight-cut polygons, the cut-card look, solid to a rim at 0.55 of their opacity with straight sides between the ring's points. As the heavy pieces were mended (_tips_1943), a clump keeps its dark heart out to the jet's inner ring and fades to side_clump_rim at its very edge, so its lumpy outline shows soft and no straight cut. Absent: 0.55, as before.",
    "_tips_1943": "Art director 19:43Z: jet sides read as glass shards or blades. The cause was each big heavy piece's wide see-through band (solid only to half its radius, then thinning to a hard rim), drawn with straight sides between the ring's points. Now a heavy piece is solid out to heavy_inner of its radius (heavy_heart) and fades in a thin soft edge with no rim, so its lumpy outline shows and nothing is glassy. The root stays dense and dark up to root_solid with clumps bulging from its sides (side_clumps); the tip is torn into smaller, rougher, scattered pieces (tip_grain, tip_rough, tip_inner), drawn out and pointed less (tip_stretch 1.2, tip_point 0.45). The lighter dust between the jets is scattered wider, lumpy and soft, never pointed (fill_scatter, fill_rough, fill_stretch).",
    "_heavy_jets_0319": "Art director 03:13Z (Brian's battle clips): 24 to 40 thin dark spiky jets in place of 5 to 8 heavy ones. The shells keep 3 to 5 heavy jets for the mass and add the spikes (burst.crown.spikes); the bombs keep their own passed fan (sizes.<bomb>.crown).",
    "spikes": {
@@ -398,7 +400,9 @@
    "smoke_dark": 0.45,
    "smoke_settle_s": 1.3,
    "fill_dust": 0.35,
-   "_how": "Art director 03:13Z, from Brian's battle clips: close-hit black is 29% of the burst in the clips and 0.8% in ours; the burst itself has to carry the black, no grade can. A dense mass of near-black lumps at the crown's base (and the crown's body near-black with it): count lumps (times the square root of scale, at least 0.7), out to width and up to height times the crown's height, each lump_r times the crown's height, the heavy colour times shade (near black), lit on top and dark below by light, lumpy by rough, living life_s and settling toward the smoke's colour mixed with settle_dust of the dust, settle of the way by its end, so near-black for 0.3 to 1.0 s, then brown-grey. Not on water. Pass: at 0.4 s on earth, at least 15% of the burst box under luma 60. The earth veil over the foot is the dust mixed veil_dark toward the heavy colour, and the smoke puffs in the lower smoke_band of the cloud start smoke_dark as bright, settling to the cloud's own colour by smoke_settle_s. The dust between the jets is the heavy colour mixed with fill_dust of its usual dust share, settling the same way."
+   "_how": "Art director 03:13Z, from Brian's battle clips: close-hit black is 29% of the burst in the clips and 0.8% in ours; the burst itself has to carry the black, no grade can. A dense mass of near-black lumps at the crown's base (and the crown's body near-black with it): count lumps (times the square root of scale, at least 0.7), out to width and up to height times the crown's height, each lump_r times the crown's height, the heavy colour times shade (near black), lit on top and dark below by light, lumpy by rough, living life_s and settling toward the smoke's colour mixed with settle_dust of the dust, settle of the way by its end, so near-black for 0.3 to 1.0 s, then brown-grey. Not on water. Pass: at 0.4 s on earth, at least 15% of the burst box under luma 60. The earth veil over the foot is the dust mixed veil_dark toward the heavy colour, and the smoke puffs in the lower smoke_band of the cloud start smoke_dark as bright, settling to the cloud's own colour by smoke_settle_s. The dust between the jets is the heavy colour mixed with fill_dust of its usual dust share, settling the same way.",
+   "rim": 0.1,
+   "_rim": "Art director 14:09Z (clods sheet, 1.0 s): the burst's dark body beside and below its core showed hard straight-cut edges. A foot piece keeps its dark heart out to 0.7 of its radius and fades to rim (0.3 before) at its very edge, so the body's lumpy outline shows soft and its darkness is kept (the burst's mean level the same to a tenth). Absent: 0.3, as before."
   },
   "debris": {
    "frames": [
@@ -427,7 +431,9 @@
      2.0
     ],
     "shade": 2.5,
-    "_chunk": "Irregular chunks, never smooth beans (art director 19:36Z): each clod has its own lumpy outline (rough), tumbles as it flies, and has a lit face toward the sun and a dark one away (shade)."
+    "_chunk": "Irregular chunks, never smooth beans (art director 19:36Z): each clod has its own lumpy outline (rough), tumbles as it flies, and has a lit face toward the sun and a dark one away (shade).",
+    "most_long": 3,
+    "_most_long": "Art director on cut 5 (06, 22 November): a fast clod drawn as a streak along its flight was a long dark slab across the men. A thrown lump (clod, shower, lens piece, a gun's kicked dirt; never a spark, an ember or a tracer) is drawn no longer than most_long times its width. Absent or 0: as before."
    },
    "grit": {
     "streaks": true,
@@ -451,6 +457,9 @@
      0.5,
      0.8
     ],
+    "rim": 0.1,
+    "inner": 0.6,
+    "_rim": "Art director 14:09Z (clods sheet, 1.0 s): the big dark lumps beside and below the burst, the pieces thrown past the lens, were hard straight-cut polygons, the cut-card look: solid to a rim at 0.6 of their opacity, with straight sides between the ring's points. Each keeps its dark heart out to inner of its radius and fades to rim at its very edge, so its torn outline shows soft. Absent: as before.",
     "pieces": [
      3,
      7
@@ -700,7 +709,7 @@
    "gone_dirt": 0,
    "alpha_pow": 2.0,
    "alpha_most": 0.95,
-   "_how": "The production lead's FX3 (battle-scale plan, 22 November): a hit on land outside a sea battle keeps a share of its pieces, each as much bigger. The share is FarK, its crown's height in the picture (crown_m, at the scene's own window pixels) against full_px, all of them at that or taller and never under least, times BusyK: with more than halve_past pieces asked for on the screen half, with the room four fifths full a quarter, with more asked than the room over_busy; a hit whole in the picture only near_busy, and only with the room four fifths full; between, by how small it stands. Of the crown it keeps every heavy jet, each of fewer pieces up to three times as long; the square root of the share of the dust between the jets, the body and the foot (each bigger); the share of the spikes, clumps and thrown clods. Its skirt keeps the share to skirt_pow, its smoke to smoke_pow, so a cloud seen after a cut to a nearer eye is softer but whole. And a piece of a land hit past gone_beyond_m that stands under gone_px across at its biggest, and a crater's mark likewise, takes no place in the room and is not laid (its flash never; its thrown dirt only with gone_dirt 1). A see-through piece of such a hit (skirt, smoke, the cloud's lighter fringe) laid Bigger times as wide is as thick as Bigger to alpha_pow of them laid one over another, never over alpha_most (the art director 12:33Z: with fewer layers the grass showed through the far clouds and tinted them; 0 or no key: as laid). Measured on the ground scene's whole-army wide shot (1,080 x 670, a 1.5 km front from 810 m back and 470 m up, the kit's crater marks off as the ground scene has them), 6 shells a second: the room asked 18,400 against 3,000 before and 3,200 now, Draw 6.7 ms before and 3.6 now on the test box (median of 3), and over four frames 98 of 101 young bursts show in the picture against 35 before (the bursts' own pieces filled the room and it left the farthest out first); 7.6 a second, 146 of 153 against 37. A single burst at the preview's own distance is drawn as before, byte for byte. No row: as before."
+   "_how": "The production lead's FX3 (battle-scale plan, 22 November): a hit on land outside a sea battle keeps a share of its pieces, each as much bigger. The share is FarK, its crown's height in the picture (crown_m, at the scene's own window pixels) against full_px, all of them at that or taller and never under least, times BusyK: with more than halve_past pieces asked for on the screen half, with the room four fifths full a quarter, with more asked than the room over_busy; a hit whole in the picture only near_busy, and only with the room four fifths full; between, by how small it stands. Of the crown it keeps every heavy jet, each of fewer pieces up to three times as long; the square root of the share of the dust between the jets, the body and the foot (each bigger); the share of the spikes, clumps and thrown clods. Its skirt keeps the share to skirt_pow, its smoke to smoke_pow, so a cloud seen after a cut to a nearer eye is softer but whole. And a piece of a land hit past gone_beyond_m that stands under gone_px across at its biggest, and a crater's mark likewise, takes no place in the room and is not laid (its flash never; its thrown dirt only with gone_dirt 1). A see-through piece of such a hit (skirt, smoke, the cloud's lighter fringe) laid Bigger times as wide is as thick as Bigger to alpha_pow of them laid one over another, never over alpha_most (the art director 12:33Z: with fewer layers the grass showed through the far clouds and tinted them; 0 or no key: as laid). Measured on the ground scene's whole-army wide shot (1,080 x 670, a 1.5 km front from 810 m back and 470 m up, the kit's crater marks off as the ground scene has them), 6 shells a second: the room asked 18,400 against 3,000 before and 3,200 now, Draw 7.9 ms before and 3.5 now on the test box (median of 3), and over four frames 96 of 101 young bursts show in the picture against 35 before (the bursts' own pieces filled the room and it left the farthest out first); 7.6 a second, 147 of 153 against 37, Draw 10.9 and 4.7 ms. A single burst at the preview's own distance is drawn as before, byte for byte. No row: as before."
   }
  },
  "sizes": {
@@ -4784,6 +4793,56 @@
    "soft": 0.15,
    "near_m": 10.0,
    "_backstop": "The art director 07:22Z 22 November: the camera keeps out of a burst's cloud for its first 4 s (about 30 m for a 500 lb bomb); as a backstop a size's own lens_near_m (sizes.<size>.lens_near_m: 75 mm 10, 105 12, 150 17, 250 lb 23, 500 lb 30) stands for near_m for that burst's pieces where it is more, so a lens caught inside a big cloud dims and never goes black."
+  },
+  "soft_contact": {
+   "_how": "The land battle's soft contact (the art director's cut 5, still 07, 22 November: a burning wreck's flame cut along a hard straight line where it met the hull; ruling 14:16Z, B). With the scene's FBattleEffects::SetSoftContact(metres) its material (M_BattlePuffsSoft) fades every piece where it comes within that depth in front of the ground or a hull, so a flame or smoke meets them softly. A piece lying on the ground would fade with it: a thrown clod or fragment come to rest, a spent case, a crater's mark. So each is laid lie_nearer times that depth nearer the eye along its own line of sight and smaller to match, the same picture to the pixel, every point of it that far in front of what it lies on: it stays whole, from any height of eye (a lift straight up would not: from above, 3 cm is 3 cm of depth; along the line of sight it is the full depth). Within four times that of the eye it is laid where it is. Off unless the scene calls it; the air and sea scenes never do.",
+   "lie_nearer": 1.5
+  },
+  "smoke_budget": {
+   "_how": "FX9 of the production lead's battle-scale plan (22 November): a budget for the screen's area of smoke, pre-built and OFF (on 0) until the Mac's gate shows the smoke's fill is what costs. on 1: a piece of smoke (a burst's or a fire's puff or low skirt; not a light, a kept or oil column, a trail, a thrown piece, a far form or a funnel's even plume) under skip_px.0 across at its biggest takes no place and is not laid, coming in by degrees to whole at skip_px.1. And past screens of the smoke's fill a frame (each piece's area on the screen, over the screen's), the big smoke near the lens, over thin_from_px across (whole at a quarter as wide again), is thinned: a share of its pieces left out, each by its own lot and fading out over thin_band of lots, and the rest that much darker (the light they let through, to the power of one over the share kept), so a cloud of many keeps its weight. That share is what would bring this frame within screens, never over thin_most, followed over thin_s seconds so the smoke thins and comes back by degrees. The cloud rig (a 1.5 km front, 6 shells a second): the wide shot, 810 m back, fills 0.6 screens; the battle camera 150 m back fills 3.0, 1.7 of it 61 puffs over 200 px. The thinning has its own switch, thin (1 with on 1): the art director refused it at 17:43Z 22 November (the near veil tears into clear patches and dark lumps where one smooth body is the film look; if fill is ever proved to cost, try a lower-resolution smoke pass first, or merge near puffs into fewer, bigger, softer ones, never holes and lumps). The skip alone (on 1, thin 0) is invisible, and art has no objection to it. No row, or on 0: as before.",
+   "on": 0,
+   "thin": 0,
+   "skip_px": [
+    2.0,
+    3.0
+   ],
+   "screens": 2.0,
+   "thin_from_px": 150.0,
+   "thin_most": 0.5,
+   "thin_s": 1.0,
+   "thin_band": 0.15
+  },
+  "six_sided": {
+   "_how": "FX7 of the production lead's battle-scale plan (22 November), pre-built and OFF (on 0) until the Mac's gate shows the kit's own time is what costs. on 1: a piece under under_px across on the screen (its long way) has its ring worked out at six of its points (the first, the one half way round where a piece's point and tail are, and four between, each the ring's nearest to a sixth of the way round), and every other point is a copy of the nearest of those, so the mesh stays as it is and the triangles between two copies cover nothing. At under 8 px the six sides lie within half a pixel of the round. Not a strip's piece, a tapered tracer, a squared case, a hub's fan, a tube or a round column's lump. No row, or on 0: as before.",
+   "on": 0,
+   "under_px": 8.0
+  },
+  "room_shares": {
+   "_how": "FX5, room shares by kind (production lead's battle-scale plan; built 11-22, OFF until the Mac's gate run shows the room is what costs). On, every gate but the vehicles' dust (bursts, their lingering smoke's slow fade, fires, trails, gun smoke) counts the room without the dust trails' pieces, up to dust.vehicles.most_of_room, so a column of tanks never thins them. The art director's ruling of 18:12Z: the dust trails give way first, by distance, in fewer, longer, softer pieces, never gaps or beads, and never stopped. The far trails are laid one puff in ShareThin of their own, each reaching back over the gap and as much denser, a little softer and wider; ShareThin rises while the dust holds more than the rest leaves it (dust_top of the room less the highest the rest asked over dust_memory_s, never under dust_floor of it) and falls when it holds less, over dust_thin_s, up to dust_most_thin. A vehicle within dust_full_m of the eye keeps its whole trail; thinning reaches full 2.5 times that far. No trail is thinned below dust_least_alive puffs alive along it. Far off, a vehicle's two dust sockets (Id 2K and 2K+1, as the land battle calls them) become one wider trail. Art director 18:31Z, PASS, and for the heaviest barrage until FX8: when thinning is not enough, far trails past dust_full_m are let go before any far burst loses a piece, the farthest first: once the rest's peak over dust_memory_s with the dust passes drop_from of the room, more go over dust_thin_s; under drop_back they come back. A trail let go lays nothing for at least drop_hold_s and what it laid fades over its own life, never cut; it comes back from its next puff, fading in. Cloud rig (sand, 120 tanks, 1.5 km front, battle camera 810 m back): the slow fade is whole at every rate; far bursts lose at most about 1% at 2 to 3.5 shells a second, and at 6 the far trails are let go and far bursts are as today (what they lose there is the bursts' own overflow, FX8's).",
+   "on": 0,
+   "dust_floor": 0.05,
+   "dust_top": 0.92,
+   "dust_memory_s": 4,
+   "dust_full_m": 300,
+   "dust_most_thin": 8,
+   "dust_thin_s": 2,
+   "dust_least_alive": 2,
+   "drop_hold_s": 2,
+   "drop_from": 1.0,
+   "drop_back": 0.9
+  },
+  "air_far": {
+   "_how": "The air scene's far forms (its 11-22 ask, so its trail room can go from 24 to 60 at 150 aircraft); OFF until the air scene and the art director take them. trails_on: a trail past trails_from_m is laid as about trails_puffs puffs over its length, each that much farther apart and reaching back to the last as much farther, its hanging bars one in trails_keep_one_in of those puffs, so it is the same line in fewer, longer pieces; it goes over by degrees across the last trails_band of the range, so no length of a trail switches form, and nothing laid changes as the eye closes in. The art director's mends of 18:44Z: until the bar over them is laid, a far trail's short pieces stand in for it, as dark as the two would be together, so the smoke behind a far aircraft is never pale; each bar comes into sight point by point along it by the age there; and every far piece's sides swell and pinch by up to trails_billow of its width at each point along it (and a little more each side on its own), so a far trail billows and its edges are broken, never a smooth contrail. guns_on: a gun past guns_from_m flies no rounds; every guns_dash_s it lays one solid dash in its tracer core's colour along the aim, guns_dash_flight_s of a round's flight long, as wide as the far tracer's dash, carried with the aircraft; it takes up its rounds again where the dashes leave off. Cloud rig (five burning aircraft, 0.8 to 2.2 km, 60 m/s, guns in bursts): a far trail holds about 35 to 40 pieces against about 128, as dark all along as today's (averaged over five moments, within a few levels), with no jump frame to frame; a far gun lays a quarter of the pieces.",
+   "trails_on": 0,
+   "trails_from_m": 1200,
+   "trails_band": 0.15,
+   "trails_puffs": 40,
+   "trails_keep_one_in": 3,
+   "trails_billow": 0.25,
+   "guns_on": 0,
+   "guns_from_m": 1500,
+   "guns_dash_s": 0.2,
+   "guns_dash_flight_s": 0.12
   }
  },
  "air_flak": {
@@ -5563,7 +5622,9 @@
    122
   ],
   "most_a_frame": 3,
-  "_most_a_frame": "The pre-check on de54166, 17:51Z 20 November: a ricochet's cost is its call (off a deck one pushes some 345 pieces, 0.6 ms; a dozen in one frame took 7 ms). No more than most_a_frame shots begin to be followed at one moment; one past it keeps its flash, sparks and puff, and its shot is not drawn. Without the key: no such limit, as before."
+  "_most_a_frame": "The pre-check on de54166, 17:51Z 20 November: a ricochet's cost is its call (off a deck one pushes some 345 pieces, 0.6 ms; a dozen in one frame took 7 ms). No more than most_a_frame shots begin to be followed at one moment; one past it keeps its flash, sparks and puff, and its shot is not drawn. Without the key: no such limit, as before.",
+  "shot_from_mm": 20,
+  "_shot_from": "The production lead's FX4: a glance off armour from a calibre under shot_from_mm (a rifle's or a machine gun's round; the ground battle sends them at 8 mm, 1,541 in Normandy) is its two-frame flash and its sparks, and nothing more: no lamp, no puff of paint and no glowing shot followed off, so it takes none of most_shots and most_a_frame. Its sparks are as a glance's always were for its calibre, read at 20 mm at the least (about half a 75 mm shell's in count, speed and size). With its shot, each such glance was about 500 pieces; now 32 (its flash's ragged pieces and 7 to 13 sparks), and ten a second along a tank's side stand at 95 pieces at the most, against 3,023. A calibre that is no number counts as a shell's. Without the key, every glance as before."
  },
  "sea": {
   "_how": "A sea battle (its own FBattleEffects, UseSeaDistance): its gun actions are fought with the enemy line 5 to 15 km from the eye, so it draws out to draw_beyond_m, and what a far line is read by is held up on the screen there. flash: the flame of a gun's flash or a hit's is never under least_px and keeps keep of its strength; where the whole flash stands under glow_px across it is far: its flame turns hot of the way toward colour and burns over times white, and a soft glow of the flame's own colour is laid over it, glow_px across and glow_alpha thick, outliving it by glow_s (all of that at half glow_px and under, none at glow_px). column: a shell column's jets and fingers are never under least_px long (a splash under 50 m tall as much less as the root of its height), keeping keep. Near the eye each is bigger than its floor and nothing changes. gone_px: beyond air.draw_beyond_m, where nothing used to be drawn, a piece of smoke, dust or water under that many pixels across takes no place (lights, kept columns and pieces with a floor of their own are left alone): a hit on the far line is over a thousand pieces a metre across. hit: beyond that distance a shell's or bomb's smoke on a ship or the land is fewer, bigger puffs the smaller it stands: all of them where its crown is full_px tall, that share under it, never under least (coming in over the next over_m), and under half of them it has no skirt of dust.",
@@ -6313,6 +6374,171 @@
     "least_px": 4,
     "keep": 0.5,
     "windage": 1.0
+   }
+  }
+ },
+ "land_grade": {
+  "_how": "The land battle grades its own picture (most of the colour out of the darks and the middles, contrast 1.42, half a stop down: tools/battle-fx/land_grade.py), not by the game's curve these colours are written for, so a scene under it says so (FBattleEffects::SetLandGrade) and this row stands in for what it names, each at the same path under land_grade. Art director on cut 5 (06, 22 November): the clods were flat black silhouettes, core L 9; lit as earth they are about 45 to 70 in the smoke's shade, brown about 70,58,45, lumps not cards. Written with land_grade.py write: earth 118,103,61 lands 72,62,42 (art director 14:09Z: earth, not rose-brown; first 118,99,72 for 70,58,45 leaned rosy on the lit faces); mud 110,97,59, snow 125,114,76 and woods 138,118,67 the same lift over what they were painted to show, and sand's stones 107,93,53 (its clods land 72,59,45 already). The grade is steep (a tenth darker is ten levels darker), so the clods' shade (lit face and dark face) is 0.5 and their tint 0.95 to 1.05, holding a clod within about 40 to 80, and the shower's backlit undersides 0.9 to 1.0 (45 to 60) where 0.55 went black. Art director 13:58Z: the yellow tracer written for the grade lands near 214,207,103 (with the fire's spread 220,207,118; plain, it landed pale khaki 202,197,162 and was lost in the wheat): colour 232,208,0, and by day its edge 255,178,0 (233,193,110 with the spread, aim 229,196,31). Its white-hot core stays as it is. The desert (the production lead's theatre ask, 17:46Z 22 November; the art director's 13:30Z rule, colours written warmer to land on her numbers): sand's soil, heavy jets, dust and smoke, and the vehicles' sand dust low and high, written with land_grade.py write to land as grounds.sand.paint and dust.vehicles say the picture shows them (dust 196,174,135 was landing grey 185,174,154, smoke 160,144,126, heavy jets near black 38,31,21; vehicle dust 200,195,187). Sand's clods (72,59,45) and stones stay as passed, its foot black.",
+  "_targets": {
+   "_how": "The colour each desert paint and dust must land at on screen, as the art director passed them (11-22). land_grade.py retarget <recipe> <grade> --apply writes every entry again for a ground's grade; _targets_grade names the grade the writes above were made for.",
+   "grounds": {
+    "sand": {
+     "paint": {
+      "soil": [
+       150,
+       128,
+       95
+      ],
+      "heavy": [
+       96,
+       78,
+       55
+      ],
+      "dust": [
+       196,
+       174,
+       135
+      ],
+      "smoke": [
+       176,
+       152,
+       118
+      ]
+     }
+    }
+   },
+   "dust": {
+    "vehicles": {
+     "low": {
+      "sand": [
+       170,
+       140,
+       106
+      ]
+     },
+     "high": {
+      "sand": [
+       210,
+       196,
+       170
+      ]
+     }
+    }
+   }
+  },
+  "_targets_grade": "normandy",
+  "grounds": {
+   "earth": {
+    "paint": {
+     "clod": [
+      118,
+      103,
+      61
+     ]
+    }
+   },
+   "mud": {
+    "paint": {
+     "clod": [
+      110,
+      97,
+      59
+     ]
+    }
+   },
+   "snow": {
+    "paint": {
+     "clod": [
+      125,
+      114,
+      76
+     ]
+    }
+   },
+   "woods": {
+    "paint": {
+     "clod": [
+      138,
+      118,
+      67
+     ]
+    }
+   },
+   "sand": {
+    "paint": {
+     "stone": [
+      107,
+      93,
+      53
+     ],
+     "soil": [
+      173,
+      142,
+      83
+     ],
+     "heavy": [
+      138,
+      112,
+      67
+     ],
+     "dust": [
+      214,
+      171,
+      89
+     ],
+     "smoke": [
+      194,
+      156,
+      93
+     ]
+    }
+   }
+  },
+  "burst": {
+   "debris": {
+    "clods": {
+     "shade": 0.5,
+     "tint": [
+      0.95,
+      1.05
+     ]
+    },
+    "shower": {
+     "shade": [
+      0.9,
+      1.0
+     ]
+    }
+   }
+  },
+  "tracer": {
+   "colour": [
+    232,
+    208,
+    0
+   ],
+   "day_edge": [
+    255,
+    178,
+    0
+   ]
+  },
+  "dust": {
+   "vehicles": {
+    "low": {
+     "sand": [
+      192,
+      147,
+      84
+     ]
+    },
+    "high": {
+     "sand": [
+      232,
+      193,
+      122
+     ]
+    }
    }
   }
  }
