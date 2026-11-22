@@ -3955,8 +3955,9 @@ function spiesPage(s: Game, region: number): Page | null {
     const lines = [`${a.where}${a.abroad ? `, in ${theName(s, a.host)}` : ', at home'}. ${a.doing}`];
     if (a.wait > 0) lines.push(`At work in ${a.wait} month${a.wait === 1 ? '' : 's'}.`);
     if (a.atWork) lines.push(`Chance of being caught this month: ${pct(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? '' : 's'} before another act of sabotage.` : ''}`);
-    // (an agent on the road or in training has the month's wait above: the rest of its work needs no line of its own)
-    const rest = a.atWork ? barredLine(a.missions) : '';
+    // (an agent in training has the month's wait above and no work yet; one on the road can be given its work for where
+    // it is going, as the design director ruled on 22 November, so its row says what the rest would need there)
+    const rest = a.training ? '' : barredLine(a.missions);
     if (rest) lines.push(rest);
     for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? '' : 's'}.`);
     return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };

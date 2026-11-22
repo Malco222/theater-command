@@ -423,6 +423,8 @@ function codename(g: Game, id: number, salt = ''): string {
 }
 
 const waitWords = (g: Game, a: Agent): string => { const m = a.ready - g.turn; return m <= 1 ? 'until next month' : `for ${m} more months`; };
+/** True for an agent recruited and still in training at home: not yet at work, and not on the road either. */
+const inTraining = (a: Agent): boolean => a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
 
 /** Why this nation cannot recruit an agent, or null if it can. */
 export function whyNotRecruit(g: Game, nat: string): string | null {
@@ -564,7 +566,9 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
   const a = find(g, nat, id);
   if (!a) return 'There is no such agent.';
   const r = g.regions[a.reg], host = g.nations[r.ctrl];
-  if (!atWork(g, a)) return `${a.name} is not yet at work: ${waitWords(g, a)}.`;
+  // (The design director, 22 November, release 2: work may be chosen while the agent is on the road, judged against
+  // where the agent is going; it begins the month the agent arrives. An agent still in training is given none.)
+  if (!atWork(g, a) && inTraining(a)) return `${a.name} is not yet at work: ${waitWords(g, a)}.`;
   if (m === 'guard') return abroad(g, a) ? 'An agent can stand guard only on friendly ground.' : null;
   if (m === 'hunt') return !huntersOn(g) ? 'Not in this campaign.' : abroad(g, a) ? 'An agent hunts enemy agents only on friendly ground.' : null;
   if (!abroad(g, a)) return `${a.name} is on friendly ground. Send the agent abroad first.`;
@@ -1335,7 +1339,15 @@ export function intelTick(g: Game, nat: string): void {
       continue;
     }
     // Ground that has changed hands under an agent: a guard finds itself behind the lines, a reader's capital has fallen.
-    if (AT_HOME.includes(a.mission) || (a.mission !== 'watch' && whyNotMission(g, nat, a.id, a.mission))) a.mission = 'watch';
+    const gone = a.mission !== 'watch' && !AT_HOME.includes(a.mission) ? whyNotMission(g, nat, a.id, a.mission) : null;
+    // (The design director, 22 November, release 2, with ruling 129(d).) Work chosen on the road whose target is gone
+    // when the agent arrives: the agent watches and reports instead, and the month's report says why.
+    if (gone && a.ready === g.turn) {
+      const text = `Agent ${a.name} reaches ${r.name}, but the order to ${MISSION_TEXT[a.mission].label.toLowerCase()} cannot be carried out. ${gone} The agent watches and reports instead.`;
+      note(g, a, r.id, 'arrived', text, false);
+      headline(g, 'info', text, nat, r.id);
+    }
+    if (AT_HOME.includes(a.mission) || gone) a.mission = 'watch';
     const was = a.mission;
     // The risk is the one the player was shown when the order was given: the alarm an attempt raises counts from next month.
     // (With double agents on, the true one: a turned agent is never caught, and betrays the others in its masters' country.)
@@ -1380,6 +1392,8 @@ export interface AgentView {
   next: number | null;
   reg: number; where: string; host: string; abroad: boolean;
   atWork: boolean;
+  /** Recruited and still in training at home: no work can be chosen yet (an agent on the road can be given its work). */
+  training: boolean;
   /** Months until the agent is at work: 0 when it is. */
   wait: number;
   mission: Mission;
@@ -1465,12 +1479,14 @@ function viewOf(g: Game, a: Agent): AgentView {
     }
   }
   const T = INTEL.agents.skillAt;
-  const training = !work && a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
-  const doing = !work ? `${training ? 'In training' : `On the road to ${r.name}`}: at work ${a.ready - g.turn <= 1 ? 'next month' : `in ${a.ready - g.turn} months`}`
+  const training = !work && inTraining(a);
+  // (With work chosen on the road, the design director's line: what the agent will do on arrival.)
+  const chosen = !work && !training && a.mission !== (out ? 'watch' : 'guard');
+  const doing = !work ? (chosen ? `On the road to ${r.name}: will ${MISSION_TEXT[a.mission].label.toLowerCase()} there on arrival` : `${training ? 'In training' : `On the road to ${r.name}`}: at work ${a.ready - g.turn <= 1 ? 'next month' : `in ${a.ready - g.turn} months`}`)
     : `${a.mission === 'guard' ? 'On guard' : a.mission === 'hunt' ? 'Hunting enemy agents' : a.mission === 'watch' ? 'Watching' : a.mission === 'books' ? 'Reading the books' : a.mission === 'orders' ? 'Stealing the orders: tried each month' : MISSION_TEXT[a.mission].label + ': tried next month'} at ${r.name}`;
   return {
     id: a.id, nat: a.nat, name: a.name, rank: rankOf(a), skill: skillOf(a), xp: a.xp, next: T[skillOf(a) - 1] ?? null,
-    reg: a.reg, where: r.name, host: r.ctrl, abroad: out, atWork: work, wait: Math.max(0, a.ready - g.turn),
+    reg: a.reg, where: r.name, host: r.ctrl, abroad: out, atWork: work, training, wait: Math.max(0, a.ready - g.turn),
     mission: a.mission, doing, caught: work ? caughtChance(g, a) : 0, rest: Math.max(0, (a.rest ?? 0) - g.turn),
     missions: offers, sees,
   };

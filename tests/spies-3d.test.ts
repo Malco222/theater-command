@@ -100,14 +100,23 @@ describe('the room as the UI director ruled it', () => {
     expect(row.lines).toContainEqual(expect.stringMatching(new RegExp(`^${barred} more need .+ here\\.$`)));
   });
 
-  it('gives an agent still on the road no line for the rest: the wait is already said', () => {
+  it('gives an agent on the road its work for where it is going, and one in training no line for the rest', () => {
     const g = startOpen(createGame(7, 'UK'));
     setWar(g, 'UK', 'GER');
     const a = agentAt(g, 'Berlin');
     a.ready = g.turn + 1;
+    a.born = g.turn - 3; // (sent, not newly recruited)
     const row = room(g).sections.find((x) => x.heading === 'YOUR AGENTS')!.rows[0];
-    expect(row.lines.some((l) => / more need /.test(l))).toBe(false);
     expect(row.lines).toContain('At work in 1 month.');
+    // (the design director, 22 November: work may be chosen on the road, for where the agent is going)
+    expect(row.buttons.some((b) => b.act.endsWith(':factory') && b.ok)).toBe(true);
+    expect(row.lines.some((l) => / more need .+ here\.$/.test(l))).toBe(true);
+    const trainee = agentAt(g, 'London', 'guard');
+    trainee.ready = g.turn + 1;
+    trainee.born = trainee.ready - 1;
+    const rows = room(g).sections.find((x) => x.heading === 'YOUR AGENTS')!.rows;
+    const t = rows.find((r) => r.title.endsWith(trainee.name))!;
+    expect(t.lines.some((l) => / more need /.test(l) || /not yet at work/.test(l))).toBe(false);
   });
 
   it("lists on the agent's card the work in force first, then the work that can be done there, then the rest", () => {
