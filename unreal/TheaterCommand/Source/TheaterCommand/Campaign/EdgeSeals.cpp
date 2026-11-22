@@ -72,10 +72,122 @@ namespace EdgeSeals
 			return false;
 		}
 
+		/** A word in small letters, any stop or full stop after it taken off. */
+		std::string LowerBare(const std::string& Word)
+		{
+			std::string Out;
+			for (const char Letter : Word.substr(0, BareEnd(Word, 0, Word.size())))
+			{
+				Out += Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+			}
+			return Out;
+		}
+
+		/**
+		 * The news lines' own verbs that take an object after them, each as the rules write it: its plain and third
+		 * person's forms, its past, its past participle (Done) and its -ing form (the design director, 20:27Z: a cut never
+		 * ends on a verb that lacks its object). The verbs the 48 real months' lines (Tools/edge_seals/real_months.inc) put
+		 * right after their doer and right before what they do (the, a, an, its, their, your, his, her, a number or a name:
+		 * the test derives them from the lines again, prints them and holds this table to them), with the few whose object
+		 * the lines give as a bare word, after a stop or after "up" (declares war, raid roads, stop tanks, knows its tracks,
+		 * opened its gates, has finished forming, "Take Lodz", tore up the railway), and "close", which the lines' "close
+		 * round" never leaves without its place.
+		 */
+		struct FNewsVerb
+		{
+			const char* Plain;
+			const char* Third;
+			const char* Past;
+			const char* Done;
+			const char* Doing;
+		};
+		constexpr FNewsVerb NewsVerbs[] = {
+			{ "beat", "beats", "beat", "beaten", "beating" },
+			{ "blow", "blows", "blew", "blown", "blowing" },
+			{ "bomb", "bombs", "bombed", "bombed", "bombing" },
+			{ "close", "closes", "closed", "closed", "closing" },
+			{ "court", "courts", "courted", "courted", "courting" },
+			{ "cut", "cuts", "cut", "cut", "cutting" },
+			{ "declare", "declares", "declared", "declared", "declaring" },
+			{ "defeat", "defeats", "defeated", "defeated", "defeating" },
+			{ "drive", "drives", "drove", "driven", "driving" },
+			{ "enter", "enters", "entered", "entered", "entering" },
+			{ "expect", "expects", "expected", "expected", "expecting" },
+			{ "finish", "finishes", "finished", "finished", "finishing" },
+			{ "fight", "fights", "fought", "fought", "fighting" },
+			{ "hit", "hits", "hit", "hit", "hitting" },
+			{ "hold", "holds", "held", "held", "holding" },
+			{ "invade", "invades", "invaded", "invaded", "invading" },
+			{ "invite", "invites", "invited", "invited", "inviting" },
+			{ "join", "joins", "joined", "joined", "joining" },
+			{ "know", "knows", "knew", "known", "knowing" },
+			{ "lose", "loses", "lost", "lost", "losing" },
+			{ "man", "mans", "manned", "manned", "manning" },
+			{ "open", "opens", "opened", "opened", "opening" },
+			{ "probe", "probes", "probed", "probed", "probing" },
+			{ "raid", "raids", "raided", "raided", "raiding" },
+			{ "reach", "reaches", "reached", "reached", "reaching" },
+			{ "see", "sees", "saw", "seen", "seeing" },
+			{ "seize", "seizes", "seized", "seized", "seizing" },
+			{ "shell", "shells", "shelled", "shelled", "shelling" },
+			{ "sink", "sinks", "sank", "sunk", "sinking" },
+			{ "stop", "stops", "stopped", "stopped", "stopping" },
+			{ "strike", "strikes", "struck", "struck", "striking" },
+			{ "take", "takes", "took", "taken", "taking" },
+			{ "tear", "tears", "tore", "torn", "tearing" },
+			{ "win", "wins", "won", "won", "winning" },
+			{ "wreck", "wrecks", "wrecked", "wrecked", "wrecking" },
+		};
+
+		bool IsOneOf(const std::string& Word, std::initializer_list<const char*> Words)
+		{
+			for (const char* Each : Words)
+			{
+				if (Word == Each)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
 		double ClampTo(double Value, double Low, double High)
 		{
 			return Value < Low ? Low : Value > High ? High : Value;
 		}
+	}
+
+	bool VerbWithoutObject(const std::string& Before, const std::string& Word)
+	{
+		// (a word in capitals is a row's tag, its head: "Ruhr HIT" says what happened; and a word after "the", "a" or "its"
+		// is a thing, never a verb: "a landing", "the cut")
+		const std::string Bare = Word.substr(0, BareEnd(Word, 0, Word.size()));
+		bool bCapitals = Bare.size() > 1;
+		for (const char Letter : Bare)
+		{
+			bCapitals = bCapitals && !(Letter >= 'a' && Letter <= 'z');
+		}
+		const std::string Key = LowerBare(Word), Prev = LowerBare(Before);
+		if (bCapitals || Key.empty() || IsOneOf(Prev, { "the", "a", "an", "its", "their", "your", "his", "her", "our", "my", "this", "that", "these", "those" }))
+		{
+			return false;
+		}
+		const bool bPerfect = IsOneOf(Prev, { "has", "have", "had" });
+		const bool bBeing = IsOneOf(Prev, { "is", "are", "was", "were", "be", "been", "being" });
+		for (const FNewsVerb& Verb : NewsVerbs)
+		{
+			// (after "has" the done form wants its object: "has driven"; after "is" only the -ing form, "is manning": "is
+			// bombed" is done to it, and whole; else the plain, the third person's, the past or the -ing form, never a done
+			// form that is not also a past: "shipping sunk this month" is whole)
+			const bool bVerb = bPerfect ? Key == Verb.Done
+				: bBeing ? Key == Verb.Doing
+						 : Key == Verb.Plain || Key == Verb.Third || Key == Verb.Past || Key == Verb.Doing;
+			if (bVerb)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	bool FBox::Overlaps(const FBox& Other) const
@@ -246,35 +358,58 @@ namespace EdgeSeals
 		return Line;
 	}
 
-	std::string EightWords(const std::string& Text, int Most)
+	namespace
 	{
-		// The words, as where each starts and ends.
-		std::vector<std::pair<size_t, size_t>> Words;
-		for (size_t At = 0; At < Text.size();)
+		using FWordSpans = std::vector<std::pair<size_t, size_t>>;
+
+		/** A line's words, as where each starts and ends; stops standing before the first word are no word. */
+		void WordsAt(const std::string& Text, FWordSpans& Words)
 		{
-			while (At < Text.size() && IsSpace(Text[At]))
+			Words.clear();
+			for (size_t At = 0; At < Text.size();)
 			{
-				++At;
-			}
-			const size_t Start = At;
-			while (At < Text.size() && !IsSpace(Text[At]))
-			{
-				++At;
-			}
-			// (stops standing before the first word say nothing, and are no word to begin on either)
-			if (At > Start && (!Words.empty() || !IsStopsWord(Text, Start, At)))
-			{
-				Words.emplace_back(Start, At);
+				while (At < Text.size() && IsSpace(Text[At]))
+				{
+					++At;
+				}
+				const size_t Start = At;
+				while (At < Text.size() && !IsSpace(Text[At]))
+				{
+					++At;
+				}
+				// (stops standing before the first word say nothing, and are no word to begin on either)
+				if (At > Start && (!Words.empty() || !IsStopsWord(Text, Start, At)))
+				{
+					Words.emplace_back(Start, At);
+				}
 			}
 		}
-		if (Words.empty())
+
+		/** Whether the word Index of a line is one of the news lines' verbs, with no stop after it, that its cut would leave without its object. */
+		bool IsBareVerb(const std::string& Text, const FWordSpans& Words, size_t Index)
 		{
-			return std::string();
+			const size_t Start = Words[Index].first, End = Words[Index].second;
+			// (a verb with a stop after it ends its clause, and wants nothing more: "Tobruk is surrounded:")
+			if (BareEnd(Text, Start, End) != End)
+			{
+				return false;
+			}
+			const std::string Before = Index > 0 ? Text.substr(Words[Index - 1].first, Words[Index - 1].second - Words[Index - 1].first) : std::string();
+			return VerbWithoutObject(Before, Text.substr(Start, End - Start));
 		}
-		const int Room = std::max(Most, 1);
-		size_t Kept = Words.size();
-		if (static_cast<int>(Words.size()) > Room)
+
+		/**
+		 * How many of a line's words its cut to Most keeps (EightWords; with bVerbs, ListedCut, which also never ends on a
+		 * verb without its object): all of them where they are no more than Most.
+		 */
+		size_t KeptOf(const std::string& Text, const FWordSpans& Words, int Most, bool bVerbs)
 		{
+			const int Room = std::max(Most, 1);
+			size_t Kept = Words.size();
+			if (static_cast<int>(Words.size()) <= Room)
+			{
+				return Kept;
+			}
 			Kept = static_cast<size_t>(Room);
 			// (at a stop, where one falls late enough to leave at least half of the words)
 			for (size_t Count = static_cast<size_t>(Room); Count >= static_cast<size_t>((Room + 1) / 2) && Count >= 1; --Count)
@@ -287,10 +422,11 @@ namespace EdgeSeals
 			}
 			for (;;)
 			{
-				// (a lone dash is no word to end on, nor stops standing on their own, nor a joining or small word: back to
-				// the last word that says something)
+				// (a lone dash is no word to end on, nor stops standing on their own, nor a joining or small word, nor, for a
+				// folded seal's listed line, a verb whose object the cut leaves behind: back to the last word that is none of
+				// them, "The escorts of the Western Approaches Fleet")
 				while (Kept > 1 && (IsStopsWord(Text, Words[Kept - 1].first, Words[Kept - 1].second) || IsDashWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)
-						   || IsSmallWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)))
+						   || IsSmallWord(Text, Words[Kept - 1].first, Words[Kept - 1].second) || (bVerbs && IsBareVerb(Text, Words, Kept - 1))))
 				{
 					--Kept;
 				}
@@ -318,14 +454,105 @@ namespace EdgeSeals
 				}
 				Kept = Opened;
 			}
+			return Kept;
 		}
-		std::string Out = Text.substr(Words[0].first, Words[Kept - 1].second - Words[0].first);
-		if (Kept < Words.size())
+
+		/** The line's first Kept words; where that is not all of them, with no stop left hanging at the cut. */
+		std::string KeptWords(const std::string& Text, const FWordSpans& Words, size_t Kept)
 		{
-			while (!Out.empty() && (IsStop(Out.back()) || IsSpace(Out.back())))
+			std::string Out = Text.substr(Words[0].first, Words[Kept - 1].second - Words[0].first);
+			if (Kept < Words.size())
 			{
-				Out.pop_back();
+				while (!Out.empty() && (IsStop(Out.back()) || IsSpace(Out.back())))
+				{
+					Out.pop_back();
+				}
 			}
+			return Out;
+		}
+
+		/**
+		 * Whether a word ends its clause: a stop after it (",", ";", ":"), stops standing alone, or a sentence's end ("." "!"
+		 * "?"). The full stop of a number's order ("1. Fliegerdivision") or of a short title ("No. 11 Group") ends nothing.
+		 */
+		bool EndsClause(const std::string& Text, size_t Start, size_t End)
+		{
+			const char Last = Text[End - 1];
+			if (IsStop(Last) || IsStopsWord(Text, Start, End))
+			{
+				return true;
+			}
+			if (Last == '!' || Last == '?')
+			{
+				return true;
+			}
+			if (Last != '.')
+			{
+				return false;
+			}
+			const std::string Word = Text.substr(Start, End - 1 - Start);
+			bool bNumber = !Word.empty();
+			for (const char Letter : Word)
+			{
+				bNumber = bNumber && Letter >= '0' && Letter <= '9';
+			}
+			return !bNumber && !IsOneOf(Word, { "No", "St", "Ste", "Mt", "Ft" });
+		}
+	}
+
+	std::string EightWords(const std::string& Text, int Most)
+	{
+		FWordSpans Words;
+		WordsAt(Text, Words);
+		return Words.empty() ? std::string() : KeptWords(Text, Words, KeptOf(Text, Words, Most, false));
+	}
+
+	std::string ListedCut(const std::string& Text, int Most)
+	{
+		FWordSpans Words;
+		WordsAt(Text, Words);
+		return Words.empty() ? std::string() : KeptWords(Text, Words, KeptOf(Text, Words, Most, true));
+	}
+
+	std::string WholeClause(const std::string& Text, int Most)
+	{
+		FWordSpans Words;
+		WordsAt(Text, Words);
+		if (Words.empty())
+		{
+			return std::string();
+		}
+		// (the clause the eight words end in, to its own end: the first word from their last on that ends its clause outside
+		// a bracket, else the line's last word)
+		const size_t Cut = KeptOf(Text, Words, 8, false);
+		size_t End = Words.size();
+		int Depth = 0;
+		for (size_t Index = 0; Index < Words.size(); ++Index)
+		{
+			for (size_t At = Words[Index].first; At < Words[Index].second; ++At)
+			{
+				Depth += Text[At] == '(' ? 1 : Text[At] == ')' && Depth > 0 ? -1 : 0;
+			}
+			if (Index + 1 >= Cut && Depth == 0 && EndsClause(Text, Words[Index].first, Words[Index].second))
+			{
+				End = Index + 1;
+				break;
+			}
+		}
+		// (more than Most words, a bracket the clause leaves open, or a clause the line breaks off on stops standing alone, a
+		// dash, an article or a joining word: no whole clause to give. A clause the line ends on a small word of its own is
+		// whole: "as they were driven off")
+		const size_t Last = End - 1;
+		const std::string LastWord = LowerBare(Text.substr(Words[Last].first, Words[Last].second - Words[Last].first));
+		if (static_cast<int>(End) > std::max(Most, 1) || Depth != 0 || IsStopsWord(Text, Words[Last].first, Words[Last].second)
+			|| IsDashWord(Text, Words[Last].first, Words[Last].second) || IsOneOf(LastWord, { "the", "a", "an", "and", "or", "but" }))
+		{
+			return std::string();
+		}
+		std::string Out = Text.substr(Words[0].first, Words[Last].second - Words[0].first);
+		while (!Out.empty() && (IsStop(Out.back()) || Out.back() == '.' || Out.back() == '!' || Out.back() == '?' || IsSpace(Out.back())))
+		{
+			Out.pop_back();
 		}
 		return Out;
 	}
@@ -828,7 +1055,7 @@ namespace EdgeSeals
 		{
 			return Unstopped(Said.Name + " " + Said.Head);
 		}
-		return Unstopped(EightWords(Said.Line));
+		return Unstopped(ListedCut(Said.Line));
 	}
 
 	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room)
@@ -869,45 +1096,87 @@ namespace EdgeSeals
 		{
 			return Count + " " + Head.Head + ": " + ListNames(Names);
 		}
-		// (else each item's own short line, in card order, as many as the hover's line holds, and how many more: each line
-		// stands apart by "; ", so "and 4 more" is one more of the list, never four more of the line before it. The lines
-		// stop at an item with no words of its own, which the list could not name)
-		std::vector<std::string> Lines;
+		// (else each item's own line, in card order: each line stands apart by "; ", so "and 4 more" is one more of the list,
+		// never four more of the line before it. The lines stop at an item with no words of its own, which the list could
+		// not name. Each item has two lines: Lines, the shortest the list gives it (a row's title, else its eight words cut
+		// by ListedCut, never on a small word or a verb without its object), and Wholes, the most (the design director,
+		// 20:27Z: its whole clause, up to ClauseMost words, else the same))
+		std::vector<std::string> Lines, Wholes;
 		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
 		{
-			const std::string Line = ShortLine(Said[static_cast<size_t>(Index)]);
+			const FSaid& Item = Said[static_cast<size_t>(Index)];
+			const std::string Line = ShortLine(Item);
 			if (Line.empty())
 			{
 				break;
 			}
+			const std::string Whole = HasTitle(Item) ? Line : Unstopped(WholeClause(Item.Line));
 			Lines.push_back(Line);
+			Wholes.push_back(Whole.empty() ? Line : Whole);
 		}
-		// (a row whose title the list gives already, two rows of one place and head, gives its first words in its place,
-		// cut by EightWords' own rules, so the list never seems to say one line twice: "Stalino HIT; ...; Stalino HIT: The
-		// Black Sea Fleet shelled". Where those words are the title still, as a row with another side named, it stays)
+		// (a row whose title the list gives already, two rows of one place and head, gives its first words in its place, its
+		// title first, so the list never seems to say one line twice: "Stalino HIT; ...; Stalino HIT: The Black Sea Fleet
+		// shelled the troops ashore", or cut, "Stalino HIT: The Black Sea Fleet". Where those words are the title still, as a
+		// row with another side named, it stays)
 		for (size_t Index = 1; Index < Lines.size(); ++Index)
 		{
 			const FSaid& Item = Said[static_cast<size_t>(Run.First) + Index];
 			if (HasTitle(Item) && std::find(Lines.begin(), Lines.begin() + static_cast<std::ptrdiff_t>(Index), Lines[Index]) != Lines.begin() + static_cast<std::ptrdiff_t>(Index))
 			{
-				Lines[Index] = Unstopped(EightWords(Item.Line));
+				Lines[Index] = Unstopped(ListedCut(Item.Line));
+				const std::string Whole = Unstopped(WholeClause(Item.Line));
+				Wholes[Index] = Whole.empty() ? Lines[Index] : Whole;
 			}
 		}
-		// (the most lines that fit: one fewer can be longer, for "; and 1 more" is longer than a short last line)
-		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		// (in card order, each item's whole clause where the hover's one line still holds it with how many more after it,
+		// else its short line where that fits; the list ends at the first that fits neither way, unless every line left,
+		// each short, fits with no "and N more", which is longer than a short last line. Then each line still short is
+		// given whole where the line, as it now stands, still holds it)
+		std::vector<std::string> Given;
+		auto Fits = [&Given, &Run, Room]() { return LettersOf(ListLines(Given, Given.size(), Run.Count - static_cast<int>(Given.size()))) <= Room; };
+		for (size_t Index = 0; Index < Lines.size(); ++Index)
 		{
-			const std::string Out = ListLines(Lines, Named, Run.Count - static_cast<int>(Named));
-			if (LettersOf(Out) <= Room)
+			Given.push_back(Wholes[Index]);
+			if (Fits())
 			{
-				return Out;
+				continue;
 			}
+			Given.back() = Lines[Index];
+			if (Fits())
+			{
+				continue;
+			}
+			Given.pop_back();
+			if (Lines.size() == static_cast<size_t>(Run.Count))
+			{
+				const size_t Had = Given.size();
+				Given.insert(Given.end(), Lines.begin() + static_cast<std::ptrdiff_t>(Index), Lines.end());
+				if (!Fits())
+				{
+					Given.resize(Had);
+				}
+			}
+			break;
+		}
+		for (size_t Index = 0; Index < Given.size(); ++Index)
+		{
+			const std::string Short = Given[Index];
+			Given[Index] = Wholes[Index];
+			if (!Fits())
+			{
+				Given[Index] = Short;
+			}
+		}
+		if (!Given.empty())
+		{
+			return ListLines(Given, Given.size(), Run.Count - static_cast<int>(Given.size()));
 		}
 		// (no line fits whole with its "and N more": the first line the list gives, cut a word shorter until it does. Never
 		// into a row's title, which alone says where and what happened: never "Ruhr" for "Ruhr HIT"; the count, then)
 		const int Least = HasTitle(Head) ? LettersOf(ShortLine(Head)) : 1;
 		for (int Most = 7; !Lines.empty() && Most >= 1; --Most)
 		{
-			std::vector<std::string> Cut{ Unstopped(EightWords(Lines[0], Most)) };
+			std::vector<std::string> Cut{ Unstopped(ListedCut(Lines[0], Most)) };
 			if (LettersOf(Cut[0]) < Least)
 			{
 				break;
@@ -1496,11 +1765,16 @@ namespace EdgeSeals
 			Sword.GuardLong = Sword.BladeThick + 2.0 * Sword.Overhang;
 			Sword.GripThick = Stroke(1.6, PxPerUnit);
 			Sword.Pommel = -8.8;
-			Sword.PommelD = 3.2;
+			// (a filled knob, drawn as a dot (EStroke::Dot, the layer's Disc), never an outlined ring, which cannot hold 1.5 px
+			// a side at these sizes; at least the blade's stroke and half a pixel across, so that it reads as a knob and not
+			// as more grip: the art director, 20:26Z. 3.2 units, which is that from 0.625 px a unit up; a tiny screen is taken
+			// at a quarter pixel a unit, as Stroke takes it, so that nothing swells without end)
+			Sword.PommelD = std::max(3.2, Sword.BladeThick + 0.5 / std::max(Scale, 0.25));
 			Sword.Neck = (Sword.Guard - Sword.GuardThick * 0.5) - (Sword.Pommel + Sword.PommelD * 0.5);
-			// (the pommel where its neck and how far it stands past its grip on each side both hold 1.5 px, as the guard is
-			// measured: drawn 3.2 across on a grip of 1.6, from 1.875 px a unit up, a window 1823 high; else the grip ends round)
-			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * 0.5 * Scale >= MinStrokePx - 1e-9;
+			// (the pommel where its neck, the grip left bare under the guard, holds 1.5 px, and how far it stands past its grip
+			// does too, measured across the whole pommel, not on each side (the art director, 20:26Z): its neck of 0.9 units
+			// holds from 5/3 px a unit up, a window 1620 high, and so Brian's window; else the grip ends round)
+			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * Scale >= MinStrokePx - 1e-9;
 			Sword.GripEnd = Sword.bPommel ? Sword.Pommel : -7.4;
 			// (the two swords' box, point to hilt, centred on the disc's middle on every screen)
 			FStroke Made[MarkMost];

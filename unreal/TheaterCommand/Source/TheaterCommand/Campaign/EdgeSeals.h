@@ -194,6 +194,44 @@ namespace EdgeSeals
 	std::string EightWords(const std::string& Text, int Most = 8);
 
 	/**
+	 * The design director's ruling of 20:27Z on a folded seal's listed lines: "One rule for the fallback cut, so it never
+	 * reads broken either: it ends at a whole word, never on a verb that lacks its object and never on a small word; where
+	 * the eighth word is such a word, it steps back to the last noun." ListedCut is EightWords' cut with that rule: where
+	 * the last word it keeps is a verb of the news lines that the cut leaves without its object (VerbWithoutObject: "The
+	 * escorts of the Western Approaches Fleet sink"), it steps back past it, and past any small word before it, to the last
+	 * word that is neither ("The escorts of the Western Approaches Fleet"; "No. 11 Group has driven" is "No. 11 Group").
+	 * A verb with a stop after it ends its clause and stays. A seal's own words are EightWords' still (ruling 5).
+	 */
+	std::string ListedCut(const std::string& Text, int Most = 8);
+
+	/**
+	 * Whether a cut that ends on Word, the word before it Before, ends on a verb that lacks its object: one of the news
+	 * lines' own verbs that take one (sink, shell, bomb, blow, seize, close, cut, hit, take, lose, declare...: the table
+	 * in EdgeSeals.cpp, which the test holds to the verbs it derives from the 48 real months' lines), in a form that wants
+	 * what follows it. After "has", "have" or "had" its done form ("has driven"); after "is", "are", "was", "were", "be",
+	 * "been" or "being" its -ing form only ("is manning"; "is bombed" is done to it, and whole); else its plain, third person's,
+	 * past or -ing form, never a done form that is not also a past ("shipping sunk this month" is whole). A word in
+	 * capitals, a row's tag ("HIT"), is a head, never a verb; nor is a word after "the", "a", "its" and the like. Any case
+	 * ("Take Lodz"); a stop after the word is not read.
+	 */
+	bool VerbWithoutObject(const std::string& Before, const std::string& Word);
+
+	/** The most words a folded seal's listed line gives as its whole clause (the design director, 20:27Z). */
+	constexpr int ClauseMost = 16;
+
+	/**
+	 * A line's whole clause, for a folded seal's listed line (the design director, 20:27Z: "A listed line is its whole
+	 * clause, up to 16 words, where the line still holds it"): the line from its start to the end of the clause its eight
+	 * words end in (EightWords), that is, to the first word from their last on that ends its clause outside a bracket (a
+	 * ",", ";" or ":" after it, or a sentence's end; "No." and "1." end nothing), else to the line's end; no stop or full
+	 * stop at its end. Where the eight words end at a stop, it is they ("German troops close round Warsaw"); where they are
+	 * the whole line, the line. "" where it would be more than Most words, leave a bracket open, or end on an article or a
+	 * joining word (the, a, an, and, or, but), on stops standing alone or on a dash: the list gives the eight-word cut
+	 * there (ListedCut). A clause the line ends on a small word of its own is whole ("as they were driven off").
+	 */
+	std::string WholeClause(const std::string& Text, int Most = ClauseMost);
+
+	/**
 	 * Ruling 64(g) as amended 08:55Z, the fold of alike runs: "Three or more in a row that would look the same (wax,
 	 * mark, sign, pulse) stand as one seal with their count at the first item's place, and a press opens the card at
 	 * that run's first row." FAlike is how an item's seal looks on the edge: its wax, what is pressed in it (its drawn
@@ -295,7 +333,9 @@ namespace EdgeSeals
 	/**
 	 * An item's own short line, for a folded seal that lists its items: a front's row's title as the card prints it, its
 	 * place and its head ("Polish Silesia LOST against Germany", "Ruhr HIT"); any other item's first words, cut at a
-	 * whole word by EightWords' own rules ("Soviet troops blow the bridges over the Oka"). No stop or full stop at its end.
+	 * whole word by ListedCut, EightWords' own rules and never on a verb without its object ("Soviet troops blow the
+	 * bridges over the Oka", "The escorts of the Western Approaches Fleet"). No stop or full stop at its end. The shortest
+	 * line the list gives the item; where the hover's line holds it, the list gives its whole clause (FoldWords).
 	 */
 	std::string ShortLine(const FSaid& Said);
 
@@ -306,13 +346,21 @@ namespace EdgeSeals
 	 *   "German troops", is the name's) and then the same words, those words up to any colon, their verb made plural
 	 *   and "its" made "their", and the names: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more".
 	 * - Else, where each is a front's row with the same head, that head and the places: "3 HIT: Ruhr, Hamburg and Bohemia".
-	 * - Else (the design director, 64(g)(4), 13:00Z) each item's own short line (ShortLine), in card order, one after
-	 *   another, as many as the hover's one line holds, then "and N more" for the rest: "Soviet troops close round
-	 *   Helsinki; Soviet troops blow the bridges over the Oka; and 3 more". The lines stand apart by "; ", so the "and N
-	 *   more" is one more of the list, never more of the line before it. A row whose title the list gives already gives
-	 *   its own first words ("Stalino HIT: The Black Sea Fleet shelled"). A first line too long for the hover with its
-	 *   "and N more" is cut a word shorter until it fits, never into a row's title ("Ruhr HIT", never "Ruhr"); where it
-	 *   cannot, or no item has words of its own, the count and where on the card they are ("3 elsewhere in the war").
+	 * - Else (the design director, 64(g)(4), 13:00Z) each item's own line, in card order, one after another, as many as
+	 *   the hover's one line holds, then "and N more" for the rest: "Soviet troops close round Helsinki; Soviet troops
+	 *   blow the bridges over the Oka; and 3 more". The lines stand apart by "; ", so the "and N more" is one more of the
+	 *   list, never more of the line before it. Each listed line (the design director, 20:27Z) is the item's whole clause
+	 *   (WholeClause, up to ClauseMost words) where the hover's line still holds it with how many more after it, else its
+	 *   short line (ShortLine: a row's title, which comes first where the row has one, else its eight words cut by
+	 *   ListedCut, never on a small word or a verb without its object); the list ends at the first item that fits neither
+	 *   way (unless every item left, each short, fits with no "and N more" after them), and then each line still short is
+	 *   given whole where the line, as it then stands, holds it: "The escorts of the Western Approaches Fleet sink 1 German
+	 *   submarine in the Western Approaches; and 2 more". The hover is never longer for it. A row whose title the
+	 *   list gives already gives its own first words, its title first ("Stalino HIT: The Black Sea Fleet shelled the
+	 *   troops ashore", or cut, "Stalino HIT: The Black Sea Fleet"). A first line too long for the hover with its "and N
+	 *   more" even cut is cut a word shorter until it fits (ListedCut), never into a row's title ("Ruhr HIT", never
+	 *   "Ruhr"); where it cannot, or no item has words of its own, the count and where on the card they are ("3 elsewhere
+	 *   in the war").
 	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more"; a
 	 * name's "The" is "the" in the list.
 	 */
@@ -655,9 +703,11 @@ namespace EdgeSeals
 		 * side: the guard's width (GuardThick), and how far it stands out past the blade at its full width (Overhang less
 		 * the guard's round end, GuardThick / 2: made longer on a small screen so that it holds, to at most 4 units);
 		 * and for the pommel, the grip left bare between the guard and the pommel (Neck) and how far the pommel stands
-		 * past its grip on each side (half of PommelD less GripThick), without which it would read as the grip's own end.
-		 * Where either is under 1.5 px, the pommel is left off (bPommel false) and the grip ends round: as drawn, under
-		 * 1.875 px a unit, a window 1823 high (the art director's call: the floor per side, or across the pommel).
+		 * past its grip, measured across the whole pommel, not on each side (PommelD less GripThick: the art director,
+		 * 20:26Z), without which it would read as the grip's own end. Where either is under 1.5 px, the pommel is left off
+		 * (bPommel false) and the grip ends round: as drawn, under 5/3 px a unit, a window 1620 high, where the neck is
+		 * what fails. The pommel is a filled knob (a Dot), never an outlined ring, and at least the blade's stroke and half
+		 * a pixel across (PommelD), so that it reads as a knob and not as more grip.
 		 */
 		struct FSword
 		{
