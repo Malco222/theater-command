@@ -47,16 +47,23 @@ MOVERS = ("pelvis", "pouch_l", "pouch_r", "weapon", "bolt")
 # height by two men in step, slower than a walk, about 60%, heads down)
 SLOW = 1.25                  # (the walk's beat, slowed)
 STEP = 0.76                  # (the walk's leg swing, shortened: with the slower beat, about 60% of the walk's speed)
-POLES_APART = 0.56           # (the two poles' centres, m)
+# (the tank modeller's Stretcher prop, battle-models/ground-props/Stretcher.json: grip.* at x +-1.1, y +-0.29, z 0.14
+# over its root; the carried man at `lie`, z 0.11, head to +x, the head end first)
+POLES_APART = 0.58
 POLE_LONG = 2.3
-GRIPS_APART = 2.15           # (front fists to rear fists: the handles 7.5 cm in from each pole's end)
-BED_LONG = 1.83              # (the canvas between the poles, in the middle)
+GRIPS_APART = 2.2
+GRIP_Z = 0.14
+# (the CableReel prop: grip.left / grip.right at y -+0.115, z 0.56 over its root)
+REEL_GRIP_Y, REEL_GRIP_Z = 0.115, 0.56
+REEL_AHEAD = 0.47            # (the reel's handles ahead of his pelvis, so its frame clears his knees)
+REEL_HIGH = 0.9              # (the handles' height over the ground)
 GRIP_X = {"front": -0.11, "rear": 0.12}      # (the wrist ahead of the shoulder, root's frame: the load behind / ahead)
 CURL = 82.0                  # (the fingers round a pole)
 THUMB = 38.0
 
 # ---- the carried man (on his back on the canvas: the root on the canvas's top, his middle over it)
 WOUNDED_LONG = 6.0
+WAITING_LONG = 8.0
 WOUNDED_X, WOUNDED_Z = -0.1, 0.13
 
 # ---- the splice
@@ -142,6 +149,25 @@ class Man:
                             "thumb0": unit(th), "med": med}
         self.weapon_pts = self._weapon_points()
         self.back_x = self._back()
+        self._body = None
+        self.settled = {}
+
+    def body_points(self):
+        """His body's points (not the weapon) with their two bones and weight, and which of them are his hips, his
+        back above them (and any pack on it), and his lower legs: for setting a lying man down on the ground."""
+        if self._body is None:
+            M = self.D["near"]
+            P = np.array(M["points"]).reshape(-1, 3)
+            a, b, w = np.array(M["part"]), np.array(M["part2"]), np.array(M["w2"], float)
+            gun = [self.b(x) for x in ("weapon", "bolt", "bipod") if x in self.ix]
+            keep = ~np.isin(a, gun) & ~np.isin(b, gun)
+            P, a, b, w = P[keep], a[keep], b[keep], w[keep]
+            zone = lambda names: np.isin(a, [self.b(x) for x in names if x in self.ix])
+            self._body = (P, a, b, w, {
+                "hips": zone(("pelvis", "pouch_l", "pouch_r")),
+                "back": zone(("spine_01", "spine_02", "chest", "neck", "head", "clavicle_l", "clavicle_r")),
+                "legs": zone(("thigh_l", "calf_l", "foot_l", "ball_l", "thigh_r", "calf_r", "foot_r", "ball_r"))})
+        return self._body
 
     def b(self, name):
         return self.ix[name]
@@ -227,6 +253,12 @@ class Man:
         lq[ha] = Gl.T @ Gh
         return lq
 
+    def wrist_for(self, s, grip_at, d, t, along=0.075, palm=0.022):
+        """Where his wrist goes for his fist (as `grip` reads it) to close on `grip_at`, the hand along d, thumb t."""
+        A = self.side[s]
+        Gh = frame_map(A["d0"], A["t0"], np.asarray(d, float), np.asarray(t, float))
+        return np.asarray(grip_at, float) - Gh @ (A["d0"] * along + A["n0"] * palm)
+
     def fingers(self, lq, s, curl, thumb):
         A = self.side[s]
         lq[self.b("fingers_" + s)] = R_axis(np.cross(A["d0"], A["n0"]), curl)
@@ -238,6 +270,31 @@ class Man:
         A = self.side[s]
         h = self.b("hand_" + s)
         return X[h] + G[h] @ (A["d0"] * along + A["n0"] * palm)
+
+    def lay_weapon(self, lq, mv):
+        """His weapon lying on the ground by his right side, along him, muzzle toward his head, on its side."""
+        if len(self.weapon_pts) == 0:
+            return lq, mv
+        G, X = self.fk(lq, mv)
+        Pw = self.weapon_pts
+        lo, hi = Pw[:, 0].min(), Pw[:, 0].max()
+        mid = np.array(((lo + hi) / 2, Pw[:, 1].mean(), Pw[:, 2].mean()))
+        half = float(np.abs(Pw[:, 1] - Pw[:, 1].mean()).max())
+        along = X[self.b("head")] - X[self.b("pelvis")]
+        along[2] = 0.0
+        along = unit(along)
+        right = X[self.b("upperarm_r")] - X[self.b("upperarm_l")]
+        right[2] = 0.0
+        right = unit(right)
+        Gw = frame_map(np.array((1.0, 0, 0)), np.array((0, 1.0, 0)), along, np.array((0.0, 0.0, 1.0)))
+        target = 0.5 * (X[self.b("upperarm_r")] + X[self.b("thigh_r")]) + right * 0.3
+        target[2] = half + 0.005
+        wi = self.b("weapon")
+        Xw = target - Gw @ (mid - self.H[wi])
+        p = self.par[wi]
+        lq[wi] = G[p].T @ Gw
+        mv[wi] = G[p].T @ (Xw - X[p]) - (self.H[wi] - self.H[p])
+        return lq, mv
 
     def sling(self, lq, mv, G=None, X=None):
         """The rifle (whatever the file's weapon is) slung across his back: muzzle up by his right shoulder, butt by
@@ -263,6 +320,15 @@ class Man:
         return lq, mv
 
 
+def sm(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def ramp(t, t0, t1):
+    return sm((t - t0) / (t1 - t0))
+
+
 def feet_low(man, G, X):
     """His lowest foot point: the heel (the foot's head, less the sole) or the ball."""
     zs = []
@@ -273,7 +339,9 @@ def feet_low(man, G, X):
 
 
 # ================================================================================================ the clips
-def carry_pose(man, role, t):
+def slow_walk(man, t, bend=(3.0, 3.0, 3.0, 7.0, 9.0)):
+    """The file's own walk, slowed (SLOW) and its legs' swing shortened (STEP), trunk and head down by `bend`
+    (spine_01, spine_02, chest, neck, head, degrees), shoulders drawn down, feet kept on the ground as in the walk."""
     W = man.D["clips"]["walk"]
     tw = (t / SLOW) % W["long"]
     lq, mv = man.locals_of(W, tw)
@@ -285,28 +353,56 @@ def carry_pose(man, role, t):
         lq[man.b("foot_" + s)] = qpow(lq[man.b("foot_" + s)], 0.85)
     pe = man.b("pelvis")
     lq[pe] = qpow(lq[pe], 0.7)
-    # (the load: his trunk a little forward, his head down, his shoulders drawn down)
-    for b, deg in (("spine_01", 3.0), ("spine_02", 3.0), ("chest", 3.0), ("neck", 7.0), ("head", 9.0)):
+    for b, deg in zip(("spine_01", "spine_02", "chest", "neck", "head"), bend):
         lq[man.b(b)] = lq[man.b(b)] @ R_axis((0, 1, 0), deg)
     for s, sg in (("l", 1.0), ("r", -1.0)):
         lq[man.b("clavicle_" + s)] = R_axis((1, 0, 0), -5.0 * sg) @ R_axis((0, 1, 0), 3.0)
     G1, X1 = man.fk(lq, mv)
-    mv[pe][2] += h0 - feet_low(man, G1, X1)            # (his feet on the ground as in the walk)
+    mv[pe][2] += h0 - feet_low(man, G1, X1)
+    return lq, mv
+
+
+def carry_pose(man, role, t):
+    """A stretcher bearer: arms down at his sides, nearly straight, a pole handle in each fist (the prop's grips
+    POLES_APART apart), just behind his hips (front man) or before them (rear man)."""
+    lq, mv = slow_walk(man, t)
     G1, X1 = man.fk(lq, mv)
     for s in ("l", "r"):
         A = man.side[s]
         S = X1[man.b("upperarm_" + s)]
         out = -A["med"]                                  # (his outside: -y on his left)
-        y = out * POLES_APART / 2
-        # (the wrist above the pole by the fist's reach, the arm nearly straight)
+        d = unit((0.25 * np.sign(GRIP_X[role]), 0.0, -1.0))
+        tt = np.array((1.0, 0.0, 0.0))
+        # (the fist on the pole's line: the wrist's sideways place for it, then its drop from the shoulder for a
+        # nearly straight arm)
+        o = man.wrist_for(s, np.zeros(3), d, tt)
         reach = 0.965 * (A["l1"] + A["l2"])
-        dx, dy = GRIP_X[role], y - S[1] - out * 0.018
+        dx = GRIP_X[role]
+        dy = out * POLES_APART / 2 + o[1] - S[1]
         drop = math.sqrt(max(reach * reach - dx * dx - dy * dy, 0.04))
         T = np.array((S[0] + dx, S[1] + dy, S[2] - drop))
-        d = unit((0.25 * np.sign(dx), 0.0, -1.0))
-        tt = np.array((1.0, 0.0, 0.0))
         pole = np.array((-1.0, out * 0.35, 0.0))
         lq = man.arm(lq, mv, s, T, pole, d, tt)
+        lq = man.fingers(lq, s, CURL, THUMB)
+    lq, mv = man.sling(lq, mv)
+    return lq, mv
+
+
+def reel_pose(man, t):
+    """The lineman walking his line out: bent forward, the cable reel carried before him by its two handles (the
+    CableReel prop's grip.left / grip.right), its frame clear of his knees."""
+    lq, mv = slow_walk(man, t, bend=(6.0, 6.0, 5.0, 4.0, 10.0))
+    G1, X1 = man.fk(lq, mv)
+    pz = X1[man.b("pelvis")][2] - (man.H[man.b("pelvis")][2] + 0.0)
+    for s in ("l", "r"):
+        A = man.side[s]
+        out = -A["med"]
+        grip = np.array((X1[man.b("pelvis")][0] + REEL_AHEAD, out * REEL_GRIP_Y, REEL_HIGH + 0.6 * pz))
+        d = unit((0.3, -out * 0.25, -0.92))
+        tt = unit((1.0, 0.0, 0.25))
+        T = man.wrist_for(s, grip, d, tt)
+        pole = np.array((-0.6, out * 1.0, -0.5))
+        lq = man.arm(lq, mv, s, T, pole, d, tt, share=0.6)
         lq = man.fingers(lq, s, CURL, THUMB)
     lq, mv = man.sling(lq, mv)
     return lq, mv
@@ -353,17 +449,98 @@ def hide_weapon(man, lq, mv):
     return lq, mv
 
 
-def wounded_pose(man, t):
-    """On his back on the stretcher, feet first, alive: breathing, his left knee drawn up and let down, his right hand
-    on his chest, his head turning now and then."""
+SETTLED = {}
+HAND_DOWN = 0.075
+
+
+BACK_SHARE = (("spine_01", 0.55), ("spine_02", 0.45))
+BEND_MOST = 12.0             # (how far his back may arch or round to lie on the ground)
+TILT = (-6.0, 20.0)          # (how far his trunk may lie head-down or propped head-up, on a pack)
+SINK = 0.03                  # (how far a pack may press into soft ground or the canvas)
+
+
+def settle(man, lq, mv):
+    """How a man on his back lies on the ground. His trunk is tilted (head up, propped on a pack, or head down) and his
+    back arched or rounded a little, the least that rests both his seat and his shoulders (or the pack under them,
+    which may press SINK into the ground) on the ground; then his legs are let down (or up) at the hips until his
+    heels and calves rest on it. Returns (tilt, lift, bend, hip): degrees about y at the pelvis (+ his head up), metres,
+    degrees about y shared by spine_01 and spine_02, degrees about y at both thighs."""
+    P, a, b, w, Z = man.body_points()
+    pe = man.b("pelvis")
+
+    def back(l2, deg):
+        for s, f in BACK_SHARE:
+            l2[man.b(s)] = R_axis((0, 1, 0), deg * f) @ l2[man.b(s)]
+        return l2
+
+    best = None
+    for bend in np.arange(-BEND_MOST, BEND_MOST + 0.01, 0.5):
+        G, X = man.fk(back(lq.copy(), bend), mv)
+        Q = gore.skin(P, a, b, w, G, X, man.H) - X[pe]
+        for tilt in np.arange(TILT[0], TILT[1] + 0.01, 0.5):
+            r = math.radians(tilt)
+            z = X[pe][2] - Q[:, 0] * math.sin(r) + Q[:, 2] * math.cos(r)
+            zh, zb = float(z[Z["hips"]].min()), float(z[Z["back"]].min())
+            lift = max(-zh, -zb - SINK)
+            gh, gb = zh + lift, zb + lift
+            cost = gh + max(gb, 0.0) + 0.25 * max(-gb, 0.0) + 0.002 * (abs(tilt) + abs(bend))
+            if best is None or cost < best[0]:
+                best = (cost, float(tilt), float(lift), float(bend))
+    _, tilt, lift, bend = best
+    l2, m2 = back(lq.copy(), bend), mv.copy()
+    l2[pe] = R_axis((0, 1, 0), tilt) @ l2[pe]
+    m2[pe] = m2[pe] + np.array((0.0, 0.0, lift))
+    best = None
+    for hip in np.arange(-15.0, 15.01, 0.25):
+        l3 = l2.copy()
+        for s in ("thigh_l", "thigh_r"):
+            l3[man.b(s)] = R_axis((0, 1, 0), hip) @ l3[man.b(s)]
+        z = gore.skin(P, a, b, w, *man.fk(l3, m2), man.H)[:, 2]
+        miss = abs(float(z[Z["legs"]].min())) + 0.0005 * abs(hip)
+        if best is None or miss < best[0]:
+            best = (miss, float(hip))
+    return tilt, lift, bend, best[1]
+
+
+def fold_whip(man, lq, mv, out=0.42):
+    """A radio man's long whip antenna (whip_1 to whip_4, if the file has it) taken down: its four sections folded
+    back and forth into one bundle lying by his left side from the set toward his feet, a little splayed; `out` is how
+    far to his left its far end lies (inside the poles on a stretcher)."""
+    if "whip_1" not in man.ix:
+        return lq
+    G, X = man.fk(lq, mv)
+    W = [man.b(n) for n in ("whip_1", "whip_2", "whip_3", "whip_4")]
+    r0 = unit(man.H[W[1]] - man.H[W[0]])
+    feet = unit(X[man.b("pelvis")] - X[man.b("neck")])
+    left = unit(X[man.b("upperarm_l")] - X[man.b("upperarm_r")])
+    foot = X[W[0]]
+    end = foot + feet * 0.62 + left * out
+    end[2] = 0.02
+    d = unit(end - foot)
+    up = unit(np.cross(d, left))
+    prev = G[man.par[W[0]]]
+    for k, i in enumerate(W):
+        dk = (d if k % 2 == 0 else -d) + left * (0.04 * k)
+        Gk = frame_map(r0, unit(np.cross(r0, (0.0, 0.0, 1.0))), unit(dk), up)
+        lq[i] = prev.T @ Gk
+        prev = Gk
+    return lq
+
+
+def wounded_pose(man, t, waiting=False):
+    """On his back, alive: breathing, his left knee drawn up and let down, his right hand on his chest, his head
+    turning now and then; head to +x (the stretcher's head end). Waiting on the ground for the bearers, his right hand
+    is pressed to the wound at his side, he breathes harder, lifts his left arm now and then to call them, and his
+    rifle lies by his right side."""
     lq = np.tile(np.eye(3), (man.nb, 1, 1))
     mv = np.zeros((man.nb, 3))
-    u = t / WOUNDED_LONG
+    L = WAITING_LONG if waiting else WOUNDED_LONG
+    u = t / L
     pe = man.b("pelvis")
     lq[pe] = R_axis((0, 1, 0), -90.0)                    # (his front up, his head toward -x: the rear man)
     mv[pe] = np.array((WOUNDED_X, 0.0, WOUNDED_Z)) - man.H[pe]
-    breathe = 1.2 * math.sin(2 * math.pi * 5 * u)
-    for b, deg in (("spine_01", 3.0), ("spine_02", 3.0), ("chest", 4.0 + breathe), ("neck", 6.0), ("head", 10.0)):
+    breathe = (1.8 * math.sin(2 * math.pi * 12 * u)) if waiting else 1.2 * math.sin(2 * math.pi * 5 * u)
+    for b, deg in (("chest", breathe), ("neck", 8.0), ("head", 12.0)):
         lq[man.b(b)] = R_axis((0, 1, 0), deg)
     turn = 22.0 * (math.sin(2 * math.pi * u) * 0.6 + 0.4 * math.sin(2 * math.pi * 2 * u + 1.0))
     lq[man.b("head")] = lq[man.b("head")] @ R_axis((0, 0, 1), turn)
@@ -376,16 +553,52 @@ def wounded_pose(man, t):
     lq[man.b("foot_r")] = R_axis((0, 1, 0), 20.0)
     lq[man.b("thigh_r")] = R_axis((0, 1, 0), -3.0)
     lq[man.b("calf_r")] = R_axis((0, 1, 0), 6.0)
+    # (set down on the ground or the canvas: hips, heels and shoulders (or the pack under them) touching, found once
+    # from the first pose and kept, so nothing sinks in and nothing floats)
+    if man not in SETTLED:
+        SETTLED[man] = settle(man, lq, mv)
+    tilt, lift, bend, hip = SETTLED[man]
+    Rt = R_axis((0, 1, 0), tilt)
+    lq[pe] = Rt @ lq[pe]
+    mv[pe] = mv[pe] + np.array((0.0, 0.0, lift))
+    for s in ("thigh_l", "thigh_r"):
+        lq[man.b(s)] = R_axis((0, 1, 0), hip) @ lq[man.b(s)]
+    for s, f in BACK_SHARE:
+        lq[man.b(s)] = R_axis((0, 1, 0), bend * f) @ lq[man.b(s)]
     G, X = man.fk(lq, mv)
     ch = man.b("chest")
-    # (his right hand flat on his chest, his left lying along his side on the canvas)
-    Tr = X[ch] + np.array((0.02, 0.02, 0.15 + 0.004 * breathe))
-    lq = man.arm(lq, mv, "r", Tr, np.array((0.2, 1.0, 0.3)), unit((0.25, -1.0, -0.15)), np.array((-1.0, 0.0, 0.1)))
-    Tl = X[man.b("upperarm_l")] + np.array((0.47, -0.07, -0.06))
-    lq = man.arm(lq, mv, "l", Tl, np.array((0.0, -1.0, 0.2)), unit((1.0, 0.1, -0.35)), np.array((0.0, 0.3, 1.0)))
+    # (his right hand flat on his chest, or pressed to the wound at his right side; his left lying along his side, or
+    # lifted to call the bearers)
+    # (the right hand's place on him in his own frame, so it rides a propped trunk; its ways tilted with him)
+    if waiting:
+        sp = man.b("spine_01")
+        Tr = X[sp] + G[sp] @ np.array((0.13 + 0.004 * breathe, 0.1, -0.02))
+        lq = man.arm(lq, mv, "r", Tr, Rt @ np.array((-0.2, 1.0, 0.2)), Rt @ unit((0.6, -0.7, -0.3)),
+                     Rt @ np.array((-0.3, 0.0, 1.0)))
+    else:
+        Tr = X[ch] + G[ch] @ np.array((0.15 + 0.004 * breathe, 0.02, -0.02))
+        lq = man.arm(lq, mv, "r", Tr, Rt @ np.array((0.2, 1.0, 0.3)), Rt @ unit((0.25, -1.0, -0.15)),
+                     Rt @ np.array((-1.0, 0.0, 0.1)))
+    lift = ramp(u, 0.38, 0.52) * (1 - ramp(u, 0.64, 0.8)) if waiting else 0.0
+    wave = 0.06 * math.sin(2 * math.pi * 3 * u) * lift
+    Tl0 = X[man.b("upperarm_l")] + np.array((0.47, -0.07, 0.0))
+    Tl0[2] = HAND_DOWN                                   # (his wrist just over the ground, his hand lying on it)
+    Tl1 = X[man.b("upperarm_l")] + np.array((0.12, -0.12 + wave, 0.5))
+    Tl = Tl0 * (1 - lift) + Tl1 * lift
+    dl = unit(np.array((1.0, 0.1, -0.35)) * (1 - lift) + np.array((0.1, 0.0, 1.0)) * lift)
+    tl = unit(np.array((0.0, 0.3, 1.0)) * (1 - lift) + np.array((1.0, 0.2, 0.0)) * lift)
+    lq = man.arm(lq, mv, "l", Tl, np.array((0.0, -1.0, 0.2)), dl, tl)
     for s in ("l", "r"):
-        lq = man.fingers(lq, s, 22.0, 15.0)
-    return hide_weapon(man, lq, mv)
+        lq = man.fingers(lq, s, 22.0 if not (waiting and s == "r") else 45.0, 15.0)
+    lq = fold_whip(man, lq, mv, 0.42 if waiting else 0.2)
+    # (turned end for end about the upright, so his head is at +x: every bone below the pelvis goes with it)
+    Rz = R_axis((0, 0, 1), 180.0)
+    at = man.H[pe] + mv[pe]
+    lq[pe] = Rz @ lq[pe]
+    mv[pe] = Rz @ at - man.H[pe]
+    if not waiting:
+        return hide_weapon(man, lq, mv)
+    return man.lay_weapon(lq, mv)
 
 
 def times_of(L):
@@ -466,18 +679,38 @@ def clips_for(D):
         out["stretcher_" + role] = {
             "long": L, "loop": True, "stride": st, "weapon": "slung", "tracks": tracks, "events": evs,
             "from": "field_clips.py: this file's walk (motion capture), slowed and shortened, the arms keyed to the poles",
-            "about": (f"The {role} man of a two-man stretcher, walking at about {st / L:.2f} m/s (stride {st} m a "
-                      f"{L:.2f} s cycle), head down. Play stretcher_front and stretcher_rear on one clock (same phase), "
-                      f"the {'rear' if role == 'front' else 'front'} man's root placed so the front fists are "
-                      f"{GRIPS_APART} m ahead of the rear fists (the `grips` means: front root x = rear root x + "
-                      f"{GRIPS_APART} + rear mean x - front mean x). The poles: two, {POLE_LONG} m long, {POLES_APART} m "
-                      "apart, through `grips` (his left fist then his right, the root's frame, the game's axes), "
-                      f"their handles 7.5 cm in from each end; the canvas {BED_LONG} m long in the middle. The rifle "
-                      "rides slung on his back."),
-            "grips_apart": GRIPS_APART, "pole_long": POLE_LONG, "poles_apart": POLES_APART, "bed_long": BED_LONG,
+            "about": (f"The {role} man of a two-man stretcher (the Stretcher prop, battle-models/ground-props), walking "
+                      f"at about {st / L:.2f} m/s (stride {st} m a {L:.2f} s cycle), head down, the prop's "
+                      f"grip.{role.replace('rear', 'back')}.left/right in his fists: `grips` (his left fist then his "
+                      "right, every key, the root's frame, the game's axes; `mean` their average). Play "
+                      "stretcher_front and stretcher_rear on one clock (same phase, in step). Place the prop's root at "
+                      f"the mean of the four fists less {GRIP_Z} m, head end (+x) toward the front man; then his root x "
+                      f"= the prop's x {'+' if role == 'front' else '-'} {GRIPS_APART / 2} - his grips' mean x. The "
+                      "carried man (carried_wounded) at the prop's `lie`. The rifle rides slung on his back."),
+            "grips_apart": GRIPS_APART, "poles_apart": POLES_APART,
             "grips": {"track_fields": ["t", "lx", "ly", "lz", "rx", "ry", "rz"], "track": grips,
                       "mean": [round(float(v), 3) for v in mid]},
         }
+    # (the lineman walking his line out with the reel)
+    tracks, poses = bake(man, lambda t: reel_pose(man, t), L)
+    reel = []
+    for t, lq, mv in poses:
+        G, X = man.fk(lq, mv)
+        gl, gr = man.grip(G, X, "l"), man.grip(G, X, "r")
+        c = 0.5 * (gl + gr) - np.array((0.0, 0.0, REEL_GRIP_Z))
+        reel.append([round(t, 4)] + [round(float(v), 4) for v in (*c, *gl, *gr)])
+    st = stride_of(man, poses, L)
+    out["reel_walk"] = {
+        "long": L, "loop": True, "stride": st, "weapon": "slung", "tracks": tracks,
+        "events": [dict(e, t=round(e["t"] * SLOW, 4)) for e in W["events"]],
+        "from": "field_clips.py: this file's walk (motion capture), slowed and shortened, bent, the arms keyed to the reel",
+        "about": (f"The lineman walking his line out, about {st / L:.2f} m/s (stride {st} m a {L:.2f} s cycle), bent "
+                  "forward, the CableReel prop (battle-models/ground-props) carried before him by its two handles: "
+                  "`reel` gives, every key, the prop's root (x, y, z) and his left and right fists (on its grip.left "
+                  "and grip.right), the root's frame, the game's axes; the prop faces as he does. Turn its drum by the "
+                  "wire paid out (the prop's README). The rifle rides slung on his back."),
+        "reel": {"track_fields": ["t", "x", "y", "z", "lx", "ly", "lz", "rx", "ry", "rz"], "track": reel},
+    }
     tracks, poses = bake(man, lambda t: splice_pose(man, t), SPLICE_LONG)
     hands = []
     for t, lq, mv in poses:
@@ -499,11 +732,21 @@ def clips_for(D):
     out["carried_wounded"] = {
         "long": WOUNDED_LONG, "loop": True, "stride": 0.0, "weapon": "none", "tracks": tracks, "events": [],
         "from": "field_clips.py: keyed on the rig",
-        "about": ("The man on the stretcher, alive (the dead stay still; he does not): on his back, feet first (his "
-                  "head toward -x, the rear man), breathing, his left knee drawn up and let down, his right hand on his "
-                  "chest, his head turning now and then. The root goes on the canvas's top, in the middle of the "
-                  "stretcher between the two bearers' grips, turned with it. No weapon (the weapon bone rides 2 m "
-                  "under his root). Put his white field dressing where the wound is."),
+        "about": ("The man on the stretcher, alive (the dead stay still; he does not): on his back, head to +x (the "
+                  "Stretcher prop's head end, carried first), breathing, his left knee drawn up and let down, his right "
+                  "hand on his chest, his head turning now and then. His root goes at the prop's `lie` socket, turned "
+                  "with it. No weapon (the weapon bone rides 2 m under his root). His white field dressing is the "
+                  "game's to place."),
+    }
+    tracks, poses = bake(man, lambda t: wounded_pose(man, t, waiting=True), WAITING_LONG)
+    out["wounded_waiting"] = {
+        "long": WAITING_LONG, "loop": True, "stride": 0.0, "weapon": "laid", "tracks": tracks, "events": [],
+        "from": "field_clips.py: keyed on the rig",
+        "about": ("A wounded man on the ground waiting for the bearers, alive: on his back (head to +x, his root on "
+                  "the ground under his middle), breathing hard, his right hand pressed to the wound at his right side, "
+                  "his left knee drawn up and let down, his head turning, and once a loop his left arm lifted to call "
+                  "them. His rifle lies by his right side. When the bearers reach him: carried_wounded on the "
+                  "stretcher (the same lie, so it swaps without a jump but for the hands)."),
     }
     return out, man
 
