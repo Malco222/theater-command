@@ -144,6 +144,38 @@ export const LAND = {
     hedge: { near: HEDGE_NEAR, gap: 3 },
     staff: { blocks: 2, ahead: 400, back: 100, across: 200 },
   },
+  /**
+   * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+   * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LandBattle.patrol): off unless the battle is opened
+   * with it, and it needs hiding on (LAND.hide): with hiding off nothing is hidden to find, so no patrol goes out and
+   * nothing is drawn. The night before the battle the attack sends one reconnaissance patrol from a block of its line
+   * on foot (the computer's always, from its most forward; the player's only by his order while he places his army):
+   * settled once as the clock starts, on its own stream ('patrol:' and the seed), never the battle's dice. Two draws,
+   * always both, found first: with chance 'found' the defence's most forward hidden post is found before a shot is
+   * fired (it springs no ambush, and the attack's first plan counts it); with chance 'caught' the patrol is caught and
+   * the defence is alerted, ready but not stronger (the card prices the digging already, b418): one more of its blocks
+   * takes a hidden post by the computer's own ambush rule (LAND.hide.staff), a computer defence's reserve starts
+   * toward the attack at once as a bold defence's does (styles defShift), and the patrol's block loses the patrol's men
+   * from its strength (its nerve untouched). Both can happen: the rear man gets the report home (Infantry Training
+   * 1937, sec. 35).
+   *   found, caught: the design director's knobs (18:36Z, Q6). No army's rate is sourced; the only tally is approximate,
+   *     the 38th (Irish) Brigade's war diary, Italy, December 1944, about 106 patrols: about 24% saw or found something
+   *     and about 42% made contact (the tactics thread's readings, 22 November 18:40Z).
+   *   size: men in a reconnaissance patrol, by army. USA 4 (FM 21-75, 1944, ¶86g: "three to six men"); the UK and her
+   *     kin 3 ("an officer or sergeant and two men who go out at night": a British junior officer, Intelligence Bulletin,
+   *     August 1943); SOV 4 ("three- to five-man teams": Sasso, Leavenworth Paper 6, p. 12); JAP 10 ("approximately one
+   *     squad (10 men)": Intelligence Bulletin, July 1944); GER 10 (patrols "not less strong than a squad": German
+   *     Motorized Infantry Regiment, MIS 1942, ¶40); FRA and VIC 2 (night patrols "by riflemen alone": Passmore 2025;
+   *     the count a knob); ITA 4 (unsourced: knob); every other army '_' 4 (knob). Kin follow Britain, Vichy France.
+   *     Its pictures, and the men its block loses when it is caught.
+   *   night: battle seconds the patrol is out, before the clock starts (negative: the night before). Looks only, a knob.
+   */
+  patrol: {
+    found: 0.4,
+    caught: 0.3,
+    size: { USA: 4, UK: 3, CAN: 3, AUS: 3, NZL: 3, SAF: 3, IND: 3, SOV: 4, JAP: 10, GER: 10, FRA: 2, VIC: 2, ITA: 4, _: 4 } as Record<string, number>,
+    night: { t0: -2400, t1: -600 },
+  },
   teams: {
     mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
     mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },
@@ -594,6 +626,8 @@ export const phoneFallback = (nat: string, year: number): PhoneFallback => (LAND
 
 /** How far a block's fire carries: its team's reach, or its kind's. */
 export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);
+/** Night patrol: the men in an army's reconnaissance patrol (LAND.patrol.size; every army not listed, '_'). */
+export const patrolSize = (nat: string): number => LAND.patrol.size[nat] ?? LAND.patrol.size._;
 /** Its gun numbers: its team's, or the guns' (only for a gun block). */
 export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; close: number; closeAt: number } => (u.team ? LAND.teams[u.team] : LAND.guns);
 /** An army's section smoke (LAND.smoke): its own, or its senior partner's (kin); null where it has none. */

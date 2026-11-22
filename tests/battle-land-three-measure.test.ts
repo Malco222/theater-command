@@ -21,7 +21,7 @@
 // counts them; his order is refused while it is off), and an optional count for its line (note).
 import { describe, expect, it } from 'vitest';
 import type { FieldTicket, Side } from '../src/battle/core';
-import { LandBattle, sampleTicket, withTeams, type LandPlace } from '../src/battle/land';
+import { LandBattle, sampleTicket, withTeams, type LandPlace, type LandUnit } from '../src/battle/land';
 
 type T = FieldTicket<LandPlace>;
 const env = (globalThis as { process?: { env: Record<string, string | undefined>; stdout?: { write(s: string): void } } }).process;
@@ -49,6 +49,11 @@ interface Switch {
   note?: (b: LandBattle) => Record<string, number>;
 }
 
+/** A side's most forward block on foot, ties by id: where the player's night patrol goes out from. */
+const footFront = (b: LandBattle, side: Side): LandUnit | undefined =>
+  b.units.filter((u) => u.side === side && !u.team && (u.kind === 'inf' || u.kind === 'mtn' || u.kind === 'cav' || u.kind === 'eng') && u.state !== 'gone' && u.state !== 'withdrawn')
+    .sort((a, c) => c.y - a.y || a.id - c.id)[0];
+
 const SWITCHES: Record<string, Switch> = {
   // A. Field telephone lines (LandBattle.phones). The practice armies carry no guns, so both battles of a pair carry the
   // support teams: the attack's mortar team is what cuts a wire with a blow (its tanks cut by crossing one). The wires
@@ -64,6 +69,20 @@ const SWITCHES: Record<string, Switch> = {
     nat: 'SOV',
     on: (b) => { b.bearers = true; },
     note: (b) => ({ 'men back in the line': b.returns.reduce((a, r) => { const u = b.unit(r.unit)!; return a + (r.n * u.men0) / u.str0; }, 0) }),
+  },
+  // C. Night patrol (LandBattle.patrol): both battles of a pair hide (the patrol needs it). The computer's attack always
+  // sends one; his attack sends one by his order while he places his army, from his most forward block on foot (as the
+  // computer's would go): the setup step is opened in both battles and closed at once, and off, his order is refused.
+  patrol: {
+    both: (b, side) => { b.hideOn(); if (side === 'att') b.setupOn('att', true); },
+    on: (b) => { b.patrol = true; },
+    orders: (b, side, k) => {
+      if (k !== 0 || side !== 'att' || b.setup !== 'att') return;
+      const u = footFront(b, 'att');
+      if (u) b.command({ do: 'land:patrol', unit: u.id }, 'att');
+      b.command({ do: 'land:begin' }, 'att');
+    },
+    note: (b) => ({ sent: b.nightPatrol ? 1 : 0, found: b.nightPatrol?.found ? 1 : 0, caught: b.nightPatrol?.alerted ? 1 : 0, post: b.nightPatrol && b.nightPatrol.post !== null ? 1 : 0 }),
   },
 };
 

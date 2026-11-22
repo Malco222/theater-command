@@ -544,6 +544,17 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    */
   riders?: { corps: number; side: Side; x: number; y: number; face: number; speed: number; there: number; comes: number; edge: 'south' | 'north' | 'west' | 'east'; line?: number; name: string; kind: string; divs: string[]; men: number; str: number; says: string }[];
   /**
+   * Land, night patrol (release 2; Brian, 22 November 17:33Z; the design director, 18:36Z; LandBattle.patrol on, with
+   * hiding on): the attack's patrol the night before, settled as the clock starts. The side that sent it, its block
+   * ('unit'), when it was out (t0 to t1, battle seconds, negative: the night before), its men, where it set out from
+   * ('from') and where it went to ('to': where it was caught, when it was), the hidden post it found (found: where and
+   * what, null where none), whether the defence is alerted (it was caught), and the flares the defence fired over it
+   * ([t, x, y] each; none unless caught). The attack sees all of it; the defence only once alerted, and then only the
+   * patrol's men where it was caught and the flares (no 'unit', 'from' or what was found). Looks and words only beyond
+   * what the rules settled at the start. Left out where no patrol went out.
+   */
+  patrol?: { side: Side; unit?: number; t0: number; t1: number; men: number; from?: [number, number]; to: [number, number]; found: { x: number; y: number; kind: string } | null; alerted: boolean; flares: [number, number, number][] };
+  /**
    * Land, hedge cutters (release 2; ruling 242; LandBattle.cutters on): the gaps tank blocks have cut through hedges, the
    * side's own and those cut by enemy blocks it knew as the cut began (all of them with no side given, as a recording
    * is). Each: the battle second the cut began (t0: the block's front at the hedge, the lead tank pushing through) and
