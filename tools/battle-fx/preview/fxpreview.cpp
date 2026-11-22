@@ -12,6 +12,7 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> fate <steam|out|cook|glance> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> sea <a name for the frames> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> wreck <side|battle|far|tall> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> seafx <screen...|splash...> <frames> [WxH]
 //
 // The sea shot (the sea battle's range): three ships in line ahead, FX_GAP m (500) apart and FX_SHIP_LONG m (200)
 // long, steaming along +X at FX_KNOTS (25), seen broadside on from FX_DIST m (15000) by an eye FX_EYE_H m (24) up with
@@ -25,6 +26,16 @@
 // FX_EYE_X m along the line and FX_EYE_Y m toward it. FX_BG=light: a flat ground of that light, to measure opacity. FX_NO_SHIPS=1 leaves
 // the hulls out. Each moment falls a little before a frame, as a game's does. The fate shots take a moving ship too:
 // FX_SHIP=x,y,z is her velocity in m/s (12.9 is 25 knots), FX_SHIP_STOP=s stops her dead, FX_SHIP_STAY=1 holds the eye.
+//
+// The sea battle's own shots of release 2 (seafx), named screen... or splash...: "screen", FX_SCREENS escorts (1),
+// FX_SHIP_LONG m (110) long, FX_GAP m (400) apart away from the eye and FX_STAGGER m (300) further along, steam along +X
+// at FX_KNOTS (25) laying smoke screens from her stern from 0 s (ScreenLay; FX_BLACK=1 from the funnels, alt every
+// other one) until FX_STOP s; the wind FX_WIND_X, FX_WIND_Y (0.8, 3: across her track, away from the eye); the eye
+// FX_DIST m (5000) abeam, FX_EYE_H m (24) up, looking at the middle of what is laid by then; FX_FUNNEL=funnel: their
+// funnels smoke too. "splash": FX_SPLASHES shells (1) of FX_CAL mm (406) dyed FX_DYE (none) fall FX_SHORT m (120)
+// short of a ship FX_DIST m (1000) off, FX_SPREAD m (90) apart, from FX_FALL_AT s (1) and FX_EVERY s (0.3) apart
+// (SeaSplash); FX_OLD=bomb500 (or another size): the call the scene made before, Shell on water. FX_SUN, FX_DUSK, FX_BG,
+// FX_NO_SHIPS as in the sea shot; FX_STEP=n draws the frames between n at a time.
 //
 // The drive shot (the desert dust): a column of FX_VEHICLES (4) tanks, FX_GAP m (30) apart, driving along +X at
 // FX_SPEED m/s (10) on a stony desert ("sand"), FX_RUN s (12) before the first frame, each laying dust from its two
@@ -1819,6 +1830,190 @@ namespace
 		return 0;
 	}
 
+	/** The sea battle's own looks of release 2 (see the top of the file): "screen", escorts laying smoke screens
+	 * (ScreenLay); "splash", shells falling in the sea by their calibre and their ship's dye (SeaSplash). */
+	int SeaFx(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		SeaDecks Decks; // (no decks: a flat sea)
+		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		const bool bScreen = Shot.compare(0, 6, "screen") == 0;
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 0.8), EnvNum("FX_WIND_Y", bScreen ? 3.0 : 0.8), 0.0));
+		Fx.UseSea();
+		const double Dist = EnvNum("FX_DIST", bScreen ? 5000.0 : 1000.0), Speed = EnvNum("FX_KNOTS", 25.0) * 0.5144;
+		const double Long = EnvNum("FX_SHIP_LONG", bScreen ? 110.0 : 200.0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 55.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		Battle::View View;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		if (const char* SunIs = std::getenv("FX_SUN"))
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
+		}
+		// (screens: FX_SCREENS escorts (1), FX_GAP m (400) apart away from the eye, each FX_STAGGER m (300) further along,
+		// steaming along +X at FX_KNOTS and laying from 0 s until FX_STOP s; FX_BLACK=1 all from the funnels, alt every
+		// other one; FX_FUNNEL=funnel: each funnel smokes too, FX_POWER of her power)
+		const int Screens = std::clamp(static_cast<int>(EnvNum("FX_SCREENS", 1.0)), 0, 16);
+		const double Gap = EnvNum("FX_GAP", 400.0), Stagger = EnvNum("FX_STAGGER", 300.0), StopAt = EnvNum("FX_STOP", 1.0e9);
+		const char* BlackIs = std::getenv("FX_BLACK");
+		const std::string Black = BlackIs ? BlackIs : "";
+		const char* FunnelIs = std::getenv("FX_FUNNEL");
+		auto EscortAt = [&](int I, double T) { return Vec(Speed * T + I * Stagger, Dist + I * Gap, 0.0); };
+		// (splash: FX_SPLASHES shells (1) of FX_CAL mm (406) dyed FX_DYE, landing from FX_FALL_AT s (1) each FX_EVERY s
+		// (0.3) after the last, FX_SPREAD m (90) apart along her, FX_SHORT m (120) short of a target ship FX_DIST m off;
+		// FX_OLD=size: the call the scene made before, Shell on water with that size)
+		const int Splashes = std::clamp(static_cast<int>(EnvNum("FX_SPLASHES", 1.0)), 0, 64);
+		const double Cal = EnvNum("FX_CAL", 406.0), FallAt = EnvNum("FX_FALL_AT", 1.0), FallEvery = EnvNum("FX_EVERY", 0.3);
+		const double Spread = EnvNum("FX_SPREAD", 90.0), Short = EnvNum("FX_SHORT", 120.0);
+		const char* DyeIs = std::getenv("FX_DYE");
+		const char* OldIs = std::getenv("FX_OLD");
+		int Fallen = 0;
+		bool bStopped = false;
+		auto Play = [&](double Now)
+		{
+			if (bScreen)
+			{
+				for (int I = 0; I < Screens; ++I)
+				{
+					const Vec Ship = EscortAt(I, Now);
+					const bool bBlack = Black == "1" || (Black == "alt" && I % 2 == 1);
+					if (Now < StopAt)
+					{
+						Fx.ScreenLay(Now, 70 + I, Ship + Vec(-0.5 * Long, 0.0, 3.0), Vec(Speed, 0.0, 0.0), bBlack);
+					}
+					if (FunnelIs)
+					{
+						if (Now == 0.0)
+						{
+							Fx.TrailStart(Now, 90 + I, Ship + Vec(0.05 * Long, 0.0, 12.0), Vec(Speed, 0.0, 0.0), FunnelIs, 3.0);
+						}
+						Fx.TrailMove(Now, 90 + I, Ship + Vec(0.05 * Long, 0.0, 12.0), Vec(Speed, 0.0, 0.0), EnvNum("FX_POWER", 0.85));
+					}
+				}
+				if (Now >= StopAt && !bStopped)
+				{
+					bStopped = true;
+					for (int I = 0; I < Screens; ++I)
+					{
+						Fx.ScreenLayStop(Now, 70 + I);
+					}
+				}
+				return;
+			}
+			while (Fallen < Splashes && Now >= FallAt + Fallen * FallEvery)
+			{
+				const double T = FallAt + Fallen * FallEvery;
+				const Vec At(-0.5 * Spread * (Splashes - 1) + Spread * Fallen, Dist - Short * (Fallen % 2 == 0 ? 1.0 : -0.6), 0.0);
+				if (OldIs)
+				{
+					Fx.Shell(T, At, OldIs, "water", false);
+				}
+				else
+				{
+					Fx.SeaSplash(T, At, Cal, DyeIs ? DyeIs : "");
+				}
+				++Fallen;
+			}
+		};
+		// (the eye: FX_DIST m off, abeam, FX_EYE_H m (24) up, looking FX_LOOK_H m (screens 20, splash 25) up at the
+		// middle of what the screens have laid by then, or at the target ship; FX_LOOK_X overrides)
+		auto Aim = [&](double Now)
+		{
+			const double LookX = std::getenv("FX_LOOK_X") ? EnvNum("FX_LOOK_X", 0.0) : (bScreen ? 0.5 * Speed * std::min(Now, StopAt) - 0.5 * Long : 0.0);
+			Cam.Eye = Vec(LookX, 0.0, EnvNum("FX_EYE_H", 24.0));
+			Cam.Forward = (Vec(LookX, Dist, EnvNum("FX_LOOK_H", bScreen ? 20.0 : 25.0)) - Cam.Eye).Unit();
+			Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+			Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+			View.Eye = Cam.Eye;
+			View.Right = Cam.Right;
+			View.Up = Cam.Up;
+			View.Forward = Cam.Forward;
+		};
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		const std::vector<Vec> Nobody;
+		const double Grey[3] = { 0.16, 0.18, 0.2 };
+		const int Step = std::max(1, static_cast<int>(EnvNum("FX_STEP", 1.0))); // (FX_STEP=n: the frames between drawn n at a time, as a slow game)
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; Drawn += Step)
+			{
+				Play(Drawn / 30.0);
+				Aim(Drawn / 30.0);
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			Aim(Now);
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Nobody, false, true);
+			const char* BgIs = std::getenv("FX_BG");
+			if (BgIs)
+			{
+				const double Bg = std::atof(BgIs);
+				std::fill(C.R.begin(), C.R.end(), Bg);
+				C.G = C.R;
+				C.B = C.R;
+			}
+			if (!std::getenv("FX_NO_SHIPS") && !BgIs)
+			{
+				if (bScreen)
+				{
+					for (int I = 0; I < Screens; ++I)
+					{
+						Box(C, Cam, EscortAt(I, Now), Vec(1.0, 0.0, 0.0), Long, 0.1 * Long, 6.0, Grey, I);
+						Box(C, Cam, EscortAt(I, Now) + Vec(0.1 * Long, 0.0, 6.0), Vec(1.0, 0.0, 0.0), 0.3 * Long, 0.07 * Long, 7.0, Grey, I);
+					}
+				}
+				else
+				{
+					Box(C, Cam, Vec(0.0, Dist, 0.0), Vec(1.0, 0.0, 0.0), Long, 0.14 * Long, 10.0, Grey, 0);
+					Box(C, Cam, Vec(0.05 * Long, Dist, 10.0), Vec(1.0, 0.0, 0.0), 0.3 * Long, 0.08 * Long, 14.0, Grey, 0);
+				}
+			}
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/seafx-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
+		}
+		return 0;
+	}
+
 	/** The desert dust (see the top of the file): a column driving, or a towed gun firing. */
 	int Drive(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Ground, std::vector<int> Frames, int W, int H, const std::string& Shot)
 	{
@@ -2274,6 +2469,10 @@ int main(int Argc, char** Argv)
 	if (Size == "sea")
 	{
 		return Sea(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "seafx")
+	{
+		return SeaFx(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "drive")
 	{

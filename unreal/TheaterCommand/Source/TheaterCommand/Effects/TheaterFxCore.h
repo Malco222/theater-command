@@ -285,6 +285,7 @@ namespace TheaterFx
 		double EdgeIn = 0.25; // (and how much of that its heart ring takes: more, and the colour turns sooner from its middle)
 		double DayAlpha = 1.0; // (by day its opacity is this share of what it is at dusk: a flash's glow, thin in daylight)
 		double Over = 1.0; // (a light: how far past white it burns, up to picture.lit_gain; see Battle::PictureGain)
+		double LitOver = 1.0; // (not a light: how far past white its lit colour may be written, up to picture.lit_gain: a far sea splash's white water held over a pale sky, SeaSplash. 1: never)
 		double Nearer = 0.0; // (sorted as if this many metres nearer the eye: a fire's white heart drawn over its own clumps)
 		// (dust that may hide a unit: from a high steep eye it thins near the units, so a player always finds his own.
 		// 1: a vehicle's trail, near any vehicle laying dust; 2: a gun's blast veil, near Origin, the gun)
@@ -526,6 +527,27 @@ namespace TheaterFx
 		 * white from the ground that thickens into the wall over its first seconds. Never a crater, never a black or
 		 * grey cloud. Its numbers are the recipe's smoke_screen row. Id 0 or more: the caller's own number for it. */
 		void Screen(double Now, const Vec& At, double Across, double Seconds, const char* Kind = "wp", int Id = -1);
+		/** A smoke screen laid at sea by a ship under way (the sea battle's escorts; nothing to do with Screen above, a
+		 * smoke round on land). Every frame while she lays it: Id, her own number for this screen; At, where the smoke
+		 * leaves her (her stern); Velocity, hers (metres a second). bFunnel: oily black smoke from her funnels (her
+		 * boilers starved of air), born the row's from_up_m higher; else white chemical smoke from her stern generators.
+		 * Laid by time into the air she steams through, it keeps none of her speed: dense and lumpy at her stern, it
+		 * hangs low on the water, drifts and spreads down the wind (SetWind) and thins over minutes, with gaps opening
+		 * in its old parts. Far off it is fewer, bigger puffs. A call that is no place or no moment is dropped; a
+		 * velocity no number or past 150 m/s is counted as none; a clock that goes back or stalls past the row's
+		 * restart_after_s starts it afresh from here. Its numbers are the recipe's sea_screen row; without it: nothing. */
+		void ScreenLay(double Now, int Id, const Vec& At, const Vec& Velocity, bool bFunnel = false);
+		/** She stops laying that screen: no new smoke; what is laid hangs, drifts and thins away on its own. Calling
+		 * ScreenLay again under the Id starts a new screen. */
+		void ScreenLayStop(double Now, int Id);
+		/** A shell falling in the sea, by its calibre (CalibreMm, held to 20..600) and the dye its ship loaded (Dye: a
+		 * name of the recipe's sea_splash.dyes, "pink", "red", "yellow", "green", "orange", "blue"; empty or unknown:
+		 * white water). A column of white water as tall and as slow as the calibre throws it (sea_splash's table,
+		 * after the art director's ruling: a 16-inch shell's 60 m, full height in about 2 s, standing 3 to 4 s and
+		 * falling over 4 to 6 s), coloured through by the dye and paling toward its white crown as it falls, leaving a
+		 * foam patch stained with it. Far off its white is held over the sky. No flash. Without the sea_splash row:
+		 * Shell on "water" with the size row its calibre is nearest (bomb500, bomb250, how150), as before. */
+		void SeaSplash(double Now, const Vec& At, double CalibreMm, const char* Dye = "");
 
 		/** What the eye is: where it is, which way its screen's right, up and forward point, and how many pixels a
 		 * radian across the screen is (the screen's width / (2 tan(field of view / 2))). Smoke takes SmokeLight (the
@@ -1271,7 +1293,16 @@ namespace TheaterFx
 		void Bulk(double T0, const Vec& At, double CrownH, double K, const std::string& Size, const std::string& Ground, const Paint& P, double CloudM, double LooksS, Dice& D, double Many); // (a burst's cloud as a dense column of earth standing on the ground in lighter smoke: burst.bulk)
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many = 1.0);
-		void Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D); // a hit in the sea: white water thrown up and falling back
+		// (a shell falling in the sea by its calibre, SeaSplash: how its column stands and falls, its foam, its dye and its
+		// floor far off. Given to Spout; none, and the spout is as it always was)
+		struct SplashLook
+		{
+			double RiseS = 1.0, HangS = 1.0, FallS = 2.0, FoamM = 10.0, FoamS = 10.0, CrownWide = 0.0;
+			Rgb Tint = Rgb(1.0f, 1.0f, 1.0f), ShadeTint = Rgb(1.0f, 1.0f, 1.0f), Stain;
+			double DyeK = 0.0, DyeTop = 0.3, DyeFoot = 0.5, DyePale = 0.5, StainK = 0.0, MistDye = 0.4;
+			double FarOver = 1.0, FarFoot = 0.0, MistS = 0.0, FootWhite = 0.0;
+		};
+		void Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D, const SplashLook* Look = nullptr); // a hit in the sea: white water thrown up and falling back
 		void Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D);
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
 		/** A tracer's streak (two layers, paler along its middle), its tail at Start when born, flying at Vel along Way;
@@ -1325,6 +1356,19 @@ namespace TheaterFx
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
 		/** A smoke screen's wall (Kind 6): its lumps laid up to Now. */
 		void ScreenLumps(Source& S, double Now);
+		// (a smoke screen laid at sea, ScreenLay: one a ship's screen. Last, At, Vel: her last call; Owed, the seconds since
+		// the last puff; N, the next puff's number; Wander, the screen's slow drift across the wind)
+		struct SeaScreen
+		{
+			int Id = 0;
+			bool bOn = false, bFunnel = false;
+			double Last = 0.0, Owed = 0.0, Wander = 0.0, Lift = 1.0;
+			Vec At, Vel;
+			uint32_t N = 0;
+			uint64_t Seed = 1;
+		};
+		std::vector<SeaScreen> SeaScreens;
+		void SeaScreenPuffs(SeaScreen& S, double Now, const Vec& At, const Vec& Vel);
 		void Prune(double Now);
 		/** Smoke that fades gradually into the air (Brian, 21 November 18:00Z: "have the smoke effects gradually fade
 		 * away into the air not disappear right away"; the art director's ruling of 19:58Z). A row of the recipe's

@@ -360,6 +360,7 @@ namespace TheaterFx
 		Falls.clear();
 		Dusts.clear();
 		FlamesDue.clear();
+		SeaScreens.clear();
 		InSight = HeldAtDraw = TwinBits = 0;
 		SeenBits = SeenTwin = 0;
 		CaseOff = 0;
@@ -2385,7 +2386,7 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D)
+	void Battle::Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D, const SplashLook* Look)
 	{
 		// A hit in the sea. (Art director 17:54Z 20 November, from build 1778: the columns were "soft white billows that
 		// hang like steam or cotton". Wanted: white water, a fast spout to about mast height with a hard ragged crown and
@@ -2412,10 +2413,10 @@ namespace TheaterFx
 		};
 		const double H = SafeNum(CrownH, 0.5, 400.0, 10.0);
 		const double Tall = std::clamp(std::sqrt(H / 50.0), 0.3, 1.5); // (a small splash is quicker up and down than a bomb's column)
-		const double RiseS = NumOf("rise_s", 0.9, 0.1, 5.0) * Tall;
+		const double RiseS = Look ? Look->RiseS : NumOf("rise_s", 0.9, 0.1, 5.0) * Tall; // (SeaSplash: the calibre's own, see Stand)
 		const double Kd = 3.0 / RiseS;
 		const Span FallS = SpanOf("fall_s", 3.2, 4.6, 0.5, 20.0);
-		const double StalkR = NumOf("wide", 0.1, 0.02, 3.0) * H, HeadR = std::max(StalkR, NumOf("crown_wide", 0.17, 0.02, 4.0) * H);
+		const double StalkR = NumOf("wide", 0.1, 0.02, 3.0) * H, HeadR = std::max(StalkR, (Look && Look->CrownWide > 0.0 ? Look->CrownWide : NumOf("crown_wide", 0.17, 0.02, 4.0)) * H);
 		// (how long for its width the water is drawn as it goes up: a column's is jets; the low boil round a sinking ship, lumps)
 		const Span Jet = SpanOf("jet_stretch", 1.9, 2.8, 1.0, 6.0);
 		const double JetK = 0.5 * (Jet.A + Jet.B) / 2.35;
@@ -2428,7 +2429,7 @@ namespace TheaterFx
 		const double PieceMax = NumOf("piece_max_m", 2.4, 0.2, 20.0) / std::sqrt(FarK);
 		const Rgb WaterCol = Picture(PathOf("colour"), Rgb::FromPicture(240, 244, 246));
 		const Rgb ShadowCol = Picture(PathOf("shadow"), Rgb::FromPicture(150, 166, 180));
-		const Rgb WetCol = Picture(PathOf("base_colour"), Rgb::FromPicture(84, 98, 104));
+		const Rgb WetCol = Picture(PathOf("base_colour"), Rgb::FromPicture(84, 98, 104)).Mix(ShadowCol, Look ? Look->FarFoot : 0.0); // (SeaSplash far off: its foot never a dark puff)
 		const Rgb FoamCol = Picture(PathOf("foam_colour"), Rgb::FromPicture(206, 222, 220));
 		const double ShadowK = NumOf("shadow_k", 0.7, 0.0, 1.0), BaseTo = NumOf("base_to", 0.3, 0.01, 1.0), Solid = NumOf("alpha", 0.95, 0.0, 1.0);
 		const double SideShade = NumOf("side_shade", 0.6, 0.0, 1.0);
@@ -2505,14 +2506,57 @@ namespace TheaterFx
 			B.ShadowK = ShadowK;
 			return B;
 		};
+		// (SeaSplash, Look given. Stand: water that stands, as a big shell's column does. Thrown so as to be about its
+		// height by RiseS, it climbs on a little, stands near it through HangS and is back on the sea at Ends: the drag
+		// takes it to under To by as much as a slow throw against a gentle fall then adds, whose top is To in the middle
+		// of the hang. Dyed: the dye of the shell's ship through its water, k of the way, the shade side toward the
+		// dye's own shade; as it falls it pales DyePale of the way back to white)
+		const double HangS = Look ? Look->HangS : 0.0;
+		auto Stand = [&](Bit& B, const Vec& From, const Vec& To, double Ends)
+		{
+			const double Top = std::max(To.Z - At.Z, 0.05);
+			const double Peak = RiseS + 0.5 * HangS, After = std::max(Ends - Peak, 0.2);
+			const double G = 2.0 * Top / (After * After);
+			const double Bump = std::min(0.5 * G * Peak * Peak, 0.9 * Top);
+			B.Vel = (To - ZUp * Bump - From) * Kd;
+			B.Gravity = G;
+			B.Rise = G * Peak;
+			B.Life = Ends;
+		};
+		auto Tinted = [](const Rgb& C, const Rgb& T, double K)
+		{
+			const Rgb By = Rgb(1.0f, 1.0f, 1.0f).Mix(T, K);
+			return Rgb(C.R * By.R, C.G * By.G, C.B * By.B);
+		};
+		auto Dye = [&](Bit& B, double K)
+		{
+			if (!Look || !(Look->DyeK > 0.0))
+			{
+				return;
+			}
+			const double Own = Clamp01(K * Look->DyeK);
+			const Rgb Plain = B.Col;
+			B.Col = Tinted(Plain, Look->Tint, Own);
+			B.Col2 = Tinted(B.Col2, Look->Tint, Own * (1.0 - Look->DyePale));
+			B.ShadowCol = Tinted(B.ShadowCol, Look->ShadeTint, Own);
+			B.Cool = 1.0;
+		};
+		// (how much of the dye water at this share of the column's height holds: all of it up its body, less toward its
+		// crown (DyeTop at the top), and DyeFoot of it in the dark water at its foot (White: how far it has broken white))
+		auto DyeAt = [&](double Up, double White)
+		{
+			const double Crown = Clamp01((Up - 0.55) / 0.45);
+			const double Low = Look ? Look->DyeFoot + (1.0 - Look->DyeFoot) * White : 1.0;
+			return (1.0 - (1.0 - (Look ? Look->DyeTop : 1.0)) * Crown) * Low;
+		};
 		// (domes: no column at all, but that many low domes of white water heaving up and sinking over the column's
 		// width, with darker water between them: the boil round a ship that is going down. The art director, 22:03Z)
 		const Span Domes = SpanOf("domes", 0.0, 0.0, 0.0, 24.0);
 		const bool bBoil = Domes.B >= 1.0;
 		// the foam: a pale patch where the column stood, and a broken ring of it spreading as the water comes down.
 		// Laid first: it lies on the sea, under everything
-		const double FoamReach = NumOf("foam_reach", 0.42, 0.05, 2.0) * H;
-		const Span FoamS = SpanOf("foam_s", 10.0, 16.0, 1.0, 120.0);
+		const double FoamReach = Look ? 0.5 * Look->FoamM : NumOf("foam_reach", 0.42, 0.05, 2.0) * H;
+		const Span FoamS = Look ? Span{ 0.85 * Look->FoamS / Tall, 1.15 * Look->FoamS / Tall } : SpanOf("foam_s", 10.0, 16.0, 1.0, 120.0); // (SeaSplash: its calibre's patch, so long whatever its height)
 		const double FoamAlpha = NumOf("foam_alpha", 0.6, 0.0, 1.0);
 		const int NFoam = FoamAlpha > 0.0 ? std::max(6, static_cast<int>(NumOf("foam", 22.0, 0.0, 60.0) * Many)) : 0;
 		for (int I = -1; I < NFoam; ++I)
@@ -2549,6 +2593,12 @@ namespace TheaterFx
 			B.ShadeK = 0.0; // (flat on the sea: evenly lit, no bright side and dark side to show its outline)
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
+			if (Look && Look->StainK > 0.0)
+			{
+				// (SeaSplash: the patch stained with the dye, its pieces a little less)
+				B.Col = B.Col.Mix(Look->Stain, Look->StainK * (bPatch ? 1.0 : 0.6));
+				B.Col2 = B.Col2.Mix(Look->Stain, Look->StainK * (bPatch ? 1.0 : 0.6));
+			}
 			Bits.push_back(B);
 		}
 		// the surge: a low ring of spray racing out over the sea from the column's foot and settling
@@ -2590,6 +2640,11 @@ namespace TheaterFx
 			B.Rough = 0.35;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
+			if (Look)
+			{
+				Dye(B, 0.5);
+				B.LitOver = Look->FarOver;
+			}
 			Bits.push_back(B);
 		}
 		// (spray: a streamer of water leaving the column at one place, thrown out and a little up over a moment, so
@@ -2636,6 +2691,11 @@ namespace TheaterFx
 				B.Point = bBead ? 0.4 : 0.6;
 				B.Tail = 0.4;
 				B.LeastPx = 1.0;
+				if (Look)
+				{
+					Dye(B, Look->DyeTop + 0.3);
+					B.LitOver = Look->FarOver;
+				}
 				Bits.push_back(B);
 			}
 		};
@@ -2736,6 +2796,10 @@ namespace TheaterFx
 			B.Heart = 0.85;
 			B.Inner = 0.5;
 			B.Rough = D.U(0.25, 0.4); // (heavy water: a rounder, softer outline than the froth above it)
+			if (Look)
+			{
+				Dye(B, Look->DyeFoot);
+			}
 			Bits.push_back(B);
 		}
 		// the column: white water all the way up, dark and wet at its base, wider toward its head
@@ -2775,6 +2839,24 @@ namespace TheaterFx
 			B.Rough = D.U(0.45, 0.6);
 			B.LeastPx = FarPx;
 			B.LeastKeep = FarKeep;
+			if (Look)
+			{
+				// (SeaSplash: it stands, the column's top the last down; it falls as a curtain once its hang is over)
+				const double Ends = (RiseS + HangS + Look->FallS) * D.U(0.9, 1.05) * (0.8 + 0.2 * F / 0.74);
+				Stand(B, B.From, At + Outward * (0.9 * Rc * Off) + ZUp * (F * H), Ends);
+				// (its foot broken white as it stands: the dark wet water is the first moment's, never a dark lump the
+				// column stands on for seconds)
+				const double Broken = std::max(White, Look->FootWhite);
+				B.Col = WetCol.Mix(Froth, Broken) * Tint;
+				B.Col2 = WetCol.Mix(Froth, std::max(Broken, Look->FootWhite + 0.5 * (1.0 - Look->FootWhite))) * Tint;
+				B.Cool = 1.0;
+				B.ShadowK = ShadowK * Broken;
+				B.StretchAfter = RiseS + HangS;
+				B.StretchBy = 0.5 * Look->FallS;
+				B.Hold = Clamp01((RiseS + HangS) / Ends);
+				Dye(B, DyeAt(F, Broken));
+				B.LitOver = Look->FarOver;
+			}
 			Bits.push_back(B);
 		}
 		// the crown: fingers of water thrown on past the column's head, uneven and leaning out, each drawn to a torn
@@ -2795,7 +2877,7 @@ namespace TheaterFx
 			const double Rf = std::min(PieceMax, StalkR * D.U(0.3, 0.5) * Coarse), Rt = Rf * 0.22;
 			const Rgb FingerCol = Sided(WaterCol * D.U(0.92, 1.0), Out2, std::min(1.0, 0.3 + Spread * 2.5));
 			const double G = FallG();
-			const double Fades = D.U(1.8, 2.8) * Tall; // (a finger's water breaks to spray in the air and is gone before it is down)
+			const double Fades = Look ? (RiseS + HangS + 0.6 * Look->FallS) * D.U(0.85, 1.1) : D.U(1.8, 2.8) * Tall; // (a finger's water breaks to spray in the air and is gone before it is down)
 			double F = 0.4 + D.U(0.0, 0.04);
 			while (F < 1.0)
 			{
@@ -2822,6 +2904,15 @@ namespace TheaterFx
 				B.Rough = 0.45 + 0.15 * Fn;
 				B.LeastPx = FarPx;
 				B.LeastKeep = FarKeep;
+				if (Look)
+				{
+					Stand(B, B.From, Stands + Side, (RiseS + HangS + Look->FallS) * D.U(0.95, 1.08));
+					B.Life = std::min(B.Life, Fades * D.U(0.8, 1.2) * (1.0 - 0.3 * Fn));
+					B.StretchAfter = RiseS + HangS;
+					B.StretchBy = 0.5 * Look->FallS;
+					Dye(B, DyeAt(F * ReachJ / H, WhiteJ));
+					B.LitOver = Look->FarOver;
+				}
 				Bits.push_back(B);
 				F += std::max(0.02, Rl * std::max(1.0, (2.0 + 1.4 * Fn) * JetK) * 0.85 / std::max(ReachJ, 1e-3) * D.U(0.7, 1.1)) * Coarse;
 			}
@@ -2853,7 +2944,7 @@ namespace TheaterFx
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
 			Bit B;
-			B.Born = T0 + RiseS * D.U(1.0, 2.6);
+			B.Born = Look ? T0 + RiseS + HangS * D.U(0.2, 1.0) : T0 + RiseS * D.U(1.0, 2.6); // (SeaSplash: as its hang ends)
 			B.From = At + Vec(std::cos(A), std::sin(A), 0.0) * (HeadR * D.U(0.0, 0.8)) + ZUp * (H * D.U(0.12, 0.7));
 			B.Vel = Vec(D.Bell(), D.Bell(), 0.0) * (0.02 * H) + ZUp * (-0.03 * H * D.U(0.5, 1.5));
 			B.Drag = 0.4;
@@ -2876,6 +2967,14 @@ namespace TheaterFx
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			B.ShadowCol = ShadowCol;
 			B.ShadowK = ShadowK;
+			if (Look)
+			{
+				if (Look->MistS > 0.0)
+				{
+					B.Life = Look->MistS * D.U(0.85, 1.15); // (the ruling's 4 to 6 s at the foot of a tall column)
+				}
+				Dye(B, Look->MistDye);
+			}
 			Bits.push_back(B);
 		}
 	}
@@ -10548,6 +10647,398 @@ namespace TheaterFx
 		}
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// The sea battle's own: a shell's column by its calibre and its ship's dye, and a smoke screen laid by a ship
+	// under way (release 2, the sea scene's asks of 22 November)
+
+	void Battle::SeaSplash(double Now, const Vec& AtIn, double CalibreMm, const char* DyeIn)
+	{
+		// A shell falling in the sea, by its calibre: the art director's columns by calibre (sea-guns-ruling.md, 06:12Z
+		// 21 November: a heavy shell's 50 to 70 m, full height in 2 to 2.5 s, standing 3 to 4 s then falling over 4 to 6
+		// s, a foam patch 30 to 40 m that lasts 20 to 30 s; a medium's and a light's smaller and quicker), and the dye
+		// its ship loaded so she could tell her own fall of shot (the historian, 22 November: Nagato brilliant pink,
+		// Kongo blood red reading red to purple by the light, Haruna greenish yellow, Yamato none). The passed column's
+		// build is kept (Spout): only how long it stands, how wide its foam, its colour and its floor far off are the
+		// calibre's and the dye's. A hit whose place or moment is no number is no hit.
+		const auto Sound = [](double V, double Most) { return V == V && V >= -Most && V <= Most; };
+		if (!Sound(Now, 1.0e9) || !Sound(AtIn.X, 1.0e7) || !Sound(AtIn.Y, 1.0e7) || !Sound(AtIn.Z, 1.0e7))
+		{
+			return;
+		}
+		const double Mm = SafeNum(CalibreMm, 20.0, 600.0, 150.0);
+		const std::string P = "sea_splash.";
+		if (!Has(P + "calibre_mm.0") || !Has("grounds.water.spout.rise_s"))
+		{
+			// (a recipe without the row: the size row the scene passed before for that calibre, as it was drawn)
+			Shell(Now, AtIn, Mm >= 300.0 ? "bomb500" : (Mm >= 180.0 ? "bomb250" : "how150"), "water", false);
+			return;
+		}
+		// (the row's table by calibre: each number between the two calibres either side, held at the table's ends. Up to
+		// eight calibres, rising; a calibre that does not rise ends the table)
+		double Cal[8] = {};
+		int NCal = 0;
+		for (int I = 0; I < 8; ++I)
+		{
+			const std::string Key = P + "calibre_mm." + std::to_string(I);
+			const double C = Num(Key, -1.0);
+			if (!Has(Key) || !(C == C) || C <= (NCal > 0 ? Cal[NCal - 1] : 0.0) || C > 2000.0)
+			{
+				break;
+			}
+			Cal[NCal++] = C;
+		}
+		if (NCal == 0)
+		{
+			Shell(Now, AtIn, Mm >= 300.0 ? "bomb500" : (Mm >= 180.0 ? "bomb250" : "how150"), "water", false);
+			return;
+		}
+		int Lo = 0;
+		while (Lo + 1 < NCal && Cal[Lo + 1] < Mm)
+		{
+			++Lo;
+		}
+		const int Hi = std::min(Lo + 1, NCal - 1);
+		const double Between = Hi > Lo ? Clamp01((Mm - Cal[Lo]) / (Cal[Hi] - Cal[Lo])) : 0.0;
+		const double Below = Mm < Cal[0] ? 1.0 : 0.0; // (under the table's least calibre: as its first row)
+		auto Table = [&](const char* Name, double Usual, double Least, double Most)
+		{
+			const double A = SafeNum(Num(P + Name + "." + std::to_string(Lo), Usual), Least, Most, Usual);
+			const double B = SafeNum(Num(P + Name + "." + std::to_string(Hi), A), Least, Most, A);
+			return Below > 0.0 ? A : A + (B - A) * Between;
+		};
+		const double H = Table("height_m", 30.0, 1.0, 150.0);
+		Dice D(++Seeds * 7919ull ^ PlaceKey(AtIn));
+		SplashLook Look;
+		Look.RiseS = Table("rise_s", 1.5, 0.1, 10.0);
+		Look.HangS = Table("hang_s", 2.0, 0.0, 20.0);
+		Look.FallS = Table("fall_s", 3.0, 0.2, 30.0);
+		Look.FoamM = Table("foam_m", 0.5 * H, 0.5, 200.0);
+		Look.FoamS = Table("foam_s", 15.0, 0.5, 300.0);
+		Look.CrownWide = Has(P + "crown_wide.0") ? Table("crown_wide", 0.17, 0.02, 1.0) : 0.0;
+		Look.MistS = SafeNum(Num(P + "mist_s", 0.0), 0.0, 60.0, 0.0) * std::clamp(std::sqrt(H / 60.0), 0.5, 1.2);
+		Look.FootWhite = SafeNum(Num(P + "foot_white", 0.0), 0.0, 1.0, 0.0);
+		// (its dye: a name of the row's dyes, its colour in sunlight on the water, its shade side, and the colour it
+		// shifts toward against the sun or with the sun low; the patch it leaves. No such dye, or none: white water)
+		const std::string DyeName = DyeIn ? DyeIn : "";
+		const std::string Dp = P + "dyes." + DyeName + ".";
+		if (!DyeName.empty() && Has(Dp + "colour.0"))
+		{
+			const Rgb Water = Picture("grounds.water.spout.colour", Rgb::FromPicture(240, 244, 246));
+			const Rgb Shadow = Picture("grounds.water.spout.shadow", Rgb::FromPicture(150, 166, 180));
+			const auto Over = [](const Rgb& C, const Rgb& Of)
+			{
+				const auto One = [](float A, float B) { return static_cast<float>(SafeNum(A / std::max(B, 1e-4f), 0.0, 1.2, 1.0)); };
+				return Rgb(One(C.R, Of.R), One(C.G, Of.G), One(C.B, Of.B));
+			};
+			const Rgb Lit = Picture(Dp + "colour", Water);
+			const Rgb Shade = Picture(Dp + "shade", Lit * 0.7);
+			double Shift = 0.0;
+			if (bEyeKnown && Has(Dp + "shift.0"))
+			{
+				// (against the sun, or with the sun low, it shifts: Kongo's red toward purple)
+				const Vec Seen = (AtIn - LastEye).Unit(Vec(0.0, 1.0, 0.0));
+				const Vec Sun = LastSun.Unit(ZUp);
+				Shift = SafeNum(Num(Dp + "shift_k", 1.0), 0.0, 1.0, 1.0) * std::max(Clamp01(2.0 * Seen.Dot(Sun)), Clamp01(1.0 - Sun.Z / 0.35));
+			}
+			const Rgb LitIs = Lit.Mix(Picture(Dp + "shift", Lit), Shift);
+			Look.Tint = Over(LitIs, Water);
+			Look.ShadeTint = Over(Shade.Mix(Picture(Dp + "shift", Shade) * 0.7, Shift), Shadow);
+			Look.DyeK = SafeNum(Num(P + "dye_k", 0.85), 0.0, 1.0, 0.85) * SafeNum(Num(Dp + "strength", 1.0), 0.0, 1.0, 1.0);
+			Look.DyeTop = SafeNum(Num(P + "dye_top", 0.35), 0.0, 1.0, 0.35);
+			Look.DyeFoot = SafeNum(Num(P + "dye_foot", 0.5), 0.0, 1.0, 0.5);
+			Look.DyePale = SafeNum(Num(P + "dye_pale", 0.45), 0.0, 1.0, 0.45);
+			Look.MistDye = SafeNum(Num(P + "mist_dye", 0.4), 0.0, 1.0, 0.4);
+			Look.StainK = SafeNum(Num(P + "stain", 0.35), 0.0, 1.0, 0.35) * SafeNum(Num(Dp + "strength", 1.0), 0.0, 1.0, 1.0);
+			Look.Stain = Picture(Dp + "stain", Picture("grounds.water.spout.foam_colour", Rgb::FromPicture(206, 222, 220)).Mix(LitIs, 0.6));
+		}
+		// (far off its white is held over the sky and its dark foot is no dark puff: where the whole column stands under
+		// far_px tall in the last frame's picture, in full from half that down)
+		if (bEyeKnown)
+		{
+			const double Away = std::max(1.0, (AtIn - LastEye).Length());
+			const double SeenPx = H * SafeNum(LastPpr, 1.0, 1.0e7, 1000.0) / Away;
+			const double FarPxIs = SafeNum(Num(P + "far_px", 0.0), 0.0, 1.0e4, 0.0);
+			const double FarIs = FarPxIs > 0.0 ? Clamp01(2.0 * (1.0 - SeenPx / FarPxIs)) : 0.0;
+			Look.FarOver = 1.0 + (SafeNum(Num(P + "far_over", 1.0), 1.0, 4.0, 1.0) - 1.0) * FarIs;
+			Look.FarFoot = SafeNum(Num(P + "far_foot", 0.0), 0.0, 1.0, 0.0) * FarIs;
+		}
+		const Vec At(AtIn.X, AtIn.Y, Height(AtIn.X, AtIn.Y));
+		Spout(Now + 0.005, At, H, std::string(), D, &Look);
+		// (a near miss shakes the eye close by: shake_within_k times its height. 0: none)
+		const double Within = SafeNum(Num(P + "shake_within_k", 0.0), 0.0, 20.0, 0.0) * H;
+		if (Within > 0.0)
+		{
+			Knock J;
+			J.At = AtIn;
+			J.Born = Now;
+			J.Strength = Clamp01(H / 60.0);
+			J.Within = Within;
+			Knocks.push_back(J);
+		}
+	}
+
+	void Battle::ScreenLay(double Now, int Id, const Vec& At, const Vec& Velocity, bool bFunnel)
+	{
+		// A smoke screen laid at sea (the sea scene's ask, 22 November: Samar's escorts laid eight, up to five at once,
+		// each reported every step at her stern; the art director: each escort lays her own plume, dense at the source,
+		// white-grey from the stern generators and black from the funnels, lumpy, thinning downwind, with gaps). It
+		// hangs low on the water, lasts minutes, drifts and spreads down the wind. No row, or a call that is no place
+		// or no moment: nothing.
+		if (!Has("sea_screen.white.lip_m") || !(Now == Now) || std::fabs(Now) > 1.0e9)
+		{
+			return;
+		}
+		const auto Place = [](double V) { return V == V && std::fabs(V) <= 1.0e7; };
+		if (!Place(At.X) || !Place(At.Y) || !Place(At.Z))
+		{
+			return;
+		}
+		const auto Kept = [](double V) { return V == V && std::fabs(V) <= 150.0 ? V : 0.0; };
+		Vec Vel(Kept(Velocity.X), Kept(Velocity.Y), Kept(Velocity.Z));
+		if (Vel.Length() > 150.0)
+		{
+			Vel = Vec();
+		}
+		SeaScreen* Own = nullptr;
+		for (SeaScreen& S : SeaScreens)
+		{
+			if (S.Id == Id)
+			{
+				Own = &S;
+			}
+		}
+		if (!Own || !Own->bOn)
+		{
+			if (!Own)
+			{
+				// (held to 64 screens at once: the stopped ones make room first; with 64 still laying, a new one lays nothing)
+				if (SeaScreens.size() >= 64)
+				{
+					SeaScreens.erase(std::remove_if(SeaScreens.begin(), SeaScreens.end(), [](const SeaScreen& S) { return !S.bOn; }), SeaScreens.end());
+				}
+				if (SeaScreens.size() >= 64)
+				{
+					return;
+				}
+				SeaScreens.push_back(SeaScreen());
+				Own = &SeaScreens.back();
+			}
+			// (a new screen, or one laid again after it stopped: afresh from here, with a puff at once)
+			*Own = SeaScreen();
+			Own->Id = Id;
+			Own->bOn = true;
+			Own->Last = Now;
+			Own->At = At;
+			Own->Vel = Vel;
+			Own->Owed = 1.0e9;
+			Own->Seed = Mix64(static_cast<uint64_t>(static_cast<int64_t>(Id)) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(Now * 1000.0)) ^ 0x5EA5C4ull) | 1ull;
+		}
+		Own->bFunnel = bFunnel;
+		SeaScreenPuffs(*Own, Now, At, Vel);
+	}
+
+	void Battle::ScreenLayStop(double Now, int Id)
+	{
+		(void)Now;
+		for (SeaScreen& S : SeaScreens)
+		{
+			if (S.Id == Id)
+			{
+				S.bOn = false;
+			}
+		}
+	}
+
+	void Battle::SeaScreenPuffs(SeaScreen& S, double Now, const Vec& At, const Vec& Vel)
+	{
+		// The screen's puffs laid since her last call, by time, along her way between the two calls (as a funnel's
+		// plume, PlumeMove): one every overlap-th of a puff's width of the wind she feels, each let go into the air she
+		// steams through with none of her speed. It widens as the two thirds power of its age (wide_k), and as it does
+		// its puffs go by halves (even, Bit::Even), so those left always stand evenly and as deep: the screen is
+		// unbroken and its old end costs few pieces. Each puff holds its smoke over a face as much wider, so it thins
+		// downwind; it also thins by its own age (fade_s), and along the screen some stretches thin sooner than the
+		// rest (gaps, over gap_s of laying; gap_thin of their smoke is thin from the start), so gaps open in its old parts
+		// while it stays dense at her stern. It rests on the water (rest) and climbs only a little (rise_mps), drawn out
+		// along its line (stretch), lumpy (rough, lumps, the roll; and billow of its puffs billow_size as big and climbing
+		// billow_rise as fast, so its top is heaped and uneven). Far off, a puff is never under least_px across in the last frame's picture: fewer, bigger
+		// puffs, overlapping overlap_far deep, each as much denser. Past busy_from of the room, half as deep.
+		const std::string P = "sea_screen.";
+		const std::string K = P + (S.bFunnel ? "black." : "white.");
+		auto One = [&](const char* Name, double Usual, double Least, double Most)
+		{
+			return SafeNum(Num(K + Name, Num(P + Name, Usual)), Least, Most, Usual);
+		};
+		auto Two = [&](const char* Name, double Low, double High, double Least, double Most)
+		{
+			const std::string Path = Has(K + Name + ".0") || Has(K + Name) ? K + Name : P + Name;
+			Span R = Range(Path, Low, High);
+			R.A = SafeNum(R.A, Least, Most, Low);
+			R.B = std::max(R.A, SafeNum(R.B, Least, Most, High));
+			return R;
+		};
+		auto Colour = [&](const char* Name, const Rgb& Usual)
+		{
+			return Picture(Has(K + Name + ".0") ? K + Name : P + Name, Usual);
+		};
+		const double Restart = One("restart_after_s", 6.0, 0.1, 120.0);
+		if (Now < S.Last || Now - S.Last > Restart)
+		{
+			// (time going back, or a long silence: afresh from here, with a puff at once)
+			S.Last = Now;
+			S.At = At;
+			S.Vel = Vel;
+			S.Owed = 1.0e9;
+		}
+		const double Between = Now - S.Last;
+		const Vec Path = At - S.At;
+		const Vec Blown = Wind.X == Wind.X && Wind.Y == Wind.Y && Wind.Z == Wind.Z ? Vec(Wind.X, Wind.Y, 0.0) : Vec();
+		const Vec Through = Vec(Vel.X - Blown.X, Vel.Y - Blown.Y, 0.0); // (her way through the air: the line the screen is laid along)
+		const double Felt = std::clamp(Through.Length(), One("felt_least_mps", 3.0, 0.5, 30.0), 60.0);
+		const double LipOwn = One("lip_m", 14.0, 1.0, 200.0);
+		double Lip = LipOwn;
+		const double DeepOwn = One("overlap", 3.0, 1.0, 6.0);
+		double Deep = DeepOwn;
+		if (bEyeKnown)
+		{
+			const double Away = (At - LastEye).Length(), Ppr = SafeNum(LastPpr, 1.0, 1.0e7, 1000.0);
+			const double LeastPx = One("least_px", 0.0, 0.0, 400.0);
+			if (Away == Away && Away > 1.0 && LeastPx > 0.0)
+			{
+				const double SeenPx = LipOwn * Ppr / Away;
+				if (SeenPx < LeastPx)
+				{
+					const double DeepFar = std::min(One("overlap_far", DeepOwn, 1.0, 6.0), DeepOwn);
+					Deep = DeepFar + (DeepOwn - DeepFar) * Clamp01(SeenPx / LeastPx);
+					Lip = std::min(LeastPx * Away / Ppr, One("lip_most", 8.0, 1.0, 50.0) * LipOwn);
+				}
+			}
+		}
+		if (static_cast<double>(RoomAsked()) > One("busy_from", 0.6, 0.05, 4.0) * MaxPuffs)
+		{
+			Deep = std::max(1.0, 0.5 * Deep);
+		}
+		const double Every = SafeNum(Lip / (Deep * Felt), 0.05, 60.0, 0.5);
+		const double WideK = One("wide_k", 1.7, 0.0, 50.0);
+		const double Widens = std::min(WideK / std::max(Lip, 1e-3), 1.0e6);
+		const double AgeS = One("age_s", 300.0, 5.0, 1800.0);
+		const double Even = One("even", 0.0, 0.0, 0.9);
+		const int EvenNear = static_cast<int>(One("even_near", 2.0, 0.0, 20.0)), EvenFar = static_cast<int>(One("even_far", 0.0, 0.0, 20.0));
+		const double EvenStep = One("even_step", 1.6, 1.15, 2.0);
+		const Span Rises = Two("rise_mps", 0.02, 0.1, 0.0, 5.0);
+		const double Spread = One("spread_mps", 0.2, 0.0, 10.0), FromUp = One("from_up_m", 2.0, 0.0, 100.0), Ahead = One("from_ahead_m", 0.0, -200.0, 200.0);
+		const double Size = One("size", 0.25, 0.0, 0.8), Shading = One("shade", 0.05, 0.0, 0.5), Rough = One("rough", 0.3, 0.0, 1.0);
+		const double Alpha = One("alpha", 0.85, 0.0, 0.99), FadeS = One("fade_s", 150.0, 1.0, 3600.0), FadePow = One("fade_pow", 1.5, 0.3, 6.0);
+		const double OldBy = One("old_by_s", 120.0, 0.5, 3600.0), Stretch = One("stretch", 1.0, 1.0, 4.0), Rest = One("rest", 0.5, 0.0, 2.0);
+		const double Gaps = One("gaps", 0.0, 0.0, 0.95), GapS = One("gap_s", 15.0, 0.5, 600.0), GapFrom = One("gap_from", 0.5, 0.0, 0.95);
+		const double GapThin = One("gap_thin", 0.0, 0.0, 0.95), Billow = One("billow", 0.0, 0.0, 1.0);
+		const double BillowSize = One("billow_size", 1.5, 1.0, 3.0), BillowRise = One("billow_rise", 3.0, 1.0, 20.0);
+		const double ShadowOf = One("shadow_of_lit", 0.75, 0.0, 1.0), ShadowK = One("shadow_k", 0.0, 0.0, 1.0);
+		const double RollLift = One("roll_lift", 0.0, 0.0, 1.0), RollShade = One("roll_shade", 0.0, 0.0, 0.5), RollRun = One("roll_run", 4.0, 1.0, 64.0);
+		const int Lumps = static_cast<int>(One("lumps", 0.0, 0.0, 8.0));
+		const double LumpsPx = One("lumps_px", 120.0, 0.0, 1.0e5);
+		const Rgb Col = Colour("colour", Rgb::FromPicture(232, 233, 230)), Old = Colour("colour_old", Col);
+		const Vec Line = Through.Unit(Vel.Length() > 0.1 ? Vec(Vel.X, Vel.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)) : Vec(1.0, 0.0, 0.0));
+		const Vec Across(-Line.Y, Line.X, 0.0);
+		const Vec Forward = Vec(Vel.X, Vel.Y, 0.0).Unit(Line);
+		const int MostLaid = static_cast<int>(One("most_a_call", 64.0, 1.0, 400.0));
+		// (the screen's gaps: a slow value along its laying, by its own seed, cell by cell of gap_s seconds)
+		auto GapAt = [&](double T)
+		{
+			const double X = (T - std::floor(T / 1.0e6) * 1.0e6) / GapS;
+			const double Cell = std::floor(X), In = X - Cell;
+			auto Thrown = [&](double C)
+			{
+				const uint64_t Hh = Mix64(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(C)) * 0xD1B54A32D192ED03ull));
+				return static_cast<double>(Hh >> 11) * (1.0 / 9007199254740992.0);
+			};
+			const double V = Thrown(Cell) + (Thrown(Cell + 1.0) - Thrown(Cell)) * (In * In * (3.0 - 2.0 * In));
+			return Clamp01((V - GapFrom) / std::max(1.0 - GapFrom, 1e-3));
+		};
+		int Laid = 0;
+		double LastT = S.Last;
+		double T = S.Last + std::max(0.0, Every - S.Owed);
+		for (; T <= Now && Laid < MostLaid; T += Every, ++Laid)
+		{
+			const double Kt = Between > 1e-9 ? Clamp01((T - S.Last) / Between) : 1.0;
+			const uint32_t N = S.N++;
+			Dice D(Mix64(S.Seed ^ (static_cast<uint64_t>(N) * 0xD1B54A32D192ED03ull) ^ 0x5C3Eull) | 1ull);
+			// (how many halvings it lives through, and when the next comes: as a funnel's, Bit::Even)
+			int Halvings = N == 0u ? 31 : 0;
+			for (uint32_t Left = N; Left != 0u && (Left & 1u) == 0u; Left >>= 1)
+			{
+				++Halvings;
+			}
+			const int Next = std::min(Halvings + 1, 30), NextNear = std::min(Next, EvenNear), NextMid = std::clamp(Next - EvenNear, 0, EvenFar);
+			const double HalvedAt = std::ldexp(1.0, NextNear + std::max(Next - EvenNear - EvenFar, 0)) * std::pow(EvenStep, NextMid);
+			const double Goes = Even > 0.0 && Widens > 1e-9 ? std::pow((HalvedAt - 1.0) / Widens, 1.5) : AgeS;
+			const bool bBillow = D.U() < Billow;
+			const double SizeK = D.U(1.0 - Size, 1.0 + Size) * (bBillow ? BillowSize : 1.0);
+			S.Wander = S.Wander * std::exp(-Every / 20.0) + 0.6 * std::sqrt(1.0 - std::exp(-2.0 * Every / 20.0)) * D.Bell();
+			S.Lift = 1.0 + (S.Lift - 1.0) * std::exp(-Every / 10.0) + 0.3 * std::sqrt(1.0 - std::exp(-2.0 * Every / 10.0)) * D.Bell();
+			Bit B;
+			B.Born = T;
+			B.Life = AgeS * D.U(0.9, 1.0);
+			if (Even > 0.0)
+			{
+				B.Life = std::clamp(Goes, 0.05, AgeS);
+				B.Even = Halvings;
+				B.EvenK = Widens;
+				B.EvenWin = Even;
+				B.EvenNear = EvenNear;
+				B.EvenFar = EvenFar;
+				B.EvenStep = std::log2(EvenStep);
+				B.EvenN = N;
+				B.EvenSeed = static_cast<uint32_t>(S.Seed >> 32);
+				B.EvenRollLift = RollLift;
+				B.EvenRollShade = RollShade;
+				B.EvenRollRun = RollRun;
+			}
+			B.From = S.At + Path * Kt + Forward * Ahead + Across * (D.Bell() * 0.1 * Lip) + ZUp * FromUp;
+			B.Vel = Across * (Spread * std::clamp(S.Wander, -2.0, 2.0));
+			B.Drag = 0.0;
+			B.Windage = D.U(0.85, 1.0);
+			B.Rise = Rises.Pick(D) * std::clamp(S.Lift, 0.3, 1.7) * (bBillow ? BillowRise : 1.0);
+			B.R0 = 0.5 * Lip * SizeK;
+			B.R1 = B.R0 + 0.5 * WideK * SizeK * std::pow(B.Life, 2.0 / 3.0);
+			B.Grow = 2.0 / 3.0;
+			B.Along = Line;
+			B.Stretch = Stretch;
+			B.Rest = Rest;
+			const double Shade = D.U(1.0 - Shading, 1.0 + Shading);
+			B.Col = Col * Shade;
+			B.Col2 = B.Col.Mix(Old * Shade, std::min(1.0, B.Life / OldBy));
+			B.Cool = 1.0;
+			const double Thick = std::min(0.97, Alpha * D.U(0.9, 1.0));
+			B.Alpha = (Deep < DeepOwn ? std::min(0.97, 1.0 - std::pow(1.0 - Thick, DeepOwn / Deep)) : Thick) * (1.0 - GapThin * GapAt(T)); // (laid less deep, each holds as much more smoke)
+			B.AgeFade = FadeS * (1.0 - Gaps * GapAt(T));
+			B.AgeFadePow = FadePow;
+			B.FadeIn = 0.3;
+			B.Hold = Even > 0.0 && Goes < AgeS ? 1.0 : 0.8;
+			B.Heart = 0.7;
+			B.HeartRound = 1.0;
+			B.Inner = 0.55;
+			B.Rim = 0.0;
+			B.Rough = Rough;
+			B.Lumps = Lumps;
+			B.LumpsPx = LumpsPx;
+			B.LumpsAlpha = 0.85;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.TurnRate = D.U(-0.05, 0.05);
+			if (ShadowK > 0.0)
+			{
+				B.ShadowCol = Rgb(static_cast<float>(B.Col.R * ShadowOf * 0.97), static_cast<float>(B.Col.G * ShadowOf), static_cast<float>(B.Col.B * ShadowOf * 1.04));
+				B.ShadowK = ShadowK;
+			}
+			Bits.push_back(B);
+			LastT = T;
+		}
+		S.Owed = Laid > 0 ? Now - LastT : std::min(S.Owed + Between, 1.0e9);
+		S.Last = Now;
+		S.At = At;
+		S.Vel = Vel;
+	}
+
 	Vec Battle::OnSlick(const Source& S, Dice& D) const
 	{
 		const double A = D.U(0.0, 2.0 * Pi), Out_ = std::sqrt(D.U());
@@ -12291,7 +12782,7 @@ namespace TheaterFx
 		EdgeK = B.EdgeK;
 		EdgeTo = B.Edge;
 		EdgeIn = B.EdgeIn;
-		PutK = (B.bLight ? std::clamp(B.Over, 1.0, LitGain) : 1.0) / LitGain;
+		PutK = (B.bLight ? std::clamp(B.Over, 1.0, LitGain) : std::clamp(B.LitOver, 1.0, LitGain)) / LitGain; // (Bit::LitOver: 1 but for a far sea splash's white water)
 		if (B.SunSide > 0.0 && !B.bLight && Dist > 1e-6)
 		{
 			// (art director 03:59Z: an oil column reads round, never a flat ink cut-out: each lobe's sunward side lit up

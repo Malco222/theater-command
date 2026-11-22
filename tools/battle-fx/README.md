@@ -1436,6 +1436,35 @@ Blasts->OilStop(Zone.Id); // only if it should go out before the fight ends
   `oil burning`; `oil horizon` (three fires 3, 6 and 9 km off from an 8 m eye).
 - `-TheaterBlastTest` also lights two, already burning: a slick 900 m off and a burning ship 2.5 km off.
 
+## Smoke screens at sea, and shell columns by calibre and dye (after head b0f46c5)
+
+```cpp
+// an escort laying smoke: every frame while she lays it, at her stern, with her velocity (world units a second)
+Blasts->ScreenLay(ScreenId, SternWorld, ShipVelocity, /*bFunnel*/ false); // true: black from her funnels
+Blasts->ScreenLayStop(ScreenId); // she stops laying: what is laid hangs and thins on its own
+// a shell falling in the sea, by its calibre in mm and its ship's dye ("pink" Nagato, "red" Kongo, "yellow" Haruna; empty: none)
+Blasts->SeaSplash(FallWorld, 406.0f, TEXT("pink"));
+```
+
+- **Screens** (`sea_screen`; not the land's `SmokeScreen`, a smoke round's wall, which draws as before). Laid by
+  time as a funnel's plume is, into the air she steams through: `white` from her stern generators, `black` from her
+  funnels (born `from_up_m` higher and `from_ahead_m` forward). It rests on the water (`rest`), climbs only a little,
+  widens as its age to the two thirds (`wide_k`) and thins by halves (`even`), so its old end costs few pieces; it
+  fades over minutes (`fade_s`, gone by `age_s`), the black greying to mid grey (`colour_old`). Heaped (`billow`) and
+  lumpy, with gaps (`gaps`, `gap_thin`) along it. Far off a puff is never under `least_px` across: fewer, bigger.
+  Five screens laying at once from 1 km: about 800 puffs once they are five minutes old (game.max_puffs 3,000).
+- **Columns by calibre** (`sea_splash`): the passed white water (`grounds.water.spout`) built to the art director's
+  table by calibre (`height_m`, `rise_s`, `hang_s`, `fall_s`, `foam_m`, `foam_s`, `crown_wide`, each between the two
+  calibres either side): a 16-inch shell's column about 60 m, up in about 2 s, standing 3.5 s, then down over 5 s,
+  its top the last down, and a 35 m foam patch for 25 s; its foot breaks white as it stands (`foot_white`). Dyed
+  (`dyes.<name>`: `colour` lit, `shade`, `shift` toward which it reads against the sun or with the sun low, `strength`),
+  its crown whiter (`dye_top`) and paling as it falls (`dye_pale`), its foam patch stained (`stain`). Far off
+  (`far_px`) its white is written past white (`far_over`) to stand over a pale sky and its foot is never a dark puff
+  (`far_foot`). A salvo's spacing is the caller's (0.1 to 0.5 s). Without the row: `ShellOfSize` on water as before.
+- The preview: `./fxpreview recipe.txt out seafx screen 300,1800 1600x1000` (`FX_SCREENS`, `FX_BLACK=1|alt`, `FX_DIST`,
+  `FX_KNOTS`, `FX_STOP`, `FX_LENS`) and `./fxpreview recipe.txt out seafx splash 45,90,180 1600x1000` (`FX_CAL`, `FX_DYE`,
+  `FX_SPLASHES`, `FX_EVERY`, `FX_DIST`; `FX_OLD=bomb500` the call before). Render with `FX_KIT_PX=1.8` as the game window.
+
 ## Guns on aircraft
 
 ```cpp

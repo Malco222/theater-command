@@ -5565,5 +5565,259 @@
   "creep_mps": 0.6,
   "lumps": 3,
   "lumps_px": 120
+ },
+ "sea_splash": {
+  "_why": "A shell falling in the sea by its calibre, SeaSplash(At, CalibreMm, Dye): the art director's columns by calibre (sea-guns-ruling.md part 5, 06:12Z 21 November) on the passed column's build (grounds.water.spout), and the dye its ship loaded (historian/dye-loaded-shell-splashes.md, 22 November). The table runs by calibre_mm, each number between the two calibres either side and held at its ends: height_m, the column's height (heavy 14 to 18 inch 50 to 70 m, medium 8 inch 25 to 35, light 5 to 6 inch 12 to 20); rise_s, about its full height by then; hang_s, it stands near that height so long; fall_s, then it falls as a curtain and is back on the sea, its top the last down; foam_m and foam_s, the patch it leaves, across and how long; crown_wide, its head's half width for its height (a light one a short bushy plume). mist_s: the fine spray at its foot hangs about so long (4 to 6 s at a heavy column's, less by the root of the height). foot_white: as it stands its foot is broken at least that far to white water, so the dark wet water is the first moment's and never a dark lump under it for seconds (0: as the passed column). far_px: where the whole column stands under that many pixels tall in the last frame's picture (in full from half that down), its white water is written up to far_over past white so it stands over a pale sky (the ruling: lit side 20 over the sky) and its dark foot goes far_foot of the way to the column's shade colour, so it is never a small dark puff. Dyes: a name the scene passes for the firing ship (Nagato pink, Kongo red, Haruna yellow, Yamato none; the US heavy ships by the historian's table; British from late 1942; everyone else none, white): colour, its water in the sun, written to land; shade, its shade side; shift, what it turns toward against the sun or with the sun low, shift_k of the way (Kongo's red to purple); stain, the foam patch's tint, stain of the way; strength, 0 to 1. The column is dye_k of the way to the dye through its body, dye_top of that at its crown and dye_foot in the dark water at its foot, and pales dye_pale of the way back to white as it falls; its mist mist_dye. shake_within_k: a near miss jolts an eye within that many times its height. Without this row SeaSplash draws Shell on water with bomb500, bomb250 or how150 as the scene did.",
+  "calibre_mm": [
+   76,
+   127,
+   203,
+   406,
+   460
+  ],
+  "height_m": [
+   9,
+   16,
+   30,
+   60,
+   68
+  ],
+  "rise_s": [
+   0.8,
+   1.0,
+   1.5,
+   2.25,
+   2.5
+  ],
+  "hang_s": [
+   1.0,
+   1.5,
+   2.5,
+   3.5,
+   4.0
+  ],
+  "fall_s": [
+   2.0,
+   2.5,
+   3.5,
+   5.0,
+   5.5
+  ],
+  "foam_m": [
+   6,
+   9,
+   17,
+   35,
+   40
+  ],
+  "foam_s": [
+   8,
+   10,
+   15,
+   25,
+   30
+  ],
+  "crown_wide": [
+   0.26,
+   0.24,
+   0.2,
+   0.17,
+   0.17
+  ],
+  "mist_s": 5.0,
+  "foot_white": 0.6,
+  "far_px": 60,
+  "far_over": 1.6,
+  "far_foot": 0.7,
+  "dye_k": 0.85,
+  "dye_top": 0.35,
+  "dye_foot": 0.5,
+  "dye_pale": 0.45,
+  "mist_dye": 0.4,
+  "stain": 0.35,
+  "shake_within_k": 3,
+  "dyes": {
+   "pink": {
+    "_who": "Nagato (brilliant pink)",
+    "colour": [
+     242,
+     120,
+     172
+    ],
+    "shade": [
+     150,
+     70,
+     120
+    ]
+   },
+   "red": {
+    "_who": "Kongo (blood red, red to purple by the light); Missouri, Pennsylvania; Howe, Queen Elizabeth, Rodney",
+    "colour": [
+     195,
+     35,
+     45
+    ],
+    "shade": [
+     105,
+     20,
+     40
+    ],
+    "shift": [
+     135,
+     40,
+     130
+    ],
+    "shift_k": 0.8
+   },
+   "yellow": {
+    "_who": "Haruna (greenish yellow); King George V",
+    "colour": [
+     205,
+     225,
+     100
+    ],
+    "shade": [
+     130,
+     145,
+     75
+    ]
+   },
+   "green": {
+    "_who": "Wisconsin, North Carolina; Duke of York, Valiant",
+    "colour": [
+     110,
+     200,
+     120
+    ],
+    "shade": [
+     60,
+     120,
+     90
+    ]
+   },
+   "orange": {
+    "_who": "Iowa, Washington, Colorado, Nevada",
+    "colour": [
+     245,
+     160,
+     70
+    ],
+    "shade": [
+     150,
+     95,
+     60
+    ]
+   },
+   "blue": {
+    "_who": "New Jersey, South Dakota, Maryland",
+    "colour": [
+     100,
+     150,
+     235
+    ],
+    "shade": [
+     60,
+     90,
+     160
+    ]
+   }
+  }
+ },
+ "sea_screen": {
+  "_why": "A smoke screen laid at sea by a ship under way, ScreenLay(Id, At, Velocity, bFunnel) every frame and ScreenLayStop(Id) (the sea scene's ask, 22 November: Samar's escorts laid 8 screens, up to 5 at once; the art director: each escort lays her own plume, dense at the source, white-grey from the stern generators and black from the funnels, lumpy, thinning downwind, with gaps). Not the land's smoke_screen (a smoke round's wall). Laid by time, as a funnel's plume: a puff every overlap-th of its width of the wind she feels (felt_least_mps at least), let go into the air with none of her speed; it rests on the water (rest: its middle at least that share of its radius up), climbs rise_mps, drifts with the wind, wanders across it (spread_mps) and is drawn out along its line (stretch). Its width is lip_m at her stern and grows by wide_k times its age to the two thirds; as it does, its puffs go by halves (even, even_near, even_far, even_step, as the funnel's), so the screen is unbroken and its old end costs few pieces, each holding its smoke over a face as much wider: it thins downwind. Each puff also thins by its age (fade_s, fade_pow) and is gone by age_s; along the screen some stretches (gaps, over gap_s of laying, past gap_from of a slow random value) thin sooner, and gap_thin of their smoke is thin from the start, so gaps open in its old parts while it stays dense at her stern. billow: that share of its puffs are billows, billow_size as big and climbing billow_rise as fast, so its top is heaped and uneven. Colour: colour, going to colour_old by old_by_s; its side from the sun shadow_of_lit of it, shadow_k of the way; size and shade, the dice on each puff; rough, lumps, lumps_px and the roll (roll_lift, roll_shade, roll_run) its lumps. white: the stern generators' chemical smoke. black: the funnels', born from_up_m higher and from_ahead_m forward of the stern the scene gives. Far off: least_px, no puff under that many pixels across at its birth in the last frame's picture (at most lip_most times its own width), overlapping overlap_far deep, each as much denser: fewer, bigger puffs. busy_from: past that share of the room (game.max_puffs) a screen lays half as deep. restart_after_s: a screen not called for that long starts afresh. most_a_call: puffs laid in one call at most.",
+  "restart_after_s": 6,
+  "most_a_call": 64,
+  "felt_least_mps": 3,
+  "overlap": 3,
+  "overlap_far": 2.2,
+  "least_px": 10,
+  "lip_most": 8,
+  "busy_from": 0.6,
+  "even": 0.3,
+  "even_near": 0,
+  "even_far": 12,
+  "even_step": 1.6,
+  "gaps": 0.7,
+  "gap_s": 14,
+  "gap_from": 0.45,
+  "gap_thin": 0.45,
+  "billow": 0.2,
+  "billow_size": 1.6,
+  "billow_rise": 4.0,
+  "white": {
+   "lip_m": 18,
+   "from_up_m": 3,
+   "wide_k": 1.9,
+   "age_s": 300,
+   "fade_s": 150,
+   "fade_pow": 1.4,
+   "alpha": 0.92,
+   "rise_mps": [
+    0.02,
+    0.12
+   ],
+   "spread_mps": 0.25,
+   "colour": [
+    232,
+    233,
+    230
+   ],
+   "colour_old": [
+    214,
+    216,
+    218
+   ],
+   "old_by_s": 150,
+   "shadow_of_lit": 0.74,
+   "shadow_k": 0.6,
+   "stretch": 1.6,
+   "rest": 0.5,
+   "size": 0.4,
+   "shade": 0.05,
+   "rough": 0.35,
+   "lumps": 3,
+   "lumps_px": 80,
+   "roll_lift": 0.25,
+   "roll_shade": 0.05,
+   "roll_run": 4
+  },
+  "black": {
+   "lip_m": 16,
+   "from_up_m": 14,
+   "from_ahead_m": 45,
+   "wide_k": 2.4,
+   "age_s": 220,
+   "fade_s": 110,
+   "fade_pow": 1.3,
+   "alpha": 0.92,
+   "rise_mps": [
+    -0.1,
+    0.06
+   ],
+   "spread_mps": 0.2,
+   "colour": [
+    46,
+    43,
+    40
+   ],
+   "colour_old": [
+    118,
+    114,
+    108
+   ],
+   "old_by_s": 90,
+   "shadow_of_lit": 0.72,
+   "shadow_k": 0.5,
+   "stretch": 1.4,
+   "rest": 0.5,
+   "size": 0.4,
+   "shade": 0.08,
+   "rough": 0.35,
+   "lumps": 3,
+   "lumps_px": 80,
+   "roll_lift": 0.3,
+   "roll_shade": 0.1,
+   "roll_run": 4
+  }
  }
 }

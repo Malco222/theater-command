@@ -505,6 +505,30 @@ void FBattleEffects::SmokeScreen(const FVector& WorldAt, float AcrossMetres, flo
 	}
 }
 
+void FBattleEffects::ScreenLay(int32 Id, const FVector& WorldAt, const FVector& Velocity, bool bFunnel)
+{
+	if (IsReady())
+	{
+		Core.ScreenLay(Time(), Id, ToFx(WorldAt), ToFx(Velocity), bFunnel);
+	}
+}
+
+void FBattleEffects::ScreenLayStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.ScreenLayStop(Time(), Id);
+	}
+}
+
+void FBattleEffects::SeaSplash(const FVector& WorldAt, float CalibreMm, const FString& Dye)
+{
+	if (IsReady())
+	{
+		Core.SeaSplash(Time(), ToFx(WorldAt), CalibreMm, Named(Dye).c_str());
+	}
+}
+
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Core.SetWind(ToFxWay(MetresPerSecond));

@@ -222,6 +222,21 @@ public:
 	 * burst of burning streamers) or "canister" (a burning bomb's or a base-ejection shell's: a gush from the ground).
 	 * No crater. Id: the caller's own number for it, or under 0 none. */
 	void SmokeScreen(const FVector& WorldAt, float AcrossMetres, float Seconds, const FString& Kind = TEXT("wp"), int32 Id = -1);
+	/** A smoke screen laid at sea by a ship under way (the sea battle's escorts; not SmokeScreen above, a smoke round
+	 * on land). Call it every frame while she lays it: Id, her own number for this screen; WorldAt, her stern;
+	 * Velocity, hers (world units a second). bFunnel: black smoke from her funnels, else white smoke from her stern
+	 * generators. It keeps none of her speed: dense at her stern, low on the water, drifting and spreading down the
+	 * wind (SetWind) and thinning over minutes, with gaps in its old parts. The recipe's sea_screen row; without it,
+	 * nothing. */
+	void ScreenLay(int32 Id, const FVector& WorldAt, const FVector& Velocity, bool bFunnel = false);
+	/** She stops laying that screen: what is laid hangs and thins away on its own. ScreenLay again under the Id
+	 * starts a new one. */
+	void ScreenLayStop(int32 Id);
+	/** A shell falling in the sea by its calibre in millimetres (a 16-inch shell 406): a column of white water as
+	 * tall and as slow as the calibre throws it, standing seconds before it falls, coloured by Dye, the firing ship's
+	 * dye name from the recipe's sea_splash.dyes ("pink" Nagato, "red" Kongo, "yellow" Haruna, ...; empty for none,
+	 * Yamato), and a stained foam patch. Without the sea_splash row: ShellOfSize on "water" as before. */
+	void SeaSplash(const FVector& WorldAt, float CalibreMm, const FString& Dye = FString());
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
 	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and
