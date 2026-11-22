@@ -71,6 +71,7 @@ export function thinkFor(b: LandBattle, side: Side): void {
   if (!foes.length) {
     // An attack that sees nobody still has the place to take: it feels its way forward until it finds them.
     if (side === 'att' && b.units.some((u) => u.side !== side && ok(u))) probe(b, side, mine);
+    if (side === 'att' && b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
     return;
   }
   const style = b.style[side];
@@ -78,11 +79,34 @@ export function thinkFor(b: LandBattle, side: Side): void {
     if (style) planned(b, side, style, mine, foes);
     else plain(b, side, mine, foes);
     if (b.measured) seekFlanks(b, side, mine);
+    if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
     return;
   }
   defend(b, side, style, mine, foes);
   // A reserve sent in at a tank block goes round her too; the line's own tanks hold where they stand.
   if (b.measured) seekFlanks(b, side, mine.filter((u) => u.reserve === 'sent'));
+}
+
+/**
+ * Reconnaissance by fire (the historian's check, release 2; LAND.hide.search): once its attack has been ambushed, each
+ * of its blocks with nothing in its sights sweeps the cover ahead in its lane (woods, or a hedge line), as far as
+ * 'ahead' metres or its reach, with fire as it goes on ("shooting constantly at the hedgerows"): its search is the
+ * sweep's middle and half its depth round it. Where there is no cover there, none. Never its guns far back.
+ */
+function searchCover(b: LandBattle, side: Side, mine: LandUnit[]): void {
+  const F = LAND.hide.search, dir = side === 'att' ? 1 : -1, step = b.hedges.length ? 10 : b.field.cell;
+  for (const u of mine) {
+    if ((u.kind === 'art' && !u.team) || u.engaged !== undefined || u.order?.kind === 'withdraw') { if (u.engaged === undefined) { delete u.search; delete u.searchR; } continue; }
+    const ahead = Math.min(F.ahead, reachOf(u)), r = ahead / 2;
+    const x = u.x, y = u.y + dir * (u.d / 2 + r);
+    let cover = false;
+    // (Out to the far edge of a block standing there: what it can strike.)
+    for (let dy = -r; dy <= r + F.reach && !cover; dy += step) for (let dx = -F.lane; dx <= F.lane && !cover; dx += step) {
+      const px = x + dx, py = y + dy;
+      if (px >= 0 && py >= 0 && px < b.field.w && py < b.field.h && (coverAt(b.field, px, py) === 'woods' || b.onHedge(px, py))) cover = true;
+    }
+    if (cover) { u.search = [x, y]; u.searchR = Math.max(r, F.lane); } else { delete u.search; delete u.searchR; }
+  }
 }
 
 /**
