@@ -237,6 +237,15 @@ namespace TheaterFx
 		// on its cloud's sunward side and least on the far side; none seen side-on or against the sun, nor at night)
 		double FaceLit = 0.0;
 		Rgb LitCol;
+		// (a burst's thrown earth in the light of its own flash, Battle::InFlash. GlareK over 0: strongest GlareFor
+		// seconds before GlareEnd and nothing by it, the piece goes toward GlareCol on its side toward GlareAt, the
+		// flash: the most on the pieces nearest the flash (half as much GlareReach metres from it) and on those the eye
+		// sees from the flash's side; a face turned from the flash keeps its own dark. bNeverUnder: no point of the
+		// piece is drawn darker than NeverUnder in the hour's light, so thrown earth is dark brown, never a black cut-out)
+		double GlareK = 0.0, GlareFor = 0.0, GlareEnd = 0.0, GlareReach = 1.0;
+		Vec GlareAt;
+		Rgb GlareCol, NeverUnder;
+		bool bNeverUnder = false;
 		double TwinPx = 0.0; // (at least this many pixels across, drawn as two fans, the second turned half a step: twice the sides, so no facet shows; 0 never)
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
@@ -938,6 +947,10 @@ namespace TheaterFx
 		// strip and 1 a round puff)
 		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0, LayWob = 1.0;
 		bool bLayFarCol = false; Rgb LayFarBy, LayFarFloor; bool bLayLean = false; double LayLean = 0.0, LayLeanFar = 0.0; // (Bit::bSoft: how its far edge's colour differs from its near edge's, in the hour's light)
+		// (while laying one bit: bLayGlare, its Lift is its burst's flash and not the sun, Bit::GlareK: each point lit by how
+		// far it is round toward LayGlareWay, the way to the flash; LayGlareAll: 1 the eye sees the face the flash lights and
+		// all of it is lit, a half the piece stands beside the flash, 0 it stands before it and only its edge catches)
+		bool bLayGlare = false; Vec LayGlareWay; double LayGlareAll = 0.0;
 		// (picture.lit_gain: the game's picture multiplies every colour by this (the wrapper sets the material's
 		// brightness to it), and every colour is written that much darker, so all looks as before; but a light's hottest
 		// parts (Bit::Over) are written up to that much brighter than white, so they land white-hot after the game's
@@ -994,6 +1007,16 @@ namespace TheaterFx
 		// (see-through smoke and dust thins out as it comes up to the eye, game.near_eye_fade_m: nothing of a piece whose
 		// near edge is within NearGone metres of the eye, all of it from NearWhole on. 0, 0: no such fade)
 		double NearGone = 0.0, NearWhole = 0.0;
+		// (an aircraft's trail thins out as it comes up to the eye, game.trail_near_eye_fade_m: nothing of it within
+		// TrailNearGone metres of the eye, all of it from TrailNearWhole on. By where its line is, not its edge, each end
+		// of a strip by its own, so two pieces of a strip agree at the edge they share. 0, 0: no such fade.
+		// game.trail_near_eye_looms: nearer than that it still shows while it is small in the picture, all of it while
+		// its half width is under TrailLoomsWhole of its distance and none from TrailLoomsGone, so the aircraft the eye
+		// rides with still trails its smoke from the engine to the tail. 0, 0: by the distance alone.
+		// game.trail_near_eye_least_m: however small, none of it within TrailLeastGone metres and no more than the
+		// distance leaves until TrailLeastWhole, so no strip is ever drawn through the eye's own plane)
+		double TrailNearGone = 0.0, TrailNearWhole = 0.0, TrailLoomsWhole = 0.0, TrailLoomsGone = 0.0, TrailLeastGone = 0.0, TrailLeastWhole = 0.0;
+		double TrailNearK(double OffEye, double HalfWide) const;
 		// (SetLensFade: the land battle's fade by depth in front of the lens, and its near plane. 0, 0: none)
 		double LensGone = 0.0, LensWhole = 0.0, LensPlane = 0.0;
 		bool bScars = true; // (SetScars)
@@ -1130,7 +1153,7 @@ namespace TheaterFx
 		void Throw(Bit& B) const; // a clod's flight worked out against the ground
 		void Chunk(Bit& B, Dice& D) const; // a clod's lumpy, tumbling, lit-and-dark shape
 
-		void Wink(double T0, const Vec& At, double Scale, Dice& D);
+		void Wink(double T0, const Vec& At, double Scale, Dice& D, const std::string& Size = std::string()); // (Size: the flash by the size's own flash_k and flash_s)
 		bool GroundColour(const Vec& At, double& R255, double& G255, double& B255) const; // (the ground there as the game's screen shows it, if the game can say)
 		// (what to write for the game's screen to show a value: picture.to_land, read once and then asked)
 		struct LandTable
@@ -1141,8 +1164,9 @@ namespace TheaterFx
 			double ToLand(double Screen255) const;
 		};
 		LandTable LandTableOf() const;
-		void RaggedFlash(double T0, const Vec& At, double K, double Small); // (a shell's flash by the gun flashes' rule: burst.flash.tongues)
-		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
+		void RaggedFlash(double T0, const Vec& At, double K, double Small, double GrowK = 1.0, double LastsS = 0.0); // (a shell's flash by the gun flashes' rule: burst.flash.tongues; GrowK times as big, and LastsS seconds long where that is over 0)
+		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D, const std::string& Size = std::string()); // (Size: a skirt that rolls out to its cloud's width and hangs with it: burst.shock_ring.of_cloud)
+		void Bulk(double T0, const Vec& At, double CrownH, double K, const std::string& Size, const std::string& Ground, const Paint& P, double CloudM, double LooksS, Dice& D, double Many); // (a burst's cloud as a dense column of earth standing on the ground in lighter smoke: burst.bulk)
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many = 1.0);
 		void Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D); // a hit in the sea: white water thrown up and falling back
@@ -1205,6 +1229,8 @@ namespace TheaterFx
 			double ThickS = 0.0, GoneS = 0.0, Keep = 0.5, GoBy = 0.4;
 			double Third = 0.1, TwoThirds = 0.02, Wide = 0.0, Spread = 0.0, Lift = 0.0, Pale = 0.0, PaleFrom = 0.33, PaleBy = 0.8;
 			Rgb To;
+			double StayLow = 0.0; // (a burst with bulk: how much the likelier a puff at the cloud's foot is to stay than one at its top, so the base thins last)
+			double BulkThird = 0.1, BulkTwoThirds = 0.02; // (a burst with bulk: its own Third and TwoThirds, the row's unless the recipe gives them)
 		};
 		/** The row linger.<Kind>, its times from linger.<Kind>.by.<Name> when Name is given (a shell's size, a gun). */
 		const LingerRow& LingerOf(const std::string& Kind, const std::string& Name = std::string());
@@ -1213,7 +1239,7 @@ namespace TheaterFx
 		/** Puts B, a puff of smoke of a burst that began at T0, under that row. Mid is the cloud's middle then, carried
 		 * by the wind at MidWindage; Tall, over 0, the height of the cloud above Mid's own, by which a puff at its
 		 * top climbs in full and one at its foot not at all (0 or less: every puff climbs alike). */
-		void Lingering(Bit& B, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall, double Spare);
+		void Lingering(Bit& B, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall, double Spare, double KeepK = 1.0, double StayBias = 1.0); // (KeepK: this part of the cloud keeps that many times the row's share of its puffs; StayBias: this puff that much the likelier to be one that stays)
 		// (short of room, a new cloud keeps fewer of its puffs to its end and the rest retire sooner: the share of its
 		// row's keep and go_by it gets, by how much of the room, game.max_puffs, is asked for (RoomAsked, as the dust
 		// goes by; Own: this burst's own pieces, left out of the count); all of them under linger.spare_from of the
@@ -1223,6 +1249,18 @@ namespace TheaterFx
 		double LingerSpare(size_t Own = 0) const;
 		double LingerSpareFrom = 0.5, LingerSpareBy = 0.9, LingerSpareLeast = 0.3;
 		double SpareAtBurst = 1.0; // (a shell's: taken as Shell begins, before its own pieces are in the count)
+		// (a shell's thrown earth, burst.throw, read once as Shell begins: how much lighter than the ground's heavy earth
+		// it is, piece by piece (Mottle), its darkest colour, and the light its own flash throws on it. InFlash gives a
+		// thrown piece all of them: Share of the light, and OfLighter of the way to Lighter times as light)
+		struct ThrowRow
+		{
+			bool bFloor = false, bGlare = false;
+			Rgb Floor, GlareCol;
+			double GlareK = 0.0, GlareS = 0.0, GlareReach = 1.0, T0 = 0.0, Lighter = 1.0, Mottle = 0.0;
+			Vec At;
+		};
+		ThrowRow ThrowIs;
+		void InFlash(Bit& B, double Share, double OfLighter = 1.0) const;
 		/** And every puff of smoke laid since the pieces numbered First (what a call has just laid): not its lights,
 		 * nor what it threw that falls back, nor a piece already under a row. */
 		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);

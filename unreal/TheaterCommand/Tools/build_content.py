@@ -1621,7 +1621,7 @@ def build_land_leaves():
     m.set_editor_property("used_with_instanced_static_meshes", True)
     m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
     m.set_editor_property("two_sided", True)
-    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWOSIDED_FOLIAGE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE)
     m.set_editor_property("opacity_mask_clip_value", 0.5)
     leaves_picture = land_texture("T_LandLeaves", cut_out=True)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)

@@ -6,6 +6,7 @@
 // Usage: land_field_test <recording.json> [picture folder]
 // The recording's men are its ways: tanks 2 m either side, guns and lorries 1.6 m, men half a metre.
 
+#include "Battle/LandCarpet.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandField.h"
 #include "land_field_picture.h"
@@ -204,7 +205,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden" };
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
 	/** The highest triangle of a mesh over a place, seen from above (NaN where none). */
@@ -837,6 +838,41 @@ int main(int Argc, char** Argv)
 	const double Build = Seconds(Start);
 	const LandField::Tally& T = G.Laid();
 	std::printf("built in %.2f s (core %.2f s: heights, lanes, parcels, hedges, village, instances; meshes %.2f s: tiles, ring, bases)\n", Build, T.CoreSeconds, T.MeshSeconds);
+	// LAND_FIELD_HEDGES=<folder>: the hedges and their openings as laid, for the rules (<key>-hedges.json): metres from
+	// the field's south-west corner, a hedge's points along its bank's middle after its gaps are cut, an opening's yaw
+	// the hedge's own heading there (radians from east).
+	if (const char* Dir = std::getenv("LAND_FIELD_HEDGES"))
+	{
+		const std::string Path = std::string(Dir) + "/" + Key + "-hedges.json";
+		if (FILE* Out = std::fopen(Path.c_str(), "w"))
+		{
+			static const char* const KindWords[] = { "hedgerow", "lane_bank", "wood_edge", "garden", "wall" };
+			std::fprintf(Out, "{\"field\":\"%s\",\"width\":%.1f,\"depth\":%.1f,\"ways\":%zu,\"hedges\":[", Key.c_str(), F.Width(), F.Depth(), F.Ways.size());
+			bool bFirst = true;
+			int Lines = 0, Gates = 0, Breaches = 0;
+			for (const LandField::HedgeLine& H : G.Hedges())
+			{
+				if (H.Kind < 0 || H.Kind > 4 || H.Points.size() < 2) continue; // (the far ring's strips are scenery)
+				std::fprintf(Out, "%s\n{\"kind\":\"%s\",\"points\":[", bFirst ? "" : ",", KindWords[H.Kind]);
+				for (size_t K = 0; K < H.Points.size(); ++K) std::fprintf(Out, "%s[%.2f,%.2f]", K ? "," : "", H.Points[K].first, H.Points[K].second);
+				std::fprintf(Out, "]}");
+				bFirst = false;
+				++Lines;
+			}
+			std::fprintf(Out, "\n],\"openings\":[");
+			bFirst = true;
+			for (const LandField::HedgeOpening& O : G.Openings())
+			{
+				std::fprintf(Out, "%s\n{\"x\":%.2f,\"y\":%.2f,\"yaw\":%.4f,\"width\":%.2f,\"kind\":\"%s\",\"men\":%d}", bFirst ? "" : ",", O.X, O.Y, O.Yaw, O.Width, O.Kind == 0 ? "gate" : "breach", O.Men);
+				bFirst = false;
+				++(O.Kind == 0 ? Gates : Breaches);
+			}
+			std::fprintf(Out, "\n]}\n");
+			std::fclose(Out);
+			std::printf("  hedges for the rules: %d lines, %d gates, %d breaches -> %s\n", Lines, Gates, Breaches, Path.c_str());
+		}
+		else std::printf("  hedges for the rules: could not write %s\n", Path.c_str());
+	}
 	std::printf("  %d parcels in the field and its band, mean %.0f m across; %d lanes, %.1f km; %.1f km of banks and walls; %d gates; %d hedges opened by the recording's vehicles\n", T.Parcels, T.ParcelMean, T.Lanes,
 	            T.LaneKm, T.HedgeKm, T.Gates, T.WayGaps);
 	std::printf("  village: %d houses, barns and byres (%d damaged), church %s, %d farmsteads\n", T.Houses, T.Damaged, T.bChurch ? "yes" : "no", T.Farmsteads);
@@ -920,6 +956,207 @@ int main(int Argc, char** Argv)
 		Check(PA == PB && !PA.empty(), "clutter boxes that overlap lay the same things", Fmt("%.0f and %.0f in the overlap", static_cast<double>(PA.size()), static_cast<double>(PB.size())));
 	}
 
+	// The clutter laid once in squares as the eye moves (LandCarpet, as the scene drives it): an eye dollying across the
+	// field at a tank's pace and looking 60 m ahead, cut away every 15 s, with shell holes torn near it. Its meshes kept
+	// here as the engine would keep them, place by place, and what they hold checked against the old box.
+	{
+		constexpr int Kinds = static_cast<int>(LandField::Base::Count);
+		LandCarpet::Squares C;
+		C.Reach.assign(Kinds, 1e9);
+		std::vector<double> Cull(Kinds, 1e9);
+		for (int B = static_cast<int>(LandField::Base::Tuft); B < Kinds; ++B)
+		{
+			const LandField::BaseMesh& Shape = G.BaseOf(static_cast<LandField::Base>(B));
+			if (Shape.Far.Empty())
+			{
+				C.Reach[static_cast<size_t>(B)] = Shape.FarFrom + 12.0; // (as LandBattle::LayThings sets it)
+				Cull[static_cast<size_t>(B)] = Shape.FarFrom;            // (and where the engine stops drawing it)
+			}
+		}
+		struct HoleAt
+		{
+			double X, Y, R;
+		};
+		std::vector<HoleAt> Holes;
+		auto InHole = [&Holes](double X, double Y) {
+			for (const HoleAt& H : Holes)
+				if (std::hypot(X - H.X, Y - H.Y) < H.R) return true;
+			return false;
+		};
+		C.CopyOf = [](const LandField::Placed& P) { return static_cast<int32_t>(P.Kind); };
+		C.Stands = [&InHole](const LandField::Placed& P) { return !InHole(P.X, P.Y); };
+		std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds); // (laid, thing) a place
+		long BadOps = 0, Ops = 0, Puts = 0, Hides = 0;
+		double WorstMoving = 0.0, SumMoving = 0.0, WorstCut = 0.0, OldSum = 0.0, OldWorst = 0.0;
+		int Moving = 0, Cuts = 0, Settled = 0, OldLays = 0, MostMade = 0, Relaid = 0, SinceCut = 0, SlowestFill = 0;
+		long Missing = 0, Wanted = 0, Extra = 0, InHoles = 0;
+		size_t PeakLaid = 0;
+		std::vector<LandCarpet::Op> Out;
+		const double W = F.Width(), D = F.Depth();
+		double EX = W * 0.3, EY = D * 0.3, Head = 0.6, OldX = 1e9, OldY = 1e9, OldLX = 1e9, OldLY = 1e9;
+		unsigned Rng = 12345u;
+		auto Rand = [&Rng]() { Rng = Rng * 1664525u + 1013904223u; return (Rng >> 8) / 16777216.0; };
+		for (int Frame = 0; Frame < 60 * 60; ++Frame)
+		{
+			const double Now = Frame / 60.0;
+			const bool bCut = Frame == 0 || Frame % (15 * 60) == 0;
+			if (bCut && Frame > 0)
+			{
+				EX = W * (0.2 + 0.6 * Rand());
+				EY = D * (0.2 + 0.6 * Rand());
+				Head = 6.2832 * Rand();
+			}
+			// (a tank's pace, 6 m/s, turning slowly; kept inside the field)
+			Head += 0.15 / 60.0;
+			EX = std::clamp(EX + 6.0 / 60.0 * std::cos(Head), 60.0, W - 60.0);
+			EY = std::clamp(EY + 6.0 / 60.0 * std::sin(Head), 60.0, D - 60.0);
+			const double LX = EX + 60.0 * std::cos(Head), LY = EY + 60.0 * std::sin(Head);
+			// (a shell hole near the eye every 2 s)
+			if (Frame % 120 == 60)
+			{
+				const double R = 2.0 + 3.0 * Rand(), A = 6.2832 * Rand(), Far = 5.0 + 30.0 * Rand();
+				Holes.push_back({ EX + Far * std::cos(A), EY + Far * std::sin(A), R });
+				C.Mark(Holes.back().X, Holes.back().Y, R);
+			}
+			std::vector<int32_t> Before(Kinds);
+			for (int K = 0; K < Kinds; ++K) Before[static_cast<size_t>(K)] = C.Count(K);
+			Out.clear();
+			const auto T0 = std::chrono::steady_clock::now();
+			const LandCarpet::Tally Tl = C.Update(G, EX, EY, LX, LY, bCut, 4, Now, Out);
+			const double Ms = Seconds(T0) * 1000.0;
+			Relaid += Tl.Relaid;
+			// (how many frames a cut's far squares take to follow: until the first frame with none waiting)
+			if (bCut) SinceCut = 0;
+			if (SinceCut >= 0 && Tl.Waiting == 0)
+			{
+				SlowestFill = std::max(SlowestFill, SinceCut);
+				SinceCut = -1;
+			}
+			else if (SinceCut >= 0)
+				++SinceCut;
+			if (bCut)
+			{
+				WorstCut = std::max(WorstCut, Ms);
+				++Cuts;
+			}
+			else
+			{
+				WorstMoving = std::max(WorstMoving, Ms);
+				SumMoving += Ms;
+				++Moving;
+				MostMade = std::max(MostMade, Tl.Made);
+			}
+			// The meshes as the engine keeps them: a new place only at the end, in order; a put only into a free place;
+			// a hide only of a laid one.
+			for (const LandCarpet::Op& O : Out)
+			{
+				++Ops;
+				if (O.Copy == -1 && O.Slot == -1)
+				{
+					for (auto& M : Mesh) M.clear();
+					std::fill(Before.begin(), Before.end(), 0);
+					continue;
+				}
+				if (O.Copy < 0 || O.Copy >= Kinds)
+				{
+					++BadOps;
+					continue;
+				}
+				auto& M = Mesh[static_cast<size_t>(O.Copy)];
+				if (O.Slot >= static_cast<int32_t>(M.size()))
+				{
+					if (O.bHide || O.Slot != static_cast<int32_t>(M.size()) || O.Slot < Before[static_cast<size_t>(O.Copy)])
+					{
+						++BadOps;
+						continue;
+					}
+					M.push_back({ true, O.Thing });
+					++Puts;
+					continue;
+				}
+				auto& Place = M[static_cast<size_t>(O.Slot)];
+				if (O.bHide != Place.first)
+				{
+					++BadOps;
+				}
+				Place = { !O.bHide, O.Thing };
+				(O.bHide ? Hides : Puts) += 1;
+			}
+			size_t Laid = 0;
+			for (const auto& M : Mesh)
+				for (const auto& P : M) Laid += P.first ? 1 : 0;
+			PeakLaid = std::max(PeakLaid, Laid);
+			// The old way, for its time: the whole box made again every 12 m.
+			if (std::hypot(EX - OldX, EY - OldY) > 12.0 || std::hypot(LX - OldLX, LY - OldLY) > 12.0)
+			{
+				std::vector<LandField::Placed> A;
+				const auto T1 = std::chrono::steady_clock::now();
+				G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, A);
+				G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, A);
+				const double OldMs = Seconds(T1) * 1000.0;
+				OldSum += OldMs;
+				OldWorst = std::max(OldWorst, OldMs);
+				++OldLays;
+				OldX = EX;
+				OldY = EY;
+				OldLX = LX;
+				OldLY = LY;
+			}
+			// Once a second, with nothing left waiting: every thing the old box would draw is laid, and nothing laid
+			// stands in a hole past its mark's time.
+			if (Frame % 60 == 30 && Tl.Waiting == 0)
+			{
+				++Settled;
+				std::vector<std::pair<float, float>> Have;
+				for (const auto& M : Mesh)
+					for (const auto& P : M)
+						if (P.first) Have.push_back({ P.second.X, P.second.Y });
+				std::sort(Have.begin(), Have.end());
+				std::vector<LandField::Placed> Box;
+				G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, Box);
+				if (std::hypot(LX - EX, LY - EY) >= 40.0)
+				{
+					std::vector<LandField::Placed> Round;
+					G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, Round);
+					for (const LandField::Placed& P : Round)
+						if (std::fabs(P.X - EX) > 45.0 || std::fabs(P.Y - EY) > 45.0) Box.push_back(P);
+				}
+				long Drawn = 0;
+				for (const LandField::Placed& P : Box)
+				{
+					if (std::hypot(P.X - EX, P.Y - EY) >= Cull[static_cast<size_t>(P.Kind)] || InHole(P.X, P.Y)) continue;
+					++Drawn;
+					if (!std::binary_search(Have.begin(), Have.end(), std::make_pair(P.X, P.Y))) ++Missing;
+				}
+				Wanted += Drawn;
+				Extra += static_cast<long>(Have.size()) - Drawn;
+				// (holes older than the marks' wait)
+				for (const auto& M : Mesh)
+					for (const auto& P : M)
+						if (P.first)
+							for (size_t H = 0; H + 1 < Holes.size(); ++H) // (the newest may still be within its wait)
+								if (std::hypot(P.second.X - Holes[H].X, P.second.Y - Holes[H].Y) < Holes[H].R) ++InHoles;
+			}
+		}
+		size_t Places = 0;
+		for (const auto& M : Mesh) Places += M.size();
+		std::printf("  clutter in squares: a cut's far squares all laid within %d frames\n", SlowestFill);
+		std::printf("  clutter in squares: %d moving frames %.3f ms mean, worst %.2f ms (at most %d squares made a frame), %d cuts worst %.2f ms; "
+		            "the old box made %d times, %.2f ms mean, worst %.2f ms; %d squares laid again (holes, reach); %ld puts, %ld hides, %zu places for %zu laid at most; "
+		            "%ld of %ld drawn things missing over %d settled frames, %.2f laid for each drawn\n",
+			Moving, Moving ? SumMoving / Moving : 0.0, WorstMoving, MostMade, Cuts, WorstCut, OldLays, OldLays ? OldSum / OldLays : 0.0, OldWorst, Relaid, Puts, Hides, Places,
+			PeakLaid, Missing, Wanted, Settled, Wanted ? static_cast<double>(Wanted + Extra) / Wanted : 0.0);
+		Check(BadOps == 0 && Ops > 0, "the grass squares' places kept straight (new ones at the end, a put only into a free place, a hide only of a laid one)",
+		      Fmt("%.0f wrong of %.0f", static_cast<double>(BadOps), static_cast<double>(Ops)));
+		Check(Settled >= 40 && Missing == 0 && InHoles == 0, "the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again",
+		      Fmt("%.0f missing of %.0f, %.0f in holes", static_cast<double>(Missing), static_cast<double>(Wanted), static_cast<double>(InHoles)) + Fmt(", %.0f settled frames", Settled));
+		Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end)", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
+		Check(Moving > 0 && WorstMoving < 0.5 * OldWorst, "a moving eye's grass costs under half the old box's re-lay in its worst frame",
+		      Fmt("worst %.2f ms against %.2f ms", WorstMoving, OldWorst));
+		Check(WorstCut <= 1.1 * OldWorst && SlowestFill <= 20, "a cut's grass costs no more than the old box's re-lay, and its far squares follow within a third of a second",
+		      Fmt("worst %.2f ms against %.2f ms, ", WorstCut, OldWorst) + Fmt("%.0f frames", SlowestFill));
+	}
+
 	Check(Build < 2.0, "built in under two seconds", Fmt("%.2f s", Build));
 	Check(T.NearTris + T.BuiltTris < 1500000, "near level (ground, lanes, banks) and buildings under 1.5 million triangles", Fmt("%.0f + %.0f", static_cast<double>(T.NearTris), static_cast<double>(T.BuiltTris)));
 	if (bSteppe)
@@ -940,6 +1177,105 @@ int main(int Argc, char** Argv)
 	{
 		Check(T.ParcelMean >= 80.0 && T.ParcelMean <= 200.0, "parcels 80 to 200 m across", Fmt("mean %.0f m", T.ParcelMean));
 		Check(T.Gates > T.Parcels / 3, "a gate in most parcels", Fmt("%.0f gates, %.0f parcels", T.Gates, T.Parcels));
+		// The floor (the art director's review of 22 November, item 3): the June hay in cocks in half the mown meadows or
+		// more, 1.2 to 1.6 m; the cattle's paths along the pastures' hedges and out of their gateways, bare; the grass
+		// in clumps, not spread even.
+		{
+			std::vector<double> High;
+			const LandField::BaseMesh& Hc = G.BaseOf(LandField::Base::Haycock);
+			for (const LandField::Placed& P : G.Instances(LandField::Base::Haycock)) High.push_back(Hc.Height * P.ScaleZ);
+			const std::vector<LandField::Placed>& Cocks = G.Instances(LandField::Base::Haycock);
+			const LandField::Placed* Mid = nullptr;
+			for (const LandField::Placed& P : Cocks)
+				if (!Mid || std::hypot(P.X - F.Width() / 2.0, P.Y - F.Depth() / 2.0) < std::hypot(Mid->X - F.Width() / 2.0, Mid->Y - F.Depth() / 2.0)) Mid = &P;
+			std::printf("  hay: %d mown meadows, %d with their hay in cocks, %d cocks (%.2f to %.2f m, median %.2f); the cock nearest the middle at %.0f, %.0f\n", T.HayFields,
+			            T.HayFieldsCocked, T.Haycocks, Pctl(High, 0.1), Pctl(High, 0.9), Pctl(High, 0.5), Mid ? Mid->X : 0.0, Mid ? Mid->Y : 0.0);
+			Check(T.HayFields == 0 || (T.HayFieldsCocked * 2 >= T.HayFields && Pctl(High, 0.1) >= 1.15 && Pctl(High, 0.9) <= 1.65),
+			      "the June hay in cocks 1.2 to 1.6 m high, in half the mown meadows or more",
+			      Fmt("%.0f of %.0f meadows, 10%% %.2f m, 90%% %.2f m", T.HayFieldsCocked, T.HayFields, Pctl(High, 0.1), Pctl(High, 0.9)));
+			// Every gateway into a pasture with beasts: its paths, and the grass off them.
+			int Into = 0, Pathed = 0;
+			double GateX = 1e9, GateY = 1e9;
+			double OnPath = 0.0, OnArea = 0.0, Grass = 0.0, Area = 0.0;
+			for (const LandField::HedgeOpening& O : G.Openings())
+			{
+				if (O.Kind != 0) continue;
+				bool bPasture = false;
+				for (const double Side : { -1.0, 1.0 })
+				{
+					const std::string Crop = G.CropOfParcel(G.ParcelAt(O.X - std::sin(O.Yaw) * 4.0 * Side, O.Y + std::cos(O.Yaw) * 4.0 * Side));
+					bPasture = bPasture || Crop == "grazed" || Crop == "lush";
+				}
+				if (!bPasture) continue;
+				++Into;
+				std::vector<LandField::Placed> Out;
+				G.Clutter(O.X - 10.0, O.Y - 10.0, O.X + 10.0, O.Y + 10.0, Out);
+				std::vector<std::pair<float, float>> Bits;
+				for (const LandField::Placed& P : Out)
+					if (P.Kind == LandField::Base::Trodden) Bits.push_back({ P.X, P.Y });
+				if (Bits.size() >= 8)
+				{
+					++Pathed;
+					if (std::hypot(O.X - F.Width() / 2.0, O.Y - F.Depth() / 2.0) < std::hypot(GateX - F.Width() / 2.0, GateY - F.Depth() / 2.0))
+					{
+						GateX = O.X;
+						GateY = O.Y;
+					}
+				}
+				for (const LandField::Placed& P : Out)
+				{
+					if (P.Kind == LandField::Base::Trodden || P.Kind == LandField::Base::Stone) continue;
+					bool bOn = false;
+					for (const auto& [BX, BY] : Bits) bOn = bOn || std::hypot(P.X - BX, P.Y - BY) < 0.15;
+					(bOn ? OnPath : Grass) += 1.0;
+				}
+				OnArea += Bits.size() * 3.14159 * 0.15 * 0.15 * 0.75; // (the pieces' circles overlap a quarter along the path)
+				Area += 400.0;
+			}
+			const double Bare = Area > 0.0 && OnArea > 0.0 && Grass > 0.0 ? (OnPath / OnArea) / (Grass / Area) : 1.0;
+			std::printf("  cow paths: %.1f km; %d of %d gateways into a pasture with a path out of them (the nearest the middle at %.0f, %.0f); grass on a path's middle %.2f of the ground round it\n",
+			            T.CowPathKm, Pathed, Into, GateX, GateY, Bare);
+			Check(T.CowPathKm > 0.5 && Into > 0 && Pathed * 10 >= Into * 8 && Bare < 0.2, "cow paths along the pastures' hedges and out of eight in ten of their gateways, trodden bare",
+			      Fmt("%.1f km, %.0f of %.0f gateways, grass on them %.2f of round them", T.CowPathKm, Pathed, Into, Bare));
+			// Clumps: the tufts a 2 m square in grazed pasture, over random places; their spread over their mean (1 when
+			// spread at random, more in clumps).
+			uint64_t Sd = 777;
+			auto Next = [&Sd]() {
+				Sd = Sd * 6364136223846793005ull + 1442695040888963407ull;
+				return static_cast<double>(Sd >> 11) / 9007199254740992.0;
+			};
+			double Sum = 0.0, Sum2 = 0.0, Cells = 0.0;
+			for (int Try = 0, Boxes = 0; Try < 4000 && Boxes < 40; ++Try)
+			{
+				const double X = 20.0 + Next() * (F.Width() - 40.0), Y = 20.0 + Next() * (F.Depth() - 40.0);
+				if (G.CropOfParcel(G.ParcelAt(X, Y)) != "grazed") continue;
+				bool bAll = true;
+				for (const double DX : { -8.0, 8.0 })
+					for (const double DY : { -8.0, 8.0 })
+					{
+						LandField::Drawn What = LandField::Drawn::Floor;
+						G.HeightAt(X + DX, Y + DY, &What);
+						bAll = bAll && What == LandField::Drawn::Pasture && G.ParcelAt(X + DX, Y + DY) == G.ParcelAt(X, Y);
+					}
+				if (!bAll) continue;
+				++Boxes;
+				std::vector<LandField::Placed> Out;
+				G.Clutter(X - 8.0, Y - 8.0, X + 8.0, Y + 8.0, Out);
+				int N[64] = {};
+				for (const LandField::Placed& P : Out)
+					if (P.Kind == LandField::Base::Tuft) ++N[std::clamp(static_cast<int>((P.X - (X - 8.0)) / 2.0), 0, 7) * 8 + std::clamp(static_cast<int>((P.Y - (Y - 8.0)) / 2.0), 0, 7)];
+				for (const int K : N)
+				{
+					Sum += K;
+					Sum2 += static_cast<double>(K) * K;
+					Cells += 1.0;
+				}
+			}
+			const double Mean = Cells > 0.0 ? Sum / Cells : 0.0, Spread = Cells > 0.0 && Mean > 0.0 ? (Sum2 / Cells - Mean * Mean) / Mean : 0.0;
+			std::printf("  grazed pasture's tufts: %.2f a 2 m square, spread over mean %.2f (%.0f squares)\n", Mean, Spread, Cells);
+			// (spread at random they read 1.19 here: b754375e, before the clumps)
+			Check(Cells < 64.0 || Spread >= 1.45, "the pasture's tufts in clumps, not spread even", Fmt("spread over mean %.2f", Spread));
+		}
 		Check(!F.bTown || (T.bChurch && T.Houses >= 10), "the village has its church and houses", Fmt("%.0f houses", T.Houses));
 	}
 
@@ -1069,7 +1405,7 @@ int main(int Argc, char** Argv)
 	// Nothing standing in a house, and each thing standing on the ground drawn; no tree trunk on a vehicle's way.
 	{
 		int Bad = 0, Off = 0, All = 0, InLane = 0, ShrubsInLane = 0;
-		for (int B = 0; B <= static_cast<int>(LandField::Base::Birch); ++B)
+		for (int B = 0; B < static_cast<int>(LandField::Base::Tuft); ++B)
 			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
 			{
 				if (B == static_cast<int>(LandField::Base::Khata)) continue; // (a cottage stands on its own floor)

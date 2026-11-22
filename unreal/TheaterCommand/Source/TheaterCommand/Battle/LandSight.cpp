@@ -66,6 +66,7 @@ namespace LandSight
 			// the steppe's (a cottage stands as a house; poles, sweeps and wattle are seen through)
 			case Base::Birch: Out = { 0.62f, 0.38f, 0.7f, 0.15f }; return true;
 			case Base::Haystack: Out = { 0.42f, 0.45f, 0.85f, 0.0f }; return true;
+			case Base::Haycock: Out = { 0.45f, 0.45f, 0.75f, 0.0f }; return true; // (the bocage's mown hay, in cocks: a man kneels behind one)
 			case Base::Chimney: Out = { 0.5f, 0.5f, 0.12f, 0.0f }; return true; // (the stove and its stack, in its ash)
 			default: return false;
 			}

@@ -261,8 +261,11 @@ namespace LandPlay
 		return Rec ? GroundWordOf(Rec->Ground.GroundAt(X, Y)) : std::string("earth");
 	}
 
-	std::string Replay::TankMg(int TrackIndex, double T, int RoundN, const Vec& Toward) const
+	std::string Replay::TankMg(int TrackIndex, double T, int RoundN, const Vec& Toward, const std::string& Gun) const
 	{
+		if (Gun == "roof") return "roof_mg";
+		if (Gun == "hull") return "hull_mg";
+		if (Gun == "coax") return "coax";
 		if (!Rec || TrackIndex < 0) return "coax";
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
 		const LandFeed::Change* C = LandFeed::ChangeAt(Tr, T);
@@ -282,11 +285,11 @@ namespace LandPlay
 		return "coax";
 	}
 
-	Vec Replay::MuzzleOf(int TrackIndex, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward, int RoundN) const
+	Vec Replay::MuzzleOf(int TrackIndex, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward, int RoundN, const std::string& Gun) const
 	{
 		Vec At;
 		const bool bTankMg = TrackIndex >= 0 && Rec && Weapon == "mg" && Rec->Tracks[static_cast<size_t>(TrackIndex)].Role == "tank";
-		const std::string Socket = bTankMg ? TankMg(TrackIndex, T, RoundN, Toward) : std::string();
+		const std::string Socket = bTankMg ? TankMg(TrackIndex, T, RoundN, Toward, Gun) : std::string();
 		if (TrackIndex >= 0 && Here.Muzzle && Here.Muzzle(TrackIndex, T, Socket, At, OutFacing))
 		{
 			// (a machine gun swings to its mark: the burst leaves toward it)
@@ -438,7 +441,7 @@ namespace LandPlay
 		Round AtFire = R;
 		const Vec To = LandingOf(AtFire, Target, Normal);
 		Vec Facing;
-		const Vec At = MuzzleOf(S, R.T, R.W, Facing, To, R.N);
+		const Vec At = MuzzleOf(S, R.T, R.W, Facing, To, R.N, R.G);
 		if (Facing.Length() < 0.5) Facing = (To - At).Unit();
 		const std::string Ground = GroundAt(At.X, At.Y);
 
@@ -453,6 +456,8 @@ namespace LandPlay
 		N.Side = By ? By->Side : -1;
 		N.Track = S;
 		N.Role = Role;
+		// (the same gun the muzzle was put on: TankMg rolls the same for the same round)
+		if (R.W == "mg" && Role == "tank") N.Mount = TankMg(S, R.T, R.N, To, R.G);
 		N.bMiss = R.R == Result::Miss;
 		N.LandsAt = R.L;
 
@@ -509,7 +514,7 @@ namespace LandPlay
 		const bool bOnVehicle = Target >= 0 && Rec->Tracks[static_cast<size_t>(Target)].IsVehicle() && R.R != Result::Miss;
 		// Which way it came: from its muzzle (the shooter where he stood when he fired).
 		Vec Facing;
-		const Vec From = MuzzleOf(S, R.T, R.W, Facing, At, R.N);
+		const Vec From = MuzzleOf(S, R.T, R.W, Facing, At, R.N, R.G);
 		Vec Incoming = (At - From).Unit();
 		if ((At - From).Length() < 0.5) Incoming = Vec(0.0, 1.0, 0.0);
 		const std::string Model = By ? By->Model : std::string();

@@ -122,6 +122,10 @@ namespace LandFeed
 		Result R = Result::Miss;
 		std::string Fc;
 		double U = 0.0, H = 0.0;
+		/** A tank's machine-gun round: its gun, as the rules name it ("coax", "hull" or "roof"; empty where they do not). */
+		std::string G;
+		/** It struck the tank's commander up in his hatch (the rules' cm: 1): he drops inside, and she fights buttoned up. */
+		bool bCm = false;
 	};
 
 	struct Event
