@@ -5,6 +5,7 @@
 #include "Campaign/CampaignSounds.h"
 
 #include "Campaign/ArmyPiece.h"
+#include "Campaign/BargainLayer.h" // R2 bargains hook
 #include "Campaign/BattleSchool.h"
 #include "Campaign/CampaignCameraPawn.h"
 #include "Campaign/CampaignEnvironment.h"
@@ -9537,6 +9538,7 @@ void ACampaignPlayerController::ShowWarRest(const FCampaignView& View)
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowAirfieldSigns(View.Airfields);
 		Map->ShowLanes(View.Lanes);
+		BargainLayer::ShowOnMap(this); // R2 bargains hook: a neutral's bargains and the legions, read once for each new picture (nothing while both rules are off)
 		Map->ShowFreeCapitals(View.FreeCapitals);
 		Map->ShowShroud(View.Unseen, View.Glimpsed);
 		Map->ShowMud(View.bMud ? View.WeatherGround : TArray<int32>());

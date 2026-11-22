@@ -138,6 +138,7 @@ import {
 import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
 import { seaWhere } from '../../../src/campaign/sea-words';
+import { bargainCalls } from './bargains-look';
 
 let g: Game | null = null;
 /** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
@@ -608,6 +609,7 @@ function drawView() {
       }
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
+      ...(c.vol ? { vol: c.vol } : {}), // (release 2) a volunteer legion: its home, whose flag it flies
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       // (release 1) the province it is marching to on a standing order, or -1, and about how many months it has still to go
       marchTo: marchOf(s, c), marchMonths: marchState(s, c)?.months ?? 0,
@@ -6729,3 +6731,4 @@ function find(name: string) {
 // is written and every save is as before. The setting is the viewer's and lives outside the save: the screen sets it at
 // start and again after every load.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
+Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)

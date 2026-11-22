@@ -1,5 +1,6 @@
 #include "Campaign/CampaignFlags.h"
 
+#include "Campaign/BargainLook.h" // (release 2: the plain flags' bands)
 #include "Engine/Texture2D.h"
 #include "TextureResource.h"
 
@@ -864,6 +865,38 @@ namespace
 			P.Star(Sun, 0.32, 0.279, 0.171, 16, 0.62);
 			P.Disc(Sun, 0.32, 0.279, 0.093);
 		});
+
+		// (Release 2: a neutral's bargains and the volunteer legions; contract D.5.) The plain flags of the period, with no
+		// arms: a legion's pennant under its host's flag, the tray's corner flag and the bid card's rows. Their bands are
+		// Bargains::PlainFlagOf's, so the card's tests and the cloth read the same colours. ("~" is no use in an object name.)
+		for (const char* Tag : { "ESP", "POR", "GER" })
+		{
+			const Bargains::FPlainFlag* Plain = Bargains::PlainFlagOf(Tag);
+			if (!Plain)
+			{
+				continue;
+			}
+			TArray<FLinearColor> Colours;
+			TArray<double> Shares;
+			for (int32 Band = 0; Band < Plain->Count; ++Band)
+			{
+				const uint32 Srgb = Plain->Bands[Band].Srgb;
+				Colours.Add(FLinearColor(FColor(static_cast<uint8>((Srgb >> 16) & 0xFF), static_cast<uint8>((Srgb >> 8) & 0xFF), static_cast<uint8>(Srgb & 0xFF))));
+				Shares.Add(static_cast<double>(Plain->Bands[Band].Weight));
+			}
+			const bool bUpright = Plain->bVertical;
+			Map.Add(FString(Plain->Key), [Colours, Shares, bUpright](FFlagPainter& P)
+			{
+				if (bUpright)
+				{
+					P.Columns(Colours, Shares);
+				}
+				else
+				{
+					P.Rows(Colours, Shares);
+				}
+			});
+		}
 
 		return Map;
 	}

@@ -856,7 +856,7 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
 .lbar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; margin-top: 12px; background: var(--panel-2); }
 .lbar i { display: block; height: 100%; min-width: 2px; }
 .lbar i + i { border-left: 1px solid var(--panel); }
-.army { background: #b5694a; } .navy { background: #4f86b3; } .air { background: #9a86c2; } .works { background: #8a8f6b; } .free { background: var(--green); }
+.army { background: #b5694a; } .navy { background: #4f86b3; } .air { background: #9a86c2; } .works { background: #8a8f6b; } .dues { background: #b59a4a; } .free { background: var(--green); }
 .lkey { display: flex; gap: 6px 16px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 .lkey i, .ltab i.dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 .lkey small { color: var(--ink-3); }

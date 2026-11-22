@@ -42,7 +42,10 @@ import {
   crossings, liftOf, orderCrossingPlan,
   ordersByCity, ordersIn, type CityOrders, type OrderLine,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderArrest, orderRetireAgent, orderSendAgent, whyNotArrestAgent, lastAct, orderDomination, orderKeepPeace, orderWinterPeace, whyNotOrderWinterPeace, winterCardDue, winterPeace, type WinterPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
+  orderBid, orderSellTo, orderLegion, orderRecall,
 } from '../turn';
+import { bargainOutputLoss, bargainRules, bargainsView, goodsOf, heldOf, replacedDeal, rowsOf as bargainRows, type BargainView } from '../bargains';
+import { LEGIONS, legionOffers, legionRules, legionsView, type LegionView } from '../legions';
 import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
@@ -2321,6 +2324,8 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (c.job) tags.push(`<span class="tag good" title="${esc(jobLine(g, c))}">At work</span>`);
   else if (c.kind === 'eng' && c.nat === g.human && groundRules(g)) tags.push('<span class="tag" title="Give it work from the list under the forces: bridges, railways, bombed factories, fortifications, minefields or demolition.">Engineers: ready for work</span>');
   if (c.airborne) tags.push(`<span class="tag good" title="Parachute and glider troops. Once a month they can be flown from a friendly coast to an enemy one across a single sea, with no ships and whoever holds the water. They fight there at ${Math.round(NAVY.landing.airborne * 100)}%, without heavy weapons, and not under a sky the enemy's fighters hold.">Airborne</span>`);
+  // A volunteer legion (release 2): whose men these are, under its patron's command.
+  if (c.vol && g.nations[c.vol]) tags.push(`${chip(c.vol)}<span class="tag good" title="${esc(`Volunteers from ${theName(c.vol)}, serving in ${theName(c.nat)}'s army under their own name and flag. Their drafts come from ${theName(c.vol)}, and they go home at their tour's end or when called.`)}">${esc(g.nations[c.vol].adj)} volunteers</span>`);
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
   if (c.dug) tags.push(`<span class="tag good${autoDig() && worksOf(c) < 0.95 ? ' worn' : ''}" title="${esc(autoDig() ? `${worksWords(c)} ${STANCE_HOLD}` : STANCE_DIG)}">${autoDig() ? `Dug in · ${worksTag(c)}` : 'Dug in'}</span>`);
@@ -4221,6 +4226,56 @@ function townsShelf(sel: Region | null): string {
     <h3>The staff's picks <span class="inhand">the best place for each kind</span></h3>${tips.map(tip).join('') || '<div class="empty">Every plot you hold is built on, or its builders are busy.</div>'}`;
 }
 
+/**
+ * A neutral's bargains (release 2), in the trade office: what the player buys or sells, and every round of bids he can
+ * take part in. A buyer bids a month's price; a seller chooses among the bids, or sells to nobody.
+ */
+function bargainsSection(me: string, up: boolean): string {
+  if (!bargainRules(g)) return '';
+  const rows = bargainsView(g, me).filter((v) => v.buyer === me || v.seller === me || (v.round && (v.round.canBid === null || v.round.mine !== null)));
+  const price = (pp: number | null): string => (pp === null ? '?' : cash(pp));
+  const one = (v: BargainView): string => {
+    const term = v.buyer ? `to ${esc(theName(v.buyer))} for ${price(v.price)} a month, ${v.monthsLeft} month${v.monthsLeft === 1 ? '' : 's'} left` : 'sold to nobody';
+    const tag = v.state === 'cut' ? ' <span class="tag bad">Cut</span>' : v.state === 'raided' ? ' <span class="tag bad">Raided</span>' : '';
+    let act = '';
+    const r = v.round;
+    if (r && r.accept) {
+      act = `<div class="acts">${r.bids.map((b) => `<button class="btn small go" data-act="bargainsell" data-id="${v.id}" data-nat="${b.nat}" ${up ? '' : 'disabled'}>Sell to ${esc(theName(b.nat))} for ${price(b.offer)}</button>`).join('')}<button class="btn small" data-act="bargainsell" data-id="${v.id}" data-nat="" ${up ? '' : 'disabled'}>Sell to nobody</button></div>`;
+    } else if (r && r.canBid === null && r.steps.length) {
+      const k = r.steps.length, pick = [...new Set([0, Math.floor(k / 4), Math.floor(k / 2), Math.floor((3 * k) / 4), k - 1])].map((i) => r.steps[i]);
+      act = `<div class="acts">${r.mine !== null ? `<small>Your bid: ${cash(r.mine)} a month.</small>` : ''}${pick.map((pp) => `<button class="btn small${r.mine === pp ? ' go' : ''}" data-act="bargainbid" data-id="${v.id}" data-pp="${pp}" ${up ? '' : 'disabled'}>Bid ${cash(pp)}</button>`).join('')}</div>`;
+    } else if (r && r.mine !== null) act = `<small>Your bid of ${cash(r.mine)} a month is in. ${esc(r.canBid ?? '')}</small>`;
+    return `<div class="tdeal">${chip(v.seller)}<span class="grow"><b>${esc(v.name)}</b>${tag}<small>${esc(v.sellerName)} sells it ${term}${r ? ` · a round of bids is open (${r.bids.length} bid${r.bids.length === 1 ? '' : 's'})` : ''}</small>${act}</span></div>`;
+  };
+  return `<h3>A neutral's bargains <span class="inhand">a term runs a year</span></h3>
+      <p class="sub">Countries at peace outside both sides sell their goods, or the use of a base, to one country at war a year at a time. When a term ends the countries at war bid a price a month, and the seller chooses. Feeding one side costs the seller the other side's patience.</p>
+      <div class="tdeals">${rows.map(one).join('') || '<div class="empty">You buy and sell nothing from the neutrals just now.</div>'}</div>`;
+}
+
+/**
+ * Volunteer legions (release 2), in the trade office: the legion the player's country has abroad and the patrons it
+ * could send one to, the legions serving in his own army, and every other legion abroad.
+ */
+function legionsSection(me: string, up: boolean): string {
+  if (!legionRules(g)) return '';
+  const all = legionsView(g);
+  const mine = all.find((v) => v.home === me);
+  const left = (v: LegionView): string => (v.corps < 0 ? 'on its way to the line' : `${v.men.toLocaleString('en-US')} men, ${v.monthsLeft} month${v.monthsLeft === 1 ? '' : 's'} of its tour left${v.recall ? ', called home' : ''}`);
+  const one = (v: LegionView, act = ''): string => `<div class="tdeal">${chip(v.home)}<span class="grow"><b>${esc(v.name)}</b><small>${esc(v.homeName)}'s volunteers with ${esc(theName(v.patron))} against ${esc(theName(v.against))} · ${esc(left(v))}</small>${act}</span></div>`;
+  let own = '';
+  if (mine) own = one(mine, mine.recall ? '' : `<div class="acts"><button class="btn small" data-act="legionrecall" ${up ? '' : 'disabled'}>Call them home</button></div>`);
+  else {
+    const offers = legionOffers(g, me);
+    own = offers.map((o) => `<div class="tdeal${o.why ? ' off' : ''}">${chip(o.patron)}<span class="grow"><b>${esc(theName(o.patron))} against ${esc(theName(o.against))}</b>${o.why ? `<small class="whyno">${esc(o.why)}</small>` : ''}</span><button class="btn small${o.why ? '' : ' go'}" data-act="legionsend" data-nat="${o.patron}" data-on="${o.against}" ${!o.why && up ? '' : 'disabled'} title="A legion costs ${LEGIONS.cost} political capital.">Send volunteers</button></div>`).join('');
+  }
+  const serving = all.filter((v) => v.patron === me), others = all.filter((v) => v.home !== me && v.patron !== me);
+  return `<h3>Volunteer legions <span class="inhand">one at a time, a division at most</span></h3>
+      <p class="sub">A country at peace outside both sides may send volunteers to fight for a country at war. They serve in its army under their own name and flag, their drafts come from home, and they come home at their tour's end or when called. The power they fight loses patience with their country.</p>
+      ${mine || legionOffers(g, me).length ? `<div class="tdeals">${own}</div>` : ''}
+      ${serving.length ? `<div class="tdeals">${serving.map((v) => one(v)).join('')}</div>` : ''}
+      <div class="tdeals">${others.map((v) => one(v)).join('') || '<div class="empty">No other volunteers serve abroad just now.</div>'}</div>`;
+}
+
 /** The trade office: the agreements in force and what each pays, the trading houses, and every country that could be signed with. */
 function tradeCard(nat: string): string {
   const b = tradeLedger(g, nat);
@@ -4258,6 +4313,8 @@ function tradeCard(nat: string): string {
       ${mine ? `<h3>Countries that would sign <span class="inhand">${open.length ? `signing costs ${b.cost} political capital` : ''}</span></h3>
       <div class="tdeals">${open.map(offer).join('') || '<div class="empty">Nobody will sign just now.</div>'}</div>
       ${shut.length ? `<div class="acts"><button class="btn small" data-act="tradeall">${all ? 'Hide the countries that will not sign' : `Show the ${shut.length} that will not sign now, and why`}</button></div>${all ? `<div class="tdeals">${shut.map(offer).join('')}</div>` : ''}` : ''}` : ''}
+      ${mine ? bargainsSection(nat, up) : ''}
+      ${mine ? legionsSection(nat, up) : ''}
       <p class="sub" style="margin-top:8px">Your routes are drawn on the map in the wealth view, the coin button beside the zoom.</p>
     </div>
     <footer><button class="btn" data-act="ledger"${mine ? '' : ` data-nat="${nat}"`}>Open the ledger</button><button class="btn go" data-act="close">Close</button></footer>`;
@@ -5779,7 +5836,16 @@ function seaNotes(): string {
   }
   const ore = oreRoute(g);
   const to = NAVY.ore.to;
-  if (ore !== 'none' && (!me || me === to || atWar(g, me, to))) {
+  // (With a neutral's bargains, release 2, the ore is Sweden's to sell: the note follows its term, not the old route.)
+  const sold = replacedDeal(g, 'ore') ? heldOf(g, 'swe-ore') : undefined;
+  if (sold && ore !== 'none' && (!me || me === to || me === 'SWE' || atWar(g, me, to))) {
+    const lost = bargainOutputLoss(g, to) > 0;
+    const text = sold.buyer === to && sold.share > 0
+      ? `Swedish iron ore is reaching ${theName(to)}, bought from Sweden${ore === 'narvik' ? `, through ${NAVY.ore.winterPort} while the Baltic ports are frozen` : ''}.`
+      : sold.buyer === to ? `Swedish iron ore bought by ${theName(to)} is not getting through.${lost ? ` It loses ${Math.round(NAVY.ore.share * 100)}% of its production until the ore comes again.` : ''}`
+      : `Sweden sells its iron ore to ${sold.buyer ? theName(sold.buyer) : 'nobody'}.${lost ? ` ${natName(to)} goes without, and loses ${Math.round(NAVY.ore.share * 100)}% of its production.` : ''}`;
+    out += `<div class="note"${lost ? ' style="border-left-color:var(--red)"' : ''}><b>The ore traffic.</b> ${esc(text)}</div>`;
+  } else if (!sold && ore !== 'none' && (!me || me === to || atWar(g, me, to))) {
     const text = ore === 'baltic' ? `Swedish iron ore is reaching ${theName(to)} across the Baltic.` : ore === 'narvik' ? `The Baltic ports are frozen. Swedish iron ore is reaching ${theName(to)} through ${NAVY.ore.winterPort}.` : `Swedish iron ore is not getting through. ${natName(to)} loses ${Math.round(NAVY.ore.share * 100)}% of its production until the route is open again.`;
     out += `<div class="note"${ore === 'cut' ? ' style="border-left-color:var(--red)"' : ''}><b>The ore traffic.</b> ${esc(text)}</div>`;
   }
@@ -8111,7 +8177,15 @@ function laneNotes(): string {
 function oilNote(r: Region): string {
   if (!r.oil || !resRules(g)) return '';
   const own = fieldYield(g, r, r.owner), held = fieldYield(g, r);
-  const buyers = RES.deals.filter((d) => d.field === r.name && d.oil > 0 && stores(g, d.to)?.lanes.some((l) => l.id === d.id && l.state === 'open'));
+  const buyers: { to: string; oil: number }[] = RES.deals.filter((d) => d.field === r.name && d.oil > 0 && !replacedDeal(g, d.id) && stores(g, d.to)?.lanes.some((l) => l.id === d.id && l.state === 'open'));
+  // (A deal a neutral's bargain has taken over, release 2: whoever buys the bargain this term, and what reaches it.)
+  for (const row of bargainRows(g)) {
+    const deal = row.replaces ? RES.deals.find((d) => d.id === row.replaces) : undefined;
+    const h = heldOf(g, row.id);
+    if (!deal || deal.field !== r.name || !replacedDeal(g, deal.id) || !h?.buyer || h.share <= 0) continue;
+    const oil = goodsOf(g, row).oil * h.share, had = buyers.find((b) => b.to === h.buyer);
+    if (oil > 0) { if (had) had.oil = Math.round((had.oil + oil) * 100) / 100; else buyers.push({ to: h.buyer, oil: Math.round(oil * 100) / 100 }); }
+  }
   // (A field on colony ground gives nothing at home to anybody: resources.ts fieldOverseas. It is said to yield, not to give.)
   const who = keepsStores(g, r.ctrl) && !fieldOverseas(r)
     ? `It gives ${esc(theName(r.ctrl))} ${amt(held)} oil a month${r.ctrl !== r.owner ? `, less than the ${amt(own)} it gave its owner` : ''}.`
@@ -8121,10 +8195,26 @@ function oilNote(r: Region): string {
 
 // ---- The ledger: where the money comes from, what the forces cost, and what every province pays ----
 
-type Arm = 'army' | 'navy' | 'air' | 'works';
-const ARMS: Arm[] = ['army', 'navy', 'air', 'works'];
-const ARM_OF = (key: string): Arm => (key.startsWith('corps:') ? 'army' : key.startsWith('ships:') ? 'navy' : key.startsWith('works:') ? 'works' : 'air');
-const ARM_NAME = { army: 'Army', navy: 'Navy', air: 'Air force', works: 'Guns and airfields' } as const;
+type Arm = 'army' | 'navy' | 'air' | 'works' | 'dues';
+const ARMS: Arm[] = ['army', 'navy', 'air', 'works', 'dues'];
+// (What a country pays neutrals for their goods, release 2's bargains, is its own group: it is not an arm's keep.)
+const ARM_OF = (key: string): Arm => (key.startsWith('corps:') ? 'army' : key.startsWith('ships:') ? 'navy' : key.startsWith('works:') ? 'works' : key === 'bargains' ? 'dues' : 'air');
+const ARM_NAME = { army: 'Army', navy: 'Navy', air: 'Air force', works: 'Guns and airfields', dues: 'Bought from neutrals' } as const;
+
+/**
+ * Another country's ledger, as the player may read it while the neutrals' bargains are in the campaign (release 2):
+ * the price of a bargain is a sealed bid, so a country whose books he cannot read (intel.ts knowsBooks) shows its
+ * ledger without its sales to the countries at war and its purchases from the neutrals.
+ */
+function sealedLedger(L: Ledger): Ledger {
+  const inc = L.income.filter((l) => l.key === 'bargains' || l.key === 'bought').reduce((s, l) => s + l.amount, 0);
+  const out = L.upkeep.filter((l) => l.key === 'bargains').reduce((s, l) => s + l.amount, 0);
+  if (inc === 0 && out === 0) return L;
+  return {
+    ...L, income: L.income.filter((l) => l.key !== 'bargains' && l.key !== 'bought'), upkeep: L.upkeep.filter((l) => l.key !== 'bargains'),
+    gross: L.gross - inc, upkeepTotal: L.upkeepTotal - out, net: L.net - inc + out,
+  };
+}
 
 function ledgerRows(lines: LedgerLine[], sign: 1 | -1, unit: (l: LedgerLine) => string): string {
   return lines.map((l) => `<tr${sign < 0 ? ' class="sub"' : ''}><td>${esc(l.label)}${unit(l) ? ` <small>${unit(l)}</small>` : ''}</td><td class="${l.amount * sign < 0 ? 'neg' : ''}">${cash(l.amount * sign, sign < 0 || l.amount < 0)}</td></tr>`).join('');
@@ -8132,11 +8222,12 @@ function ledgerRows(lines: LedgerLine[], sign: 1 | -1, unit: (l: LedgerLine) => 
 
 function ledgerCard(nat: string): string {
   const n = g.nations[nat];
-  const L: Ledger = ledger(g, nat);
   const mine = nat === g.human;
-  const by: Record<Arm, number> = { army: 0, navy: 0, air: 0, works: 0 };
-  // The three services always show; the guns and airfields only once some have been built.
-  const arm3 = ARMS.filter((k) => k !== 'works' || by.works > 0 || L.upkeep.some((l) => ARM_OF(l.key) === 'works'));
+  const sealed = !mine && bargainRules(g) && !!g.human && !knowsBooks(g, nat, g.human);
+  const L: Ledger = sealed ? sealedLedger(ledger(g, nat)) : ledger(g, nat);
+  const by: Record<Arm, number> = { army: 0, navy: 0, air: 0, works: 0, dues: 0 };
+  // The three services always show; the guns and airfields only once some have been built, and what is bought from neutrals only while it is.
+  const arm3 = ARMS.filter((k) => (k !== 'works' && k !== 'dues') || by[k] > 0 || L.upkeep.some((l) => ARM_OF(l.key) === k));
   for (const l of L.upkeep) by[ARM_OF(l.key)] += l.amount;
   // The picture: one bar for the month's income, cut into what each arm takes and what is left to spend.
   const whole = Math.max(L.gross, L.upkeepTotal, 1e-9);
@@ -8953,6 +9044,26 @@ function onClick(e: MouseEvent): void {
     }
     case 'trade': openModal({ kind: 'trade', nat: t.dataset.nat || '' }); break;
     case 'tradeall': if (ui.modal) { ui.modal.all = !ui.modal.all; openModal(ui.modal); } break;
+    case 'bargainbid': case 'bargainsell': {
+      const id = t.dataset.id!, h = g.headlines.length;
+      const why = act === 'bargainbid' ? orderBid(g, id, Number(t.dataset.pp)) : orderSellTo(g, id, t.dataset.nat || null);
+      ui.unread += g.headlines.length - h;
+      ui.msg = why ?? (act === 'bargainbid' ? 'Your bid is in. The seller chooses next month.' : 'The bargain is settled for a year.');
+      if (!why) queueSave();
+      refresh();
+      if (ui.modal?.kind === 'trade') openModal(ui.modal);
+      break;
+    }
+    case 'legionsend': case 'legionrecall': {
+      const h = g.headlines.length;
+      const why = act === 'legionsend' ? orderLegion(g, t.dataset.nat!, t.dataset.on!) : orderRecall(g);
+      ui.unread += g.headlines.length - h;
+      ui.msg = why ?? (act === 'legionsend' ? 'Your volunteers are on their way. They reach the line next month.' : 'Your volunteers come home at the month\'s end.');
+      if (!why) queueSave();
+      refresh();
+      if (ui.modal?.kind === 'trade') openModal(ui.modal);
+      break;
+    }
     case 'tradeask': if (ui.modal) { ui.modal.ask = t.dataset.nat || ''; openModal(ui.modal); } break;
     case 'tradesign': case 'tradeend': {
       const nat = t.dataset.nat!, h = g.headlines.length;
