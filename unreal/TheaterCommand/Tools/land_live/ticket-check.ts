@@ -8,6 +8,7 @@
 // Built and run by command.sh:  node land-live-ticket.mjs [key] [seed]
 import { liveTicket, livePiece, type LiveBattle, type LiveOpts } from '../../../../src/battle/land/live';
 import { PIECES, ticketOf } from '../../../../src/battle/land/pieces';
+import '../../Rules/land-bridge';
 
 const [key = 'normandy-1944', seedArg = '11'] = process.argv.slice(2);
 const piece = PIECES.find((p) => p.key === key);
@@ -37,8 +38,15 @@ console.log(`${key} by its ticket: ${d2.length} deltas, the same as by its key: 
 // 2. A campaign battle: no piece, under the card's fog with none identified, and a design year for each side's armour.
 const t = structuredClone(ticketOf(piece, seed, 'att'));
 const camp = liveTicket(t, { ...opts, fog: true, seen: [], designYears: { [t.att.nat]: 1943, [t.def.nat]: 1944 } });
-const head = camp.header() as { key: string; blocks: { side: string; model: string | null }[]; field: { place: unknown } };
-if (head.key !== 'field' || head.blocks.some((b) => b.model !== null)) fail('a campaign battle names no set piece and no model');
+const head = camp.header() as { key: string; blocks: { side: string; kind: string; team?: unknown; model: string | null }[]; field: { place: unknown } };
+// (the 3D game's tank and gun models so far: Content/Models/Battle)
+const HAVE = new Set(['Sherman', 'PanzerIV', 'Tiger', 'StuG3', 'T34', 'LightTank', 'Howitzer105', 'leFH18', 'ZiS3']);
+const drawn = head.blocks.filter((b) => b.kind === 'arm' || (b.kind === 'art' && !b.team));
+if (head.key !== 'field') fail('a campaign battle names no set piece');
+if (drawn.some((b) => !b.model || !HAVE.has(b.model))) fail('each of its tank and gun blocks names a model the 3D game has');
+// (stand-ins are looks only: the rules weigh none of them, so the battle is the one the campaign priced)
+if ((camp.sim as unknown as { models: Map<number, string> }).models.size) fail('a stand-in model is looks only, never weighed by the rules');
+console.log(`a campaign battle's models: ${drawn.map((b) => `${b.side} ${b.model}`).join(', ')}`);
 if (!head.field.place) fail('its header carries the ticket\'s place');
 let unknownSeen = 0, knownFoe = 0, lines = 0;
 for (const text of fight(camp)) {
@@ -54,5 +62,26 @@ console.log(`a campaign battle from its ticket: ${lines} deltas to ${camp.sim.t.
 if (!camp.sim.over) fail('it fights to its end');
 if (!unknownSeen) fail('under the card\'s fog an enemy block not identified shows only where it stands');
 if (camp.sim.over && typeof camp.sim.over.R !== 'number') fail('its result carries R for the campaign\'s settle');
+const sky = (head as unknown as { sky?: { cover: number; kind: string; base: number } }).sky;
+if (!sky || !(sky.cover >= 0 && sky.cover <= 1) || !sky.base) fail('a campaign battle\'s header carries a sky from its ticket');
+
+// 3. Through the bridge as the 3D game calls it: the campaign's TC.battleLook answer as it stands, fought to its end,
+// and TC.landResult the very result the last delta carried (what goes back to the campaign's TC.battleSettleLand).
+type Calls = Record<string, (...a: unknown[]) => unknown>;
+const TC = (globalThis as unknown as { TC: Calls }).TC;
+const look = { ticket: structuredClone(ticketOf(piece, seed, 'att')), live: { fog: true, seen: [], designYears: {}, sky: { cover: 0.8, base: 700, kind: 'deck', latLon: [51.9, 5.9], hour: 8 } } };
+const bh = TC.landStartTicket(look, { me: 'att', setup: false }) as { key: string; sky?: { cover: number; latLon?: number[]; hour?: number } };
+if (bh.key !== 'field' || bh.sky?.cover !== 0.8 || bh.sky?.latLon?.[0] !== 51.9 || bh.sky?.hour !== 8) fail('the bridge opens the campaign\'s look answer with its sky');
+let lastOver: unknown = null, n = 0;
+for (let guard = 0; guard < 100000; guard++) {
+  const d = TC.landTick(0.5, 1000) as { end?: number; over?: unknown };
+  n++;
+  if (d.over) { lastOver = d.over; break; }
+}
+const res = (TC.landResult() as { over: unknown }).over;
+const sameOver = !!lastOver && JSON.stringify(res) === JSON.stringify(lastOver);
+console.log(`through the bridge: ${n} deltas; TC.landResult the last delta's over: ${sameOver ? 'yes' : 'no'} (${JSON.stringify((res as { level?: string } | null)?.level)})`);
+if (!sameOver) fail('TC.landResult is the result the last delta carried');
+TC.landEnd();
 console.log(failures ? `FAIL (${failures})` : 'a ticket opens the battle the campaign priced');
 process.exit(failures ? 1 : 0);

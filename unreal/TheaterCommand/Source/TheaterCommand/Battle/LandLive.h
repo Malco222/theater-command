@@ -52,6 +52,12 @@ public:
 	 * not start. HeaderReady() says when the battle is open.
 	 */
 	bool Start(const FString& Key, int32 Seed, const FString& Me, bool bSetup);
+	/**
+	 * A campaign battle (release 2, the production lead's (a)): opens the battle the campaign priced from its ticket, as
+	 * Start does a set piece. LookJson is the campaign's TC.battleLook answer as it stands ({ "ticket": .., "live": { fog,
+	 * seen, designYears, sky } }) or a bare FieldTicket; TC.landStartTicket reads either.
+	 */
+	bool StartTicket(const FString& LookJson, const FString& Me, bool bSetup);
 	/** The recording's header (nothing fought yet, as UTF-8 text) once the battle is open: true once, handing it over. */
 	bool TakeHeader(std::string& OutHeader);
 	/** True (and why) if the rules could not be loaded or the battle not opened. */
@@ -78,6 +84,9 @@ public:
 	/** Battle time the rules have reached (what the deltas taken so far go up to, or beyond). */
 	double Fought() const { return FoughtT.load(); }
 	bool IsOver() const { return bOver.load(); }
+	/** The battle's result once it is over (TC.landResult's answer, { "over": the FieldResult }: what the campaign's
+	 * TC.battleSettleLand takes), or false before. Set before the last delta is handed over. */
+	bool Result(FString& OutJson) const;
 	/** Milliseconds the rules took for their last piece, and the most so far (for the log). */
 	double LastMs() const { return LastStepMs.load(); }
 	double MostMs() const { return MostStepMs.load(); }
@@ -100,6 +109,8 @@ private:
 	FString Key, Me;
 	int32 Seed = 0;
 	bool bSetup = false;
+	/** A campaign battle's look (StartTicket), or empty for a set piece. */
+	FString Ticket;
 
 	/** (made UTF-8 here, on the rules' thread: some 70 KB a piece the game thread need not turn) */
 	TQueue<std::string, EQueueMode::Spsc> Deltas;
@@ -109,6 +120,8 @@ private:
 	mutable FCriticalSection HeaderGate;
 	std::string HeaderText;
 	FString Why;
+	/** The result, once the last delta is fought (under HeaderGate). */
+	FString ResultJson;
 	bool bHeaderReady = false, bHeaderTaken = false, bFailed = false;
 
 	std::atomic<double> WantT { 0.0 }, AheadT { 2.5 }, FoughtT { 0.0 };

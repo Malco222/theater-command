@@ -94,6 +94,23 @@ public:
 	/** Starts the rules on their own thread (LandLive) on the set piece Key, the player on side Me ("att", "def", or ""
 	 * for a film), deploying first when bDeploy; the scene opens when the rules have opened the battle. False if not. */
 	bool BeginLive(const FString& Key, int32 Seed, const FString& Me, bool bDeploy);
+	/**
+	 * A campaign battle fought live from its ticket (release 2, the production lead's (a); off unless CampaignLiveOn):
+	 * LookJson is the campaign's TC.battleLook answer as it stands ({ "ticket": .., "live": { fog, seen, designYears,
+	 * sky } }) or a bare FieldTicket, opened in the land rules (TC.landStartTicket), the player on side Me, deploying
+	 * first when bDeploy. Its result, once over, is LiveResult, for the campaign's TC.battleSettleLand.
+	 */
+	bool BeginLiveTicket(const FString& LookJson, const FString& Me, bool bDeploy);
+	void LiveTicketWhenReady(const FString& LookJson, const FString& Me, bool bDeploy);
+	/** "-TheaterLandTicket=<file>": a campaign battle's look (or ticket) from a JSON file, fought live as the set piece
+	 * is by -TheaterLandLive (its side and setup by the same switches): the test path for a campaign battle. */
+	static bool WantsLiveTicket(FString& OutLookJson);
+	void LiveTicketWhenReady(const FString& LookJson);
+	/** The switch for the campaign's own battles fought live in the land rules: "-TheaterLandCampaignLive" or the console
+	 * variable TheaterLandCampaignLive 1. Off: the campaign's FIGHT IT YOURSELF stays as release 2 has it. */
+	static bool CampaignLiveOn();
+	/** The live battle's result once it is over, as the campaign's TC.battleSettleLand takes it ({ "over": .. }). */
+	bool LiveResult(FString& OutJson) const;
 	bool IsLive() const { return Live.IsValid(); }
 	/**
 	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time
@@ -483,6 +500,8 @@ private:
 	/** The rules on their own thread, fighting the battle a little ahead of the screen (none for a recording). */
 	TSharedPtr<FLandLive> Live;
 	FString PendingLive, LiveMe;
+	/** A campaign battle's look waiting to open (LiveTicketWhenReady). */
+	FString PendingTicket;
 	int32 LiveSeed = 0;
 	bool bLiveDeploy = false;
 	/** Started, and waiting on the rules to open the battle (its header): for how long, real seconds. */
@@ -502,6 +521,8 @@ private:
 	/** The battle's clock this frame never past what the rules have fought (less a margin); and the rules kept ahead. */
 	double LiveClock(double From, double To, double Real);
 	void CloseLive();
+	/** BeginLive's and BeginLiveTicket's own: a set piece by Key, or a campaign battle's look where LookJson is given. */
+	bool BeginLiveFrom(const FString& InKey, int32 Seed, const FString& Me, bool bDeploy, const FString& LookJson);
 
 	// ---- The general's controls (LandBattleCommand.cpp) ----
 	/** His pointer pressed: where, which button, and whether it has moved past a click since. */

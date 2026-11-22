@@ -228,12 +228,21 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 
 	// "-TheaterLandLive=normandy-1944" fights a set piece live in the same scene, the player its general (release 2):
 	// "-TheaterLandSide=att" (the default), "def" or "none" (a film); "-TheaterLandNoDeploy" skips the setup step.
-	FString LiveKey;
+	FString LiveKey, LiveLook;
 	if (LandKey.IsEmpty() && ALandBattle::WantsLive(LiveKey))
 	{
 		if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
 		{
 			Land->LiveWhenReady(LiveKey);
+		}
+	}
+	// "-TheaterLandTicket=<file>": a campaign battle's look (TC.battleLook's answer) or ticket fought live the same way, the
+	// test path for the campaign's battles opened in the land rules (release 2, the production lead's (a)).
+	else if (LandKey.IsEmpty() && ALandBattle::WantsLiveTicket(LiveLook))
+	{
+		if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Land->LiveTicketWhenReady(LiveLook);
 		}
 	}
 }

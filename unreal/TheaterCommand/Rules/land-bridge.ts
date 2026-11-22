@@ -13,9 +13,12 @@
 //   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider }) -> the recording's header: the field, the blocks,
 //                                             the sky, and the setup room when the player deploys first. me 'att' | 'def'
 //                                             | null (a film). staff and radio (direct command) are on unless false
-//   TC.landStartTicket(ticket, opts)       -> the same header for a campaign battle (release 2, switched): its ticket from
-//                                             the campaign's TC.battleLook, opts as landStart's plus the card's fog, seen and
-//                                             designYears; the last delta's over goes back to TC.battleSettleLand
+//   TC.landStartTicket(look, opts)         -> the same header for a campaign battle (release 2, switched): the campaign's
+//                                             TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears,
+//                                             sky } }) or a bare ticket, opts as landStart's (and any of live's, which they
+//                                             override); the last delta's over goes back to TC.battleSettleLand
+//   TC.landResult()                        -> { over }: the battle's result once it is over (null before), as the
+//                                             campaign's TC.battleSettleLand takes it; the battle is kept
 //   TC.landTick(seconds, maxSteps)         -> a delta: what was fought in up to `seconds` more (none while setup is open).
 //                                             It opens {"t":..., and {"t":...,"end":... when it is the battle's last
 //   TC.landTo(t, maxSteps)                 -> a delta: fought on to battle time t
@@ -40,7 +43,7 @@
 // Nothing here decides anything about the fight.
 
 import type { Command, FieldTicket, Side } from '../../../src/battle/core/types';
-import { LiveBattle, livePiece, liveTicket, type LiveDelta } from '../../../src/battle/land/live';
+import { LiveBattle, livePiece, liveTicket, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
 import type { LandPlace } from '../../../src/battle/land/field';
 import { PIECES } from '../../../src/battle/land/pieces';
 import type { Gate, Hedge } from '../../../src/battle/land/sim';
@@ -76,11 +79,18 @@ function need(): LiveBattle {
    * the card's fog (fog, seen: the corps it identified) and each nation's armour design year, with the same switches as
    * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
    */
-  landStartTicket(ticket: FieldTicket<LandPlace>, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number> } | null) {
+  landStartTicket(
+    ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> },
+    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
+  ) {
+    // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
+    const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
+    const ticket = look ? look.ticket : (ticketOrLook as FieldTicket<LandPlace>);
+    const o = { ...(look?.live ?? {}), ...(opts ?? {}) };
     live = liveTicket(ticket, {
-      me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
-      hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
-      fog: !!opts?.fog, seen: opts?.seen ?? [], designYears: opts?.designYears ?? {},
+      me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
+      hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
+      fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(o.sky ? { sky: o.sky } : {}),
     });
     return live.header();
   },
@@ -124,6 +134,10 @@ function need(): LiveBattle {
     const l = need();
     const ok = Array.isArray(hedges) && l.hedges(hedges, Array.isArray(gates) ? gates : []);
     return { ok, hedges: l.sim.hedges.length, gates: l.sim.gates.length };
+  },
+
+  landResult() {
+    return { over: live?.sim.over ?? null };
   },
 
   landEnd() {

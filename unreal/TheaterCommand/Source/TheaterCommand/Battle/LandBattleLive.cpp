@@ -19,7 +19,9 @@
 #include "Battle/LandLive.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
@@ -56,6 +58,10 @@ namespace
 	 * camera thread, 22 November: its cut on action wants 2.2 real seconds of lead and a tank's knock-out 5.2: "2.5 battle
 	 * s at 1x, 5 at 2x, 10 at 4x"). */
 	constexpr double LiveLead = 2.5;
+
+	/** The campaign's own land battles fought live from their tickets (ALandBattle::CampaignLiveOn): off by default. */
+	TAutoConsoleVariable<int32> CampaignLiveSwitch(TEXT("TheaterLandCampaignLive"), 0,
+		TEXT("1: the campaign's own land battles fought live in the land rules, from their tickets (release 2, the production lead's (a)). 0: as release 2 has them."));
 }
 
 bool ALandBattle::WantsLive(FString& OutKey)
@@ -85,7 +91,56 @@ void ALandBattle::LiveWhenReady(const FString& InKey, const FString& Me, int32 S
 	SetActorTickEnabled(true);
 }
 
+bool ALandBattle::WantsLiveTicket(FString& OutLookJson)
+{
+	FString File;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTicket="), File) || File.IsEmpty())
+	{
+		return false;
+	}
+	if (!FFileHelper::LoadFileToString(OutLookJson, *File) || !OutLookJson.TrimStart().StartsWith(TEXT("{")))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): -TheaterLandTicket=%s is not a ticket (JSON) this game can read"), *File);
+		OutLookJson.Empty();
+		return false;
+	}
+	return true;
+}
+
+bool ALandBattle::CampaignLiveOn()
+{
+	return CampaignLiveSwitch.GetValueOnGameThread() != 0 || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCampaignLive"));
+}
+
+void ALandBattle::LiveTicketWhenReady(const FString& LookJson)
+{
+	// (its side and setup by the set piece's own switches)
+	LiveWhenReady(TEXT("field"));
+	PendingTicket = LookJson;
+}
+
+void ALandBattle::LiveTicketWhenReady(const FString& LookJson, const FString& Me, bool bDeploy)
+{
+	LiveWhenReady(TEXT("field"), Me, 0, bDeploy);
+	PendingTicket = LookJson;
+}
+
+bool ALandBattle::LiveResult(FString& OutJson) const
+{
+	return Live.IsValid() && Live->Result(OutJson);
+}
+
 bool ALandBattle::BeginLive(const FString& InKey, int32 Seed, const FString& Me, bool bDeploy)
+{
+	return BeginLiveFrom(InKey, Seed, Me, bDeploy, FString());
+}
+
+bool ALandBattle::BeginLiveTicket(const FString& LookJson, const FString& Me, bool bDeploy)
+{
+	return BeginLiveFrom(TEXT("field"), 0, Me, bDeploy, LookJson);
+}
+
+bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString& Me, bool bDeploy, const FString& LookJson)
 {
 	if (Live.IsValid() || State.IsValid())
 	{
@@ -96,7 +151,7 @@ bool ALandBattle::BeginLive(const FString& InKey, int32 Seed, const FString& Me,
 	LiveMe = Me;
 	bLiveDeploy = bDeploy && !Me.IsEmpty();
 	TSharedPtr<FLandLive> Made = MakeShared<FLandLive>();
-	if (!Made->Start(InKey, Seed, Me, bLiveDeploy))
+	if (LookJson.IsEmpty() ? !Made->Start(InKey, Seed, Me, bLiveDeploy) : !Made->StartTicket(LookJson, Me, bLiveDeploy))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s not begun: the rules' thread could not start"), *InKey);
 		return false;
@@ -142,9 +197,10 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 		// (two seconds in, as a recording: the table and its light are up, so that they are put away after)
 		if (GetWorld() && GetWorld()->GetTimeSeconds() > 2.0)
 		{
-			const FString Asked = PendingLive;
+			const FString Asked = PendingLive, Look = PendingTicket;
 			PendingLive.Empty();
-			BeginLive(Asked, LiveSeed, LiveMe, bLiveDeploy);
+			PendingTicket.Empty();
+			BeginLiveFrom(Asked, LiveSeed, LiveMe, bLiveDeploy, Look);
 		}
 		return true;
 	}
@@ -319,6 +375,12 @@ void ALandBattle::PumpLive()
 		if (G.bOver)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): over at %.1f s; the rules' slowest piece %.0f ms"), S.Rec.End, Live->MostMs());
+			// (the result as the campaign takes it back, TC.battleSettleLand: in the log for a campaign battle's test run)
+			FString Result;
+			if (Live->Result(Result))
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle (live): the result for the campaign (%d bytes): %s"), Result.Len(), *Result.Left(400));
+			}
 		}
 	}
 }

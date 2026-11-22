@@ -75,6 +75,27 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	return Thread != nullptr;
 }
 
+bool FLandLive::StartTicket(const FString& LookJson, const FString& InMe, bool bInSetup)
+{
+	if (Thread || !LookJson.TrimStart().StartsWith(TEXT("{")))
+	{
+		return false;
+	}
+	Ticket = LookJson;
+	return Start(TEXT("field"), 0, InMe, bInSetup);
+}
+
+bool FLandLive::Result(FString& OutJson) const
+{
+	FScopeLock Hold(&HeaderGate);
+	if (ResultJson.IsEmpty())
+	{
+		return false;
+	}
+	OutJson = ResultJson;
+	return true;
+}
+
 bool FLandLive::TakeHeader(std::string& OutHeader)
 {
 	FScopeLock Hold(&HeaderGate);
@@ -210,12 +231,16 @@ uint32 FLandLive::Run()
 	const bool bPlatoons = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPlatoons"));
 	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s,\"platoons\":%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me), bSetup ? TEXT("true") : TEXT("false"),
 		bPlatoons ? TEXT("true") : TEXT("false"));
-	const FString Arguments = FString::Printf(TEXT("[%s,%s,%s]"), *Quoted(Key), Seed > 0 ? *FString::FromInt(Seed) : TEXT("null"), *Options);
+	// (a campaign battle from its ticket: the campaign's look answer as it stands, the same options beside it)
+	const bool bTicket = !Ticket.IsEmpty();
+	const FString Arguments = bTicket ? FString::Printf(TEXT("[%s,%s]"), *Ticket, *Options)
+		: FString::Printf(TEXT("[%s,%s,%s]"), *Quoted(Key), Seed > 0 ? *FString::FromInt(Seed) : TEXT("null"), *Options);
 	FString Header;
 	const double Opened = FPlatformTime::Seconds();
-	if (!Host->Call(TEXT("landStart"), Arguments, Header, Error) || !Header.StartsWith(TEXT("{")))
+	if (!Host->Call(bTicket ? TEXT("landStartTicket") : TEXT("landStart"), Arguments, Header, Error) || !Header.StartsWith(TEXT("{")))
 	{
-		Fail(FString::Printf(TEXT("TC.landStart(%s) failed: %s"), *Key, *Error));
+		Fail(bTicket ? FString::Printf(TEXT("TC.landStartTicket (a campaign battle, %d KB of ticket) failed: %s"), Ticket.Len() / 1024, *Error)
+			: FString::Printf(TEXT("TC.landStart(%s) failed: %s"), *Key, *Error));
 		return 1;
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s opened in %.0f ms (%d KB), the player %s%s"), *Key, (FPlatformTime::Seconds() - Opened) * 1000.0,
@@ -287,6 +312,17 @@ uint32 FLandLive::Run()
 			{
 				Fail(TEXT("TC.landTo's answer is not a delta"));
 				break;
+			}
+			if (bLast)
+			{
+				// (the result as the campaign takes it, kept for its hand-back, TC.battleSettleLand: before the last delta
+				// goes, so the game thread that reads the end finds it)
+				FString Over;
+				if (Host->Call(TEXT("landResult"), TEXT("[]"), Over, Error))
+				{
+					FScopeLock Hold(&HeaderGate);
+					ResultJson = Over;
+				}
 			}
 			Deltas.Enqueue(MoveTemp(Delta));
 			FoughtT.store(T);

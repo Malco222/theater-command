@@ -302,6 +302,58 @@ export interface LiveOpts {
   fog?: boolean;
   seen?: number[];
   designYears?: Record<string, number>;
+  /**
+   * A campaign battle's sky over the field (looks only), where the 3D game or the campaign knows the place on the earth:
+   * the cloud, the sun's latitude and longitude and the hour. Left out, ticketSky draws one from the ticket's weather and
+   * seed; a set piece keeps its own.
+   */
+  sky?: LiveSky;
+}
+
+/** The battle's year from its ticket's date ("June 1944"), or 1942 where it names none. */
+export function yearOf(t: FieldTicket<LandPlace>): number {
+  const m = /(19[34]\d)/.exec(t.date ?? '');
+  return m ? Number(m[1]) : 1942;
+}
+
+/**
+ * A campaign battle's stand-in model for a tank or gun block (release 2, looks only): the 3D game has a Sherman, a Panzer
+ * IV, a Tiger, a StuG, a T-34, a light tank and three guns so far, so each nation is drawn with the nearest it has, in
+ * its own coat (LandKit dresses a model in its owner's colours), until the art director's models for every theatre come
+ * (Brian, 22 November: "it's a world war game not just France"). The Nth tank of a side, for a mix.
+ */
+export function standInModel(kind: string, nat: string, year: number, n: number): string {
+  const axis = ['GER', 'ITA', 'JAP', 'HUN', 'ROM', 'BUL', 'FIN'].includes(nat);
+  if (kind === 'art') return nat === 'SOV' ? 'ZiS3' : axis ? 'leFH18' : 'Howitzer105';
+  if (nat === 'GER') return year >= 1943 ? ['PanzerIV', 'PanzerIV', 'Tiger', 'StuG3'][n % 4] : year >= 1941 ? ['PanzerIV', 'StuG3', 'LightTank'][n % 3] : ['LightTank', 'PanzerIV'][n % 2];
+  if (nat === 'SOV') return year >= 1941 ? ['T34', 'T34', 'LightTank'][n % 3] : 'LightTank';
+  if (axis) return year >= 1943 && nat !== 'JAP' ? ['StuG3', 'LightTank'][n % 2] : 'LightTank';
+  return year >= 1942 ? ['Sherman', 'Sherman', 'LightTank'][n % 3] : 'LightTank';
+}
+
+/** The sky the header carries (the set piece's own shape): cloud cover 0..1 and its base, the place on the earth, the hour. */
+export interface LiveSky {
+  cover: number;
+  base: number;
+  kind: 'cumulus' | 'deck';
+  wind?: [number, number];
+  latLon?: [number, number];
+  hour?: number;
+}
+
+/**
+ * A campaign battle's sky where none is given: the campaign's weather over the place in its own words, varied a little by
+ * the ticket's seed (Brian, 20 November: the weather varies battle to battle, clear to overcast). Looks only.
+ */
+export function ticketSky(t: FieldTicket<LandPlace>): LiveSky {
+  const w = (t.weather ?? '').toLowerCase();
+  const lean = ((t.seed % 21) - 10) / 100;
+  const c = (x: number): number => Math.round(Math.min(1, Math.max(0, x + lean)) * 100) / 100;
+  if (w === 'rain') return { cover: c(0.85), base: 600, kind: 'deck', hour: 11 };
+  if (w === 'snow') return { cover: c(0.9), base: 500, kind: 'deck', hour: 11 };
+  if (w === 'mud') return { cover: c(0.7), base: 800, kind: 'deck', hour: 11 };
+  if (w === 'clear') return { cover: c(0.2), base: 1400, kind: 'cumulus', hour: 10 };
+  return { cover: c(0.45), base: 1000, kind: 'cumulus', hour: 10 };
 }
 
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
@@ -310,6 +362,8 @@ export class LiveBattle {
   readonly drill: Drill;
   readonly me: Side | null;
   private keeper = new LiveKeeper();
+  /** A campaign battle's sky (no set piece): as given, or drawn from its ticket. */
+  private readonly skyOf: LiveSky;
   private steppe: Steppe | null;
   private blocks: Record<string, unknown>[];
   private seen = new Set<number>();
@@ -324,6 +378,7 @@ export class LiveBattle {
 
   constructor(readonly ticket: FieldTicket<LandPlace>, readonly piece: SetPiece | null, opts: LiveOpts = {}) {
     this.me = opts.me ?? null;
+    this.skyOf = opts.sky ?? ticketSky(ticket);
     const sim = (this.sim = new LandBattle(ticket));
     this.steppe = piece?.open === 'steppe' ? openSteppe(sim.field, ticket.seed) : null;
     if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
@@ -353,6 +408,9 @@ export class LiveBattle {
       else if (a && u.kind === 'art' && !u.team) model = a.gun;
       // (the rules weigh a block as the model the set piece draws it with, so a Tiger on the screen fights as a Tiger)
       if (model) sim.vehicleIs(u.id, model);
+      // A campaign battle (no piece): the nearest model the 3D game has for the nation and year, looks only, so the
+      // battle stays the one the campaign priced (the fight never reads it).
+      else if (!piece && (u.kind === 'arm' || (u.kind === 'art' && !u.team))) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
@@ -370,7 +428,7 @@ export class LiveBattle {
     return {
       what: 'LIVE: a land battle fought as the 3D game shows it (src/battle/land/live.ts). The recording\'s shapes; the men, rounds, events, views and phases come in the deltas.',
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
-      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : {}),
+      ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
       sides: {
         att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}) },
         def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...(p ? { army: p.def.army, ...(p.def.standIn ? { standIn: p.def.standIn } : {}) } : {}) },
