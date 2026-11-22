@@ -5,7 +5,7 @@
 import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
 import { cardSeen, markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
-import { gunsAlone, homeAlarms } from '../danger';
+import { gunsAlone, homeAlarms, termsCard, warHome } from '../danger';
 import { monthCardHtml } from './monthview';
 import { footingCard, footingStrip } from './footingui';
 import { footingWord, type FootingId } from '../footing';
@@ -5284,6 +5284,13 @@ function staffsCard(): string {
     <footer><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
+/** How near a country with a row of terms is to asking for them: two lines under its bar, met or not yet, and no figure (ruling 196(h); sheet 25, box 5). */
+function termsRows(nat: string): string {
+  const t = termsCard(g, nat, g.human);
+  if (!t) return '';
+  return `<div class="will terms"><small class="termshead">${esc(t.label)}</small>${t.rows.map((r) => `<div class="termsrow${r.met ? ' met' : ''}"><span>${r.met ? '✓' : '○'} ${esc(r.text)}</span><i>${r.met ? 'MET' : 'NOT YET'}</i></div>`).join('')}${t.then ? `<div class="termsthen${nat === g.human ? ' own' : ''}">${esc(t.then)}</div>` : ''}</div>`;
+}
+
 function powersPane(): string {
   const act = lastAct(g);
   if (act?.on) return worldPane();
@@ -5305,7 +5312,7 @@ function powersPane(): string {
       const form = gv ? ` <button class="btn tiny" data-act="cabinet" data-nat="${n.id}" title="${esc(gv.form.name)}. ${esc(gv.form.blurb)}">${FORM_WORD[gv.form.id]}</button>` : '';
       // Its general staff: the character it has in this war, and its main effort where the player may know it.
       const staff = rivalStaff(g, n.id);
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}${footingWord(g, n.id) ? ` · ${esc(footingWord(g, n.id)!)}` : ''}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}${wp?.from === n.id ? `<div class="peaceask"><small>${esc(wp.row)}</small><button class="btn tiny" data-act="peaceterms">Terms ▸</button></div>` : ''}</div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}${footingWord(g, n.id) ? ` · ${esc(footingWord(g, n.id)!)}` : ''}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${termsRows(n.id)}${staff ? staffRow(staff) : ''}${wp?.from === n.id ? `<div class="peaceask"><small>${esc(wp.row)}</small><button class="btn tiny" data-act="peaceterms">Terms ▸</button></div>` : ''}</div>`;
     } else {
       const f = fallen.find((x) => x.nat === n.id);
       const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${theName(n.fellOn!.to)}` : `Asked ${theName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
@@ -5837,6 +5844,12 @@ function ashoreNote(cs: Corps[], target: Region): string {
   return s ? `<div class="note ashore${s.tone === 'lost' ? ' holdbad' : s.tone === 'even' ? ' holdamber' : ''}"><b>${esc(s.head)}</b> ${line}</div>` : '';
 }
 
+/** ONCE IT IS YOURS on the landing card: what holding the place brings (ruling 196: the war on Japan's home ground, where taking it makes that so). */
+function onceYours(target: Region): string {
+  const w = g.human ? warHome(g, g.human, target) : null;
+  return w ? `<h3>Once it is yours</h3><div class="sub onceyours"><b>${esc(w.key)}:</b> ${esc(w.text)} · (${esc(w.note)})</div>` : '';
+}
+
 function landingCard(): string {
   const m = ui.modal!;
   const target = g.regions[m.target];
@@ -5890,7 +5903,7 @@ function landingCard(): string {
       ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}${plan.hold ? holdTicket(plan.hold) : ''}`}
       ${a ? `<h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>` : ''}
       <h3>${air ? 'Going in' : 'Going ashore'}</h3>${cs.map((c) => `<div class="pickrow pick">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span></span></div>`).join('')}
-      <div class="note${h && !h.open ? (h.island ? ' holdamber' : ' holdbad') : h && h.contested ? ' holdamber' : ''}"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. ${h && !h.open && h.island ? `As things stand the enemy can close the ${sea} behind it. On an island the force can hold out for about ${numberWord(h.months)} months on what it carries: beat his fleets or bring more of your own ships and aircraft into that sea in that time.` : h && !h.open ? `As things stand the enemy can close the ${sea} behind it, and the troops would be cut off: beat his fleets or bring more of your own ships and aircraft into that sea first.` : h && h.contested ? `As things stand the ${sea} behind it is yours, but contested: the enemy can bring ships enough to fight you for it. More of your own ships and aircraft in that sea would make it safe.` : h ? `As things stand the enemy cannot close the ${sea} behind it.` : 'If your navy loses that sea, the troops are cut off.'}</div>${ashoreNote(cs, target)}`;
+      <div class="note${h && !h.open ? (h.island ? ' holdamber' : ' holdbad') : h && h.contested ? ' holdamber' : ''}"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. ${h && !h.open && h.island ? `As things stand the enemy can close the ${sea} behind it. On an island the force can hold out for about ${numberWord(h.months)} months on what it carries: beat his fleets or bring more of your own ships and aircraft into that sea in that time.` : h && !h.open ? `As things stand the enemy can close the ${sea} behind it, and the troops would be cut off: beat his fleets or bring more of your own ships and aircraft into that sea first.` : h && h.contested ? `As things stand the ${sea} behind it is yours, but contested: the enemy can bring ships enough to fight you for it. More of your own ships and aircraft in that sea would make it safe.` : h ? `As things stand the enemy cannot close the ${sea} behind it.` : 'If your navy loses that sea, the troops are cut off.'}</div>${onceYours(target)}${ashoreNote(cs, target)}`;
   }
   const fromAir = byAir(cs);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${fromAir ? 'Airborne assault' : 'Landing from the sea'} · ${date(g.turn)}</div><h2>${fromAir ? 'Assault on' : 'Landing at'} ${esc(target.name)}</h2></header>

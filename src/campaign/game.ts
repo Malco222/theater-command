@@ -2840,10 +2840,10 @@ export function checkCollapse(g: Game, nat: string, by: string): void {
   capitulate(g, nat, by);
 }
 
-/** The share of a nation's home country, by worth, that an enemy holds. */
-export function homeTaken(g: Game, nat: string): number {
+/** The share of a nation's home country, by worth, that an enemy holds. With `also`, as it would stand with that province taken too. */
+export function homeTaken(g: Game, nat: string, also?: Region): number {
   let vp = 0, taken = 0;
-  for (const r of g.regions) if (r.owner === nat && !r.overseas) { vp += r.vp; if (atWar(g, nat, r.ctrl)) taken += r.vp; }
+  for (const r of g.regions) if (r.owner === nat && !r.overseas) { vp += r.vp; if (r === also || atWar(g, nat, r.ctrl)) taken += r.vp; }
   return vp ? taken / vp : 0;
 }
 
@@ -2869,11 +2869,29 @@ export function checkTerms(g: Game, nat: string): boolean {
   const n = g.nations[nat];
   if (!n?.alive || n.capital < 0 || nat === g.human) return false;
   const t = termsOf(g, nat);
-  if (!t || !t.ground || !t.privation) return false;
+  if (!t) return false;
+  if (!t.ground || !t.privation) { termsNews(g, nat, t); return false; }
   const to = victorOf(g, nat);
   if (!to) return false;
   capitulate(g, nat, to, `${theName(n, true)} accepts terms and is out of the war.`);
   return true;
+}
+
+/**
+ * The news of the month each condition first holds with the other not yet (ruling 196, the planner's two lines; the
+ * UI director's sheet 25, box 5): said once each, under the country's own flag. The first carries its line for the
+ * month card, where the whole sentence is a letter or two too long for a row. The month both hold the news is a
+ * fall's, and none of this is said of a player's own country (checkTerms reads nothing for him).
+ */
+function termsNews(g: Game, nat: string, t: { ground: boolean; privation: boolean }): void {
+  const n = g.nations[nat], name = theName(n), Name = theName(n, true);
+  const once = (key: string, text: string, card?: string): void => {
+    if (g.flags[key]) return;
+    g.flags[key] = g.turn;
+    g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind: 'event', nat, ...(card ? { card } : {}) });
+  };
+  if (t.ground) once(`terms:ground:${nat}`, `The war has reached ${name}'s home ground. ${Name} asks for terms when its people can bear no more.`, `War has reached ${name}'s home ground.`);
+  if (t.privation) once(`terms:privation:${nat}`, `${Name}'s people can bear no more. It asks for terms once an enemy holds a part of its home ground.`);
 }
 
 /**

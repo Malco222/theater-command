@@ -750,6 +750,12 @@ export interface Headline {
   /** For a warning: the country the news is about, where that is not the player's own (display only: a band flies its flag). */
   about?: string;
   /**
+   * Its line on the month card, where the first sentence of the news is too long for a row there (display only: 'War
+   * has reached Japan's home ground.', the UI director's sheet 25). All reports and the newsreel keep the whole text.
+   * Among a country's news of the month it stands next after a fall.
+   */
+  card?: string;
+  /**
    * Two tags on news of fighting (Version 80; display only, no rule reads them). `arm` is the arm that did the
    * fighting: on land, at sea or from the air. `won` and `lost` are the nation that had the better of it and the one
    * that had the worse, where the news has a winner or a loser; either may be missing. An interface asks `newsSide`
