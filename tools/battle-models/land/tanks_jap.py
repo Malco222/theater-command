@@ -32,6 +32,9 @@ def type97(fine=True, tag="JAP"):
     """Type 97 medium tank: 5.5 m long, 2.33 m wide, 2.23 m high. The drive at the front; the engine behind under
     louvred doors, a silencer on each rear guard."""
     v = Works("Type97", "Type 97 medium tank", "tank", tag, fine)
+    # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.8, rim=True)
     v.root(hull_pivot=(0.0, 0.0, 0.68))
     hw, zg, zr = 0.70, 1.00, 1.44                  # half-width between the tracks; the guards; the roof
 

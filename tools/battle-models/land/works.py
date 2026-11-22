@@ -397,7 +397,8 @@ class Works(Shop, Gear, Fittings):
             self.m.weather = weather
         return self
 
-    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5, rim=False, disc=0.55, tyre=0.45, lie=0.24):
+    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5, rim=False, disc=0.55, tyre=0.45, lie=0.24,
+             shade_deep=None, ground=None):
         """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
         all there is). Dust, point by point, in the file's `dust` (`wear` stays paint chipped to the metal): thick on her running gear and the foot of her
         hull, thinning fast between `foot` and `top` (metres up) so that her upper plates stay her own paint, lying a
@@ -416,8 +417,11 @@ class Works(Shop, Gear, Fittings):
         And on `soot`, over what the exhaust and the worn edges already lay there: her paint a little uneven, plate by
         plate, as weeks of sun, rain and hands leave it. `cast(point, part)` says where she is a casting: a casting's
         skin is uneven in patches a foot or two across, lighter and darker, and sits a shade under the rolled plate.
-        Soft, all of it: no streak fine enough to read as wood grain. shade: the shadow in her creases too (`shaded`).
-        Call it after her last piece is on; plates must have been cut finer (`dice`) for it to show on them."""
+        Soft, all of it: no streak fine enough to read as wood grain. shade: the shadow in her creases too (`shaded`),
+        shade_deep how dark the deepest crease goes (1 - shade_deep; the E7 pass: 0.42, so 0.58), with the pass's knee, bounce and film. ground: her home ground
+        (GROUND_DIRT: field, desert, italy, steppe, winter): her dirt in its colour, and every ground's in the file's
+        `dust_by_ground`. Call it after her last piece is on; plates must have been cut finer (`dice`) for it to show on them."""
+        self._worn = True
         base = self.m.weather
         rs = random.Random(zlib.crc32((self.name + ":worn").encode()))
 
@@ -429,8 +433,9 @@ class Works(Shop, Gear, Fittings):
             return lambda p: 0.5 + 0.5 * sum(math.sin(k.dot(p) + ph) for k, ph in ws) / math.sqrt(n) * 1.25
         big, small, plates = field(0.9, 2.2), field(0.28, 0.6), field(1.4, 3.0)
         skin = field(0.45, 0.95, 6)
-        low_c, top_c = dirt_for(self.m.paints.get("upper", "565C3A"))
-        two = layers == 2
+        coat_hex = self.m.paints.get("upper", "565C3A")
+        low_c, top_c = ground_dirt(ground, coat_hex) if ground else dirt_for(coat_hex)
+        two = layers == 2 and (not ground or top_c != low_c)
         self.m.info["dust"] = colour or low_c
         file = self.m.info.setdefault("file", {})
         file["dust_colour"] = self.m.info["dust"]
@@ -445,6 +450,9 @@ class Works(Shop, Gear, Fittings):
             file["haze_colour"] = top_c
             file["dust_is"] += (" `haze` (0 to 100, where the mesh has it) is the thin pale dust lying on what looks up: after `dust`, take the "
                                 "point that far to `haze_colour`.")
+        if ground:
+            file["home_ground"] = ground
+            file["dust_by_ground"] = {"how": GROUND_DIRT_HOW, **{g: dict(zip(("dust_colour", "haze_colour"), ground_dirt(g, coat_hex))) for g in GROUND_DIRT}}
         for mk in self.m.marks:
             mk["dust"] = round(100 * marks * dust)
         takes = ("upper", "upper2", "upper3", "shade", "rubber", "canvas", "cloth", "wood", "steel", "leather", "rope", "rust")
@@ -510,16 +518,22 @@ class Works(Shop, Gear, Fittings):
             return w, max(s, min(0.38, g * grime)), (min(0.45, lying * dust) if two else 0.0), min(0.88, d * dust)
         self.m.weather = weather
         if shade:
-            self.shaded()
+            # (the E7 pass, shade_deep given: the creases to 1 - shade_deep, an open face left clear (knee), the ground's
+            # own light under her (bounce) and no film along a long plate or trail (film), so her lit side darkens by
+            # under the art director's 8%: 1.4 to 7.3% on the seven theatre vehicles built so far)
+            self.shaded(**({"deep": shade_deep, "knee": 0.3, "bounce": 0.4, "film": 0.3} if shade_deep is not None else {}))
         return self
 
-    def shaded(self, reach=0.5, deep=0.7, rays=20):
+    def shaded(self, reach=0.5, deep=0.7, rays=20, knee=0.0, bounce=1.0, film=0.0):
         """The shadow in her creases, point by point, in the file's `shade` (1 in the open, less where little of the
         sky is seen: between her road wheels, under her track guards, round the turret ring, under the gun's shield).
         The battle's light casts no such small shadows, so the file carries them: the game multiplies a point's colour
         by its `shade`. Worked out as she stands at rest, each point looking out over the half of the sky its facing
         sees, as far as `reach`. A part that goes round sees only itself, and every ring about its axle takes one even
-        shade, so nothing dark goes round with a wheel and wheels of one shape carry the same; a track's links take none."""
+        shade, so nothing dark goes round with a wheel and wheels of one shape carry the same; a track's links take none.
+        knee: how much of the sky may be shut before a point darkens at all (the E7 pass: an open face keeps 0.95 or
+        more, the shade gathers in the creases); bounce: what a ray stopped by the ground counts (the ground gives back
+        its own light: under 1, a face low by the ground is not darkened as a crease is). 0 and 1: as before."""
         m = self.m
 
         def bake(me, vpart):
@@ -550,6 +564,7 @@ class Works(Shop, Gear, Fittings):
                         at = {i: j for j, i in enumerate(ids)}
                         own[k] = BVHTree.FromPolygons([tuple(m.verts[i]) for i in ids], [tuple(at[i] for i in f) for f in fs])
             whole = tree
+            nf = len(m.faces)
             for i in range(nv):
                 if track[vpart[i]]:
                     continue
@@ -565,8 +580,19 @@ class Works(Shop, Gear, Fittings):
                 for a, b, c in dirs:
                     hit = tree.ray_cast(p, u * a + v * b + n * c, reach)
                     if hit[0] is not None:
-                        shut += 1.0 - 0.6 * hit[3] / reach
-                out[i] = 1.0 - deep * min(1.0, shut / rays * 1.15)
+                        shut += (1.0 - 0.6 * hit[3] / reach) * (bounce if tree is whole and hit[2] >= nf else 1.0)
+                occ = min(1.0, shut / rays * 1.15)
+                if knee > 0.0:
+                    occ = max(0.0, (occ - knee) / (1.0 - knee))
+                out[i] = 1.0 - deep * occ
+            if film > 0.0:                              # (no film: a point on a long edge dimmed the less)
+                longest = np.zeros(nv)
+                for e in me.edges:
+                    a, b = e.vertices
+                    d = (Vector(m.verts[a]) - Vector(m.verts[b])).length
+                    longest[a] = max(longest[a], d)
+                    longest[b] = max(longest[b], d)
+                out = 1.0 - (1.0 - out) * np.clip(film / np.maximum(longest, 1e-6), 0.0, 1.0)
             for k, part in enumerate(m.parts):          # (a part that goes round: every ring of it one even shade)
                 if part.kind == "spin" and part.axis is not None:
                     idx = np.nonzero(vpart == k)[0]
@@ -827,6 +853,54 @@ def _ramp(nt, fac, lo, hi, a=0.0, b=1.0):
 EARTH = "6F5F45"         # damp earth: the dirt from the ground up on a coat too near the road dust's own tone for dust to show on it
 HAZE = "B0AB9B"          # and the thin pale dust that lies on such a coat's upper faces: a grey haze, not more yellow
 DUST = "9A8A6A"          # the dust of the battle stage's road: what she carries unless the picture says other ground
+
+# The dirt of each ground, from the ground up (the art director's E7 surface pass, 22 Nov 17:55Z: "dirt rises from the
+# ground up in the ground's colour, as a by-ground setting"): (low, haze, other). Low is what she carries on her running
+# gear and the foot of her hull; haze is the thin dust lying on what looks up; other is the same ground in another tone,
+# for a coat too near the low one. Each is checked against her coat by the 9-step lightness rule (ground_dirt).
+GROUND_DIRT = {
+    "field": (DUST, HAZE, EARTH),                 # road dust, its grey haze, damp earth (France, the Low Countries, China's roads)
+    "desert": ("9C845C", "C2AA78", "7A6648"),     # sand packed low, pale on what looks up, darker sand
+    "italy": ("A09682", "C4BCA8", "857A66"),      # the pale Italian dust
+    "steppe": ("463C32", "9A9282", "6A5E4C"),     # black steppe earth low, a grey dust on top in the dry, brown earth
+    "winter": ("4E463C", "A9A9A3", "6E665A"),     # slush and mud
+}
+GROUND_DIRT_HOW = ("dust_by_ground: the dirt of each ground (field, desert, italy, steppe, winter), worked out for her build coat: on a field of "
+                   "that ground take `dust` toward its dust_colour and `haze` toward its haze_colour in place of the file's own. A paint "
+                   "swap's choice that names its own dust_colour and haze_colour (her desert coat) is already worked out for its ground.")
+
+
+def ground_dirt(ground, coat):
+    """(low, haze) of a ground's dirt on a coat, by the art director's rule: dirt must differ from the paint under it by
+    9 or more in lightness or it does not show. A low that is too near the coat takes the ground's other tone, then
+    its pale haze; a haze too near it is dropped for the low."""
+    low, top, other = GROUND_DIRT[ground]
+    c = lightness(coat)
+    for cand in (low, other, top):
+        if abs(lightness(cand) - c) >= 9.0:
+            low = cand
+            break
+    if abs(lightness(top) - c) < 9.0:
+        top = low
+    return low, top
+
+
+def choice_dirt(model, home=None):
+    """Gives each of a file's paint choices without its own dirt the dirt of the ground it is worn on: a choice the
+    desert rows name (swaps.paint.by_ground.desert) the desert's, the others her home ground's (none: left as they are)."""
+    sw = model.info.get("file", {}).get("swaps", {}).get("paint", {})
+    desert = {r.get("paint") for r in sw.get("by_ground", {}).get("desert", [])}
+    for key, ch in sw.get("choices", {}).items():
+        if "dust_colour" in ch:
+            continue
+        g = "desert" if key in desert else home
+        if not g:
+            continue
+        upper = ch.get("paints", {}).get("upper", model.paints.get("upper", "565C3A"))
+        low, top = ground_dirt(g, upper)
+        ch["dust_colour"] = low
+        if "haze_colour" in model.info.get("file", {}):
+            ch["haze_colour"] = top
 EDGE_DARK = 0.22         # how far a plate's cut-back edge goes dark where boots and hands rub it: in the file it rides on `soot`
 #                          (wear on an edge goes darker, never whiter: a pale line along every edge reads as chalk)
 COATS = ("upper", "upper2", "shade")

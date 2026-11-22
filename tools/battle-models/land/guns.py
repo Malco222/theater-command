@@ -787,6 +787,9 @@ def pounder25(fine=True, tag="UK"):
     """Ordnance QF 25-pounder: a box cradle as long as the barrel's jacket, lorry wheels standing on a round firing
     platform, a flat shield with its top bent back, a humped box trail."""
     v = GunWorks("25pdr", "25-pounder", "gun", tag, fine)
+    # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.6, rim=True)
     R, T, plat = 0.45, 1.78, 0.03
     v.gun_root(R + plat)
     for letter, s in SIDES:

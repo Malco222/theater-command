@@ -731,6 +731,9 @@ def su76(fine=True, tag="SOV"):
     open box over her back half, the gun a little left of her middle with a plate box over its recoil gear, the
     driver under a hood in the middle of her glacis. 4.97 m long, 2.72 m wide, 2.10 m high."""
     v = SpWorks("SU76", "SU-76", "tank", tag, fine, paints={"canvas.seat": "4A4638", "canvas.tarp": "5A5A40", "cloth.sack": "6A6448", "torn.mud": "4C402C", "torn.mud2": "3E3D29"})
+    # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="steppe", marks=0.3, gear=0.8, rim=True)
     v.root(hull_pivot=(0.0, 0.0, 0.70))
     hw, zg, zr, xr, th = 0.98, 1.00, 1.26, -2.45, 0.028     # half-width between the tracks; the guards; the roof ahead of the box; her tail
     gz = lambda x: 0.74 + (2.44 - x) * (zr - 0.74) / (2.44 - 0.95)       # noqa: E731  (the glacis: one plate from her nose to the roof)

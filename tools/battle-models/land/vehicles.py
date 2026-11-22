@@ -136,4 +136,10 @@ def build(name, fine=True, tag=None, whole=False, **choice):
     fn = BUILDERS[name]
     if whole:
         choice = {**WHOLE.get(name, {}), **choice}
-    return fn(fine, tag, **choice) if tag else fn(fine, **choice)
+    v = fn(fine, tag, **choice) if tag else fn(fine, **choice)
+    if getattr(v, "dice", None):
+        if not getattr(v, "_worn", False):          # (a gun has no tank clips to wear her: she is worn here, her last piece on)
+            v.worn(**getattr(v, "worn_kw", {}))
+        import works
+        works.choice_dirt(v.m, getattr(v, "worn_kw", {}).get("ground"))
+    return v

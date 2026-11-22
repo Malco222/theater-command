@@ -14,6 +14,9 @@ def pak40(fine=True, tag="GER", paint=None):
     wings sweep back over pressed-steel wheels on solid tyres, round trail legs. 1.25 m high. Dark grey when she
     came (1942), dark yellow from 1943: one model, a paint swap."""
     v = GunWorks("Pak40", "7.5 cm Pak 40", "gun", tag, fine, paint=GER_COATS[paint or "grey"][0])
+    # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.6, rim=True)
     R, T = 0.45, 1.62
     v.gun_root(R)
     for letter, s in SIDES:

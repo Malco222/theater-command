@@ -51,6 +51,9 @@ def matilda(fine=True, tag="UK"):
     """Matilda II: 5.6 m long, 2.59 m wide, 2.5 m high. The drive at the back, ten small steel wheels a side in
     five pairs behind an armoured skirt, a cast turret with the 2-pounder and a machine gun beside it."""
     v = Works("Matilda", "Matilda II", "tank", tag, fine)
+    # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", layers=2, marks=0.45, gear=0.8, rim=True, cast=lambda p, part: part == "turret" or (part == "hull" and p.x > 1.9))
     v.root(hull_pivot=(0.0, 0.0, 0.75))
     hw, zg, zr, ty, yo = 0.72, 1.18, 1.50, 1.05, 1.295       # the tub's half-width; the guards; the roof; the track's middle; the skirt's face
 

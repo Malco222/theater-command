@@ -20,6 +20,9 @@ def m13(fine=True, tag="ITA"):
     """M13/40: 4.9 m long, 2.2 m wide, 2.35 m high. The drive at the front, the engine behind under a deck with a
     silencer on each rear guard."""
     v = Works("M13", "Carro Armato M13/40", "tank", tag, fine)
+    # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="desert", layers=2, marks=0.45, gear=0.8, rim=True)
     v.root(hull_pivot=(0.0, 0.0, 0.68))
     hw, sw, zg, zr = 0.66, 1.02, 1.06, 1.76          # half-width between the tracks and of the crew's box; the guards; the roof
 

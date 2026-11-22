@@ -22,6 +22,9 @@ def char_b1(fine=True, tag="FRA"):
     """Char B1 bis: 6.3 m long, 2.5 m wide, 2.8 m high. The drive at the back, twelve small steel wheels a side
     behind the side plate, the track carried back along the top on rollers under a mudguard the length of her."""
     v = Works("CharB1", "Char B1 bis", "tank", tag, fine)
+    # (the E7 surface pass: shade from her shape, dirt of her ground; the art director, 22 Nov 17:55Z)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, shade_deep=0.42, ground="field", dust=0.5, grime=0.5, marks=0.3, gear=0.6, rim=True, cast=lambda p, part: part == "turret")
     v.root(hull_pivot=(0.0, 0.0, 0.9))
     hw, zr, ty, yp = 0.72, 1.90, 0.98, 1.21          # the hull's half-width; its roof; the track's middle; the side plate's face
 
