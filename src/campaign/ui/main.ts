@@ -2565,6 +2565,16 @@ function fleetFuelLine(card: FleetCard): string {
   return `<small class="sub fuel short" style="color:#e9c987"><b>Short of fuel:</b> ${F.less}% less fit for sea.</small><small class="sub fuel" style="color:var(--ink)">What helps: oil in stock at home, or a base beside a working oilfield of your own.</small>`;
 }
 
+/**
+ * The fleet tray's line on its harbour patrols (the far side; the design director's ruling of 19:52Z of 22 November
+ * 2026): a fleet laid for harbour keeps a share of its destroyers hunting submarines off its own port.
+ */
+function harbourPatrolLine(card: FleetCard): string {
+  if (!card.harbour) return '';
+  const share = card.harbour === 0.25 ? 'a quarter' : `${Math.round(card.harbour * 100)}%`;
+  return `<small class="sub" style="color:var(--ink)"><b>Harbour patrols:</b> ${share} of its destroyers hunt submarines ${esc(seaWhere(card.sea))} while it lies in port.</small>`;
+}
+
 /** The fleet tray's line on the boats out on patrol (the far side's one measure; the UI director's words of 22 November 2026). */
 function boatsOutWords(out: number, boats: number): string {
   if (boats === 1) return out >= 1 ? 'Its submarine is out on patrol' : 'Its submarine is not out on patrol';
@@ -2595,7 +2605,7 @@ function drawFleetTray(f: Fleet): void {
   const wingCol = card.wings.length || card.ashore.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}${card.ashore.map((w) => `<button class="ucard wingmini ashore" data-act="wing" data-id="${w.id}" title="${esc(`${w.name}: ordered ashore. It is an air group at ${w.at} until it is sent back aboard.`)}"><span class="utop">${planePlate(card.nat, w.kind)}<b>${esc(w.label)}</b><span class="shipn">${num(w.aircraft)}</span></span><span class="um">Ashore at ${esc(w.at)}</span><span class="tags"><span class="tag">Carrier wing</span></span></button>`).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
-  el.innerHTML = `<div class="thead">${head}${fleetFuelLine(card)}${card.sky ? `<small class="sub">${esc(card.sky)}</small>` : ''}${tally}${trayFold(card.ships, 'ship', 'ships')}${card.torpedoes && f.nat === g.human && f.stance === 'raid' ? `<small class="sub typed" style="font-family:'Courier Prime',monospace;color:var(--ink)">${esc(card.torpedoes)}</small>` : ''}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
+  el.innerHTML = `<div class="thead">${head}${fleetFuelLine(card)}${f.nat === g.human ? harbourPatrolLine(card) : ''}${card.sky ? `<small class="sub">${esc(card.sky)}</small>` : ''}${tally}${trayFold(card.ships, 'ship', 'ships')}${card.torpedoes && f.nat === g.human && f.stance === 'raid' ? `<small class="sub typed" style="font-family:'Courier Prime',monospace;color:var(--ink)">${esc(card.torpedoes)}</small>` : ''}${orders}</div><div class="cards${card.wings.length || card.ashore.length ? ' haswings' : ''}">${cards}</div>`;
   articled(el);
   el.classList.add('open');
   el.classList.toggle('slim', !ui.trayOpen);

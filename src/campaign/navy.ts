@@ -2641,9 +2641,21 @@ function placeFarBoats(g: Game, nat: string, B: Beats): void {
   });
 }
 
-/** How much of a fleet's hunting weight falls on a sea: all of it for a fleet sent there to hunt, part for an escort whose lane crosses it or a patrol there. */
+/**
+ * The far side (the design director's ruling of 19:52Z of 22 November 2026): a fleet laid for harbour, lying in it,
+ * keeps the patrol's share of its destroyers on the sea at its own door, as navies kept local patrols on their
+ * approaches. No fleet does with the far side off.
+ */
+export const harbourPatrol = (g: Game, f: Fleet): boolean => f.duty === 'port' && !atSea(f) && f.ships.dd > 0 && farOn(g);
+
+/**
+ * How much of a fleet's hunting weight falls on a sea: all of it for a fleet sent there to hunt, part for an escort
+ * whose lane crosses it or a patrol there (and, on the far side, for the harbour patrols of a fleet laid for harbour
+ * in the sea its port stands on).
+ */
 function huntShare(g: Game, f: Fleet, z: number): number {
   const H = FLEETS.hunt;
+  if (!atSea(f)) return f.home === z && harbourPatrol(g, f) ? H.loose : 0;
   if (f.stance === 'escort') {
     const rt = seaRoutes(g).find((r) => r.id === f.lane);
     return rt && rt.zones.includes(z) ? H.escort : f.zone === z ? H.loose : 0;
@@ -2653,13 +2665,16 @@ function huntShare(g: Game, f: Fleet, z: number): number {
 }
 
 /** What a nation's hunters are worth against the submarines in one sea: its destroyers and carriers there, and the aircraft on the coasts. */
-export function huntersIn(g: Game, nat: string, z: number): { weight: number; fleets: Fleet[] } {
+export function huntersIn(g: Game, nat: string, z: number, but?: Fleet): { weight: number; fleets: Fleet[] } {
   const H = FLEETS.hunt;
   let w = 0;
   const fleets: Fleet[] = [];
   for (const f of g.fleets) {
-    if (f.nat !== nat || !atSea(f)) continue;
-    const p = (f.ships.dd + f.ships.cv * H.carrier * deckWorth(g, f)) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
+    if (f.nat !== nat || f === but) continue;
+    // (A fleet in harbour sends its destroyers alone: its carriers' aircraft are not flown from the anchorage.)
+    const out = atSea(f);
+    if (!out && !harbourPatrol(g, f)) continue;
+    const p = (f.ships.dd + (out ? f.ships.cv * H.carrier * deckWorth(g, f) : 0)) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
     if (p > 0) { w += p; fleets.push(f); }
   }
   w += ownAirOver(g, z, nat) * H.air;
@@ -2732,10 +2747,14 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
       loseStars(f, 'dd', k);
     }
     if (look) look.cost = cost;
-    const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : h.fleets.length ? `The escorts of ${fleetName(h.fleets[0])}` : `${g.nations[nat].adj} aircraft`;
+    // (A fleet at sea is named before one whose harbour patrols alone were out: the far side's.)
+    const first = h.fleets.find(atSea) ?? h.fleets[0];
+    const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : first ? `${atSea(first) ? 'The escorts' : 'The harbour patrols'} of ${fleetName(first)}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
     const subsSunk = `${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'}`;
-    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} ${seaWhere(zone.name)}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk ${seaWhere(zone.name)}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
+    // (The harbour patrols' line counts one boat in words, the UI director's of 20:04Z; the older lines stand as they were.)
+    const sinks = groups.length || !first || atSea(first) || sunk !== 1 ? subsSunk : `a ${g.nations[quarry[0].nat].adj} submarine`;
+    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${sinks} ${seaWhere(zone.name)}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk ${seaWhere(zone.name)}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
   }
   return out;
 }
@@ -3741,7 +3760,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       const clear = (z: number): boolean => !(airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid) && !(f.struck && f.struck[2] === z && g.turn - f.struck[0] <= CARRIERS.ai.shy && carrierRules(g));
       const bare = FLEETS.ai.guard ? laneUnguarded(g, f, reach.filter(clear)) : null;
       if (bare && escort(g, f, bare.id)) continue;
-      const z = FLEETS.ai.hunt ? huntingGround(g, f, [...beat].filter((x) => reach.includes(x) && clear(x))) : -1;
+      // (The far side: it hunts wherever the enemy's boats are out within its reach, not on its own beat alone.)
+      const z = !FLEETS.ai.hunt ? -1 : farOn(g) ? huntingSea(g, f, reach.filter(clear)) : huntingGround(g, f, [...beat].filter((x) => reach.includes(x) && clear(x)));
       if (z >= 0 && sail(g, f, z, 'hunt')) continue;
     }
     if (best < 0 || !sail(g, f, best, 'patrol')) home();
@@ -3783,6 +3803,36 @@ function huntingGround(g: Game, f: Fleet, seas: number[]): number {
       subs += boatsOut(g, x);
     }
     if (subs > most) { most = subs; best = z; }
+  }
+  return best;
+}
+
+/**
+ * The far side's hunting ground (the design director's ruling of 19:52Z of 22 November 2026). Each month a staff at
+ * war has the seas where the enemy's boats are out, and its fleets with destroyers and nothing better to do hunt
+ * there wherever they can reach and live, not on their own beat alone. They are sent one at a time, each to the sea
+ * where its own hunters would sink the most boats by the hunt's rule, counting the hunters of its side already
+ * there: so many boats draw it, and hunters enough already there send it on to the next sea. A sea where enemy
+ * surface ships are out is no hunting ground. Any fleet the hunt counts as a hunter goes, its carriers' aircraft as
+ * its destroyers (the director's 20:03Z): a fleet with neither has no hunting ground.
+ */
+export function huntingSea(g: Game, f: Fleet, seas: number[]): number {
+  const H = FLEETS.hunt;
+  const mine = (f.ships.dd + f.ships.cv * H.carrier * deckWorth(g, f)) * H.hunter * quality(g, f.nat) * fit(g, f) * techMul(g, f.nat, 'radar');
+  if (!(mine > 0)) return -1;
+  let best = -1, most = 0;
+  for (const z of seas) {
+    let subs = 0, surface = false;
+    for (const x of g.fleets) {
+      if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
+      if (surfaceShips(x) > 0) { surface = true; break; }
+      subs += boatsOut(g, x);
+    }
+    if (surface || subs <= 0) continue;
+    let there = 0;
+    for (const nat of Object.keys(g.nations)) if (nat === f.nat || allied(g, nat, f.nat)) there += huntersIn(g, nat, z, f).weight;
+    const gain = subs * (huntShareSunk(there + mine, subs) - huntShareSunk(there, subs));
+    if (gain > most) { most = gain; best = z; }
   }
   return best;
 }

@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, fuelLine, torpedoWords, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, fuelLine, torpedoWords, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, harbourPatrol, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -75,6 +75,8 @@ export interface FleetCard {
   fuel?: { kind: 'wells'; field: string } | { kind: 'short'; less: number };
   /** Faulty torpedoes (sheet 24, box 3): the sentence for a fleet whose boats raid at a share of their worth, shown to its own side. `torpedoWords`. */
   torpedoes?: string;
+  /** The far side's harbour patrols: the share of its destroyers that hunt submarines in the sea off its port while a fleet laid for harbour lies there. `harbourPatrol`. */
+  harbour?: number;
   /** One card for each class it has ships of, heaviest first. */
   cards: ShipCard[];
   /** The weight of its guns against a coast, its worth with a convoy, and its weight hunting submarines. */
@@ -130,6 +132,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     ready: f.ready, power: fleetPower(g, f), ships: shipCount(f.ships),
     ...(atSea(f) && f.ships.ss > 0 && patrolRow(g, f) ? { boatsOut: Math.round(boatsOut(g, f)) } : {}),
     ...(fuelLine(g, f) ? { fuel: fuelLine(g, f)! } : {}),
+    ...(seaWar(g) && harbourPatrol(g, f) ? { harbour: FLEETS.hunt.loose } : {}),
     ...(f.ships.ss > 0 && f.zone >= FAR_SEAS_FIRST && torpedoWords(g, f.nat, 'these boats') ? { torpedoes: torpedoWords(g, f.nat, 'these boats')! } : {}),
     cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => {
       const card: ShipCard = { cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] };
