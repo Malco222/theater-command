@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 78ac5167 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3ab493f5 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -49362,9 +49362,11 @@
     V.alive = false;
     V.fellOn = { turn: g2.turn, week: g2.week, to: "FRA", how: "annexed" };
     recordFall(g2, "VIC", "FRA", "annexed");
+    const turned = /* @__PURE__ */ new Set();
     for (const c of g2.corps) if (c.nat === "VIC" && !c.dead) {
       c.nat = "FRA";
       c.hold = false;
+      turned.add(c.reg);
     }
     fleetsOnFall(g2, "VIC");
     airOnFall(g2, "VIC");
@@ -49379,9 +49381,26 @@
     for (const n of Object.values(g2.nations)) n.atWar = n.atWar.filter((e) => e !== "VIC");
     V.atWar = [];
     handBack(g2, F);
+    partFoes(g2, turned);
     g2.supplyDirty = true;
     const G5 = g2.nations.GER;
     headline(g2, "event", `The government at Vichy is no more. ${G5 && !G5.alive ? `With ${theName(G5)} beaten, its` : "France is free again in Paris, and its"} ground at home and overseas is France's again, and its troops answer to France.`, "FRA", F.capital, { arm: "land", won: "FRA" });
+  }
+  function partFoes(g2, regions) {
+    for (const id of [...regions].sort((a, b) => a - b)) {
+      const r = g2.regions[id];
+      if (!r.units.some((a) => r.units.some((b) => atWar(g2, a.nat, b.nat)))) continue;
+      const out = r.units.filter((c) => !c.dead && !allied(g2, c.nat, r.ctrl));
+      const to = /* @__PURE__ */ new Set();
+      for (const c of out) {
+        const back = retreatTarget(g2, c, r, /* @__PURE__ */ new Set());
+        if (back) relocate(g2, c, back);
+        else sendHome(g2, c);
+        c.ap = 0;
+        if (!c.dead && c.reg !== r.id) to.add(g2.regions[c.reg].name);
+      }
+      if (out.length && to.size) headline(g2, "event", `With Vichy gone, ${g2.nations[out[0].nat].adj} troops leave ${r.name} for ${[...to].join(" and ")}: the ground is ${theName(g2.nations[r.ctrl])}'s.`, out[0].nat, r.id, { arm: "land" });
+    }
   }
 
   // ../../src/campaign/facing.ts
