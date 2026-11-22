@@ -200,7 +200,7 @@ static void TestWords()
 	// (a band's item that found no band is a row with its band's word and no other side: its news is its sentence)
 	CHECK(RowLine("Germany", "WAR", "", "", "Germany declares war on Poland.") == "Germany WAR: Germany declares war on Poland.");
 	CHECK(EightWords(RowLine("Germany", "WAR", "", "", "Germany declares war on Poland.")) == "Germany WAR: Germany declares war on Poland.");
-	CHECK(EightWords(RowLine("Coast watch", "WARNING", "", "", "Italy masses troops on the Yugoslav border.")) == "Coast watch WARNING: Italy masses troops on the");
+	CHECK(EightWords(RowLine("Coast watch", "WARNING", "", "", "Italy masses troops on the Yugoslav border.")) == "Coast watch WARNING: Italy masses troops");
 	// (a sea or air row never names the other side with a join word: SUNK, HIT, BLOCKED, MISSED)
 	CHECK(EightWords(RowLine("North Sea", "SUNK", "", "", "A U-boat sinks two transports.")) == "North Sea SUNK: A U-boat sinks two transports.");
 	CHECK(EightWords(RowLine("Ruhr", "HIT", "", "", "Our bombers hit the Ruhr's works, and three are lost.")) == "Ruhr HIT: Our bombers hit the Ruhr's works");
@@ -212,12 +212,12 @@ static void TestWords()
 	CHECK(EightWords("") .empty() && EightWords("   ").empty());
 	CHECK(EightWords("one two three four five six seven eight") == "one two three four five six seven eight");
 	CHECK(EightWords("one two three four five six seven eight nine ten") == "one two three four five six seven eight");
-	CHECK(EightWords("Paris falls, and the French government leaves for Bordeaux tonight") == "Paris falls, and the French government leaves for");
+	CHECK(EightWords("Paris falls, and the French government leaves for Bordeaux tonight") == "Paris falls, and the French government leaves");
 	CHECK(EightWords("The siege of Leningrad tightens, and the last road across the lake is shelled") == "The siege of Leningrad tightens");
 	CHECK(EightWords("one two three four five six seven, eight nine") == "one two three four five six seven");
 	CHECK(EightWords("one, two three four five six seven eight nine") == "one, two three four five six seven eight");
 	CHECK(EightWords("one two three four five six seven \xE2\x80\x94 eight nine") == "one two three four five six seven");
-	CHECK(EightWords("Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack from the west today") == "Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack from");
+	CHECK(EightWords("Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack from the west today") == "Wroc\xC5\x82" "aw and \xC5\x81\xC3\xB3" "d\xC5\xBA hold against the attack");
 	CHECK(EightWords("a b c", 2) == "a b" && EightWords("a b c", 0) == "a");
 }
 
@@ -1714,6 +1714,173 @@ static void TestFold()
 	}
 }
 
+namespace
+{
+	/** The test's own list of the joining and small words a cut never ends on, kept apart from EdgeSeals' own. */
+	bool IsSmall(std::string Word)
+	{
+		while (!Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'))
+		{
+			Word.pop_back();
+		}
+		for (char& Letter : Word)
+		{
+			Letter = Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+		}
+		for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their" })
+		{
+			if (Word == Small)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A line's words, split at spaces. */
+	std::vector<std::string> WordsOf(const std::string& Line)
+	{
+		std::vector<std::string> Out;
+		size_t At = 0;
+		while (At < Line.size())
+		{
+			while (At < Line.size() && Line[At] == ' ')
+			{
+				++At;
+			}
+			const size_t Start = At;
+			while (At < Line.size() && Line[At] != ' ')
+			{
+				++At;
+			}
+			if (At > Start)
+			{
+				Out.push_back(Line.substr(Start, At - Start));
+			}
+		}
+		return Out;
+	}
+}
+
+/**
+ * The eight-word cut never ends on a joining or small word (at, in, on, of, to, by, for, from, with, and, or, the, a,
+ * an, its, his, her, their): it steps back to the last word that says something. A seal's own words and a folded
+ * seal's first item's words alike ("The Baltic Fleet shells the Finnish troops at, and 2 more" was 0010's), over the
+ * 48 real months, every cut's last word shown.
+ */
+static void TestCuts()
+{
+	// Each small word, in any case and with a stop after it, as the eighth word: the cut steps back to the seventh.
+	bool bBack = true;
+	for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their" })
+	{
+		const std::string Lower(Small);
+		std::string Upper = Lower;
+		Upper[0] = static_cast<char>(Upper[0] - 'a' + 'A');
+		bBack = bBack && EightWords("one two three four five six seven " + Lower + " nine ten") == "one two three four five six seven";
+		bBack = bBack && EightWords("one two three four five six seven " + Upper + " nine ten") == "one two three four five six seven";
+		bBack = bBack && EightWords("one two three four five six seven " + Lower + ", nine ten") == "one two three four five six seven";
+	}
+	CHECK(bBack);
+	// (a word that only starts or ends like one is a word that says something)
+	CHECK(EightWords("one two three four five six seven another nine") == "one two three four five six seven another");
+	CHECK(EightWords("one two three four five six seven theirs nine") == "one two three four five six seven theirs");
+	CHECK(EightWords("one two three four five six seven Inn nine") == "one two three four five six seven Inn");
+	CHECK(EightWords("one two three four five six seven forth nine") == "one two three four five six seven forth");
+	// (several in a row, and a dash among them, all go; a stop the cut then ends on is dropped, as at any cut)
+	CHECK(EightWords("one two three four five six of the nine ten") == "one two three four five six");
+	CHECK(EightWords("one two three four five six \xE2\x80\x94 of nine ten") == "one two three four five six");
+	CHECK(EightWords("one two three four five six, and the nine ten") == "one two three four five six");
+	// (a line that is not cut keeps its own last word, whatever it is; nor does a line of nothing else lose its first)
+	CHECK(EightWords("The siege is lifted at last and") == "The siege is lifted at last and");
+	CHECK(EightWords("of the a an in on at to by", 8) == "of" && EightWords("a b c", 2) == "a b" && EightWords("a b c", 0) == "a");
+	// 0010's own: elsewhere's first item, and a run of three of them. (The cuts TestWords holds that ended on a small
+	// word, "troops on the", "leaves for", "the attack from", now end a word or two sooner.)
+	const std::string Baltic = "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland.";
+	CHECK(EightWords(Baltic) == "The Baltic Fleet shells the Finnish troops");
+	{
+		std::vector<FSaid> Said;
+		Said.push_back(PlainSaid(ESection::Elsewhere, Baltic));
+		Said.push_back(PlainSaid(ESection::Elsewhere, "Hungary joins the Axis."));
+		Said.push_back(PlainSaid(ESection::Elsewhere, "Romania joins the Axis."));
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops, and 2 more elsewhere in the war");
+	}
+
+	// Over the 48 real months: every item's own words, and every folded seal's first item's words, cut or not; every
+	// cut's last word is one that says something, and the cut is the line's own first words.
+	const std::vector<FMonth> Months = ReadMonths();
+	std::vector<FAlikeRun> Runs;
+	std::vector<std::pair<std::string, int>> Last;
+	int Items = 0, Cuts = 0, Bad = 0, Short = 0, FoldCuts = 0, FoldBad = 0;
+	std::string FirstBad, FoldLast;
+	for (const FMonth& Month : Months)
+	{
+		for (const FSaid& Said : Month.Said)
+		{
+			++Items;
+			const std::string Cut = EightWords(Said.Line);
+			const std::vector<std::string> Whole = WordsOf(Said.Line), Kept = WordsOf(Cut);
+			if (Kept.size() >= Whole.size())
+			{
+				continue;
+			}
+			++Cuts;
+			std::string End = Kept.empty() ? std::string() : Kept.back();
+			while (!End.empty() && (End.back() == ',' || End.back() == ';' || End.back() == ':'))
+			{
+				End.pop_back();
+			}
+			const bool bOwn = Said.Line.compare(0, Cut.size(), Cut) == 0;
+			if (Kept.empty() || IsSmall(End) || !bOwn)
+			{
+				++Bad;
+				FirstBad = FirstBad.empty() ? Cut : FirstBad;
+			}
+			Short += Kept.size() < 4 ? 1 : 0;
+			auto Found = std::find_if(Last.begin(), Last.end(), [&End](const std::pair<std::string, int>& Each) { return Each.first == End; });
+			if (Found == Last.end())
+			{
+				Last.emplace_back(End, 1);
+			}
+			else
+			{
+				++Found->second;
+			}
+		}
+		// (a folded seal that gives its first item's words: what stands before ", and N more")
+		FoldAlike(Month.Looks, Runs);
+		for (const FAlikeRun& Run : Runs)
+		{
+			const std::string Words = FoldWords(Month.Said, Run);
+			const size_t And = Words.rfind(", and "); // (the last: the first item's own words may hold one)
+			const FSaid& First = Month.Said[static_cast<size_t>(Run.First)];
+			if (Run.Count < 2 || And == std::string::npos || WordsOf(EightWords(First.Line)).size() >= WordsOf(First.Line).size())
+			{
+				continue;
+			}
+			++FoldCuts;
+			const std::vector<std::string> Kept = WordsOf(Words.substr(0, And));
+			const std::string End = Kept.empty() ? std::string() : Kept.back();
+			FoldBad += Kept.empty() || IsSmall(End) ? 1 : 0;
+			FoldLast += (FoldLast.empty() ? "" : "; ") + Words.substr(0, And) + " [" + End + "]";
+		}
+	}
+	CHECK(Months.size() == 48 && Cuts >= 40 && Bad == 0 && Short == 0);
+	CHECK(FoldCuts >= 1 && FoldBad == 0);
+	if (Bad > 0)
+	{
+		std::printf("  first: %s\n", FirstBad.c_str());
+	}
+	std::sort(Last.begin(), Last.end(), [](const std::pair<std::string, int>& A, const std::pair<std::string, int>& B) { return A.second != B.second ? A.second > B.second : A.first < B.first; });
+	std::string Shown;
+	for (const std::pair<std::string, int>& Each : Last)
+	{
+		Shown += (Shown.empty() ? "" : ", ") + Each.first + (Each.second > 1 ? " x" + std::to_string(Each.second) : std::string());
+	}
+	std::printf("(the real months' eight words: %d of %d items cut, %d ending on a small word; every cut's last word: %s)\n", Cuts, Items, Bad, Shown.c_str());
+	std::printf("(the real months' folded seals that give their first item's words cut: %d, %d ending on a small word: %s)\n", FoldCuts, FoldBad, FoldLast.c_str());
+}
+
 /** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
 static void TestSealLook()
 {
@@ -2775,6 +2942,7 @@ int main(int ArgCount, char** Args)
 	TestSealAsk();
 	TestSwords();
 	TestFold();
+	TestCuts();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

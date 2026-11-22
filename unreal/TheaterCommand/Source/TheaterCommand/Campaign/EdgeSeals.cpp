@@ -25,6 +25,36 @@ namespace EdgeSeals
 			return Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94";
 		}
 
+		/**
+		 * A joining or small word (at, in, on, of, to, by, for, from, with, and, or, the, a, an, its, his, her, their), in
+		 * any case, with any stop or full stop after it: no word to end a cut line on ("the Finnish troops at").
+		 */
+		bool IsSmallWord(const std::string& Text, size_t Start, size_t End)
+		{
+			while (End > Start && (IsStop(Text[End - 1]) || Text[End - 1] == '.'))
+			{
+				--End;
+			}
+			if (End == Start || End - Start > 5)
+			{
+				return false;
+			}
+			std::string Word;
+			for (size_t At = Start; At < End; ++At)
+			{
+				const char Letter = Text[At];
+				Word += Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+			}
+			for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their" })
+			{
+				if (Word == Small)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
 		double ClampTo(double Value, double Low, double High)
 		{
 			return Value < Low ? Low : Value > High ? High : Value;
@@ -237,8 +267,8 @@ namespace EdgeSeals
 					break;
 				}
 			}
-			// (a lone dash is no word to end on)
-			while (Kept > 1 && IsDashWord(Text, Words[Kept - 1].first, Words[Kept - 1].second))
+			// (a lone dash is no word to end on, nor a joining or small word: back to the last word that says something)
+			while (Kept > 1 && (IsDashWord(Text, Words[Kept - 1].first, Words[Kept - 1].second) || IsSmallWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)))
 			{
 				--Kept;
 			}

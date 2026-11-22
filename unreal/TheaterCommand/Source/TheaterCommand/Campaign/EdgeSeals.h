@@ -182,7 +182,11 @@ namespace EdgeSeals
 	 * The row's eight words, for the pointer on its seal: the line whole where it has no more than Most words, else cut
 	 * at a whole word, at the last comma, colon or semicolon that leaves at least half of them where there is one. No
 	 * dots are added (the UI director's review of build 1628: nothing is cut with three dots), and no stop is left
-	 * hanging at the cut. UTF-8 in and out: only spaces and the ASCII stops are read, so a name is never split.
+	 * hanging at the cut. Nor does a cut end on a lone dash or on a joining or small word (at, in, on, of, to, by, for,
+	 * from, with, and, or, the, a, an, its, his, her, their): it steps back to the last word that says something, so
+	 * that neither a seal's words nor a folded seal's first words stop short ("the Finnish troops at, and 2 more"). A
+	 * line that is not cut keeps its own last word. UTF-8 in and out: only spaces and the ASCII stops are read, so a
+	 * name is never split.
 	 */
 	std::string EightWords(const std::string& Text, int Most = 8);
 
