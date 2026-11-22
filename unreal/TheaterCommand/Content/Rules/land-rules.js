@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 5e37ed2f 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of cb03928e 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2334,6 +2334,11 @@
     return parts;
   }
   var BRIGADES = ["UK", "CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
+  function kindWord(nat, k) {
+    if (k === "arm") return nat === "USA" ? "Armored" : "Armoured";
+    if (k === "mot") return BRIGADES.includes(nat) ? "Motor" : nat === "POL" ? "Motorised" : "Motorized";
+    return KIND_WORD[k];
+  }
   function regimentWord(nat, kind, n, i, ym) {
     const o = ORD(n);
     if (kind === "arm") {
@@ -2343,7 +2348,7 @@
       if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
       return `${o} Tank Regiment`;
     }
-    const arm = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? "Motorized" : kind === "eng" ? "Engineer" : "Infantry";
+    const arm = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? kindWord(nat, "mot") : kind === "eng" ? "Engineer" : "Infantry";
     if (BRIGADES.includes(nat)) return `${o} ${arm} Brigade`;
     if (nat === "GER") {
       const late = ym >= 1942 * 12 + 10;
@@ -2365,7 +2370,7 @@
         const u = units[j++];
         if (!u || p.regiment === void 0 || team) continue;
         const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
-        const full = div?.name ?? `${ORD(no)} ${KIND_WORD[k]} Division`, short = div?.short ?? `${ORD(no)} ${KIND_WORD[k]}`;
+        const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k)}`;
         const lead = /^(\d+)/.exec(full)?.[1];
         const n = lead ? (Number(lead) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
         u.short = regimentWord(u.nat, k, n, p.regiment, ym);
@@ -2385,8 +2390,8 @@
         const own = f.divisions?.[d];
         const no = (f.first ?? 1) + d;
         return {
-          name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${KIND_WORD[k]} Division`),
-          short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD(no)} ${KIND_WORD[k]}`),
+          name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k)} Division`),
+          short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD(no)} ${kindWord(f.nat, k)}`),
           str: own?.str ?? f.str,
           xp: own?.xp ?? f.xp,
           men: own?.men ?? f.men / n
