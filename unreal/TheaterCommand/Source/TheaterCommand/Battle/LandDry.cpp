@@ -746,6 +746,7 @@ namespace LandScape
 			int Fx(const std::string& Ground, int Else) const override
 			{
 				if (Ground == "sand" || Ground == "desert") return 5;
+				if (Ground == "rough" || Ground == "rock") return 7; // (the stony rises: rock)
 				return Else == 4 && !bWinter ? 0 : Else; // (no mud on the summer steppe)
 			}
 			const char* Earth() const override { return bSandy ? "sand" : "loam"; }

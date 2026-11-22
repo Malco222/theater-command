@@ -251,7 +251,7 @@ namespace LandScape
 				if (C == 0) return Organic(X, Y, 55.0, Seed ^ 0xE01);
 				if (C == 5) return Organic(X, Y, 24.0, Seed ^ 0xE09);
 				if (C == 6) return Organic(X, Y, 62.0, Seed ^ 0xE0A);
-				if (bIsland) return C == 1 ? Organic(X, Y, 22.0, Seed ^ 0xE02) : C == 2 ? Organic(X, Y, 70.0, Seed ^ 0xE03) : C == 3 ? Organic(X, Y, 26.0, Seed ^ 0xE04) : 0.0;
+				if (bIsland) return C == 1 ? Organic(X, Y, 22.0, Seed ^ 0xE02) : C == 2 ? Organic(X, Y, 70.0, Seed ^ 0xE03) : C == 3 ? Organic(X, Y, 26.0, Seed ^ 0xE04) : Organic(X, Y, 150.0, Seed ^ 0xC1D);
 				return C == 1 ? Organic(X, Y, 28.0, Seed ^ 0xE05) : C == 2 ? Organic(X, Y, 42.0, Seed ^ 0xE06) : C == 3 ? Organic(X, Y, 80.0, Seed ^ 0xE07) : Organic(X, Y, 220.0, Seed ^ 0xE08);
 			}
 			/** The ground's own breakup at 5-40 m, carried by its colour where the clutter has dropped out (the general's
@@ -301,6 +301,8 @@ namespace LandScape
 				const double Mask = Smooth(-0.15, 0.0, Read(X, Y, 4));
 				return Mask > 0.0 ? Mask * Smooth(1.4, 0.5, 75.0 * std::fabs(Read(X, Y, 3))) : 0.0;
 			}
+			/** An island's groves: 1 inside one, 0 on the open sand between them (some four in ten of the grove's land). */
+			double GroveAt(double X, double Y) const { return Smooth(-0.12, 0.08, Read(X, Y, 4)); }
 			double BurnAt(double X, double Y) const { return Smooth(0.66, 0.76, Read(X, Y, 2) + 0.6 * Read(X, Y, 4)); } // (some 3 in 100, in a few areas)
 
 			// ------------------------------------------------------------------ the land
@@ -425,7 +427,8 @@ namespace LandScape
 			{
 				// red laterite (yellow-brown clay in Papua), redder and yellower along it: the ruts wet and dark, water
 				// standing in them and across the floor in its low places; grass on the hump between the ruts here and
-				// there, creeping in over its broken edges, the verge
+				// there; its broken edge fraying straight into the kunai round it (no verge of its own: from above two green
+				// stripes read as a race track)
 				const double Off = std::fabs(S.Lane + S.LaneHalf);
 				const Tone Earth = bClay ? Mixed(Rgb(146, 112, 66), Rgb(162, 132, 86), Clamp01(0.5 + 0.7 * S.N1)) : Mixed(Rgb(155, 89, 54), Rgb(166, 112, 68), Clamp01(0.4 + 0.7 * S.N1));
 				const Tone Wet = bClay ? Rgb(106, 84, 52) : Rgb(108, 62, 42);
@@ -435,9 +438,10 @@ namespace LandScape
 				const double Pool = std::max(Rut * Smooth(0.0, 0.3, S.N2 + 0.25 * (1.0 - Dry)), Smooth(0.38, 0.52, S.N1 - 0.25 * Dry) * Smooth(0.4, 0.0, S.N2));
 				T = Mixed(T, Water, 0.9 * Pool);
 				const double OnHump = 0.75 * Smooth(0.5, 0.2, Off) * Smooth(0.0, 0.35, Hump(S.X, S.Y));
-				const double Edge = Smooth(-0.9, 0.15, S.Lane + 0.8 * Rag(S.X, S.Y));
-				T = Mixed(T, Varied(Grass, 1.0 + 0.1 * S.N2, 0.0), std::max(OnHump, Edge) * (1.0 - Pool));
-				return Varied(T, 1.0 + 0.06 * S.N2, 0.0);
+				T = Mixed(T, Varied(Mixed(Grass, Rgb(140, 132, 80), 0.4), 1.0 + 0.1 * S.N2, 0.0), OnHump * (1.0 - Pool));
+				T = Varied(T, 1.0 + 0.06 * S.N2, 0.0);
+				const double Edge = Smooth(-0.9, 0.15, S.Lane + 1.3 * Rag(S.X, S.Y));
+				return Mixed(T, KunaiGround(S), Edge);
 			}
 
 			Tone JungleGround(const Spot& S, int C) const
@@ -572,7 +576,7 @@ namespace LandScape
 				const double In = Inward(S);
 				if (C == Strand) return Floor(S, Lerp(1.0, 0.45, In), Lerp(1.0, 0.4, In), Lerp(1.0, 1.3, In));
 				if (C == Plantation) return Floor(S, Lerp(1.0, 1.15, In), Lerp(1.0, 0.8, In), 1.0);
-				return Floor(S, 1.0, 1.0, 1.0);
+				return Floor(S, 1.0, 0.2 + 0.8 * GroveAt(S.X, S.Y), 1.0); // (the litter under the groves, the sand between them clean)
 				}
 
 				/** An island's sand under its palms: whiter on the dry crests, greyer in the low bands, darker in drifts of frond
@@ -582,9 +586,9 @@ namespace LandScape
 					const double Crest = Read(S.X, S.Y, 2), Drift = Read(S.X, S.Y, 1), Lit_ = Read(S.X, S.Y, 3);
 					Tone T = Mixed(Rgb(212, 202, 174), Rgb(238, 232, 212), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)));
 					T = Mixed(T, Rgb(178, 172, 150), 0.6 * Smooth(-0.1, -0.4, Crest));
-					T = Breakup(T, S.X, S.Y, 0.85);
+					T = Breakup(T, S.X, S.Y, 0.6);
 					const double Fine = Read(S.X, S.Y, 5);
-					T = Mixed(T, Mixed(Rgb(140, 120, 90), Rgb(108, 94, 72), Clamp01(0.5 + 0.8 * Fine)), Clamp01(0.75 * Litter * Smooth(-0.35, 0.4, Lit_)));
+					T = Mixed(T, Mixed(Rgb(158, 140, 108), Rgb(132, 116, 90), Clamp01(0.5 + 0.8 * Fine)), Clamp01(0.6 * Litter * Smooth(-0.35, 0.4, Lit_)));
 					const double Green = Clamp01(Cover * Smooth(0.2, 0.42, Drift));
 					T = Mixed(T, Mixed(Rgb(112, 130, 62), Rgb(150, 154, 96), Clamp01(0.5 - 0.9 * Fine)), 0.6 * Green);
 					return Varied(T, 1.0 + 0.03 * S.Broad, 0.0);
@@ -653,8 +657,8 @@ namespace LandScape
 				case KLane:
 				{
 					// (grass over the track's broken edges and on its hump, the kunai tall on the verge)
-					const double Edge = S.Lane + 0.8 * Rag(S.X, S.Y);
-					if (Edge > 1.2) return Pick < 0.55 ? Grown{ B::Clut4, 0.9 } : Grown{ B::Clut0, 0.6 };
+					const double Edge = S.Lane + 1.3 * Rag(S.X, S.Y);
+					if (Edge > 0.6) return KunaiGrow(S, Pick);
 					if (Edge > -0.35) return Grown{ B::Clut4, 1.0 };
 					if (std::fabs(S.Lane + S.LaneHalf) < 0.35 && Hump(S.X, S.Y) > 0.12) return Grown{ B::Clut4, 0.7 };
 					return G;
@@ -1410,13 +1414,13 @@ namespace LandScape
 													   Foot + Out * ((Lean + Bend) * High) + V3{ 0, 0, (0.95 - Bend) * High } };
 						const Tone Tip = Mixed(Rgb(160, 152, 104), Rgb(140, 142, 90), Green);
 						// (lit as from above and a little outward, as a thin blade turned from the sun draws near black)
-						Ribbon(W, Line, { 0.022, 0.018, 0.012, 0.0 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(100, 102, 64), Tip, 1.8);
+						Ribbon(W, Line, { 0.022, 0.018, 0.012, 0.0 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 144, 96), Tip, 1.8); // (pale at the foot as kunai is, never a dark reed)
 					}
 					{
 						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.3, 1.5);
 						const V3 Out{ std::cos(A), std::sin(A), 0.0 };
 						const V3 Top = Out * 0.12 + V3{ 0, 0, High };
-						Ribbon(W, { V3{}, Out * 0.05 + V3{ 0, 0, 0.6 * High }, Top }, { 0.008, 0.007, 0.005 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(124, 122, 70), Rgb(160, 150, 98));
+						Ribbon(W, { V3{}, Out * 0.05 + V3{ 0, 0, 0.6 * High }, Top }, { 0.008, 0.007, 0.005 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 146, 98), Rgb(164, 154, 104), 1.8);
 						for (int F = 0; F < 16; ++F)
 						{
 							// (the plume: a soft spindle of fine silky hairs up the stem's last hand's breadth, a dull cream,
@@ -1719,11 +1723,12 @@ namespace LandScape
 							const double Yaw = R.Range(0.0, 2.0 * Pi);
 							// the scrub: low shore shrubs spreading wide and uneven, now and then a pandanus on its stilt roots
 							auto Scrub = [&](double AX, double AY, double PShrub, double PPandanus) {
-								// (in thickets where the ground cover drifts, spreading; a lone shrub now and then on the open sand)
+								// (in thickets where the ground cover drifts, spreading; a lone shrub now and then on the open sand; half
+								// as many as the sand would hold, so from above they are no speckle)
 								const double Thick = Smooth(-0.05, 0.35, Read(AX, AY, 1));
-								if (R.Next() < PShrub * (0.15 + 1.7 * Thick)) Stand(B::Kit6, AX, AY, 0.8, 0.7, 1.3, 0.7, 1.2, 0.9, 1.1, 0.03);
+								if (R.Next() < PShrub * (0.06 + 0.85 * Thick)) Stand(B::Kit6, AX, AY, 0.8, 0.7, 1.3, 0.7, 1.2, 0.9, 1.1, 0.03);
 								Elsewhere();
-								if (R.Next() < PPandanus * (0.3 + 1.4 * Thick)) Stand(B::Kit15, PX, PY, 0.8, 0.8, 1.2, 0.8, 1.25, 0.9, 1.1, 0.0);
+								if (R.Next() < PPandanus * (0.15 + 0.7 * Thick)) Stand(B::Kit15, PX, PY, 0.8, 0.8, 1.2, 0.8, 1.25, 0.9, 1.1, 0.0);
 							};
 							if (W < 40.0)
 							{
@@ -1749,7 +1754,7 @@ namespace LandScape
 								// a dense grove: palms over broadleaf trees, pandanus and scrub
 								if (R.Next() < 0.6) Palm(X, Y, Yaw);
 								Elsewhere();
-								if (R.Next() < 0.25) Stand(B::Kit0, PX, PY, 0.8, 0.45, 0.8, 0.5, 0.85, 0.9, 1.05, 0.0);
+								if (R.Next() < 0.12) Stand(B::Kit0, PX, PY, 0.8, 0.45, 0.8, 0.5, 0.85, 0.9, 1.05, 0.0);
 								Elsewhere();
 								Scrub(PX, PY, 0.45, 0.2);
 								Elsewhere();
@@ -1773,20 +1778,22 @@ namespace LandScape
 								Scrub(PX, PY, 0.3, 0.06);
 								continue;
 							}
-							// the grove: palms some 130 a hectare, in clumps and gaps (two or three together, each leaning its own
-							// way), scrub and a broadleaf tree here and there under them
+							// the grove: palms in groves a hundred metres and more across with open sand between them (from above,
+							// never a speckle of lone crowns), some 130 a hectare in a grove, in clumps and gaps (two or three
+							// together, each leaning its own way); scrub and a broadleaf tree here and there under them
+							const double InGrove = GroveAt(X, Y);
 							const double Clump = Noise(X / 34.0 + 0.4, Y / 34.0 - 2.2, Seed ^ 0xC1C);
-							if (R.Next() < std::clamp(0.78 + 0.9 * Clump, 0.12, 1.0)) Palm(X, Y, Yaw);
+							if (R.Next() < std::clamp(0.64 + 0.8 * Clump, 0.1, 0.92) * (0.05 + 0.95 * InGrove)) Palm(X, Y, Yaw);
 							Elsewhere();
-							if (Clump > 0.2 && R.Next() < 0.5)
+							if (InGrove > 0.5 && Clump > 0.2 && R.Next() < 0.35)
 							{
 								const double Turn = R.Range(-1.2, 1.2);
 								Palm(PX, PY, Yaw + Turn);
 							}
 							Elsewhere();
-							Scrub(PX, PY, 0.22, 0.05);
+							Scrub(PX, PY, 0.22 * (0.4 + 0.6 * InGrove), 0.05);
 							Elsewhere();
-							if (R.Next() < 0.03) Stand(B::Kit0, PX, PY, 0.8, 0.5, 0.8, 0.5, 0.8, 0.95, 1.05, 0.0);
+							if (R.Next() < 0.03 * InGrove) Stand(B::Kit0, PX, PY, 0.8, 0.5, 0.8, 0.5, 0.8, 0.95, 1.05, 0.0);
 							continue;
 						}
 						// ---- the jungle

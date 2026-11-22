@@ -234,6 +234,18 @@ namespace LandScape
 		return Look::Farmland;
 	}
 
+	bool LeaflessOf(const LandField::Field& F, Look L)
+	{
+		if (L != Look::Bocage && L != Look::Steppe && L != Look::Farmland) return false;
+		if (F.Month < 1 || F.Month > 12) return false;
+		const double Lat = std::fabs(F.Lat);
+		if (Lat < 28.0) return false;
+		const int M = F.Lat < 0.0 ? (F.Month + 5) % 12 + 1 : F.Month;
+		if (M == 12 || M == 1 || M == 2) return true;
+		if (M == 11 || M == 3) return Lat >= 44.0;
+		return M == 4 && Lat >= 52.0;
+	}
+
 	double SnowOf(const LandField::Field& F, Look L)
 	{
 		if (F.Snow >= 0.0) return Clamp01(F.Snow);
@@ -298,7 +310,7 @@ namespace LandScape
 			A.bSet = true;
 			Ink(A.HazeInk, 0.61, 0.70, 0.81);
 			Ink(A.HazeOvercast, 0.52, 0.55, 0.58);
-			A.HazeDensity = 0.0101;
+			A.HazeDensity = 0.0051; // (a clear day's, some 4,700 m, as the desert's: the art director's first read of 22 November; a hazy or sirocco day's 2,400 m is 0.0101)
 			A.SkyDust = 0.85;
 			Grade(0.50, 0.58, 1.35, -0.5, 0.55, 1.02, 0.97);
 			break;
@@ -398,6 +410,11 @@ namespace LandScape
 	{
 		(void)S;
 		return Mixed(C, Rgb(226, 230, 236), Cover);
+	}
+	void Snow::Leafless(LandField::Base B, LandField::BaseMesh& M) const
+	{
+		(void)B;
+		(void)M;
 	}
 	Tone Snow::OverFar(const Tone& C, const Spot& S, bool bWoods) const
 	{
@@ -519,11 +536,17 @@ namespace LandScape
 		NZ = std::fabs(NZ) + 0.6; // (lit as grass is: from above, both faces)
 		const double NN = std::sqrt(NX * NX + NY * NY + NZ * NZ);
 		NX /= NN; NY /= NN; NZ /= NN;
+		// Each face its own points, its normal leaning out of its own side: a face seen from behind is lit as its front
+		// (its normal turned toward the eye), so the back face given the front's normal had it turned down, and drew
+		// near black (the art director's black triangles on leaves, 22 November).
 		const uint32_t A = Vert(X0 - AX * H, Y0 - AY * H, Z0, NX, NY, NZ, Foot);
 		const uint32_t B = Vert(X0 + AX * H, Y0 + AY * H, Z0, NX, NY, NZ, Foot);
 		const uint32_t C = Vert(X1, Y1, Z1, NX, NY, NZ, Tip);
 		Tri(A, B, C);
-		Tri(B, A, C);
+		const uint32_t BA = Vert(X0 - AX * H, Y0 - AY * H, Z0, -NX, -NY, NZ, Foot);
+		const uint32_t BB = Vert(X0 + AX * H, Y0 + AY * H, Z0, -NX, -NY, NZ, Foot);
+		const uint32_t BC = Vert(X1, Y1, Z1, -NX, -NY, NZ, Tip);
+		Tri(BB, BA, BC);
 	}
 
 	void Writer::Rock(double CX, double CY, double Radius, double Height, uint64_t RockSeed, const Tone& Lit, const Tone& Under)
