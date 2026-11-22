@@ -1159,7 +1159,8 @@ namespace TheaterFx
 					}
 				}
 			}
-			const double Across = SafeNum(Num(S + "crater_m", 1.5), 0.0, 200.0, 1.5);
+			// (grounds.<ground>.crater_k: a hard ground's scar smaller, rock's a shallow chipped star; no such key, 1)
+			const double Across = SafeNum(Num(S + "crater_m", 1.5), 0.0, 200.0, 1.5) * SafeNum(Num(G + "crater_k", 1.0), 0.1, 4.0, 1.0);
 			if (bScars && Across > 0.0 && Ground != "water")
 			{
 				Scar(Now + 0.25, At, Across, P, Ground == "snow", D);

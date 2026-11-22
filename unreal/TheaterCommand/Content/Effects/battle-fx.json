@@ -1129,7 +1129,7 @@
   }
  },
  "grounds": {
-  "_how": "The ground under the hit decides the look. thrown is the crown's colour against the ground's own (or a fixed colour where given); smoke tints the cloud. The 3D field's ground kinds (open, field, woods, rough, marsh, water, road, bridge, buildings, rock, bunker, works, blown) map to these by ground_of.",
+  "_how": "The ground under the hit decides the look. thrown is the crown's colour against the ground's own (or a fixed colour where given); smoke tints the cloud. The 3D field's ground kinds (open, field, woods, rough, marsh, water, road, bridge, buildings, rock, bunker, works, blown) map to these by ground_of (the game keeps its own table: a word it does not pass is never drawn).",
   "earth": {
    "thrown_from_ground": 0.55,
    "clods": 1.0,
@@ -1393,6 +1393,74 @@
    "shower": 0.8,
    "_shower": "Masonry lumps and tiles in the shower, in the town's clod colour: shower 0.8, though town throws no earth clods."
   },
+  "rock": {
+   "clods": 0.35,
+   "shower": 1.0,
+   "dust": 1.5,
+   "smoke": [
+    128,
+    122,
+    114
+   ],
+   "haze_lingers": 1.2,
+   "crater_k": 0.55,
+   "extra": "stone splinters, pale dust, a shallow chipped scar: the shell bursts on the surface, so less earth goes up and more of it is pale grit and flying chips; the cloud a grey-tan, paler than earth's, darker than the town's masonry dust",
+   "paint": {
+    "soil": [
+     132,
+     126,
+     116
+    ],
+    "heavy": [
+     88,
+     83,
+     76
+    ],
+    "dust": [
+     184,
+     178,
+     166
+    ],
+    "clod": [
+     104,
+     98,
+     90
+    ],
+    "smoke": [
+     128,
+     122,
+     114
+    ],
+    "splinter": [
+     182,
+     176,
+     164
+    ],
+    "stone": [
+     140,
+     134,
+     124
+    ],
+    "ring": [
+     168,
+     162,
+     150
+    ],
+    "foot": [
+     44,
+     42,
+     40
+    ],
+    "grain": 0.75,
+    "scar": [
+     58,
+     55,
+     52
+    ],
+    "scar_rays": 1.8
+   },
+   "_how": "Lead's theatre ask (17:46Z 22 November): a rock ground for Italy's hills, the desert's escarpments and stony steppe. Grit, not earth: the jets granular (grain), a third of the lumps fresh pale splinters (splinter), the shower stone, a pale dust skirt and veil that hangs (dust, haze_lingers), and a scar a little over half as wide (crater_k) with longer chipped rays and a grey-black scorch. Used only where the scene passes the word rock; until then rock ground draws as before."
+  },
   "woods": {
    "thrown_from_ground": 0.55,
    "clods": 0.6,
@@ -1573,7 +1641,7 @@
    "blown": "earth",
    "works": "earth",
    "bunker": "town",
-   "rock": "town",
+   "rock": "rock",
    "buildings": "town",
    "woods": "woods",
    "marsh": "mud",

@@ -2045,3 +2045,20 @@ side toward the sun, and its shadow laid on the ground downwind, and liked the s
   General's eye: `FX_DIST=150 FX_EYE_H=300 FX_LOOK_H=0 FX_LOOK_X=0 ... wreck tall`, or `... how105 earth F WxH 150 300`
   with `FX_LOOK_HIT=0 FX_BARRAGE=8 FX_BARRAGE_STEP=25`.
 - Stills: `battle-fx/stills/from-above/from-above-sheet.png` (today left, on right).
+
+## Rock ground: stone splinters, pale dust, a shallow scar (grounds.rock, drawn only when the scene passes "rock")
+
+The production lead's theatre ask (17:46Z 22 November), with the environments thread: Italy's hills, the desert's
+escarpments and stony steppe were drawn as earth (the game's own ground table maps its rock cells to earth today).
+
+- A new ground word, `rock`, beside earth, sand, snow, mud, town, woods and water. Grit, not earth: the jets granular
+  (`paint.grain` 0.75, smaller pieces and more of them, not drawn out), a third of the lumps fresh pale splinters
+  (`paint.splinter`), the shower stone (`paint.stone`, `shower` 1), fewer earth lumps (`clods` 0.35), a pale dust skirt
+  and veil (`dust` 1.5, `paint.dust` 184,178,166) that hangs a little longer (`haze_lingers` 1.2), and a grey-tan cloud
+  (`smoke` 128,122,114), paler than earth's and darker than the town's masonry dust.
+- Shallow scar: `crater_k` (new, any ground; none written, 1) scales the size's `crater_m`. Rock's is 0.55, with longer
+  chipped rays (`scar_rays` 1.8) and a grey-black scorch (`paint.scar` 58,55,52).
+- Switch: the word itself. Until the scene passes "rock" (the land field's FxWords table), nothing changes; every
+  frame with today's words is byte for byte as before.
+- Preview: `FX_GROUND=138,132,122 ./fxpreview recipe out how105 rock 4,20,60,300 960x540`.
+- Stills: `battle-fx/stills/rock/rock-sheet.png` (earth, rock, town; 0.1, 0.7, 2 and 10 s).
