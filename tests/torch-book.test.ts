@@ -264,8 +264,10 @@ describe('Operation Torch by the book', () => {
     for (const nm of ['1st Armored Division', '2nd Armored Division']) {
       const c = g.corps.filter((x) => x.nat === 'USA' && x.name === nm);
       expect(c.length, nm).toBe(1);
-      expect(c[0].full, nm).toBe(0.65);
-      expect(c[0].str, nm).toBeLessThanOrEqual(0.65 + 1e-9);
+      const size = TORCH.rows.find((r) => r[1] === 'USA' && r[2] === nm)![6]!.est as number;
+      expect(size, nm).toBe(0.5);
+      expect(c[0].full, nm).toBe(size);
+      expect(c[0].str, nm).toBeLessThanOrEqual(size + 1e-9);
     }
     expect(g.corps.some((c) => c.name === '34th Infantry Division')).toBe(false);
     for (const c of g.corps) if (c.nat === 'USA' && !c.dead && TORCH.vichy.ground.includes(g.regions[c.reg].name)) expect(picks.has(c.id) || rows.has(c.name), c.name).toBe(true);
