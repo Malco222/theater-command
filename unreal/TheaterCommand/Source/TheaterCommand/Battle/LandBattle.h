@@ -137,6 +137,11 @@ private:
 	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> CraterMeshes;
+	/** The track marks (LandCrater::Ruts), the same way: one mesh a 64 m patch, a section for each 48 pieces, sent again
+	 * a quarter second after a piece is laid in it. */
+	UPROPERTY()
+	TArray<TObjectPtr<UProceduralMeshComponent>> RutMeshes;
+	double RutsSentAt = -10.0;
 
 	// ---- The men (LandMen) ----
 	struct FManDrawn
@@ -295,6 +300,8 @@ private:
 	void PlayEffects();
 	/** This frame's shells, bombs and grenades into the ground: their holes, kept the whole battle. */
 	void MakeCraters();
+	/** This frame's tracks on the ground: each moving tank's and lorry's marks, the corn laid flat behind her. */
+	void MakeRuts();
 	void PlayArmourEvents();
 	void PlayMenEvents();
 	void PlaySound(double RealDt);

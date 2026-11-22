@@ -412,6 +412,15 @@ int main(int Argc, char** Argv)
 	long GaitFrames = 0, CappedFrames = 0;
 	std::map<std::string, long> ClipFrames;
 	long ManFrames = 0;
+	// Elbow room (the cut 2 film: knots of men passing through each other, pairs shoulder to shoulder in one pose, a man
+	// stepping through a body): every tenth of a second, pairs of living men closer than 0.6 m and 0.3 m (a team's two at
+	// their work left out: the same block and key man, one of them a loader, crewman, mortar, hmg, at, mg or fo), and
+	// men on the move with their feet within 0.35 m of a body.
+	long RoomSamples = 0, Close06 = 0, Close03 = 0, OnBody = 0, MovingSamples = 0;
+	std::map<std::pair<int, int>, long> ClosePairs;
+	struct BodyLine { double AX, AY, BX, BY; };
+	std::map<int, BodyLine> BodyLines;
+	auto TeamRole = [](const std::string& R) { return R == "loader" || R == "crew" || R == "mortar" || R == "hmg" || R == "at" || R == "mg" || R == "fo"; };
 
 	const int Pelvis = Ger.BoneIndex("pelvis"), HeadB = Ger.BoneIndex("head");
 	std::vector<float> Raw;
@@ -642,6 +651,70 @@ int main(int Argc, char** Argv)
 			}
 		}
 
+		if (Fr % 6 == 0)
+		{
+			struct At2 { double X, Y; int I; };
+			std::map<int64_t, std::vector<At2>> Grid;
+			auto Cell = [](double X, double Y) { return (static_cast<int64_t>(std::floor(X)) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(static_cast<int32_t>(std::floor(Y)))); };
+			std::vector<At2> Living;
+			for (int I = 0; I < N; ++I)
+			{
+				if (!C.Visible(I)) continue;
+				if (C.Frozen(I))
+				{
+					if (!BodyLines.count(I))
+					{
+						// (a body as a line from his head through his pelvis to his feet)
+						const Soldier& Sd = *C.SoldierOf(I);
+						const Xform* Fm = C.FramesOf(I);
+						const Vec3 H = Fm[HeadB].Point(Sd.Bones[static_cast<size_t>(HeadB)].Head);
+						const Vec3 Pv = Fm[Pelvis].Point(Sd.Bones[static_cast<size_t>(Pelvis)].Head);
+						BodyLines[I] = { H.X, H.Y, Pv.X - 0.95 * (H.X - Pv.X), Pv.Y - 0.95 * (H.Y - Pv.Y) };
+					}
+					continue;
+				}
+				if (C.IsFalling(I)) continue;
+				double X, Y, Z;
+				float F;
+				C.PlaceOf(I, X, Y, Z, F);
+				Living.push_back({ X, Y, I });
+				Grid[Cell(X, Y)].push_back({ X, Y, I });
+			}
+			for (const At2& A : Living)
+			{
+				++RoomSamples;
+				for (int Dy = -1; Dy <= 1; ++Dy)
+					for (int Dx = -1; Dx <= 1; ++Dx)
+					{
+						const auto Found = Grid.find(Cell(A.X + Dx, A.Y + Dy));
+						if (Found == Grid.end()) continue;
+						for (const At2& B : Found->second)
+						{
+							if (B.I <= A.I) continue;
+							const double D = std::hypot(A.X - B.X, A.Y - B.Y);
+							if (D >= 0.6) continue;
+							const ManInfo& Ia = C.Info(A.I);
+							const ManInfo& Ib = C.Info(B.I);
+							if (Ia.Block == Ib.Block && Ia.K == Ib.K && (TeamRole(Ia.Role) || TeamRole(Ib.Role))) continue;
+							++Close06;
+							if (D < 0.3) ++Close03;
+							++ClosePairs[{ A.I, B.I }];
+						}
+					}
+				const Playing Pl = C.PlayingOf(A.I);
+				if (!Pl.bGait || Pl.Speed < 0.5f) continue;
+				++MovingSamples;
+				for (const auto& KV : BodyLines)
+				{
+					const BodyLine& L = KV.second;
+					const double Vx = L.BX - L.AX, Vy = L.BY - L.AY;
+					const double Len2 = std::max(1e-9, Vx * Vx + Vy * Vy);
+					const double U = std::clamp(((A.X - L.AX) * Vx + (A.Y - L.AY) * Vy) / Len2, 0.0, 1.0);
+					if (std::hypot(A.X - (L.AX + U * Vx), A.Y - (L.AY + U * Vy)) < 0.35) { ++OnBody; break; }
+				}
+			}
+		}
+
 		// Clips shown, and the feet on the ground.
 		for (int I = 0; I < N; ++I)
 		{
@@ -707,6 +780,16 @@ int main(int Argc, char** Argv)
 
 	// ---- The report.
 	std::printf("\nplayed %.1f s at 60 frames a second (%d frames), %d men\n", End, Frames, N);
+	{
+		long Long = 0;
+		for (const auto& KV : ClosePairs) Long += KV.second >= 10; // (a pair closer than 0.6 m for a second or more)
+		std::printf("elbow room: of %ld looks at a living man, %.2f%% had another within 0.6 m and %.2f%% within 0.3 m (%zu pairs, %ld of them for a second or more); %.2f%% of %ld looks at a man on the move had his feet on a body\n",
+			RoomSamples, 100.0 * Close06 / std::max(1L, RoomSamples), 100.0 * Close03 / std::max(1L, RoomSamples), ClosePairs.size(), Long,
+			100.0 * OnBody / std::max(1L, MovingSamples), MovingSamples);
+		// (on the drill's spacing, 3f1c2c29: 0.09% and 0.03%; the second cut's recording had knots of five and six)
+		if (Close06 > 0.005 * RoomSamples) Fail("living men stand closer than 0.6 m on %.2f%% of looks (more than 0.5%%)", 100.0 * Close06 / std::max(1L, RoomSamples));
+		if (OnBody > 0.002 * MovingSamples) Fail("men on the move have their feet on a body on %.2f%% of looks (more than 0.2%%)", 100.0 * OnBody / std::max(1L, MovingSamples));
+	}
 
 	// Deaths.
 	std::printf("\ndeaths (%zu): man, army, when, fall (stance, kind, from), fall start frame vs d, rest after, lying (head, pelvis, highest point over the ground), clip's own lowest point, laid lowest\n", Dead.size());

@@ -963,6 +963,9 @@ bool ALandBattle::Open()
 	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
 	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1,
 		[FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); });
+	// And the tracks' marks, on the same ground and paint.
+	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
+		LandCrater::Ruts::KindOn(*FieldPtr));
 
 	Took = LandParts::Seconds();
 	LayField();
@@ -1368,6 +1371,10 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 		if (State->Holes.Bare(One.X, One.Y))
 		{
 			continue; // (blown away: a shell hole is bare earth)
+		}
+		if (State->Ruts.Flat(One.X, One.Y))
+		{
+			continue; // (laid flat under a tank's tracks, and the corn between them)
 		}
 		const int32 Kind = static_cast<int32>(One.Kind);
 		const int32 Slot = Kind * Shades + ShadeOf(Kind, One.Tint.R, One.Tint.G, One.Tint.B);
@@ -2723,6 +2730,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// (the shell holes' meshes are the field's: their time is counted in FieldMs)
 	Mark = LandParts::Seconds();
 	MakeCraters();
+	MakeRuts();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
 	PlayArmourEvents();
 	PlayMenEvents();
@@ -2985,6 +2993,70 @@ void ALandBattle::MakeCraters()
 			continue;
 		}
 		LandParts::FromField(S.Holes.Section(Where), UnitsPerMetre, P, N, C, T);
+		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(Where.Section, GroundInk);
+	}
+}
+
+void ALandBattle::MakeRuts()
+{
+	FLandBattleState& S = *State;
+	if (!S.Field || !S.Armour)
+	{
+		return;
+	}
+	// Each tank, lorry and towed gun that moves on the ground leaves her tracks' marks behind her (the middles of her
+	// tracks are her dust sockets, at her tail): pressed grass, torn stubble or plough, and in standing corn the corn
+	// between her tracks laid flat. A knocked-out tank, or one gone from the field, lays none; seen to jump (a seek), her
+	// marks start afresh.
+	for (const LandKit::Vehicle& V : S.Armour->Vehicles())
+	{
+		if (V.bDead || V.Fade < 0.5)
+		{
+			S.Ruts.Lift(V.Index);
+			continue;
+		}
+		if (!V.bMoving)
+		{
+			continue;
+		}
+		const double Width = LandCrater::Ruts::TrackWidthOf(V.Look().Name, V.Look().Kind);
+		if (S.Ruts.Drive(V.Index, V.DustLeft.X, V.DustLeft.Y, V.DustRight.X, V.DustRight.Y, Width))
+		{
+			// (near the eye, or what it looks at: the grass and corn there laid again, without what she flattened)
+			const FVector2D At(V.Root.At.X, V.Root.At.Y);
+			if (FVector2D::Distance(At, ClutterEyeAt) < 30.0 || FVector2D::Distance(At, ClutterLookAt) < 20.0)
+			{
+				bClutterHoled = true;
+			}
+		}
+	}
+	// The patches' sections with new pieces sent again whole, on the ground's own paint, four times a second at most.
+	if (RealT - RutsSentAt < 0.25)
+	{
+		return;
+	}
+	const std::vector<LandCrater::Ruts::Place> Changed = S.Ruts.TakeChanged();
+	if (Changed.empty())
+	{
+		return;
+	}
+	RutsSentAt = RealT;
+	TArray<FVector> P, N;
+	TArray<FColor> C;
+	TArray<int32> T;
+	for (const LandCrater::Ruts::Place& Where : Changed)
+	{
+		while (RutMeshes.Num() <= Where.Patch)
+		{
+			RutMeshes.Add(LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandRuts%d"), RutMeshes.Num())), true));
+		}
+		UProceduralMeshComponent* Mesh = RutMeshes[Where.Patch];
+		if (!Mesh)
+		{
+			continue;
+		}
+		LandParts::FromField(S.Ruts.Section(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(Where.Section, GroundInk);
 	}

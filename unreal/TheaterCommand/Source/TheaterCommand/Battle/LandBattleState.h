@@ -39,6 +39,8 @@ struct FLandBattleState
 	std::vector<std::pair<const LandMen::Soldier*, std::pair<int, int>>> SightBones;
 	/** The shell holes made so far (LandCrater), kept the whole battle. */
 	LandCrater::Field Holes;
+	/** The tanks' and lorries' track marks so far, and the corn their tracks laid flat (LandCrater), kept the whole battle. */
+	LandCrater::Ruts Ruts;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
 	Fates::Table FatesTable;
