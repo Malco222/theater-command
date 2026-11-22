@@ -362,7 +362,11 @@ export function bookStations(g: Game, nat: string): void {
       if (late.some(({ row }) => row.corps === c.name)) continue;
       if (c.bookWorks !== undefined) letGo(g, c);
       if (c.bookCoast) delete c.bookCoast;
-      if (g.flags[`bkl:${c.id}`] !== undefined) { delete g.flags[`bkl:${c.id}`]; if (!c.dead) c.hold = false; }
+      // (A corps held to a dated landing with a book of its own is that book's while it asks the row: the table's
+      // end does not let it go. `ownBook`; the design director's 18:08Z of 22 November 2026.)
+      const k = g.flags[`bkl:${c.id}`];
+      const held = k !== undefined ? B.attacks?.[k - 1] : undefined;
+      if (k !== undefined && !(held && !g.flags[`ba:${k - 1}`] && ownBook(g, B, nat, held))) { delete g.flags[`bkl:${c.id}`]; if (!c.dead) c.hold = false; }
     }
     if (!late.length) return;
     const inWar = cal!.went && (nat === B.taker || allied(g, nat, B.taker) || atWar(g, nat, B.taker));
@@ -614,9 +618,51 @@ function stride(g: Game, row: Attack, c: Corps, way: { road: number[]; months: n
  * ground to the first door of the row's that is open to it; with no door open yet, or no road, it does not set out.
  * A corps an earlier row of the book still names (`claimed`), one that goes with another, and one that has fought
  * this month, stay.
+ *
+ * A dated landing still to come sends its corps to their quay a month ahead (the design director's 18:08Z of 22
+ * November 2026 to ruling 234, on Assab's trace: one rule, every dated row arrives on its date, by sea or by land).
+ * As built a landing's corps were put down on their quay in the date's own month. Britain's Aden force, marched
+ * inland by its staff and standing in Addis Ababa's town in June 1941, came out of the town and to Aden that month
+ * with its month's march spent, could not embark, and landed at Assab in July against the record's June. Now a corps
+ * that is not on one of the row's ports is there, in the field, by the end of the month before: it marches by the
+ * move rules over its side's ground, setting out early enough that the last month of its road is the one before the
+ * date, or, with no road by land (its quay is over the sea), is put down on the quay in that last month, as the
+ * date's own month always put it. One standing in the town of its port comes out into the field that month. From
+ * then it is held to its row, and is the staff's again when the row is no longer owed (`landedFree`).
  */
-function setsOut(g: Game, nat: string, row: Attack, date: number, claimed: Set<string>, riders: Row[]): void {
-  if (row.sea) return;
+function setsOut(g: Game, nat: string, B: Stations, i: number, date: number, claimed: Set<string>, riders: Row[]): void {
+  const row = B.attacks![i];
+  if (row.sea) {
+    const quays = (row.from ?? []).map((nm) => g.byName[nm]).filter((r): r is Region => !!r && r.port && allied(g, nat, r.ctrl));
+    for (const nm of row.force) {
+      if (claimed.has(nm) || riders.some((r) => r.corps === nm)) continue;
+      const c = g.corps.find((x) => x.nat === nat && !x.dead && x.name === nm);
+      if (!c || c.fought) continue;
+      const ahead = date - g.turn === 1;
+      if (quays.some((q) => q.id === c.reg)) {
+        // (On its port already: out of the town in the last month, and the row's from then.)
+        if (!ahead || (c.town !== undefined && !takeField(g, c))) continue;
+      } else {
+        const q = quays.find((r) => door(g, c, r));
+        if (!q) continue;
+        const way = wayTo(g, c, q);
+        if (way) {
+          // (So many months of march, the last of them the month before the date.)
+          if (way.months < date - g.turn || !stride(g, row, c, way) || c.reg !== q.id) continue;
+        } else {
+          if (!ahead || g.flags[`bkm:${c.id}`] === g.turn) continue;
+          const from = g.regions[c.reg];
+          if (!bring(g, c, q)) continue;
+          g.flags[`bkm:${c.id}`] = g.turn;
+          c.ap = 0;
+          broughtWatch.tell?.({ row, corps: c, from, to: q, months: null });
+        }
+      }
+      c.hold = true;
+      g.flags[`bkl:${c.id}`] = i + 1;
+    }
+    return;
+  }
   const to = row.at.map((nm) => g.byName[nm]).find((r) => !!r && !allied(g, nat, r.ctrl));
   if (!to || !atWar(g, nat, to.ctrl)) return;
   if (g.human !== null && (to.ctrl === g.human || hostileUnits(g, to, nat).some((u) => u.nat === g.human))) return;
@@ -742,7 +788,7 @@ export function bookAttacks(g: Game, nat: string): void {
     const slide = slideFor(row);
     if (slide === null || g.flags[key] || !g.nations[nat].alive) return;
     // (A row still to come: its corps set out in time to arrive by the move rules. The design director's 11:41Z.)
-    if (g.turn < row.month + slide) { setsOut(g, nat, row, row.month + slide, claimed, riders); for (const nm of row.force) claimed.add(nm); return; }
+    if (g.turn < row.month + slide) { setsOut(g, nat, B, i, row.month + slide, claimed, riders); for (const nm of row.force) claimed.add(nm); return; }
     // A fight at the record's figures that was lost this month, or a row whose place held this month, is not tried again in it.
     if (g.flags[`bat:${i}`] === g.turn) { for (const nm of row.force) claimed.add(nm); return; }
     if (row.until !== undefined && g.turn > row.until + slide) { g.flags[key] = g.turn; landedFree(g, B, i); bookWatch.tell?.({ row, what: 'over', why: 'the record\'s attack was called off' }); return; }
