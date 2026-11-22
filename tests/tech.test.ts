@@ -56,10 +56,21 @@ describe('the data', () => {
     }
   });
 
-  it('gives every technology something to do, with numbers that are sane and orders that exist', () => {
+  it('gives every technology something to do, with numbers that are sane and orders that exist', async () => {
+    // (Ruling 240: a row marked 'ships' is a fitting of the fleet. The mark names its switch in carriers.json, and its number is there too.)
+    const FITTED = (await import('../data/campaign/carriers.json')).default as unknown as { research: Record<string, { on: boolean; tech?: string }>; flak: { vt: number }; strike: { dc: number } };
     for (const t of TECH.techs) {
-      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil', 'weapons', 'spy'].filter((k) => (t as any)[k] !== undefined);
+      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil', 'weapons', 'spy', 'ships'].filter((k) => (t as any)[k] !== undefined);
       expect(does.length, t.id).toBeGreaterThan(0);
+      if (t.ships !== undefined) {
+        expect(['vt', 'dc'], t.id).toContain(t.ships);
+        expect(FITTED.research[t.ships].tech, t.id).toBe(t.id);
+        expect(typeof FITTED.research[t.ships].on, t.id).toBe('boolean');
+        const n = t.ships === 'vt' ? FITTED.flak.vt : FITTED.strike.dc;
+        expect(n, t.id).toBeGreaterThan(1);
+        expect(n, t.id).toBeLessThanOrEqual(1.5);
+        expect(techRule(t), t.id).toContain(` ${Math.round((n - 1) * 100)}% more `);
+      }
       // The Intelligence branch works for the secret service alone, and nothing else does (rider b542).
       expect(t.spy !== undefined, t.id).toBe(t.branch === 'intel');
       if (t.spy) {
@@ -252,7 +263,10 @@ describe('research', () => {
     startResearch(g, 'GER', 'antitank');
     techTick(g, 'GER');
     const v = techView(g, 'GER')!;
-    expect(v.total).toBe(TECH.techs.length);
+    // (Ruling 240: the total is the rows the view shows. With the switches as shipped, all off, that is release 1's tree: 51 rows, 8 of them naval.)
+    expect(v.total).toBe(v.nodes.length);
+    expect(v.total).toBe(51);
+    expect(v.branches.find((b) => b.id === 'naval')!.total).toBe(8);
     expect(v.done).toBe(TECH.start.GER.length);
     expect(v.teams).toBe(2);
     expect(v.busy).toBe(1);
