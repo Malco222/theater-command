@@ -405,8 +405,7 @@ def split_lod(M, rig, lod, bank):
         node = {int(t): j for j, t in enumerate(ai)}
         N = len(ai)
         src, snk = N, N + 1
-        SC = 1e8
-        BIG = int(1e11)
+        HARD = float("inf")    # a cost of 1e3 or more is a rule, never a trade (see below for the integers)
         rows, cols, caps = [], [], []
         forced_out = 0
         for t in ai:
@@ -427,36 +426,54 @@ def split_lod(M, rig, lod, bank):
                 u_in = max(u_in, 1e3)
             rows += [src, j]
             cols += [j, snk]
-            caps += [min(BIG, int(u_out * SC) + 1), min(BIG, int(u_in * SC) + 1)]
+            caps += [u_out, u_in]
         for t, u, e in tedge:
             if act[t] and act[u]:
                 l = float(np.linalg.norm(VP[e[0]] - VP[e[1]]))
                 w = 2.0 * l * 0.05 * 0.5 * (vcrack.get(e[0], 0) + vcrack.get(e[1], 0))
                 if rigid[t] and rigid[u] and patch[t] == patch[u]:
                     w = 1e3
-                cw = min(BIG, int(w * SC) + 1)
                 rows += [node[t], node[u]]
                 cols += [node[u], node[t]]
-                caps += [cw, cw]
+                caps += [w, w]
         # an open edge of the mesh (a cuff, a collar) is never crossed by the cut: the triangles round it go together
         for v, ts in openv.items():
             ts = [node[t] for t in ts if act[t]]
             for x, y in zip(ts[:-1], ts[1:]):
                 rows += [x, y]
                 cols += [y, x]
-                caps += [BIG, BIG]
+                caps += [HARD, HARD]
         # rigid kit in its own piece (no neighbours across): tie its triangles
         for pt in np.unique(patch[ai][rigid[ai]]):
             ts = [node[int(t)] for t in ai if patch[t] == pt]
             for x, y in zip(ts[:-1], ts[1:]):
                 rows += [x, y]
                 cols += [y, x]
-                caps += [BIG, BIG]
+                caps += [HARD, HARD]
+        # scipy's maximum flow works in 32-bit integers (a bigger capacity wraps round, even negative, and the cut
+        # goes wrong: the paratrooper's right arm, 11-22). So the costs come in three ranks, each more than all of the
+        # rank below together: the trades (scaled to come to 2^21 in all), the ties (TIE: an open edge's triangles,
+        # a rigid piece's), and the rules (RULE, 64 ties: a triangle that must stay on the limb or off it). Where a
+        # rule and a tie pull two ways (a thinned level's sleeve tied along its open edges from the hand to the
+        # armpit) the tie gives; ties and rules given up are logged
         from scipy.sparse import csr_matrix
         from scipy.sparse.csgraph import maximum_flow
-        Cm = csr_matrix((np.array(caps, np.int64), (np.array(rows), np.array(cols))), shape=(N + 2, N + 2))
+        cf = np.array(caps, float)
+        ra, ca = np.array(rows), np.array(cols)
+        hard = cf >= 1e3
+        unary = (ra == src) | (ca == snk)
+        SC = 2.0 ** 21 / max(float(cf[~hard].sum()), 1e-12)
+        TIE = 2 ** 21 + len(cf) + 1
+        RULE = 64 * TIE
+        ci = np.where(hard & unary, RULE, np.where(hard, TIE, np.floor(np.where(hard, 0.0, cf) * SC) + 1)).astype(np.int64)
+        Cm = csr_matrix((ci, (ra, ca)), shape=(N + 2, N + 2))
         Cm.sum_duplicates()
-        fl = maximum_flow(Cm, src, snk, method="dinic").flow
+        Cm.data = np.minimum(Cm.data, RULE)
+        mf = maximum_flow(Cm, src, snk, method="dinic")
+        fv = int(mf.flow_value)
+        if fv >= TIE or fv < 0:
+            print(f"    {lod} {cut}: given up: {fv // RULE} rule(s), {(fv % RULE) // TIE} tie(s) (flow {fv})")
+        fl = mf.flow
         Rm = (Cm - fl).tocsr()
         Rm.eliminate_zeros()
         seen = np.zeros(N + 2, bool)
