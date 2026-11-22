@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a25a58e1 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 78ac5167 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -637,7 +637,7 @@
       [15, "GRE", "II Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 1 }],
       [16, "GRE", "III Corps", "inf", 2, "Thessaly", { xp: 0.15, war: ["GRE", "ITA"], after: 2 }],
       [15, "UK", "Creforce", "inf", 1, "Crete", { gen: "Bernard Freyberg", trait: "defender", hold: 1, xp: 0.2, war: ["GRE", "ITA"] }],
-      [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", { gen: "Henry Maitland Wilson", hold: 1, xp: 0.25, war: ["GRE", "ITA"] }],
+      [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", { gen: "Henry Maitland Wilson", hold: 1, xp: 0.25, war: ["GRE", "ITA"], takes: { name: "2nd Armoured Division", share: 0.5, leaves: "The 1st Armoured Brigade sails from {place} for Greece with W Force. The 2nd Armoured Division stays in the desert with its other brigade." } }],
       [19, "GER", "5th and 11th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
       [19, "GER", "2nd and 9th Panzer Divisions", "arm", 2, "Sofia", { hold: 1, xp: 0.4, war: ["ITA", "GRE"], until: 22 }],
       [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", { hold: 1, xp: 0.35, war: ["ITA", "GRE"] }],
@@ -42607,6 +42607,7 @@
           c.str *= 0.75;
           c.org = 0.2;
           c.ap = 0;
+          liftedOut(c, target, dest);
           defU[i].fate = "evacuated";
           if (!g2.flags[`evac:${g2.turn}`]) {
             g2.flags[`evac:${g2.turn}`] = 1;
@@ -43363,6 +43364,7 @@
     c.str *= 0.75;
     c.org = 0.3;
     c.ap = 0;
+    liftedOut(c, r, dest);
     if (!g2.flags[`evac:${g2.turn}`]) {
       g2.flags[`evac:${g2.turn}`] = 1;
       headline(g2, "event", dest.cap ? `${N.adj} troops are lifted off the beaches at ${r.name}.` : `${N.adj} troops are lifted off the beaches at ${r.name} and taken to ${dest.name}, without their heavy equipment.`, c.nat, r.id, { arm: "land", lost: c.nat });
@@ -43499,6 +43501,9 @@
   function havensOf(r) {
     return r.theatre >= 0 ? THEATRE_LIST[r.theatre]?.havens ?? [] : [];
   }
+  function liftedOut(c, from2, to) {
+    if (to.theatre !== from2.theatre || to.theatre < 0) c.hold = false;
+  }
   function refuge(g2, c, from2) {
     for (const nm of havensOf(from2)) {
       const r = g2.byName[nm];
@@ -43575,6 +43580,8 @@
     for (const f of foes) for (const k of [`war:${w[0]}:${f}`, `war:${f}:${w[0]}`]) if (g2.flags[k] !== void 0) first2 = Math.min(first2, g2.flags[k]);
     return first2 === Infinity ? g2.turn : first2;
   }
+  var AID = new Map((setup_1939_default.expeditions ?? []).filter((row2) => Array.isArray(row2[6]?.war)).map((row2) => [`${row2[1]}|${row2[2]}`, row2[6].war.filter((x) => x !== row2[1] && x !== "*")]));
+  var aidOf = (c) => AID.get(`${c.nat}|${c.name}`) ?? [];
   var UNLESS = new Set((setup_1939_default.expeditions ?? []).map((row2) => row2[6]?.unless).filter((x) => !!x));
   var rowLanded = (g2, name) => (setup_1939_default.expeditions ?? []).some((row2, i) => row2[2] === name && (g2.flags[`came:${i}`] !== void 0 || g2.flags[`sent:${i}`] === 1));
   function carriedRows(g2) {
@@ -43723,6 +43730,18 @@
       }
       const c = addCorps(g2, nat, row2[2], row2[3], g2.flags.open === 1 && o.openDivs !== void 0 ? o.openDivs : row2[4], reg.id, fell ? { ...o, hold: void 0 } : o);
       if (o.str !== void 0) c.str = o.str;
+      if (g2.flags.open === 1 && g2.flags[`cut:${i}`] !== void 0) {
+        c.str *= 1 - g2.flags[`cut:${i}`];
+        delete g2.flags[`cut:${i}`];
+      }
+      if (g2.flags.open === 1 && o.takes) {
+        const x = g2.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
+        const j = setup_1939_default.expeditions.findIndex((r22) => r22[1] === nat && r22[2] === o.takes.name);
+        if (x) {
+          x.str *= 1 - o.takes.share;
+          if (nat === g2.human && o.takes.leaves) headline(g2, "event", o.takes.leaves.replace("{place}", g2.regions[x.reg].name), nat, reg.id);
+        } else if (j >= 0 && !g2.flags[`sent:${j}`]) g2.flags[`cut:${j}`] = o.takes.share;
+      }
       if (g2.flags.open === 1 && UNLESS.has(row2[2])) {
         g2.flags[`came:${i}`] = g2.turn;
         (setup_1939_default.expeditions ?? []).forEach((r22, j) => {
@@ -47813,6 +47832,11 @@
     }
     const here = g2.regions[c.reg];
     if (beyondEurope(here) && (here.ctrl === c.nat || fieldCtrl(g2, here) === c.nat) && atWar(g2, c.nat, here.owner)) return !c.supplied || c.org < 0.3;
+    const guest = g2.nations[here.owner];
+    if (guest && aidOf(c).includes(here.owner) && allied(g2, c.nat, here.owner) && guest.alive) {
+      if (!c.supplied || c.org < 0.3) return true;
+      return !havensOf(here).includes(here.name) && collapseScore(g2, here.owner) >= 0.7 * guest.resilience;
+    }
     let host = null, size = 0;
     for (const n of Object.values(g2.nations)) {
       if (n.id === c.nat || n.dormant || !allied(g2, c.nat, n.id) || n.capital < 0 || n.seaSupply) continue;
