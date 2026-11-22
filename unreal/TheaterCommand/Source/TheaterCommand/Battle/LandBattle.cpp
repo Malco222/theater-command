@@ -1038,6 +1038,13 @@ bool ALandBattle::Open()
 			}
 			return false;
 		};
+		// (an enemy unit in a wood the player has not found: the film never shows it, so it never gives the ambush away;
+		// the general's screen keeps the list, General.Hides)
+		EyeWorld.Hidden = [Weak](int Block)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			return Pinned.IsValid() && Pinned->General.Hides(Block);
+		};
 		LandEye::Settings Set;
 		Set.Own = 0;
 		Set.Seed = Rec.Seed ? Rec.Seed : 1;
