@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 000e14f5 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of c8c4a7d8 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11653,6 +11653,13 @@
       if (!this.me || u.side !== this.me) return "Only your own troops take your orders.";
       return this.sim.smokeWhy(u, x0, y0, x1, y1);
     }
+    /** Night patrol: why one of his blocks may not go out on patrol tonight, or null where it may. */
+    patrolWhy(id) {
+      const u = this.sim.unit(id);
+      if (!u) return "Nothing to order.";
+      if (!this.me || u.side !== this.me) return "Only your own troops take your orders.";
+      return this.sim.patrolWhy(u);
+    }
     /** Why a block may not stand there in the setup step, or null where it may. */
     canPlace(id, x, y) {
       const u = this.sim.units.find((v) => v.id === id);
@@ -11789,6 +11796,8 @@
       const p = c;
       if (!ok2 && o.do === "land:cut" && o.units?.length) return { ok: ok2, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? "" };
       if (!ok2 && o.do === "land:smoke" && o.units?.length) return { ok: ok2, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? "" };
+      const n = c;
+      if (!ok2 && o.do === "land:patrol") return { ok: ok2, why: need().patrolWhy(Number(n.unit ?? o.units?.[0])) ?? "" };
       return { ok: ok2 };
     },
     landWaitWhy(id) {
