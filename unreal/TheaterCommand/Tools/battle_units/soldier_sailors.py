@@ -1,8 +1,9 @@
 """The sailors of the sea battles, for the men who go over the side when their ship goes down (Brian, 22 November
 2026: "sailors should jump in the water if the boat is going down", "have them use the models we have for the soldiers
 for the sailors"): the American sailor (soldier_USA_sailor), the Japanese sailor (soldier_JAP_sailor), the British
-sailor (soldier_UK_sailor, `--man uk`) and the German sailor (soldier_GER_sailor, `--man ger`). Made beside soldier.py
-and soldier_usa.py (both stay as they are).
+sailor (soldier_UK_sailor, `--man uk`), the German sailor (soldier_GER_sailor, `--man ger`), the Italian sailor
+(soldier_ITA_sailor, `--man ita`) and the Soviet sailor (soldier_SOV_sailor, `--man sov`). Made beside soldier.py and
+soldier_usa.py (both stay as they are).
 
     python soldier_sailors.py --man usa --only export,picture      build, rig, animate and export him; his pictures
     python soldier_sailors.py --man usa --only look                 test stills of the dress (no clips baked)
@@ -41,9 +42,10 @@ def _arg(name, default):
 
 
 WHO = _arg("--man", "usa")
-assert WHO in ("usa", "jap", "uk", "ger"), WHO
-NATION = {"usa": "USA", "jap": "JAP", "uk": "UK", "ger": "GER"}[WHO]
-BASE = {"usa": "soldier_USA_sailor", "jap": "soldier_JAP_sailor", "uk": "soldier_UK_sailor", "ger": "soldier_GER_sailor"}[WHO]
+assert WHO in ("usa", "jap", "uk", "ger", "ita", "sov"), WHO
+NATION = {"usa": "USA", "jap": "JAP", "uk": "UK", "ger": "GER", "ita": "ITA", "sov": "SOV"}[WHO]
+BASE = {"usa": "soldier_USA_sailor", "jap": "soldier_JAP_sailor", "uk": "soldier_UK_sailor", "ger": "soldier_GER_sailor",
+        "ita": "soldier_ITA_sailor", "sov": "soldier_SOV_sailor"}[WHO]
 
 if WHO == "usa":
     import soldier_usa as U  # noqa: E402  (soldier.py with the American's wrappers)
@@ -85,7 +87,7 @@ def on_surface(L, start, way, steps=240, most=0.008):
     return p, _n(g)
 
 
-SEED = {"usa": 233, "jap": 57, "uk": 149, "ger": 191}[WHO]      # (his face: a mix no other man's file uses)
+SEED = {"usa": 233, "jap": 57, "uk": 149, "ger": 191, "ita": 167, "sov": 211}[WHO]      # (his face: a mix no other man's file uses)
 # His own paints (past the army's fifteen, so the battle colours them from this file, not from an army's table): the
 # file is written with these in place of the army's tunic, trousers, gaiters and helmet (OWN_OF below)
 NEW_PAINTS = {"kapok": 41, "shirt_own": 42, "trousers_own": 43, "hat": 44, "ties": 45}
@@ -185,6 +187,73 @@ elif WHO == "ger":
                               "helmet in dark grey 525A5E) drawn in place of the cap (helmet_paints)"},
     }
 
+elif WHO == "ita":
+    # the Italian sailor (a rating of the Navy at his action station, no badge or insignia): the faded blue-grey cotton
+    # working dress (jumper and trousers), black leather shoes, the dark blue round cap, and a life jacket of cork
+    # blocks sewn into cream canvas (the kapok jacket's make, its cork in blocks: grooves across as well as down),
+    # tied over the jumper
+    S.NATION_SEED[NATION] = SEED
+    S.LOOK[NATION] = dict(S.LOOK["GER"])
+    S.NATION_KIT[NATION] = dict(S.NATION_KIT["UK"])
+    SPEC = S.NATION_KIT[NATION]
+    SPEC.update({"helmet": "roundcap", "pack": False, "y_straps": False, "pouches": {"front": 0, "rear": False},
+                 "cross_straps": False, "chest_pouches": False})
+    COLOURS = {
+        "tunic": "6B7C92",     # the working jumper, faded blue-grey cotton
+        "trousers": "4A566A",  # its trousers, darker
+        "lower": "4A566A",     # (the legs below the knee, the same cloth)
+        "boots": "1E1A18",     # black leather shoes
+        "helmet": "1C2232",    # the round cap, dark blue
+        "straps": "8A8068",    # the jacket's ties, a tape a shade darker than its canvas
+        "kapok": "B9AE92",     # the cork jacket's cream canvas
+        "leather": "1E1A18",
+    }
+    S.LOOK[NATION].update(COLOURS)
+    OWN_COLOURS = {"kapok": COLOURS["kapok"], "shirt_own": COLOURS["tunic"], "trousers_own": COLOURS["trousers"],
+                   "hat": COLOURS["helmet"], "ties": COLOURS["straps"]}
+    VARIANTS = {
+        "white_summer": {"shirt_own": "E0DDD3", "trousers_own": "D8D5CA",
+                         "about": "the white summer working dress of the Mediterranean: jumper and trousers (the cap "
+                                  "stays dark)"},
+        "dark_blue": {"shirt_own": "222A3C", "trousers_own": "1E2536",
+                      "about": "the dark blue cloth dress of the winter"},
+        "gun_crew": {"about": "a gun crew's man: the same colours, with a steel helmet (a helmet finish, in grey-green "
+                              "5C6052) drawn in place of the cap (helmet_paints)"},
+    }
+
+elif WHO == "sov":
+    # the Soviet sailor (a rating of the Navy at his action station, no badge or insignia): the dark blue flannel
+    # jumper and black trousers, black leather shoes (not the soldier's tall boots), the peakless round cap with its two
+    # black ribbons hanging behind, and a kapok bib: a pad over his chest and one over his back, joined over the
+    # shoulders and round the neck, open at his sides
+    S.NATION_SEED[NATION] = SEED
+    S.LOOK[NATION] = dict(S.LOOK.get(NATION, S.LOOK["GER"]))
+    SPEC = S.NATION_KIT[NATION]
+    SPEC.update({"helmet": "bescap", "tall_boots": False, "pack": False, "roll": False, "canister": False,
+                 "y_straps": False, "pouches": {"front": 0, "rear": False}, "cross_straps": False, "chest_pouches": False})
+    SPEC.pop("puttees", None)
+    COLOURS = {
+        "tunic": "202638",     # the dark blue flannel jumper
+        "trousers": "17181D",  # the black trousers
+        "lower": "17181D",     # (the legs below the knee, the same cloth)
+        "boots": "1B1917",     # black leather shoes
+        "helmet": "15161B",    # the peakless cap and its ribbons, black
+        "straps": "6E6650",    # the bib's ties, a tape a shade darker than its canvas
+        "kapok": "8F8466",     # the kapok bib's khaki canvas
+        "leather": "1B1917",
+    }
+    S.LOOK[NATION].update(COLOURS)
+    OWN_COLOURS = {"kapok": COLOURS["kapok"], "shirt_own": COLOURS["tunic"], "trousers_own": COLOURS["trousers"],
+                   "hat": COLOURS["helmet"], "ties": COLOURS["straps"]}
+    VARIANTS = {
+        "white_summer": {"shirt_own": "E2E0D8",
+                         "about": "the white flannel jumper of summer (the trousers and the cap stay dark)"},
+        "pea_coat": {"shirt_own": "16171B",
+                     "about": "the black pea coat of the cold seas, in place of the jumper's colour"},
+        "gun_crew": {"about": "a gun crew's man: the same colours, with a steel helmet (a helmet finish, in dark "
+                              "grey-green 4E5446) drawn in place of the cap (helmet_paints)"},
+    }
+
 else:
     # the Japanese sailor: the Navy's white cotton working dress (jumper and trousers), black leather shoes, the soft
     # working cap with its short peak in white, and a tan canvas kapok life jacket over the jumper
@@ -225,6 +294,9 @@ SEAM = 0.02                # (m: the shirt is taken as his trunk to this far out
 #                            close beside him, is no part of what the vest is stood over)
 GROOVES = (0.065, 0.13)    # (the kapok's channels, this far either side of the middle, front and back)
 TIES = (0.075, 0.18, 0.285)    # (the three ties across the front, this far over the belt)
+CORK_ROWS = {"ita": (0.11, 0.22, 0.33)}     # (m over the hem: the grooves across a cork jacket, between its blocks)
+BIB = {"sov": (0.115, 0.13)}   # (m: a bib's pads, front and back, end this far out from his middle, from this far under
+#                                his shoulders down: open at his sides)
 VEST_ROUND = 0.0           # (m: the vest's edges rounded over, at the hem, the armholes and the neck)
 VEST_GAP = 0.02            # (m: how deep the groove where its two halves meet goes)
 if WHO not in ("usa", "jap"):
@@ -258,10 +330,11 @@ class VestRegion:
     cylinder along the neck's axis, above the neck's foot) and the armholes (an upright oval each side, through him
     from front to back: the vest's edge meets its own surface square on, so it is a clean edge, not a fringe)."""
 
-    def __init__(self, z0, z1, neck_c, neck_ax, hole):
+    def __init__(self, z0, z1, neck_c, neck_ax, hole, bib=None):
         self.box = Box((-0.32, -0.34, z0), (0.32, 0.34, z1))
         self.lo, self.hi, self.c, self.R = self.box.lo, self.box.hi, self.box.c, None
         self.nc, self.na, self.hole = np.asarray(neck_c, float), _n(neck_ax), hole
+        self.bib = bib                                  # (a bib's sides open: past |y| = bib[0], under z = bib[1])
 
     def d(self, px, py, pz):
         bx, by, bz = np.broadcast_arrays(np.asarray(px, float), np.asarray(py, float), np.asarray(pz, float))
@@ -274,7 +347,11 @@ class VestRegion:
         out = np.maximum(out, neck)
         yc, zc, ry, rz = self.hole
         e = np.sqrt(((np.abs(by) - yc) / ry) ** 2 + ((bz - zc) / rz) ** 2)
-        return np.maximum(out, (1.0 - e) * ry)
+        out = np.maximum(out, (1.0 - e) * ry)
+        if self.bib is not None:
+            ys, zs = self.bib
+            out = np.maximum(out, np.minimum(np.abs(by) - ys, zs - bz))     # (kept unless both out past ys and under zs)
+        return out
 
 
 class Trunk:
@@ -342,14 +419,17 @@ def kapok_vest(man, J, LM, shirt):
     z0 = LM["belt"] - VEST_DOWN
     z1 = LM["shoulder"] + 0.16
     vest = Layer("kapok", "kapok")
-    vest.add(Over(was, 0.0, VestRegion(z0, z1, nk, LM["neck_axis"], hole), VEST_ROUND), 0.0)
+    bib = (BIB[WHO][0], float(LM["shoulder"]) - BIB[WHO][1]) if WHO in BIB else None
+    vest.add(Over(was, 0.0, VestRegion(z0, z1, nk, LM["neck_axis"], hole, bib), VEST_ROUND), 0.0)
     # ---- open down the front: the two halves meet over the breastbone with a groove between them
     zt = LM["collar"] - 0.03
     xf = float(on_surface(vest, (0.45, 0.0, (z0 + zt) / 2), (-1.0, 0.0, 0.0))[0][0])
     vest.sub(RoundBox((xf + 0.03 - VEST_GAP, 0.0, (z0 + zt) / 2), (0.03, 0.006, (zt - z0) / 2 + 0.02), 0.004), 0.004)
     # ---- the kapok in channels: a groove down the vest between its pads, front and back
+    # (a bib's channels keep clear of its open sides: a groove by the edge would chew the edge ragged)
+    grooves = [y for y in GROOVES if WHO not in BIB or y < BIB[WHO][0] - 0.03]
     for side in (1.0, -1.0):
-        for y in GROOVES:
+        for y in grooves:
             for fb in (1.0, -1.0):
                 pts = []
                 for z in np.linspace(z0 + 0.03, LM["shoulder"] - 0.03 - 0.05 * (y > 0.15), 7):
@@ -360,6 +440,18 @@ def kapok_vest(man, J, LM, shirt):
                     pts.append(p + nrm * 0.003)
                 for a, b in zip(pts[:-1], pts[1:]):
                     vest.sub(RoundCone(a, b, 0.0075, 0.0075), 0.004)
+    # ---- a cork jacket's blocks: grooves across it as well, front and back
+    for zz in CORK_ROWS.get(WHO, ()):
+        for fb in (1.0, -1.0):
+            pts = []
+            for y in np.linspace(-0.16, 0.16, 9):
+                try:
+                    p, nrm = on_surface(vest, (0.45 * fb, y, z0 + zz), (-fb, 0.0, 0.0))
+                except RuntimeError:
+                    continue
+                pts.append(p + nrm * 0.003)
+            for a, b in zip(pts[:-1], pts[1:]):
+                vest.sub(RoundCone(a, b, 0.0075, 0.0075), 0.004)
     # ---- the pad round the back of the neck (it holds the head up in the water)
     nmid, nfwd, nrx, nry = LM["neck_ring"]
     ax = LM["neck_axis"]
@@ -502,7 +594,7 @@ _kit_prev = S.build_kit
 
 
 def build_kit(J, spec, body_ls, Z=None):
-    if spec is S.NATION_KIT[NATION] and WHO in ("uk", "ger"):
+    if spec is S.NATION_KIT[NATION] and WHO in ("uk", "ger", "ita", "sov"):
         return {}                                 # (nothing to build: the jersey is shorter than a tunic's hip)
     out = _kit_prev(J, spec, body_ls, Z)
     if spec is not S.NATION_KIT[NATION]:
@@ -549,11 +641,16 @@ def dixie_hat(J, sides=36):
 # ---- the Royal Navy rating's round cap: a band round the head and a flat crown over it, wider all round, no peak
 S.HELMETS["navycap"] = dict(S.HELMETS["dixie"])
 S.HELMETS["tellercap"] = dict(S.HELMETS["dixie"])
+S.HELMETS["roundcap"] = dict(S.HELMETS["dixie"])
+S.HELMETS["bescap"] = dict(S.HELMETS["dixie"])
 CAP = dict(clear=0.01, rim=0.03, top=0.012, back=0.008, foot=0.016, dome=0.131)
 # the German rating's plate cap: the same make with a wider, flatter crown, and two black ribbons hanging behind from
 # its band (each RIBBONS: how long, how wide, how thick; they hang out from his neck as they go down)
 CAP_TELLER = dict(CAP, clear=0.008, rim=0.045, top=0.01, back=0.004)
 RIBBONS = (0.15, 0.026, 0.0015)
+CAP_ITA = dict(CAP, rim=0.034, top=0.011)      # (the Italian rating's round cap: a little wider in the crown)
+CAP_SOV = dict(CAP, rim=0.036, top=0.011)      # (the Soviet rating's peakless cap)
+RIBBONS_SOV = (0.15, 0.024, 0.0015)            # (its ribbons narrower: longer ones run into the jacket's neck pad)
 # (m: the crown's top this far over the skull's crown; how far the crown stands out past the band; its thickness; how
 #  much lower it sits behind; the band's foot this far over the white hat's edge, up at his hairline; the height of
 #  the white hat's dome, which holds his skull, so the band is drawn in to where the skull is that high)
@@ -616,6 +713,10 @@ def build_helmet(kind, J, sides=None):
         return navy_cap(J, sides or 36)
     if kind == "tellercap" and "crown" in J:
         return navy_cap(J, sides or 36, CAP_TELLER, "tellercap", RIBBONS)
+    if kind == "roundcap" and "crown" in J:
+        return navy_cap(J, sides or 36, CAP_ITA, "roundcap")
+    if kind == "bescap" and "crown" in J:
+        return navy_cap(J, sides or 36, CAP_SOV, "bescap", RIBBONS_SOV)
     return _helmet_prev(kind, J, sides)
 
 
@@ -1235,7 +1336,8 @@ def c_sit_raft(t):
 
 # ================================================================================================ the files
 NAME = {"usa": "American sailor (soldier_USA_sailor)", "jap": "Japanese sailor (soldier_JAP_sailor)",
-        "uk": "British sailor (soldier_UK_sailor)", "ger": "German sailor (soldier_GER_sailor)"}[WHO]
+        "uk": "British sailor (soldier_UK_sailor)", "ger": "German sailor (soldier_GER_sailor)",
+        "ita": "Italian sailor (soldier_ITA_sailor)", "sov": "Soviet sailor (soldier_SOV_sailor)"}[WHO]
 ABOUT = {
     "usa": (" The American sailor: soldier.py's man (the same 32 bones) in the Navy's working dress, a light blue "
             "chambray shirt, dark blue dungarees, brown work shoes, the white hat, and a grey kapok life jacket tied "
@@ -1268,6 +1370,23 @@ ABOUT = {
             "army's; colour_variants gives the white drill working dress of summer and the Mediterranean, the "
             "grey-green working dress, and the gun crew's steel helmet. Clips on deck from the motion capture; over "
             "the side and in the water keyed on his rig, the root at the sea's surface (water block)."),
+    "ita": (" The Italian sailor: soldier.py's man (the same 32 bones) as a rating of the Navy at his action station, "
+            "with no badge or insignia anywhere: the faded blue-grey cotton working dress, jumper and trousers, black "
+            "leather shoes, the dark blue round cap, and a life jacket of cork blocks sewn into cream canvas, tied over "
+            "the jumper. He carries no weapon (every clip's weapon is none). His colours are the file's own paints "
+            "(new_paints, colours: kapok = the cork jacket, shirt_own = the jumper, trousers_own, hat = the cap, ties = "
+            "the jacket's ties), not an army's; colour_variants gives the white summer working dress, the dark blue "
+            "winter dress, and the gun crew's steel helmet. Clips on deck from the motion capture; over the side and in "
+            "the water keyed on his rig, the root at the sea's surface (water block)."),
+    "sov": (" The Soviet sailor: soldier.py's man (the same 32 bones) as a rating of the Navy at his action station, "
+            "with no badge or insignia anywhere: the dark blue flannel jumper and black trousers, black leather shoes, "
+            "the peakless round cap with its two black ribbons hanging behind, and a kapok bib in khaki canvas (a pad "
+            "over his chest and one over his back, joined over the shoulders and round the neck, open at his sides). "
+            "He carries no weapon (every clip's weapon is none). His colours are the file's own paints (new_paints, "
+            "colours: kapok = the bib, shirt_own = the jumper, trousers_own, hat = the cap and its ribbons, ties = the "
+            "bib's ties), not an army's; colour_variants gives the white summer jumper, the black pea coat of the cold "
+            "seas, and the gun crew's steel helmet. Clips on deck from the motion capture; over the side and in the "
+            "water keyed on his rig, the root at the sea's surface (water block)."),
 }[WHO]
 DECK_ABOUT = {
     "idle": "On deck, at ease, arms free (motion capture).",
@@ -1537,6 +1656,12 @@ LABELS = {
     "ger": ["German sailor: navy pullover, kapok life jacket, round cap with its ribbons",
             "From behind: the jacket's back, the cap's ribbons",
             "Close: the round cap, the jacket's collar"],
+    "ita": ["Italian sailor: blue-grey working dress, cork life jacket, round cap",
+            "From behind: the jacket's cork blocks",
+            "Close: the round cap, the jacket's collar"],
+    "sov": ["Soviet sailor: dark blue jumper, black trousers, kapok bib, peakless cap",
+            "From behind: the bib's back pad, the cap's ribbons",
+            "Close: the peakless cap, the bib's collar"],
 }[WHO]
 
 
