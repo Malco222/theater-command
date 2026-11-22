@@ -3,7 +3,8 @@
 //   Mediterranean, 1942: a British submarine against an Italian convoy to Libya (no boat booked);
 //   Pacific, 1944: an American submarine against a Japanese convoy (one boat booked sunk).
 // Each is staged from a month's facts in the shape the bridge reads them (Rules/sub-scene.ts factsOf), with the boats
-// at sea as the month closed (boatsAt). The Pacific facts are written by hand: today's rules keep no convoy route to
+// at sea as the month closed (boatsAt) and who raided the route (raidBy): in the Mediterranean, Malta in British hands
+// raids the Libya convoys too, so its caption says "sunk on the convoy routes", not "by submarines". The Pacific facts are written by hand: today's rules keep no convoy route to
 // Japan (navy.json convoys: the Atlantic and Libya only), so in a campaign a Pacific scene comes from a torpedoing or a
 // hunt; the stager takes a convoy month for any navy alike.
 //
@@ -24,7 +25,7 @@ export const SAMPLES: { file: string; facts: MonthFacts }[] = [
       human: 'UK', seed: 7919, turn: turnOf(1941, 10) + 1, names: NAMES,
       foes: { UK: ['GER', 'ITA'], GER: ['UK', 'SOV'], ITA: ['UK'], SOV: ['GER'] },
       facts: [
-        { kind: 'convoy', sea: 'natl', turn: turnOf(1941, 10), week: 3, by: '', on: 'UK', route: 'atlantic', routeName: 'the Atlantic convoys', tons: 156000, boats: 2, escortsLost: 1, boatsAt: { GER: 14 } },
+        { kind: 'convoy', sea: 'natl', turn: turnOf(1941, 10), week: 3, by: '', on: 'UK', route: 'atlantic', routeName: 'the Atlantic convoys', tons: 156000, boats: 2, escortsLost: 1, boatsAt: { GER: 14 }, raidBy: { boats: true, surface: false, base: false } },
         { kind: 'hunt', sea: 'natl', turn: turnOf(1941, 10), week: 3, by: 'UK', on: 'GER', boats: 2, escortsLost: 0 },
       ],
     },
@@ -35,7 +36,7 @@ export const SAMPLES: { file: string; facts: MonthFacts }[] = [
       human: 'UK', seed: 104729, turn: turnOf(1942, 9) + 1, names: NAMES,
       foes: { UK: ['GER', 'ITA'], GER: ['UK', 'SOV'], ITA: ['UK'], SOV: ['GER'] },
       facts: [
-        { kind: 'convoy', sea: 'central', turn: turnOf(1942, 9), week: 2, by: '', on: 'ITA', route: 'libya', routeName: 'the Libya convoys', tons: 12000, boats: 0, escortsLost: 0, boatsAt: { UK: 3 } },
+        { kind: 'convoy', sea: 'central', turn: turnOf(1942, 9), week: 2, by: '', on: 'ITA', route: 'libya', routeName: 'the Libya convoys', tons: 12000, boats: 0, escortsLost: 0, boatsAt: { UK: 3 }, raidBy: { boats: true, surface: false, base: true } },
       ],
     },
   },
@@ -45,7 +46,7 @@ export const SAMPLES: { file: string; facts: MonthFacts }[] = [
       human: 'USA', seed: 1299709, turn: turnOf(1944, 10) + 1, names: NAMES,
       foes: { USA: ['JAP', 'GER'], JAP: ['USA', 'UK'], UK: ['JAP', 'GER'], GER: ['USA', 'UK'] },
       facts: [
-        { kind: 'convoy', sea: 'luzonstrait', turn: turnOf(1944, 10), week: 4, by: '', on: 'JAP', route: 'sample:japan', routeName: 'the convoys to Japan', tons: 21000, boats: 1, escortsLost: 0, boatsAt: { USA: 6 } },
+        { kind: 'convoy', sea: 'luzonstrait', turn: turnOf(1944, 10), week: 4, by: '', on: 'JAP', route: 'sample:japan', routeName: 'the convoys to Japan', tons: 21000, boats: 1, escortsLost: 0, boatsAt: { USA: 6 }, raidBy: { boats: true, surface: false, base: false } },
       ],
     },
   },
