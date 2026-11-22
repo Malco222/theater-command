@@ -781,6 +781,8 @@ int main(int Argc, char** Argv)
 		                   std::to_string(C.ChargeBurstsBooked) + " of " + std::to_string(ChargeHits) + ", " + std::to_string(C.ChargeHitUnmatched) + " with no attack before it, " +
 		                       std::to_string(P.ChargesOffBoat) + " out of her reach",
 		                   "all, on her" });
+		Limits.push_back({ "every aircraft told on a boat seen, letting go on her before she goes", C.AirOnBoats == 0 || (C.AirBlowsOnBoats == C.AirOnBoats && C.MostPlanes > 0),
+		                   std::to_string(C.AirBlowsOnBoats) + " of " + std::to_string(C.AirOnBoats) + " let go on her, aircraft up " + std::to_string(C.MostPlanes) + " at the most", "all, seen" });
 		Limits.push_back({ "every star shell and rescue shown", C.Starshells == Starshells && C.Rescues == Rescues,
 		                   std::to_string(C.Starshells) + " of " + std::to_string(Starshells) + " star shells, " + std::to_string(C.Rescues) + " of " + std::to_string(Rescues) + " rescues", "all" });
 	}

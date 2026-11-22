@@ -419,6 +419,7 @@ namespace SeaShow
 		// A convoy's night (ruling 241): the events told, and what the show made of them.
 		int DiveEvents = 0, SonarEvents = 0, ChargeEvents = 0, ChargeHitEvents = 0, ReportEvents = 0, StarshellEvents = 0, RescueEvents = 0;
 		int ChargeDrops = 0, ChargeBursts = 0, ChargeBurstsBooked = 0, ChargeHitUnmatched = 0, Dives = 0, Starshells = 0, Rescues = 0;
+		int AirOnBoats = 0, AirBlowsOnBoats = 0; // aircraft told on a boat (sea:air), and their blows let go on her while she was afloat
 		double MostKeel = 0.0;      // metres: the deepest a boat was drawn
 		// Ships under air attack (B4, B5.4 of naval-battles/ship-air-defence.md): the big ships put hard over against a
 		// dive, every ship's turn to comb a torpedo plane's drop, those back in their place after, the worst still off it

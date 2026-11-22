@@ -685,6 +685,8 @@ namespace SeaShow
 		A.Go = S.bFromCoast ? ShownT : ShownT + 3.0 + Slot * 4.0;
 		A.LegT = 0.0;
 		A.Spd = S.bFromCoast ? 95.0 : 0.0;
+		// (an aircraft from the coast has no deck to leave: it is in the picture from its first moment)
+		A.bShown = S.bFromCoast;
 		Air[A.Key] = A;
 		S.Planes.push_back(A.Key);
 		return A.Key;
@@ -942,6 +944,30 @@ namespace SeaShow
 			S.bFromCoast = true;
 			const bool bNone = E.Text.find("none reach") != std::string::npos;
 			const double Home = S.Side == 0 ? Pi : 0.0; // (the attacker's coast to the south, the defender's to the north)
+			// A boat (ruling 241, D1: "an aircraft seen running in on a boat"): the aircraft told (n, one at least, of its
+			// kind), low over the sea from as far out as its `running` seconds take it, letting go over her as they end: its
+			// depth bombs, the blow the battle booked, while she is still on the surface; then away to its own coast.
+			if (Hull* Boat = P && P->Class == "ss" ? NearestOf(E.Unit, At.X, At.Y) : nullptr)
+			{
+				const double Run = std::clamp(E.Running > 0.0 ? E.Running : 8.0, 4.0, 60.0), Low = 75.0;
+				S.Lands = ShownT + Run;
+				S.OnKey = Boat->Key;
+				const int Count = std::clamp(E.N > 0 ? E.N : 1, 1, 4);
+				for (int K = 0; K < Count && static_cast<int>(Air.size()) < 60; ++K)
+				{
+					const Vec From = Vec(Boat->P.X, Boat->P.Y, 0.0) + Ahead(Home + (K - 0.5 * (Count - 1)) * 10.0 * Deg) * (Run * Low + K * 90.0) + Vec(0.0, 0.0, 150.0);
+					const int Key = Launch(S, From, Wrap(Home + Pi), K);
+					Plane& A = Air[Key];
+					A.Role = "level";
+					A.Model = "Patrol:" + A.Nation;
+					A.Spd = Low;
+					A.bHit = !bNone && K == 0;
+				}
+				Strikes.push_back(S);
+				AirBlowAt[E.Unit] = E.T;
+				++Check.AirOnBoats;
+				return;
+			}
 			for (int K = 0; K < 4 && static_cast<int>(Air.size()) < 60; ++K)
 			{
 				const Vec From = At + Ahead(Home + (K - 1.5) * 12.0 * Deg) * (3200.0 + K * 150.0) + Vec(0.0, 0.0, 2600.0);
@@ -2577,6 +2603,7 @@ namespace SeaShow
 					continue;
 				}
 				const bool bDive = A.Role == "dive";
+				const bool bLevel = A.Role == "level"; // (low over a boat, ruling 241 D1: Play's sea:air)
 				const Vec Over = On ? On->P : Target ? Vec(Target->X, Target->Y, 0.0) : A.P;
 				// (the dive bombers' moment eight seconds after the strike's: they come down fast from their point, and so let
 				// go just after the battle has said which of them hit, not before it, when every one would be a miss)
@@ -2603,7 +2630,14 @@ namespace SeaShow
 				}
 				else if (A.Doing == Leg::Attack)
 				{
-					if (bDive)
+					if (bLevel)
+					{
+						// Low and straight for her, timed to be over her as the battle's moment comes, 60 m up.
+						Goal = Over;
+						GoalAlt = 60.0;
+						GoalSpd = Clamp(Flat(Over - A.P) / std::max(1.0, Attack - ShownT), 50.0, 110.0);
+					}
+					else if (bDive)
 					{
 						// Pushed over into a steep dive on her (about seventy degrees: little way over the sea, falling fast),
 						// released low over her, pulled out over the sea beyond. One that has not the height for it (a strike
@@ -2620,7 +2654,8 @@ namespace SeaShow
 						GoalSpd = 80.0;
 					}
 					const double Near = Flat(Over - A.P);
-					if ((bDive && A.P.Z < 900.0 && (Near < 250.0 || (A.P.Z <= GoalAlt + 60.0 && Near < 600.0))) || (!bDive && Near < 900.0) || ShownT > Attack + 25.0)
+					if ((bDive && A.P.Z < 900.0 && (Near < 250.0 || (A.P.Z <= GoalAlt + 60.0 && Near < 600.0))) || (bLevel && (Near < 60.0 || ShownT >= Attack + 3.0))
+						|| (!bDive && !bLevel && Near < 900.0) || ShownT > Attack + 25.0)
 					{
 						// Released: a hit on her or a near miss (the battle's share, decided as the strike landed).
 						if (On)
@@ -2628,7 +2663,8 @@ namespace SeaShow
 							const ClassSize& Sz = SizeOf(On->Class);
 							if (A.bHit)
 							{
-								const bool bTorp = !bDive;
+								const bool bTorp = !bDive && !bLevel;
+								if (bLevel && On->Class == "ss") ++Check.AirBlowsOnBoats;
 								const Vec At = bTorp ? PlaceOn(*On, Roll.U(-0.3, 0.3), (Roll.U() < 0.5 ? -1.0 : 1.0) * (Sz.Beam * 0.5 + 2.0), 0.0)
 									: PlaceOn(*On, Roll.U(-0.35, 0.35), Roll.U(-0.3, 0.3) * Sz.Beam, Roll.U(6.0, 12.0));
 								Fx& E = Emit(FxKind::BombHit, At, bTorp ? "torpedo" : S.bFromCoast ? "level" : "dive", On->Key);
@@ -2655,12 +2691,12 @@ namespace SeaShow
 								const Vec At = PlaceOn(*On, Roll.U(-0.8, 0.8), (Roll.U() < 0.5 ? -1.0 : 1.0) * Roll.U(Sz.Beam * 0.5 + 10.0, Wide), 0.0);
 								if (!OnHull(At, 6.0, -1) && Columns.Take(ShownT, Flat(At - Eye)))
 								{
-									Emit(FxKind::NearMiss, Vec(At.X, At.Y, 0.0), bDive ? "bomb250" : "torpedo");
+									Emit(FxKind::NearMiss, Vec(At.X, At.Y, 0.0), bDive ? "bomb250" : bLevel ? "bomb60" : "torpedo");
 									++Check.NearMisses;
 								}
 							}
 							// B4: every ship combs a torpedo plane's drop, bow or stern on to it, the torpedoes' run long.
-							if (!bDive) Dodge(*On, A, true, ShownT + 45.0);
+							if (!bDive && !bLevel) Dodge(*On, A, true, ShownT + 45.0);
 						}
 						A.Doing = Leg::Home;
 						A.LegT = 0.0;
