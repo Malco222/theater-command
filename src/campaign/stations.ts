@@ -127,7 +127,8 @@ export interface Attack {
   works?: true | string[];
   /**
    * The dated choice whose book this row is in, where that is not the table's own (`"JAP:ichigo"`; the design
-   * director's rulings of 07:44Z and 07:46Z, 22 November 2026): see `ownBook`.
+   * director's rulings of 07:44Z and 07:46Z, 22 November 2026): see `ownBook`. The row is that choice's country's
+   * fight (`rowNat`; his 14:36Z of the same day): Britain's takings in East Africa are rows of this one table.
    */
   book?: string;
 }
@@ -149,6 +150,14 @@ export interface Stations {
 
 /** The stations the book gives (history.json, 'stations'). */
 export const stations = (): Stations | null => (HISTORY as unknown as { stations?: Stations }).stations ?? null;
+
+/**
+ * The country a dated attack is: its own choice's where it names one (`book`), else the table's invader (the design
+ * director's 14:36Z of 22 November 2026: a dated attack that names its own choice is that choosing country's fight,
+ * one map). As built every row was the invader's, whoever its book named, and the table has one invader: Britain's
+ * takings in East Africa by the book (far-africa.json, `UK:eastafrica`) could be nobody's.
+ */
+const rowNat = (B: Stations, row: Attack): string => (row.book !== undefined ? row.book.split(':')[0] : B.taker);
 
 /** How far the calendar has moved in this war, and whether the blow has fallen. Null where the book gives the choice no month. */
 function calendar(g: Game, B: Stations): { slide: number; date: number; went: boolean } | null {
@@ -184,10 +193,11 @@ export function stationsBind(g: Game, nat: string): boolean {
  * list its theatre keeps (line.ts) does not slide either, so the row and the list read the same months (the choice
  * of 1944 is dated 56 and goes in 57 in every war read, and the list's plain months are what met the record). And
  * the list stays the leave it is: the row is not asked at a place the list keeps shut that month (`bookAttacks`).
- * It lapses with its own `until`, or with nothing done when its book is closed.
+ * It lapses with its own `until`, or with nothing done when its book is closed. It is asked of its own choice's
+ * country and of no other (`rowNat`), and never of a player.
  */
 function ownBook(g: Game, B: Stations, nat: string, row: Attack): boolean {
-  if (row.book === undefined || nat === g.human || g.human === B.taker || !stopDef(g).book) return false;
+  if (row.book === undefined || nat !== rowNat(B, row) || nat === g.human || !stopDef(g).book) return false;
   const [n, op] = row.book.split(':');
   return (g.flags[`st:done:${row.book}`] ?? 0) > 0 && onBook(g, theatreOf(n, op));
 }
@@ -264,12 +274,12 @@ function letGo(g: Game, c: Corps): void {
  * (`bookStations`).
  */
 function landedFree(g: Game, B: Stations, i: number): void {
-  const A = B.attacks!;
-  // (Each row by its own calendar: the table's, or its own book's. `slideOf`.)
+  const A = B.attacks!, who = rowNat(B, A[i]);
+  // (Each row by its own calendar: the table's, or its own book's. `slideOf`. A row of another country's is no part of it.)
   const goes = (r: Attack, k: number, c: Corps): boolean => {
-    if (k === i || g.flags[`ba:${k}`] || !r.force.includes(c.name)) return false;
-    const slide = slideOf(g, B, B.taker, r, false);
-    return slide !== null && !(r.until !== undefined && g.turn > r.until + slide) && r.at.some((nm) => !!g.byName[nm] && !allied(g, B.taker, g.byName[nm].ctrl));
+    if (k === i || g.flags[`ba:${k}`] || rowNat(B, r) !== who || !r.force.includes(c.name)) return false;
+    const slide = slideOf(g, B, who, r, false);
+    return slide !== null && !(r.until !== undefined && g.turn > r.until + slide) && r.at.some((nm) => !!g.byName[nm] && !allied(g, who, g.byName[nm].ctrl));
   };
   for (const c of g.corps) {
     if (g.flags[`bkl:${c.id}`] !== i + 1) continue;
@@ -290,10 +300,11 @@ function landedFree(g: Game, B: Stations, i: number): void {
  */
 export function bookedAhead(g: Game, c: Corps): boolean {
   const B = stations();
-  if (!B?.attacks || c.nat !== B.taker) return false;
-  // (A row with a book of its own is read by that book: the table's last month does not let its corps go. `ownBook`.)
+  if (!B?.attacks) return false;
+  // (A row with a book of its own is read by that book: the table's last month does not let its corps go. `ownBook`.
+  // Each country by its own rows: `rowNat`.)
   return B.attacks.some((r, k) => {
-    if (g.flags[`ba:${k}`] || !r.force.includes(c.name)) return false;
+    if (rowNat(B, r) !== c.nat || g.flags[`ba:${k}`] || !r.force.includes(c.name)) return false;
     const slide = slideOf(g, B, c.nat, r, false);
     return slide !== null && !(r.until !== undefined && g.turn > r.until + slide) && r.at.some((nm) => !!g.byName[nm] && !allied(g, c.nat, g.byName[nm].ctrl));
   });
@@ -705,20 +716,24 @@ function fallBack(g: Game, B: Stations, cal: { slide: number; date: number }, be
  * whatever odds it would ask, before its own landings and attacks, and is asked once more when its month's marching
  * is done, for one whose corps have only then come up to the door (ai.ts). An attack that cannot go in is owed while
  * the table runs. The battle is the game's own: at the record's met figures where the table gives them (rider b580).
+ * Each country makes its own rows and no other's: the invader the table's, and a country whose choice a row names
+ * that row (`rowNat`; the design director's 14:36Z of 22 November 2026).
  */
 export function bookAttacks(g: Game, nat: string): void {
   const B = stations();
-  if (!B?.attacks || nat !== B.taker) return;
-  // The table's own calendar, while the stations bind and the great blow has fallen. A row that names its own choice
-  // is asked by that choice's book instead, in its own month as written (`ownBook`).
-  const T = stationsBind(g, nat) ? calendar(g, B)! : null;
+  if (!B?.attacks) return;
+  const mine = (r: Attack): boolean => rowNat(B, r) === nat;
+  if (nat !== B.taker && !B.attacks.some(mine)) return;
+  // The table's own calendar, while the stations bind and the great blow has fallen: its invader's alone. A row that
+  // names its own choice is asked by that choice's book instead, in its own month as written (`ownBook`).
+  const T = nat === B.taker && stationsBind(g, nat) ? calendar(g, B)! : null;
   const table = T && T.went ? T : null;
   const slideFor = (r: Attack): number | null => (r.book === undefined ? (table ? table.slide : null) : ownBook(g, B, nat, r) ? 0 : null);
   if (!table && !B.attacks.some((r) => r.book !== undefined && ownBook(g, B, nat, r))) return;
   const riders = B.rows.filter((r) => r.nat === nat && r.beside);
   // (By their months, and within a month in the table's order, which is the record's date order: a row owed from an
   // earlier month goes in before the month's own, as the record's did: rider b599 (i).)
-  const order = B.attacks.map((_, i) => i).sort((a, b) => B.attacks![a].month - B.attacks![b].month || a - b);
+  const order = B.attacks.map((_, i) => i).filter((i) => mine(B.attacks![i])).sort((a, b) => B.attacks![a].month - B.attacks![b].month || a - b);
   // The corps the rows before it in the book's order still name: none of them sets out for a later row (`setsOut`).
   const claimed = new Set<string>();
   order.forEach((i) => {

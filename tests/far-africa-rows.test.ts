@@ -128,13 +128,14 @@ describe('the rows of the design director\'s 13:43Z, 14:18Z and 14:36Z of 22 Nov
     expect(ROWS.some((r) => r[1] === 'SAF')).toBe(false);
     const One = row('1st South African Brigade'), D = row('1st South African Division'), B = row('2nd South African Brigade');
     expect([One[1], One[5], One[0], One[6].until]).toEqual(['UK', 'Wajir', 12, 22]);
-    expect([D[1], D[5], D[0], D[6].until]).toEqual(['UK', 'Marsabit', 15, 21]);
+    // (At Marsabit from December 1940, the historian's check of the posting: section 8.7 of the file.)
+    expect([D[1], D[5], D[0], D[6].until]).toEqual(['UK', 'Marsabit', 16, 21]);
     expect([B[1], B[5], B[0], B[6].until]).toEqual(['UK', 'Mombasa', 19, 22]);
     const south = (m: number): number => [One, D, B].filter((r) => r[0] <= m && r[6].until > m).reduce((n, r) => n + worth(r, m), 0);
-    // (The 1st Brigade alone from August 1940; the division's 1.8 from November; from March 1941 the 2nd Brigade a
+    // (The 1st Brigade alone from August 1940; the division's 1.8 from December; from March 1941 the 2nd Brigade a
     // row of its own, staged at Mombasa; from May the headquarters and the 5th Brigade in Egypt, where the old
     // chart's own row lands the division; gone in June.)
-    for (const [m, w] of [[12, 0.6], [14, 0.6], [15, 1.8], [18, 1.8], [19, 1.8], [20, 1.8], [21, 1.2], [22, 0]] as [number, number][]) expect(south(m), `month ${m}`).toBeCloseTo(w, 2);
+    for (const [m, w] of [[12, 0.6], [14, 0.6], [15, 0.6], [16, 1.8], [18, 1.8], [19, 1.8], [20, 1.8], [21, 1.2], [22, 0]] as [number, number][]) expect(south(m), `month ${m}`).toBeCloseTo(w, 2);
     expect(((setup as any).expeditions as Row[]).some((r) => r[1] === 'UK' && r[2] === '1st South African Division' && r[0] === 21 && r[5] === 'Alexandria')).toBe(true);
     const N = row('23rd Nigerian Brigade'), G = row('24th Gold Coast Brigade');
     expect([N[1], N[5], N[0], N[6].until]).toEqual(['UK', 'Garissa', 17, 23]);
@@ -160,6 +161,9 @@ describe('the rows of the design director\'s 13:43Z, 14:18Z and 14:36Z of 22 Nov
     expect(alive(g, D[2])).toBeUndefined();
     expect(alive(g, B[2])).toBeUndefined();
     g.turn = 15;
+    startPhase(g, 'UK');
+    expect(alive(g, D[2])).toBeUndefined();
+    g.turn = 16;
     startPhase(g, 'UK');
     const d = alive(g, D[2])!;
     expect([d.nat, g.regions[d.reg].name]).toEqual(['UK', 'Marsabit']);

@@ -49,7 +49,8 @@ const ROWS: [number, string, string, string[], string[], string][] = [
 ];
 
 const table = (): Attack[] => stations()!.attacks!;
-const mine = (): Attack[] => table().filter((a) => a.book !== undefined);
+// (The rows that name a choice of Japan's: Britain's in East Africa are rows of the same table, far-africa-attacks.test.ts.)
+const mine = (): Attack[] => table().filter((a) => a.book !== undefined && a.book.startsWith('JAP:'));
 const idx = (name: string): number => table().findIndex((a) => a.name === name);
 afterEach(() => { bookWatch.tell = null; broughtWatch.tell = null; });
 
@@ -97,10 +98,13 @@ describe("China's dated attacks in the line file", () => {
     expect(mine().map((a) => [a.month, a.name, a.at.join('+'), a.force, a.from, a.book])).toEqual(ROWS.map((r) => [r[0], r[1], r[2], r[3], r[4], r[5]]));
     // (One row has a last month: Tushan's, the month it was reached and given up. The design director's 11:41Z of 22 November 2026.)
     expect(mine().filter((a) => a.until !== undefined).map((a) => [a.name, a.until])).toEqual([['Tushan', 64]]);
-    // (Laid as the file is: its own block holds the ten, and they stand at the table's end.)
+    // (Laid as the file is: its own block holds the ten, and they stand at the end of Japan's rows in the table.
+    // Britain's rows in East Africa are laid after them: far-africa-attacks.test.ts.)
     const own = (chinaLine as any).history.stations.attacks as Attack[];
     expect(own).toHaveLength(10);
-    expect(table().slice(-10).map((a) => a.name)).toEqual(ROWS.map((r) => r[1]));
+    const japans = table().filter((a) => a.book === undefined || a.book.startsWith('JAP:'));
+    expect(japans.slice(-10).map((a) => a.name)).toEqual(ROWS.map((r) => r[1]));
+    expect(table().slice(0, japans.length)).toEqual(japans);
     // (None by sea, none with a record's fight; one with a last month, Tushan's: see the case above.)
     for (const a of mine()) expect([a.sea, a.met, a.until, HISTORY.theatre[a.book!]], a.name).toEqual([undefined, undefined, a.name === 'Tushan' ? 64 : undefined, 'china']);
     expect([HISTORY.dates.JAP.ichigo, HISTORY.dates.JAP.kukong45]).toEqual([56, 64]);
