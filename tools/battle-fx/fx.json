@@ -686,6 +686,21 @@
     117,
     80
    ]
+  },
+  "far": {
+   "full_px": 110,
+   "least": 0.08,
+   "halve_past": 1500,
+   "near_busy": 0.5,
+   "over_busy": 0.125,
+   "smoke_pow": 0.75,
+   "skirt_pow": 0.75,
+   "gone_px": 2.0,
+   "gone_beyond_m": 300,
+   "gone_dirt": 0,
+   "alpha_pow": 2.0,
+   "alpha_most": 0.95,
+   "_how": "The production lead's FX3 (battle-scale plan, 22 November): a hit on land outside a sea battle keeps a share of its pieces, each as much bigger. The share is FarK, its crown's height in the picture (crown_m, at the scene's own window pixels) against full_px, all of them at that or taller and never under least, times BusyK: with more than halve_past pieces asked for on the screen half, with the room four fifths full a quarter, with more asked than the room over_busy; a hit whole in the picture only near_busy, and only with the room four fifths full; between, by how small it stands. Of the crown it keeps every heavy jet, each of fewer pieces up to three times as long; the square root of the share of the dust between the jets, the body and the foot (each bigger); the share of the spikes, clumps and thrown clods. Its skirt keeps the share to skirt_pow, its smoke to smoke_pow, so a cloud seen after a cut to a nearer eye is softer but whole. And a piece of a land hit past gone_beyond_m that stands under gone_px across at its biggest, and a crater's mark likewise, takes no place in the room and is not laid (its flash never; its thrown dirt only with gone_dirt 1). A see-through piece of such a hit (skirt, smoke, the cloud's lighter fringe) laid Bigger times as wide is as thick as Bigger to alpha_pow of them laid one over another, never over alpha_most (the art director 12:33Z: with fewer layers the grass showed through the far clouds and tinted them; 0 or no key: as laid). Measured on the ground scene's whole-army wide shot (1,080 x 670, a 1.5 km front from 810 m back and 470 m up, the kit's crater marks off as the ground scene has them), 6 shells a second: the room asked 18,400 against 3,000 before and 3,200 now, Draw 6.7 ms before and 3.6 now on the test box (median of 3), and over four frames 98 of 101 young bursts show in the picture against 35 before (the bursts' own pieces filled the room and it left the farthest out first); 7.6 a second, 146 of 153 against 37. A single burst at the preview's own distance is drawn as before, byte for byte. No row: as before."
   }
  },
  "sizes": {

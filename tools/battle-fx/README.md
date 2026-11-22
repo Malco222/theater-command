@@ -1511,6 +1511,79 @@ About 70 m is the spacing of the pieces themselves. Longest: the slow stretch la
 until the first fast piece goes, then fades (it was 5,200 m before, with the hole). At a steady speed nothing is
 cut: the 96 old frames and the 24 heavy frames are byte for byte as before.
 
+## Far bursts: fewer, bigger pieces (FX3, after head 5833912)
+
+The production lead's FX3 (/mnt/project-files/production/battle-scale-1122/plan.md): on the ground scene's whole-army
+wide shot the bursts asked for six times the room, and the room leaves out the farthest first, so the far half of
+the front showed only dots. Recipe row `burst.far` (no row: as before, byte for byte):
+
+- **The share kept** (Shell, a hit on land outside a sea battle). FarK: the crown's height in the picture (`crown_m`
+  at the scene's own window pixels) against `full_px` 110, all of it at that or taller, never under `least` 0.08. Times
+  BusyK: with more than `halve_past` 1,500 pieces asked for on the screen a half, with the room four fifths full a
+  quarter, with more asked than the room `over_busy` 0.125; a hit whole in the picture only `near_busy` 0.5, and only
+  with the room four fifths full; between, by how small it stands. Whole at 1,080 px wide: a grenade within 33 m, a
+  mortar 104 m, a 75 mm 160 m, a 105 mm 212 m, a 150 mm 297 m, a 500 lb bomb 660 m.
+- **What it keeps.** The flash always. The crown keeps every heavy jet, each of fewer pieces up to three times as
+  long; the square root of the share of the dust between the jets, the body and the foot (each bigger); the share of
+  the spikes, clumps and thrown clods. The skirt keeps the share to `skirt_pow` 0.75 and the smoke to `smoke_pow` 0.75,
+  each piece as much wider, so a cloud seen after a cut to a nearer eye is softer but whole.
+- **Too small to see.** A piece of a land hit past `gone_beyond_m` 300 that stands under `gone_px` 2 across at its
+  biggest takes no place and is not laid; so is a crater's mark. The marks are laid first and stay all battle, up to
+  2,400 of them: at 45 s of the wide shot they held a third of the room. Thrown dirt is left alone unless `gone_dirt` 1.
+- **Readout.** `-TheaterFxRoomLog` adds the land hits so far, how many kept fewer pieces, and the mean share kept.
+
+Measured with a probe on the kit (the wide shot: 1,080 x 670, a 1.5 km front 500 m deep, the eye 810 m back and
+470 m up; shells of 60 mm to 250 lb mixed; how many 0.3-8 s old bursts change at least 6 pixels of the picture):
+
+| Wide shot | Room asked (mean) | Pieces held | Draw (median of 3) | Bursts that show |
+|---|---|---|---|---|
+| 6 shells a second, before | 18,436 | 19,530 | 6.7 ms | 25 of 74 |
+| 6 shells a second, now | 3,161 | 3,767 | 3.6 ms | 70 of 74 |
+| 7.6 shells a second (Prokhorovka's busiest), before | 22,939 | 24,284 | 7.5 ms | 10 of 37 |
+| 7.6 shells a second, now | 3,703 | 4,433 | 4.5 ms | 107 of 116 |
+
+From a hill 350 m off at 6 a second (1,600 px wide): Draw 5.7 ms before and 4.0 now, asked at the end 15,811 and 4,643. A
+single burst at the preview's own distance draws as before, byte for byte; the 96 old frames and 24 heavy frames
+(the raid, the fleet, the wrecks) too, with the row and without it. Pictures: battle-fx/stills/fx3/.
+
+## Dark smoke keeps its hue: sRGB bytes and M_BattlePuffs (after head c86e3ec)
+
+The art director passed FX3 at 12:33Z 22 November with one fix: at the medium shot a big far piece read olive over
+grass (55,59,37, ground 87,86,70), and the share of dark smoke with green above red went from 7% to 15%. The cause was
+not the grass alone. The kit writes each colour into a byte a channel, as light, `picture.lit_gain` (4) times darker
+so its hottest flames can burn past white. A charcoal or dark earth smoke is then one to four steps a channel, and its
+red, green and blue round apart: a dark brown of 2.3, 2.0 and 1.5 steps goes in as 2, 2, 1, which is olive. Many small
+pieces each rounded a little differently and the errors evened out; one big piece shows its own plainly. The same
+rounding is the dusk specks (red and blue blotches in near-black smoke).
+
+- **The cure.** The kit can write its colours raised to 1/2.2 first (`Battle::SetSrgbBytes(true)`), and the new
+  material `M_BattlePuffs` (Tools/build_content.py) raises them back to 2.2 before its Brightness, as M_MapSurface and
+  M_LandLeaves read theirs. A dark smoke then has 30 to 50 steps a channel instead of 1 to 4. `FBattleEffects::Begin`
+  uses M_BattlePuffs when it is there and says so in its ready line ("colours as sRGB bytes"); without it (the Mac's
+  content not built since), M_Highlight and plain bytes, as before. **On the Mac: run Tools/build_content.sh once**;
+  it builds M_BattlePuffs when it is missing and leaves everything else alone.
+- **Thicker far pieces.** `burst.far.alpha_pow` 2 and `alpha_most` 0.95: a see-through piece of a thinned land hit
+  (skirt, smoke, the cloud's lighter fringe) laid Bigger times as wide is as thick as Bigger to alpha_pow of them laid
+  one over another, never over alpha_most, so less grass shows through the fewer layers. Sea hits are untouched.
+- **The preview.** `FX_BYTES=srgb` draws as the game will with M_BattlePuffs; unset, plain bytes as before, so every
+  older check holds. Byte checks need clang builds: the 96 old frames were made with clang, and g++ rounds a few
+  sums differently.
+
+Measured on the medium shot (150 m back, the kit's crater marks off as the ground scene has them; frames at 20 and 30 s):
+
+| | Dark smoke with green above red (20 s / 30 s) | The big low piece | Dark smoke area at 30 s |
+|---|---|---|---|
+| Before FX3 | 3.0% / 12.8% | 77,68,60 (many small pieces) | 50,753 px |
+| FX3 as passed | 2.4% / 22.7% | 54,59,37 | 35,702 px |
+| FX3 with the cure | 2.4% / 14.8% | 58,57,43 | 36,908 px |
+
+At dusk, over the burning wreck (960 x 540, frame 450), dark pixels with red six or more above green fell from 10,371 to
+2,697, and with blue above red from 852 to 560; the smoke reads as its own brown-grey, not grey with purple blotches.
+By day every older test frame moves by 1.7 levels on average where it moves at all (92 of 96 frames, mostly the smoke's
+blue up a level or two, at most 6 to 8 levels; 21 at the darkest heart of a 75's cloud on mud). The cost is a table
+look-up a channel: Draw 3.66 ms against 3.70 on the wide shot (median of 3). Pictures:
+battle-fx/stills/fx3-colour/ (medium-colour-fix.png, dusk-specks.png).
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can

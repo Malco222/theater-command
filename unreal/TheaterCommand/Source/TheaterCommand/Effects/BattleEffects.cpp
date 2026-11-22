@@ -240,7 +240,11 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 		UE_LOG(LogTheater, Warning, TEXT("Battle effects: the recipe is missing or unreadable (%s); nothing will be drawn"), *Path);
 		return false;
 	}
-	UMaterialInterface* Highlight = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	// (M_BattlePuffs reads the colours as sRGB bytes, so a dark smoke keeps its hue; without it (build_content.py not run
+	// since it came), M_Highlight and plain bytes, as before)
+	UMaterialInterface* Puffs = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_BattlePuffs.M_BattlePuffs"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	const bool bGammaBytes = Puffs != nullptr;
+	UMaterialInterface* Highlight = Puffs ? Puffs : LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
 	if (!Highlight)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Battle effects: M_Highlight is missing (run Tools/build_content.sh); nothing will be drawn"));
@@ -272,6 +276,7 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	// The flashes' lamps: a few, shadowless, out until a flash lights one.
 	Core.Setup(&Book, &FBattleEffects::GroundHeight, this, 3u);
 	Core.SetGroundColour(&FBattleEffects::GroundColourAt, this);
+	Core.SetSrgbBytes(bGammaBytes); // (before any Draw, on this thread: no task is running yet)
 	// (picture.lit_gain: the kit writes its colours that much darker and its hottest lights up to that much past white,
 	// so the material's brightness must be the same number for all else to look as it did)
 	Instance->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(Core.PictureGain()));
@@ -297,7 +302,8 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	}
 	const UWorld* World = Parent->GetWorld();
 	Clock = World ? World->GetTimeSeconds() : 0.0; // (until the first Tick)
-	UE_LOG(LogTheater, Log, TEXT("Battle effects ready: %.2f world units a metre, room for %d puffs, %d lamps"), UnitsPerMetre, Core.Room(), LampsInUse);
+	UE_LOG(LogTheater, Log, TEXT("Battle effects ready: %.2f world units a metre, room for %d puffs, %d lamps; colours %s"), UnitsPerMetre, Core.Room(), LampsInUse,
+		bGammaBytes ? TEXT("as sRGB bytes (M_BattlePuffs)") : TEXT("as plain bytes (M_Highlight: run Tools/build_content.sh for M_BattlePuffs, darker smoke keeps its hue)"));
 	return true;
 }
 
@@ -710,7 +716,7 @@ void FBattleEffects::RoomLog(double Now, int32 Laid)
 	}
 	if (Now - LogFrom >= 10.0)
 	{
-		UE_LOG(LogTheater, Log, TEXT("Battle effects room, the kit's clock %.1f to %.1f s: the most drawn %d at %.1f s, asked %d then, of room %d; %d of %d sections in use now"), LogFrom, Now, LogMost, LogMostAt, LogAsked, Core.Room(), SectionsUsed, Sections);
+		UE_LOG(LogTheater, Log, TEXT("Battle effects room, the kit's clock %.1f to %.1f s: the most drawn %d at %.1f s, asked %d then, of room %d; %d of %d sections in use now; land hits so far %d, %d with fewer pieces (burst.far), keeping %.2f of their pieces on average"), LogFrom, Now, LogMost, LogMostAt, LogAsked, Core.Room(), SectionsUsed, Sections, Core.LandHitsMade(), Core.LandHitsThinned(), Core.LandKeptMean());
 		LogFrom = Now;
 		LogMost = -1;
 	}
