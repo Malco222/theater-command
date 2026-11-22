@@ -1200,7 +1200,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     // Tanks without fuel and troops without shells: a nation whose depots are empty fights weaker (the grand campaign).
     if (wide) { const short = shortAttack(g, c); if (short !== 1) { p *= short; shortA = Math.min(shortA, short); } }
     // An agent at work in the province has mapped its defences for the attackers (the grand campaign).
-    if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; if (spy.foe) watched ??= { nat: spy.foe, by: c.nat, found: !!spy.found, mul: spy.mul }; else spied = spy.agent; } }
+    if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; if (spy.foe) { if (!watched || (watched.by !== spy.foe && c.nat === spy.foe)) watched = { nat: spy.foe, by: c.nat, found: !!spy.found, mul: spy.mul }; } else spied = spy.agent; } }
     // Troops in good heart hit harder, and shaken ones do not (the grand campaign: nobody else carries morale).
     p *= heart(c);
     if (g.nations[c.nat].slowCommand) p *= 0.85;

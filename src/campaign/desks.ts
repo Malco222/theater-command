@@ -20,7 +20,7 @@ import { keepsStores } from './resources';
 import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
-import { INTEL, abroad, agentsOf, arrest, atWork, foesFound, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, turnFoe, whyNotMission, whyNotRecruit, whyNotSend, whyNotTurn } from './intel';
+import { INTEL, abroad, agentsOf, arrest, atWork, enemySends, foesFound, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, turnFoe, whyNotMission, whyNotRecruit, whyNotSend, whyNotTurn } from './intel';
 import { doublesOn, watchersOn } from './secretwar';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
@@ -335,11 +335,34 @@ function spies(g: Game, nat: string): string | null {
   // With the enemy's watchers, and a service big enough to keep one more back, the next agent at home hunts on the front.
   const hunters = watchersOn(g) && guards && agentsOf(g, nat).length > guards + 1 ? S.hunters ?? 0 : 0;
   const home = mine.filter((a) => !abroad(g, a));
+  // Who guards and who hunts. Without watchers: the first agents at home guard. With them the guard comes first, and
+  // after it the hunter: whoever hunts already goes on hunting (one on the road home to hunt counts), the guard is the
+  // first of the rest, and the next one at home hunts if a hunter is still wanted. Agents in training or on the road
+  // home count as coming.
+  const coming = hunters ? agentsOf(g, nat).filter((a) => !atWork(g, a) && !abroad(g, a)) : [];
+  const toHunt = Math.max(0, Math.min(hunters - coming.filter((a) => a.mission === 'hunt').length, home.length - guards));
+  const hunting = home.filter((a) => a.mission === 'hunt').slice(0, toHunt);
+  const guarding = home.filter((a) => !hunting.includes(a)).slice(0, guards);
+  hunting.push(...home.filter((a) => !hunting.includes(a) && !guarding.includes(a)).slice(0, toHunt - hunting.length));
   for (const a of mine) {
     if (abroad(g, a)) { if (!posts.includes(a.reg)) free.push(a); continue; }
-    if (home.indexOf(a) >= guards + hunters) free.push(a);
+    if (!guarding.includes(a) && !hunting.includes(a)) free.push(a);
   }
-  for (const a of home.slice(guards, guards + hunters)) did.push(...hunt(g, nat, a));
+  // (With watchers.) A guard is on guard: a former hunter that has come to stand in its place goes back to guarding.
+  if (watchersOn(g)) {
+    for (const a of guarding) if (a.mission !== 'guard' && whyNotMission(g, nat, a.id, 'guard') === null && setMission(g, nat, a.id, 'guard')) did.push(`put ${a.name} back on guard at ${g.regions[a.reg].name}`);
+  }
+  for (const a of hunting) did.push(...hunt(g, nat, a));
+  // (With watchers.) No hunter at home and none coming (its province overrun, say, with the service full): one agent
+  // abroad comes home to hunt, the first with no post, else the one on the least of the posts, never the one reading the books.
+  if (hunting.length + coming.length < hunters) {
+    const out = mine.filter((a) => abroad(g, a));
+    const back = out.find((a) => !posts.includes(a.reg)) ?? out.filter((a) => !capitals.includes(a.reg)).sort((x, y) => posts.indexOf(y.reg) - posts.indexOf(x.reg) || x.id - y.id)[0];
+    if (back) {
+      const from = back.reg, went = hunt(g, nat, back);
+      if (went.length) { did.push(...went); if (free.includes(back)) free.splice(free.indexOf(back), 1); taken.delete(from); }
+    }
+  }
   for (const a of free) {
     const to = posts.find((p) => !taken.has(p) && whyNotSend(g, nat, a.id, p) === null);
     if (to === undefined) continue;
@@ -355,37 +378,36 @@ function spies(g: Game, nat: string): string | null {
 }
 
 /**
- * The service's hunter: it hunts where it stands while its search still reaches the front (its own province or one
- * beside it), and otherwise goes to the province of the front with the most of the enemy's divisions beside it,
- * already ordered to hunt, so that it searches from the month it arrives. With no front at all it hunts where it is.
+ * The service's hunter: it hunts where it stands while its search reaches a province of the front at least half as
+ * busy as the busiest (its own province or one beside it; busy = one, and the enemy's divisions beside it, as the
+ * watchers choose their places). Otherwise it goes to the busiest province of the front, already ordered to hunt, so
+ * that it searches from the month it arrives. An agent abroad called home to hunt goes there too. With no front at
+ * all it hunts where it is.
  */
 function hunt(g: Game, nat: string, a: ReturnType<typeof agentsOf>[number]): string[] {
   const edge = (r: Region): boolean => r.ctrl === nat && r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl));
-  const here = g.regions[a.reg];
-  if (!edge(here) && !here.nb.some((j) => edge(g.regions[j]))) {
-    const foe = new Map<number, number>();
-    for (const c of g.corps) if (!c.dead && c.reg >= 0 && atWar(g, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
-    let to = -1, most = -1;
-    for (const r of g.regions) {
-      if (!edge(r)) continue;
-      const n = r.nb.reduce((t, j) => t + (foe.get(j) ?? 0), 0);
-      if (n > most) { most = n; to = r.id; }
-    }
-    if (to >= 0 && whyNotSend(g, nat, a.id, to) === null && sendAgent(g, nat, a.id, to)) {
-      // (On the road it is not at work; at home on arrival the month keeps an agent ordered to hunt at it.)
-      a.mission = 'hunt';
-      return [`sent ${a.name} to hunt enemy agents at ${g.regions[to].name}`];
-    }
+  const foe = new Map<number, number>();
+  for (const c of g.corps) if (!c.dead && c.reg >= 0 && atWar(g, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
+  const busy = (r: Region): number => (edge(r) ? 1 + r.nb.reduce((t, j) => t + (foe.get(j) ?? 0), 0) : 0);
+  let to = -1, most = 0;
+  for (const r of g.regions) { const n = busy(r); if (n > most) { most = n; to = r.id; } }
+  const here = g.regions[a.reg], out = abroad(g, a);
+  const reach = out ? 0 : Math.max(busy(here), ...here.nb.map((j) => busy(g.regions[j])));
+  if (to >= 0 && reach * 2 < most && whyNotSend(g, nat, a.id, to) === null && sendAgent(g, nat, a.id, to)) {
+    // (On the road it is not at work; at home on arrival the month keeps an agent ordered to hunt at it.)
+    a.mission = 'hunt';
+    return [out ? `called ${a.name} home from ${here.name} to hunt enemy agents at ${g.regions[to].name}` : `sent ${a.name} to hunt enemy agents at ${g.regions[to].name}`];
   }
+  if (out) return [];
   if (a.mission !== 'hunt' && whyNotMission(g, nat, a.id, 'hunt') === null && setMission(g, nat, a.id, 'hunt')) return [`set ${a.name} to hunt enemy agents at ${here.name}`];
   return [];
 }
 
-/** What the staff does with a desk, in words, for this campaign: the secret service's hunter and arrests only where the enemy's watchers are in it. */
+/** What the staff does with a desk, in words, for this campaign: the secret service's hunter and arrests only where the enemy's watchers are in it and its services send agents at this level. */
 export function deskRuns(g: Game, id: DeskId): string {
   const d = DEPTH.desks.find((x) => x.id === id);
   if (!d) return '';
-  return id === 'spies' && watchersOn(g) && d.runsMore ? `${d.runs} ${d.runsMore}` : d.runs;
+  return id === 'spies' && watchersOn(g) && enemySends(g) && d.runsMore ? `${d.runs} ${d.runsMore}` : d.runs;
 }
 
 // ---- The air war --------------------------------------------------------------------------------------
