@@ -957,3 +957,10 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    back picture, 06b, frames ship and aircraft with an eighth to spare (was a quarter), 350 m at the nearest.
 27. **The ride's log.** While riding, the dispatches show only the last four, at least 34 characters wide beside
    the aircraft ridden. Look at 03 and 05.
+28. **The strike at the player's pace** (the realism audit of 22 November, 4.2; the flight core air-r2-core). While
+   bombs or torpedoes are in the air, a bomber's doors are open on its run or a dive is going down, the clock holds
+   his own pace even before the formations meet and on the way home: the tag reads "THE STRIKE · RUNNING ×1". Five
+   seconds after the last of it the clock eases into ×10 over three seconds and the tag goes back to "×10 UNTIL ...".
+   Bremen and Midway: the bomb's rush (bomb_release) is heard as a stick falls near the eye, and not while the clock
+   runs fast. The rally: the lead drops first, the rest of the box on him, then it turns home on him (the flight
+   core's own rally, which replaces the scene's of e01b4c03).
