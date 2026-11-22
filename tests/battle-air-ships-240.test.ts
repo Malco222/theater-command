@@ -4,10 +4,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { shipHitsBy } from '../src/campaign/air';
 import { afterCard, keptLines } from '../src/campaign/airfought';
-import { launchRaid } from '../src/campaign/airwar';
+import { launchRaid, planRaid } from '../src/campaign/airwar';
 import { syncWings } from '../src/campaign/carriers';
 import { createGame, setWar } from '../src/campaign/game';
-import { afloatWatch, keptAfloat, sail, type AfloatTold } from '../src/campaign/navy';
+import { afloatWatch, keptAfloat, sail, zoneOf, type AfloatTold } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { SHIP_RESEARCH, dcOf, techOf } from '../src/campaign/tech';
@@ -263,4 +263,65 @@ describe('ruling 240 on the field: ships kept afloat in a fought strike (the des
       }
     }
   });
+});
+
+/** The Home Fleet with six carriers and the German Battle Fleet together in the open Atlantic (tests/battle-air-ships.test.ts). */
+const SEA = (() => {
+  const g = britain();
+  const home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
+  home.ships.cv = 6;
+  for (const f of [home, foe]) { f.zone = zoneOf(g, 'natl'); f.stance = 'patrol'; f.lane = undefined; }
+  syncWings(g);
+  return saveGame(g);
+})();
+/** The German harbour alone (no Italians), as tests/battle-air-ships.test.ts has it. */
+const PORT = (() => {
+  const g = britain();
+  const home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
+  home.ships.cv = 6;
+  sail(g, foe, foe.home, 'port');
+  home.zone = g.seas.find((z) => z.coast.includes(foe.base))!.id; home.stance = 'patrol'; syncWings(g);
+  return saveGame(g);
+})();
+
+describe("ruling 240 on the field: the ships' guns with the stage and proximity-shell switches on", () => {
+  for (const kind of ['harbour', 'fleet'] as const) {
+    it(`the field fires the card's own guns, and costs what the card forecast inside 15 per cent: a ${kind === 'harbour' ? 'raid on a harbour' : 'strike at sea'}`, () => {
+      // The Germans with late-war guns and proximity shells.
+      const ticketOf = () => {
+        const g = loadGame(kind === 'harbour' ? PORT : SEA)!;
+        give(g, 'GER', 'firecontrol', 'taskforces', 'proxfuze');
+        const foe = named(g, 'Battle Fleet'), target = kind === 'harbour' ? foe.base : foe.id;
+        const ids = raidGroups(g, kind, target, 'UK');
+        return { g, target, ids, ticket: airTicket(g, kind, target, ids, 'UK', { ships: true }).ticket! };
+      };
+      set(false, false, false);
+      const off = ticketOf();
+      set(true, true, false);
+      const on = ticketOf();
+      // The card's guns, as the raid card shows them (planRaid: "about N to the ships' guns"), are the ones the field fires.
+      expect(on.ticket.place.gunLoss).toBe(planRaid(on.g, kind, on.target, on.ids, 'UK').guns.loss);
+      expect(on.ticket.place.gunLoss).toBeGreaterThan(off.ticket.place.gunLoss * 1.5);
+      // Many battles with the computer on both sides: the bombers lost against the card's forecast with the switches on,
+      // and the bombers the guns bring down against the same battles with the switches off.
+      const RUNS = 48;
+      const fly = (t: typeof on.ticket, k: number): { bmr: number; flak: number } => {
+        const s = airBattle({ ...t, seed: t.seed + k }, { show: false });
+        s.ai.att = true; s.ai.def = true;
+        while (!s.over) s.step();
+        const bmr = s.outcome().groups.reduce((n, gr) => n + (gr.side === 'att' ? gr.lostBmr : 0), 0);
+        const flak = s.history().filter((e) => e.what === 'air:lost' && e.extra?.air === 'bmr' && e.extra?.by === 'flak').length;
+        return { bmr, flak };
+      };
+      let bmr = 0, flakOn = 0, flakOff = 0;
+      for (let k = 0; k < RUNS; k++) {
+        const x = fly(on.ticket, k);
+        bmr += x.bmr;
+        if (k < RUNS / 2) { flakOn += x.flak; set(false, false, false); flakOff += fly(off.ticket, k).flak; set(true, true, false); }
+      }
+      const want = on.ticket.place.forecast.bmr;
+      expect(Math.abs(bmr / RUNS - want), `bombers lost ${(bmr / RUNS).toFixed(1)} against the card's ${want.toFixed(1)}`).toBeLessThan(Math.max(0.15 * want, 1));
+      expect(flakOn, `the guns brought down ${flakOn} with the switches on, ${flakOff} off`).toBeGreaterThan(flakOff);
+    }, 300_000);
+  }
 });
