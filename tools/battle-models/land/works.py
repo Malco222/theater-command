@@ -768,7 +768,9 @@ class Works(Shop, Gear, Fittings):
                         "and with the file's roof_mg swap on `off` she has no roof gun at all: never aim it or play roof_mg_burst. "
                         + ("The post stands in front of his hatch: he stays facing ahead and his hands follow the grips."
                            if roof["kind"] == "m2" else
-                           "The mount rides the rail round his cupola, so roof_mg turns about the cupola's middle: turn him with it (his facing is roof_mg's bearing).")}
+                           "The mount rides the rail round his cupola, so roof_mg turns about the cupola's middle: turn him with it (his facing is roof_mg's bearing). "
+                           "Draw the gun itself (roof_mg_cradle) only while he mans it, and scale it to nothing otherwise (crews kept the MG 34 inside "
+                           "till they needed it; parked anywhere, its stock would hang over the open hatch where he stands): the carriage, roof_mg, stays.")}
         return self
 
     def running_table(self):
