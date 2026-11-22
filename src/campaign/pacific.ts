@@ -125,7 +125,7 @@ interface Rules {
   pact: { with: string; book: number; fallen: string; months: number };
   freeze: { book: number; places: string[]; wars: string[]; seller: string; south: string[] };
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
-  /** The Soviet Far East's rows that leave the far chart: `westMonth`. */
+  /** The Soviet Far East's divisions that go west: `westMonth`. */
   west?: WestRules;
   demand: {
     of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string;
@@ -152,13 +152,20 @@ interface Rules {
 }
 
 /**
- * Rows of the Soviet Far East that leave the far chart (the design director's ruling of 20:03Z, 22 November 2026).
- * `westMonth`.
+ * The Soviet Far East's divisions that go west (the design director's rulings of 19:45Z and 20:03Z, 22 November
+ * 2026; the historian's far-east-west-and-us-divisions-dec41.md, section (c)). `westMonth`.
  */
 interface WestRules {
-  nat: string;
+  nat: string; foe: string; while: string[];
   /** Rows of the far chart that leave it in a month because the old chart's own book raises the same men elsewhere: [month, the row's name, the line a player of that country reads]. */
   leaves: [number, string, string][];
+  /**
+   * The waves. 'cause': the month counted from ("foe": the country's war with its foe begins; "freeze": the freeze;
+   * "war": the power's war with one of 'while' begins). 'after': so many months after the cause; 'book': the month
+   * at the stops that keep the book. 'needs' "foe": only while the country is at war with its foe. 'rows': [the
+   * held row's name, how many of its divisions the wave frees, the record's name of the formation it gives up].
+   */
+  waves: { cause: 'foe' | 'freeze' | 'war'; after: number; book: number; needs?: 'foe'; rows: [string, number, string][] }[];
 }
 
 interface LiftRules {
@@ -277,9 +284,20 @@ function freezeMonth(g: Game): void {
 }
 
 /**
- * Rows of the Soviet Far East that leave the far chart (the design director's ruling of 20:03Z, 22 November 2026):
- * men the old chart's own book raises in the west (the 16th Army at Kiev in May 1941) leave the far chart's row
- * they came from in that month, so nobody is counted twice.
+ * The Soviet Far East's divisions that go west (the design director's rulings of 19:45Z and 20:03Z, 22 November
+ * 2026). The far chart's rows there are all held, and nothing read what Japan did: the record sent about thirteen
+ * divisions west in 1941 after Germany's attack and three more in July 1942, once Japan had turned south.
+ *
+ * A wave comes due so many months after its cause (at the stops that keep the book, in the book's month) and is
+ * taken in the first month from then that finds the country at peace with the power, and at war with its foe where
+ * the wave asks that. The power at war with the country frees nothing, and no wave to come is taken while that war
+ * lasts. A wave lifts the hold on so many divisions of a row and no more: a row that gives up all it has loses its
+ * hold; one that gives up part gives up a formation of that many, in the same place and of the row's own quality,
+ * free of the hold, and the rest stays held. Nothing is moved: the staff's own rules do the rest. A player of that
+ * country is told what the Far East can spare, and his formations are left as they stand (ruling 129(d)).
+ *
+ * 'leaves' is the other half of the same count: men the old chart's own book raises in the west (the 16th Army at
+ * Kiev in May 1941) leave the far chart's row they came from in that month, so nobody is counted twice.
  */
 function westMonth(g: Game): void {
   const P = PACIFIC!, W = P.west;
@@ -296,6 +314,34 @@ function westMonth(g: Game): void {
     if (!c) return;
     removeCorps(g, c);
     if (W.nat === g.human) headline(g, 'info', words, W.nat);
+  });
+  const J = live(g, P.power);
+  if (!J || atWar(g, W.nat, J.id)) return;
+  const since = (a: string, b: string): number => (atWar(g, a, b) ? Math.max(g.flags[`war:${a}:${b}`] ?? 0, g.flags[`war:${b}:${a}`] ?? 0) : 0);
+  const foe = since(W.nat, W.foe);
+  const wars = W.while.map((e) => since(J.id, e)).filter((t) => t > 0);
+  const cause = { foe, freeze: g.flags[FREEZE] ?? 0, war: wars.length ? Math.min(...wars) : 0 };
+  W.waves.forEach((w, i) => {
+    const key = `pac:west:${i}`;
+    if (g.flags[key] !== undefined || cause[w.cause] <= 0 || (w.needs === 'foe' && foe <= 0)) return;
+    if (g.turn < (stopDef(g).book ? w.book : cause[w.cause] + w.after)) return;
+    g.flags[key] = g.turn;
+    const spared: string[] = [];
+    let n = 0;
+    for (const [name, divs, record] of w.rows) {
+      const c = g.corps.find((x) => x.nat === W.nat && !x.dead && x.hold && x.name === name);
+      if (!c) continue;
+      const k = Math.min(divs, c.divs);
+      n += k;
+      spared.push(`the ${record} at ${g.regions[c.reg].name}`);
+      if (W.nat === g.human) continue;
+      if (k >= c.divs) { c.hold = false; continue; }
+      c.divs -= k;
+      const free = addCorps(g, W.nat, record, c.kind, k, c.reg, { xp: c.xp });
+      free.str = c.str; free.org = c.org; free.ap = c.ap; free.apMax = c.apMax; free.supplied = c.supplied;
+      if (c.full !== undefined) free.full = c.full;
+    }
+    if (n > 0 && W.nat === g.human) headline(g, 'event', fill(P.says.west, { n: String(n), divisions: n === 1 ? 'division' : 'divisions', list: spared.length > 1 ? `${spared.slice(0, -1).join(', ')} and ${spared[spared.length - 1]}` : spared[0] }), W.nat);
   });
 }
 
