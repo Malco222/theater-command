@@ -73062,7 +73062,7 @@
       const name = newsName(n);
       nations[tag] = { name, the: theName({ ...n, name }), adj: n.adj, bloc: bloc(n) ?? "" };
     }
-    return { on: true, viewer: viewer ?? "", turn: g2.turn, month: monthName(g2.turn), term: BARGAINS.term, round: BARGAINS.round, nations, rows, legions };
+    return { on: true, viewer: viewer ?? "", turn: g2.turn, month: monthName(g2.turn), term: BARGAINS.term, round: BARGAINS.round, scale: BUDGET.scale, nations, rows, legions };
   }
   var money2 = (pp) => `${Math.round(pp * BUDGET.scale)}`;
   function stepNear(g2, pp) {

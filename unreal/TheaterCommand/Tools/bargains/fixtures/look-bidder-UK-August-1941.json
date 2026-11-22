@@ -1,6 +1,6 @@
 {
 "_about": "REAL output of TC.bargainsLook()'s function (Rules/bargains-look.ts bargainsLookOf) on the bargains-map branch (claude/volunteer-legions 69576fa4 merged over claude/project-thread-sgfei1 e6d6cf15), TC_BARGAINS=1 TC_LEGIONS=1, grand campaign seed 1939, player UK, history stop 1, asked every month from the start. Viewer UK: the player, a bidder (his own bid on the Swedish ore).",
-"on": true, "viewer": "UK", "turn": 24, "month": "August", "term": 12, "round": 1,
+"on": true, "viewer": "UK", "turn": 24, "month": "August", "term": 12, "round": 1, "scale": 100,
 "nations": {
  "ARG": {"name":"Argentina","the":"Argentina","adj":"Argentine","bloc":""},
  "BRA": {"name":"Brazil","the":"Brazil","adj":"Brazilian","bloc":""},

@@ -7,7 +7,7 @@
 // not say: the names of the countries named, who the buyer is to the player, whether the player has an agent in
 // either capital, the line the goods follow, and where a lane's goods are lost or cut off.
 //
-//   TC.bargainsLook()             -> { on: false } or { on, viewer, turn, month, term, round, nations, rows, legions }
+//   TC.bargainsLook()             -> { on: false } or { on, viewer, turn, month, term, round, scale, nations, rows, legions }
 //   TC.bargainBid(id, pp)         -> { ok, note, view }: the player bids for a bargain whose round is open
 //   TC.bargainSell(id, buyer|null)-> { ok, note, view }: the player, as the seller, chooses a buyer or nobody
 //
@@ -62,7 +62,7 @@ export interface LookNation { name: string; the: string; adj: string; bloc: stri
 
 export type Look =
   | { on: false }
-  | { on: true; viewer: string; turn: number; month: string; term: number; round: number; nations: Record<string, LookNation>; rows: LookRow[]; legions: LookLegion[] };
+  | { on: true; viewer: string; turn: number; month: string; term: number; round: number; scale: number; nations: Record<string, LookNation>; rows: LookRow[]; legions: LookLegion[] };
 
 // ---- The lanes cut off at sea ----------------------------------------------------------------------------------
 //
@@ -225,7 +225,8 @@ export function bargainsLookOf(g: Game, viewer: string | null = g.human): Look {
     const name = newsName(n);
     nations[tag] = { name, the: theName({ ...n, name }), adj: n.adj, bloc: bloc(n) ?? '' };
   }
-  return { on: true, viewer: viewer ?? '', turn: g.turn, month: monthName(g.turn), term: BARGAINS.term, round: BARGAINS.round, nations, rows, legions };
+  // (scale: how the game shows money, budget.json's, so that the card's bids read as the rules' notes and the treasury do)
+  return { on: true, viewer: viewer ?? '', turn: g.turn, month: monthName(g.turn), term: BARGAINS.term, round: BARGAINS.round, scale: BUDGET.scale, nations, rows, legions };
 }
 
 // ---- The orders ----------------------------------------------------------------------------------------------------

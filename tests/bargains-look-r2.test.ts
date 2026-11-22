@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import { BARGAINS, bargainsView, bidSteps, startBargains } from '../src/campaign/bargains';
 import { legionsMonth, legionsView, startLegions } from '../src/campaign/legions';
+import { BUDGET } from '../src/campaign/economy';
 import { atWar, createGame } from '../src/campaign/game';
 import { setStop, stopOf } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -78,7 +79,7 @@ describe('switched on', () => {
     const g = playing('UK');
     TC().load(saveGame(g));
     const before = saved();
-    const L = look() as { on: boolean; viewer: string; turn: number; month: string; term: number; round: number; nations: Record<string, { name: string; the: string; adj: string; bloc: string }>; rows: LookRow[]; legions: unknown[] };
+    const L = look() as { on: boolean; viewer: string; turn: number; month: string; term: number; round: number; scale: number; nations: Record<string, { name: string; the: string; adj: string; bloc: string }>; rows: LookRow[]; legions: unknown[] };
     expect(saved()).toBe(before);
     expect(L.on).toBe(true);
     expect(L.viewer).toBe('UK');
@@ -86,6 +87,7 @@ describe('switched on', () => {
     expect(`${L.month} ${1939 + Math.floor((8 + g.turn - 1) / 12)}`).toMatch(/^[A-Z][a-z]+ \d{4}$/);
     expect(L.term).toBe(BARGAINS.term);
     expect(L.round).toBe(BARGAINS.round);
+    expect(L.scale).toBe(BUDGET.scale); // (the card shows bids as the game shows money: 1.5 points read 150)
     // The rules' own rows, unchanged, in the rules' order.
     const rules = bargainsView(loadGame(before)!, 'UK');
     expect(L.rows.length).toBe(rules.length);
