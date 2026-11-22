@@ -52,6 +52,8 @@ export interface LandUnit extends UnitBase {
   path: [number, number][];
   /** Dug in where it began: cover while it stays put. */
   dug: boolean;
+  /** How worn its uniforms and kit look, from its corps' time in the line (release 2, looks only): absent, fresh. */
+  wear?: number;
   home: [number, number];
   /** Seconds since it was last hit, and since it last had an enemy near (for a rally). */
   still: number;
@@ -225,6 +227,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         worth: weightOf(p),
         order: null, path: [], dug: !!f.dug, home: [0, 0], still: 99, clear: 99, pinned: false, flankedAt: -99, keepFace: null, met: false,
         ...(f.cross === false ? { dry: true } : {}),
+        ...(f.wear !== undefined ? { wear: f.wear } : {}),
       });
     }
   });

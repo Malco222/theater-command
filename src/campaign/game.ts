@@ -26,7 +26,7 @@ import { numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
-import { drafted, newStories, schoolMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
+import { drafted, newStories, schoolMonth, wearMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import placesData from '../../data/campaign/places.json';
@@ -3342,7 +3342,8 @@ export function startPhase(g: Game, nat: string): void {
   const starved = new Map<number, { names: string[]; men: number }>();
   army.forEach((c, i) => {
     // What it knew before the month's drafts: a corps back from the battle schools is a grade better than when it went.
-    const knew = c.xp;
+    // And its strength before them: the drafts come in new uniforms (wearMonth).
+    const knew = c.xp, had = c.str;
     // Its morale for the month: where it stands, who stands with it, whether it has had any rest (the grand campaign).
     moraleMonth(g, c, { owed, cold: c.supplied && frozen(g, nat, g.regions[c.reg]) });
     if (c.supplied) {
@@ -3376,7 +3377,9 @@ export function startPhase(g: Game, nat: string): void {
       }
     }
     // Its month at the battle schools is over (release 2): back a grade better, or cut short.
-    schoolMonth(g, c, knew);
+    const schooled = schoolMonth(g, c, knew);
+    // How worn its uniforms and kit look after the month gone (release 2, looks only): a whole term at school is a refit.
+    wearMonth(g, c, had, schooled);
     c.fought = false;
     if (c.blows !== undefined) delete c.blows;
     if (c.gaveWay) delete c.gaveWay;

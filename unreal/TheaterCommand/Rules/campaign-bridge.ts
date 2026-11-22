@@ -36,6 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.school([corpsId, ...], go)       -> { ok, note, view }: sends them to the battle schools for the month (go true), or calls them back (release 2).
 //                                          Each corps in the view carries school (at the schools now), schoolTo (the grade it would come back) and schoolWhy (why it cannot go, '' if it can)
+//                                          and wear, how worn its uniforms look, 0.1 fresh to 1 after six weeks in the line (its battles' blocks carry the same)
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
 import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
@@ -105,7 +106,7 @@ import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
 import type { RaidKind, RaidPlan, RaidWay } from '../../../src/campaign/airwar';
 import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack, orderSchool } from '../../../src/campaign/turn';
-import { whyNotCash, drillTo, whyNoSchool } from '../../../src/campaign/stories';
+import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY } from '../../../src/campaign/navy';
@@ -610,6 +611,8 @@ function drawView() {
       lean: !!c.lean,
       // (Release 2) the battle schools: at them this month, the grade a month there brings it to, and why it cannot go ('' if it can).
       school: !!c.school, schoolTo: grade(drillTo(c.xp)), schoolWhy: c.nat === s.human && !c.school ? whyNoSchool(s, c) ?? '' : '',
+      // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
+      wear: wearOf(c),
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.

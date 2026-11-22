@@ -35,6 +35,9 @@
 //                                   block a few seconds later, longer when its headquarters is hit (units carry orderIn, the
 //                                   seconds left); an order may carry at, the battle time he gave it as shown, and the wait
 //                                   counts from there (never before it). A 'move' with run: true goes at the double. Off unless asked
+//                                   Uniforms (release 2, looks only): every land block in a view carries wear, 0.1 (fresh kit) to
+//                                   1 (six weeks or more in the line since its corps was last rested or formed), its corps' own
+//                                   from the campaign, pulled down by its share of fresh drafts; a practice battle's are fresh
 //   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
 //                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
 //                                   red ghost with the words beside it). Moves nothing (release 2)
@@ -434,6 +437,7 @@ import { armourYear } from '../../../src/campaign/tech';
 import { staffOnly } from '../../../src/battle/land/offered';
 import { LAND, MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
+import { STORIES } from '../../../src/campaign/stories';
 import { SKY } from '../../../src/battle/air/book';
 import { AirSim } from '../../../src/battle/air/sim';
 import { airTicket, foughtAir } from '../../../src/battle/air/ticket';
@@ -476,6 +480,9 @@ function airLoop(a: AirUnit): string {
 }
 
 /** One unit as the 3D game reads it: plain fields only. Exported for the tests. */
+/** A block whose corps has no time in the line on record (a practice battle's, or fresh): new uniforms. */
+const WEAR_FRESH = STORIES.wear.fresh;
+
 export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
   const land = u as LandUnit;
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
@@ -500,6 +507,8 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     // Direct command (release 2): a block the player has taken in hand, and the seconds till his order on the air reaches it.
     ...(land.taken ? { taken: true } : {}),
     ...(land.orderAt !== undefined ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
+    // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
+    ...(land.short ? { wear: land.wear ?? WEAR_FRESH } : {}),
     // What its guns throw, as the art director's explosions sheet sizes it (src/battle/land/shells.ts).
     ...(land.cal ? { cal: land.cal } : {}),
     // A tank block that has left its foot on close ground and is paying for it this second (item 7): buttoned up,

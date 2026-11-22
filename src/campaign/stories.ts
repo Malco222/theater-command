@@ -51,6 +51,7 @@ export const STORIES = data as unknown as {
   rivals: { meets: number; edge: number; org: number; xp: number; pc: number };
   legacy: { xp: number };
   drill: { cap: number };
+  wear: { fresh: number; weeks: number; month: number };
   tour: { perMonth: number };
   lastStand: number;
   generalXp: number;
@@ -600,20 +601,53 @@ export function whyNoSchool(g: Game, c: Corps): string | null {
  * better than it went ('before', its experience before the month's drafts: the schools train the drafts too), or its
  * term was cut short because it had to fight, was cut off or left home. The order lasts the one month either way.
  */
-export function schoolMonth(g: Game, c: Corps, before: number): void {
-  if (!c.school) return;
+export function schoolMonth(g: Game, c: Corps, before: number): boolean {
+  if (!c.school) return false;
   delete c.school;
-  if (c.nat !== g.human) return;
+  if (c.nat !== g.human) return false;
   const to = drillTo(before);
   const place = g.regions[c.reg]?.name ?? 'home';
   if (restedMonth(g, c) && atHome(g, c) && to > c.xp) {
     c.xp = to;
     note(g, c, 'drill', c.reg, gradeIndex(to));
     headline(g, 'info', `${c.name} is back from the battle schools at ${place}, ${grade(to).toLowerCase()} now, and ready for orders.`, c.nat, c.reg);
+    return true;
   } else {
     const why = c.fought ? 'it had to fight' : !c.supplied ? 'it was cut off from supply' : !atHome(g, c) ? 'it was driven from home' : 'it marched';
     headline(g, 'info', `${c.name}'s month at the battle schools at ${place} was cut short: ${why}. It is ready for orders.`, c.nat, c.reg);
   }
+  return false;
+}
+
+// ---- Uniforms and kit (release 2) -------------------------------------------------------------
+
+/** How worn a unit's uniforms and kit look, 0.1 (fresh) to 1 (six weeks or more in the line). Looks only. */
+export const wearOf = (c: Corps): number => c.wear ?? STORIES.wear.fresh;
+
+/** True where an army at war with the corps' nation holds the ground next door, or stands in its own province: the front. */
+const inLine = (g: Game, c: Corps): boolean => {
+  const r = g.regions[c.reg];
+  if (!r) return false;
+  if (r.units.some((u) => !u.dead && u.nat !== c.nat && atWar(g, u.nat, c.nat))) return true;
+  return r.nb.some((j) => { const o = g.regions[j].ctrl; return !!o && o !== c.nat && atWar(g, o, c.nat); });
+};
+
+/**
+ * A corps' uniforms and kit at the reckoning that opens its month (release 2, Brian's "uniforms wear with time at the
+ * front"; every nation, looks only). The month gone counts its weeks in the line: a whole month if it fought, stood at
+ * the front or was cut off, else the weeks it marched. None: it was rested and refitted (fresh). Its old hands' kit wears
+ * by those weeks; the drafts that joined it this month ('before': its strength before them) come in new kit. A corps
+ * formed this month, or back from a whole term at the battle schools ('schooled'), is fresh: new kit, or a refit at home.
+ */
+export function wearMonth(g: Game, c: Corps, before: number, schooled = false): void {
+  const W = STORIES.wear;
+  const marched = c.town !== undefined || c.joint !== undefined ? 0 : Math.max(0, c.apMax - c.ap);
+  const weeks = schooled || c.born === g.turn ? 0 : c.fought || c.pressed || !c.supplied || inLine(g, c) ? W.month : marched;
+  if (weeks <= 0) { delete c.line; delete c.wear; return; }
+  c.line = (c.line ?? 0) + weeks;
+  const old = Math.min(1, wearOf(c) + ((1 - W.fresh) * weeks) / W.weeks);
+  const fresh = c.str > before + 1e-9 ? (c.str - before) / c.str : 0;
+  c.wear = Math.round((old * (1 - fresh) + W.fresh * fresh) * 1000) / 1000;
 }
 
 // ---- The monthly round ----------------------------------------------------------------------

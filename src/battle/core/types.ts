@@ -84,6 +84,11 @@ export interface ForceTicket {
    * cross (the design director, b464(5)). Absent, it crosses, as every corps of a practice card does.
    */
   cross?: boolean;
+  /**
+   * Land, looks only (release 2, Brian's "uniforms wear with time at the front"): how worn its uniforms and kit look,
+   * 0.1 fresh to 1 after six weeks or more in the line, from the campaign (wearOf). Absent, fresh. Nothing in the fight reads it.
+   */
+  wear?: number;
 }
 
 export interface SideTicket {
