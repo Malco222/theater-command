@@ -36,7 +36,7 @@ import {
 } from './fleets';
 import {
   INTEL, SIGHT, armiesSeen, arrest, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
-  whyNotArrest, whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
+  turnFoe, whyNotArrest, whyNotMission, whyNotRecruit, whyNotSend, whyNotTurn, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
@@ -2243,6 +2243,18 @@ export function whyNotArrestAgent(g: Game, id: number): string | null {
 /** ARREST: ends an enemy agent the player's hunters uncovered (ruling 151(c)). */
 export function orderArrest(g: Game, id: number): boolean {
   return whyNotArrestAgent(g, id) === null && arrest(g, g.human!, id);
+}
+
+/** Why the player cannot turn this uncovered enemy agent now, or null (double agents, Brian, 22 November, release 2). */
+export function whyNotTurnAgent(g: Game, id: number): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotTurn(g, g.human, id);
+}
+
+/** TURN: an enemy agent the player's hunters uncovered goes back to its service as his double agent. */
+export function orderTurn(g: Game, id: number): boolean {
+  return whyNotTurnAgent(g, id) === null && turnFoe(g, g.human!, id) !== null;
 }
 
 /** Retires one of the player's agents, which frees a place in the service. */

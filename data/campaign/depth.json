@@ -3,7 +3,7 @@
   "start": "theatre",
   "cap": { "steps": [25, 50, 75, 100], "start": 50 },
   "diplomacy": { "keep": 2 },
-  "spies": { "guards": 1, "peace": false },
+  "spies": { "guards": 1, "hunters": 1, "peace": false },
   "build": {
     "_machines": "Money without men (Version 68). When the armies in the field are waiting for the men a new corps would take, a building staff at war puts the treasury into aircraft, which need pilots and not divisions: 'each' wings of fighters and of bombers on order at a time, until the aircraft it has bought stand at 'share' of the air force's own establishment. Fighters come first while the enemy is bombing the factories.",
     "machines": { "each": 1, "share": 0.5 }
@@ -27,6 +27,7 @@
     {
       "id": "spies", "name": "The secret service", "tab": "spies", "lead": "Your secret service",
       "runs": "The service recruits agents, sends them to watch the enemy's front and to read the books in his capital, and keeps a guard at home. It tries no sabotage.",
+      "runsMore": "Once it has an agent to spare it also keeps a hunter where the enemy's watchers are likeliest (where his divisions mass on your front, or on the coast facing him), calling one home if it must, and it deals with every enemy agent that is uncovered: it turns one into a double agent where it can, and arrests the rest.",
       "hand": "You recruit, post and brief every agent."
     },
     {
