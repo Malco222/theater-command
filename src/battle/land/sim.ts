@@ -2589,22 +2589,20 @@ export class LandBattle implements BattleSim<LandUnit> {
     const pct = (p: number): string => (p < 1e-4 ? 'none' : p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
     const cap = (t: string): string => t[0].toUpperCase() + t.slice(1);
     const line = this.practice && this.ticket.def.human ? 'Your line' : this.practice ? 'Their line' : `The ${this.ticket.def.adj} line`;
+    // Broken, when and why in one line (the UI director, 18:26Z: "broke" said twice read as two events): the break's
+    // figure is its men along the line at the break; the strength line under it is the whole day's, the rout counted.
+    const told = how === 'rout' && why && why.by !== 'none';
     const lines = [
-      how === 'rout' ? this.brokeAfter(loser)
+      how === 'rout' ? this.brokeAfter(loser, told ? why : undefined)
         : how === 'withdrew' ? `${this.army(loser)} withdrew from the field.`
           : how === 'time' ? `${line} held until the day was done.`
             : how === 'destroyed' ? `${this.army(loser)} was driven from the field.`
               : this.staffLine(),
     ];
-    // Broken, why, in the past: straight after the line that says when (the UI director, 14:44Z). So after a rout the
-    // strength line is the third, and the pursuit's line comes after it. Its figure is at the break, the strength line's
-    // at the end, so the strength line opens "In all," under it (the UI director, 16:37Z).
-    const told = how === 'rout' && why && why.by !== 'none';
-    if (told) lines.push(breakLine(why, this.whose(loser), true));
     // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
     // campaign's bill for the whole day (the design director, b356). Handed over before a shot, the staff's line says so
     // already, and there is no figure to give (the UI director, after the retest).
-    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : `${told ? `In all, ${this.sideOf('att', 'attack')}` : cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
+    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : (told ? `By the day's end, counting the rout, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.` : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`));
     else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     // The battle is over: nothing marches on (the blocks' cards and the 3D models alike), and none is left standing in the
     // river: one still wading it is set on the nearer bank (b464(5)). The figures above are already counted.
@@ -2647,14 +2645,18 @@ export class LandBattle implements BattleSim<LandUnit> {
    * minute (b464(6)). Whole minutes made everything from half a minute to a minute and a half "a minute", the span most
    * routs at odds the card calls sure or hopeless fall in.
    */
-  private brokeAfter(s: Side): string {
+  private brokeAfter(s: Side, why?: BreakCause): string {
     const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
     // "Of fighting" on every form (the UI director, b464).
     const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
-    if (halves === 0) return `${who} broke within half a minute of fighting.`;
     const n = ['', 'a', 'two', 'three', 'four', 'five', 'six'][m] ?? `${m}`;
-    const span = m === 0 ? 'half a minute' : m === 1 ? (half ? 'a minute and a half' : 'a minute') : `${n}${half ? ' and a half' : ''} minutes`;
-    return `${who} broke after ${span} of fighting.`;
+    const span = halves === 0 ? 'within half a minute' : `after ${m === 0 ? 'half a minute' : m === 1 ? (half ? 'a minute and a half' : 'a minute') : `${n}${half ? ' and a half' : ''} minutes`}`;
+    const when = `${who} broke ${span} of fighting`;
+    // (and why, where told, in the same line: breakLine's past words after its "broke")
+    if (!why) return `${when}.`;
+    const said = breakLine(why, who, true);
+    const after = said.startsWith(`${who} broke`) ? said.slice(`${who} broke`.length) : `: ${said}`;
+    return `${when}${after.startsWith(':') ? after : `,${after}`}`;
   }
 
   /** Each side's standing power against what it brought, as the staff reckons the day now. */
