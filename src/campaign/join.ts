@@ -216,8 +216,8 @@ function sideOf(g: Game, c: Corps, attNat: string, aN: string[], defNat: string,
  */
 export const staffMask: { of: (g: Game, c: Corps) => ReadonlySet<number> } = { of: () => NO_MASK };
 
-/** What a battle tells joinersOf: a storm of a town, a sortie, the staff's second wave kept out, a landing, a second reckoning. */
-export interface JoinOpts { town?: boolean; sally?: boolean; spare?: Corps[]; sea?: number; joined?: number[] }
+/** What a battle tells joinersOf: a storm of a town, a sortie, the staff's second wave kept out, a second reckoning. (A landing reads its reserves as any battle does.) */
+export interface JoinOpts { town?: boolean; sally?: boolean; spare?: Corps[]; joined?: number[] }
 
 /** One corps next door that passes a battle's tests: its side, week and share; 'spent' where it passes them all but its month, which an earlier battle this month took. */
 interface Near { c: Corps; r: Region; side: 'att' | 'def'; weeks: number; share: number; spent?: true }
@@ -259,27 +259,34 @@ function nearBy(g: Game, attackers: Corps[], target: Region, defenders: Corps[],
   return out;
 }
 
-/** Why a corps next door that passed every test of a battle did not come up in it: cut by the five a side, kept where it is by the front rule, or come up already this month. */
+/**
+ * Why a corps next door that passed every test of a battle did not come up in it: kept where it is by the front rule,
+ * cut by the five a side, or come up already this month. Where both the front rule and the five would leave it out,
+ * the front rule is named: it would have stayed had there been room.
+ */
 export type LeftOut = 'stack' | 'front' | 'joined';
 
 /**
  * Of the corps next door that pass a battle's tests, those that come up, each side's earliest first: by the week and
  * then the corps' number, down to STACK of them; a computer staff's corps that its front rule (screen, with the staff's
  * own masks) keeps where it is stays: those that have joined this month, and those taken here, are gone from its
- * province's count. 'left' names the rest and why. Neither is spent: only a joiner, once its battle is fought.
+ * province's count. 'left' names the rest and why. Neither is spent: only a joiner, once its battle is fought. With
+ * 'why' (the war's records, passedOver), one cut by the five is also read against its front rule, and named by it where
+ * the rule keeps it; who comes up is the same either way.
  */
-function choose(g: Game, near: Near[]): { join: Join; left: { j: Joiner; why: LeftOut }[] } {
+function choose(g: Game, near: Near[], why = false): { join: Join; left: { j: Joiner; why: LeftOut }[] } {
   const att: Joiner[] = [], def: Joiner[] = [];
   for (const { c, r, side, weeks, share } of near) {
     (side === 'att' ? att : def).push({ corps: c, id: c.id, nat: c.nat, name: c.name, kind: c.kind, from: r.id, fromName: r.name, weeks, word: joinWord(share), share });
   }
   const taken = new Set<number>(), left: { j: Joiner; why: LeftOut }[] = [];
   const gone = (u: Corps): boolean => u.joinedIn === g.turn || taken.has(u.id);
+  const front = (j: Joiner): boolean => armyOf(j.corps) !== g.human && screens(g, j.corps, j.corps.nat, staffMask.of(g, j.corps), gone);
   const first = (xs: Joiner[]): Joiner[] => {
     const out: Joiner[] = [];
     for (const j of xs.sort((x, y) => x.weeks - y.weeks || x.id - y.id)) {
-      if (out.length >= STACK) { left.push({ j, why: 'stack' }); continue; }
-      if (armyOf(j.corps) !== g.human && screens(g, j.corps, j.corps.nat, staffMask.of(g, j.corps), gone)) { left.push({ j, why: 'front' }); continue; }
+      if (out.length >= STACK) { left.push({ j, why: why && front(j) ? 'front' : 'stack' }); continue; }
+      if (front(j)) { left.push({ j, why: 'front' }); continue; }
       out.push(j);
       taken.add(j.id);
     }
@@ -303,13 +310,13 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
 
 /**
  * For the war's records: the corps next door that pass every test of this battle but do not come up in it, and why
- * (LeftOut): cut by the five a side or kept by the front rule (both stay free for the next card), or come up already
- * in an earlier battle this month. Empty with the switch off. Reads the game and leaves it as it was.
+ * (LeftOut): kept by the front rule, or else cut by the five a side (both stay free for the next card), or come up
+ * already in an earlier battle this month. Empty with the switch off. Reads the game and leaves it as it was.
  */
 export function passedOver(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: JoinOpts = {}): { corps: Corps; side: 'att' | 'def'; why: LeftOut }[] {
   const near = nearBy(g, attackers, target, defenders, opts, true);
   if (!near) return [];
-  const out = choose(g, near.filter((x) => !x.spent)).left.map(({ j, why }) => ({ corps: j.corps, side: near.find((x) => x.c === j.corps)!.side, why }));
+  const out = choose(g, near.filter((x) => !x.spent), true).left.map(({ j, why }) => ({ corps: j.corps, side: near.find((x) => x.c === j.corps)!.side, why }));
   for (const x of near) if (x.spent) out.push({ corps: x.c, side: x.side, why: 'joined' });
   return out;
 }

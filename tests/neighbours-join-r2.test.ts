@@ -14,7 +14,7 @@ import stageData from '../data/campaign/stage.json';
 import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.json';
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
 import joinData from '../data/campaign/join.json';
-import { NO_MASK, addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, monthWeeks, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
+import { NO_MASK, addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, monthWeeks, moveCost, relocate, removeCorps, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
 import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, foughtNow, joinShare, joinWatch, joinWord, joinersOf, marchWeeks, mayJoin, passedOver, staffMask, weeksInHand, weeksOfMonth } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -899,6 +899,14 @@ describe("one battle a month, in the order the battles are fought (the sequence 
     // Without it, the front rule keeps Poles where they stand.
     const p = lodz();
     expect(passedOver(p.g, [p.iv], p.lodz, hostileUnits(p.g, p.lodz, 'GER')).filter((x) => x.why === 'front' && x.side === 'def').length).toBeGreaterThan(0);
+    // Where both would leave a reserve out, the front rule is named (the review of Q3, finding 7): with Warsaw's screen
+    // gone, the Wyszkow Group, past the fifth, would have stayed there had there been room. Who comes up is the same.
+    const w = lodz({ screen: true }), warsaw = w.g.byName['Warsaw'];
+    const was = ids(assess(w.g, [w.iv], w.lodz), 'def');
+    expect(passedOver(w.g, [w.iv], w.lodz, hostileUnits(w.g, w.lodz, 'GER')).find((x) => x.corps.name === 'Wyszkow Group')?.why).toBe('stack');
+    for (const u of warsaw.units.filter((c) => !real(c))) removeCorps(w.g, u);
+    expect(ids(assess(w.g, [w.iv], w.lodz), 'def')).toEqual(was);
+    expect(passedOver(w.g, [w.iv], w.lodz, hostileUnits(w.g, w.lodz, 'GER')).find((x) => x.corps.name === 'Wyszkow Group')?.why).toBe('front');
     expect(joinWatch.tell).toBeNull();
     const told: number[] = [];
     joinWatch.tell = (e) => { told.push(e.target.id); };
