@@ -36,19 +36,49 @@ namespace SeaShow
 		/** To the right of a heading, level. */
 		Vec RightOf(double Hdg) { return Vec(std::cos(Hdg), -std::sin(Hdg), 0.0); }
 		double Bearing(const Vec& From, const Vec& To) { return std::atan2(To.X - From.X, To.Y - From.Y); }
+		/** A class's name as a number, for SizeOf: its two letters (every class the battles name has two), -1 for another. */
+		int ClassCode(const std::string& Class)
+		{
+			return Class.size() == 2 ? (static_cast<unsigned char>(Class[0]) << 8) | static_cast<unsigned char>(Class[1]) : -1;
+		}
 		/** The least distance between two segments, level (0 where they cross). */
 		double SegGap(const Vec& A0, const Vec& A1, const Vec& B0, const Vec& B1)
 		{
 			auto Cross = [](const Vec& O, const Vec& A, const Vec& B) { return (A.X - O.X) * (B.Y - O.Y) - (A.Y - O.Y) * (B.X - O.X); };
 			const double D1 = Cross(B0, B1, A0), D2 = Cross(B0, B1, A1), D3 = Cross(A0, A1, B0), D4 = Cross(A0, A1, B1);
 			if (((D1 > 0.0 && D2 < 0.0) || (D1 < 0.0 && D2 > 0.0)) && ((D3 > 0.0 && D4 < 0.0) || (D3 < 0.0 && D4 > 0.0))) return 0.0;
-			auto ToSeg = [](const Vec& P, const Vec& S0, const Vec& S1)
+			// (the nearest of the four ends to the other segment, by the square of its gap, and that gap measured once: the
+			// show asks this many times a step of every ship keeping clear, finding 9 of 22 November. The ends whose squares
+			// tie with the least, to a millionth of a millionth, are each measured and the least taken, so the answer is the
+			// four measures' least to the last bit, as before: two ships abeam on one course tie, the review's 1.1%.)
+			double GX[4], GY[4], G2[4];
+			int Ends = 0;
+			auto ToSeg = [&](const Vec& P, const Vec& S0, double DX, double DY, double L2)
 			{
-				const double DX = S1.X - S0.X, DY = S1.Y - S0.Y, L2 = DX * DX + DY * DY;
 				const double U = L2 > 1e-9 ? Clamp(((P.X - S0.X) * DX + (P.Y - S0.Y) * DY) / L2, 0.0, 1.0) : 0.0;
-				return std::hypot(P.X - S0.X - DX * U, P.Y - S0.Y - DY * U);
+				GX[Ends] = P.X - S0.X - DX * U;
+				GY[Ends] = P.Y - S0.Y - DY * U;
+				G2[Ends] = GX[Ends] * GX[Ends] + GY[Ends] * GY[Ends];
+				++Ends;
 			};
-			return std::min(std::min(ToSeg(A0, B0, B1), ToSeg(A1, B0, B1)), std::min(ToSeg(B0, A0, A1), ToSeg(B1, A0, A1)));
+			const double BX = B1.X - B0.X, BY = B1.Y - B0.Y, BL2 = BX * BX + BY * BY;
+			const double AX = A1.X - A0.X, AY = A1.Y - A0.Y, AL2 = AX * AX + AY * AY;
+			ToSeg(A0, B0, BX, BY, BL2);
+			ToSeg(A1, B0, BX, BY, BL2);
+			ToSeg(B0, A0, AX, AY, AL2);
+			ToSeg(B1, A0, AX, AY, AL2);
+			const double Least2 = std::min(std::min(G2[0], G2[1]), std::min(G2[2], G2[3]));
+			const double Band = Least2 * (1.0 + 1e-12) + 1e-200;
+			double Gap = -1.0;
+			for (int K = 0; K < 4; ++K)
+			{
+				if (G2[K] <= Band)
+				{
+					const double H = std::hypot(GX[K], GY[K]);
+					Gap = Gap < 0.0 ? H : std::min(Gap, H);
+				}
+			}
+			return Gap < 0.0 ? std::hypot(GX[0], GY[0]) : Gap; // (no number in: none out, as before)
 		}
 		/** A number from 0 to under 1 fixed by a whole number (a hash): the look's own, never the battle's dice. */
 		double Mix(uint64_t N)
@@ -183,6 +213,8 @@ namespace SeaShow
 		const std::map<std::string, ClassSize> Kept = F.Classes;
 		F = InField;
 		for (const auto& Pair : Kept) if (!F.Classes.count(Pair.first)) F.Classes[Pair.first] = Pair.second;
+		ClassList.clear();
+		for (const auto& Pair : F.Classes) ClassList.push_back({ ClassCode(Pair.first), Pair.first, Pair.second });
 		Roll = Dice(F.Seed * 2654435761ULL + 239ULL);
 		// L6: one wind a battle, from its seed where the field names none (the recorder's hash is the same kind of thing).
 		// (a speed of -2: the battle gave its bearing alone, SeaSim.wind; -1 or none: neither)
@@ -205,8 +237,16 @@ namespace SeaShow
 
 	const ClassSize& Show::SizeOf(const std::string& Class) const
 	{
-		auto It = F.Classes.find(Class);
-		return It != F.Classes.end() ? It->second : F.Classes.at("ca");
+		const int Code = ClassCode(Class);
+		for (const ClassRow& Row : ClassList)
+		{
+			if (Code >= 0 ? Row.Code == Code : Row.Name == Class) return Row.Size;
+		}
+		for (const ClassRow& Row : ClassList)
+		{
+			if (Row.Name == "ca") return Row.Size;
+		}
+		return F.Classes.at("ca");
 	}
 
 	double Show::Calibre(const std::string& Class, const std::string& Nation) const
@@ -2055,6 +2095,8 @@ namespace SeaShow
 			N.O = &O;
 			N.Half = std::max(0.0, 0.5 * (OS.Long - OS.Beam));
 			N.R = 0.5 * OS.Beam;
+			N.V = Ahead(O.Hdg) * O.Spd;
+			N.Fore = Ahead(O.Hdg) * N.Half;
 			N.Horizon = bGive ? 45.0 : 12.0;
 			N.Margin = bNextAhead ? 15.0 : bGive ? 35.0 : 12.0;
 			// (none that could not come within reach in the time she looks ahead)
@@ -2093,13 +2135,10 @@ namespace SeaShow
 				for (const NearShip& N : Nears)
 				{
 					if (T > N.Horizon) continue;
-					const Hull& O = *N.O;
-					const Vec Ov = Ahead(O.Hdg) * O.Spd;
-					const Vec OP = O.P + Ov * T;
-					const double Need = MyR + N.R + N.Margin + 0.5 * Look * Flat(Ov - Mv);
+					const Vec OP = N.O->P + N.V * T;
+					const double Need = MyR + N.R + N.Margin + 0.5 * Look * Flat(N.V - Mv);
 					if (std::fabs(OP.X - P.X) > MyHalf + N.Half + Need || std::fabs(OP.Y - P.Y) > MyHalf + N.Half + Need) continue;
-					const Vec OFore = Ahead(O.Hdg) * N.Half;
-					const double Gap = SegGap(P + Fore, P - Fore, OP + OFore, OP - OFore);
+					const double Gap = SegGap(P + Fore, P - Fore, OP + N.Fore, OP - N.Fore);
 					if (Gap < Need) Sum += (Need - Gap) * (1.0 - 0.7 * T / N.Horizon);
 				}
 				if (Sum > Cap) return Sum; // (already worse than a way in hand)
@@ -3004,6 +3043,9 @@ namespace SeaShow
 				const double A = 2.0 * Pi * (Slot + 0.5) / std::max(1, Room);
 				return Vec(std::cos(A) * (0.5 * O.Long - 0.35), std::sin(A) * (0.5 * O.Beam - 0.35), 0.0);
 			}
+			// (a boat's holders on her grab line at her sides, the art director, 22 November 13:47Z; others round its rim, out
+			// from it)
+			if (O.Kind == "boat") return GrabHold(O.Long, O.Beam, Slot, Hold);
 			const double A = 2.0 * Pi * (Slot + 0.25) / std::max(1, Hold);
 			return Vec(std::cos(A) * (0.5 * O.Long + 0.35), std::sin(A) * (0.5 * O.Beam + 0.35), 0.0);
 		}
@@ -3534,7 +3576,11 @@ namespace SeaShow
 			case Swim::Boat:
 				if (!On) { Into(Swim::Tread); break; }
 				M.O.At = OnFrame(On->O.At, On->O.Heading, M.Off);
-				M.O.Heading = M.O.Doing == Swim::Boat ? Wrap(On->O.Heading + Pi) : Bearing(M.O.At, On->O.At);
+				// (in a boat facing her stern; holding on to a boat facing her side, his hands on her grab line; to a raft,
+				// facing her middle)
+				M.O.Heading = M.O.Doing == Swim::Boat ? Wrap(On->O.Heading + Pi)
+					: M.O.Doing == Swim::Cling && On->O.Kind == "boat" ? Wrap(On->O.Heading - (M.Off.Y >= 0.0 ? 0.5 : -0.5) * Pi)
+					: Bearing(M.O.At, On->O.At);
 				break;
 			case Swim::Climb:
 			{

@@ -3,6 +3,8 @@
 #include "Battle/ShipGuns.h"
 #include "Effects/TheaterFxCore.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <deque>
 #include <map>
@@ -84,7 +86,8 @@ namespace SeaShow
 		uint64_t Seed = 239;
 		std::string ZoneName, Title, Date;
 		std::string AttNat, DefNat, AttAdj, DefAdj;
-		int Year = 1941, Month = 4;
+		int Year = 1941, Month = 4; // Month from 0 (January)
+		bool bWhen = false;         // whether the battle gave its year and month (field.when): else the date is not known
 		double Lat = 45.0, Lon = 0.0;
 		/** The look's wind (L6): where it blows from, radians clockwise from north, and metres a second (SeaSim.wind and
 		 * windSpeed). A speed of -1: none given, the show takes both from the seed; -2: the bearing alone was given. */
@@ -277,6 +280,82 @@ namespace SeaShow
 		int Aboard = 0, Holding = 0; // men in it, men holding on to it
 		double Way = 0.0;     // a boat: her own way through the water under oars, metres a second (0: adrift)
 	};
+
+	/**
+	 * A pulling boat's lines, as the scene draws her (SeaBattle's DrawBoat): her half breadth at her gunwale and her
+	 * gunwale's height over her waterline at her stations, U from -1 (her stern) to 1 (her bow), BoatStations of them,
+	 * double-ended, her sheer rising toward both ends, flat between stations; her side running in to 0.84 of the
+	 * gunwale's breadth 0.12 m under the water.
+	 */
+	constexpr int BoatStations = 8;
+	inline double BoatHalf(double U, double Beam)
+	{
+		const double A = U < 0.0 ? -U : U;
+		const double In = 1.0 - std::pow(A, 2.4);
+		const double H = 0.5 * Beam * std::sqrt(In > 0.0 ? In : 0.0);
+		return H > 0.03 ? H : 0.03;
+	}
+	inline double BoatSheer(double U)
+	{
+		return 0.5 + 0.2 * U * U;
+	}
+	/** Her side's half breadth and her gunwale's height at U as drawn: straight between her stations. */
+	inline void BoatDrawn(double U, double Beam, double& OutHalf, double& OutSheer)
+	{
+		const double Where = (std::clamp(U, -1.0, 1.0) + 1.0) * 0.5 * BoatStations;
+		const int K = std::min(BoatStations - 1, static_cast<int>(Where));
+		const double T = Where - K, U0 = -1.0 + 2.0 * K / BoatStations, U1 = -1.0 + 2.0 * (K + 1) / BoatStations;
+		OutHalf = BoatHalf(U0, Beam) + (BoatHalf(U1, Beam) - BoatHalf(U0, Beam)) * T;
+		OutSheer = BoatSheer(U0) + (BoatSheer(U1) - BoatSheer(U0)) * T;
+	}
+
+	/**
+	 * Her grab line (the art director, 22 November 13:47Z): a dark rope along each side in festoons, made fast GrabFast
+	 * under her gunwale and dipping between to GrabLow over her waterline, about a metre a loop (GrabLoops a side), from
+	 * GrabFrom of her length aft of her middle to as far forward. A man in the water holding on to her holds it at a
+	 * loop's lowest point (GrabDip, metres forward of her middle) at his chest, facing her side: the sailor files' cling
+	 * clip has his fingers GrabReach ahead of him and 0.11 m up, his chest's front 0.27 m ahead, so he is clear of her
+	 * planking. GrabThick: the rope's half thickness.
+	 */
+	constexpr double GrabLoop = 1.1, GrabLow = 0.08, GrabReach = 0.34, GrabFrom = 0.38, GrabFast = 0.06, GrabThick = 0.012;
+	inline int GrabLoops(double Long)
+	{
+		const int N = static_cast<int>(2.0 * GrabFrom * Long / GrabLoop + 0.5);
+		return N < 1 ? 1 : N;
+	}
+	inline double GrabDip(double Long, int I)
+	{
+		return GrabFrom * Long * (-1.0 + 2.0 * (I + 0.5) / GrabLoops(Long));
+	}
+	/** A point of her grab line on a side (Hand 1 starboard, -1 port), Along her from her middle (metres): X along, Y
+	 * across, Z over her waterline, in her own frame; a hanging rope's curve from where it is made fast down to each
+	 * loop's middle, lying against her side as drawn. */
+	inline Vec GrabAt(double Long, double Beam, double Hand, double Along)
+	{
+		const int N = GrabLoops(Long);
+		const double From = -GrabFrom * Long, Span = 2.0 * GrabFrom * Long / N;
+		const double At = std::clamp(Along, From, -From);
+		double Loop = (At - From) / Span;
+		Loop -= std::floor(Loop);
+		const double U = At / (0.5 * Long);
+		double Half = 0.0, Sheer = 0.0;
+		BoatDrawn(U, Beam, Half, Sheer);
+		const double Top = Sheer - GrabFast;
+		const double Mid = 2.0 * Loop - 1.0;
+		const double Z = GrabLow + (Top - GrabLow) * Mid * Mid;
+		const double T = std::clamp((Z + 0.12) / (Sheer + 0.12), 0.0, 1.0);
+		return Vec(At, Hand * (Half * (0.84 + 0.16 * T) + GrabThick), Z);
+	}
+	/** Where her holder Slot of Hold (from 0) is, in her own frame (X along, Y across, Z 0): his hands on a loop's lowest
+	 * point, the holders spread along her, starboard and port by turns. */
+	inline Vec GrabHold(double Long, double Beam, int Slot, int Hold)
+	{
+		const double Hand = Slot % 2 == 0 ? 1.0 : -1.0;
+		const int PerSide = std::max(1, (Hold + 1) / 2), Loops = GrabLoops(Long);
+		const int Loop = std::clamp(static_cast<int>(std::lround((Slot / 2 + 0.5) * Loops / PerSide - 0.5)), 0, Loops - 1);
+		const Vec Dip = GrabAt(Long, Beam, Hand, GrabDip(Long, Loop));
+		return Vec(Dip.X, Dip.Y + Hand * GrabReach, 0.0);
+	}
 
 	/** Her oil on the sea: an oval drawn out down the wind, spreading and thinning as it ages, alight in part for a while. */
 	struct SlickOut
@@ -676,6 +755,15 @@ namespace SeaShow
 		};
 
 		Field F;
+		/** F.Classes as a list, each with its name's first two letters as a number (-1 for a name not two letters long),
+		 * for SizeOf: asked many times a step for every ship, a short scan of numbers beats the map (finding 9). */
+		struct ClassRow
+		{
+			int Code = -1;
+			std::string Name;
+			ClassSize Size;
+		};
+		std::vector<ClassRow> ClassList;
 		Dice Roll;
 		std::deque<View> Views;
 		std::deque<Event> Queue;
@@ -833,6 +921,7 @@ namespace SeaShow
 		{
 			const Hull* O = nullptr;
 			double Half = 0.0, R = 0.0, Horizon = 0.0, Margin = 0.0;
+			Vec V, Fore; // (her way, and her middle to the end of her straight side ahead: the same at every look)
 		};
 		std::vector<NearShip> Nears; // (ClearWay's own, kept to save making it each step)
 		int Rechosen = 0;            // ships that chose again how to keep clear this step

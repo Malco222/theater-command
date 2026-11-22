@@ -21,9 +21,9 @@ namespace SeaSailors
 
 		float Wrapped(double T, float Long)
 		{
-			if (Long <= 0.f)
+			if (Long <= 0.f || !std::isfinite(T))
 			{
-				return 0.f;
+				return 0.f; // (a time that is no number is the clip's start: the pre-check's probe asks it)
 			}
 			const double W = std::fmod(T, static_cast<double>(Long));
 			return static_cast<float>(W < 0.0 ? W + Long : W);
@@ -226,8 +226,8 @@ namespace SeaSailors
 				}
 			}
 		}
-		// (its other dress: the first of its colour_variants that gives colours, by its own paints' names (new_paints) and
-		// the army paints')
+		// (its other dresses: each of its colour_variants that gives colours, by its own paints' names (new_paints) and the
+		// army paints', with its name)
 		const auto [NewOpen, NewClose] = ObjectAfter(Text, "\"new_paints\"");
 		std::vector<std::pair<std::string, int>> NewPaints;
 		for (size_t P = NewOpen; NewClose != std::string::npos && P < NewClose;)
@@ -248,7 +248,7 @@ namespace SeaSailors
 		}
 		const size_t Variants = Text.find("\"colour_variants\"");
 		const size_t VariantsOpen = Variants == std::string::npos ? Variants : Text.find('{', Variants);
-		for (size_t P = VariantsOpen; P != std::string::npos && !F.bAlt;)
+		for (size_t P = VariantsOpen; P != std::string::npos;)
 		{
 			const size_t Open = Text.find('{', P + 1), Close = Open == std::string::npos ? Open : Text.find('}', Open);
 			const size_t End = Text.find('}', P + 1);
@@ -256,24 +256,32 @@ namespace SeaSailors
 			{
 				break;
 			}
+			const size_t NameEnd = Text.rfind('"', Open), NameFrom = NameEnd == std::string::npos || NameEnd <= P ? std::string::npos : Text.rfind('"', NameEnd - 1);
+			const std::string Variant = NameFrom == std::string::npos || NameFrom <= P ? std::string() : Text.substr(NameFrom + 1, NameEnd - NameFrom - 1);
+			Dress Other;
+			bool bAny = false;
 			for (const auto& [Name, Rgb] : ColoursIn(Text, Open, Close))
 			{
 				for (const auto& [Paint, Number] : NewPaints)
 				{
 					if (Paint == Name)
 					{
-						F.Alt.Put(Number, Rgb);
-						F.bAlt = true;
+						Other.Put(Number, Rgb);
+						bAny = true;
 					}
 				}
 				for (size_t I = 0; I < Names.size(); ++I)
 				{
 					if (Names[I] == Name)
 					{
-						F.Alt.Put(static_cast<int>(I), Rgb);
-						F.bAlt = true;
+						Other.Put(static_cast<int>(I), Rgb);
+						bAny = true;
 					}
 				}
+			}
+			if (bAny)
+			{
+				F.Others.emplace_back(Variant, Other);
 			}
 			P = Close;
 		}
@@ -321,6 +329,45 @@ namespace SeaSailors
 		return Read.empty() ? -1 : 0;
 	}
 
+	void Crew::DressOf(int K, int Variant, bool bWarm, Dress& Out) const
+	{
+		Out = Dress();
+		const FileRead& F = Read[static_cast<size_t>(K)];
+		const auto White = [](const std::string& Name) { return Name.rfind("white", 0) == 0; };
+		// (his own dress white where its shirt is pale: each of its colours over three fifths)
+		const auto Own = F.S->OwnPaints.find(Shirt);
+		const uint32_t Rgb = Own == F.S->OwnPaints.end() ? 0u : Own->second;
+		const bool bOwnWhite = ((Rgb >> 16) & 255u) >= 0xB0u && ((Rgb >> 8) & 255u) >= 0xB0u && (Rgb & 255u) >= 0xB0u;
+		const bool bNoWhite = !bWarm && bOwnWhite;
+		if (Variant == 0 && !bNoWhite)
+		{
+			return;
+		}
+		for (const auto& [Name, Other] : F.Others)
+		{
+			if (bWarm || !White(Name))
+			{
+				Out = Other;
+				return;
+			}
+		}
+	}
+
+	bool SummerWhites(bool bWhen, int Month, double Lat, double Lon)
+	{
+		if (!bWhen || Month < 4 || Month > 8)
+		{
+			return false;
+		}
+		// (the Mediterranean: from Gibraltar to the Levant, the Aegean and the Adriatic, not the Black Sea or the Bay of
+		// Biscay; the Indian Ocean north of the Tropic of Capricorn, with the Red Sea and the Gulf, to Sumatra: south of
+		// it May to September is its winter; the tropics, the Tropic of Cancer to the Tropic of Capricorn)
+		const bool bMed = Lat >= 30.0 && Lat <= 46.0 && Lon >= -5.7 && Lon <= 36.5 && !(Lat > 40.8 && Lon > 26.5) && !(Lon < -0.5 && Lat > 38.5);
+		const bool bIndian = Lat >= -23.5 && Lat <= 30.0 && Lon >= 20.0 && Lon <= 120.0 && !(Lat > 10.0 && Lon > 100.0);
+		const bool bTropics = Lat >= -23.5 && Lat <= 23.5;
+		return bMed || bIndian || bTropics;
+	}
+
 	float Crew::Long(int K, Act A) const
 	{
 		const FileRead& F = Read[static_cast<size_t>(K)];
@@ -356,17 +403,9 @@ namespace SeaSailors
 			P.Z = M.At.Z;
 			break;
 		case Swim::Cling:
-			// (holding a raft: his forearms over her tube, so a little nearer her middle than the show's place for him)
+			// (holding on where the show puts him: a raft's tube at his hands, a boat's grab line (SeaShow::GrabHold); riding
+			// the swell with it, its rise where he is)
 			Loop(Act::Cling, Now + Own * Long(K, Act::Cling));
-			if (On && On->Kind == "raft")
-			{
-				const double DX = On->At.X - M.At.X, DY = On->At.Y - M.At.Y, D = std::hypot(DX, DY);
-				if (D > RaftHold + 0.1)
-				{
-					P.X += DX / D * RaftHold;
-					P.Y += DY / D * RaftHold;
-				}
-			}
 			P.Z = Where.Ride;
 			break;
 		case Swim::Raft:

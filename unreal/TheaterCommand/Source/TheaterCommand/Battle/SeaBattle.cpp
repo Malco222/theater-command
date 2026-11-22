@@ -657,7 +657,7 @@ namespace SeaParts
 		FColor Skin, Top, Shirt, Legs, Jacket;
 		bool bJacket = true;
 	};
-	static FSailorPaint SailorPaint(const FString& Navy, uint32 Look)
+	static FSailorPaint SailorPaint(const FString& Navy, uint32 Look, bool bWarm)
 	{
 		auto Bit = [Look](int32 Shift) { return static_cast<double>((Look >> Shift) & 255u) / 255.0; };
 		FSailorPaint P;
@@ -667,9 +667,11 @@ namespace SeaParts
 		const double Hat = Bit(16), Coat = Bit(24), Vest = Bit(4);
 		if (Navy == TEXT("jp"))
 		{
-			P.Shirt = Coat < 0.55 ? FColor(196, 192, 178) : FColor(118, 116, 84);
-			P.Legs = Coat < 0.55 ? FColor(186, 182, 168) : FColor(106, 104, 76);
-			P.Top = Hat < 0.25 ? FColor(214, 212, 204) : Hat < 0.45 ? FColor(30, 32, 44) : Hair;
+			// (his whites only in summer in warm water, SeaSailors::SummerWhites)
+			const bool bWhites = bWarm && Coat < 0.55;
+			P.Shirt = bWhites ? FColor(196, 192, 178) : FColor(118, 116, 84);
+			P.Legs = bWhites ? FColor(186, 182, 168) : FColor(106, 104, 76);
+			P.Top = Hat < 0.25 ? (bWarm ? FColor(214, 212, 204) : FColor(118, 116, 84)) : Hat < 0.45 ? FColor(30, 32, 44) : Hair;
 			P.Jacket = FColor(148, 134, 96);
 			P.bJacket = Vest < 0.5;
 		}
@@ -692,7 +694,7 @@ namespace SeaParts
 		else
 		{
 			// (the US Navy, and a merchant seaman much as one)
-			P.Shirt = Coat < 0.08 ? FColor(166, 150, 108) : Coat < 0.85 ? FColor(118, 142, 170) : FColor(206, 206, 200);
+			P.Shirt = Coat < 0.08 ? FColor(166, 150, 108) : Coat < 0.85 || !bWarm ? FColor(118, 142, 170) : FColor(206, 206, 200);
 			P.Legs = FColor(48, 58, 84);
 			P.Top = Hat < 0.45 ? FColor(226, 226, 220) : Hair;
 			P.Jacket = Vest < 0.55 ? FColor(164, 148, 104) : FColor(96, 106, 116);
@@ -733,14 +735,15 @@ namespace SeaParts
 	}
 
 	/** A whaleboat's or lifeboat's half breadth at its gunwale and its gunwale's height over the sea, U from -1 (her
-	 * stern) to 1 (her bow): double-ended, her sheer rising toward both ends. */
+	 * stern) to 1 (her bow): double-ended, her sheer rising toward both ends (the show keeps her lines, SeaShow::BoatHalf,
+	 * for the men who hold on to her grab line). */
 	static double BoatHalf(double U, double Beam)
 	{
-		return FMath::Max(0.03, 0.5 * Beam * FMath::Sqrt(FMath::Max(0.0, 1.0 - FMath::Pow(FMath::Abs(U), 2.4))));
+		return SeaShow::BoatHalf(U, Beam);
 	}
 	static double BoatSheer(double U)
 	{
-		return 0.5 + 0.2 * U * U;
+		return SeaShow::BoatSheer(U);
 	}
 
 	/** A boat's tiller: how far forward of her sternpost it reaches, how far to starboard and how high over her waterline
@@ -751,10 +754,10 @@ namespace SeaParts
 	static constexpr double TillerLong = 0.7, TillerAcross = 0.33, TillerLow = 0.45, CoxAt = 0.65;
 
 	/** A pulling boat: her sides from under the water to the gunwale, the inside of them, the gunwale's capping, her
-	 * bottom boards and four thwarts. */
-	static void DrawBoat(FWreckMesh& M, const FWreckFrame& Fr, double Long, double Beam, const FColor& Hull, const FColor& Inside, const FColor& Wood)
+	 * bottom boards and four thwarts; bLines, her grab lines too (near enough for a rope to show). */
+	static void DrawBoat(FWreckMesh& M, const FWreckFrame& Fr, double Long, double Beam, const FColor& Hull, const FColor& Inside, const FColor& Wood, bool bLines)
 	{
-		const int32 Steps = 8;
+		const int32 Steps = SeaShow::BoatStations;
 		for (const double Hand : { -1.0, 1.0 })
 		{
 			for (int32 K = 0; K < Steps; ++K)
@@ -796,11 +799,31 @@ namespace SeaParts
 		M.Box(Fr, Aft - 0.01, 0.0, 0.5 * (AftTop - 0.12), 0.06, 0.07, AftTop + 0.12, Wood, Wood);
 		M.Rod(Fr.At(Aft - 0.04, 0.0, AftTop - 0.03), Fr.At(Aft + TillerLong, TillerAcross, TillerLow), 0.025, 4, Wood);
 		M.Box(Fr, Fore + 0.01, 0.0, 0.5 * (ForeTop - 0.12), 0.07, 0.07, ForeTop + 0.12, Wood, Wood);
+		// (her grab lines, the art director, 22 November 13:47Z: a dark rope in festoons along each side, made fast under her
+		// gunwale about every metre and dipping to just over the water, where the men in the water hold on: SeaShow::GrabAt)
+		if (!bLines)
+		{
+			return;
+		}
+		static const FColor GrabRope(52, 46, 38);
+		const int32 Loops = SeaShow::GrabLoops(Long), Bits = 6;
+		const double From = -SeaShow::GrabFrom * Long, Span = 2.0 * SeaShow::GrabFrom * Long / Loops;
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			SeaShow::Vec Was = SeaShow::GrabAt(Long, Beam, Hand, From);
+			for (int32 K = 1; K <= Loops * Bits; ++K)
+			{
+				const SeaShow::Vec Next = SeaShow::GrabAt(Long, Beam, Hand, From + Span * K / Bits);
+				M.Rod(Fr.At(Was.X, Was.Y, Was.Z), Fr.At(Next.X, Next.Y, Next.Z), SeaShow::GrabThick, 4, GrabRope);
+				Was = Next;
+			}
+		}
 	}
 
 	/** One thing afloat where a ship went down (SeaShow's FloatOut): a Carley float, a pulling boat, or her wreckage:
-	 * planks, spars, crates, drums, hatch covers, life rings. */
-	static void DrawFloat(FWreckMesh& M, const SeaShow::FloatOut& F, const FString& Navy, bool bMerchant, double Now)
+	 * planks, spars, crates, drums, hatch covers, life rings. bFine: near enough for a rope to show (a quarter of a pixel
+	 * thick or more). */
+	static void DrawFloat(FWreckMesh& M, const SeaShow::FloatOut& F, const FString& Navy, bool bMerchant, double Now, bool bFine)
 	{
 		const FVector Ride = FloatRide(F.Key, Now, F.Long);
 		const FWreckFrame Fr = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading, Ride.Y, Ride.Z);
@@ -817,7 +840,7 @@ namespace SeaParts
 		}
 		else if (Kind == "boat")
 		{
-			DrawBoat(M, Fr, F.Long, F.Beam, Craft, Shaded(Craft, 1.15), Wood);
+			DrawBoat(M, Fr, F.Long, F.Beam, Craft, Shaded(Craft, 1.15), Wood, bFine);
 		}
 		else if (Kind == "plank")
 		{
@@ -977,10 +1000,13 @@ namespace SeaParts
 	 * S.Dresses: a navy's own file in its own colours, its variant 1 the file's other dress (the American officer's and
 	 * chief's khaki, the Japanese grey-green); another navy's men, until their own file is made, in the American's rig in
 	 * their own working dress, as the stand-ins wear it (SailorPaint): the Royal Navy's blue overalls, dark cap and grey
-	 * belt; the German, Italian and Soviet navies' blue-grey; a Japanese sailor's white or green.
+	 * belt; the German, Italian and Soviet navies' blue-grey; a Japanese sailor's white or green. Whites only where the
+	 * battle is known to fall in summer in warm water (SeaSailors::SummerWhites; the art director, 22 November 13:47Z).
 	 */
 	static int32 DressFor(FSeaBattleState& S, const std::string& Nation, int32 File, int32 Variant)
 	{
+		const SeaShow::Field& Board = S.Rec.Board;
+		const bool bWarm = SeaSailors::SummerWhites(Board.bWhen, Board.Month, Board.Lat, Board.Lon);
 		const std::string Army = SeaSailors::ArmyOf(Nation);
 		const std::string Key = Army + "/" + std::to_string(File) + "/" + std::to_string(Variant);
 		const auto Found = S.DressAt.find(Key);
@@ -992,16 +1018,14 @@ namespace SeaParts
 		const bool bSecond = Variant == 1;
 		if (S.Crew.Army(File) == Army)
 		{
-			if (bSecond)
-			{
-				S.Crew.AltDress(File, D);
-			}
+			S.Crew.DressOf(File, Variant, bWarm, D);
 		}
 		else if (Army == "JAP")
 		{
-			D.Put(SeaSailors::Shirt, bSecond ? 0x767454u : 0xC4C0B2u);
-			D.Put(SeaSailors::Trousers, bSecond ? 0x6A684Cu : 0xBAB6A8u);
-			D.Put(SeaSailors::Hat, bSecond ? 0x1E202Cu : 0xD6D4CCu);
+			const bool bGreen = bSecond || !bWarm;
+			D.Put(SeaSailors::Shirt, bGreen ? 0x767454u : 0xC4C0B2u);
+			D.Put(SeaSailors::Trousers, bGreen ? 0x6A684Cu : 0xBAB6A8u);
+			D.Put(SeaSailors::Hat, bGreen ? 0x1E202Cu : 0xD6D4CCu);
 			D.Put(SeaSailors::Kapok, 0x948660u);
 		}
 		else if (Army == "GBR")
@@ -2987,6 +3011,8 @@ void ASeaBattle::DrawWrecks()
 	const std::vector<SeaShow::SlickOut>& Slicks = S.Show.Slicks();
 	const double Dt = FMath::Clamp(Now - WrecksDrawnAt, 0.0, 1.0);
 	WrecksDrawnAt = Now;
+	// (whether the men may wear their whites: the battle known to fall in summer in warm water)
+	const bool bWarm = SeaSailors::SummerWhites(S.Rec.Board.bWhen, S.Rec.Board.Month, S.Rec.Board.Lat, S.Rec.Board.Lon);
 
 	// Each wreck's navy and whether she was a merchant ship, while she is still to be seen going down (her rafts and
 	// boats in her paint), else from her men.
@@ -3073,18 +3099,19 @@ void ASeaBattle::DrawWrecks()
 		{
 			continue; // (under half a pixel)
 		}
+		const bool bFine = 2.0 * SeaShow::GrabThick * PerRadian / D >= 0.25;
 		if (D < LiveReach || F.Kind == "boat")
 		{
-			DrawFloat(NearMesh, F, Paint, bMerchant, Now);
+			DrawFloat(NearMesh, F, Paint, bMerchant, Now, bFine);
 		}
 		else if (bFarDue)
 		{
-			DrawFloat(FarMesh, F, Paint, bMerchant, Now);
+			DrawFloat(FarMesh, F, Paint, bMerchant, Now, bFine);
 			FarFloats.Add(F.Key);
 		}
 		else if (!FarFloats.Contains(F.Key))
 		{
-			DrawFloat(NearMesh, F, Paint, bMerchant, Now);
+			DrawFloat(NearMesh, F, Paint, bMerchant, Now, bFine);
 		}
 	}
 	// (the men drawn whole: those 7 pixels across or more, the nearest MostDetailedMen of them where there are more)
@@ -3237,7 +3264,7 @@ void ASeaBattle::DrawWrecks()
 		{
 			continue;
 		}
-		FSailorPaint Paint = SailorPaint(KitNation(Man.Nation), Man.Look);
+		FSailorPaint Paint = SailorPaint(KitNation(Man.Nation), Man.Look, bWarm);
 		const float* OilShare = OilOnMen.Find(Man.Key);
 		if (OilShare)
 		{
@@ -3253,7 +3280,7 @@ void ASeaBattle::DrawWrecks()
 		double BoatU = 0.0, BoatAlong = 0.0, BoatAcross = 0.0, BoatLong = 0.0, BoatBeam = 0.0;
 		bool bOarsman = false, bInBoat = false, bCoxswain = false;
 		double SeatAlong = 0.0, SeatAcross = 0.0;
-		if ((Man.Doing == Swim::Raft || Man.Doing == Swim::Boat) && Man.On >= 0)
+		if ((Man.Doing == Swim::Raft || Man.Doing == Swim::Boat || Man.Doing == Swim::Cling) && Man.On >= 0)
 		{
 			if (const int32* Index = FloatAt.Find(Man.On))
 			{
@@ -3262,6 +3289,15 @@ void ASeaBattle::DrawWrecks()
 				Lift = Ride.X;
 				Where.On = &F;
 				Where.Ride = Lift;
+				if (Man.Doing == Swim::Cling)
+				{
+					// (holding on at her side: her rise there, her bow lifting and her right side going down with the swell as
+					// the scene draws her, so his hands stay on her line or her tube)
+					const FWreckFrame Tilted = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading, Ride.Y, Ride.Z);
+					const FWreckFrame Untilted = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading);
+					const FVector Off(Man.At.X - F.At.X, Man.At.Y - F.At.Y, 0.0);
+					Where.Ride = Tilted.At(FVector::DotProduct(Off, Untilted.X), FVector::DotProduct(Off, Untilted.Y), 0.0).Z;
+				}
 				if (Man.Doing == Swim::Boat)
 				{
 					// (under way: her own way through the water under oars, the show's; a boat only drifting down the wind

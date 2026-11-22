@@ -3,9 +3,12 @@
 #include "Battle/LandMen.h"
 #include "Battle/SeaShow.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -96,10 +99,10 @@ namespace SeaSailors
 	};
 
 	/** The heights of the things the men sit on (metres over the float's own waterline): a boat's thwart top, her bottom
-	 * boards, a Carley float's tube top (the scene draws them so). A man holding on to a raft is drawn this much nearer
-	 * her middle than the show's place for him (its rim and a third of a metre: the clip's forearms lie over a spar a
-	 * quarter of a metre ahead of him, and the raft's tube is a fifth of a metre round). */
-	constexpr double ThwartTop = 0.47, Boards = 0.12, RaftTop = 0.26, RaftHold = 0.22;
+	 * boards, a Carley float's tube top (the scene draws them so). A man holding on is drawn where the show puts him: a
+	 * raft's holders a third of a metre out from her rim, their hands at her tube's side; a boat's on her grab line
+	 * (SeaShow::GrabHold). */
+	constexpr double ThwartTop = 0.47, Boards = 0.12, RaftTop = 0.26;
 	/** The row clip's rowlock out to his side (metres, the file's `oar`): where his oar crosses her gunwale. */
 	constexpr double LockOut = 0.6;
 	/** A man in the water (root at the sea's top): a hand or a boot whose joint (wrist, ankle) is under SinkFrom metres
@@ -108,6 +111,11 @@ namespace SeaSailors
 	 * The breaststroke's glide lifts the hands up to 0.13 m and its kick the boot tips 0.05 m over a wrist or ankle under
 	 * the water. A hand on a raft's tube, an arm up to wave: its wrist is out of the water, so it shows. */
 	constexpr float SinkFrom = 0.03f, SinkTo = 0.03f;
+
+	/** Whether a battle is known to fall in summer in warm water, where a navy's men wore their whites (the art director,
+	 * 22 November 13:47Z): its month May to September in the Mediterranean, the Indian Ocean north of the Tropic of
+	 * Capricorn or the tropics. False where its month is not known: no whites then. */
+	bool SummerWhites(bool bWhen, int Month, double Lat, double Lon);
 
 	class Crew
 	{
@@ -123,13 +131,21 @@ namespace SeaSailors
 		const std::string& Army(int K) const { return Read[static_cast<size_t>(K)].Army; }
 		/** A clip's length (seconds) for an act. */
 		float Long(int K, Act A) const;
-		/** File K's other dress (the first of its colour_variants with colours: the American's officer's khaki, the
-		 * Japanese's grey-green); false where it has none. */
+		/** File K's dress for a man: Variant 0 most men's, 1 the one in seven's (the first of its colour_variants with
+		 * colours: the American officer's khaki, the Japanese grey-green, the British cap's white cover, the German and
+		 * Italian summer white). Not bWarm (SummerWhites false), no man wears white: the one in seven takes the file's
+		 * first other dress that is not white (the German grey, the Italian winter blue, the Soviet pea coat, the British
+		 * sea jersey), and a file whose own dress is white (the Japanese) its first other dress for every man. A variant
+		 * is white where its name begins "white"; the file's own dress, where its shirt is pale. Out left with no paint
+		 * set: the file's own colours. */
+		void DressOf(int K, int Variant, bool bWarm, Dress& Out) const;
+		/** File K's first other dress (the first of its colour_variants with colours), whatever its colour; false where it
+		 * has none. (The pre-check's sailor probe paints it; the scene asks DressOf.) */
 		bool AltDress(int K, Dress& Out) const
 		{
 			const FileRead& F = Read[static_cast<size_t>(K)];
-			Out = F.Alt;
-			return F.bAlt;
+			Out = F.Others.empty() ? Dress() : F.Others.front().second;
+			return !F.Others.empty();
 		}
 
 		/** How a man is shown now (Now and LandedAt battle seconds; LandedAt -1 when he has not just come down). */
@@ -172,8 +188,8 @@ namespace SeaSailors
 			bool bOwn[16] = {};
 			float Lock[3] = { 0.f, 0.f, 0.f };
 			std::vector<float> Handle;
-			Dress Alt;
-			bool bAlt = false;
+			// (its colour_variants that give colours, in the file's order, by name)
+			std::vector<std::pair<std::string, Dress>> Others;
 		};
 		std::vector<FileRead> Read;
 		void Frames(int K, Act A, float Time, LandMen::Xform* Out) const;

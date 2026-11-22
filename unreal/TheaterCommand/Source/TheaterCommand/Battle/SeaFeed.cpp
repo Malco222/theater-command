@@ -39,6 +39,7 @@ namespace SeaFeed
 		{
 			Out.Year = J["when"]["year"].Int(Out.Year);
 			Out.Month = J["when"]["month"].Int(Out.Month);
+			Out.bWhen = J["when"]["month"].IsNumber();
 		}
 		if (J["att"].IsObject()) { Out.AttNat = J["att"]["nat"].Str(""); Out.AttAdj = J["att"]["adj"].Str(""); }
 		if (J["def"].IsObject()) { Out.DefNat = J["def"]["nat"].Str(""); Out.DefAdj = J["def"]["adj"].Str(""); }
