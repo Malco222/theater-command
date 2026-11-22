@@ -11,6 +11,7 @@
  */
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/towns.json';
+import placesData from '../../data/campaign/places.json';
 import mapData from '../generated/campaign-map.json';
 import americasMap from '../generated/world-americas.json';
 import wholeMap from '../generated/world-whole.json';
@@ -38,9 +39,11 @@ export type TownSign = 'factory' | 'harbour' | 'oil' | 'fort' | 'yard' | 'airfie
 
 /** The chief place of a province: its own name if it is named for a city, otherwise its chief town. */
 export const townName = (r: Region): string => TOWNS.names[r.name] ?? r.name;
-/** Where in a province, in running text: "in the Ruhr", "in Bavaria" for one named for a stretch of country (it names
- * its chief town under 'names', or takes "the"), "at Berlin" for one named for its town (the UI director, 22 November). */
-export const inOrAt = (r: Region): string => (TOWNS.names[r.name] !== undefined || placeName(r.name) !== r.name ? `in ${placeName(r.name)}` : `at ${r.name}`);
+/** Where in a province, in running text: "in the Ruhr", "in Bavaria", "in Colorado" for one named for a stretch of
+ * country (it names its chief town under 'names', is on places.json's 'in' list, or takes "the"), "at Berlin" for one
+ * named for its town (the UI director, 22 November). */
+const IN_PLACES = new Set((placesData as { in?: string[] }).in ?? []);
+export const inOrAt = (r: Region): string => (TOWNS.names[r.name] !== undefined || IN_PLACES.has(r.name) || placeName(r.name) !== r.name ? `in ${placeName(r.name)}` : `at ${r.name}`);
 
 /** How big the chief place of a province is. A capital is the seat of a government that still stands. */
 export function townSize(g: Game, r: Region): TownSize {

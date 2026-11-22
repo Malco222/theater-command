@@ -426,6 +426,8 @@ function codename(g: Game, id: number, salt = ''): string {
 // (The UI director, 22 November, release 2: a count in a sentence is a word: "for two more months", "in three months".)
 const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 const countWord = (n: number): string => COUNT_WORDS[n] ?? String(n);
+// (The UI director, 22 November, release 2: one sentence for work barred by peace, on the room and the card alike.)
+const peaceWords = (host: Game['nations'][string] | undefined): string => `You are at peace with ${host ? theName(host) : 'this country'}: sabotage would be an act of war.`;
 const waitWords = (g: Game, a: Agent): string => { const m = a.ready - g.turn; return m <= 1 ? 'until next month' : `for ${countWord(m)} more months`; };
 /** True for an agent recruited and still in training at home: not yet at work, and not on the road either. */
 const inTraining = (a: Agent): boolean => a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
@@ -583,12 +585,12 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
   }
   if (m === 'orders') {
     if (!ordersOn(g)) return 'Not in this campaign.';
-    if (!atWar(g, nat, r.ctrl)) return `You are at peace with ${host?.name ?? 'this country'}: its air staff has no orders against you.`;
+    if (!atWar(g, nat, r.ctrl)) return peaceWords(host);
     if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${placeName(r.name)}.`;
     return null;
   }
   if (isTheft(m)) return whyNoTheft(g, nat, a, r, THEFT[m]!);
-  if (!atWar(g, nat, r.ctrl)) return `You are at peace with ${host?.name ?? 'this country'}. Sabotage is an act of war.`;
+  if (!atWar(g, nat, r.ctrl)) return peaceWords(host);
   if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${countWord(k)} more months`} after the last attempt.`; }
   if (m === 'factory') {
     if (r.fac <= 0) return `There is no industry ${inOrAt(r)}.`;
@@ -637,7 +639,7 @@ function theftBar(g: Game, nat: string, a: Agent, r: Region, x: PlanItem): strin
   if (!host?.alive || !PLANS.great.includes(r.ctrl)) return `Plans of ${W.many} are kept by the great powers, in ${P.kept}. Send the agent to one.`;
   if (r.owner !== r.ctrl) return `${host.name} keeps its plans at home, in ${P.home}: ${r.name} is ground it has taken.`;
   const capital = g.regions[host.capital]?.name ?? 'its capital';
-  if (!keepsPlans(g, r.ctrl, r, x)) return W.place === 'capital' ? `${host.name} keeps its ${W.one} plans at ${capital}, its capital.` : `${P.lack} ${r.name}: ${host.name} keeps its plans at ${capital} and at ${P.home.replace('its capital and ', 'its ')}.`;
+  if (!keepsPlans(g, r.ctrl, r, x)) return W.place === 'capital' ? `${host.name} keeps its ${W.one} plans at ${capital}, its capital.` : `${P.lack} ${inOrAt(r)}: ${host.name} keeps its plans at ${capital} and at ${P.home.replace('its capital and ', 'its ')}.`;
   if (!givesPlans(g, r.ctrl, x)) return hull ? `${host.name} builds no ${W.many} yet: there are no plans to steal.` : `${host.name} has no ${W.many} yet: there are no plans to steal.`;
   if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${countWord(k)} more months`} after the last attempt.`; }
   return null;
@@ -1246,7 +1248,7 @@ export function enemyOrders(g: Game, viewer: string | null = g.human): { text: s
     const t = g.regions[o.target], F = g.nations[o.nat];
     const when = o.turn > g.turn ? 'next month' : 'this month';
     const state = o.done === 'flown' ? ' Flown.' : o.done === 'lapsed' ? ' Cancelled.' : '';
-    return { text: `${F.adj} bombers from ${g.regions[o.field].name} against ${t.name} ${when}, ${o.mission === 'night' ? 'by night' : 'by day'}, about ${o.bombers.toLocaleString('en-US')}: read by Agent ${o.agent}.${state}`, target: o.target, turn: o.turn, done: o.done };
+    return { text: `${F.adj} bombers from ${placeName(g.regions[o.field].name)} against ${placeName(t.name)} ${when}, ${o.mission === 'night' ? 'by night' : 'by day'}, about ${o.bombers.toLocaleString('en-US')}: read by Agent ${o.agent}.${state}`, target: o.target, turn: o.turn, done: o.done };
   });
 }
 
@@ -1494,8 +1496,8 @@ function viewOf(g: Game, a: Agent): AgentView {
   // (The UI director, 22 November, release 2: the room's status line, "Berlin, in Germany: watching and reporting.",
   // so what the agent does, without the place the line has already named.)
   const status = training ? 'in training' : !work ? (chosen ? `on the road, and will ${label} there on arrival` : 'on the road')
-    : a.mission === 'watch' ? 'watching and reporting' : a.mission === 'orders' ? 'stealing the orders, tried each month'
-      : a.mission === 'guard' || a.mission === 'hunt' || a.mission === 'books' ? MISSION_TEXT[a.mission].doing : `${MISSION_TEXT[a.mission].doing}, tried next month`;
+    : a.mission === 'watch' ? 'watching and reporting' : a.mission === 'orders' ? 'trying each month to steal the orders'
+      : a.mission === 'guard' || a.mission === 'hunt' || a.mission === 'books' ? MISSION_TEXT[a.mission].doing : `will try to ${label} next month`;
   return {
     id: a.id, nat: a.nat, name: a.name, rank: rankOf(a), skill: skillOf(a), xp: a.xp, next: T[skillOf(a) - 1] ?? null,
     reg: a.reg, where: r.name, host: r.ctrl, abroad: out, atWork: work, training, wait: Math.max(0, a.ready - g.turn),
@@ -1525,7 +1527,7 @@ export function spyRoom(g: Game, nat: string | null = g.human): SpyRoom | null {
     ...(watchersOn(g) ? { watchHelp: watchHelp(g) } : {}),
     ...(ordersOn(g) ? { orders: enemyOrders(g, nat) } : {}),
     ...(doublesOn(g) ? {
-      doubles: doublesOf(g, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g.nations[d.of]?.adj ?? 'enemy'} service since ${monthOf(d.since)}: they warn of every new ${g.nations[d.of]?.adj ?? 'enemy'} agent sent against you, and open ${g.nations[d.of]?.name ?? 'that country'}'s books.` })),
+      doubles: doublesOf(g, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: theWords(`Double agent ${d.name}, in the ${g.nations[d.of]?.adj ?? 'enemy'} service since ${monthOf(d.since)}: they warn of every new ${g.nations[d.of]?.adj ?? 'enemy'} agent sent against you, and open ${g.nations[d.of]?.name ?? 'that country'}'s books.`) })),
       turnedHelp: TURNED_HELP,
     } : {}),
   };

@@ -4,7 +4,9 @@
 // more than one country, as the browser does.
 import { describe, expect, it } from 'vitest';
 import { createGame, setWar } from '../src/campaign/game';
-import { spyRoom } from '../src/campaign/intel';
+import { enemyOrders, spyRoom, whyNotSend } from '../src/campaign/intel';
+import { setSecretWar } from '../src/campaign/secretwar';
+import { inOrAt } from '../src/campaign/towns';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { turnToDate } from '../src/core/ticket';
@@ -191,6 +193,86 @@ describe('the room as the UI director ruled it', () => {
     trainee.ready = g.turn + 1;
     trainee.born = trainee.ready - 1;
     expect(rowOf(trainee).lines.slice(0, 2)).toEqual(['London, at home: in training.', 'At work in a month.']);
+  });
+
+  // (Found by review of the mends, 22 November: the same words wherever the room, the card and the map say them.)
+  it('says the places, the counts and the peace the same way on the card, the map and the room opened on a province', () => {
+    const g = startOpen(createGame(7, 'UK'));
+    setWar(g, 'UK', 'GER');
+    g.flags.spyfrom = -99;
+    const V = (): { agents: { id: number; doing: string; home: string; work: { id: string; why: string }[] }[]; agentMarks: { text: string }[] } => {
+      expect(TC.load(saveGame(g))).not.toBeNull();
+      return (TC as unknown as { view: () => ReturnType<typeof V> }).view();
+    };
+    // A province named for a stretch of country is "in" it; one named for its town "at" it.
+    expect([g.byName.Ruhr, g.byName.Bavaria, g.byName.Kent, g.byName.Berlin].map(inOrAt)).toEqual(['in the Ruhr', 'in Bavaria', 'in Kent', 'at Berlin']);
+    // (beyond the towns list, places.json's 'in' names the regions and islands: the wider world's provinces)
+    if (g.byName.Colorado) expect([g.byName.Colorado, g.byName.Iceland, g.byName.Denver ?? g.byName.Berlin].map(inOrAt)).toEqual(['in Colorado', 'in Iceland', g.byName.Denver ? 'at Denver' : 'at Berlin']);
+    expect(g.byName.Colorado).toBeDefined();
+    const ruhr = agentAt(g, 'Ruhr');
+    const road = agentAt(g, 'Ruhr', 'factory');
+    road.ready = g.turn + 2;
+    const v = V();
+    expect(v.agents.find((x) => x.id === road.id)!.doing).toBe('On the road to the Ruhr: will wreck a factory there on arrival');
+    expect(v.agents.find((x) => x.id === ruhr.id)!.doing).toBe('Watching in the Ruhr');
+    expect(JSON.stringify(v.agents)).not.toMatch(/ (at|to|from|through) (Ruhr|Rhineland)\b/);
+    expect(whyNotSend(g, 'UK', ruhr.id, g.byName.Ruhr.id)).toBe(`${ruhr.name} is already in the Ruhr.`);
+    // The room opened with the Ruhr picked on the map.
+    expect(TC.load(saveGame(g))).not.toBeNull();
+    const opened = JSON.stringify((TC as unknown as { page: (id: string, r: number) => unknown }).page('spies', g.byName.Ruhr.id));
+    expect(opened).toMatch(/or send one to the Ruhr from here\./);
+    expect(opened).not.toMatch(/ (at|to|from|through) (Ruhr|Rhineland)\b/);
+    // A province with no industry: the need is counted, not told.
+    const sh = agentAt(g, 'Schleswig-Holstein');
+    const line = room(g).sections[0].rows.find((r) => r.title.endsWith(sh.name))!.lines[2];
+    expect(line).toBe('Five more need a capital, a factory, an oilfield or enemy aircraft on the field here.');
+    // The card leaves out work no place can make possible, as the room's line does: Britain draws its own plans.
+    expect(V().agents.find((x) => x.id === ruhr.id)!.work.some((w) => /Plans$/.test(w.id))).toBe(false);
+    // Sabotage set: what the agent will do, plainly.
+    // (given in the game as the player gives it: a saved game opens on the month, when set sabotage is tried)
+    expect(TC.load(saveGame(g))).not.toBeNull();
+    const T = TC as unknown as { act: (a: string, r: number) => unknown; page: (id: string) => Room };
+    T.act(`spy:mission:${ruhr.id}:factory`, -1);
+    expect(T.page('spies').sections[0].rows.find((r) => r.title.endsWith(ruhr.name))!.lines[0]).toBe('The Ruhr, in Germany: will try to wreck a factory next month.');
+    // At home: no caught chance on the line or in the tips; the card's home line counts in words.
+    const kent = agentAt(g, 'Kent', 'hunt');
+    const kentRow = room(g).sections[0].rows.find((r) => r.title.endsWith(kent.name))!;
+    expect(kentRow.lines[0]).toBe('Kent, at home: hunting enemy agents.');
+    expect(JSON.stringify(kentRow)).not.toMatch(/caught/);
+    expect(V().agents.find((x) => x.id === kent.id)!.home).toMatch(/, with no agents on guard\.$/);
+    agentAt(g, 'London', 'guard');
+    expect(V().agents.find((x) => x.id === kent.id)!.home).toMatch(/, with one agent on guard\.$/);
+    // On an ally's ground: in the ally's country, not at home.
+    const paris = agentAt(g, 'Paris', 'guard');
+    expect(room(g).sections[0].rows.find((r) => r.title.endsWith(paris.name))!.lines[0]).toBe('Paris, in France: on guard.');
+    // An uncovered enemy agent in a region.
+    g.intel.foes = [{ id: 1, nat: 'GER', reg: g.byName.Kent.id, strike: g.turn + 2, found: g.turn, kind: 'factory' }];
+    const sec = room(g).sections.find((x) => x.heading === 'ENEMY AGENTS UNCOVERED')!;
+    expect(sec.rows[0].title).toBe('German agent in Kent');
+    expect(sec.rows[0].lines[0]).toMatch(/^A German agent in Kent, uncovered this month\. /);
+    // The map's mark for an agent caught this month gives the saved note its article.
+    g.intel.notes.push({ turn: g.turn, agent: 'Kestrel', nat: 'UK', reg: g.byName.Ruhr.id, what: 'caught', text: 'Agent Kestrel is caught at Ruhr by German counter-intelligence. Nothing more is heard.', good: false });
+    expect(V().agentMarks.map((m) => m.text)).toContain('Agent Kestrel is caught at the Ruhr by German counter-intelligence. Nothing more is heard.');
+    // Stolen orders name their places with their articles.
+    setSecretWar(g, 'orders', true);
+    g.intel.orders = [{ nat: 'GER', field: g.byName.Ruhr.id, groups: [], target: g.byName.Midlands.id, mission: 'night', bombers: 120, turn: g.turn + 1, agent: 'Lapwing', by: 'UK' }];
+    expect(enemyOrders(g)[0].text).toMatch(/^German bombers from the Ruhr against the Midlands next month, by night, about 120: read by Agent Lapwing\.$/);
+  });
+
+  it('says the peace once, the same on the card as in the room, and gives a country its article', () => {
+    const g = startOpen(createGame(7, 'UK'));
+    setWar(g, 'UK', 'GER');
+    const st = agentAt(g, 'Stockholm');
+    expect(TC.load(saveGame(g))).not.toBeNull();
+    const work = (TC as unknown as { view: () => { agents: { work: { ok: boolean; now: boolean; why: string }[] }[] } }).view().agents[0].work;
+    const whys = [...new Set(work.filter((w) => !w.ok && !w.now && /peace/.test(w.why)).map((w) => w.why))];
+    expect(whys).toEqual(['You are at peace with Sweden: sabotage would be an act of war.']);
+    expect(room(g).sections[0].rows.find((r) => r.title.endsWith(st.name))!.lines[2]).toBe('You are at peace with Sweden: sabotage would be an act of war.');
+    // A double agent's line, with the article a country's name takes.
+    const d = startOpen(createGame(7, 'GER'));
+    setWar(d, 'GER', 'SOV');
+    d.intel.doubles = [{ id: 9, name: 'Nightjar', of: 'SOV', by: 'GER', since: d.turn }];
+    expect(spyRoom(d)!.doubles![0].text).toMatch(/, and open the Soviet Union's books\.$/);
   });
 
   it("lists on the agent's card the work in force first, then the work that can be done there, then the rest", () => {

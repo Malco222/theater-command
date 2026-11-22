@@ -239,6 +239,14 @@ describe('what a watcher does', () => {
     expect(g.headlines.slice(before).some((h) => /Saboteurs|Grounded/.test(h.text))).toBe(false);
   });
 
+  // (The UI director, 22 November: a count in a sentence is a word.)
+  it('says how many months until an uncovered watcher helps, in words', () => {
+    const g = scene();
+    const { r } = faceOff(g);
+    plant(g, r.id, 'SOV', g.turn + 2).found = g.turn;
+    expect(spyRoom(g)!.found![0].then).toBe(`In two months, until they are arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
+  });
+
   it('a hunter uncovers it, says what it is doing, and ARREST ends it; the room lists it as a watcher', () => {
     const g = scene();
     const { r } = faceOff(g);
@@ -251,7 +259,9 @@ describe('what a watcher does', () => {
     expect(g.headlines.some((x) => x.text === `Agent ${h.name} uncovers a Soviet agent watching your defences at ${r.name}. Arrest the agent: until you do, attacks there by the Soviet Union and its allies go in harder.`)).toBe(true);
     const row = spyRoom(g)!.found![0];
     expect(row.watch).toBe(true);
-    expect(row.text).toBe(`A Soviet agent watching your defences ${inOrAt(r)}, uncovered this month`);
+    // (Karelia is named for a stretch of country, so "in": the UI director, 22 November)
+    expect(r.name).toBe('Karelia');
+    expect(row.text).toBe('A Soviet agent watching your defences in Karelia, uncovered this month');
     expect(row.then).toBe(`Until they are arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
     expect(arrest(g, 'FIN', found[0].id)).toBe(true);
     expect(watchers(g)).toEqual([]);
