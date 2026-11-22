@@ -85,8 +85,9 @@ describe('the table (the historian\'s rows, the design director\'s split)', () =
     expect(hitRate('USA', 'torpedo', false, false, 61)).toBe(HITS.pool.torpedo.open);
   });
 
-  it('gives level bombing at sea Japan 0.09 (Force Z), America 0 (from high up), the rest the pool: 0.06 open, 0 under fighters', () => {
-    expect(hitRate('JAP', 'level', false, false, 28)).toBe(0.09);
+  it('gives level bombing at sea Japan 0.06 (Force Z and Crace\'s cruisers), America 0 (from high up), the rest the pool: 0.06 open, 0 under fighters', () => {
+    expect(hitRate('JAP', 'level', false, false, 28)).toBe(0.06);
+    expect(hitRate('JAP', 'level', true, false, 28)).toBe(0);
     expect(hitRate('USA', 'level', false, false, JUN42)).toBe(0);
     expect(hitRate('USA', 'level', true, false, JUN42)).toBe(0);
     expect(hitRate('GER', 'level', false, false, JUN42)).toBe(0.06);
