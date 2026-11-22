@@ -239,8 +239,9 @@ namespace
 		};
 		FNow Seals[SealSlots];
 
-		/** The under-frame watch: which slots have been held against the frame for this laying (not in shipping builds). */
+		/** The under-frame watch: which slots have been held against the frame for this laying (not in shipping builds), and the boxes kept off as it holds them (EdgeSeals::UnderPiece's). */
 		EdgeSeals::FUnderWatch Watch;
+		std::vector<EdgeSeals::FBox> Watched;
 
 		EdgeSeals::FParams Params;
 		EdgeSeals::FLayout Layout;
@@ -528,17 +529,20 @@ namespace
 			{
 				return;
 			}
+			// (EdgeSeals::UnderPiece, the test's own: the boxes as FBoxes, in the window's pixels)
 			const FSlateRect Mine = Geometry.GetLayoutBoundingRect();
-			for (int32 Piece = 0; Piece < Laid->KeepOff.Num(); ++Piece)
+			Laid->Watched.clear();
+			for (const FSlateRect& Kept : Laid->KeepOff)
+			{
+				Laid->Watched.push_back(EdgeSeals::FBox{ Kept.Left, Kept.Top, Kept.Right, Kept.Bottom });
+			}
+			const int Piece = EdgeSeals::UnderPiece(EdgeSeals::FBox{ Mine.Left, Mine.Top, Mine.Right, Mine.Bottom }, Laid->Watched);
+			if (Piece >= 0)
 			{
 				const FSlateRect& Kept = Laid->KeepOff[Piece];
-				if (FSlateRect::DoRectanglesIntersect(Mine, Kept))
-				{
-					UE_LOG(LogTheater, Warning, TEXT("EdgeNews: seal %d%s painted under a frame piece (the seal from %.0f,%.0f to %.0f,%.0f; piece %d of %d from %.0f,%.0f to %.0f,%.0f; in the window's pixels)"),
-						SealSlot + 1, Here.bRest ? TEXT(", the \"+N\",") : TEXT(""), Mine.Left, Mine.Top, Mine.Right, Mine.Bottom,
-						Piece + 1, Laid->KeepOff.Num(), Kept.Left, Kept.Top, Kept.Right, Kept.Bottom);
-					return;
-				}
+				UE_LOG(LogTheater, Warning, TEXT("EdgeNews: seal %d%s painted under a frame piece (the seal from %.0f,%.0f to %.0f,%.0f; piece %d of %d from %.0f,%.0f to %.0f,%.0f; in the window's pixels)"),
+					SealSlot + 1, Here.bRest ? TEXT(", the \"+N\",") : TEXT(""), Mine.Left, Mine.Top, Mine.Right, Mine.Bottom,
+					Piece + 1, Laid->KeepOff.Num(), Kept.Left, Kept.Top, Kept.Right, Kept.Bottom);
 			}
 		}
 #endif
@@ -1000,6 +1004,7 @@ TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerContro
 	Laid->SignOf = MoveTemp(SignOf);
 	Laid->KeepOffOf = MoveTemp(KeepOffOf);
 	Laid->KeepOff.Reserve(32);
+	Laid->Watched.reserve(32);
 	Laid->CountFace = CountFace;
 	Laid->TabFace = TabFace;
 	// (the photographer's "-TheaterSeal=open:N,hover:N,slide", read once: EdgeSeals::ReadSealAsk)

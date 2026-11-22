@@ -352,9 +352,9 @@ namespace EdgeSeals
 	 * The under-frame watch (Mac run 3: the "+N" seal was laid and painted under the top bar, its keep-off boxes read in
 	 * the wrong measure). Not in shipping builds: each seal, once per laying, once it is on the screen and has slid all
 	 * the way in, is held against every box it keeps off, both as last painted (the window's measure), and a warning is
-	 * logged where it meets one. Meet is FSlateRect::DoRectanglesIntersect's test, as the screen makes it: boxes that
-	 * only touch meet too (a seal laid right keeps Keep clear of every piece, so it never even touches one). UnderPiece is
-	 * the first of Pieces a seal's box meets, -1 for none.
+	 * logged where it meets one. Meet is FSlateRect::DoRectanglesIntersect's test: boxes that only touch meet too (a seal
+	 * laid right keeps Keep clear of every piece, so it never even touches one). UnderPiece is the first of Pieces a
+	 * seal's box meets, -1 for none: the layer's watch calls it with the boxes as painted, so the test holds what runs.
 	 */
 	bool Meet(const FBox& A, const FBox& B);
 	int UnderPiece(const FBox& Seal, const std::vector<FBox>& Pieces);
