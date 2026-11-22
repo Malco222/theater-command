@@ -66,6 +66,16 @@ public:
 	bool Make(const LandMen::Crowd& Men);
 	/** Whether every body set the crowd has was made at level L (LandMen::Mid or Far). */
 	bool HasAll(int32 Level) const;
+	/**
+	 * A live battle's men come with its pieces (release 2): its header has none, so Make finds no set. Grow makes the
+	 * sets and helmets met on the men added since Make or the last Grow, and the levels banked on a set since (a set is
+	 * banked the first time a man of it is met, at each level the first time one stands there). Each part is tried once.
+	 * The number of parts made. bAgain: the crowd was made again (a live reset): every man looked at again, and the
+	 * places of men past its count given back.
+	 */
+	int32 Grow(const LandMen::Crowd& Men, bool bAgain = false);
+	/** A set banked at the mid level whose part could not be made there (its mid men must then be skinned). */
+	bool MidMissing() const { return bMidMissing; }
 
 	/**
 	 * Man Man drawn here this frame: Body is where his set's mesh stands (in Parent's frame: BankedAt of his WorldFrame,
@@ -135,6 +145,10 @@ private:
 	/** One instance's place and place a frame before, for the engine's batch update (kept: no array made a move). */
 	TArray<FTransform> OneAt, OneBefore;
 	TSet<int32> Keys;
+	/** Grow's: the men looked at so far, the helmets met (key, finish), and the parts tried (made or not). */
+	int32 GrownTo = 0;
+	TSet<int64> WornMet, Tried;
+	bool bMidMissing = false;
 	double MadeMsTotal = 0.0;
 	double PictureBytes = 0.0;
 };

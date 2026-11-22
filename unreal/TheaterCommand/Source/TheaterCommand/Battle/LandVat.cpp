@@ -164,9 +164,96 @@ bool FLandVat::Make(const LandMen::Crowd& Men)
 		}
 	}
 	MadeMsTotal = (FPlatformTime::Seconds() - Began) * 1000.0;
+	GrownTo = Men.Count();
+	WornMet = Worn;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the mid and far men as one crowd (SO1): %d body sets, %d of their %d parts made (mid and far), %d helmets' parts of %d; the poses' pictures %.1f MB on the card; made in %.0f ms"),
 		Keys.Num(), Bodies, Keys.Num() * 2, Helmets, Worn.Num() * 2, PicturesMB(), MadeMsTotal);
 	return Bodies > 0;
+}
+
+int32 FLandVat::Grow(const LandMen::Crowd& Men, bool bAgain)
+{
+	if (!CrowdInk.IsValid() || !Ink.IsValid() || !Owner.IsValid() || Men.BankPoses() <= 0)
+	{
+		return 0;
+	}
+	const double Began = FPlatformTime::Seconds();
+	if (bAgain)
+	{
+		for (int32 Man = FMath::Max(0, Men.Count()); Man < Drawn.Num(); ++Man)
+		{
+			Out(Man);
+		}
+		if (Drawn.Num() > Men.Count())
+		{
+			Drawn.SetNum(FMath::Max(0, Men.Count()));
+		}
+		GrownTo = 0;
+	}
+	if (Drawn.Num() < Men.Count())
+	{
+		Drawn.SetNum(Men.Count());
+	}
+	// (the men added since: their sets and helmets)
+	for (int32 Man = FMath::Clamp(GrownTo, 0, Men.Count()); Man < Men.Count(); ++Man)
+	{
+		const int32 Key = Men.BodyKey(Man);
+		if (Key < 0)
+		{
+			continue;
+		}
+		Keys.Add(Key);
+		const int32 Finish = Men.HelmetOf(Man);
+		if (Finish >= 0)
+		{
+			WornMet.Add((static_cast<int64>(Key) << 32) | static_cast<int64>(static_cast<uint32>(Finish)));
+		}
+	}
+	GrownTo = Men.Count();
+	// (every set's level banked and not yet tried: a man of a set met only far may stand at mid later)
+	int32 Made = 0;
+	for (const int32 Key : Keys)
+	{
+		for (const int32 Level : { static_cast<int32>(LandMen::Mid), static_cast<int32>(LandMen::Far) })
+		{
+			const int64 Id = BodyId(Key, Level);
+			if (PartOf.Contains(Id) || Tried.Contains(Id) || Men.BankBodyPoints(Key, static_cast<LandMen::Lod>(Level)) <= 0)
+			{
+				continue;
+			}
+			Tried.Add(Id);
+			if (MakeBody(Men, Key, Level))
+			{
+				++Made;
+			}
+			else if (Level == static_cast<int32>(LandMen::Mid))
+			{
+				bMidMissing = true;
+			}
+		}
+	}
+	for (const int64 Both : WornMet)
+	{
+		const int32 Key = static_cast<int32>(Both >> 32), Finish = static_cast<int32>(Both & 0xFFFFFFFF);
+		for (const int32 Level : { static_cast<int32>(LandMen::Mid), static_cast<int32>(LandMen::Far) })
+		{
+			const int64 Id = HelmetId(Key, Finish, Level);
+			if (PartOf.Contains(Id) || Tried.Contains(Id) || !PartOf.Contains(BodyId(Key, Level)))
+			{
+				continue;
+			}
+			Tried.Add(Id);
+			Made += MakeHelmet(Men, Key, Finish, Level) ? 1 : 0;
+		}
+	}
+	if (Made > 0)
+	{
+		const double Took = (FPlatformTime::Seconds() - Began) * 1000.0;
+		MadeMsTotal += Took;
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): the men's crowd (SO1) grown by %d parts: %d body sets now, %d parts in all; the poses' pictures %.1f MB on the card; %.0f ms"),
+			Made, Keys.Num(), PartOf.Num(), PicturesMB(), Took);
+	}
+	return Made;
 }
 
 bool FLandVat::HasAll(int32 Level) const

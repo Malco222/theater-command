@@ -2486,7 +2486,15 @@ void ALandBattle::MakeMen()
 			const bool bMid = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVatMid"));
 			Crowd->SetPoseBankMid(bMid);
 			Vat = MakeShared<FLandVat>(this, Root.Get(), CrowdInk, ManInk.Get(), UnitsPerMetre, VatKept);
-			if (!Vat->Make(*Crowd))
+			// (a live battle's header has no men yet: its sets are made as its pieces bring them, FLandVat::Grow from the
+			// live pieces; the 40d928a6 Mac run found SO1 never made live)
+			const bool bLiveEmpty = S.Rec.bLive && Crowd->Count() == 0;
+			if (bLiveEmpty)
+			{
+				Vat->Make(*Crowd);
+				UE_LOG(LogTheater, Display, TEXT("Land battle (live): the men's crowd (SO1) is made as the men come"));
+			}
+			else if (!Vat->Make(*Crowd))
 			{
 				Crowd->SetPoseBankMid(false);
 				Vat.Reset();
