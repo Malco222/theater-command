@@ -10,11 +10,13 @@
  * The jungle (Guadalcanal, Kokoda and Buna, Burma; 1942-45): a wall of green with no horizon. The rules' woods are lowland
  * rainforest: a closed canopy from fewer, bigger trees (the kit's giants and its canopy trees scaled up to 22-36 m), slim
  * sub-canopy trees under them, bananas and young palms, and round the eye the floor's own growth (ferns and gingers,
- * saplings and rattan, leaf litter) as clutter; the edges a solid wall of undergrowth and small trees. Pale trunks, very
- * different thicknesses, lianas hanging in loops. The rules' open land is kunai grass 1-2 m over red laterite, bright
- * against the forest, with burnt patches; its fields are coconut plantations in ruler-straight rows of tall leaning
- * palms over short grass (rice paddies on the Asian mainland); its rough the open grassy ridges. Tracks of red or
- * yellow-brown mud, puddled in their ruts. Villages of houses on stilts among bananas and palms. Beyond the field the
+ * saplings and rattan, leaf litter) as clutter; thickets through it, and at its edge a wall of them shoulder to shoulder
+ * from the ground up, columns of climbers and small trees under the big crowns. Pale trunks, very different
+ * thicknesses, lianas hanging in loops. The rules' open land is kunai grass 1-2 m, tan-green, in clumps and patches
+ * over red laterite, with trodden paths through it and burnt patches; its fields are coconut plantations in straight
+ * rows of tall palms each its own height and lean, over short grass (rice paddies on the Asian mainland); its rough the
+ * open grassy ridges. Tracks of red or yellow-brown mud, their edges broken by the grass, grass on the hump, water in
+ * the ruts. Villages of houses on stilts among bananas and palms, tin roofs patchy with rust. Beyond the field the
  * forest closes in on every side and climbs into hills under the humid haze.
  *
  * The islands (Tarawa, Saipan, Peleliu; 1943-45): dazzling coral sand under palm groves, flat, the shore laid beyond the
@@ -403,9 +405,9 @@ namespace LandScape
 				{
 					// kunai: tan-green, straw when old, the tussocks darker; thinning in patches to short grass over red earth;
 					// trodden paths through it; burnt patches black
-					Tone T = Mixed(Rgb(122, 128, 74), Rgb(166, 158, 106), 0.2 + 0.45 * Dry + 0.3 * S.N1);
-					T = Mixed(T, Rgb(92, 98, 56), 0.35 * Smooth(-0.3, 0.7, S.N2));
-					T = Mixed(T, Mixed(Rgb(126, 128, 76), Red, Clamp01(0.25 + 0.35 * S.N2)), 0.7 * Smooth(-0.32, -0.5, Thin(S.X, S.Y)));
+					Tone T = Mixed(Rgb(104, 110, 62), Rgb(140, 134, 88), 0.2 + 0.45 * Dry + 0.3 * S.N1);
+					T = Mixed(T, Rgb(80, 86, 50), 0.35 * Smooth(-0.3, 0.7, S.N2));
+					T = Mixed(T, Mixed(Rgb(112, 112, 66), Red, Clamp01(0.35 + 0.35 * S.N2)), 0.6 * Smooth(-0.35, -0.6, Thin(S.X, S.Y)));
 					T = Mixed(T, Red, 0.12 * Smooth(0.45, 0.9, -S.N2));
 					T = Mixed(T, Mixed(Rgb(150, 104, 70), Rgb(146, 134, 92), Clamp01(0.4 + 0.4 * S.N1)), 0.85 * Trod(S.X, S.Y));
 					if (Burnt(S.Key, S.X, S.Y)) T = Mixed(Rgb(66, 60, 50), Rgb(104, 94, 72), 0.3 + 0.3 * S.N2);
@@ -524,6 +526,7 @@ namespace LandScape
 					if (S.Crop == Strand) return Pick < 0.4 ? Grown{ B::Clut4, 0.45 } : Pick < 0.7 ? Grown{ B::Stone, 0.35 } : Grown{ B::Clut5, 0.15 };
 					// the grove: vines and grass in patches over the sand, fronds and husks under the palms
 					const double Patch = Noise(S.X / 11.0, S.Y / 11.0, Seed ^ 0xC11);
+					if (Pick < 0.2) return Patch > 0.1 ? Grown{ B::Clut1, 0.9 } : Grown{ B::Clut4, 0.6 }; // (creepers spread low over the sand)
 					if (Pick < 0.68) return Grown{ B::Clut4, std::clamp(1.0 + 1.2 * Patch, 0.25, 1.9) };
 					if (Pick < 0.9) return Grown{ B::Clut5, 0.45 };
 					return Grown{ B::Stone, 0.3 };
@@ -572,10 +575,9 @@ namespace LandScape
 					if (Burnt(S.Key, S.X, S.Y)) return Pick < 0.5 ? Grown{ B::Clut4, 0.6 } : G;
 					if (Trod(S.X, S.Y) > 0.45) return Pick < 0.3 ? Grown{ B::Clut4, 0.5 } : G;
 					{
-						const double Th = Thin(S.X, S.Y);
-						if (Th < -0.42) return Pick < 0.65 ? Grown{ B::Clut4, 0.9 } : Pick < 0.75 ? Grown{ B::Clut0, 0.5 } : G;
-						const double Dense = std::clamp(1.35 + 0.4 * Patch, 0.8, 1.7) * (0.35 + 0.65 * Smooth(-0.42, -0.15, Th));
-						return Pick < 0.88 ? Grown{ B::Clut0, Dense } : Grown{ B::Clut4, 0.7 };
+						// (where it thins, clumps with the earth between them)
+						const double Dense = std::clamp(1.35 + 0.4 * Patch, 0.8, 1.7) * (0.3 + 0.7 * Smooth(-0.6, -0.3, Thin(S.X, S.Y)));
+						return Pick < 0.86 ? Grown{ B::Clut0, Dense } : Grown{ B::Clut4, 0.8 };
 					}
 				}
 			}
@@ -602,7 +604,8 @@ namespace LandScape
 				}
 				case B::Clut1:
 				{
-					Size(0.65 + 0.75 * U4, 0.7 + 0.7 * U5);
+					if (bIsland) Size(0.9 + 0.6 * U4, 0.32 + 0.22 * U5); // (an island's creepers, low)
+					else Size(0.65 + 0.75 * U4, 0.7 + 0.7 * U5);
 					const double L = 0.8 + 0.4 * U6;
 					P.Tint = bIsland ? Tint(1.05 * L, 1.1 * L, 0.85 * L) : Tint(0.95 * L, L, 0.9 * L);
 					return true;
@@ -854,6 +857,9 @@ namespace LandScape
 					M.SightTrunk = Trunk;
 				};
 				const bool bRead = M.Name.empty() ? false : Fd.Kit.count(M.Name) > 0;
+				// (the trees, drawn far off as the bocage's are, a crown of some 40 triangles: the rainforest's, the palms, the
+				// bamboo; not the bananas, the shot palms' bare poles or the thickets)
+				M.bTree = K == KTree || K == KGiant || K == KPalm || K == KPalmTall || K == KPalmYoung || K == KBamboo;
 				switch (K)
 				{
 				case KTree:
@@ -1354,10 +1360,18 @@ namespace LandScape
 							// the understory: thickets, bananas, undergrowth, young palms; at the edge a wall of thickets shoulder to shoulder
 							// from the ground to the small trees' crowns
 							if (bEdge)
-								for (int K = 0; K < 3; ++K)
 								{
+									for (int K = 0; K < 3; ++K)
+									{
+										Elsewhere();
+										Stand(B::Kit15, PX, PY, 0.5, 0.9, 1.45, 0.9, 1.5, 0.85, 1.12, Warm);
+									}
+									// (at the edge the climbers smother the small trees from the ground to the canopy, columns of leaves some
+									// 8-12 m, and small trees crowd in under the big crowns)
 									Elsewhere();
-									Stand(B::Kit15, PX, PY, 0.5, 0.9, 1.45, 0.9, 1.5, 0.85, 1.12, Warm);
+									if (R.Next() < (S.Edge < 5.0 ? 0.9 : 0.5)) Stand(B::Kit15, PX, PY, 0.5, 1.1, 1.5, 1.8, 2.6, 0.85, 1.1, Warm);
+									Elsewhere();
+									Stand(B::Kit0, PX, PY, 0.5, 0.45, 0.75, 0.42, 0.7, 0.85, 1.1, 0.0);
 								}
 							else
 							{
@@ -1420,7 +1434,7 @@ namespace LandScape
 							if (Burnt(S.Key, X, Y)) break;
 							{
 								const double Clumps = Noise(X / 22.0 - 1.4, Y / 22.0 + 3.3, Seed ^ 0xC14);
-								const double Want = (Clumps > -0.05 ? 0.9 : 0.22) * Smooth(-0.45, -0.15, Thin(X, Y)) * (1.0 - Trod(X, Y));
+								const double Want = (Clumps > -0.05 ? 0.9 : 0.22) * Smooth(-0.6, -0.3, Thin(X, Y)) * (1.0 - Trod(X, Y));
 								if (R.Next() < Want) Tuft(B::Kit6, X, Y, 0.6, 1.15, 1.7, 0.4, 0.58, Tint(1.0 + 0.1 * Dry, 1.0, 0.94));
 							}
 							if (R.Next() < 0.008)
