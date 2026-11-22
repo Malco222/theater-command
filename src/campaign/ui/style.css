@@ -1156,6 +1156,11 @@ p.sub.whyno { color: #f0b3a5; }
 .afm.other .afpad { fill: #6c6f62; stroke: #b9b5a8; stroke-width: .6; opacity: .8; }
 .afm .afrun { fill: none; stroke: #f1e9d4; stroke-width: 1.15; stroke-linecap: round; }
 .afm.other .afrun { opacity: .75; }
+/* Under fog the runway is drawn again over the bars, edged in the pad's own colour (washed with the lid) so it stays whole. */
+.afm .afedge { fill: none; stroke: #66733f; stroke-width: 1.5; stroke-linecap: round; }
+.afm.ally .afedge { stroke: #5f6f52; }
+.afm.foe .afedge { stroke: #6b5a3c; }
+.afm.other .afedge { stroke: #6c6f62; }
 .afm:hover .afpad { stroke: var(--brass); stroke-width: 1.3; }
 .afm .afsel { fill: rgba(217, 180, 90, .22); stroke: var(--brass); stroke-width: 1.2; stroke-dasharray: 2.4 1.6; }
 .mk.scout { stroke: #d9b45a; stroke-width: 1.4; stroke-dasharray: 3 2; fill: rgba(217, 180, 90, .22); }

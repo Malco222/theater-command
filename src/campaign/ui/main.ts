@@ -6219,9 +6219,15 @@ function groupIcon(kind: 'ftr' | 'bmr' | 'mixed', nat: string): string {
  * Fog over an airfield (fog.ts): a soft pale wash over the pad, the same size as the badge, with the weather map's three
  * bars for fog in pale ink. No side's colour of its own, and the side's colour still shows through (the art director, 22 November).
  */
-function fogLid(w: number, h: number): string {
-  const bars = [-0.26, 0, 0.26].map((k) => `M${(-w * 0.34).toFixed(1)} ${(h * k).toFixed(1)}H${(w * 0.34).toFixed(1)}`).join('');
-  return `<g class="affog"><title>Fog has closed this airfield this month: nothing there can take off.</title><rect x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2" fill="#dfe3e6" fill-opacity="0.45"/><path d="${bars}" stroke="#ebebeb" stroke-width="0.65" stroke-linecap="round" fill="none"/></g>`;
+/**
+ * Fog over an airfield the player knows (fog.ts): a pale wash inside the badge's own outline, the weather map's bars for
+ * fog, and the runway drawn again over them with a lid-coloured edge so it stays whole (the art director, 22 November
+ * 18:24Z). The bars lie between the glyph's strokes, never on its crossbar; two on a landing ground's small badge.
+ */
+function fogLid(w: number, h: number, k: number, strips: string): string {
+  const rows = k === 1 ? [-0.3, 0.3] : k === 2 ? [-0.3, -0.04, 0.36] : [-0.24, -0.02, 0.38];
+  const bars = rows.map((y) => `M${(-w * 0.34).toFixed(1)} ${(h * y).toFixed(1)}H${(w * 0.34).toFixed(1)}`).join('');
+  return `<g class="affog"><title>Fog has closed this airfield this month: nothing there can take off.</title><rect x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2" fill="#dfe3e6" fill-opacity="0.45"/><path d="${bars}" stroke="#ebebeb" stroke-width="0.65" stroke-linecap="round" fill="none"/><path class="afedge" d="${strips}"/><path d="${strips}" stroke="#dfe3e6" stroke-opacity="0.45" stroke-width="1.5" stroke-linecap="round" fill="none"/><path class="afrun" d="${strips}"/></g>`;
 }
 
 function airfieldMarks(): Piece[] {
@@ -6234,7 +6240,7 @@ function airfieldMarks(): Piece[] {
     const strips = k === 1 ? `M${(-w * 0.32).toFixed(1)} ${(h * 0.2).toFixed(1)}L${(w * 0.32).toFixed(1)} ${(-h * 0.2).toFixed(1)}`
       : k === 2 ? `M${(-w * 0.36).toFixed(1)} ${(h * 0.16).toFixed(1)}H${(w * 0.36).toFixed(1)}M${(-w * 0.16).toFixed(1)} ${(-h * 0.32).toFixed(1)}L${(w * 0.2).toFixed(1)} ${(h * 0.32).toFixed(1)}`
       : `M${(-w * 0.37).toFixed(1)} ${(h * 0.2).toFixed(1)}H${(w * 0.37).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(-w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}`;
-    out.push(pieceAt(`<g class="afm ${a.side}${on ? ' on' : ''}" data-id="${a.region}" transform="translate(${(a.x - 17).toFixed(1)} ${(a.y + 11).toFixed(1)})">${on ? `<rect class="afsel" x="${(-w / 2 - 2.6).toFixed(1)}" y="${(-h / 2 - 2.6).toFixed(1)}" width="${(w + 5.2).toFixed(1)}" height="${(h + 5.2).toFixed(1)}" rx="3.6"/>` : ''}<rect class="afpad" x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2"/><path class="afrun" d="${strips}"/>${fogAt(g, a.region) ? fogLid(w, h) : ''}</g>`, a.x - 17, a.y + 11, w / 2 + 8, h / 2 + 8));
+    out.push(pieceAt(`<g class="afm ${a.side}${on ? ' on' : ''}" data-id="${a.region}" transform="translate(${(a.x - 17).toFixed(1)} ${(a.y + 11).toFixed(1)})">${on ? `<rect class="afsel" x="${(-w / 2 - 2.6).toFixed(1)}" y="${(-h / 2 - 2.6).toFixed(1)}" width="${(w + 5.2).toFixed(1)}" height="${(h + 5.2).toFixed(1)}" rx="3.6"/>` : ''}<rect class="afpad" x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2"/><path class="afrun" d="${strips}"/>${fogAt(g, a.region) ? fogLid(w, h, k, strips) : ''}</g>`, a.x - 17, a.y + 11, w / 2 + 8, h / 2 + 8));
   }
   return out;
 }
