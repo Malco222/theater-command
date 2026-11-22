@@ -50,7 +50,7 @@ import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
 import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
@@ -2174,8 +2174,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     if (town) tallySiege(g, 'repulsed');
     if ((town || inField) && watch > 0) {
       // The guard has its losses too, and they are not made good while the siege lasts. (Beside the field army, ruling
-      // 232, it pays as it would for a storm thrown back.)
-      const share = clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
+      // 232, it pays as it would for a storm thrown back. Where the battle was fought on the field, the guard stood on it
+      // as a block of its own (the coordinator's ruling, 22 November): it pays the share its side lost there, as the corps
+      // beside it are held to (ruling 226(6)), so the after card's headline and its field line agree (b464).)
+      const onField = inField && opts.field ? (opts.field.corps[guardForce(target)] !== undefined ? opts.field.def : null) : null;
+      const share = onField !== null ? clamp(onField, 0, 1) : clamp((SIEGE.assault.guardHit / 100) * Math.min(1.2, R), 0.05, 0.6);
       const lost = Math.round(watchMen * share);
       guardAfter(g, target, share);
       defLost += lost;

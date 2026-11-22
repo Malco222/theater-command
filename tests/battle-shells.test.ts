@@ -281,7 +281,9 @@ describe('the fight is not moved by a hair', () => {
     // street plan (b618: a real city's plan from its name, no longer the battle's seed), its kept plan 3 (b625). And with
     // the tactics panel's item 7 on (b647, ruling 239): one German tank, alone in Katowice's streets at 166.5 s, takes the
     // card's figure; with LAND.alone off it is still aecea9823b67b851, and the shells are as many.
-    'Polish Silesia': [1.865, 216, 4392, 9950, '279ca9d945ba3542'],
+    // Re-recorded with Katowice's town guard drawn on the field as a defending block (ruling 232, b464: the coordinator,
+    // 22 November 06:40Z): the same odds, a longer fight, and the guard's men booked with the field's; viewed and not alike.
+    'Polish Silesia': [1.865, 233, 4659, 16171, '6cf32f3fafd9dbcc'],
   };
   const check = (key: string, b: LandBattle, viewed: boolean): number => {
     b.ai.def = true;
@@ -311,7 +313,8 @@ describe('the fight is not moved by a hair', () => {
       shells += check(name, new LandBattle(landTicket(g, cs, r)!), true);
       check(name, new LandBattle(landTicket(g, cs, r)!), false);
     }
-    // Katowice on its own kept plan (b618, b625): two shells more than on the battle's plan.
-    expect(shells).toBe(9);
+    // Katowice on its own kept plan (b618, b625): two shells more than on the battle's plan; and two more with its town
+    // guard on the field (ruling 232, b464), the fight in its streets lasting longer.
+    expect(shells).toBe(11);
   });
 });

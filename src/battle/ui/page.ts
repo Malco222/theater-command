@@ -19,7 +19,7 @@ import type { LandPlace, Terrain } from '../land/field';
 import { PRACTICE_GROUNDS, practiceBill, practiceTicket, withTeams, wornWords, type PracticeGround } from '../land/sample';
 import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
-import { cardKnows, pursuitLine } from '../land/ticket';
+import { cardKnows, corpsOn, pursuitLine } from '../land/ticket';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type CardSaid, type Offer } from './campaign';
 import { drawFrame, signSvg, toField, toScreen, type Scene } from './draw';
@@ -161,7 +161,8 @@ function showChooser(): void {
   const me = g.nations[g.human!];
   const row = (o: Offer, i: number): string => {
     const t = o.ticket, p = t.place;
-    const att = t.att.forces.length, def = t.def.forces.length;
+    // The town's guard on the field (ruling 232) is no corps: the card names it apart.
+    const att = corpsOn(t.att), def = corpsOn(t.def), guard = t.def.forces.length > def ? ' and the town guard' : '';
     const bits = [TERRAIN_WORD[p.terrain], p.river ? `across the ${esc(p.river)}${p.bridgeDown ? ', bridges down' : ''}` : '', p.fort ? `fortress works, level ${p.fort}` : '', p.town ? townWords(p) : ''].filter(Boolean);
     const staff = staffSays(diceChance(o.odds, t.reckoning.dice));
     // The campaign lets a corps thrown back attack again while it has the moves for it (mark 11): the card says so.
@@ -170,7 +171,7 @@ function showChooser(): void {
     return `<button class="tc-card is-press offer" data-offer="${i}">
       <span class="otop"><b class="tc-title-3">${esc(o.target.name)}</b><span class="tc-data"><b>${odds(o.odds)}</b> to 1</span></span>
       <span class="tc-data omid">${facts(bits)}</span>
-      <span class="tc-data olow">${facts([`${att} corps against ${def}`, ...(again ? [again] : []), staff])}</span></button>`;
+      <span class="tc-data olow">${facts([`${att} corps against ${def}${guard}`, ...(again ? [again] : []), staff])}</span></button>`;
   };
   // Each practice ground's card is reckoned as the campaign would reckon the two practice armies there (b400).
   const practice = (p: PracticeGround, i: number): string => {
@@ -231,8 +232,8 @@ function since(now: Offer[]): string {
     }
     if (!n) continue;
     if (n.ticket.place.bridgeDown && !o.ticket.place.bridgeDown) say(o.target.name, 'bridges down');
-    const ca = n.ticket.att.forces.length, cd = n.ticket.def.forces.length;
-    if (ca !== o.ticket.att.forces.length || cd !== o.ticket.def.forces.length) say(o.target.name, `now ${ca} corps against ${cd}`);
+    const ca = corpsOn(n.ticket.att), cd = corpsOn(n.ticket.def);
+    if (ca !== corpsOn(o.ticket.att) || cd !== corpsOn(o.ticket.def)) say(o.target.name, `now ${ca} corps against ${cd}`);
     // The odds never split across a fold.
     if (Math.abs(n.odds - o.odds) >= 0.005) say(o.target.name, `<span class="nobr">now ${odds(n.odds)} to 1, from ${odds(o.odds)}</span>`);
   }

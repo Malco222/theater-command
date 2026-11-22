@@ -3,12 +3,13 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut, type BreakCause } from '../src/battle/core';
-import { BEND, buildField, CITY_PLANS, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, planKey, streetsOf, wornWords, type LandPlace, type LandUnit, type PracticeGround } from '../src/battle/land';
+import { BEND, buildField, CITY_PLANS, cardKnows, corpsOn, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, planKey, streetsOf, wornWords, type LandPlace, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING, riverBetween } from '../src/campaign/rivers';
 import { createGame, hostileUnits, type FieldBill } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
 import { townName, townSize } from '../src/campaign/towns';
+import { guardForce, guardMen } from '../src/campaign/siege';
 import { attachWorld } from '../src/campaign/world';
 import { beginHuman, candidates, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
 import { FORT_MUL, type Corps, type Game, type Region } from '../src/campaign/types';
@@ -1083,8 +1084,42 @@ describe('the hand-off with a real campaign', () => {
     expect(t.place.terrain).toBe(r.terrain);
     expect(t.att.human).toBe(true);
     expect(t.att.forces.map((f) => f.corps)).toEqual(goingIn(g, [c], r).map((x) => x.id));
-    expect(t.def.forces.length).toBe(a.defenders.length);
+    // The defence's corps, and the town's guard where it fights beside them in the field (ruling 232): a block of its
+    // own, under the guard's own id (the coordinator's ruling, 22 November).
+    expect(t.def.forces.length).toBe(a.defenders.length + (a.guard ? 1 : 0));
+    expect(t.def.forces.filter((f) => f.corps >= 0).map((f) => f.corps)).toEqual(a.defenders.map((x) => x.id));
+    if (a.guard) {
+      const guard = t.def.forces.find((f) => f.corps === guardForce(r))!;
+      expect(guard.name).toBe(`Town guard of ${townName(r)}`);
+      expect(guard.men).toBe(guardMen(g, r));
+      expect(guard.dug).toBe(true);
+    }
     expect(t.att.forces.reduce((s, f) => s + f.share, 0)).toBeCloseTo(1);
+    expect(t.def.forces.reduce((s, f) => s + f.share, 0)).toBeCloseTo(1);
+  });
+  it('the town\'s guard that fights beside the field army stands on the field and pays the share its side lost there (ruling 232, b464)', () => {
+    const g = playing();
+    const { c, r } = anAttack(g);
+    const a = previewAttack(g, [c], r)!;
+    expect(a.guard ?? 0).toBeGreaterThan(0);
+    const t = landTicket(g, [c], r)!;
+    const b = new LandBattle(t);
+    const guards = b.units.filter((u) => u.corps === guardForce(r));
+    expect(guards.length).toBeGreaterThan(0);
+    expect(guards.every((u) => u.side === 'def' && u.dug && u.name.startsWith('Town guard of'))).toBe(true);
+    // No secret on a fogged field (the card names it), and no corps on the card's count.
+    expect(cardKnows(g, t).has(guardForce(r))).toBe(true);
+    expect(corpsOn(t.def)).toBe(t.def.forces.length - 1);
+    b.ai.att = b.ai.def = true;
+    runOut(b);
+    const o = b.over!;
+    expect(o.forces!.some((f) => f.corps === guardForce(r))).toBe(true);
+    const men = guardMen(g, r);
+    const rep = handBack(g, [c], r, o)!;
+    const row = rep.defenders.find((u) => (u as { guard?: boolean }).guard)!;
+    expect(row).toBeDefined();
+    if (!rep.taken) expect(row.lost).toBe(Math.round(men * o.lost.def));
+    else expect(row.fate).toBe('surrendered');
   });
   it('a fought battle comes back through the rules: the report carries the field\'s R, and the ground follows it', () => {
     const g = playing();
@@ -1147,8 +1182,9 @@ describe('the hand-off with a real campaign', () => {
     seventh.reg = r.id;
     r.units = r.units.filter((u) => u.nat === 'GER').concat(seventh);
     const t = landTicket(g, [c], r)!;
-    expect(t.def.forces.map((f) => f.divisions!.map((d) => d.name))).toEqual([['7th Armoured Division']]);
-    const blocks = new LandBattle(t).units.filter((u) => u.side === 'def');
+    // (Beside it, the town's guard where it fights in the field: ruling 232, a block of its own.)
+    expect(t.def.forces.filter((f) => f.corps >= 0).map((f) => f.divisions!.map((d) => d.name))).toEqual([['7th Armoured Division']]);
+    const blocks = new LandBattle(t).units.filter((u) => u.side === 'def' && u.corps >= 0);
     expect(blocks.length).toBe(LAND.blocks.regiments);
     expect(blocks.map((u) => u.name)).toEqual(['1st', '2nd', '3rd'].map((n) => `${n} Regiment, 7th Armoured`));
     expect(blocks.every((u) => u.parent === '7th Armoured')).toBe(true);
