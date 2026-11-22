@@ -683,6 +683,32 @@ def build_stage_sea():
     finish(m)
 
 
+def build_tally_mark():
+    """AN AIRCRAFT'S RECORD ON HER SIDE (named aces, release 2; the bombers' tallies after them): each mark a small square
+    of the modeller's tally sheet, handed in as 'Sheet', cut out by the sheet's own edge and lit as her paint is. Each
+    square's corners carry the paint under it (their colour, stored as a picture stores it, as M_MapSurface's) and the
+    mark's strength (their alpha: 1 the newest, an old kill 0.85, an old bomb 0.67): the mark is drawn that far from her
+    paint toward its own colour. 'Tin' tints it (a bomb's yellow; white for a kill); 'Roughness' and 'Specular' are her
+    paint's (the air battle sets them from its PlaneInk)."""
+    m = new_material("M_TallyMark")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    m.set_editor_property("opacity_mask_clip_value", 0.5)
+    picture = node(m, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0,
+                   parameter_name="Sheet",
+                   texture=unreal.load_asset("/Engine/EngineResources/DefaultTexture"),
+                   sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 300)
+    skin = node(m, unreal.MaterialExpressionPower, -700, 300, const_exponent=2.2)
+    connect(colour, "", skin, "Base")
+    mark = times(m, (picture, "RGB"), vector(m, "Tin", (1.0, 1.0, 1.0, 1.0), -700, 150), -450, 50)
+    painted = lerp(m, skin, mark, (colour, "A"), -250, 150)
+    to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    to_property(scalar(m, "Roughness", 0.9, -250, 350), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.15, -250, 450), "", unreal.MaterialProperty.MP_SPECULAR)
+    to_property(picture, "A", unreal.MaterialProperty.MP_OPACITY_MASK)
+    finish(m)
+
+
 def build_battle_puffs():
     """The battle effects kit's smoke, dust, fire and flashes (Effects/BattleEffects): M_Highlight's light that is not
     shaded, see-through by the mesh's own alpha, "Brightness" times its colour (picture.lit_gain, so the hottest flames
@@ -1941,5 +1967,11 @@ if REBUILD == "all" or "M_BattlePuffs" in REBUILD.split(",") or not eal.does_ass
     build_battle_puffs()
 else:
     unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffs already exists, left alone")
+# (M_TallyMark, the air battle's aces' marks: built when missing, or with TC_REBUILD=M_TallyMark or all. Without it no
+# ace's victories are painted)
+if REBUILD == "all" or "M_TallyMark" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_TallyMark"):
+    build_tally_mark()
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_TallyMark already exists, left alone")
 build_level()
 unreal.log("Theater Command: content built")

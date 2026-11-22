@@ -24,7 +24,7 @@ class UProceduralMeshComponent;
 class UDecalComponent;
 class UInstancedStaticMeshComponent;
 class UStaticMesh;
-namespace AirShow { struct Fx; struct Shape; }
+namespace AirShow { struct Fx; struct Shape; struct Group; }
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
@@ -32,6 +32,22 @@ class USoundBase;
 struct FAirBattleState;
 struct FAirLandMade;
 class UTexture2D;
+
+/**
+ * An aircraft model's places for an ace's victory marks (its file's tally.kills, the modeller's): each slot in the
+ * shape's own frame (engine units, nose toward -X, right hand at -Y) with the way out of its skin there, the paint under
+ * it, and the painter's hand (lean in degrees, size, along and up in metres) where the file gives one; half a mark's
+ * width in engine units; and whether the paint there is light (L* 50 or more), so the sheet's light set is used.
+ */
+struct FAirTallySide
+{
+	TArray<FVector> At;
+	TArray<FVector> Out;
+	TArray<FColor> Skin;
+	TArray<FVector4> Hand;
+	double Radius = 0.0;
+	bool bLight = false;
+};
 
 /**
  * The air battle's 3D scene (the air battles thread's 3D handoff, sections 1 to 10; ruling 238 for Pearl Harbor and
@@ -172,6 +188,10 @@ private:
 			TWeakObjectPtr<UDecalComponent> Decal;
 		};
 		TArray<FMark> Marks;
+		/** Its ace's victories painted on its side (AirBattleTally.cpp), made once when first near the eye; tried says
+		 * it was looked at, painted or not. */
+		TWeakObjectPtr<UProceduralMeshComponent> Tally;
+		bool bTallyTried = false;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/**
@@ -249,6 +269,30 @@ private:
 	int32 MarksEyeKey = INDEX_NONE;
 	/** Which side of an aircraft its strikes mostly lie on: Hand 1 its right, -1 its left; Under true when most face down. */
 	void MarksSide(int32 Key, double& Hand, bool& bUnder) const;
+	/**
+	 * Named aces (Brian's, release 2; the air thread's extra.ace, read into AirShow::Group as AceName, AceKills and
+	 * AceBy): his victories painted on his group's lead aircraft (its lowest key), one mark a kill in the victims'
+	 * symbols, laid on the model's kill slots as the modeller's rules lay them (Battle/AirTally), from the tally sheet
+	 * (Content/Data/Tally) with M_TallyMark, while it is near the eye on its own mesh. Shown, never counted.
+	 * "-TheaterAces=0" paints none; "-TheaterAceTest=att:6:GER=6" gives the first fighter group of a side (att or
+	 * def) a test ace, for the art director's frames, where the recording has none.
+	 */
+	void DrawTally(const FVector& EyeAt);
+	bool TallyReady();
+	void MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::Group& Ace, const FString& Nation);
+	const FAirTallySide* TallyOfShape(const FString& Shape);
+	static constexpr double TallyNearM = 250.0;
+	/** Each ace's group, and its lead's key (the lowest seen). */
+	TMap<int32, int32> AceLead;
+	bool bAcesRead = false;
+	bool bTallyTried = false;
+	/** The sheet's cells, "KILL-GER|dark" to u0, v0, u1, v1; a mark's half width as a share of its slot's radius. */
+	TMap<FString, FVector4> TallyCells;
+	double TallySpan = 1.25;
+	UPROPERTY()
+	TObjectPtr<UTexture2D> TallySheet;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> TallyInk;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;
@@ -327,6 +371,9 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PlainInk;
+	/** The aircraft's paint's roughness and specular (PlaneInk's), for what is painted on it. */
+	float PaintRoughness = 0.9f;
+	float PaintSpecular = 0.15f;
 	/** The ground's pictures under a battle with no stage (Battle/AirLand: fields, woods, villages, rivers, the town),
 	 * painted on the pool's threads as the battle opens and laid over the plain sheets when done (LayLand). */
 	TSharedPtr<FAirLandMade, ESPMode::ThreadSafe> LandMade;

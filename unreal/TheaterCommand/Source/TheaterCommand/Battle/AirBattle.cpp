@@ -809,6 +809,8 @@ bool AAirBattle::Open(const FString& Why)
 			UE_LOG(LogTheater, Display, TEXT("Air battle: the aircraft's paint %.2f rough, %.2f specular."), PaintRough, PaintSpec);
 		}
 		PlaneInk = Ink(static_cast<float>(PaintRough), static_cast<float>(PaintSpec));
+		PaintRoughness = static_cast<float>(PaintRough);
+		PaintSpecular = static_cast<float>(PaintSpec);
 		PlainInk = Ink(0.85f, 0.2f);
 		if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight")))
 		{
@@ -3492,6 +3494,13 @@ namespace AirParts
 		};
 		TArray<FPiece> Doors;
 		FPiece Racked;
+		/** Its kill slots, for an ace's victories (the file's tally.kills; AirBattleTally.cpp): read when an ace first
+		 * needs them, from its file (Kind) as its points were brought in (Middle, Fit). */
+		FAirTallySide Kills;
+		bool bKillsRead = false;
+		FString Kind;
+		FVector Middle = FVector::ZeroVector;
+		double Fit = 1.0;
 	};
 
 	static TMap<FString, FShape>& Shapes()
@@ -3586,6 +3595,114 @@ namespace AirParts
 	 * the near shape into pieces of their own; the rest stays. Read wrong (no parts, a count that does not match, not
 	 * two doors) and the shape is left as it was, its bay drawn shut.
 	 */
+	/**
+	 * A model's kill slots (its file's tally.kills, the modeller's: each [x, y, z, nx, ny, nz] in the file's axes, x
+	 * forward and y to the right), brought into the shape's frame as its points were; with the paint under each (the
+	 * nearest point of the shape facing the same way) and whether that paint is light. Nothing where the file has none.
+	 */
+	static void TakeTally(FShape& Shape, const FString& Kind, const FVector& Middle, double Fit, double U)
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json")))))
+		{
+			return;
+		}
+		// (only the tally's own object is read: the file is megabytes of points)
+		const int32 Key = Text.Find(TEXT("\"tally\""));
+		const int32 Open = Key == INDEX_NONE ? INDEX_NONE : Text.Find(TEXT("{"), ESearchCase::CaseSensitive, ESearchDir::FromStart, Key);
+		if (Open == INDEX_NONE)
+		{
+			return;
+		}
+		int32 Depth = 0, Close = INDEX_NONE;
+		for (int32 K = Open; K < Text.Len(); ++K)
+		{
+			const TCHAR C = Text[K];
+			Depth += C == TEXT('{') ? 1 : C == TEXT('}') ? -1 : 0;
+			if (Depth == 0)
+			{
+				Close = K;
+				break;
+			}
+		}
+		TSharedPtr<FJsonObject> Tally;
+		if (Close == INDEX_NONE || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text.Mid(Open, Close - Open + 1)), Tally) || !Tally.IsValid())
+		{
+			return;
+		}
+		const TSharedPtr<FJsonObject>* KillsAt = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Slots = nullptr;
+		if (!Tally->TryGetObjectField(TEXT("kills"), KillsAt) || !(*KillsAt)->TryGetArrayField(TEXT("slots"), Slots))
+		{
+			return;
+		}
+		FAirTallySide& Side = Shape.Kills;
+		Side.Radius = (*KillsAt)->HasField(TEXT("radius")) ? (*KillsAt)->GetNumberField(TEXT("radius")) * U * Fit : 0.045 * U * Fit;
+		for (const TSharedPtr<FJsonValue>& Slot : *Slots)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Six = nullptr;
+			if (!Slot.IsValid() || !Slot->TryGetArray(Six) || Six->Num() < 6)
+			{
+				continue;
+			}
+			auto At = [Six](int32 K) { return (*Six)[K]->AsNumber(); };
+			// (the file has x forward and y to the right; the shape its nose toward -X and its right hand at -Y)
+			Side.At.Add((FVector(-At(0), -At(1), At(2)) * U - Middle) * Fit);
+			Side.Out.Add(FVector(-At(3), -At(4), At(5)).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector));
+		}
+		// (the painter's hand, where the file gives one: kills.hand, or the tally's hand.kills)
+		const TArray<TSharedPtr<FJsonValue>>* Hand = nullptr;
+		const TSharedPtr<FJsonObject>* Hands = nullptr;
+		if (!(*KillsAt)->TryGetArrayField(TEXT("hand"), Hand) && Tally->TryGetObjectField(TEXT("hand"), Hands))
+		{
+			(*Hands)->TryGetArrayField(TEXT("kills"), Hand);
+		}
+		if (Hand)
+		{
+			for (const TSharedPtr<FJsonValue>& One : *Hand)
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Four = nullptr;
+				if (One.IsValid() && One->TryGetArray(Four) && Four->Num() >= 4)
+				{
+					Side.Hand.Add(FVector4((*Four)[0]->AsNumber(), (*Four)[1]->AsNumber(), (*Four)[2]->AsNumber() * U * Fit, (*Four)[3]->AsNumber() * U * Fit));
+				}
+			}
+		}
+		// The paint under each slot: the nearest point of the shape that faces the same way (not a stripe's edge on
+		// the other side of a seam), and the panel's lightness from them all (the sheet's light set at L* 50 or more).
+		double Sum[3] = { 0.0, 0.0, 0.0 };
+		for (int32 K = 0; K < Side.At.Num(); ++K)
+		{
+			double Best = TNumericLimits<double>::Max();
+			FColor Under(96, 96, 96, 255);
+			for (int32 P = 0; P < Shape.Points.Num() && P < Shape.Colors.Num() && P < Shape.Normals.Num(); ++P)
+			{
+				if (FVector::DotProduct(Shape.Normals[P], Side.Out[K]) < 0.5)
+				{
+					continue;
+				}
+				const double D = FVector::DistSquared(Shape.Points[P], Side.At[K]);
+				if (D < Best)
+				{
+					Best = D;
+					Under = Shape.Colors[P];
+				}
+			}
+			Under.A = 255;
+			Side.Skin.Add(Under);
+			const FLinearColor Lin(Under);
+			Sum[0] += Lin.R;
+			Sum[1] += Lin.G;
+			Sum[2] += Lin.B;
+		}
+		if (Side.At.Num() > 0)
+		{
+			const double Y = (0.2126 * Sum[0] + 0.7152 * Sum[1] + 0.0722 * Sum[2]) / Side.At.Num();
+			const double L = Y > 216.0 / 24389.0 ? 116.0 * FMath::Pow(Y, 1.0 / 3.0) - 16.0 : 24389.0 / 27.0 * Y;
+			Side.bLight = L >= 50.0;
+		}
+	}
+
 	static void TakeBay(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U)
 	{
 		FString Text;
@@ -3979,6 +4096,10 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 				}
 			}
 			LiftMarks(*Old);
+			if (Old->Tally.IsValid())
+			{
+				Old->Tally->DestroyComponent();
+			}
 			Struck = MoveTemp(Old->Marks);
 			for (FPlaneMade::FMark& Mark : Struck)
 			{
@@ -4026,6 +4147,10 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			}
 			// (its bay's doors and racked load, lifted out to turn and to go: after its coat, so that they wear it)
 			AirParts::TakeBay(Near, Made, Kind, Middle, Fit, UnitsPerMetre);
+			// (its kill slots are read from its file when an ace first needs them, as its points were brought in)
+			Near.Kind = Kind;
+			Near.Middle = Middle;
+			Near.Fit = Fit;
 			// (the stand-ins too: the plain Fighter and Bomber models have far parts, and they are half of each battle)
 			FMiniatureMesh Far;
 			if (Far.Sculpted(Kind, Whose, FVector::ZeroVector, UnitsPerMetre, 0.0, true) && Far.Vertices.Num() > 0 && Far.Vertices.Num() < Made.Vertices.Num())
@@ -4197,6 +4322,21 @@ void AAirBattle::ShowDiscs(FPlaneMade& Made, bool bShow)
 			Disc->SetVisibility(bShow);
 		}
 	}
+}
+
+const FAirTallySide* AAirBattle::TallyOfShape(const FString& Shape)
+{
+	AirParts::FShape* Found = AirParts::Shapes().Find(Shape);
+	if (Found && !Found->bKillsRead)
+	{
+		Found->bKillsRead = true;
+		// (a stand-in sized to the battle's span has its slots sized with it)
+		if (!Found->Kind.IsEmpty())
+		{
+			AirParts::TakeTally(*Found, Found->Kind, Found->Middle, Found->Fit, UnitsPerMetre);
+		}
+	}
+	return Found ? &Found->Kills : nullptr;
 }
 
 UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
@@ -4521,6 +4661,7 @@ void AAirBattle::Draw(double Real)
 	}
 	// The strikes on those near the eye, laid on their skins; taken up from the rest.
 	DrawMarks(EyeAt);
+	DrawTally(EyeAt);
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling; a bomb or a torpedo falling a copy of its own mesh (AS2), sent with the aircraft's copies.
 	FMiniatureMesh Things;

@@ -1,0 +1,344 @@
+// Named aces (Brian's, release 2; the air thread's extra.ace, 22 November): an ace's victories painted on his group's
+// lead aircraft, one mark a kill in the victims' symbols, as the modeller's rules lay a bomber's record on her side
+// (battle-models/air/tally/README.md; Battle/AirTally). Each mark a small square of the tally sheet (Content/Data/Tally,
+// from the modeller's, passed by the art director on 20 November) on one of the model's kill slots, upright on its skin
+// with its right toward the tail, drawn with M_TallyMark over the paint under it. Shown, never counted.
+
+#include "Battle/AirBattle.h"
+
+#include "Battle/AirBattleState.h"
+#include "Battle/AirShow.h"
+#include "Battle/AirTally.h"
+#include "Campaign/CampaignTextures.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "ProceduralMeshComponent.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "TheaterCommand.h"
+
+#include <map>
+#include <string>
+#include <vector>
+
+namespace
+{
+	/** The test ace ("-TheaterAceTest=att:6:GER=6", or def, its victims' nations after the kills, and a name after
+	 * those if wanted): Side -1 when none is asked. */
+	struct FTestAce
+	{
+		int32 Side = -1;
+		int32 Kills = 0;
+		std::map<std::string, int> By;
+		std::string Name = "Test ace";
+	};
+
+	const FTestAce& TestAce()
+	{
+		static const FTestAce Asked = []
+		{
+			FTestAce Out;
+			FString Text;
+			if (!FParse::Value(FCommandLine::Get(), TEXT("TheaterAceTest="), Text, false))
+			{
+				return Out;
+			}
+			TArray<FString> Parts;
+			Text.ParseIntoArray(Parts, TEXT(":"), false);
+			if (Parts.Num() < 2)
+			{
+				return Out;
+			}
+			Out.Side = Parts[0].TrimStartAndEnd().Equals(TEXT("def"), ESearchCase::IgnoreCase) ? 1 : 0;
+			Out.Kills = FMath::Clamp(FCString::Atoi(*Parts[1]), 0, 99);
+			if (Parts.Num() > 2)
+			{
+				TArray<FString> Each;
+				Parts[2].ParseIntoArray(Each, TEXT(","), true);
+				for (const FString& One : Each)
+				{
+					FString Nation, Count;
+					if (One.Split(TEXT("="), &Nation, &Count))
+					{
+						Out.By[TCHAR_TO_UTF8(*Nation.TrimStartAndEnd())] = FCString::Atoi(*Count);
+					}
+				}
+			}
+			if (Parts.Num() > 3 && !Parts[3].IsEmpty())
+			{
+				Out.Name = TCHAR_TO_UTF8(*Parts[3]);
+			}
+			UE_LOG(LogTheater, Display, TEXT("Air battle: aces: a test ace with %d victories in the first fighter group of the %s."),
+				Out.Kills, Out.Side == 1 ? TEXT("defence") : TEXT("raid"));
+			return Out;
+		}();
+		return Asked;
+	}
+}
+
+bool AAirBattle::TallyReady()
+{
+	if (bTallyTried)
+	{
+		return TallyInk != nullptr;
+	}
+	bTallyTried = true;
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_TallyMark.M_TallyMark"));
+	if (!Base)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: aces: no M_TallyMark (Tools/build_content.sh makes it), so no ace's victories are painted."));
+		return false;
+	}
+	// The sheet: plain RGBA bytes (Tools/tally_sheet.py), and the modeller's index of its cells.
+	const FString Folder = FPaths::ProjectContentDir() / TEXT("Data") / TEXT("Tally");
+	FString Index;
+	TSharedPtr<FJsonObject> Sheet;
+	TArray<uint8> Bytes;
+	if (!FFileHelper::LoadFileToString(Index, *(Folder / TEXT("tally-sheet.json"))) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Index), Sheet)
+		|| !Sheet.IsValid() || !FFileHelper::LoadFileToArray(Bytes, *(Folder / TEXT("tally-sheet.rgba"))))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: aces: the tally sheet is missing (Content/Data/Tally), so no ace's victories are painted."));
+		return false;
+	}
+	const int32 Width = static_cast<int32>(Sheet->GetNumberField(TEXT("width")));
+	const int32 Height = static_cast<int32>(Sheet->GetNumberField(TEXT("height")));
+	if (Width <= 0 || Height <= 0 || Bytes.Num() != Width * Height * 4)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: aces: the tally sheet is %d bytes, not %d by %d, so no ace's victories are painted."), Bytes.Num(), Width, Height);
+		return false;
+	}
+	TallySpan = Sheet->HasField(TEXT("span")) ? Sheet->GetNumberField(TEXT("span")) : 1.25;
+	const TSharedPtr<FJsonObject>* Cells = nullptr;
+	if (Sheet->TryGetObjectField(TEXT("uv"), Cells))
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Tag : (*Cells)->Values)
+		{
+			const TSharedPtr<FJsonObject>* Sets = nullptr;
+			if (!Tag.Value.IsValid() || !Tag.Value->TryGetObject(Sets))
+			{
+				continue;
+			}
+			for (const TCHAR* Set : { TEXT("dark"), TEXT("light") })
+			{
+				const TArray<TSharedPtr<FJsonValue>>* Box = nullptr;
+				if ((*Sets)->TryGetArrayField(Set, Box) && Box->Num() >= 4)
+				{
+					TallyCells.Add(Tag.Key + TEXT("|") + Set, FVector4((*Box)[0]->AsNumber(), (*Box)[1]->AsNumber(), (*Box)[2]->AsNumber(), (*Box)[3]->AsNumber()));
+				}
+			}
+		}
+	}
+	TArray<FColor> Pixels;
+	Pixels.SetNumUninitialized(Width * Height);
+	for (int32 K = 0; K < Pixels.Num(); ++K)
+	{
+		Pixels[K] = FColor(Bytes[K * 4], Bytes[K * 4 + 1], Bytes[K * 4 + 2], Bytes[K * 4 + 3]);
+	}
+	// (colours as the eye sees them, its edge held, with its smaller copies: a mark seen from farther off is a soft
+	// small mark, not a shimmer)
+	TallySheet = CampaignTextures::Create(Width, Height, Pixels, true, false, TEXT("AirTallySheet"));
+	if (!TallySheet || TallyCells.Num() == 0)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: aces: the tally sheet could not be made, so no ace's victories are painted."));
+		return false;
+	}
+	TallyInk = UMaterialInstanceDynamic::Create(Base, this);
+	TallyInk->SetTextureParameterValue(TEXT("Sheet"), TallySheet);
+	TallyInk->SetVectorParameterValue(TEXT("Tin"), FLinearColor::White);
+	TallyInk->SetScalarParameterValue(TEXT("Roughness"), PaintRoughness);
+	TallyInk->SetScalarParameterValue(TEXT("Specular"), PaintSpecular);
+	return true;
+}
+
+void AAirBattle::MakeTally(int32 Key, FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::Group& Ace, const FString& Nation)
+{
+	Made.bTallyTried = true;
+	const FAirTallySide* Side = TallyOfShape(Made.Shape);
+	if (!Side || Side->At.Num() == 0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s (%s) has no kill slots in its model, so %s flies unpainted."),
+			*Made.Model, *Made.Shape, UTF8_TO_TCHAR(Ace.AceName.c_str()));
+		return;
+	}
+	if (!TallyReady())
+	{
+		return;
+	}
+	const std::vector<AirTally::Mark> Marks = AirTally::Fill(TCHAR_TO_UTF8(*Nation), 0, Ace.AceKills, Ace.AceBy, 0, Side->At.Num(), Key);
+	const TCHAR* Set = Side->bLight ? TEXT("light") : TEXT("dark");
+	const double U = UnitsPerMetre;
+	TArray<FVector> Points, Normals;
+	TArray<FVector2D> Places;
+	TArray<FColor> Colours;
+	TArray<int32> Corners;
+	for (const AirTally::Mark& Mark : Marks)
+	{
+		const FVector4* Cell = TallyCells.Find(FString(UTF8_TO_TCHAR(Mark.Tag.c_str())) + TEXT("|") + Set);
+		if (!Mark.bKill || !Cell || !Side->At.IsValidIndex(Mark.Slot))
+		{
+			continue;
+		}
+		const FVector Out = Side->Out[Mark.Slot];
+		// Upright on her side: its up along her skin toward the sky, its right toward her tail (seen from outside
+		// her port side the tail is on the right), then the painter's hand where the file gives it: turned by its
+		// lean (anticlockwise seen from outside), sized, and moved along toward the tail and up her skin.
+		FVector Up = FVector::UpVector - Out * FVector::DotProduct(FVector::UpVector, Out);
+		Up = Up.GetSafeNormal(UE_SMALL_NUMBER, FVector::BackwardVector);
+		const FVector Right = FVector::CrossProduct(Out, Up).GetSafeNormal();
+		FVector4 Hand(0.0, 1.0, 0.0, 0.0);
+		if (Side->Hand.Num() > 0)
+		{
+			Hand = Side->Hand[(Mark.Slot + 37 * (Key & 0xFFFF)) % Side->Hand.Num()];
+		}
+		const double Lean = FMath::DegreesToRadians(Hand.X);
+		const FVector R = Right * FMath::Cos(Lean) + Up * FMath::Sin(Lean);
+		const FVector V = Up * FMath::Cos(Lean) - Right * FMath::Sin(Lean);
+		const double Half = TallySpan * Side->Radius * Hand.Y;
+		// (two millimetres off the skin, so it never sinks into a fuselage's curve)
+		const FVector Middle = Side->At[Mark.Slot] + Out * (0.002 * U) + Right * Hand.Z + Up * Hand.W;
+		FColor Under = Side->Skin.IsValidIndex(Mark.Slot) ? Side->Skin[Mark.Slot] : FColor(96, 96, 96);
+		Under.A = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Mark.Fade * 255.0), 0, 255));
+		const int32 First = Points.Num();
+		// (the cell's top left at the mark's upper corner nearest the nose)
+		Points.Append({ Middle - R * Half + V * Half, Middle + R * Half + V * Half, Middle + R * Half - V * Half, Middle - R * Half - V * Half });
+		Places.Append({ FVector2D(Cell->X, Cell->Y), FVector2D(Cell->Z, Cell->Y), FVector2D(Cell->Z, Cell->W), FVector2D(Cell->X, Cell->W) });
+		for (int32 K = 0; K < 4; ++K)
+		{
+			Normals.Add(Out);
+			Colours.Add(Under);
+		}
+		// (each triangle's corners the way round the engine draws as facing out, as FMiniatureMesh::Face lays them)
+		for (const FIntVector& Tri : { FIntVector(0, 1, 2), FIntVector(0, 2, 3) })
+		{
+			const FVector Facing = FVector::CrossProduct(Points[First + Tri.Y] - Points[First + Tri.Z], Points[First + Tri.X] - Points[First + Tri.Z]);
+			if (FVector::DotProduct(Facing, Out) >= 0.0)
+			{
+				Corners.Append({ First + Tri.X, First + Tri.Y, First + Tri.Z });
+			}
+			else
+			{
+				Corners.Append({ First + Tri.X, First + Tri.Z, First + Tri.Y });
+			}
+		}
+	}
+	if (Corners.Num() == 0)
+	{
+		return;
+	}
+	UProceduralMeshComponent* Tally = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), *FString::Printf(TEXT("AirTally_%d"), Key)));
+	Tally->SetupAttachment(Mesh);
+	Tally->SetMobility(EComponentMobility::Movable);
+	Tally->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Tally->SetCastShadow(false);
+	// (lit as her paint is, by the light thrown up from under the eye too)
+	Tally->LightingChannels.bChannel1 = true;
+	Tally->bUseAsyncCooking = false;
+	Tally->RegisterComponent();
+	Tally->CreateMeshSection(0, Points, Corners, Normals, Places, Colours, TArray<FProcMeshTangent>(), false);
+	Tally->SetMaterial(0, TallyInk);
+	Made.Tally = Tally;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: aces: %s's %d victories painted on %s (key %d), %d marks in the %s set."),
+		UTF8_TO_TCHAR(Ace.AceName.c_str()), Ace.AceKills, *Made.Model, Key, Corners.Num() / 6, Set);
+}
+
+void AAirBattle::DrawTally(const FVector& EyeAt)
+{
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_DrawTally);
+	static const bool bOn = []
+	{
+		int32 On = 1;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAces="), On);
+		UE_LOG(LogTheater, Display, TEXT("Air battle: aces' victories painted on their aircraft: %s."), On != 0 ? TEXT("on") : TEXT("off"));
+		return On != 0;
+	}();
+	if (!bOn || !State)
+	{
+		return;
+	}
+	FAirBattleState& S = *State;
+	const std::map<int, AirShow::Group>& Groups = S.Show.Groups();
+	// The test ace's group: the first fighter group of its side (any of its groups if it has no fighters).
+	const FTestAce& Test = TestAce();
+	int32 TestGroup = INDEX_NONE;
+	if (Test.Side >= 0)
+	{
+		for (const auto& [Id, G] : Groups)
+		{
+			if (G.Side == Test.Side && (G.bFighter || TestGroup == INDEX_NONE))
+			{
+				TestGroup = Id;
+				if (G.bFighter)
+				{
+					break;
+				}
+			}
+		}
+	}
+	auto HasAce = [&Groups, TestGroup](int32 Id)
+	{
+		const auto Found = Groups.find(Id);
+		return Id == TestGroup || (Found != Groups.end() && Found->second.AceKills > 0);
+	};
+	// Each ace's lead: his group's lowest key (its first aircraft, made first), kept once seen, so that when he falls
+	// his marks go with him and are not painted on the next man.
+	for (const AirShow::PlaneOut& P : S.Show.Planes())
+	{
+		if (HasAce(P.Group))
+		{
+			int32& Lead = AceLead.FindOrAdd(P.Group, P.Key);
+			Lead = FMath::Min(Lead, P.Key);
+		}
+	}
+	const int32 Ridden = S.bClose ? S.Subject.Plane : INDEX_NONE;
+	const double U = UnitsPerMetre;
+	for (const TPair<int32, int32>& Lead : AceLead)
+	{
+		FPlaneMade* Made = PlaneMade.Find(Lead.Value);
+		const TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(Lead.Value);
+		UProceduralMeshComponent* Mesh = Have ? Have->Get() : nullptr;
+		if (!Made)
+		{
+			continue;
+		}
+		const auto Found = Groups.find(Lead.Key);
+		const double Away = Mesh ? FVector::Dist(Mesh->GetComponentLocation(), EyeAt) / U : 1e9;
+		// (on its own mesh, its near shape drawn, near the eye: past a few hundred metres a 9 cm mark is under a pixel)
+		const bool bOnShape = !Made->bTwoShapes || Made->bNear;
+		const bool bShow = Found != Groups.end() && Mesh && Mesh->IsVisible() && bOnShape && (Lead.Value == Ridden || Away < TallyNearM);
+		if (bShow && !Made->bTallyTried)
+		{
+			AirShow::Group Ace = Found->second;
+			if (Lead.Key == TestGroup && Ace.AceKills <= 0)
+			{
+				Ace.AceName = Test.Name;
+				Ace.AceKills = Test.Kills;
+				Ace.AceBy = Test.By;
+			}
+			// (no victims recorded: his kills are the other side's)
+			if (Ace.AceBy.empty())
+			{
+				const std::string& Other = Ace.Side == 0 ? S.Board.DefNat : S.Board.AttNat;
+				if (!Other.empty())
+				{
+					Ace.AceBy[Other] = Ace.AceKills;
+				}
+			}
+			MakeTally(Lead.Value, *Made, Mesh, Ace, UTF8_TO_TCHAR(Ace.Nation.c_str()));
+		}
+		if (UProceduralMeshComponent* Tally = Made->Tally.Get())
+		{
+			if (Tally->IsVisible() != bShow)
+			{
+				Tally->SetVisibility(bShow);
+			}
+		}
+	}
+}

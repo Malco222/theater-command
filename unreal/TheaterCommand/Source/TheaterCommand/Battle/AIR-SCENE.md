@@ -1066,3 +1066,17 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    where it was a frame before (from its speed), with the aircraft's copies. Nothing should look different: Bremen's
    sticks and Midway's torpedoes as before, no smear on a falling bomb. `-TheaterPlaneCopies=0` lays them as rods again.
    The 10 s line counts them ("and N bombs falling as copies").
+44. **A named ace's victories on his aircraft** (Brian's named aces, release 2; the air thread's extra.ace, read into
+   AirShow::Group as AceName, AceKills and AceBy). His group's lead aircraft (its first) wears one mark a victory in
+   the victims' symbols (a cross for a German, a roundel for a Briton, a tricolour for an Italian, a red star or a cherry
+   blossom for every kill where his own nation paints its own), laid on its model's kill slots under the cockpit by the
+   modeller's rules (Battle/AirTally: each nation a row of its own, the commonest first, at most thirty; the oldest of a
+   row a little paler), from the modeller's tally sheet as the art director passed it (Content/Data/Tally; M_TallyMark,
+   built by Tools/build_content.sh when missing), the dark or light set by the paint under them. Upright on his side,
+   its right toward the tail. Seen within 250 m on its own mesh; soot and holes land on them as on his skin. A model with
+   no kill slots flies unpainted (the log says so): today the Mustang, Dauntless, Kate and Val have them; the modeller's
+   battle-standard fighters bring them to the rest. His name under the cockpit follows with the modeller's name panel.
+   `-TheaterAces=0` paints none; `-TheaterAceTest=att:6:GER=6` gives the raid's first fighter group a test ace (def for
+   the defence; more nations after a comma, `GER=14,ITA=6,UK=3`), for frames where the recording has none. Look for: the
+   marks square to his side, not mirrored (the Italian tricolour green toward the nose), not floating off the skin or
+   sunk into it, no shimmer as he moves off; and only on his aircraft, never moving to another when he falls.
