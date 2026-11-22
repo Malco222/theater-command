@@ -4793,6 +4793,10 @@
    "soft": 0.15,
    "near_m": 10.0,
    "_backstop": "The art director 07:22Z 22 November: the camera keeps out of a burst's cloud for its first 4 s (about 30 m for a 500 lb bomb); as a backstop a size's own lens_near_m (sizes.<size>.lens_near_m: 75 mm 10, 105 12, 150 17, 250 lb 23, 500 lb 30) stands for near_m for that burst's pieces where it is more, so a lens caught inside a big cloud dims and never goes black."
+  },
+  "soft_contact": {
+   "_how": "The land battle's soft contact (the art director's cut 5, still 07, 22 November: a burning wreck's flame cut along a hard straight line where it met the hull; ruling 14:16Z, B). With the scene's FBattleEffects::SetSoftContact(metres) its material (M_BattlePuffsSoft) fades every piece where it comes within that depth in front of the ground or a hull, so a flame or smoke meets them softly. A piece lying on the ground would fade with it: a thrown clod or fragment come to rest, a spent case, a crater's mark. So each is laid lie_nearer times that depth nearer the eye along its own line of sight and smaller to match, the same picture to the pixel, every point of it that far in front of what it lies on: it stays whole, from any height of eye (a lift straight up would not: from above, 3 cm is 3 cm of depth; along the line of sight it is the full depth). Within four times that of the eye it is laid where it is. Off unless the scene calls it; the air and sea scenes never do.",
+   "lie_nearer": 1.5
   }
  },
  "air_flak": {

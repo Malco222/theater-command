@@ -218,9 +218,12 @@ namespace TheaterFx
 		// (set up again for another battle, it is no sea battle's until that one calls UseSea)
 		bSeaFar = false;
 		SeaGonePx = SeaHitFullPx = 0.0;
-		// (nor a land battle's until it asks: SetLensFade, SetScars)
+		// (nor a land battle's until it asks: SetLensFade, SetScars, SetLandGrade, SetSoftContact)
 		LensGone = LensWhole = LensPlane = 0.0;
 		bScars = true;
+		bLandGrade = false;
+		LieNearer = 0.0;
+		LayNear = 1.0;
 		// (the far form, far: how far its pieces are drawn, over what share of the draw range a bomb's near burst and its far
 		// form cross, and whether the room keeps them first. Its own dice, from the kit's seed. No row: nothing far is laid)
 		FarRows.clear();
@@ -403,6 +406,8 @@ namespace TheaterFx
 		Out.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff, Vec());
 		OutRgba.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff * 4, 0);
 		ThrownLong = SafeNum(Num("burst.debris.clods.most_long", 0.0), 0.0, 100.0, 0.0);
+		ThrownLong = ThrownLong > 0.0 ? std::max(1.0, ThrownLong) : 0.0; // (never shorter than it is wide: the pre-check on d487b717)
+		LieNearerK = SafeNum(Num("game.soft_contact.lie_nearer", 1.5), 1.0, 10.0, 1.5);
 		ReadGradeLooks();
 		Clear();
 	}
@@ -414,6 +419,11 @@ namespace TheaterFx
 			bLandGrade = bOn;
 			ReadGradeLooks();
 		}
+	}
+
+	void Battle::SetSoftContact(double Metres)
+	{
+		LieNearer = Metres > 0.0 && Metres < 100.0 ? Metres * LieNearerK : 0.0;
 	}
 
 	double Battle::GradeNum(const std::string& Path, double Fallback) const
@@ -433,13 +443,22 @@ namespace TheaterFx
 	void Battle::ReadGradeLooks()
 	{
 		// (Picture reads land_grade.<path> itself while bLandGrade is set; the paints are read at each burst, so only
-		// what Setup keeps is read again here)
+		// what Setup keeps is read again here: all of it, so a land_grade entry for any of them works when the grade is
+		// set after Begin. The pre-check on d487b717)
 		ClodShade = GradeNum("burst.debris.clods.shade", 2.5);
 		ClodTint = GradeRange("burst.debris.clods.tint", 0.8, 1.2);
 		TracerCol = Picture("tracer.colour", Rgb::FromPicture(213, 199, 104));
 		TracerPale = TracerCol.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
 		TracerDayCore = Picture("tracer.day_core", Rgb::FromPicture(245, 240, 210));
 		TracerDayEdge = Picture("tracer.day_edge", Rgb::FromPicture(235, 180, 70));
+		SunThroughCol = Picture("game.sun_through_colour", Rgb::FromPicture(255, 205, 160));
+		DayLampCol = Picture("game.day_lamp_colour", Rgb::FromPicture(255, 240, 215));
+		CannonHeartCol = Picture("air_guns.flash_heart", Rgb::FromPicture(240, 220, 150));
+		FlameCol = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
+		FlashCoreCol = Picture("burst.flash.core_colour", Rgb::FromPicture(236, 168, 72));
+		GunSmokeCol = Picture("air_guns.smoke_colour", Rgb::FromPicture(168, 166, 160));
+		CaseMouth = Picture("ground_cases.mouth", Rgb::FromPicture(46, 34, 18));
+		CaseGlint = Picture("ground_cases.glint_colour", Rgb::FromPicture(255, 220, 140));
 	}
 
 	void Battle::Clear()
@@ -2065,7 +2084,7 @@ namespace TheaterFx
 		// (art director 14:09Z: close to the eye a lens piece's hard rim and the straight sides between its ring's points
 		// read as a cut card. lens.rim: how much of it is left at its very edge, so its dark heart fades out softly)
 		const bool bLensRim = Has("burst.debris.lens.rim");
-		const double LensRim = SafeNum(Num("burst.debris.lens.rim", 0.6), 0.0, 1.0, 0.6), LensInner = SafeNum(Num("burst.debris.lens.inner", 0.6), 0.0, 0.95, 0.6);
+		const double LensRim = SafeNum(Num("burst.debris.lens.rim", 0.6), 0.0, 1.0, 0.6), LensInner = SafeNum(Num("burst.debris.lens.inner", 0.5), 0.0, 0.95, 0.5); // (without the key, a piece's own 0.5: the pre-check on 5dc2e510)
 		// (a close hit throws a few lumps past the lens: what puts the player in the hole)
 		if (bEyeKnown && ClodK > 0.05)
 		{
@@ -13124,7 +13143,7 @@ namespace TheaterFx
 		const double FadeLen2 = bLayFade ? AxisA.Dot(AxisA) : 0.0; // (fx-air r2: see LayFadeHead)
 		auto Put = [this, &Middle, &AxisA, FadeLen2](size_t I, const Vec& At, const Rgb& C, double A)
 		{
-			Out[I] = At;
+			Out[I] = LayNear < 1.0 ? LayEye + (At - LayEye) * LayNear : At; // (a lying piece, nearer and smaller: the same picture; SetSoftContact)
 			if (bSrgbBytes)
 			{
 				OutRgba[I * 4 + 0] = ByteGamma(C.R * PutK);
@@ -13499,10 +13518,11 @@ namespace TheaterFx
 			return 0;
 		}
 		Vec P = Seen;
-		if (CaseNearer > 0.0 && Off > 4.0 * CaseNearer)
+		const double Nearer = std::max(CaseNearer, LieNearer); // (and with SetSoftContact, at least as near as a lying piece)
+		if (Nearer > 0.0 && Off > 4.0 * Nearer)
 		{
 			// (nearer the eye along its own line of sight and smaller to match: the same picture, in front of the ground)
-			const double K = 1.0 - CaseNearer / Off;
+			const double K = 1.0 - Nearer / Off;
 			P = Eye.Eye + (Seen - Eye.Eye) * K;
 			Rad *= K;
 			Long *= K;
@@ -14219,6 +14239,22 @@ namespace TheaterFx
 		}
 		Vec AxA = Eye.Right * Rad, AxB = Eye.Up * Rad;
 		Vec Middle = P;
+		// (SetSoftContact: a piece lying on the ground, a thrown clod or fragment come to rest or a crater's mark, is
+		// laid LieNearer nearer the eye and smaller to match, the same picture, so the scene's material, fading every
+		// piece where it meets the ground, leaves it whole. A flat piece already that high over the ground (a fire's
+		// glow, 0.2 m up) is laid where it is, and one lower only the rest of the way: pulled the whole way, a glow by
+		// a wreck showed as much more of itself under the hull's foot. A spent case does as much by itself: LayCase)
+		LayNear = 1.0;
+		if (LieNearer > 0.0 && (B.Form == Bit::Shape::Flat || (B.bThrown && Age >= B.Land2 && B.Form != Bit::Shape::Plate)))
+		{
+			const double Off = (Middle - Eye.Eye).Length();
+			const double Pull = B.Form == Bit::Shape::Flat ? LieNearer - std::max(0.0, Middle.Z - Height(Middle.X, Middle.Y)) : LieNearer;
+			if (Pull > 0.0 && Off > 4.0 * Pull)
+			{
+				LayNear = 1.0 - Pull / Off;
+				LayEye = Eye.Eye;
+			}
+		}
 		Vec TaperB; // (a tracer: how its width runs along it, so it is as wide on the screen at both ends)
 		double PointNow = B.Point, TailNow = B.Tail; // (a tracer cut short at an end is blunter there)
 		double RimNow = B.Rim, InnerNow = InnerOwn, HeartUp = 0.0; // (a tracer by day is solid across: its edge and heart brought up)

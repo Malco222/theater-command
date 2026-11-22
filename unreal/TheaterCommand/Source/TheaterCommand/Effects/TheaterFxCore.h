@@ -413,8 +413,16 @@ namespace TheaterFx
 		 * for. With it the recipe's land_grade row stands in for what it names: colours (the clods' paint, the tracer's)
 		 * and the clods' shade and tint, written to land in that grade as the art director ruled them (cut 5: a clod
 		 * earth brown about 70,58,45 with its form, never a black silhouette; a yellow tracer yellow, not khaki). Off as
-		 * made; without the row nothing changes. */
+		 * made and at every Setup (a kit set up again for another scene is off until that scene asks); without the row
+		 * nothing changes. */
 		void SetLandGrade(bool bOn);
+		/** The scene's material fades every piece where it meets the ground or a hull, over Metres (the land battle's,
+		 * FBattleEffects::SetSoftContact: the art director's cut 5, still 07, a burning wreck's flame cut along a
+		 * straight line where it met the hull). A piece lying on the ground (a thrown clod or fragment come to rest, a
+		 * spent case, a crater's mark) would fade with it, so it is drawn game.soft_contact.lie_nearer times Metres
+		 * nearer the eye along its own line of sight and smaller to match: the same picture, every point of it that far
+		 * in front of what it lies on, so it stays whole. 0: off, as made and at every Setup. */
+		void SetSoftContact(double Metres);
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -1239,8 +1247,11 @@ namespace TheaterFx
 		Span ClodTint; // (burst.debris.clods.tint: each clod's own shade of its paint, 0.8 to 1.2 as made)
 		double ThrownLong = 0.0; // (burst.debris.clods.most_long: a thrown lump drawn no longer than that times its width; 0, as before)
 		bool bLandGrade = false; // (SetLandGrade)
+		double LieNearer = 0.0, LieNearerK = 1.5; // (SetSoftContact: how much nearer the eye a lying piece is drawn; game.soft_contact.lie_nearer)
+		double LayNear = 1.0; // (while laying one bit: every point of it this share of the way from the eye to where it is, LayEye; see SetSoftContact)
+		Vec LayEye;
 		/** What the scene's grade changes (SetLandGrade), read at Setup and again when it changes: the clods' shade and
-		 * tint and the tracer's colours, each from land_grade.<its path> where the scene is under that grade. */
+		 * tint and every colour Setup keeps (Picture), each from land_grade.<its path> where the scene is under that grade. */
 		void ReadGradeLooks();
 		double GradeNum(const std::string& Path, double Fallback) const;
 		Span GradeRange(const std::string& Path, double Low, double High) const;

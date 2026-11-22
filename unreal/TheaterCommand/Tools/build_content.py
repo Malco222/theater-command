@@ -1418,15 +1418,20 @@ for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid
         build()
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
-def build_battle_puffs():
+def build_battle_puffs(name="M_BattlePuffs", soft=False):
     """The battle effects kit's smoke, dust, fire and flashes (Effects/BattleEffects): M_Highlight's light that is not
     shaded, see-through by the mesh's own alpha, "Brightness" times its colour (picture.lit_gain, so the hottest flames
     burn past white) and "Tint", but the colour is stored as a picture file stores it (sRGB) and made linear here, as
     M_MapSurface's. In plain bytes, a charcoal smoke written four times darker was one to four steps a channel, so its
     red, green and blue rounded apart: specks of red and blue in dark smoke at dusk, and a big far piece of dark earth
     read olive over grass (the art director, 22 November). The kit writes its bytes to suit when it finds this
-    material (TheaterFx::Battle::SetSrgbBytes); without it, M_Highlight and plain bytes, as before."""
-    m = new_material("M_BattlePuffs")
+    material (TheaterFx::Battle::SetSrgbBytes); without it, M_Highlight and plain bytes, as before.
+    soft (M_BattlePuffsSoft, the land battle's soft contact): every piece also fades where it comes within FadeCm
+    (world units) in front of the ground or a hull, by the scene's depth there less its own, so a burning wreck's flame
+    meets the hull softly and is never cut along a straight line (the art director's cut 5, still 07). The scene puts
+    it on the kit's mesh with FBattleEffects::SetSoftContact; the kit lays its lying pieces nearer the eye to match.
+    Its own material, so the scenes without it pay nothing for the depth read."""
+    m = new_material(name)
     m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
     m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
@@ -1442,6 +1447,16 @@ def build_battle_puffs():
     faded = node(m, unreal.MaterialExpressionMultiply, -450, 200)
     connect(colour, "A", faded, "A")
     connect(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
+    if soft:
+        # (how far in front of the opaque world this pixel of the piece is, as a share of FadeCm, held 0 to 1)
+        gap = node(m, unreal.MaterialExpressionSubtract, -700, 480)
+        connect(node(m, unreal.MaterialExpressionSceneDepth, -900, 440), "", gap, "A")
+        connect(node(m, unreal.MaterialExpressionPixelDepth, -900, 540), "", gap, "B")
+        share = node(m, unreal.MaterialExpressionDivide, -550, 480)
+        connect(gap, "", share, "A")
+        connect(scalar(m, "FadeCm", 10.0, -700, 600), "", share, "B")
+        touch = one_in(m, unreal.MaterialExpressionSaturate, share, -400, 480)
+        faded = times(m, faded, touch, -250, 300)
     to_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
     # (the pieces mark where they are on the screen, in the custom depth, wherever they are a tenth seen or more, so
     # M_FireSpread knows the kit's own pixels from the field's. Nothing is marked unless the scene asks for the fire's
@@ -1522,6 +1537,12 @@ if REBUILD == "all" or "M_BattlePuffs" in REBUILD.split(",") or not eal.does_ass
     build_battle_puffs()
 else:
     unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffs already exists, left alone")
+# (M_BattlePuffsSoft, the land battle's soft contact (FBattleEffects::SetSoftContact): M_BattlePuffs, fading where it
+# meets the ground or a hull. The same: built when missing, or with TC_REBUILD=M_BattlePuffsSoft or all)
+if REBUILD == "all" or "M_BattlePuffsSoft" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_BattlePuffsSoft"):
+    build_battle_puffs("M_BattlePuffsSoft", soft=True)
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffsSoft already exists, left alone")
 # (M_FireSpread, the same: built when missing, or with TC_REBUILD=M_FireSpread or all. An M_BattlePuffs made before it
 # came does not mark its pixels: TC_REBUILD=M_BattlePuffs,M_FireSpread once)
 if REBUILD == "all" or "M_FireSpread" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_FireSpread"):

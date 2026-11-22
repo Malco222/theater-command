@@ -300,6 +300,15 @@ public:
 	 * putting it on another. Costs the custom depth pass for the kit's mesh. False, with a log line, without M_BattlePuffs and
 	 * M_FireSpread (Tools/build_content.sh with TC_REBUILD=M_BattlePuffs,M_FireSpread). */
 	bool SetFireSpread(FPostProcessSettings& Lens, float Spread = 2.0f, float Warm = 1.2f);
+	/** Soft contact, for the land battle (the art director's cut 5, still 07: a burning wreck's flame was cut along a
+	 * hard straight line where it met the hull; ruling 14:16Z 22 November, 0.1 m). The kit's mesh takes
+	 * M_BattlePuffsSoft, which fades every piece where it comes within Metres in front of the ground or a hull, and the
+	 * kit lays its lying pieces (a clod or fragment come to rest, a spent case, a crater's mark) nearer the eye and
+	 * smaller to match, the same picture, so they stay whole (TheaterFx::Battle::SetSoftContact). Call it after Begin,
+	 * on this thread; 0 takes it off. Costs one depth read for each of the kit's pixels; the scenes that never call it
+	 * pay nothing. False, with a log line, without M_BattlePuffs and M_BattlePuffsSoft (Tools/build_content.sh with
+	 * TC_REBUILD=M_BattlePuffsSoft), and the kit draws as before. */
+	bool SetSoftContact(float Metres = 0.1f);
 	/** Everything gone: a new battle. */
 	void Clear();
 
@@ -350,6 +359,8 @@ private:
 	TWeakObjectPtr<UMaterialInstanceDynamic> Ink;
 	bool bOwnPuffs = false; // (M_BattlePuffs found at Begin: only it marks the kit's pixels for SetFireSpread)
 	TWeakObjectPtr<UMaterialInstanceDynamic> SpreadInk; // (M_FireSpread as last put in a lens, so it is taken out again)
+	float InkBrightness = 1.0f; // (the Brightness Begin gave Ink: picture.lit_gain)
+	bool bSoftInk = false; // (Ink is M_BattlePuffsSoft's: SetSoftContact)
 	static constexpr int32 MostLamps = 4;
 	TWeakObjectPtr<UPointLightComponent> LampLights[MostLamps];
 	int32 LampsInUse = 2;

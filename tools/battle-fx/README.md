@@ -1699,6 +1699,38 @@ were median 28,26,21 (L 26), now 67,60,43 (L 60, nine in ten between about 40 an
 edges blended with the smoke behind. With the old recipe all 96 check frames are the same to the byte; with the new
 recipe and the grade off only the 500 lb bomb's frames change (the 3:1 and the soft edges), of 24 heavy frames.
 
+## Soft contact: flames meet the hull softly (after head 5dc2e51)
+
+The art director's cut 5, still 07: a burning wreck's flame cards met the hull along a hard straight line. The
+mesh carries only places and colours, so the material cannot tell a flame from a case lying in the dirt; the art
+director ruled (14:16Z, 22 November) option B: fade every piece where it meets the ground or a hull over 0.1 m, and
+keep the lying pieces whole.
+
+- The scene: `FBattleEffects::SetSoftContact(0.1f)` after Begin, on the game thread (the land battle only; the air
+  and sea scenes never call it and pay nothing). The kit's mesh takes `M_BattlePuffsSoft`, `M_BattlePuffs` with its
+  opacity times `saturate((SceneDepth - PixelDepth) / FadeCm)`. Build it once on the Mac:
+  `TC_REBUILD=M_BattlePuffsSoft Tools/build_content.sh` (built anyway when missing). Without it: a log line, and the
+  kit draws as before.
+- The kit (`Battle::SetSoftContact`): a piece lying on the ground (a thrown clod or fragment come to rest, a crater's
+  mark) is laid `game.soft_contact.lie_nearer` (1.5) times that depth nearer the eye along its own line of sight and
+  smaller to match: the same picture, every point of it that far in front of what it lies on, from any height of eye.
+  A spent case already did this (`ground_cases.nearer_m`); it now takes the larger of the two. A flat piece already
+  higher than that (a fire's glow, 0.2 m up) is left where it is; pulled the whole way, a glow by the wreck showed a
+  strip more of itself under the hull's foot.
+- Why along the line of sight and not straight up: the fade is by depth. Lifted 3 cm straight up, a case seen from
+  45 degrees above is 4 cm in front of the ground, and keeps 40% of itself; pulled 15 cm along the line of sight it is
+  15 cm in front from any angle and keeps all of it. What changes on the screen: a resting clod shows the bottom few
+  centimetres of itself the ground had hidden (about one pixel on a 105's clods at 5 s).
+- Preview: `FX_SOFT_CONTACT=0.1` (the kit's call, and the material's fade in the preview's own depth test).
+- Measured (960 x 540, the land grade on): the wreck at 10 s, from the side and the battle camera, about 2,000
+  pixels change by more than 8 of 255, all of them flame where it meets the turret and the deck; with the lying
+  pieces not pulled, a 500 lb bomb's clods at 5 and 10 s faded on 134 and 255 pixels (mean 9 and 6 levels), pulled
+  16 and 4 (mean under 1). Draw on the wide heavy shot (6 a second): 3.3 to 3.5 ms either way. The GPU's one depth
+  read a pixel is the Mac's to measure.
+- Stills: `battle-fx/stills/soft-contact/wreck-soft-contact.png` (now on the left, soft contact on the right).
+- Checked first (the art director: only if free): the colour's alpha cannot gate it. A thrown solid's middle is at
+  full alpha in 24% of its frames (it fades in and out, and its rim is soft since 5dc2e51), and a flame's in 18 to 42%.
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
