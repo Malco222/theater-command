@@ -44,6 +44,27 @@
         "blanket": { "rgb": "6B5640", "about": "The water bottle's brown felt cover." },
         "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
       }
+    },
+    "SOV": {
+      "about": "Soviet rifleman, Kursk salient, July 1943 (Prokhorovka): the M1943 gymnastyorka with its stand collar and shoulder boards in summer khaki cotton, faded by the sun, breeches (sharovary) of the same, tarpaulin kirza boots, a brown leather or canvas belt, the canvas veshmeshok on his back, the SSh-40 helmet in green paint (the soldier file's finishes: plain, summer dust, mud, the rare red star). Drawn with the soldiers thread's own Soviet file (soldier_SOV), the man as made for the summer.",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "7B7748", "about": "M1943 gymnastyorka, summer khaki cotton: an olive-khaki new, washed and sun-faded paler and yellower within weeks; taken between the two." },
+        "trousers": { "rgb": "6C6943", "about": "Sharovary breeches, khaki cotton or wool: a little darker than the shirt, which faded faster." },
+        "boots": { "rgb": "26211D", "about": "Kirza boots, rubberised tarpaulin uppers, near black and dull. (In the Soviet file the eyes share this paint.)" },
+        "lower": { "rgb": "2C2824", "about": "The boots' shafts to below the knee (kirza), as dark as the feet; puttees and ankle boots for others, not drawn." },
+        "straps": { "rgb": "5B4A33", "about": "Belt and ammunition pouches, brown leather or canvas substitute; the veshmeshok's straps." },
+        "helmet": { "rgb": "4E5A3A", "about": "SSh-40 steel helmet, dull green paint; shown only where the file's finishes do not cover the date." },
+        "pack": { "rgb": "7A7154", "about": "Veshmeshok (the drawstring duffel bag) and the gas-mask bag, khaki canvas, faded." },
+        "skin": { "rgb": "BDA08E", "about": "Skin, sunburnt by July; each face's tone multiplies it." },
+        "wood": { "rgb": "6B4429", "about": "Rifle stock, birch stained and shellacked a reddish brown (the Mosin; the file's rifle is a generic bolt-action)." },
+        "steel": { "rgb": "34363A", "about": "Blued steel; also the canteen, the entrenching spade and the buckles." },
+        "coat": { "rgb": "6B6352", "about": "Shinel greatcoat, grey-brown wool (not worn in July; rolled over the shoulder by many, not drawn)." },
+        "coat_dark": { "rgb": "504A3D", "about": "The greatcoat's collar and shadowed panels." },
+        "leather": { "rgb": "3A2E25", "about": "Leather and rubber soles." },
+        "blanket": { "rgb": "675D4E", "about": "The canteen's cloth cover." },
+        "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
+      }
     }
   }
 }
