@@ -135,8 +135,7 @@ def bt7(fine=True, tag="SOV"):
             v.port(Vector((x0 - 0.62, s * 0.475, zt + 0.32)), Vector((0, s, 0)), 0.035)
             rivets(v, (x0 - 0.40, s * 0.471, roof - 0.04), (x0 - 0.97, s * 0.441, roof - 0.04), Vector((0, s, 0)), 0.10)
         rivets(v, (x0 - 1.001, 0.40, zt + 0.40), (x0 - 1.001, -0.40, zt + 0.40), -X, 0.10)
-    for s in (LEFT, RIGHT):
-        v.mark("SOV", (x0 - 0.74, s * 0.46, zt + 0.32), Vector((0.0, s, 0.0)), 0.12, part="turret")
+    # (no star: bare is the common read for Khalkhin Gol and 1941; the art director, 22 Nov 20:46Z, for the historian to confirm)
 
     # ---- the gun: the 45 mm in a flat shield, the machine gun beside it on its right ---------------------------------
     tx, tz = x0 + 0.60, zt + 0.30
