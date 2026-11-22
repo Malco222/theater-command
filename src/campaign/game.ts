@@ -3625,7 +3625,7 @@ function keptLevy(g: Game, nat: string, row: any[]): boolean {
 export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string; name: string; kind: string; divs: number; place: string; owner: string | null; holder: string | null; to: string | null; toHolder: string | null; war: boolean; until: boolean; ifLost: boolean; joins: string | null; hold: boolean }) => void) | null } = { tell: null };
 
 function expeditions(g: Game, nat: string): void {
-  const gone: Corps[] = [];
+  const gone: Corps[] = [], down: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
     // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
@@ -3648,8 +3648,9 @@ function expeditions(g: Game, nat: string): void {
       const id = g.flags[`lent:${i}`];
       if (o.until && id > 0 && lentOver(g, nat, row, o)) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
-        // (The far side: a regiment its division awaits comes home to it: `comeHome`.)
-        if (c) { gone.push(c); comeHome(g, nat, i, row, c); }
+        // (The far side: a regiment its division awaits comes home to it: `comeHome`. A row whose record ends in a
+        // surrender, `ends`, is told as one: `down`, below.)
+        if (c) { (o.ends === 'surrender' && farOn(g) ? down : gone).push(c); comeHome(g, nat, i, row, c); }
         g.flags[`lent:${i}`] = -1;
       }
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
@@ -3810,6 +3811,16 @@ function expeditions(g: Game, nat: string): void {
     for (const c of gone) removeCorps(g, c);
     g.supplyDirty = true;
     headline(g, 'event', `${g.nations[nat].adj} formations lent to the campaign${where ? ` in ${where}` : ''} leave for other fronts: ${names.join('; ')}.`, nat);
+  }
+  // (The far side: a garrison whose record ends in a surrender, a row with `ends`: its months over, it lays down its
+  // arms where it stands, and the card says that and not that it left for another front. The design director's
+  // acceptance of 13:09Z, 22 November 2026, of the historian's East Africa rows: far-africa.json. No older row has the word.)
+  if (down.length) {
+    const names = down.map((c) => c.name);
+    const at = down[0].reg;
+    for (const c of down) removeCorps(g, c);
+    g.supplyDirty = true;
+    headline(g, 'event', `${g.nations[nat].adj} forces lay down their arms: ${names.join('; ')}.`, nat, at);
   }
 }
 
