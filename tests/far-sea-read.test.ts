@@ -56,6 +56,12 @@ describe('a nation counts in a sea\'s read only against those it is at war with 
     const honshu = zoneOf(g, 'honshu');
     const f = fifth(g);
     expect([g.seas[f.zone].key, f.stance]).toEqual(['honshu', 'port']);
+    // (By hand: the 1st Air Division's 200 bombers fly from Nagoya, on this coast. From Hsinking, where the first
+    // day's chart has them, the coast's nearest shore is Sapporo at 1,295 km on the globe, outside the 1,048 Japan's
+    // bombers reach on the far side; the map's own line had it 1,149 and counted them here.)
+    const division = g.airFleets.find((a) => a.nat === 'JAP' && a.name === '1st Air Division')!;
+    expect(g.regions[division.base].name).toBe('Hsinking');
+    division.base = g.byName['Nagoya'].id;
     expect(closedTo(g, honshu, 'USA')).toBe(false);
     f.stance = 'patrol';
     const e = seaSide(g, honshu, 'USA', true).total, was = seaSide(g, honshu, 'USA', false, false).total;

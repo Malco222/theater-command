@@ -34,7 +34,7 @@ import { FAR_STAGE } from './stage';
 import { FAR_FIRST, farOn } from './world';
 import { addCorps, armySize, atWar, bloc, capture, headline, relocate, removeCorps, sameSide, setWar, theName } from './game';
 import { signPeace } from './diplomacy';
-import { mapDist2 } from './wrap';
+import { chartDist2 } from './wrap';
 import { STACK, type Corps, type Game, type Region } from './types';
 
 interface ClientRow { patron: string; wars: string[] }
@@ -272,7 +272,7 @@ function parts(g: Game, client: string, patron: string): void {
       let best: Region | null = null, bd = Infinity;
       for (const r of g.regions) {
         if (r === from || r.ctrl !== client || r.units.length >= STACK || r.units.some((u) => u.nat !== client)) continue;
-        const d = mapDist2(g, r.x, r.y, from.x, from.y);
+        const d = chartDist2(g, r, from);
         if (d < bd) { bd = d; best = r; }
       }
       if (best) relocate(g, c, best); else removeCorps(g, c);

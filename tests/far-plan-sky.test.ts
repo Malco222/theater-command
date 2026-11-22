@@ -193,10 +193,11 @@ describe("the plan's fight for the sky it lands under (rider b631 (iv) to ruling
     expect(told.map((e) => [e.to.name, e.shores.map((r) => r.name), names(e.named), names(e.flew)])).toEqual([['Aparri', ['Aparri'], ['1st Sentai'], ['1st Sentai']], ['Lingayen', ['Lingayen'], [], []]]);
     expect([few.mission, few.target]).toEqual(['superiority', A.id]);
     // Bombers that reach the first shore and not the field fly over the shore with the fighters.
-    // (Hengyang's field, as in the war this was first seen in: 1,222 km from Aparri, and Lingayen beyond its bombers.)
+    // (Foochow's field: 993 km from Aparri on the globe, inside its bombers' 1,048, and 1,141 from Lingayen, beyond
+    // them. The war this was first seen in had them on Hengyang, by the map's line and at the bombers' older 1,300.)
     const far = war();
-    far.byName.Hengyang.ctrl = 'JAP';
-    const fighters = stand(far, group(far, 'JAP', '1st Sentai'), 'Formosa'), bombers = stand(far, group(far, 'JAP', '2nd Air Brigade'), 'Hengyang');
+    far.byName.Foochow.ctrl = 'JAP';
+    const fighters = stand(far, group(far, 'JAP', '1st Sentai'), 'Formosa'), bombers = stand(far, group(far, 'JAP', '2nd Air Brigade'), 'Foochow');
     expect([whyNotMission(far, bombers, 'superiority', A.id) === null, whyNotMission(far, bombers, 'superiority', L.id) === null]).toEqual([true, false]);
     listen();
     airAI(far, 'JAP', null, [A.id, L.id]);
@@ -206,19 +207,25 @@ describe("the plan's fight for the sky it lands under (rider b631 (iv) to ruling
   });
 
   it("goes over the first shore too where the plan's bombers reach the field and no fighter group can: bombers do not fight for a sky alone; and a field that denies one shore only is not fought over", () => {
+    // (America's plan here, where the others are Japan's. Since the ranges were laid by the record Japan's fighters
+    // reach as far as its bombers, 1,048 km, so a field its bombers reach is one a fighter group of its own can be
+    // brought up to. America's bombers out-reach its fighters: 1,243 km against 300 in December 1941.)
     const g = war();
-    const L = g.byName.Lingayen, S = g.byName.Legaspi, M = g.byName.Manila;
-    // The pursuit squadron on Manila's field denies Lingayen and Legaspi. Formosa's bombers reach Manila; no fighter
-    // of Japan's does, from any field it holds.
-    group(g, 'USA', '3rd Pursuit Squadron').base = M.id;
-    const few = stand(g, group(g, 'JAP', '1st Sentai'), 'Formosa'), bombers = stand(g, group(g, 'JAP', '2nd Air Brigade'), 'Formosa');
-    for (const t of [L, S]) expect(fightersOverFrom(g, t.id, 'JAP').get(M.id), t.name).toBeGreaterThanOrEqual(AIR.sky.least);
-    expect([whyNotMission(g, few, 'superiority', L.id) === null, whyNotMission(g, few, 'superiority', M.id) === null, whyNotMission(g, bombers, 'superiority', M.id) === null]).toEqual([true, false, true]);
+    const L = g.byName.Lingayen, A = g.byName.Aparri, F = g.byName.Formosa;
+    // Japan holds Lingayen and Aparri, and the hundred fighters on Formosa's field deny both (745 and 583 km of their
+    // 1,048). Manila's bombers reach Formosa (903 km). Its pursuit squadron reaches Lingayen (173) and neither Aparri
+    // (342) nor Formosa, and America holds no field nearer to either.
+    for (const r of [L, A]) r.ctrl = 'JAP';
+    stand(g, group(g, 'JAP', '3rd Air Brigade'), 'Formosa');
+    const few = stand(g, group(g, 'USA', '3rd Pursuit Squadron'), 'Manila'), bombers = stand(g, group(g, 'USA', '1st Bombardment Squadron'), 'Manila');
+    for (const t of [L, A]) expect(fightersOverFrom(g, t.id, 'USA').get(F.id), t.name).toBeGreaterThanOrEqual(AIR.sky.least);
+    expect([whyNotMission(g, few, 'superiority', L.id) === null, whyNotMission(g, few, 'superiority', A.id) === null, whyNotMission(g, few, 'superiority', F.id) === null, whyNotMission(g, bombers, 'superiority', F.id) === null]).toEqual([true, false, false, true]);
     listen();
-    airAI(g, 'JAP', null, [L.id, S.id]);
-    expect(told.map((e) => [e.to.name, e.shores.map((r) => r.name), names(e.named), names(e.flew)])).toEqual([['Lingayen', ['Lingayen'], ['1st Sentai', '2nd Air Brigade'], ['1st Sentai', '2nd Air Brigade']], ['Legaspi', ['Legaspi'], [], []]]);
+    airAI(g, 'USA', null, [L.id, A.id]);
+    expect(told.map((e) => [e.to.name, e.shores.map((r) => r.name), names(e.named), names(e.flew)])).toEqual([['Lingayen', ['Lingayen'], ['1st Bombardment Squadron', '3rd Pursuit Squadron'], ['1st Bombardment Squadron', '3rd Pursuit Squadron']], ['Aparri', ['Aparri'], [], []]]);
     expect(few.moved === 28).toBe(false);
-    // One shore, denied from a field elsewhere: the fight is over the shore, as for any one shore.
+    // One shore, denied from a field elsewhere (Manila's pursuit squadron over Lingayen, and Formosa's groups reach
+    // both): the fight is over the shore, as for any one shore.
     const one = war();
     group(one, 'USA', '3rd Pursuit Squadron').base = one.byName.Manila.id;
     stand(one, group(one, 'JAP', '1st Sentai'), 'Formosa'); stand(one, group(one, 'JAP', '2nd Air Brigade'), 'Formosa');

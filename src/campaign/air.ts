@@ -42,7 +42,7 @@ import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
-import { mapDist } from './wrap';
+import { chartDist } from './wrap';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -99,6 +99,12 @@ export const AIR = data as unknown as {
    * flying with the bombers against industry, railways or a town, from that month (before it, as cover).
    */
   jobs?: Record<string, { cover: number; raid: [number, number][] }>;
+  /**
+   * The far side (the ranges' ruling with the chart's kilometre, 22 November 2026): a nation's fighters by date from
+   * a field beyond Europe's chart, [month, km], the record's routine radius on the globe: read from the row's first
+   * month in the place of airwar.json's dated row, which is Europe's.
+   */
+  ftrReach?: Record<string, [number, number][]>;
   /**
    * The far side (rider b518, 7): the smaller powers whose own works (arsenal.json smallAir.works) keep up the
    * commands the record gives them: each month what the works build goes to the country's pool (arsenal.ts).
@@ -306,11 +312,15 @@ const reach = (f: { nat: string; name: string; parent?: string; ship?: number; a
   // Carrier aircraft are built for the deck, not for range: ashore as aboard.
   if (deckBred(f)) return { quality: natQuality(nat, g) * (CARRIERS.quality[nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
   const own = rowOf(f);
-  const dated = g && airWar(g) ? dayRow(AIRWAR.day.range, nat, g.turn) : 0;
+  // The far side: from a field beyond Europe's chart the month's reach is the far side's own row where it has one
+  // (the record's routine radius on the globe), and Europe's dated row before that row's first month.
+  const out = !!g && f.base !== undefined && beyondEurope(f.base) && farOn(g);
+  const laid = out ? row(AIR.ftrReach?.[nat], g!.turn) : null;
+  const dated = g && airWar(g) ? (laid ? laid[1] : dayRow(AIRWAR.day.range, nat, g.turn)) : 0;
   let ftrRange = Math.max(own?.ftrRange ?? 0, dated, spec(nat).ftrRange);
   // The far side (ruling 187(a)): from a field beyond Europe's chart its fighters reach by the job. The long reach is
   // the escorts' on a raid and nobody else's (from Saipan it would cover Iwo Jima's beach).
-  const J = g && f.base !== undefined && beyondEurope(f.base) && farOn(g) ? AIR.jobs?.[nat] : undefined;
+  const J = out ? AIR.jobs?.[nat] : undefined;
   if (J) { const far = job === 'raid' ? row(J.raid, g!.turn) : null; ftrRange = far ? far[1] : Math.min(ftrRange, J.cover); }
   // A nation with a weight row (ruling 227, b424) fights as that share of the air force it is measured against.
   const w = g ? airWeight(g, nat) : null;
@@ -385,7 +395,7 @@ export function airPool(g: Game, nat: string): AirPool {
 /** Kilometres between the centres of two regions. */
 export function km(g: Game, a: number, b: number): number {
   const A = g.regions[a], B = g.regions[b];
-  return mapDist(g, A.x, A.y, B.x, B.y) * AIR.kmPerUnit;
+  return chartDist(g, A, B) * AIR.kmPerUnit;
 }
 
 /** How far a base is from a sea: nothing if it stands on its shore, otherwise the distance to the nearest shore. */
@@ -1653,7 +1663,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
     let out: Region | null = null, bd = Infinity;
     for (const r of g.regions) {
       if (r.ctrl !== f.nat || (fields && !hasAirfield(g, r.id)) || besieged(g, r) || prizeOut(g, r, 'airfield') > 0) continue;
-      const d = mapDist(g, r.x, r.y, old.x, old.y);
+      const d = chartDist(g, r, old);
       if (d < bd) { bd = d; out = r; }
     }
     return out;

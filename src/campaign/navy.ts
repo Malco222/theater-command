@@ -3,7 +3,7 @@
 // knows (ships by class, aircraft on the coasts, admirals, readiness), and every number
 // lives in data/campaign/navy.json and data/campaign/seas.json.
 
-import { mapDist } from './wrap';
+import { chartDist, seaDist } from './wrap';
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
 import americasMap from '../generated/world-americas.json';
@@ -2285,7 +2285,7 @@ function newBase(g: Game, f: Fleet, form: boolean = farOn(g)): boolean {
     let best: Region | null = null, bd = 1e9;
     for (const r of g.regions) {
       if (!r.port || !r.seas.length || !ok(r) || !canSailTo(g, f, r)) continue;
-      const d = mapDist(g, r.x, r.y, old.x, old.y);
+      const d = chartDist(g, r, old);
       if (d < bd) { bd = d; best = r; }
     }
     return best;
@@ -2764,7 +2764,7 @@ function coverBase(g: Game, f: Fleet, z: number): Region | null {
     if (!r.port || !r.seas.length || r.id === f.base || !allied(g, f.nat, r.ctrl) || hostileUnits(g, r, f.nat).length || besieged(g, r)) continue;
     const near = Math.min(...r.seas.map((s) => (d[s] < 0 ? Infinity : d[s])));
     if (near === Infinity || near > bd) continue;
-    const m = mapDist(g, r.x, r.y, beach.x, beach.y);
+    const m = seaDist(g, r, beach);
     if (near === bd && m >= bm) continue;
     if (!canSailTo(g, f, r)) continue;
     best = r; bd = near; bm = m;
