@@ -845,6 +845,21 @@ namespace Bargains
 	 */
 	bool SealAt(FPt Capital, double Px, const std::vector<FRect>& Frame, const std::vector<FRect>& Avoid, const std::vector<FPt>& Laid, FPt& Out);
 
+	/**
+	 * The open card's seal while its card is shown (the art director's call 6): it leaves the capital, so that the lane's
+	 * end there shows, and its disc's middle stands on the card's top-right corner, where it is the card's close (a
+	 * press on it shuts the card, as a press on it at the capital did). When the card shuts it is back at its capital.
+	 * Only the open card's seal moves. Its box (SealBox) reaches SealMid x Px over the card's top and right, inside the
+	 * card's KeepOff, so it stays on the screen and off the panels; it is clear of the ring and of every button.
+	 */
+	FPt CardSealAt(const FRect& Card);
+
+	/** True for the seal that stands on the card: the open card's own (FSealLook::bOpen), while the card is shown. */
+	bool SealOnCard(const FSealLook& Seal, bool bCardShown);
+
+	/** True where a point on the card (its own units, the top left at 0) is on the card's seal: a press there shuts the card. */
+	bool OnCardSeal(FPt OnCard, FPt CardSize, double Px);
+
 	// ---------------------------------------------------------------------------------------------------------------
 	// The sender's capital plate line, a capital plate of our own, and the tray
 

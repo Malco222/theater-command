@@ -1964,6 +1964,21 @@ namespace Bargains
 	// ---------------------------------------------------------------------------------------------------------------
 	// The plate line, our own plate
 
+	FPt CardSealAt(const FRect& Card)
+	{
+		return FPt{ Card.Right(), Card.Y };
+	}
+
+	bool SealOnCard(const FSealLook& Seal, bool bCardShown)
+	{
+		return bCardShown && Seal.bOpen;
+	}
+
+	bool OnCardSeal(FPt OnCard, FPt CardSize, double Px)
+	{
+		return SealBox(CardSealAt(FRect{ 0.0, 0.0, CardSize.X, CardSize.Y }), Px).Contains(OnCard);
+	}
+
 	void MenSign(FPt TopLeft, double Size, double Px, std::vector<FDraw>& Out)
 	{
 		// The picture's helmet in its 24 box: "M4.5 14a7.5 7.5 0 0 1 15 0 M3 14h18 M6.5 14v3.5h11V14".

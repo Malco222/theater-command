@@ -1656,6 +1656,98 @@ namespace
 		CHECK(SealAt(Cap, 1.08, None, None, Laid, At) && Near(At.Y, 400.0 - 24.0 * 1.08));
 	}
 
+	/**
+	 * Call 6: while its card is shown, the open card's seal stands with its disc's middle on the card's top-right corner,
+	 * where it is the card's close; only that seal moves; its box is clear of the ring (a round of three months shows one)
+	 * and of every button and word on the card, and, the card being KeepOff off everything, on the screen and off the panels.
+	 */
+	void TestCardSeal()
+	{
+		CHECK(Near(CardSealAt(FRect{ 100, 200, 230, 180 }).X, 330.0) && Near(CardSealAt(FRect{ 100, 200, 230, 180 }).Y, 200.0));
+		FSealLook Seal;
+		Seal.bOpens = true;
+		CHECK(!SealOnCard(Seal, true));
+		Seal.bOpen = true;
+		CHECK(SealOnCard(Seal, true) && !SealOnCard(Seal, false));
+		// Two seals that open a card, one open: only it stands on the card, and none while the card is not shown.
+		FBook Book = BritainsSeat();
+		FRow Mine = RowOf(Book, "por-wolfram");
+		Mine.Id = "swe-ore";
+		Mine.Seller = "UK";
+		Mine.Round = Round({ { "GER", 3.0 } }, std::nullopt, "It is yours to sell.", true);
+		Book.Rows.push_back(Mine);
+		FLookIn In;
+		In.SrgbOf = ColourOf;
+		In.SeesLegion = SeesEveryLegion;
+		In.OpenRow = "por-wolfram";
+		FLook Look;
+		LookAt(Book, In, Look);
+		int Opens = 0, OnCard = 0, OnShut = 0;
+		for (const FSealLook& Each : Look.Seals)
+		{
+			Opens += Each.bOpens ? 1 : 0;
+			if (SealOnCard(Each, true))
+			{
+				++OnCard;
+				CHECK(Book.Rows[Each.Row].Id == "por-wolfram");
+			}
+			OnShut += SealOnCard(Each, false) ? 1 : 0;
+		}
+		CHECK(Opens == 2 && OnCard == 1 && OnShut == 0);
+		In.OpenRow.clear();
+		LookAt(Book, In, Look);
+		OnCard = 0;
+		for (const FSealLook& Each : Look.Seals)
+		{
+			OnCard += SealOnCard(Each, true) ? 1 : 0;
+		}
+		CHECK(OnCard == 0);
+		// On the card: clear of the ring, the buttons and the words; a press on it shuts the card, one mid-card does not.
+		for (const double Px : { 1.0, 1.08 })
+		{
+			FBook Long = BritainsSeat();
+			Long.RoundLen = 3;
+			for (const FRow* Row : { &RowOf(Long, "por-wolfram"), static_cast<const FRow*>(&Mine) })
+			{
+				FCard Card;
+				CHECK(LayCard(*Row, Long, KitMeasure, Px, Card));
+				const FRect Box = SealBox(CardSealAt(FRect{ 0.0, 0.0, Card.Size.X, Card.Size.Y }), Px);
+				CHECK(Near(Box.Right() - Card.Size.X, SealMid * Px) && Near(-Box.Y, SealMid * Px) && SealMid < KeepOff);
+				const FDraw* Ring = RingOf(Card, Px);
+				CHECK(Ring != nullptr);
+				if (Ring)
+				{
+					const FPt Mid = Ring->At.Centre();
+					const FPt Closest{ std::clamp(Mid.X, Box.X, Box.Right()), std::clamp(Mid.Y, Box.Y, Box.Bottom()) };
+					CHECK(Distance(Mid, Closest) > Ring->At.W * 0.5 + Ring->EdgeW * 0.5 + 2.0 * Px);
+				}
+				for (const FButton& Button : Card.Buttons)
+				{
+					CHECK(!Button.At.Overlaps(Box));
+				}
+				for (size_t K = 1; K < Card.Draws.size(); ++K)
+				{
+					CHECK(Card.Draws[K].Kind != EDraw::Text || !Card.Draws[K].At.Overlaps(Box));
+				}
+				CHECK(OnCardSeal(FPt{ Card.Size.X - 2.0 * Px, 2.0 * Px }, Card.Size, Px) && OnCardSeal(FPt{ Card.Size.X - 9.0 * Px, 15.0 * Px }, Card.Size, Px));
+				CHECK(!OnCardSeal(FPt{ Card.Size.X * 0.5, Card.Size.Y * 0.5 }, Card.Size, Px) && !OnCardSeal(FPt{ Card.Size.X - 11.0 * Px, 2.0 * Px }, Card.Size, Px) && !OnCardSeal(FPt{ Card.Size.X - 2.0 * Px, 17.0 * Px }, Card.Size, Px));
+			}
+		}
+		// A placed card's seal: on the screen and off every panel, as the card is (left, right, slid under the top bar).
+		const std::vector<FRect> Frame = { { 0, 0, 1440, 52 }, { 0, 750, 1440, 150 }, { 990, 70, 430, 672 } };
+		for (const FPt Capital : { FPt{ 322, 520 }, FPt{ 262, 520 }, FPt{ 600, 90 }, FPt{ 900, 700 } })
+		{
+			FPlaceIn Place{ Capital, FPt{ 230, 210 }, FRect{ 0, 52, 1440, 698 }, &Frame, 1.0 };
+			const FPlaced Placed = PlaceCard(Place);
+			const FRect Box = SealBox(CardSealAt(Placed.Card), 1.0);
+			CHECK(Placed.bFits && Inside(Box, Place.Screen));
+			for (const FRect& Piece : Frame)
+			{
+				CHECK(!Box.Overlaps(Piece));
+			}
+		}
+	}
+
 	void TestPlates()
 	{
 		std::vector<FDraw> Sign;
@@ -2128,6 +2220,7 @@ int main(int Count, char** Args)
 	TestLane();
 	TestTint();
 	TestSeals();
+	TestCardSeal();
 	TestPlates();
 	TestNoAllocation();
 	if (Count > 1)

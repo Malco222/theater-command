@@ -415,6 +415,7 @@ namespace BargainLayer
 		struct FSealLaid
 		{
 			bool bShown = false;
+			bool bOnCard = false; // the open card's seal, standing on the card's top-right corner as its close (call 6)
 			FVector2D At = FVector2D::ZeroVector; // its disc's middle
 			FText Tip;
 		};
@@ -515,6 +516,7 @@ namespace BargainLayer
 			std::vector<FLaneLaid> Lanes;
 			FSealLaid Seals[SealSlots];
 			int32 HotSeal = INDEX_NONE;
+			int32 CardSeal = INDEX_NONE; // the slot of the seal on the card this frame, or INDEX_NONE
 			std::vector<FPlateLaid> Plates;
 			std::vector<FTrayLaid> Trays;
 
@@ -989,9 +991,11 @@ namespace BargainLayer
 			for (int32 Slot = 0; Slot < SealSlots; ++Slot)
 			{
 				S.Seals[Slot].bShown = false;
+				S.Seals[Slot].bOnCard = false;
 				S.Seals[Slot].Tip = static_cast<size_t>(Slot) < S.Look.Seals.size() ? FText::FromString(FromUtf8(S.Look.Seals[static_cast<size_t>(Slot)].Tip)) : FText::GetEmpty();
 			}
 			S.HotSeal = INDEX_NONE;
+			S.CardSeal = INDEX_NONE;
 			S.Plates.clear();
 			for (const Bargains::FPlateLook& Look : S.Look.Plates)
 			{
@@ -1028,6 +1032,7 @@ namespace BargainLayer
 				Seal = FSealLaid();
 			}
 			S.HotSeal = INDEX_NONE;
+			S.CardSeal = INDEX_NONE;
 			S.Card = Bargains::FCard();
 			S.CardDraws.Reset();
 			S.CardRow.clear();
@@ -1164,7 +1169,8 @@ namespace BargainLayer
 			const FState& S = State();
 			if (Kind == ESpot::Seal)
 			{
-				return Slot >= 0 && Slot < SealSlots && S.Seals[Slot].bShown ? S.Seals[Slot].Tip : FText::GetEmpty();
+				// (none for the seal on the card: it is the card's close there, and the card says what its round is)
+				return Slot >= 0 && Slot < SealSlots && S.Seals[Slot].bShown && !S.Seals[Slot].bOnCard ? S.Seals[Slot].Tip : FText::GetEmpty();
 			}
 			return Slot >= 0 && static_cast<size_t>(Slot) < S.Lanes.size() ? S.Lanes[static_cast<size_t>(Slot)].Hover : FText::GetEmpty();
 		}
@@ -1354,9 +1360,9 @@ namespace BargainLayer
 				// The seals at the sellers' capitals.
 				for (int32 Slot = 0; Slot < SealSlots; ++Slot)
 				{
-					if (!S.Seals[Slot].bShown || static_cast<size_t>(Slot) >= S.Look.Seals.size())
+					if (!S.Seals[Slot].bShown || S.Seals[Slot].bOnCard || static_cast<size_t>(Slot) >= S.Look.Seals.size())
 					{
-						continue;
+						continue; // (the seal on the card is painted by the card, over its paper)
 					}
 					const Bargains::FSealLook& Seal = S.Look.Seals[static_cast<size_t>(Slot)];
 					PaintSeal(OutDrawElements, Layer, Geometry, S.Seals[Slot].At, Px, S.PxPerUnit, Seal.bOpens, Seal.bOpen, S.HotSeal == Slot);
@@ -1520,6 +1526,32 @@ namespace BargainLayer
 				};
 				const Bargains::FRect Screen{ 0.0, 0.0, Local.X, Local.Y };
 
+				// The card: placed when it opens, again when its capital has moved 24 px or the screen changed size, and again
+				// when the frame has moved so that it no longer keeps 16 px off the screen's edges and every panel, or while it
+				// keeps off nowhere (call 5: left of the capital where it keeps off, else right; S.Frame is the keep-off, read in
+				// paint space above; placing allocates nothing). Before the seals: the open card's seal stands on it.
+				const Bargains::FRow* Open = S.bCardLaid ? S.Book.Row(S.Open.Row()) : nullptr;
+				FVector2D OpenCapital(0.0, 0.0);
+				if (Open && CapitalAt(Open->Capital, OpenCapital))
+				{
+					Bargains::FPlaceIn In;
+					In.Capital = Bargains::FPt{ OpenCapital.X, OpenCapital.Y };
+					In.Size = S.Card.Size;
+					In.Screen = Screen;
+					In.Frame = &S.Frame;
+					In.Px = Px;
+					if (!S.bPlaced || Bargains::NeedsPlace(S.Placed, In.Capital, Screen, Px) || !S.Placed.bFits || Bargains::KeepOffIntrusion(S.Placed.Card, In) > 0.0)
+					{
+						S.WasCard = S.bPlaced ? S.Placed.Card : Bargains::FRect{};
+						S.Placed = Bargains::PlaceCard(In);
+						S.bPlaced = true;
+					}
+				}
+				else if (!S.bCardLaid)
+				{
+					S.bPlaced = false;
+				}
+
 				// Our own plates at the senders' capitals the town plates left without one (none from far off).
 				for (FPlateLaid& Plate : S.Plates)
 				{
@@ -1543,12 +1575,26 @@ namespace BargainLayer
 				S.Avoid.insert(S.Avoid.end(), S.Frame.begin(), S.Frame.end());
 				S.Avoid.insert(S.Avoid.end(), S.TownPlates.begin(), S.TownPlates.end());
 				S.Laid.clear();
+				// (call 6: while the card is shown, its seal leaves the capital, so that the lane's end there shows, and stands
+				// on the card's top-right corner as its close; the card paints it and takes its presses, the spot its overhang)
+				const bool bCardShown = CardShown();
+				S.CardSeal = INDEX_NONE;
 				for (int32 Slot = 0; Slot < SealSlots; ++Slot)
 				{
 					FSealLaid& Seal = S.Seals[Slot];
 					Seal.bShown = false;
+					Seal.bOnCard = false;
 					if (static_cast<size_t>(Slot) >= S.Look.Seals.size())
 					{
+						continue;
+					}
+					if (Bargains::SealOnCard(S.Look.Seals[static_cast<size_t>(Slot)], bCardShown))
+					{
+						const Bargains::FPt Corner = Bargains::CardSealAt(S.Placed.Card);
+						Seal.bShown = true;
+						Seal.bOnCard = true;
+						Seal.At = FVector2D(Corner.X, Corner.Y);
+						S.CardSeal = Slot;
 						continue;
 					}
 					const int32 Row = S.Look.Seals[static_cast<size_t>(Slot)].Row;
@@ -1616,32 +1662,6 @@ namespace BargainLayer
 						}
 					}
 				}
-
-				// The card: placed when it opens, again when its capital has moved 24 px or the screen changed size, and again
-				// when the frame has moved so that it no longer keeps 16 px off the screen's edges and every panel, or while it
-				// keeps off nowhere (call 5: left of the capital where it keeps off, else right; S.Frame is the keep-off, read in
-				// paint space above; placing allocates nothing).
-				const Bargains::FRow* Open = S.bCardLaid ? S.Book.Row(S.Open.Row()) : nullptr;
-				FVector2D Capital(0.0, 0.0);
-				if (Open && CapitalAt(Open->Capital, Capital))
-				{
-					Bargains::FPlaceIn In;
-					In.Capital = Bargains::FPt{ Capital.X, Capital.Y };
-					In.Size = S.Card.Size;
-					In.Screen = Screen;
-					In.Frame = &S.Frame;
-					In.Px = Px;
-					if (!S.bPlaced || Bargains::NeedsPlace(S.Placed, In.Capital, Screen, Px) || !S.Placed.bFits || Bargains::KeepOffIntrusion(S.Placed.Card, In) > 0.0)
-					{
-						S.WasCard = S.bPlaced ? S.Placed.Card : Bargains::FRect{};
-						S.Placed = Bargains::PlaceCard(In);
-						S.bPlaced = true;
-					}
-				}
-				else if (!S.bCardLaid)
-				{
-					S.bPlaced = false;
-				}
 			}
 
 		private:
@@ -1650,7 +1670,7 @@ namespace BargainLayer
 			TFunction<void(TArray<FBox2D>&)> PlatesOf;
 		};
 
-		/** The one bid card: the look's draws on paper; a press on a live button gives the order. */
+		/** The one bid card: the look's draws on paper; a press on a live button gives the order, one on its seal closes it. */
 		class SBargainCard : public SLeafWidget
 		{
 		public:
@@ -1687,6 +1707,12 @@ namespace BargainLayer
 					FSlateDrawElement::MakeBox(OutDrawElements, Layer, Geometry.ToPaintGeometry(FVector2D(At.W, At.H), FSlateLayoutTransform(FVector2D(At.X, At.Y))), &Round, ESlateDrawEffect::None, Hollow);
 					++Layer;
 				}
+				// (call 6: the open card's seal, its disc's middle on the card's top-right corner, over the paper: the card's close)
+				if (const Bargains::FSealLook* Seal = CardSealLook())
+				{
+					PaintSeal(OutDrawElements, Layer, Geometry, FVector2D(S.Card.Size.X, 0.0), LayPx(S), S.PxPerUnit, Seal->bOpens, Seal->bOpen, S.HotSeal == S.CardSeal);
+					Layer += 9;
+				}
 				return Layer;
 			}
 
@@ -1695,6 +1721,11 @@ namespace BargainLayer
 				// (the card is paper over the map: no press on it reaches the map)
 				if (MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 				{
+					if (OnSeal(MyGeometry, MouseEvent))
+					{
+						PressSeal(State().CardSeal); // (its own seal closes the card, as at the capital)
+						return FReply::Handled();
+					}
 					const int32 Button = ButtonAt(MyGeometry, MouseEvent);
 					if (Button != INDEX_NONE)
 					{
@@ -1707,22 +1738,61 @@ namespace BargainLayer
 
 			virtual FReply OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override
 			{
-				State().HotButton = ButtonAt(MyGeometry, MouseEvent);
+				FState& S = State();
+				S.HotButton = ButtonAt(MyGeometry, MouseEvent);
+				if (OnSeal(MyGeometry, MouseEvent))
+				{
+					S.HotSeal = S.CardSeal;
+				}
+				else if (S.HotSeal != INDEX_NONE && S.HotSeal == S.CardSeal)
+				{
+					S.HotSeal = INDEX_NONE;
+				}
 				return FReply::Unhandled();
 			}
 
 			virtual void OnMouseLeave(const FPointerEvent& MouseEvent) override
 			{
 				SLeafWidget::OnMouseLeave(MouseEvent);
-				State().HotButton = INDEX_NONE;
+				FState& S = State();
+				S.HotButton = INDEX_NONE;
+				if (S.HotSeal != INDEX_NONE && S.HotSeal == S.CardSeal)
+				{
+					S.HotSeal = INDEX_NONE; // (on its overhang, past the card's edge, the seal's spot takes the pointer again)
+				}
 			}
 
 			virtual FCursorReply OnCursorQuery(const FGeometry& MyGeometry, const FPointerEvent& CursorEvent) const override
 			{
-				return State().HotButton != INDEX_NONE ? FCursorReply::Cursor(EMouseCursor::Hand) : FCursorReply::Cursor(EMouseCursor::Default);
+				const FState& S = State();
+				const bool bHand = S.HotButton != INDEX_NONE || (S.CardSeal != INDEX_NONE && S.HotSeal == S.CardSeal);
+				return bHand ? FCursorReply::Cursor(EMouseCursor::Hand) : FCursorReply::Cursor(EMouseCursor::Default);
 			}
 
 		private:
+			/** The look of the seal on the card this frame, or nullptr. */
+			static const Bargains::FSealLook* CardSealLook()
+			{
+				const FState& S = State();
+				if (S.CardSeal < 0 || S.CardSeal >= SealSlots || !S.Seals[S.CardSeal].bOnCard || static_cast<size_t>(S.CardSeal) >= S.Look.Seals.size())
+				{
+					return nullptr;
+				}
+				return &S.Look.Seals[static_cast<size_t>(S.CardSeal)];
+			}
+
+			/** True where the pointer is on the card's seal (the part over the paper; its overhang is the seal's own spot). */
+			static bool OnSeal(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+			{
+				const FState& S = State();
+				if (!S.bCardLaid || !CardSealLook())
+				{
+					return false;
+				}
+				const FVector2D At = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+				return Bargains::OnCardSeal(Bargains::FPt{ At.X, At.Y }, S.Card.Size, LayPx(S));
+			}
+
 			/** The live button under the pointer, or INDEX_NONE. */
 			static int32 ButtonAt(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 			{
