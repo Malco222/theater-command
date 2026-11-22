@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -609,6 +610,11 @@ namespace TheaterFx
 		double PictureGain() const { return LitGain; }
 		int PerPuff() const { return PointsPerPuff; }
 		int Room() const { return MaxPuffs; }
+		/** What the last Draw laid (puffs), and the room asked for as it stands: on the screen at that Draw, and what has
+		 *  been made since (RoomAsked; over Room() when the room is short). For a scene's log, the production lead's ask
+		 *  of 22 November. */
+		int PuffsDrawn() const { return LastDrawn; }
+		int PuffsAsked() const { return static_cast<int>(std::min<size_t>(RoomAsked(), 1000000000u)); }
 		const std::vector<Vec>& Points() const { return Out; }
 		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
 		bool Busy(double Now) const;
@@ -848,6 +854,7 @@ namespace TheaterFx
 			// and that power a few seconds late, for a sharp rise is her ringing up; the black surge that follows; and the
 			// slow wander of its puffs' climb and drift, each taking most of the last one's)
 			double PlumeOwed = 1.0e9, PowerLate = -1.0, SurgeFrom = 0.0, SurgeUntil = -1.0e18, PlumeRise = 1.0, PlumeSide = 0.0;
+			double Squeeze = 1.0; // (longest_m: the share of its row's time the trail was last laid by, 1 when not squeezed; TrailKind's closing bar takes it)
 			unsigned PlumeN = 0;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */

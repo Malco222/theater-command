@@ -294,6 +294,12 @@ public:
 	/** Camera shake on or off (Options: "Camera shake", default on). */
 	bool bShake = true;
 
+	/** For a scene's log line: the puffs the kit drew at the last Tick, and the room asked for (what was on the screen
+	 * then and what has been made since; over the room, 3,000, when it is short). Both by the kit's clock, Tick's Now.
+	 * -TheaterFxRoomLog on the command line also writes a line of its own every 10 s of that clock. */
+	int32 PuffsDrawn() const;
+	int32 PuffsAsked() const;
+
 	/** -TheaterBlastTest on the command line: lay a test barrage round a place (RunTest) for test frames. */
 	static bool WantsTest();
 	/** A barrage that plays again every 24 seconds round Centre (a world point on the ground), every size and kind:
@@ -317,12 +323,18 @@ private:
 	double UnitsPerMetre = 100.0;
 	double Clock = 0.0;
 	FVector Sun = FVector(-0.45, -0.35, 0.82);
-	int32 Room = 0; // puffs the mesh has room for (in steps of 300, as the map's smoke)
-	int32 RoomSpare = 0; // frames running that less room would have done
-	int32 LastSent = 0;
+	// (the mesh, the production lead's FX1 of 22 November: Sections sections of PuffsASection puffs each, made once at
+	// the first frame with something to draw and never rebuilt; a section is sent only while it holds puffs, and the
+	// rest are folded flat and hidden)
+	static constexpr int32 PuffsASection = 300;
+	int32 Sections = 0;
+	int32 SectionsUsed = 0; // sections holding puffs at the last Tick (shown)
 	bool bShown = false;
-	TArray<FVector> Points;
+	TArray<FVector> Points; // one section's points and colours, filled for each section in turn
 	TArray<FColor> Colours;
+	// (-TheaterFxRoomLog: the most drawn in the 10 s of the kit's clock, when, and the room asked then)
+	int32 LogMost = -1, LogAsked = 0;
+	double LogMostAt = 0.0, LogFrom = -1.0;
 
 	struct FTestShot
 	{
@@ -343,7 +355,8 @@ private:
 	TheaterFx::Vec ToFx(const FVector& World) const;
 	TheaterFx::Vec ToFxWay(const FVector& Way) const;
 	double Time() const;
-	void MakeSection(int32 NewRoom, const FVector& Fill);
+	void MakeSections(const FVector& Fill);
+	void RoomLog(double Now, int32 Laid);
 	void Hide();
 	void PlayTest(double Now);
 };

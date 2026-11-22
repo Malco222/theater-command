@@ -6177,14 +6177,17 @@ namespace TheaterFx
 			bOldBars = Old.Core > 0.0 && Old.ThinAfter > 0.0 && Old.ThinKeep > 1 && Old.Life > Old.ThinAfter;
 			if (bOldBars)
 			{
-				OldBars.Life = Old.Life;
+				// (squeezed as the old kind's last pieces were, longest_m: on a fast aircraft the closing bar goes with its
+				// neighbours, not after them. The pre-check, 22 November)
+				const double K = SafeNum(Tr.Squeeze, 0.02, 1.0, 1.0);
+				OldBars.Life = Old.Life * K;
 				OldBars.Hold = Old.ThinHold >= 0.0 ? Old.ThinHold : 0.25 * Old.ThinAfter / Old.Life;
-				OldBars.ShowFrom = Old.JoinFrom * Old.ThinAfter;
-				OldBars.ShowBy = Old.JoinBy * Old.ThinAfter;
+				OldBars.ShowFrom = Old.JoinFrom * Old.ThinAfter * K;
+				OldBars.ShowBy = Old.JoinBy * Old.ThinAfter * K;
 				OldBars.Smear = (2.0 * Old.ThinKeep + 1.0) * Old.Spacing;
 				OldBars.PaleTo = Old.PaleTo;
-				OldBars.PaleFrom = Old.PaleFrom;
-				OldBars.PaleBy = Old.PaleBy;
+				OldBars.PaleFrom = Old.PaleFrom * K;
+				OldBars.PaleBy = Old.PaleBy * K;
 			}
 			FlameWas = FlameOf(Tr, Old) * (0.45 + 0.55 * Clamp01((Now - Tr.KindBorn) / Old.RampS));
 			if (Now < Tr.FlameOutBy && Tr.FlameShrinkS > 0.0)
@@ -6777,9 +6780,11 @@ namespace TheaterFx
 		TrailRow Squeezed;
 		const TrailRow* Use = &AsRow;
 		const double Flies = Carry.Length();
+		Tr->Squeeze = 1.0;
 		if (AsRow.Longest > 0.0 && Flies * AsRow.Life > AsRow.Longest)
 		{
 			const double K = std::max(AsRow.Longest / (Flies * AsRow.Life), 0.02);
+			Tr->Squeeze = K;
 			Squeezed = AsRow;
 			Squeezed.Life *= K;
 			Squeezed.ThinAfter *= K;

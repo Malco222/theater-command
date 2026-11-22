@@ -138,10 +138,11 @@ void FBattleEffects::End()
 	Core.Clear();
 	TestShots.Reset();
 	TestStart = -1.0;
-	Room = 0;
-	RoomSpare = 0;
-	LastSent = 0;
+	Sections = 0;
+	SectionsUsed = 0;
 	bShown = false;
+	LogMost = -1;
+	LogFrom = -1.0;
 }
 
 double FBattleEffects::GroundHeight(void* Context, double X, double Y)
@@ -271,6 +272,16 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 bool FBattleEffects::IsReady() const
 {
 	return Mesh.IsValid() && Ink.IsValid();
+}
+
+int32 FBattleEffects::PuffsDrawn() const
+{
+	return Core.PuffsDrawn();
+}
+
+int32 FBattleEffects::PuffsAsked() const
+{
+	return Core.PuffsAsked();
 }
 
 std::string FBattleEffects::Named(const FString& Text)
@@ -600,15 +611,18 @@ void FBattleEffects::Clear()
 	Hide();
 }
 
-void FBattleEffects::MakeSection(int32 NewRoom, const FVector& Fill)
+void FBattleEffects::MakeSections(const FVector& Fill)
 {
-	// The mesh is made with room for so many puffs (the map smoke's shape: a middle and two rings, of game.puff_sides
-	// points each, both faces of every triangle); after that only its points and colours change, until it needs more
-	// room or much less.
+	// The mesh, made once (the production lead's FX1, 22 November): the kit's room in sections of PuffsASection puffs
+	// (the map smoke's shape: a middle and two rings, of game.puff_sides points each, both faces of every triangle).
+	// Before, one section grew and shrank with the puffs in steps of 300, and each step rebuilt the whole of it, up to
+	// 75,002 points and 648k indices, 16 to 22 times a minute on the Mac. Now only points and colours ever change, and
+	// only in the sections that hold puffs. The kit lays its puffs far to near and section k holds its puffs from
+	// k x PuffsASection on, so the sections, drawn in their order, keep the far-to-near order the translucent puffs need.
 	const int32 Ring = Core.Ring(), PerPuff = Core.PerPuff();
 	TArray<int32> Triangles;
-	Triangles.Reserve(NewRoom * Ring * 18);
-	for (int32 Each = 0; Each < NewRoom; ++Each)
+	Triangles.Reserve(PuffsASection * Ring * 18);
+	for (int32 Each = 0; Each < PuffsASection; ++Each)
 	{
 		const int32 First = Each * PerPuff;
 		for (int32 K = 0; K < Ring; ++K)
@@ -620,14 +634,46 @@ void FBattleEffects::MakeSection(int32 NewRoom, const FVector& Fill)
 			Triangles.Append({ In0, Out1, Out0, In0, Out0, Out1 });
 		}
 	}
-	Room = NewRoom;
-	Points.Init(Fill, Room * PerPuff + 2); // (spare room at the battle, not at the world's origin, so the bounds stay tight)
-	Colours.Init(FColor(0, 0, 0, 0), Room * PerPuff + 2);
-	LastSent = 0;
+	Points.Init(Fill, PuffsASection * PerPuff); // (folded at the battle, not at the world's origin, so the bounds stay tight)
+	Colours.Init(FColor(0, 0, 0, 0), PuffsASection * PerPuff);
 	TArray<FVector> Normals;
 	Normals.Init(FVector::UpVector, Points.Num());
-	Mesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
-	Mesh->SetMaterial(0, Ink.Get());
+	Sections = FMath::Max(1, FMath::DivideAndRoundUp(Core.Room(), PuffsASection));
+	for (int32 Section = 0; Section < Sections; ++Section)
+	{
+		Mesh->CreateMeshSection(Section, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(Section, Ink.Get());
+		Mesh->SetMeshSectionVisible(Section, false);
+	}
+	SectionsUsed = 0;
+}
+
+void FBattleEffects::RoomLog(double Now, int32 Laid)
+{
+	// (-TheaterFxRoomLog: every 10 s of the kit's own clock, Tick's Now, the most puffs drawn in a frame in those 10 s,
+	// when, and the room asked for at that frame. Over 3,000 asked: the room was short and the kit chose what to leave out)
+	static const bool bRoomLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterFxRoomLog"));
+	if (!bRoomLog)
+	{
+		return;
+	}
+	if (LogFrom < 0.0 || Now < LogFrom)
+	{
+		LogFrom = Now;
+		LogMost = -1;
+	}
+	if (Laid > LogMost)
+	{
+		LogMost = Laid;
+		LogMostAt = Now;
+		LogAsked = Core.PuffsAsked();
+	}
+	if (Now - LogFrom >= 10.0)
+	{
+		UE_LOG(LogTheater, Log, TEXT("Battle effects room, the kit's clock %.1f to %.1f s: the most drawn %d at %.1f s, asked %d then, of room %d; %d of %d sections in use now"), LogFrom, Now, LogMost, LogMostAt, LogAsked, Core.Room(), SectionsUsed, Sections);
+		LogFrom = Now;
+		LogMost = -1;
+	}
 }
 
 void FBattleEffects::Hide()
@@ -687,46 +733,46 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	Sight.SunLight = TheaterFx::Rgb(SunUp, SunUp, SunUp);
 	const int32 Drawn = Core.Draw(Now, Sight);
 
-	// (room kept in steps of 300 puffs, let down only after two seconds with fewer, as the map's smoke does)
-	const int32 Step = 300;
-	int32 Wanted = FMath::Min(FMath::DivideAndRoundUp(FMath::Max(Drawn, 1), Step) * Step, FMath::Max(Step, Core.Room()));
-	if (Wanted < Room && ++RoomSpare < 120)
-	{
-		Wanted = Room;
-	}
-	else if (Wanted >= Room)
-	{
-		RoomSpare = 0;
-	}
 	const int32 PerPuff = Core.PerPuff();
 	const std::vector<TheaterFx::Vec>& From = Core.Points();
 	const std::vector<uint8_t>& Rgba = Core.Colours();
-	if (Wanted != Room)
+	const FVector FirstAt = Drawn > 0 ? FVector(From[0].X, From[0].Y, From[0].Z) * UnitsPerMetre : Eye;
+	if (Sections == 0)
 	{
-		MakeSection(Wanted, Drawn > 0 ? FVector(From[0].X, From[0].Y, From[0].Z) * UnitsPerMetre : Eye);
+		MakeSections(FirstAt);
 	}
-	// (what the core drew, and what it folded away from last frame: the rest of the room is folded already)
-	const int32 Send = FMath::Min(Room, FMath::Max(Drawn, LastSent)) * PerPuff;
-	FBox Whole(ForceInit);
-	for (int32 Index = 0; Index < Send; ++Index)
+	// (the sections that hold puffs now are sent, their slots past the last puff folded flat onto their first point; a
+	// section that held puffs at the last Tick and holds none now is sent once more, all of it folded onto the first
+	// puff's first point (so the mesh's bounds stay round the battle), and hidden; the rest are not touched)
+	const int32 Used = FMath::Min(Sections, FMath::DivideAndRoundUp(FMath::Max(Drawn, 0), PuffsASection));
+	const int32 Slots = PuffsASection * PerPuff;
+	for (int32 Section = 0; Section < FMath::Max(Used, SectionsUsed); ++Section)
 	{
-		const TheaterFx::Vec& P = From[static_cast<size_t>(Index)];
-		Points[Index] = FVector(P.X, P.Y, P.Z) * UnitsPerMetre;
-		const size_t C = static_cast<size_t>(Index) * 4;
-		Colours[Index] = FColor(Rgba[C], Rgba[C + 1], Rgba[C + 2], Rgba[C + 3]); // (linear already, as ToFColor(false))
-		if (Index < Drawn * PerPuff)
+		const int32 FirstPuff = Section * PuffsASection;
+		const int32 Real = FMath::Clamp(Drawn - FirstPuff, 0, PuffsASection) * PerPuff;
+		for (int32 Index = 0; Index < Real; ++Index)
 		{
-			Whole += Points[Index];
+			const size_t At = static_cast<size_t>(FirstPuff) * PerPuff + Index;
+			const TheaterFx::Vec& P = From[At];
+			Points[Index] = FVector(P.X, P.Y, P.Z) * UnitsPerMetre;
+			const size_t C = At * 4;
+			Colours[Index] = FColor(Rgba[C], Rgba[C + 1], Rgba[C + 2], Rgba[C + 3]); // (linear already, as ToFColor(false))
+		}
+		const FVector Fold = Real > 0 ? Points[0] : FirstAt;
+		for (int32 Index = Real; Index < Slots; ++Index)
+		{
+			Points[Index] = Fold;
+			Colours[Index] = FColor(0, 0, 0, 0);
+		}
+		Mesh->UpdateMeshSection(Section, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+		const bool bUse = Section < Used;
+		if (bUse != (Section < SectionsUsed))
+		{
+			Mesh->SetMeshSectionVisible(Section, bUse);
 		}
 	}
-	LastSent = FMath::Min(Drawn, Room);
-	// (two points more that are no puff's: the corners of all the puffs, so that the mesh's bounds hold them)
-	if (Whole.IsValid)
-	{
-		Points[Room * PerPuff] = Whole.Min;
-		Points[Room * PerPuff + 1] = Whole.Max;
-	}
-	Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+	SectionsUsed = Used;
+	RoomLog(Now, Drawn);
 	if (!bShown)
 	{
 		Mesh->SetVisibility(true);
