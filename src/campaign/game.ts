@@ -1279,6 +1279,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
   const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
   let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = '', streets = false;
+  // (Brian, 22 November, release 2: 'Busier, mostly watchers'.) An enemy watcher on the player's ground that mapped its defences.
+  let watched: { nat: string; by: string; found: boolean; mul: number } | null = null;
   // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
   let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
@@ -1350,7 +1352,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     // Tanks without fuel and troops without shells: a nation whose depots are empty fights weaker (the grand campaign).
     if (wide) { const short = shortAttack(g, c); if (short !== 1) { p *= short; shortA = Math.min(shortA, short); } }
     // An agent at work in the province has mapped its defences for the attackers (the grand campaign).
-    if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; spied = spy.agent; } }
+    if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; if (spy.foe) { if (!watched || (watched.by !== spy.foe && c.nat === spy.foe)) watched = { nat: spy.foe, by: c.nat, found: !!spy.found, mul: spy.mul }; } else spied = spy.agent; } }
     // Troops in good heart hit harder, and shaken ones do not (the grand campaign: nobody else carries morale).
     p *= heart(c);
     if (g.nations[c.nat].slowCommand) p *= 0.85;
@@ -1731,6 +1733,16 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     lines.push({ label: 'Morale', value, effect: effect ? effect[0].toUpperCase() + effect.slice(1) : undefined });
   }
   if (spied) lines.push({ label: 'Intelligence', value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
+  // (The tell for a hidden watcher: the battle shows that the enemy knew the defences, and so where to hunt.)
+  // (It names the army that attacks, and the agent's own country where that is an ally of the attacker's.)
+  if (watched) {
+    const adj = g.nations[watched.nat]?.adj ?? 'enemy', by = g.nations[watched.by]?.adj ?? 'enemy', own = watched.by === watched.nat;
+    const an = /^[AEIOU]/.test(adj) && !/^(Uru|Ukr|Uni|Eu)/.test(adj) ? 'an' : 'a';
+    const value = watched.found
+      ? `The ${adj} agent uncovered at ${target.name} has mapped its defences${own ? '' : ` for the ${by} army`}`
+      : `The ${by} army knew the defences of ${target.name}: ${own ? 'one of its agents' : `${an} ${adj} agent`} is at work there`;
+    lines.push({ label: 'Enemy intelligence', value, effect: `Attack up ${Math.round((watched.mul - 1) * 100)}%` });
+  }
   if (sneaked) lines.push({ label: 'Surprise', value: 'War was declared this month on a country at peace', effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
   // (In the grand campaign WHAT YOU FACE says why, and the ticket keeps the figure alone: ruling 149(e).)
   if (armorShock) lines.push(at ? { label: 'Armor', value: `Tank attack up ${Math.round(25 * (1 - at.strength))}%` } : { label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });

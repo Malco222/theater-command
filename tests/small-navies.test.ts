@@ -14,6 +14,7 @@ import { INTEL, MISSIONS, MISSION_TEXT, THEFT, caughtChance, guardChance, intelT
 import { PLANS, PLAN_ITEMS, buildsOwn, givesPlans, grantPlans, onPlans, planRules, plansFrom, plansOf, whyNoPlans, whyNoTechPlans } from '../src/campaign/plans';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
+import { inOrAt } from '../src/campaign/towns';
 import { TECH, hasTech, locked, spyOf, spyTeamsOf, staffPick, startResearch, staffTeams, teamsOf, techOf, techTick, techView, whyNotResearch } from '../src/campaign/tech';
 import { capitalPlans } from '../src/campaign/turn';
 import type { Agent, Game, Mission } from '../src/campaign/types';
@@ -181,7 +182,7 @@ describe('plans stolen by an agent', () => {
     expect(whyNotMission(g, 'ESP', london.id, 'bbPlans')).toBeNull();
     expect(whyNotMission(g, 'ESP', london.id, 'cvPlans')).toBeNull();
     expect(whyNotMission(g, 'ESP', clyde.id, 'bbPlans')).toBeNull();
-    expect(whyNotMission(g, 'ESP', plain.id, 'bbPlans')).toBe(`There is no great naval yard at ${kent.name}: the United Kingdom keeps its plans at London and at its great naval yards.`);
+    expect(whyNotMission(g, 'ESP', plain.id, 'bbPlans')).toBe(`There is no great naval yard ${inOrAt(kent)}: the United Kingdom keeps its plans at London and at its great naval yards.`);
     expect(whyNotMission(g, 'ESP', berlin.id, 'bbPlans')).toBeNull();
     expect(whyNotMission(g, 'ESP', berlin.id, 'cvPlans')).toBe('Germany builds no aircraft carriers yet: there are no plans to steal.');
     expect(whyNotMission(g, 'ESP', warsaw.id, 'bbPlans')).toBe('Plans of battleships are kept by the great powers, in their capitals and great naval yards. Send the agent to one.');
@@ -339,8 +340,8 @@ describe('rider b542: four-engined bombers, jets, rocket artillery and guided we
     expect(whyNotMission(g, 'ESP', big.id, 'bomberPlans')).toBeNull();
     expect(whyNotMission(g, 'ESP', big.id, 'jetPlans')).toBeNull();
     expect(whyNotMission(g, 'ESP', mid.id, 'jetPlans')).toBeNull();
-    expect(whyNotMission(g, 'ESP', mid.id, 'bomberPlans')).toBe(`There are no great aircraft works at ${works2.name}: Germany keeps its plans at Berlin and at its great aircraft works.`);
-    expect(whyNotMission(g, 'ESP', bare.id, 'jetPlans')).toMatch(/^There are no great aircraft works at/);
+    expect(whyNotMission(g, 'ESP', mid.id, 'bomberPlans')).toBe(`There are no great aircraft works ${inOrAt(works2)}: Germany keeps its plans at Berlin and at its great aircraft works.`);
+    expect(whyNotMission(g, 'ESP', bare.id, 'jetPlans')).toMatch(/^There are no great aircraft works (at|in) /);
     expect(whyNotMission(g, 'ESP', big.id, 'rocketPlans')).toBe('Germany keeps its rocket artillery plans at Berlin, its capital.');
     // A theft in Berlin comes off sooner or later, and the jets are Spain's.
     let tries = 0;

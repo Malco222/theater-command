@@ -19,6 +19,8 @@ export interface DeskDef {
   lead: string;
   /** What the staff does with it, and what running it by hand means. */
   runs: string; hand: string;
+  /** (The secret service, with the enemy's watchers in the campaign, release 2) what the staff does besides: read through deskRuns() in desks.ts. */
+  runsMore?: string;
 }
 
 export interface DepthDef {
@@ -34,7 +36,8 @@ export const DEPTH = data as unknown as {
   start: string;
   cap: { steps: number[]; start: number };
   diplomacy: { keep: number };
-  spies: { guards: number; peace: boolean };
+  /** guards: agents kept at home on guard; hunters (with spy hunters on): agents kept at home hunting on the front. */
+  spies: { guards: number; hunters?: number; peace: boolean };
   build?: { machines?: { each: number; share: number } };
   desks: DeskDef[];
   depths: DepthDef[];
