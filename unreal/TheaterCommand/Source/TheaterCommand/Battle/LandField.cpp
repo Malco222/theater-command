@@ -6152,6 +6152,12 @@ namespace LandField
 					// The bocage's grass in clumps, not spread even (the review's item 3): in some patches tussocks and
 					// flowers together, between them the short sward. On
 					// a cow path, the ground trodden bare (its own pieces of earth laid below), its edge thinned.
+					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
+					if (Gr.Kind == Base::Count) continue;
+					// (past what the thickest clump could keep, 1.85 times its growth: let go before the clump's noise and
+					// the cow paths are asked. The pre-check, 22 November: the clumps had made the bocage's clutter half as
+					// dear again)
+					if (Keep >= Gr.Density * 1.85 / 2.0) continue;
 					double InClump = -1.0, Thick = 1.0;
 					if (What == Drawn::Pasture && !G.Sp)
 					{
@@ -6161,8 +6167,6 @@ namespace LandField
 						if (Path < 0.0 && Keep > 0.05) continue;
 						if (Path < 0.12) Thick = 0.5;
 					}
-					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
-					if (Gr.Kind == Base::Count) continue;
 					// (the short sward between the clumps; the tussocks and the flowers in them. The tall grass stays as it
 					// was, spread: the camera reads it as standing corn for its low shots)
 					if (InClump >= 0.0 && Gr.Kind != Base::TallGrass) Thick *= Gr.Kind == Base::Sward ? 1.2 - 0.45 * InClump : 0.15 + 1.7 * InClump;

@@ -1621,7 +1621,7 @@ def build_land_leaves():
     m.set_editor_property("used_with_instanced_static_meshes", True)
     m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
     m.set_editor_property("two_sided", True)
-    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWOSIDED_FOLIAGE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE)
     m.set_editor_property("opacity_mask_clip_value", 0.5)
     leaves_picture = land_texture("T_LandLeaves", cut_out=True)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
@@ -1639,6 +1639,42 @@ def build_land_leaves():
     to_property(scalar(m, "Roughness", 0.75, -200, 600), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(scalar(m, "Specular", 0.3, -200, 700), "", unreal.MaterialProperty.MP_SPECULAR)
     finish(m)
+
+
+def build_land_shade():
+    """THE SHADE ON THE GROUND UNDER A TANK, A GUN OR A MAN (release 2; the art director on cut 4, fix 3: "a soft
+    footprint shade under every vehicle and wreck"). The light that the sky and the bounce would have given the ground
+    under a hull, which the sun's shadow alone does not take away: a flat mesh laid just over the ground (LandShade.h),
+    multiplying what is drawn behind it (modulate), never lighting anything. Its vertex colour's red is the share of the
+    light left there as the eye would measure it (0.35 under a tank's belly, 1.0 where it ends), made linear here;
+    "Strength" (C++, -TheaterLandFootShade) takes it from none (0) to all (1). Unlit, both faces, instanced (one mesh a
+    kind of tank, gun or man). Without it the battle draws no footprint shade, said once."""
+    m = new_material("M_LandShade")
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MODULATE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -650, 0, const_exponent=2.2)
+    connect(colour, "R", to_linear, "Base")
+    left = lerp(m, 1.0, to_linear, scalar(m, "Strength", 1.0, -650, 200), -400, 0)
+    to_property(left, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
+def build_land_shade_or_tell():
+    """M_LandShade is the ground battle's alone, and the battle draws no footprint shade without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_shade()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandShade was not built (the ground battle draws no footprint shade):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandShade"):
+                eal.delete_asset(f"{MATERIALS}/M_LandShade")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandShade could not be removed:\n" + traceback.format_exc())
 
 
 def build_land_leaves_or_tell():
@@ -1778,8 +1814,9 @@ import os
 REBUILD = os.environ.get("TC_REBUILD", "")
 # (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
 # build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
-# M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.
+# M_LandShade, the footprint shade under tanks, guns and men, the same.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

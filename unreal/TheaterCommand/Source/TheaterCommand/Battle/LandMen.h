@@ -326,6 +326,22 @@ namespace LandMen
 		/** A recorded battle (Content/Data/LandBattles/<key>.json): its men's tracks, its blocks' armies, its date. */
 		bool Build(const std::string& RecordingText, GroundFn GroundAt, std::string& OutError);
 		bool Build(const std::string& RecordingText, GroundFn GroundAt, const Options& With, std::string& OutError);
+		/**
+		 * A live battle's next delta (src/battle/land/live.ts LiveDelta), after Build from its header (no men yet): new
+		 * tracks become new men as Build makes them (appended: a man's number never changes, and Find finds him), new
+		 * kept points and changes go on their tracks (a provisional last point, `tails`, gives way to them), new rounds
+		 * are booked as the men's shots and read for the kills, d and out set his fall and his leaving; `reset` drops
+		 * every man and begins again. A battle grown so plays as the same battle read whole while Update stays 2 battle
+		 * seconds behind the latest delta, as the scene runs. At 1 second behind the places, shots and falls are still
+		 * the same, but a turn of pose is fitted into 0.6 of the time to his next change, which must then be known: going
+		 * prone (1.9 s of life, 1 battle second at Life 2) wants it 1.7 s ahead, else he takes the turn at its own pace
+		 * where the battle read whole hurries it. A bazooka's reload after his rocket (9 s of life) is squeezed before
+		 * his next round in the same way and wants that round up to 4.5 s ahead. Tools/land_live/men.sh checks it.
+		 * Costs, on the game thread: some 2 ms for a delta of 1.7 battle seconds of Normandy's two thousand men (5 at
+		 * most), well under 1 for one of half a second; the first, where every man is new (some 9 KB of state each),
+		 * about 13 ms: a loading moment.
+		 */
+		bool Extend(const std::string& DeltaText, std::string& OutError);
 
 		/**
 		 * A round a man fires (the rounds' t, w, and by/k mapped to the man by Find). His shot is played so the flash
@@ -338,8 +354,10 @@ namespace LandMen
 		/** The clip's own muzzle flashes back on (every firing pose loops its clip and shows its shots), for a test. */
 		bool bClipShots = false;
 
-		/** Where the eye is this frame (field metres), for the levels of detail. */
-		void SetEye(double X, double Y, double Z);
+		/** Where the eye is this frame (field metres), for the levels of detail. Zoom: how much bigger the lens draws a
+		 * man than the usual one does (tan of half the usual 50 deg over tan of half this lens's, both vertical): the
+		 * levels go by his distance over Zoom, so a long lens's men 120 m off are drawn at the middle level. */
+		void SetEye(double X, double Y, double Z, double Zoom = 1.0);
 		/** Plays every man to the battle's time. Forward only: going back starts over from the beginning, silently. */
 		void Update(double BattleTime);
 		/**
@@ -379,6 +397,8 @@ namespace LandMen
 		/** Changes whenever his mesh would: skin him again only when it moved. */
 		uint32_t Stamp(int Man) const;
 		Lod LodOf(int Man) const;
+		/** His distance from the eye at the last Update as the picture sees it (over SetEye's Zoom), metres. */
+		float SeenDistance(int Man) const;
 		/** Points a skin of him writes at that level (the body, then his helmet's finish). */
 		int PointsOf(int Man, Lod L) const;
 		/** His triangles and colours at that level (the same all battle: read once). */

@@ -144,6 +144,13 @@ namespace LandPlay
 	{
 	public:
 		bool Begin(const LandFeed::Recording& InRecording, const World& InWorld);
+		/**
+		 * A live battle (release 2): indexes what one delta added to the recording (LandFeed::AppendDelta's Grown) as
+		 * Begin indexes a whole one: the new rounds' shooters and targets, their landings in order, the 'shell' events
+		 * paired with their kill rounds (a round and its event may come in different deltas), the new falls. The rules
+		 * run ahead of the screen, so all of it is later than what has been played. A reset begins again.
+		 */
+		void Extend(const LandFeed::Grown& G);
 		/** Everything due in (From, To] of battle time, in order: the effects, the sounds' sources, the losses. A step
 		 * backwards (From > To) hands nothing: a replay only goes forward. */
 		void Step(double From, double To, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise, std::vector<Loss>& OutLoss);
@@ -168,6 +175,13 @@ namespace LandPlay
 		std::vector<int> EventOf;
 		/** For each 'shell' event, the round it is paired with (-1: a blast alone). */
 		std::vector<int> RoundOfEvent;
+		/** Each track's fall listed (a live battle's falls come in as they happen). */
+		std::vector<uint8_t> FallListed;
+		/** The battle time played to (Step's To), -1 none yet. */
+		double PlayedTo = -1.0;
+		/** Pairs 'shell' events [From, To) with the kill rounds they draw (Begin's rule: the nearest unpaired kill round
+		 * landing within 0.35 s and 1.5 m, a key man's first), the rounds looked for among those landing near each. */
+		void PairBlasts(size_t From, size_t To);
 		/** Where the replay has got to in the time-ordered lists: rounds fired, rounds landed (by landing time), events,
 		 * falls. */
 		size_t NextFire = 0, NextLand = 0, NextEvent = 0, NextFall = 0;

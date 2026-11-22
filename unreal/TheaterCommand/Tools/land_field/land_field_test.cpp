@@ -6,6 +6,8 @@
 // Usage: land_field_test <recording.json> [picture folder]
 // The recording's men are its ways: tanks 2 m either side, guns and lorries 1.6 m, men half a metre.
 
+#include "Battle/LandCarpet.h"
+#include "Battle/LandShade.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandField.h"
 #include "land_field_picture.h"
@@ -932,13 +934,20 @@ int main(int Argc, char** Argv)
 		for (const double Half : { 40.0, 60.0 })
 		{
 			std::vector<LandField::Placed> Out;
-			const auto C0 = std::chrono::steady_clock::now();
-			G.Clutter(CX - Half, CY - Half, CX + Half, CY + Half, Out);
+			// (the quickest of five, so a busy machine's hiccup is not read as the field's cost)
+			double Best = 1e9;
+			for (int Try = 0; Try < 5; ++Try)
+			{
+				Out.clear();
+				const auto C0 = std::chrono::steady_clock::now();
+				G.Clutter(CX - Half, CY - Half, CX + Half, CY + Half, Out);
+				Best = std::min(Best, Seconds(C0));
+			}
 			std::map<int, int> ByKind;
 			for (const LandField::Placed& P : Out) ++ByKind[static_cast<int>(P.Kind)];
 			std::string Kinds;
 			for (const auto& [K, N] : ByKind) Kinds += std::string(" ") + BaseNames[K] + " " + std::to_string(N);
-			std::printf("  clutter in %.0f m square round %.0f, %.0f: %zu things in %.1f ms (%s )\n", 2.0 * Half, CX, CY, Out.size(), Seconds(C0) * 1000.0, Kinds.c_str());
+			std::printf("  clutter in %.0f m square round %.0f, %.0f: %zu things in %.1f ms (%s )\n", 2.0 * Half, CX, CY, Out.size(), Best * 1000.0, Kinds.c_str());
 		}
 		std::vector<LandField::Placed> A, B;
 		G.Clutter(CX - 30.0, CY - 30.0, CX + 10.0, CY + 10.0, A);
@@ -953,6 +962,297 @@ int main(int Argc, char** Argv)
 		std::sort(PB.begin(), PB.end());
 		std::printf("checks\n");
 		Check(PA == PB && !PA.empty(), "clutter boxes that overlap lay the same things", Fmt("%.0f and %.0f in the overlap", static_cast<double>(PA.size()), static_cast<double>(PB.size())));
+	}
+
+	// The clutter laid once in squares as the eye moves (LandCarpet, as the scene drives it): an eye dollying across the
+	// field at a tank's pace and looking 60 m ahead, cut away every 15 s, with shell holes torn near it. Its meshes kept
+	// here as the engine would keep them, place by place, and what they hold checked against the old box. The same walk
+	// three times, each frame's time and the old box's the quickest of the three (a busy box's swings are not the
+	// squares'), checked on the third.
+	{
+		constexpr int Kinds = static_cast<int>(LandField::Base::Count);
+		constexpr int Frames = 60 * 60;
+		std::vector<double> FrameMs(Frames, 1e30), OldMsAt(Frames, 1e30);
+		std::vector<char> CutAt(Frames, 0);
+		for (int Run = 0; Run < 3; ++Run)
+		{
+			LandCarpet::Squares C;
+			C.Reach.assign(Kinds, 1e9);
+			std::vector<double> Cull(Kinds, 1e9);
+			for (int B = static_cast<int>(LandField::Base::Tuft); B < Kinds; ++B)
+			{
+				const LandField::BaseMesh& Shape = G.BaseOf(static_cast<LandField::Base>(B));
+				if (Shape.Far.Empty())
+				{
+					C.Reach[static_cast<size_t>(B)] = Shape.FarFrom + 12.0; // (as LandBattle::LayThings sets it)
+					Cull[static_cast<size_t>(B)] = Shape.FarFrom;            // (and where the engine stops drawing it)
+				}
+			}
+			struct HoleAt
+			{
+				double X, Y, R;
+			};
+			std::vector<HoleAt> Holes;
+			// (filed by 8 m cell, as the scene's holes are, so asking costs what it does there)
+			std::map<std::pair<int, int>, std::vector<size_t>> HoleCells;
+			auto InHole = [&Holes, &HoleCells](double X, double Y) {
+				const auto Found = HoleCells.find({ static_cast<int>(std::floor(X / 8.0)), static_cast<int>(std::floor(Y / 8.0)) });
+				if (Found == HoleCells.end()) return false;
+				for (const size_t H : Found->second)
+					if (std::hypot(X - Holes[H].X, Y - Holes[H].Y) < Holes[H].R) return true;
+				return false;
+			};
+			C.CopyOf = [](const LandField::Placed& P) { return static_cast<int32_t>(P.Kind); };
+			C.Stands = [&InHole](const LandField::Placed& P) { return !InHole(P.X, P.Y); };
+			std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds); // (laid, thing) a place
+			long BadOps = 0, Ops = 0, Puts = 0, Hides = 0;
+			double WorstMoving = 0.0, SumMoving = 0.0, WorstCut = 0.0, OldSum = 0.0, OldWorst = 0.0;
+			int Moving = 0, Cuts = 0, Settled = 0, OldLays = 0, MostMade = 0, Relaid = 0, SinceCut = 0, SlowestFill = 0;
+			long Missing = 0, Wanted = 0, Extra = 0, InHoles = 0;
+			size_t PeakLaid = 0;
+			std::vector<LandCarpet::Op> Out;
+			const double W = F.Width(), D = F.Depth();
+			double EX = W * 0.3, EY = D * 0.3, Head = 0.6, OldX = 1e9, OldY = 1e9, OldLX = 1e9, OldLY = 1e9;
+			unsigned Rng = 12345u;
+			auto Rand = [&Rng]() { Rng = Rng * 1664525u + 1013904223u; return (Rng >> 8) / 16777216.0; };
+			for (int Frame = 0; Frame < Frames; ++Frame)
+			{
+				const double Now = Frame / 60.0;
+				const bool bCut = Frame == 0 || Frame % (15 * 60) == 0;
+				if (bCut && Frame > 0)
+				{
+					EX = W * (0.2 + 0.6 * Rand());
+					EY = D * (0.2 + 0.6 * Rand());
+					Head = 6.2832 * Rand();
+				}
+				// (a tank's pace, 6 m/s, turning slowly; kept inside the field)
+				Head += 0.15 / 60.0;
+				EX = std::clamp(EX + 6.0 / 60.0 * std::cos(Head), 60.0, W - 60.0);
+				EY = std::clamp(EY + 6.0 / 60.0 * std::sin(Head), 60.0, D - 60.0);
+				const double LX = EX + 60.0 * std::cos(Head), LY = EY + 60.0 * std::sin(Head);
+				// (a shell hole near the eye every 2 s)
+				if (Frame % 120 == 60)
+				{
+					const double R = 2.0 + 3.0 * Rand(), A = 6.2832 * Rand(), Far = 5.0 + 30.0 * Rand();
+					Holes.push_back({ EX + Far * std::cos(A), EY + Far * std::sin(A), R });
+					for (int CJ = static_cast<int>(std::floor((Holes.back().Y - R) / 8.0)); CJ <= static_cast<int>(std::floor((Holes.back().Y + R) / 8.0)); ++CJ)
+						for (int CI = static_cast<int>(std::floor((Holes.back().X - R) / 8.0)); CI <= static_cast<int>(std::floor((Holes.back().X + R) / 8.0)); ++CI)
+							HoleCells[{ CI, CJ }].push_back(Holes.size() - 1);
+					C.Mark(Holes.back().X, Holes.back().Y, R);
+				}
+				std::vector<int32_t> Before(Kinds);
+				for (int K = 0; K < Kinds; ++K) Before[static_cast<size_t>(K)] = C.Count(K);
+				Out.clear();
+				const auto T0 = std::chrono::steady_clock::now();
+				const LandCarpet::Tally Tl = C.Update(G, EX, EY, LX, LY, bCut, 4, Now, Out);
+				FrameMs[static_cast<size_t>(Frame)] = std::min(FrameMs[static_cast<size_t>(Frame)], Seconds(T0) * 1000.0);
+				CutAt[static_cast<size_t>(Frame)] = bCut ? 1 : 0;
+				Relaid += Tl.Relaid;
+				// (how many frames a cut's far squares take to follow: until the first frame with none waiting)
+				if (bCut) SinceCut = 0;
+				if (SinceCut >= 0 && Tl.Waiting == 0)
+				{
+					SlowestFill = std::max(SlowestFill, SinceCut);
+					SinceCut = -1;
+				}
+				else if (SinceCut >= 0)
+					++SinceCut;
+				if (bCut)
+				{
+					++Cuts;
+				}
+				else
+				{
+					++Moving;
+					MostMade = std::max(MostMade, Tl.Made);
+				}
+				// The meshes as the engine keeps them: a new place only at the end, in order; a put only into a free place;
+				// a hide only of a laid one.
+				for (const LandCarpet::Op& O : Out)
+				{
+					++Ops;
+					if (O.Copy == -1 && O.Slot == -1)
+					{
+						for (auto& M : Mesh) M.clear();
+						std::fill(Before.begin(), Before.end(), 0);
+						continue;
+					}
+					if (O.Copy < 0 || O.Copy >= Kinds)
+					{
+						++BadOps;
+						continue;
+					}
+					auto& M = Mesh[static_cast<size_t>(O.Copy)];
+					if (O.Slot >= static_cast<int32_t>(M.size()))
+					{
+						if (O.bHide || O.Slot != static_cast<int32_t>(M.size()) || O.Slot < Before[static_cast<size_t>(O.Copy)])
+						{
+							++BadOps;
+							continue;
+						}
+						M.push_back({ true, O.Thing });
+						++Puts;
+						continue;
+					}
+					auto& Place = M[static_cast<size_t>(O.Slot)];
+					if (O.bHide != Place.first)
+					{
+						++BadOps;
+					}
+					Place = { !O.bHide, O.Thing };
+					(O.bHide ? Hides : Puts) += 1;
+				}
+				size_t Laid = 0;
+				for (const auto& M : Mesh)
+					for (const auto& P : M) Laid += P.first ? 1 : 0;
+				PeakLaid = std::max(PeakLaid, Laid);
+				// The old way, for its time: the whole box made again every 12 m.
+				if (std::hypot(EX - OldX, EY - OldY) > 12.0 || std::hypot(LX - OldLX, LY - OldLY) > 12.0)
+				{
+					std::vector<LandField::Placed> A;
+					const auto T1 = std::chrono::steady_clock::now();
+					G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, A);
+					G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, A);
+					OldMsAt[static_cast<size_t>(Frame)] = std::min(OldMsAt[static_cast<size_t>(Frame)], Seconds(T1) * 1000.0);
+					++OldLays;
+					OldX = EX;
+					OldY = EY;
+					OldLX = LX;
+					OldLY = LY;
+				}
+				// Once a second, with nothing left waiting: every thing the old box would draw is laid, and nothing laid
+				// stands in a hole past its mark's time.
+				if (Frame % 60 == 30 && Tl.Waiting == 0)
+				{
+					++Settled;
+					std::vector<std::pair<float, float>> Have;
+					for (const auto& M : Mesh)
+						for (const auto& P : M)
+							if (P.first) Have.push_back({ P.second.X, P.second.Y });
+					std::sort(Have.begin(), Have.end());
+					std::vector<LandField::Placed> Box;
+					G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, Box);
+					if (std::hypot(LX - EX, LY - EY) >= 40.0)
+					{
+						std::vector<LandField::Placed> Round;
+						G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, Round);
+						for (const LandField::Placed& P : Round)
+							if (std::fabs(P.X - EX) > 45.0 || std::fabs(P.Y - EY) > 45.0) Box.push_back(P);
+					}
+					long Drawn = 0;
+					for (const LandField::Placed& P : Box)
+					{
+						if (std::hypot(P.X - EX, P.Y - EY) >= Cull[static_cast<size_t>(P.Kind)] || InHole(P.X, P.Y)) continue;
+						++Drawn;
+						if (!std::binary_search(Have.begin(), Have.end(), std::make_pair(P.X, P.Y))) ++Missing;
+					}
+					Wanted += Drawn;
+					Extra += static_cast<long>(Have.size()) - Drawn;
+					// (holes older than the marks' wait)
+					for (const auto& M : Mesh)
+						for (const auto& P : M)
+							if (P.first)
+								for (size_t H = 0; H + 1 < Holes.size(); ++H) // (the newest may still be within its wait)
+									if (std::hypot(P.second.X - Holes[H].X, P.second.Y - Holes[H].Y) < Holes[H].R) ++InHoles;
+				}
+			}
+			size_t Places = 0;
+			for (const auto& M : Mesh) Places += M.size();
+			if (Run < 2) continue;
+			for (int Frame = 0; Frame < Frames; ++Frame)
+			{
+				const double Ms = FrameMs[static_cast<size_t>(Frame)];
+				if (CutAt[static_cast<size_t>(Frame)])
+					WorstCut = std::max(WorstCut, Ms);
+				else
+				{
+					WorstMoving = std::max(WorstMoving, Ms);
+					SumMoving += Ms;
+				}
+				if (OldMsAt[static_cast<size_t>(Frame)] < 1e29)
+				{
+					OldSum += OldMsAt[static_cast<size_t>(Frame)];
+					OldWorst = std::max(OldWorst, OldMsAt[static_cast<size_t>(Frame)]);
+				}
+			}
+			std::printf("  clutter in squares: a cut's far squares all laid within %d frames\n", SlowestFill);
+			std::printf("  clutter in squares: %d moving frames %.3f ms mean, worst %.2f ms (at most %d squares made a frame), %d cuts worst %.2f ms; "
+			            "the old box made %d times, %.2f ms mean, worst %.2f ms; %d squares laid again (holes, reach); %ld puts, %ld hides, %zu places for %zu laid at most; "
+			            "%ld of %ld drawn things missing over %d settled frames, %.2f laid for each drawn\n",
+				Moving, Moving ? SumMoving / Moving : 0.0, WorstMoving, MostMade, Cuts, WorstCut, OldLays, OldLays ? OldSum / OldLays : 0.0, OldWorst, Relaid, Puts, Hides, Places,
+				PeakLaid, Missing, Wanted, Settled, Wanted ? static_cast<double>(Wanted + Extra) / Wanted : 0.0);
+			Check(BadOps == 0 && Ops > 0, "the grass squares' places kept straight (new ones at the end, a put only into a free place, a hide only of a laid one)",
+			      Fmt("%.0f wrong of %.0f", static_cast<double>(BadOps), static_cast<double>(Ops)));
+			Check(Settled >= 40 && Missing == 0 && InHoles == 0, "the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again",
+			      Fmt("%.0f missing of %.0f, %.0f in holes", static_cast<double>(Missing), static_cast<double>(Wanted), static_cast<double>(InHoles)) + Fmt(", %.0f settled frames", Settled));
+			Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end)", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
+			Check(Moving > 0 && WorstMoving < 0.5 * OldWorst, "a moving eye's grass costs under half the old box's re-lay in its worst frame",
+			      Fmt("worst %.2f ms against %.2f ms", WorstMoving, OldWorst));
+			Check(WorstCut <= 1.1 * OldWorst && SlowestFill <= 20, "a cut's grass costs no more than the old box's re-lay, and its far squares follow within a third of a second",
+			      Fmt("worst %.2f ms against %.2f ms, ", WorstCut, OldWorst) + Fmt("%.0f frames", SlowestFill));
+		}
+	}
+
+	// The footprint shade under a tank, a gun, a standing man and a prone one (LandShade, the art director's cut 4 fix
+	// 3): laid without a fold or an overlap (it multiplies, so an overlap would be a dark seam), deepest under the
+	// belly, at the outline's share there, back to nothing 0.8 to 1.2 m out with no straight edge, and small.
+	{
+		struct Kind
+		{
+			const char* Name;
+			LandShade::Shape S;
+		};
+		const Kind Kinds[] = { { "tank", LandShade::Tank(-3.2, -1.85, 3.2, 1.85) }, { "gun", LandShade::Gun(-3.5, -0.9, 1.2, 0.9) },
+			{ "standing man", LandShade::Standing() }, { "prone man", LandShade::Prone() }, { "body", LandShade::Body() } };
+		for (const Kind& K : Kinds)
+		{
+			LandShade::Mesh M;
+			LandShade::Make(K.S, M);
+			const LandShade::Fitted Fi = LandShade::Fit(K.S);
+			const size_t N = M.Count();
+			double Area = 0.0, Folded = 0.0;
+			for (size_t Tri = 0; Tri + 2 < M.Triangles.size(); Tri += 3)
+			{
+				const float* A = &M.Points[M.Triangles[Tri] * 3];
+				const float* B = &M.Points[M.Triangles[Tri + 1] * 3];
+				const float* C = &M.Points[M.Triangles[Tri + 2] * 3];
+				const double Twice = (static_cast<double>(B[0]) - A[0]) * (static_cast<double>(C[1]) - A[1]) - (static_cast<double>(B[1]) - A[1]) * (static_cast<double>(C[0]) - A[0]);
+				Area += 0.5 * Twice;
+				if (Twice < -1e-6) Folded += -0.5 * Twice;
+			}
+			// (the outer ring's own area: with no triangle turned over, the triangles' areas add up to it only if none
+			// overlaps)
+			const size_t Ring = (N - 1) / 9, OuterAt = 1 + 8 * Ring;
+			double Outline = 0.0, NearestOut = 1e9, FarthestOut = 0.0, Deepest = 1.0, AtEdge = 0.0, EdgeCount = 0.0, OuterLight = 1.0;
+			bool bInOrder = true;
+			for (size_t I = 0; I < Ring; ++I)
+			{
+				const float* A = &M.Points[(OuterAt + I) * 3];
+				const float* B = &M.Points[(OuterAt + (I + 1) % Ring) * 3];
+				Outline += 0.5 * (static_cast<double>(A[0]) * B[1] - static_cast<double>(B[0]) * A[1]);
+				const double D = LandShade::Outside(Fi, A[0], A[1]);
+				NearestOut = std::min(NearestOut, D);
+				FarthestOut = std::max(FarthestOut, D);
+				OuterLight = std::min(OuterLight, static_cast<double>(M.Light[OuterAt + I]));
+				AtEdge += M.Light[1 + 3 * Ring + I];
+				EdgeCount += 1.0;
+				for (size_t J = 0; J + 1 < 9; ++J)
+					if (M.Light[1 + (J + 1) * Ring + I] + 1e-6 < M.Light[1 + J * Ring + I]) bInOrder = false;
+			}
+			for (size_t I = 0; I < N; ++I) Deepest = std::min(Deepest, static_cast<double>(M.Light[I]));
+			AtEdge = EdgeCount > 0.0 ? AtEdge / EdgeCount : 0.0;
+			const double Lo = K.S.Feather * (1.0 - K.S.Wander) - 0.02, Hi = K.S.Feather * (1.0 + K.S.Wander) + 0.02;
+			std::printf("  footprint shade, %s: %zu points, %zu triangles; deepest %.2f, at the outline %.2f, back to %.2f between %.2f and %.2f m out\n", K.Name, N,
+				M.Triangles.size() / 3, Deepest, AtEdge, OuterLight, NearestOut, FarthestOut);
+			Check(Folded < 1e-9 && std::fabs(Area - Outline) < 1e-4 * std::max(1.0, Outline), (std::string("the ") + K.Name + "'s footprint shade laid without a fold or an overlap").c_str(),
+				Fmt("%.4f m2 turned over, ", Folded) + Fmt("%.4f m2 laid for ", Area) + Fmt("%.4f m2 inside its edge", Outline));
+			Check(std::fabs(Deepest - K.S.Belly) < 0.01 && std::fabs(AtEdge - K.S.Edge) < 0.01 && OuterLight > 0.999 && bInOrder,
+				(std::string("the ") + K.Name + "'s footprint shade deepest under it, its share at the outline, lighter outward, nothing at its edge").c_str(),
+				Fmt("deepest %.2f, ", Deepest) + Fmt("outline %.2f, ", AtEdge) + Fmt("edge %.2f", OuterLight));
+			Check(NearestOut >= Lo && FarthestOut <= Hi && FarthestOut - NearestOut >= K.S.Feather * K.S.Wander && N < 1500,
+				(std::string("the ") + K.Name + "'s footprint shade fades out over its feather, its edge wavering, in under 1,500 points").c_str(),
+				Fmt("%.2f to ", NearestOut) + Fmt("%.2f m out, ", FarthestOut) + Fmt("%.0f points", static_cast<double>(N)));
+		}
 	}
 
 	Check(Build < 2.0, "built in under two seconds", Fmt("%.2f s", Build));

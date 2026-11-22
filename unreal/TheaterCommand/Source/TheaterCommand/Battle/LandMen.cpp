@@ -73,7 +73,7 @@ namespace LandMen
 				if (!Value(Out)) { OutError = Error.empty() ? std::string("bad JSON") : Error; return false; }
 				return true;
 			}
-		private:
+		protected:
 			const char* P = nullptr;
 			const char* E = nullptr;
 			std::string Error;
@@ -289,6 +289,154 @@ namespace LandMen
 			Reader R(Text);
 			return R.Read(Out, OutError);
 		}
+
+		/**
+		 * JSON read as it goes, for a live battle's deltas: Extend runs on the game thread between frames, and a delta of
+		 * a few hundred kilobytes read into a tree costs milliseconds, most of them making and freeing its nodes. Here
+		 * the caller walks the members and lists it wants and the rest is skipped; numbers are read as the tree reads
+		 * them (Reader's own), so a delta gives exactly what the same text read whole would.
+		 */
+		/** A name is this word (the length known at compile time: no strlen, as == with a C string would make). */
+		template <size_t N> inline bool Is(const std::string& Name, const char (&Word)[N])
+		{
+			return Name.size() == N - 1 && std::memcmp(Name.data(), Word, N - 1) == 0;
+		}
+
+		class Scan : public Reader
+		{
+		public:
+			explicit Scan(const std::string& Source) : Reader(Source) {}
+
+			/** A plain value as the tree would hold it (a list or an object is skipped and only its kind kept). */
+			struct Plain
+			{
+				J::Type K = J::Null;
+				bool B = false;
+				double N = 0.0;
+				std::string S;
+				/** As J::Num0: a number, a truth as 1 or 0, else the default. */
+				double Num0(double Default = 0.0) const { return K == J::Num ? N : K == J::Bool ? (B ? 1.0 : 0.0) : Default; }
+				/** As J::Number on a list's item: a number, else the default. */
+				double Number(double Default = 0.0) const { return K == J::Num ? N : Default; }
+				std::string Text(const char* Default = "") const { return K == J::Str ? S : std::string(Default); }
+			};
+
+			const std::string& Problem() const { return Error; }
+
+			/** Each member of an object, its name to Each, which reads its value (or skips it). */
+			template <typename F> bool Members(F&& Each)
+			{
+				Ws();
+				if (P >= E || *P != '{') return Fail("an object expected");
+				++P;
+				Ws();
+				if (P < E && *P == '}') { ++P; return true; }
+				std::string Key;    // (its own: Each may read an object within)
+				for (;;)
+				{
+					Ws();
+					if (P >= E || *P != '"') return Fail("a name expected");
+					if (!String(Key)) return false;
+					Ws();
+					if (P >= E || *P != ':') return Fail("a colon expected");
+					++P;
+					if (!Each(static_cast<const std::string&>(Key))) return false;
+					Ws();
+					if (P < E && *P == ',') { ++P; continue; }
+					if (P < E && *P == '}') { ++P; return true; }
+					return Fail("a comma or a brace expected");
+				}
+			}
+
+			/** Each item of a list, its number to Each, which reads it (or skips it). */
+			template <typename F> bool Items(F&& Each)
+			{
+				Ws();
+				if (P >= E || *P != '[') return Fail("a list expected");
+				++P;
+				Ws();
+				if (P < E && *P == ']') { ++P; return true; }
+				for (size_t I = 0;; ++I)
+				{
+					if (!Each(I)) return false;
+					Ws();
+					if (P < E && *P == ',') { ++P; continue; }
+					if (P < E && *P == ']') { ++P; return true; }
+					return Fail("a comma or a bracket expected");
+				}
+			}
+
+			/** Whether the next value is a list, or an object. */
+			bool AtList()
+			{
+				Ws();
+				return P < E && *P == '[';
+			}
+			bool AtObject()
+			{
+				Ws();
+				return P < E && *P == '{';
+			}
+
+			/** A plain value (a list or an object skipped). */
+			bool Value(Plain& Out)
+			{
+				Ws();
+				Out.K = J::Null;
+				if (P >= E) return Fail("the text ended early");
+				const char C = *P;
+				if (C == '"') { Out.K = J::Str; return String(Out.S); }
+				if (C == '{' || C == '[') { Out.K = C == '{' ? J::Obj : J::Arr; return Skip(); }
+				if (C == 't' || C == 'f' || C == 'n')
+				{
+					const char* Word = C == 't' ? "true" : C == 'f' ? "false" : "null";
+					const size_t Len = std::strlen(Word);
+					if (static_cast<size_t>(E - P) < Len || std::strncmp(P, Word, Len) != 0) return Fail("a bad word");
+					P += Len;
+					if (C != 'n') { Out.K = J::Bool; Out.B = C == 't'; }
+					return true;
+				}
+				Out.K = J::Num;
+				return Number(Out.N);
+			}
+
+			/** Any value, passed over. */
+			bool Skip()
+			{
+				Ws();
+				if (P >= E) return Fail("the text ended early");
+				if (*P == '"') return SkipString();
+				if (*P == '{' || *P == '[')
+				{
+					int Open = 0;
+					while (P < E)
+					{
+						const char C = *P;
+						if (C == '"') { if (!SkipString()) return false; continue; }
+						++P;
+						if (C == '{' || C == '[') ++Open;
+						else if ((C == '}' || C == ']') && --Open == 0) return true;
+					}
+					return Fail("a list left open");
+				}
+				const char* From = P;
+				while (P < E && *P != ',' && *P != '}' && *P != ']' && *P != ' ' && *P != '\n' && *P != '\r' && *P != '\t') ++P;
+				return P > From || Fail("a value expected");
+			}
+
+		private:
+			bool SkipString()
+			{
+				++P;
+				while (P < E)
+				{
+					const char C = *P++;
+					if (C == '"') return true;
+					if (C == '\\') ++P;
+				}
+				return Fail("a string left open");
+			}
+		};
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Small maths.
@@ -1047,6 +1195,7 @@ namespace LandMen
 			Class Cl = Up;
 			bool bRifleDown = false;
 			bool bFiring = false;           // a firing pose: its clip's shots come from the rounds
+			bool bMoving = false;           // he moved just after the change (a horse holder walks his horses)
 			std::string Pose, Cover;
 			double T = 0.0;                 // when the rules gave it (battle time)
 		};
@@ -1101,13 +1250,21 @@ namespace LandMen
 			};
 			std::vector<Change> Ch;
 			double D = -1.0, OutT = -1.0;
+			// A live battle's (Extend): the last point is provisional (where he stands at the delta's time, after his
+			// kept points), and whether he is on the map yet (TrackOf, and his man), which he is from his first point.
+			bool bTail = false;
+			bool bPlaced = false;
+			int Man = -1;               // his man, or -1 (a tank's, a gun's, a lorry's track)
 
 			/** Where he was at time Tm (lerped between kept points, the facing turned the short way) and his speed. */
 			void At(double Tm, size_t& Cursor, double& OX, double& OY, float& OF, float& OV) const
 			{
 				const size_t N = T.size();
 				if (N == 0) { OX = OY = 0.0; OF = 0.f; OV = 0.f; return; }
-				if (Cursor >= N || T[Cursor] > Tm) Cursor = 0;
+				// (the cursor backs up to the point at or before Tm: a provisional last point replaced by a nearer one
+				// leaves it past the end, and going back in time leaves it ahead; either way the same point is found)
+				if (Cursor >= N) Cursor = N - 1;
+				while (Cursor > 0 && T[Cursor] > Tm) --Cursor;
 				while (Cursor + 1 < N && T[Cursor + 1] <= Tm) ++Cursor;
 				if (Cursor + 1 >= N || Tm <= T[0])
 				{
@@ -1122,6 +1279,58 @@ namespace LandMen
 				OY = Y[I] + (Y[I + 1] - Y[I]) * U;
 				OF = static_cast<float>(F[I] + Turn(F[I], F[I + 1]) * U);
 				OV = Span > 1e-9 ? static_cast<float>(std::hypot(X[I + 1] - X[I], Y[I + 1] - Y[I]) / Span) : 0.f;
+			}
+
+			/** A cursor at the last point at or before Tm (0 when none), so At need not walk the track from its start. */
+			size_t CursorAt(double Tm) const
+			{
+				const auto It = std::upper_bound(T.begin(), T.end(), Tm);
+				return It == T.begin() ? 0 : static_cast<size_t>(It - T.begin()) - 1;
+			}
+
+			/** The last kept point's time (the provisional one is not kept), or -1e18 with none. */
+			double KeptUntil() const
+			{
+				const size_t Kept = T.size() - (bTail && !T.empty() ? 1 : 0);
+				return Kept > 0 ? T[Kept - 1] : -1e18;
+			}
+
+			/** Who he is, as a recording's track or a live delta's new track gives it: block, model, follower, role. */
+			void ReadWho(const struct J& Src)
+			{
+				B = static_cast<int>(Src["b"].Num0());
+				K = static_cast<int>(Src["k"].Num0());
+				J = std::max(0, static_cast<int>(Src["j"].Num0()));
+				Role = Src["r"].Text();
+				bFo = Src["fo"].Num0() != 0.0;
+			}
+
+			/** Kept points [t, x, y, f], appended. */
+			void ReadPoints(const struct J& At)
+			{
+				for (size_t P = 0; P < At.Size(); ++P)
+				{
+					const struct J& Pt = At.At(P);
+					T.push_back(Pt.Number(0));
+					X.push_back(Pt.Number(1));
+					Y.push_back(Pt.Number(2));
+					F.push_back(static_cast<float>(Pt.Number(3)));
+				}
+			}
+
+			/** Changes [t, pose, cover, aimX, aimY, hidden, buttoned], appended. */
+			void ReadChanges(const struct J& Chs)
+			{
+				for (size_t P = 0; P < Chs.Size(); ++P)
+				{
+					const struct J& C = Chs.At(P);
+					Change Cg;
+					Cg.T = C.At(0).Num0();
+					Cg.Pose = C.At(1).Text("idle");
+					Cg.Cover = C.At(2).Text("none");
+					Cg.bHidden = C.At(5).Num0() != 0.0;
+					Ch.push_back(Cg);
+				}
 			}
 		};
 
@@ -1166,6 +1375,54 @@ namespace LandMen
 		};
 	}
 
+	namespace
+	{
+		/** A round as the men read it: who fired it (by, k, j), when and with what, and whom it struck (on, ok, oj). */
+		struct RoundRow
+		{
+			bool bBy = false, bByK = false, bOnK = false; // (by, k and ok written)
+			double By = 0.0, ByK = 0.0, ByJ = 0.0, On = 0.0, OnK = 0.0, OnJ = 0.0;
+			double T = 0.0, X = 0.0, Y = 0.0;
+			std::string W, R;
+
+			/** One member of a round's object (a live delta's, read as it goes). */
+			void Set(const std::string& Key, const Scan::Plain& V)
+			{
+				if (Is(Key, "by")) { bBy = V.K != J::Null; By = V.Num0(); }
+				else if (Is(Key, "k")) { bByK = V.K != J::Null; ByK = V.Num0(); }
+				else if (Is(Key, "j")) ByJ = V.Num0();
+				else if (Is(Key, "on")) On = V.Num0();
+				else if (Is(Key, "ok")) { bOnK = V.K != J::Null; OnK = V.Num0(); }
+				else if (Is(Key, "oj")) OnJ = V.Num0();
+				else if (Is(Key, "t")) T = V.Num0();
+				else if (Is(Key, "x")) X = V.Num0();
+				else if (Is(Key, "y")) Y = V.Num0();
+				else if (Is(Key, "w")) W = V.Text();
+				else if (Is(Key, "r")) R = V.Text();
+			}
+		};
+
+		RoundRow RowOf(const J& Rd)
+		{
+			RoundRow Row;
+			Row.bBy = Rd.Has("by");
+			Row.By = Rd["by"].Num0();
+			Row.bByK = Rd.Has("k");
+			Row.ByK = Rd["k"].Num0();
+			Row.ByJ = Rd["j"].Num0();
+			Row.bOnK = Rd.Has("ok");
+			Row.On = Rd["on"].Num0();
+			Row.OnK = Rd["ok"].Num0();
+			Row.OnJ = Rd["oj"].Num0();
+			Row.T = Rd["t"].Num0();
+			Row.X = Rd["x"].Num0();
+			Row.Y = Rd["y"].Num0();
+			Row.W = Rd["w"].Text();
+			Row.R = Rd["r"].Text();
+			return Row;
+		}
+	}
+
 	struct Crowd::Impl
 	{
 		struct Man
@@ -1186,6 +1443,20 @@ namespace LandMen
 			Weapon KillW = Weapon::Other;
 			std::string KillWeapon;
 			double KillX = 0.0, KillY = 0.0;
+			/** Every round that killed him, in the recording's order: the one nearest his fall is his kill (ChooseKill),
+			 * chosen again when a live delta brings another, or brings his fall after them. */
+			struct Kill
+			{
+				double T = 0.0, X = 0.0, Y = 0.0;
+				int By = -1, K = -1, J = 0;
+				std::string Weapon;
+			};
+			std::vector<Kill> Kills;
+			// A live battle's: his stances before Firm are settled (each read his speed between kept points, which never
+			// change); the rest read it from a provisional point or past his last, and are made again as his track grows.
+			// bIdle: he had no change yet, so his one stance is the idle Build gives such a man.
+			size_t Firm = 0;
+			bool bIdle = false;
 
 			// Now.
 			enum Life : uint8_t { Alive, Falling, Settling, Rest } State = Alive;
@@ -1202,7 +1473,7 @@ namespace LandMen
 			double Last = -1.0;
 			uint32_t Stamp = 0;
 			Lod L = Far;
-			float EyeD = 1e9f;              // his distance from the eye at the last Update
+			float EyeD = 1e9f;              // his distance from the eye at the last Update, as the picture sees it (over the zoom)
 			Pose Now;
 			Xform Model[MaxBones];          // the bones in his own axes
 			Xform World;
@@ -1237,12 +1508,34 @@ namespace LandMen
 		std::map<std::tuple<int, int, int>, int> TrackOf;   // (block, k, j)
 		std::vector<Man> Men;
 		std::map<std::tuple<int, int, int>, int> ManOf;     // (block, k, j)
+		std::vector<int> TrackOfN;  // a live delta's track number (n) -> Tracks
+		/** A live delta's news of one track, as read (Extend): who a new one is, and where in the delta's lists its new
+		 * kept points and changes are. */
+		struct News
+		{
+			int N = -1;
+			bool bWho = false;      // b written: who a new track is
+			int B = 0, K = 0, J = 0;
+			std::string Role;
+			bool bFo = false;
+			size_t AtFrom = 0, AtTo = 0, ChFrom = 0, ChTo = 0;
+			bool bD = false, bOut = false;
+			double D = 0.0, Out = 0.0;
+		};
+		// (kept from one delta to the next, so reading one makes nothing new)
+		std::vector<News> NewsRead;
+		std::vector<double> PointsRead;            // [t, x, y, f] each
+		std::vector<TrackData::Change> ChangesRead;
+		std::vector<double> TailsRead;
+		std::vector<RoundRow> RoundsRead;
+		std::map<int, std::pair<std::string, std::string>> BlockArmy; // block id -> (army, file army)
 		bool bSections = false;     // the recording has followers (the drill's sections)
 		GroundFn GroundAt;
 		uint64_t Seed = 1;
 		int MonthNo = 0;
 		std::string SeasonName = "summer", Front = "west";
 		double EyeX = 1e9, EyeY = 1e9, EyeZ = 1e9;
+		double EyeZoom = 1.0; // (SetEye's Zoom)
 		double Clock = -1.0;  // the battle time of the last Update
 		bool bThrift = false; // far men posed every few frames (SetThrift)
 		/** Life seconds a battle second (SetLife): a clip's seconds are life's, laid on the battle's clock at 1 / Life. */
@@ -1646,13 +1939,14 @@ namespace LandMen
 
 		void PlanShots(Man& M)
 		{
+			// (Planned again whenever rounds are booked: a live battle's come a delta at a time. What was already shown
+			// of a round, its bullets and its clip's last time, stays shown; Reset starts them over. Each round's plan
+			// is made again because the next one cuts a burst short and squeezes a clip.)
 			std::stable_sort(M.Shots.begin(), M.Shots.end(), [](const Shot& A, const Shot& B) { return A.T < B.T; });
 			const Soldier& S = *M.S;
 			for (size_t I = 0; I < M.Shots.size(); ++I)
 			{
 				Shot& Sh = M.Shots[I];
-				Sh.Done = 0;
-				Sh.LastC = -1.f;
 				const Stance& St = M.Stances.empty() ? Stance() : StanceAt(M, Sh.T);
 				Sh.Rate2 = 1.f;
 				if (Sh.W == Weapon::Mortar)
@@ -2408,31 +2702,272 @@ namespace LandMen
 			++M.Stamp;
 		}
 
+		/** One man back to the start of the battle (a man new to a live battle starts there too). */
+		static void ResetMan(Man& M)
+		{
+			M.State = Man::Alive;
+			M.AtCursor = M.ChCursor = 0;
+			M.Shown = -1;
+			M.EndClass = M.Stances.empty() ? Up : M.Stances[0].Cl;
+			M.Prev = M.Cur = Segment();
+			M.bPrev = false;
+			M.Queue.clear();
+			M.Fade = 1.f;
+			M.bVisible = true;
+			M.Last = -1.0;
+			M.FallClip = -1;
+			M.Info.FallClip.clear();
+			M.Info.FallKind.clear();
+			M.Info.FallStarted = M.Info.Rested = -1.0;
+			for (int L = 0; L < LodCount; ++L) { M.bSkinned[L] = false; M.RestAt[L].clear(); M.RestFacing[L].clear(); }
+			for (Shot& Sh : M.Shots) { Sh.Done = 0; Sh.LastC = -1.f; }
+			M.ShotCur = 0;
+			RestPose(M.Now);
+		}
+
 		void Reset()
 		{
-			for (Man& M : Men)
-			{
-				M.State = Man::Alive;
-				M.AtCursor = M.ChCursor = 0;
-				M.Shown = -1;
-				M.EndClass = M.Stances.empty() ? Up : M.Stances[0].Cl;
-				M.Prev = M.Cur = Segment();
-				M.bPrev = false;
-				M.Queue.clear();
-				M.Fade = 1.f;
-				M.bVisible = true;
-				M.Last = -1.0;
-				M.FallClip = -1;
-				M.Info.FallClip.clear();
-				M.Info.FallKind.clear();
-				M.Info.FallStarted = M.Info.Rested = -1.0;
-				for (int L = 0; L < LodCount; ++L) { M.bSkinned[L] = false; M.RestAt[L].clear(); M.RestFacing[L].clear(); }
-				for (Shot& Sh : M.Shots) { Sh.Done = 0; Sh.LastC = -1.f; }
-				M.ShotCur = 0;
-				RestPose(M.Now);
-			}
+			for (Man& M : Men) ResetMan(M);
 			Falls = FallMemory();
 			Clock = -1.0;
+		}
+
+		// ---------------------------------------------------------------------------------------------------------
+		// The men from the tracks. Build reads a whole recording, Extend a live battle a delta at a time; both make a
+		// track's man, his stances, his shots and his kill with these, so a battle grown delta by delta is the battle
+		// read whole.
+		// ---------------------------------------------------------------------------------------------------------
+		/** A track on the map, found by its block, model and follower (a round's shooter, a section's key man). */
+		void Place(int TrackIx)
+		{
+			TrackData& Tr = Tracks[static_cast<size_t>(TrackIx)];
+			Tr.bPlaced = true;
+			TrackOf[{ Tr.B, Tr.K, Tr.J }] = TrackIx;
+			bSections = bSections || Tr.J > 0;
+		}
+
+		/**
+		 * The man of a track of a man's role (tanks, guns and lorries are the scene's own; and a section's followers'
+		 * roles: its leader, an MG's or a tube's number two and the ammunition bearers, a gun's crew), appended: his
+		 * soldier file, his looks, his stances, his meshes. False only when no soldier file draws his army.
+		 */
+		bool MakeMan(int TrackIx, std::string& OutError)
+		{
+			TrackData& Tr = Tracks[static_cast<size_t>(TrackIx)];
+			static const char* MenRoles[] = { "officer", "rifle", "mg", "at", "sapper", "holder", "fo", "hmg", "mortar", "leader", "loader", "crew" };
+			bool bMan = false;
+			for (const char* R : MenRoles) bMan = bMan || Tr.Role == R;
+			if (!bMan) return true;
+			const auto Found = BlockArmy.find(Tr.B);
+			const std::string Army = Found != BlockArmy.end() ? Found->second.first : "GER";
+			std::string File = Found != BlockArmy.end() ? Found->second.second : Army;
+			// (the army's own soldier file when it has one, whatever the recording stood in for it when it was made)
+			if (Soldiers.find(Army) != Soldiers.end()) File = Army;
+			const auto Colours = Armies.find(Army);
+			if (Colours != Armies.end() && !Colours->second.StandIn.empty() && Soldiers.find(Army) == Soldiers.end()) File = Colours->second.StandIn;
+			// (a machine gunner from the army's gunner's file where it has one: the American's BAR, soldier_USA_bar)
+			if (Tr.Role == "mg" && Soldiers.find(File + "_bar") != Soldiers.end()) File += "_bar";
+			// (a section's leader with his nation's leader's arm: the Gruppenfuehrer's MP 40, the Soviet squad leader's
+			// PPSh, the British section leader's Sten, from the army's _smg file where one is made; until then, and for
+			// the American squad leader, whose issue in 1944 was the M1 rifle, the army's rifleman's file)
+			if (Tr.Role == "leader" && LeaderCarriesSmg(Army) && Soldiers.find(File + "_smg") != Soldiers.end()) File += "_smg";
+			// (the American squad leader from the soldiers thread's _nco file: a staff sergeant's chevrons and the Thompson
+			// that many in Normandy carried in place of the M1; the sound's smgCue plays its bursts)
+			else if (Tr.Role == "leader" && Soldiers.find(File + "_nco") != Soldiers.end()) File += "_nco";
+			// (an anti-tank team: its gunner from the army's _bazooka file, and his number two, the loader who follows
+			// him, from its _loader file, where the army has them: the American's 2.36-inch rocket launcher team)
+			if (Tr.Role == "at" && Soldiers.find(File + "_bazooka") != Soldiers.end()) File += "_bazooka";
+			// (a battery's spotter with the army's radio man where it has one: the American's SCR-300 on his back)
+			if (Tr.Role == "fo" && Soldiers.find(File + "_radio") != Soldiers.end()) File += "_radio";
+			if (Tr.Role == "loader" && Tr.J > 0 && Soldiers.find(File + "_loader") != Soldiers.end())
+			{
+				const auto Key = TrackOf.find({ Tr.B, Tr.K, 0 });
+				if (Key != TrackOf.end() && Tracks[static_cast<size_t>(Key->second)].Role == "at") File += "_loader";
+			}
+			auto Sol = Soldiers.find(File);
+			if (Sol == Soldiers.end()) Sol = Soldiers.find(Army);
+			if (Sol == Soldiers.end() || !Sol->second)
+			{
+				OutError = "no soldier file for the " + Army + " men (" + File + ")";
+				return false;
+			}
+			// (made in place: a man is some 9 KB, too big to make and then copy in)
+			Man& Mn = Men.emplace_back();
+			Mn.Track = TrackIx;
+			Mn.S = Sol->second.get();
+			static const ArmyColours Plain;
+			Mn.Colours = Colours != Armies.end() ? &Colours->second : &Plain;
+			Mn.Info.Block = Tr.B;
+			Mn.Info.K = Tr.K;
+			Mn.Info.J = Tr.J;
+			Mn.Info.Role = Tr.Role;
+			Mn.Info.Army = Army;
+			Mn.Info.FileArmy = Sol->first;
+			Mn.Info.bFo = Tr.bFo;
+			Mn.Info.Dead = Tr.D;
+			Mn.Info.Out = Tr.D >= 0.0 ? -1.0 : Tr.OutT; // (a dead man never leaves: he lies where he fell)
+			// His own looks and his own small differences, from his block and model, so he keeps them all battle and
+			// from one run to the next: the face (a hash mod 8), the helmet's finish (a second hash, by share), a lag of
+			// up to a fifth of a second behind the recording, a play rate of 0.95 to 1.05 on his still loops and turns
+			// of pose, and where in its loop his first step falls.
+			// (a follower's own: his j stirred in, so a key man's looks are as they were before sections)
+			const uint64_t Who = ((static_cast<uint64_t>(static_cast<uint32_t>(Tr.B)) << 32) ^ static_cast<uint64_t>(static_cast<uint32_t>(Tr.K)))
+				^ (Tr.J > 0 ? Mix(0xF0110ull + static_cast<uint64_t>(Tr.J)) : 0ull);
+			const Soldier& S = *Mn.S;
+			Mn.Info.Face = S.Faces.empty() ? 0 : static_cast<int>(Mix(Who ^ 0xFACEull) % 8ull) % static_cast<int>(S.Faces.size());
+			Mn.Info.Finish = -1;
+			if (Mn.Colours->bFileFinishes)
+			{
+				std::vector<std::pair<int, double>> Fit;
+				double Sum = 0.0;
+				for (size_t F = 0; F < S.Finishes.size(); ++F)
+				{
+					const Finish& Fi = S.Finishes[F];
+					const bool bWhen = MonthNo >= Fi.From && MonthNo <= Fi.To;
+					const bool bSeason = Fi.Season == "any" || Fi.Season == SeasonName;
+					const bool bFront = Fi.Front == "any" || Fi.Front == Front;
+					if (bWhen && bSeason && bFront && Fi.Share > 0.0) { Fit.push_back({ static_cast<int>(F), Fi.Share }); Sum += Fi.Share; }
+				}
+				if (!Fit.empty())
+				{
+					double R = Unit01(Who ^ 0x4E1A7Eull) * Sum;
+					Mn.Info.Finish = Fit.back().first;
+					for (const auto& F : Fit)
+					{
+						R -= F.second;
+						if (R <= 0.0) { Mn.Info.Finish = F.first; break; }
+					}
+				}
+				// (No finish fits the date: his own helmet, painted his army's helmet colour.)
+			}
+			Mn.Info.Delay = 0.2 * Unit01(Who ^ 0xDE1Aull);
+			Mn.Info.Jitter = static_cast<float>(0.95 + 0.1 * Unit01(Who ^ 0x7177E5ull));
+			Mn.PhaseSeed = static_cast<float>(Unit01(Who ^ 0x57E9ull));
+			MakeStances(Mn);
+			// His mesh without his helmet (where a finish is drawn) and his face's rest points, made now rather than on
+			// the frame he first comes into view (a few milliseconds each the first time).
+			for (int L = 0; L < LodCount; ++L)
+			{
+				Mn.FaceAt[L] = &FaceRestOf(Mn.S, OwnHelmet(Mn), L, Mn.Info.Face);
+				Mn.Var[L] = &VariantOf(Mn.S, OwnHelmet(Mn), L);
+			}
+			Tr.Man = static_cast<int>(Men.size()) - 1;
+			ManOf[{ Tr.B, Tr.K, Tr.J }] = Tr.Man;
+			return true;
+		}
+
+		/**
+		 * His stances, one per change of his track, each from the change's pose (a horse holder's by whether he moves
+		 * just after it); a man with no change yet stands idle. Made from Firm on: a live battle's track grows, and a
+		 * stance that read his speed past his last kept point is made again when the next ones come.
+		 */
+		void MakeStances(Man& Mn)
+		{
+			const TrackData& Tr = Tracks[static_cast<size_t>(Mn.Track)];
+			const Soldier& S = *Mn.S;
+			if (Mn.bIdle && !Tr.Ch.empty())
+			{
+				// (his first changes came: they take the idle's place, and he turns to the first of them)
+				Mn.Stances.clear();
+				Mn.Firm = 0;
+				Mn.bIdle = false;
+				Mn.Shown = -1;
+			}
+			for (size_t C = Mn.Firm; C < Tr.Ch.size(); ++C)
+			{
+				const TrackData::Change& Cg = Tr.Ch[C];
+				size_t Cursor = Tr.CursorAt(Cg.T + 0.05);
+				double X = 0.0, Y = 0.0;
+				float F = 0.f, V = 0.f;
+				Tr.At(Cg.T + 0.05, Cursor, X, Y, F, V);
+				const bool bMoving = V > 0.2f;
+				// (the same pose, moving or not as before: the same stance)
+				if (C < Mn.Stances.size() && Mn.Stances[C].bMoving == bMoving) continue;
+				// (and his own soldier and role: a pose he took a little before, moving or not alike, is drawn alike)
+				const Stance* Like = nullptr;
+				for (size_t B = std::min(C, Mn.Stances.size()), Back = 0; B > 0 && Back < 8 && !Like; --B, ++Back)
+				{
+					const Stance& O = Mn.Stances[B - 1];
+					if (O.bMoving == bMoving && O.Pose == Cg.Pose) Like = &O;
+				}
+				Stance St = Like ? *Like : StanceOf(S, Tr.Role, Cg.Pose, bMoving);
+				St.T = Cg.T;
+				St.Cover = Cg.Cover;
+				St.bMoving = bMoving;
+				if (C < Mn.Stances.size()) Mn.Stances[C] = std::move(St);
+				else Mn.Stances.push_back(std::move(St));
+			}
+			if (Mn.Stances.empty())
+			{
+				Stance St = StanceOf(S, Tr.Role, "idle", false);
+				St.T = Tr.T.front();
+				Mn.Stances.push_back(St);
+				Mn.bIdle = true;
+			}
+			const double Kept = Tr.KeptUntil();
+			while (Mn.Firm < Tr.Ch.size() && Tr.Ch[Mn.Firm].T + 0.05 < Kept) ++Mn.Firm;
+		}
+
+		void Fire(int Ix, double T, Weapon W)
+		{
+			if (Ix < 0 || Ix >= static_cast<int>(Men.size())) return;
+			Man& Mn = Men[static_cast<size_t>(Ix)];
+			Shot Sh;
+			Sh.T = T;
+			Sh.W = W;
+			Mn.Shots.push_back(Sh);
+			Mn.bShotsDirty = true;
+		}
+
+		/** A round: his shot booked to the man who fired it, and a kill kept for the man it struck (Struck: his number). */
+		void Book(const RoundRow& R, int* Struck)
+		{
+			// (the man of the section who fired it, j, and the man it struck, oj: 0, or none written, the key man)
+			if (Struck) *Struck = -1;
+			if (R.bBy && R.bByK)
+			{
+				const auto Found = ManOf.find({ static_cast<int>(R.By), static_cast<int>(R.ByK), std::max(0, static_cast<int>(R.ByJ)) });
+				if (Found != ManOf.end()) Fire(Found->second, R.T, WeaponOf(R.W));
+			}
+			if (R.R == "kill" && R.bOnK)
+			{
+				const auto Found = ManOf.find({ static_cast<int>(R.On), static_cast<int>(R.OnK), std::max(0, static_cast<int>(R.OnJ)) });
+				if (Found == ManOf.end()) return;
+				Man::Kill K;
+				K.T = R.T;
+				K.By = R.bBy ? static_cast<int>(R.By) : -1;
+				K.K = R.bByK ? static_cast<int>(R.ByK) : -1;
+				K.J = std::max(0, static_cast<int>(R.ByJ));
+				K.Weapon = R.W;
+				K.X = R.X;
+				K.Y = R.Y;
+				Men[static_cast<size_t>(Found->second)].Kills.push_back(std::move(K));
+				if (Struck) *Struck = Found->second;
+			}
+		}
+
+		/** The round a dead man fell to, of those that killed him: the one nearest his fall (the first of equals). */
+		static void ChooseKill(Man& Mn)
+		{
+			Mn.KillT = -1.0;
+			Mn.KillBy = Mn.KillK = -1;
+			Mn.KillJ = 0;
+			Mn.KillW = Weapon::Other;
+			Mn.KillWeapon.clear();
+			Mn.KillX = Mn.KillY = 0.0;
+			if (Mn.Info.Dead < 0.0) return;
+			for (const Man::Kill& K : Mn.Kills)
+			{
+				if (Mn.KillT >= 0.0 && std::fabs(K.T - Mn.Info.Dead) >= std::fabs(Mn.KillT - Mn.Info.Dead)) continue;
+				Mn.KillT = K.T;
+				Mn.KillBy = K.By;
+				Mn.KillK = K.K;
+				Mn.KillJ = K.J;
+				Mn.KillWeapon = K.Weapon;
+				Mn.KillW = WeaponOf(Mn.KillWeapon);
+				Mn.KillX = K.X;
+				Mn.KillY = K.Y;
+			}
 		}
 	};
 
@@ -2486,6 +3021,7 @@ namespace LandMen
 		I.Seed = static_cast<uint64_t>(Root["seed"].Num0(1.0)) * 0x9E3779B97F4A7C15ull + 17;
 		I.Tracks.clear();
 		I.TrackOf.clear();
+		I.TrackOfN.clear();
 		I.Men.clear();
 		I.ManOf.clear();
 		I.bSections = false;
@@ -2524,235 +3060,338 @@ namespace LandMen
 		}
 
 		// Each block's army and the soldier file its men are drawn from.
-		std::map<int, std::pair<std::string, std::string>> BlockArmy; // id -> (army, file army)
+		I.BlockArmy.clear();
 		const J& Bs = Root["blocks"];
 		for (size_t K = 0; K < Bs.Size(); ++K)
 		{
 			const J& B = Bs.At(K);
 			const std::string Army = B["army"].Text(B["nat"].Text("GER").c_str());
 			std::string File = B["standIn"].Text(Army.c_str());
-			BlockArmy[static_cast<int>(B["id"].Num0())] = { Army, File };
+			I.BlockArmy[static_cast<int>(B["id"].Num0())] = { Army, File };
 		}
 
+		// The tracks (a live battle's header has none: Extend brings them), then their men.
 		const J& Ms = Root["men"];
 		for (size_t K = 0; K < Ms.Size(); ++K)
 		{
 			const J& Src = Ms.At(K);
 			TrackData Tr;
-			Tr.B = static_cast<int>(Src["b"].Num0());
-			Tr.K = static_cast<int>(Src["k"].Num0());
-			Tr.J = std::max(0, static_cast<int>(Src["j"].Num0()));
-			Tr.Role = Src["r"].Text();
-			Tr.bFo = Src["fo"].Num0() != 0.0;
-			const J& At = Src["at"];
-			for (size_t P = 0; P < At.Size(); ++P)
-			{
-				const J& Pt = At.At(P);
-				Tr.T.push_back(Pt.Number(0));
-				Tr.X.push_back(Pt.Number(1));
-				Tr.Y.push_back(Pt.Number(2));
-				Tr.F.push_back(static_cast<float>(Pt.Number(3)));
-			}
-			const J& Ch = Src["ch"];
-			for (size_t P = 0; P < Ch.Size(); ++P)
-			{
-				const J& C = Ch.At(P);
-				TrackData::Change Cg;
-				Cg.T = C.At(0).Num0();
-				Cg.Pose = C.At(1).Text("idle");
-				Cg.Cover = C.At(2).Text("none");
-				Cg.bHidden = C.At(5).Num0() != 0.0;
-				Tr.Ch.push_back(Cg);
-			}
+			Tr.ReadWho(Src);
+			Tr.ReadPoints(Src["at"]);
+			Tr.ReadChanges(Src["ch"]);
 			if (Src.Has("d")) Tr.D = Src["d"].Num0();
 			if (Src.Has("out")) Tr.OutT = Src["out"].Num0();
 			if (Tr.T.empty()) continue;
-			I.TrackOf[{ Tr.B, Tr.K, Tr.J }] = static_cast<int>(I.Tracks.size());
-			I.bSections = I.bSections || Tr.J > 0;
 			I.Tracks.push_back(std::move(Tr));
+			I.Place(static_cast<int>(I.Tracks.size()) - 1);
 		}
-
-		// The men: every track of a man's role (tanks, guns and lorries are the scene's own).
-		// (and a section's followers' roles: its leader, an MG's or a tube's number two and the ammunition bearers, a
-		// gun's crew)
-		static const char* MenRoles[] = { "officer", "rifle", "mg", "at", "sapper", "holder", "fo", "hmg", "mortar", "leader", "loader", "crew" };
+		// (room made first: a man is too big to copy about as the list grows)
+		I.Men.reserve(I.Tracks.size());
 		for (size_t K = 0; K < I.Tracks.size(); ++K)
 		{
-			const TrackData& Tr = I.Tracks[K];
-			bool bMan = false;
-			for (const char* R : MenRoles) bMan = bMan || Tr.Role == R;
-			if (!bMan) continue;
-			const auto Found = BlockArmy.find(Tr.B);
-			const std::string Army = Found != BlockArmy.end() ? Found->second.first : "GER";
-			std::string File = Found != BlockArmy.end() ? Found->second.second : Army;
-			// (the army's own soldier file when it has one, whatever the recording stood in for it when it was made)
-			if (I.Soldiers.find(Army) != I.Soldiers.end()) File = Army;
-			const auto Colours = I.Armies.find(Army);
-			if (Colours != I.Armies.end() && !Colours->second.StandIn.empty() && I.Soldiers.find(Army) == I.Soldiers.end()) File = Colours->second.StandIn;
-			// (a machine gunner from the army's gunner's file where it has one: the American's BAR, soldier_USA_bar)
-			if (Tr.Role == "mg" && I.Soldiers.find(File + "_bar") != I.Soldiers.end()) File += "_bar";
-			// (a section's leader with his nation's leader's arm: the Gruppenfuehrer's MP 40, the Soviet squad leader's
-			// PPSh, the British section leader's Sten, from the army's _smg file where one is made; until then, and for
-			// the American squad leader, whose issue in 1944 was the M1 rifle, the army's rifleman's file)
-			if (Tr.Role == "leader" && LeaderCarriesSmg(Army) && I.Soldiers.find(File + "_smg") != I.Soldiers.end()) File += "_smg";
-			// (the American squad leader from the soldiers thread's _nco file: a staff sergeant's chevrons and the Thompson
-			// that many in Normandy carried in place of the M1; the sound's smgCue plays its bursts)
-			else if (Tr.Role == "leader" && I.Soldiers.find(File + "_nco") != I.Soldiers.end()) File += "_nco";
-			// (an anti-tank team: its gunner from the army's _bazooka file, and his number two, the loader who follows
-			// him, from its _loader file, where the army has them: the American's 2.36-inch rocket launcher team)
-			if (Tr.Role == "at" && I.Soldiers.find(File + "_bazooka") != I.Soldiers.end()) File += "_bazooka";
-			// (a battery's spotter with the army's radio man where it has one: the American's SCR-300 on his back)
-			if (Tr.Role == "fo" && I.Soldiers.find(File + "_radio") != I.Soldiers.end()) File += "_radio";
-			if (Tr.Role == "loader" && Tr.J > 0 && I.Soldiers.find(File + "_loader") != I.Soldiers.end())
-			{
-				const auto Key = I.TrackOf.find({ Tr.B, Tr.K, 0 });
-				if (Key != I.TrackOf.end() && I.Tracks[static_cast<size_t>(Key->second)].Role == "at") File += "_loader";
-			}
-			auto Sol = I.Soldiers.find(File);
-			if (Sol == I.Soldiers.end()) Sol = I.Soldiers.find(Army);
-			if (Sol == I.Soldiers.end() || !Sol->second)
-			{
-				OutError = "no soldier file for the " + Army + " men (" + File + ")";
-				return false;
-			}
-			Impl::Man Mn;
-			Mn.Track = static_cast<int>(K);
-			Mn.S = Sol->second.get();
-			static const ArmyColours Plain;
-			Mn.Colours = Colours != I.Armies.end() ? &Colours->second : &Plain;
-			Mn.Info.Block = Tr.B;
-			Mn.Info.K = Tr.K;
-			Mn.Info.J = Tr.J;
-			Mn.Info.Role = Tr.Role;
-			Mn.Info.Army = Army;
-			Mn.Info.FileArmy = Sol->first;
-			Mn.Info.bFo = Tr.bFo;
-			Mn.Info.Dead = Tr.D;
-			Mn.Info.Out = Tr.D >= 0.0 ? -1.0 : Tr.OutT; // (a dead man never leaves: he lies where he fell)
-			// His own looks and his own small differences, from his block and model, so he keeps them all battle and
-			// from one run to the next: the face (a hash mod 8), the helmet's finish (a second hash, by share), a lag of
-			// up to a fifth of a second behind the recording, a play rate of 0.95 to 1.05 on his still loops and turns
-			// of pose, and where in its loop his first step falls.
-			// (a follower's own: his j stirred in, so a key man's looks are as they were before sections)
-			const uint64_t Who = ((static_cast<uint64_t>(static_cast<uint32_t>(Tr.B)) << 32) ^ static_cast<uint64_t>(static_cast<uint32_t>(Tr.K)))
-				^ (Tr.J > 0 ? Mix(0xF0110ull + static_cast<uint64_t>(Tr.J)) : 0ull);
-			const Soldier& S = *Mn.S;
-			Mn.Info.Face = S.Faces.empty() ? 0 : static_cast<int>(Mix(Who ^ 0xFACEull) % 8ull) % static_cast<int>(S.Faces.size());
-			Mn.Info.Finish = -1;
-			if (Mn.Colours->bFileFinishes)
-			{
-				std::vector<std::pair<int, double>> Fit;
-				double Sum = 0.0;
-				for (size_t F = 0; F < S.Finishes.size(); ++F)
-				{
-					const Finish& Fi = S.Finishes[F];
-					const bool bWhen = I.MonthNo >= Fi.From && I.MonthNo <= Fi.To;
-					const bool bSeason = Fi.Season == "any" || Fi.Season == I.SeasonName;
-					const bool bFront = Fi.Front == "any" || Fi.Front == I.Front;
-					if (bWhen && bSeason && bFront && Fi.Share > 0.0) { Fit.push_back({ static_cast<int>(F), Fi.Share }); Sum += Fi.Share; }
-				}
-				if (!Fit.empty())
-				{
-					double R = Unit01(Who ^ 0x4E1A7Eull) * Sum;
-					Mn.Info.Finish = Fit.back().first;
-					for (const auto& F : Fit)
-					{
-						R -= F.second;
-						if (R <= 0.0) { Mn.Info.Finish = F.first; break; }
-					}
-				}
-				// (No finish fits the date: his own helmet, painted his army's helmet colour.)
-			}
-			Mn.Info.Delay = 0.2 * Unit01(Who ^ 0xDE1Aull);
-			Mn.Info.Jitter = static_cast<float>(0.95 + 0.1 * Unit01(Who ^ 0x7177E5ull));
-			Mn.PhaseSeed = static_cast<float>(Unit01(Who ^ 0x57E9ull));
-			// His stances, one per change of the track.
-			for (size_t C = 0; C < Tr.Ch.size(); ++C)
-			{
-				const TrackData::Change& Cg = Tr.Ch[C];
-				size_t Cursor = 0;
-				double X = 0.0, Y = 0.0;
-				float F = 0.f, V = 0.f;
-				Tr.At(Cg.T + 0.05, Cursor, X, Y, F, V);
-				Stance St = I.StanceOf(S, Tr.Role, Cg.Pose, V > 0.2f);
-				St.T = Cg.T;
-				St.Cover = Cg.Cover;
-				Mn.Stances.push_back(St);
-			}
-			if (Mn.Stances.empty())
-			{
-				Stance St = I.StanceOf(S, Tr.Role, "idle", false);
-				St.T = Tr.T.front();
-				Mn.Stances.push_back(St);
-			}
-			I.ManOf[{ Tr.B, Tr.K, Tr.J }] = static_cast<int>(I.Men.size());
-			I.Men.push_back(std::move(Mn));
+			if (!I.MakeMan(static_cast<int>(K), OutError)) return false;
 		}
 
 		// The rounds: the men's shots, and the round each dead man fell to (where it came from, for his fall).
 		if (With.bReadRounds)
 		{
 			const J& Rs = Root["rounds"];
-			for (size_t K = 0; K < Rs.Size(); ++K)
-			{
-				const J& R = Rs.At(K);
-				// (the man of the section who fired it, j, and the man it struck, oj: 0, or none written, the key man)
-				if (R.Has("by") && R.Has("k"))
-				{
-					const auto Found = I.ManOf.find({ static_cast<int>(R["by"].Num0()), static_cast<int>(R["k"].Num0()), std::max(0, static_cast<int>(R["j"].Num0())) });
-					if (Found != I.ManOf.end()) Fire(Found->second, R["t"].Num0(), WeaponOf(R["w"].Text()));
-				}
-				if (R["r"].Text() == "kill" && R.Has("ok"))
-				{
-					const auto Found = I.ManOf.find({ static_cast<int>(R["on"].Num0()), static_cast<int>(R["ok"].Num0()), std::max(0, static_cast<int>(R["oj"].Num0())) });
-					if (Found == I.ManOf.end()) continue;
-					Impl::Man& Mn = I.Men[static_cast<size_t>(Found->second)];
-					const double T = R["t"].Num0();
-					if (Mn.Info.Dead >= 0.0 && (Mn.KillT < 0.0 || std::fabs(T - Mn.Info.Dead) < std::fabs(Mn.KillT - Mn.Info.Dead)))
-					{
-						Mn.KillT = T;
-						Mn.KillBy = R.Has("by") ? static_cast<int>(R["by"].Num0()) : -1;
-						Mn.KillK = R.Has("k") ? static_cast<int>(R["k"].Num0()) : -1;
-						Mn.KillJ = std::max(0, static_cast<int>(R["j"].Num0()));
-						Mn.KillWeapon = R["w"].Text();
-						Mn.KillW = WeaponOf(Mn.KillWeapon);
-						Mn.KillX = R["x"].Num0();
-						Mn.KillY = R["y"].Num0();
-					}
-				}
-			}
-		}
-		// Each man's mesh without his helmet (where a finish is drawn) and his face's rest points, made now rather than on
-		// the frame he first comes into view (a few milliseconds each the first time).
-		for (Impl::Man& Mn : I.Men)
-		{
-			for (int L = 0; L < LodCount; ++L)
-			{
-				Mn.FaceAt[L] = &I.FaceRestOf(Mn.S, I.OwnHelmet(Mn), L, Mn.Info.Face);
-				Mn.Var[L] = &I.VariantOf(Mn.S, I.OwnHelmet(Mn), L);
-			}
+			for (size_t K = 0; K < Rs.Size(); ++K) I.Book(RowOf(Rs.At(K)), nullptr);
+			for (Impl::Man& Mn : I.Men) Impl::ChooseKill(Mn);
 		}
 		I.Reset();
 		I.bBuilt = true;
 		return true;
 	}
 
-	void Crowd::Fire(int Man, double T, Weapon W)
+	bool Crowd::Extend(const std::string& DeltaText, std::string& OutError)
 	{
-		if (Man < 0 || Man >= Count()) return;
-		Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
-		Shot Sh;
-		Sh.T = T;
-		Sh.W = W;
-		Mn.Shots.push_back(Sh);
-		Mn.bShotsDirty = true;
+		Impl& I = *Inner;
+		if (!I.bBuilt)
+		{
+			OutError = "a live battle's delta before its header (Build)";
+			return false;
+		}
+		// The delta read whole before anything of it is taken (a bad one changes nothing), into flat lists: each track's
+		// news, its new kept points and changes, the tails, the rounds. Read as it goes, not into a tree: see Scan.
+		std::vector<Impl::News>& Read = I.NewsRead;
+		std::vector<double>& Pts = I.PointsRead;
+		std::vector<TrackData::Change>& Chs = I.ChangesRead;
+		std::vector<double>& Tails = I.TailsRead;
+		std::vector<RoundRow>& Rounds = I.RoundsRead;
+		Read.clear();
+		Pts.clear();
+		Chs.clear();
+		Tails.clear();
+		Rounds.clear();
+		double Now = 0.0;
+		bool bNow = false, bReset = false;
+		Scan In(DeltaText);
+		Scan::Plain V;
+		// (a track's kept points, [t, x, y, f] each, as TrackData::ReadPoints reads them)
+		auto ReadPoints = [&]() {
+			return In.Items([&](size_t) {
+				const size_t At = Pts.size();
+				Pts.resize(At + 4, 0.0);
+				if (!In.AtList()) return In.Skip();
+				return In.Items([&](size_t K) {
+					if (!In.Value(V)) return false;
+					if (K < 4) Pts[At + K] = V.Number();
+					return true;
+				});
+			});
+		};
+		// (his changes, [t, pose, cover, aimX, aimY, hidden, buttoned] each, as TrackData::ReadChanges reads them)
+		Scan::Plain Item[6];
+		auto ReadChanges = [&]() {
+			return In.Items([&](size_t) {
+				TrackData::Change Cg;
+				for (Scan::Plain& It : Item) It.K = J::Null;
+				bool bAllNumbers = true;   // (a list of numbers alone holds no items, as the tree keeps it)
+				bool bOk = true;
+				if (!In.AtList()) bOk = In.Skip();
+				else bOk = In.Items([&](size_t K) {
+					Scan::Plain& Into = K < 6 ? Item[K] : V;
+					if (!In.Value(Into)) return false;
+					bAllNumbers = bAllNumbers && Into.K == J::Num;
+					return true;
+				});
+				if (bAllNumbers) for (Scan::Plain& It : Item) It.K = J::Null;
+				Cg.T = Item[0].Num0();
+				Cg.Pose = Item[1].Text("idle");
+				Cg.Cover = Item[2].Text("none");
+				Cg.bHidden = Item[5].Num0() != 0.0;
+				Chs.push_back(std::move(Cg));
+				return bOk;
+			});
+		};
+		const bool bRead = In.Members([&](const std::string& Key) {
+			if (Is(Key, "t")) { if (!In.Value(V)) return false; bNow = V.K == J::Num; Now = V.N; return true; }
+			if (Is(Key, "reset")) { if (!In.Value(V)) return false; bReset = V.K == J::Bool && V.B; return true; }
+			if (Is(Key, "tails"))
+			{
+				if (!In.AtList()) return In.Skip();
+				// (n, x, y, f: n -1 where it is not a number, as the tree reads it)
+				return In.Items([&](size_t K) {
+					if (!In.Value(V)) return false;
+					Tails.push_back(V.Number(K % 4 == 0 ? -1.0 : 0.0));
+					return true;
+				});
+			}
+			if (Is(Key, "rounds"))
+			{
+				if (!In.AtList()) return In.Skip();
+				return In.Items([&](size_t) {
+					Rounds.emplace_back();
+					RoundRow& Row = Rounds.back();
+					if (!In.AtObject()) return In.Skip(); // (not a round: nothing of it is read)
+					return In.Members([&](const std::string& Field) {
+						if (!In.Value(V)) return false;
+						Row.Set(Field, V);
+						return true;
+					});
+				});
+			}
+			if (!Is(Key, "men") || !In.AtList()) return In.Skip();
+			return In.Items([&](size_t) {
+				Read.emplace_back();
+				Impl::News& Nw = Read.back();
+				Nw.AtFrom = Nw.AtTo = Pts.size() / 4;
+				Nw.ChFrom = Nw.ChTo = Chs.size();
+				return In.Members([&](const std::string& Field) {
+					if (Is(Field, "at") || Is(Field, "ch"))
+					{
+						if (!In.AtList()) return In.Skip();
+						const bool bAt = Is(Field, "at");
+						// (a field written twice: the first is the one read, as the tree has it)
+						if (bAt ? Nw.AtTo > Nw.AtFrom : Nw.ChTo > Nw.ChFrom) return In.Skip();
+						if (bAt) { Nw.AtFrom = Pts.size() / 4; if (!ReadPoints()) return false; Nw.AtTo = Pts.size() / 4; }
+						else { Nw.ChFrom = Chs.size(); if (!ReadChanges()) return false; Nw.ChTo = Chs.size(); }
+						return true;
+					}
+					if (!In.Value(V)) return false;
+					if (Is(Field, "n")) Nw.N = static_cast<int>(V.Num0(-1.0));
+					else if (Is(Field, "b")) { Nw.bWho = V.K != J::Null; Nw.B = static_cast<int>(V.Num0()); }
+					else if (Is(Field, "k")) Nw.K = static_cast<int>(V.Num0());
+					else if (Is(Field, "j")) Nw.J = std::max(0, static_cast<int>(V.Num0()));
+					else if (Is(Field, "r")) Nw.Role = V.Text();
+					else if (Is(Field, "fo")) Nw.bFo = V.Num0() != 0.0;
+					else if (Is(Field, "d")) { Nw.bD = V.K != J::Null; Nw.D = V.Num0(); }
+					else if (Is(Field, "out")) { Nw.bOut = V.K != J::Null; Nw.Out = V.Num0(); }
+					return true;
+				});
+			});
+		});
+		if (!bRead)
+		{
+			OutError = In.Problem().empty() ? std::string("bad JSON") : In.Problem();
+			return false;
+		}
+		if (!bNow)
+		{
+			OutError = "not a live ground battle's delta (no t)";
+			return false;
+		}
+		if (bReset)
+		{
+			// The men placed again before the clock ran: every track and man is dropped, and the battle begins again
+			// with this delta (its track numbers from 0), as from the header.
+			I.Tracks.clear();
+			I.TrackOf.clear();
+			I.TrackOfN.clear();
+			I.Men.clear();
+			I.ManOf.clear();
+			I.bSections = false;
+			I.Reset();
+		}
+
+		// The tracks' news. A new track's n is the count so far, and it says who it is that first time.
+		std::vector<char> Seen(I.TrackOfN.size(), 0);   // the tracks this delta touched, by n
+		auto Touch = [&](int N) {
+			if (Seen.size() <= static_cast<size_t>(N)) Seen.resize(static_cast<size_t>(N) + 1, 0);
+			Seen[static_cast<size_t>(N)] = 1;
+		};
+		for (Impl::News& Nw : Read)
+		{
+			const int N = Nw.N;
+			if (N < 0 || N > static_cast<int>(I.TrackOfN.size()))
+			{
+				OutError = "a delta names track " + std::to_string(N) + " of " + std::to_string(I.TrackOfN.size());
+				return false;
+			}
+			if (N == static_cast<int>(I.TrackOfN.size()))
+			{
+				if (!Nw.bWho)
+				{
+					OutError = "a new track " + std::to_string(N) + " without who it is";
+					return false;
+				}
+				TrackData Tr;
+				Tr.B = Nw.B;
+				Tr.K = Nw.K;
+				Tr.J = Nw.J;
+				Tr.Role = std::move(Nw.Role);
+				Tr.bFo = Nw.bFo;
+				I.TrackOfN.push_back(static_cast<int>(I.Tracks.size()));
+				I.Tracks.push_back(std::move(Tr));
+			}
+			TrackData& Tr = I.Tracks[static_cast<size_t>(I.TrackOfN[static_cast<size_t>(N)])];
+			if (Nw.AtTo > Nw.AtFrom)
+			{
+				// The provisional last point gives way to the new kept ones; it stays only while it is still later.
+				double TailT = 0.0, TailX = 0.0, TailY = 0.0;
+				float TailF = 0.f;
+				const bool bHadTail = Tr.bTail && !Tr.T.empty();
+				if (bHadTail)
+				{
+					TailT = Tr.T.back(); TailX = Tr.X.back(); TailY = Tr.Y.back(); TailF = Tr.F.back();
+					Tr.T.pop_back(); Tr.X.pop_back(); Tr.Y.pop_back(); Tr.F.pop_back();
+					Tr.bTail = false;
+				}
+				for (size_t P = Nw.AtFrom; P < Nw.AtTo; ++P)
+				{
+					Tr.T.push_back(Pts[P * 4]);
+					Tr.X.push_back(Pts[P * 4 + 1]);
+					Tr.Y.push_back(Pts[P * 4 + 2]);
+					Tr.F.push_back(static_cast<float>(Pts[P * 4 + 3]));
+				}
+				if (bHadTail && TailT > Tr.T.back())
+				{
+					Tr.T.push_back(TailT); Tr.X.push_back(TailX); Tr.Y.push_back(TailY); Tr.F.push_back(TailF);
+					Tr.bTail = true;
+				}
+			}
+			for (size_t C = Nw.ChFrom; C < Nw.ChTo; ++C) Tr.Ch.push_back(std::move(Chs[C]));
+			if (Nw.bD) Tr.D = Nw.D;
+			// (out -1: he is back on the list)
+			if (Nw.bOut) Tr.OutT = Nw.Out < 0.0 ? -1.0 : Nw.Out;
+			Touch(N);
+		}
+		// Where each moving man stands now, [n, x, y, f] at t: his provisional last point, in place of the one before.
+		for (size_t K = 0; K + 3 < Tails.size(); K += 4)
+		{
+			const int N = static_cast<int>(Tails[K]);
+			if (N < 0 || N >= static_cast<int>(I.TrackOfN.size()))
+			{
+				OutError = "a delta's tail names track " + std::to_string(N);
+				return false;
+			}
+			TrackData& Tr = I.Tracks[static_cast<size_t>(I.TrackOfN[static_cast<size_t>(N)])];
+			if (Tr.bTail && !Tr.T.empty()) { Tr.T.pop_back(); Tr.X.pop_back(); Tr.Y.pop_back(); Tr.F.pop_back(); }
+			Tr.T.push_back(Now);
+			Tr.X.push_back(Tails[K + 1]);
+			Tr.Y.push_back(Tails[K + 2]);
+			Tr.F.push_back(static_cast<float>(Tails[K + 3]));
+			Tr.bTail = true;
+			Touch(N);
+		}
+		std::vector<int> Grown;     // (in the order first seen)
+		for (size_t N = 0; N < Seen.size(); ++N)
+		{
+			if (Seen[N]) Grown.push_back(static_cast<int>(N));
+		}
+
+		// A track goes on the map with its first point, all of this delta's first (a section's loader looks for its
+		// key man), then their men, in the order first seen: a man's number never changes, and Find finds him.
+		// The men already here take their track's news: his fall, his leaving, his new stances.
+		std::vector<char> Placed(Grown.size(), 0);
+		size_t NewMen = 0;
+		for (size_t G = 0; G < Grown.size(); ++G)
+		{
+			const int Ix = I.TrackOfN[static_cast<size_t>(Grown[G])];
+			const TrackData& Tr = I.Tracks[static_cast<size_t>(Ix)];
+			if (!Tr.bPlaced && !Tr.T.empty()) { I.Place(Ix); Placed[G] = 1; ++NewMen; }
+		}
+		// (room made first: a man is too big to copy about as the list grows)
+		I.Men.reserve(I.Men.size() + NewMen);
+		std::vector<int> Dirty;     // men whose kill is chosen again
+		for (size_t G = 0; G < Grown.size(); ++G)
+		{
+			const int Ix = I.TrackOfN[static_cast<size_t>(Grown[G])];
+			if (Placed[G])
+			{
+				if (!I.MakeMan(Ix, OutError)) return false;
+				const int Mx = I.Tracks[static_cast<size_t>(Ix)].Man;
+				if (Mx >= 0) Impl::ResetMan(I.Men[static_cast<size_t>(Mx)]);
+				continue;
+			}
+			const TrackData& Tr = I.Tracks[static_cast<size_t>(Ix)];
+			if (Tr.Man < 0) continue;
+			Impl::Man& Mn = I.Men[static_cast<size_t>(Tr.Man)];
+			if (Mn.Info.Dead != Tr.D) Dirty.push_back(Tr.Man);
+			Mn.Info.Dead = Tr.D;
+			Mn.Info.Out = Tr.D >= 0.0 ? -1.0 : Tr.OutT;
+			// (back on the list after his block left: whole again, as the battle read whole never had him leave)
+			if (Mn.Info.Out < 0.0 && Mn.State == Impl::Man::Alive) { Mn.Fade = 1.f; Mn.bVisible = true; }
+			// (only a change new or not yet settled is made again: most men in a delta have only moved)
+			if (Mn.Firm < Tr.Ch.size()) I.MakeStances(Mn);
+		}
+
+		// The new rounds: shots booked (each man's planned again with them before his next frame), kills kept.
+		if (I.With.bReadRounds)
+		{
+			for (const RoundRow& Row : Rounds)
+			{
+				int Struck = -1;
+				I.Book(Row, &Struck);
+				if (Struck >= 0) Dirty.push_back(Struck);
+			}
+		}
+		for (const int Mx : Dirty) Impl::ChooseKill(I.Men[static_cast<size_t>(Mx)]);
+		return true;
 	}
 
-	void Crowd::SetEye(double X, double Y, double Z)
+	void Crowd::Fire(int Man, double T, Weapon W)
+	{
+		Inner->Fire(Man, T, W);
+	}
+
+	void Crowd::SetEye(double X, double Y, double Z, double Zoom)
 	{
 		Inner->EyeX = X;
 		Inner->EyeY = Y;
 		Inner->EyeZ = Z;
+		Inner->EyeZoom = Zoom > 0.05 && Zoom < 20.0 ? Zoom : 1.0;
 	}
 
 	void Crowd::Update(double BattleTime)
@@ -2782,7 +3421,8 @@ namespace LandMen
 			// The level of detail by the eye's distance, with a little give so a man at the edge does not flicker.
 			if (!Mn.bVisible) continue;
 			const double DX = Mn.X - I.EyeX, DY = Mn.Y - I.EyeY, DZ = static_cast<double>(Mn.World.T[2]) - I.EyeZ;
-			const double D = std::sqrt(DX * DX + DY * DY + DZ * DZ);
+			// (as the picture sees him: a long lens draws a far man as big as a near one, and he is posed and drawn so)
+			const double D = std::sqrt(DX * DX + DY * DY + DZ * DZ) / I.EyeZoom;
 			Mn.EyeD = static_cast<float>(D);
 			const double Give = 1.05;
 			Lod L = D < 25.0 ? Near : D < 120.0 ? Mid : Far;
@@ -2857,6 +3497,7 @@ namespace LandMen
 	}
 	uint32_t Crowd::Stamp(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Stamp; }
 	Lod Crowd::LodOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].L; }
+	float Crowd::SeenDistance(int Man) const { return Inner->Men[static_cast<size_t>(Man)].EyeD; }
 	const Xform* Crowd::FramesOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Frames; }
 	const Soldier* Crowd::SoldierOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].S; }
 	int Crowd::Month() const { return Inner->MonthNo; }
