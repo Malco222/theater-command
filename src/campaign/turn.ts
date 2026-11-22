@@ -2,7 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import type { FoughtAir } from './airfought';
-import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type CrewOrder, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
@@ -46,6 +46,8 @@ import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour, whyNoSchool } from './stories';
 import { takeWinterPeace, whyNotWinterPeace, winterMonth } from './winter';
+import { setCrewOrder } from './bombers';
+import { sendHero } from './valour';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, liberationMonth, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
@@ -1910,6 +1912,16 @@ export function orderBuildCorps(g: Game, kind: Kind, region: number, revive?: nu
 /** Cashes in one of the player's honours: its heroes go home on a bond tour, or to the schools as instructors. */
 export function orderCash(g: Game, award: number, how: Cash): boolean {
   return humanUp(g) && cashHonour(g, award, how);
+}
+
+/** The player's standing order for bomber crews who finish their tour: the schools, a war bond tour, or one and then the other (bombers.ts). */
+export function orderCrews(g: Game, how: CrewOrder): boolean {
+  return humanUp(g) && setCrewOrder(g, how);
+}
+
+/** The player sends a holder of the highest award home: on a war bond tour, or to train recruits (valour.ts). */
+export function orderHero(g: Game, id: number, how: Cash): boolean {
+  return humanUp(g) && sendHero(g, id, how);
 }
 
 /** The player has read a citation. */

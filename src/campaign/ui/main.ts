@@ -24,7 +24,7 @@ import {
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
-  orderCash, orderDrafts, orderSchool, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
+  orderCash, orderDrafts, orderSchool, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway, orderCrews, orderHero,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
@@ -101,8 +101,10 @@ import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { setTeams, TEAMS_RELEASE } from '../teams';
-import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance, type CrewOrder, type Hero } from '../types';
 import { tenthPct } from '../../core/math';
+import { BOMBERS, bomberCard, bomberMark, carriesNames, countWord, flownWord, headStart, tourOf } from '../bombers';
+import { VALOUR, awardTitleOf, heroesOf, heroesWaiting, sendWorth, whyNotSend } from '../valour';
 import { turnToDate } from '../../core/ticket';
 import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
 import { EVERYWHERE, Lines, Sheet, boxOf, boxOfLine, meetsAny, piece, pieceAt, within, type Area, type Piece } from './cull';
@@ -4648,13 +4650,84 @@ function honourBlock(a: Award, open: boolean): string {
 
 const STAT_LABELS: Record<UnitKind, [string, string][]> = {
   corps: [['battles', 'Battles'], ['won', 'Won'], ['taken', 'Regions taken'], ['stormed', 'Breakthroughs'], ['stood', 'Stood against odds'], ['pris', 'Prisoners taken'], ['lost', 'Men lost'], ['caps', 'Capitals entered'], ['landings', 'Landings'], ['drops', 'Airborne drops'], ['cut', 'Months cut off'], ['winter', 'Winter battles'], ['desert', 'Desert battles'], ['scores', 'Old scores settled']],
-  air: [['flown', 'Operations flown'], ['missions', 'Bombing missions'], ['nights', 'Night raids'], ['skies', 'Skies won'], ['kills', 'Enemy aircraft downed'], ['sunk', 'Ships sunk'], ['defended', 'Raids met'], ['saved', 'Raiders shot down']],
+  air: [['flown', 'Operations flown'], ['missions', 'Bombing missions'], ['tours', 'Tours finished'], ['nights', 'Night raids'], ['skies', 'Skies won'], ['kills', 'Enemy aircraft downed'], ['sunk', 'Ships sunk'], ['defended', 'Raids met'], ['saved', 'Raiders shot down']],
   fleet: [['actions', 'Actions won'], ['capital', 'Capital ships sunk'], ['tons', 'Tons of shipping sunk'], ['escort', 'Months on escort']],
 };
 
 function statGrid(kind: UnitKind, u: Storied, always: number): string {
   const cells = STAT_LABELS[kind].filter(([k], i) => i < always || (u.rec?.[k] ?? 0) > 0).map(([k, label]) => `<div class="fact"><span>${label}</span><b>${num(u.rec?.[k] ?? 0)}</b></div>`);
   return cells.length ? `<div class="facts">${cells.join('')}</div>` : '';
+}
+
+/**
+ * A bomber group's bombers one by one (bombers.ts): the old hands with their missions and their gunners' kills, the
+ * crews that have gone home and the bombers lost, and for the player his standing order for crews who finish a tour.
+ */
+function bombersBlock(f: AirFleet): string {
+  const R = f.bombers;
+  if (!R || !R.on.length) return '';
+  const B = BOMBERS, rows = bomberCard(g, f), shown = rows.slice(0, 12);
+  const tour = tourOf(f.nat), word = flownWord(f.nat), named = carriesNames(f.nat);
+  const fact = (label: string, v: number | string): string => `<div class="fact"><span>${label}</span><b>${typeof v === 'number' ? num(v) : v}</b></div>`;
+  const shot = (k: number): string => (k === 1 ? 'a fighter shot down' : `${k} fighters shot down`);
+  // An American bomber goes by its name; any other by its marking, with the word its crew calls it by where it has one.
+  const called = (m: { name: string; mark: string }): string => (m.mark && m.mark !== m.name ? `${m.mark}, ${m.name}` : m.name);
+  const line = (r: (typeof rows)[number]): string => `<tr><td><b>${esc(called(r) || 'No name yet')}</b></td><td>${r.missions} ${r.missions === 1 ? word : `${word}s`}</td><td>${r.kills ? shot(r.kills) : ''}</td><td><small>${esc(r.grade)} crew, ${r.crew} of their ${tour}</small></td></tr>`;
+  // In running text a bomber goes by its name alone; its marking stays in its row above (the UI director).
+  const roll = R.roll.slice(-6).reverse().map((x) => {
+    const name = bomberMark(g, f, x.b, x.t).name;
+    const what = x.how === 'home'
+      ? `${name ? `${esc(name)}'s crew` : "A bomber's crew"} went home after ${tour} ${word}s${x.b[3] ? `, with ${shot(x.b[3])}` : ''}`
+      : `${esc(name) || 'A bomber'} was lost with ${x.b[2]} ${x.b[2] === 1 ? word : `${word}s`} flown${x.b[3] ? ` and ${shot(x.b[3])}` : ''}`;
+    return `<p>${date(x.t)}: ${what}.</p>`;
+  }).join('');
+  let order = '';
+  if (f.nat === g.human) {
+    const C = g.stories.crews?.[f.nat], now: CrewOrder = C?.order ?? 'split';
+    const opt = (how: CrewOrder, label: string): string => `<button class="btn ${now === how ? 'on' : ''}" data-act="crews" data-id="${f.id}" data-how="${how}">${label}</button>`;
+    const head = headStart(g, f.nat), tours = C?.bonds.length ?? 0;
+    const crews = (k: number): string => `${countWord(k, true)} ${k === 1 ? 'crew is' : 'crews are'}`;
+    const state = [
+      C?.school ? `${crews(C.school)} at the schools${head ? `: new crews arrive with ${head === 1 ? `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}'s` : `${head} ${word}s'`} experience` : ''}.` : '',
+      tours ? `${crews(tours)} on a war bond tour: ${cash(B.bonds.pp * tours)} a month into the treasury.` : '',
+    ].filter(Boolean).join(' ');
+    order = `<p class="sub">Crews go home after ${tour} ${word}s, and their group's readiness rises. Where they go next is your standing order:</p>
+      <div class="seg">${opt('school', 'Train new crews')}${opt('bonds', 'War bond tour')}${opt('split', 'Both in turn')}</div>
+      <p class="sub">Crews at the schools give every new crew experience before their first ${word}, and their own bomber flies on with a new crew. Crews on a war bond tour fly their bomber home, and bring in money every month for ${B.bonds.months[0]} to ${B.bonds.months[1]} months.${state ? ` ${state}` : ''}</p>`;
+  }
+  return `<h3>Bombers</h3>
+      <div class="facts">${fact('On strength', R.on.length)}${fact('Crews gone home', R.home)}${fact(named ? 'Named bombers lost' : 'Bombers lost', R.gone)}</div>
+      <table class="ltab">${shown.map(line).join('')}</table>
+      ${rows.length > shown.length ? `<p class="sub">And ${rows.length - shown.length} more.</p>` : ''}
+      ${roll ? `<div class="reel diary">${roll}</div>` : ''}
+      ${order}`;
+}
+
+/** A unit's holders of its nation's highest award, and for the player's own what he can do with each (valour.ts). */
+function heroesBlock(kind: UnitKind, u: AnyUnit): string {
+  const hs = heroesOf(g, kind, u.id);
+  if (!hs.length) return '';
+  const mine = u.nat === g.human, up = mine && humanUp(g);
+  let todo = 0;
+  const row = (h: Hero): string => {
+    const at = h.at < 0 ? '' : h.kind === 'fleet' ? g.seas[h.at]?.name ?? '' : g.regions[h.at]?.name ?? '';
+    let state: string;
+    if (h.sent === 'bonds') state = `<small>${h.left ? `On a war bond tour: ${h.left} ${h.left === 1 ? 'month' : 'months'} to go` : 'With the unit, back from a war bond tour'}</small>`;
+    else if (h.sent === 'school') state = '<small>At home, training recruits</small>';
+    else if (!mine) state = '<small>With the unit</small>';
+    else {
+      todo++;
+      const opt = (how: Cash, label: string): string => {
+        const why = whyNotSend(g, h, how) || (up ? '' : 'Wait for your turn.');
+        return `<button class="btn small" data-act="hero" data-id="${h.id}" data-how="${how}" title="${esc(why || capital(sendWorth(h, how)))}" ${why ? 'disabled' : ''}>${label}</button>`;
+      };
+      state = `<small>With the unit</small><div class="seg" style="margin-top:5px">${opt('bonds', 'War bond tour')}${opt('school', 'Train recruits')}</div>`;
+    }
+    return `<div class="hon"><span class="grow"><b>${esc(awardTitleOf(h.nat, h.turn))}</b><small>${esc(h.who)} · ${date(h.turn)}${at ? ` · ${esc(at)}` : ''}</small>${state}</span></div>`;
+  };
+  const rows = hs.map(row).join('');
+  const B = VALOUR.bonds;
+  return `<h3>Highest award</h3>${rows}${todo ? `<p class="sub">A holder can stay with the unit or go home. On a war bond tour the crowds bring in ${cash(B.pp)} a month for ${B.months[0]} to ${B.months[1]} months. One who trains recruits sends every later draft to the front better trained.</p>` : ''}`;
 }
 
 function diaryBlock(u: { log?: DiaryLine[] }, shape: { kind?: unknown; ships?: unknown; ftr?: unknown }): string {
@@ -4741,8 +4814,10 @@ function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
     <div class="body">
       <div class="record">${badge}<div class="who">${who}</div></div>
       <h3>Honours</h3>${hs.length ? `${hs.map((a) => honourBlock(a, true)).join('')}${waiting ? `<p class="sub">An honour carried at the front makes the unit fight harder. Open one to send its heroes home instead: on a bond tour, or to the schools as instructors.</p>` : ''}` : `<div class="empty">None yet. Honours are earned from the record: ${kind === 'corps' ? 'breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service' : kind === 'air' ? 'a full tour of twenty-five bombing missions, a sky won, raids broken up, ships sunk' : 'a great ship sunk in a fleet action, a year on convoy escort, tonnage sunk on the trade routes'}.</div>`}
+      ${heroesBlock(kind, u)}
       <h3>Record</h3>${statGrid(kind, u, kind === 'corps' ? 3 : 1)}
       ${extra}
+      ${kind === 'air' ? bombersBlock(u as AirFleet) : ''}
       <h3>Diary</h3>${diaryBlock(u, u)}
       ${letters.length ? `<h3>Letters</h3>${letters.slice(-4).reverse().map(letterBlock).join('')}` : ''}
     </div><footer>${where >= 0 ? `<button class="btn" data-act="showmap" data-id="${where}">Show on map</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
@@ -4858,6 +4933,16 @@ function honoursPane(): string {
     <div class="facts"><div class="fact"><span>Honours held</span><b>${held.length}</b></div><div class="fact"><span>Cadres at the schools</span><b>${schools} / ${STORIES.veterans.maxSchools}</b></div><div class="fact"><span>On the wall</span><b>${wall.length}</b></div></div>
     <p class="sub">Drafts reach the front at experience ${t} (${esc(grade(t / 100).toLowerCase())}), and a new corps starts at ${Math.round(raisedXp(g, me) * 100)}. Every cadre of veterans sent to the schools raises both.</p>`;
   if (waiting.length) out += `<div class="note"><b>${waiting.length} ${waiting.length === 1 ? 'citation is' : 'citations are'} waiting to be read.</b> <button class="btn small" data-act="nextaward" style="margin-left:6px">Read ${waiting.length === 1 ? 'it' : 'them'}</button></div>`;
+  const heroes = (S.heroes ?? []).filter((h) => h.nat === me);
+  if (heroes.length) {
+    const todo = heroesWaiting(g).length;
+    out += `<h3>${esc(awardTitleOf(me, g.turn))}</h3>${todo ? `<div class="note"><b>${todo} ${todo === 1 ? 'holder is' : 'holders are'} still with ${todo === 1 ? 'the unit' : 'their units'}.</b> Open a unit's record to send one home on a war bond tour or to train recruits.</div>` : ''}`;
+    for (const h of heroes.slice(-12).reverse()) {
+      const alive = !!unitOf(g, h.kind, h.unit);
+      const state = h.sent === 'bonds' ? (h.left ? `on a war bond tour, ${h.left} ${h.left === 1 ? 'month' : 'months'} to go` : 'back from a war bond tour') : h.sent === 'school' ? 'at home, training recruits' : alive ? 'with the unit' : 'lost with the unit';
+      out += `<${alive ? 'button' : 'div'} class="gen${alive ? '' : ' gone'}" ${alive ? `data-act="record" data-type="${h.kind}" data-id="${h.unit}"` : ''}><span class="grow"><b>${esc(h.who)} of ${esc(h.name)}</b><small>${date(h.turn)} · ${esc(capital(state))}</small></span></${alive ? 'button' : 'div'}>`;
+    }
+  }
   out += `<h3>Your honoured units</h3>${mine.length ? mine.map(([k, u]) => unitRow(k, u)).join('') : '<div class="empty">None yet. Honours are earned from the record: breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service, a full tour of bombing missions. Every unit has a <b>Record</b> strip under its name; open it to see how it stands.</div>'}`;
   if (feuds.length || settled.length) {
     out += '<h3>Old enemies</h3>';
@@ -6311,7 +6396,7 @@ function raidCard(): string {
       return `<button class="way ${w.kind === 'bomb' ? 'day' : 'night'}${on ? ' on' : ''}" data-act="raidway" data-kind="${w.kind}" aria-pressed="${on}" ${on || w.why ? 'disabled' : ''}><span class="wayhead">${w.kind === 'bomb' ? SUN_SIGN : MOON_SIGN}<b>${esc(w.label)}</b>${on ? '<span class="waytag">Chosen</span>' : '<span class="wayring"></span>'}</span>${body}</button>`;
     };
     head = `<h3 style="margin-top:0">The forecast · by day or by night</h3>
-      <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach</span><span title="${dn.guns ? `Guns built round the target: they stop ${pctOf(dn.day.gunsStop || dn.night.gunsStop)} of the bombing and bring down more of the bombers.` : 'No guns are built round this target. It still puts up the flak any target does.'}"><svg class="wayaa${dn.guns ? '' : ' none'}" width="26" height="17" viewBox="0 0 24 16" aria-hidden="true"><path d="${ORDER_SIGN.aa}"/></svg><span class="waypips" aria-hidden="true">${[1, 2, 3].map((i) => `<i${i <= dn.guns ? ' class="on"' : ''}></i>`).join('')}</span><b>${dn.guns ? `Level ${dn.guns}` : 'No'}</b>anti-aircraft guns${dn.gunsTail ? `<small class="waytail"> · ${esc(dn.gunsTail)}</small>` : ''}</span></div>
+      <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span title="${dn.foeSquadrons ? `Of the ${num(dn.foes)} fighters of the groups in reach, about ${num(dn.foesAble)} can get to the raid.` : 'No enemy fighter group can reach the raid.'}"><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach${dn.foesCount ? `<small class="waytail"> · ${esc(dn.foesCount)}</small>` : ''}</span><span title="${dn.guns ? `Guns built round the target: they stop ${pctOf(dn.day.gunsStop || dn.night.gunsStop)} of the bombing and bring down more of the bombers.` : 'No guns are built round this target. It still puts up the flak any target does.'}"><svg class="wayaa${dn.guns ? '' : ' none'}" width="26" height="17" viewBox="0 0 24 16" aria-hidden="true"><path d="${ORDER_SIGN.aa}"/></svg><span class="waypips" aria-hidden="true">${[1, 2, 3].map((i) => `<i${i <= dn.guns ? ' class="on"' : ''}></i>`).join('')}</span><b>${dn.guns ? `Level ${dn.guns}` : 'No'}</b>anti-aircraft guns${dn.gunsTail ? `<small class="waytail"> · ${esc(dn.gunsTail)}</small>` : ''}<small class="waytail"> · ${esc(dn.gunsCount)}</small></span></div>
       <div class="daynight">${column(dn.day, dn.chosen === 'bomb')}${column(dn.night, dn.chosen === 'night')}</div>
       ${p.why ? '' : `<div class="sub">${p.effects.map(esc).join(' ')}</div>`}
       ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
@@ -8857,6 +8942,19 @@ function onClick(e: MouseEvent): void {
     case 'fallen': openModal({ kind: 'fallen', id }); break;
     case 'award': openModal({ kind: 'award', id }); refresh(); break;
     case 'nextaward': { const next = unseen(g)[0]; openModal(next ? { kind: 'award', id: next.id } : null); refresh(); break; }
+    case 'crews': {
+      if (orderCrews(g, t.dataset.how as CrewOrder)) queueSave();
+      refresh();
+      openModal({ kind: 'unit', type: 'air', id });
+      break;
+    }
+    case 'hero': {
+      const h = (g.stories.heroes ?? []).find((x) => x.id === id);
+      if (h && orderHero(g, id, t.dataset.how as Cash)) queueSave();
+      refresh();
+      if (h) openModal({ kind: 'unit', type: h.kind, id: h.unit });
+      break;
+    }
     case 'cash': {
       const a = awardOf(g, id);
       if (a && orderCash(g, id, t.dataset.how as Cash)) { ui.picked.clear(); queueSave(); }

@@ -7,7 +7,7 @@
 // of the dice. The 3D game draws the pictures: the models, their walk and fire, the sounds the events name.
 // It draws every explosion too, by the art director's sheet (land: "Explosions" below).
 //
-// Wiring (two lines in campaign-bridge.ts, for the 3D builder):
+// Wiring (made in campaign-bridge.ts; kept here as the record of what it takes, and what to keep if it is redone):
 //   1. its attack(ids, to) takes two more arguments, fought?: number and field?: FieldBill (src/campaign/game.ts), and
 //      passes them on: orderAttack(s, sent, s.regions[to], fought, field) (field: what the field cost each corps and
 //      each side, so the bill falls on the corps as the field had it and the after card agrees with the field, ruling 226(6))
@@ -18,6 +18,8 @@
 // from what the campaign booked: { lines, level, groups }); and the TC object's line becomes
 //   ...battleCalls({ game, attack, raid: (k, t, ids, f) => act(`raid:${k}:${t}:${ids.join('.')}`, -1, f) }),
 // With no air battle fought, nothing changes there either: the raid is paid with the dice as before.
+// (campaign-bridge.ts passes both hooks through its playerOrder, so a fought attack or raid is noted as the player's
+// own deed, in the notebook and the lessons, as the same order given from the map is.)
 //
 // The calls, on the same global object TC:
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,
@@ -107,6 +109,9 @@
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
 //                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority')
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
+//                                   ({ w, h, scale, target, flakR, bands, place, title, date, att, def }: att and def
+//                                   { nat, adj, human }). Each view of an air battle also carries sky: { chance, fired,
+//                                   winding, near: { att, def: { at, why } }, score, called, me } (AirFeed.cpp ReadView)
 //
 // A view: { t, limit, speed, units, balance, events, zones, ai, over, me }, and for a land battle breaking: { att, def }
 // (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)), breakingBy:
@@ -590,9 +595,27 @@ function fogged(by: Record<Side, BreakCause>, me: Side): Record<Side, Partial<Br
   return { [me]: by[me], [them]: { side: them, bar: by[them].bar } } as Record<Side, Partial<BreakCause>>;
 }
 
+/**
+ * What an air battle offers the screens beyond the shared view, as the 3D game reads it (AirFeed.cpp ReadView's 'sky',
+ * the shape the air recorder writes, tools/air-record): the staff's chance now, whether a shot has been fired, whether
+ * the fight is winding down, how near each side is to breaking off and why, the field's score, and each group's name as
+ * the dispatches call it.
+ */
+function skyOut(a: AirSim, me: Side): Record<string, unknown> {
+  const r3 = (x: number): number => Math.round(x * 1000) / 1000;
+  const near = (side: Side) => { const n = a.nearWhy(side); return { at: r3(n.at), why: n.why }; };
+  const sc = a.score();
+  return {
+    chance: r3(a.staffChance()), fired: a.fired, winding: a.winding(), near: { att: near('att'), def: near('def') },
+    score: { lost: sc.lost, worth: Math.round(sc.worth), cut: sc.cut, ruined: sc.ruined, ratio: r3(sc.ratio), up: sc.up },
+    called: Object.fromEntries(a.units.map((u) => [u.id, a.called(u)])), me,
+  };
+}
+
 function viewOut(s: Session, v: BattleView): Record<string, unknown> {
   const land = s.sim instanceof LandBattle ? s.sim : null;
   return {
+    ...(s.sim instanceof AirSim ? { sky: skyOut(s.sim, s.me) } : {}),
     t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u, v.t))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
     ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
     // What drives each bar (b496(2)): plain numbers, to three places already. Under fog, of the enemy only its bar
@@ -814,15 +837,19 @@ export function battleCalls(h: BattleHooks) {
       const t = airTicket(h.game(), kind as RaidKind, target, ids);
       if (!t.ticket) return null;
       // Shown, never counted (ruling 237): who shot whom, passes, stragglers, guns, escort roles for the 3D game to act
-      // out (the air battles thread, 2dc2da46). Written so it holds before that AirSim reaches this branch and after; once
-      // it has, this is plain new AirSim(t.ticket, { show: true }).
-      const Shown = AirSim as unknown as new (ticket: typeof t.ticket, opts: { show?: boolean }) => AirSim;
-      const sim = new Shown(t.ticket, { show: true });
+      // out (the air battles thread, 2dc2da46).
+      const sim = new AirSim(t.ticket, { show: true });
       // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports
       // (the campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid.
       const ses = begin(sim, (r) => raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined));
+      // The title, the date and the two sides as the 3D game reads them (AirFeed.cpp ReadSky: "the bridge's sky names
+      // them"); without them it shows no title or date, and finds the defender only from the place's models.
+      const side = (x: typeof t.ticket.att) => ({ nat: x.nat, adj: x.adj, human: x.human });
       return {
-        sky: { w: SKY.w, h: SKY.h, scale: SKY.scale, target: SKY.target, flakR: SKY.flakR, bands: SKY.bands.alt, place: t.ticket.place },
+        sky: {
+          w: SKY.w, h: SKY.h, scale: SKY.scale, target: SKY.target, flakR: SKY.flakR, bands: SKY.bands.alt, place: t.ticket.place,
+          title: t.ticket.title, date: t.ticket.date, att: side(t.ticket.att), def: side(t.ticket.def),
+        },
         view: viewOut(ses, sim.view(ses.me)),
       };
     },

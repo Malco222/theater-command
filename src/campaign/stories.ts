@@ -15,12 +15,14 @@ import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
+import { BOMBERS, bomberName, bondsMonth, countWord, flownMonth, flownWord, keptByName, muster, thePlace, theUnit, type ToursDone } from './bombers';
 import { gainXp, generalOf } from './commanders';
+import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
 import { moraleRules, restedMonth } from './morale';
 import {
   STACK,
-  type AirFleet, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
+  type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
   type Region, type Rivalry, type Storied, type Stories, type UnitKind,
 } from './types';
 
@@ -240,6 +242,8 @@ function award(g: Game, kind: UnitKind, u: Unit, d: HonourDef, at: number, extra
     // The first of a great power's formations to make such a name is news everywhere.
     news(g, a, `${citation(g, a)}${named ? ` The ${N.adj} ${service} has begun to call it ${named}.` : ''}`, where);
   }
+  // A man of the unit may be given his nation's highest award for it (valour.ts); never for a last stand, whose men are gone.
+  if (!d.last) decorate(g, a, d.fame, u);
   return a;
 }
 
@@ -702,6 +706,11 @@ export function storyMonth(g: Game, nat: string): void {
     earn(g, 'corps', c, c.reg);
   }
   publish(g);
+  // Bombers kept by name (bombers.ts): each group's roster is made up with the month's replacements and with any
+  // bombers lost on the ground, and the player's bond tours pay.
+  for (const f of g.airFleets) if (f.nat === nat && keptByName(f)) muster(g, f);
+  bondsMonth(g, nat);
+  valourMonth(g, nat);
   if (!mine) return;
   // A rivalry whose other half was lost somewhere else is over, and meetings with corps that no longer exist are forgotten.
   const S = g.stories;
@@ -721,9 +730,68 @@ export function storyMonth(g: Game, nat: string): void {
 // ---- The air war and the war at sea ------------------------------------------------------------
 
 /** An air operation is over: what each fleet that flew in it did goes in its record. */
-export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number }): void {
+const nth = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+
+/**
+ * The news of crews who have finished their tour, for the player (bombers.ts). The UI director's words (20 November
+ * 2026, ui-director/words-bombers-flak-valour.md): the tour is the crew's, a crew takes the plural verb, a bomber is
+ * given its kind on first mention, one with a name is 'her' and one known by its marking is 'it', and the gain is
+ * named in the game's own word, readiness.
+ */
+export function toursWords(unit: string, t: ToursDone): string {
+  const n = t.done.length, of = theUnit(unit);
+  const names = t.names.filter(Boolean);
+  const lift = t.lift > 0 ? " The group's readiness rises." : '';
+  if (n === 1) {
+    const her = t.named && names.length > 0 ? 'her' : 'it';
+    const home = t.school ? 'They go home to train new crews.' : t.bonds ? `They fly ${her} home for a war bond tour.` : 'They go home.';
+    const who = names.length ? `The bomber ${names[0]} of ${of}` : `A bomber of ${of}`;
+    return `${who} brings ${her === 'her' ? 'her' : 'its'} crew home from their ${nth(t.tour)} ${t.flown}, and their tour is over. ${home}${lift}`;
+  }
+  const shown = names.slice(0, 3), more = n - shown.length;
+  const who = shown.length ? `The crews of ${listOf(more > 0 ? [...shown, `${more} more`] : shown)}, of ${of},` : `${countWord(n, true)} crews of ${of}`;
+  const rest = n - t.school - t.bonds;
+  const went: [number, string][] = [];
+  if (t.school) went.push([t.school, 'home to train new crews']);
+  if (t.bonds) went.push([t.bonds, 'on a war bond tour']);
+  if (rest > 0) went.push([rest, 'home']);
+  // All the same way: 'They go home to train new crews.' Otherwise each count with its own verb.
+  const each = went.map(([k, where], i) => `${countWord(k, i === 0)} ${k === 1 ? 'goes' : 'go'} ${where}`);
+  const home = went.length === 1 ? `They go ${went[0][1]}.` : `${each.slice(0, -1).join(', ')}, and ${each[each.length - 1]}.`;
+  return `${who} have finished their tours of ${t.tour} ${t.flown}s. ${home}${lift}`;
+}
+
+/**
+ * A bomber group's bombers after an operation (bombers.ts): the lost are struck off its roster (those the field saw
+ * fall, 'fallen', where the raid was fought out), and after a month of bombing each bomber has its missions, the
+ * gunners their kills (first the bombers the field saw make them, 'seen'), and the crews that have finished a tour go home. Told to the player; for everyone else it is
+ * kept and no more. 'guns' are the raid's own gunners' kills for the group (ruling 227: the field's, or fly()'s dice).
+ */
+function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: number, sea: boolean, fallen?: BomberRow[], foe?: string, seen?: BomberShot[], guns?: number): void {
+  if (!keptByName(f)) return;
+  const struck = muster(g, f, fallen);
+  if (!f.bombers) return;
+  const mine = f.nat === g.human;
+  // An old hand that did not come back is news: the one with the most missions, if it had enough of them.
+  const old = struck.filter((b) => b[0] && b[2] >= BOMBERS.told).sort((a, b) => b[2] - a[2])[0];
+  if (mine && old) headline(g, 'info', `The bomber ${bomberName(g, f, old)} of ${theUnit(f.name)}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${sea ? (placeName(g, 'fleet', at) ? `the ${placeName(g, 'fleet', at)}` : 'the raid') : thePlace(placeName(g, 'air', at)) || 'the raid'}.`, f.nat, sea ? undefined : at);
+  if (!bombing) return;
+  // The gunners' kills are the raid's own (ruling 227): those the field booked to the group's boxes, or the gunners'
+  // part of fly()'s dice. Told only the kills (a caller that does not count the gunners'), of a mixed fleet's the
+  // gunners have the bombers' weight beside its fighters', and never more than 'escorted' of them (the historian).
+  const share = f.ftr > 0 ? Math.min(BOMBERS.escorted, (f.bmr * BOMBERS.gunners) / (f.ftr + f.bmr * BOMBERS.gunners)) : 1;
+  const done = flownMonth(g, f, guns ?? Math.round(kills * share), foe, seen);
+  if (!done) return;
+  // Counted on the group's record; the bombers' own roll says which crews they were, so the group's diary does not.
+  bump(f, 'tours', done.done.length);
+  if (mine) headline(g, 'info', toursWords(f.name, done), f.nat);
+}
+
+export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number; fallen?: Record<number, BomberRow[]>; shot?: Record<number, BomberShot[]>; guns?: Record<number, number> }): void {
   const sea = mission === 'strike';
   const bombing = mission === 'bomb' || mission === 'night' || sea;
+  // Whose fighters the bombers' gunners shot at: the nation with the most of them up.
+  const foe = def.length ? def.reduce((a, b) => (b.ftr > a.ftr ? b : a)).nat : undefined;
   for (const f of att) {
     bump(f, 'flown');
     if (bombing) bump(f, 'missions', STORIES.tour.perMonth);
@@ -735,6 +803,7 @@ export function storyAir(g: Game, mission: string, target: number, att: AirFleet
     const had = f.hon?.length ?? 0;
     earn(g, 'air', f, sea ? -1 : target);
     if (f.nat === g.human && (f.hon?.length ?? 0) > had && honoursOf(g, f).slice(had).some((a) => a.hon === 'tour')) g.stories.mail.push({ w: 7, m: 'tour', id: -f.id, unit: f.name, reg: f.base });
+    bombersFlew(g, f, bombing, facts.defLost ? Math.round(facts.defLost / att.length) : 0, target, sea, facts.fallen?.[f.id], foe, facts.shot?.[f.id], facts.guns?.[f.id]);
   }
   const fighters = def.reduce((s, x) => s + x.ftr, 0);
   for (const f of def) {
