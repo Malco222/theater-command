@@ -244,11 +244,11 @@ int main(int Argc, char** Argv)
 	std::string Err;
 	if (RecText.empty() || !LandJson::Parse(RecText, Rec)) { std::printf("cannot read %s\n", Argv[1]); return 1; }
 	std::map<std::string, std::shared_ptr<Soldier>> Files;
-	for (const char* Army : { "GER", "POL", "USA", "USA_bar", "USA_nco", "USA_bazooka", "USA_loader", "USA_radio" })
+	for (const char* Army : { "GER", "POL", "USA", "USA_bar", "USA_nco", "USA_bazooka", "USA_loader", "USA_radio", "SOV" })
 	{
 		const std::string Path = std::string(Argv[2]) + "/soldier_" + Army + ".json";
 		const std::string Text = ReadFile(Path);
-		if (Text.empty() && std::string(Army).rfind("USA", 0) == 0) continue; // (the GI's files, when they are here)
+		if (Text.empty() && (std::string(Army).rfind("USA", 0) == 0 || std::string(Army) == "SOV")) continue; // (the GI's and the Red Army man's files, when they are here)
 		auto S = std::make_shared<Soldier>();
 		const auto A = std::chrono::steady_clock::now();
 		if (Text.empty() || !S->Load(Text, Err)) { std::printf("cannot read %s: %s\n", Path.c_str(), Err.c_str()); return 1; }
@@ -831,6 +831,19 @@ int main(int Argc, char** Argv)
 			double X, Y, Z;
 			float Fc;
 			C.PlaceOf(Body, X, Y, Z, Fc);
+			{
+				// (from where his body lies as skinned, not his place: a fall that carries him a metre or two, a blast's or
+				// a run's, left the rim's ring wholly off him, so the check had nothing to look at)
+				std::vector<float> Was_(static_cast<size_t>(C.PointsOf(Body, Near)) * 3);
+				const int N_ = C.Skin(Body, Near, Was_.data(), nullptr);
+				if (N_ > 0)
+				{
+					double Sx = 0.0, Sy = 0.0;
+					for (int K = 0; K < N_; ++K) { Sx += Was_[static_cast<size_t>(K) * 3]; Sy += Was_[static_cast<size_t>(K) * 3 + 1]; }
+					X = Sx / N_;
+					Y = Sy / N_;
+				}
+			}
 			RimX = X + 0.9;
 			RimY = Y;
 			RimH = 0.25;
@@ -841,7 +854,7 @@ int main(int Argc, char** Argv)
 				double Bx, By, Bz;
 				float Bf;
 				C.PlaceOf(KV.first, Bx, By, Bz, Bf);
-				if ((Bx - RimX) * (Bx - RimX) + (By - RimY) * (By - RimY) > (Reach + 2.0) * (Reach + 2.0)) Beyond[KV.first] = C.Stamp(KV.first);
+				if ((Bx - RimX) * (Bx - RimX) + (By - RimY) * (By - RimY) > (Reach + 8.0) * (Reach + 8.0)) Beyond[KV.first] = C.Stamp(KV.first); // (a thrown body lies up to 7 m off his root)
 			}
 			const uint32_t Was = C.Stamp(Body);
 			const int Laid = C.Unsettle(RimX, RimY, Reach);

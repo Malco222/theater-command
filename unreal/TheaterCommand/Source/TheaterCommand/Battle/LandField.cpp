@@ -553,6 +553,7 @@ namespace LandField
 		std::vector<KitSpot> Kits;
 
 		std::vector<HedgeLine> HedgeOut;
+		std::vector<HedgeOpening> OpeningOut;
 		std::vector<std::vector<std::pair<double, double>>> LaneOut;
 		std::vector<std::vector<Placed>> Inst;
 		std::vector<BaseMesh> Bases;
@@ -601,7 +602,7 @@ namespace LandField
 		void MakeLanes();
 		void MakeRaster();
 		void MakeWays();
-		double WayRoom(V2 P) const;
+		double WayRoom(V2 P, bool bVehicles = false) const;
 		void MakeSites();
 		void MakeSteppeSites();
 		bool Fits(const House& H, double Margin) const;
@@ -612,7 +613,7 @@ namespace LandField
 		void MakeDistances();
 		void MakeHedges();
 		void MakePlants();
-		void Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint);
+		void Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint, bool bThrough = false);
 
 		// meshes
 		Col GroundColour(double X, double Y) const;
@@ -1285,13 +1286,15 @@ namespace LandField
 		}
 	}
 
-	/** How far a place lies off the recorded ways: metres past the nearest one's half width (a lot where none is near). */
-	double Ground::Impl::WayRoom(V2 P) const
+	/** How far a place lies off the recorded ways: metres past the nearest one's half width (a lot where none is near);
+	 * bVehicles, off the vehicles' ways only. */
+	double Ground::Impl::WayRoom(V2 P, bool bVehicles) const
 	{
 		double Room = 1e9;
 		if (const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y))
 			for (const uint32_t W : *Near)
 			{
+				if (bVehicles && WayHalf[W] < VehicleHalf) continue;
 				double T;
 				Room = std::min(Room, SegDist(P, WayA[W], WayB[W], T) - WayHalf[W]);
 			}
@@ -2611,6 +2614,10 @@ namespace LandField
 			}
 			const V2 Way = Unit2(H.P[std::min(Hinge + 1, H.P.size() - 1)] - H.P[Hinge]);
 			double Yaw = std::atan2(Way.Y, Way.X);
+			{
+				const V2 Middle = H.P[Hinge] + Way * (At - H.S[Hinge]);
+				OpeningOut.push_back({ Middle.X, Middle.Y, Yaw, 2.0 * GateHalf, 0, 0 });
+			}
 			const V2 Inward = V2{ Q.CX, Q.CY } - H.P[Hinge];
 			const double Into = Dot(Inward, Perp(Way)) > 0.0 ? 1.0 : -1.0;
 			const bool bSwung = R.Next() < 0.55;
@@ -2634,6 +2641,94 @@ namespace LandField
 					if (DX * DX + DY * DY < 30.0 && InRaster(Mid.X + DX, Mid.Y + DY)) OccR[Pix(Mid.X + DX, Mid.Y + DY)] |= OcGate;
 		}
 		Count.Gates = static_cast<int>(Gates.size());
+		// Where the recording's men went over a hedgerow or a lane's bank in numbers (three crossings or more within 12.5 m
+		// of one of them), a breach blown through it, bank and all, as the engineers' charges did: 2.5 to 4 m across (the
+		// more men, the wider), at most one in 40 m of hedge and none within 15 m of a gateway or another gap, its earth
+		// thrown out either side. The rest of the men climb the bank and push through the shrubs (MakePlants nudges two
+		// apart for each), so the hedge stays a wall where the fight is.
+		auto PointOn = [](const Hedge& H, double S, V2& Way) {
+			size_t K0 = 0;
+			while (K0 + 2 < H.P.size() && H.S[K0 + 1] <= S) ++K0;
+			Way = Unit2(H.P[K0 + 1] - H.P[K0]);
+			return H.P[K0] + Way * (S - H.S[K0]);
+		};
+		for (Hedge& H : Hs)
+		{
+			if (H.Kind != HkHedgerow && H.Kind != HkLaneBank) continue;
+			std::vector<double> Over;
+			for (size_t K = 0; K + 1 < H.P.size(); ++K)
+			{
+				if (!H.Keep[K] || !H.Keep[K + 1]) continue;
+				const V2 Mid = Lerp2(H.P[K], H.P[K + 1], 0.5);
+				const std::vector<uint32_t>* Near = WGrid.At(Mid.X, Mid.Y);
+				if (!Near) continue;
+				for (const uint32_t W : *Near)
+				{
+					double T;
+					if (WayHalf[W] < VehicleHalf && Crosses(H.P[K], H.P[K + 1], WayA[W], WayB[W], T)) Over.push_back(Lerp(H.S[K], H.S[K + 1], T));
+				}
+			}
+			if (Over.size() < 3) continue;
+			std::sort(Over.begin(), Over.end());
+			const double Last = H.S.back();
+			auto Gapped = [&H](double S, double Room) {
+				for (size_t K = 0; K < H.P.size(); ++K)
+					if (!H.Keep[K] && std::fabs(H.S[K] - S) < Room) return true;
+				return false;
+			};
+			// (40 m along this hedge, and where a hedge runs on in line past a junction as another, a breach in that one
+			// counts too: within 3 m of this one's line, or this one within 3 m of its, heading within 20 degrees)
+			std::vector<double> Blown;
+			auto InLine = [&](double S) {
+				for (const double B : Blown)
+					if (std::fabs(B - S) < 40.0) return true;
+				V2 Way;
+				const V2 P = PointOn(H, S, Way);
+				for (const HedgeOpening& O : OpeningOut)
+				{
+					if (O.Kind != 1) continue;
+					const V2 D{ O.X - P.X, O.Y - P.Y }, Theirs{ std::cos(O.Yaw), std::sin(O.Yaw) };
+					const double Turn = std::fabs(std::remainder(O.Yaw - std::atan2(Way.Y, Way.X), Pi));
+					const bool bOnLine = std::fabs(D.X * Way.Y - D.Y * Way.X) < 3.0 || std::fabs(D.X * Theirs.Y - D.Y * Theirs.X) < 3.0;
+					if (Turn < 0.35 && bOnLine && std::fabs(Dot(D, Way)) < 40.0) return true;
+				}
+				return false;
+			};
+			for (;;)
+			{
+				size_t Best = Over.size();
+				int Most = 0;
+				for (size_t I = 0; I < Over.size(); ++I)
+				{
+					const double S = Over[I];
+					if (S < 4.0 || S > Last - 4.0 || Gapped(S, 15.0) || InLine(S)) continue;
+					int Men = 0;
+					for (const double O : Over) Men += std::fabs(O - S) <= 12.5 ? 1 : 0;
+					if (Men > Most)
+					{
+						Most = Men;
+						Best = I;
+					}
+				}
+				if (Best == Over.size() || Most < 3) break;
+				const double At = Over[Best], Half = std::min(2.0, 1.25 + 0.05 * Most);
+				Blown.push_back(At);
+				for (size_t K = 0; K < H.P.size(); ++K)
+					if (std::fabs(H.S[K] - At) < Half) H.Keep[K] = 0;
+				V2 Way;
+				const V2 Middle = PointOn(H, At, Way);
+				OpeningOut.push_back({ Middle.X, Middle.Y, std::atan2(Way.Y, Way.X), 2.0 * Half, 1, Most });
+				++Count.Breaches;
+				// (its earth thrown out 3 to 5 m either side, torn and trodden)
+				for (double DY = -5.5; DY <= 5.5; DY += Res)
+					for (double DX = -5.5; DX <= 5.5; DX += Res)
+					{
+						const double Across = DX * -Way.Y + DY * Way.X, Along = DX * Way.X + DY * Way.Y;
+						const double Ax = Across / 5.0, Al = Along / (Half + 1.5);
+						if (Ax * Ax + Al * Al < 1.0 && InRaster(Middle.X + DX, Middle.Y + DY)) OccR[Pix(Middle.X + DX, Middle.Y + DY)] |= OcGate;
+					}
+			}
+		}
 		// What stays, laid: banks (with their shrubs and trees later) and walls.
 		for (Hedge& H : Hs)
 		{
@@ -2829,35 +2924,35 @@ namespace LandField
 		}
 
 		/**
-		 * A bocage hedge's tree and its height over the bank's top (the bank lifts it some 1.2 m more, to 10 to 15 m over
-		 * the field): oak most, a third of all of them pollarded (a thick stub and a bushy head), elm and ash, a beech now
-		 * and then; a row of pollards all pollards.
+		 * A bocage hedge's tree and its height over the bank's top (the bank lifts it some 1.2 m more): standards of oak,
+		 * elm and ash 14 to 22 m, a beech now and then, and a third of all of them pollarded (a thick stub and a bushy head,
+		 * 6.5 to 10 m); a row of pollards all pollards.
 		 */
 		Base BocageTree(Rng& R, bool bPollards, double& High)
 		{
 			const double U = R.Next();
-			const Base B = bPollards || U < 0.34 ? Base::Pollard : U < 0.64 ? Base::Oak : U < 0.77 ? Base::Elm : U < 0.95 ? Base::Ash : Base::Beech;
+			const Base B = bPollards || U < 0.28 ? Base::Pollard : U < 0.6 ? Base::Oak : U < 0.75 ? Base::Elm : U < 0.94 ? Base::Ash : Base::Beech;
 			switch (B)
 			{
-			case Base::Oak: High = R.Range(10.0, 14.0); break;
-			case Base::Elm: High = R.Range(10.5, 14.5); break;
-			case Base::Ash: High = R.Range(9.5, 13.5); break;
-			case Base::Beech: High = R.Range(10.5, 14.0); break;
-			default: High = R.Range(8.5, 11.5); break;
+			case Base::Oak: High = R.Range(15.0, 21.0); break;
+			case Base::Elm: High = R.Range(16.0, 22.0); break;
+			case Base::Ash: High = R.Range(14.0, 19.0); break;
+			case Base::Beech: High = R.Range(15.0, 20.0); break;
+			default: High = R.Range(6.5, 10.0); break;
 			}
 			return B;
 		}
 	}
 
-	void Ground::Impl::Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint)
+	void Ground::Impl::Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint, bool bThrough)
 	{
 		// Nothing stands on a recorded way, a man's or a vehicle's: no stem, trunk or prop within its half width and the
 		// thing's own body besides (the planting's coarse marks miss a stem by a pixel's corner now and then). The gates are
-		// hung or left off where they are cut.
+		// hung or left off where they are cut. A hedgerow's shrub men push through (bThrough) is kept off vehicles' ways only.
 		if (B != Base::Gate)
 		{
 			const double Body = B <= Base::Bramble ? 0.35 : B <= Base::Apple ? 0.4 : B == Base::Cart ? 1.6 : 0.8;
-			if (WayRoom({ X, Y }) < Body) return;
+			if (WayRoom({ X, Y }, bThrough) < Body) return;
 		}
 		Placed P;
 		P.Kind = B;
@@ -2885,10 +2980,10 @@ namespace LandField
 			const size_t P = Pix(X, Y);
 			return !(OccR[P] & Bits) && LaneD[P] > 0.4f;
 		};
-		// A recorded man's way and a hedge's shrub: its stem keeps off his way, and where he crosses the hedge its crown too,
-		// so the gap he goes through is open (where he walks along the hedge, only his own width is kept clear of stems).
-		// He crosses it where his way runs across it, or where a stretch of his way passes from one side of its line to
-		// the other however slantwise.
+		// A recorded man's way and a wood edge's or a garden hedge's shrub: its stem keeps off his way, and where he
+		// crosses the hedge its crown too, so the gap he goes through is open (where he walks along the hedge, only his own
+		// width is kept clear of stems). He crosses it where his way runs across it, or where a stretch of his way passes
+		// from one side of its line to the other however slantwise.
 		auto ManClear = [this](V2 P, V2 Along) {
 			const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y);
 			if (!Near) return true;
@@ -2903,20 +2998,69 @@ namespace LandField
 			}
 			return true;
 		};
-		// The hedges. A hedgerow's bank and a lane's carry a dense hedge with no gap but the gateways and the ways: its
-		// shrubs a metre and a half apart along the bank's top (so its faces of earth and grass show under them), its
-		// height running smoothly along it, 2 to 2.8 m over the bank (so it reads as one green wall, not a row of bushes),
-		// and a tree every 5 to 15 m, oak, elm and ash and many of them pollards, 10 to 15 m over the field. A wood's
-		// edge and a garden's hedge are lower and looser.
+		// A hedgerow's or a lane bank's: the hedge stays a wall. Where a man goes over it outside its gateways and breaches
+		// (MakeHedges) he climbs the bank and pushes through between two shrubs moved apart along it for him (no stem within
+		// his half width and half a metre: a trampled notch about a metre wide, its shrubs a little lower), and where his
+		// way runs along the bank, its shrubs and trees stand a little to one side of it. A trunk is moved as far as 4 m
+		// and never stands on his way; a shrub that cannot be given room (where many cross close together) stays, and he
+		// pushes through it.
+		auto InHisWay = [this](V2 P, V2 Along, double Room) {
+			const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y);
+			if (!Near) return false;
+			for (const uint32_t W : *Near)
+			{
+				if (WayHalf[W] >= VehicleHalf) continue;
+				double T;
+				const V2 Dir = Unit2(WayB[W] - WayA[W]);
+				const double SideA = Along.X * (WayA[W].Y - P.Y) - Along.Y * (WayA[W].X - P.X), SideB = Along.X * (WayB[W].Y - P.Y) - Along.Y * (WayB[W].X - P.X);
+				const bool bAcross = std::fabs(Dir.X * Along.Y - Dir.Y * Along.X) > 0.5 || SideA * SideB <= 0.0;
+				if (bAcross && SegDist(P, WayA[W], WayB[W], T) < WayHalf[W] + Room) return true;
+			}
+			return false;
+		};
+		constexpr uint8_t Built = OcHouse | OcNear | OcWall | OcVehicle;
+		// (the nearest place along the bank as far as Reach and across it as far as 0.9 m that is clear of what is built,
+		// of a crossing man's way by Room and of every way by Body, and no nearer a sunken lane's wall; false where there
+		// is none)
+		auto Nudged = [&](V2& P, V2 Along, double Room, double Body, double Reach) {
+			if (!InRaster(P.X, P.Y)) return false;
+			const float Lane = std::min(LaneD[Pix(P.X, P.Y)], static_cast<float>(LaneWall + 0.45));
+			auto Fine = [&](V2 Q) { return Clear(Q.X, Q.Y, Built) && LaneD[Pix(Q.X, Q.Y)] >= Lane && !InHisWay(Q, Along, Room) && WayRoom(Q) >= Body; };
+			if (Fine(P)) return true;
+			const V2 Across = Perp(Along);
+			for (double Step = 0.3; Step <= Reach + 0.9 + 1e-9; Step += 0.3)
+				for (double D = std::max(0.0, Step - 0.9); D <= std::min(Step, Reach) + 1e-9; D += 0.3)
+					for (const double SD : { 1.0, -1.0 })
+						for (const double SE : { 1.0, -1.0 })
+						{
+							const V2 Q = P + Along * (D * SD) + Across * ((Step - D) * SE);
+							if (Fine(Q))
+							{
+								P = Q;
+								return true;
+							}
+						}
+			return false;
+		};
+		// The hedges. A hedgerow's bank and a lane's carry a dense hedge with no gap but the gateways and the breaches, as
+		// Normandy's were in 1944, untrimmed: its shrubs a metre and a half apart along the bank's top, broad enough to
+		// spill over its faces, its top ragged, 2.5 to 3.2 m over the bank on the whole and rising and falling a metre or
+		// more in every 6 to 10 m along it, and every 5 to 9 m a clump of hazel or elder grown up to 4 or 5 m; brambles
+		// hanging over both faces. In it a tree every 5 to 15 m, oak, elm and ash standing 15 to 22 m, a third of them
+		// pollards (their bushy heads at 6 to 10 m), and between them young oak, ash and pollard shoots 3.5 to 6 m, so
+		// from the field the leaves run up from the hedge into the crowns with little sky between (the bocage's walls 4 to
+		// 6 m high in all). A wood's edge and a garden's hedge are lower and looser.
+		const auto InField = [this](V2 P) { return P.X > -60.0 && P.Y > -60.0 && P.X < FW + 60.0 && P.Y < FH + 60.0; };
 		for (const Run& Rn : Runs)
 		{
 			Rng R(Rn.Key ^ 0x9A17);
 			const double Total = LineLength(Rn.P);
 			const bool bGarden = Rn.Kind == HkGarden, bBocage = Rn.Kind == HkHedgerow || Rn.Kind == HkLaneBank;
 			const double Thin = bBocage ? 0.0 : R.Next() < 0.15 ? 0.3 : 0.06;
-			const bool bPollards = bBocage && R.Next() < 0.2;
+			const bool bPollards = bBocage && R.Next() < 0.12;
 			const double TreeStep = bGarden ? 1e9 : !bBocage ? 45.0 : bPollards ? R.Range(6.0, 8.5) : R.Range(7.5, 11.0);
-			const double Level = R.Range(2.0, 2.5), Along = static_cast<double>(Rn.Key % 1013);
+			const double Level = bBocage ? R.Range(2.0, 2.6) : R.Range(2.0, 2.5), Along = static_cast<double>(Rn.Key % 1013);
+			const double Wave = R.Range(6.0, 10.0), Swell = R.Range(1.0, 1.4);
 			const double Lo = bGarden ? 1.4 : 1.6, Hi = bGarden ? 2.0 : 3.2;
 			size_t Seg = 0;
 			double Before = 0.0;
@@ -2932,7 +3076,7 @@ namespace LandField
 			};
 			// The shrubs: their kind changes every dozen metres or so, as a hedge's planting does.
 			Base Kind = Base::ShrubA;
-			double NextKind = 0.0;
+			double NextKind = 0.0, NextTall = R.Range(2.0, 10.0);
 			const double Start = bBocage ? R.Range(0.6, 1.0) : R.Range(0.3, 1.0), End = bBocage ? 0.6 : 0.3;
 			for (double S = Start; S < Total - End; S += bGarden ? R.Range(1.1, 1.5) : bBocage ? R.Range(1.15, 1.6) : R.Range(1.9, 2.7))
 			{
@@ -2944,27 +3088,48 @@ namespace LandField
 				}
 				if (Thin > 0.0 && R.Next() < Thin) continue;
 				V2 Way;
-				const V2 P = PointAt(S, Way) + Perp(Way) * (bBocage ? R.Range(-0.28, 0.28) : R.Range(-0.35, 0.35));
-				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcVehicle | (bBocage ? 0 : OcMan)) || !ManClear(P, Way)) continue;
-				const double Shade = R.Range(0.9, 1.1);
-				double Scale, High;
+				V2 P = PointAt(S, Way) + Perp(Way) * (bBocage ? R.Range(-0.28, 0.28) : R.Range(-0.35, 0.35));
+				if (!Clear(P.X, P.Y, Built | (bBocage ? 0 : OcMan))) continue;
+				bool bTrod = false, bThrough = false;
 				if (bBocage)
 				{
-					Scale = R.Range(0.78, 0.95);
-					High = Level + 0.3 * Noise(S / 13.0, Along, Seed ^ 0x9A18) + R.Range(-0.12, 0.12);
+					bTrod = InHisWay(P, Way, 0.55);
+					bThrough = !Nudged(P, Way, 0.55, 0.35, 1.2);
+				}
+				else if (!ManClear(P, Way)) continue;
+				const double Shade = R.Range(0.9, 1.1);
+				double Scale, High;
+				Base What = Kind;
+				if (bBocage)
+				{
+					Scale = R.Range(0.9, 1.35);
+					High = std::max(1.4, Level + Swell * Noise(S / Wave, Along, Seed ^ 0x9A18) + 0.75 * Noise(S / 2.5, Along, Seed ^ 0x9A19) + R.Range(-0.4, 0.4));
+					// (a clump grown up: hazel or elder, 3.9 to 5 m over the bank; where a man went over, the next one)
+					if (S >= NextTall && !bTrod)
+					{
+						NextTall = S + R.Range(8.0, 14.0);
+						What = R.Next() < 0.6 ? Base::ShrubC : Base::ShrubB;
+						Scale = R.Range(1.1, 1.4);
+						High = R.Range(3.9, 5.0);
+					}
 				}
 				else
 				{
 					Scale = R.Range(1.0, 1.45);
 					High = R.Range(Lo, Hi);
 				}
-				Plant(Kind, P.X, P.Y, R.Range(0.0, 2.0 * Pi), Scale, High / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)));
-				// Brambles and nettles spill from the bank's foot, here and there.
-				if (!bGarden && R.Next() < (bBocage ? 0.12 : 0.22))
+				if (bTrod) High *= 0.85;
+				Plant(What, P.X, P.Y, R.Range(0.0, 2.0 * Pi), Scale, High / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)), bThrough);
+				// Brambles and nettles: on a bocage bank in the field, hanging over both its faces most of their length; else
+				// spilling from the bank's foot here and there (not where he goes over).
+				if (bGarden || bTrod) continue;
+				const double Wide = Rn.W[std::min(Seg, Rn.W.size() - 1)];
+				for (const double Side : { -1.0, 1.0 })
 				{
-					const double Foot = 0.5 * Rn.W[std::min(Seg, Rn.W.size() - 1)] * (R.Next() < 0.5 ? -1.0 : 1.0);
-					const V2 F = P + Perp(Way) * Foot;
-					if (Clear(F.X, F.Y, OcHouse | OcNear | OcWall | OcVehicle) && LaneD[Pix(F.X, F.Y)] > 0.8f)
+					const bool bFaces = bBocage && InField(P);
+					if (R.Next() >= (bFaces ? 0.3 : bBocage ? 0.06 : 0.11)) continue;
+					const V2 F = P + Perp(Way) * (Side * Wide * (bFaces ? R.Range(0.25, 0.45) : 0.5));
+					if (Clear(F.X, F.Y, Built | OcMan) && LaneD[Pix(F.X, F.Y)] > 0.8f)
 						Plant(Base::Bramble, F.X, F.Y, R.Range(0.0, 2.0 * Pi), R.Range(0.7, 1.2), R.Range(0.6, 1.1), Tint8(1, 1, 1));
 				}
 			}
@@ -2976,12 +3141,27 @@ namespace LandField
 			{
 				if (S < 3.0) continue;
 				V2 Way;
-				const V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.3, 0.3);
-				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
+				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.3, 0.3);
+				if (bBocage ? !Clear(P.X, P.Y, Built) || !Nudged(P, Way, 0.9, 0.45, 4.0) : !Clear(P.X, P.Y, Built | OcMan)) continue;
 				double High = 0.0;
 				const Base B = bBocage ? BocageTree(R, bPollards, High) : HedgeTree(R, false, High);
 				const double Spread = R.Range(0.85, 1.15);
 				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.06), R.Range(0.9, 1.04)));
+			}
+			// The young shoots between them (in the field and a little round it): oak, ash and pollard growth 3.5 to 6 m,
+			// every 4 to 7 m, their crowns down in the hedge's top.
+			if (!bBocage) continue;
+			Seg = 0;
+			Before = 0.0;
+			for (double S = R.Range(1.5, 6.0); S < Total - 2.0; S += R.Range(4.0, 7.0))
+			{
+				V2 Way;
+				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.35, 0.35);
+				if (!InField(P) || !Clear(P.X, P.Y, Built) || !Nudged(P, Way, 0.9, 0.45, 1.5)) continue;
+				const double U = R.Next();
+				const Base B = U < 0.45 ? Base::Oak : U < 0.75 ? Base::Ash : Base::Pollard;
+				const double High = R.Range(3.5, 6.0);
+				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * R.Range(1.0, 1.35), High / TreeHigh(B), Tint8(R.Range(0.95, 1.08), R.Range(0.97, 1.08), R.Range(0.9, 1.02)));
 			}
 		}
 		// The woods: trees some 7.5 m apart (clearings here and there), undergrowth thick in their edges.
@@ -5059,6 +5239,9 @@ namespace LandField
 		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4, LeafOval, LeafRound }, S + 3);
 		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2, LeafThorn, LeafOak }, S + 4);
 		for (const Base B : { Base::ShrubA, Base::ShrubB, Base::ShrubC, Base::Bramble }) At(B).FarFrom = 60.0f;
+		// (brambles low under the hedges and in the woods' edges, drawn near only, out to 70 m as the grass is)
+		At(Base::Bramble).Far = Mesh();
+		At(Base::Bramble).FarFrom = 70.0f;
 
 		// The trees, each built at its TreeHigh: the hedgerow oak broad and ragged on spreading limbs; the elm tall, its
 		// crown pulled in at the waist; the ash airy, small sprays far apart and pale; the beech dense and domed; the pollard
@@ -5463,6 +5646,7 @@ namespace LandField
 	const BaseMesh& Ground::BaseOf(Base B) const { return In->Bases[static_cast<size_t>(B)]; }
 	const std::vector<Placed>& Ground::Instances(Base B) const { return In->Inst[static_cast<size_t>(B)]; }
 	const std::vector<HedgeLine>& Ground::Hedges() const { return In->HedgeOut; }
+	const std::vector<HedgeOpening>& Ground::Openings() const { return In->OpeningOut; }
 	const std::vector<std::vector<std::pair<double, double>>>& Ground::Lanes() const { return In->LaneOut; }
 	const Tally& Ground::Laid() const { return In->Count; }
 

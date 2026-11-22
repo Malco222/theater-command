@@ -79,6 +79,7 @@ namespace LandMen
 		std::vector<uint8_t> Part, Part2;
 		std::vector<float> W2;          // part2's weight, 0 to 0.5; part takes the rest
 		std::vector<float> Shade;       // 0 to 1, wear and seams; empty: every point 1
+		std::vector<float> Tint;        // rgb a point, about 1 (the soldier files' "tint": mud browner, dust paler; shade only darkens); empty: every point 1
 		std::vector<int16_t> Ink;       // a helmet finish's: -1 the paint, else an index into the file's inks; empty: all -1
 		std::vector<uint32_t> Triangles;
 	};

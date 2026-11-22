@@ -217,8 +217,19 @@ public:
 	void OilFire(int32 Id, const FVector& WorldAt, float ReachMetres, const FString& Kind = TEXT("sunk"), double UntilSeconds = 0.0, float SinceSeconds = 0.0f);
 	/** That oil fire goes out: no new flame or smoke, and its column thins away on its own. */
 	void OilStop(int32 Id);
+	/** A smoke round landing at WorldAt: its burst and the white wall that drifts from it down the wind, AcrossMetres
+	 * wide at its fullest and laid for Seconds (on the kit's life clock). Kind "wp" (white phosphorus: a hard white
+	 * burst of burning streamers) or "canister" (a burning bomb's or a base-ejection shell's: a gush from the ground).
+	 * No crater. Id: the caller's own number for it, or under 0 none. */
+	void SmokeScreen(const FVector& WorldAt, float AcrossMetres, float Seconds, const FString& Kind = TEXT("wp"), int32 Id = -1);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
+	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and
+	 * blue as pixel / 255, not linearised; alpha is not read): the horizon's haze for a ground or sea battle, the sky at
+	 * the fight's height for an air one. Old smoke pales toward a shade just under it as it thins, so it goes into the
+	 * air. Call it once the scene's sky is set, and again when the hour or the weather changes it. Not called: the
+	 * recipe's own grey (linger.to) by the hour's light. */
+	void SetSky(const FLinearColor& OnScreen);
 	/** For an air scene: draw out to the recipe's air.draw_beyond_m (4,000 m), so guns, hits and flames are seen from
 	 * the strategy camera 800 to 2,000 m off the fight. Call once after it is made. */
 	void UseAirDistance();

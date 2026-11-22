@@ -42,8 +42,9 @@ namespace LandPlay
 		/** The effects kit's word for the ground at a point: earth, sand, snow, mud, town, woods, water. */
 		std::function<std::string(double X, double Y)> GroundWord;
 		/** A shooter's muzzle (a man's from his skinned rifle, a tank's or a gun's from its model's socket) at a battle
-		 * time: where and which way, for track index Track. False: not known (the replay places it plainly). */
-		std::function<bool(int Track, double T, Vec& OutAt, Vec& OutFacing)> Muzzle;
+		 * time: where and which way, for track index Track. Socket names a vehicle's other gun (TankMg: hull_mg, coax,
+		 * roof_mg), empty for its main gun. False: not known (the replay places it plainly). */
+		std::function<bool(int Track, double T, const std::string& Socket, Vec& OutAt, Vec& OutFacing)> Muzzle;
 		/** Where round Round struck a vehicle's skin (the rules' face: front, left, right, rear, top; U across, -1..1;
 		 * H up, 0..1) at battle time T, and the skin's outward way there. False: not known. */
 		std::function<bool(int Track, int Round, double T, const std::string& Face, double U, double H, Vec& OutAt, Vec& OutNormal)> Skin;
@@ -58,7 +59,8 @@ namespace LandPlay
 		Size,       // a burst by the kit's size row (Name: grenade, gun75, how105...) at At on Ground
 		Skip,       // an armour-piercing round that missed: a low spurt and a skip along Way
 		Glance,     // a shot glancing off armour at At: Way its incoming way, Normal the plate's, CalibreMm
-		Plate       // a round on armour that went in or killed: the kit's on_armour sparks (Size with bArmour)
+		Plate,      // a round on armour that went in or killed: the kit's on_armour sparks (Size with bArmour)
+		Screen      // a smoke round landing: its screen (Name: wp, a phosphorus round's burst; canister, a burning bomb's), CalibreMm the bomb's
 	};
 
 	struct Effect
@@ -173,7 +175,17 @@ namespace LandPlay
 
 		double HeightAt(double X, double Y) const;
 		std::string GroundAt(double X, double Y) const;
-		Vec MuzzleOf(int Track, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward) const;
+		Vec MuzzleOf(int Track, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward, int RoundN = -1) const;
+	public:
+		/**
+		 * A tank's machine gun for one of her bursts (the rules say only 'mg'): the commander's on her roof when he is up
+		 * in his hatch (not buttoned) and his army mounted one there (the Americans' .50, the Germans' MG 34 on the
+		 * cupola's ring), a burst in three; else the hull gunner's ball-mounted gun where the foot are within 25 degrees
+		 * of her bow, half its bursts; else the coaxial beside her main gun. The same burst picks the same gun (by its
+		 * round's number). Its socket's name: roof_mg, hull_mg or coax.
+		 */
+		std::string TankMg(int Track, double T, int RoundN, const Vec& Toward) const;
+	private:
 		/** Where a round lands: on the ground at x, y; on a vehicle's skin where the rules name the face. */
 		Vec LandingOf(const LandFeed::Round& R, int Target, Vec& OutNormal) const;
 		void Fire(const LandFeed::Round& R, int Index, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise);

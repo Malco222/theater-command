@@ -666,6 +666,19 @@ void ALandBattle::LoadInks()
 	}
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
+	// (the surfaces' flat lift on every face turned up to the sky, 0.26 on the map, lit the ground under a tank as
+	// much as the open field, sun or shade: the battle's light now gives the shade its own (the contact shade, the
+	// ambient occlusion), so only a little of it. The graphics audit, 22 November. "-TheaterLandTopLight=0.08")
+	float TopLight = 0.08f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTopLight="), TopLight);
+	TopLight = FMath::Clamp(TopLight, 0.0f, 1.0f);
+	for (UMaterialInstanceDynamic* Made : { GroundInk.Get(), ThingInk.Get(), ManInk.Get(), SteelInk.Get() })
+	{
+		if (Made)
+		{
+			Made->SetScalarParameterValue(TEXT("TopLight"), TopLight);
+		}
+	}
 }
 
 bool ALandBattle::Open()
@@ -805,7 +818,7 @@ bool ALandBattle::Open()
 	const double ArmourSeconds = LandParts::Seconds() - Took;
 	{
 		TWeakPtr<FLandBattleState> Weak(State);
-		PlayWorld.Muzzle = [Weak](int Track, double T, LandPlay::Vec& OutAt, LandPlay::Vec& OutFacing)
+		PlayWorld.Muzzle = [Weak](int Track, double T, const std::string& Socket, LandPlay::Vec& OutAt, LandPlay::Vec& OutFacing)
 		{
 			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
 			if (!Pinned.IsValid() || Track < 0)
@@ -818,7 +831,32 @@ bool ALandBattle::Open()
 			{
 				const LandKit::Vehicle& V = St.Armour->Vehicles()[static_cast<size_t>(St.VehicleOf[K])];
 				LandKit::V3 At, Facing;
-				if (V.SocketAt("muzzle", T, At, Facing))
+				// Her machine guns: the hull gunner's and the coaxial at their sockets; the commander's on the roof at a
+				// roof_mg socket where the model has one, else on its pintle over his hatch's rim (the commander socket is
+				// a quarter metre under it). A model short of one fires the next: the coaxial, then the main gun's place.
+				bool bFound = false;
+				if (Socket == "roof_mg")
+				{
+					bFound = V.SocketAt("roof_mg", T, At, Facing);
+					if (!bFound && V.SocketAt("commander", T, At, Facing))
+					{
+						At = LandKit::V3{ At.X + Facing.X * 0.3, At.Y + Facing.Y * 0.3, At.Z + 0.6 };
+						bFound = true;
+					}
+				}
+				else if (!Socket.empty())
+				{
+					bFound = V.SocketAt(Socket, T, At, Facing);
+				}
+				if (!bFound && !Socket.empty())
+				{
+					bFound = V.SocketAt("coax", T, At, Facing);
+				}
+				if (!bFound)
+				{
+					bFound = V.SocketAt("muzzle", T, At, Facing);
+				}
+				if (bFound)
 				{
 					OutAt = LandPlay::Vec(At.X, At.Y, At.Z);
 					OutFacing = LandPlay::Vec(Facing.X, Facing.Y, Facing.Z);
@@ -1107,6 +1145,32 @@ bool ALandBattle::Open()
 		Lens->PostProcessSettings.bOverride_FilmGrainIntensity = true;
 		Lens->PostProcessSettings.FilmGrainIntensity = FMath::Clamp(Grain, 0.0f, 1.0f);
 	}
+	// The shade where things meet the ground, for the battle only (the graphics audit, 22 November): the map's speed
+	// trims switched off the soft shade in corners and under things, the contact shadows, and the finer sun shadows for
+	// the whole game, and a battle never had them back, so men and tanks floated on the field. Put back here, and the
+	// map's own again when the battle ends. "-TheaterLandMapLight" keeps the map's trims in the battle.
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMapLight")))
+	{
+		static const TPair<const TCHAR*, const TCHAR*> BattleLight[] = {
+			{ TEXT("r.AmbientOcclusionLevels"), TEXT("-1") },
+			{ TEXT("r.ContactShadows"), TEXT("1") },
+			{ TEXT("sg.ShadowQuality"), TEXT("3") },
+		};
+		for (const TPair<const TCHAR*, const TCHAR*>& One : BattleLight)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(One.Key))
+			{
+				KeptTrims.Add(TPair<FString, FString>(One.Key, Variable->GetString()));
+				Variable->Set(One.Value, ECVF_SetByCode);
+			}
+		}
+		if (BattleKey.IsValid())
+		{
+			KeptContactShadow = BattleKey->ContactShadowLength;
+			BattleKey->ContactShadowLength = 0.05f;
+			BattleKey->MarkRenderStateDirty();
+		}
+	}
 	int32 LandSize = 0;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSize="), LandSize) && LandSize >= 40 && LandSize <= 100)
 	{
@@ -1350,6 +1414,17 @@ void ALandBattle::LayThings()
 				const double Mx = FMath::Lerp(X0, X1, (1.0 + 2.0 * Col) / 6.0), My = FMath::Lerp(Y0, Y1, (1.0 + 2.0 * Row) / 6.0);
 				Square.clear();
 				G.Clutter(Mx - 60.0, My - 60.0, Mx + 60.0, My + 60.0, Square);
+				Sample.insert(Sample.end(), Square.begin(), Square.end());
+			}
+		}
+		// (and a small square every 150 m over the whole field, so a grass that grows only somewhere the nine miss, the
+		// state farm's at Prokhorovka, is sampled too: unsampled, it drew in its built grey. The pre-check, 22 November)
+		for (double Sy = Y0 + 75.0; Sy < Y1; Sy += 150.0)
+		{
+			for (double Sx = X0 + 75.0; Sx < X1; Sx += 150.0)
+			{
+				Square.clear();
+				G.Clutter(Sx - 10.0, Sy - 10.0, Sx + 10.0, Sy + 10.0, Square);
 				Sample.insert(Sample.end(), Square.begin(), Square.end());
 			}
 		}
@@ -2226,6 +2301,13 @@ void ALandBattle::HideTheTable()
 	HazeFalloff = FMath::Max(0.0, HazeFalloff);
 	// (a warm grey-blue on a fair day, the summer haze over the bocage, not the sea's blue; greyer under overcast)
 	const FLinearColor HazeInk = FMath::Lerp(FLinearColor(0.62f, 0.66f, 0.70f), FLinearColor(0.50f, 0.52f, 0.54f), static_cast<float>(Day.Overcast));
+	// (old smoke pales into the air behind it, the effects kit's slow smoke: the horizon's haze as the screen shows it,
+	// its sRGB pixel; the haze's own colour stands for it, the stills' horizon reading within a few levels of it)
+	if (Effects)
+	{
+		const FColor HazePixel = HazeInk.ToFColor(true);
+		Effects->SetSky(FLinearColor(HazePixel.R / 255.0f, HazePixel.G / 255.0f, HazePixel.B / 255.0f, 1.0f));
+	}
 	double GroundMean = 0.0;
 	if (State.IsValid() && !State->Rec.Ground.Height.empty())
 	{
@@ -3138,6 +3220,17 @@ void ALandBattle::PlayEffects()
 		case LandPlay::FxKind::Plate:
 			Effects->ShellOfSize(At, Name.IsEmpty() ? FString(TEXT("gun75")) : Name, Ground, true);
 			break;
+		case LandPlay::FxKind::Screen:
+		{
+			// A smoke round's screen, as long and as wide as its bomb gave (the kit's life clock is the seen world's: a
+			// light mortar's bomb about a minute, 18 m; the 81 mm's a minute and a half, 24 m; a field gun's shell two
+			// and a half minutes, 30 m). No hole: MakeCraters takes shells only.
+			const double Cal = E.CalibreMm;
+			const float Across = Cal < 70.0 ? 18.0f : Cal < 85.0 ? 24.0f : 30.0f;
+			const float Seconds = Cal < 70.0 ? 60.0f : Cal < 85.0 ? 90.0f : 150.0f;
+			Effects->SmokeScreen(At, Across, Seconds, Name.IsEmpty() ? FString(TEXT("canister")) : Name, -1);
+			break;
+		}
 		}
 	}
 }
@@ -3985,6 +4078,21 @@ void ALandBattle::Finish()
 void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	HideScreen();
+	// (the map's own light trims again, and its sun's contact shadow)
+	for (const TPair<FString, FString>& Kept : KeptTrims)
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Kept.Key))
+		{
+			Variable->Set(*Kept.Value, ECVF_SetByCode);
+		}
+	}
+	KeptTrims.Reset();
+	if (KeptContactShadow >= 0.0f && BattleKey.IsValid())
+	{
+		BattleKey->ContactShadowLength = KeptContactShadow;
+		BattleKey->MarkRenderStateDirty();
+	}
+	KeptContactShadow = -1.0f;
 	if (KeptScreenPercent > 0.0f)
 	{
 		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
