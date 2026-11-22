@@ -32,7 +32,7 @@ import { isTeam, TEAMS, teamsOn } from './teams';
 import { aiRepair } from './repairs';
 import { aiFieldRepair } from './fieldstate';
 import {
-  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
+  DEFENCE, EASTERN, aidOf, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
@@ -2560,6 +2560,16 @@ export function wantsOut(g: Game, c: Corps): boolean {
   // host rule below.
   const here = g.regions[c.reg];
   if (beyondEurope(here) && (here.ctrl === c.nat || fieldCtrl(g, here) === c.nat) && atWar(g, c.nat, here.owner)) return !c.supplied || c.org < 0.3;
+  // A corps a dated row sent to fight beside a country (its row's war names it: Creforce and W Force, for Greece) is that
+  // country's guest on its ground. It comes off when cut off or broken, or when that country has fallen or is collapsing,
+  // and on one of the theatre's havens it holds on through the collapse, as Creforce did on Crete. (Read against the
+  // biggest ally alone, the expedition took fallen France for its host and sailed home the month it landed: playtest
+  // war 17, Creforce in London from November 1940.)
+  const guest = g.nations[here.owner];
+  if (guest && aidOf(c).includes(here.owner) && allied(g, c.nat, here.owner) && guest.alive) {
+    if (!c.supplied || c.org < 0.3) return true;
+    return !havensOf(here).includes(here.name) && collapseScore(g, here.owner) >= 0.7 * guest.resilience;
+  }
 
   // The host is the biggest continental ally. If it has fallen, there is nothing left to stay for.
   let host: string | null = null, size = 0;

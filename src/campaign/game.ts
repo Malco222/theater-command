@@ -2236,6 +2236,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         const dest = refuge(g, c, target);
         place(g, c, dest);
         c.str *= 0.75; c.org = 0.2; c.ap = 0;
+        liftedOut(c, target, dest);
         defU[i].fate = 'evacuated';
         if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
       } else {
@@ -3199,6 +3200,7 @@ export function evacuate(g: Game, c: Corps): boolean {
   const dest = refuge(g, c, r);
   place(g, c, dest);
   c.str *= 0.75; c.org = 0.3; c.ap = 0;
+  liftedOut(c, r, dest);
   if (!g.flags[`evac:${g.turn}`]) {
     g.flags[`evac:${g.turn}`] = 1;
     headline(g, 'event', dest.cap ? `${N.adj} troops are lifted off the beaches at ${r.name}.` : `${N.adj} troops are lifted off the beaches at ${r.name} and taken to ${dest.name}, without their heavy equipment.`, c.nat, r.id, { arm: 'land', lost: c.nat });
@@ -3395,6 +3397,15 @@ export function havensOf(r: Region): string[] {
   return r.theatre >= 0 ? THEATRE_LIST[r.theatre]?.havens ?? [] : [];
 }
 
+/**
+ * A corps lifted off out of the theatre it stood in holds nothing in place where it lands: the place it was to hold is
+ * gone. (Kept, Creforce and W Force stood held in London for the rest of the war, playtest war 17.) Taken to one of
+ * the theatre's own havens it holds on there, as W Force did on Crete.
+ */
+function liftedOut(c: Corps, from: Region, to: Region): void {
+  if (to.theatre !== from.theatre || to.theatre < 0) c.hold = false;
+}
+
 /** Where troops lifted off a coast are landed: a haven of the same theatre still in friendly hands, with room and ships able to reach it, or else home. */
 export function refuge(g: Game, c: Corps, from: Region): Region {
   for (const nm of havensOf(from)) {
@@ -3531,6 +3542,14 @@ function warBegan(g: Game, w: string[]): number {
   for (const f of foes) for (const k of [`war:${w[0]}:${f}`, `war:${f}:${w[0]}`]) if (g.flags[k] !== undefined) first = Math.min(first, g.flags[k]);
   return first === Infinity ? g.turn : first;
 }
+
+/**
+ * The allies a dated row sent a corps to fight beside: the countries its 'war' names other than its own (Creforce and
+ * W Force, for Greece). ai.ts wantsOut reads them: on such a country's ground the corps is its guest.
+ */
+const AID = new Map<string, string[]>(((setup as any).expeditions as any[] ?? []).filter((row) => Array.isArray(row[6]?.war))
+  .map((row) => [`${row[1]}|${row[2]}`, (row[6].war as string[]).filter((x) => x !== row[1] && x !== '*')]));
+export const aidOf = (c: Corps): string[] => AID.get(`${c.nat}|${c.name}`) ?? [];
 
 /** The rows another row's 'unless' names: the month each of them lands is kept (the grand campaign, ruling 229, 1c). */
 const UNLESS = new Set<string>(((setup as any).expeditions as any[] ?? []).map((row) => row[6]?.unless).filter((x): x is string => !!x));
@@ -3724,6 +3743,18 @@ function expeditions(g: Game, nat: string): void {
     }
     const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
     if (o.str !== undefined) c.str = o.str;
+    // (A row that takes part of a division already landed leaves that division the weaker by it, in the grand campaign:
+    // W Force's 1st Armoured Brigade came out of the 2nd Armoured Division in Egypt, and was counted in both. A
+    // division not landed yet comes the weaker when it does.)
+    if (g.flags.open === 1 && g.flags[`cut:${i}`] !== undefined) { c.str *= 1 - g.flags[`cut:${i}`]; delete g.flags[`cut:${i}`]; }
+    if (g.flags.open === 1 && o.takes) {
+      const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === o.takes.name);
+      const j = ((setup as any).expeditions as any[]).findIndex((r2) => r2[1] === nat && r2[2] === o.takes.name);
+      if (x) {
+        x.str *= 1 - o.takes.share;
+        if (nat === g.human && o.takes.leaves) headline(g, 'event', o.takes.leaves.replace('{place}', g.regions[x.reg].name), nat, reg.id);
+      } else if (j >= 0 && !g.flags[`sent:${j}`]) g.flags[`cut:${j}`] = o.takes.share;
+    }
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
       // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)
