@@ -306,8 +306,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
     const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
     this.power = { att: A, def: D };
-    const att = makeBlocks('att', ticket.att, A, 1);
-    const def = makeBlocks('def', ticket.def, D, att.length + 1);
+    const att = makeBlocks('att', ticket.att, A, 1, undefined, ticket.turn);
+    const def = makeBlocks('def', ticket.def, D, att.length + 1, undefined, ticket.turn);
     this.units = [...att, ...def];
     // Corps from next door (release 2): built with the rest, numbered after both armies, held off the field (comeOn).
     const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);

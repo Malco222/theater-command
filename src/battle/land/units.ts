@@ -231,12 +231,20 @@ const BRIGADES = ['UK', 'CAN', 'AUS', 'NZL', 'NZ', 'SAF', 'IND'];
 /**
  * The kind's word in a division's name, as its army's English wrote it (the historian, 22 November 18:54Z,
  * historian/unit-type-words-by-nation.md, from the UI director's "4th Armored"): the US Armored and Motorized, Britain
- * and the Commonwealth Armoured and Motor, Poland Armoured and Motorised. Germany's Panzer and the Soviet and Japanese
- * Tank at the division are the design director's and the UI director's call: the one word as before until they rule.
+ * and the Commonwealth Armoured and Motor; Germany's Panzer, its motorized divisions Panzergrenadier from mid-1943;
+ * the Soviets' and Japan's Tank, the Soviets' Motorized and Rifle; every other army Armoured and Motorised (the UI director's house
+ * style, 19:03Z: "Panzer" a proper name, "1st Panzer Division"). 'ym' the battle's year times 12 plus the month from 1.
  */
-function kindWord(nat: string, k: Kind): string {
-  if (k === 'arm') return nat === 'USA' ? 'Armored' : 'Armoured';
-  if (k === 'mot') return BRIGADES.includes(nat) ? 'Motor' : nat === 'POL' ? 'Motorised' : 'Motorized';
+function kindWord(nat: string, k: Kind, ym = 0): string {
+  if (k === 'arm') return nat === 'USA' ? 'Armored' : nat === 'GER' ? 'Panzer' : nat === 'SOV' || nat === 'JAP' ? 'Tank' : 'Armoured';
+  if (k === 'mot') {
+    if (nat === 'USA' || nat === 'SOV') return 'Motorized';
+    if (BRIGADES.includes(nat)) return 'Motor';
+    if (nat === 'GER') return ym >= 1943 * 12 + 6 ? 'Panzergrenadier' : 'Motorized';
+    return 'Motorised';
+  }
+  // (the Soviets' foot: the Rifle Division, as its Rifle Regiments under it)
+  if (k === 'inf' && nat === 'SOV') return 'Rifle';
   return KIND_WORD[k];
 }
 
@@ -260,7 +268,7 @@ export function regimentWord(nat: string, kind: Kind, n: number, i: number, ym: 
     if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
     return `${o} Tank Regiment`;
   }
-  const arm = kind === 'mtn' ? 'Mountain' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? kindWord(nat, 'mot') : kind === 'eng' ? 'Engineer' : 'Infantry';
+  const arm = kind === 'mtn' ? 'Mountain' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? kindWord(nat, 'mot', ym) : kind === 'eng' ? 'Engineer' : 'Infantry';
   if (BRIGADES.includes(nat)) return `${o} ${arm} Brigade`;
   if (nat === 'GER') {
     const late = ym >= 1942 * 12 + 10;
@@ -288,7 +296,7 @@ export function armyNames(t: SideTicket, units: LandUnit[], turn: number): void 
       const u = units[j++];
       if (!u || p.regiment === undefined || team) continue;
       const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
-      const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k)}`;
+      const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k, ym)}`;
       const lead = /^(\d+)/.exec(full)?.[1];
       const n = lead ? (Number(lead) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
       u.short = regimentWord(u.nat, k, n, p.regiment, ym);
@@ -304,8 +312,10 @@ export function blocksFor(forces: ForceTicket[]): number[] {
 }
 
 /** The blocks of one side, not yet placed. least: the fewest blocks the side is cut into (regiments make up the rest). */
-export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: number, least: number = LAND.blocks.least): LandUnit[] {
+export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: number, least: number = LAND.blocks.least, turn?: number): LandUnit[] {
   const out: LandUnit[] = [];
+  // (the battle's month, for the words that changed with the war: Germany's Panzergrenadier from mid-1943)
+  const ym = turn === undefined ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn));
   const cut = partsFor(t.forces, least);
   t.forces.forEach((f, i) => {
     const team = teamOf(f);
@@ -316,7 +326,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
       const own = f.divisions?.[d];
       const no = (f.first ?? 1) + d;
       return {
-        name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k)} Division`), short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(' ')[0]}` : `${ORD(no)} ${kindWord(f.nat, k)}`),
+        name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`), short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(' ')[0]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)}`),
         str: own?.str ?? f.str, xp: own?.xp ?? f.xp, men: own?.men ?? f.men / n,
       };
     });
@@ -363,12 +373,12 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
  * gives, the side's power times its share), and its corps' whole weight as its power0 (priced over joined). None where
  * there are no joiners.
  */
-export function joinBlocks(t: { att: SideTicket; def: SideTicket }, power: Record<Side, number>, firstId: number): LandUnit[] {
+export function joinBlocks(t: { att: SideTicket; def: SideTicket; turn?: number }, power: Record<Side, number>, firstId: number): LandUnit[] {
   const out: LandUnit[] = [];
   for (const side of ['att', 'def'] as Side[]) {
     const js = (t[side].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined! > 0 && f.share > 0);
     if (!js.length) continue;
-    for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0)) {
+    for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0, t.turn)) {
       const j = Math.min(1, js.find((f) => f.corps === u.corps)!.joined!);
       u.joined = j;
       u.priced = u.power0;
