@@ -158,6 +158,8 @@ namespace
 		double MostPitch[3] = { 0.0, 0.0, 0.0 }, MostHeave[3] = { 0.0, 0.0, 0.0 }; // the ride on the sea: under 145 m, to 215 m, over
 		double MostBoatAngle = 0.0, MostBoatKeel = 0.0; // a convoy's boats (ruling 241): their angle and the deepest keel drawn
 		int BoatOdd = 0;                                // boat-frames with no state or a keel above the sea
+		int BoatSwings = 0;                             // a boat's angle swinging 4 degrees one way or the other (a dive is two: down, level)
+		std::map<int, std::pair<double, int>> BoatSwing; // by boat: the last extreme of her angle, which way it is going (+1, -1, 0)
 		int ChargesOffBoat = 0;                         // depth charges booked on a boat that burst out of her reach
 		int SinkingAhead = 0;
 		std::map<int, Vec> EndAt;  // each ship afloat at the end, by key
@@ -308,6 +310,20 @@ namespace
 				if (S.Class == "ss")
 				{
 					Out.MostBoatAngle = std::max(Out.MostBoatAngle, std::fabs(S.Pitch));
+					{
+						// (her angle followed: a swing counted each time it turns back by 4 degrees from its last extreme)
+						auto Swing = Out.BoatSwing.find(S.Key);
+						if (Swing == Out.BoatSwing.end()) Out.BoatSwing[S.Key] = { S.Pitch, 0 };
+						else
+						{
+							double& Ext = Swing->second.first;
+							int& Way = Swing->second.second;
+							if ((Way >= 0 && S.Pitch > Ext) || (Way < 0 && S.Pitch < Ext)) { if (Way != 0) Ext = S.Pitch; }
+							if (Way == 0 && std::fabs(S.Pitch - Ext) > 4.0) { Way = S.Pitch > Ext ? 1 : -1; Ext = S.Pitch; ++Out.BoatSwings; }
+							else if (Way > 0 && Ext - S.Pitch > 4.0) { Way = -1; Ext = S.Pitch; ++Out.BoatSwings; }
+							else if (Way < 0 && S.Pitch - Ext > 4.0) { Way = 1; Ext = S.Pitch; ++Out.BoatSwings; }
+						}
+					}
 					Out.MostBoatKeel = std::max(Out.MostBoatKeel, S.Keel);
 					if (S.Keel < 0.0 || (S.Dive != "surfaced" && S.Dive != "periscope" && S.Dive != "deep")) ++Out.BoatOdd;
 				}
@@ -682,6 +698,10 @@ int main(int Argc, char** Argv)
 		Limits.push_back({ "every boat drawn with her state, her keel under the sea and above her crush depth", P.BoatOdd == 0 && P.MostBoatKeel <= Rec.Board.CrushKeel,
 		                   std::to_string(P.BoatOdd) + " odd boat-frames, the deepest " + Num(P.MostBoatKeel, 0) + " m (crush " + Num(Rec.Board.CrushKeel, 0) + ")", "0, the crush depth or less" });
 		Limits.push_back({ "a boat's angle diving or surfacing within reason", P.MostBoatAngle <= 15.0, Num(P.MostBoatAngle, 1) + " deg", "15 deg or less" });
+		// (a depth told as it changes, a view at a time, followed without a nod at each: the pre-check, 22 November)
+		const int Swings = 2 * (DiveEvents + 2 * Boats);
+		Limits.push_back({ "a boat's angle goes over and comes back once a dive, no nodding", P.BoatSwings <= Swings,
+		                   std::to_string(P.BoatSwings) + " swings of 4 degrees (" + std::to_string(Swings) + " allowed)", "two a dive told and four a boat, or fewer" });
 		Limits.push_back({ "every dive told shown going", C.Dives == DiveEvents && C.DiveEvents == DiveEvents, std::to_string(C.Dives) + " of " + std::to_string(DiveEvents), "all" });
 		Limits.push_back({ "every depth-charge attack goes in", C.ChargeDrops == ChargeEvents && C.ChargeEvents == ChargeEvents,
 		                   std::to_string(C.ChargeDrops) + " of " + std::to_string(ChargeEvents) + ", " + std::to_string(C.ChargeBursts) + " charges burst", "all" });

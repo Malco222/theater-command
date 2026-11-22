@@ -67,7 +67,7 @@ DIVES = {  # piece -> [(from t, state, keel or None, scope)]
     30: [(0, "surfaced", None, False), (65, "periscope", None, True), (150, "deep", 80, False), (360, "surfaced", None, False)],
     31: [(0, "periscope", None, True), (285, "deep", 80, False)],
 }
-STR = {30: [(0, 1.0), (347, 0.5), (450, 0.0)], 31: [(0, 1.0), (481, 0.0)], 1: [(0, 1.0), (272, 0.0)]}
+STR = {30: [(0, 1.0), (330, 0.5), (450, 0.0)], 31: [(0, 1.0), (481, 0.0)], 1: [(0, 1.0), (272, 0.0)]}
 
 
 def at(table, t, default):
@@ -100,6 +100,9 @@ def unit(pid, t, first):
         u["extra"]["dive"] = state
         u["extra"]["scope"] = scope
         u["extra"]["keel"] = keel if keel is not None else {"surfaced": 4.7, "periscope": 13, "deep": 80}[state]
+        # (Boat A's depth told as it changes, a view at a time, going deep at a metre a second: the pre-check's what-if)
+        if pid == 30 and 150 <= t < 217:
+            u["extra"]["keel"] = round(13 + (t - 150), 1)
     return u
 
 
@@ -135,7 +138,8 @@ EVENTS = [
        sinking=round(70 / 3.0, 1), spread=120, kind="pattern"),
     ev(340, "sea:depthCharge", 21, "def", "Escort 2 drops a pattern on Boat B.", here=pos(21, 340), on=31, x=pos(31, 340)[0], y=pos(31, 340)[1], n=10, set=50,
        sinking=round(50 / 3.0, 1), spread=120, kind="pattern"),
-    ev(347, "sea:depthChargeHit", 30, "def", "Boat A is damaged.", here=pos(30, 347), harm=0.5, keel=80, **{"from": 22}),
+    # (Boat A's hit told at the moment of the drop, Boat B's ten seconds after the bombs went: the pre-check's what-if)
+    ev(330, "sea:depthChargeHit", 30, "def", "Boat A is damaged.", here=pos(30, 330), harm=0.5, keel=80, **{"from": 22}),
     ev(360, "sea:dive", 30, "att", "Boat A is forced to the surface.", dive="surfaced", why="forced"),
     ev(400, "sea:sonar", 21, "def", "", on=31, kind="asdic", lost="close"),
     ev(470, "sea:depthCharge", 21, "def", "Escort 2 fires ahead at Boat B.", here=pos(21, 470), on=31, x=pos(31, 470)[0], y=pos(31, 470)[1], n=24, kind="ahead"),

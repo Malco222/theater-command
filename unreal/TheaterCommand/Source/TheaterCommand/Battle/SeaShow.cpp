@@ -329,13 +329,10 @@ namespace SeaShow
 		while (Views.size() > 12 && Views[1].T <= ShownT) Views.pop_front();
 		for (const Event& E : InEvents) Queue.push_back(E);
 		// (at one moment the blow before what it did: the torpedo that sank her strikes her before she goes down, and on
-		// her, not on the empty place in her line)
-		std::stable_sort(Queue.begin(), Queue.end(), [](const Event& A, const Event& B)
-			{
-				const bool bBlowA = A.What == "sea:torpedoHit" || A.What == "sea:depthChargeHit";
-				const bool bBlowB = B.What == "sea:torpedoHit" || B.What == "sea:depthChargeHit";
-				return A.T < B.T || (A.T == B.T && bBlowA && !bBlowB);
-			});
+		// her, not on the empty place in her line; and a depth-charge attack before a hit told at its own moment, so the hit
+		// has its charges to burst)
+		auto Rank = [](const Event& E) { return E.What == "sea:depthCharge" ? 0 : E.What == "sea:torpedoHit" || E.What == "sea:depthChargeHit" ? 1 : 2; };
+		std::stable_sort(Queue.begin(), Queue.end(), [&Rank](const Event& A, const Event& B) { return A.T < B.T || (A.T == B.T && Rank(A) < Rank(B)); });
 		if (InZones) Zones = *InZones;
 		if (Contact >= 0.0 && ContactT < 0.0) ContactT = Contact;
 		if (!bStarted)
@@ -1039,6 +1036,7 @@ namespace SeaShow
 				C.At = Stern + Ahead(H->Hdg) * (Share * Spread) + RightOf(H->Hdg) * Side + Vec(Roll.Bell() * 3.0, Roll.Bell() * 3.0, 0.0);
 				C.At.Z = -Set;
 				C.Bursts = E.T + Share * Run + Sinks;
+				C.Dropped = E.T;
 				Charges.push_back(C);
 			}
 			return;
@@ -1060,7 +1058,18 @@ namespace SeaShow
 				if (!Best || std::fabs(C.Bursts - E.T) < std::fabs(Best->Bursts - E.T)) Best = &C;
 			}
 			auto It = AheadAt.find(E.From);
-			const bool bAhead = !Best && It != AheadAt.end() && E.T - It->second <= 60.0;
+			const double AheadT = It != AheadAt.end() ? It->second : -1e18;
+			if (!Best)
+			{
+				// (told well before its charges reach their depth, as at the drop: the first to burst of that escort's newest
+				// pattern, dropped within two minutes and since any ahead-thrown salvo of hers; it bursts at its own time)
+				for (Charge& C : Charges)
+				{
+					if (C.Piece != E.From || C.bHit || C.Kind != "pattern" || E.T - C.Dropped > 120.0 || C.Dropped < AheadT) continue;
+					if (!Best || C.Dropped > Best->Dropped || (C.Dropped == Best->Dropped && C.Bursts < Best->Bursts)) Best = &C;
+				}
+			}
+			const bool bAhead = !Best && E.T - AheadT <= 60.0;
 			if (!Best)
 			{
 				if (!bAhead) ++Check.ChargeHitUnmatched;
@@ -1078,13 +1087,21 @@ namespace SeaShow
 					C.At.Z = -Keel;
 					C.bHit = K == 0;
 					C.Bursts = E.T + K * 0.4;
+					C.Dropped = E.T;
 					Charges.push_back(C);
 				}
 				return;
 			}
 			Best->bHit = true;
 			Best->At = Vec(Near.X, Near.Y, -Keel);
-			Best->Bursts = E.T;
+			if (std::fabs(Best->Bursts - E.T) <= 15.0) Best->Bursts = E.T;
+			else if (Boat)
+			{
+				// (bursting later, at its own time: beside her where she is by then)
+				Best->bOnBoat = true;
+				Best->Boat = E.Unit;
+				Best->Off = Vec(Near.X - Boat->P.X, Near.Y - Boat->P.Y, 0.0);
+			}
 			return;
 		}
 		if (E.What == "sea:starshell")
@@ -1143,25 +1160,31 @@ namespace SeaShow
 		const double To = Clamp(Want, Up, std::max(Up, F.CrushKeel));
 		if (H.Keel < 0.0)
 		{
-			H.Keel = H.KeelTo = H.KeelFrom = To;
-			H.KeelFor = 0.0;
+			H.Keel = H.KeelTo = To;
+			H.KeelRate = 0.0;
 		}
-		if (H.Doing == Fate::Line && std::fabs(To - H.KeelTo) > 0.05)
-		{
-			// A new depth, from where she is: a crash dive puts her casing under and her at periscope depth in about 27 s,
-			// then about 1 m/s deeper; she comes up at about 1.2 m/s (tanks blown), and from periscope depth to the surface in
-			// about 20 s.
-			const double Lo = std::min(To, H.Keel), Hi = std::max(To, H.Keel);
-			const double Shallow = std::max(0.0, std::min(Hi, F.ScopeKeel) - Lo);
-			const bool bDown = To > H.Keel;
-			H.KeelFrom = H.Keel;
-			H.KeelTo = To;
-			H.KeelSince = ShownT;
-			H.KeelFor = Shallow / std::max(1.0, F.ScopeKeel - Up) * (bDown ? 27.0 : 20.0) + (Hi - Lo - Shallow) / (bDown ? 1.0 : 1.2);
-		}
+		if (H.Doing == Fate::Line) H.KeelTo = To;
+		// Her depth follows the battle's at her own rate, the rate itself eased (a depth told as it changes, a view at a
+		// time, is followed without a stop at each; the pre-check, 22 November): a crash dive puts her casing under and her
+		// at periscope depth in about 27 s, then about 1 m/s deeper; she comes up at about 1.2 m/s (tanks blown), and from
+		// periscope depth to the surface in about 20 s; she eases off as she comes to the depth she wants.
+		const double Left = H.KeelTo - H.Keel;
+		const bool bDown = Left > 0.0;
+		const bool bShallow = bDown ? H.Keel < F.ScopeKeel : H.Keel <= F.ScopeKeel;
+		const double Band = std::max(1.0, F.ScopeKeel - Up);
+		const double Most = bShallow ? Band / (bDown ? 27.0 : 20.0) * 1.3 : bDown ? 1.0 : 1.2;
+		const double Ease = 0.08; // (metres a second, each second)
+		const double WantRate = (bDown ? 1.0 : -1.0) * std::min(Most, std::sqrt(2.0 * Ease * std::fabs(Left)));
+		H.KeelRate += Clamp(WantRate - H.KeelRate, -Ease * Dt, Ease * Dt);
 		const double Was = H.Keel;
-		const double K = H.KeelFor > 0.0 ? Clamp((ShownT - H.KeelSince) / H.KeelFor, 0.0, 1.0) : 1.0;
-		H.Keel = H.KeelFrom + (H.KeelTo - H.KeelFrom) * K * K * (3.0 - 2.0 * K);
+		H.Keel += H.KeelRate * Dt;
+		// (on the depth she wants, or past it: there she stops)
+		if ((Left >= 0.0 && H.Keel >= H.KeelTo) || (Left <= 0.0 && H.Keel <= H.KeelTo))
+		{
+			H.Keel = H.KeelTo;
+			H.KeelRate = 0.0;
+		}
+		H.Keel = Clamp(H.Keel, Up, std::max(Up, F.CrushKeel));
 		OutSink = Dt > 0.0 ? (H.Keel - Was) / Dt : 0.0;
 		Check.MostKeel = std::max(Check.MostKeel, H.Keel);
 		// (the waves' motion fades with depth: about a third left at periscope depth, none deep)
@@ -1177,8 +1200,17 @@ namespace SeaShow
 				++K;
 				continue;
 			}
-			const Charge C = Charges[K];
+			Charge C = Charges[K];
 			Charges.erase(Charges.begin() + static_cast<long>(K));
+			if (C.bOnBoat)
+			{
+				if (const Hull* Boat = NearestOf(C.Boat, C.At.X, C.At.Y))
+				{
+					C.At.X = Boat->P.X + C.Off.X;
+					C.At.Y = Boat->P.Y + C.Off.Y;
+					if (Boat->Keel > 0.0) C.At.Z = -Boat->Keel;
+				}
+			}
 			Fx& E = Emit(FxKind::ChargeBurst, C.At, C.Kind, C.Escort);
 			E.Size = C.bHit ? 1.0 : 0.0;
 			E.Side = C.Side;

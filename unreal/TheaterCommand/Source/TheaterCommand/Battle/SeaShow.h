@@ -487,10 +487,10 @@ namespace SeaShow
 			double OffTrack = 0.0;    // a follower: metres off his track (plus: to her port), last step; a leader: off her ghost
 			bool bDodgeTurned = false; // her helm has bitten in a dodge since she was last judged (judged only then)
 			double PutOffGap = -1.0;  // metres astern of her place when her judging was last put off as she closed it
-			// A boat (ruling 241): her state, her keel as drawn and where it is going (eased from KeelFrom at KeelSince over
-			// KeelFor seconds), her periscope.
+			// A boat (ruling 241): her state, her keel as drawn, where it is going and how fast (metres a second, plus down),
+			// her periscope.
 			std::string Dive;
-			double Keel = -1.0, KeelTo = 0.0, KeelFrom = 0.0, KeelSince = 0.0, KeelFor = 0.0;
+			double Keel = -1.0, KeelTo = 0.0, KeelRate = 0.0;
 			bool bScope = false;
 			// Keeping clear (Brian, 22 November 05:31Z: "the ships are turning into each other and going over each other"):
 			// the alteration she holds off the course she wishes (radians, plus to starboard) and the share of her wished way
@@ -590,9 +590,11 @@ namespace SeaShow
 		{
 			int Escort = -1, Piece = -1, Boat = -1, Side = -1;
 			Vec At;
-			double Bursts = 0.0;
+			double Bursts = 0.0, Dropped = 0.0; // (battle times: it bursts; its pattern went in)
 			std::string Kind;
 			bool bHit = false;
+			bool bOnBoat = false; // (the battle's blow told before it bursts: it bursts where she is then, Off from her)
+			Vec Off;
 		};
 
 		Field F;
