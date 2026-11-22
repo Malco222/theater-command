@@ -269,13 +269,16 @@ describe('the fight is not moved by a hair', () => {
    * the gate pass, with the UI director's 16:37Z words; run out there with no view at all; here with a view after every tick, as the 3D game asks): the result's R, length and men
    * for the reader, and a digest of all of it, to the last figure (two runs of core/rng.ts hashString, 64 bits).
    */
+  // Every digest re-recorded at the general's join (22 November 20:10Z) for the after-battle card's words alone (the UI
+  // director, 18:26Z: a rout's when and why in one line, the strength line "By the day's end, counting the rout"): each
+  // R, length and men the same, viewed and not alike; with the old words every digest is as it was.
   const BEFORE: Record<string, [number, number, number, number, string]> = {
-    'practice 0 seed 1': [1.484, 262, 13150, 21612, '4f5a319c83f0b43b'],
-    'practice 6 seed 2': [1.539, 222, 9404, 25997, '90ac7ec7304adae0'],
-    'practice 7 seed 5': [1.129, 241, 19498, 14269, '45635242105cb477'],
+    'practice 0 seed 1': [1.484, 262, 13150, 21612, 'bd251698b75ddc1d'],
+    'practice 6 seed 2': [1.539, 222, 9404, 25997, '641b7449be431eb8'],
+    'practice 7 seed 5': [1.129, 241, 19498, 14269, '31e0bac3c4c096ca'],
     // Re-recorded at the join with the city glance's rules base (22 November): the campaign gives these corps their own
     // historic divisions and Katowice its town guard (ruling 232), so the tickets differ; viewed and not still alike.
-    Pomorze: [5.264, 142, 134, 9946, 'c393116388d47da6'],
+    Pomorze: [5.264, 142, 134, 9946, '0ac731b51ccad330'],
     // Re-recorded on the city's streets (b511: Katowice is a city, fought in its streets now), viewed and not alike; and
     // again with the defence a block inside its core (b529): a shorter fight, one shell fewer; and on Katowice's own
     // street plan (b618: a real city's plan from its name, no longer the battle's seed), its kept plan 3 (b625). And with
@@ -283,7 +286,7 @@ describe('the fight is not moved by a hair', () => {
     // card's figure; with LAND.alone off it is still aecea9823b67b851, and the shells are as many.
     // Re-recorded with Katowice's town guard drawn on the field as a defending block (ruling 232, b464: the coordinator,
     // 22 November 06:40Z): the same odds, a longer fight, and the guard's men booked with the field's; viewed and not alike.
-    'Polish Silesia': [1.865, 233, 4659, 16171, '6cf32f3fafd9dbcc'],
+    'Polish Silesia': [1.865, 233, 4659, 16171, '46c3aefdbb74086a'],
   };
   const check = (key: string, b: LandBattle, viewed: boolean): number => {
     b.ai.def = true;
