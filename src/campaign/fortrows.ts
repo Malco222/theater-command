@@ -32,15 +32,35 @@ export function crewStores(c: Corps): number | null {
   return s ? s.months : STORES.storesDefault;
 }
 /**
- * A month cut off for a fortress crew (game.ts startPhase, the unfed branch, under the fortress rows): its
- * organisation falls by 1 / stores and it does not waste by strength. 'starved' when its stores are gone; 'held' while
- * they last, or always for a row with no clock.
+ * The months of its stores a fortress crew has eaten since it was last fed (the design director's 09:06Z): counted
+ * apart from its organisation, in the game's flags under the corps' id, so the corps and the save keep their shape and
+ * a campaign with the fortress rows off writes nothing.
  */
-export function crewMonth(c: Corps): 'held' | 'starved' {
+const eatenKey = (c: Corps): string => `eaten:${c.id}`;
+export const storesEaten = (g: Game, c: Corps): number => g.flags[eatenKey(c)] ?? 0;
+/** The months of its own stores a fortress crew has left, or null for a row with no clock. */
+export function storesLeft(g: Game, c: Corps): number | null {
+  const months = crewStores(c);
+  return months === null ? null : Math.max(0, months - storesEaten(g, c));
+}
+/** A month fed in supply (09:06Z (b)): a relieved fortress is restocked, and its count starts again. */
+export function crewFed(g: Game, c: Corps): void {
+  delete g.flags[eatenKey(c)];
+}
+/**
+ * A month cut off for a fortress crew (game.ts startPhase, the unfed branch, under the fortress rows): it eats a
+ * month of its own stores, and neither its organisation nor its strength wastes for it (09:06Z: a fed crew holds its
+ * organisation while its stores last). 'starved' in the month its stores run out, the historian's months being the
+ * whole hold: it goes then, by the starved branch, with no hungry months after. 'held' while they last, or always for
+ * a row with no clock.
+ */
+export function crewMonth(g: Game, c: Corps): 'held' | 'starved' {
   const months = crewStores(c);
   if (months === null) return 'held';
-  c.org -= 1 / months;
-  return c.org <= 1e-9 ? 'starved' : 'held';
+  const eaten = storesEaten(g, c) + 1;
+  if (eaten >= months - 1e-9) { crewFed(g, c); return 'starved'; }
+  g.flags[eatenKey(c)] = eaten;
+  return 'held';
 }
 
 /**

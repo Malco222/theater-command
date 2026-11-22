@@ -7,11 +7,12 @@ import setup from '../data/campaign/setup-1939.json';
 import farWorld from '../data/campaign/far-world.json';
 import stage from '../data/campaign/stage.json';
 import { orderCorps, specOf } from '../src/campaign/economy';
-import { FORT_ROWS, crewMonth, crewStores, fortShape, fortsMonth } from '../src/campaign/fortrows';
+import { FORT_ROWS, crewFed, crewMonth, crewStores, fortShape, fortsMonth, storesEaten, storesLeft } from '../src/campaign/fortrows';
 import { DESERT, GUNS, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
 import { menLeft } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { SIEGE, besieged, breach, garrisonOf, housed, joinTown, siegeSupply, storm, townBonus } from '../src/campaign/siege';
+import { SIEGE, besieged, breach, garrisonOf, housed, joinTown, siegeSupply, sortiePower, storm, townBonus } from '../src/campaign/siege';
+import { corpsMood } from '../src/campaign/morale';
 import { ENGINEERING } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
 import { FORTS_STAGE } from '../src/campaign/stage';
@@ -246,7 +247,7 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
     }
   });
 
-  it('cut off, a crew lives on its own stores: organisation falls by 1 / stores a month, with no waste of strength; no clock, no starving', () => {
+  it('cut off, a crew lives on its own stores: a month of them eaten a month, its organisation and strength held; no clock, no starving', () => {
     const g = open();
     const months = (nat: string, name: string): number | null => crewStores(row(g, nat, name)!);
     expect(months('FRA', 'Metz fortified region')).toBe(3);
@@ -255,15 +256,18 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
     expect(months('GRE', 'Metaxas Line forts')).toBeNull();
     // (A row the book gives no figure takes the default, 3, marked judgment.)
     expect(months('FRA', 'Upper Rhine fortified sectors')).toBe(3);
-    const count = (c: Corps): number => { let k = 0; while (k < 40 && crewMonth(c) === 'held') k++; return k + 1; };
+    const count = (c: Corps): number => { let k = 0; while (k < 40 && crewMonth(g, c) === 'held') k++; return k + 1; };
     const metz = row(g, 'FRA', 'Metz fortified region')!, str = metz.str;
+    metz.org = 0.8;
     expect(count(metz)).toBe(3);
     expect(metz.str).toBe(str);
+    expect(metz.org).toBe(0.8);
     expect(count(row(g, 'UK', 'Gibraltar garrison')!)).toBe(16);
     expect(count(row(g, 'POL', 'Hel Fortified Area')!)).toBe(1);
     const metaxas = row(g, 'GRE', 'Metaxas Line forts')!;
-    for (let k = 0; k < 24; k++) expect(crewMonth(metaxas)).toBe('held');
+    for (let k = 0; k < 24; k++) expect(crewMonth(g, metaxas)).toBe('held');
     expect(metaxas.org).toBe(1);
+    expect(storesLeft(g, metaxas)).toBeNull();
   });
   it('one stores, not two: a fortified port overseas that holds a row feeds from that row\'s stores, and the crew\'s clock runs from the month the sea closed (07:12Z)', () => {
     // (Gibraltar: the historian's 16 months are the place's whole stores. Off, the port keeps its own two.)
@@ -287,7 +291,7 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
         if (!on && k > DESERT.stores) { expect(crew.supplied).toBe(false); gone = -1; break; }
         expect(crew.supplied, `month ${k}`).toBe(true);
         expect(onPortStores(g, crew)).toBe(on);
-        if (on) { expect(crew.org).toBeCloseTo(1 - k / 16, 9); expect(crew.str).toBe(1); }
+        if (on) { expect(crew.org).toBe(1); expect(crew.str).toBe(1); expect(storesLeft(g, crew)).toBe(16 - k); }
       }
       if (on) {
         // Gone in the month its stores run out, and the port with no row left keeps its own two, long spent.
@@ -297,6 +301,90 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
         expect(g.flags[`stores:${gib.id}`]).toBe(opened);
       } else expect(gone).toBe(-1);
     }
+  });
+});
+
+describe('(b) the stores counted apart from organisation (the design director, 09:06Z)', () => {
+  /** Alsace's three rows beaten into their works, the town besieged, the crews shut in on their own stores. */
+  function shutIn(): { g: Game; target: Region; crews: Corps[] } {
+    const { g, target, behind } = alsace(true, true);
+    for (let k = 0; k < 4; k++) behind.push(addCorps(g, 'GER', `Rear Corps ${k}`, 'arm', 12, 'Lorraine', {}));
+    expect(resolveBattle(g, behind, target).taken).toBe(true);
+    siegeSupply(g);
+    const crews = garrisonOf(target).filter((c) => c.kind === 'fort');
+    expect(crews.length).toBe(3);
+    for (const c of crews) expect(c.supplied).toBe(false);
+    return { g, target, crews };
+  }
+
+  it('a fed crew fights at the strength it went in with while its stores last: the month\'s count moves nothing the battle reads', () => {
+    const { g, crews } = shutIn();
+    const c = crews.find((x) => (crewStores(x) ?? 0) >= 3)!;
+    const org = c.org, base = corpsBase(g, c);
+    for (let k = 1; k < crewStores(c)!; k++) {
+      expect(crewMonth(g, c)).toBe('held');
+      expect(storesEaten(g, c)).toBe(k);
+      expect(c.org).toBe(org);
+      expect(corpsBase(g, c)).toBe(base);
+    }
+  });
+
+  it('the stores\' end is the surrender: it goes in the month they run out, by the starved branch, with no hungry months after', () => {
+    const { g, crews } = shutIn();
+    const c = crews.find((x) => crewStores(x) !== null)!, months = crewStores(c)!;
+    for (let k = 1; k < months; k++) expect(crewMonth(g, c)).toBe('held');
+    expect(storesLeft(g, c)).toBe(1);
+    expect(crewMonth(g, c)).toBe('starved');
+    expect(storesEaten(g, c)).toBe(0);
+  });
+
+  it('a month fed in supply restocks it: the count starts again', () => {
+    const { g, crews } = shutIn();
+    const c = crews.find((x) => crewStores(x) !== null)!, months = crewStores(c)!;
+    for (let k = 1; k < months; k++) crewMonth(g, c);
+    expect(storesLeft(g, c)).toBe(1);
+    crewFed(g, c);
+    expect(storesLeft(g, c)).toBe(months);
+    expect(g.flags[`eaten:${c.id}`]).toBeUndefined();
+  });
+
+  it('a crew most of the way through its stores still sallies to meet a relief, as its organisation holds', () => {
+    const { g, target, crews } = shutIn();
+    const was = sortiePower(g, target, 'FRA');
+    expect(was.corps).toBeGreaterThanOrEqual(crews.length);
+    for (const c of crews) { const m = crewStores(c); if (m !== null) for (let k = 1; k < m; k++) crewMonth(g, c); }
+    const now = sortiePower(g, target, 'FRA');
+    expect(now.corps).toBe(was.corps);
+    expect(now.power).toBeCloseTo(was.power, 9);
+  });
+
+  it('the guns take its organisation, their own harm, and none of its stores', () => {
+    const { g, crews } = shutIn();
+    const c = crews.find((x) => crewStores(x) !== null)!;
+    crewMonth(g, c);
+    const left = storesLeft(g, c);
+    c.org -= 0.3;
+    expect(storesLeft(g, c)).toBe(left);
+  });
+
+  it('the mood panel shows the months of stores left, and the rest that holds', () => {
+    const { g, crews } = shutIn();
+    const c = crews.find((x) => (crewStores(x) ?? 0) >= 3)!, months = crewStores(c)!;
+    crewMonth(g, c);
+    const m = corpsMood(g, c);
+    expect(m.stores).toEqual({ left: months - 1, months });
+    expect(m.restLine).toMatch(/own stores/);
+    expect(m.restLine).toMatch(new RegExp(`${months - 1} months`));
+    // A corps that is no fortress crew shows none.
+    const field = g.corps.find((x) => !x.dead && x.kind !== 'fort')!;
+    expect(corpsMood(g, field).stores).toBeUndefined();
+  });
+
+  it('off, nothing is counted and nothing written: the mood panel is release 1\'s', () => {
+    const g = open(false);
+    for (let t = 0; t < 6; t++) runTurnAI(g);
+    expect(Object.keys(g.flags).some((k) => k.startsWith('eaten:'))).toBe(false);
+    for (const c of g.corps.filter((x) => !x.dead)) expect('stores' in corpsMood(g, c)).toBe(false);
   });
 });
 

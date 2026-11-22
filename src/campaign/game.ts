@@ -2,7 +2,7 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
-import { crewMonth, fortsMonth, portStores } from './fortrows';
+import { crewFed, crewMonth, fortsMonth, portStores } from './fortrows';
 import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
@@ -584,9 +584,9 @@ export function portKeep(g: Game, r: Region): number {
 }
 /**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
- * shut and the port still feeds it from what it holds. Its own clock runs from the month the sea closed, so its
- * organisation falls by 1 / stores a month as a crew cut off does, it rests and takes in no drafts, and it is gone in
- * the month the stores run out.
+ * shut and the port still feeds it from what it holds. Its own clock runs from the month the sea closed: it eats a
+ * month of its stores as a crew cut off does (09:06Z: counted apart from its organisation, which it holds), it neither rests
+ * nor takes in drafts, and it is gone in the month the stores run out.
  */
 export function onPortStores(g: Game, c: Corps): boolean {
   if (!fortRow(g, c) || !c.supplied) return false;
@@ -3764,6 +3764,8 @@ export function startPhase(g: Game, nat: string): void {
     // Its morale for the month: where it stands, who stands with it, whether it has had any rest (the grand campaign).
     moraleMonth(g, c, { owed, cold: c.supplied && frozen(g, nat, g.regions[c.reg]) });
     if (c.supplied && !stored.has(c)) {
+      // (A fortress crew fed all month is restocked: its own stores' count starts again, 09:06Z (b).)
+      if (fortRow(g, c)) crewFed(g, c);
       const give = want[i] * share;
       if (give > 0) {
         // Green drafts thin out what a corps of the player's has learned.
@@ -3781,9 +3783,10 @@ export function startPhase(g: Game, nat: string): void {
       c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {
-      // (A fortress crew under the fortress rows lives on its works' own stores: its organisation is the clock, 1 / stores
-      // a month, and it does not waste by strength while they last; a row with no clock yields only with its army.)
-      const crew = fortRow(g, c) ? crewMonth(c) : 'fed';
+      // (A fortress crew under the fortress rows lives on its works' own stores, counted apart from its organisation
+      // (09:06Z): it holds its organisation and its strength while they last, and goes in the month they run out; a
+      // row with no clock yields only with its army.)
+      const crew = fortRow(g, c) ? crewMonth(g, c) : 'fed';
       if (crew === 'fed') { c.org -= UNFED; c.str *= 0.85; }
       if (crew === 'fed' ? c.org <= 0 : crew === 'starved') {
         const lost = starved.get(c.reg) ?? { names: [], men: 0 };
