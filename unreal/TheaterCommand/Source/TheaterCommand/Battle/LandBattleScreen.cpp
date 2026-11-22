@@ -842,13 +842,15 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 		{
 			GeneralHeld = Button;
 			Battle->GeneralPress(ToPixels(Geometry, Local), Button, Event.IsShiftDown(), TagUnder(Local));
-			return FReply::Handled().CaptureMouse(SharedThis(this));
+			// (capture asked again while it is held would release it first, and its loss let this press go: the 3D
+			// pre-check, 22 November 05:29Z)
+			return HasMouseCapture() ? FReply::Handled() : FReply::Handled().CaptureMouse(SharedThis(this));
 		}
 		if (Which == EKeys::MiddleMouseButton && GeneralHeld < 0)
 		{
 			// (the middle button drags the ground under it, as a two-finger slide)
 			bSliding = true;
-			return FReply::Handled().CaptureMouse(SharedThis(this));
+			return HasMouseCapture() ? FReply::Handled() : FReply::Handled().CaptureMouse(SharedThis(this));
 		}
 		return FReply::Handled();
 	}
@@ -881,7 +883,8 @@ FReply SLandBattleScreen::OnMouseButtonUp(const FGeometry& Geometry, const FPoin
 			const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 			Battle->GeneralRelease(ToPixels(Geometry, Local), Button, Event.IsShiftDown(), TagUnder(Local));
 		}
-		return FReply::Handled().ReleaseMouseCapture();
+		// (the middle button still sliding keeps the capture)
+		return bSliding ? FReply::Handled() : FReply::Handled().ReleaseMouseCapture();
 	}
 	if (Event.GetEffectingButton() != EKeys::LeftMouseButton || !bDragging)
 	{
