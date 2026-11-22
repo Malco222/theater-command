@@ -3565,8 +3565,9 @@ void ALandBattle::PlayArmourEvents()
 		{
 			if (Fx.Contains(TEXT("brew")) || Fx.Contains(TEXT("cook")) || Fx.Contains(TEXT("magazine")) || Fx.Contains(TEXT("flame_jet")))
 			{
-				// (a brew-up: the ammunition goes, flame roaring from the hatches; the turret thrown is the model's)
-				Effects->CookOff(At, Up, 1.0f, 8, 5.0f, 4.0f, -1.0f, E.Key);
+				// (a brew-up: the ammunition goes, flame roaring from the hatches; the turret thrown is the model's. The jet
+				// 2.5 s: the art director's burning-tank ruling gives a cook-off's jet 1 to 3 s)
+				Effects->CookOff(At, Up, 1.0f, 8, 5.0f, 2.5f, -1.0f, E.Key);
 			}
 			else if (Fx.Contains(TEXT("knocked")) || Fx.Contains(TEXT("knock_out")) || Fx.Contains(TEXT("hatch_blown")))
 			{
