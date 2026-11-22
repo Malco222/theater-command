@@ -125,6 +125,8 @@ interface Rules {
   pact: { with: string; book: number; fallen: string; months: number };
   freeze: { book: number; places: string[]; wars: string[]; seller: string; south: string[] };
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
+  /** The Soviet Far East's rows that leave the far chart: `westMonth`. */
+  west?: WestRules;
   demand: {
     of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string;
     /** At stops 4 and 5: the staff's chance each month by its character, times 'busy' while `war` is on (demandMonth). */
@@ -147,6 +149,16 @@ interface Rules {
   /** The month the power draws its ring by the book (paper 14, section 3; rider b599 (iii) to ruling 234): `ringDrawn`. */
   ring?: { from: number };
   says: Record<string, string>;
+}
+
+/**
+ * Rows of the Soviet Far East that leave the far chart (the design director's ruling of 20:03Z, 22 November 2026).
+ * `westMonth`.
+ */
+interface WestRules {
+  nat: string;
+  /** Rows of the far chart that leave it in a month because the old chart's own book raises the same men elsewhere: [month, the row's name, the line a player of that country reads]. */
+  leaves: [number, string, string][];
 }
 
 interface LiftRules {
@@ -265,6 +277,29 @@ function freezeMonth(g: Game): void {
 }
 
 /**
+ * Rows of the Soviet Far East that leave the far chart (the design director's ruling of 20:03Z, 22 November 2026):
+ * men the old chart's own book raises in the west (the 16th Army at Kiev in May 1941) leave the far chart's row
+ * they came from in that month, so nobody is counted twice.
+ */
+function westMonth(g: Game): void {
+  const P = PACIFIC!, W = P.west;
+  if (!W) return;
+  const S = live(g, W.nat);
+  if (!S) return;
+  W.leaves.forEach(([month, name, words], i) => {
+    const key = `pac:west:left:${i}`;
+    if (g.flags[key] !== undefined || g.turn < month) return;
+    g.flags[key] = g.turn;
+    // (A campaign begun too late for the book's own row to form keeps the far chart's.)
+    if (g.turn > month + 6) return;
+    const c = g.corps.find((x) => x.nat === W.nat && !x.dead && x.name === name);
+    if (!c) return;
+    removeCorps(g, c);
+    if (W.nat === g.human) headline(g, 'info', words, W.nat);
+  });
+}
+
+/**
  * A country's sea lift by the record (rider b630 to ruling 234; the historian's historian/sea-lift-record-b630.md):
  * the most times its rows put to sea in a month of the record, from the month the shipping for it was gathered.
  * Japan's is 4 on the China coast and 11 from October 1941, when the southern operation's shipping was held: the
@@ -309,6 +344,7 @@ export function pacificOpening(g: Game): void {
     if (at !== null && g.turn >= at) g.flags[PACT] = at;
   }
   freezeMonth(g);
+  westMonth(g);
   // (The demand on Vichy France is made once the freeze has been read: where no date brings the freeze, it follows the demand a month on.)
   demandMonth(g);
   coupMonth(g);

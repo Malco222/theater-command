@@ -45,6 +45,13 @@
       "UK"
     ]
   },
+  "west": {
+    "_about": "Rows of the Soviet Far East that leave the far chart because the old chart's own book raises the same men elsewhere (the design director's ruling of 20:03Z, 22 November 2026). The 16th Army, which setup-1939.json raises at Kiev in May 1941 with three divisions, was also the far chart's Transbaikal row at Chita, held through the war: the same men counted twice. The Chita row's three leave in the month the book raises the army in the west. Each row: [month, the far chart's row, the line a Soviet player reads]. (pacific.ts westMonth.)",
+    "nat": "SOV",
+    "leaves": [
+      [21, "Transbaikal Military District (Chita)", "The 16th Army entrains at Chita for Kiev."]
+    ]
+  },
   "demand": {
     "of": "VIC",
     "key": "Saigon",
