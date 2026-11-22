@@ -27,8 +27,13 @@ const SAHARA = ['Kufra', 'Murzuk', 'Ghat'];
 const SEATS = ['Asmara', 'Gondar', 'Addis Ababa', 'Jimma', 'Harar', 'Mogadishu'];
 const ITALY = ROWS.filter((r) => r[1] === 'ITA' && !SAHARA.includes(r[5]));
 const worth = (r: Row, month: number): number => r[4] * (estAt(r[6].est, month) ?? 1);
-const sum = (rows: Row[], month: number): number => rows.reduce((s, r) => s + worth(r, month), 0);
-const command = (name: string): Row[] => ITALY.filter((r) => r[2].startsWith(name));
+/** (A row is counted from its own month: Nasi's force comes in August 1940.) */
+const sum = (rows: Row[], month: number): number => rows.filter((r) => r[0] <= month).reduce((s, r) => s + worth(r, month), 0);
+/** The three forces that are rows of their own, each taken out of its command's worth (the design director's 14:36Z and 18:08Z of 22 November 2026). */
+const FORCES: Record<string, string> = { 'Eritrea command': 'Kassala force', 'Amhara command': 'Gallabat force', 'Harar command': 'Nasi\'s force' };
+const force = (name: string): Row => ITALY.find((r) => r[2].startsWith(name))!;
+/** A command's rows, with the force taken out of it. */
+const command = (name: string): Row[] => ITALY.filter((r) => r[2].startsWith(name) || (FORCES[name] !== undefined && r[2].startsWith(FORCES[name])));
 
 describe('Italian East Africa and the Sahara posts: the file beside the record (the design director, 13:09Z of 22 November 2026)', () => {
   it('Italy\'s army of 1 June 1940 is 17.1 by its six commands and the headquarters, and all forces from 1 August are 24.7', () => {
@@ -40,11 +45,40 @@ describe('Italian East Africa and the Sahara posts: the file beside the record (
     expect(at10.reduce((n, [name]) => n + command(name).length, 0)).toBe(ITALY.length);
   });
 
+  it('three forces are rows of their own, each taken out of its command\'s worth: Kassala\'s 0.4, Gallabat\'s battalion, and Nasi\'s 1.95 from August 1940', () => {
+    const K = 24.7 / 17.1;
+    // The Kassala force: 0.4 of Eritrea's 2.8, staged at Keren; it keeps its figure when the command grows.
+    const kf = force('Kassala force');
+    expect([kf[0], kf[5], kf[6].hold, kf[6].until, kf[6].mark]).toEqual([10, 'Keren', 1, 19, undefined]);
+    for (const m of [10, 12, 18]) expect(worth(kf, m), `Kassala force in ${m}`).toBeCloseTo(0.4, 3);
+    expect(sum(ITALY.filter((r) => r[2].startsWith('Eritrea command')), 10)).toBeCloseTo(2.4, 2);
+    expect(sum(command('Eritrea command'), 12)).toBeCloseTo(2.8 * K, 1);
+    // The Gallabat force: a battalion of Amhara's 4.0 (D), staged at Gondar, and of Gondar's 2.7 from May 1941.
+    const gf = force('Gallabat force');
+    expect([gf[0], gf[5], gf[6].hold, gf[6].until, gf[6].mark]).toEqual([10, 'Gondar', 1, 27, 'D']);
+    for (const m of [10, 12, 21, 26]) expect(worth(gf, m), `Gallabat force in ${m}`).toBeCloseTo(0.05, 3);
+    expect(sum(ITALY.filter((r) => r[2].startsWith('Amhara command')), 10)).toBeCloseTo(3.95, 2);
+    expect(sum(command('Amhara command'), 12)).toBeCloseTo(4.0 * K, 1);
+    // Nasi's force: 1.95, the middle of the pages' 24,000 and 35,000, drawn in August 1940 from Harar's worth.
+    const nf = force('Nasi\'s force');
+    expect([nf[0], nf[5], nf[6].hold, nf[6].until, nf[6].mark]).toEqual([12, 'Harar', 1, 19, 'L']);
+    expect(worth(nf, 12)).toBeCloseTo(1.95, 3);
+    expect((24000 / 15000 + 35000 / 15000) / 2).toBeCloseTo(1.95, 1);
+    const harar = ITALY.find((r) => r[2] === 'Harar command')!;
+    expect(worth(harar, 10)).toBeCloseTo(2.5, 2);
+    expect(worth(harar, 12)).toBeCloseTo(2.5 * K - 1.95, 2);
+    expect(worth(harar, 12)).toBeGreaterThan(0);
+    expect(sum(command('Harar command'), 12)).toBeCloseTo(2.5 * K, 1);
+    // (No row is over its divisions: a row's size is never more than it can hold.)
+    for (const r of ITALY) for (const m of [10, 12, 21]) expect((estAt(r[6].est, m) ?? 1), `${r[2]} in ${m}`).toBeLessThanOrEqual(1);
+  });
+
   it('from May 1941 the field army is Gondar\'s 2.7 and Galla-Sidamo\'s 2.5, and from July Gondar alone', () => {
     const standing = (month: number): Row[] => ITALY.filter((r) => r[6].until > month);
-    expect(worth(command('Amhara command (Gondar)')[0], 21)).toBeCloseTo(2.7, 2);
+    // (Gondar's 2.7 with the Gallabat force, a battalion of it, which is a row of its own.)
+    expect(worth(command('Amhara command (Gondar)')[0], 21) + worth(force('Gallabat force'), 21)).toBeCloseTo(2.7, 2);
     expect(sum(command('Galla-Sidamo command').filter((r) => r[6].until > 21), 21)).toBeCloseTo(2.5, 2);
-    expect(standing(23).map((r) => r[2])).toEqual(['Amhara command (Gondar)']);
+    expect(standing(23).map((r) => r[2])).toEqual(['Amhara command (Gondar)', force('Gallabat force')[2]]);
     expect(sum(standing(23), 23)).toBeCloseTo(2.7, 2);
     expect(standing(27)).toEqual([]);
   });
@@ -98,14 +132,29 @@ describe('Italian East Africa and the Sahara posts: the file beside the record (
     for (const name of places) if (!SEATS.includes(name)) expect(g.flags[`depot:${g.byName[name].id}`], name).toBeUndefined();
   });
 
-  it('the five garrisons that stood there before Italy\'s war are laid a month before it, and every other row in its own month', () => {
+  it('the five garrisons that stood there before Italy\'s war are laid a month before it, the Defence Force at its six posts, and every other row in its own month', () => {
     const before = ROWS.filter((r) => r[0] < 10).map((r) => r[2]);
-    expect(before).toEqual([
-      'Sudan Defence Force', 'British battalions in the Sudan (West Yorkshire, Essex, Worcestershire)', 'King\'s African Rifles (Kenya)',
+    const posts = before.filter((nm) => nm.startsWith('Sudan Defence Force ('));
+    expect(posts.length).toBe(6);
+    expect(before.filter((nm) => !posts.includes(nm))).toEqual([
+      'British battalions in the Sudan (West Yorkshire, Essex, Worcestershire)', 'King\'s African Rifles (Kenya)',
       'Somaliland force (the Camel Corps and Chater\'s battalions)', 'Djibouti garrison (French Somaliland)',
     ]);
     for (const r of ROWS.filter((x) => x[0] < 10)) expect(r[0], r[2]).toBe(9);
-    for (const r of ROWS.filter((x) => x[1] === 'ITA')) expect(r[0], r[2]).toBe(10);
+    for (const r of ROWS.filter((x) => x[1] === 'ITA')) expect(r[0], r[2]).toBe(r[2].startsWith('Nasi') ? 12 : 10);
+  });
+
+  it('the Sudan Defence Force stands at its record posts: 0.02 at Kassala, and the other 0.28 shared evenly over its five seats', () => {
+    const sdf = ROWS.filter((r) => r[1] === 'UK' && r[2].startsWith('Sudan Defence Force ('));
+    expect(sdf.map((r) => r[5])).toEqual(['Kassala', 'El Obeid', 'El Fasher', 'Juba', 'Atbara', 'Khartoum']);
+    expect(sum(sdf, 10)).toBeCloseTo(0.3, 3);
+    const [kassala, ...seats] = sdf;
+    // (Kassala: 320 of its men, 500 with the police, at 15,000 to 1.0.)
+    expect([worth(kassala, 10), kassala[6].mark, kassala[6].hold]).toEqual([0.02, 'L', 1]);
+    expect(worth(kassala, 10)).toBeCloseTo(320 / 15000, 2);
+    for (const r of seats) expect([worth(r, 10), r[6].mark, r[6].hold], r[2]).toEqual([0.056, 'D', 1]);
+    // (The file's 0.6 for all troops in the Sudan stands: the Defence Force and the three British battalions.)
+    expect(sum(ROWS.filter((r) => r[0] === 9 && r[1] === 'UK' && ['Kassala', 'El Obeid', 'El Fasher', 'Juba', 'Atbara', 'Khartoum'].includes(r[5])), 10)).toBeCloseTo(0.6, 3);
   });
 });
 
@@ -257,7 +306,8 @@ describe('Italian East Africa by the record: one war at the book\'s first stop, 
     // Italy's month opens: every row of its army at its place, held there, at the size of 1 June 1940.
     startPhase(g, 'ITA');
     let sum10 = 0;
-    for (const r of ITALY) {
+    for (const r of ITALY.filter((x) => x[0] > 10)) expect(alive(r[2]), r[2]).toBeUndefined();
+    for (const r of ITALY.filter((x) => x[0] <= 10)) {
       const c = alive(r[2]);
       expect(c, r[2]).toBeTruthy();
       expect(c!.nat).toBe('ITA');
@@ -268,12 +318,13 @@ describe('Italian East Africa by the record: one war at the book\'s first stop, 
     }
     expect(sum10).toBeCloseTo(17.1, 1);
     for (const place of SAHARA) expect(g.byName[place].units.some((u) => u.nat === 'ITA' && !u.dead), place).toBe(true);
-    // By hand to August 1940, nobody having moved: all forces.
+    // By hand to August 1940, nobody having moved: all forces, Nasi's force come at Harar out of the command's worth.
     g.turn = 12;
     startPhase(g, 'ITA');
     let sum12 = 0;
     for (const r of ITALY) { expect(size(alive(r[2])!), r[2]).toBeCloseTo(worth(r, 12), 2); sum12 += size(alive(r[2])!); }
     expect(sum12).toBeCloseTo(24.7, 1);
+    expect([at(g, alive(force('Nasi\'s force')[2])!), alive(force('Nasi\'s force')[2])!.hold]).toEqual(['Harar', true]);
     // By hand to February 1941: Mogadishu's and Kismayu's rows end, with a surrender's words and never a lent row's.
     const news = g.headlines.length;
     g.turn = 18;
