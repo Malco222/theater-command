@@ -356,6 +356,17 @@ namespace AirShow
 		/** Sticks let go and their bombs; bombs that left a bay whose doors were not yet open (a model with no bay
 		 * draws none, so it counts only the core's own doors); bays still open 8 s after their stick was gone. */
 		int Sticks = 0, StickBombs = 0, BombsThroughShutDoors = 0, BaysLeftOpen = 0;
+		/** Drop on the lead (Brian, 22 November 04:11Z: "the lead plane always drops the bombs first and the rest
+		 * follow"): first bombs let go after the box's lead's, and before it (none, by construction); the least and the
+		 * most air seconds after his. The rally (04:11Z: "after the bombers drop their bombs they close the bomb bay
+		 * doors and start turning back home"): boxes that turned for home on their lead; steps a bomber in its place
+		 * in a turning box banked more than 5 degrees against the lead's way round, of all such steps; the most bank in
+		 * a rally turn, degrees. */
+		int DropsOnLead = 0, DropsBeforeLead = 0;
+		double OnLeadLeast = 1e9, OnLeadMost = 0.0;
+		int Rallies = 0;
+		long RallySteps = 0, RallyAgainst = 0;
+		double RallyBankSeen = 0.0;
 		int Rushes = 0; // falling bombs' rushes given (bomb_release, ending at the landing, within 400 m of the eye)
 		std::map<std::string, int> FallsBy;  // falls begun, by the way down they play
 		int FallsOnTime = 0, FallsOffTime = 0; // falls that struck the sea or ground within a quarter of the battle's dur, or not
@@ -439,6 +450,16 @@ namespace AirShow
 		 * it (straggling, covering, going home); falling, she goes as she falls.
 		 */
 		double StickSteady = 1.5, RunBankMost = 2.0, RallyBankMost = 20.0, HeavyBankMost = 30.0, HeavyRollMost = 5.0;
+		/**
+		 * Drop on the lead and the rally (Brian, 22 November 04:11Z). A level bombing box lets its bombs go on its lead:
+		 * his stick first, and each of the others as her bombardier sees his bombs leave, DropOnLeadLeast to
+		 * DropOnLeadMost air seconds after his first (each craft its own, from its key, the same every run). Her doors
+		 * shut after her stick; then the box turns for home on its lead: he picks the way round once and banks
+		 * RallyLeadBank degrees, the rest fly their places on him (the box's frame turning with his heading, not jumping
+		 * to the battle's reversed one), and they keep on him until he has his heading for home and is within
+		 * RallyCloseM metres of his own place.
+		 */
+		double DropOnLeadLeast = 0.6, DropOnLeadMost = 1.8, RallyLeadBank = 12.0, RallyCloseM = 300.0;
 		/**
 		 * A bomber's bay as her model has it, by the battle's model name (the scene sets it from the shape it draws, the
 		 * cloud test from the same model file): the load racked there from Fore to Aft (metres ahead of the point she is
@@ -617,6 +638,7 @@ namespace AirShow
 			double StickBegan = -1.0; // (when the first bomb of a bay's stick left: her lift)
 			double RunHdg = 0.0;      // (her heading as she dropped: held, wings level, until her stick has gone)
 			bool bRunHeld = false;    // (her doors full open on her run: her heading held from then, as her bombardier flew her)
+			double DropDue = -1.0;    // (the air time she lets her stick go on her lead's: -1, none due)
 			Vec LastP;
 			bool bHasLast = false;
 		};
@@ -642,6 +664,12 @@ namespace AirShow
 			int LastFigures = -1;
 			bool bSeen = false;
 			bool bDropped = false;
+			/** A level bombing box: the air time its lead's first bomb leaves (-1: not yet). Its rally: the air time
+			 * it began (-1: not begun), the way round (+1 to the right), and whether it is over (the box on its own
+			 * places again). */
+			double LeadBombAt = -1.0;
+			double RallyAt = -1.0, RallyWay = 0.0;
+			bool bRallied = false;
 		};
 
 		struct Held
@@ -808,6 +836,16 @@ namespace AirShow
 		double RushAt = -1e9; // air seconds: the last falling bomb's rush given
 		std::map<int, double> RingT; // air seconds each raiding bomber group has held inside the target ring
 		void Bays(double Dt);
+		/** Each craft whose stick is due on her lead's lets it go (before Bays, each frame). */
+		void DropOnLead();
+		/** A level bombing box's lead: its first craft in its place, by slot (null: none in their places). */
+		const Craft* BoxLead(int GroupId) const;
+		/** A bomber in her place after her box has bombed: its rally turn for home on its lead. False when the box is
+		 * not rallying (she keeps her place in the battle's formation as before). */
+		bool Rally(Craft& C, const Group& G, Band& B, double Dt);
+		/** While a box turns for home on its lead (and keeps on him after): his place, heading and way, for a bomber
+		 * falling back behind it; false otherwise (the box's own, as the battle has it). */
+		bool RallyFrame(int GroupId, Vec& At, double& Face, Vec& Vel) const;
 		void Leave(Craft& C);
 		Vec Local(const Craft& C, const Vec& L) const;
 		Vec Velocity(const Craft& C) const;
