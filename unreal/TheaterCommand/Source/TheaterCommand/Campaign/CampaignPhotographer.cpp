@@ -1959,6 +1959,20 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	}
 }
 
+void ACampaignPhotographer::PutAwayCard(ACampaignPlayerController* Sender, bool bBare)
+{
+	// (the result card of the order "-TheaterConfirm" sent in is put away; with "-TheaterConfirmBare" the army is put
+	// down and the province's card put away in the same moment)
+	Sender->CloseFaceOff();
+	UE_LOG(LogTheater, Display, TEXT("Photographer: the order is sent in, its result card put away"));
+	if (bBare)
+	{
+		Sender->PutDownArmy();
+		Sender->SelectRegion(INDEX_NONE);
+		UE_LOG(LogTheater, Display, TEXT("Photographer: the army is put down and the province's card put away"));
+	}
+}
+
 void ACampaignPhotographer::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -2182,21 +2196,35 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		// province in the middle of the frame". "-TheaterConfirmBare" sends the order in as "-TheaterConfirm" does, then puts
 		// the army down and the province's card away in the same moment, so that neither the army's washes nor the panels
 		// stand over the ground the ink crosses.)
+		// (And the ruling that came of it: an order's ink stands at its start while its result card is up, and runs as the
+		// card is put away. "-TheaterCardFor=1.5" leaves the result card up that many seconds after the order is sent in,
+		// then puts it away, so that a clip shows the ink held under the card and then crossing the province.)
 		static const bool bConfirmBare = FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare"));
+		static float CardFor = 0.0f;
+		static const bool bCardFor = FParse::Value(FCommandLine::Get(), TEXT("TheaterCardFor="), CardFor) && CardFor > 0.0f;
 		if (Current == 0 && (bConfirmBare || FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm"))))
 		{
 			if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
 			{
 				Sender->ConfirmAttack();
-				Sender->CloseFaceOff();
-				UE_LOG(LogTheater, Display, TEXT("Photographer: the order is sent in, its result card put away"));
-				if (bConfirmBare)
+				if (bCardFor)
 				{
-					Sender->PutDownArmy();
-					Sender->SelectRegion(INDEX_NONE);
-					UE_LOG(LogTheater, Display, TEXT("Photographer: the army is put down and the province's card put away"));
+					CardPutAwayAt = Clock + FMath::Min(CardFor, 10.0f);
+					UE_LOG(LogTheater, Display, TEXT("Photographer: the order is sent in, its result card left up for %.2f s"), FMath::Min(CardFor, 10.0f));
+				}
+				else
+				{
+					PutAwayCard(Sender, bConfirmBare);
 				}
 			}
+		}
+	}
+	if (CardPutAwayAt >= 0.0f && Clock >= CardPutAwayAt)
+	{
+		CardPutAwayAt = -1.0f;
+		if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
+		{
+			PutAwayCard(Sender, FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirmBare")));
 		}
 	}
 	if (bTaken && Current == 0 && ClipTaken < ClipFrames && Clock >= ClipAt)

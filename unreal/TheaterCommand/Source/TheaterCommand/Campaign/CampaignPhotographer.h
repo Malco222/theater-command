@@ -4,6 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "CampaignPhotographer.generated.h"
 
+class ACampaignPlayerController;
+
 /**
  * A development tool, not part of the game. Started with
  * "-TheaterShots=<folder>" on the command line, it waits for the table to be
@@ -24,6 +26,9 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	/** The result card of the order "-TheaterConfirm" sent in is put away (and with bBare the army put down and the province's card put away). */
+	void PutAwayCard(ACampaignPlayerController* Sender, bool bBare);
+
 	struct FShot
 	{
 		FString Name;
@@ -129,6 +134,7 @@ private:
 	int32 ClipFrames = 0, ClipTaken = 0;
 	float ClipEvery = 0.25f, ClipAt = 0.0f;
 	bool bClipStepped = false; // (the game is stepped by the clip's own gap while the clip is taken: see Tick)
+	float CardPutAwayAt = -1.0f; // ("-TheaterCardFor=1.5": when the result card of the order sent in is put away, by the clock)
 	double ClipStepWas = 0.0; // (the engine's fixed step as it stood before)
 	float SheetWait = 0.0f; // how long this picture has waited for the world's fine ground
 	float WarmUp = 0.0f;
