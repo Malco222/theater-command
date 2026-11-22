@@ -421,8 +421,12 @@ private:
 		bool bShown = false;
 		FVector At = FVector::ZeroVector;
 		FQuat Q = FQuat::Identity;
+		/** Her shade's size as laid (1: her own; the general's view grows it with her and lays it as her cast shadow). */
+		double Size = 1.0;
 	};
 	TArray<FShadeDrawn> ShadesDrawn;
+	/** The vehicles' shades laid for the general's view (grown, cast away from the sun, seen to 3 km) this frame. */
+	bool bShadesHigh = false;
 	/** Each shade mesh's instances given back (shrunk to nothing), to be used again before a new one is added. */
 	TArray<TArray<int32>> ShadeFree;
 	/** The men's: a round blob under a standing man, his body's shape under a prone one, a wider blob under a body at

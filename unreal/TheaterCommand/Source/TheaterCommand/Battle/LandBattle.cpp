@@ -3637,6 +3637,11 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 	// TK1: the far vehicles put as their pieces' instances (and who is in the picture, for TK3), before their bodies
 	if (FarCrowd.IsValid())
 	{
+		// (the general's own view, high over the field: a far vehicle grown to stand at least 14 by 7 of the men's lines,
+		// her barrel drawn at least a line wide, her far ink's sky shine taken down; the art director, 22 November 18:27Z,
+		// "tanks read as grey-blue chips". FLandCrowd's "-TheaterLandGeneralTankPx=", "-TheaterLandGeneralBarrelPx=" and
+		// "-TheaterLandGeneralTankInk=")
+		FarCrowd->SetHigh(S.General.bOn && !S.General.bFilm, S.MenLines / 1.8);
 		FarCrowd->Draw(All, S.Pose, EyeAt, [this](int32 K) { return HiddenVehicle(K); }); // TK1
 	}
 	// (the wrecks' soot steps spread over frames: at most this many points sent a frame, a body shown again sent at once)
@@ -3679,7 +3684,18 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			continue;
 		}
 		const LandKit::Place& Place = V.Bodies()[static_cast<size_t>(D.Body)];
-		Mesh->SetWorldLocationAndRotation(World(Place.At.X, Place.At.Y, Place.At.Z), FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W));
+		// (in the general's view a far vehicle her own meshes draw is grown as her pieces would grow her, about the ground
+		// under her middle: a gun laid high, a manned roof gun's cradle)
+		const double Grow = FarCrowd.IsValid() ? FarCrowd->GrowOf(D.Vehicle) : 1.0;
+		if (Grow != 1.0 || !Mesh->GetRelativeScale3D().Equals(FVector::OneVector))
+		{
+			const FVector Foot = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
+			Mesh->SetWorldTransform(FTransform(FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W), Foot + (World(Place.At.X, Place.At.Y, Place.At.Z) - Foot) * Grow, FVector(Grow)));
+		}
+		else
+		{
+			Mesh->SetWorldLocationAndRotation(World(Place.At.X, Place.At.Y, Place.At.Z), FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W));
+		}
 		// The near level within 120 m (a long lens's Watch shot at 140 m keeps it), the far beyond (TK1: where it has a far
 		// section of its own; a body merged into her far pieces keeps its near level while her own meshes draw her).
 		const double Far = (LandPlay::Vec(V.Root.At.X, V.Root.At.Y, V.Root.At.Z) - EyeAt).Length();
@@ -3804,7 +3820,7 @@ int32 ALandBattle::ShadeCopyFor(const LandKit::Model& Model)
 			// (drawn before the smoke and fire, which must not be darkened where they pass in front of it; gone past
 			// 800 m, where a tank is a few pixels)
 			Copies->SetTranslucentSortPriority(-100);
-			Copies->SetCullDistances(0, FMath::RoundToInt32(800.0 * UnitsPerMetre));
+			Copies->SetCullDistances(0, FMath::RoundToInt32((bShadesHigh ? 3000.0 : 800.0) * UnitsPerMetre));
 			Copies->RegisterComponent();
 			Index = ShadeCopies.Add(Copies);
 			ShadeFree.SetNum(ShadeCopies.Num());
@@ -3846,6 +3862,28 @@ void ALandBattle::DrawShades()
 		GiveBack(ShadesDrawn[K]);
 	}
 	ShadesDrawn.SetNum(Count);
+	// The general's view (the art director, 22 November 18:27Z: "give each tank a soft cast shadow on the ground, which
+	// doubles its footprint and gives the hull its shape"): her shade grown with her (FLandCrowd::GrowOf), laid 1.4
+	// times as big and moved away from the sun by half the shadow two thirds of her height throws (never more than 0.6
+	// of her length), along the ground she stands on: from his height it is her footprint and her cast shadow in one;
+	// and seen to 3 km, as far as his eye looks over the field (800 m, where a tank is a few pixels, out of it).
+	const bool bHigh = S.General.bOn && !S.General.bFilm;
+	if (bHigh != bShadesHigh)
+	{
+		bShadesHigh = bHigh;
+		for (UInstancedStaticMeshComponent* Copies : ShadeCopies)
+		{
+			if (Copies)
+			{
+				Copies->SetCullDistances(0, FMath::RoundToInt32((bHigh ? 3000.0 : 800.0) * UnitsPerMetre));
+			}
+		}
+	}
+	FVector Away(-TowardSun.X, -TowardSun.Y, 0.0);
+	const double SunFlat = Away.Size();
+	Away = SunFlat > 1e-3 ? Away / SunFlat : FVector::ZeroVector;
+	// (the shadow's length a metre of height: never past 3, the low sun's)
+	const double ThrowPerMetre = FMath::Min(3.0, SunFlat / FMath::Max(0.05, static_cast<double>(TowardSun.Z)));
 	for (int32 K = 0; K < Count; ++K)
 	{
 		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
@@ -3878,16 +3916,27 @@ void ALandBattle::DrawShades()
 			continue;
 		}
 		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(K);
-		const FVector At = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
+		FVector At = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
 		const FQuat Q(V.Root.Q.X, V.Root.Q.Y, V.Root.Q.Z, V.Root.Q.W);
-		if (bShown == D.bShown && (!bShown || (At.Equals(D.At, 1.0) && Q.Equals(D.Q, 1e-4))))
+		double Size = FarCrowd.IsValid() ? FarCrowd->GrowOf(K) : 1.0;
+		if (bHigh && bShown)
+		{
+			// (away from the sun along the ground under her: the way taken into her own frame, kept level in it)
+			FVector Along = Q.UnrotateVector(Away);
+			Along.Z = 0.0;
+			const double Throw = FMath::Min(0.6 * FMath::Max(Model.Long, 1.0), 0.67 * FMath::Max(Model.High, 1.0) * ThrowPerMetre) * Size;
+			At += Q.RotateVector(Along.GetSafeNormal()) * (0.5 * Throw * UnitsPerMetre);
+			Size *= 1.4;
+		}
+		if (bShown == D.bShown && (!bShown || (At.Equals(D.At, 1.0) && Q.Equals(D.Q, 1e-4) && FMath::IsNearlyEqual(Size, D.Size, 0.01))))
 		{
 			continue;
 		}
 		D.bShown = bShown;
 		D.At = At;
 		D.Q = Q;
-		ShadeCopies[D.Copy]->UpdateInstanceTransform(D.Slot, FTransform(Q, At, FVector(bShown ? 1.0 : 1e-3)), true, false, true);
+		D.Size = Size;
+		ShadeCopies[D.Copy]->UpdateInstanceTransform(D.Slot, FTransform(Q, At, FVector(bShown ? Size : 1e-3)), true, false, true);
 		Touched[D.Copy] = true;
 	}
 	for (int32 C = 0; C < Touched.Num(); ++C)
