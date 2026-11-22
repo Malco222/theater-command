@@ -1840,6 +1840,13 @@ export function orderScout(g: Game, id: number, target: number): { ok: boolean; 
   return flown;
 }
 
+// ---- Air campaigns (aircampaigns.ts; the grand campaign's air war, ruling 236.2) ---------------------------------
+
+// On in a new grand campaign as shipped (aircampaigns.json `on`; the design director, 22 November 12:28Z, b623 and
+// b636). The browser's newGame and the campaign bridge's start turn it on right after startOpen, where the war runners
+// set g.flags.ac with TC_AC=1. The bridge asks for both by name, so it builds on rules without the switch too.
+export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
+
 // ---- Carriers and the air war at sea (the grand campaign) ----
 //
 // A carrier wing is an air group like any other: its id (WingCard.id, GroupRow.id with ship >= 0) goes to the raid

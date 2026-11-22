@@ -32,7 +32,7 @@ import {
   fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
   footingOf, orderFootingTo, cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
-  orderResearch, orderStopResearch,
+  orderResearch, orderStopResearch, airCampaignsShipped, setAirCampaigns,
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateLeft, type GateLeft, gateQuestion, orderGate, whyNotGate, whyNotOrder, whyNotOrderGarrison, verdictAt, verdictOf, asForecast, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
@@ -8059,6 +8059,9 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   if (grand && from === 1) startOpen(g);
   while (g.turn < from) runTurnAI(g);
   if (grand && from > 1) startOpen(g);
+  // Air campaigns (ruling 236.2): flown in a new grand campaign as shipped (aircampaigns.json `on`; the design director,
+  // b623 and b636), set right after startOpen as the war runners set them (TC_AC=1), so the war is the one the gates measured.
+  if (grand && airCampaignsShipped()) setAirCampaigns(g, true);
   g.human = human;
   // The history dial: how far the computer-run world may move away from history, in a watched war too.
   if (grand && hist !== HIST_FREE) orderHistory(g, hist, true);
