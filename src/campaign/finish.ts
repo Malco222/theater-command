@@ -32,7 +32,7 @@
 import { turnToDate } from '../core/ticket';
 import { airOnFall } from './air';
 import { DIPLOMACY, majorsOf } from './diplomacy';
-import { allied, atWar, bloc, declareWar, headline, theName, warning } from './game';
+import { allied, atWar, bloc, declareWar, headline, relocate, retreatTarget, sendHome, theName, warning } from './game';
 import { LIB, handBack, recordFall, rejoinWars, warsAtFall } from './liberation';
 import { fleetsOnFall } from './navy';
 import { dropSieges } from './siege';
@@ -145,7 +145,8 @@ function endVichy(g: Game): void {
   V.alive = false;
   V.fellOn = { turn: g.turn, week: g.week, to: 'FRA', how: 'annexed' };
   recordFall(g, 'VIC', 'FRA', 'annexed');
-  for (const c of g.corps) if (c.nat === 'VIC' && !c.dead) { c.nat = 'FRA'; c.hold = false; }
+  const turned = new Set<number>();
+  for (const c of g.corps) if (c.nat === 'VIC' && !c.dead) { c.nat = 'FRA'; c.hold = false; turned.add(c.reg); }
   fleetsOnFall(g, 'VIC');
   airOnFall(g, 'VIC');
   dropSieges(g, 'VIC');
@@ -156,7 +157,32 @@ function endVichy(g: Game): void {
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== 'VIC');
   V.atWar = [];
   handBack(g, F);
+  partFoes(g, turned);
   g.supplyDirty = true;
   const G = g.nations.GER;
   headline(g, 'event', `The government at Vichy is no more. ${G && !G.alive ? `With ${theName(G)} beaten, its` : 'France is free again in Paris, and its'} ground at home and overseas is France's again, and its troops answer to France.`, 'FRA', F.capital, { arm: 'land', won: 'FRA' });
+}
+
+/**
+ * Vichy's end leaves no enemies side by side in one field (release 1's bug A; the playtester's field-ITA-1, Mareth,
+ * December 1944: Vichy's Tunisia Command, France's now, stood beside the German 90th Light Division for a month).
+ * Wherever the troops that have just turned French share a field with troops at war with France, the side that does
+ * not hold the province falls back as a beaten army does, to ground beside it that its side holds, and with none
+ * there goes to the nearest its side holds anywhere: the rule that puts right what handovers leave behind (siege.ts,
+ * siegeSweep). A garrison in the town and an enemy in the field round it is a siege, as anywhere else.
+ */
+function partFoes(g: Game, regions: Set<number>): void {
+  for (const id of [...regions].sort((a, b) => a - b)) {
+    const r = g.regions[id];
+    if (!r.units.some((a) => r.units.some((b) => atWar(g, a.nat, b.nat)))) continue;
+    const out = r.units.filter((c) => !c.dead && !allied(g, c.nat, r.ctrl));
+    const to = new Set<string>();
+    for (const c of out) {
+      const back = retreatTarget(g, c, r, new Set());
+      if (back) relocate(g, c, back); else sendHome(g, c);
+      c.ap = 0;
+      if (!c.dead && c.reg !== r.id) to.add(g.regions[c.reg].name);
+    }
+    if (out.length && to.size) headline(g, 'event', `With Vichy gone, ${g.nations[out[0].nat].adj} troops leave ${r.name} for ${[...to].join(' and ')}: the ground is ${theName(g.nations[r.ctrl])}'s.`, out[0].nat, r.id, { arm: 'land' });
+  }
 }
