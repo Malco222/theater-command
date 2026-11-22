@@ -314,6 +314,10 @@ namespace LandField
 		/** The drawn surface's height alone (At's Z), and what is drawn there when asked (At's What), without At's
 		 * normal and effects word: a fifth of its cost, for the camera's many questions a frame. Any thread. */
 		double HeightAt(double X, double Y, Drawn* OutWhat = nullptr) const;
+		/** Whether a house's floor or a stone wall's line may be drawn at a place (the field's 2 m raster): where false,
+		 * HeightAt never says Floor or Wall there. A few nanoseconds, so the camera's sight (LandSight) asks HeightAt
+		 * only where it may. Any thread. */
+		bool MayBeBuilt(double X, double Y) const;
 		/** The ground's own colour at a place (8-bit sRGB), as the near ground's points are painted: for what is laid
 		 * over it, a shell hole's thrown soil, to fade into it (a hole's edge was a hard olive outline on a pale field
 		 * of stubble: the second cut's stills, 21 November). Any thread. */

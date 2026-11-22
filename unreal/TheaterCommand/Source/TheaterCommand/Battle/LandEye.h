@@ -409,5 +409,35 @@ namespace LandEye
 		bool OwnLostFrom(const Pose& From, double Battle) const;
 		/** Whether anything moves in the picture now (before the armies meet: the advance is the action). */
 		bool MovingIn(double Battle) const;
+
+		// Indexes, so the film's questions cost by what is near, not by every man on the field (the battles of some 8,000
+		// men: the production lead's plan, 22 November). Each gives the same answers as a walk over every man or round.
+		/** Each track's block (an index into the recording's blocks, -1 none), kept while the counts stand. */
+		mutable std::vector<int> BlockIx;
+		mutable size_t BlockIxTracks = 0, BlockIxBlocks = 0;
+		const LandFeed::Block* BlockOfTrack(int Track) const;
+		/** The men where they stood at a battle time (MenT), by 16 m squares in a hashed table of chains; Crossing asks
+		 * the squares round its eye, with room for how far the fastest man of the recording goes from MenT. */
+		struct ManAt
+		{
+			int Track = -1;
+			double X = 0.0, Y = 0.0;
+		};
+		mutable std::vector<ManAt> MenAt;
+		mutable std::vector<int32_t> MenHead, MenNext;
+		mutable std::vector<uint32_t> MenUsed;
+		mutable double MenT = -1e18;
+		mutable size_t MenTracks = 0;
+		/** The fastest any man of the recording goes, metres a battle second (from his track's points). */
+		double MenFastest = 0.0;
+		void PlaceMen(double T) const;
+		/** The rounds by when they land (indices into the recording's rounds), kept as the rounds grow. */
+		std::vector<int> ByLanding;
+		size_t ByLandingRounds = 0;
+		void IndexLandings();
+		/** Ahead's heat by 35 m squares (a hashed table of chains, each heat in its own square once), for HeatNear. */
+		std::vector<int32_t> HeatHead, HeatNext;
+		std::vector<uint32_t> HeatUsed;
+		mutable std::vector<int> HeatNearBy;
 	};
 }
