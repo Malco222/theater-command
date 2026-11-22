@@ -296,6 +296,8 @@ private:
 	double MassMinPx = 2.0;
 	int32 VatMid = 0, VatFar = 0, MassGrown = 0;
 	double MostGrow = 1.0, GpuMs = 0.0;
+	/** For the 10 s log (FX2): the most smoke puffs the effects kit drew in a frame, and the room it was asked for then. */
+	int32 PuffsMost = 0, PuffsMostAsked = 0;
 
 	// ---- The tanks, guns and lorries (LandKit) ----
 	struct FBodyDrawn

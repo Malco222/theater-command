@@ -191,7 +191,16 @@ camera comes back to its shot.
   the tanks', the effects kit's tick, the sound), the card's own frame time (for A/Bs of the field's and the men's
   draw), the men in the picture a frame and the most in one frame, the meshes made again or held at the old level a
   frame, and the men's crowd (SO1): men drawn as its instances a frame, mid and far, and in the mass shot how many far
-  men were grown to the least size and the most, times his size.
+  men were grown to the least size and the most, times his size; and the most smoke puffs the effects kit drew in a
+  frame, with the room asked then.
+- **The effects kit's frame in two halves (FX2, the effects thread's; merged up to 5833912a).** A frame now plays the
+  fire first (the shells, guns and smoke rounds told the kit), then digs and settles the holes and tracks, then calls
+  the kit's `TickBegin`: the kit's drawing starts on a worker and the hand-held eye gets its jolt at once. The men and
+  the tanks are drawn meanwhile, the tanks' and men's own beats (cook-offs, wreck fires) played, and `TickEnd` waits for
+  the worker and sends the smoke. In between, the worker asks the ground under a point of the field's `At`, which is
+  read-only: nothing in the scene changes it. What the scene asks of the kit in between (a tank's dust, a cook-off) is
+  held and done at `TickEnd`, first drawn the next frame. The log's effects time is the two halves' own time on the game
+  thread (`TickEnd`'s wait for the worker included).
 - **Smoke at the lens.** The effects kit lays each puff flat to the lens. The land camera stands among the bursts, so a
   shell's smoke whose middle was level with the camera a few metres to one side was laid across the whole picture as
   one dark disc. The land scene now calls `SetLensFade(1, 5, 0.3)` on the effects: smoke and dust thin out as their near

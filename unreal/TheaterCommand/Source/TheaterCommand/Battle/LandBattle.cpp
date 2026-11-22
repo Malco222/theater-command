@@ -4637,26 +4637,22 @@ void ALandBattle::Tick(float DeltaSeconds)
 	Mark = LandParts::Seconds();
 	ShowField(EyeWorld, S.Battle);
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
-	Mark = LandParts::Seconds();
-	const int32 InPictureWas = MenInPicture;
-	DrawMen(EyeWorld);
-	DrawMenMs += (LandParts::Seconds() - Mark) * 1000.0;
-	MostInPicture = FMath::Max(MostInPicture, MenInPicture - InPictureWas);
-	Mark = LandParts::Seconds();
-	DrawArmour(EyeWorld);
-	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
-	DrawManShades();
-
-	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
+	// What happens first: the frame's fire (the shells, guns and smoke rounds, told the kit before its frame begins, so
+	// they are drawn this frame), then the shell holes and the tracks dug and settled (the field's: their time is counted
+	// in FieldMs).
 	PlayEffects();
-	// (the shell holes' meshes are the field's: their time is counted in FieldMs)
 	Mark = LandParts::Seconds();
 	MakeCraters();
 	MakeRuts();
 	SettleTorn();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
-	PlayArmourEvents();
-	PlayMenEvents();
+
+	// The effects kit's frame in two halves (the production lead's FX2): TickBegin starts the kit's drawing on a worker
+	// and gives the hand-held eye its jolt at once; the men and the tanks are drawn meanwhile; TickEnd waits for the
+	// worker and sends the smoke. In between, the kit asks the ground under a point from the worker (the field's At,
+	// read-only: nothing here changes it), and what the scene asks of the kit (a tank's dust, a cook-off, a fire) is
+	// held and done at TickEnd, first drawn the next frame. EffectsMs is the two halves' own time on this thread.
+	bool bEffectsBegun = false;
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600, ViewH = 900;
@@ -4668,9 +4664,34 @@ void ALandBattle::Tick(float DeltaSeconds)
 			ViewH = FMath::Max(1, static_cast<int32>(Size.Y));
 		}
 		Mark = LandParts::Seconds();
-		const FBattleJolt Jolt = Effects->Tick(S.Lived, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
+		const FBattleJolt Jolt = Effects->TickBegin(S.Lived, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
 		EffectsMs += (LandParts::Seconds() - Mark) * 1000.0;
 		Eye->SetActorLocationAndRotation(Eye->GetActorLocation() + Jolt.Offset, Eye->GetActorRotation() + FRotator(0.0, 0.0, Jolt.RollDegrees));
+		bEffectsBegun = true;
+	}
+	Mark = LandParts::Seconds();
+	const int32 InPictureWas = MenInPicture;
+	DrawMen(EyeWorld);
+	DrawMenMs += (LandParts::Seconds() - Mark) * 1000.0;
+	MostInPicture = FMath::Max(MostInPicture, MenInPicture - InPictureWas);
+	Mark = LandParts::Seconds();
+	DrawArmour(EyeWorld);
+	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
+	DrawManShades();
+	// (the tanks' own beats and the men's: cook-offs, wreck fires, falls)
+	PlayArmourEvents();
+	PlayMenEvents();
+	if (bEffectsBegun)
+	{
+		Mark = LandParts::Seconds();
+		Effects->TickEnd();
+		EffectsMs += (LandParts::Seconds() - Mark) * 1000.0;
+		// (the smoke's puffs drawn and the room asked, the most in the log's 10 s)
+		if (Effects->PuffsDrawn() >= PuffsMost)
+		{
+			PuffsMost = Effects->PuffsDrawn();
+			PuffsMostAsked = Effects->PuffsAsked();
+		}
 	}
 	Mark = LandParts::Seconds();
 	PlaySound(Real);
@@ -4724,11 +4745,11 @@ void ALandBattle::Tick(float DeltaSeconds)
 			ClutterPlaces += Mesh ? Mesh->GetInstanceCount() : 0;
 		}
 		const int32 ClutterLaid = Carpet.IsValid() ? static_cast<int32>(Carpet->Laid()) : 0;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f; the ground's clutter %d places for %d laid (GS7); the torn ground (GS8) %d sections sent, %d baked static, %d procedural now, the slowest frame's baking %.2f ms"),
+		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f; the ground's clutter %d places for %d laid (GS7); the torn ground (GS8) %d sections sent, %d baked static, %d procedural now, the slowest frame's baking %.2f ms; the smoke's puffs (FX2) the most %d drawn, of %d asked"),
 			DrawMenMs / LogFrames, DrawArmourMs / LogFrames, EffectsMs / LogFrames, SoundMs / LogFrames, GpuMs / LogFrames, static_cast<double>(MenInPicture) / LogFrames, MostInPicture,
 			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
 			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid,
-			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs);
+			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs, PuffsMost, PuffsMostAsked);
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
@@ -4738,6 +4759,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		MostGrow = 1.0;
 		TornSent = TornBakedCount = 0;
 		TornBakeMostMs = 0.0;
+		PuffsMost = PuffsMostAsked = 0;
 	}
 }
 
