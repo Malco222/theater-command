@@ -27,6 +27,21 @@ namespace TheaterFx
 			return static_cast<uint8_t>(std::lround(Clamp01(V) * 255.0));
 		}
 
+		// (SetSrgbBytes: the byte that a material raising it to 2.2 reads as V, from a table made once of 65,536 steps)
+		uint8_t ByteGamma(double V)
+		{
+			static const std::vector<uint8_t> Table = []()
+			{
+				std::vector<uint8_t> Made(65536);
+				for (size_t I = 0; I < Made.size(); ++I)
+				{
+					Made[I] = static_cast<uint8_t>(std::lround(std::pow(static_cast<double>(I) / 65535.0, 1.0 / 2.2) * 255.0));
+				}
+				return Made;
+			}();
+			return Table[static_cast<size_t>(std::lround(Clamp01(V) * 65535.0))];
+		}
+
 		uint64_t Mix64(uint64_t V)
 		{
 			V += 0x9E3779B97F4A7C15ull;
@@ -348,6 +363,9 @@ namespace TheaterFx
 		bLandGoneDirt = Num("burst.far.gone_dirt", 0.0) > 0.5;
 		LandSmokePow = SafeNum(Num("burst.far.smoke_pow", 0.5), 0.0, 1.0, 0.5);
 		LandSkirtPow = SafeNum(Num("burst.far.skirt_pow", 0.5), 0.0, 1.0, 0.5);
+		LandAlphaPow = bLandFar ? SafeNum(Num("burst.far.alpha_pow", 0.0), 0.0, 2.0, 0.0) : 0.0;
+		LandAlphaMost = SafeNum(Num("burst.far.alpha_most", 0.9), 0.0, 1.0, 0.9);
+		FewAlphaPow = 0.0;
 		LandHits = LandHitsFew = 0;
 		LandFewSum = 0.0;
 		CaseDetailPx = std::max(0.0, Num("ground_cases.detail_px", 3.0));
@@ -962,12 +980,14 @@ namespace TheaterFx
 					LandHitsFew += Few < 1.0 ? 1u : 0u;
 					LandFewSum += Few;
 				}
+				FewAlphaPow = Few < 1.0 ? LandAlphaPow : 0.0; // (its see-through pieces, laid bigger, as much thicker: Thicker)
 				if (!(Many < 0.5)) // (and under half, no skirt of dust racing out over the ground: 230 wide sheets, a few pixels long out there)
 				{
 					Skirt(Now + 0.01, At, K, P, DustK, D, Size, Few < 1.0 ? std::pow(Few, LandSkirtPow) : 1.0);
 				}
 				Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D, Few);
 				Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D, Few < 1.0 ? Many * std::pow(Few, LandSmokePow) : Many);
+				FewAlphaPow = 0.0;
 				if (bLandFar && !bSeaFar && LandGonePx > 0.0 && Ground != "water")
 				{
 					for (size_t I = HitFrom; I < Bits.size(); ++I)
@@ -1486,6 +1506,7 @@ namespace TheaterFx
 			// (its outer part feathers away: full strength out to FeatherFrom of the reach, a sixth of it at the rim)
 			const double Feather = Out_ > FeatherFrom ? 1.0 - 0.85 * Clamp01((Out_ - FeatherFrom) / std::max(1.0 - FeatherFrom, 1e-3)) : 1.0;
 			B.Alpha = std::min(0.9, AlphaOf.Pick(D) * DustAlpha) * Feather * (bFront ? 1.0 : InnerAlpha);
+			B.Alpha = Thicker(B.Alpha, FewR);
 			B.FadeIn = 0.02;
 			B.Hold = 0.1;
 			B.HazeBy = HazeBy;
@@ -2119,6 +2140,18 @@ namespace TheaterFx
 		}
 	}
 
+	double Battle::Thicker(double Alpha, double Bigger) const
+	{
+		// (burst.far.alpha_pow: a see-through piece Bigger times as wide, where fewer of them overlap, is as thick as
+		// Bigger to alpha_pow of them laid one over another, never thinner than it was and never over alpha_most)
+		if (!(FewAlphaPow > 0.0) || !(Bigger > 1.0) || !(Alpha > 0.0) || Alpha >= LandAlphaMost)
+		{
+			return Alpha;
+		}
+		const double Layers = std::pow(std::min(Bigger, 4.0), FewAlphaPow);
+		return std::max(Alpha, std::min(LandAlphaMost, 1.0 - std::pow(1.0 - Clamp01(Alpha), Layers)));
+	}
+
 	void Battle::Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many)
 	{
 		// The veil: fine earth that stands a moment over the crown's foot and falls back.
@@ -2232,7 +2265,7 @@ namespace TheaterFx
 				B.Col = B.Col * FootSmokeDark; // (dark at the foot for its first second, settling to the cloud's own colour)
 				B.Cool = B.Life / FootSettle;
 			}
-			B.Alpha = SmokeAlpha.Pick(D) * AlphaK;
+			B.Alpha = Thicker(SmokeAlpha.Pick(D) * AlphaK, Bigger);
 			B.Drag = D.U(1.4, 2.2);
 			B.Rise = D.U(0.25, 0.9) * std::sqrt(K);
 			B.FadeIn = 0.08;
@@ -2472,6 +2505,7 @@ namespace TheaterFx
 			}
 			const double AlphaOwn = SafeNum(FrAlpha.Pick(D), 0.0, 1.0, 0.5), HeartOwn = SafeNum(FrHeart.Pick(D), 0.0, 1.0, 0.5);
 			B.Alpha = std::min(0.98, (FrNearAlpha > 0.0 ? AlphaOwn + (FrNearAlpha - AlphaOwn) * (1.0 - Far) : AlphaOwn) * AlphaK);
+			B.Alpha = Thicker(B.Alpha, FringeBigger);
 			B.FadeIn = 0.08;
 			B.Hold = 0.15;
 			B.Heart = Clamp01(FrNearHeart > 0.0 ? HeartOwn + (FrNearHeart - HeartOwn) * (1.0 - Far) : HeartOwn);
@@ -13020,9 +13054,18 @@ namespace TheaterFx
 		auto Put = [this, &Middle, &AxisA, FadeLen2](size_t I, const Vec& At, const Rgb& C, double A)
 		{
 			Out[I] = At;
-			OutRgba[I * 4 + 0] = Byte(C.R * PutK);
-			OutRgba[I * 4 + 1] = Byte(C.G * PutK);
-			OutRgba[I * 4 + 2] = Byte(C.B * PutK);
+			if (bSrgbBytes)
+			{
+				OutRgba[I * 4 + 0] = ByteGamma(C.R * PutK);
+				OutRgba[I * 4 + 1] = ByteGamma(C.G * PutK);
+				OutRgba[I * 4 + 2] = ByteGamma(C.B * PutK);
+			}
+			else
+			{
+				OutRgba[I * 4 + 0] = Byte(C.R * PutK);
+				OutRgba[I * 4 + 1] = Byte(C.G * PutK);
+				OutRgba[I * 4 + 2] = Byte(C.B * PutK);
+			}
 			OutRgba[I * 4 + 3] = Byte(FadeLen2 > 1e-18 ? A * (LayFadeTail + (LayFadeHead - LayFadeTail) * Clamp01(0.5 + 0.5 * (At - Middle).Dot(AxisA) / FadeLen2)) : A);
 		};
 		// (Lift: the sunlit face of smoke seen with the sun behind the eye. Art director 23:59Z: each lobe a dome, its

@@ -621,6 +621,13 @@ namespace TheaterFx
 		int Ring() const { return Sides; }
 		/** What the picture must multiply the colours by (the material's brightness): picture.lit_gain, 1 by default. */
 		double PictureGain() const { return LitGain; }
+		/** How the colours go into the bytes (Colours()). false: the light itself, a byte 1/255 of it, as M_Highlight reads
+		 * them. true: raised to 1/2.2 first, as M_BattlePuffs reads them (its Power of 2.2), so a dark smoke keeps its hue:
+		 * in plain bytes a charcoal, written lit_gain times darker, is one to four steps a channel, and its red, green and
+		 * blue round apart (a big far piece of dark earth read olive over grass, 55,59,37; the dusk specks). Set by the
+		 * scene for the material it draws with, once, before the first Draw; Setup leaves it as it is. false by default. */
+		void SetSrgbBytes(bool bOn) { bSrgbBytes = bOn; }
+		bool SrgbBytes() const { return bSrgbBytes; }
 		int PerPuff() const { return PointsPerPuff; }
 		int Room() const { return MaxPuffs; }
 		/** What the last Draw laid (puffs), and the room asked for as it stands: on the screen at that Draw, and what has
@@ -1152,6 +1159,7 @@ namespace TheaterFx
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		Rgb LayShadow; // (while laying one bit: its shadow side's colour, Bit::ShadowCol in the hour's light, and how far it goes to it)
 		double LayShadowK = 0.0;
+		bool bSrgbBytes = false; // (SetSrgbBytes)
 		double LayFadeHead = 1.0, LayFadeTail = 1.0; bool bLayFade = false; // (fx-air r2, while laying one bit: its opacity runs evenly from its tail end to its head, a ship's tracer or hose)
 		double LayHeartRound = 0.0; // (while laying one bit: Bit::HeartRound)
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
@@ -1622,6 +1630,11 @@ namespace TheaterFx
 		bool bLandFar = false;
 		double LandFullPx = 0.0, LandLeast = 0.1, LandHalvePast = 1800.0, LandNearBusy = 0.5, LandOverBusy = 0.125, LandGonePx = 0.0, LandGoneBeyond = 300.0;
 		double LandSmokePow = 0.5, LandSkirtPow = 0.5;
+		// (burst.far.alpha_pow, the art director 12:33Z: a see-through piece laid Bigger is as much thicker, up to alpha_most,
+		// so where fewer layers lie the ground does not show through and tint the smoke. FewAlphaPow is alpha_pow only while
+		// Shell lays a land hit that keeps Few under 1; 0 otherwise, so a sea hit's far pieces are as they were)
+		double LandAlphaPow = 0.0, LandAlphaMost = 0.9, FewAlphaPow = 0.0;
+		double Thicker(double Alpha, double Bigger) const;
 		bool bLandGoneDirt = false;
 		size_t LandHits = 0, LandHitsFew = 0; // (since Setup: land hits, and those laid with fewer pieces)
 		double LandFewSum = 0.0; // (and the shares they kept, summed)
