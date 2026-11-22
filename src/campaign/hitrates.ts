@@ -7,8 +7,8 @@
 // The split by kind is the field's own: a carrier group's strike flies by the record's mix for its nation and year
 // (deckMix, which the air battle's boxes fly by too). A land group (the design director's 18:40Z) flies by its type where
 // the game carries one (a B-17 is a level bomber, a Stuka dives), else by the record's own count of its nation's strikes
-// (Japan at Force Z), else by the historian's kinds for its nation and year (M), counting as the kind of them that hits
-// least while no share is found, so that no share of ours is laid.
+// (Japan at Force Z), else by the historian's kinds for its nation and year (M), in equal shares while no share is found
+// (the middle of the possible mixes, D; the design director's 18:45Z).
 
 import data from '../../data/campaign/hitrates.json';
 import { turnToDate } from '../core/ticket';
@@ -73,11 +73,10 @@ function rowAt<T>(table: Record<string, [number, T][]>, nat: string, turn: numbe
 
 /**
  * A land bomber group's kinds in a month: by its type where the game carries one ('types'); else by the record's count of
- * its nation's strikes ('landShares'); else by the historian's kinds for its nation ('landKinds', M), all of it at the
- * one kind of them that hits least (by its cover and whether the ships are at anchor) while no share is found; level with
- * no row at all, as the law was.
+ * its nation's strikes ('landShares'); else by the historian's kinds for its nation ('landKinds', M), in equal shares
+ * while no share is found; level with no row at all, as the law was.
  */
-export function landMix(nat: string, turn: number, type?: string, covered = false, harbour = false): Record<HitKind, number> {
+export function landMix(nat: string, turn: number, type?: string): Record<HitKind, number> {
   const out = none();
   const byType = type ? HITS.types[type] : undefined;
   if (byType) { out[byType] = 1; return out; }
@@ -87,18 +86,14 @@ export function landMix(nat: string, turn: number, type?: string, covered = fals
     if (sum > 0) { for (const k of HIT_KINDS) out[k] = (share[k] ?? 0) / sum; return out; }
   }
   const kinds = rowAt(HITS.landKinds, nat, turn) ?? [];
-  let least: HitKind = 'level', worst = Infinity;
-  for (const k of kinds) {
-    const r = hitRate(nat, k, covered, harbour, turn);
-    if (r < worst) { worst = r; least = k; }
-  }
-  out[least] = 1;
+  if (!kinds.length) { out.level = 1; return out; }
+  for (const k of kinds) out[k] += 1 / kinds.length;
   return out;
 }
 
 /** A group's split by kind: a carrier group's by the record's deck mix, a land group's by its type or its nation's kinds. */
-export function mixOf(nat: string, deck: boolean, turn: number, harbour: boolean, type?: string, covered = false): Record<HitKind, number> {
-  if (!deck) return landMix(nat, turn, type, covered, harbour);
+export function mixOf(nat: string, deck: boolean, turn: number, harbour: boolean, type?: string): Record<HitKind, number> {
+  if (!deck) return landMix(nat, turn, type);
   const d = turnToDate(turn), out = none();
   for (const [k, s] of deckMix(nat, { year: d.year, month: d.month }, harbour ? 'harbour' : 'fleet')) out[k] += s;
   return out;
@@ -135,7 +130,7 @@ export function strikeRates(groups: { nat: string; bmr: number; deck: boolean; t
   const n = none(), worth = none(), landN = none();
   for (const x of groups) {
     if (x.bmr <= 0) continue;
-    const mix = mixOf(x.nat, x.deck, turn, harbour, x.type, covered);
+    const mix = mixOf(x.nat, x.deck, turn, harbour, x.type);
     for (const k of HIT_KINDS) {
       const b = x.bmr * mix[k];
       n[k] += b;

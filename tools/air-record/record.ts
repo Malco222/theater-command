@@ -368,10 +368,10 @@ function likeRecord(P: SetPiece | DayRaid, f: Fought): number {
   return P.kind === 'harbour' ? down('bb') * 10 + (big ? 15 : 0) + down('dd') + down('ca') : down('cv') * 10 + (big ? 5 : 0) + down('bb') + down('ca');
 }
 
-function record(P: SetPiece | DayRaid, outDir: string, step = 1.0, tries = 60): void {
+function record(P: SetPiece | DayRaid, outDir: string, step = 1.0, tries = 60, only?: number): void {
   let best: Fought | null = null, bestScore = -1, bestSeed = 0;
-  for (let k = 0; k < tries; k++) {
-    const seed = 238 + k * 7919;
+  for (let k = 0; k < (only ? 1 : tries); k++) {
+    const seed = only ?? 238 + k * 7919;
     const f = fight(P, seed, step), sc = likeRecord(P, f);
     if (sc > bestScore) { best = f; bestScore = sc; bestSeed = seed; }
   }
@@ -403,5 +403,7 @@ if (!process.env.VITEST) {
   const outDir = process.argv[2] ?? 'dist/air-record';
   mkdirSync(outDir, { recursive: true });
   const only = process.argv[3];
-  for (const P of [...PIECES, ...RAIDS]) if (!only || P.key === only) record(P, outDir);
+  // (a fourth argument fights that one seed instead of the luckiest of the run: to record again a fight already in the game)
+  const seed = process.argv[4] ? Number(process.argv[4]) : undefined;
+  for (const P of [...PIECES, ...RAIDS]) if (!only || P.key === only) record(P, outDir, 1.0, 60, seed);
 }
