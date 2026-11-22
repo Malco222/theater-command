@@ -4095,6 +4095,12 @@ static void TestCountFace(const char* Folder)
 		bFace = std::fabs(Size - Look::CountPt) < 1e-6 && After != nullptr && std::string(After).rfind("f, true)", 0) == 0;
 	}
 	CHECK(Mounts == 1 && bFace);
+	// (the tab's figures are made once, one string each, when the slot's count changes, and the tab's paint makes none:
+	// the review of the rulings' build, finding 6)
+	const std::string Layer = SourceText(Folder, "EdgeNewsLayer.cpp");
+	const size_t Tab = Layer.find("void PaintTab("), Mark = Layer.find("void PaintMark(");
+	const std::string Paint = Tab != std::string::npos && Mark != std::string::npos && Mark > Tab ? Layer.substr(Tab, Mark - Tab) : std::string();
+	CHECK(!Paint.empty() && Contains(Paint, "Here.AlikeFigures[Index]") && !Contains(Paint, "Mid(") && !Contains(Paint, "FString Figure") && Contains(Layer, "Seal.AlikeFigures.Add(Seal.AlikeCount.Mid("));
 }
 
 int main(int ArgCount, char** Args)

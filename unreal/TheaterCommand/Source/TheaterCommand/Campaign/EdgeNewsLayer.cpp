@@ -239,6 +239,7 @@ namespace
 			FString RestWords;
 			int32 Alike = 1; // how many items the board's seal in this slot stands for (a folded run: 3 or more), and that as its tab shows it
 			FString AlikeCount;
+			TArray<FString> AlikeFigures; // its figures one by one, made when the count changes, so the tab draws each with nothing made at paint
 		};
 		FNow Seals[SealSlots];
 
@@ -532,7 +533,7 @@ namespace
 			const FEdgeNewsLaid::FNow& Here = Laid->Seals[SealSlot];
 			if (!Here.bRest && !Here.AlikeCount.IsEmpty())
 			{
-				PaintTab(Pen, Layer + 2, Here.AlikeCount, Shown, PxPerUnit);
+				PaintTab(Pen, Layer + 2, Here, Shown, PxPerUnit);
 			}
 			return Layer + 5;
 		}
@@ -581,11 +582,12 @@ namespace
 		 * director, 64(g)(4), ruling 3: never CountPt raised), in a child geometry of that scale, as the seal itself grows
 		 * under the pointer; elsewhere FigureGrow is 1. Slate places text by its line, which runs from the face's ascent
 		 * to its descent, so the line is set FigureLift below the tab's middle for the figures' own ink to have its middle
-		 * there. Three layers, from Layer.
+		 * there. The figures are the slot's own (FNow::AlikeFigures), made when its count changed. Three layers, from Layer.
 		 */
-		void PaintTab(const FSealPen& Pen, int32 Layer, const FString& Count, float Shown, double PxPerUnit) const
+		void PaintTab(const FSealPen& Pen, int32 Layer, const FEdgeNewsLaid::FNow& Here, float Shown, double PxPerUnit) const
 		{
-			const EdgeSeals::FBox Tab = EdgeSeals::Look::TabOf(Count.Len(), PxPerUnit);
+			const int32 Figures = Here.AlikeFigures.Num();
+			const EdgeSeals::FBox Tab = EdgeSeals::Look::TabOf(Figures, PxPerUnit);
 			const double Edge = EdgeSeals::Look::TabEdge(PxPerUnit), Round = EdgeSeals::Look::TabRound;
 			const FLinearColor Fold = SealRibbonFold.CopyWithNewOpacity(Shown), Paper = SealRibbon.CopyWithNewOpacity(Shown);
 			Pen.Slip(Layer, FVector2D(Tab.MinX, Tab.MinY), FVector2D(Tab.MaxX - Tab.MinX, Tab.MaxY - Tab.MinY), Round, Fold, Fold, 0.0);
@@ -600,11 +602,11 @@ namespace
 			const double MiddleY = (Tab.MinY + Tab.MaxY) * 0.5 + EdgeSeals::Look::FigureLift(PxPerUnit);
 			const double Grow = EdgeSeals::Look::FigureGrow(PxPerUnit);
 			const FLinearColor Ink = SealTabInk.CopyWithNewOpacity(Shown);
-			for (int32 Index = 0; Index < Count.Len(); ++Index)
+			for (int32 Index = 0; Index < Figures; ++Index)
 			{
-				const FString Figure = Count.Mid(Index, 1);
+				const FString& Figure = Here.AlikeFigures[Index];
 				const FVector2D Size = Measure->Measure(Figure, Laid->TabFace);
-				const FVector2D Middle(EdgeSeals::Look::FigureAt(Index, Count.Len(), PxPerUnit), MiddleY);
+				const FVector2D Middle(EdgeSeals::Look::FigureAt(Index, Figures, PxPerUnit), MiddleY);
 				const FGeometry Stood = Pen.On.MakeChild(Size, FSlateLayoutTransform(static_cast<float>(Grow), Middle - Size * (0.5 * Grow)));
 				FSlateDrawElement::MakeText(Pen.Out, Layer + 2, Stood.ToPaintGeometry(), Figure, Laid->TabFace, ESlateDrawEffect::None, Ink);
 			}
@@ -887,6 +889,11 @@ namespace
 					{
 						Seal.Alike = Alike;
 						Seal.AlikeCount = Alike > 1 ? FString::FromInt(Alike) : FString();
+						Seal.AlikeFigures.Reset();
+						for (int32 FigureIndex = 0; FigureIndex < Seal.AlikeCount.Len(); ++FigureIndex)
+						{
+							Seal.AlikeFigures.Add(Seal.AlikeCount.Mid(FigureIndex, 1));
+						}
 					}
 					if (bRestHere && Seal.Folded != Shared.Standing.More)
 					{
