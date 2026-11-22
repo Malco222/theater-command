@@ -225,6 +225,14 @@ namespace TheaterFx
 		// director 15:38Z: 1.5 m at the nacelle, 5 to 6 m past the tail)
 		double WakeBy = 0.0, WakeR = 0.0;
 		double WakeOn = 0.0; // (over 0: past WakeBy it keeps widening, as WakeR times this power of its age over WakeBy: a trail flares on behind the tail and is never a tube)
+		// (a far trail's short piece, game.air_far: until the bar over it is laid (its trail has laid more than StandBars bars),
+		// it stands in for that bar too, as dark as the two would be together, by StandA, coming in between StandFrom and
+		// StandBy seconds as the bar would. A far bar is laid many seconds after the short pieces at its old end, and the
+		// trail there went pale waiting for it; the art director's mend of 18:44Z)
+		double StandA = 0.0, StandFrom = 0.0, StandBy = 0.0; unsigned StandBars = 0;
+		bool bFarLong = false; // (a far trail's piece, game.air_far: many times longer than it is wide, so its line bows between its two ends no more than its own width, or its outline folds over itself and a sliver is drawn twice)
+		bool bShowEach = false; // (a far trail's bar, game.air_far: it comes into sight point by point along it, each point by the age of the trail there, not by the ages at its two ends alone; a bar many seconds long comes in as the short ones it stands in for go, all along it)
+		double Billow = 0.0; // (a far trail's long piece, game.air_far.trails_billow: its two sides swell and pinch together by up to this share of its width at each point along them, its own, so one long piece is as lumpy along its length as the several short ones it stands in for; its ends as laid)
 		double EdgeSoft = 0.0; // (over 0: its lumpy outline is gentler the wider the piece is for its length, so a wide old length has soft swells, never a comb of spikes: all of it up to a width of its length over EdgeSoft)
 		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
 		double LeastKeep = 0.0; // (a puff held up to LeastPx keeps at least this share of its opacity: a light's twinkle, a far trail's dark line)
@@ -789,7 +797,8 @@ namespace TheaterFx
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
 			double Longest = 0.0; // (longest_m over 0: the most sky a trail is laid over in its life; a faster aircraft's is squeezed, see TrailMove)
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
-			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
+			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1, KeepFar = 0; // (KeepFar over 0: the far form's, game.air_far.trails_keep_one_in, its bars one in that many of its puffs; ThinKeep still sets how far one reaches back)
+			// (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
 			double LeastPx = 0.0, LeastKeep = 0.0; // (a far trail held at least LeastPx across, keeping LeastKeep of its opacity)
 			// (a ribbon, Core over 0: every piece a length of one strip back to the piece before it, sharing its edge,
 			// dense over Core of its half width and thinning to its sides; 0: the trail as it was, each puff a lens. The
@@ -874,6 +883,8 @@ namespace TheaterFx
 			double Born = 0.0, KindBorn = 0.0, Last = 0.0, Owed = 0.0, LastPuff = 0.0, NextFlame = 0.0;
 			double Tip = 0.0; // (fire: how far aft of the point its smoke starts, at the flame's tips)
 			double Span = 0.0; // (the aircraft's span, metres, as TrailStart was told: a fire's flame is sized by it)
+			double FarK = 1.0; // (game.air_far: how many times farther apart its puffs are laid now; 1, as ever)
+			unsigned BarsLaid = 0; // (how many bars that hang on it has laid: Bit::StandBars)
 			unsigned Puffs = 0, NextKept = 0, KeptGap = 0; // (puffs laid, counted only when the row thins its old puffs; the next to hang on, and how many back the last one kept was)
 			Vec At, Carry, LastPuffAt;
 			Vec KeptAt; bool bKeptAt = false; // (where the last puff kept to hang was laid)
@@ -1165,7 +1176,8 @@ namespace TheaterFx
 		// run to leave each edge along the path there; LayTailAlpha: its far edge's opacity as a share of its near
 		// edge's; LayLump, LayLumpFar: how far its near and far ends have drawn in to a round lump, 0 a link of the
 		// strip and 1 a round puff)
-		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0, LayWob = 1.0;
+		std::vector<std::pair<uint32_t, unsigned>> RunBars; // (set by Draw: each trail run's Trailing::BarsLaid, by run, for Bit::StandBars)
+		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0, LayWob = 1.0, LayBillow = 0.0; uint32_t LayBillowSeed = 0; bool bLayShowEach = false; double LayShowFrom = 0.0, LayShowBy = 0.0, LayAgeNear = 0.0, LayAgeFar = 0.0;
 		bool bLayFarCol = false; Rgb LayFarBy, LayFarFloor; bool bLayLean = false; double LayLean = 0.0, LayLeanFar = 0.0; // (Bit::bSoft: how its far edge's colour differs from its near edge's, in the hour's light)
 		// (while laying one bit: bLayGlare, its Lift is its burst's flash and not the sun, Bit::GlareK: each point lit by how
 		// far it is round toward LayGlareWay, the way to the flash; LayGlareAll: 1 the eye sees the face the flash lights and
@@ -1350,7 +1362,7 @@ namespace TheaterFx
 		double AirGlowSoft = 0.0; // (over 0: by day its glow is that strong beside the core and fades smoothly to nothing at its edge, never a solid bar; 0: solid across, as it was)
 		double AirFarPx = 0.0; // (over 0: a one-fan tracer is a solid dash that wide in the core's colour; 0: the glow alone, as it was)
 		// (game.air_far, the air scene's far forms; 0: off. See Setup)
-		double FarTrailFromM = 0.0, FarTrailBand = 0.15, FarTrailPuffs = 40.0, FarGunFromM = 0.0, FarGunDashS = 0.2, FarGunFlightS = 0.12;
+		double FarTrailFromM = 0.0, FarTrailBand = 0.15, FarTrailPuffs = 40.0, FarTrailBillow = 0.25; int FarTrailKeep = 3; double FarGunFromM = 0.0, FarGunDashS = 0.2, FarGunFlightS = 0.12;
 		void FarGunDash(double T, const Vec& At, const Vec& Way, const Vec& Carry, const AirRow& Row, double Mps, const TracerHue& Hue);
 		std::vector<double> AirTracerEnds; // (when each air tracer now alight goes out)
 		int HoseMost = 0; std::vector<double> HoseEnds; // (fx-air r2: no more than HoseMost ship guns' hose lines at once, and when each goes)
