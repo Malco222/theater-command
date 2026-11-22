@@ -802,7 +802,8 @@
    "clods_back_s": 2.8,
    "crown": {
     "piece_max_m": 1.5
-   }
+   },
+   "lens_near_m": 10.0
   },
   "how105": {
    "scale": 1.0,
@@ -830,7 +831,8 @@
    "clods_back_s": 3.0,
    "crown": {
     "piece_max_m": 1.4
-   }
+   },
+   "lens_near_m": 12.0
   },
   "how150": {
    "scale": 1.6,
@@ -860,7 +862,8 @@
    "crown": {
     "piece_max_m": 1.8
    },
-   "cloud_reach": 1.13
+   "cloud_reach": 1.13,
+   "lens_near_m": 17.0
   },
   "bomb250": {
    "scale": 3.4,
@@ -938,7 +941,8 @@
    "flash_k": 2.05,
    "flash_s": 0.13,
    "cloud_many": 1.25,
-   "cloud_puff": 1.4
+   "cloud_puff": 1.4,
+   "lens_near_m": 23.0
   },
   "bomb500": {
    "scale": 4.6,
@@ -1017,7 +1021,8 @@
    "flash_s": 0.15,
    "cloud_reach": 1.0,
    "cloud_many": 1.3,
-   "cloud_puff": 1.4
+   "cloud_puff": 1.4,
+   "lens_near_m": 30.0
   },
   "torpedo": {
    "_what": "a torpedo against a ship's side (the scene passes this size for it; a kit without the row draws a field gun's burst, so pass it only with this recipe). On water: the tallest, narrowest column, over the mast, dark for its lower third.",
@@ -1871,6 +1876,335 @@
    "far_tall": 0.35,
    "far_px": 400,
    "foot_soft": 0.55
+  },
+  "land_tongues": {
+   "_how_land": "A fire on land's own tongues (a burning tank's: under fire.smoke_column.from_m across, within fire.land_column.above_m of the ground and not under way), the whole row in place of fire.tongues: head C's numbers and the art director's mends of 22 November. The pre-check of 22 November found head C's numbers in fire.tongues reaching every ship's fire too (twice the pieces, redder), so fire.tongues is the ships' row again as at 07d21fff, and the tank's look lives here. Without this row: fire.tongues for every fire.",
+   "_how": "A burning thing's flames (Burn). Art director 17:54Z 20 November, from build 1778's ships: the fires were rows of pointed orange cones like birthday candles. With this row a fire burns at seats of its own (seats of them, fixed on the skin where it was lit, standing apart round its middle). Each seat throws ragged tongues tall of the fire's width high, each seat its own share of that so no two are the same height, one the tallest and more of them short (a fire over tall_wide_m across is less tall for its width); a tongue is wide of the width at its root, lives life_s and dies by being eaten away from below. A seat's height surges and sinks by pulse several times a second, no two seats together. A tongue leans lean for each metre a second of wind, lean_most at the most, and bends further over toward its tip. forks of them have a thinner tongue out of the same root leaning aside, and tips of them a thin tip above the body, so a flame's top is torn and never one point. Colour (art director 23:19Z: each flame was one flat orange from root to tip): a tongue is body at its root, running out to orange and then to tip, a dull deep red, at its edge and its top, and it reddens as it dies; its thin tip is that red, going darker. Under the tongues each seat keeps a bed that never goes out while the fire burns: a broad yellow foot where the flame leaves the skin, and along it, across the eye's line, two short blunt licks of root, white-yellow, burning root_over past white under the tallest seat and less under the rest (picture.lit_gain), so the heart of the fire is a ragged bright band along its foot and never a disc. foot_soft: the share of a lick, from its root out to its rim, over which it fades away (0.4 without the key; the art director 23:51Z: soften the licks a little so they do not read as cut shapes up close). torn: the chance a step (every_s) of a scrap torn off a tall tongue's top: ragged, blunt, dull red going to the smoke's dark, gone in a quarter of a second within a tongue's height (the first were darts flying across the smoke, which read as sparks). over_smoke: the fire's flames are sorted this share of its width nearer the eye, so its far seats show through its own smoke and are not blacked out by it (from a ship's distance they were). A fire under full_px wide in the picture (the scene's window pixels) burns at that share of its seats, never under seats_least, each as much wider, with as much fewer forks, tips and torn tips; and one under far_px wide stands taller, up to far_tall more, so far off it reads as fire before smoke. As the room fills a fire keeps its bed and its tongues' bodies and loses the forks, tips and torn tips, by degrees from seven tenths full to none at seventeen twentieths. Put out, it is eaten back to its middle, steadily lower and at fewer seats. Without this row: one or two upright cones a step, anywhere on the fire.",
+   "every_s": 0.05,
+   "seats": [
+    3,
+    5
+   ],
+   "seats_least": 3,
+   "tall": [
+    0.6,
+    1.5
+   ],
+   "tall_wide_m": 36,
+   "wide": [
+    0.14,
+    0.24
+   ],
+   "life_s": [
+    0.45,
+    0.75
+   ],
+   "pulse": 0.45,
+   "lean": 0.06,
+   "lean_most": 0.6,
+   "tips": 0.7,
+   "forks": 0.45,
+   "torn": 0.3,
+   "full_px": 110,
+   "over_smoke": 0.5,
+   "root": [
+    255,
+    156,
+    83
+   ],
+   "root_over": 1.8,
+   "body": [
+    255,
+    150,
+    80
+   ],
+   "tip": [
+    136,
+    66,
+    46
+   ],
+   "far_tall": 0.35,
+   "far_px": 400,
+   "foot_soft": 0.2,
+   "born_k": 0.5,
+   "full_by": 0.3,
+   "fade_in": 0.18,
+   "jitter": 1.0,
+   "anchor": 1.0,
+   "climb": 0.4,
+   "bed_overlap": 2.5,
+   "flicker": 0.12,
+   "flicker_long": 0.25,
+   "flicker_wide": 0.1,
+   "flicker_hz": [
+    3.0,
+    6.0
+   ],
+   "bed": [
+    255,
+    160,
+    90
+   ],
+   "mass": 3,
+   "mass_r": [
+    0.24,
+    0.38
+   ],
+   "mass_life_s": [
+    0.5,
+    0.8
+   ],
+   "mass_up": 0.45,
+   "mass_colour": [
+    250,
+    143,
+    75
+   ],
+   "mass_top": [
+    123,
+    60,
+    43
+   ],
+   "soot": 1,
+   "soot_r": [
+    0.25,
+    0.4
+   ],
+   "soot_life_s": [
+    1.2,
+    2.0
+   ],
+   "soot_colour": [
+    64,
+    58,
+    55
+   ],
+   "point": 0.45,
+   "long_most": 2.4,
+   "_smooth": "Smooth flames (the frame study of 22 November: each tongue was born whole on a step of a twentieth of a second and only shrank, so at 30 frames a second the fire popped ten times a second, 53% of its flicker over 8 Hz; with these keys 1%). born_k: a piece is born that share of its size and grows to it by full_by of its life, fading in over fade_in of it; jitter: born up to that share of a step late, so births never beat with the frames; anchor: its root stays on the seat; climb: how much of its old climb it keeps; bed_overlap: the foot lives that many times longer, so a seat's foot pieces cross-fade. flicker, flicker_long, flicker_wide: every piece of a seat swells and dims together by the clock, three smooth waves between flicker_hz (the ruling's 3 to 6 Hz), in strength, length and width. point and long_most: how pointed a tongue is drawn (0.9 before) and how long for its width at the most (5 before); lower, the fire reads as a heap of overlapping lobes and not a row of blades. The body (the ruling: 'one merged body of overlapping camera-facing flame puffs'): mass soft round flame puffs a step rise through it from the seats, mass_r of its width, mass_up of a seat's height their climb, mass_colour going to mass_top as they rise, so the flames go dark red into the smoke; soot black puffs a step roll off its top, soot_r of its width. Both thin out as the fire is small in the picture (to a quarter) and with the room near full (to half), each bigger to cover the same. bed: the foot's own colour in place of the fire's yellow-white heart (the ruling: orange-yellow, never white). Without these keys: as before. Tuned on the wreck shot (fxpreview wreck): flames about 3 m over the turret roof, tongues to 4 m, core 245 at the most, 203,102,27 at the middle and 139,64,23 at the edge, the game's curve applied.",
+   "bed_over": 1.6,
+   "bed_edge": [
+    255,
+    140,
+    70
+   ],
+   "bed_inner": 0.9,
+   "mass_over": 1.0,
+   "mass_inner": 0.88,
+   "bed_tall": 1.5,
+   "inner": 0.9,
+   "flare_every_s": [
+    2.0,
+    3.0
+   ],
+   "flare_tall": 1.35,
+   "flare_s": 0.5,
+   "_mends": "The art director's read of head C, 06:43Z 22 November: the base metre yellow-orange (G/R 0.7 to 0.8, about 250,195,85 on screen), the tongues crisp on their lower two thirds and soft only at the tips, the top breaking into licks that detach and vanish and not a rounded cap, and about one lick every 2 to 3 s reaching 5 to 6 m over the roof. bed_over: the foot burns that far past white (0 or none: as before); bed_edge: its colour at its rim (the fire's flame colour without it); bed_inner: how far out it stays dense (0.4 without it); bed_tall: the foot and its heart licks that many times taller (1 without it), so the yellow-orange reaches a metre up the fire; inner: how far out a tongue's body and its fork stay dense (0.8 and 0.78 without it), higher a crisper edge; mass_over and mass_inner: the body puffs' brightness past white and the share of them dense (1 and 0.5 without them); flare_every_s, flare_tall, flare_s: about one lick every so many seconds, by the fire's own clock and seed, out of its tallest seat, thin and the seat's whole height tall, swelling to flare_tall of it and back over flare_s, its top torn off as it falls (none without flare_every_s). Measured on the wreck shot at 10 s, through the game's curve: the yellow-orange core (G/R 0.7 or more) 24% of the flame (3% before), at 243,178,65 (L 185, the brightest tenth 198); the edge's contrast on the lower two thirds 22.8 mean, 12.2 median (12.7 and 3.5 before); flames 2.8 to 3.5 m over the turret roof, a lick every 2.5 s to about 6 m over it."
+  },
+  "land_column": {
+   "_how": "A burning vehicle's own black column on land (the ruling, section 3: black, the lit side 40 to 60 and the shade 15 to 30, 3 m wide at the hull, 10 to 12 m at 30 m up, 25 to 35 m at 100 m, rising 150 to 250 m and bending downwind, pale only above 100 m). The same row as fire.smoke_column, read for a fire on land: one from_m across or more (and under smoke_column.from_m, which keeps the ships' columns as they are), within above_m of the ground and not moving. It rises from flame_up_m over the fire; while it stands, the fire's own plain smoke is cut back to base_r1 of its size and base_life of its life, since the column carries it. Measured on the wreck shot from 700 m: 10.5 m wide at 33 m up, 34 m at 100 m, its top near 190 m. Without from_m here: a tank's fire has no column of its own, as before.",
+   "from_m": 1.5,
+   "from_s": 20,
+   "join_m": 8,
+   "join_wide": 0.5,
+   "most": 8,
+   "under_oil": 0,
+   "head_r": [
+    0.15,
+    0.6
+   ],
+   "column_every_s": 0.3,
+   "column_life_s": [
+    34,
+    44
+   ],
+   "rise_mps": [
+    0.0,
+    0.0
+   ],
+   "burst_mps": [
+    24,
+    40
+   ],
+   "burst_drag": 0.035,
+   "slow_mps2": 0.0,
+   "windage": [
+    0.7,
+    1.5
+   ],
+   "r0": [
+    0.45,
+    0.55
+   ],
+   "r1": [
+    9.0,
+    15.0
+   ],
+   "grow": 0.8,
+   "alpha": [
+    0.75,
+    0.95
+   ],
+   "hold": 0.3,
+   "heart": 0.85,
+   "rough": 0.5,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    64,
+    60,
+    57
+   ],
+   "twin_px": 160,
+   "keep": 0,
+   "pall_every_s": 0.0,
+   "pall_life_s": [
+    150,
+    220
+   ],
+   "pall_r1": [
+    0.8,
+    1.3
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.4,
+    0.6
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 90,
+   "pall_hold": 0.4,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.3,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 2.2,
+   "lit_colour": [
+    118,
+    106,
+    94
+   ],
+   "sun_young": 0.1,
+   "sun_from_s": 4,
+   "sun_by_s": 16,
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.3
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8,
+   "tight_m": 50,
+   "overlap": 1.5,
+   "least_px": 8,
+   "least_keep": 0.6,
+   "above_m": 6.0,
+   "flame_up_m": 2.0,
+   "base_r1": 0.35,
+   "base_life": 0.5,
+   "pale_up_m": 180,
+   "pale_up_pow": 2.5,
+   "thin_up": 0.95,
+   "pale_up_most": 0.35,
+   "pale_up_colour": [
+    90,
+    85,
+    80
+   ],
+   "pale_up_lit": [
+    150,
+    140,
+    128
+   ],
+   "_mends": "The art director 06:43Z 22 November: the column's top from 700 m ended in a rounded sausage tip, its puffs twisted like a rope. Its puffs now live 34 to 44 s, climb at 24 to 40 m/s, drift 0.7 to 1.5 of the wind and grow to 9 to 15 of the fire's width, from a wider head, rougher; and they pale a little and thin away as they climb, by pale_up_m 180, pale_up_pow 2.5 and thin_up 0.95 (see oil_fires.ablaze), so the top goes to nothing over its last 40 to 60 m and leans with the wind. 216 pieces at 2 minutes, against 243 before."
+  },
+  "late": {
+   "_how": "A long fire burning down (the ruling, section 3: 'in a long battle, after 3 to 5 minutes the flames drop to 1 to 2 m and the smoke goes grey-brown and thinner'). Each fire picks its own moment between from_s seconds after it was lit (by its seed, so a field of wrecks lit together never burn down together) and over by_s seconds, smoothly, its flames go to flames of their height and width (a tank's 3 m deck fire to about 1 to 1.5 m over the deck), its lamp and ground glow to light of their strength, its soot and its own smoke toward column_colour, and its land column's new puffs toward column_colour at their foot and column_top above, at column_alpha of their ink. Puffs already laid keep their colour, so the column greys from the bottom up. Without by_s: never, as before.",
+   "from_s": [
+    180,
+    300
+   ],
+   "by_s": 60,
+   "flames": 0.4,
+   "light": 0.4,
+   "column_alpha": 0.6,
+   "column_colour": [
+    70,
+    60,
+    50
+   ],
+   "column_top": [
+    110,
+    100,
+    88
+   ]
+  },
+  "join": {
+   "_how": "A knocked-out tank burns as one fire (the frame study of 22 November: the ground scene lit a wreck as six to eight fires of its own along the whole hull, one for each of the clip's fire and smoke beats, and they flickered and hopped as eight; the art director's ruling, section 3, wants one body of flame as wide as the engine deck). A fire lit within within_m of one already burning (on the level, and no more than up_m above or below it), neither of them over most_m across, joins it: that fire burns on as one, as long as the longer of them, growing smoothly over grow_s toward wide_m across at the most (each newcomer adds add of its own width; it never narrows), with one lamp, one glow and one column. The newcomer's number still finds it for BurnMove and BurnOut (its place kept as an offset; on a joined fire the first number that moves it moves it, the rest are not heard). No ground scene change is needed. Without within_m: every fire burns alone, as before.",
+   "within_m": 4.5,
+   "up_m": 3.0,
+   "most_m": 6.0,
+   "grow_s": 1.5,
+   "wide_m": 3.0,
+   "add": 0.1
+  },
+  "lamp": {
+   "_how": "A burning thing's lamp held steady (the frame study of 22 November: the lamps were handed out again every frame to the brightest of the moment, so a wreck's light hopped between its fires three or four times a second, and the ground and hull jumped with it). With ramp_s each fire, oil fire and jet keeps its lamp while it burns: ranked by its steady strength over its distance squared from the eye (keep times stronger if it held a lamp last frame, so two near alike do not swap), the first game.steady_lamps of them lit before any flash, the rest after. A fire's lamp comes up over ramp_s when lit and goes down over ramp_s when its flames end (and as it is put out), strength of the day's share times the square root of its width, flickering flicker by three smooth waves between flicker_hz, up of its width above it, reaching reach of its width and never under reach_least_m. Without ramp_s: as before.",
+   "ramp_s": 0.6,
+   "strength": 0.1875,
+   "land_strength": 0.8,
+   "reach": 8.0,
+   "land_reach": 3.3,
+   "reach_least_m": 9.0,
+   "up": 0.6,
+   "land_up": 0.5,
+   "flicker": 0.25,
+   "flicker_hz": [
+    3.0,
+    6.0
+   ],
+   "keep": 1.5,
+   "_mends": "The art director 06:43Z 22 November: at dusk the deck and the turret's rear within 2 m should catch the lamp as they did before head C. land_strength 0.8 (0.3 in head C): the deck's lit strip from the battle camera at dusk 130 at the middle (86 in head C, 162 before it). The pre-check of 22 November: strength is read by every fire, so head C's 0.3 lit a ship's fire 1.6 times as strongly as before it, and 0.8 would have been 4.3 times. A ship's (strength) is 0.1875 again, as before head C (the old lamp's 0.25 times its mean flicker 0.75: one 8 m fire 12 m up, mean strength 0.133 by day before head C, 0.133 now); a fire on land's (land_strength, see fire.land_tongues) keeps 0.8. So too reach and up: a ship's lamp reaches 8 of its width from 0.6 of it up, as before head C; a fire on land's land_reach 3.3 and land_up 0.5, as in head C."
+  },
+  "glow": {
+   "_how": "A fire's warm light on the ground round it (the ruling, section 3: 'lights the ground within 5 to 8 m with a flicker'; the art director, 04:54Z 22 November: 'a warm ground glow with a soft fall-off and no hard rim, lighting the lower plates and near road wheels'). Soft warm pieces lying flat on the ground under the fire, a new one every every_s seconds living life_s and fading in over a third of it, so three overlap and their sum barely moves; r of the fire's width across, held between r_least_m and r_most_m; up_m over the ground; alpha (day_alpha of it by day), over its brightness past white; all of one fire flicker together by flicker between flicker_hz. Only for a fire within above_m of the ground (a ship's deck fire high over the sea lights no sea), and less as it is put out. Without every_s: none, as before.",
+   "every_s": 1.0,
+   "life_s": 3.0,
+   "r": 2.2,
+   "r_least_m": 4.0,
+   "r_most_m": 8.0,
+   "up_m": 0.15,
+   "above_m": 6.0,
+   "alpha": 0.3,
+   "day_alpha": 0.35,
+   "over": 1.0,
+   "flicker": 0.25,
+   "flicker_hz": [
+    1.5,
+    4.0
+   ],
+   "colour": [
+    255,
+    150,
+    60
+   ]
   }
  },
  "camera": {
@@ -1969,6 +2303,25 @@
    "light": "small",
    "smoke": "a short puff up the tube's line",
    "smoke_s": 2.5
+  },
+  "ship_aa": {
+   "_what": "a ship's high-angle gun firing at aircraft (ShipGuns' heavy guns: the 5-inch, the 12.7 cm, the 4-inch and their like), from her deck over the sea: its flame and its own smoke along the bore, no dust ring (nothing under it but the sea 6 to 16 m below)",
+   "flame_m": 1.5,
+   "light_w": 9000,
+   "smoke_s": [
+    3,
+    6
+   ]
+  },
+  "ship_main": {
+   "_what": "a ship's big gun (a calibre of 200 mm or more) thrown low at a torpedo plane over the sea, as ship_aa but a battleship's flame and smoke",
+   "flame_m": 2.6,
+   "light_w": 16000,
+   "smoke_s": [
+    6,
+    10
+   ],
+   "day_lamp": 1
   },
   "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z).",
   "veil": {
@@ -2478,6 +2831,80 @@
    "tracer_life_k": 0.85,
    "streak_s": 0.0245
   },
+  "aa25": {
+   "_what": "a ship's 20 to 25 mm guns (the Oerlikon, the Japanese 25 mm, the German 2 cm, the Italian Breda 20 mm): ShipGuns' light guns of kind aa25, laid by eye along their tracers from her decks (Brian, 21 November 18:06Z: ships fire back at the planes attacking them). The 20 mm cannon's row, a tracer in three (the gunners hosed by the tracer), each burning longer, as a ship's gun reaches out to 1.5 to 2 km",
+   "rate_per_min": 450,
+   "muzzle_mps": 820,
+   "drag": 0.22,
+   "drop": 1,
+   "tracer_every": 3,
+   "tracer_s": 1.9,
+   "spread_mil": 5,
+   "flash_m": 0.9,
+   "licks": 2,
+   "lamp": 0.12,
+   "hot_flash": 1,
+   "smoke_every": 1,
+   "smoke_s": 1.1,
+   "smoke_alpha": 0.16,
+   "strike_m": 1.6,
+   "case_m": 0.11,
+   "case_d_m": 0.03,
+   "link_m": 0,
+   "cannon": 1,
+   "tracer_wide": 1.5,
+   "tracer_life_k": 1.8,
+   "streak_s": 0.0245,
+   "ship_hue": 1,
+   "burn_out_m": 2000,
+   "dwindle_from_m": 300,
+   "dwindle_to": 0.3,
+   "dwindle_wide": 0.6,
+   "tail_fade": 0.6,
+   "core_tail_fade": 0.85,
+   "hose": 0.3,
+   "hose_px": 6.5,
+   "hose_mix": 0.3,
+   "hose_s": 0.5,
+   "_fx_air_r2": "fx-air r2 (art director, Midway 06b and Samar b34a 02): a ship's light AA is a hose of tracer, not a ladder of dashes, and burns out at its reach. hose: each round lays a thin line back to the round fired before it, drawn where both are now (hose its opacity, hose_px its width in the pixels the scene tells the kit, hose_mix how far its colour goes from the glow's to the core's, hose_s the least seconds between its points: a 25 mm's hose runs through every second round), so a burst is one line through its rounds, curving as the gun swings and the rounds slow and drop; a new burst starts a new hose. ship_hue: the nation's ship colours (air_guns.tracers.nations.<n>.ship) where it has them. burn_out_m: a tracer burns until it has flown that far (the art director's 2 km for a 20 mm, 3.5 km for a 40 mm), dwindling from dwindle_from_m to dwindle_to of its strength and dwindle_wide of its width; tail_fade and core_tail_fade: its glow's and core's tail end that much fainter than the head, so each reads as a moving streak; its core keeps its own colour near the eye. drag 0.22 (0.16 for aa40) from the scenes' 0.38 and 0.3: the gunners lay their lead for an average of 0.8 of the muzzle speed (ShipGuns' Tof), which these give out to about 2 km, and the rounds reach their burn-out. Without these keys the row is as the scenes carry it."
+  },
+  "aa40": {
+   "_what": "a ship's 37 to 40 mm guns (the Bofors, the 1.1-inch, the British pom-pom, the German 3.7 cm, the Soviet 37 and 45 mm): ShipGuns' light guns of kind aa40, a slow heavy beat of big red-orange tracers, every round a tracer (their clips were loaded so), each burning out to about 3 km, with a heavy flash and a puff of smoke at every round",
+   "rate_per_min": 120,
+   "muzzle_mps": 881,
+   "drag": 0.16,
+   "drop": 1,
+   "tracer_every": 1,
+   "tracer_s": 1.9,
+   "spread_mil": 3,
+   "flash_m": 1.4,
+   "licks": 2,
+   "lamp": 0.18,
+   "hot_flash": 1,
+   "smoke_every": 1,
+   "smoke_s": 1.6,
+   "smoke_alpha": 0.2,
+   "strike_m": 2.4,
+   "case_m": 0.311,
+   "case_d_m": 0.042,
+   "link_m": 0,
+   "cannon": 1,
+   "tracer_wide": 2.0,
+   "tracer_life_k": 3.0,
+   "streak_s": 0.0245,
+   "ship_hue": 1,
+   "burn_out_m": 3500,
+   "dwindle_from_m": 300,
+   "dwindle_to": 0.3,
+   "dwindle_wide": 0.6,
+   "tail_fade": 0.6,
+   "core_tail_fade": 0.85,
+   "hose": 0.3,
+   "hose_px": 6.5,
+   "hose_mix": 0.3,
+   "hose_s": 0.0,
+   "_fx_air_r2": "As aa25._fx_air_r2."
+  },
   "close": {
    "_how": "The close view: only within licks_within_m of the eye does a row's flicker throw close_licks short side licks raked aft, with a lamp of close_lamp (night only, as every small gun's); only within cases_within_m does every round drop its spent case (case_m long, case_d_m across, case_colour, case_dark on its far face) and belt link (link_m, link_colour) from a chute chute_back_m behind the muzzle and chute_down_m under it, kicked out at throw_mps, torn aft by the air (drag) and falling at case_sink_mps or link_sink_mps, tumbling tumble radians a second and glinting (glint), gone in life_s. Left out first when the room fills.",
    "_art_director_0440": "Art director 04:40Z item 6: close view only: cases and links from the wing gun chutes and from the turrets that dumped them overboard, drawn within 60 m. Heavy machine gun licks 0 to 2, with the small lamp, for guns within 30 m.",
@@ -2565,11 +2992,14 @@
    "always_within_m": 300,
    "one_fan_beyond_m": 1200,
    "one_fan_px": 5.5,
+   "hose_most": 500,
+   "_hose_most": "fx-air r2: no more than hose_most ship guns' hose lines (a row's hose) at once; as the tracers' room passes 0.7 of most, the guns beyond always_within_m lose their hoses first, as their tracers.",
    "glow_soft": 1.0,
    "_glow_soft": "Art director 19:52Z 20 November: solid across, the glow was a bar darker than a pale sky round a sky-pale core, a hollow tube, and end-on a ring. With glow_soft the glow is that strong beside the core and fades smoothly from the core's edge to nothing at its own, with no rim (by day; at dusk it is as it was), and the core stands at least 25 over the sky it crosses (us lands 255,236,212, red only in its glow). one_fan_px: a far gun's one-fan tracer is a solid dash that wide in the core's own colour, never an outlined oval.",
    "_one_fan": "A gun farther than one_fan_beyond_m from the eye fires tracers of one piece (see one_fan_px): its core was a pixel wide there, and a tracer costs half as much. Without the key every tracer is glow and core.",
    "nations": {
     "_lands": "us and gb: core 255,236,212, body 230,80,40. de and it: core 255,250,225, body 240,228,160. jp: core 255,250,225, body 240,236,205. su: core 235,255,235, body 120,225,120, its cannon red as us. default as de.",
+    "_ship": "fx-air r2 (art director, Samar b34a 02, 05:44Z 22 November): a ship's light AA tracer (a row's ship_hue) was 255,253,235, near white. ship: its body written to land about 213,199,104, its core (the head) hotter, 240,222,140; it keeps that colour near the eye. us, gb and su keep their own colours.",
     "us": {
      "body": [
       224,
@@ -2610,7 +3040,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     },
     "it": {
      "body": [
@@ -2624,7 +3068,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     },
     "jp": {
      "body": [
@@ -2638,7 +3096,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     },
     "su": {
      "body": [
@@ -2680,7 +3152,21 @@
       225,
       131
      ],
-     "core_over": 4.0
+     "core_over": 4.0,
+     "ship": {
+      "body": [
+       209,
+       186,
+       106
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       209,
+       118
+      ],
+      "core_over": 1.24
+     }
     }
    }
   }
@@ -2776,40 +3262,40 @@
   "_how": "A trail from a moving point on an aircraft (TrailStart, TrailMove every frame, TrailStop). Puffs are laid every spacing_m along the path, each drawn smear x spacing longer behind it so they join in one line, and left hanging in the air (carried: the share of the aircraft's speed they keep) to drift with the wind. Each frame the young end is drawn from the point back to the newest puff, so a trail starts at the engine. A trail comes to full over ramp_s, darkening from colour to colour_full over darken_s; each puff widens from r0_m to r1_m as it hangs for life_s (grow: below 1 widens early, above 1 late) and pales toward colour_old. lumpy (0 to 1) makes some puffs bigger lumps and the rest smaller and shorter lived, and the smear shrinks over smear_s, so an old trail breaks into uneven lumps; rise_mps lifts the smoke. Fire adds ragged tongues streaming back about flame_m from the root, and its smoke starts at the flame's tips.",
   "smoke": {
    "_what": "a damaged engine: thin and dark at the engine, widening (about three times by 2 s) and breaking into paler lumps",
-   "life_s": 20,
+   "life_s": 30,
    "thin_after_s": 7,
    "thin_keep_one_in": 6,
-   "thin_grow": 2.89,
-   "thin_alpha": 2.2,
-   "thin_hold": 0.8,
+   "thin_grow": 1.4,
+   "thin_alpha": 1.2,
+   "thin_hold": 0.5,
    "thin_ragged": 0.4,
    "least_px": 3,
    "least_keep": 0.6,
    "spacing_m": 9,
-   "r0_m": 0.4,
-   "r1_m": 7.5,
-   "alpha": 0.55,
+   "r0_m": 0.5,
+   "r1_m": 6,
+   "alpha": 0.9,
    "colour": [
-    92,
+    100,
     90,
-    87
+    76
    ],
    "colour_full": [
-    50,
-    48,
-    46
+    86,
+    76,
+    62
    ],
    "colour_old": [
-    96,
-    94,
-    91
+    150,
+    142,
+    130
    ],
    "darken_s": 3,
    "ramp_s": 1.5,
    "smear": 1.6,
    "carried": 0.05,
    "flame_m": 0,
-   "grow": 1.5,
+   "grow": 0.7,
    "lumpy": 0.7,
    "smear_s": 5,
    "rise_mps": 0,
@@ -2819,28 +3305,33 @@
    "drift": 0.7,
    "ribbon": 1,
    "core": 0.3,
-   "lumps_from": 1.0,
-   "pale_to": 0.8,
-   "pale_by_s": 8.0,
+   "lumps_from": 0.8,
+   "pale_to": 0.35,
+   "pale_by_s": 15,
    "wide_wander": 2.0,
-   "pale_from_s": 2.5,
-   "widen_by_s": 7.0
+   "pale_from_s": 2,
+   "widen_by_s": 10,
+   "soft": 1,
+   "edge_torn": 0.6,
+   "wisps": 0.5,
+   "fold": 0.3,
+   "longest_m": 2400
   },
   "fire": {
    "_what": "an engine or tank on fire: ragged flame streaming aft from the root, black smoke rising from its tips",
    "life_s": 30,
    "thin_after_s": 8,
    "thin_keep_one_in": 6,
-   "thin_grow": 1.78,
-   "thin_alpha": 1.4,
-   "thin_hold": 0.85,
+   "thin_grow": 1.5,
+   "thin_alpha": 1.2,
+   "thin_hold": 0.4,
    "thin_ragged": 0.4,
    "least_px": 3,
    "least_keep": 0.6,
    "spacing_m": 8,
    "r0_m": 0.75,
-   "r1_m": 16.0,
-   "alpha": 0.96,
+   "r1_m": 7.0,
+   "alpha": 0.92,
    "colour": [
     44,
     41,
@@ -2852,9 +3343,9 @@
     31
    ],
    "colour_old": [
-    46,
-    44,
-    42
+    136,
+    132,
+    128
    ],
    "darken_s": 1,
    "ramp_s": 0.8,
@@ -2893,7 +3384,7 @@
     0.6
    ],
    "tip_smoke_r_of_flame": 0.35,
-   "grow": 1.8,
+   "grow": 0.7,
    "lumpy": 0.6,
    "smear_s": 5,
    "rise_mps": 1.2,
@@ -2903,15 +3394,15 @@
    "drift": 0.7,
    "ribbon": 1,
    "core": 0.5,
-   "lumps_from": 1.0,
-   "pale_to": 0.94,
-   "pale_by_s": 8.0,
+   "lumps_from": 0.8,
+   "pale_to": 0.56,
+   "pale_by_s": 15,
    "wide_wander": 2.0,
-   "pale_from_s": 2.5,
-   "widen_by_s": 7.5,
+   "pale_from_s": 5,
+   "widen_by_s": 10,
    "tail_wide_m": [
-    7.6,
-    10.4
+    5,
+    6
    ],
    "tail_m": 16,
    "soft": 1,
@@ -2920,7 +3411,7 @@
    "knots": 0.8,
    "knot_alpha": 0.6,
    "knot_dark": 0.8,
-   "wisps": 0.45,
+   "wisps": 0.7,
    "knot_r": [
     0.45,
     0.85
@@ -2929,13 +3420,14 @@
     0.1,
     0.95
    ],
-   "edge_torn": 0.35,
+   "edge_torn": 0.6,
    "flame_tongues": 3,
    "flame_over": 2.2,
    "knot_s": [
     1.5,
     3.0
-   ]
+   ],
+   "longest_m": 2400
   },
   "glycol": {
    "_what": "a holed radiator: a thin white vapour that soon thins out",
@@ -3007,9 +3499,9 @@
    "life_s": 30,
    "thin_after_s": 6,
    "thin_keep_one_in": 6,
-   "thin_grow": 2.4,
-   "thin_alpha": 1.8,
-   "thin_hold": 0.75,
+   "thin_grow": 1.6,
+   "thin_alpha": 1.3,
+   "thin_hold": 0.5,
    "thin_ragged": 0.5,
    "least_px": 6,
    "least_keep": 0.6,
@@ -3053,9 +3545,9 @@
     73
    ],
    "colour_old": [
-    100,
-    101,
-    105
+    130,
+    130,
+    132
    ],
    "darken_s": 2,
    "ramp_s": 1.0,
@@ -3073,9 +3565,9 @@
    "wisps": 0.65,
    "soft": 1,
    "rise_mps": 0.3,
-   "pale_to": 0.8,
-   "pale_from_s": 2.5,
-   "pale_by_s": 9.0,
+   "pale_to": 0.35,
+   "pale_from_s": 2,
+   "pale_by_s": 15,
    "smear": 1.6,
    "carried": 0.05,
    "flame_m": 0,
@@ -3086,8 +3578,9 @@
    "drift": 0.7,
    "ribbon": 1,
    "core": 0.55,
-   "lumps_from": 1.0,
-   "wide_wander": 2.0
+   "lumps_from": 0.8,
+   "wide_wander": 2.0,
+   "longest_m": 2400
   },
   "streak": {
    "_what": "a fire put out and the airscrew feathered: a thin dark streak, about half the windmilling trail, that never clears",
@@ -3150,7 +3643,8 @@
    "ribbon": 1,
    "core": 0.55,
    "lumps_from": 1.0,
-   "wide_wander": 2.0
+   "wide_wander": 2.0,
+   "longest_m": 2400
   },
   "doused": {
    "_what": "the extinguisher going off in a burning nacelle: a white-grey puff for a second or two, then the streak",
@@ -3308,16 +3802,16 @@
    "life_s": 30,
    "thin_after_s": 8,
    "thin_keep_one_in": 6,
-   "thin_grow": 1.78,
-   "thin_alpha": 1.4,
-   "thin_hold": 0.85,
+   "thin_grow": 1.5,
+   "thin_alpha": 1.2,
+   "thin_hold": 0.4,
    "thin_ragged": 0.4,
    "least_px": 3,
    "least_keep": 0.6,
    "spacing_m": 8,
    "r0_m": 1.0,
-   "r1_m": 16.0,
-   "alpha": 0.98,
+   "r1_m": 7.5,
+   "alpha": 0.92,
    "colour": [
     36,
     34,
@@ -3329,9 +3823,9 @@
     25
    ],
    "colour_old": [
-    40,
-    38,
-    37
+    136,
+    132,
+    128
    ],
    "darken_s": 1,
    "ramp_s": 1.2,
@@ -3370,7 +3864,7 @@
     0.6
    ],
    "tip_smoke_r_of_flame": 0.35,
-   "grow": 1.8,
+   "grow": 0.7,
    "lumpy": 0.6,
    "smear_s": 5,
    "rise_mps": 1.2,
@@ -3380,15 +3874,15 @@
    "drift": 0.7,
    "ribbon": 1,
    "core": 0.5,
-   "lumps_from": 1.0,
-   "pale_to": 0.94,
-   "pale_by_s": 8.0,
+   "lumps_from": 0.8,
+   "pale_to": 0.56,
+   "pale_by_s": 15,
    "wide_wander": 2.0,
-   "pale_from_s": 2.5,
-   "widen_by_s": 7.5,
+   "pale_from_s": 5,
+   "widen_by_s": 10,
    "tail_wide_m": [
-    7,
-    9
+    5,
+    6
    ],
    "tail_m": 16,
    "soft": 1,
@@ -3397,7 +3891,7 @@
    "knots": 0.8,
    "knot_alpha": 0.6,
    "knot_dark": 0.8,
-   "wisps": 0.45,
+   "wisps": 0.7,
    "knot_r": [
     0.45,
     0.85
@@ -3406,7 +3900,7 @@
     0.1,
     0.95
    ],
-   "edge_torn": 0.35,
+   "edge_torn": 0.6,
    "flame_tongues": 3,
    "flame_over": 2.2,
    "knot_s": [
@@ -3452,7 +3946,8 @@
     70,
     34,
     24
-   ]
+   ],
+   "longest_m": 2400
   },
   "mist": {
    "_what": "fuel spraying from a torn wing root: a white mist torn back and gone in a second or two (it often catches: TrailStart again as fuel or fire)",
@@ -3516,7 +4011,8 @@
    "core": 0.45,
    "lumps_from": 0.75,
    "wide_wander": 2.0
-  }
+  },
+  "_art_director_bremen": "Art director's read of the air scene's Mac frames (a1acb552), 22 November, mend 2: the trails at Bremen were ropes, a core of 78 against a sky of 226, one width all along and crossing the whole frame. Wanted: 1-2 m at the source, 6-12 m by 10 s; opacity 0.9, 0.3 by 15 s, gone by 30 s; colour lifting from about 45 to 100-120 with age; edges breaking into puffs; no trail longer than about 2 km; an engine hit grey-brown, only burning fuel black and only near the aircraft. So smoke, fire, fuel and oil: widen to r1_m by widen_by_s 10 and on to thin_grow after; pale to pale_to 0.35 from 2 to 15 s and fade from thin_hold 0.5 of life_s 30; colour_old a light grey (smoke's grey-brown); lumps only from 0.8 of life, so the old end does not break into beads; edges torn (soft, edge_torn, wisps). longest_m 2400: a faster aircraft's trail is squeezed in time to that length of sky (about 2 km of it seen). Measured side-on at 80 m/s (smoke; fire): opacity 0.94, 0.88, 0.51, 0.33, 0.18, 0.06 at 0.5, 5, 10, 15, 20, 25 s (0.94, 0.90, 0.54, 0.33, 0.19, 0.06), none at 30 s; colour 79 to 112 at 15 s (37 to 110); wide at half 1.3, 5.4, 8.7, 12.7 m at 0.5, 5, 10, 15 s (3.3, 8.0, 8.7, 10.7). At 150 m/s smoke 0.32 at 8 s, 0.12 at 12 s, gone by 16 s. Art director 08:54Z: the engine hit PASS; fire and fuel one step heavier, so a burning aircraft out-reads a damaged one: 12 m at 10 s and about 16 m at 15 s, opacity 0.75 at 10 s and 0.4 at 15 s, colour about 80 at 10 s, and the wake past the tail kept at 5 to 6 m (20 November). So fire and fuel r1_m 7 and 7.5, thin_grow 1.5, pale_to 0.56 from 5 to 15 s, thin_hold 0.4, colour_old 136,132,128, tail_wide_m 5 to 6. Fire measured: opacity 0.95, 0.96, 0.74, 0.41, 0.23, 0.08 at 0.5, 5, 10, 15, 20, 25 s, none at 30; colour 39, 63, 87, 101, 109, 125; wide at half 4.0 m at 0.2 s, 11.4 at 5 s, 13.4 at 10 s, 15.4 at 15 s."
  },
  "air_debris": {
   "_how": "A falling aircraft's debris row (AirFall once as the fall starts with its span and the deck height, AirFallMove every frame, AirFallStop when the model is gone). explode sheds fighter or bomber pieces at once (bomber at bomber_span_m or more), thrown throw_mps out and carried on at carry of its speed, with a short torn fireball; burn sheds burn_sheds over its fall, every_s apart, from first_s; spin sheds spin_sheds, the first a wing at wing_odds. A skin plate (plate_m across, painted face paint, bare metal inside bare) tumbles plate_tumble radians a second, so seen edge-on it thins and flutters, and glints when the sun catches it (glint, glint_power); it slows to sink at plate_sink_mps and drifts with the wind. A heavy piece (heavy_share of an explosion's, heavy_m, heavy_colour) drops at heavy_sink_mps. A wing (wing_chord_of_span) tumbles slowly down at wing_sink_mps. Every piece fades into the deck over its last enter_deck_m, at most most_s after it came loose; far off it shrinks to a speck under least_px and fades, never held up.",
@@ -3910,6 +4406,145 @@
    }
   }
  },
+ "fuel_ball": {
+  "_how": "Fuel going up (FuelBall): a ragged ball of burning fuel about the caller's Across metres wide, its time by its width (small_s at small_m across, big_s at big_m, in proportion between). Its lobes (lobes_per_m of its width, held to lobes), each burning life_share of its time and never going before its smoke can take it, are thrown out and up from a seat 0.3 of its half-width up, each to reach of its half-width and slowed by the air, lobe_r of its half-width at birth growing lobe_grow times; the whole climbs rise_of_across of its width while it burns, faster and faster, and each lobe rolls roll_rad_s as it climbs. Lit from within: each lobe colour taken heart_mix toward hot_colour, and heart_in more at the middle than at the rim, and up to deep_mix (more at the outside) toward edge_colour, so it billows; it holds that colour for cool_from of its life and then cools cool of the way to ember by its end; its rim edge of the way to edge_colour; the middle's lobes are sorted core_nearer of the half width nearer the eye, so from any side the hot middle shows through the cooler lobes round it; near opaque to its edge (rim), rough its torn outline, drawn as two fans past twin_px; the middle burns over times past white. hearts white-hot knots low in the middle for heart_s, heart_r of its half-width. Each lobe goes into black smoke_colour smoke at soot_life of its life (the first for a lobe at the ball's top, the second at its foot, so the dark comes in on top), never before smoke_from_s, born a little above it so the smoke boils off the top; with soot_in_s the smoke is whole that many seconds on and the lobe goes then, so none is seen fading over the sky. The smoke keeps smoke_climb of its lobe's climb (the first at the foot, the second at the top), growing smoke_grow times, climbing smoke_rise_mps, smoke_alpha thick, rough smoke_rough, ageing toward smoke_old and going as linger.fuel says; and from smoke_from_s top_puffs_per_m of its width more boil off its top as it climbs, keeping top_climb of the ball's climb, a black cap. The cloud by cap_s: each puff cap_spread further again out from the ball's upright, level with the ground; any whose top would pass the ceiling (the ball's middle as it went to smoke, cap_top of its half width over that) held cap_flat of that lower, and what stood above the ball's middle carried cap_raise of the way up under it, more the further out, so it is a cap with a flat top and level shoulders; leaning lean_deg down the wind by its height in a wind of lean_full_mps or more. stem_puffs_per_m of its width climb from the seat from smoke_from_s to stem_s, each to its own height up to the ball's middle as it went to smoke, stem_r of its half width widening stem_grow, so a dark stem stands down to the ground. A lamp of lamp times the root of its width, reaching lamp_reach of its width, up as it swells and down as it goes. Every piece of it keeps lens_near_of_across of its width as its own game.lens_cap near_m, so a lens caught inside it dims and never goes black. Without this row: nothing.",
+  "_ruling": "Art director 21 November, section 2: rolling fireballs only from fuel: a vehicle 6 to 10 m for 1 to 1.5 s, an aircraft crash or a fuel dump 15 to 25 m for 1.5 to 2 s; black smoke from its top after 0.5 s. Fire as the air fireball's (06:00Z 20 November): heart near white-yellow, body saturated orange (blue under 60), cooling to deep orange-red and into the black smoke, never peach or salmon.",
+  "_mends": "Art director 08:08Z 22 November on head D: sizes, times, the 0.1 s heart, the climb with its stem and the smoke boiling off the top from 0.5 s passed. 1. Lit hotter, the brightest thing in the frame (it read as popcorn: flat mid orange lumps each with a dark outline): the middle luma 190-220 about 255,190,80 through 0.5 s, down to an orange 150-170 by 1.0 s, the outer lumps 140-170, dark lacing only where soot forms, on top after 0.5 s, and never peach. 2. The big one's smoke too round: by 3 s a flatter top, 1.5-2 times the ball across, leaning 20-30 degrees down the wind, torn edges, a dark stem down to the fire on the ground, thinning as it goes. 3. The drama kept; the camera keeps twice the ball's width off it (its own thread) and the frame never goes black (lens_near_of_across).",
+  "small_m": 8.0,
+  "small_s": [
+   1.0,
+   1.5
+  ],
+  "big_m": 20.0,
+  "big_s": [
+   1.5,
+   2.0
+  ],
+  "lobes_per_m": 10.0,
+  "lobes": [
+   32,
+   160
+  ],
+  "life_share": [
+   0.7,
+   1.0
+  ],
+  "reach": [
+   0.3,
+   0.9
+  ],
+  "lobe_r": [
+   0.1,
+   0.18
+  ],
+  "lobe_grow": [
+   1.8,
+   2.6
+  ],
+  "rise_of_across": 1.0,
+  "roll_rad_s": [
+   1.5,
+   3.0
+  ],
+  "colour": [
+   250,
+   136,
+   22
+  ],
+  "hot_colour": [
+   255,
+   222,
+   90
+  ],
+  "heart_mix": [
+   0.0,
+   0.2
+  ],
+  "heart_in": 0.8,
+  "deep_mix": 0.3,
+  "ember": [
+   240,
+   135,
+   35
+  ],
+  "edge_colour": [
+   232,
+   112,
+   22
+  ],
+  "edge": 0.3,
+  "rim": 0.95,
+  "rough": 0.3,
+  "cool": 1.0,
+  "cool_from": 0.4,
+  "core_nearer": 0.8,
+  "over": 1.3,
+  "twin_px": 40,
+  "hearts": [
+   3,
+   6
+  ],
+  "heart_s": 0.18,
+  "heart_r": 0.2,
+  "heart_colour": [
+   255,
+   226,
+   96
+  ],
+  "smoke_from_s": 0.5,
+  "soot_life": [
+   0.55,
+   0.85
+  ],
+  "soot_in_s": 0.05,
+  "smoke_colour": [
+   34,
+   31,
+   29
+  ],
+  "smoke_old": [
+   96,
+   92,
+   88
+  ],
+  "smoke_alpha": 0.9,
+  "smoke_grow": [
+   1.6,
+   2.2
+  ],
+  "smoke_rise_mps": 1.2,
+  "smoke_rough": 0.55,
+  "smoke_s": [
+   12,
+   20
+  ],
+  "smoke_climb": [
+   0.15,
+   0.6
+  ],
+  "top_puffs_per_m": 1.5,
+  "top_climb": 0.2,
+  "cap_s": 2.5,
+  "cap_top": 0.6,
+  "cap_flat": 0.9,
+  "cap_raise": 0.8,
+  "cap_spread": 0.8,
+  "lean_deg": 25,
+  "lean_full_mps": 1.5,
+  "stem_puffs_per_m": 1.5,
+  "stem_s": 6,
+  "stem_r": [
+   0.2,
+   0.35
+  ],
+  "stem_grow": [
+   1.8,
+   2.6
+  ],
+  "lamp": 0.9,
+  "lamp_reach": 4.0,
+  "lens_near_of_across": 1.0
+ },
  "dust": {
   "vehicles": {
    "_how": "Mediterranean set 03:35Z and art director 06:19Z: every vehicle moving on dry ground trails dust from its dust sockets (dust.left, dust.right; VehicleDust every frame). Pale fine dust, the ground's own colour where it is thrown up (low) going paler as it climbs (high); low and long, drifting on the one wind (SetWind), lingering, never popping; taller and longer at speed (flatten, r1_m to r1_fast_m, life_s to life_fast_s between least_mps and full_mps); tracks throw tracked times more than wheels. A puff every spacing_m (no more than most_a_second); dense for haze_by_s, then a thin haze to its end. by_ground scales it; a ground not listed throws none. Pass check: from a 1.7 m eye a column's dust hides the vehicles behind its lead.",
@@ -4063,6 +4698,8 @@
   "lumps_soft_s": 0.35,
   "_lumps_soft": "The pre-check on 7d83869, 16:14Z 20 November: no single lump popped, but at the cap every lump in the fade band stepped together about once a second, 6 to 13% of all the lumps' ink in one frame, and blinked twice on a slow approach. lumps_soft_s: the width asked closes most of the way to the count's in this many seconds, the same at any frame rate, so a small move of the count is a fade over many frames (its tried cure: the biggest frame change 2% from 12%, no blinks). 0 or no key: at once, as 7d83869. Under the cap nothing changes: Midway 06 is laid exactly as passed. Not set here: lumps_band, the share of the width asked over which a puff's lumps come in (0.25 without the key). With many puffs alike in size most of the kept ones lie inside that quarter and show at under half strength (the pre-check's note); 0.15 gives the kept lumps a third more ink at the cap, but it also quickens every young puff's lumps under the cap, so Midway 06 would no longer be the picture passed.",
   "max_lamps": 2,
+  "steady_lamps": 1,
+  "_steady_lamps": "With fire.lamp.ramp_s: how many of the lamps (max_lamps) go first to the steadiest fires, the rest to the flashes of the moment and then the other fires. 1: a burning wreck's light stays put while gun flashes still light their own moment.",
   "lamp_candela_at_full": 400.0,
   "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",
   "muzzle_lamp_height_m": 6.0,
@@ -4098,6 +4735,8 @@
    10.0
   ],
   "_trail_near_eye": "Art director 04:17Z 22 November, on the air scene's ride and chase cameras (build 2b177386): a trail passing the lens was a wide soft grey band across the frame or a black ribbon, and a strip through the camera's own plane a hard-edged sheet. trail_near_eye_fade_m: by its distance, nothing of an aircraft's smoke trail within the first of these of the camera and all of it from the second on, fading smoothly between. By how far the trail's line is from the camera, each end of a strip by its own, so the strip fades along its length with no step at a join. The art director's first numbers were 30 and 60, then 20 and 45 (04:43Z) so that the 60 m rear quarter film shot's fire trail does not thin toward its corner. That trail passes 39 m from that camera, so the second number is 38 and the shot is as it was (no pixel moves by more than 4 of 255; at 45 it still thinned by up to 54). trail_near_eye_looms: nearer than the second distance a trail still shows while it is small in the picture: all of it while its half width is under the first of these as a share of its distance from the camera, none of it from the second. So the aircraft the camera rides with still trails its smoke from the engine (thin there, and some 20 m off) and loses it as it widens toward the lens, and a wide old trail goes as it comes up to the lens. Without this key the distance alone decides and a ridden aircraft shows no smoke. trail_near_eye_least_m: however small in the picture, none of a trail within the first of these of the camera and no more than the distance leaves until the second, so nothing is drawn at the lens or through the camera's own plane. Flames are lights and stay. A ship's funnel smoke, a burst's smoke and gun smoke go by near_eye_fade_m. Absent: no fade.",
+  "trail_cut_fade_s": 3.0,
+  "_trail_cut": "The pre-check on 13388a4f, 22 November: an aircraft that speeds up (80 to 220 m/s and back) squeezes its trail row's life shorter, so the first piece laid fast ended before the slow pieces laid just behind it, and the trail had a hole up to 3.6 km wide for over 10 s. Now each piece laid before the squeeze rose is cut to end with that first fast piece (never later than its own end), so the trail always dies from its old end. A cut piece fades out over these last seconds before its cut (0.05 to 60; not a number gives 3). At a steady speed nothing is cut and every frame is as before.",
   "draw_beyond_m": 1500,
   "muzzle_smoke": [
    150,
@@ -4120,7 +4759,17 @@
    215
   ],
   "_day": "How much the hour is day, from the light handed to Tick (its luminance): 0 at or below day_light_from, 1 at day_light_full. The campaign map's deepest night is about 0.377 (pre-check 21:16Z), so night is 0 there. By day (art director 21:16Z, build 1690) a lamp is day_lamp_share as strong and warm white (day_lamp_colour), and small guns (machine guns, rifles, guns under 75 mm, tank muzzles, aircraft guns and hits) light no ground at all; dust skirts stay. Tracer day widening reads the same Day.",
-  "_lamp_frames": "Art director 21:16Z, build 1690: a lamp never comes before its flash. A flash's lamp is full on the first frame drawn after the flash is born, about half on the next, then out. A light shorter than a frame (a flash, a flicker, a close tracer) is kept until a frame has drawn it once, so 30 frames a second and less still see every one."
+  "_lamp_frames": "Art director 21:16Z, build 1690: a lamp never comes before its flash. A flash's lamp is full on the first frame drawn after the flash is born, about half on the next, then out. A light shorter than a frame (a flash, a flicker, a close tracer) is kept until a frame has drawn it once, so 30 frames a second and less still see every one.",
+  "lens_cap": {
+   "_how": "The near-lens cap (the art director 22:46Z 21 November: clods faded 4 to 8 m from the lens, no card over 15% of the frame, no flash or flame over 20%, never a blackout; the ground scene's cut 4, still 06: a clod a few metres in front of the lens hung in the picture as a flat black slab). A thrown clod fades out from thrown_whole_m in front of the lens and is gone by thrown_gone_m; a smoke or dust card wider than card_most of the picture, or a flash or flame wider than light_most, fades away over the last soft of that, but only nearer the lens than near_m (by degrees over its last three tenths), so a column filling the picture from further off is never touched. Without thrown_whole_m, card_most and light_most: none, as before.",
+   "thrown_gone_m": 4.0,
+   "thrown_whole_m": 8.0,
+   "card_most": 0.15,
+   "light_most": 0.2,
+   "soft": 0.15,
+   "near_m": 10.0,
+   "_backstop": "The art director 07:22Z 22 November: the camera keeps out of a burst's cloud for its first 4 s (about 30 m for a 500 lb bomb); as a backstop a size's own lens_near_m (sizes.<size>.lens_near_m: 75 mm 10, 105 12, 150 17, 250 lb 23, 500 lb 30) stands for near_m for that burst's pieces where it is more, so a lens caught inside a big cloud dims and never goes black."
+  }
  },
  "air_flak": {
   "_how": "A flak shell bursting at the bombers' height (AirFlak). Five to eight see-through lobes in a crooked chain about long_m along the wind and across_m across it, each lobe_r of half the length, growing grow times; its two ends draw apart along the wind at stretch_mps for each half length out, and the whole drifts downwind at downwind_mps on top of the wind. Three to five thin wisps trail downwind. Opacity falls to half by half_by_s, then fades out; each piece lives life_s. Colour greys from colour to colour_old; cloud_shade lights its sunward side and shadows the far side, as the ground smoke. The lobes also spread across and up at spread_mps, their dark heart thins to heart_end of its middle as they age, and far off each lobe is held at least least_px across and made thinner to match. The flash: a torn orange glow gone in flash_glow_s with flash_spikes short bright spikes thrown out, and a white-hot heart in a hotter orange, a third to half the glow's radius off its middle, gone in flash_heart_s (radii in metres); off-centre and laid in front of the smoke; its lamp is lamp (a 105 is 1) reaching lamp_reach_m.",
@@ -4493,6 +5142,163 @@
    "lumps_inner": 0.7,
    "lumps_light": 0.6,
    "lumps_rim": 0.8
+  },
+  "ablaze": {
+   "_rule": "fx-air r2 (art director, Midway 06): a ship burning afloat, the scene's OilFire kind 'ablaze' for a ship lost to fire (AirStage's How 'burn'). A burning carrier's smoke stood hundreds of metres to kilometres high and bent over with the wind: from her deck fires (no burning slick and no flames of its own: her deck Burns are the flames), a narrow root about her beam wide, climbing hard to 250 to 300 m and leaning down the wind as the push dies, then on up slowly as it drifts, a long leaning plume. Black and dense low, browner grey and thinner high (pale_up_m, pale_up_most, pale_up_pow, pale_up_colour, thin_up: by its height over the fire a puff goes that share of the way to pale_up_colour and thins), lit on its sun side (sun_side, lit_colour, going toward pale_up_lit as it pales). An older kit without the row draws it as sunk.",
+   "heads": [
+    2,
+    3
+   ],
+   "head_spread": 0.1,
+   "head_r": [
+    0.08,
+    0.14
+   ],
+   "flame_up_m": 12.0,
+   "flame_every_s": 0.1,
+   "flame_r_m": [
+    2.5,
+    5.0
+   ],
+   "flame_tall": [
+    2.5,
+    4.0
+   ],
+   "flame_life_s": [
+    0.35,
+    0.7
+   ],
+   "column_every_s": 0.4,
+   "column_life_s": [
+    100,
+    130
+   ],
+   "rise_mps": [
+    1.0,
+    2.0
+   ],
+   "burst_mps": [
+    15,
+    19
+   ],
+   "burst_drag": 0.07,
+   "slow_mps2": 0.0,
+   "base_every_s": 0.0,
+   "windage": [
+    1.0,
+    1.5
+   ],
+   "r0": [
+    0.12,
+    0.17
+   ],
+   "r1": [
+    0.36,
+    0.56
+   ],
+   "grow": 0.7,
+   "alpha": [
+    0.8,
+    0.95
+   ],
+   "hold": 0.45,
+   "heart": 0.85,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    52,
+    48,
+    44
+   ],
+   "lamp": 0.0,
+   "lamp_reach": 1.5,
+   "twin_px": 160,
+   "keep": 1,
+   "pall_every_s": 0.0,
+   "pall_life_s": [
+    160,
+    240
+   ],
+   "pall_r1": [
+    0.9,
+    1.4
+   ],
+   "pall_windage": [
+    1.2,
+    1.5
+   ],
+   "pall_alpha": [
+    0.3,
+    0.45
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 80,
+   "pall_hold": 0.35,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.25,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 2.0,
+   "lit_colour": [
+    122,
+    110,
+    98
+   ],
+   "base_life_s": [
+    6,
+    9
+   ],
+   "base_rise_mps": [
+    0.4,
+    1.0
+   ],
+   "base_r": [
+    0.14,
+    0.22
+   ],
+   "base_alpha": [
+    0.6,
+    0.75
+   ],
+   "base_flat": 0.75,
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8,
+   "flame_odds": 0.0,
+   "pale_up_m": 650,
+   "pale_up_most": 0.85,
+   "pale_up_pow": 1.0,
+   "pale_up_colour": [
+    140,
+    134,
+    126
+   ],
+   "pale_up_lit": [
+    190,
+    178,
+    162
+   ],
+   "thin_up": 0.6,
+   "_lumps": "As oil_fires.sunk._lumps."
   },
   "_pall_rest": "pall_rest (art director 18:28Z): a pall puff's middle is never lower than this share of its own radius above the sea (Bit::Rest; 1.3 covers its rough outline), so one that wanders down (pall_drift_mps) is never cut by the sea along a straight line when seen from the air. 0 or no key: as before."
  },
@@ -4954,6 +5760,20 @@
    "thick_s": 2,
    "gone_s": 15
   },
+  "fuel": {
+   "keep": 0.6,
+   "go_by": 0.33,
+   "left_third": 0.3,
+   "left_two_thirds": 0.1,
+   "wide": 2.0,
+   "spread": 0.6,
+   "lift_mps": 0.35,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 2.5,
+   "gone_s": 20
+  },
   "_stay_low": "A burst with bulk: a puff at the cloud's foot is stay_low the likelier to stay to the end than the cloud's share, and one at its top that much the less, so the base holds the smoke and thins last while the smoke above lifts (art director 20:50Z 21 November)."
  },
  "smoke_screen": {
@@ -5012,5 +5832,473 @@
   "creep_mps": 0.6,
   "lumps": 3,
   "lumps_px": 120
+ },
+ "sea_splash": {
+  "_why": "A shell falling in the sea by its calibre, SeaSplash(At, CalibreMm, Dye): the art director's columns by calibre (sea-guns-ruling.md part 5, 06:12Z 21 November) on the passed column's build (grounds.water.spout), and the dye its ship loaded (historian/dye-loaded-shell-splashes.md, 22 November). The table runs by calibre_mm, each number between the two calibres either side and held at its ends: height_m, the column's height (heavy 14 to 18 inch 50 to 70 m, medium 8 inch 25 to 35, light 5 to 6 inch 12 to 20); rise_s, about its full height by then; hang_s, it stands near that height so long; fall_s, then it falls as a curtain and is back on the sea, its top the last down; foam_m and foam_s, the patch it leaves, across and how long; crown_wide, its head's half width for its height (a light one a short bushy plume). mist_s: the fine spray at its foot hangs about so long (4 to 6 s at a heavy column's, less by the root of the height). foot_white: as it stands its foot is broken at least that far to white water, so the dark wet water is the first moment's and never a dark lump under it for seconds (0: as the passed column). far_px: where the whole column stands under that many pixels tall in the last frame's picture (in full from half that down), its white water is written up to far_over past white so it stands over a pale sky (the ruling: lit side 20 over the sky) and its dark foot goes far_foot of the way to the column's shade colour, so it is never a small dark puff. Dyes: a name the scene passes for the firing ship (Nagato pink, Kongo red, Haruna yellow, Yamato none; the US heavy ships by the historian's table; British from late 1942; everyone else none, white): colour, its water in the sun, written to land; shade, its shade side; shift, what it turns toward against the sun or with the sun low, shift_k of the way (Kongo's red to purple); stain, the foam patch's tint, stain of the way; strength, 0 to 1. The column is dye_k of the way to the dye through its body, dye_top of that at its crown and dye_foot in the dark water at its foot, and pales dye_pale of the way back to white as it falls; its mist mist_dye. shake_within_k: a near miss jolts an eye within that many times its height. Without this row SeaSplash draws Shell on water with bomb500, bomb250 or how150 as the scene did.",
+  "calibre_mm": [
+   76,
+   127,
+   203,
+   406,
+   460
+  ],
+  "height_m": [
+   9,
+   16,
+   30,
+   60,
+   68
+  ],
+  "rise_s": [
+   0.8,
+   1.0,
+   1.5,
+   2.25,
+   2.5
+  ],
+  "hang_s": [
+   1.0,
+   1.5,
+   2.5,
+   3.5,
+   4.0
+  ],
+  "fall_s": [
+   2.0,
+   2.5,
+   3.5,
+   5.0,
+   5.5
+  ],
+  "foam_m": [
+   6,
+   9,
+   17,
+   35,
+   40
+  ],
+  "foam_s": [
+   8,
+   10,
+   15,
+   25,
+   30
+  ],
+  "crown_wide": [
+   0.26,
+   0.24,
+   0.2,
+   0.17,
+   0.17
+  ],
+  "mist_s": 5.0,
+  "foot_white": 0.6,
+  "far_px": 60,
+  "far_over": 1.6,
+  "far_foot": 0.7,
+  "dye_k": 0.85,
+  "dye_top": 0.35,
+  "dye_foot": 0.5,
+  "dye_pale": 0.45,
+  "mist_dye": 0.4,
+  "stain": 0.35,
+  "shake_within_k": 3,
+  "dyes": {
+   "pink": {
+    "_who": "Nagato (brilliant pink)",
+    "colour": [
+     242,
+     120,
+     172
+    ],
+    "shade": [
+     150,
+     70,
+     120
+    ]
+   },
+   "red": {
+    "_who": "Kongo (blood red, red to purple by the light); Missouri, Pennsylvania; Howe, Queen Elizabeth, Rodney",
+    "colour": [
+     195,
+     35,
+     45
+    ],
+    "shade": [
+     105,
+     20,
+     40
+    ],
+    "shift": [
+     135,
+     40,
+     130
+    ],
+    "shift_k": 0.8
+   },
+   "yellow": {
+    "_who": "Haruna (greenish yellow); King George V",
+    "colour": [
+     205,
+     225,
+     100
+    ],
+    "shade": [
+     130,
+     145,
+     75
+    ]
+   },
+   "green": {
+    "_who": "Wisconsin, North Carolina; Duke of York, Valiant",
+    "colour": [
+     110,
+     200,
+     120
+    ],
+    "shade": [
+     60,
+     120,
+     90
+    ]
+   },
+   "orange": {
+    "_who": "Iowa, Washington, Colorado, Nevada",
+    "colour": [
+     245,
+     160,
+     70
+    ],
+    "shade": [
+     150,
+     95,
+     60
+    ]
+   },
+   "blue": {
+    "_who": "New Jersey, South Dakota, Maryland",
+    "colour": [
+     100,
+     150,
+     235
+    ],
+    "shade": [
+     60,
+     90,
+     160
+    ]
+   }
+  }
+ },
+ "sea_screen": {
+  "_why": "A smoke screen laid at sea by a ship under way, ScreenLay(Id, At, Velocity, bFunnel) every frame and ScreenLayStop(Id) (the sea scene's ask, 22 November: Samar's escorts laid 8 screens, up to 5 at once; the art director: each escort lays her own plume, dense at the source, white-grey from the stern generators and black from the funnels, lumpy, thinning downwind, with gaps). Not the land's smoke_screen (a smoke round's wall). Laid by time, as a funnel's plume: a puff every overlap-th of its width of the wind she feels (felt_least_mps at least), let go into the air with none of her speed; it rests on the water (rest: its middle at least that share of its radius up), climbs rise_mps, drifts with the wind, wanders across it (spread_mps) and is drawn out along its line (stretch). Its width is lip_m at her stern and grows by wide_k times its age to the two thirds; as it does, its puffs go by halves (even, even_near, even_far, even_step, as the funnel's), so the screen is unbroken and its old end costs few pieces, each holding its smoke over a face as much wider: it thins downwind. Each puff also thins by its age (fade_s, fade_pow) and is gone by age_s; along the screen some stretches (gaps, over gap_s of laying, past gap_from of a slow random value) thin sooner, and gap_thin of their smoke is thin from the start, so gaps open in its old parts while it stays dense at her stern. billow: that share of its puffs are billows, billow_size as big and climbing billow_rise as fast, so its top is heaped and uneven. Colour: colour, going to colour_old by old_by_s; its side from the sun shadow_of_lit of it, shadow_k of the way; size and shade, the dice on each puff; rough, lumps, lumps_px and the roll (roll_lift, roll_shade, roll_run) its lumps. white: the stern generators' chemical smoke. black: the funnels', born from_up_m higher and from_ahead_m forward of the stern the scene gives. Far off: least_px, no puff under that many pixels across at its birth in the last frame's picture (at most lip_most times its own width), overlapping overlap_far deep, each as much denser: fewer, bigger puffs. busy_from: past that share of the room (game.max_puffs) a screen lays half as deep. restart_after_s: a screen not called for that long starts afresh. most_a_call: puffs laid in one call at most.",
+  "restart_after_s": 6,
+  "most_a_call": 64,
+  "felt_least_mps": 3,
+  "overlap": 3,
+  "overlap_far": 2.2,
+  "least_px": 10,
+  "lip_most": 8,
+  "busy_from": 0.6,
+  "even": 0.3,
+  "even_near": 0,
+  "even_far": 12,
+  "even_step": 1.6,
+  "gaps": 0.7,
+  "gap_s": 14,
+  "gap_from": 0.45,
+  "gap_thin": 0.45,
+  "billow": 0.2,
+  "billow_size": 1.6,
+  "billow_rise": 4.0,
+  "white": {
+   "lip_m": 18,
+   "from_up_m": 3,
+   "wide_k": 1.9,
+   "age_s": 300,
+   "fade_s": 150,
+   "fade_pow": 1.4,
+   "alpha": 0.92,
+   "rise_mps": [
+    0.02,
+    0.12
+   ],
+   "spread_mps": 0.25,
+   "colour": [
+    232,
+    233,
+    230
+   ],
+   "colour_old": [
+    214,
+    216,
+    218
+   ],
+   "old_by_s": 150,
+   "shadow_of_lit": 0.74,
+   "shadow_k": 0.6,
+   "stretch": 1.6,
+   "rest": 0.5,
+   "size": 0.4,
+   "shade": 0.05,
+   "rough": 0.35,
+   "lumps": 3,
+   "lumps_px": 80,
+   "roll_lift": 0.25,
+   "roll_shade": 0.05,
+   "roll_run": 4
+  },
+  "black": {
+   "lip_m": 16,
+   "from_up_m": 14,
+   "from_ahead_m": 45,
+   "wide_k": 2.4,
+   "age_s": 220,
+   "fade_s": 110,
+   "fade_pow": 1.3,
+   "alpha": 0.92,
+   "rise_mps": [
+    -0.1,
+    0.06
+   ],
+   "spread_mps": 0.2,
+   "colour": [
+    46,
+    43,
+    40
+   ],
+   "colour_old": [
+    118,
+    114,
+    108
+   ],
+   "old_by_s": 90,
+   "shadow_of_lit": 0.72,
+   "shadow_k": 0.5,
+   "stretch": 1.4,
+   "rest": 0.5,
+   "size": 0.4,
+   "shade": 0.08,
+   "rough": 0.35,
+   "lumps": 3,
+   "lumps_px": 80,
+   "roll_lift": 0.3,
+   "roll_shade": 0.1,
+   "roll_run": 4
+  }
+ },
+ "far": {
+  "_how": "The far form (BombStick; TheaterFxCore.h, FarLay). Beyond the scene's draw range (air.draw_beyond_m, 4 km) a bomb that lands is drawn as a few large soft pieces in place of its near burst's hundreds, out to draw_beyond_m: a flash held to least_px on the screen with a soft glow, so a stick's bombs ripple along the line; and the parts below, each a share of the size's cloud_m across (r: at birth and by grow_s, then late times that by its life's end), coloured from the ground's dark heavy earth (0) to its light smoke and dust (1) (paint: at birth and by settle_s; on water from the spout's base_colour to its white), never under least_px across, keeping keep of their opacity there. crown: the earth thrown up, tall times as high as wide, gone in life_s. body: the dense cloud of earth on the ground. veil: the lighter smoke that lifts and spreads. skirt: the low dust ring (upright: a low flat ball on the ground). On the sea: column (the white water standing up), foam, mist. A part that lingers goes as its size's near cloud does (linger.shell, never sooner than the size's linger_s), widening, lifting lift of the row's lift_mps and paling to the sky, and looks left_third and left_two_thirds as thick a third and two thirds through its tail (the art director's half and tenth, 19:58Z 21 November). A part that merges is laid once for as many bombs of a stick as stand within merge_px of each other on the screen, drawn out along the stick as its bombs land. Within the range the near burst is drawn, and its far form takes over across the last hand_over of the range; keep 1: far pieces are kept first when the screen is full. walk_mps: the bombers' speed over the ground, a stick's bombs landing that far apart in time when the caller gives none.",
+  "draw_beyond_m": 20000,
+  "hand_over": 0.1,
+  "keep": 1,
+  "bombs": {
+   "walk_mps": 85,
+   "merge_px": 6,
+   "flash": {
+    "least_px": 5,
+    "keep": 0.9,
+    "over": 1.6,
+    "width_m": 6,
+    "long": 1.5,
+    "colour": [
+     255,
+     226,
+     150
+    ],
+    "glow_px": 14,
+    "glow_alpha": 0.3,
+    "glow_s": 0.12,
+    "glow_wide": 2.5
+   },
+   "crown": {
+    "alpha": 0.9,
+    "r": [
+     0.14,
+     0.3
+    ],
+    "grow_s": 0.6,
+    "grow": 0.5,
+    "tall": 2.2,
+    "up": 1.0,
+    "life_s": 5.0,
+    "hold": 0.3,
+    "fade_in": 0.04,
+    "paint": [
+     0.0,
+     0.15
+    ],
+    "settle_s": 1.5,
+    "heart": 0.85,
+    "rim": 0.1,
+    "inner": 0.55,
+    "rough": 0.5,
+    "least_px": 3,
+    "keep": 0.8,
+    "windage": 0.5
+   },
+   "body": {
+    "alpha": 0.95,
+    "r": [
+     0.2,
+     0.5
+    ],
+    "grow_s": 2.0,
+    "grow": 0.5,
+    "late": 1.5,
+    "tall": 1.6,
+    "up": 1.0,
+    "rise": 0.2,
+    "paint": [
+     0.0,
+     0.3
+    ],
+    "settle_s": 4,
+    "heart": 0.85,
+    "rim": 0.05,
+    "inner": 0.6,
+    "rough": 0.45,
+    "least_px": 4,
+    "keep": 0.85,
+    "lingers": 1,
+    "windage": 0.6,
+    "lift": 0.6,
+    "fade_in": 0.08,
+    "left_third": 0.5,
+    "left_two_thirds": 0.1
+   },
+   "veil": {
+    "alpha": 0.45,
+    "r": [
+     0.3,
+     0.6
+    ],
+    "grow_s": 4,
+    "grow": 0.6,
+    "late": 1.5,
+    "up": 1.1,
+    "rise": 0.6,
+    "paint": [
+     0.35,
+     0.75
+    ],
+    "settle_s": 6,
+    "heart": 0.6,
+    "rim": 0.0,
+    "inner": 0.5,
+    "least_px": 5,
+    "keep": 0.6,
+    "lingers": 1,
+    "merges": 1,
+    "windage": 0.9,
+    "lift": 1.0,
+    "fade_in": 0.6,
+    "left_third": 0.5,
+    "left_two_thirds": 0.1
+   },
+   "skirt": {
+    "upright": 1,
+    "merges": 1,
+    "lingers": 1,
+    "alpha": 0.45,
+    "r": [
+     0.25,
+     0.75
+    ],
+    "grow_s": 1.5,
+    "grow": 0.5,
+    "late": 1.3,
+    "flat": 0.3,
+    "paint": [
+     0.7,
+     0.9
+    ],
+    "settle_s": 2,
+    "heart": 0.6,
+    "rim": 0.0,
+    "inner": 0.5,
+    "windage": 0.4,
+    "lift": 0,
+    "fade_in": 0.1,
+    "left_third": 0.5,
+    "left_two_thirds": 0.1
+   },
+   "column": {
+    "alpha": 0.9,
+    "r": [
+     0.1,
+     0.17
+    ],
+    "grow_s": 0.9,
+    "grow": 0.5,
+    "tall": 4.0,
+    "up": 1.0,
+    "life_s": 4.0,
+    "hold": 0.4,
+    "fade_in": 0.03,
+    "paint": [
+     1.0,
+     1.0
+    ],
+    "settle_s": 2.0,
+    "heart": 0.8,
+    "rim": 0.1,
+    "inner": 0.5,
+    "rough": 0.3,
+    "least_px": 3,
+    "keep": 0.9,
+    "windage": 0.3
+   },
+   "foam": {
+    "upright": 1,
+    "alpha": 0.4,
+    "r": [
+     0.2,
+     0.42
+    ],
+    "grow_s": 2.0,
+    "grow": 0.5,
+    "late": 1.3,
+    "flat": 0.15,
+    "paint": [
+     0.7,
+     0.7
+    ],
+    "settle_s": 2,
+    "life_s": 13,
+    "hold": 0.3,
+    "fade_in": 0.3,
+    "heart": 0.6,
+    "rim": 0.0,
+    "inner": 0.5,
+    "windage": 0.2
+   },
+   "mist": {
+    "alpha": 0.35,
+    "r": [
+     0.25,
+     0.6
+    ],
+    "grow_s": 3,
+    "grow": 0.6,
+    "late": 1.5,
+    "up": 0.8,
+    "rise": 0.5,
+    "paint": [
+     0.9,
+     0.9
+    ],
+    "settle_s": 2,
+    "life_s": 5.5,
+    "hold": 0.2,
+    "fade_in": 0.3,
+    "heart": 0.5,
+    "rim": 0.0,
+    "inner": 0.5,
+    "least_px": 4,
+    "keep": 0.5,
+    "windage": 1.0
+   }
+  }
  }
 }

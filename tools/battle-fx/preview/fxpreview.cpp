@@ -11,6 +11,9 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|top|gun]
 //   ./fxpreview /tmp/recipe.txt <out folder> fate <steam|out|cook|glance> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> sea <a name for the frames> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> raid <earth|town|water> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> wreck <side|battle|far|tall> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> seafx <screen...|splash...> <frames> [WxH]
 //
 // The sea shot (the sea battle's range): three ships in line ahead, FX_GAP m (500) apart and FX_SHIP_LONG m (200)
 // long, steaming along +X at FX_KNOTS (25), seen broadside on from FX_DIST m (15000) by an eye FX_EYE_H m (24) up with
@@ -24,6 +27,26 @@
 // FX_EYE_X m along the line and FX_EYE_Y m toward it. FX_BG=light: a flat ground of that light, to measure opacity. FX_NO_SHIPS=1 leaves
 // the hulls out. Each moment falls a little before a frame, as a game's does. The fate shots take a moving ship too:
 // FX_SHIP=x,y,z is her velocity in m/s (12.9 is 25 knots), FX_SHIP_STOP=s stops her dead, FX_SHIP_STAY=1 holds the eye.
+//
+// The sea battle's own shots of release 2 (seafx), named screen... or splash...: "screen", FX_SCREENS escorts (1),
+// FX_SHIP_LONG m (110) long, FX_GAP m (400) apart away from the eye and FX_STAGGER m (300) further along, steam along +X
+// at FX_KNOTS (25) laying smoke screens from her stern from 0 s (ScreenLay; FX_BLACK=1 from the funnels, alt every
+// other one) until FX_STOP s; the wind FX_WIND_X, FX_WIND_Y (0.8, 3: across her track, away from the eye); the eye
+// FX_DIST m (5000) abeam, FX_EYE_H m (24) up, looking at the middle of what is laid by then; FX_FUNNEL=funnel: their
+// funnels smoke too. "splash": FX_SPLASHES shells (1) of FX_CAL mm (406) dyed FX_DYE (none) fall FX_SHORT m (120)
+// short of a ship FX_DIST m (1000) off, FX_SPREAD m (90) apart, from FX_FALL_AT s (1) and FX_EVERY s (0.3) apart
+// (SeaSplash); FX_OLD=bomb500 (or another size): the call the scene made before, Shell on water. FX_SUN, FX_DUSK, FX_BG,
+// FX_NO_SHIPS as in the sea shot; FX_STEP=n draws the frames between n at a time.
+//
+// The raid shot (bomb carpets from the air scene's wide view, BombStick): FX_STICKS bombers (22) in boxes of six,
+// FX_BOX_GAP s (12) apart, each dropping a stick of FX_BOMBS (11) FX_SIZE (bomb500) FX_STICK_M m (300) long along +X,
+// over FX_OVER s (under 0: the kit's own), the first at FX_DROP_AT s (0.5). The eye stands FX_EYE_H m (4700) up and
+// FX_DIST m (11000) from the carpets' middle, from FX_FROM degrees round (0: the bombers cross the view), with an
+// FX_LENS degree lens (55), in a light haze FX_HAZE_KM (60) on the ground only; the scene's draw range is FX_BEYOND
+// (the recipe's air.draw_beyond_m). FX_BACK_MPS: the eye draws back along its line of sight that fast, so the
+// carpets cross the draw range (the hand-over). FX_REF=1: the same bombs as plain Shell calls at the moments and
+// places the kit gives them, for the proof that a recipe with no far row draws the same either way. It prints the
+// most puffs laid in any frame.
 //
 // The drive shot (the desert dust): a column of FX_VEHICLES (4) tanks, FX_GAP m (30) apart, driving along +X at
 // FX_SPEED m/s (10) on a stony desert ("sand"), FX_RUN s (12) before the first frame, each laying dust from its two
@@ -48,6 +71,14 @@
 // the hatch FX_ACROSS m (0.6). "glance": an FX_MM (75) shot glancing off a plate FX_UP m (1.8) up; FX_IN its way in,
 // FX_N the plate's way out; FX_GLANCES=n shots FX_GAP s apart. The eye: FX_DIST m off (300 at sea, 18.75 on land, the
 // battle camera's), FX_EYE_H m up, looking FX_LOOK_H m up. Two men of 1.75 m stand by on land.
+//
+// The wreck shot: a knocked-out heavy tank (a box hull, 6.4 m long) burning, the kit called just as the ground scene
+// calls it for the tank's knocked_out clip and then its burn loop: the hatch's cook-off at 0.35 s, a burst of smoke at
+// 0.5 s, the engine's fire at 1.2 s and its smoke at 1.6 s, then from 3 s four fires of 2.4 m (engine deck, its left
+// side, the turret roof, the front left) and the engine's smoke again (FX_SCRIPT=one: the engine's fire alone). The
+// hull is lit by the sun and by the kit's lamps, plate by plate, so the fire's glow shows on it. "side" is a man's eye
+// 16 m off her burning side, "battle" the battle camera's, "far" 60 m off, "tall" 160 m off for the whole column;
+// FX_DIST, FX_EYE_H, FX_LOOK_H, FX_LENS (42) move it. FX_DUSK=1 as the others. Each frame prints the lamps lit.
 //
 // The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
 // wing guns, laid to meet 300 m ahead, from the first frame; AirGun is called sixty times a second as the game would.
@@ -713,7 +744,7 @@ namespace
 				case 1:
 					if (BurnAcross > 0.0)
 					{
-						Fx.Burn(D.At, FireAt + ShipAt(D.At), BurnAcross, EnvNum("FX_BURN_S", 900.0), 7);
+						Fx.Burn(D.At, FireAt + ShipAt(D.At), BurnAcross, EnvNum("FX_BURN_S", 900.0), 7, true);
 					}
 					break;
 				case 2:
@@ -1055,7 +1086,7 @@ namespace
 			{
 				// (the whole trail laid so far, from far off the beam: FX_DIST metres, 2500)
 				const Vec Mid = Fly(0.5 * Shown).At;
-				Cam.Eye = Mid + StartRight * EnvNum("FX_DIST", 2500.0) + ZUp * 250.0;
+				Cam.Eye = Mid + StartRight * EnvNum("FX_DIST", 2500.0) + ZUp * EnvNum("FX_WAKE_UP", 250.0); // (FX_WAKE_UP: how far above it, 250)
 				Cam.Forward = (Mid - Cam.Eye).Unit();
 			}
 			else if (ShotName == "map")
@@ -1270,6 +1301,18 @@ namespace
 			Battle::Lamp AirLamps[2];
 			const int NAirLamps = bAbove ? Fx.Lamps(Now, AirLamps, 2, Fx.DayOf(View.SmokeLight)) : 0; // (over the fields: the flash's lamp on the ground)
 			Paint(C, Cam, AirLamps, NAirLamps, {}, false);
+			if (const char* FlatIs = std::getenv("FX_FLAT_BACK"))
+			{
+				// (FX_FLAT_BACK=r,g,b: the whole picture behind the kit one flat colour, so that a trail drawn over two of
+				// them shows its own opacity and colour: see trailmeasure.py)
+				double Fr = 0.0, Fg = 0.0, Fb = 0.0;
+				if (std::sscanf(FlatIs, "%lf,%lf,%lf", &Fr, &Fg, &Fb) == 3)
+				{
+					std::fill(C.R.begin(), C.R.end(), ToLinear(Fr));
+					std::fill(C.G.begin(), C.G.end(), ToLinear(Fg));
+					std::fill(C.B.begin(), C.B.end(), ToLinear(Fb));
+				}
+			}
 			// the aircraft: a plain olive-drab shape, lit by the sun, so the flash and streams are judged on a wing
 			if (!(bFall && FallKind == "explode" && Now > FallFrom))
 			{
@@ -1377,6 +1420,257 @@ namespace
 			Solid(C, Cam, T1, Shaded, Who);
 			Solid(C, Cam, T2, Shaded, Who);
 		}
+	}
+
+	/** A box lit by the sun and by the kit's lamps, patch by patch (Patch m a side), so that a fire's glow shows on the
+	 * plates nearest it: Lo and Hi are two opposite corners, the box square to the world. Its floor is not drawn. */
+	void LitBox(Canvas& C, const Camera& Cam, const Vec& Lo, const Vec& Hi, const double Base[3], const Battle::Lamp* Lamps, int NLamps, const Vec& Sun, double SunShare, double Patch = 0.2)
+	{
+		struct Face { int Axis; int Side; };
+		const Face Faces[5] = { { 2, 1 }, { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 } };
+		for (const Face& F : Faces)
+		{
+			const int A = (F.Axis + 1) % 3, B = (F.Axis + 2) % 3;
+			auto Get = [](const Vec& V, int K) { return K == 0 ? V.X : K == 1 ? V.Y : V.Z; };
+			auto Make = [](int Axis, double On, int Ka, double Va, int Kb, double Vb)
+			{
+				double P[3] = { 0.0, 0.0, 0.0 };
+				P[Axis] = On;
+				P[Ka] = Va;
+				P[Kb] = Vb;
+				return Vec(P[0], P[1], P[2]);
+			};
+			const double On = F.Side ? Get(Hi, F.Axis) : Get(Lo, F.Axis);
+			double N3[3] = { 0.0, 0.0, 0.0 };
+			N3[F.Axis] = F.Side ? 1.0 : -1.0;
+			const Vec N(N3[0], N3[1], N3[2]);
+			const double A0 = Get(Lo, A), A1 = Get(Hi, A), B0 = Get(Lo, B), B1 = Get(Hi, B);
+			const int Na = std::max(1, static_cast<int>(std::ceil((A1 - A0) / Patch))), Nb = std::max(1, static_cast<int>(std::ceil((B1 - B0) / Patch)));
+			const double Lit = (1.0 - SunShare) * (0.55 + 0.45 * N.Z) + SunShare * std::max(0.0, N.Dot(Sun)) * 1.6;
+			for (int I = 0; I < Na; ++I)
+			{
+				for (int J = 0; J < Nb; ++J)
+				{
+					const double Ua = A0 + (A1 - A0) * I / Na, Ub = A0 + (A1 - A0) * (I + 1) / Na;
+					const double Va = B0 + (B1 - B0) * J / Nb, Vb = B0 + (B1 - B0) * (J + 1) / Nb;
+					const Vec Mid = Make(F.Axis, On, A, 0.5 * (Ua + Ub), B, 0.5 * (Va + Vb));
+					double Lift[3] = { 0.0, 0.0, 0.0 };
+					for (int L = 0; L < NLamps; ++L)
+					{
+						const Vec To = Lamps[L].At - Mid;
+						const double Dist = To.Length();
+						if (Dist < Lamps[L].Radius && Dist > 1e-6)
+						{
+							// (the ground's own lamp in Paint, turned by how square the plate faces it)
+							const double Window = 1.0 - std::pow(Dist / Lamps[L].Radius, 4.0);
+							const double Fl = Lamps[L].Strength * 64.0 / std::max(Dist * Dist, 1.0) * Window * Window * std::max(0.0, N.Dot(To * (1.0 / Dist)));
+							Lift[0] += Fl * Lamps[L].Col.R / std::max(0.01f, Lamps[L].Col.G);
+							Lift[1] += Fl;
+							Lift[2] += Fl * Lamps[L].Col.B / std::max(0.01f, Lamps[L].Col.G);
+						}
+					}
+					const double Col[3] = { Base[0] * (Lit + Lift[0]), Base[1] * (Lit + Lift[1]), Base[2] * (Lit + Lift[2]) };
+					const Vec Q[4] = { Make(F.Axis, On, A, Ua, B, Va), Make(F.Axis, On, A, Ub, B, Va), Make(F.Axis, On, A, Ub, B, Vb), Make(F.Axis, On, A, Ua, B, Vb) };
+					const Vec T1[3] = { Q[0], Q[1], Q[2] };
+					const Vec T2[3] = { Q[0], Q[2], Q[3] };
+					Solid(C, Cam, T1, Col, 0);
+					Solid(C, Cam, T2, Col, 0);
+				}
+			}
+		}
+	}
+
+	/** The wreck shot (see the top of the file): a knocked-out heavy tank burning, as the ground scene calls the kit. */
+	int Wreck(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		Fx.SetGroundColour(&GroundPaint, nullptr);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
+		// (the tank stands at the middle facing +X, on the ground there; its sockets as Tiger.json gives them)
+		const double G = Swell(nullptr, 0.0, 0.0);
+		const Vec Engine(-2.2, 0.0, G + 1.83), Fire1(-2.2, -1.0, G + 1.83), Fire2(-0.24, -0.5, G + 2.9), Fire3(1.55, -0.86, G + 1.82), Commander(-0.24, -0.5, G + 2.55);
+		const Vec Upward(0.0, 0.0, 1.0);
+		// (what happens, and when, as ALandBattle::PlayArmourEvents turns the tank's knocked_out clip and then its burn
+		// loop into the kit's calls. FX_SCRIPT=one: the knocked_out clip's fire alone, one Burn of 2.4 m at the engine)
+		struct Due
+		{
+			double At = 0.0;
+			int What = 0; // (1 Burn, 2 the hatch's cook-off, 3 a fuel ball)
+			Vec Where;
+			double Across = 0.0, Seconds = 0.0;
+			int Key = -1;
+			bool bDone = false;
+		};
+		const double Long = EnvNum("FX_BURN_S", 900.0);
+		std::vector<Due> Script;
+		const std::string Kind = std::getenv("FX_SCRIPT") ? std::getenv("FX_SCRIPT") : "ground";
+		// (FX_SCRIPT=fuel: her fuel goes up at 0.5 s, a FuelBall FX_FUEL_M across (8) at the engine deck, and she burns
+		// on as the ground script has it; crash: an aeroplane's fuel, FX_FUEL_M (20) across at the ground at 0.5 s,
+		// coming in at 60 m/s, with no tank (FX_NOTANK too), its wreck burning on from 1.5 s; dump: a fuel dump's, the
+		// same but standing still)
+		const bool bNoTank = Kind == "crash" || Kind == "dump" || std::getenv("FX_NOTANK") != nullptr;
+		if (Kind == "one")
+		{
+			Script.push_back({ 1.2, 1, Engine, 2.4, Long, 3 });
+		}
+		else if (Kind == "crash" || Kind == "dump")
+		{
+			Script.push_back({ 0.5, 3, Vec(0.0, 0.0, G), EnvNum("FX_FUEL_M", 20.0), Kind == "crash" ? 60.0 : 0.0, -1 });
+			// (and what is left burns on the ground from a second in, as the scene would light it: the wreck where it came
+			// to rest, or the dump's spilt fuel; FX_GROUND_FIRE=0 for none)
+			if (EnvNum("FX_GROUND_FIRE", 1.0) > 0.0)
+			{
+				Script.push_back({ 1.5, 1, Vec(Kind == "crash" ? 8.0 : 0.0, 0.0, G + 0.5), 0.3 * EnvNum("FX_FUEL_M", 20.0), Long, 11 });
+			}
+		}
+		else
+		{
+			Script.push_back({ 0.35, 2, Commander, 0.8, 0.0, 1 }); // hatch_blown
+			Script.push_back({ 0.5, 1, Engine, 0.8, 4.0, 100002 }); // smoke_burst
+			Script.push_back({ 1.2, 1, Engine, 2.4, Long, 3 }); // fire_start
+			Script.push_back({ 1.6, 1, Engine, 1.2, Long, 100004 }); // smoke_loop
+			Script.push_back({ 3.0, 1, Engine, 2.4, Long, 5 }); // the burn loop: fire_loop at four sockets, smoke_loop
+			Script.push_back({ 3.0, 1, Fire1, 2.4, Long, 6 });
+			Script.push_back({ 3.0, 1, Fire2, 2.4, Long, 7 });
+			Script.push_back({ 3.0, 1, Fire3, 2.4, Long, 8 });
+			Script.push_back({ 3.0, 1, Engine, 1.2, Long, 100009 });
+			if (Kind == "fuel")
+			{
+				Script.push_back({ 0.5, 3, Engine, EnvNum("FX_FUEL_M", 8.0), 0.0, -1 });
+			}
+		}
+		auto Play = [&](double Now)
+		{
+			for (Due& D : Script)
+			{
+				if (D.bDone || D.At > Now)
+				{
+					continue;
+				}
+				D.bDone = true;
+				if (D.What == 1)
+				{
+					Fx.Burn(D.At, D.Where, D.Across, D.Seconds, D.Key);
+				}
+				else if (D.What == 3)
+				{
+					Fx.FuelBall(D.At, D.Where, D.Across, Vec(D.Seconds, 0.0, -0.15 * D.Seconds)); // (Seconds: its speed in, along +X and a little down)
+				}
+				else
+				{
+					Fx.CookOff(D.At, D.Where, Upward, D.Across, 3, 2.5, 0.0, -1.0, D.Key);
+				}
+			}
+		};
+		// (the eyes: "side" a man's eye 16 m off her burning side, "battle" the battle camera's, "far" 60 m off to see
+		// the column, "tall" 140 m off and low for the whole column. FX_DIST, FX_EYE_H, FX_LOOK_H move them; FX_LENS
+		// is the lens's angle across, 42 degrees unless given)
+		double Dist = 16.0, EyeH = 1.7, LookH = 3.0;
+		Vec From(0.15, -1.0, 0.0);
+		if (Shot == "battle")
+		{
+			Dist = 18.75, EyeH = 6.0, LookH = 3.0, From = Vec(-0.3, -1.0, 0.0);
+		}
+		else if (Shot == "far")
+		{
+			Dist = 60.0, EyeH = 4.0, LookH = 14.0, From = Vec(0.2, -1.0, 0.0);
+		}
+		else if (Shot == "tall")
+		{
+			Dist = 160.0, EyeH = 3.0, LookH = 60.0, From = Vec(0.2, -1.0, 0.0);
+		}
+		Dist = EnvNum("FX_DIST", Dist);
+		EyeH = EnvNum("FX_EYE_H", EyeH);
+		LookH = EnvNum("FX_LOOK_H", LookH);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 42.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		Cam.Eye = From.Unit() * Dist + Vec(0.0, 0.0, G + EyeH);
+		Cam.Forward = (Vec(EnvNum("FX_LOOK_X", -0.8), 0.0, G + LookH) - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
+		}
+		// (the hull, dark yellow gone dull with soot: tracks and lower hull, the upper hull, the turret, the gun)
+		const double Paint3[3] = { ToLinear(112), ToLinear(102), ToLinear(80) };
+		const double Track3[3] = { ToLinear(58), ToLinear(54), ToLinear(50) };
+		std::vector<Vec> Men;
+		for (const Vec& M : { Vec(4.5, -3.5, 0.0), Vec(-5.5, -4.0, 0.0) })
+		{
+			Men.push_back(Vec(M.X, M.Y, Swell(nullptr, M.X, M.Y)));
+		}
+		Fx.Draw(-0.1, View);
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Play(Drawn / 30.0);
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int Room = std::clamp(static_cast<int>(EnvNum("FX_LAMPS", 2.0)), 0, 2);
+			const int NL = Fx.Lamps(Now, Lamps, Room, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Men, false);
+			const Vec Sun = View.Sun.Unit();
+			const double SunShare = bDusk ? 0.0 : 0.6;
+			if (!bNoTank)
+			{
+				LitBox(C, Cam, Vec(-3.2, -1.75, G), Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.2, 1.15, G), Vec(3.2, 1.75, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.0, -1.15, G + 0.4), Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.2, -1.6, G + 1.2), Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-1.6, -1.2, G + 1.83), Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(1.2, -0.12, G + 2.1), Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			}
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/wreck-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps", Frame, N, NL);
+			for (int L = 0; L < NL; ++L)
+			{
+				std::printf(" | lamp %.3f at (%.2f, %.2f, %.2f) r %.1f", Lamps[L].Strength, Lamps[L].At.X, Lamps[L].At.Y, Lamps[L].At.Z, Lamps[L].Radius);
+			}
+			std::printf("\n");
+		}
+		return 0;
 	}
 
 	/** The sea with three ships' decks on it: a hit that is not on armour is laid on what is under it, as the game's
@@ -1491,7 +1785,7 @@ namespace
 			bSmokes = true;
 			if (!bLit && BurnAcross > 0.0)
 			{
-				Fx.Burn(0.0, ShipAt(2, 0.0) + Vec(-20.0, 0.0, DeckUp), BurnAcross, 900.0, 7);
+				Fx.Burn(0.0, ShipAt(2, 0.0) + Vec(-20.0, 0.0, DeckUp), BurnAcross, 900.0, 7, true);
 				bLit = true;
 			}
 			if (bLit)
@@ -1582,6 +1876,403 @@ namespace
 			C.Save(Name);
 			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
 		}
+		return 0;
+	}
+
+	/** The sea battle's own looks of release 2 (see the top of the file): "screen", escorts laying smoke screens
+	 * (ScreenLay); "splash", shells falling in the sea by their calibre and their ship's dye (SeaSplash). */
+	int SeaFx(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		SeaDecks Decks; // (no decks: a flat sea)
+		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		const bool bScreen = Shot.compare(0, 6, "screen") == 0;
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 0.8), EnvNum("FX_WIND_Y", bScreen ? 3.0 : 0.8), 0.0));
+		Fx.UseSea();
+		const double Dist = EnvNum("FX_DIST", bScreen ? 5000.0 : 1000.0), Speed = EnvNum("FX_KNOTS", 25.0) * 0.5144;
+		const double Long = EnvNum("FX_SHIP_LONG", bScreen ? 110.0 : 200.0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 55.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		Battle::View View;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		if (const char* SunIs = std::getenv("FX_SUN"))
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
+		}
+		// (screens: FX_SCREENS escorts (1), FX_GAP m (400) apart away from the eye, each FX_STAGGER m (300) further along,
+		// steaming along +X at FX_KNOTS and laying from 0 s until FX_STOP s; FX_BLACK=1 all from the funnels, alt every
+		// other one; FX_FUNNEL=funnel: each funnel smokes too, FX_POWER of her power)
+		const int Screens = std::clamp(static_cast<int>(EnvNum("FX_SCREENS", 1.0)), 0, 16);
+		const double Gap = EnvNum("FX_GAP", 400.0), Stagger = EnvNum("FX_STAGGER", 300.0), StopAt = EnvNum("FX_STOP", 1.0e9);
+		const char* BlackIs = std::getenv("FX_BLACK");
+		const std::string Black = BlackIs ? BlackIs : "";
+		const char* FunnelIs = std::getenv("FX_FUNNEL");
+		auto EscortAt = [&](int I, double T) { return Vec(Speed * T + I * Stagger, Dist + I * Gap, 0.0); };
+		// (splash: FX_SPLASHES shells (1) of FX_CAL mm (406) dyed FX_DYE, landing from FX_FALL_AT s (1) each FX_EVERY s
+		// (0.3) after the last, FX_SPREAD m (90) apart along her, FX_SHORT m (120) short of a target ship FX_DIST m off;
+		// FX_OLD=size: the call the scene made before, Shell on water with that size)
+		const int Splashes = std::clamp(static_cast<int>(EnvNum("FX_SPLASHES", 1.0)), 0, 64);
+		const double Cal = EnvNum("FX_CAL", 406.0), FallAt = EnvNum("FX_FALL_AT", 1.0), FallEvery = EnvNum("FX_EVERY", 0.3);
+		const double Spread = EnvNum("FX_SPREAD", 90.0), Short = EnvNum("FX_SHORT", 120.0);
+		const char* DyeIs = std::getenv("FX_DYE");
+		const char* OldIs = std::getenv("FX_OLD");
+		int Fallen = 0;
+		bool bStopped = false;
+		auto Play = [&](double Now)
+		{
+			if (bScreen)
+			{
+				for (int I = 0; I < Screens; ++I)
+				{
+					const Vec Ship = EscortAt(I, Now);
+					const bool bBlack = Black == "1" || (Black == "alt" && I % 2 == 1);
+					if (Now < StopAt)
+					{
+						Fx.ScreenLay(Now, 70 + I, Ship + Vec(-0.5 * Long, 0.0, 3.0), Vec(Speed, 0.0, 0.0), bBlack);
+					}
+					if (FunnelIs)
+					{
+						if (Now == 0.0)
+						{
+							Fx.TrailStart(Now, 90 + I, Ship + Vec(0.05 * Long, 0.0, 12.0), Vec(Speed, 0.0, 0.0), FunnelIs, 3.0);
+						}
+						Fx.TrailMove(Now, 90 + I, Ship + Vec(0.05 * Long, 0.0, 12.0), Vec(Speed, 0.0, 0.0), EnvNum("FX_POWER", 0.85));
+					}
+				}
+				if (Now >= StopAt && !bStopped)
+				{
+					bStopped = true;
+					for (int I = 0; I < Screens; ++I)
+					{
+						Fx.ScreenLayStop(Now, 70 + I);
+					}
+				}
+				return;
+			}
+			while (Fallen < Splashes && Now >= FallAt + Fallen * FallEvery)
+			{
+				const double T = FallAt + Fallen * FallEvery;
+				const Vec At(-0.5 * Spread * (Splashes - 1) + Spread * Fallen, Dist - Short * (Fallen % 2 == 0 ? 1.0 : -0.6), 0.0);
+				if (OldIs)
+				{
+					Fx.Shell(T, At, OldIs, "water", false);
+				}
+				else
+				{
+					Fx.SeaSplash(T, At, Cal, DyeIs ? DyeIs : "");
+				}
+				++Fallen;
+			}
+		};
+		// (the eye: FX_DIST m off, abeam, FX_EYE_H m (24) up, looking FX_LOOK_H m (screens 20, splash 25) up at the
+		// middle of what the screens have laid by then, or at the target ship; FX_LOOK_X overrides)
+		auto Aim = [&](double Now)
+		{
+			const double LookX = std::getenv("FX_LOOK_X") ? EnvNum("FX_LOOK_X", 0.0) : (bScreen ? 0.5 * Speed * std::min(Now, StopAt) - 0.5 * Long : 0.0);
+			Cam.Eye = Vec(LookX, 0.0, EnvNum("FX_EYE_H", 24.0));
+			Cam.Forward = (Vec(LookX, Dist, EnvNum("FX_LOOK_H", bScreen ? 20.0 : 25.0)) - Cam.Eye).Unit();
+			Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+			Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+			View.Eye = Cam.Eye;
+			View.Right = Cam.Right;
+			View.Up = Cam.Up;
+			View.Forward = Cam.Forward;
+		};
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		const std::vector<Vec> Nobody;
+		const double Grey[3] = { 0.16, 0.18, 0.2 };
+		const int Step = std::max(1, static_cast<int>(EnvNum("FX_STEP", 1.0))); // (FX_STEP=n: the frames between drawn n at a time, as a slow game)
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; Drawn += Step)
+			{
+				Play(Drawn / 30.0);
+				Aim(Drawn / 30.0);
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			Aim(Now);
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Nobody, false, true);
+			const char* BgIs = std::getenv("FX_BG");
+			if (BgIs)
+			{
+				const double Bg = std::atof(BgIs);
+				std::fill(C.R.begin(), C.R.end(), Bg);
+				C.G = C.R;
+				C.B = C.R;
+			}
+			if (!std::getenv("FX_NO_SHIPS") && !BgIs)
+			{
+				if (bScreen)
+				{
+					for (int I = 0; I < Screens; ++I)
+					{
+						Box(C, Cam, EscortAt(I, Now), Vec(1.0, 0.0, 0.0), Long, 0.1 * Long, 6.0, Grey, I);
+						Box(C, Cam, EscortAt(I, Now) + Vec(0.1 * Long, 0.0, 6.0), Vec(1.0, 0.0, 0.0), 0.3 * Long, 0.07 * Long, 7.0, Grey, I);
+					}
+				}
+				else
+				{
+					Box(C, Cam, Vec(0.0, Dist, 0.0), Vec(1.0, 0.0, 0.0), Long, 0.14 * Long, 10.0, Grey, 0);
+					Box(C, Cam, Vec(0.05 * Long, Dist, 10.0), Vec(1.0, 0.0, 0.0), 0.3 * Long, 0.08 * Long, 14.0, Grey, 0);
+				}
+			}
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/seafx-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
+		}
+		return 0;
+	}
+
+	/** A raid's bomb carpets from the air scene's wide view (see the top of the file). */
+	int Raid(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Ground, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, +[](void*, double, double) { return 0.0; }, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		Fx.SetGroundColour(&GroundPaint, nullptr);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 4.0), EnvNum("FX_WIND_Y", 1.0), 0.0));
+		Fx.SetDrawBeyond(EnvNum("FX_BEYOND", Fx.AirBeyond()));
+		// (the eye: FX_EYE_H m up, FX_DIST m from the carpets' middle, from FX_FROM degrees round (0: from the south, the
+		// bombers crossing the view), looking FX_LOOK_H m above it)
+		const double Dist = std::max(EnvNum("FX_DIST", 11000.0), 10.0), EyeH = EnvNum("FX_EYE_H", 4700.0), From = EnvNum("FX_FROM", 0.0) * 3.14159265358979 / 180.0;
+		const double Level = std::sqrt(std::max(Dist * Dist - EyeH * EyeH, 1.0));
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 55.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		Cam.Eye = Vec(-std::sin(From) * Level, -std::cos(From) * Level, EyeH);
+		Cam.Forward = (Vec(0.0, 0.0, EnvNum("FX_LOOK_H", 100.0)) - Cam.Eye).Unit();
+		// (FX_BACK_MPS: the eye draws back along its line of sight at that many metres a second, so the carpets cross the
+		// scene's draw range: the hand-over from the near bursts to their far form)
+		const Vec Eye0 = Cam.Eye;
+		const double BackMps = EnvNum("FX_BACK_MPS", 0.0);
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		if (const char* SunIs = std::getenv("FX_SUN"))
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
+		// (the raid: FX_STICKS bombers (22) in boxes of six, FX_BOX_GAP s (12) between boxes, each box's bombers a third of
+		// a second apart, flying along +X; each drops FX_BOMBS of FX_SIZE (11 bomb500) in a stick FX_STICK_M m (300) long,
+		// the first box's first bomb at FX_DROP_AT s (0.5))
+		const int NSticks = std::clamp(static_cast<int>(EnvNum("FX_STICKS", 22.0)), 1, 200), NBombs = static_cast<int>(EnvNum("FX_BOMBS", 11.0));
+		const char* SizeIs = std::getenv("FX_SIZE");
+		const std::string Size = SizeIs ? SizeIs : "bomb500";
+		const double StickM = EnvNum("FX_STICK_M", 300.0), BoxGap = EnvNum("FX_BOX_GAP", 12.0), DropAt = EnvNum("FX_DROP_AT", 0.5), Over = EnvNum("FX_OVER", -1.0);
+		struct Drop
+		{
+			double T = 0.0;
+			Vec First, Last;
+		};
+		std::vector<Drop> Drops;
+		for (int I = 0; I < NSticks; ++I)
+		{
+			const int Box = I / 6, J = I % 6;
+			Drop D;
+			D.T = DropAt + Box * BoxGap + J * 0.35;
+			const double X0 = NSticks == 1 ? -0.5 * StickM : (Box - 1.5) * 140.0 + ((J % 3) - 1) * 30.0 - 0.5 * StickM;
+			const double Y = NSticks == 1 ? 0.0 : (J - 2.5) * 65.0 + (Box - 1.5) * 20.0;
+			D.First = Vec(X0, Y, 0.0);
+			D.Last = Vec(X0 + StickM, Y, 0.0);
+			Drops.push_back(D);
+		}
+		// (FX_REF=shell: in place of each stick, the bombs as plain Shell calls at the moments and places the kit gives them
+		// (BombStick's own sums), to show a recipe with no far row draws the same frames either way)
+		const bool bRef = std::getenv("FX_REF") != nullptr;
+		struct Strike
+		{
+			double T = 0.0;
+			Vec At;
+		};
+		std::vector<Strike> Strikes;
+		if (bRef)
+		{
+			double Walk = 85.0;
+			Walk = Book.Find("far.bombs.walk_mps", Walk) && Walk == Walk ? std::clamp(Walk, 10.0, 400.0) : 85.0;
+			const int Count = std::min(NBombs, 48);
+			for (const Drop& D : Drops)
+			{
+				const Vec Run(D.Last.X - D.First.X, D.Last.Y - D.First.Y, 0.0);
+				const double Length = std::min(Run.Length(), 5000.0);
+				const Vec Way = Run.Unit(Vec(1.0, 0.0, 0.0));
+				const double Gap = Count > 1 ? Length / (Count - 1) : 0.0;
+				const double Takes = Over >= 0.0 && Over <= 1.0e9 ? std::min(Over, 30.0) : std::min(Length / Walk, 4.0);
+				const double Dt = Count > 1 ? Takes / (Count - 1) : 0.0;
+				for (int K = 0; K < Count; ++K)
+				{
+					Strikes.push_back(Strike{ D.T + Dt * K, D.First + Way * (Gap * K) });
+				}
+			}
+			std::stable_sort(Strikes.begin(), Strikes.end(), [](const Strike& A, const Strike& B) { return A.T < B.T; });
+		}
+		size_t Called = 0, Struck = 0;
+		auto Play = [&](double Now)
+		{
+			for (; Called < Drops.size() && Drops[Called].T <= Now; ++Called)
+			{
+				if (!bRef)
+				{
+					Fx.BombStick(Drops[Called].T, static_cast<int>(Called), Drops[Called].First, Drops[Called].Last, NBombs, Size.c_str(), Ground.c_str(), Over);
+				}
+			}
+			for (; bRef && Struck < Strikes.size() && Strikes[Struck].T <= Now; ++Struck)
+			{
+				Fx.Shell(Strikes[Struck].T, Strikes[Struck].At, Size.c_str(), Ground.c_str(), false);
+			}
+		};
+		const bool bSea = Ground == "water";
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0, Most = 0, MostAt = 0;
+		const double HazeM = std::max(EnvNum("FX_HAZE_KM", 60.0), 0.1) * 1000.0;
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Play(Drawn / 30.0);
+				View.Eye = Eye0 - Cam.Forward * (BackMps * (Drawn / 30.0));
+				const int N = Fx.Draw(Drawn / 30.0, View);
+				if (N > Most)
+				{
+					Most = N;
+					MostAt = Drawn;
+				}
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			Cam.Eye = View.Eye = Eye0 - Cam.Forward * (BackMps * Now);
+			const int N = Fx.Draw(Now, View);
+			if (N > Most)
+			{
+				Most = N;
+				MostAt = Frame;
+			}
+			// (the ground from the air: fields, a town's roofs and streets, or the sea, in a light haze, FX_HAZE_KM (60))
+			Canvas C;
+			C.Init(W, H);
+			const double Haze[3] = { ToLinear(196), ToLinear(206), ToLinear(218) }, Top[3] = { ToLinear(140), ToLinear(170), ToLinear(210) };
+			for (int Y = 0; Y < H; ++Y)
+			{
+				for (int X = 0; X < W; ++X)
+				{
+					const size_t I = static_cast<size_t>(Y * W + X);
+					const Vec Ray = Cam.Ray(X + 0.5, Y + 0.5);
+					double Col[3];
+					if (Ray.Z < -1e-5)
+					{
+						const double T = -Cam.Eye.Z / Ray.Z;
+						const Vec P = Cam.Eye + Ray * T;
+						const double N1 = Noise(P.X * 0.004, P.Y * 0.004), N2 = Noise(P.X * 0.03, P.Y * 0.03);
+						double Base[3];
+						if (bSea)
+						{
+							Base[0] = ToLinear(52 + 8 * N1);
+							Base[1] = ToLinear(72 + 10 * N1);
+							Base[2] = ToLinear(88 + 10 * N1);
+						}
+						else if (Ground == "town")
+						{
+							const bool bStreet = std::fmod(std::fabs(P.X) + 9.0, 70.0) < 9.0 || std::fmod(std::fabs(P.Y) + 7.0, 55.0) < 7.0;
+							const double L = bStreet ? 108.0 : 128.0 + 30.0 * N2;
+							Base[0] = ToLinear(L + 6.0);
+							Base[1] = ToLinear(L);
+							Base[2] = ToLinear(L - 6.0);
+						}
+						else
+						{
+							// (a patchwork of fields: grass, ploughland and stubble)
+							const double Cell = std::fabs(std::sin(std::floor(P.X / 220.0) * 12.9898 + std::floor(P.Y / 150.0) * 78.233)) * 43758.5453;
+							const int Kind = static_cast<int>((Cell - std::floor(Cell)) * 3.0);
+							const double Fields[3][3] = { { 84, 104, 56 }, { 118, 98, 74 }, { 146, 136, 94 } };
+							for (int K = 0; K < 3; ++K)
+							{
+								Base[K] = ToLinear(Fields[Kind][K] * (0.92 + 0.16 * N2));
+							}
+						}
+						const double Fog = 1.0 - std::exp(-T / HazeM);
+						for (int K = 0; K < 3; ++K)
+						{
+							Col[K] = Base[K] * (1.0 - Fog) + Haze[K] * Fog;
+						}
+						C.Depth[I] = (Ray * T).Dot(Cam.Forward);
+					}
+					else
+					{
+						const double Up = std::min(1.0, Ray.Z * 4.0);
+						for (int K = 0; K < 3; ++K)
+						{
+							Col[K] = Haze[K] + (Top[K] - Haze[K]) * Up;
+						}
+					}
+					C.R[I] = Col[0];
+					C.G[I] = Col[1];
+					C.B[I] = Col[2];
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/raid-%s-f%04d.ppm", OutDir.c_str(), Ground.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, the carpets' middle %.0f m from the eye\n", Frame, N, Cam.Eye.Length());
+		}
+		std::printf("most puffs laid in a frame: %d (frame %d)\n", Most, MostAt);
 		return 0;
 	}
 
@@ -1716,6 +2407,273 @@ namespace
 		}
 		return 0;
 	}
+
+	/** The air scene's ships (see the top of the file): a carrier ablaze as the scene lights her, or a carrier's light
+	 * guns firing on a dive bomber, each seen as the scene's own camera sees it. */
+	int Fleet(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		const double Deg = 3.14159265358979 / 180.0;
+		const Vec ZUp(0.0, 0.0, 1.0);
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, &FlatSea, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene: UseAirDistance)
+		const Vec Wind(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", -2.0), 0.0); // (the air scene's own, AirSky::Wind)
+		Fx.SetWind(Wind);
+		const bool bGuns = Shot == "guns";
+		const double Long = EnvNum("FX_SHIP_LONG", bGuns ? 247.6 : 260.7), Beam = EnvNum("FX_SHIP_BEAM", bGuns ? 32.5 : 31.3);
+		const double Turn = EnvNum("FX_SHIP_TURN", 20.0) * Deg;
+		const Vec Bow(std::cos(Turn), std::sin(Turn), 0.0), Abeam(std::sin(Turn), -std::cos(Turn), 0.0);
+		const Vec Ship(0.0, 0.0, 0.0);
+		const double Lens = EnvNum("FX_LENS", bGuns ? 55.0 : 35.0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(Lens, 5.0, 170.0) * Deg * 0.5));
+		const Vec Downwind = Vec(Wind.X, Wind.Y, 0.0).Unit(Abeam * -1.0);
+		// (the dive bomber of the guns shot: FX_PLANE_OUT m out from her (900) and FX_PLANE_UP m up (1100) at 0 s, diving on
+		// her at FX_PLANE_DIVE degrees (70) and FX_PLANE_MPS (110), from FX_PLANE_FROM degrees off her bow (60))
+		const double PlaneFrom = EnvNum("FX_PLANE_FROM", 60.0) * Deg, Dive = EnvNum("FX_PLANE_DIVE", 70.0) * Deg, PlaneMps = EnvNum("FX_PLANE_MPS", 110.0);
+		const Vec PlaneOut = (Bow * std::cos(PlaneFrom) + Abeam * std::sin(PlaneFrom)).Unit(Bow);
+		const Vec Plane0 = Ship + PlaneOut * EnvNum("FX_PLANE_OUT", 900.0) + ZUp * EnvNum("FX_PLANE_UP", 1100.0);
+		const Vec PlaneV = (PlaneOut * -std::cos(Dive) + ZUp * -std::sin(Dive)) * PlaneMps;
+		auto PlaneAt = [&](double T) { return Plane0 + PlaneV * T; };
+		Vec Look;
+		double Away = EnvNum("FX_DIST", 0.0), Down = 0.0;
+		Vec Out;
+		if (bGuns)
+		{
+			// (AAirBattle::AimEye, the guns fire back picture: side-on to the line from her to him, the way upwind and with
+			// the sun behind the eye; the look two fifths of the way to him, 4 degrees down; both in the frame with a quarter
+			// to spare, never nearer than 450 m nor farther than 2.6 km)
+			const Vec Line = PlaneAt(EnvNum("FX_PLANE_EYE_AT", 0.0)) - Ship;
+			const Vec Across(Line.X, Line.Y, 0.0);
+			const Vec Along = Across.Unit(Bow);
+			const Vec Side = ZUp.Cross(Along).Unit(Abeam);
+			Out = Side.Dot(Downwind * -1.0) >= 0.0 ? Side : Side * -1.0;
+			const double Wide = Across.Length(), High = std::fabs(Line.Z);
+			if (!(Away > 0.0))
+			{
+				Away = std::clamp(std::max(0.75 * Wide / std::tan(27.5 * Deg), 0.75 * High / std::tan(16.3 * Deg)), 450.0, 2600.0);
+			}
+			Look = Ship + Line * 0.4;
+			Down = EnvNum("FX_DOWN", 4.0) * Deg;
+		}
+		else
+		{
+			// (AAirBattle::AimEye, the ships picture at sea: from upwind, the look FX_VIEW degrees (55) off the wind's way, of
+			// the two such eyes the one nearer her beam; she fills about a third of the frame; 9 degrees down, the look 0.12
+			// of her length over her waterline)
+			const double View_ = EnvNum("FX_VIEW", 55.0) * Deg;
+			double Best = -1e9;
+			for (const double Sign : { 1.0, -1.0 })
+			{
+				const Vec Way = (Downwind * -std::cos(View_) + ZUp.Cross(Downwind) * (Sign * std::sin(View_))).Unit(Abeam);
+				const double Score = std::fabs(Way.Dot(Abeam));
+				if (Score > Best)
+				{
+					Best = Score;
+					Out = Way;
+				}
+			}
+			const double Shown = std::max(Out.Cross(Bow).Length(), 0.33) * Long;
+			if (!(Away > 0.0))
+			{
+				Away = std::clamp(3.0 * Shown / (2.0 * std::tan(Lens * Deg * 0.5)), 450.0, 1600.0);
+			}
+			Look = Ship + ZUp * (0.12 * Long);
+			Down = EnvNum("FX_DOWN", 9.0) * Deg;
+		}
+		Cam.Forward = (Out * -std::cos(Down) + ZUp * -std::sin(Down)).Unit();
+		Cam.Eye = Look - Cam.Forward * Away;
+		Cam.Eye.Z = std::max(Cam.Eye.Z, 40.0);
+		Cam.Forward = (Look - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		std::printf("eye %.0f m off, %.0f m up\n", (Cam.Eye - Look).Length(), Cam.Eye.Z);
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0); // (FX_KIT_PX: as the air scene tells the kit the window's pixels)
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		if (const char* SunIs = std::getenv("FX_SUN"))
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
+		// (the carrier ablaze, AAirStage::Sink's "burn": FX_EARLY fires (2) her hits lit FX_EARLY_S s (90) before she is lost,
+		// 0.45 of her beam across at her deck; then at FX_LOST_AT s (0) five fires 0.45 of her beam across along her length
+		// for 1800 s (the hits' count toward the five), and her oil burning on the sea round her, 0.6 of her length
+		// (OilFire "sunk", FX_OIL another kind, FX_NO_OIL=1 none))
+		const double LostAt = EnvNum("FX_LOST_AT", 0.0), DeckFire = EnvNum("FX_DECK_FIRE", 9.0);
+		const int Early = bGuns ? 0 : static_cast<int>(std::clamp(EnvNum("FX_EARLY", 2.0), 0.0, 5.0));
+		const double EarlyS = EnvNum("FX_EARLY_S", 90.0);
+		const double Shares[5] = { -0.4, 0.4, 0.0, -0.2, 0.2 };
+		const double EarlyShares[5] = { 0.1, -0.3, 0.3, -0.1, 0.25 };
+		const char* OilIs = std::getenv("FX_OIL");
+		bool bLost = bGuns, bAblazeLit = false;
+		int Lit = 0;
+		// (the guns shot, ShipGuns::Gunnery: FX_MOUNTS (11) twin mounts of FX_GUN (aa25) along her decks 16 m up, port and
+		// starboard by turns, each two streams of FX_RATE rounds a minute (220) at FX_MV m/s (900) in FX_NATION's colours
+		// (jp), in bursts of 2.5 to 6 s with rests of 0.4 to 1.5 s and a 15-round magazine changed in 3.5 s, laid short of
+		// the full lead and wandering about him, called sixty times a second)
+		struct Crew { double Phase = 0.0, W1 = 0.0, W2 = 0.0, Lead = 0.0, Left = 0.0, Burst = 0.0, Rest = 0.0, Change = 0.0; bool bOn = false; };
+		const bool bEscorts = std::getenv("FX_ESCORTS") != nullptr; // (in the carrier shot too: she and her escorts fire as she burns)
+		const int Mounts = bGuns || bEscorts ? static_cast<int>(std::clamp(EnvNum("FX_MOUNTS", 11.0), 0.0, 30.0)) : 0;
+		const char* KindIs = std::getenv("FX_GUN");
+		const std::string Kind = KindIs ? KindIs : "aa25";
+		const char* NationIs = std::getenv("FX_NATION");
+		const std::string Nation = NationIs ? NationIs : "jp";
+		const double Rate = EnvNum("FX_RATE", 220.0), Mv = EnvNum("FX_MV", 900.0), Load = EnvNum("FX_LOAD", 15.0), Change = EnvNum("FX_CHANGE", 3.5);
+		const double Deck = 16.0;
+		// (FX_ESCORTS=n: n more ships firing the same, 700 m apart abeam and 150 m along; FX_ABLAZE=m: a carrier ablaze m metres
+		// astern of her from the first moment, five fires 0.45 of her beam across and her column (OilFire FX_OIL, ablaze, lit
+		// FX_OIL_SINCE s before, 180): the room a burning carrier and her escorts' guns take together)
+		const int Ships = bGuns || bEscorts ? 1 + static_cast<int>(std::clamp(EnvNum("FX_ESCORTS", 0.0), 0.0, 6.0)) : 1;
+		auto ShipAt = [&](int Sh) { return Ship + Abeam * (Sh == 0 ? 0.0 : ((Sh + 1) / 2) * 700.0 * (Sh % 2 ? 1.0 : -1.0)) + Bow * (Sh * 150.0); };
+		std::vector<Crew> Crews(static_cast<size_t>(Mounts * Ships));
+		TheaterFx::Dice Roll(239u);
+		for (Crew& C : Crews)
+		{
+			C.Phase = Roll.U(0.0, 6.2831853);
+			C.W1 = Roll.U(0.25, 0.6);
+			C.W2 = Roll.U(0.35, 0.9);
+			C.Lead = Roll.U(0.5, 0.85);
+			C.Left = Load;
+			C.Burst = Roll.U(1.0, 4.0);
+			C.Rest = Roll.U(0.0, 1.5);
+		}
+		const double FireFrom = EnvNum("FX_FIRE_FROM", -2.5);
+		std::sort(Frames.begin(), Frames.end());
+		const double Step = 1.0 / 60.0;
+		double T = bGuns ? FireFrom - Step : std::min(LostAt - (Early > 0 ? EarlyS : 0.0), 0.0) - Step;
+		Fx.Draw(T, View);
+		for (int Frame : Frames)
+		{
+			const double Now = Frame / 30.0;
+			while (T + Step <= Now + 1e-9)
+			{
+				T += Step;
+				if (!bGuns)
+				{
+					for (; Lit < Early && T >= LostAt - EarlyS + Lit * 20.0; ++Lit)
+					{
+						Fx.Burn(T, Ship + Bow * (EarlyShares[Lit] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, 239000 + Lit, true);
+					}
+					if (!bLost && T >= LostAt)
+					{
+						bLost = true;
+						for (int K = 0; K < std::max(2, 5 - Early); ++K)
+						{
+							Fx.Burn(T, Ship + Bow * (Shares[K] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, -1, true);
+						}
+						if (!std::getenv("FX_NO_OIL"))
+						{
+							Fx.OilFire(T, 238001, Ship, 0.6 * Long, OilIs ? OilIs : "sunk", 0.0, EnvNum("FX_OIL_SINCE", 0.0));
+						}
+					}
+				}
+				if (bGuns && !bAblazeLit && std::getenv("FX_ABLAZE"))
+				{
+					bAblazeLit = true;
+					const Vec Burning = Ship - Bow * EnvNum("FX_ABLAZE", 1200.0);
+					for (int K = 0; K < 5; ++K)
+					{
+						Fx.Burn(T, Burning + Bow * (Shares[K] * 260.7) + ZUp * DeckFire, 31.3 * 0.45, 1800.0, -1, true);
+					}
+					Fx.OilFire(T, 238001, Burning, 0.6 * 260.7, OilIs ? OilIs : "ablaze", 0.0, EnvNum("FX_OIL_SINCE", 180.0));
+				}
+				for (int MoAll = 0; MoAll < Mounts * Ships && T >= 0.0; ++MoAll)
+				{
+					const int Mo = MoAll % Mounts, Sh = MoAll / Mounts;
+					Crew& C = Crews[static_cast<size_t>(MoAll)];
+					bool bFiring = false;
+					if (C.Change > 0.0) C.Change -= Step;
+					else if (C.Rest > 0.0) C.Rest -= Step;
+					else
+					{
+						bFiring = true;
+						C.Burst -= Step;
+						C.Left -= Rate / 60.0 * Step;
+						if (C.Left <= 0.0)
+						{
+							C.Change = Change * Roll.U(0.8, 1.3);
+							C.Left = Load;
+							C.Burst = 0.0;
+						}
+						if (C.Burst <= 0.0)
+						{
+							C.Burst = Roll.U(2.5, 6.0);
+							C.Rest = Roll.U(0.4, 1.5);
+						}
+					}
+					const double SideK = Mo % 2 == 0 ? 1.0 : -1.0;
+					const Vec Muzzle = ShipAt(Sh) + Bow * (Long * (-0.42 + 0.84 * (Mo + 0.5) / Mounts)) + Abeam * (SideK * Beam * 0.42) + ZUp * (Deck + 1.5);
+					for (int K = 0; K < 2; ++K)
+					{
+						const int Key = (1 << 27) + (7 + Sh) * 64 + Mo * 2 + K;
+						if (!bFiring)
+						{
+							if (C.bOn)
+							{
+								Fx.AirGunStop(Key);
+							}
+							continue;
+						}
+						const Vec P = PlaneAt(T);
+						const double D = (P - Muzzle).Length();
+						const double Tof = D / (Mv * 0.8);
+						const double Lead = std::clamp(C.Lead + 0.22 * std::sin(T * C.W1 + C.Phase), 0.3, 1.1);
+						const Vec Los = (P - Muzzle).Unit(ZUp);
+						const Vec A1 = Los.Cross(ZUp).Unit(Abeam);
+						const Vec A2 = A1.Cross(Los);
+						const double Amp = std::max(12.7 * 1.3, D * 0.011);
+						const Vec Off = A1 * (Amp * std::sin(T * C.W2 + C.Phase * 1.7)) + A2 * (Amp * 0.8 * std::sin(T * C.W2 * 1.37 + C.Phase * 0.6));
+						const Vec Point = P + PlaneV * (Tof * Lead) + Off;
+						const Vec Aim = Point + ZUp * (0.5 * 9.81 * Tof * Tof * 0.85);
+						Fx.AirGun(T, Key, Muzzle + Bow * ((K - 0.5) * 0.6), Aim, Vec(), Kind.c_str(), Rate, Mv, Nation.c_str());
+					}
+					C.bOn = bFiring;
+				}
+				Fx.Draw(T, View);
+			}
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, std::vector<Vec>(), false, true);
+			if (!std::getenv("FX_NO_SHIPS"))
+			{
+				// (her hull to her flight deck, and the deck: so the eye has her size)
+				const double HullCol[3] = { ToLinear(70), ToLinear(72), ToLinear(76) }, DeckCol[3] = { ToLinear(150), ToLinear(138), ToLinear(112) };
+				Box(C, Cam, Ship, Bow, Long * 0.92, Beam * 0.8, 14.0, HullCol, 0);
+				Box(C, Cam, Ship + ZUp * 14.0, Bow, Long, Beam, 2.0, DeckCol, 0);
+				if (bGuns)
+				{
+					const double PlaneCol[3] = { ToLinear(60), ToLinear(64), ToLinear(66) };
+					Box(C, Cam, PlaneAt(Now), Vec(PlaneV.X, PlaneV.Y, 0.0).Unit(Bow), 10.0, 12.7, 1.5, PlaneCol, 1);
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/fleet-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
+		}
+		return 0;
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -1774,9 +2732,25 @@ int main(int Argc, char** Argv)
 	{
 		return Sea(Book, OutDir, Ground, Frames, W, H);
 	}
+	if (Size == "seafx")
+	{
+		return SeaFx(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "raid")
+	{
+		return Raid(Book, OutDir, Ground, Frames, W, H);
+	}
 	if (Size == "drive")
 	{
 		return Drive(Book, OutDir, Ground, Frames, W, H, Argc > 7 ? Argv[7] : "eye");
+	}
+	if (Size == "wreck")
+	{
+		return Wreck(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "fleet")
+	{
+		return Fleet(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "air")
 	{

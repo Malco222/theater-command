@@ -45,6 +45,9 @@ Blasts->Muzzle(MuzzleSocket, Facing, TEXT("tank_gun"), TEXT("sand"));
 Blasts->VehicleDust(Vehicle * 2, LeftSocket, Velocity, TEXT("sand"), /*bTracked*/ true);
 Blasts->VehicleDust(Vehicle * 2 + 1, RightSocket, Velocity, TEXT("sand"), true);
 
+// an air scene's stick of bombs: 11 bombs of 500 lb landing along the ground from First to Last (see Bomb carpets far off)
+Blasts->BombStick(AirNow, StickId, FirstWorld, LastWorld, 11, TEXT("bomb500"), TEXT("earth"));
+
 // EndPlay
 if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
@@ -643,6 +646,12 @@ Gouges and scorch that stay are the MODEL's to show.
   half (`jet_torn`), a pulse that only takes from its height (`jet_pulse`), a lean with the wind (`jet_lean`),
   sparks up in it (`jet_sparks`), black smoke off its sides and top by the clock (`jet_smoke_every_s`) so the
   column above is one torn piece, and an orange lamp on hull and ground (`jet_lamp`, `jet_lamp_day`).
+- **`Burn(WorldAt, AcrossMetres, Seconds, Id, bOnShip)`.** `bOnShip` true: a fire on a ship's deck (anything
+  afloat). A small, low, still fire on land takes the burning tank's look (`fire.land_tongues`, `fire.land_column`,
+  the land lamp) and joins a fire beside it (`fire.join`); a scene's ground under a ship is her deck, so a deck
+  fire would too. With the flag it never does, and burns as a ship's fire (the pre-check of 22 November: a ship's
+  fire 2.5 m across at rest drew 426 pieces with a column and a lamp four times as strong; with the flag 100, as
+  at 07d21fff). False (the default): as before. The sea scene and the air stage pass it for every fire on a ship.
 - **`Burn(WorldAt, AcrossMetres, Seconds, Id)`, `BurnOut(Id, OverSeconds, How)`** (row `fire.put_out`). The
   flames are eaten back from the edges to the seat, shrinking steadily: half their height by two fifths of the
   time, fewer tongues as it goes, never all gone and back. `How` "water": a surge of the vent's own steam rags
@@ -735,7 +744,9 @@ behind a recipe row or key and throws no dice an old recipe's path throws: the l
 - **Preview.** `fxpreview <recipe> <dir> air <gun row> <frames> WxH <shot>`; shots `far`, `chase`, `close`, `hit`,
   and for an engine's trail `beam` and `quarter` with `FX_TRAIL` (and `FX_TRAIL2`, `FX_TRAIL2_AT` for a change of
   kind), `FX_ENGINE=x,y,z`, `FX_PLANE`, `FX_SPEED`, `FX_SPAN`; `FX_NATION` whose guns. Stills:
-  `battle-fx/stills/air-*.png`.
+  `battle-fx/stills/air-*.png`. For measuring a trail: `FX_FLAT_BACK=r,g,b` paints the sky one flat colour (run it
+  over 0,0,0 and 255,255,255 and the two pictures give the trail's opacity and its own colour), and `FX_WAKE_UP`
+  (250 m) is how high the `wake` shot's eye rides over the trail (0: level with it, seen side-on).
 
 ## The art director's mends to the air look (after head ea8c1ba)
 
@@ -1411,6 +1422,164 @@ most 4 of 255 in 1,569 of its 57,600 pixels, the streak by at most 1 in 53. 527 
 numbers and with odd eyes (on the trail, behind it, at a place that is not a number), built with
 float-divide-by-zero: none bad. No warnings (g++ and clang `-Wshadow`, clang `-Wunreachable-code-aggressive`).
 
+## Trails that thin, pale and go: the Bremen mend (after head f7bf0b2)
+
+Art director, 22 November, mend 2 on the air scene's Mac frames (a1acb552): at Bremen the trails were ropes, a core of
+78 against a sky of 226, one width all along, crossing the whole frame. Wanted: 1-2 m at the source, 6-12 m by 10 s;
+opacity 0.9, 0.3 by 15 s and gone by 30 s; colour lifting from about 45 to 100-120 with age; edges breaking into
+puffs; no trail longer than about 2 km; an engine hit grey-brown, only burning fuel black and only near the aircraft.
+
+- **The rows** `air_trails.smoke`, `fire`, `fuel` and `oil` (the kinds the flight core passes are unchanged). Each
+  widens to `r1_m` by `widen_by_s` 10 and on by `thin_grow` after; pales to `pale_to` 0.35 from 2 to 15 s; fades from
+  `thin_hold` 0.5 of `life_s` 30; cools to a light grey `colour_old` (smoke: grey-brown from the start, never black);
+  draws into lumps only from `lumps_from` 0.8 of its life, so its old end never breaks into a row of beads; and its
+  edges are torn (`soft`, `edge_torn`, `wisps`). Fire and fuel heavier, below. The streak stays as it was, with the length rule below.
+- **`longest_m`** (2400): the most sky a trail is laid over in its life. A faster aircraft's puffs live that much
+  shorter, and its whole age curve (widening, paling, thinning, lumps and knots) is squeezed by the same share, so it
+  is the same trail, only shorter: at 80 m/s as above, at 150 m/s gone by 16 s. Without the key, as before.
+- **Measured** side-on at 80 m/s over flat black and white (`FX_FLAT_BACK`, `FX_WAKE_UP=0`, the wake shot at 31 s):
+
+  | Age | Engine hit (smoke): opacity, colour, width at half | Fire: opacity, colour, width at half |
+  |---|---|---|
+  | 0.5 s | 0.94, 79, 1.3 m | 0.95, 39, 4.7 m |
+  | 5 s | 0.88, 93, 5.4 m | 0.96, 63, 11.4 m |
+  | 10 s | 0.51, 109, 8.7 m | 0.74, 87, 13.4 m |
+  | 15 s | 0.33, 112, 12.7 m | 0.41, 101, 15.4 m |
+  | 20 s | 0.18, 127 | 0.23, 109 |
+  | 25 s | 0.06, 135 | 0.08, 125 |
+  | 30 s | none | none |
+
+- **Fire out-reads a hit** (art director 08:54Z: the engine hit passed; a burning aircraft must out-read a damaged
+  one). Fire and fuel are one step heavier: `r1_m` 7 and 7.5, `thin_grow` 1.5, `pale_to` 0.56 from 5 to 15 s,
+  `thin_hold` 0.4, and the wake past the tail kept at 5 to 6 m (`tail_wide_m`, her ruling of 20 November; 4.0 to
+  5.4 m measured at 0.2 s). "1-2 m at the source" is the engine hit's.
+
+## The kit at scale: the mesh in sections, and its Draw on a worker (FX1, FX2, after head 13388a4)
+
+The production lead's battle-scale plan (/mnt/project-files/production/battle-scale-1122/plan.md), items FX1 and FX2.
+
+- **FX1, the mesh made once.** The kit's room (3,000 puffs) is made at the first frame with something to draw as
+  sections of 300 puffs, and never rebuilt. Each frame sends only the sections that hold puffs, points and colours
+  only; a section that empties is folded flat once and hidden (`SetMeshSectionVisible`). The kit lays its puffs far
+  to near and section k holds puffs k x 300 on, so the far-to-near order holds across sections.
+- **Readouts.** `FBattleEffects::PuffsDrawn()` and `PuffsAsked()`: the last frame's puffs drawn and room asked.
+  `-TheaterFxRoomLog`: a line every 10 s of the kit's clock (Tick's Now): the most drawn, when, the room asked then,
+  the room and the sections in use.
+- **FX2, old pieces go cheaply.** A piece (`Bit`) is about 1.8 kB. Prune used to close each gap by moving every piece
+  after it; now the last piece fills each gap. Two pieces equally deep are drawn in the order they were made
+  (`Bit::Serial`, numbered at the Draw after they are made), so the picture does not depend on where they lie: the
+  96 old frames byte for byte, and 23 of 24 heavy frames (6 pixels one level apart in the raid shot, an exact tie).
+  A barrage of 6 shells a second seen from a hill (16,500 asked of the room): Draw 6.8 ms against 7.3 (median of 5).
+- **FX2, Draw on a worker.** `TickBegin(...)` takes what `Tick` takes, does on the game thread what must be done there
+  (the test barrage, the camera's jolt, the view), starts the kit's Draw on a worker (`UE::Tasks`) and returns the
+  jolt. `TickEnd()` waits for it, sends the mesh and lights the lamps, then does what was asked of the kit in
+  between, in order. Between the two:
+  - every call on the kit is held, its arguments copied, and done at `TickEnd` with this frame's time, as a call
+    made after a `Tick`: first seen at the next frame. So call `TickBegin` after the frame's shells and fires where
+    you can, and only what comes after (a vehicle's dust) waits;
+  - `GroundUnder` and `GroundColour` are called from the worker: nothing may change what they read (the field's
+    heights, craters, ruts) until `TickEnd`;
+  - `PuffsDrawn`/`PuffsAsked` give the last frame's; `Clear` and `End` wait for the worker first; a `TickBegin`
+    with no `TickEnd` is ended by the next `TickBegin` or `Tick`.
+  `Tick` is both at once on the game thread, as before (the air and sea scenes). The kit keeps no shared state: two
+  kits drawing at once on two threads ran clean under the thread sanitiser and drew what each drew alone.
+- **The box of a moving battle** (the pre-check on FX1). A hidden section's box still counts in the mesh's bounds,
+  and the translucent sort goes by the bounds' middle, so sections folded where the battle was stretched the box as
+  the battle moved on (a bomber stream most). When the farthest puff is more than 500 m from where the idle sections
+  were folded, they are sent once more, folded onto it and still hidden: one send of the idle sections each 500 m.
+
+## A trail that speeds up keeps no hole (after head 9cc20a7)
+
+The pre-check on 13388a4f: an aircraft that speeds up from 80 to 220 m/s squeezes its row's life (`longest_m`), so
+the first piece laid fast ended before the slow pieces laid just behind it: a hole in the trail, kilometres wide,
+for over 10 s. Now each piece of a trail (and of its kind: a kind change keeps its own rows) laid before the squeeze
+rose is cut to end with that first fast piece, never later than its own end, and fades out over the last
+`game.trail_cut_fade_s` (3 s) before it. The trail dies from its old end, and lives no longer than it did.
+
+Measured with a probe on the kit (80 m/s for 10 s, up to 220 over 8 s or 2 s, held to 30 s, back down), the widest
+stretch with no living piece:
+
+| Trail | Before (8 s / 2 s) | Now (8 s / 2 s) | Longest now |
+|---|---|---|---|
+| smoke | 3,644 m / 4,032 m | 73 m / 72 m | 4,369 m / 3,484 m |
+| fire, fuel | 3,600 m / 4,008 m | 65 m / 65 m | 4,375 m / 3,489 m |
+| oil | 3,616 m / 4,000 m | 72 m / 73 m | 4,370 m / 3,485 m |
+| streak, doused | 2,080 m / 2,352 m | 72 m / 72 m | 3,818 m / 3,421 m |
+| glycol, mist | no hole | unchanged | |
+
+About 70 m is the spacing of the pieces themselves. Longest: the slow stretch laid before the speed-up lives on
+until the first fast piece goes, then fades (it was 5,200 m before, with the hole). At a steady speed nothing is
+cut: the 96 old frames and the 24 heavy frames are byte for byte as before.
+
+## Bomb carpets far off (after head b0f46c5)
+
+Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
+be seen. The air scene's wide view looks at its bomb carpets from 6 to 11 km (the eye about 4.7 km up), and the kit
+drew nothing beyond its 4 km draw range; drawn near, one stick of eleven 500 lb bombs is about 13,600 puffs.
+
+```cpp
+// a bomber's stick, once, when it lets go (on the AirGun clock): Count bombs from First to Last along the ground
+Blasts->BombStick(AirNow, BomberId, FirstWorld, LastWorld, 11, TEXT("bomb500"), TEXT("earth"));
+// on the sea or a deck: TEXT("water") or TEXT("town"); OverSeconds (last, -1) when the stick's own time is known
+```
+
+Each bomb lands at its own moment along the line (the line's length at `far.bombs.walk_mps`, at most 4 s, unless the
+caller gives `OverSeconds`), laid by the next Tick on or after it. Within the draw range it is the ordinary burst,
+as `ShellOfSize`. Beyond it, with the recipe's `far` row, it is the far form (`TheaterFxCore.h`, `FarLay`): a flash
+held to `flash.least_px` with a soft glow, so a stick ripples along its line; a short dark crown of thrown earth; a
+dense dark body of earth standing on the ground; a lighter veil that lifts and spreads; and a low skirt of dust,
+each one large soft piece a share of the size's `cloud_m`, in the ground's own colours (the spout's white water, foam
+and mist on the sea), never under its `least_px` on the screen. The body, veil and skirt go as the near cloud does
+(`linger.shell` and the size's `linger_s`: thick 8 s, then thinning over a minute or more, lifting and paling to the
+sky), and look half as thick a third of the way through their tail and a tenth at two thirds (`left_third`,
+`left_two_thirds`: how thick a piece looks, the art director's curve, turned into the smoke it must keep). When a
+stick's bombs stand closer on the screen than `merge_px` the veil and skirt are laid once for several of them, drawn
+out along the stick as its bombs land; every bomb keeps its own flash, crown and body. Far pieces are drawn out to
+`far.draw_beyond_m` (20 km) and kept first when the screen is full (`far.keep`).
+
+A bomb laid near carries its far form too, drawn only once its strike point is beyond the range; the two cross over
+the last `far.hand_over` of the range (3.6 to 4 km), so a carpet never goes as the eye draws back. A bomb laid far keeps
+its far form if the eye comes in. The worst raid asked for, 22 bombers each dropping twelve 500 lb bombs within a
+minute, holds at most 929 pieces on earth or town (all 264 bombs within 12 s; 842 spread over 40 s) and 572 on the
+sea, of the 3,000 (`game.max_puffs`).
+
+Without the `far` row a stick is its bombs as plain `Shell` calls at their moments and places, frame for frame.
+
+The preview's `raid` shot: `FX_KIT_PX=0.90031 FX_DIST=11000 ./fxpreview recipe.txt out raid earth 120,483,1233
+3200x1800` (see the top of fxpreview.cpp: FX_STICKS, FX_BOMBS, FX_BOX_GAP, FX_EYE_H, FX_BACK_MPS for the hand-over,
+FX_REF=1 for the same bombs as Shell calls).
+
+## Fuel going up: the fuel ball (head D)
+
+The art director's ruling of 21 November, section 2: a shell or bomb burst is earth and smoke, never a petrol
+fireball; rolling fireballs come only from fuel, a vehicle's 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
+dump 15 to 25 m for 1.5 to 2 s, with black smoke from its top after half a second.
+
+- **The call** `FuelBall(Now, At, Across, Velocity)` (the game's `FBattleEffects::FuelBall`). Call it at the moment
+  the fuel goes; a fire that burns on after it is the caller's `Burn`, called with it. Velocity is what it was moving
+  at (a crashing aeroplane's, a truck's); the fire keeps a little of it. Without the recipe's `fuel_ball` row:
+  nothing.
+- **What it draws.** Its time comes from its width (`small_s` at `small_m`, `big_s` at `big_m`). Its lobes are thrown
+  out and up from a seat just above the ground and slowed by the air. The whole ball climbs `rise_of_across` of its
+  width while it burns, faster as it goes, and each lobe rolls as it climbs. The fire is lit from within: white-hot
+  knots (`hearts`) for its first moment, then a yellow-orange middle (`heart_in`, its lobes sorted `core_nearer`
+  toward the eye so the middle shows from any side) inside orange billows, some deeper toward the outside
+  (`deep_mix`). Each holds its colour for `cool_from` of its life, then cools to an orange `ember`, with no dark rim.
+  No lobe goes before its smoke can take it, and with `soot_in_s` a lobe goes the moment its smoke is whole, so none
+  fades pink over the sky. The dark comes in on top first (`soot_life`): from `smoke_from_s` black smoke boils off
+  the top (`top_puffs_per_m`), and lobes lower down turn to smoke later.
+- **The cloud after it** (art director 08:08Z 22 November). By `cap_s` the smoke spreads out (`cap_spread`) under a
+  flat top (`cap_top`, `cap_flat`, `cap_raise`), about twice the ball across, leaning `lean_deg` down the wind, on a
+  dark stem from the ground (`stem_puffs_per_m` up to `stem_s`). It thins as `linger.fuel` says (thick 2.5 s, gone
+  by 20 s, four in ten of its puffs retiring early). A lamp of `lamp` times the root of its width lights the ground
+  while it burns, rising with it. A camera inside it dims and never goes black (`lens_near_of_across`, the
+  `game.lens_cap` backstop); the camera itself keeps twice the ball's width off it.
+- **Preview.** `FX_SCRIPT=fuel` on the wreck shot: her fuel goes up at 0.5 s, `FX_FUEL_M` across (8), at the engine
+  deck, and she burns on. `FX_SCRIPT=crash`: an aeroplane's fuel, 20 m at the ground, coming in at 60 m/s, with no tank.
+  `FX_SCRIPT=dump`: the same standing still. With crash and dump the wreck or the spilt fuel burns on from 1.5 s (a
+  `Burn` 0.3 of its width across, as a scene would light it; `FX_GROUND_FIRE=0` for none). For example
+  `FX_SCRIPT=crash FX_DIST=110 FX_LOOK_H=14 FX_LOOK_X=0 fxpreview recipe.txt out wreck far 18,36,54 960x540`.
+
 ## Oil fires at sea
 
 ```cpp
@@ -1435,6 +1604,35 @@ Blasts->OilStop(Zone.Id); // only if it should go out before the fight ends
 - The preview: `./fxpreview recipe.txt out oil sunk 45 1280x720` with `FX_SINCE=300 FX_DIST=1300 FX_LOOK_H=200` (`FX_SUN=x,y,z` the way toward the sun);
   `oil burning`; `oil horizon` (three fires 3, 6 and 9 km off from an 8 m eye).
 - `-TheaterBlastTest` also lights two, already burning: a slick 900 m off and a burning ship 2.5 km off.
+
+## Smoke screens at sea, and shell columns by calibre and dye (after head b0f46c5)
+
+```cpp
+// an escort laying smoke: every frame while she lays it, at her stern, with her velocity (world units a second)
+Blasts->ScreenLay(ScreenId, SternWorld, ShipVelocity, /*bFunnel*/ false); // true: black from her funnels
+Blasts->ScreenLayStop(ScreenId); // she stops laying: what is laid hangs and thins on its own
+// a shell falling in the sea, by its calibre in mm and its ship's dye ("pink" Nagato, "red" Kongo, "yellow" Haruna; empty: none)
+Blasts->SeaSplash(FallWorld, 406.0f, TEXT("pink"));
+```
+
+- **Screens** (`sea_screen`; not the land's `SmokeScreen`, a smoke round's wall, which draws as before). Laid by
+  time as a funnel's plume is, into the air she steams through: `white` from her stern generators, `black` from her
+  funnels (born `from_up_m` higher and `from_ahead_m` forward). It rests on the water (`rest`), climbs only a little,
+  widens as its age to the two thirds (`wide_k`) and thins by halves (`even`), so its old end costs few pieces; it
+  fades over minutes (`fade_s`, gone by `age_s`), the black greying to mid grey (`colour_old`). Heaped (`billow`) and
+  lumpy, with gaps (`gaps`, `gap_thin`) along it. Far off a puff is never under `least_px` across: fewer, bigger.
+  Five screens laying at once from 1 km: about 800 puffs once they are five minutes old (game.max_puffs 3,000).
+- **Columns by calibre** (`sea_splash`): the passed white water (`grounds.water.spout`) built to the art director's
+  table by calibre (`height_m`, `rise_s`, `hang_s`, `fall_s`, `foam_m`, `foam_s`, `crown_wide`, each between the two
+  calibres either side): a 16-inch shell's column about 60 m, up in about 2 s, standing 3.5 s, then down over 5 s,
+  its top the last down, and a 35 m foam patch for 25 s; its foot breaks white as it stands (`foot_white`). Dyed
+  (`dyes.<name>`: `colour` lit, `shade`, `shift` toward which it reads against the sun or with the sun low, `strength`),
+  its crown whiter (`dye_top`) and paling as it falls (`dye_pale`), its foam patch stained (`stain`). Far off
+  (`far_px`) its white is written past white (`far_over`) to stand over a pale sky and its foot is never a dark puff
+  (`far_foot`). A salvo's spacing is the caller's (0.1 to 0.5 s). Without the row: `ShellOfSize` on water as before.
+- The preview: `./fxpreview recipe.txt out seafx screen 300,1800 1600x1000` (`FX_SCREENS`, `FX_BLACK=1|alt`, `FX_DIST`,
+  `FX_KNOTS`, `FX_STOP`, `FX_LENS`) and `./fxpreview recipe.txt out seafx splash 45,90,180 1600x1000` (`FX_CAL`, `FX_DYE`,
+  `FX_SPLASHES`, `FX_EVERY`, `FX_DIST`; `FX_OLD=bomb500` the call before). Render with `FX_KIT_PX=1.8` as the game window.
 
 ## Guns on aircraft
 

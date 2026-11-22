@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Effects/TheaterFxCore.h"
+#include "Tasks/Task.h"
 #include "Templates/Function.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
@@ -45,7 +46,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn, FuelBall); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -163,9 +164,24 @@ public:
 	 * often (the art director's brief: within about two wingspans of the formation, more behind than ahead, every
 	 * 2.5 s for light guns, 1.4 s medium, 0.9 s heavy, ragged). */
 	void AirFlak(double Now, const FVector& At, const FString& Kind = TEXT("heavy"));
+	/** A stick of bombs, on the same clock as AirGun: Count bombs (1 to 48) of Size (a sizes row, "bomb250",
+	 * "bomb500") landing evenly along the ground from First to Last on Ground ("earth", "town", "water", ...), the
+	 * first at Now and the last OverSeconds later (under 0: the line at the bombers' speed, far.bombs.walk_mps, at most
+	 * 4 s). Each bomb lands at its own moment, every one of them seen. Within the draw range it is the ordinary
+	 * burst; beyond it, with the recipe's far row, the far form: a ripple of flashes along the line and the ground's
+	 * own dust and smoke standing and spreading into one pall, drawn out to far.draw_beyond_m (20 km) and fading as
+	 * the near cloud does. Id: the stick's own number (one stick per number while its bombs land). */
+	void BombStick(double Now, int32 Id, const FVector& First, const FVector& Last, int32 Count, const FString& Size, const FString& Ground, float OverSeconds = -1.0f);
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. Id, 0 or more: the
-	 * caller's own number for this fire, so BurnOut finds it (under 0: none). */
-	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
+	 * caller's own number for this fire, so BurnOut finds it (under 0: none). bOnShip: true for a fire on a ship's
+	 * deck (anything afloat), so it burns as a ship's fire, never as a burning tank's, however small, low or still. */
+	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1, bool bOnShip = false);
+	/** Fuel going up: a ragged ball of burning fuel about AcrossMetres wide that rolls and rises and turns to black
+	 * smoke boiling off its top, lighting the ground while it burns. A vehicle's fuel 6 to 10 m (about 1 to 1.5 s),
+	 * an aircraft's crash or a fuel dump 15 to 25 m (1.5 to 2 s). Velocity: what it was moving at (a crashing
+	 * aeroplane's, a truck's), of which the fire keeps a little. Call it at the moment the fuel goes; a fire that
+	 * burns on after it is Burn's, called with it. */
+	void FuelBall(const FVector& WorldAt, float AcrossMetres, const FVector& Velocity = FVector::ZeroVector);
 	/** The crew puts that fire out over OverSeconds (0: the recipe's 6 to 12 s): its flames are eaten back from the
 	 * edges to the seat, shrinking steadily and never all gone and back; a dull glow and small flickering embers
 	 * stay 10 to 20 s; its smoke pales from black through grey to grey-white and is gone inside about a minute. How "water" (a ship's hoses: a surge of white steam at the
@@ -222,6 +238,21 @@ public:
 	 * burst of burning streamers) or "canister" (a burning bomb's or a base-ejection shell's: a gush from the ground).
 	 * No crater. Id: the caller's own number for it, or under 0 none. */
 	void SmokeScreen(const FVector& WorldAt, float AcrossMetres, float Seconds, const FString& Kind = TEXT("wp"), int32 Id = -1);
+	/** A smoke screen laid at sea by a ship under way (the sea battle's escorts; not SmokeScreen above, a smoke round
+	 * on land). Call it every frame while she lays it: Id, her own number for this screen; WorldAt, her stern;
+	 * Velocity, hers (world units a second). bFunnel: black smoke from her funnels, else white smoke from her stern
+	 * generators. It keeps none of her speed: dense at her stern, low on the water, drifting and spreading down the
+	 * wind (SetWind) and thinning over minutes, with gaps in its old parts. The recipe's sea_screen row; without it,
+	 * nothing. */
+	void ScreenLay(int32 Id, const FVector& WorldAt, const FVector& Velocity, bool bFunnel = false);
+	/** She stops laying that screen: what is laid hangs and thins away on its own. ScreenLay again under the Id
+	 * starts a new one. */
+	void ScreenLayStop(int32 Id);
+	/** A shell falling in the sea by its calibre in millimetres (a 16-inch shell 406): a column of white water as
+	 * tall and as slow as the calibre throws it, standing seconds before it falls, coloured by Dye, the firing ship's
+	 * dye name from the recipe's sea_splash.dyes ("pink" Nagato, "red" Kongo, "yellow" Haruna, ...; empty for none,
+	 * Yamato), and a stained foam patch. Without the sea_splash row: ShellOfSize on "water" as before. */
+	void SeaSplash(const FVector& WorldAt, float CalibreMm, const FString& Dye = FString());
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
 	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and
@@ -261,8 +292,30 @@ public:
 	 * covers any window wider than it is tall. Returns the camera's jolt. */
 	FBattleJolt Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White, int32 ViewHeight = 0);
 
+	/** Tick in two halves (the production lead's FX2), so the kit's own frame runs on a worker while the scene draws its
+	 * men and tanks. TickBegin takes what Tick takes and does on this thread what must be done here (the test barrage,
+	 * the camera's jolt, the view), starts the kit's Draw on a worker and returns the jolt at once. TickEnd waits for
+	 * the worker, sends the mesh and lights the lamps, then does what was asked of the kit in between, in the order
+	 * asked. Between the two:
+	 * - every call on the kit is held, its arguments copied, and done at TickEnd, stamped with this frame's time as a
+	 *   call after a Tick is: so it is first seen at the next frame. Call TickBegin after the frame's shells and fires
+	 *   where you can, so only what comes after (a vehicle's dust) waits;
+	 * - GroundUnder and GroundColour are called from the worker: nothing may change what they read (the field's
+	 *   heights, a crater, a rut) until TickEnd;
+	 * - PuffsDrawn and PuffsAsked give the last frame's; Clear and End wait for the worker first.
+	 * Tick is both halves at once, all on this thread, as before. A TickBegin left without its TickEnd is ended by the
+	 * next TickBegin or Tick. */
+	FBattleJolt TickBegin(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White, int32 ViewHeight = 0);
+	void TickEnd();
+
 	/** Camera shake on or off (Options: "Camera shake", default on). */
 	bool bShake = true;
+
+	/** For a scene's log line: the puffs the kit drew at the last Tick (or TickEnd), and the room asked for then (what was
+	 * on the screen and what had been made since; over the room, 3,000, when it is short). Both by the kit's clock.
+	 * -TheaterFxRoomLog on the command line also writes a line of its own every 10 s of that clock. */
+	int32 PuffsDrawn() const;
+	int32 PuffsAsked() const;
 
 	/** -TheaterBlastTest on the command line: lay a test barrage round a place (RunTest) for test frames. */
 	static bool WantsTest();
@@ -287,12 +340,27 @@ private:
 	double UnitsPerMetre = 100.0;
 	double Clock = 0.0;
 	FVector Sun = FVector(-0.45, -0.35, 0.82);
-	int32 Room = 0; // puffs the mesh has room for (in steps of 300, as the map's smoke)
-	int32 RoomSpare = 0; // frames running that less room would have done
-	int32 LastSent = 0;
+	// (the mesh, the production lead's FX1 of 22 November: Sections sections of PuffsASection puffs each, made once at
+	// the first frame with something to draw and never rebuilt; a section is sent only while it holds puffs, and the
+	// rest are folded flat and hidden)
+	static constexpr int32 PuffsASection = 300;
+	int32 Sections = 0;
+	int32 SectionsUsed = 0; // sections holding puffs at the last Tick (shown)
+	FVector FoldedAt = FVector::ZeroVector; // where the sections holding no puffs were last folded (the pre-check on FX1: their boxes count in the mesh's bounds)
 	bool bShown = false;
-	TArray<FVector> Points;
+	TArray<FVector> Points; // one section's points and colours, filled for each section in turn
 	TArray<FColor> Colours;
+	// (-TheaterFxRoomLog: the most drawn in the 10 s of the kit's clock, when, and the room asked then)
+	int32 LogMost = -1, LogAsked = 0;
+	double LogMostAt = 0.0, LogFrom = -1.0;
+	int32 LastDrawn = 0, LastAsked = 0; // (PuffsDrawn, PuffsAsked)
+	// (the production lead's FX2: the kit's Draw on a worker from TickBegin to TickEnd, the frame it draws, and what is
+	// asked of the kit meanwhile, held in order for TickEnd)
+	UE::Tasks::TTask<int32> Drawing;
+	bool bDrawing = false;
+	double DrawNow = 0.0, DrawDay = 1.0;
+	FVector DrawEye = FVector::ZeroVector;
+	TArray<TUniqueFunction<void()>> Held;
 
 	struct FTestShot
 	{
@@ -313,7 +381,15 @@ private:
 	TheaterFx::Vec ToFx(const FVector& World) const;
 	TheaterFx::Vec ToFxWay(const FVector& Way) const;
 	double Time() const;
-	void MakeSection(int32 NewRoom, const FVector& Fill);
+	void MakeSections(const FVector& Fill);
+	void RoomLog(double Now, int32 Laid);
+	/** Before the kit's Draw, on this thread: the test barrage, the jolt, the view and the day. False: nothing to draw. */
+	bool Ahead(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight, FBattleJolt& Jolt, TheaterFx::Battle::View& Sight, double& Day);
+	/** After it, on this thread: the puffs it laid into the mesh, the room log and the lamps. */
+	void Lay(double Now, const FVector& Eye, int32 Drawn, double Day);
+	/** A call on the kit: done now, or held while the kit draws on its worker. bWhenReady: only once Begin has made it. */
+	template <typename FWork>
+	void Do(FWork&& Work, bool bWhenReady = true);
 	void Hide();
 	void PlayTest(double Now);
 };
