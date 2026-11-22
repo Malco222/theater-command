@@ -266,20 +266,32 @@ const FLIP: Record<VictoryLevel, VictoryLevel> = {
  * rider 3: the saved sentence takes the tense of the one before it). Where the strike sank nothing, rider 2's one
  * sentence, as the strike's report has it: "Ships of the Home Fleet were hit, but none was sunk: the repair parties kept
  * a badly hit cruiser afloat." Where it sank some, the fleet form, a line for each fleet that has any: "A cruiser of the
- * Home Fleet was badly hit, but the repair parties kept the ship afloat."; to the fleet's owner, his own: "One of your
- * cruisers was badly hit, ...". Empty where none was kept, always with the switch off.
+ * Home Fleet was badly hit, but the repair parties kept the ship afloat."
+ *
+ * To the fleets' owner (`owner`, the player reading his own fleets struck), the UI director's rider 6 (13:47Z): one of
+ * his fleets struck, his own ("One of your destroyers was badly hit, ..."); two or more, each by name, so the lines do
+ * not read alike ("A destroyer of your Battle Fleet was badly hit, ..."). None sunk: "Your ships were hit, but none
+ * was sunk: ..."; with two or more of his fleets, "Ships of your Battle Fleet and your 2nd Fleet were hit, ...". Empty
+ * where none was kept, always with the switch off.
  */
 export function keptLines(rows: SeaSide[], owner: string | null): string[] {
   const kept = rows.filter((x) => x.kept && shipCount(x.kept));
   if (!kept.length) return [];
+  const mine = rows.filter((x) => owner !== null && x.nat === owner).length;
   if (!rows.some((x) => shipCount(x.sunk))) {
     const all: Ships = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 };
     for (const x of kept) for (const c of Object.keys(all) as ShipClass[]) all[c] += x.kept![c];
-    // (One fleet as the strike's report names it, "the Home Fleet"; several by name, three and then "and N more".)
-    return [`Ships of ${rows.length === 1 ? `the ${rows[0].fleet}` : fleetsNamed(rows.map((x) => ({ name: x.fleet })))} were hit, but none was sunk: ${keptAfloatPast(all)}.`];
+    // (One fleet as the strike's report names it, "the Home Fleet"; several by name, three and then "and N more"; the
+    // owner's own as "your Battle Fleet", and his one fleet struck alone as "Your ships".)
+    const names = rows.map((x) => (x.nat === owner ? `your ${x.fleet}` : fleetsNamed([{ name: x.fleet }])));
+    const who = !mine ? (rows.length === 1 ? `Ships of the ${rows[0].fleet}` : `Ships of ${fleetsNamed(rows.map((x) => ({ name: x.fleet })))}`)
+      : rows.length === 1 ? 'Your ships'
+      : `Ships of ${names.length <= 3 ? andNames(names) : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`}`;
+    return [`${who} were hit, but none was sunk: ${keptAfloatPast(all)}.`];
   }
-  return kept.map((x) => keptAfloat({ name: x.fleet }, x.kept!, x.nat === owner ? 'yours' : 'fleet', true));
+  return kept.map((x) => keptAfloat({ name: x.fleet }, x.kept!, x.nat !== owner ? 'fleet' : mine > 1 ? 'your fleet' : 'yours', true));
 }
+const andNames = (xs: string[]): string => (xs.length === 1 ? xs[0] : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /**
  * The after card from the raid report the campaign wrote for a fought raid, so the card's bill is the campaign's

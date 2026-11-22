@@ -12,7 +12,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { SHIP_RESEARCH, dcOf, techOf } from '../src/campaign/tech';
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
-import type { Fleet, Game, ShipClass } from '../src/campaign/types';
+import type { Fleet, Game, SeaSide, ShipClass, Ships } from '../src/campaign/types';
 import { airBattle, type AirSim } from '../src/battle/air/sim';
 import { ShipBook, type ShipPlace } from '../src/battle/air/ships';
 import { airTicket, foughtAir, raidGroups } from '../src/battle/air/ticket';
@@ -324,4 +324,63 @@ describe("ruling 240 on the field: the ships' guns with the stage and proximity-
       expect(flakOn, `the guns brought down ${flakOn} with the switches on, ${flakOff} off`).toBeGreaterThan(flakOff);
     }, 300_000);
   }
+});
+
+describe("the after card's words for ships kept afloat (the UI director's rider 6, 13:47Z)", () => {
+  const ships = (x: Partial<Ships>): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0, ...x });
+  const row = (fleet: string, nat: string, sunk: Partial<Ships>, kept: Partial<Ships>): SeaSide =>
+    ({ nat, fleet, admiral: null, ships: ships({ bb: 2, ca: 8, dd: 20 }), sunk: ships(sunk), ...(Object.keys(kept).length ? { kept: ships(kept) } : {}) });
+
+  it('read by the raider, and by any side but the owner: the fleet named, as built', () => {
+    expect(keptLines([row('Battle Fleet', 'GER', { ca: 1 }, { dd: 1 })], null)).toEqual(['A destroyer of the Battle Fleet was badly hit, but the repair parties kept the ship afloat.']);
+    expect(keptLines([row('Battle Fleet', 'GER', { ca: 1 }, { ca: 1, dd: 1 })], 'UK')).toEqual(['A cruiser and a destroyer of the Battle Fleet were badly hit, but the repair parties kept the ships afloat.']);
+    expect(keptLines([row('Battle Fleet', 'GER', {}, { dd: 1 })], null)).toEqual(['Ships of the Battle Fleet were hit, but none was sunk: the repair parties kept a badly hit destroyer afloat.']);
+    expect(keptLines([row('Battle Fleet', 'GER', {}, { dd: 1 }), row('2nd Fleet', 'ITA', {}, {})], null)).toEqual(['Ships of the Battle Fleet and the 2nd Fleet were hit, but none was sunk: the repair parties kept a badly hit destroyer afloat.']);
+    // A line for each fleet that kept any; none at all where none was kept.
+    expect(keptLines([row('Battle Fleet', 'GER', { dd: 2 }, { dd: 1 }), row('2nd Fleet', 'ITA', { dd: 1 }, {})], null)).toEqual(['A destroyer of the Battle Fleet was badly hit, but the repair parties kept the ship afloat.']);
+    expect(keptLines([row('Battle Fleet', 'GER', { dd: 2 }, {})], null)).toEqual([]);
+  });
+
+  it("read by the owner: one of his fleets his own; two or more each by name, 'your' and no 'the'; none sunk 'Your ships'", () => {
+    // One of his fleets struck: passes as built.
+    expect(keptLines([row('Battle Fleet', 'GER', { ca: 1 }, { dd: 1 })], 'GER')).toEqual(['One of your destroyers was badly hit, but the repair parties kept the ship afloat.']);
+    // Mend (a): two or more of his fleets struck, each named.
+    expect(keptLines([row('Battle Fleet', 'GER', { ca: 1 }, { dd: 1 }), row('2nd Fleet', 'GER', {}, { ca: 1, dd: 2 })], 'GER')).toEqual([
+      'A destroyer of your Battle Fleet was badly hit, but the repair parties kept the ship afloat.',
+      'A cruiser and 2 destroyers of your 2nd Fleet were badly hit, but the repair parties kept the ships afloat.',
+    ]);
+    // Mend (b): none sunk.
+    expect(keptLines([row('Battle Fleet', 'GER', {}, { dd: 1 })], 'GER')).toEqual(['Your ships were hit, but none was sunk: the repair parties kept a badly hit destroyer afloat.']);
+    expect(keptLines([row('Battle Fleet', 'GER', {}, { dd: 1 }), row('2nd Fleet', 'GER', {}, { ca: 1 })], 'GER')).toEqual(['Ships of your Battle Fleet and your 2nd Fleet were hit, but none was sunk: the repair parties kept a badly hit cruiser and a destroyer afloat.']);
+    // His fleet beside an ally's: his own, and the other by its name.
+    expect(keptLines([row('Battle Fleet', 'GER', { ca: 1 }, { dd: 1 }), row('2nd Fleet', 'ITA', {}, { dd: 1 })], 'GER')).toEqual([
+      'One of your destroyers was badly hit, but the repair parties kept the ship afloat.',
+      'A destroyer of the 2nd Fleet was badly hit, but the repair parties kept the ship afloat.',
+    ]);
+    expect(keptLines([row('Battle Fleet', 'GER', {}, { dd: 1 }), row('2nd Fleet', 'ITA', {}, {})], 'GER')).toEqual(['Ships of your Battle Fleet and the 2nd Fleet were hit, but none was sunk: the repair parties kept a badly hit destroyer afloat.']);
+  });
+
+  it("a played strike's after card, read by the fleet's owner: his own form, after the bombers line", () => {
+    set(false, false, true);
+    let saw = 0;
+    for (let k = 0; k < 12 && saw < 2; k++) {
+      const g = loadGame(PORT)!;
+      give(g, 'GER', 'damagecontrol');
+      g.seed = (7 + 7919 * k) >>> 0; g.flags.airBattles = k;
+      const port = named(g, 'Battle Fleet').base, ids = raidGroups(g, 'harbour', port, 'UK');
+      const s = airBattle(airTicket(g, 'harbour', port, ids, 'UK', { ships: true }).ticket!, { show: false });
+      s.ai.att = true; s.ai.def = true;
+      while (!s.over) s.step();
+      const fa = foughtAir(s.outcome());
+      const rep = launchRaid(g, 'harbour', port, ids, 'UK', fa)!;
+      if (!rep.ships!.some((x) => x.kept)) continue;
+      saw++;
+      expect(rep.defNat).toBe('GER');
+      g.human = 'GER';
+      const lines = afterCard(g, rep, fa).lines;
+      expect(lines[1]).toMatch(/^(One of your .+ (was|were) badly hit, but the repair parties kept the (ship|ships) afloat\.|Your ships were hit, but none was sunk: the repair parties kept .* afloat\.)$/);
+      expect(lines.slice(1, 2)).toEqual(keptLines(rep.ships!, 'GER'));
+    }
+    expect(saw).toBeGreaterThan(0);
+  });
 });
