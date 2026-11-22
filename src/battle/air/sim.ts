@@ -171,8 +171,8 @@ export class AirSim implements BattleSim<AirUnit> {
   private risen = new Set<number>();
   /** A split defence's pool (arm): each group's weight, by which it shares what the defence still in the fight has left. */
   private pool: Map<number, number> | null = null;
-  /** The escorts the defenders sent against the escort (deal) have held off, each with the box it was escorting (tied). */
-  private heldOff = new Map<number, number>();
+  /** The escorts that have fought the defence, each with the box it was escorting: one fought out still counts over it (tied). */
+  private foughtFor = new Map<number, number>();
   /**
    * For the pilots the 3D game flies (Brian, 20 November 2026: "lets work on the ai for the fighter pilots. they were
    * kinda just flying around doing nothing"; "super realistic and meaningful and everyone has high AI iq"). Shown, never
@@ -832,13 +832,14 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * An escort held off by the defenders its staff sent against it (deal) still counts over its own box: the split is
    * the staff's choice of where its weight falls, and the card has priced the escort's protection (217, b418). So does
-   * one they have fought out, while it flies home: its weight was spent where the split put it, and the card counts the
-   * escort over its bombers for the whole raid (L.escort, 227), so the box it leaves is not priced as one never escorted.
+   * an escort the defence has fought out, while it flies home, whatever the defence: its weight was spent on the
+   * defenders, and the card counts the escort over its bombers for the whole raid (L.escort, 227), so the box it leaves
+   * is not priced as one never escorted.
    */
   private tied(f: AirUnit, b: AirUnit): boolean {
     if (f.air !== 'ftr' || f.side !== 'att') return false;
     if (f.job.do === 'escort') return f.job.on === b.id && f.contacts.some((i) => this.unit(i)?.def === 'escort');
-    return f.job.do === 'home' && f.vig < SKY.spent && this.heldOff.get(f.id) === b.id;
+    return f.job.do === 'home' && f.vig < SKY.spent && this.foughtFor.get(f.id) === b.id;
   }
 
   /** A fighter group's fight left, and home once all but SKY.spent of it is gone. */
@@ -871,8 +872,8 @@ export class AirSim implements BattleSim<AirUnit> {
       if (foes(u, 'bmr').length) on.bmr += k;
     }
     const pace = (u: AirUnit, k: 'ftr' | 'bmr'): number => (on[k] > 0 && pool?.has(u.id) ? 1 / on[k] : 1);
-    // The escorts the escort-takers are on now, each with its box (tied): one they fight out still counts over it.
-    if (pool) for (const f of live) if (f.side === 'att' && f.air === 'ftr' && f.job.do === 'escort' && f.contacts.some((i) => byId.get(i)?.def === 'escort')) this.heldOff.set(f.id, f.job.on);
+    // The escorts in a fight with the defence now, each with its box (tied): one fought out still counts over it.
+    for (const f of live) if (f.side === 'att' && f.air === 'ftr' && f.job.do === 'escort' && f.contacts.some((i) => byId.get(i)?.side === 'def')) this.foughtFor.set(f.id, f.job.on);
     const covers = new Map<number, number>();
     // Who owed what this tick: each group's debts by creditor, and each fighter's fire. Kept whether or not the battle
     // is shown, for the way each loss goes (fates.ts) is told in the dispatches either way; none of it moves a count.
