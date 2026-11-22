@@ -27,6 +27,10 @@ body simulation with extended position based dynamics"), one solve a substep at 
     falls as a body of its own.
   * Once he is down and all but still, cloth and soil take the last of the motion (extra damping), and the fall
     ends when nothing moves.
+  * A limb taken off (Brian, 22 November: "graphic animations if a guy gets shot or blown up", "with limbs coming
+    off"): at the cut's time the joint that holds it to him is let go (shoulder, elbow, hip or knee: the gore twin's
+    cuts), the limb goes limp and is a body of its own from there, kept out of the body it left, and lands where it
+    lands. The time it first touches the ground after the cut is kept (`limb_land`) for its sound and dust.
 
 AXES: the game file's (x forward, y right, z up, metres), quaternions [w, x, y, z] as the file's clips.
 """
@@ -617,6 +621,13 @@ class Fall:
             P[:, 2] += pen + 0.001
         self.gap = self._gaps(self.pairs, P)
         self.slow = 0.0
+        # limbs taken off: (t, part) to cut; done: part -> the time it was cut, and its limb's parts; where each
+        # severed limb first came down after its cut (part -> (t, point on the ground)); what touched the ground
+        self.cuts = []
+        self.cut_at, self.cut_limb = {}, {}
+        self.limb_land = {}
+        self.touch = set()
+        self.touch_at_cut = {}
 
     # -------------------------------------------------------------------------------------------- state
     def _pose(self, local):
@@ -649,6 +660,49 @@ class Fall:
 
     def _Iinv(self, k):
         return self.R[k] @ self.rd.I0inv[k] @ self.R[k].T
+
+    def limb_of(self, k):
+        """A part and every part below it: the limb that comes away when it is cut from its parent."""
+        out, grew = {k}, True
+        while grew:
+            grew = False
+            for c, p in enumerate(self.rd.parent):
+                if p in out and c not in out:
+                    out.add(c)
+                    grew = True
+        return out
+
+    def _cut(self, k):
+        """Let go the joint that holds part k to its parent: the limb from k down is a body of its own, limp, and kept
+        out of the rest of him (each pair of their core spheres that is apart now; one that touches now is left, or
+        it would throw the limb off at speed)."""
+        rd = self.rd
+        self.joints = [j for j in self.joints if j["child"] != k]
+        limb = self.limb_of(k)
+        for c in limb:
+            self.tone[c] = (lambda t: 0.0)
+        self.cut_at[k] = self.t
+        self.cut_limb[k] = limb
+        self.touch_at_cut[k] = self.touch & limb
+        if self.held and rd.pix["hand_r"] in limb:
+            self.release_at = min(self.release_at, self.t)   # (the rifle goes with the hand that held it)
+        P = self._spheres()
+        core = np.nonzero(rd.sp_core)[0]
+        have = {(int(a), int(b)) for a, b in self.pairs} | {(int(b), int(a)) for a, b in self.pairs}
+        wk = rd.pix["weapon"]
+        add = []
+        for i in core:
+            if rd.sp_part[i] not in limb:
+                continue
+            for j in core:
+                if rd.sp_part[j] in limb or rd.sp_part[j] == wk or (int(i), int(j)) in have:
+                    continue
+                if np.linalg.norm(P[i] - P[j]) > (rd.sp_r[i] + rd.sp_r[j]) * 1.05:
+                    add.append((i, j))
+        if add:
+            add = np.array(add, int).reshape(-1, 2)
+            self.pairs = np.concatenate([self.pairs, add])
+            self.gap = np.concatenate([self.gap, rd.sp_r[add[:, 0]] + rd.sp_r[add[:, 1]]])
 
     # -------------------------------------------------------------------------------------------- corrections
     def _pos(self, k1, r1, k2, r2, d, alpha=0.0):
@@ -762,6 +816,13 @@ class Fall:
             if k not in self.contact_t:
                 self.contact_t[k] = self.t
                 self.contact_v[k] = float(-self.v[k][2])
+            self.touch.add(k)
+            # (a severed limb coming down: the first touch after its cut by a part of it that was not already on the
+            # ground then, a foot left standing when the leg was cut above it)
+            for c, limb in self.cut_limb.items():
+                if c not in self.limb_land and k in limb and k not in self.touch_at_cut[c]:
+                    q = self.x[k] + self.R[k] @ rd.sp_off[i]
+                    self.limb_land[c] = (self.t, q - np.array((0.0, 0.0, rd.sp_r[i])))
 
     def _self(self):
         rd = self.rd
@@ -783,6 +844,9 @@ class Fall:
     # -------------------------------------------------------------------------------------------- the step
     def step(self):
         rd, h = self.rd, self.h
+        for (tc, k) in [c for c in self.cuts if c[0] <= self.t]:
+            self._cut(k)
+        self.cuts = [c for c in self.cuts if c[0] > self.t]
         for (tp, k, dv) in [p for p in self.push if p[0] <= self.t]:
             self.v[k] += dv
         self.push = [p for p in self.push if p[0] > self.t]
@@ -813,6 +877,7 @@ class Fall:
             self.pairs = np.concatenate([self.pairs, add])
             self.gap = np.concatenate([self.gap, rd.sp_r[add[:, 0]] + rd.sp_r[add[:, 1]]])
         self.xp, self.Rp = self.x.copy(), self.R.copy()
+        self.touch = set()
         self.v[:, 2] += G[2] * h
         self.x = self.x + self.v * h
         self.R = np.array([from_rotvec(self.w[k] * h) @ self.R[k] for k in range(len(self.R))])

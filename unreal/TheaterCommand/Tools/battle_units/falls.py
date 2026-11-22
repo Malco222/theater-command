@@ -37,8 +37,10 @@ LOOK = {"tunic": "5F665C", "trousers": "585E57", "boots": "2A2420", "lower": "2C
 
 
 # ------------------------------------------------------------------------------------------------ the clip
-def frame_local(rd, R, H):
-    """One frame of a Fall (part turns R, heads H) as the file's local turns: {bone: (q, move or None)}."""
+def frame_local(rd, R, H, t=0.0, cuts=None):
+    """One frame of a Fall (part turns R, heads H) as the file's local turns: {bone: (q, move or None)}. `cuts`
+    ({bone: time}): a limb taken off; from its time its bone carries a move, so its head goes where the severed limb
+    went, not where its parent's joint would hold it."""
     m = rd.man
     names = m.names
     Gw = np.zeros((len(names), 3, 3))
@@ -50,6 +52,15 @@ def frame_local(rd, R, H):
             continue                                  # (a bag bone is placed by clip_from, from where it was packed)
         mv = H[rd.pix[n]] - m.head[b] if n in ("pelvis", "weapon") else None
         loc[n] = (RG.matq(Gw[m.parent[b]].T @ Gw[b]), mv)
+    if cuts:
+        Gf, Xf = m.fk(loc)
+        for n in sorted(cuts, key=m.i):                     # (parents first: a cut above moves what is below it)
+            b, q = m.i(n), loc[n][0]
+            if t < cuts[n] - 1e-9:
+                loc[n] = (q, np.zeros(3))                 # (held at the joint until the cut: a move track from 0)
+                continue
+            loc[n] = (q, Gf[m.parent[b]].T @ (H[rd.pix[n]] - Xf[b]))
+            Gf, Xf = m.fk(loc)
     return loc
 
 
@@ -200,8 +211,18 @@ def bag_dense(man, clip, rel, fps=BAG_FPS):
 
 
 def fall_events(f, rd, start=None):
-    """Sounds of a fall: a knee down, the body on the ground, the rifle landing (first touch of each)."""
+    """Sounds of a fall: a knee down, the body on the ground, the rifle landing (first touch of each); and for a
+    limb taken off, limb_off at the cut (the wound's socket on the body, the end's on the limb: the gore twin's) and
+    limb_fall where the severed limb comes down (x, y, z: the point it touches, metres, his own axes)."""
     ev = []
+    for k, tc in sorted(f.cut_at.items(), key=lambda kv: kv[1]):
+        n = rd.parts[k]
+        ev.append({"t": round(tc, 3), "fx": "limb_off", "socket": "wound_" + n, "end": "end_" + n, "cue": "limb_off",
+                   "bone": n})
+        if k in f.limb_land:
+            tl, q = f.limb_land[k]
+            ev.append({"t": round(tl, 3), "fx": "limb_fall", "socket": None, "cue": "limb_fall", "bone": n,
+                       "x": round(float(q[0]), 3), "y": round(float(q[1]), 3), "z": round(float(max(q[2], 0.0)), 3)})
     pre = set(start or ())
     for k, t in sorted(f.contact_t.items(), key=lambda kv: kv[1]):
         n = rd.parts[k]
@@ -217,9 +238,13 @@ def fall_events(f, rd, start=None):
 
 
 def clip_of(f, rd, note, start=None):
-    """A finished Fall as the file's clip."""
-    frames = [(t, frame_local(rd, R, H)) for (t, R, H) in f.rec]
-    return clip_from(rd.man, frames, note, fall_events(f, rd, start))
+    """A finished Fall as the file's clip (a limb taken off in it: its bone's move track, from the cut)."""
+    cuts = {rd.parts[k]: t for k, t in f.cut_at.items()}
+    frames = [(t, frame_local(rd, R, H, t, cuts)) for (t, R, H) in f.rec]
+    c = clip_from(rd.man, frames, note, fall_events(f, rd, start))
+    if cuts:
+        c["cuts"] = [{"bone": n, "t": round(t, 3)} for n, t in sorted(cuts.items(), key=lambda kv: kv[1])]
+    return c
 
 
 def _thin(keys, tol=2e-4):
@@ -467,6 +492,30 @@ RECIPES = [
          push=[(0.4, "chest", (0.3, 0.0, 0.0)), (1.1, "chest", (0.0, -0.8, 0.1))],
          tone={"legs": (0.15, 0.5), "trunk": (0.25, 0.6), "neck": (0.1, 0.4), "arms": (0.1, 0.4)},
          release=0.3, throw=(0.2, -0.2, 0.0)),
+    # ---- where he was hit (Brian, 22 November: "more graphic animations if a guy gets shot"): in the head, every
+    # muscle gone at once and he drops where he stands; in the gut, he folds at the waist before his legs go; in the
+    # leg, that leg goes from under him and he falls to its side
+    dict(name="die_head_a", stance="stand", kind="head", start=("fire_stand", 0.3),
+         push=[(0.0, "head", (-1.1, 0.1, 0.25))],
+         tone={"legs": (0.0, 0.03), "trunk": (0.0, 0.04), "neck": (0.0, 0.02), "arms": (0.0, 0.03)},
+         release=0.02, throw=(0.2, 0.3, 0.1)),
+    dict(name="die_head_b", stance="stand", kind="head", start=("advance", 0.3), travel=1.4,
+         push=[(0.0, "head", (-1.4, -0.2, 0.3))],
+         tone={"legs": (0.0, 0.03), "trunk": (0.0, 0.04), "neck": (0.0, 0.02), "arms": (0.0, 0.03)},
+         release=0.02, throw=(0.8, -0.2, 0.2)),
+    dict(name="die_gut_a", stance="stand", kind="gut", start=("fire_stand", 0.6),
+         push=[(0.0, "pelvis", (-0.7, 0.0, 0.0)), (0.0, "chest", (0.45, 0.05, -0.25))],
+         tone={"legs": (0.45, 0.45), "trunk": (0.0, 0.12), "neck": (0.0, 0.2), "arms": (0.05, 0.3)},
+         release=0.3, throw=(0.3, 0.2, 0.0)),
+    dict(name="die_gut_b", stance="kneel", kind="gut", start=("fire_kneel", 0.5),
+         push=[(0.0, "spine_01", (-0.4, 0.0, 0.0)), (0.0, "chest", (0.4, 0.2, -0.2)), (0.9, "chest", (0.0, 0.6, 0.0))],
+         tone={"legs": (0.3, 0.4), "trunk": (0.0, 0.15), "neck": (0.0, 0.25), "arms": (0.1, 0.35)},
+         release=0.35, throw=(0.2, 0.3, 0.0)),
+    dict(name="die_leg_a", stance="stand", kind="leg", start=("advance", 0.3), travel=1.5, mirror="die_leg_b",
+         push=[(0.0, "calf_l", (-0.9, 0.4, 0.0)), (0.1, "chest", (0.1, -0.6, 0.0))],
+         tone={"legs": (0.35, 0.3), "trunk": (0.25, 0.3), "neck": (0.1, 0.25), "arms": (0.05, 0.25)},
+         tone_part={"thigh_l": (0.0, 0.04), "calf_l": (0.0, 0.04), "foot_l": (0.0, 0.04)},
+         release=0.25, throw=(0.5, -0.3, 0.2)),
 ]
 
 
@@ -489,6 +538,10 @@ def mirrored(rc):
     fy = lambda v: (v[0], -v[1], v[2])
     sw = lambda p: p.replace("_l", "_R").replace("_r", "_l").replace("_R", "_r")
     r["push"] = [(t, sw(p), fy(dv)) for (t, p, dv) in rc.get("push", [])]
+    if "cut" in rc:
+        r["cut"] = [(t, sw(p)) for (t, p) in rc["cut"]]
+    if "tone_part" in rc:
+        r["tone_part"] = {sw(p): v for p, v in rc["tone_part"].items()}
     for k in ("throw", "blast"):
         if k in rc:
             r[k] = fy(rc[k])
@@ -569,6 +622,7 @@ def simulate(man, rd, rc, verbose=False):
         fam = j["fam"]
         g = next(k for k, v in GROUPS.items() if fam in v)
         h, fd = rc["tone"][g]
+        h, fd = rc.get("tone_part", {}).get(rd.parts[j["child"]], (h, fd))     # (one limb's own: a leg shot from under him)
         f.tone[j["child"]] = tone_fn(h, fd)
     pushes = []
     for (t, p, dv) in rc.get("push", []):
@@ -588,6 +642,7 @@ def simulate(man, rd, rc, verbose=False):
             if rd.parts[k] != "weapon":
                 f.w[k] += spin * 0.5
     f.push = pushes
+    f.cuts = [(t, rd.pix[p]) for (t, p) in rc.get("cut", [])]
     f.release_at = rc.get("release", 0.1)
     f.throw = np.array(rc.get("throw", (0.0, 0.0, 0.0)), float)
     f.throw_w = np.array(rc.get("throw_spin", (0.0, 6.0, 2.0)), float)
@@ -771,26 +826,148 @@ def crawl_death(man, rd, rc):
 # deaths[stance][kind]: the clips that fit a man hit in that stance, by the Fates picker's kinds (forward, back, side,
 # knees, spin, thrown) and the wounded crawl. Every cell has at least one clip; a cell without a fall of its own
 # borrows the nearest (a running man spun round, a kneeling man thrown back hard).
+# ------------------------------------------------------------------------------------------------ gore: limbs off
+# Brian (22 November 2026): "make more graphic animations if a guy gets shot or blown up", "with limbs coming off".
+# Each as a death above, with `cut`: (time, part) a limb taken off at its joint (the gore twin's cuts: upperarm at the
+# shoulder, lowerarm at the elbow, thigh at the hip, calf at the knee). The blows name the severed limb too: a blast
+# throws it farther than the man, a heavy round carries the arm it takes. They go in the gore twin's file
+# (soldier_<ARMY>_gore.json, the same skeleton, its mesh split at the cuts), never in the man's own: gore off, the game
+# loads nothing of this.
+GORE_CUTS = ("upperarm_l", "upperarm_r", "lowerarm_l", "lowerarm_r", "thigh_l", "thigh_r", "calf_l", "calf_r")
+GORE = [
+    # ---- a shell or a grenade at his feet: thrown, and a limb or two torn off and flung
+    dict(name="die_blast_a", stance="stand", kind="thrown", start=("advance", 0.35), travel=2.0, blast=(-4.8, 0.6, 3.2),
+         cut=[(0.0, "calf_l"), (0.0, "lowerarm_r")],
+         push=[(0.0, "calf_l", (-3.0, -2.2, 3.4)), (0.0, "lowerarm_r", (-2.2, 3.0, 4.2))],
+         tone=LIMP, release=0.0, throw=(-2.0, 1.5, 3.0), spin=(3.4, -5.2, 2.0), mu=0.6),
+    dict(name="die_blast_b", stance="stand", kind="thrown", start=("fire_stand", 0.5), blast=(-1.2, 4.2, 2.6),
+         cut=[(0.0, "thigh_l")],
+         push=[(0.0, "thigh_l", (-1.6, -2.6, 4.4))],
+         tone=LIMP, tone_part={"upperarm_l": (0.1, 0.2), "lowerarm_l": (0.05, 0.12)},   # (the left arm held a moment:
+         release=0.0, throw=(0.5, 3.0, 2.5), spin=(-5.0, 2.0, 6.0), mu=0.6),          # limp, it folded behind him)
+    dict(name="die_blast_c", stance="kneel", kind="thrown", start=("fire_kneel", 0.3), blast=(-3.2, -1.6, 3.0),
+         cut=[(0.0, "upperarm_l"), (0.0, "calf_r")],
+         push=[(0.0, "upperarm_l", (-2.6, -3.4, 3.6)), (0.0, "calf_r", (-2.0, 2.4, 2.8))],
+         tone=LIMP, release=0.0, throw=(-1.0, -1.5, 2.5), spin=(-3.0, 4.0, -4.0), mu=0.6),
+    dict(name="die_blast_d", stance="prone", kind="thrown", start=("fire_prone", 0.6), blast=(0.6, 1.6, 3.4),
+         cut=[(0.0, "calf_r"), (0.0, "lowerarm_l")],
+         push=[(0.0, "calf_r", (-1.4, 2.6, 4.0)), (0.0, "lowerarm_l", (1.6, -2.0, 4.2))],
+         tone=LIMP, release=0.0, throw=(0.5, 1.5, 2.5), spin=(3.0, -2.0, 4.0), mu=0.6),
+    # ---- a heavy round (a machine gun's burst at close range, a cannon's shot) takes an arm: he is spun and goes down
+    dict(name="die_arm_off_a", stance="stand", kind="spin", start=("fire_stand", 0.4),
+         cut=[(0.0, "upperarm_r")],
+         push=[(0.0, "upperarm_r", (-3.6, 1.8, 0.9)), (0.0, "chest", (-0.7, 0.9, 0.0)), (0.0, "upperarm_l", (0.9, 0.0, 0.0))],
+         tone={"legs": (0.22, 0.3), "trunk": (0.06, 0.25), "neck": (0.0, 0.12), "arms": (0.0, 0.06)},
+         release=0.0, throw=(-1.2, 1.0, 0.8)),
+    dict(name="die_arm_off_b", stance="stand", kind="spin", start=("advance", 0.2), travel=1.4,
+         cut=[(0.0, "lowerarm_l")],
+         push=[(0.0, "lowerarm_l", (-2.6, -2.0, 1.2)), (0.0, "upperarm_l", (-1.4, -0.6, 0.0)), (0.0, "chest", (-0.4, -0.7, 0.0))],
+         tone={"legs": (0.15, 0.3), "trunk": (0.05, 0.25), "neck": (0.0, 0.12), "arms": (0.0, 0.08)},
+         release=0.12, throw=(0.4, 0.9, 0.5)),
+    # ---- a leg taken off: he drops on the side it went from, the leg falling away
+    dict(name="die_leg_off_a", stance="stand", kind="knees", start=("advance", 0.25), travel=1.5,
+         cut=[(0.0, "calf_l")],
+         push=[(0.0, "calf_l", (-1.8, -1.4, 1.2)), (0.25, "chest", (0.3, -0.6, 0.0))],
+         tone={"legs": (0.0, 0.08), "trunk": (0.2, 0.35), "neck": (0.1, 0.25), "arms": (0.05, 0.2)},
+         release=0.2, throw=(0.6, -0.4, 0.3)),
+    dict(name="die_leg_off_b", stance="stand", kind="knees", start=("fire_stand", 0.6),
+         cut=[(0.0, "thigh_r")],
+         push=[(0.0, "thigh_r", (-2.2, 1.8, 1.8)), (0.0, "pelvis", (-0.3, 0.5, 0.2))],
+         tone={"legs": (0.0, 0.06), "trunk": (0.1, 0.3), "neck": (0.05, 0.2), "arms": (0.0, 0.15)},
+         release=0.1, throw=(0.3, 0.8, 0.4)),
+]
+GORE_TABLE = {
+    "stand": {"thrown": ["die_blast_a", "die_blast_b"], "spin": ["die_arm_off_a", "die_arm_off_b"],
+              "side": ["die_arm_off_a", "die_arm_off_b"], "knees": ["die_leg_off_a", "die_leg_off_b"],
+              "forward": ["die_leg_off_a"], "back": ["die_arm_off_a", "die_blast_b"]},
+    "run": {"thrown": ["die_blast_a", "die_blast_b"], "spin": ["die_arm_off_b"], "side": ["die_arm_off_b"],
+            "knees": ["die_leg_off_a"], "forward": ["die_leg_off_a"], "back": ["die_blast_a"]},
+    "kneel": {"thrown": ["die_blast_c"]},
+    "cover": {"thrown": ["die_blast_c"]},
+    "prone": {"thrown": ["die_blast_d"]},
+}
+ABOUT_GORE = (
+    "Gore deaths (Tools/battle_units/falls.py, GORE; Brian, 22 November 2026: \"graphic animations if a guy gets shot "
+    "or blown up\", \"with limbs coming off\"): physics falls as the man's own deaths are, in which a limb is taken off "
+    "at its joint (the cuts this file's mesh is split at: shoulder, elbow, hip, knee). From the cut the limb's bone "
+    "carries a move track: it flies and lands as a body of its own, and lies where it fell for the rest of the battle "
+    "as he does. Pick, gore on: deaths_gore[stance][kind] where the scene has chosen a gore death (a shell or grenade "
+    "close by: thrown; a heavy round: spin, side, knees, forward or back), else the man's own deaths table; one of the "
+    "list by a hash of (block id, man). Events: limb_off at the cut (socket: the wound on the body, wound_<bone>; "
+    "end: the limb's cut end, end_<bone>, for the blood), limb_fall where the severed limb comes down (x, y, z in "
+    "his own axes, metres), and knee_down, body_fall, rifle_drop as in every death. Gore off: none of this is loaded.")
+
+
+def gore_names():
+    return [r["name"] for r in GORE] + [r["mirror"] for r in GORE if r.get("mirror")]
+
+
+def gore_recipes(only=None):
+    out = []
+    for rc in GORE:
+        out.append(rc)
+        if rc.get("mirror"):
+            out.append(mirrored(rc))
+    return [r for r in out if not only or r["name"] in only]
+
+
+def gore_man(man):
+    """The man as his gore twin is cut: no point weighted across a cut (w2 0 where its two bones are on either side
+    of one), no triangle spanning one (the twin's hard split, without its caps: for the checks and pictures of a gore
+    death drawn on the man's own file before the twin exists)."""
+    m = man
+    sub = []
+    for c in GORE_CUTS:
+        if c not in m.ix:
+            continue
+        s, grew = {m.i(c)}, True
+        while grew:
+            grew = False
+            for b, p in enumerate(m.parent):
+                if p in s and b not in s:
+                    s.add(b)
+                    grew = True
+        sub.append(np.isin(np.arange(len(m.names)), list(s)))
+    across = np.zeros(len(m.part), bool)
+    for s in sub:
+        across |= s[m.part] != s[m.part2]
+    m.w2 = np.where(across & (m.w2 > 0), 0.0, m.w2)
+    T = np.array(m.data["near"]["triangles"], int).reshape(-1, 3)
+    keep = np.ones(len(T), bool)
+    for s in sub:
+        side = s[m.part][T]
+        keep &= side.all(1) | (~side).all(1)
+    near = dict(m.data["near"])
+    near["triangles"] = T[keep].reshape(-1).tolist()
+    m.data = dict(m.data)
+    m.data["near"] = near
+    return m
+
+
 TABLE = {
     "stand": {"back": ["die_back_a", "die_back_b", "die_back_c"],
-              "forward": ["die_forward_a", "die_forward_b", "die_forward_c"],
-              "side": ["die_side_a", "die_side_b", "die_side_c", "die_side_d"],
-              "knees": ["die_knees_a", "die_knees_b"], "spin": ["die_spin_a", "die_spin_b"],
-              "thrown": ["die_thrown_a", "die_thrown_b", "die_thrown_c"], "crawl": ["die_crawl_a"]},
-    "run": {"back": ["die_run_c", "die_back_c"], "forward": ["die_run_a", "die_run_b", "die_forward_a"],
+              "forward": ["die_forward_a", "die_forward_b", "die_forward_c", "die_head_b"],
+              "side": ["die_side_a", "die_side_b", "die_side_c", "die_side_d", "die_leg_a", "die_leg_b"],
+              "knees": ["die_knees_a", "die_knees_b", "die_head_a", "die_gut_a"], "spin": ["die_spin_a", "die_spin_b"],
+              "thrown": ["die_thrown_a", "die_thrown_b", "die_thrown_c"], "crawl": ["die_crawl_a"],
+              "head": ["die_head_a", "die_head_b"], "gut": ["die_gut_a"], "leg": ["die_leg_a", "die_leg_b"]},
+    "run": {"back": ["die_run_c", "die_back_c"], "forward": ["die_run_a", "die_run_b", "die_forward_a", "die_head_b"],
             "side": ["die_spin_a", "die_spin_b", "die_run_b"], "knees": ["die_forward_c", "die_run_a"],
             "spin": ["die_spin_a", "die_spin_b"], "thrown": ["die_thrown_a", "die_thrown_b", "die_thrown_c"],
-            "crawl": ["die_crawl_a"]},
+            "crawl": ["die_crawl_a"], "head": ["die_head_b"], "gut": ["die_gut_a"], "leg": ["die_leg_a", "die_leg_b"]},
     "kneel": {"back": ["die_kneeling_b"], "forward": ["die_kneeling_a"], "side": ["die_kneeling_c", "die_kneeling_d"],
-              "knees": ["die_kneeling_a", "die_kneeling_c", "die_kneeling_d"],
+              "knees": ["die_kneeling_a", "die_kneeling_c", "die_kneeling_d", "die_gut_b"],
               "spin": ["die_kneeling_c", "die_kneeling_d"], "thrown": ["die_kneeling_b", "die_kneeling_c", "die_kneeling_d"],
-              "crawl": ["die_crawl_b"]},
+              "crawl": ["die_crawl_b"], "head": ["die_kneeling_a", "die_kneeling_b"], "gut": ["die_gut_b"],
+              "leg": ["die_kneeling_c", "die_kneeling_d"]},
     "prone": {"back": ["die_prone_b", "die_prone_c"], "forward": ["die_prone_a"], "side": ["die_prone_b", "die_prone_c"],
               "knees": ["die_prone_a"], "spin": ["die_prone_b", "die_prone_c"], "thrown": ["die_prone_b", "die_prone_c"],
-              "crawl": ["die_crawl_c"]},
+              "crawl": ["die_crawl_c"], "head": ["die_prone_a"], "gut": ["die_prone_b", "die_prone_c"],
+              "leg": ["die_prone_b", "die_prone_c"]},
     "cover": {"back": ["die_cover_a", "die_cover_b"], "forward": ["die_cover_c"], "side": ["die_cover_a", "die_cover_b"],
               "knees": ["die_cover_a", "die_cover_b", "die_cover_c"], "spin": ["die_cover_a", "die_cover_b"],
-              "thrown": ["die_kneeling_b", "die_cover_a", "die_cover_b"], "crawl": ["die_crawl_b"]},
+              "thrown": ["die_kneeling_b", "die_cover_a", "die_cover_b"], "crawl": ["die_crawl_b"],
+              "head": ["die_cover_c"], "gut": ["die_cover_a", "die_cover_b"], "leg": ["die_cover_a", "die_cover_b"]},
 }
 ABOUT_DEATHS = (
     "Deaths (Tools/battle_units/falls.py on ragdoll.py): every die_* clip named in `deaths` is a physics fall baked "
@@ -798,13 +975,32 @@ ABOUT_DEATHS = (
     "ground under him; the rifle leaves his hand and lands where it lands), so no two kinds fall alike and none sinks "
     "into the ground. Pick: deaths[stance][kind], stance stand, run, kneel, prone or cover (what he was doing when "
     "hit), kind as the Fates picker's man_fall kinds (forward, back, side, knees, spin, thrown) or crawl (wounded: he "
-    "falls, drags himself on a little, then goes still); one of the list by a hash of (block id, man). Play it once "
+    "falls, drags himself on a little, then goes still), or where he was hit when the scene knows it: head (he drops "
+    "where he stands), gut (he folds at the waist, then goes down), leg (that leg goes from under him); one of the "
+    "list by a hash of (block id, man). Play it once "
     "(loop false) and hold its last frame for the rest of the battle: the body stays where it fell. Each clip starts "
     "in the pose of `start` [clip, time] (blend into it over ~0.15 s from whatever he was doing); `end_offset` is "
     "where his pelvis ends (metres, his own axes; the clip is not in place: the pelvis and the rifle move); the "
     "weapon bone's last key is the rifle lying on the ground. Events: knee_down, body_fall, rifle_drop "
     "(and elbow_down in a crawl), at the time they touch. The older die_back, die_forward and die_kneel stay in the "
     "file as they were but are not in the table (they sink into the ground).")
+
+
+# (what rom.py measures across each cut: a joint's turn, and what it reads from the next joint's place, the knee's
+# for the hip, the elbow's and forearm's for the shoulder, the shoulder's for the collarbone; the severed limb's own
+# joints below the cut still hold and are still checked)
+CUT_KEYS = {"upperarm": ("sh_", "el_torso", "el_back", "el_up", "cl_"),
+            "lowerarm": ("el_", "pron", "sup", "sh_"),
+            "thigh": ("hip_",), "calf": ("kn_", "hip_")}
+
+
+def _across_cut(key, side, cuts):
+    """Whether a range-of-motion row measures a joint a limb was cut at (it no longer holds anything)."""
+    for c in cuts:
+        fam, sd = c.rsplit("_", 1)
+        if side == sd and any(key.startswith(p) for p in CUT_KEYS[fam]):
+            return True
+    return False
 
 
 def _job(rc):
@@ -824,12 +1020,19 @@ def _job(rc):
     m.clips["_check"] = c
     g = ground_check(m, "_check")
     rep = rom_check(m, "_check")
-    faults = [(r["key"] + r["side"], round(float(r["value"]), 1)) for r in rep["faults"]]
+    cuts = [p for (_, p) in rc.get("cut", [])]
+    faults = [(r["key"] + r["side"], round(float(r["value"]), 1)) for r in rep["faults"]
+              if not _across_cut(r["key"], r["side"], cuts)]
     Gw, X = m.fk(m.local_at(c, c["long"] + 1.0))
     g["chest_z"] = round(float(X[m.i("chest")][2]), 3)
     # (where the weapon ends: on the ground, near him; an unarmed man's weapon bone is in his hand, unseen)
     g["weapon_far"] = 0.0 if rd.unarmed else round(float(np.linalg.norm((X[m.i("weapon")] - X[m.i("pelvis")])[:2])), 2)
     g["weapon_z"] = 0.0 if rd.unarmed else round(float(X[m.i("weapon")][2]), 3)
+    if cuts:
+        # (each severed limb: where it lies from the man, how far it is off the ground, and whether it came down)
+        lab = {e["bone"]: e for e in c["events"] if e["fx"] == "limb_fall"}
+        g["limbs"] = {p: (round(float(np.linalg.norm((X[m.i(p)] - X[m.i("pelvis")])[:2])), 2),
+                          round(float(X[m.i(p)][2]), 3), p in lab) for p in cuts}
     return rc["name"], c, g, faults
 
 
@@ -877,10 +1080,12 @@ def _whip(man):
 LOOSE = {"whip": _whip}
 
 
-def _init(path):
+def _init(path, gore=False):
     data = json.load(open(path))
     m = RG.Man(data)
-    kit = KIT.get(os.path.basename(path), {})
+    if gore:
+        m = gore_man(m)
+    kit = KIT.get(os.path.basename(path).replace("_gore.json", ".json"), {})
     m.bag = kit.get("bag", {})
     m.loose = LOOSE[kit["loose"]](m) if kit.get("loose") else None
     m.chain = tuple(kit.get("chain", ()))
@@ -901,7 +1106,7 @@ def bake(path, workers=4, quick=None):
     from multiprocessing import Pool
     with Pool(workers, initializer=_init, initargs=(path,)) as p:
         out = p.map(_job, jobs, chunksize=1)
-    for n in names_all():
+    for n in (names_all() if not quick else [r["name"] for r in jobs]):     # (a try of a few leaves the rest)
         data["clips"].pop(n, None)
     rep = {}
     for name, c, g, faults in out:
@@ -914,6 +1119,31 @@ def bake(path, workers=4, quick=None):
     with open(tmp, "w") as f:
         json.dump(data, f, separators=(",", ":"))
     json.load(open(tmp))                        # (it reads back)
+    os.replace(tmp, path)
+    return data, rep
+
+
+def bake_gore(path, workers=4, quick=None):
+    """Every gore death of one gore twin's file (soldier_<ARMY>_gore.json), into it (the ones added before taken out
+    first), and its deaths_gore table. Returns (data, report)."""
+    data = json.load(open(path))
+    jobs = [r for r in gore_recipes() if not quick or r["name"] in quick]
+    from multiprocessing import Pool
+    with Pool(workers, initializer=_init, initargs=(path, True)) as p:
+        out = p.map(_job, jobs, chunksize=1)
+    for n in (gore_names() if not quick else [r["name"] for r in jobs]):
+        data["clips"].pop(n, None)
+    rep = {}
+    for name, c, g, faults in out:
+        data["clips"][name] = c
+        rep[name] = {"long": c["long"], "ground": g, "faults": faults}
+    have = set(data["clips"])
+    data["deaths_gore"] = {s: {k: [n for n in v if n in have] for k, v in kinds.items()} for s, kinds in GORE_TABLE.items()}
+    data["about_gore"] = ABOUT_GORE
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, separators=(",", ":"))
+    json.load(open(tmp))
     os.replace(tmp, path)
     return data, rep
 
@@ -958,10 +1188,10 @@ def about_kit(path, data):
     return ABOUT_DEATHS + kit.get("note", "") + extra
 
 
-def picture_sheet(data, out, names=None, cols=6, size=(360, 250)):
+def picture_sheet(data, out, names=None, cols=6, size=(360, 250), man=None):
     """The end of every death (how each man lies), for a look: one tile each, in the file's own colours."""
     from PIL import Image, ImageDraw
-    m = RG.Man(data)
+    m = man or RG.Man(data)
     look = dict(LOOK)
     look.update(data.get("colours", {}))
     names = names or [n for n in names_all() if n in data["clips"]]
@@ -973,7 +1203,9 @@ def picture_sheet(data, out, names=None, cols=6, size=(360, 250)):
         P = frames_of(m, c, [c["long"] + 1.0])[0]
         tgt = P.mean(0)
         tgt[2] = 0.15
-        im = render(m, P, size, cam={"target": tuple(tgt), "yaw": -50.0, "pitch": 38.0, "dist": 2.8}, look=look)
+        far = float(np.max(np.linalg.norm((P - tgt)[:, :2], axis=1)))      # (a limb thrown off: back far enough)
+        im = render(m, P, size, cam={"target": tuple(tgt), "yaw": -50.0, "pitch": 38.0, "dist": max(2.8, 1.9 * far)},
+                    look=look)
         ImageDraw.Draw(im).text((6, 4), n, fill=(0, 0, 0))
         sheet.paste(im, ((i % cols) * W, (i // cols) * H))
     sheet.save(out, quality=88)
@@ -995,7 +1227,15 @@ def main(argv):
                     help="any of clips, pictures; or rebag alone (re-key bag bones and the whip in the deaths there, no new falls)")
     ap.add_argument("--quick", default="", help="only these deaths (names, comma-separated), for a try")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--gore", action="store_true",
+                    help="the gore deaths (limbs off) into each army's gore twin, soldier_<ARMY>_gore.json, beside it")
+    ap.add_argument("--gore-dir", default="",
+                    help="with --gore: where the gore files are (default --dir); a twin not made yet is made there as "
+                         "a copy of the man's own file, for a try (his mesh is not split at the cuts: the pictures and "
+                         "checks drop what spans one)")
     a = ap.parse_args(argv)
+    if a.gore:
+        return main_gore(a)
     only = set(a.only.split(","))
     for army in a.armies.split(","):
         t = time.time()
@@ -1026,6 +1266,36 @@ def main(argv):
             out = os.path.join(a.dir, "pictures", "deaths", "ends_%s.jpg" % army)
             os.makedirs(os.path.dirname(out), exist_ok=True)
             picture_sheet(data, out)
+            print(army, "sheet", out, flush=True)
+
+
+def main_gore(a):
+    gdir = a.gore_dir or a.dir
+    for army in a.armies.split(","):
+        t = time.time()
+        own = os.path.join(a.dir, FILES.get(army, "soldier_%s.json" % army))
+        path = os.path.join(gdir, os.path.basename(own).replace(".json", "_gore.json"))
+        if not os.path.exists(path):
+            if not a.gore_dir or not os.path.exists(own):
+                print(army, "no gore twin", path, "(skipped; --gore-dir makes a try copy)", flush=True)
+                continue
+            import shutil
+            os.makedirs(gdir, exist_ok=True)
+            shutil.copyfile(own, path)
+            print(army, "no gore twin yet: trying on a copy of", own, flush=True)
+        data, rep = bake_gore(path, a.workers, set(a.quick.split(",")) - {""})
+        under = {n: r["ground"]["under_1cm"] for n, r in rep.items() if r["ground"]["under_1cm"]}
+        up = {n: r["ground"]["chest_z"] for n, r in rep.items() if r["ground"]["chest_z"] >= LIE_MAX}
+        limbs = {n: r["ground"].get("limbs") for n, r in rep.items()}
+        faults = {n: r["faults"] for n, r in rep.items() if r["faults"]}
+        print(army, "%d gore deaths in %.0f s" % (len(rep), time.time() - t), "NOT LYING DOWN:" if up else "all lie down",
+              up or "", "points under 1 cm:", under, "limbs (m from him, height, came down):", limbs, "rom faults:",
+              faults, flush=True)
+        if "pictures" in a.only:
+            m = gore_man(RG.Man(data))
+            out = os.path.join(gdir, "pictures", "deaths", "ends_%s_gore.jpg" % army)
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            picture_sheet(data, out, [n for n in gore_names() if n in data["clips"]], cols=4, man=m)
             print(army, "sheet", out, flush=True)
 
 
