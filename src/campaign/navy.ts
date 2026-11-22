@@ -1581,6 +1581,26 @@ export function keptAfloatPast(saved: Ships): string {
   return `the repair parties kept ${andList(parts)} afloat`;
 }
 
+/** What one fleet lost, and what damage control kept afloat, where a warship may be sunk (ruling 240): for afloatWatch. */
+export interface AfloatTold {
+  /** air: a strike on a fleet or a harbour; shipping: the older strike at shipping in a sea; action: a fleet action; toll: land bombers' monthly toll; shore: batteries answering a bombardment; torpedo: a submarine's torpedo. */
+  route: 'air' | 'shipping' | 'action' | 'toll' | 'shore' | 'torpedo';
+  nat: string;
+  sunk: Ships;
+  saved: Ships;
+  /** The older strike at shipping only: the fleet after the strike, the share the fight sank at, and the fleet's damage control. */
+  fleet?: Fleet;
+  frac?: number;
+  dc?: number;
+}
+
+/**
+ * A war runner's eyes on ruling 240 (as staff.ts's strengthWatch and ai.ts's landingWatch): `tell` hears of each fleet
+ * as it takes its losses on any of the six routes, `strike` of each older strike at shipping before its dice are thrown
+ * (with the assessment it is flown on). Nothing in the game sets either, and they move nothing.
+ */
+export const afloatWatch: { tell: ((e: AfloatTold) => void) | null; strike: ((a: unknown, nat: string, target: number) => void) | null } = { tell: null, strike: null };
+
 // ---- The month at sea -----------------------------------------------------------------------------
 
 /**
@@ -2076,6 +2096,7 @@ function torpedoes(g: Game, nat: string): void {
     if (f.ships[cls] <= 0) continue;
     const sinks = u < p / dcOf(g, f.nat);
     if (sinks) { f.ships[cls]--; f.lost[cls]++; }
+    afloatWatch.tell?.({ route: 'torpedo', nat: f.nat, sunk: { ...none(), [cls]: sinks ? 1 : 0 }, saved: { ...none(), [cls]: sinks ? 0 : 1 } });
     f.ready = Math.max(0, f.ready - 0.05);
     if (sinks) headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
     // (The ship is hit and the repair parties save it: the fleet is the less fit for sea all the same.)
@@ -2114,6 +2135,7 @@ function airAttack(g: Game, f: Fleet): void {
   const kept = none();
   const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)), seaRng(g, `air:${f.id}`), SURFACE, dcOf(g, f.nat), kept);
   f.ready = Math.max(0, f.ready - 0.1);
+  afloatWatch.tell?.({ route: 'toll', nat: f.nat, sunk, saved: kept });
   // (Rider 2 of 22 November: the lead-in has named the fleet, so the line names it once: "One of its cruisers is ...".)
   const afloat = keptAfloat(f, kept, 'its');
   if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of ${fleetName(f)} in the ${g.seas[f.zone].name}.${afloat ? ` ${afloat}` : ''}`, f.nat, undefined, { arm: 'air', lost: f.nat });
@@ -2313,6 +2335,7 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const keptA = mine.map(() => none()), keptD = met.map(() => none());
     mine.forEach((f, i) => { att[i].sunk = sinkShips(f, won ? light : hard, rng, CLASSES, dcOf(g, f.nat), keptA[i]); });
     met.forEach((f, i) => { def[i].sunk = sinkShips(f, won ? hard : light, rng, CLASSES, dcOf(g, f.nat), keptD[i]); });
+    if (afloatWatch.tell) { mine.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: att[i].sunk, saved: keptA[i] })); met.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: def[i].sunk, saved: keptD[i] })); }
     const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
     const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
     const lines: TicketLine[] = [

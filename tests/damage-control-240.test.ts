@@ -10,13 +10,14 @@ import { planRaid } from '../src/campaign/airwar';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { bombard, planBombard } from '../src/campaign/fleets';
 import { createGame, relocate, setWar } from '../src/campaign/game';
-import { FLEETS, NAVY, atSea, keptAfloat, keptAfloatPast, lossOf, navalUpkeep, sail, seaBattles, shipCount, shipList, sinkShips, torpedoRisk, toughOf, zoneOf } from '../src/campaign/navy';
+import { FLEETS, NAVY, afloatWatch, atSea, keptAfloat, keptAfloatPast, lossOf, navalUpkeep, sail, seaBattles, shipCount, shipList, sinkShips, torpedoRisk, toughOf, zoneOf } from '../src/campaign/navy';
 import { PLANS } from '../src/campaign/plans';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { lossAt, planSeaBattle, shares } from '../src/campaign/seaplan';
 import { startOpen } from '../src/campaign/staff';
 import { SHIP_RESEARCH, dcOf, techOf } from '../src/campaign/tech';
 import { beginHuman, endHuman, humanUp, orderFleet, runTurnAI, stepAI } from '../src/campaign/turn';
+import type { AfloatTold } from '../src/campaign/navy';
 import type { AirFleet, Fleet, Game, ShipClass, Ships } from '../src/campaign/types';
 
 // The switch is flipped in memory and put back after every test (as tests/wings-abroad.test.ts does with its own).
@@ -1108,3 +1109,34 @@ describe('ruling 240, C3: the switch off with the research held (a save made wit
   });
 });
 
+describe("ruling 240: the war runner's watcher (navy.ts afloatWatch) hears and moves nothing", () => {
+  afterEach(() => { afloatWatch.tell = null; afloatWatch.strike = null; });
+  it('a strike on a fleet, the older strike at shipping and a month at sea: the same saves with it set, and it hears what was sunk and saved', () => {
+    const { g, home } = duel();
+    const ally = named(g, '2nd Fleet');
+    setWar(g, 'UK', ally.nat);
+    put(g, ally, 'natl');
+    R.dc.on = true;
+    give(g, 'GER');
+    const snap = saveGame(g);
+    const play = (watch: boolean): { save: string; told: AfloatTold[]; strikes: number; rep: { fleet: Ships[]; shipping: string } } => {
+      const told: AfloatTold[] = [];
+      let strikes = 0;
+      if (watch) { afloatWatch.tell = (e) => told.push({ ...e, sunk: { ...e.sunk }, saved: { ...e.saved }, fleet: undefined }); afloatWatch.strike = () => { strikes++; }; }
+      const h1 = loadGame(snap)!, h2 = loadGame(snap)!;
+      const a = fly(h1, 'UK', 'fleet', named(h1, 'Battle Fleet').id, [wing(h1, named(h1, 'Home Fleet'), 'bmr')], ':w1')!;
+      const b = fly(h2, 'UK', 'strike', home.zone, [wing(h2, named(h2, 'Home Fleet'), 'bmr')], ':w2')!;
+      afloatWatch.tell = null; afloatWatch.strike = null;
+      return { save: saveGame(h1) + saveGame(h2), told, strikes, rep: { fleet: a.ships!.map((x) => x.sunk), shipping: b.result } };
+    };
+    const off = play(false), on = play(true);
+    expect(on.save).toBe(off.save);
+    expect(on.rep).toEqual(off.rep);
+    expect(on.strikes).toBe(1);
+    const air = on.told.filter((e) => e.route === 'air'), sea = on.told.filter((e) => e.route === 'shipping');
+    expect(air.map((e) => e.nat)).toEqual(['GER']);
+    expect(air[0].sunk).toEqual(off.rep.fleet[0]);
+    expect(sea.map((e) => e.nat).sort()).toEqual(['GER', 'ITA']);
+    for (const e of sea) { expect(e.dc).toBe(e.nat === 'GER' ? DC : 1); expect(e.frac).toBeGreaterThan(0); if (e.nat === 'ITA') expect(shipCount(e.saved)).toBe(0); }
+  });
+});

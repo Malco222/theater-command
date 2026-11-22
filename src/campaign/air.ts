@@ -23,7 +23,7 @@ import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
-import { NAVY, atSea, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
+import { NAVY, afloatWatch, atSea, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
@@ -1719,6 +1719,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         kept[c] = Math.min(x.ships[c], n0) - k;
         x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k; keptAll[c] += kept[c];
       }
+      afloatWatch.tell?.({ route: 'air', nat: x.nat, sunk: struck![i].sunk, saved: kept });
       if (shipCount(kept)) afloat.push({ x, kept });
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
@@ -1831,10 +1832,12 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const sunk = none();
     // (Ruling 240, C3: each fleet's damage control eases its own losses, on the same draws; the ships it kept afloat are told.)
     const afloat: string[] = [];
+    afloatWatch.strike?.(a, nat, target);
     for (const f of g.fleets) {
       if (f.zone !== target || !atSea(f) || !atWar(g, nat, f.nat) || !surfaceShips(f)) continue;
       const kept = none();
       const s = sinkShips(f, frac, rng, [...SURFACE], dcOf(g, f.nat), kept);
+      afloatWatch.tell?.({ route: 'shipping', nat: f.nat, sunk: s, saved: kept, fleet: f, frac, dc: dcOf(g, f.nat) });
       f.ready = Math.max(0, f.ready - 0.1);
       for (const c of SURFACE) sunk[c] += s[c];
       if (shipCount(kept)) afloat.push(keptAfloat(f, kept));

@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -411,6 +411,7 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   const kept = none();
   const sunk = plan.reply > 0 ? sinkShips(f, shoreReply(plan.fort), rng, ['ca', 'dd'], dcOf(g, f.nat), kept) : none();
   if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
+  afloatWatch.tell?.({ route: 'shore', nat: f.nat, sunk, saved: kept });
   const afloat = keptAfloat(f, kept);
   if (afloat) result += ` ${afloat}`;
   f.shelled = g.turn;
