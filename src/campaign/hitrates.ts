@@ -12,7 +12,7 @@
 
 import data from '../../data/campaign/hitrates.json';
 import { turnToDate } from '../core/ticket';
-import type { Game } from './types';
+import type { Game, ShipClass } from './types';
 
 export type HitKind = 'dive' | 'torpedo' | 'level' | 'mast';
 export const HIT_KINDS: HitKind[] = ['dive', 'torpedo', 'level', 'mast'];
@@ -29,13 +29,35 @@ export const HITS = data as unknown as {
   types: Record<string, HitKind>;
   landShares: Record<string, [number, Partial<Record<HitKind, number>>][]>;
   landKinds: Record<string, [number, HitKind[]][]>;
-  takes: Record<'bb' | 'cv' | 'ca' | 'dd' | 'ss', number>;
-  takesAnchor: Partial<Record<'bb' | 'cv' | 'ca' | 'dd' | 'ss', number>>;
+  takes: Record<ShipClass, number>;
+  takesAnchor: Partial<Record<ShipClass, number>>;
+  kindTakes: Record<Jug, Record<ShipClass, number | null>>;
+  kindTakesAnchor: Record<Jug, Partial<Record<ShipClass, number | null>>>;
 };
 
-/** Hits to sink each class with hit rates by kind (the record's counts; the design director's 19:48Z): at anchor its own rows where it has one. */
-export function takesOf(harbour: boolean): Record<'bb' | 'cv' | 'ca' | 'dd' | 'ss', number> {
+/** The kind form's two jugs: bombs (dive, level, mast height) and torpedoes. */
+export type Jug = 'bomb' | 'torpedo';
+export const jugOf = (k: HitKind): Jug => (k === 'torpedo' ? 'torpedo' : 'bomb');
+
+/** The all-kind hits to sink each class (the design director's 19:48Z), the reference the kind form replaced: at anchor its own rows where it has one. */
+export function takesOf(harbour: boolean): Record<ShipClass, number> {
   return harbour ? { ...HITS.takes, ...HITS.takesAnchor } : HITS.takes;
+}
+
+/** Hits of each kind to sink each class (the kind form; the design director's 19:53Z and 19:54Z): null where the record has no case. */
+export function kindTakesOf(harbour: boolean): Record<Jug, Record<ShipClass, number | null>> {
+  const T = HITS.kindTakes, A = HITS.kindTakesAnchor;
+  return harbour ? { bomb: { ...T.bomb, ...A.bomb }, torpedo: { ...T.torpedo, ...A.torpedo } } : T;
+}
+
+/**
+ * Ships of a class that bombs and torpedoes on it should sink (the kind form): each kind's hits over its own take, added.
+ * A kind with no case for the class adds nothing: she is hit, not sunk by it (bombs on a battleship at sea).
+ */
+export function sunkByKind(c: ShipClass, bombs: number, torpedoes: number, harbour: boolean): number {
+  const t = kindTakesOf(harbour);
+  const part = (hits: number, take: number | null | undefined): number => (take && take > 0 ? hits / take : 0);
+  return part(bombs, t.bomb[c]) + part(torpedoes, t.torpedo[c]);
 }
 
 /** True in a campaign played with hit rates by kind: the grand campaign, begun with the switch on. */

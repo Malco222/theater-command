@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { assessAir, fly, shipHits, shipHitsBy, shipLaw, type ShipLaw } from '../src/campaign/air';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { createGame } from '../src/campaign/game';
-import { HITS, deckMix, hitRate, hitRatesOn, hitRatesShipped, hitsLine, landMix, mixOf, setHitRates, strikeRates, takesOf } from '../src/campaign/hitrates';
+import { HITS, deckMix, hitRate, hitRatesOn, hitRatesShipped, hitsLine, kindTakesOf, landMix, mixOf, setHitRates, strikeRates, sunkByKind, takesOf } from '../src/campaign/hitrates';
 import { atSea, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -177,17 +177,80 @@ describe('the law with hit rates by kind', () => {
     expect(sum).toBeCloseTo(h.hits, 6);
   });
 
-  it('sinks by the record\'s hits to sink with the switch on: battleship 6.25 (7 at anchor), carrier 5.7, cruiser 8, destroyer 2.25', () => {
+  it('keeps the all-kind takes of 19:48Z as the reference: battleship 6.25 (7 at anchor), carrier 5.7, cruiser 8, destroyer 2.25', () => {
     expect(takesOf(false)).toEqual({ bb: 6.25, cv: 5.7, ca: 8, dd: 2.25, ss: 1 });
     expect(takesOf(true).bb).toBe(7);
+  });
+
+  it('lays the kind form\'s takes: bombs and torpedoes each against their own, from the record\'s pure cases', () => {
+    const sea = kindTakesOf(false), anchor = kindTakesOf(true);
+    expect(sea.bomb).toEqual({ bb: null, cv: 6.5, ca: 8, dd: 3, ss: 1 });
+    expect(sea.torpedo).toEqual({ bb: 5.25, cv: 4, ca: 8, dd: 1.6667, ss: 1 });
+    expect(anchor.bomb.bb).toBe(7);
+    expect(anchor.torpedo.bb).toBe(6);
+    expect(anchor.bomb.cv).toBe(6.5);
+  });
+
+  // The tests before code (air-battles/hitrates/form-aim-and-kind-1122.md; the design director's 19:54Z): each case's
+  // bombs and torpedoes, and the ships the kind form says they sink, against the record.
+  it('sinks the record\'s battleships at sea by torpedo, and none by bombs', () => {
+    // Repulse 5 torpedoes and Prince of Wales 5.5, a bomb each: two sunk, by construction.
+    expect(sunkByKind('bb', 1, 5, false) + sunkByKind('bb', 1, 5.5, false)).toBeCloseTo(2, 6);
+    // No battleship at sea was sunk by bombs alone: bombs hit her but do not sink her.
+    expect(sunkByKind('bb', 30, 0, false)).toBe(0);
+  });
+
+  it('sinks the carriers as the record has them: Yorktown afloat on 4 June, Lexington and Hornet sunk, all five together', () => {
+    expect(sunkByKind('cv', 3, 2, false)).toBeCloseTo(0.96, 2); // Yorktown, 4 June: afloat
+    expect(sunkByKind('cv', 3, 2, false)).toBeLessThan(1);
+    expect(sunkByKind('cv', 2, 3.5, false)).toBeGreaterThan(1); // Lexington, sunk (1.18)
+    expect(sunkByKind('cv', 3, 3, false)).toBeGreaterThan(1); // Hornet, sunk (1.21)
+    // Taiho 1 torpedo, Shokaku 3.5, Lexington, Hornet, and Yorktown in the end (3 bombs, 4 torpedoes): 5 sunk.
+    const five = [[0, 1], [0, 3.5], [2, 3.5], [3, 3], [3, 4]].reduce((s, [b, t]) => s + sunkByKind('cv', b, t, false), 0);
+    expect(five).toBeCloseTo(5, 1);
+    // A reading, not a fault: Taiho (0.25) and Shokaku (0.88) sank by fuel vapour and damage control, which the field does not know.
+    expect(sunkByKind('cv', 0, 1, false)).toBeCloseTo(0.25, 6);
+    expect(sunkByKind('cv', 0, 3.5, false)).toBeCloseTo(0.875, 6);
+  });
+
+  it('sinks battleships at anchor by both kinds: West Virginia sunk, Nevada beached, the four together over the record by a fifth', () => {
+    expect(sunkByKind('bb', 7, 0, true)).toBeCloseTo(1, 6); // bombs 7 at anchor
+    expect(sunkByKind('bb', 0, 6, true)).toBeCloseTo(1, 6); // torpedoes 6 (Oklahoma)
+    expect(sunkByKind('bb', 2, 6.5, true)).toBeGreaterThan(1); // West Virginia (1.37)
+    expect(sunkByKind('bb', 6, 1, true)).toBeCloseTo(1.02, 2); // Nevada, beached (half)
+    // California (2 bombs, 2.5 torpedoes) comes to 0.70 against sunk: a reading, the four together 3.1 against 2.5.
+    expect(sunkByKind('bb', 2, 2.5, true)).toBeCloseTo(0.70, 2);
+    const four = [[2, 6.5], [2, 2.5], [6, 1]].reduce((s, [b, t]) => s + sunkByKind('bb', b, t, true), 0);
+    expect(four).toBeCloseTo(3.1, 1);
+  });
+
+  it('sinks cruisers and destroyers by their own takes: Mikuma and Mogami one between them, Sims by 3 bombs, 3 by 5 torpedoes', () => {
+    expect(sunkByKind('ca', 3, 0, false) + sunkByKind('ca', 5, 0, false)).toBeCloseTo(1, 6);
+    expect(sunkByKind('ca', 0, 8, false)).toBeCloseTo(1, 6); // torpedoes on a cruiser: the all-kind take, a gap
+    expect(sunkByKind('dd', 3, 0, false)).toBeCloseTo(1, 6);
+    expect(sunkByKind('dd', 0, 5, false)).toBeCloseTo(3, 3);
+  });
+
+  it('keeps a strike\'s bombs and torpedoes in two jugs, each shared over the classes by the aim', () => {
+    const weight = 40 * 2 + 40 * 3 + 80 * 1 + 160 * 0.5;
+    // Midway: dive bombers only score under the Japanese fighters (America's torpedoes 0): no battleship at sea sinks.
     const r = strikeRates([{ nat: 'USA', bmr: 100, deck: true }], JUN42, false, true)!;
     const h = shipHitsBy(law(r), 100);
-    const weight = 40 * 2 + 40 * 3 + 80 * 1 + 160 * 0.5;
-    expect(h.sunk.bb).toBeCloseTo((h.hits * 40 * 2) / weight / 6.25, 8);
-    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 3) / weight / 5.7, 8);
-    expect(h.sunk.dd).toBeCloseTo((h.hits * 160 * 0.5) / weight / 2.25, 8);
+    expect(h.sunk.bb).toBe(0);
+    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 3) / weight / 6.5, 8);
+    expect(h.sunk.ca).toBeCloseTo((h.hits * 80 * 1) / weight / 8, 8);
+    expect(h.sunk.dd).toBeCloseTo((h.hits * 160 * 0.5) / weight / 3, 8);
+    // Japan in the Coral Sea: torpedoes and dive bombs, each against its own take.
+    const j = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], MAY42, false, false)!), 50);
+    const bombs = j.kinds!.dive + j.kinds!.level + j.kinds!.mast, torps = j.kinds!.torpedo;
+    expect(torps).toBeGreaterThan(0);
+    expect(j.sunk.bb).toBeCloseTo((torps * 40 * 2) / weight / 5.25, 8);
+    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 3) / weight / 6.5 + (torps * 40 * 3) / weight / 4, 8);
+    expect(j.sunk.dd).toBeCloseTo((bombs * 160 * 0.5) / weight / 3 + (torps * 160 * 0.5) / weight / 1.6667, 8);
+    // At anchor (Pearl, turn 28), bombs sink battleships too.
     const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
-    expect(at.sunk.bb).toBeCloseTo((at.hits * 40 * 2) / weight / 7, 8);
+    const ab = at.kinds!.dive + at.kinds!.level + at.kinds!.mast, atT = at.kinds!.torpedo;
+    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 2) / weight / 7 + (atT * 40 * 2) / weight / 6, 8);
   });
 
   it('reads a strike on a fleet with the switch on, and says the hits by kind on the raid card', () => {
