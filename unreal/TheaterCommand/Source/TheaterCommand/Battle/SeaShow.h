@@ -862,6 +862,7 @@ namespace SeaShow
 			double Long = 100.0, Beam = 10.0, Free = 5.0; // her length, beam and height of deck over the sea
 			double T0 = 0.0, For = 100.0;                 // she began to go, and took this long
 			double Start = 0.0, End = 0.0;                // her men go over the side between these
+			double BoatsFrom = -1.0;                      // her boats lowered from (below 0: from Start); one left, once she has nearly lost her way
 			int Men = 0, Out = 0, Dead = 0;               // men the show keeps, gone over so far, of them dead
 			int Rafts = 0, RaftsOut = 0, Boats = 0, BoatsOut = 0, Bits = 0, BitsOut = 0;
 			Vec Oil0;                                     // where her oil began
@@ -878,6 +879,7 @@ namespace SeaShow
 			Vec OilEnd, Drift;                            // where her oil ended (where she went under), and how far it has drifted
 			double TrackHdg = 0.0, TrackLen = 0.0;        // her oil's way along her last track
 			bool bGone = false, bLit = false, bDue = false;
+			bool bLeft = false;                           // her men left her (sea:abandon): over one side from her waist and stern, as she loses her way
 			// (the ships near her men and her wreckage, looked for each second, and found again each step)
 			std::vector<int> Near;
 			std::vector<const Hull*> NearNow;
@@ -896,6 +898,7 @@ namespace SeaShow
 			int Room = 0, Hold = 0; // men it takes aboard, men it lets hold on
 			uint32_t InMask = 0, HoldMask = 0; // the places aboard and round it taken (or promised to a man swimming to it)
 			int W = 0;            // its wreck (Wrecked's place)
+			int Group = 0;        // men aboard it, holding on to it or gathered round it (counted each step)
 		};
 		struct Man
 		{
@@ -912,6 +915,8 @@ namespace SeaShow
 			bool bSwept = false;  // pushed aside by a ship's bow, once or more
 			double Until = 0.0;   // climbing: when he is aboard; going under: when he is gone
 			int To = -1;          // climbing: the rescuer (her key)
+			int Near = -1;        // the float he keeps by, treading water in its group with no place on it (its key), -1 none
+			Vec NearOff;          // his place by it (its own frame)
 		};
 		std::vector<Wreck> Wrecked;
 		std::vector<Floater> Afloat;
@@ -925,6 +930,9 @@ namespace SeaShow
 		/** An abandoned ship (sea:abandon): her going down drawn over this long until the battle says she goes (she settles
 		 * a sixtieth of the way a minute while her men leave her), and the way she loses a second, her engines stopped. */
 		static constexpr double AbandonedFor = 3600.0, AbandonedSlowing = 0.3;
+		/** The share of the wind's speed an abandoned ship drifts at, empty and stopped: far more than her men in the water (a
+		 * sixtieth) or her rafts (a thirtieth), so that she drifts away from them (the art director, 22 November 18:54Z). */
+		static constexpr double AbandonedLeeway = 0.05;
 		bool bStarted = false;
 		bool bBigBlast = false;
 		int NextKey = 1;
