@@ -259,35 +259,45 @@ describe('the law with hit rates by kind', () => {
     expect(sunkByKind('dd', 1, 0, false) + sunkByKind('dd', 2, 0, false)).toBeCloseTo(1, 6); // Suzutsuki lived, Kasumi scuttled
   });
 
-  it('lays the aim from the record\'s hits by class at sea: carrier 2.34, battleship 1, cruiser 0.148, destroyers none', () => {
-    expect(HITS.aim).toEqual({ bb: 1, cv: 2.34, ca: 0.148, dd: 0, ss: 0 });
-    // A screen of destroyers draws no hits while a bigger ship is there to hit (none of 62 present was hit at sea).
-    expect(shipAimOf({ bb: 0, cv: 1, ca: 0, dd: 8, ss: 0 }).dd).toBe(0);
-    expect(shipAimOf({ bb: 0, cv: 0, ca: 1, dd: 8, ss: 0 }).dd).toBe(0);
-    // A strike that finds only destroyers shares its hits by ship count; submarines stay unaimed.
-    expect(shipAimOf({ bb: 0, cv: 0, ca: 0, dd: 3, ss: 2 })).toEqual({ bb: 1, cv: 1, ca: 1, dd: 1, ss: 0 });
+  it('lays the aim matched strike by strike (the design director\'s 20:46Z): carrier 24.49, battleship 1, cruiser 0.916, destroyer 0.0268', () => {
+    expect(HITS.aim).toEqual({ bb: 1, cv: 24.49, ca: 0.916, dd: 0.0268, ss: 0 });
+    // The record's shares come back: Midway's carriers draw about 95% (the record all), Ten-Go's battleship, cruiser and
+    // destroyers 48, 44 and 8 (the record 47, 44, 9), Shoho's cruisers 13 (the record none).
+    const share = (have: Partial<Record<'bb' | 'cv' | 'ca' | 'dd', number>>, c: 'bb' | 'cv' | 'ca' | 'dd'): number => {
+      const w = (['bb', 'cv', 'ca', 'dd'] as const).reduce((t, k) => t + (have[k] ?? 0) * HITS.aim[k], 0);
+      return ((have[c] ?? 0) * HITS.aim[c]) / w;
+    };
+    expect(share({ cv: 4, bb: 2, ca: 3, dd: 12 }, 'cv')).toBeCloseTo(0.95, 2);
+    expect(share({ bb: 1, ca: 1, dd: 6 }, 'bb')).toBeCloseTo(0.48, 2);
+    expect(share({ bb: 1, ca: 1, dd: 6 }, 'dd')).toBeCloseTo(0.08, 2);
+    expect(share({ cv: 1, ca: 4, dd: 1 }, 'ca')).toBeCloseTo(0.13, 2);
+    // Every surface class is aimed at now; a strike that finds only destroyers shares its hits by ship count; submarines stay unaimed.
+    expect(shipAimOf({ bb: 0, cv: 1, ca: 0, dd: 8, ss: 0 })).toBe(HITS.aim);
+    expect(shipAimOf({ bb: 0, cv: 0, ca: 0, dd: 3, ss: 2 }).ss).toBe(0);
   });
 
   it('keeps a strike\'s bombs and torpedoes in two jugs, each shared over the classes by the record\'s aim', () => {
-    const weight = 40 * 1 + 40 * 2.34 + 80 * 0.148 + 160 * 0;
+    const A = HITS.aim, have = { bb: 40, cv: 40, ca: 80, dd: 160 };
+    const weight = have.bb * A.bb + have.cv * A.cv + have.ca * A.ca + have.dd * A.dd;
+    const part = (c: 'bb' | 'cv' | 'ca' | 'dd'): number => (have[c] * A[c]) / weight;
     // Midway: dive bombers only score under the Japanese fighters (America's torpedoes 0): no battleship at sea sinks.
     const r = strikeRates([{ nat: 'USA', bmr: 100, deck: true }], JUN42, false, true)!;
     const h = shipHitsBy(law(r), 100);
     expect(h.sunk.bb).toBe(0);
-    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 2.34) / weight / 30.876, 8);
-    expect(h.sunk.ca).toBeCloseTo((h.hits * 80 * 0.148) / weight / 8, 8);
-    expect(h.sunk.dd).toBe(0);
+    expect(h.sunk.cv).toBeCloseTo((h.hits * part('cv')) / 30.876, 8);
+    expect(h.sunk.ca).toBeCloseTo((h.hits * part('ca')) / 8, 8);
+    expect(h.sunk.dd).toBeCloseTo((h.hits * part('dd')) / 3, 8);
     // Japan in the Coral Sea: torpedoes and dive bombs, each against its own take.
     const j = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], MAY42, false, false)!), 50);
     const bombs = j.kinds!.dive + j.kinds!.level + j.kinds!.mast, torps = j.kinds!.torpedo;
     expect(torps).toBeGreaterThan(0);
-    expect(j.sunk.bb).toBeCloseTo((torps * 40 * 1) / weight / 5.25, 8);
-    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 2.34) / weight / 30.876 + (torps * 40 * 2.34) / weight / 3.036, 8);
-    expect(j.sunk.dd).toBe(0);
+    expect(j.sunk.bb).toBeCloseTo((torps * part('bb')) / 5.25, 8);
+    expect(j.sunk.cv).toBeCloseTo((bombs * part('cv')) / 30.876 + (torps * part('cv')) / 3.036, 8);
+    expect(j.sunk.dd).toBeCloseTo((bombs * part('dd')) / 3 + (torps * part('dd')) / 1.5, 8);
     // At anchor (Pearl, turn 28), bombs sink battleships too.
     const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
     const ab = at.kinds!.dive + at.kinds!.level + at.kinds!.mast, atT = at.kinds!.torpedo;
-    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 1) / weight / 10 + (atT * 40 * 1) / weight / 6, 8);
+    expect(at.sunk.bb).toBeCloseTo((ab * part('bb')) / 10 + (atT * part('bb')) / 6, 8);
   });
 
   it('puts every hit on the destroyers when they are all a strike finds (Sims)', () => {
@@ -325,7 +335,7 @@ describe('the law with hit rates by kind', () => {
     expect(on.armed).toEqual([true]);
     const off: ShipLaw = { ...on, armed: undefined };
     // The same hits sink more carriers caught armed aboard (bombs 3.25 against 30.876 off deck), and nothing else moves.
-    const a = shipHitsBy(on, 40), b = shipHitsBy(off, 40);
+    const a = shipHitsBy(on, 12), b = shipHitsBy(off, 12);
     expect(a.hits).toBeCloseTo(b.hits, 9);
     expect(b.sunk.cv).toBeLessThan(1);
     expect(a.sunk.cv).toBeGreaterThan(b.sunk.cv);
