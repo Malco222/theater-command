@@ -309,6 +309,26 @@ namespace LandField
 		/** A region's kit slot: a tree. The game draws it far off as a crown of some 40 triangles with no shadow and not
 		 * past its trees' reach (GS9), as the bocage's own trees; the region sets it in KitLook. */
 		bool bTree = false;
+		/** A region's kit slot: its middle level where its file has one, drawn from MidFrom metres (GS9; empty: none). */
+		Mesh Mid;
+		float MidFrom = 60.0f;
+		/**
+		 * A region's kit slot: its class for the game's far draw (GS9 by class, the frame budget of 22 November,
+		 * production/theatre-budgets-1122): Tree as bTree (plain, then a crown, none past the trees' reach); Shrub, a
+		 * bush or a small rock (plain from the shrubs' distance, its shadow to 250 m, none past the shrubs' reach); Big,
+		 * an outcrop, a pole, a stack or a tower (plain and culled at the trees' distances, no shadow past the crowns');
+		 * House, a building (plain from 300 m, never culled, its shadow to 1,200 m). Thing: as before. LandField sets one
+		 * from the slot's use and size where the region's KitLook leaves it Thing.
+		 */
+		enum class Draw : uint8_t
+		{
+			Thing,
+			Tree,
+			Shrub,
+			Big,
+			House
+		};
+		Draw Class = Draw::Thing;
 	};
 
 	/**
@@ -431,6 +451,10 @@ namespace LandField
 		const std::vector<Tile>& Ring() const;
 
 		const BaseMesh& BaseOf(Base B) const;
+		/** The region's step down the frame budget's ladder of nearer far-draw distances (0, GS9's own, to 4, the
+		 * nearest: LandScape::Region::DrawStep); -1 where the ground has no region (the bocage and the steppe draw as
+		 * they always have). */
+		int DrawStep() const;
 		/** Every instance of a base (none for the clutter bases: see Clutter). */
 		const std::vector<Placed>& Instances(Base B) const;
 
