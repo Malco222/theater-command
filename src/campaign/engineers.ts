@@ -15,7 +15,7 @@ import { groundRules } from './ground';
 import { ENGINEERING, bridgeDown, crossingsAt, downBetween, farBank, rebuildAt, riverName, type Crossing } from './rivers';
 import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach } from './game';
 import { orderCorps, raiseSite } from './economy';
-import { mendRail, onNet, railCut, railheads, railsAt, rebuildFactory, ruinedAt } from './rails';
+import { mendRail, onNet, railCut, railheads, railsAt, rebuildFactory, ruinedAt, noTrain } from './rails';
 import { AIRWAR, airWar, airfieldsHold } from './air';
 
 export type JobKind = 'bridge' | 'rail' | 'plant' | 'works' | 'airfield' | 'mines' | 'demolish';
@@ -194,7 +194,7 @@ function wanted(g: Game, nat: string): Site[] {
     if (site.spans.length) out.push(site);
     // A cut line at the end of the working net: relaying it brings the railhead a province forward. One further
     // out waits its turn. It matters most where the army stands on it or next to it.
-    if (head && railCut(g, r.id) && (head[r.id] === 0 || railsAt(r.id).some((j) => head[j] === 0 && !railCut(g, j) && !downBetween(g, r.id, j)))) {
+    if (head && railCut(g, r.id) && (head[r.id] === 0 || railsAt(r.id).some((j) => head[j] === 0 && !railCut(g, j) && !noTrain(g, r.id, j)))) {
       out.push({ reg: r.id, score: own || r.nb.some((j) => troops(g.regions[j])) ? 3 : 2, what: 'rail', spans: [] });
     }
     // A factory of its own that bombing has left in ruins.

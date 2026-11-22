@@ -13,7 +13,8 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { STRENGTH, reckon } from '../src/campaign/ashore';
-import { addCorps, assess, createGame, declareWar, moveCorps, resolveBattle } from '../src/campaign/game';
+import { addCorps, assess, computeSupply, createGame, declareWar, moveCorps, railInto, resolveBattle } from '../src/campaign/game';
+import { railOpen } from '../src/campaign/rails';
 import { farGround } from '../src/campaign/marches';
 import { NAVY, craftOf, liftLeft, strait, straitBars, straitCut, straitLift, whyNotCross } from '../src/campaign/navy';
 import { blocked, whyBlocked } from '../src/campaign/rivers';
@@ -154,6 +155,35 @@ describe('the strait: every short crossing is water', () => {
     expect(farGround(g, wave[0]).get(got.id)?.prev).not.toBe(jut.id);
     const line = assess(g, wave, got).lines.find((l) => l.label === 'Open sea')!;
     expect(line.effect).toMatch(/2 corps cannot come over it and take no part/);
+  });
+
+  it('cut means cut: no supply and no railway runs over the Kattegat, and both still run over a crossing', () => {
+    const g = start();
+    const jut = g.byName.Jutland, got = g.byName.Gothenburg, zea = g.byName.Zealand;
+    declareWar(g, 'GER', 'DEN');
+    declareWar(g, 'GER', 'SWE');
+    give(g, jut, 'GER');
+    give(g, zea, 'GER');
+    give(g, got, 'GER');
+    // (Gothenburg alone of Sweden is Germany's, and it is no harbour: its only way home by land is Jutland.)
+    expect(got.port).toBeFalsy();
+    expect(got.nb.filter((j) => g.regions[j].ctrl === 'GER').map((j) => g.regions[j].name)).toEqual(['Jutland']);
+    // Off: the chart's border carries the stores and the trains, as it always did.
+    computeSupply(g);
+    expect(g.supply.GER[got.id]).toBeTruthy();
+    expect(railOpen(g, 'GER', jut.id, got.id)).toBe(true);
+    expect(railInto(g, 'GER', [jut.id])[got.id]).toBe(1);
+    on();
+    computeSupply(g);
+    expect(g.supply.GER[jut.id]).toBeTruthy();
+    expect(g.supply.GER[got.id]).toBeFalsy();
+    expect(railOpen(g, 'GER', jut.id, got.id)).toBe(false);
+    expect(railOpen(g, 'GER', got.id, jut.id)).toBe(false);
+    expect(railInto(g, 'GER', [jut.id])[got.id]).toBe(0);
+    // A crossing is not cut: the Great Belt carries supply and the train ferry as before.
+    expect(g.supply.GER[zea.id]).toBeTruthy();
+    expect(railOpen(g, 'GER', jut.id, zea.id)).toBe(true);
+    expect(railInto(g, 'GER', [jut.id])[zea.id]).toBe(1);
   });
 
   it('a crossing\'s own craft carry its record\'s month to a bank the side holds, with no lift; the rest goes by ship', () => {

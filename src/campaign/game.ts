@@ -30,7 +30,7 @@ import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps, crossStrait, strait, straitShare, straitWave } from './navy';
+import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps, crossStrait, strait, straitCut, straitShare, straitWave } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -41,7 +41,7 @@ import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMa
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
-import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
+import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, noTrain, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { STRATEGY, straitsOn, torchBook, torchWeek } from './strategy';
@@ -696,6 +696,8 @@ export function computeSupply(g: Game): void {
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
   const shippers = (id: string): string[] => withShips.filter((a) => a !== id && allied(g, id, a));
   const wide = groundRules(g);
+  // (The strait rule: no supply runs over a border it cuts as open sea.)
+  const water = straitsOn(g);
   // The grand campaign: where an army stands round a town it has not taken, the roads are that army's. Its supply
   // passes through; the town's holder draws none there and sends none on.
   const field = siegeRules(g) ? g.regions.map((r) => fieldCtrl(g, r)) : null;
@@ -760,7 +762,7 @@ export function computeSupply(g: Game): void {
     }
     for (let i = 0; i < q.length; i++) {
       for (const j of g.regions[q[i]].nb) {
-        if (ok[j] || !friend[road[j]]) continue;
+        if (ok[j] || !friend[road[j]] || (water && straitCut(g, q[i], j))) continue;
         ok[j] = 1; q.push(j);
         if (deep[j]) east = true;
         if (sand[j]) desert = true;
@@ -2441,7 +2443,7 @@ function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; end
       const r = g.regions[j];
       if (seen[j] || sandRules(r)) continue;
       if ((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) continue;
-      if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
+      if (noTrain(g, q[i], j)) continue; // no train crosses a river whose bridges are down, or a border that is open sea
       if (net && railCut(g, j)) {
         // Engineers alone ride the works train to the break itself. Nothing goes on through it.
         if (c.kind === 'eng') { seen[j] = 1; out.add(j); ends.push(j); }
@@ -2469,7 +2471,7 @@ export function litTracks(g: Game, corps: Corps[]): [number, number][] {
     const w = railWalk(g, c), through = new Set(w.through), ends = new Set(w.ends);
     const mine = new Map<number, Track>(), was: Map<number, Track> | null = lit;
     for (const a of w.through) for (const b of railsAt(a)) {
-      if (!(through.has(b) ? a < b : ends.has(b)) || downBetween(g, a, b)) continue;
+      if (!(through.has(b) ? a < b : ends.has(b)) || noTrain(g, a, b)) continue;
       const lo = Math.min(a, b), hi = Math.max(a, b);
       mine.set(lo * g.regions.length + hi, [lo, hi]);
     }
@@ -2491,7 +2493,7 @@ export function railInto(g: Game, nat: string, ends: number[]): Uint8Array {
   const q: number[] = [];
   for (const id of ends) if (!seen[id] && open(g.regions[id])) { seen[id] = 1; q.push(id); }
   for (let i = 0; i < q.length; i++) for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
-    if (seen[j] || !open(g.regions[j]) || downBetween(g, q[i], j)) continue;
+    if (seen[j] || !open(g.regions[j]) || noTrain(g, q[i], j)) continue;
     seen[j] = 1; q.push(j);
   }
   return seen;
@@ -2586,7 +2588,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   // so he is told of the cut on his own line before he is told of a way round through another country.
   const INF = 1e9;
   const cost = new Int32Array(g.regions.length).fill(INF), prev = new Int32Array(g.regions.length).fill(-1);
-  const weigh = (a: number, b: number): number => { const r = g.regions[b]; return !allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r) ? 4 : !open(r) || (net && railCut(g, b)) || downBetween(g, a, b) ? 1 : 0; };
+  const weigh = (a: number, b: number): number => { const r = g.regions[b]; return !allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r) ? 4 : !open(r) || (net && railCut(g, b)) || noTrain(g, a, b) ? 1 : 0; };
   cost[c.reg] = 0;
   const dq: number[] = [c.reg];
   while (dq.length) {
@@ -2720,7 +2722,7 @@ export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
       seen.add(j);
       const r = g.regions[j];
       if (sandRules(r)) continue;
-      const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j));
+      const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !noTrain(g, q[i], j) && !(net && railCut(g, j));
       if (open) { q.push(j); continue; }
       if (reach.has(j) || !allied(g, c.nat, r.ctrl)) continue;
       const why = whyNoTrain(g, c, j);
@@ -3583,11 +3585,12 @@ export const torchRowsOnly = (g: Game, nat: string, r: Region): boolean => !!TOR
 
 /**
  * Operation Torch by the book: the rows that arrive by the week (setup-1939.json 'torch.rows', 'week'; the
- * historian's torch-8c-weekly-1122.md; the design director, 22 November 2026, 17:58Z). A row's 'week' is the week of
- * its month by which the record has it ashore. A month opens for a nation in its first week, so a row of a later
- * week is not there when its nation's month opens: it is put down at the French turn if the turn falls in or after
- * its month (the Axis came into Tunisia in the weeks after the landings, and the rest of that month is nobody's
- * turn), or else when its nation's next month opens. Called by the turn (diplomacy.ts) and by nobody else.
+ * historian's torch-8c-weekly-1122.md; the design director, 22 November 2026, 17:58Z and 18:29Z). A row's 'week' is
+ * the week of its month by which the record has it ashore. No clock runs between the nations' months, so a week
+ * rounds to the nearest month's opening: a row of week 1 or 2 goes down when its month opens for its nation, or at
+ * the French turn where the place meant for it is not its side's until then (Tunis is Vichy's when Germany's
+ * November opens); a row of week 3 or 4 goes down when its nation's next month opens, and is in no fight of its own
+ * month. Called by the turn (diplomacy.ts) and by nobody else: it puts down the rows of weeks 1 and 2 that are due.
  */
 export function weekRows(g: Game): void {
   if (!TORCH || !torchBook(g)) return;
@@ -3613,8 +3616,8 @@ function expeditions(g: Game, nat: string, atTurn = false): void {
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
     if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
-    // (Torch's rows that arrive by the week: one of a later week than the first is not there when its month opens.)
-    if (torch && typeof i === 'string' && !atTurn && (o.week ?? 1) > 1 && g.turn === row[0]) return;
+    // (Torch's rows that arrive by the week: one of week 3 or 4 comes when its nation's next month opens.)
+    if (torch && typeof i === 'string' && (o.week ?? 1) >= 3 && g.turn <= row[0]) return;
     // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
     if (o.open && g.flags.open !== 1) return;
     if (g.flags[`sent:${i}`]) {

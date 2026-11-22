@@ -298,26 +298,29 @@ describe('Operation Torch by the book', () => {
     expect(xix[0].divs).toBeLessThanOrEqual(g.flags['torch:turned']);
     expect(['UK', 'USA']).toContain(g.regions[xix[0].reg].ctrl);
     expect(['Casablanca', 'Oran', 'Algiers', 'Constantine', 'Fez', 'Marrakech', 'Mareth', 'Sfax', 'Tunis']).toContain(g.regions[xix[0].reg].name);
-    // The Axis rows that arrive by the week (the historian's weekly file; the design director, 17:58Z): XC Corps and
-    // the 10th Panzer came into Tunis at the turn, in November as the record's airlift and first ships did, and the
-    // 334th, of late December, is not in the game yet.
+    // The Axis rows that arrive by the week (the historian's weekly file; the design director, 17:58Z and 18:29Z). A
+    // week rounds to the nearest month's opening. XC Corps, of November's second week, came into Tunis at the turn
+    // (Tunis was Vichy's when Germany's November opened); the 10th Panzer, of its last week, and the 334th, of late
+    // December, are not in the game yet.
     const weekly = TORCH.rows.filter((r) => (r[6] as { week?: number } | undefined)?.week !== undefined).map((r) => [r[0], r[2].slice(0, 8), (r[6] as { week: number }).week]);
     expect(weekly).toEqual([[39, 'XC Corps', 2], [39, '10th Pan', 4], [40, '334th In', 4]]);
+    const sent = (nm: string): number | undefined => g.flags[`sent:t${TORCH.rows.findIndex((r) => r[2].startsWith(nm))}`];
     expect(g.byName.Tunis.ctrl).toBe('GER');
-    expect(g.byName.Tunis.units.filter((c) => !c.dead).map((c) => c.name.slice(0, 8)).sort()).toEqual(['10th Pan', 'XC Corps']);
-    expect(g.corps.some((c) => c.name === '334th Infantry Division')).toBe(false);
+    expect(g.byName.Tunis.units.filter((c) => !c.dead).map((c) => c.name.slice(0, 8)).sort()).toEqual(['XC Corps']);
+    expect(sent('XC Corps')).toBeTruthy();
+    expect(sent('10th Panzer Division')).toBeUndefined();
+    expect(g.corps.some((c) => c.name === '10th Panzer Division' || c.name === '334th Infantry Division')).toBe(false);
     // The next month it is not made again.
     runTurnAI(g);
     expect(g.corps.filter((c) => c.name === 'French XIX Corps').length).toBe(1);
-    // December is fought without the 334th: it is ashore only in the month's last week, so it is in no fight of it
-    // and comes when Germany's next month opens (to Tunis, or to the nearest harbour its side still holds).
+    // December: the 10th Panzer came when Germany's month opened (the record has it fighting at Tebourba on 1 to 4
+    // December), once, and XC Corps was not made a second time. The 334th is in no fight of December: it comes when
+    // Germany's January opens (to Tunis, or to the nearest harbour its side still holds).
+    expect(sent('10th Panzer Division')).toBeTruthy();
+    for (const nm of ['XC Corps', '10th Panzer Division']) expect(g.corps.filter((c) => c.name.startsWith(nm)).length, nm).toBeLessThanOrEqual(1);
+    expect(sent('334th Infantry Division')).toBeUndefined();
     expect(g.corps.some((c) => c.name === '334th Infantry Division')).toBe(false);
     for (const r of g.reports) if (r.turn === 40) expect(r.defenders.some((u) => /^334th/.test(u.name)), r.regionName).toBe(false);
-    // (Each of the two that came at the turn came once: its row is marked sent, and December's opening makes no second.)
-    for (const nm of ['XC Corps', '10th Panzer Division']) {
-      expect(g.flags[`sent:t${TORCH.rows.findIndex((r) => r[2].startsWith(nm))}`], nm).toBeTruthy();
-      expect(g.corps.filter((c) => c.name.startsWith(nm)).length, nm).toBeLessThanOrEqual(1);
-    }
     // December: the rest of the two armoured divisions come, once each, as the book's rows, at their own size; and
     // still nothing of America's army stands in French North Africa but its picks and those rows.
     const rows = new Set(TORCH.rows.filter((r) => r[1] === 'USA').map((r) => r[2]));
