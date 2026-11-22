@@ -14169,7 +14169,7 @@ namespace TheaterFx
 				LumpFar = Clamp01((FT - B.Back.LumpsFrom) / std::max(1.0 - B.Back.LumpsFrom, 1e-6));
 			}
 		}
-		if (A * ShowNear < 0.004 && TailA * ShowFar < 0.004)
+		if ((bShowEach ? A * ShowNear : A) < 0.004 && (bShowEach ? TailA * ShowFar : TailA) < 0.004) // (any other piece has its show in A already: the pre-check's trails-and-hits probe on 3730f9e4)
 		{
 			return 0;
 		}
