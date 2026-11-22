@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of dd4fd3fb 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f445fd6d 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -48741,7 +48741,7 @@
     if (!f.hunters) standIns.push("the kill's share by aircraft: the air row");
     if (pick2.case === "convoy" && f.escortShips === void 0) standIns.push("the escorts: the escort row");
     if (pick2.case === "hunt" && !f.hunters) standIns.push("the hunting group: the escort row");
-    if (pick2.case === "convoy" && f.raidBy?.sure === false) standIns.push(f.raiders ? "who raided: a raider's heavy ships as the scene is read (not in the record)" : "who raided: the fleets at sea as the month closed");
+    if (pick2.case === "convoy" && f.raidBy?.sure === false) standIns.push(f.raiders ? "who raided: an older save's record, without the raiders' heavy ships; the fleets as the scene is read" : "who raided: the fleets at sea as the month closed");
     const fan = pick2.case !== "hunt";
     const fleetEsc = pick2.case === "heavyLost" || pick2.case === "boatsKill";
     const killsDrawn = Math.min(L.most.boats, pick2.kills);
@@ -49595,17 +49595,6 @@
     const rec = record2 ?? g2.subLook ?? [];
     const lookOf2 = (nat, turn) => rec.find((l) => l.turn === turn && l.nat === nat);
     const fleetById = new Map(g2.fleets.map((x) => [x.id, x]));
-    const natOfFleet = new Map(g2.fleets.map((x) => [x.id, x.nat]));
-    {
-      const add = (y) => {
-        if (!natOfFleet.has(y.fleet)) natOfFleet.set(y.fleet, y.nat);
-      };
-      for (const l of rec) {
-        for (const h of l.hunts) [...h.hunters, ...h.quarry].forEach(add);
-        for (const c of l.convoys) for (const x of c.seas) [...x.raiders, ...x.escorts].forEach(add);
-      }
-    }
-    const natOfRef = (id) => id === null ? void 0 : natOfFleet.get(id);
     const byNat = (fs, keep = (x) => x.n > 0) => {
       const n = {};
       for (const x of fs) if (keep(x)) n[x.nat] = (n[x.nat] ?? 0) + x.n;
@@ -49634,10 +49623,8 @@
         const sea = z >= 0 ? g2.seas[z].key : "";
         const r = fleet ? lookOf2(h.nat, h.turn)?.torpedoes.find((x) => !usedTorpedo.has(x) && x.fleet === fleet.id && x.zone === z && x.cls === cls) : void 0;
         if (r) usedTorpedo.add(r);
-        const byNat0 = r ? natOfRef(r.by) : void 0;
-        const pick2 = !r || r.by === null ? "none" : byNat0 ? "rules" : "unknown";
-        const could = r ? r.could.filter((id) => id !== r.by).map(natOfRef) : [];
-        const attackers2 = r ? [...new Set([byNat0, ...could].filter((n) => !!n))] : [];
+        const pick2 = !r ? void 0 : r.by === null ? "none" : typeof r.byNat === "string" ? "rules" : "unknown";
+        const attackers2 = !r ? [] : [...new Set([pick2 === "rules" ? r.byNat : null, ...r.couldNat ?? []].filter((n) => !!n))];
         facts.push({
           kind: "torpedo",
           sea,
@@ -49649,7 +49636,7 @@
           fleet: tor[2],
           ships: fleet ? { ...fleet.ships } : void 0,
           ...z >= 0 ? { boatsAt: boatsIn(z, h.nat) } : {},
-          ...attackers2.length ? { attackers: attackers2, pick: pick2 } : {}
+          ...r ? { attackers: attackers2, pick: pick2 } : {}
         });
         continue;
       }
@@ -49683,7 +49670,9 @@
         const r = look?.convoys.find((x) => x.route === route.id);
         if (r) {
           const lost = same2 ? book.subsLost : said?.[2] ? Number(said[2]) : 0;
-          const asRaided = grand2 || lost === 0;
+          const all = r.seas.flatMap((x) => x.raiders);
+          const older = all.some((y) => y.heavy === void 0) || !grand2 && lost > sum2(all);
+          const asRaided = !older || grand2 || lost === 0;
           const heavyThen = (y) => {
             if (y.heavy !== void 0) return y.heavy > 0;
             if (y.n === 0 && asRaided) return true;
@@ -49693,7 +49682,6 @@
             return touched(fl.name) ? void 0 : false;
           };
           const boatsThen = (y) => y.n > 0 ? true : asRaided ? false : heavyThen(y) === false ? true : void 0;
-          const all = r.seas.flatMap((x) => x.raiders);
           const maybeBoats = (y) => boatsThen(y) !== false;
           const boatSeas = r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)).length ? r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)) : r.seas.filter((x) => x.raiders.some(maybeBoats));
           const his = boatSeas.filter((x) => x.raiders.some((y) => maybeBoats(y) && y.nat === g2.human));
@@ -49718,7 +49706,7 @@
             escortsLost: same2 ? book.escortsLost : 0,
             ...z2 >= 0 ? { boatsAt: boatsIn(z2, h.nat, true) } : {},
             raidBy: {
-              // (boats lost on a history route were its raiders' boats: boats raided)
+              // (boats lost on a history route were its raiders' boats: boats raided; the snapshot shows them, an older record may not)
               boats: all.some((y) => boatsThen(y) === true) || !grand2 && lost > 0,
               surface: all.some((y) => heavyThen(y) === true),
               base: baseHeld(route),
