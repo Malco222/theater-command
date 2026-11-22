@@ -323,12 +323,13 @@ namespace LandScape
 			A.bSet = true;
 			break;
 		case Look::Dry:
-			// (the high continental air of Mongolia in summer: clear, a pale blue-grey haze and a little dust, the sight
-			// long, some 6,000 m; the art director's summer steppe grade)
+			// (the high continental air of Mongolia in summer: clear and dry, a pale blue-grey haze and a little dust, the
+			// sight long, some 8,500 m (the art director's Khalkhin Gol read: a third less haze, so the Khalkha bluffs carry);
+			// her summer steppe grade)
 			A.bSet = true;
 			Ink(A.HazeInk, 0.68, 0.70, 0.72);
 			Ink(A.HazeOvercast, 0.55, 0.56, 0.57);
-			A.HazeDensity = 0.0042;
+			A.HazeDensity = 0.0028;
 			A.SkyDust = 0.8;
 			Grade(0.50, 0.55, 1.35, -0.5, 0.55, 1.01, 0.99);
 			break;

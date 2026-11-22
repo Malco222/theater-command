@@ -44,7 +44,8 @@ namespace LandScape
 			KReeds = 3,
 			KYurt = 4, // (built: no file)
 			KOvoo = 5, // (built)
-			KHut = 6   // (built)
+			KHut = 6,  // (built)
+			KShrub = 7 // pea-shrub, low, open and grey-green (built)
 		};
 
 		enum Clut : int
@@ -305,14 +306,18 @@ namespace LandScape
 				T = Mixed(T, GrassGreen, (0.15 + 0.15 * Green) * Meadow_);
 				T = Mixed(T, Wormwood, 0.3 * Wm);
 				// (bare grey sand between the bunch grass where the sward is thin)
-				T = Mixed(T, GreySand, 0.3 * Smooth(0.15, 0.7, Read(X, Y, 4)) * (1.0 - Meadow_));
+				const double Bn = Read(X, Y, 4);
+				T = Mixed(T, GreySand, 0.35 * Smooth(0.15, 0.7, Bn) * (1.0 - Meadow_));
+				// (and the sward's own drifts between, olive where it grows thick: the ground's breakup at 10 to 40 m, which
+				// the camera sees from above when the clutter has dropped out)
+				T = Mixed(T, Rgb(98, 106, 72), 0.3 * Smooth(-0.1, -0.65, Bn));
 				T = Mixed(T, Plume, 0.15 * Smooth(0.2, 0.7, Pt) * (1.0 - Meadow_));
 				// (the sand: through the thin grass on it, and bare where the wind has blown it out, in blow-outs tens of
 				// metres across on the sandiest ground)
 				const double Bare = std::max(0.85 * Rough, BlownOut(Sd, Pt));
 				T = Mixed(T, Mixed(SandDark, Sand, 0.5 + 0.4 * Pt), 0.12 * Sd + 0.8 * Bare);
 				// (the grass's own light and dark: the patches a man sees running away from him)
-				return Varied(T, 0.97 - 0.05 * Sd + 0.04 * Broad + 0.04 * Pt, 0.01 * Broad);
+				return Varied(T, 0.97 - 0.05 * Sd + 0.04 * Broad + 0.04 * Pt + 0.06 * Bn, 0.01 * Broad);
 			}
 			static double BlownOut(double Sd, double Pt) { return Smooth(0.6, 0.95, Sd) * Smooth(0.25, 0.7, -Pt); }
 			/** How far a parcel's own ground reaches here: 0 at its edge to 1 some Reach metres in, its line wavering with
@@ -372,8 +377,10 @@ namespace LandScape
 					const double Face = Smooth(-215.0, -250.0, D) * Smooth(-430.0, -380.0, D);
 					const double Scar = Smooth(0.45, 0.75, Noise(S.Y / 90.0, D / 60.0, Seed ^ 0xE7));
 					const double Cut = std::max(Gully(S.Y), 0.6 * Smooth(0.2, 0.6, Noise(S.Y / 28.0, D / 40.0, Seed ^ 0xE8)));
-					Tone Bank = Mixed(Rgb(96, 102, 74), Rgb(180, 156, 112), 0.85 * Scar);
-					Bank = Mixed(Bank, Rgb(62, 60, 50), 0.8 * Cut);
+					Tone Bank = Mixed(Rgb(82, 88, 64), Rgb(176, 152, 110), 0.8 * Scar);
+					Bank = Mixed(Bank, Rgb(46, 44, 38), 0.85 * Cut);
+					// (the foot band in its own shadow and scree, darkest)
+					Bank = Mixed(Bank, Rgb(58, 58, 46), 0.6 * Smooth(-215.0, -245.0, D) * Smooth(-300.0, -265.0, D));
 					T = Mixed(T, Bank, 0.95 * Face);
 				}
 				return T;
@@ -459,7 +466,7 @@ namespace LandScape
 				{
 				case CTuft:
 					// a bunch-grass tuft a hand or two high: twenty-odd blades, grey-green at the foot, paler at the tips
-					Tuft(W, 28, 0.09, 0.1, 0.16, 0.08, 0.018, 0x7F01, Rgb(96, 100, 64), Rgb(170, 166, 118));
+					Tuft(W, 28, 0.09, 0.1, 0.16, 0.08, 0.018, 0x7F01, Rgb(118, 110, 86), Rgb(170, 166, 118)); // (dead thatch at the foot)
 					LitUp(M.Near, 0);
 					M.Paint = 2;
 					M.FarFrom = 45.0f;
@@ -467,7 +474,7 @@ namespace LandScape
 				case CFeather:
 				{
 					// feather grass: a low tuft and a dozen fine awns arching out downwind, silver at their tips
-					Tuft(W, 10, 0.04, 0.08, 0.06, 0.04, 0.014, 0x7F02, Rgb(104, 106, 70), Rgb(156, 154, 110));
+					Tuft(W, 10, 0.04, 0.08, 0.06, 0.04, 0.014, 0x7F02, Rgb(116, 110, 84), Rgb(156, 154, 110));
 					for (int B = 0; B < 12; ++B)
 					{
 						const double A = 0.6 * (Unit(Hash(0x7F03, B)) - 0.5), Reach = 0.18 + 0.16 * Unit(Hash(0x7F04, B));
@@ -482,8 +489,8 @@ namespace LandScape
 				case CWorm:
 				{
 					// wormwood: a low rounded cushion of silver-green leaves, a few stems standing out of it
-					Chip(W, 0.0, 0.0, 0.1, 0.09, 0x7F07, Rgb(156, 162, 146), Rgb(108, 114, 98));
-					Tuft(W, 18, 0.1, 0.1, 0.1, 0.1, 0.024, 0x7F08, Rgb(126, 132, 112), Rgb(180, 184, 168));
+					Chip(W, 0.0, 0.0, 0.12, 0.05, 0x7F07, Rgb(134, 138, 124), Rgb(98, 102, 90));
+					Tuft(W, 18, 0.1, 0.06, 0.06, 0.1, 0.024, 0x7F08, Rgb(112, 116, 102), Rgb(150, 154, 140));
 					LitUp(M.Near, 0);
 					M.Paint = 2;
 					M.FarFrom = 50.0f;
@@ -532,10 +539,11 @@ namespace LandScape
 				case KYurt: return bYurts ? "Yurt" : nullptr;
 				case KOvoo: return bYurts ? "Ovoo" : nullptr;
 				case KHut: return "SteppeHut";
+				case KShrub: return "PeaShrub";
 				default: return nullptr;
 				}
 			}
-			bool KitBuilt(int K) const override { return K == KYurt || K == KOvoo || K == KHut; }
+			bool KitBuilt(int K) const override { return K == KYurt || K == KOvoo || K == KHut || K == KShrub; }
 			void KitLook(int K, LandField::BaseMesh& M) const override
 			{
 				auto Stands = [&M](float Mid, float Half, float Across, float Trunk, float Far) {
@@ -558,6 +566,10 @@ namespace LandScape
 				case KReeds: M.FarFrom = 60.0f; break;
 				case KYurt:
 				case KHut: Stands(0.5f, 0.5f, 0.85f, 0.0f, 400.0f); break;
+				case KShrub:
+					M.Paint = 1;
+					M.FarFrom = 120.0f;
+					break;
 				case KOvoo: Stands(0.45f, 0.45f, 0.6f, 0.0f, 300.0f); break;
 				default: M.FarFrom = 90.0f; break;
 				}
@@ -619,6 +631,21 @@ namespace LandScape
 					W.Box(0.0, 0.0, 1.1, 3.0, 2.2, 1.1, 0.0, Rgb(178, 160, 126));
 					W.Box(0.0, 0.0, 2.3, 3.25, 2.45, 0.12, 0.0, Rgb(132, 120, 92), true);
 					W.Box(0.0, -2.22, 0.85, 0.5, 0.04, 0.85, 0.0, Rgb(70, 58, 46));
+					M.Far = M.Near;
+					break;
+				case KShrub:
+					// pea-shrub: a loose spread of small grey-green leaf clumps on thin stems, wider than tall (about 2 m by
+					// 1), light and sky between them
+					for (int B = 0; B < 11; ++B)
+					{
+						const double A = 2.0 * Pi * (B + 0.5 * Unit(Hash(0x0F10, B))) / 11.0, D = B == 0 ? 0.0 : 0.25 + 0.7 * Unit(Hash(0x0F11, B));
+						const double X = D * std::cos(A), Y = D * std::sin(A), Up = 0.35 + 0.55 * (1.0 - D) * Unit(Hash(0x0F12, B)), R = 0.16 + 0.12 * Unit(Hash(0x0F13, B));
+						W.Box(0.5 * X, 0.5 * Y, 0.5 * Up, 0.015, 0.015, 0.5 * Up, A, Rgb(96, 88, 72));
+						Chip(W, X, Y, R, 0.3, Hash(0x0F14, B), Rgb(136, 142, 108), Rgb(94, 100, 76));
+						// (the clump lifted onto its stem)
+						const size_t Last = M.Near.Points();
+						for (size_t P = Last - 11; P < Last; ++P) M.Near.Positions[3 * P + 2] += static_cast<float>(Up);
+					}
 					M.Far = M.Near;
 					break;
 				case KWillow:
@@ -711,7 +738,7 @@ namespace LandScape
 					if (S.Kind == KWoods)
 					{
 						if (Keep < 0.3 * Smooth(-0.5, 0.2, Read(X, Y, 3)) && H.Free(X, Y, 1.6))
-							H.Plant(LandField::Base::ShrubB, X, Y, Yaw, 0.55 * Low, 0.5 * Low * R.Range(0.7, 1.1), Tint(1.95 * Grey, 1.9 * Grey, 1.62 * Grey)); // (pea-shrub: low, open, grey-green)
+							H.Plant(KitOf(KShrub), X, Y, Yaw, 0.6 + 0.7 * Low, (0.6 + 0.7 * Low) * R.Range(0.7, 1.05), Tint(Grey * 1.1, Grey * 1.1, Grey * 1.06)); // (pea-shrub: low, open, grey-green)
 					}
 				}
 			}
