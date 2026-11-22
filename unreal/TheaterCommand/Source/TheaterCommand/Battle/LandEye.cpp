@@ -292,6 +292,24 @@ namespace LandEye
 			if (W == "mortar" || W == "gun" || W == "tank" || W == "at") Heavy.push_back(static_cast<int>(I));
 		}
 		std::sort(Heavy.begin(), Heavy.end(), [this](int A, int B) { return Rec->Rounds[static_cast<size_t>(A)].L < Rec->Rounds[static_cast<size_t>(B)].L; });
+		ByLanding.clear();
+		ByLandingRounds = 0;
+		IndexLandings();
+		BlockIx.clear();
+		BlockIxTracks = BlockIxBlocks = 0;
+		MenT = -1e18;
+		MenTracks = 0;
+		// (the fastest a man goes between two of his points, and on past his last at that speed)
+		MenFastest = 0.0;
+		for (const Track& Tr : Rec->Tracks)
+		{
+			if (Tr.bTwin || !Tr.IsMan()) continue;
+			for (size_t K = 1; K < Tr.At.size(); ++K)
+			{
+				const double Dt = std::max(1e-6, Tr.At[K].T - Tr.At[K - 1].T);
+				MenFastest = std::max(MenFastest, std::hypot(Tr.At[K].X - Tr.At[K - 1].X, Tr.At[K].Y - Tr.At[K - 1].Y) / Dt);
+			}
+		}
 		// The film's own section: of the own side's rifle sections of four men or more, the one that fires most and
 		// lasts longest in the fight (the recording is the script).
 		HeroBlock = HeroK = -1;
@@ -351,6 +369,70 @@ namespace LandEye
 		bCutAsked = true;
 	}
 
+	namespace
+	{
+		size_t BucketOf(int64_t I, int64_t J, size_t Count)
+		{
+			const uint64_t H = static_cast<uint64_t>(I) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(J) * 0xC2B2AE3D27D4EB4Full;
+			return static_cast<size_t>(H ^ (H >> 29)) & (Count - 1);
+		}
+		constexpr double MenSquare = 16.0, HeatSquare = 35.0;
+		constexpr size_t MenBuckets = size_t(1) << 12, HeatBuckets = size_t(1) << 10;
+	}
+
+	const LandFeed::Block* Director::BlockOfTrack(int TrackIndex) const
+	{
+		if (!Rec || TrackIndex < 0 || static_cast<size_t>(TrackIndex) >= Rec->Tracks.size()) return nullptr;
+		if (BlockIxTracks != Rec->Tracks.size() || BlockIxBlocks != Rec->Blocks.size())
+		{
+			BlockIxTracks = Rec->Tracks.size();
+			BlockIxBlocks = Rec->Blocks.size();
+			BlockIx.assign(Rec->Tracks.size(), -1);
+			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+			{
+				const LandFeed::Block* B = Rec->BlockOf(Rec->Tracks[I].Block);
+				BlockIx[I] = B ? static_cast<int>(B - Rec->Blocks.data()) : -1;
+			}
+		}
+		const int B = BlockIx[static_cast<size_t>(TrackIndex)];
+		return B >= 0 ? &Rec->Blocks[static_cast<size_t>(B)] : nullptr;
+	}
+
+	void Director::PlaceMen(double T) const
+	{
+		if (MenHead.empty()) MenHead.assign(MenBuckets, -1);
+		for (const uint32_t B : MenUsed) MenHead[B] = -1;
+		MenUsed.clear();
+		MenAt.clear();
+		MenNext.clear();
+		MenT = T;
+		MenTracks = Rec->Tracks.size();
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			if (Tr.bTwin || !Tr.IsMan()) continue;
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
+			const size_t B = BucketOf(static_cast<int64_t>(std::floor(S.X / MenSquare)), static_cast<int64_t>(std::floor(S.Y / MenSquare)), MenBuckets);
+			if (MenHead[B] < 0) MenUsed.push_back(static_cast<uint32_t>(B));
+			MenNext.push_back(MenHead[B]);
+			MenHead[B] = static_cast<int32_t>(MenAt.size());
+			MenAt.push_back({ static_cast<int>(I), S.X, S.Y });
+		}
+	}
+
+	void Director::IndexLandings()
+	{
+		if (!Rec || ByLandingRounds == Rec->Rounds.size()) return;
+		// (the rounds come in firing order; those new since are put in by when they land)
+		for (size_t I = ByLandingRounds; I < Rec->Rounds.size(); ++I)
+		{
+			const double L = Rec->Rounds[I].L;
+			auto It = std::upper_bound(ByLanding.begin(), ByLanding.end(), L, [this](double V, int K) { return V < Rec->Rounds[static_cast<size_t>(K)].L; });
+			ByLanding.insert(It, static_cast<int>(I));
+		}
+		ByLandingRounds = Rec->Rounds.size();
+	}
+
 	void Director::Gather(double From, double To)
 	{
 		Ahead.clear();
@@ -367,14 +449,46 @@ namespace LandEye
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Tr.Fell);
 			Ahead.push_back({ S.X, S.Y, Tr.Fell, Tr.IsVehicle() ? 25.0 : 10.0 });
 		}
+		// (by squares, each heat in its own once, in Ahead's order)
+		if (HeatHead.empty()) HeatHead.assign(HeatBuckets, -1);
+		for (const uint32_t B : HeatUsed) HeatHead[B] = -1;
+		HeatUsed.clear();
+		HeatNext.assign(Ahead.size(), -1);
+		for (size_t K = Ahead.size(); K-- > 0;)
+		{
+			const size_t B = BucketOf(static_cast<int64_t>(std::floor(Ahead[K].X / HeatSquare)), static_cast<int64_t>(std::floor(Ahead[K].Y / HeatSquare)), HeatBuckets);
+			if (HeatHead[B] < 0) HeatUsed.push_back(static_cast<uint32_t>(B));
+			HeatNext[K] = HeatHead[B];
+			HeatHead[B] = static_cast<int32_t>(K);
+		}
 	}
 
 	double Director::HeatNear(double X, double Y, double From, double To, double Radius) const
 	{
-		double Sum = 0.0;
-		for (const Heat& H : Ahead)
+		// (the squares round the point, each heat in them once; summed in Ahead's order, as a walk over all of it would)
+		HeatNearBy.clear();
+		if (HeatHead.empty()) return 0.0;
+		const int64_t I0 = static_cast<int64_t>(std::floor((X - Radius) / HeatSquare)), I1 = static_cast<int64_t>(std::floor((X + Radius) / HeatSquare));
+		const int64_t J0 = static_cast<int64_t>(std::floor((Y - Radius) / HeatSquare)), J1 = static_cast<int64_t>(std::floor((Y + Radius) / HeatSquare));
+		for (int64_t I = I0; I <= I1; ++I)
 		{
-			if (H.T < From || H.T > To) continue;
+			for (int64_t J = J0; J <= J1; ++J)
+			{
+				for (int32_t K = HeatHead[BucketOf(I, J, HeatBuckets)]; K >= 0; K = HeatNext[static_cast<size_t>(K)])
+				{
+					const Heat& H = Ahead[static_cast<size_t>(K)];
+					// (a heat of another square that shares the chain is left to its own square)
+					if (static_cast<int64_t>(std::floor(H.X / HeatSquare)) != I || static_cast<int64_t>(std::floor(H.Y / HeatSquare)) != J) continue;
+					if (H.T < From || H.T > To || std::abs(H.X - X) > Radius || std::abs(H.Y - Y) > Radius) continue;
+					HeatNearBy.push_back(K);
+				}
+			}
+		}
+		std::sort(HeatNearBy.begin(), HeatNearBy.end());
+		double Sum = 0.0;
+		for (const int K : HeatNearBy)
+		{
+			const Heat& H = Ahead[static_cast<size_t>(K)];
 			const double D = std::hypot(H.X - X, H.Y - Y);
 			if (D > Radius) continue;
 			Sum += H.W * (1.0 - D / Radius);
@@ -665,23 +779,40 @@ namespace LandEye
 		// (a man runs some 6 m a second at most, 12 on the rules' clock, twice life's: farther off than that, none can
 		// reach the lens in time)
 		const double Reach = Set.CrossClear + 12.0 * (To - From) + Moved + 0.5;
-		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		// (the men by squares where they stood a moment ago, kept half a battle second: those that could be within Reach
+		// now, by how far the fastest man goes, are asked where they are)
+		if (MenTracks != Rec->Tracks.size() || std::abs(From - MenT) > 0.5) PlaceMen(From);
+		const double Wide = Reach + MenFastest * std::abs(From - MenT) + 0.01;
+		const int64_t I0 = static_cast<int64_t>(std::floor((Eyes[0].X - Wide) / MenSquare)), I1 = static_cast<int64_t>(std::floor((Eyes[0].X + Wide) / MenSquare));
+		const int64_t J0 = static_cast<int64_t>(std::floor((Eyes[0].Y - Wide) / MenSquare)), J1 = static_cast<int64_t>(std::floor((Eyes[0].Y + Wide) / MenSquare));
+		for (int64_t Ia = I0; Ia <= I1; ++Ia)
 		{
-			if (static_cast<int>(I) == Own) continue;
-			const Track& Tr = Rec->Tracks[I];
-			if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > To || (Tr.Out >= 0.0 && Tr.Out < From)) continue;
-			const LandFeed::Spot S0 = LandFeed::SpotAt(Tr, From);
-			if (std::abs(S0.X - Eyes[0].X) > Reach || std::abs(S0.Y - Eyes[0].Y) > Reach) continue;
-			for (int K = 0; K < N; ++K)
+			for (int64_t Ja = J0; Ja <= J1; ++Ja)
 			{
-				const LandFeed::Spot S = K == 0 ? S0 : LandFeed::SpotAt(Tr, Times[K]);
-				if (std::hypot(S.X - Eyes[K].X, S.Y - Eyes[K].Y) >= Set.CrossClear) continue;
-				// (his body from the ground to the top of him: standing, kneeling, lying or fallen)
-				const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= Times[K];
-				const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Times[K]);
-				const std::string Pose = C ? C->Pose : std::string("idle");
-				const double Top = bFallen || IsDown(Pose) ? 0.45 : (Pose == "fire_kneel" || Pose == "wait" ? 1.1 : 1.75);
-				if (Eyes[K].Z < HeightAt(S.X, S.Y) + Top + 0.3) return true;
+				for (int32_t E = MenHead[BucketOf(Ia, Ja, MenBuckets)]; E >= 0; E = MenNext[static_cast<size_t>(E)])
+				{
+					const ManAt& Ma = MenAt[static_cast<size_t>(E)];
+					// (a man of another square that shares the chain is left to his own square)
+					if (static_cast<int64_t>(std::floor(Ma.X / MenSquare)) != Ia || static_cast<int64_t>(std::floor(Ma.Y / MenSquare)) != Ja) continue;
+					if (std::abs(Ma.X - Eyes[0].X) > Wide || std::abs(Ma.Y - Eyes[0].Y) > Wide) continue;
+					const size_t I = static_cast<size_t>(Ma.Track);
+					if (static_cast<int>(I) == Own) continue;
+					const Track& Tr = Rec->Tracks[I];
+					if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > To || (Tr.Out >= 0.0 && Tr.Out < From)) continue;
+					const LandFeed::Spot S0 = LandFeed::SpotAt(Tr, From);
+					if (std::abs(S0.X - Eyes[0].X) > Reach || std::abs(S0.Y - Eyes[0].Y) > Reach) continue;
+					for (int K = 0; K < N; ++K)
+					{
+						const LandFeed::Spot S = K == 0 ? S0 : LandFeed::SpotAt(Tr, Times[K]);
+						if (std::hypot(S.X - Eyes[K].X, S.Y - Eyes[K].Y) >= Set.CrossClear) continue;
+						// (his body from the ground to the top of him: standing, kneeling, lying or fallen)
+						const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= Times[K];
+						const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Times[K]);
+						const std::string Pose = C ? C->Pose : std::string("idle");
+						const double Top = bFallen || IsDown(Pose) ? 0.45 : (Pose == "fire_kneel" || Pose == "wait" ? 1.1 : 1.75);
+						if (Eyes[K].Z < HeightAt(S.X, S.Y) + Top + 0.3) return true;
+					}
+				}
 			}
 		}
 		return false;
@@ -802,29 +933,33 @@ namespace LandEye
 	bool Director::ActionIn(const Pose& In, double From, double To) const
 	{
 		if (!(To > From)) return false;
-		for (size_t I = RoundFrom; I < Rec->Rounds.size(); ++I)
+		// (the rounds fired in it, from the firing order, and those landing in it, from the landing order: the same as a
+		// walk over every round still in the air)
+		const auto ByT = [](double T, const LandFeed::Round& R) { return T < R.T; };
+		const size_t Fired0 = static_cast<size_t>(std::upper_bound(Rec->Rounds.begin() + static_cast<std::ptrdiff_t>(std::min(RoundFrom, Rec->Rounds.size())), Rec->Rounds.end(), From, ByT) - Rec->Rounds.begin());
+		const size_t Past = static_cast<size_t>(std::upper_bound(Rec->Rounds.begin() + static_cast<std::ptrdiff_t>(Fired0), Rec->Rounds.end(), To, ByT) - Rec->Rounds.begin());
+		auto Landed0 = std::upper_bound(ByLanding.begin(), ByLanding.end(), From, [this](double V, int K) { return V < Rec->Rounds[static_cast<size_t>(K)].L; });
+		for (auto It = Landed0; It != ByLanding.end(); ++It)
+		{
+			const size_t I = static_cast<size_t>(*It);
+			const LandFeed::Round& R = Rec->Rounds[I];
+			if (R.L > To) break;
+			if (I < RoundFrom || I >= Past) continue;
+			const Vec At(R.X, R.Y, HeightAt(R.X, R.Y) + 0.5);
+			// (a round that struck someone lands on him: his own hull or body does not hide it)
+			const int Struck = R.On >= 0 ? TrackOfShooter(R.On, R.Ok, R.Oj) : -1;
+			if ((At - In.Eye).Length() < 300.0 && InPicture(In, At) && SeenFrom(In.Eye, At, Struck)) return true;
+		}
+		for (size_t I = Fired0; I < Past; ++I)
 		{
 			const LandFeed::Round& R = Rec->Rounds[I];
-			if (R.T > To) break;
-			const bool bFired = R.T > From && R.T <= To;
-			const bool bLanded = R.L > From && R.L <= To;
-			if (bLanded)
+			const int Who = TrackOfShooter(R.By, R.K, R.J);
+			Vec At;
+			double Facing = 0.0;
+			if (Who >= 0 && WhereIs(Who, To, At, Facing))
 			{
-				const Vec At(R.X, R.Y, HeightAt(R.X, R.Y) + 0.5);
-				// (a round that struck someone lands on him: his own hull or body does not hide it)
-				const int Struck = R.On >= 0 ? TrackOfShooter(R.On, R.Ok, R.Oj) : -1;
-				if ((At - In.Eye).Length() < 300.0 && InPicture(In, At) && SeenFrom(In.Eye, At, Struck)) return true;
-			}
-			if (bFired)
-			{
-				const int Who = TrackOfShooter(R.By, R.K, R.J);
-				Vec At;
-				double Facing = 0.0;
-				if (Who >= 0 && WhereIs(Who, To, At, Facing))
-				{
-					At.Z += 1.0;
-					if ((At - In.Eye).Length() < 250.0 && InPicture(In, At) && SeenFrom(In.Eye, At, Who)) return true;
-				}
+				At.Z += 1.0;
+				if ((At - In.Eye).Length() < 250.0 && InPicture(In, At) && SeenFrom(In.Eye, At, Who)) return true;
 			}
 		}
 		for (const Track& Tr : Rec->Tracks)
@@ -855,7 +990,7 @@ namespace LandEye
 			{
 				const Track& Tr = Rec->Tracks[I];
 				if (Tr.bTwin || (Tr.Fell >= 0.0 && Tr.Fell < Battle)) continue;
-				const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
+				const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
 				if (!B || (B->Kind == "art" && B->Team.empty())) continue; // the batteries stand far back
 				if (HiddenNow(static_cast<int>(I))) continue; // (nor where an ambush lies, as the player does not know it)
 				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
@@ -1115,7 +1250,7 @@ namespace LandEye
 					// Seen from his side, near, at a man's height; else over the shoulder of a man beside him.
 					Options.push_back({ Kind::Watch, Coming, true });
 					const LandFeed::Spot Sf = LandFeed::SpotAt(Tr, Battle);
-					const LandFeed::Block* Bf = Rec->BlockOf(Tr.Block);
+					const LandFeed::Block* Bf = BlockOfTrack(Coming);
 					int Mate = -1;
 					double MateGap = 1e9;
 					for (size_t I = 0; I < Rec->Tracks.size(); ++I)
@@ -1123,7 +1258,7 @@ namespace LandEye
 						const Track& Tm = Rec->Tracks[I];
 						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle || HiddenNow(static_cast<int>(I))) continue;
 						if (Tm.Fell >= 0.0 && Tm.Fell < Battle + Soon(6.0)) continue;
-						const LandFeed::Block* Bm = Rec->BlockOf(Tm.Block);
+						const LandFeed::Block* Bm = BlockOfTrack(static_cast<int>(I));
 						if (!Bm || !Bf || Bm->Side != Bf->Side) continue;
 						const LandFeed::Spot Sm = LandFeed::SpotAt(Tm, Battle);
 						const double Gap = std::hypot(Sm.X - Sf.X, Sm.Y - Sf.Y);
@@ -1157,7 +1292,7 @@ namespace LandEye
 				for (size_t I = 0; I < Rec->Tracks.size() && !bEnemySeen; ++I)
 				{
 					const Track& Tr = Rec->Tracks[I];
-					const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
+					const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
 					bEnemySeen = B && B->Side != Set.Own && !Tr.bTwin && Tr.Start() <= Battle && !(Tr.Fell >= 0.0 && Tr.Fell < Battle) && !HiddenNow(static_cast<int>(I));
 				}
 				bOwnTurn = !bEnemySeen;
@@ -1181,14 +1316,15 @@ namespace LandEye
 			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 			{
 				const Track& Tr = Rec->Tracks[I];
-				if (!Standing(Tr) || HiddenNow(static_cast<int>(I))) continue;
+				if (!Standing(Tr)) continue;
 				if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
-				const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
+				const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
 				if (!B) continue;
 				const bool bTank = Tr.Role == "tank";
 				if (bTanksOnly && !bTank) continue;
 				if (bSquadOnly && !InSquad(static_cast<int>(I))) continue;
 				if ((B->Side == Set.Own) != bOwnTurn && !bTanksOnly && !bSquadOnly) continue;
+				if (HiddenNow(static_cast<int>(I))) continue;
 				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
 				double Score = HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(2.5), 40.0) * 2.5 + HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(8.0), 70.0);
 				// Someone about to fall right here: the moment the film is for. Seen, not dwelt on.
@@ -1338,7 +1474,7 @@ namespace LandEye
 		{
 			ShownAt[static_cast<size_t>(Subject)] = Real;
 			const Track& Ts = Rec->Tracks[static_cast<size_t>(Subject)];
-			const LandFeed::Block* Bs = Rec->BlockOf(Ts.Block);
+			const LandFeed::Block* Bs = BlockOfTrack(Subject);
 			if (Ts.Role == "tank" && Bs) LastTankSide = Bs->Side;
 		}
 		ShotStarted = Real;
@@ -1401,6 +1537,7 @@ namespace LandEye
 	{
 		Now.bCut = false;
 		if (!Rec) return Now;
+		IndexLandings();
 		const double PrevBattle = LastBattle;
 		// (the rounds that may still be in the air: none fired more than a minute before; a seek back starts again)
 		if (Battle < LastBattle) RoundFrom = 0;

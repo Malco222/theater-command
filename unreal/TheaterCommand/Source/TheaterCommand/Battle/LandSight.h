@@ -62,7 +62,7 @@ namespace LandSight
 	class Room
 	{
 	public:
-		/** Lays the field's own things in a grid of 10 m squares (once; about 20 ms for the dry run's 175,000). */
+		/** Lays the field's own things in a grid of 4 m squares (once; some tens of ms for the dry run's 175,000). */
 		void Lay(const LandField::Ground* InGround);
 		/** The movers, again before each frame's questions. */
 		void ClearMovers();
@@ -85,15 +85,20 @@ namespace LandSight
 		};
 		const LandField::Ground* Ground = nullptr;
 		std::vector<Thing> Kept;
-		std::vector<uint32_t> First, Order; // the grid: First[cell] .. First[cell + 1] in Order
-		double X0 = 0.0, Y0 = 0.0, Cell = 10.0;
+		/** The grid of 4 m squares: each holds every thing that reaches into it (First[cell] .. First[cell + 1] in Order),
+		 * and the highest and lowest any of them stands there. */
+		std::vector<uint32_t> First, Order;
+		std::vector<float> Highest, Lowest;
+		double X0 = 0.0, Y0 = 0.0, Cell = 4.0;
 		int Cols = 0, Rows = 0;
 		std::vector<Man> Men;
 		std::vector<Machine> Machines;
-		/** The men by 3 m squares of where their feet are (a question looks in its own square and the eight round it):
-		 * some 700 men asked of a few thousand times a look. */
-		std::unordered_map<int64_t, std::vector<uint32_t>> MenSquares;
-		std::vector<int64_t> UsedSquares;
-		static int64_t ManSquare(double X, double Y);
+		/** The men by 3 m squares of where their feet are, the machines by 10 m squares of their roots (a question looks in
+		 * its own square and the eight round it): a hashed table of chains, Head[bucket] the first, Next[one] the next. A
+		 * chain may hold a few from squares far off; their distance turns them away. Some 2,000 men asked of tens of
+		 * thousands of times a frame. */
+		std::vector<int32_t> ManHead, ManNext, MachineHead, MachineNext;
+		std::vector<uint32_t> UsedMen, UsedMachines;
+		static size_t Bucket(int64_t I, int64_t J, size_t Count);
 	};
 }
