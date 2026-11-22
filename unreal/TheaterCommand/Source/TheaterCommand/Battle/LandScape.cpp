@@ -367,6 +367,19 @@ namespace LandScape
 		return MeanZ + 14.0 * Fbm(X, Y, 2600.0, 3, Seed ^ 0xB1) + 4.0 * Fbm(X, Y, 700.0, 2, Seed ^ 0xB2);
 	}
 
+	int Region::DrawStep() const
+	{
+		// (the budget's steps: the jungle a step nearer, the temperate woods two, the northern forest three, olives on a
+		// mountain four; the desert, the dry steppe, the hills' olives and the islands GS9's own)
+		switch (Which())
+		{
+		case Look::Jungle: return 1;
+		case Look::Farmland: return Fd.Lat > 55.0 ? 3 : 2;
+		case Look::Med: return Fd.Terrain.find("mount") != std::string::npos ? 4 : 0;
+		default: return 0;
+		}
+	}
+
 	void Region::KitPlain(int Slot, LandField::BaseMesh& M) const
 	{
 		// (a plain grey box a little taller than a man: the kit is what is meant to be seen, and a missing file is said)

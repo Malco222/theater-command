@@ -53,7 +53,8 @@ namespace LandScape
 			CFeather = 1, // feather grass: fine silvery plumes leaning with the wind
 			CWorm = 2,    // a wormwood cushion, silver-green
 			CPebble = 3,  // a few small stones
-			CHummock = 4  // a sand hummock held by a tuft
+			CHummock = 4, // a sand hummock held by a tuft
+			CReed = 5     // a clump of reeds (round the eye only, as the frame budget asks of low growth)
 		};
 
 		LandField::Base KitOf(int K) { return static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K); }
@@ -61,11 +62,11 @@ namespace LandScape
 
 		// (sRGB as painted, the art director's to check: the steppe's grass a step under the bocage's pastures in
 		// green, greyer and more buff; the sand paler and warmer than the desert's serir)
-		const Tone GrassGreen = Rgb(124, 130, 80);
-		const Tone GrassGrey = Rgb(144, 142, 100);
-		const Tone Buff = Rgb(168, 154, 106);
-		const Tone Wormwood = Rgb(150, 154, 128);
-		const Tone Plume = Rgb(182, 176, 140);
+		const Tone GrassGreen = Rgb(104, 118, 66);
+		const Tone GrassGrey = Rgb(128, 130, 92);
+		const Tone Buff = Rgb(156, 144, 100);
+		const Tone Wormwood = Rgb(136, 142, 118);
+		const Tone Plume = Rgb(170, 166, 132);
 		const Tone Sand = Rgb(196, 176, 132);
 		const Tone SandDark = Rgb(166, 146, 106);
 		const Tone Dust = Rgb(162, 148, 114);
@@ -284,7 +285,7 @@ namespace LandScape
 				const double Wm = Read(X, Y, 1), Sd = Read(X, Y, 2), Pt = Read(X, Y, 3);
 				const double Wet = Clamp01(0.5 - 0.6 * Broad + 0.25 * Pt);
 				Tone T = Mixed(GrassGrey, GrassGreen, Green * (0.35 + 0.65 * Wet));
-				T = Mixed(T, Buff, (1.0 - 0.7 * Green) * (0.35 + 0.4 * Smooth(-0.2, 0.5, Broad)) + 0.25 * Sd);
+				T = Mixed(T, Buff, (1.0 - 0.7 * Green) * (0.35 + 0.4 * Smooth(-0.2, 0.5, Broad)) + 0.12 * Sd);
 				if (bWinter) T = Mixed(T, Rgb(170, 160, 128), 0.6);
 				T = Mixed(T, GrassGreen, (0.3 + 0.3 * Green) * Meadow_);
 				T = Mixed(T, Wormwood, 0.45 * Wm);
@@ -292,9 +293,9 @@ namespace LandScape
 				// (the sand: through the thin grass on it, and bare where the wind has blown it out, in blow-outs tens of
 				// metres across on the sandiest ground)
 				const double Bare = std::max(0.85 * Rough, BlownOut(Sd, Pt));
-				T = Mixed(T, Mixed(SandDark, Sand, 0.5 + 0.4 * Pt), 0.22 * Sd + 0.8 * Bare);
+				T = Mixed(T, Mixed(SandDark, Sand, 0.5 + 0.4 * Pt), 0.12 * Sd + 0.8 * Bare);
 				// (the grass's own light and dark: the patches a man sees running away from him)
-				return Varied(T, 1.0 + 0.04 * Broad + 0.05 * Pt, 0.01 * Broad);
+				return Varied(T, 1.0 + 0.05 * Broad + 0.08 * Pt, 0.015 * Broad);
 			}
 			static double BlownOut(double Sd, double Pt) { return Smooth(0.6, 0.95, Sd) * Smooth(0.25, 0.7, -Pt); }
 			/** How far a parcel's own ground reaches here: 0 at its edge to 1 some Reach metres in, its line wavering with
@@ -321,7 +322,7 @@ namespace LandScape
 					return Mixed(T, Mixed(Dust, Rut, 0.4), 0.75 * RutK);
 				}
 				case KVillage:
-				case KYard: return Mixed(Grass(S.X, S.Y, S.Broad, 0.0, 0.0), Dust, 0.5 * Inside(S, 30.0)); // (trampled round the tents)
+				case KYard: return Mixed(Grass(S.X, S.Y, S.Broad, 0.0, 0.0), Dust, 0.35 * Smooth(-0.3, 0.4, Read(S.X, S.Y, 3))); // (trampled in patches round the tents, no edge to the plot)
 				case KWater: return Rgb(74, 92, 98);
 				case KMarsh: return Mixed(Grass(S.X, S.Y, S.Broad, 1.0, 0.0), Rgb(108, 120, 72), 0.8 * Inside(S, 20.0));
 				case KWorks: return Mixed(Grass(S.X, S.Y, S.Broad, 0.0, 0.0), Mixed(Sand, SandDark, 0.5), 0.8 * Inside(S, 8.0)); // (sand thrown up from the pits)
@@ -347,8 +348,11 @@ namespace LandScape
 					T = Mixed(T, Rgb(70, 90, 102), Smooth(26.0, 16.0, std::fabs(D)));
 					// the bluffs' faces: eroded sand and clay, pale where the sun takes them, gullies dark, grass on top
 					const double Face = Smooth(-215.0, -250.0, D) * Smooth(-410.0, -370.0, D);
-					const Tone Scar = Mixed(Rgb(196, 170, 126), Rgb(120, 104, 80), Smooth(0.1, 0.6, Noise(S.Y / 40.0, D / 25.0, Seed ^ 0xE7)));
-					T = Mixed(T, Scar, 0.9 * Face);
+					const double Gully = Smooth(-0.1, 0.35, Noise(S.Y / 35.0, D / 22.0, Seed ^ 0xE7)) * (0.6 + 0.4 * Smooth(0.0, 0.5, Noise(S.Y / 160.0, 0.5, Seed ^ 0xE8)));
+					const Tone Scar = Mixed(Rgb(176, 148, 106), Rgb(88, 74, 58), Gully);
+					T = Mixed(T, Scar, 0.92 * Face);
+					// (the grass on the plateau's lip darker than the faces under it, so the bluffs' line reads at a distance)
+					T = Mixed(T, Mixed(GrassGreen, Rgb(84, 96, 58), 0.5), 0.6 * Smooth(-400.0, -430.0, D) * Smooth(-560.0, -480.0, D));
 				}
 				return T;
 			}
@@ -368,7 +372,8 @@ namespace LandScape
 					if (Pick < 0.35) return Grown{ ClutOf(CHummock), 0.2 };
 					return Pick < 0.9 ? Grown{ ClutOf(CTuft), 0.1 + 0.5 * (1.0 - Bare) } : Grown{ ClutOf(CPebble), 0.08 };
 				}
-				if (S.Kind == KWoods || S.Kind == KMarsh || S.Kind == KField) return Pick < 0.85 ? Grown{ ClutOf(CTuft), 2.0 } : Grown{ ClutOf(CWorm), 0.3 };
+				if (S.Kind == KMarsh) return Pick < 0.7 ? Grown{ ClutOf(CReed), 1.2 * Inside(S, 10.0) } : Grown{ ClutOf(CTuft), 1.5 };
+				if (S.Kind == KWoods || S.Kind == KField) return Pick < 0.85 ? Grown{ ClutOf(CTuft), 2.0 } : Grown{ ClutOf(CWorm), 0.3 };
 				// the open steppe: a carpet of short tufts, thinner on the sand; wormwood in its patches, feather grass on the
 				// poorest ground, hummocks where the sand is
 				const double Plumed = Smooth(0.2, 0.7, Pt);
@@ -411,6 +416,11 @@ namespace LandScape
 				case CPebble:
 					P.Scale = static_cast<float>(0.7 + 0.6 * U4);
 					P.ScaleZ = static_cast<float>(0.7 + 0.5 * U5);
+					return true;
+				case CReed:
+					P.Scale = static_cast<float>(0.8 + 0.5 * U4);
+					P.ScaleZ = static_cast<float>(0.7 + 0.6 * U5);
+					P.Tint = bWinter ? Tint(1.1, 1.02, 0.9) : Tint(1.0 - 0.06 * G, 1.0, 0.96);
 					return true;
 				default: return false;
 				}
@@ -474,6 +484,13 @@ namespace LandScape
 					M.FarFrom = 70.0f;
 					break;
 				}
+				case CReed:
+					// a clump of reeds a man high: thirty-odd stems, green at the foot, straw at the tips, a few heads
+					Tuft(W, 32, 0.25, 1.3, 0.8, 0.18, 0.02, 0x7F10, Rgb(88, 100, 60), Rgb(176, 164, 112));
+					LitUp(M.Near, 0);
+					M.Paint = 2;
+					M.FarFrom = 60.0f;
+					break;
 				default: break;
 				}
 			}
@@ -487,8 +504,7 @@ namespace LandScape
 				{
 				case KBoulder: return "DryBoulder";
 				case KOutcrop: return "DryOutcrop";
-				case KWillow: return "Willow";
-				case KReeds: return "Reeds";
+				case KWillow: return nullptr; // (the Asia set's willow reads as a savanna tree on the open steppe: the scrub is shrubs)
 				case KYurt: return bYurts ? "Yurt" : nullptr;
 				case KOvoo: return bYurts ? "Ovoo" : nullptr;
 				case KHut: return "SteppeHut";
@@ -659,18 +675,25 @@ namespace LandScape
 					if (!H.Free(X, Y, bBig ? 5.0 : 1.5)) continue;
 					H.Plant(KitOf(bBig ? KOutcrop : KBoulder), X, Y, Yaw, Size, Size * Flat, Tint(1.0, 1.0, 1.0));
 				}
-				// Willow scrub where the rules have woods (the river's and the lakes' banks) and round the marshes; reeds in
+				// Scrub where the rules have woods (the river's and the lakes' banks, the sand's elm and willow thickets) and
+				// round the marshes: willows in clumps that touch, a low thicket of grey-green shrub (pea shrub, young
+				// willow) between and round them so no lone tree stands on the grass, gaps where the noise opens it; reeds in
 				// the marshes.
-				const int Scrub = static_cast<int>(W * D / 10000.0 * 140.0);
+				const int Scrub = static_cast<int>(W * D / 10000.0 * 220.0);
 				for (int K = 0; K < Scrub; ++K)
 				{
 					const double X = R.Range(-B, W - B), Y = R.Range(-B, D - B);
-					const double Keep = R.Next(), Yaw = R.Range(0.0, 2.0 * Pi), Size = R.Range(0.6, 1.1), Tall = R.Range(0.7, 1.1), Grey = R.Range(0.92, 1.05);
+					const double Keep = R.Next(), Yaw = R.Range(0.0, 2.0 * Pi), Size = R.Range(0.6, 1.1), Tall = R.Range(0.7, 1.1), Grey = R.Range(0.82, 0.94);
+					const double Which = R.Next(), Low = R.Range(0.45, 0.85);
 					const Spot S = H.At(X, Y);
-					if (S.Kind == KWoods && Keep < 0.45 && H.Free(X, Y, 3.0))
-						H.Plant(KitOf(KWillow), X, Y, Yaw, Size, Size * Tall, Tint(Grey, Grey, Grey * 0.96));
-					else if (S.Kind == KMarsh && Keep < 0.8 && H.Free(X, Y, 1.2, true))
-						H.Plant(KitOf(KReeds), X, Y, Yaw, Size, Tall, Tint(Grey, Grey, Grey));
+					if (S.Kind == KWoods)
+					{
+						const double Clump = Smooth(-0.35, 0.25, Read(X, Y, 3)) * Smooth(0.0, 12.0, S.Edge + 8.0);
+						if (Which < 0.4 && Keep < 0.75 * Clump && H.Free(X, Y, 2.2))
+							H.Plant(LandField::Base::ShrubC, X, Y, Yaw, 0.9 * Size, Size * Tall, Tint(Grey * 0.88, Grey * 0.94, Grey * 0.84)); // (a willow clump: tall, loose, many-stemmed)
+						else if (Which >= 0.4 && Keep < 0.55 * Smooth(-0.6, 0.0, Read(X, Y, 3)) && H.Free(X, Y, 1.4))
+							H.Plant(LandField::Base::ShrubB, X, Y, Yaw, Low, Low * R.Range(0.6, 0.9), Tint(Grey * 0.9, Grey * 0.95, Grey * 0.82));
+					}
 				}
 			}
 

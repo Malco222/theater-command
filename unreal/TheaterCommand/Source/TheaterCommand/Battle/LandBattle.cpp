@@ -2015,6 +2015,44 @@ void ALandBattle::LayThings()
 	// lay them in a twin mesh that casts one, the rest in one that casts none; LandCarpet's ShadowTo. 0: everywhere)
 	float CornShadowTo = 25.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCornShadowTo="), CornShadowTo);
+	// A region's ground (GS9 by class, the frame budget of 22 November, production/theatre-budgets-1122): its kit drawn
+	// by its class (LandField::BaseMesh::Class), each class at the budget's distances, its dense woods a step or more down
+	// the budget's ladder of nearer ones (LandScape::Region::DrawStep). The bocage and the steppe (no region: -1) keep the
+	// distances above exactly; a "-TheaterLand<name>=" still wins.
+	const int32 Step = G.DrawStep();
+	struct FRung
+	{
+		float TreePlain, Crown, Trees, ShrubPlain, Shrubs;
+	};
+	static const FRung Ladder[5] = { { 300.0f, 400.0f, 1200.0f, 128.0f, 500.0f }, { 200.0f, 300.0f, 1200.0f, 100.0f, 400.0f }, { 150.0f, 250.0f, 1000.0f, 80.0f, 300.0f },
+		{ 120.0f, 200.0f, 800.0f, 60.0f, 250.0f }, { 80.0f, 150.0f, 600.0f, 50.0f, 200.0f } };
+	float RungTreePlain = 0.0f, RungShrubPlain = 0.0f;
+	if (Step >= 0)
+	{
+		const FRung& Rung = Ladder[FMath::Clamp(Step, 0, 4)];
+		auto Said = [](const TCHAR* Key) {
+			float Value = 0.0f;
+			return FParse::Value(FCommandLine::Get(), Key, Value);
+		};
+		if (!Said(TEXT("TheaterLandCrownFrom=")))
+		{
+			CrownFrom = Rung.Crown;
+		}
+		if (!Said(TEXT("TheaterLandTreesTo=")))
+		{
+			TreesTo = Rung.Trees;
+		}
+		if (!Said(TEXT("TheaterLandShrubsTo=")))
+		{
+			ShrubsTo = Rung.Shrubs;
+		}
+		if (!Said(TEXT("TheaterLandShrubShadowTo=")))
+		{
+			ShrubShadowTo = FMath::Min(ShrubShadowTo, ShrubsTo);
+		}
+		RungTreePlain = TreeFarFrom > 0.0f ? 0.0f : Rung.TreePlain;
+		RungShrubPlain = ShrubFarFrom > 0.0f ? 0.0f : Rung.ShrubPlain;
+	}
 	double SaidShrubFar = 0.0, SaidTreeFar = 0.0;
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
@@ -2072,10 +2110,15 @@ void ALandBattle::LayThings()
 	{
 		const LandField::Base Base = static_cast<LandField::Base>(Kind);
 		const bool bClutter = LandParts::IsClutter(Kind);
-		const bool bShrub = Base == LandField::Base::ShrubA || Base == LandField::Base::ShrubB || Base == LandField::Base::ShrubC || Base == LandField::Base::Haycock;
-		// (and a region's kit trees: an olive, a cypress, a palm; LandScape's KitLook marks them)
+		// (and a region's kit by its class: an olive, a cypress, a palm a tree; a bush or a boulder a shrub; an outcrop, a
+		// pole or a tower big; a building a house. LandScape's KitLook or LandField sets it)
+		using FDraw = LandField::BaseMesh::Draw;
+		const FDraw Class = G.BaseOf(Base).Class;
+		const bool bShrub = Base == LandField::Base::ShrubA || Base == LandField::Base::ShrubB || Base == LandField::Base::ShrubC || Base == LandField::Base::Haycock
+			|| Class == FDraw::Shrub;
 		const bool bTree = Base == LandField::Base::Oak || Base == LandField::Base::Elm || Base == LandField::Base::Ash || Base == LandField::Base::Beech
-			|| Base == LandField::Base::Pollard || Base == LandField::Base::Apple || Base == LandField::Base::Birch || G.BaseOf(Base).bTree;
+			|| Base == LandField::Base::Pollard || Base == LandField::Base::Apple || Base == LandField::Base::Birch || G.BaseOf(Base).bTree || Class == FDraw::Tree;
+		const bool bBig = Class == FDraw::Big, bHouse = Class == FDraw::House;
 		std::vector<const LandField::Placed*> Them;
 		if (bClutter)
 		{
@@ -2167,6 +2210,24 @@ void ALandBattle::LayThings()
 			{
 				Plain = ShrubFarFrom;
 			}
+			// (a region's ground: no plain level further off than its rung's, a house's from 300 m at most)
+			if ((bTree || bBig) && RungTreePlain > 0.0f)
+			{
+				Plain = FMath::Min(Plain, static_cast<double>(RungTreePlain));
+			}
+			else if (bShrub && RungShrubPlain > 0.0f)
+			{
+				Plain = FMath::Min(Plain, static_cast<double>(RungShrubPlain));
+			}
+			else if (bHouse && Step >= 0)
+			{
+				Plain = FMath::Min(Plain, 300.0);
+			}
+			// (a region's kit: its file's middle level from MidFrom, where it has one and the plain level is well beyond)
+			if (Step >= 0 && !Shape.Mid.Empty() && !Shape.Far.Empty() && Shape.MidFrom * 1.2 < Plain)
+			{
+				Further.Add({ &Shape.Mid, static_cast<double>(Shape.MidFrom), true });
+			}
 			if (!Shape.Far.Empty())
 			{
 				Further.Add({ &Shape.Far, Plain, true });
@@ -2191,6 +2252,15 @@ void ALandBattle::LayThings()
 				{
 					Further.Add({ &Crown, FMath::Max(static_cast<double>(CrownFrom), Plain * 1.2), false });
 				}
+			}
+			// (a big thing casts no shadow past the trees' crowns, a house none past 1,200 m)
+			if (bBig && CrownFrom > 0.0f && (TreesTo <= 0.0f || CrownFrom < TreesTo))
+			{
+				Further.Add({ &Last, FMath::Max(static_cast<double>(CrownFrom), Plain * 1.2), false });
+			}
+			else if (bHouse)
+			{
+				Further.Add({ &Last, FMath::Max(1200.0, Plain * 1.2), false });
 			}
 		}
 		for (int32 Shade = 0; Shade < Shades; ++Shade)
@@ -2232,9 +2302,9 @@ void ALandBattle::LayThings()
 				Copies->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
 			}
 			// (GS9: a hedge shrub or a haycock not drawn past ShrubsTo, a tree past TreesTo: some two lines of the picture)
-			else if ((bShrub && ShrubsTo > 0.0f) || (bTree && TreesTo > 0.0f))
+			else if ((bShrub && ShrubsTo > 0.0f) || ((bTree || bBig) && TreesTo > 0.0f))
 			{
-				Copies->SetCullDistances(0, FMath::RoundToInt32((bTree ? TreesTo : ShrubsTo) * U));
+				Copies->SetCullDistances(0, FMath::RoundToInt32((bTree || bBig ? TreesTo : ShrubsTo) * U));
 			}
 			Copies->RegisterComponent();
 			if (bClutter)
@@ -2381,6 +2451,11 @@ void ALandBattle::LayThings()
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the field's draw (GS9): hedge shrubs and haycocks plain from %.0f m, their shadows to %.0f m, none past %.0f m; trees plain from %.0f m, 42-triangle crowns with no shadow from %.0f m, none past %.0f m; the corn's shadows within %.0f m (0: that step off); the clutter's given-back places %s"),
 		SaidShrubFar, ShrubShadowTo, ShrubsTo, SaidTreeFar, CrownFrom, TreesTo, CornShadowTo,
 		Carpet->bCompact ? TEXT("removed, each mesh kept packed (GS7)") : TEXT("kept shrunk to nothing (-TheaterLandClutterShrunk)"));
+	if (Step >= 0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: a region's ground, step %d of the frame budget's ladder: its kit by class, trees plain from %.0f m at most, shrubs from %.0f m, houses from 300 m and never culled"),
+			Step, RungTreePlain, RungShrubPlain);
+	}
 }
 
 void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
