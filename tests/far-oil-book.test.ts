@@ -225,11 +225,20 @@ describe("Japan's fuel plants make the record's yield", () => {
   it('its staff gains nothing by more fuel chemistry once the plants make all they can, and the card says what they make', () => {
     const g = grand();
     expect(plantsSpent(g, 'JAP')).toBe(false);
-    expect(techRule(SYN, g, 'JAP')).toContain('With every factory at home working, its fuel plants make 0.94 oil a month between them');
+    // (The UI director's words of 20:45Z: the country's name to anyone but its own player, and "your" to him.)
+    const first = 'fuel plants make 0.94 oil a month between them, far less than was planned for them. Submarines cannot touch this oil, but bombers can hit the plants.';
+    expect(techRule(SYN, g, 'JAP')).toContain(`With every factory at home working, Japan's ${first}`);
     expect(techRule(SYN, g, 'GER')).toMatch(/Every working factory at home also makes [\d.]+ oil a month/);
     techOf(g, 'JAP')!.done.push('synthetics');
     expect(plantsSpent(g, 'JAP')).toBe(true);
-    expect(techRule(HYD, g, 'JAP')).toContain('its fuel plants make 0.94 oil a month between them');
+    // The first step's card still says what it gives; the second says that it adds nothing.
+    expect(plantsSpent(g, 'JAP', 'synthetics')).toBe(false);
+    expect(techRule(SYN, g, 'JAP')).toContain(`With every factory at home working, Japan's ${first}`);
+    expect(techRule(HYD, g, 'JAP')).toContain("Japan's fuel plants already make all they can: this adds no oil.");
+    const mine = startOpen(createGame(3, 'JAP'));
+    expect(techRule(SYN, mine, 'JAP')).toContain(`With every factory at home working, your ${first}`);
+    techOf(mine, 'JAP')!.done.push('synthetics');
+    expect(techRule(HYD, mine, 'JAP')).toContain('Your fuel plants already make all they can: this adds no oil.');
     techOf(g, 'GER')!.done.push('synthetics');
     expect(plantsSpent(g, 'GER')).toBe(false);
   });

@@ -207,11 +207,14 @@ export function plantRate(g: Game, nat: string, rate: number): number {
   return all > 0 ? Math.min(rate, most / all) : rate;
 }
 
-/** True for a nation whose fuel plants already make all the record allows them: more of the tree's fuel chemistry adds no oil. */
-export function plantsSpent(g: Game, nat: string): boolean {
+/**
+ * True for a nation whose fuel plants already make all the record allows them: more of the tree's fuel chemistry adds
+ * no oil. With `but`, read as if that technology were not yet had (what the technology itself adds).
+ */
+export function plantsSpent(g: Game, nat: string, but?: string): boolean {
   if (plantsMost(g, nat) === null) return false;
   let rate = 0;
-  for (const id of g.nations[nat].tech?.done ?? []) rate += TECH.techs.find((t) => t.id === id)?.oil ?? 0;
+  for (const id of g.nations[nat].tech?.done ?? []) if (id !== but) rate += TECH.techs.find((t) => t.id === id)?.oil ?? 0;
   return rate > 0 && plantRate(g, nat, rate) < rate;
 }
 
