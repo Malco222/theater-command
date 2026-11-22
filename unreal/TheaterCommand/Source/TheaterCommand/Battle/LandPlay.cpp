@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace LandPlay
 {
@@ -66,6 +67,14 @@ namespace LandPlay
 	{
 		Burst B;
 		if (Weapon != "mg") return B;
+		if (Role == "tank")
+		{
+			// A tank's: the Germans' MG 34 (about 15 a second), the Americans' M1919 and .50 (about 8), the Russians' DT
+			// (10), the British Besa (13); her gunners' bursts a little longer than a section's.
+			B.Rounds = Army == "GER" ? 9 : Army == "USA" ? 6 : Army == "SOV" ? 7 : 7;
+			B.PerSecond = Army == "GER" ? 15.0 : Army == "USA" ? 8.0 : Army == "SOV" ? 10.0 : Army == "UK" ? 13.0 : 9.0;
+			return B;
+		}
 		if (Army == "GER")
 		{
 			// The MG 42 (1,200 rounds a minute): a short burst of 7 to 10, as its crews were taught.
@@ -252,10 +261,38 @@ namespace LandPlay
 		return Rec ? GroundWordOf(Rec->Ground.GroundAt(X, Y)) : std::string("earth");
 	}
 
-	Vec Replay::MuzzleOf(int TrackIndex, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward) const
+	std::string Replay::TankMg(int TrackIndex, double T, int RoundN, const Vec& Toward) const
+	{
+		if (!Rec || TrackIndex < 0) return "coax";
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
+		const LandFeed::Change* C = LandFeed::ChangeAt(Tr, T);
+		const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
+		const std::string Army = B ? B->Army : std::string();
+		// (a burst's own roll, the same each time it is asked)
+		uint64_t H = static_cast<uint64_t>(RoundN + 1) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(TrackIndex) * 0xC2B2AE3D27D4EB4Full;
+		H ^= H >> 29;
+		H *= 0xBF58476D1CE4E5B9ull;
+		H ^= H >> 32;
+		const int Roll = static_cast<int>(H % 6);
+		if (C && !C->bButtoned && (Army == "USA" || Army == "GER") && Roll < 2) return "roof_mg";
+		const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
+		const double Bearing = std::atan2(Toward.X - S.X, Toward.Y - S.Y);
+		const double Off = std::fabs(std::remainder(Bearing - S.F, 2.0 * 3.14159265358979));
+		if (Off < 25.0 * 3.14159265358979 / 180.0 && Roll % 2 == 1) return "hull_mg";
+		return "coax";
+	}
+
+	Vec Replay::MuzzleOf(int TrackIndex, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward, int RoundN) const
 	{
 		Vec At;
-		if (TrackIndex >= 0 && Here.Muzzle && Here.Muzzle(TrackIndex, T, At, OutFacing)) return At;
+		const bool bTankMg = TrackIndex >= 0 && Rec && Weapon == "mg" && Rec->Tracks[static_cast<size_t>(TrackIndex)].Role == "tank";
+		const std::string Socket = bTankMg ? TankMg(TrackIndex, T, RoundN, Toward) : std::string();
+		if (TrackIndex >= 0 && Here.Muzzle && Here.Muzzle(TrackIndex, T, Socket, At, OutFacing))
+		{
+			// (a machine gun swings to its mark: the burst leaves toward it)
+			if (bTankMg && (Toward - At).Length() > 0.5) OutFacing = (Toward - At).Unit();
+			return At;
+		}
 		if (TrackIndex < 0 || !Rec)
 		{
 			// A shooter the player has not seen: the round comes from beyond what he can see, on the line it flew.
@@ -273,7 +310,8 @@ namespace LandPlay
 		if (Flat < 1e-6) { Fx = std::sin(S.F); Fy = std::cos(S.F); }
 		else { Fx /= Flat; Fy /= Flat; }
 		double Up = 0.0, Ahead = 0.6;
-		if (Tr.Role == "tank") { Up = 2.2; Ahead = 4.0; }
+		if (bTankMg) { Up = Socket == "roof_mg" ? 2.9 : Socket == "hull_mg" ? 1.6 : 2.1; Ahead = Socket == "roof_mg" ? 0.0 : Socket == "hull_mg" ? 2.6 : 1.4; }
+		else if (Tr.Role == "tank") { Up = 2.2; Ahead = 4.0; }
 		else if (Tr.Role == "gun") { Up = 1.2; Ahead = 2.0; }
 		else if (Weapon == "mortar" || Weapon == "smoke") { Up = 0.7; Ahead = 0.3; } // (a smoke round: the light mortar's)
 		else Up = MuzzleHeight(Pose);
@@ -400,7 +438,7 @@ namespace LandPlay
 		Round AtFire = R;
 		const Vec To = LandingOf(AtFire, Target, Normal);
 		Vec Facing;
-		const Vec At = MuzzleOf(S, R.T, R.W, Facing, To);
+		const Vec At = MuzzleOf(S, R.T, R.W, Facing, To, R.N);
 		if (Facing.Length() < 0.5) Facing = (To - At).Unit();
 		const std::string Ground = GroundAt(At.X, At.Y);
 
@@ -471,7 +509,7 @@ namespace LandPlay
 		const bool bOnVehicle = Target >= 0 && Rec->Tracks[static_cast<size_t>(Target)].IsVehicle() && R.R != Result::Miss;
 		// Which way it came: from its muzzle (the shooter where he stood when he fired).
 		Vec Facing;
-		const Vec From = MuzzleOf(S, R.T, R.W, Facing, At);
+		const Vec From = MuzzleOf(S, R.T, R.W, Facing, At, R.N);
 		Vec Incoming = (At - From).Unit();
 		if ((At - From).Length() < 0.5) Incoming = Vec(0.0, 1.0, 0.0);
 		const std::string Model = By ? By->Model : std::string();

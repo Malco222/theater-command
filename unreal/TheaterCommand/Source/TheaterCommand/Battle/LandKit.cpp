@@ -1038,6 +1038,11 @@ namespace LandKit
 		{
 			std::vector<float> Points, Facings;
 			std::vector<int> Paints, Parts, Blend, SootIn, Wear;
+			// (the modeller's later files, from the Tiger of 22 November: the third coat colour's blend2, the road dirt
+			// dust and the pale haze on what looks up, 0 to 100 a point, and shade, how open a point is to the sky, 0 to 1)
+			std::vector<int> Blend2, DustIn, Haze;
+			std::vector<float> ShadeIn;
+			bool bDust = false;
 			std::vector<uint32_t> Triangles;
 			size_t Count() const { return Paints.size(); }
 		};
@@ -1060,9 +1065,17 @@ namespace LandKit
 			M["blend"].Numbers(Out.Blend);
 			M["soot"].Numbers(Out.SootIn);
 			M["wear"].Numbers(Out.Wear);
+			M["blend2"].Numbers(Out.Blend2);
+			Out.bDust = M["dust"].Numbers(Out.DustIn) && Out.DustIn.size() == N;
+			M["haze"].Numbers(Out.Haze);
+			M["shade"].Numbers(Out.ShadeIn);
 			Out.Blend.resize(N, 0);
 			Out.SootIn.resize(N, 0);
 			Out.Wear.resize(N, 0);
+			Out.Blend2.resize(N, 0);
+			Out.DustIn.resize(N, 0);
+			Out.Haze.resize(N, 0);
+			Out.ShadeIn.resize(N, 1.0f);
 			Out.Triangles.resize(Tri.size());
 			for (size_t I = 0; I < Tri.size(); ++I)
 			{
@@ -1191,6 +1204,10 @@ namespace LandKit
 						R.Blend.push_back((R.Blend[A] + R.Blend[B]) / 2);
 						R.SootIn.push_back((R.SootIn[A] + R.SootIn[B]) / 2);
 						R.Wear.push_back((R.Wear[A] + R.Wear[B]) / 2);
+						R.Blend2.push_back((R.Blend2[A] + R.Blend2[B]) / 2);
+						R.DustIn.push_back((R.DustIn[A] + R.DustIn[B]) / 2);
+						R.Haze.push_back((R.Haze[A] + R.Haze[B]) / 2);
+						R.ShadeIn.push_back(0.5f * (R.ShadeIn[A] + R.ShadeIn[B]));
 					}
 				}
 				if (Halves.empty())
@@ -1293,6 +1310,12 @@ namespace LandKit
 		const int Upper = PaintNumber("upper", 0), Upper2 = PaintNumber("upper2", 1), Shade = PaintNumber("shade", 2);
 		const int Tread = PaintNumber("track", 3), Rubber = PaintNumber("rubber", 4), Steel = PaintNumber("steel", 5);
 		const int Black = PaintNumber("black", 10), Glass = PaintNumber("glass", 9), Canvas = PaintNumber("canvas", 8);
+		const int Upper3 = PaintNumber("upper3", -1);
+		// A file that lays its own road dirt (dust, from the modeller's Tiger of 22 November) is painted as it says, and
+		// nothing of the game's own goes over it: no dust, sun fade, sprayed camouflage or chipped edges (its own wear
+		// says where the paint is chipped). Its dust and haze colours: the file's, or the chosen coat's own.
+		const bool bFileDust = R["near"]["dust"].IsArray();
+		Lin DustColour = FromHex(R["dust_colour"].Str("9A8A6A")), HazeColour = FromHex(R["haze_colour"].Str(R["dust_colour"].Str("9A8A6A").c_str()));
 
 		char MonthKey[16];
 		std::snprintf(MonthKey, sizeof(MonthKey), "%04d-%02d", D.Year, D.Month);
@@ -1300,7 +1323,7 @@ namespace LandKit
 		const Json::Value Row = MonthRow(Swaps, MonthKey);
 		const Json::Value PaintSwap = Swaps["paint"];
 		bool bCamouflage = false;
-		std::string CoatUpper, CoatUpper2, CoatShade;
+		std::string CoatUpper, CoatUpper2, CoatShade, CoatUpper3;
 		if (PaintSwap["choices"].IsObject())
 		{
 			std::string Choice = ChoiceIn(Row, "paint");
@@ -1317,12 +1340,16 @@ namespace LandKit
 			CoatUpper = Chosen["upper"].Str("");
 			CoatUpper2 = Chosen["upper2"].Str("");
 			CoatShade = Chosen["shade"].Str("");
+			CoatUpper3 = Chosen["upper3"].Str("");
+			const Json::Value ChoiceRow = PaintSwap["choices"][Choice];
+			if (ChoiceRow["dust_colour"].IsString()) DustColour = FromHex(ChoiceRow["dust_colour"].Str());
+			if (ChoiceRow["haze_colour"].IsString()) HazeColour = FromHex(ChoiceRow["haze_colour"].Str());
 			Coat = Choice;
 			// The dark yellow came out as a base coat with pastes of olive green and red-brown for the crews to spray in
 			// blotches and bands, and by 1944 nearly every German vehicle at the front wore them. The model files give
 			// the blotches only for the lorry, so they are laid here, point by point: the green goes in upper2 (the
 			// file's own upper2, a darker yellow, is too near the base to read as camouflage at any distance).
-			bCamouflage = Choice == "yellow";
+			bCamouflage = Choice == "yellow" && !bFileDust;
 			if (bCamouflage)
 			{
 				CoatUpper2 = "5A6240";
@@ -1344,6 +1371,11 @@ namespace LandKit
 		if (!CoatUpper.empty()) Paint[static_cast<size_t>(Upper)] = FromHex(CoatUpper);
 		if (!CoatUpper2.empty()) Paint[static_cast<size_t>(Upper2)] = FromHex(CoatUpper2);
 		if (!CoatShade.empty()) Paint[static_cast<size_t>(Shade)] = FromHex(CoatShade);
+		if (Upper3 >= 0 && static_cast<size_t>(Upper3) < Paint.size())
+		{
+			// (a coat with no third colour of its own: the second's, so blend2 changes nothing)
+			Paint[static_cast<size_t>(Upper3)] = !CoatUpper3.empty() ? FromHex(CoatUpper3) : !CoatUpper2.empty() ? FromHex(CoatUpper2) : Paint[static_cast<size_t>(Upper3)];
+		}
 		const bool bAmerican = D.Nation == "USA";
 
 		// The month's swaps of parts (the Panzer IV's long gun and her skirts, the lorry's tilt): parts named only by a
@@ -1752,7 +1784,7 @@ namespace LandKit
 				if (PaintK == Upper)
 				{
 					Lin First = C;
-					if (bAmerican)
+					if (bAmerican && !bFileDust)
 					{
 						// (the art director's sheet: an American vehicle's olive is faded by the sun on what faces the sky,
 						// paler and greyer, never greener: red stays over green)
@@ -1761,6 +1793,11 @@ namespace LandKit
 					if (bFileBlend)
 					{
 						C = Mix(First, Paint[static_cast<size_t>(Upper2)], Clamp(Raw.Blend[K] / 100.0, 0.0, 1.0));
+						// (the third colour sprayed over the second where they meet: mix(mix(upper, upper2, blend), upper3, blend2))
+						if (Upper3 >= 0 && Raw.Blend2[K] > 0)
+						{
+							C = Mix(C, Paint[static_cast<size_t>(Upper3)], Clamp(Raw.Blend2[K] / 100.0, 0.0, 1.0));
+						}
 					}
 					else if (bCamouflage)
 					{
@@ -1773,14 +1810,22 @@ namespace LandKit
 						C = First;
 					}
 				}
-				// Worn edges: the paint chipped back toward a pale primer and bright steel along the plates' edges.
-				if (bCoat && Edge[K] > 0.0f)
+				// Worn edges: the paint chipped back toward a pale primer and bright steel along the plates' edges (a file
+				// with its own dirt says where with its wear: chipped to the metal that far).
+				if (bFileDust)
+				{
+					if (bCoat && Raw.Wear[K] > 0)
+					{
+						C = Mix(C, Paint[static_cast<size_t>(Steel)], Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
+					}
+				}
+				else if (bCoat && Edge[K] > 0.0f)
 				{
 					const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
 					C = Mix(C, C * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
 				}
 				// Road dust, thickest low down: tracks, wheels and the lower hull of a summer Normandy.
-				if (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel)
+				if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
 				{
 					const double Low = Clamp(1.0 - At.Z / 1.0, 0.0, 1.0);
 					C = Mix(C, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)));
@@ -1789,6 +1834,14 @@ namespace LandKit
 				if (Raw.SootIn[K] > 4)
 				{
 					C = Mix(C, Paint[static_cast<size_t>(Black)], 0.72 * std::min(Raw.SootIn[K], 100) / 100.0);
+				}
+				if (bFileDust)
+				{
+					// The file's own dirt over the finished paint: the road's dust that far to her coat's dust colour, then
+					// the thin pale haze on what looks up, then the shadow in her creases (how open the point is to the sky).
+					C = Mix(C, DustColour, Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
+					C = Mix(C, HazeColour, Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
+					C = C * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
 				}
 				Colour[K * 4] = ToPicture(C.R);
 				Colour[K * 4 + 1] = ToPicture(C.G);
@@ -4709,7 +4762,39 @@ namespace LandKit
 		return true;
 	}
 
-	std::string Battle::PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, uint8_t& OutBrew)
+	bool ReadFireOdds(const std::string& Text, std::map<std::string, FireOdds>& Out, std::string& OutError)
+	{
+		Json Doc;
+		if (!Doc.Parse(Text, OutError))
+		{
+			OutError = "the performance file: " + OutError;
+			return false;
+		}
+		const Json::Value List = Doc.Root()["vehicles"];
+		if (!List.IsObject())
+		{
+			OutError = "the performance file has no vehicles";
+			return false;
+		}
+		for (size_t I = 0; I < List.Count(); ++I)
+		{
+			const Json::Value V = List.At(I);
+			const Json::Value F = V["fire_when_pierced"];
+			if (!F.IsObject())
+			{
+				continue;
+			}
+			FireOdds O;
+			O.Front = Clamp(F["front"].Num(), 0.0, 1.0);
+			O.Side = Clamp(F["side"].Num(), 0.0, 1.0);
+			O.Rear = Clamp(F["rear"].Num(), 0.0, 1.0);
+			O.Explodes = Clamp(V["explodes_of_fires"].Num(), 0.0, 1.0);
+			Out[List.Name(I)] = O;
+		}
+		return true;
+	}
+
+	std::string Battle::PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, int Index, uint8_t& OutBrew)
 	{
 		if (!Picker)
 		{
@@ -4739,14 +4824,51 @@ namespace LandKit
 		Bl.bMoving = SpeedBefore(W, W.Died) > 0.5;
 		Bl.Unit = W.Block;
 		Bl.Model = W.K;
-		const Fates::Fate F = Picker->Choose(Bl);
+		// Her end by her own odds and the face struck (a tank or a self-propelled gun: the fates' tank ways name
+		// theirs, blow, burn or still); the table then picks how that end looks.
+		const Block* Of = BlockOf(W.Block);
+		const auto Odds = Fires.find(Of ? Of->Model : M.Name); // (by the model's file name, as performance-land.json keys it)
+		if (Odds != Fires.end() && (Bl.Family.compare(0, 5, "tank_") == 0 || Bl.Family == "spgun"))
+		{
+			const uint64_t H = Mix(FateSeed ^ 0xF17Eull, static_cast<uint64_t>(W.Block) * 977u + static_cast<uint64_t>(W.K), static_cast<uint64_t>(W.J) + 1u);
+			Bl.How = FireEnd(Odds->second, Bl.Aspect, Unit01(H), Unit01(Mix(H, 0xB10Bull)));
+		}
+		const std::string Drawn = Bl.How;
+		Fates::Fate F = Picker->Choose(Bl);
+		// (a self-propelled gun has no turret to throw: her ammunition going up burns her out instead; a table with no
+		// ways for the end drawn shows any)
+		if (F.Key.empty() && Bl.How == "blow")
+		{
+			Bl.How = "burn";
+			F = Picker->Choose(Bl);
+		}
+		if (F.Key.empty() && !Bl.How.empty())
+		{
+			Bl.How.clear();
+			F = Picker->Choose(Bl);
+		}
+		Ends.push_back({ Index, Of ? Of->Model : M.Name, Bl.Aspect, Drawn, F.Key });
 		OutBrew = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
 		return F.Key;
+	}
+
+
+	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2)
+	{
+		// (a plunging shot through her roof or her engine deck: as through her side)
+		const double Fire = Aspect == "front" ? O.Front : Aspect == "rear" ? O.Rear : Aspect == "side" || Aspect == "top" ? O.Side
+			: (O.Front + O.Side + O.Rear) / 3.0;
+		if (U1 >= Fire)
+		{
+			return "still";
+		}
+		return U2 < O.Explodes ? "blow" : "burn";
 	}
 
 	bool Battle::Load(const std::string& RecordingText, const ReadFn& Read, const GroundFn& InGround,
 		const Fates::Table* FatesTable, uint64_t Seed, std::string& OutError)
 	{
+		Ends.clear();
 		All.clear();
 		Looks.clear();
 		Events.clear();
@@ -4825,7 +4947,7 @@ namespace LandKit
 		std::vector<std::string> FateOf(Tracks.size());
 		for (size_t I : Order)
 		{
-			FateOf[I] = PickLook(Tracks[I], Looks[KeyOf[I]], RoundList, Brew[I]);
+			FateOf[I] = PickLook(Tracks[I], Looks[KeyOf[I]], RoundList, static_cast<int>(I), Brew[I]);
 			Picked[I] = 1;
 		}
 
@@ -5074,7 +5196,7 @@ namespace LandKit
 		std::stable_sort(Order.begin(), Order.end(), [this](size_t A, size_t B) { return Grown[A].Died < Grown[B].Died; });
 		for (size_t V : Order)
 		{
-			All[V].FateKey = PickLook(Laid(Grown[V]), Looks[KeyOf[V]], Own[V], Brew[V]);
+			All[V].FateKey = PickLook(Laid(Grown[V]), Looks[KeyOf[V]], Own[V], static_cast<int>(V), Brew[V]);
 			Picked[V] = 1;
 			Moved[V] = 1;
 		}

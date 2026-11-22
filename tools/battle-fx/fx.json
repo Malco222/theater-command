@@ -2975,7 +2975,7 @@
   "_mends_1952": "Art director 19:52Z 20 November, on head ea8c1ba. tail_widen: past the tail a trail keeps widening, as its age over the time to the tail to this power (0.22: half as wide again by 100 m), a cone and never a tube. edge_torn: its two sides wobble in and out by this much more. fold: a lighter fold along inside it, the strip up to this much thinner on one side, the side wandering along it; never denser. knots: the share of its pieces that carry a soft lump of denser smoke, knot_r of the strip's half width across, knot_off of it off its middle, knot_alpha as dense and knot_dark as dark, for knot_s; one past 0.6 off the middle is the column's own colour and lumps its outline; three times as many in a gout, none when the room is four fifths full. oil's gout_s is short, so a gout is a lump seen running back down the trail. streak: dark from the nacelle; the game blends in linear light, where a dark thing over a pale sky loses about a third of its darkness on the picture, so alpha 0.75 reads 0.3 to 0.4 at the nacelle, paling to 0.6 of that by 60 m (0.15 on the picture). glycol: a cool grey underside 10 below a pale sky (shadow), and spurt_m: a denser, wider spurt that long behind the radiator, spurt_wide times the source's width and spurt_alpha as dense. fire: flame_tongues thin tongues a step in place of the one wide one, each rooted on the nacelle's skin round it, flame_over times past white at its root, licking back and flame_lift_of_length of its length off the skin at its tip.",
   "funnel": {
    "_what": "a ship's funnel smoke (the art director's ruling of 05:30Z 21 November, art-director/explosions/funnel-smoke-ruling.md): round puffs laid by time into the air the ship steams through, never the air trail's strips",
-   "_how": "TrailStart(Now, Id, At, her velocity, \"funnel\", the funnel's width at its top in metres) and TrailMove every frame with her velocity and, last, the share of her top speed she is making (0 to 1; left out, her speed over top_speed_mps). A puff keeps none of her speed: it drifts with the world's wind and climbs, its height rise_k x root(funnel) x age^(2/3) / cube root(felt wind), so a fast ship's plume lies low and a stopped one's stands up (felt wind never under felt_least_mps). A puff is lip_of_funnel funnel widths across at the lip and widens by wide_k x funnel^wide_by_funnel x (metres of felt wind gone by)^(2/3). One is laid every 1/overlap of a puff's width. even (the art director, 14:13Z 21 November: no sky between the puffs): every other puff goes each time the plume has doubled its width, so the ones left always stand evenly; a puff thins as the plume deepens in them (the same smoke over more of them), and over the last even share of each such stretch the ones that go thin to nothing while those between take their smoke up. The first even_near halvings come at each doubling, the next even_far sooner (each when the plume is even_step times wider: far astern it is faint and needs fewer puffs deep), the rest at each doubling again. Without even: as they widen only as many hang on as still overlap that deep, by an even spread. size, shade: each puff that much bigger or smaller, lighter or darker; rough its lumpy rim, and heart_round 1 keeps its heart ring a true round under that rim, so the outline billows and the middle of the plume stays even. full is the look at full_from of her power and over, cruise the look at cruise_to and under, blended between: alpha a puff's opacity at the lip, fallen by e at fade_s seconds old (as the power fade_pow of its age: over 1 it holds while young, then goes sooner); age_s how long the oldest hang; colour at the lip going to colour_old by old_by_s. surge: when her power rises by rise within about within_s she rings up, and for for_s the smoke is the surge look. shadow_of_lit, shadow_k: a puff's side away from the sun. lip_least_px: a far ship's puffs are never under that many pixels at the lip (at most lip_most times their size), so her plume is fewer, bigger puffs; and where the lip is far_px.0 pixels or under they overlap only overlap_far deep, each as much denser (in full from far_px.1). life_s is only the row's mark as a trail of its own.",
+   "_how": "TrailStart(Now, Id, At, her velocity, \"funnel\", the funnel's width at its top in metres) and TrailMove every frame with her velocity and, last, the share of her top speed she is making (0 to 1; left out, her speed over top_speed_mps). A puff keeps none of her speed: it drifts with the world's wind and climbs, its height rise_k x root(funnel) x age^(2/3) / cube root(felt wind), so a fast ship's plume lies low and a stopped one's stands up (felt wind never under felt_least_mps). A puff is lip_of_funnel funnel widths across at the lip and widens by wide_k x funnel^wide_by_funnel x (metres of felt wind gone by)^(2/3). One is laid every 1/overlap of a puff's width. even (the art director, 14:13Z 21 November: no sky between the puffs): every other puff goes each time the plume has doubled its width, so the ones left always stand evenly; a puff thins as the plume deepens in them (the same smoke over more of them), and over the last even share of each such stretch the ones that go thin to nothing while those between take their smoke up. The first even_near halvings come at each doubling, the next even_far sooner (each when the plume is even_step times wider: far astern it is faint and needs fewer puffs deep), the rest at each doubling again. Without even: as they widen only as many hang on as still overlap that deep, by an even spread. size, shade: each puff that much bigger or smaller, lighter or darker; rough its lumpy rim, and heart_round 1 keeps its heart ring a true round under that rim, so the outline billows and the middle of the plume stays even. The plume rolls: a slow wave along it, one value every roll_run puffs at the lip and twice as far apart each time the plume has doubled its width, so a roll is always about as long as the plume is wide; where the wave is high the puffs ride roll_lift of their radius higher and are roll_shade darker, where it is low as much the other way (no lift at the lip, in full by three lip widths; never more than that, no dice). A wide funnel's puffs are laid closer: overlap_wide deep at wide_funnel_m across and wider, between funnel_m and that in proportion, each holding as much less smoke. full is the look at full_from of her power and over, cruise the look at cruise_to and under, blended between: alpha a puff's opacity at the lip, fallen by e at fade_s seconds old (as the power fade_pow of its age: over 1 it holds while young, then goes sooner); age_s how long the oldest hang; colour at the lip going to colour_old by old_by_s. surge: when her power rises by rise within about within_s she rings up, and for for_s the smoke is the surge look. shadow_of_lit, shadow_k: a puff's side away from the sun. lip_least_px: a far ship's puffs are never under that many pixels at the lip (at most lip_most times their size), so her plume is fewer, bigger puffs; and where the lip is far_px.0 pixels or under they overlap only overlap_far deep, each as much denser (in full from far_px.1). life_s is only the row's mark as a trail of its own.",
    "life_s": 36,
    "plume": {
     "lip_of_funnel": 1.1,
@@ -2994,13 +2994,18 @@
     "full_from": 0.75,
     "cruise_to": 0.4,
     "size": 0.1,
-    "shade": 0.15,
+    "shade": 0.1,
     "rough": 0.2,
     "heart_round": 1,
     "even": 0.3,
     "even_near": 2,
     "even_far": 2,
     "even_step": 1.6,
+    "roll_lift": 0.35,
+    "roll_shade": 0.1,
+    "roll_run": 4,
+    "overlap_wide": 4,
+    "wide_funnel_m": 8,
     "lip_least_px": 3,
     "lip_most": 8,
     "shadow_of_lit": 0.55,
@@ -4510,5 +4515,228 @@
    "least_px": 6,
    "keep": 0.6
   }
+ },
+ "linger": {
+  "_what": "Smoke that fades gradually into the air (Brian, 18:00Z 21 November: 'have the smoke effects gradually fade away into the air not disappear right away'; the art director's ruling of 19:58Z, art-director/explosions/smoke-burst-fire-ruling-r2.md). Each kind's cloud is as thick as it was until thick_s after its burst, then goes over the time to gone_s: at half its thick opacity a third of the way, at a tenth by two thirds, under a twentieth for the last fifth, two to three times as wide by the end, climbing and drifting, and paling to the colour of the air behind it, never pink.",
+  "_how": "keep: the share of the cloud's puffs that stay to the end and take over the smoke of the others, which retire over the first go_by of the tail. left_third and left_two_thirds: of the smoke the cloud had when thick, what is left a third and two thirds of the way from thick_s to gone_s (a deep cloud must lose most of its smoke before the eye sees it thin: tuned in the preview's pictures so the cloud reads half as strong and then a tenth there). wide: by the end a puff is that much wider again, its smoke thinner over the wider face. spread: and stands that much further again from the cloud's own middle, so the cloud is two to three times as wide. lift_mps: it climbs that much more. A puff's other looks (its own widening, colours, heart) keep the clock they had. Any of these numbers may be given for one size or gun under by.<name>. Between pale_from and pale_by of the way it goes 'pale' of the way to the sky the scene gave (SetSky; sky_share of it) or to 'to'. Remove a row, or its times, and that kind goes as it did before.",
+  "to": [
+   150,
+   156,
+   164
+  ],
+  "sky_share": 0.9,
+  "spare_from": 0.5,
+  "spare_by": 0.9,
+  "spare_least": 0.3,
+  "_spare": "Short of room, a new cloud keeps fewer of its puffs to its end and the rest retire sooner, the ones that stay taking the smoke of the rest as ever: all of its keep and go_by while under spare_from of the room (game.max_puffs) is asked for, down to spare_least of them at spare_by. So a long barrage's old smoke never crowds out its new bursts.",
+  "_never_sooner": "A cloud is gone no sooner than its longest puff was before this rule: its tail runs from thick_s to the later of gone_s and that, by the same curve (the pre-check on 86d71f2: a bomb's smoke lived 45 to 120 s by its size's linger_s, 1.6 times that on sand, and gone_s 45 and 60 cut it short).",
+  "shell": {
+   "keep": 0.5,
+   "go_by": 0.33,
+   "left_third": 0.24,
+   "left_two_thirds": 0.24,
+   "wide": 2.0,
+   "spread": 1.5,
+   "lift_mps": 0.4,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "by": {
+    "grenade": {
+     "thick_s": 1,
+     "gone_s": 8,
+     "left_third": 0.13,
+     "left_two_thirds": 0.09
+    },
+    "light": {
+     "thick_s": 1.5,
+     "gone_s": 11,
+     "left_third": 0.28,
+     "left_two_thirds": 0.22
+    },
+    "mortar": {
+     "thick_s": 2,
+     "gone_s": 15,
+     "left_third": 0.28,
+     "left_two_thirds": 0.18
+    },
+    "gun75": {
+     "thick_s": 3,
+     "gone_s": 22,
+     "left_two_thirds": 0.22
+    },
+    "how105": {
+     "thick_s": 4,
+     "gone_s": 30
+    },
+    "how150": {
+     "thick_s": 5,
+     "gone_s": 38,
+     "left_third": 0.22,
+     "left_two_thirds": 0.19,
+     "wide": 1.5,
+     "spread": 1.0
+    },
+    "bomb250": {
+     "thick_s": 6,
+     "gone_s": 45,
+     "left_third": 0.31,
+     "left_two_thirds": 0.16,
+     "wide": 1.2,
+     "spread": 0.7
+    },
+    "bomb500": {
+     "thick_s": 8,
+     "gone_s": 60,
+     "left_third": 0.22,
+     "left_two_thirds": 0.12,
+     "wide": 1.2,
+     "spread": 0.7
+    }
+   }
+  },
+  "gun": {
+   "keep": 0.5,
+   "go_by": 0.33,
+   "left_third": 0.45,
+   "left_two_thirds": 0.22,
+   "wide": 2.0,
+   "spread": 1.5,
+   "lift_mps": 0.4,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "by": {
+    "tank_gun": {
+     "thick_s": 1,
+     "gone_s": 10,
+     "left_third": 0.6,
+     "left_two_thirds": 0.3
+    },
+    "at_gun": {
+     "thick_s": 1,
+     "gone_s": 10
+    },
+    "howitzer": {
+     "thick_s": 1,
+     "gone_s": 10,
+     "left_third": 0.33,
+     "left_two_thirds": 0.17
+    }
+   }
+  },
+  "flak": {
+   "keep": 1.0,
+   "go_by": 0.33,
+   "left_third": 0.8,
+   "left_two_thirds": 0.27,
+   "wide": 1.0,
+   "spread": 0.0,
+   "lift_mps": 0.35,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 8,
+   "gone_s": 25
+  },
+  "hit": {
+   "keep": 1.0,
+   "go_by": 0.33,
+   "left_third": 0.4,
+   "left_two_thirds": 0.08,
+   "wide": 2.0,
+   "spread": 0.5,
+   "lift_mps": 0.3,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 0.5,
+   "gone_s": 6
+  },
+  "burst": {
+   "keep": 1.0,
+   "go_by": 0.33,
+   "left_third": 0.5,
+   "left_two_thirds": 0.25,
+   "wide": 2.0,
+   "spread": 0.6,
+   "lift_mps": 0.35,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 4,
+   "gone_s": 30
+  },
+  "cook": {
+   "keep": 0.5,
+   "go_by": 0.33,
+   "left_third": 0.24,
+   "left_two_thirds": 0.24,
+   "wide": 2.0,
+   "spread": 1.5,
+   "lift_mps": 0.4,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 2,
+   "gone_s": 15
+  }
+ },
+ "smoke_screen": {
+  "_why": "The drill book's smoke screens (22 November): a smoke round makes no crater and no dark cloud. A phosphorus round (wp, the American 60 mm) bursts hard and white and throws burning streamers in a dome, each trailing white smoke that curls over as it falls; a burning bomb or canister (the British 2-inch, the others') gushes from where it lies. From either a low white wall is laid for as long as the round burns (the battle says: a light mortar's about 60 s and 18 m, an 81 mm's 90 s and 24 m, a field gun's 150 s and 30 m), its lumps swelling as they drift down the wind, so it is one screen through its middle with rags at its edges, thickening over build_s and thinning from thin_from of its time.",
+  "colour": [
+   232,
+   233,
+   230
+  ],
+  "shadow_colour": [
+   170,
+   173,
+   176
+  ],
+  "streamers": [
+   10,
+   16
+  ],
+  "streamer_reach": 0.8,
+  "streamer_colour": [
+   255,
+   250,
+   236
+  ],
+  "trail_every_s": 0.07,
+  "trail_life_s": [
+   8,
+   14
+  ],
+  "trail_r_m": [
+   1.0,
+   1.8
+  ],
+  "burst_r_m": 0.22,
+  "every_s": 0.3,
+  "life_s": [
+   25,
+   45
+  ],
+  "lump_r": [
+   0.24,
+   0.36
+  ],
+  "alpha": [
+   0.55,
+   0.8
+  ],
+  "rise_mps": [
+   0.05,
+   0.3
+  ],
+  "build_s": 3.0,
+  "build_wp_s": 1.5,
+  "thin_from": 0.7,
+  "spread": 0.25,
+  "creep_mps": 0.6,
+  "lumps": 3,
+  "lumps_px": 120
  }
 }

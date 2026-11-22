@@ -1127,6 +1127,27 @@ Effects->TrailMove(Now, FunnelId, FunnelTop, ShipVelocity, Power);
   0.32, none. A capital ship: 0.15 and 0.34 through a surge, 0.19 and 0.38 steady, two frames of 35 a hair
   over in each. The measure is in shown levels, and dense black smoke on a bright sky is where it bites: a
   puff's worth of smoke more or less moves the level by 30. Sheet: `stills/funnel/funnel-even.jpg`.
+- **It rolls** (`roll_lift`, `roll_shade`, `roll_run`, after head 1dd07e8). The art director passed the spacing,
+  16:03Z 21 November, and found the plume now "evener than the ruling", "a smooth tube": put the lumps back
+  (puff size 0.3, rim 0.25), with the bead measure "still never over 0.33". Measured, those dice break the
+  measure: over a third in 10 frames of 35 through a surge and in 14 steady, 0.43 and 0.48 at most. So did
+  every way of making a stretch of the plume denser or its puffs bigger that was tried (twenty of them): the
+  measure allows the thinnest place two thirds of the smoke of the thickest, and the evenly laid plume stood
+  at 0.32 already. What the measure does not mind is where the puffs sit and how dark they are. So the plume
+  rolls: a slow wave along it by the puff's number, one value every `roll_run` (4) puffs at the lip and
+  twice as far apart each time the plume has doubled its width, so a roll is always about as long as the
+  plume is wide and goes with the smoke. Where the wave is high the puffs ride `roll_lift` (0.35) of their
+  radius higher and are `roll_shade` (0.1) darker; where it is low, as much the other way. No lift at the
+  lip, in full once the plume is near three times as wide (at the lip a lifted puff was a hook at her
+  funnel). The wave is never over 1: no dice, no tails. `shade`, the dice, came down to 0.1 so the two
+  together stay about the ruling's 15 in a hundred. Bead measure with the roll: a destroyer through a surge
+  0.17 on average and 0.32 at most, steady 0.21 and 0.32, over a third in none of 35 either way.
+- **A wide funnel's puffs are laid closer** (`overlap_wide` 4 at `wide_funnel_m` 8 and wider, in proportion
+  between `funnel_m` and that: a cruiser's 5 m funnel 3.7). The art director of the capital ship's two
+  frames in 35 a hair over: "Lay hers at a quarter of a width. The extra pieces are worth it, because beads
+  read at any range." Each puff holds as much less smoke (by the light it lets through), so the plume is as
+  dense as before: lip 0.78, 0.46 at 100 m, 0.13 at 300 m. Bead measure: through a surge 0.13 on average
+  and 0.31 at most, none over; steady 0.14 and 0.36, one frame of 35 over (4.5 deep did no better: 0.38).
 - **Power.** `full` is the look from `full_from` (0.75) of her power, `cruise` the look at `cruise_to` (0.4)
   and under, blended between: `alpha` a puff's opacity at the lip, fallen by e at `fade_s` seconds old (as
   the power `fade_pow` of its age), `age_s` how long the oldest hang, `colour` going to `colour_old` by
@@ -1147,20 +1168,21 @@ Effects->TrailMove(Now, FunnelId, FunnelTop, ShipVelocity, Power);
   (25 to 30) and 55 m (50 to 60), 0.45 and 0.12, +23 and +44 m (20, 40 to 50); lip 0.78. Cruising at 12
   knots: lip 0.24 (0.25), 0.10 at 60 m (0.10), gone by 150 m, lit 152,150,146 (130 to 160). The surge (the
   art director on the first sheet, 14:09Z: at 64,61,59 it "doesn't read as black"; now 56,52,48): at the
-  lip lit 32,28,25 (25 to 40, red over blue by 4 to 10), shade 20,17,15 (20 to 30), opacity 0.89 (0.9);
-  lit 40 at 30 m astern. Stills: `stills/funnel/`.
+  lip lit 35,32,28 (25 to 40, red over blue by 4 to 10), shade 24,22,19 (20 to 30), opacity 0.88 (0.9);
+  lit 44 at 30 m astern (with the roll; before it 32,28,25 and 20,17,15). Stills: `stills/funnel/`.
 - **Counts,** a funnel (the mean of three ships over five frames), at 1,920 and at 2,880 pixels wide with
   a 55 degree lens, 25 knots at full power, no wind, nothing left out for being off the screen; the last
   head (1ec1f4c) by the same count in brackets. A destroyer's: 63 at 600 m (56), 57 and 62 at 1.5 km (56),
   54 and 55 at 3 km (49, 56), 50 and 52 at 5 km (40, 48), 38 and 45 at 10 km (31, 37), 29 and 38 at 15 km
-  (24, 31). A capital ship's: 39 out to 3 km (30), 34 and 37 at 5 km (30), 29 and 33 at 10 km (24, 29), 25
-  and 29 at 15 km (19, 24). At 30 knots and all her power: 69 (63) and 44 (34). Cruising at 12 knots: 28
-  (19) and 15 (9). Through a surge: 58 at most (50) and 37 (26). Stopped: 21 (14) and 10 (6). The game's
-  own following wind: the same. So an evenly laid plume costs a destroyer's funnel an eighth more and a
-  capital ship's three tenths more. Sixty funnels started together near the eye, 14 s on: 2,755, inside
-  the room. The most a scene that smokes its 8 nearest ships can ask: all destroyers, three funnels each,
-  all near and at 30 knots, 1,656, a little over half the room. A plume a funnel on the three nearest ships
-  (two funnels each) and one a ship on the five beyond: about 760 for destroyers, 480 for capital ships.
+  (24, 31). A capital ship's, laid 4 deep: 44 at 600 m and 42 at 3 km (30), 34 and 41 at 5 km (30), 29 and
+  33 at 10 km (24, 29), 25 and 29 at 15 km (19, 24). At 30 knots and all her power: 69 (63) and 50 (34).
+  Cruising at 12 knots: 28 (19) and 16 (9). Through a surge: 58 at most (50) and 40 (26). A cruiser's 5 m
+  funnel: 53. The game's own following wind: the same. So an evenly laid plume costs a destroyer's funnel
+  an eighth more than the first head's and a capital ship's, near, nearly half as much again. Sixty
+  destroyer funnels started together near the eye, 14 s on: 2,755, inside the room. The most a scene that
+  smokes its 8 nearest ships can ask: all destroyers, three funnels each, all near and at 30 knots, 1,656,
+  a little over half the room. A plume a funnel on the three nearest ships (two funnels each) and one a
+  ship on the five beyond: about 760 for destroyers, 540 for capital ships. The roll adds no piece.
 - **Rules of the calls.** The kit holds the width between 1 and 14 m. A plume throws dice of its own, from
   the trail's id and the puff's number: no other effect is thrown differently because funnels smoke, and a
   funnel's plume is the same in every play. TrailMove's Power is a last argument with a default: every
@@ -1180,9 +1202,82 @@ Effects->TrailMove(Now, FunnelId, FunnelTop, ShipVelocity, Power);
   row's 56 numbers made wild in turn) and 20 preview runs: none bad. A funnel stopped and started again
   under her id, back after a frame to 5 s at more power: no surge (1ec1f4c surged every time); never
   stopped, or ringing up after she is back: she surges.
+- **Proofs** (the rolling head). 1dd07e8's recipe on its own code and on this: 377 frames byte for byte (35
+  funnel, 51 ship, 81 ways, 23 sea, 50 air, 44, 65, 28). The seven older heads' sets as before. The recipe
+  gains 5 keys (`roll_lift`, `roll_shade`, `roll_run`, `overlap_wide`, `wide_funnel_m`) and changes one
+  number (`shade`), all under `air_trails.funnel.plume`. Both hashes unchanged, no warnings (g++ and clang,
+  -Wshadow). Wild numbers under ASAN and UBSAN with float-divide-by-zero: 2,190 direct cases (calls 404, the
+  eye 200, each of the row's 61 numbers made wild in turn 1,586) and 17 preview runs: none bad.
 - **For the preview:** `FX_FUNNEL=funnel FX_FUNNEL_SPAN=3 FX_POWER=0.85 FX_FOLLOW=1 FX_DIST=600
   FX_LOOK_X=-190 FX_BURN=0 FX_NO_HIT=1 FX_FIRE_AT=1e9 FX_FALL_AT=1e9 ... sea side 1200 1600x700`;
   `FX_BG=0` and `FX_BG=1` give the pair to measure opacity from.
+
+## Smoke that goes slowly into the air (after head b15af20)
+
+Brian, 21 November: "have the smoke effects gradually fade away into the air not disappear right away". The art
+director's ruling (`art-director/explosions/smoke-burst-fire-ruling-r2.md`): a cloud is as thick as it was until its
+thick time, then widens, lifts, drifts and thins on a long tail. It is at half its thick strength a third of the way
+through the tail and at a tenth by two thirds, the last fifth stays under a twentieth so nothing pops, and it is two
+to three times as wide by the end. Old smoke pales to the haze behind it, never to white and never pink.
+
+The recipe's `linger` row holds it, a kind at a time. Seconds after the burst:
+
+| Kind (row) | Thick until | Gone by | Before |
+|---|---|---|---|
+| grenade (`shell.by.grenade`) | 1 | 8 | 3.5 |
+| light, mortar | 1.5, 2 | 11, 15 | 8 to 10 |
+| 75 mm, 105 mm, 150 mm | 3, 4, 5 | 22, 30, 38 | 14, 17, 38 |
+| 250 lb, 500 lb bomb | 6, 8 | 45, 60 or its old life if later | 45 to 90, 60 to 120 |
+| a tank's, anti-tank or field gun's smoke and dust (`gun.by.*`) | 1 | 10 | 4 |
+| flak burst (`flak`) | 8 | 25 | 9 |
+| hit puff on an aircraft (`hit`) | 0.5 | 6 | 2.4 |
+| aircraft explosion cloud (`burst`) | 4 | 30 | 12 |
+| cook-off smoke, each pop and the jet (`cook`) | 2 | 15 | 4 |
+
+Rifle and machine-gun smoke, fire columns, funnel smoke, steam and spray go as they did. Smoke trails after their
+source stops come with the trail head. Take a kind's row or its times out of the recipe and it goes as before.
+
+- **The curve.** `left_third` and `left_two_thirds` are what is left of the cloud's smoke a third and two thirds of
+  the way through the tail; the kit runs smoothly between, on to four fifths, and from there to nothing. They are
+  not the opacity: a deep cloud must lose most of its smoke before the eye sees it thin, so they are tuned in the
+  preview's pictures until the cloud reads half as strong and then a tenth against the empty frame.
+- **Fewer puffs.** `keep` of a cloud's puffs stay to the end and take over the smoke of the rest, which retire over
+  the first `go_by` of the tail. Flak, hit puffs and the aircraft cloud keep all of theirs (so few, they read as
+  separate balls with half gone).
+- **Wider, higher.** By the end a puff is `wide` wider again and stands `spread` further again from the cloud's own
+  middle (found from the puffs, carried by the wind), and it climbs `lift_mps` more.
+- **Its old looks.** Everything else about a puff (its own widening, colours, heart, lumps) keeps the clock it was
+  laid with, so a burst is unchanged up to its thick time. A puff in its tail carries no lumps.
+- **Colour.** From `pale_from` to `pale_by` of the tail the puff goes `pale` of the way to `sky_share` (0.9) of the
+  sky or haze the scene gave, or to `to` by the hour's light where no scene has said.
+- **Room.** With over `spare_from` of the room (game.max_puffs) asked for, a new cloud gets less of its `keep` and
+  `go_by`, down to `spare_least` of them at `spare_by`. The cloud goes by the same law with fewer pieces.
+- **Never sooner.** A cloud is gone no sooner than its longest puff was before the rule: its tail runs from its
+  thick time to the later of `gone_s` and that, by the same curve. A bomb's smoke lived 45 to 90 s (250 lb) and 60 to
+  120 s (500 lb) by its size's `linger_s`, 1.6 times that on sand, and `gone_s` alone cut it short (the pre-check on
+  86d71f2). Shells on earth are under their `gone_s` and go as the table says.
+- Any of a kind's numbers may be given for one size or gun under `by.<name>`.
+
+```cpp
+// once the scene's sky is set, and again when the hour or the weather changes it: the haze at the horizon for a
+// ground or sea battle, the sky at the fight's height for an air one, as the SCREEN shows it (pixel / 255)
+Blasts->SetSky(FLinearColor(209.f / 255.f, 212.f / 255.f, 215.f / 255.f));
+```
+
+Measured in the preview's pictures in the game's curve (a third / two thirds / four fifths of the tail, as a share
+of the cloud when thick): grenade 0.52 / 0.08 / 0.05, light 0.48 / 0.08 / 0.02, mortar 0.50 / 0.09 / 0.03, 75 mm
+0.50 / 0.09 / 0.02, 105 mm 0.52 / 0.08 / 0.02, 150 mm 0.52 / 0.11 / 0.03, 250 lb 0.50 / 0.10 / 0.04, 500 lb 0.51 /
+0.11 / 0.04, an anti-tank gun's smoke 0.52 / 0.09 / 0.03, flak 0.48 / 0.10 / 0.04, the aircraft cloud 0.55 / 0.11 /
+0.03. Flak against a sky of 209,212,215: red minus blue -6.3 and -7.0 against the sky's -6, the worst pixel 3 over.
+
+Pieces (1,600 px wide, a 55 degree lens; held at most, the rule off in brackets): one 105 1,034 (1,034), its tail
+130 puffs falling to 65; 105s every 3 s for two minutes 2,465 (2,141); 105s one a second 4,122 (4,596); 75s one a
+second 3,225 (3,077); mortars two a second 4,070 (4,444); eight tank guns each firing every 6 s 639 (221); flak two
+bursts a second 554 (205), six a second 1,610 (586); an aircraft exploding every 4 s 1,876 (1,722).
+
+The preview: `FX_SKY=r,g,b` tells the kit the sky as the game's screen shows it. For the burst shot `FX_FOLLOW=1`
+carries the eye with the wind so an old burst stays in the picture, and `FX_FAR=2` and so on stands it that many
+times 160 m off. `FX_FLOAT=1` and `game_curve.py show` give the frame as the game shows it.
 
 ## Oil fires at sea
 
@@ -1342,7 +1437,8 @@ Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
 ```
 
 - Smoke, never a ball: a soft flash, then five to eight see-through lobes in a crooked chain down the wind, with wisps.
-  It hangs where it burst, drifts with the wind, greys and stretches, and is gone in about 9 s. It is never cut off.
+  It hangs where it burst, drifts with the wind, greys and stretches to 8 s, then thins into the air and is gone by 25 s
+  (the recipe's `linger.flak`; about 9 s without it). It is never cut off.
 - The art director's brief sets where and how often: within about two wingspans of the formation, more behind than
   ahead; a new burst about every 2.5 s (light guns), 1.4 s (medium) or 0.9 s (heavy), ragged; none once they turn
   for home. Each burst is about 12 to 19 puffs; seen close, its smoke puffs take two slots each (16 to 26 slots).

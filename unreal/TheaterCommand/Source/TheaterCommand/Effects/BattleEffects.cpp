@@ -510,6 +510,11 @@ void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 	Core.SetWind(ToFxWay(MetresPerSecond));
 }
 
+void FBattleEffects::SetSky(const FLinearColor& OnScreen)
+{
+	Core.SetSky(255.0 * OnScreen.R, 255.0 * OnScreen.G, 255.0 * OnScreen.B);
+}
+
 void FBattleEffects::UseAirDistance()
 {
 	if (IsReady())

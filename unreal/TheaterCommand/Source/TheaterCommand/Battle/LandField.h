@@ -263,6 +263,16 @@ namespace LandField
 		int Kind = 0;
 	};
 
+	/** A way through a hedgerow or a lane's bank: a field's gateway (its gate open or shut) or a breach blown through it
+	 * where the recording's men went over in numbers, bank and all. Metres from the field's south-west corner; Yaw the
+	 * hedge's own heading there (radians from east); Width the gap's, from bank end to bank end. */
+	struct HedgeOpening
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, Width = 0.0;
+		int Kind = 0;   // 0 a gateway, 1 a breach
+		int Men = 0;    // a breach: the recording's men's crossings it gathers (those within 12.5 m of it)
+	};
+
 	/** What was laid and how long it took, for the log and the test. */
 	struct Tally
 	{
@@ -272,7 +282,8 @@ namespace LandField
 		double LaneKm = 0.0;
 		double HedgeKm = 0.0;     // banks and walls, after the gaps
 		int Gates = 0;
-		int WayGaps = 0;          // hedges opened where the recording's men and vehicles cross them
+		int WayGaps = 0;          // hedges opened where the recording's vehicles cross them
+		int Breaches = 0;         // hedgerows blown open where the recording's men went over them in numbers
 		int Houses = 0;           // houses, barns and byres (the church counted apart)
 		int Damaged = 0;
 		bool bChurch = false;
@@ -324,10 +335,15 @@ namespace LandField
 
 		/** The hedgerows' and walls' lines (tests, maps). */
 		const std::vector<HedgeLine>& Hedges() const;
+		/** The gateways and breaches through them. */
+		const std::vector<HedgeOpening>& Openings() const;
 		/** The lanes' middle lines. */
 		const std::vector<std::vector<std::pair<double, double>>>& Lanes() const;
 		/** The parcel at a place (-1 where none: lanes, woods, beyond), for maps and tests. */
 		int ParcelAt(double X, double Y) const;
+		/** What a parcel grows, in a word ("wheat", "barley", "oats", "green wheat", "stubble", "roots", "grazed",
+		 * "lush", "hay cut", "meadow", "rye", "steppe", "fallow"; "" for none), for tests and sheets. */
+		std::string CropOfParcel(int Parcel) const;
 
 		const Tally& Laid() const;
 

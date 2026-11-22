@@ -818,7 +818,7 @@ bool ALandBattle::Open()
 	const double ArmourSeconds = LandParts::Seconds() - Took;
 	{
 		TWeakPtr<FLandBattleState> Weak(State);
-		PlayWorld.Muzzle = [Weak](int Track, double T, LandPlay::Vec& OutAt, LandPlay::Vec& OutFacing)
+		PlayWorld.Muzzle = [Weak](int Track, double T, const std::string& Socket, LandPlay::Vec& OutAt, LandPlay::Vec& OutFacing)
 		{
 			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
 			if (!Pinned.IsValid() || Track < 0)
@@ -831,7 +831,32 @@ bool ALandBattle::Open()
 			{
 				const LandKit::Vehicle& V = St.Armour->Vehicles()[static_cast<size_t>(St.VehicleOf[K])];
 				LandKit::V3 At, Facing;
-				if (V.SocketAt("muzzle", T, At, Facing))
+				// Her machine guns: the hull gunner's and the coaxial at their sockets; the commander's on the roof at a
+				// roof_mg socket where the model has one, else on its pintle over his hatch's rim (the commander socket is
+				// a quarter metre under it). A model short of one fires the next: the coaxial, then the main gun's place.
+				bool bFound = false;
+				if (Socket == "roof_mg")
+				{
+					bFound = V.SocketAt("roof_mg", T, At, Facing);
+					if (!bFound && V.SocketAt("commander", T, At, Facing))
+					{
+						At = LandKit::V3{ At.X + Facing.X * 0.3, At.Y + Facing.Y * 0.3, At.Z + 0.6 };
+						bFound = true;
+					}
+				}
+				else if (!Socket.empty())
+				{
+					bFound = V.SocketAt(Socket, T, At, Facing);
+				}
+				if (!bFound && !Socket.empty())
+				{
+					bFound = V.SocketAt("coax", T, At, Facing);
+				}
+				if (!bFound)
+				{
+					bFound = V.SocketAt("muzzle", T, At, Facing);
+				}
+				if (bFound)
 				{
 					OutAt = LandPlay::Vec(At.X, At.Y, At.Z);
 					OutFacing = LandPlay::Vec(Facing.X, Facing.Y, Facing.Z);
@@ -1943,6 +1968,17 @@ void ALandBattle::MakeArmour()
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
 	std::string Error;
+	{
+		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
+		// blows her up more often, Brian's ask of 22 November).
+		FString PerformanceText;
+		std::string Why;
+		if (!FFileHelper::LoadFileToString(PerformanceText, *(FPaths::ProjectContentDir() / TEXT("Data/Battle/performance-land.json")))
+			|| !LandKit::ReadFireOdds(LandParts::Narrow(PerformanceText), Armour->Fires, Why))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: Content/Data/Battle/performance-land.json not read (%s): kills look by the fates table alone."), *LandParts::Wide(Why));
+		}
+	}
 	const bool bFates = !S.FatesTable.Ways().empty();
 	if (!Armour->Load(S.RecText, Read, GroundAt, bFates ? &S.FatesTable : nullptr, S.Rec.Seed ? S.Rec.Seed : 1, Error))
 	{
@@ -2290,6 +2326,13 @@ void ALandBattle::HideTheTable()
 	HazeFalloff = FMath::Max(0.0, HazeFalloff);
 	// (a warm grey-blue on a fair day, the summer haze over the bocage, not the sea's blue; greyer under overcast)
 	const FLinearColor HazeInk = FMath::Lerp(FLinearColor(0.62f, 0.66f, 0.70f), FLinearColor(0.50f, 0.52f, 0.54f), static_cast<float>(Day.Overcast));
+	// (old smoke pales into the air behind it, the effects kit's slow smoke: the horizon's haze as the screen shows it,
+	// its sRGB pixel; the haze's own colour stands for it, the stills' horizon reading within a few levels of it)
+	if (Effects)
+	{
+		const FColor HazePixel = HazeInk.ToFColor(true);
+		Effects->SetSky(FLinearColor(HazePixel.R / 255.0f, HazePixel.G / 255.0f, HazePixel.B / 255.0f, 1.0f));
+	}
 	double GroundMean = 0.0;
 	if (State.IsValid() && !State->Rec.Ground.Height.empty())
 	{

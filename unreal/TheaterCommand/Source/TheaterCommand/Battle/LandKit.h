@@ -24,7 +24,8 @@ namespace Fates { class Table; class Director; }
  *   with the parts that never move apart from it (kind "fixed": skirts, stowage, a barrel's sleeve) merged into it.
  *   A track's separate links (near mesh only) make one body a side, which the caller may leave still or re-pose on the
  *   CPU each frame (Model::PoseLinks). Each body's points come painted: the coat of its nation and month, the
- *   camouflage blotches, worn edges, exhaust soot and road dust, and a weight per point for how black it burns.
+ *   camouflage blotches, worn edges, exhaust soot and road dust, and a weight per point for how black it burns (a
+ *   file that lays its own dirt, dust, haze, blend2 and shade, is painted as it says and nothing of the game's own).
  * - A vehicle played from its track in the recording (Vehicle): where it is, how it sits on the ground, how its hull
  *   rocks, how its turret trains and its gun lays, when its barrel recoils, its hatches, wheels and tracks, how it is
  *   knocked out and burns. Everything is worked out ahead from the recording at 20 steps a battle second, so the pose
@@ -620,6 +621,27 @@ namespace LandKit
 		std::string Side, Nation, Kind, Model, Cal;
 	};
 
+	/**
+	 * How a vehicle pierced on one face ends, as measured (Content/Data/Battle/performance-land.json, the modeller's:
+	 * vehicles[name].fire_when_pierced and explodes_of_fires). Brian, 22 November: a rear hit on a Tiger or a Panther
+	 * raises the chance she blows up; the scene's kills read it.
+	 */
+	struct FireOdds
+	{
+		double Front = 0.0, Side = 0.0, Rear = 0.0; // the chance she burns, pierced on that face
+		double Explodes = 0.0;                       // of those fires, the share that set off her ammunition at once
+	};
+
+	/** Every vehicle's fire odds from performance-land.json's text, by its model name; false (and why) on a fault. */
+	bool ReadFireOdds(const std::string& Text, std::map<std::string, FireOdds>& Out, std::string& OutError);
+
+	/**
+	 * Her end by the face struck ("front", "side", "rear", "top"; empty: the three faces' mean): "blow" (her ammunition
+	 * goes up: the fates' turret off), "burn" (she brews up or burns) or "still" (knocked out, no fire), for draws U1
+	 * (fire) and U2 (blast), each 0..1.
+	 */
+	std::string FireEnd(const FireOdds& O, const std::string& Aspect, double U1, double U2);
+
 	class Battle
 	{
 	public:
@@ -667,6 +689,13 @@ namespace LandKit
 		 * Set before Load. */
 		double Life = 1.0;
 		int Year = 1944, Month = 7;
+		/** The vehicles' fire odds by model name (ReadFireOdds): a kill's end is drawn by them and the face struck, and
+		 * the fates table shows that end. Empty: the table's own weights alone, as before. Set before Load. */
+		std::map<std::string, FireOdds> Fires;
+		/** How each kill ended, after Load (and as Extend picks them): the vehicle's index, the face struck and the end
+		 * drawn ("" where no odds). */
+		struct KillEnd { int Track = -1; std::string Model, Face, End, Fate; };
+		std::vector<KillEnd> Ends;
 		/** What has happened since it was last emptied: the caller plays it and clears it. */
 		std::vector<Event> Events;
 		/** Loaded from a live battle's header (Extend grows it); and over (its last piece has come). */
@@ -699,9 +728,10 @@ namespace LandKit
 		const Block* BlockOf(int Id) const;
 		/** The model for a vehicle of block B in Role, read and painted if it is not yet; its key into Looks. */
 		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError);
-		/** How a kill looks (its fate key, and whether it brews up) from the picker; or without a table, a fixed one in
-		 * four brewing up. Rounds: those that struck her, the killing one among them. */
-		std::string PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, uint8_t& OutBrew);
+		/** How a kill looks (its fate key, and whether it brews up) from the picker, her end first drawn by her fire odds
+		 * and the face struck (recorded in Ends under Index); or without a table, a fixed one in four brewing up.
+		 * Rounds: those that struck her, the killing one among them. */
+		std::string PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, int Index, uint8_t& OutBrew);
 	};
 
 	/** Reads a recording's vehicle tracks, rounds and blocks (Battle::Load does it; the checks use it alone). */

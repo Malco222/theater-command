@@ -39,6 +39,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace
@@ -224,6 +225,54 @@ int main(int argc, char** argv)
 	LandPlay::World PW;
 	LandPlay::Replay Play;
 	Play.Begin(Rec, PW);
+	{
+		// A tank's machine guns at the foot (Brian, 22 November: the gunner's inside "also shoots some times at
+		// infantry"; the roof gun "cant be used unless the tank commander mans the gun"): which gun each of her bursts
+		// is fired from. The roof gun only with the commander up in his open hatch and only where his army mounted one;
+		// the hull gunner's only toward her bow.
+		std::map<std::tuple<int, int, int>, int> TankOf;
+		for (size_t I = 0; I < Rec.Tracks.size(); ++I)
+		{
+			const LandFeed::Track& Tr = Rec.Tracks[I];
+			if (Tr.Role == "tank") TankOf[{ Tr.Block, Tr.K, Tr.J }] = static_cast<int>(I);
+		}
+		int Bursts = 0, Roof = 0, Hull = 0, Coax = 0, RoofShut = 0, HullWide = 0, RoofNone = 0, Up = 0, ByTanks = 0;
+		std::set<int> Firing;
+		for (const LandFeed::Round& R : Rec.Rounds)
+		{
+			if (R.W != "mg") continue;
+			const auto Of = TankOf.find({ R.By, R.K, R.J });
+			if (Of == TankOf.end()) continue;
+			++Bursts;
+			Firing.insert(Of->second);
+			const LandFeed::Track& Tr = Rec.Tracks[static_cast<size_t>(Of->second)];
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, R.T);
+			const bool bOpen = C && !C->bButtoned;
+			if (bOpen) ++Up;
+			const std::string Gun = Play.TankMg(Of->second, R.T, R.N, LandPlay::Vec(R.X, R.Y, 0.0));
+			const LandFeed::Block* B = Rec.BlockOf(Tr.Block);
+			if (Gun == "roof_mg")
+			{
+				++Roof;
+				if (!bOpen) ++RoofShut;
+				if (!B || (B->Army != "USA" && B->Army != "GER")) ++RoofNone;
+			}
+			else if (Gun == "hull_mg")
+			{
+				++Hull;
+				const LandFeed::Spot S = LandFeed::SpotAt(Tr, R.T);
+				const double Off = std::fabs(std::remainder(std::atan2(R.X - S.X, R.Y - S.Y) - S.F, 2.0 * 3.14159265358979));
+				if (Off > 25.5 * 3.14159265358979 / 180.0) ++HullWide;
+			}
+			else ++Coax;
+		}
+		for (const auto& Kv : TankOf) if (Firing.count(Kv.second)) ++ByTanks;
+		std::printf("tank machine guns: %d bursts at the foot from %d of %zu tanks: the coaxial %d, the hull gunner's %d, the commander's on the roof %d (%d of the bursts with him up in his hatch)\n",
+			Bursts, ByTanks, TankOf.size(), Coax, Hull, Roof, Up);
+		if (RoofShut > 0) Fault("a tank's roof gun fired with her commander's hatch shut");
+		if (RoofNone > 0) Fault("a roof gun fired on a tank whose army mounted none");
+		if (HullWide > 0) Fault("a hull gunner fired wide of his tank's bow");
+	}
 	LandSound::Mixer Mix;
 	if (!Mix.Begin(MixText, Rec.Seed, Error)) { std::printf("cannot read the mix: %s\n", Error.c_str()); return 2; }
 	// LAND_PLAY_LIFE=2 replays the fight at half the battle clock, as the scene's cut 4 plays it (life seconds a battle
@@ -399,8 +448,11 @@ int main(int argc, char** argv)
 	std::vector<std::pair<double, double>> HeatSamples;
 	std::vector<std::pair<double, double>> MeterSamples;
 	double NextHeatSample = 0.0, BlockHeat = 0.0;
-	double Slowest = 0.0, Total = 0.0;
+	double Slowest = 0.0, Total = 0.0, SlowestAt = 0.0;
 	int Frames = 0;
+	// (every frame's cost, and each battle second's: the 99th in the hundred, and the busiest second's own frames)
+	std::vector<double> FrameCosts;
+	std::map<int, std::pair<double, int>> BySecond;
 	// The camera's own share: its slowest frame, its frames over 2 ms, its average.
 	double EyeSlowest = 0.0, EyeTotal = 0.0;
 	int EyeOver2 = 0;
@@ -514,9 +566,15 @@ int main(int argc, char** argv)
 		Mix.Tick(Real, Dt, Ear, Fighting, Blocks ? static_cast<double>(Fighting) / Blocks : 0.0, Battle >= Contact, "open", Beds);
 		const LandDesk::Words& W = Desk.Update(Battle, Dt);
 		const double FrameMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - F0).count() - MeasureMs;
-		Slowest = std::max(Slowest, FrameMs);
+		if (FrameMs > Slowest) { Slowest = FrameMs; SlowestAt = Battle; }
 		Total += FrameMs;
 		++Frames;
+		FrameCosts.push_back(FrameMs);
+		{
+			auto& Sec = BySecond[static_cast<int>(Battle)];
+			Sec.first += FrameMs;
+			++Sec.second;
+		}
 
 		if (KnotStart < 0.0) KnotStart = W.Knot;
 		KnotEnd = W.Knot;
@@ -1334,6 +1392,19 @@ int main(int argc, char** argv)
 	std::printf("bar: starts %.3f, ends %.3f (%s won)\n", KnotStart, KnotEnd, Rec.Result.Winner.c_str());
 	std::printf("cores: %.3f ms a frame on average, %.2f ms the slowest, over %d frames; the camera alone %.3f ms on average, %.2f ms the slowest, %d frames over 2 ms\n",
 		Total / std::max(1, Frames), Slowest, Frames, EyeTotal / std::max(1, Frames), EyeSlowest, EyeOver2);
+	{
+		std::vector<double> Sorted = FrameCosts;
+		std::sort(Sorted.begin(), Sorted.end());
+		const double P99 = Sorted.empty() ? 0.0 : Sorted[std::min(Sorted.size() - 1, static_cast<size_t>(Sorted.size() * 0.99))];
+		int Busiest = 0;
+		double BusiestMs = 0.0;
+		for (const auto& Kv : BySecond)
+		{
+			const double Mean = Kv.second.first / std::max(1, Kv.second.second);
+			if (Mean > BusiestMs) { BusiestMs = Mean; Busiest = Kv.first; }
+		}
+		std::printf("cores: 99%% of frames under %.2f ms; the slowest at battle %.1f s; the busiest battle second %d s at %.2f ms a frame\n", P99, SlowestAt, Busiest, BusiestMs);
+	}
 	if (argc > 3)
 	{
 		std::ofstream Log(std::string(argv[3]) + "/" + Rec.Key + "-cuts.txt");
