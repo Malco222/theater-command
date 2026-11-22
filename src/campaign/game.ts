@@ -3395,8 +3395,68 @@ export function turnedRows(g: Game, stood: number[]): void {
  * 'turned' marks the row made from the French army that came over at the turn, which comes only where that army
  * still stood and with no more divisions than it had (diplomacy.ts).
  */
-type TorchRows = { instead: string[]; rows: any[] };
+type TorchRows = { instead: string[]; rows: any[]; vichy?: { nat: string; from: number; ground: string[]; places: [string, number, string][] }; america?: { nats: string[] } };
 const TORCH = (setup as unknown as { torch?: TorchRows }).torch;
+
+/**
+ * Operation Torch by the book: Vichy's army of Africa stands where the record had it on the day ('torch.vichy' in
+ * setup-1939.json; the design director, 22 November 2026). The 1939 setup's three French rows never move, so in
+ * November 1942 the game had three divisions at Algiers, two at Casablanca and three on the Mareth line, with Oran,
+ * Constantine, Fez, Marrakech and Tunis empty; the record had a division in each command. Once, at the opening of the
+ * month the data names, where Vichy still stands at peace on that ground: its infantry there is formed again into the
+ * record's places, in their order, each up to its count. No division is added and none struck. A corps already at
+ * its place stays, works and all; a corps with no place left gives its men to the new ones, which take the whole's
+ * strength, order and experience. Called as the month opens (turn.ts); nothing with the switch off, at a stop that is
+ * not the book's, or where the player is France's heir in Africa.
+ */
+export function vichyPlaced(g: Game): void {
+  const V = TORCH?.vichy;
+  if (!V || !torchBook(g) || g.flags['torch:vichy'] || g.turn < V.from) return;
+  const n = g.nations[V.nat];
+  if (!n?.alive || n.atWar.length || V.nat === g.human) return;
+  g.flags['torch:vichy'] = g.turn;
+  const ground = new Set(V.ground.map((nm) => g.byName[nm]?.id ?? -1));
+  const army = g.corps.filter((c) => c.nat === V.nat && !c.dead && c.kind === 'inf' && c.town === undefined && ground.has(c.reg) && g.regions[c.reg].ctrl === V.nat);
+  let left = army.reduce((s, c) => s + c.divs, 0);
+  if (left <= 0) return;
+  const w = army.reduce((s, c) => s + c.divs * c.str, 0);
+  const mean = (f: (c: Corps) => number): number => army.reduce((s, c) => s + f(c) * c.divs, 0) / left;
+  const str = w / left, org = mean((c) => c.org), xp = mean((c) => c.xp);
+  const spare = new Set(army);
+  const put: { c: Corps | null; to: Region; divs: number; name: string }[] = [];
+  for (const [at, most, name] of V.places) {
+    const to = g.byName[at];
+    if (!to || to.ctrl !== V.nat || left <= 0) continue;
+    const divs = Math.min(most, left);
+    left -= divs;
+    // (The corps that stands there already keeps the place, and its works.)
+    const c = army.find((x) => spare.has(x) && x.reg === to.id) ?? null;
+    if (c) spare.delete(c);
+    put.push({ c, to, divs, name });
+  }
+  // (Divisions the places do not ask for stay with the first corps placed: none is struck.)
+  if (left > 0 && put.length) put[0].divs += left;
+  for (const x of put) {
+    if (x.c) { x.c.divs = x.divs; x.c.name = x.name; x.c.hold = true; continue; }
+    // A corps with no place of its own moves to this one; with none left, the place is a new corps of the same men.
+    const old = [...spare][0];
+    if (old) {
+      spare.delete(old);
+      leaveWorks(g, old);
+      place(g, old, x.to);
+      old.divs = x.divs; old.name = x.name; old.str = str; old.org = org; old.xp = xp; old.hold = true;
+      delete old.dug; delete old.dugFor;
+    } else {
+      const c = addCorps(g, V.nat, x.name, 'inf', x.divs, x.to.id, { hold: 1, xp });
+      c.str = str; c.org = org;
+    }
+  }
+  for (const c of spare) removeCorps(g, c);
+  g.supplyDirty = true;
+}
+
+/** True for a harbour of the ground Torch lands on, for a nation whose divisions there are the book's rows (setup-1939.json 'torch.america'): its army across the ocean is sailed into none of them. */
+export const torchRowsOnly = (g: Game, nat: string, r: Region): boolean => !!TORCH?.america?.nats.includes(nat) && nat !== g.human && torchBook(g) && !!TORCH.vichy?.ground.includes(r.name);
 
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
@@ -3507,7 +3567,10 @@ function expeditions(g: Game, nat: string): void {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], o.turned ? Math.min(row[4], g.flags['torch:turned']) : g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
+    // (A Torch row marked to stay holds the place its row names, or a second quay it names: one that a full quay
+    // sends on to other ground holds nothing there, as one whose place has fallen holds nothing where it lands.)
+    const astray = !fell && torch && typeof i === 'string' && !!o.stay && reg.name !== row[5] && !((o.or as string[] | undefined) ?? []).includes(reg.name);
+    const c = addCorps(g, nat, row[2], row[3], o.turned ? Math.min(row[4], g.flags['torch:turned']) : g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, astray ? { ...o, hold: undefined, stay: undefined } : fell ? { ...o, hold: undefined } : o);
     if (o.str !== undefined) c.str = o.str;
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;

@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import open from '../data/campaign/open.json';
-import { createGame } from '../src/campaign/game';
+import { createGame, men, torchRowsOnly } from '../src/campaign/game';
 import { HISTORY, leash, setStop } from '../src/campaign/history';
 import { bookLanding, startOpen } from '../src/campaign/staff';
 import { STRATEGY, torchBook } from '../src/campaign/strategy';
@@ -22,7 +22,7 @@ const start = (seed: number, stop: number, human: string | null = null): Game =>
   return g;
 };
 type Row = [number, string, string, string, number, string, Record<string, unknown>?];
-const TORCH = (setup as unknown as { torch: { instead: string[]; rows: Row[] } }).torch;
+const TORCH = (setup as unknown as { torch: { instead: string[]; rows: Row[]; vichy: { nat: string; from: number; ground: string[]; places: [string, number, string][] }; america: { nats: string[] } } }).torch;
 const ROSTER = (setup as unknown as { expeditions: Row[] }).expeditions;
 type Landing = { corps: string; own?: number; to: string[] };
 const LANDINGS = (nat: string): Landing[] => (open as unknown as { ops: Record<string, { id: string; landings?: Landing[] }[]> }).ops[nat].find((o) => o.id === 'torch')!.landings!;
@@ -61,7 +61,54 @@ describe('Operation Torch by the book', () => {
     // The Axis answer is rows with a date; Pistoia and La Spezia were Libya's and do not come to Tunis again.
     expect(TORCH.instead).toContain('Pistoia and La Spezia Divisions');
     expect(TORCH.rows.some((r) => /Pistoia/.test(r[2]))).toBe(false);
+    // The Axis rows hold the bridgehead they land in: every one is held and marked to stay. No Allied row is.
+    for (const r of TORCH.rows) { const axis = r[1] === 'GER' || r[1] === 'ITA'; expect(!!r[6]?.hold && !!r[6]?.stay, r[2]).toBe(axis); }
+    // Vichy's placing on the day: the record's commands, eight divisions as the 1939 rows have, every place on the
+    // ground named and laid before the day; and America is the nation whose divisions there are the book's rows.
+    const V = TORCH.vichy;
+    expect(V.places.reduce((n, x) => n + x[1], 0)).toBe(8);
+    expect((setup as unknown as { corps: [string, string, string, number, string][] }).corps.filter((r) => r[0] === 'FRA' && V.ground.includes(r[4])).reduce((n, r) => n + r[3], 0)).toBe(8);
+    for (const [at] of V.places) expect(V.ground, at).toContain(at);
+    expect(V.places.slice(0, 3).map((x) => x[0])).toEqual(['Algiers', 'Oran', 'Casablanca']);
+    expect(V.from).toBeLessThan(39);
+    expect(TORCH.america.nats).toEqual(['USA']);
   });
+
+  it('Vichy stands where the record had it on the day, with no division added or struck; never with the switch off', () => {
+    const where = (g: Game): string => g.corps.filter((c) => c.nat === 'VIC' && !c.dead && TORCH.vichy.ground.includes(g.regions[c.reg].name)).map((c) => `${g.regions[c.reg].name} ${c.divs}`).sort().join(', ');
+    const count = (g: Game): number => g.corps.filter((c) => c.nat === 'VIC' && !c.dead && TORCH.vichy.ground.includes(g.regions[c.reg].name)).reduce((n, c) => n + men(c), 0);
+    // Off: the 1939 rows where they have stood since.
+    const off = start(17, 1);
+    while (off.turn < 39) runTurnAI(off);
+    expect(where(off)).toBe('Algiers 3, Casablanca 2, Mareth 3');
+    expect(off.flags['torch:vichy']).toBeUndefined();
+    // On, at stop 1: the 1939 rows until the month the data names, then the record's commands.
+    STRATEGY.torch!.on = true;
+    const g = start(17, 1);
+    while (g.turn < TORCH.vichy.from - 1) runTurnAI(g);
+    expect(where(g)).toBe('Algiers 3, Casablanca 2, Mareth 3');
+    const before = count(g);
+    runTurnAI(g);
+    expect(g.flags['torch:vichy']).toBe(TORCH.vichy.from);
+    expect(where(g)).toBe('Algiers 1, Casablanca 1, Constantine 1, Fez 2, Marrakech 1, Oran 1, Tunis 1');
+    expect(count(g)).toBe(before);
+    for (const c of g.corps) if (c.nat === 'VIC' && TORCH.vichy.ground.includes(g.regions[c.reg].name)) expect(c.hold, c.name).toBe(true);
+    // Once: the next month it is not laid again.
+    runTurnAI(g);
+    expect(g.flags['torch:vichy']).toBe(TORCH.vichy.from);
+    // At a stop that keeps no book, never.
+    const free = start(17, 3);
+    while (free.turn < 39) runTurnAI(free);
+    expect(free.flags['torch:vichy']).toBeUndefined();
+    // America's army across the ocean is sailed into no harbour of that ground where Torch is the book's, and only there.
+    expect(torchRowsOnly(g, 'USA', g.byName.Oran)).toBe(true);
+    expect(torchRowsOnly(g, 'USA', g.byName.Cornwall)).toBe(false);
+    expect(torchRowsOnly(g, 'UK', g.byName.Oran)).toBe(false);
+    expect(torchRowsOnly(free, 'USA', free.byName.Oran)).toBe(false);
+    expect(torchRowsOnly(start(17, 1, 'USA'), 'USA', g.byName.Oran)).toBe(false);
+    STRATEGY.torch!.on = false;
+    expect(torchRowsOnly(g, 'USA', g.byName.Oran)).toBe(false);
+  }, 300_000);
 
   it('is on no menu with the switch off, nor at a stop that keeps no book, nor for a player', () => {
     for (const stop of [1, 3, 5]) {
@@ -136,6 +183,9 @@ describe('Operation Torch by the book', () => {
     expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Center Task Force'] - 1 && !c.dead))).toBe('Oran');
     // (The struck step's key is off: no force is noted as lying off its shore.)
     expect(Object.keys(g.flags).some((k) => k.startsWith('torch:off:'))).toBe(false);
+    // America's divisions in French North Africa are the book's rows: nothing of its army stands there but the two picks.
+    const picks = new Set(picked.map((k) => g.flags[k] - 1));
+    for (const c of g.corps) if (c.nat === 'USA' && !c.dead && TORCH.vichy.ground.includes(g.regions[c.reg].name)) expect(picks.has(c.id), c.name).toBe(true);
     // No new American men for it: the count of its corps moved only by what its own factories and ships did (none struck, none added by Torch).
     expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead && /Task Force/.test(c.name)).length).toBe(0);
     expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead).length).toBeGreaterThanOrEqual(usaBefore);

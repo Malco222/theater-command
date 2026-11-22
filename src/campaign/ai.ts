@@ -30,7 +30,7 @@ import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
+  DEFENCE, EASTERN, allied, assess, atWar, torchRowsOnly, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
@@ -1748,6 +1748,9 @@ function ferry(g: Game, nat: string): void {
   // a venture: it has a ceiling of its own ('hop').
   const sails = (c: Corps, p: Region): boolean => {
     if (friendlyUnits(g, p, nat).length >= STACK) return false;
+    // (Operation Torch by the book: America's divisions in French North Africa are the book's rows, and this army is
+    // sailed into none of its harbours. game.ts, `torchRowsOnly`; nothing with the switch off or at a stop without a book.)
+    if (torchRowsOnly(g, nat, p)) return false;
     const path = seaPath(g, nat, g.regions[c.reg], p);
     if (!path) return false;
     const limit = path.length <= NAVY.landing.range ? Math.max(O.risk, O.hop ?? 0) : O.risk;

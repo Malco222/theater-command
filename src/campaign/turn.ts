@@ -17,7 +17,7 @@ import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
-  worksMonth,
+  worksMonth, vichyPlaced,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
@@ -108,6 +108,8 @@ function closePhase(g: Game, nat: string): void {
     // Works held outright from one month's end to the next are taken over by the side that holds them.
     worksMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
+    // (Operation Torch by the book: Vichy's army of Africa stands where the record had it. game.ts; nothing with its switch off.)
+    vichyPlaced(g);
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
