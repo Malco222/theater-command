@@ -778,9 +778,31 @@ namespace EdgeSeals
 		}
 	}
 
+	int TipLettersAt(double Scale)
+	{
+		// (a screen of no measure is taken at a pixel a unit; a letter is never set under a pixel)
+		const double At = Scale > 0.0 ? Scale : 1.0;
+		const double Advance = std::max(std::floor(TipAdvance * TipPt * 4.0 / 3.0 * At + 0.5), 1.0);
+		return static_cast<int>(std::floor(TipWrap * At / Advance + 1e-9));
+	}
+
 	int TipLetters()
 	{
-		return static_cast<int>(std::floor(TipWrap / (TipAdvance * TipPt * 4.0 / 3.0)));
+		// (worked out once: the least is at a window 640 high, where a letter of 4.5 px is set 5)
+		static const int Least = []()
+		{
+			int Most = TipLettersAt(1.0);
+			for (int High = static_cast<int>(TipLeastHigh); High <= static_cast<int>(TipMostScale * 1080.0); ++High)
+			{
+				Most = std::min(Most, TipLettersAt(static_cast<double>(High) / 1080.0));
+			}
+			for (int Quarters = 4; Quarters <= static_cast<int>(TipMostScale * 4.0); ++Quarters)
+			{
+				Most = std::min(Most, TipLettersAt(static_cast<double>(Quarters) / 4.0));
+			}
+			return Most;
+		}();
+		return Least;
 	}
 
 	int LettersOf(const std::string& Words)

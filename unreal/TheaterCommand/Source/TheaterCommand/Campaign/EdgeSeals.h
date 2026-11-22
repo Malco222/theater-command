@@ -266,14 +266,28 @@ namespace EdgeSeals
 	 * the frame dresses as it dresses every tip (CampaignHUD, "ToolTip.Font": the typed face at TipPt). The layer gives
 	 * it no size of its own: the engine sizes it to its words and wraps them at Slate.ToolTipWrapWidth, TipWrap units
 	 * (the engine's own 1000). The face is Courier Prime, every letter of it TipAdvance of an em wide (1228 of 2048, from
-	 * the font file), so TipPt's em is TipPt * 4/3 units and a letter 7.6 of them: the hover's own size is one line of
-	 * TipLetters (131) letters, and a hover of more wraps to a second line. Today every hover the real months stand is
-	 * one such line but one, a folded seal's of 132 letters, which wraps by its last word.
+	 * the font file), so TipPt's em is TipPt * 4/3 units and a letter 7.6 of them. But Slate sets each letter a whole
+	 * pixel's advance at the scale it draws the tip (the shaped glyph's advance is a whole number of pixels, the face
+	 * hinted), so on a screen of Scale pixels a unit a letter is round(7.6 * Scale) / Scale units, and one line holds
+	 * TipLettersAt(Scale) letters: 125 at a pixel a unit (1920 by 1080), 133 at two, 120 in a window 783 high, 118 in
+	 * one 640 high; 131 only were the advance not a whole pixel. The tip is drawn at the game layer's scale (the window's
+	 * height over 1080, Unreal's own curve) or, where the engine gives it a window of its own, at the desktop's (one to
+	 * three pixels a point); which is not read here, as Unreal is not installed. So the hover's own size is the least
+	 * line of either on every screen the seals are held to: TipLetters, 118 letters. A hover of more wraps to a second
+	 * line on some screen. Today four of the real months' hovers are longer than that, the longest a folded seal's of 132
+	 * letters, which wraps at 1920 by 1080.
 	 */
 	constexpr double TipPt = 9.5;
 	constexpr double TipWrap = 1000.0;
 	constexpr double TipAdvance = 1228.0 / 2048.0;
-	/** The letters one line of the hover holds: as many as are no wider, together, than TipWrap. */
+	constexpr double TipLeastHigh = 600.0; // the least window the seals are held to, as their strokes' 1.5 px floor is (Look::Stroke)
+	constexpr double TipMostScale = 3.0; // the most pixels a unit (and a desktop's pixels a point) they are held to
+	/** The letters one line of the hover holds on a screen of Scale pixels a unit: as many as are no wider, together, than TipWrap, each at its whole-pixel advance. */
+	int TipLettersAt(double Scale);
+	/**
+	 * The letters one line of the hover holds on every screen: the least TipLettersAt of the game layer's scale for
+	 * every window from TipLeastHigh to TipMostScale * 1080 high, and of the desktop's from 1 to TipMostScale in quarters.
+	 */
 	int TipLetters();
 	/** How many letters some words are (UTF-8 in: each letter one advance of the typed face, "4ª" two). */
 	int LettersOf(const std::string& Words);

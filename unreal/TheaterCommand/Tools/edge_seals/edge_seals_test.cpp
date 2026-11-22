@@ -1416,8 +1416,19 @@ namespace
 		return Letters;
 	}
 
-	/** One line of the hover, as the test reckons it: 1000 units of wrap over a letter of 1228/2048 of 9.5 points' em, 4/3 units a point. */
-	constexpr int HoverLine = 131;
+	/**
+	 * One line of the hover, as the test reckons it: 1000 units of wrap over a letter of 1228/2048 of 9.5 points' em, 4/3
+	 * units a point, set at a whole pixel's advance, on the screen where that holds fewest: a window 640 high, where the
+	 * letter's 4.5 px are set 5 (TipLines wraps at it).
+	 */
+	constexpr int HoverLine = 118;
+
+	/** The test's own whole-pixel line: 1000 units at Scale pixels a unit over the letter's advance rounded to a pixel. */
+	int LineAt(double Scale)
+	{
+		const double Px = std::max(std::round(1228.0 / 2048.0 * 9.5 * 4.0 / 3.0 * Scale), 1.0);
+		return static_cast<int>(std::floor(1000.0 * Scale / Px + 1e-9));
+	}
 
 	/** The short lines a folded seal can list: each item's in card order, up to the first item with no words of its own. */
 	std::vector<std::string> ShortLines(const std::vector<FSaid>& Said, const FAlikeRun& Run)
@@ -1876,11 +1887,12 @@ static void TestFold()
 		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } })
 			== "No. 3 Group bombs Paris by night; No. 4 Group bombs Rome by night; No. 5 Group bombs Turin by night");
 		// (a list's "and" is never the verb, nor a name with one in it listed; words that run on into a second sentence are
-		// not made plural; and an item with no words of its own gives the count and its part of the card)
+		// not made plural; and an item with no words of its own gives the count and its part of the card. Three such lines
+		// are more than the hover's 118 letters, so two are listed and "and 1 more")
 		CHECK(Words({ { "", "Britain and France declare war on Germany." }, { "", "Canada and France declare war on Germany." }, { "", "India and France declare war on Germany." } })
-			== "Britain and France declare war on Germany; Canada and France declare war on Germany; India and France declare war on Germany");
+			== "Britain and France declare war on Germany; Canada and France declare war on Germany; and 1 more");
 		CHECK(Words({ { "", "Montgomery reports for duty. He was in Egypt." }, { "", "Alexander reports for duty. He was in Egypt." }, { "", "Brooke reports for duty. He was in Egypt." } })
-			== "Montgomery reports for duty. He was in Egypt; Alexander reports for duty. He was in Egypt; Brooke reports for duty. He was in Egypt");
+			== "Montgomery reports for duty. He was in Egypt; Alexander reports for duty. He was in Egypt; and 1 more");
 		CHECK(Words({ { "", "U-47 torpedoes a battleship." }, { "", "U-99 torpedoes a battleship." }, { "", "U-100 torpedoes a battleship." } }) == "3 torpedo a battleship: U-47, U-99 and U-100");
 		CHECK(Words({ { "", "" }, { "", "" }, { "", "" } }) == "3 elsewhere in the war");
 		// (the review's cards, on the rules' own sentences: a thing named after a nation's adjective is the name's, never
@@ -1904,7 +1916,7 @@ static void TestFold()
 		CHECK(Each({ "Argentina", "Chile", "Spain" }, "leans toward the Axis: trade and treaties, but not at war.") == "3 lean toward the Axis: Argentina, Chile and Spain");
 		CHECK(Each({ "Hungary", "Romania", "Bulgaria" }, "lets its claim to Transylvania rest for now.") == "3 let their claim to Transylvania rest for now: Hungary, Romania and Bulgaria");
 		CHECK(Each({ "Hungary", "Romania", "Finland" }, "joins the Axis and declares war on the Soviet Union.")
-			== "Hungary joins the Axis and declares war; Romania joins the Axis and declares war; Finland joins the Axis and declares war");
+			== "Hungary joins the Axis and declares war; Romania joins the Axis and declares war; and 1 more");
 		CHECK(Each({ "Hood", "Repulse", "Barham" }, "loses her captain.") == "Hood loses her captain; Repulse loses her captain; Barham loses her captain");
 		// (a name's own small word is the name's; but the verb is the first other word in small letters, so a run that does
 		// not split there splits nowhere: never "3 her captain: Hood loses, Repulse sinks and Barham rams")
@@ -2540,16 +2552,37 @@ namespace
  * The design director's ruling 64(g)(4), 13:00Z: a folded seal that cannot name its run lists each item's own short
  * line, in card order, as many as the hover's own size holds, then "and N more". The hover is the engine's own tip,
  * sized to its words and wrapped at 1000 units, in the typed face at 9.5 points (CampaignHUD's "ToolTip.Font"), which
- * the layer leaves as it is: one line of it is 131 letters. No hover grows: every hover the real months stand, in
- * either fold, is one such line, where today's tallest is two; and none is wider than the tip's wrap, nor than one line
- * of it. The card and the press are as they were (FoldAlike's runs, the card's rows: not touched). Every folded seal's
- * hover is printed, with how many of its items it names and whether it says "and N more".
+ * the layer leaves as it is. Slate sets each letter at a whole pixel's advance at the tip's scale, which is the game
+ * layer's (the window's height over 1080) or the desktop's: so one line of it is 125 letters at 1920 by 1080, and 118
+ * where it is fewest, a window 640 high (the review of the rulings' build: 131 held only were the advance fractional).
+ * No hover grows: every hover the real months stand, in either fold, is one such line on every screen, where today's
+ * tallest is two; and none is wider than the tip's wrap, nor than one line of it. The card and the press are as they
+ * were (FoldAlike's runs, the card's rows: not touched). Every folded seal's hover is printed, with how many of its
+ * items it names and whether it says "and N more".
  */
 static void TestHover(const char* Folder)
 {
-	// 1. The hover's own size: 131 letters to its line, no wider together than the wrap, and a 132nd wider.
+	// 1. The hover's own size: 118 letters to its line on every screen the seals are held to (from a window 600 high to
+	// 3 px a unit, and a desktop of 1 to 3 px a point), each letter its whole pixel's advance; 119 wrap in a window 640
+	// high. 125 at 1920 by 1080, 120 at 783 high, 133 at two pixels a unit; 131 only with fractional advances.
 	const double Letter = TipAdvance * TipPt * 4.0 / 3.0;
-	CHECK(TipLetters() == HoverLine && TipLetters() * Letter <= TipWrap && (TipLetters() + 1) * Letter > TipWrap);
+	CHECK(TipLetters() == HoverLine && TipLettersAt(640.0 / 1080.0) == HoverLine && TipLettersAt(1.0) == 125 && TipLettersAt(783.0 / 1080.0) == 120 && TipLettersAt(2.0) == 133);
+	CHECK(static_cast<int>(std::floor(TipWrap / Letter)) == 131 && TipLettersAt(0.0) == 125);
+	{
+		bool bEvery = true, bLeast = false;
+		for (int High = 600; High <= 3240; ++High)
+		{
+			const double Scale = High / 1080.0;
+			const double Px = std::round(Letter * Scale);
+			bEvery = bEvery && TipLettersAt(Scale) == LineAt(Scale) && HoverLine * Px <= TipWrap * Scale + 1e-9 && TipLettersAt(Scale) >= HoverLine;
+			bLeast = bLeast || (HoverLine + 1) * Px > TipWrap * Scale;
+		}
+		for (int Quarters = 4; Quarters <= 12; ++Quarters)
+		{
+			bEvery = bEvery && TipLettersAt(Quarters / 4.0) == LineAt(Quarters / 4.0) && TipLettersAt(Quarters / 4.0) >= HoverLine;
+		}
+		CHECK(bEvery && bLeast);
+	}
 	CHECK(LettersOf("Soviet troops") == 13 && LettersOf("4\xC2\xAA Armata") == 9 && LettersOf("\xC5\x81\xC3\xB3" "d\xC5\xBA") == 4 && LettersOf("") == 0);
 	if (Folder)
 	{
@@ -2591,7 +2624,7 @@ static void TestHover(const char* Folder)
 	const std::vector<FMonth> Months = ReadMonths();
 	std::vector<FAlike> Drawn;
 	std::vector<FAlikeRun> Pressed, Plain;
-	int PressedFolded = 0, PressedMore = 0, Hovers = 0, Over = 0, Longest = 0, TodaysLongest = 0, TodaysTallest = 0, TodaysWidest = 0, Widest = 0, Folded = 0, Whole = 0, More = 0, NamedAll = 0, Bad = 0;
+	int PressedFolded = 0, PressedMore = 0, Hovers = 0, Over = 0, Longest = 0, TodaysLongest = 0, TodaysTallest = 0, TodaysWidest = 0, TodaysOver = 0, Widest = 0, Folded = 0, Whole = 0, More = 0, NamedAll = 0, Bad = 0;
 	int ByNamed[5] = { 0, 0, 0, 0, 0 };
 	std::string Why, First, LongestSaid;
 	for (const FMonth& Month : Months)
@@ -2619,6 +2652,7 @@ static void TestHover(const char* Folder)
 				TodaysTallest = std::max(TodaysTallest, TodaysLines);
 				TodaysWidest = std::max(TodaysWidest, TodaysWide);
 				TodaysLongest = std::max(TodaysLongest, LettersSet(Today));
+				TodaysOver += LettersSet(Today) > HoverLine ? 1 : 0;
 				if (LettersSet(Said) > Longest)
 				{
 					Longest = LettersSet(Said);
@@ -2664,17 +2698,18 @@ static void TestHover(const char* Folder)
 		}
 	}
 	CHECK(Months.size() == 48 && Hovers >= 500 && Over == 0 && Bad == 0);
-	CHECK(Longest <= HoverLine && Widest <= HoverLine && Widest * Letter <= TipWrap && TodaysTallest == 2 && TodaysLongest > HoverLine);
+	CHECK(Longest <= HoverLine && Widest <= HoverLine && Widest * Letter <= TipWrap && Widest * std::round(Letter * 640.0 / 1080.0) <= TipWrap * 640.0 / 1080.0 && TodaysTallest == 2 && TodaysLongest > HoverLine);
 	CHECK(Folded >= 40 && Whole >= 20 && More >= 10 && NamedAll >= 20);
 	if (Bad > 0)
 	{
 		std::printf("  first: %s\n", First.c_str());
 	}
-	std::printf("(the hover: one line of %d letters, %.1f of %.0f units; %d hovers over the real months in both folds, none of more than one line, the longest %d letters (\"%s\"); today's longest %d letters on %d lines, its widest line %d)\n",
-		TipLetters(), TipLetters() * Letter, TipWrap, Hovers, Longest, LongestSaid.c_str(), TodaysLongest, TodaysTallest, TodaysWidest);
-	std::printf("(the real months' %d folded seals, %d where the set is pressed and %d more as drawn below 972 high: %d name every item, %d say \"and N more\" (%d of the pressed); %d list their items' own lines; naming 2: %d, 3: %d, 4 or more: %d, none: %d)\n",
-		Folded, PressedFolded, Folded - PressedFolded, NamedAll, More, PressedMore, Whole, ByNamed[2], ByNamed[3], ByNamed[4], ByNamed[0]);
-	CHECK(ByNamed[1] == 0);
+	std::printf("(the hover: one line of %d letters on every screen, each at its whole pixel's advance (%d at 1920 by 1080, %d at 783 high, %d at 640, %d with fractional advances); %d hovers over the real months in both folds, none of more than one line, the longest %d letters (\"%s\"); today %d are longer than that line, the longest %d letters on %d lines, its widest line %d)\n",
+		TipLetters(), TipLettersAt(1.0), TipLettersAt(783.0 / 1080.0), TipLettersAt(640.0 / 1080.0), static_cast<int>(std::floor(TipWrap / Letter)), Hovers, Longest, LongestSaid.c_str(), TodaysOver, TodaysLongest, TodaysTallest, TodaysWidest);
+	std::printf("(the real months' %d folded seals, %d where the set is pressed and %d more as drawn below 972 high: %d name every item, %d say \"and N more\" (%d of the pressed); %d list their items' own lines; naming 1: %d, 2: %d, 3: %d, 4 or more: %d, none: %d)\n",
+		Folded, PressedFolded, Folded - PressedFolded, NamedAll, More, PressedMore, Whole, ByNamed[1], ByNamed[2], ByNamed[3], ByNamed[4], ByNamed[0]);
+	// (one names a single item: SOV January 1944's three lines of 60 letters and more, where two and "and 1 more" pass the line)
+	CHECK(ByNamed[1] <= 1 && ByNamed[0] == 0);
 }
 
 /** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
