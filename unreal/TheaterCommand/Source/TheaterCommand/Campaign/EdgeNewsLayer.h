@@ -20,10 +20,12 @@ struct FSlateBrush;
  * nearest its row's place, in card order, about 0.12 s apart, and keeps off every piece of the frame (the right
  * column, the date strip, the tray, the minimap) and every panel that stands over the map (the staff's note, the
  * adviser): KeepOffOf fills an array with them, in absolute measure, as the frame last laid them out (EdgeNewsKeepOff).
- * As many stand as the edge has room for, in the card's ranking, and the rest fold into the "+N" seal. Classes 1 and 2
- * are red and pulse slowly until opened. The pointer on a seal gives its eight words and pings its place on the map; a
- * press opens the month's card at its row. SignOf gives an order sign's picture by its key (Content/CityOrders), and
- * CountFace is the face the "+N" is pressed in.
+ * As many stand as the edge has room for, in the card's ranking, and the rest fold into the "+N" seal. A seal wears the
+ * colour of the row it opens (the art director's ruling of 22 November: EdgeSeals::LookOf): a dated warning is red and
+ * pulses slowly until opened; war and peace and the news wear the news band's brass (a freeing his own side did, its
+ * green) and pulse; the rest wear their row's colour and stand still. The pointer on a seal gives its eight words and
+ * pings its place on the map; a press opens the month's card at its row. SignOf gives an order sign's picture by its
+ * key (Content/CityOrders), and CountFace is the face the "+N" is pressed in.
  *
  * EdgeNewsKeepOff: what the seals keep off, into Out (which keeps its room between frames): the frame's pieces (Frame,
  * absolute), and for each of Panels that stands on the screen now, the box that holds it among the layers of the

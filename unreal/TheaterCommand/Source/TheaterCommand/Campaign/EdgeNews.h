@@ -17,11 +17,18 @@ struct FEdgeNewsSeal
 	/** The card's part (EdgeSeals::ESection: 0 a band, 1 the lead story, 2 a front's row, 3 home, 4 the staff, 5 elsewhere, 6 "+N") and the item's place in it. */
 	int32 Section = 0;
 	int32 Index = 0;
-	/** Ruling 64's class (EdgeSeals::ClassOf): 1 and 2 are red, and pulse until opened. */
+	/** Ruling 64's class (EdgeSeals::ClassOf). */
 	int32 Class = 3;
-	/** The row's tone on the card: 1 good news, -1 bad, 2 something that blocks or warns, 0 neither; 3 next month's, in grey. */
+	/** The row's tone on the card: 1 good news (a band: a FREED his own side won), -1 bad, 2 something that blocks or warns, 0 neither; 3 next month's, in grey. */
 	int32 Tone = 0;
-	/** What is pressed into it (EdgeSeals::EGlyph), and the order sign it names where it is one ("inf", "hull", "star"...). */
+	/**
+	 * The colour it wears (EdgeSeals::EWax, from EdgeSeals::LookOf: the colour of its row on the card, the art
+	 * director's ruling of 22 November), and whether it pulses until opened: a dated warning (red), and war and peace
+	 * and the news (the news band's brass, or green for a freeing his own side did).
+	 */
+	int32 Wax = 4; // (EdgeSeals::EWax::Brass, plain: EdgeNews.cpp checks the number)
+	bool bPulse = false;
+	/** What is pressed into it (EdgeSeals::EGlyph), and the order sign its row names ("inf", "hull"...; a "star" is never pressed: EdgeSeals::MayPress). */
 	int32 Glyph = 0;
 	FString Sign;
 	/** The row's eight words, for the pointer. */
@@ -33,7 +40,6 @@ struct FEdgeNewsSeal
 	bool bOpened = false;
 
 	bool HasPlace() const { return Region != INDEX_NONE || Sea != INDEX_NONE; }
-	bool IsRed() const { return Class >= 1 && Class <= 2; }
 };
 
 /** The month's seals, and the row of the card a seal last opened. */

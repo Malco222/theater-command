@@ -158,15 +158,15 @@ static void TestItems()
 
 static void TestWords()
 {
-	CHECK(ClassOf(ESection::Band, "WARNING") == 1 && IsRed(1));
+	CHECK(ClassOf(ESection::Band, "WARNING") == 1);
 	CHECK(ClassOf(ESection::Band, "WAR") == 2 && ClassOf(ESection::Band, "FREED") == 2 && ClassOf(ESection::Band, "NEWS") == 2);
 	CHECK(ClassOf(ESection::Lead, "LAST MONTH") == 2);
-	CHECK(ClassOf(ESection::Lead, "WON") == 3 && !IsRed(3));
+	CHECK(ClassOf(ESection::Lead, "WON") == 3);
 	CHECK(ClassOf(ESection::Row, "WARNING") == 1);
 	CHECK(ClassOf(ESection::Row, "FALLEN") == 2);
 	CHECK(ClassOf(ESection::Row, "LOST") == 3 && ClassOf(ESection::Row, "") == 3);
-	CHECK(ClassOf(ESection::Home, "") == 6 && ClassOf(ESection::Staff, "") == 6 && !IsRed(6));
-	CHECK(ClassOf(ESection::Elsewhere, "") == 7 && ClassOf(ESection::More, "") == 8 && !IsRed(8) && !IsRed(0));
+	CHECK(ClassOf(ESection::Home, "") == 6 && ClassOf(ESection::Staff, "") == 6);
+	CHECK(ClassOf(ESection::Elsewhere, "") == 7 && ClassOf(ESection::More, "") == 8);
 
 	CHECK(GlyphOf(ESection::Band, "WARNING", false) == EGlyph::Warning);
 	CHECK(GlyphOf(ESection::Band, "WAR", false) == EGlyph::War);
@@ -678,6 +678,239 @@ static void TestMotion()
 	CHECK(bInside);
 }
 
+/** The art director's ruling of 22 November, section 1: a seal wears the colour of the row it opens, and which pulse. */
+static void TestColours()
+{
+	auto Is = [](const FLook& Worn, EWax Wax, bool bPulse) { return Worn.Wax == Wax && Worn.bPulse == bPulse; };
+	// A dated warning: red, and it pulses, as a band (a band's tone is -1 where the card does not edge it green), as a
+	// row that found no band, and as the lead of the month a stake falls due.
+	CHECK(Is(LookOf(ESection::Band, "WARNING", -1), EWax::Red, true));
+	CHECK(Is(LookOf(ESection::Row, "WARNING", -1), EWax::Red, true));
+	CHECK(Is(LookOf(ESection::Lead, "LAST MONTH", -1), EWax::Red, true));
+	// WAR, FALLEN, FREED and NEWS: the news band's brass, and they pulse, as a band and as a row that found no band.
+	bool bBand = true;
+	for (const char* Word : { "WAR", "FALLEN", "FREED", "NEWS" })
+	{
+		bBand = bBand && Is(LookOf(ESection::Band, Word, -1), EWax::Band, true) && Is(LookOf(ESection::Row, Word, -1), EWax::Band, true);
+		bBand = bBand && Is(LookOf(ESection::Row, Word, 0), EWax::Band, true); // (a NEWS row's tone is plain)
+	}
+	CHECK(bBand);
+	CHECK(Is(LookOf(ESection::Band, "WAR", -1), EWax::Band, true));
+	CHECK(Is(LookOf(ESection::Band, "FALLEN", -1), EWax::Band, true));
+	CHECK(Is(LookOf(ESection::Band, "FREED", -1), EWax::Band, true));
+	CHECK(Is(LookOf(ESection::Band, "NEWS", -1), EWax::Band, true));
+	// A FREED his own side won keeps the card's green, and pulses: the band's "good" (Tone 1, as EdgeNews passes
+	// Band.bGood), and the row's tone 1 for the same freeing when it found no band.
+	CHECK(Is(LookOf(ESection::Band, "FREED", 1), EWax::Green, true));
+	CHECK(Is(LookOf(ESection::Row, "FREED", 1), EWax::Green, true));
+	// Amber, green, plain brass and grey seals do not pulse.
+	CHECK(Is(LookOf(ESection::Row, "BESIEGED", 2), EWax::Amber, false));
+	CHECK(Is(LookOf(ESection::Row, "BLOCKED", 2), EWax::Amber, false));
+	CHECK(Is(LookOf(ESection::Row, "WON", 1), EWax::Green, false));
+	CHECK(Is(LookOf(ESection::Lead, "WON", 1), EWax::Green, false));
+	CHECK(Is(LookOf(ESection::Row, "", 0), EWax::Brass, false));
+	CHECK(Is(LookOf(ESection::Home, "", 0), EWax::Brass, false));
+	CHECK(Is(LookOf(ESection::Staff, "", 0), EWax::Brass, false));
+	CHECK(Is(LookOf(ESection::More, "", 0), EWax::Brass, false));
+	CHECK(Is(LookOf(ESection::Home, "", 3), EWax::Grey, false));
+	CHECK(Is(LookOf(ESection::Elsewhere, "", 0), EWax::Grey, false));
+	// Bad news is no warning: nothing that arrives wears red.
+	CHECK(Is(LookOf(ESection::Row, "LOST", -1), EWax::Brass, false));
+	CHECK(Is(LookOf(ESection::Lead, "LOST", -1), EWax::Brass, false));
+	CHECK(Is(LookOf(ESection::Row, "SUNK", -1), EWax::Brass, false));
+	// Over every part, word and tone: red is the dated warning's alone; the news band's brass is class 2's alone; only
+	// red, band brass and class 2's green pulse; amber, green, plain brass and grey otherwise never do.
+	const ESection Sections[] = { ESection::Band, ESection::Lead, ESection::Row, ESection::Home, ESection::Staff, ESection::Elsewhere, ESection::More };
+	const char* Words[] = { "", "WARNING", "WAR", "FALLEN", "FREED", "NEWS", "LAST MONTH", "WON", "LOST", "HELD", "BESIEGED", "SUNK", "HIT", "BLOCKED", "MISSED" };
+	bool bRedOnly = true, bBandOnly = true, bPulseOnly = true, bStill = true;
+	for (const ESection Section : Sections)
+	{
+		for (const char* Word : Words)
+		{
+			for (int Tone = -1; Tone <= 3; ++Tone)
+			{
+				const FLook Worn = LookOf(Section, Word, Tone);
+				const int Class = ClassOf(Section, Word);
+				const bool bDated = Class == 1 || (Section == ESection::Lead && std::string(Word) == "LAST MONTH");
+				bRedOnly = bRedOnly && (Worn.Wax == EWax::Red) == bDated;
+				bBandOnly = bBandOnly && (Worn.Wax == EWax::Band) == (Class == 2 && !bDated && Tone != 1);
+				bPulseOnly = bPulseOnly && Worn.bPulse == (bDated || Class == 2);
+				const bool bQuiet = Worn.Wax == EWax::Amber || Worn.Wax == EWax::Brass || Worn.Wax == EWax::Grey || (Worn.Wax == EWax::Green && Class != 2);
+				bStill = bStill && (!bQuiet || !Worn.bPulse);
+			}
+		}
+	}
+	CHECK(bRedOnly);
+	CHECK(bBandOnly);
+	CHECK(bPulseOnly);
+	CHECK(bStill);
+	// Our own order signs are pressed in; no star (the ruling's section 2), nor the night raid's moon and star.
+	CHECK(MayPress("inf") && MayPress("hull") && MayPress("ftr") && MayPress("art") && MayPress("aa"));
+	CHECK(!MayPress("star") && !MayPress("night") && !MayPress(""));
+	CHECK(GlyphOf(ESection::Row, "", MayPress("star")) == EGlyph::News);
+	CHECK(GlyphOf(ESection::Home, "", MayPress("star")) == EGlyph::News);
+	CHECK(GlyphOf(ESection::Row, "WON", MayPress("inf")) == EGlyph::Sign);
+}
+
+namespace
+{
+	/** A drawn mark's box about the disc's middle, and how far its farthest point lies from it. */
+	struct FMarkBox
+	{
+		double MinX = 1e9, MinY = 1e9, MaxX = -1e9, MaxY = -1e9, Far = 0.0;
+	};
+
+	FMarkBox MarkBox(const Look::FStroke* Strokes, int Count)
+	{
+		FMarkBox Box;
+		for (int Index = 0; Index < Count; ++Index)
+		{
+			const Look::FStroke& Cut = Strokes[Index];
+			double HalfX = Cut.Long * 0.5, HalfY = Cut.Long * 0.5, Far = std::hypot(Cut.X, Cut.Y) + Cut.Long * 0.5;
+			if (Cut.Kind == Look::EStroke::Bar)
+			{
+				// (a bar with round ends: its two ends' middles, and the round end's half width round them)
+				const double Turn = Cut.Degrees * 3.141592653589793 / 180.0, Reach = (Cut.Long - Cut.Thick) * 0.5;
+				HalfX = Reach * std::fabs(std::cos(Turn)) + Cut.Thick * 0.5;
+				HalfY = Reach * std::fabs(std::sin(Turn)) + Cut.Thick * 0.5;
+				Far = std::max(std::hypot(Cut.X + Reach * std::cos(Turn), Cut.Y + Reach * std::sin(Turn)), std::hypot(Cut.X - Reach * std::cos(Turn), Cut.Y - Reach * std::sin(Turn))) + Cut.Thick * 0.5;
+			}
+			Box.MinX = std::min(Box.MinX, Cut.X - HalfX);
+			Box.MaxX = std::max(Box.MaxX, Cut.X + HalfX);
+			Box.MinY = std::min(Box.MinY, Cut.Y - HalfY);
+			Box.MaxY = std::max(Box.MaxY, Cut.Y + HalfY);
+			Box.Far = std::max(Box.Far, Far);
+		}
+		return Box;
+	}
+}
+
+/** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
+static void TestSealLook()
+{
+	const FParams Params;
+	CHECK(Look::BoxW == Params.SealW && Look::BoxH == Params.SealH);
+	CHECK(Look::MidY + Look::DiscR <= Look::BoxH && Look::MidX + Look::DiscR <= Look::BoxW);
+	// On the screen a frame's unit is FrameScale (1000 / 900) times Unreal's own scale for the window (its height over
+	// 1080): 1.029 px at 1600 by 1000, where the seals are judged; 0.74 at 1280 by 720; twice that on the fine pixels.
+	const double Reference = (1000.0 / 900.0) * (1000.0 / 1080.0);
+	const double Scales[] = { (1000.0 / 900.0) * (600.0 / 1080.0), (1000.0 / 900.0) * (720.0 / 1080.0), (1000.0 / 900.0) * (878.0 / 1080.0), Reference, (1000.0 / 900.0) * (1440.0 / 1080.0), 2.0 * Reference, 3.0 };
+
+	// The pressed sign: about 18 px across at the reference screen, an order sign fitted as it was drawn, inside the hollow.
+	const FPoint Wide = Look::FitSign(192.0, 128.0);
+	CHECK(std::fabs(Wide.X - Look::SignW) < 1e-9 && Wide.Y <= Look::SignH + 1e-9);
+	CHECK(Wide.X * Reference > 17.0 && Wide.X * Reference < 19.0);
+	const FPoint Square = Look::FitSign(64.0, 64.0);
+	CHECK(Square.X <= Look::SignW + 1e-9 && Square.Y <= Look::SignH + 1e-9 && std::fabs(Square.X - Square.Y) < 1e-9);
+	const FPoint Undrawn = Look::FitSign(0.0, 0.0);
+	CHECK(std::fabs(Undrawn.X - Look::SignW) < 1e-9 && Undrawn.Y <= Look::SignH + 1e-9);
+	// (corner to corner, with its wall, inside the hollow)
+	CHECK(std::hypot(Look::SignW, Look::SignH) * 0.5 + Look::WallOf(Reference) <= Look::HollowR);
+
+	// The drawn marks: about 18 px across at the reference screen (16 to 19), inside the hollow with their wall at
+	// every scale, and no stroke under 1.5 px on the screen from a window 600 high to the fine pixels.
+	const EGlyph Drawn[] = { EGlyph::Warning, EGlyph::War, EGlyph::Fallen, EGlyph::Freed, EGlyph::News, EGlyph::Globe };
+	bool bAcross = true, bInside = true, bThick = true, bSome = true;
+	for (const EGlyph Glyph : Drawn)
+	{
+		for (const double Scale : Scales)
+		{
+			Look::FStroke Strokes[4];
+			const int Count = Look::MarkOf(Glyph, Scale, Strokes);
+			bSome = bSome && Count > 0 && Count <= 4;
+			const FMarkBox Box = MarkBox(Strokes, Count);
+			bInside = bInside && Box.Far + Look::WallOf(Scale) * std::sqrt(2.0) <= Look::HollowR + 1e-9;
+			for (int Index = 0; Index < Count; ++Index)
+			{
+				const double Line = Strokes[Index].Kind == Look::EStroke::Dot ? Strokes[Index].Long : Strokes[Index].Thick;
+				bThick = bThick && Line * Scale >= Look::MinStrokePx - 1e-9;
+			}
+			if (Scale == Reference)
+			{
+				const double Across = std::max(Box.MaxX - Box.MinX, Box.MaxY - Box.MinY) * Reference;
+				bAcross = bAcross && Across >= 16.0 && Across <= 19.0;
+			}
+		}
+	}
+	CHECK(bSome);
+	CHECK(bAcross);
+	CHECK(bInside);
+	CHECK(bThick);
+	{
+		Look::FStroke Strokes[4];
+		CHECK(Look::MarkOf(EGlyph::Sign, Reference, Strokes) == 0 && Look::MarkOf(EGlyph::More, Reference, Strokes) == 0);
+	}
+	// A stroke is kept as drawn where it is thick enough, made thicker where it is not, and never swells past 6 units.
+	CHECK(Look::Stroke(2.0, Reference) == 2.0);
+	CHECK(std::fabs(Look::Stroke(1.2, Reference) * Reference - 1.5) < 1e-9);
+	CHECK(std::fabs(Look::Stroke(2.0, 0.5) - 3.0) < 1e-9);
+	CHECK(Look::Stroke(1.0, 0.0) == 1.5 && Look::Stroke(1.0, std::nan("")) == 1.5 && Look::Stroke(1.0, 0.01) == 6.0);
+	CHECK(Look::WallOf(Reference) <= 1.0 && Look::WallOf(0.5) == 1.0 && Look::WallOf(3.0) == 0.75 && Look::WallOf(0.0) == 1.0);
+
+	// The hollow lit from the upper left: the ring that catches the light lies, inside the hollow, along its lower-right
+	// wall; the ring in shadow along its upper-left wall (the patch lit it from the lower right).
+	CHECK(Look::LightX < 0.0 && Look::LightY < 0.0);
+	const Look::FLips Lips = Look::HollowLips();
+	CHECK(Lips.LitX < 0.0 && Lips.LitY < 0.0 && Lips.ShadeX > 0.0 && Lips.ShadeY > 0.0);
+	const double Diagonal = std::sqrt(0.5), Line = Lips.R - 0.5;
+	CHECK(std::hypot(Lips.LitX + Line * Diagonal, Lips.LitY + Line * Diagonal) < Look::HollowR);
+	CHECK(std::hypot(Lips.LitX - Line * Diagonal, Lips.LitY - Line * Diagonal) > Look::HollowR);
+	CHECK(std::hypot(Lips.ShadeX - Line * Diagonal, Lips.ShadeY - Line * Diagonal) < Look::HollowR);
+	CHECK(std::hypot(Lips.ShadeX + Line * Diagonal, Lips.ShadeY + Line * Diagonal) > Look::HollowR);
+	CHECK(Look::HollowR < Look::DiscR - 2.0 * Look::RimW);
+
+	// Four small, uneven runs of wax: none more than a quarter of the disc's radius, each out past the rim by a little
+	// (0.5 to 1.5), and neither evenly spaced (a gear) nor alike (a badge's edge).
+	CHECK(Look::RunCount == 4);
+	bool bSmall = true;
+	double LeastGap = 360.0, MostGap = 0.0, LeastR = 1e9, MostR = 0.0, LeastOut = 1e9, MostOut = 0.0;
+	for (int Index = 0; Index < Look::RunCount; ++Index)
+	{
+		const Look::FRun& Run = Look::Runs[Index];
+		const double Past = Run.Out + Run.Radius - Look::DiscR;
+		bSmall = bSmall && Run.Radius <= 0.25 * Look::DiscR && Past >= 0.5 && Past <= 1.5 && Run.Out + Run.Radius <= Look::MidX;
+		const double Next = Index + 1 < Look::RunCount ? Look::Runs[Index + 1].Degrees : Look::Runs[0].Degrees + 360.0;
+		LeastGap = std::min(LeastGap, Next - Run.Degrees);
+		MostGap = std::max(MostGap, Next - Run.Degrees);
+		LeastR = std::min(LeastR, Run.Radius);
+		MostR = std::max(MostR, Run.Radius);
+		LeastOut = std::min(LeastOut, Past);
+		MostOut = std::max(MostOut, Past);
+	}
+	CHECK(bSmall);
+	CHECK(LeastGap > 0.0 && MostGap - LeastGap >= 30.0);
+	CHECK(MostR - LeastR >= 0.8 && MostOut - LeastOut >= 0.2);
+
+	// The ribbon's tails: short, neither longer than the disc is tall, and inside the seal's box.
+	bool bTails = true;
+	for (const Look::FTail& Tail : Look::Tails)
+	{
+		const double Turn = Tail.Degrees * 3.141592653589793 / 180.0, Reach = (Tail.Long - Tail.Thick) * 0.5;
+		const double HalfX = Reach * std::fabs(std::cos(Turn)) + Tail.Thick * 0.5, HalfY = Reach * std::fabs(std::sin(Turn)) + Tail.Thick * 0.5;
+		bTails = bTails && Tail.Long <= 2.0 * Look::DiscR && Tail.Y + HalfY <= Look::BoxH && Tail.X - HalfX >= 0.0 && Tail.X + HalfX <= Look::BoxW;
+		// (and each comes out from under the disc)
+		bTails = bTails && Tail.Y - HalfY < Look::MidY + Look::DiscR;
+	}
+	CHECK(bTails);
+
+	// The call at 2.4 s: calm (a breath of a few hundredths), the ring no wider than twice the disc even under the
+	// pointer's grow, never as opaque as the seal (it and the glow are drawn in the seal's own wax: never brighter),
+	// fading to nothing at its widest.
+	bool bNarrow = true, bDim = true, bCalm = true;
+	for (int Step = 0; Step <= 2000; ++Step)
+	{
+		const Look::FCall Call = Look::CallOf(Step * 0.005);
+		const double Grown = std::max(Call.Grow, Look::HoverGrow);
+		bNarrow = bNarrow && (Call.RingR + Call.RingW * 0.5) * Grown <= 2.0 * Look::DiscR && Call.GlowR * Grown <= 2.0 * Look::DiscR && Call.RingR > Look::DiscR;
+		bDim = bDim && Call.Ring >= 0.0 && Call.Ring <= 0.6 && Call.Glow >= 0.0 && Call.Glow <= 0.25 && Call.Ring + Call.Glow < 1.0;
+		bCalm = bCalm && Call.Grow >= 1.0 && Call.Grow <= 1.0 + Look::Breath + 1e-12;
+	}
+	CHECK(bNarrow);
+	CHECK(bDim);
+	CHECK(bCalm && Look::Breath <= 0.05);
+	CHECK(Look::CallOf(2.4 - 1e-6).Ring < 0.01 && std::fabs(Look::CallOf(1.2).Grow - (1.0 + Look::Breath)) < 1e-9 && Look::CallOf(0.0).Grow == 1.0);
+}
+
 int main()
 {
 	TestItems();
@@ -686,6 +919,8 @@ int main()
 	TestLayout();
 	TestRanked();
 	TestMotion();
+	TestColours();
+	TestSealLook();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

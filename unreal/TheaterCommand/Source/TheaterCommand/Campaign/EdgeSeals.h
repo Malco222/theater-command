@@ -15,11 +15,12 @@
  * row has a place.
  *
  * This file is the seals' pure logic, with no engine in it: which items the card has and in what order, how many
- * seals stand and how many fold into "+N", each item's class, sign and eight words, and where on the screen each
- * seal lies: on the edge nearest its row's place as the camera sees the map, never on a piece of the frame (the right
- * column, the date strip, the tray, the minimap) nor on another seal, the seals with no place in a neat stack at the
- * top edge. Tools/edge_seals/run.sh builds it with g++ and checks it. Nothing here is saved: the seals are laid
- * again from the month's card.
+ * seals stand and how many fold into "+N", each item's class, colour, pulse, sign and eight words, the seal's look
+ * measures (Look: the art director's limits of 22 November), and where on the screen each seal lies: on the edge
+ * nearest its row's place as the camera sees the map, never on a piece of the frame (the right column, the date strip,
+ * the tray, the minimap) nor on another seal, the seals with no place in a neat stack at the top edge.
+ * Tools/edge_seals/run.sh builds it with g++ and checks it. Nothing here is saved: the seals are laid again from the
+ * month's card.
  */
 namespace EdgeSeals
 {
@@ -47,7 +48,7 @@ namespace EdgeSeals
 	/** What is pressed into a seal: the row's own order sign, or a mark drawn in line where the row has none. */
 	enum class EGlyph : int
 	{
-		Sign = 0, // the order sign named by the item (Content/CityOrders)
+		Sign = 0, // the order sign named by the item (Content/CityOrders), where it may be pressed (MayPress)
 		Warning, // a warning that needs his decision: an upright stroke and a dot
 		War, // war declared: two strokes crossed
 		Fallen, // a country fallen: a chevron pointing down
@@ -114,8 +115,47 @@ namespace EdgeSeals
 	 */
 	int ClassOf(ESection Section, const std::string& Word);
 
-	/** Classes 1 and 2 are red, and pulse until they are opened. */
-	inline bool IsRed(int Class) { return Class >= 1 && Class <= 2; }
+	/**
+	 * The colours a seal's wax comes in: the colours of the rows of the month's card (the art director's ruling of 22
+	 * November, section 1; rulings 149(g) and 160). EdgeNewsLayer maps each to its inks.
+	 */
+	enum class EWax : int
+	{
+		Red = 0, // a dated warning: the only red seal
+		Band, // war and peace and the news (class 2): the kit's tc-band--news, its wax (108,80,36) to (85,63,29), rim and sign brass-300
+		Green, // good news, and a FREED his own side won
+		Amber, // something that blocks or warns
+		Brass, // plain brass: neither good nor bad, and bad news (nothing that arrives wears red)
+		Grey, // elsewhere in the war, and next month's at home
+	};
+
+	/** A seal's colour, and whether it pulses until it is opened. */
+	struct FLook
+	{
+		EWax Wax = EWax::Brass;
+		bool bPulse = false;
+	};
+
+	/**
+	 * The art director's ruling of 22 November, section 1: a seal wears the colour of the row it opens on the month's
+	 * card. Tone is that row's tone as the card colours it: 1 good (for a band, its "good": a FREED his own side won,
+	 * which the card edges green), -1 bad, 2 something that blocks or warns, 0 neither, 3 next month's (grey).
+	 * - A dated warning is red, and pulses: a WARNING band or row (class 1), and the lead story of the month a stake
+	 *   falls due (LAST MONTH), which is that warning (ruling 118(f)) and which the card frames in the warning's red.
+	 *   Nothing else is red: a row of bad news wears plain brass.
+	 * - WAR, FALLEN, FREED and NEWS (class 2) wear the news band's brass and pulse; one his own side won (Tone 1)
+	 *   keeps the card's green, and pulses.
+	 * - The rest wear their row's tone, green, amber, plain brass or grey (elsewhere is grey; the "+N" plain brass),
+	 *   and do not pulse.
+	 */
+	FLook LookOf(ESection Section, const std::string& Word, int Tone);
+
+	/**
+	 * Whether an order sign may be pressed into the wax. Our own order signs make a seal ours; no crest, eagle, star or
+	 * emblem goes in it (the ruling of 22 November, section 2). So the star (goals, honours, a works' order) and the
+	 * night raid's sign (a moon and a star) are refused, and the seal takes its drawn mark instead.
+	 */
+	bool MayPress(const std::string& Sign);
 
 	/** What is pressed into the seal of an item that carries Word, where it has an order sign of its own (bSign) or not. */
 	EGlyph GlyphOf(ESection Section, const std::string& Word, bool bSign);
@@ -236,6 +276,121 @@ namespace EdgeSeals
 	 */
 	double SlideShare(double Since, int Order, double Stagger = 0.12, double Slide = 0.38);
 
-	/** The slow pulse of a red seal not yet opened, 0 to 1 and back over Period seconds. */
+	/** The slow pulse of a seal that calls (FLook::bPulse) and is not yet opened, 0 to 1 and back over Period seconds. */
 	double Pulse(double Now, double Period = 2.4);
+
+	/**
+	 * The seal as EdgeNewsLayer draws it, in the frame's units (its box is FParams' 34 by 44, the disc at its head), to
+	 * the art director's look limits of 22 November, section 2, which the test holds it to. On the screen a unit is
+	 * the frame's FrameScale times Unreal's own scale for the window: about a pixel at 1600 by 1000, 0.74 of one in a
+	 * window 720 high. What must hold in pixels is measured at that scale (PxPerUnit).
+	 */
+	namespace Look
+	{
+		constexpr double BoxW = 34.0;
+		constexpr double BoxH = 44.0;
+		constexpr double MidX = 17.0; // the disc's middle in the box
+		constexpr double MidY = 17.0;
+		constexpr double DiscR = 15.0; // the disc: 30 across, 30 tall
+		constexpr double HollowR = 12.0; // the hollow the die pressed
+		constexpr double RimW = 1.3; // the rim's line
+		constexpr double SignW = 18.0; // the pressed sign: about 18 across (a pixel a unit at 1600 by 1000), at most 12.5 tall
+		constexpr double SignH = 12.5;
+		constexpr double MinStrokePx = 1.5; // no stroke of a pressed mark under 1.5 pixels on the screen
+		constexpr double LightX = -0.6; // the light, as the offset towards it: from the upper left, like the kit's other raised pieces
+		constexpr double LightY = -0.7;
+		constexpr double Breath = 0.035; // a seal that calls grows by at most this share as it breathes
+		constexpr double HoverGrow = 1.08; // and by this under the pointer
+
+		/** The four small runs of wax at the rim: where (degrees clockwise from the right), how big, and how far out their middles lie. */
+		struct FRun
+		{
+			double Degrees = 0.0;
+			double Radius = 0.0;
+			double Out = 0.0;
+		};
+		constexpr int RunCount = 4;
+		// (uneven in place and in size, and soft: wax, never a gear's teeth or a badge's scalloped edge)
+		inline constexpr FRun Runs[RunCount] = { { 31.0, 2.9, 13.4 }, { 142.0, 2.2, 13.9 }, { 203.0, 3.4, 13.0 }, { 296.0, 2.6, 13.6 } };
+
+		/** The ribbon's two tails from under the disc, in the date strip's paper: their middles, length, width and turn (degrees clockwise). */
+		struct FTail
+		{
+			double X = 0.0;
+			double Y = 0.0;
+			double Long = 0.0;
+			double Thick = 0.0;
+			double Degrees = 0.0;
+		};
+		// (short: neither is longer than the disc is tall)
+		inline constexpr FTail Tails[2] = { { 10.2, 33.4, 16.0, 5.6, 108.0 }, { 23.8, 33.4, 16.0, 5.6, 72.0 } };
+
+		/** A stroke Units thick, made no thinner than MinStrokePx on a screen of PxPerUnit pixels to a unit. */
+		double Stroke(double Units, double PxPerUnit);
+
+		/** An order sign's picture, DrawnW by DrawnH, fitted into SignW by SignH as it was drawn: its size (X wide, Y high). */
+		FPoint FitSign(double DrawnW, double DrawnH);
+
+		/** One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees clockwise), a dot (Long across) or a ring (Long across, its line Thick). */
+		enum class EStroke : int
+		{
+			Bar = 0,
+			Dot,
+			Ring,
+		};
+		struct FStroke
+		{
+			EStroke Kind = EStroke::Bar;
+			double X = 0.0;
+			double Y = 0.0;
+			double Long = 0.0;
+			double Thick = 0.0;
+			double Degrees = 0.0;
+		};
+
+		/**
+		 * The strokes of a drawn mark (Warning, War, Fallen, Freed, News, Globe), about SignW across and inside the
+		 * hollow, none thinner than MinStrokePx on a screen of PxPerUnit: how many (at most 4). 0 for the order sign and
+		 * the "+N", which are drawn otherwise.
+		 */
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4]);
+
+		/**
+		 * How far the pressed sign's other wall is drawn from it, along the light's diagonal (both X and Y): about a
+		 * pixel at PxPerUnit, 0.75 to 1 unit, so that the sign with its wall stays inside the hollow.
+		 */
+		double WallOf(double PxPerUnit);
+
+		/**
+		 * The hollow's two lips, lit from the upper left: the ring that catches the light is moved towards the light, so
+		 * that the part of it inside the hollow lies along the lower-right inner wall; the ring in shadow is moved away,
+		 * so that inside the hollow it lies along the upper-left wall. Offsets from the disc's middle, and their radius.
+		 */
+		struct FLips
+		{
+			double LitX = 0.0;
+			double LitY = 0.0;
+			double ShadeX = 0.0;
+			double ShadeY = 0.0;
+			double R = 0.0;
+		};
+		FLips HollowLips();
+
+		/**
+		 * The call of a seal that pulses, Since seconds after the seals were laid: it breathes (Grow), a glow comes and
+		 * goes under it, and a ring spreads from its rim and fades. The glow and the ring are drawn in the seal's own wax
+		 * and never more opaque than it, so neither is ever brighter than the seal; the ring at its widest, under the
+		 * pointer's grow too, is no wider than twice the disc.
+		 */
+		struct FCall
+		{
+			double Grow = 1.0;
+			double GlowR = 0.0;
+			double Glow = 0.0;
+			double RingR = 0.0;
+			double RingW = 0.0;
+			double Ring = 0.0;
+		};
+		FCall CallOf(double Since, double Period = 2.4);
+	}
 }

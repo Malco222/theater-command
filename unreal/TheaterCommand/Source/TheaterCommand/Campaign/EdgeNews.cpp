@@ -12,7 +12,11 @@
 
 // (Release 2, campaign map plan item 5, "News at the map's edge"; ruling 131.) The month's seals, from the month's
 // card: the same items in the same order (ruling 64(g)). The layout and the look are in EdgeNewsLayer; what is pure
-// logic (the order, the fold, the class, the eight words, where each seal lies) is in EdgeSeals, tested with g++.
+// logic (the order, the fold, the class, the colour and the pulse, the eight words, where each seal lies) is in
+// EdgeSeals, tested with g++.
+
+// (FEdgeNewsSeal keeps its colour as a number, so that EdgeNews.h need not take EdgeSeals' standard headers)
+static_assert(static_cast<int32>(EdgeSeals::EWax::Brass) == 4, "FEdgeNewsSeal::Wax's default is EdgeSeals::EWax::Brass");
 
 namespace
 {
@@ -95,7 +99,13 @@ namespace
 		}
 		const std::string Tagged = EdgeUtf8(Word);
 		Seal.Class = EdgeSeals::ClassOf(Item.Section, Tagged);
-		Seal.Glyph = static_cast<int32>(EdgeSeals::GlyphOf(Item.Section, Tagged, !Seal.Sign.IsEmpty()));
+		// (the colour of its row on the card, and the pulse: the art director's ruling of 22 November. A band's Tone is
+		// 1 where the card edges it green, Band.bGood, a FREED his own side won; a row's is its own, 1 for the same)
+		const EdgeSeals::FLook Worn = EdgeSeals::LookOf(Item.Section, Tagged, Seal.Tone);
+		Seal.Wax = static_cast<int32>(Worn.Wax);
+		Seal.bPulse = Worn.bPulse;
+		// (our own order signs are pressed in; a star never is)
+		Seal.Glyph = static_cast<int32>(EdgeSeals::GlyphOf(Item.Section, Tagged, EdgeSeals::MayPress(EdgeUtf8(Seal.Sign))));
 		return Seal;
 	}
 }
@@ -116,6 +126,9 @@ void FEdgeNewsBoard::LayFrom(const FMonthCard& Card)
 	Rest = FEdgeNewsSeal();
 	Rest.Section = static_cast<int32>(EdgeSeals::ESection::More);
 	Rest.Class = EdgeSeals::ClassOf(EdgeSeals::ESection::More, std::string());
+	const EdgeSeals::FLook RestLook = EdgeSeals::LookOf(EdgeSeals::ESection::More, std::string(), 0);
+	Rest.Wax = static_cast<int32>(RestLook.Wax);
+	Rest.bPulse = RestLook.bPulse;
 	Rest.Glyph = static_cast<int32>(EdgeSeals::EGlyph::More);
 }
 

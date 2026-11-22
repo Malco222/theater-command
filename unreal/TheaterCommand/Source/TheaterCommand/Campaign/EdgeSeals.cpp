@@ -95,6 +95,37 @@ namespace EdgeSeals
 		return Section == ESection::Elsewhere ? 7 : 8;
 	}
 
+	FLook LookOf(ESection Section, const std::string& Word, int Tone)
+	{
+		const int Class = ClassOf(Section, Word);
+		// (a dated warning: act by its date or lose something. The lead of the month a stake falls due is that warning,
+		// and the card frames it in the warning's red: ruling 118(f))
+		if (Class == 1 || (Section == ESection::Lead && Word == "LAST MONTH"))
+		{
+			return FLook{ EWax::Red, true };
+		}
+		// (news of war and peace arrives: the brass band's colours, or the card's green for a freeing his own side did)
+		if (Class == 2)
+		{
+			return FLook{ Tone == 1 ? EWax::Green : EWax::Band, true };
+		}
+		if (Section == ESection::Elsewhere)
+		{
+			return FLook{ EWax::Grey, false };
+		}
+		if (Section == ESection::More)
+		{
+			return FLook{ EWax::Brass, false };
+		}
+		// (bad news is no warning: it wears plain brass, never red)
+		return FLook{ Tone == 1 ? EWax::Green : Tone == 2 ? EWax::Amber : Tone == 3 ? EWax::Grey : EWax::Brass, false };
+	}
+
+	bool MayPress(const std::string& Sign)
+	{
+		return !Sign.empty() && Sign != "star" && Sign != "night";
+	}
+
 	EGlyph GlyphOf(ESection Section, const std::string& Word, bool bSign)
 	{
 		if (Section == ESection::More)
@@ -523,5 +554,99 @@ namespace EdgeSeals
 	{
 		const double Turn = 6.283185307179586 * Now / std::max(Period, 0.001);
 		return 0.5 - 0.5 * std::cos(Turn);
+	}
+
+	namespace Look
+	{
+		double Stroke(double Units, double PxPerUnit)
+		{
+			// (a screen of no measure is taken at a pixel a unit; a tiny one is not let swell the strokes past 6 units)
+			const double Scale = PxPerUnit > 0.0 ? std::max(PxPerUnit, 0.25) : 1.0;
+			return std::max(Units, MinStrokePx / Scale);
+		}
+
+		FPoint FitSign(double DrawnW, double DrawnH)
+		{
+			const double W = DrawnW > 0.0 && DrawnH > 0.0 ? DrawnW : 22.0;
+			const double H = DrawnW > 0.0 && DrawnH > 0.0 ? DrawnH : 15.0;
+			const double Fit = std::min(SignW / W, SignH / H);
+			return FPoint{ W * Fit, H * Fit };
+		}
+
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4])
+		{
+			auto Bar = [PxPerUnit](double X, double Y, double Long, double Thick, double Degrees)
+			{
+				return FStroke{ EStroke::Bar, X, Y, Long, Stroke(Thick, PxPerUnit), Degrees };
+			};
+			// (a chevron's arms run from (+-7.5, -+3.25) to (0, +-3.25): 17 across with their round ends, and the ends
+			// stay at the arms' tips however thick the stroke is made)
+			const double ArmThick = Stroke(2.4, PxPerUnit);
+			const double ArmLong = std::sqrt(7.5 * 7.5 + 6.5 * 6.5) + ArmThick;
+			const double ArmTurn = std::atan2(6.5, 7.5) * 57.29577951308232;
+			switch (Glyph)
+			{
+			case EGlyph::Warning:
+				// (an upright stroke and a dot under it, 16 high)
+				Out[0] = Bar(0.0, -2.4, 11.5, 2.6, 90.0);
+				Out[1] = FStroke{ EStroke::Dot, 0.0, 6.0, std::max(3.6, Stroke(2.6, PxPerUnit)), 0.0, 0.0 };
+				return 2;
+			case EGlyph::War:
+				// (two strokes crossed flat, as sabres are: about 17 across, 13 high)
+				Out[0] = Bar(0.0, 0.0, 20.0, 2.4, 36.0);
+				Out[1] = Bar(0.0, 0.0, 20.0, 2.4, -36.0);
+				return 2;
+			case EGlyph::Fallen:
+				Out[0] = FStroke{ EStroke::Bar, -3.75, 0.0, ArmLong, ArmThick, ArmTurn };
+				Out[1] = FStroke{ EStroke::Bar, 3.75, 0.0, ArmLong, ArmThick, -ArmTurn };
+				return 2;
+			case EGlyph::Freed:
+				Out[0] = FStroke{ EStroke::Bar, -3.75, 0.0, ArmLong, ArmThick, -ArmTurn };
+				Out[1] = FStroke{ EStroke::Bar, 3.75, 0.0, ArmLong, ArmThick, ArmTurn };
+				return 2;
+			case EGlyph::News:
+				// (three short lines, the last shorter: 17 across)
+				Out[0] = Bar(0.0, -4.6, 17.0, 2.2, 0.0);
+				Out[1] = Bar(0.0, 0.0, 17.0, 2.2, 0.0);
+				Out[2] = Bar(-3.0, 4.6, 11.0, 2.2, 0.0);
+				return 3;
+			case EGlyph::Globe:
+				// (a ring 16.4 across, its equator and its meridian)
+				Out[0] = FStroke{ EStroke::Ring, 0.0, 0.0, 16.4, Stroke(1.7, PxPerUnit), 0.0 };
+				Out[1] = Bar(0.0, 0.0, 16.4, 1.6, 0.0);
+				Out[2] = Bar(0.0, 0.0, 16.4, 1.6, 90.0);
+				return 3;
+			case EGlyph::Sign:
+			case EGlyph::More:
+				break;
+			}
+			return 0;
+		}
+
+		double WallOf(double PxPerUnit)
+		{
+			return PxPerUnit > 0.0 ? std::min(std::max(1.0 / PxPerUnit, 0.75), 1.0) : 1.0;
+		}
+
+		FLips HollowLips()
+		{
+			return FLips{ LightX, LightY, -LightX * 0.7, -LightY * 0.7, HollowR + 0.1 };
+		}
+
+		FCall CallOf(double Since, double Period)
+		{
+			const double Span = std::max(Period, 0.001);
+			const double Beat = Pulse(Since, Span);
+			const double Spread = std::fmod(std::max(Since, 0.0), Span) / Span;
+			FCall Call;
+			Call.Grow = 1.0 + Breath * Beat;
+			Call.GlowR = DiscR + 2.5;
+			Call.Glow = 0.2 * Beat;
+			// (from just off the rim out to 24.5, fading as it goes, so that it is gone at its widest and starts again unseen)
+			Call.RingR = DiscR + 1.5 + 8.0 * Spread;
+			Call.RingW = 1.6;
+			Call.Ring = 0.55 * (1.0 - Spread);
+			return Call;
+		}
 	}
 }

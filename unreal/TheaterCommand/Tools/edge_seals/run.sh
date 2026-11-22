@@ -3,7 +3,10 @@
 # engine) and checks it: the card's items in the card's order, the fold into "+N", each item's class, sign and eight
 # words, and the seals laid along the screen's edge clear of the frame, of each other and of the screen's own edge,
 # again and again over random frames and places; where the edge is full, the last items folded into "+N" in the card's
-# ranking, none lost without trace; and that laying them again allocates nothing.
+# ranking, none lost without trace; that laying them again allocates nothing; and the art director's ruling of 22
+# November: each seal's colour and pulse (red the dated warning's alone, the news band's brass for war and peace and
+# the news, no star pressed in), and the look's limits (the sign about 18 px with no stroke under 1.5 px, the hollow
+# lit from the upper left, four small uneven runs, short tails, the pulse ring under twice the disc and dimmer than it).
 # Usage: Tools/edge_seals/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

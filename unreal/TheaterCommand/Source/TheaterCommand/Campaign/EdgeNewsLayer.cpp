@@ -33,24 +33,28 @@
 
 namespace
 {
-	// The UI kit's colours, as the month's card wears them on its rows' edges (CampaignHUD's MonthRowOf), and the
-	// frame's brass. A seal is wax of its row's colour: classes 1 and 2 the card's red.
+	// The UI kit's colours, as the month's card wears them on its rows' edges (CampaignHUD's MonthRowOf) and its bands
+	// (LayOutMonthCard, MonthNewsBrush): a seal wears the colour of the row it opens (the art director's ruling of 22
+	// November, section 1). Which colour, and whether it pulses, is EdgeSeals::LookOf's; here they are only inked.
 	const FLinearColor SealGood = FLinearColor(FColor(147, 181, 108));
 	const FLinearColor SealRed = FLinearColor(FColor(208, 86, 61));
 	const FLinearColor SealAmber = FLinearColor(FColor(224, 161, 60));
-	const FLinearColor SealBrass = FLinearColor(FColor(224, 184, 114));
 	const FLinearColor SealGrey = FLinearColor(FColor::FromHex(TEXT("A89F8D")));
+	// (brass-300: a plain brass seal's wax, the news band's rim and pressed sign, the pointer's ring, the card's frame)
 	const FLinearColor SealLitBrass = FLinearColor(FColor::FromHex(TEXT("E0B872")));
+	// (the news band, the kit's tc-band--news: its ground (108,80,36) shading to (85,63,29))
+	const FLinearColor SealBandWax = FLinearColor(FColor(108, 80, 36));
+	const FLinearColor SealBandShade = FLinearColor(FColor(85, 63, 29));
 	// (the ribbon is the date strip's paper, with a fold of its darker edge down it)
 	const FLinearColor SealRibbon = FLinearColor(FColor(214, 201, 168));
 	const FLinearColor SealRibbonFold = FLinearColor(FColor(150, 132, 96));
 
-	// A seal's box, in the frame's units: the disc at its head, the ribbon's two tails under it.
-	constexpr double SealBoxW = 34.0;
-	constexpr double SealBoxH = 44.0;
-	constexpr double SealDiscR = 15.0;
-	constexpr double SealMidX = 17.0;
-	constexpr double SealMidY = 17.0;
+	// A seal's box, in the frame's units: the disc at its head, the ribbon's two tails under it (EdgeSeals::Look).
+	constexpr double SealBoxW = EdgeSeals::Look::BoxW;
+	constexpr double SealBoxH = EdgeSeals::Look::BoxH;
+	constexpr double SealDiscR = EdgeSeals::Look::DiscR;
+	constexpr double SealMidX = EdgeSeals::Look::MidX;
+	constexpr double SealMidY = EdgeSeals::Look::MidY;
 	constexpr int32 SealSlots = FEdgeNewsBoard::MostSeals;
 
 	FLinearColor SealShade(const FLinearColor& Colour, float By)
@@ -58,17 +62,85 @@ namespace
 		return FLinearColor(Colour.R * By, Colour.G * By, Colour.B * By, Colour.A);
 	}
 
-	FLinearColor SealWaxOf(const FEdgeNewsSeal& Seal)
+	/** The colour a seal's row wears on the card (EdgeSeals::EWax): the news band's is its brass-300 edge. */
+	FLinearColor SealKitOf(int32 Wax)
 	{
-		if (Seal.IsRed())
+		switch (static_cast<EdgeSeals::EWax>(Wax))
 		{
+		case EdgeSeals::EWax::Red:
 			return SealRed;
-		}
-		if (Seal.Section == static_cast<int32>(EdgeSeals::ESection::Elsewhere))
-		{
+		case EdgeSeals::EWax::Green:
+			return SealGood;
+		case EdgeSeals::EWax::Amber:
+			return SealAmber;
+		case EdgeSeals::EWax::Grey:
 			return SealGrey;
+		case EdgeSeals::EWax::Band:
+		case EdgeSeals::EWax::Brass:
+			break;
 		}
-		return Seal.Tone == 1 ? SealGood : Seal.Tone == -1 ? SealRed : Seal.Tone == 2 ? SealAmber : Seal.Tone == 3 ? SealGrey : SealBrass;
+		return SealLitBrass;
+	}
+
+	/** The inks one seal is drawn in. */
+	struct FSealInks
+	{
+		FLinearColor Wax; // the disc, its side toward the light; the call's glow and ring take it too
+		FLinearColor Shade; // the disc's side away from the light, and the runs
+		FLinearColor Hollow; // the hollow the die pressed
+		FLinearColor Rim;
+		FLinearColor Lit; // the hollow's wall that catches the light
+		FLinearColor Dark; // its wall in shadow
+		FLinearColor Mark; // the pressed sign
+		FLinearColor MarkWall; // the sign's other wall: lit (a dark sign) or in shadow (a brass-300 one)
+		bool bWallLit = true;
+		float Shown = 1.0f;
+	};
+
+	/** A seal's inks from its colour: the kit's colour shaded, or the news band's own; dull and grey at 55% once opened. */
+	FSealInks SealInksOf(const FEdgeNewsSeal& Seal)
+	{
+		FSealInks Inks;
+		if (static_cast<EdgeSeals::EWax>(Seal.Wax) == EdgeSeals::EWax::Band)
+		{
+			// (the news band's own colours, so that the seal and its row match: the wax its ground, the rim and the sign
+			// its brass-300, which also tells it from a plain brass seal)
+			Inks.Wax = SealBandWax;
+			Inks.Shade = SealBandShade;
+			Inks.Hollow = SealBandShade;
+			Inks.Rim = SealLitBrass;
+			Inks.Lit = SealLitBrass.CopyWithNewOpacity(0.5f);
+			Inks.Dark = SealShade(SealBandShade, 0.45f);
+			Inks.Mark = SealLitBrass;
+			Inks.MarkWall = SealShade(SealBandShade, 0.45f);
+			Inks.bWallLit = false;
+		}
+		else
+		{
+			const FLinearColor Kit = SealKitOf(Seal.Wax);
+			Inks.Wax = SealShade(Kit, 0.9f);
+			Inks.Shade = SealShade(Kit, 0.71f);
+			Inks.Hollow = SealShade(Kit, 0.66f);
+			Inks.Rim = SealShade(Kit, 0.66f);
+			Inks.Lit = FMath::Lerp(Kit, FLinearColor::White, 0.45f).CopyWithNewOpacity(0.6f);
+			Inks.Dark = SealShade(Kit, 0.34f);
+			Inks.Mark = Inks.Dark;
+			Inks.MarkWall = Inks.Lit;
+			Inks.bWallLit = true;
+		}
+		if (Seal.bOpened)
+		{
+			// (opened: the wax goes dull and grey, and the seal stands back until the next month's are laid)
+			FLinearColor* const Each[] = { &Inks.Wax, &Inks.Shade, &Inks.Hollow, &Inks.Rim, &Inks.Lit, &Inks.Dark, &Inks.Mark, &Inks.MarkWall };
+			for (FLinearColor* Ink : Each)
+			{
+				const float Grey = 0.3f * Ink->R + 0.59f * Ink->G + 0.11f * Ink->B;
+				const float Alpha = Ink->A * 0.55f;
+				*Ink = FMath::Lerp(*Ink, FLinearColor(Grey, Grey, Grey, Ink->A), 0.6f).CopyWithNewOpacity(Alpha);
+			}
+			Inks.Shown = 0.55f;
+		}
+		return Inks;
 	}
 
 	/** The seals stand while the map has the screen and nothing is laid over it that they would stand under. */
@@ -276,69 +348,77 @@ namespace
 			const FEdgeNewsSeal& Seal = *Held;
 			const double Now = FPlatformTime::Seconds();
 			const bool bHot = Laid->Hovered == SealSlot;
-			// (classes 1 and 2 pulse slowly until opened: the seal breathes, and a ring spreads from it)
-			const bool bCalling = Seal.IsRed() && !Seal.bOpened;
-			const double Beat = bCalling ? EdgeSeals::Pulse(Now - Laid->LaidAt) : 0.0;
-			const double Spread = bCalling ? std::fmod(FMath::Max(Now - Laid->LaidAt, 0.0), 2.4) / 2.4 : 0.0;
+			// (a dated warning, and war and peace and the news, call until opened: the seal breathes, a glow comes and goes
+			// under it and a ring spreads from it. EdgeSeals::LookOf says which seals call; Look::CallOf how)
+			const bool bCalling = Seal.bPulse && !Seal.bOpened;
+			const EdgeSeals::Look::FCall Call = bCalling ? EdgeSeals::Look::CallOf(Now - Laid->LaidAt) : EdgeSeals::Look::FCall();
+			const FSealInks Inks = SealInksOf(Seal);
+			const float Shown = Inks.Shown;
+			// (the frame's units to the screen's pixels, to hold the pressed sign's strokes to 1.5 px: the layer stands
+			// inside the frame's SDPIScaler, so its paint scale is FrameScale times Unreal's own for the window, the same
+			// product CampaignHUD measures units to pixels by)
+			const double PxPerUnit = FMath::Max(static_cast<double>(Geometry.Scale), 0.01);
 
-			FLinearColor Kit = SealWaxOf(Seal);
-			float Shown = 1.0f;
-			if (Seal.bOpened)
-			{
-				// (opened: the wax goes dull and grey, and the seal stands back until the next month's are laid)
-				const float Grey = 0.3f * Kit.R + 0.59f * Kit.G + 0.11f * Kit.B;
-				Kit = FMath::Lerp(Kit, FLinearColor(Grey, Grey, Grey, 1.0f), 0.6f);
-				Shown = 0.55f;
-			}
-			const FLinearColor Wax = SealShade(Kit, 0.9f).CopyWithNewOpacity(Shown);
-			const FLinearColor Deep = SealShade(Kit, 0.66f).CopyWithNewOpacity(Shown);
-			const FLinearColor Dark = SealShade(Kit, 0.34f).CopyWithNewOpacity(Shown);
-			const FLinearColor Light = FMath::Lerp(Kit, FLinearColor::White, 0.45f).CopyWithNewOpacity(0.6f * Shown);
-
-			const double Grow = bHot ? 1.08 : 1.0 + 0.035 * Beat;
+			const double Grow = bHot ? EdgeSeals::Look::HoverGrow : Call.Grow;
 			const FGeometry Face = Geometry.MakeChild(FVector2D(SealBoxW, SealBoxH), FSlateLayoutTransform(static_cast<float>(Grow), FVector2D(SealMidX, SealMidY) * (1.0 - Grow)));
 			const FSealPen Pen{ OutDrawElements, Face };
 			int32 Layer = LayerId;
 
-			// The call of a red seal: a ring spreading and fading, and a glow that comes and goes.
+			// The call: the glow and the spreading ring, both in the seal's own wax and never as opaque as the seal, so
+			// never brighter than it; the ring fades as it spreads and is no wider than twice the disc.
 			if (bCalling)
 			{
-				Pen.Disc(Layer, SealMidX, SealMidY, SealDiscR + 3.0, Kit.CopyWithNewOpacity(static_cast<float>(0.22 * Beat)));
-				Pen.Ring(Layer + 1, SealMidX, SealMidY, SealDiscR + 2.0 + 9.0 * Spread, 1.6, Kit.CopyWithNewOpacity(static_cast<float>(0.7 * (1.0 - Spread))));
+				Pen.Disc(Layer, SealMidX, SealMidY, Call.GlowR, Inks.Wax.CopyWithNewOpacity(static_cast<float>(Call.Glow)));
+				Pen.Ring(Layer + 1, SealMidX, SealMidY, Call.RingR, Call.RingW, Inks.Wax.CopyWithNewOpacity(static_cast<float>(Call.Ring)));
 				Layer += 2;
 			}
-			// The ribbon's two tails, from under the disc.
+			// The ribbon's two short tails, from under the disc: neither longer than the disc is tall.
 			{
 				const FLinearColor Tape = SealRibbon.CopyWithNewOpacity(Shown), Fold = SealRibbonFold.CopyWithNewOpacity(0.7f * Shown);
-				Pen.Bar(Layer, 9.9, 34.1, 17.0, 6.0, 108.0, Tape);
-				Pen.Bar(Layer, 24.1, 34.1, 17.0, 6.0, 72.0, Tape);
-				Pen.Bar(Layer + 1, 9.9, 34.1, 15.0, 1.1, 108.0, Fold);
-				Pen.Bar(Layer + 1, 24.1, 34.1, 15.0, 1.1, 72.0, Fold);
+				for (const EdgeSeals::Look::FTail& Tail : EdgeSeals::Look::Tails)
+				{
+					Pen.Bar(Layer, Tail.X, Tail.Y, Tail.Long, Tail.Thick, Tail.Degrees, Tape);
+					Pen.Bar(Layer + 1, Tail.X, Tail.Y, Tail.Long - 2.0, 1.1, Tail.Degrees, Fold);
+				}
 				Layer += 2;
 			}
-			// Its shadow on the map, the wax run out at four places round the rim, and the disc.
+			// Its shadow on the map, away from the light; the four small, uneven runs of wax at the rim; the disc, lit from
+			// the upper left (its shaded side, and over it the lit side moved toward the light); and the rim.
 			Pen.Disc(Layer, SealMidX + 1.3, SealMidY + 2.0, SealDiscR, FLinearColor(0.0f, 0.0f, 0.0f, 0.35f * Shown));
 			++Layer;
-			static const double Runs[4][2] = { { 28.0, 3.6 }, { 118.0, 3.1 }, { 212.0, 3.8 }, { 304.0, 3.3 } };
-			for (const auto& Run : Runs)
+			for (const EdgeSeals::Look::FRun& Run : EdgeSeals::Look::Runs)
 			{
-				const double Turn = FMath::DegreesToRadians(Run[0]);
-				Pen.Disc(Layer, SealMidX + (SealDiscR - 1.8) * std::cos(Turn), SealMidY + (SealDiscR - 1.8) * std::sin(Turn), Run[1], Wax);
+				const double Turn = FMath::DegreesToRadians(Run.Degrees);
+				Pen.Disc(Layer, SealMidX + Run.Out * std::cos(Turn), SealMidY + Run.Out * std::sin(Turn), Run.Radius, Inks.Shade);
 			}
-			Pen.Disc(Layer + 1, SealMidX, SealMidY, SealDiscR, Wax);
-			Pen.Ring(Layer + 2, SealMidX, SealMidY, SealDiscR - 0.6, 1.2, Deep);
+			if (Seal.bOpened)
+			{
+				// (opened: one flat disc, so that it stands back at 55% and no two layers of it add up to more)
+				Pen.Disc(Layer + 1, SealMidX, SealMidY, SealDiscR, Inks.Wax);
+			}
+			else
+			{
+				Pen.Disc(Layer + 1, SealMidX, SealMidY, SealDiscR, Inks.Shade);
+				Pen.Disc(Layer + 2, SealMidX + EdgeSeals::Look::LightX, SealMidY + EdgeSeals::Look::LightY, SealDiscR - 1.2, Inks.Wax);
+			}
+			Pen.Ring(Layer + 3, SealMidX, SealMidY, SealDiscR - 0.6, EdgeSeals::Look::Stroke(EdgeSeals::Look::RimW, PxPerUnit), Inks.Rim);
+			Layer += 4;
+			// The hollow the die pressed, lit from the upper left like the kit's other raised pieces: its lower-right
+			// inner wall catches the light, its upper-left wall is in shadow (Look::HollowLips).
+			const EdgeSeals::Look::FLips Lips = EdgeSeals::Look::HollowLips();
+			Pen.Disc(Layer, SealMidX, SealMidY, EdgeSeals::Look::HollowR, Inks.Hollow);
+			Pen.Ring(Layer + 1, SealMidX + Lips.LitX, SealMidY + Lips.LitY, Lips.R, 1.1, Inks.Lit);
+			Pen.Ring(Layer + 2, SealMidX + Lips.ShadeX, SealMidY + Lips.ShadeY, Lips.R, 1.0, Inks.Dark.CopyWithNewOpacity(0.5f * Shown));
 			Layer += 3;
-			// The hollow the seal's die pressed, its lower lip catching the light.
-			Pen.Disc(Layer, SealMidX, SealMidY, 10.5, Deep);
-			Pen.Ring(Layer + 1, SealMidX + 0.6, SealMidY + 0.7, 10.6, 1.1, Light);
-			Pen.Ring(Layer + 2, SealMidX - 0.4, SealMidY - 0.5, 10.6, 1.0, Dark.CopyWithNewOpacity(0.5f * Shown));
-			Layer += 3;
-			// What the die pressed: the row's sign, or its mark; once lit from below and to the right, once in the wax's dark.
-			PaintMark(Seal, Pen, Layer, 0.7, 0.8, Light);
-			PaintMark(Seal, Pen, Layer + 1, 0.0, 0.0, Dark);
+			// What the die pressed: our own order sign, or a drawn mark, about 18 across with no stroke under 1.5 px. Each
+			// stroke is a groove lit from the upper left: a dark one shows its lower-right wall lit; a brass-300 one (the
+			// news band's) its upper-left wall in shadow. The wall is about a pixel wide (Look::WallOf).
+			const double Wall = Inks.bWallLit ? EdgeSeals::Look::WallOf(PxPerUnit) : -EdgeSeals::Look::WallOf(PxPerUnit);
+			PaintMark(Seal, Pen, Layer, Wall, Wall, Inks.MarkWall, PxPerUnit);
+			PaintMark(Seal, Pen, Layer + 1, 0.0, 0.0, Inks.Mark, PxPerUnit);
 			Layer += 2;
-			// The shine on the wax, and the brass ring the pointer puts round it.
-			Pen.Bar(Layer, SealMidX - 5.5, SealMidY - 9.5, 8.0, 3.0, -28.0, FLinearColor(1.0f, 1.0f, 1.0f, 0.22f * Shown));
+			// The shine on the wax's lip, toward the light, and the brass ring the pointer puts round it.
+			Pen.Bar(Layer, SealMidX - 6.4, SealMidY - 10.8, 7.0, 2.4, -28.0, FLinearColor(1.0f, 1.0f, 1.0f, 0.22f * Shown));
 			if (bHot)
 			{
 				Pen.Ring(Layer + 1, SealMidX, SealMidY, SealDiscR + 2.2, 1.5, SealLitBrass);
@@ -347,8 +427,8 @@ namespace
 		}
 
 	private:
-		/** The sign or the mark in the seal's hollow, moved (DX, DY), in one ink. */
-		void PaintMark(const FEdgeNewsSeal& Seal, const FSealPen& Pen, int32 Layer, double DX, double DY, const FLinearColor& Ink) const
+		/** The sign or the mark in the seal's hollow, moved (DX, DY), in one ink, its strokes held to 1.5 px at PxPerUnit. */
+		void PaintMark(const FEdgeNewsSeal& Seal, const FSealPen& Pen, int32 Layer, double DX, double DY, const FLinearColor& Ink, double PxPerUnit) const
 		{
 			const double MX = SealMidX + DX, MY = SealMidY + DY;
 			EdgeSeals::EGlyph Glyph = static_cast<EdgeSeals::EGlyph>(Seal.Glyph);
@@ -357,39 +437,15 @@ namespace
 				const FSlateBrush* Sign = Laid->SignOf && !Seal.Sign.IsEmpty() ? Laid->SignOf(Seal.Sign) : nullptr;
 				if (Sign)
 				{
-					// (the order sign, fitted into 17 by 12 as it was drawn)
-					const FVector2D Drawn = Sign->ImageSize.X > 0.0 && Sign->ImageSize.Y > 0.0 ? FVector2D(Sign->ImageSize) : FVector2D(22.0, 15.0);
-					const double Fit = FMath::Min(17.0 / Drawn.X, 12.0 / Drawn.Y);
-					const FVector2D Size = Drawn * Fit;
+					// (the order sign, fitted into 18 by 12.5 as it was drawn: Look::FitSign)
+					const EdgeSeals::FPoint Fitted = EdgeSeals::Look::FitSign(Sign->ImageSize.X, Sign->ImageSize.Y);
+					const FVector2D Size(Fitted.X, Fitted.Y);
 					FSlateDrawElement::MakeBox(Pen.Out, Layer, Pen.On.ToPaintGeometry(Size, FSlateLayoutTransform(FVector2D(MX, MY) - Size * 0.5)), Sign, ESlateDrawEffect::None, Ink);
 					return;
 				}
 				Glyph = EdgeSeals::EGlyph::News; // (a sign not drawn yet: the plain mark)
 			}
-			switch (Glyph)
-			{
-			case EdgeSeals::EGlyph::Warning:
-				Pen.Bar(Layer, MX, MY - 2.4, 9.5, 2.6, 90.0, Ink);
-				Pen.Disc(Layer, MX, MY + 5.0, 1.6, Ink);
-				break;
-			case EdgeSeals::EGlyph::War:
-				Pen.Bar(Layer, MX, MY, 13.0, 2.4, 45.0, Ink);
-				Pen.Bar(Layer, MX, MY, 13.0, 2.4, -45.0, Ink);
-				break;
-			case EdgeSeals::EGlyph::Fallen:
-				Pen.Bar(Layer, MX - 3.0, MY - 1.2, 8.5, 2.4, 45.0, Ink);
-				Pen.Bar(Layer, MX + 3.0, MY - 1.2, 8.5, 2.4, -45.0, Ink);
-				break;
-			case EdgeSeals::EGlyph::Freed:
-				Pen.Bar(Layer, MX - 3.0, MY + 1.2, 8.5, 2.4, -45.0, Ink);
-				Pen.Bar(Layer, MX + 3.0, MY + 1.2, 8.5, 2.4, 45.0, Ink);
-				break;
-			case EdgeSeals::EGlyph::Globe:
-				Pen.Ring(Layer, MX, MY, 6.4, 1.5, Ink);
-				Pen.Bar(Layer, MX, MY, 12.0, 1.3, 0.0, Ink);
-				Pen.Bar(Layer, MX, MY, 12.0, 1.3, 90.0, Ink);
-				break;
-			case EdgeSeals::EGlyph::More:
+			if (Glyph == EdgeSeals::EGlyph::More)
 			{
 				const FString& Count = Laid->Seals[SealSlot].Count;
 				if (!Count.IsEmpty() && FSlateApplication::IsInitialized())
@@ -397,14 +453,25 @@ namespace
 					const FVector2D Size = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Count, Laid->CountFace);
 					FSlateDrawElement::MakeText(Pen.Out, Layer, Pen.On.ToPaintGeometry(Size, FSlateLayoutTransform(FVector2D(MX, MY) - Size * 0.5)), Count, Laid->CountFace, ESlateDrawEffect::None, Ink);
 				}
-				break;
+				return;
 			}
-			case EdgeSeals::EGlyph::Sign:
-			case EdgeSeals::EGlyph::News:
-				Pen.Bar(Layer, MX, MY - 4.0, 11.0, 2.0, 0.0, Ink);
-				Pen.Bar(Layer, MX, MY, 11.0, 2.0, 0.0, Ink);
-				Pen.Bar(Layer, MX - 2.0, MY + 4.0, 7.0, 2.0, 0.0, Ink);
-				break;
+			EdgeSeals::Look::FStroke Cuts[4];
+			const int32 CutCount = EdgeSeals::Look::MarkOf(Glyph, PxPerUnit, Cuts);
+			for (int32 Each = 0; Each < CutCount; ++Each)
+			{
+				const EdgeSeals::Look::FStroke& Cut = Cuts[Each];
+				switch (Cut.Kind)
+				{
+				case EdgeSeals::Look::EStroke::Bar:
+					Pen.Bar(Layer, MX + Cut.X, MY + Cut.Y, Cut.Long, Cut.Thick, Cut.Degrees, Ink);
+					break;
+				case EdgeSeals::Look::EStroke::Dot:
+					Pen.Disc(Layer, MX + Cut.X, MY + Cut.Y, Cut.Long * 0.5, Ink);
+					break;
+				case EdgeSeals::Look::EStroke::Ring:
+					Pen.Ring(Layer, MX + Cut.X, MY + Cut.Y, Cut.Long * 0.5, Cut.Thick, Ink);
+					break;
+				}
 			}
 		}
 
@@ -616,7 +683,7 @@ namespace
 				{
 					Shared.bPing = true;
 					Shared.PingAt = At;
-					Shared.PingInk = FMath::Lerp(SealWaxOf(Board.Seals[Shared.Hovered]), FLinearColor::White, 0.25f);
+					Shared.PingInk = FMath::Lerp(SealKitOf(Board.Seals[Shared.Hovered].Wax), FLinearColor::White, 0.25f);
 				}
 			}
 		}
