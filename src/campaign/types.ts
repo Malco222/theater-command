@@ -862,6 +862,8 @@ export interface PlanPhase {
   main?: string[];
   /** The grand campaign: the month a main effort is named. The army masses opposite the target and attacks nowhere. */
   massing?: boolean;
+  /** The war plan (strategy.ts): a campaign is massing for a blow at this province (its id). Its fast troops are gathered whatever the posture. */
+  campaign?: number;
   /** The grand campaign: how many waves a staff pressing a won war will send at one place in a month (two otherwise). */
   waves?: number;
   /**
@@ -873,8 +875,12 @@ export interface PlanPhase {
   ifAtWar?: [string, string];
   /** A war for a strip of frontier: only corps within this many marches of the front close up to it (the Winter War, ruling 228). */
   near?: number;
-  /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
-  landings?: { corps: string; with?: string[]; to: string[]; minOdds?: number }[];
+  /**
+   * Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced.
+   * With 'own' the landing is made from the staff's own corps, 'corps' is the record's name for the force and 'own'
+   * its worth in divisions: the corps of the staff's own nearest to that in size sails (staff.ts, `ownForce`).
+   */
+  landings?: { corps: string; own?: number; with?: string[]; to: string[]; minOdds?: number }[];
   /**
    * An expedition on someone else's ground that leaves rather than be lost with it: once the enemy holds any of the
    * places in 'when', its corps make for a port and are taken off, to one of the theatre's havens or else home.

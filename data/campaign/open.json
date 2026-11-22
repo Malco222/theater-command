@@ -98,7 +98,17 @@
     ],
     "UK": [
       { "id": "norway", "name": "Expedition to Norway", "side": true, "if": ["war:GER,NOR", "alive:NOR"], "chance": 0.7,
-        "landings": [{ "corps": "North Western Expeditionary Force", "to": ["Narvik", "Finnmark", "Trondheim"] }] }
+        "landings": [{ "corps": "North Western Expeditionary Force", "to": ["Narvik", "Finnmark", "Trondheim"] }] },
+      { "id": "torch", "name": "Operation Torch", "side": true, "declare": ["VIC"], "if": ["alive:VIC", "war:UK,GER"], "from": 39, "to": 44, "chance": 1,
+        "_note": "The book's alone (history.json 'bookOnly'; strategy.json 'torch', off): the landings of 8 November 1942. The Eastern Task Force at Algiers, its British part the roster's dated row (the 78th Division; the record's 11th and 36th Brigade Groups, with the Americans' two combat teams about 1.3 divisions in the assault); Bougie and Bone, taken on 11 and 12 November, are Constantine's coast.",
+        "news": "Operation Torch: British and American troops are going ashore in French North Africa.",
+        "landings": [{ "corps": "First Army: 78th Division", "to": ["Algiers", "Constantine"], "minOdds": 1.0 }] }
+    ],
+    "USA": [
+      { "id": "torch", "name": "Operation Torch", "side": true, "declare": ["VIC"], "if": ["alive:VIC", "war:USA,GER"], "from": 39, "to": 44, "chance": 1, "quay": "Gibraltar",
+        "_note": "The book's alone (history.json 'bookOnly'; strategy.json 'torch', off). America's landings are made from its own corps ('own': the worth the record sent, in divisions of 15,000 men), with no new men: the Western Task Force in Morocco (the 3rd Infantry Division at Fedala, two combat teams of the 9th and four tank battalions of the 2nd Armored at Port Lyautey and Safi: about 2.3) and the Center Task Force at Oran (the 1st Infantry Division and Combat Command B of the 1st Armored: 1.2 in the assault). Port Lyautey is Fez's coast and Safi Marrakech's. A corps that stands out of a landing's reach of its beach is shipped to 'quay' first, the harbour the record's convoys passed.",
+        "news": "Operation Torch: American and British troops are going ashore in French North Africa.",
+        "landings": [{ "corps": "Western Task Force", "own": 2.3, "to": ["Casablanca", "Fez", "Marrakech"], "minOdds": 1.0 }, { "corps": "Center Task Force", "own": 1.2, "to": ["Oran"], "minOdds": 1.0 }] }
     ],
     "ROM": [{ "id": "east", "name": "With Germany into Russia", "side": true, "declare": ["SOV"], "if": ["war:GER,SOV", "step>=:ROM,1"], "chance": 0.8 }],
     "HUN": [{ "id": "east", "name": "With Germany into Russia", "side": true, "declare": ["SOV"], "if": ["war:GER,SOV", "step>=:HUN,1"], "chance": 0.6 }],

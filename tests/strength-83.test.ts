@@ -19,6 +19,7 @@ import { setStop } from '../src/campaign/history';
 import { setFog } from '../src/campaign/intel';
 import { fieldCtrl } from '../src/campaign/siege';
 import { characterOf, holdsAshore, joinsOn, lodgment, mainFirst, opensOn, startOpen, strengthAsked, strengthWatch } from '../src/campaign/staff';
+import { STRATEGY } from '../src/campaign/strategy';
 import { runTurnAI } from '../src/campaign/turn';
 import { type Corps, type Game, type Region } from '../src/campaign/types';
 import open from '../data/campaign/open.json';
@@ -413,20 +414,67 @@ describe('one war at the history stop, nobody playing', () => {
     // it). Of seeds 17 to 30 on release 1's tree only seed 27 tells it: America's corps are refused on the mainland of
     // France in May 1944 and land at Rouen in June, its only first wave of that summer. Seeds 17, 18, 23, 26, 29 and 30
     // are refused but land in France that same month; 19, 20, 24, 25 and 28 put no first wave ashore in the summer of
-    // 1944, and 21 lands in Liguria unrefused. Seed 27 is the one used.)
-    const g = startOpen(createGame(27, null));
+    // 1944, and 21 lands in Liguria unrefused. Seed 27 until a front's month of moves was switched on in release 2's
+    // rules (strategy.json 'fronts.month', 22 November 2026), which moved the wars again: on it seed 27's Americans
+    // are refused in May 1944 and land at Marseille that same month. Seed 17 tells the story there: the mainland of
+    // France refuses America's corps in May and in June 1944, and its staff lands them at Nantes in June, its only
+    // first wave of that summer (its one landing before was Sardinia in May 1943). Seeds 18 and 19 put no first wave
+    // ashore in the summer of 1944. Seed 17 is the one used.
+    //
+    // Real sea crossings were switched on in release 2's rules the same day (strategy.json 'straits.on', Brian's
+    // choice of 20:19Z), and the wars moved once more: of seeds 17 to 58 with it on, none tells the story as it is
+    // asked here, a refusal from May 1944 in a month before the landing (in 11 of them America's corps are refused at
+    // a French harbour in May 1944 and land at another in France that same month). No seed was hunted for it. Brian's
+    // choice of 21:17Z on what to do with this check: keep it as written and run it on the rules it was measured on,
+    // where it still passes, and add a new check for the wars with sea crossings on (the next test). So this test
+    // switches the crossings off for its own war and asks what it always asked; nothing in it is loosened.)
+    const crossings = STRATEGY.straits!.on;
+    STRATEGY.straits!.on = false;
+    const g = startOpen(createGame(17, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();
     landingWatch.tell = (e) => { if (!e.wave) landings.push({ turn: g.turn, nat: e.nat, to: e.to, corps: e.force.length }); };
     strengthWatch.tell = (e) => { if (e.nat === 'USA' && g.turn >= 57 && e.force.length >= 3 && e.at.owner === 'FRA' && e.at.nb.length > 0 && e.R.chance < e.ask) refused.add(g.turn); };
-    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; strengthWatch.tell = null; }
+    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; strengthWatch.tell = null; STRATEGY.straits!.on = crossings; }
     const usa = landings.filter((l) => l.nat === 'USA' && l.turn >= 57);
     // It was refused on the mainland first, in a month before its landing there.
     expect([...refused].some((t) => usa.some((l) => l.turn > t))).toBe(true);
     // No American first wave of 1944 goes to an island; its landing of that summer is in France.
     expect(usa.filter((l) => l.to.nb.length === 0)).toEqual([]);
     expect(usa.some((l) => l.to.owner === 'FRA' && !l.to.overseas)).toBe(true);
+  }, 240000);
+
+  it('with real sea crossings on, a staff refused at a mainland harbour lands on the mainland and sends no first wave to an island', () => {
+    // The same claim, by its cause, on the rules release 2 plays (strategy.json 'straits.on'; added on Brian's choice
+    // of 22 November 2026, 21:17Z, beside the test above, which is kept as written; the design director's reading of
+    // 20:58Z and 21:01Z the same day: a staff refused at a mainland harbour does not spend its landing force on an
+    // island; it lands on the mainland, that month or later). The same war, seed 17, with the crossings on. Its
+    // refusals are read from the first one, at any date, and only on the mainland of France itself (the test above
+    // counts them from May 1944). America's corps are refused there in February, March, April and May 1944, and its
+    // staff lands them at Nantes in May 1944, its only first wave by then.
+    //
+    // Measured on seeds 17 to 58 with the crossings on (22 November 2026, each war to October 1944): in 33 of the 42 wars
+    // America's corps are refused on the mainland of France at some date; in 19 of them they land in France in a
+    // later month with no first wave to an island between the two, seed 17 among them.
+    expect(STRATEGY.straits!.on).toBe(true);
+    const g = startOpen(createGame(17, null));
+    expect(setStop(g, 3, true)).toBe(true);
+    const landings: { turn: number; to: Region }[] = [];
+    const refused = new Set<number>();
+    const mainland = (r: Region): boolean => r.owner === 'FRA' && !r.overseas && r.nb.length > 0;
+    landingWatch.tell = (e) => { if (!e.wave && e.nat === 'USA') landings.push({ turn: g.turn, to: e.to }); };
+    strengthWatch.tell = (e) => { if (e.nat === 'USA' && e.force.length >= 3 && mainland(e.at) && e.R.chance < e.ask) refused.add(g.turn); };
+    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; strengthWatch.tell = null; }
+    const first = Math.min(...refused);
+    // It was refused on the mainland of France.
+    expect(refused.size).toBeGreaterThan(0);
+    // From its first refusal on, no first wave of its goes to an island.
+    expect(landings.filter((l) => l.turn >= first && l.to.nb.length === 0)).toEqual([]);
+    // It lands on the mainland of France, in the month of a refusal or later.
+    expect(landings.some((l) => l.turn >= first && mainland(l.to))).toBe(true);
+    // And in this war the wait is told as well: refused in one month, it lands in France in a later one.
+    expect([...refused].some((t) => landings.some((l) => l.turn > t && mainland(l.to)))).toBe(true);
   }, 240000);
 });
 

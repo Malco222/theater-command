@@ -36,7 +36,14 @@
   "dates": {
     "GER": { "weser": 8, "west": 9, "balkans": 20, "east": 22 },
     "ITA": { "jackal": 10, "greece": 14 },
-    "SOV": { "winter": 3 }
+    "SOV": { "winter": 3 },
+    "UK": { "torch": 39 },
+    "USA": { "torch": 39 }
+  },
+  "bookOnly": {
+    "_note": "Choices that are the book's alone (Operation Torch; the design director's ruling of 22 November 2026). Each is on its staff's menu only where the book dates it: at a stop that keeps the book, while the book stands in its theatre, and where its own switch is on (strategy.json 'torch'). Off the book, at the looser stops and with the switch off no staff has it at all: whether a staff fights Vichy of its own accord is another ruling. 'with': an operation mounted together with another country's takes that one's month, so a stop's slack never parts the two.",
+    "ops": ["UK:torch", "USA:torch"],
+    "with": { "USA:torch": "UK:torch" }
   },
   "bookIf": {
     "_note": "By the book a dated choice is taken when these hold, in place of its own conditions (open.json): history's month is the staff's reason, and what was a precondition in the real war may already be over in this one. Italy came in as France was falling: with France already fallen in her month she comes in all the same. Germany went into the Balkans while Italy was held in Greece: with Greece already beaten she goes for Yugoslavia in her month all the same.",
@@ -51,7 +58,8 @@
     "ITA:jackal": "med", "ITA:late": "med",
     "ITA:greece": "balkans", "GER:balkans": "balkans", "ITA:yugoslavia": "balkans", "BUL:balkans": "balkans",
     "GER:east": "east", "SOV:west": "east", "SOV:vulture": "east", "ITA:east": "east", "ROM:east": "east", "HUN:east": "east", "SVK:east": "east", "FIN:east": "east",
-    "SOV:winter": "finland"
+    "SOV:winter": "finland",
+    "UK:torch": "second", "USA:torch": "second"
   },
   "theatres": {
     "north": { "name": "the north", "after": [] },
