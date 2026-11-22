@@ -238,6 +238,60 @@ def zimmerit_swap(parts):
         "on": {"what": "ribbed paste on her upright plates", "years": "tanks built 1943-09 to 1944-09", "parts": parts}}}
 
 
+# The machine gun on her roof that only her commander fires (Brian, 22 November) is a swap of its own: the German rail
+# came with the cupolas of 1943 (Panzer IV Ausf. H, the Tiger's seven-periscope cupola, the Panther Ausf. A), and on
+# every tank the gun on it was optional, often kept inside; British and Commonwealth Shermans mostly ran without the .50.
+ROOF_MG_HOW = ("roof_mg: the machine gun on her roof that only her commander fires. `on`: show the choice's parts; `off`: scale them to "
+               "nothing, and then the game must not aim or fire a roof gun at all (no roof_mg_burst; controls.roof_mg left alone).")
+
+
+# Measured mesh against mesh (22 November), for the art director's review of the roof guns and hatches:
+# - MG34_LIFT: the MG 34 turns about the cupola's middle, so its butt always hangs over the open hatch; tipping the
+#   muzzle up swings the butt down into it. At 15 degrees the butt plate's lowest corner is 3 cm over the hatch's dark
+#   disc, at 17 it is 1 cm, by 18 it is in (at the old 45 it was 23 cm in). The same on all three German tanks.
+# - The seven-periscope cupola's lid (Tiger, Panther): its post on the cupola's top ring at the left-rear (-130, + to the
+#   right), 0.33 out from the middle; it lifts 3 cm and swings 105 degrees clockwise seen from above, to lie behind the
+#   cupola, its middle 0.52 out (clear of the hole). Swinging, it crosses the rail's circle from 119 to 221.5 degrees, so
+#   the rail is cut away from 116 to 225 (the real rail had such a gap). The mount rides the rail up to 108 to the right
+#   (the gap, less the carriage's half-width and 3 degrees) and to -118 to the left (from -122 the carriage meets the
+#   lid's post; 4 degrees kept).
+# - The Tiger's hull lids, hung on their outboard edges, cleared the turret's front corners but their inboard edges
+#   still rose into the ends of the mantlet (which hangs 9 cm over the roof) between 10 and 30 degrees open: their
+#   middles moved 10 cm forward, to x 1.65, they clear the turret and the mantlet all the way, gun level or drooped.
+MG34_LIFT = 15.0
+CUPOLA_POST, CUPOLA_SWING, CUPOLA_LIFT = -130.0, 105.0, 0.03
+TIGER_RAIL_GAP, TIGER_MG_ARC = (116.0, 225.0), (-118.0, 108.0)
+PANTHER_RAIL_GAP, PANTHER_MG_ARC = (116.0, 225.0), (-118.0, 108.0)
+TIGER_HULL_LID, TIGER_HULL_LID_X = 105.0, 1.65
+
+
+def roof_mg_swap(parts, default, on_what, on_years, off_years, **more):
+    return {"default": default, "choices": {
+        "off": {"what": "no gun on her roof: the game must then not aim or fire a roof gun (no roof_mg_burst)", "years": off_years, "parts": []},
+        "on": {"what": on_what, "years": on_years, "parts": parts}}, **more}
+
+
+def roof_mg_months(rows, first_on):
+    """A by_month table with the roof_mg column added: off in the months before `first_on` ("YYYY-MM"), on from it.
+    A row that runs across that month is cut in two there (both halves keep the rest of the row)."""
+    y, mo = int(first_on[:4]), int(first_on[5:])
+    prev = "%04d-%02d" % ((y, mo - 1) if mo > 1 else (y - 1, 12))
+
+    def row_of(lo, hi, row, mg):
+        r = {**({"from": lo} if lo else {}), **({"to": hi} if hi else {})}
+        r.update({k: x for k, x in row.items() if k not in ("from", "to")})
+        r["roof_mg"] = mg
+        return r
+    out = []
+    for row in rows:
+        lo, hi = row.get("from"), row.get("to")
+        if (lo or "0000-00") < first_on <= (hi or "9999-99"):
+            out += [row_of(lo, prev, row, "off"), row_of(first_on, hi, row, "on")]
+        else:
+            out.append(row_of(lo, hi, row, "on" if (lo or "0000-00") >= first_on else "off"))
+    return out
+
+
 # The Panzer IV's faces by the month (the historian, 18 Nov: the two guns served side by side through 1942, about a
 # third of them long by the middle of the year and most by its end; medium-low on the shares).
 PZ4_MONTHS = [{"to": "1942-03", "gun": "short", "paint": "grey", "skirts": "off", "zimmerit": "off"},
@@ -608,8 +662,10 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     v.hatch_round("hatch_commander", "turret", cup + Z * 0.0, 0.25, Z, -X, thick=0.03, opens=105.0)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
     # the MG 34 on the anti-aircraft rail round the cupola: only he fires it, standing up in it (Brian, 22 November);
-    # all round but where his lid stands open behind him
-    v.roof_gun("mg34", cup, arc=(-125.0, 125.0), lay=(-10.0, 45.0), ring=0.335 + 0.045)
+    # all round but where his lid stands open behind him: to the right as far as 125 degrees, to the left only 110 (its
+    # belt drum hangs on the gun's left and met the lid from -120). Its lift stops where the butt, swinging down
+    # over the open hatch, would sink into it (MG34_LIFT: the butt plate's lowest corner stays 3 cm over the hatch's dark)
+    v.roof_gun("mg34", cup, arc=(-110.0, 125.0), lay=(-10.0, MG34_LIFT), ring=0.335 + 0.045)
     v.vent((x0 + 0.42, -0.2, 2.245), 0.12, 0.05)
     v.port((x0 + 0.2, 0.32, 2.262), Z, 0.05)
     # turret face: the gunner's sight port and a visor each side of the gun
@@ -702,10 +758,14 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     swaps = {"how": "one model for the whole war. gun: show the chosen gun's parts and scale the other's to nothing (a part scaled to "
                     "nothing is not drawn), and use its sockets in place of the default ones. paint: put the chosen coat's colours "
                     "in place of the paints of the same names. " + BY_MONTH_HOW,
-             "paint": coats(v, paint or "grey"), "by_month": sprayed(PZ4_MONTHS)}
+             "paint": coats(v, paint or "grey"), "by_month": sprayed(roof_mg_months(PZ4_MONTHS, "1943-05"))}
     if zim:
         swaps["how"] += " " + ZIMMERIT_HOW
         swaps["zimmerit"] = zimmerit_swap(zim)
+    swaps["how"] += " " + ROOF_MG_HOW
+    swaps["roof_mg"] = roof_mg_swap(["roof_mg", "roof_mg_cradle", "roof_mg_rail"], "off",
+                                    "an MG 34 on the anti-aircraft rail round her cupola", "1943-05 on (Ausf. H and J)",
+                                    "1939 to April 1943: no rail on her cupola (and a tank of any year whose crew kept the gun inside)")
     if gun == "all":
         swaps["gun"] = {"default": "long", "choices": {
             "long": {"what": "7.5 cm L/43 and L/48, double-baffle muzzle brake", "years": "1942 on", "parts": ["barrel_long"], "sockets": {"muzzle": "muzzle"}, "muzzle_brake": True},
@@ -857,8 +917,14 @@ def panther(fine=True, tag="GER", paint=None, ambush=False):
     #  and her cupola are castings, uneven in patches)
     v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, rim=True,
                      cast=lambda p, part: part == "gun" or (part == "turret" and p.z > roof - 0.02 and (p - cup).length < 0.48))
-    v.hatch_round("hatch_commander", "turret", cup, 0.26, Z, Y, thick=0.03, opens=105.0)
+    # the seven-periscope cupola of the Ausf. A on, with the rail round it, much as the Tiger's from July 1943: its lid
+    # is cranked up out of its seat and swung flat about a post (here on its left-rear, as the Tiger's), back through the
+    # gap in the rail. (The Ausf. D of July and August 1943 had a drum cupola whose lid flipped up: not modelled.)
+    v.hatch_swing("hatch_commander", "turret", cup, 0.26, post=CUPOLA_POST, swing=CUPOLA_SWING, lift=CUPOLA_LIFT)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
+    # the MG 34 on the anti-aircraft rail round it, as on the Panzer IV and the Tiger: only he fires it (Brian, 22
+    # November); its mount rides the rail from the gap's one end to the other, clear of the lid swung back across it
+    v.roof_gun("mg34", cup, arc=PANTHER_MG_ARC, lay=(-10.0, MG34_LIFT), ring=0.36 + 0.045, gap=PANTHER_RAIL_GAP)
     v.use("turret")
     v.vent((x0 + 0.42, -0.1, roof), 0.12, 0.05)
     v.periscope((x0 + 0.45, -0.42, roof), X, (0.08, 0.16, 0.06))
@@ -910,8 +976,11 @@ def panther(fine=True, tag="GER", paint=None, ambush=False):
     v.tank_clips(recoil=0.45, kick=0.8, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=15.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-1.2, 3.2, 0.45, 168.0))
     swaps = {"how": "paint: the coat's colours stand in place of the paints of the same names. She wore dark yellow all her life, from 1943 with "
-                    "olive green and red-brown sprayed over it. " + BY_MONTH_HOW,
-             "paint": coats(v, "yellow", only=("yellow", "camo")), "by_month": sprayed(PANTHER_MONTHS)}
+                    "olive green and red-brown sprayed over it. " + BY_MONTH_HOW + " " + ROOF_MG_HOW,
+             "paint": coats(v, "yellow", only=("yellow", "camo")), "by_month": sprayed(roof_mg_months(PANTHER_MONTHS, "1943-09")),
+             "roof_mg": roof_mg_swap(["roof_mg", "roof_mg_cradle", "roof_mg_rail"], "on",
+                                     "an MG 34 on the anti-aircraft rail round her cupola", "1943-09 on (Ausf. A and G)",
+                                     "July and August 1943: the Ausf. D's first cupola had no rail (and a tank of any year whose crew kept the gun inside)")}
     if dots:
         swaps["how"] += " " + AMBUSH_HOW
         swaps["ambush"] = {"default": "off", "choices": {
@@ -953,9 +1022,13 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
         v.slab((-3.16, s * 1.55, zf - 0.012), (2.3, s * 1.80, zf), "upper", 0.003)
         v.plate([(2.3, s * 0.96, zf), (2.3, s * 1.80, zf), (3.12, s * 1.80, 1.02), (3.12, s * 0.96, 1.02)][::int(s)], 0.008, "upper", 0.003)
         v.plate([(-3.16, s * 1.80, zf), (-3.16, s * 0.96, zf), (-3.42, s * 0.96, 0.86), (-3.42, s * 1.80, 0.86)][::int(s)], 0.008, "upper", 0.003)
-    # the roof: round lids for the driver and the wireless operator, their periscopes, the ventilator
-    v.hatch_round("hatch_driver", "hull", (1.55, 0.86, zr), 0.25, Z, -X, thick=0.03, opens=105.0)
-    v.hatch_round("hatch_radio", "hull", (1.55, -0.86, zr), 0.25, Z, -X, thick=0.03, opens=105.0)
+    # the roof: round lids for the driver and the wireless operator, their periscopes, the ventilator. Each lid is hung
+    # on its outboard edge and opens up and out over the track, away from the turret: the lids were placed out
+    # beside the men, half over the sponsons, so that they would not foul the turret (Henschel's drawing J2877). Until
+    # 22 November they were hung on their back edges and stood up into the turret's front corners and the mantlet; now
+    # they also sit 10 cm further forward (TIGER_HULL_LID_X), clear of the mantlet's overhanging ends as they rise.
+    for nm, s in (("hatch_driver", LEFT), ("hatch_radio", RIGHT)):
+        v.hatch_round(nm, "hull", (TIGER_HULL_LID_X, s * 0.86, zr), 0.25, Z, Y * s, thick=0.03, opens=TIGER_HULL_LID)
     v.use("hull")
     v.vent((1.85, 0.0, zr), 0.12, 0.05)
     # the engine deck: the long hatch down the middle, grilles over the radiators and fans each side
@@ -1033,11 +1106,15 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.lathe((x0, 0, zt - 0.03), Z, [(0.06, 0.95), (0.0, 0.97), (0.0, 0.0)], "shade", v.n(36, 12))
     roof = zt + th
     cup = v.cupola((x0 - 0.36, 0.5, roof), 0.36, 0.2, slits=7, start=0.2)
-    v.hatch_round("hatch_commander", "turret", cup, 0.26, Z, -Y, thick=0.03, opens=105.0)
+    # the seven-periscope cupola of July 1943 on: its lid is cranked up out of its seat and swung flat about a post on
+    # its left, back through the gap left for it in the rail (tiger1.info: hinged on the left; mirrored almost at once
+    # so that it swung to the rear, not the front). Tigers built before July 1943 had the tall drum cupola, whose lid
+    # flipped up: not modelled, this one lid serves her whole war.
+    v.hatch_swing("hatch_commander", "turret", cup, 0.26, post=CUPOLA_POST, swing=CUPOLA_SWING, lift=CUPOLA_LIFT)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
-    # the MG 34 on the anti-aircraft rail round the cupola: only he fires it (Brian, 22 November); all round from dead
-    # ahead to the left and behind, but not across the right, where his lid stands open
-    v.roof_gun("mg34", cup, arc=(-180.0, 40.0), lay=(-10.0, 45.0), ring=0.36 + 0.045)
+    # the MG 34 on the anti-aircraft rail round the cupola: only he fires it (Brian, 22 November); its mount rides the
+    # rail all round from the gap's one end to the other, clear of the lid lying swung back across the gap
+    v.roof_gun("mg34", cup, arc=TIGER_MG_ARC, lay=(-10.0, MG34_LIFT), ring=0.36 + 0.045, gap=TIGER_RAIL_GAP)
     v.hatch_rect("hatch_loader", "turret", (x0 + 0.12, -0.5, roof), (0.52, 0.44), Z, X, hinge="front", opens=100.0, thick=0.028)
     v.use("turret")
     v.vent((x0 - 0.5, -0.1, roof), 0.13, 0.05)
@@ -1106,7 +1183,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.socket("engine", (-2.2, 0.0, zr + 0.03), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-2.2, 1.0, zr + 0.03), Z, part="hull")
     v.socket("fire.2", (cup.x, cup.y, cup.z + 0.1), Z, part="turret", note="out of the commander's hatch")
-    v.socket("fire.3", (1.55, 0.86, zr + 0.02), Z, part="hull", note="out of the driver's hatch")
+    v.socket("fire.3", (TIGER_HULL_LID_X, 0.86, zr + 0.02), Z, part="hull", note="out of the driver's hatch")
     v.socket("ring", (x0, 0.0, zt), Z, part="hull", note="the turret ring: where the blast comes from when her ammunition goes")
     v.socket("hit.front", f_at(0.1, 1.5), fn, part="hull")
     v.socket("hit.left", (0.2, sw, 1.5), Y, part="hull")
@@ -1116,10 +1193,13 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.socket("case", (x0 + 0.12, -0.5, roof), Z, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.55, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=10.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
-    swaps = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + ZIMMERIT_HOW + " " + BY_MONTH_HOW,
-             "paint": coats(v, paint or "grey"), "by_month": sprayed(TIGER_MONTHS)}
+    swaps = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + ZIMMERIT_HOW + " " + BY_MONTH_HOW + " " + ROOF_MG_HOW,
+             "paint": coats(v, paint or "grey"), "by_month": sprayed(roof_mg_months(TIGER_MONTHS, "1943-07"))}
     if zim:
         swaps["zimmerit"] = zimmerit_swap(zim)
+    swaps["roof_mg"] = roof_mg_swap(["roof_mg", "roof_mg_cradle", "roof_mg_rail"], "off",
+                                    "an MG 34 on the anti-aircraft rail round her seven-periscope cupola", "1943-07 on",
+                                    "1942 to June 1943: the first, drum-shaped cupola had no rail (and a tank of any year whose crew kept the gun inside)")
     v.m.info.setdefault("file", {})["swaps"] = swaps
     v.kill_rings("barrel")                                             # no name: a German crew painted rings round the barrel (b477)
     return v
