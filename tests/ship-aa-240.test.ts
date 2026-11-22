@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CARRIERS, assessAir, type AirAssess } from '../src/campaign/air';
 import { planRaid } from '../src/campaign/airwar';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
+import { commandView } from '../src/campaign/desks';
 import { createGame, setWar } from '../src/campaign/game';
+import { booksOf } from '../src/campaign/intel';
 import { atSea, sail, zoneOf } from '../src/campaign/navy';
 import { PLANS } from '../src/campaign/plans';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import {
   SHIP_RESEARCH, TECH, dcOf, flakMul, grantTech, hasTech, idleTeams, shelved, shipKit, shipRule, staffPick, startResearch, techById, techOf, techRule,
@@ -40,6 +42,40 @@ const strip = (g: Game, nat: string): void => { const s = techOf(g, nat)!; s.don
 /** The nations that hold a research, and those with a team at work on it. */
 const holding = (g: Game, id: string): string[] => Object.values(g.nations).filter((n) => n.tech?.done.includes(id)).map((n) => n.id);
 const workingOn = (g: Game, id: string): string[] => Object.values(g.nations).filter((n) => n.tech?.work.some((w) => w.id === id)).map((n) => n.id);
+/**
+ * The names under which a save would write a number that is not one (NaN or an infinity, which a save writes as
+ * null): none, in a game whose rules all came out as numbers.
+ */
+function notNumbers(g: Game): string[] {
+  const real = JSON.stringify, out: string[] = [];
+  JSON.stringify = ((v: unknown) => real(v, (k: string, x: unknown) => { if (typeof x === 'number' && !Number.isFinite(x)) out.push(k); return x; })) as typeof JSON.stringify;
+  try { saveGame(g); } finally { JSON.stringify = real; }
+  return out;
+}
+/**
+ * A staff-fought war of thirty months (seed 17), played once for each setting asked for and kept: its save. `on`
+ * false is the game as shipped, every switch off; true has all three on from the first month. The switches are left
+ * as the caller had them.
+ */
+const wars: { off?: string; on?: string } = {};
+function war(on: boolean): string {
+  const key = on ? 'on' : 'off';
+  if (wars[key] === undefined) {
+    const kept = [R.stage.on, R.vt.on, R.dc.on] as const;
+    set(on, on, on);
+    try {
+      const g = grand(null, 17);
+      while (g.turn < 30) runTurnAI(g);
+      wars[key] = saveGame(g);
+    } finally { set(...kept); }
+  }
+  return wars[key]!;
+}
+/** What a navy's guns are from the lists as a save holds them, read here without the rule: its own or its senior partner's. */
+function stageFrom(g: Game, nat: string): 'early' | 'mid' | 'late' {
+  const lists = [nat, PLANS.kin[nat]].filter((n) => n !== undefined && g.nations[n]).map((n) => g.nations[n].tech?.done ?? []);
+  return lists.some((l) => l.includes('taskforces')) ? 'late' : lists.some((l) => l.includes('firecontrol')) ? 'mid' : 'early';
+}
 
 /** Release 1's tree, counted at fcfb7711. */
 const R1 = { total: 51, naval: 8 };
@@ -128,16 +164,18 @@ describe('ruling 240, the switches off (as shipped): release 1', () => {
   });
 
   it('is held and worked on by no staff after thirty months of a staff-fought war', () => {
-    const g = grand(null, 17);
-    while (g.turn < 30) runTurnAI(g);
+    const text = war(false);
+    const g = loadGame(text)!;
+    expect(g.turn).toBe(30);
     for (const n of Object.values(g.nations)) {
       for (const id of ['proxfuze', 'damagecontrol']) {
         expect(n.tech?.done ?? [], `${n.id} holds ${id}`).not.toContain(id);
         expect((n.tech?.work ?? []).map((w) => w.id), `${n.id} works on ${id}`).not.toContain(id);
       }
     }
-    expect(saveGame(g)).not.toMatch(/proxfuze|damagecontrol/);
-  }, 120000);
+    expect(text).not.toMatch(/proxfuze|damagecontrol/);
+    expect(saveGame(g) === text).toBe(true);
+  }, 240000);
 
   it('reads no kit at all, even for a navy whose list holds all four researches', () => {
     const g = grand();
@@ -174,6 +212,14 @@ describe('ruling 240, the switches off (as shipped): release 1', () => {
     set(false, false, true);
     expect(startResearch(g, 'GER', 'damagecontrol')).toBe(true);
     expect(techView(g, 'GER')!.busy).toBe(1);
+    // The research desk's line and the books a spy would read (intel.ts): with the switch on they name the row.
+    const desk = (): string => commandView(g)!.desks.find((d) => d.id === 'research')!.state;
+    const books = (): { research: { name: string; left: number }[]; researched: number } => booksOf(g, 'GER', 'GER')!;
+    const held = techOf(g, 'GER')!.done.length;
+    expect(held).toBe(TECH.start.GER.length);
+    expect(desk()).toMatch(/^1 of 2 teams at work: Damage control \(\d+ months\)\.$/);
+    expect(books().research.map((x) => x.name)).toEqual(['Damage control']);
+    expect(books().researched).toBe(held);
     const text = saveGame(g);
     set(false, false, false);
     // The save still holds the id; the tree does not show it, and the team counts as free.
@@ -182,15 +228,35 @@ describe('ruling 240, the switches off (as shipped): release 1', () => {
     expect(v.busy).toBe(0);
     expect(v.free).toBe(v.teams);
     expect(v.total).toBe(R1.total);
+    // Nor does the desk's line name it or count its team, nor the books list it: both read as release 1's.
+    expect(desk()).toBe('No research team has work.');
+    expect(books().research).toEqual([]);
+    expect(books().researched).toBe(held);
+    // (A team on a row of release 1's tree beside it is still counted, and alone.)
+    expect(startResearch(g, 'GER', 'antitank')).toBe(true);
+    expect(desk()).toMatch(/^1 of 2 teams at work: [^,]+ \(\d+ months\)\.$/);
+    expect(desk()).not.toMatch(/Damage control/);
+    expect(books().research).toHaveLength(1);
+    expect(books().research[0].name).not.toBe('Damage control');
+    expect(techView(g, 'GER')!.busy).toBe(1);
+    techOf(g, 'GER')!.work = techOf(g, 'GER')!.work.filter((w) => w.id !== 'antitank');
     const news = g.headlines.length;
     for (let k = 0; k < 20; k++) techTick(g, 'GER');
     expect(techOf(g, 'GER')!.work.map((w) => w.id)).not.toContain('damagecontrol');
     expect(techOf(g, 'GER')!.done).not.toContain('damagecontrol');
     expect(g.headlines.slice(news).map((h) => h.text).join(' ')).not.toMatch(/Damage control/);
     // A list that holds the id from such a save is not counted either.
-    give(g, 'GER', 'damagecontrol');
-    expect(techView(g, 'GER')!.done).toBe(techOf(g, 'GER')!.done.length - 1);
+    give(g, 'GER', 'damagecontrol', 'proxfuze');
+    expect(techView(g, 'GER')!.done).toBe(techOf(g, 'GER')!.done.length - 2);
+    expect(books().researched).toBe(techView(g, 'GER')!.done);
+    expect(books().researched).toBe(held);
     expect(dcOf(g, 'GER')).toBe(1);
+    // Each switch counts its own row again and no other.
+    set(false, false, true);
+    expect(books().researched).toBe(held + 1);
+    set(false, true, true);
+    expect(books().researched).toBe(held + 2);
+    expect(books().researched).toBe(techOf(g, 'GER')!.done.length);
   });
 });
 
@@ -793,4 +859,123 @@ describe('ruling 240, C2: proximity shells', () => {
     expect(on.bomberLoss - off.bomberLoss).toBeCloseTo((on.flak - off.flak) * CARRIERS.harbour.intensity, 12);
     expect(on.lines.find((l) => l.label === 'Anti-aircraft guns')).toEqual(off.lines.find((l) => l.label === 'Anti-aircraft guns'));
   });
+});
+
+// ---- Months of a war with the switches on, and saves carried across the switches -----------------------------------
+
+describe('ruling 240, a staff-fought war with the switches on, and saves carried across them', () => {
+  it('thirty months with all three on: every number in the save is a number, the save loads back to itself, and staffs take up Damage control like any naval item', () => {
+    const text = war(true);
+    set(true, true, true);
+    const g = loadGame(text)!;
+    expect(g.turn).toBe(30);
+    // (The rules bite: it is not the war the same seed gives with the switches off.)
+    expect(text === war(false)).toBe(false);
+    expect(notNumbers(g)).toEqual([]);
+    expect(saveGame(g) === text).toBe(true);
+    // (The helper does find one where there is one.)
+    const bad = loadGame(text)!;
+    bad.fleets[0].ready = NaN;
+    expect(notNumbers(bad)).toEqual(['ready']);
+    // R8: no table names the rows, and a staff researches Damage control like any naval item. (Measured: Britain and
+    // the United States begin it in month 20 and hold it from month 28; Italy has a team on it from month 23.)
+    const held = holding(g, 'damagecontrol');
+    expect(held.length).toBeGreaterThan(0);
+    expect(workingOn(g, 'damagecontrol').length).toBeGreaterThan(0);
+    for (const nat of Object.keys(g.nations)) {
+      // A navy's kit is its research, or its senior partner's, and nothing else: read here from the lists themselves.
+      const lists = [nat, PLANS.kin[nat]].filter((n) => n !== undefined && g.nations[n]).map((n) => techOf(g, n)!.done);
+      const dc = lists.some((l) => l.includes('damagecontrol'));
+      expect(shipKit(g, nat), nat).toEqual({ stage: stageFrom(g, nat), vt: lists.some((l) => l.includes('proxfuze')), dc });
+      expect(dcOf(g, nat), nat).toBe(dc ? 1.3 : 1);
+      // Its tree shows both rows, and counts every team at work and every research held.
+      const v = techView(g, nat)!;
+      expect(v.total, nat).toBe(R1.total + 2);
+      expect(v.busy, nat).toBe(v.nodes.filter((x) => x.state === 'work').length);
+      expect(v.busy, nat).toBe(techOf(g, nat)!.work.length);
+      expect(v.done, nat).toBe(techOf(g, nat)!.done.length);
+    }
+    expect(dcOf(g, held[0])).toBe(1.3);
+  }, 240000);
+
+  it('a save made with the switches on and loaded with them off plays on as release 1 does: the ids stay in the save and count for nothing', () => {
+    const text = war(true);
+    set(false, false, false);
+    const g = loadGame(text)!;
+    // Loading rewrites nothing: the lists still hold the id, and a team is still down for the row.
+    expect(saveGame(g) === text).toBe(true);
+    const alive = (nats: string[]): string[] => nats.filter((nat) => g.nations[nat].alive);
+    const held = holding(g, 'damagecontrol'), atWork = alive(workingOn(g, 'damagecontrol'));
+    expect(held.length).toBeGreaterThan(0);
+    expect(atWork.length).toBeGreaterThan(0);
+    // Every nation, every month: no kit, release 1's tree, and the tree, the books and the lists agree.
+    const audit = (when: string): void => {
+      let books = 0;
+      for (const nat of Object.keys(g.nations)) {
+        const at = `${when}, ${nat}`;
+        expect(shipKit(g, nat), at).toEqual({ stage: null, vt: false, dc: false });
+        expect(flakMul(g, nat), at).toBe(1);
+        expect(dcOf(g, nat), at).toBe(1);
+        const v = techView(g, nat)!, s = techOf(g, nat)!;
+        expect(v.total, at).toBe(R1.total);
+        expect(v.nodes.some((x) => x.id === 'damagecontrol' || x.id === 'proxfuze'), at).toBe(false);
+        expect(v.busy, at).toBe(v.nodes.filter((x) => x.state === 'work').length);
+        expect(v.busy, at).toBe(s.work.filter((w) => !shelved(techById(w.id))).length);
+        expect(v.done, at).toBe(s.done.filter((id) => !shelved(techById(id))).length);
+        const b = booksOf(g, nat, nat);
+        if (!b) continue;
+        books++;
+        expect(b.researched, at).toBe(v.done);
+        expect(b.research.map((x) => x.name), at).not.toContain('Damage control');
+        expect(b.research, at).toHaveLength(v.busy);
+      }
+      expect(books, when).toBeGreaterThan(20);
+    };
+    audit('at the load');
+    // The team that is down for the shelved row counts as free.
+    for (const nat of atWork) expect(techView(g, nat)!.busy, nat).toBe(techOf(g, nat)!.work.length - 1);
+    const news = g.headlines.length;
+    for (let m = 1; m <= 3; m++) {
+      runTurnAI(g);
+      // The work in hand on the row is dropped at the nation's next month of research, and nobody takes it up again.
+      expect(alive(workingOn(g, 'damagecontrol')), `month ${m}`).toEqual([]);
+      audit(`month ${m} after the load`);
+    }
+    // The team that was on it has other work, or there is nothing left for it to begin.
+    for (const nat of atWork) expect(idleTeams(g, nat), nat).toBe(0);
+    for (const nat of atWork) expect(techView(g, nat)!.busy, nat).toBeGreaterThan(0);
+    // What was researched stays on the list and in the save, and nothing in the months played speaks of the rules.
+    expect(holding(g, 'damagecontrol')).toEqual(held);
+    const again = saveGame(g);
+    expect(again).toMatch(/damagecontrol/);
+    expect(g.headlines.slice(news).map((h) => h.text).join(' ')).not.toMatch(/Damage control|Proximity shells|repair parties/);
+    expect(notNumbers(g)).toEqual([]);
+    expect(saveGame(loadGame(again)!) === again).toBe(true);
+  }, 240000);
+
+  it('a save made with the switches off (release 1\'s) and loaded with all three on plays on: the rows are on the tree, a navy has early-war guns until it researches, and a staff takes Damage control up', () => {
+    const text = war(false);
+    set(true, true, true);
+    const g = loadGame(text)!;
+    expect(saveGame(g) === text).toBe(true);
+    const nats = Object.keys(g.nations);
+    for (const nat of nats) {
+      expect(shipKit(g, nat), nat).toEqual({ stage: stageFrom(g, nat), vt: false, dc: false });
+      expect(techView(g, nat)!.total, nat).toBe(R1.total + 2);
+    }
+    // (Measured: no staff has Radar gunnery by month 30 of this war, so every navy on the chart reads early-war guns.)
+    expect(nats.filter((nat) => shipKit(g, nat).stage === 'early').length).toBeGreaterThan(40);
+    for (let m = 1; m <= 3; m++) runTurnAI(g);
+    // (Measured: Britain's staff begins Damage control in the first month after the load, Italy's in the second.)
+    expect(workingOn(g, 'damagecontrol').length + holding(g, 'damagecontrol').length).toBeGreaterThan(0);
+    for (const nat of nats) {
+      const v = techView(g, nat)!;
+      expect(v.busy, nat).toBe(v.nodes.filter((x) => x.state === 'work').length);
+      expect(v.busy, nat).toBe(techOf(g, nat)!.work.length);
+    }
+    expect(notNumbers(g)).toEqual([]);
+    const again = saveGame(g);
+    expect(again).toMatch(/damagecontrol/);
+    expect(saveGame(loadGame(again)!) === again).toBe(true);
+  }, 240000);
 });
