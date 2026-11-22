@@ -170,6 +170,16 @@ camera comes back to its shot.
   gathered again on the draw thread every frame, in every pass, shadows included. The 170 tiles of the far ring, 1 km
   and more off, cast no shadow. The points, normals and colours are the same bytes as before. The log says how many
   were made and how long it took. `-TheaterLandTilesProcedural` draws them as procedural meshes, as before.
+  The torn ground settles into static meshes too (GS8): a section of a patch's holes or tracks, or a part of a dug
+  tile's near ground, is sent into its procedural mesh as it changes, as before. Once it has stood unchanged 3 s it is
+  baked into a static mesh of its own and its procedural section emptied, within 1 ms a frame. A patch's procedural
+  mesh then holds only the pieces still changing, so a new hole remakes only those. A hole torn in a baked piece makes
+  it procedural again until it settles. The engine cannot change a procedural section's triangles in place (its update
+  takes points only), and a hole's cut changes them, so this is how the torn ground stays mostly static. The 10 s log
+  says the sections sent, the pieces baked, those still procedural and the slowest frame's baking.
+  `-TheaterLandTornProcedural` keeps them all procedural; `-TheaterLandTornSettle=` (3 s) and `-TheaterLandTornBakeMs=`
+  (1 ms) tune it. The effects kit's own painted crater marks stay off in this scene (the holes are the torn earth's);
+  `-TheaterLandKitScars` brings them back for an A/B.
 - **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
   tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built

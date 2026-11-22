@@ -27,6 +27,7 @@ class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
 class UStaticMesh;
+class UStaticMeshComponent;
 class UTexture2D;
 struct FLandBattleState;
 namespace LandCarpet
@@ -219,6 +220,34 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> RutMeshes;
 	double RutsSentAt = -10.0;
+	/** GS8: the torn ground's pieces (a section of a patch's holes or tracks, a part of a dug tile's near ground) are sent
+	 * into their procedural meshes as they change, and once a piece has stood unchanged TornSettleAfter seconds it is
+	 * baked into a static mesh of its own (cached draw) and its procedural section emptied: a patch's procedural mesh
+	 * then holds only its pieces still changing, and a send makes only those again. A change makes a baked piece
+	 * procedural again. -TheaterLandTornProcedural: never baked, as before. */
+	struct FTornPiece
+	{
+		/** 0: holes (CraterMeshes), 1: tracks (RutMeshes), 2: dug ground (a tile's NearParts). */
+		int32 Kind = 0;
+		/** The patch and section, or the tile and part. */
+		int32 A = 0, B = 0;
+		double ChangedAt = 0.0;
+		bool bHot = false;
+		TWeakObjectPtr<UStaticMeshComponent> Baked;
+	};
+	static int64 TornKey(int32 Kind, int32 A, int32 B)
+	{
+		return (static_cast<int64>(Kind) << 56) | (static_cast<int64>(A & 0xFFFFFF) << 28) | static_cast<int64>(B & 0xFFFFFFF);
+	}
+	TMap<int64, FTornPiece> Torn;
+	TArray<int64> TornHot;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> TornBaked;
+	bool bTornBakes = true;
+	double TornSettleAfter = 3.0, TornBakeMs = 1.0;
+	/** For the 10 s log: sections sent, pieces baked, and the slowest frame's baking (ms). */
+	int32 TornSent = 0, TornBakedCount = 0;
+	double TornBakeMostMs = 0.0;
 
 	// ---- The men (LandMen) ----
 	struct FManDrawn
@@ -546,6 +575,10 @@ private:
 	void MakeRuts();
 	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */
 	void SendDug();
+	/** GS8: a torn piece just sent into its procedural section (its baked mesh, if any, let go). */
+	void TornChanged(int32 Kind, int32 A, int32 B);
+	/** GS8: the torn pieces unchanged TornSettleAfter seconds baked into static meshes, within TornBakeMs a frame. */
+	void SettleTorn();
 	void PlayArmourEvents();
 	void PlayMenEvents();
 	void PlaySound(double RealDt);

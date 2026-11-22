@@ -1408,7 +1408,12 @@ bool ALandBattle::Open()
 		// (the camera stands among the bursts: smoke and dust fade as they come within a few metres in front of the
 		// lens, and nothing is laid at or behind it; the kit's flat painted craters give way to the torn earth below)
 		Effects->SetLensFade(1.0f, 5.0f, 0.3f);
-		Effects->SetCraters(false);
+		// (the art director, 22 November: the holes are the torn earth's alone, never the kit's marks over them too;
+		// -TheaterLandKitScars brings the kit's back for the A/B)
+		const bool bKitScars = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandKitScars"));
+		Effects->SetCraters(bKitScars);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the effects kit's painted crater marks %s"),
+			bKitScars ? TEXT("ON (-TheaterLandKitScars: drawn over the torn-earth holes)") : TEXT("off: the torn-earth holes alone"));
 		Effects->SetSun(TowardSun);
 		// (a summer morning's breeze from the west-south-west, some 3 m a second: the smoke leans east over the field;
 		// or the recording's own wind)
@@ -1675,6 +1680,12 @@ void ALandBattle::LayField()
 	// GS8: each tile's level a static mesh of its own, drawn from the engine's cached draw commands (a procedural mesh is
 	// gathered again on the draw thread every frame, in every pass); -TheaterLandTilesProcedural draws them as before.
 	const bool bStaticTiles = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandTilesProcedural"));
+	// (and the torn ground's pieces baked into static meshes once they settle, SettleTorn)
+	bTornBakes = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandTornProcedural"));
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTornSettle="), TornSettleAfter);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTornBakeMs="), TornBakeMs);
+	TornSettleAfter = FMath::Clamp(TornSettleAfter, 0.5, 600.0);
+	TornBakeMs = FMath::Clamp(TornBakeMs, 0.05, 50.0);
 	const double LaidFrom = LandParts::Seconds();
 	int32 StaticMade = 0, Points = 0;
 	auto Lay = [&](const LandField::Mesh& M, UMaterialInstanceDynamic* Ink, bool bShadow) -> UMeshComponent*
@@ -1738,8 +1749,9 @@ void ALandBattle::LayField()
 	{
 		AddTile(Tile, true);
 	}
-	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground (GS8): %d meshes, %d of them static (cached draw), %d points, %d ring tiles with no shadow, in %.2f s%s"), Made, StaticMade,
-		Points, static_cast<int32>(G.Ring().size()), LandParts::Seconds() - LaidFrom, bStaticTiles ? TEXT("") : TEXT(" (-TheaterLandTilesProcedural: procedural, as before)"));
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground (GS8): %d meshes, %d of them static (cached draw), %d points, %d ring tiles with no shadow, in %.2f s%s; torn ground %s"), Made, StaticMade,
+		Points, static_cast<int32>(G.Ring().size()), LandParts::Seconds() - LaidFrom, bStaticTiles ? TEXT("") : TEXT(" (-TheaterLandTilesProcedural: procedural, as before)"),
+		bTornBakes ? *FString::Printf(TEXT("baked static after %.1f s unchanged, within %.2f ms a frame"), TornSettleAfter, TornBakeMs) : TEXT("procedural (-TheaterLandTornProcedural)"));
 	LayThings();
 }
 
@@ -2097,20 +2109,29 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 	(void)Battle;
 	const FVector2D EyeAt(EyeWorld.Y / UnitsPerMetre, EyeWorld.X / UnitsPerMetre);
 	// The ground's level by the eye's distance to each tile (the things choose their own, by instancing).
-	for (FTileDrawn& Tile : Tiles)
+	for (int32 TileIndex = 0; TileIndex < Tiles.Num(); ++TileIndex)
 	{
+		FTileDrawn& Tile = Tiles[TileIndex];
 		const double Far = FMath::Sqrt(Tile.Box.ComputeSquaredDistanceToPoint(EyeAt));
 		const bool bNear = Far < Tile.FarFrom;
 		if (bNear != Tile.bNearShown && Tile.Near.IsValid() && Tile.Far.IsValid())
 		{
 			Tile.bNearShown = bNear;
-			// (once dug in, its parts stand in for its near mesh, which stays hidden)
+			// (once dug in, its parts stand in for its near mesh, which stays hidden; a part settled is drawn by its baked
+			// mesh, GS8)
 			Tile.Near->SetVisibility(bNear && Tile.NearParts.IsEmpty());
-			for (const TWeakObjectPtr<UProceduralMeshComponent>& Part : Tile.NearParts)
+			for (int32 Part = 0; Part < Tile.NearParts.Num(); ++Part)
 			{
-				if (Part.IsValid())
+				if (Tile.NearParts[Part].IsValid())
 				{
-					Part->SetVisibility(bNear);
+					Tile.NearParts[Part]->SetVisibility(bNear);
+				}
+				if (const FTornPiece* Piece = Torn.Find(TornKey(2, TileIndex, Part)))
+				{
+					if (UStaticMeshComponent* Baked = Piece->Baked.Get())
+					{
+						Baked->SetVisibility(bNear);
+					}
 				}
 			}
 			Tile.Far->SetVisibility(!bNear);
@@ -4632,6 +4653,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	Mark = LandParts::Seconds();
 	MakeCraters();
 	MakeRuts();
+	SettleTorn();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
 	PlayArmourEvents();
 	PlayMenEvents();
@@ -4702,10 +4724,11 @@ void ALandBattle::Tick(float DeltaSeconds)
 			ClutterPlaces += Mesh ? Mesh->GetInstanceCount() : 0;
 		}
 		const int32 ClutterLaid = Carpet.IsValid() ? static_cast<int32>(Carpet->Laid()) : 0;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f; the ground's clutter %d places for %d laid (GS7)"),
+		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f; the ground's clutter %d places for %d laid (GS7); the torn ground (GS8) %d sections sent, %d baked static, %d procedural now, the slowest frame's baking %.2f ms"),
 			DrawMenMs / LogFrames, DrawArmourMs / LogFrames, EffectsMs / LogFrames, SoundMs / LogFrames, GpuMs / LogFrames, static_cast<double>(MenInPicture) / LogFrames, MostInPicture,
 			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
-			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid);
+			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid,
+			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs);
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
@@ -4713,6 +4736,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 		MenInPicture = MenRebuilt = RebuildsPut = MostInPicture = 0;
 		VatMid = VatFar = MassGrown = 0;
 		MostGrow = 1.0;
+		TornSent = TornBakedCount = 0;
+		TornBakeMostMs = 0.0;
 	}
 }
 
@@ -4942,6 +4967,7 @@ void ALandBattle::MakeCraters()
 		LandParts::FromField(S.Holes.Section(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(Where.Section, GroundInk);
+		TornChanged(0, Where.Patch, Where.Section);
 	}
 }
 
@@ -4976,6 +5002,7 @@ void ALandBattle::SendDug()
 			Mesh->SetVisibility(bShow);
 			FieldMeshes.Add(Mesh);
 			Tile.NearParts[Part] = Mesh;
+			TornChanged(2, TileIndex, Part);
 		}
 		if (Tile.Near.IsValid())
 		{
@@ -4995,6 +5022,7 @@ void ALandBattle::SendDug()
 		}
 		LandParts::FromField(S.Dug.PartOf(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		TornChanged(2, Where.Tile, Where.Part);
 	}
 }
 
@@ -5058,7 +5086,122 @@ void ALandBattle::MakeRuts()
 		LandParts::FromField(S.Ruts.Section(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(Where.Section, GroundInk);
+		TornChanged(1, Where.Patch, Where.Section);
 	}
+}
+
+void ALandBattle::TornChanged(int32 Kind, int32 A, int32 B)
+{
+	++TornSent;
+	if (!bTornBakes)
+	{
+		return;
+	}
+	const int64 Key = TornKey(Kind, A, B);
+	FTornPiece& Piece = Torn.FindOrAdd(Key);
+	Piece.Kind = Kind;
+	Piece.A = A;
+	Piece.B = B;
+	Piece.ChangedAt = RealT;
+	if (UStaticMeshComponent* Was = Piece.Baked.Get())
+	{
+		// (its baked mesh let go: its procedural section, sent just now, draws it again until it settles)
+		TornBaked.RemoveSingleSwap(Was);
+		Was->DestroyComponent();
+	}
+	Piece.Baked.Reset();
+	if (!Piece.bHot)
+	{
+		Piece.bHot = true;
+		TornHot.Add(Key);
+	}
+}
+
+void ALandBattle::SettleTorn()
+{
+	if (!bTornBakes || TornHot.Num() == 0 || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	// Each piece unchanged TornSettleAfter seconds baked into a static mesh of its own, drawn from cached draw commands,
+	// and its procedural section emptied; within TornBakeMs a frame (the production lead's guard: a hitch is worse than
+	// a few more procedural pieces), the rest left for the frames after.
+	const double Began = LandParts::Seconds();
+	for (int32 I = 0; I < TornHot.Num() && (LandParts::Seconds() - Began) * 1000.0 < TornBakeMs;)
+	{
+		const int64 Key = TornHot[I];
+		FTornPiece* Piece = Torn.Find(Key);
+		if (!Piece || !Piece->bHot)
+		{
+			TornHot.RemoveAtSwap(I);
+			continue;
+		}
+		if (RealT - Piece->ChangedAt < TornSettleAfter)
+		{
+			++I;
+			continue;
+		}
+		const LandField::Mesh* M = nullptr;
+		UProceduralMeshComponent* Proc = nullptr;
+		bool bShown = true;
+		if (Piece->Kind == 0 && Piece->A >= 0 && Piece->A < S.Holes.Patches() && Piece->B >= 0
+			&& Piece->B < static_cast<int32>(S.Holes.PatchAt(Piece->A).Sections.size()) && CraterMeshes.IsValidIndex(Piece->A))
+		{
+			M = &S.Holes.Section({ Piece->A, Piece->B });
+			Proc = CraterMeshes[Piece->A];
+		}
+		else if (Piece->Kind == 1 && Piece->A >= 0 && Piece->A < S.Ruts.Patches() && Piece->B >= 0
+			&& Piece->B < static_cast<int32>(S.Ruts.PatchAt(Piece->A).Sections.size()) && RutMeshes.IsValidIndex(Piece->A))
+		{
+			M = &S.Ruts.Section({ Piece->A, Piece->B });
+			Proc = RutMeshes[Piece->A];
+		}
+		else if (Piece->Kind == 2 && Tiles.IsValidIndex(Piece->A) && Tiles[Piece->A].NearParts.IsValidIndex(Piece->B) && S.Dug.IsSplit(Piece->A))
+		{
+			M = &S.Dug.PartOf({ Piece->A, Piece->B });
+			Proc = Tiles[Piece->A].NearParts[Piece->B].Get();
+			bShown = Tiles[Piece->A].bNearShown || !Tiles[Piece->A].Far.IsValid();
+		}
+		Piece->bHot = false;
+		TornHot.RemoveAtSwap(I);
+		if (!M || !Proc)
+		{
+			continue;
+		}
+		if (!M->Empty())
+		{
+			const FString Name = FString::Printf(TEXT("LandTorn%d_%d_%d"), Piece->Kind, Piece->A, Piece->B);
+			UStaticMesh* Shape = LandParts::GroundMesh(this, MakeUniqueObjectName(this, UStaticMesh::StaticClass(), FName(*(Name + TEXT("_Mesh")))), *M, GroundInk,
+				UnitsPerMetre);
+			if (!Shape)
+			{
+				continue; // (left procedural)
+			}
+			UStaticMeshComponent* Baked = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), FName(*Name)));
+			Baked->SetupAttachment(Root);
+			Baked->SetStaticMesh(Shape);
+			Baked->SetMaterial(0, GroundInk);
+			Baked->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Baked->SetCanEverAffectNavigation(false);
+			Baked->SetCastShadow(true);
+			Baked->SetVisibility(bShown);
+			Baked->RegisterComponent();
+			TornBaked.Add(Baked);
+			Piece->Baked = Baked;
+		}
+		// (its procedural section emptied: the baked mesh draws it now)
+		if (Piece->Kind == 2)
+		{
+			Proc->ClearAllMeshSections();
+		}
+		else
+		{
+			Proc->ClearMeshSection(Piece->B);
+		}
+		++TornBakedCount;
+	}
+	TornBakeMostMs = FMath::Max(TornBakeMostMs, (LandParts::Seconds() - Began) * 1000.0);
 }
 
 void ALandBattle::PlayArmourEvents()
