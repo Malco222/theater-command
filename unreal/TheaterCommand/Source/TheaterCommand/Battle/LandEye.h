@@ -192,6 +192,11 @@ namespace LandEye
 		 * that near a held shot cuts it on its flash; no shot is placed in a cloud still hanging, and a following shot
 		 * that runs into one is left. */
 		double CloudFor = 4.0, CloudShell = 10.0, CloudMortar = 9.0, CloudGun = 12.0, CloudBomb = 30.0;
+		/** A fuel ball (the art director, 22 November 08:08Z, from the effects kit's fuel_ball: a vehicle's 6 to 10 m
+		 * across): no shot places or holds its lens within FuelVehicle metres of a tank or a lorry knocked out, in the
+		 * ball's first FuelFor seconds on the screen; one going up that near a held shot cuts it on its flash. Held as
+		 * a burst's cloud is (InCloud, LensBurst). Farther off, the ball may fill the picture: that drama is wanted. */
+		double FuelFor = 2.0, FuelVehicle = 16.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -231,6 +236,13 @@ namespace LandEye
 		void Hold(bool bHold) { bHeld = bHold; }
 		/** A shot of a kind on a subject asked for (the picture run). Subject -1: the director's choice. */
 		void Ask(Kind K, int Subject = -1);
+		/** Ride with this unit (Brian's yes, 22 November 03:36Z): the film stays with one block's men or tanks (its id as
+		 * the recording numbers it), cutting among them by the same rules as among the field's: their falls and a tank's
+		 * end are gone to, no one else's. It cuts to them at once unless the shot on the screen is already on one of them.
+		 * Let go with -1; it lets go of itself when none of them is left standing or they are hidden from the player
+		 * (Riding() then -1). No wide of the whole mass while riding. */
+		void Ride(int Block);
+		int Riding() const { return RideBlock; }
 
 		// For the test.
 		int Cuts() const { return CutCount; }
@@ -270,6 +282,9 @@ namespace LandEye
 		 * in its first CloudFor seconds at battle time T. */
 		double CloudOf(const LandFeed::Round& R) const;
 		bool InCloud(const Vec& At, double T) const;
+		/** Whether a point is within Settings::FuelVehicle of a vehicle knocked out between two battle times (its fuel
+		 * ball), and when the first went up. InCloud and LensBurst count these too. */
+		bool InFuelBall(const Vec& At, double From, double To, double* OutWhen = nullptr) const;
 		/** Whether a heavy round lands at a pose's lens between two battle times (Settings::BurstClear, CloudShell). */
 		bool BurstAt(const Pose& P, double From, double To) const { return LensBurst(P.Eye, P.Look, P.Fov, From, To, P.Subject, nullptr); }
 		/** How much of a pose's picture its own man fills (0 with no Solid or no man). */
@@ -345,6 +360,11 @@ namespace LandEye
 		 * men drawn now and at its end weighed from the own side's rear and round it, nearest first. */
 		bool bMassNow = false, bMassDone = false;
 		double MassCutAt = -1.0;
+		/** The block ridden with (Ride), -1 none; whether a track is one of its men; whether any of them still stands for
+		 * the film (up, on the field, not hidden) at a battle time. */
+		int RideBlock = -1;
+		bool OffRide(int Track) const { return RideBlock >= 0 && Rec->Tracks[static_cast<size_t>(Track)].Block != RideBlock; }
+		bool RideStands(double Battle) const;
 		bool MassDue(double Battle, int Coming) const;
 		bool PlaceMass(double Battle);
 		/** The operator's nerves after a burst near the lens (0 to 1), and where they are going. */
@@ -466,7 +486,7 @@ namespace LandEye
 		};
 		Pick ChoiceTop[4];
 		size_t ChoiceScan = 0;
-		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false;
+		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false, bScanRide = false;
 		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
 		 * tries before the high view. */
 		bool bChoiceMiddle = false;
@@ -506,6 +526,8 @@ namespace LandEye
 		double ShoulderUp(double Battle) const;
 		/** The rounds that burst (shells, mortar bombs, tank and anti-tank rounds) by the time they land. */
 		std::vector<int> Heavy;
+		/** The tanks and lorries knocked out (their fuel goes up: Settings::FuelVehicle), by the time they are. */
+		std::vector<int> Burnt;
 		/** The real time to cut on the flash of a shell landing at the lens in this shot, -1 none. */
 		double BurstCutAt = -1.0;
 		/** The look's swing (metres a second at the look point): a spring, so a pan starts and stops without a kick. */
