@@ -641,7 +641,11 @@ namespace ShipGuns
 				const Vec Off = A1 * (Amp * std::sin(Now * C.W2 + C.Phase * 1.7)) + A2 * (Amp * 0.8 * std::sin(Now * C.W2 * 1.37 + C.Phase * 0.6));
 				const Vec There = T.P + T.V * Tof;
 				const Vec Point = T.P + T.V * (Tof * Lead) + Off;
-				const double Miss = Len(Point - There);
+				// (how far the plane will be from the stream's line as the rounds reach it: a plane flying straight at the
+				// gun is on the line whatever the lead, and one crossing it is off by the lead and the wander alike)
+				const Vec Ray = Norm(Point - Muzzle, Los);
+				const Vec Gap = There - Muzzle;
+				const double Miss = Len(Gap - Ray * Gap.Dot(Ray));
 				const int Of = std::min(G.Barrels, 2);
 				for (int K = 0; K < Of; ++K)
 				{
