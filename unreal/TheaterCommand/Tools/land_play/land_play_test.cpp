@@ -22,6 +22,7 @@
 #include "Battle/LandEye.h"
 #include "Battle/LandFeed.h"
 #include "Battle/LandField.h"
+#include "Battle/LandGeneralEye.h"
 #include "Battle/LandJson.h"
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
@@ -1088,6 +1089,159 @@ int main(int argc, char** argv)
 		const std::string Label = "seed " + std::to_string(More);
 		MoreFilm.Report(Label.c_str());
 	}
+	// The general's view (release 2: the player commands the battle himself): a scripted player zooms from the deploy
+	// view to a man's shoulder, walks the view through the hedges, turns it round, slides it, runs it to the field's
+	// edges, follows a tank and his own section, then wanders at random. The eye must never stand under the ground, in a
+	// thing or among the stalks, the look-at never leave the field by more than its margin, and nothing jolt.
+	{
+		LandGeneralEye::Eye Gen;
+		const double* Za = Rec.Ground.ZoneAtt;
+		const double* Zd = Rec.Ground.ZoneDef;
+		const double Ox = 0.5 * (Za[0] + Za[2]), Oy = 0.5 * (Za[1] + Za[3]);
+		const double Ex = 0.5 * (Zd[0] + Zd[2]), Ey = 0.5 * (Zd[1] + Zd[3]);
+		Gen.Begin(Rec, EW, Vec(Ox, Oy, 0.0), LandFeed::FacingTo(Ox, Oy, Ex, Ey), 250.0);
+		int TankBlock = -1;
+		for (const LandFeed::Block& Bk : Rec.Blocks)
+		{
+			if (Bk.Side == ES.Own && !Bk.Model.empty() && TankBlock < 0)
+			{
+				for (const LandFeed::Track& Tr : Rec.Tracks)
+				{
+					if (Tr.Block == Bk.Id && Tr.Role == "tank") { TankBlock = Bk.Id; break; }
+				}
+			}
+		}
+		uint64_t Dice = Rec.Seed * 0x9E3779B97F4A7C15ull + 99;
+		auto Roll = [&Dice]() { Dice ^= Dice << 13; Dice ^= Dice >> 7; Dice ^= Dice << 17; return static_cast<double>(Dice % 1000000) / 1000000.0; };
+		LandGeneralEye::Input Wander;
+		double B = 0.0, R = 0.0, NextWander = 0.0, NextNotch = 0.0;
+		int GFrames = 0, Under = 0, InThing = 0, InCorn = 0, OffField = 0, Lifted = 0, Followed = 0, Kicks = 0;
+		double Lowest = 1e9, Highest = -1e9, LowestNear = 1e9, WorstKick = 0.0, WorstKickAt = 0.0, GSlowest = 0.0, Spent = 0.0;
+		double Yaw = 0.0, Pitch = 0.0, SwingYaw = 0.0, SwingPitch = 0.0;
+		int Steady = 0;
+		double ZWas = 0.0, ZWas2 = 0.0, WorstRise = 0.0, WorstRiseAt = 0.0;
+		int GCuts = 0;
+		bool CutWas = false;
+		const double End = 260.0;
+		while (R < End)
+		{
+			LandGeneralEye::Input In;
+			auto Notch = [&](double Way, double Every) { if (R >= NextNotch) { In.Zoom = Way; NextNotch = R + Every; } };
+			if (R < 2.0) {}
+			else if (R < 8.0) Notch(1.0, 0.25);
+			else if (R < 28.0) In.PanAhead = 1.0;
+			else if (R < 36.0) In.Turn = 45.0 * Dt;
+			else if (R < 46.0) { In.PanRight = 1.0; In.PanAhead = 0.5; }
+			else if (R < 50.0) Notch(-1.0, 1.0);
+			else if (R < 60.0) { In.SlideRight = (static_cast<int>(R / 2.0) % 2 ? 1.0 : -1.0) * 0.012; In.SlideAhead = 0.006; }
+			else if (R < 66.0) Notch(-1.0, 0.25);
+			else if (R < 73.0) In.PanAhead = 1.0;
+			else if (R < 80.0) { In.EdgeRight = -1.0; In.bLockEdgePan = R > 77.0; }
+			else if (R < 110.0)
+			{
+				if (R - Dt < 80.0) In.GoBlock = TankBlock;
+				In.bFollow = true;
+				if (R < 84.0) Notch(1.0, 0.25);
+			}
+			else if (R < 140.0)
+			{
+				if (R - Dt < 110.0) In.GoBlock = Eye.SquadBlock();
+				In.bFollow = true;
+				if (R < 118.0) Notch(1.0, 0.3);
+			}
+			else
+			{
+				if (R >= NextWander)
+				{
+					NextWander = R + 1.5 + 3.0 * Roll();
+					Wander = LandGeneralEye::Input();
+					const double Pick = Roll();
+					if (Pick < 0.45) { Wander.PanRight = Roll() * 2.0 - 1.0; Wander.PanAhead = Roll() * 2.0 - 1.0; }
+					else if (Pick < 0.6) { Wander.EdgeRight = Roll() < 0.5 ? -1.0 : 1.0; Wander.bLockEdgePan = Roll() < 0.3; }
+					else if (Pick < 0.75) Wander.Turn = (Roll() * 2.0 - 1.0) * 60.0 * Dt;
+					else if (Pick < 0.9) Wander.Zoom = Roll() < 0.5 ? 1.0 : -1.0;
+					else Wander.SlideRight = (Roll() * 2.0 - 1.0) * 0.01;
+				}
+				In = Wander;
+				if (In.Zoom != 0.0) { if (R < NextNotch) In.Zoom = 0.0; else NextNotch = R + 0.3; }
+			}
+			B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
+			R += Dt;
+			PlaceMovers(B);
+			const auto GT0 = std::chrono::steady_clock::now();
+			const LandEye::Pose P = Gen.Update(In, Dt, B);
+			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GT0).count();
+			Spent += Ms;
+			GSlowest = std::max(GSlowest, Ms);
+			if (Ms > 3.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow general's eye %.2f ms at real %.2f: zoom %.3f, lift %.2f need %.2f hurried %d aside %.2f waited %d braked %d, asked %d\n", Ms, R + Dt, Gen.Zoom(), Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames(), Gen.AskedNow());
+			++GFrames;
+			const double G = GroundAt(P.Eye.X, P.Eye.Y);
+			const double Over = P.Eye.Z - G;
+			Lowest = std::min(Lowest, Over);
+			Highest = std::max(Highest, P.Eye.Z - GroundAt(P.Look.X, P.Look.Y));
+			if (Gen.Zoom() < 0.02) LowestNear = std::min(LowestNear, Over);
+			if (Over < 0.5) ++Under;
+			if (!EW.Free(P.Eye) || EW.Solid(P.Eye, -1) != 0) { ++InThing; if (std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye in a thing at real %.2f: free %d solid %d, zoom %.3f, eye %.2f over the ground, following %d\n", R, EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1), Gen.Zoom(), Over, Gen.Following()); }
+			if (P.Eye.Z < G + CornAt(P.Eye.X, P.Eye.Y) + 0.1) ++InCorn;
+			if (const char* Win = std::getenv("LAND_PLAY_GEN_AT"))
+			{
+				double W0 = 0.0, W1 = 0.0;
+				if (std::sscanf(Win, "%lf,%lf", &W0, &W1) == 2 && R >= W0 && R <= W1)
+				{
+					const Vec La = Gen.LookAt();
+					std::printf("  at %.3f: zoom %.4f heading %.2f look (%.2f %.2f) eye (%.2f %.2f %.2f) %.2f over, lift %.3f need %.3f hurried %d aside %.2f waited %d braked %d, free %d solid %d\n", R, Gen.Zoom(), Gen.Heading() * 57.2958, La.X, La.Y, P.Eye.X, P.Eye.Y, P.Eye.Z, Over, Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames(), EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1));
+				}
+			}
+			const double M = Gen.Margin();
+			const Vec At = Gen.LookAt();
+			if (At.X < -M - 0.5 || At.Y < -M - 0.5 || At.X > Rec.Ground.W + M + 0.5 || At.Y > Rec.Ground.H + M + 0.5) ++OffField;
+			Followed += Gen.Following() >= 0 ? 1 : 0;
+			const Vec D = (P.Look - P.Eye).Unit();
+			const double Y = std::atan2(D.X, D.Y) * 180.0 / 3.14159265358979, Pt = std::asin(std::clamp(D.Z, -1.0, 1.0)) * 180.0 / 3.14159265358979;
+			if (GFrames > 1 && !P.bCut)
+			{
+				double Dy = Y - Yaw;
+				while (Dy > 180.0) Dy -= 360.0;
+				while (Dy < -180.0) Dy += 360.0;
+				const double Sy = Dy / Dt, Sp = (Pt - Pitch) / Dt;
+				if (Steady > 1)
+				{
+					const double K = std::hypot(Sy - SwingYaw, Sp - SwingPitch) / Dt;
+					if (K > WorstKick) { WorstKick = K; WorstKickAt = R; }
+					if (K > 1200.0) ++Kicks;
+					if (K > 1200.0 && std::getenv("LAND_PLAY_KICKS")) std::printf("  general's kick %.0f at real %.2f: zoom %.3f, eye %.2f over the ground, yaw %.1f pitch %.1f\n", K, R, Gen.Zoom(), Over, Y, Pt);
+				}
+				SwingYaw = Sy;
+				SwingPitch = Sp;
+				++Steady;
+			}
+			GCuts += P.bCut && GFrames > 1 ? 1 : 0;
+			if (GFrames > 2 && !P.bCut && !CutWas)
+			{
+				// (a rise or fall of the whole view, as the picture sees it: over the eye's distance to what it looks at)
+				const double Az = ((P.Eye.Z - ZWas) - (ZWas - ZWas2)) / (Dt * Dt) / std::max(1.0, (P.Look - P.Eye).Length()) * 180.0 / 3.14159265358979;
+				if (std::abs(Az) > WorstRise) { WorstRise = std::abs(Az); WorstRiseAt = R; }
+				Lifted += std::abs(Az) > 1200.0 ? 1 : 0;
+				if (std::abs(Az) > 1200.0 && std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye jumps %.0f deg/s/s at real %.2f: zoom %.3f, eye %.2f over the ground, lift %.3f need %.3f hurried %d, aside %.2f, eye z %+.3f %+.3f\n", Az, R, Gen.Zoom(), Over, Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), ZWas - ZWas2, P.Eye.Z - ZWas);
+			}
+			CutWas = P.bCut;
+			ZWas2 = ZWas;
+			ZWas = P.Eye.Z;
+			Yaw = Y;
+			Pitch = Pt;
+		}
+		std::printf("\ngeneral's view: %d frames over %.0f s; eye under the ground %d, in a thing %d, among the stalks %d, look-at off the field %d; eye %.2f m over the ground at the lowest (%.2f at the nearest zoom), %.0f m over the look-at at the highest; followed a block %.0f s; worst look kick %.0f deg/s/s (real %.1f s), %d frames over 1200; the view's worst rise or fall %.0f deg/s/s as the picture sees it (real %.1f s), %d frames over 1200; waited at a thing %d frames, braked %d, cut %d times; %.3f ms a frame on average, %.2f ms the slowest",
+			GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
+		if (Under > 0) Fault("the general's view went under the ground");
+		if (InThing > 0) Fault("the general's view stood in a thing or a man");
+		if (InCorn > 0) Fault("the general's view stood among the stalks");
+		if (OffField > 0) Fault("the general's view looked off the field past its margin");
+		if (Kicks > 0) Fault("the general's view jolted (a look kick over 1200 deg/s/s)");
+		if (Lifted > 0) Fault("the general's view jolted up or down (over 1200 deg/s/s as the picture sees it)");
+		if (LowestNear > 2.5) Fault("the general's view never came down to a man's shoulder");
+		if (Highest < 300.0) Fault("the general's view never rose to look down on the battle");
+		if (GSlowest > 8.0) Fault("a frame of the general's view took over 8 ms");
+	}
 	// A tank's own shot and her knock-out count as action for a lens straight off her nose or tail (her hull runs 3.2 m
 	// from her middle: the pre-check found it hid her own shot from the dead-shot rule within some 35-40 degrees of
 	// her nose or tail, the head-on "Tiger fires at the lens" shot). Each at 30, 60 and 120 m, where nothing else is in
@@ -1134,6 +1288,38 @@ int main(int argc, char** argv)
 		if (Counted < Tried) Fault("a tank's own hull hid her shot or knock-out from the dead-shot rule");
 	}
 	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks, %d behind stalks a step or two in front)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn, LensBehindStalks);
+	// The forest ambush (Brian, 22 November): every enemy block hidden from the player through the first minute of the
+	// fight; the film never takes one of their men or tanks as its subject, and still never goes up to an aerial.
+	{
+		LandEye::World Wh = EW;
+		const double HideTo = Contact + 60.0;
+		double HideClock = 0.0;
+		Wh.Hidden = [&Rec, &ES, &HideClock, HideTo](int Block)
+		{
+			const LandFeed::Block* B = Rec.BlockOf(Block);
+			return B && B->Side != ES.Own && HideClock < HideTo;
+		};
+		LandEye::Director Hid;
+		Hid.Begin(Rec, Wh, ES);
+		int OnHidden = 0, Shots = 0, Aerials = 0;
+		const double From = std::max(0.0, Contact - 10.0);
+		for (double B = From; B < std::min(Rec.End, HideTo + 10.0); B += Dt)
+		{
+			HideClock = B;
+			PlaceMovers(B);
+			const LandEye::Pose P = Hid.Update(B, 2000.0 + (B - From), Dt);
+			Shots += P.bCut ? 1 : 0;
+			if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0) ++Aerials;
+			if (P.Subject >= 0 && B < HideTo)
+			{
+				const LandFeed::Block* Bk = Rec.BlockOf(Rec.Tracks[static_cast<size_t>(P.Subject)].Block);
+				if (Bk && Bk->Side != ES.Own) ++OnHidden;
+			}
+		}
+		std::printf("ambush: every enemy block hidden to %.0f s: %d shots, %d frames on a hidden enemy, %d aerials\n", HideTo, Shots, OnHidden, Aerials);
+		if (OnHidden > 0) Fault("the film took a hidden enemy as its subject (it gives the ambush away)");
+		if (Shots < 3) Fault("with the enemy hidden the film hardly cut");
+	}
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.
 	{
@@ -1147,7 +1333,11 @@ int main(int argc, char** argv)
 			{
 				if (T.Fell >= 0.0 && T.Fell < When + 6.0) break;
 				const LandFeed::Spot Sp = LandFeed::SpotAt(T, When);
-				if (CornAt(Sp.X, Sp.Y) > 0.5) { InCorn = static_cast<int>(K); AskAt = When; break; }
+				// (well in it, the corn all round him: at a field's edge the low eye beside him stands on the grass, as
+				// the platoon recording's first man in the corn did)
+				bool bDeep = CornAt(Sp.X, Sp.Y) > 0.5;
+				for (int Q = 0; Q < 8 && bDeep; ++Q) bDeep = CornAt(Sp.X + 2.5 * std::sin(Q * 0.785398), Sp.Y + 2.5 * std::cos(Q * 0.785398)) > 0.5;
+				if (bDeep) { InCorn = static_cast<int>(K); AskAt = When; break; }
 			}
 		}
 		if (InCorn >= 0)
@@ -1161,6 +1351,7 @@ int main(int argc, char** argv)
 				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
 				PlaceMovers(AskAt + F * Dt);
 				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
+				if (std::getenv("LAND_PLAY_CORN") && F % 20 == 0) std::printf("  corn ask frame %d: %s on %d, eye corn %.2f, eye %.2f over the ground, man corn %.2f\n", F, LandEye::NameOf(P.Shot), P.Subject, CornAt(P.Eye.X, P.Eye.Y), P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), CornAt(LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).X, LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(InCorn)], AskAt + F * Dt).Y));
 				if (P.Shot != LandEye::Kind::Low) continue;
 				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
 				if (Corn <= 0.0) continue;

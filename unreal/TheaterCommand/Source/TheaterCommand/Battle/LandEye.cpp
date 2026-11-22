@@ -857,6 +857,7 @@ namespace LandEye
 				if (Tr.bTwin || (Tr.Fell >= 0.0 && Tr.Fell < Battle)) continue;
 				const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
 				if (!B || (B->Kind == "art" && B->Team.empty())) continue; // the batteries stand far back
+				if (HiddenNow(static_cast<int>(I))) continue; // (nor where an ambush lies, as the player does not know it)
 				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
 				if (B->Side == Whose) { Sx += S.X; Sy += S.Y; ++Ns; }
 				else { Ex += S.X; Ey += S.Y; ++Ne; }
@@ -1057,6 +1058,7 @@ namespace LandEye
 			{
 				const Track& Tr = Rec->Tracks[I];
 				if (!Tr.IsVehicle() || Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(Set.ShotLeast + 2.2)) continue;
+				if (HiddenNow(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				Coming = static_cast<int>(I);
@@ -1091,7 +1093,7 @@ namespace LandEye
 				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 				{
 					const Track& Tr = Rec->Tracks[I];
-					if (Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(3.0)) continue;
+					if (Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(3.0) || HiddenNow(static_cast<int>(I))) continue;
 					if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 					Appointed.push_back(static_cast<int>(I));
 					if (!Tr.IsVehicle() && (bTankTurn || Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
@@ -1119,7 +1121,7 @@ namespace LandEye
 					for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 					{
 						const Track& Tm = Rec->Tracks[I];
-						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle) continue;
+						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle || HiddenNow(static_cast<int>(I))) continue;
 						if (Tm.Fell >= 0.0 && Tm.Fell < Battle + Soon(6.0)) continue;
 						const LandFeed::Block* Bm = Rec->BlockOf(Tm.Block);
 						if (!Bm || !Bf || Bm->Side != Bf->Side) continue;
@@ -1146,7 +1148,20 @@ namespace LandEye
 				int Who = -1;
 			};
 			Pick Top[4];
-			const bool bOwnTurn = Roll() < Set.OwnShare;
+			bool bOwnTurn = Roll() < Set.OwnShare;
+			// (the enemy's turn with every enemy hidden from the player, an ambush not found: his own side's instead, not
+			// an aerial for want of a subject)
+			if (!bOwnTurn && Here.Hidden)
+			{
+				bool bEnemySeen = false;
+				for (size_t I = 0; I < Rec->Tracks.size() && !bEnemySeen; ++I)
+				{
+					const Track& Tr = Rec->Tracks[I];
+					const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
+					bEnemySeen = B && B->Side != Set.Own && !Tr.bTwin && Tr.Start() <= Battle && !(Tr.Fell >= 0.0 && Tr.Fell < Battle) && !HiddenNow(static_cast<int>(I));
+				}
+				bOwnTurn = !bEnemySeen;
+			}
 			// A man about to fall draws the camera only as often as a fall is cut to (a crowd has a fall every second or
 			// two; the film shows some, not all, and not one after another).
 			const bool bFallsDue = Real - LastFallCut >= 6.0;
@@ -1166,7 +1181,7 @@ namespace LandEye
 			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 			{
 				const Track& Tr = Rec->Tracks[I];
-				if (!Standing(Tr)) continue;
+				if (!Standing(Tr) || HiddenNow(static_cast<int>(I))) continue;
 				if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
 				const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
 				if (!B) continue;
@@ -1288,6 +1303,22 @@ namespace LandEye
 			}
 			bLoose = false;
 		}
+		// (and still none: from a bank or a rise farther back and higher on one of the men it was going to, a long lens,
+		// where neither a man nor a hedge comes into the lens; the rescue of a shot falling to the aerial mid-fight came
+		// and went with every small change of the field)
+		if (!bPlaced && !bAskedNow && Battle > 12.0 && Battle < Rec->End)
+		{
+			bLoose = true;
+			bNearWatch = false;
+			for (size_t O = 0; O < Options.size() && !bPlaced; ++O)
+			{
+				if (Options[O].Who < 0) continue;
+				for (int V = 4; V < 8 && !bPlaced; ++V) bPlaced = Place(Kind::Watch, Options[O].Who, Battle, V) && Fits(Battle);
+			}
+			for (size_t O = 0; O < Options.size() && !bPlaced; ++O)
+				if (Options[O].Who >= 0) bPlaced = Place(Kind::Watch, Options[O].Who, Battle, 6);
+			bLoose = false;
+		}
 		if (!bPlaced)
 		{
 			bNearWatch = false;
@@ -1347,6 +1378,12 @@ namespace LandEye
 		return Tr.Block == HeroBlock && Tr.K == HeroK && Tr.IsMan();
 	}
 
+	bool Director::HiddenNow(int TrackIndex) const
+	{
+		if (!Rec || !Here.Hidden || TrackIndex < 0 || static_cast<size_t>(TrackIndex) >= Rec->Tracks.size()) return false;
+		return Here.Hidden(Rec->Tracks[static_cast<size_t>(TrackIndex)].Block);
+	}
+
 	int Director::HeavyNear(double X, double Y, double From, double To, double Radius) const
 	{
 		auto First = std::lower_bound(Heavy.begin(), Heavy.end(), From, [this](int I, double T) { return Rec->Rounds[static_cast<size_t>(I)].L < T; });
@@ -1388,6 +1425,12 @@ namespace LandEye
 		// on a tank that had stopped was left as dead 0.2 s before she was knocked out)
 		// (for a moment only: a shot waiting for a tank's end let its own man go lost from the picture for 5 s)
 		const bool bWaiting = WaitFor >= 0.0 && Battle < WaitFor + 0.2 && WaitFor - Battle < Soon(2.5);
+		// (its man gone into hiding from the player, an ambush he has not found: the film does not give it away)
+		if (!bCut && Subject >= 0 && HiddenNow(Subject))
+		{
+			bCut = true;
+			Reason = Why::Gone;
+		}
 		if (!bHeld && !bCut)
 		{
 			if (Shot == Kind::Open && Held > Set.Opening) { bCut = true; Reason = Why::Opening; }
@@ -1443,6 +1486,7 @@ namespace LandEye
 				const Track& Tr = Rec->Tracks[I];
 				if (Tr.IsVehicle() != bVehicles || (!bVehicles && FellAt >= 0.0)) continue;
 				if (Tr.bTwin || Tr.Fell < Battle + Soon(bVehicles ? 0.4 : 1.0) || Tr.Fell > Battle + Soon(2.2)) continue;
+				if (HiddenNow(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				if (!Tr.IsVehicle() && (Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
