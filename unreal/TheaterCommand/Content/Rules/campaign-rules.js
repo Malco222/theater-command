@@ -49438,7 +49438,9 @@
     const strWords = (c2, share) => {
       if (share >= 0.95) return "";
       const sure = see.own || see.ally || see.agent || corpsKnown(s, c2, s.human).level !== "report";
-      return ` · ${sure ? "" : "about "}${Math.round(share * 100)}% strength`;
+      const worth3 = c2.divs * share, about = sure ? "" : "about ";
+      const worthSaid = worth3 >= 0.95 ? String(Math.round(worth3)) : (Math.round(worth3 * 10) / 10).toFixed(1);
+      return ` at ${about}${Math.round(share * 100)}% strength, worth ${about}${worthSaid}`;
     };
     for (const c2 of see.known) {
       const share = glanceStr(s, c2, see);

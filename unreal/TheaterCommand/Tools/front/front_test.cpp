@@ -610,7 +610,8 @@ namespace
 		Check(std::fabs(Half.Share - 0.75f) < 1e-6f, "ink, one second: three quarters across at half a second");
 		Check(!InkPhase(0.69, 1.0).bBorders && InkPhase(0.7, 1.0).bBorders, "ink, one second: the frontier moves at seven tenths");
 		Check(!InkPhase(1.29, 1.0).bOver && InkPhase(1.3, 1.0).bOver, "ink, one second: over at 1.3 (the rim dried)");
-		// The run of this release: a second and a half.
+		// The plan's second and a half ("-TheaterInkSeconds=1.5"; release 2 ran at it until the art director's ruling of
+		// 22 November put the player's own orders back on release 1's second, below).
 		const double Length = 1.5;
 		Check(InkPhase(0.0, Length).Share == 0.0f && InkPhase(Length, Length).Share == 1.0f && InkPhase(9.0, Length).Share == 1.0f, "ink, 1.5 s: nothing at the start, all of it at the end and after");
 		bool bRising = true;
@@ -642,6 +643,21 @@ namespace
 		Check(bWhole, "ink, replay: by the step's last laying the colour has crossed and the frontier band and line have come over");
 		Check(InkFitted(Length, 2.2) == Length && InkFitted(Length, 6.4) == Length, "ink, replay: a raid's or a sinking's long step keeps the whole second and a half");
 		Check(std::fabs(InkFitted(1.0, 0.8) - 0.675) < 1e-9 && InkFitted(0.3, 0.55) == 0.3 && InkFitted(Length, 0.3) == 0.4, "ink, replay: a shorter asked run is never lengthened; nothing under 0.4 s");
+		// The run the game uses now (the art director, 22 November, run 3): a second for the player's own orders, so his
+		// ink is done before he clicks again. The replay's marches and others' battles fit as they did at a second and a
+		// half (0.425 and 0.675 s, the late band at seven tenths of each), and his own 1.3 s step keeps the whole second.
+		const double Own = 1.0;
+		Check(std::fabs(InkFitted(Own, 0.55) - 0.425) < 1e-9 && std::fabs(InkFitted(Own, 0.8) - 0.675) < 1e-9 && InkFitted(Own, 1.3) == Own,
+			"ink, a second: the replay's fitted runs are the same as at a second and a half, and the player's own step keeps the whole second");
+		bool bWholeOwn = true;
+		for (const double Shown : { 0.55, 0.8, 1.3 })
+		{
+			const FInkPhase AtLastLaying = InkPhase(Shown - 0.125, InkFitted(Own, Shown));
+			bWholeOwn &= AtLastLaying.Share == 1.0f && AtLastLaying.Late == 1.0f && AtLastLaying.bBorders;
+		}
+		Check(bWholeOwn, "ink, a second: by each step's last laying the colour has crossed and the frontier has come over");
+		Check(!InkPhase(0.69, Own).bBorders && InkPhase(0.7, Own).bBorders && InkPhase(1.3, Own).bOver,
+			"ink, a second: the late band at seven tenths, and done (the rim dried) by 1.3 s, before the next click");
 	}
 
 	void Wavering()

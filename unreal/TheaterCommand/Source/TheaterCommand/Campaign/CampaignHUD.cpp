@@ -5809,7 +5809,8 @@ namespace
 						.Visibility_Lambda([this]() { return PlatesAway() ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
-							Piece(SNew(SHorizontalBox)
+							// (release 2: remembered, for the room the date strip has on its left: see UpdateFold)
+							Edge(TopDoorsPiece, SNew(SHorizontalBox)
 							// The six doors, on a strip of leather: round and dark, each with its sign engraved in brass.
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 							[
@@ -11293,6 +11294,25 @@ namespace
 				Fold.MoneyText = FText::FromString(Cash(Fold.Money));
 				Fold.NetText = FText::FromString(Cash(Left, true));
 			}
+			// (The art director's read of run 3, 22 November: at 1024 by 768 the doors stood over the strip's treasury,
+			// "13,0". The room is read where the plates stand this frame, in the frame's own measure, as the news line's
+			// is (NoticeGap); where the strip's one line would run under the doors, 12 clear of them, its treasury goes
+			// to a second line under the month. Nothing on it is lost, and at Brian's window it stays one line.)
+			Fold.bTwoRows = false;
+			const FBox2D Doors = InFrame(TopDoorsPiece), Card = InFrame(TopLeftPiece);
+			if (Fold.bFolded && Fold.bTreasury && Doors.bIsValid && Card.bIsValid)
+			{
+				const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+				auto Wide = [&Measure](const FText& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+				// (the strip's own measures: its edge, its sides, the tag's gap and padding, the treasury's gap, sign and spacing)
+				double OneLine = 2.0 + 28.0 + Wide(Fold.DateText, Serif(TEXT("Bold"), 15))
+					+ 16.0 + 20.0 + Wide(Fold.MoneyText, Typed(12.5f, true)) + 8.0 + Wide(Fold.NetText, Typed(12.5f, true));
+				if (Fold.Tips > 0)
+				{
+					OneLine += 12.0 + 14.0 + Wide(Fold.TipsText, Typed(9.5f, true));
+				}
+				Fold.bTwoRows = FMath::Max(OneLine, 382.0) > Doors.Min.X - Card.Min.X - 12.0;
+			}
 		}
 
 		/**
@@ -11305,7 +11325,30 @@ namespace
 		TSharedRef<SWidget> DateStrip()
 		{
 			const FLinearColor Ink600(FColor(92, 80, 64)), GainDeep(FColor(63, 107, 54)), AlarmDeep(FColor(140, 47, 34));
-			return SNew(SBox).MinDesiredWidth(380.0f)
+			// (the treasury, made twice: once at the end of the month's line, once on a second line under it, for a window
+			// too small for one; UpdateFold says which stands)
+			auto Treasury = [this, Ink600, GainDeep, AlarmDeep](bool bSecondLine) -> TSharedRef<SWidget>
+			{
+				return SNew(SHorizontalBox)
+					.Visibility_Lambda([this, bSecondLine]() { return ScreenFold.bTreasury && ScreenFold.bTwoRows == bSecondLine ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+					[
+						SNew(SLineIcon).Kind(12).Size(14.0f).Weight(1.4f).Ink(Ink600)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Font(Typed(12.5f, true))
+						.ColorAndOpacity_Lambda([this, AlarmDeep]() { return FSlateColor(ScreenFold.Money < 0 ? AlarmDeep : DeskInk); })
+						.Text_Lambda([this]() { return ScreenFold.MoneyText; })
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Typed(12.5f, true))
+						.ColorAndOpacity_Lambda([this, GainDeep, AlarmDeep, Ink600]() { return FSlateColor(ScreenFold.Net > 0 ? GainDeep : ScreenFold.Net < 0 ? AlarmDeep : Ink600); })
+						.Text_Lambda([this]() { return ScreenFold.NetText; })
+					];
+			};
+			return SNew(SBox).MinDesiredWidth_Lambda([this]() -> FOptionalSize { return ScreenFold.bTwoRows ? FOptionalSize() : FOptionalSize(380.0f); })
 				.Visibility_Lambda([this]() { return ScreenFold.bFolded ? EVisibility::Visible : EVisibility::Collapsed; })
 				[
 					SNew(SBorder).BorderImage(&DateStripBrush).Padding(FMargin(0.0f))
@@ -11346,25 +11389,13 @@ namespace
 							]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)
 							[
-								SNew(SHorizontalBox)
-								.Visibility_Lambda([this]() { return ScreenFold.bTreasury ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
-								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
-								[
-									SNew(SLineIcon).Kind(12).Size(14.0f).Weight(1.4f).Ink(Ink600)
-								]
-								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-								[
-									SNew(STextBlock).Font(Typed(12.5f, true))
-									.ColorAndOpacity_Lambda([this, AlarmDeep]() { return FSlateColor(ScreenFold.Money < 0 ? AlarmDeep : DeskInk); })
-									.Text_Lambda([this]() { return ScreenFold.MoneyText; })
-								]
-								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
-								[
-									SNew(STextBlock).Font(Typed(12.5f, true))
-									.ColorAndOpacity_Lambda([this, GainDeep, AlarmDeep, Ink600]() { return FSlateColor(ScreenFold.Net > 0 ? GainDeep : ScreenFold.Net < 0 ? AlarmDeep : Ink600); })
-									.Text_Lambda([this]() { return ScreenFold.NetText; })
-								]
+								Treasury(false)
 							]
+						]
+						// (a small window: the treasury on a line of its own under the month)
+						+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(14.0f, -2.0f, 14.0f, 7.0f))
+						[
+							Treasury(true)
 						]
 					]
 				];
@@ -16663,6 +16694,7 @@ namespace
 		TSharedPtr<SVerticalBox> AdviserSteps;
 		int32 ShownAdviser = -1;
 		TSharedPtr<SHorizontalBox> WatchStrip;
+		TWeakPtr<SWidget> TopDoorsPiece; // (release 2) the doors, the guide and the menu, and the end of the month: the date strip keeps clear of them
 		TWeakPtr<SWidget> TopLeftPiece; // the calendar plate, and
 		TArray<TWeakPtr<SWidget>> TopChips; // the chips down the right: the news line keeps between them
 		/**
@@ -16679,6 +16711,7 @@ namespace
 			bool bGlance = false; // THIS MONTH stands
 			bool bEndLesson = false; // FIRST COMMAND's note on ending the month is up: the rear chip it names stands whole
 			bool bTreasury = false; // there is a treasury for the strip
+			bool bTwoRows = false; // the strip's one line would run under the doors (a small window): its treasury goes under the month
 			int32 Turn = INDEX_NONE; // the month these were worked out for: a new month folds again what the last one opened
 			int32 Tone[5] = { 0, 0, 0, 0, 0 }; // (ruling 161) the tone of each of the five rows the column can show
 			int32 Tips = -1; // the chief's plain tips, folded away

@@ -11594,11 +11594,12 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	}
 	InkBegan = Now;
 	{
-		// (release 2, the front you can read: "-TheaterInkSeconds=1.0" runs the ink in that many seconds, for the art
-		// director to set beside the plan's second and a half)
-		static float AskedSeconds = 1.5f;
+		// (release 2, the front you can read: the player's own ink crosses in a second, release 1's, as the art director
+		// ruled on 22 November after run 3, so that an order's ink is done before he clicks the next; the plan's second
+		// and a half ran on under his next click. "-TheaterInkSeconds=1.5" runs it in that many seconds, for a picture.)
+		static float AskedSeconds = 1.0f;
 		static const bool bAskedSeconds = FParse::Value(FCommandLine::Get(), TEXT("TheaterInkSeconds="), AskedSeconds);
-		InkSeconds = bAskedSeconds ? FMath::Clamp(AskedSeconds, 0.2f, 5.0f) : 1.5f;
+		InkSeconds = bAskedSeconds ? FMath::Clamp(AskedSeconds, 0.2f, 5.0f) : 1.0f;
 		InkBeganFrame = GFrameCounter; // (in the month's replay the step shortens it to fit: see FitInk)
 	}
 	InkBox = FIntRect(I0, J0, I1, J1);
@@ -11618,8 +11619,8 @@ void ACampaignMapActor::StepInk(double Second)
 	// (It takes a second to cross a province, quick at first and slowing; the frontier's band and the paint of the
 	// ground beside it come to their new place in the last three tenths of it; the wet rim behind the front dries
 	// in three tenths more.)
-	// (release 2, the front you can read: the run takes InkSeconds, a second and a half, "-TheaterInkSeconds=1.0" for
-	// the brief's one; the shares are worked out in Campaign/FrontLine.cpp, InkPhase, where they are tested)
+	// (release 2, the front you can read: the run takes InkSeconds, a second, "-TheaterInkSeconds=1.5" for the plan's
+	// second and a half; the shares are worked out in Campaign/FrontLine.cpp, InkPhase, where they are tested)
 	const TheaterFront::FInkPhase Phase = TheaterFront::InkPhase(Second, InkSeconds);
 	const float Late = Phase.Late;
 	const float Dry = Phase.Dry;
@@ -11693,7 +11694,9 @@ void ACampaignMapActor::FitInk(double Seconds)
 	// The month's replay shows each step for a moment (0.55 s for marches, 0.8 for others' fighting, 1.3 for the
 	// player's own) and the next step that moves ground ends the ink still running (SetHolders, EndInk). Left at a
 	// second and a half, a 0.8 s step was cut with a fifth of the province and the whole frontier band still to come,
-	// and the frontier's line not yet moved. The ink this step began is fitted into its moment instead.
+	// and the frontier's line not yet moved. The ink this step began is fitted into its moment instead. (At the
+	// second the player's own ink now takes, the fitted runs are the same: 0.425 s for a march, 0.675 for others'
+	// fighting, and the whole second for his own, as the art director asked on 22 November.)
 	if (InkRuns.Num() > 0 && InkBeganFrame == GFrameCounter)
 	{
 		InkSeconds = static_cast<float>(TheaterFront::InkFitted(InkSeconds, Seconds));
@@ -17247,7 +17250,7 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 		}
 	}
 	DrawWatchEdge(CameraDistance);
-	KeepPickedEdge(CameraDistance);
+	KeepEdgeWidth(CameraDistance);
 }
 
 void ACampaignMapActor::SetWatchEdge(int32 RegionId)
@@ -17469,45 +17472,52 @@ void ACampaignMapActor::RebuildHighlight()
 	const float Moon = FMath::Clamp(GetMoonlight(), 0.0f, 1.0f);
 	HighlightMoon = Moon;
 	auto ByMoon = [Moon](const FLinearColor& Day, const FLinearColor& Night) { return FMath::Lerp(Day, Night, Moon); };
+	// (The mesh's colours reach this paint as plain light and it brightens them 1.6 times, so the kit's colours, which
+	// are screen colours, are turned to light and taken down by that much first; by moonlight they are dimmer. Both
+	// edges are drawn in pixels: KeepEdgeWidth draws them again as the eye rises or comes down.)
+	auto KitInk = [](const FColor& Screen, float Share, float Opacity)
+	{
+		FLinearColor Light = FLinearColor(Screen) * (Share / 1.6f);
+		Light.A = Opacity;
+		return Light;
+	};
+	const FColor Brass300(224, 184, 114), Paper100(237, 230, 214), Desk950(14, 11, 8);
+	const double Pixel = 0.00037 * (EdgeWidthAt > 0.0f ? EdgeWidthAt : 4000.0f) / UnitScale;
+	const FLinearColor UnderStroke = ByMoon(KitInk(Desk950, 1.0f, 0.7f), KitInk(Desk950, 1.0f, 0.55f));
 	// (with an agent in hand the province pointed at wears the edge of the ground he would watch, and not this pale wash)
-	// (Release 2: drawn first, in sections 0 and 1, so that on the side it shares with the picked province its wide pale
-	// edge lies under the picked one's thin brass line and does not cover it: one mesh draws its sections in order.)
+	// (Release 2: drawn first, in sections 0 and 1, so that on the side it shares with the picked province its edge
+	// lies under the picked one's brass line and does not cover it: one mesh draws its sections in order.)
+	// (Release 2, the art director's read of run 3, 22 November: the edge under the pointer was about six pixels of
+	// near white, the loudest line on the map whenever the pointer moved, louder than the pick. It is now paper-100, two
+	// pixels at six tenths, over the picked edge's own dark under-stroke: quieter than the pick, and the same make.)
 	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion && WatchRegion == INDEX_NONE)
 	{
 		AddRegionOverlay(HoveredRegion, ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.12f), FLinearColor(0.5f, 0.56f, 0.68f, 0.07f)),
-			ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), FLinearColor(0.5f, 0.56f, 0.68f, 0.42f)), 0);
+			ByMoon(KitInk(Paper100, 1.0f, 0.6f), KitInk(Paper100, 0.6f, 0.5f)), 0,
+			1.0 * Pixel, UnderStroke, 2.0 * Pixel);
 	}
 	if (SelectedRegion != INDEX_NONE)
 	{
 		// (a light wash and a bright edge: the ground keeps the colour of whoever holds it while it is picked)
 		// (Release 2, the art director's read of run 2, 22 November: mend 9. The edge was a thick line of near white, the
 		// loudest line on the map. It is now brass-300, two pixels wide from any height, over a dark under-stroke a pixel
-		// wider each side, as the town plate's lit edge is: KeepPickedEdge draws it again as the eye rises or comes down.
-		// The mesh's colours reach this paint as plain light and it brightens them 1.6 times, so the kit's colours, which
-		// are screen colours, are turned to light and taken down by that much first; by moonlight the brass is dimmer.)
-		auto KitInk = [](const FColor& Screen, float Share, float Opacity)
-		{
-			FLinearColor Light = FLinearColor(Screen) * (Share / 1.6f);
-			Light.A = Opacity;
-			return Light;
-		};
-		const FColor Brass300(224, 184, 114), Desk950(14, 11, 8);
-		const double Pixel = 0.00037 * (PickedEdgeAt > 0.0f ? PickedEdgeAt : 4000.0f) / UnitScale;
+		// wider each side, as the town plate's lit edge is.)
 		AddRegionOverlay(SelectedRegion, ByMoon(FLinearColor(1.0f, 0.82f, 0.42f, 0.11f), FLinearColor(0.62f, 0.56f, 0.4f, 0.07f)),
 			ByMoon(KitInk(Brass300, 1.0f, 1.0f), KitInk(Brass300, 0.7f, 0.9f)), 2,
-			1.0 * Pixel, ByMoon(KitInk(Desk950, 1.0f, 0.7f), KitInk(Desk950, 1.0f, 0.55f)), 2.0 * Pixel);
+			1.0 * Pixel, UnderStroke, 2.0 * Pixel);
 	}
 }
 
-void ACampaignMapActor::KeepPickedEdge(float CameraDistance)
+void ACampaignMapActor::KeepEdgeWidth(float CameraDistance)
 {
-	// (the picked province's edge is two pixels wide from any height: drawn again when the eye has risen or come down by a twelfth)
-	if (SelectedRegion == INDEX_NONE || !HighlightMesh || CameraDistance <= 0.0f
-		|| (PickedEdgeAt > 0.0f && FMath::Abs(CameraDistance - PickedEdgeAt) < 0.085f * PickedEdgeAt))
+	// (the edges of the picked province and of the one under the pointer are two pixels wide from any height: drawn
+	// again when the eye has risen or come down by a twelfth)
+	if ((SelectedRegion == INDEX_NONE && HoveredRegion == INDEX_NONE) || !HighlightMesh || CameraDistance <= 0.0f
+		|| (EdgeWidthAt > 0.0f && FMath::Abs(CameraDistance - EdgeWidthAt) < 0.085f * EdgeWidthAt))
 	{
 		return;
 	}
-	PickedEdgeAt = CameraDistance;
+	EdgeWidthAt = CameraDistance;
 	RebuildHighlight();
 }
 

@@ -880,8 +880,8 @@ private:
 	int32 WatchRegion = INDEX_NONE;
 	float WatchDrawnAt = -1.0f; // the eye's distance the edge was last drawn for: its line is two pixels wide from any height
 	void DrawWatchEdge(float CameraDistance);
-	float PickedEdgeAt = -1.0f; // the eye's distance the picked province's edge was last drawn for: two pixels from any height
-	void KeepPickedEdge(float CameraDistance);
+	float EdgeWidthAt = -1.0f; // the eye's distance the picked and pointed-at provinces' edges were last drawn for: two pixels from any height
+	void KeepEdgeWidth(float CameraDistance);
 	/**
 	 * (The art director's round 38.) Where a cut province's lamp, board and post stand: on the longest stretch of its
 	 * own track, halfway between the town's last house and the border, clear of where its army stands.
@@ -1273,7 +1273,7 @@ private:
 	void ForgetBorderEdges(const FBox2D& Box);
 	double InkBegan = 0.0, PaintStepped = 0.0;
 	// ---- (release 2, the front you can read) ----
-	float InkSeconds = 1.5f; // how long ink takes to cross a province ("-TheaterInkSeconds=1.0" for release 1's second)
+	float InkSeconds = 1.0f; // how long ink takes to cross a province: release 1's second, the art director's ruling of 22 November (run 3); "-TheaterInkSeconds=1.5" for the plan's second and a half
 	uint64 InkSkipFrame = 0; // (the frame in which the player cut the month's replay short: see SkipInk)
 	uint64 InkBeganFrame = 0; // (the frame in which the last run of ink began: see FitInk)
 	// ---- (end release 2, the front you can read) ----

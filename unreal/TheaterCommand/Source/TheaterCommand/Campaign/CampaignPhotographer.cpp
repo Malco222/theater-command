@@ -2157,6 +2157,19 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 				ClipAt = Clock + ClipEvery;
 			}
 		}
+		// (Release 2, the art director's read of run 3, 22 November: "-TheaterConfirm" sends in the order the first
+		// picture shows, "-TheaterArmy=Farther Pomerania -TheaterOrderTo=Pomorze", the moment that picture is taken, and
+		// puts its result card away, so that a clip made with it starts on the player's own order taking a province,
+		// outside the month's replay: the ink spreading from the side it was taken from, at the second it takes.)
+		if (Current == 0 && FParse::Param(FCommandLine::Get(), TEXT("TheaterConfirm")))
+		{
+			if (ACampaignPlayerController* Sender = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController()))
+			{
+				Sender->ConfirmAttack();
+				Sender->CloseFaceOff();
+				UE_LOG(LogTheater, Display, TEXT("Photographer: the order is sent in, its result card put away"));
+			}
+		}
 	}
 	if (bTaken && Current == 0 && ClipTaken < ClipFrames && Clock >= ClipAt)
 	{

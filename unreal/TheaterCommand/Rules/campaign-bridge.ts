@@ -1110,10 +1110,15 @@ function glanceShelves(s: Game, id: number) {
   const garrison: { kind: string; sign: string; name: string; line: string; share: number; id: number }[] = [];
   // (The Mac pictures of 22 November: the header counts divisions at their strength, "1 div", while First Army's card
   // said "2 divisions" at half strength. A corps under strength says so on its card, so the two agree.)
+  // (The art director's read of run 3, 22 November: Tula's header said "2 div" over a corps of "3 divisions · 71%
+  // strength", two counts side by side. The card now counts the header's way too: "3 divisions at 71% strength,
+  // worth 2", the worth being what the header adds up, divisions times strength. A worth under one is said to a tenth.)
   const strWords = (c: Corps, share: number): string => {
     if (share >= 0.95) return '';
     const sure = see.own || see.ally || see.agent || corpsKnown(s, c, s.human).level !== 'report';
-    return ` \u00B7 ${sure ? '' : 'about '}${Math.round(share * 100)}% strength`;
+    const worth = c.divs * share, about = sure ? '' : 'about ';
+    const worthSaid = worth >= 0.95 ? String(Math.round(worth)) : (Math.round(worth * 10) / 10).toFixed(1);
+    return ` at ${about}${Math.round(share * 100)}% strength, worth ${about}${worthSaid}`;
   };
   for (const c of see.known) {
     const share = glanceStr(s, c, see);
