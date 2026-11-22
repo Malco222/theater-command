@@ -11,6 +11,8 @@
   },
   "_stores": "Each crew's own stores, in months, from the month the supply picture cuts it off (the design director's 06:41Z, on the historian's 06:50Z addendum to fortress-garrisons-by-line.md): its organisation falls by 1 / stores a month, and it does not waste by strength while they last. A port fed by sea is not cut off. null: no stores clock; the row yields only with its army. A row not named takes storesDefault, marked judgment. The historian's point: no works line yielded because its food ran out while its army still fought; stores are a ceiling, and holds ended by orders, the army's yield, assault, or shells and water.",
   "storesDefault": 3,
+  "_crewXp": "A fortress crew's experience (the design director's 11:56Z of 22 November 2026, on the historian's fortress-storm-rows.md): trained, not green. The record's crews were full-time specialist cadres with reservists from the district, trained on their own works though untried in battle; every nation's fortress troops are read by that same test, the book's rows here and the first-day rows of setup-1939.json and far-world.json alike. 0.25 is the setup's own figure for a trained formation of 1939 (France's active 1st and 7th Armies; the card's word for 0.2 to 0.45 is trained). A crew that has more keeps it, and drafts into a crew come in at this figure, not the depots' green. Nothing is set for a storm: the attackers fight at whatever their own corps carry.",
+  "crewXp": 0.25,
   "stores": {
     "FRA:Metz fortified region": {
       "months": 3,

@@ -85,6 +85,14 @@ export type FortRow = [number, string, string, string, number, FortOpts];
 
 export const FORT_ROWS: FortRow[] = (data as unknown as { rows: FortRow[] }).rows;
 
+/** A fortress crew's experience (the design director's 11:56Z): trained, every nation's alike (fortrows.json crewXp). */
+export const FORT_XP: number = (data as unknown as { crewXp: number }).crewXp;
+
+/** As the campaign opens with the rows on: the crews already on the roster (setup-1939.json's first day) are trained. */
+export function trainCrews(g: Game): void {
+  for (const c of g.corps) if (!c.dead && c.kind === 'fort') c.xp = Math.max(c.xp, FORT_XP);
+}
+
 /** A row's shape: up to one division's worth is one division at that strength; more, two divisions at half it. */
 export function fortShape(worth: number): { divs: number; str: number } {
   const divs = worth > 1 ? 2 : 1;

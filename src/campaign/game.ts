@@ -2,7 +2,7 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
-import { crewFed, crewMonth, fortsMonth, portStores } from './fortrows';
+import { FORT_XP, crewFed, crewMonth, fortsMonth, portStores } from './fortrows';
 import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
@@ -169,6 +169,8 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   };
   if (o.airborne) c.airborne = true;
   if (o.stay) c.stay = true;
+  // A fortress crew is trained, never green, every nation's alike (fortrows.json crewXp; the fortress rows' switch).
+  if (kind === 'fort' && fortRows(g)) c.xp = Math.max(c.xp, FORT_XP);
   // The fullest the row ever gets (the planner's paper 18, ruled 16:32Z on 17 November 2026): a garrison of a brigade
   // is a row of one division that never fills past its own size, for player and computer alike.
   if (o.est !== undefined && o.est < 1) c.full = o.est;

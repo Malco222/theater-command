@@ -14,7 +14,8 @@ import budget from '../../data/campaign/budget.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { clamp } from '../core/math';
-import { DESERT, EASTERN, allied, atWar, headline, relocate, weather, roomless } from './game';
+import { DESERT, EASTERN, allied, atWar, fortRow, headline, relocate, weather, roomless } from './game';
+import { FORT_XP } from './fortrows';
 import { gainXp, generalOf } from './commanders';
 import { DIPLOMACY } from './diplomacy';
 import {
@@ -551,7 +552,9 @@ export function drafted(g: Game, c: Corps, before: number, add: number): void {
   if (c.nat !== g.human || add <= 0) return;
   const w = add * STORIES.veterans.dilute;
   const was = c.xp;
-  c.xp = (c.xp * before + training(g, c.nat) * w) / (before + w);
+  // (A fortress crew's drafts come from its own depots, trained as the crew is: fortrows.json crewXp, under the switch.)
+  const at = fortRow(g, c) ? Math.max(training(g, c.nat), FORT_XP) : training(g, c.nat);
+  c.xp = (c.xp * before + at * w) / (before + w);
   const fresh = add / (before + add);
   if (fresh >= 0.2 && was >= 0.4) {
     note(g, c, 'drafts', c.reg, Math.round(fresh * 100));

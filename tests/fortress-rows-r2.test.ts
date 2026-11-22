@@ -7,12 +7,13 @@ import setup from '../data/campaign/setup-1939.json';
 import farWorld from '../data/campaign/far-world.json';
 import stage from '../data/campaign/stage.json';
 import { orderCorps, specOf } from '../src/campaign/economy';
-import { FORT_ROWS, crewFed, crewMonth, crewStores, fortShape, fortsMonth, storesEaten, storesLeft } from '../src/campaign/fortrows';
+import { FORT_ROWS, FORT_XP, crewFed, crewMonth, crewStores, fortShape, fortsMonth, storesEaten, storesLeft } from '../src/campaign/fortrows';
 import { DESERT, GUNS, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
 import { menLeft } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { SIEGE, besieged, breach, garrisonOf, housed, joinTown, siegeSupply, sortiePower, storm, townBonus } from '../src/campaign/siege';
 import { corpsMood } from '../src/campaign/morale';
+import { drafted, training } from '../src/campaign/stories';
 import { ENGINEERING } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
 import { FORTS_STAGE } from '../src/campaign/stage';
@@ -31,6 +32,8 @@ const row = (g: Game, nat: string, name: string): Corps | undefined => g.corps.f
 const worth = (c: Corps): number => c.divs * c.str;
 /** Takes every corps but those `keep` names out of a province. */
 const clear = (g: Game, r: Region, keep: (c: Corps) => boolean = () => false): void => { for (const c of [...r.units]) if (!keep(c)) removeCorps(g, c); };
+/** Off, the crews at the experience they have on (11:56Z), so that an on-off comparison reads the rule under test alone. */
+const sameCrews = (g: Game): Game => { for (const c of g.corps) if (c.kind === 'fort') c.xp = Math.max(c.xp, FORT_XP); return g; };
 /** Release 1's fortress rows, on the first day of every 1939 campaign. */
 const R1 = ['Metz fortified region', 'Lauter fortified region', 'Montmedy sector', 'Gibraltar garrison'];
 
@@ -169,7 +172,7 @@ describe('room: fortress troops take no place among the five', () => {
  * ready in Baden (head-on) and in Lorraine (from behind: French ground the works do not face).
  */
 function alsace(on: boolean, rows = false): { g: Game; target: Region; front: Corps[]; behind: Corps[] } {
-  const g = open(on);
+  const g = sameCrews(open(on));
   setWar(g, 'GER', 'FRA');
   const target = g.byName.Alsace;
   clear(g, target, (u) => u.kind === 'fort' && (rows || u.name === 'Lauter fortified region'));
@@ -394,7 +397,7 @@ describe('(b) amended, the storm (07:36Z): a crew in its works fights from them 
    * guard out of action (so the garrison is the whole defence), and a German storm force in the field round it.
    */
   function metz(on: boolean, guns = false): { g: Game; town: Region; crew: Corps; force: Corps[] } {
-    const g = open(on);
+    const g = sameCrews(open(on));
     setWar(g, 'GER', 'FRA');
     const town = g.byName.Lorraine;
     const crew = row(g, 'FRA', 'Metz fortified region')!;
@@ -478,3 +481,42 @@ describe('(b) amended, the storm (07:36Z): a crew in its works fights from them 
   });
 });
 
+
+describe("the crews are trained, not green (the design director's 11:56Z)", () => {
+  const trained = (xp: number): boolean => xp >= 0.2 && xp < 0.45;
+
+  it("every nation's crews read trained with the rows on, release 1's four and the book's alike; off, release 1's stay as they were", () => {
+    expect(trained(FORT_XP)).toBe(true);
+    const g = open(true);
+    const crews = g.corps.filter((c) => !c.dead && c.kind === 'fort');
+    expect(new Set(crews.map((c) => c.nat)).size).toBeGreaterThan(3);
+    for (const name of R1) expect(crews.some((c) => c.name === name)).toBe(true);
+    for (const c of crews) expect(trained(c.xp)).toBe(true);
+    if (FORTS_STAGE) return; // (a run with TC_FORTS set opens every campaign with the rows on)
+    const off = open(false);
+    for (const name of R1) expect(row(off, name === 'Gibraltar garrison' ? 'UK' : 'FRA', name)!.xp).toBe(0.15);
+  });
+
+  it('a row formed later in the war is trained too, and a corps of any other kind is not touched', () => {
+    const g = open(true);
+    const late = addCorps(g, 'SOV', 'Test fortified region', 'fort', 1, 'Minsk', { hold: 1 });
+    expect(late.xp).toBe(FORT_XP);
+    const field = addCorps(g, 'GER', 'Storm Corps', 'inf', 3, 'Lorraine', {});
+    expect(field.xp).toBe(0.15);
+    const keeps = addCorps(g, 'FRA', 'Veteran works', 'fort', 1, 'Lorraine', { xp: 0.6 });
+    expect(keeps.xp).toBe(0.6);
+  });
+
+  it("the player's crew takes its drafts at the crew's figure; his field corps still take the depots' green", () => {
+    const g = open(true);
+    g.human = 'FRA';
+    const crew = row(g, 'FRA', 'Metz fortified region')!;
+    const field = row(g, 'FRA', '3rd Army')!;
+    field.xp = crew.xp = FORT_XP;
+    drafted(g, crew, 0.5, 0.5);
+    drafted(g, field, 0.5, 0.5);
+    expect(crew.xp).toBeCloseTo(FORT_XP, 9);
+    expect(field.xp).toBeLessThan(FORT_XP);
+    expect(field.xp).toBeGreaterThan(training(g, 'FRA'));
+  });
+});
