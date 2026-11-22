@@ -87,8 +87,15 @@ struct FLandGeneralShown
 	double PointerX = -1.0, PointerY = -1.0;
 	int Hover = -1;
 	std::string Would;
-	/** An order armed by a button: the next click goes at the double ("double") or fires on what it is on ("fire"). */
+	/** An order armed by a button: the next click goes at the double ("double"), fires on what it is on ("fire"), cuts a
+	 * gap in the hedge there with the cutters in hand ("gap") or lays smoke there, or along a line dragged ("smoke"). */
 	std::string Armed;
+	/** Hedge cutters armed, the pointer near a hedge: where on it the gap would be cut (on the screen). */
+	bool bGapAt = false;
+	double GapAtX = 0.0, GapAtY = 0.0;
+	/** Smoke armed and a line dragged: its two ends on the screen. */
+	bool bSmoke = false;
+	double SmokeEnds[4] = { 0, 0, 0, 0 };
 	/** Where he last gave an order (on the field, and on the screen this frame) and when (real seconds), for the mark
 	 * that answers his click at once. */
 	double PingFieldX = 0.0, PingFieldY = 0.0, PingX = 0.0, PingY = 0.0, PingAt = -10.0;

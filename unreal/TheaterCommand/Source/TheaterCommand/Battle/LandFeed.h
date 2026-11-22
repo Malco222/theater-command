@@ -180,6 +180,10 @@ namespace LandFeed
 		/** Firing into cover at a point to flush out what hides there (reconnaissance by fire), and the point. */
 		bool bSearch = false;
 		double SearchX = 0.0, SearchY = 0.0;
+		/** His own blocks' tools (Brian, 22 November 14:19Z; the rules say, on his own blocks only): a Sherman with hedge
+		 * cutters that can punch a gap at a hedge point he picks; and the smoke a section can still lay (-1 none said). */
+		bool bCutter = false;
+		int Smoke = -1;
 		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
 		 * path's corners. Empty kind: no order. */
 		std::string OrderKind;

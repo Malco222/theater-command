@@ -527,7 +527,13 @@ private:
 	/** How far a click reaches on the ground at a pixel, metres (some 24 pixels' worth there). */
 	double ReachAt(const FVector2D& Pixel) const;
 	/** The order in hand given (TC.landOrder's command): sent, shown at once, and the click answered on the screen. */
-	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY);
+	/** Only: the blocks it goes to, where not all those in hand (the cutter alone, those with smoke). */
+	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY, const TArray<int32>& Only = TArray<int32>());
+	/** Hedge cutters: the point on a hedge (a hedgerow, a lane's bank, a garden's) within Reach of (X, Y) where a gap would
+	 * be cut; false none so near. */
+	bool HedgeNear(double X, double Y, double Reach, double& OutX, double& OutY) const;
+	/** Smoke on call: those in hand with smoke lay it from (X0, Y0) to (X1, Y1). */
+	void GiveSmoke(double X0, double Y0, double X1, double Y1);
 
 	// ---- The general's walk pressed in code (LandBattleCommand.cpp, its choices LandScript.h) ----
 	/** "-TheaterLandScript=<folder>": for a builder with no hand on the mouse, his steps pressed through his own pointer

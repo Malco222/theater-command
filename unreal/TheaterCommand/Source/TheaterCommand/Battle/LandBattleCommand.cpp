@@ -50,6 +50,9 @@ namespace
 	constexpr double DragPixels = 6.0;
 	/** A second click this soon (real seconds) and this near (pixels) where an order went sends them at the double. */
 	constexpr double TwiceSeconds = 0.4, TwicePixels = 12.0;
+	/** Half a smoke screen laid at a click, metres (a platoon's 2-inch mortars and grenades screen a front of about 150 m;
+	 * a line dragged sets its own). */
+	constexpr double SmokeHalfWidth = 80.0;
 
 	/** Whether the rules' cell under a place is woods (a block standing there at the start is hidden). */
 	bool WoodsAt(const LandFeed::Field& F, double X, double Y)
@@ -335,7 +338,7 @@ void ALandBattle::ShowGeneral()
 			continue;
 		}
 		// His orders' routes: those in hand, and those he has taken in hand (his staff's own are not drawn: too many).
-		if (!T.bMine || T.OrderKind.empty() || T.OrderKind == "hold" || (!T.bChosen && T.Says == LandCommand::Chip::Staff))
+		if (!T.bMine || T.OrderKind.empty() || T.OrderKind == "hold" || T.OrderKind == "smoke" || (!T.bChosen && T.Says == LandCommand::Chip::Staff))
 		{
 			continue;
 		}
@@ -533,6 +536,12 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 		const int32 Mine = On ? (On->bOrderable ? OnTag : -1) : bGround ? Clip.MineAt(X, Y, Reach * 0.5) : -1;
 		const int32 Foe = On ? (!On->bMine ? OnTag : -1) : bGround ? Clip.EnemyAt(X, Y, Reach) : -1;
 		const std::vector<int> Hand = Clip.Chosen();
+		G.bGapAt = false;
+		// (an armed tool no one in hand still has, put down)
+		if ((G.Armed == "gap" && Clip.Cutter() < 0) || (G.Armed == "smoke" && Clip.Smokers().empty()))
+		{
+			G.Armed.clear();
+		}
 		if (Clip.Deploying())
 		{
 			G.Would = Mine >= 0 ? "DRAG TO MOVE IT" : "";
@@ -544,6 +553,20 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 		else if (Hand.empty())
 		{
 			G.Would = "";
+		}
+		else if (G.Armed == "gap")
+		{
+			// (the cutters: the gap snaps to the hedge nearest the pointer, shown where it would be cut)
+			double Gx = 0.0, Gy = 0.0;
+			FVector2D At;
+			G.bGapAt = bGround && HedgeNear(X, Y, FMath::Max(Reach, 30.0), Gx, Gy) && PixelOf(Gx, Gy, 0.8, At);
+			G.GapAtX = At.X;
+			G.GapAtY = At.Y;
+			G.Would = !bGround ? "" : G.bGapAt ? "CUT A GAP HERE" : "NO HEDGE HERE";
+		}
+		else if (G.Armed == "smoke")
+		{
+			G.Would = bGround ? "LAY SMOKE HERE, OR DRAG ITS LINE" : "";
 		}
 		else if (Foe >= 0)
 		{
@@ -589,6 +612,16 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 				G.Corners[K * 2 + 1] = P.Y;
 			}
 		}
+	}
+	else if (GeneralButton == 0 && G.Armed == "smoke")
+	{
+		// (smoke armed: the left drag draws the smoke's line on the ground, not a box)
+		double X0 = 0.0, Y0 = 0.0;
+		G.bSmoke = bGround && GroundUnder(GeneralDownAt, X0, Y0);
+		G.SmokeEnds[0] = GeneralDownAt.X;
+		G.SmokeEnds[1] = GeneralDownAt.Y;
+		G.SmokeEnds[2] = Pixel.X;
+		G.SmokeEnds[3] = Pixel.Y;
 	}
 	else if (GeneralButton == 0)
 	{
@@ -637,8 +670,8 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	GeneralButton = -1;
 	bGeneralMoved = false;
 	GeneralCarry = -1;
-	const bool bBox = G.bBox, bLine = G.bLine;
-	G.bBox = G.bLine = G.bCarry = false;
+	const bool bBox = G.bBox, bLine = G.bLine, bSmokeLine = G.bSmoke;
+	G.bBox = G.bLine = G.bCarry = G.bSmoke = false;
 	G.Ghosts.clear();
 	double X = 0.0, Y = 0.0;
 	const bool bGround = GroundUnder(Pixel, X, Y);
@@ -658,6 +691,16 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 		{
 			S.Note = "IT MUST STAND ON YOUR OWN GROUND";
 			S.NoteAge = 0.0;
+		}
+		return;
+	}
+	// Smoke armed, a line dragged: those in hand with smoke lay it along the line.
+	if (Button == 0 && bMoved && bSmokeLine)
+	{
+		double X0 = 0.0, Y0 = 0.0;
+		if (bGround && GroundUnder(DownAt, X0, Y0))
+		{
+			GiveSmoke(X0, Y0, X, Y);
 		}
 		return;
 	}
@@ -726,6 +769,56 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 		}
 		return;
 	}
+	// (the cutters armed: the tank with them goes to the hedge nearest the click and punches a gap in it; Brian, 22
+	// November 14:19Z)
+	if (G.Armed == "gap" && bGround)
+	{
+		double Gx = 0.0, Gy = 0.0;
+		const int Cutter = Clip.Cutter();
+		if (Cutter < 0 || !HedgeNear(X, Y, FMath::Max(Reach, 30.0), Gx, Gy))
+		{
+			S.Note = Cutter < 0 ? "NO TANK WITH HEDGE CUTTERS IN HAND" : "CLICK ON A HEDGE TO CUT A GAP IN IT";
+			S.NoteAge = 0.0;
+			return;
+		}
+		GiveGeneral(WideOf(Clip.Cut(Gx, Gy)), TEXT("gap"), -1, { FVector2D(Gx, Gy) }, Gx, Gy, { Cutter });
+		G.Armed.clear();
+		G.bGapAt = false;
+		return;
+	}
+	// (smoke armed, a click: a screen across the front at the point, square to the way those laying it look at it)
+	if (G.Armed == "smoke" && bGround)
+	{
+		double Cx = 0.0, Cy = 0.0;
+		const std::vector<int> Layers = Clip.Smokers();
+		for (int Id : Layers)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Id);
+			Cx += T ? T->X : X;
+			Cy += T ? T->Y : Y;
+		}
+		if (!Layers.empty())
+		{
+			Cx /= static_cast<double>(Layers.size());
+			Cy /= static_cast<double>(Layers.size());
+		}
+		double Dx = X - Cx, Dy = Y - Cy;
+		const double Long = FMath::Sqrt(Dx * Dx + Dy * Dy);
+		if (Long < 1.0)
+		{
+			// (on top of them: across the field, facing the enemy's side)
+			Dx = 0.0;
+			Dy = Clip.Side() == 1 ? -1.0 : 1.0;
+		}
+		else
+		{
+			Dx /= Long;
+			Dy /= Long;
+		}
+		const double Half = SmokeHalfWidth;
+		GiveSmoke(X + Dy * Half, Y - Dx * Half, X - Dy * Half, Y + Dx * Half);
+		return;
+	}
 	const int32 Foe = On ? (!On->bMine ? OnTag : -1) : bGround ? Clip.EnemyAt(X, Y, Reach) : -1;
 	if (Foe >= 0)
 	{
@@ -780,7 +873,7 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	G.Armed.clear();
 }
 
-void ALandBattle::GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY)
+void ALandBattle::GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY, const TArray<int32>& Only)
 {
 	if (Command.IsEmpty() || !State.IsValid() || !Live.IsValid())
 	{
@@ -789,6 +882,10 @@ void ALandBattle::GiveGeneral(const FString& Command, const FString& Kind, int32
 	FLandBattleState& S = *State;
 	FLandGeneralShown& G = S.General;
 	std::vector<int> Ids = G.Clipboard.Chosen();
+	if (Only.Num() > 0)
+	{
+		Ids.assign(Only.GetData(), Only.GetData() + Only.Num());
+	}
 	if (Kind == TEXT("staff"))
 	{
 		Ids.erase(std::remove_if(Ids.begin(), Ids.end(), [&G](int Id) { const LandCommand::Tag* T = G.Clipboard.TagOf(Id); return !T || !T->bTaken; }), Ids.end());
@@ -807,11 +904,54 @@ void ALandBattle::GiveGeneral(const FString& Command, const FString& Kind, int32
 		At.push_back({ P.X, P.Y });
 	}
 	// (shown on its tags until the screen reaches the views that carry it: the rules' time now, a piece and a view on)
-	G.Clipboard.Sent(Ids, Kind == TEXT("fire") ? std::string("attack") : NarrowOf(Kind), At, Target, S.Rec.Fought + 2.0);
+	G.Clipboard.Sent(Ids, Kind == TEXT("fire") ? std::string("attack") : Kind == TEXT("gap") ? std::string("move") : NarrowOf(Kind), At, Target, S.Rec.Fought + 2.0);
 	G.PingFieldX = PingX;
 	G.PingFieldY = PingY;
 	G.PingAt = RealT;
 	G.bPingAttack = Kind == TEXT("attack") || Kind == TEXT("fire");
+}
+
+bool ALandBattle::HedgeNear(double X, double Y, double Reach, double& OutX, double& OutY) const
+{
+	if (!State.IsValid() || !State->Field)
+	{
+		return false;
+	}
+	std::vector<const std::vector<std::pair<double, double>>*> Lines;
+	for (const LandField::HedgeLine& H : State->Field->Hedges())
+	{
+		// (what cutters go through: a hedgerow, a lane's bank, a garden's hedge; not a stone wall, not a wood's edge)
+		if (H.Kind == 0 || H.Kind == 1 || H.Kind == 3)
+		{
+			Lines.push_back(&H.Points);
+		}
+	}
+	return LandCommand::NearestOnLines(Lines, X, Y, Reach, OutX, OutY);
+}
+
+void ALandBattle::GiveSmoke(double X0, double Y0, double X1, double Y1)
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	FLandGeneralShown& G = State->General;
+	const std::vector<int> Layers = G.Clipboard.Smokers();
+	if (Layers.empty())
+	{
+		State->Note = "NO SMOKE LEFT WITH THOSE IN HAND";
+		State->NoteAge = 0.0;
+		G.Armed.clear();
+		return;
+	}
+	TArray<int32> Only;
+	for (int Id : Layers)
+	{
+		Only.Add(Id);
+	}
+	// (they lay it from where they stand: no route, the ring where the screen's middle falls)
+	GiveGeneral(WideOf(G.Clipboard.SmokeLine(X0, Y0, X1, Y1)), TEXT("smoke"), -1, TArray<FVector2D>(), (X0 + X1) * 0.5, (Y0 + Y1) * 0.5, Only);
+	G.Armed.clear();
 }
 
 // ---- His view ---------------------------------------------------------------------------------------------------
@@ -939,14 +1079,14 @@ void ALandBattle::GeneralDo(const FString& Word)
 	{
 		G.Armed.clear();
 		Clip.Clear();
-		G.bBox = G.bLine = G.bCarry = false;
+		G.bBox = G.bLine = G.bCarry = G.bSmoke = G.bGapAt = false;
 		GeneralButton = -1;
 		GeneralCarry = -1;
 	}
 	else if (Word == TEXT("letgo"))
 	{
 		// (the pointer lost mid-drag: nothing given, nothing carried)
-		G.bBox = G.bLine = G.bCarry = false;
+		G.bBox = G.bLine = G.bCarry = G.bSmoke = false;
 		G.Ghosts.clear();
 		GeneralButton = -1;
 		bGeneralMoved = false;
@@ -970,6 +1110,30 @@ void ALandBattle::GeneralDo(const FString& Word)
 	{
 		// (any unit may fire into cover; on an enemy unit, only guns fire from where they stand)
 		G.Armed = G.Armed == NarrowOf(Word) ? std::string() : NarrowOf(Word);
+	}
+	else if (Word == TEXT("gap"))
+	{
+		if (Clip.Cutter() < 0)
+		{
+			Say("NO TANK WITH HEDGE CUTTERS IN HAND");
+		}
+		else
+		{
+			G.Armed = G.Armed == "gap" ? std::string() : std::string("gap");
+			Say(G.Armed.empty() ? "" : "CLICK ON A HEDGE: THE TANK WITH CUTTERS PUNCHES A GAP THROUGH IT");
+		}
+	}
+	else if (Word == TEXT("smoke"))
+	{
+		if (Clip.Smokers().empty())
+		{
+			Say("NO SMOKE LEFT WITH THOSE IN HAND");
+		}
+		else
+		{
+			G.Armed = G.Armed == "smoke" ? std::string() : std::string("smoke");
+			Say(G.Armed.empty() ? "" : "CLICK WHERE THE SMOKE GOES, OR DRAG A LINE FOR IT");
+		}
 	}
 	else if (Word == TEXT("hold"))
 	{

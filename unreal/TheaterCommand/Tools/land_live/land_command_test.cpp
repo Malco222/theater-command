@@ -286,6 +286,83 @@ int main(int Argc, char** Argv)
 	for (const auto& [Do, N] : Made) std::printf(" %s %d", Do.c_str(), N);
 	std::printf("\n");
 
+	// ---- Hedge cutters and smoke on call (Brian, 22 November 14:19Z): the rules mark his own blocks' tools; until they
+	// do, nothing shows. The battle's last view with one of his tanks given cutters and two blocks given smoke, and an
+	// enemy given both (not his: never shown). ----
+	{
+		LandCommand::General Plain;
+		Plain.Begin(Rec);
+		Plain.Update(Rec, Rec.Fought - 2.0);
+		std::vector<int> All;
+		for (const LandCommand::Tag& T : Plain.Tags())
+		{
+			if (T.bOrderable) All.push_back(T.Block);
+			Check(!T.bCutter && T.Smoke < 0, "no cutters or smoke shown where the rules say none");
+		}
+		Plain.Choose(All, false);
+		Check(Plain.Cutter() < 0 && Plain.Smokers().empty() && Plain.Cut(10.0, 10.0).empty() && Plain.SmokeLine(0, 0, 10, 10).empty(), "no cut or smoke order without the tools");
+
+		LandFeed::Recording Kit = Rec;
+		int Tank = -1, Foe = -1;
+		std::vector<int> Smoky;
+		for (LandFeed::View& V : Kit.Views)
+		{
+			for (LandFeed::Unit& U : V.Units)
+			{
+				const LandCommand::Tag* T = Plain.TagOf(U.Id);
+				if (!T || T->State == "gone" || T->State == "withdrawn") continue;
+				if (T->bOrderable && T->Kind == "arm" && (Tank < 0 || Tank == U.Id))
+				{
+					Tank = U.Id;
+					U.bCutter = true;
+				}
+				else if (T->bOrderable && T->Kind == "inf" && (Smoky.size() < 2 || std::find(Smoky.begin(), Smoky.end(), U.Id) != Smoky.end()))
+				{
+					if (std::find(Smoky.begin(), Smoky.end(), U.Id) == Smoky.end()) Smoky.push_back(U.Id);
+					U.Smoke = 2;
+				}
+				else if (!T->bMine && (Foe < 0 || Foe == U.Id))
+				{
+					Foe = U.Id;
+					U.bCutter = true;
+					U.Smoke = 3;
+				}
+			}
+		}
+		Check(Tank >= 0 && Smoky.size() == 2 && Foe >= 0, "the battle has a tank of his, two of his sections and an enemy to give the tools to");
+		LandCommand::General K;
+		K.Begin(Kit);
+		K.Update(Kit, Kit.Fought - 2.0);
+		const LandCommand::Tag* Cutting = K.TagOf(Tank);
+		const LandCommand::Tag* Theirs = K.TagOf(Foe);
+		Check(Cutting && Cutting->bCutter, "his tank with cutters is shown with them");
+		Check(Theirs && !Theirs->bCutter && Theirs->Smoke < 0, "the enemy's tools are never shown");
+		K.Choose(Smoky, false);
+		Check(K.Cutter() < 0 && K.Cut(5.0, 5.0).empty(), "no cut order without a cutter in hand");
+		K.Choose(All, false);
+		Check(K.Cutter() == Tank, "the cutter in hand is found among the rest");
+		const std::string Cut = K.Cut(120.25, 340.5);
+		Check(IsJson(Cut, "land:cut") && Cut == "{\"do\":\"land:cut\",\"units\":[" + std::to_string(Tank) + "],\"x\":120.25,\"y\":340.5}", "a cut is the rules' JSON for the one tank: " + Cut);
+		const std::vector<int> Layers = K.Smokers();
+		Check(Layers.size() == 2 && std::find(Layers.begin(), Layers.end(), Tank) == Layers.end(), "only those with smoke lay it");
+		const std::string Smoke = K.SmokeLine(100.0, 200.0, 300.0, 200.0);
+		Check(IsJson(Smoke, "land:smoke") && Smoke.find("\"x0\":100") != std::string::npos && Smoke.find("\"y1\":200") != std::string::npos && Smoke.find(std::to_string(Tank) + "]") == std::string::npos, "smoke is the rules' JSON for a line, from those with it: " + Smoke);
+		std::printf("cutters and smoke: tank %d cuts (%s), sections lay smoke (%s)\n", Tank, Cut.c_str(), Smoke.c_str());
+	}
+
+	// ---- Hedge snapping: the nearest point of a hedge within reach ----
+	{
+		const std::vector<std::pair<double, double>> Hedge = { { 0.0, 0.0 }, { 100.0, 0.0 }, { 100.0, 100.0 } };
+		const std::vector<std::pair<double, double>> Far = { { 500.0, 500.0 }, { 600.0, 500.0 } };
+		const std::vector<std::pair<double, double>> Dot = { { 50.0, 60.0 } };
+		double Sx = -1.0, Sy = -1.0;
+		Check(LandCommand::NearestOnLines({ &Hedge, &Far }, 40.0, 7.0, 10.0, Sx, Sy) && std::fabs(Sx - 40.0) < 1e-9 && std::fabs(Sy) < 1e-9, "a point near a hedge snaps onto it");
+		Check(LandCommand::NearestOnLines({ &Hedge, &Far }, 104.0, 50.0, 10.0, Sx, Sy) && std::fabs(Sx - 100.0) < 1e-9 && std::fabs(Sy - 50.0) < 1e-9, "onto the nearest of its runs");
+		Check(LandCommand::NearestOnLines({ &Hedge, &Far }, 103.0, -3.0, 10.0, Sx, Sy) && std::fabs(Sx - 100.0) < 1e-9 && std::fabs(Sy) < 1e-9, "a point off a corner snaps to the corner");
+		Check(!LandCommand::NearestOnLines({ &Hedge, &Far }, 50.0, 50.0, 10.0, Sx, Sy), "none where no hedge comes within reach");
+		Check(LandCommand::NearestOnLines({ nullptr, &Dot }, 52.0, 60.0, 5.0, Sx, Sy) && std::fabs(Sx - 50.0) < 1e-9, "a hedge of one point, and an empty slot, are borne");
+	}
+
 	// ---- The setup step: his ground ----
 	LandFeed::Recording Setup;
 	std::vector<std::string> SetupDeltas;

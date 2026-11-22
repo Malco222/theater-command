@@ -235,6 +235,8 @@ namespace LandCommand
 			G.bSearch = U.bSearch;
 			G.SearchX = U.SearchX;
 			G.SearchY = U.SearchY;
+			G.bCutter = G.bMine && U.bCutter;
+			G.Smoke = G.bMine ? U.Smoke : -1;
 			G.OrderIn = U.OrderIn;
 			G.OrderKind = U.OrderKind;
 			G.OrderX = U.OrderX;
@@ -499,6 +501,69 @@ namespace LandCommand
 			Out.push_back({ Us[I]->Block, X0 + (X1 - X0) * F, Y0 + (Y1 - Y0) * F, Face });
 		}
 		return Out;
+	}
+
+	int General::Cutter() const
+	{
+		for (int Id : Chosen())
+		{
+			const Tag* G = TagOf(Id);
+			if (G && G->bCutter) return Id;
+		}
+		return -1;
+	}
+
+	std::vector<int> General::Smokers() const
+	{
+		std::vector<int> Out;
+		for (int Id : Chosen())
+		{
+			const Tag* G = TagOf(Id);
+			if (G && G->Smoke > 0) Out.push_back(Id);
+		}
+		return Out;
+	}
+
+	std::string General::Cut(double X, double Y) const
+	{
+		const int Id = Cutter();
+		if (Id < 0) return std::string();
+		return "{\"do\":\"land:cut\",\"units\":[" + std::to_string(Id) + "],\"x\":" + Number(X) + ",\"y\":" + Number(Y) + "}";
+	}
+
+	std::string General::SmokeLine(double X0, double Y0, double X1, double Y1) const
+	{
+		const std::vector<int> Ids = Smokers();
+		if (Ids.empty()) return std::string();
+		return "{\"do\":\"land:smoke\",\"units\":" + Units(Ids) + ",\"x0\":" + Number(X0) + ",\"y0\":" + Number(Y0) + ",\"x1\":" + Number(X1) + ",\"y1\":" + Number(Y1) + "}";
+	}
+
+	bool NearestOnLines(const std::vector<const std::vector<std::pair<double, double>>*>& Lines, double X, double Y, double Reach, double& OutX, double& OutY)
+	{
+		double Best = Reach * Reach;
+		bool bFound = false;
+		for (const std::vector<std::pair<double, double>>* Line : Lines)
+		{
+			if (!Line) continue;
+			for (size_t K = 0; K < Line->size(); ++K)
+			{
+				const std::pair<double, double>& A = (*Line)[K];
+				const std::pair<double, double>& B = (*Line)[K + 1 < Line->size() ? K + 1 : K];
+				const double Dx = B.first - A.first, Dy = B.second - A.second, Long2 = Dx * Dx + Dy * Dy;
+				double F = Long2 > 0.0 ? ((X - A.first) * Dx + (Y - A.second) * Dy) / Long2 : 0.0;
+				F = std::max(0.0, std::min(1.0, F));
+				const double Px = A.first + Dx * F, Py = A.second + Dy * F;
+				const double D2 = (Px - X) * (Px - X) + (Py - Y) * (Py - Y);
+				if (D2 <= Best)
+				{
+					Best = D2;
+					OutX = Px;
+					OutY = Py;
+					bFound = true;
+				}
+			}
+		}
+		return bFound;
 	}
 
 	void General::Sent(const std::vector<int>& Ids, const std::string& Kind, const std::vector<std::pair<double, double>>& Points, int Target, double Until)

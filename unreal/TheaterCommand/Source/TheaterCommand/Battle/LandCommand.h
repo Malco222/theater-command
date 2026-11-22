@@ -67,6 +67,9 @@ namespace LandCommand
 		/** An enemy found by its fire, not yet located; and his own firing into cover at a point (reconnaissance by fire). */
 		bool bVague = false, bSearch = false;
 		double SearchX = 0.0, SearchY = 0.0;
+		/** His own: a tank with hedge cutters (it can punch a gap in a hedge), and the smoke it can still lay (-1 none). */
+		bool bCutter = false;
+		int Smoke = -1;
 		/** Seconds till his order reaches it, -1 none on the air. */
 		double OrderIn = -1.0;
 		Chip Says = Chip::Staff;
@@ -159,6 +162,16 @@ namespace LandCommand
 		/** The rules' own lining up of the blocks in hand along a line (for the line drawn while he drags). */
 		std::vector<Ghost> LineUp(double X0, double Y0, double X1, double Y1) const;
 
+		// ---- Hedge cutters and smoke on call (Brian, 22 November 14:19Z; shown only where the rules give a block one) ----
+		/** The first block in hand with hedge cutters, -1 none. */
+		int Cutter() const;
+		/** Those in hand with smoke still to lay. */
+		std::vector<int> Smokers() const;
+		/** The cutter in hand punches a gap in the hedge at (X, Y) (the screen snaps the point to a hedge first). */
+		std::string Cut(double X, double Y) const;
+		/** Those in hand with smoke lay a line of it from (X0, Y0) to (X1, Y1). */
+		std::string SmokeLine(double X0, double Y0, double X1, double Y1) const;
+
 		/**
 		 * An order he has just given, shown at once: the screen runs a couple of battle seconds behind the rules, so the
 		 * views only say what they made of it once the screen reaches the moment it was given (Until: the rules' time
@@ -213,4 +226,8 @@ namespace LandCommand
 
 	/** A number as the rules' JSON takes it: finite, to the centimetre. */
 	std::string Number(double V);
+
+	/** The nearest point to (X, Y) on any of the lines (each a run of corners), within Reach metres: true and the point
+	 * where one is (a hedge for the cutters to snap to), false where none comes that close. */
+	bool NearestOnLines(const std::vector<const std::vector<std::pair<double, double>>*>& Lines, double X, double Y, double Reach, double& OutX, double& OutY);
 }

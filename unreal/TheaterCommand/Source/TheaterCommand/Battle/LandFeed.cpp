@@ -123,6 +123,8 @@ namespace LandFeed
 				Row.OrderIn = U["orderIn"].IsNumber() ? U["orderIn"].Num() : -1.0;
 				Row.Men = U["men"].Int(-1);
 				Row.bVague = U["vague"].Truth(false);
+				Row.bCutter = U["cutter"].Truth(false);
+				Row.Smoke = U["smoke"].Int(-1);
 				const Json& Search = U["search"];
 				if (Search.IsArray() && Search.Count() >= 2)
 				{

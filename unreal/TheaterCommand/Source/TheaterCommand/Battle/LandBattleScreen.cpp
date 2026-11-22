@@ -698,6 +698,21 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Fill(At.X - 5.0, At.Y - 5.0, 10.0, 10.0, Cream, 9);
 		}
 	}
+	if (G.bSmoke)
+	{
+		// (the smoke's line: grey and broad, as the screen will stand)
+		const FVector2D A = Local(G.SmokeEnds[0], G.SmokeEnds[1]), B = Local(G.SmokeEnds[2], G.SmokeEnds[3]);
+		Lines({ A, B }, FLinearColor(0.82f, 0.82f, 0.78f, 0.55f), 9.0f, 8);
+		Lines({ A, B }, Cream, 1.5f, 9);
+	}
+	if (G.bGapAt)
+	{
+		// (where the cutters would go through: the hedge parted, two posts and the way between)
+		const FVector2D At = Local(G.GapAtX, G.GapAtY);
+		Fill(At.X - 9.0, At.Y - 7.0, 3.0, 14.0, BrightBrass, 9);
+		Fill(At.X + 6.0, At.Y - 7.0, 3.0, 14.0, BrightBrass, 9);
+		Lines({ FVector2D(At.X - 4.0, At.Y), FVector2D(At.X + 4.0, At.Y) }, Cream, 1.5f, 9);
+	}
 	if (G.bCarry)
 	{
 		TArray<FVector2D> Ring;
@@ -771,6 +786,16 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Parts.Add({ TEXT("AT THE DOUBLE"), TEXT(""), TEXT("general:double"), G.Armed == "double", !bHand });
 			Parts.Add({ TEXT("HOLD"), TEXT("H"), TEXT("general:hold"), false, !bHand });
 			Parts.Add({ TEXT("FIRE ON"), TEXT(""), TEXT("general:fire"), G.Armed == "fire", !bHand });
+			// (shown only while a unit in hand has the tool: a tank with hedge cutters, a section with smoke left; Brian, 22
+			// November 14:19Z)
+			if (Clip.Cutter() >= 0)
+			{
+				Parts.Add({ TEXT("CUT A GAP"), TEXT(""), TEXT("general:gap"), G.Armed == "gap", false });
+			}
+			if (!Clip.Smokers().empty())
+			{
+				Parts.Add({ TEXT("LAY SMOKE"), TEXT(""), TEXT("general:smoke"), G.Armed == "smoke", false });
+			}
 			Parts.Add({ TEXT("FALL BACK"), TEXT("R"), TEXT("general:fallback"), false, !bHand });
 			Parts.Add({ TEXT("BACK TO STAFF"), TEXT(""), TEXT("general:staff"), false, !bHand });
 			Parts.Add({ TEXT("PAUSE"), TEXT("SPACE"), TEXT("speed:0"), S.SpeedNow <= 0.0, false });
