@@ -129,6 +129,8 @@ private:
 		bool bTwoShapes = false;
 		bool bNearMade = false;
 		bool bNear = false;
+		/** It casts its shadow (made casting; AirParts::ShadowFarM). */
+		bool bShadow = true;
 		/** Its airscrews' turning discs, one an engine, shown with the near shape (Brian 11-20 14:20Z: "the japanese
 		 * zero's propeller didnt spin"); and where in its turn each aircraft's screws start, so that no two turn as one. */
 		TArray<TWeakObjectPtr<UProceduralMeshComponent>> Discs;

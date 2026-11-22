@@ -82,6 +82,28 @@ struct FAirLandMade
 
 namespace AirParts
 {
+	/** An aircraft casts its shadow only within ShadowFarM of the eye (AS1 of the production lead's battle-scale plan,
+	 * 22 November: past a kilometre its shadow is under a pixel on its own skin and kilometres below it on the ground,
+	 * yet every one that moves redraws the shadow maps each frame); one on the ground keeps it out to ShadowGroundM,
+	 * for parked aircraft stand on their shadows in the strategy view. A tenth more before one already casting stops.
+	 * "-TheaterPlaneShadowM=1500" tries another reach in the air (the ground's scaled with it; 0: none cast). */
+	constexpr double ShadowFarM = 1000.0, ShadowGroundM = 3000.0;
+	static double ShadowScale()
+	{
+		static const double Scale = []
+		{
+			double Metres = ShadowFarM;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneShadowM="), Metres);
+			const double Asked = FMath::Clamp(Metres, 0.0, 100000.0) / ShadowFarM;
+			if (Asked != 1.0)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air battle: aircraft cast shadows within %.0f m (%.0f m on the ground)."), ShadowFarM * Asked, ShadowGroundM * Asked);
+			}
+			return Asked;
+		}();
+		return Scale;
+	}
+
 	static FString Wide(const std::string& Text)
 	{
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
@@ -3946,6 +3968,16 @@ void AAirBattle::Draw(double Real)
 		const FQuat Attitude = FRotator(P.Pitch, P.Heading, P.Bank).Quaternion() * HalfRound;
 		const FVector Where = World(P.At.X, P.At.Y, P.At.Z);
 		Mesh->SetWorldLocationAndRotation(Where, Attitude);
+		if (FPlaneMade* Lit = PlaneMade.Find(P.Key))
+		{
+			const double Reach = (P.bOnGround ? AirParts::ShadowGroundM : AirParts::ShadowFarM) * AirParts::ShadowScale() * (Lit->bShadow ? 1.1 : 1.0);
+			const bool bShadow = FVector::Dist(Where, EyeAt) / U < Reach;
+			if (bShadow != Lit->bShadow)
+			{
+				Mesh->SetCastShadow(bShadow);
+				Lit->bShadow = bShadow;
+			}
+		}
 		// The near shape within 300 m of the eye (and for the ridden aircraft), the far one past 450 m.
 		if (const FPlaneMade* Made = PlaneMade.Find(P.Key); Made && Made->bTwoShapes)
 		{

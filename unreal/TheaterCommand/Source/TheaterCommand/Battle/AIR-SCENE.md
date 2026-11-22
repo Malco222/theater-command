@@ -970,3 +970,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the ships' 25 mm and 40 mm read as soft amber hoses with a hot head every third round, thinning past 300 m, out by
    2 km and 3.5 km, no near-white. Bremen 01 and 07 and the strategy views: bombs landing far off still show (the kit's
    far form), each where the flight core lands it; near ones as before. Log: none new.
+30. **No aircraft shadows past a kilometre** (AS1 of the production lead's battle-scale plan, 22 November). An aircraft
+   in the air casts its shadow only within 1 km of the eye (1.1 km before one casting stops); one on the ground keeps
+   it to 3 km. Look at the strategy views (01, 04, 07) and the chase: no aircraft should change its shading as it
+   crosses a kilometre; if one does, "-TheaterPlaneShadowM=1500" tries a longer reach (the log then says "Air battle:
+   aircraft cast shadows within ..."). Read stat unit's graphics time at Bremen 07 with and without
+   "-TheaterPlaneShadowM=100000" (every aircraft casting, as before) and give both.
