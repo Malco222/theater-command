@@ -16,7 +16,7 @@ import { setStop, stopOf } from '../src/campaign/history';
 import { airfieldOpenTo } from '../src/campaign/prizes';
 import { lanesTo } from '../src/campaign/resources';
 import { TRADE, tradeRoute, type WayRead } from '../src/campaign/trade';
-import { NAVY, oceanOf, oceanRisk, seaRisk, seaSide } from '../src/campaign/navy';
+import { NAVY, closedTo, oceanHeld, oceanOf, oceanRisk, seaRisk, seaSide } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { BARGAINS_STAGE } from '../src/campaign/stage';
 import { FIT_ORG, startOpen } from '../src/campaign/staff';
@@ -709,6 +709,8 @@ describe('a war with the bargains on', () => {
 });
 
 describe("the cargo across the ocean (the design director's 11:25Z)", () => {
+  // (The ocean read alone, without the stop of 19:10Z: in the game the bargains' cargo reads both, so where the enemy
+  // holds the ocean the goods are stopped before any loss is read. The contraband control describe below has that.)
   const CARGO: WayRead = { home: true, ocean: true };
   /** France's Atlantic coast in German hands and her fleets in harbour: Germany has its ports on the Bay of Biscay. */
   function biscay(g: Game): void {
@@ -854,5 +856,181 @@ describe("the cargo across the ocean (the design director's 11:25Z)", () => {
     const lane = bargainLanes(g, 'GER').find((l) => l.name === v.name);
     expect(lane).toBeDefined();
     expect(lane!.why).toBe(`${Math.round(cargo.lost * 100)}% of the cargoes are sunk: the way crosses waters the enemy's navy can reach.`);
+  });
+});
+
+describe("contraband control: the enemy holding the ocean stops the ships (the design director's 19:10Z)", () => {
+  const CARGO: WayRead = { home: true, ocean: true, stop: true };
+  const READ: WayRead = { home: true, ocean: true };
+  function biscay(g: Game): void {
+    for (const r of g.regions) if (r.port && r.owner === 'FRA' && !r.overseas && r.seas.some((z) => g.seas[z].name === 'Bay of Biscay')) r.ctrl = 'GER';
+    for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port';
+  }
+  const sums = (g: Game, way: number[], nat: string): { foe: number; own: number } => {
+    let foe = 0, own = 0;
+    for (const z of oceanOf(g, way, nat)) { foe += seaSide(g, z, nat, true).total; own += seaSide(g, z, nat, false).total; }
+    return { foe, own };
+  };
+
+  it("Germany's Argentine beef is stopped: no way, and the route says the ocean is held; release 1's trade still reads its way", () => {
+    const g = world(1);
+    biscay(g);
+    const open = tradeRoute(g, 'ARG', 'GER', new Map(), READ);
+    expect(open.way).toBe('sea');
+    const { foe, own } = sums(g, open.seas, 'GER');
+    expect(foe).toBeGreaterThanOrEqual(NAVY.closed.min);
+    expect(foe).toBeGreaterThanOrEqual(NAVY.closed.ratio * own);
+    expect(oceanHeld(g, open.seas, 'GER')).toBe(true);
+    const cargo = tradeRoute(g, 'ARG', 'GER', new Map(), CARGO);
+    expect(cargo.way).toBe('none');
+    expect(cargo.held).toBe(true);
+    expect(cargo.keeps).toBe(0);
+    // Release 1 never reads it.
+    const r1 = tradeRoute(g, 'ARG', 'GER');
+    expect(r1.way).toBe('sea');
+    expect(r1.held).toBeUndefined();
+  });
+
+  it("is closedTo's own test: an ocean of one sea is held exactly when closedTo closes that sea", () => {
+    const g = world(1);
+    biscay(g);
+    const N = NAVY as { range: number };
+    const range = N.range;
+    try {
+      N.range = 0;
+      let closed = 0;
+      for (const nat of ['GER', 'UK', 'FRA']) for (let z = 0; z < g.seas.length; z++) {
+        expect(oceanHeld(g, [z], nat)).toBe(closedTo(g, z, nat));
+        if (closedTo(g, z, nat)) closed++;
+      }
+      expect(closed).toBeGreaterThan(0);
+    } finally {
+      N.range = range;
+    }
+  });
+
+  it("cuts both ways by one rule, and Britain's own beef is not stopped while its side holds the ocean", () => {
+    const g = world(1);
+    const open = tradeRoute(g, 'ARG', 'UK', new Map(), READ);
+    expect(open.way).toBe('sea');
+    expect(oceanHeld(g, open.seas, 'UK')).toBe(false);
+    expect(tradeRoute(g, 'ARG', 'UK', new Map(), CARGO)).toEqual(open);
+  });
+
+  it("the ocean is held only from NAVY.closed.min: one British fleet alone at sea, no ship or aircraft of Germany's side", () => {
+    const g = world(1);
+    biscay(g);
+    const way = tradeRoute(g, 'ARG', 'GER', new Map(), READ);
+    expect(way.way).toBe('sea');
+    for (const f of g.fleets) f.stance = 'port';
+    for (const n of Object.keys(g.nations)) g.nations[n].air = 0;
+    const uk = g.fleets.find((f) => f.nat === 'UK')!;
+    uk.stance = 'patrol'; uk.zone = way.seas[Math.floor(way.seas.length / 2)];
+    const { foe, own } = sums(g, way.seas, 'GER');
+    expect(foe).toBeGreaterThan(0);
+    expect(own).toBe(0);
+    const C = NAVY.closed as { min: number; ratio: number };
+    const min = C.min;
+    try {
+      C.min = foe;
+      expect(oceanHeld(g, way.seas, 'GER')).toBe(true);
+      expect(tradeRoute(g, 'ARG', 'GER', new Map(), CARGO).held).toBe(true);
+      C.min = foe + 1e-6;
+      expect(oceanHeld(g, way.seas, 'GER')).toBe(false);
+      expect(tradeRoute(g, 'ARG', 'GER', new Map(), CARGO).way).toBe('sea');
+    } finally {
+      C.min = min;
+    }
+  });
+
+  it('a buyer whose enemy has no ship or aircraft in the ocean is not stopped; at peace nothing is', () => {
+    const g = world(1);
+    biscay(g);
+    const foes = Object.keys(g.nations).filter((n) => atWar(g, n, 'GER'));
+    for (const f of g.fleets) if (foes.includes(f.nat)) f.stance = 'port';
+    for (const n of foes) g.nations[n].air = 0;
+    const way = tradeRoute(g, 'ARG', 'GER', new Map(), CARGO);
+    expect(way.way).toBe('sea');
+    expect(way.held).toBeUndefined();
+    expect(sums(g, way.seas, 'GER').foe).toBe(0);
+    const peace = tradeRoute(g, 'ARG', 'ESP', new Map(), CARGO);
+    expect(peace.way).toBe('sea');
+    expect(peace).toEqual(tradeRoute(g, 'ARG', 'ESP', new Map(), READ));
+  });
+
+  it("a base right's way is read alike: a held ocean is a shut way for it, as release 1's closed seas already are", () => {
+    const g = world(3);
+    biscay(g);
+    const row = rowById(g, 'por-azores')!;
+    expect(row.gives.base).toBeDefined();
+    expect(tradeRoute(g, 'POR', 'GER', new Map(), READ).way).toBe('sea');
+    expect(tradeRoute(g, 'POR', 'GER', new Map(), CARGO).held).toBe(true);
+    expect(whyNoBargain(g, row, 'GER')).toContain('the enemy holds the ocean the ships would cross, and stops them');
+    // Britain's way to the Azores is open, as before.
+    expect(tradeRoute(g, 'POR', 'UK', new Map(), CARGO).way).toBe('sea');
+  });
+
+  it("the way to the buyer's army overseas is read alike: Turkey's chrome to Britain's army in Egypt, Italy holding the Mediterranean, is stopped", () => {
+    const g = world(1);
+    const home = tradeRoute(g, 'TUR', 'UK', new Map(), CARGO);
+    expect(home.way).toBe('sea');
+    // Italy at war with Britain, its fleet at sea in the middle of the way home; the British and French in harbour, no aircraft.
+    war(g, 'ITA', 'UK');
+    for (const f of g.fleets) if (f.nat === 'UK' || f.nat === 'FRA') f.stance = 'port';
+    for (const n of ['UK', 'FRA']) g.nations[n].air = 0;
+    for (const f of g.fleets) if (f.nat === 'ITA') { f.stance = 'patrol'; f.zone = home.seas[Math.floor(home.seas.length / 2)]; }
+    // Without the stop the goods go to the army in Egypt, the way home shut (release 1's closed seas).
+    const army = tradeRoute(g, 'TUR', 'UK', new Map(), READ);
+    expect(army.way).toBe('sea');
+    const end = army.seas[army.seas.length - 1];
+    expect(g.regions.some((r) => r.ctrl === 'UK' && r.overseas && r.port && r.seas.includes(end) && r.units.some((c) => c.nat === 'UK' && !c.dead && c.kind !== 'fort'))).toBe(true);
+    expect(oceanHeld(g, army.seas, 'UK')).toBe(true);
+    // With it, that way too is stopped, and the route says why.
+    const stopped = tradeRoute(g, 'TUR', 'UK', new Map(), CARGO);
+    expect(stopped.way).toBe('none');
+    expect(stopped.held).toBe(true);
+  });
+
+  it("a term held across a held ocean carries nothing, and every card says why: the bid, the trade office and the depot's line", () => {
+    const g = world(3);
+    biscay(g);
+    const row = rowById(g, 'arg-beef')!;
+    const why = whyNoBargain(g, row, 'GER');
+    expect(why).toContain('No way is open for the goods between');
+    expect(why).toContain('the enemy holds the ocean the ships would cross, and stops them');
+    g.bargains!.rows['arg-beef'] = { buyer: 'GER', price: 1, since: g.turn, until: g.turn + 11, way: 'sea', seas: [], lost: 0, share: 1 };
+    bargainsMonth(g);
+    const h = heldOf(g, 'arg-beef') as BargainHeld;
+    expect(h.buyer).toBe('GER');
+    expect(h.way).toBe('none');
+    expect(h.held).toBe(true);
+    expect(h.share).toBe(0);
+    // Nothing arrives, so nothing is paid: Germany's bargains cost the same with this term as without it.
+    const cost = bargainCost(g, 'GER');
+    h.buyer = null;
+    expect(bargainCost(g, 'GER')).toBe(cost);
+    h.buyer = 'GER';
+    const v = bargainsView(g, 'GER').find((x) => x.id === 'arg-beef')!;
+    expect(v.state).toBe('cut');
+    expect(v.why).toBe('No way is open for the goods: the enemy holds the ocean the ships would cross, and stops them.');
+    const lane = bargainLanes(g, 'GER').find((l) => l.name === v.name);
+    expect(lane?.state).toBe('cut');
+    expect(lane?.why).toBe(v.why);
+    // A way shut for want of any way at all keeps release 2's plain words.
+    h.held = undefined;
+    expect(bargainsView(g, 'GER').find((x) => x.id === 'arg-beef')!.why).toBe('No way is open for the goods.');
+  });
+
+  it('a term the held ocean shuts for its cut months ends, and says the ships were stopped', () => {
+    const g = world(3);
+    biscay(g);
+    g.human = 'GER';
+    g.bargains!.rows['arg-beef'] = { buyer: 'GER', price: 1, since: g.turn, until: g.turn + 11, way: 'sea', seas: [], lost: 0, share: 1 };
+    const from = g.headlines.length;
+    for (let i = 0; i < BARGAINS.cutMonths; i++) bargainsMonth(g);
+    expect(heldOf(g, 'arg-beef')?.buyer ?? null).toBeNull();
+    const said = g.headlines.slice(from).map((x) => x.text).find((t) => t.includes('can no longer take'));
+    expect(said).toBeDefined();
+    expect(said).toContain('No ship has got through: the enemy holds the ocean the ships would cross, and stops them.');
   });
 });
