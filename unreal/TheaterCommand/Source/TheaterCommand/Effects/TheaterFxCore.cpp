@@ -15549,17 +15549,17 @@ namespace TheaterFx
 		{
 			// (FX5: the room the rest asked of late, its highest over the last dust_memory_s, in eight steps; dust lives
 			// long, so it is laid for the barrage's peaks, not for a lull between salvos)
-			const int64_t Slot = static_cast<int64_t>(std::floor(Now / (ShareDustMemory / 8.0)));
-			if (Slot != SharePeakSlot)
+			const int64_t PeakSlot = static_cast<int64_t>(std::floor(Now / (ShareDustMemory / 8.0)));
+			if (PeakSlot != SharePeakSlot)
 			{
-				const bool bFresh = SharePeakSlot == std::numeric_limits<int64_t>::min() || Slot < SharePeakSlot || Slot - SharePeakSlot >= 8;
-				for (int64_t S = bFresh ? Slot - 7 : SharePeakSlot + 1; S <= Slot; ++S)
+				const bool bFresh = SharePeakSlot == std::numeric_limits<int64_t>::min() || PeakSlot < SharePeakSlot || PeakSlot - SharePeakSlot >= 8;
+				for (int64_t S = bFresh ? PeakSlot - 7 : SharePeakSlot + 1; S <= PeakSlot; ++S)
 				{
 					SharePeaks[static_cast<size_t>(S & 7)] = 0.0;
 				}
-				SharePeakSlot = Slot;
+				SharePeakSlot = PeakSlot;
 			}
-			double& Here = SharePeaks[static_cast<size_t>(Slot & 7)];
+			double& Here = SharePeaks[static_cast<size_t>(PeakSlot & 7)];
 			Here = std::max(Here, static_cast<double>(RoomGate()));
 			SharePeak = *std::max_element(SharePeaks, SharePeaks + 8);
 			// (how thin the far trails are laid: up while the dust holds more than the rest leaves it, between dust_top of
