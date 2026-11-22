@@ -215,7 +215,7 @@ export class LiveKeeper {
 }
 
 /** One block as the 3D game reads it: the bridge's unitOut for land, plus whether the player has met it. */
-export function landUnitOut(u: LandUnit, t: number, known = true, mine = false): Record<string, unknown> {
+export function landUnitOut(u: LandUnit, t: number, known = true, mine = false, sim?: LandBattle): Record<string, unknown> {
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
   const town = u.act === 'fight' && (u.cover === 'buildings' || u.cover === 'suburb' || u.cover === 'industry') && !!loops && motion !== 'guns';
@@ -249,8 +249,19 @@ export function landUnitOut(u: LandUnit, t: number, known = true, mine = false):
     // Hold until relieved (release 2, sim.relief), his own blocks only: waiting for a corps coming up from next door, dug in
     // where it stands while not free; late, help never came and its men break sooner.
     ...(mine && u.waits ? { waits: { due: r1(u.waits.due), ...(u.waits.late ? { late: true } : {}), ...(u.waits.free ? { free: true } : {}) } } : {}),
+    // Hedge cutters (release 2, sim.cutters): a tank block that carries them, with the share of its tanks fitted (the
+    // 3D game draws the cutters on that many). Smoke on call (sim.smoke): his own blocks that may lay it, with the
+    // screens they have left.
+    ...(sim?.cutters && sim.cutterOf(u) ? { cutter: LAND.cutters.share } : {}),
+    ...(mine && sim?.smoke ? smokeOut(sim, u) : {}),
     order: u.order ? { kind: u.order.kind, x: r1(u.order.x), y: r1(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r1(x), r1(y)]) } : null,
   };
+}
+
+/** A block's smoke for the 3D game (smoke on call): the screens it has left, where its army has the means. */
+function smokeOut(sim: LandBattle, u: LandUnit): Record<string, unknown> {
+  const m = sim.smokeOf(u);
+  return m ? { smoke: u.smokeLeft ?? m.count ?? LAND.smoke.count } : {};
 }
 
 export interface LiveOpts {
@@ -293,6 +304,18 @@ export interface LiveOpts {
   relief?: boolean;
   /** The rider ahead (release 2; the rules' sim.rider): his own corps coming up sends a despatch rider first (view riders). */
   rider?: boolean;
+  /**
+   * Hedge cutters and smoke on call (release 2; Brian, 22 November 14:19Z; ruling 242; the rules' sim.cutters and
+   * sim.smoke): his tanks may cut a gap through a hedge where he picks and his men on foot lay a screen along a line he
+   * drags, and both staffs use them too. On unless turned off.
+   */
+  cutters?: boolean;
+  smoke?: boolean;
+  /**
+   * The bocage (ruling 242 C1-B, as amended 17:45Z; the rules' sim.bocage): on a field with hedges, a tank block without
+   * cutters crosses a hedge line only at a gap. Off unless turned on (the tactics thread is still finishing it).
+   */
+  bocage?: boolean;
   /**
    * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
    * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
@@ -398,6 +421,9 @@ export class LiveBattle {
     if (opts.names !== false) sim.namesOn();
     if (this.me && opts.relief !== false) sim.relief = true;
     if (this.me && opts.rider !== false) sim.rider = true;
+    if (opts.cutters !== false) sim.cutters = true;
+    if (opts.smoke !== false) sim.smoke = true;
+    if (opts.bocage) sim.bocage = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     // (a corps coming up from next door is in the header from the start, its words and model known, and walks on later:
     // 'joins' says so; the views carry it once it is on the field and, till then, in 'coming')
@@ -471,7 +497,7 @@ export class LiveBattle {
     if (Math.floor(t) !== this.lastView || v.over) {
       this.lastView = Math.floor(t);
       this.views.push({
-        t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit), !!this.me && u.side === this.me)), balance: v.balance, zones: v.zones,
+        t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit), !!this.me && u.side === this.me, this.sim)), balance: v.balance, zones: v.zones,
         ...(v.breaking ? { breaking: { att: r3(v.breaking.att), def: r3(v.breaking.def) } } : {}),
         ...(v.contact !== undefined ? { contact: v.contact } : {}),
         ...(v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p!.phase, main: p!.main ?? [], startY: p!.startY ?? null }])) } : {}),
@@ -480,6 +506,11 @@ export class LiveBattle {
         ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
         // (the rider ahead: his own corps' despatch riders, riding in before it)
         ...(v.riders?.length ? { riders: v.riders } : {}),
+        // (hedge cutters: the gaps cut and being cut that he may know of, each opening as a gateway at t1; smoke on call:
+        // the screens standing now, the enemy's block named only where he knows it. The 3D field opens the hedge and
+        // hangs the smoke; the smoke rounds carry how long each hangs as well)
+        ...this.sim.cutView(this.me ?? undefined),
+        ...this.sim.screenView(this.me ?? undefined),
         ...(v.over ? { over: v.over } : {}),
       });
     }
@@ -535,6 +566,28 @@ export class LiveBattle {
     if (!this.me || u.side !== this.me) return { why: 'Only your own troops take your orders.', due: null };
     const why = this.sim.waitWhy(u);
     return { why, due: why === null ? this.sim.dueAt(u)?.due ?? null : null };
+  }
+
+  /**
+   * Hedge cutters: why one of his tank blocks may not cut a gap through the hedge at (x, y) (null where it may); with no
+   * point, whether it may cut at all.
+   */
+  cutWhy(id: number, x?: number, y?: number): string | null {
+    const u = this.sim.unit(id);
+    if (!u) return 'Nothing to order.';
+    if (!this.me || u.side !== this.me) return 'Only your own troops take your orders.';
+    return this.sim.cutWhy(u, x, y);
+  }
+
+  /**
+   * Smoke on call: why one of his blocks may not lay a screen along that line (x0, y0 to x1, y1, or only its middle; null
+   * where it may); with no line, whether it may lay one at all.
+   */
+  smokeWhy(id: number, x0?: number, y0?: number, x1?: number, y1?: number): string | null {
+    const u = this.sim.unit(id);
+    if (!u) return 'Nothing to order.';
+    if (!this.me || u.side !== this.me) return 'Only your own troops take your orders.';
+    return this.sim.smokeWhy(u, x0, y0, x1, y1);
   }
 
   /** Why a block may not stand there in the setup step, or null where it may. */

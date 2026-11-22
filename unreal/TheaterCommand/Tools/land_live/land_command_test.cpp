@@ -286,13 +286,33 @@ int main(int Argc, char** Argv)
 	for (const auto& [Do, N] : Made) std::printf(" %s %d", Do.c_str(), N);
 	std::printf("\n");
 
-	// ---- Hedge cutters and smoke on call (Brian, 22 November 14:19Z): the rules mark his own blocks' tools; until they
-	// do, nothing shows. The battle's last view with one of his tanks given cutters and two blocks given smoke, and an
-	// enemy given both (not his: never shown). ----
+	// ---- Hedge cutters and smoke on call (Brian, 22 November 14:19Z): the rules mark his own blocks' tools, and his
+	// clipboard shows what they mark, never the enemy's. Then the same battle with every tool taken away (nothing shows),
+	// and with one of his tanks given cutters and two blocks given smoke, and an enemy given both (not his: never shown). ----
 	{
+		LandCommand::General Ruled;
+		Ruled.Begin(Rec);
+		Ruled.Update(Rec, Rec.Fought - 2.0);
+		int RuledSmoke = 0, RuledCutters = 0;
+		for (const LandCommand::Tag& T : Ruled.Tags())
+		{
+			if (T.bMine && T.Smoke >= 0) RuledSmoke++;
+			if (T.bMine && T.bCutter) RuledCutters++;
+			Check(T.bMine || (!T.bCutter && T.Smoke < 0), "the enemy's tools are never shown (the rules' own marks)");
+		}
+		std::printf("the rules' tools: smoke for %d of his blocks, cutters for %d (no hedges on this field)\n", RuledSmoke, RuledCutters);
+		Check(RuledSmoke > 0, "the rules give his sections smoke (smoke on call is on)");
+
+		LandFeed::Recording Bare = Rec;
+		for (LandFeed::View& V : Bare.Views)
+			for (LandFeed::Unit& U : V.Units)
+			{
+				U.bCutter = false;
+				U.Smoke = -1;
+			}
 		LandCommand::General Plain;
-		Plain.Begin(Rec);
-		Plain.Update(Rec, Rec.Fought - 2.0);
+		Plain.Begin(Bare);
+		Plain.Update(Bare, Bare.Fought - 2.0);
 		std::vector<int> All;
 		for (const LandCommand::Tag& T : Plain.Tags())
 		{
@@ -302,7 +322,7 @@ int main(int Argc, char** Argv)
 		Plain.Choose(All, false);
 		Check(Plain.Cutter() < 0 && Plain.Smokers().empty() && Plain.Cut(10.0, 10.0).empty() && Plain.SmokeLine(0, 0, 10, 10).empty(), "no cut or smoke order without the tools");
 
-		LandFeed::Recording Kit = Rec;
+		LandFeed::Recording Kit = Bare;
 		int Tank = -1, Foe = -1;
 		std::vector<int> Smoky;
 		for (LandFeed::View& V : Kit.Views)

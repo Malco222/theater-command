@@ -10,7 +10,7 @@
 // The game calls these by name through the global object TC (this engine's own; the campaign's TC is another):
 //
 //   TC.landPieces()                        -> [{ key, title, date, att, def, seeds }]: the set pieces that can be fought
-//   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider }) -> the recording's header: the field, the blocks,
+//   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider, cutters, smoke, bocage }) -> the recording's header: the field, the blocks,
 //                                             the sky, and the setup room when the player deploys first. me 'att' | 'def'
 //                                             | null (a film). staff and radio (direct command) are on unless false
 //   TC.landStartTicket(look, opts)         -> the same header for a campaign battle (release 2, switched): the campaign's
@@ -31,6 +31,12 @@
 //                                             from next door; release 2, the rules' sim.relief)
 //   TC.landWaitWhy(id)                     -> { why, due }: why that block of his may not wait for help (null where it
 //                                             may), and the battle second help could reach it there (null where not)
+//                                             land:cut { units, x, y } (hedge cutters: tanks cut a gap through the hedge
+//                                             there), land:smoke { units, x0, y0, x1, y1 } (smoke on call: men on foot lay
+//                                             a screen along that line); a refusal says why
+//   TC.landCutWhy(id, x?, y?)              -> { why }: why that tank block of his may not cut a gap there (null where it may)
+//   TC.landSmokeWhy(id, x0?, y0?, x1?, y1?) -> { why }: why that block of his may not lay smoke along that line (null where
+//                                             it may); with no point or line, whether it may at all
 //   TC.landCanPlace(id, x, y)              -> { ok, why }: whether a block may stand there in the setup step
 //   TC.landPlace(id, x, y, face)           -> { ok, why }: places it; the next delta starts the men again (reset)
 //   TC.landBegin()                         -> { ok }: ends the setup step; the clock runs
@@ -66,10 +72,11 @@ function need(): LiveBattle {
     }));
   },
 
-  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean } | null) {
+  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean } | null) {
     live = livePiece(key, seed ?? undefined, {
       me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
       hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
+      cutters: opts?.cutters !== false, smoke: opts?.smoke !== false, bocage: !!opts?.bocage,
     });
     return live.header();
   },
@@ -81,7 +88,7 @@ function need(): LiveBattle {
    */
   landStartTicket(
     ticketOrLook: FieldTicket<LandPlace> | { ticket: FieldTicket<LandPlace>; live?: Partial<LiveOpts> },
-    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
+    opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number>; sky?: LiveSky } | null,
   ) {
     // The campaign's TC.battleLook answer as it stands ({ ticket, live: { fog, seen, designYears, sky } }), or a bare ticket.
     const look = 'ticket' in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
@@ -90,6 +97,7 @@ function need(): LiveBattle {
     live = liveTicket(ticket, {
       me: o.me ?? null, setup: !!o.setup, platoons: o.platoons !== false, staff: o.staff !== false, radio: o.radio !== false,
       hide: o.hide !== false, armour: o.armour !== false, names: o.names !== false, relief: o.relief !== false, rider: o.rider !== false,
+      cutters: o.cutters !== false, smoke: o.smoke !== false, bocage: !!o.bocage,
       fog: !!o.fog, seen: o.seen ?? [], designYears: o.designYears ?? {}, ...(o.sky ? { sky: o.sky } : {}),
     });
     return live.header();
@@ -108,11 +116,23 @@ function need(): LiveBattle {
     // (a wait refused says why in the rules' own words: the first of its blocks' reason, for the general's note)
     const o = c as { do?: string; units?: number[] };
     if (!ok && o.do === 'land:wait' && o.units?.length) return { ok, why: need().waitWhy(Number(o.units[0])).why ?? '' };
+    // (so do a cut and a screen refused: hedge cutters and smoke on call)
+    const p = c as { x?: number; y?: number; x0?: number; y0?: number; x1?: number; y1?: number };
+    if (!ok && o.do === 'land:cut' && o.units?.length) return { ok, why: need().cutWhy(Number(o.units[0]), p.x, p.y) ?? '' };
+    if (!ok && o.do === 'land:smoke' && o.units?.length) return { ok, why: need().smokeWhy(Number(o.units[0]), p.x0, p.y0, p.x1, p.y1) ?? '' };
     return { ok };
   },
 
   landWaitWhy(id: number) {
     return need().waitWhy(Number(id));
+  },
+
+  landCutWhy(id: number, x?: number | null, y?: number | null) {
+    return { why: need().cutWhy(Number(id), x ?? undefined, y ?? undefined) };
+  },
+
+  landSmokeWhy(id: number, x0?: number | null, y0?: number | null, x1?: number | null, y1?: number | null) {
+    return { why: need().smokeWhy(Number(id), x0 ?? undefined, y0 ?? undefined, x1 ?? undefined, y1 ?? undefined) };
   },
 
   landCanPlace(id: number, x: number, y: number) {

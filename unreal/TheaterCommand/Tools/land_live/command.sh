@@ -10,9 +10,14 @@ SRC="$ROOT/Source/TheaterCommand"
 OUT="${LAND_LIVE_OUT:-${TMPDIR:-/tmp}/land_live}"
 mkdir -p "$OUT"
 "$REPO/node_modules/.bin/esbuild" "$HERE/command-check.ts" --bundle --platform=node --format=esm --outfile="$OUT/land-command-check.mjs" --log-level=warning
-if [ ! -f "$OUT/normandy/deltas.jsonl" ]; then
+# (the battle run.sh fought is reused only when the rules that fought it are the rules here: a fingerprint of the land
+# rules' sources beside it; otherwise it is fought again, so a stale battle never hides a new rule)
+STAMP="$(cat "$REPO"/src/battle/land/*.ts "$REPO"/src/battle/core/*.ts "$HERE/deltas.ts" | cksum | cut -d' ' -f1)"
+if [ ! -f "$OUT/normandy/deltas.jsonl" ] || [ "$(cat "$OUT/normandy/rules.stamp" 2>/dev/null)" != "$STAMP" ]; then
+  rm -rf "$OUT/normandy"
   "$REPO/node_modules/.bin/esbuild" "$HERE/deltas.ts" --bundle --platform=node --format=esm --outfile="$OUT/land-live-deltas.mjs" --log-level=warning
   node "$OUT/land-live-deltas.mjs" "$OUT/normandy" normandy-1944 11 att 0.5 orders
+  echo "$STAMP" > "$OUT/normandy/rules.stamp"
 fi
 node "$OUT/land-command-check.mjs" setup "$OUT/normandy-setup" normandy-1944 11
 # (neighbours join the fight, release 2: the Normandy battle with a corps coming up from next door on each side)
