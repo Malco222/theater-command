@@ -735,6 +735,13 @@ void ALandBattle::GiveGeneral(const FString& Command, const FString& Kind, int32
 		Ids.erase(std::remove_if(Ids.begin(), Ids.end(), [&G](int Id) { const LandCommand::Tag* T = G.Clipboard.TagOf(Id); return !T || !T->bTaken; }), Ids.end());
 	}
 	OrderLive(Command);
+	// (while the film has the camera, its next cut goes to the men he has just ordered, as a war film cuts from the radio
+	// call to the men it sends: the camera thread, 22 November; never from his own view, or it would fire on the film's
+	// return)
+	if (G.bFilm && !Ids.empty())
+	{
+		S.Eye.Lean(Ids.front());
+	}
 	std::vector<std::pair<double, double>> At;
 	for (const FVector2D& P : Points)
 	{
