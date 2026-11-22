@@ -975,6 +975,66 @@ int main(int argc, char** argv)
 	// The lens near the ground over corn: frames, and how far over the ears it was at the lowest.
 	int LowOverCorn = 0, LowInCorn = 0, LensBehindStalks = 0;
 	double LeastOverEars = 1e9;
+	// Scarred ground (release 2, looks only): the old holes of two battles fought here before, the last six months
+	// ago, laid as LandBattle's LayScars lays them (every 4th point of every track the fought-over ground; open
+	// ground only), in a field of their own: how many and how fast; none where Dig says no; each weathered (a bare
+	// patch of its own, its bowl silted under a fresh 150's); a fresh round still laid after them; and room left for
+	// the battle's own (checked against its count at the end). LAND_PLAY_ONLY_SCARS: this alone.
+	int ScarsLaid = 0;
+	{
+		LandCrater::Field Old;
+		Old.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1);
+		Old.Dig = LandCrater::Field::DigOn(Field);
+		std::vector<std::pair<double, double>> Fought;
+		for (const LandFeed::Track& Tr : Rec.Tracks)
+			for (size_t K = 0; K < Tr.At.size(); K += 4) Fought.emplace_back(Tr.At[K].X, Tr.At[K].Y);
+		const LandCrater::Field* OldPtr = &Old;
+		const auto ScarT0 = std::chrono::steady_clock::now();
+		ScarsLaid = LandCrater::LayScars(Old, Fought, 2, 6.0, Rec.Seed ? Rec.Seed : 1,
+			[&Field, OldPtr](double X, double Y) -> std::string
+			{
+				const LandField::Surface Under = Field.At(X, Y);
+				if (Under.What == LandField::Drawn::Floor || Under.What == LandField::Drawn::Wall || Under.What == LandField::Drawn::Water || Under.What == LandField::Drawn::Marsh) return std::string();
+				if (OldPtr->Dig && !OldPtr->Dig(X, Y)) return std::string();
+				return std::string(Under.Fx);
+			});
+		const double ScarMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - ScarT0).count();
+		const int ScarWanted = std::min(LandCrater::Field::Most / 6, 150 * 2);
+		int NotDig = 0, NotBare = 0, NoBareR = 0, TooDeep = 0;
+		double DeepestOld = 0.0;
+		for (const LandCrater::Field::Hole& H : Old.All())
+		{
+			if (!Old.Dig(H.X, H.Y)) ++NotDig;
+			if (!Old.Bare(H.X, H.Y)) ++NotBare;
+			if (H.BareR <= 0.0) ++NoBareR;
+			DeepestOld = std::max(DeepestOld, H.Deep);
+			if (H.Deep > 0.75) ++TooDeep;
+		}
+		// (a fresh 105 after them, on the first open ground of the fought-over ground with no old hole's cut on it)
+		bool bFreshLaid = false, bFreshTried = false;
+		for (const auto& P : Fought)
+		{
+			if (!Old.Dig(P.first, P.second) || Old.InCut(P.first, P.second) || Old.Bare(P.first, P.second)) continue;
+			bFreshTried = true;
+			bFreshLaid = Old.Add(P.first, P.second, "field", 105.0, "earth");
+			break;
+		}
+		std::printf("scars: %d old holes of %d wanted (2 battles, 6 months) laid in %.1f ms in %d patches; deepest old bowl %.2f m; a fresh 105 after them %s\n",
+			ScarsLaid, ScarWanted, ScarMs, Old.Patches(), DeepestOld, bFreshLaid ? "laid" : bFreshTried ? "NOT laid" : "(no open ground to try)");
+		if (!Fought.empty() && ScarsLaid == 0) Fault("scars: no old hole laid on the fought-over ground");
+		if (ScarsLaid > ScarWanted) Fault("scars: more old holes than wanted");
+		if (ScarMs > 1500.0) Fault("scars: laying the old holes took past 1.5 s");
+		if (NotDig > 0) Fault("scars: an old hole on ground Dig keeps (a lane, a yard, a floor, water)");
+		if (NotBare > 0) Fault("scars: the grass not kept off an old hole's middle");
+		if (NoBareR > 0) Fault("scars: an old hole without its own bare patch");
+		if (TooDeep > 0) Fault("scars: an old hole's bowl deeper than 0.75 m (not silted)");
+		if (bFreshTried && !bFreshLaid) Fault("scars: a fresh round's hole not laid after the old ones");
+	}
+	if (std::getenv("LAND_PLAY_ONLY_SCARS"))
+	{
+		std::printf("%s\n", Faults == 0 ? "PASS" : ("FAIL: " + std::to_string(Faults) + " faults").c_str());
+		return Faults == 0 ? 0 : 1;
+	}
 	// The shell holes, laid as the game lays them (LandBattle's MakeCraters): every shell, bomb and grenade that lands
 	// in the ground, none on armour.
 	LandCrater::Field Holes;
@@ -2651,6 +2711,7 @@ int main(int argc, char** argv)
 		std::printf("dug: %d of the holes dug, %d cuts; %d tiles split; the ground cut in %.3f ms a frame at most (%.1f ms in all); at most %zu points in %d parts sent again in a frame\n",
 			DugCount, Dug.Cuts(), DugSplit, DugMsMost, DugMs, DugSentMost, DugSentPartsMost);
 		if (Holes.Count() > 20 && DugCount == 0) Fault("no shell hole was dug");
+		if (Holes.Count() + ScarsLaid > LandCrater::Field::Most) Fault("scars: the old holes left the battle's own rounds no room (the guard reached)");
 		if (DugMsMost > 8.0) Fault("cutting the ground for a frame's holes took more than 8 ms");
 		if (DugSentPartsMost > 0 && DugSentMost > static_cast<size_t>(DugSentPartsMost) * 4000) Fault("a dug part sent again holds more than 4000 points");
 		if (Astray > 0) Fault("a shell hole is kept in a patch its middle is not in");

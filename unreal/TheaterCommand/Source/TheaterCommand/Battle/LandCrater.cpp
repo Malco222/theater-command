@@ -417,11 +417,12 @@ namespace LandCrater
 		// (dug: the bowl under the ground, a round floor falling to Deep at its middle, its wall coming up through the
 		// ground between the 0.72 and the 0.86 rings; Deep 0 lays the old shallow form over the ground)
 		const double Deep = std::max(0.0, S.Deep);
+		const double Fresh = 1.0 - std::clamp(S.Weathered, 0.0, 1.0); // (an old hole's blast soot washed out)
 		const auto BowlAt = [Deep](double T) { const double K = T / 0.78; return -Deep * std::max(0.0, 1.0 - K * K); };
 		const double Base = 0.03 + std::max(0.0, Lift); // (the floor over the drawn ground: nothing of it may sink under the ground's own triangles)
 		const double Ground0 = Height(X, Y);
 		const uint32_t Middle = Deep > 0.0
-			? Put(Out, X, Y, Ground0 + Base - Deep * D.U(0.96, 1.04), Mixed(Toned(Paint.Hollow, D.U(0.82, 0.92)), Soot, D.U(0.3, 0.45)))
+			? Put(Out, X, Y, Ground0 + Base - Deep * D.U(0.96, 1.04), Mixed(Toned(Paint.Hollow, D.U(0.82, 0.92)), Soot, D.U(0.3, 0.45) * Fresh))
 			: Put(Out, X, Y, Ground0 + Base, Toned(Paint.Hollow, D.U(0.82, 0.92)));
 		std::vector<uint32_t> Index(static_cast<size_t>(NRings * N));
 		for (int Ring = 0; Ring < NRings; ++Ring)
@@ -445,7 +446,7 @@ namespace LandCrater
 						// lightening toward the dry soil it rises to
 						const double Bowl = BowlAt(Rg.T) * D.U(0.92, 1.06);
 						Over = Bowl + D.U(-0.02, 0.02) * Deep;
-						Colour = Rg.T < 0.4 ? Mixed(Paint.Hollow, Soot, D.U(0.15, 0.3)) : Rg.T < 0.6 ? Mixed(Paint.Hollow, Paint.Wall, 0.18) : Mixed(Paint.Hollow, Paint.Wall, 0.55);
+						Colour = Rg.T < 0.4 ? Mixed(Paint.Hollow, Soot, D.U(0.15, 0.3) * Fresh) : Rg.T < 0.6 ? Mixed(Paint.Hollow, Paint.Wall, 0.18) : Mixed(Paint.Hollow, Paint.Wall, 0.55);
 					}
 					else if (Rg.T <= 0.56)
 					{
@@ -478,7 +479,7 @@ namespace LandCrater
 						Colour = Mixed(Colour, Paint.Turf, TurfShare);
 					}
 					else if (Patch < 0.42) Colour = Toned(Mixed(Colour, Paint.Clod, 0.6), D.U(0.8, 0.95));
-					else if (Deep > 0.0 && Rg.T < 0.4 && Patch < 0.62) Colour = Mixed(Colour, Soot, D.U(0.15, 0.35)); // (blast-blackened soil thrown with it)
+					else if (Deep > 0.0 && Rg.T < 0.4 && Patch < 0.62) Colour = Mixed(Colour, Soot, D.U(0.15, 0.35) * Fresh); // (blast-blackened soil thrown with it)
 				}
 				const double Px = X + std::cos(A) * Radius, Py = Y + std::sin(A) * Radius;
 				const double Edge = Rg.bOut && Rg.T >= 1.0 ? 0.6 : 1.0; // (the thin edge a little lower: it lies on the grass)
@@ -878,6 +879,16 @@ namespace LandCrater
 
 	bool Field::Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground)
 	{
+		return AddAged(X, Y, Name, CalibreMm, Ground, -1.0);
+	}
+
+	bool Field::AddOld(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months)
+	{
+		return AddAged(X, Y, Name, CalibreMm, Ground, std::max(0.0, Months));
+	}
+
+	bool Field::AddAged(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months)
+	{
 		if (!Height || Ground == "water" || static_cast<int>(Holes.size()) >= Most || !(X == X) || !(Y == Y) || std::fabs(X) > 1e6 || std::fabs(Y) > 1e6)
 		{
 			return false;
@@ -892,6 +903,18 @@ namespace LandCrater
 		if (Ground == "rock")
 		{
 			S.Deep *= 0.35;
+		}
+		// (an old hole: weathered toward a year's look. Its soot and its clods gone in the first weeks' rain; then its
+		// bowl silts and slumps, its crest wears down and its thrown soil spreads and thins; the art director's to tune)
+		const bool bOld = Months >= 0.0;
+		const double Age = bOld ? std::clamp(Months / 12.0, 0.0, 1.0) : 0.0;
+		if (bOld)
+		{
+			S.Weathered = 0.4 + 0.6 * Age;
+			S.Deep *= 1.0 - 0.55 * Age;
+			S.Rim *= 1.0 - 0.65 * Age;
+			S.Reach *= 1.0 - 0.25 * Age;
+			S.Clods = 0;
 		}
 		if (S.Deep > 0.0 && Dig)
 		{
@@ -920,8 +943,25 @@ namespace LandCrater
 		const HeightFn Surface = [this](double Px, double Py) { return SurfaceAt(Px, Py); };
 		std::vector<double> CutLine;
 		// (rock's thrown soil the region's own earth: the desert's sand, Italy's red earth; else the bocage's loam)
-		Lay(X, Y, S, SoilOf((Ground == "earth" || Ground == "rock") && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
+		Soil Paint = SoilOf((Ground == "earth" || Ground == "rock") && !Earth.empty() ? Earth : Ground);
+		if (bOld)
+		{
+			// (grown over toward the ground's own colour there: the thrown soil first and most, then the crest, the walls
+			// and the hollow, which keep a damper, darker earth longest)
+			const Rgb8 Grown = Under ? Under(X, Y) : Paint.Turf;
+			const double Over = 0.3 + 0.6 * Age, Inner = 0.12 + 0.43 * Age;
+			Paint.Thrown = Mixed(Paint.Thrown, Grown, Over);
+			Paint.Edge = Mixed(Paint.Edge, Grown, std::min(1.0, Over + 0.1));
+			Paint.Crest = Mixed(Paint.Crest, Grown, Over * 0.85);
+			Paint.Turf = Mixed(Paint.Turf, Grown, 0.6);
+			Paint.Clod = Mixed(Paint.Clod, Grown, Over);
+			Paint.Wall = Mixed(Paint.Wall, Toned(Grown, 0.82), Inner);
+			Paint.Hollow = Mixed(Paint.Hollow, Toned(Grown, 0.7), Inner * 0.8);
+		}
+		Lay(X, Y, S, Paint, Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr, Lit);
 		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
+		// (an old hole's grass and corn stand round it but over its bowl: on its worn rim they have grown back)
+		H.BareR = bOld ? (H.Deep > 0.0 ? 0.92 : 0.55) * 0.5 * S.Across : 0.0;
 		H.X = X;
 		H.Y = Y;
 		H.R = 0.5 * S.Across;
@@ -1105,7 +1145,7 @@ namespace LandCrater
 				}
 				continue;
 			}
-			const double Bare_ = 1.2 * H.R;
+			const double Bare_ = H.BareR > 0.0 ? H.BareR : 1.2 * H.R;
 			if ((X - H.X) * (X - H.X) + (Y - H.Y) * (Y - H.Y) < Bare_ * Bare_)
 			{
 				return true;
@@ -1953,5 +1993,69 @@ namespace LandCrater
 			}
 		}
 		return false;
+	}
+
+	int LayScars(Field& Holes, const std::vector<std::pair<double, double>>& Fought, int Battles, double Months, uint64_t Seed,
+		const std::function<std::string(double X, double Y)>& GroundWord)
+	{
+		if (Battles <= 0 || Fought.empty() || !GroundWord)
+		{
+			return 0;
+		}
+		// The fought-over ground: the middle four fifths of where the men and machines went, each way, 300 m at least.
+		std::vector<double> Xs, Ys;
+		Xs.reserve(Fought.size());
+		Ys.reserve(Fought.size());
+		for (const auto& P : Fought)
+		{
+			if (P.first == P.first && P.second == P.second)
+			{
+				Xs.push_back(P.first);
+				Ys.push_back(P.second);
+			}
+		}
+		if (Xs.empty())
+		{
+			return 0;
+		}
+		std::sort(Xs.begin(), Xs.end());
+		std::sort(Ys.begin(), Ys.end());
+		const auto At = [](const std::vector<double>& V, double Q) { return V[std::min(V.size() - 1, static_cast<size_t>(Q * static_cast<double>(V.size() - 1) + 0.5))]; };
+		double X0 = At(Xs, 0.1), X1 = At(Xs, 0.9), Y0 = At(Ys, 0.1), Y1 = At(Ys, 0.9);
+		const auto Widen = [](double& A, double& B) { const double Mid = 0.5 * (A + B), Half = std::max(150.0, 0.5 * (B - A)); A = Mid - Half; B = Mid + Half; };
+		Widen(X0, X1);
+		Widen(Y0, Y1);
+		const int Wanted = std::min(Field::Most / 6, 150 * Battles);
+		Dice D(Mix(Seed, 0x5CA25ull));
+		int Laid = 0;
+		// (clusters: a barrage's dozen, a mortar's few; tried a while longer than wanted, since open ground is not all)
+		for (int Tries = 0; Laid < Wanted && Tries < Wanted * 6; )
+		{
+			const double CX = X0 + (X1 - X0) * D.U(), CY = Y0 + (Y1 - Y0) * D.U();
+			const bool bBarrage = D.U() < 0.45;
+			const int InIt = bBarrage ? 8 + static_cast<int>(D.U() * 9.0) : 2 + static_cast<int>(D.U() * 4.0);
+			const double Spread = bBarrage ? 35.0 : 12.0;
+			// (which battle before: the last the most, an earlier one's holes older by some months each)
+			const int Before = Battles > 1 ? static_cast<int>(D.U() * D.U() * Battles) : 0;
+			const double Older = Months + Before * (2.0 + 4.0 * D.U());
+			for (int K = 0; K < InIt && Laid < Wanted; ++K, ++Tries)
+			{
+				// (about the cluster's middle, thicker at it: the sum of two throws each way)
+				const double X = CX + Spread * (D.U() + D.U() - 1.0), Y = CY + Spread * (D.U() + D.U() - 1.0);
+				const double Kind = D.U();
+				const double Age = std::max(0.0, Older + D.U() * 0.5);
+				const std::string Ground = GroundWord(X, Y);
+				if (Ground.empty() || Ground == "water")
+				{
+					continue;
+				}
+				const char* Name = Kind < 0.4 ? "mortar" : Kind < 0.6 ? "gun75" : Kind < 0.9 ? "field" : "heavy";
+				if (Holes.AddOld(X, Y, Name, Kind < 0.6 && Kind >= 0.4 ? 75.0 : 0.0, Ground, Age))
+				{
+					++Laid;
+				}
+			}
+		}
+		return Laid;
 	}
 }

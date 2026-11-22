@@ -343,6 +343,11 @@ namespace LandFeed
 				R.Aid.push_back(Row);
 			}
 			ReadPatrol(Root["patrol"], R.Night);
+			if (Root["scars"].IsObject())
+			{
+				R.ScarCount = std::max(0, Root["scars"]["count"].Int(0));
+				R.ScarMonths = std::max(0.0, Root["scars"]["months"].Num(0.0));
+			}
 		}
 
 		/** The platoon cam's marks: ld [[from, to], ...], e [[from, to, "base" | "move"], ...], cl [t, ...] or

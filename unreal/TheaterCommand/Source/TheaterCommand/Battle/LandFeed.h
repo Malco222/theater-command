@@ -405,6 +405,13 @@ namespace LandFeed
 		std::vector<HeldOrder> Held;
 		std::vector<AidPost> Aid;
 		Patrol Night;
+		/**
+		 * Scarred ground (release 2, Brian 21:21Z: "a field fought over keeps its craters next time"; the design
+		 * director: looks only, no draw reads it): root "scars" {"count": battles fought here before, "months": since
+		 * the last}. Count 0 where none is given (the player's switch off, or a fresh field).
+		 */
+		int ScarCount = 0;
+		double ScarMonths = 0.0;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header
