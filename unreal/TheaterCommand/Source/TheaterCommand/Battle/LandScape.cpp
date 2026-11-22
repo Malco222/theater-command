@@ -323,12 +323,13 @@ namespace LandScape
 			A.bSet = true;
 			break;
 		case Look::Dry:
-			// (the high continental air of Mongolia in summer: clear, a pale blue-grey haze and a little dust, the sight
-			// long, some 6,000 m; the art director's summer steppe grade)
+			// (the high continental air of Mongolia in summer: clear and dry, a pale blue-grey haze and a little dust, the
+			// sight long, some 8,500 m (the art director's Khalkhin Gol read: a third less haze, so the Khalkha bluffs carry);
+			// her summer steppe grade)
 			A.bSet = true;
 			Ink(A.HazeInk, 0.68, 0.70, 0.72);
 			Ink(A.HazeOvercast, 0.55, 0.56, 0.57);
-			A.HazeDensity = 0.0042;
+			A.HazeDensity = 0.0028;
 			A.SkyDust = 0.8;
 			Grade(0.50, 0.55, 1.35, -0.5, 0.55, 1.01, 0.99);
 			break;
@@ -365,6 +366,19 @@ namespace LandScape
 	double Region::Rolling(double X, double Y, double MeanZ) const
 	{
 		return MeanZ + 14.0 * Fbm(X, Y, 2600.0, 3, Seed ^ 0xB1) + 4.0 * Fbm(X, Y, 700.0, 2, Seed ^ 0xB2);
+	}
+
+	int Region::DrawStep() const
+	{
+		// (the budget's steps: the jungle a step nearer, the temperate woods two, the northern forest three, olives on a
+		// mountain four; the desert, the dry steppe, the hills' olives and the islands GS9's own)
+		switch (Which())
+		{
+		case Look::Jungle: return 1;
+		case Look::Farmland: return Fd.Lat > 55.0 ? 3 : 2;
+		case Look::Med: return Fd.Terrain.find("mount") != std::string::npos ? 4 : 0;
+		default: return 0;
+		}
 	}
 
 	void Region::KitPlain(int Slot, LandField::BaseMesh& M) const

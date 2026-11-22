@@ -381,10 +381,13 @@ namespace LandSteppe
 		if (!LandJson::Parse(Text, Root, OutError)) return false;
 		std::vector<Tone> Colours;
 		for (size_t K = 0; K < Root["colours"].Count(); ++K) Colours.push_back(Hex(Root["colours"].At(K).Str("808080")));
-		LandField::Mesh Near, Far;
+		LandField::Mesh Near, Mid, Far;
 		if (!ReadLevel(Root["near"], Colours, Near, OutError)) return false;
 		if (Root["far"].IsObject() && !ReadLevel(Root["far"], Colours, Far, OutError)) return false;
+		// (its middle level too where the file has one: the game draws it from MidFrom, GS9 by class)
+		if (Root["mid"].IsObject() && !ReadLevel(Root["mid"], Colours, Mid, OutError)) return false;
 		Out.Near = std::move(Near);
+		Out.Mid = std::move(Mid);
 		Out.Far = std::move(Far);
 		Out.FarFrom = static_cast<float>(FarFrom);
 		return true;

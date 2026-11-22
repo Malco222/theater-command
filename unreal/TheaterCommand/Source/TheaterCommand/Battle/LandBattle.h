@@ -189,6 +189,61 @@ private:
 	TArray<TObjectPtr<UStaticMesh>> ThingMeshes;
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ThingCopies;
+	/** A hedge shrub standing at a hedge cutter's gap (the recording's cuts), drawn by a few copies of its own and not
+	 * the field's, so that shaking it and throwing it down touches only those: which cut, its copies (in ThingCopies)
+	 * and its place there, and where it stood (the field's metres, its turn and sizes, LandField::Placed). */
+	struct FCutShrub
+	{
+		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies;
+		int32 Cut = -1, Index = 0;
+		double X = 0.0, Y = 0.0, Z = 0.0, Yaw = 0.0, Scale = 1.0, ScaleZ = 1.0;
+	};
+	TArray<FCutShrub> CutShrubs;
+	/** Each cut's stage (the recording's order): 0 the hedge whole, 1 she is pushing into it (from T0), 2 torn (T1). */
+	TArray<uint8> CutStage;
+	int32 CutsTorn = 0;
+
+	/** Release 2's field telephones (the recording's wires): every wire's lengths of a metre or so, copies of one piece
+	 * of wire laid on the ground (WireCopies, drawn out to some 60 m), and the field telephones at each wire's two
+	 * ends (PhoneCopies). */
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> WireCopies;
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> PhoneCopies;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> PropMeshes;
+	/** A length of wire: its wire (Wires' order), its two ends (the field's metres), and where it is laid now. */
+	struct FWireLength
+	{
+		int32 Wire = 0;
+		double X0 = 0.0, Y0 = 0.0, X1 = 0.0, Y1 = 0.0;
+		bool bHidden = false;
+	};
+	TArray<FWireLength> WireLengths;
+	/** A wire as it stands: its lengths in WireLengths (From, Count), cut or whole, a cut's hidden lengths and its two
+	 * curled ends' places in WireCopies (-1: none yet). */
+	struct FWireState
+	{
+		int32 Id = 0, From = 0, Count = 0, CurlA = -1, CurlB = -1;
+		bool bCut = false;
+		TArray<int32> Hidden;
+	};
+	TArray<FWireState> WireStates;
+	/** The next of the recording's wire cuts and mends not yet shown, and the holes already laid when the wires were
+	 * last settled on the ground. */
+	int32 NextWireCut = 0, NextWireMend = 0, WireHolesSeen = 0;
+	/** The bearers' stretchers (Content/Models/Battle's Stretcher, one copy a carry) and the aid posts' stretchers. */
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> StretcherCopies;
+	/** A carry: the man carried (a track), his two bearers (front, rear: tracks), its battle times, and its copy's place
+	 * in StretcherCopies (shown or put away). */
+	struct FCarrySpan
+	{
+		int32 Carried = -1, By1 = -1, By2 = -1, Copy = -1;
+		double From = 0.0, To = 0.0;
+		bool bShown = false;
+	};
+	TArray<FCarrySpan> CarrySpans;
 	/** Each base's two shade edges (the brightness of an instance's tint, R + G + B), and for the clutter each
 	 * brightness third's two warmth edges (R - G; WarmEdges, three a kind): a thing's shade is its brightness third, and
 	 * the clutter's is that third split again in thirds by warmth, nine a kind, so that a blade of grass takes about its
@@ -469,10 +524,12 @@ private:
 	/** The walk pan ("-TheaterLandWalkPan=<battle s>[,<seconds>]", the Mac recipe's look 7): from that battle second the
 	 * eye stands off a walking block's flank and turns with it (LandWalkPan), a still each real second. Battle second
 	 * it starts at (-1 none), how long, the stills' next real time and count, the tries left to find a walking block
-	 * (10 s later each), whether it holds the eye now, and its look, smoothed. */
+	 * (10 s later each), whether it holds the eye now, and its look, smoothed. The tank pan ("-TheaterLandTankPan=", the
+	 * same form; the far tanks' motion vectors, LandCrowd) uses the same: a tank driving 170 to 240 m off, past the
+	 * hand-over, on a long lens (bTankPan). */
 	double WalkPanAt = -1.0, WalkPanFor = 20.0, WalkPanStillAt = -1.0;
 	int32 WalkPanStills = 0, WalkPanTries = 6;
-	bool bWalkPanOn = false;
+	bool bWalkPanOn = false, bTankPan = false;
 	FVector WalkPanLook = FVector::ZeroVector;
 	void WalkPan(double Real);
 	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
@@ -598,8 +655,23 @@ private:
 	void MakeFlags();
 
 	void PlayEffects();
+	/** This frame's hedge cutters (the recording's cuts): from T0 the shrubs at the gap shaken as she pushes into the
+	 * bank, at T1 the bank torn through (LandCrater's breach, sent by MakeCraters with the holes) and its shrubs thrown
+	 * down the way she drove. */
+	void MakeBreaches();
 	/** This frame's shells, bombs and grenades into the ground: their holes, kept the whole battle. */
 	void MakeCraters();
+	/** The field telephones' wires laid on the ground and their telephones (none where the recording has no wires). */
+	void LayWires();
+	/** This frame's wire cuts and mends, and the lengths over a new hole laid on its face. */
+	void MakeWires();
+	/** A length of wire placed from its ends, on the ground as it is now (its holes and gaps). */
+	FTransform WireAt(double X0, double Y0, double X1, double Y1) const;
+	/** The stretcher bearers' stretchers, one a carry, put away until it starts; and two stretchers laid by each aid
+	 * post (none where the recording carries no carries). */
+	void LayStretchers();
+	/** This frame's stretchers: each carry's under its man between his two bearers, the rest put away. */
+	void MakeStretchers();
 	/** This frame's tracks on the ground: each moving tank's and lorry's marks, the corn laid flat behind her. */
 	void MakeRuts();
 	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */

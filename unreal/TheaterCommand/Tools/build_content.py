@@ -325,6 +325,145 @@ def build_cloud():
     finish(m)
 
 
+def _sky_chip_code():
+    """GS6: M_CloudTurned's Custom node: Battle/AirSkyChip.inl as it stands (the clouds' arithmetic, which the cloud test
+    also compiles as C++ and checks against the painter's), then a few lines that read one puff's texels from the
+    table and hand back where the point goes (the mesh's own units, its own frame) with its colour and its place on
+    the sheet."""
+    import os
+    places = []
+    try:
+        places.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
+    except NameError:  # (run where the script's own path is not given)
+        pass
+    places.append(os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
+    for path in places:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                maths = f.read()
+            break
+    else:
+        raise RuntimeError("Battle/AirSkyChip.inl was not found at " + " or ".join(places))
+    texels = ", ".join(f"SkyTable.Load(int3({k}, 0, 0))" for k in range(5)) + ",\n    " + \
+        ", ".join(f"SkyTable.Load(int3(SkyCol + {k}, SkyRow, 0))" for k in range(8))
+    return maths + f"""
+// (the glue: one point of one puff, for the eye where it is this frame)
+FSkyChip SkyChip;
+SkyChip.Pad = 0.0f;
+int SkyCol = (int)(SkySlot.x + 0.5f);
+int SkyRow = (int)(SkySlot.y + 0.5f);
+float3 SkyLocal = SkyEye / SkyUnits;
+FSkyChipOut SkyOut = SkyChip.Vertex({texels},
+    float3(SkyLocal.y, SkyLocal.x, SkyLocal.z), SkyCol / 8 + (SkyRow - 1) * 256, (int)(SkyRing.x + 0.5f), (int)(SkyRing.y + 0.5f));
+SkyColour = SkyOut.Colour;
+SkySheet = SkyOut.Sheet;
+return float3(SkyOut.At.y, SkyOut.At.x, SkyOut.At.z) * SkyUnits;
+"""
+
+
+def build_cloud_turned():
+    """GS6, THE CLOUDS TURNED ON THE GRAPHICS CHIP (the speed gate's sky: the same clouds as M_Cloud, with nothing turned
+    or sent from the game's thread as the eye moves). One mesh, made once, a puff's room for each slot of the table:
+    each point's first texture coordinate is its place round its puff (the point round the ring, and which ring: 0 the
+    middle, 1 the heart, 2 the rim), its second its slot's first texel in "Table" (a float picture the game lays, far
+    to near: AirSky::Chip). Where the points are placed (the vertex shader) the Custom node runs Battle/AirSkyChip.inl,
+    the painter's own arithmetic, for the eye as it is this frame ("UnitsPerMetre": the scene's), and the point is
+    moved there; its colour and its place on the sheet are carried to the pixels, which are M_Cloud's (the "Sheet" of
+    shapes, "Brightness", "Tint", "Opacity"). Light of its own, see-through, seen from both sides."""
+    m = new_material("M_CloudTurned")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+
+    chip = node(m, unreal.MaterialExpressionCustom, -2400, 900)
+    chip.set_editor_property("description", "AirSkyChip")
+    chip.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    chip.set_editor_property("code", _sky_chip_code())
+    inputs = []
+    for name in ("SkyTable", "SkyRing", "SkySlot", "SkyEye", "SkyUnits"):
+        each = unreal.CustomInput()
+        each.set_editor_property("input_name", name)
+        inputs.append(each)
+    chip.set_editor_property("inputs", inputs)
+    outputs = []
+    for name in ("SkyColour", "SkySheet"):
+        each = unreal.CustomOutput()
+        each.set_editor_property("output_name", name)
+        each.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+        outputs.append(each)
+    chip.set_editor_property("additional_outputs", outputs)
+
+    stand = stand_in(True)
+    table = node(m, unreal.MaterialExpressionTextureObjectParameter, -2900, 700, parameter_name="Table", texture=stand, sampler_type=sampler_for(stand))
+    connect(table, "", chip, "SkyTable")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 850, coordinate_index=0), "", chip, "SkyRing")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 950, coordinate_index=1), "", chip, "SkySlot")
+    eye = node(m, unreal.MaterialExpressionTransformPosition, -2700, 1050,
+               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
+               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    connect(node(m, unreal.MaterialExpressionCameraPositionWS, -2950, 1050), "", eye, "")
+    connect(eye, "", chip, "SkyEye")
+    connect(scalar(m, "UnitsPerMetre", 100.0, -2900, 1150), "", chip, "SkyUnits")
+
+    # The point moved from where the mesh made it to where the chip puts it, in the world.
+    away = node(m, unreal.MaterialExpressionSubtract, -2100, 900)
+    connect(chip, "", away, "A")
+    connect(node(m, unreal.MaterialExpressionPreSkinnedPosition, -2300, 1050), "", away, "B")
+    moved = node(m, unreal.MaterialExpressionTransform, -1900, 900,
+                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    connect(away, "", moved, "")
+    to_property(moved, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    # The pixels: M_Cloud's, from the colour and the sheet's place carried from the points.
+    colour = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkyColour"), -1700, -300)
+    carried = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkySheet"), -1700, 300)
+    paint = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, -300, r=True, g=True, b=True, a=False)
+    alpha = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, 650, r=False, g=False, b=False, a=True)
+    place = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1400, 0, r=True, g=True, b=False, a=False)
+    sheet = picture(m, "Sheet", place, -1100, 0, numbers=True)
+    behind = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 400, r=False, g=False, b=True, a=False)
+    ahead = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 520, r=False, g=False, b=False, a=True)
+
+    def less(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionSubtract, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    # light = 2 (side + (front - side) behind + (back - side) ahead), as M_Cloud
+    toward = times(m, less((sheet, "G"), (sheet, "R"), -850, 200), behind, -650, 250)
+    against = times(m, less((sheet, "B"), (sheet, "R"), -850, 450), ahead, -650, 450)
+    light = times(m, plus(m, plus(m, (sheet, "R"), toward, -450, 150), against, -300, 250), 2.0, -150, 250)
+    lit = times(m, times(m, paint, light, -150, -200), scalar(m, "Brightness", 1.3, -350, -100), 50, -200)
+    tinted = times(m, lit, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -150, -400), 250, -250)
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    shown = times(m, times(m, alpha, (sheet, "A"), -450, 650), scalar(m, "Opacity", 1.0, -450, 780), -250, 650)
+    to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, -50, 650), "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+    try:  # (what the points' shader costs, for the next Mac run's notes; an engine without the call says nothing)
+        stats = mel.get_statistics(m)
+        unreal.log(f"Theater Command: M_CloudTurned: {stats.get_editor_property('num_vertex_shader_instructions')} vertex shader instructions, "
+                   f"{stats.get_editor_property('num_pixel_shader_instructions')} pixel")
+    except Exception:
+        pass
+
+
+def build_cloud_turned_or_tell():
+    """GS6: M_CloudTurned is the clouds' on the graphics chip only; without it the scenes turn them on the game's thread
+    as before (LandBattle's LaySky says so). Whatever goes wrong in it is told, and the rest is built as before."""
+    import traceback
+    try:
+        build_cloud_turned()
+    except Exception:
+        unreal.log_error("Theater Command: M_CloudTurned was not built (the clouds are turned on the game's thread, as before):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_CloudTurned"):
+                eal.delete_asset(f"{MATERIALS}/M_CloudTurned")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_CloudTurned could not be removed:\n" + traceback.format_exc())
+
+
 def build_wake():
     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
@@ -2047,7 +2186,9 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # the same. M_LandSteel, the far vehicles' instanced pieces with their soot (TK1), the same: TC_REBUILD=M_LandSteel
 # after a change to M_MapSurface. M_LandCrowd, the mid and far men as posed instances (SO1), the same:
 # TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
+# Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

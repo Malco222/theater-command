@@ -59,9 +59,11 @@ namespace LandScape
 			KThatch = 10,   // ThatchHouse
 			KReeds = 11,
 			KBoulder = 12,
-			KBamboo = 13,   // Bamboo (the Asian mainland only: Burma, Malaya)
-			KStump = 14,    // CoconutPalmTall again, its crown shot away (KitLook cuts it): the islands' snapped palms
-			KThicket = 15   // the jungle's thickets, built whole in KitLook (the kit has none; Boulder's small file carries the slot)
+			KBamboo = 13,   // Bamboo on the Asian mainland (Burma, Malaya); elsewhere in the jungle a fallen log, built whole
+			KStump = 14,    // CoconutPalmTall again, its crown shot away (KitLook cuts it): the islands' snapped palms; the
+				               // jungle's curtain of climbers at the woods' edge, built whole
+			KThicket = 15   // the jungle's thickets; an island's pandanus (built whole in KitLook: the kit has neither, and
+				               // Boulder's small file carries the slot, as for the others built whole)
 		};
 
 		struct V3
@@ -81,7 +83,7 @@ namespace LandScape
 		/** A ribbon along a line of points (a blade, a frond, a stem, a liana), both faces, Wide across at each point (its
 		 * last may be 0, a point), facing square to Across; coloured along it from Foot to Tip. Lit as leaves are, from
 		 * above on both faces. */
-		void Ribbon(Writer& W, const std::vector<V3>& P, const std::vector<double>& Wide, const V3& Across, const Tone& Foot, const Tone& Tip)
+		void Ribbon(Writer& W, const std::vector<V3>& P, const std::vector<double>& Wide, const V3& Across, const Tone& Foot, const Tone& Tip, double Lift = 0.6)
 		{
 			if (P.size() < 2) return;
 			const V3 A = Norm(Across);
@@ -90,7 +92,7 @@ namespace LandScape
 			{
 				const V3 Up = Norm(P[std::min(K + 1, P.size() - 1)] - P[K > 0 ? K - 1 : 0]);
 				V3 N = Norm(Cross(A, Up));
-				N.Z = std::fabs(N.Z) + 0.6;
+				N.Z = std::fabs(N.Z) + Lift;
 				N = Norm(N);
 				const Tone C = Mixed(Foot, Tip, static_cast<double>(K) / static_cast<double>(P.size() - 1));
 				const double H = 0.5 * Wide[K];
@@ -134,9 +136,9 @@ namespace LandScape
 			return Out;
 		}
 
-		/** A closed lumpy ball about C (RX across, RZ high; Rings from top to foot, Round about), lit Lit on top and Under
+		/** A closed lumpy ball about C (RX and RY across, RZ high; Rings from top to foot, Round about), lit Lit on top and Under
 		 * beneath: the core of a mass of leaves, or one of a far thicket's few. */
-		void Blob(Writer& W, const V3& C, double RX, double RZ, int Rings, int Round, uint64_t Key, const Tone& Lit, const Tone& Under)
+		void Blob(Writer& W, const V3& C, double RX, double RY, double RZ, int Rings, int Round, uint64_t Key, const Tone& Lit, const Tone& Under)
 		{
 			const uint32_t Top = W.Vert(C.X, C.Y, C.Z + RZ, 0, 0, 1, Lit);
 			std::vector<uint32_t> Id;
@@ -151,7 +153,7 @@ namespace LandScape
 					const double X = std::sin(Phi) * std::cos(Th), Y = std::sin(Phi) * std::sin(Th), Z = std::cos(Phi);
 					// (mottled, the lumps that stand out lit the more)
 					const Tone Cv = Varied(Mixed(Under, Lit, Clamp01(0.5 + 0.5 * Z + 0.4 * (Push - 1.0))), Mottle, 0.0);
-					Id.push_back(W.Vert(C.X + RX * Push * X, C.Y + RX * Push * Y, C.Z + RZ * Push * Z, X, Y, Z, Cv));
+					Id.push_back(W.Vert(C.X + RX * Push * X, C.Y + RY * Push * Y, C.Z + RZ * Push * Z, X, Y, Z, Cv));
 				}
 			}
 			const uint32_t Foot = W.Vert(C.X, C.Y, C.Z - 0.85 * RZ, 0, 0, -1, Under);
@@ -168,16 +170,16 @@ namespace LandScape
 
 		/** A mass of leaves: a dark lumpy core half hidden under broad leaves lying over it like shingles, each drooping
 		 * out and down from where it grows, its face to the light. */
-		void Leafy(Writer& W, const V3& C, double RX, double RZ, int Leaves, uint64_t Key, const Tone& Lit, const Tone& Under)
+		void Leafy(Writer& W, const V3& C, double RX, double RY, double RZ, int Leaves, uint64_t Key, const Tone& Lit, const Tone& Under)
 		{
-			Blob(W, C, 0.7 * RX, 0.7 * RZ, 5, 7, Key, Mixed(Under, Lit, 0.55), Under);
+			Blob(W, C, 0.7 * RX, 0.7 * RY, 0.7 * RZ, 5, 7, Key, Mixed(Under, Lit, 0.55), Under);
 			Rng R(Key ^ 0x1EAF);
 			for (int L = 0; L < Leaves; ++L)
 			{
 				const double Th = R.Range(0.0, 2.0 * Pi), Z = R.Range(-0.5, 0.97), Long = R.Range(0.45, 0.8), Wide = R.Range(0.2, 0.34), Pale = R.Next(), Spin = R.Range(-0.7, 0.7);
 				const double S = std::sqrt(std::max(0.0, 1.0 - Z * Z));
 				const V3 N{ S * std::cos(Th), S * std::sin(Th), Z };
-				const V3 Root = C + V3{ N.X * RX * 0.7, N.Y * RX * 0.7, N.Z * RZ * 0.7 };
+				const V3 Root = C + V3{ N.X * RX * 0.7, N.Y * RY * 0.7, N.Z * RZ * 0.7 };
 				// (down the surface, turned a little either way, and out from it)
 				const V3 Down = S > 0.15 ? Norm(V3{ 0, 0, -1 } + N * Z) : Norm(V3{ std::cos(Th + Spin), std::sin(Th + Spin), 0.0 });
 				const V3 Side = Cross(N, Down);
@@ -216,8 +218,92 @@ namespace LandScape
 				SeaZ = Lo - 1.2;
 				Wf = F.Width();
 				Df = F.Depth();
-			}
+				// The patches' noises read once onto an 8 m grid over the field and 300 m round it (the paint, the clutter and
+				// the planting ask them many times; four noises each is too dear), straight from the noise beyond it.
+				GX0 = -300.0;
+				GY0 = -300.0;
+				GNX = static_cast<int>((Wf + 600.0) / GStep) + 2;
+				GNY = static_cast<int>((Df + 600.0) / GStep) + 2;
+				Grid.resize(static_cast<size_t>(Chans) * static_cast<size_t>(GNX) * static_cast<size_t>(GNY));
+				for (int J = 0; J < GNY; ++J)
+					for (int I = 0; I < GNX; ++I)
+						for (int C = 0; C < Chans; ++C)
+							Grid[(static_cast<size_t>(J) * static_cast<size_t>(GNX) + static_cast<size_t>(I)) * Chans + static_cast<size_t>(C)] = static_cast<float>(Chan(GX0 + I * GStep, GY0 + J * GStep, C));
+				}
 			Look Which() const override { return bIsland ? Look::Island : Look::Jungle; }
+
+			// ------------------------------------------------------------------ noise with no lattice showing
+
+			/** A noise turned and bent by another, at two scales, so neither its square cells nor diamonds show (about -1 to 1,
+			 * most within a third of 0); Scale in metres. */
+			double Organic(double X, double Y, double Scale, uint64_t K) const
+			{
+				const double Bend = 0.5 * Scale, F = 1.0 / (1.9 * Scale);
+				const double WX = Bend * Noise(X * F + 3.1, Y * F - 0.7, K ^ 0x0A1), WY = Bend * Noise(X * F - 2.3, Y * F + 4.4, K ^ 0x0A2);
+				const double U = 0.8 * (X + WX) - 0.6 * (Y + WY), V = 0.6 * (X + WX) + 0.8 * (Y + WY);
+				return 0.72 * Noise(U / Scale, V / Scale, K) + 0.4 * Noise(V / (0.55 * Scale) + 1.7, -U / (0.55 * Scale), K ^ 0x0A3);
+			}
+			/** The grid's channels. Both looks: 0 the parcels' ragged edges. The jungle: 1 the kunai's thin spots, 2 its burns, 3
+			 * its paths' line, 4 where it has paths. The islands: 1 the ground cover's drifts, 2 the sand's dry crests and grey
+			 * bands, 3 the litter under the palms. */
+			double Chan(double X, double Y, int C) const
+			{
+				if (C == 0) return Organic(X, Y, 55.0, Seed ^ 0xE01);
+				if (C == 5) return Organic(X, Y, 24.0, Seed ^ 0xE09);
+				if (C == 6) return Organic(X, Y, 62.0, Seed ^ 0xE0A);
+				if (bIsland) return C == 1 ? Organic(X, Y, 22.0, Seed ^ 0xE02) : C == 2 ? Organic(X, Y, 70.0, Seed ^ 0xE03) : C == 3 ? Organic(X, Y, 26.0, Seed ^ 0xE04) : Organic(X, Y, 150.0, Seed ^ 0xC1D);
+				return C == 1 ? Organic(X, Y, 28.0, Seed ^ 0xE05) : C == 2 ? Organic(X, Y, 42.0, Seed ^ 0xE06) : C == 3 ? Organic(X, Y, 80.0, Seed ^ 0xE07) : Organic(X, Y, 220.0, Seed ^ 0xE08);
+			}
+			/** The ground's own breakup at 5-40 m, carried by its colour where the clutter has dropped out (the general's
+			 * camera sees the oblique): soft drifts lighter and warmer, darker and cooler, from the grid's two breakup
+			 * channels (warped noise, its finest some 13 m and its broadest 60 m) and, finest, a noise of 11 m cells turned
+			 * and bent by them, read at each point (nothing finer, as the 4.2 m vertices would show it in cells). */
+			Tone Breakup(const Tone& T, double X, double Y, double Amount) const
+			{
+				const double Fine = Read(X, Y, 5), Broad = Read(X, Y, 6);
+				const double U = 0.8 * X - 0.6 * Y + 9.0 * Broad, V = 0.6 * X + 0.8 * Y + 9.0 * Fine;
+				const double Grain = Noise(U / 11.0 + 0.4, V / 11.0 - 0.9, Seed ^ 0xE0B);
+				return Varied(T, 1.0 + Amount * (0.2 * Broad - 0.3 * Fine + 0.18 * Grain), Amount * (0.08 * Broad - 0.06 * Fine + 0.04 * Grain));
+			}
+			/** A channel here, read between the grid's points; beyond the grid straight from the noise (the jungle's thin
+			 * spots, burns and paths left out there: the haze has them). */
+			double Read(double X, double Y, int C) const
+			{
+				const double U = (X - GX0) / GStep, V = (Y - GY0) / GStep;
+				if (!(U >= 0.0 && V >= 0.0 && U < GNX - 1.0 && V < GNY - 1.0))
+				{
+					if (C == 0 || bIsland) return Chan(X, Y, C);
+					return C >= 5 ? 0.0 : C == 2 || C == 4 ? -1.0 : 1.0;
+				}
+				const int I = static_cast<int>(U), J = static_cast<int>(V);
+				const double FU = U - I, FV = V - J;
+				const size_t K = (static_cast<size_t>(J) * static_cast<size_t>(GNX) + static_cast<size_t>(I)) * Chans + static_cast<size_t>(C);
+				const size_t Row = static_cast<size_t>(GNX) * Chans;
+				const double A = Grid[K], B = Grid[K + Chans], Cq = Grid[K + Row], D = Grid[K + Row + Chans];
+				const double Top = A + (B - A) * FU, Bottom = Cq + (D - Cq) * FU;
+				return Top + (Bottom - Top) * FV;
+			}
+
+			/** How far a parcel's own crop shows: 0 at its edge (where the kunai, or an island's grove floor, runs on from the
+			 * next parcel, the same both sides) to 1 inside it; the edge ragged, so no parcel's straight side shows. */
+			double Inward(const Spot& S) const { return Smooth(0.0, 1.0, (S.Edge - 16.0 - 42.0 * Read(S.X, S.Y, 0)) / 12.0); }
+			/** The band's woods eaten back raggedly from the field's edge, kunai there, so no straight wall frames the battle. */
+			bool Eaten(double X, double Y) const
+			{
+				if (bIsland) return false;
+				const double D = Outside(X, Y);
+				return D > 0.0 && D < 25.0 + 60.0 * Read(X, Y, 0);
+			}
+			/** The kunai's thin spots (0 to 1), its trodden paths (0 to 1, a metre wide), its burns (0 to 1, black ash). */
+			double ThinAt(double X, double Y) const { return Smooth(-0.38, -0.55, Read(X, Y, 1)); }
+			double TrodAt(double X, double Y) const
+			{
+				const double Mask = Smooth(-0.15, 0.0, Read(X, Y, 4));
+				return Mask > 0.0 ? Mask * Smooth(1.4, 0.5, 75.0 * std::fabs(Read(X, Y, 3))) : 0.0;
+			}
+			/** An island's groves: 1 inside one, 0 on the open sand between them (some four in ten of the grove's land). */
+			double GroveAt(double X, double Y) const { return Smooth(-0.12, 0.08, Read(X, Y, 4)); }
+			double BurnAt(double X, double Y) const { return Smooth(0.66, 0.76, Read(X, Y, 2) + 0.6 * Read(X, Y, 4)); } // (some 3 in 100, in a few areas)
 
 			// ------------------------------------------------------------------ the land
 
@@ -226,16 +312,30 @@ namespace LandScape
 				const double DX = std::max({ 0.0, -X, X - Wf }), DY = std::max({ 0.0, -Y, Y - Df });
 				return std::sqrt(DX * DX + DY * DY);
 			}
-			/** An island's shore: metres inland of the waterline (negative out on the reef), the beach some 100 to 180 m
-			 * beyond the field's edge on every side. */
+			/** An island's shore: metres inland of the waterline (negative out on the reef). The islet is its own shape, long
+			 * and narrow along the field's length: a middle line that tilts and wanders across the field's and a half-width
+			 * that holds the field's sides (never nearer them than some 60 m: the recording's ground stands up to 10 m over
+			 * the sea and falls to the beach), its coast bent in bays and points at two scales, its west end a rounded tip
+			 * some 250 m out and its east a spit trailing 1.8 km to a point; the sea at the corners. */
 			double Shore(double X, double Y) const
 			{
 				const double D = Outside(X, Y);
 				if (D <= 0.0) return 1000.0;
-				return 140.0 + 38.0 * Noise(X / 260.0 + 3.7, Y / 260.0 - 1.3, Seed ^ 0x5E0A) - D;
+				const double Mid = 0.5 * Df + 0.05 * (X - 0.5 * Wf) + 130.0 * Noise(X / 1100.0 + 0.3, 0.7, Seed ^ 0x5E0D);
+				double Half = 0.5 * Df + 120.0;
+				const double West = -X - 10.0, East = X - Wf - 40.0;
+				if (West > 0.0) Half *= std::sqrt(std::max(0.0, 1.0 - (West / 240.0) * (West / 240.0)));
+				if (East > 0.0) Half *= std::pow(std::max(0.0, 1.0 - East / 1800.0), 1.6);
+				const double U = 0.8 * X - 0.6 * Y, V = 0.6 * X + 0.8 * Y;
+				const double Bend = 95.0 * Noise(U / 420.0 + 0.4, V / 420.0, Seed ^ 0x5E0A) + 40.0 * Noise(V / 110.0, -U / 110.0 + 2.2, Seed ^ 0x5E0C);
+				const double W = Half + Bend - std::fabs(Y - Mid);
+				// (held off the field by a soft floor, 60 m less the distance out: the larger of the two, its corner rounded)
+				const double Hold = 60.0 - D;
+				return 0.5 * (W + Hold + std::sqrt((W - Hold) * (W - Hold) + 900.0));
 			}
-			/** The reef flat's width out from the waterline to its surf line. */
-			double Reef(double X, double Y) const { return 430.0 + 180.0 * Noise(X / 900.0, Y / 900.0, Seed ^ 0x5E0B); }
+			/** The reef flat's width out from the waterline to its surf line (some 55-190 m: the drop to deep water in sight
+			 * from the shore). */
+			double Reef(double X, double Y) const { return std::max(55.0, 120.0 + 70.0 * Noise(X / 700.0 + 0.2, Y / 700.0, Seed ^ 0x5E0B)); }
 
 			double Relief(double X, double Y, double Z) const override
 			{
@@ -269,7 +369,9 @@ namespace LandScape
 			double PlotMin() const override { return bIsland ? 26000.0 : 30000.0; }
 			double PlotMax() const override { return bIsland ? 60000.0 : 75000.0; }
 			double FarTilled() const override { return bIsland ? 0.6 : 0.3; }
-			double WoodsEdge() const override { return bIsland ? 0.95 : -0.22; }
+			// (the jungle's woods beyond the field some two grounds in five, in blocks, so no solid wall frames the battle; the
+			// kunai between)
+			double WoodsEdge() const override { return bIsland ? 0.95 : 0.08; }
 
 			int CropOf(int Kind, double U) const override
 			{
@@ -300,24 +402,23 @@ namespace LandScape
 
 			// ------------------------------------------------------------------ colours
 
-			/** Kunai burnt black in patches (some parcels): the same mask for the ground's paint and its clutter. */
-			bool Burnt(uint64_t Key, double X, double Y) const
+			/** The kunai, the jungle's open cover and every open parcel's at its edge: a sea of tan-green grass 1-2 m, the
+			 * thatch matted under it; thinning in spots to red earth; trodden paths through it; burns black ash. */
+			Tone KunaiGround(const Spot& S) const
 			{
-				if (Unit(Hash(Key, 0xB0B)) > 0.16) return false;
-				return Noise(X / 38.0 + 1.3, Y / 38.0 - 2.1, Seed ^ 0xB0C) > 0.48;
+				const Tone Red = bClay ? Rgb(150, 116, 70) : Rgb(158, 92, 56);
+				Tone T = Mixed(Rgb(108, 108, 60), Rgb(146, 136, 84), Clamp01(0.2 + 0.45 * Dry + 0.3 * S.N1));
+				// (the grass in drifts some 10-40 m across, darker and greener where it stands thick, paler straw between, so it
+				// never reads as a lawn from above when the clutter has gone; smooth, never a step, as a track mark's edge takes
+				// the ground's colour a hair off its own point)
+				T = Mixed(T, Rgb(84, 86, 48), 0.4 * Smooth(-0.1, 0.6, Read(S.X, S.Y, 5)));
+				T = Breakup(T, S.X, S.Y, 1.0);
+				T = Mixed(T, Mixed(Rgb(118, 110, 64), Red, Clamp01(0.4 + 0.4 * S.N2)), 0.65 * ThinAt(S.X, S.Y));
+				T = Mixed(T, Mixed(Rgb(150, 104, 70), Rgb(146, 134, 92), Clamp01(0.4 + 0.4 * S.N1)), 0.85 * TrodAt(S.X, S.Y));
+				T = Mixed(T, Mixed(Rgb(38, 36, 33), Rgb(70, 67, 60), Clamp01(0.35 + 0.5 * S.N2)), BurnAt(S.X, S.Y));
+				return Varied(T, 1.0 + 0.04 * S.Broad, 0.01);
 			}
 
-			/** The kunai's big patches: low where it thins to short grass over red earth. */
-			double Thin(double X, double Y) const { return Noise(X / 19.0 + 2.1, Y / 19.0 - 0.6, Seed ^ 0xC13) - 0.1; }
-			/** How trodden the kunai is here, 0 to 1: the paths men and pigs have worn through it, a metre wide, wandering,
-			 * running out. */
-			double Trod(double X, double Y) const
-			{
-				const double Mask = Smooth(-0.2, 0.05, Noise(X / 170.0 + 4.1, Y / 170.0 - 2.7, Seed ^ 0x7A8));
-				if (Mask <= 0.0) return 0.0;
-				const double Off = 60.0 * std::fabs(Noise(X / 60.0 - 1.7, Y / 60.0 + 0.9, Seed ^ 0x7A7)); // (some metres off its line)
-				return Mask * Smooth(1.4, 0.5, Off);
-			}
 			/** A track's broken edge (the grass coming in over it) and the grass on its hump between the ruts. */
 			double Rag(double X, double Y) const { return Noise(X / 5.0 + 0.3, Y / 5.0 - 1.1, Seed ^ 0x7A9); }
 			double Hump(double X, double Y) const { return Noise(X / 7.0 - 0.8, Y / 7.0 + 0.2, Seed ^ 0x7AA); }
@@ -326,7 +427,8 @@ namespace LandScape
 			{
 				// red laterite (yellow-brown clay in Papua), redder and yellower along it: the ruts wet and dark, water
 				// standing in them and across the floor in its low places; grass on the hump between the ruts here and
-				// there, creeping in over its broken edges, the verge
+				// there; its broken edge fraying straight into the kunai round it (no verge of its own: from above two green
+				// stripes read as a race track)
 				const double Off = std::fabs(S.Lane + S.LaneHalf);
 				const Tone Earth = bClay ? Mixed(Rgb(146, 112, 66), Rgb(162, 132, 86), Clamp01(0.5 + 0.7 * S.N1)) : Mixed(Rgb(155, 89, 54), Rgb(166, 112, 68), Clamp01(0.4 + 0.7 * S.N1));
 				const Tone Wet = bClay ? Rgb(106, 84, 52) : Rgb(108, 62, 42);
@@ -336,9 +438,10 @@ namespace LandScape
 				const double Pool = std::max(Rut * Smooth(0.0, 0.3, S.N2 + 0.25 * (1.0 - Dry)), Smooth(0.38, 0.52, S.N1 - 0.25 * Dry) * Smooth(0.4, 0.0, S.N2));
 				T = Mixed(T, Water, 0.9 * Pool);
 				const double OnHump = 0.75 * Smooth(0.5, 0.2, Off) * Smooth(0.0, 0.35, Hump(S.X, S.Y));
-				const double Edge = Smooth(-0.9, 0.15, S.Lane + 0.8 * Rag(S.X, S.Y));
-				T = Mixed(T, Varied(Grass, 1.0 + 0.1 * S.N2, 0.0), std::max(OnHump, Edge) * (1.0 - Pool));
-				return Varied(T, 1.0 + 0.06 * S.N2, 0.0);
+				T = Mixed(T, Varied(Mixed(Grass, Rgb(140, 132, 80), 0.4), 1.0 + 0.1 * S.N2, 0.0), OnHump * (1.0 - Pool));
+				T = Varied(T, 1.0 + 0.06 * S.N2, 0.0);
+				const double Edge = Smooth(-0.9, 0.15, S.Lane + 1.3 * Rag(S.X, S.Y));
+				return Mixed(T, KunaiGround(S), Edge);
 			}
 
 			Tone JungleGround(const Spot& S, int C) const
@@ -352,36 +455,45 @@ namespace LandScape
 					// a swept bare-earth plaza round the houses, gardens and grass between them
 					const Tone Swept = bClay ? Rgb(170, 138, 92) : Rgb(170, 116, 78), Garden_ = Rgb(108, 122, 54);
 					const double Bare = S.bNear ? 0.9 : Smooth(-0.2, 0.45, S.N1);
-					return Varied(Mixed(Garden_, Swept, Bare), 1.0 + 0.06 * S.N2, 0.02);
+					return Varied(Breakup(Mixed(Garden_, Swept, Bare), S.X, S.Y, 0.7), 1.0, 0.02);
 				}
 				case KWater: return Varied(Rgb(108, 100, 70), 1.0 + 0.04 * S.N1, 0.0); // (brown-green river water)
 				case KMarsh: return Varied(Mixed(Rgb(56, 48, 38), Rgb(72, 84, 42), 0.4 + 0.4 * S.N1), 1.0 + 0.06 * S.N2, 0.0);
 				case KWorks: return Varied(Mixed(Rgb(150, 86, 54), Rgb(112, 70, 46), 0.4 + 0.3 * S.N2), 1.0, 0.0);
 				case KWoods:
 				{
-					// the forest floor: leaf litter, damp dark patches, moss (dim under the canopy; the light its own)
-					const Tone Litter = Rgb(104, 86, 58), Damp = Rgb(72, 62, 44), Moss = Rgb(78, 94, 48);
-					Tone T = Mixed(Litter, Damp, 0.3 + 0.3 * S.N1);
-					T = Mixed(T, Moss, 0.45 * Smooth(-0.1, 0.6, S.N2));
-					return Varied(T, 1.0 + 0.05 * S.Broad, 0.02);
+					if (Eaten(S.X, S.Y)) return KunaiGround(S);
+					// the forest floor: leaf litter brown, rust and yellow in drifts, damp patches, moss (dim under the canopy)
+					const Tone Litter = Rgb(110, 88, 58), Rust = Rgb(122, 84, 52), Yellow = Rgb(124, 106, 64), Damp = Rgb(80, 68, 48), Moss = Rgb(80, 96, 48);
+					Tone T = Mixed(Litter, S.N1 > 0.0 ? Rust : Yellow, Clamp01(0.6 * std::fabs(S.N1)));
+					const double Fine = Read(S.X, S.Y, 5);
+					T = Mixed(T, Damp, 0.35 * Smooth(0.1, 0.5, -Fine));
+					T = Mixed(T, Moss, 0.35 * Smooth(0.15, 0.55, Fine));
+					return Varied(Breakup(T, S.X, S.Y, 0.8), 1.0 + 0.05 * S.Broad, 0.02);
 				}
 				default: break;
 				}
+				// the open land: the kunai, and a parcel's own crop showing inside its ragged edge
+				const Tone K = KunaiGround(S);
+				if (C == Kunai) return K;
+				const double In = Inward(S);
+				if (In <= 0.0) return K;
 				const Tone Red = bClay ? Rgb(150, 116, 70) : Rgb(158, 92, 56);
 				switch (C)
 				{
 				case Ridge:
 				{
-					Tone T = Mixed(Rgb(146, 148, 74), Rgb(178, 162, 98), 0.3 + 0.4 * Dry + 0.2 * S.N2);
-					T = Mixed(T, Red, 0.28 + 0.22 * S.N1);
-					return Varied(T, 1.0 + 0.05 * S.Broad, 0.01);
+					Tone T = Mixed(Rgb(136, 134, 74), Rgb(164, 150, 92), Clamp01(0.3 + 0.4 * Dry - 0.3 * Read(S.X, S.Y, 5)));
+					T = Mixed(T, Red, 0.26 + 0.2 * S.N1);
+					return Mixed(K, Varied(Breakup(T, S.X, S.Y, 0.8), 1.0 + 0.05 * S.Broad, 0.01), In);
 				}
 				case Plantation:
 				{
-					// short grass the cattle kept down, the palms' fallen fronds and husks browning it in drifts
-					Tone T = Mixed(Rgb(98, 124, 50), Rgb(126, 140, 62), 0.4 + 0.35 * S.N2 + 0.2 * Dry);
+					// short grass the cattle kept down, the kunai's own straw-green, the palms' fallen fronds and husks browning it
+					// in drifts
+					Tone T = Mixed(Rgb(126, 124, 64), Rgb(152, 142, 78), Clamp01(0.35 - 0.4 * Read(S.X, S.Y, 5) + 0.2 * Dry));
 					T = Mixed(T, Rgb(132, 110, 72), 0.18 * Smooth(0.0, 0.7, S.N1));
-					return Varied(T, 1.0 + 0.04 * S.Broad, 0.0);
+					return Mixed(K, Varied(Breakup(T, S.X, S.Y, 0.8), 1.0 + 0.04 * S.Broad, 0.0), In);
 				}
 				case Paddy:
 				{
@@ -394,40 +506,37 @@ namespace LandScape
 					const bool bFlood = Unit(Plot) < 0.85 - 0.75 * Dry;
 					Tone T = bFlood ? Rgb(128, 134, 118) : Dry > 0.5 ? Rgb(170, 150, 100) : Rgb(104, 142, 56);
 					T = Mixed(T, Rgb(116, 118, 64), Bund);
-					return Varied(T, 1.0 + 0.05 * S.N2, 0.0);
-				}
-				case Garden:
-				{
-					Tone T = Mixed(Rgb(104, 128, 52), Red, 0.3 + 0.3 * S.N1);
-					return Varied(T, 1.0 + 0.06 * S.N2, 0.0);
-				}
-				default:
-				{
-					// kunai: tan-green, straw when old, the tussocks darker; thinning in patches to short grass over red earth;
-					// trodden paths through it; burnt patches black
-					Tone T = Mixed(Rgb(104, 110, 62), Rgb(140, 134, 88), 0.2 + 0.45 * Dry + 0.3 * S.N1);
-					T = Mixed(T, Rgb(80, 86, 50), 0.35 * Smooth(-0.3, 0.7, S.N2));
-					T = Mixed(T, Mixed(Rgb(112, 112, 66), Red, Clamp01(0.35 + 0.35 * S.N2)), 0.6 * Smooth(-0.35, -0.6, Thin(S.X, S.Y)));
-					T = Mixed(T, Red, 0.12 * Smooth(0.45, 0.9, -S.N2));
-					T = Mixed(T, Mixed(Rgb(150, 104, 70), Rgb(146, 134, 92), Clamp01(0.4 + 0.4 * S.N1)), 0.85 * Trod(S.X, S.Y));
-					if (Burnt(S.Key, S.X, S.Y)) T = Mixed(Rgb(66, 60, 50), Rgb(104, 94, 72), 0.3 + 0.3 * S.N2);
-					return Varied(T, 1.0 + 0.04 * S.Broad, 0.01);
-				}
-				}
+					return Mixed(K, Varied(T, 1.0 + 0.05 * S.N2, 0.0), In);
+					}
+					case Garden:
+					{
+						Tone T = Mixed(Rgb(124, 124, 60), Red, 0.3 + 0.3 * S.N1);
+						return Mixed(K, Breakup(T, S.X, S.Y, 0.8), In);
+					}
+					default: return K;
+					}
 			}
 
-			/** The sea round an island, W metres inland of the waterline (less than nothing): the shallow wash, the
-			 * turquoise reef flat mottled with coral heads and brown algae, its white surf line, the deep blue beyond. */
+			/** The sea round an island, W metres inland of the waterline (less than nothing), in bands: the wash over wet
+			 * sand, the pale turquoise shallows, the reef flat (teal, mottled with dark brown-green coral heads and weed,
+			 * pale sand channels), its broken white surf line at the reef's edge, the deep blue beyond. */
 			Tone Sea(double W, double Rf, double N1, double N2) const
 			{
+				// In bands out from the beach: wet sand under a skin of water, pale sandy shallows, the reef flat mottled with
+				// sand channels, weed and dark coral heads, the white surf line at its edge, the drop to deep blue.
 				const double Out = -W;
-				const Tone Wash = Rgb(176, 220, 206), Flat = Rgb(104, 204, 192), Algae = Rgb(112, 160, 128), Deep = Rgb(30, 90, 140);
-				Tone T = Mixed(Wash, Flat, Smooth(0.0, 30.0, Out));
-				T = Mixed(T, Algae, 0.35 * Smooth(0.15, 0.6, N2) * Smooth(40.0, 120.0, Out));
-				T = Mixed(T, Rgb(70, 170, 184), 0.4 * Smooth(Rf * 0.5, Rf * 0.95, Out)); // (deeper toward the edge)
-				const double Surf = Smooth(22.0, 0.0, std::fabs(Out - Rf));
-				T = Mixed(T, Rgb(232, 240, 238), 0.9 * Surf);
-				T = Mixed(T, Deep, Smooth(Rf + 4.0, Rf + 60.0, Out));
+				const Tone Wash = Rgb(196, 196, 174), Pale = Rgb(172, 194, 176), Flat = Rgb(124, 148, 122), Drop = Rgb(44, 100, 132), Deep = Rgb(26, 60, 106);
+				Tone T = Mixed(Wash, Pale, Smooth(0.0, 12.0, Out));
+				T = Mixed(T, Flat, Smooth(22.0, 20.0 + 0.45 * Rf, Out));
+				const double Reefy = Smooth(18.0, 50.0, Out) * Smooth(Rf + 4.0, Rf - 10.0, Out);
+				T = Mixed(T, Rgb(176, 188, 162), 0.5 * Reefy * Smooth(0.2, 0.55, -N1 - 0.3 * N2));       // (sand channels)
+				T = Mixed(T, Rgb(104, 116, 80), 0.55 * Reefy * Smooth(0.0, 0.45, N1 - 0.25 * N2));       // (weed)
+				T = Mixed(T, Rgb(86, 86, 64), 0.8 * Reefy * Smooth(0.1, 0.45, N2 + 0.6 * N1));           // (coral heads)
+				T = Mixed(T, Rgb(96, 138, 132), 0.35 * Smooth(Rf * 0.6, Rf, Out));                       // (deeper toward the edge)
+				const double Surf = Smooth(9.0 + 6.0 * N1, 0.0, std::fabs(Out - Rf - 4.0 * N2));
+				T = Mixed(T, Drop, Smooth(Rf + 2.0, Rf + 12.0, Out));
+				T = Mixed(T, Deep, Smooth(Rf + 12.0, Rf + 70.0, Out));
+				T = Mixed(T, Rgb(232, 236, 232), 0.92 * Surf);
 				return Varied(T, 1.0 + 0.03 * N1, 0.0);
 			}
 
@@ -435,13 +544,14 @@ namespace LandScape
 			{
 				const double W = Shore(S.X, S.Y);
 				if (W < 0.0) return Sea(W, Reef(S.X, S.Y), S.N1, S.N2);
-				const Tone Dry_ = Rgb(240, 234, 214), Wet = Rgb(198, 190, 166), Wrack = Rgb(164, 146, 112);
+				const double Crest = Read(S.X, S.Y, 2);
+				const Tone Dry_ = Mixed(Rgb(232, 226, 206), Rgb(246, 242, 228), Smooth(-0.1, 0.35, Crest)), Wet = Rgb(186, 180, 160), Wrack = Rgb(150, 134, 104);
 				if (W < 32.0)
 				{
-					// the beach: the wet band at the water, the tide's wrack of weed and husks, dry sand to the crest
-					Tone T = Mixed(Wet, Dry_, Smooth(2.5, 6.0, W));
-					T = Mixed(T, Wrack, 0.7 * Smooth(1.6, 0.0, std::fabs(W - 7.5)) * (0.5 + 0.5 * Smooth(-0.4, 0.4, S.N2)));
-					if (S.Kind != KLane) return Varied(T, 1.0 + 0.025 * S.N2, 0.0);
+					// the beach: the wet band at the water greyer, the tide's wrack of weed and husks, dry sand whiter to the crest
+					Tone T = Mixed(Wet, Dry_, Smooth(2.5, 7.0 + 3.0 * S.N1, W));
+					T = Mixed(T, Wrack, 0.7 * Smooth(1.6, 0.0, std::fabs(W - 7.5 - 1.5 * S.N1)) * (0.5 + 0.5 * Smooth(-0.4, 0.4, S.N2)));
+					if (S.Kind != KLane) return Breakup(T, S.X, S.Y, 0.5);
 				}
 				switch (S.Kind)
 				{
@@ -459,19 +569,29 @@ namespace LandScape
 				case KWater: return Sea(-60.0 - 80.0 * (0.5 + 0.5 * S.N1), 1000.0, S.N1, S.N2);
 				case KMarsh: return Varied(Mixed(Rgb(150, 146, 108), Rgb(96, 112, 62), 0.4 + 0.3 * S.N1), 1.0, 0.0);
 				case KWorks: return Varied(Mixed(Rgb(212, 202, 176), Rgb(176, 166, 140), 0.4 + 0.3 * S.N2), 1.0, 0.0);
-				case KWoods:
-				{
-					const Tone T = Mixed(Rgb(176, 160, 120), Rgb(110, 126, 60), 0.35 + 0.3 * S.N1);
-					return Varied(T, 1.0 + 0.05 * S.N2, 0.0);
-				}
+				case KWoods: return Floor(S, 1.0, 1.5, 1.2);
 				default: break;
 				}
-				// the grove's floor: coral sand under creeping vines and grass, fallen fronds and husks
-				const Tone Sand = Rgb(232, 224, 200), Creep = Rgb(122, 142, 64), Litter = Rgb(170, 146, 102);
-				const double Green = C == Strand ? 0.12 + 0.2 * S.N1 : C == Plantation ? 0.48 + 0.28 * S.N1 : 0.42 + 0.3 * S.N1;
-				Tone T = Mixed(Sand, Creep, Clamp01(Green + 0.2 * S.N2));
-				T = Mixed(T, Litter, 0.3 * Smooth(-0.2, 0.6, -S.N2));
-				return Varied(T, 1.0 + 0.03 * S.Broad, 0.0);
+				// the grove's floor (the plantation's and the strand's showing inside their ragged edges)
+				const double In = Inward(S);
+				if (C == Strand) return Floor(S, Lerp(1.0, 0.45, In), Lerp(1.0, 0.4, In), Lerp(1.0, 1.3, In));
+				if (C == Plantation) return Floor(S, Lerp(1.0, 1.15, In), Lerp(1.0, 0.8, In), 1.0);
+				return Floor(S, 1.0, 0.2 + 0.8 * GroveAt(S.X, S.Y), 1.0); // (the litter under the groves, the sand between them clean)
+				}
+
+				/** An island's sand under its palms: whiter on the dry crests, greyer in the low bands, darker in drifts of frond
+				 * litter and husks, the ground cover (creepers, grass) in drifts over it; Cover, Litter and Bare scale those. */
+				Tone Floor(const Spot& S, double Cover, double Litter, double Bare) const
+				{
+					const double Crest = Read(S.X, S.Y, 2), Drift = Read(S.X, S.Y, 1), Lit_ = Read(S.X, S.Y, 3);
+					Tone T = Mixed(Rgb(212, 202, 174), Rgb(238, 232, 212), Clamp01(Bare * Smooth(-0.1, 0.4, Crest)));
+					T = Mixed(T, Rgb(178, 172, 150), 0.6 * Smooth(-0.1, -0.4, Crest));
+					T = Breakup(T, S.X, S.Y, 0.6);
+					const double Fine = Read(S.X, S.Y, 5);
+					T = Mixed(T, Mixed(Rgb(158, 140, 108), Rgb(132, 116, 90), Clamp01(0.5 + 0.8 * Fine)), Clamp01(0.6 * Litter * Smooth(-0.35, 0.4, Lit_)));
+					const double Green = Clamp01(Cover * Smooth(0.2, 0.42, Drift));
+					T = Mixed(T, Mixed(Rgb(112, 130, 62), Rgb(150, 154, 96), Clamp01(0.5 - 0.9 * Fine)), 0.6 * Green);
+					return Varied(T, 1.0 + 0.03 * S.Broad, 0.0);
 			}
 
 			Tone Colour(const Spot& S) const override
@@ -522,22 +642,23 @@ namespace LandScape
 					if (S.Kind == KLane) return S.Lane > 0.4 ? Grown{ B::Clut4, 0.4 } : Grown{ B::Stone, 0.06 };
 					if (S.Kind == KVillage || S.Kind == KYard) return Pick < 0.5 ? Grown{ B::Clut4, 0.3 } : Grown{ B::Clut5, 0.08 };
 					if (S.Kind == KWorks) return Grown{ B::Stone, 0.4 };
-					if (S.Kind == KWoods) return Pick < 0.3 ? Grown{ B::Clut1, 0.4 } : Pick < 0.75 ? Grown{ B::Clut4, 1.0 } : Grown{ B::Clut5, 0.45 };
-					if (S.Crop == Strand) return Pick < 0.4 ? Grown{ B::Clut4, 0.45 } : Pick < 0.7 ? Grown{ B::Stone, 0.35 } : Grown{ B::Clut5, 0.15 };
-					// the grove: vines and grass in patches over the sand, fronds and husks under the palms
-					const double Patch = Noise(S.X / 11.0, S.Y / 11.0, Seed ^ 0xC11);
-					if (Pick < 0.2) return Patch > 0.1 ? Grown{ B::Clut1, 0.9 } : Grown{ B::Clut4, 0.6 }; // (creepers spread low over the sand)
-					if (Pick < 0.68) return Grown{ B::Clut4, std::clamp(1.0 + 1.2 * Patch, 0.25, 1.9) };
-					if (Pick < 0.9) return Grown{ B::Clut5, 0.45 };
-					return Grown{ B::Stone, 0.3 };
+					// the grove's floor: creepers and grass in drifts over the sand (none between), husks and fronds where the
+					// litter drifts under the palms, bits of coral; less of all on the strand, more in a dense grove
+					const double In = S.Kind == KWoods ? 0.0 : Inward(S);
+					const double Scale = S.Kind == KWoods ? 1.2 : S.Crop == Strand ? Lerp(1.0, 0.5, In) : 1.0;
+					const double Cover = Smooth(0.2, 0.42, Read(S.X, S.Y, 1)) * Scale, Litter = Smooth(-0.15, 0.3, Read(S.X, S.Y, 3));
+					if (Pick < 0.45) return Cover > 0.02 ? Grown{ B::Clut4, 2.4 * Cover } : Pick < 0.06 ? Grown{ B::Clut4, 0.2 } : G;
+					if (Pick < 0.62) return Cover > 0.25 ? Grown{ B::Clut1, 1.3 * Cover } : G;
+					if (Pick < 0.88) return Grown{ B::Clut5, (0.12 + 0.4 * Litter) * Scale };
+					return Grown{ B::Stone, 0.25 };
 				}
 				switch (S.Kind)
 				{
 				case KLane:
 				{
 					// (grass over the track's broken edges and on its hump, the kunai tall on the verge)
-					const double Edge = S.Lane + 0.8 * Rag(S.X, S.Y);
-					if (Edge > 1.2) return Pick < 0.55 ? Grown{ B::Clut4, 0.9 } : Grown{ B::Clut0, 0.6 };
+					const double Edge = S.Lane + 1.3 * Rag(S.X, S.Y);
+					if (Edge > 0.6) return KunaiGrow(S, Pick);
 					if (Edge > -0.35) return Grown{ B::Clut4, 1.0 };
 					if (std::fabs(S.Lane + S.LaneHalf) < 0.35 && Hump(S.X, S.Y) > 0.12) return Grown{ B::Clut4, 0.7 };
 					return G;
@@ -548,16 +669,23 @@ namespace LandScape
 				case KWorks: return Grown{ B::Stone, 0.35 };
 				case KWoods:
 				{
-					// the floor: ferns and gingers, saplings and rattan, leaf litter; a wall of it at the forest's edge
+					if (Eaten(S.X, S.Y)) return KunaiGrow(S, Pick);
+					// the floor: ferns and gingers, saplings and rattan, leaf litter thick over it; a wall of it at the forest's edge
 					const double Edge = Smooth(12.0, 3.0, S.Edge);
-					if (Pick < 0.42) return Grown{ B::Clut1, 0.95 + 0.6 * Edge };
-					if (Pick < 0.56) return Grown{ B::Clut2, 0.42 + 0.4 * Edge };
-					if (Pick < 0.94) return Grown{ B::Clut3, 0.55 };
+					if (Pick < 0.4) return Grown{ B::Clut1, 0.95 + 0.6 * Edge };
+					if (Pick < 0.54) return Grown{ B::Clut2, 0.45 + 0.4 * Edge };
+					if (Pick < 0.96) return Grown{ B::Clut3, 1.0 };
 					return Grown{ B::Stone, 0.25 };
 				}
 				default: break;
 				}
+				// the open land: the kunai, and inside a parcel's ragged edge its own crop (Pick shared between them, so each
+				// stays uniform)
 				const int C = S.Crop >= 0 ? S.Crop : Kunai;
+				if (C == Kunai) return KunaiGrow(S, Pick);
+				const double In = Inward(S);
+				if (Pick >= In) return KunaiGrow(S, (Pick - In) / std::max(1e-6, 1.0 - In));
+				Pick /= In;
 				const double Patch = Noise(S.X / 9.0 + 0.7, S.Y / 9.0 - 0.3, Seed ^ 0xC12);
 				switch (C)
 				{
@@ -569,24 +697,25 @@ namespace LandScape
 					return Patch > 0.25 ? Grown{ B::Clut0, 0.5 } : Grown{ B::Clut3, 0.25 };
 				case Paddy: return Grown{ B::Clut4, Dry > 0.5 ? 0.4 : 1.0 };
 				case Garden: return Pick < 0.4 ? Grown{ B::Clut1, 0.6 } : Pick < 0.8 ? Grown{ B::Clut0, 0.6 } : Grown{ B::Clut4, 0.6 };
-				default:
-					// kunai, thick, thinning in patches to short grass over red earth; a trodden path bare but for a tuft; burnt
-					// patches only stubble
-					if (Burnt(S.Key, S.X, S.Y)) return Pick < 0.5 ? Grown{ B::Clut4, 0.6 } : G;
-					if (Trod(S.X, S.Y) > 0.45) return Pick < 0.3 ? Grown{ B::Clut4, 0.5 } : G;
-					{
-						// (where it thins, clumps with the earth between them)
-						const double Dense = std::clamp(1.35 + 0.4 * Patch, 0.8, 1.7) * (0.3 + 0.7 * Smooth(-0.6, -0.3, Thin(S.X, S.Y)));
-						return Pick < 0.86 ? Grown{ B::Clut0, Dense } : Grown{ B::Clut4, 0.8 };
-					}
+				default: return KunaiGrow(S, Pick);
 				}
-			}
+				}
+
+				/** The kunai's clutter: a sea of it, wide clumps shoulder to shoulder (fewer where it thins); a trodden path bare but
+				 * for a tuft; a burn only charred stubble. */
+				Grown KunaiGrow(const Spot& S, double Pick) const
+				{
+					using B = LandField::Base;
+					if (BurnAt(S.X, S.Y) > 0.5) return Pick < 0.35 ? Grown{ B::Clut4, 0.5 } : Grown{};
+					if (TrodAt(S.X, S.Y) > 0.45) return Pick < 0.3 ? Grown{ B::Clut4, 0.5 } : Grown{};
+					return Pick < 0.9 ? Grown{ B::Clut0, 0.62 * (1.0 - 0.55 * ThinAt(S.X, S.Y)) } : Grown{ B::Clut4, 0.6 };
+				}
 
 			bool Dress(LandField::Placed& P, const Spot& S, double U4, double U5, double U6, double U7) const override
 			{
 				using B = LandField::Base;
 				const int C = S.Crop >= 0 ? S.Crop : -1;
-				const bool bBurnt = !bIsland && S.Kind != KWoods && C == Kunai && Burnt(S.Key, S.X, S.Y);
+				const bool bBurnt = !bIsland && S.Kind != KWoods && S.Kind != KLane && BurnAt(S.X, S.Y) > 0.5;
 				auto Size = [&P](double Sc, double Sz) {
 					P.Scale = static_cast<float>(Sc);
 					P.ScaleZ = static_cast<float>(Sz);
@@ -595,11 +724,13 @@ namespace LandScape
 				{
 				case B::Clut0:
 				{
-					// kunai: 1-2 m on the plain, short on the ridges and in the plantations' regrowth; straw in the dry
-					const double High = C == Ridge ? 0.45 + 0.25 * U5 : C == Plantation ? 0.4 + 0.35 * U5 : S.Kind == KMarsh ? 0.9 + 0.3 * U5 : 0.92 + 0.48 * U5;
-					Size(0.75 + 0.5 * U4, High);
+					// kunai: 1-2 m on the plain, short inside the ridges and the plantations' regrowth; straw in the dry
+					const double Tall = S.Kind == KMarsh ? 0.9 + 0.3 * U5 : 0.85 + 0.4 * U5;
+					const double Short = C == Ridge ? 0.45 + 0.25 * U5 : 0.4 + 0.35 * U5;
+					const double High = (S.Kind == KOpen || S.Kind == KField || S.Kind == KRough) && (C == Ridge || C == Plantation) ? Lerp(Tall, Short, Inward(S)) : Tall;
+					Size(0.85 + 0.4 * U4, High);
 					const double Straw = Clamp01(Dry + 0.35 * (U6 - 0.5));
-					P.Tint = S.Kind == KMarsh ? Tint(0.82, 1.0, 0.86) : Tint(0.96 + 0.1 * Straw, 1.0, 0.94 + 0.08 * U7);
+					P.Tint = S.Kind == KMarsh ? Tint(0.82, 1.0, 0.86) : Tint(0.97 + 0.08 * Straw, 1.0, 0.9 + 0.08 * U7);
 					return true;
 				}
 				case B::Clut1:
@@ -665,16 +796,16 @@ namespace LandScape
 				case KPalmTall: return "CoconutPalmTall";
 				case KPalmYoung: return "CoconutPalmYoung";
 				case KBanana: return "Banana";
-				case KGrass: return bIsland ? nullptr : "ElephantGrass";
-				case KUnder: return "Undergrowth";
+				case KGrass: return bIsland ? "Boulder" : "ElephantGrass"; // (an island's shore shrub, built whole)
+				case KUnder: return bIsland ? nullptr : "Undergrowth";
 				case KStilt: return "StiltHouse";
 				case KStiltTin: return "StiltHouseTin";
 				case KThatch: return "ThatchHouse";
 				case KReeds: return "Reeds";
 				case KBoulder: return bIsland ? nullptr : "Boulder";
-				case KBamboo: return bMainland && !bIsland ? "Bamboo" : nullptr;
-				case KStump: return bIsland ? "CoconutPalmTall" : nullptr;
-				case KThicket: return bIsland ? nullptr : "Boulder";
+				case KBamboo: return bIsland ? nullptr : bMainland ? "Bamboo" : "Boulder"; // (off the mainland a fallen log, built whole)
+				case KStump: return bIsland ? "CoconutPalmTall" : "Boulder";               // (the jungle's edge curtain, built whole)
+				case KThicket: return "Boulder";                                            // (the jungle's thicket, an island's pandanus)
 				default: return nullptr;
 				}
 			}
@@ -710,7 +841,19 @@ namespace LandScape
 				}
 			}
 
-			/** Pale bark, blotched with lichen and moss, for a tree whose bark paints are Bark and BarkDark. */
+			/** Bark mottled mid-dark grey-brown, blotched with pale lichen and green moss, at a point of a trunk (X across it,
+			 * Z up it): the blotches a hand to a forearm across. */
+			static Tone Bark(double X, double Z, bool bDark, uint64_t Key)
+			{
+				const double U = Unit(Hash(Key, static_cast<uint64_t>(std::lround(X * 3.0) + 4096), static_cast<uint64_t>(std::lround(Z * 2.5) + 4096)));
+				const double V = Unit(Hash(Key ^ 0xBA7, static_cast<uint64_t>(std::lround(X * 3.0) + 4096), static_cast<uint64_t>(std::lround(Z * 2.5) + 4096)));
+				Tone T = Mixed(bDark ? Rgb(54, 50, 43) : Rgb(72, 67, 57), Rgb(62, 57, 48), V);
+				if (U < 0.28) T = Mixed(T, Rgb(118, 116, 104), 0.8);   // (lichen, grey-white)
+				else if (U > 0.86) T = Mixed(T, Rgb(54, 68, 34), 0.7); // (moss)
+				return T;
+			}
+
+			/** Bark mottled, blotched with lichen and moss, for a tree whose bark paints are Bark and BarkDark. */
 			static void PaleBark(LandField::Mesh& M, int BR, int BG, int BB, int DR, int DG, int DB, uint64_t Key)
 			{
 				for (size_t K = 0; K < M.Colours.size(); ++K)
@@ -718,11 +861,7 @@ namespace LandScape
 					LandField::Rgb8& C = M.Colours[K];
 					const bool bBark = Same(C, BR, BG, BB), bDark = Same(C, DR, DG, DB);
 					if (!bBark && !bDark) continue;
-					const double U = Unit(Hash(Key, static_cast<uint64_t>(std::lround(M.Positions[3 * K] * 3.0) + 4096), static_cast<uint64_t>(std::lround(M.Positions[3 * K + 2] * 2.0) + 4096)));
-					Tone T = bBark ? Rgb(138, 134, 116) : Rgb(104, 100, 86);
-					if (U < 0.22) T = Mixed(T, Rgb(184, 182, 166), 0.6);      // (lichen, whitish)
-					else if (U > 0.84) T = Mixed(T, Rgb(80, 96, 50), 0.6);    // (moss)
-					C = Byte(T);
+					C = Byte(Bark(M.Positions[3 * K], M.Positions[3 * K + 2], bDark, Key));
 				}
 			}
 
@@ -798,7 +937,7 @@ namespace LandScape
 				{
 					const double L = R.Range(0.85, 1.15), Warm = R.Range(-0.06, 0.06);
 					const Tone Lk = Varied(Lit, L, Warm), Uk = Varied(Under, L, Warm);
-					Leafy(W, V3{ Mass[K][0], Mass[K][1], Mass[K][2] }, Mass[K][3], Mass[K][4], static_cast<int>(Mass[K][5]), Hash(Seed, 0x7C1D, static_cast<uint64_t>(K)), Lk, Uk);
+					Leafy(W, V3{ Mass[K][0], Mass[K][1], Mass[K][2] }, Mass[K][3], Mass[K][3], Mass[K][4], static_cast<int>(Mass[K][5]), Hash(Seed, 0x7C1D, static_cast<uint64_t>(K)), Lk, Uk);
 				}
 				for (int K = 0; K < 4; ++K)
 				{
@@ -813,18 +952,257 @@ namespace LandScape
 				Writer F(M.Far);
 				const double Lump[5][5] = { { 0.0, 0.0, 0.9, 2.1, 1.0 }, { 0.9, 0.5, 2.0, 1.4, 1.1 }, { -0.8, -0.6, 2.1, 1.4, 1.2 }, { -0.2, 0.4, 3.3, 1.3, 1.0 }, { 0.6, -0.4, 3.8, 1.0, 0.8 } };
 				for (int K = 0; K < 5; ++K)
-					Blob(F, V3{ Lump[K][0], Lump[K][1], Lump[K][2] }, Lump[K][3], Lump[K][4], 4, 6, Hash(Seed, 0x7C1E, static_cast<uint64_t>(K)), Mixed(Lit, Rgb(96, 124, 56), 0.15 * K), Under);
+					Blob(F, V3{ Lump[K][0], Lump[K][1], Lump[K][2] }, Lump[K][3], Lump[K][3], Lump[K][4], 4, 6, Hash(Seed, 0x7C1E, static_cast<uint64_t>(K)), Mixed(Lit, Rgb(96, 124, 56), 0.15 * K), Under);
 			}
 
-			/** The undergrowth's far level, the kit's a stub: three low lumps of leaves as wide as its near. */
+			/** The undergrowth's far level, the kit's a stub: five low lumps of leaves spread unevenly, as wide as its near. */
 			void UnderFar(LandField::BaseMesh& M) const
 			{
 				M.Far = LandField::Mesh();
 				Writer F(M.Far);
 				const Tone Lit = Rgb(74, 100, 46), Under = Rgb(36, 52, 28);
-				Blob(F, V3{ 0.0, 0.0, 0.35 }, 1.15, 0.42, 4, 6, Hash(Seed, 0x7D1), Lit, Under);
-				Blob(F, V3{ 0.7, 0.45, 0.45 }, 0.75, 0.42, 4, 6, Hash(Seed, 0x7D2), Lit, Under);
-				Blob(F, V3{ -0.7, -0.35, 0.4 }, 0.8, 0.4, 4, 6, Hash(Seed, 0x7D3), Lit, Under);
+				const double Lump[5][6] = { { 0.0, 0.0, 0.4, 0.9, 0.7, 0.45 }, { 0.9, 0.4, 0.35, 0.7, 0.5, 0.4 }, { -0.8, -0.3, 0.45, 0.75, 0.6, 0.5 }, { 0.3, -0.8, 0.3, 0.6, 0.5, 0.32 }, { -0.4, 0.8, 0.55, 0.55, 0.45, 0.4 } };
+				for (int K = 0; K < 5; ++K) Blob(F, V3{ Lump[K][0], Lump[K][1], Lump[K][2] }, Lump[K][3], Lump[K][4], Lump[K][5], 4, 6, Hash(Seed, 0x7D1, static_cast<uint64_t>(K)), Lit, Under);
+			}
+
+			/** Buttress roots on a giant: five fins standing out from its trunk's foot, 3-4.5 m up it and 2-3.5 m out, their
+			 * free edges sweeping down concave to the ground; barked as the trunk. */
+			static void Buttress(LandField::Mesh& M, uint64_t Key)
+			{
+				// (the trunk's foot: its middle and girth from the bark's points within a metre of the ground)
+				double SX = 0.0, SY = 0.0;
+				int N = 0;
+				std::vector<size_t> Foot;
+				for (size_t K = 0; K < M.Colours.size(); ++K)
+					if (M.Positions[3 * K + 2] < 1.0)
+					{
+						Foot.push_back(K);
+						SX += M.Positions[3 * K];
+						SY += M.Positions[3 * K + 1];
+						++N;
+					}
+				if (N < 3) return;
+				const double CX = SX / N, CY = SY / N;
+				double Rad = 0.0;
+				for (const size_t K : Foot) Rad += std::hypot(M.Positions[3 * K] - CX, M.Positions[3 * K + 1] - CY);
+				Rad = std::clamp(Rad / N, 0.3, 2.0);
+				Writer W(M);
+				Rng R(Key);
+				for (int F = 0; F < 5; ++F)
+				{
+					const double A = 2.0 * Pi * F / 5.0 + R.Range(-0.35, 0.35), High = R.Range(3.0, 4.5), Out = R.Range(2.0, 3.5), Thick = 0.2;
+					const V3 Rd{ std::cos(A), std::sin(A), 0.0 }, Ac{ -std::sin(A), std::cos(A), 0.0 };
+					const V3 Root{ CX + Rd.X * 0.8 * Rad, CY + Rd.Y * 0.8 * Rad, 0.0 };
+					std::vector<V3> Edge; // the free edge, from its top on the trunk to its foot out on the ground
+					for (int K = 0; K <= 4; ++K)
+					{
+						const double T = K / 4.0;
+						Edge.push_back(Root + Rd * (Out * std::pow(T, 0.7)) + V3{ 0, 0, High * std::pow(1.0 - T, 1.8) - 0.1 });
+					}
+					for (int Side = -1; Side <= 1; Side += 2)
+					{
+						const V3 Off = Ac * (0.5 * Thick * Side);
+						const V3 Nn = Ac * static_cast<double>(Side);
+						const uint32_t Q0 = W.Vert(Root.X + Off.X, Root.Y + Off.Y, -0.1, Nn.X, Nn.Y, 0.2, Bark(Side * 0.3, 0.0, true, Key));
+						std::vector<uint32_t> E;
+						for (const V3& P : Edge) E.push_back(W.Vert(P.X + Off.X, P.Y + Off.Y, P.Z, Nn.X, Nn.Y, 0.2, Bark(P.X - Root.X + Side * 0.3, P.Z, P.Z < 0.6, Key)));
+						for (size_t K = 0; K + 1 < E.size(); ++K)
+						{
+							W.Tri(Q0, E[K], E[K + 1]);
+							W.Tri(Q0, E[K + 1], E[K]);
+						}
+					}
+					for (size_t K = 0; K + 1 < Edge.size(); ++K)
+					{
+						// (the fin's rim along its free edge)
+						const V3 Up = Norm(Cross(Edge[K + 1] - Edge[K], Ac));
+						const V3 L0 = Edge[K] - Ac * (0.5 * Thick), R0 = Edge[K] + Ac * (0.5 * Thick), L1 = Edge[K + 1] - Ac * (0.5 * Thick), R1 = Edge[K + 1] + Ac * (0.5 * Thick);
+						const Tone C = Bark(Edge[K].X - Root.X, Edge[K].Z, false, Key ^ 0x5);
+						const uint32_t A0 = W.Vert(L0.X, L0.Y, L0.Z, Up.X, Up.Y, std::fabs(Up.Z), C), A1 = W.Vert(R0.X, R0.Y, R0.Z, Up.X, Up.Y, std::fabs(Up.Z), C);
+						const uint32_t B0 = W.Vert(L1.X, L1.Y, L1.Z, Up.X, Up.Y, std::fabs(Up.Z), C), B1 = W.Vert(R1.X, R1.Y, R1.Z, Up.X, Up.Y, std::fabs(Up.Z), C);
+						W.Tri(A0, A1, B1);
+						W.Tri(A0, B1, B0);
+						W.Tri(A1, A0, B1);
+						W.Tri(B1, A0, B0);
+					}
+				}
+			}
+
+			/** A curtain of climbers at the forest's edge, its face to +y: masses of leaves from the ground to some 16 m, 13 m
+			 * across, three to a row, vines hanging down its face to the ground; far off, a sheet of six flat lumps. */
+			void Curtain(LandField::BaseMesh& M) const
+			{
+				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
+				Writer W(M.Near);
+				Rng R(Seed ^ 0xC17A);
+				const Tone Lit = Rgb(76, 106, 46), Under = Rgb(32, 48, 24);
+				for (int Row = 0; Row < 6; ++Row)
+					for (int Q = 0; Q < 3; ++Q)
+					{
+						const double X = 4.3 * (Q - 1) + R.Range(-0.6, 0.6) + (Row % 2 ? 1.1 : -1.1), Z = 1.3 + 2.6 * Row + R.Range(-0.4, 0.4), Y = R.Range(-0.5, 0.3);
+						const double L = R.Range(0.85, 1.15), Warm = R.Range(-0.06, 0.06);
+						Leafy(W, V3{ X, Y, Z }, 2.7, 1.1, 1.65, 15, Hash(Seed, 0xC17B, static_cast<uint64_t>(Row * 3 + Q)), Varied(Lit, L, Warm), Varied(Under, L, Warm));
+					}
+				for (int K = 0; K < 10; ++K)
+				{
+					// a vine hanging down its face, leaves along it
+					const double X0 = R.Range(-4.2, 4.2), Z0 = R.Range(13.0, 16.0), Low = R.Range(0.2, 2.0), Sway = R.Range(0.2, 0.6);
+					std::vector<V3> Line;
+					std::vector<double> Wide;
+					for (int S = 0; S <= 8; ++S)
+					{
+						const double T = S / 8.0;
+						Line.push_back(V3{ X0 + Sway * std::sin(T * 5.0 + K), 0.9 + 0.3 * std::sin(T * 3.0), Z0 - (Z0 - Low) * T });
+						Wide.push_back(0.05);
+					}
+					Ribbon(W, Line, Wide, V3{ 1, 0, 0 }, Rgb(64, 84, 40), Rgb(76, 98, 46));
+					for (int S = 1; S < 8; ++S)
+						for (int Sd = -1; Sd <= 1; Sd += 2)
+						{
+							const V3& P = Line[static_cast<size_t>(S)];
+							const V3 Tip = P + V3{ 0.3 * Sd, 0.22, -0.12 };
+							W.Blade(P.X, P.Y, P.Z, Tip.X, Tip.Y, Tip.Z, 0.16, Mixed(Under, Lit, 0.5), Mixed(Lit, Rgb(112, 140, 62), 0.4));
+						}
+				}
+				Writer F(M.Far);
+				const double Lump[6][6] = { { -3.4, 0.0, 3.0, 3.6, 1.1, 3.2 }, { 3.2, -0.1, 3.6, 3.6, 1.1, 3.6 }, { -0.2, -0.2, 8.2, 4.4, 1.1, 3.4 },
+											{ -3.8, -0.2, 12.6, 3.2, 1.0, 3.0 }, { 3.6, -0.2, 11.8, 3.4, 1.0, 3.4 }, { 0.0, 0.0, 3.4, 2.6, 1.2, 2.8 } };
+				for (int K = 0; K < 6; ++K) Blob(F, V3{ Lump[K][0], Lump[K][1], Lump[K][2] }, Lump[K][3], Lump[K][4], Lump[K][5], 4, 6, Hash(Seed, 0xC17C, static_cast<uint64_t>(K)), Mixed(Lit, Rgb(92, 120, 54), 0.1 * K), Under);
+			}
+
+			/** A fallen trunk rotting on the forest floor, along x, 6 m long and half sunk: mossy on its top, a broken branch or
+			 * two, its ends pale. */
+			void Log(LandField::BaseMesh& M) const
+			{
+				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
+				for (int Lv = 0; Lv < 2; ++Lv)
+				{
+					Writer W(Lv ? M.Far : M.Near);
+					const int Round = Lv ? 5 : 8, Segs = Lv ? 1 : 4;
+					const double Rad = 0.34, Long = 6.0;
+					std::vector<std::vector<uint32_t>> Ring;
+					for (int S = 0; S <= Segs; ++S)
+					{
+						const double T = static_cast<double>(S) / Segs, X = -0.5 * Long + Long * T, Bow = 0.25 * std::sin(T * Pi), Rr = Rad * (1.0 - 0.25 * T);
+						std::vector<uint32_t> One;
+						for (int K = 0; K < Round; ++K)
+						{
+							const double A = 2.0 * Pi * K / Round, NY = std::cos(A), NZ = std::sin(A);
+							Tone C = Bark(X, 2.0 * A, NZ < 0.0, Seed ^ 0x106);
+							if (NZ > 0.4) C = Mixed(C, Rgb(70, 92, 42), 0.55 * Smooth(0.4, 0.9, NZ)); // (moss along its top)
+							One.push_back(W.Vert(X, Bow + Rr * NY, 0.7 * Rr + Rr * NZ, 0.0, NY, NZ, C));
+						}
+						Ring.push_back(One);
+					}
+					for (int S = 0; S < Segs; ++S)
+						for (int K = 0; K < Round; ++K)
+						{
+							const uint32_t A = Ring[static_cast<size_t>(S)][static_cast<size_t>(K)], B = Ring[static_cast<size_t>(S)][static_cast<size_t>((K + 1) % Round)];
+							const uint32_t C = Ring[static_cast<size_t>(S + 1)][static_cast<size_t>((K + 1) % Round)], D = Ring[static_cast<size_t>(S + 1)][static_cast<size_t>(K)];
+							W.Tri(A, B, C);
+							W.Tri(A, C, D);
+						}
+					for (int End = 0; End < 2; ++End)
+					{
+						// (the ends: pale broken wood)
+						const std::vector<uint32_t>& E = Ring[End ? static_cast<size_t>(Segs) : 0];
+						const double X = End ? 0.5 * Long : -0.5 * Long, Rr = Rad * (End ? 0.75 : 1.0);
+						const uint32_t Mid = W.Vert(X, End ? 0.0 : 0.0, 0.7 * Rr, End ? 1.0 : -1.0, 0.0, 0.0, Rgb(150, 128, 96));
+						for (int K = 0; K < Round; ++K)
+						{
+							W.Tri(Mid, E[static_cast<size_t>(K)], E[static_cast<size_t>((K + 1) % Round)]);
+							W.Tri(Mid, E[static_cast<size_t>((K + 1) % Round)], E[static_cast<size_t>(K)]);
+						}
+					}
+					if (!Lv)
+					{
+						W.Box(-0.8, 0.2, 0.75, 0.05, 0.4, 0.05, 0.5, Rgb(92, 84, 70));
+						W.Box(1.5, -0.25, 0.65, 0.04, 0.35, 0.04, -0.7, Rgb(92, 84, 70));
+					}
+				}
+			}
+
+			/** An island's low shore shrub (Scaevola, beach heliotrope): small heads of waxy leaves on woody stems spread wide
+			 * and low, uneven, about 1 m high and 5 m across, sand between them; far off, a low mat of eight flat lumps. */
+			void Shrub(LandField::BaseMesh& M) const
+			{
+				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
+				Writer W(M.Near);
+				Rng R(Seed ^ 0x5B1);
+				const Tone Lit = Rgb(108, 136, 66), Under = Rgb(46, 66, 34);
+				// (a shore shrub sprawling low and open, wider than it is high: woody stems out from its root to a dozen
+				// small leafy heads at different heights, sand between them)
+				for (int K = 0; K < 11; ++K)
+				{
+					const double A = R.Range(0.0, 2.0 * Pi), D = 2.1 * std::sqrt(R.Next()), RX = R.Range(0.45, 0.8), RY = R.Range(0.4, 0.7), RZ = R.Range(0.24, 0.42);
+					const double Lift = R.Range(0.0, 0.55), L = R.Range(0.85, 1.12);
+					const V3 C{ D * std::cos(A), D * std::sin(A), RZ * 0.8 + Lift * (1.0 - D / 2.4) };
+					Ribbon(W, { V3{ 0, 0, 0.02 }, V3{ 0.5 * C.X, 0.5 * C.Y, 0.55 * C.Z + 0.08 }, C }, { 0.05, 0.04, 0.025 }, V3{ -std::sin(A), std::cos(A), 0.0 }, Rgb(96, 84, 66), Rgb(88, 80, 62));
+					Leafy(W, C, RX, RY, RZ, 11, Hash(Seed, 0x5B2, static_cast<uint64_t>(K)), Varied(Lit, L, 0.0), Varied(Under, L, 0.0));
+				}
+				Writer F(M.Far);
+				// (far off a low spreading mat of small heads, not balls)
+				const double Lump[8][6] = { { 0.0, 0.0, 0.6, 0.7, 0.6, 0.32 }, { 1.3, 0.5, 0.42, 0.7, 0.5, 0.26 }, { -1.3, -0.6, 0.36, 0.7, 0.55, 0.24 }, { 0.3, -1.5, 0.3, 0.6, 0.45, 0.22 },
+											{ -0.6, 1.5, 0.34, 0.55, 0.5, 0.24 }, { 1.7, -1.0, 0.26, 0.5, 0.45, 0.2 }, { -1.9, 0.6, 0.24, 0.5, 0.4, 0.2 }, { 0.8, 1.9, 0.22, 0.45, 0.4, 0.18 } };
+				for (int K = 0; K < 8; ++K) Blob(F, V3{ Lump[K][0], Lump[K][1], Lump[K][2] }, Lump[K][3], Lump[K][4], Lump[K][5], 3, 6, Hash(Seed, 0x5B3, static_cast<uint64_t>(K)), Mixed(Lit, Under, 0.12 * (K % 3)), Under);
+			}
+
+			/** A pandanus: a leaning grey trunk 4 m on a cone of stilt roots, forking at its head, each branch ending in a spiral
+			 * tuft of long strap leaves arching over and drooping, a few gone dry. */
+			void Pandanus(LandField::BaseMesh& M) const
+			{
+				M.Near = LandField::Mesh();
+				M.Far = LandField::Mesh();
+				Rng R(Seed ^ 0x9A7D);
+				const Tone Wood = Rgb(128, 118, 98), WoodDark = Rgb(98, 90, 76);
+				const V3 Lean{ 0.9, 0.2, 0.0 };
+				const V3 Top = Lean + V3{ 0, 0, 3.8 };
+				std::vector<V3> Heads;
+				for (int B = 0; B < 3; ++B)
+				{
+					const double A = 2.0 * Pi * B / 3.0 + 0.4;
+					Heads.push_back(Top + V3{ 0.9 * std::cos(A), 0.9 * std::sin(A), 0.6 + 0.3 * B });
+				}
+				for (int Lv = 0; Lv < 2; ++Lv)
+				{
+					Writer W(Lv ? M.Far : M.Near);
+					// the trunk and its branches, crossed strips
+					const std::vector<V3> Trunk = { V3{ 0, 0, 0.9 }, Lean * 0.45 + V3{ 0, 0, 2.3 }, Top };
+					Ribbon(W, Trunk, { 0.2, 0.17, 0.14 }, V3{ 1, 0, 0 }, WoodDark, Wood);
+					Ribbon(W, Trunk, { 0.2, 0.17, 0.14 }, V3{ 0, 1, 0 }, WoodDark, Wood);
+					for (const V3& Hd : Heads)
+					{
+						Ribbon(W, { Top, Hd }, { 0.12, 0.09 }, V3{ 1, 0, 0 }, Wood, Wood);
+						if (!Lv) Ribbon(W, { Top, Hd }, { 0.12, 0.09 }, V3{ 0, 1, 0 }, Wood, Wood);
+					}
+					// the stilt roots: from the trunk's foot out to the ground
+					for (int K = 0; K < (Lv ? 4 : 7); ++K)
+					{
+						const double A = 2.0 * Pi * K / (Lv ? 4.0 : 7.0) + 0.2, Up = 0.7 + 0.5 * std::fabs(std::sin(K * 1.9));
+						const V3 Out{ 0.85 * std::cos(A), 0.85 * std::sin(A), 0.0 };
+						const V3 Hi{ 0.1 * std::cos(A), 0.1 * std::sin(A), Up };
+						Ribbon(W, { Hi, (Hi + Out) * 0.5 + V3{ 0, 0, 0.12 }, Out + V3{ 0, 0, -0.05 } }, { 0.07, 0.06, 0.05 }, V3{ -std::sin(A), std::cos(A), 0.0 }, Wood, WoodDark);
+					}
+					// the leaf tufts
+					for (size_t B = 0; B < Heads.size(); ++B)
+					{
+						const V3& Hd = Heads[B];
+						const int Leaves = Lv ? 5 : 18;
+						for (int L = 0; L < Leaves; ++L)
+						{
+							const double A = 2.0 * Pi * L / Leaves * 2.618 + static_cast<double>(B), Rise = 0.35 + 0.55 * std::fabs(std::sin(L * 1.7 + B)), Long = Lv ? 1.3 : 1.15 + 0.4 * std::fabs(std::cos(L * 2.3));
+							const V3 Out{ std::cos(A), std::sin(A), 0.0 };
+							const bool bDry = (L + static_cast<int>(B)) % 7 == 3;
+							const Tone Foot = bDry ? Rgb(138, 120, 82) : Rgb(70, 94, 48), Tip = bDry ? Rgb(160, 140, 96) : Rgb(112, 136, 66);
+							const std::vector<V3> Line = { Hd, Hd + Out * (0.35 * Long) + V3{ 0, 0, Rise * 0.6 }, Hd + Out * (0.75 * Long) + V3{ 0, 0, Rise * 0.55 - 0.15 }, Hd + Out * Long + V3{ 0, 0, Rise * 0.1 - 0.55 } };
+							// (far off fewer and broader)
+							Ribbon(W, Line, Lv ? std::vector<double>{ 0.08, 0.3, 0.24, 0.0 } : std::vector<double>{ 0.05, 0.09, 0.07, 0.0 }, V3{ -Out.Y, Out.X, 0.0 }, Foot, Tip);
+						}
+					}
+				}
 			}
 
 			/** Tin roofs and walls gone patchy with rust: the kit's bright and dull tin rusted in blotches a metre or so
@@ -859,7 +1237,7 @@ namespace LandScape
 				const bool bRead = M.Name.empty() ? false : Fd.Kit.count(M.Name) > 0;
 				// (the trees, drawn far off as the bocage's are, a crown of some 40 triangles: the rainforest's, the palms, the
 				// bamboo; not the bananas, the shot palms' bare poles or the thickets)
-				M.bTree = K == KTree || K == KGiant || K == KPalm || K == KPalmTall || K == KPalmYoung || K == KBamboo;
+				M.bTree = K == KTree || K == KGiant || K == KPalm || K == KPalmTall || K == KPalmYoung || (K == KBamboo && bMainland);
 				switch (K)
 				{
 				case KTree:
@@ -880,6 +1258,8 @@ namespace LandScape
 					{
 						PaleBark(M.Near, 154, 148, 132, 74, 64, 56, Seed ^ 0xBA5);
 						PaleBark(M.Far, 154, 148, 132, 74, 64, 56, Seed ^ 0xBA5);
+						Buttress(M.Near, Seed ^ 0xB77);
+						Buttress(M.Far, Seed ^ 0xB77);
 						Repaint(M.Near, 44, 62, 38, Rgb(60, 84, 44));
 						Repaint(M.Far, 44, 62, 38, Rgb(60, 84, 44));
 						Lianas(M.Near, 32.0, 11.0, Seed ^ 0x11B);
@@ -896,17 +1276,34 @@ namespace LandScape
 					Sight(0.92f, 0.08f, 0.6f, 0.35f);
 					break;
 				case KStump:
-					if (bRead)
-					{
-						Snap(M.Near, 9.0, true);
-						Snap(M.Far, 9.0, false);
-					}
+				if (!bIsland)
+				{
+					Curtain(M);
+					M.Paint = 1;
+					M.FarFrom = 80.0f;
+					Sight(0.5f, 0.5f, 0.95f, 0.0f);
+					break;
+				}
+				if (bRead)
+				{
+					Snap(M.Near, 9.0, true);
+					Snap(M.Far, 9.0, false);
+				}
 					M.Paint = 0;
 					M.FarFrom = 100.0f;
 					Sight(0.5f, 0.5f, 0.3f, 0.35f);
 					break;
-				case KBanana:
 				case KBamboo:
+				if (!bMainland)
+				{
+					Log(M);
+					M.Paint = 0;
+					M.FarFrom = 60.0f;
+					Sight(0.5f, 0.5f, 0.3f, 0.0f);
+					break;
+				}
+				[[fallthrough]];
+				case KBanana:
 					M.Paint = 1;
 					M.FarFrom = K == KBamboo ? 80.0f : 60.0f;
 					Sight(0.55f, 0.45f, 0.8f, 0.2f);
@@ -918,14 +1315,31 @@ namespace LandScape
 					Sight(0.5f, 0.5f, 0.85f, 0.0f);
 					break;
 				case KThicket:
-					Thicket(M);
+				if (bIsland)
+				{
+					Pandanus(M);
+					M.Paint = 1;
+					M.FarFrom = 80.0f;
+					Sight(0.75f, 0.25f, 0.6f, 0.15f);
+					break;
+				}
+				Thicket(M);
 					M.Paint = 1;
 					M.FarFrom = 70.0f;
 					Sight(0.5f, 0.5f, 0.92f, 0.0f);
 					break;
 				case KGrass:
+				if (bIsland)
+				{
+					Shrub(M);
+					M.Paint = 1;
+					M.FarFrom = 70.0f;
+					Sight(0.5f, 0.5f, 0.85f, 0.0f);
+					break;
+				}
+				[[fallthrough]];
 				case KReeds:
-					M.Paint = 2;
+				M.Paint = 2;
 					M.FarFrom = 60.0f;
 					Sight(0.55f, 0.45f, 0.8f, 0.0f);
 					break;
@@ -987,27 +1401,35 @@ namespace LandScape
 				{
 				case 0:
 				{
-					// Kunai: a clump of saw-edged blades 1-1.6 m, leaning out and bending over, yellow-green to straw at
-					// their tips; two or three stems carrying white silky plumes.
-					for (int B = 0; B < 30; ++B)
+					// Kunai: a patch of it some 1.3 m across, saw-edged blades 0.75-1.5 m from many feet, leaning every way and
+					// bending over, pale yellow-green, straw at their tips; one slim stem with a small soft plume of fine
+					// filaments, low among the blades.
+					for (int B = 0; B < 46; ++B)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), R0 = R.Range(0.0, 0.18), High = R.Range(0.8, 1.55), Lean = R.Range(0.12, 0.55);
-						const double Bend = R.Range(0.1, 0.45), Green = R.Next();
-						const V3 Out{ std::cos(A), std::sin(A), 0.0 };
-						const V3 Foot{ R0 * Out.X, R0 * Out.Y, 0.0 };
+						const double A = R.Range(0.0, 2.0 * Pi), R0 = 0.62 * std::sqrt(R.Next()), High = R.Range(0.75, 1.5), Lean = R.Range(0.1, 0.5);
+						const double Bend = R.Range(0.1, 0.45), Green = R.Next(), Turn = R.Range(-1.1, 1.1);
+						const V3 Out{ std::cos(A + Turn), std::sin(A + Turn), 0.0 };
+						const V3 Foot{ R0 * std::cos(A), R0 * std::sin(A), 0.0 };
 						const std::vector<V3> Line = { Foot, Foot + Out * (0.25 * Lean * High) + V3{ 0, 0, 0.5 * High }, Foot + Out * (0.65 * Lean * High) + V3{ 0, 0, 0.85 * High },
 													   Foot + Out * ((Lean + Bend) * High) + V3{ 0, 0, (0.95 - Bend) * High } };
-						const Tone Tip = Mixed(Rgb(178, 168, 120), Rgb(138, 146, 92), Green);
-						Ribbon(W, Line, { 0.019, 0.016, 0.011, 0.0 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(96, 100, 62), Tip);
+						const Tone Tip = Mixed(Rgb(160, 152, 104), Rgb(140, 142, 90), Green);
+						// (lit as from above and a little outward, as a thin blade turned from the sun draws near black)
+						Ribbon(W, Line, { 0.022, 0.018, 0.012, 0.0 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 144, 96), Tip, 1.8); // (pale at the foot as kunai is, never a dark reed)
 					}
-					for (int B = 0; B < 3; ++B)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.4, 1.75);
+						const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(1.3, 1.5);
 						const V3 Out{ std::cos(A), std::sin(A), 0.0 };
-						const V3 Top = Out * 0.2 + V3{ 0, 0, High };
-						Ribbon(W, { V3{}, Out * 0.08 + V3{ 0, 0, 0.6 * High }, Top }, { 0.012, 0.01, 0.008 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(120, 120, 64), Rgb(170, 160, 104));
-						Ribbon(W, { Top, Top + Out * 0.04 + V3{ 0, 0, 0.12 }, Top + Out * 0.1 + V3{ 0, 0, 0.22 }, Top + Out * 0.18 + V3{ 0, 0, 0.27 } }, { 0.012, 0.03, 0.026, 0.0 }, V3{ -Out.Y, Out.X, 0.0 },
-							   Rgb(200, 194, 174), Rgb(234, 230, 216));
+						const V3 Top = Out * 0.12 + V3{ 0, 0, High };
+						Ribbon(W, { V3{}, Out * 0.05 + V3{ 0, 0, 0.6 * High }, Top }, { 0.008, 0.007, 0.005 }, V3{ -Out.Y, Out.X, 0.0 }, Rgb(156, 146, 98), Rgb(164, 154, 104), 1.8);
+						for (int F = 0; F < 16; ++F)
+						{
+							// (the plume: a soft spindle of fine silky hairs up the stem's last hand's breadth, a dull cream,
+							// never a star of white strips)
+							const double Fa = A + 2.4 * F, At = 0.012 * F, Up = 1.0 - 0.04 * F;
+							const V3 Dir = Norm(V3{ 0.32 * std::cos(Fa) + 0.25 * Out.X, 0.32 * std::sin(Fa) + 0.25 * Out.Y, Up });
+							const V3 Root = Top + V3{ 0, 0, At - 0.06 }, Mid = Root + Dir * 0.05, End = Root + Dir * (0.09 + 0.002 * F);
+							Ribbon(W, { Root, Mid, End }, { 0.002, 0.007, 0.0 }, V3{ -Dir.Y, Dir.X, 0.0 }, Rgb(150, 142, 118), Rgb(176, 168, 146), 1.8);
+						}
 					}
 					M.FarFrom = 48.0f;
 					M.Paint = 2;
@@ -1075,9 +1497,9 @@ namespace LandScape
 				case 3:
 				{
 					// Leaf litter: fallen leaves brown, rust and yellow, a twig.
-					for (int L = 0; L < 16; ++L)
+					for (int L = 0; L < 26; ++L)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), D = 0.6 * std::sqrt(R.Next()), Turn = R.Range(0.0, Pi), Long = R.Range(0.08, 0.16), Z = R.Range(0.008, 0.03);
+						const double A = R.Range(0.0, 2.0 * Pi), D = 0.85 * std::sqrt(R.Next()), Turn = R.Range(0.0, Pi), Long = R.Range(0.08, 0.16), Z = R.Range(0.008, 0.03);
 						const double Pick = R.Next();
 						const Tone C = Pick < 0.35 ? Rgb(118, 86, 52) : Pick < 0.6 ? Rgb(146, 88, 46) : Pick < 0.8 ? Rgb(156, 128, 64) : Rgb(74, 58, 40);
 						const double X = D * std::cos(A), Y = D * std::sin(A), CT = std::cos(Turn), ST = std::sin(Turn);
@@ -1108,22 +1530,64 @@ namespace LandScape
 				}
 				case 5:
 				{
-					// A palm's droppings: two or three husks and a fallen frond lying dry, its leaflets splayed.
+					// A palm's droppings: three husks, ovoid and grey-brown (one still green-brown), half sunk in the sand and
+					// scattered; a dead frond lying curved and broken in two, brown-grey, its leaflets curled up at their tips
+					// and gone in places.
 					for (int H = 0; H < 3; ++H)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(0.2, 0.7);
-						W.Rock(D * std::cos(A), D * std::sin(A), 0.11, 0.13, Hash(Seed, 0x4E5, static_cast<uint64_t>(H)), Rgb(150, 112, 70), Rgb(96, 72, 48));
+						const double A = R.Range(0.0, 2.0 * Pi), D = R.Range(0.4, 1.5), Turn = R.Range(0.0, Pi), Big = R.Range(0.85, 1.15);
+						const size_t From = M.Near.Colours.size();
+						const Tone Lit = H == 2 ? Rgb(110, 108, 66) : Rgb(122, 102, 76), Under = H == 2 ? Rgb(76, 76, 48) : Rgb(82, 70, 54);
+						const V3 C{ D * std::cos(A), D * std::sin(A), 0.012 * Big };
+						Blob(W, C, 0.13 * Big, 0.095 * Big, 0.09 * Big, 4, 6, Hash(Seed, 0x4E5, static_cast<uint64_t>(H)), Lit, Under);
+						for (size_t V = From; V < M.Near.Colours.size(); ++V)
+						{
+							// (turned about its own middle)
+							float* P = &M.Near.Positions[3 * V];
+							float* N = &M.Near.Normals[3 * V];
+							const double DX = P[0] - C.X, DY = P[1] - C.Y, CT = std::cos(Turn), ST = std::sin(Turn);
+							P[0] = static_cast<float>(C.X + DX * CT - DY * ST);
+							P[1] = static_cast<float>(C.Y + DX * ST + DY * CT);
+							const double NX = N[0], NY = N[1];
+							N[0] = static_cast<float>(NX * CT - NY * ST);
+							N[1] = static_cast<float>(NX * ST + NY * CT);
+						}
 					}
-					const double A = R.Range(0.0, 2.0 * Pi);
+					const double A = R.Range(0.0, 2.0 * Pi), Curve = R.Range(0.25, 0.5);
 					const V3 Out{ std::cos(A), std::sin(A), 0.0 }, Side{ -Out.Y, Out.X, 0.0 };
-					const V3 Base0 = Out * -1.2 + V3{ 0, 0, 0.03 };
-					Ribbon(W, { Base0, Base0 + Out * 1.2 + V3{ 0, 0, 0.02 }, Base0 + Out * 2.4 }, { 0.06, 0.04, 0.0 }, V3{ 0, 0, 1 }, Rgb(150, 126, 84), Rgb(140, 118, 80));
-					for (int L = 0; L < 22; ++L)
+					const V3 Base0 = Out * -1.2 + Side * 0.3;
+					auto Along = [&](double T, int Piece) {
+						// (the rachis bowed to one side; its outer piece kinked where it broke)
+						V3 P = Base0 + Out * (2.5 * T) + Side * (Curve * std::sin(Pi * T)) + V3{ 0, 0, 0.03 + 0.05 * T * T };
+						if (Piece) P = P + Side * (0.35 * (T - 0.55)) + Out * 0.08;
+						return P;
+					};
+					const Tone Grey = Rgb(132, 120, 98), Pale = Rgb(154, 142, 116), Dark = Rgb(112, 100, 80);
+					for (int Piece = 0; Piece < 2; ++Piece)
 					{
-						const double T = 0.06 + 0.9 * L / 22.0, Long = 0.75 * (1.0 - 0.55 * T), Side_ = (L % 2) ? 1.0 : -1.0;
-						const V3 Root = Base0 + Out * (2.4 * T) + V3{ 0, 0, 0.02 };
-						const V3 Tip = Root + (Side * Side_ + Out * 0.5) * Long + V3{ 0, 0, 0.01 };
-						W.Blade(Root.X, Root.Y, Root.Z, Tip.X, Tip.Y, Tip.Z, 0.08, Rgb(160, 134, 88), Rgb(182, 156, 104));
+						const double T0 = Piece ? 0.58 : 0.0, T1 = Piece ? 1.0 : 0.53;
+						Ribbon(W, { Along(T0, Piece), Along(0.5 * (T0 + T1), Piece), Along(T1, Piece) }, { 0.06 - 0.03 * T0, 0.05 - 0.03 * T0, 0.035 - 0.03 * T0 }, V3{ 0, 0, 1 }, Grey, Dark);
+					}
+					double Lift = 0.0, Skew = 0.0, GroupSd = 1.0;
+					for (int L = 0; L < 72; ++L)
+					{
+						// (leaflets close set, drying in tangled groups of four lying on the sand or lifting a little off it at their
+						// own slant, curling up at their tips, each its own length where it broke, gone in places)
+						if (L % 4 == 0)
+						{
+							Lift = R.Range(-0.05, 0.32);
+							Skew = R.Range(-0.35, 0.35);
+							GroupSd = R.Next() < 0.5 ? -1.0 : 1.0;
+						}
+						const double T = 0.04 + 0.94 * L / 72.0, Broke = R.Range(0.45, 1.0), Gone = R.Next(), Curl = R.Range(0.03, 0.12), Splay = R.Range(-0.15, 0.15);
+						if (Gone < 0.15 || (T > 0.53 && T < 0.58)) continue;
+						const double Long = 0.85 * (1.0 - 0.45 * T) * Broke, Sd = (L % 2) ? GroupSd : -GroupSd;
+						const int Piece = T > 0.55 ? 1 : 0;
+						const V3 Root = Along(T, Piece) + V3{ 0, 0, 0.02 };
+						const V3 Dir = Norm(Side * Sd + Out * (0.5 + Skew + Splay));
+						const double Rise = Lift * Long;
+						const V3 Mid = Root + Dir * (0.45 * Long) + V3{ 0, 0, std::max(-0.02, 0.75 * Rise) }, Tip = Root + Dir * (0.9 * Long) + V3{ 0, 0, std::max(-0.01, 0.4 * Rise) + Curl - 0.02 };
+						Ribbon(W, { Root, Mid, Tip }, { 0.04, 0.045, 0.0 }, Cross(Dir, V3{ 0, 0, 1 }), Mixed(Grey, Dark, Gone), Mixed(Pale, Grey, Gone));
 					}
 					M.FarFrom = 34.0f;
 					M.Paint = 0;
@@ -1257,10 +1721,19 @@ namespace LandScape
 								else Put(H, B::Kit2, AX, AY, 0.5, Way - LeanPalm, Sc, Sz, Tn);
 							};
 							const double Yaw = R.Range(0.0, 2.0 * Pi);
+							// the scrub: low shore shrubs spreading wide and uneven, now and then a pandanus on its stilt roots
+							auto Scrub = [&](double AX, double AY, double PShrub, double PPandanus) {
+								// (in thickets where the ground cover drifts, spreading; a lone shrub now and then on the open sand; half
+								// as many as the sand would hold, so from above they are no speckle)
+								const double Thick = Smooth(-0.05, 0.35, Read(AX, AY, 1));
+								if (R.Next() < PShrub * (0.06 + 0.85 * Thick)) Stand(B::Kit6, AX, AY, 0.8, 0.7, 1.3, 0.7, 1.2, 0.9, 1.1, 0.03);
+								Elsewhere();
+								if (R.Next() < PPandanus * (0.15 + 0.7 * Thick)) Stand(B::Kit15, PX, PY, 0.8, 0.8, 1.2, 0.8, 1.25, 0.9, 1.1, 0.0);
+							};
 							if (W < 40.0)
 							{
 								// the strand along the beach's crest: scrub, young palms, a few old ones leaning out over the sand
-								if (R.Next() < 0.6) Stand(B::Kit7, X, Y, 0.8, 1.0, 1.7, 0.9, 1.5, 0.9, 1.1, 0.05);
+								Scrub(X, Y, 0.45, 0.14);
 								Elsewhere();
 								if (R.Next() < 0.25) Stand(B::Kit4, PX, PY, 0.5, 0.6, 1.0, 0.6, 1.0, 0.95, 1.05, 0.0);
 								Elsewhere();
@@ -1281,46 +1754,70 @@ namespace LandScape
 								// a dense grove: palms over broadleaf trees, pandanus and scrub
 								if (R.Next() < 0.6) Palm(X, Y, Yaw);
 								Elsewhere();
-								if (R.Next() < 0.25) Stand(B::Kit0, PX, PY, 0.8, 0.45, 0.8, 0.5, 0.85, 0.9, 1.05, 0.0);
+								if (R.Next() < 0.12) Stand(B::Kit0, PX, PY, 0.8, 0.45, 0.8, 0.5, 0.85, 0.9, 1.05, 0.0);
 								Elsewhere();
-								if (R.Next() < 0.7) Stand(B::Kit7, PX, PY, 0.8, 1.0, 1.6, 1.0, 1.6, 0.85, 1.1, 0.0);
+								Scrub(PX, PY, 0.45, 0.2);
 								Elsewhere();
 								if (R.Next() < 0.1) Stand(B::Kit5, PX, PY, 0.6, 0.8, 1.2, 0.8, 1.3, 0.95, 1.05, 0.0);
 								continue;
 							default: break;
 							}
-							if (S.Crop == Plantation)
+							// (a plantation or the strand inside its ragged edge, the grove outside it)
+							const double Side = S.Crop == Plantation || S.Crop == Strand ? R.Next() : 1.0;
+							if (S.Crop == Plantation && Side < Inward(S))
 							{
 								Rows(S, X0, Y0, Cell, R, [&](double AX, double AY, double Way) { Palm(AX, AY, Way); });
 								Elsewhere();
-								if (R.Next() < 0.12) Stand(B::Kit7, PX, PY, 0.8, 0.8, 1.3, 0.8, 1.3, 0.95, 1.05, 0.0);
+								Scrub(PX, PY, 0.1, 0.0);
 								continue;
 							}
-							if (S.Crop == Strand)
+							if (S.Crop == Strand && Side < Inward(S))
 							{
 								if (R.Next() < 0.15) Palm(X, Y, Yaw);
 								Elsewhere();
-								if (R.Next() < 0.35) Stand(B::Kit7, PX, PY, 0.8, 0.9, 1.5, 0.8, 1.4, 0.9, 1.1, 0.05);
+								Scrub(PX, PY, 0.3, 0.06);
 								continue;
 							}
-							// the grove: palms some 130 a hectare, in clumps and gaps (two or three together, each leaning its own
-							// way), scrub and a broadleaf tree here and there under them
+							// the grove: palms in groves a hundred metres and more across with open sand between them (from above,
+							// never a speckle of lone crowns), some 130 a hectare in a grove, in clumps and gaps (two or three
+							// together, each leaning its own way); scrub and a broadleaf tree here and there under them
+							const double InGrove = GroveAt(X, Y);
 							const double Clump = Noise(X / 34.0 + 0.4, Y / 34.0 - 2.2, Seed ^ 0xC1C);
-							if (R.Next() < std::clamp(0.78 + 0.9 * Clump, 0.12, 1.0)) Palm(X, Y, Yaw);
+							if (R.Next() < std::clamp(0.64 + 0.8 * Clump, 0.1, 0.92) * (0.05 + 0.95 * InGrove)) Palm(X, Y, Yaw);
 							Elsewhere();
-							if (Clump > 0.2 && R.Next() < 0.5)
+							if (InGrove > 0.5 && Clump > 0.2 && R.Next() < 0.35)
 							{
 								const double Turn = R.Range(-1.2, 1.2);
 								Palm(PX, PY, Yaw + Turn);
 							}
 							Elsewhere();
-							if (R.Next() < 0.4) Stand(B::Kit7, PX, PY, 0.8, 0.9, 1.6, 0.8, 1.5, 0.9, 1.1, 0.0);
+							Scrub(PX, PY, 0.22 * (0.4 + 0.6 * InGrove), 0.05);
 							Elsewhere();
-							if (R.Next() < 0.03) Stand(B::Kit0, PX, PY, 0.8, 0.5, 0.8, 0.5, 0.8, 0.95, 1.05, 0.0);
+							if (R.Next() < 0.03 * InGrove) Stand(B::Kit0, PX, PY, 0.8, 0.5, 0.8, 0.5, 0.8, 0.95, 1.05, 0.0);
 							continue;
 						}
 						// ---- the jungle
 						const double Warm = R.Range(-0.04, 0.06);
+						// the kunai: clumps of it standing over the sea of grass in patches, none on its paths, its burns
+						// or where it thins; now and then a clump of trees and undergrowth with a tree in it, or a wild palm
+						auto KunaiHere = [&]() {
+							if (BurnAt(X, Y) > 0.5) return;
+							const double Clumps = Organic(X, Y, 24.0, Seed ^ 0xC14);
+							const double Want = (Clumps > -0.05 ? 0.85 : 0.25) * (1.0 - ThinAt(X, Y)) * (1.0 - TrodAt(X, Y));
+							if (R.Next() < Want) Tuft(B::Kit6, X, Y, 0.6, 1.2, 1.8, 0.4, 0.56, Tint(1.15 + 0.08 * Dry, 0.95, 1.0)); // (tan-green, not lime, from above)
+							if (R.Next() < 0.008)
+							{
+								Stand(B::Kit0, X, Y, 0.8, 0.55, 0.95, 0.6, 1.0, 0.85, 1.12, Warm);
+								for (int K = 0; K < 4; ++K)
+								{
+									const double A = R.Range(0.0, 2.0 * Pi);
+									const double D = R.Range(2.0, 6.0);
+									Stand(K == 3 ? B::Kit5 : K == 2 ? B::Kit15 : B::Kit7, X + D * std::cos(A), Y + D * std::sin(A), 0.5, 1.0, 1.8, 0.8, 1.6, 0.85, 1.1, 0.0);
+								}
+							}
+							Elsewhere();
+							if (R.Next() < 0.01) Stand(B::Kit2, PX, PY, 0.5, 0.85, 1.1, 0.8, 1.1, 0.9, 1.1, 0.0);
+						};
 						switch (S.Kind)
 						{
 						case KVillage:
@@ -1343,12 +1840,18 @@ namespace LandScape
 						case KWorks: continue;
 						case KWoods:
 						{
-							// the rainforest: a few emergents and the canopy's big crowns (25-36 m), slim sub-canopy trees,
-							// bananas and young palms; at the edge a wall of undergrowth and small trees
+							if (Eaten(X, Y))
+							{
+								KunaiHere();
+								continue;
+							}
+							// the rainforest: one roof of big crowns 21-28 m up, merging, with the emergent giants standing
+							// above it (34-42 m); slim sub-canopy trees, bananas and young palms; at its edge a curtain of
+							// climbers from the canopy to the ground before a wall of thickets
 							const bool bEdge = S.Edge < 10.0, bDeep = Outside(X, Y) > 70.0;
 							const double U = R.Next();
-							if (U < 0.1) Stand(B::Kit1, X, Y, 1.6, 0.78, 1.1, 0.8, 1.1, 0.85, 1.12, Warm);
-							else if (U < 0.42) Stand(B::Kit0, X, Y, 1.0, 1.3, 1.75, 1.35, 1.8, 0.85, 1.12, Warm);
+							if (U < 0.08) Stand(B::Kit1, X, Y, 1.6, 0.95, 1.25, 1.05, 1.3, 0.85, 1.12, Warm);
+							else if (U < 0.48) Stand(B::Kit0, X, Y, 1.0, 1.6, 2.1, 1.3, 1.7, 0.85, 1.12, Warm);
 							// (deep in the band, seen only from afar: the canopy and its sub-canopy alone)
 							Elsewhere();
 							if (R.Next() < (bEdge ? 1.0 : bDeep ? 0.35 : 0.75))
@@ -1357,22 +1860,36 @@ namespace LandScape
 								else Stand(B::Kit0, PX, PY, 0.5, 0.42, 0.85, 0.45, 0.95, 0.85, 1.1, 0.0);
 							}
 							if (bDeep && !bEdge) continue;
-							// the understory: thickets, bananas, undergrowth, young palms; at the edge a wall of thickets shoulder to shoulder
-							// from the ground to the small trees' crowns
 							if (bEdge)
+							{
+								// the curtain at the edge itself, its face turned out (the way the woods' edge lies, from
+								// the edge's distance a little either side)
+								if (S.Edge < 8.0)
 								{
-									for (int K = 0; K < 3; ++K)
+									auto In_ = [](const Spot& Q) { return Q.Kind == KWoods ? Q.Edge : -Q.Edge; };
+									double GX = In_(H.At(X + 3.0, Y)) - In_(H.At(X - 3.0, Y)), GY = In_(H.At(X, Y + 3.0)) - In_(H.At(X, Y - 3.0));
+									const double GL = std::hypot(GX, GY);
+									const double Sc = R.Range(0.85, 1.15);
+									const double Sz = R.Range(0.85, 1.2);
+									const double Lf = R.Range(0.88, 1.1);
+									if (GL > 0.5)
 									{
-										Elsewhere();
-										Stand(B::Kit15, PX, PY, 0.5, 0.9, 1.45, 0.9, 1.5, 0.85, 1.12, Warm);
+										GX /= GL;
+										GY /= GL;
+										// (only where the woods run deep behind it: a lone clump on the plain takes none)
+										const Spot Behind = H.At(X + GX * 15.0, Y + GY * 15.0);
+										const double Back = std::max(0.0, S.Edge - 1.5);
+										if (Behind.Kind == KWoods && Behind.Edge > 6.0) Put(H, B::Kit14, X - GX * Back, Y - GY * Back, 0.5, std::atan2(GX, -GY), Sc, Sz, Leaf(Lf, Warm));
 									}
-									// (at the edge the climbers smother the small trees from the ground to the canopy, columns of leaves some
-									// 8-12 m, and small trees crowd in under the big crowns)
-									Elsewhere();
-									if (R.Next() < (S.Edge < 5.0 ? 0.9 : 0.5)) Stand(B::Kit15, PX, PY, 0.5, 1.1, 1.5, 1.8, 2.6, 0.85, 1.1, Warm);
-									Elsewhere();
-									Stand(B::Kit0, PX, PY, 0.5, 0.45, 0.75, 0.42, 0.7, 0.85, 1.1, 0.0);
 								}
+								for (int K = 0; K < 2; ++K)
+								{
+									Elsewhere();
+									Stand(B::Kit15, PX, PY, 0.5, 0.9, 1.45, 0.9, 1.5, 0.85, 1.12, Warm);
+								}
+								Elsewhere();
+								Stand(B::Kit0, PX, PY, 0.5, 0.45, 0.75, 0.42, 0.7, 0.85, 1.1, 0.0);
+							}
 							else
 							{
 								Elsewhere();
@@ -1384,16 +1901,24 @@ namespace LandScape
 							if (R.Next() < (bEdge ? 0.6 : 0.8)) Stand(B::Kit7, PX, PY, 0.5, 1.2, 2.2, 1.2, 2.4, 0.85, 1.1, 0.0);
 							Elsewhere();
 							if (R.Next() < 0.16) Stand(B::Kit4, PX, PY, 0.5, 0.35, 0.55, 0.35, 0.6, 0.85, 0.95, 0.0);
-							if (bMainland)
-							{
-								Elsewhere();
-								if (R.Next() < 0.04) Stand(B::Kit13, PX, PY, 1.2, 0.8, 1.2, 0.8, 1.2, 0.95, 1.05, 0.0);
-							}
+							// (bamboo on the mainland; elsewhere a fallen trunk rotting on the floor)
+							Elsewhere();
+							if (R.Next() < (bMainland ? 0.04 : 0.12)) Stand(B::Kit13, PX, PY, bMainland ? 1.2 : 0.8, 0.8, 1.2, 0.8, 1.2, 0.95, 1.05, 0.0);
 							continue;
 						}
 						default: break;
 						}
 						const int C = S.Crop >= 0 ? S.Crop : Kunai;
+						if (C != Kunai)
+						{
+							// (a parcel's own crop inside its ragged edge, the kunai outside it)
+							const double Side = R.Next();
+							if (Side >= Inward(S))
+							{
+								KunaiHere();
+								continue;
+							}
+						}
 						switch (C)
 						{
 						case Plantation:
@@ -1404,8 +1929,10 @@ namespace LandScape
 								const double Sc = R.Range(0.82, 1.24);
 								const double Sz = R.Range(0.64, 1.02);
 								const double Lf = R.Range(0.9, 1.08);
-								if (Pick < 0.7) Put(H, B::Kit3, AX, AY, 0.5, Way - LeanTall, Sc, Sz, Leaf(Lf, 0.02));
-								else Put(H, B::Kit2, AX, AY, 0.5, Way - LeanPalm, Sc, Sz * 1.15, Leaf(Lf, 0.02));
+								// (the fronds yellow-green in the sun, near the kunai's own hue from above, not the forest's)
+								const LandField::Rgb8 Sun = Tint(1.3 * Lf, 1.04 * Lf, 1.08 * Lf);
+								if (Pick < 0.7) Put(H, B::Kit3, AX, AY, 0.5, Way - LeanTall, Sc, Sz, Sun);
+								else Put(H, B::Kit2, AX, AY, 0.5, Way - LeanPalm, Sc, Sz * 1.15, Sun);
 							});
 							Elsewhere();
 							if (R.Next() < 0.05) Stand(B::Kit7, PX, PY, 0.5, 0.8, 1.2, 0.7, 1.1, 0.9, 1.1, 0.0);
@@ -1415,7 +1942,7 @@ namespace LandScape
 							if (S.Edge < 6.0 && R.Next() < 0.12) Stand(B::Kit2, X, Y, 0.5, 0.85, 1.1, 0.85, 1.1, 0.9, 1.1, 0.0);
 							break;
 						case Ridge:
-							if (R.Next() < 0.25) Tuft(B::Kit6, X, Y, 0.6, 0.7, 1.0, 0.3, 0.42, Tint(1.02 + 0.1 * Dry, 1.0, 0.9));
+							if (R.Next() < 0.25) Tuft(B::Kit6, X, Y, 0.6, 0.7, 1.0, 0.3, 0.42, Tint(1.17 + 0.1 * Dry, 0.95, 1.0));
 							Elsewhere();
 							if (R.Next() < 0.05) Tuft(B::Kit12, PX, PY, 0.9, 0.6, 1.4, 0.6, 1.2, Tint(1.12, 0.92, 0.8));
 							Elsewhere();
@@ -1426,30 +1953,9 @@ namespace LandScape
 							Elsewhere();
 							if (R.Next() < 0.1) Stand(B::Kit4, PX, PY, 0.5, 0.8, 1.1, 0.8, 1.15, 0.9, 1.1, 0.0);
 							Elsewhere();
-							if (R.Next() < 0.25) Tuft(B::Kit6, PX, PY, 0.6, 0.7, 1.0, 0.4, 0.55, Tint(1.0, 1.0, 0.9));
+							if (R.Next() < 0.25) Tuft(B::Kit6, PX, PY, 0.6, 0.7, 1.0, 0.4, 0.55, Tint(1.1, 0.97, 0.95));
 							break;
-						default:
-							// kunai: clumps standing above the sea of grass in patches, none on its paths or where it thins;
-							// now and then a thicket (a tree, undergrowth, a banana gone wild) or a wild palm
-							if (Burnt(S.Key, X, Y)) break;
-							{
-								const double Clumps = Noise(X / 22.0 - 1.4, Y / 22.0 + 3.3, Seed ^ 0xC14);
-								const double Want = (Clumps > -0.05 ? 0.9 : 0.22) * Smooth(-0.6, -0.3, Thin(X, Y)) * (1.0 - Trod(X, Y));
-								if (R.Next() < Want) Tuft(B::Kit6, X, Y, 0.6, 1.15, 1.7, 0.4, 0.58, Tint(1.0 + 0.1 * Dry, 1.0, 0.94));
-							}
-							if (R.Next() < 0.008)
-							{
-								Stand(B::Kit0, X, Y, 0.8, 0.55, 0.95, 0.6, 1.0, 0.85, 1.12, Warm);
-								for (int K = 0; K < 3; ++K)
-								{
-									const double A = R.Range(0.0, 2.0 * Pi);
-									const double D = R.Range(2.0, 5.0);
-									Stand(K == 2 ? B::Kit5 : B::Kit7, X + D * std::cos(A), Y + D * std::sin(A), 0.5, 1.2, 2.0, 1.2, 2.0, 0.85, 1.1, 0.0);
-								}
-							}
-							Elsewhere();
-							if (R.Next() < 0.01) Stand(B::Kit2, PX, PY, 0.5, 0.85, 1.1, 0.8, 1.1, 0.9, 1.1, 0.0);
-							break;
+						default: KunaiHere(); break;
 						}
 					}
 			}
@@ -1506,7 +2012,12 @@ namespace LandScape
 			double Dry = 0.5;
 			double SeaZ = 0.0;
 			double Wf = 0.0, Df = 0.0;
-		};
+			static constexpr int Chans = 7;
+			static constexpr double GStep = 8.0;
+			double GX0 = 0.0, GY0 = 0.0;
+			int GNX = 0, GNY = 0;
+			std::vector<float> Grid;
+			};
 	}
 
 	std::unique_ptr<Region> MakeTropic(const LandField::Field& F, uint64_t S, bool bIsland) { return std::make_unique<Tropic>(F, S, bIsland); }

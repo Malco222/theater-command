@@ -328,6 +328,10 @@ namespace LandScape
 		virtual void KitPlain(int Slot, LandField::BaseMesh& M) const;
 		/** A kit slot the region builds itself in KitPlain (a yurt, a cairn), with no file to read or to miss. */
 		virtual bool KitBuilt(int Slot) const { (void)Slot; return false; }
+		/** How many steps down the frame budget's ladder of nearer far-draw distances the game takes for this ground (0,
+		 * GS9's own, to 4; production/theatre-budgets-1122/budgets.md section B): its dense woods' trees and shrubs turn
+		 * plain, to crowns and out sooner. By its look unless the region says. */
+		virtual int DrawStep() const;
 		/** A clutter slot's mesh (Clut0..Clut5), built here. */
 		virtual void ClutterMesh(int Slot, LandField::BaseMesh& M) const { (void)Slot; (void)M; }
 

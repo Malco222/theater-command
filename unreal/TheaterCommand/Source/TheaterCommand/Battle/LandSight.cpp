@@ -281,6 +281,154 @@ namespace LandSight
 		return Out;
 	}
 
+	void PhonesFromBattle(LandFeed::Recording& Rec, double MendAfter)
+	{
+		if (!Rec.Wires.empty())
+		{
+			return;
+		}
+		// Each side's men's middle at the start: the line from the attacker's to the defender's is "back"; the
+		// headquarters is the defender's key man (an officer, an observer, a gun's, mortar's or heavy gun's first man)
+		// standing farthest back along it, the battery or command post behind the line.
+		double AX = 0.0, AY = 0.0, DX = 0.0, DY = 0.0;
+		int Attackers = 0, Defenders = 0;
+		for (const LandFeed::Track& T : Rec.Tracks)
+		{
+			const LandFeed::Block* B = Rec.BlockOf(T.Block);
+			if (!B || !T.IsMan() || T.At.empty())
+			{
+				continue;
+			}
+			(B->Side == 0 ? AX : DX) += T.At.front().X;
+			(B->Side == 0 ? AY : DY) += T.At.front().Y;
+			++(B->Side == 0 ? Attackers : Defenders);
+		}
+		if (Attackers == 0 || Defenders == 0)
+		{
+			return;
+		}
+		AX /= Attackers;
+		AY /= Attackers;
+		DX /= Defenders;
+		DY /= Defenders;
+		const double Apart = std::max(1e-6, std::hypot(DX - AX, DY - AY));
+		const double Ux = (DX - AX) / Apart, Uy = (DY - AY) / Apart;
+		auto BackOf = [&](const LandFeed::Point& P) { return (P.X - AX) * Ux + (P.Y - AY) * Uy; };
+		int Hq = -1;
+		std::vector<int> Ends;
+		for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+		{
+			const LandFeed::Track& T = Rec.Tracks[K];
+			const LandFeed::Block* B = Rec.BlockOf(T.Block);
+			const bool bKey = T.Role == "officer" || T.Role == "fo" || T.Role == "mortar" || T.Role == "gun" || T.Role == "hmg";
+			if (!B || B->Side != 1 || T.At.empty() || T.J != 0 || !bKey)
+			{
+				continue;
+			}
+			// (a heavy weapon's line goes to its first piece only)
+			const bool bFirst = T.Role == "officer" || T.Role == "fo" || Rec.TrackIndexOf(T.Block, T.K - 1) < 0
+				|| Rec.Tracks[static_cast<size_t>(Rec.TrackIndexOf(T.Block, T.K - 1))].Role != T.Role;
+			if (Hq < 0 || BackOf(T.At.front()) > BackOf(Rec.Tracks[static_cast<size_t>(Hq)].At.front()))
+			{
+				Hq = static_cast<int>(K);
+			}
+			if (bFirst)
+			{
+				Ends.push_back(static_cast<int>(K));
+			}
+		}
+		if (Hq < 0)
+		{
+			return;
+		}
+		// (the lines run first to the posts nearest the enemy: the companies and the observers)
+		std::stable_sort(Ends.begin(), Ends.end(), [&](int A, int B) { return BackOf(Rec.Tracks[static_cast<size_t>(A)].At.front()) < BackOf(Rec.Tracks[static_cast<size_t>(B)].At.front()); });
+		const LandFeed::Point& From = Rec.Tracks[static_cast<size_t>(Hq)].At.front();
+		std::vector<std::pair<double, double>> Done = { { From.X, From.Y } };
+		for (const int K : Ends)
+		{
+			const LandFeed::Track& T = Rec.Tracks[static_cast<size_t>(K)];
+			const LandFeed::Point& To = T.At.front();
+			const double Long = std::hypot(To.X - From.X, To.Y - From.Y);
+			bool bNear = false;
+			for (const auto& D : Done)
+			{
+				bNear = bNear || std::hypot(D.first - To.X, D.second - To.Y) < 30.0;
+			}
+			if (bNear || Rec.Wires.size() >= 6)
+			{
+				continue;
+			}
+			Done.push_back({ To.X, To.Y });
+			LandFeed::Wire W;
+			W.Id = static_cast<int>(Rec.Wires.size());
+			W.Side = 1;
+			W.Hq = Rec.Tracks[static_cast<size_t>(Hq)].Block;
+			W.Unit = T.Block;
+			// (a slow wander either side, each line its own, nothing at its two ends)
+			const int Steps = std::max(2, static_cast<int>(std::ceil(Long / 5.0)));
+			const double Nx = -(To.Y - From.Y) / Long, Ny = (To.X - From.X) / Long;
+			const double Phase = 1.7 * static_cast<double>(W.Id), Wave = 1.0 + 0.6 * std::sin(2.3 * static_cast<double>(W.Id) + 0.4);
+			for (int I = 0; I <= Steps; ++I)
+			{
+				const double F = static_cast<double>(I) / static_cast<double>(Steps);
+				const double Off = std::sin(3.14159265358979 * F) * Wave * std::sin(Phase + F * Long / 23.0);
+				W.Pts.push_back({ From.X + (To.X - From.X) * F + Nx * Off, From.Y + (To.Y - From.Y) * F + Ny * Off });
+			}
+			Rec.Wires.push_back(std::move(W));
+		}
+		// Each line cut by the rounds that land beside it while it is whole, mended MendAfter seconds on.
+		std::vector<double> WholeFrom(Rec.Wires.size(), -1e9);
+		for (const LandFeed::Round& R : Rec.Rounds)
+		{
+			if (R.R != LandFeed::Result::Miss || (R.W != "mortar" && R.W != "gun" && R.W != "tank"))
+			{
+				continue;
+			}
+			for (size_t K = 0; K < Rec.Wires.size(); ++K)
+			{
+				if (R.L < WholeFrom[K])
+				{
+					continue;
+				}
+				const std::vector<std::pair<double, double>>& P = Rec.Wires[K].Pts;
+				double Best = 1e9, BX = 0.0, BY = 0.0;
+				for (size_t I = 0; I + 1 < P.size(); ++I)
+				{
+					const double Dx = P[I + 1].first - P[I].first, Dy = P[I + 1].second - P[I].second;
+					const double Len2 = std::max(1e-9, Dx * Dx + Dy * Dy);
+					const double F = std::clamp(((R.X - P[I].first) * Dx + (R.Y - P[I].second) * Dy) / Len2, 0.0, 1.0);
+					const double X = P[I].first + Dx * F, Y = P[I].second + Dy * F;
+					const double D = std::hypot(R.X - X, R.Y - Y);
+					if (D < Best)
+					{
+						Best = D;
+						BX = X;
+						BY = Y;
+					}
+				}
+				if (Best > 5.0)
+				{
+					continue;
+				}
+				LandFeed::WireCut Cut;
+				Cut.T = R.L;
+				Cut.Wire = Rec.Wires[K].Id;
+				Cut.X = BX;
+				Cut.Y = BY;
+				Cut.By = "shell";
+				Rec.WireCuts.push_back(Cut);
+				LandFeed::WireMend Mend;
+				Mend.T = R.L + MendAfter;
+				Mend.Wire = Cut.Wire;
+				Rec.WireMends.push_back(Mend);
+				WholeFrom[K] = Mend.T;
+			}
+		}
+		std::stable_sort(Rec.WireCuts.begin(), Rec.WireCuts.end(), [](const LandFeed::WireCut& A, const LandFeed::WireCut& B) { return A.T < B.T; });
+		std::stable_sort(Rec.WireMends.begin(), Rec.WireMends.end(), [](const LandFeed::WireMend& A, const LandFeed::WireMend& B) { return A.T < B.T; });
+	}
+
 	Machine Machine::Plain(int Track, const Vec& Root, double Heading, double Turret, double Long, double Wide, double High, bool bWithTurret)
 	{
 		Machine M;

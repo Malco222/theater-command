@@ -6680,6 +6680,7 @@ namespace LandField
 				if (Found == Fd.Kit.end() || !LandSteppe::ReadKit(Found->second, 150.0, M, Error))
 				{
 					M.Near = Mesh();
+					M.Mid = Mesh();
 					M.Far = Mesh();
 					Rg->KitPlain(K, M);
 				}
@@ -6688,10 +6689,26 @@ namespace LandField
 			}
 			for (int K = 0; K < 6; ++K) Rg->ClutterMesh(K, At(static_cast<Base>(static_cast<int>(Base::Clut0) + K)));
 		}
-		// Snow over it all: the broadleaf trees bare, snow on what faces up.
+		// Snow over it all: the broadleaf trees bare, snow on what faces up (a kit's middle level, which the snow does not
+		// reach, dropped: its near level is drawn to its far one).
 		if (SnowLay)
-			for (size_t K = 0; K < Bases.size(); ++K) SnowLay->Base(static_cast<Base>(K), Bases[K]);
+			for (size_t K = 0; K < Bases.size(); ++K)
+			{
+				Bases[K].Mid = Mesh();
+				SnowLay->Base(static_cast<Base>(K), Bases[K]);
+			}
 		for (BaseMesh& B : Bases) Measure(B);
+		// A region's kit slots' classes for the game's far draw, where its KitLook set none: a tree as it marked it, a
+		// slot it laid as a house a house, else a tall thing big and a low one a shrub (the frame budget's classes).
+		if (Rg)
+			for (int K = 0; K < 16; ++K)
+			{
+				const Base B = static_cast<Base>(static_cast<int>(Base::Kit0) + K);
+				BaseMesh& M = At(B);
+				if (M.Near.Empty() || M.Class != BaseMesh::Draw::Thing) continue;
+				const bool bHouse = std::any_of(Houses.begin(), Houses.end(), [B](const House& H) { return H.bKit && H.KitB == B; });
+				M.Class = M.bTree ? BaseMesh::Draw::Tree : bHouse ? BaseMesh::Draw::House : M.Height >= 3.0f ? BaseMesh::Draw::Big : BaseMesh::Draw::Shrub;
+			}
 	}
 }
 
@@ -6861,6 +6878,7 @@ namespace LandField
 	const std::vector<Tile>& Ground::Tiles() const { return In->TileList; }
 	const std::vector<Tile>& Ground::Ring() const { return In->RingList; }
 	const BaseMesh& Ground::BaseOf(Base B) const { return In->Bases[static_cast<size_t>(B)]; }
+	int Ground::DrawStep() const { return In->Rg ? std::clamp(In->Rg->DrawStep(), 0, 4) : -1; }
 	const std::vector<Placed>& Ground::Instances(Base B) const { return In->Inst[static_cast<size_t>(B)]; }
 	const std::vector<HedgeLine>& Ground::Hedges() const { return In->HedgeOut; }
 	const std::vector<HedgeOpening>& Ground::Openings() const { return In->OpeningOut; }
