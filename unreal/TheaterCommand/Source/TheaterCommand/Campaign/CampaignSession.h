@@ -187,6 +187,8 @@ public:
 	/** Dismisses a general for good; sets the picked corps' standing order about drafts; places the army by the staff's plan on the eve of war. */
 	bool SackGeneral(int32 GeneralId, FString& OutNote);
 	bool SetDrafts(const TArray<int32>& CorpsIds, bool bTake, FString& OutNote);
+	/** (Release 2: the battle schools.) Sends the corps to the battle schools for the month (bGo), or calls them back; OutNote is the rules' word on it. */
+	bool SendToSchool(const TArray<int32>& CorpsIds, bool bGo, FString& OutNote);
 	bool PlaceByPlan(FString& OutNote);
 	/** Asks the allied corps in a province to march with the player's army there; sends one of them home again. */
 	bool JoinArmy(int32 RegionId, FString& OutNote);

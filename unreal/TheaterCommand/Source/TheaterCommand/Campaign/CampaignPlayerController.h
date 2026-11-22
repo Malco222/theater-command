@@ -85,6 +85,13 @@ struct FTrayCard
 	// march with them until it takes the field, so its card takes no click, and says why in the rules' sentence.
 	bool bInTown = false;
 	FString Apart;
+	// ---- (Release 2: the battle schools.) Its button on the card (Campaign/BattleSchool): SEND TO SCHOOL, or BRING BACK
+	// while it is there; no label, no button (release 1's rules, a history scenario, an ally's corps, fortress troops).
+	FString SchoolLabel;
+	FString SchoolTip; // unlit: the rules' reason, word for word
+	bool bSchoolLit = false;
+	bool bAtSchool = false; // at the schools: it takes no orders, but its card still takes the press of BRING BACK
+	// ---- (end of the battle schools)
 };
 
 /** One ship of the fleet in hand, as a card. */
@@ -659,6 +666,8 @@ public:
 	int32 GetSackAsked() const { return SackAsked; }
 	/** The army in hand takes drafts, or keeps its veterans together and takes none. */
 	void ToggleDrafts();
+	/** (Release 2: the battle schools.) A corps card's SEND TO SCHOOL, or its BRING BACK while the corps is there. */
+	void SchoolCorps(int32 CorpsId);
 	/** On the eve of war: the army is placed as the staff advises. */
 	void PlaceByPlan();
 	bool HasEvePlan() const;

@@ -133,6 +133,13 @@ struct FViewCorps
 	// counts none for (tanks, guns, engineers), for one not identified, and outside the grand campaign.
 	TArray<int32> Carry;
 	bool bDigging = false; // it has begun to dig where the first month's digging shows no works yet (the open desert)
+	// ---- (Release 2: the battle schools.) Only rules that have them say 'school' at all; release 1's never do, and then
+	// bSchoolKnown stays false and the corps card shows no school button (Campaign/BattleSchool).
+	bool bSchoolKnown = false;
+	bool bSchool = false; // at the battle schools this month: it takes no orders until it is back
+	FString SchoolTo; // the grade a month there brings it to ("Veteran")
+	FString SchoolWhy; // the rules' sentence why it cannot go; empty if it can (and for one already there)
+	// ---- (end of the battle schools)
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */

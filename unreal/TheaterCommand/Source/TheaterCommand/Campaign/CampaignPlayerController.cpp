@@ -5,6 +5,7 @@
 #include "Campaign/CampaignSounds.h"
 
 #include "Campaign/ArmyPiece.h"
+#include "Campaign/BattleSchool.h"
 #include "Campaign/CampaignCameraPawn.h"
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignGameMode.h"
@@ -1537,6 +1538,87 @@ void ACampaignPlayerController::ToggleDrafts()
 	RefreshOrders();
 	Notify(Note, 6.0);
 }
+
+// ---- (Release 2: the battle schools.) The corps card's button, and its press. -----------------------------------------
+namespace
+{
+	/** Sets a corps card's school button from what the rules' view says of the corps (Campaign/BattleSchool decides). */
+	void SchoolButtonOnCard(FTrayCard& Card, const FViewCorps& Unit, const FCampaignView& View)
+	{
+		BattleSchool::FCorpsFacts Facts;
+		Facts.bKnown = Unit.bSchoolKnown;
+		Facts.bOwn = Unit.Nation == View.Human && Unit.Ally.IsEmpty();
+		Facts.bGrand = View.bOpen; // (the rules' own test: the schools are open where the war is open play)
+		Facts.bFort = Unit.Kind == TEXT("fort");
+		Facts.bHisMonth = View.bHumanUp;
+		Facts.bAtSchool = Unit.bSchool;
+		Facts.To = std::string(TCHAR_TO_UTF8(*Unit.SchoolTo));
+		Facts.Why = std::string(TCHAR_TO_UTF8(*Unit.SchoolWhy));
+		const BattleSchool::FButton Button = BattleSchool::ButtonFor(Facts);
+		Card.SchoolLabel = FString(UTF8_TO_TCHAR(Button.Label.c_str()));
+		Card.SchoolTip = FString(UTF8_TO_TCHAR(Button.Tip.c_str()));
+		Card.bSchoolLit = Button.bLit;
+		Card.bAtSchool = Button.Face == BattleSchool::EFace::Back;
+		if (Card.bAtSchool && Card.bLook && Card.NoOrders.IsEmpty())
+		{
+			// (a whole army at the schools is only looked at: its tray says why it takes no orders, in the rules' sentence)
+			Card.NoOrders = Unit.NoOrders;
+		}
+	}
+}
+
+void ACampaignPlayerController::SchoolCorps(int32 CorpsId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || IsAnswering())
+	{
+		return;
+	}
+	bool bGo = true;
+	int32 Where = INDEX_NONE;
+	{
+		// (read before the press: the view is laid afresh once the rules have answered)
+		const FViewCorps* Unit = Session->GetView().Corps.FindByPredicate([CorpsId](const FViewCorps& Each) { return Each.Id == CorpsId; });
+		if (!Unit || !Unit->bSchoolKnown)
+		{
+			return;
+		}
+		bGo = !Unit->bSchool;
+		Where = Unit->Region;
+	}
+	TArray<int32> Ids;
+	Ids.Add(CorpsId);
+	FString Note;
+	const bool bOk = Session->SendToSchool(Ids, bGo, Note);
+	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
+	bool bTakenUp = false;
+	if (bOk)
+	{
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		if (bGo)
+		{
+			PickedCorps.Remove(CorpsId); // (it takes no orders until it is back)
+		}
+		else if (ArmyRegion == Where)
+		{
+			PickedCorps.AddUnique(CorpsId); // (back, and ready for orders: it comes along with the army in hand)
+		}
+		else if (ArmyRegion == INDEX_NONE)
+		{
+			bTakenUp = PickUpArmyIn(Where); // (the whole army was at the schools, only looked at: called back, it is in hand)
+		}
+	}
+	if (!bTakenUp)
+	{
+		RefreshOrders(); // (the cards dealt again: its button turns over, and a corps at the schools drops out of the hand)
+	}
+	RefreshRegionPanel(SelectedRegion);
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 7.0);
+	}
+}
+// ---- (end of the battle schools)
 
 bool ACampaignPlayerController::HasEvePlan() const
 {
@@ -7000,6 +7082,7 @@ void ACampaignPlayerController::LayOutLook()
 			Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
 			Card.Honours = Unit.Honours;
 			Card.Parts = Unit.Parts;
+			SchoolButtonOnCard(Card, Unit, View); // (release 2: the battle schools: a whole army there is only looked at, and is called back from here)
 			if (Unit.Morale >= 0.0f)
 			{
 				Card.bMood = true;
@@ -7541,6 +7624,7 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Nickname = FText::FromString(Unit.Nickname);
 		Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
 		Card.Honours = Unit.Honours;
+		SchoolButtonOnCard(Card, Unit, View); // (release 2: the battle schools)
 		Tray.Cards.Add(Card);
 		Divisions += Unit.Divisions;
 		++CorpsCount;

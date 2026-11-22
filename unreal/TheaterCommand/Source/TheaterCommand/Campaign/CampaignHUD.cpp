@@ -14801,13 +14801,15 @@ namespace
 
 			// (release 1) Point at the corps' card for the bigger card of the corps, laid out above the tray. One nobody
 			// has identified keeps its plain line.
+			// (Release 2: the battle schools. A corps at the schools takes no orders, but its card stays pressable for its
+			// BRING BACK: a press on the rest of the card does nothing.)
 			const TSharedRef<SButton> Whole = SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
-				.IsFocusable(false).IsEnabled((Card.bCanOrder || Card.bLook) && Card.Apart.IsEmpty())
+				.IsFocusable(false).IsEnabled((Card.bCanOrder || Card.bLook || Card.bAtSchool) && Card.Apart.IsEmpty())
 				.ToolTipText(Card.bUnknown ? FText::FromString(Tip) : !Card.Apart.IsEmpty() ? FText::FromString(Card.Apart) : FText::GetEmpty())
 				.OnHovered_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->ShowCorpsModel(Id); } })
-				.OnClicked_Lambda([this, Id = Card.CorpsId]()
+				.OnClicked_Lambda([this, Id = Card.CorpsId, bCardTakesPress = Card.bCanOrder || Card.bLook]()
 				{
-					if (Controller.IsValid())
+					if (Controller.IsValid() && bCardTakesPress)
 					{
 						Controller->ToggleCorps(Id);
 					}
@@ -14846,6 +14848,25 @@ namespace
 								SNew(STextBlock).Text(FText::FromString(TEXT("SEND BACK"))).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
 							]
 						]
+						// ---- (Release 2: the battle schools.) SEND TO SCHOOL, or BRING BACK while it is there; unlit, the
+						// rules' own reason is its tip. No label, no button (release 1's rules have no schools). (Its
+						// backing keeps a press on it when unlit: it would otherwise fall through to the card's own press.)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(SBorder).BorderImage(&NoBrush).Padding(FMargin(0.0f))
+							.Visibility(Card.SchoolLabel.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+							.OnMouseDoubleClick_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+							[
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 1.0f)).IsFocusable(false).IsEnabled(Card.bSchoolLit)
+								.ToolTipText(FText::FromString(Card.SchoolTip))
+								.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->SchoolCorps(Id); } return FReply::Handled(); })
+								[
+									SNew(STextBlock).Text(FText::FromString(Card.SchoolLabel)).Font(SmallCaps()).ColorAndOpacity(Card.bSchoolLit ? BrightBrass : Faint)
+								]
+							]
+						]
+						// ---- (end of the battle schools)
 						// The way to the corps' service record: its honours and its diary.
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 4.0f, 0.0f)
 						[
