@@ -1465,14 +1465,22 @@ dump 15 to 25 m for 1.5 to 2 s, with black smoke from its top after half a secon
 - **What it draws.** Its time comes from its width (`small_s` at `small_m`, `big_s` at `big_m`). Its lobes are thrown
   out and up from a seat just above the ground and slowed by the air. The whole ball climbs `rise_of_across` of its
   width while it burns, faster as it goes, and each lobe rolls as it climbs. The fire is lit from within: white-hot
-  knots (`hearts`) for its first moment, then saturated orange billows, some deeper toward the outside
-  (`deep_mix`). They cool to a dark ember and go into black smoke, never pink over the sky. No lobe goes before its
-  smoke can take it. From `smoke_from_s` black smoke boils off the top (`top_puffs_per_m`), and each lobe's smoke
-  trails a ragged stem. The smoke goes as `linger.fuel` says (thick 3 s, gone by 25 s). A lamp of `lamp` times the
-  root of its width lights the ground while it burns, rising with it.
+  knots (`hearts`) for its first moment, then a yellow-orange middle (`heart_in`, its lobes sorted `core_nearer`
+  toward the eye so the middle shows from any side) inside orange billows, some deeper toward the outside
+  (`deep_mix`). Each holds its colour for `cool_from` of its life, then cools to an orange `ember`, with no dark rim.
+  No lobe goes before its smoke can take it, and with `soot_in_s` a lobe goes the moment its smoke is whole, so none
+  fades pink over the sky. The dark comes in on top first (`soot_life`): from `smoke_from_s` black smoke boils off
+  the top (`top_puffs_per_m`), and lobes lower down turn to smoke later.
+- **The cloud after it** (art director 08:08Z 22 November). By `cap_s` the smoke spreads out (`cap_spread`) under a
+  flat top (`cap_top`, `cap_flat`, `cap_raise`), about twice the ball across, leaning `lean_deg` down the wind, on a
+  dark stem from the ground (`stem_puffs_per_m` up to `stem_s`). It thins as `linger.fuel` says (thick 2.5 s, gone
+  by 20 s, four in ten of its puffs retiring early). A lamp of `lamp` times the root of its width lights the ground
+  while it burns, rising with it. A camera inside it dims and never goes black (`lens_near_of_across`, the
+  `game.lens_cap` backstop); the camera itself keeps twice the ball's width off it.
 - **Preview.** `FX_SCRIPT=fuel` on the wreck shot: her fuel goes up at 0.5 s, `FX_FUEL_M` across (8), at the engine
   deck, and she burns on. `FX_SCRIPT=crash`: an aeroplane's fuel, 20 m at the ground, coming in at 60 m/s, with no tank.
-  `FX_SCRIPT=dump`: the same standing still. For example
+  `FX_SCRIPT=dump`: the same standing still. With crash and dump the wreck or the spilt fuel burns on from 1.5 s (a
+  `Burn` 0.3 of its width across, as a scene would light it; `FX_GROUND_FIRE=0` for none). For example
   `FX_SCRIPT=crash FX_DIST=110 FX_LOOK_H=14 FX_LOOK_X=0 fxpreview recipe.txt out wreck far 18,36,54 960x540`.
 
 ## Oil fires at sea

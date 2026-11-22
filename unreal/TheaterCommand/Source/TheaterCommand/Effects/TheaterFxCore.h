@@ -112,6 +112,10 @@ namespace TheaterFx
 		double BySpeed = 0.0, DimFrom = 1.0, DimTo = 1.0, DayPx = 0.0;
 		bool bOwnDay = false;
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
+		// (CoolFrom over 0: its colour holds as laid until this share of its life and only then cools, Cool of the way to
+		// Col2 by its end, so a fuel ball's middle stays yellow-orange through its first half second. 0: it cools from
+		// birth, as ever)
+		double CoolFrom = 0.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
 		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)

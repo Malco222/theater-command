@@ -1498,7 +1498,8 @@ namespace
 		const std::string Kind = std::getenv("FX_SCRIPT") ? std::getenv("FX_SCRIPT") : "ground";
 		// (FX_SCRIPT=fuel: her fuel goes up at 0.5 s, a FuelBall FX_FUEL_M across (8) at the engine deck, and she burns
 		// on as the ground script has it; crash: an aeroplane's fuel, FX_FUEL_M (20) across at the ground at 0.5 s,
-		// coming in at 60 m/s, with no tank (FX_NOTANK too); dump: a fuel dump's, the same but standing still)
+		// coming in at 60 m/s, with no tank (FX_NOTANK too), its wreck burning on from 1.5 s; dump: a fuel dump's, the
+		// same but standing still)
 		const bool bNoTank = Kind == "crash" || Kind == "dump" || std::getenv("FX_NOTANK") != nullptr;
 		if (Kind == "one")
 		{
@@ -1507,6 +1508,12 @@ namespace
 		else if (Kind == "crash" || Kind == "dump")
 		{
 			Script.push_back({ 0.5, 3, Vec(0.0, 0.0, G), EnvNum("FX_FUEL_M", 20.0), Kind == "crash" ? 60.0 : 0.0, -1 });
+			// (and what is left burns on the ground from a second in, as the scene would light it: the wreck where it came
+			// to rest, or the dump's spilt fuel; FX_GROUND_FIRE=0 for none)
+			if (EnvNum("FX_GROUND_FIRE", 1.0) > 0.0)
+			{
+				Script.push_back({ 1.5, 1, Vec(Kind == "crash" ? 8.0 : 0.0, 0.0, G + 0.5), 0.3 * EnvNum("FX_FUEL_M", 20.0), Long, 11 });
+			}
 		}
 		else
 		{

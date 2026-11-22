@@ -12045,7 +12045,56 @@ namespace TheaterFx
 		const Span SmokeS = Held(P + "smoke_s", 12.0, 20.0, 0.5, 600.0);
 		const Span LifeShare = Held(P + "life_share", 0.7, 1.0, 0.05, 1.0); // (each lump burns this share of the ball's time)
 		const double DeepMix = SafeNum(Num(P + "deep_mix", 0.0), 0.0, 1.0, 0.0);
+		// (art director 08:08Z 22 November: lit from within, the brightest thing in the frame. cool_from: the share of
+		// its life a lump keeps its colour before it cools toward ember, so the middle holds yellow-orange through its
+		// first half second; soot_life: the share of its life a lump goes to smoke, the first at the ball's top and the
+		// second at its foot, so the dark comes in on top and the middle burns on)
+		const double CoolFrom = SafeNum(Num(P + "cool_from", 0.0), 0.0, 0.95, 0.0);
+		const Span SootLife = Held(P + "soot_life", 0.7, 0.7, 0.05, 0.95);
+		// (the big one's cloud by cap_s: each puff's way out from the ball's upright cap_spread further again, level
+		// with the ground, what of it stood above the ball's middle cap_flat lower, so the top flattens and spreads; and
+		// leaning lean_deg down the wind, by its height over the ground, in a wind of lean_full_mps or more (less in
+		// less, upright in none). smoke_climb: the share of its lump's climb a puff keeps, the first from the ball's
+		// foot and the second from its top, so the cloud trails a stem)
+		const double CapSpread = SafeNum(Num(P + "cap_spread", 0.0), 0.0, 5.0, 0.0), CapFlat = SafeNum(Num(P + "cap_flat", 0.0), 0.0, 1.0, 0.0);
+		const double CapS = SafeNum(Num(P + "cap_s", 2.5), 0.1, 30.0, 2.5);
+		const double LeanTan = std::tan(SafeNum(Num(P + "lean_deg", 0.0), 0.0, 60.0, 0.0) * Pi / 180.0);
+		const double WindNow = std::hypot(Wind.X, Wind.Y);
+		const double LeanBy = LeanTan * Clamp01(WindNow / SafeNum(Num(P + "lean_full_mps", 1.5), 0.01, 100.0, 1.5));
+		const Vec Downwind = WindNow > 1e-6 ? Vec(Wind.X / WindNow, Wind.Y / WindNow, 0.0) : Vec();
+		const Span Climb = Held(P + "smoke_climb", 0.15, 0.7, 0.0, 2.0);
+		const bool bClimbByTop = Has(P + "smoke_climb.0");
+		// (and a lens the ball's own: within lens_near_of_across of its width it fades as game.lens_cap says, never black)
+		const double LensNear = SafeNum(Num(P + "lens_near_of_across", 0.0), 0.0, 20.0, 0.0) * Across;
+		// (soot_in_s over 0: a lump's smoke is whole that many seconds after it is born, and the lump goes then)
+		const double SootIn = SafeNum(Num(P + "soot_in_s", 0.0), 0.0, 1.0, 0.0);
+		const bool bQuickSoot = SootIn > 0.0;
+		// (heart_in: how much more of hot_colour a lump at the middle takes than one at the rim; core_nearer: the middle's
+		// lumps sorted this share of the half width nearer the eye, so from any side the hot middle is seen through
+		// the cooler lumps round it, lit from within)
+		const double HeartIn = SafeNum(Num(P + "heart_in", 0.4), 0.0, 1.0, 0.4), CoreNearer = SafeNum(Num(P + "core_nearer", 0.0), 0.0, 2.0, 0.0);
 		const Vec Seat = At + ZUp * (0.3 * Rc);
+		auto AxisAt = [&](double T) { return Seat + Vel * (0.5 * (1.0 - std::exp(-3.5 * T)) / 3.5) + Wind * (0.3 * T); };
+		const double CapRaise = SafeNum(Num(P + "cap_raise", 0.0), 0.0, 1.0, 0.0);
+		const double Ceiling = Seat.Z + 0.4 * Rc + 0.5 * Buoy * FireS * FireS + SafeNum(Num(P + "cap_top", 0.5), -5.0, 20.0, 0.5) * Rc;
+		auto Shaped = [&](Bit& M, double T)
+		{
+			// (T: seconds after Now it is born. Its way, slowed by the air, is spent by about cap_s)
+			const double K = M.Drag > 1e-6 ? M.Drag / std::max(1.0 - std::exp(-M.Drag * CapS), 1e-6) : 1.0 / CapS;
+			const Vec Off = M.From - AxisAt(T);
+			// (the top: where its way would carry its top over the ceiling, the ball's middle as it went to smoke and cap_top
+			// of its half width over that, it is held cap_flat of that much lower, so the cloud's top flattens under it)
+			const double Reaches = M.From.Z + M.Vel.Z / K + M.R0 + (M.R1 - M.R0) * std::pow(Clamp01(CapS / std::max(M.Life, 1e-3)), M.Grow); // (its top, as wide as it will be by then)
+			const double OverTop = Reaches - Ceiling;
+			// (and cap_raise: what of it stood above the ball's middle as it went to smoke is carried that share of the
+			// way up under the ceiling, the more the further out it is, so the cloud's shoulders come up level with its
+			// crown: a cap, never a ball with its top cut off)
+			const double Above = M.From.Z - (Seat.Z + 0.4 * Rc + 0.5 * Buoy * T * T);
+			const double Lifts = OverTop < 0.0 && Above > 0.0 ? -OverTop * CapRaise * Clamp01(Above / std::max(0.5 * Rc, 1e-3)) * Clamp01(std::hypot(Off.X, Off.Y) / std::max(0.5 * Rc, 1e-3)) : 0.0;
+			M.Vel = M.Vel + Vec(Off.X, Off.Y, 0.0) * (CapSpread * K) + ZUp * ((Lifts - std::max(OverTop, 0.0) * CapFlat) * K);
+			M.Vel = M.Vel + Downwind * (LeanBy * std::max(M.From.Z - At.Z, 0.0) * K);
+			M.LensNear = LensNear;
+		};
 		for (int I = 0; I < N; ++I)
 		{
 			// (thrown out and up from the seat, most of them upward: the ball stands on the ground and climbs off it)
@@ -12062,19 +12111,22 @@ namespace TheaterFx
 			B.Gravity = -Buoy * D.U(0.8, 1.2); // (it climbs faster and faster: the hot gas rising)
 			B.Windage = 0.3;
 			const double In = 1.0 - Clamp01(Reached / std::max(Rc * Reach.B, 1e-3)); // (1 at the middle, 0 at the far rim)
+			const double Top = Clamp01(Toward.Z * Reached / std::max(Rc * Reach.B, 1e-3)); // (1 thrown straight up to the full reach, 0 at the seat)
 			B.R0 = Rc * LobeR.Pick(D);
 			B.R1 = B.R0 * LobeGrow.Pick(D);
 			B.Grow = 0.5;
-			B.Col = FireCol.Mix(HotCol, Clamp01(HeartMix.Pick(D) + 0.4 * In));
+			B.Col = FireCol.Mix(HotCol, Clamp01(HeartMix.Pick(D) + HeartIn * In));
 			if (DeepMix > 0.0)
 			{
 				B.Col = B.Col.Mix(EdgeCol, D.U(0.0, DeepMix) * (1.0 - In)); // (some lumps toward the outside a deeper orange-red: billows, never one flat orange)
 			}
 			B.Col2 = EmberCol;
 			B.Cool = Cool;
+			B.CoolFrom = CoolFrom;
 			B.Alpha = 1.0;
 			B.FadeIn = 0.01;
 			B.Hold = 0.92; // (whole until its smoke has it, then gone in a frame or two: a see-through fade over the sky is pink)
+			B.LensNear = LensNear;
 			B.Heart = 1.0;
 			B.Rim = Rim;
 			B.Rough = Rough;
@@ -12082,16 +12134,20 @@ namespace TheaterFx
 			B.EdgeK = Edge;
 			B.TwinPx = TwinPx;
 			B.Over = 1.0 + (Over - 1.0) * In; // (its middle burns brighter)
+			B.Nearer = CoreNearer * In * Rc;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			B.TurnRate = Roll.Pick(D) * (Toward.X >= 0.0 ? -1.0 : 1.0); // (its lumps roll out and over as it climbs)
 			B.bLight = true;
 			B.bWhole = true;
-			Bits.push_back(B);
 			// (the black smoke each lump goes into as it dies, never before smoke_from_s: born round it a little higher,
 			// so the smoke boils off the ball's top and the fire is never seen fading over the bare sky)
-			const double Dies = std::max(0.7 * B.Life, Now + SmokeFrom - B.Born);
-			if (Dies < 0.9 * B.Life)
+			const double Dies = std::max((SootLife.A + (SootLife.B - SootLife.A) * (1.0 - Top)) * B.Life, Now + SmokeFrom - B.Born);
+			if (Dies >= 0.96 * B.Life)
+			{
+				Bits.push_back(B);
+			}
+			else
 			{
 				Bit M;
 				M.Born = B.Born + Dies;
@@ -12099,7 +12155,8 @@ namespace TheaterFx
 				const Vec Was = Going(B, Dies);
 				// (each keeps its own share of the ball's climb, and its lumps drift apart: a ragged cloud trailing a dark
 				// stem back toward the ground, never one black ball lifting off)
-				M.Vel = (IsAPlace(Was) ? Was * D.U(0.15, 0.7) : Vec()) + Vec(D.Bell(), D.Bell(), 0.4 * D.Bell()) * (0.18 * Rc);
+				const double Keeps = bClimbByTop ? (Climb.A + (Climb.B - Climb.A) * Top) * D.U(0.85, 1.15) : Climb.Pick(D);
+				M.Vel = (IsAPlace(Was) ? Was * Keeps : Vec()) + Vec(D.Bell(), D.Bell(), 0.4 * D.Bell()) * (0.18 * Rc);
 				M.Drag = 1.2;
 				M.Rise = SmokeRise * D.U(0.7, 1.3);
 				M.Windage = D.U(0.8, 1.1);
@@ -12120,12 +12177,41 @@ namespace TheaterFx
 				M.TurnRate = 0.3 * B.TurnRate;
 				M.LeastPx = 2.0;
 				M.LeastKeep = 0.4;
+				if (bQuickSoot)
+				{
+					// (art director 08:08Z: the lump goes out the moment its smoke has it, whole until then and gone in a
+					// frame, so a lump is never seen fading pink over the sky as its smoke moves off. Its looks keep the
+					// clock they had: its widening and its cooling as over its whole life)
+					M.FadeIn = std::min(0.5, SootIn / std::max(M.Life, 0.5));
+					const double Was0 = B.Life, Now0 = std::min(Dies + SootIn + 0.03, B.Life);
+					const double Ratio = Now0 / Was0;
+					B.R1 = B.R0 + (B.R1 - B.R0) * std::pow(Ratio, B.Grow);
+					if (B.CoolFrom > 0.0 && Ratio <= B.CoolFrom)
+					{
+						B.Cool = 0.0; // (it goes before it would have begun to cool)
+					}
+					else if (B.CoolFrom > 0.0)
+					{
+						const double From = B.CoolFrom / Ratio;
+						B.Cool *= (Ratio - B.CoolFrom) / (1.0 - B.CoolFrom);
+						B.CoolFrom = std::min(From, 0.95);
+					}
+					else
+					{
+						B.Cool *= Ratio;
+					}
+					B.Life = Now0;
+					B.Hold = std::min(0.999, (Dies + SootIn) / Now0);
+				}
+				Bits.push_back(B);
+				Shaped(M, M.Born - Now);
 				Bits.push_back(M);
 			}
 		}
 		// (top_puffs_per_m: black smoke boiling off the ball's top from smoke_from_s while it still burns below, born at
 		// the top as the ball has climbed by then and climbing on with it, so the fire wears a black cap that grows)
 		const int Tops = static_cast<int>(std::lround(std::clamp(SafeNum(Num(P + "top_puffs_per_m", 0.0), 0.0, 20.0, 0.0) * Across, 0.0, 200.0)));
+		const double TopClimb = SafeNum(Num(P + "top_climb", 0.6), 0.0, 2.0, 0.6); // (the share of the ball's climb then that each keeps)
 		for (int I = 0; I < Tops && SmokeFrom < FireS; ++I)
 		{
 			const double T = SmokeFrom + (FireS - SmokeFrom) * (I + D.U()) / Tops;
@@ -12133,7 +12219,7 @@ namespace TheaterFx
 			Bit M;
 			M.Born = Now + T;
 			M.From = Seat + Vel * (0.5 * (1.0 - std::exp(-3.5 * T)) / 3.5) + ZUp * (0.5 * Buoy * T * T + Rc * D.U(0.6, 0.95)) + Side;
-			M.Vel = ZUp * (Buoy * T * 0.6) + Side * 0.5;
+			M.Vel = ZUp * (Buoy * T * TopClimb) + Side * 0.5;
 			M.Drag = 1.0;
 			M.Rise = SmokeRise * D.U(0.8, 1.3);
 			M.Windage = D.U(0.8, 1.1);
@@ -12154,6 +12240,50 @@ namespace TheaterFx
 			M.TurnRate = D.U(-0.6, 0.6);
 			M.LeastPx = 2.0;
 			M.LeastKeep = 0.4;
+			Shaped(M, T);
+			Bits.push_back(M);
+		}
+		// (stem_puffs_per_m: the dark stem from the fire on the ground up into the cloud, art director 08:08Z: puffs born
+		// at the seat from smoke_from_s to stem_s, each climbing to its own height between the ground and where the
+		// ball's middle was as it went to smoke, stem_r of the ball's half width and widening stem_grow, leaning with
+		// the cloud)
+		const int Stems = static_cast<int>(std::lround(std::clamp(SafeNum(Num(P + "stem_puffs_per_m", 0.0), 0.0, 20.0, 0.0) * Across, 0.0, 200.0)));
+		const double StemS = std::max(SafeNum(Num(P + "stem_s", 3.0), 0.0, 60.0, 3.0), SmokeFrom + 0.1);
+		const Span StemR = Held(P + "stem_r", 0.25, 0.4, 0.01, 5.0), StemGrow = Held(P + "stem_grow", 1.8, 2.6, 1.0, 20.0);
+		const double CapZ = Seat.Z + 0.4 * Rc + 0.5 * Buoy * FireS * FireS - At.Z; // (how high the ball's middle was as it went to smoke)
+		for (int I = 0; I < Stems; ++I)
+		{
+			const double T = SmokeFrom + (StemS - SmokeFrom) * (I + D.U()) / Stems;
+			const double Reaches = CapZ * std::sqrt(D.U(0.0, 1.0)) * D.U(0.8, 1.05); // (more of them high: the stem is thin at its foot)
+			Bit M;
+			M.Born = Now + T;
+			M.From = AxisAt(std::min(T, FireS)) + Vec(D.Bell(), D.Bell(), 0.0) * (0.12 * Rc);
+			M.From.Z = At.Z + 0.2 * Rc;
+			M.Drag = 1.2;
+			M.Vel = ZUp * (Reaches * M.Drag / std::max(1.0 - std::exp(-M.Drag * CapS), 1e-6)) + Vec(D.Bell(), D.Bell(), 0.0) * (0.1 * Rc);
+			M.Rise = SmokeRise * D.U(0.7, 1.1);
+			M.Windage = D.U(0.8, 1.1);
+			M.Life = SmokeS.Pick(D);
+			M.R0 = Rc * StemR.Pick(D);
+			M.R1 = M.R0 * StemGrow.Pick(D);
+			M.Grow = 0.45;
+			M.Col = SmokeCol;
+			M.Col2 = SmokeCol.Mix(SmokeOld, 0.7);
+			M.Alpha = SmokeAlpha * D.U(0.8, 1.0);
+			M.FadeIn = std::min(0.08, 0.3 / std::max(M.Life, 0.5));
+			M.Hold = 0.3;
+			M.Heart = 0.75;
+			M.Rim = 0.0;
+			M.Rough = SmokeRough;
+			M.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			M.Turn = D.U(0.0, 2.0 * Pi);
+			M.TurnRate = D.U(-0.5, 0.5);
+			M.LeastPx = 2.0;
+			M.LeastKeep = 0.4;
+			// (it leans as the cloud does, by the height it climbs to)
+			const double K = M.Drag / std::max(1.0 - std::exp(-M.Drag * CapS), 1e-6);
+			M.Vel = M.Vel + Downwind * (LeanBy * Reaches * K);
+			M.LensNear = LensNear;
 			Bits.push_back(M);
 		}
 		// (the white-hot heart, a few knots low in the middle for its first moment, drawn over the lumps round it)
@@ -12186,6 +12316,7 @@ namespace TheaterFx
 			H.TwinPx = TwinPx; // (never a pale plate with straight sides seen close)
 			H.Over = Over;
 			H.Nearer = 0.5 * Rc;
+			H.LensNear = LensNear;
 			H.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			H.Turn = D.U(0.0, 2.0 * Pi);
 			H.bLight = true;
@@ -13381,7 +13512,8 @@ namespace TheaterFx
 		{
 			A = std::max(A, 1e-3); // (unseen at its own end yet, it is still the strip up to the piece behind)
 		}
-		Rgb Col = B.Col.Mix(B.Col2, F * B.Cool);
+		const double CoolF = B.CoolFrom > 0.0 ? Clamp01((F - B.CoolFrom) / std::max(1.0 - B.CoolFrom, 1e-6)) : F; // (Bit::CoolFrom)
+		Rgb Col = B.Col.Mix(B.Col2, CoolF * B.Cool);
 		if (RollShadeNow != 0.0)
 		{
 			Col = Col * (1.0 - RollShadeNow);
@@ -13852,7 +13984,7 @@ namespace TheaterFx
 						{
 							// (soft: its far edge is the colour the piece behind is now, so the strip's colour runs through its joins)
 							const Rgb FarCol = T.Col.Mix(T.Col2, Clamp01(AgeT / std::max(T.Life, 1e-6)) * T.Cool);
-							const Rgb Own = B.Col.Mix(B.Col2, F * B.Cool);
+							const Rgb Own = B.Col.Mix(B.Col2, CoolF * B.Cool);
 							LayFarBy = Rgb((FarCol.R - Own.R) * Eye.SmokeLight.R, (FarCol.G - Own.G) * Eye.SmokeLight.G, (FarCol.B - Own.B) * Eye.SmokeLight.B);
 							LayFarFloor = LayFarBy * SkyFill;
 							bLayFarCol = true;
