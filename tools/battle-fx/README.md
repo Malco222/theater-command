@@ -1597,6 +1597,22 @@ blue up a level or two, at most 6 to 8 levels; 21 at the darkest heart of a 75's
 look-up a channel: Draw 3.66 ms against 3.70 on the wide shot (median of 3). Pictures:
 battle-fx/stills/fx3-colour/ (medium-colour-fix.png, dusk-specks.png).
 
+## A rifle's round off armour: its flash and its sparks (FX4, after head f027cdf)
+
+The ground battle sends a glance for every rifle and machine-gun round that strikes a tank's plate and does not go in,
+at 8 mm: 1,541 of them in the Normandy battle. Each laid a shell's whole ricochet: a lamp, a puff of paint, and a
+glowing shot followed off for about a second, some 470 pieces of its 500. With glance.shot_from_mm at 20, a glance
+from anything smaller is its two-frame ragged flash and its sparks only. Its sparks are as before for its calibre
+(read at 20 mm at the least: 7 to 13, about half a 75's in count, speed and size). It takes no lamp and no place
+among the shots followed (most_shots, most_a_frame), so a tank's own gun glancing nearby is still followed. A
+calibre that is no number counts as a shell's, and without the key every glance is as before.
+
+| | One glance | Ten a second along a tank's side, 30 s | Standing at the most |
+|---|---|---|---|
+| 8 mm before | 507 pieces, a lamp, a shot followed | 123,917 pieces | 3,023 |
+| 8 mm now (and 12.7 mm) | 32 pieces | 10,562 pieces | 95 |
+| 20 mm and 75 mm | as before | as before | as before |
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can

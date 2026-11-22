@@ -9942,6 +9942,13 @@ namespace TheaterFx
 		const Vec Off = (Along * std::cos(Lift) + Normal * std::sin(Lift)).Unit(Along);
 		const Vec SideA = Off.Cross(Normal).Unit(Vec(0.0, 1.0, 0.0));
 		const Vec SideB = SideA.Cross(Off).Unit(Normal);
+		// (glance.shot_from_mm, the production lead's FX4: a rifle's or a machine gun's round glancing off armour, a
+		// calibre under this, is its flash and its sparks and nothing more: no lamp, no puff and no glowing shot followed
+		// off. The ground battle sends them off a tank's plates at 8 mm, 1,541 of them in Normandy, and each with its
+		// shot was about 500 pieces. A calibre that is no number is a shell's; without the key, every glance as
+		// before)
+		const double ShotFrom = Safe(Num(P + "shot_from_mm", 0.0), 0.0, 1000.0, 0.0);
+		const bool bSmall = ShotFrom > 0.0 && CalibreMm == CalibreMm && CalibreMm < ShotFrom;
 		const double FlashK = Safe(Num(P + "flash", 0.4), 0.0, 4.0, 0.4);
 		if (FlashK > 0.0)
 		{
@@ -9950,7 +9957,7 @@ namespace TheaterFx
 		const Rgb Hot = Picture(P + "spark", Rgb::FromPicture(255, 236, 170));
 		const Rgb Cooled = Picture(P + "spark_old", Rgb::FromPicture(255, 140, 50));
 		const double LampK = Safe(Num(P + "lamp", 0.3), 0.0, 2.0, 0.3);
-		if (LampK > 0.0)
+		if (LampK > 0.0 && !bSmall)
 		{
 			Flash F;
 			F.At = At + Normal * 0.2;
@@ -10005,6 +10012,10 @@ namespace TheaterFx
 			B.LeastPx = 1.5;
 			B.bLight = true;
 			Bits.push_back(B);
+		}
+		if (bSmall)
+		{
+			return; // (a small arm's: its flash and its sparks, and its shot takes no place among those followed)
 		}
 		// (the puff: paint and metal dust, very small, gone in about half a second)
 		for (int I = 0; I < 2; ++I)
