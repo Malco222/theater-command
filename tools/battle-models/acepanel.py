@@ -145,7 +145,8 @@ def wide(ch):
 
 
 RANKS = {"SGT", "F/SGT", "P/O", "F/O", "F/LT", "S/LDR", "W/CDR", "ENS.", "LT.", "LT.(JG)", "LCDR.", "CAPT.", "MAJ.",
-         "FW.", "OFW.", "UFFZ.", "OBLT.", "HPTM.", "SERG.", "M.LLO", "S.TEN.", "TEN.", "CAP.", "ML.", "ST.", "KAPT."}
+         "COL.", "CDR.", "FW.", "OFW.", "UFFZ.", "OBLT.", "HPTM.", "SERG.", "MAGG.", "M.LLO", "S.TEN.", "TEN.", "CAP.", "ML.",
+         "ST.", "KAPT."}                                   # (a rank of two words is two of these: ST. LT., LT. COL., SERG. MAGG.)
 
 
 def fitted(entry, text):
