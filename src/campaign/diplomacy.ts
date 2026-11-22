@@ -9,7 +9,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, turnedRows, turnedShores, turnedWings, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, turnedRows, turnedShores, warning, wingsStruck } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -829,9 +829,9 @@ function fire(g: Game, e: DiploEvent): boolean {
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
     endVoyages(g, X.id);
     fleetsOnFall(g, X.id);
-    // (By the record its air rows turn with its army: they are set aside here and sorted out below.)
-    const wings = record ? g.airFleets.filter((f) => f.nat === X.id) : [];
     airOnFall(g, X.id);
+    // (By the record its air rows go with the rest: game.ts, `wingsStruck`.)
+    if (record) wingsStruck(g);
     // Where another army stands on the country's ground, that ground is its own to hold: the terms divide the rest.
     if (e.partition.occupied || open) for (const r of g.regions) {
       if (r.ctrl !== X.id) continue;
@@ -862,7 +862,6 @@ function fire(g: Game, e: DiploEvent): boolean {
         // (And the corps the roster makes of them forms now, where the largest of them stood: the ports the French
         // army held are not left empty for the month between.)
         turnedRows(g, [...over].sort((x, y) => y[1] - x[1] || x[0] - y[0]).map(([reg]) => reg));
-        turnedWings(g, wings);
       }
       // (And the landings the French threw back on the day go ashore where they lay off: the ceasefire opened the ports.)
       turnedShores(g);

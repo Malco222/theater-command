@@ -83,7 +83,7 @@ export const DESERT = desertData as unknown as {
 };
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
-  type AirFleet, type BattleReport, type Corps, type Field, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit, type Voyage,
+  type BattleReport, type Corps, type Field, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit, type Voyage,
 } from './types';
 
 const ORDER = ['GER', 'ITA', 'SVK', 'HUN', 'SOV', 'POL', 'FRA', 'UK', 'USA', 'BEL', 'NED', 'LUX', 'DEN', 'NOR'];
@@ -3426,25 +3426,13 @@ export function turnedRows(g: Game, stood: number[]): void {
 }
 
 /**
- * Operation Torch by the book: Vichy's air rows turn with the French (the design director, 22 November 2026, 13:27Z).
- * `wings` are the book's air groups as the turn found them, set aside before a fallen nation's air force is struck
- * (diplomacy.ts). A group whose airfields the turn gave to the side the French army came over to flies on for the
- * nation that army's row is made for, with the aircraft the day left it and kept at no more; the others are gone
- * with Vichy. Called by the turn and by nobody else; nothing where no army came over.
+ * Operation Torch by the book: Vichy's air rows are struck at the French turn with the rest of its air force (the
+ * design director, 22 November 2026, 14:23Z: the record's aircraft did not fly on for the Allies; its re-equipped
+ * units come as dated rows of their own). Only the marks that kept the rows at their seats are cleared here.
+ * Called by the turn (diplomacy.ts) and by nobody else.
  */
-export function turnedWings(g: Game, wings: AirFleet[]): void {
-  if (!TORCH || !torchBook(g) || !((g.flags['torch:turned'] ?? 0) > 0)) return;
-  const row = TORCH.rows.find((r) => r[6]?.turned);
-  const nat = row?.[1] as string | undefined;
-  if (!nat || nat === g.human || !g.nations[nat]?.alive) return;
-  for (const f of wings) {
-    const r = g.regions[f.base], book = !!g.flags[`torch:wing:${f.id}`];
-    delete g.flags[`torch:wing:${f.id}`];
-    if (!book || !r || !allied(g, nat, r.ctrl) || f.ftr + f.bmr <= 0) continue;
-    f.nat = nat; f.leader = null; f.mission = 'support'; f.target = -1;
-    f.est = { ftr: f.ftr, bmr: f.bmr };
-    g.airFleets.push(f);
-  }
+export function wingsStruck(g: Game): void {
+  for (const k of Object.keys(g.flags)) if (k.startsWith('torch:wing:')) delete g.flags[k];
 }
 
 /**

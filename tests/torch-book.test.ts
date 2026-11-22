@@ -202,6 +202,8 @@ describe('Operation Torch by the book', () => {
     expect(g.flags['event:darlan']).toBeUndefined();
     expect(torchWeek(g)).toBe(1);
     const seen = g.reports.length;
+    const wingIds = g.airFleets.filter((f) => f.nat === 'VIC').map((f) => f.id);
+    expect(wingIds.length).toBe(2 * TORCH.vichy.air.length);
     runTurnAI(g);
     // The day: both staffs went, somebody is ashore in Morocco or Algeria, and the French turned in that month.
     expect(g.flags['st:done:UK:torch']).toBe(39);
@@ -227,13 +229,10 @@ describe('Operation Torch by the book', () => {
     }
     // (No force is left noted as lying off its shore.)
     expect(Object.keys(g.flags).some((k) => k.startsWith('torch:off:'))).toBe(false);
-    // Vichy's air turned with its army: no group is Vichy's, and those whose seats came over fly on, British, with no more than they had.
+    // Vichy's air is struck at the turn with the rest of its air force: no group is Vichy's, and none flies on for the Allies.
     expect(g.airFleets.some((f) => f.nat === 'VIC')).toBe(false);
     expect(Object.keys(g.flags).some((k) => k.startsWith('torch:wing:'))).toBe(false);
-    const came = g.airFleets.filter((f) => f.nat === 'UK' && /Escadre|Groupe|Bomber Group/.test(f.name));
-    expect(came.length).toBeGreaterThan(0);
-    expect(came.reduce((n, f) => n + f.ftr + f.bmr, 0)).toBeLessThanOrEqual(TORCH.vichy.air.reduce((n, x) => n + x[1] + x[2], 0));
-    for (const f of came) expect(f.est).toEqual({ ftr: f.ftr, bmr: f.bmr });
+    expect(g.airFleets.some((f) => wingIds.includes(f.id))).toBe(false);
     // America's divisions in French North Africa are the book's rows: nothing of its army stands there but the two picks.
     const picks = new Set(picked.map((k) => g.flags[k] - 1));
     for (const c of g.corps) if (c.nat === 'USA' && !c.dead && TORCH.vichy.ground.includes(g.regions[c.reg].name)) expect(picks.has(c.id), c.name).toBe(true);
