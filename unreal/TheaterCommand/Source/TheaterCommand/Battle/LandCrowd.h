@@ -10,6 +10,7 @@
 
 class AActor;
 class UInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UObject;
 class USceneComponent;
@@ -62,6 +63,19 @@ class USceneComponent;
  * frame before; one newly drawn by a piece (at the hand-over, or her lid's copy swapped in) takes her anchor body's
  * place a frame before, where her own meshes or the other piece drew her, so neither change shows as a jump.
  *
+ * The general's own view (Brian, 22 November 02:55Z; the art director's read of its stills, 18:27Z: "tanks read as
+ * grey-blue chips ... give each tank a size floor of about 14x7 render pixels (up to 1.5x); keep the barrel at least 1
+ * pixel wide, because today it is gone"): while the scene says it is up (SetHigh: his view high over the field, not his
+ * film), a far vehicle that would stand smaller in the picture than "-TheaterLandGeneralTankPx=" (14,7,1.5: her length
+ * and her width in the lines of the men's 665-line measure, GS3, and how much she may grow at most) is drawn grown about
+ * the ground under her middle until she stands that big, by her pieces (each instance grown about that one point, so her
+ * turret stays on her hull) and, through GrowOf, by her own meshes and her shade (the scene's). Her barrel is drawn
+ * over by a stick of her barrel's paint from her gun's pivot to her muzzle, at least "-TheaterLandGeneralBarrelPx=" (1)
+ * line wide (a fourth instanced mesh a model, one instance a vehicle, only while the view is up and she is drawn by her
+ * pieces). And her pieces' ink takes "-TheaterLandGeneralTankInk=" (0.1,0.9,1,1,1: its specular, its roughness and a
+ * tint) while the view is up, so her top faces give back less of the blue sky; her near ink is as it was. Out of the
+ * view (or in his film) all of it is as before.
+ *
  * "-TheaterLandNoCrowd" turns TK1 off (every body drawn by its own meshes, as before: the A/B). "-TheaterLandLinksAlways"
  * turns TK3 off (every near moving tank's links posed every frame, as before). "-TheaterLandCrowdNoPrev" turns the places
  * a frame before off (the pieces as before: an instance moved is drawn as still; the look A/B with -TheaterLandTankPan).
@@ -112,10 +126,24 @@ public:
 	 * drawn on the screen a moment ago (bRendered); counted for the log. */
 	bool LinksDue(int32 Vehicle, bool bRendered);
 
+	// ---- The general's view, from DrawArmour, before Draw ----
+
+	/**
+	 * Whether the general's own view is up this frame (bOn: his view high over the field, not his film), and the picture's
+	 * lines a metre at a metre off (the men's measure: MenLines / 1.8). While it is up Draw grows the far vehicles to the
+	 * floor, lays the barrels' sticks and gives the pieces' ink its general's settings; off, all as before.
+	 */
+	void SetHigh(bool bOn, double LinesPerMetre);
+	/** How much vehicle Vehicle is grown this frame (1: her own size), about the ground under her middle (her root): what
+	 * her own meshes and her shade take where her pieces do not draw her. Set by Draw. */
+	double GrowOf(int32 Vehicle) const;
+
 private:
-	/** The pieces drawn: the hull's, the turret's, and the lid-up copy of whichever of them holds the commander's lid. */
-	static constexpr int32 PieceCount = 3;
+	/** The pieces drawn: the hull's, the turret's, and the lid-up copy of whichever of them holds the commander's lid;
+	 * and (the general's view) the stick over her barrel, a box of her barrel's paint anchored on her gun's body. */
+	static constexpr int32 PieceCount = 4;
 	static constexpr int32 LidUp = 2;
+	static constexpr int32 Stick = 3;
 
 	/** One model's pieces: their instanced meshes, and who holds each instance (packed: instance I is Holder[I]'s). */
 	struct FKind
@@ -125,48 +153,76 @@ private:
 		LandKit::FarSplit Split;
 		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies[PieceCount];
 		TArray<int32> Holder[PieceCount];
-		bool bShownNow[PieceCount] = { false, false, false };
-		bool bDirty[PieceCount] = { false, false, false };
+		bool bShownNow[PieceCount] = { false, false, false, false };
+		bool bDirty[PieceCount] = { false, false, false, false };
 		bool bKeepsFar = false;
 		bool bMade = false;
+		/** Her gun's body (the body of her gun control's part) and whether she has a muzzle: the stick's two ends (-1: she
+		 * has no stick). */
+		int32 GunBody = -1;
+		/** Her pieces' ink when made here (on M_LandSteel), and its specular, roughness and tint as made: the general's
+		 * view sets its own while it is up and gives these back after. */
+		TWeakObjectPtr<UMaterialInstanceDynamic> Ink;
+		float Specular = 0.35f, Roughness = 0.6f;
+		FLinearColor Tint = FLinearColor::White;
 	};
 	/** One vehicle: her model's kind, her instance in each piece (-1: none), and what was last put there. */
 	struct FOne
 	{
 		int32 Kind = -1;
 		int32 Slot[PieceCount] = { -1, -1, -1 };
-		FVector At[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
-		FQuat Q[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
-		/** The place a frame before sent with At, Q (the motion vector's other end; the same: still). */
-		FVector Before[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
-		FQuat BeforeQ[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		FVector At[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+		FQuat Q[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		/** Each instance's scale as put: her growth in the general's view (1: her own size); the stick's, its length and
+		 * width in metres. */
+		FVector S[PieceCount] = { FVector::OneVector, FVector::OneVector, FVector::OneVector, FVector::OneVector };
+		/** The place a frame before sent with At, Q, S (the motion vector's other end; the same: still). */
+		FVector Before[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+		FQuat BeforeQ[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		FVector BeforeS[PieceCount] = { FVector::OneVector, FVector::OneVector, FVector::OneVector, FVector::OneVector };
 		/** The frame (Frame) each piece's instance was last sent moving; 0: still. */
-		uint32 Moved[PieceCount] = { 0, 0, 0 };
+		uint32 Moved[PieceCount] = { 0, 0, 0, 0 };
 		/** Each piece's anchor body's place at the frame WasFrame (drawn by a piece or not), for one newly put there. */
-		FVector Was[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
-		FQuat WasQ[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		FVector Was[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+		FQuat WasQ[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		FVector WasS[PieceCount] = { FVector::OneVector, FVector::OneVector, FVector::OneVector, FVector::OneVector };
 		uint32 WasFrame = 0;
 		float Soot = -1.0f;
+		/** How much she is grown this frame (the general's view; 1: her own size). */
+		double Grow = 1.0;
 		bool bHeld = false;
 		bool bSeen = true;
 	};
 
 	int32 KindFor(const LandKit::Model& Model);
-	/** Piece Piece of a model's split: the hull's, the turret's, or the lid-up copy. */
+	/** Piece Piece of a model's split: the hull's, the turret's, or the lid-up copy (never the stick, which is no
+	 * piece of the split). */
 	static const LandKit::FarPiece& SplitPiece(const LandKit::FarSplit& Split, int32 Piece)
 	{
 		return Piece == LidUp ? Split.Open : Split.Pieces[Piece];
 	}
-	UMaterialInterface* InkFor(const LandKit::Model& Model);
-	/** Vehicle Vehicle (One) put in piece Piece at At, Q: the place after the piece's last vehicle, with her soot; her
-	 * place a frame before Before, BeforeQ (the same: no move). */
-	void Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q, const FVector& Before, const FQuat& BeforeQ);
+	/** The body piece Piece is anchored on: its split piece's anchor, or (the stick) her gun's body. */
+	static int32 AnchorOf(const FKind& Kind, int32 Piece)
+	{
+		return Piece == Stick ? Kind.GunBody : SplitPiece(Kind.Split, Piece).Anchor;
+	}
+	UMaterialInterface* InkFor(const LandKit::Model& Model, FKind& Kind);
+	/** A kind's stick: a box a metre each way of her barrel's paint (its body's far colours, a shade darker), burnt with
+	 * her; on its own instanced mesh. */
+	void MakeStick(FKind& Kind, UMaterialInterface* Ink);
+	/** A kind's ink set for the general's view (bOn) or given back its own settings. */
+	void InkHigh(FKind& Kind, bool bOn) const;
+	/** Vehicle Vehicle (One) put in piece Piece at At, Q, S: the place after the piece's last vehicle, with her soot; her
+	 * place a frame before Before, BeforeQ, BeforeS (the same: no move). */
+	void Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q, const FVector& S, const FVector& Before, const FQuat& BeforeQ,
+		const FVector& BeforeS);
 	/** Her instance in piece Piece given back: the piece's last vehicle moved into it (Draw removes the tail). */
 	void Drop(FOne& One, int32 Piece);
 	void Release(FOne& One);
-	/** Instance Slot of Copies put at At, Q (world), its place a frame before Before, BeforeQ (the same: no move); with the
-	 * places a frame before off, put as before. */
-	void SetPlace(UInstancedStaticMeshComponent* Copies, int32 Slot, const FVector& At, const FQuat& Q, const FVector& Before, const FQuat& BeforeQ);
+	/** Instance Slot of Copies put at At, Q, S (world), its place a frame before Before, BeforeQ, BeforeS (the same: no
+	 * move); with the places a frame before off, put as before. */
+	void SetPlace(UInstancedStaticMeshComponent* Copies, int32 Slot, const FVector& At, const FQuat& Q, const FVector& S, const FVector& Before,
+		const FQuat& BeforeQ, const FVector& BeforeS);
 	void Tell(int32 Shown);
 
 	TWeakObjectPtr<AActor> Owner;
@@ -180,6 +236,15 @@ private:
 	bool bOff = false, bLinksAlways = false;
 	/** Each piece keeps its instances' places a frame before (off: -TheaterLandCrowdNoPrev). */
 	bool bPrev = true;
+	/** The general's view (SetHigh): up this frame, the picture's lines a metre at a metre off, and the floor
+	 * ("-TheaterLandGeneralTankPx=": her least length and width in lines, how much she may grow), the barrel's least width
+	 * in lines ("-TheaterLandGeneralBarrelPx=", 0: no stick) and the pieces' ink while it is up
+	 * ("-TheaterLandGeneralTankInk=": specular, roughness, tint). bInkHigh: the inks are set for it now. */
+	bool bHigh = false, bInkHigh = false;
+	double HighPerMetre = 0.0;
+	double FloorLong = 14.0, FloorWide = 7.0, FloorMost = 1.5, BarrelPx = 1.0;
+	float HighSpecular = 0.1f, HighRoughness = 0.9f;
+	FLinearColor HighTint = FLinearColor::White;
 	/** The frame, counted at each Draw (from 1; 0 is "still"). */
 	uint32 Frame = 1;
 	/** One instance's place and place a frame before, for the engine's batch update (kept: no array made a move). */
@@ -193,4 +258,7 @@ private:
 	int64 Frames = 0, HeldFrames = 0, OwnFarFrames = 0, LinksPosed = 0, LinksHeld = 0;
 	// (and the places sent moving and made still again, with the places a frame before)
 	int64 SentMoving = 0, MadeStill = 0;
+	// (and in the general's view: the frames it was up, the far vehicles grown and their growth summed, sticks drawn)
+	int64 HighFrames = 0, Grown = 0, Sticks = 0;
+	double GrowSum = 0.0;
 };
