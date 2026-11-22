@@ -74,6 +74,10 @@ namespace
 		{ TEXT("hide"), TEXT("Forest ambushes"), TEXT("Units in woods stay hidden from the enemy until found or firing. Off: woods hide no one."), TEXT("TheaterLandNoHide"), true, nullptr },
 		{ TEXT("relief"), TEXT("Hold till relieved"), TEXT("A unit digs in to wait for a corps coming up; if help comes late, it breaks sooner. Off: no hold order; help simply arrives."), TEXT("TheaterLandNoRelief"), true, nullptr },
 		{ TEXT("rider"), TEXT("Despatch riders"), TEXT("A corps coming up sends a rider ahead; click him for its news. Off: help arrives with no word ahead."), TEXT("TheaterLandNoRider"), true, nullptr },
+		// (Brian, 22 November 17:33Z, "make it where we can toggle it off", and 21:21Z, each starting on)
+		{ TEXT("phones"), TEXT("Field telephones"), TEXT("The defence's posts are wired to their headquarters, so orders reach them quickly until shellfire cuts a line. Off: no telephone lines."), TEXT("TheaterLandNoPhones"), true, nullptr },
+		{ TEXT("bearers"), TEXT("Stretcher bearers"), TEXT("Bearers carry the wounded back, and the lightly hurt return to the line later in the battle. Off: no one comes back."), TEXT("TheaterLandNoBearers"), true, nullptr },
+		{ TEXT("patrol"), TEXT("Night patrol"), TEXT("While you place your army, send a unit on foot out the night before to find hidden posts; it may be caught. Needs Forest ambushes. Off: no patrols."), TEXT("TheaterLandNoPatrol"), true, nullptr },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }
@@ -96,6 +100,19 @@ bool FLandLive::RuleOn(int32 Index)
 		GConfig->GetBool(RulesSection, RuleAt(Index).Key, bOn, GGameUserSettingsIni);
 	}
 	return bOn;
+}
+
+bool FLandLive::RuleNow(const TCHAR* Key)
+{
+	for (int32 R = 0; R < RuleCount(); ++R)
+	{
+		const FRule& Rule = LandRuleTable[R];
+		if (FCString::Strcmp(Rule.Key, Key) == 0)
+		{
+			return (RuleOn(R) || (Rule.OnFlag && FParse::Param(FCommandLine::Get(), Rule.OnFlag))) && !FParse::Param(FCommandLine::Get(), Rule.OffFlag);
+		}
+	}
+	return false;
 }
 
 void FLandLive::SetRule(int32 Index, bool bOn)
@@ -123,8 +140,7 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	Switches.Reset();
 	for (int32 R = 0; R < RuleCount(); ++R)
 	{
-		const FRule& Rule = LandRuleTable[R];
-		const bool bOn = (RuleOn(R) || (Rule.OnFlag && FParse::Param(FCommandLine::Get(), Rule.OnFlag))) && !FParse::Param(FCommandLine::Get(), Rule.OffFlag);
+		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));
 	}
 	Thread = FRunnableThread::Create(this, TEXT("TheaterLandRules"), 0, TPri_Normal);

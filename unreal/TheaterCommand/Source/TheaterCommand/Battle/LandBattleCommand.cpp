@@ -1204,6 +1204,21 @@ void ALandBattle::GeneralDo(const FString& Word)
 			Say("THEY DIG IN TO WAIT FOR HELP. IF HELP HAS NOT COME BY ITS TIME, THEY BREAK SOONER");
 		}
 	}
+	else if (Word == TEXT("patrol"))
+	{
+		// (night patrol, release 2: while he places his army, one of his blocks on foot goes out the night before; the
+		// rules take one a night and say why where they refuse)
+		const std::vector<int> Foot = Clip.Waiters();
+		if (Foot.empty())
+		{
+			Say("ONLY MEN ON FOOT GO OUT ON PATROL");
+		}
+		else
+		{
+			OrderLive(FString::Printf(TEXT("{\"do\":\"land:patrol\",\"unit\":%d}"), Foot.front()));
+			Say("THEIR PATROL GOES OUT TONIGHT, BEFORE THE BATTLE: IT MAY FIND A HIDDEN POST, OR BE CAUGHT");
+		}
+	}
 	else if (Word == TEXT("hold"))
 	{
 		GiveGeneral(WideOf(Clip.Hold()), TEXT("hold"), -1, TArray<FVector2D>(), 0.0, 0.0);

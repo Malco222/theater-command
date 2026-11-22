@@ -1,4 +1,5 @@
 #include "Battle/LandBattleScreen.h"
+#include "Battle/LandLive.h"
 
 #include "Battle/LandBattle.h"
 #include "Battle/LandBattleState.h"
@@ -1362,6 +1363,13 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			Arrow(false, X, First + Fit < Count);
 		}
+	}
+
+	// ---- While he places his army: SEND A PATROL for men on foot in his hand, where he attacks and night patrols are on
+	// (release 2; Brian, 22 November 17:33Z), at the left of the bar BEGIN THE BATTLE stands on. ----
+	if (bHand && Clip.Deploying() && Clip.Side() == 0 && !Clip.Waiters().empty() && FLandLive::RuleNow(TEXT("patrol")) && FLandLive::RuleNow(TEXT("hide")))
+	{
+		Button(TEXT("SEND A PATROL TONIGHT"), TEXT(""), TEXT("general:patrol"), 18.0, OrdersY, false, false, 12);
 	}
 
 	// ---- The orders of the unit in hand, just above the cards, only while one is in hand and only those it can give

@@ -58,6 +58,8 @@ public:
 		bool bOnAtFirst;
 		const TCHAR* OnFlag;
 	};
+	/** Whether the rule named Key is on for the next battle: as he left it on the Battle rules card, or for one run on the command line. */
+	static bool RuleNow(const TCHAR* Key);
 	static int32 RuleCount();
 	static const FRule& RuleAt(int32 Index);
 	/** Whether the player has it on (his settings; on when never set). The command line's off is not counted here. */
