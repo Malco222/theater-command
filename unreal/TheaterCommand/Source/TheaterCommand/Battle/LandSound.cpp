@@ -345,6 +345,16 @@ namespace LandSound
 			const Json& P = Parts.Values[K];
 			if (P.IsArray() && P.At(0).IsNumber() && P.At(1).IsNumber()) FiringPart[Parts.Keys[K]] = { P.At(0).Num(), P.At(1).Num() };
 		}
+		const Json& More = Mg["moreParts"];
+		for (size_t K = 0; K < More.Keys.size(); ++K)
+		{
+			const Json& Ps = More.Values[K];
+			if (!Ps.IsArray() || More.Keys[K][0] == '_') continue;
+			for (const Json& P : Ps.Items)
+			{
+				if (P.IsArray() && P.At(0).IsNumber() && P.At(1).IsNumber()) MoreParts[More.Keys[K]].push_back({ P.At(0).Num(), P.At(1).Num() });
+			}
+		}
 		BurstEndFade = Mg["endFade"].Num(BurstEndFade);
 		const Json& Ga = Land["garand"];
 		ClipEvery = Ga["clipEvery"].Int(ClipEvery);
@@ -642,6 +652,7 @@ namespace LandSound
 							if (OtherGap < Repitch)
 							{
 								++SameMerged;
+								if (Far <= F.FarFrom && F.FarFrom < 1e8) { ++SameMergedNear; ++MergedNearBy[T.Name]; }  // (a family with far takes, nearer than them)
 								bLastMerged = true;
 								return false;
 							}
@@ -660,6 +671,7 @@ namespace LandSound
 							// that copy, as a crowd's rifles are: one more copy would only flange it, the 0.15 s rule's
 							// fault. Found by the camera's new path through Prokhorovka, 22 November)
 							++SameMerged;
+							if (Far <= F.FarFrom && F.FarFrom < 1e8) { ++SameMergedNear; ++MergedNearBy[T.Name]; }  // (a family with far takes, nearer than them)
 							bLastMerged = true;
 							return false;
 						}
@@ -776,8 +788,13 @@ namespace LandSound
 		// its recording. From the take's first shot, silent by the time the next round would come: the recording keeps
 		// firing after the burst's last round, so a "tail" cut from it is only more rounds (the review's find).
 		auto It = FiringPart.find(T.Name);
-		if (It == FiringPart.end() || N.Rounds <= 1 || N.PerSecond <= 0.0) return;
-		const double A = It->second.first, B = It->second.second;
+		if (It != FiringPart.end()) CutBurstAt(T, N, It->second.first, It->second.second);
+	}
+
+	void Mixer::CutBurstAt(Take& T, const Noise& N, double A, double B)
+	{
+		// (from the stretch of firing A to B in the take's recording: its part, or one of its moreParts)
+		if (N.Rounds <= 1 || N.PerSecond <= 0.0) return;
 		const double Want = N.Rounds / N.PerSecond;
 		if (Want >= B - A) return; // the whole recording, with its own tail
 		T.From = std::max(0.0, A - 0.01);
@@ -882,10 +899,12 @@ namespace LandSound
 				}
 				const bool bFarMg = bMg && Far > F.FarFrom;
 				T.Name = Pick(Far > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : bMg ? MgList : Nation("rifle"));
+				const double Want = bMg && N.PerSecond > 0.0 ? N.Rounds / N.PerSecond : 0.0;
+				Take Uncut;
+				const int CutsWere = BurstsCut;
 				if (bMg)
 				{
 					// (a take whose firing is shorter than the burst gives way to one long enough, where the list has one)
-					const double Want = N.PerSecond > 0.0 ? N.Rounds / N.PerSecond : 0.0;
 					for (int Try = 0; Try < 3; ++Try)
 					{
 						auto Part = FiringPart.find(T.Name);
@@ -899,6 +918,7 @@ namespace LandSound
 						auto Part = FiringPart.find(T.Name);
 						if (Part != FiringPart.end() && Part->second.second - Part->second.first < Want) ++TankMgWhole;
 					}
+					Uncut = T;
 					CutBurst(T, N);
 				}
 				// (a squad leader's round once his Thompson clip is in: his clip's thompson_burst cue carries the sound)
@@ -909,6 +929,55 @@ namespace LandSound
 					bStarted = Start(T, Now, Far, bOnScreen, Out);
 					bTooFar = bLastTooFar;
 					bMerged = bLastMerged;
+					// (a machine gun's burst crowded out of its recording, every pitch near it sounding, gives way to another
+					// recording on its list whose firing outlasts the burst, then to another stretch of firing in any of
+					// them (moreParts: a Maxim's take fires three bursts), before it is heard in that copy: an MG at 400 m
+					// is still its own rip, the mix's distance note)
+					if (bMg && bMerged)
+					{
+						std::string Merged = T.Name;
+						auto Retry = [&](Take Other)
+						{
+							--SameMerged;
+							if (Far <= F.FarFrom && F.FarFrom < 1e8) { --SameMergedNear; --MergedNearBy[Merged]; }
+							bStarted = Start(Other, Now, Far, bOnScreen, Out);
+							bTooFar = bLastTooFar;
+							bMerged = bLastMerged;
+							Merged = Other.Name;
+							return !bMerged;
+						};
+						// (one burst, however many places it tries: the count of bursts cut is the one it plays from)
+						auto CutAgain = [&](Take& Other, const std::pair<double, double>* Stretch)
+						{
+							const int Before = BurstsCut;
+							if (Stretch) CutBurstAt(Other, N, Stretch->first, Stretch->second);
+							else CutBurst(Other, N);
+							BurstsCut = CutsWere + (BurstsCut - Before);
+						};
+						const std::vector<std::string> Own = ListOf(bFarMg ? "mg.far" : MgList);
+						for (const std::string& Name : Own)
+						{
+							auto Part = FiringPart.find(Name);
+							if (Name == T.Name || (Part != FiringPart.end() && Part->second.second - Part->second.first < Want)) continue;
+							Take Other = Uncut;
+							Other.Name = Name;
+							CutAgain(Other, nullptr);
+							if (Retry(Other)) { ++MgToOther; break; }
+						}
+						for (size_t I = 0; I < Own.size() && bMerged && N.Rounds > 1 && Want > 0.0; ++I)
+						{
+							auto More = MoreParts.find(Own[I]);
+							if (More == MoreParts.end()) continue;
+							for (const auto& Stretch : More->second)
+							{
+								if (Stretch.second - Stretch.first <= Want) continue; // (a stretch the burst outlasts: its silence would play)
+								Take Other = Uncut;
+								Other.Name = Own[I];
+								CutAgain(Other, &Stretch);
+								if (Retry(Other)) { ++MgToOtherPart; break; }
+							}
+						}
+					}
 				}
 				Count(Now, bMg ? "mg" : "small_arms", Far);
 				if (!bMg && N.Track >= 0)

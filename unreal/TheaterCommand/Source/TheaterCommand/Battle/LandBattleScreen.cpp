@@ -778,6 +778,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Parts.Add({ TEXT("\u00D72"), TEXT("2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0), false });
 			Parts.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0), false });
 			Parts.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false, false });
+			// (the film with the unit in his hand: Ride with this unit)
+			Parts.Add({ TEXT("RIDE WITH THEM"), TEXT("V"), TEXT("general:ride"), false, !bHand });
 		}
 		double Whole = 0.0;
 		for (const FPart& P : Parts)
@@ -1216,6 +1218,7 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Tab) { Scene->GeneralDo(Event.IsShiftDown() ? TEXT("back") : TEXT("next")); return FReply::Handled(); }
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
+		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
 		else
 		{

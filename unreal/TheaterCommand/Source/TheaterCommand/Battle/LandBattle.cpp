@@ -7,7 +7,9 @@
 #include "Battle/LandBattleState.h"
 #include "Battle/LandCarpet.h"
 #include "Battle/LandFell.h"
+#include "Battle/LandCrowd.h" // TK1
 #include "Battle/LandShade.h"
+#include "Battle/LandVat.h" // SO1
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -21,6 +23,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
@@ -51,6 +54,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
+#include "RHI.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Sound/SoundAttenuation.h"
@@ -67,6 +71,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <tuple>
 
 namespace LandParts
 {
@@ -103,7 +108,9 @@ namespace LandParts
 			Blue = Sky->Grade[3];
 		}
 		FString Asked;
-		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked))
+		// (read past its commas, as LandLook::Asked reads its own: the engine's reader stops at the first one unless told
+		// not to, so only the darks were ever taken; the effects thread's find on cut 5)
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked, false))
 		{
 			TArray<FString> Parts;
 			Asked.ParseIntoArray(Parts, TEXT(","), false);
@@ -273,15 +280,39 @@ namespace LandParts
 	 * distance the field gives on (FarFrom). Points as FromField takes them (the field's x and y swapped into Unreal's
 	 * frame, which keeps each triangle facing the same way); colours as sRGB bytes, the base's paint by the shade's tint
 	 * (128 as built). */
-	static UStaticMesh* ThingMesh(UObject* Owner, const FName& Name, const LandField::BaseMesh& Base, const FVector3f& Tint, UMaterialInterface* Ink, UMaterialInterface* LeafInk, double U)
+	/** A thing's level of detail past its near one (GS9): its mesh, from how many metres off at the usual 50 deg lens,
+	 * and whether it casts a shadow there. */
+	struct FThingLevel
 	{
-		const LandField::Mesh* Levels[2] = { &Base.Near, Base.Far.Empty() ? nullptr : &Base.Far };
+		const LandField::Mesh* Mesh = nullptr;
+		double From = 0.0;
+		bool bShadow = true;
+	};
+
+	/** The share of the screen's height a thing of this bounds radius (Unreal's units) fills Metres off at the usual 50
+	 * deg vertical lens: what Unreal's level of detail goes by (ComputeBoundsScreenSize: the projection's larger scale,
+	 * the vertical one, over the distance, times two). */
+	static float ScreenAt(double Radius, double Metres, double U)
+	{
+		const double Lens = 1.0 / FMath::Tan(FMath::DegreesToRadians(25.0));
+		return static_cast<float>(Lens * Radius / FMath::Max(1.0, Metres * U));
+	}
+
+	static UStaticMesh* ThingMesh(UObject* Owner, const FName& Name, const LandField::BaseMesh& Base, const FVector3f& Tint, UMaterialInterface* Ink, UMaterialInterface* LeafInk, double U,
+		const TArray<FThingLevel>& Further)
+	{
+		TArray<const LandField::Mesh*> Levels;
+		Levels.Add(&Base.Near);
+		for (const FThingLevel& Level : Further)
+		{
+			Levels.Add(Level.Mesh);
+		}
 		// The near level's leaves (a hedge shrub's, a tree's): on their cards with the leaves' material, its second
 		// section; without that material, the solid sprigs in the first, on the paint.
 		const bool bCards = LeafInk && !Base.Cards.Empty() && Base.Cards.Uvs.size() == 2 * Base.Cards.Points();
 		const LandField::Mesh* Leaves = bCards ? &Base.Cards : Base.Sprigs.Empty() ? nullptr : &Base.Sprigs;
 		TArray<FMeshDescription> Descriptions;
-		Descriptions.SetNum(Levels[1] ? 2 : 1);
+		Descriptions.SetNum(Levels.Num());
 		for (int32 L = 0; L < Descriptions.Num(); ++L)
 		{
 			FMeshDescription& D = Descriptions[L];
@@ -368,13 +399,28 @@ namespace LandParts
 		Params.bCommitMeshDescription = false;
 		Params.bFastBuild = true;
 		Made->BuildFromMeshDescriptions(Levelled, Params);
-		// The far level from where the field puts it: a level is chosen by the share of the screen the mesh's bounds
-		// fill, which at a 90 degree lens is its radius over the distance (a long lens keeps the near level further).
+		// Each further level from its distance: a level is chosen by the share of the screen the mesh's bounds fill (a long
+		// lens keeps the nearer level further out). Until GS9 the far level's share was worked out for a 90 degree lens,
+		// so at the usual 50 deg it fell at 2.14 times the field's FarFrom; the callers keep that unless told otherwise.
+		// A level with no shadow has every section's shadow off: the instances' proxies read it as they are made.
 		FStaticMeshRenderData* Drawn = Made->GetRenderData();
-		if (Levels[1] && Drawn && Drawn->LODResources.Num() > 1)
+		if (Drawn)
 		{
 			const double Reach = FMath::Max(1.0, static_cast<double>(Made->GetBounds().SphereRadius));
-			Drawn->ScreenSize[1].Default = static_cast<float>(Reach / (FMath::Max(1.0f, Base.FarFrom) * U));
+			float Last = 1e9f;
+			for (int32 L = 1; L < Drawn->LODResources.Num() && L <= Further.Num() && L < MAX_STATIC_MESH_LODS; ++L)
+			{
+				const float Share = FMath::Min(ScreenAt(Reach, Further[L - 1].From, U), Last * 0.95f);
+				Drawn->ScreenSize[L].Default = Share;
+				Last = Share;
+				if (!Further[L - 1].bShadow)
+				{
+					for (FStaticMeshSection& Section : Drawn->LODResources[L].Sections)
+					{
+						Section.bCastShadow = false;
+					}
+				}
+			}
 		}
 		return Made;
 	}
@@ -429,6 +475,76 @@ namespace LandParts
 		}
 		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
 		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Shade")));
+		TArray<const FMeshDescription*> Levels;
+		Levels.Add(&D);
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levels, Params);
+		return Made;
+	}
+
+	/** A ground tile's level (GS8: LandField's Tile Near, Far, Built, or a tile of the far ring) as a static mesh of its
+	 * own, so the engine draws it from its cached draw commands: as a procedural mesh it was gathered again on the draw
+	 * thread every frame, in every pass, shadows too. Points and normals as FromField makes them; colours as sRGB bytes
+	 * (see ThingMesh); no texture coordinates, as before; the tangent along Unreal's x laid flat on the normal, as the
+	 * procedural mesh's own (it gave none, so x). */
+	static UStaticMesh* GroundMesh(UObject* Owner, const FName& Name, const LandField::Mesh& M, UMaterialInterface* Ink, double U)
+	{
+		if (!Ink || M.Empty())
+		{
+			return nullptr;
+		}
+		FMeshDescription D;
+		FStaticMeshAttributes Attributes(D);
+		Attributes.Register();
+		auto Positions = Attributes.GetVertexPositions();
+		auto Normals = Attributes.GetVertexInstanceNormals();
+		auto Tangents = Attributes.GetVertexInstanceTangents();
+		auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+		auto Colours = Attributes.GetVertexInstanceColors();
+		auto Uvs = Attributes.GetVertexInstanceUVs();
+		Uvs.SetNumChannels(1);
+		const FPolygonGroupID Group = D.CreatePolygonGroup();
+		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ground");
+		const int32 Count = static_cast<int32>(M.Points());
+		D.ReserveNewVertices(Count);
+		D.ReserveNewVertexInstances(Count);
+		D.ReserveNewTriangles(static_cast<int32>(M.Tris()));
+		TArray<FVertexInstanceID> Corners;
+		Corners.SetNum(Count);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const size_t K = static_cast<size_t>(I);
+			const float* At = &M.Positions[K * 3];
+			const float* Way = &M.Normals[K * 3];
+			const FVertexID Vertex = D.CreateVertex();
+			Positions[Vertex] = FVector3f(At[1] * U, At[0] * U, At[2] * U);
+			const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+			const FVector3f Normal = FVector3f(Way[1], Way[0], Way[2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
+			Normals[Corner] = Normal;
+			FVector3f Along = FVector3f::ForwardVector - Normal * FVector3f::DotProduct(FVector3f::ForwardVector, Normal);
+			if (!Along.Normalize(1e-6f))
+			{
+				Along = FVector3f::RightVector;
+			}
+			Tangents[Corner] = Along;
+			Signs[Corner] = 1.0f;
+			const LandField::Rgb8& Paint = M.Colours[K];
+			Colours[Corner] = FVector4f(FLinearColor(FColor(Paint.R, Paint.G, Paint.B, 255)));
+			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			Corners[I] = Corner;
+		}
+		for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+		{
+			const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(M.Triangles[K])], Corners[static_cast<int32>(M.Triangles[K + 1])],
+				Corners[static_cast<int32>(M.Triangles[K + 2])] };
+			D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ground")));
 		TArray<const FMeshDescription*> Levels;
 		Levels.Add(&D);
 		UStaticMesh::FBuildMeshDescriptionsParams Params;
@@ -648,7 +764,7 @@ namespace LandParts
 		{
 			for (int Man = 0; Man < S.Men->Count(); ++Man)
 			{
-				if (!S.Men->Visible(Man) || static_cast<size_t>(Man) >= S.TrackOfMan.size())
+				if (!S.Men->Visible(Man) || static_cast<size_t>(Man) >= S.TrackOfMan.size() || S.Men->IsRider(Man))
 				{
 					continue;
 				}
@@ -1102,7 +1218,21 @@ bool ALandBattle::Open()
 			return true;
 		};
 	}
+	{
+		// (a roof gun only where her model draws one this month and for her nation: the tank modeller's swaps)
+		TWeakPtr<FLandBattleState> Weak(State);
+		PlayWorld.RoofGun = [Weak](int Track)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || !Pinned->Armour || Track < 0 || static_cast<size_t>(Track) >= Pinned->VehicleOf.size() || Pinned->VehicleOf[static_cast<size_t>(Track)] < 0)
+			{
+				return true;
+			}
+			return Pinned->Armour->Vehicles()[static_cast<size_t>(Pinned->VehicleOf[static_cast<size_t>(Track)])].Look().RoofGun();
+		};
+	}
 	S.Play.Begin(Rec, PlayWorld);
+	MakeRiders();
 
 	// The camera's world: the ground drawn, where it can stand, what it can see through, where each man and tank is.
 	{
@@ -1248,6 +1378,11 @@ bool ALandBattle::Open()
 		float Hand = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHand="), Hand);
 		Set.Hand = FMath::Clamp(static_cast<double>(Hand), 0.0, 3.0);
+		// (the production lead's A/B: the whole mass's wide, the dearest shot until the men are instanced, turned off)
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoMassWide")))
+		{
+			Set.MassFrom = 0.0;
+		}
 		S.EyeWorld = EyeWorld;
 		S.Eye.Begin(Rec, EyeWorld, Set);
 	}
@@ -1276,16 +1411,26 @@ bool ALandBattle::Open()
 		// (the camera stands among the bursts: smoke and dust fade as they come within a few metres in front of the
 		// lens, and nothing is laid at or behind it; the kit's flat painted craters give way to the torn earth below)
 		Effects->SetLensFade(1.0f, 5.0f, 0.3f);
-		Effects->SetCraters(false);
+		// (the art director, 22 November: the holes are the torn earth's alone, never the kit's marks over them too;
+		// -TheaterLandKitScars brings the kit's back for the A/B)
+		const bool bKitScars = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandKitScars"));
+		Effects->SetCraters(bKitScars);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the effects kit's painted crater marks %s"),
+			bKitScars ? TEXT("ON (-TheaterLandKitScars: drawn over the torn-earth holes)") : TEXT("off: the torn-earth holes alone"));
 		Effects->SetSun(TowardSun);
 		// (a summer morning's breeze from the west-south-west, some 3 m a second: the smoke leans east over the field;
 		// or the recording's own wind)
 		Effects->SetWind(Rec.Weather.bWind ? WorldWay(Rec.Weather.WindX, Rec.Weather.WindY, 0.0) : WorldWay(2.6, 1.2, 0.0));
 	}
 
-	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
-	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1,
+	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle, the thrown soil lit as
+	// the ground round it is (by the near ground's own normals: lit by its own slope, a hole's edge drew a ruled polygon
+	// in a low sun; the art director's cut 4, shot 07). (Their heights, and the tracks', by HeightAt, At's height alone
+	// at a fifth of its cost, now that each point asks the ground's normal as well.)
+	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1,
 		[FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); });
+	const LandCrater::UpFn GroundLit = [FieldPtr](double X, double Y, double& NX, double& NY, double& NZ) { FieldPtr->DrawnUp(X, Y, NX, NY, NZ); };
+	S.Holes.Lit = GroundLit;
 	// (Brian, 22 November: "explosions should create craters": a mortar bomb's or a shell's hole dug into open ground,
 	// the ground drawn cut away over its bowl; "-TheaterLandShallowHoles" lays them all over the ground as before)
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShallowHoles")))
@@ -1321,12 +1466,13 @@ bool ALandBattle::Open()
 		S.Holes.SetEarth("blackearth"); // (the steppe's chernozem, not the bocage's loam)
 	}
 	// And the tracks' marks, on the same ground and paint (none across a dug hole's bowl).
-	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
+	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
 		LandCrater::Ruts::KindOn(*FieldPtr));
 	{
 		const LandCrater::Field* DugHoles = &S.Holes;
 		S.Ruts.DugAt = [DugHoles](double X, double Y) { return DugHoles->InCut(X, Y); };
 	}
+	S.Ruts.Lit = GroundLit; // (each strip lit as the ground under it: a flat stripe no more)
 
 	Took = LandParts::Seconds();
 	LayField();
@@ -1534,26 +1680,58 @@ void ALandBattle::LayField()
 	const TArray<FVector2D> NoUv;
 	const TArray<FProcMeshTangent> NoTangents;
 	int32 Made = 0;
-	auto Lay = [&](const LandField::Mesh& M, UMaterialInstanceDynamic* Ink, bool bShadow) -> UProceduralMeshComponent*
+	// GS8: each tile's level a static mesh of its own, drawn from the engine's cached draw commands (a procedural mesh is
+	// gathered again on the draw thread every frame, in every pass); -TheaterLandTilesProcedural draws them as before.
+	const bool bStaticTiles = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandTilesProcedural"));
+	// (and the torn ground's pieces baked into static meshes once they settle, SettleTorn)
+	bTornBakes = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandTornProcedural"));
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTornSettle="), TornSettleAfter);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTornBakeMs="), TornBakeMs);
+	TornSettleAfter = FMath::Clamp(TornSettleAfter, 0.5, 600.0);
+	TornBakeMs = FMath::Clamp(TornBakeMs, 0.05, 50.0);
+	const double LaidFrom = LandParts::Seconds();
+	int32 StaticMade = 0, Points = 0;
+	auto Lay = [&](const LandField::Mesh& M, UMaterialInstanceDynamic* Ink, bool bShadow) -> UMeshComponent*
 	{
 		if (M.Empty())
 		{
 			return nullptr;
 		}
+		const FString Name = FString::Printf(TEXT("LandGround%d"), Made++);
+		Points += static_cast<int32>(M.Points());
+		if (bStaticTiles)
+		{
+			if (UStaticMesh* Shape = LandParts::GroundMesh(this, FName(*(Name + TEXT("_Mesh"))), M, Ink, U))
+			{
+				UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(this, FName(*Name));
+				Mesh->SetupAttachment(Root);
+				Mesh->SetStaticMesh(Shape);
+				Mesh->SetMaterial(0, Ink);
+				Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Mesh->SetCanEverAffectNavigation(false);
+				Mesh->SetCastShadow(bShadow);
+				Mesh->RegisterComponent();
+				GroundKept.Add(Shape);
+				GroundKept.Add(Mesh);
+				++StaticMade;
+				return Mesh;
+			}
+		}
 		LandParts::FromField(M, U, P, N, C, T);
-		UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandGround%d"), Made++)), bShadow);
+		UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*Name), bShadow);
 		Mesh->CreateMeshSection(0, P, T, N, NoUv, C, NoTangents, false);
 		Mesh->SetMaterial(0, Ink);
 		FieldMeshes.Add(Mesh);
 		return Mesh;
 	};
-	auto AddTile = [&](const LandField::Tile& Tile)
+	auto AddTile = [&](const LandField::Tile& Tile, bool bRing)
 	{
 		FTileDrawn& D = Tiles.AddDefaulted_GetRef();
 		D.Box = FBox2D(FVector2D(Tile.X0, Tile.Y0), FVector2D(Tile.X1, Tile.Y1));
-		D.Near = Lay(Tile.Near, GroundInk, true);
-		D.Far = Lay(Tile.Far, GroundInk, true);
-		D.Built = Lay(Tile.Built, ThingInk, true);
+		// (GS8: the far ring's tiles, 1 km and more off, cast no shadow: the shadows' far pages hold the field's own)
+		D.Near = Lay(Tile.Near, GroundInk, !bRing);
+		D.Far = Lay(Tile.Far, GroundInk, !bRing);
+		D.Built = Lay(Tile.Built, ThingInk, !bRing);
 		// (the near ground within 700 m, as the field's own painter switches, the far beyond: a tile of the ring has
 		// only its one level)
 		D.FarFrom = Tile.Far.Empty() ? 1e12 : 700.0;
@@ -1568,12 +1746,15 @@ void ALandBattle::LayField()
 	};
 	for (const LandField::Tile& Tile : G.Tiles())
 	{
-		AddTile(Tile);
+		AddTile(Tile, false);
 	}
 	for (const LandField::Tile& Tile : G.Ring())
 	{
-		AddTile(Tile);
+		AddTile(Tile, true);
 	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground (GS8): %d meshes, %d of them static (cached draw), %d points, %d ring tiles with no shadow, in %.2f s%s; torn ground %s"), Made, StaticMade,
+		Points, static_cast<int32>(G.Ring().size()), LandParts::Seconds() - LaidFrom, bStaticTiles ? TEXT("") : TEXT(" (-TheaterLandTilesProcedural: procedural, as before)"),
+		bTornBakes ? *FString::Printf(TEXT("baked static after %.1f s unchanged, within %.2f ms a frame"), TornSettleAfter, TornBakeMs) : TEXT("procedural (-TheaterLandTornProcedural)"));
 	LayThings();
 }
 
@@ -1604,6 +1785,7 @@ void ALandBattle::LayThings()
 	WarmEdges.Init(FVector2f(-1e9f, 1e9f), Kinds * 3);
 	ClutterReach.Init(1e9f, Kinds);
 	ClutterCopyOf.Init(-1, Kinds * Shades);
+	ClutterTwin.Reset();
 	bStalksMade = false;
 	// The clutter's shades from a sample of it (it is laid round the eye later): nine squares 120 m across, laid once
 	// in three rows of three over the field, so that a crop or a grass that is not in the field's middle has its own
@@ -1642,6 +1824,23 @@ void ALandBattle::LayThings()
 			}
 		}
 	}
+	// The field's own draw (the battle-scale plan's GS9): the hedge shrubs and haycocks drawn plain from ShrubFarFrom
+	// metres (as the build before it: the field's FarFrom at a 90 deg lens, 2.14 times it at the usual 50), their shadows
+	// to ShrubShadowTo, none past ShrubsTo; the trees plain from TreeFarFrom, as crowns of some 40 triangles with no
+	// shadow from CrownFrom, none past TreesTo. Each "-TheaterLand<name>=" metres; 0 leaves that step out.
+	const double OldLens = 1.0 / FMath::Tan(FMath::DegreesToRadians(25.0));
+	float ShrubFarFrom = -1.0f, TreeFarFrom = -1.0f, ShrubShadowTo = 250.0f, CrownFrom = 400.0f, ShrubsTo = 500.0f, TreesTo = 1200.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShrubFarFrom="), ShrubFarFrom);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTreeFarFrom="), TreeFarFrom);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShrubShadowTo="), ShrubShadowTo);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCrownFrom="), CrownFrom);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShrubsTo="), ShrubsTo);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTreesTo="), TreesTo);
+	// (and the corn's bundles cast their shadow only within CornShadowTo metres of the eye: the squares nearer than that
+	// lay them in a twin mesh that casts one, the rest in one that casts none; LandCarpet's ShadowTo. 0: everywhere)
+	float CornShadowTo = 25.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCornShadowTo="), CornShadowTo);
+	double SaidShrubFar = 0.0, SaidTreeFar = 0.0;
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
 	TArray<FTransform> Places;
@@ -1649,6 +1848,9 @@ void ALandBattle::LayThings()
 	{
 		const LandField::Base Base = static_cast<LandField::Base>(Kind);
 		const bool bClutter = LandParts::IsClutter(Kind);
+		const bool bShrub = Base == LandField::Base::ShrubA || Base == LandField::Base::ShrubB || Base == LandField::Base::ShrubC || Base == LandField::Base::Haycock;
+		const bool bTree = Base == LandField::Base::Oak || Base == LandField::Base::Elm || Base == LandField::Base::Ash || Base == LandField::Base::Beech
+			|| Base == LandField::Base::Pollard || Base == LandField::Base::Apple || Base == LandField::Base::Birch;
 		std::vector<const LandField::Placed*> Them;
 		if (bClutter)
 		{
@@ -1726,6 +1928,46 @@ void ALandBattle::LayThings()
 		{
 			ClutterReach[Kind] = Shape.FarFrom + 12.0f;
 		}
+		// Its further levels (GS9): the far one where the field has it, a shrub's again with no shadow, a tree's crown.
+		TArray<LandParts::FThingLevel> Further;
+		LandField::Mesh Crown;
+		if (!bClutter)
+		{
+			double Plain = static_cast<double>(Shape.FarFrom) * OldLens;
+			if (bTree && TreeFarFrom > 0.0f)
+			{
+				Plain = TreeFarFrom;
+			}
+			else if (bShrub && ShrubFarFrom > 0.0f)
+			{
+				Plain = ShrubFarFrom;
+			}
+			if (!Shape.Far.Empty())
+			{
+				Further.Add({ &Shape.Far, Plain, true });
+				if (bTree)
+				{
+					SaidTreeFar = Plain;
+				}
+				else if (bShrub)
+				{
+					SaidShrubFar = Plain;
+				}
+			}
+			const LandField::Mesh& Last = Shape.Far.Empty() ? Shape.Near : Shape.Far;
+			if (bShrub && ShrubShadowTo > 0.0f && (ShrubsTo <= 0.0f || ShrubShadowTo < ShrubsTo))
+			{
+				Further.Add({ &Last, FMath::Max(static_cast<double>(ShrubShadowTo), Plain * 1.2), false });
+			}
+			if (bTree && CrownFrom > 0.0f && (TreesTo <= 0.0f || CrownFrom < TreesTo))
+			{
+				Crown = LandField::CrownOf(Last);
+				if (!Crown.Empty())
+				{
+					Further.Add({ &Crown, FMath::Max(static_cast<double>(CrownFrom), Plain * 1.2), false });
+				}
+			}
+		}
 		for (int32 Shade = 0; Shade < Shades; ++Shade)
 		{
 			// (a thing's shades are its brightness thirds alone, 1, 4 and 7; a clutter kind not in the sample, the middle)
@@ -1736,7 +1978,7 @@ void ALandBattle::LayThings()
 			const FVector3f Tint = Number[Shade] > 0 ? Sum[Shade] / static_cast<float>(Number[Shade]) : Mean;
 			const FString Name = FString::Printf(TEXT("LandThing_%s_%d"), *LandParts::Wide(Shape.Name), Shade);
 			UMaterialInterface* Paint = bStalks ? StalkInk.Get() : ThingInk.Get();
-			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, Paint, bStalks ? nullptr : LeafInk.Get(), U);
+			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, Paint, bStalks ? nullptr : LeafInk.Get(), U, Further);
 			if (!Mesh)
 			{
 				continue;
@@ -1756,17 +1998,53 @@ void ALandBattle::LayThings()
 			}
 			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Copies->SetCanEverAffectNavigation(false);
-			Copies->SetCastShadow(!bClutter || Base == LandField::Base::Wheat || bStalks);
+			const bool bCornTwin = bClutter && Base == LandField::Base::Wheat && CornShadowTo > 0.0f;
+			Copies->SetCastShadow((!bClutter || Base == LandField::Base::Wheat || bStalks) && !bCornTwin);
 			// (a thing with no far level is not drawn past where the field gives it up: gates, the well, the cart, the
 			// clutter)
 			if (Shape.Far.Empty())
 			{
 				Copies->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
 			}
+			// (GS9: a hedge shrub or a haycock not drawn past ShrubsTo, a tree past TreesTo: some two lines of the picture)
+			else if ((bShrub && ShrubsTo > 0.0f) || (bTree && TreesTo > 0.0f))
+			{
+				Copies->SetCullDistances(0, FMath::RoundToInt32((bTree ? TreesTo : ShrubsTo) * U));
+			}
 			Copies->RegisterComponent();
 			if (bClutter)
 			{
-				ClutterCopyOf[Kind * Shades + Shade] = ClutterCopies.Add(Copies);
+				// (GS7: its places removed off the end only; swap-removal keeps its arrays from shrinking and growing again)
+				Copies->SetRemoveSwap();
+				const int32 Index = ClutterCopies.Add(Copies);
+				ClutterCopyOf[Kind * Shades + Shade] = Index;
+				if (bCornTwin)
+				{
+					// (GS9: the same corn in a mesh that casts its shadow, for the squares near the eye)
+					UInstancedStaticMeshComponent* Shadowed = NewObject<UInstancedStaticMeshComponent>(this, FName(*(Name + TEXT("_Shadowed"))));
+					Shadowed->SetupAttachment(Root);
+					Shadowed->SetStaticMesh(Mesh);
+					Shadowed->SetMaterial(0, Paint);
+					if (LeafInk && Mesh->GetStaticMaterials().Num() > 1)
+					{
+						Shadowed->SetMaterial(1, LeafInk);
+					}
+					Shadowed->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Shadowed->SetCanEverAffectNavigation(false);
+					Shadowed->SetCastShadow(true);
+					if (Shape.Far.Empty())
+					{
+						Shadowed->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
+					}
+					Shadowed->RegisterComponent();
+					Shadowed->SetRemoveSwap();
+					const int32 TwinIndex = ClutterCopies.Add(Shadowed);
+					while (ClutterTwin.Num() <= TwinIndex)
+					{
+						ClutterTwin.Add(-1);
+					}
+					ClutterTwin[Index] = TwinIndex;
+				}
 				if (bStalks)
 				{
 					// (hidden until the eye comes down into the corn)
@@ -1791,6 +2069,9 @@ void ALandBattle::LayThings()
 	// The clutter's squares (LandCarpet): each thing's mesh by its kind and shade, how near the eye a kind is laid, and
 	// whether a thing still stands (not in a shell hole, not flattened by a tank).
 	Carpet = MakeShared<LandCarpet::Squares>();
+	// (GS7: each mesh kept packed, a place given back filled from its end and the last removed, so nothing hidden is
+	// drawn; "-TheaterLandClutterShrunk" keeps the old way, given-back places shrunk to nothing where they stood)
+	Carpet->bCompact = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandClutterShrunk"));
 	Carpet->Reach.assign(static_cast<size_t>(Kinds), 1e9);
 	for (int32 Kind = 0; Kind < Kinds; ++Kind)
 	{
@@ -1808,8 +2089,22 @@ void ALandBattle::LayThings()
 	};
 	// (the corn's clearing round the lens: none until the eye is low, LayClutter)
 	Carpet->Clear.assign(static_cast<size_t>(Kinds), 0.0);
+	// (the corn's shadows only near the eye, GS9: its squares within CornShadowTo laid in its meshes' shadowed twins)
+	Carpet->ShadowTo.assign(static_cast<size_t>(Kinds), 0.0);
+	Carpet->Twin.assign(static_cast<size_t>(ClutterCopies.Num()), -1);
+	for (int32 K = 0; K < ClutterTwin.Num() && K < ClutterCopies.Num(); ++K)
+	{
+		Carpet->Twin[static_cast<size_t>(K)] = ClutterTwin[K];
+	}
+	if (CornShadowTo > 0.0f)
+	{
+		Carpet->ShadowTo[static_cast<size_t>(LandField::Base::Wheat)] = CornShadowTo;
+	}
 	bStalksShown = false;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground's things: %d meshes, %d instances, made in %.2f s"), Meshes, Instances, LandParts::Seconds() - Began);
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the field's draw (GS9): hedge shrubs and haycocks plain from %.0f m, their shadows to %.0f m, none past %.0f m; trees plain from %.0f m, 42-triangle crowns with no shadow from %.0f m, none past %.0f m; the corn's shadows within %.0f m (0: that step off); the clutter's given-back places %s"),
+		SaidShrubFar, ShrubShadowTo, ShrubsTo, SaidTreeFar, CrownFrom, TreesTo, CornShadowTo,
+		Carpet->bCompact ? TEXT("removed, each mesh kept packed (GS7)") : TEXT("kept shrunk to nothing (-TheaterLandClutterShrunk)"));
 }
 
 void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
@@ -1817,20 +2112,29 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 	(void)Battle;
 	const FVector2D EyeAt(EyeWorld.Y / UnitsPerMetre, EyeWorld.X / UnitsPerMetre);
 	// The ground's level by the eye's distance to each tile (the things choose their own, by instancing).
-	for (FTileDrawn& Tile : Tiles)
+	for (int32 TileIndex = 0; TileIndex < Tiles.Num(); ++TileIndex)
 	{
+		FTileDrawn& Tile = Tiles[TileIndex];
 		const double Far = FMath::Sqrt(Tile.Box.ComputeSquaredDistanceToPoint(EyeAt));
 		const bool bNear = Far < Tile.FarFrom;
 		if (bNear != Tile.bNearShown && Tile.Near.IsValid() && Tile.Far.IsValid())
 		{
 			Tile.bNearShown = bNear;
-			// (once dug in, its parts stand in for its near mesh, which stays hidden)
+			// (once dug in, its parts stand in for its near mesh, which stays hidden; a part settled is drawn by its baked
+			// mesh, GS8)
 			Tile.Near->SetVisibility(bNear && Tile.NearParts.IsEmpty());
-			for (const TWeakObjectPtr<UProceduralMeshComponent>& Part : Tile.NearParts)
+			for (int32 Part = 0; Part < Tile.NearParts.Num(); ++Part)
 			{
-				if (Part.IsValid())
+				if (Tile.NearParts[Part].IsValid())
 				{
-					Part->SetVisibility(bNear);
+					Tile.NearParts[Part]->SetVisibility(bNear);
+				}
+				if (const FTornPiece* Piece = TornPieces.Find(TornKey(2, TileIndex, Part)))
+				{
+					if (UStaticMeshComponent* Baked = Piece->Baked.Get())
+					{
+						Baked->SetVisibility(bNear);
+					}
 				}
 			}
 			Tile.Far->SetVisibility(!bNear);
@@ -1875,12 +2179,6 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 		}
 	}
 	const int32 Copies = ClutterCopies.Num();
-	TArray<int32> Before;
-	Before.SetNum(Copies);
-	for (int32 K = 0; K < Copies; ++K)
-	{
-		Before[K] = Carpet->Count(K);
-	}
 	// The squares brought up to date: within 20 m of the eye or what it looks at made now (32 m on a cut), four more a
 	// frame, nearest first (the old way made the whole 90 m box again every 12 m: 2.1 to 2.9 ms on the Mac each time).
 	std::vector<LandCarpet::Op> Ops;
@@ -1890,47 +2188,77 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 	{
 		return;
 	}
-	// Each change into its mesh: a place given back shrunk to nothing where it stood; a new place added at the end.
+	// Each mesh brought to what the squares hold now. A place's last change in this update is the one sent (a place may
+	// be given back, filled from its mesh's end and taken again within one update); places past the squares' count are
+	// removed from the mesh's end, new ones added at it, in order. (Kept packed, GS7, a place given back is filled with
+	// its mesh's last thing and the last removed, so the mesh draws only what is laid; with -TheaterLandClutterShrunk it
+	// stays, shrunk to nothing where it stood, for the next thing, as before.)
 	LandFell::Phase("ground: the clutter's meshes", static_cast<int>(Ops.size()));
 	const double U = UnitsPerMetre;
-	TArray<TArray<FTransform>> Added;
-	Added.SetNum(Copies);
-	TArray<bool> Touched;
-	Touched.Init(false, Copies);
-	for (const LandCarpet::Op& O : Ops)
+	size_t From = 0;
+	for (size_t N = Ops.size(); N-- > 0;)
 	{
-		if (O.Copy < 0)
+		if (Ops[N].Copy < 0)
 		{
-			// (a cut far away: every mesh emptied whole, its places counted again from 0)
+			// (a cut far away: every mesh emptied whole, its places counted again from 0; what came before it is moot)
 			for (int32 K = 0; K < Copies; ++K)
 			{
 				if (UInstancedStaticMeshComponent* Mesh = ClutterCopies[K])
 				{
 					Mesh->ClearInstances();
 				}
-				Before[K] = 0;
-				Added[K].Reset();
-				Touched[K] = false;
 			}
-			continue;
+			From = N + 1;
+			break;
 		}
-		if (!ClutterCopies.IsValidIndex(O.Copy) || !ClutterCopies[O.Copy])
+	}
+	TArray<int32> Had, Now, Filled;
+	TArray<TArray<FTransform>> Added;
+	TArray<bool> Touched;
+	Had.SetNumZeroed(Copies);
+	Now.SetNumZeroed(Copies);
+	Filled.SetNumZeroed(Copies);
+	Added.SetNum(Copies);
+	Touched.Init(false, Copies);
+	const FTransform Nothing(FQuat::Identity, FVector(EyeAt.Y * U, EyeAt.X * U, GroundZ(EyeAt.X, EyeAt.Y) * U), FVector(1e-3));
+	for (int32 K = 0; K < Copies; ++K)
+	{
+		if (UInstancedStaticMeshComponent* Mesh = ClutterCopies[K])
+		{
+			Had[K] = Mesh->GetInstanceCount();
+			Now[K] = Carpet->Count(K);
+			Added[K].Init(Nothing, FMath::Max(0, Now[K] - Had[K]));
+		}
+	}
+	TSet<uint64> Seen;
+	Seen.Reserve(static_cast<int32>(Ops.size() - From));
+	for (size_t N = Ops.size(); N-- > From;)
+	{
+		const LandCarpet::Op& O = Ops[N];
+		if (O.bPop || O.Slot < 0 || !ClutterCopies.IsValidIndex(O.Copy) || !ClutterCopies[O.Copy])
 		{
 			continue;
+		}
+		bool bSeen = false;
+		Seen.Add((static_cast<uint64>(static_cast<uint32>(O.Copy)) << 32) | static_cast<uint32>(O.Slot), &bSeen);
+		if (bSeen || O.Slot >= Now[O.Copy])
+		{
+			continue; // (changed again later in this update, or removed by its end)
 		}
 		FTransform Where = LandParts::PlacedAt(O.Thing, U);
 		if (O.bHide)
 		{
 			Where.SetScale3D(FVector(1e-3));
 		}
-		if (O.Slot >= Before[O.Copy])
-		{
-			Added[O.Copy].Add(Where);
-		}
-		else
+		if (O.Slot < Had[O.Copy])
 		{
 			ClutterCopies[O.Copy]->UpdateInstanceTransform(O.Slot, Where, true, false, true);
 			Touched[O.Copy] = true;
+		}
+		else
+		{
+			Added[O.Copy][O.Slot - Had[O.Copy]] = Where;
+			++Filled[O.Copy];
 		}
 	}
 	for (int32 K = 0; K < Copies; ++K)
@@ -1940,20 +2268,37 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 		{
 			continue;
 		}
-		if (Added[K].Num() > 0)
+		if (Now[K] < Had[K])
+		{
+			// (the places given back off the mesh's end, last first: nothing after them moves. In UE 5.8 a removal of
+			// the last place is a change sent with the instances, not the mesh made again: pre-check, 22 November)
+			TArray<int32> Gone;
+			Gone.Reserve(Had[K] - Now[K]);
+			for (int32 Slot = Had[K] - 1; Slot >= Now[K]; --Slot)
+			{
+				Gone.Add(Slot);
+			}
+			Mesh->RemoveInstances(Gone, true);
+			Touched[K] = true;
+		}
+		if (Added[K].Num() > 0 && Filled[K] == Added[K].Num())
 		{
 			Mesh->AddInstances(Added[K], false, true);
 		}
 		else if (Touched[K])
 		{
-			Mesh->MarkRenderStateDirty();
+			// (the moved places are already queued, each UpdateInstanceTransform; this only says so: the instances sent
+			// at the frame's end, not the whole mesh made again as MarkRenderStateDirty would. Pre-check on UE 5.8's
+			// InstanceDataManager, 22 November)
+			Mesh->MarkRenderInstancesDirty();
 		}
 		// (out of step with the squares, which should never be: the mesh built again whole from what they hold)
-		if (Mesh->GetInstanceCount() != Carpet->Count(K))
+		if (Mesh->GetInstanceCount() != Carpet->Count(K) || Filled[K] != Added[K].Num())
 		{
-			UE_LOG(LogTheater, Warning, TEXT("Land battle: clutter mesh %d had %d places for the squares' %d; built again whole"), K, Mesh->GetInstanceCount(), Carpet->Count(K));
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: clutter mesh %d had %d places for the squares' %d (%d of %d new ones given); built again whole"), K,
+				Mesh->GetInstanceCount(), Carpet->Count(K), Filled[K], Added[K].Num());
 			TArray<FTransform> All;
-			All.Init(FTransform(FQuat::Identity, FVector(EyeAt.Y * U, EyeAt.X * U, GroundZ(EyeAt.X, EyeAt.Y) * U), FVector(1e-3)), Carpet->Count(K));
+			All.Init(Nothing, Carpet->Count(K));
 			Carpet->Each(K, [&All, U](int32_t Slot, const LandField::Placed& One)
 			{
 				if (All.IsValidIndex(Slot))
@@ -2014,7 +2359,8 @@ void ALandBattle::MakeMen()
 	}
 	// (and each army's files for its other men where it has them: the American's BAR gunner, squad leader, bazooka
 	// gunner and his loader, soldier_USA_bar, _nco, _bazooka and _loader; a file not made yet is passed over below)
-	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader"), TEXT("_radio") };
+	// (and the tank commanders' files, soldier_USA_tanker and soldier_GER_panzer: ridden on their tanks, MakeRiders)
+	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader"), TEXT("_radio"), TEXT("_tanker"), TEXT("_panzer") };
 	for (const FString& Army : TArray<FString>(Armies.Array()))
 	{
 		for (const TCHAR* Suffix : OtherMen)
@@ -2094,6 +2440,61 @@ void ALandBattle::MakeMen()
 	}
 	// (six hundred men: a man away from the eye posed every few frames, his place, shots and falls every frame)
 	Crowd->SetThrift(true);
+	// The levels of detail by the man's share of the picture (the battle-scale plan's GS3), at the usual 50 deg lens and
+	// 665 lines tall: a 1.8 m man over NearPx lines (150) drawn Near, Mid to ShadowTo metres (80, where his shadow
+	// ends), Far beyond; under CullPx lines (2) not drawn but in the wide mass shot. "-TheaterLandNearPx=",
+	// "-TheaterLandShadowTo=", "-TheaterLandCullPx=" and "-TheaterLandRebuilds=" (a frame's most meshes made again).
+	{
+		float NearPx = 150.0f, ShadowTo = 80.0f, CullPx = 2.0f;
+		int32 Rebuilds = 50;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandNearPx="), NearPx);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShadowTo="), ShadowTo);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCullPx="), CullPx);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandRebuilds="), Rebuilds);
+		const double Lines = 1.8 * 665.0 / (2.0 * FMath::Tan(FMath::DegreesToRadians(25.0)));
+		Crowd->SetLevels(Lines / FMath::Max(1.0f, NearPx), ShadowTo);
+		S.MenCullFrom = CullPx > 0.0f ? Lines / CullPx : 1e12;
+		S.MenLines = Lines;
+		S.MenRebuildsMax = FMath::Clamp(Rebuilds, 1, 100000);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the men drawn Near within %.1f m, Mid to %.0f m (their shadows end there), Far beyond, none past %.0f m but in the mass shot; at most %d meshes made again a frame"),
+			Lines / FMath::Max(1.0f, NearPx), FMath::Max(Lines / FMath::Max(1.0f, NearPx), static_cast<double>(ShadowTo)), S.MenCullFrom, S.MenRebuildsMax);
+	}
+	// SO1's draw (Battle/LandVat): the mid and far men as one crowd of posed instances on M_LandCrowd (build_content.py),
+	// a component for each body set and level, every pose in one picture; mid men banked too (SetPoseBankMid), so
+	// nobody past the near level is skinned. Without M_LandCrowd, or with "-TheaterLandNoVat", far men are drawn a
+	// mesh a set and pose and mid men skinned, as before; "-TheaterLandNoVatMid" keeps mid men skinned. In the wide
+	// mass shot a far man is drawn no smaller than "-TheaterLandMassMinPx=" (2) of the picture's lines.
+	{
+		float MinPx = 2.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandMassMinPx="), MinPx);
+		MassMinPx = FMath::Clamp(static_cast<double>(MinPx), 0.0, 50.0);
+	}
+	if (Crowd->PoseBankOn() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVat")))
+	{
+		UMaterialInterface* CrowdInk = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandCrowd.M_LandCrowd"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!CrowdInk || !ManInk)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandCrowd is missing (run Tools/build_content.sh): far men are drawn a mesh a pose, mid men skinned."));
+		}
+		else
+		{
+			const bool bMid = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoVatMid"));
+			Crowd->SetPoseBankMid(bMid);
+			Vat = MakeShared<FLandVat>(this, Root.Get(), CrowdInk, ManInk.Get(), UnitsPerMetre, VatKept);
+			if (!Vat->Make(*Crowd))
+			{
+				Crowd->SetPoseBankMid(false);
+				Vat.Reset();
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: the men's crowd (SO1) could not be made: far men are drawn a mesh a pose, mid men skinned."));
+			}
+			else if (bMid && !Vat->HasAll(static_cast<int32>(LandMen::Mid)))
+			{
+				// (a set missing at mid would show the far mesh there: every mid man skinned instead)
+				Crowd->SetPoseBankMid(false);
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: a body set could not be made at the mid level: mid men are skinned as before."));
+			}
+		}
+	}
 	S.Men = std::move(Crowd);
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
 	S.TrackOfMan.assign(static_cast<size_t>(S.Men->Count()), -1);
@@ -2144,27 +2545,25 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	LandFell::Phase("men: who is drawn", Crowd.Count());
 	// (the banked men's meshes made as first needed: at most four a frame; a man whose mesh waits is skinned meanwhile)
 	int32 Builds = 4;
+	// (a man's mesh made again for a new level of detail rebuilds its whole draw: at most MenRebuildsMax a frame, the
+	// battle-scale plan's stopgap; the rest keep their level a frame or more, a new man waits to be drawn)
+	int32 Rebuilds = S.MenRebuildsMax;
+	// (no man drawn under some 2 of the picture's lines, GS3, but in the camera's wide of the whole army, where the far
+	// men are its crowd)
+	const bool bMass = S.Eye.MassShot();
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
-		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man);
+		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || Crowd.SeenDistance(Man) <= S.MenCullFrom);
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
 		Crowd.PlaceOf(Man, X, Y, Z, Facing);
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
 		const bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
-		// (no shadow past about 80 m as the picture sees him: a far man's shadow is a smudge of a few pixels, and every
-		// moving one makes the shadow maps draw their pages under him again; GS3)
-		if (D.Mesh.IsValid() && bShown)
+		if (bShown && bLooked)
 		{
-			const float Seen = Crowd.SeenDistance(Man);
-			const bool bShadow = D.bShadow ? Seen < 84.0f : Seen < 80.0f;
-			if (bShadow != D.bShadow)
-			{
-				D.Mesh->SetCastShadow(bShadow);
-				D.bShadow = bShadow;
-			}
+			++MenInPicture;
 		}
 		if (!bShown || !bLooked)
 		{
@@ -2175,17 +2574,80 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 					D.Mesh->SetVisibility(false);
 				}
 				BankOut(D);
+				if (Vat.IsValid())
+				{
+					Vat->Out(Man);
+				}
 			}
 			continue;
 		}
-		// Banked far (SO1): an instance of his set's mesh in the bank's pose, put where his frame is (again only when it
-		// moved or the pose changed); nothing skinned, no mesh of his own sent.
 		const int32 Pose = Crowd.BankPose(Man);
+		// Banked mid or far (SO1's draw, Battle/LandVat): an instance of his body set at his level, between the bank's
+		// two poses his clip is between, placed by his frame; his helmet another, by its own. Nothing skinned, nothing of
+		// his own sent but his place and his numbers. In the wide mass shot a far man is grown about his feet to stand
+		// at least MassMinPx of the picture's lines (GS3's measure), so the army reads as men, not as nothing.
+		if (Pose >= 0 && Vat.IsValid())
+		{
+			const int32 Level = Crowd.BankLevel(Man);
+			FTransform Body = LandParts::BankedAt(Crowd.WorldFrame(Man), UnitsPerMetre);
+			double Grow = 1.0;
+			if (bMass && Level == static_cast<int32>(LandMen::Far) && MassMinPx > 0.0)
+			{
+				Grow = FMath::Max(1.0, MassMinPx * Crowd.SeenDistance(Man) / FMath::Max(1.0, S.MenLines));
+			}
+			FTransform Helmet;
+			LandMen::Xform Worn;
+			const bool bHelmet = Crowd.HelmetOf(Man) >= 0 && Crowd.HelmetFrame(Man, Worn);
+			if (bHelmet)
+			{
+				Helmet = LandParts::BankedAt(Worn, UnitsPerMetre);
+			}
+			if (Grow > 1.0)
+			{
+				const FVector Feet = Body.GetLocation();
+				Body.SetScale3D(Body.GetScale3D() * Grow);
+				if (bHelmet)
+				{
+					Helmet.SetLocation(Feet + (Helmet.GetLocation() - Feet) * Grow);
+					Helmet.SetScale3D(Helmet.GetScale3D() * Grow);
+				}
+			}
+			if (Vat->Place(Crowd, Man, Body, bHelmet ? &Helmet : nullptr))
+			{
+				BankOut(D);
+				if (D.Mesh.IsValid())
+				{
+					D.Mesh->SetVisibility(false);
+				}
+				// (skinned afresh when he leaves the bank)
+				D.Stamp = 0xFFFFFFFFu;
+				if (Level == static_cast<int32>(LandMen::Mid))
+				{
+					++VatMid;
+				}
+				else
+				{
+					++VatFar;
+				}
+				if (Grow > 1.0)
+				{
+					++MassGrown;
+					MostGrow = FMath::Max(MostGrow, Grow);
+				}
+				continue;
+			}
+		}
+		// Banked far, the crowd not made (SO1 before its draw): an instance of his set's mesh in the bank's pose, put
+		// where his frame is (again only when it moved or the pose changed); nothing skinned, no mesh of his own sent.
 		if (Pose >= 0)
 		{
 			const int32 Copy = BankCopyFor(Crowd.BankKey(Man), Pose, Builds);
 			if (Copy >= 0)
 			{
+				if (Vat.IsValid())
+				{
+					Vat->Out(Man);
+				}
 				const LandMen::Xform& W = Crowd.WorldFrame(Man);
 				float Frame[12];
 				FMemory::Memcpy(Frame, W.R, sizeof(W.R));
@@ -2227,8 +2689,32 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 				continue;
 			}
 		}
+		LandMen::Lod Level = Crowd.LodOf(Man);
+		if (!D.Mesh.IsValid() || D.Lod != static_cast<int32>(Level))
+		{
+			if (Rebuilds <= 0)
+			{
+				// (over the frame's rebuilds: he keeps the level his mesh has, or waits to be drawn; a man just out of the
+				// bank with no mesh yet keeps his bank copy where it last stood meanwhile, not drawn nowhere: the pre-check
+				// on 76562a10)
+				if (!D.Mesh.IsValid() || D.Lod < 0)
+				{
+					continue;
+				}
+				Level = static_cast<LandMen::Lod>(D.Lod);
+				++RebuildsPut;
+			}
+			else
+			{
+				--Rebuilds;
+				++MenRebuilt;
+			}
+		}
 		BankOut(D);
-		const LandMen::Lod Level = Crowd.LodOf(Man);
+		if (Vat.IsValid())
+		{
+			Vat->Out(Man);
+		}
 		// (banked but his set's mesh not made yet: his stamp holds while only his place moves, so he is skinned each frame)
 		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Crowd.Stamp(Man) && Pose < 0)
 		{
@@ -2242,16 +2728,20 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Job.Offset = Floats;
 		Floats += Job.Points * 3;
 	}
-	// (the banked instances moved this frame sent once a mesh; a mesh holding no one now hidden)
 	LandFell::Phase("men: the bank sent", BankCopies.Num());
+	// (the banked instances moved this frame sent at the frame's end, only those; a mesh holding no one now hidden)
 	for (int32 K = 0; K < BankCopies.Num(); ++K)
 	{
 		if (BankDirty[K] && BankCopies[K])
 		{
 			BankCopies[K]->SetVisibility(BankLive[K] > 0);
-			BankCopies[K]->MarkRenderStateDirty();
+			BankCopies[K]->MarkRenderInstancesDirty();
 		}
 		BankDirty[K] = 0;
+	}
+	if (Vat.IsValid())
+	{
+		Vat->Send();
 	}
 	if (Jobs.Num() == 0)
 	{
@@ -2309,7 +2799,16 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		}
 		if (D.Lod != static_cast<int32>(Level))
 		{
-			// A new level: its own triangles and colours (the same all battle, read once), then the skin.
+			// A new level: its own triangles and colours (the same all battle, read once), then the skin. His shadow goes
+			// with the level, switched only as his draw is made again anyway (GS3): near and mid men cast one, within some
+			// 80 m as the picture sees him (the Mid level's end); a far man's would be a smudge of a few pixels, and every
+			// moving one makes the shadow maps draw their pages under him again.
+			const bool bShadow = Level != LandMen::Far;
+			if (bShadow != D.bShadow)
+			{
+				D.Mesh->SetCastShadow(bShadow);
+				D.bShadow = bShadow;
+			}
 			const LandMen::Look& Paint = Crowd.LookOf(Man, Level);
 			T.SetNumUninitialized(static_cast<int32>(Paint.Triangles.size()));
 			for (int32 I = 0; I < T.Num(); ++I)
@@ -2471,6 +2970,268 @@ void ALandBattle::MakeArmour()
 	MakeBodies(0);
 }
 
+void ALandBattle::MakeRiders()
+{
+	FLandBattleState& S = *State;
+	using FRider = FLandBattleState::FRider;
+	S.Riders.clear();
+	S.RoofManned.assign(S.Armour ? S.Armour->Vehicles().size() : 0, 1);
+	if (!S.Men || !S.Armour || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCommanders")))
+	{
+		return;
+	}
+	static const char* const ClipNames[FRider::Kinds] = { "commander_hatch", "commander_roof_mg", "commander_roof_mg_burst", "die_hatch_slump", "die_hatch_drop" };
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	// (each vehicle's rider by her track's words, for her rounds below)
+	std::map<std::tuple<int, int, int>, size_t> ByWords;
+	for (size_t V = 0; V < All.size(); ++V)
+	{
+		const LandKit::Vehicle& Veh = All[V];
+		const LandKit::Model& Look = Veh.Look();
+		if (Look.Kind != "tank" || Look.SocketIndex("commander") < 0 || V >= S.TrackOfVehicle.size() || S.TrackOfVehicle[V] < 0)
+		{
+			continue;
+		}
+		const std::string File = Veh.Nation == "USA" ? "USA_tanker" : Veh.Nation == "GER" ? "GER_panzer" : std::string();
+		const LandMen::Soldier* Crew = File.empty() ? nullptr : S.Men->SoldierFile(File);
+		const LandKit::TrackWords& W = Veh.Words();
+		const LandFeed::Block* B = S.Rec.BlockOf(W.Block);
+		if (!Crew || !B)
+		{
+			continue;
+		}
+		// (his clips' places name her by her model's file: Sherman, PanzerIV, Tiger; a tank they do not name has no
+		// commander drawn yet)
+		FRider R;
+		R.Vehicle = static_cast<int>(V);
+		bool bAll = true;
+		for (int K = 0; K < FRider::Kinds && bAll; ++K)
+		{
+			R.Clips[K] = Crew->ClipIndex(ClipNames[K]);
+			const LandMen::Clip* C = R.Clips[K] >= 0 ? &Crew->Clips[static_cast<size_t>(R.Clips[K])] : nullptr;
+			const LandMen::Clip::Seat* Seat = C ? C->SeatOn(B->Model) : nullptr;
+			bAll = Seat && Seat->Socket == "commander";
+			if (!bAll)
+			{
+				break;
+			}
+			R.Offsets[K] = Seat->Offset;
+			R.Long[K] = C->Long;
+			for (const LandMen::ClipEvent& E : C->Events)
+			{
+				if (K == FRider::Drop && E.Fx == "hide")
+				{
+					R.DropHide = E.T;
+				}
+			}
+		}
+		if (!bAll)
+		{
+			continue;
+		}
+		const uint64_t Seed = (S.Rec.Seed ? S.Rec.Seed : 1) * 0x9E3779B97F4A7C15ull ^ (static_cast<uint64_t>(V) + 1) * 0xC2B2AE3D27D4EB4Full;
+		R.Phase = static_cast<float>((Seed >> 20) % 1000) * 0.01f;
+		// His end up in the hatch: her kill while he was up (by the rules' own hatch: not buttoned then). Thrown with
+		// her turret when she blows up; else he slumps over the rim or drops inside, by her own draw.
+		const LandFeed::Track& Tr = S.Rec.Tracks[static_cast<size_t>(S.TrackOfVehicle[V])];
+		if (Veh.Died >= 0.0)
+		{
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Veh.Died - 0.05);
+			if (C && !C->bButtoned)
+			{
+				R.Killed = Veh.Died;
+				R.Dies = Veh.bBrewUp ? static_cast<int>(FRider::Kinds) : ((Seed >> 41) & 1) ? static_cast<int>(FRider::Slump) : static_cast<int>(FRider::Drop);
+			}
+		}
+		R.Man = S.Men->AddRider(File, Veh.Nation, Seed);
+		if (R.Man < 0)
+		{
+			continue;
+		}
+		ByWords[std::make_tuple(W.Block, W.K, W.J)] = S.Riders.size();
+		S.Riders.push_back(R);
+	}
+	// Her roof gun's bursts (the replay's own pick of her gun for each burst, TankMg), and a round that struck him up
+	// in his hatch (the rules' cm: he drops inside; she fights on buttoned up).
+	int Bursts = 0, Struck = 0;
+	for (const LandFeed::Round& Rd : S.Rec.Rounds)
+	{
+		if (Rd.W == "mg")
+		{
+			const auto Found = ByWords.find(std::make_tuple(Rd.By, Rd.K, Rd.J));
+			if (Found != ByWords.end())
+			{
+				FRider& R = S.Riders[Found->second];
+				const int Track = S.TrackOfVehicle[static_cast<size_t>(R.Vehicle)];
+				if (S.Play.TankMg(Track, Rd.T, Rd.N, LandPlay::Vec(Rd.X, Rd.Y, 0.0), Rd.G) == "roof_mg" && (R.Killed < 0.0 || Rd.T < R.Killed))
+				{
+					R.Bursts.push_back(Rd.T);
+					++Bursts;
+				}
+			}
+		}
+		if (Rd.bCm)
+		{
+			const auto Found = ByWords.find(std::make_tuple(Rd.On, Rd.Ok, Rd.Oj));
+			if (Found != ByWords.end())
+			{
+				FRider& R = S.Riders[Found->second];
+				const double At = Rd.T + FMath::Max(0.0, Rd.L);
+				if (R.Killed < 0.0 || At < R.Killed)
+				{
+					R.Killed = At;
+					R.Dies = FRider::Drop;
+					++Struck;
+				}
+			}
+		}
+	}
+	for (FRider& R : S.Riders)
+	{
+		std::sort(R.Bursts.begin(), R.Bursts.end());
+		while (!R.Bursts.empty() && R.Killed >= 0.0 && R.Bursts.back() >= R.Killed)
+		{
+			R.Bursts.pop_back();
+		}
+	}
+	MenDrawn.SetNum(S.Men->Count());
+	int Killed = 0;
+	for (const FRider& R : S.Riders)
+	{
+		Killed += R.Killed >= 0.0;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: %d tank commanders up in their hatches (soldier_USA_tanker, soldier_GER_panzer): %d roof-gun bursts, %d killed up there (%d by a round at him)"),
+		static_cast<int32>(S.Riders.size()), Bursts, Killed, Struck);
+}
+
+void ALandBattle::RideTanks()
+{
+	FLandBattleState& S = *State;
+	using FRider = FLandBattleState::FRider;
+	if (!S.Men || !S.Armour || S.Riders.empty())
+	{
+		return;
+	}
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	if (S.RoofManned.size() < All.size())
+	{
+		S.RoofManned.resize(All.size(), 1);
+	}
+	const double Now = S.Battle;
+	const double Life = S.Life;
+	for (FRider& R : S.Riders)
+	{
+		if (R.Man < 0 || !S.Men->IsRider(R.Man) || R.Vehicle < 0 || static_cast<size_t>(R.Vehicle) >= All.size())
+		{
+			continue;
+		}
+		const LandKit::Vehicle& V = All[static_cast<size_t>(R.Vehicle)];
+		S.RoofManned[static_cast<size_t>(R.Vehicle)] = 0;
+		int Want = -1;
+		float Time = 0.f;
+		double Rise = 0.0;
+		float Blend = 0.35f;
+		if (R.Killed >= 0.0 && Now >= R.Killed)
+		{
+			// Killed up there: his end played from the moment, where he stood (not seen if he was down inside, or
+			// thrown with her turret; gone from sight once a drop has taken him under the rim).
+			const float Since = static_cast<float>((Now - R.Killed) * Life);
+			Rise = R.Rise;
+			if (R.Dies != FRider::Kinds && Rise > 0.03 && !(R.Dies == FRider::Drop && Since >= R.DropHide))
+			{
+				Want = R.Dies;
+				Time = Since;
+				Blend = 0.12f;
+			}
+		}
+		else
+		{
+			// Up as her lid swings open, from 40% open, and down again as it shuts.
+			const double Open = FMath::Clamp((V.HatchOpen - 0.4) / 0.55, 0.0, 1.0);
+			Rise = Open * Open * (3.0 - 2.0 * Open);
+			const double BurstSpan = R.Long[FRider::Burst] / FMath::Max(0.25, Life);
+			const auto Next = std::lower_bound(R.Bursts.begin(), R.Bursts.end(), Now + 0.02);
+			const double Last = Next != R.Bursts.begin() ? *(Next - 1) : -1e9;
+			const double Coming = Next != R.Bursts.end() ? *Next : 1e9;
+			// (her roof gun firing, or about to, while the lid still swings open: he is up at it at once, so no burst
+			// comes from a gun nobody mans, or from a German cradle not drawn; the pre-check's note on 174524b6)
+			if (V.HatchOpen > 0.15 && (Now - Last < BurstSpan || Coming - Now < 0.5))
+			{
+				Rise = 1.0;
+			}
+			R.Rise = static_cast<float>(Rise);
+			if (Rise > 0.03)
+			{
+				// At the roof gun from some seconds before her bursts to some after, firing each burst; else looking
+				// about with his glasses.
+				if (Now - Last < BurstSpan)
+				{
+					Want = FRider::Burst;
+					Time = static_cast<float>((Now - Last) * Life);
+					Blend = 0.1f;
+				}
+				else if (Now - Last < 5.0 || Coming - Now < 3.0)
+				{
+					Want = FRider::Roof;
+					Time = static_cast<float>(Now * Life) + R.Phase;
+				}
+				else
+				{
+					Want = FRider::Hatch;
+					Time = static_cast<float>(Now * Life) + R.Phase;
+				}
+			}
+		}
+		LandMen::Crowd::Ride Ride;
+		LandKit::V3 At, Facing;
+		if (Want < 0 || R.Clips[Want] < 0 || V.Fade < 0.5 || HiddenVehicle(R.Vehicle) || !V.SocketNow("commander", At, Facing))
+		{
+			// (out of sight: what he played is forgotten, so he comes back up as he is, unblended)
+			R.Now = R.Was = -1;
+			S.Men->SetRide(R.Man, Ride);
+			continue;
+		}
+		if (Want != R.Now)
+		{
+			R.Was = R.Now;
+			R.WasTime = R.NowTime;
+			R.SwitchedAt = Now;
+			R.Now = Want;
+		}
+		R.NowTime = Time;
+		S.RoofManned[static_cast<size_t>(R.Vehicle)] = Want == FRider::Roof || Want == FRider::Burst;
+		// (the clip left, blended out: a loop runs on, a one-shot holds its end)
+		const double Since = Now - R.SwitchedAt;
+		const float W = R.Was < 0 || Since < 0.0 ? 1.f : static_cast<float>(FMath::Clamp(Since * Life / Blend, 0.0, 1.0));
+		LandMen::Vec3 Off = R.Offsets[Want];
+		if (W < 1.f)
+		{
+			const LandMen::Vec3& From = R.Offsets[R.Was];
+			Off = LandMen::Vec3{ From.X + (Off.X - From.X) * W, From.Y + (Off.Y - From.Y) * W, From.Z + (Off.Z - From.Z) * W };
+			Ride.FromClip = R.Clips[R.Was];
+			Ride.FromTime = R.WasTime + static_cast<float>(Since * Life);
+			Ride.W = W;
+		}
+		// His seat: her commander socket, its facing (her turret's) along the turret roof, her hull's up; his root the
+		// socket moved by the clip's offset, and lower by what he has not yet risen.
+		const LandKit::V3 Up = V.Root.Way(LandKit::V3(0.0, 0.0, 1.0)).Unit();
+		const LandKit::V3 Forward = (Facing - Up * Facing.Dot(Up)).Unit(LandKit::V3(0.0, 1.0, 0.0));
+		const LandKit::V3 Right = Forward.Cross(Up);
+		const LandKit::V3 Feet = At + Forward * Off.X + Right * Off.Y + Up * (Off.Z - (1.0 - Rise) * 1.1);
+		float* M = Ride.Seat.R;
+		M[0] = static_cast<float>(Forward.X); M[1] = static_cast<float>(Right.X); M[2] = static_cast<float>(Up.X);
+		M[3] = static_cast<float>(Forward.Y); M[4] = static_cast<float>(Right.Y); M[5] = static_cast<float>(Up.Y);
+		M[6] = static_cast<float>(Forward.Z); M[7] = static_cast<float>(Right.Z); M[8] = static_cast<float>(Up.Z);
+		Ride.Seat.T[0] = static_cast<float>(Feet.X);
+		Ride.Seat.T[1] = static_cast<float>(Feet.Y);
+		Ride.Seat.T[2] = static_cast<float>(Feet.Z);
+		Ride.bShown = true;
+		Ride.Clip = R.Clips[Want];
+		Ride.Time = Time;
+		S.Men->SetRide(R.Man, Ride);
+	}
+}
+
 void ALandBattle::MakeBodies(int32 FromVehicle)
 {
 	FLandBattleState& S = *State;
@@ -2483,10 +3244,17 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
+	// TK1: past the hand-over a vehicle is drawn as instances of her model's merged far pieces (Battle/LandCrowd): each
+	// is enlisted there, and a body it merges makes no far section of its own
+	if (!FarCrowd.IsValid())
+	{
+		FarCrowd = MakeShared<FLandCrowd>(this, Root.Get(), SteelInk.Get(), UnitsPerMetre, [this](double X, double Y, double Z) { return World(X, Y, Z); }, CrowdKept); // TK1
+	}
 	for (size_t V = static_cast<size_t>(FMath::Max(0, FromVehicle)); V < S.Armour->Vehicles().size(); ++V)
 	{
 		const LandKit::Vehicle& Vehicle = S.Armour->Vehicles()[V];
 		const LandKit::Model& Model = Vehicle.Look();
+		const bool bEnlisted = FarCrowd->Enlist(static_cast<int32>(V), Model); // TK1
 		for (size_t B = 0; B < Model.Bodies.size(); ++B)
 		{
 			const LandKit::Body& Body = Model.Bodies[B];
@@ -2494,6 +3262,7 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			{
 				continue;
 			}
+			const bool bFarSection = !Body.Far.Triangles.empty() && !(bEnlisted && FarCrowd->TakesFar(static_cast<int32>(V), static_cast<int32>(B))); // TK1
 			const FString Name = BodyRound == 0 ? FString::Printf(TEXT("LandBody%d_%d"), static_cast<int32>(V), static_cast<int32>(B))
 				: FString::Printf(TEXT("LandBody%d_%d_%d"), static_cast<int32>(V), static_cast<int32>(B), BodyRound);
 			UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*Name), true);
@@ -2503,7 +3272,7 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 				Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 				Mesh->SetMaterial(0, SteelInk);
 			}
-			if (!Body.Far.Triangles.empty())
+			if (bFarSection) // TK1
 			{
 				LandParts::FromBody(Body.Far, Model.BurntColour, 0.0, UnitsPerMetre, P, N, C, &T);
 				Mesh->CreateMeshSection(1, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
@@ -2517,6 +3286,11 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			D.Body = static_cast<int32>(B);
 			D.bTrack = Body.bTrack;
 			D.bNear = !Body.Near.Triangles.empty();
+			// (a German roof gun, the MG 34 in its cradle on the cupola's rail, is drawn only while her commander mans
+			// it: the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post)
+			D.bWhileManned = LandKit::ShownWhileManned(Model, Body);
+			D.bFarSection = bFarSection; // TK1
+			D.LinksRun = Body.Side < 0 ? Vehicle.RunLeft : Vehicle.RunRight; // TK3: links as made, posed once she runs
 		}
 	}
 }
@@ -2532,6 +3306,13 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 	std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
 	TArray<FVector> P, N;
 	TArray<FColor> C;
+	// TK1: the far vehicles put as their pieces' instances (and who is in the picture, for TK3), before their bodies
+	if (FarCrowd.IsValid())
+	{
+		FarCrowd->Draw(All, S.Pose, EyeAt, [this](int32 K) { return HiddenVehicle(K); }); // TK1
+	}
+	// (the wrecks' soot steps spread over frames: at most this many points sent a frame, a body shown again sent at once)
+	int32 SootRoom = 40000; // TK1 (soot)
 	for (FBodyDrawn& D : BodiesDrawn)
 	{
 		UProceduralMeshComponent* Mesh = D.Mesh.Get();
@@ -2542,26 +3323,52 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		const LandKit::Vehicle& V = All[static_cast<size_t>(D.Vehicle)];
 		const LandKit::Model& Model = V.Look();
 		const LandKit::Body& Body = Model.Bodies[static_cast<size_t>(D.Body)];
-		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle);
+		const bool bManned = !D.bWhileManned || static_cast<size_t>(D.Vehicle) >= S.RoofManned.size() || S.RoofManned[static_cast<size_t>(D.Vehicle)] != 0;
+		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle) && bManned;
 		Mesh->SetVisibility(bShown);
 		if (!bShown)
 		{
 			continue;
 		}
+		// TK1: far and drawn by her instances: this body's sections hidden (no rebuild) and the body not moved; shown
+		// again at its level the frame she comes back
+		const bool bHeld = FarCrowd.IsValid() && FarCrowd->Holds(D.Vehicle, D.Body); // TK1
+		const bool bBack = D.bHeld && !bHeld;
+		if (bHeld != D.bHeld)
+		{
+			D.bHeld = bHeld;
+			if (!Body.Near.Triangles.empty())
+			{
+				Mesh->SetMeshSectionVisible(0, !bHeld && D.bNear);
+			}
+			if (D.bFarSection)
+			{
+				Mesh->SetMeshSectionVisible(1, !bHeld && !D.bNear);
+			}
+		}
+		if (bHeld)
+		{
+			continue;
+		}
 		const LandKit::Place& Place = V.Bodies()[static_cast<size_t>(D.Body)];
 		Mesh->SetWorldLocationAndRotation(World(Place.At.X, Place.At.Y, Place.At.Z), FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W));
-		// The near level within 120 m (a long lens's Watch shot at 140 m keeps it), the far beyond.
+		// The near level within 120 m (a long lens's Watch shot at 140 m keeps it), the far beyond (TK1: where it has a far
+		// section of its own; a body merged into her far pieces keeps its near level while her own meshes draw her).
 		const double Far = (LandPlay::Vec(V.Root.At.X, V.Root.At.Y, V.Root.At.Z) - EyeAt).Length();
-		const bool bNear = (Far < 140.0 && !Body.Near.Triangles.empty()) || Body.Far.Triangles.empty();
-		if (bNear != D.bNear && !Body.Near.Triangles.empty() && !Body.Far.Triangles.empty())
+		const bool bNear = (Far < 140.0 && !Body.Near.Triangles.empty()) || !D.bFarSection; // TK1
+		if (bNear != D.bNear && !Body.Near.Triangles.empty() && D.bFarSection) // TK1
 		{
 			D.bNear = bNear;
 			Mesh->SetMeshSectionVisible(0, bNear);
 			Mesh->SetMeshSectionVisible(1, !bNear);
 		}
-		// A track's links, posed for her run while she is near and moving.
-		if (D.bTrack && D.bNear && V.bMoving && !Body.Near.Triangles.empty())
+		// A track's links, posed for her run while she is near, and (TK3) only while she is in the picture: out of it
+		// she keeps the links she had, and is posed at once as she comes back into it, moving or not.
+		const double LinksRun = Body.Side < 0 ? V.RunLeft : V.RunRight; // TK3
+		if (D.bTrack && D.bNear && !Body.Near.Triangles.empty() && LinksRun != D.LinksRun // TK3
+			&& (!FarCrowd.IsValid() || FarCrowd->LinksDue(D.Vehicle, Mesh->WasRecentlyRendered(0.1f)))) // TK3
 		{
+			D.LinksRun = LinksRun; // TK3
 			const int32 Points = static_cast<int32>(Body.Near.Count());
 			LinkPoints.SetNumUninitialized(Points * 3);
 			V.PoseLinks(Body.Side, LinkPoints.GetData());
@@ -2572,19 +3379,25 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			}
 			Mesh->UpdateMeshSection(0, P, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
 		}
-		// The burning blackens her, a step at a time.
-		if (V.Soot - D.SootShown > 0.05 || (V.Soot >= 1.0 && D.SootShown < 1.0))
+		// The burning blackens her, a step at a time (spread over frames by SootRoom: a whole Sherman's step is some 89,000
+		// points; a body coming back from her instances is brought up to date at once).
+		if ((V.Soot - D.SootShown > 0.05 || (V.Soot >= 1.0 && D.SootShown < 1.0)) && (SootRoom > 0 || bBack)) // TK1 (soot)
 		{
 			D.SootShown = V.Soot;
 			for (int32 Section = 0; Section < 2; ++Section)
 			{
 				const LandKit::Mesh& M = Section == 0 ? Body.Near : Body.Far;
-				if (M.Triangles.empty() || (Section == 0 && D.bTrack && V.bMoving))
+				if (M.Triangles.empty() || (Section == 0 && D.bTrack && V.bMoving) || (Section == 1 && !D.bFarSection)) // TK1
 				{
 					continue;
 				}
 				LandParts::FromBody(M, Model.BurntColour, V.Soot, UnitsPerMetre, P, N, C, nullptr);
 				Mesh->UpdateMeshSection(Section, P, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>());
+				SootRoom -= P.Num(); // TK1 (soot)
+				if (Section == 0 && D.bTrack)
+				{
+					D.LinksRun = -1e300; // TK3: the links were sent at rest with the colours: posed again when next in the picture
+				}
 			}
 		}
 	}
@@ -2753,7 +3566,7 @@ void ALandBattle::DrawShades()
 	{
 		if (Touched[C] && ShadeCopies.IsValidIndex(C) && ShadeCopies[C])
 		{
-			ShadeCopies[C]->MarkRenderStateDirty();
+			ShadeCopies[C]->MarkRenderInstancesDirty();
 		}
 	}
 }
@@ -2826,7 +3639,7 @@ void ALandBattle::DrawManShades()
 		int32 Kind = -1;
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
-		if (Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && Crowd.SeenDistance(Man) < 150.0f && !HiddenMan(Man) && Crowd.PlaceOf(Man, X, Y, Z, Facing))
+		if (Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && Crowd.SeenDistance(Man) < 150.0f && !HiddenMan(Man) && !Crowd.IsRider(Man) && Crowd.PlaceOf(Man, X, Y, Z, Facing))
 		{
 			Kind = Crowd.Frozen(Man) ? 2 : Crowd.PlayingOf(Man).Lie > 0.5f ? 1 : 0;
 		}
@@ -2874,7 +3687,7 @@ void ALandBattle::DrawManShades()
 	{
 		if (Touched[K])
 		{
-			ManShadeCopies[K]->MarkRenderStateDirty();
+			ManShadeCopies[K]->MarkRenderInstancesDirty();
 		}
 	}
 }
@@ -3793,6 +4606,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// the near ones they look; the battle-scale plan's GS3)
 		const double Zoom = FMath::Tan(FMath::DegreesToRadians(25.0)) / FMath::Max(0.02, FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(S.Pose.Fov, 2.0, 120.0) * 0.5)));
 		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
+		// (the tank commanders on their tanks as just posed)
+		RideTanks();
 		S.Men->Update(S.Battle);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -3848,28 +4663,26 @@ void ALandBattle::Tick(float DeltaSeconds)
 	LandFell::Phase("tick: the ground shown");
 	ShowField(EyeWorld, S.Battle);
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
-	LandFell::Phase("tick: the men drawn");
-	DrawMen(EyeWorld);
-	LandFell::Phase("tick: the tanks drawn");
-	DrawArmour(EyeWorld);
-	LandFell::Phase("tick: the men's shades");
-	DrawManShades();
-
-	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
 	LandFell::Phase("tick: the effects played");
+	// What happens first: the frame's fire (the shells, guns and smoke rounds, told the kit before its frame begins, so
+	// they are drawn this frame), then the shell holes and the tracks dug and settled (the field's: their time is counted
+	// in FieldMs).
 	PlayEffects();
-	// (the shell holes' meshes are the field's: their time is counted in FieldMs)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the craters");
 	MakeCraters();
 	LandFell::Phase("tick: the ruts");
 	MakeRuts();
+	SettleTorn();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
-	LandFell::Phase("tick: the tanks' beats");
-	PlayArmourEvents();
-	LandFell::Phase("tick: the men's beats");
-	PlayMenEvents();
-	LandFell::Phase("tick: the effects kit");
+
+	// The effects kit's frame in two halves (the production lead's FX2): TickBegin starts the kit's drawing on a worker
+	// and gives the hand-held eye its jolt at once; the men and the tanks are drawn meanwhile; TickEnd waits for the
+	// worker and sends the smoke. In between, the kit asks the ground under a point from the worker (the field's At,
+	// read-only: nothing here changes it), and what the scene asks of the kit (a tank's dust, a cook-off, a fire) is
+	// held and done at TickEnd, first drawn the next frame. EffectsMs is the two halves' own time on this thread.
+	bool bEffectsBegun = false;
+	LandFell::Phase("tick: the effects kit begun");
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600, ViewH = 900;
@@ -3880,11 +4693,46 @@ void ALandBattle::Tick(float DeltaSeconds)
 			ViewW = FMath::Max(1, static_cast<int32>(Size.X));
 			ViewH = FMath::Max(1, static_cast<int32>(Size.Y));
 		}
-		const FBattleJolt Jolt = Effects->Tick(S.Lived, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
+		Mark = LandParts::Seconds();
+		const FBattleJolt Jolt = Effects->TickBegin(S.Lived, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
+		EffectsMs += (LandParts::Seconds() - Mark) * 1000.0;
 		Eye->SetActorLocationAndRotation(Eye->GetActorLocation() + Jolt.Offset, Eye->GetActorRotation() + FRotator(0.0, 0.0, Jolt.RollDegrees));
+		bEffectsBegun = true;
 	}
+	Mark = LandParts::Seconds();
+	const int32 InPictureWas = MenInPicture;
+	LandFell::Phase("tick: the men drawn");
+	DrawMen(EyeWorld);
+	DrawMenMs += (LandParts::Seconds() - Mark) * 1000.0;
+	MostInPicture = FMath::Max(MostInPicture, MenInPicture - InPictureWas);
+	Mark = LandParts::Seconds();
+	LandFell::Phase("tick: the tanks drawn");
+	DrawArmour(EyeWorld);
+	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
+	LandFell::Phase("tick: the men's shades");
+	DrawManShades();
+	// (the tanks' own beats and the men's: cook-offs, wreck fires, falls)
+	LandFell::Phase("tick: the tanks' beats");
+	PlayArmourEvents();
+	LandFell::Phase("tick: the men's beats");
+	PlayMenEvents();
+	if (bEffectsBegun)
+	{
+		Mark = LandParts::Seconds();
+		LandFell::Phase("tick: the effects kit ended");
+		Effects->TickEnd();
+		EffectsMs += (LandParts::Seconds() - Mark) * 1000.0;
+		// (the smoke's puffs drawn and the room asked, the most in the log's 10 s)
+		if (Effects->PuffsDrawn() >= PuffsMost)
+		{
+			PuffsMost = Effects->PuffsDrawn();
+			PuffsMostAsked = Effects->PuffsAsked();
+		}
+	}
+	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the sound");
 	PlaySound(Real);
+	SoundMs += (LandParts::Seconds() - Mark) * 1000.0;
 	LandFell::Phase("tick: the end and the notes");
 
 	// The battle's end: the last words shown, then the after card a few seconds on.
@@ -3917,6 +4765,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The log, every 10 s: the frames, the slowest, and what each part cost.
 	const double FrameMs = (LandParts::Seconds() - FrameBegan) * 1000.0;
 	SlowestFrame = FMath::Max(SlowestFrame, FrameMs);
+	// (the card's own time for its last whole frame: what an A/B of the field's or the men's draw moves)
+	GpuMs += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
 	++LogFrames;
 	if (RealT - LogAt >= 10.0)
 	{
@@ -3924,9 +4774,32 @@ void ALandBattle::Tick(float DeltaSeconds)
 		UE_LOG(LogTheater, Display, TEXT("Land battle: %.0f s of battle, %s shot; %.0f frames a second, the scene's slowest frame %.1f ms; a frame's cores %.2f ms, men %.2f, tanks %.2f, ground %.2f; shots heard %d, takes %d (dropped %d, on the screen %d), cracks %d, falls %d"),
 			S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), LogFrames / Span, SlowestFrame, CoresMs / LogFrames, MenMs / LogFrames, ArmourMs / LogFrames, FieldMs / LogFrames,
 			S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped, S.Mix.Cracks, S.Mix.Falls);
+		// (the drawing's own parts, the battle-scale plan's speed log: what the Mac's frame goes on)
+		// (and the card's frame, ms: the art director's A/B of -TheaterLandTreeFarFrom=80 against the default reads here;
+		// SO1: men drawn as the crowd's instances, mid and far, a frame, and in the wide mass shot how many far men were
+		// grown to MassMinPx of the picture's lines and the most, x times his size)
+		// (GS7: the ground's clutter places the meshes hold now against the things laid in them; kept packed, the same)
+		int32 ClutterPlaces = 0;
+		for (const TObjectPtr<UInstancedStaticMeshComponent>& Mesh : ClutterCopies)
+		{
+			ClutterPlaces += Mesh ? Mesh->GetInstanceCount() : 0;
+		}
+		const int32 ClutterLaid = Carpet.IsValid() ? static_cast<int32>(Carpet->Laid()) : 0;
+		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f; the ground's clutter %d places for %d laid (GS7); the torn ground (GS8) %d sections sent, %d baked static, %d procedural now, the slowest frame's baking %.2f ms; the smoke's puffs (FX2) the most %d drawn, of %d asked"),
+			DrawMenMs / LogFrames, DrawArmourMs / LogFrames, EffectsMs / LogFrames, SoundMs / LogFrames, GpuMs / LogFrames, static_cast<double>(MenInPicture) / LogFrames, MostInPicture,
+			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
+			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid,
+			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs, PuffsMost, PuffsMostAsked);
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
+		DrawMenMs = DrawArmourMs = EffectsMs = SoundMs = GpuMs = 0.0;
+		MenInPicture = MenRebuilt = RebuildsPut = MostInPicture = 0;
+		VatMid = VatFar = MassGrown = 0;
+		MostGrow = 1.0;
+		TornSent = TornBakedCount = 0;
+		TornBakeMostMs = 0.0;
+		PuffsMost = PuffsMostAsked = 0;
 	}
 	LandFell::Phase("tick: done");
 }
@@ -4157,6 +5030,7 @@ void ALandBattle::MakeCraters()
 		LandParts::FromField(S.Holes.Section(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(Where.Section, GroundInk);
+		TornChanged(0, Where.Patch, Where.Section);
 	}
 }
 
@@ -4191,6 +5065,7 @@ void ALandBattle::SendDug()
 			Mesh->SetVisibility(bShow);
 			FieldMeshes.Add(Mesh);
 			Tile.NearParts[Part] = Mesh;
+			TornChanged(2, TileIndex, Part);
 		}
 		if (Tile.Near.IsValid())
 		{
@@ -4210,6 +5085,7 @@ void ALandBattle::SendDug()
 		}
 		LandParts::FromField(S.Dug.PartOf(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		TornChanged(2, Where.Tile, Where.Part);
 	}
 }
 
@@ -4273,7 +5149,122 @@ void ALandBattle::MakeRuts()
 		LandParts::FromField(S.Ruts.Section(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(Where.Section, GroundInk);
+		TornChanged(1, Where.Patch, Where.Section);
 	}
+}
+
+void ALandBattle::TornChanged(int32 Kind, int32 A, int32 B)
+{
+	++TornSent;
+	if (!bTornBakes)
+	{
+		return;
+	}
+	const int64 PieceKey = TornKey(Kind, A, B);
+	FTornPiece& Piece = TornPieces.FindOrAdd(PieceKey);
+	Piece.Kind = Kind;
+	Piece.A = A;
+	Piece.B = B;
+	Piece.ChangedAt = RealT;
+	if (UStaticMeshComponent* Was = Piece.Baked.Get())
+	{
+		// (its baked mesh let go: its procedural section, sent just now, draws it again until it settles)
+		TornBaked.RemoveSingleSwap(Was);
+		Was->DestroyComponent();
+	}
+	Piece.Baked.Reset();
+	if (!Piece.bHot)
+	{
+		Piece.bHot = true;
+		TornHot.Add(PieceKey);
+	}
+}
+
+void ALandBattle::SettleTorn()
+{
+	if (!bTornBakes || TornHot.Num() == 0 || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	// Each piece unchanged TornSettleAfter seconds baked into a static mesh of its own, drawn from cached draw commands,
+	// and its procedural section emptied; within TornBakeMs a frame (the production lead's guard: a hitch is worse than
+	// a few more procedural pieces), the rest left for the frames after.
+	const double Began = LandParts::Seconds();
+	for (int32 I = 0; I < TornHot.Num() && (LandParts::Seconds() - Began) * 1000.0 < TornBakeMs;)
+	{
+		const int64 PieceKey = TornHot[I];
+		FTornPiece* Piece = TornPieces.Find(PieceKey);
+		if (!Piece || !Piece->bHot)
+		{
+			TornHot.RemoveAtSwap(I);
+			continue;
+		}
+		if (RealT - Piece->ChangedAt < TornSettleAfter)
+		{
+			++I;
+			continue;
+		}
+		const LandField::Mesh* M = nullptr;
+		UProceduralMeshComponent* Proc = nullptr;
+		bool bShown = true;
+		if (Piece->Kind == 0 && Piece->A >= 0 && Piece->A < S.Holes.Patches() && Piece->B >= 0
+			&& Piece->B < static_cast<int32>(S.Holes.PatchAt(Piece->A).Sections.size()) && CraterMeshes.IsValidIndex(Piece->A))
+		{
+			M = &S.Holes.Section({ Piece->A, Piece->B });
+			Proc = CraterMeshes[Piece->A];
+		}
+		else if (Piece->Kind == 1 && Piece->A >= 0 && Piece->A < S.Ruts.Patches() && Piece->B >= 0
+			&& Piece->B < static_cast<int32>(S.Ruts.PatchAt(Piece->A).Sections.size()) && RutMeshes.IsValidIndex(Piece->A))
+		{
+			M = &S.Ruts.Section({ Piece->A, Piece->B });
+			Proc = RutMeshes[Piece->A];
+		}
+		else if (Piece->Kind == 2 && Tiles.IsValidIndex(Piece->A) && Tiles[Piece->A].NearParts.IsValidIndex(Piece->B) && S.Dug.IsSplit(Piece->A))
+		{
+			M = &S.Dug.PartOf({ Piece->A, Piece->B });
+			Proc = Tiles[Piece->A].NearParts[Piece->B].Get();
+			bShown = Tiles[Piece->A].bNearShown || !Tiles[Piece->A].Far.IsValid();
+		}
+		Piece->bHot = false;
+		TornHot.RemoveAtSwap(I);
+		if (!M || !Proc)
+		{
+			continue;
+		}
+		if (!M->Empty())
+		{
+			const FString Name = FString::Printf(TEXT("LandTorn%d_%d_%d"), Piece->Kind, Piece->A, Piece->B);
+			UStaticMesh* Shape = LandParts::GroundMesh(this, MakeUniqueObjectName(this, UStaticMesh::StaticClass(), FName(*(Name + TEXT("_Mesh")))), *M, GroundInk,
+				UnitsPerMetre);
+			if (!Shape)
+			{
+				continue; // (left procedural)
+			}
+			UStaticMeshComponent* Baked = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), FName(*Name)));
+			Baked->SetupAttachment(Root);
+			Baked->SetStaticMesh(Shape);
+			Baked->SetMaterial(0, GroundInk);
+			Baked->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Baked->SetCanEverAffectNavigation(false);
+			Baked->SetCastShadow(true);
+			Baked->SetVisibility(bShown);
+			Baked->RegisterComponent();
+			TornBaked.Add(Baked);
+			Piece->Baked = Baked;
+		}
+		// (its procedural section emptied: the baked mesh draws it now)
+		if (Piece->Kind == 2)
+		{
+			Proc->ClearAllMeshSections();
+		}
+		else
+		{
+			Proc->ClearMeshSection(Piece->B);
+		}
+		++TornBakedCount;
+	}
+	TornBakeMostMs = FMath::Max(TornBakeMostMs, (LandParts::Seconds() - Began) * 1000.0);
 }
 
 void ALandBattle::PlayArmourEvents()
@@ -4299,6 +5290,18 @@ void ALandBattle::PlayArmourEvents()
 			|| Fx.Contains(TEXT("board")) || Fx == TEXT("hatch_open") || Fx.Contains(TEXT("turret_lands")))
 		{
 			Fx.Reset();
+		}
+		// Her fuel going up: a rolling ball of burning fuel over her engine deck, once a vehicle, as a tank brews up (her
+		// ammunition's blast) or a lorry is knocked out (its fire starting). Some 8 m across for a tank (the art
+		// director's ruling), 6 for a lorry; it rolls on as she was moving. Her own fire burns on after it as before.
+		if (Effects && E.Vehicle >= 0 && static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size()
+			&& (Fx == TEXT("magazine_blast") || (Fx == TEXT("fire_start") && S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)].Look().Kind == "carrier")))
+		{
+			const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)];
+			LandKit::V3 Deck, DeckWay;
+			const FVector BallAt = V.SocketNow("engine", Deck, DeckWay) ? World(Deck.X, Deck.Y, Deck.Z) : At;
+			const FVector Rolling = WorldWay(V.Velocity.X, V.Velocity.Y, V.Velocity.Z) * (UnitsPerMetre / S.Life);
+			Effects->FuelBall(BallAt, V.Look().Kind == "carrier" ? 6.0f : 8.0f, Rolling);
 		}
 		if (Effects && !Fx.IsEmpty())
 		{
@@ -4838,9 +5841,13 @@ void ALandBattle::TakeShots()
 		if (S.Battle >= Shot.At)
 		{
 			Shot.bTaken = true;
-			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
+			// (a still whose asked shot found no fit place and was placed anyway, one the film's own rules would have
+			// turned away, says so in its name: the camera director's AskedUnfit, for the art director's read)
+			const bool bUnfit = Shot.Kind >= 0 && S.Eye.AskedUnfit();
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Shot.Name + (bUnfit ? TEXT("-unfit") : TEXT("")) + TEXT(".png")), true, false);
 			++ShotsTaken;
-			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d"), *Shot.Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject);
+			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d%s"), *Shot.Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject,
+				bUnfit ? TEXT(" (no fit place found for it: placed anyway; the film would have turned it away)") : TEXT(""));
 		}
 	}
 	if (S.bCard && !bCardShot)

@@ -590,6 +590,10 @@ namespace LandField
 		/** The nearest lane's half width (its floor), 2.2 where none is near. */
 		double LaneHalfAt(double X, double Y) const;
 		double Top(double X, double Y, Drawn* What) const;
+		/** The ground under everything laid on it, as the tiles take it: the far tiles' height. */
+		double UnderZ(double X, double Y) const;
+		/** The near tiles' height: carved for the lanes, a little lower under a lane's own mesh. */
+		double NearZ(double X, double Y) const;
 		int HouseAt(double X, double Y) const;
 
 		// raster lookups
@@ -3551,7 +3555,10 @@ namespace LandField
 		const Col PastureLush = Rgb(76, 102, 50);    // a wetter, ungrazed pasture
 		// (the pale crops a step darker: the second cut's stubble lit near white, 236 228 176, where the art director
 		// asks open ground lit 120 to 160; 21 November)
-		const Col HayCut = Rgb(134, 136, 82);        // a meadow mown in June: pale aftermath, hay-coloured
+		// (the mown meadow a step darker and greener again: it lit 170 to 190 behind the knocked-out Tiger on the fourth
+		// cut's frames, where the art director asks open ground 120 to 160; the aftermath coming green through the
+		// cut stems three weeks on, 22 November)
+		const Col HayCut = Rgb(114, 120, 70);        // a meadow mown in June: the aftermath, hay-coloured stems over new green
 		const Col Meadow = Rgb(126, 128, 74);        // standing grass gone to seed: buff over green
 		const Col Wheat = Rgb(166, 140, 76);         // wheat ripening, gold with green in it (a stand of it, its stalks shading one another)
 		const Col Barley = Rgb(166, 148, 94);        // barley, ripe and paler
@@ -3807,7 +3814,8 @@ namespace LandField
 		{
 			// Grass: darker tufts where the cattle left it, paler where they grazed it down; thistles and docks.
 			C = Varied(C, 1.0 + 0.08 * N1, 0.03 * N1);
-			C = Mixed(C, Q.Crop == CpHayCut ? Meadow : PastureLush, 0.3 * Smooth(0.2, 0.55, N2));
+			// (a mown meadow's patches the regrowth's green, not the standing meadow's buff: the hay lifted, the clover under it)
+			C = Mixed(C, Q.Crop == CpHayCut ? PastureGrazed : PastureLush, (Q.Crop == CpHayCut ? 0.45 : 0.3) * Smooth(0.2, 0.55, N2));
 			C = Mixed(C, Margin, 0.45 * Smooth(5.0, 1.0, Edge));
 		}
 		C = Mixed(C, HedgeFoot, 0.55 * Smooth(2.6, 0.6, Edge));
@@ -4426,6 +4434,20 @@ namespace LandField
 	 * The field's tiles (and the band's): the ground at two levels; the lanes' floors, walls and ruts and the banks swept
 	 * in the near level, the banks as ridges in the far; the walls, houses, barns and the church in Built.
 	 */
+	double Ground::Impl::UnderZ(double X, double Y) const
+	{
+		// (the steppe's railway bank is swept at its own points: the ground's mesh leaves it out and sinks a little under it)
+		return Sp ? Land(X, Y) - (Sp->HasRail() ? 0.25 * Smooth(8.4, 7.4, Sp->RailDistance(X, Y)) : 0.0) : Terrain(X, Y);
+	}
+
+	double Ground::Impl::NearZ(double X, double Y) const
+	{
+		double Edge = 1e6, Z = UnderZ(X, Y);
+		if (!InRaster(X, Y) || LaneD[Pix(X, Y)] < LaneWall + 3.0f) Z = Carve(X, Y, Z, &Edge);
+		// Under a lane's mesh the ground drops a little more, so the lane is always the one seen.
+		return Z - 0.35 * (1.0 - Smooth(LaneWall + 0.4, LaneWall + 1.0, Edge));
+	}
+
 	void Ground::Impl::MakeTiles()
 	{
 		const int TX = TilesX(), TY = TilesY();
@@ -4435,15 +4457,9 @@ namespace LandField
 			if (I < 0 || J < 0 || I >= TX || J >= TY) return nullptr;
 			return &TileList[static_cast<size_t>(J) * TX + I];
 		};
-		// (the steppe's railway bank is swept at its own points: the ground's mesh leaves it out and sinks a little under it)
-		auto Under = [this](double X, double Y) { return Sp ? Land(X, Y) - (Sp->HasRail() ? 0.25 * Smooth(8.4, 7.4, Sp->RailDistance(X, Y)) : 0.0) : Terrain(X, Y); };
-		auto NearZ = [this, Under](double X, double Y) {
-			double Edge = 1e6, Z = Under(X, Y);
-			if (!InRaster(X, Y) || LaneD[Pix(X, Y)] < LaneWall + 3.0f) Z = Carve(X, Y, Z, &Edge);
-			// Under a lane's mesh the ground drops a little more, so the lane is always the one seen.
-			return Z - 0.35 * (1.0 - Smooth(LaneWall + 0.4, LaneWall + 1.0, Edge));
-		};
-		auto FarZ = [Under](double X, double Y) { return Under(X, Y); };
+		// (the heights as members: Ground::DrawnUp asks them again, to light what is laid on the ground as these tiles are)
+		auto NearZ_ = [this](double X, double Y) { return NearZ(X, Y); };
+		auto FarZ = [this](double X, double Y) { return UnderZ(X, Y); };
 		auto NearCol = [this](double X, double Y) { return GroundColour(X, Y); };
 		for (int J = 0; J < TY; ++J)
 			for (int I = 0; I < TX; ++I)
@@ -4461,7 +4477,7 @@ namespace LandField
 				G.NX = G.NY = bInner ? NearQuads : BandQuads;
 				G.Skirt = 1.0;
 				T.Spacing = TileSize / G.NX;
-				GridMesh(T.Near, G, NearZ, NearCol);
+				GridMesh(T.Near, G, NearZ_, NearCol);
 				G.NX = G.NY = FarQuads;
 				const double Sub = TileSize / FarQuads / 3.0;
 				GridMesh(T.Far, G, FarZ, [this, Sub](double X, double Y) {
@@ -6007,6 +6023,41 @@ namespace LandField
 		return Z;
 	}
 
+	void Ground::DrawnUp(double X, double Y, double& OutX, double& OutY, double& OutZ) const
+	{
+		// As GridMesh lays a near tile: its square's corners lit by the slope across their neighbours, the square cut
+		// along its flatter diagonal, the normal mixed across the triangle the place is in.
+		const Impl& G = *In;
+		const int TI = static_cast<int>(std::floor((X + Band) / TileSize)), TJ = static_cast<int>(std::floor((Y + Band) / TileSize));
+		const double X0 = -Band + TI * TileSize, Y0 = -Band + TJ * TileSize;
+		const bool bInner = X0 >= 0.0 && Y0 >= 0.0 && X0 + TileSize <= G.FW + 1e-6 && Y0 + TileSize <= G.FH + 1e-6;
+		const int Q = bInner ? NearQuads : BandQuads;
+		const double Step = TileSize / Q;
+		const int I = std::clamp(static_cast<int>(std::floor((X - X0) / Step)), 0, Q - 1), J = std::clamp(static_cast<int>(std::floor((Y - Y0) / Step)), 0, Q - 1);
+		double Z[4][4]; // (corners I-1 to I+2, J-1 to J+2; the four outer corners never asked)
+		for (int B = 0; B < 4; ++B)
+			for (int A = 0; A < 4; ++A)
+				Z[B][A] = ((A == 0 || A == 3) && (B == 0 || B == 3)) ? 0.0 : G.NearZ(X0 + (I - 1 + A) * Step, Y0 + (J - 1 + B) * Step);
+		auto Corner = [&Z, Step](int A, int B) { return Unit3({ -(Z[B][A + 1] - Z[B][A - 1]) / (2.0 * Step), -(Z[B + 1][A] - Z[B - 1][A]) / (2.0 * Step), 1.0 }); };
+		const V3 Na = Corner(1, 1), Nb = Corner(2, 1), Nc = Corner(2, 2), Nd = Corner(1, 2);
+		const double U = std::clamp((X - X0) / Step - I, 0.0, 1.0), V = std::clamp((Y - Y0) / Step - J, 0.0, 1.0);
+		V3 N;
+		if (std::fabs(Z[1][1] - Z[2][2]) <= std::fabs(Z[1][2] - Z[2][1]))
+		{
+			// (A, B, C and A, C, D: cut from the square's first corner to its far one)
+			N = U >= V ? Na * (1.0 - U) + Nb * (U - V) + Nc * V : Na * (1.0 - V) + Nc * U + Nd * (V - U);
+		}
+		else
+		{
+			// (A, B, D and B, C, D)
+			N = U + V <= 1.0 ? Na * (1.0 - U - V) + Nb * U + Nd * V : Nb * (1.0 - V) + Nc * (U + V - 1.0) + Nd * (1.0 - U);
+		}
+		N = Unit3(N);
+		OutX = N.X;
+		OutY = N.Y;
+		OutZ = N.Z;
+	}
+
 	bool Ground::MayBeBuilt(double X, double Y) const
 	{
 		// (Top says Floor only inside a house's footprint pixels, and Wall only on a wall's, both in the raster)
@@ -6239,7 +6290,13 @@ namespace LandField
 					double InClump = -1.0, Thick = 1.0;
 					if (What == Drawn::Pasture && !G.Sp)
 					{
-						const double Clump = Noise(X / 4.5, Y / 4.5, G.Seed ^ 0x7AF7) + 0.4 * Noise(X / 1.6, Y / 1.6, G.Seed ^ 0x7AF8);
+						// (the noise's squares turned off the field's axes, each its own way, and pushed about a little: its
+						// lattice laid the clumps out on a 4.5 m grid, read as rows of tufts from a low lens; the art director's
+						// cut 4, shot 08)
+						const double Wx = 1.3 * Noise(X / 7.3 + 3.1, Y / 7.3 - 1.7, G.Seed ^ 0x7AF9), Wy = 1.3 * Noise(X / 7.3 - 5.3, Y / 7.3 + 2.9, G.Seed ^ 0x7AFA);
+						const double Ax = 0.809 * X - 0.588 * Y + Wx, Ay = 0.588 * X + 0.809 * Y + Wy;   // (36 degrees)
+						const double Bx = 0.276 * X + 0.961 * Y, By = -0.961 * X + 0.276 * Y;             // (74 degrees the other way)
+						const double Clump = Noise(Ax / 4.5, Ay / 4.5, G.Seed ^ 0x7AF7) + 0.4 * Noise(Bx / 1.6, By / 1.6, G.Seed ^ 0x7AF8);
 						InClump = Smooth(-0.3, 0.3, Clump);
 						const double Path = G.CowPath(X, Y);
 						if (Path < 0.0 && Keep > 0.05) continue;
@@ -6296,9 +6353,16 @@ namespace LandField
 						}
 						break;
 					case Base::Tuft:
-						Scale = 0.7 + 0.7 * U4;
-						ScaleZ = 0.6 + 0.7 * U5;
+					{
+						// (most tufts small, a few big, each its own height for its spread and its own green or straw: the
+						// same big tuft over and over read as rows of one model; the art director's cut 4, shot 08)
+						Scale = 0.55 + 0.95 * std::pow(U4, 1.6);
+						ScaleZ = Scale * (0.6 + 0.6 * U5);
 						if (Crop == CpHayCut) ScaleZ *= 0.6;
+						const double Dry = Unit(Hash(H, 7));
+						TR = 0.92 + 0.2 * Dry;
+						TG = 0.97 + 0.07 * Dry;
+						TB = 0.88 + 0.18 * Dry;
 						if (Crop == CpRoots && What == Drawn::Crop)
 						{
 							Scale *= 1.6;
@@ -6308,6 +6372,7 @@ namespace LandField
 							TB = 0.74;
 						}
 						break;
+					}
 					case Base::TallGrass:
 						Scale = 0.8 + 0.5 * U4;
 						ScaleZ = 0.8 + 0.45 * U5;
@@ -6405,5 +6470,126 @@ namespace LandField
 						if (B.X >= X0 && B.X < X1 && B.Y >= Y0 && B.Y < Y1) Out.push_back(B);
 					}
 			}
+	}
+}
+
+namespace LandField
+{
+	Mesh CrownOf(const Mesh& From)
+	{
+		Mesh Out;
+		const size_t N = From.Points();
+		if (N == 0 || From.Positions.size() < N * 3) return Out;
+		double High = 0.5;
+		for (size_t K = 0; K < N; ++K) High = std::max(High, static_cast<double>(From.Positions[K * 3 + 2]));
+		auto Leafy = [&From](size_t K) { return static_cast<int>(From.Colours[K].G) > static_cast<int>(From.Colours[K].R) + 6; };
+		size_t LeafN = 0;
+		for (size_t K = 0; K < N; ++K) LeafN += Leafy(K) ? 1 : 0;
+		const bool bByColour = LeafN >= 8;
+		auto InCrown = [&](size_t K) { return bByColour ? Leafy(K) : From.Positions[K * 3 + 2] > High / 3.0; };
+		double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+		double Leaf[3] = { 0, 0, 0 }, Bark[3] = { 0, 0, 0 }, TrunkR = 0.0;
+		size_t CrownN = 0, BarkN = 0;
+		for (size_t K = 0; K < N; ++K)
+		{
+			const float* P = &From.Positions[K * 3];
+			const Rgb8& C = From.Colours[K];
+			if (InCrown(K))
+			{
+				for (int A = 0; A < 3; ++A)
+				{
+					Lo[A] = std::min(Lo[A], static_cast<double>(P[A]));
+					Hi[A] = std::max(Hi[A], static_cast<double>(P[A]));
+				}
+				Leaf[0] += C.R;
+				Leaf[1] += C.G;
+				Leaf[2] += C.B;
+				++CrownN;
+			}
+			else
+			{
+				Bark[0] += C.R;
+				Bark[1] += C.G;
+				Bark[2] += C.B;
+				++BarkN;
+				if (P[2] < High * 0.2) TrunkR = std::max(TrunkR, std::sqrt(static_cast<double>(P[0]) * P[0] + static_cast<double>(P[1]) * P[1]));
+			}
+		}
+		if (CrownN == 0) return Out;
+		for (int A = 0; A < 3; ++A)
+		{
+			Leaf[A] /= static_cast<double>(CrownN);
+			Bark[A] = BarkN ? Bark[A] / static_cast<double>(BarkN) : (A == 0 ? 92.0 : A == 1 ? 80.0 : 66.0);
+		}
+		const double CX = 0.5 * (Lo[0] + Hi[0]), CY = 0.5 * (Lo[1] + Hi[1]), CZ = 0.5 * (Lo[2] + Hi[2]);
+		// (the leaves' box holds their outermost tips: the ball a little inside it, as much leaf as the eye sees in it)
+		const double RX = std::max(0.3, 0.42 * (Hi[0] - Lo[0])), RY = std::max(0.3, 0.42 * (Hi[1] - Lo[1])), RZ = std::max(0.3, 0.46 * (Hi[2] - Lo[2]));
+		auto Byte = [](double V) { return static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(V)), 0, 255)); };
+		auto Put = [&Out, &Byte](double X, double Y, double Z, double NX, double NY, double NZ, const double* C, double Shade) {
+			const double L = std::max(1e-9, std::sqrt(NX * NX + NY * NY + NZ * NZ));
+			Out.Positions.insert(Out.Positions.end(), { static_cast<float>(X), static_cast<float>(Y), static_cast<float>(Z) });
+			Out.Normals.insert(Out.Normals.end(), { static_cast<float>(NX / L), static_cast<float>(NY / L), static_cast<float>(NZ / L) });
+			Out.Colours.push_back(Rgb8{ Byte(C[0] * Shade), Byte(C[1] * Shade), Byte(C[2] * Shade) });
+			return static_cast<uint32_t>(Out.Colours.size() - 1);
+		};
+		// (each triangle's corners so that (B - A) x (C - A) points out, as the field's Builder makes them)
+		auto Tri = [&Out](uint32_t A, uint32_t B, uint32_t C) { Out.Triangles.insert(Out.Triangles.end(), { A, B, C }); };
+		auto Outward = [&Out](uint32_t A, uint32_t B, uint32_t C, double OX, double OY, double OZ) {
+			const float* PA = &Out.Positions[A * 3];
+			const float* PB = &Out.Positions[B * 3];
+			const float* PC = &Out.Positions[C * 3];
+			const double UX = PB[0] - PA[0], UY = PB[1] - PA[1], UZ = PB[2] - PA[2];
+			const double VX = PC[0] - PA[0], VY = PC[1] - PA[1], VZ = PC[2] - PA[2];
+			const double NX = UY * VZ - UZ * VY, NY = UZ * VX - UX * VZ, NZ = UX * VY - UY * VX;
+			const double MX = (PA[0] + PB[0] + PC[0]) / 3.0 - OX, MY = (PA[1] + PB[1] + PC[1]) / 3.0 - OY, MZ = (PA[2] + PB[2] + PC[2]) / 3.0 - OZ;
+			return NX * MX + NY * MY + NZ * MZ >= 0.0;
+		};
+		auto Face = [&](uint32_t A, uint32_t B, uint32_t C, double OX, double OY, double OZ) {
+			if (Outward(A, B, C, OX, OY, OZ)) Tri(A, B, C);
+			else Tri(A, C, B);
+		};
+		// The trunk: three sides from the ground into the crown's lower third.
+		const double R = std::clamp(TrunkR * 0.8, 0.12, 0.6), Top = Lo[2] + RZ * 0.6;
+		const double Pi2 = 6.283185307179586;
+		uint32_t Foot[3], Head[3];
+		for (int K = 0; K < 3; ++K)
+		{
+			const double A = Pi2 * K / 3.0, X = R * std::cos(A), Y = R * std::sin(A);
+			Foot[K] = Put(X, Y, 0.0, X, Y, 0.0, Bark, 0.85);
+			Head[K] = Put(X, Y, Top, X, Y, 0.0, Bark, 1.0);
+		}
+		for (int K = 0; K < 3; ++K)
+		{
+			const int J = (K + 1) % 3;
+			Face(Foot[K], Foot[J], Head[J], 0.0, 0.0, 0.5 * Top);
+			Face(Foot[K], Head[J], Head[K], 0.0, 0.0, 0.5 * Top);
+		}
+		// The crown: a ball of six sides and four bands, darker toward its underside.
+		const int Sides = 6, Bands = 4;
+		const uint32_t North = Put(CX, CY, CZ + RZ, 0.0, 0.0, 1.0, Leaf, 1.08);
+		std::vector<uint32_t> Ring[Bands - 1];
+		for (int B = 1; B < Bands; ++B)
+		{
+			const double Polar = 3.141592653589793 * B / Bands, SZ = std::cos(Polar), SR = std::sin(Polar);
+			const double Shade = 0.72 + 0.36 * (0.5 + 0.5 * SZ);
+			for (int K = 0; K < Sides; ++K)
+			{
+				const double A = Pi2 * (K + 0.5 * (B % 2)) / Sides, DX = SR * std::cos(A), DY = SR * std::sin(A);
+				Ring[B - 1].push_back(Put(CX + RX * DX, CY + RY * DY, CZ + RZ * SZ, DX / RX, DY / RY, SZ / RZ, Leaf, Shade));
+			}
+		}
+		const uint32_t South = Put(CX, CY, CZ - RZ, 0.0, 0.0, -1.0, Leaf, 0.66);
+		for (int K = 0; K < Sides; ++K)
+		{
+			const int J = (K + 1) % Sides;
+			Face(North, Ring[0][K], Ring[0][J], CX, CY, CZ);
+			for (int B = 0; B + 1 < Bands - 1; ++B)
+			{
+				Face(Ring[B][K], Ring[B + 1][K], Ring[B + 1][J], CX, CY, CZ);
+				Face(Ring[B][K], Ring[B + 1][J], Ring[B][J], CX, CY, CZ);
+			}
+			Face(South, Ring[Bands - 2][J], Ring[Bands - 2][K], CX, CY, CZ);
+		}
+		return Out;
 	}
 }

@@ -1001,6 +1001,12 @@ namespace LandKit
 		}
 	}
 
+	bool Model::RoofGun() const
+	{
+		const int I = PartIndex("roof_mg");
+		return I >= 0 && Parts[static_cast<size_t>(I)].bShown;
+	}
+
 	int Model::PartIndex(const std::string& PartName) const
 	{
 		for (size_t I = 0; I < Parts.size(); ++I)
@@ -1391,6 +1397,12 @@ namespace LandKit
 				continue;
 			}
 			std::string Pick = ChoiceIn(Row, Group);
+			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
+			// Sherman without the American's .50 on her roof)
+			if (Pick.empty() && S["by_nation"].IsObject())
+			{
+				Pick = S["by_nation"][D.Nation].Str("");
+			}
 			if (Pick.empty() || !S["choices"][Pick].IsObject())
 			{
 				Pick = S["default"].Str("");
@@ -2426,11 +2438,25 @@ namespace LandKit
 				Open.push_back(S[static_cast<size_t>(H)].Turn);
 				S[static_cast<size_t>(H)].Turn = 0.0;
 			}
+			// a lid's lift up its post, as its hatch: as far up as either puts it, not both added
+			std::vector<std::pair<size_t, double>> Lifted;
+			for (size_t P = 0; P < M.Parts.size(); ++P)
+			{
+				if (M.Parts[P].Kind == PartKind::Slide && M.Parts[P].Name.find("_lift") != std::string::npos)
+				{
+					Lifted.emplace_back(P, S[P].Slide);
+					S[P].Slide = 0.0;
+				}
+			}
 			M.Play(C, Age, 1.0, S);
 			for (size_t I = 0; I < M.Hatches.size(); ++I)
 			{
 				double& Turn = S[static_cast<size_t>(M.Hatches[I])].Turn;
 				Turn = std::max(Turn, Open[I]);
+			}
+			for (const auto& L : Lifted)
+			{
+				S[L.first].Slide = std::max(S[L.first].Slide, L.second);
 			}
 			if (M.Gun >= 0 && M.Parts[static_cast<size_t>(M.Gun)].bLimits)
 			{
@@ -3871,6 +3897,13 @@ namespace LandKit
 			const Part& H = M.Parts[static_cast<size_t>(I)];
 			S[static_cast<size_t>(I)].Turn = Clamp(P.Hatches, 0.0, 1.0) * (H.bLimits && H.Hi > 0.0 ? H.Hi : 90.0);
 		}
+		if (P.bOpenUp)
+		{
+			if (const Clip* C = M.FindClip("open_up"))
+			{
+				M.Play(*C, C->Long, 1.0, S);
+			}
+		}
 		if (P.FireAge >= 0.0)
 		{
 			if (const Clip* C = M.FindClip("fire"))
@@ -5255,5 +5288,268 @@ namespace LandKit
 		{
 			V.Update(T, &Events);
 		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// TK1: the far level merged, for drawing far vehicles as instances.
+
+	namespace
+	{
+		/** A body flag the scene hides a body by while her vehicle stands (bWhileManned: a roof gun's cradle shown only
+		 * while it is manned), read where the model's bodies carry it, and false where they do not. */
+		template <typename TBody>
+		bool HiddenAtTimes(const TBody& B)
+		{
+			if constexpr (requires(const TBody& X) { static_cast<bool>(X.bWhileManned); })
+			{
+				return static_cast<bool>(B.bWhileManned);
+			}
+			else
+			{
+				(void)B;
+				return false;
+			}
+		}
+	}
+
+	bool MayHide(const Body& B)
+	{
+		return HiddenAtTimes(B);
+	}
+
+	void SplitFar(const Model& M, FarSplit& Out, const std::vector<uint8_t>* KeepOut)
+	{
+		Out = FarSplit();
+		const size_t N = M.Bodies.size();
+		Out.PieceOf.assign(N, -1);
+		Out.Kept.assign(N, 0);
+		Out.StandIn.assign(N, 0);
+		Out.Reach.assign(N, 0.0);
+		Out.Loose.assign(N, 0);
+		auto Under = [&M](int P, int Top)
+		{
+			for (; P >= 0 && Top >= 0; P = M.Parts[static_cast<size_t>(P)].Parent)
+			{
+				if (P == Top)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+		const int TurretBody = M.Turret >= 0 ? M.Parts[static_cast<size_t>(M.Turret)].Body : -1;
+		for (size_t B = 0; B < N; ++B)
+		{
+			if (M.Bodies[B].Parent < 0)
+			{
+				Out.Pieces[FarSplit::HullPiece].Anchor = static_cast<int>(B);
+				break;
+			}
+		}
+		Out.Pieces[FarSplit::TurretPiece].Anchor = TurretBody;
+		// (a body the scene may hide, and every body hanging on one, stays out of the pieces: bodies come after the body
+		// they hang on)
+		std::vector<uint8_t> Hides(N, 0);
+		for (size_t B = 0; B < N; ++B)
+		{
+			const Body& Bo = M.Bodies[B];
+			Hides[B] = MayHide(Bo) || (KeepOut && B < KeepOut->size() && (*KeepOut)[B])
+				|| (Bo.Parent >= 0 && static_cast<size_t>(Bo.Parent) < B && Hides[static_cast<size_t>(Bo.Parent)]);
+			// What moves near only and is drawn at rest from afar: a hatch and what hangs on it, the barrel's recoil (and
+			// the breech on it) passed by; a spinning wheel's turn passed by, its shift not.
+			bool bHatch = false;
+			for (int H : M.Hatches)
+			{
+				bHatch = bHatch || Under(Bo.Part, H);
+			}
+			if (bHatch || Under(Bo.Part, M.Barrel))
+			{
+				Out.Loose[B] = 2;
+			}
+			else if (M.Parts[static_cast<size_t>(Bo.Part)].Kind == PartKind::Spin)
+			{
+				Out.Loose[B] = 1;
+			}
+			const bool bFar = !Bo.Far.Triangles.empty(), bNear = !Bo.Near.Triangles.empty();
+			if (!bFar && !bNear)
+			{
+				continue; // (nothing drawn)
+			}
+			const int Piece = TurretBody >= 0 && Under(Bo.Part, M.Turret) ? FarSplit::TurretPiece : FarSplit::HullPiece;
+			// (a body with no near level is drawn far at every distance, by its own mesh; one with no far level, which the
+			// scene draws at its near level at every distance (the Panzer IV's suspension arms, the StuG's root), stands
+			// in at its near level, so the piece looks as the far bodies looked)
+			if (Hides[B] || !bNear || Out.Pieces[Piece].Anchor < 0)
+			{
+				Out.Kept[B] = bFar ? 1 : 0;
+				continue;
+			}
+			Out.StandIn[B] = bFar ? 0 : 1;
+			Out.PieceOf[B] = Piece;
+			Out.Pieces[Piece].Bodies.push_back(static_cast<int>(B));
+			const Mesh& Drawn = Out.Level(M, static_cast<int>(B));
+			for (size_t K = 0; K + 2 < Drawn.Points.size(); K += 3)
+			{
+				const V3 At(Drawn.Points[K], Drawn.Points[K + 1], Drawn.Points[K + 2]);
+				Out.Reach[B] = std::max(Out.Reach[B], At.Length());
+			}
+		}
+		// Each piece: its bodies' meshes one after another, carried from each pivot to the anchor's (at rest every part
+		// stands unturned, so a body's points are its pivot's offset from the anchor's away).
+		for (FarPiece& Piece : Out.Pieces)
+		{
+			if (Piece.Bodies.empty())
+			{
+				continue;
+			}
+			const V3 Origin = M.Bodies[static_cast<size_t>(Piece.Anchor)].Pivot;
+			size_t Points = 0, Indices = 0;
+			for (int B : Piece.Bodies)
+			{
+				Points += Out.Level(M, B).Count();
+				Indices += Out.Level(M, B).Triangles.size();
+			}
+			Mesh& To = Piece.Merged;
+			To.Points.reserve(Points * 3);
+			To.Normals.reserve(Points * 3);
+			To.Colours.reserve(Points * 4);
+			To.Soot.reserve(Points);
+			To.Triangles.reserve(Indices);
+			for (int B : Piece.Bodies)
+			{
+				const Body& Bo = M.Bodies[static_cast<size_t>(B)];
+				const Mesh& From = Out.Level(M, B);
+				const uint32_t Base = static_cast<uint32_t>(To.Count());
+				Piece.FirstPoint.push_back(Base);
+				Piece.FirstTriangle.push_back(static_cast<uint32_t>(To.Triangles.size() / 3));
+				const V3 Off = Bo.Pivot - Origin;
+				const size_t Count = From.Count();
+				for (size_t K = 0; K < Count; ++K)
+				{
+					To.Points.push_back(static_cast<float>(From.Points[K * 3] + Off.X));
+					To.Points.push_back(static_cast<float>(From.Points[K * 3 + 1] + Off.Y));
+					To.Points.push_back(static_cast<float>(From.Points[K * 3 + 2] + Off.Z));
+					To.Normals.insert(To.Normals.end(), From.Normals.begin() + static_cast<std::ptrdiff_t>(K * 3),
+						From.Normals.begin() + static_cast<std::ptrdiff_t>(K * 3 + 3));
+					To.Colours.insert(To.Colours.end(), From.Colours.begin() + static_cast<std::ptrdiff_t>(K * 4),
+						From.Colours.begin() + static_cast<std::ptrdiff_t>(K * 4 + 4));
+					To.Soot.push_back(From.Soot[K]);
+				}
+				for (uint32_t I : From.Triangles)
+				{
+					To.Triangles.push_back(Base + I);
+				}
+			}
+			Piece.FirstPoint.push_back(static_cast<uint32_t>(To.Count()));
+			Piece.FirstTriangle.push_back(static_cast<uint32_t>(To.Triangles.size() / 3));
+		}
+
+		// The commander's lid up: the piece that holds it once more, every body of it as it stands at the end of her
+		// open_up clip (each part's turn and slide from the clip, the rest at rest), carried into the anchor's frame as
+		// the anchor stands then (it does not move: the clip moves the lid and what hangs on it).
+		const Clip* OpenUp = M.FindClip("open_up");
+		if (M.CommanderHatch < 0 || !OpenUp)
+		{
+			return;
+		}
+		for (size_t B = 0; B < N && Out.OpenOf < 0; ++B)
+		{
+			if (Out.PieceOf[B] >= 0 && Under(M.Bodies[B].Part, M.CommanderHatch))
+			{
+				Out.OpenOf = Out.PieceOf[B];
+			}
+		}
+		if (Out.OpenOf < 0)
+		{
+			return;
+		}
+		for (const ClipTrack& T : OpenUp->Tracks)
+		{
+			for (size_t B = 0; B < N; ++B)
+			{
+				if (Out.PieceOf[B] >= 0 && Out.PieceOf[B] != Out.OpenOf && Under(M.Bodies[B].Part, T.Part))
+				{
+					Out.OpenOf = -1; // (the clip moves a body of the other piece too: no lid piece, she shows it shut)
+					return;
+				}
+			}
+		}
+		std::vector<PartState> S(M.Parts.size());
+		M.Play(*OpenUp, OpenUp->Long, 1.0, S);
+		std::vector<Xf> Posed;
+		M.Solve(Xf(), S, Posed);
+		const FarPiece& Shut = Out.Pieces[Out.OpenOf];
+		FarPiece& Up = Out.Open;
+		Up.Anchor = Shut.Anchor;
+		Up.Bodies = Shut.Bodies;
+		Up.FirstPoint = Shut.FirstPoint;
+		Up.FirstTriangle = Shut.FirstTriangle;
+		Up.Merged = Shut.Merged;
+		const Body& AnchorBody = M.Bodies[static_cast<size_t>(Up.Anchor)];
+		const Xf& A = Posed[static_cast<size_t>(AnchorBody.Part)];
+		const Quat Back = A.Q.Unit().Conj();
+		for (size_t K = 0; K < Up.Bodies.size(); ++K)
+		{
+			const Body& Bo = M.Bodies[static_cast<size_t>(Up.Bodies[K])];
+			const Xf& X = Posed[static_cast<size_t>(Bo.Part)];
+			const Mesh& From = Out.Level(M, Up.Bodies[K]);
+			const size_t Base = Up.FirstPoint[K];
+			for (size_t P = 0; P < From.Count(); ++P)
+			{
+				const V3 Local(From.Points[P * 3], From.Points[P * 3 + 1], From.Points[P * 3 + 2]);
+				const V3 At = Back.Rotate(X.Apply(Bo.Pivot + Local) - A.T) - AnchorBody.Pivot;
+				const V3 Way = Back.Rotate(X.Q.Rotate(V3(From.Normals[P * 3], From.Normals[P * 3 + 1], From.Normals[P * 3 + 2])));
+				const size_t I = (Base + P) * 3;
+				Up.Merged.Points[I] = static_cast<float>(At.X);
+				Up.Merged.Points[I + 1] = static_cast<float>(At.Y);
+				Up.Merged.Points[I + 2] = static_cast<float>(At.Z);
+				Up.Merged.Normals[I] = static_cast<float>(Way.X);
+				Up.Merged.Normals[I + 1] = static_cast<float>(Way.Y);
+				Up.Merged.Normals[I + 2] = static_cast<float>(Way.Z);
+			}
+		}
+	}
+
+	double FarOff(const Model& M, const FarSplit& Split, const std::vector<Place>& Now, std::vector<double>* PerBody)
+	{
+		if (PerBody)
+		{
+			PerBody->assign(M.Bodies.size(), 0.0);
+		}
+		double Worst = 0.0;
+		for (const FarPiece& Piece : Split.Pieces)
+		{
+			if (Piece.Empty() || Piece.Anchor < 0 || static_cast<size_t>(Piece.Anchor) >= Now.size())
+			{
+				continue;
+			}
+			const Place& A = Now[static_cast<size_t>(Piece.Anchor)];
+			const Quat Back = A.Q.Unit().Conj();
+			const V3 Origin = M.Bodies[static_cast<size_t>(Piece.Anchor)].Pivot;
+			for (int B : Piece.Bodies)
+			{
+				const size_t Bi = static_cast<size_t>(B);
+				if (Bi >= Now.size() || Split.Loose[Bi] == 2)
+				{
+					continue;
+				}
+				// Its pivot on the anchor's frame against where the piece has it, and its turn against none (a point
+				// Reach from the pivot moves by at most 2 sin(turn / 2) Reach).
+				const Place& P = Now[Bi];
+				const V3 Shift = Back.Rotate(Swap(P.At - A.At)) - (M.Bodies[Bi].Pivot - Origin);
+				double Off = Shift.Length();
+				if (Split.Loose[Bi] == 0)
+				{
+					const Quat Turn = Back * P.Q.Unit();
+					Off += 2.0 * std::sqrt(Turn.X * Turn.X + Turn.Y * Turn.Y + Turn.Z * Turn.Z) * Split.Reach[Bi];
+				}
+				if (PerBody)
+				{
+					(*PerBody)[Bi] = Off;
+				}
+				Worst = std::max(Worst, Off);
+			}
+		}
+		return Worst;
 	}
 }

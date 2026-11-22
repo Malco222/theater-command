@@ -326,6 +326,9 @@ namespace LandKit
 		int PartIndex(const std::string& PartName) const;
 		int SocketIndex(const std::string& SocketName) const;
 		const Clip* FindClip(const std::string& ClipName) const;
+		/** She carries a roof machine gun as drawn (a roof_mg part not scaled to nothing by her swaps this month, or for
+		 * her nation): only then may her commander fire one. */
+		bool RoofGun() const;
 		/** The links of a track side (-1 left, +1 right), in the order their points run in the track body's Near. */
 		const std::vector<int>& Links(int Side) const { return Side < 0 ? LinksL : LinksR; }
 		/**
@@ -526,6 +529,7 @@ namespace LandKit
 			double X = 0.0, Y = 0.0, Heading = 0.0;
 			double Turret = 0.0, Gun = 0.0, Traverse = 0.0, Steer = 0.0, Trail = 0.0;
 			double Hatches = 0.0;       // 0 shut to 1 every hatch open
+			bool bOpenUp = false;       // her open_up clip played to its end (her commander's lid as she stands unbuttoned)
 			double FireAge = -1.0;      // seconds since a shot (the barrel's recoil), -1 none
 			double DeathAge = -1.0;     // seconds since knocked out (-1 alive)
 			bool bBrewUp = false;
@@ -738,4 +742,93 @@ namespace LandKit
 	/** Reads a recording's vehicle tracks, rounds and blocks (Battle::Load does it; the checks use it alone). */
 	bool ReadRecording(const Json& Doc, std::vector<Block>& OutBlocks, std::vector<TrackWords>& OutTracks,
 		std::vector<Round>& OutRounds, double& OutEnd, int& OutYear, int& OutMonth, std::string& OutError);
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// TK1: the far level merged, for drawing far vehicles as instances (the scene's Battle/LandCrowd).
+
+	/**
+	 * One piece of a model's far level: bodies merged into one mesh as they stand at rest (every part's turn, slide
+	 * and clip at nothing: the gun at its rest lay, every hatch shut, the wheels unturned), in the frame of its anchor
+	 * body (model axes, metres from the anchor's pivot, as a body's own points). Drawn at the anchor's place
+	 * (Vehicle::Bodies()[Anchor]) exactly as the anchor body's own mesh would be.
+	 */
+	struct FarPiece
+	{
+		int Anchor = -1;                     // the body whose place it is drawn at (-1: no piece)
+		Mesh Merged;                         // points, normals, colours, soot weights and triangles (no links)
+		std::vector<int> Bodies;             // the bodies merged in, in body order
+		std::vector<uint32_t> FirstPoint;    // where each of Bodies' points begin in Merged, and the end (one more than Bodies)
+		std::vector<uint32_t> FirstTriangle; // where each one's triangles begin (in triangles), and the end
+		bool Empty() const { return Merged.Triangles.empty(); }
+	};
+
+	/** A model's far level cut for instancing: a hull piece and, where she has a turret, a turret piece. */
+	struct FarSplit
+	{
+		enum : int { HullPiece = 0, TurretPiece = 1 };
+		/** The hull (every body not under the turret, at her root body) and the turret (the turret's body and every body
+		 * under it, at the turret body). A model with no turret (a gun, a lorry) has the first only. */
+		FarPiece Pieces[2];
+		/**
+		 * By body: the piece it is drawn in past the hand-over, or -1. Each body goes in at its far level; a body with
+		 * no far level, which the scene draws at its near level at every distance, stands in at its near level
+		 * (StandIn), so a piece looks as the bodies looked from afar. Left out (-1, with Kept set where it has a far
+		 * level, to be drawn by its own mesh as before): a body with no near level (drawn far at every distance), and a
+		 * body the scene may hide while she stands (MayHide, or the caller's KeepOut: a manned roof gun's cradle) with
+		 * every body hanging on it, which must never be baked into a piece.
+		 */
+		std::vector<int> PieceOf;
+		std::vector<uint8_t> Kept, StandIn;
+		/** By body: the farthest of its merged points from its pivot (metres; FarOff weighs a turn by it). */
+		std::vector<double> Reach;
+		/** By body: what FarOff passes by, near-only motions shown at rest from afar: 1 its turn (a wheel's spin), 2 all
+		 * of it (a hatch and what hangs on it, the barrel's recoil and the breech on it). */
+		std::vector<uint8_t> Loose;
+		/**
+		 * TK1 (the commander's lid): the piece that holds her commander's hatch (OpenOf: the turret, or the hull where she
+		 * has none, as a StuG) once more, with her open_up clip played to its end (the lid up, lifted up its post first
+		 * where it lifts, as the Tiger's and the Panther's): drawn in that piece's stead while her lid stands open
+		 * OpenFrom or more (Vehicle::HatchOpen), so an unbuttoned tank shows her lid up past the hand-over and her
+		 * commander standing clear of it, not through it. The same bodies as that piece, in the same order. Empty
+		 * (OpenOf -1) where she has no open_up clip, her commander's lid is in no piece, or the clip moves a body of
+		 * another piece.
+		 */
+		FarPiece Open;
+		int OpenOf = -1;
+		static constexpr double OpenFrom = 0.5;
+		bool Empty() const { return Pieces[0].Empty() && Pieces[1].Empty(); }
+		/** The pieces drawn: 1, or 2 with a turret piece. */
+		int Count() const { return Pieces[1].Empty() ? (Pieces[0].Empty() ? 0 : 1) : 2; }
+		/** The level body B is merged at (its far mesh, or its near one where it stands in). */
+		const Mesh& Level(const Model& M, int B) const
+		{
+			const Body& Of = M.Bodies[static_cast<size_t>(B)];
+			return StandIn[static_cast<size_t>(B)] ? Of.Near : Of.Far;
+		}
+	};
+
+	/** Whether the scene may hide this body while her vehicle stands (a body flagged bWhileManned, where the model has
+	 * that flag): such a body is never merged into a far piece. False for every body of a model without the flag. */
+	bool MayHide(const Body& B);
+
+	/** A body the ground scene draws only while her commander mans it: a German roof gun, the MG 34 in its cradle on
+	 * the cupola's rail (the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post).
+	 * The one rule for the scene's bodies and the far pieces' KeepOut. */
+	inline bool ShownWhileManned(const Model& M, const Body& B) { return B.Name == "roof_mg_cradle" && M.Nation == "GER"; }
+
+	/**
+	 * Cuts M's far level into its pieces (once a model, at load). KeepOut (by body, may be null or short): bodies the
+	 * caller keeps out of the pieces as well as those MayHide names. Every triangle of a merged body's level (FarSplit::
+	 * Level) is in its piece exactly once, its points carried from the body's pivot to the anchor's as they stand at
+	 * rest, with its normals, colours and soot weights. Also cuts the lid-up copy (FarSplit::Open) where she has one.
+	 */
+	void SplitFar(const Model& M, FarSplit& Out, const std::vector<uint8_t>* KeepOut = nullptr);
+
+	/**
+	 * How far (metres) the merged bodies of a vehicle posed now (Vehicle::Bodies()) stand off where their piece draws
+	 * them (their rest place on the anchor's place), the worst of them: each body's shift plus its turn times its
+	 * reach. A wheel's spin, a hatch (and what hangs on it) and the barrel's recoil are passed by: near-only motions,
+	 * shown shut and still from afar. PerBody (optional): each body's own (0 for a body in no piece or passed by).
+	 */
+	double FarOff(const Model& M, const FarSplit& Split, const std::vector<Place>& Now, std::vector<double>* PerBody = nullptr);
 }

@@ -10,6 +10,8 @@ class ACameraActor;
 class ACampaignEnvironment;
 class ACampaignMapActor;
 class FJsonObject;
+class FLandCrowd; // TK1
+class FLandVat; // SO1
 class FLandLive;
 class SLandBattleScreen;
 class SWidget;
@@ -18,12 +20,14 @@ class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
 class UInstancedStaticMeshComponent;
+class UMeshComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
 class UStaticMesh;
+class UStaticMeshComponent;
 class UTexture2D;
 struct FLandBattleState;
 namespace LandCarpet
@@ -164,7 +168,9 @@ private:
 	struct FTileDrawn
 	{
 		FBox2D Box;
-		TWeakObjectPtr<UProceduralMeshComponent> Near, Far, Built;
+		/** Each a static mesh of its own (GS8: drawn from the engine's cached draw commands), or with
+		 * -TheaterLandTilesProcedural a procedural mesh as before. */
+		TWeakObjectPtr<UMeshComponent> Near, Far, Built;
 		/** Once a hole is dug in it, its near ground by parts (LandCrater::Dug), drawn in Near's place. */
 		TArray<TWeakObjectPtr<UProceduralMeshComponent>> NearParts;
 		bool bNearShown = false;
@@ -173,6 +179,9 @@ private:
 	TArray<FTileDrawn> Tiles;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> FieldMeshes;
+	/** GS8: the ground tiles' own static meshes and their components. */
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> GroundKept;
 	/** The ground's things (hedge shrubs, trees, gates; LandField's bases) are far too many to lay into meshes (some
 	 * 129,000 of them, 150 million triangles at their near level): each kind is made once as a mesh of its own, in three
 	 * shades of its instances' tints, its near level the mesh's first level of detail and its far the second, and drawn
@@ -195,6 +204,9 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
 	TArray<int32> ClutterCopyOf;
+	/** GS9: a clutter mesh's shadowed twin (by ClutterCopies' number; -1 none): the corn's bundles cast their shadow
+	 * only within -TheaterLandCornShadowTo= (25 m) of the eye, laid there in the twin (LandCarpet's ShadowTo). */
+	TArray<int32> ClutterTwin;
 	TSharedPtr<LandCarpet::Squares> Carpet;
 	/** The corn drawn stalk by stalk round the lens (the art director's cut 4, fix 4): whether the stalks' meshes were
 	 * made (StalkInk), and whether the eye is low enough for them now (they are shown, and the bundles cleared within
@@ -210,6 +222,34 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> RutMeshes;
 	double RutsSentAt = -10.0;
+	/** GS8: the torn ground's pieces (a section of a patch's holes or tracks, a part of a dug tile's near ground) are sent
+	 * into their procedural meshes as they change, and once a piece has stood unchanged TornSettleAfter seconds it is
+	 * baked into a static mesh of its own (cached draw) and its procedural section emptied: a patch's procedural mesh
+	 * then holds only its pieces still changing, and a send makes only those again. A change makes a baked piece
+	 * procedural again. -TheaterLandTornProcedural: never baked, as before. */
+	struct FTornPiece
+	{
+		/** 0: holes (CraterMeshes), 1: tracks (RutMeshes), 2: dug ground (a tile's NearParts). */
+		int32 Kind = 0;
+		/** The patch and section, or the tile and part. */
+		int32 A = 0, B = 0;
+		double ChangedAt = 0.0;
+		bool bHot = false;
+		TWeakObjectPtr<UStaticMeshComponent> Baked;
+	};
+	static int64 TornKey(int32 Kind, int32 A, int32 B)
+	{
+		return (static_cast<int64>(Kind) << 56) | (static_cast<int64>(A & 0xFFFFFF) << 28) | static_cast<int64>(B & 0xFFFFFFF);
+	}
+	TMap<int64, FTornPiece> TornPieces;
+	TArray<int64> TornHot;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> TornBaked;
+	bool bTornBakes = true;
+	double TornSettleAfter = 3.0, TornBakeMs = 1.0;
+	/** For the 10 s log: sections sent, pieces baked, and the slowest frame's baking (ms). */
+	int32 TornSent = 0, TornBakedCount = 0;
+	double TornBakeMostMs = 0.0;
 
 	// ---- The men (LandMen) ----
 	struct FManDrawn
@@ -246,6 +286,21 @@ private:
 	int32 BankMade = 0;
 	double BankMadeMs = 0.0;
 
+	// ---- The mid and far men as one crowd of posed instances (SO1's draw: Battle/LandVat) ----
+	/** None without M_LandCrowd or with -TheaterLandNoVat: then far men are drawn a mesh a set and pose (above) and mid
+	 * men skinned, as before. What it makes is held in VatKept. */
+	TSharedPtr<FLandVat> Vat;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> VatKept;
+	/** In the wide mass shot a far man is drawn no smaller than MassMinPx of the picture's lines (GS3's measure): grown
+	 * about his feet ("-TheaterLandMassMinPx=", 2; 0 none). For the 10 s log: men placed as instances (mid, far), men
+	 * grown and the most grown, and the card's own frame time (ms, summed). */
+	double MassMinPx = 2.0;
+	int32 VatMid = 0, VatFar = 0, MassGrown = 0;
+	double MostGrow = 1.0, GpuMs = 0.0;
+	/** For the 10 s log (FX2): the most smoke puffs the effects kit drew in a frame, and the room it was asked for then. */
+	int32 PuffsMost = 0, PuffsMostAsked = 0;
+
 	// ---- The tanks, guns and lorries (LandKit) ----
 	struct FBodyDrawn
 	{
@@ -253,12 +308,24 @@ private:
 		int32 Vehicle = 0, Body = 0;
 		bool bTrack = false;
 		bool bNear = true;
+		/** Drawn only while her roof gun is manned (a German tank's MG 34, its cradle part). */
+		bool bWhileManned = false;
 		double SootShown = 0.0;
+		/** TK1: whether its far level is a section of its own (a body the crowd merges has none), and whether her
+		 * instances draw it now (its sections hidden). TK3: the run its links were last posed for (-1e300: to be posed). */
+		bool bFarSection = false;
+		bool bHeld = false;
+		double LinksRun = -1e300;
 	};
 	TArray<FBodyDrawn> BodiesDrawn;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> BodyMeshes;
 	TArray<float> LinkPoints;
+	/** TK1: far vehicles as instances of their models' merged far pieces, and TK3's who is in the picture
+	 * (Battle/LandCrowd); what it makes is held here. */
+	TSharedPtr<FLandCrowd> FarCrowd;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> CrowdKept;
 
 	// ---- The footprint shade (LandShade on M_LandShade: the art director's cut 4, fix 3) ----
 	/** The shade's ink (none without M_LandShade: then no shade is drawn, said once), its meshes (one a kind of tank,
@@ -386,7 +453,10 @@ private:
 	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
 	double LogAt = 0.0, SlowestFrame = 0.0, CoresMs = 0.0, MenMs = 0.0, ArmourMs = 0.0, FieldMs = 0.0;
-	int32 LogFrames = 0;
+	/** ...and the drawing's own parts (the men's meshes, the tanks', the effects kit, the sound), the men in the picture
+	 * and their meshes made again or held at the old level (the GS3 cap) over the span; the most in one frame. */
+	double DrawMenMs = 0.0, DrawArmourMs = 0.0, EffectsMs = 0.0, SoundMs = 0.0;
+	int32 LogFrames = 0, MenInPicture = 0, MenRebuilt = 0, RebuildsPut = 0, MostInPicture = 0;
 
 	// ---- The picture run (-TheaterLandBattleShots) ----
 	FString ShotFolder;
@@ -498,6 +568,11 @@ private:
 	void MakeMen();
 	void DrawMen(const FVector& EyeWorld);
 	void MakeArmour();
+	/** The tank commanders: a rider in the crowd for each American and German tank his crew file has a place on, with
+	 * her roof gun's bursts and his end read from the recording (after the replay has begun: its TankMg). */
+	void MakeRiders();
+	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
+	void RideTanks();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */
@@ -528,6 +603,10 @@ private:
 	void MakeRuts();
 	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */
 	void SendDug();
+	/** GS8: a torn piece just sent into its procedural section (its baked mesh, if any, let go). */
+	void TornChanged(int32 Kind, int32 A, int32 B);
+	/** GS8: the torn pieces unchanged TornSettleAfter seconds baked into static meshes, within TornBakeMs a frame. */
+	void SettleTorn();
 	void PlayArmourEvents();
 	void PlayMenEvents();
 	void PlaySound(double RealDt);

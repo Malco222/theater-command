@@ -915,12 +915,15 @@ void ALandBattle::GeneralDo(const FString& Word)
 	{
 		S.bEyeSwitched = S.bEyeSwitched || !G.bFilm;
 		G.bFilm = true;
+		// (the film as it chooses: any ride let go)
+		S.Eye.Ride(-1);
 		Say("THE FILM HAS THE CAMERA: ESC BRINGS THE MAP BACK");
 	}
 	else if (Word == TEXT("map"))
 	{
 		S.bEyeSwitched = S.bEyeSwitched || G.bFilm;
 		G.bFilm = false;
+		S.Eye.Ride(-1);
 	}
 	else if (Word.StartsWith(TEXT("follow:")))
 	{
@@ -984,6 +987,17 @@ void ALandBattle::GeneralDo(const FString& Word)
 		}
 		GiveGeneral(WideOf(Clip.FallBack()), TEXT("withdraw"), -1, Points, 0.0, 0.0);
 		G.PingAt = -10.0;
+	}
+	else if (Word == TEXT("ride"))
+	{
+		// Ride with this unit (Brian's yes, 22 November): the film takes the camera and stays with the unit in his hand
+		// (the first, if he holds several), cutting among its men or tanks; it lets go of itself when none of them is
+		// left standing, and ESC brings the map back.
+		const int Block = Clip.Chosen().front();
+		S.bEyeSwitched = S.bEyeSwitched || !G.bFilm;
+		G.bFilm = true;
+		S.Eye.Ride(Block);
+		Say("THE FILM RIDES WITH THEM: ESC BRINGS THE MAP BACK");
 	}
 	else if (Word == TEXT("staff"))
 	{
