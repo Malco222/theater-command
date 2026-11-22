@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3ab493f5 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e022ea0e 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -42718,6 +42718,8 @@
     const hurt2 = battleHit(g2, target, fight2, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === "art" ? u.divs : 0), 0));
     if (hurt2) rep.city = { region: hurt2.region, added: hurt2.added, now: hurt2.now };
     g2.reports.push(rep);
+    const scar = (g2.scars ?? (g2.scars = {}))[target.id];
+    g2.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g2.turn };
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
       g2.flags.lateBattles = (g2.flags.lateBattles ?? 0) + 1;
@@ -48600,6 +48602,9 @@
       bargains: g2.bargains,
       // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
       legions: g2.legions,
+      // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
+      // its scars back from its reports when loaded.
+      scars: g2.flags.open === 1 ? g2.scars : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -48755,6 +48760,13 @@
     if (Array.isArray(d.subLook)) g2.subLook = d.subLook;
     if (d.bargains && typeof d.bargains === "object") g2.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
     if (d.legions && typeof d.legions === "object") g2.legions = { abroad: {}, done: {}, ...d.legions };
+    if (d.scars && typeof d.scars === "object") g2.scars = d.scars;
+    else
+      for (const r of g2.reports ?? []) {
+        if (r.yielded) continue;
+        const was = (g2.scars ?? (g2.scars = {}))[r.region];
+        g2.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
+      }
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -75239,7 +75251,10 @@
         const t = landTicket(g2, corps, g2.regions[to]);
         if (!t) return null;
         const why = staffOnly(t);
-        return why ? { ticket: null, why } : { ticket: t, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
+        if (why) return { ticket: null, why };
+        const scar = g2.scars?.[to];
+        const ticket = scar && scar.n > 0 ? { ...t, scars: { count: scar.n, months: Math.max(0, g2.turn - scar.last) } } : t;
+        return { ticket, live: liveOf(g2, t, attackOutlook(g2, corps, g2.regions[to])) };
       },
       battleSettleLand(ids2, to, result, seed) {
         const r = result && "over" in result ? result.over : result;
