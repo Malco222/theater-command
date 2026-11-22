@@ -144,7 +144,7 @@ export interface Straggler {
 /** What the campaign hands the air battle as the place: the raid, its target, and what the raid card forecast. */
 export interface AirPlace {
   /** Named aces (campaign/aces.ts): by campaign air group id, the group's ace as the news names him and his victories, for the 3D game to paint his aircraft and name him if he falls. Shown, never counted. */
-  aces?: Record<number, { name: string; kills: number }>;
+  aces?: Record<number, { name: string; kills: number; by?: Record<string, number> }>;
   /** The campaign's raid kind and mission ('bomb', 'night', 'superiority' in the first slice). */
   kind: string;
   mission: AirMission;

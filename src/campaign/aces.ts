@@ -89,6 +89,15 @@ function onRecord(g: Game, f: AirFleet, a: AirAce, fell?: number, at?: number): 
   if (!was) list.push(row);
 }
 
+/** The nation that put up the most aircraft on the other side of a fight (by name on a tie), or null with none. */
+function mainFoe(foes: AirSide[]): string | null {
+  const n = new Map<string, number>();
+  for (const s of foes) n.set(s.nat, (n.get(s.nat) ?? 0) + s.ftr + s.bmr);
+  let best: string | null = null, most = 0;
+  for (const [nat, k] of [...n].sort((x, y) => (x[0] < y[0] ? -1 : 1))) if (k > most) { best = nat; most = k; }
+  return best;
+}
+
 /**
  * After an air fight: every fighter group in it may name its ace, or add to his tally, and he may fall. `att` and `def`
  * are the sides as the fight booked them (the aircraft each group flew and lost), beside the groups themselves. The
@@ -103,9 +112,12 @@ export function acesFought(g: Game, att: AirSide[], attF: AirFleet[], def: AirSi
     const st = (f.aces ??= { from: 0, n: 0 });
     const down = downedOf(f);
     const tally = Math.round(ACES.share * (down - st.from));
+    const foes = attacking ? def : att;
+    const foe = mainFoe(foes);
     if (!st.now) {
       if (ACES.share * (down - st.from) < ACES.at) continue;
       st.now = newAce(g, f, st, Math.max(ACES.at, tally));
+      if (foe) st.now.by = { [foe]: st.now.kills };
       st.n++;
       if (f.nat === me) {
         const a = st.now;
@@ -116,6 +128,7 @@ export function acesFought(g: Game, att: AirSide[], attF: AirFleet[], def: AirSi
       continue;
     }
     const a = st.now;
+    if (tally > a.kills && foe) (a.by ??= {})[foe] = (a.by[foe] ?? 0) + tally - a.kills;
     a.kills = Math.max(a.kills, tally);
     if (f.nat === me) onRecord(g, f, a);
     // Did he come home? The group's own loss share that day (ruling R2), from his own stream.
@@ -124,7 +137,6 @@ export function acesFought(g: Game, att: AirSide[], attF: AirFleet[], def: AirSi
     const roll = new Rng(hashString(`acefell:${g.seed}:${f.id}:${st.n}:${g.turn}:${g.flags.airBattles ?? 0}`)).next();
     if (roll >= p) continue;
     // He fell. The news names him for the player's own, and for an enemy's the player's fighters brought down.
-    const foes = attacking ? def : att;
     const words = { ...groupWords(f), title: aceRank(f.nat, a), name: a.name, kills: a.kills };
     const at = place ? thePlace(place) : '';
     if (f.nat === me) {
@@ -155,11 +167,23 @@ export function aceGrief(g: Game, u: Storied & { nat?: string }): number {
 }
 
 /** The aces of the groups in an air battle, for its ticket (battle/air AirPlace.aces): shown, never counted. Null with none. */
-export function aceSeats(g: Game, groups: AirFleet[]): Record<number, { name: string; kills: number }> | null {
+export function aceSeats(g: Game, groups: AirFleet[]): Record<number, { name: string; kills: number; by?: Record<string, number> }> | null {
   if (!acesOn(g)) return null;
-  const out: Record<number, { name: string; kills: number }> = {};
-  for (const f of groups) if (f.aces?.now) out[f.id] = { name: aceTitle(f.nat, f.aces.now), kills: f.aces.now.kills };
+  const out: Record<number, { name: string; kills: number; by?: Record<string, number> }> = {};
+  for (const f of groups) if (f.aces?.now) out[f.id] = { name: aceTitle(f.nat, f.aces.now), kills: f.aces.now.kills, ...(f.aces.now.by ? { by: { ...f.aces.now.by } } : {}) };
   return Object.keys(out).length ? out : null;
+}
+
+/** An ace for a recorded set piece (tools/air-record): a name of his nation's from the key's own stream, never a famous
+ *  ace, as the ticket's aces carry him. The campaign names its aces by acesFought; this is only for a record's ticket. */
+export function setPieceAce(nat: string, key: string, kills: number, by: Record<string, number>): { name: string; kills: number; by: Record<string, number> } {
+  const N = namesOf(nat), rng = new Rng(hashString(`acename:${key}`));
+  let name = '';
+  for (let k = 0; k < 8; k++) {
+    name = N.familyFirst ? `${rng.pick(N.last)} ${rng.pick(N.first)}` : `${rng.pick(N.first)} ${rng.pick(N.last)}`;
+    if (!ACES.guard.includes(name)) break;
+  }
+  return { name: aceTitle(nat, { name, rank: rng.int(2), kills, from: 0, since: 0 }), kills, by };
 }
 
 /** The line on a group's card: "Its ace: Flight Lieutenant Tom Harland, 23 victories." Null with none. */

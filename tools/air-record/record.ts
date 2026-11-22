@@ -30,6 +30,7 @@ import { defenceOf, experience, leanOf, STYLES } from '../../src/battle/air/styl
 import { airTicket, raidGroups, seaGround } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
 import { seatsOf } from '../../src/campaign/bombers';
+import { setPieceAce } from '../../src/campaign/aces';
 import type { AirUnit, AirPlace } from '../../src/battle/air/types';
 import type { FieldTicket, ForceTicket, Side } from '../../src/battle/core/types';
 
@@ -121,6 +122,8 @@ interface DayRaid {
   escort: string[];
   defenders: string[];
   models: Record<string, { ftr: string; bmr: string }>;
+  /** The lead escort group's named ace, invented (Brian's named aces): his victories and their nations. */
+  ace?: { kills: number; by: Record<string, number> };
 }
 
 const RAIDS: DayRaid[] = [
@@ -135,6 +138,8 @@ const RAIDS: DayRaid[] = [
     bombers: ['303rd Bomb Group', '91st Bomb Group', '384th Bomb Group'], escort: ['354th Fighter Group', '357th Fighter Group'],
     defenders: ['Jagdgeschwader 1', 'Jagdgeschwader 11'],
     models: { USA: { ftr: 'Mustang', bmr: 'B17' }, GER: { ftr: 'Fw190', bmr: 'He111' } },
+    // (an invented ace; the group's first weeks over Germany, so a young tally, all German)
+    ace: { kills: 6, by: { GER: 6 } },
   },
 ];
 
@@ -174,6 +179,12 @@ function raidTicketOf(R: DayRaid, seed: number): FieldTicket<AirPlace> {
   }
   if (Object.keys(bombers).length) place.bombers = bombers;
   else delete place.bombers;
+  // The lead escort group's named ace (campaign/aces.ts; Brian's named aces, release 2), invented, never a real man:
+  // for the scene to paint his marks and name him. Shown, never counted.
+  if (R.ace) {
+    const lead = t.att.forces.find((x) => x.kind !== 'bmr');
+    if (lead) place.aces = { [lead.corps]: setPieceAce(USA.nat, `${R.key}:${lead.corps}`, R.ace.kills, R.ace.by) };
+  }
   t.title = R.title;
   t.date = R.date;
   return t;

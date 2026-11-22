@@ -1421,6 +1421,10 @@ export class AirSim implements BattleSim<AirUnit> {
    * while routing) and its stragglers, each drifting back and down, one covered by a pair of its close escort.
    */
   private shown(u: AirUnit, dt: number): void {
+    // A named ace (campaign/aces.ts) rides in his group's lead unit, its first: his name, victories and their nations,
+    // for the scene to paint his aircraft. Shown, never counted.
+    const A = this.place.aces?.[u.corps];
+    const ace = A && this.units.find((x) => x.corps === u.corps) === u ? { ace: { name: A.name, kills: A.kills, ...(A.by ? { by: A.by } : {}) } } : {};
     if (u.air === 'ftr') {
       const ammo = u.kit0 > 0 ? clamp01((u.vig - SKY.spent) / (1 - SKY.spent)) : 1;
       // 'cool': how its engines are cooled, for the shade of what a hit one trails (the art director; fates.ts coolOf).
@@ -1436,6 +1440,7 @@ export class AirSim implements BattleSim<AirUnit> {
         ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
         fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 10_000) / 10_000 })),
+        ...ace,
       };
       return;
     }
@@ -1450,6 +1455,7 @@ export class AirSim implements BattleSim<AirUnit> {
       // seconds of it left in 'holdLeft'; between passes 'holdIn' is the air seconds until the next, SKY.flak.hold).
       flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && !this.held.has(u.id) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],
       ...this.heldLook(u, done),
+      ...ace,
     };
   }
 

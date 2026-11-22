@@ -98,6 +98,12 @@ namespace AirShow
 		std::vector<Fire> Firing;
 		std::vector<Strag> Strags;
 		std::vector<std::string> Flak;
+		// A named ace in this group's lead (the rules' extra.ace, on the group's first unit only; Brian's named aces,
+		// release 2): his title and name as the news gives them, his victories, and how many were each nation's (for
+		// his marks, in the victims' symbols). Empty, 0 and empty when the group has none, or in an older recording.
+		std::string AceName;
+		int AceKills = 0;
+		std::map<std::string, int> AceBy;
 	};
 
 	/** One event of a view, with what the show needs of its extra. */

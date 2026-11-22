@@ -1167,7 +1167,11 @@ export interface AirFleet extends Storied {
 }
 
 /** A named ace (aces.ts): his name, the rank he was named at (its place in his nation's list), his victories, the group's aircraft downed when his count began, and the month he was named. */
-export interface AirAce { name: string; rank: number; kills: number; from: number; since: number }
+export interface AirAce {
+  name: string; rank: number; kills: number; from: number; since: number;
+  /** His victories by the nation they flew for (each fight's added to the nation that put up the most aircraft against him), for his aircraft's marks. */
+  by?: Record<string, number>;
+}
 /** An air group's aces (aces.ts): the one flying now, the group's aircraft downed when the next man's count began, how many it has had, and the month the last one fell. */
 export interface AceState { now?: AirAce; from: number; n: number; fell?: number }
 /** An ace on the war's record (aces.ts): the player's own, and those the player's fighters brought down. His title and name as the news gave them, his group, his victories, the month he was named and the month he fell, and where. */
