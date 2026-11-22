@@ -594,9 +594,15 @@ namespace LandGeneralEye
 			Hurried = 1;
 			if (!bFirst)
 			{
-				Lift = LiftBefore;
-				LiftSwing = SwingBefore;
-				Spring(Lift, LiftSwing, std::max(Up, Need), Set.HurryRate, Dt);
+				// (hurried, but its push held under what the picture bears at this distance, HurryPush: at the nearest
+				// zoom, a few metres from its look-at, a spring left free lifted the whole view 2 cm in a frame, 1,274
+				// degrees a second squared in Kursk; what it cannot climb in time is put clear with a cut, below)
+				double L = LiftBefore, Sw = SwingBefore;
+				Spring(L, Sw, std::max(Up, Need), Set.HurryRate, Dt);
+				const double Push = Set.HurryPush * Far;
+				Sw = std::clamp(Sw, SwingBefore - Push * Dt, SwingBefore + Push * Dt);
+				Lift = LiftBefore + 0.5 * (SwingBefore + Sw) * Dt;
+				LiftSwing = Sw;
 			}
 			Lift = std::max(Lift, Was);
 			EyeAt = Eye1 + Vec(0.0, 0.0, Lift);
