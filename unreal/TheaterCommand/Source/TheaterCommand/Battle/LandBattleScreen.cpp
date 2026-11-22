@@ -716,11 +716,11 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 		else if (Sign == TEXT("tank"))
 		{
-			TArray<FVector2D> Track = { P(5, 14), P(19, 14) };
-			Arc(Track, P(19, 17), 3.0 * K, -0.5 * UE_DOUBLE_PI, 0.5 * UE_DOUBLE_PI);
-			Track.Add(P(5, 20));
-			Arc(Track, P(5, 17), 3.0 * K, 0.5 * UE_DOUBLE_PI, 1.5 * UE_DOUBLE_PI);
-			Path(Track);
+			TArray<FVector2D> Tread = { P(5, 14), P(19, 14) };
+			Arc(Tread, P(19, 17), 3.0 * K, -0.5 * UE_DOUBLE_PI, 0.5 * UE_DOUBLE_PI);
+			Tread.Add(P(5, 20));
+			Arc(Tread, P(5, 17), 3.0 * K, 0.5 * UE_DOUBLE_PI, 1.5 * UE_DOUBLE_PI);
+			Path(Tread);
 			Path({ P(7, 14), P(7, 11), P(15, 11), P(16.5, 14) });
 			Path({ P(12, 11), P(12, 8), P(15, 8) });
 			Path({ P(15, 9.5), P(21.5, 9.5) });
