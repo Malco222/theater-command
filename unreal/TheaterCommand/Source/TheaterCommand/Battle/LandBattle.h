@@ -456,6 +456,9 @@ private:
 	/** ...and the drawing's own parts (the men's meshes, the tanks', the effects kit, the sound), the men in the picture
 	 * and their meshes made again or held at the old level (the GS3 cap) over the span; the most in one frame. */
 	double DrawMenMs = 0.0, DrawArmourMs = 0.0, EffectsMs = 0.0, SoundMs = 0.0;
+	/** A live battle's own parts, ms over the log's 10 s: the general's view (his camera) and his screen (tags, routes,
+	 * chips, the pointer); with the rules' step, said on the log's live line. */
+	double GeneralViewMs = 0.0, GeneralScreenMs = 0.0;
 	int32 LogFrames = 0, MenInPicture = 0, MenRebuilt = 0, RebuildsPut = 0, MostInPicture = 0;
 
 	// ---- The picture run (-TheaterLandBattleShots) ----

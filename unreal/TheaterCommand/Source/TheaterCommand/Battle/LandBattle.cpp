@@ -4629,7 +4629,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 	if (Live.IsValid())
 	{
 		LandFell::Phase("tick: the general's view");
+		const double ViewBegan = LandParts::Seconds();
 		GeneralView(Real);
+		GeneralViewMs += (LandParts::Seconds() - ViewBegan) * 1000.0;
 	}
 	LandFell::Phase("tick: the dispatches");
 	S.Words = S.Desk.Update(S.Battle, Real);
@@ -4641,7 +4643,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 	if (Live.IsValid())
 	{
 		LandFell::Phase("tick: the general's screen");
+		const double ScreenBegan = LandParts::Seconds();
 		ShowGeneral();
+		GeneralScreenMs += (LandParts::Seconds() - ScreenBegan) * 1000.0;
 		LandFell::Phase("tick: the walk", ScriptStep);
 		TickScript();
 	}
@@ -4790,6 +4794,15 @@ void ALandBattle::Tick(float DeltaSeconds)
 			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
 			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid,
 			TornSent, TornBakedCount, TornHot.Num(), TornBakeMostMs, PuffsMost, PuffsMostAsked);
+		// (a live battle: the general's own parts, and the rules' step on their thread with how far ahead of the picture
+		// they have fought; the production lead's frame-time read, 22 November)
+		if (Live.IsValid())
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): a frame's general's view %.2f ms, his screen %.2f ms; the rules' last step %.0f ms, the slowest %.0f ms, fought to %.1f s, %.1f s ahead of the picture%s"),
+				GeneralViewMs / LogFrames, GeneralScreenMs / LogFrames, Live->LastMs(), Live->MostMs(), Live->Fought(), Live->Fought() - S.Battle,
+				S.Rec.bSetup ? TEXT(" (the setup step: the clock stands)") : TEXT(""));
+		}
+		GeneralViewMs = GeneralScreenMs = 0.0;
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
