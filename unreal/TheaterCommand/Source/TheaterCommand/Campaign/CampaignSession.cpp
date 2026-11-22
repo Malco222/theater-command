@@ -132,6 +132,13 @@ bool FCampaignSession::Prepare(FString& OutError)
 			return false;
 		}
 	}
+#if !UE_BUILD_SHIPPING
+	// R2 bargains hook: -TheaterR2Deals opens new grand campaigns with a neutral's bargains and the volunteer legions (development only)
+	if (bReal && FParse::Param(FCommandLine::Get(), TEXT("TheaterR2Deals")) && !Host->Evaluate(TEXT("globalThis.TC_BARGAINS = 1; globalThis.TC_LEGIONS = 1;"), TEXT("release 2 deals"), OutError))
+	{
+		return false;
+	}
+#endif
 	if (!Host->LoadScript(bReal ? RealRules : FPaths::Combine(RulesFolder, TEXT("stand-in-rules.js")), OutError))
 	{
 		return false;
@@ -385,7 +392,8 @@ namespace
 		// leaves behind, which the tray asks before the province's card: in build 1590 it threw away the province kept
 		// ahead after every order, 2 to 14 ms of the frame after.)
 		static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead"),
-			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft") };
+			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft"),
+			TEXT("bargainsLook") }; // R2 bargains hook: the map's look at the bargains (changes nothing; Campaign/BargainCalls.cpp)
 		return Questions.Contains(Function);
 	}
 
@@ -1566,6 +1574,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetStringField(TEXT("schoolTo"), C.SchoolTo);
 			Unit->TryGetStringField(TEXT("schoolWhy"), C.SchoolWhy);
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
+			Unit->TryGetStringField(TEXT("vol"), C.Vol); // R2 bargains hook: a volunteer legion's home (sent only when set)
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
 			Unit->TryGetNumberField(TEXT("stale"), C.Stale);
 			{

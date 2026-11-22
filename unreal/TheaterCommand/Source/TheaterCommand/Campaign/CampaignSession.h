@@ -338,6 +338,14 @@ public:
 	 */
 	bool CallBattle(const FString& Function, const FString& ArgumentsJson, FString& OutJson, FString& OutError);
 
+	// R2 bargains hook: a neutral's bargains and the volunteer legions (Campaign/BargainCalls.cpp; switched off in release 1)
+	/** TC.bargainsLook()'s answer as JSON text, for Campaign/BargainFeed: {"on":false} while both are off. Changes nothing, and is kept as the questions are. */
+	bool BargainsLook(FString& OutJson);
+	/** The player bids Pp a month (one of the round's steps) for the bargain Id. */
+	bool BargainBid(const FString& Id, double Pp, FString& OutNote);
+	/** The player, as the seller, sells the bargain Id to Buyer ("" for nobody). */
+	bool BargainSell(const FString& Id, const FString& Buyer, FString& OutNote);
+
 private:
 	bool CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject);
 	struct FAside;
