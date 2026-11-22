@@ -14363,6 +14363,12 @@ namespace
 				Cells.Add(MakePractice());
 				Cells.Add(MakeBattleRules());
 				AddGrid(Cells, 2);
+				// (for the Mac's pictures, which cannot scroll by hand: "-TheaterOpeningScroll" opens the list at its foot,
+				// where the practice and Battle rules cards are)
+				if (StartsScroll.IsValid() && FParse::Param(FCommandLine::Get(), TEXT("TheaterOpeningScroll")))
+				{
+					StartsScroll->ScrollToEnd();
+				}
 			}
 		}
 
