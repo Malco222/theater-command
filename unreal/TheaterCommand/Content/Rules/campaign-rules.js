@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b4319993 2026-11-21. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of dd4fd3fb 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -328,13 +328,20 @@
   // ../../data/campaign/stage.json
   var stage_default = {
     _about: "How far the grand campaign's chart reaches. 'far' false: Europe and the Americas with their cities, as the cities version plays them. 'far' true: the whole world, with the Pacific and the globe laid after them (step 13 and the globe's stage) and the countries that live there. One line, flipped by the rules builder when the far side ships; until then nothing of the far side is read, so no campaign and no war moves. A test of the far side turns it on for its own file alone (src/campaign/stage.ts).",
-    far: false
+    far: false,
+    _convoyBattle: "The wolf pack and convoy battle (release 2; Brian's yes of 20 November 2026, ruling 241 of 22 November). Off: nothing of the convoy battle runs, no extra die is thrown, and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'convoyBattle' (set at a campaign's start only, never in one under way): every month on a convoy route takes a swing (data/campaign/convoybattle.json), and a night the player fights is booked back through navy.ts convoyField. A run outside the browser can be given it by TC_CONVOY=1.",
+    convoyBattle: false
   };
 
   // ../../src/campaign/stage.ts
   var G = globalThis;
   var forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
   var FAR_STAGE = forced !== void 0 ? !!forced && forced !== "0" : stage_default.far === true;
+  var C = globalThis;
+  var convoyForced = C.TC_CONVOY ?? C.process?.env?.TC_CONVOY;
+  var CONVOY_STAGE = convoyForced !== void 0 ? !!convoyForced && convoyForced !== "0" : stage_default.convoyBattle === true;
+  var subForced = C.process?.env?.TC_SUBSCENE ?? globalThis.TC_SUBSCENE;
+  var SUBSCENE_ENV = subForced !== void 0 && !!subForced && subForced !== "0";
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -10641,6 +10648,15 @@
     }
   };
 
+  // ../../data/campaign/convoybattle.json
+  var convoybattle_default = {
+    _about: "The wolf pack and convoy battle's campaign side (release 2; ruling 241 of 22 November 2026, on the production lead's form naval-battles/wolfpack-r2/form.md). Read only where a grand campaign carries the flag 'convoyBattle' (stage.json): off, nothing here is read.",
+    _swing: "Every month on a convoy route the share of its cargoes sunk (navy.ts convoyWar's L) is multiplied by a swing, drawn on its own key ('convoySwing:<route>') after the convoy's own rolls, so no other roll moves: uniform between 'low' and 'high', mean 1, so the staff's expectation is unmoved (ruling 241 Q1; ruling 217's seam (2)). The width and its even shape are the design director's marked judgment, to be replaced by the OEG study's spread of losses per convoy attacked if the historian finds one. A night the player fights picks its swing inside the same bounds. The share so swung is held under laneLoss's own cap.",
+    swing: { low: 0.8, high: 1.2 },
+    _hand: "The routes whose nights a player may fight (form section 1). The convoys to Libya stay settled by the staff until the historian has checked their rows (history section 2; ruling 241).",
+    hand: ["atlantic"]
+  };
+
   // ../../src/campaign/air.ts
   var air_exports = {};
   __export(air_exports, {
@@ -12690,16 +12706,16 @@
   }
   function traitLevy(g2, nat) {
     const n = g2.nations[nat];
-    const L = traitRules(g2) && n?.alive && n.atWar.length ? traitsOf(nat).find((t) => t.levy)?.levy : void 0;
-    if (!L) return 0;
+    const L2 = traitRules(g2) && n?.alive && n.atWar.length ? traitsOf(nat).find((t) => t.levy)?.levy : void 0;
+    if (!L2) return 0;
     const count4 = g2.flags[`lv:${nat}`] ?? 0, last = g2.flags[`lvt:${nat}`];
-    if (count4 >= L.most || last !== void 0 && g2.turn - last < L.gap) return 0;
-    if (homeShare(g2, nat) >= 1 || menLeft(g2, nat) >= L.spent * poolAtStart(g2, nat) || fieldStrength(g2, nat) >= L.under) return 0;
-    levyMen(g2, nat, L.men);
+    if (count4 >= L2.most || last !== void 0 && g2.turn - last < L2.gap) return 0;
+    if (homeShare(g2, nat) >= 1 || menLeft(g2, nat) >= L2.spent * poolAtStart(g2, nat) || fieldStrength(g2, nat) >= L2.under) return 0;
+    levyMen(g2, nat, L2.men);
     g2.flags[`lv:${nat}`] = count4 + 1;
     g2.flags[`lvt:${nat}`] = g2.turn;
-    headline(g2, "event", `${/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${L.words === "divisions" ? `${levyBrings(L)}.` : `${levyBrings(L)} for its armies.`}`, nat);
-    return L.men;
+    headline(g2, "event", `${/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${L2.words === "divisions" ? `${levyBrings(L2)}.` : `${levyBrings(L2)} for its armies.`}`, nat);
+    return L2.men;
   }
   function traitsMonth(g2) {
     if (!traitRules(g2)) return;
@@ -12771,9 +12787,9 @@
     return `${head}${whenWords(x.when, who)}.`;
   }
   var TIMES = { 3: "three", 4: "four", 5: "five" };
-  var levyBrings = (L) => L.words === "divisions" ? `men enough for ${+L.men.toFixed(1)} divisions` : `${menWords(L.men * MEN_PER_DIV)} more men`;
-  function levyRule(L) {
-    return `With the enemy on its soil, its reserve of men all but spent and its army in the field under ${L.under} divisions, it calls up every man fit to bear arms: ${levyBrings(L)}, ${L.most === 1 ? "once" : L.most === 2 ? "twice" : `${TIMES[L.most] ?? L.most} times`} in a war at most and never twice within ${L.gap === 12 ? "a year" : `${L.gap} months`}.`;
+  var levyBrings = (L2) => L2.words === "divisions" ? `men enough for ${+L2.men.toFixed(1)} divisions` : `${menWords(L2.men * MEN_PER_DIV)} more men`;
+  function levyRule(L2) {
+    return `With the enemy on its soil, its reserve of men all but spent and its army in the field under ${L2.under} divisions, it calls up every man fit to bear arms: ${levyBrings(L2)}, ${L2.most === 1 ? "once" : L2.most === 2 ? "twice" : `${TIMES[L2.most] ?? L2.most} times`} in a war at most and never twice within ${L2.gap === 12 ? "a year" : `${L2.gap} months`}.`;
   }
   function traitRule(t, scale = 100) {
     if (t.builtin) return t.rule ?? "Part of the rules of every campaign.";
@@ -13036,9 +13052,9 @@
     return CLIENTS[a]?.patron === b ? a : CLIENTS[b]?.patron === a ? b : null;
   }
   function tieHolds(g2, client2, patron) {
-    const C2 = g2.nations[client2], P = g2.nations[patron];
-    if (!C2?.alive || !P?.alive || C2.atWar.includes(patron)) return false;
-    const bc = bloc(C2);
+    const C3 = g2.nations[client2], P = g2.nations[patron];
+    if (!C3?.alive || !P?.alive || C3.atWar.includes(patron)) return false;
+    const bc = bloc(C3);
     if (bc === null) return true;
     const bp = bloc(P);
     if (bp !== null && bp !== bc) return false;
@@ -13072,13 +13088,13 @@
   var madeOn = (g2, client2, e) => (g2.flags[`war:${e}:${client2}`] ?? -1) > (g2.flags[`war:${client2}:${e}`] ?? -1);
   function answers(g2, client2, e, quiet2) {
     const patron = CLIENTS[client2].patron;
-    const C2 = g2.nations[client2], P = g2.nations[patron], E = g2.nations[e];
+    const C3 = g2.nations[client2], P = g2.nations[patron], E = g2.nations[e];
     if (e === patron || !E?.alive || !madeOn(g2, client2, e) || P.atWar.includes(e) || sameSide(g2, patron, e)) return false;
     setWar(g2, patron, e);
     g2.flags[`war:${e}:${patron}`] = g2.turn;
     g2.flags[dutyFlag(client2, e)] = g2.turn;
     g2.supplyDirty = true;
-    if (!quiet2) headline(g2, "war", `${theName(E, true)} is at war with ${theName(P)}: war on ${theName(C2)} is war on ${theName(P)}.`, patron);
+    if (!quiet2) headline(g2, "war", `${theName(E, true)} is at war with ${theName(P)}: war on ${theName(C3)} is war on ${theName(P)}.`, patron);
     return true;
   }
   function clientMonth(g2, quiet2 = false) {
@@ -13086,8 +13102,8 @@
     for (let round3 = 0, moved = true; moved && round3 < 6; round3++) {
       moved = false;
       for (const [client2, row2] of Object.entries(CLIENTS)) {
-        const C2 = g2.nations[client2], P = g2.nations[row2.patron];
-        if (!C2 || !P) continue;
+        const C3 = g2.nations[client2], P = g2.nations[row2.patron];
+        if (!C3 || !P) continue;
         if (!tieHolds(g2, client2, row2.patron)) {
           if (g2.flags[tiedFlag(client2)] !== void 0) {
             parts(g2, client2, row2.patron);
@@ -13099,24 +13115,24 @@
         for (const e of row2.wars) {
           const E = g2.nations[e];
           if (!E?.alive) continue;
-          const patronIn = P.atWar.includes(e), clientIn = C2.atWar.includes(e);
+          const patronIn = P.atWar.includes(e), clientIn = C3.atWar.includes(e);
           if (patronIn && !clientIn) {
             if (sameSide(g2, client2, e)) continue;
             setWar(g2, client2, e);
             g2.flags[tieFlag(client2, e)] = g2.turn;
             g2.supplyDirty = true;
             moved = true;
-            if (!quiet2) headline(g2, "war", `${theName(C2, true)} is at war with ${theName(E)}, beside ${theName(P)}.`, client2);
+            if (!quiet2) headline(g2, "war", `${theName(C3, true)} is at war with ${theName(E)}, beside ${theName(P)}.`, client2);
           } else if (!patronIn && clientIn && (g2.flags[tieFlag(client2, e)] !== void 0 || g2.flags[tieFlag(e, client2)] !== void 0)) {
             signPeace(g2, client2, e);
             delete g2.flags[tieFlag(client2, e)];
             delete g2.flags[tieFlag(e, client2)];
             g2.supplyDirty = true;
             moved = true;
-            if (!quiet2) headline(g2, "event", `${theName(C2, true)} and ${theName(E)} are at peace again: ${theName(P)} has made its peace.`, client2);
+            if (!quiet2) headline(g2, "event", `${theName(C3, true)} and ${theName(E)} are at peace again: ${theName(P)} has made its peace.`, client2);
           }
         }
-        for (const e of [...C2.atWar]) {
+        for (const e of [...C3.atWar]) {
           if (P.atWar.includes(e)) continue;
           const E = g2.nations[e];
           if (g2.flags[dutyFlag(client2, e)] !== void 0) {
@@ -13125,7 +13141,7 @@
             delete g2.flags[`war:${e}:${client2}`];
             g2.supplyDirty = true;
             moved = true;
-            if (!quiet2) headline(g2, "event", `${theName(C2, true)} and ${theName(E)} are at peace again: ${theName(P)} has made its peace.`, client2);
+            if (!quiet2) headline(g2, "event", `${theName(C3, true)} and ${theName(E)} are at peace again: ${theName(P)} has made its peace.`, client2);
           } else if (answers(g2, client2, e, quiet2)) moved = true;
         }
       }
@@ -13144,8 +13160,8 @@
   function parts(g2, client2, patron) {
     delete g2.flags[tiedFlag(client2)];
     for (const k of Object.keys(g2.flags)) if (k.startsWith(`tie:${client2}:`) || k.startsWith(`duty:${client2}:`)) delete g2.flags[k];
-    const C2 = g2.nations[client2], P = g2.nations[patron];
-    if (!C2?.alive || !P?.alive) return;
+    const C3 = g2.nations[client2], P = g2.nations[patron];
+    if (!C3?.alive || !P?.alive) return;
     const out = (from) => {
       for (const c of g2.corps.filter((x) => x.nat === client2 && x.reg === from.id && !x.dead)) {
         let best = null, bd = Infinity;
@@ -13168,16 +13184,16 @@
       else if (r.ctrl === patron && g2.corps.some((x) => x.nat === client2 && x.reg === r.id && !x.dead)) out(r);
     }
     for (const r of taken2) out(r);
-    for (const r of taken2) if (C2.alive && r.ctrl === client2 && r.id !== C2.capital) capture(g2, r, patron);
-    const seat4 = g2.regions[C2.capital];
-    if (C2.alive && seat4 && taken2.includes(seat4) && seat4.ctrl === client2) {
+    for (const r of taken2) if (C3.alive && r.ctrl === client2 && r.id !== C3.capital) capture(g2, r, patron);
+    const seat4 = g2.regions[C3.capital];
+    if (C3.alive && seat4 && taken2.includes(seat4) && seat4.ctrl === client2) {
       seat4.prev = client2;
       seat4.ctrl = patron;
       seat4.since = g2.turn;
       g2.flags[`fellP:${seat4.id}`] = g2.phase;
     }
     const kept2 = taken2.filter((r) => r.ctrl === patron).map((r) => r.name);
-    if (kept2.length) headline(g2, "event", `${theName(P, true)} keeps the ground its army stands on in ${theName(C2)}: ${kept2.length > 4 ? `${kept2.slice(0, 4).join(", ")} and ${kept2.length - 4} more` : kept2.length > 1 ? `${kept2.slice(0, -1).join(", ")} and ${kept2[kept2.length - 1]}` : kept2[0]}.`, client2, seat4 && kept2.includes(seat4.name) ? seat4.id : void 0);
+    if (kept2.length) headline(g2, "event", `${theName(P, true)} keeps the ground its army stands on in ${theName(C3)}: ${kept2.length > 4 ? `${kept2.slice(0, 4).join(", ")} and ${kept2.length - 4} more` : kept2.length > 1 ? `${kept2.slice(0, -1).join(", ")} and ${kept2[kept2.length - 1]}` : kept2[0]}.`, client2, seat4 && kept2.includes(seat4.name) ? seat4.id : void 0);
     g2.supplyDirty = true;
   }
   function farGround(g2) {
@@ -13220,9 +13236,9 @@
     }
     for (const [a, b] of FAR_SETUP.wars) if (g2.nations[a]?.alive && g2.nations[b]?.alive && !atWar(g2, a, b)) setWar(g2, a, b);
     for (const [client2, row2] of Object.entries(CLIENTS)) {
-      const C2 = g2.nations[client2], P = g2.nations[row2.patron];
-      if (!C2?.alive || !P?.alive) continue;
-      for (const e of row2.wars) if (C2.atWar.includes(e) && P.atWar.includes(e)) g2.flags[tieFlag(client2, e)] = g2.turn;
+      const C3 = g2.nations[client2], P = g2.nations[row2.patron];
+      if (!C3?.alive || !P?.alive) continue;
+      for (const e of row2.wars) if (C3.atWar.includes(e) && P.atWar.includes(e)) g2.flags[tieFlag(client2, e)] = g2.turn;
     }
     clientMonth(g2, true);
     for (const n of Object.values(g2.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g2, n.id));
@@ -15244,37 +15260,37 @@
     const a = awardOf(g2, id);
     if (!a || whyNotCash(g2, a, how)) return false;
     const u = unitOf(g2, a.kind, a.unit);
-    const C2 = STORIES.cash, fame = fameOf(a);
+    const C3 = STORIES.cash, fame = fameOf(a);
     const n = g2.nations[a.nat];
     let gain;
     if (how === "bonds") {
-      n.pp += C2.bondsPp * fame;
-      n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C2.bondsPc * fame);
-      gain = `The bond drive brings in ${(C2.bondsPp * fame * budget_default.scale).toLocaleString("en-US")} for the treasury and ${C2.bondsPc * fame} political capital.`;
+      n.pp += C3.bondsPp * fame;
+      n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C3.bondsPc * fame);
+      gain = `The bond drive brings in ${(C3.bondsPp * fame * budget_default.scale).toLocaleString("en-US")} for the treasury and ${C3.bondsPc * fame} political capital.`;
     } else {
       g2.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g2.stories.schools[a.nat] ?? 0) + fame);
       if (a.kind === "air") {
         const p = g2.airPool[a.nat];
-        if (p) p.pilots += C2.pilots * fame;
+        if (p) p.pilots += C3.pilots * fame;
       }
       gain = "From now on every draft reaches the front better trained.";
     }
     if (a.kind === "corps") {
       const c = u;
       const to = homeFor(g2, c);
-      if (how === "school") c.xp = Math.max(STORIES.veterans.green, c.xp - C2.schoolXp * fame);
+      if (how === "school") c.xp = Math.max(STORIES.veterans.green, c.xp - C3.schoolXp * fame);
       if (to.id !== c.reg) relocate(g2, c, to);
       c.ap = 0;
-      c.leave = g2.turn + C2.months;
+      c.leave = g2.turn + C3.months;
       delete c.yields;
       delete c.digs;
       note(g2, c, how, to.id);
       moment(g2, 5, how, c, a.at >= 0 ? a.at : c.reg);
       g2.supplyDirty = true;
-      headline(g2, "info", `${c.name} goes home to ${to.name} ${how === "bonds" ? "on a bond tour" : "to train the next drafts"} and is out of the line for ${C2.months} months. ${gain}`, a.nat, to.id);
+      headline(g2, "info", `${c.name} goes home to ${to.name} ${how === "bonds" ? "on a bond tour" : "to train the next drafts"} and is out of the line for ${C3.months} months. ${gain}`, a.nat, to.id);
     } else {
       const f = u;
-      f.ready = Math.max(a.kind === "air" ? 0.3 : 0, f.ready - C2.ready);
+      f.ready = Math.max(a.kind === "air" ? 0.3 : 0, f.ready - C3.ready);
       note(g2, f, how, -1);
       headline(g2, "info", `The men of ${f.name} who earned its honour go home ${how === "bonds" ? "on a bond tour" : "to the training schools"}. ${gain}`, a.nat);
     }
@@ -15555,10 +15571,10 @@
       if (![nat, r.ctrl].some((p) => p === g2.human || allied(g2, p, g2.human))) continue;
       const got = PRIZE_KINDS.filter((k) => hasPrize(g2, r, k) && !prizeInside(g2, r, k) && prizeOut(g2, r, k) <= 0);
       if (!got.some((k) => k !== "airfield")) continue;
-      const words = listed(got);
+      const words2 = listed(got);
       const many = got.length > 1 || got[0] === "oil";
       const money = Math.round(got.reduce((s, k) => s + prizeMoney(g2, r, k, nat), 0) * 10) / 10;
-      headline(g2, "info", `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} now ${many ? "work" : "works"} for ${theName(g2.nations[nat])}, though the town holds${money > 0 ? `: ${money} a month to its treasury` : ""}.`, nat, r.id);
+      headline(g2, "info", `${words2[0].toUpperCase()}${words2.slice(1)} outside ${townName(r)} now ${many ? "work" : "works"} for ${theName(g2.nations[nat])}, though the town holds${money > 0 ? `: ${money} a month to its treasury` : ""}.`, nat, r.id);
     }
   }
   function mendPrizes(g2, nat) {
@@ -16769,7 +16785,7 @@
     if (!fogOn(g2, viewer)) return out.fill(SIGHT.full);
     const me = viewer;
     const S2 = INTEL.sight, far = Math.max(S2.full, S2.glimpse);
-    const dist = new Int16Array(g2.regions.length).fill(-1);
+    const dist2 = new Int16Array(g2.regions.length).fill(-1);
     let ring = [];
     const side3 = /* @__PURE__ */ new Map();
     const ours = (n) => {
@@ -16779,29 +16795,29 @@
     };
     for (const r of g2.regions) {
       if (ours(r.ctrl) || r.units.some((u) => !u.dead && ours(u.nat))) {
-        dist[r.id] = 0;
+        dist2[r.id] = 0;
         ring.push(r.id);
       }
     }
-    for (const a of agentsOf(g2, me)) if (atWork(g2, a) && dist[a.reg] !== 0) {
-      dist[a.reg] = 0;
+    for (const a of agentsOf(g2, me)) if (atWork(g2, a) && dist2[a.reg] !== 0) {
+      dist2[a.reg] = 0;
       ring.push(a.reg);
     }
     if (me === g2.human) {
-      for (const [id, turn] of Object.entries(g2.intel.scout ?? {})) if (turn === g2.turn && dist[+id] !== 0) {
-        dist[+id] = 0;
+      for (const [id, turn] of Object.entries(g2.intel.scout ?? {})) if (turn === g2.turn && dist2[+id] !== 0) {
+        dist2[+id] = 0;
         ring.push(+id);
       }
     }
     for (let d = 1; d <= far && ring.length; d++) {
       const next = [];
-      for (const id of ring) for (const j of g2.regions[id].nb) if (dist[j] < 0) {
-        dist[j] = d;
+      for (const id of ring) for (const j of g2.regions[id].nb) if (dist2[j] < 0) {
+        dist2[j] = d;
         next.push(j);
       }
       ring = next;
     }
-    for (let i = 0; i < out.length; i++) out[i] = dist[i] < 0 ? SIGHT.none : dist[i] <= S2.full ? SIGHT.full : SIGHT.glimpse;
+    for (let i = 0; i < out.length; i++) out[i] = dist2[i] < 0 ? SIGHT.none : dist2[i] <= S2.full ? SIGHT.full : SIGHT.glimpse;
     if (S2.fleets) {
       for (const f of g2.fleets) {
         if (f.stance === "port" || !ours(f.nat) || !g2.seas[f.zone] || !Object.values(f.ships).some((n) => n > 0)) continue;
@@ -17238,16 +17254,16 @@
   function booksOf(g2, of2, viewer = g2.human) {
     const n = g2.nations[of2];
     if (!intelRules(g2) || !n?.alive || !knowsBooks(g2, of2, viewer)) return null;
-    const L = ledger(g2, of2);
+    const L2 = ledger(g2, of2);
     const a = agentsOf(g2, viewer).find((x) => x.reg === n.capital && x.mission === "books" && atWork(g2, x));
     return {
       nat: of2,
       agent: a?.name ?? null,
-      treasury: L.treasury,
-      gross: L.gross,
-      upkeep: L.upkeepTotal,
-      net: L.net,
-      scale: L.scale,
+      treasury: L2.treasury,
+      gross: L2.gross,
+      upkeep: L2.upkeepTotal,
+      net: L2.net,
+      scale: L2.scale,
       divisions: fieldArmy(g2, of2),
       corps: g2.corps.filter((c) => c.nat === of2 && !c.dead).length,
       queue: [...n.queue].sort((x, y) => x.eta - y.eta).map((b) => ({ name: b.name, what: b.what, eta: b.eta, region: b.region })),
@@ -21927,9 +21943,9 @@
       for (const id of g2.seas[z].coast) {
         const r = g2.regions[id];
         if (!r.port || r.ctrl !== nat) continue;
-        const dist = home ? mapDist(g2, r.x, r.y, home.x, home.y) : 0;
-        if (dist < far) {
-          far = dist;
+        const dist2 = home ? mapDist(g2, r.x, r.y, home.x, home.y) : 0;
+        if (dist2 < far) {
+          far = dist2;
           best = r;
         }
       }
@@ -22261,8 +22277,8 @@
     const { all, held: held2 } = worth(g2);
     let scale = 1;
     const row2 = (n) => {
-      const L = n.alive ? ledger(g2, n.id) : null;
-      if (L) scale = L.scale;
+      const L2 = n.alive ? ledger(g2, n.id) : null;
+      if (L2) scale = L2.scale;
       const army = !n.alive ? { divs: 0, exact: true } : viewer && n.id !== viewer ? armyKnown(g2, n.id, viewer) : { divs: fieldArmy(g2, n.id), exact: true };
       const open2 = !viewer || n.id === viewer || !fogOn(g2, viewer) || knowsBooks(g2, n.id, viewer);
       return {
@@ -22275,7 +22291,7 @@
         divisions: army.divs,
         exact: army.exact,
         few: !!army.few,
-        income: L && open2 ? L.gross : null,
+        income: L2 && open2 ? L2.gross : null,
         will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(g2, n.id) / n.resilience)) : 0,
         fell: n.fellOn ? { turn: n.fellOn.turn, to: n.fellOn.to } : null
       };
@@ -22288,63 +22304,63 @@
   // ../../src/campaign/line.ts
   var NONE4 = [];
   var lines = () => HISTORY.lines ?? NONE4;
-  var lineOn = (land2) => lines().find((L) => L.land === land2);
-  function lineBinds(g2, L) {
-    return !!stopDef(g2).book && onBook(g2, L.theatre) && g2.turn <= L.until && g2.human !== L.land && g2.human !== L.taker;
+  var lineOn = (land2) => lines().find((L2) => L2.land === land2);
+  function lineBinds(g2, L2) {
+    return !!stopDef(g2).book && onBook(g2, L2.theatre) && g2.turn <= L2.until && g2.human !== L2.land && g2.human !== L2.taker;
   }
   var edges = /* @__PURE__ */ new WeakMap();
-  function monthsOf(g2, L, name) {
+  function monthsOf(g2, L2, name) {
     const stop = stopOf(g2);
     let memo2 = edges.get(g2);
     if (!memo2 || memo2.stop !== stop) edges.set(g2, memo2 = { stop, at: /* @__PURE__ */ new Map() });
-    const key6 = `${L.id}:${name}`;
+    const key6 = `${L2.id}:${name}`;
     let out = memo2.at.get(key6);
     if (!out) {
       const slack = stopDef(g2).slack ?? 0;
-      out = (L.spans[name] ?? []).map((s, k) => {
-        const d = slack ? Math.floor(dialDraw(g2, "line", L.id, name, k) * (2 * slack + 1)) - slack : 0;
-        return [s.from <= 1 ? s.from : s.from + d, s.to >= L.until ? s.to : s.to + d];
+      out = (L2.spans[name] ?? []).map((s, k) => {
+        const d = slack ? Math.floor(dialDraw(g2, "line", L2.id, name, k) * (2 * slack + 1)) - slack : 0;
+        return [s.from <= 1 ? s.from : s.from + d, s.to >= L2.until ? s.to : s.to + d];
       });
       memo2.at.set(key6, out);
     }
     return out;
   }
-  function inLine(g2, L, r, t, kinds) {
-    const spans = L.spans[r.name];
+  function inLine(g2, L2, r, t, kinds) {
+    const spans = L2.spans[r.name];
     if (!spans) return false;
-    const m = monthsOf(g2, L, r.name);
+    const m = monthsOf(g2, L2, r.name);
     return spans.some((s, k) => (!kinds || kinds.includes(s.kind)) && t >= m[k][0] && t <= m[k][1]);
   }
   var withSide = (g2, nat, side3) => nat === side3 || allied(g2, nat, side3);
   function lineShut(g2, nat, r) {
     if (!lines().length || nat === g2.human) return false;
-    const L = lineOn(r.owner);
-    if (!L || r.ctrl === g2.human || !lineBinds(g2, L)) return false;
-    if (withSide(g2, nat, L.taker)) return !inLine(g2, L, r, g2.turn);
-    if (withSide(g2, nat, L.land) && withSide(g2, r.ctrl, L.taker)) return g2.turn < L.floor.until && inLine(g2, L, r, g2.turn, L.floor.kinds);
+    const L2 = lineOn(r.owner);
+    if (!L2 || r.ctrl === g2.human || !lineBinds(g2, L2)) return false;
+    if (withSide(g2, nat, L2.taker)) return !inLine(g2, L2, r, g2.turn);
+    if (withSide(g2, nat, L2.land) && withSide(g2, r.ctrl, L2.taker)) return g2.turn < L2.floor.until && inLine(g2, L2, r, g2.turn, L2.floor.kinds);
     return false;
   }
   function lineLeaves(g2, nat, r, t) {
     if (!lines().length || nat === g2.human) return false;
-    const L = lineOn(r.owner);
-    return !!L && lineBinds(g2, L) && t <= L.until && withSide(g2, nat, L.taker) && !inLine(g2, L, r, t);
+    const L2 = lineOn(r.owner);
+    return !!L2 && lineBinds(g2, L2) && t <= L2.until && withSide(g2, nat, L2.taker) && !inLine(g2, L2, r, t);
   }
   function lineGives(g2, nat, t) {
     const out = [];
     if (nat === g2.human) return out;
-    for (const L of lines()) {
-      if (!lineBinds(g2, L) || t > L.until || !withSide(g2, nat, L.taker)) continue;
+    for (const L2 of lines()) {
+      if (!lineBinds(g2, L2) || t > L2.until || !withSide(g2, nat, L2.taker)) continue;
       for (const r of g2.regions) {
-        if (r.owner !== L.land || r.ctrl === g2.human || !withSide(g2, r.ctrl, L.taker) || inLine(g2, L, r, t)) continue;
-        if (r.units.some((c) => !c.dead && withSide(g2, c.nat, L.taker)) || (r.garr ?? []).some((c) => !c.dead && withSide(g2, c.nat, L.taker))) continue;
-        const fits2 = (x) => !!x && x !== g2.human && !!g2.nations[x]?.alive && !withSide(g2, x, L.taker) && atWar(g2, x, r.ctrl);
-        const to = fits2(r.prev) ? r.prev : fits2(L.land) ? L.land : null;
+        if (r.owner !== L2.land || r.ctrl === g2.human || !withSide(g2, r.ctrl, L2.taker) || inLine(g2, L2, r, t)) continue;
+        if (r.units.some((c) => !c.dead && withSide(g2, c.nat, L2.taker)) || (r.garr ?? []).some((c) => !c.dead && withSide(g2, c.nat, L2.taker))) continue;
+        const fits2 = (x) => !!x && x !== g2.human && !!g2.nations[x]?.alive && !withSide(g2, x, L2.taker) && atWar(g2, x, r.ctrl);
+        const to = fits2(r.prev) ? r.prev : fits2(L2.land) ? L2.land : null;
         if (to) out.push({ r, to });
       }
     }
     return out;
   }
-  var lineAny = (g2, nat) => lines().some((L) => lineBinds(g2, L) && nat !== g2.human && withSide(g2, nat, L.taker));
+  var lineAny = (g2, nat) => lines().some((L2) => lineBinds(g2, L2) && nat !== g2.human && withSide(g2, nat, L2.taker));
 
   // ../../src/campaign/engineers.ts
   var JOBS = ["bridge", "rail", "plant", "works", "airfield", "mines", "demolish"];
@@ -22889,7 +22905,7 @@
   };
   function divisionsOf(g2, c) {
     const first2 = firstNumber(g2, c);
-    const words = divisionWords(c.nat, c.kind);
+    const words2 = divisionWords(c.nat, c.kind);
     const str = Math.min(1, Math.max(0, c.str)), xp = Math.min(1, Math.max(0, c.xp));
     const ds = characters(c.id, c.divs, "ds"), dx = characters(c.id, c.divs, "dx");
     const roomS = Math.min(str, 1 - str) * DIVISIONS.spread.str, roomX = Math.min(xp, 1 - xp) * DIVISIONS.spread.xp;
@@ -22899,8 +22915,8 @@
       return {
         slot: i,
         no,
-        name: `${ordinal(no)} ${words.name}`,
-        short: `${ordinal(no)} ${words.short}`,
+        name: `${ordinal(no)} ${words2.name}`,
+        short: `${ordinal(no)} ${words2.short}`,
         kind: c.kind,
         nat: c.nat,
         str: s,
@@ -23027,7 +23043,7 @@
       const dv = cards.reduce((s, c) => s + c.divs, 0);
       const mix2 = mixOf(seen3);
       const est = armyBand(g2, region, nat, cs, viewer, sight2 === SIGHT.full);
-      const words = [seen3.length ? `${mixLine(mix2)} identified` : "", k.none.length ? `${k.none.length} corps not identified` : ""].filter(Boolean).join(", ");
+      const words2 = [seen3.length ? `${mixLine(mix2)} identified` : "", k.none.length ? `${k.none.length} corps not identified` : ""].filter(Boolean).join(", ");
       return {
         region,
         nat,
@@ -23045,7 +23061,7 @@
         rest: 0,
         restWord: "",
         mix: mix2,
-        line: `${words[0].toUpperCase()}${words.slice(1)}`,
+        line: `${words2[0].toUpperCase()}${words2.slice(1)}`,
         allies: [],
         corps: cards
       };
@@ -23143,9 +23159,9 @@
         if (!atWar(g2, nat, u.nat)) continue;
         const share = seen2 ? seen2(u) : 1;
         if (share <= 0) continue;
-        const p = strikes(g2, u) * share, L = inLine2(u, r);
+        const p = strikes(g2, u) * share, L2 = inLine2(u, r);
         const atHome = !!S2.own && !r.overseas && r.owner === u.nat && !host.has(u.nat);
-        const counts = far[id] >= 0 ? L.tied && !L.here ? S2.line : 1 : L.tied || atHome ? 0 : door.has(u.nat) ? S2.door ?? S2.reserve : S2.reserve;
+        const counts = far[id] >= 0 ? L2.tied && !L2.here ? S2.line : 1 : L2.tied || atHome ? 0 : door.has(u.nat) ? S2.door ?? S2.reserve : S2.reserve;
         if (far[id] >= 0) {
           out.near += counts * p;
           out.corps++;
@@ -23819,6 +23835,7 @@
     openMorale(g2);
     openEscorts(g2);
     openTrade(g2);
+    if (CONVOY_STAGE) g2.flags.convoyBattle = 1;
     openGovernment(g2);
     openFooting(g2);
     openWeather(g2);
@@ -23843,9 +23860,9 @@
   function temper(g2, nat) {
     const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] };
     if (rivalRules(g2)) {
-      const C2 = RIVALS.characters[characterOf(g2, nat)];
-      t.attackAt *= C2.attackAt;
-      t.minOdds += C2.minOdds;
+      const C3 = RIVALS.characters[characterOf(g2, nat)];
+      t.attackAt *= C3.attackAt;
+      t.minOdds += C3.minOdds;
     }
     const mood = 1 + OPEN.mood * moodMul(g2) * (2 * draw2(g2, nat, "mood") - 1);
     const lv = nerveOf(g2, nat);
@@ -24283,7 +24300,7 @@
   }
   function mainEffort(g2, nat, real, T, where, spoken) {
     if (!rivalRules(g2) || nat === g2.human) return;
-    const E = RIVALS.effort, who = characterOf(g2, nat), C2 = RIVALS.characters[who];
+    const E = RIVALS.effort, who = characterOf(g2, nat), C3 = RIVALS.characters[who];
     const key6 = (k) => effKey(k, nat, where);
     const stop = (rest) => {
       for (const k of ["eff", "eff0", "effAt", "effTo", "effE", "effWon", "effOdds"]) delete g2.flags[key6(k)];
@@ -24316,11 +24333,11 @@
       if (onSince(g2, nat, f, where) || spoken(f)) continue;
       if (!f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}${where}`))) continue;
       const quiet2 = Math.min(...f.enemies.map((e) => quietInField(g2, nat, e)));
-      const waited = quiet2 >= C2.quiet;
+      const waited = quiet2 >= C3.quiet;
       if (!waited && !(who === "opportunist" && f.enemies.some((e) => busyElsewhere(g2, e, nat)))) continue;
-      const P = E.patience, over = P && waited ? quiet2 - C2.quiet : 0;
-      const strength3 = P ? Math.max(Math.min(P.strength, C2.strength), C2.strength - P.step * over) : C2.strength;
-      const local = P ? Math.max(Math.min(P.odds, C2.local), C2.local - P.step * over) : C2.local;
+      const P = E.patience, over = P && waited ? quiet2 - C3.quiet : 0;
+      const strength3 = P ? Math.max(Math.min(P.strength, C3.strength), C3.strength - P.step * over) : C3.strength;
+      const local = P ? Math.max(Math.min(P.odds, C3.local), C3.local - P.step * over) : C3.local;
       if (f.near < strength3) continue;
       const s = sector(g2, nat, f, local);
       if (!s) continue;
@@ -24329,7 +24346,7 @@
       g2.flags[key6("effTo")] = g2.turn + E.months;
       g2.flags[key6("effE")] = Object.keys(g2.nations).indexOf(fieldCtrl(g2, s.target)) + 1;
       delete g2.flags[key6("effWon")];
-      if (local < C2.local) g2.flags[key6("effOdds")] = Math.round(local * 100);
+      if (local < C3.local) g2.flags[key6("effOdds")] = Math.round(local * 100);
       else delete g2.flags[key6("effOdds")];
       const named2 = effortOf(g2, nat, where);
       if (named2) effortNamed(g2, named2);
@@ -24486,9 +24503,9 @@
       const op = list4[cur - 1];
       const p = op ? prospect(g2, nat, op, skip) : null;
       const still = !!op && (op.if ?? []).filter((c) => c !== "quiet").every((c) => cond(g2, nat, c, real));
-      const L = op ? leash(g2, nat, op.id) : null;
-      const dated2 = L?.kind === "dated";
-      const need = op?.ratio !== void 0 ? op.ratio * (dated2 ? L.nerve : 1) : 0;
+      const L2 = op ? leash(g2, nat, op.id) : null;
+      const dated2 = L2?.kind === "dated";
+      const need = op?.ratio !== void 0 ? op.ratio * (dated2 ? L2.nerve : 1) : 0;
       if (!op || !p || !still || op.ratio !== void 0 && p.ratio < 0.8 * need) {
         delete g2.flags[`st:op:${nat}`];
         if (op) g2.flags[`st:cool:${nat}:${op.id}`] = g2.turn + 6;
@@ -24501,15 +24518,15 @@
     if ((!cur || book) && flag2(g2, `st:go:${nat}`) !== g2.turn) {
       for (let k = 0; k < list4.length; k++) {
         const op = list4[k];
-        const L = leash(g2, nat, op.id);
-        if (L.kind === "never") continue;
+        const L2 = leash(g2, nat, op.id);
+        if (L2.kind === "never") continue;
         const upL = cur ? leash(g2, nat, list4[cur - 1].id) : null;
-        const first2 = !!cur && k !== cur - 1 && !op.side && L.kind === "dated" && upL?.kind === "dated" && L.date <= upL.date;
-        if (cur && !(L.kind === "dated" && (op.side || first2))) continue;
-        if (flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn < (op.from ?? 1) - L.early || g2.turn > (op.to ?? 999) || g2.turn < flag2(g2, `st:cool:${nat}:${op.id}`)) continue;
-        if (L.kind === "dated" && g2.turn < (first2 ? Math.min(L.date, upL.date - 1) : L.date - (op.side ? 0 : op.prep ?? 0))) continue;
+        const first2 = !!cur && k !== cur - 1 && !op.side && L2.kind === "dated" && upL?.kind === "dated" && L2.date <= upL.date;
+        if (cur && !(L2.kind === "dated" && (op.side || first2))) continue;
+        if (flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn < (op.from ?? 1) - L2.early || g2.turn > (op.to ?? 999) || g2.turn < flag2(g2, `st:cool:${nat}:${op.id}`)) continue;
+        if (L2.kind === "dated" && g2.turn < (first2 ? Math.min(L2.date, upL.date - 1) : L2.date - (op.side ? 0 : op.prep ?? 0))) continue;
         if (!op.side && busy) continue;
-        if (!((L.kind === "dated" ? bookIf(nat, op.id) : null) ?? op.if ?? []).every((c) => cond(g2, nat, c, real))) continue;
+        if (!((L2.kind === "dated" ? bookIf(nat, op.id) : null) ?? op.if ?? []).every((c) => cond(g2, nat, c, real))) continue;
         const who = targets(g2, nat, op);
         if ((op.declare ?? []).length && !who.length) {
           g2.flags[`st:done:${nat}:${op.id}`] = -1;
@@ -24517,16 +24534,16 @@
         }
         if (op.ratio !== void 0) {
           const p = prospect(g2, nat, op, skip);
-          if (!p || p.ratio < 0.9 * op.ratio * L.nerve) continue;
+          if (!p || p.ratio < 0.9 * op.ratio * L2.nerve) continue;
         }
-        const falls = L.kind === "dated" ? Math.max(g2.turn + 1, L.date) : g2.turn + (op.prep ?? 0);
+        const falls = L2.kind === "dated" ? Math.max(g2.turn + 1, L2.date) : g2.turn + (op.prep ?? 0);
         if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g2, op, falls + late))) continue;
-        if (L.kind === "free" && !hurried(op) && monthly(g2, nat, op.id, g2.turn) >= op.chance * L.chance * deterred(g2, nat, who)) continue;
+        if (L2.kind === "free" && !hurried(op) && monthly(g2, nat, op.id, g2.turn) >= op.chance * L2.chance * deterred(g2, nat, who)) continue;
         if (op.side || !(op.prep ?? 0) || first2) {
           if (inSeason(g2, op)) go(k, !!cur);
         } else {
           g2.flags[`st:op:${nat}`] = k + 1;
-          g2.flags[`st:opAt:${nat}`] = L.kind === "dated" ? Math.min(g2.turn, L.date - (op.prep ?? 0)) : g2.turn;
+          g2.flags[`st:opAt:${nat}`] = L2.kind === "dated" ? Math.min(g2.turn, L2.date - (op.prep ?? 0)) : g2.turn;
         }
         break;
       }
@@ -24664,12 +24681,12 @@
     if (!W2 || !isOpen(g2) || !W2.stops.includes(stopOf(g2)) || nat === g2.human || !n?.alive || n.capital < 0 || n.seaSupply || !n.atWar.length) return [];
     const out = [];
     let on = null;
-    for (const L of leavings(g2)) {
-      const A = g2.nations[L.nation];
+    for (const L2 of leavings(g2)) {
+      const A = g2.nations[L2.nation];
       if (!A?.alive || A.id === nat || A.capital < 0 || !allied(g2, nat, A.id)) continue;
       const cap11 = g2.regions[A.capital];
       if (cap11.ctrl !== A.id || out.includes(cap11.name)) continue;
-      if (!L.grounds.some((nm) => {
+      if (!L2.grounds.some((nm) => {
         const r = g2.byName[nm];
         return !!r && (atWar(g2, A.id, r.ctrl) || hostileUnits(g2, r, A.id).length > 0);
       })) continue;
@@ -24914,8 +24931,8 @@
       return far ? { foe: far.foe, L: D, second: true } : null;
     }
     if (n.capital < 0) return null;
-    const L = landingsFor(g2, nat), you = seat2(g2);
-    if (L && you !== null && atWar(g2, nat, you)) return { foe: you, L };
+    const L2 = landingsFor(g2, nat), you = seat2(g2);
+    if (L2 && you !== null && atWar(g2, nat, you)) return { foe: you, L: L2 };
     if (!D || !isOpen(g2)) return null;
     if (g2.regions.some((r) => r.owner === nat && !r.overseas && atWar(g2, nat, r.ctrl))) return null;
     const ids2 = Object.keys(g2.nations);
@@ -25137,9 +25154,9 @@
     return lod && !lod.short ? null : seaBase(g2, nat);
   }
   function coastWatch(g2, nat) {
-    const C2 = OPEN.coast, n = g2.nations[nat], D = OPEN.descent;
+    const C3 = OPEN.coast, n = g2.nations[nat], D = OPEN.descent;
     const out = {};
-    if (!C2 || !D || !isOpen(g2) || !n || !n.alive || n.capital < 0 || !n.atWar.length) return out;
+    if (!C3 || !D || !isOpen(g2) || !n || !n.alive || n.capital < 0 || !n.atWar.length) return out;
     const home = homeGround(g2, nat);
     const mine4 = home.list.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat && !r.overseas);
     if (!mine4.length) return out;
@@ -25175,8 +25192,8 @@
     if (fresh4) g2.flags[`st:watch:${nat}`] = g2.turn;
     else if (!flag2(g2, `st:watch:${nat}`) || g2.turn - flag2(g2, `st:watch:${nat}`) >= 12) return out;
     const open2 = mine4.filter((r) => r.seas.some((z) => want[z])).sort((a, b) => 2 * b.vp + b.fac + (b.cap ? 8 : 0) - (2 * a.vp + a.fac + (a.cap ? 8 : 0)) || a.id - b.id);
-    let left = Math.max(C2.least, Math.floor(C2.share * g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng").length));
-    for (let k = 1; k <= C2.each && left > 0; k++) for (const r of open2) {
+    let left = Math.max(C3.least, Math.floor(C3.share * g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng").length));
+    for (let k = 1; k <= C3.each && left > 0; k++) for (const r of open2) {
       if (left <= 0) break;
       out[r.name] = k;
       left--;
@@ -25620,7 +25637,7 @@
     headline(g2, "event", turned.length ? `Nobody has read the history books this time. The chancelleries report new leanings: ${listOf4(turned.slice(0, 6))}${turned.length > 6 ? ", and others besides" : ""}.` : "Nobody has read the history books this time: any country may yet pick either side.");
     return turned;
   }
-  var C = HISTORY.claims;
+  var C2 = HISTORY.claims;
   var groundOf = (g2, a) => a.ground.map((nm) => g2.byName[nm]).filter((r) => !!r);
   var stillHeld = (g2, a) => groundOf(g2, a).filter((r) => r.owner === a.on && r.ctrl === a.on);
   function guarded(g2, a) {
@@ -25628,7 +25645,7 @@
     if (hb !== "axis" && hb !== "allies") return false;
     return majorsOf(g2).some((id) => {
       const P = g2.nations[id];
-      if (!P?.alive || P.dormant || id === a.on || bloc(P) !== hb || collapseScore(g2, id) / P.resilience >= C.guard) return false;
+      if (!P?.alive || P.dormant || id === a.on || bloc(P) !== hb || collapseScore(g2, id) / P.resilience >= C2.guard) return false;
       return g2.regions.some((r) => r.ctrl === id && r.nb.some((j) => g2.regions[j].ctrl === a.nat));
     });
   }
@@ -25655,12 +25672,12 @@
     const lost = collapseScore(g2, a.on) / H.resilience;
     const busy = H.atWar.filter((e) => g2.nations[e]?.alive);
     const f = fronts(g2, a.nat, { extra: /* @__PURE__ */ new Set([a.on]) }).find((x) => x.enemies.includes(a.on) && held2.some((r) => x.depth[r.id] > 0));
-    const thin = held2.every((r) => r.units.reduce((s, u) => s + (u.nat === a.on && !u.dead ? u.divs : 0), 0) <= C.thin);
-    const good = f ? f.near >= C.odds : thin;
+    const thin = held2.every((r) => r.units.reduce((s, u) => s + (u.nat === a.on && !u.dead ? u.divs : 0), 0) <= C2.thin);
+    const good = f ? f.near >= C2.odds : thin;
     const waited = g2.turn >= 3 + Math.floor(dialDraw(g2, "wait", a.id) * (S2.wait ?? 0));
     if (busy.length) {
       if (!S2.bold && guarded(g2, a)) return null;
-      if (lost >= C.weak) return `${H.name} is hard pressed by ${listOf4(busy.slice(0, 2).map((e) => g2.nations[e].name))}`;
+      if (lost >= C2.weak) return `${H.name} is hard pressed by ${listOf4(busy.slice(0, 2).map((e) => g2.nations[e].name))}`;
       if (good && (f || S2.bold && waited)) return f ? `${theName(H, true)}'s armies are away fighting ${listOf4(busy.slice(0, 2).map((e) => g2.nations[e].name))}` : `${theName(H, true)} holds it with a handful of troops while it fights ${listOf4(busy.slice(0, 2).map((e) => g2.nations[e].name))}`;
       return null;
     }
@@ -25685,7 +25702,7 @@
         joinedSide(g2, a.nat);
       }
     }
-    launch(g2, a.nat, [a.on], C.push);
+    launch(g2, a.nat, [a.on], C2.push);
     g2.flags[`amb:go:${a.id}`] = g2.turn;
     g2.flags["hist:live"] = 1;
     headline(g2, "war", `${n.name} marches for ${a.name}: ${why}. ${cap5(a.why)}.`, a.nat, a.on === g2.human ? groundOf(g2, a)[0]?.id : void 0);
@@ -25698,7 +25715,7 @@
       const G3 = g2.nations[id];
       if (!G3?.alive || G3.dormant || id === g2.human || id === a.on || bloc(G3) !== hb || atWar(g2, id, a.nat) || allied(g2, id, a.nat)) continue;
       const borders2 = g2.regions.some((r) => r.ctrl === id && r.nb.some((j) => g2.regions[j].ctrl === a.nat));
-      if (!borders2 || dialDraw(g2, "aid", a.id, id, g2.turn) >= C.aid) continue;
+      if (!borders2 || dialDraw(g2, "aid", a.id, id, g2.turn) >= C2.aid) continue;
       declareWar(g2, id, a.nat);
       if (atWar(g2, id, a.nat)) headline(g2, "war", `${G3.name} stands by ${H.name}: ${n.name} went to war for ${a.name}, and now has ${theName(G3)} to reckon with.`, id);
     }
@@ -25713,7 +25730,7 @@
       return false;
     }
     const since = g2.flags[`amb:held:${a.id}`] ?? (g2.flags[`amb:held:${a.id}`] = g2.turn);
-    if (g2.turn - since + 1 < C.treaty) return false;
+    if (g2.turn - since + 1 < C2.treaty) return false;
     for (const r of ground) {
       r.owner = a.nat;
       r.since = g2.turn;
@@ -25751,13 +25768,13 @@
         if (!warned) {
           g2.flags[`amb:${a.id}`] = g2.turn;
           const told = `${n.name} presses its claim to ${a.name}: ${why}. ${cap5(a.why)}. ${theName(H, true)} is warned that it may march.`;
-          if (a.on === g2.human) warning(g2, "A claim on your ground", `${told} It will not march for ${C.notice === 1 ? "a month" : `${C.notice} months`} at least, and what it weighs is the troops you keep there.`, a.on, groundOf(g2, a)[0]?.id, a.nat);
+          if (a.on === g2.human) warning(g2, "A claim on your ground", `${told} It will not march for ${C2.notice === 1 ? "a month" : `${C2.notice} months`} at least, and what it weighs is the troops you keep there.`, a.on, groundOf(g2, a)[0]?.id, a.nat);
           else headline(g2, "event", told, a.nat);
-        } else if (g2.turn - warned >= C.notice && dialDraw(g2, "march", a.id, g2.turn) < C.chance * deterred(g2, a.nat, [a.on])) {
+        } else if (g2.turn - warned >= C2.notice && dialDraw(g2, "march", a.id, g2.turn) < C2.chance * deterred(g2, a.nat, [a.on])) {
           march2(g2, a, why);
           live2 = live2 || !!g2.flags[`amb:go:${a.id}`];
         }
-      } else if (warned && g2.turn - (g2.flags[`amb:last:${a.id}`] ?? warned) >= C.lapse) {
+      } else if (warned && g2.turn - (g2.flags[`amb:last:${a.id}`] ?? warned) >= C2.lapse) {
         delete g2.flags[`amb:${a.id}`];
         delete g2.flags[`amb:last:${a.id}`];
         if (g2.human === a.on) headline(g2, "event", `${n.name} lets its claim to ${a.name} rest for now.`, a.nat);
@@ -26169,8 +26186,8 @@
   }
   var govAdd = (st, key6) => effectsOf(st).reduce((s, e) => s + (e[key6] ?? 0), 0);
   function capitalOf(nat, st) {
-    const C2 = GOV.capital;
-    return GOV.forms[formOf(nat)].capital + govAdd(st, "capital") - (st.trust < C2.lowTrust ? pcIncome(nat) * C2.lowShare : 0) + (st.trust >= C2.highTrust ? C2.highAdd : 0);
+    const C3 = GOV.capital;
+    return GOV.forms[formOf(nat)].capital + govAdd(st, "capital") - (st.trust < C3.lowTrust ? pcIncome(nat) * C3.lowShare : 0) + (st.trust >= C3.highTrust ? C3.highAdd : 0);
   }
   function govCapital(g2, nat) {
     const st = g2.nations[nat]?.gov;
@@ -27236,7 +27253,7 @@
     const cm = capitalOf(nat, st);
     if (Math.abs(cm) > 1e-9) sums.push(`Political capital ${cm > 0 ? "+" : "−"}${Math.abs(Math.round(cm * 10) / 10)} a month`);
     const d = st.dir;
-    const C2 = GOV.capital, doubts = doubted(st);
+    const C3 = GOV.capital, doubts = doubted(st);
     const v = st.vow, vr = v ? g2.regions[v.region] : void 0;
     const asked2 = st.head ? generalBy(g2, st.head.general) : void 0, askedCorps = asked2 ? corpsOf(g2, asked2) : null;
     const stood = st.stood ? generalBy(g2, st.stood.general) : void 0;
@@ -27250,7 +27267,7 @@
       low: st.low,
       since: st.since ?? 0,
       doubts,
-      withheld: doubts ? `It withholds ${Math.round(C2.lowShare * 100)}% of the political capital you would earn each month and ${Math.round(C2.lowIncome * 100)}% of the treasury's income until its trust is back to ${C2.lowTrust}.` : null,
+      withheld: doubts ? `It withholds ${Math.round(C3.lowShare * 100)}% of the political capital you would earn each month and ${Math.round(C3.lowIncome * 100)}% of the treasury's income until its trust is back to ${C3.lowTrust}.` : null,
       capital: Math.floor(n.pc),
       capitalMonth: Math.round((pcIncome(nat, g2) + civicSum(g2, nat).pc + cm) * 100) / 100,
       seats,
@@ -27984,30 +28001,30 @@
     }
   }
   var purseKey = (nat, arm) => `pg:${nat}:${arm}`;
-  function aiFortify(g2, nat, watch, C2) {
+  function aiFortify(g2, nat, watch, C3) {
     const n = g2.nations[nat];
-    if (!C2 || g2.flags.open !== 1 || !budgeted(g2) || nat === g2.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
+    if (!C3 || g2.flags.open !== 1 || !budgeted(g2) || nat === g2.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
     const level = (r) => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === "fort" && b.region === r.id).length;
     const order2 = (r, keep) => {
       const cost = fortCost(g2, nat, r);
       return cost !== null && n.pp >= cost + keep && !!orderFort(g2, nat, r.id);
     };
     const idle = corpsCost(g2, nat, "inf") + PRODUCTION.aiReserve;
-    const coast = watch.map((nm) => g2.byName[nm]).filter((r) => !!r && isHome(g2, nat, r) && level(r) < C2.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
+    const coast = watch.map((nm) => g2.byName[nm]).filter((r) => !!r && isHome(g2, nat, r) && level(r) < C3.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
     if (coast.length && !n.queue.some((b) => b.what === "fort" && watch.includes(g2.regions[b.region].name))) order2(coast[0], idle);
-    const D = C2.dig;
+    const D = C3.dig;
     if (!D || menSpare(g2, nat) >= (specOf(g2, "inf")?.divs ?? 1)) return;
-    const dist = new Int16Array(g2.regions.length).fill(-1);
+    const dist2 = new Int16Array(g2.regions.length).fill(-1);
     const q = [];
     for (const r of g2.regions) if (atWar(g2, nat, r.ctrl)) {
-      dist[r.id] = 0;
+      dist2[r.id] = 0;
       q.push(r.id);
     }
-    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (dist[j] < 0) {
-      dist[j] = dist[q[i]] + 1;
+    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (dist2[j] < 0) {
+      dist2[j] = dist2[q[i]] + 1;
       q.push(j);
     }
-    const cands = g2.regions.filter((r) => isHome(g2, nat, r) && !r.overseas && dist[r.id] >= 2 && level(r) < (r.id === n.capital ? D.capital : D.top)).sort((a, b) => dist[a.id] - dist[b.id] || level(a) - level(b) || a.id - b.id);
+    const cands = g2.regions.filter((r) => isHome(g2, nat, r) && !r.overseas && dist2[r.id] >= 2 && level(r) < (r.id === n.capital ? D.capital : D.top)).sort((a, b) => dist2[a.id] - dist2[b.id] || level(a) - level(b) || a.id - b.id);
     let k = 0;
     for (const r of cands) {
       if (k >= D.orders || !order2(r, Math.max(D.keep, idle))) break;
@@ -28616,7 +28633,7 @@
   function civicSum(g2, nat, keeps = false) {
     if (!g2.flags["cv:any"] || !civicRules(g2)) return ZERO;
     const s = { ...ZERO };
-    const C2 = CIVIC.caps;
+    const C3 = CIVIC.caps;
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       const own = r.owner === nat;
@@ -28638,11 +28655,11 @@
         if (l.pc) s.pc += l.pc * lv;
       }
     }
-    s.research = Math.min(C2.research, s.research);
-    s.drafts = Math.min(C2.drafts, s.drafts);
-    s.trade = Math.min(C2.trade, s.trade);
-    s.pc = Math.min(C2.pc, s.pc);
-    s.houses = Math.min(C2.houses, s.houses);
+    s.research = Math.min(C3.research, s.research);
+    s.drafts = Math.min(C3.drafts, s.drafts);
+    s.trade = Math.min(C3.trade, s.trade);
+    s.pc = Math.min(C3.pc, s.pc);
+    s.houses = Math.min(C3.houses, s.houses);
     return s;
   }
   function civicHouses(g2, nat) {
@@ -30842,7 +30859,7 @@
   var clashOf = (g2, m) => airWar(g2) && m !== "superiority" ? AIRWAR.losses.clash : 1;
   var mostBomberLoss = (g2, night = false) => airWar(g2) ? night ? AIRWAR.losses.most : AIRWAR.losses.day : AIR.combat.maxBomberLoss;
   function assessAir(g2, fleets, m, target) {
-    const C2 = AIR.combat;
+    const C3 = AIR.combat;
     const quarry = m === "fleet" ? g2.fleets.find((x) => x.id === target) ?? null : null;
     const sea = m === "strike" || m === "fleet", night = m === "night";
     const zone = m === "fleet" ? quarry?.zone ?? -1 : target;
@@ -30909,8 +30926,8 @@
       const d = sea ? kmToSea(g2, f, zone) : kmTo(g2, f, target);
       let w = (amb ? d <= reach(f, g2).ftrRange ? AMBUSH() : 0 : cover2(d, reach(f, g2).ftrRange)) * crowding(g2, f);
       const deck = f.ship !== void 0;
-      if (sea && !deck) w *= C2.seaCover;
-      if (night) w *= acOn(g2) ? nightFighters(g2, f.nat) : C2.night.fighters;
+      if (sea && !deck) w *= C3.seaCover;
+      if (night) w *= acOn(g2) ? nightFighters(g2, f.nat) : C3.night.fighters;
       if (!amb && !out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
       w *= unready;
       if (wx) w *= cloudMet(sky);
@@ -30925,10 +30942,10 @@
     const escort2 = airWar(g2) && !night ? AIRWAR.losses.escort : 1;
     const met2 = out.Dpow / Math.max(1, out.Dpow + out.Epow * escort2 + guns2);
     const most = mostBomberLoss(g2, night);
-    const L = airWar(g2) ? night ? AIRWAR.losses.night : AIRWAR.losses : null;
+    const L2 = airWar(g2) ? night ? AIRWAR.losses.night : AIRWAR.losses : null;
     const gun = cloudGuns(sky, night);
     const aaGun = gun * nightGunShare(g2, night);
-    out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met2, L.power) : C2.bombers * met2) * I + (night ? C2.night.flak : C2.flak) * gun * I) : 0;
+    out.bomberLoss = out.B > 0 ? Math.min(most, (L2 ? L2.bombers * Math.pow(met2, L2.power) : C3.bombers * met2) * I + (night ? C3.night.flak : C3.flak) * gun * I) : 0;
     out.aa = m === "bomb" || night || m === "harbour" || m === "town" ? gunsAt(g2, target) : 0;
     if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * aaGun);
     const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
@@ -30940,7 +30957,7 @@
       const before = Math.max(0, ...out.ships.map((x) => x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0));
       out.again = Math.pow(CARRIERS.strike.again, before);
     }
-    if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C2.night.flak : C2.flak) * gun + out.aa * WORKS.aa.flak * unready * aaGun + out.flak) * I);
+    if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C3.night.flak : C3.flak) * gun + out.aa * WORKS.aa.flak * unready * aaGun + out.flak) * I);
     const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
     const ab = out.att.reduce((s, a) => s + (a.bmr > 0 ? a.f.bmr : 0), 0);
     const df2 = out.def.reduce((s, x) => s + x.f.ftr, 0);
@@ -31046,11 +31063,11 @@
   function fly(g2, nat, m, target, fleets, salt = "") {
     const a = assessAir(g2, fleets, m, target);
     if (a.why) return null;
-    const C2 = AIR.combat, I = intensity(m);
+    const C3 = AIR.combat, I = intensity(m);
     const sea = m === "strike" || m === "fleet", night = m === "night";
     const zone = m === "fleet" ? a.ships[0].zone : target;
     const rng = airRng(g2, `${m}:${target}:${nat}${salt}`);
-    const luck = () => rng.range(1 - C2.luck, 1 + C2.luck);
+    const luck = () => rng.range(1 - C3.luck, 1 + C3.luck);
     const before = (f) => {
       const side3 = { nat: f.nat, fleet: f.name, id: f.id, base: f.base, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 };
       if (f.ship !== void 0) {
@@ -31063,8 +31080,8 @@
     const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
     const share = se + sd > 0 ? se / (se + sd) : 0;
     const clash = Math.min(a.E, a.D) * clashOf(g2, m);
-    const dLoss = C2.fighters * I * clash * 2 * share * luck();
-    const eLoss = C2.fighters * I * clash * 2 * (1 - share) * C2.escortShare * luck();
+    const dLoss = C3.fighters * I * clash * 2 * share * luck();
+    const eLoss = C3.fighters * I * clash * 2 * (1 - share) * C3.escortShare * luck();
     const bLoss = a.B * Math.min(mostBomberLoss(g2, night), a.bomberLoss * luck());
     const gunKills = gunsDown(g2, a, night, bLoss, m, target);
     const saved = (home) => sea ? (AIR.pilots.home + AIR.pilots.away) / 2 : home ? AIR.pilots.home : AIR.pilots.away;
@@ -31093,7 +31110,7 @@
       bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
     });
     const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-    const through = Math.max(0, a.B - lostB) * (night ? C2.night.accuracy : dayAim(g2, nat, m)) * techMul(g2, nat, "bombers") * a.aim;
+    const through = Math.max(0, a.B - lostB) * (night ? C3.night.accuracy : dayAim(g2, nat, m)) * techMul(g2, nat, "bombers") * a.aim;
     let result = "", value = 0, ground = 0, shipsSunk = 0, notable2 = false;
     let struck;
     if (m === "fleet" || m === "harbour") {
@@ -31844,16 +31861,16 @@
     return out;
   }
   function nightChance(g2, a, target, nat, escortLoss, foeFighters) {
-    const C2 = AIR.combat, N = AIR.damage.industry, r = g2.regions[target];
+    const C3 = AIR.combat, N = AIR.damage.industry, r = g2.regions[target];
     const gunsStop2 = a.aa ? a.aa * WORKS.aa.cut : 0;
-    const spread = (n) => Array.from({ length: n }, (_, i) => 1 - C2.luck + 2 * C2.luck * (i + 0.5) / n);
+    const spread = (n) => Array.from({ length: n }, (_, i) => 1 - C3.luck + 2 * C3.luck * (i + 0.5) / n);
     const bombers = spread(12), fighters = foeFighters > 0 || escortLoss > 0 ? spread(4) : [1];
     const bmrShares = a.att.filter((x) => x.bmr > 0).map((x) => x.bmr / Math.max(1, a.B));
     const defShares = a.D > 0 ? a.def.map((x) => x.f.ftr * x.w / a.D) : [];
     let won = 0, throws = 0;
     for (const lb of bombers) {
       const lost = a.B * Math.min(mostBomberLoss(g2, true), a.bomberLoss * lb);
-      const through = Math.max(0, a.B - lost) * C2.night.accuracy * techMul(g2, nat, "bombers") * a.aim;
+      const through = Math.max(0, a.B - lost) * C3.night.accuracy * techMul(g2, nat, "bombers") * a.aim;
       const cut = Math.min(N.max, through / N.scale) * (1 - gunsStop2);
       const pr = groundRules(g2) ? railBombChance(g2, target, through, gunsStop2) : 0;
       const pf = groundRules(g2) ? ruinChance(g2, r, cut) : 0;
@@ -31876,17 +31893,17 @@
     return won / throws;
   }
   function forecastAir(g2, a, m, target) {
-    const C2 = AIR.combat, I = intensity(m);
+    const C3 = AIR.combat, I = intensity(m);
     const nat = a.att[0]?.f.nat ?? "";
-    const through = a.B * (1 - a.bomberLoss) * (m === "night" ? C2.night.accuracy : dayAim(g2, nat, m)) * techMul(g2, nat, "bombers") * a.aim;
+    const through = a.B * (1 - a.bomberLoss) * (m === "night" ? C3.night.accuracy : dayAim(g2, nat, m)) * techMul(g2, nat, "bombers") * a.aim;
     const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
     const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
     const share = se + sd > 0 ? se / (se + sd) : 0;
     const clash = Math.min(a.E, a.D) * clashOf(g2, m);
-    let ftrLoss = C2.fighters * I * clash * 2 * (1 - share) * C2.escortShare;
+    let ftrLoss = C3.fighters * I * clash * 2 * (1 - share) * C3.escortShare;
     const bmrLoss = a.B * a.bomberLoss;
     const foeGuns = gunsDown(g2, a, m === "night", bmrLoss, m, target);
-    const foeLoss = C2.fighters * I * clash * 2 * share + foeGuns;
+    const foeLoss = C3.fighters * I * clash * 2 * share + foeGuns;
     let cut = 0, nation = 0, value = 0;
     let rail2, ruin;
     let ships, hits;
@@ -33027,13 +33044,13 @@
     const n = g2.nations[nat];
     for (const given2 of NAVY.fleets) {
       const b = given2.book;
-      const booked = !!b && g2.flags.open === 1 && b.stops.includes(stopOf(g2)) && dialRuns(g2, nat);
-      const row2 = booked ? { ...given2, from: b.from, ships: b.ships } : given2;
-      const due = booked ? b.from <= g2.turn && g2.turn <= Math.max(b.from, given2.from ?? 1) : (row2.from ?? 1) === g2.turn;
+      const booked2 = !!b && g2.flags.open === 1 && b.stops.includes(stopOf(g2)) && dialRuns(g2, nat);
+      const row2 = booked2 ? { ...given2, from: b.from, ships: b.ships } : given2;
+      const due = booked2 ? b.from <= g2.turn && g2.turn <= Math.max(b.from, given2.from ?? 1) : (row2.from ?? 1) === g2.turn;
       if (row2.nat !== nat || !due || g2.turn <= 1 || g2.fleets.some((f2) => f2.nat === nat && f2.name === row2.name)) continue;
       if (row2.base && !g2.byName[row2.base]) continue;
       const f = addFleet(g2, row2);
-      if (booked) g2.flags[`bk:${nat}:${f.name}`] = g2.turn;
+      if (booked2) g2.flags[`bk:${nat}:${f.name}`] = g2.turn;
       headline(g2, "info", `${f.name} forms at ${f.port}.`, nat);
     }
     const named2 = (name) => g2.fleets.find((f) => f.nat === nat && f.name === name);
@@ -33078,8 +33095,8 @@
       }
       if (dial && leaving2 && !gone || (src || dial?.most) && !came || turn < g2.turn && !dial?.waits) continue;
       const many = / and /.test(what) || /s$/.test(what.split(" ")[0]) || /\bof\b/.test(what) && /s$/.test(what);
-      const words = leaving2 ? `${cap8(what)}.` : src ? `${cap8(what)} ${many ? "leave" : "leaves"} ${fleetName(src)} for ${fleetName(f)}.` : `${cap8(what)} ${many ? "join" : "joins"} ${fleetName(f)}.`;
-      headline(g2, "info", words, nat);
+      const words2 = leaving2 ? `${cap8(what)}.` : src ? `${cap8(what)} ${many ? "leave" : "leaves"} ${fleetName(src)} for ${fleetName(f)}.` : `${cap8(what)} ${many ? "join" : "joins"} ${fleetName(f)}.`;
+      headline(g2, "info", words2, nat);
     }
     for (const m of NAVY.moves ?? []) {
       if (m.nat !== nat || m.turn !== g2.turn || nat === g2.human || m.stops && !m.stops.includes(stopOf(g2))) continue;
@@ -33109,9 +33126,10 @@
         f.ready = f.ready > NAVY.ready.floor ? Math.max(NAVY.ready.floor, f.ready + NAVY.ready.sea) : Math.min(NAVY.ready.floor, f.ready + NAVY.ready.mend);
       } else f.ready = Math.min(1, f.ready + NAVY.ready.port);
     }
-    const sunk = seaWar(g2) && n.atWar.length ? huntSubs(g2, nat) : void 0;
+    const nights = convoyNights(g2, nat);
+    const sunk = seaWar(g2) && n.atWar.length ? huntSubs(g2, nat, nights) : void 0;
     if (sunk) torpedoes(g2, nat);
-    convoyWar(g2, nat, sunk);
+    convoyWar(g2, nat, sunk, nights);
   }
   function wholeShares(total, weights) {
     const w = weights.map((x) => Math.max(0, x));
@@ -33322,7 +33340,7 @@
     const H = FLEETS.hunt;
     return weight4 > 0 && subs > 0 ? Math.min(H.most, H.base + H.rate * (weight4 / (weight4 + subs * H.perSub + H.sea))) : 0;
   }
-  function huntSubs(g2, nat) {
+  function huntSubs(g2, nat, nights) {
     const out = {};
     for (const zone of g2.seas) {
       const z = zone.id;
@@ -33333,12 +33351,17 @@
       const share = huntShareSunk(h.weight, subs);
       if (share <= 0) continue;
       const rng = seaRng(g2, `hunt:${nat}:${z}`);
+      const look = subScene.on ? { zone: z, hunters: h.fleets.map((f) => lookFleet(f, f.ships.dd)), air: ownAirOver(g2, z, nat), quarry: quarry.map((f) => lookFleet(f, f.ships.ss)), sunk: 0, cost: 0 } : null;
       let sunk = 0;
       for (const f of quarry) {
-        const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * share));
+        const k = Math.min(f.ships.ss, booked(nights, "ss", f.id, rng.roll(f.ships.ss * share), f.ships.ss * share));
         f.ships.ss -= k;
         f.lost.ss += k;
         sunk += k;
+      }
+      if (look) {
+        look.sunk = sunk;
+        lookOf(g2, nat).hunts.push(look);
       }
       if (!sunk) continue;
       out[z] = sunk;
@@ -33351,6 +33374,7 @@
         f.lost.dd += k;
         cost += k;
       }
+      if (look) look.cost = cost;
       const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : h.fleets.length ? `The escorts of ${fleetName(h.fleets[0])}` : `${g2.nations[nat].adj} aircraft`;
       const told = !g2.human || g2.human === nat || allied(g2, g2.human, nat) || quarry.some((f) => f.nat === g2.human);
       const subsSunk = `${sunk} ${g2.nations[quarry[0].nat].adj} submarine${sunk === 1 ? "" : "s"}`;
@@ -33391,6 +33415,7 @@
       f.lost[cls]++;
       if (cls !== "ca") nameLosses(g2, f.nat, f.name, { ...none2(), [cls]: 1 }, `torpedo:${g2.turn}:${f.id}`);
       f.ready = Math.max(0, f.ready - 0.05);
+      if (subScene.on) lookTorpedo(g2, f, cls);
       headline(g2, "battle", `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g2.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, void 0, { arm: "sea", lost: nat });
     }
   }
@@ -33430,7 +33455,157 @@
     if (f.stance === "escort" && lane !== void 0 && f.lane === lane) return 1;
     return f.stance !== "raid" && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
   }
-  function convoyWar(g2, nat, sunkAt) {
+  var LANE_CAP = 0.95;
+  function routeForces(g2, nat, route) {
+    const zones = route.zones.map((k) => zoneOf(g2, k));
+    let raid2 = 0, guard = 0;
+    const raiders = [], escorts = [];
+    for (const f of g2.fleets) {
+      if (!atSea(f)) continue;
+      if (atWar(g2, f.nat, nat)) {
+        if (!zones.includes(f.zone)) continue;
+        let p = 0;
+        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+        p *= quality(g2, f.nat) * fit2(g2, f) * raidShare(f);
+        if (p > 0) {
+          raid2 += p;
+          raiders.push(f);
+        }
+      } else if (allied(g2, f.nat, nat)) {
+        const w = guardShare(g2, f, zones, route.id);
+        if (w <= 0) continue;
+        let p = 0;
+        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === "cv" ? deckWorth(g2, f) : 1);
+        p *= quality(g2, f.nat) * fit2(g2, f) * w;
+        if (p > 0) {
+          guard += p;
+          escorts.push(f);
+        }
+      }
+    }
+    if (route.base) {
+      const b = g2.byName[route.base.region];
+      if (b && atWar(g2, b.ctrl, nat)) raid2 += route.base.raid * quality(g2, b.ctrl) * (g2.supply[b.ctrl] && !g2.supply[b.ctrl][b.id] ? route.base.starved : 1);
+    }
+    for (const z of zones) guard += airOver(g2, z, nat) * NAVY.convoy.air;
+    const G3 = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
+    const L2 = raid2 > 0 ? raid2 / (raid2 + G3 + NAVY.convoy.ocean) : 0;
+    return { zones, raid: raid2, guard, raiders, escorts, G: G3, L: L2 };
+  }
+  var CONVOY_BATTLE = convoybattle_default;
+  var convoyRules = (g2) => g2.flags.open === 1 && g2.flags.convoyBattle === 1;
+  var convoyField = {};
+  function convoyMeeting(g2, nat, route) {
+    const { zones, raid: raid2, guard, raiders, escorts, G: G3, L: L2 } = routeForces(g2, nat, route);
+    const hunt = /* @__PURE__ */ new Map();
+    if (seaWar(g2) && g2.nations[nat].atWar.length) {
+      for (const z of zones) {
+        const quarry = g2.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g2, f.nat, nat));
+        if (!quarry.length) continue;
+        hunt.set(z, huntShareSunk(huntersIn(g2, nat, z).weight, quarry.reduce((s, f) => s + f.ships.ss, 0)));
+      }
+    }
+    const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
+    return {
+      turn: g2.turn,
+      route: route.id,
+      owner: nat,
+      zones,
+      raid: raid2,
+      guard,
+      G: G3,
+      L: L2,
+      tons: Math.round(route.tons * L2 / 1e3) * 1e3,
+      raiders: raiders.map((f) => ({ id: f.id, nat: f.nat, ss: f.ships.ss, expect: f.ships.ss * (hunt.get(f.zone) ?? 0) })),
+      escorts: escorts.map((f) => ({ id: f.id, nat: f.nat, dd: f.ships.dd, expect: raid2 > 0 ? raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd)) : 0 }))
+    };
+  }
+  function convoyNights(g2, nat) {
+    const ask = convoyField.fought;
+    if (!ask || !convoyRules(g2) || !g2.nations[nat].atWar.length) return void 0;
+    let out;
+    for (const route of NAVY.convoys) {
+      if (route.to !== nat || !CONVOY_BATTLE.hand.includes(route.id)) continue;
+      const m = convoyMeeting(g2, nat, route);
+      const fought = ask(m);
+      if (!fought) continue;
+      (out ?? (out = /* @__PURE__ */ new Map())).set(route.id, { fought, ss: new Set(m.raiders.map((r) => r.id)), dd: new Set(m.escorts.map((e) => e.id)), clamped: false });
+    }
+    return out;
+  }
+  function booked(nights, kind, id, rolled, expected, route) {
+    if (!nights) return rolled;
+    for (const [rid, n] of nights) {
+      if (route !== void 0 && rid !== route) continue;
+      if (!n[kind].has(id)) continue;
+      const want = n.fought[kind][id];
+      if (want === void 0) return rolled;
+      const lo = Math.floor(expected), hi = lo + 1;
+      const k = Math.max(lo, Math.min(hi, Math.round(want)));
+      if (k !== want) n.clamped = true;
+      return k;
+    }
+    return rolled;
+  }
+  function swingOf(g2, route, night) {
+    const { low: low2, high } = CONVOY_BATTLE.swing;
+    const drawn = low2 + (high - low2) * seaRng(g2, `convoySwing:${route}`).next();
+    if (!night) return drawn;
+    const w = night.fought.swing;
+    const k = Math.max(low2, Math.min(high, Number.isFinite(w) ? w : 1));
+    if (k !== w) night.clamped = true;
+    return k;
+  }
+  var subScene = { on: SUBSCENE_ENV };
+  var lookFleet = (f, n) => ({ fleet: f.id, nat: f.nat, n });
+  var lookRaider = (f, n) => ({ ...lookFleet(f, n), heavy: f.ships.bb + f.ships.cv + f.ships.ca });
+  function lookOf(g2, nat) {
+    const keep = (g2.subLook ?? []).filter((l2) => l2.turn >= g2.turn - 1);
+    let l = keep.find((x) => x.turn === g2.turn && x.nat === nat);
+    if (!l) {
+      l = { turn: g2.turn, nat, hunts: [], torpedoes: [], convoys: [] };
+      keep.push(l);
+    }
+    g2.subLook = keep;
+    return l;
+  }
+  function lookTorpedo(g2, f, cls) {
+    const could = g2.fleets.filter((x) => x.zone === f.zone && atSea(x) && x.ships.ss > 0 && atWar(g2, x.nat, f.nat));
+    const w = could.map((x) => x.ships.ss * quality(g2, x.nat) * fit2(g2, x));
+    const all = w.reduce((a, b) => a + b, 0);
+    let by = null;
+    if (all > 0) {
+      let pick2 = seaRng(g2, `look:torpedo:${f.id}`).next() * all;
+      for (let i = 0; i < could.length; i++) {
+        pick2 -= w[i];
+        if (pick2 < 0 || i === could.length - 1) {
+          by = could[i].id;
+          break;
+        }
+      }
+    }
+    const byNat = by === null ? null : could.find((x) => x.id === by).nat;
+    lookOf(g2, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, could: could.map((x) => x.id), by, couldNat: could.map((x) => x.nat), byNat });
+  }
+  function lookConvoy(g2, nat, route, zones, raiders, escorts, at, tons) {
+    const power = (f) => {
+      let p = 0;
+      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+      return p * quality(g2, f.nat) * fit2(g2, f) * raidShare(f);
+    };
+    const by = zones.map((z) => raiders.filter((f) => f.zone === z).reduce((a, f) => a + power(f), 0));
+    const all = by.reduce((a, b) => a + b, 0);
+    const most = zones[by.indexOf(Math.max(...by))];
+    const seas = zones.map((z, i) => ({
+      zone: z,
+      raiders: raiders.filter((f) => f.zone === z).map((f) => lookRaider(f, at.ss.get(f.id) ?? f.ships.ss)),
+      escorts: escorts.filter((f) => f.zone === z || z === most && !zones.includes(f.zone)).map((f) => lookFleet(f, at.dd.get(f.id) ?? f.ships.dd)),
+      air: airOver(g2, z, nat) * NAVY.convoy.air,
+      tons: Math.round((all > 0 ? tons * (by[i] / all) : tons / zones.length) / 1e3) * 1e3
+    }));
+    lookOf(g2, nat).convoys.push({ route, tons, seas });
+  }
+  function convoyWar(g2, nat, sunkAt, nights) {
     const n = g2.nations[nat];
     for (const route of NAVY.convoys) {
       if (route.to !== nat) continue;
@@ -33438,42 +33613,14 @@
         delete g2.convoys[route.id];
         continue;
       }
-      const zones = route.zones.map((k) => zoneOf(g2, k));
       const rng = seaRng(g2, `convoy:${route.id}`);
-      let raid2 = 0, guard = 0;
-      const raiders = [], escorts = [];
-      for (const f of g2.fleets) {
-        if (!atSea(f)) continue;
-        if (atWar(g2, f.nat, nat)) {
-          if (!zones.includes(f.zone)) continue;
-          let p = 0;
-          for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-          p *= quality(g2, f.nat) * fit2(g2, f) * raidShare(f);
-          if (p > 0) {
-            raid2 += p;
-            raiders.push(f);
-          }
-        } else if (allied(g2, f.nat, nat)) {
-          const w = guardShare(g2, f, zones, route.id);
-          if (w <= 0) continue;
-          let p = 0;
-          for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === "cv" ? deckWorth(g2, f) : 1);
-          p *= quality(g2, f.nat) * fit2(g2, f) * w;
-          if (p > 0) {
-            guard += p;
-            escorts.push(f);
-          }
-        }
-      }
-      if (route.base) {
-        const b = g2.byName[route.base.region];
-        if (b && atWar(g2, b.ctrl, nat)) raid2 += route.base.raid * quality(g2, b.ctrl) * (g2.supply[b.ctrl] && !g2.supply[b.ctrl][b.id] ? route.base.starved : 1);
-      }
-      for (const z of zones) guard += airOver(g2, z, nat) * NAVY.convoy.air;
-      const G3 = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
-      const L = raid2 > 0 ? raid2 / (raid2 + G3 + NAVY.convoy.ocean) : 0;
-      const tons = Math.round(route.tons * L / 1e3) * 1e3;
+      const { zones, raid: raid2, guard, raiders, escorts, G: G3, L: L0 } = routeForces(g2, nat, route);
+      const night = nights?.get(route.id);
+      const swing = convoyRules(g2) ? swingOf(g2, route.id, night) : void 0;
+      const L2 = swing === void 0 ? L0 : Math.min(LANE_CAP, L0 * swing);
+      const tons = Math.round(route.tons * L2 / 1e3) * 1e3;
       let subsLost = 0, escortsLost = 0;
+      const at = subScene.on ? { dd: new Map(escorts.map((f) => [f.id, f.ships.dd])), ss: new Map(raiders.map((f) => [f.id, f.ships.ss])) } : null;
       if (raid2 > 0) {
         if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
         else {
@@ -33487,13 +33634,17 @@
         }
         const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
         for (const f of escorts) {
-          const k = Math.min(f.ships.dd, rng.roll(raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd))));
+          const x = raid2 * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd));
+          const k = Math.min(f.ships.dd, booked(nights, "dd", f.id, rng.roll(x), x, route.id));
           f.ships.dd -= k;
           f.lost.dd += k;
           escortsLost += k;
         }
       }
-      g2.convoys[route.id] = { turn: g2.turn, raid: raid2, guard, tons, total: (g2.convoys[route.id]?.total ?? 0) + tons, share: route.share * L, loss: L, subsLost, escortsLost };
+      g2.convoys[route.id] = { turn: g2.turn, raid: raid2, guard, tons, total: (g2.convoys[route.id]?.total ?? 0) + tons, share: route.share * L2, loss: L2, subsLost, escortsLost };
+      if (swing !== void 0) g2.convoys[route.id].swing = swing;
+      if (night) g2.convoys[route.id].fought = night.clamped ? "clamped" : "field";
+      if (at) lookConvoy(g2, nat, route.id, zones, raiders, escorts, at, tons);
       storyConvoy(g2, raiders, escorts, tons, raid2 > 0);
       if (tons > 0 && g2.human && (g2.human === nat || atWar(g2, g2.human, nat))) {
         headline(g2, "info", `${cap8(route.name)}: ${tons.toLocaleString("en-US")} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? "submarine" : "submarines"} destroyed` : ""}.`, nat, void 0, { arm: "sea", lost: nat });
@@ -33520,7 +33671,7 @@
     for (const z of zones) guard += airOver(g2, z, nat) * NAVY.convoy.air;
     const G3 = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
     const loss = raid2 > 0 ? raid2 / (raid2 + G3 + NAVY.convoy.ocean) * traitSeaLoss(g2, nat) : 0;
-    return { raid: raid2, guard, loss: Math.min(0.95, loss) };
+    return { raid: raid2, guard, loss: Math.min(LANE_CAP, loss) };
   }
   function oreRoute(g2) {
     const o = NAVY.ore, n = g2.nations[o.to], src = g2.byName[o.source];
@@ -34761,7 +34912,7 @@
     return out;
   }
   function leavingThreat(g2, nation) {
-    return leavings(g2).some((L) => L.nation === nation && L.grounds.some((nm) => {
+    return leavings(g2).some((L2) => L2.nation === nation && L2.grounds.some((nm) => {
       const r = g2.byName[nm];
       return !!r && (atWar(g2, nation, r.ctrl) || r.units.some((u) => !u.dead && u.kind !== "fort" && atWar(g2, nation, u.nat)));
     }));
@@ -34945,11 +35096,11 @@
       did = true;
     }
     if (e.liberate) {
-      const L = e.liberate;
-      const to = L.to.find((id) => g2.nations[id]?.alive && atWar(g2, id, L.from));
-      for (const name of L.regions) {
+      const L2 = e.liberate;
+      const to = L2.to.find((id) => g2.nations[id]?.alive && atWar(g2, id, L2.from));
+      for (const name of L2.regions) {
         const r = g2.byName[name];
-        if (!to || !r || r.ctrl !== L.from || r.units.some((u) => !allied(g2, u.nat, to))) continue;
+        if (!to || !r || r.ctrl !== L2.from || r.units.some((u) => !allied(g2, u.nat, to))) continue;
         capture(g2, r, to);
         did = true;
       }
@@ -35873,7 +36024,7 @@
   var assaultFire = (g2, c) => isFoot(c) && hasTech(g2, c.nat, SUPPORT.tech.handHeld) ? 1 + SUPPORT.assault.attack : 1;
   var snipedIn = (target, town) => town ? "town" : !SUPPORT.snipers.ground.includes(target.terrain) ? null : target.terrain === "urban" ? "city" : "forest";
   function tollOf(g2, attackers2, defenders, at, f, sniped) {
-    const L = SUPPORT.toll, M = SUPPORT.machineGuns;
+    const L2 = SUPPORT.toll, M = SUPPORT.machineGuns;
     const snipers = sniped ? SUPPORT.snipers.toll : 0;
     if (!at || !f) return { tanks: 1, foot: 1 + snipers, guns: 1, why: { machineGuns: 0, guns: 0, snipers, shield: 0 } };
     let all = 0, mg = 0;
@@ -35888,12 +36039,12 @@
       mine4 += k;
       if (c.kind === "arm") armour += k;
     }
-    const shield = mine4 > 0 ? L.shield * Math.min(1, 2 * armour / mine4) * (1 - at.strength) : 0;
-    const machine = L.machineGuns * (all > 0 ? mg / all : 0), guns2 = Math.min(L.gunsMost, L.guns * f.guns);
+    const shield = mine4 > 0 ? L2.shield * Math.min(1, 2 * armour / mine4) * (1 - at.strength) : 0;
+    const machine = L2.machineGuns * (all > 0 ? mg / all : 0), guns2 = Math.min(L2.gunsMost, L2.guns * f.guns);
     return {
-      tanks: L.tanks[0] + (L.tanks[1] - L.tanks[0]) * at.strength,
+      tanks: L2.tanks[0] + (L2.tanks[1] - L2.tanks[0]) * at.strength,
       foot: (1 + machine + guns2 + snipers) * (1 - shield),
-      guns: L.behind,
+      guns: L2.behind,
       why: { machineGuns: machine, guns: guns2, snipers, shield }
     };
   }
@@ -38935,8 +39086,8 @@
     const gone = [];
     (setup_1939_default.expeditions ?? []).forEach((row2, i) => {
       var _a, _b;
-      const booked = g2.flags.open === 1 && row2[1] === nat && bookRow(g2, nat, g2.byName[row2[5]]);
-      const o0 = booked && BOOK.from?.[row2[2]] ? { ...row2[6] ?? {}, from: [...row2[6]?.from ?? [], ...BOOK.from[row2[2]]] } : row2[6] ?? {};
+      const booked2 = g2.flags.open === 1 && row2[1] === nat && bookRow(g2, nat, g2.byName[row2[5]]);
+      const o0 = booked2 && BOOK.from?.[row2[2]] ? { ...row2[6] ?? {}, from: [...row2[6]?.from ?? [], ...BOOK.from[row2[2]]] } : row2[6] ?? {};
       const o = bookOnly(g2, nat, row2[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
       const fromWar = g2.flags.open === 1 && !!o.war && o.after !== void 0;
       if (row2[1] !== nat || !fromWar && g2.turn < row2[0]) return;
@@ -38956,7 +39107,7 @@
       if (shipsItsOwn(g2, nat)) return;
       if (g2.flags.open === 1) {
         const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
-        if (k >= 0 && THEATRE_LIST[k].scripted && row2[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked || bookWaits(g2, reg.owner))) return;
+        if (k >= 0 && THEATRE_LIST[k].scripted && row2[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked2 || bookWaits(g2, reg.owner))) return;
         if (o.war) {
           if (!warOn(g2, o.war)) return;
           if (!o.war.includes(nat) && !atWar(g2, nat, o.war[0]) && !atWar(g2, nat, o.war[1])) return;
@@ -40240,11 +40391,11 @@
     const fleets = airFleetsOf(g2, nat).filter((f) => flying(f) || f.est.ftr + f.est.bmr > 0);
     const whys = new Map(fleets.map((f) => [f.id, whyNotSeat(g2, f, kind, target)]));
     const can2 = fleets.filter((f) => whys.get(f.id) === null);
-    const dist = (f) => distTo(g2, f, kind, target);
+    const dist2 = (f) => distTo(g2, f, kind, target);
     let going;
     if (ids2) going = can2.filter((f) => ids2.includes(f.id));
     else {
-      const near2 = [...can2].sort((a2, b) => dist(a2) - dist(b) || a2.id - b.id);
+      const near2 = [...can2].sort((a2, b) => dist2(a2) - dist2(b) || a2.id - b.id);
       const lead2 = kind === "recon" ? near2[0] : kind === "superiority" ? near2.find((f) => f.ftr > 0) ?? near2[0] : near2.find((f) => f.bmr > 0) ?? (row2.needs === "any" ? near2[0] : void 0);
       const same2 = lead2 ? can2.filter((f) => homeOf(f) === homeOf(lead2) && (lead2.bmr > 0 ? f.bmr > 0 : f.ftr > 0)) : [];
       going = kind === "recon" ? same2.slice(0, 1) : same2;
@@ -40258,7 +40409,7 @@
     }
     plan.picked = going.map((f) => f.id);
     plan.seats = fleets.map((f) => {
-      const d = dist(f), R = airRange(f, g2), k = kindOf2(f);
+      const d = dist2(f), R = airRange(f, g2), k = kindOf2(f);
       const effect = k === "bmr" ? d <= R.bmr ? 1 : 0 : kind === "night" ? 0 : cover2(d, R.ftr);
       const why = whys.get(f.id) ?? null;
       const atSeaTarget = kind === "strike" || kind === "fleet";
@@ -40369,9 +40520,9 @@
     if (!day.why && !night.why) {
       const ORDER3 = ["output, for a month", "chance the railway is cut", "chance a factory is wrecked"];
       for (const [w, o] of [[day, night], [night, day]]) {
-        const lacks = ORDER3.filter((words) => o.hits.some((h) => h.words === words && !h.dim) && !w.hits.some((h) => h.words === words));
+        const lacks = ORDER3.filter((words2) => o.hits.some((h) => h.words === words2 && !h.dim) && !w.hits.some((h) => h.words === words2));
         if (!lacks.length) continue;
-        const mine4 = [...w.hits.filter((h) => ORDER3.includes(h.words)), ...lacks.map((words) => ({ n: "0%", words, dim: true }))];
+        const mine4 = [...w.hits.filter((h) => ORDER3.includes(h.words)), ...lacks.map((words2) => ({ n: "0%", words: words2, dim: true }))];
         w.hits = mine4.sort((a, b) => ORDER3.indexOf(a.words) - ORDER3.indexOf(b.words));
       }
     }
@@ -41812,22 +41963,22 @@
     return list4.flatMap((p) => p.objectives ?? []);
   }
   function landings(g2, nat, ph, within3) {
-    for (const L of ph.landings ?? []) {
-      const c = g2.corps.find((x) => x.nat === nat && x.name === L.corps && !x.dead);
+    for (const L2 of ph.landings ?? []) {
+      const c = g2.corps.find((x) => x.nat === nat && x.name === L2.corps && !x.dead);
       if (!c) continue;
       const from = g2.regions[c.reg];
-      const waiting2 = from.port && (within3 ? within3.has(from.id) && allied(g2, nat, from.ctrl) && !L.to.includes(from.name) : from.owner === nat);
+      const waiting2 = from.port && (within3 ? within3.has(from.id) && allied(g2, nat, from.ctrl) && !L2.to.includes(from.name) : from.owner === nat);
       if (!waiting2) continue;
-      const force2 = [c, ...(L.with ?? []).map((nm) => g2.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x) => !!x)];
+      const force2 = [c, ...(L2.with ?? []).map((nm) => g2.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x) => !!x)];
       if (leavesHome(g2, nat, from)) force2.splice(Math.min(force2.length, mayLeave(g2, nat)));
       if (!force2.length) continue;
-      for (const name of L.to) {
+      for (const name of L2.to) {
         const to = g2.byName[name];
         if (!to) continue;
         let ok = false;
         if (allied(g2, nat, to.ctrl)) ok = to.owner !== nat && force2.map((x) => shipMove(g2, x, to)).some(Boolean);
         else if (atWar(g2, nat, to.ctrl)) {
-          if (hostileUnits(g2, to, nat).length && assess(g2, force2, to, landingOpts(g2, force2, to)).odds < (L.minOdds ?? 1.2)) continue;
+          if (hostileUnits(g2, to, nat).length && assess(g2, force2, to, landingOpts(g2, force2, to)).odds < (L2.minOdds ?? 1.2)) continue;
           const res = landCorps(g2, force2, to);
           ok = res.ok && !!res.taken;
           if (res.ok && !res.taken) break;
@@ -41885,7 +42036,7 @@
     var _a;
     const sea = seaFoe(g2, nat, slot);
     if (!sea) return;
-    const L = sea.L, you = sea.foe;
+    const L2 = sea.L, you = sea.foe;
     const quay = seaBase(g2, nat, slot);
     if (!quay) return;
     const sfx = slot ? ":o" : "";
@@ -41912,7 +42063,7 @@
         if (wave.length) {
           const plan = planLanding(g2, wave, ashore.at);
           const warned = !!plan.hold && !plan.hold.open;
-          if (!plan.why && plan.risk <= L.risk && !(heedsCard(ashore.at, true) && warned) && holdsAshore(g2, nat, ashore.at, wave, followUp(g2, nat, quay, wave, ashore.at)) && landCorps(g2, wave, ashore.at).ok) {
+          if (!plan.why && plan.risk <= L2.risk && !(heedsCard(ashore.at, true) && warned) && holdsAshore(g2, nat, ashore.at, wave, followUp(g2, nat, quay, wave, ashore.at)) && landCorps(g2, wave, ashore.at).ok) {
             landingWatch.tell?.({ nat, to: ashore.at, force: wave, warned, sea: plan.hold?.sea ?? -1, wave: true, taken: true });
             for (const c of wave) {
               c.hold = false;
@@ -41924,9 +42075,9 @@
       }
     }
     if (sea.second && !slot && neighbourAcrossTheWater(g2, nat, you) && lodgment(g2, nat)) return;
-    if (ready.length && ready.length < L.force) ready.push(...quayGuests(g2, nat, quay, you).slice(0, L.force - ready.length));
+    if (ready.length && ready.length < L2.force) ready.push(...quayGuests(g2, nat, quay, you).slice(0, L2.force - ready.length));
     const ask = strengthAsked(g2, nat);
-    const most = ask === null || !STRENGTH ? L.force : Math.max(L.force, Math.min(ready.length, liftLeft(g2, nat), STRENGTH.wave, STACK));
+    const most = ask === null || !STRENGTH ? L2.force : Math.max(L2.force, Math.min(ready.length, liftLeft(g2, nat), STRENGTH.wave, STACK));
     const mixed = (r, w) => {
       if (gunsRule(g2) && !w.some(fights)) return null;
       if (!hostileUnits(g2, r, nat).length) return w;
@@ -41934,16 +42085,16 @@
       return !sent || sent === w ? sent : [...w.slice(0, -1), sent[sent.length - 1]];
     };
     const waveFor = (r) => {
-      for (let k = L.force; k <= most; k++) {
+      for (let k = L2.force; k <= most; k++) {
         const w2 = mixed(r, ready.slice(0, k));
         if (w2 && holdsAshore(g2, nat, r, w2)) return w2;
       }
       const w = mixed(r, ready.slice(0, most));
       return w && holdsAshore(g2, nat, r, w, followUp(g2, nat, quay, w, r)) ? w : null;
     };
-    if (sea.second) takeAim(g2, nat, sfx, quay, ready.slice(0, L.force), L, you, ask === null ? null : waveFor);
-    const force2 = ready.slice(0, Math.min(L.force, liftLeft(g2, nat)));
-    if (force2.length < L.force) return;
+    if (sea.second) takeAim(g2, nat, sfx, quay, ready.slice(0, L2.force), L2, you, ask === null ? null : waveFor);
+    const force2 = ready.slice(0, Math.min(L2.force, liftLeft(g2, nat)));
+    if (force2.length < L2.force) return;
     const went = (k) => {
       for (const c of force2) c.hold = false;
       g2.flags[`st:seaNext:${nat}${sfx}`] = g2.turn + k;
@@ -41959,7 +42110,7 @@
       }
     }
     const atOnce = sea.second && neighbourAcrossTheWater(g2, nat, you);
-    const diced = !atOnce && hashString(`descent:${g2.seed}:${g2.turn}:${nat}${sfx}`) / 4294967296 >= L.chance;
+    const diced = !atOnce && hashString(`descent:${g2.seed}:${g2.turn}:${nat}${sfx}`) / 4294967296 >= L2.chance;
     if (diced && !day) return;
     const men2 = force2.reduce((s, c) => s + c.divs * c.str, 0);
     let best = null, bv = 0, bw = false, bz = -1, bf = force2, weak = false, weakMain = false;
@@ -41972,13 +42123,13 @@
       if (force2.some((c) => c.nat !== nat && !joinsOn(g2, c.nat, r, nat))) continue;
       if (!soon && !shoreOpen(g2, r.owner, !!r.overseas, r.name)) continue;
       const plan = planLanding(g2, force2, r);
-      if (plan.why || plan.risk > L.risk) continue;
+      if (plan.why || plan.risk > L2.risk) continue;
       const warned = !!plan.hold && !plan.hold.open;
       if (heedsCard(r) && warned) continue;
-      if (plan.defended && (!plan.assess || plan.assess.odds < L.odds)) continue;
+      if (plan.defended && (!plan.assess || plan.assess.odds < L2.odds)) continue;
       let near2 = 0;
       for (const j of [r.id, ...r.nb]) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (u.kind !== "fort") near2 += u.divs * u.str;
-      if (near2 > L.near * men2) continue;
+      if (near2 > L2.near * men2) continue;
       const wave = waveFor(r);
       if (!wave) {
         weak = true;
@@ -41998,7 +42149,7 @@
     if (diced && !best) return;
     const since = `st:moreFrom:${nat}${sfx}`;
     if ((g2.flags[`st:more:${nat}${sfx}`] ?? 0) < g2.turn - 2) delete g2.flags[since];
-    const waits = !!best && weakMain && lesser(best) && g2.turn - (g2.flags[since] ?? g2.turn) < L.every;
+    const waits = !!best && weakMain && lesser(best) && g2.turn - (g2.flags[since] ?? g2.turn) < L2.every;
     if (weak && (!best || waits)) {
       g2.flags[`st:more:${nat}${sfx}`] = g2.turn;
       (_a = g2.flags)[since] ?? (_a[since] = g2.turn);
@@ -42008,7 +42159,7 @@
     if (!res.ok) return;
     for (const c of bf) c.hold = false;
     landingWatch.tell?.({ nat, to: best, force: bf, warned: bw, sea: bz, wave: false, taken: !!res.taken });
-    went(L.every);
+    went(L2.every);
     delete g2.flags[`st:aim:${nat}${sfx}`];
     delete g2.flags[`st:more:${nat}${sfx}`];
     delete g2.flags[since];
@@ -42227,7 +42378,7 @@
       break;
     }
   }
-  function takeAim(g2, nat, sfx, quay, force2, L, you, waveFor = null) {
+  function takeAim(g2, nat, sfx, quay, force2, L2, you, waveFor = null) {
     const key6 = `st:aim:${nat}${sfx}`, at = `st:aimAt:${nat}${sfx}`;
     if (!force2.length) return;
     const men2 = force2.reduce((s, c) => s + c.divs * c.str, 0);
@@ -42239,10 +42390,10 @@
       if (force2.some((c) => c.nat !== nat && !joinsOn(g2, c.nat, r, nat))) continue;
       if (!seaPath(g2, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
       const defended = hostileUnits(g2, r, nat).length > 0;
-      if (defended && assess(g2, force2, r, landingOpts(g2, force2, r)).odds < L.odds) continue;
+      if (defended && assess(g2, force2, r, landingOpts(g2, force2, r)).odds < L2.odds) continue;
       let near2 = 0;
       for (const j of [r.id, ...r.nb]) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (u.kind !== "fort") near2 += u.divs * u.str;
-      if (near2 > L.near * men2) continue;
+      if (near2 > L2.near * men2) continue;
       if (waveFor && !waveFor(r)) continue;
       const v = (2 + r.vp + r.fac + (r.cap ? 6 : 0) + (r.owner !== you ? 2 : 0)) * (defended ? 1 : 1.5) - 0.2 * near2;
       if (!best || v > bv) {
@@ -42624,7 +42775,7 @@
   function advance(g2, nat, enemies, wave, door, halt) {
     let made = 0;
     const N = g2.regions.length;
-    const dist = new Float32Array(N).fill(1e9);
+    const dist2 = new Float32Array(N).fill(1e9);
     const atFront2 = new Uint8Array(N);
     const full = (r) => friendlyUnits(g2, r, nat).length >= STACK;
     const q = [];
@@ -42640,7 +42791,7 @@
       }
       if (open2) atFront2[r.id] = 1;
       if ((open2 || walled) && !full(r)) {
-        dist[r.id] = open2 ? 0 : 4;
+        dist2[r.id] = open2 ? 0 : 4;
         q.push(r.id);
       }
     }
@@ -42649,8 +42800,8 @@
       if (full(g2.regions[a])) continue;
       for (const j of g2.regions[a].nb) {
         if (!allied(g2, nat, ctl(g2, g2.regions[j])) || !within2(g2.regions[j])) continue;
-        if (dist[a] + 1 < dist[j]) {
-          dist[j] = dist[a] + 1;
+        if (dist2[a] + 1 < dist2[j]) {
+          dist2[j] = dist2[a] + 1;
           q.push(j);
         }
       }
@@ -42662,7 +42813,7 @@
     };
     for (const c of movers) {
       if (screen(c) || massed.has(c.id)) continue;
-      if (near !== null && !(dist[c.reg] <= near)) continue;
+      if (near !== null && !(dist2[c.reg] <= near)) continue;
       if (door && KIND[c.kind].mobile && door[c.reg] > 0) {
         for (let step2 = 0; step2 < 6 && c.ap > 0 && door[c.reg] > 0; step2++) {
           let to = null;
@@ -42676,16 +42827,16 @@
         }
         continue;
       }
-      if (!scope && wave <= 1 && c.ap >= 4 && dist[c.reg] >= 3 && dist[c.reg] < 1e9) {
+      if (!scope && wave <= 1 && c.ap >= 4 && dist2[c.reg] >= 3 && dist2[c.reg] < 1e9) {
         const byRail = hops(g2, c.reg, (r) => allied(g2, nat, r.ctrl));
-        let to = null, bd = dist[c.reg] - 1, bu = 99;
+        let to = null, bd = dist2[c.reg] - 1, bu = 99;
         for (const r of g2.regions) {
-          if (r.since >= g2.turn || dist[r.id] > bd || byRail[r.id] < 0 || !allied(g2, nat, r.ctrl)) continue;
+          if (r.since >= g2.turn || dist2[r.id] > bd || byRail[r.id] < 0 || !allied(g2, nat, r.ctrl)) continue;
           const u = friendlyUnits(g2, r, nat).length;
           if (u >= STACK || blocked(g2, c, r)) continue;
-          if (dist[r.id] < bd || u < bu) {
+          if (dist2[r.id] < bd || u < bu) {
             to = r;
-            bd = dist[r.id];
+            bd = dist2[r.id];
             bu = u;
           }
         }
@@ -42696,16 +42847,16 @@
       }
       for (let step2 = 0; step2 < 6 && c.ap > 0; step2++) {
         const here = c.reg;
-        if (atFront2[here] || dist[here] >= 1e9) break;
-        let to = null, bd = dist[here], bu = 99;
+        if (atFront2[here] || dist2[here] >= 1e9) break;
+        let to = null, bd = dist2[here], bu = 99;
         for (const j of g2.regions[here].nb) {
           const r = g2.regions[j];
-          if (!allied(g2, nat, ctl(g2, r)) || dist[j] >= bd + (to ? 1e-3 : 0)) continue;
+          if (!allied(g2, nat, ctl(g2, r)) || dist2[j] >= bd + (to ? 1e-3 : 0)) continue;
           const u = friendlyUnits(g2, r, nat).length;
           if (u >= STACK || blocked(g2, c, r)) continue;
-          if (dist[j] < bd || u < bu) {
+          if (dist2[j] < bd || u < bu) {
             to = r;
-            bd = dist[j];
+            bd = dist2[j];
             bu = u;
           }
         }
@@ -43178,6 +43329,8 @@
       atSea: g2.atSea?.length ? g2.atSea : void 0,
       // The air campaigns' memory (ruling 236.2): absent while the switch is off, so such a save is written as it always was.
       ac: g2.ac,
+      // The submarine scene's record (release 2, ruling 241 D1): absent while its viewing setting is off, so such a save is written as it always was.
+      subLook: g2.subLook,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -43330,6 +43483,7 @@
     g2.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g2);
     if (Array.isArray(d.atSea) && d.atSea.length) g2.atSea = d.atSea;
     if (d.ac && typeof d.ac === "object") g2.ac = d.ac;
+    if (Array.isArray(d.subLook)) g2.subLook = d.subLook;
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -43630,8 +43784,8 @@
     airAI(g2, nat);
     const flown = g2.airReports.slice(from).filter((r) => r.attNat === nat);
     if (!flown.length) return null;
-    const L = lossesOf(flown);
-    return `flew ${plural7(flown.length, "raid")}: ${some(flown.map((r) => raidWords(g2, r)), 4)}. It cost ${plural7(Math.round(L.ours), "aircraft", "aircraft")}${L.theirs >= 0.5 ? ` and shot down ${Math.round(L.theirs)}` : ""}.`;
+    const L2 = lossesOf(flown);
+    return `flew ${plural7(flown.length, "raid")}: ${some(flown.map((r) => raidWords(g2, r)), 4)}. It cost ${plural7(Math.round(L2.ours), "aircraft", "aircraft")}${L2.theirs >= 0.5 ? ` and shot down ${Math.round(L2.theirs)}` : ""}.`;
   }
   function navy(g2, nat) {
     const was = new Map(fleetsOf(g2, nat).map((f) => [f.id, { zone: f.zone, stance: f.stance }]));
@@ -45117,7 +45271,7 @@
     const n = g2.nations[nat];
     if (!rivalRules(g2) || !n?.alive || n.dormant || nat === g2.human) return null;
     const character = characterOf(g2, nat);
-    const C2 = RIVALS.characters[character];
+    const C3 = RIVALS.characters[character];
     const source = plansKnown(g2, nat);
     const me = g2.human;
     const name = (id) => g2.nations[id]?.name ?? id;
@@ -45142,7 +45296,7 @@
     }
     const cap11 = n.capital >= 0 ? g2.regions[n.capital].name : "its capital";
     const line = !n.atWar.length ? "At peace: its staff has no plan of attack." : !source ? `Where its main effort will fall is not known. An agent reading its books in ${cap11} would learn it.` : efforts.length ? efforts.map((e) => `Main effort: ${e.name}, against ${name(e.enemy)}, until ${turnToDate(e.to).label}${e.target !== e.first ? `. It has moved on to ${e.targetName}` : ""}.`).join(" ") : offensives.length ? `A general offensive against ${offensives.map((o) => name(o.enemy)).join(" and ")}, under way since ${turnToDate(Math.min(...offensives.map((o) => o.since))).label}.` : "It stands on the defensive: no main effort is named.";
-    return { nat, character, label: C2.label, says: C2.says, source, efforts, offensives, line };
+    return { nat, character, label: C3.label, says: C3.says, source, efforts, offensives, line };
   }
   function rivalStaffs(g2) {
     return Object.values(g2.nations).sort((a, b) => (b.atWar.length ? 1 : 0) - (a.atWar.length ? 1 : 0) || b.armyPeak - a.armyPeak || (a.id < b.id ? -1 : 1)).map((n) => rivalStaff(g2, n.id)).filter((v) => v !== null);
@@ -45895,8 +46049,8 @@
     const raise2 = specOf(g2, "inf")?.months ?? 5;
     const myIndex = g2.order.indexOf(nat);
     const cap11 = n.capital;
-    const dist = g2.capDist?.[nat];
-    const far = (id) => dist ? dist[id] : 0;
+    const dist2 = g2.capDist?.[nat];
+    const far = (id) => dist2 ? dist2[id] : 0;
     const foe = (u) => !u.dead && u.kind !== "fort" && atWar(g2, u.nat, nat);
     let all = null;
     const rails = /* @__PURE__ */ new Map();
@@ -47371,17 +47525,17 @@
     card.quiet = fighting.length ? "" : opts.opening ? NOT_YET_FOUGHT : card.bands.length || all.some((r) => r.cls === 2) ? "There was no fighting on your fronts this month." : "A quiet month.";
     if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
     const tone = (good, bad) => good > bad ? "good" : bad > good ? "bad" : "plain";
-    const words = (n, w) => n ? `${n} ${w}` : `none ${w}`;
-    if (provWon || provLost) card.boxes.push({ key: "provinces", label: "PROVINCES", figure: `${provWon - provLost > 0 ? "+" : provWon - provLost < 0 ? "−" : ""}${Math.abs(provWon - provLost)}`, sub: `${words(provWon, "won")} · ${words(provLost, "lost")}`, tone: tone(provWon, provLost) });
+    const words2 = (n, w) => n ? `${n} ${w}` : `none ${w}`;
+    if (provWon || provLost) card.boxes.push({ key: "provinces", label: "PROVINCES", figure: `${provWon - provLost > 0 ? "+" : provWon - provLost < 0 ? "−" : ""}${Math.abs(provWon - provLost)}`, sub: `${words2(provWon, "won")} · ${words2(provLost, "lost")}`, tone: tone(provWon, provLost) });
     const sieged = besiegedTowns.size ? ` · ${plural8(besiegedTowns.size, "town")} besieged` : "";
     if (battlesWon || battlesLost || sieged) card.boxes.push({ key: "battles", label: "BATTLES", figure: `${battlesWon} – ${battlesLost}`, sub: `${battlesWon || battlesLost ? `${battlesWon} won · ${battlesLost} lost` : "none fought"}${sieged}`, tone: tone(battlesWon, battlesLost) });
     if (menOurs || menTheirs) card.boxes.push({ key: "men", label: "MEN LOST", figure: num4(menOurs), sub: `theirs: ${num4(menTheirs)}`, tone: menOurs > menTheirs ? "bad" : "plain" });
     if (sunk || shipsLost) card.boxes.push({ key: "sea", label: "AT SEA", figure: `${sunk} – ${shipsLost}`, sub: `${sunk} sunk · ${shipsLost} lost`, tone: tone(sunk, shipsLost) });
     if (shotDown || planesLost) card.boxes.push({ key: "air", label: "IN THE AIR", figure: `${num4(shotDown)} – ${num4(planesLost)}`, sub: `${num4(shotDown)} shot down · ${num4(planesLost)} lost`, tone: tone(shotDown, planesLost) });
     {
-      const L = ledger(g2, me);
-      const net = Math.round(L.net * BUDGET.scale), hand = L.treasury < 0 ? Math.round(-L.treasury * BUDGET.scale) : Math.floor(L.treasury * BUDGET.scale + 1e-6);
-      card.boxes.push({ key: "treasury", label: "TREASURY", figure: `${net > 0 ? "+" : net < 0 ? "−" : ""}${Math.abs(net).toLocaleString("en-US")}`, sub: L.treasury < 0 ? `${hand.toLocaleString("en-US")} in debt` : `${hand.toLocaleString("en-US")} in hand`, tone: net > 0 ? "good" : net < 0 ? "bad" : "plain" });
+      const L2 = ledger(g2, me);
+      const net = Math.round(L2.net * BUDGET.scale), hand = L2.treasury < 0 ? Math.round(-L2.treasury * BUDGET.scale) : Math.floor(L2.treasury * BUDGET.scale + 1e-6);
+      card.boxes.push({ key: "treasury", label: "TREASURY", figure: `${net > 0 ? "+" : net < 0 ? "−" : ""}${Math.abs(net).toLocaleString("en-US")}`, sub: L2.treasury < 0 ? `${hand.toLocaleString("en-US")} in debt` : `${hand.toLocaleString("en-US")} in hand`, tone: net > 0 ? "good" : net < 0 ? "bad" : "plain" });
     }
     const still = new Set(N.queue.map((b) => b.id));
     const group = (list4, sign, text, region, next) => {
@@ -47512,16 +47666,2119 @@
   function menOutLine(g2, nat) {
     const n = g2.nations[nat];
     if (!n?.alive || !menRules(g2) || raisable(g2, nat, 1) >= 1) return null;
-    const L = ledger(g2, nat);
-    if (L.gross <= 0 || L.treasury <= 3 * L.gross) return null;
+    const L2 = ledger(g2, nat);
+    if (L2.gross <= 0 || L2.treasury <= 3 * L2.gross) return null;
     const buys = moneyBuys(g2, nat);
     const list4 = buys.length > 1 ? `${buys.slice(0, -1).join(", ")} and ${buys[buys.length - 1]}` : buys[0];
-    return `The reserve of men is empty and ${Math.floor(L.treasury * BUDGET.scale + 1e-6).toLocaleString("en-US")} lies unspent. Money alone still buys: ${list4}.`;
+    return `The reserve of men is empty and ${Math.floor(L2.treasury * BUDGET.scale + 1e-6).toLocaleString("en-US")} lies unspent. Money alone still buys: ${list4}.`;
   }
   var menOutDue = (g2, nat) => {
     const from = g2.flags[`menout:${nat}`];
     return from === void 0 || (g2.turn - from) % 3 === 0;
   };
+
+  // Rules/sub-scene-looks.json
+  var sub_scene_looks_default = {
+    _about: "The month's submarine scene (D1, ruling 241): LOOK ONLY. Read by Rules/sub-scene.ts and by no rule; nothing here changes a rule, a random draw, a save or the news. Rows by navy and year: a row stands from its 'from' (YYYY-MM) until the next row of the same navy; a row with a 'basin' stands only in that basin and is preferred there. '_default' is any navy without rows of its own (the small navies). Marks: [H] read in a good source or standard, [M] one source or sources differ a little, [L] the staff's reading, [P] published and not re-read, [OEG] US Navy OEG Report 51; the historian's check of 22 November 05:20Z (/mnt/project-files/historian/convoy-war-history-check-1122.md) is cited as [historian]. Lengths, beams and draughts in metres; speeds in metres a second; depths in metres below the surface. Until the rules record hunters, attackers and escorts per sea (form D1's record-only fields, which the rules builder adds under subScene), these rows stand in for them.",
+    caption: {
+      grt: 5200,
+      check: "to be checked by the historian before shipping",
+      _src: "About 5,200 GRT a ship: 14,687,231 GRT over 2,828 ships [P: Roskill] = 5,193. The historian locked 5,200 (H) at 05:20Z on 22 November and suggests 'by submarines', not 'by U-boats'; the caption still carries the check mark until the pre-check lifts it."
+    },
+    beats: {
+      _about: "Screen seconds for each beat of the scene (form D1): the convoy in columns or the torpedoed fleet (8 s), a torpedo fan (10 s: its firing 4 and its hits 6), a depth-charge run (12 s: the drop 6 and the bursts 6), and only for a booked kill the boat's end (10 s). A beat's battle-time window is played at (to - from) / screen; 'pace' is the most a window may be sped up before it is cut in two.",
+      convoy: 8,
+      fire: 4,
+      hits: 6,
+      drop: 6,
+      bursts: 6,
+      charges: 12,
+      end: 10,
+      pace: 4.5,
+      least: 30,
+      most: 45
+    },
+    most: { heavy: 3, boats: 3, hits: 3, escorts: 8, merchants: 60 },
+    convoy: {
+      _about: "Merchant ship look: a tramp of about 5,000 GRT [L]. Columns about 900 m apart, ships about 550 m apart (field-side-read §3; the historian: speeds as held, spacings L).",
+      mv: { name: "merchant ship", len: 128, beam: 17, draught: 7.5, turn: 0.05 },
+      colGap: 900,
+      rowGap: 550
+    },
+    heavy: {
+      _about: "Heavy ships and destroyers of a fleet, the sizes the fleet recordings use (sea.json classes).",
+      bb: { len: 240, beam: 33, speed: 7.2, turn: 0.05 },
+      cv: { len: 240, beam: 32, speed: 7.7, turn: 0.05 },
+      ca: { len: 180, beam: 20, speed: 7.7, turn: 0.08 },
+      dd: { len: 110, beam: 11, speed: 8.2, turn: 0.12 }
+    },
+    basins: {
+      _about: "Which navies' boats work in which waters, by date [P: Blair; Hezlet; Boyd & Yoshida; to be checked]. Used only when the rules have not recorded the attackers (form D1): the first navy listed that is at war with the side struck. Seas not listed fall to 'atlantic' (the world chart's American and Atlantic seas) or, on the far chart, to 'pacific'.",
+      seas: {
+        north: ["nsea", "norw", "barents", "skag", "denmark", "iceland"],
+        baltic: ["baltic", "bothnia", "finland"],
+        med: ["wmed", "tyrr", "adriatic", "ionian", "aegean", "emed", "central", "libyan"],
+        black: ["black"],
+        indian: ["andaman", "bengal", "ceylon", "arabian", "persian", "cindian", "mascarene", "somali", "sindian", "redsea", "zanzibar", "eindian", "mentawai", "westaus", "bight", "aden", "mozambique"],
+        pacific: ["california", "cascadia", "tehuantepec", "panama", "guayaquil", "callao", "atacama", "valparaiso", "fjords", "eqpacific", "sepacific"]
+      },
+      navies: {
+        atlantic: [["GER", "1939-09", "1945-05"], ["ITA", "1940-08", "1943-09"], ["UK", "1939-09", "1945-05"], ["USA", "1941-12", "1945-05"]],
+        north: [["UK", "1939-09", "1945-05"], ["GER", "1939-09", "1945-05"], ["SOV", "1941-06", "1945-05"], ["NOR", "1940-06", "1945-05"]],
+        baltic: [["SOV", "1939-11", "1945-05"], ["GER", "1939-09", "1945-05"], ["POL", "1939-09", "1939-10"]],
+        med: [["UK", "1940-06", "1945-05"], ["ITA", "1940-06", "1943-09"], ["GER", "1941-09", "1944-09"], ["FRA", "1940-06", "1940-06"], ["GRE", "1940-10", "1945-05"]],
+        black: [["SOV", "1941-06", "1944-09"], ["GER", "1942-10", "1944-09"], ["ROM", "1941-06", "1944-08"]],
+        pacific: [["USA", "1941-12", "1945-08"], ["JAP", "1941-12", "1945-08"], ["NED", "1941-12", "1942-03"], ["UK", "1944-01", "1945-08"]],
+        indian: [["JAP", "1942-01", "1945-08"], ["GER", "1943-01", "1945-05"], ["UK", "1944-01", "1945-08"]]
+      }
+    },
+    boats: {
+      _about: "A navy's boat by year: her class, size and speeds (surf surfaced, dived submerged), draught, torpedoes carried, the fan she fires, the range she fires it from, how she attacks at night, her usual depth when hunted (deep), crush depth, how many boats attack a convoy together (pack; OEG 10.1.4: about 2 in 1941-42, 1.7 for US groups of 3), and whether a shadower reports to the others (Germany 1940 to early 1944).",
+      GER: [
+        { from: "1939-09", cls: "Type VIIB", len: 66.5, beam: 6.2, draught: 4.7, surf: 8.9, dived: 4, tubes: 14, fan: 3, range: 900, attack: "periscope", deep: 80, crush: 220, pack: 1, report: false, _src: "[P: Rossler]; submerged day attacks to June 1940 [history §1]" },
+        { from: "1940-07", cls: "Type VIIC", len: 67.1, beam: 6.2, draught: 4.7, surf: 9.1, dived: 3.9, tubes: 14, fan: 3, range: 700, attack: "surfaced", deep: 100, crush: 250, pack: 2, report: true, _src: "[H: historian] 17.7/7.6 kn, 14 torpedoes; night surface attacks, a fan of 2-4 from close in [P: Blair]" },
+        { from: "1943-07", cls: "Type VIIC", len: 67.1, beam: 6.2, draught: 4.7, surf: 9.1, dived: 3.9, tubes: 14, fan: 2, range: 1200, attack: "periscope", deep: 150, crush: 250, pack: 2, report: true, _src: "boats forced deep [OEG T2]" },
+        { from: "1944-03", cls: "Type VIIC", len: 67.1, beam: 6.2, draught: 4.7, surf: 9.1, dived: 3.9, tubes: 14, fan: 2, range: 1200, attack: "periscope", deep: 150, crush: 250, pack: 1, report: false, _src: "packs given up [history §1]" }
+      ],
+      ITA: [
+        { from: "1940-06", cls: "Marcello class", len: 73, beam: 7.2, draught: 5.1, surf: 8.9, dived: 4.1, tubes: 16, fan: 2, range: 1500, attack: "periscope", deep: 80, crush: 160, pack: 1, report: false, _src: "[L]; trained for submerged attack [P: Blair]" },
+        { from: "1940-06", basin: "med", cls: "Adua class", len: 60.2, beam: 6.5, draught: 4.6, surf: 7.7, dived: 3.9, tubes: 12, fan: 2, range: 1500, attack: "periscope", deep: 80, crush: 160, pack: 1, report: false, _src: "[L]" }
+      ],
+      UK: [
+        { from: "1939-09", cls: "T class", len: 84.3, beam: 7.8, draught: 4.5, surf: 7.8, dived: 4.6, tubes: 16, fan: 4, range: 1800, attack: "periscope", deep: 60, crush: 150, pack: 1, report: false, _src: "[L]" },
+        { from: "1940-06", basin: "med", cls: "U class", len: 58.2, beam: 4.9, draught: 4.6, surf: 5.8, dived: 4.6, tubes: 8, fan: 4, range: 1600, attack: "periscope", deep: 60, crush: 120, pack: 1, report: false, _src: "[L]; the boats worked alone, routed by Ultra [historian H]" }
+      ],
+      USA: [
+        { from: "1941-12", cls: "Gato class", len: 95, beam: 8.3, draught: 5.2, surf: 10.4, dived: 4.5, tubes: 24, fan: 3, range: 1600, attack: "periscope", deep: 90, crush: 150, pack: 1, report: false, _src: "[L]" },
+        { from: "1943-10", cls: "Balao class", len: 95, beam: 8.3, draught: 5.2, surf: 10.4, dived: 4.5, tubes: 24, fan: 3, range: 1400, attack: "surfaced", deep: 120, crush: 180, pack: 2, report: false, _src: "packs of 3 led at sea from October 1943 [P: Blair]; 1.7 attackers per contact [OEG 10.1.4]; night surface attacks by radar [L]" }
+      ],
+      JAP: [
+        { from: "1941-12", cls: "Type B1 (I-15 class)", len: 108.7, beam: 9.3, draught: 5.1, surf: 12, dived: 4.1, tubes: 17, fan: 3, range: 2e3, attack: "periscope", deep: 80, crush: 150, pack: 1, report: false, _src: "[L]; aimed at warships [P: Boyd & Yoshida]" }
+      ],
+      SOV: [
+        { from: "1939-09", cls: "Shch class", len: 58.8, beam: 6.2, draught: 3.9, surf: 6.4, dived: 4.3, tubes: 10, fan: 2, range: 1200, attack: "periscope", deep: 60, crush: 90, pack: 1, report: false, _src: "[L]; Soviet boats worked alone [form D2]" }
+      ],
+      FRA: [
+        { from: "1939-09", cls: "Redoutable class", len: 92.3, beam: 8.1, draught: 4.4, surf: 8.7, dived: 5.1, tubes: 13, fan: 3, range: 1500, attack: "periscope", deep: 80, crush: 120, pack: 1, report: false, _src: "[L]" }
+      ],
+      _default: [
+        { from: "1939-09", cls: "coastal submarine", len: 60, beam: 5.5, draught: 3.8, surf: 6.5, dived: 4, tubes: 6, fan: 2, range: 1200, attack: "periscope", deep: 50, crush: 100, pack: 1, report: false, _src: "[L] a small navy's boat" }
+      ]
+    },
+    torpedoes: {
+      _about: "A navy's torpedo by year: its name, running speed and whether it leaves a wake (wakeless: electric or oxygen).",
+      GER: [
+        { from: "1939-09", fish: "G7e", speed: 15.4, wakeless: true, _src: "30 kn, about 5 km, no wake [H: historian]" },
+        { from: "1940-07", fish: "G7a", speed: 20.6, wakeless: false, _src: "40 kn over 7.5 km, a wake of bubbles; the 44 kn setting not used early [M: historian]; used at night [L]" },
+        { from: "1942-01", fish: "G7e", speed: 15.4, wakeless: true, _src: "[H: historian]" }
+      ],
+      ITA: [{ from: "1940-06", fish: "533 mm steam torpedo", speed: 23.1, wakeless: false, _src: "[L]" }],
+      UK: [{ from: "1939-09", fish: "Mark VIII", speed: 23.4, wakeless: false, _src: "45.5 kn [L]" }],
+      USA: [
+        { from: "1941-12", fish: "Mark 14", speed: 23.7, wakeless: false, _src: "46 kn [L]" },
+        { from: "1944-07", fish: "Mark 18", speed: 14.9, wakeless: true, _src: "electric, 29 kn, in service from late 1943 [L]" }
+      ],
+      JAP: [{ from: "1941-12", fish: "Type 95", speed: 25.2, wakeless: true, _src: "oxygen, 49 kn, almost no wake [M]" }],
+      SOV: [{ from: "1939-09", fish: "53-38", speed: 22.9, wakeless: false, _src: "[L]" }],
+      FRA: [{ from: "1939-09", fish: "550 mm 23D", speed: 22.6, wakeless: false, _src: "[L]" }],
+      _default: [{ from: "1939-09", fish: "533 mm steam torpedo", speed: 21.6, wakeless: false, _src: "[L]" }]
+    },
+    escorts: {
+      _about: "A navy's escorts and hunters by year: the class (one size for every escort piece in a scene), how many sail with a convoy (n) and how many hunt together (group), the speed they run in at, their kit: the depth-charge pattern, the depths it is set to (shallow when the boat is missed, as the patterns of the day were; never her own keel unless the kill is booked), the sinking rate (Mk VII about 3 m/s, the heavy charge about 5 m/s [H: historian]), an ahead-thrower, radar, starshell, and the range at which asdic contact is lost running in ([OEG T2] 176, 192, 223 and 279 yd). A missed pattern's charges all burst at least CLEAR (100 m, Rules/sub-scene.ts) across the water from every boat.",
+      UK: [
+        { from: "1939-09", cls: "V and W class destroyer", len: 95.1, beam: 9, speed: 7.7, turn: 0.12, n: [1, 2], group: [2, 3], pattern: 5, spread: 80, set: [30, 60], sink: 3, ahead: null, radar: false, starshell: true, contact: [1300, 1900], lost: 150, _src: "1-2 escorts to about 15 W [P: Roskill]; 5-charge pattern" },
+        { from: "1940-07", cls: "Flower class corvette", len: 62.5, beam: 10.1, speed: 7.7, turn: 0.12, n: [2, 5], group: [2, 3], pattern: 5, spread: 80, set: [30, 60], sink: 3, ahead: null, radar: false, starshell: true, contact: [1300, 1900], lost: 150, _src: "16 kn [historian]; 2-5 escorts [OEG]" },
+        { from: "1941-04", cls: "Flower class corvette", len: 62.5, beam: 10.1, speed: 7.7, turn: 0.12, n: [4, 8], group: [3, 4], pattern: 10, spread: 120, set: [30, 75], sink: 3, ahead: null, radar: true, starshell: true, contact: [1300, 2100], lost: 160, _src: "4-8 escorts [OEG T3]; Type 271 radar 1941 [historian]; patterns of 10 [M]" },
+        { from: "1942-07", cls: "Flower class corvette", len: 62.5, beam: 10.1, speed: 7.7, turn: 0.12, n: [4, 8], group: [3, 4], pattern: 10, spread: 120, set: [40, 90], sink: 3, ahead: null, radar: true, starshell: true, contact: [1300, 2100], lost: 161, _src: "lost at 176 yd [OEG T2]" },
+        { from: "1943-01", cls: "River class frigate", len: 91.9, beam: 11.1, speed: 8.2, turn: 0.11, n: [6, 8], group: [4, 6], pattern: 14, spread: 140, set: [45, 110], sink: 3, ahead: "Hedgehog", radar: true, starshell: true, contact: [1400, 2300], lost: 176, _src: "6.4-6.8 escorts [OEG T5]; pattern of 14 [P]; Hedgehog, first kill Nov 1942 [historian M]; lost at 192 yd [OEG T2]" },
+        { from: "1943-07", cls: "River class frigate", len: 91.9, beam: 11.1, speed: 8.2, turn: 0.11, n: [6, 8], group: [4, 6], pattern: 14, spread: 140, set: [60, 140], sink: 3, ahead: "Hedgehog", radar: true, starshell: true, contact: [1400, 2300], lost: 204, _src: "lost at 223 yd [OEG T2]" },
+        { from: "1944-03", cls: "Loch class frigate", len: 93.6, beam: 11.7, speed: 8.2, turn: 0.11, n: [6, 8], group: [4, 6], pattern: 14, spread: 140, set: [60, 160], sink: 5.1, ahead: "Hedgehog", radar: true, starshell: true, contact: [1400, 2300], lost: 255, _src: "lost at 279 yd [OEG T2]; Squid kills only from late July 1944 [historian L], drawn here as the ahead-thrower" }
+      ],
+      CAN: [
+        { from: "1940-07", cls: "Flower class corvette", len: 62.5, beam: 10.1, speed: 7.7, turn: 0.12, n: [3, 6], group: [2, 3], pattern: 10, spread: 120, set: [30, 75], sink: 3, ahead: null, radar: false, starshell: true, contact: [1300, 1900], lost: 160, _src: "Canadian groups later with radar and HF/DF [P: Milner]" },
+        { from: "1943-04", cls: "River class frigate", len: 91.9, beam: 11.1, speed: 8.2, turn: 0.11, n: [5, 7], group: [4, 5], pattern: 14, spread: 140, set: [45, 110], sink: 3, ahead: "Hedgehog", radar: true, starshell: true, contact: [1400, 2300], lost: 176, _src: "[L]" }
+      ],
+      USA: [
+        { from: "1941-09", cls: "Wickes class destroyer", len: 95.8, beam: 9.7, speed: 7.7, turn: 0.12, n: [3, 5], group: [2, 3], pattern: 9, spread: 120, set: [30, 75], sink: 3, ahead: null, radar: true, starshell: true, contact: [1300, 2e3], lost: 160, _src: "[L]" },
+        { from: "1943-04", cls: "Buckley class destroyer escort", len: 93.3, beam: 11.3, speed: 8.2, turn: 0.12, n: [4, 6], group: [4, 5], pattern: 13, spread: 140, set: [45, 110], sink: 3, ahead: "Hedgehog", radar: true, starshell: true, contact: [1400, 2300], lost: 176, _src: "US attacks sank 5% of boats attacked in 1943, 30% in 1944 [OEG T8]; kit [L]" }
+      ],
+      GER: [
+        { from: "1939-09", cls: "UJ-boat (armed trawler)", len: 55, beam: 8.5, speed: 5.7, turn: 0.12, n: [2, 4], group: [2, 3], pattern: 6, spread: 90, set: [30, 80], sink: 3, ahead: null, radar: false, starshell: true, contact: [1e3, 1600], lost: 150, _src: "[L]" }
+      ],
+      ITA: [
+        { from: "1940-06", cls: "Spica class torpedo boat", len: 81.4, beam: 8.2, speed: 7.7, turn: 0.12, n: [2, 6], group: [1, 2], pattern: 6, spread: 90, set: [25, 60], sink: 3, ahead: null, radar: false, starshell: true, contact: [700, 1200], lost: 150, sonar: 0.5, _src: "2-8 escorts for 1-6 merchants [historian M/L]; few had working sonar to 1941, about half the British [historian L]" },
+        { from: "1942-01", cls: "Ciclone class torpedo boat", len: 87.8, beam: 9.9, speed: 7.7, turn: 0.12, n: [2, 6], group: [1, 2], pattern: 8, spread: 100, set: [30, 75], sink: 3, ahead: null, radar: false, starshell: true, contact: [900, 1500], lost: 150, sonar: 0.75, _src: "more had sonar from 1942, Italian and German sets [historian L]" }
+      ],
+      JAP: [
+        { from: "1941-12", cls: "Kamikaze class destroyer", len: 102.6, beam: 9.2, speed: 7.7, turn: 0.12, n: [1, 3], group: [1, 2], pattern: 6, spread: 90, set: [25, 40], sink: 3, ahead: null, radar: false, starshell: true, contact: [800, 1400], lost: 150, _src: "charges set shallow to mid-1943 [L]" },
+        { from: "1943-07", cls: "Etorofu class kaibokan", len: 77.7, beam: 9.1, speed: 7.7, turn: 0.12, n: [2, 4], group: [2, 3], pattern: 8, spread: 100, set: [30, 90], sink: 3, ahead: null, radar: false, starshell: true, contact: [900, 1500], lost: 150, _src: "[L]" },
+        { from: "1944-03", cls: "Type C kaibokan", len: 67.5, beam: 8.4, speed: 7.7, turn: 0.12, n: [3, 6], group: [2, 4], pattern: 12, spread: 120, set: [30, 100], sink: 3, ahead: null, radar: true, starshell: true, contact: [1e3, 1600], lost: 150, _src: "[L]" }
+      ],
+      SOV: [
+        { from: "1939-09", cls: "Uragan class patrol ship", len: 71.5, beam: 7.4, speed: 7.7, turn: 0.12, n: [1, 3], group: [1, 2], pattern: 6, spread: 90, set: [25, 60], sink: 3, ahead: null, radar: false, starshell: true, contact: [800, 1400], lost: 150, _src: "[L]" }
+      ],
+      FRA: [
+        { from: "1939-09", cls: "Bourrasque class destroyer", len: 105.8, beam: 9.6, speed: 7.7, turn: 0.12, n: [2, 4], group: [2, 3], pattern: 6, spread: 90, set: [25, 60], sink: 3, ahead: null, radar: false, starshell: true, contact: [1e3, 1600], lost: 150, _src: "[L]" }
+      ],
+      _default: [
+        { from: "1939-09", cls: "torpedo boat", len: 70, beam: 7.5, speed: 7.2, turn: 0.12, n: [1, 3], group: [1, 2], pattern: 4, spread: 70, set: [25, 50], sink: 3, ahead: null, radar: false, starshell: true, contact: [700, 1200], lost: 150, _src: "[L] a small navy's escort" }
+      ]
+    },
+    convoys: {
+      _about: "How many merchant ships sail together, in how many columns, and how fast, by the navy that owns the convoy and the year [history §1, §2, §4; L where marked].",
+      UK: [
+        { from: "1939-09", n: [30, 40], cols: [8, 9], speed: 3.9, _src: "SC 7: 35 ships [historian M]; slow convoys 7 kn [OEG T1]" },
+        { from: "1941-04", n: [40, 50], cols: [9, 10], speed: 3.9, _src: "[L]" },
+        { from: "1942-07", n: [40, 60], cols: [10, 12], speed: 3.9, _src: "[L]" },
+        { from: "1940-06", basin: "med", n: [4, 14], cols: [2, 4], speed: 6.2, _src: "Malta convoys, Pedestal 14 [historian]" }
+      ],
+      ITA: [{ from: "1940-06", n: [1, 6], cols: [1, 2], speed: 4.1, _src: "1-6 merchants [historian M]" }],
+      JAP: [
+        { from: "1941-12", n: [4, 10], cols: [2, 3], speed: 3.6, _src: "[L]" },
+        { from: "1944-01", n: [6, 15], cols: [3, 4], speed: 3.6, _src: "[L]" }
+      ],
+      GER: [{ from: "1939-09", n: [2, 8], cols: [1, 2], speed: 3.6, _src: "[L] coastal convoys" }],
+      USA: [{ from: "1941-12", n: [20, 40], cols: [5, 8], speed: 4.1, _src: "[L]" }],
+      SOV: [{ from: "1939-09", n: [3, 8], cols: [1, 2], speed: 3.6, _src: "[L]" }],
+      FRA: [{ from: "1939-09", n: [10, 30], cols: [4, 6], speed: 3.9, _src: "[L]" }],
+      _default: [{ from: "1939-09", n: [3, 8], cols: [1, 2], speed: 3.6, _src: "[L]" }]
+    },
+    air: {
+      _about: "A navy's anti-submarine aircraft by year and the share of its kills that are theirs, until the rules record hunters and aircraft per sea (huntersIn): the kills are split between ships and aircraft as wholeShares splits them (navy.ts:1650).",
+      UK: [
+        { from: "1939-09", name: "flying boat", share: 0.15, _src: "[L]" },
+        { from: "1942-06", name: "bomber with searchlight", share: 0.3, _src: "Leigh light, first kill 5 July 1942 [historian H]" },
+        { from: "1943-04", name: "very-long-range bomber", share: 0.45, _src: "[L]" }
+      ],
+      USA: [
+        { from: "1941-12", name: "flying boat", share: 0.25, _src: "[L]" },
+        { from: "1943-03", name: "escort carrier's torpedo bomber", share: 0.45, _src: "[L]" }
+      ],
+      GER: [{ from: "1939-09", name: "seaplane", share: 0.15, _src: "[L]" }],
+      ITA: [{ from: "1940-06", name: "flying boat", share: 0.2, _src: "[L]" }],
+      JAP: [{ from: "1941-12", name: "flying boat", share: 0.15, _src: "[L]" }],
+      SOV: [{ from: "1939-09", name: "flying boat", share: 0.1, _src: "[L]" }],
+      FRA: [{ from: "1939-09", name: "flying boat", share: 0.1, _src: "[L]" }],
+      _default: [{ from: "1939-09", name: "patrol aircraft", share: 0.1, _src: "[L]" }]
+    },
+    ends: {
+      _about: "How a booked kill ends, as a share 'crushed' (the rest 'scuttled'): by escorts and by aircraft [L]. The form allows only these two in D1.",
+      escort: 0.55,
+      air: 0.35
+    }
+  };
+
+  // ../../data/campaign/seas.json
+  var seas_default = {
+    _about: "The seas of the campaign map. Each zone is the water nearest its anchor point (lat, lon); the map-maker works out which regions have a coast on it. 'waters' marks more of the same sea: an arm the coastline all but closes off, or a stretch that would otherwise be nearer another zone's anchor. 'label' is where the name and the fleets are drawn when the anchor itself is in a narrow place, and 'narrow' asks for the name in smaller type where the water is tight. 'air' is how much of the sea aircraft flying from its coasts can cover: 1 for narrow waters, much less for open ocean. adjacent lists the zones a fleet can sail between. A gate is a strait someone holds: a fleet passes only if the holder (the nation named, or whoever controls the region named) is not at war with it, and a gate marked closed is shut to every navy at war, as the Turkish straits were under the Montreux Convention.",
+    zones: [
+      { id: "natl", air: 0.25, name: "North Atlantic", at: [60.3, -8.6] },
+      { id: "wapp", air: 0.3, name: "Western Approaches", at: [49.6, -9] },
+      { id: "irish", air: 1, name: "Irish Sea", at: [53.7, -5.2], narrow: true },
+      { id: "biscay", air: 0.4, name: "Bay of Biscay", at: [45.6, -4.6] },
+      { id: "iberia", air: 0.4, name: "Iberian Coast", at: [36.4, -8.4] },
+      { id: "channel", air: 1, name: "English Channel", at: [50.1, -1.2], label: [50, -1.6] },
+      { id: "nsea", air: 0.6, name: "North Sea", at: [56.3, 3.2] },
+      { id: "norw", air: 0.3, name: "Norwegian Sea", at: [66.2, 4], waters: [[70.7, 17.5]] },
+      { id: "barents", air: 0.3, name: "Barents Sea", at: [70.6, 36], waters: [[65.8, 37.6]] },
+      { id: "skag", air: 1, name: "Skagerrak", at: [57, 11.3], label: [57.9, 9.5], narrow: true },
+      { id: "baltic", air: 0.8, name: "Baltic Sea", at: [55.8, 18.2] },
+      { id: "bothnia", air: 0.8, name: "Gulf of Bothnia", at: [62, 19.6], label: [62, 19.3] },
+      { id: "finland", air: 1, name: "Gulf of Finland", at: [59.9, 27.4], label: [59.93, 26.9], narrow: true },
+      { id: "wmed", air: 0.6, name: "Western Mediterranean", at: [39.6, 5.2], label: [38.3, 4.9], waters: [[36, -3.2]] },
+      { id: "tyrr", air: 0.8, name: "Tyrrhenian Sea", at: [40, 12.3] },
+      { id: "adriatic", air: 1, name: "Adriatic Sea", at: [43.3, 15], narrow: true },
+      { id: "ionian", air: 0.6, name: "Ionian Sea", at: [37.3, 18.3] },
+      { id: "aegean", air: 0.8, name: "Aegean Sea", at: [37.9, 25], label: [38.9, 25.25], narrow: true, waters: [[40.7, 28.2]] },
+      { id: "emed", air: 0.5, name: "Eastern Mediterranean", at: [33.6, 31.6] },
+      { id: "black", air: 0.6, name: "Black Sea", at: [43.3, 34.5], waters: [[46, 36.6]] },
+      { id: "central", air: 0.8, name: "Central Mediterranean", at: [35.4, 13.4], label: [34.3, 14.6] },
+      { id: "libyan", air: 0.6, name: "Libyan Sea", at: [33.6, 23.6] }
+    ],
+    adjacent: [
+      ["natl", "wapp"],
+      ["natl", "irish"],
+      ["natl", "nsea"],
+      ["natl", "norw"],
+      ["wapp", "irish"],
+      ["wapp", "channel"],
+      ["wapp", "biscay"],
+      ["wapp", "iberia"],
+      ["biscay", "iberia"],
+      ["channel", "nsea"],
+      ["nsea", "norw"],
+      ["nsea", "skag"],
+      ["norw", "barents"],
+      ["skag", "baltic"],
+      ["baltic", "bothnia"],
+      ["baltic", "finland"],
+      ["iberia", "wmed"],
+      ["wmed", "tyrr"],
+      ["tyrr", "ionian"],
+      ["ionian", "adriatic"],
+      ["ionian", "aegean"],
+      ["aegean", "emed"],
+      ["aegean", "black"],
+      ["wmed", "central"],
+      ["tyrr", "central"],
+      ["ionian", "central"],
+      ["central", "libyan"],
+      ["ionian", "libyan"],
+      ["libyan", "aegean"],
+      ["libyan", "emed"]
+    ],
+    gates: [
+      { between: ["skag", "baltic"], name: "the Danish straits", region: "Zealand" },
+      { between: ["iberia", "wmed"], name: "the Strait of Gibraltar", region: "Gibraltar" },
+      { between: ["aegean", "black"], name: "the Turkish straits", region: "Istanbul", closed: true }
+    ]
+  };
+
+  // ../../data/campaign/world-seas.json
+  var world_seas_default = {
+    _about: "The seas of the wider world, added to those of the map of Europe (seas.json) for the grand campaign. The same rules: each zone is the water nearest its anchor point (lat, lon) by sea, 'waters' marks more of the same sea, 'air' is how much of it aircraft from its coasts can cover, and 'adjacent' lists the zones a fleet can sail between, here including the links to the seas of Europe. The seas of Europe keep their numbers; these come after them, in this order. Add new ones at the end. 'gates' are passages somebody holds, as in seas.json: the Panama Canal joins the Caribbean to the Pacific coast, and is open to every nation not at war with the United States. 'passages' names pairs of adjacent seas that do not meet on the chart because the way between them lies beyond its edge (round Cape Horn, round the Horn of Africa): they are adjacent all the same, and the map tool does not question them.",
+    zones: [
+      { id: "iceland", air: 0.2, name: "Iceland Gap", at: [61.3, -17.5] },
+      { id: "denmark", air: 0.2, name: "Denmark Strait", at: [66.6, -26.5] },
+      { id: "midnatl", air: 0.05, name: "Mid-Atlantic Gap", at: [52.5, -33] },
+      { id: "labrador", air: 0.1, name: "Labrador Sea", at: [58, -52.5] },
+      { id: "hudson", air: 0.1, name: "Hudson Bay", at: [59.5, -86] },
+      { id: "lawrence", air: 0.6, name: "Gulf of St Lawrence", at: [48.2, -62] },
+      { id: "banks", air: 0.2, name: "Grand Banks", at: [44.5, -50.5] },
+      { id: "maine", air: 0.6, name: "Gulf of Maine", at: [43, -67.6] },
+      { id: "seaboard", air: 0.5, name: "Eastern Seaboard", at: [38.2, -72] },
+      { id: "hatteras", air: 0.5, name: "Carolina Coast", at: [32.2, -77] },
+      { id: "sargasso", air: 0.05, name: "Sargasso Sea", at: [30.5, -60] },
+      { id: "florida", air: 0.8, name: "Straits of Florida", at: [24.2, -80.6] },
+      { id: "gulf", air: 0.4, name: "Gulf of Mexico", at: [25.3, -90.5] },
+      { id: "caribbean", air: 0.3, name: "Caribbean Sea", at: [15.2, -75.5] },
+      { id: "antilles", air: 0.2, name: "Leeward Passage", at: [20.8, -62] },
+      { id: "azores", air: 0.1, name: "Azores Waters", at: [40, -29.5] },
+      { id: "canary", air: 0.2, name: "Canary Basin", at: [30, -19.5] },
+      { id: "tropic", air: 0.05, name: "Tropical Atlantic", at: [15.5, -38] },
+      { id: "california", air: 0.5, name: "California Coast", at: [33.6, -121.6], waters: [[27.6, -111.7]] },
+      { id: "cascadia", air: 0.2, name: "North-East Pacific", at: [47, -129] },
+      { id: "tehuantepec", air: 0.2, name: "Gulf of Tehuantepec", at: [14.5, -97.5] },
+      { id: "scotian", air: 0.4, name: "Scotian Shelf", at: [43.4, -61.5] },
+      { id: "panama", air: 0.4, name: "Gulf of Panama", at: [6.5, -79.8] },
+      { id: "guayaquil", air: 0.2, name: "Gulf of Guayaquil", at: [-2.5, -83] },
+      { id: "callao", air: 0.3, name: "Peruvian Coast", at: [-12.5, -79.5] },
+      { id: "atacama", air: 0.2, name: "Atacama Coast", at: [-23.5, -73.5] },
+      { id: "valparaiso", air: 0.3, name: "Chilean Sea", at: [-36, -75.5] },
+      { id: "fjords", air: 0.1, name: "Patagonian Channels", at: [-48.5, -78.5] },
+      { id: "eqpacific", air: 0.05, name: "Eastern Pacific", at: [3, -105] },
+      { id: "sepacific", air: 0.05, name: "South-East Pacific", at: [-28, -100] },
+      { id: "guiana", air: 0.3, name: "Guiana Coast", at: [8.5, -56] },
+      { id: "amazon", air: 0.3, name: "Amazon Mouth", at: [1.5, -46.5] },
+      { id: "narrows", air: 0.1, name: "Atlantic Narrows", at: [-2, -29] },
+      { id: "bahia", air: 0.3, name: "Bahia Coast", at: [-14, -36] },
+      { id: "santos", air: 0.4, name: "Santos Bight", at: [-25.8, -43.5] },
+      { id: "plate", air: 0.4, name: "River Plate", at: [-36.6, -53.5] },
+      { id: "argentine", air: 0.2, name: "Argentine Sea", at: [-44.5, -61] },
+      { id: "falklands", air: 0.1, name: "Falkland Waters", at: [-52.8, -56] },
+      { id: "southatlantic", air: 0.05, name: "South Atlantic", at: [-30, -20], waters: [[-17, -14]] },
+      { id: "sierra", air: 0.1, name: "Sierra Leone Basin", at: [6, -18] },
+      { id: "guinea", air: 0.1, name: "Gulf of Guinea", at: [0.5, 3] },
+      { id: "angola", air: 0.05, name: "Angola Basin", at: [-15, 5] },
+      { id: "cape", air: 0.05, name: "Cape Basin", at: [-35, 10] },
+      { id: "mozambique", air: 0.1, name: "Mozambique Channel", at: [-20, 40.5] },
+      { id: "aden", air: 0.2, name: "Gulf of Aden", at: [12.3, 45.5] }
+    ],
+    adjacent: [
+      ["natl", "iceland"],
+      ["wapp", "iceland"],
+      ["wapp", "midnatl"],
+      ["wapp", "azores"],
+      ["iberia", "azores"],
+      ["iberia", "canary"],
+      ["iceland", "denmark"],
+      ["iceland", "midnatl"],
+      ["denmark", "labrador"],
+      ["denmark", "midnatl"],
+      ["labrador", "midnatl"],
+      ["labrador", "banks"],
+      ["labrador", "hudson"],
+      ["labrador", "lawrence"],
+      ["lawrence", "banks"],
+      ["banks", "midnatl"],
+      ["banks", "scotian"],
+      ["banks", "sargasso"],
+      ["banks", "azores"],
+      ["midnatl", "azores"],
+      ["scotian", "maine"],
+      ["scotian", "lawrence"],
+      ["scotian", "seaboard"],
+      ["scotian", "sargasso"],
+      ["maine", "seaboard"],
+      ["seaboard", "hatteras"],
+      ["seaboard", "sargasso"],
+      ["hatteras", "sargasso"],
+      ["hatteras", "florida"],
+      ["florida", "gulf"],
+      ["florida", "caribbean"],
+      ["florida", "antilles"],
+      ["gulf", "caribbean"],
+      ["caribbean", "antilles"],
+      ["antilles", "sargasso"],
+      ["antilles", "tropic"],
+      ["sargasso", "azores"],
+      ["sargasso", "tropic"],
+      ["azores", "canary"],
+      ["canary", "tropic"],
+      ["california", "cascadia"],
+      ["california", "tehuantepec"],
+      ["caribbean", "panama"],
+      ["tehuantepec", "panama"],
+      ["tehuantepec", "eqpacific"],
+      ["california", "eqpacific"],
+      ["panama", "eqpacific"],
+      ["panama", "guayaquil"],
+      ["guayaquil", "eqpacific"],
+      ["guayaquil", "callao"],
+      ["callao", "sepacific"],
+      ["callao", "atacama"],
+      ["atacama", "sepacific"],
+      ["atacama", "valparaiso"],
+      ["valparaiso", "sepacific"],
+      ["valparaiso", "fjords"],
+      ["fjords", "sepacific"],
+      ["fjords", "falklands"],
+      ["eqpacific", "sepacific"],
+      ["caribbean", "guiana"],
+      ["antilles", "guiana"],
+      ["tropic", "guiana"],
+      ["guiana", "amazon"],
+      ["tropic", "amazon"],
+      ["amazon", "narrows"],
+      ["tropic", "narrows"],
+      ["tropic", "sierra"],
+      ["canary", "sierra"],
+      ["narrows", "sierra"],
+      ["sierra", "guinea"],
+      ["narrows", "guinea"],
+      ["narrows", "bahia"],
+      ["southatlantic", "guinea"],
+      ["callao", "eqpacific"],
+      ["bahia", "santos"],
+      ["bahia", "southatlantic"],
+      ["narrows", "southatlantic"],
+      ["santos", "plate"],
+      ["santos", "southatlantic"],
+      ["plate", "argentine"],
+      ["plate", "southatlantic"],
+      ["argentine", "falklands"],
+      ["plate", "falklands"],
+      ["falklands", "southatlantic"],
+      ["guinea", "angola"],
+      ["angola", "southatlantic"],
+      ["angola", "cape"],
+      ["cape", "southatlantic"],
+      ["cape", "mozambique"],
+      ["mozambique", "aden"]
+    ],
+    passages: [["fjords", "falklands"], ["mozambique", "aden"]],
+    gates: [
+      { between: ["caribbean", "panama"], name: "the Panama Canal", region: "Canal Zone" }
+    ]
+  };
+
+  // ../../data/campaign/far-seas.json
+  var far_seas_default = {
+    _about: "The seas of the far side of the world, added to those of today's chart (seas.json and world-seas.json) by tools/build-geo-far.mjs. The same rules: each zone is the water nearest its anchor point (lat, lon) by sea, 'waters' marks more of the same sea, 'air' is how much of it aircraft from its coasts can cover, and 'adjacent' lists the zones a fleet can sail between, here including the links to the seas of today's chart. Today's seas keep their numbers and every square of water they hold; these come after them, in this order. Add new ones at the end. The open ocean and the island groups are cut on the Pacific planner's draft (ruling 173, riders (b) and (m)): an island group lies a sea apart from the next, a small island stands on one sea, and the count of seas between two bases is what data/campaign/far-reach.json says it must be (tools/check-reach.mjs). The coastal seas of Asia, the Indies and Australia are cut on the same rule.",
+    zones: [
+      { id: "gulfalaska", air: 0.2, name: "Gulf of Alaska", at: [56.5, -148.5] },
+      { id: "bering", air: 0.2, name: "Bering Sea", at: [58.5, -174], waters: [[63.5, -168.5]] },
+      { id: "aleutian", air: 0.3, name: "Aleutian Waters", at: [51, 180], waters: [[53.4, 175.5], [52.9, -177.5], [54.7, -167.6], [52.6, -167.5]] },
+      { id: "npacific", air: 0.05, name: "North Pacific", at: [40, -170], waters: [[45, -150], [33, -161]] },
+      { id: "calrun", air: 0.05, name: "Hawaiian Approaches", at: [30, -146.5], waters: [[18, -146]] },
+      { id: "hawaii", air: 0.6, name: "Hawaiian Waters", at: [20, -157.6] },
+      { id: "midway", air: 0.6, name: "Midway Waters", at: [28, -176] },
+      { id: "midpac", air: 0.05, name: "Central Pacific", at: [12, -172] },
+      { id: "line", air: 0.05, name: "Line Islands", at: [3, -160] },
+      { id: "wake", air: 0.6, name: "Wake Waters", at: [19, 168] },
+      { id: "marcus", air: 0.2, name: "North-West Pacific", at: [25, 155] },
+      { id: "marshalls", air: 0.6, name: "Marshall Waters", at: [8, 169.5] },
+      { id: "eniwetok", air: 0.6, name: "Eniwetok Waters", at: [12, 161] },
+      { id: "gilberts", air: 0.6, name: "Gilbert Waters", at: [0.5, 173.5] },
+      { id: "ellice", air: 0.5, name: "Ellice Waters", at: [-7, 178] },
+      { id: "truk", air: 0.6, name: "Caroline Waters", at: [7, 153], waters: [[1, 156]] },
+      { id: "marianas", air: 0.6, name: "Mariana Waters", at: [15, 147] },
+      { id: "wcarolines", air: 0.5, name: "Western Carolines", at: [9, 136.5] },
+      { id: "bonin", air: 0.6, name: "Bonin Waters", at: [26, 143] },
+      { id: "philsea", air: 0.2, name: "Philippine Sea", at: [19, 132], waters: [[15.5, 123.6]] },
+      { id: "honshu", air: 0.5, name: "Honshu Coast", at: [34.2, 140.6], waters: [[40.4, 142.7]] },
+      { id: "kyushu", air: 0.5, name: "Kyushu Coast", at: [31, 132.6] },
+      { id: "kurile", air: 0.3, name: "Kurile Waters", at: [46, 152], waters: [[42.3, 145.6]] },
+      { id: "okhotsk", air: 0.2, name: "Sea of Okhotsk", at: [54, 148], waters: [[47.6, 144.8]] },
+      { id: "japansea", air: 0.5, name: "Sea of Japan", at: [40, 135], waters: [[45.5, 139.5]] },
+      { id: "tsushima", air: 1, name: "Tsushima Strait", at: [33.9, 129], narrow: true },
+      { id: "inland", air: 1, name: "Inland Sea", at: [34.25, 133.4], narrow: true },
+      { id: "yellow", air: 0.5, name: "Yellow Sea", at: [35.5, 123.5], waters: [[38.9, 120]] },
+      { id: "echina", air: 0.4, name: "East China Sea", at: [29.5, 125], waters: [[25.9, 122.3]] },
+      { id: "ryukyu", air: 0.6, name: "Ryukyu Waters", at: [26.3, 129], waters: [[26.7, 127]] },
+      { id: "formosa", air: 0.8, name: "Formosa Strait", at: [24.4, 119.4] },
+      { id: "luzonstrait", air: 0.5, name: "Luzon Strait", at: [20.8, 121.6] },
+      { id: "schina", air: 0.3, name: "South China Sea", at: [19.5, 115], waters: [[17.5, 111.5]] },
+      { id: "luzonsea", air: 0.5, name: "Luzon Sea", at: [15.6, 118.6] },
+      { id: "palawan", air: 0.2, name: "Palawan Passage", at: [10, 115.6] },
+      { id: "tonkin", air: 0.8, name: "Gulf of Tonkin", at: [20, 107.8] },
+      { id: "indochina", air: 0.4, name: "Indochina Coast", at: [12, 111] },
+      { id: "siam", air: 0.6, name: "Gulf of Siam", at: [10, 101.8] },
+      { id: "natuna", air: 0.3, name: "Natuna Sea", at: [4.5, 106.5], waters: [[1.3, 104.45]] },
+      { id: "sulu", air: 0.5, name: "Sulu Sea", at: [8.5, 120.3], waters: [[12, 120.9], [9.2, 124.6]] },
+      { id: "visayan", air: 1, name: "Visayan Sea", at: [11.4, 123.6], narrow: true },
+      { id: "leyte", air: 0.6, name: "Leyte Gulf", at: [10.5, 127.5] },
+      { id: "celebes", air: 0.4, name: "Celebes Sea", at: [3.5, 122.5] },
+      { id: "malacca", air: 1, name: "Strait of Malacca", at: [3.6, 99.9], narrow: true, waters: [[1.15, 103.35]] },
+      { id: "java", air: 0.6, name: "Java Sea", at: [-5.2, 111.5] },
+      { id: "makassar", air: 0.6, name: "Makassar Strait", at: [-1.5, 118] },
+      { id: "molucca", air: 0.5, name: "Molucca Sea", at: [0.5, 126], waters: [[0.3, 129.4], [3, 129.2]] },
+      { id: "banda", air: 0.4, name: "Banda Sea", at: [-5.5, 127.5] },
+      { id: "flores", air: 0.5, name: "Flores Sea", at: [-7.6, 119.5] },
+      { id: "timor", air: 0.3, name: "Timor Sea", at: [-11.5, 126.5] },
+      { id: "arafura", air: 0.3, name: "Arafura Sea", at: [-9.5, 134.5], waters: [[-14.5, 139.5]] },
+      { id: "ngnorth", air: 0.5, name: "North New Guinea Waters", at: [0.5, 139], waters: [[-2, 140.2], [-0.2, 133.6]] },
+      { id: "bismarck", air: 0.8, name: "Bismarck Sea", at: [-3.3, 148.3], waters: [[-2.4, 152.6], [-2.6, 142.3]] },
+      { id: "solomon", air: 0.8, name: "Solomon Sea", at: [-7.5, 152.5], waters: [[-9.2, 156.8]] },
+      { id: "eastsol", air: 0.6, name: "Eastern Solomons", at: [-6.5, 161.5], waters: [[-8.3, 158.6], [-9.1, 160], [-10.3, 160.3], [-4.5, 158.5]] },
+      { id: "coral", air: 0.5, name: "Coral Sea", at: [-15, 152], waters: [[-11, 147]] },
+      { id: "newhebrides", air: 0.6, name: "New Hebrides Waters", at: [-17.5, 168.5] },
+      { id: "fiji", air: 0.5, name: "Fiji Waters", at: [-18.5, 179] },
+      { id: "samoa", air: 0.5, name: "Samoa Waters", at: [-12, -171] },
+      { id: "spacific", air: 0.05, name: "South Pacific", at: [-30, -150], waters: [[-18, -150]] },
+      { id: "tasman", air: 0.2, name: "Tasman Sea", at: [-30, 158], waters: [[-38.5, 158], [-24.6, 162.8]] },
+      { id: "nzwaters", air: 0.2, name: "New Zealand Waters", at: [-38, 179.5] },
+      { id: "bight", air: 0.2, name: "Great Australian Bight", at: [-35.5, 131] },
+      { id: "westaus", air: 0.2, name: "West Australian Waters", at: [-27, 110.5] },
+      { id: "eindian", air: 0.05, name: "East Indian Ocean", at: [-13, 104] },
+      { id: "mentawai", air: 0.2, name: "Mentawai Waters", at: [-2, 97.6] },
+      { id: "andaman", air: 0.4, name: "Andaman Sea", at: [11, 96] },
+      { id: "bengal", air: 0.2, name: "Bay of Bengal", at: [15, 88.5] },
+      { id: "ceylon", air: 0.3, name: "Ceylon Waters", at: [5, 80] },
+      { id: "arabian", air: 0.1, name: "Arabian Sea", at: [16, 64], waters: [[7.5, 62], [24.3, 59.8]] },
+      { id: "persian", air: 0.8, name: "Persian Gulf", at: [26.6, 52], narrow: true },
+      { id: "cindian", air: 0.05, name: "Central Indian Ocean", at: [-12, 72] },
+      { id: "mascarene", air: 0.1, name: "Mascarene Waters", at: [-18, 54] },
+      { id: "somali", air: 0.1, name: "Somali Coast", at: [2, 50.5], takes: [{ from: "mozambique", within: [[-1.6, 38], [-1.9, 43], [-3.5, 48], [6, 48], [6, 38]] }] },
+      { id: "sindian", air: 0.05, name: "Southern Indian Ocean", at: [-40, 80] },
+      { id: "chukchi", air: 0.1, name: "Chukchi Sea", at: [69, -170.5] },
+      { id: "redsea", air: 0.6, name: "Red Sea", at: [20.5, 38.5], takes: [{ from: "aden", within: [[30.5, 32], [30.5, 35.6], [28, 37], [20, 42], [13.5, 44.2], [12.75, 43.6], [12.4, 43.25], [12.6, 42.5], [13.5, 41.5], [14.5, 40.3], [15.5, 39], [18, 37.5], [20, 36], [27, 32]] }] },
+      { id: "zanzibar", air: 0.2, name: "Zanzibar Coast", at: [-6, 41.5], takes: [{ from: "mozambique", within: [[-1.6, 38], [-1.9, 43], [-3.5, 48], [-10.7, 48], [-10.7, 38]] }] }
+    ],
+    adjacent: [
+      ["california", "calrun"],
+      ["cascadia", "calrun"],
+      ["eqpacific", "calrun"],
+      ["calrun", "hawaii"],
+      ["calrun", "npacific"],
+      ["cascadia", "gulfalaska"],
+      ["cascadia", "npacific"],
+      ["gulfalaska", "npacific"],
+      ["gulfalaska", "aleutian"],
+      ["aleutian", "npacific"],
+      ["aleutian", "kurile"],
+      ["kurile", "npacific"],
+      ["kurile", "okhotsk"],
+      ["kurile", "honshu"],
+      ["hawaii", "npacific"],
+      ["hawaii", "midway"],
+      ["hawaii", "midpac"],
+      ["hawaii", "line"],
+      ["midway", "npacific"],
+      ["midway", "marcus"],
+      ["midway", "wake"],
+      ["midway", "midpac"],
+      ["midpac", "wake"],
+      ["midpac", "marshalls"],
+      ["midpac", "gilberts"],
+      ["midpac", "line"],
+      ["wake", "marcus"],
+      ["wake", "eniwetok"],
+      ["wake", "marshalls"],
+      ["marcus", "honshu"],
+      ["marcus", "bonin"],
+      ["marcus", "marianas"],
+      ["marshalls", "eniwetok"],
+      ["marshalls", "gilberts"],
+      ["eniwetok", "marianas"],
+      ["eniwetok", "truk"],
+      ["gilberts", "ellice"],
+      ["gilberts", "eastsol"],
+      ["gilberts", "line"],
+      ["ellice", "fiji"],
+      ["ellice", "samoa"],
+      ["ellice", "eastsol"],
+      ["line", "samoa"],
+      ["line", "spacific"],
+      ["line", "eqpacific"],
+      ["samoa", "fiji"],
+      ["samoa", "spacific"],
+      ["fiji", "spacific"],
+      ["fiji", "newhebrides"],
+      ["newhebrides", "eastsol"],
+      ["newhebrides", "coral"],
+      ["newhebrides", "tasman"],
+      ["tasman", "coral"],
+      ["eastsol", "coral"],
+      ["eastsol", "solomon"],
+      ["eastsol", "bismarck"],
+      ["eastsol", "truk"],
+      ["coral", "solomon"],
+      ["coral", "arafura"],
+      ["solomon", "bismarck"],
+      ["bismarck", "truk"],
+      ["bismarck", "ngnorth"],
+      ["ngnorth", "wcarolines"],
+      ["ngnorth", "molucca"],
+      ["truk", "marianas"],
+      ["truk", "wcarolines"],
+      ["wcarolines", "marianas"],
+      ["wcarolines", "philsea"],
+      ["wcarolines", "leyte"],
+      ["wcarolines", "molucca"],
+      ["marianas", "bonin"],
+      ["marianas", "philsea"],
+      ["bonin", "honshu"],
+      ["bonin", "philsea"],
+      ["philsea", "ryukyu"],
+      ["philsea", "leyte"],
+      ["philsea", "luzonstrait"],
+      ["ryukyu", "echina"],
+      ["ryukyu", "kyushu"],
+      ["ryukyu", "luzonstrait"],
+      ["kyushu", "honshu"],
+      ["kyushu", "echina"],
+      ["leyte", "molucca"],
+      ["leyte", "sulu"],
+      ["leyte", "celebes"],
+      ["luzonstrait", "luzonsea"],
+      ["luzonsea", "sulu"],
+      ["sulu", "celebes"],
+      ["celebes", "molucca"],
+      ["molucca", "banda"],
+      ["banda", "arafura"],
+      ["ellice", "newhebrides"],
+      ["ngnorth", "truk"],
+      ["ellice", "line"],
+      ["marshalls", "truk"],
+      ["kurile", "marcus"],
+      ["bonin", "ryukyu"],
+      ["eqpacific", "spacific"],
+      ["sepacific", "spacific"],
+      ["bering", "aleutian"],
+      ["bering", "chukchi"],
+      ["bonin", "kyushu"],
+      ["honshu", "japansea"],
+      ["honshu", "inland"],
+      ["kyushu", "inland"],
+      ["tsushima", "echina"],
+      ["tsushima", "yellow"],
+      ["yellow", "echina"],
+      ["japansea", "tsushima"],
+      ["okhotsk", "japansea"],
+      ["echina", "formosa"],
+      ["echina", "luzonstrait"],
+      ["formosa", "luzonstrait"],
+      ["formosa", "schina"],
+      ["luzonstrait", "schina"],
+      ["schina", "luzonsea"],
+      ["schina", "tonkin"],
+      ["schina", "indochina"],
+      ["luzonsea", "indochina"],
+      ["palawan", "indochina"],
+      ["luzonsea", "palawan"],
+      ["palawan", "natuna"],
+      ["indochina", "natuna"],
+      ["indochina", "siam"],
+      ["siam", "natuna"],
+      ["palawan", "sulu"],
+      ["natuna", "malacca"],
+      ["natuna", "java"],
+      ["java", "makassar"],
+      ["celebes", "makassar"],
+      ["makassar", "flores"],
+      ["java", "flores"],
+      ["banda", "flores"],
+      ["banda", "timor"],
+      ["flores", "timor"],
+      ["timor", "arafura"],
+      ["timor", "westaus"],
+      ["timor", "eindian"],
+      ["flores", "eindian"],
+      ["java", "eindian"],
+      ["java", "mentawai"],
+      ["malacca", "mentawai"],
+      ["malacca", "andaman"],
+      ["andaman", "bengal"],
+      ["andaman", "ceylon"],
+      ["bengal", "ceylon"],
+      ["ceylon", "arabian"],
+      ["ceylon", "cindian"],
+      ["mentawai", "cindian"],
+      ["mentawai", "ceylon"],
+      ["eindian", "mentawai"],
+      ["eindian", "cindian"],
+      ["westaus", "eindian"],
+      ["westaus", "sindian"],
+      ["bight", "westaus"],
+      ["bight", "sindian"],
+      ["tasman", "bight"],
+      ["cindian", "sindian"],
+      ["cindian", "mascarene"],
+      ["mascarene", "sindian"],
+      ["cindian", "somali"],
+      ["mascarene", "somali"],
+      ["arabian", "somali"],
+      ["arabian", "persian"],
+      ["aden", "arabian"],
+      ["aden", "somali"],
+      ["zanzibar", "somali"],
+      ["zanzibar", "mozambique"],
+      ["zanzibar", "mascarene"],
+      ["redsea", "aden"],
+      ["emed", "redsea"],
+      ["mozambique", "mascarene"],
+      ["mozambique", "sindian"],
+      ["cape", "sindian"],
+      ["philsea", "visayan"],
+      ["visayan", "leyte"],
+      ["sulu", "visayan"],
+      ["fiji", "tasman"],
+      ["fiji", "nzwaters"],
+      ["tasman", "nzwaters"],
+      ["spacific", "nzwaters"],
+      ["calrun", "line"],
+      ["arabian", "cindian"],
+      ["luzonsea", "visayan"]
+    ],
+    passages: [["sulu", "leyte"], ["leyte", "celebes"], ["luzonsea", "visayan"], ["redsea", "aden"]],
+    shores: {
+      Singapore: ["malacca", "natuna"],
+      Leyte: ["leyte", "visayan"],
+      Lingayen: ["luzonsea"],
+      Manila: ["luzonsea"],
+      Vogelkop: ["molucca", "ngnorth"],
+      Sanaa: [],
+      Asmara: []
+    },
+    gates: [{ between: ["emed", "redsea"], name: "the Suez Canal", region: "Suez" }],
+    unlink: [["mozambique", "aden"]]
+  };
+
+  // Rules/sub-scene.ts
+  var L = sub_scene_looks_default;
+  var monthsOf3 = (s) => {
+    const [y, m] = s.split("-").map(Number);
+    return (y - 1939) * 12 + (m - 1);
+  };
+  function rowOf(table, nat, at, basin) {
+    const rows = (hasRows(table, nat) ? table[nat] : table._default).filter((r) => !r.basin || r.basin === basin);
+    let best = null;
+    for (const r of rows) {
+      if (monthsOf3(r.from) > at) continue;
+      if (!best || monthsOf3(r.from) > monthsOf3(best.from) || monthsOf3(r.from) === monthsOf3(best.from) && !!r.basin && !best.basin) best = r;
+    }
+    return best ?? [...rows].sort((a, b) => monthsOf3(a.from) - monthsOf3(b.from))[0] ?? table._default[0];
+  }
+  var hasRows = (table, nat) => Object.prototype.hasOwnProperty.call(table, nat) && nat !== "_default" && !nat.startsWith("_");
+  var SEAS = (() => {
+    const out = {};
+    const add = (zones, chart) => {
+      for (const z of zones) {
+        if (!z.at || out[z.id]) continue;
+        let basin = chart === "far" ? "pacific" : "atlantic";
+        for (const [b, keys] of Object.entries(L.basins.seas)) if (keys.includes(z.id)) basin = b;
+        out[z.id] = { key: z.id, name: z.name, lat: z.at[0], lon: z.at[1], basin };
+      }
+    };
+    add(seas_default.zones, "europe");
+    add(world_seas_default.zones, "world");
+    add(far_seas_default.zones, "far");
+    return out;
+  })();
+  var seaPlace = (key6) => SEAS[key6] ?? { key: key6, name: "open sea", lat: 50, lon: -25, basin: "atlantic" };
+  function hash32(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    h ^= h >>> 16;
+    h = Math.imul(h, 2246822507) >>> 0;
+    h ^= h >>> 13;
+    h = Math.imul(h, 3266489909) >>> 0;
+    h ^= h >>> 16;
+    return h >>> 0;
+  }
+  var looker = (key6) => (label) => hash32(`${key6}|${label}`) / 4294967296;
+  var pickIn = (r, u) => Math.round(r[0] + (r[1] - r[0]) * u);
+  var clamp5 = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  var thousands = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  var RAD = Math.PI / 180;
+  var wrapDeg = (x) => (x % 360 + 360) % 360;
+  function julian(year, month02, day, hourUT) {
+    let y = year, m = month02 + 1;
+    if (m <= 2) {
+      y -= 1;
+      m += 12;
+    }
+    const a = Math.floor(y / 100), b = 2 - a + Math.floor(a / 4);
+    return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day + b - 1524.5 + hourUT / 24;
+  }
+  function sunAt(jd) {
+    const n = jd - 2451545;
+    const Lm = wrapDeg(280.46 + 0.9856474 * n), g2 = wrapDeg(357.528 + 0.9856003 * n) * RAD;
+    const lam = wrapDeg(Lm + 1.915 * Math.sin(g2) + 0.02 * Math.sin(2 * g2));
+    const eps = (23.439 - 4e-7 * n) * RAD;
+    const ra = wrapDeg(Math.atan2(Math.cos(eps) * Math.sin(lam * RAD), Math.cos(lam * RAD)) / RAD);
+    const dec = Math.asin(Math.sin(eps) * Math.sin(lam * RAD)) / RAD;
+    let eqt = Lm - ra;
+    if (eqt > 180) eqt -= 360;
+    if (eqt < -180) eqt += 360;
+    return { lam, ra, dec, eqt };
+  }
+  function upFrom(lat, ha, dec) {
+    const p = lat * RAD, h = ha * RAD, d = dec * RAD;
+    const up = Math.asin(Math.sin(p) * Math.sin(d) + Math.cos(p) * Math.cos(d) * Math.cos(h)) / RAD;
+    const from = wrapDeg(Math.atan2(-Math.cos(d) * Math.sin(h), Math.sin(d) * Math.cos(p) - Math.cos(d) * Math.cos(h) * Math.sin(p)) / RAD);
+    return { up, from };
+  }
+  function nightOf(lat, lon, year, month02, day, u) {
+    const noon = sunAt(julian(year, month02, day, 12 - lon / 15));
+    const p = lat * RAD, d = noon.dec * RAD;
+    const c = (Math.sin(-0.833 * RAD) - Math.sin(p) * Math.sin(d)) / (Math.cos(p) * Math.cos(d));
+    const solarNoon = 12 - noon.eqt / 15;
+    let hours, dusk, dawn, hour;
+    if (c >= 1) {
+      hours = 24;
+      dusk = solarNoon - 12;
+      dawn = solarNoon + 12;
+      hour = 24 * (0.15 + 0.7 * u);
+    } else if (c <= -1) {
+      hours = 0;
+      dusk = solarNoon + 12;
+      dawn = solarNoon + 12;
+      hour = solarNoon + 12;
+    } else {
+      const h0 = Math.acos(c) / RAD / 15;
+      hours = 24 - 2 * h0;
+      dusk = solarNoon + h0;
+      dawn = solarNoon + 24 - h0;
+      hour = dusk + hours * (0.25 + 0.5 * u);
+    }
+    const local = (hour % 24 + 24) % 24;
+    const jd = julian(year, month02, day, local - lon / 15);
+    const s = sunAt(jd);
+    const ha = (local - solarNoon) * 15;
+    const sun = upFrom(lat, ha, s.dec);
+    const SYNODIC = 29.530588853;
+    const age = ((jd - 245155026e-2) % SYNODIC + SYNODIC) % SYNODIC;
+    const lit = (1 - Math.cos(2 * Math.PI * age / SYNODIC)) / 2;
+    const mlam = wrapDeg(s.lam + 360 * age / SYNODIC) * RAD, eps = 23.439 * RAD;
+    const mra = wrapDeg(Math.atan2(Math.cos(eps) * Math.sin(mlam), Math.cos(mlam)) / RAD);
+    const mdec = Math.asin(Math.sin(eps) * Math.sin(mlam)) / RAD;
+    const moon = upFrom(lat, ha - (mra - s.ra), mdec);
+    return { hours, dusk, dawn, hour: local, sun, moon: { ...moon, lit } };
+  }
+  var hisLoss = (p) => p.case === "heavyLost" || p.case === "convoy" && p.me === "def" || p.me === "att" && p.kills > 0;
+  function boatsRaided(f) {
+    if (f.raidBy) return f.raidBy.boats;
+    if (f.raiders) return f.raiders.length > 0;
+    if (f.boatsAt) return Object.values(f.boatsAt).some((n) => n > 0);
+    return void 0;
+  }
+  var atWarIn = (m, a, b) => (m.foes[a] ?? []).includes(b) || (m.foes[b] ?? []).includes(a);
+  var monthsAt = (turn) => {
+    const d = turnToDate(turn);
+    return (d.year - 1939) * 12 + d.month;
+  };
+  function basinNavies(basin, at) {
+    return (L.basins.navies[basin] ?? []).filter(([, a, b]) => monthsOf3(a) <= at && at <= monthsOf3(b)).map(([n]) => n);
+  }
+  function boatsAgainst(m, f, struck) {
+    const at = f.boatsAt ?? {};
+    return Object.keys(at).filter((n) => at[n] > 0 && atWarIn(m, n, struck)).sort((a, b) => at[b] - at[a] || (a < b ? -1 : 1));
+  }
+  function raiderOf(m, f, struck, recorded, picked = true) {
+    if (recorded?.length && picked) return { nat: recorded[0], source: "record" };
+    if (recorded?.length) {
+      const there2 = boatsAgainst(m, f, struck).filter((n) => recorded.includes(n));
+      return { nat: there2[0] ?? recorded[0], source: "fleets" };
+    }
+    const there = boatsAgainst(m, f, struck);
+    if (there.length) return { nat: there[0], source: "fleets" };
+    const sea = seaPlace(f.sea), at = monthsAt(f.turn);
+    for (const n of basinNavies(sea.basin, at)) if (atWarIn(m, n, struck)) return { nat: n, source: "rows" };
+    const foes = [.../* @__PURE__ */ new Set([...m.foes[struck] ?? [], ...Object.keys(m.foes).filter((k) => (m.foes[k] ?? []).includes(struck))])].sort();
+    return { nat: foes.find((n) => hasRows(L.boats, n)) ?? foes[0] ?? "_default", source: "rows" };
+  }
+  function hisBoatsThere(m, f, recorded, pick2 = "any") {
+    const me = m.human;
+    if (recorded) return pick2 === "rules" || pick2 === void 0 ? recorded[0] === me : pick2 === "unknown" ? false : recorded.includes(me);
+    if (f.boatsAt) return (f.boatsAt[me] ?? 0) > 0;
+    return basinNavies(seaPlace(f.sea).basin, monthsAt(f.turn)).includes(me);
+  }
+  var factOrder = (a, b) => a.turn - b.turn || a.week - b.week || (a.sea < b.sea ? -1 : a.sea > b.sea ? 1 : 0) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || (a.on < b.on ? -1 : a.on > b.on ? 1 : 0);
+  var huntedIn = (m, sea, nat, by) => m.facts.filter((f) => f.kind === "hunt" && f.sea === sea && f.on === nat && (by === void 0 || f.by === by)).reduce((s, f) => s + (f.boats ?? 0), 0);
+  function pickScene(m, view3 = "all") {
+    if (view3 === "never") return null;
+    for (const p of scenesOf(m)) if (view3 === "all" || hisLoss(p)) return p;
+    return null;
+  }
+  function scenesOf(m) {
+    const me = m.human;
+    const out = [];
+    if (!me) return out;
+    const facts = m.facts.filter((f) => !!f.sea).sort(factOrder);
+    for (const f of facts) {
+      if (f.kind !== "torpedo" || f.on !== me) continue;
+      const r = raiderOf(m, f, me, f.attackers, (f.pick ?? "rules") === "rules");
+      out.push(withHits(m, { case: "heavyLost", fact: f, boats: r.nat, guard: me, me: "def", kills: huntedIn(m, f.sea, r.nat, me), sunkThere: huntedIn(m, f.sea, r.nat), ships: 0, heavy: [], source: r.source }));
+    }
+    for (const f of facts) {
+      if (f.kind !== "torpedo" || f.on === me || !atWarIn(m, me, f.on) || !hisBoatsThere(m, f, f.attackers, f.pick ?? "rules")) continue;
+      const source = f.attackers ? (f.pick ?? "rules") === "rules" ? "record" : "fleets" : f.boatsAt ? "fleets" : "rows";
+      out.push(withHits(m, { case: "boatsKill", fact: f, boats: me, guard: f.on, me: "att", kills: huntedIn(m, f.sea, me, f.on), sunkThere: huntedIn(m, f.sea, me), ships: 0, heavy: [], source }));
+    }
+    const convoys = facts.filter((f) => f.kind === "convoy" && (f.tons ?? 0) > 0 && boatsRaided(f) !== false).sort((a, b) => (b.tons ?? 0) - (a.tons ?? 0) || factOrder(a, b));
+    for (const f of convoys) {
+      let r = raiderOf(m, f, f.on, f.raiders), mine4 = null;
+      if (f.on === me) mine4 = "def";
+      else if (atWarIn(m, me, f.on) && hisBoatsThere(m, f, f.raiders)) {
+        mine4 = "att";
+        r = { nat: me, source: f.raiders ? "record" : f.boatsAt ? "fleets" : "rows" };
+      }
+      if (!mine4) continue;
+      let kills = f.boats ?? 0;
+      if (f.boatsNat && mine4 === "att" && f.boatsNat !== me) kills = 0;
+      if (f.boatsNat && mine4 === "def" && kills > 0 && f.raiders?.includes(f.boatsNat)) r = { nat: f.boatsNat, source: "record" };
+      const ships = Math.max(1, Math.round((f.tons ?? 0) / L.caption.grt));
+      out.push({ case: "convoy", fact: f, boats: r.nat, guard: f.on, me: mine4, kills, ships, heavy: [], source: r.source });
+    }
+    const hunts = facts.filter((f) => f.kind === "hunt" && (f.boats ?? 0) > 0 && (f.by === me || f.on === me)).sort((a, b) => (b.boats ?? 0) - (a.boats ?? 0) || factOrder(a, b));
+    for (const f of hunts) out.push({ case: "hunt", fact: f, boats: f.on, guard: f.by, me: f.by === me ? "def" : "att", kills: f.boats ?? 0, ships: 0, heavy: [], source: f.hunters ? "record" : "rows" });
+    return out;
+  }
+  function withHits(m, p) {
+    const same2 = m.facts.filter((f) => f.kind === "torpedo" && f !== p.fact && f.sea === p.fact.sea && f.on === p.fact.on && f.turn === p.fact.turn && f.fleet === p.fact.fleet && (!f.attackers || ((f.pick ?? "rules") === "rules" ? f.attackers[0] === p.boats : f.pick === "none" && f.attackers.includes(p.boats)))).sort(factOrder);
+    p.hits = [p.fact, ...same2].slice(0, L.most.heavy);
+    p.heavy = p.hits.map((f) => f.cls ?? "ca");
+    p.ships = p.heavy.length;
+    return p;
+  }
+  function othersOf(m, p) {
+    const drawn = new Set(p.hits ?? [p.fact]);
+    return m.facts.filter((f) => f.kind === "torpedo" && !drawn.has(f) && f.sea === p.fact.sea && f.on === p.fact.on && f.turn === p.fact.turn).sort(factOrder);
+  }
+  var DT = 0.25;
+  var TAU2 = Math.PI * 2;
+  var wrapPi = (a) => {
+    let x = a % TAU2;
+    if (x > Math.PI) x -= TAU2;
+    if (x < -Math.PI) x += TAU2;
+    return x;
+  };
+  var wrap2Pi = (a) => (a % TAU2 + TAU2) % TAU2;
+  var bearing = (ax, ay, bx, by) => wrap2Pi(Math.atan2(bx - ax, by - ay));
+  var dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  var Track = class _Track {
+    constructor(start2, orders, end, k) {
+      __publicField(this, "poses", []);
+      if (end < 0) return;
+      const os = [...orders].sort((a, b) => a.at - b.at);
+      const p = { ...start2 };
+      let o = null, oi = -1, over = false;
+      const rudder = k.turn / 3;
+      for (let i = 0; i * DT <= end + 1e-9; i++) {
+        const t = i * DT;
+        this.poses.push({ ...p });
+        while (oi + 1 < os.length && os[oi + 1].at <= t + 1e-9) {
+          o = os[++oi];
+          over = false;
+        }
+        let want = p.h;
+        const v = o ? o.v : p.v;
+        if (o?.to) {
+          const d = dist(p, o.to), b = bearing(p.x, p.y, o.to.x, o.to.y);
+          if (!over && (d < 30 || d < 250 && Math.abs(wrapPi(b - p.h)) > 1.6)) over = true;
+          if (!over) want = b;
+        } else if (o && o.h !== void 0) want = o.h;
+        const cap11 = k.turn * clamp5(p.v / Math.max(0.1, k.speed), 0.15, 1.45);
+        const rWant = clamp5(wrapPi(want - p.h) * 0.3, -cap11, cap11);
+        p.r = clamp5(p.r + clamp5(rWant - p.r, -rudder * DT, rudder * DT), -cap11, cap11);
+        p.h = wrap2Pi(p.h + p.r * DT);
+        p.v += clamp5(v - p.v, -k.acc * DT, k.acc * DT);
+        p.x += Math.sin(p.h) * p.v * DT;
+        p.y += Math.cos(p.h) * p.v * DT;
+      }
+    }
+    /** A track from poses already sailed. */
+    static of(poses) {
+      const t = new _Track({ x: 0, y: 0, h: 0, v: 0, r: 0 }, [], -1, { turn: 0, speed: 1, acc: 0 });
+      t.poses.push(...poses);
+      return t;
+    }
+    at(t) {
+      const i = clamp5(t / DT, 0, this.poses.length - 1);
+      const a = this.poses[Math.floor(i)], b = this.poses[Math.min(this.poses.length - 1, Math.floor(i) + 1)], f = i - Math.floor(i);
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, h: wrap2Pi(a.h + wrapPi(b.h - a.h) * f), v: a.v + (b.v - a.v) * f, r: a.r };
+    }
+    /** When a point carried with her (`ahead` metres before her middle) passes nearest a point after a moment. */
+    nearest(q, from, ahead = 0) {
+      let best = from, bd = Infinity;
+      for (let i = Math.ceil(from / DT); i < this.poses.length; i++) {
+        const p = this.poses[i], d = Math.hypot(p.x + Math.sin(p.h) * ahead - q.x, p.y + Math.cos(p.h) * ahead - q.y);
+        if (d < bd) {
+          bd = d;
+          best = i * DT;
+        }
+      }
+      return best;
+    }
+    /** The first moment after `from` she heads within `within` (radians) of the bearing to a point, or -1. */
+    pointing(q, from, within3) {
+      for (let i = Math.ceil(from / DT); i < this.poses.length; i++) {
+        const p = this.poses[i];
+        if (Math.abs(wrapPi(bearing(p.x, p.y, q.x, q.y) - p.h)) <= within3) return i * DT;
+      }
+      return -1;
+    }
+    /** The first moment after `from` she is within `r` of a moving point, or -1. */
+    first(other2, r, from, until) {
+      for (let i = Math.ceil(from / DT); i < this.poses.length && i * DT <= until; i++) if (dist(this.poses[i], other2(i * DT)) <= r) return i * DT;
+      return -1;
+    }
+  };
+  function splice(old, from, orders, end, k) {
+    const cut = clamp5(Math.round(from / DT), 0, old.poses.length - 1);
+    const pose = old.poses[cut];
+    const fresh4 = new Track(pose, orders.map((o) => ({ ...o, at: Math.max(0, o.at - cut * DT) })), Math.max(0, end - cut * DT), k);
+    return Track.of([...old.poses.slice(0, cut), ...fresh4.poses]);
+  }
+  var SCOPE = 13;
+  function moveKeel(ks2, t, from, to, up, dive) {
+    const down = to > from;
+    const shallowFor = (a, b) => Math.abs(b - a) / Math.max(1, SCOPE - up) * (down ? 27 : 20);
+    const deepFor = (a, b) => Math.abs(b - a) / (down ? 1 : 1.2);
+    const span = (a, b) => {
+      const lo = Math.min(a, b), hi = Math.max(a, b), sh = Math.max(0, Math.min(hi, SCOPE) - lo);
+      return shallowFor(0, sh) + deepFor(0, hi - lo - sh);
+    };
+    ks2.push({ t, keel: from, dive, scope: false });
+    let at = t;
+    if ((from - SCOPE) * (to - SCOPE) < 0) {
+      at += span(from, SCOPE);
+      ks2.push({ t: at, keel: SCOPE, dive, scope: false });
+      at += span(SCOPE, to);
+    } else at += span(from, to);
+    ks2.push({ t: at, keel: to, dive, scope: false });
+    return at;
+  }
+  function cutKeels(ks2, t) {
+    const keep = ks2.filter((k) => k.t < t);
+    ks2.length = 0;
+    ks2.push(...keep);
+  }
+  function keelOf(ks2, t) {
+    let i = 0;
+    while (i + 1 < ks2.length && ks2[i + 1].t <= t + 1e-9) i++;
+    const a = ks2[i], b = ks2[i + 1];
+    const keel = b ? a.keel + (b.keel - a.keel) * clamp5((t - a.t) / Math.max(1e-6, b.t - a.t), 0, 1) : a.keel;
+    return { t, keel, dive: a.dive, scope: a.scope };
+  }
+  var steadyFrom = (ks2) => ks2.reduce((s, k, i) => i > 0 && Math.abs(k.keel - ks2[i - 1].keel) > 1e-6 ? k.t : s, 0);
+  var r1 = (x) => Math.round(x * 10) / 10;
+  var r32 = (x) => Math.round(x * 1e3) / 1e3;
+  var bearingDeg = (x) => {
+    const v = r1(wrapDeg(x));
+    return v >= 360 ? 0 : v;
+  };
+  var STEP = 2;
+  var SIZE = 2e4;
+  var CLEAR = 100;
+  var LETHAL = 6.4;
+  var AHEAD_SINK = 7;
+  var KILL_NEAR = LETHAL;
+  var LET_GO = 240;
+  var AHEAD_RANGE = 200;
+  var NUMS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen"];
+  var words = (n) => NUMS[n] ?? String(n);
+  var MONTHS2 = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var CLASS_ONE = { bb: "battleship", cv: "carrier", ca: "cruiser", dd: "destroyer", ss: "submarine", mv: "merchant ship" };
+  var upFirst2 = (s) => s ? s[0].toUpperCase() + s.slice(1) : s;
+  var an2 = (w) => /^[aeiou]/i.test(w) ? `an ${w}` : `a ${w}`;
+  var shipWord = (cls) => {
+    const w = cls.replace(/\(.*?\)/g, "").trim().split(/\s+/);
+    return w[w.length - 1].toLowerCase() || "escort";
+  };
+  var PLANS2 = [{ end: 900, killFirst: false }, { end: 900, killFirst: true }, { end: 1800, killFirst: true }];
+  var TRACK_SPARE = 20;
+  var AIR_RUN = 30;
+  function stagePick(m, pick2) {
+    for (let i = 0; ; i++) {
+      const out = stageWith(m, pick2, PLANS2[i], i === PLANS2.length - 1);
+      if (out.staged) return out.staged;
+    }
+  }
+  function stageWith(m, pick2, plan, lastPlan = true) {
+    const f = pick2.fact;
+    const sea = seaPlace(f.sea);
+    const at = monthsAt(f.turn);
+    const { year, month: month02 } = turnToDate(f.turn);
+    const week = clamp5(Math.round(f.week || 2), 1, 4);
+    const day = Math.min(28, (week - 1) * 7 + 4);
+    const key6 = `sub-${f.turn}-${pick2.case}-${f.sea}`;
+    const look = looker(`${m.seed}:${m.turn}:${key6}:${f.on}:${f.by}:${f.route ?? f.fleet ?? ""}`);
+    const nameOf2 = (n) => m.names?.[n] ?? { name: n, adj: n };
+    const boatRow = rowOf(L.boats, pick2.boats, at, sea.basin);
+    const fishRow = rowOf(L.torpedoes, pick2.boats, at, sea.basin);
+    const escNat = pick2.case === "convoy" && f.escorts?.length && !atWarIn(m, f.escorts[0], pick2.guard) ? f.escorts[0] : pick2.guard;
+    const escRow = rowOf(L.escorts, escNat, at, sea.basin);
+    const airRow = rowOf(L.air, pick2.guard, at, sea.basin);
+    const convRow = rowOf(L.convoys, pick2.guard, at, sea.basin);
+    const standIns = [];
+    if (pick2.source !== "record") standIns.push(pick2.source === "fleets" ? "the boats' navy: the boats at sea there as the month closed" : "the boats' navy: the basin's rows");
+    if (!f.hunters) standIns.push("the kill's share by aircraft: the air row");
+    if (pick2.case === "convoy" && f.escortShips === void 0) standIns.push("the escorts: the escort row");
+    if (pick2.case === "hunt" && !f.hunters) standIns.push("the hunting group: the escort row");
+    if (pick2.case === "convoy" && f.raidBy?.sure === false) standIns.push(f.raiders ? "who raided: a raider's heavy ships as the scene is read (not in the record)" : "who raided: the fleets at sea as the month closed");
+    const fan = pick2.case !== "hunt";
+    const fleetEsc = pick2.case === "heavyLost" || pick2.case === "boatsKill";
+    const killsDrawn = Math.min(L.most.boats, pick2.kills);
+    const airShare = f.hunters ? f.hunters.aircraft / Math.max(1e-9, f.hunters.ships + f.hunters.aircraft) : airRow.share;
+    const [byShips, byAir] = wholeShares(killsDrawn, [1 - airShare, airShare]);
+    const hits = pick2.case === "convoy" ? Math.min(L.most.hits, f.tonsBy?.[f.sea] !== void 0 ? Math.max(1, Math.round(f.tonsBy[f.sea] / L.caption.grt)) : pick2.ships) : fleetEsc ? Math.min(L.most.heavy, pick2.heavy.length) : 0;
+    const nBoats = pick2.case === "hunt" ? Math.min(L.most.boats, Math.max(1, killsDrawn) + ((f.quarry?.[pick2.boats] ?? 0) > (f.boats ?? 0) ? 1 : 0)) : clamp5(Math.max(killsDrawn, pick2.case === "convoy" ? Math.max(boatRow.pack, Math.ceil(hits / 2)) : 1), 1, L.most.boats);
+    const fate = Array.from({ length: nBoats }, (_, i) => i < byShips ? "escort" : i < byShips + byAir ? "air" : null);
+    const escCap = pick2.case === "convoy" ? f.escortShips : pick2.case === "hunt" ? f.hunters?.ships : void 0;
+    const escWant = pick2.case === "convoy" ? clamp5(pickIn(escRow.n, look("escorts")), 1, L.most.escorts) : pick2.case === "hunt" ? clamp5(pickIn(escRow.group, look("group")), 1, L.most.escorts) : clamp5(f.ships?.dd ?? 1, 1, 3);
+    const nEsc = Math.min(L.most.escorts, Math.max(byShips, escCap !== void 0 ? clamp5(Math.min(escWant, Math.round(escCap)), 1, L.most.escorts) : escWant));
+    let scuttles = 0;
+    const endHow = fate.map((x, i) => {
+      if (x === null) return null;
+      if (look(`how:${i}`) < (x === "air" ? L.ends.air : L.ends.escort) || scuttles >= nEsc) return "crushed";
+      scuttles++;
+      return "scuttled";
+    });
+    const course = wrap2Pi(TAU2 * look("course"));
+    const cx = SIZE / 2, cy = SIZE / 2 - 1500;
+    const toBoard = (u, v) => ({ x: cx + u * Math.cos(course) + v * Math.sin(course), y: cy - u * Math.sin(course) + v * Math.cos(course) });
+    const side3 = look("side") < 0.5 ? -1 : 1;
+    const events = [];
+    const zones = [];
+    const zone = (kind, p, r, from, until, zside, unit) => {
+      zones.push({ id: zones.length + 1, kind, x: r1(p.x), y: r1(p.y), r: Math.round(r), until: r1(until), side: zside, at: r1(from), unit });
+    };
+    const attNat = pick2.boats, defNat = pick2.guard;
+    const attAdj = nameOf2(attNat).adj, defAdj = nameOf2(defNat).adj;
+    const boatFleet = `${attAdj} submarines`;
+    const fleetText = f.fleet ?? `the ${defAdj} fleet`;
+    const defFleet = pick2.case === "convoy" ? upFirst2(f.routeName ?? `the ${defAdj} convoy`) : pick2.case === "hunt" ? `${defAdj} hunting group` : fleetText.replace(/^the /, "");
+    const END = plan.end;
+    const mvK = { turn: L.convoy.mv.turn, speed: convRow.speed, acc: 0.03 };
+    const guarded2 = [];
+    let halfW = 0, halfL = 0;
+    const guardV = pick2.case === "convoy" ? convRow.speed : pick2.case === "hunt" ? 5 : Math.min(...pick2.heavy.map((c) => L.heavy[c].speed));
+    if (pick2.case === "convoy") {
+      const n = Math.min(L.most.merchants, Math.max(hits, pickIn(convRow.n, look("merchants"))));
+      const cols = clamp5(pickIn(convRow.cols, look("columns")), 1, n);
+      const rows = Math.ceil(n / cols);
+      halfW = (cols - 1) * L.convoy.colGap / 2;
+      halfL = (rows - 1) * L.convoy.rowGap / 2;
+      for (let i = 0; i < n; i++) {
+        const col = i % cols, row2 = Math.floor(i / cols);
+        const p0 = toBoard(col * L.convoy.colGap - halfW + (look(`jig:u:${i}`) - 0.5) * 60, halfL - row2 * L.convoy.rowGap + (look(`jig:v:${i}`) - 0.5) * 80);
+        guarded2.push({
+          id: 0,
+          side: "def",
+          cls: "mv",
+          name: `Merchant ${i + 1}`,
+          nat: defNat,
+          fleet: defFleet,
+          fleetId: 2,
+          len: L.convoy.mv.len,
+          beam: L.convoy.mv.beam,
+          loop: "ship_steam_engine_loop",
+          column: col + 1,
+          k: mvK,
+          sunk: -1,
+          track: new Track({ x: p0.x, y: p0.y, h: course, v: guardV, r: 0 }, [{ at: 0, h: course, v: guardV }], END, mvK)
+        });
+      }
+    } else if (fleetEsc) {
+      const known = f.ships ?? {};
+      const heavy = pick2.heavy.slice(0, hits);
+      for (const c of ["bb", "cv", "ca"]) for (let k = 0; k < (known[c] ?? 0) && heavy.length < L.most.heavy; k++) heavy.push(c);
+      halfL = (heavy.length - 1) * 700 / 2;
+      heavy.forEach((c, i) => {
+        const p0 = toBoard(0, halfL - i * 700), hk = { turn: L.heavy[c].turn, speed: L.heavy[c].speed, acc: 0.04 };
+        guarded2.push({
+          id: 0,
+          side: "def",
+          cls: c,
+          name: `${upFirst2(CLASS_ONE[c])} ${i + 1}`,
+          nat: defNat,
+          fleet: defFleet,
+          fleetId: 2,
+          len: L.heavy[c].len,
+          beam: L.heavy[c].beam,
+          loop: "ship_engine_loop",
+          k: hk,
+          sunk: -1,
+          track: new Track({ x: p0.x, y: p0.y, h: course, v: guardV, r: 0 }, [{ at: 0, h: course, v: guardV }], END, hk)
+        });
+      });
+    }
+    const targets2 = [];
+    if (pick2.case === "convoy") {
+      const cols = Math.max(...guarded2.map((p) => p.column ?? 1));
+      const outer = side3 > 0 ? cols : 1, next = side3 > 0 ? cols - 1 : 2;
+      const order2 = [...guarded2.keys()].filter((i) => guarded2[i].column === outer).concat([...guarded2.keys()].filter((i) => guarded2[i].column === next && next !== outer)).concat([...guarded2.keys()].filter((i) => guarded2[i].column !== outer && guarded2[i].column !== next));
+      targets2.push(...order2.slice(0, hits));
+    } else if (fleetEsc) for (let h = 0; h < hits; h++) targets2.push(h);
+    const tFire0 = 22;
+    const perBoat = Math.max(1, Math.ceil(targets2.length / nBoats));
+    const fans = targets2.map((ti, h) => {
+      const b = Math.min(nBoats - 1, Math.floor(h / perBoat));
+      const range = boatRow.range * (0.85 + 0.3 * look(`range:${h}`));
+      const across = 160 + 80 * look(`spread:${h}`);
+      return { boat: b, target: ti, t: tFire0 + 3 * b + 4 * (h - b * perBoat) + look(`fire:${h}`) * 1.5, range, running: range / fishRow.speed, aim: { x: 0, y: 0 }, fish: Math.min(boatRow.fan, boatRow.tubes), spread: r1(2 * Math.atan(across / 2 / range) / RAD) };
+    });
+    for (const fn of fans) {
+      const q = guarded2[fn.target].track.at(fn.t + fn.running);
+      fn.aim = { x: q.x, y: q.y };
+    }
+    const surfacedAttack = boatRow.attack === "surfaced" && fan;
+    const ssK = { turn: 0.07, speed: boatRow.surf, acc: 0.05 };
+    const up = 0.07 * boatRow.len;
+    const approachV = surfacedAttack ? Math.min(boatRow.surf * 0.6, 5.5) : Math.min(boatRow.dived * 0.5, 2);
+    const deepV = Math.min(boatRow.dived * 0.5, 2);
+    const boats = [];
+    const dives = [];
+    let nextId = 1;
+    for (let b = 0; b < nBoats; b++) {
+      const mine4 = fans.filter((x) => x.boat === b);
+      let firePt, hdg, t0;
+      if (mine4.length) {
+        const fn = mine4[0];
+        const beta = (12 + 18 * look(`beta:${b}`)) * RAD;
+        const off = { x: side3 * Math.cos(course) * Math.cos(beta) + Math.sin(course) * Math.sin(beta), y: -side3 * Math.sin(course) * Math.cos(beta) + Math.cos(course) * Math.sin(beta) };
+        firePt = { x: fn.aim.x + off.x * fn.range, y: fn.aim.y + off.y * fn.range };
+        hdg = bearing(firePt.x, firePt.y, fn.aim.x, fn.aim.y);
+        t0 = fn.t;
+      } else if (pick2.case === "hunt") {
+        firePt = toBoard((b - (nBoats - 1) / 2) * 1500 + (look(`hu:${b}`) - 0.5) * 400, 900 + 300 * look(`hv:${b}`));
+        hdg = wrap2Pi(course + Math.PI + (look(`hh:${b}`) - 0.5) * 0.8);
+        t0 = 0;
+      } else {
+        firePt = toBoard(side3 * (halfW + 2400 + 500 * b), halfL + 600 - 900 * b);
+        hdg = wrap2Pi(course - side3 * 2);
+        t0 = 0;
+      }
+      const v0 = mine4.length ? approachV : deepV;
+      const start2 = { x: firePt.x - Math.sin(hdg) * v0 * t0, y: firePt.y - Math.cos(hdg) * v0 * t0, h: hdg, v: v0, r: 0 };
+      const lastFire = mine4.length ? mine4[mine4.length - 1].t : 0;
+      const firstAll = fans.length ? Math.min(...fans.map((x) => x.t + x.running)) : 0;
+      const radarOn = fleetEsc || escRow.radar;
+      const tDeep = !fan ? 6 + 3 * b : !mine4.length ? tFire0 + 4 + 3 * b : surfacedAttack ? radarOn ? lastFire + 3 + 1.5 * b : Math.max(lastFire + 3, firstAll + 2 + 1.5 * b) : lastFire + 4 + 1.5 * b;
+      const away = mine4.length ? wrap2Pi(hdg + side3 * 2.4) : wrap2Pi(hdg + (look(`turn:${b}`) - 0.5) * 1.2);
+      const orders = [{ at: 0, h: hdg, v: v0 }];
+      if (mine4.length) orders.push({ at: lastFire + 1, h: away, v: surfacedAttack ? Math.min(boatRow.surf * 0.85, 7.5) : v0 });
+      orders.push({ at: tDeep, h: away, v: deepV });
+      const startDive = surfacedAttack ? "surfaced" : "periscope";
+      const k0 = startDive === "surfaced" ? up : SCOPE;
+      const deep = Math.round(Math.min(boatRow.deep * (0.85 + 0.3 * look(`deep:${b}`)), boatRow.crush * 0.8));
+      const keels = [{ t: 0, keel: k0, dive: startDive, scope: startDive === "periscope" }];
+      moveKeel(keels, tDeep, k0, deep, up, "deep");
+      dives.push({ t: tDeep, keel: deep, why: !fan ? "evade" : surfacedAttack && escRow.radar && !fleetEsc ? "radar" : "evade", from: startDive });
+      boats.push({
+        id: nextId++,
+        side: "att",
+        cls: "ss",
+        name: `Submarine ${b + 1}`,
+        nat: attNat,
+        fleet: boatFleet,
+        fleetId: 1,
+        len: boatRow.len,
+        beam: boatRow.beam,
+        loop: "ship_engine_loop",
+        k: ssK,
+        sunk: -1,
+        track: new Track(start2, orders, END, ssK),
+        keels,
+        tubes: boatRow.tubes,
+        fired: mine4.map((x) => ({ t: x.t, n: x.fish }))
+      });
+    }
+    for (const fn of fans) {
+      if (fans.find((x) => x.boat === fn.boat) === fn) continue;
+      for (let pass = 0; pass < 3; pass++) {
+        const bp = boats[fn.boat].track.at(fn.t);
+        fn.range = dist(bp, fn.aim);
+        fn.running = fn.range / fishRow.speed;
+        const q = guarded2[fn.target].track.at(fn.t + fn.running);
+        fn.aim = { x: q.x, y: q.y };
+      }
+    }
+    for (const p of guarded2) p.id = nextId++;
+    const esc = fleetEsc ? { cls: "destroyer", len: L.heavy.dd.len, beam: L.heavy.dd.beam, speed: L.heavy.dd.speed, turn: L.heavy.dd.turn } : { cls: escRow.cls, len: escRow.len, beam: escRow.beam, speed: escRow.speed, turn: escRow.turn };
+    const escK = { turn: esc.turn, speed: esc.speed, acc: 0.08 };
+    const escWord = fleetEsc ? "destroyer" : shipWord(escRow.cls);
+    const radarFirst = surfacedAttack && (fleetEsc || escRow.radar);
+    const firstHitAt = fans.length ? Math.min(...fans.map((x) => x.t + x.running)) : -1;
+    const reactAt = boats.map((_, i) => {
+      const mine4 = fans.filter((x) => x.boat === i);
+      return !fan ? 10 + 6 * i : radarFirst && mine4.length ? Math.max(4, mine4[0].t - 8) : firstHitAt + 4 + 4 * i;
+    });
+    const stations = [];
+    const stationFor = [];
+    for (let k = 0; k < nEsc; k++) {
+      const a = TAU2 * (k + 0.5) / nEsc;
+      stations.push(pick2.case === "hunt" ? { u: (k - (nEsc - 1) / 2) * 1800, v: 0 } : { u: Math.sin(a) * (halfW + 1500), v: Math.cos(a) * (halfL + 1600) });
+    }
+    if (pick2.case !== "hunt") {
+      const taken2 = /* @__PURE__ */ new Set();
+      boats.forEach((b, i) => {
+        if (taken2.size >= nEsc) return;
+        const tRef = reactAt[i];
+        const bp = b.track.at(tRef), o = toBoard(0, 0);
+        const dx = bp.x - o.x - Math.sin(course) * guardV * tRef, dy = bp.y - o.y - Math.cos(course) * guardV * tRef;
+        const bu = dx * Math.cos(course) - dy * Math.sin(course), bv = dx * Math.sin(course) + dy * Math.cos(course);
+        const want = { u: bu - side3 * (100 + 150 * look(`st:u:${i}`)), v: bv - 350 - 200 * look(`st:v:${i}`) };
+        let best = -1, bd = Infinity;
+        stations.forEach((st, k) => {
+          if (!taken2.has(k)) {
+            const d = Math.hypot(st.u - want.u, st.v - want.v);
+            if (d < bd) {
+              bd = d;
+              best = k;
+            }
+          }
+        });
+        taken2.add(best);
+        stations[best] = want;
+        stationFor[i] = best;
+      });
+    }
+    const escorts = [];
+    for (let k = 0; k < nEsc; k++) {
+      const p0 = toBoard(stations[k].u, stations[k].v);
+      escorts.push({
+        id: nextId++,
+        side: "def",
+        cls: "dd",
+        name: `${upFirst2(escWord)} ${k + 1}`,
+        nat: escNat,
+        fleet: defFleet,
+        fleetId: 2,
+        len: esc.len,
+        beam: esc.beam,
+        loop: "destroyer_wash_loop",
+        k: escK,
+        sunk: -1,
+        track: new Track({ x: p0.x, y: p0.y, h: course, v: guardV, r: 0 }, [{ at: 0, h: course, v: guardV }], END, escK),
+        hunt: [],
+        busy: 0
+      });
+    }
+    const pieces = [...boats, ...guarded2, ...escorts];
+    const byId = new Map(pieces.map((p) => [p.id, p]));
+    if (pick2.case === "convoy" && boatRow.report) {
+      const b = boats[0], p = b.track.at(4);
+      let near2 = guarded2[0];
+      for (const g2 of guarded2) if (dist(g2.track.at(4), p) < dist(near2.track.at(4), p)) near2 = g2;
+      events.push({ t: 4, what: "sea:report", unit: b.id, side: "att", x: p.x, y: p.y, text: `${upFirst2(an2(attAdj))} submarine reports the convoy.`, extra: { by: b.id, at: near2.id } });
+    }
+    const hitAt = /* @__PURE__ */ new Map();
+    for (const fn of fans) {
+      const b = boats[fn.boat], tg = guarded2[fn.target], p = b.track.at(fn.t);
+      const what = tg.cls === "mv" ? "a merchant ship of the convoy" : `${an2(CLASS_ONE[tg.cls])} of ${fleetText}`;
+      events.push({
+        t: fn.t,
+        what: "sea:torpedo",
+        unit: b.id,
+        side: "att",
+        x: p.x,
+        y: p.y,
+        cue: "torpedo_launch",
+        text: `${upFirst2(an2(attAdj))} submarine fires ${words(fn.fish)} torpedoes at ${what}.`,
+        extra: { target: tg.id, x: r1(fn.aim.x), y: r1(fn.aim.y), running: r1(fn.running), share: 1, fish: fn.fish, spread: fn.spread, wakeless: fishRow.wakeless, dive: keelOf(b.keels, fn.t).dive }
+      });
+      zone("torpedo", fn.aim, Math.round(fn.range * Math.tan(fn.spread / 2 * RAD)) + 60, fn.t, fn.t + fn.running, "att", b.id);
+      const th = fn.t + fn.running;
+      if (hitAt.has(fn.target)) continue;
+      hitAt.set(fn.target, th);
+      const q = tg.track.at(th);
+      events.push({ t: th, what: "sea:torpedoHit", unit: tg.id, side: "att", x: q.x, y: q.y, cue: "torpedo_hit", text: `A torpedo hits ${what}.`, extra: { from: b.id } });
+      tg.track = splice(tg.track, th, [{ at: th, h: wrap2Pi(course + side3 * 0.25), v: 0 }], END, { ...tg.k, acc: 0.06 });
+      tg.sunk = th + (tg.cls === "mv" ? 1.5 : 6);
+      const qs = tg.track.at(tg.sunk);
+      events.push({ t: tg.sunk, what: "sea:sunk", unit: tg.id, side: "def", x: qs.x, y: qs.y, cue: "ship_sinking", text: `${upFirst2(what)} goes down.`, extra: { cls: tg.cls, fleet: tg.fleetId } });
+      events.push({ t: tg.sunk, what: "gone", unit: tg.id, side: "def", x: qs.x, y: qs.y, text: "" });
+      zone("sunk", qs, Math.round(tg.len / 2), tg.sunk, END, "def", tg.id);
+    }
+    const firstHit = fans.length ? Math.min(...fans.map((x) => x.t + x.running)) : -1;
+    const lastHit = fans.length ? Math.max(...fans.map((x) => x.t + x.running)) : 0;
+    boats.forEach((b, i) => {
+      const d = dives[i], p = b.track.at(d.t);
+      events.push({ t: d.t, what: "sea:dive", unit: b.id, side: "att", x: p.x, y: p.y, text: d.from === "surfaced" ? `${upFirst2(an2(attAdj))} submarine crash-dives.` : `${upFirst2(an2(attAdj))} submarine goes deep.`, extra: { dive: "deep", keel: d.keel, why: d.why } });
+    });
+    const sinkRate = fleetEsc ? 3 : escRow.sink;
+    const spreadOf = fleetEsc ? 100 : escRow.spread;
+    const patternN = fleetEsc ? 6 : escRow.pattern;
+    const setRange = fleetEsc ? [30, 60] : escRow.set;
+    const lostAt = fleetEsc ? 160 : escRow.lost;
+    const contactRange = fleetEsc ? [1300, 1800] : escRow.contact;
+    const runs = [];
+    const chargesOf = (e, track, drop, n, spread, sinking) => {
+      const p = track.at(drop), sp = Math.max(3, p.v), run = spread / sp;
+      const ax = Math.sin(p.h), ay = Math.cos(p.h), rx = Math.cos(p.h), ry = -Math.sin(p.h);
+      const stern = { x: p.x - ax * e.len * 0.5, y: p.y - ay * e.len * 0.5 };
+      const out = [];
+      for (let k = 0; k < n; k++) {
+        const share = n > 1 ? k / (n - 1) : 0;
+        const across = k % 2 === 0 ? 0 : (Math.floor(k / 2) % 2 === 0 ? 1 : -1) * (spread * 0.5 - e.beam * 0.5);
+        out.push({ x: stern.x + ax * share * spread + rx * across, y: stern.y + ay * share * spread + ry * across, t: drop + share * run + sinking });
+      }
+      return out;
+    };
+    const kb = patternN > 1 ? 2 * Math.round((patternN - 1) / 4) : 0;
+    const kbShare = patternN > 1 ? kb / (patternN - 1) : 0;
+    const comeRound = (e, track, b, drop, length, burst) => {
+      const tBack = drop + length / Math.max(3, track.at(drop).v) + 3;
+      e.track = splice(track, tBack, [{ at: tBack, to: b.track.at(tBack + 60), v: Math.min(esc.speed, 5) }], END, e.k);
+      e.busy = Math.max(tBack, burst + 6);
+    };
+    const planMiss = (e, b, from, label, notBefore) => {
+      const base = e.track;
+      const set = Math.round(setRange[0] + (setRange[1] - setRange[0]) * look(`set:${label}`));
+      const sinking = r1(set / sinkRate);
+      let offA = TAU2 * look(`off:${label}`);
+      let far = spreadOf / 2 + CLEAR + 30 + 40 * look(`far:${label}`);
+      const lead2 = spreadOf / 2 - e.len / 2;
+      const bp0 = b.track.at(from + 60);
+      let centre = { x: bp0.x, y: bp0.y };
+      let track = base, drop = from + 60, nearest = Infinity;
+      for (let pass = 0; pass < 16; pass++) {
+        const p0 = base.at(from), a = bearing(p0.x, p0.y, centre.x, centre.y);
+        track = splice(base, from, [{ at: from, to: { x: centre.x - Math.sin(a) * lead2, y: centre.y - Math.cos(a) * lead2 }, v: esc.speed }], END, e.k);
+        drop = track.nearest(centre, from + 5, lead2);
+        if (drop < notBefore - 0.5) {
+          from += notBefore - drop;
+          continue;
+        }
+        const bp = b.track.at(drop + sinking);
+        centre = { x: bp.x + Math.sin(offA) * far, y: bp.y + Math.cos(offA) * far };
+        let near2 = b;
+        nearest = Infinity;
+        for (const c of chargesOf(e, track, drop, patternN, spreadOf, sinking)) for (const o of boats) {
+          const d = dist(c, o.track.at(c.t));
+          if (d < nearest) {
+            nearest = d;
+            near2 = o;
+          }
+        }
+        if (pass >= 2 && nearest >= CLEAR) break;
+        if (nearest < CLEAR && near2 === b) far += CLEAR - nearest + 25;
+        else if (nearest < CLEAR) offA += 1.1;
+      }
+      const cs = chargesOf(e, track, drop, patternN, spreadOf, sinking);
+      centre = { x: cs.reduce((a, c) => a + c.x, 0) / cs.length, y: cs.reduce((a, c) => a + c.y, 0) / cs.length };
+      comeRound(e, track, b, drop, spreadOf, drop + sinking);
+      return { escort: e, boat: b, kind: "pattern", from, drop, burst: drop + sinking, last: Math.max(...cs.map((c) => c.t)), centre, set, n: patternN, spread: spreadOf, kill: false, sinking, nearest };
+    };
+    const planKill = (e, b, from0, ahead, notBefore) => {
+      const base = e.track;
+      const lead2 = ahead ? AHEAD_RANGE : kbShare * spreadOf - e.len / 2;
+      let best = null;
+      const ways = [{ open: 0, dir: 0 }];
+      for (const open2 of [500, 800]) for (let dir = 0; dir < 4; dir++) ways.push({ open: open2, dir });
+      for (const way of ways) {
+        let from = from0, tried = null, shifts = 0;
+        let target = b.track.at(from + 60);
+        let mark = null, out = null;
+        for (let pass = 0; pass < 10; pass++) {
+          const pf = base.at(from);
+          if (!mark) {
+            const a = bearing(pf.x, pf.y, target.x, target.y);
+            const dirA = way.open === 0 || way.dir === 0 ? a : way.dir === 1 ? pf.h : a + (way.dir === 2 ? 1 : -1) * Math.PI / 2;
+            mark = { x: target.x - Math.sin(dirA) * lead2, y: target.y - Math.cos(dirA) * lead2 };
+            if (way.open) out = { x: mark.x - Math.sin(dirA) * way.open, y: mark.y - Math.cos(dirA) * way.open };
+          }
+          let track, tIn;
+          if (out) {
+            const first2 = splice(base, from, [{ at: from, to: out, v: esc.speed }], END, e.k);
+            const tOut = first2.first(() => out, 40, from, END);
+            if (tOut < 0) break;
+            track = splice(first2, tOut, [{ at: tOut, to: mark, v: esc.speed }], END, e.k);
+            tIn = tOut + 5;
+          } else {
+            track = splice(base, from, [{ at: from, to: mark, v: esc.speed }], END, e.k);
+            tIn = from + 5;
+          }
+          const drop = track.nearest(target, tIn, lead2);
+          if (drop < notBefore - 0.5 && shifts++ < 20) {
+            from += notBefore - drop;
+            mark = null;
+            out = null;
+            pass--;
+            continue;
+          }
+          const p = track.at(drop);
+          const run = ahead ? 0 : kbShare * spreadOf / Math.max(3, p.v);
+          let hit = drop + run + keelOf(b.keels, drop).keel / (ahead ? AHEAD_SINK : sinkRate), set = 10, sinking = 0;
+          for (let k2 = 0; k2 < 3; k2++) {
+            const keel = keelOf(b.keels, hit).keel;
+            set = Math.max(10, Math.round(keel));
+            sinking = ahead ? r1(keel / AHEAD_SINK) : r1(set / sinkRate);
+            hit = r1(r1(drop) + run + sinking);
+          }
+          const at2 = { x: p.x + Math.sin(p.h) * lead2, y: p.y + Math.cos(p.h) * lead2 };
+          const q2 = b.track.at(hit), miss = dist(at2, q2);
+          if (!tried || miss < tried.miss) tried = { track, from, drop, hit, set, sinking, miss, at: at2 };
+          if (miss <= KILL_NEAR) break;
+          mark = { x: mark.x + q2.x - at2.x, y: mark.y + q2.y - at2.y };
+          target = { x: q2.x, y: q2.y };
+        }
+        if (tried && (!best || tried.miss < best.miss)) best = tried;
+        if (best && best.miss <= KILL_NEAR) break;
+      }
+      const k = best;
+      const q = b.track.at(k.hit);
+      let centre = { x: q.x, y: q.y }, last = k.hit;
+      if (!ahead) {
+        const cs = chargesOf(e, k.track, k.drop, patternN, spreadOf, k.sinking);
+        centre = { x: cs.reduce((a, c) => a + c.x, 0) / cs.length, y: cs.reduce((a, c) => a + c.y, 0) / cs.length };
+        last = Math.max(...cs.map((c) => c.t));
+      }
+      comeRound(e, k.track, b, k.drop, ahead ? 40 : spreadOf, k.hit);
+      return { escort: e, boat: b, kind: ahead ? "ahead" : "pattern", from: k.from, drop: k.drop, burst: k.hit, last, centre, set: k.set, n: ahead ? 24 : patternN, spread: ahead ? 40 : spreadOf, kill: true, sinking: k.sinking, nearest: k.miss };
+    };
+    const sendAt = (b, t) => {
+      let best = null;
+      for (const e of escorts) {
+        const ready = Math.max(t, e.busy ?? 0);
+        if (ready >= END || keep.has(e)) continue;
+        const p = e.track.at(ready), q = b.track.at(ready);
+        const at2 = ready + dist(p, q) / esc.speed + Math.abs(wrapPi(bearing(p.x, p.y, q.x, q.y) - p.h)) / esc.turn + Math.max(0, esc.speed - p.v) / (2 * escK.acc);
+        if (!best || at2 < best.at - 1e-6) best = { e, t: ready, at: at2 };
+      }
+      return best;
+    };
+    const sendOn = (b, i, t) => {
+      const mine4 = stationFor[i] === void 0 ? void 0 : escorts[stationFor[i]];
+      return mine4 && !keep.has(mine4) && (mine4.busy ?? 0) <= t ? { e: mine4, t, at: t } : sendAt(b, t);
+    };
+    const keep = /* @__PURE__ */ new Set();
+    const byEscort = fate.filter((x) => x === "escort").length;
+    const killFirst = plan.killFirst || nBoats + byEscort > 2 * nEsc;
+    const clearOf = /* @__PURE__ */ new Map(), killOf = /* @__PURE__ */ new Map();
+    const planKillOn = (b, i) => {
+      const clear2 = clearOf.get(b);
+      const t0 = clear2 ? Math.max(clear2.burst + 8, steadyFrom(b.keels) + 4) : reactAt[i];
+      const s = clear2 ? sendAt(b, t0) : sendOn(b, i, t0);
+      const ahead = !fleetEsc && !!escRow.ahead && look(`ahead:${i}`) < 0.6;
+      const run = planKill(s.e, b, s.t, ahead, clear2 ? t0 : dives[i].t + 25);
+      runs.push(run);
+      killOf.set(b, run);
+      if (endHow[i] === "scuttled") keep.add(s.e);
+    };
+    if (killFirst) boats.forEach((b, i) => {
+      if (fate[i] === "escort") planKillOn(b, i);
+    });
+    boats.forEach((b, i) => {
+      if (killFirst && fate[i] === "escort") return;
+      const s = sendOn(b, i, reactAt[i]);
+      if (!s || s.at > reactAt[i] + LET_GO) return;
+      const run = planMiss(s.e, b, s.t, `clear:${i}`, dives[i].t + 25);
+      runs.push(run);
+      clearOf.set(b, run);
+    });
+    if (!killFirst) boats.forEach((b, i) => {
+      if (fate[i] === "escort") planKillOn(b, i);
+    });
+    const ends = [];
+    boats.forEach((b, i) => {
+      const by = fate[i], how = endHow[i];
+      if (!by || !how) return;
+      const run = killOf.get(b);
+      ends.push(run ? { boat: b, how, by, t: run.burst, sunk: -1, killer: run.escort } : { boat: b, how, by, t: -1, sunk: -1 });
+    });
+    for (const end of ends) {
+      const b = end.boat, ks2 = b.keels;
+      const hold2 = (t, acc) => {
+        b.track = splice(b.track, t, [{ at: t, h: b.track.at(t).h, v: 0 }], END, { ...b.k, acc });
+      };
+      if (end.by === "air") {
+        const tUp = Math.max((clearOf.get(b)?.burst ?? 0) + 15, steadyFrom(ks2) + 2), k = keelOf(ks2, tUp).keel;
+        cutKeels(ks2, tUp);
+        const tTop = moveKeel(ks2, tUp, k, up, up, "surfaced");
+        const p = b.track.at(tUp);
+        events.push({ t: tUp, what: "sea:dive", unit: b.id, side: "att", x: p.x, y: p.y, text: `${upFirst2(an2(attAdj))} submarine surfaces to slip away in the dark.`, extra: { dive: "surfaced", keel: r1(up), why: "evade" } });
+        const h = b.track.at(tUp).h;
+        b.track = splice(b.track, tTop, [{ at: tTop, h, v: Math.min(boatRow.surf * 0.6, 5) }], END, b.k);
+        const tSeen = tTop + 4, tAir = tSeen + AIR_RUN, q0 = b.track.at(tSeen), q2 = b.track.at(tAir);
+        events.push({ t: tSeen, what: "sea:air", unit: b.id, side: "def", x: q0.x, y: q0.y, text: `${upFirst2(an2(defAdj))} ${airRow.name} finds ${an2(attAdj)} submarine on the surface and runs in on her.`, extra: { kind: airRow.name, n: 1, running: AIR_RUN } });
+        end.seen = tSeen;
+        end.t = tAir;
+        if (end.how === "crushed") {
+          const tDown = tAir + 2;
+          const tGone = moveKeel(ks2, tDown, up, Math.min(40, boatRow.crush * 0.8), up, "deep");
+          events.push({ t: tDown, what: "sea:dive", unit: b.id, side: "att", x: q2.x, y: q2.y, text: "", extra: { dive: "deep", keel: Math.min(40, boatRow.crush * 0.8), why: "aircraft" } });
+          end.sunk = Math.min(tGone, tDown + 30);
+          hold2(tDown, 0.1);
+        } else {
+          end.sunk = tAir + 18;
+          hold2(tAir + 2, 0.15);
+        }
+      } else if (end.how === "scuttled") {
+        const tUp = end.t + 2, k = keelOf(ks2, end.t).keel;
+        cutKeels(ks2, tUp);
+        const tTop = moveKeel(ks2, tUp, k, up, up, "surfaced");
+        const p = b.track.at(tUp);
+        events.push({ t: tUp, what: "sea:dive", unit: b.id, side: "att", x: p.x, y: p.y, text: `${upFirst2(an2(attAdj))} submarine is forced to the surface.`, extra: { dive: "surfaced", keel: r1(up), why: "forced" } });
+        end.up = tTop;
+        end.sunk = tTop + 14;
+        hold2(end.t, 0.05);
+      } else {
+        end.sunk = end.t + 3;
+        hold2(end.t, 0.3);
+      }
+      b.sunk = end.sunk;
+      const q = b.track.at(end.sunk);
+      events.push({ t: end.sunk, what: "sea:sunk", unit: b.id, side: "att", x: q.x, y: q.y, cue: "ship_sinking", text: end.how === "crushed" ? `${upFirst2(an2(attAdj))} submarine is destroyed.` : `${upFirst2(an2(attAdj))} submarine is scuttled by her crew.`, extra: { cls: "ss", fleet: b.fleetId, how: end.how } });
+      events.push({ t: end.sunk, what: "gone", unit: b.id, side: "att", x: q.x, y: q.y, text: "" });
+      zone("sunk", q, 40, end.sunk, END, "att", b.id);
+      const s = end.how !== "scuttled" ? null : end.killer ? { e: end.killer, t: Math.max(end.t + 4, end.killer.busy ?? 0), at: 0 } : sendAt(b, end.t);
+      if (s && (end.killer || s.at <= end.t + LET_GO)) {
+        const e = s.e, near2 = e.track.at(s.t), stopAcc = 0.2, slow = Math.min(esc.speed, 6), short = 200 + slow * slow / (2 * stopAcc);
+        e.track = splice(e.track, s.t, [{ at: s.t, h: bearing(near2.x, near2.y, q.x, q.y), v: slow }], END, e.k);
+        const pointed = e.track.pointing(q, s.t, 0.3), tOn = pointed >= 0 ? pointed : s.t + 30;
+        e.track = splice(e.track, tOn, [{ at: tOn, to: q, v: esc.speed }], END, e.k);
+        const nearer = e.track.first(() => q, short + 300, tOn, END), tEase = nearer >= 0 ? nearer : tOn;
+        e.track = splice(e.track, tEase, [{ at: tEase, to: q, v: slow }], END, e.k);
+        const close3 = e.track.first(() => q, short, tEase, END), tSlow = close3 >= 0 ? close3 : tEase;
+        e.track = splice(e.track, tSlow, [{ at: tSlow, to: q, v: 0 }], END, { ...e.k, acc: stopAcc });
+        const tStop = tSlow + Math.ceil(e.track.at(tSlow).v / stopAcc) + 1, tR = Math.max(tStop, end.sunk + 3);
+        e.busy = END;
+        end.rescue = tR;
+        events.push({ t: tR, what: "sea:rescue", unit: e.id, side: "def", x: q.x, y: q.y, text: `${upFirst2(an2(escWord))} stands by to pick up the submarine's survivors.`, extra: { by: e.id, on: b.id } });
+      }
+    }
+    runs.sort((a, b) => a.drop - b.drop || a.escort.id - b.escort.id);
+    for (const [k, run] of runs.entries()) {
+      const e = run.escort, b = run.boat;
+      const reach3 = pickIn(contactRange, look(`contact:${k}`));
+      let tc = e.track.first((t) => b.track.at(t), reach3, run.from, run.drop);
+      if (tc < 0) tc = Math.max(run.from, run.drop - 20);
+      const kind = keelOf(b.keels, tc).dive === "surfaced" && (fleetEsc || escRow.radar) ? "radar" : "asdic";
+      const err = (look(`err:${k}`) - 0.5) * (run.kill ? 0.06 : 0.3) / (fleetEsc ? 1 : escRow.sonar ?? 1);
+      const ep = e.track.at(tc), bp = b.track.at(tc);
+      events.push({ t: tc, what: "sea:sonar", unit: e.id, side: "def", x: ep.x, y: ep.y, text: kind === "radar" ? `${upFirst2(an2(escWord))} has a radar contact.` : `${upFirst2(an2(escWord))} has an asdic contact.`, extra: { on: b.id, kind, range: Math.round(dist(ep, bp)), bearing: r32(bearing(ep.x, ep.y, bp.x, bp.y)), err: r32(err) } });
+      let tl = -1;
+      if (run.kind === "pattern") {
+        tl = e.track.first((t) => b.track.at(t), lostAt, tc + 1, run.drop);
+        if (tl < 0) tl = Math.max(tc + 1, run.drop - 8);
+        const lp = e.track.at(tl), lb = b.track.at(tl);
+        events.push({ t: tl, what: "sea:sonar", unit: e.id, side: "def", x: lp.x, y: lp.y, text: "", extra: { on: b.id, kind: "asdic", range: Math.round(dist(lp, lb)), bearing: r32(bearing(lp.x, lp.y, lb.x, lb.y)), err: r32(err), lost: "close" } });
+        zone("datum", lb, 150, tl, run.burst + 30, "def", e.id);
+      }
+      e.hunt.push({ from: tc, to: tl >= 0 ? tl : run.drop, phase: "run", on: b.id, kind, err });
+      if (tl >= 0) e.hunt.push({ from: tl, to: run.burst, phase: "blind", on: b.id, kind, err });
+      e.hunt.push({ from: tl >= 0 ? run.burst : run.drop, to: run.burst + 30, phase: "open", on: b.id, kind, err });
+      const dp = e.track.at(run.drop);
+      const word2 = run.kind === "ahead" ? `fires her ${escRow.ahead ?? "ahead-thrower"}` : `drops a pattern of ${words(run.n)} depth charges`;
+      events.push({ t: run.drop, what: "sea:depthCharge", unit: e.id, side: "def", x: dp.x, y: dp.y, text: `${upFirst2(an2(escWord))} ${word2}.`, extra: { on: b.id, x: r1(run.centre.x), y: r1(run.centre.y), n: run.n, set: run.set, sinking: r1(run.sinking), spread: run.spread, kind: run.kind } });
+      zone("pattern", run.centre, run.spread / 2, run.drop, run.burst + 6, "def", e.id);
+      if (run.kill) {
+        const q = b.track.at(run.burst);
+        events.push({ t: run.burst, what: "sea:depthChargeHit", unit: b.id, side: "def", x: q.x, y: q.y, text: `Depth charges hit ${an2(attAdj)} submarine.`, extra: { from: e.id, harm: 1, keel: Math.round(keelOf(b.keels, run.burst).keel) } });
+      }
+    }
+    const shells = [];
+    if (fleetEsc || escRow.starshell) {
+      if (fan && firstHit >= 0) {
+        const b = boats[0], q = b.track.at(firstHit + 3), a = TAU2 * look("shell");
+        shells.push({ t: firstHit + 3, over: { x: q.x + Math.sin(a) * 300, y: q.y + Math.cos(a) * 300 } });
+      }
+      for (const end of ends) if (end.up !== void 0) {
+        const q = end.boat.track.at(end.up);
+        shells.push({ t: end.up + 2, over: { x: q.x + 120, y: q.y + 120 } });
+      }
+    }
+    for (const s of shells) {
+      let e = escorts[0], bd = Infinity;
+      for (const x of escorts) {
+        const d = dist(x.track.at(s.t), s.over);
+        if (d < bd) {
+          bd = d;
+          e = x;
+        }
+      }
+      const ep = e.track.at(s.t);
+      events.push({ t: s.t, what: "sea:starshell", unit: e.id, side: "def", x: ep.x, y: ep.y, text: `${upFirst2(an2(escWord))} fires starshell.`, extra: { by: e.id, x: r1(s.over.x), y: r1(s.over.y) } });
+    }
+    const B2 = L.beats;
+    const beats = [];
+    const win = (what, from, to, screen) => {
+      from = Math.max(0, from);
+      if ((to - from) / screen <= B2.pace) {
+        beats.push({ what, from: r1(from), to: r1(to), screen });
+        return;
+      }
+      const a = Math.max(2, Math.round(screen / 2));
+      beats.push({ what, from: r1(from), to: r1(from + a * B2.pace), screen: a }, { what, from: r1(to - (screen - a) * B2.pace), to: r1(to), screen: screen - a });
+    };
+    win(pick2.case === "convoy" ? "convoy" : pick2.case === "hunt" ? "sweep" : "fleet", 0, 16, B2.convoy);
+    if (fans.length) {
+      win("fire", Math.min(...fans.map((x) => x.t)) - 2, Math.max(...fans.map((x) => x.t)) + 3, B2.fire);
+      win("hits", firstHit - 3, lastHit + 4, B2.hits);
+    }
+    const clear = runs.filter((r) => !r.kill), shown2 = clear.length ? clear : runs;
+    const d0 = Math.min(...shown2.map((r) => r.drop)), d1 = Math.max(...shown2.map((r) => r.drop));
+    const b0 = Math.min(...shown2.map((r) => r.drop + r.sinking)), b1 = Math.max(...shown2.map((r) => r.last));
+    if (b0 - 2 <= d1 + 3) win("charges", d0 - 6, b1 + 4, B2.charges);
+    else {
+      win("drop", d0 - 6, d1 + 3, B2.drop);
+      win("bursts", b0 - 2, b1 + 4, B2.bursts);
+    }
+    if (ends.length) {
+      const others = beats.reduce((a, x) => a + x.screen, 0);
+      const share = Math.min(B2.end + 4 * (ends.length - 1), B2.most - others) / ends.length;
+      ends.forEach((x, i) => {
+        const s = Math.round(share * (i + 1)) - Math.round(share * i);
+        if (x.by === "escort" && x.how === "scuttled" && x.up !== void 0) {
+          const a = Math.max(1, Math.round(s * 0.4));
+          win("end", x.t - 3, x.t + 5, a);
+          win("end", x.up - 4, Math.max(x.sunk + 8, Math.min(x.rescue ?? 0, x.sunk + 20)), s - a);
+        } else if (x.by === "air" && x.seen !== void 0) {
+          const a = Math.max(1, Math.round(s * 0.3));
+          win("end", x.seen - 2, x.seen + 6, a);
+          win("end", x.t - 6, x.sunk + 6, s - a);
+        } else win("end", x.t - 3, x.sunk + 6, s);
+      });
+    }
+    beats.sort((a, b) => a.from - b.from);
+    for (let i = 1; i < beats.length; i++) {
+      if (beats[i].from <= beats[i - 1].to) {
+        const a = beats[i - 1], b = beats[i];
+        beats[i - 1] = { what: a.what === b.what ? a.what : `${a.what}+${b.what}`, from: a.from, to: Math.max(a.to, b.to), screen: a.screen + b.screen };
+        beats.splice(i--, 1);
+      }
+    }
+    const tEnd = Math.ceil((Math.max(...beats.map((x) => x.to), ...events.map((x) => x.t), ...runs.map((r) => r.last)) + 4) / STEP) * STEP;
+    if (!lastPlan && tEnd + TRACK_SPARE > END) return { staged: null, last: tEnd, end: END };
+    events.sort((a, b) => a.t - b.t || (a.what === "sea:torpedoHit" || a.what === "sea:depthChargeHit" ? 0 : 1) - (b.what === "sea:torpedoHit" || b.what === "sea:depthChargeHit" ? 0 : 1));
+    const contactT = events.find((e) => e.what === "sea:torpedo" || e.what === "sea:sonar" || e.what === "sea:report")?.t ?? null;
+    const told = /* @__PURE__ */ new Map();
+    const unitOut = (p, t) => {
+      const gone = p.sunk >= 0 && p.sunk <= t + 1e-9;
+      const q = p.track.at(gone ? p.sunk : t);
+      const u = { id: p.id, side: p.side, kind: p.cls, name: p.name, nat: p.nat };
+      u.x = r1(q.x);
+      u.y = r1(q.y);
+      u.face = r32(q.h);
+      u.str = gone ? 0 : 1;
+      u.mor = 1;
+      u.state = gone ? "gone" : "steady";
+      u.figures0 = 1;
+      u.figures = gone ? 0 : 1;
+      u.w = p.beam;
+      u.d = p.len;
+      const hunt = (p.hunt ?? []).find((h) => h.from <= t + 1e-9 && t < h.to);
+      u.act = gone ? "down" : hunt?.phase === "run" ? "run" : "march";
+      u.speed = gone ? 0 : r1(q.v);
+      u.engaged = -1;
+      u.loop = gone ? "" : p.loop;
+      const x = { cls: p.cls, ships0: 1, ships: gone ? 0 : 1, sunk: gone ? 1 : 0, way: gone ? 0 : r1(q.v), speed: q.v > 7 ? "full" : "cruise", target: -1, fleet: p.fleet };
+      if (p.column !== void 0) x.column = p.column;
+      const fresh4 = /* @__PURE__ */ new Set();
+      if (p.cls === "ss" && !gone) {
+        const k = keelOf(p.keels, t);
+        x.dive = k.dive;
+        x.keel = r1(k.keel);
+        x.scope = k.dive === "periscope" && k.scope;
+        fresh4.add("dive");
+        fresh4.add("keel");
+        fresh4.add("scope");
+        x.tubes = Math.max(0, (p.tubes ?? 0) - (p.fired ?? []).filter((fd) => fd.t <= t + 1e-9).reduce((s, fd) => s + fd.n, 0));
+        x.heard = escorts.filter((e) => (e.hunt ?? []).some((h) => h.on === p.id && h.phase === "run" && h.from <= t + 1e-9 && t < h.to)).map((e) => e.id);
+      }
+      if (gone) fresh4.add("sunk");
+      if (p.hunt && !gone) {
+        x.huntPhase = hunt?.phase ?? "search";
+        if (hunt) x.huntUntil = r1(hunt.to);
+        if (hunt?.phase === "run") {
+          const b = byId.get(hunt.on).track.at(t);
+          x.echo = { on: hunt.on, kind: hunt.kind, range: Math.round(dist(q, b)), bearing: r32(bearing(q.x, q.y, b.x, b.y)), err: r32(hunt.err) };
+          fresh4.add("echo");
+        }
+      }
+      u.extra = x;
+      const was = told.get(p.id);
+      const kept2 = (v) => v !== null && typeof v === "object" ? JSON.stringify(v) : typeof v === "number" && !Number.isFinite(v) ? JSON.stringify(v) : v;
+      const nowU = {}, nowX = {};
+      for (const k in u) if (k !== "extra") nowU[k] = kept2(u[k]);
+      for (const k in x) nowX[k] = kept2(x[k]);
+      told.set(p.id, { u: nowU, x: nowX });
+      if (!was) return u;
+      const out = { id: p.id };
+      for (const k in u) if (k !== "extra" && k !== "id" && was.u[k] !== nowU[k]) out[k] = u[k];
+      let ox = null;
+      for (const k in x) if (fresh4.has(k) || was.x[k] !== nowX[k]) (ox ?? (ox = {}))[k] = x[k];
+      if (ox) out.extra = ox;
+      return out;
+    };
+    const views = [];
+    let lastZones = "", ei = 0;
+    for (let t = 0; t <= tEnd + 1e-9; t += STEP) {
+      const evs = [];
+      while (ei < events.length && events[ei].t <= t + 1e-9) {
+        const e = events[ei++];
+        const o = { t: r1(e.t) };
+        if (e.x !== void 0 && e.y !== void 0) {
+          o.x = Math.round(e.x);
+          o.y = Math.round(e.y);
+        }
+        if (e.cue) o.cue = e.cue;
+        o.what = e.what;
+        if (e.unit !== void 0) o.unit = e.unit;
+        if (e.side) o.side = e.side;
+        o.text = e.text;
+        if (e.extra) o.extra = e.extra;
+        evs.push(o);
+      }
+      const units = pieces.map((p) => unitOut(p, t));
+      const live2 = zones.filter((z) => z.at <= t + 1e-9 && z.until >= t - 1e-9);
+      const zs = JSON.stringify(live2);
+      const lostAtt = boats.filter((b) => b.sunk >= 0 && b.sunk <= t + 1e-9).length / boats.length;
+      const lostDef = guarded2.filter((g2) => g2.sunk >= 0 && g2.sunk <= t + 1e-9).length / Math.max(1, guarded2.length + escorts.length);
+      const v = {
+        t,
+        limit: tEnd,
+        speed: 1,
+        units,
+        balance: { att: 0.5, def: 0.5 },
+        events: evs,
+        ai: { att: true, def: true },
+        over: null,
+        me: pick2.me,
+        breaking: { att: 0, def: 0 },
+        contact: contactT !== null && contactT <= t + 1e-9 ? r1(contactT) : null,
+        lost: { att: r32(lostAtt), def: r32(lostDef) },
+        broken: null
+      };
+      if (zs !== lastZones || t === 0) {
+        v.zones = live2;
+        lastZones = zs;
+      }
+      views.push(v);
+    }
+    const caption = captionOf(m, pick2, sea, year, month02);
+    views[views.length - 1].over = { winner: "", level: "", lines: caption };
+    const night = nightOf(sea.lat, sea.lon, year, month02, day, look("hour"));
+    const moonLight = night.moon.up > 0 ? night.moon.lit : 0;
+    const vis = Math.round((1500 + 3500 * look("vis")) * (0.6 + 0.6 * moonLight) / 100) * 100;
+    const windy = (sea.basin === "atlantic" || sea.basin === "north") && (month02 >= 9 || month02 <= 2) ? 2 : 0;
+    const classes = {
+      ss: { len: boatRow.len, beam: boatRow.beam, speed: boatRow.surf, turn: ssK.turn, reach: 0, name: boatRow.cls },
+      dd: { len: esc.len, beam: esc.beam, speed: esc.speed, turn: esc.turn, reach: 5e3, name: esc.cls }
+    };
+    if (pick2.case === "convoy") classes.mv = { len: L.convoy.mv.len, beam: L.convoy.mv.beam, speed: convRow.speed, turn: L.convoy.mv.turn, reach: 0, name: L.convoy.mv.name };
+    for (const c of new Set(guarded2.map((p) => p.cls))) if (c !== "mv") {
+      const h = L.heavy[c];
+      classes[c] = { len: h.len, beam: h.beam, speed: h.speed, turn: h.turn, reach: 5e3 };
+    }
+    const shipsOf = (ps) => {
+      const o = {};
+      for (const p of ps) o[p.cls] = (o[p.cls] ?? 0) + 1;
+      return o;
+    };
+    const staged = {
+      scene: "sub",
+      case: pick2.case,
+      beats,
+      seconds: beats.reduce((s, x) => s + x.screen, 0),
+      caption: { lines: caption, check: L.caption.check },
+      facts: { kind: f.kind, sea: f.sea, by: f.by, on: f.on, week, tons: f.tons ?? 0, ships: pick2.case === "convoy" ? pick2.ships : pick2.heavy.length, boats: pick2.kills, escortsLost: f.escortsLost ?? 0, source: pick2.source },
+      drawn: { boats: boats.length, kills: ends.length, byAir: ends.filter((x) => x.by === "air").length, hits: hitAt.size, merchants: guarded2.filter((p) => p.cls === "mv").length, heavy: guarded2.filter((p) => p.cls !== "mv").length, escorts: escorts.length, ends: ends.map((x) => `${x.how} by ${x.by}`) },
+      looks: { boat: boatRow.cls, torpedo: fishRow.fish, wakeless: fishRow.wakeless, escort: esc.cls, ahead: fleetEsc ? null : escRow.ahead, aircraft: airRow.name, radar: fleetEsc ? true : escRow.radar },
+      night: { hour: r1(night.hour), hours: r1(night.hours), dusk: r1(night.dusk), dawn: r1(night.dawn) },
+      standIns
+    };
+    const field4 = {
+      size: SIZE,
+      edge: 5e3,
+      zoneName: sea.name,
+      title: pick2.case === "convoy" ? `${upFirst2(f.routeName ?? "the convoy")}: a night in ${MONTHS2[month02]}` : pick2.case === "hunt" ? `The hunt in the ${sea.name}` : `${upFirst2(an2(CLASS_ONE[pick2.heavy[0]]))} torpedoed in the ${sea.name}`,
+      date: `${day} ${MONTHS2[month02]} ${year}`,
+      when: { year, month: month02 },
+      lat: sea.lat,
+      lon: sea.lon,
+      att: { nat: attNat, adj: attAdj, human: m.human === attNat, fleets: [{ id: 1, name: boatFleet, ships: shipsOf(boats) }] },
+      def: { nat: defNat, adj: defAdj, human: m.human === defNat, fleets: [{ id: 2, name: defFleet, ships: shipsOf([...guarded2, ...escorts]) }] },
+      classes,
+      torp: { travel: r1(fans.length ? fans[0].running : 60), radius: fans.length ? Math.round(fans[0].range * Math.tan(fans[0].spread / 2 * RAD)) + 60 : 300 },
+      strike: { windup: 90, radius: 1500 },
+      wind: { from: r32(TAU2 * look("wind")), speed: r1(4 + 7 * look("windspeed") + windy) },
+      subs: { scope: SCOPE, deep: boatRow.deep, crush: boatRow.crush, dived: boatRow.dived },
+      dc: { sink: sinkRate, lethal: LETHAL },
+      light: { sun: { up: r1(night.sun.up), from: bearingDeg(night.sun.from) }, moon: { lit: r32(night.moon.lit), up: r1(night.moon.up), from: bearingDeg(night.moon.from) }, vis },
+      staged
+    };
+    const staged0 = {
+      what: "STAGED: the month's submarine scene (form D1, ruling 241), staged from the month's booked facts with no dice, for the 3D scene to show. Look only: no rule reads it. Each view carries a piece whole the first time it shows, then only what changed (a boat's dive, keel and scope and a lost piece's sunk in every view), and the zones only where they changed. field.staged.beats are the windows of battle time the scene shows and the screen seconds each is given.",
+      recording: true,
+      key: key6,
+      seed: hash32(`${m.seed}:${m.turn}:${key6}`),
+      step: STEP,
+      field: field4,
+      views,
+      after: { lines: caption, level: "", winner: "", seconds: tEnd }
+    };
+    return { staged: staged0, last: tEnd, end: END };
+  }
+  function captionOf(m, pick2, sea, year, month02) {
+    const f = pick2.fact;
+    const adj = (n) => m.names?.[n]?.adj ?? n;
+    const when = `${MONTHS2[month02]} ${year}`;
+    const subs = (n, nat) => `${thousands(n)} ${adj(nat)} submarine${n === 1 ? "" : "s"}`;
+    if (pick2.case === "convoy") {
+      const bySubs = boatsRaided(f) === true && !f.raidBy?.surface && !f.raidBy?.base && f.raidBy?.sure !== false;
+      const counted3 = (f.tons ?? 0) >= L.caption.grt / 2 ? `, about ${thousands(pick2.ships)} ship${pick2.ships === 1 ? "" : "s"} at about ${thousands(L.caption.grt)} tons a ship` : "";
+      const lines3 = [`${upFirst2(f.routeName ?? "the convoy routes")}, ${when}: ${thousands(f.tons ?? 0)} tons of shipping sunk ${bySubs ? "by submarines" : "on the convoy routes"}${counted3}.`];
+      if (pick2.kills) lines3.push(`${thousands(pick2.kills)} ${f.boatsNat ? `${adj(f.boatsNat)} ` : ""}submarine${pick2.kills === 1 ? "" : "s"} sunk.`);
+      return lines3;
+    }
+    if (pick2.case === "hunt") {
+      const cost = f.escortsLost ? `, for the loss of ${f.escortsLost} destroyer${f.escortsLost === 1 ? "" : "s"}` : "";
+      const one = !f.quarry || Object.values(f.quarry).filter((n) => n > 0).length <= 1;
+      const sunk2 = one ? subs(pick2.kills, pick2.boats) : `${thousands(pick2.kills)} submarine${pick2.kills === 1 ? "" : "s"}`;
+      return [`${upFirst2(sunk2)} sunk in the ${sea.name}, ${when}${cost}.`];
+    }
+    const lines2 = [`${pick2.heavy.length === 1 ? upFirst2(an2(CLASS_ONE[pick2.heavy[0]])) : `${upFirst2(words(pick2.heavy.length))} heavy ships`} of ${f.fleet ?? `the ${adj(f.on)} fleet`} torpedoed and sunk in the ${sea.name}, ${when}.`];
+    const others = othersOf(m, pick2);
+    if (others.length) lines2.push(`Also torpedoed and sunk there: ${others.map((o) => `${an2(CLASS_ONE[o.cls ?? "ca"])} of ${o.fleet ?? `the ${adj(o.on)} fleet`}`).join(", ")}.`);
+    const sunk = Math.max(pick2.kills, pick2.sunkThere ?? 0);
+    if (sunk) lines2.push(`${upFirst2(subs(sunk, pick2.boats))} sunk there this month.`);
+    return lines2;
+  }
+  var HUNT_AIR = fleets_default.hunt.air;
+  function firstOf(g2, from) {
+    const month3 = g2.headlines.findIndex((h) => h.turn >= g2.turn - 1);
+    if (typeof from === "number" && from >= 0 && from <= g2.headlines.length) return from;
+    return month3 < 0 ? g2.headlines.length : month3;
+  }
+  function factsOf(g2, routes, from, record2) {
+    const facts = [];
+    const zoneByName = (text) => {
+      let best = -1, len = 0;
+      g2.seas.forEach((z, i) => {
+        if (text.includes(z.name) && z.name.length > len) {
+          best = i;
+          len = z.name.length;
+        }
+      });
+      return best;
+    };
+    const byAdj = (adj) => Object.values(g2.nations).find((n) => n.adj === adj)?.id ?? "";
+    const atWarG = (a, b) => !!g2.nations[a]?.atWar.includes(b) || !!g2.nations[b]?.atWar.includes(a);
+    const boatsIn = (z, struck, raiding = false) => {
+      const out = {};
+      for (const x of g2.fleets) {
+        if (x.zone !== z || x.stance === "port" || !(x.ships.ss > 0) || !atWarG(x.nat, struck)) continue;
+        if (raiding && x.stance !== "raid" && x.stance !== "patrol") continue;
+        out[x.nat] = (out[x.nat] ?? 0) + x.ships.ss;
+      }
+      return out;
+    };
+    const rec = record2 ?? g2.subLook ?? [];
+    const lookOf2 = (nat, turn) => rec.find((l) => l.turn === turn && l.nat === nat);
+    const fleetById = new Map(g2.fleets.map((x) => [x.id, x]));
+    const natOfFleet = new Map(g2.fleets.map((x) => [x.id, x.nat]));
+    {
+      const add = (y) => {
+        if (!natOfFleet.has(y.fleet)) natOfFleet.set(y.fleet, y.nat);
+      };
+      for (const l of rec) {
+        for (const h of l.hunts) [...h.hunters, ...h.quarry].forEach(add);
+        for (const c of l.convoys) for (const x of c.seas) [...x.raiders, ...x.escorts].forEach(add);
+      }
+    }
+    const natOfRef = (id) => id === null ? void 0 : natOfFleet.get(id);
+    const byNat = (fs, keep = (x) => x.n > 0) => {
+      const n = {};
+      for (const x of fs) if (keep(x)) n[x.nat] = (n[x.nat] ?? 0) + x.n;
+      return { nats: Object.keys(n).sort((a, b) => n[b] - n[a] || (a < b ? -1 : 1)), n };
+    };
+    const sum2 = (fs) => fs.reduce((s, x) => s + x.n, 0);
+    const huntersOf = (hs2) => ({ ships: hs2.reduce((s, x) => s + sum2(x.hunters), 0), aircraft: hs2.reduce((s, x) => s + x.air, 0) * HUNT_AIR });
+    const baseHeld = (route) => {
+      if (!route.base) return false;
+      const r = g2.byName?.[route.base.region] ?? g2.regions.find((x) => x.name === route.base.region);
+      return !!r && atWarG(r.ctrl, route.to);
+    };
+    const surfaceClasses = (x) => (x.ships.bb ?? 0) + (x.ships.ca ?? 0) + (x.ships.cv ?? 0);
+    const usedTorpedo = /* @__PURE__ */ new Set();
+    const hs = g2.headlines.slice(firstOf(g2, from));
+    const grand2 = g2.flags.open === 1;
+    const touched = (name) => hs.some((h) => h.text.includes(name) && /\b(sinks?|sunk|scuttled|lost)\b/.test(h.text));
+    for (const h of hs) {
+      const text = h.text;
+      const tor = /^A submarine torpedoes and sinks an? (battleship|carrier|cruiser) of (.+?) in the (.+?): /.exec(text);
+      if (tor && h.nat) {
+        const cls = { battleship: "bb", carrier: "cv", cruiser: "ca" }[tor[1]];
+        const fleetName2 = tor[2].replace(/^the /, "");
+        const fleet = g2.fleets.find((x) => x.nat === h.nat && x.name === fleetName2);
+        const z = zoneByName(`in the ${tor[3]}`);
+        const sea = z >= 0 ? g2.seas[z].key : "";
+        const r = fleet ? lookOf2(h.nat, h.turn)?.torpedoes.find((x) => !usedTorpedo.has(x) && x.fleet === fleet.id && x.zone === z && x.cls === cls) : void 0;
+        if (r) usedTorpedo.add(r);
+        const byNat0 = r ? natOfRef(r.by) : void 0;
+        const pick2 = !r || r.by === null ? "none" : byNat0 ? "rules" : "unknown";
+        const could = r ? r.could.filter((id) => id !== r.by).map(natOfRef) : [];
+        const attackers2 = r ? [...new Set([byNat0, ...could].filter((n) => !!n))] : [];
+        facts.push({
+          kind: "torpedo",
+          sea,
+          turn: h.turn,
+          week: h.week,
+          by: "",
+          on: h.nat,
+          cls,
+          fleet: tor[2],
+          ships: fleet ? { ...fleet.ships } : void 0,
+          ...z >= 0 ? { boatsAt: boatsIn(z, h.nat) } : {},
+          ...attackers2.length ? { attackers: attackers2, pick: pick2 } : {}
+        });
+        continue;
+      }
+      const hunt = /\bsinks? (\d+) ([A-Z][A-Za-z ]*?) submarines? in the (.+?)(?:, for the loss of (\d+) destroyers?)?\.$/.exec(text);
+      if (hunt && h.arm === "sea" && h.won && h.lost) {
+        const z = zoneByName(`in the ${hunt[3]}`);
+        const sea = z >= 0 ? g2.seas[z].key : "";
+        const r = z >= 0 ? lookOf2(h.won, h.turn)?.hunts.find((x) => x.zone === z) : void 0;
+        facts.push({ kind: "hunt", sea, turn: h.turn, week: h.week, by: h.won, on: h.lost, boats: Number(hunt[1]), escortsLost: hunt[4] ? Number(hunt[4]) : 0, ...r ? { hunters: huntersOf([r]), quarry: byNat(r.quarry).n } : {} });
+        continue;
+      }
+      if (h.kind === "info" && h.nat && /^The month in the air and at sea, /.test(text)) {
+        const re = /(\d+) ([A-Z][A-Za-z ]*?) submarines? sunk in the ([^;.]+)/g;
+        for (let mm = re.exec(text); mm; mm = re.exec(text)) {
+          const on = byAdj(mm[2]);
+          const z = zoneByName(`in the ${mm[3]}`);
+          if (!on || z < 0) continue;
+          const r = lookOf2(h.nat, h.turn)?.hunts.find((x) => x.zone === z);
+          facts.push({ kind: "hunt", sea: g2.seas[z].key, turn: h.turn, week: h.week, by: h.nat, on, boats: Number(mm[1]), escortsLost: 0, ...r ? { hunters: huntersOf([r]), quarry: byNat(r.quarry).n } : {} });
+        }
+        continue;
+      }
+      if (h.kind === "info" && h.arm === "sea" && h.nat && /tons of shipping sunk this month/.test(text)) {
+        const route = routes.find((r2) => r2.to === h.nat && text.toLowerCase().startsWith(`${r2.name.toLowerCase()}:`));
+        if (!route) continue;
+        const book = g2.convoys[route.id];
+        const said = /: ([\d,]+) tons of shipping sunk this month(?:, (\d+) submarines? destroyed)?/.exec(text);
+        const same2 = !!book && book.turn === h.turn;
+        const zones = route.zones.map((k) => g2.seas.findIndex((z2) => z2.key === k)).filter((z2) => z2 >= 0);
+        const look = lookOf2(h.nat, h.turn);
+        const r = look?.convoys.find((x) => x.route === route.id);
+        if (r) {
+          const lost = same2 ? book.subsLost : said?.[2] ? Number(said[2]) : 0;
+          const asRaided = grand2 || lost === 0;
+          const heavyThen = (y) => {
+            if (y.heavy !== void 0) return y.heavy > 0;
+            if (y.n === 0 && asRaided) return true;
+            const fl = fleetById.get(y.fleet);
+            if (!fl) return void 0;
+            if (surfaceClasses(fl) > 0) return true;
+            return touched(fl.name) ? void 0 : false;
+          };
+          const boatsThen = (y) => y.n > 0 ? true : asRaided ? false : heavyThen(y) === false ? true : void 0;
+          const all = r.seas.flatMap((x) => x.raiders);
+          const maybeBoats = (y) => boatsThen(y) !== false;
+          const boatSeas = r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)).length ? r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)) : r.seas.filter((x) => x.raiders.some(maybeBoats));
+          const his = boatSeas.filter((x) => x.raiders.some((y) => maybeBoats(y) && y.nat === g2.human));
+          const pool = his.length ? his : boatSeas.length ? boatSeas : r.seas;
+          const s0 = [...pool].sort((a, b) => b.tons - a.tons || sum2(b.raiders) - sum2(a.raiders) || a.zone - b.zone)[0];
+          const z2 = s0 ? s0.zone : zones[0] ?? -1;
+          const tonsBy = {};
+          for (const x of r.seas) if (g2.seas[x.zone]) tonsBy[g2.seas[x.zone].key] = x.tons;
+          const hunts = (look?.hunts ?? []).filter((x) => zones.includes(x.zone) && x.sunk > 0);
+          const lostNats = hunts.length ? byNat(hunts.flatMap((x) => x.quarry)).nats : byNat(all, maybeBoats).nats;
+          facts.push({
+            kind: "convoy",
+            sea: z2 >= 0 && g2.seas[z2] ? g2.seas[z2].key : route.zones[0],
+            turn: h.turn,
+            week: h.week,
+            by: "",
+            on: h.nat,
+            route: route.id,
+            routeName: route.name,
+            tons: same2 ? book.tons : said ? Number(said[1].replace(/,/g, "")) : r.tons,
+            boats: lost,
+            escortsLost: same2 ? book.escortsLost : 0,
+            ...z2 >= 0 ? { boatsAt: boatsIn(z2, h.nat, true) } : {},
+            raidBy: {
+              // (boats lost on a history route were its raiders' boats: boats raided)
+              boats: all.some((y) => boatsThen(y) === true) || !grand2 && lost > 0,
+              surface: all.some((y) => heavyThen(y) === true),
+              base: baseHeld(route),
+              sure: all.every((y) => heavyThen(y) !== void 0 && boatsThen(y) !== void 0)
+            },
+            raiders: s0 ? byNat(s0.raiders, maybeBoats).nats : [],
+            escorts: s0 ? byNat(s0.escorts).nats : [],
+            escortShips: s0 ? sum2(s0.escorts) : 0,
+            airGuard: s0 ? s0.air : 0,
+            tonsBy,
+            hunters: hunts.length ? huntersOf(hunts) : { ships: s0 ? sum2(s0.escorts) : 0, aircraft: s0 ? s0.air : 0 },
+            ...lostNats.length === 1 ? { boatsNat: lostNats[0] } : {}
+          });
+          continue;
+        }
+        let z = -1, most = 0;
+        for (const zi of zones) {
+          const n = Object.values(boatsIn(zi, h.nat, true)).reduce((s, x) => s + x, 0);
+          if (n > most) {
+            most = n;
+            z = zi;
+          }
+        }
+        if (z < 0) z = zones[0] ?? -1;
+        const surface = g2.fleets.some((x) => zones.includes(x.zone) && (x.stance === "raid" || x.stance === "patrol") && atWarG(x.nat, route.to) && surfaceClasses(x) > 0);
+        facts.push({
+          kind: "convoy",
+          sea: z >= 0 ? g2.seas[z].key : route.zones[0],
+          turn: h.turn,
+          week: h.week,
+          by: "",
+          on: h.nat,
+          route: route.id,
+          routeName: route.name,
+          tons: same2 ? book.tons : said ? Number(said[1].replace(/,/g, "")) : 0,
+          boats: same2 ? book.subsLost : said?.[2] ? Number(said[2]) : 0,
+          escortsLost: same2 ? book.escortsLost : 0,
+          ...z >= 0 ? { boatsAt: boatsIn(z, h.nat, true) } : {},
+          // (the fleets as the month closed stand in for who raided: not sure enough for "by submarines")
+          // (a history route's boats lost were its raiders' boats, though none is at sea there now)
+          raidBy: { boats: most > 0 || !grand2 && (same2 ? book.subsLost : said?.[2] ? Number(said[2]) : 0) > 0, surface, base: baseHeld(route), sure: false }
+        });
+      }
+    }
+    const foes = {};
+    const names = {};
+    for (const n of Object.values(g2.nations)) {
+      foes[n.id] = [...n.atWar];
+      names[n.id] = { name: n.name, adj: n.adj };
+    }
+    return { human: g2.human ?? "", seed: g2.seed, turn: g2.turn, facts, foes, names };
+  }
+  function subSceneOf(g2, routes, from, view3 = "all") {
+    const mark = g2.headlines.length;
+    if (!g2.human || view3 === "never") return { mark, pick: null, recording: null };
+    const m = factsOf(g2, routes, from);
+    const pick2 = pickScene(m, view3 === "mine" ? "mine" : "all");
+    if (!pick2) return { mark, pick: null, recording: null };
+    return { mark, pick: { case: pick2.case, sea: pick2.fact.sea, me: pick2.me, boats: pick2.boats, guard: pick2.guard }, recording: JSON.stringify(stagePick(m, pick2)) };
+  }
 
   // Rules/starts.ts
   var STARTS = [
@@ -48684,7 +50941,7 @@
         try {
           const m = manpowerOf(s);
           if (!m) return null;
-          const words = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")} million` : Math.round(n / 1e3) * 1e3 >= 1e3 ? `${(Math.round(n / 1e3) * 1e3).toLocaleString("en-US")}` : `${Math.round(n)}`;
+          const words2 = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")} million` : Math.round(n / 1e3) * 1e3 >= 1e3 ? `${(Math.round(n / 1e3) * 1e3).toLocaleString("en-US")}` : `${Math.round(n)}`;
           return {
             share: Math.max(0, Math.min(1, m.share)),
             word: m.word,
@@ -48692,8 +50949,8 @@
             tip: [
               m.line,
               `That is enough for about ${Math.floor(m.divs)} division${Math.floor(m.divs) === 1 ? "" : "s"}.`,
-              `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ""}.`,
-              `Drawn since the campaign opened: ${words(m.drawn)}.`,
+              `Each month ${words2(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ""}.`,
+              `Drawn since the campaign opened: ${words2(m.drawn)}.`,
               "Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.",
               "Click for the count, and your say over the call-up."
             ].join("\n")
@@ -48734,43 +50991,43 @@
   var shown = (pp) => Math.round(pp * BUDGET.scale);
   var inHand = (pp) => pp >= 0 ? Math.floor(pp * BUDGET.scale + 1e-6) : shown(pp);
   function treasuryOf(s, nat) {
-    const L = ledger(s, nat);
+    const L2 = ledger(s, nat);
     return {
       pp: Math.floor(s.nations[nat].pp),
       income: Math.round(income(s, nat)),
       pc: Math.floor(s.nations[nat].pc),
       orders: ((book) => s.nations[nat].queue.map((b) => orderLine(s, b, book)))(ordersBookOf(s)),
       scale: BUDGET.scale,
-      budget: L.budget,
-      money: inHand(L.treasury),
-      gross: shown(L.gross),
-      upkeep: shown(L.upkeepTotal),
-      net: shown(L.net),
-      debt: L.debt
+      budget: L2.budget,
+      money: inHand(L2.treasury),
+      gross: shown(L2.gross),
+      upkeep: shown(L2.upkeepTotal),
+      net: shown(L2.net),
+      debt: L2.debt
     };
   }
   function ledger2() {
     const s = game();
     const me = s.human;
     if (!me) return null;
-    const L = ledger(s, me);
+    const L2 = ledger(s, me);
     const line = (l) => ({ label: l.label, amount: shown(l.amount), count: l.count ?? 0 });
     const orders = ((book) => s.nations[me].queue.map((b) => ({ ...orderLine(s, b, book), cost: shown(b.cost) })))(ordersBookOf(s));
     return {
       nation: s.nations[me].name,
       date: turnToDate(s.turn).label,
-      budget: L.budget,
-      money: inHand(L.treasury),
-      gross: shown(L.gross),
-      upkeepTotal: shown(L.upkeepTotal),
-      net: shown(L.net),
-      debt: L.debt,
+      budget: L2.budget,
+      money: inHand(L2.treasury),
+      gross: shown(L2.gross),
+      upkeepTotal: shown(L2.upkeepTotal),
+      net: shown(L2.net),
+      debt: L2.debt,
       // How deep the debt may go before the lenders stop, and what it does to the army meanwhile.
-      debtFloor: shown(BUDGET.debt.floor * Math.max(1, L.gross)),
-      income: L.income.map(line),
-      changes: L.changes.map(line),
-      upkeep: L.upkeep.map(line),
-      provinces: L.provinces.map((p) => ({
+      debtFloor: shown(BUDGET.debt.floor * Math.max(1, L2.gross)),
+      income: L2.income.map(line),
+      changes: L2.changes.map(line),
+      upkeep: L2.upkeep.map(line),
+      provinces: L2.provinces.map((p) => ({
         id: p.id,
         name: p.name,
         land: shown(p.land),
@@ -48800,7 +51057,7 @@
       total: c.units,
       spied: c.spied,
       head: `${c.spied ? "Your agent reports: " : ""}${c.summary}`,
-      lines: c.lines.map((l) => `${upFirst2(l.label)}, ready ${inMonths2(l.months)}`)
+      lines: c.lines.map((l) => `${upFirst3(l.label)}, ready ${inMonths2(l.months)}`)
     }));
   }
   function orderLine(s, b, book = ordersBookOf(s)) {
@@ -48818,7 +51075,7 @@
       canCancel: b.ordered === s.turn && humanUp(s),
       sign: shownAs?.mark ?? "",
       star: !!shownAs?.elite,
-      words: upFirst2(shownAs?.label ?? b.name),
+      words: upFirst3(shownAs?.label ?? b.name),
       share: shownAs ? Math.min(1, Math.max(0, shownAs.done / shownAs.need)) : b.eta > b.ordered ? Math.min(1, Math.max(0, (s.turn - b.ordered) / (b.eta - b.ordered))) : 1
     };
   }
@@ -49386,7 +51643,7 @@
       const rows = list4.map((c) => {
         const when = turnToDate(c.since).label, at = s.byName[c.ground[0]];
         return {
-          title: `${upFirst2(theName2(s, c.nat))} claims ${c.name}`,
+          title: `${upFirst3(theName2(s, c.nat))} claims ${c.name}`,
           from: `from ${theName2(s, c.on)}${c.why ? `: ${c.why}` : ""}.`,
           tag: c.state === "marched" ? `At war for it since ${when}` : c.state === "pressing" ? `Pressing its claim since ${when}: it may march` : "A claim it has not pressed",
           state: c.state === "marched" ? 2 : c.state === "pressing" ? 1 : 0,
@@ -49439,7 +51696,7 @@
       })
     };
   }
-  var monthsOf3 = marchMonths;
+  var monthsOf4 = marchMonths;
   var inMonths3 = aboutMonths;
   function reachOf(ids2) {
     const s = game();
@@ -49489,7 +51746,7 @@
         if (lead2) {
           for (const [id, g2] of farGround2(s, lead2)) {
             if (id === lead2.reg || merged.has(id) || lead2.ap > 0 && s.regions[lead2.reg].nb.includes(id) || far.length >= 1200) continue;
-            far.push(id, monthsOf3(lead2, g2.cost));
+            far.push(id, monthsOf4(lead2, g2.cost));
           }
           const on = cs.find((c) => marchOf(s, c) >= 0);
           if (on) {
@@ -49743,10 +52000,10 @@
   }
   var oddsPct = (p) => p >= 0.9995 ? 100 : p <= 5e-4 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100)));
   var chanceWords = (look) => look.exact || Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : look.wide ? `a best guess of ${oddsPct(look.guess)}%, anywhere from ${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`;
-  var endWords = (words, named2 = false) => words === "about 100%" ? named2 ? "they are sure of it" : "your staff is sure of it" : words === "about 0%" ? named2 ? "they give it no chance" : "your staff gives it no chance" : "";
+  var endWords = (words2, named2 = false) => words2 === "about 100%" ? named2 ? "they are sure of it" : "your staff is sure of it" : words2 === "about 0%" ? named2 ? "they give it no chance" : "your staff gives it no chance" : "";
   var chanceTo = (look, place2) => {
-    const words = chanceWords(look);
-    return endWords(words) || `${words} to take ${place2}`;
+    const words2 = chanceWords(look);
+    return endWords(words2) || `${words2} to take ${place2}`;
   };
   var roughMen = (n) => n < 100 ? "under 100" : (Math.round(n / 100) * 100).toLocaleString("en");
   function costLines(look) {
@@ -50617,8 +52874,8 @@
       if (n.id === s.human || n.id === fallen) continue;
       const mine4 = s.human ? allied(s, s.human, n.id) : false;
       const foe = s.human ? atWar(s, s.human, n.id) : false;
-      if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} has fallen`).toUpperCase(), text: said(n.id) || `${upFirst2(theName2(s, n.id))} is eliminated from the war.`, good: foe });
-      else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} is liberated`).toUpperCase(), text: said(n.id) || `${upFirst2(theName2(s, n.id))} is free again, and back in the war.`, good: mine4 || !foe });
+      if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} has fallen`).toUpperCase(), text: said(n.id) || `${upFirst3(theName2(s, n.id))} is eliminated from the war.`, good: foe });
+      else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: theWords(`${n.name} is liberated`).toUpperCase(), text: said(n.id) || `${upFirst3(theName2(s, n.id))} is free again, and back in the war.`, good: mine4 || !foe });
     }
     if (me0 && s.nations[me0] && !fallen) {
       GOAL_KEYS.forEach((key6, i) => {
@@ -51497,7 +53754,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const nm = s.nations[id]?.name ?? id;
     return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm;
   };
-  var upFirst2 = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
+  var upFirst3 = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
   var listOf7 = (names) => names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   var motherOf = (s, nat) => {
     const p = isOpen(s) && !s.flags.dom ? patronOf(nat) : null;
@@ -51510,7 +53767,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     if (!f || !n || !s.human) return { ok: false, name: "", lead: "", friends: "", lines: [] };
     const mine4 = bloc(s.nations[s.human]);
     const blocOf = (b) => b === "axis" ? "the Axis" : "the Allies";
-    const The = upFirst2(theName2(s, on));
+    const The = upFirst3(theName2(s, on));
     const trade = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
     const divsOf = (n2) => `${Math.round(n2).toLocaleString("en-US")} division${Math.round(n2) === 1 ? "" : "s"}`;
     const divs = divsOf(fieldArmy(s, on));
@@ -51534,7 +53791,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       for (const a of moved) {
         const was = TRACK.indexOf(a.from) - 3, now = TRACK.indexOf(a.to) - 3;
         const how = now === 0 ? `no longer leans toward ${blocOf(was > 0 ? "axis" : "allies")}` : Math.abs(now) === 1 ? `begins to lean toward ${blocOf(now > 0 ? "axis" : "allies")}` : `throws in its lot with ${blocOf(now > 0 ? "axis" : "allies")}`;
-        lines2.push(`${upFirst2(theName2(s, a.nat))} ${how}${a.trade ? `, and stops trading with you (${trade} a month lost)` : ""}.`);
+        lines2.push(`${upFirst3(theName2(s, a.nat))} ${how}${a.trade ? `, and stops trading with you (${trade} a month lost)` : ""}.`);
       }
       if (!moved.length) lines2.push("Nobody changes sides over this one attack, but the next may tip them.");
     } else if (f.joins === null && bloc(n) === "league") lines2.push("The neutrals on the track between the blocs take no side in a quarrel with the League.");
@@ -51632,14 +53889,14 @@ ${next.text}` : ""}` : next ? next.also : "";
     try {
       const air2 = air_exports;
       const fieldsOf = air2["crowdedFields"];
-      const rowOf = air2["crowdedRow"];
+      const rowOf2 = air2["crowdedRow"];
       const crowded = fieldsOf ? fieldsOf(s, me.id) : [];
-      if (crowded.length && rowOf) {
+      if (crowded.length && rowOf2) {
         const named2 = `${(s.regions[crowded[0].region]?.name ?? "").toUpperCase()}'S AIRFIELD IS CROWDED`;
         out.push({
           k: `field:${crowded[0].region}`,
           t: crowded.length > 1 ? `${crowded.length} AIRFIELDS ARE CROWDED` : named2.length <= 34 ? named2 : "AN AIRFIELD IS CROWDED",
-          tip: ((row2) => /[.!?]$/.test(row2) ? row2 : `${row2}.`)(rowOf(s, crowded))
+          tip: ((row2) => /[.!?]$/.test(row2) ? row2 : `${row2}.`)(rowOf2(s, crowded))
         });
       }
     } catch {
@@ -51670,7 +53927,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const out = [];
     if (!s.human) return out;
     const act2 = lastAct(s);
-    if (act2?.winner) out.push(`${upFirst2(theName2(s, act2.winner))} has won the world.`);
+    if (act2?.winner) out.push(`${upFirst3(theName2(s, act2.winner))} has won the world.`);
     else if (act2?.open && !act2.peace) out.push("The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.");
     try {
       const m = manpowerOf(s);
@@ -51742,7 +53999,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const needWords = Math.abs(need - 0.75) < 1e-9 ? "three quarters" : Math.abs(need - 2 / 3) < 1e-3 ? "two thirds" : Math.abs(need - 0.5) < 1e-9 ? "half" : `${Math.round(need * 100)}%`;
     const laidWords = laid === 1 ? "the last country still standing has laid down its arms" : `the last ${laid} countries still standing have laid down their arms`;
     if (act2.winner) {
-      const name = upFirst2(theName2(s, act2.winner)), top1 = board.rows[0];
+      const name = upFirst3(theName2(s, act2.winner)), top1 = board.rows[0];
       note4 = need > 0 ? act2.winner === s.human ? `No great power is left to fight you. You hold ${pct10(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. The world is won.` : `${name} is the last great power standing and holds ${pct10(top1?.share ?? 1)} of the world${laid ? `, and ${laidWords}` : ""}. ${name} stands alone.` : `${name} is the last nation standing. The world is won.`;
     } else if (act2.on) note4 = need > 0 ? `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The world goes to the last great power standing, once it holds ${needWords} of it: the countries still standing then lay down their arms.` : `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The last one standing wins the world.`;
     else {
@@ -51767,7 +54024,7 @@ ${next.text}` : ""}` : next ? next.also : "";
             {
               nat: "",
               title: rivals2.length ? `${rivals2.length === 1 ? "One great power" : `${rivals2.length} great powers`} still to beat` : "No great power stands against you",
-              lines: [rivals2.length ? `${upFirst2(listOf7(rivals2.map((id) => theName2(s, id))))}.` : "The first test is met."],
+              lines: [rivals2.length ? `${upFirst3(listOf7(rivals2.map((id) => theName2(s, id))))}.` : "The first test is met."],
               buttons: []
             },
             {
@@ -51862,7 +54119,7 @@ ${next.text}` : ""}` : next ? next.also : "";
           if (buttons.length >= 5) break;
         }
       }
-      rows.push({ nat: mission === "strike" ? "" : s.regions[t].ctrl, title: mission === "strike" ? upFirst2(place2) : `${place2}, ${Math.round(km(s, f.base, t)).toLocaleString("en-US")} km`, lines: lines2, buttons });
+      rows.push({ nat: mission === "strike" ? "" : s.regions[t].ctrl, title: mission === "strike" ? upFirst3(place2) : `${place2}, ${Math.round(km(s, f.base, t)).toLocaleString("en-US")} km`, lines: lines2, buttons });
     }
     return {
       id: `raid:${mission}:${id}`,
@@ -51907,7 +54164,7 @@ ${next.text}` : ""}` : next ? next.also : "";
   function battleReportPage(s, id) {
     const r = s.reports.find((x) => x.id === id);
     if (!r) return null;
-    const nameOf2 = (nat) => upFirst2(theName2(s, nat));
+    const nameOf2 = (nat) => upFirst3(theName2(s, nat));
     const side3 = (units) => units.map((u) => ({
       // (Rules 84.3.) Every corps on the report carries its country's word: "German XIX Corps".
       nat: u.nat,
@@ -52800,9 +55057,9 @@ ${standing5}`,
         // none of these gets no box, and the whole of it is on the pointer.)
         hits: p.why ? [] : ((all) => {
           const out = [];
-          const take2 = (re, n, words) => {
+          const take2 = (re, n, words2) => {
             const m = all.match(re);
-            if (m && out.length < 3) out.push({ n: n(m), words: typeof words === "string" ? words : words(m) });
+            if (m && out.length < 3) out.push({ n: n(m), words: typeof words2 === "string" ? words2 : words2(m) });
           };
           take2(/stop about (\d+(?:\.\d+)?)% of [^.]*output/, (m) => `−${m[1]}%`, "output, for a month");
           take2(/(\d+)% chance of cutting the railway/, (m) => `${m[1]}%`, "chance the railway is cut");
@@ -53516,7 +55773,7 @@ ${standing5}`,
     const members = leagueMembers(s);
     const league = {
       founded: leagueFounded(s),
-      full: upFirst2(LEAGUE.full),
+      full: upFirst3(LEAGUE.full),
       since: born !== void 0 ? turnToDate(born).label : "",
       members: members.map((n) => ({
         nat: n.id,
@@ -53534,7 +55791,7 @@ ${standing5}`,
     const where = mine4 === "league" ? `a member of ${LEAGUE.name}${others.length ? `, with ${listOf7(others.map((n) => theName2(s, n.id)))}` : ""}` : mine4 ? `a member of ${mine4 === "axis" ? "the Axis" : "the Allies"}` : TRACK_PHRASE[me.align];
     const path = {
       open: opts.length > 0,
-      lead: opts.length ? `${upFirst2(theName2(s, me.id))} is ${where}. ${foes.length ? `You are at war with ${listOf7(foes.map((x) => theName2(s, x)))}.` : "You are at peace."} A small country chooses its own path, and nobody chooses it for you: no treaty signs your land away, and no courting moves you.` : "",
+      lead: opts.length ? `${upFirst3(theName2(s, me.id))} is ${where}. ${foes.length ? `You are at war with ${listOf7(foes.map((x) => theName2(s, x)))}.` : "You are at peace."} A small country chooses its own path, and nobody chooses it for you: no treaty signs your land away, and no courting moves you.` : "",
       options: opts.map((o) => {
         const T = PATH_TEXT[o.id];
         let text = T.text;
@@ -53545,7 +55802,7 @@ ${standing5}`,
           ok: o.ok && up,
           now: o.now,
           why: o.ok && !up ? "Not in your month." : o.why,
-          title: !o.now ? T.title : o.id === "join" ? upFirst2(LEAGUE.full) : o.id === "axis" ? "The Axis" : o.id === "allies" ? "The Allies" : T.title,
+          title: !o.now ? T.title : o.id === "join" ? upFirst3(LEAGUE.full) : o.id === "axis" ? "The Axis" : o.id === "allies" ? "The Allies" : T.title,
           text: o.ok || o.now ? text : "",
           final: o.id === "axis" || o.id === "allies" || o.id === "join"
         };
@@ -53600,7 +55857,7 @@ ${standing5}`,
         free: 0,
         doctrine: "",
         money: inHand(me.pp),
-        note: `${upFirst2(theName2(s, me.id))} has no design offices of its own and buys its weapons abroad. The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service.`,
+        note: `${upFirst3(theName2(s, me.id))} has no design offices of its own and buys its weapons abroad. The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service.`,
         bureau: null,
         fields: [],
         others
@@ -53819,7 +56076,7 @@ ${standing5}`,
     const why = whyNotLeagueInvite(s, nat);
     const ok = orderLeagueInvite(s, nat);
     const news3 = s.headlines.slice(h0).map((h) => h.text);
-    return { ok, note: !ok ? why ?? "They would not join today." : news3.length ? news3.join(" ") : `${upFirst2(theName2(s, nat))} joins ${LEAGUE.name}.`, view: view2() };
+    return { ok, note: !ok ? why ?? "They would not join today." : news3.length ? news3.join(" ") : `${upFirst3(theName2(s, nat))} joins ${LEAGUE.name}.`, view: view2() };
   }
   function courtNation(nat) {
     const s = game();
@@ -54300,5 +56557,10 @@ ${standing5}`,
     notebook: lessonNotebook,
     guide: lessonGuide,
     openingCard
+  };
+  globalThis.TC.subScene = (from, view3) => subSceneOf(game(), NAVY.convoys, from, view3);
+  globalThis.TC.subSceneOn = (on) => {
+    subScene.on = !!on;
+    return { on: subScene.on };
   };
 })();

@@ -107,7 +107,7 @@ import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as w
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
-import { NAVY } from '../../../src/campaign/navy';
+import { NAVY, subScene } from '../../../src/campaign/navy';
 import { subSceneOf } from './sub-scene'; // D1 (ruling 241): the month's submarine scene, staged; look only
 import { chanceOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
@@ -6314,3 +6314,8 @@ function find(name: string) {
 // It reads the game (and its record g.subLook) and writes nothing. `from` is the headline mark to count from (the last
 // call's `mark`); `view` the viewer's card setting: 'all' (the default), 'mine' (his losses only) or 'never'.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subScene = (from?: number, view?: 'all' | 'mine' | 'never') => subSceneOf(game(), NAVY.convoys, from, view);
+// D1 (ruling 241), the viewing setting `subScene`: TC.subSceneOn(on) turns the rules' record of each month at sea on or off
+// (navy.ts subScene; g.subLook, this month and last, read by no rule). On, the stager above reads the record; off, nothing
+// is written and every save is as before, and the stager stands in from its data rows. The setting is the viewer's and
+// lives outside the save: the screen sets it at start and again after every load.
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
