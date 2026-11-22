@@ -41,7 +41,7 @@ def pak40(fine=True, tag="GER", paint=None):
     v.gun_clips(0.9, E.x, lift=0.05, close=close, eye_z=0.2, track=T, low=-5.0)
     # (her own sprayed blotches, as the Tiger's: with her own dirt in her file the game sprays none of its own, so her 1944
     # coat is in the file, dark yellow with olive green and red-brown bands; the art director's E7 mend, 22 Nov 19:27Z)
-    spray(v, paint or "grey")
+    spray(v, paint or "grey", cell=0.55)                # (patches a third to two thirds of a metre: a gun is no bigger than a tank's turret)
     v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + BY_MONTH_HOW,
                                                 "paint": coats(v, paint or "grey"),
                                                 "by_month": sprayed([{"to": "1943-01", "paint": "grey"}, {"from": "1943-02", "to": "1943-05", "paint": "yellow"},
