@@ -91,6 +91,11 @@ namespace LandEye
 		/** Where a man's body is now (his chest, falling or fallen; for a vehicle her hull's middle), so a fall is
 		 * followed to the ground. Unset: where he stands, a metre up (or a fifth of one once he has fallen). */
 		std::function<bool(int Track, double T, Vec& OutAt)> Body;
+		/** Whether a block is hidden from the player now: an enemy unit in a wood he has not found (Brian, 22 November:
+		 * the forest ambush). The film never takes such a block's men or vehicles as a shot's subject, never goes to its
+		 * fall or knock-out, and leaves a shot whose subject becomes hidden; his own hidden blocks are not his enemy's and
+		 * are filmed as ever. Unset: nothing hidden. */
+		std::function<bool(int Block)> Hidden;
 	};
 
 	struct Settings
@@ -218,6 +223,8 @@ namespace LandEye
 		double OwnFill(const Pose& P) const { return OwnShare(P.Eye, P.Look, P.Fov, P.Subject); }
 		/** Whether a track is a man of the film's own section (Settings::SquadEvery). */
 		bool InSquad(int Track) const;
+		/** Whether a track's block is hidden from the player now (World::Hidden). */
+		bool HiddenNow(int Track) const;
 		/** The film's own section: its block and section number (-1: none). */
 		int SquadBlock() const { return HeroBlock; }
 		int SquadK() const { return HeroK; }
