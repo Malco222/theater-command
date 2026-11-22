@@ -1841,36 +1841,257 @@
     0.24
    ],
    "life_s": [
-    0.22,
-    0.4
+    0.45,
+    0.75
    ],
    "pulse": 0.45,
    "lean": 0.06,
    "lean_most": 0.6,
    "tips": 0.7,
    "forks": 0.45,
-   "torn": 0.2,
+   "torn": 0.1,
    "full_px": 110,
    "over_smoke": 0.5,
    "root": [
     255,
-    236,
-    170
+    156,
+    83
    ],
-   "root_over": 1.2,
+   "root_over": 1.15,
    "body": [
-    255,
-    196,
-    84
+    247,
+    135,
+    71
    ],
    "tip": [
-    176,
-    62,
-    30
+    136,
+    66,
+    46
    ],
    "far_tall": 0.35,
    "far_px": 400,
-   "foot_soft": 0.55
+   "foot_soft": 0.55,
+   "born_k": 0.5,
+   "full_by": 0.3,
+   "fade_in": 0.18,
+   "jitter": 1.0,
+   "anchor": 1.0,
+   "climb": 0.4,
+   "bed_overlap": 2.5,
+   "flicker": 0.12,
+   "flicker_long": 0.25,
+   "flicker_wide": 0.1,
+   "flicker_hz": [
+    3.0,
+    6.0
+   ],
+   "bed": [
+    250,
+    143,
+    75
+   ],
+   "mass": 4,
+   "mass_r": [
+    0.24,
+    0.38
+   ],
+   "mass_life_s": [
+    0.5,
+    0.8
+   ],
+   "mass_up": 0.9,
+   "mass_colour": [
+    250,
+    143,
+    75
+   ],
+   "mass_top": [
+    123,
+    60,
+    43
+   ],
+   "soot": 1,
+   "soot_r": [
+    0.25,
+    0.4
+   ],
+   "soot_life_s": [
+    1.2,
+    2.0
+   ],
+   "soot_colour": [
+    64,
+    58,
+    55
+   ],
+   "point": 0.45,
+   "long_most": 2.4,
+   "_smooth": "Smooth flames (the frame study of 22 November: each tongue was born whole on a step of a twentieth of a second and only shrank, so at 30 frames a second the fire popped ten times a second, 53% of its flicker over 8 Hz; with these keys 1%). born_k: a piece is born that share of its size and grows to it by full_by of its life, fading in over fade_in of it; jitter: born up to that share of a step late, so births never beat with the frames; anchor: its root stays on the seat; climb: how much of its old climb it keeps; bed_overlap: the foot lives that many times longer, so a seat's foot pieces cross-fade. flicker, flicker_long, flicker_wide: every piece of a seat swells and dims together by the clock, three smooth waves between flicker_hz (the ruling's 3 to 6 Hz), in strength, length and width. point and long_most: how pointed a tongue is drawn (0.9 before) and how long for its width at the most (5 before); lower, the fire reads as a heap of overlapping lobes and not a row of blades. The body (the ruling: 'one merged body of overlapping camera-facing flame puffs'): mass soft round flame puffs a step rise through it from the seats, mass_r of its width, mass_up of a seat's height their climb, mass_colour going to mass_top as they rise, so the flames go dark red into the smoke; soot black puffs a step roll off its top, soot_r of its width. Both thin out as the fire is small in the picture (to a quarter) and with the room near full (to half), each bigger to cover the same. bed: the foot's own colour in place of the fire's yellow-white heart (the ruling: orange-yellow, never white). Without these keys: as before. Tuned on the wreck shot (fxpreview wreck): flames about 3 m over the turret roof, tongues to 4 m, core 245 at the most, 203,102,27 at the middle and 139,64,23 at the edge, the game's curve applied."
+  },
+  "land_column": {
+   "_how": "A burning vehicle's own black column on land (the ruling, section 3: black, the lit side 40 to 60 and the shade 15 to 30, 3 m wide at the hull, 10 to 12 m at 30 m up, 25 to 35 m at 100 m, rising 150 to 250 m and bending downwind, pale only above 100 m). The same row as fire.smoke_column, read for a fire on land: one from_m across or more (and under smoke_column.from_m, which keeps the ships' columns as they are), within above_m of the ground and not moving. It rises from flame_up_m over the fire; while it stands, the fire's own plain smoke is cut back to base_r1 of its size and base_life of its life, since the column carries it. Measured on the wreck shot from 700 m: 10.5 m wide at 33 m up, 34 m at 100 m, its top near 190 m. Without from_m here: a tank's fire has no column of its own, as before.",
+   "from_m": 1.5,
+   "from_s": 20,
+   "join_m": 8,
+   "join_wide": 0.5,
+   "most": 8,
+   "under_oil": 0,
+   "head_r": [
+    0.15,
+    0.3
+   ],
+   "column_every_s": 0.3,
+   "column_life_s": [
+    40,
+    50
+   ],
+   "rise_mps": [
+    0.0,
+    0.0
+   ],
+   "burst_mps": [
+    30,
+    36
+   ],
+   "burst_drag": 0.035,
+   "slow_mps2": 0.0,
+   "windage": [
+    0.9,
+    1.3
+   ],
+   "r0": [
+    0.45,
+    0.55
+   ],
+   "r1": [
+    10.0,
+    12.5
+   ],
+   "grow": 0.8,
+   "alpha": [
+    0.75,
+    0.95
+   ],
+   "hold": 0.5,
+   "heart": 0.85,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    64,
+    60,
+    57
+   ],
+   "twin_px": 160,
+   "keep": 0,
+   "pall_every_s": 0.0,
+   "pall_life_s": [
+    150,
+    220
+   ],
+   "pall_r1": [
+    0.8,
+    1.3
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.4,
+    0.6
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 90,
+   "pall_hold": 0.4,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.3,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 2.2,
+   "lit_colour": [
+    118,
+    106,
+    94
+   ],
+   "sun_young": 0.1,
+   "sun_from_s": 4,
+   "sun_by_s": 16,
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8,
+   "tight_m": 50,
+   "overlap": 1.5,
+   "least_px": 8,
+   "least_keep": 0.6,
+   "above_m": 6.0,
+   "flame_up_m": 2.0,
+   "base_r1": 0.35,
+   "base_life": 0.5
+  },
+  "join": {
+   "_how": "A knocked-out tank burns as one fire (the frame study of 22 November: the ground scene lit a wreck as six to eight fires of its own along the whole hull, one for each of the clip's fire and smoke beats, and they flickered and hopped as eight; the art director's ruling, section 3, wants one body of flame as wide as the engine deck). A fire lit within within_m of one already burning (on the level, and no more than up_m above or below it), neither of them over most_m across, joins it: that fire burns on as one, as long as the longer of them, growing smoothly over grow_s toward wide_m across at the most (each newcomer adds add of its own width; it never narrows), with one lamp, one glow and one column. The newcomer's number still finds it for BurnMove and BurnOut (its place kept as an offset; on a joined fire the first number that moves it moves it, the rest are not heard). No ground scene change is needed. Without within_m: every fire burns alone, as before.",
+   "within_m": 4.5,
+   "up_m": 3.0,
+   "most_m": 6.0,
+   "grow_s": 1.5,
+   "wide_m": 3.0,
+   "add": 0.1
+  },
+  "lamp": {
+   "_how": "A burning thing's lamp held steady (the frame study of 22 November: the lamps were handed out again every frame to the brightest of the moment, so a wreck's light hopped between its fires three or four times a second, and the ground and hull jumped with it). With ramp_s each fire, oil fire and jet keeps its lamp while it burns: ranked by its steady strength over its distance squared from the eye (keep times stronger if it held a lamp last frame, so two near alike do not swap), the first game.steady_lamps of them lit before any flash, the rest after. A fire's lamp comes up over ramp_s when lit and goes down over ramp_s when its flames end (and as it is put out), strength of the day's share times the square root of its width, flickering flicker by three smooth waves between flicker_hz, up of its width above it, reaching reach of its width and never under reach_least_m. Without ramp_s: as before.",
+   "ramp_s": 0.6,
+   "strength": 0.3,
+   "reach": 3.3,
+   "reach_least_m": 9.0,
+   "up": 0.5,
+   "flicker": 0.25,
+   "flicker_hz": [
+    3.0,
+    6.0
+   ],
+   "keep": 1.5
+  },
+  "glow": {
+   "_how": "A fire's warm light on the ground round it (the ruling, section 3: 'lights the ground within 5 to 8 m with a flicker'; the art director, 04:54Z 22 November: 'a warm ground glow with a soft fall-off and no hard rim, lighting the lower plates and near road wheels'). Soft warm pieces lying flat on the ground under the fire, a new one every every_s seconds living life_s and fading in over a third of it, so three overlap and their sum barely moves; r of the fire's width across, held between r_least_m and r_most_m; up_m over the ground; alpha (day_alpha of it by day), over its brightness past white; all of one fire flicker together by flicker between flicker_hz. Only for a fire within above_m of the ground (a ship's deck fire high over the sea lights no sea), and less as it is put out. Without every_s: none, as before.",
+   "every_s": 1.0,
+   "life_s": 3.0,
+   "r": 2.2,
+   "r_least_m": 4.0,
+   "r_most_m": 8.0,
+   "up_m": 0.15,
+   "above_m": 6.0,
+   "alpha": 0.3,
+   "day_alpha": 0.35,
+   "over": 1.0,
+   "flicker": 0.25,
+   "flicker_hz": [
+    1.5,
+    4.0
+   ],
+   "colour": [
+    255,
+    150,
+    60
+   ]
   }
  },
  "camera": {
@@ -4063,6 +4284,8 @@
   "lumps_soft_s": 0.35,
   "_lumps_soft": "The pre-check on 7d83869, 16:14Z 20 November: no single lump popped, but at the cap every lump in the fade band stepped together about once a second, 6 to 13% of all the lumps' ink in one frame, and blinked twice on a slow approach. lumps_soft_s: the width asked closes most of the way to the count's in this many seconds, the same at any frame rate, so a small move of the count is a fade over many frames (its tried cure: the biggest frame change 2% from 12%, no blinks). 0 or no key: at once, as 7d83869. Under the cap nothing changes: Midway 06 is laid exactly as passed. Not set here: lumps_band, the share of the width asked over which a puff's lumps come in (0.25 without the key). With many puffs alike in size most of the kept ones lie inside that quarter and show at under half strength (the pre-check's note); 0.15 gives the kept lumps a third more ink at the cap, but it also quickens every young puff's lumps under the cap, so Midway 06 would no longer be the picture passed.",
   "max_lamps": 2,
+  "steady_lamps": 1,
+  "_steady_lamps": "With fire.lamp.ramp_s: how many of the lamps (max_lamps) go first to the steadiest fires, the rest to the flashes of the moment and then the other fires. 1: a burning wreck's light stays put while gun flashes still light their own moment.",
   "lamp_candela_at_full": 400.0,
   "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",
   "muzzle_lamp_height_m": 6.0,

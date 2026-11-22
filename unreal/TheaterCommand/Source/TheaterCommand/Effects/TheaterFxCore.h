@@ -300,6 +300,16 @@ namespace TheaterFx
 		double LowFlat = 1.0, LowFrom = 0.0, LowBy = 0.0, LowSoft = 1.0, LowLit = 0.0;
 		double FootClear = 0.0, FootK = 0.0; // (a resting puff takes FootCol, FootK of it, while it lies on the surface, and its own colour by FootClear of its radius clear of where it rests; 0 never)
 		Rgb FootCol;
+		// (a tongue of flame that stays on its root, Anchor over 0: drawn this share of its own long half-way ahead of
+		// where it is, along Along, so that as it grows in and narrows its root stays where it rises from and never
+		// floats off it as a loose card. 0: drawn about where it is, as ever)
+		double Anchor = 0.0;
+		// (a flame's flicker, FlickerSeed other than 0: by the clock, never by its age, three waves between FlickerLo and
+		// FlickerHi a second, their phases from the seed, so every piece of one seat of a fire flickers together. Its
+		// opacity goes Flicker more or less, its length FlickerLong and its width FlickerWide, as shares: the fire's
+		// shape and light change smoothly every frame and never step. 0: none)
+		uint32_t FlickerSeed = 0;
+		double Flicker = 0.0, FlickerLong = 0.0, FlickerWide = 0.0, FlickerLo = 3.0, FlickerHi = 6.0;
 	};
 
 	class Battle
@@ -545,6 +555,8 @@ namespace TheaterFx
 		 * turns them down to a share and toward a warm white, and puts out small guns' altogether. A flash's lamp is full
 		 * on the first frame drawn after it, half on the next, then out: call it after Draw. */
 		int Lamps(double Now, Lamp* Into, int Room, double Day = 0.0) const;
+		/** The lamps by fire.lamp's rules (Lamps, when the recipe has fire.lamp.ramp_s): see the .cpp. */
+		int SteadyLamps(double Now, Lamp* Into, int Room, double Day) const;
 		/** How much the hour's light (View::SmokeLight) is day: 0 at night, 1 in full day (game.day_light_from, _full). */
 		double DayOf(const Rgb& HourLight) const;
 
@@ -845,6 +857,40 @@ namespace TheaterFx
 			double RootOver = 1.0; // (how far past white the root burns under the tallest seat; see picture.lit_gain)
 			double FarTall = 0.0, FarPx = 400.0; // (a fire under FarPx wide in the picture stands up to FarTall taller)
 			double FootSoft = 0.4; // (the share of a foot lick, from its root out to its rim, over which it fades away)
+			// (smooth flames, the frame study of 22 November: a piece born BornK of its size grows to it by FullBy of its
+			// life and fades in over FadeShare of it; each is born up to Jitter of a step late, so births never beat with
+			// the frames; Anchor keeps its root on the seat (Bit::Anchor) and Climb is how much of its old climb it keeps;
+			// the bed lives BedOverlap of its old life, so a seat's foot pieces cross-fade; Flicker, FlickerLong and
+			// FlickerWide its seat's flicker (Bit::Flicker) between FlickerHz. All at their old values: as before)
+			double BornK = 1.0, FullBy = 0.3, FadeShare = 0.0, Jitter = 0.0, Anchor = 0.0, Climb = 1.0, BedOverlap = 1.0;
+			double Flicker = 0.0, FlickerLong = 0.0, FlickerWide = 0.0;
+			Span FlickerHz{ 3.0, 6.0 };
+			// (Point: how pointed a tongue's body, fork and tip are drawn, 0.9 as before; LongMost: how drawn out a body may
+			// be for its width at the most, 5 as before, its forks and tips 3.5 or LongMost if less. Lower, the flames read
+			// as a heap of overlapping lobes and not a row of blades: the art director's "overlapping puffs")
+			double Point = 0.9, LongMost = 5.0;
+			bool bSmooth = false;
+			// (the fire's body, Mass over 0: so many soft round flame puffs a step, rising through it from the seats and
+			// reddening and darkening to the smoke at its top, so it reads as one body and never a row of candles: MassR
+			// of the fire's width each, MassUp of a seat's height their climb, MassLife their seconds; Soot: so many
+			// black puffs a step off its top, SootR of its width, where the flames go into the smoke)
+			double Mass = 0.0, MassUp = 0.7, Soot = 0.0;
+			Span MassR{ 0.22, 0.34 }, MassLife{ 0.5, 0.8 }, SootR{ 0.25, 0.4 }, SootLife{ 1.2, 2.0 };
+			Rgb MassCol, MassTop, SootCol;
+			Rgb Bed; // (bBed: the foot's own colour in place of the fire's yellow heart)
+			bool bBed = false;
+		};
+		/** fire.glow: a burning thing's warm light on the ground round it, read once a frame. */
+		struct GlowRow
+		{
+			bool bOn = false;
+			// (a piece every Every seconds, each living Life and fading in over a third of it, so three overlap and the
+			// glow never steps; R of the fire's width across its half, held between RLeast and RMost metres; Up metres
+			// over the ground under the fire; only for a fire within Above metres of the ground; its opacity at night
+			// Alpha, by day DayAlpha of that; its flicker as a flame's (Bit::Flicker))
+			double Every = 1.0, Life = 3.0, R = 2.2, RLeast = 3.0, RMost = 9.0, Up = 0.2, Above = 6.0, Alpha = 0.35, DayAlpha = 0.4, Over = 1.0, Flicker = 0.2;
+			Span FlickerHz{ 1.5, 4.0 };
+			Rgb Col;
 		};
 		/** The cook_off row, read when it starts. */
 		struct CookRow
@@ -891,6 +937,16 @@ namespace TheaterFx
 			OilRow Oil; // (an oil fire: its row)
 			BankRow Bank; // (a burning thing: its smoke as a bank of lumps, when the recipe asks and it is big enough)
 			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts; a smoke screen: the seats its wall is laid from)
+			// (a burning thing others have joined, fire.join: its width grows from AcrossFrom to AcrossTo over AcrossBy
+			// seconds from AcrossAt; AlsoIds are the joined fires' numbers, each AlsoOffsets from this one's seat, so
+			// BurnMove and BurnOut by any of them find it; the first number that moves it is the one it moves by, Mover)
+			double AcrossFrom = 0.0, AcrossTo = 0.0, AcrossAt = 0.0, AcrossBy = 0.0;
+			std::vector<int> AlsoIds;
+			std::vector<Vec> AlsoOffsets;
+			int Mover = -1;
+			bool bMoverSet = false;
+			double NextGlow = 0.0; // (a burning thing's warm glow on the ground, fire.glow, by the clock)
+			bool bLandColumn = false; // (a big fire's own column, Kind 3, that stands over a burning vehicle on land: fire.land_column)
 		};
 		struct Paint
 		{
@@ -1023,6 +1079,15 @@ namespace TheaterFx
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
+		// (fire.lamp: the steady lamps lit at the last frame, by their source's seed, and how far each has come up, so a
+		// fire's lamp comes up smoothly and keeps its place against near equals instead of hopping between them)
+		struct LampKept
+		{
+			uint64_t Seed = 0;
+			double Level = 0.0;
+		};
+		mutable std::vector<LampKept> LampsKept;
+		mutable double LampsAt = -1.0e18;
 		Vec LastEye;
 		double LastPpr = 1000.0; // (the last frame's pixels a radian: a water column far off in the picture is fewer pieces)
 		Vec LastSun; // (the way to the sun in the last frame drawn; none before the first: a steam plume's rags on its far side from the sun are born in its shade)
@@ -1197,13 +1262,17 @@ namespace TheaterFx
 		void OilBase(Source& S, double T); // one puff of the low smoke rolling off the slick, born at T
 		OilRow OilRowOf(const std::string& Kind) const;
 		OilRow OilRowAt(const std::string& Prefix) const; // (the row under any prefix, every dial held to a sane span)
-		int OwnColumn(double Now, const Source& Fire); // (a big fire's own column: started, or this fire joined to one standing near; that column's Id, or -1 for none)
+		bool JoinBurn(double Now, const Vec& At, double Across, double Seconds, int Id); // (fire.join: a fire lit by one already burning joins it; true when it did)
+		int OwnColumn(double Now, const Source& Fire, bool bLand = false); // (a big fire's own column: started, or this fire joined to one standing near; that column's Id, or -1 for none)
 		SteamRow SteamRowOf(const std::string& Kind) const; // (the row, every dial held to a sane span)
 		CookRow CookRowOf() const;
 		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
 		void CookPop(const Source& S, double T); // (one pop of a cook-off)
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
 		TongueRow TongueRowOf() const;
+		GlowRow GlowRowOf() const;
+		void FireGlow(Source& S, double Now, const GlowRow& R); // (fire.glow: a burning thing's warm light on the ground, by the clock)
+		bool LandColumnStands(int Column, double T) const; // (fire.land_column: that column still stands over its fire at T)
 		void FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& Heart, const Rgb& Ember); // (one step of a burning thing's flames, by fire.tongues)
 		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;

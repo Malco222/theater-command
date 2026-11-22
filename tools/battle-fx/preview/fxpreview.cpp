@@ -11,6 +11,7 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|top|gun]
 //   ./fxpreview /tmp/recipe.txt <out folder> fate <steam|out|cook|glance> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> sea <a name for the frames> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> wreck <side|battle|far|tall> <frames> [WxH]
 //
 // The sea shot (the sea battle's range): three ships in line ahead, FX_GAP m (500) apart and FX_SHIP_LONG m (200)
 // long, steaming along +X at FX_KNOTS (25), seen broadside on from FX_DIST m (15000) by an eye FX_EYE_H m (24) up with
@@ -48,6 +49,14 @@
 // the hatch FX_ACROSS m (0.6). "glance": an FX_MM (75) shot glancing off a plate FX_UP m (1.8) up; FX_IN its way in,
 // FX_N the plate's way out; FX_GLANCES=n shots FX_GAP s apart. The eye: FX_DIST m off (300 at sea, 18.75 on land, the
 // battle camera's), FX_EYE_H m up, looking FX_LOOK_H m up. Two men of 1.75 m stand by on land.
+//
+// The wreck shot: a knocked-out heavy tank (a box hull, 6.4 m long) burning, the kit called just as the ground scene
+// calls it for the tank's knocked_out clip and then its burn loop: the hatch's cook-off at 0.35 s, a burst of smoke at
+// 0.5 s, the engine's fire at 1.2 s and its smoke at 1.6 s, then from 3 s four fires of 2.4 m (engine deck, its left
+// side, the turret roof, the front left) and the engine's smoke again (FX_SCRIPT=one: the engine's fire alone). The
+// hull is lit by the sun and by the kit's lamps, plate by plate, so the fire's glow shows on it. "side" is a man's eye
+// 16 m off her burning side, "battle" the battle camera's, "far" 60 m off, "tall" 160 m off for the whole column;
+// FX_DIST, FX_EYE_H, FX_LOOK_H, FX_LENS (42) move it. FX_DUSK=1 as the others. Each frame prints the lamps lit.
 //
 // The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
 // wing guns, laid to meet 300 m ahead, from the first frame; AirGun is called sixty times a second as the game would.
@@ -1379,6 +1388,231 @@ namespace
 		}
 	}
 
+	/** A box lit by the sun and by the kit's lamps, patch by patch (Patch m a side), so that a fire's glow shows on the
+	 * plates nearest it: Lo and Hi are two opposite corners, the box square to the world. Its floor is not drawn. */
+	void LitBox(Canvas& C, const Camera& Cam, const Vec& Lo, const Vec& Hi, const double Base[3], const Battle::Lamp* Lamps, int NLamps, const Vec& Sun, double SunShare, double Patch = 0.2)
+	{
+		struct Face { int Axis; int Side; };
+		const Face Faces[5] = { { 2, 1 }, { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 } };
+		for (const Face& F : Faces)
+		{
+			const int A = (F.Axis + 1) % 3, B = (F.Axis + 2) % 3;
+			auto Get = [](const Vec& V, int K) { return K == 0 ? V.X : K == 1 ? V.Y : V.Z; };
+			auto Make = [](int Axis, double On, int Ka, double Va, int Kb, double Vb)
+			{
+				double P[3] = { 0.0, 0.0, 0.0 };
+				P[Axis] = On;
+				P[Ka] = Va;
+				P[Kb] = Vb;
+				return Vec(P[0], P[1], P[2]);
+			};
+			const double On = F.Side ? Get(Hi, F.Axis) : Get(Lo, F.Axis);
+			double N3[3] = { 0.0, 0.0, 0.0 };
+			N3[F.Axis] = F.Side ? 1.0 : -1.0;
+			const Vec N(N3[0], N3[1], N3[2]);
+			const double A0 = Get(Lo, A), A1 = Get(Hi, A), B0 = Get(Lo, B), B1 = Get(Hi, B);
+			const int Na = std::max(1, static_cast<int>(std::ceil((A1 - A0) / Patch))), Nb = std::max(1, static_cast<int>(std::ceil((B1 - B0) / Patch)));
+			const double Lit = (1.0 - SunShare) * (0.55 + 0.45 * N.Z) + SunShare * std::max(0.0, N.Dot(Sun)) * 1.6;
+			for (int I = 0; I < Na; ++I)
+			{
+				for (int J = 0; J < Nb; ++J)
+				{
+					const double Ua = A0 + (A1 - A0) * I / Na, Ub = A0 + (A1 - A0) * (I + 1) / Na;
+					const double Va = B0 + (B1 - B0) * J / Nb, Vb = B0 + (B1 - B0) * (J + 1) / Nb;
+					const Vec Mid = Make(F.Axis, On, A, 0.5 * (Ua + Ub), B, 0.5 * (Va + Vb));
+					double Lift[3] = { 0.0, 0.0, 0.0 };
+					for (int L = 0; L < NLamps; ++L)
+					{
+						const Vec To = Lamps[L].At - Mid;
+						const double Dist = To.Length();
+						if (Dist < Lamps[L].Radius && Dist > 1e-6)
+						{
+							// (the ground's own lamp in Paint, turned by how square the plate faces it)
+							const double Window = 1.0 - std::pow(Dist / Lamps[L].Radius, 4.0);
+							const double Fl = Lamps[L].Strength * 64.0 / std::max(Dist * Dist, 1.0) * Window * Window * std::max(0.0, N.Dot(To * (1.0 / Dist)));
+							Lift[0] += Fl * Lamps[L].Col.R / std::max(0.01f, Lamps[L].Col.G);
+							Lift[1] += Fl;
+							Lift[2] += Fl * Lamps[L].Col.B / std::max(0.01f, Lamps[L].Col.G);
+						}
+					}
+					const double Col[3] = { Base[0] * (Lit + Lift[0]), Base[1] * (Lit + Lift[1]), Base[2] * (Lit + Lift[2]) };
+					const Vec Q[4] = { Make(F.Axis, On, A, Ua, B, Va), Make(F.Axis, On, A, Ub, B, Va), Make(F.Axis, On, A, Ub, B, Vb), Make(F.Axis, On, A, Ua, B, Vb) };
+					const Vec T1[3] = { Q[0], Q[1], Q[2] };
+					const Vec T2[3] = { Q[0], Q[2], Q[3] };
+					Solid(C, Cam, T1, Col, 0);
+					Solid(C, Cam, T2, Col, 0);
+				}
+			}
+		}
+	}
+
+	/** The wreck shot (see the top of the file): a knocked-out heavy tank burning, as the ground scene calls the kit. */
+	int Wreck(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		Fx.SetGroundColour(&GroundPaint, nullptr);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
+		// (the tank stands at the middle facing +X, on the ground there; its sockets as Tiger.json gives them)
+		const double G = Swell(nullptr, 0.0, 0.0);
+		const Vec Engine(-2.2, 0.0, G + 1.83), Fire1(-2.2, -1.0, G + 1.83), Fire2(-0.24, -0.5, G + 2.9), Fire3(1.55, -0.86, G + 1.82), Commander(-0.24, -0.5, G + 2.55);
+		const Vec Upward(0.0, 0.0, 1.0);
+		// (what happens, and when, as ALandBattle::PlayArmourEvents turns the tank's knocked_out clip and then its burn
+		// loop into the kit's calls. FX_SCRIPT=one: the knocked_out clip's fire alone, one Burn of 2.4 m at the engine)
+		struct Due
+		{
+			double At = 0.0;
+			int What = 0; // (1 Burn, 2 the hatch's cook-off)
+			Vec Where;
+			double Across = 0.0, Seconds = 0.0;
+			int Key = -1;
+			bool bDone = false;
+		};
+		const double Long = EnvNum("FX_BURN_S", 900.0);
+		std::vector<Due> Script;
+		const std::string Kind = std::getenv("FX_SCRIPT") ? std::getenv("FX_SCRIPT") : "ground";
+		if (Kind == "one")
+		{
+			Script.push_back({ 1.2, 1, Engine, 2.4, Long, 3 });
+		}
+		else
+		{
+			Script.push_back({ 0.35, 2, Commander, 0.8, 0.0, 1 }); // hatch_blown
+			Script.push_back({ 0.5, 1, Engine, 0.8, 4.0, 100002 }); // smoke_burst
+			Script.push_back({ 1.2, 1, Engine, 2.4, Long, 3 }); // fire_start
+			Script.push_back({ 1.6, 1, Engine, 1.2, Long, 100004 }); // smoke_loop
+			Script.push_back({ 3.0, 1, Engine, 2.4, Long, 5 }); // the burn loop: fire_loop at four sockets, smoke_loop
+			Script.push_back({ 3.0, 1, Fire1, 2.4, Long, 6 });
+			Script.push_back({ 3.0, 1, Fire2, 2.4, Long, 7 });
+			Script.push_back({ 3.0, 1, Fire3, 2.4, Long, 8 });
+			Script.push_back({ 3.0, 1, Engine, 1.2, Long, 100009 });
+		}
+		auto Play = [&](double Now)
+		{
+			for (Due& D : Script)
+			{
+				if (D.bDone || D.At > Now)
+				{
+					continue;
+				}
+				D.bDone = true;
+				if (D.What == 1)
+				{
+					Fx.Burn(D.At, D.Where, D.Across, D.Seconds, D.Key);
+				}
+				else
+				{
+					Fx.CookOff(D.At, D.Where, Upward, D.Across, 3, 2.5, 0.0, -1.0, D.Key);
+				}
+			}
+		};
+		// (the eyes: "side" a man's eye 16 m off her burning side, "battle" the battle camera's, "far" 60 m off to see
+		// the column, "tall" 140 m off and low for the whole column. FX_DIST, FX_EYE_H, FX_LOOK_H move them; FX_LENS
+		// is the lens's angle across, 42 degrees unless given)
+		double Dist = 16.0, EyeH = 1.7, LookH = 3.0;
+		Vec From(0.15, -1.0, 0.0);
+		if (Shot == "battle")
+		{
+			Dist = 18.75, EyeH = 6.0, LookH = 3.0, From = Vec(-0.3, -1.0, 0.0);
+		}
+		else if (Shot == "far")
+		{
+			Dist = 60.0, EyeH = 4.0, LookH = 14.0, From = Vec(0.2, -1.0, 0.0);
+		}
+		else if (Shot == "tall")
+		{
+			Dist = 160.0, EyeH = 3.0, LookH = 60.0, From = Vec(0.2, -1.0, 0.0);
+		}
+		Dist = EnvNum("FX_DIST", Dist);
+		EyeH = EnvNum("FX_EYE_H", EyeH);
+		LookH = EnvNum("FX_LOOK_H", LookH);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 42.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		Cam.Eye = From.Unit() * Dist + Vec(0.0, 0.0, G + EyeH);
+		Cam.Forward = (Vec(EnvNum("FX_LOOK_X", -0.8), 0.0, G + LookH) - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
+		}
+		// (the hull, dark yellow gone dull with soot: tracks and lower hull, the upper hull, the turret, the gun)
+		const double Paint3[3] = { ToLinear(112), ToLinear(102), ToLinear(80) };
+		const double Track3[3] = { ToLinear(58), ToLinear(54), ToLinear(50) };
+		std::vector<Vec> Men;
+		for (const Vec& M : { Vec(4.5, -3.5, 0.0), Vec(-5.5, -4.0, 0.0) })
+		{
+			Men.push_back(Vec(M.X, M.Y, Swell(nullptr, M.X, M.Y)));
+		}
+		Fx.Draw(-0.1, View);
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Play(Drawn / 30.0);
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int Room = std::clamp(static_cast<int>(EnvNum("FX_LAMPS", 2.0)), 0, 2);
+			const int NL = Fx.Lamps(Now, Lamps, Room, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Men, false);
+			const Vec Sun = View.Sun.Unit();
+			const double SunShare = bDusk ? 0.0 : 0.6;
+			LitBox(C, Cam, Vec(-3.2, -1.75, G), Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, Vec(-3.2, 1.15, G), Vec(3.2, 1.75, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, Vec(-3.0, -1.15, G + 0.4), Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, Vec(-3.2, -1.6, G + 1.2), Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, Vec(-1.6, -1.2, G + 1.83), Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, Vec(1.2, -0.12, G + 2.1), Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/wreck-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps", Frame, N, NL);
+			for (int L = 0; L < NL; ++L)
+			{
+				std::printf(" | lamp %.3f at (%.2f, %.2f, %.2f) r %.1f", Lamps[L].Strength, Lamps[L].At.X, Lamps[L].At.Y, Lamps[L].At.Z, Lamps[L].Radius);
+			}
+			std::printf("\n");
+		}
+		return 0;
+	}
+
 	/** The sea with three ships' decks on it: a hit that is not on armour is laid on what is under it, as the game's
 	 * ground function says (a deck there, the sea elsewhere). */
 	struct SeaDecks
@@ -1777,6 +2011,10 @@ int main(int Argc, char** Argv)
 	if (Size == "drive")
 	{
 		return Drive(Book, OutDir, Ground, Frames, W, H, Argc > 7 ? Argv[7] : "eye");
+	}
+	if (Size == "wreck")
+	{
+		return Wreck(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "air")
 	{
