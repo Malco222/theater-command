@@ -1554,6 +1554,11 @@ namespace BargainLayer
 					S.bPlaced = false;
 				}
 
+				// What our own plates and the seals keep off: the frame's pieces, and the card while it is shown (the look
+				// review's finding 2: they step off it as off any frame piece; it is left out of S.Frame for its placing).
+				const bool bCardShown = CardShown();
+				Bargains::AvoidOf(S.Frame, bCardShown, S.Placed.Card, S.Avoid);
+
 				// Our own plates at the senders' capitals the town plates left without one (none from far off).
 				for (FPlateLaid& Plate : S.Plates)
 				{
@@ -1564,7 +1569,7 @@ namespace BargainLayer
 						continue;
 					}
 					const Bargains::FRect Box = Plate.Own.Plate.Moved(At.X, At.Y);
-					if (Bargains::OwnPlateShown(S.Eye, Box, S.TownPlates, S.Frame))
+					if (Bargains::OwnPlateShown(S.Eye, Box, S.TownPlates, S.Avoid))
 					{
 						Plate.bOwn = true;
 						Plate.OwnAt = At;
@@ -1572,14 +1577,11 @@ namespace BargainLayer
 					}
 				}
 
-				// The seals: each beside its capital, clear of the frame, the plates and one another.
-				S.Avoid.clear();
-				S.Avoid.insert(S.Avoid.end(), S.Frame.begin(), S.Frame.end());
+				// The seals: each beside its capital, clear of the frame, the card while it is shown, the plates and one another.
 				S.Avoid.insert(S.Avoid.end(), S.TownPlates.begin(), S.TownPlates.end());
 				S.Laid.clear();
 				// (call 6: while the card is shown, its seal leaves the capital, so that the lane's end there shows, and stands
 				// on the card's top-right corner as its close; the card paints it and takes its presses, the spot its overhang)
-				const bool bCardShown = CardShown();
 				S.CardSeal = INDEX_NONE;
 				for (int32 Slot = 0; Slot < SealSlots; ++Slot)
 				{
@@ -1955,7 +1957,7 @@ namespace BargainLayer
 		S.PlateBoxes.Reserve(64);
 		S.Frame.reserve(32);
 		S.TownPlates.reserve(64);
-		S.Avoid.reserve(96);
+		S.Avoid.reserve(32 + 1 + 64); // (the frame, the card, the plates)
 		S.Laid.reserve(Impl::SealSlots);
 		return SNew(Impl::SBargainLayer, Player, MoveTemp(KeepOffOf), MoveTemp(PlatesOf));
 	}

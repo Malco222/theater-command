@@ -2038,6 +2038,15 @@ namespace Bargains
 		return false;
 	}
 
+	void AvoidOf(const std::vector<FRect>& Frame, bool bCardShown, const FRect& Card, std::vector<FRect>& Out)
+	{
+		Out.assign(Frame.begin(), Frame.end());
+		if (bCardShown)
+		{
+			Out.push_back(Card);
+		}
+	}
+
 	// ---------------------------------------------------------------------------------------------------------------
 	// The plate line, our own plate
 

@@ -1769,6 +1769,48 @@ namespace
 	}
 
 	/**
+	 * The look review's finding 2: while the card is shown, the other seals and our own plates step off it as off any frame
+	 * piece (AvoidOf adds its rect to what they keep off); while it is not, they keep off the frame alone, as before.
+	 */
+	void TestAvoidCard()
+	{
+		const std::vector<FRect> Frame = { { 0, 0, 1440, 52 }, { 0, 750, 1440, 150 }, { 990, 70, 430, 672 } };
+		const FRect Card{ 290, 425, 230, 190 }; // (where preview-card-right's card stands, right of Lisbon)
+		std::vector<FRect> Avoid;
+		AvoidOf(Frame, false, Card, Avoid);
+		CHECK(Avoid.size() == Frame.size());
+		AvoidOf(Frame, true, Card, Avoid);
+		AvoidOf(Frame, true, Card, Avoid); // (refilled each frame, never added to)
+		CHECK(Avoid.size() == Frame.size() + 1 && Near(Avoid.back().X, Card.X) && Near(Avoid.back().Y, Card.Y) && Near(Avoid.back().W, Card.W) && Near(Avoid.back().H, Card.H));
+		for (size_t K = 0; K < Frame.size(); ++K)
+		{
+			CHECK(Near(Avoid[K].X, Frame[K].X) && Near(Avoid[K].W, Frame[K].W));
+		}
+		// Another neutral's seal under the card's bottom-left corner: it steps off the card to its first clear try (the
+		// third, left), where with the card shut it stands at its first (above its capital, under where the card would be).
+		const FPt Capital{ 300, 640 };
+		const std::vector<FPt> NoSeals;
+		FPt At;
+		AvoidOf(Frame, true, Card, Avoid);
+		CHECK(SealAt(Capital, 1.0, Frame, Avoid, NoSeals, At) && Near(At.X, Capital.X + SealOffsets[2].X) && Near(At.Y, Capital.Y + SealOffsets[2].Y) && !Card.Overlaps(SealBox(At, 1.0)));
+		AvoidOf(Frame, false, Card, Avoid);
+		CHECK(SealAt(Capital, 1.0, Frame, Avoid, NoSeals, At) && Near(At.X, Capital.X) && Near(At.Y, Capital.Y + SealOffsets[0].Y) && Card.Overlaps(SealBox(At, 1.0)));
+		// Our own plate under the card is not drawn while the card is shown; with the card shut it is, as before.
+		FOwnPlate Own;
+		LayOwnPlate("Madrid", "1 division abroad, Leningrad", FPt{ 400, 480 }, KitMeasure, 1.0, Own);
+		const std::vector<FRect> NoPlates;
+		CHECK(Card.Overlaps(Own.Plate));
+		AvoidOf(Frame, true, Card, Avoid);
+		CHECK(!OwnPlateShown(9000.0, Own.Plate, NoPlates, Avoid));
+		AvoidOf(Frame, false, Card, Avoid);
+		CHECK(OwnPlateShown(9000.0, Own.Plate, NoPlates, Avoid));
+		// (a plate clear of the card stays, card or no card)
+		LayOwnPlate("Madrid", "1 division abroad, Leningrad", FPt{ 600, 480 }, KitMeasure, 1.0, Own);
+		AvoidOf(Frame, true, Card, Avoid);
+		CHECK(!Card.Overlaps(Own.Plate) && OwnPlateShown(9000.0, Own.Plate, NoPlates, Avoid));
+	}
+
+	/**
 	 * Calls 11 and 13 on the tray card. The corner flag is the size the other tray cards' flags are: an ally's corps's in
 	 * CampaignHUD's MakeCard, read from the source here so the two cannot part. The legion's line under the title is one
 	 * line in the card's width, never wider: the game's one-division card is 355 px at 1441, and the line has that less the
@@ -1901,6 +1943,8 @@ namespace
 		In.Frame = &Frame;
 		std::vector<FPt> Laid;
 		Laid.reserve(8);
+		std::vector<FRect> Avoid;
+		Avoid.reserve(Frame.size() + 1);
 		const FRow& Por = RowOf(Book, "por-wolfram");
 		const FRow& Ore = RowOf(Book, "esp-ore");
 		FLaneShape Lane;
@@ -1949,6 +1993,9 @@ namespace
 			Laid.clear();
 			SealAt(In.Capital, 1.0, Frame, Plates, Laid, At);
 			Laid.push_back(At);
+			AvoidOf(Frame, (Frame_ & 1) != 0, Placed.Card, Avoid);
+			Sum += SealAt(FPt{ 700, 400 }, 1.0, Frame, Avoid, Laid, At) ? At.X : 0.0;
+			Sum += OwnPlateShown(9000.0, Plates[0], Plates, Avoid) ? 1.0 : 0.0;
 			Sum += ExitTag(OnScreen, In.Screen, Frame, FPt{ 50, 16 }, 1.0, Tag) ? Tag.X : 0.0;
 			Project();
 			Sum += ExitTagOfPieces(Pieces, In.Screen, Frame, FPt{ 50, 16 }, 1.0, Tag) ? Tag.X : 0.0;
@@ -2326,6 +2373,7 @@ int main(int Count, char** Args)
 	TestTint();
 	TestSeals();
 	TestCardSeal();
+	TestAvoidCard();
 	TestTrayCard();
 	TestPlates();
 	TestNoAllocation();
