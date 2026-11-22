@@ -641,7 +641,8 @@ class Works(Shop, Gear, Fittings):
         keys = [[t, round(run_back(t), 4)] for t in (0.0, 0.0125, 0.025, 0.0375, 0.05, 0.13, 0.2, 0.28, 0.36, 0.45, 0.55, 0.63, 0.72, 0.8, 0.9, 1.0, 1.08, 1.13, 2.5)]
         m.clips["fire"] = {"long": 2.5, "loop": False, "after": "hold", "about": "the main gun fires: flash and blast at 0.0, the barrel runs back at once and out again over a second, the empty case a moment after",
                            "tracks": [{"part": "barrel", "slide": keys}],
-                           "events": [ev(0.0, "muzzle_flash_big", "muzzle", gun_cue), ev(0.0, "muzzle_blast_dust", "muzzle"), ev(1.5, "case_clang", "case", "tank_shell_case")]}
+                           "events": [ev(0.0, "muzzle_flash_big", "muzzle", gun_cue), ev(0.0, "muzzle_blast_dust", "muzzle")]
+                                     + ([ev(1.5, "case_clang", "case", "tank_shell_case")] if any(s["name"] == "case" for s in m.sockets) else [])}   # (a machine-gun tankette throws no case)
         # (the hull rocks back about `kick` degrees a fifth of a second after the shot, and has settled a second after it)
         m.clips["fire.rock"] = {"long": 1.6, "loop": False, "after": "hold",
                                 "about": "the hull's answer to the shot, for a gun trained ahead: she is thrown back on her springs, the nose lifts about a degree, and she settles in a "
