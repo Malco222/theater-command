@@ -30959,6 +30959,14 @@
     if (flew === 1) return lost ? "lost the one that flew" : "lost none of the one that flew";
     return `lost ${lost === 0 ? "none" : lost} of the ${flew} that flew`;
   }
+  function afterLost(card) {
+    const out = { att: { ftr: 0, bmr: 0 }, def: { ftr: 0, bmr: 0 } };
+    for (const x of card.groups) {
+      out[x.side].ftr += x.lostFtr;
+      out[x.side].bmr += x.lostBmr;
+    }
+    return out;
+  }
   var FLIP = {
     "Heroic victory": "Crushing defeat",
     "Decisive victory": "Decisive defeat",
@@ -62433,7 +62441,11 @@
         const t = airTicket(h.game(), kind, target, ids2);
         if (!t.ticket) return null;
         const sim = new AirSim(t.ticket, { show: true });
-        const ses = begin(sim, (r) => raid2(kind, target, ids2, r.extra?.air ? foughtAir(r.extra.air) : void 0));
+        const withLost = (out) => {
+          const after = out?.after;
+          return after ? { ...out, after: { ...after, lost: afterLost(after) } } : out;
+        };
+        const ses = begin(sim, (r) => withLost(raid2(kind, target, ids2, r.extra?.air ? foughtAir(r.extra.air) : void 0)));
         const side3 = (x) => ({ nat: x.nat, adj: x.adj, human: x.human });
         return {
           sky: {

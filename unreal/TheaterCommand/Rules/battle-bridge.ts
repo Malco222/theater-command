@@ -98,7 +98,8 @@
 //                                   the staff's band moved as the fight has moved it, "between about 40% and 65%",
 //                                   never the chance at the true odds
 //   TC.battleEnd()               -> what TC.attack returns ({ report, siege, note, price, paid, moved, view }), once the
-//                                   battle is over; null before that (after an air battle: what TC.act returns for the raid).
+//                                   battle is over; null before that (after an air battle: what TC.act returns for the raid,
+//                                   its after card with lost: { att, def: { ftr, bmr } }, the sums of the card's rows).
 //                                   Where the army that broke was booked more than the field cost it, also pursuit: one
 //                                   line for the after card, under ON THE FIELD straight after the strength line (b464).
 //                                   An army pulled out after contact pays the rules' bill for that defeat times its bar
@@ -481,7 +482,7 @@ import { SKY } from '../../../src/battle/air/book';
 import { AirSim } from '../../../src/battle/air/sim';
 import { airTicket, foughtAir } from '../../../src/battle/air/ticket';
 import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
-import type { FoughtAir } from '../../../src/campaign/airfought';
+import { afterLost, type AfterCard, type FoughtAir } from '../../../src/campaign/airfought';
 import type { RaidKind } from '../../../src/campaign/airwar';
 import type { BattleReport, Game } from '../../../src/campaign/types';
 import type { FieldBill } from '../../../src/campaign/game';
@@ -841,7 +842,13 @@ export function battleCalls(h: BattleHooks) {
       const sim = new AirSim(t.ticket, { show: true });
       // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports
       // (the campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid.
-      const ses = begin(sim, (r) => raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined));
+      // The after card goes out with its totals, each side's fighters and bombers lost (AirFeed.cpp ReadAfter reads
+      // after.lost), summed from its own rows by the rules (afterLost), so the totals and the rows never disagree.
+      const withLost = (out: unknown): unknown => {
+        const after = (out as { after?: AfterCard } | null)?.after;
+        return after ? { ...(out as object), after: { ...after, lost: afterLost(after) } } : out;
+      };
+      const ses = begin(sim, (r) => withLost(raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined)));
       // The title, the date and the two sides as the 3D game reads them (AirFeed.cpp ReadSky: "the bridge's sky names
       // them"); without them it shows no title or date, and finds the defender only from the place's models.
       const side = (x: typeof t.ticket.att) => ({ nat: x.nat, adj: x.adj, human: x.human });

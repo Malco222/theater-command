@@ -35,6 +35,16 @@ describe('air through the bridge', () => {
     console.log(JSON.stringify({ ok: out.ok, note: out.note, report: out.report }));
     expect(out.ok).toBe(true);
     expect(g.airReports.length).toBe(r0 + 1);
+    // The after card's totals (AirFeed.cpp ReadAfter reads after.lost): each side's fighters and bombers lost, the very
+    // sums of the card's rows (the lead, 09:12Z).
+    const rows = out.after.groups as { side: 'att' | 'def'; lostFtr: number; lostBmr: number }[];
+    const sum = (side: string, k: 'lostFtr' | 'lostBmr') => rows.filter((x) => x.side === side).reduce((t, x) => t + x[k], 0);
+    expect(out.after.lost).toEqual({
+      att: { ftr: sum('att', 'lostFtr'), bmr: sum('att', 'lostBmr') },
+      def: { ftr: sum('def', 'lostFtr'), bmr: sum('def', 'lostBmr') },
+    });
+    expect(rows.some((x) => x.side === 'att') && rows.some((x) => x.side === 'def')).toBe(true);
+    expect(out.after.lost.att.ftr + out.after.lost.att.bmr + out.after.lost.def.ftr).toBeGreaterThan(0);
   });
   it('hands it to the staff at once', () => {
     const { TC, target, ids } = setup();
@@ -42,5 +52,11 @@ describe('air through the bridge', () => {
     expect(TC.battleOrder({ do: 'dice' }).ok).toBe(true);
     const out: any = TC.battleEnd();
     expect(out.ok).toBe(true);
+    // Handed to the staff at once, the card's totals are still its rows' sums.
+    const rows = out.after.groups as { side: 'att' | 'def'; lostFtr: number; lostBmr: number }[];
+    for (const side of ['att', 'def'] as const) {
+      expect(out.after.lost[side].ftr).toBe(rows.filter((x) => x.side === side).reduce((t, x) => t + x.lostFtr, 0));
+      expect(out.after.lost[side].bmr).toBe(rows.filter((x) => x.side === side).reduce((t, x) => t + x.lostBmr, 0));
+    }
   });
 });
