@@ -4818,11 +4818,15 @@
    "under_px": 8.0
   },
   "room_shares": {
-   "_how": "FX5, room shares by kind (production lead's battle-scale plan; built 11-22, OFF until the Mac's gate run shows the room is what costs). On, every gate but the vehicles' dust (the bursts, their lingering smoke's slow fade, fires, trails, gun smoke) counts the room without the dust trails' pieces, up to dust.vehicles.most_of_room, so a column of tanks never thins them. The dust takes what they leave: up to dust_top of the room less the highest the rest asked over the last dust_memory_s, never under dust_floor, half as many when its share is filling; a vehicle within dust.vehicles.full_within_m of the eye always lays. Cloud rig (sand, 120 tanks, 1.5 km front, 810 m back): today the dust takes a third of the lingering smoke at 3.5 shells a second and is gone entirely at 6; on, the lingering smoke is whole again, every column keeps a thin line at 6, and the dust is thinner at 2 to 3.5. The 3,000 room cannot hold all three at once at 3.5 shells a second: which gives way is the art director's to rule.",
+   "_how": "FX5, room shares by kind (production lead's battle-scale plan; built 11-22, OFF until the Mac's gate run shows the room is what costs). On, every gate but the vehicles' dust (bursts, their lingering smoke's slow fade, fires, trails, gun smoke) counts the room without the dust trails' pieces, up to dust.vehicles.most_of_room, so a column of tanks never thins them. The art director's ruling of 18:12Z: the dust trails give way first, by distance, in fewer, longer, softer pieces, never gaps or beads, and never stopped. The far trails are laid one puff in ShareThin of their own, each reaching back over the gap and as much denser, a little softer and wider; ShareThin rises while the dust holds more than the rest leaves it (dust_top of the room less the highest the rest asked over dust_memory_s, never under dust_floor of it) and falls when it holds less, over dust_thin_s, up to dust_most_thin. A vehicle within dust_full_m of the eye keeps its whole trail; thinning reaches full 2.5 times that far. No trail is thinned below dust_least_alive puffs alive along it. Far off, a vehicle's two dust sockets (Id 2K and 2K+1, as the land battle calls them) become one wider trail. Cloud rig (sand, 120 tanks, 1.5 km front, battle camera 810 m back): at 2 to 3.5 shells a second every trail is a continuous thin line, the slow fade is whole and far bursts lose at most about 1%; at 6 a second keeping every tank's line costs about 10% of far bursts (the 3,000 room cannot do all three; FX8's 6,000 can).",
    "on": 0,
    "dust_floor": 0.05,
    "dust_top": 0.92,
-   "dust_memory_s": 4
+   "dust_memory_s": 4,
+   "dust_full_m": 300,
+   "dust_most_thin": 8,
+   "dust_thin_s": 2,
+   "dust_least_alive": 2
   }
  },
  "air_flak": {

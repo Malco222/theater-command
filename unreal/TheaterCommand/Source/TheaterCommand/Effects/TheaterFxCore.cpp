@@ -352,10 +352,14 @@ namespace TheaterFx
 		DustRoom = std::max(0.05, std::min(1.0, Num("dust.vehicles.most_of_room", 0.4)));
 		DustFullWithin = std::max(0.0, Num("dust.vehicles.full_within_m", 120.0));
 		// (FX5, room shares by kind: off by default, and then nothing moves. On, every gate but the dust's reads RoomGate,
-		// and the dust keeps dust_floor of the room for its trails however full the rest is)
+		// and the dust thins its far trails to fit what the rest leaves: ShareThin)
 		ShareDustFloor = Num("game.room_shares.on", 0.0) >= 0.5 ? SafeNum(Num("game.room_shares.dust_floor", 0.08), 0.0, 0.4, 0.08) : -1.0;
 		ShareDustTop = SafeNum(Num("game.room_shares.dust_top", 0.92), 0.3, 1.0, 0.92);
 		ShareDustMemory = SafeNum(Num("game.room_shares.dust_memory_s", 4.0), 0.1, 30.0, 4.0);
+		ShareDustFullM = SafeNum(Num("game.room_shares.dust_full_m", 300.0), 0.0, 1.0e5, 300.0);
+		ShareDustMostThin = SafeNum(Num("game.room_shares.dust_most_thin", 8.0), 1.0, 32.0, 8.0);
+		ShareDustThinS = SafeNum(Num("game.room_shares.dust_thin_s", 2.0), 0.1, 30.0, 2.0);
+		ShareDustLeastAlive = SafeNum(Num("game.room_shares.dust_least_alive", 2.0), 1.0, 20.0, 2.0);
 		CaseMouth = Picture("ground_cases.mouth", Rgb::FromPicture(46, 34, 18));
 		CaseGlint = Picture("ground_cases.glint_colour", Rgb::FromPicture(255, 220, 140));
 		CaseShadow = Clamp01(Num("ground_cases.contact_shadow", 0.5));
@@ -539,7 +543,9 @@ namespace TheaterFx
 		LampsKept.clear(); // (the pre-check, 22 November: kept lamps outlived a Clear, so a fire lit again with the clock set back
 		LampsAt = -1.0e18; // had no lamp until the clock passed where it was)
 		ThinShare = FillSmall = FillBig = FillLaid = SmokeLaidScreens = 0.0; // (FX9: no memory of another battle's smoke)
-		SharePeak = 0.0; // (FX5: nor of its barrage's peak)
+		SharePeak = 0.0; // (FX5: nor of its barrage's peak, nor its trails' thinning)
+		ShareThin = 1.0;
+		ShareThinAt = -1.0e9;
 		std::fill(SharePeaks, SharePeaks + 8, 0.0);
 		SharePeakSlot = std::numeric_limits<int64_t>::min();
 		ThinAt = -1.0e9;
@@ -4510,20 +4516,19 @@ namespace TheaterFx
 		// the column in front of a man still hides what drives behind its lead; the far columns thin)
 		const bool bNearEye = bEyeKnown && (LastEye - At).Length() < DustFullWithin;
 		const double Busy = std::max(static_cast<double>(RoomAsked()), bNearEye ? 0.0 : static_cast<double>(DustInSight + DustSince) / DustRoom) / std::max(1, MaxPuffs);
-		// (FX5, room shares by kind: the bursts, their lingering smoke and the fires take the room first, RoomGate; the
-		// dust has what they leave up to dust_top of the room, never more than its own share and never less than
-		// dust_floor, so a heavy barrage still shows every column's line and a light one its whole trail. A vehicle near
-		// the eye always lays, half as many when its share is filling)
-		bool bShareStop = false, bShareHalf = false;
+		// (FX5, room shares by kind, the art director's ruling (a) of 18:12Z: the bursts, their lingering smoke and the
+		// fires take the room first, RoomGate, and the dust trails give way. Never by stopping: a tank on sand with no
+		// dust looks parked. Each far trail lays one puff in ShareThin of its own, each that much longer along the
+		// track and a little softer, so it is the same line in fewer, bigger pieces, never beads; the farthest thin
+		// first, and a vehicle within dust_full_m of the eye keeps its whole trail)
+		double ShareK = 1.0;
 		if (ShareDustFloor >= 0.0)
 		{
-			const double Most = static_cast<double>(std::max(1, MaxPuffs));
-			const double Allowed = std::clamp(ShareDustTop * Most - std::max(static_cast<double>(RoomGate()), SharePeak), ShareDustFloor * Most, DustRoom * Most);
-			const double DustNow = static_cast<double>(DustInSight + DustSince);
-			bShareStop = !bNearEye && DustNow >= Allowed;
-			bShareHalf = DustNow > 0.6 * Allowed;
+			const double Away = bEyeKnown ? (LastEye - At).Length() : 0.0;
+			const double Over = Clamp01((Away - ShareDustFullM) / std::max(1.5 * ShareDustFullM, 1.0));
+			ShareK = 1.0 + (ShareThin - 1.0) * Over * Over * (3.0 - 2.0 * Over);
 		}
-		if (Row.Share <= 0.0 || Speed < Row.LeastMps || Speed < 1e-6 || (ShareDustFloor >= 0.0 ? bShareStop : Busy > 0.85))
+		if (Row.Share <= 0.0 || Speed < Row.LeastMps || Speed < 1e-6 || (ShareDustFloor < 0.0 && Busy > 0.85))
 		{
 			Du->Owed = 0.0;
 			return;
@@ -4531,7 +4536,31 @@ namespace TheaterFx
 		// (a puff every spacing_m along its path, no more than most_a_second; when the screen is filling, half as many)
 		const double Fast = Clamp01((Speed - Row.LeastMps) / (Row.FullMps - Row.LeastMps));
 		double Spacing = std::max(Row.Spacing, Speed / Row.MostPerS);
-		if (ShareDustFloor >= 0.0 ? bShareHalf : Busy > 0.6)
+		double Wider = 1.0, ShareBase = Spacing;
+		if (ShareDustFloor >= 0.0)
+		{
+			// (never so thin that a trail has fewer than dust_least_alive puffs alive along it, or it would come and
+			// go; and far off, a vehicle's two dust sockets, Id 2K and 2K+1 as the land battle calls them, become one
+			// trail a little wider: the right one's puffs go as the vehicle thins, the left one's widen)
+			const double LivesMid = 0.25 * ((Row.Life.A + Row.Life.B) * (1.0 - Fast) + (Row.LifeFast.A + Row.LifeFast.B) * Fast);
+			ShareK = std::clamp(std::min(ShareK, LivesMid * Speed / (ShareDustLeastAlive * Spacing)), 1.0, ShareDustMostThin);
+			const double Merged = Clamp01(ShareK - 1.0);
+			if (Merged > 0.0 && (Id & 1) != 0)
+			{
+				const double Tick = Now * 30.0;
+				const int64_t TickN = Tick == Tick && std::fabs(Tick) < 1.0e15 ? std::llround(Tick) : 0;
+				Dice Coin(Mix64(static_cast<uint64_t>(Id) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(TickN)));
+				if (Coin.U() < Merged)
+				{
+					Du->Owed = 0.0;
+					return;
+				}
+			}
+			Wider = (Id & 1) == 0 ? 1.0 + 0.4 * Merged : 1.0;
+			ShareBase = Spacing;
+			Spacing *= ShareK;
+		}
+		else if (Busy > 0.6)
 		{
 			Spacing *= 2.0;
 		}
@@ -4555,7 +4584,7 @@ namespace TheaterFx
 			B.Life = Row.Life.Pick(D) * (1.0 - Fast) + Row.LifeFast.Pick(D) * Fast; // (at full speed within life_fast_s, never past it)
 			B.Rise = Row.RiseM.Pick(D) * (0.5 + 0.5 * Fast) / B.Life;
 			B.R0 = Row.R0.Pick(D) * Big;
-			B.R1 = (Row.R1.Pick(D) * (1.0 - Fast) + Row.R1Fast.Pick(D) * Fast) * Big;
+			B.R1 = (Row.R1.Pick(D) * (1.0 - Fast) + Row.R1Fast.Pick(D) * Fast) * Big * Wider;
 			B.Grow = 0.4;
 			B.Along = Ahead;
 			B.Stretch = 1.3 + 0.5 * Fast;
@@ -4584,6 +4613,21 @@ namespace TheaterFx
 				B.Heart = 0.85;
 				B.Inner = 0.7;
 				B.Rim = 0.2;
+			}
+			if (ShareK > 1.0)
+			{
+				// (FX5: a thinned trail's puff reaches back over the gap to the last one kept, as much longer along the
+				// track, and as much denser as the puffs it stands for overlapped, so the line reads as dense as before;
+				// a little softer and wider, as the far bursts' fewer pieces are)
+				const double Soft = std::min(1.0, (ShareK - 1.0) / 3.0);
+				const double Was = B.Stretch;
+				B.Stretch = Was + (ShareK - 1.0) * ShareBase / std::max(2.0 * B.R1, 0.1);
+				const double Stood = ShareK * Was / B.Stretch;
+				B.Alpha = std::min(B.Alpha >= 0.9 ? B.Alpha : 0.9, 1.0 - std::pow(1.0 - Clamp01(B.Alpha), std::max(Stood, 1.0)));
+				B.HazeAlpha = std::min(B.Alpha, 1.0 - std::pow(1.0 - Clamp01(B.HazeAlpha), std::max(Stood, 1.0)));
+				B.Heart *= 1.0 - 0.25 * Soft;
+				B.Inner *= 1.0 - 0.2 * Soft;
+				B.R1 *= 1.0 + 0.15 * Soft;
 			}
 			Bits.push_back(B);
 			++DustSince;
@@ -15283,6 +15327,18 @@ namespace TheaterFx
 			double& Here = SharePeaks[static_cast<size_t>(Slot & 7)];
 			Here = std::max(Here, static_cast<double>(RoomGate()));
 			SharePeak = *std::max_element(SharePeaks, SharePeaks + 8);
+			// (how thin the far trails are laid: up while the dust holds more than the rest leaves it, between dust_top of
+			// the room less that peak and dust_floor of it, down while it holds less; over dust_thin_s, and never past
+			// dust_most_thin, so every moving vehicle keeps a line)
+			const double Most = static_cast<double>(std::max(1, MaxPuffs));
+			const double Allowed = std::clamp(ShareDustTop * Most - SharePeak, ShareDustFloor * Most, DustRoom * Most);
+			const double Since = Now - ShareThinAt;
+			if (Since > 0.0 && Since < 1.0)
+			{
+				const double Over = std::clamp(static_cast<double>(DustInSight) / std::max(Allowed, 1.0), 0.25, 4.0);
+				ShareThin = std::clamp(ShareThin * std::pow(Over, Since / ShareDustThinS), 1.0, ShareDustMostThin);
+			}
+			ShareThinAt = Now;
 		}
 		for (size_t I = 0; I < Roots.size(); ++I)
 		{
