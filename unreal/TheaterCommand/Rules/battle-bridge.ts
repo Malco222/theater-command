@@ -110,6 +110,17 @@
 //                                   carry wire: 0 (draw the cut line and the runner's wait, orderIn as ever). view.phones
 //                                   (below), the lineman in TC.battleMen (ln, below), and land:wire and land:mend events
 //                                   say the rest. Off: there are no wires, no block carries wire, and orders go as ever
+//                                   Stretcher bearers (release 2; Brian, 22 November 17:33Z: "make it where we can toggle it
+//                                   off"; the design director's Q4 and Q5, 18:36Z): { bearers: true }: of each block's
+//                                   losses a quarter are killed and the rest wounded; its stretcher bearers (2 to 3.5% of its
+//                                   men, by army) carry the wounded back to its aid post, 503 m behind where it started, and
+//                                   back (330 battle seconds a trip), its blows the weaker by the men away while they are
+//                                   out; its light cases (17% of the wounded) are back in the line 30 battle seconds after
+//                                   they fell, if it is still fighting then. view.bearers, view.aid and view.returns
+//                                   (below), a land:bearers event to his own side the first time a block's bearers go out
+//                                   ("1st Infantry's stretcher bearers are carrying the wounded back."), and the wounded,
+//                                   the stretchers and the men back in TC.battleMen (wd, cy, gone, back, br; poses wounded,
+//                                   carried, stretcher_front, stretcher_rear) draw it. Off: no such keys, events or men
 //   TC.battleWaitWhy(id)         -> { why, due }: hold until relieved, before he gives the wait order to one of his blocks:
 //                                   why, null where it may wait, else the reason in words for its card (the design director,
 //                                   129(d)); due, the battle second help could reach it there, or null. Moves nothing
@@ -220,6 +231,15 @@
 // the two telephone lines to 21st Infantry Division is cut. Orders still go by the other."; by: 'runner' or 'radio';
 // mend: when the lineman will have it mended), and { what: 'land:mend', unit, side, x, y, extra: { wire, man } } ("The
 // line to 21st Infantry Division is mended."). A recording names them wires, wireCuts and wireMends.
+// Stretcher bearers (release 2; the design director's Q4 and Q5, 18:36Z), only with { bearers: true }, his own side's
+// blocks (every side's in a view asked with no side, as a recording is): bearers, each { unit, out, waiting, back } for a
+// block with bearers out carrying ('out', men) or wounded lying for them ('waiting', men), and the battle second the
+// next of its bearers are back ('back', null with none out); aid, each { side, unit, x, y }: the aid post of a block
+// that has had wounded (draw a dressing station there: a stretcher carries its wounded to it, and they stay there);
+// returns, each { t, unit, n }: the light cases of block 'unit' back in the line at battle second t, n men (a block's in
+// one battle second together), those of the last two battle seconds: tell each once by its t and unit. Event { what:
+// 'land:bearers', unit, side, x, y } to his own side the first time a block's bearers go out. The men (TC.battleMen,
+// below) draw the wounded and the stretchers. Looks and numbers: the fight is the bearers' own rule, never the drill's.
 // Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
 // cover, loop, order }, and cal where a land block has one ("Explosions" below). Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
@@ -455,6 +475,18 @@
 //   pose reel (walking, the cable reel in his hands), walks the wire to the cut at 6 m a battle second, kneels there in
 //   pose splice (the two ends in his hands) from t1 until the mend's t, then walks back along the wire (walk) and leaves
 //   the list at the headquarters. He is never struck. r rifle (a signaller's rifle slung).
+//   Stretcher bearers (release 2; { bearers: true }; the recording keys of the ground thread, 17:37Z and 18:18Z): a quarter
+//   of the men who fall are killed (down, as ever); the rest carry wd, the battle time they fell, and lie wounded (p
+//   wounded) for the bearers. The block's stretcher bearers carry br: 1 (riflemen, two to a stretcher, as many stretchers
+//   as its bearers carry at once). A pair walks to a wounded man (walk), kneels by him (wait) while they turn to the way,
+//   and carries him head first to the block's aid post (view.aid) at 3 m a battle second: he is p carried, facing the
+//   way they walk, his x, y the stretcher's middle, his head toward the front bearer (p stretcher_front, 1.12 m ahead of
+//   him along the way), the rear bearer (p stretcher_rear) 1.35 m behind; his cy lists the carry, [from, to, by1, by2]:
+//   the battle seconds it began and reaches the aid post, and its front and rear bearers, each named k x 1000 + j (his
+//   model and his place in it). At the aid post he carries gone, the time he reached it, and lies there (wounded) to the
+//   end; the bearers walk home (walk) and fight again. A light case (about one wounded man in six, of a section) lies
+//   wounded for his 30 s dressing, then gets up as his block's strength comes back (back: the time he did; his d goes) and
+//   fights on. A block running, fled or gone sends no stretcher out; one on its way goes on. The men's count never changes.
 // Air support (Brian, 2026-11-18 18:58Z: "during ground battles where fighters are in range, you should be able to call
 // in air support where the fighters will strafe and drop bombs"; the design director, b533 and b536). A side whose
 // fighter groups are on ground support that month and reach the place comes on with fighters on call: the battle card
@@ -753,6 +785,10 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     ...(v.screens ? { screens: v.screens } : {}),
     // Field telephone lines (release 2, land): the defence's wires, as his side sees them, only with { phones: true }.
     ...(v.phones ? { phones: v.phones } : {}),
+    // Stretcher bearers (release 2, land): his own blocks' bearers, aid posts and light cases back, only with the switch.
+    ...(v.bearers ? { bearers: v.bearers } : {}),
+    ...(v.aid ? { aid: v.aid } : {}),
+    ...(v.returns ? { returns: v.returns } : {}),
   };
 }
 
@@ -793,7 +829,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; phones?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; phones?: boolean; bearers?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -851,6 +887,8 @@ export function battleCalls(h: BattleHooks) {
       if (opts?.smoke) sim.smoke = true;
       // Field telephone lines (release 2; the design director, 18:36Z): by its own switch.
       if (opts?.phones) sim.phones = true;
+      // Stretcher bearers (release 2): by its own switch.
+      if (opts?.bearers) sim.bearers = true;
       const f = sim.field;
       return {
         field: {

@@ -537,6 +537,53 @@ export const LAND = {
       GER: [[1942, 'runner'], [9999, 'radio']], SOV: [[9999, 'runner']], JAP: [[9999, 'runner']], ITA: [[9999, 'runner']], FRA: [[9999, 'runner']], VIC: [[9999, 'runner']], _: [[9999, 'runner']],
     } as Record<string, [number, PhoneFallback][]>,
   },
+  /**
+   * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off";
+   * the design director's rulings Q4 and Q5, 18:36Z, and 18:38Z on the light cases; LandBattle.bearers): off unless the
+   * battle is opened with them. Of each loss of strength a block suffers, 'killed' are dead and the rest wounded; of the
+   * wounded, light.share are dressed and back in the line light.dress seconds later (the only same-battle return in the
+   * record, Q5), and the rest are litter cases waiting for the block's bearers. Its bearers ('share' of its strength at the
+   * start, counted in its strength) carry them back 'litter' to a case, out to the aid post 'aid' metres behind where it
+   * started and back at 'pace': while they are out the block's own blows weaken by the men away (never its strength, its
+   * nerve, its count or its size). Nothing here draws on the dice.
+   *   killed: the share of each loss killed, 3 wounded to 1 killed: the US figure, 3.1 (Army Battle Casualties and
+   *     Nonbattle Deaths in World War II: 189,696 killed in action, 592,170 wounded and injured), for every army (Q4:
+   *     B1's 3:1 is looks only). The drill draws the rest of the men who fall as wounded.
+   *   share: bearers as a share of a block's men, by army, sourced in kind and rounded:
+   *     UK and her kin (CAN, AUS, NZL, SAF, IND) 0.025: a corporal and 19 privates a battalion, "all of these were
+   *       infantrymen" (bayonetstrength.uk, The Organisation of the British Infantry Battalion 1938-45, p.10;
+   *       britishmilitaryhistory.co.uk, the battalion HQ's medical list).
+   *     GER 0.03: a Krankenträger in each platoon headquarters and the company's medical NCO (KStN 131n, 1 May 1944,
+   *       battleorder.org): 4 of a company of 142.
+   *     SOV 0.035: a medical instructor and 4 orderlies a company of 143 (shtat 04/550, 10 December 1942, battleorder.org).
+   *     USA 0.02: two company aid men a company (FM 8-10, 1942, para 28d(1), 33b) and the battalion's 12-man litter
+   *       squad (med-dept.com, The WW2 Aid Station).
+   *     JAP 0.02: a medical orderly a platoon (TM-E 30-480, Handbook on Japanese Military Forces, evacuation).
+   *     ITA, FRA and VIC 0.0275: unsourced; knob (DD 18:36Z), the middle of the sourced 2 to 3.5% (Q4).
+   *     '_', every other army: 0.0275, the same knob (DD 18:36Z).
+   *   litter: bearers to a stretcher (FM 8-10 para 32a: "Litter squads consist ordinarily of four bearers each").
+   *   aid: metres from the block's start place to its aid post, toward its own back edge, kept on the field: the middle
+   *     of FM 8-10's 300 to 800 yards (para 31b(3)), 550 yards (the design director, Q4, not the 350 proposed).
+   *   pace: metres a battle second out and back: FM 8-10 para 32c, a round trip of 500 yards each way "at least twenty
+   *     minutes", 914.4 m in 300 battle seconds (15 battle seconds a real minute). A round trip to 503 m: 330 s.
+   *   light: the lightly wounded, back in the same battle (Q5: the only same-battle return; no bigger share for feel):
+   *     share: of the wounded, the US "carded for record only", 17.1% (123,836 of 723,560 wounded: the Dupuy Institute,
+   *       Carded for Record in WWII): knob (DD 18:36Z).
+   *     at: metres from the block where they are dressed. The design director, 18:38Z: "Light cases are dressed at the
+   *       block by the company's aid man, or by themselves, and are back in the line after the 30 s dressing knob, with
+   *       no walk ... every soldier carried a field dressing." Kept as a knob (DD 18:36Z): 0, no walk.
+   *     out, back: their pace going and coming back, times the foot's (LAND.speed.inf), read only where at > 0:
+   *       knobs (DD 18:36Z).
+   *     dress: battle seconds to dress a wound: knob (DD 18:36Z).
+   */
+  bearers: {
+    killed: 0.25,
+    share: { USA: 0.02, UK: 0.025, CAN: 0.025, AUS: 0.025, NZL: 0.025, SAF: 0.025, IND: 0.025, GER: 0.03, SOV: 0.035, JAP: 0.02, ITA: 0.0275, FRA: 0.0275, VIC: 0.0275, _: 0.0275 } as Record<string, number>,
+    litter: 4,
+    aid: 503,
+    pace: 3.048,
+    light: { share: 0.17, at: 0, out: 0.5, back: 1, dress: 30 },
+  },
 };
 /** How orders go to a block whose telephone wire is down (LAND.phones.fallback): by the wireless or by a runner. */
 export type PhoneFallback = 'radio' | 'runner';
@@ -551,3 +598,5 @@ export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAN
 export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; close: number; closeAt: number } => (u.team ? LAND.teams[u.team] : LAND.guns);
 /** An army's section smoke (LAND.smoke): its own, or its senior partner's (kin); null where it has none. */
 export const smokeMeans = (nat: string): SmokeMeans | null => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;
+/** An army's stretcher bearers, as a share of a block's men (LAND.bearers.share): its own, or every other army's. */
+export const bearerShare = (nat: string): number => LAND.bearers.share[nat] ?? LAND.bearers.share._;

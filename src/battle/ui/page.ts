@@ -270,6 +270,8 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   b.cutters = flagged('cutters'); b.smoke = flagged('smoke');
   // ?phones (release 2; the design director, 18:36Z): the defence's field telephone lines; guns, mortars and tanks cut them.
   b.phones = flagged('phones');
+  // ?bearers (release 2): stretcher bearers carry each block's wounded to its aid post; its light cases come back.
+  b.bearers = flagged('bearers');
   if (flagged('hedges')) { const H = practiceHedges(b.field.w, b.field.h); b.hedgesOn(H.hedges, H.gates); }
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
