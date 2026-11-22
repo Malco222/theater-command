@@ -135,4 +135,24 @@ describe('the battle doorway for the 3D game', () => {
     expect(unitOut(tank, b.t).alone).toBe(true);
     expect(unitOut(tank, b.t + 2).alone).toBeUndefined();
   });
+  it('sends the men inside the blocks (the squad brain): the player\'s own always, an enemy block only once he knows it', () => {
+    const { g, TC } = rig();
+    const o = offers(g).find((x) => attackOutlook(g, x.corps, x.target)?.exact === false) ?? offers(g)[0];
+    const st = TC.battleStart(o.corps.map((c) => c.id), o.target.id)!;
+    type M = { blocks: { id: number; ph: string; men: { k: number; r: string; x: number; y: number; p: string; v: number; c: string }[] }[] };
+    const units = st.view.units as { id: number; side: string; known?: boolean }[];
+    let men = TC.battleMen() as M;
+    const mine = units.filter((u) => u.side === 'att').map((u) => u.id);
+    for (const id of mine) expect(men.blocks.some((b) => b.id === id), `block ${id}`).toBe(true);
+    for (const u of units.filter((x) => x.known === false)) expect(men.blocks.some((b) => b.id === u.id)).toBe(false);
+    const foot = men.blocks.find((b) => b.men.some((m) => m.r === 'officer'))!;
+    expect(foot.men.every((m) => typeof m.x === 'number' && typeof m.p === 'string')).toBe(true);
+    // Sent in, his men go forward with their blocks.
+    const foe = units.find((x) => x.side === 'def')!.id;
+    expect(TC.battleOrder({ do: 'attack', units: mine, target: foe }).ok).toBe(true);
+    TC.battleSpeed(4);
+    for (let i = 0; i < 10; i++) TC.battleTick(1);
+    men = TC.battleMen() as M;
+    expect(men.blocks.filter((b) => mine.includes(b.id)).some((b) => b.men.some((m) => m.v > 0))).toBe(true);
+  });
 });
