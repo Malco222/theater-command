@@ -94,9 +94,10 @@ export interface SeaFact {
    * route's fortress) shows: boats; surface raiders (a battleship, cruiser or carrier raiding or patrolling there); an
    * enemy-held fortress astride the route (navy.json convoys[].base, as routeForces counts it). The caption says "by
    * submarines" only where boats were the raiders and nothing else raided; a month no boat raided holds no scene.
-   * `sure` false: the record could not settle whether every raider was boats alone (a raider fleet gone from the list,
-   * or one that has lost ships since the raid was counted; without the record, the fleets as the month closed stand
-   * in): the caption then says "on the convoy routes", never "by submarines". Absent, as in a fact made by hand: sure.
+   * `sure` false: who raided could not be settled: without the record (the fleets as the month closed stand in), or
+   * from an older save's record whose raiders carry no `heavy` (a raider fleet gone from the list, or one that has lost
+   * ships since the raid was counted). The caption then says "on the convoy routes", never "by submarines". The
+   * record as the rules write it since 21a3a759 always settles it. Absent, as in a fact made by hand: sure.
    */
   raidBy?: { boats: boolean; surface: boolean; base: boolean; sure?: boolean };
   // Record-only fields (form D1: "hunters, aircraft and quarry per sea (huntersIn, 1870-1898); a torpedoing's possible
@@ -107,13 +108,13 @@ export interface SeaFact {
   hunters?: { ships: number; aircraft: number };
   /** A hunt: the enemy boats in the sea as it began, by nation. */
   quarry?: Record<string, number>;
-  /** A torpedoing's possible attackers' nations, the picked one's (look:torpedo:<fleet>) first. */
+  /** A torpedoing's possible attackers' nations as the record names them (couldNat), the picked one's (byNat) first. */
   attackers?: string[];
   /**
    * How attackers[0] stands: 'rules' (and absent, as in a fact made by hand), the rules' own pick (the record's `by`,
-   * its nation known); 'none', the record picked none, and the attackers are the boats that could have fired;
-   * 'unknown', the record's pick is a fleet whose nation is not known (gone from the list and named nowhere else in the
-   * record), and the attackers are the others that could have fired: the scene takes none of them as the one that did.
+   * with its nation `byNat`); 'none', the record picked none (`byNat` null), and the attackers are the boats that could
+   * have fired; 'unknown', an older save's record (no `byNat`): it picked a fleet but names no nation, the attackers are
+   * none, and the scene takes no navy's boats as the ones that fired.
    */
   pick?: 'rules' | 'none' | 'unknown';
   /** A convoy month, in the scene's sea: the raiding boats' nations and the escorts' (the most first), the escorts' destroyers, and the air guard; tons sunk by sea (key: tons). */
@@ -127,25 +128,41 @@ export interface SeaFact {
 }
 
 /**
- * A fleet in the rules' record: its id, nation and boats or destroyers (types.ts SubLookFleet). `heavy`, a raider's
- * battleships, cruisers and carriers as the raid was counted, is not in the record yet (asked of the rules builder,
- * 22 November): where it is given it settles whether the raider was a surface raider.
+ * A fleet in the rules' record (types.ts SubLookFleet): its id, its nation, and `n`, its boats (a hunter's or an
+ * escort's: its destroyers) as the month began. `heavy` is a convoy raider's alone: its battleships, carriers and
+ * cruisers, which raid too. Every convoy raider carries it since the rules' 21a3a759 (0 included), and with it `n` is
+ * the raider's boats before a history campaign's convoy roll sank any. A raider row without it is an older save's
+ * record, written before the rules kept either: its `n` may be after the roll (factsOf bounds what it reads from it).
  */
 export interface SubLookFleet { fleet: number; nat: string; n: number; heavy?: number }
 
 /**
+ * A heavy ship torpedoed, in the record: its fleet, sea and class; `could`, the enemy boats' fleets in the sea that
+ * could have fired, and `couldNat` their nations in the same order; `by`, the one the rules picked on its own key
+ * (look:torpedo:<fleet>), and `byNat` its nation, null where `by` is null (since the rules' 21a3a759).
+ */
+export interface SubLookTorpedo { fleet: number; zone: number; cls: 'bb' | 'cv' | 'ca' | 'dd' | 'ss'; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }
+
+/**
  * The rules' record for the scene (release 2, ruling 241 D1; written by navy.ts while the viewing setting is on, this
  * month and last, into `g.subLook`): this module reads it and never writes it. The shape is types.ts `SubLook` as
- * the rules builder wrote it (claude/convoy-hook 9b40cebb); it is mirrored here, not imported, so this module builds
- * on rules that do not yet have it. The tests hold a hand-made record to this shape.
+ * the rules builder wrote it (claude/convoy-hook 21a3a759); it is mirrored here, not imported, so this module builds
+ * on rules that do not have it. The two are held assignable both ways at compile time (tests/sub-scene-d1.test.ts).
  */
 export interface SubLook {
   turn: number;
   nat: string;
   hunts: { zone: number; hunters: SubLookFleet[]; air: number; quarry: SubLookFleet[]; sunk: number; cost: number }[];
-  torpedoes: { fleet: number; zone: number; cls: 'bb' | 'cv' | 'ca' | 'dd' | 'ss'; could: number[]; by: number | null }[];
+  torpedoes: SubLookTorpedo[];
   convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number }[] }[];
 }
+
+/**
+ * The record as a save may hold it: today's (SubLook), or an older save's, written before the rules' 21a3a759, whose
+ * torpedoings carry no `couldNat` and `byNat` (and whose raiders carry no `heavy`). The record keeps this month and
+ * last, so an older save's rows are gone a month after it is loaded and played on. factsOf reads either.
+ */
+export type SubLookSaved = Omit<SubLook, 'torpedoes'> & { torpedoes: (Omit<SubLookTorpedo, 'couldNat' | 'byNat'> & Partial<Pick<SubLookTorpedo, 'couldNat' | 'byNat'>>)[] };
 
 export interface MonthFacts {
   /** The player's nation. */
@@ -773,7 +790,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true):
   if (!f.hunters) standIns.push("the kill's share by aircraft: the air row");
   if (pick.case === 'convoy' && f.escortShips === undefined) standIns.push('the escorts: the escort row');
   if (pick.case === 'hunt' && !f.hunters) standIns.push('the hunting group: the escort row');
-  if (pick.case === 'convoy' && f.raidBy?.sure === false) standIns.push(f.raiders ? "who raided: a raider's heavy ships as the scene is read (not in the record)" : 'who raided: the fleets at sea as the month closed');
+  if (pick.case === 'convoy' && f.raidBy?.sure === false) standIns.push(f.raiders ? "who raided: an older save's record, without the raiders' heavy ships; the fleets as the scene is read" : 'who raided: the fleets at sea as the month closed');
 
   // ---- The outcome, fixed first ------------------------------------------------------------------------------
   const fan = pick.case !== 'hunt';
@@ -1593,7 +1610,7 @@ function firstOf(g: Game, from?: number): number {
  * quarry, the torpedoing's picked attacker and the convoy's raiders, escorts, air guard and tons by sea. It reads the
  * game and writes nothing.
  */
-export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: SubLook[]): MonthFacts {
+export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: SubLookSaved[]): MonthFacts {
   const facts: SeaFact[] = [];
   const zoneByName = (text: string): number => {
     let best = -1, len = 0;
@@ -1613,21 +1630,9 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
     return out;
   };
   // The rules' record: a nation's row for the month the headline is dated, where one was kept.
-  const rec: SubLook[] = record ?? (g as unknown as { subLook?: SubLook[] }).subLook ?? [];
-  const lookOf = (nat: string, turn: number): SubLook | undefined => rec.find((l) => l.turn === turn && l.nat === nat);
+  const rec: SubLookSaved[] = record ?? (g as unknown as { subLook?: SubLookSaved[] }).subLook ?? [];
+  const lookOf = (nat: string, turn: number): SubLookSaved | undefined => rec.find((l) => l.turn === turn && l.nat === nat);
   const fleetById = new Map(g.fleets.map((x) => [x.id, x]));
-  // A fleet's nation by its id (ids are never given twice, g.nextFleet): the fleets on the list, and failing those the
-  // record's own rows, which name each fleet's nation (a fleet struck from the list since, merged or sunk, is still
-  // there); a torpedoing's `by` and `could` are bare ids, read through this, never guessed.
-  const natOfFleet = new Map<number, string>(g.fleets.map((x) => [x.id, x.nat]));
-  {
-    const add = (y: SubLookFleet): void => { if (!natOfFleet.has(y.fleet)) natOfFleet.set(y.fleet, y.nat); };
-    for (const l of rec) {
-      for (const h of l.hunts) [...h.hunters, ...h.quarry].forEach(add);
-      for (const c of l.convoys) for (const x of c.seas) [...x.raiders, ...x.escorts].forEach(add);
-    }
-  }
-  const natOfRef = (id: number | null): string | undefined => (id === null ? undefined : natOfFleet.get(id));
   /** The record's fleets by nation: boats or destroyers each, and the nations the most first (ties by name); `keep` lets a fleet of none count. */
   const byNat = (fs: SubLookFleet[], keep: (x: SubLookFleet) => boolean = (x) => x.n > 0): { nats: string[]; n: Record<string, number> } => {
     const n: Record<string, number> = {};
@@ -1647,7 +1652,8 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
   const usedTorpedo = new Set<object>();
   const hs: Headline[] = g.headlines.slice(firstOf(g, from));
   // (the grand campaign counts a route's raiders after the month's hunts, so a raider's `n` is its boats as it raided;
-  // the history campaigns count them before the convoy's own roll and record them after it, navy.ts convoyWar)
+  // the history campaigns count them before the convoy's own roll, and the record keeps them as they were then since
+  // the rules' 21a3a759, navy.ts convoyWar; an older save's record kept them after it)
   const grand = (g.flags as { open?: number }).open === 1;
   /** Whether the window's news tells of a fleet's ships sunk or lost (since the raid was counted, or before it). */
   const touched = (name: string): boolean => hs.some((h) => h.text.includes(name) && /\b(sinks?|sunk|scuttled|lost)\b/.test(h.text));
@@ -1664,14 +1670,14 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
       // (the record: the boats' fleets that could have fired, the one picked on look:torpedo:<fleet> first, as nations)
       const r = fleet ? lookOf(h.nat, h.turn)?.torpedoes.find((x) => !usedTorpedo.has(x) && x.fleet === fleet.id && x.zone === z && x.cls === cls) : undefined;
       if (r) usedTorpedo.add(r);
-      // (the pick's nation where it is known; where the record picked a fleet whose nation is not, the others that could
-      // have fired, and none of them taken as the one that did)
-      const byNat0 = r ? natOfRef(r.by) : undefined;
-      const pick: SeaFact['pick'] = !r || r.by === null ? 'none' : byNat0 ? 'rules' : 'unknown';
-      const could = r ? r.could.filter((id) => id !== r.by).map(natOfRef) : [];
-      const attackers = r ? [...new Set([byNat0, ...could].filter((n): n is string => !!n))] : [];
+      // (the nations as the record names them: the pick's, `byNat`, and those that could have fired, `couldNat`. Where
+      // it picked none (`byNat` null) the scene stands in a boat of one of them, and says so. A torpedoing without
+      // `byNat` is an older save's record: its pick's nation is not known, and no navy's boats are taken as the ones
+      // that fired; the scene stands in from the boats at sea there)
+      const pick: SeaFact['pick'] | undefined = !r ? undefined : r.by === null ? 'none' : typeof r.byNat === 'string' ? 'rules' : 'unknown';
+      const attackers = !r ? [] : [...new Set([pick === 'rules' ? r.byNat : null, ...(r.couldNat ?? [])].filter((n): n is string => !!n))];
       facts.push({ kind: 'torpedo', sea, turn: h.turn, week: h.week, by: '', on: h.nat, cls, fleet: tor[2], ships: fleet ? { ...fleet.ships } : undefined, ...(z >= 0 ? { boatsAt: boatsIn(z, h.nat) } : {}),
-        ...(attackers.length ? { attackers, pick } : {}) });
+        ...(r ? { attackers, pick } : {}) });
       continue;
     }
     // A hunt (navy.ts huntSubs()): "Destroyers of the Home Fleet sink 2 German submarines in the North Atlantic, for the loss of 1 destroyer."
@@ -1707,14 +1713,20 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
       const r = look?.convoys.find((x) => x.route === route.id);
       if (r) {
         const lost = same ? book.subsLost : said?.[2] ? Number(said[2]) : 0;
+        const all = r.seas.flatMap((x) => x.raiders);
         // Who raided, from the record itself (the fleet list as the scene is read has moved on since: other navies'
         // months, the beats' groups struck when empty, fleets merged or sunk). A raider is on the record only for its
-        // raid strength (routeForces: battleships, cruisers, carriers, boats). Its battleships, cruisers and carriers
-        // as it raided (`heavy` where the record gives it): with no boats (n 0, where n is its boats as it raided) it
-        // had them; else the fleet now, where it is still on the list and the window's news tells of no loss of its;
-        // else not known. Its boats: n > 0; in a history campaign whose route lost boats, n is after the roll, and a
-        // raider of n 0 had boats where it had no heavy ships.
-        const asRaided = grand || lost === 0;
+        // raid strength (routeForces: battleships, cruisers, carriers, boats). Since the rules' 21a3a759 each raider
+        // carries `heavy`, its battleships, carriers and cruisers, and its `n` is its boats as the month began, before a
+        // history campaign's convoy roll: both as it raided, read as they stand (boats: n > 0; heavy ships: heavy > 0).
+        // An older save's record is told by a raider without `heavy`; and since the boats a history route lost came off
+        // its raiders, they can be no more than the raiders' boats as the month began, so a history route whose rows
+        // count fewer is read as an older one too. Only there does the bound stand (as round 2 read every record): in
+        // a history campaign whose route lost boats, n may be after the roll, and a raider of n 0 had boats where it
+        // had no heavy ships; with no boats as it raided, it had heavy ships; without `heavy`, the fleet now, where it
+        // is still on the list and the window's news tells of no loss of its; else not known.
+        const older = all.some((y) => y.heavy === undefined) || (!grand && lost > sum(all));
+        const asRaided = !older || grand || lost === 0;
         const heavyThen = (y: SubLookFleet): boolean | undefined => {
           if (y.heavy !== undefined) return y.heavy > 0;
           if (y.n === 0 && asRaided) return true;
@@ -1724,7 +1736,6 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
           return touched(fl.name) ? undefined : false;
         };
         const boatsThen = (y: SubLookFleet): boolean | undefined => (y.n > 0 ? true : asRaided ? false : heavyThen(y) === false ? true : undefined);
-        const all = r.seas.flatMap((x) => x.raiders);
         const maybeBoats = (y: SubLookFleet): boolean => boatsThen(y) !== false;
         // The record. Its sea: where boats raided, his own where he raided it, the most tons (then the most boats).
         const boatSeas = r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)).length ? r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)) : r.seas.filter((x) => x.raiders.some(maybeBoats));
@@ -1735,7 +1746,8 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
         const tonsBy: Record<string, number> = {};
         for (const x of r.seas) if (g.seas[x.zone]) tonsBy[g.seas[x.zone].key] = x.tons;
         // (the boats lost: the quarry of his hunts that sank them in the route's seas (counted before the hunt), else
-        // every raider that may have had boats, whatever its n: a history campaign's n is after the boats were lost)
+        // every raider that had boats as the month began; in an older save's record, every raider that may have had
+        // them, whatever its n, as a history campaign's n there may be after the boats were lost)
         const hunts = (look?.hunts ?? []).filter((x) => zones.includes(x.zone) && x.sunk > 0);
         const lostNats = hunts.length ? byNat(hunts.flatMap((x) => x.quarry)).nats : byNat(all, maybeBoats).nats;
         facts.push({
@@ -1743,7 +1755,7 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
           tons: same ? book.tons : said ? Number(said[1].replace(/,/g, '')) : r.tons, boats: lost, escortsLost: same ? book.escortsLost : 0,
           ...(z >= 0 ? { boatsAt: boatsIn(z, h.nat, true) } : {}),
           raidBy: {
-            // (boats lost on a history route were its raiders' boats: boats raided)
+            // (boats lost on a history route were its raiders' boats: boats raided; the snapshot shows them, an older record may not)
             boats: all.some((y) => boatsThen(y) === true) || (!grand && lost > 0),
             surface: all.some((y) => heavyThen(y) === true),
             base: baseHeld(route),
