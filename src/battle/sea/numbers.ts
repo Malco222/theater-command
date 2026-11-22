@@ -75,12 +75,14 @@ export const SAILORS = sailorsData as unknown as {
 export function aliveAfter(band: SeaWater, h: number): number {
   const p = SAILORS.alive[band];
   if (h <= p[0][0]) return p[0][1];
-  for (let i = 1; i < p.length; i++) if (h <= p[i][0]) return p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * (h - p[i - 1][0])) / (p[i][0] - p[i - 1][0]);
+  // A point itself is the record's figure, never a sum that misses it by a rounding (arctic's 0 at three hours).
+  for (let i = 1; i < p.length; i++) if (h <= p[i][0]) return h === p[i][0] ? p[i][1] : p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * (h - p[i - 1][0])) / (p[i][0] - p[i - 1][0]);
   return 0;
 }
 
-/** The band of a sea's water in a month (0 January), from the historian's table; null for a sea the table lacks. */
+/** The band of a sea's water in a month (0 January), from the historian's table; null for a sea the table lacks. 'a',
+ *  arctic, only in the sea-months the historian lays as under 4 C (the design director, 18:50Z). */
 export function waterOf(sea: string, month: number): SeaWater | null {
   const b = SAILORS.water[sea]?.[month];
-  return b === 'c' ? 'cold' : b === 't' ? 'temperate' : b === 'w' ? 'warm' : null;
+  return b === 'a' ? 'arctic' : b === 'c' ? 'cold' : b === 't' ? 'temperate' : b === 'w' ? 'warm' : null;
 }

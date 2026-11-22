@@ -20,6 +20,14 @@ export const SEA_CLASSES: SeaClass[] = ['bb', 'cv', 'ca', 'dd'];
 /** Ships by class, as the rules count them (types.ts Ships), without submarines. */
 export type SeaShips = Record<SeaClass, number>;
 
+/**
+ * One row of a fleet's ships of a kind (ships by class and navy: naval-battles/ships-by-class-plan.md 5.1, c1): the hulls
+ * of one class of the record, its words ('King George V class', or '' for hulls with no row), the worth the rules' fleet
+ * power gives each of them (navy.ts fleetPower through shiprows.ts hullWorth), and how many; in the fleet's list order.
+ * Only these four keys (plan 6.1, test 6).
+ */
+export interface ShipRow { id: string | null; label: string; worth: number; n: number }
+
 /** One campaign fleet as the field receives it. */
 export interface FleetTicket {
   /** The fleet's id in the campaign: what it lost is reported back against it. */
@@ -46,6 +54,9 @@ export interface FleetTicket {
   tough?: SeaShips;
   /** Ruling 240: what the fleet's ships are fitted with (tech.ts shipKit), for the 3D scenes to read and nothing else. Absent where nothing is. */
   kit?: { stage: 'early' | 'mid' | 'late' | null; vt: boolean; dc: boolean };
+  /** Its ships by row, for the kinds the campaign plays by class (ships by class, with the campaign's switch on): hulls
+   *  past the rows' count have no row and the kind's weight. Absent, every ship of a kind weighs alike, as ever. */
+  rows?: Partial<Record<SeaClass, ShipRow[]>>;
 }
 
 /** The sea the battle is fought in, and what the campaign knows of it. */
@@ -61,7 +72,7 @@ export interface SeaPlace {
 }
 
 /** The band of the water men go into (data/battle/sailors.json water): cold, temperate or warm. */
-export type SeaWater = 'cold' | 'temperate' | 'warm';
+export type SeaWater = 'arctic' | 'cold' | 'temperate' | 'warm';
 
 /**
  * Men in the water (release 2's sailor rules: Brian, 22 November 12:49Z; the design director's form ruling 12:58Z and

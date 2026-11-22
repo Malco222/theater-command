@@ -6,10 +6,26 @@
 // the carrier's deck, and the fleet's own multiplier); its hull is that weight over the class's toughness, so a
 // battleship takes about twice the wear of its weight that a destroyer does, as the rules sink them. Each side's
 // hulls together come to the same multiple of its weight (fire.hull), so toughness picks who goes down, not who wins.
+//
+// Ships by class (naval-battles/ships-by-class-plan.md 4.7 and 5.1, c1): where the ticket gives a fleet's ships of a kind
+// by row, a ship weighs her row's worth times her kind's weight, and a piece holds hulls of one row. Rows cut more
+// pieces than the kind's count where several sail to a piece; past the side's limit, rows of one kind within one fleet
+// merge, the closest worths first, and a merged piece weighs the mean of its hulls' worths. A ticket with no rows draws
+// up as ever.
 
 import type { Side } from '../core/types';
 import { RULES_CLASSES, SEA } from './numbers';
-import { SEA_CLASSES, type FleetTicket, type SeaClass, type SeaUnit } from './types';
+import { SEA_CLASSES, type FleetTicket, type SeaClass, type SeaShips, type SeaUnit, type ShipRow } from './types';
+
+/** A fleet's ships of a kind as the rules weigh them, in ships of the kind's weight: where it has rows, each hull at her
+ *  row's worth and those past the rows at 1 (shiprows.ts hullSum); else its count. */
+export function hullsOf(f: { ships: SeaShips; rows?: Partial<Record<SeaClass, ShipRow[]>> }, c: SeaClass): number {
+  const rows = f.rows?.[c];
+  if (!rows) return f.ships[c];
+  let n = f.ships[c];
+  for (const r of rows) n += r.n * (r.worth - 1);
+  return n;
+}
 
 /** How many ships of each class sail as one piece on this side, so that it has no more than the most pieces. */
 export function groupSizes(fleets: FleetTicket[]): Record<SeaClass, number> {
@@ -29,6 +45,58 @@ export interface PieceInfo {
   weight: number;
   hull: number;
   fleet: FleetTicket;
+  /** Ships by class: the row of each hull in the piece, in its fleet's list order, where its fleet gives the kind by row. */
+  rows?: (string | null)[];
+}
+
+/** A hull of a fleet that gives its kind by row: her row, its worth, and how much of a ship she is (1, or the part ship
+ *  a count ends on, as the campaign's counts can). */
+interface Hull { id: string | null; worth: number; part: number }
+
+/** A fleet's hulls of a kind, row by row in its list order, the hulls past its rows last at worth 1 with no row (with
+ *  hulls of a row of no row at worth 1, where it has one); null where it gives the kind by count. */
+function rowHulls(f: FleetTicket, c: SeaClass): Hull[][] | null {
+  const rows = f.rows?.[c];
+  if (!rows) return null;
+  const groups: Hull[][] = [];
+  let left = f.ships[c];
+  for (const r of rows) {
+    const g: Hull[] = [];
+    for (let i = 0; i < r.n && left > 1e-9; i++) { g.push({ id: r.id, worth: r.worth, part: 1 }); left -= 1; }
+    if (g.length) groups.push(g);
+  }
+  if (left > 1e-9) {
+    let rest = groups.find((g) => g[0].id === null && g[0].worth === 1);
+    if (!rest) groups.push((rest = []));
+    while (left > 1e-9) { const part = Math.min(1, left); rest.push({ id: null, worth: 1, part }); left -= part; }
+  }
+  return groups;
+}
+
+const meanWorth = (g: Hull[]): number => g.reduce((s, h) => s + h.worth * h.part, 0) / g.reduce((s, h) => s + h.part, 0);
+
+/**
+ * Past the side's limit (pieces.most), rows of one kind within one fleet merge, the closest worths first, until it fits
+ * (plan 4.7): of the pairs whose merging saves a piece, the closest; where no single pair saves one, the closest pair of
+ * all, so three rows that fit in two pieces only together still come together. Ties go to the first in the fleets' and
+ * the kinds' order and the lists'. The merged row keeps the earlier row's place, its hulls after them.
+ */
+function mergeRows(cut: Map<FleetTicket, Partial<Record<SeaClass, Hull[][]>>>, count: () => number, per: Record<SeaClass, number>): void {
+  while (count() > SEA.pieces.most) {
+    let best: { gs: Hull[][]; i: number; j: number; d: number; saves: boolean } | null = null;
+    for (const by of cut.values()) for (const c of SEA_CLASSES) {
+      const gs = by[c];
+      if (!gs) continue;
+      for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
+        const saves = Math.ceil((gs[i].length + gs[j].length) / per[c]) < Math.ceil(gs[i].length / per[c]) + Math.ceil(gs[j].length / per[c]);
+        const d = Math.abs(meanWorth(gs[i]) - meanWorth(gs[j]));
+        if (!best || (saves && !best.saves) || (saves === best.saves && d < best.d - 1e-12)) best = { gs, i, j, d, saves };
+      }
+    }
+    if (!best) return;
+    best.gs[best.i] = [...best.gs[best.i], ...best.gs[best.j]];
+    best.gs.splice(best.j, 1);
+  }
 }
 
 /** Each class's row in the line, counted back from the front: destroyers ahead, then cruisers, battleships, carriers. */
@@ -46,16 +114,36 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
   for (const side of ['att', 'def'] as Side[]) {
     const mine = fleets.filter((f) => f.side === side);
     const per = groupSizes(mine);
+    // Ships by class: the hulls of each kind a fleet gives by row, row by row, merged past the side's limit (mergeRows).
+    const cut = new Map<FleetTicket, Partial<Record<SeaClass, Hull[][]>>>();
+    for (const f of mine) for (const c of SEA_CLASSES) { const g = rowHulls(f, c); if (g) cut.set(f, { ...cut.get(f), [c]: g }); }
+    if (cut.size) {
+      const count = (): number => mine.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => {
+        const gs = cut.get(f)?.[c];
+        return m + (gs ? gs.reduce((k, g) => k + Math.ceil(g.length / per[c]), 0) : Math.ceil(f.ships[c] / per[c]));
+      }, 0), 0);
+      mergeRows(cut, count, per);
+    }
     // Lines across the field, one row per class, heaviest at the back: destroyers ahead, then cruisers, then battleships, then carriers.
-    const rows: Record<SeaClass, { f: FleetTicket; n: number }[]> = { dd: [], ca: [], bb: [], cv: [] };
+    // 'w': the weight of one of its ships; 'ids': its hulls' rows (ships by class).
+    const rows: Record<SeaClass, { f: FleetTicket; n: number; w: number; ids?: (string | null)[] }[]> = { dd: [], ca: [], bb: [], cv: [] };
     for (const f of mine) for (const c of SEA_CLASSES) {
+      const gs = cut.get(f)?.[c];
+      if (gs) {
+        // Pieces cut within a row: per[c] hulls a piece, a ship weighing the mean of its piece's hulls' worths.
+        for (const g of gs) for (let k = 0; k < g.length; k += per[c]) {
+          const hs = g.slice(k, k + per[c]), n = hs.reduce((s, h) => s + h.part, 0);
+          rows[c].push({ f, n, w: shipWeight(f, c) * (hs.reduce((s, h) => s + h.worth * h.part, 0) / n), ids: hs.map((h) => h.id) });
+        }
+        continue;
+      }
       let left = f.ships[c];
-      while (left > 0) { const n = Math.min(per[c], left); rows[c].push({ f, n }); left -= n; }
+      while (left > 0) { const n = Math.min(per[c], left); rows[c].push({ f, n, w: shipWeight(f, c) }); left -= n; }
     }
     const order: SeaClass[] = ['dd', 'ca', 'bb', 'cv'];
     const toward = side === 'att' ? 1 : -1;
     const baseY = side === 'att' ? F.edge : F.size - F.edge;
-    const sideW = mine.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + f.ships[c] * shipWeight(f, c), 0), 0);
+    const sideW = mine.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + hullsOf(f, c) * shipWeight(f, c), 0), 0);
     order.forEach((c) => {
       const list = rows[c];
       const y = baseY - toward * ROW[c] * F.row;
@@ -66,14 +154,14 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
       // before (650 m between big ships, 500 m between fours of destroyers): for the same weight a cruiser row stood on
       // three times the front of a battleship row and a destroyer row on twice, so a light line stood two or three times
       // as wide as a battle line of the same weight, its wings out of reach, and won 31 in 100 against a card of 50.
-      const rowW = list.reduce((m, p) => m + p.n * shipWeight(p.f, c), 0);
+      const rowW = list.reduce((m, p) => m + p.n * p.w, 0);
       const slot = (SEA.pieces.front * rowW) / (Math.max(1e-6, sideW) * Math.max(1, list.length));
       list.forEach((p, i) => {
         // The defender's line is the attacker's turned half round, not its mirror: each side's first ship is on its
         // own left, so a ship turning to starboard does for one side what it does for the other (b402: drawn as a
         // mirror, the same helm put one side across the other's bows).
         const x = F.size / 2 + (side === 'def' ? -1 : 1) * (i - (list.length - 1) / 2) * slot;
-        const w = shipWeight(p.f, c);
+        const w = p.w;
         const u: SeaUnit = {
           id, side, corps: p.f.id, nat: p.f.nat, kind: c,
           // Numbered in kind on its side, as the campaign counts ships by kind and the field never names what the
@@ -87,7 +175,7 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
         };
         if (c === 'cv') u.abilities = [{ key: 'strike', label: 'Carrier strike', ready: 0, windup: SEA.strike.windup, winding: false }];
         units.push(u);
-        info.set(id, { weight: w, hull: w / RULES_CLASSES[c].tough, fleet: p.f });
+        info.set(id, { weight: w, hull: w / RULES_CLASSES[c].tough, fleet: p.f, ...(p.ids ? { rows: p.ids } : {}) });
         id++;
       });
     });

@@ -50,7 +50,7 @@ function honoured(name: string, att: PlainFleet[], def: PlainFleet[], air?: Part
 const GUNS_A: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 3, ca: 4, dd: 8 } };
 const GUNS_B: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 4, dd: 12 } };
 const CARRIERS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
-const BATTLE_LINE: PlainFleet = { name: 'Battle Force', nat: 'US', ships: { bb: 2, ca: 3, dd: 8 } };
+const BATTLE_LINE: PlainFleet = { name: 'Battle Force', nat: 'USA', ships: { bb: 2, ca: 3, dd: 8 } };
 
 describe('the obvious order wins about as often as the card says (ruling 226, mark 4)', () => {
   honoured('the heavier battle line against the lighter', [GUNS_A], [GUNS_B]);
