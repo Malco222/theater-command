@@ -6076,11 +6076,14 @@ namespace
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false).IsEnabled(false)
-											.Visibility(EVisibility::Collapsed) // (FIGHT IT YOURSELF leaves the foot until that battle exists)
-											.ToolTipText(FText::FromString(TEXT("Fighting the battle yourself, in real time, comes with the battlefield.")))
+											// (release 2; Brian, 22 November 21:21Z: asked before each campaign battle, FIGHT IT YOURSELF as the
+											// general or SEND THEM IN and let the generals decide)
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanFightLive() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText(FText::FromString(TEXT("Fight this battle yourself as the general: place your units, then order them in real time. SEND THEM IN lets your generals decide it.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->FightLive(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT IT YOURSELF  (to come)"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Faint)
+												SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT IT YOURSELF"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
 											]
 										]
 										// (The foot's places never change: CALL IT OFF, then SEND THEM IN, then the siege's order where there is one. Only the light moves.)

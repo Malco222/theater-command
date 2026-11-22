@@ -107,11 +107,16 @@ public:
 	 * is by -TheaterLandLive (its side and setup by the same switches): the test path for a campaign battle. */
 	static bool WantsLiveTicket(FString& OutLookJson);
 	void LiveTicketWhenReady(const FString& LookJson);
-	/** The switch for the campaign's own battles fought live in the land rules: "-TheaterLandCampaignLive" or the console
-	 * variable TheaterLandCampaignLive 1. Off: the campaign's FIGHT IT YOURSELF stays as release 2 has it. */
+	/** The switch for the campaign's own battles fought live in the land rules: on, unless "-TheaterLandNoCampaignLive"
+	 * or the console variable TheaterLandCampaignLive 0. Off: the attack card offers SEND THEM IN only. */
 	static bool CampaignLiveOn();
 	/** The live battle's result once it is over, as the campaign's TC.battleSettleLand takes it ({ "over": .. }). */
 	bool LiveResult(FString& OutJson) const;
+	/**
+	 * (release 2) Where the campaign opened this battle for the player to fight (FIGHT IT YOURSELF): run once when he
+	 * presses CONTINUE on the after card, with LiveResult's answer (empty where there is none), after the table is back.
+	 */
+	TFunction<void(const FString&)> HandBack;
 	bool IsLive() const { return Live.IsValid(); }
 	/**
 	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time

@@ -324,6 +324,12 @@ public:
 	/** Function: "attack", "take" (bAssault as Take's), "storm" or "sally" (no corps: the province says who). */
 	void FightAside(const FString& Function, const TArray<int32>& CorpsIds, int32 RegionId, bool bAssault, bool bAside,
 		TFunction<FHandNext(const FAttackResult&)>&& Guess, TFunction<void(const FAttackResult&)>&& Then);
+	/**
+	 * (release 2) A land battle the player fought himself, as the general, handed back: booked as the attack order is,
+	 * through TC.battleSettleLand with the ticket's seed (so a battle other than the one the campaign would make now is
+	 * never booked), and its picture of the war taken. ResultJson is the field's TC.landResult answer ({ "over": .. }).
+	 */
+	FAttackResult SettleLandLive(const TArray<int32>& CorpsIds, int32 RegionId, const FString& ResultJson, double TicketSeed);
 	/** True from an order given aside until its Then has been run. */
 	bool IsAnswering() const { return Aside.IsValid() || static_cast<bool>(AsideThen); }
 	/** Once a frame, from the player's controller: where the answer is in, it is taken and its Then is run. bWait: waited for, where it is still being worked out. */

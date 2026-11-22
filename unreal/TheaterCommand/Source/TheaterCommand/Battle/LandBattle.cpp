@@ -7314,6 +7314,14 @@ void ALandBattle::HideScreen()
 void ALandBattle::Finish()
 {
 	// CONTINUE: the scene taken down and the table shown again.
+	// (a campaign battle he fought himself: its result taken now, while the rules' thread is still open, for after)
+	TFunction<void(const FString&)> Hand = MoveTemp(HandBack);
+	HandBack = nullptr;
+	FString Handed;
+	if (Hand && !LiveResult(Handed))
+	{
+		Handed.Empty();
+	}
 	HideScreen();
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
 	{
@@ -7325,6 +7333,10 @@ void ALandBattle::Finish()
 		Controller->SetViewTarget(Controller->GetPawn());
 	}
 	ShowTheTable();
+	if (Hand)
+	{
+		Hand(Handed); // (the campaign books it and its attack card shows the result)
+	}
 	Destroy();
 }
 
