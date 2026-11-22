@@ -216,6 +216,7 @@ NUMBERS = {
     # (on her plain model her torpedo, bomb and wheels at the game's own grain, 12 round every 30 cm and rods of 10
     #  sides: at the fine grain they were a third of it, and the map and the far camera cannot tell the difference)
     "plain_extras": (12, 0.3, 10),
+    "torpedo_paints": ("boss",),                            # (her torpedo's warhead and screws, in the hub's dark: they ride the torpedo)
     "corrugated": [("wing", 2.31, 3.55, (0.04, 0.74), (0.04, 0.74), 0.052), ("wing", 3.72, 6.78, (0.04, 0.84), (0.04, 0.84), 0.052),
                    ("tail", 0.30, 2.24, (0.22, 0.46), (0.45, 0.46), 0.052)],
     "scoops": [
@@ -228,15 +229,28 @@ NUMBERS = {
         ("rod", ((0.19, 1.74, -0.756), (0.19, 1.94, -0.756), 0.345, 0.345, "tyre")),
         ("rod", ((0.19, 1.76, -0.756), (0.19, 1.92, -0.756), 0.38, 0.38, "tyre")),
         ("rod", ((0.19, 1.725, -0.756), (0.19, 1.955, -0.756), 0.13, 0.13, "leg")),
-        # (the Mark 13 torpedo, as the drawing has it: half sunk in her belly, its nose down six degrees; its body, its
-        #  tail cone and the box of its tail, 0.57 m across and 4.1 m long, the real weapon's size; the two crutches that
-        #  steady it)
+        # (the Mark 13 torpedo, as the drawing has it: half sunk in her belly, its nose down six degrees; its body and its
+        #  tail cone, 0.57 m across and 4.1 m long, the real weapon's size; the open box of boards round its tail that
+        #  steadied it in the air; the two crutches that steady it on her)
         ("body", ([(2.74, -1.41, 0.03, 0.03), (2.703, -1.405, 0.182, 0.182), (2.63, -1.397, 0.255, 0.255), (2.521, -1.385, 0.285, 0.285),
                    (-0.282, -1.08, 0.285, 0.285), (-0.493, -1.058, 0.243, 0.243), (-0.703, -1.034, 0.146, 0.146), (-0.858, -1.017, 0.073, 0.073),
                    (-1.36, -0.962, 0.03, 0.03)], 0.0, 2.0, "torpedo")),
-        ("rod", ((-0.821, 0.0, -1.033), (-1.360, 0.0, -0.958), 0.243, 0.243, "torpedo")),
+        ("body", ([(-0.86, -0.774, 0.243, 0.004), (-0.87, -0.773, 0.243, 0.006), (-1.11, -0.747, 0.243, 0.006), (-1.12, -0.745, 0.243, 0.004)], 0.0, 6.0, "torpedo")),
+        ("body", ([(-0.86, -1.26, 0.243, 0.004), (-0.87, -1.259, 0.243, 0.006), (-1.11, -1.233, 0.243, 0.006), (-1.12, -1.231, 0.243, 0.004)], 0.0, 6.0, "torpedo")),
+        ("body", ([(-0.86, -1.017, 0.004, 0.243), (-0.87, -1.016, 0.006, 0.243), (-1.11, -0.99, 0.006, 0.243), (-1.12, -0.988, 0.004, 0.243)], 0.243, 6.0, "torpedo")),
         ("rod", ((1.65, 0.11, -0.84), (1.65, 0.15, -1.04), 0.016, 0.016, "leg")),
         ("rod", ((0.95, 0.11, -0.87), (0.95, 0.15, -0.98), 0.016, 0.016, "leg")),
+        # (and, close up, what makes it a torpedo and not a tank: its dark warhead, its edge a seam behind the nose; the
+        #  cross of its four fins inside the box; its two screws behind, four blades each, the second set turned an
+        #  eighth of a turn on the first. The warhead and the screws ride the torpedo (torpedo_paints))
+        ("body", ([(2.745, -1.41, 0.035, 0.035), (2.705, -1.405, 0.187, 0.187), (2.632, -1.397, 0.26, 0.26), (2.521, -1.385, 0.29, 0.29), (1.86, -1.314, 0.29, 0.29), (1.85, -1.313, 0.282, 0.282)], 0.0, 2.0, "boss", "fine")),
+        ("body", ([(-0.76, -1.028, 0.004, 0.06), (-0.84, -1.019, 0.008, 0.2), (-0.88, -1.015, 0.008, 0.243), (-1.1, -0.991, 0.008, 0.243), (-1.11, -0.99, 0.004, 0.1)], 0.0, 6.0, "torpedo", "fine")),
+        ("body", ([(-0.76, -1.028, 0.06, 0.004), (-0.84, -1.019, 0.2, 0.008), (-0.88, -1.015, 0.243, 0.008), (-1.1, -0.991, 0.243, 0.008), (-1.11, -0.99, 0.1, 0.004)], 0.0, 6.0, "torpedo", "fine")),
+        ("rod", ((-1.17, 0.0, -0.983), (-1.17, 0.0, -0.823), 0.022, 0.012, "boss", "fine")),
+        ("rod", ((-1.17, 0.0, -0.983), (-1.17, 0.0, -1.143), 0.022, 0.012, "boss", "fine")),
+        ("rod", ((-1.17, 0.0, -0.983), (-1.17, 0.16, -0.983), 0.022, 0.012, "boss", "fine")),
+        ("rod", ((-1.23, 0.0, -0.976), (-1.23, 0.113, -0.863), 0.022, 0.012, "boss", "fine")),
+        ("rod", ((-1.23, 0.0, -0.976), (-1.23, 0.113, -1.089), 0.022, 0.012, "boss", "fine")),
         # (or her one 1,000 lb bomb in its place, on the same crutches: its round nose, its case, its tail cone and the box
         #  of its fins)
         ("body", ([(1.55, -1.12, 0.03, 0.03), (1.45, -1.12, 0.15, 0.15), (1.30, -1.12, 0.215, 0.215), (1.00, -1.12, 0.235, 0.235),

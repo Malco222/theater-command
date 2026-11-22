@@ -2397,8 +2397,8 @@ def convert(name, fine=True):
         if kind == "extra":
             if has_bombs and paint_of(ob) == PAINTS["bomb"]:
                 return "bombs"
-            if has_torpedo and paint_of(ob) == PAINTS["torpedo"]:
-                return "torpedo"
+            if has_torpedo and (paint_of(ob) == PAINTS["torpedo"] or paint_of(ob) in [PAINTS[k] for k in s.get("torpedo_paints", ())]):
+                return "torpedo"                        # (`torpedo_paints`: other paints of a machine's own torpedo, its warhead, its screws)
             for i, (a_, b_) in enumerate(rods):
                 if (mean - 0.5 * (a_ + b_)).length < 0.03:
                     return gun_part[i]
