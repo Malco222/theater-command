@@ -63,15 +63,18 @@ describe('Italian East Africa and the Sahara posts: the file beside the record (
     expect(ROWS.some((r) => r[5] === 'Sebha' || r[5] === 'Waw el Kebir')).toBe(false);
   });
 
-  it('every row stands on the far chart at a place of its own side\'s on the first day, but the one the record posts to ground Italy holds', () => {
+  it('every row stands on the first day at a place of its own side\'s, where the record raised or staged it, and none on a gain of the line\'s', () => {
     const g = startOpen(createGame(3, null));
-    const posted = ['Gideon Force (the Frontier Battalion and the 2nd Ethiopian)'];
+    const gains = Object.entries((africa as any).history.lines[0].spans as Record<string, { kind: string }[]>).filter(([, v]) => v[0].kind === 'gain').map(([k]) => k);
+    expect(gains.length).toBe(6);
     for (const r of ROWS) {
       const at = g.byName[r[5]];
       expect(at, r[5]).toBeTruthy();
-      expect(shoreOf(at), r[5]).toBe(2);
-      if (posted.includes(r[2])) expect(at.ctrl, r[2]).toBe('ITA');
-      else expect(at.ctrl, r[2]).toBe(r[1]);
+      // (All on the far chart but the 4th Indian Division's own row, which stands in Egypt again when its loan is over.)
+      expect(shoreOf(at), r[2]).toBe(r[2] === '4th Indian Division' ? 0 : 2);
+      // (South Africa's rows stand on Britain's ground, beside it.)
+      expect(at.ctrl, r[2]).toBe(r[1] === 'SAF' ? 'UK' : r[1]);
+      if (r[1] !== 'ITA') expect(gains.includes(r[5]) && r[0] > 9, r[2]).toBe(false);
     }
     // (Laid over the chart's dated rows once, as one block in the file's order; no name of theirs is another row's.)
     const laid = (setup as any).expeditions as Row[];
@@ -104,6 +107,113 @@ describe('Italian East Africa and the Sahara posts: the file beside the record (
     ]);
     for (const r of ROWS.filter((x) => x[0] < 10)) expect(r[0], r[2]).toBe(9);
     for (const r of ROWS.filter((x) => x[1] === 'ITA')) expect(r[0], r[2]).toBe(10);
+  });
+});
+
+describe('the rows of the design director\'s 13:43Z and 14:18Z of 22 November 2026: the South Africans, the West African brigades, the 4th Indian Division\'s loan', () => {
+  const row = (name: string): Row => ROWS.find((r) => r[2].startsWith(name))!;
+  /** A war at a stop of the dial in a month set by hand, Italy at war with Britain and South Africa. */
+  const board = (stop: number, turn: number): Game => {
+    const g = startOpen(createGame(3, null));
+    setStop(g, stop, true);
+    for (const nat of ['UK', 'SAF']) if (!atWar(g, 'ITA', nat)) declareWar(g, 'ITA', nat);
+    g.turn = turn;
+    return g;
+  };
+  const alive = (g: Game, name: string): Corps | undefined => g.corps.find((c) => !c.dead && c.name === name);
+  const size = (c: Corps): number => c.divs * (c.full ?? 1);
+
+  it('the file: South Africa\'s division is 1.8 from November 1940, its brigades as the record moved them; the West Africans are 0.6 by two brigades', () => {
+    const D = row('1st South African Division'), B = row('2nd South African Brigade');
+    expect([D[1], D[5], D[0], D[6].until]).toEqual(['SAF', 'Marsabit', 12, 22]);
+    expect([12, 15, 18].map((m) => worth(D, m))).toEqual([0.6, 1.8, 1.8]);
+    // (From March 1941 the 2nd Brigade is its own row, staged at Mombasa: the two are the division's 1.8 still.)
+    expect([B[1], B[5], B[0], B[6].until]).toEqual(['SAF', 'Mombasa', 19, 22]);
+    expect(worth(D, 19) + worth(B, 19)).toBeCloseTo(1.8, 2);
+    // (From May the headquarters and the 5th Brigade are in Egypt: the old chart's own row lands the division there.)
+    expect(worth(D, 21)).toBeCloseTo(0.6, 2);
+    expect(((setup as any).expeditions as Row[]).some((r) => r[1] === 'UK' && r[2] === '1st South African Division' && r[0] === 21 && r[5] === 'Alexandria')).toBe(true);
+    const N = row('23rd Nigerian Brigade'), G = row('24th Gold Coast Brigade');
+    expect([N[1], N[5], N[0], N[6].until]).toEqual(['UK', 'Garissa', 17, 23]);
+    expect([G[1], G[5], G[0], G[6].until]).toEqual(['UK', 'Wajir', 15, 26]);
+    expect(worth(N, 17) + worth(G, 17)).toBeCloseTo(0.6, 2);
+    // (Rows posted where the record staged them: the design director's 14:18Z.)
+    expect([row('Gideon Force')[5], row('Aden Striking Force')[5], row('Force Publique')[5]]).toEqual(['Roseires', 'Aden', 'Malakal']);
+    expect(row('Chad troops')[6].hold).toBe(1);
+  });
+
+  it('South Africa\'s rows come under its own flag on Britain\'s ground, at the record\'s size month by month, and are gone in June 1941', () => {
+    const g = board(1, 12);
+    const D = row('1st South African Division'), B = row('2nd South African Brigade');
+    startPhase(g, 'SAF');
+    const d = alive(g, D[2])!;
+    expect(d).toBeTruthy();
+    expect([d.nat, g.regions[d.reg].name]).toEqual(['SAF', 'Marsabit']);
+    expect(size(d)).toBeCloseTo(0.6, 2);
+    expect(alive(g, B[2])).toBeUndefined();
+    for (const [turn, w] of [[15, 1.8], [19, 1.2], [21, 0.6]] as [number, number][]) {
+      g.turn = turn;
+      startPhase(g, 'SAF');
+      expect(size(alive(g, D[2])!), `month ${turn}`).toBeCloseTo(w, 2);
+    }
+    const b = alive(g, B[2])!;
+    expect([b.nat, g.regions[b.reg].name]).toEqual(['SAF', 'Mombasa']);
+    expect(size(b)).toBeCloseTo(0.6, 2);
+    g.turn = 22;
+    startPhase(g, 'SAF');
+    expect(alive(g, D[2])).toBeUndefined();
+    expect(alive(g, B[2])).toBeUndefined();
+  });
+
+  it('the 4th Indian Division at the book\'s stops: taken from the desert in January 1941, lent to the Sudan until April, and in Egypt again', () => {
+    const lent = '4th Indian Division (the Sudan and Eritrea)';
+    for (const stop of [1, 2]) {
+      const g = board(stop, 16);
+      const old = alive(g, '4th Indian Division')!;
+      expect(g.regions[old.reg].name, `stop ${stop}`).toBe('Mersa Matruh');
+      startPhase(g, 'UK');
+      expect(alive(g, lent), `stop ${stop}, December`).toBeUndefined();
+      g.turn = 17;
+      startPhase(g, 'UK');
+      // (One division and not two: the desert's corps is the one that went.)
+      expect(alive(g, '4th Indian Division'), `stop ${stop}`).toBeUndefined();
+      const c = alive(g, lent)!;
+      expect(c).toBeTruthy();
+      expect([c.nat, c.divs, g.regions[c.reg].name]).toEqual(['UK', 1, 'Port Sudan']);
+      g.turn = 20;
+      const news = g.headlines.length;
+      startPhase(g, 'UK');
+      expect(alive(g, lent), `stop ${stop}`).toBeUndefined();
+      expect(g.headlines.slice(news).some((h) => /lent to the campaign/.test(h.text) && h.text.includes(lent))).toBe(true);
+      const home = alive(g, '4th Indian Division')!;
+      expect(home).toBeTruthy();
+      // (At Alexandria, or beside it where the board set by hand has filled the place: game.ts, roomNear.)
+      const A = g.byName['Alexandria'];
+      expect(home.divs).toBe(1);
+      expect([A.id, ...A.nb]).toContain(home.reg);
+      expect(g.corps.filter((x) => !x.dead && /4th Indian Division/.test(x.name) && x.nat === 'UK' && !/New Zealand|Eighth Army/.test(x.name)).length).toBe(1);
+    }
+  });
+
+  it('at the stops that keep no book the 4th Indian Division is its staff\'s own: no loan, and the desert\'s corps stands', () => {
+    for (const stop of [3, 5]) {
+      const g = board(stop, 17);
+      startPhase(g, 'UK');
+      g.turn = 20;
+      startPhase(g, 'UK');
+      expect(alive(g, '4th Indian Division (the Sudan and Eritrea)'), `stop ${stop}`).toBeUndefined();
+      const old = g.corps.filter((x) => !x.dead && x.name === '4th Indian Division');
+      expect(old.length, `stop ${stop}`).toBe(1);
+      expect(g.regions[old[0].reg].name, `stop ${stop}`).toBe('Mersa Matruh');
+    }
+  });
+
+  it('Chad\'s row comes held to Chad', () => {
+    const g = board(1, 12);
+    startPhase(g, 'FRA');
+    const c = alive(g, 'Chad troops (Leclerc)')!;
+    expect(c).toBeTruthy();
+    expect([g.regions[c.reg].name, c.hold]).toEqual(['Fort-Lamy', true]);
   });
 });
 
