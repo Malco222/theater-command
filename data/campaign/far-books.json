@@ -46,7 +46,7 @@
           {"name": "Asiatic Submarine Fleet", "base": "Manila", "port": "Manila", "home": "luzonsea", "zone": "luzonsea", "duty": "raid", "ships": {"ss": 0},
             "bases": [[29, "Soerabaja", "Soerabaja", "java"]],
             "hunts": {"to": "JAP", "seas": [[28, ["luzonsea", "schina", "celebes", "makassar", "java"]]]}},
-          {"name": "Fremantle Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
+          {"name": "South West Pacific Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
             "bases": [[67, "Bataan", "Subic Bay", "luzonsea"]],
             "hunts": {"to": "JAP", "seas": [[31, ["java", "makassar", "celebes", "flores", "banda", "molucca", "timor"]], [47, ["schina", "natuna", "makassar", "celebes", "java"]], [53, ["schina", "natuna", "luzonsea", "palawan", "java"]]]}},
           {"name": "Brisbane Submarine Fleet", "base": "Brisbane", "port": "Brisbane", "home": "tasman", "zone": "bismarck", "duty": "raid", "ships": {"ss": 0},

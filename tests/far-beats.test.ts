@@ -48,7 +48,7 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect(Object.keys(B).sort()).toEqual(['GER', 'ITA', 'JAP', 'NED', 'UK', 'USA']);
     for (const nat of NAVIES) { expect(B[nat].far, nat).toEqual({ war: 28 }); for (const G of B[nat].groups) { expect(G.name, nat).toMatch(/Fleet$/); expect(G.duty, G.name).toBe('raid'); expect(G.ships, G.name).toEqual({ ss: 0 }); } }
     expect(B.USA.pools).toEqual(['Pacific Submarine Fleet', 'Asiatic Fleet']);
-    expect(B.USA.groups.map((G) => G.name)).toEqual(['Central Pacific Submarine Fleet', 'Asiatic Submarine Fleet', 'Fremantle Submarine Fleet', 'Brisbane Submarine Fleet']);
+    expect(B.USA.groups.map((G) => G.name)).toEqual(['Central Pacific Submarine Fleet', 'Asiatic Submarine Fleet', 'South West Pacific Submarine Fleet', 'Brisbane Submarine Fleet']);
     // The paper's 9d: Pearl Harbor, the Asiatic Fleet, Fremantle, Brisbane.
     expect(B.USA.rows).toEqual([[28, 22, 29, 0, 0], [31, 27, 0, 10, 0], [32, 30, 0, 10, 12], [40, 70, 0, 26, 12], [47, 85, 0, 30, 12], [53, 100, 0, 30, 12], [60, 105, 0, 40, 12], [68, 130, 0, 35, 12], [72, 140, 0, 30, 12]]);
     expect(B.NED.rows).toEqual([[28, 15], [31, 0]]);
@@ -113,12 +113,12 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     fleet(g, 'USA', 'Pacific Submarine Fleet')!.ships.ss += 17;
     place(g, 40);
     expect(all(g, 'USA')).toBe(68);
-    expect([boats(g, 'USA', 'Central Pacific Submarine Fleet'), boats(g, 'USA', 'Asiatic Submarine Fleet'), boats(g, 'USA', 'Fremantle Submarine Fleet'), boats(g, 'USA', 'Brisbane Submarine Fleet')]).toEqual([44, 0, 16, 8]);
+    expect([boats(g, 'USA', 'Central Pacific Submarine Fleet'), boats(g, 'USA', 'Asiatic Submarine Fleet'), boats(g, 'USA', 'South West Pacific Submarine Fleet'), boats(g, 'USA', 'Brisbane Submarine Fleet')]).toEqual([44, 0, 16, 8]);
     expect([boats(g, 'USA', 'Pacific Submarine Fleet'), boats(g, 'USA', 'Asiatic Fleet')]).toEqual([0, 0]);
     // With more boats than the row asks, the rest stay at home with the first pool.
     fleet(g, 'USA', 'Pacific Submarine Fleet')!.ships.ss += 100;
     place(g, 41);
-    expect([boats(g, 'USA', 'Central Pacific Submarine Fleet'), boats(g, 'USA', 'Fremantle Submarine Fleet'), boats(g, 'USA', 'Brisbane Submarine Fleet')]).toEqual([70, 26, 12]);
+    expect([boats(g, 'USA', 'Central Pacific Submarine Fleet'), boats(g, 'USA', 'South West Pacific Submarine Fleet'), boats(g, 'USA', 'Brisbane Submarine Fleet')]).toEqual([70, 26, 12]);
     expect([boats(g, 'USA', 'Pacific Submarine Fleet'), all(g, 'USA')]).toEqual([60, 168]);
   });
 
@@ -147,7 +147,7 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     place(g, 64);
     expect(pearl().port).toBe('Guam');
     // The Fremantle boats: Perth's harbour, an ally's, and Subic Bay from March 1945 while Bataan is America's.
-    const fremantle = (): Fleet => fleet(g, 'USA', 'Fremantle Submarine Fleet')!;
+    const fremantle = (): Fleet => fleet(g, 'USA', 'South West Pacific Submarine Fleet')!;
     expect([fremantle().port, g.regions[fremantle().base].name]).toEqual(['Fremantle', 'Perth']);
     hold(g, 'Bataan', 'JAP');
     place(g, 67);
@@ -200,7 +200,7 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect(sea(g, pearl)).toBe('luzonstrait');
     expect(lanesTo(g, 'JAP', pearl.station)).toBeGreaterThan(0);
     // The Fremantle boats keep the Java Sea until the South China Sea is on their list, in July 1943.
-    const fremantle = fleet(g, 'USA', 'Fremantle Submarine Fleet')!;
+    const fremantle = fleet(g, 'USA', 'South West Pacific Submarine Fleet')!;
     expect([sea(g, fremantle), fremantle.reach]).toEqual(['java', 5]);
     place(g, 47);
     expect([sea(g, fremantle), fremantle.reach]).toEqual(['schina', 6]);
@@ -234,7 +234,7 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect([boats(g, 'USA', 'Central Pacific Submarine Fleet'), boats(g, 'USA', 'Pacific Submarine Fleet'), boats(g, 'NED', 'Dutch East Indies Fleet'), all(g, 'USA')]).toEqual([22, 29, 15, 51]);
     // March 1942 by the row: Fremantle's ten.
     place(g, 31);
-    expect([boats(g, 'USA', 'Central Pacific Submarine Fleet'), boats(g, 'USA', 'Fremantle Submarine Fleet'), boats(g, 'USA', 'Pacific Submarine Fleet')]).toEqual([27, 10, 14]);
+    expect([boats(g, 'USA', 'Central Pacific Submarine Fleet'), boats(g, 'USA', 'South West Pacific Submarine Fleet'), boats(g, 'USA', 'Pacific Submarine Fleet')]).toEqual([27, 10, 14]);
   });
 
   it('Britain: no boat until August 1943, then Ceylon, the 8th at Fremantle and on to Subic Bay, and the 4th', () => {
