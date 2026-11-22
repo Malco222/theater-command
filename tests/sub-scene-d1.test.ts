@@ -4,9 +4,10 @@
 // draws no kill that is not booked, and writes what the sea scene's reader expects (field-side-read §3, form §5).
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
+import { runTurnAI } from '../src/campaign/turn';
 import { startOpen } from '../src/campaign/staff';
 import { NAVY, navalUpkeep, subScene } from '../src/campaign/navy';
-import type { Game, SubLook as RecordLook, SubLookFleet as RecordFleet } from '../src/campaign/types';
+import type { Game, SubLook as RecordLook } from '../src/campaign/types';
 import {
   AHEAD_RANGE, CLEAR, KILL_NEAR, TRACK_SPARE, factsOf, hisLoss, looksOf, pickScene, scenesOf, seaPlace, stagePick, stageScene, subSceneOf,
   type MonthFacts, type SeaFact, type Staged, type StagedNote, type SubLook, type SubLookSaved,
@@ -28,16 +29,25 @@ const month = (human: string, turn: number, facts: SeaFact[], seed = 4242): Mont
 const noteOf = (r: Staged): StagedNote => r.field.staged as StagedNote;
 
 // The stager's mirror of the rules' record (sub-scene.ts SubLook) and the record itself (types.ts SubLook, the rules'
-// 21a3a759) are assignable both ways: a compile-time check (npx tsc --noEmit fails here when either moves). Today's
+// 21a3a759) are held equal at compile time: npx tsc --noEmit fails here when either moves. Assignable both ways (which
+// also holds each field's type, and whether it is optional, at every depth); and field for field at every depth, the
+// record, its hunts and their hunters and quarry, its torpedoings, its convoys, their seas and those seas' raiders and
+// escorts (assignability lets an optional field on one side alone by: this catches it, and names where it is). Today's
 // record is also one the stager reads as a save may hold it (SubLookSaved, which an older save's rows fit too).
 type Both<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
-type Row<T> = T extends (infer U)[] ? U : never;
+/** Where A's and B's fields part, at any depth, as paths ('SubLook.convoys[].fought'); never where they are the same throughout. */
+type Apart<A, B, P extends string> =
+  [A] extends [readonly (infer X)[]] ? ([B] extends [readonly (infer Y)[]] ? Apart<X, Y, `${P}[]`> : P)
+  : [B] extends [readonly unknown[]] ? P
+  : [A] extends [object] ? ([B] extends [object]
+    ? `${P}.${(Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>) & string}`
+      | { [K in keyof A & keyof B & string]-?: ({} extends Pick<A, K> ? 1 : 0) extends ({} extends Pick<B, K> ? 1 : 0) ? Apart<NonNullable<A[K]>, NonNullable<B[K]>, `${P}.${K}`> : `${P}.${K}?` }[keyof A & keyof B & string]
+    : P)
+  : [B] extends [object] ? P : never;
+/** true where the two have the same fields throughout; else the paths where they part (tsc names them in its error). */
+type SameFields<A, B> = [Apart<A, B, 'SubLook'>] extends [never] ? true : Apart<A, B, 'SubLook'>;
 const MIRROR_IS_RECORD: Both<SubLook, RecordLook> = true;
-// (and field for field, so that an optional field on one side alone, which assignability lets by, is caught too)
-const SAME_FIELDS: [Both<keyof SubLook, keyof RecordLook>, Both<keyof Row<SubLook['torpedoes']>, keyof Row<RecordLook['torpedoes']>>,
-  Both<keyof Row<SubLook['hunts']>, keyof Row<RecordLook['hunts']>>, Both<keyof Row<Row<SubLook['convoys']>['seas']>, keyof Row<Row<RecordLook['convoys']>['seas']>>,
-  Both<keyof Row<Row<Row<SubLook['convoys']>['seas']>['raiders']>, keyof RecordFleet>] = [true, true, true, true, true];
-const toRecord = (x: SubLook): RecordLook => x;
+const SAME_FIELDS: SameFields<SubLook, RecordLook> = true;
 const toMirror = (x: RecordLook): SubLook => x;
 const asSaved = (x: RecordLook): SubLookSaved => x;
 /** A record into the game as a save may hold it (an older save's rows have no couldNat, byNat or heavy). */
@@ -843,8 +853,11 @@ describe('the submarine scene stager (form D1)', () => {
     expect([short.f.raidBy, short.f.raiders, short.f.boatsNat, short.scenes]).toEqual([sure, ['GER'], 'GER', [['convoy', 'GER', 1]]]);
   });
 
-  it('mirrors the rules\' record both ways, and reads the record the rules write over real months (round 3)', () => {
-    expect([MIRROR_IS_RECORD, ...SAME_FIELDS]).toEqual([true, true, true, true, true, true]);
+  it('mirrors the rules\' record both ways, field for field at every depth (round 3; a compile-time check, above)', () => {
+    expect([MIRROR_IS_RECORD, SAME_FIELDS]).toEqual([true, true]);
+  });
+
+  it('reads a torpedoing as the real rules record it: the pick\'s nation, and the nations that could have fired (round 3)', () => {
     const g = startOpen(createGame(3, 'UK'));
     const home = g.fleets.find((f) => f.nat === 'UK' && f.ships.bb > 0)!;
     const boats = g.fleets.find((f) => f.nat === 'GER' && f.ships.ss > 0)!;
@@ -858,20 +871,50 @@ describe('the submarine scene stager (form D1)', () => {
         if (!(g.subLook ?? []).some((l) => l.torpedoes.length)) g.turn++;
       }
     } finally { subScene.on = false; }
+    // (the record read through the mirror's type: the two are one shape at compile time, above; at run time they are
+    // the same objects, so sending them back and forth would check nothing)
     const rec = (g.subLook ?? []).map(toMirror);
-    expect(rec.map(toRecord)).toEqual(g.subLook);
     const tp = rec.flatMap((l) => l.torpedoes);
     expect(tp.length).toBeGreaterThan(0);
     for (const t of tp) expect([t.couldNat.length, t.byNat]).toEqual([t.could.length, t.by === null ? null : t.couldNat[t.could.indexOf(t.by)]]);
     for (const x of rec.flatMap((l) => l.convoys.flatMap((c) => c.seas.flatMap((s) => s.raiders)))) expect(typeof x.heavy).toBe('number');
     // The stager reads them as the record names them: each torpedoing's attackers are its nations, the pick's first.
-    const m = factsOf(g, NAVY.convoys, mark, rec.map(toRecord).map(asSaved));
+    const m = factsOf(g, NAVY.convoys, mark, (g.subLook ?? []).map(asSaved));
     const tors = m.facts.filter((f) => f.kind === 'torpedo' && f.attackers);
     expect(tors.length).toBeGreaterThan(0);
     for (const f of tors) {
       const r = tp.find((t) => t.zone === g.seas.findIndex((z) => z.key === f.sea) && t.cls === f.cls)!;
       expect([f.pick, f.attackers![0]]).toEqual([r.by === null ? 'none' : 'rules', r.byNat ?? r.couldNat[0]]);
     }
-    for (const f of m.facts.filter((x) => x.kind === 'convoy' && x.raiders)) expect(f.raidBy?.sure).toBe(true);
+  });
+
+  it('reads the convoys the real rules record over real months, a history campaign and a grand one: who raided is settled, and the raiders\' opening boats are no fewer than the boats lost (round 3, finding 4)', () => {
+    for (const [grand, g] of [[false, createGame(5, 'UK')], [true, startOpen(createGame(3, 'UK'))]] as const) {
+      expect((g.flags as { open?: number }).open === 1).toBe(grand);
+      let read = 0, lost = 0;
+      subScene.on = true;
+      try {
+        for (let i = 0; i < 3; i++) {
+          const mark = g.headlines.length;
+          runTurnAI(g);
+          const convoys = factsOf(g, NAVY.convoys, mark).facts.filter((f) => f.kind === 'convoy');
+          expect(convoys.length).toBeGreaterThan(0);
+          for (const f of convoys) {
+            // (built from the record: the record's route, and the raiders it gives; the boats left on the route)
+            const r = (g.subLook ?? []).find((l) => l.nat === f.on && l.turn === f.turn)?.convoys.find((c) => c.route === f.route);
+            expect([!!r, Array.isArray(f.raiders)]).toEqual([true, true]);
+            const all = r!.seas.flatMap((s) => s.raiders);
+            expect(all.length).toBeGreaterThan(0);
+            for (const x of all) expect(typeof x.heavy).toBe('number');
+            expect(f.raidBy?.sure).toBe(true);
+            expect(all.reduce((s, x) => s + x.n, 0)).toBeGreaterThanOrEqual(f.boats ?? 0);
+            read++; lost += f.boats ?? 0;
+          }
+        }
+      } finally { subScene.on = false; }
+      // (three months' convoys read, and boats lost among them, so the bound above is met with something to bound)
+      expect(read).toBeGreaterThanOrEqual(3);
+      expect(lost).toBeGreaterThan(0);
+    }
   });
 });

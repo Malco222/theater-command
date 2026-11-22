@@ -147,7 +147,8 @@ export interface SubLookTorpedo { fleet: number; zone: number; cls: 'bb' | 'cv' 
  * The rules' record for the scene (release 2, ruling 241 D1; written by navy.ts while the viewing setting is on, this
  * month and last, into `g.subLook`): this module reads it and never writes it. The shape is types.ts `SubLook` as
  * the rules builder wrote it (claude/convoy-hook 21a3a759); it is mirrored here, not imported, so this module builds
- * on rules that do not have it. The two are held assignable both ways at compile time (tests/sub-scene-d1.test.ts).
+ * on rules that do not have it. The two are held equal at compile time (tests/sub-scene-d1.test.ts): assignable both
+ * ways, and with the same fields, each optional or not alike, at every depth.
  */
 export interface SubLook {
   turn: number;
