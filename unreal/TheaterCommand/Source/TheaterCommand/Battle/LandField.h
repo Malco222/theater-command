@@ -177,6 +177,8 @@ namespace LandField
 		Flowers, // white and yellow (ox-eye, buttercup)
 		Stone,
 		Fern,
+		Stubble, // clutter: a cut field's straw stubble in its drill rows, a few straws lying loose
+		Sward,   // clutter: the short grass itself, close round the eye, in the ground's own colour (its tint)
 		Count
 	};
 

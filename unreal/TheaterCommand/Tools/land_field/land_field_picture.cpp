@@ -376,7 +376,9 @@ namespace LandFieldPicture
 			case Base::Wheat:
 			case Base::Poppies:
 			case Base::Flowers:
-			case Base::Fern: return MatBlades;
+			case Base::Fern:
+			case Base::Stubble:
+			case Base::Sward: return MatBlades;
 			default: return MatGround;
 			}
 		}

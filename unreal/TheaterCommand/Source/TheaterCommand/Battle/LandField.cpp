@@ -2865,7 +2865,14 @@ namespace LandField
 		const Col Barley = Rgb(166, 148, 94);        // barley, ripe and paler
 		const Col Oats = Rgb(150, 144, 84);          // oats, greener gold
 		const Col GreenWheat = Rgb(120, 128, 68);    // a late field, still green
-		const Col Stubble = Rgb(166, 150, 106);      // barley cut: pale stubble
+		// Barley cut by the binder: the straw's stubble in its rows over brown earth, with the clover undersown and the
+		// weeds coming green between them. The stubble lit 198 on the third cut's frames with the grade's half stop
+		// down, and as flat as a sheet (its spread, darkest tenth to brightest, 40); the art director asked it a fifth
+		// darker and spread 60 or more (22 November): the straw itself a little darker, and the earth and the green
+		// showing through in bands along the lands and in patches.
+		const Col Stubble = Rgb(160, 144, 100);       // the straw stubble, standing
+		const Col StubbleEarth = Rgb(104, 86, 62);   // the earth between its rows, where the sheaves' stooks stood and the carts went
+		const Col Regrowth = Rgb(98, 106, 60);       // clover undersown, and the weeds: green coming through the stubble
 		const Col Roots = Rgb(74, 98, 50);           // beet or potatoes in their rows
 		const Col RoughGrass = Rgb(118, 120, 72);    // tussocky rough grazing
 		const Col BrambleGreen = Rgb(66, 80, 42);    // brambles, nettles
@@ -3084,7 +3091,13 @@ namespace LandField
 			// (strong enough to read from a hill or a turret, or a field of corn is a flat yellow sheet)
 			C = Varied(C, 1.0 + 0.09 * Lands + 0.08 * Streak + 0.1 * N1, 0.0);
 			if (IsCorn(Q.Crop)) C = Mixed(C, GreenWheat, 0.4 * Smooth(0.2, 0.6, N2 + 0.6 * N1));
-			if (Q.Crop == CpStubble) C = Mixed(C, Margin, 0.25 * Smooth(0.2, 0.6, N1));
+			if (Q.Crop == CpStubble)
+			{
+				// Bare in bands along the lands (the binder's swath and the carts' wheels) and in patches; green in others.
+				const double Bare = Smooth(0.1, 0.35, 0.5 * Lands + 0.6 * N2 + 0.3 * Streak);
+				C = Mixed(C, StubbleEarth, 0.85 * Bare);
+				C = Mixed(C, Regrowth, 0.6 * Smooth(0.1, 0.35, N1 + 0.35 * Noise(X / 11.0, Y / 11.0, Seed ^ 0x17)));
+			}
 			C = Mixed(C, Margin, 0.55 * Smooth(5.0, 1.5, Edge)); // the headland: thin corn, weeds
 		}
 		else
@@ -3107,7 +3120,10 @@ namespace LandField
 		double Gap = 0.0;
 		uint8_t Kind = RgOpen;
 		const int S = Plot(X, Y, &Gap, &Kind);
-		Col C = CropColour(CropOf(S, Kind));
+		const int Crop = CropOf(S, Kind);
+		Col C = CropColour(Crop);
+		// (a stubble far off: its straw, earth and green together, as the near ground's paint comes out on the whole)
+		if (Crop == CpStubble) C = Mixed(Mixed(C, StubbleEarth, 0.3), Regrowth, 0.2);
 		C = Varied(C, 1.0 + 0.08 * N1 + 0.05 * Broad, 0.02 * Broad);
 		return Mixed(C, FarHedge, 0.5 * Smooth(9.0, 1.0, Gap));
 	}
@@ -4505,7 +4521,8 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
+		static_assert(sizeof(Names) / sizeof(Names[0]) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
 		const uint64_t S = 0xBA5E;
@@ -4741,7 +4758,57 @@ namespace LandField
 				Strip(M, P, { 0.01, 0.1, 0.13, 0.11, 0.07, 0.0 }, { -Out.Y, Out.X, 0 }, Rgb(82, 110, 44), Rgb(112, 138, 58));
 			}
 		}
-		for (const Base B : { Base::Tuft, Base::TallGrass, Base::Wheat, Base::Poppies, Base::Flowers, Base::Stone, Base::Fern }) At(B).FarFrom = 70.0f;
+		// A barley stubble: the binder cut it a hand's breadth up, so its stalks stand 8 to 15 cm in the drill rows, 17 cm
+		// apart, pale and hollow, their feet in shade; and a few straws the binder dropped lie loose along the rows.
+		// (1.4 m along seven rows; the field turns it to its own rows. The art director, 22 November: "straw rows over
+		// brown earth", the third cut's stubble a flat pale sheet.) Each stalk drawn is a few stalks seen together.
+		{
+			Mesh& M = At(Base::Stubble).Near;
+			constexpr int Rows = 7, Stalks = 11;
+			constexpr double Apart = 0.17, Along = 1.4;
+			for (int Row = 0; Row < Rows; ++Row)
+			{
+				const double Y = (Row - 0.5 * (Rows - 1)) * Apart + R.Range(-0.015, 0.015);
+				for (int K = 0; K < Stalks; ++K)
+				{
+					const double X = ((K + R.Range(0.15, 0.85)) / Stalks - 0.5) * Along;
+					const V3 Foot{ X, Y + R.Range(-0.012, 0.012), -0.01 };
+					const double High = R.Range(0.08, 0.15), A = R.Range(0.0, Pi);
+					const V3 Lean{ R.Range(-0.02, 0.02), R.Range(-0.02, 0.02), 0 };
+					Strip(M, { Foot, Foot + Lean + V3{ 0, 0, High } }, { 0.008, 0.005 }, { std::cos(A), std::sin(A), 0 },
+						  Rgb(112, 98, 66), Varied(Rgb(178, 160, 110), R.Range(0.9, 1.08), R.Range(-0.03, 0.03)));
+				}
+			}
+			for (int K = 0; K < 8; ++K)
+			{
+				// a loose straw: lying along the rows, give or take, a little off the ground at one end
+				const double A = R.Range(-0.5, 0.5), Long = R.Range(0.18, 0.4);
+				const V3 Mid{ R.Range(-0.6, 0.6), R.Range(-0.55, 0.55), 0.005 };
+				const V3 Way{ std::cos(A), std::sin(A), 0 };
+				Strip(M, { Mid - Way * (0.5 * Long), Mid + Way * (0.5 * Long) + V3{ 0, 0, 0.02 } }, { 0.006, 0.005 }, { -Way.Y, Way.X, 0 }, Rgb(150, 134, 92),
+					  Rgb(184, 166, 116));
+			}
+		}
+		// The sward: the grass itself, a hand high, three dozen blades in a patch, grazed short. Built grey, so that its
+		// tint (the ground's own colour where it grows, Clutter) is its colour: the feet in shade, the tips lit, a few dead
+		// and straw-coloured. Close round the eye only (25 m), where the painted ground alone read as a flat green felt
+		// with tufts stuck on it (Brian, 22 November: "i want the grass and bushes and plants to look more realistic").
+		{
+			Mesh& M = At(Base::Sward).Near;
+			for (int K = 0; K < 36; ++K)
+			{
+				const V3 Foot = Around(0.42);
+				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.05, 0.14);
+				const V3 Lean{ std::cos(A) * High * R.Range(0.15, 0.55), std::sin(A) * High * R.Range(0.15, 0.55), 0 };
+				const bool bDead = R.Next() < 0.1;
+				const double L = R.Range(0.88, 1.12);
+				const Col Tip = bDead ? Rgb(148, 138, 108) : Varied(Rgb(132, 138, 124), L, 0.0);
+				Strip(M, { Foot - V3{ 0, 0, 0.01 }, Foot + Lean * 0.4 + V3{ 0, 0, High * 0.55 }, Foot + Lean + V3{ 0, 0, High } }, { 0.008, 0.006, 0.0 }, AcrossOf(Lean, A),
+					  Varied(Rgb(84, 88, 80), L, 0.0), Tip);
+			}
+		}
+		for (const Base B : { Base::Tuft, Base::TallGrass, Base::Wheat, Base::Poppies, Base::Flowers, Base::Stone, Base::Fern, Base::Stubble }) At(B).FarFrom = 70.0f;
+		At(Base::Sward).FarFrom = 25.0f;
 		for (BaseMesh& B : Bases) Measure(B);
 	}
 }
@@ -4902,22 +4969,22 @@ namespace LandField
 				if (IsCorn(Crop))
 					G = Edge > 4.0 ? Of(2.0, { { 0.93, Base::Wheat }, { 0.04, Base::Poppies }, { 0.02, Base::Tuft }, { 0.01, Base::Flowers } })
 								   : Of(1.4, { { 0.4, Base::Wheat }, { 0.22, Base::Poppies }, { 0.18, Base::TallGrass }, { 0.1, Base::Flowers }, { 0.1, Base::Tuft } });
-				else if (Crop == CpStubble) G = Of(0.5, { { 0.7, Base::Tuft }, { 0.15, Base::Poppies }, { 0.15, Base::Flowers } });
+				else if (Crop == CpStubble) G = Of(1.0, { { 0.84, Base::Stubble }, { 0.11, Base::Tuft }, { 0.03, Base::Poppies }, { 0.02, Base::Flowers } });
 				else G = Of(1.6, { { 1.0, Base::Tuft } });
 				break;
 			case Drawn::Pasture:
 				if (Edge < 3.0) G = Of(1.2, { { 0.35, Base::TallGrass }, { 0.15, Base::Fern }, { 0.2, Base::Flowers }, { 0.3, Base::Tuft } });
-				else if (Crop == CpLush) G = Of(1.2, { { 0.6, Base::Tuft }, { 0.3, Base::TallGrass }, { 0.1, Base::Flowers } });
-				else if (Crop == CpHayCut) G = Of(0.6, { { 0.9, Base::Tuft }, { 0.1, Base::Flowers } });
-				else if (Crop == CpMeadow) G = Of(1.4, { { 0.2, Base::Tuft }, { 0.55, Base::TallGrass }, { 0.15, Base::Flowers }, { 0.1, Base::Poppies } });
-				else G = Of(1.0, { { 0.86, Base::Tuft }, { 0.08, Base::Flowers }, { 0.06, Base::TallGrass } });
+				else if (Crop == CpLush) G = Of(1.45, { { 0.35, Base::Sward }, { 0.4, Base::Tuft }, { 0.18, Base::TallGrass }, { 0.07, Base::Flowers } });
+				else if (Crop == CpHayCut) G = Of(1.2, { { 0.55, Base::Sward }, { 0.4, Base::Tuft }, { 0.05, Base::Flowers } });
+				else if (Crop == CpMeadow) G = Of(1.45, { { 0.2, Base::Sward }, { 0.15, Base::Tuft }, { 0.45, Base::TallGrass }, { 0.12, Base::Flowers }, { 0.08, Base::Poppies } });
+				else G = Of(1.45, { { 0.6, Base::Sward }, { 0.32, Base::Tuft }, { 0.05, Base::Flowers }, { 0.03, Base::TallGrass } });
 				break;
 			case Drawn::Rough: G = Of(1.2, { { 0.5, Base::TallGrass }, { 0.35, Base::Tuft }, { 0.15, Base::Fern } }); break;
 			case Drawn::Works: G = Of(0.3, { { 1.0, Base::Tuft } }); break; // (its few stones: the clumped pass below)
 			case Drawn::Village:
 			case Drawn::Yard:
 				G = (Occ & OcNear) || What == Drawn::Yard ? Of(0.25, { { 0.8, Base::Tuft }, { 0.2, Base::Stone } })
-														   : Of(0.8, { { 0.6, Base::Tuft }, { 0.3, Base::Flowers }, { 0.1, Base::TallGrass } });
+														   : Of(1.2, { { 0.4, Base::Sward }, { 0.36, Base::Tuft }, { 0.18, Base::Flowers }, { 0.06, Base::TallGrass } });
 				break;
 			case Drawn::Lane:
 				// The floor's edges and its middle strip grass over; between, the ruts' stones. The walls: ferns and grass.
@@ -4929,7 +4996,7 @@ namespace LandField
 			case Drawn::Woods: G = Of(0.5, { { 0.65, Base::Fern }, { 0.35, Base::Tuft } }); break;
 			case Drawn::Wall: G = Of(0.2, { { 0.5, Base::TallGrass }, { 0.5, Base::Fern } }); break;
 			case Drawn::Marsh: G = Of(1.5, { { 0.8, Base::TallGrass }, { 0.2, Base::Tuft } }); break;
-			case Drawn::Beyond: G = Of(0.8, { { 0.85, Base::Tuft }, { 0.1, Base::TallGrass }, { 0.05, Base::Flowers } }); break;
+			case Drawn::Beyond: G = Of(1.2, { { 0.45, Base::Sward }, { 0.45, Base::Tuft }, { 0.06, Base::TallGrass }, { 0.04, Base::Flowers } }); break;
 			default: break; // a floor or water: nothing
 			}
 			// Trodden: gateways, and where the recording's men and vehicles went.
@@ -4959,13 +5026,14 @@ namespace LandField
 					if (X < X0 || X >= X1 || Y < Y0 || Y >= Y1) continue;
 					const double Keep = Unit(Hash(H, 1)), Pick = Unit(Hash(H, 2));
 					int Crop = CpOther;
-					double Edge = 99.0, LaneEdge = 99.0;
+					double Edge = 99.0, LaneEdge = 99.0, RowAngle = 0.0;
 					uint8_t Occ = 0;
 					if (G.InRaster(X, Y))
 					{
 						const size_t P = G.Pix(X, Y);
 						const ParcelInfo& Q = G.Parcels[static_cast<size_t>(G.Pid[P])];
 						Crop = Q.Crop;
+						RowAngle = Q.Angle;
 						Edge = G.DistE[P];
 						LaneEdge = G.LaneD[P];
 						Occ = G.OccR[P];
@@ -5024,12 +5092,6 @@ namespace LandField
 							TG = 0.86;
 							TB = 0.74;
 						}
-						if (Crop == CpStubble && What == Drawn::Crop)
-						{
-							TR = 1.12;
-							TG = 1.04;
-							TB = 0.92;
-						}
 						break;
 					case Base::TallGrass:
 						Scale = 0.8 + 0.5 * U4;
@@ -5038,6 +5100,23 @@ namespace LandField
 					case Base::Stone:
 						Scale = 0.6 + 1.2 * U4;
 						ScaleZ = 0.7 + 0.6 * U5;
+						break;
+					case Base::Sward:
+					{
+						// the ground's own colour where it grows (built grey, 128 a tint is as built)
+						const Col Here = G.GroundColour(X, Y);
+						TR = Here.R / 118.0;
+						TG = Here.G / 118.0;
+						TB = Here.B / 118.0;
+						Scale = 0.8 + 0.4 * U4;
+						ScaleZ = Crop == CpHayCut || Crop == CpGrazed ? 0.7 + 0.4 * U5 : 0.9 + 0.5 * U5;
+						break;
+					}
+					case Base::Stubble:
+						// along the field's own drill rows (its ploughed lands' way), either way round
+						P.Yaw = static_cast<float>(RowAngle + (U6 < 0.5 ? 0.0 : Pi) + 0.06 * (U4 - 0.5));
+						Scale = 0.85 + 0.3 * U4;
+						ScaleZ = 0.8 + 0.4 * U5;
 						break;
 					default: break;
 					}

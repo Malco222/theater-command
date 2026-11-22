@@ -77,7 +77,7 @@ namespace LandParts
 	 * her first item, "one switch, every shot: the biggest lift"): with red 1.08 and blue 0.87 the frames measured
 	 * saturation 0.30 to 0.48 and blue under red by 37 to 62, wheat orange-gold and grass lime; she asks red 1.00, blue
 	 * 1.02, the middle tones' colour 0.45 to 0.50 and the darks' 0.45, for saturation 0.15 to 0.25 and blue under red
-	 * by 15 to 0. "-TheaterLandGrade=darks,middles,red,blue" tries other numbers (leave one empty to keep it);
+	 * by 15 to 0. "-TheaterLandGrade=darks,middles,red,blue,stops" tries other numbers (leave one empty to keep it);
 	 * "-TheaterNoBattleGrade" leaves both off.
 	 */
 	static void Grade(FPostProcessSettings& Lens)
@@ -87,14 +87,16 @@ namespace LandParts
 		{
 			return;
 		}
-		double Darks = 0.45, Middles = 0.48, Red = 1.0, Blue = 1.02;
+		// (and half a stop down: the art director on the third cut's field sheets, 22 November: the stop brings hay,
+		// wheat, barley and meadow into 120-165 and keeps the contrast's shadows, where a softer contrast flattens them)
+		double Darks = 0.45, Middles = 0.48, Red = 1.0, Blue = 1.02, Stops = -0.5;
 		FString Asked;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked))
 		{
 			TArray<FString> Parts;
 			Asked.ParseIntoArray(Parts, TEXT(","), false);
-			double* Into[] = { &Darks, &Middles, &Red, &Blue };
-			for (int32 K = 0; K < Parts.Num() && K < 4; ++K)
+			double* Into[] = { &Darks, &Middles, &Red, &Blue, &Stops };
+			for (int32 K = 0; K < Parts.Num() && K < 5; ++K)
 			{
 				if (!Parts[K].TrimStartAndEnd().IsEmpty())
 				{
@@ -105,12 +107,14 @@ namespace LandParts
 		Lens.ColorSaturationShadows = FVector4(Darks, Darks, Darks, 1.0);
 		Lens.ColorSaturationMidtones = FVector4(Middles, Middles, Middles, 1.0);
 		Lens.ColorGain = FVector4(Red, 1.0, Blue, 1.0);
+		Lens.bOverride_AutoExposureBias = true;
+		Lens.AutoExposureBias = static_cast<float>(Stops);
 		static bool bSaid = false;
 		if (!bSaid)
 		{
 			bSaid = true;
-			UE_LOG(LogTheater, Display, TEXT("Land battle look: the ground battle's grade over the battles' own: colour kept in the darks %.2f, the middle tones %.2f; red %.2f and blue %.2f"),
-				Darks, Middles, Red, Blue);
+			UE_LOG(LogTheater, Display, TEXT("Land battle look: the ground battle's grade over the battles' own: colour kept in the darks %.2f, the middle tones %.2f; red %.2f and blue %.2f; %.2f stops"),
+				Darks, Middles, Red, Blue, Stops);
 		}
 	}
 
