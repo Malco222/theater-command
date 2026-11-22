@@ -36,5 +36,9 @@ public class TheaterCommand : ModuleRules
 
 		// Only for the development photographer, which reports how long a frame takes to draw.
 		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI" });
+
+		// The seal signs are read into an image and given their smaller copies by hand (FImage::CopyTo in
+		// CampaignHUD.cpp), which lives in ImageCore. Without it the game compiles but does not link on the Mac.
+		PrivateDependencyModuleNames.Add("ImageCore");
 	}
 }
