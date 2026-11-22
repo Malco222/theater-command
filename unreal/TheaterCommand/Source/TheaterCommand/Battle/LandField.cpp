@@ -1466,7 +1466,9 @@ namespace LandField
 		}
 		switch (Kind)
 		{
-		case RgField: return U < 0.46 ? CpWheat : U < 0.66 ? CpBarley : U < 0.78 ? CpOats : U < 0.86 ? CpGreenWheat : U < 0.94 ? CpStubble : CpRoots;
+		// (mid-July 1944: the harvest barely begun, so only a little early barley is cut; a late-sown wheat still green; the
+		// environment review of 22 November: stubble 3% of the arable at most, green wheat 15%)
+		case RgField: return U < 0.42 ? CpWheat : U < 0.60 ? CpBarley : U < 0.72 ? CpOats : U < 0.87 ? CpGreenWheat : U < 0.90 ? CpStubble : CpRoots;
 		case RgOpen: return U < 0.45 ? CpGrazed : U < 0.65 ? CpLush : U < 0.82 ? CpHayCut : CpMeadow;
 		case RgRough: return CpRough;
 		case RgWorks: return CpWorks;
@@ -5373,14 +5375,16 @@ namespace LandField
 				Strip(M, { Head, Head + Lean * 0.4 + V3{ 0, 0, 0.12 } }, { 0.018, 0.0 }, AcrossOf(Lean, A + 1.0), Rgb(150, 140, 96), Rgb(168, 156, 112));
 			}
 		}
-		// Ripe corn: two dozen stalks, a metre high, each with its ear, leaning a little with the wind.
+		// Ripe corn: three dozen stalks, about a metre high (the field stands them 1.2 to 1.4 m to the ears), each with its
+		// ear, leaning a little with the wind; each stalk drawn is a few stalks seen together. (The environment review, 22
+		// November: the floor showed between the stalks a few metres from the eye, and the ears stood about 1.1 m.)
 		{
 			Mesh& M = At(Base::Wheat).Near;
 			const V3 Wind{ 0.06, 0.02, 0 };
-			for (int K = 0; K < 24; ++K)
+			for (int K = 0; K < 36; ++K)
 			{
-				const V3 Foot = Around(0.3);
-				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.82, 1.0);
+				const V3 Foot = Around(0.36);
+				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.9, 1.04);
 				const V3 Lean = Wind + V3{ R.Range(-0.04, 0.04), R.Range(-0.04, 0.04), 0 };
 				const V3 Crest = Foot + Lean + V3{ 0, 0, High };
 				const V3 Across{ std::cos(A), std::sin(A), 0 };
@@ -5650,6 +5654,29 @@ namespace LandField
 	const std::vector<std::vector<std::pair<double, double>>>& Ground::Lanes() const { return In->LaneOut; }
 	const Tally& Ground::Laid() const { return In->Count; }
 
+	std::string Ground::CropOfParcel(int Parcel) const
+	{
+		const Impl& G = *In;
+		if (Parcel < 0 || static_cast<size_t>(Parcel) >= G.Parcels.size()) return "";
+		switch (G.Parcels[static_cast<size_t>(Parcel)].Crop)
+		{
+		case CpGrazed: return "grazed";
+		case CpLush: return "lush";
+		case CpHayCut: return "hay cut";
+		case CpMeadow: return "meadow";
+		case CpWheat: return "wheat";
+		case CpBarley: return "barley";
+		case CpOats: return "oats";
+		case CpGreenWheat: return "green wheat";
+		case CpStubble: return "stubble";
+		case CpRoots: return "roots";
+		case CpRye: return "rye";
+		case CpSteppe: return "steppe";
+		case CpFallow: return "fallow";
+		default: return "";
+		}
+	}
+
 	int Ground::ParcelAt(double X, double Y) const
 	{
 		const Impl& G = *In;
@@ -5786,11 +5813,13 @@ namespace LandField
 					switch (Gr.Kind)
 					{
 					case Base::Wheat:
+						// (wheat's ears 1.2 to 1.4 m up, barley 1.0 to 1.1, rye at Prokhorovka 1.5 to 1.8: a kneeling man
+						// hidden, a standing man seen from his belt up)
 						Scale = 0.9 + 0.3 * U4;
-						ScaleZ = 0.92 + 0.16 * U5;
+						ScaleZ = 1.12 + 0.14 * U5;
 						if (Crop == CpBarley)
 						{
-							ScaleZ *= 0.82;
+							ScaleZ *= 0.8;
 							TR = 1.06;
 							TG = 1.06;
 							TB = 1.1;
@@ -5812,7 +5841,7 @@ namespace LandField
 						else if (Crop == CpRye)
 						{
 							// (winter rye, ripe and chest high: greyer and paler than the wheat)
-							ScaleZ *= 1.35;
+							ScaleZ *= 1.3;
 							TR = 0.98;
 							TG = 0.97;
 							TB = 1.06;

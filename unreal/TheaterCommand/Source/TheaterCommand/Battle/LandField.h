@@ -341,6 +341,9 @@ namespace LandField
 		const std::vector<std::vector<std::pair<double, double>>>& Lanes() const;
 		/** The parcel at a place (-1 where none: lanes, woods, beyond), for maps and tests. */
 		int ParcelAt(double X, double Y) const;
+		/** What a parcel grows, in a word ("wheat", "barley", "oats", "green wheat", "stubble", "roots", "grazed",
+		 * "lush", "hay cut", "meadow", "rye", "steppe", "fallow"; "" for none), for tests and sheets. */
+		std::string CropOfParcel(int Parcel) const;
 
 		const Tally& Laid() const;
 
