@@ -18,24 +18,38 @@ namespace EdgeSeals
 			return Letter == ' ' || Letter == '\t' || Letter == '\n' || Letter == '\r';
 		}
 
-		/** A word that is only a dash (-, the en dash or the em dash in UTF-8): no word to end a cut line on. */
-		bool IsDashWord(const std::string& Text, size_t Start, size_t End)
-		{
-			const std::string Word = Text.substr(Start, End - Start);
-			return Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94";
-		}
-
-		/**
-		 * A joining or small word (at, in, on, of, to, by, for, from, with, and, or, the, a, an, its, his, her, their), in
-		 * any case, with any stop or full stop after it: no word to end a cut line on ("the Finnish troops at").
-		 */
-		bool IsSmallWord(const std::string& Text, size_t Start, size_t End)
+		/** Where a word ends once any stops or full stops after it are taken off. */
+		size_t BareEnd(const std::string& Text, size_t Start, size_t End)
 		{
 			while (End > Start && (IsStop(Text[End - 1]) || Text[End - 1] == '.'))
 			{
 				--End;
 			}
-			if (End == Start || End - Start > 5)
+			return End;
+		}
+
+		/** A word that is only stops (",", ";", ":", "."), standing apart from the word before it: no word to end a cut line on. */
+		bool IsStopsWord(const std::string& Text, size_t Start, size_t End)
+		{
+			return BareEnd(Text, Start, End) == Start;
+		}
+
+		/** A word that is only a dash (-, the en dash or the em dash in UTF-8), with or without a stop after it: no word to end a cut line on. */
+		bool IsDashWord(const std::string& Text, size_t Start, size_t End)
+		{
+			const std::string Word = Text.substr(Start, BareEnd(Text, Start, End) - Start);
+			return Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94";
+		}
+
+		/**
+		 * A joining or small word, in any case, with any stop or full stop after it: no word to end a cut line on ("the
+		 * Finnish troops at", "reports for duty and is"). The rules' own list for the same job (monthcard.ts, LITTLE: the
+		 * articles, prepositions, conjunctions, pronouns and the verbs that only help another), and "her".
+		 */
+		bool IsSmallWord(const std::string& Text, size_t Start, size_t End)
+		{
+			End = BareEnd(Text, Start, End);
+			if (End == Start || End - Start > 7)
 			{
 				return false;
 			}
@@ -45,7 +59,10 @@ namespace EdgeSeals
 				const char Letter = Text[At];
 				Word += Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
 			}
-			for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their" })
+			for (const char* Small : { "a", "an", "the", "of", "at", "in", "on", "to", "with", "for", "from", "by", "and", "or", "but", "its", "their", "his", "her",
+					 "is", "are", "was", "were", "be", "been", "has", "have", "had", "can", "could", "will", "would", "may", "must", "not", "no", "it", "they", "he",
+					 "we", "that", "which", "as", "if", "so", "than", "then", "when", "while", "before", "after", "until", "because", "about", "out", "up", "off",
+					 "into", "over", "under", "near", "round", "against", "between", "who", "whose" })
 			{
 				if (Word == Small)
 				{
@@ -244,7 +261,8 @@ namespace EdgeSeals
 			{
 				++At;
 			}
-			if (At > Start)
+			// (stops standing before the first word say nothing, and are no word to begin on either)
+			if (At > Start && (!Words.empty() || !IsStopsWord(Text, Start, At)))
 			{
 				Words.emplace_back(Start, At);
 			}
@@ -267,16 +285,44 @@ namespace EdgeSeals
 					break;
 				}
 			}
-			// (a lone dash is no word to end on, nor a joining or small word: back to the last word that says something)
-			while (Kept > 1 && (IsDashWord(Text, Words[Kept - 1].first, Words[Kept - 1].second) || IsSmallWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)))
+			for (;;)
 			{
-				--Kept;
+				// (a lone dash is no word to end on, nor stops standing on their own, nor a joining or small word: back to
+				// the last word that says something)
+				while (Kept > 1 && (IsStopsWord(Text, Words[Kept - 1].first, Words[Kept - 1].second) || IsDashWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)
+						   || IsSmallWord(Text, Words[Kept - 1].first, Words[Kept - 1].second)))
+				{
+					--Kept;
+				}
+				// (nor is a bracket left open: "VI Corps (36th and 34th Infantry" goes back to before the word that opened it)
+				int Depth = 0;
+				size_t Opened = 0;
+				for (size_t Word = 0; Word < Kept; ++Word)
+				{
+					for (size_t At = Words[Word].first; At < Words[Word].second; ++At)
+					{
+						if (Text[At] == '(')
+						{
+							Opened = Depth == 0 ? Word : Opened;
+							++Depth;
+						}
+						else if (Text[At] == ')' && Depth > 0)
+						{
+							--Depth;
+						}
+					}
+				}
+				if (Depth == 0 || Opened == 0)
+				{
+					break;
+				}
+				Kept = Opened;
 			}
 		}
 		std::string Out = Text.substr(Words[0].first, Words[Kept - 1].second - Words[0].first);
 		if (Kept < Words.size())
 		{
-			while (!Out.empty() && IsStop(Out.back()))
+			while (!Out.empty() && (IsStop(Out.back()) || IsSpace(Out.back())))
 			{
 				Out.pop_back();
 			}
@@ -425,12 +471,58 @@ namespace EdgeSeals
 		}
 
 		/**
+		 * A word the rules put after a nation's adjective as the thing it names ("German troops land", "Italian envoys
+		 * are courting"): part of the name, never the verb. (src/campaign: every word after an adjective's "${adj}".)
+		 */
+		bool IsNamedThing(const std::string& Word)
+		{
+			for (const char* Thing : { "troops", "army", "armies", "corps", "air", "airborne", "fighters", "bombers", "aircraft", "agents", "sabotage", "industry",
+					 "hands", "forces", "fleet", "fleets", "fieldworks", "command", "train", "ships", "shipping", "raid", "production", "navy", "landing", "honour",
+					 "envoys", "drawing", "designs", "counter", "coast", "submarine", "submarines", "guns", "tanks", "divisions" })
+			{
+				if (Word == Thing)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/** A name's own small word: "Charles de Gaulle", "Army of the Rhine". */
+		bool IsNameParticle(const std::string& Word)
+		{
+			for (const char* Particle : { "de", "du", "da", "di", "del", "della", "der", "den", "van", "von", "la", "le", "of", "the", "y", "al", "bin", "ibn" })
+			{
+				if (Word == Particle)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/** A word with any stops after it taken off ("rearms:" "rearms"). */
+		std::string Bare(const std::string& Word)
+		{
+			size_t End = Word.size();
+			while (End > 0 && (IsStop(Word[End - 1]) || Word[End - 1] == '.'))
+			{
+				--End;
+			}
+			return Word.substr(0, End);
+		}
+
+		/**
 		 * The sentences of a run as a name each and the same words after it (the predicate): where each sentence is one
 		 * to four words with no stop in them, none named twice, and then the same words, the first of them in small
 		 * letters (a verb, never another name). Out: the names, "The" made "the" for the list. A list's joining word
 		 * ("and", "or") is never the verb, and a name with one in it is not listed ("Britain and France declare war"
 		 * three times over would read "3 and France declare war"); nor are words that run on past the end of a sentence
-		 * ("... for a command. He was ..."), whose second sentence the plural would not fit.
+		 * ("... for a command. He was ..."), whose second sentence the plural would not fit. Nor is a thing named after a
+		 * nation's adjective ("German troops land at Narvik") taken for the verb: it is part of the name. The predicate
+		 * is said up to a colon in it, never past it ("3 rearm: Germany, Italy and Japan"), its "its" and "his" made
+		 * "their"; where a second verb after "and" would want its plural too ("joins the Axis and declares war"), or a
+		 * "her" would want "their" or stay, the sentences are not split.
 		 */
 		bool SplitNames(const std::vector<FSaid>& Said, const FAlikeRun& Run, std::vector<std::string>& OutNames, std::string& OutSays)
 		{
@@ -438,9 +530,22 @@ namespace EdgeSeals
 			SplitWords(Said[static_cast<size_t>(Run.First)].Sentence, First);
 			for (size_t Lead = 1; Lead <= 4 && Lead < First.size(); ++Lead)
 			{
-				if (!StartsLower(First[Lead]) || EndsStopped(First[Lead - 1]) || IsJoin(First[Lead]))
+				if (!StartsLower(First[Lead]))
 				{
 					continue;
+				}
+				// (a word in small letters that may be part of a name: a list's joining word, a thing named after a nation's
+				// adjective, a name's own small word, "Charles de Gaulle". Any other is the verb: where the run does not split
+				// at it, it splits nowhere, and no later word is taken for the verb with it inside a name, "3 captain: Hood
+				// loses her")
+				const bool bNamePart = IsJoin(First[Lead]) || IsNamedThing(Bare(First[Lead])) || IsNameParticle(First[Lead]);
+				if (EndsStopped(First[Lead - 1]) || IsJoin(First[Lead]) || IsNamedThing(Bare(First[Lead])))
+				{
+					if (bNamePart)
+					{
+						continue;
+					}
+					return false;
 				}
 				bool bOneSentence = true;
 				for (size_t Word = Lead; Word + 1 < First.size(); ++Word)
@@ -476,18 +581,47 @@ namespace EdgeSeals
 				}
 				if (bAll)
 				{
-					// (the verb made plural, and an "is", "has" or "was" after an "and" with it: "report for duty and are waiting")
 					std::vector<std::string> Words(First.begin() + static_cast<std::ptrdiff_t>(Lead), First.end());
-					Words[0] = PluralVerb(Words[0]);
-					for (size_t Word = 1; Word < Words.size(); ++Word)
+					// (up to a colon, never past it: what follows it is the card's gloss on one, not the names' list)
+					for (size_t Word = 0; Word < Words.size(); ++Word)
 					{
-						if (Words[Word - 1] == "and" && (Words[Word] == "is" || Words[Word] == "has" || Words[Word] == "was"))
+						if (!Words[Word].empty() && Words[Word].back() == ':')
+						{
+							Words.resize(Word + 1);
+							Words[Word] = Bare(Words[Word]);
+							break;
+						}
+					}
+					// (the verb made plural, and an "is", "has" or "was" after an "and" with it: "report for duty and are waiting";
+					// "its" and "his" made "their")
+					Words[0] = PluralVerb(Words[0]);
+					bool bSplit = true;
+					for (size_t Word = 0; Word < Words.size(); ++Word)
+					{
+						const std::string Plain = Bare(Words[Word]);
+						if (Word > 0 && Words[Word - 1] == "and" && (Plain == "is" || Plain == "has" || Plain == "was"))
 						{
 							Words[Word] = PluralVerb(Words[Word]);
 						}
+						else if (Word > 0 && IsJoin(Words[Word - 1]) && PluralVerb(Plain) != Plain)
+						{
+							bSplit = false; // (a second verb, "and declares": it would want its plural, which a noun must not get)
+						}
+						if (Plain == "its" || Plain == "his")
+						{
+							Words[Word] = "their" + Words[Word].substr(Plain.size());
+						}
+						bSplit = bSplit && Plain != "her";
 					}
-					OutSays = JoinWords(Words, 0, Words.size());
-					return true;
+					if (bSplit)
+					{
+						OutSays = JoinWords(Words, 0, Words.size());
+						return true;
+					}
+				}
+				if (!bNamePart)
+				{
+					return false;
 				}
 			}
 			return false;
@@ -517,8 +651,19 @@ namespace EdgeSeals
 		return Said;
 	}
 
-	std::string PluralVerb(const std::string& Word)
+	std::string PluralVerb(const std::string& Said)
 	{
+		// (a stop after it is kept as it was: "rearms:" "rearm:")
+		size_t Bare = Said.size();
+		while (Bare > 0 && IsStop(Said[Bare - 1]))
+		{
+			--Bare;
+		}
+		if (Bare < Said.size())
+		{
+			return PluralVerb(Said.substr(0, Bare)) + Said.substr(Bare);
+		}
+		const std::string& Word = Said;
 		if (Word == "is")
 		{
 			return "are";
@@ -553,9 +698,69 @@ namespace EdgeSeals
 		return Word.substr(0, Word.size() - 1);
 	}
 
+	namespace
+	{
+		/** Where on the card a part's items are, for a folded seal's words: "" for a band or the lead story, which the words do not place. */
+		const char* PartWords(ESection Section)
+		{
+			return Section == ESection::Row ? " on your fronts" : Section == ESection::Home ? " at home" : Section == ESection::Staff ? " from your staff" : Section == ESection::Elsewhere ? " elsewhere in the war" : "";
+		}
+
+		/**
+		 * Where on the card the items From to To (not To) are: their parts' words in card order, each once ("at home and
+		 * from your staff"); "" where one is a band or the lead story, which the words do not place.
+		 */
+		std::string PartsOf(const std::vector<FSaid>& Said, int From, int To)
+		{
+			std::vector<std::string> Parts;
+			for (int Index = From; Index < To; ++Index)
+			{
+				const std::string Part = PartWords(Said[static_cast<size_t>(Index)].Section);
+				if (Part.empty())
+				{
+					return std::string();
+				}
+				if (std::find(Parts.begin(), Parts.end(), Part) == Parts.end())
+				{
+					Parts.push_back(Part);
+				}
+			}
+			std::string Out;
+			for (size_t Index = 0; Index < Parts.size(); ++Index)
+			{
+				Out += Index == 0 ? Parts[Index] : (Index + 1 == Parts.size() ? " and" : ",") + Parts[Index];
+			}
+			return Out;
+		}
+
+		/**
+		 * A folded seal's first item's words, where they cannot name the run: the line whole where it is one clause (no
+		 * comma, colon or semicolon, one sentence) of no more than twice Most words, so that a verb is never cut from its
+		 * object ("The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches"); else its
+		 * eight words. No full stop: the words go on.
+		 */
+		std::string FirstWords(const std::string& Line, int Most = 8)
+		{
+			std::vector<std::string> Words;
+			SplitWords(Line, Words);
+			bool bClause = !Words.empty() && static_cast<int>(Words.size()) <= 2 * Most;
+			for (size_t Word = 0; bClause && Word < Words.size(); ++Word)
+			{
+				bClause = !EndsStopped(Words[Word]) && !EndsSentence(Words[Word]);
+			}
+			std::string Out = bClause ? JoinWords(Words, 0, Words.size()) : EightWords(Line, Most);
+			while (!Out.empty() && (IsStop(Out.back()) || Out.back() == '.' || Out.back() == '!' || Out.back() == '?'))
+			{
+				Out.pop_back();
+			}
+			return Out;
+		}
+	}
+
 	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run)
 	{
-		if (Run.First < 0 || Run.Count < 1 || static_cast<size_t>(Run.First + Run.Count) > Said.size())
+		// (a run that is not wholly on the card says nothing; its end is weighed without adding, which could overflow)
+		if (Run.First < 0 || Run.Count < 1 || static_cast<size_t>(Run.First) > Said.size() || static_cast<size_t>(Run.Count) > Said.size() - static_cast<size_t>(Run.First))
 		{
 			return std::string();
 		}
@@ -571,41 +776,36 @@ namespace EdgeSeals
 		{
 			return Count + " " + Says + ": " + ListNames(Names);
 		}
-		// (a front's rows that share their head: its place on each, and the head as the card prints it)
+		// (a front's rows that share their head: its place on each, and the head as the card prints it; "The" made "the" in
+		// the list, as SplitNames makes it)
 		bool bRows = !Head.Head.empty();
 		Names.clear();
 		for (int Index = Run.First; bRows && Index < Run.First + Run.Count; ++Index)
 		{
 			const FSaid& Row = Said[static_cast<size_t>(Index)];
-			bRows = Row.Section == ESection::Row && Row.Head == Head.Head && !Row.Name.empty() && std::find(Names.begin(), Names.end(), Row.Name) == Names.end();
-			Names.push_back(Row.Name);
+			std::string Name = Row.Name;
+			if (Name.compare(0, 4, "The ") == 0)
+			{
+				Name[0] = 't';
+			}
+			bRows = Row.Section == ESection::Row && Row.Head == Head.Head && !Name.empty() && std::find(Names.begin(), Names.end(), Name) == Names.end();
+			Names.push_back(Name);
 		}
 		if (bRows)
 		{
 			return Count + " " + Head.Head + ": " + ListNames(Names);
 		}
-		// (else the first item's own words, how many more, and the part of the card they are in, where they share one)
-		bool bOnePart = true;
-		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
-		{
-			bOnePart = bOnePart && Said[static_cast<size_t>(Index)].Section == Head.Section;
-		}
-		const char* Where = "";
-		if (bOnePart)
-		{
-			Where = Head.Section == ESection::Row ? " on your fronts" : Head.Section == ESection::Home ? " at home" : Head.Section == ESection::Staff ? " from your staff" : Head.Section == ESection::Elsewhere ? " elsewhere in the war" : "";
-		}
-		std::string First = EightWords(Head.Line);
-		while (!First.empty() && (IsStop(First.back()) || First.back() == '.' || First.back() == '!' || First.back() == '?'))
-		{
-			First.pop_back(); // (its full stop: the words go on)
-		}
+		// (else the first item's own words; then how many more reports, and where on the card they are. Counted as reports,
+		// never as more of the first: "Hungary joins the Axis, and 4 more" would say that four more joined it)
+		const std::string First = FirstWords(Head.Line);
 		if (First.empty())
 		{
 			// (a first item with no words of its own: the count, and where on the card they are)
-			return Count + (Where[0] != '\0' ? std::string(Where) : std::string(" in the month's report"));
+			const std::string Where = PartsOf(Said, Run.First, Run.First + Run.Count);
+			return Count + (Where.empty() ? std::string(" in the month's report") : Where);
 		}
-		return First + ", and " + std::to_string(Run.Count - 1) + " more" + Where;
+		const int More = Run.Count - 1;
+		return First + "; " + std::to_string(More) + (More == 1 ? " more report" : " more reports") + PartsOf(Said, Run.First + 1, Run.First + Run.Count);
 	}
 
 	FLane LaneOf(const FParams& Params, EEdge Edge)

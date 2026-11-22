@@ -7,6 +7,7 @@
 #include "Campaign/EdgeSeals.h"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -1312,10 +1313,64 @@ namespace
 		return Text.compare(0, Part.size(), Part) == 0;
 	}
 
+	/** A sentence with its "its" and "his" read as "their", as a folded seal's words say them of more than one. */
+	std::string Theirs(const std::string& Sentence)
+	{
+		std::string Out = " " + Sentence + " ";
+		for (const char* Own : { " its ", " his " })
+		{
+			for (size_t At = Out.find(Own); At != std::string::npos; At = Out.find(Own, At + 1))
+			{
+				Out.replace(At, 5, " their ");
+			}
+		}
+		return Out.substr(1, Out.size() - 2);
+	}
+
+	/**
+	 * The test's own reading of a folded seal's first words where they cannot name the run: the line whole where it is
+	 * one clause (no , ; : and no sentence's end before its last word) of at most 16 words, else its eight words; no
+	 * stop at the end.
+	 */
+	std::string FirstSaid(const std::string& Line)
+	{
+		std::vector<std::string> Words;
+		size_t At = 0;
+		while (At < Line.size())
+		{
+			while (At < Line.size() && Line[At] == ' ')
+			{
+				++At;
+			}
+			const size_t Start = At;
+			while (At < Line.size() && Line[At] != ' ')
+			{
+				++At;
+			}
+			if (At > Start)
+			{
+				Words.push_back(Line.substr(Start, At - Start));
+			}
+		}
+		bool bClause = !Words.empty() && Words.size() <= 16;
+		for (size_t Index = 0; bClause && Index < Words.size(); ++Index)
+		{
+			const char Last = Words[Index].back();
+			bClause = Last != ',' && Last != ';' && Last != ':' && Last != '!' && Last != '?' && (Last != '.' || Index + 1 == Words.size());
+		}
+		std::string Out = bClause ? Line : EightWords(Line);
+		while (!Out.empty() && (Out.back() == '.' || Out.back() == ',' || Out.back() == ':' || Out.back() == ';' || Out.back() == ' '))
+		{
+			Out.pop_back();
+		}
+		return Out;
+	}
+
 	/**
 	 * Nothing the card does not say: a folded seal's words begin with its count, name its first items in card order
-	 * (each from its own sentence or its row's place), and say how many more; or they are its first item's own words
-	 * and how many more.
+	 * (each from its own sentence or its row's place), and say how many more; or they are its first item's own words,
+	 * then how many more reports (never "and N more" after the first's own words, which reads as more of the first),
+	 * and the parts of the card those are in.
 	 */
 	bool SaysOnlyTheCard(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words, std::string& Why)
 	{
@@ -1335,7 +1390,7 @@ namespace
 			{
 				const FSaid& Item = Said[static_cast<size_t>(Run.First + Index)];
 				const bool bHead = Item.Head == Says;
-				if (!bHead && !Contains(Item.Sentence, Tail))
+				if (!bHead && !Contains(Theirs(Item.Sentence), Tail))
 				{
 					Why = "a folded seal's words say what an item's sentence does not";
 					return false;
@@ -1344,7 +1399,7 @@ namespace
 				{
 					// (its name, where the list has it, in card order: its row's place, or the words of its own sentence before
 					// its verb, the word before the rest)
-					std::string Sentence = Item.Sentence;
+					std::string Sentence = Theirs(Item.Sentence);
 					while (!Sentence.empty() && Sentence.back() == '.')
 					{
 						Sentence.pop_back();
@@ -1373,14 +1428,27 @@ namespace
 			}
 			return true;
 		}
-		std::string Own = EightWords(First.Line);
-		while (!Own.empty() && (Own.back() == '.' || Own.back() == ',' || Own.back() == ':' || Own.back() == ';'))
+		const std::string Own = FirstSaid(First.Line);
+		const int More = Run.Count - 1;
+		std::string Where;
+		for (int Index = Run.First + 1; Index < Run.First + Run.Count; ++Index)
 		{
-			Own.pop_back();
+			const ESection Part = Said[static_cast<size_t>(Index)].Section;
+			const std::string Named = Part == ESection::Row ? "on your fronts" : Part == ESection::Home ? "at home" : Part == ESection::Staff ? "from your staff" : Part == ESection::Elsewhere ? "elsewhere in the war" : "?";
+			if (!Contains(Where, Named))
+			{
+				Where += (Where.empty() ? " " : " and ") + Named;
+			}
 		}
-		if (!StartsWith(Words, Own + ", and " + std::to_string(Run.Count - 1) + " more"))
+		Where = Contains(Where, "?") ? std::string() : Where;
+		const std::string Rest = "; " + std::to_string(More) + (More == 1 ? " more report" : " more reports");
+		// (three parts are listed "a, b and c": the test takes them as "a and b and c")
+		std::string Given = Words;
+		const size_t Comma = Given.find(", ", Own.size() + Rest.size());
+		Given = Comma == std::string::npos ? Given : Given.replace(Comma, 2, " and ");
+		if (!StartsWith(Words, Own + Rest) || Given != Own + Rest + Where)
 		{
-			Why = "a folded seal's words that are neither its names nor its first item's words and how many more";
+			Why = "a folded seal's words that are neither its names nor its first item's words, how many more reports and where";
 			return false;
 		}
 		return true;
@@ -1409,9 +1477,9 @@ static void TestFold()
 	{
 		const std::string War = FoldWords(Three.Said, Runs[0]), Iran = FoldWords(Three.Said, Runs[1]), Home = FoldWords(Three.Said, Runs[2]), Elsewhere = FoldWords(Three.Said, Runs[3]);
 		CHECK(War == "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more");
-		CHECK(Iran == EightWords(Three.Said[9].Line) && Iran == "Soviet Union NEWS: British and Soviet troops have");
+		CHECK(Iran == EightWords(Three.Said[9].Line) && Iran == "Soviet Union NEWS: British and Soviet troops");
 		CHECK(Home == "German envoys are courting Buenos Aires.");
-		CHECK(Elsewhere == "Soviet troops close round Helsinki, and 4 more elsewhere in the war");
+		CHECK(Elsewhere == "Soviet troops close round Helsinki; 4 more reports elsewhere in the war");
 		std::printf("(run 3's month folded: \"%s\"; \"%s\")\n", War.c_str(), Elsewhere.c_str());
 		// Laid at 1441 by 878 and at 1024 by 768 (the layer is 972 units high: 1595 by 972, 1296 by 972), with the frame:
 		// all four stand, and no "+N".
@@ -1638,19 +1706,58 @@ static void TestFold()
 		// (the rows' head and their places, where their sentences name no one: the card's "Ruhr HIT" three times)
 		CHECK(Words({ { "Ruhr", "Their bombers hit its factories by night." }, { "Hamburg", "Their bombers hit its factories by night." }, { "Bohemia", "Their bombers hit its factories by night." } }) == "3 HIT: Ruhr, Hamburg and Bohemia");
 		// (else the first item's words: a name twice, a stop in the name, a capital after it, or different words after it)
-		CHECK(Words({ { "", "Soviet troops close round Riga." }, { "", "Soviet troops close round Pskov." }, { "", "Soviet troops close round Narva." } }) == "Soviet troops close round Riga, and 2 more elsewhere in the war");
+		CHECK(Words({ { "", "Soviet troops close round Riga." }, { "", "Soviet troops close round Pskov." }, { "", "Soviet troops close round Narva." } }) == "Soviet troops close round Riga; 2 more reports elsewhere in the war");
 		CHECK(Words({ { "", "Scorched earth: German troops tore up the railway." }, { "", "Scorched earth: Soviet troops tore up the railway." }, { "", "Scorched earth: Finnish troops tore up the railway." } })
-			== "Scorched earth: German troops tore up the railway, and 2 more elsewhere in the war");
-		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls, and 2 more elsewhere in the war");
-		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } }) == "No. 3 Group bombs Paris by night, and 2 more elsewhere in the war");
+			== "Scorched earth: German troops tore up the railway; 2 more reports elsewhere in the war");
+		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls; 2 more reports elsewhere in the war");
+		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } }) == "No. 3 Group bombs Paris by night; 2 more reports elsewhere in the war");
 		// (a list's "and" is never the verb, nor a name with one in it listed; words that run on into a second sentence are
 		// not made plural; and an item with no words of its own gives the count and its part of the card)
 		CHECK(Words({ { "", "Britain and France declare war on Germany." }, { "", "Canada and France declare war on Germany." }, { "", "India and France declare war on Germany." } })
-			== "Britain and France declare war on Germany, and 2 more elsewhere in the war");
+			== "Britain and France declare war on Germany; 2 more reports elsewhere in the war");
 		CHECK(Words({ { "", "Montgomery reports for duty. He was in Egypt." }, { "", "Alexander reports for duty. He was in Egypt." }, { "", "Brooke reports for duty. He was in Egypt." } })
-			== "Montgomery reports for duty. He was in Egypt, and 2 more elsewhere in the war");
+			== "Montgomery reports for duty. He was in Egypt; 2 more reports elsewhere in the war");
 		CHECK(Words({ { "", "U-47 torpedoes a battleship." }, { "", "U-99 torpedoes a battleship." }, { "", "U-100 torpedoes a battleship." } }) == "3 torpedo a battleship: U-47, U-99 and U-100");
 		CHECK(Words({ { "", "" }, { "", "" }, { "", "" } }) == "3 elsewhere in the war");
+		// (the review's cards, on the rules' own sentences: a thing named after a nation's adjective is the name's, never
+		// the verb, navy.ts's "${adj} troops land at X from the sea" and diplomacy.ts's envoys; the predicate is said up to
+		// a colon in it, a stop on the verb kept off its plural, and "its" made "their"; a second verb after "and", or a
+		// "her", is not split; and a front's rows list "The sky over" as "the sky over", as the names do)
+		auto Each = [&Words](std::initializer_list<const char*> Names, const std::string& Says)
+		{
+			std::vector<std::pair<std::string, std::string>> Items;
+			for (const char* Name : Names)
+			{
+				Items.emplace_back("", std::string(Name) + " " + Says);
+			}
+			return Words(Items);
+		};
+		CHECK(Each({ "German troops", "British troops", "French troops" }, "land at Narvik from the sea.") == "3 land at Narvik from the sea: German troops, British troops and French troops");
+		CHECK(Each({ "German airborne troops", "Italian airborne troops", "Japanese airborne troops" }, "take Crete from the air.")
+			== "3 take Crete from the air: German airborne troops, Italian airborne troops and Japanese airborne troops");
+		CHECK(Each({ "German envoys", "Italian envoys", "Japanese envoys" }, "are courting Buenos Aires.") == "3 are courting Buenos Aires: German envoys, Italian envoys and Japanese envoys");
+		CHECK(Each({ "Germany", "Italy", "Japan" }, "rearms: more of its industry goes over to war work.") == "3 rearm: Germany, Italy and Japan");
+		CHECK(Each({ "Argentina", "Chile", "Spain" }, "leans toward the Axis: trade and treaties, but not at war.") == "3 lean toward the Axis: Argentina, Chile and Spain");
+		CHECK(Each({ "Hungary", "Romania", "Bulgaria" }, "lets its claim to Transylvania rest for now.") == "3 let their claim to Transylvania rest for now: Hungary, Romania and Bulgaria");
+		CHECK(Each({ "Hungary", "Romania", "Finland" }, "joins the Axis and declares war on the Soviet Union.") == "Hungary joins the Axis and declares war on the Soviet Union; 2 more reports elsewhere in the war");
+		CHECK(Each({ "Hood", "Repulse", "Barham" }, "loses her captain.") == "Hood loses her captain; 2 more reports elsewhere in the war");
+		// (a name's own small word is the name's; but the verb is the first other word in small letters, so a run that does
+		// not split there splits nowhere: never "3 her captain: Hood loses, Repulse sinks and Barham rams")
+		CHECK(Each({ "Charles de Gaulle", "Bernard Montgomery", "Alan Brooke" }, "reports for duty.") == "3 report for duty: Charles de Gaulle, Bernard Montgomery and Alan Brooke");
+		CHECK(Words({ { "", "Hood loses her captain." }, { "", "Repulse sinks her captain." }, { "", "Barham rams her captain." } }) == "Hood loses her captain; 2 more reports elsewhere in the war");
+		CHECK(PluralVerb("rearms:") == "rearm:" && PluralVerb("declares,") == "declare," && PluralVerb("is;") == "are;");
+		{
+			FMonth Sky;
+			for (const char* Place : { "The sky over Lodz", "The sky over Rzhev", "The sky over Novgorod" })
+			{
+				AddItem(Sky, ESection::Row, "LOST", -1, "ftr", Place, "", "", "Our fighters were driven from it.");
+			}
+			std::string Why;
+			const std::string Said = FoldWords(Sky.Said, FAlikeRun{ 0, 3 });
+			CHECK(Said == "3 LOST: the sky over Lodz, the sky over Rzhev and the sky over Novgorod" && SaysOnlyTheCard(Sky.Said, FAlikeRun{ 0, 3 }, Said, Why));
+			// (a run that is not wholly on the card says nothing, and its end is weighed without overflowing)
+			CHECK(FoldWords(Sky.Said, FAlikeRun{ INT_MAX, 2 }).empty() && FoldWords(Sky.Said, FAlikeRun{ 2, INT_MAX }).empty() && FoldWords(Sky.Said, FAlikeRun{ 1, 3 }).empty());
+		}
 		CHECK(PluralVerb("focuses") == "focus" && PluralVerb("echoes") == "echo" && PluralVerb("vetoes") == "veto" && PluralVerb("uses") == "use" && PluralVerb("causes") == "cause");
 		CHECK(PluralVerb("declares") == "declare" && PluralVerb("carries") == "carry" && PluralVerb("dies") == "die" && PluralVerb("presses") == "press" && PluralVerb("reaches") == "reach");
 		CHECK(PluralVerb("closes") == "close" && PluralVerb("seizes") == "seize" && PluralVerb("goes") == "go" && PluralVerb("tore") == "tore" && PluralVerb("WAR") == "WAR" && PluralVerb("pass") == "pass");
@@ -1716,18 +1823,28 @@ static void TestFold()
 
 namespace
 {
-	/** The test's own list of the joining and small words a cut never ends on, kept apart from EdgeSeals' own. */
+	/**
+	 * The test's own list of the joining and small words a cut never ends on, kept apart from EdgeSeals' own: the rules'
+	 * LITTLE (src/campaign/monthcard.ts, the card's own cut), and "her". A word of stops only, or a dash, counts too.
+	 */
 	bool IsSmall(std::string Word)
 	{
 		while (!Word.empty() && (Word.back() == ',' || Word.back() == ';' || Word.back() == ':' || Word.back() == '.'))
 		{
 			Word.pop_back();
 		}
+		if (Word.empty() || Word == "-" || Word == "--" || Word == "\xE2\x80\x93" || Word == "\xE2\x80\x94")
+		{
+			return true;
+		}
 		for (char& Letter : Word)
 		{
 			Letter = Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
 		}
-		for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their" })
+		for (const char* Small : { "a", "an", "the", "of", "at", "in", "on", "to", "with", "for", "from", "by", "and", "or", "but", "its", "their", "his", "is", "are", "was",
+				 "were", "be", "been", "has", "have", "had", "can", "could", "will", "would", "may", "must", "not", "no", "it", "they", "he", "we", "that", "which",
+				 "as", "if", "so", "than", "then", "when", "while", "before", "after", "until", "because", "about", "out", "up", "off", "into", "over", "under",
+				 "near", "round", "against", "between", "who", "whose", "her" })
 		{
 			if (Word == Small)
 			{
@@ -1763,16 +1880,18 @@ namespace
 }
 
 /**
- * The eight-word cut never ends on a joining or small word (at, in, on, of, to, by, for, from, with, and, or, the, a,
- * an, its, his, her, their): it steps back to the last word that says something. A seal's own words and a folded
- * seal's first item's words alike ("The Baltic Fleet shells the Finnish troops at, and 2 more" was 0010's), over the
- * 48 real months, every cut's last word shown.
+ * The eight-word cut never ends on a joining or small word (the rules' LITTLE: at, in, on, of, to, by, for, from, with,
+ * and, or, the, a, an, its, his, their, is, has, have, been, under, round...; and her), on a dash or on stops standing
+ * apart, nor leaves a bracket open: it steps back to the last word that says something. A seal's own words and a
+ * folded seal's first item's words alike ("The Baltic Fleet shells the Finnish troops at, and 2 more" was 0010's),
+ * over the 48 real months, every cut's last word shown.
  */
 static void TestCuts()
 {
 	// Each small word, in any case and with a stop after it, as the eighth word: the cut steps back to the seventh.
 	bool bBack = true;
-	for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their" })
+	for (const char* Small : { "at", "in", "on", "of", "to", "by", "for", "from", "with", "and", "or", "the", "a", "an", "its", "his", "her", "their", "is", "are", "was",
+			 "were", "be", "been", "has", "have", "had", "as", "but", "into", "over", "under", "round", "against", "between", "because", "whose" })
 	{
 		const std::string Lower(Small);
 		std::string Upper = Lower;
@@ -1794,16 +1913,38 @@ static void TestCuts()
 	// (a line that is not cut keeps its own last word, whatever it is; nor does a line of nothing else lose its first)
 	CHECK(EightWords("The siege is lifted at last and") == "The siege is lifted at last and");
 	CHECK(EightWords("of the a an in on at to by", 8) == "of" && EightWords("a b c", 2) == "a b" && EightWords("a b c", 0) == "a");
+	// (the review's: stops standing apart, a dash with a stop on it, and the space before them, are all stepped back
+	// past; a bracket the cut would leave open goes back to before the word that opened it; one the line closes stays)
+	CHECK(EightWords("The fleet moves on Malta and the ; convoy waits off Alexandria") == "The fleet moves on Malta");
+	CHECK(EightWords("German troops close round Kiev \xE2\x80\x94, the city holds out against them") == "German troops close round Kiev");
+	CHECK(EightWords("one two three four five six seven -; nine") == "one two three four five six seven");
+	CHECK(EightWords(", Paris falls today", 1) == "Paris" && EightWords(" ; Paris falls") == "Paris falls" && EightWords(" ; , ").empty());
+	CHECK(EightWords("Fifth Army: VI Corps (36th and 34th Infantry Divisions) loses 1,073 men to enemy ships") == "Fifth Army: VI Corps");
+	CHECK(EightWords("VI Corps (two divisions) loses 1,073 men to enemy ships and aircraft") == "VI Corps (two divisions) loses 1,073 men");
+	CHECK(EightWords("(one two three four five six seven eight nine") == "(one two three four five six seven eight");
+	CHECK(EightWords("Charles de Gaulle reports for duty and is waiting for a command.") == "Charles de Gaulle reports for duty");
+	CHECK(EightWords("Soviet Union NEWS: British and Soviet troops have entered Iran.") == "Soviet Union NEWS: British and Soviet troops");
 	// 0010's own: elsewhere's first item, and a run of three of them. (The cuts TestWords holds that ended on a small
 	// word, "troops on the", "leaves for", "the attack from", now end a word or two sooner.)
 	const std::string Baltic = "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland.";
 	CHECK(EightWords(Baltic) == "The Baltic Fleet shells the Finnish troops");
 	{
+		// (a folded seal's first item of one clause and no more than 16 words is said whole, so that no verb loses its
+		// object, "the Western Approaches Fleet sink"; a longer one, or one of more clauses, is cut as a seal's own words)
 		std::vector<FSaid> Said;
 		Said.push_back(PlainSaid(ESection::Elsewhere, Baltic));
 		Said.push_back(PlainSaid(ESection::Elsewhere, "Hungary joins the Axis."));
 		Said.push_back(PlainSaid(ESection::Elsewhere, "Romania joins the Axis."));
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops, and 2 more elsewhere in the war");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland; 2 more reports elsewhere in the war");
+		Said[0] = PlainSaid(ESection::Elsewhere, "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland and the Aaland Islands.");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; 2 more reports elsewhere in the war");
+		Said[0] = PlainSaid(ESection::Elsewhere, "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches; 2 more reports elsewhere in the war");
+		// (where the others are in more than one part, each is named once, in card order; one more is one report)
+		Said[1] = PlainSaid(ESection::Home, "Research complete: Radar.");
+		Said[2] = PlainSaid(ESection::Staff, "Your staff on the fighting at Sedan.");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches; 2 more reports at home and from your staff");
+		CHECK(FoldWords(Said, FAlikeRun{ 1, 2 }) == "Research complete: Radar; 1 more report from your staff");
 	}
 
 	// Over the 48 real months: every item's own words, and every folded seal's first item's words, cut or not; every
@@ -1847,12 +1988,12 @@ static void TestCuts()
 				++Found->second;
 			}
 		}
-		// (a folded seal that gives its first item's words: what stands before ", and N more")
+		// (a folded seal that gives its first item's words: what stands before "; N more reports")
 		FoldAlike(Month.Looks, Runs);
 		for (const FAlikeRun& Run : Runs)
 		{
 			const std::string Words = FoldWords(Month.Said, Run);
-			const size_t And = Words.rfind(", and "); // (the last: the first item's own words may hold one)
+			const size_t And = Words.rfind("; "); // (the last: the first item's own words may hold one)
 			const FSaid& First = Month.Said[static_cast<size_t>(Run.First)];
 			if (Run.Count < 2 || And == std::string::npos || WordsOf(EightWords(First.Line)).size() >= WordsOf(First.Line).size())
 			{

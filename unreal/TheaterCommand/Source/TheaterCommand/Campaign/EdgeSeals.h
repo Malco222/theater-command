@@ -182,11 +182,14 @@ namespace EdgeSeals
 	 * The row's eight words, for the pointer on its seal: the line whole where it has no more than Most words, else cut
 	 * at a whole word, at the last comma, colon or semicolon that leaves at least half of them where there is one. No
 	 * dots are added (the UI director's review of build 1628: nothing is cut with three dots), and no stop is left
-	 * hanging at the cut. Nor does a cut end on a lone dash or on a joining or small word (at, in, on, of, to, by, for,
-	 * from, with, and, or, the, a, an, its, his, her, their): it steps back to the last word that says something, so
-	 * that neither a seal's words nor a folded seal's first words stop short ("the Finnish troops at, and 2 more"). A
-	 * line that is not cut keeps its own last word. UTF-8 in and out: only spaces and the ASCII stops are read, so a
-	 * name is never split.
+	 * hanging at the cut. Nor does a cut end on a lone dash (a stop after it or not), on stops standing apart, or on a
+	 * joining or small word (the rules' own list for their cut, monthcard.ts LITTLE: at, in, on, of, to, by, for, from,
+	 * with, and, or, but, the, a, an, its, his, their, is, are, was, were, been, has, have, had, as, into, over, under,
+	 * round, against, between and the like; and her): it steps back to the last word that says something, so that
+	 * neither a seal's words nor a folded seal's first words stop short ("the Finnish troops at", "reports for duty and
+	 * is"). Nor does it leave a bracket open: it goes back to before the word that opened it ("VI Corps (36th and 34th
+	 * Infantry" is "VI Corps"). A line that is not cut keeps its own last word. UTF-8 in and out: only spaces, the ASCII
+	 * stops and brackets are read, so a name is never split.
 	 */
 	std::string EightWords(const std::string& Text, int Most = 8);
 
@@ -246,12 +249,16 @@ namespace EdgeSeals
 	/**
 	 * The words under the pointer for a folded seal: the run's items named in card order, and how many more, in nothing
 	 * the card does not say.
-	 * - Where each sentence is a name (one to four words, none named twice) and then the same words, those words with
-	 *   their verb made plural, and the names: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more".
+	 * - Where each sentence is a name (one to four words, none named twice; a thing named after a nation's adjective,
+	 *   "German troops", is the name's) and then the same words, those words up to any colon, their verb made plural
+	 *   and "its" made "their", and the names: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more".
 	 * - Else, where each is a front's row with the same head, that head and the places: "3 HIT: Ruhr, Hamburg and Bohemia".
-	 * - Else the first item's eight words, how many more, and where on the card they are: "Soviet troops close round
-	 *   Helsinki, and 4 more elsewhere in the war".
-	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more".
+	 * - Else the first item's words (the line whole where it is one clause of at most 16 words, else its eight words),
+	 *   then how many more reports and where on the card they are: "Soviet troops close round Helsinki; 4 more reports
+	 *   elsewhere in the war". Counted as reports, so it never reads as more of the first ("Hungary joins the Axis, and
+	 *   4 more" would say four more joined).
+	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more"; a
+	 * name's "The" is "the" in the list.
 	 */
 	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run);
 	/** A verb as it stands after more than one name: "declares" "declare", "has" "have", "is" "are", "carries" "carry". A word with no third person's -s (a past, a word in capitals) is left as it is. */
