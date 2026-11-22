@@ -436,7 +436,25 @@ namespace AirFeed
 			Out.Cloud.Cover = Cover.IsNumber() && std::isfinite(Cover.Num(0.0)) ? std::max(0.0, std::min(1.0, Cover.Num(0.0))) : -1.0;
 			Out.Cloud.Word = Cloud["sky"].Str("");
 		}
+		Out.TrailM = TrailHeight(Out.Cloud.Zone, Out.Month, Out.Latitude);
 		return true;
+	}
+
+	double TrailHeight(const std::string& Zone, int Month, double Latitude)
+	{
+		// The day's vapour-trail height (the audit's 4.12): a fixed table by the weather zone and the month (from 0), so
+		// that the same battle draws the same trails every time, never a draw of its own. The record: the Eighth's
+		// bombers over north Germany in winter trailed from about 15,000 feet (4,600 m), in summer from about 25,000;
+		// in the subtropics no trail forms under about 30,000 feet. (Northern seasons; the war's southern battles are
+		// all in the tropics' row.)
+		const bool bKnown = std::isfinite(Latitude);
+		const bool bTropic = Zone.find("tropical") != std::string::npos || (bKnown && std::fabs(Latitude) < 30.0);
+		const bool bNorth = Zone.find("Europe") != std::string::npos || (bKnown && std::fabs(Latitude) >= 45.0);
+		const int M = ((Month % 12) + 12) % 12;
+		const bool bWinter = M <= 2 || M >= 10, bSummer = M >= 4 && M <= 8;
+		if (bTropic) return 9000.0;
+		if (bNorth) return bWinter ? 4600.0 : bSummer ? 7600.0 : 6100.0;
+		return bWinter ? 6000.0 : bSummer ? 8500.0 : 7300.0;
 	}
 
 	AirSky::Placing PlacingOf(const Sky& S, const std::vector<AirShow::Group>& First, uint64_t Seed)
@@ -478,6 +496,7 @@ namespace AirFeed
 		Show.TargetR = S.TargetR;
 		Show.Year = S.Year;
 		Show.Month = S.Month + 1; // (the place's month counts from 0, as the rules' calendar does)
+		Show.TrailM = S.TrailM;
 		for (const auto& Pair : S.Guns)
 		{
 			const size_t Colon = Pair.first.find(':');

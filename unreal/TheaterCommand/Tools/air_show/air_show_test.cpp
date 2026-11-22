@@ -772,6 +772,9 @@ int main(int Argc, char** Argv)
 	// diving (her nose more than 30 degrees down, not falling), it must be on; and once off, within 5 air s of the last
 	// of those or of the last hit on a ship shown (the bomb or torpedo having struck).
 	long StrikeNeed = 0, StrikeMiss = 0, StrikeOnFrames = 0, StrikeEnds = 0;
+	// The vapour trails (PlaneOut::Vapour, the audit's 4.12): none under the day's trail height; the most seen.
+	long VapourLow = 0, VapourOn = 0;
+	double VapourMost = 0.0;
 	double StrikeLast = -1e9, StrikeLateMost = 0.0;
 	bool bStrikeWas = false;
 	std::map<int, int> StickBox;
@@ -1349,6 +1352,12 @@ int main(int Argc, char** Argv)
 			for (const AirShow::PlaneOut& P : PlanesNow) bNeed = bNeed || (!P.bFighter && !P.bFalling && P.bShown && !P.bOnGround && P.Pitch < -30.0);
 			for (const AirShow::Fx& E : Show.Effects)
 				if (E.Kind == AirShow::FxKind::ShipHit || E.Kind == AirShow::FxKind::ShipSunk) StrikeLast = Show.AirNow();
+			for (const AirShow::PlaneOut& P : PlanesNow)
+			{
+				VapourLow += P.Vapour > 0.0 && (Show.TrailM <= 0.0 || P.At.Z < Show.TrailM) ? 1 : 0;
+				VapourOn += P.Vapour > 0.0 ? 1 : 0;
+				VapourMost = std::max(VapourMost, P.Vapour);
+			}
 			const bool bOn = Show.StrikeOn();
 			StrikeOnFrames += bOn ? 1 : 0;
 			if (bNeed)
@@ -1644,8 +1653,8 @@ int main(int Argc, char** Argv)
 		{ "every way down played as the battle names it", [&]() { int Off = 0; for (const auto& [How, N] : EventsHow) { const auto It = C.FallsBy.find(How); Off += std::abs(N - (It == C.FallsBy.end() ? 0 : It->second)); } return Off <= 2; }(),
 		  [&]() { std::string Text; for (const auto& [How, N] : C.FallsBy) Text += How + " " + std::to_string(N) + " "; return Text; }(), "the battle's, within 2" },
 		{ "falls strike when the battle says", C.FallsOffTime <= std::max(1, (C.FallsOnTime + C.FallsOffTime) / 20), std::to_string(C.FallsOnTime) + " on time, " + std::to_string(C.FallsOffTime) + " off, worst " + Num(C.MostOffTime, 1) + " s; " +
-		  std::to_string(C.FallsLow) + " begun low, in at once",
-		  "within a quarter of dur, 1 in 20 may miss (a fall begun under LowFallM, 400 m, strikes as soon as it can: the audit's 4.5)" },
+		  std::to_string(C.FallsLow) + " begun too low for the battle's time, in as slowly as an aeroplane comes down; " + std::to_string(C.FallsTrue) + " drawn from over the battle's band, as long as an aeroplane takes",
+		  "within a quarter of dur, 1 in 20 may miss (a fall begun under LowFallM, 400 m, or too low to last the battle's time at 8 m/s, strikes as soon as it can: the audit's 4.5; one drawn higher takes as long as it must, never steeper: 4.12)" },
 		{ "parachutes open when the battle says", C.ChutesOffTime == 0, std::to_string(C.ChutesOffTime), "0 late" },
 		{ "hits survived shown", C.HitsShown >= EventsHits * 9 / 10, std::to_string(C.HitsShown) + " of " + std::to_string(EventsHits), "9 in 10" },
 		{ "fires put out", C.FiresOut >= EventsFiresOut * 7 / 10, std::to_string(C.FiresOut) + " of " + std::to_string(EventsFiresOut), "7 in 10" },
@@ -1767,6 +1776,10 @@ int main(int Argc, char** Argv)
 		  std::to_string(StickHits) + " sticks and " + std::to_string(OneHits) + " single bombs heard landing; " + std::to_string(C.Rushes) + " rushes near the eye; " +
 		  std::to_string(Sounds.count("bomb_stick_01") ? Sounds["bomb_stick_01"] : 0) + " stick sounds at the drop",
 		  "a landing heard for each stick, none at the drop" },
+		{ "dive bombers and torpedo planes leave low, never climbing back", C.LeftLowMost <= 500.0, Num(C.LeftLowMost) + " m the highest one flew after her dive or her drop",
+		  "at most 500 m over the ground or the sea, under her bomb's 600 (the design director's ruling: they leave low, never climb back)" },
+		{ "vapour trails only over the day's trail height", VapourLow == 0, "the day's height " + Num(Show.TrailM) + " m; " + std::to_string(VapourOn) + " aircraft-frames trailing, " + std::to_string(VapourLow) + " under it; most " + Num(VapourMost, 2),
+		  "none under it" },
 		{ "the strike is on while bombs fall and dives go down", StrikeMiss == 0 && StrikeLateMost <= 5.0 && (StrikeNeed == 0 || StrikeEnds > 0),
 		  std::to_string(StrikeNeed) + " frames with a bomb or torpedo in the air or a bomber diving, " + std::to_string(StrikeMiss) + " of them off; on " + std::to_string(StrikeOnFrames) +
 		  " frames, off " + std::to_string(StrikeEnds) + " times, at most " + Num(StrikeLateMost, 2) + " air s after the last had struck",

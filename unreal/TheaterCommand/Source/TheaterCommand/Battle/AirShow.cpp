@@ -324,6 +324,15 @@ namespace AirShow
 		Heights();
 	}
 
+	void Show::TrueBand(const Group& G, double& In, double& From)
+	{
+		In = From = 0.0;
+		if (G.bFighter) return;
+		if (G.Strike == "level" && G.Model == "B5N") In = 3000.0;
+		else if (G.Strike == "dive" && G.Model == "D3A") In = From = 4000.0;
+		else if (G.Strike == "dive" && G.Model == "SBD") { In = 5600.0; From = 4500.0; }
+	}
+
 	double Show::TorpedoSpeed(const std::string& Model)
 	{
 		if (Model == "TBD") return 51.0;
@@ -355,6 +364,45 @@ namespace AirShow
 		// own place and time are kept: only the height drawn is the show's.
 		const double Dt = DrawnAt < 0.0 ? 0.0 : std::max(0.0, AirT - DrawnAt);
 		DrawnAt = AirT;
+		// The other bombers at their kind's true height (TrueBand), let down at up to 10 m a second; a dive group low after
+		// its dive, as the torpedo planes after their drop; an escort kept as high over its bombers as the battle has it.
+		std::map<int, double> Lowered;
+		for (auto& Pair : Now)
+		{
+			Group& G = Pair.second;
+			if (G.bFighter || G.Strike == "torpedo") continue;
+			double In = 0.0, From = 0.0;
+			TrueBand(G, In, From);
+			const auto B = Bands.find(G.Id);
+			const bool bDropped = B != Bands.end() && B->second.bDropped;
+			const double Floor = std::max(0.0, GroundAt(G.X, G.Y));
+			double Want = -1.0;
+			if (G.Strike == "dive" && bDropped)
+			{
+				if (!DroppedAt.count(G.Id)) DroppedAt[G.Id] = AirT;
+				Want = Floor + TorpedoAwayM + (150.0 - TorpedoAwayM) * Clamp((AirT - DroppedAt[G.Id] - 60.0) / 120.0, 0.0, 1.0);
+			}
+			else if (In > 0.0)
+			{
+				const double D = std::hypot(G.X - TargetX, G.Y - TargetY);
+				Want = From > 0.0 ? From + (In - From) * Clamp((D - 6000.0) / 9000.0, 0.0, 1.0) : In;
+			}
+			if (Want < 0.0) continue;
+			auto It = DrawnOver.find(G.Id);
+			if (It == DrawnOver.end()) It = DrawnOver.emplace(G.Id, G.Alt).first;
+			// (after its dive, at once: its bombers are already low over the water, and come back to it there)
+			if (G.Strike == "dive" && bDropped) It->second = Want;
+			else It->second += Clamp(Want - It->second, -10.0 * Dt, 3.0 * Dt);
+			if (!bDropped) Lowered[G.Id] = It->second - G.Alt;
+			G.Alt = It->second;
+		}
+		for (auto& Pair : Now)
+		{
+			Group& G = Pair.second;
+			if (!G.bFighter || G.With < 0) continue;
+			const auto L = Lowered.find(G.With);
+			if (L != Lowered.end()) G.Alt = std::max(GroundAt(G.X, G.Y) + 150.0, G.Alt + L->second);
+		}
 		for (auto& Pair : Now)
 		{
 			Group& G = Pair.second;
@@ -936,6 +984,10 @@ namespace AirShow
 				StopTrails(C);
 			}
 		};
+		// (a dive bomber pulled out of her dive, a torpedo plane whose torpedo has gone: how high she flies after, low)
+		if (G && !C.bFighter && C.bDropped && (G->Strike == "torpedo" || G->Strike == "dive") && C.Doing != Role::Ground
+		    && !(C.Doing == Role::Dive && (C.Step == Phase::Peel || C.Step == Phase::Plunge || C.Step == Phase::Pull || C.Step == Phase::Run)))
+			Check.LeftLowMost = std::max(Check.LeftLowMost, C.P.Z - GroundAt(C.P.X, C.P.Y));
 		// A torpedo plane turning in on her run (her group's run begun, or 6 km out), and after her drop breaking away:
 		// PilotTorpedo.
 		// (not one made after her group's drop: she has no run to fly)
@@ -3564,8 +3616,13 @@ namespace AirShow
 			{
 				const double Off = std::fabs(C.FallT - C.Dur);
 				// (one begun low, a torpedo plane at wave-top, is in the sea at once: sooner than the battle's time for a
-				// fall from its band, which it cannot take; the loss itself is the battle's)
-				if (C.FallHigh < LowFallM && C.FallT < C.Dur) Check.FallsLow++;
+				// fall from its band, which it cannot take; the loss itself is the battle's. So is one begun too low for
+				// the battle's time even at the slowest an aeroplane comes down, 8 m/s, a long glide out of a fight down
+				// low: it took as long as it could, the design director's (a))
+				if (C.FallT < C.Dur && (C.FallHigh < LowFallM || C.FallT >= (C.FallHigh - Floor) / 8.0 - 6.0)) Check.FallsLow++;
+				// (drawn higher than the battle's band, the fall takes as long as an aeroplane takes from there, never
+				// steeper: VTop, the design director's (a))
+				else if (C.FallT > C.Dur && C.FallT <= C.FallHigh / std::max(1.0, C.VTop * 0.95) + 6.0) Check.FallsTrue++;
 				else
 				{
 					(Off <= std::max(6.0, 0.25 * C.Dur) ? Check.FallsOnTime : Check.FallsOffTime) += 1;
@@ -7222,6 +7279,9 @@ namespace AirShow
 			}
 			P.Speed = C.Spd;
 			P.DeadEngines = C.DeadEngines;
+			// (its vapour trail: from the day's trail height, full 600 m over it; none falling or with every engine dead)
+			const bool bEngines = C.Form.Engines.empty() || C.DeadEngines.size() < C.Form.Engines.size();
+			P.Vapour = TrailM > 0.0 && C.Doing != Role::Fall && C.Doing != Role::Gone && C.Doing != Role::Ground && bEngines ? Clamp((C.P.Z - TrailM) / 600.0, 0.0, 1.0) : 0.0;
 			P.bFeathered = C.bFeathered;
 			P.Soot = C.SootAt >= 0.0 ? std::max(0.0, std::min(1.0, (AirT - C.SootAt) / 30.0)) : 0.0;
 			P.Bay = C.Bay * C.Bay * (3.0 - 2.0 * C.Bay); // (eased at both ends)
