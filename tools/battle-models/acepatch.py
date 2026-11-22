@@ -1,4 +1,4 @@
-"""Patch another battle-models tree (one whose planes.py is its own: the Yak's, the C.202's, the what-ifs') for an ace's name line (acepanel.py, copied in). Idempotent. usage: python3 acepatch.py <tree>"""
+"""Patch another battle-models tree (one whose planes.py is its own: the Yak's, the C.202's, the what-ifs') for an ace's name line (acepanel.py) and her pilot kept inside her skin (crewfit.py), both copied in. Idempotent. usage: python3 acepatch.py <tree>"""
 import os, shutil, sys
 tree = sys.argv[1]
 here = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +71,31 @@ if os.path.exists(U):
         "    name = (getattr(m, \"tally\", None) or {}).get(\"name\")\n"
         "    if name:                                                 # (an ace's name over them: acepanel.py)\n"
         "        avoid += [(q[0], q[2], 0.6 * name.get(\"cap\", 0.05)) for q in name[\"line\"]]\n"))
-src = os.path.join(here, "acepanel.py")
-if os.path.abspath(os.path.join(tree, "acepanel.py")) != os.path.abspath(src):
-    shutil.copy(src, os.path.join(tree, "acepanel.py"))
+F = os.path.join(tree, "fitout.py")                 # (her pilot kept inside her skin: crewfit.py)
+print("fitout import", edit(F, "import math\nimport zlib\n", "import math\nimport crewfit\nimport zlib\n"))
+print("fitout seat", edit(F,
+    "        z = body_top(hood, x, -y) - 0.118 - 0.03 - SEAT_DROP.get(f.name, 0.0)\n"
+    "        at = figure(m, (x, y, z), face, vest=single)\n",
+    "        z = body_top(hood, x, -y) - 0.118 - 0.03 - SEAT_DROP.get(f.name, 0.0)\n"
+    "        fits = single and face == 0.0 and crewfit.wanted(f)    # (a fighter's pilot: kept inside her skin, crewfit.py)\n"
+    "        if fits:\n"
+    "            top = crewfit.skin_top(f, hull)\n"
+    "            low = crewfit.drop(hull, x, z, top, hood)\n"
+    "            z -= low\n"
+    "            n0 = len(m.verts)\n"
+    "        at = figure(m, (x, y, z), face, vest=single)\n"))
+print("fitout plain", edit(F,
+    "        if not m.fine:\n            continue\n        m.box(at(-0.2, 0, -0.3)",
+    "        if not m.fine:\n            if fits:\n                crewfit.squash(m, hull, n0, top, hood=hood)\n            continue\n        m.box(at(-0.2, 0, -0.3)"))
+print("fitout fine", edit(F,
+    "        first = False\n",
+    "        if fits:\n"
+    "            moved = crewfit.squash(m, hull, n0, top, 0.04 if getattr(f, \"cockpit\", None) else crewfit.SPARE, hood)\n"
+    "            if low or moved:\n"
+    "                print(f\"crewfit {f.name}: {low:.3f} lower, {moved:.3f} drawn in\", flush=True)\n"
+    "        first = False\n"))
+for mod in ("acepanel.py", "crewfit.py"):
+    src = os.path.join(here, mod)
+    if os.path.abspath(os.path.join(tree, mod)) != os.path.abspath(src):
+        shutil.copy(src, os.path.join(tree, mod))
 print("ok", tree)
