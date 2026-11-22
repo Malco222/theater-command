@@ -5,10 +5,10 @@
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // src/battle/core/types.ts
+  // ../../src/battle/core/types.ts
   var DT = 0.1;
 
-  // src/battle/core/cues.ts
+  // ../../src/battle/core/cues.ts
   var LOOPS = {
     // Men in a fight carry no loop of their own: their rifles and machine guns, by nation, and the shared beds are the fight.
     foot: { march: "marching_loop", run: "marching_loop" },
@@ -28,7 +28,7 @@
     contact: "whistle_long"
   };
 
-  // src/core/rng.ts
+  // ../../src/core/rng.ts
   var Rng = class _Rng {
     constructor(seed) {
       __publicField(this, "s");
@@ -79,7 +79,7 @@
     return h >>> 0;
   }
 
-  // data/campaign/ground.json
+  // ../../data/campaign/ground.json
   var ground_default = {
     _note: "How the ground suits each arm, on top of the classic battle rules, and what tanks and infantry do for each other. The grand campaign only: the historical scenarios are settled by the classic rules alone. attack and defence are multipliers by unit kind and terrain; march is extra moves to enter that terrain on the advance (not along roads through ground held since before the month began).",
     attack: {
@@ -128,7 +128,7 @@
     }
   };
 
-  // data/campaign/support.json
+  // ../../data/campaign/support.json
   var support_default = {
     _about: "What you bring and what you face (the design director's rulings 146, 150 and 152; the Historian's anti-tank-and-support-weapons.md). The grand campaign only: a historical scenario is worked out as it always was. Every defence has an anti-tank strength from 0 to 1, and the tanks' edge (the +25% against a defence with no armour, and the break-in into a dug-in line) shrinks by it. Machine guns, mortars, assault rifles and snipers each have a job in place of 6% on everything. And a battle's losses fall on what the defence can kill.",
     antiTank: {
@@ -167,7 +167,7 @@
     tech: { antiTank: "antitank", tankDestroyers: "tankdestroyers", handHeld: "assaultrifles", support: "smg", armour: ["mediums", "heavies", "latetanks"] }
   };
 
-  // src/battle/land/rules.ts
+  // ../../src/battle/land/rules.ts
   var ARMS = ground_default.arms;
   var SUPPORT_COVER = support_default.antiTank.alone.cover;
   var TEAMS = ["mg", "mor"];
@@ -512,7 +512,7 @@
   var reachOf = (u) => u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind];
   var gunsOf = (u) => u.team ? LAND.teams[u.team] : LAND.guns;
 
-  // data/battle/city-plans.json
+  // ../../data/battle/city-plans.json
   var city_plans_default = {
     _doc: [
       "Each real capital's and city's kept street plan (the design director, b618 and b625). A city's plan is laid from its own name: plan 1 from 'streets:<town>', plan n from 'streets:<town>#n'. Each city keeps the first plan of its own sequence that, fought as it will be fought (its own river or shore in the lie of each of its real attacks, on its kind's 24 equal tickets), sits within 7 points of its kind and runs no more than one fight in ten to the clock. Picked by that rule, never by eye. A city not listed keeps plan 1.",
@@ -614,7 +614,7 @@
     }
   };
 
-  // src/battle/land/field.ts
+  // ../../src/battle/land/field.ts
   var GROUNDS = ["open", "field", "woods", "rough", "marsh", "water", "road", "bridge", "buildings", "rock", "bunker", "works", "blown", "suburb", "industry", "park"];
   var G = Object.fromEntries(GROUNDS.map((k, i) => [k, i]));
   var FIELD = { w: 3e3, h: 2e3, cell: 25 };
@@ -1422,7 +1422,7 @@
     return f.height[r * f.cols + c];
   }
 
-  // src/battle/core/geometry.ts
+  // ../../src/battle/core/geometry.ts
   var TAU = Math.PI * 2;
   var bearing = (x0, y0, x1, y1) => Math.atan2(x1 - x0, y1 - y0);
   var turn = (a, b) => {
@@ -1442,7 +1442,7 @@
   var ahead = (face) => [Math.sin(face), Math.cos(face)];
   var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 
-  // src/battle/core/result.ts
+  // ../../src/battle/core/result.ts
   var RATIO = {
     /** The campaign's line between taking the ground and being thrown back. */
     carry: 1.2,
@@ -1478,7 +1478,7 @@
     return Math.min(odds * dice[1], Math.max(odds * dice[0], R));
   }
 
-  // src/battle/core/select.ts
+  // ../../src/battle/core/select.ts
   function lineUp(units, side, x0, y0, x1, y1, gap = 120) {
     if (!units.length) return [];
     let len = dist(x0, y0, x1, y1);
@@ -1501,7 +1501,7 @@
     });
   }
 
-  // data/battle/land-styles.json
+  // ../../data/battle/land-styles.json
   var land_styles_default = {
     _doc: [
       "How the computer general fights on the land field (the tactics panel, item 1; Brian, 19 Nov: 'more general themes', 'loosely to history or not at all', 'a sandbox to play and make your own history').",
@@ -1526,7 +1526,7 @@
     dial: { absent: 3, pickFrom: 4 }
   };
 
-  // data/battle/lean.json
+  // ../../data/battle/lean.json
   var lean_default = {
     _doc: [
       "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
@@ -1547,7 +1547,7 @@
     standIn: { night: "bold", "last-stand": "bold" }
   };
 
-  // src/battle/land/styles.ts
+  // ../../src/battle/land/styles.ts
   var D = land_styles_default;
   var STYLES = Object.fromEntries(
     Object.keys(D.styles).map((id) => [id, { id, ...D.styles[id] }])
@@ -1609,7 +1609,7 @@
     return STYLES[stopOfTicket(t) >= D.dial.pickFrom ? pickFor(t, side) : leanFor(s, side)];
   }
 
-  // src/battle/land/ai.ts
+  // ../../src/battle/land/ai.ts
   var ok = (u) => u.state !== "gone" && u.state !== "withdrawn" && u.state !== "routing";
   var isFoot = (u) => MOTION[u.kind] === "foot";
   var isMobile = (u) => u.kind === "arm" || u.kind === "mot";
@@ -1916,7 +1916,7 @@
     }
   }
 
-  // src/battle/land/crew-names.ts
+  // ../../src/battle/land/crew-names.ts
   var same = (xs) => xs.map((name) => ({ name, en: name }));
   var pairs = (xs) => xs.map(([name, en]) => ({ name, en }));
   var CREW_NAMES = {
@@ -1930,7 +1930,7 @@
     POL: pairs([["Ryś", "Lynx"], ["Kania", "Kite"], ["Dzik", "Boar"], ["Smok", "Dragon"], ["Wisła", "Vistula"], ["Warta", "Warta"], ["Mazur", "The Masurian"], ["Kurpie", "Kurpie"], ["Wawel", "Wawel"], ["Jadzia", "Jadzia"], ["Halinka", "Halinka"], ["Kasia", "Kasia"], ["Śmiały", "Bold"], ["Wierny", "Faithful"], ["Bystry", "Swift"], ["Sokół", "Falcon"], ["Góral", "Highlander"]])
   };
 
-  // src/battle/land/crews.ts
+  // ../../src/battle/land/crews.ts
   var CREWS = {
     /** A unit that has come through this many battles is a veteran: its crews have named their tanks. */
     veteran: 3,
@@ -1981,7 +1981,7 @@
     return crewMarks(u.nat, u.kind, battles, u.figures0, `${u.corps}:${u.name}`);
   }
 
-  // src/core/ticket.ts
+  // ../../src/core/ticket.ts
   function turnToDate(turn3) {
     const idx = 8 + (turn3 - 1);
     const year = 1939 + Math.floor(idx / 12);
@@ -1990,7 +1990,7 @@
     return { year, month, label: `${names[month]} ${year}` };
   }
 
-  // src/battle/land/shells.ts
+  // ../../src/battle/land/shells.ts
   var REACH = { light: 4, mortar: 9, field: 11, howitzer: 15, heavy: 23, bomb: 45 };
   var CRATER = { light: 0.5, mortar: 0.8, field: 1, howitzer: 1.5, heavy: 3, bomb: 7 };
   var SHELLS_FROM = ["art", "arm"];
@@ -2060,7 +2060,7 @@
     return MODEL_CAL[m] ?? MODEL_CAL[modelOf(kind, "", year)];
   }
 
-  // src/battle/land/units.ts
+  // ../../src/battle/land/units.ts
   var ORD = (n) => {
     const s = ["th", "st", "nd", "rd"], v = n % 100;
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
@@ -2340,7 +2340,7 @@
     rows.forEach((r, i) => place(r.us, ys[i], r.wings));
   }
 
-  // data/battle/drill.json
+  // ../../data/battle/drill.json
   var drill_default = {
     _doc: [
       "The squad brain (src/battle/land/drill.ts; Brian, 20 Nov 20:43Z: 'super realistic and meaningful and everyone has high AI iq'): what each man, tank and gun inside a block does, second by second. Looks only (ruling 217: the card decides, the field acts it out): the fight never reads any of it, so no number here can move a result.",
@@ -2505,11 +2505,11 @@
       hold: { mg: 350, rifle: [700, 200, 100] },
       counter: { at: 45, ahead: 12, xp: [2, 1, 0.6] },
       flank: { rush: [14, 26], out: 45 },
-      smoke: { on: false, every: 60, spread: 10 }
+      smoke: { on: true, every: 60, spread: 10 }
     }
   };
 
-  // src/battle/land/tactics.ts
+  // ../../src/battle/land/tactics.ts
   var BOOK = drill_default.book;
   function schoolOf(nat) {
     return BOOK.nations[nat] ?? "_";
@@ -2605,7 +2605,7 @@
     }
   }
 
-  // src/battle/land/drill.ts
+  // ../../src/battle/land/drill.ts
   var DR = drill_default;
   var mix = (n) => {
     let h = n >>> 0;
@@ -5908,7 +5908,7 @@
     return [(mix(id * 977 + n * 131 + 7) - 0.5) * w * 0.9, (mix(id * 613 + n * 389 + 3) - 0.5) * d * 0.8];
   }
 
-  // src/battle/land/sim.ts
+  // ../../src/battle/land/sim.ts
   var other = (s) => s === "att" ? "def" : "att";
   function coveredTanks(t, units) {
     const A = LAND.alone, out = /* @__PURE__ */ new Set();
@@ -6204,7 +6204,8 @@
         if (this.perUnit && player) for (const u of us) this.take(u);
       };
       const air = this.radio && player && this.t > 0;
-      const give = (u, go) => this.order(u, go, air);
+      const said = c.at, from = typeof said === "number" && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
+      const give = (u, go) => this.order(u, go, air, from);
       switch (c.do) {
         case "move": {
           const us = mine(c.units);
@@ -6347,14 +6348,19 @@
      * An order for one block: at once, or by radio (direct command, release 2), landing LAND.radio's delay later, longer
      * when its headquarters is hit. A later order on the air replaces the one still on the way.
      */
-    order(u, go, air) {
+    order(u, go, air, from = this.t) {
       if (!air) {
         go();
         return;
       }
       const R = LAND.radio, hit = u.state === "wavering" || u.str < R.hqAt * u.str0;
-      const at = Math.round((this.t + R.delay * (hit ? R.cut : 1)) * 1e3) / 1e3;
+      const at = Math.round((from + R.delay * (hit ? R.cut : 1)) * 1e3) / 1e3;
       this.pending = this.pending.filter((p) => p.id !== u.id);
+      if (at <= this.t + 1e-9) {
+        delete u.orderAt;
+        go();
+        return;
+      }
       this.pending.push({ at, id: u.id, go });
       u.orderAt = at;
     }
@@ -8114,7 +8120,7 @@
     }
   };
 
-  // src/battle/land/pieces.ts
+  // ../../src/battle/land/pieces.ts
   var NORMANDY = {
     key: "normandy-1944",
     title: "The hedgerows before Le Mesnil",
@@ -8383,7 +8389,7 @@
     return { crops: CROPS, crop: crop.join(""), fields: { turn: r3(turn3), cx: w / 2, cy: h / 2, xs: xs.map(r1), ys: ys.map(r1), shift: shift.map(r1), patch: patchOut }, balka: { line: line.map(([x, y]) => [r1(x), r1(y)]), deep }, rail: { line: rail.map(([x, y]) => [r1(x), r1(y)]), bank }, hill: { ...hill, x: r1(hill.x), y: r1(hill.y) } };
   }
 
-  // src/battle/land/live.ts
+  // ../../src/battle/land/live.ts
   var KEEP_M = 0.1;
   var KEEP_F = 0.05;
   var r12 = (x) => Math.round(x * 10) / 10;
@@ -8776,8 +8782,10 @@
     delta() {
       const over = this.sim.over;
       if (over && !this.sentOver) this.keeper.close();
+      const last = !!over && !this.sentOver;
       const d = {
         t: r2(this.sim.t),
+        ...last ? { end: r2(this.sim.t) } : {},
         ...this.placed ? { reset: true } : {},
         ...this.keeper.drain(),
         rounds: this.roundsNew.sort((a, b) => a.n - b.n),
@@ -8786,9 +8794,8 @@
         phases: [...this.phaseNew.entries()].map(([b, ph]) => ({ b, ph })),
         contact: this.sim.contactAt
       };
-      if (over && !this.sentOver) {
+      if (last) {
         d.over = over;
-        d.end = r2(this.sim.t);
         this.sentOver = true;
       }
       this.events = [];
@@ -8840,7 +8847,7 @@
     return new LiveBattle(ticketOf(p, s, opts.me ?? null), p, opts);
   }
 
-  // unreal/TheaterCommand/Rules/land-bridge.ts
+  // Rules/land-bridge.ts
   var live3 = null;
   var none = { t: 0, men: [], tails: [], rounds: [], events: [], views: [], phases: [], contact: null };
   function need() {
@@ -8882,7 +8889,9 @@
       return { ok: why === null, why: why ?? "" };
     },
     landPlace(id, x, y, face) {
-      return { ok: need().place(id, x, y, face ?? void 0) };
+      const why = need().canPlace(id, x, y);
+      const ok2 = need().place(id, x, y, face ?? void 0);
+      return { ok: ok2, why: ok2 ? "" : why ?? "Not now: the battle has begun." };
     },
     landBegin() {
       return { ok: need().begin() };

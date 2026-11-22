@@ -116,27 +116,49 @@ namespace LandFeed
 				Row.Act = U["act"].Str("idle");
 				Row.Cover = U["cover"].Str("open");
 				Row.Engaged = U["engaged"].Int(-1);
+				// (a live battle's: whether the player has met it, taken it in hand, an order on the air, its order)
+				Row.bKnown = U["known"].Truth(true);
+				Row.bTaken = U["taken"].Truth(false);
+				Row.OrderIn = U["orderIn"].IsNumber() ? U["orderIn"].Num() : -1.0;
+				const Json& O = U["order"];
+				if (O.IsObject())
+				{
+					Row.OrderKind = O["kind"].Str("");
+					Row.OrderX = O["x"].Num(0.0);
+					Row.OrderY = O["y"].Num(0.0);
+					Row.OrderTarget = O["target"].Int(-1);
+					for (const Json& P : O["path"].Items) Row.OrderPath.push_back({ P.At(0).Num(0.0), P.At(1).Num(0.0) });
+				}
 				V.Units.push_back(std::move(Row));
 			}
 		}
 
-		void ReadTrack(const Json& J, Track& T)
+		void ReadWho(const Json& J, Track& T)
 		{
 			T.Block = J["b"].Int(0);
 			T.K = J["k"].Int(0);
 			T.J = std::max(0, J["j"].Int(0));
 			T.Role = J["r"].Str("rifle");
-			T.At.reserve(J["at"].Count());
-			for (const Json& P : J["at"].Items)
+			T.Fo = J["fo"].Int(0);
+		}
+
+		void ReadPoints(const Json& A, std::vector<Point>& Out)
+		{
+			Out.reserve(Out.size() + A.Count());
+			for (const Json& P : A.Items)
 			{
 				Point Pt;
 				Pt.T = P.At(0).Num(0.0);
 				Pt.X = P.At(1).Num(0.0);
 				Pt.Y = P.At(2).Num(0.0);
 				Pt.F = P.At(3).Num(0.0);
-				T.At.push_back(Pt);
+				Out.push_back(Pt);
 			}
-			for (const Json& C : J["ch"].Items)
+		}
+
+		void ReadChanges(const Json& A, std::vector<Change>& Out)
+		{
+			for (const Json& C : A.Items)
 			{
 				Change Row;
 				Row.T = C.At(0).Num(0.0);
@@ -147,26 +169,14 @@ namespace LandFeed
 				Row.AimY = C.At(4).Num(0.0);
 				Row.bHidden = C.At(5).Truth(false);
 				Row.bButtoned = C.At(6).Truth(false);
-				T.Ch.push_back(std::move(Row));
+				Out.push_back(std::move(Row));
 			}
-			T.Shots = LandJson::Numbers(J["s"]);
-			T.Fell = J["d"].IsNumber() ? J["d"].Num() : -1.0;
-			T.Out = J["out"].IsNumber() ? J["out"].Num() : -1.0;
-			// A vehicle knocked out stays where it was hit: the recording's last point jumps 14 to 22 m in a tenth of a
-			// second at the moment of its death (its formation place, not its own), and the wreck is laid where it was.
-			if (T.IsVehicle() && T.Fell >= 0.0)
-			{
-				for (size_t I = 1; I < T.At.size(); ++I)
-				{
-					const Point& A = T.At[I - 1];
-					const Point& B = T.At[I];
-					if (B.T < T.Fell - 0.15 || B.T - A.T > 0.6 || std::hypot(B.X - A.X, B.Y - A.Y) < 3.0) continue;
-					for (size_t K = I; K < T.At.size(); ++K) { T.At[K].X = A.X; T.At[K].Y = A.Y; }
-					break;
-				}
-			}
-			T.Fo = J["fo"].Int(0);
-			for (const Json& M : J["mk"].Items)
+		}
+
+		void ReadScars(const Json& A, std::vector<Scar>& Out)
+		{
+			Out.clear();
+			for (const Json& M : A.Items)
 			{
 				Scar S;
 				S.Face = M.At(0).Str("front");
@@ -174,8 +184,122 @@ namespace LandFeed
 				S.H = M.At(2).Num(0.0);
 				S.Kind = M.At(3).Str("gouge");
 				S.From = M.At(4).Num(0.0);
-				T.Marks.push_back(std::move(S));
+				Out.push_back(std::move(S));
 			}
+		}
+
+		/** A vehicle knocked out stays where it was hit: the recording's last point jumps 14 to 22 m in a tenth of a
+		 * second at the moment of its death (its formation place, not its own), and the wreck is laid where it was. */
+		void PinWreck(Track& T)
+		{
+			if (!T.IsVehicle() || T.Fell < 0.0) return;
+			for (size_t I = 1; I < T.At.size() && !T.bPinned; ++I)
+			{
+				const Point& A = T.At[I - 1];
+				const Point& B = T.At[I];
+				if (B.T < T.Fell - 0.15 || B.T - A.T > 0.6 || std::hypot(B.X - A.X, B.Y - A.Y) < 3.0) continue;
+				T.bPinned = true;
+				T.PinFrom = B.T;
+				T.PinX = A.X;
+				T.PinY = A.Y;
+			}
+			// (every point from the jump on, those a live battle adds later too)
+			if (T.bPinned)
+				for (Point& P : T.At)
+					if (P.T >= T.PinFrom) { P.X = T.PinX; P.Y = T.PinY; }
+		}
+
+		void ReadTrack(const Json& J, Track& T)
+		{
+			ReadWho(J, T);
+			ReadPoints(J["at"], T.At);
+			ReadChanges(J["ch"], T.Ch);
+			T.Shots = LandJson::Numbers(J["s"]);
+			T.Fell = J["d"].IsNumber() ? J["d"].Num() : -1.0;
+			T.Out = J["out"].IsNumber() ? J["out"].Num() : -1.0;
+			PinWreck(T);
+			ReadScars(J["mk"], T.Marks);
+		}
+
+		void ReadEvent(const Json& E, Event& Row)
+		{
+			Row.T = E["t"].Num(0.0);
+			Row.What = E["what"].Str("");
+			Row.Side = E["side"].Str("");
+			Row.Text = E["text"].Str("");
+			Row.Cue = E["cue"].Str("");
+			Row.Cal = E["cal"].Str("");
+			Row.Ground = E["ground"].Str("");
+			Row.Unit = E["unit"].Int(-1);
+			Row.On = E["on"].Int(-1);
+			Row.By = E["by"].Int(-1);
+			Row.bWhere = E["x"].IsNumber() && E["y"].IsNumber();
+			Row.X = E["x"].Num(0.0);
+			Row.Y = E["y"].Num(0.0);
+			Row.Reach = E["reach"].Num(0.0);
+			Row.bArmour = E["armour"].Truth(false);
+		}
+
+		void ReadRound(const Json& R, Round& Row)
+		{
+			Row.N = R["n"].Int(0);
+			Row.T = R["t"].Num(0.0);
+			Row.L = R["l"].Num(Row.T);
+			Row.By = R["by"].Int(-1);
+			Row.K = R["k"].Int(-1);
+			Row.J = std::max(0, R["j"].Int(0));
+			Row.W = R["w"].Str("rifle");
+			Row.On = R["on"].Int(-1);
+			Row.Ok = R["ok"].Int(-1);
+			Row.Oj = std::max(0, R["oj"].Int(0));
+			Row.X = R["x"].Num(0.0);
+			Row.Y = R["y"].Num(0.0);
+			Row.R = ResultOf(R["r"].Str("miss"));
+			Row.Fc = R["fc"].Str("");
+			Row.U = R["u"].Num(0.0);
+			Row.H = R["h"].Num(0.0);
+		}
+
+		bool RoundBefore(const Round& A, const Round& B) { return A.T != B.T ? A.T < B.T : A.N < B.N; }
+
+		/** A view's craters (zones of kind crater, by number) and the tank crews' names riding on its blocks. */
+		void ReadViewExtras(const Json& V, std::map<int, Crater>& Craters, std::vector<Block>& Blocks)
+		{
+			for (const Json& Z : V["zones"].Items)
+			{
+				if (Z["kind"].Str() != "crater") continue;
+				Crater C;
+				C.X = Z["x"].Num(0.0);
+				C.Y = Z["y"].Num(0.0);
+				C.R = Z["r"].Num(0.0);
+				C.At = Z["at"].Num(0.0);
+				C.Cal = Z["cal"].Str("");
+				Craters[Z["id"].Int(0)] = C;
+			}
+			// The crews' names ride on the tank blocks' views (the first view that has them is enough).
+			for (const Json& U : V["units"].Items)
+			{
+				const Json& Names = U["crew"]["names"];
+				if (!Names.IsArray()) continue;
+				for (Block& B : Blocks)
+				{
+					if (B.Id != U["id"].Int(-1) || !B.CrewNames.empty()) continue;
+					for (const Json& N : Names.Items) B.CrewNames.push_back(N.IsObject() ? N["en"].Str(N["name"].Str("").c_str()) : std::string());
+				}
+			}
+		}
+
+		void ReadOver(const Json& O, double End, Over& Out)
+		{
+			Out.Winner = O["winner"].Str("");
+			Out.How = O["how"].Str("");
+			Out.Level = O["level"].Str("");
+			Out.Broke = O["broke"].Str("");
+			Out.Seconds = O["seconds"].Num(End);
+			Out.Lines.clear();
+			for (const Json& L : O["lines"].Items) Out.Lines.push_back(L.Str());
+			Out.LostAtt = O["lost"]["att"].Num(0.0);
+			Out.LostDef = O["lost"]["def"].Num(0.0);
 		}
 
 		/** Two tracks drawn in one place for the whole battle (within half a metre at each of the first's points). */
@@ -379,73 +503,23 @@ namespace LandFeed
 			View Row;
 			ReadView(V, Row);
 			Out.Views.push_back(std::move(Row));
-			for (const Json& Z : V["zones"].Items)
-			{
-				if (Z["kind"].Str() != "crater") continue;
-				Crater C;
-				C.X = Z["x"].Num(0.0);
-				C.Y = Z["y"].Num(0.0);
-				C.R = Z["r"].Num(0.0);
-				C.At = Z["at"].Num(0.0);
-				C.Cal = Z["cal"].Str("");
-				Craters[Z["id"].Int(0)] = C;
-			}
-			// The crews' names ride on the tank blocks' views (the first view that has them is enough).
-			for (const Json& U : V["units"].Items)
-			{
-				const Json& Names = U["crew"]["names"];
-				if (!Names.IsArray()) continue;
-				for (Block& B : Out.Blocks)
-				{
-					if (B.Id != U["id"].Int(-1) || !B.CrewNames.empty()) continue;
-					for (const Json& N : Names.Items) B.CrewNames.push_back(N.IsObject() ? N["en"].Str(N["name"].Str("").c_str()) : std::string());
-				}
-			}
+			ReadViewExtras(V, Craters, Out.Blocks);
 		}
-		for (auto& Pair : Craters) Out.Craters.push_back(Pair.second);
+		for (auto& Pair : Craters) { Out.Craters.push_back(Pair.second); Out.CraterIds.insert(Pair.first); }
 		std::sort(Out.Craters.begin(), Out.Craters.end(), [](const Crater& A, const Crater& B) { return A.At < B.At; });
 		for (const Json& E : Root["events"].Items)
 		{
 			Event Row;
-			Row.T = E["t"].Num(0.0);
-			Row.What = E["what"].Str("");
-			Row.Side = E["side"].Str("");
-			Row.Text = E["text"].Str("");
-			Row.Cue = E["cue"].Str("");
-			Row.Cal = E["cal"].Str("");
-			Row.Ground = E["ground"].Str("");
-			Row.Unit = E["unit"].Int(-1);
-			Row.On = E["on"].Int(-1);
-			Row.By = E["by"].Int(-1);
-			Row.bWhere = E["x"].IsNumber() && E["y"].IsNumber();
-			Row.X = E["x"].Num(0.0);
-			Row.Y = E["y"].Num(0.0);
-			Row.Reach = E["reach"].Num(0.0);
-			Row.bArmour = E["armour"].Truth(false);
+			ReadEvent(E, Row);
 			Out.Events.push_back(std::move(Row));
 		}
 		for (const Json& R : Root["rounds"].Items)
 		{
 			Round Row;
-			Row.N = R["n"].Int(0);
-			Row.T = R["t"].Num(0.0);
-			Row.L = R["l"].Num(Row.T);
-			Row.By = R["by"].Int(-1);
-			Row.K = R["k"].Int(-1);
-			Row.J = std::max(0, R["j"].Int(0));
-			Row.W = R["w"].Str("rifle");
-			Row.On = R["on"].Int(-1);
-			Row.Ok = R["ok"].Int(-1);
-			Row.Oj = std::max(0, R["oj"].Int(0));
-			Row.X = R["x"].Num(0.0);
-			Row.Y = R["y"].Num(0.0);
-			Row.R = ResultOf(R["r"].Str("miss"));
-			Row.Fc = R["fc"].Str("");
-			Row.U = R["u"].Num(0.0);
-			Row.H = R["h"].Num(0.0);
+			ReadRound(R, Row);
 			Out.Rounds.push_back(std::move(Row));
 		}
-		std::sort(Out.Rounds.begin(), Out.Rounds.end(), [](const Round& A, const Round& B) { return A.T != B.T ? A.T < B.T : A.N < B.N; });
+		std::sort(Out.Rounds.begin(), Out.Rounds.end(), RoundBefore);
 		for (const Json& M : Root["men"].Items)
 		{
 			Track Row;
@@ -460,15 +534,203 @@ namespace LandFeed
 					Out.Tracks[I].bTwin = true;
 					break;
 				}
-		const Json& O = Root["over"];
-		Out.Result.Winner = O["winner"].Str("");
-		Out.Result.How = O["how"].Str("");
-		Out.Result.Level = O["level"].Str("");
-		Out.Result.Broke = O["broke"].Str("");
-		Out.Result.Seconds = O["seconds"].Num(Out.End);
-		for (const Json& L : O["lines"].Items) Out.Result.Lines.push_back(L.Str());
-		Out.Result.LostAtt = O["lost"]["att"].Num(0.0);
-		Out.Result.LostDef = O["lost"]["def"].Num(0.0);
+		ReadOver(Root["over"], Out.End, Out.Result);
+		// A live battle's header (release 2): nothing fought yet; the deltas grow it (AppendDelta).
+		Out.bLive = Root["live"].Truth(false);
+		if (Out.bLive)
+		{
+			Out.Fought = 0.0;
+			Out.End = 0.0;
+			Out.bOver = false;
+			Out.Me = Root["me"].IsString() ? SideOf(Root["me"].Str()) : -1;
+			const Json& Setup = Root["setup"];
+			Out.bSetup = Setup.IsObject() && Setup["room"].Count() >= 4;
+			if (Out.bSetup) ReadBox(Setup["room"], Out.Room);
+		}
+		return true;
+	}
+
+	bool AppendDelta(const std::string& Source, Recording& R, Grown& Out, std::string& OutError)
+	{
+		Json Root;
+		if (!LandJson::Parse(Source, Root, OutError)) return false;
+		if (!Root.IsObject() || !Root["men"].IsArray() || !Root["t"].IsNumber())
+		{
+			OutError = "not a live ground battle's delta (no t or no men)";
+			return false;
+		}
+		Out = Grown();
+		Out.T = Root["t"].Num();
+		Out.bReset = Root["reset"].Truth(false);
+		if (Out.bReset)
+		{
+			// The men placed again before the clock ran: their tracks begin again (the rules' numbers with them).
+			R.Tracks.clear();
+			R.Views.clear();
+			R.Phases.clear();
+			R.Rounds.clear();
+			R.Events.clear();
+			R.Craters.clear();
+			R.CraterIds.clear();
+		}
+		Out.NewTracksFrom = R.Tracks.size();
+		Out.RoundsFrom = R.Rounds.size();
+		Out.EventsFrom = R.Events.size();
+		Out.ViewsFrom = R.Views.size();
+		Out.CratersFrom = R.Craters.size();
+		auto Note = [](std::vector<int>& List, int I) { if (List.empty() || List.back() != I) List.push_back(I); };
+
+		// The tracks' news. A track's n is its place in the order first seen: the next new one is the next index.
+		for (const Json& M : Root["men"].Items)
+		{
+			const int N = M["n"].Int(-1);
+			if (N < 0 || N > static_cast<int>(R.Tracks.size()))
+			{
+				OutError = "a delta names track " + std::to_string(N) + " of " + std::to_string(R.Tracks.size());
+				return false;
+			}
+			if (N == static_cast<int>(R.Tracks.size()))
+			{
+				if (!M.Has("b"))
+				{
+					OutError = "a new track " + std::to_string(N) + " without who it is";
+					return false;
+				}
+				Track Row;
+				ReadWho(M, Row);
+				R.Tracks.push_back(std::move(Row));
+			}
+			Track& T = R.Tracks[static_cast<size_t>(N)];
+			const Json& At = M["at"];
+			if (At.Count() > 0)
+			{
+				// The provisional last point gives way to the kept ones; it stays only while it is still later than them.
+				Point Tail;
+				const bool bHadTail = T.bTail && !T.At.empty();
+				if (bHadTail) { Tail = T.At.back(); T.At.pop_back(); T.bTail = false; }
+				ReadPoints(At, T.At);
+				if (bHadTail && Tail.T > T.At.back().T) { T.At.push_back(Tail); T.bTail = true; }
+				Note(Out.Moved, N);
+			}
+			if (M["ch"].Count() > 0) { ReadChanges(M["ch"], T.Ch); Note(Out.Changed, N); }
+			if (M["s"].Count() > 0)
+			{
+				for (const double S : LandJson::Numbers(M["s"])) T.Shots.push_back(S);
+				Note(Out.Shot, N);
+			}
+			if (M["d"].IsNumber()) { T.Fell = M["d"].Num(); Note(Out.Fell, N); }
+			if (M["out"].IsNumber())
+			{
+				// (-1: he is back on the list)
+				const double O = M["out"].Num();
+				T.Out = O < 0.0 ? -1.0 : O;
+				Note(Out.Left, N);
+			}
+			if (M["mk"].IsArray()) { ReadScars(M["mk"], T.Marks); Note(Out.Marked, N); }
+		}
+		// Where each moving man stands now: [n, x, y, f] at t, his provisional last point.
+		const Json& Tails = Root["tails"];
+		for (size_t K = 0; K + 3 < Tails.Count(); K += 4)
+		{
+			const int N = Tails.At(K).Int(-1);
+			if (N < 0 || N >= static_cast<int>(R.Tracks.size()))
+			{
+				OutError = "a delta's tail names track " + std::to_string(N);
+				return false;
+			}
+			Track& T = R.Tracks[static_cast<size_t>(N)];
+			if (T.bTail && !T.At.empty()) T.At.pop_back();
+			Point P;
+			P.T = Out.T;
+			P.X = Tails.At(K + 1).Num(0.0);
+			P.Y = Tails.At(K + 2).Num(0.0);
+			P.F = Tails.At(K + 3).Num(0.0);
+			T.At.push_back(P);
+			T.bTail = true;
+			if (Out.Moved.empty() || std::find(Out.Moved.begin(), Out.Moved.end(), N) == Out.Moved.end()) Out.Moved.push_back(N);
+		}
+		std::sort(Out.Moved.begin(), Out.Moved.end());
+		// A wreck stays where it was hit; and the spotter pair drawn once (as ReadRecording, on what is fought so far).
+		for (const int N : Out.Moved) PinWreck(R.Tracks[static_cast<size_t>(N)]);
+		for (const int N : Out.Fell) PinWreck(R.Tracks[static_cast<size_t>(N)]);
+		for (size_t I = Out.NewTracksFrom; I < R.Tracks.size(); ++I)
+		{
+			Track& T = R.Tracks[I];
+			if (T.Role != "fo" || T.At.empty()) continue;
+			for (size_t J = 0; J < I; ++J)
+			{
+				const Track& A = R.Tracks[J];
+				if (A.bTwin || A.Role != "fo" || A.At.empty()) continue;
+				if (std::hypot(A.At.front().X - T.At.front().X, A.At.front().Y - T.At.front().Y) <= 0.5 && std::abs(A.Start() - T.Start()) <= 1.0)
+				{
+					T.bTwin = true;
+					break;
+				}
+			}
+		}
+
+		for (const Json& Rd : Root["rounds"].Items)
+		{
+			Round Row;
+			ReadRound(Rd, Row);
+			R.Rounds.push_back(std::move(Row));
+		}
+		// (each delta's own in order; kept in the order ReadRecording sorts them, should a round come out of turn)
+		if (!std::is_sorted(R.Rounds.begin() + static_cast<std::ptrdiff_t>(Out.RoundsFrom > 0 ? Out.RoundsFrom - 1 : 0), R.Rounds.end(), RoundBefore))
+		{
+			std::stable_sort(R.Rounds.begin(), R.Rounds.end(), RoundBefore);
+			Out.RoundsFrom = 0;
+		}
+		for (const Json& E : Root["events"].Items)
+		{
+			Event Row;
+			ReadEvent(E, Row);
+			R.Events.push_back(std::move(Row));
+		}
+		std::map<int, Crater> Craters;
+		for (const Json& V : Root["views"].Items)
+		{
+			View Row;
+			ReadView(V, Row);
+			R.Views.push_back(std::move(Row));
+			ReadViewExtras(V, Craters, R.Blocks);
+			if (V["setup"].IsNull() && R.bSetup) { R.bSetup = false; Out.bBegun = true; }
+		}
+		for (auto& Pair : Craters)
+		{
+			if (!R.CraterIds.insert(Pair.first).second) continue;
+			R.Craters.push_back(Pair.second);
+		}
+		std::stable_sort(R.Craters.begin() + static_cast<std::ptrdiff_t>(Out.CratersFrom), R.Craters.end(), [](const Crater& A, const Crater& B) { return A.At < B.At; });
+		for (const Json& P : Root["phases"].Items)
+		{
+			const int B = P["b"].Int(0);
+			std::vector<Phase>* List = nullptr;
+			for (auto& Pair : R.Phases) if (Pair.first == B) List = &Pair.second;
+			if (!List) { R.Phases.emplace_back(B, std::vector<Phase>()); List = &R.Phases.back().second; }
+			for (const Json& Ph : P["ph"].Items)
+			{
+				Phase Row;
+				Row.T = Ph.At(0).Num(0.0);
+				Row.Ph = Ph.At(1).Str("");
+				List->push_back(std::move(Row));
+			}
+			Out.Phased.push_back(B);
+		}
+		if (R.Contact < 0.0 && Root["contact"].IsNumber())
+		{
+			R.Contact = Root["contact"].Num();
+			Out.bContact = true;
+		}
+		R.Fought = std::max(R.Fought, Out.T);
+		if (!R.bOver) R.End = R.Fought;
+		if (Root["over"].IsObject())
+		{
+			R.bOver = true;
+			R.End = Root["end"].Num(Out.T);
+			ReadOver(Root["over"], R.End, R.Result);
+			Out.bOver = true;
+		}
 		return true;
 	}
 

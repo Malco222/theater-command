@@ -1,0 +1,283 @@
+#include "Battle/LandLive.h"
+
+#include "TheaterCommand.h"
+#include "HAL/Event.h"
+#include "HAL/PlatformProcess.h"
+#include "HAL/RunnableThread.h"
+#include "Misc/Paths.h"
+#include "Misc/ScopeLock.h"
+#include "Rules/RulesHost.h"
+
+#include <cstdlib>
+#include <cstring>
+#include <utility>
+
+namespace
+{
+	/** A string as a JSON string, quoted and escaped. */
+	FString Quoted(const FString& Text)
+	{
+		FString Out = TEXT("\"");
+		for (const TCHAR C : Text)
+		{
+			if (C == TEXT('"') || C == TEXT('\\')) { Out.AppendChar(TEXT('\\')); Out.AppendChar(C); }
+			else if (C < 32) Out += FString::Printf(TEXT("\\u%04x"), static_cast<int32>(C));
+			else Out.AppendChar(C);
+		}
+		Out.AppendChar(TEXT('"'));
+		return Out;
+	}
+
+	/** A field's text from a small JSON answer ({"ok":false,"why":"..."}), without reading the whole (plain words only). */
+	FString FieldText(const FString& Json, const TCHAR* Name)
+	{
+		const FString Opening = FString::Printf(TEXT("\"%s\":\""), Name);
+		const int32 At = Json.Find(Opening);
+		if (At == INDEX_NONE) return FString();
+		FString Out;
+		for (int32 I = At + Opening.Len(); I < Json.Len() && Json[I] != TEXT('"'); ++I)
+		{
+			if (Json[I] == TEXT('\\') && I + 1 < Json.Len()) ++I;
+			Out.AppendChar(Json[I]);
+		}
+		return Out;
+	}
+}
+
+FLandLive::FLandLive()
+{
+	Wake = FPlatformProcess::GetSynchEventFromPool(false);
+}
+
+FLandLive::~FLandLive()
+{
+	Close();
+	if (Wake)
+	{
+		FPlatformProcess::ReturnSynchEventToPool(Wake);
+		Wake = nullptr;
+	}
+}
+
+bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, bool bInSetup)
+{
+	if (Thread)
+	{
+		return false;
+	}
+	Key = InKey;
+	Seed = InSeed;
+	Me = InMe;
+	bSetup = bInSetup;
+	Thread = FRunnableThread::Create(this, TEXT("TheaterLandRules"), 0, TPri_Normal);
+	return Thread != nullptr;
+}
+
+bool FLandLive::TakeHeader(std::string& OutHeader)
+{
+	FScopeLock Hold(&HeaderGate);
+	if (!bHeaderReady || bHeaderTaken)
+	{
+		return false;
+	}
+	bHeaderTaken = true;
+	OutHeader = std::move(HeaderText);
+	HeaderText.clear();
+	return true;
+}
+
+bool FLandLive::Failed(FString& OutWhy) const
+{
+	FScopeLock Hold(&HeaderGate);
+	OutWhy = Why;
+	return bFailed;
+}
+
+void FLandLive::Fail(const FString& InWhy)
+{
+	FScopeLock Hold(&HeaderGate);
+	bFailed = true;
+	Why = InWhy;
+	UE_LOG(LogTheater, Warning, TEXT("Land battle (live): %s"), *InWhy);
+}
+
+void FLandLive::Want(double Shown, double Ahead)
+{
+	WantT.store(Shown);
+	AheadT.store(FMath::Max(0.5, Ahead));
+	if (Wake && Shown + Ahead > FoughtT.load())
+	{
+		Wake->Trigger();
+	}
+}
+
+bool FLandLive::TakeOne(std::string& OutDelta)
+{
+	return Deltas.Dequeue(OutDelta);
+}
+
+void FLandLive::Order(const FString& CommandJson)
+{
+	Requests.Enqueue({ TEXT("order"), TEXT("landOrder"), TEXT("[") + CommandJson + TEXT("]"), CommandJson });
+	if (Wake) Wake->Trigger();
+}
+
+void FLandLive::Place(int32 Id, double X, double Y, double Face)
+{
+	Requests.Enqueue({ TEXT("place"), TEXT("landPlace"), FString::Printf(TEXT("[%d,%.2f,%.2f,%.4f]"), Id, X, Y, Face), FString::FromInt(Id) });
+	if (Wake) Wake->Trigger();
+}
+
+void FLandLive::Begin()
+{
+	Requests.Enqueue({ TEXT("begin"), TEXT("landBegin"), TEXT("[]"), FString() });
+	if (Wake) Wake->Trigger();
+}
+
+void FLandLive::Answers(TArray<FAnswer>& Out)
+{
+	FAnswer A;
+	while (Replies.Dequeue(A))
+	{
+		Out.Add(MoveTemp(A));
+	}
+}
+
+double FLandLive::TimeOf(const std::string& Delta, bool& bOutLast)
+{
+	// {"t":12.3,"end":12.3,... : the rules write t first, and end straight after it on the battle's last delta.
+	bOutLast = false;
+	if (Delta.compare(0, 5, "{\"t\":") != 0)
+	{
+		return -1.0;
+	}
+	const char* At = Delta.c_str() + 5;
+	char* Past = nullptr;
+	const double T = std::strtod(At, &Past);
+	if (Past == At)
+	{
+		return -1.0;
+	}
+	bOutLast = std::strncmp(Past, ",\"end\":", 7) == 0;
+	return T;
+}
+
+void FLandLive::Stop()
+{
+	bStopping.store(true);
+	if (Wake) Wake->Trigger();
+}
+
+void FLandLive::Close()
+{
+	if (!Thread)
+	{
+		return;
+	}
+	Stop();
+	Thread->WaitForCompletion();
+	delete Thread;
+	Thread = nullptr;
+}
+
+uint32 FLandLive::Run()
+{
+	// The rules engine is made, used and let go on this thread alone.
+	TUniquePtr<FRulesHost> Host = MakeUnique<FRulesHost>();
+	if (!Host->IsAvailable())
+	{
+		Fail(TEXT("this build has no engine to run the land rules on"));
+		return 1;
+	}
+	FString Error;
+	const FString Bundle = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Rules"), TEXT("land-rules.js"));
+	if (!Host->LoadScript(Bundle, Error))
+	{
+		Fail(FString::Printf(TEXT("the land rules (Content/Rules/land-rules.js) did not load: %s. Run Tools/build_land_rules.sh."), *Error));
+		return 1;
+	}
+	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me), bSetup ? TEXT("true") : TEXT("false"));
+	const FString Arguments = FString::Printf(TEXT("[%s,%s,%s]"), *Quoted(Key), Seed > 0 ? *FString::FromInt(Seed) : TEXT("null"), *Options);
+	FString Header;
+	const double Opened = FPlatformTime::Seconds();
+	if (!Host->Call(TEXT("landStart"), Arguments, Header, Error) || !Header.StartsWith(TEXT("{")))
+	{
+		Fail(FString::Printf(TEXT("TC.landStart(%s) failed: %s"), *Key, *Error));
+		return 1;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s opened in %.0f ms (%d KB), the player %s%s"), *Key, (FPlatformTime::Seconds() - Opened) * 1000.0,
+		Header.Len() / 1024, Me.IsEmpty() ? TEXT("watching") : *Me, bSetup ? TEXT(", deploying first") : TEXT(""));
+	{
+		const FTCHARToUTF8 Narrow(*Header);
+		FScopeLock Hold(&HeaderGate);
+		HeaderText.assign(Narrow.Get(), static_cast<size_t>(Narrow.Length()));
+		bHeaderReady = true;
+	}
+
+	// The first piece is the men as they stand (every track first seen), fought or not; then the rules are kept ahead.
+	bool bNeedPiece = true;
+	bool bDeploying = bSetup;
+	while (!bStopping.load())
+	{
+		bool bDidSomething = false;
+		FRequest Asked;
+		while (Requests.Dequeue(Asked))
+		{
+			FString Reply;
+			FAnswer A;
+			A.Kind = Asked.Kind;
+			A.Asked = Asked.Asked;
+			A.bOk = Host->Call(Asked.Function, Asked.Arguments, Reply, Error) && Reply.Contains(TEXT("\"ok\":true"));
+			if (!A.bOk)
+			{
+				A.Why = FieldText(Reply, TEXT("why"));
+				if (A.Why.IsEmpty() && !Error.IsEmpty()) A.Why = Error;
+			}
+			// (a block placed stands its men again: the next piece starts them afresh; begun, the clock runs)
+			if (A.bOk && Asked.Kind == TEXT("place")) bNeedPiece = true;
+			if (A.bOk && Asked.Kind == TEXT("begin")) { bDeploying = false; bNeedPiece = true; }
+			Replies.Enqueue(MoveTemp(A));
+			bDidSomething = true;
+		}
+		const double Target = WantT.load() + AheadT.load();
+		const double Now = FoughtT.load();
+		const bool bBehind = !bDeploying && !bOver.load() && Now + 1e-6 < Target;
+		if (bNeedPiece || bBehind)
+		{
+			// At most half a battle second a call, so orders given meanwhile wait no longer than that.
+			const double To = bBehind ? FMath::Min(Target, Now + 0.5) : Now;
+			FString Answer;
+			const double Began = FPlatformTime::Seconds();
+			if (!Host->Call(TEXT("landTo"), FString::Printf(TEXT("[%.3f,50]"), To), Answer, Error))
+			{
+				Fail(FString::Printf(TEXT("TC.landTo failed at %.1f s: %s"), Now, *Error));
+				break;
+			}
+			const double Ms = (FPlatformTime::Seconds() - Began) * 1000.0;
+			LastStepMs.store(Ms);
+			if (Ms > MostStepMs.load()) MostStepMs.store(Ms);
+			const FTCHARToUTF8 Narrow(*Answer);
+			std::string Delta(Narrow.Get(), static_cast<size_t>(Narrow.Length()));
+			bool bLast = false;
+			const double T = TimeOf(Delta, bLast);
+			if (T < 0.0)
+			{
+				Fail(TEXT("TC.landTo's answer is not a delta"));
+				break;
+			}
+			Deltas.Enqueue(MoveTemp(Delta));
+			FoughtT.store(T);
+			if (bLast) bOver.store(true);
+			bNeedPiece = false;
+			bDidSomething = true;
+		}
+		if (!bDidSomething && Wake)
+		{
+			Wake->Wait(FTimespan::FromMilliseconds(5.0));
+		}
+	}
+	FString Ignored;
+	Host->Call(TEXT("landEnd"), TEXT("[]"), Ignored, Error);
+	Host.Reset();
+	return 0;
+}

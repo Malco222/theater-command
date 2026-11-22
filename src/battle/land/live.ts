@@ -387,15 +387,18 @@ export class LiveBattle {
   private delta(): LiveDelta {
     const over = this.sim.over;
     if (over && !this.sentOver) this.keeper.close();
+    // (a delta opens with t, and with end at once after it when it is the battle's last: the game reads both off its head)
+    const last = !!over && !this.sentOver;
     const d: LiveDelta = {
       t: r2(this.sim.t),
+      ...(last ? { end: r2(this.sim.t) } : {}),
       ...(this.placed ? { reset: true as const } : {}),
       ...this.keeper.drain(),
       rounds: this.roundsNew.sort((a, b) => a.n - b.n), events: this.events, views: this.views,
       phases: [...this.phaseNew.entries()].map(([b, ph]) => ({ b, ph })),
       contact: this.sim.contactAt,
     };
-    if (over && !this.sentOver) { d.over = over; d.end = r2(this.sim.t); this.sentOver = true; }
+    if (last) { d.over = over; this.sentOver = true; }
     this.events = []; this.views = []; this.roundsNew = []; this.phaseNew.clear(); this.placed = false;
     return d;
   }

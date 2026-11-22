@@ -116,34 +116,14 @@ namespace LandPlay
 			if (R.By >= 0 && R.K >= 0) Shooter[I] = Rec->TrackIndexOf(R.By, R.K, R.J);
 			if (R.On >= 0 && R.Ok >= 0) TargetTrack[I] = Rec->TrackIndexOf(R.On, R.Ok, R.Oj);
 		}
+		ByLanding.resize(N);
+		for (size_t I = 0; I < N; ++I) ByLanding[I] = static_cast<int>(I);
+		std::stable_sort(ByLanding.begin(), ByLanding.end(), [&](int A, int B) { return Rec->Rounds[static_cast<size_t>(A)].L < Rec->Rounds[static_cast<size_t>(B)].L; });
 		// A 'shell' event and its kill round are one blast (the contract: "a 'shell' event plus its kill round = ONE
 		// blast"): the round lands where and when the event bursts, the same gun's.
 		RoundOfEvent.assign(Rec->Events.size(), -1);
 		FollowerBursts = 0;
-		for (size_t E = 0; E < Rec->Events.size(); ++E)
-		{
-			const LandFeed::Event& Ev = Rec->Events[E];
-			if (Ev.What != "shell") continue;
-			// (a key man's kill round first: a follower's kill round is a burst of its own, drawn by Land, unless no
-			// key man's round fits)
-			int Best = -1;
-			for (int Pass = 0; Pass < 2 && Best < 0; ++Pass)
-			{
-				double BestFar = 1e9;
-				for (size_t I = 0; I < N; ++I)
-				{
-					const Round& R = Rec->Rounds[I];
-					if (R.R != Result::Kill || EventOf[I] >= 0) continue;
-					if ((R.Oj > 0) != (Pass == 1)) continue;
-					if (std::abs(R.L - Ev.T) > 0.35) continue;
-					if (Ev.By >= 0 && R.By >= 0 && Ev.By != R.By) continue;
-					const double Far = std::hypot(R.X - Ev.X, R.Y - Ev.Y);
-					if (Far < 1.5 && Far < BestFar) { Best = static_cast<int>(I); BestFar = Far; }
-				}
-			}
-			RoundOfEvent[E] = Best;
-			if (Best >= 0) EventOf[static_cast<size_t>(Best)] = static_cast<int>(E);
-		}
+		PairBlasts(0, Rec->Events.size());
 		// A gun's, a tank's or a mortar's round (or a grenade, an anti-tank round) that killed a follower and that no
 		// 'shell' event draws: its own burst, drawn where it landed by Land (the drill writes no shell event for it).
 		for (size_t I = 0; I < N; ++I)
@@ -151,24 +131,113 @@ namespace LandPlay
 			const Round& R = Rec->Rounds[I];
 			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && R.W != "rifle" && R.W != "mg") ++FollowerBursts;
 		}
-		ByLanding.resize(N);
-		for (size_t I = 0; I < N; ++I) ByLanding[I] = static_cast<int>(I);
-		std::stable_sort(ByLanding.begin(), ByLanding.end(), [&](int A, int B) { return Rec->Rounds[static_cast<size_t>(A)].L < Rec->Rounds[static_cast<size_t>(B)].L; });
 		Falls.clear();
+		FallListed.assign(Rec->Tracks.size(), 0);
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& T = Rec->Tracks[I];
-			if (T.Fell >= 0.0 && !T.bTwin) Falls.push_back({ T.Fell, static_cast<int>(I), T.IsVehicle() });
+			if (T.Fell >= 0.0 && !T.bTwin) { Falls.push_back({ T.Fell, static_cast<int>(I), T.IsVehicle() }); FallListed[I] = 1; }
 		}
-		std::sort(Falls.begin(), Falls.end(), [](const FallRow& A, const FallRow& B) { return A.T < B.T; });
+		// (men down on one step in the order of their tracks: a live battle's come in that order)
+		std::sort(Falls.begin(), Falls.end(), [](const FallRow& A, const FallRow& B) { return A.T != B.T ? A.T < B.T : A.Track < B.Track; });
 		Rewind();
 		return true;
+	}
+
+	void Replay::PairBlasts(size_t From, size_t To)
+	{
+		const std::vector<Round>& Rounds = Rec->Rounds;
+		auto LandsBefore = [&Rounds](int I, double L) { return Rounds[static_cast<size_t>(I)].L < L; };
+		for (size_t E = From; E < To && E < Rec->Events.size(); ++E)
+		{
+			const LandFeed::Event& Ev = Rec->Events[E];
+			if (Ev.What != "shell" || RoundOfEvent[E] >= 0) continue;
+			// (a key man's kill round first: a follower's kill round is a burst of its own, drawn by Land, unless no
+			// key man's round fits)
+			// (the rounds landing within 0.35 s of the burst, found in the landing order; on a tie of distance the
+			// earlier round in the recording's order, as a search of every round in order would take it)
+			const auto First = std::lower_bound(ByLanding.begin(), ByLanding.end(), Ev.T - 0.35 - 1e-9, LandsBefore);
+			int Best = -1;
+			for (int Pass = 0; Pass < 2 && Best < 0; ++Pass)
+			{
+				double BestFar = 1e9;
+				for (auto It = First; It != ByLanding.end() && Rounds[static_cast<size_t>(*It)].L <= Ev.T + 0.35 + 1e-9; ++It)
+				{
+					const size_t I = static_cast<size_t>(*It);
+					const Round& R = Rounds[I];
+					if (R.R != Result::Kill || EventOf[I] >= 0) continue;
+					if ((R.Oj > 0) != (Pass == 1)) continue;
+					if (std::abs(R.L - Ev.T) > 0.35) continue;
+					if (Ev.By >= 0 && R.By >= 0 && Ev.By != R.By) continue;
+					const double Far = std::hypot(R.X - Ev.X, R.Y - Ev.Y);
+					if (Far < 1.5 && (Far < BestFar || (Far == BestFar && static_cast<int>(I) < Best))) { Best = static_cast<int>(I); BestFar = Far; }
+				}
+			}
+			RoundOfEvent[E] = Best;
+			if (Best >= 0) EventOf[static_cast<size_t>(Best)] = static_cast<int>(E);
+		}
+	}
+
+	void Replay::Extend(const LandFeed::Grown& G)
+	{
+		if (!Rec) return;
+		const size_t N = Rec->Rounds.size();
+		if (G.bReset || G.RoundsFrom < Shooter.size() || G.EventsFrom < RoundOfEvent.size())
+		{
+			// Placed again before the clock ran (or the rounds sorted again): index it all afresh, and on from where it had
+			// played to without playing it again.
+			const double To = G.bReset ? -1.0 : PlayedTo;
+			Begin(*Rec, Here);
+			if (To >= 0.0)
+			{
+				while (NextFire < N && Rec->Rounds[NextFire].T <= To) ++NextFire;
+				while (NextLand < ByLanding.size() && Rec->Rounds[static_cast<size_t>(ByLanding[NextLand])].L <= To) ++NextLand;
+				while (NextEvent < Rec->Events.size() && Rec->Events[NextEvent].T <= To) ++NextEvent;
+				while (NextFall < Falls.size() && Falls[NextFall].T <= To) ++NextFall;
+				PlayedTo = To;
+			}
+			return;
+		}
+		// The new rounds: their shooters and targets, and their landings in order (all after what has landed).
+		Shooter.resize(N, -1);
+		TargetTrack.resize(N, -1);
+		EventOf.resize(N, -1);
+		for (size_t I = G.RoundsFrom; I < N; ++I)
+		{
+			const Round& R = Rec->Rounds[I];
+			if (R.By >= 0 && R.K >= 0) Shooter[I] = Rec->TrackIndexOf(R.By, R.K, R.J);
+			if (R.On >= 0 && R.Ok >= 0) TargetTrack[I] = Rec->TrackIndexOf(R.On, R.Ok, R.Oj);
+			const auto At = std::upper_bound(ByLanding.begin() + static_cast<std::ptrdiff_t>(NextLand), ByLanding.end(), R.L,
+				[this](double L, int J) { return L < Rec->Rounds[static_cast<size_t>(J)].L; });
+			ByLanding.insert(At, static_cast<int>(I));
+		}
+		// The blasts: the new 'shell' events, and any not yet played still unpaired (its round may come a delta after it).
+		RoundOfEvent.resize(Rec->Events.size(), -1);
+		PairBlasts(NextEvent, Rec->Events.size());
+		for (size_t I = G.RoundsFrom; I < N; ++I)
+		{
+			const Round& R = Rec->Rounds[I];
+			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && R.W != "rifle" && R.W != "mg") ++FollowerBursts;
+		}
+		// The new falls, in order after those played.
+		FallListed.resize(Rec->Tracks.size(), 0);
+		for (const int K : G.Fell)
+		{
+			const Track& T = Rec->Tracks[static_cast<size_t>(K)];
+			if (T.Fell < 0.0 || T.bTwin || FallListed[static_cast<size_t>(K)]) continue;
+			FallListed[static_cast<size_t>(K)] = 1;
+			const FallRow Row { T.Fell, K, T.IsVehicle() };
+			const auto At = std::upper_bound(Falls.begin() + static_cast<std::ptrdiff_t>(NextFall), Falls.end(), Row.T,
+				[](double Tm, const FallRow& F) { return Tm < F.T; });
+			Falls.insert(At, Row);
+		}
 	}
 
 	void Replay::Rewind()
 	{
 		NextFire = NextLand = NextEvent = NextFall = 0;
 		Played = Paired = Alone = 0;
+		PlayedTo = -1.0;
 	}
 
 	double Replay::HeightAt(double X, double Y) const
@@ -246,6 +315,7 @@ namespace LandPlay
 	void Replay::Step(double From, double To, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise, std::vector<Loss>& OutLoss)
 	{
 		if (!Rec || To < From) return;
+		PlayedTo = std::max(PlayedTo, To);
 		const std::vector<Round>& Rounds = Rec->Rounds;
 		// Rounds fired, in the order fired.
 		// (each once, by the cursor: a frame that skips ahead still plays every round it passed, as the contract asks of

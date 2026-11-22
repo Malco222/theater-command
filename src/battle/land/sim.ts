@@ -333,7 +333,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     const player = !this.staffing && this.ticket[by].human;
     const hands = (us: LandUnit[]): void => { if (this.perUnit && player) for (const u of us) this.take(u); };
     const air = this.radio && player && this.t > 0;
-    const give = (u: LandUnit, go: () => void): void => this.order(u, go, air);
+    // The battle time he gave it, as the 3D game shows it (it runs the rules a little ahead of the picture): the radio's
+    // wait counts from there, never from before it. Absent: now.
+    const said = (c as { at?: unknown }).at, from = typeof said === 'number' && Number.isFinite(said) ? Math.min(this.t, said) : this.t;
+    const give = (u: LandUnit, go: () => void): void => this.order(u, go, air, from);
     switch (c.do) {
       case 'move': {
         const us = mine(c.units);
@@ -479,11 +482,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    * An order for one block: at once, or by radio (direct command, release 2), landing LAND.radio's delay later, longer
    * when its headquarters is hit. A later order on the air replaces the one still on the way.
    */
-  private order(u: LandUnit, go: () => void, air: boolean): void {
+  private order(u: LandUnit, go: () => void, air: boolean, from = this.t): void {
     if (!air) { go(); return; }
     const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
-    const at = Math.round((this.t + R.delay * (hit ? R.cut : 1)) * 1000) / 1000;
+    const at = Math.round((from + R.delay * (hit ? R.cut : 1)) * 1000) / 1000;
     this.pending = this.pending.filter((p) => p.id !== u.id);
+    // Given long enough ago (as shown) that it is due already: carried out now.
+    if (at <= this.t + 1e-9) { delete u.orderAt; go(); return; }
     this.pending.push({ at, id: u.id, go });
     u.orderAt = at;
   }

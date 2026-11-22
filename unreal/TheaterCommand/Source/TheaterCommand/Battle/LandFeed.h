@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -89,6 +90,13 @@ namespace LandFeed
 		/** Another track drawn in the same place for the whole battle (the recording's two batteries share one
 		 * spotter pair's walk): drawn once, this one left out. */
 		bool bTwin = false;
+		/** A live battle (release 2): At's last point is where he stands now, provisional; the next delta replaces it
+		 * (AppendDelta). Never set on a recording read whole. */
+		bool bTail = false;
+		/** A wreck laid where it was hit (LandFeed's reading: the rules move a knocked-out vehicle to its formation
+		 * place): every point from PinFrom on is at PinX, PinY. */
+		bool bPinned = false;
+		double PinFrom = 0.0, PinX = 0.0, PinY = 0.0;
 
 		bool IsVehicle() const { return Role == "tank" || Role == "gun" || Role == "lorry"; }
 		bool IsMan() const { return !IsVehicle(); }
@@ -142,6 +150,20 @@ namespace LandFeed
 		int Figures = 0;
 		std::string State, Act, Cover;
 		int Engaged = -1;
+
+		// A live battle's (release 2; src/battle/land/live.ts landUnitOut): what the general's screen reads.
+		/** An enemy block the player has not met: where it stands and whether it moves, nothing that names or counts it. */
+		bool bKnown = true;
+		/** The player has taken it in hand (his staff fights the rest of his side). */
+		bool bTaken = false;
+		/** Seconds till his order on the air reaches it (radio), -1 none on the air. */
+		double OrderIn = -1.0;
+		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
+		 * path's corners. Empty kind: no order. */
+		std::string OrderKind;
+		double OrderX = 0.0, OrderY = 0.0;
+		int OrderTarget = -1;
+		std::vector<std::pair<double, double>> OrderPath;
 	};
 
 	/** A crater the field keeps (view zones, kind crater). */
@@ -250,6 +272,20 @@ namespace LandFeed
 		std::vector<Crater> Craters;
 		Over Result;
 
+		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header
+		// with nothing fought yet, and grown by AppendDelta.
+		bool bLive = false;
+		/** Battle time the rules have reached: nothing at or before it will change. End is that until the battle is over. */
+		double Fought = 0.0;
+		bool bOver = false;
+		/** The side the player commands (0 the attacker, 1 the defender, -1 none: a film), and the setup step's room
+		 * [x0, y0, x1, y1] where he may stand his blocks before the clock runs (bSetup while it is open). */
+		int Me = -1;
+		bool bSetup = false;
+		double Room[4] = { 0, 0, 0, 0 };
+		/** The craters' numbers already read (the views repeat them). */
+		std::set<int> CraterIds;
+
 		const Block* BlockOf(int Id) const;
 		/** The track of model K of block B (follower J of his section, 0 the key man), or null. */
 		const Track* TrackOf(int B, int K, int J = 0) const;
@@ -264,6 +300,42 @@ namespace LandFeed
 	};
 
 	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError);
+
+	/**
+	 * What one live delta added (release 2), as places in the Recording, for the cores that extend what they built from
+	 * it rather than build again: the tracks are by index, the rest from where each list stood before.
+	 */
+	struct Grown
+	{
+		/** The men were placed again (the setup step, the player moving a block): every track, view and phase began
+		 * again; build afresh. */
+		bool bReset = false;
+		/** Battle time the rules have reached. */
+		double T = 0.0;
+		/** Tracks [NewTracksFrom, Tracks.size()) are new. */
+		size_t NewTracksFrom = 0;
+		/** Tracks with new kept points or a new provisional last point; with new changes; new shots; a fall; an out
+		 * set or taken back; new scars. Each once, in order. */
+		std::vector<int> Moved, Changed, Shot, Fell, Left, Marked;
+		/** Where the rounds, events, views and craters stood before: the new are from there on. */
+		size_t RoundsFrom = 0, EventsFrom = 0, ViewsFrom = 0, CratersFrom = 0;
+		/** Blocks with new phases. */
+		std::vector<int> Phased;
+		/** The contact was first made in this delta. */
+		bool bContact = false;
+		/** The battle ended in this delta (Result and End are set). */
+		bool bOver = false;
+		/** The setup step closed in this delta. */
+		bool bBegun = false;
+	};
+
+	/**
+	 * Adds a live delta (src/battle/land/live.ts LiveDelta) to a Recording read from a live header: the tracks' new kept
+	 * points, changes, shots, falls, outs and scars, each moving man's provisional last point (Track::bTail), the rounds,
+	 * events, views (and their craters and crews' names), phases, the contact and the end. A battle grown delta by delta
+	 * is the battle read whole, once over. False (and why) on a fault; the Recording is then as it was up to the fault.
+	 */
+	bool AppendDelta(const std::string& Source, Recording& InOut, Grown& Out, std::string& OutError);
 
 	/** Where a track is at a battle time: lerped between its kept points, the facing turned the short way, and its speed
 	 * over the ground there (metres a battle second). Before its first point it stands at its first; after its last at

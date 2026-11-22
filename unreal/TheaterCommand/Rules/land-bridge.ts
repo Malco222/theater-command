@@ -13,13 +13,16 @@
 //   TC.landStart(key, seed, { me, setup, platoons, staff, radio }) -> the recording's header: the field, the blocks,
 //                                             the sky, and the setup room when the player deploys first. me 'att' | 'def'
 //                                             | null (a film). staff and radio (direct command) are on unless false
-//   TC.landTick(seconds, maxSteps)         -> a delta: what was fought in up to `seconds` more (none while setup is open)
+//   TC.landTick(seconds, maxSteps)         -> a delta: what was fought in up to `seconds` more (none while setup is open).
+//                                             It opens {"t":..., and {"t":...,"end":... when it is the battle's last
 //   TC.landTo(t, maxSteps)                 -> a delta: fought on to battle time t
 //   TC.landOrder(command)                  -> { ok }: one of the player's orders, in the rules' shapes (core/types Command):
 //                                             move { units, x, y, face?, run? }, line, attack { units, target }, hold,
-//                                             withdraw, land:fire, land:staff { units } (back to his staff), auto
+//                                             withdraw, land:fire, land:staff { units } (back to his staff), auto. Each
+//                                             may carry at: the battle time shown when he gave it (the rules run ahead of
+//                                             the screen; by radio the wait counts from then)
 //   TC.landCanPlace(id, x, y)              -> { ok, why }: whether a block may stand there in the setup step
-//   TC.landPlace(id, x, y, face)           -> { ok }: places it; the next delta starts the men again (reset)
+//   TC.landPlace(id, x, y, face)           -> { ok, why }: places it; the next delta starts the men again (reset)
 //   TC.landBegin()                         -> { ok }: ends the setup step; the clock runs
 //   TC.landEnd()                           -> { over }: lets the battle go
 //
@@ -72,7 +75,9 @@ function need(): LiveBattle {
   },
 
   landPlace(id: number, x: number, y: number, face?: number | null) {
-    return { ok: need().place(id, x, y, face ?? undefined) };
+    const why = need().canPlace(id, x, y);
+    const ok = need().place(id, x, y, face ?? undefined);
+    return { ok, why: ok ? '' : why ?? 'Not now: the battle has begun.' };
   },
 
   landBegin() {

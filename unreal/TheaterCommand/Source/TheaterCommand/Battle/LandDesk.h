@@ -56,5 +56,6 @@ namespace LandDesk
 		Words Now;
 		bool bEased = false;
 		double Balance0[2] = { 0.5, 0.5 };
+		bool bBalance0 = false;
 	};
 }

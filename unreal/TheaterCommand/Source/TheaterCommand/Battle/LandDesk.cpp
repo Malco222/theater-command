@@ -17,10 +17,12 @@ namespace LandDesk
 		Now.Place = Rec->Ground.PlaceName;
 		Now.OwnNat = Rec->Sides[Own].Nat;
 		Now.EnemyNat = Rec->Sides[1 - Own].Nat;
+		bBalance0 = false;
 		if (!Rec->Views.empty())
 		{
 			Balance0[0] = std::max(0.01, Rec->Views.front().BalanceAtt);
 			Balance0[1] = std::max(0.01, Rec->Views.front().BalanceDef);
+			bBalance0 = true;
 		}
 	}
 
@@ -58,6 +60,13 @@ namespace LandDesk
 	const Words& Desk::Update(double Battle, double RealDt)
 	{
 		if (!Rec) return Now;
+		// (a live battle's first view comes with its first delta: the balances the knot is read against are taken then)
+		if (Rec->bLive && !bBalance0 && !Rec->Views.empty())
+		{
+			Balance0[0] = std::max(0.01, Rec->Views.front().BalanceAtt);
+			Balance0[1] = std::max(0.01, Rec->Views.front().BalanceDef);
+			bBalance0 = true;
+		}
 		const double Shown = std::clamp(Battle, 0.0, Rec->End);
 		const int Seconds = static_cast<int>(std::floor(Shown));
 		char Buffer[16];
@@ -87,7 +96,8 @@ namespace LandDesk
 			Now.Lines.push_back(L);
 		}
 		if (Now.Lines.size() > 4) Now.Lines.erase(Now.Lines.begin(), Now.Lines.end() - 4);
-		Now.bOver = Battle >= Rec->End;
+		// (a live battle is over only once the rules say so: until then its End is only how far they have fought)
+		Now.bOver = Battle >= Rec->End && (!Rec->bLive || Rec->bOver);
 		if (Now.bOver)
 		{
 			Now.Level = Rec->Result.Level;
