@@ -1030,8 +1030,22 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// A shell landing
 
+	const char* Battle::GroundOn(const char* Ground) const
+	{
+		// (a grounds row with its own switch, grounds.<ground>.on, is drawn only when it is on; off, the ground is drawn
+		// as earth, the look the battle had before the row came: rock, until the art director's stills and the Mac's
+		// frame rate pass it. A row with no switch is always drawn)
+		if (!Ground || !*Ground)
+		{
+			return Ground;
+		}
+		const std::string Switch = std::string("grounds.") + Ground + ".on";
+		return Has(Switch) && !(Num(Switch, 1.0) >= 0.5) ? "earth" : Ground;
+	}
+
 	void Battle::Shell(double Now, const Vec& AtIn, const char* SizeIn, const char* GroundIn, bool bOnArmour)
 	{
+		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// (a hit whose place or moment is no number, or lies beyond any field or battle, is no hit: every point of it
 		// would be no number in the picture. The pre-check on 3e3c4ef)
 		const auto Sound = [](double V, double Most) { return V == V && V >= -Most && V <= Most; };
@@ -3587,6 +3601,7 @@ namespace TheaterFx
 
 	void Battle::Skip(double Now, const Vec& AtIn, const Vec& Heading, const char* GroundIn)
 	{
+		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// An armour-piercing round that misses: a single low spurt of earth and a skip; no crown, no crater.
 		std::string Ground = GroundIn ? GroundIn : "earth";
 		if (!Has("grounds." + Ground + ".paint.soil.0"))
@@ -3655,6 +3670,7 @@ namespace TheaterFx
 
 	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
 	{
+		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// (a tank's or a field gun's smoke and the dust it kicks up go slowly into the air: linger.gun, by the gun's row)
 		const size_t First = Bits.size();
 		MuzzleLaid(Now, At, Facing, GunIn, GroundIn);
@@ -4694,6 +4710,7 @@ namespace TheaterFx
 
 	void Battle::VehicleDust(double Now, int Id, const Vec& At, const Vec& Velocity, const char* GroundIn, bool bTracked)
 	{
+		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// The Mediterranean set (03:35Z) and the art director (06:19Z): every vehicle moving on a desert field trails pale
 		// fine dust from its dust sockets, the stony gravel's colour where it is thrown up and paler as it climbs; low
 		// and long, taller and longer at speed, drifting on the one wind, lingering, never popping. Seen from a man's
@@ -4874,6 +4891,7 @@ namespace TheaterFx
 
 	void Battle::Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn)
 	{
+		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// Brian: "1 out of every 5 bullets with yellow". As a belt was loaded: every fifth round of a gun is a tracer
 		// and the four between are not seen; guns are out of step with each other.
 		Gun = std::max(0, Gun);
@@ -10444,6 +10462,7 @@ namespace TheaterFx
 
 	void Battle::Glance(double Now, const Vec& At, const Vec& Incoming, const Vec& NormalIn, double CalibreMm, const char* GroundIn)
 	{
+		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// (glance, art director 14:39Z 20 November: "a spark spray thrown the way the shot glances, and a glowing shot
 		// streaking off at a new angle". A small two-frame near-white flash by the flash rule; sparks in a 20 to 40
 		// degree cone along the glance, white-yellow cooling to orange, falling, gone in 0.3 to 0.8 s; a very small
@@ -13163,6 +13182,7 @@ namespace TheaterFx
 
 	void Battle::BombStick(double Now, int Id, const Vec& First, const Vec& Last, int Count, const char* SizeIn, const char* GroundIn, double Over)
 	{
+		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// (a stick whose moment or either end is no number, or lies beyond any field, is no stick, as a shell's hit is not)
 		const auto Sound = [](double V, double Most) { return V == V && V >= -Most && V <= Most; };
 		if (!Sound(Now, 1.0e9) || !Sound(First.X, 1.0e7) || !Sound(First.Y, 1.0e7) || !Sound(First.Z, 1.0e7) || !Sound(Last.X, 1.0e7) || !Sound(Last.Y, 1.0e7) || !Sound(Last.Z, 1.0e7) || Count < 1)
