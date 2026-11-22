@@ -626,6 +626,39 @@ namespace LandParts
 		return Made;
 	}
 
+	/** A battle model's bodies at rest (a prop: the field telephone, the cable reel, the stretcher; LandKit's shape) as
+	 * one mesh on Ink for instancing: its own axes (x forward, y right, z up, Unreal's hand), each body's points from its
+	 * pivot; Far its plain level, else its fine one. Null where the model has no points. */
+	static UStaticMesh* PropMesh(UObject* Owner, const FName& Name, const LandKit::Model& Prop, bool bFar, UMaterialInterface* Ink, double U)
+	{
+		std::vector<float> At, Facing;
+		LandMen::Look Paint;
+		for (const LandKit::Body& Body : Prop.Bodies)
+		{
+			const LandKit::Mesh& M = bFar ? Body.Far : Body.Near;
+			const size_t Count = M.Points.size() / 3;
+			if (Count == 0 || M.Normals.size() != M.Points.size() || M.Colours.size() < Count * 4)
+			{
+				continue;
+			}
+			const uint32_t First = static_cast<uint32_t>(Paint.Points);
+			for (size_t K = 0; K < Count; ++K)
+			{
+				At.push_back(M.Points[K * 3] + static_cast<float>(Body.Pivot.X));
+				At.push_back(M.Points[K * 3 + 1] + static_cast<float>(Body.Pivot.Y));
+				At.push_back(M.Points[K * 3 + 2] + static_cast<float>(Body.Pivot.Z));
+				Facing.insert(Facing.end(), { M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2] });
+				Paint.Rgb.insert(Paint.Rgb.end(), { M.Colours[K * 4], M.Colours[K * 4 + 1], M.Colours[K * 4 + 2] });
+			}
+			for (const uint32_t T : M.Triangles)
+			{
+				Paint.Triangles.push_back(First + T);
+			}
+			Paint.Points += static_cast<int>(Count);
+		}
+		return BankManMesh(Owner, Name, At, Facing, Paint, Ink, U);
+	}
+
 	/** Where a banked man stands in Unreal's frame, from his WorldFrame (field = R * own + T, R row-major, the field's x
 	 * east and y north): Unreal's x is the field's y and its y the field's x, so his own axes go to Unreal by R with its
 	 * first two rows swapped. R is a mirror (his axes are left-handed, the field's right-handed) and the swap another,
@@ -1098,7 +1131,31 @@ bool ALandBattle::Open()
 	// The ground (LandField): the bocage, the lanes, the village, out to the haze.
 	double Took = LandParts::Seconds();
 	{
-		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there)
+		// (the hedge cutters' test switch until the rules' cuts come, "-TheaterLandCutters=N": the first N crossings of a
+		// bank by the attacker's tanks made cuts, LandSight::CutsFromCrossings, from the field laid once without them;
+		// never over the recording's own cuts, nor on the steppe, which has no banks)
+		int32 TestCuts = 0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCutters="), TestCuts) && TestCuts > 0 && S.Rec.Cuts.empty())
+		{
+			const LandField::Field First = LandSight::FieldOf(Rec);
+			if (!First.Steppe.bOn)
+			{
+				const LandField::Ground Plain(First);
+				S.Rec.Cuts = LandSight::CutsFromCrossings(Rec, Plain, TestCuts);
+				UE_LOG(LogTheater, Log, TEXT("Land battle: -TheaterLandCutters=%d: %d cuts made from the tanks' crossings (the field laid once more for them)"),
+					TestCuts, static_cast<int32>(S.Rec.Cuts.size()));
+			}
+		}
+		// (the field telephones' test switch until the rules' wires come, "-TheaterLandPhones": the defender's lines from
+		// his headquarters to his officers and mortars, cut by the rounds that land beside them, LandSight::PhonesFromBattle)
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPhones")) && S.Rec.Wires.empty())
+		{
+			LandSight::PhonesFromBattle(S.Rec);
+			UE_LOG(LogTheater, Log, TEXT("Land battle: -TheaterLandPhones: %d wires, %d cuts, %d mends made from the battle"), static_cast<int32>(S.Rec.Wires.size()),
+				static_cast<int32>(S.Rec.WireCuts.size()), static_cast<int32>(S.Rec.WireMends.size()));
+		}
+		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there,
+		// and laid whole where a hedge cutter will tear it)
 		LandField::Field Lay = LandSight::FieldOf(Rec);
 		if (Lay.Steppe.bOn)
 		{
@@ -1126,7 +1183,14 @@ bool ALandBattle::Open()
 
 	// The fire's world: the ground drawn, its word for the kit, the shooters' muzzles and where a round struck a hull.
 	LandPlay::World PlayWorld;
-	PlayWorld.Height = [FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); };
+	// (a round landing in a hedge cutter's gap once it is torn lands on the gap's floor, not on the bank that was there)
+	const LandCrater::Field* GapsPtr = &S.Holes;
+	const int32* GapsTorn = &CutsTorn;
+	PlayWorld.Height = [FieldPtr, GapsPtr, GapsTorn](double X, double Y)
+	{
+		double Floor = 0.0;
+		return *GapsTorn > 0 && GapsPtr->BreachFloor(X, Y, Floor) ? Floor : FieldPtr->HeightAt(X, Y);
+	};
 	PlayWorld.GroundWord = [FieldPtr](double X, double Y) { return std::string(FieldPtr->At(X, Y).Fx); };
 
 	// Life's seconds against the battle's (the fight at half the battle's clock): before the men and the tanks are made,
@@ -1785,6 +1849,8 @@ void ALandBattle::LayField()
 		Points, static_cast<int32>(G.Ring().size()), LandParts::Seconds() - LaidFrom, bStaticTiles ? TEXT("") : TEXT(" (-TheaterLandTilesProcedural: procedural, as before)"),
 		bTornBakes ? *FString::Printf(TEXT("baked static after %.1f s unchanged, within %.2f ms a frame"), TornSettleAfter, TornBakeMs) : TEXT("procedural (-TheaterLandTornProcedural)"));
 	LayThings();
+	LayWires();
+	LayStretchers();
 }
 
 int32 ALandBattle::ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const
@@ -1873,6 +1939,55 @@ void ALandBattle::LayThings()
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
 	TArray<FTransform> Places;
+	// The hedge cutters' gaps (the recording's cuts): each one's bank where she will tear it (its line's heading and
+	// foot), and the hedge's shrubs standing in the gap or a little past its ends laid in copies of their own, not the
+	// field's, so that shaking and throwing them down sends only those few places (the field's copies hold tens of
+	// thousands, over the whole field). No cuts, nothing changes.
+	struct FCutBank
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, Half = 2.0, Foot = 1.4;
+	};
+	TArray<FCutBank> CutBanks;
+	for (const LandFeed::Cut& Cut : State->Rec.Cuts)
+	{
+		LandField::BankPlace BP;
+		FCutBank& Bank = CutBanks.AddDefaulted_GetRef();
+		Bank.Half = 0.5 * Cut.Width;
+		if (G.NearestBank(Cut.X, Cut.Y, 6.0, BP) && std::hypot(BP.X - Cut.X, BP.Y - Cut.Y) <= 2.5)
+		{
+			Bank.X = BP.X;
+			Bank.Y = BP.Y;
+			Bank.Yaw = BP.Yaw;
+			Bank.Foot = BP.Foot;
+		}
+		else
+		{
+			Bank.Half = -1.0; // (no bank there: nothing to tear, MakeBreaches says so)
+		}
+	}
+	CutStage.Init(0, CutBanks.Num());
+	CutsTorn = 0;
+	CutShrubs.Reset();
+	const auto CutAt = [&CutBanks](const LandField::Placed& One) -> int32
+	{
+		for (int32 K = 0; K < CutBanks.Num(); ++K)
+		{
+			const FCutBank& Bank = CutBanks[K];
+			if (Bank.Half <= 0.0)
+			{
+				continue;
+			}
+			const double Dx = One.X - Bank.X, Dy = One.Y - Bank.Y;
+			const double Along = Dx * std::cos(Bank.Yaw) + Dy * std::sin(Bank.Yaw), Across = -Dx * std::sin(Bank.Yaw) + Dy * std::cos(Bank.Yaw);
+			if (std::fabs(Along) <= Bank.Half + 2.0 && std::fabs(Across) <= Bank.Foot + 1.0)
+			{
+				return K;
+			}
+		}
+		return -1;
+	};
+	TArray<FTransform> CutPlaces;
+	TArray<FCutShrub> CutFound;
 	for (int32 Kind = 0; Kind < Kinds; ++Kind)
 	{
 		const LandField::Base Base = static_cast<LandField::Base>(Kind);
@@ -2083,16 +2198,67 @@ void ALandBattle::LayThings()
 				continue;
 			}
 			Places.Reset();
+			CutPlaces.Reset();
+			CutFound.Reset();
+			const bool bHedgeShrub = CutBanks.Num() > 0 && (Base == LandField::Base::ShrubA || Base == LandField::Base::ShrubB || Base == LandField::Base::ShrubC
+				|| Base == LandField::Base::Bramble);
 			for (const LandField::Placed* One : Them)
 			{
 				if (ShadeOf(Kind, One->Tint.R, One->Tint.G, One->Tint.B) == Shade)
 				{
-					Places.Add(LandParts::PlacedAt(*One, U));
+					const int32 Cut = bHedgeShrub ? CutAt(*One) : -1;
+					if (Cut < 0)
+					{
+						Places.Add(LandParts::PlacedAt(*One, U));
+						continue;
+					}
+					FCutShrub& Found = CutFound.AddDefaulted_GetRef();
+					Found.Cut = Cut;
+					Found.Index = CutPlaces.Num();
+					Found.X = One->X;
+					Found.Y = One->Y;
+					Found.Z = One->Z;
+					Found.Yaw = One->Yaw;
+					Found.Scale = One->Scale;
+					Found.ScaleZ = One->ScaleZ;
+					CutPlaces.Add(LandParts::PlacedAt(*One, U));
 				}
 			}
 			Copies->AddInstances(Places, false, true);
 			Instances += Places.Num();
 			ThingCopies.Add(Copies);
+			if (CutPlaces.Num() > 0)
+			{
+				// (the gap's own few: plain instancing, otherwise drawn as the field's copies are)
+				UInstancedStaticMeshComponent* Own = NewObject<UInstancedStaticMeshComponent>(this, FName(*(Name + TEXT("_Cut"))));
+				Own->SetupAttachment(Root);
+				Own->SetStaticMesh(Mesh);
+				Own->SetMaterial(0, Paint);
+				if (LeafInk && Mesh->GetStaticMaterials().Num() > 1)
+				{
+					Own->SetMaterial(1, LeafInk);
+				}
+				Own->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Own->SetCanEverAffectNavigation(false);
+				Own->SetCastShadow(true);
+				if (Shape.Far.Empty())
+				{
+					Own->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
+				}
+				else if (bShrub && ShrubsTo > 0.0f)
+				{
+					Own->SetCullDistances(0, FMath::RoundToInt32(ShrubsTo * U));
+				}
+				Own->RegisterComponent();
+				Own->AddInstances(CutPlaces, false, true);
+				Instances += CutPlaces.Num();
+				ThingCopies.Add(Own);
+				for (FCutShrub& Found : CutFound)
+				{
+					Found.Copies = Own;
+					CutShrubs.Add(Found);
+				}
+			}
 		}
 	}
 	// The clutter's squares (LandCarpet): each thing's mesh by its kind and shade, how near the eye a kind is laid, and
@@ -2949,11 +3115,31 @@ void ALandBattle::MakeArmour()
 		OutText = LandParts::Narrow(Text);
 		return true;
 	};
-	const LandKit::GroundFn GroundAt = [FieldPtr](double X, double Y, double& OutZ, LandKit::V3& OutNormal)
+	// (in a hedge cutter's gap, once torn, she drives on its torn floor: the bank she tore is gone from under her; its
+	// slope from the floor half a metre either way, level where that is past the gap's cut. Read only once a bank is
+	// torn: before that, and with no cuts, the field's ground alone, as ever)
+	const LandCrater::Field* BreachesPtr = &S.Holes;
+	const int32* TornPtr = &CutsTorn;
+	const LandKit::GroundFn GroundAt = [FieldPtr, BreachesPtr, TornPtr](double X, double Y, double& OutZ, LandKit::V3& OutNormal)
 	{
 		const LandField::Surface Under = FieldPtr->At(X, Y);
 		OutZ = Under.Z;
 		OutNormal = LandKit::V3(Under.NX, Under.NY, Under.NZ);
+		double Floor = 0.0;
+		if (*TornPtr > 0 && BreachesPtr->BreachFloor(X, Y, Floor))
+		{
+			const auto FloorOr = [BreachesPtr, Floor](double PX, double PY)
+			{
+				double Z = Floor;
+				return BreachesPtr->BreachFloor(PX, PY, Z) ? Z : Floor;
+			};
+			constexpr double Step = 0.5;
+			const double Dx = (FloorOr(X + Step, Y) - FloorOr(X - Step, Y)) / (2.0 * Step);
+			const double Dy = (FloorOr(X, Y + Step) - FloorOr(X, Y - Step)) / (2.0 * Step);
+			const double Long = std::sqrt(Dx * Dx + Dy * Dy + 1.0);
+			OutZ = Floor;
+			OutNormal = LandKit::V3(-Dx / Long, -Dy / Long, 1.0 / Long);
+		}
 	};
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
@@ -4698,7 +4884,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// in FieldMs).
 	PlayEffects();
 	Mark = LandParts::Seconds();
+	MakeBreaches();
 	MakeCraters();
+	MakeWires();
+	MakeStretchers();
 	MakeRuts();
 	SettleTorn();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -5149,6 +5338,559 @@ void ALandBattle::PlayEffects()
 			break;
 		}
 		}
+	}
+}
+
+void ALandBattle::MakeBreaches()
+{
+	FLandBattleState& S = *State;
+	// (a live battle's cuts come with its deltas, after the field and its things were laid: their banks are torn as
+	// any other's; their shrubs, laid in the field's own copies, are left standing for now)
+	if (CutStage.Num() < static_cast<int32>(S.Rec.Cuts.size()))
+	{
+		CutStage.SetNumZeroed(static_cast<int32>(S.Rec.Cuts.size()));
+	}
+	if (!S.Field || CutStage.Num() == 0)
+	{
+		return;
+	}
+	const LandField::Ground& G = *S.Field;
+	const LandField::Ground* FieldPtr = S.Field.get();
+	// (a shrub's own draw, the same every run: from the cut and its place in its copies)
+	const auto Draw = [](int32 Cut, int32 Index, uint32 Salt)
+	{
+		uint32 H = static_cast<uint32>(Cut + 1) * 0x9E3779B1u ^ static_cast<uint32>(Index + 1) * 0x85EBCA77u ^ Salt * 0xC2B2AE3Du;
+		H ^= H >> 15;
+		H *= 0x2C1B3C6Du;
+		H ^= H >> 12;
+		H *= 0x297A2D39u;
+		H ^= H >> 15;
+		return static_cast<double>(H) / 4294967296.0;
+	};
+	TSet<UInstancedStaticMeshComponent*> Touched;
+	const int32 Cuts = FMath::Min(CutStage.Num(), static_cast<int32>(S.Rec.Cuts.size()));
+	for (int32 K = 0; K < Cuts; ++K)
+	{
+		const LandFeed::Cut& Cut = S.Rec.Cuts[static_cast<size_t>(K)];
+		const uint8 Was = CutStage[K];
+		const uint8 Now = S.Battle >= Cut.T1 ? 2 : (S.Battle >= Cut.T0 ? 1 : 0);
+		if (Now <= Was)
+		{
+			continue;
+		}
+		CutStage[K] = Now;
+		LandField::BankPlace BP;
+		if (!G.NearestBank(Cut.X, Cut.Y, 6.0, BP) || std::hypot(BP.X - Cut.X, BP.Y - Cut.Y) > 2.5)
+		{
+			if (Now == 2)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: hedge cutter %d at %.0f, %.0f (battle %.1f s): no bank within 2.5 m, nothing torn"), K, Cut.X, Cut.Y, S.Battle);
+			}
+			continue;
+		}
+		// The bank's frame: along its line, and the side she drives out to (her heading against the bank's left).
+		const double Ca = std::cos(BP.Yaw), Sa = std::sin(BP.Yaw);
+		const double Left = -Sa * std::cos(Cut.Yaw) + Ca * std::sin(Cut.Yaw);
+		const int Through = Left >= 0.0 ? 1 : -1;
+		const double OutX = -Sa * Through, OutY = Ca * Through; // (the way she drives out, level)
+		const double Half = 0.5 * Cut.Width;
+		const auto GroundUnder = [&S, FieldPtr](double X, double Y)
+		{
+			double Z = FieldPtr->HeightAt(X, Y), Top = 0.0;
+			if (S.Holes.TopAt(X, Y, Top) && (Top > Z || S.Holes.InCut(X, Y)))
+			{
+				Z = Top;
+			}
+			return Z;
+		};
+		int32 Thrown = 0, Crushed = 0, Leaning = 0;
+		bool bTorn = false;
+		if (Now == 2)
+		{
+			// The bank torn through (its earth down to the gap's floor, the spoil heaped the side she drove out to;
+			// MakeCraters sends it with the holes, and cuts the ground drawn over it).
+			LandCrater::Breach B;
+			B.X = BP.X;
+			B.Y = BP.Y;
+			B.Yaw = BP.Yaw;
+			B.Half = Half;
+			B.Foot = BP.Foot;
+			B.Through = Through;
+			bTorn = S.Holes.AddBreach(B, [FieldPtr](double X, double Y) { return FieldPtr->BankRise(X, Y); }, "earth");
+			if (bTorn)
+			{
+				++CutsTorn;
+				const double Out = S.Holes.All().back().Out;
+				// (bodies lying on the bank laid again on what is left of it; the grass over it and its spoil cleared)
+				if (S.Men)
+				{
+					S.Men->Unsettle(BP.X, BP.Y, Out);
+				}
+				if (Carpet.IsValid())
+				{
+					Carpet->Mark(BP.X, BP.Y, Out + 0.5);
+				}
+				// (the earth she bursts out with: three low spurts thrown ahead of her blade across the gap)
+				if (Effects)
+				{
+					for (const double Along : { -0.6 * Half, 0.0, 0.6 * Half })
+					{
+						const double X = BP.X + Ca * Along + OutX * (BP.Foot + 0.3), Y = BP.Y + Sa * Along + OutY * (BP.Foot + 0.3);
+						Effects->Skip(World(X, Y, GroundUnder(X, Y) + 0.2), WorldWay(OutX, OutY, 0.35).GetSafeNormal(), TEXT("earth"));
+					}
+				}
+			}
+		}
+		// The hedge's shrubs at the gap: shaken toward the way she drives as she pushes into the bank; when it gives,
+		// those in the gap thrown down ahead of her blade (some crushed under her and the spoil, not seen again), those
+		// at its ends left leaning out of it, torn.
+		for (const FCutShrub& Shrub : CutShrubs)
+		{
+			UInstancedStaticMeshComponent* Copies = Shrub.Copies.Get();
+			if (Shrub.Cut != K || !Copies)
+			{
+				continue;
+			}
+			const double Dx = Shrub.X - BP.X, Dy = Shrub.Y - BP.Y;
+			const double Along = Dx * Ca + Dy * Sa;
+			const bool bInGap = std::fabs(Along) <= Half + 0.4;
+			const FQuat Turn = FRotator(0.0, -FMath::RadiansToDegrees(Shrub.Yaw), 0.0).Quaternion();
+			const FVector Size(Shrub.Scale, Shrub.Scale, Shrub.ScaleZ);
+			// (a tilt toward a level field way Wx, Wy, about the shrub's foot: in the engine's frame, x and y swapped)
+			const auto Tilt = [](double Wx, double Wy, double Degrees)
+			{
+				const FVector Toward = FVector(Wy, Wx, 0.0).GetSafeNormal();
+				return FQuat(FVector::UpVector ^ Toward, FMath::DegreesToRadians(Degrees));
+			};
+			FTransform Where;
+			if (Now == 1)
+			{
+				if (!bInGap)
+				{
+					continue;
+				}
+				Where = FTransform(Tilt(OutX, OutY, 8.0 + 8.0 * Draw(K, Shrub.Index, 1)) * Turn, World(Shrub.X, Shrub.Y, Shrub.Z), Size);
+				++Leaning;
+			}
+			else if (!bTorn)
+			{
+				continue;
+			}
+			else if (bInGap)
+			{
+				if (Draw(K, Shrub.Index, 2) < 0.25)
+				{
+					Where = FTransform(Turn, World(Shrub.X, Shrub.Y, Shrub.Z), FVector(1e-3));
+					++Crushed;
+				}
+				else
+				{
+					// (thrown 1.5 to 3.5 m ahead, a little along the bank, and laid nearly flat, its crown ahead)
+					const double Push = 1.5 + 2.0 * Draw(K, Shrub.Index, 3), Aside = 1.2 * (Draw(K, Shrub.Index, 4) - 0.5);
+					const double X = Shrub.X + OutX * Push + Ca * Aside, Y = Shrub.Y + OutY * Push + Sa * Aside;
+					const double Spin = 40.0 * (Draw(K, Shrub.Index, 5) - 0.5);
+					Where = FTransform(Tilt(OutX, OutY, 70.0 + 18.0 * Draw(K, Shrub.Index, 6)) * FRotator(0.0, Spin, 0.0).Quaternion() * Turn,
+						World(X, Y, GroundUnder(X, Y) - 0.15), Size);
+					++Thrown;
+				}
+			}
+			else
+			{
+				// (at the gap's ends: leaning out of it and a little ahead, its roots torn on the gap's side)
+				const double Side = Along >= 0.0 ? 1.0 : -1.0;
+				Where = FTransform(Tilt(Ca * Side + 0.4 * OutX, Sa * Side + 0.4 * OutY, 15.0 + 20.0 * Draw(K, Shrub.Index, 7)) * Turn,
+					World(Shrub.X, Shrub.Y, GroundUnder(Shrub.X, Shrub.Y) - 0.05), Size);
+				++Leaning;
+			}
+			Copies->UpdateInstanceTransform(Shrub.Index, Where, true, false, true);
+			Touched.Add(Copies);
+		}
+		if (Now == 2)
+		{
+			UE_LOG(LogTheater, Log, TEXT("Land battle: hedge cutter %d (track %d) tore the bank at %.0f, %.0f, battle %.1f s: %s; %d shrubs thrown down, %d crushed, %d left leaning; %d of %d torn"),
+				K, Cut.Unit, BP.X, BP.Y, S.Battle, bTorn ? TEXT("the gap torn") : TEXT("NOT torn (no room left for holes, or no bank's rise)"), Thrown, Crushed, Leaning, CutsTorn, Cuts);
+		}
+	}
+	// (the moved places sent at the frame's end with the instances, as the clutter's are, not the mesh made again)
+	for (UInstancedStaticMeshComponent* Copies : Touched)
+	{
+		Copies->MarkRenderInstancesDirty();
+	}
+}
+
+FTransform ALandBattle::WireAt(double X0, double Y0, double X1, double Y1) const
+{
+	// (on the ground as it is now: a hole's face or a breach's floor where one is torn under it, a little over it)
+	const FLandBattleState& S = *State;
+	const auto Under = [&S](double X, double Y)
+	{
+		double Z = S.Field ? S.Field->HeightAt(X, Y) : 0.0, Top = 0.0;
+		if (S.Holes.TopAt(X, Y, Top) && (Top > Z || S.Holes.InCut(X, Y)))
+		{
+			Z = Top;
+		}
+		return Z + 0.012;
+	};
+	const FVector A = World(X0, Y0, Under(X0, Y0)), B = World(X1, Y1, Under(X1, Y1));
+	const FVector Way = B - A;
+	const double Long = Way.Size() / UnitsPerMetre;
+	return FTransform(FRotationMatrix::MakeFromX(Way.IsNearlyZero() ? FVector::ForwardVector : Way).ToQuat(), A, FVector(FMath::Max(Long, 0.01), 1.0, 1.0));
+}
+
+void ALandBattle::LayWires()
+{
+	FLandBattleState& S = *State;
+	WireLengths.Reset();
+	WireStates.Reset();
+	NextWireCut = NextWireMend = WireHolesSeen = 0;
+	if (S.Rec.Wires.empty() || !S.Field || !ThingInk)
+	{
+		return;
+	}
+	// One piece of wire a metre long along its own x (the art director's brief: dark, L 25 to 35, about a pixel wide
+	// from 10 to 30 m and gone by 60): a flat-bottomed three-sided strand 14 mm across, lying on the ground.
+	{
+		std::vector<float> At, Facing;
+		LandMen::Look Paint;
+		const float W = 0.007f, H = 0.010f;
+		const float Ring[3][2] = { { -W, 0.0f }, { W, 0.0f }, { 0.0f, H } };
+		for (int End = 0; End < 2; ++End)
+		{
+			for (int K = 0; K < 3; ++K)
+			{
+				At.insert(At.end(), { static_cast<float>(End), Ring[K][0], Ring[K][1] });
+				const float Ny = Ring[K][0] == 0.0f ? 0.0f : Ring[K][0] / W, Nz = Ring[K][0] == 0.0f ? 1.0f : 0.35f;
+				Facing.insert(Facing.end(), { 0.0f, Ny, Nz });
+				Paint.Rgb.insert(Paint.Rgb.end(), { 68, 64, 56 });
+			}
+		}
+		Paint.Points = 6;
+		// (the two sloping sides, both ways round: the strand is drawn from either side)
+		Paint.Triangles = { 0, 3, 5, 0, 5, 2, 1, 2, 5, 1, 5, 4, 0, 2, 5, 0, 5, 3, 1, 5, 2, 1, 4, 5 };
+		UStaticMesh* Piece = LandParts::BankManMesh(this, TEXT("LandWirePiece"), At, Facing, Paint, ThingInk, UnitsPerMetre);
+		if (!Piece)
+		{
+			return;
+		}
+		PropMeshes.Add(Piece);
+		WireCopies = NewObject<UInstancedStaticMeshComponent>(this, TEXT("LandWires"));
+		WireCopies->SetupAttachment(Root);
+		WireCopies->SetStaticMesh(Piece);
+		WireCopies->SetMaterial(0, ThingInk);
+		WireCopies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WireCopies->SetCanEverAffectNavigation(false);
+		WireCopies->SetCastShadow(false);
+		WireCopies->SetCullDistances(FMath::RoundToInt32(45.0 * UnitsPerMetre), FMath::RoundToInt32(60.0 * UnitsPerMetre));
+		WireCopies->RegisterComponent();
+	}
+	// Each wire in lengths of about a metre along its points.
+	TArray<FTransform> Places;
+	for (const LandFeed::Wire& W : S.Rec.Wires)
+	{
+		FWireState& State0 = WireStates.AddDefaulted_GetRef();
+		State0.Id = W.Id;
+		State0.From = WireLengths.Num();
+		for (size_t I = 0; I + 1 < W.Pts.size(); ++I)
+		{
+			const double X0 = W.Pts[I].first, Y0 = W.Pts[I].second, X1 = W.Pts[I + 1].first, Y1 = W.Pts[I + 1].second;
+			const int32 Pieces = FMath::Max(1, FMath::CeilToInt32(std::hypot(X1 - X0, Y1 - Y0)));
+			for (int32 P = 0; P < Pieces; ++P)
+			{
+				const double F0 = static_cast<double>(P) / Pieces, F1 = static_cast<double>(P + 1) / Pieces;
+				FWireLength& L = WireLengths.AddDefaulted_GetRef();
+				L.Wire = WireStates.Num() - 1;
+				L.X0 = X0 + (X1 - X0) * F0;
+				L.Y0 = Y0 + (Y1 - Y0) * F0;
+				L.X1 = X0 + (X1 - X0) * F1;
+				L.Y1 = Y0 + (Y1 - Y0) * F1;
+				Places.Add(WireAt(L.X0, L.Y0, L.X1, L.Y1));
+			}
+		}
+		State0.Count = WireLengths.Num() - State0.From;
+	}
+	WireCopies->AddInstances(Places, false, true);
+	// The field telephones at each wire's two ends, a little to its side, turned along it (Content/Models/Battle's
+	// FieldPhone, the tank modeller's; without it the wires alone, said).
+	int32 Phones = 0;
+	FString PhoneText;
+	LandKit::Model Phone;
+	std::string Why;
+	if (FFileHelper::LoadFileToString(PhoneText, *(FPaths::ProjectContentDir() / TEXT("Models/Battle/FieldPhone.json"))) && Phone.Load(LandParts::Narrow(PhoneText), LandKit::Dress(), Why))
+	{
+		UStaticMesh* Made = LandParts::PropMesh(this, TEXT("LandFieldPhone"), Phone, false, ThingInk, UnitsPerMetre);
+		if (Made)
+		{
+			PropMeshes.Add(Made);
+			PhoneCopies = NewObject<UInstancedStaticMeshComponent>(this, TEXT("LandFieldPhones"));
+			PhoneCopies->SetupAttachment(Root);
+			PhoneCopies->SetStaticMesh(Made);
+			PhoneCopies->SetMaterial(0, ThingInk);
+			PhoneCopies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			PhoneCopies->SetCanEverAffectNavigation(false);
+			PhoneCopies->SetCullDistances(FMath::RoundToInt32(120.0 * UnitsPerMetre), FMath::RoundToInt32(150.0 * UnitsPerMetre));
+			PhoneCopies->RegisterComponent();
+			Places.Reset();
+			for (const LandFeed::Wire& W : S.Rec.Wires)
+			{
+				for (int End = 0; End < 2; ++End)
+				{
+					const auto& P = End == 0 ? W.Pts.front() : W.Pts.back();
+					const auto& Q = End == 0 ? W.Pts[1] : W.Pts[W.Pts.size() - 2];
+					const double Way = std::atan2(Q.second - P.second, Q.first - P.first);
+					const double X = P.first - std::sin(Way) * 0.4, Y = P.second + std::cos(Way) * 0.4;
+					// (its own x along the wire: the model's x forward is the field's heading Way, Unreal's yaw 90 less it)
+					Places.Add(FTransform(FRotator(0.0, 90.0 - FMath::RadiansToDegrees(Way), 0.0), World(X, Y, S.Field->HeightAt(X, Y)), FVector::OneVector));
+				}
+			}
+			PhoneCopies->AddInstances(Places, false, true);
+			Phones = Places.Num();
+		}
+	}
+	else
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle: Content/Models/Battle/FieldPhone.json not read (%s): the wires are laid without their telephones"), *LandParts::Wide(Why));
+	}
+	UE_LOG(LogTheater, Log, TEXT("Land battle: field telephones: %d wires in %d lengths, %d telephones; %d cuts and %d mends to come"), WireStates.Num(), WireLengths.Num(), Phones,
+		static_cast<int32>(S.Rec.WireCuts.size()), static_cast<int32>(S.Rec.WireMends.size()));
+}
+
+void ALandBattle::MakeWires()
+{
+	FLandBattleState& S = *State;
+	UInstancedStaticMeshComponent* Copies = WireCopies.Get();
+	if (!Copies || WireStates.Num() == 0)
+	{
+		return;
+	}
+	bool bTouched = false;
+	const auto StateOf = [this](int32 Id) -> FWireState*
+	{
+		for (FWireState& W : WireStates)
+		{
+			if (W.Id == Id)
+			{
+				return &W;
+			}
+		}
+		return nullptr;
+	};
+	const FTransform Gone(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+	// A wire cut: its lengths within 0.4 m of the break hidden, and its two ends left curled back from the gap, lifted a
+	// little off the ground (the art director's two curled ends).
+	while (NextWireCut < static_cast<int32>(S.Rec.WireCuts.size()) && S.Rec.WireCuts[static_cast<size_t>(NextWireCut)].T <= S.Battle)
+	{
+		const LandFeed::WireCut& Cut = S.Rec.WireCuts[static_cast<size_t>(NextWireCut++)];
+		FWireState* W = StateOf(Cut.Wire);
+		if (!W || W->bCut)
+		{
+			continue;
+		}
+		W->bCut = true;
+		W->Hidden.Reset();
+		double WayX = 1.0, WayY = 0.0;
+		for (int32 K = W->From; K < W->From + W->Count; ++K)
+		{
+			FWireLength& L = WireLengths[K];
+			const double Dx = L.X1 - L.X0, Dy = L.Y1 - L.Y0, Len2 = FMath::Max(1e-9, Dx * Dx + Dy * Dy);
+			const double F = FMath::Clamp(((Cut.X - L.X0) * Dx + (Cut.Y - L.Y0) * Dy) / Len2, 0.0, 1.0);
+			if (std::hypot(L.X0 + Dx * F - Cut.X, L.Y0 + Dy * F - Cut.Y) <= 0.4)
+			{
+				L.bHidden = true;
+				W->Hidden.Add(K);
+				Copies->UpdateInstanceTransform(K, Gone, true, false, true);
+				const double Len = std::sqrt(Len2);
+				WayX = Dx / Len;
+				WayY = Dy / Len;
+			}
+		}
+		// (each end 0.45 m from the break, a 0.35 m curl back toward it, turned aside and lifted)
+		int32 Ends[2] = { -1, -1 };
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			const double Sign = Side == 0 ? -1.0 : 1.0;
+			const double EX = Cut.X + WayX * 0.45 * Sign, EY = Cut.Y + WayY * 0.45 * Sign;
+			const double Turn = (Side == 0 ? 40.0 : -55.0) * PI / 180.0;
+			const double BackX = -WayX * Sign, BackY = -WayY * Sign;
+			const double CX = BackX * std::cos(Turn) - BackY * std::sin(Turn), CY = BackX * std::sin(Turn) + BackY * std::cos(Turn);
+			const FTransform Flat = WireAt(EX, EY, EX + CX * 0.35, EY + CY * 0.35);
+			const FVector From = Flat.GetLocation();
+			const FVector To = From + Flat.GetRotation().GetForwardVector() * Flat.GetScale3D().X * UnitsPerMetre + FVector(0.0, 0.0, 0.10 * UnitsPerMetre);
+			const FTransform Curl(FRotationMatrix::MakeFromX(To - From).ToQuat(), From, FVector((To - From).Size() / UnitsPerMetre, 1.0, 1.0));
+			Ends[Side] = Copies->AddInstance(Curl, true);
+		}
+		W->CurlA = Ends[0];
+		W->CurlB = Ends[1];
+		bTouched = true;
+	}
+	// A wire mended: its lengths laid again whole (on the ground as it is now), its curled ends gone.
+	while (NextWireMend < static_cast<int32>(S.Rec.WireMends.size()) && S.Rec.WireMends[static_cast<size_t>(NextWireMend)].T <= S.Battle)
+	{
+		const LandFeed::WireMend& Mend = S.Rec.WireMends[static_cast<size_t>(NextWireMend++)];
+		FWireState* W = StateOf(Mend.Wire);
+		if (!W || !W->bCut)
+		{
+			continue;
+		}
+		for (const int32 K : W->Hidden)
+		{
+			FWireLength& L = WireLengths[K];
+			L.bHidden = false;
+			Copies->UpdateInstanceTransform(K, WireAt(L.X0, L.Y0, L.X1, L.Y1), true, false, true);
+		}
+		for (const int32 Curl : { W->CurlA, W->CurlB })
+		{
+			if (Curl >= 0)
+			{
+				Copies->UpdateInstanceTransform(Curl, Gone, true, false, true);
+			}
+		}
+		W->Hidden.Reset();
+		W->CurlA = W->CurlB = -1;
+		W->bCut = false;
+		bTouched = true;
+	}
+	// The lengths a new hole was torn under laid again on its face, not left in the air over its bowl.
+	const std::vector<LandCrater::Field::Hole>& Holes = S.Holes.All();
+	for (; WireHolesSeen < static_cast<int32>(Holes.size()); ++WireHolesSeen)
+	{
+		const LandCrater::Field::Hole& H = Holes[static_cast<size_t>(WireHolesSeen)];
+		const double Reach = H.Out + 1.0;
+		for (int32 K = 0; K < WireLengths.Num(); ++K)
+		{
+			const FWireLength& L = WireLengths[K];
+			if (L.bHidden || std::hypot(0.5 * (L.X0 + L.X1) - H.X, 0.5 * (L.Y0 + L.Y1) - H.Y) > Reach)
+			{
+				continue;
+			}
+			Copies->UpdateInstanceTransform(K, WireAt(L.X0, L.Y0, L.X1, L.Y1), true, false, true);
+			bTouched = true;
+		}
+	}
+	if (bTouched)
+	{
+		Copies->MarkRenderInstancesDirty();
+	}
+}
+
+void ALandBattle::LayStretchers()
+{
+	FLandBattleState& S = *State;
+	CarrySpans.Reset();
+	if (!S.Field || !ThingInk)
+	{
+		return;
+	}
+	for (size_t K = 0; K < S.Rec.Tracks.size(); ++K)
+	{
+		for (const LandFeed::Track::Carry& C : S.Rec.Tracks[K].Carried)
+		{
+			FCarrySpan& Span = CarrySpans.AddDefaulted_GetRef();
+			Span.Carried = static_cast<int32>(K);
+			Span.By1 = C.By1;
+			Span.By2 = C.By2;
+			Span.From = C.From;
+			Span.To = C.To;
+		}
+	}
+	if (CarrySpans.Num() == 0 && S.Rec.Aid.empty())
+	{
+		return;
+	}
+	// The tank modeller's stretcher (Content/Models/Battle's Stretcher: head end +x, on its feet with its origin on the
+	// ground under its middle, the carried man's place "lie" 0.11 m up).
+	FString Text;
+	LandKit::Model Prop;
+	std::string Why;
+	if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models/Battle/Stretcher.json"))) || !Prop.Load(LandParts::Narrow(Text), LandKit::Dress(), Why))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle: Content/Models/Battle/Stretcher.json not read (%s): %d carries shown by their men alone"), *LandParts::Wide(Why), CarrySpans.Num());
+		CarrySpans.Reset();
+		return;
+	}
+	UStaticMesh* Made = LandParts::PropMesh(this, TEXT("LandStretcher"), Prop, false, ThingInk, UnitsPerMetre);
+	if (!Made)
+	{
+		CarrySpans.Reset();
+		return;
+	}
+	PropMeshes.Add(Made);
+	StretcherCopies = NewObject<UInstancedStaticMeshComponent>(this, TEXT("LandStretchers"));
+	StretcherCopies->SetupAttachment(Root);
+	StretcherCopies->SetStaticMesh(Made);
+	StretcherCopies->SetMaterial(0, ThingInk);
+	StretcherCopies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	StretcherCopies->SetCanEverAffectNavigation(false);
+	StretcherCopies->SetCullDistances(FMath::RoundToInt32(150.0 * UnitsPerMetre), FMath::RoundToInt32(200.0 * UnitsPerMetre));
+	StretcherCopies->RegisterComponent();
+	// Each carry's copy put away until its carry starts; two stretchers laid on the ground by each aid post, a little
+	// askew, waiting.
+	const FTransform Gone(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+	TArray<FTransform> Places;
+	for (FCarrySpan& Span : CarrySpans)
+	{
+		Span.Copy = Places.Num();
+		Places.Add(Gone);
+	}
+	for (const LandFeed::AidPost& A : S.Rec.Aid)
+	{
+		for (int32 K = 0; K < 2; ++K)
+		{
+			const double X = A.X + (K == 0 ? -0.9 : 0.9), Y = A.Y + (K == 0 ? 0.3 : -0.2);
+			Places.Add(FTransform(FRotator(0.0, 15.0 + 9.0 * K, 0.0), World(X, Y, GroundZ(X, Y)), FVector::OneVector));
+		}
+	}
+	StretcherCopies->AddInstances(Places, false, true);
+	UE_LOG(LogTheater, Log, TEXT("Land battle: stretcher bearers: %d carries, %d aid posts (%d stretchers laid by them)"), CarrySpans.Num(), static_cast<int32>(S.Rec.Aid.size()),
+		2 * static_cast<int32>(S.Rec.Aid.size()));
+}
+
+void ALandBattle::MakeStretchers()
+{
+	FLandBattleState& S = *State;
+	UInstancedStaticMeshComponent* Copies = StretcherCopies.Get();
+	if (!Copies || CarrySpans.Num() == 0)
+	{
+		return;
+	}
+	const FTransform Gone(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+	bool bTouched = false;
+	for (FCarrySpan& Span : CarrySpans)
+	{
+		if (S.Battle < Span.From || S.Battle > Span.To || Span.Carried < 0 || Span.Carried >= static_cast<int32>(S.Rec.Tracks.size()))
+		{
+			if (Span.bShown)
+			{
+				Copies->UpdateInstanceTransform(Span.Copy, Gone, true, false, true);
+				Span.bShown = false;
+				bTouched = true;
+			}
+			continue;
+		}
+		// Under the man carried where he is drawn (his root is the canvas's middle, the soldiers' carried_wounded), at
+		// the height he is lifted to (the bearers' hips, LandMen's CarriedLift, raised over the first second), level.
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		float F = 0.f;
+		const size_t T = static_cast<size_t>(Span.Carried);
+		if (!(T < S.ManOf.size() && S.ManOf[T] >= 0 && S.Men && S.Men->PlaceOf(S.ManOf[T], X, Y, Z, F)))
+		{
+			const LandFeed::Spot Spot = LandFeed::SpotAt(S.Rec.Tracks[T], S.Battle);
+			X = Spot.X;
+			Y = Spot.Y;
+			Z = GroundZ(X, Y);
+			F = static_cast<float>(Spot.F);
+		}
+		const double Lift = static_cast<double>(LandMen::CarriedLift) * FMath::Clamp(S.Battle - Span.From, 0.0, 1.0);
+		// (his head lies toward the rear bearer: the stretcher's head end, +x, turned to face back down his way; a
+		// heading clockwise from north is Unreal's yaw)
+		const double Head = static_cast<double>(F) + PI;
+		const FTransform At(FRotator(0.0, FMath::RadiansToDegrees(Head), 0.0), World(X, Y, Z + FMath::Max(0.0, Lift - 0.11)), FVector::OneVector);
+		Copies->UpdateInstanceTransform(Span.Copy, At, true, false, true);
+		Span.bShown = true;
+		bTouched = true;
+	}
+	if (bTouched)
+	{
+		Copies->MarkRenderInstancesDirty();
 	}
 }
 

@@ -100,6 +100,23 @@ namespace LandFeed
 		bool bPinned = false;
 		double PinFrom = 0.0, PinX = 0.0, PinY = 0.0;
 
+		// Release 2's field telephones and stretcher bearers (Brian, 22 November 17:33Z; the tactics thread's rules,
+		// each behind its player's switch: absent, he is as before).
+		/** A lineman ("ln": he carries the cable reel and mends the wires) or a stretcher bearer ("br"). */
+		bool bLineman = false, bBearer = false;
+		/** Struck and not killed ("wd"): he goes down and lies alive from then, -1 never. */
+		double Wounded = -1.0;
+		/** Carried on a stretcher from From to To by two bearers ("cy": [[from, to, by1, by2]]), their tracks' indexes
+		 * (-1 where the rules named no one found). */
+		struct Carry
+		{
+			double From = 0.0, To = 0.0;
+			int By1 = -1, By2 = -1;
+		};
+		std::vector<Carry> Carried;
+		/** He reached the aid post and leaves the field ("gone"); he walks back to the line ("back"). -1 never. */
+		double Gone = -1.0, Back = -1.0;
+
 		bool IsVehicle() const { return Role == "tank" || Role == "gun" || Role == "lorry"; }
 		bool IsMan() const { return !IsVehicle(); }
 		double Start() const { return At.empty() ? 0.0 : At.front().T; }
@@ -187,6 +204,60 @@ namespace LandFeed
 	{
 		double T0 = 0.0, T1 = 0.0, X = 0.0, Y = 0.0, Yaw = 0.0, Width = 4.0;
 		int Unit = -1;
+	};
+
+	/**
+	 * Release 2's field telephones (Brian, 22 November 17:33Z; the tactics thread's "wires", behind the player's phones
+	 * switch): a line from a headquarters' post (block Hq) to a company (block Unit) of side Side, laid along Pts (metres,
+	 * the field's); Id its own number, as the cuts and mends name it.
+	 */
+	struct Wire
+	{
+		int Id = 0, Side = 1, Hq = -1, Unit = -1;
+		std::vector<std::pair<double, double>> Pts;
+	};
+	/** A wire broken at T at X, Y ("wireCuts"), By what: "shell" or "patrol". */
+	struct WireCut
+	{
+		double T = 0.0, X = 0.0, Y = 0.0;
+		int Wire = 0;
+		std::string By;
+	};
+	/** A wire mended at T ("wireMends") by its lineman (Man, his track's index; -1 none named). */
+	struct WireMend
+	{
+		double T = 0.0;
+		int Wire = 0, Man = -1;
+	};
+	/** An order held by a cut wire ("held"): due at Due, it went at Went (by a runner; -1 not yet), to block Unit; T when
+	 * the rules held it. */
+	struct HeldOrder
+	{
+		double T = 0.0, Due = 0.0, Went = -1.0;
+		int Unit = -1;
+	};
+	/** A side's aid post ("aid"), where the stretcher bearers carry the wounded. */
+	struct AidPost
+	{
+		int Side = 0;
+		double X = 0.0, Y = 0.0;
+	};
+	/**
+	 * Release 2's night patrol before the attack (the tactics thread's "patrol", behind the player's patrol switch):
+	 * side Side's men (track indexes) out from T0 to T1, before the battle's 0 s (their tracks run at those times); the
+	 * hidden post it found at Found (FoundKind its kind); Alerted when the enemy heard it (-1 never), and the flares they
+	 * sent up. bOn where a recording carries one.
+	 */
+	struct Patrol
+	{
+		bool bOn = false;
+		int Side = 0;
+		double T0 = 0.0, T1 = 0.0;
+		std::vector<int> Men;
+		double FoundX = 0.0, FoundY = 0.0;
+		std::string FoundKind;
+		double Alerted = -1.0;
+		std::vector<double> Flares;
 	};
 
 	/** A crater the field keeps (view zones, kind crater). */
@@ -295,6 +366,14 @@ namespace LandFeed
 		std::vector<Crater> Craters;
 		/** The hedge cutters' cuts, by T1 (none where the rules' cutters switch is off). */
 		std::vector<Cut> Cuts;
+		/** Release 2's field telephones, aid posts and night patrol (none where their switches are off): the wires, their
+		 * cuts and mends by time, the orders a cut held, the aid posts and the patrol. */
+		std::vector<Wire> Wires;
+		std::vector<WireCut> WireCuts;
+		std::vector<WireMend> WireMends;
+		std::vector<HeldOrder> Held;
+		std::vector<AidPost> Aid;
+		Patrol Night;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header
@@ -342,6 +421,8 @@ namespace LandFeed
 		/** Tracks with new kept points or a new provisional last point; with new changes; new shots; a fall; an out
 		 * set or taken back; new scars. Each once, in order. */
 		std::vector<int> Moved, Changed, Shot, Fell, Left, Marked;
+		/** Tracks a wound, a carry, a going or a coming back was given in this delta (release 2's bearers). */
+		std::vector<int> Hurt;
 		/** Where the rounds, events, views and craters stood before: the new are from there on. */
 		size_t RoundsFrom = 0, EventsFrom = 0, ViewsFrom = 0, CratersFrom = 0;
 		/** Blocks with new phases. */

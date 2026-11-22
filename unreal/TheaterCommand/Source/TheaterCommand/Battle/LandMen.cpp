@@ -1145,7 +1145,7 @@ namespace LandMen
 		const Vec3 RP = M3Vec(W.R, P.Pivot);
 		W.T[0] = static_cast<float>(PX) - RP.X;
 		W.T[1] = static_cast<float>(PY) - RP.Y;
-		W.T[2] = G.Height - RP.Z;
+		W.T[2] = G.Height - RP.Z + P.Lift;
 		return W;
 	}
 
@@ -1224,6 +1224,7 @@ namespace LandMen
 			bool bRifleDown = false;
 			bool bFiring = false;           // a firing pose: its clip's shots come from the rounds
 			bool bMoving = false;           // he moved just after the change (a horse holder walks his horses)
+			float Lift = 0.f;               // carried on a stretcher: the canvas's height over the ground, metres
 			std::string Pose, Cover;
 			double T = 0.0;                 // when the rules gave it (battle time)
 		};
@@ -2157,6 +2158,29 @@ namespace LandMen
 				Use("fire_kneel", Stance::Hold, Kneel);
 			}
 			else if (Pose == "horses") Use(bMoving ? "walk" : "idle", bMoving ? Stance::Gait : Stance::Loop, Up);
+			// Release 2's stretcher bearers and linemen (the tactics thread's poses; the soldiers thread's field clips,
+			// each file's own; a file without them goes as its pose bank's `instead`: walk, fire_kneel)
+			else if (Pose == "stretcher_front" || Pose == "stretcher_rear")
+			{
+				const bool bOwn = S.ClipIndex(Pose.c_str()) >= 0;
+				Use(bOwn ? Pose.c_str() : bMoving ? "walk" : "idle", bMoving ? Stance::Gait : bOwn ? Stance::Hold : Stance::Loop, Up);
+				St.bRifleDown = !bOwn; // (his rifle slung across his back in the clip; laid down where he walks it)
+			}
+			else if (Pose == "wounded" || Pose == "carried")
+			{
+				// Alive on his back (carried_wounded: breathing, a knee drawn up, a hand on his chest); carried, on the
+				// canvas over the bearers' fists (Lift: the poles at about 0.8 m, the canvas a hand under them).
+				if (S.ClipIndex("carried_wounded") >= 0) Use("carried_wounded", Stance::Loop, Prone);
+				else Use("fire_prone", Stance::Hold, Prone);
+				St.bRifleDown = true;
+				St.Lift = Pose == "carried" ? CarriedLift : 0.f;
+			}
+			else if (Pose == "splice")
+			{
+				if (S.ClipIndex("splice_kneel") >= 0) Use("splice_kneel", Stance::Loop, Kneel);
+				else Use("fire_kneel", Stance::Hold, Kneel);
+				St.bRifleDown = true;
+			}
 			else Use("idle", Stance::Loop, Up);
 			if (St.Clip < 0) { St.Clip = S.ClipIndex("idle"); St.Play = Stance::Loop; }
 			if (St.Clip < 0) St.Clip = 0;
@@ -3270,6 +3294,12 @@ namespace LandMen
 				if (HeadDrop > 0.f) DropHead(M, M.Model, HeadDrop);
 			}
 			Pl.Lie = Lie;
+			// (carried: raised onto the stretcher over his first second on it, as the bearers lift him)
+			if (M.State == Man::Alive && M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size() && M.Stances[static_cast<size_t>(M.Shown)].Lift > 0.f)
+			{
+				const Stance& Lifted = M.Stances[static_cast<size_t>(M.Shown)];
+				Pl.Lift = Lifted.Lift * static_cast<float>(std::clamp(Now - Lifted.T, 0.0, 1.0));
+			}
 			M.Place = Pl;
 			M.World = WorldOf(Pl, GroundAt);
 			const size_t NB = S.Bones.size();

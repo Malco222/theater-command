@@ -863,6 +863,7 @@ namespace LandCrater
 		Under = std::move(InUnder);
 		Seed = InSeed ? InSeed : 1;
 		Holes.clear();
+		Breaches.clear();
 		PatchList.clear();
 		PatchOf.clear();
 		Changed.clear();
@@ -1144,23 +1145,17 @@ namespace LandCrater
 
 	bool Field::BreachFloor(double X, double Y, double& OutZ) const
 	{
-		if (Squares.empty() || !(X == X) || !(Y == Y))
-		{
-			return false;
-		}
-		constexpr double Square = 8.0;
-		const auto Found = Squares.find(SquareOf(static_cast<int>(std::floor(X / Square)), static_cast<int>(std::floor(Y / Square))));
-		if (Found == Squares.end())
+		if (Breaches.empty() || !(X == X) || !(Y == Y))
 		{
 			return false;
 		}
 		// (the newest breach whose cut holds it: a shell hole torn in the gap later has its own bowl, which the tank
-		// rides over as she rides over any other)
-		const std::vector<int>& Listed = Found->second;
-		for (auto It = Listed.rbegin(); It != Listed.rend(); ++It)
+		// rides over as she rides over any other. A breach's reach first, a few multiplies, before its cut's outline)
+		for (auto It = Breaches.rbegin(); It != Breaches.rend(); ++It)
 		{
 			const Hole& H = Holes[static_cast<size_t>(*It)];
-			if (H.bBreach && !H.Cut.empty() && Inside(H.Cut, X, Y) && OnBreach(H, X, Y, OutZ))
+			const double Dx = X - H.X, Dy = Y - H.Y;
+			if (Dx * Dx + Dy * Dy <= H.Out * H.Out && !H.Cut.empty() && Inside(H.Cut, X, Y) && OnBreach(H, X, Y, OutZ))
 			{
 				return true;
 			}
@@ -1201,6 +1196,7 @@ namespace LandCrater
 			H.Out = std::max(H.Out, std::sqrt(Dx * Dx + Dy * Dy));
 		}
 		Keep(H, std::move(CutLine), FirstIndex, H.Out);
+		Breaches.push_back(Number);
 		return true;
 	}
 
