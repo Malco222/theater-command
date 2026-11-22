@@ -229,6 +229,18 @@ export function partsFor(forces: ForceTicket[], least: number = LAND.blocks.leas
 const BRIGADES = ['UK', 'CAN', 'AUS', 'NZL', 'NZ', 'SAF', 'IND'];
 
 /**
+ * The kind's word in a division's name, as its army's English wrote it (the historian, 22 November 18:54Z,
+ * historian/unit-type-words-by-nation.md, from the UI director's "4th Armored"): the US Armored and Motorized, Britain
+ * and the Commonwealth Armoured and Motor, Poland Armoured and Motorised. Germany's Panzer and the Soviet and Japanese
+ * Tank at the division are the design director's and the UI director's call: the one word as before until they rule.
+ */
+function kindWord(nat: string, k: Kind): string {
+  if (k === 'arm') return nat === 'USA' ? 'Armored' : 'Armoured';
+  if (k === 'mot') return BRIGADES.includes(nat) ? 'Motor' : nat === 'POL' ? 'Motorised' : 'Motorized';
+  return KIND_WORD[k];
+}
+
+/**
  * A regiment block's own word in its army, in the battle's month (the historian's ruling, 22 November; release 2, the
  * 'namesOn' switch): what a third of a division was called. 'n' is its number, 'i' which third (0 to 2), 'ym' the year
  * times 12 plus the month from 1.
@@ -248,7 +260,7 @@ export function regimentWord(nat: string, kind: Kind, n: number, i: number, ym: 
     if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
     return `${o} Tank Regiment`;
   }
-  const arm = kind === 'mtn' ? 'Mountain' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? 'Motorized' : kind === 'eng' ? 'Engineer' : 'Infantry';
+  const arm = kind === 'mtn' ? 'Mountain' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? kindWord(nat, 'mot') : kind === 'eng' ? 'Engineer' : 'Infantry';
   if (BRIGADES.includes(nat)) return `${o} ${arm} Brigade`;
   if (nat === 'GER') {
     const late = ym >= 1942 * 12 + 10;
@@ -276,7 +288,7 @@ export function armyNames(t: SideTicket, units: LandUnit[], turn: number): void 
       const u = units[j++];
       if (!u || p.regiment === undefined || team) continue;
       const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
-      const full = div?.name ?? `${ORD(no)} ${KIND_WORD[k]} Division`, short = div?.short ?? `${ORD(no)} ${KIND_WORD[k]}`;
+      const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k)}`;
       const lead = /^(\d+)/.exec(full)?.[1];
       const n = lead ? (Number(lead) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
       u.short = regimentWord(u.nat, k, n, p.regiment, ym);
@@ -304,7 +316,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
       const own = f.divisions?.[d];
       const no = (f.first ?? 1) + d;
       return {
-        name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${KIND_WORD[k]} Division`), short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(' ')[0]}` : `${ORD(no)} ${KIND_WORD[k]}`),
+        name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k)} Division`), short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(' ')[0]}` : `${ORD(no)} ${kindWord(f.nat, k)}`),
         str: own?.str ?? f.str, xp: own?.xp ?? f.xp, men: own?.men ?? f.men / n,
       };
     });
