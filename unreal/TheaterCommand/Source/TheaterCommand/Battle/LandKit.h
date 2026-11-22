@@ -712,12 +712,16 @@ namespace LandKit
 		std::vector<Event> Events;
 		/** Loaded from a live battle's header (Extend grows it); and over (its last piece has come). */
 		bool bLive = false, bOver = false;
+		/** One line for each model drawn as another for want of its own file (the nearest generic in Content/Models/Battle
+		 * by kind and nation: never a side's vehicles left undrawn): the caller logs them. */
+		const std::vector<std::string>& StandIns() const { return StandInLines; }
 
 	private:
 		std::vector<Vehicle> All;
 		std::vector<Round> RoundList;
 		std::vector<Block> BlockList;
 		std::map<std::string, Model> Looks;
+		std::vector<std::string> StandInLines;
 		// What Extend goes on with: Load's reader, ground and kill picker (it remembers what it has shown), the battle's
 		// limit, the last Update's time; and each vehicle's model, her words as the pieces grew them (ending in her
 		// provisional point when she has one), the rounds she fired or that struck her, whether her death's look is

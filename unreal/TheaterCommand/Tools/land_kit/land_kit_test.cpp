@@ -436,6 +436,7 @@ int main(int argc, char** argv)
 		std::printf("FAIL the battle: %s\n", Error.c_str());
 		return 1;
 	}
+	for (const std::string& Line : B.StandIns()) std::printf("  stand-in: %s\n", Line.c_str()); // (a model not here: the nearest generic)
 	const auto L1 = Clock::now();
 	{
 		Json Doc;

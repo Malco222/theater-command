@@ -642,6 +642,10 @@ namespace LandMen
 		/** The battle's month (year * 12 + month - 1), season and front, as the finishes were picked. */
 		int Month() const;
 		const std::string& Season() const;
+		/** One line for each army drawn with another's soldier file for want of its own (a stand-in, never a blank side). */
+		const std::vector<std::string>& StandIns() const;
+		/** armies.json's stand-in soldier file for an army ("POL"), empty where it names none. */
+		std::string StandInOf(const std::string& Army) const;
 		const std::string& FrontName() const;
 	private:
 		struct Impl;

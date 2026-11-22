@@ -4824,8 +4824,40 @@ namespace LandKit
 		std::string Text;
 		if (!Reader || !Reader(ModelName + ".json", Text))
 		{
-			OutError = "cannot read the model " + ModelName + ".json";
-			return false;
+			// (a model not in the game yet: the nearest generic already here, by kind and nation, in her own nation's coat,
+			// said once: StandIns. A gun by her side's field gun; a light machine as the light tank; a tank as her side's
+			// medium: the German's Panzer IV, the Soviet's T-34, the rest the Sherman)
+			const std::string& N = B.Nation;
+			const bool bAxis = N == "GER" || N == "HUN" || N == "ROM" || N == "FIN" || N == "ITA";
+			static const char* const Light[] = { "Light", "L3", "L6", "Stuart", "M3L", "HaGo", "Type95", "BT", "T26", "T60", "T70", "222", "Pz38", "PzII", "Tankette" };
+			bool bLight = false;
+			for (const char* L : Light)
+			{
+				bLight = bLight || ModelName.find(L) != std::string::npos;
+			}
+			std::vector<std::string> Near;
+			if (B.Kind == "art") Near = { N == "SOV" ? "ZiS3" : bAxis ? "leFH18" : "Howitzer105" };
+			else if (bLight || N == "JAP") Near = { "LightTank" };
+			else Near = { N == "SOV" ? "T34" : bAxis ? "PanzerIV" : "Sherman" };
+			for (const char* Any : { "LightTank", "PanzerIV", "Sherman", "T34" })
+			{
+				Near.push_back(Any);
+			}
+			std::string Drawn;
+			for (const std::string& M : Near)
+			{
+				if (M != ModelName && Reader && Reader(M + ".json", Text))
+				{
+					Drawn = M;
+					break;
+				}
+			}
+			if (Drawn.empty())
+			{
+				OutError = "cannot read the model " + ModelName + ".json";
+				return false;
+			}
+			StandInLines.push_back("the " + N + " " + ModelName + " drawn as the " + Drawn + " in her own coat (no " + ModelName + ".json in Content/Models/Battle)");
 		}
 		Dress D;
 		D.Nation = B.Nation;

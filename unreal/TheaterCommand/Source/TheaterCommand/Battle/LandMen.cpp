@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <set>
 #include <tuple>
 #include <utility>
 
@@ -1657,6 +1658,9 @@ namespace LandMen
 		uint64_t Seed = 1;
 		int MonthNo = 0;
 		std::string SeasonName = "summer", Front = "west";
+		/** The armies drawn with another's soldier file for want of their own (MakeMan), each said once: Crowd::StandIns. */
+		std::set<std::string> StandInSaid;
+		std::vector<std::string> StandInLines;
 		double EyeX = 1e9, EyeY = 1e9, EyeZ = 1e9;
 		double EyeZoom = 1.0; // (SetEye's Zoom)
 		double Clock = -1.0;  // the battle time of the last Update
@@ -3469,8 +3473,31 @@ namespace LandMen
 			std::string File = Found != BlockArmy.end() ? Found->second.second : Army;
 			// (the army's own soldier file when it has one, whatever the recording stood in for it when it was made)
 			if (Soldiers.find(Army) != Soldiers.end()) File = Army;
-			const auto Colours = Armies.find(Army);
-			if (Colours != Armies.end() && !Colours->second.StandIn.empty() && Soldiers.find(Army) == Soldiers.end()) File = Colours->second.StandIn;
+			// (his colours: the army's row for this front where armies.json has one, "UK@desert" his khaki drill, else the
+			// army's own row)
+			auto Colours = Armies.find(Army + "@" + Front);
+			if (Colours == Armies.end()) Colours = Armies.find(Army);
+			// (an army with no row at all: armies.json's "_default", plain khaki on the Pole's body, never unpainted)
+			if (Colours == Armies.end()) Colours = Armies.find("_default");
+			if (Colours != Armies.end() && !Colours->second.StandIn.empty() && Soldiers.find(Army) == Soldiers.end())
+			{
+				File = Colours->second.StandIn;
+				if (Soldiers.find(File) != Soldiers.end() && StandInSaid.insert(Army).second)
+					StandInLines.push_back("the " + Army + " men drawn with soldier_" + File + " in their own paints (armies.json's stand-in: no soldier_" + Army + ".json yet)");
+			}
+			// (his dress for the front and the season where the soldiers thread has made it: the Italian's sahariana in the
+			// desert, soldier_ITA_desert; the Soviet's quilted winter dress, soldier_SOV_winter, else his snow suit)
+			const std::string Dressed = File;
+			if (Front == "desert" && Soldiers.find(File + "_desert") != Soldiers.end()) File += "_desert";
+			else if (SeasonName == "winter" && Soldiers.find(File + "_winter") != Soldiers.end()) File += "_winter";
+			else if (SeasonName == "winter" && Soldiers.find(File + "_snow") != Soldiers.end()) File += "_snow";
+			// (that dress in its own colours where armies.json has a row for it: "ITA_desert" the sahariana's sand,
+			// "SOV_winter" the felt boots, "SOV_snow" the white suit)
+			if (File != Dressed)
+			{
+				const auto Dress = Armies.find(File);
+				if (Dress != Armies.end()) Colours = Dress;
+			}
 			// (a machine gunner from the army's gunner's file where it has one: the American's BAR, soldier_USA_bar)
 			if (Tr.Role == "mg" && Soldiers.find(File + "_bar") != Soldiers.end()) File += "_bar";
 			// (a section's leader with his nation's leader's arm: the Gruppenfuehrer's MP 40, the Soviet squad leader's
@@ -3492,10 +3519,23 @@ namespace LandMen
 			}
 			auto Sol = Soldiers.find(File);
 			if (Sol == Soldiers.end()) Sol = Soldiers.find(Army);
+			// (never a side left blank for a file not made or not found: the army's stand-in in armies.json, else the Pole's
+			// body, the nearest cut (the American was drawn with it before his own came), else any file read; in his own
+			// army's paints, and said once a battle: StandIns)
 			if (Sol == Soldiers.end() || !Sol->second)
 			{
-				OutError = "no soldier file for the " + Army + " men (" + File + ")";
-				return false;
+				const std::string Asked = File;
+				if (Colours != Armies.end() && !Colours->second.StandIn.empty()) Sol = Soldiers.find(Colours->second.StandIn);
+				if (Sol == Soldiers.end() || !Sol->second) Sol = Soldiers.find("POL");
+				if (Sol == Soldiers.end() || !Sol->second)
+					for (Sol = Soldiers.begin(); Sol != Soldiers.end() && !Sol->second; ++Sol) {}
+				if (Sol == Soldiers.end() || !Sol->second)
+				{
+					OutError = "no soldier file for the " + Army + " men (" + Asked + "), and none read to stand in";
+					return false;
+				}
+				if (StandInSaid.insert(Army).second)
+					StandInLines.push_back("the " + Army + " men drawn with soldier_" + Sol->first + " in their own paints (no soldier_" + Asked + ".json read)");
 			}
 			// (made in place: a man is some 9 KB, too big to make and then copy in)
 			Man& Mn = Men.emplace_back();
@@ -3732,6 +3772,8 @@ namespace LandMen
 		I.Men.clear();
 		I.ManOf.clear();
 		I.bSections = false;
+		I.StandInSaid.clear();
+		I.StandInLines.clear();
 
 		// The battle's month, season and front, for the helmets' finishes.
 		{
@@ -4531,6 +4573,12 @@ namespace LandMen
 	}
 	int Crowd::Month() const { return Inner->MonthNo; }
 	const std::string& Crowd::Season() const { return Inner->SeasonName; }
+	const std::vector<std::string>& Crowd::StandIns() const { return Inner->StandInLines; }
+	std::string Crowd::StandInOf(const std::string& Army) const
+	{
+		const auto Found = Inner->Armies.find(Army);
+		return Found != Inner->Armies.end() ? Found->second.StandIn : std::string();
+	}
 	const std::string& Crowd::FrontName() const { return Inner->Front; }
 
 	void Crowd::SetFallKind(int Man, const std::string& Kind)
@@ -4668,7 +4716,8 @@ namespace LandMen
 		const auto Sol = I.Soldiers.find(FileArmy);
 		if (!I.bBuilt || Sol == I.Soldiers.end() || !Sol->second) return -1;
 		static const ArmyColours Plain;
-		const auto Colours = I.Armies.find(Army);
+		auto Colours = I.Armies.find(Army);
+		if (Colours == I.Armies.end()) Colours = I.Armies.find("_default"); // (never unpainted: MakeMan)
 		// (made in place: a man is some 9 KB)
 		Impl::Man& Mn = I.Men.emplace_back();
 		Mn.bRider = true;

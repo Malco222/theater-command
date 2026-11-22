@@ -2778,6 +2778,17 @@ void ALandBattle::MakeMen()
 	}
 	auto Crowd = std::make_unique<LandMen::Crowd>();
 	Crowd->SetLife(S.Life);
+	// The armies' colours and stand-ins (armies.json), read first: an army with no soldier file of its own is drawn with
+	// the file its row names, else the Pole's (LandMen's MakeMan; never a side left blank).
+	FString ArmiesText;
+	std::string Error;
+	if (FFileHelper::LoadFileToString(ArmiesText, *(FPaths::ProjectContentDir() / TEXT("Data/LandBattles/armies.json"))))
+	{
+		if (!Crowd->ReadArmies(LandParts::Narrow(ArmiesText), Error))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: armies.json: %s"), *LandParts::Wide(Error));
+		}
+	}
 	// The soldier files (Content/Models/Soldiers, the soldiers thread's): each army's own, or the one standing in.
 	const FString Folder = FPaths::ProjectContentDir() / TEXT("Models/Soldiers");
 	TSet<FString> Armies;
@@ -2791,6 +2802,45 @@ void ALandBattle::MakeMen()
 		if (!Side.Army.empty())
 		{
 			Armies.Add(LandParts::Wide(Side.Army));
+		}
+		// (an army with no file of its own: its row's stand-in, and the Pole's body behind it)
+		for (const std::string& Own : { Side.Nat, Side.Army })
+		{
+			if (Own.empty() || FPaths::FileExists(Folder / (TEXT("soldier_") + LandParts::Wide(Own) + TEXT(".json"))))
+			{
+				continue;
+			}
+			const std::string Row = Crowd->StandInOf(Own);
+			if (!Row.empty())
+			{
+				Armies.Add(LandParts::Wide(Row));
+			}
+			Armies.Add(TEXT("POL"));
+		}
+	}
+	// (each army's dress for the front and the season where it is made, read only where the battle needs it: the
+	// Italian's sahariana in the desert, the Soviet's winter dress and snow suit from November to March; LandMen picks)
+	{
+		const std::string& Date = S.Rec.Date;
+		static const char* const Winter[] = { "January", "February", "March", "November", "December" };
+		bool bWinter = false;
+		for (const char* W : Winter)
+		{
+			bWinter = bWinter || Date.find(W) != std::string::npos;
+		}
+		const bool bDesert = S.Rec.Weather.Lat < 36.0 && S.Rec.Weather.Lon > -18.0 && S.Rec.Weather.Lon < 40.0;
+		for (const FString& Army : TArray<FString>(Armies.Array()))
+		{
+			if (bDesert)
+			{
+				Armies.Add(Army + TEXT("_desert"));
+			}
+			if (bWinter)
+			{
+				// (the snow suit only where there is no winter dress: LandMen picks the winter dress first)
+				const FString Dress = Army + TEXT("_winter");
+				Armies.Add(FPaths::FileExists(Folder / (TEXT("soldier_") + Dress + TEXT(".json"))) ? Dress : Army + TEXT("_snow"));
+			}
 		}
 	}
 	// (and each army's files for its other men where it has them: the American's BAR gunner, squad leader, bazooka
@@ -2821,15 +2871,6 @@ void ALandBattle::MakeMen()
 		}
 		Crowd->AddSoldier(LandParts::Narrow(Army), One);
 		++Files;
-	}
-	FString ArmiesText;
-	std::string Error;
-	if (FFileHelper::LoadFileToString(ArmiesText, *(FPaths::ProjectContentDir() / TEXT("Data/LandBattles/armies.json"))))
-	{
-		if (!Crowd->ReadArmies(LandParts::Narrow(ArmiesText), Error))
-		{
-			UE_LOG(LogTheater, Warning, TEXT("Land battle: armies.json: %s"), *LandParts::Wide(Error));
-		}
 	}
 	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
 	// little over the drawn ground, and a body laid across a rim lies on it, not sunk in it)
@@ -2868,6 +2909,11 @@ void ALandBattle::MakeMen()
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the men could not be made (%d soldier files; %s): none are drawn."), Files, *LandParts::Wide(Error));
 		return;
+	}
+	// (an army drawn with another's body for want of its own file: one line each, the stand-in named)
+	for (const std::string& Line : Crowd->StandIns())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle: stand-in: %s"), *LandParts::Wide(Line));
 	}
 	if (Crowd->PoseBankOn())
 	{
@@ -3429,6 +3475,11 @@ void ALandBattle::MakeArmour()
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the tanks could not be made (%s): none are drawn."), *LandParts::Wide(Error));
 		return;
+	}
+	// (a vehicle drawn as the nearest generic for want of her own model: one line each, the stand-in named)
+	for (const std::string& Line : Armour->StandIns())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle: stand-in: %s"), *LandParts::Wide(Line));
 	}
 	S.Armour = std::move(Armour);
 	S.VehicleOf.assign(S.Rec.Tracks.size(), -1);
