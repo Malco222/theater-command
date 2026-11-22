@@ -557,8 +557,11 @@ namespace LandMen
 		uint32_t Hex(const std::string& S, uint32_t Default)
 		{
 			if (S.size() < 6) return Default;
+			// (the six characters kept in a named string: End points into them, and a temporary would be gone before
+			// it is read. Pre-check's sanitizer run on the sailor files, 22 November)
+			const std::string Six = S.substr(S.size() - 6);
 			char* End = nullptr;
-			const unsigned long V = std::strtoul(S.substr(S.size() - 6).c_str(), &End, 16);
+			const unsigned long V = std::strtoul(Six.c_str(), &End, 16);
 			return End && *End == 0 ? static_cast<uint32_t>(V) : Default;
 		}
 
