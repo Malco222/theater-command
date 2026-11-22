@@ -4833,13 +4833,13 @@
   },
   "air_far": {
    "_how": "The air scene's far forms (its 11-22 ask, so its trail room can go from 24 to 60 at 150 aircraft); OFF until the air scene and the art director take them. trails_on: a trail past trails_from_m is laid as about trails_puffs puffs over its length, each that much farther apart and reaching back to the last as much farther, its hanging bars one in trails_keep_one_in of those puffs, so it is the same line in fewer, longer pieces; it goes over by degrees across the last trails_band of the range, so no length of a trail switches form, and nothing laid changes as the eye closes in. The art director's mends of 18:44Z: until the bar over them is laid, a far trail's short pieces stand in for it, as dark as the two would be together, so the smoke behind a far aircraft is never pale; each bar comes into sight point by point along it by the age there; and every far piece's sides swell and pinch by up to trails_billow of its width at each point along it (and a little more each side on its own), so a far trail billows and its edges are broken, never a smooth contrail. guns_on: a gun past guns_from_m flies no rounds; every guns_dash_s it lays one solid dash in its tracer core's colour along the aim, guns_dash_flight_s of a round's flight long, as wide as the far tracer's dash, carried with the aircraft; it takes up its rounds again where the dashes leave off. Cloud rig (five burning aircraft, 0.8 to 2.2 km, 60 m/s, guns in bursts): a far trail holds about 35 to 40 pieces against about 128, as dark all along as today's (averaged over five moments, within a few levels), with no jump frame to frame; a far gun lays a quarter of the pieces.",
-   "trails_on": 0,
+   "trails_on": 1,
    "trails_from_m": 1200,
    "trails_band": 0.15,
    "trails_puffs": 40,
    "trails_keep_one_in": 3,
    "trails_billow": 0.25,
-   "guns_on": 0,
+   "guns_on": 1,
    "guns_from_m": 1500,
    "guns_dash_s": 0.2,
    "guns_dash_flight_s": 0.12

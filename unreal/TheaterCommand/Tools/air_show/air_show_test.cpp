@@ -866,7 +866,8 @@ int main(int Argc, char** Argv)
 	std::map<int, std::string> FallsOpen;
 	int FallStarts = 0, FallStrays = 0, MostDebris = 0;
 	// The scene's room for trails, as on the newer kit (24) and an older one (10), a burning aircraft's own first.
-	AirShow::TrailRoom Trails24, Trails10;
+	AirShow::TrailRoom Trails60, Trails24, Trails10;
+	Trails60.Most = 60; // (the scene's with the kit's far trails on, game.air_far)
 	Trails24.Most = 24;
 	Trails10.Most = 10;
 	int PieceTrails = 0, OwnTrails = 0;
@@ -1376,11 +1377,13 @@ int main(int Argc, char** Argv)
 				PieceTrails += bPiece ? 1 : 0;
 				OwnTrails += bPiece ? 0 : 1;
 				int Out = 0;
+				Trails60.Start(E.Key, bPiece, Out);
 				Trails24.Start(E.Key, bPiece, Out);
 				Trails10.Start(E.Key, bPiece, Out);
 			}
 			if (E.Kind == AirShow::FxKind::TrailStop)
 			{
+				Trails60.Stop(E.Key);
 				Trails24.Stop(E.Key);
 				Trails10.Stop(E.Key);
 			}
@@ -1596,9 +1599,10 @@ int main(int Argc, char** Argv)
 	            RideSamples, RideOnBomber, RideHeadOn, RideGapSum / std::max(1, RideSamples));
 	std::printf("  debris: %d falls given it, %d left without (%d of them blown apart; room %d puffs, most held at once %d)\n",
 	            Debris.Given, Debris.Refused, Debris.RefusedBlasts, Debris.Most, MostDebris);
-	std::printf("  trails: %d an aircraft's own, %d pieces'; room 24: most lit %d, refused %d (%d an aircraft's own), pieces put out %d;"
-	            " room 10: refused %d (%d an aircraft's own)\n",
-	            OwnTrails, PieceTrails, Trails24.Peak, Trails24.Refused, Trails24.RefusedOwn, Trails24.PutOut, Trails10.Refused, Trails10.RefusedOwn);
+	std::printf("  trails: %d an aircraft's own, %d pieces'; room 60: most lit %d, refused %d (%d an aircraft's own), pieces put out %d;"
+	            " room 24: most lit %d, refused %d (%d an aircraft's own), pieces put out %d; room 10: refused %d (%d an aircraft's own)\n",
+	            OwnTrails, PieceTrails, Trails60.Peak, Trails60.Refused, Trails60.RefusedOwn, Trails60.PutOut, Trails24.Peak, Trails24.Refused, Trails24.RefusedOwn,
+	            Trails24.PutOut, Trails10.Refused, Trails10.RefusedOwn);
 	std::printf("  sky: %s%s from %.0f to %.0f m (zone %s, deck chance %.2f), bands %.0f and %.0f m; %zu clouds, %zu puffs, cover %.2f; laid in %.1f ms\n",
 	            Rec.Board.Cloud.bGiven ? "" : "(none given) ", Sky.Sky.bDeck ? "a deck" : "scattered cumulus", Sky.Base, Sky.Top, Rec.Board.Cloud.Zone.c_str(),
 	            Rec.Board.Cloud.Chance, SkyAt.Band, SkyAt.LowBand, Sky.Clouds.size(), Sky.Puffs.size(), Sky.Cover, SkyLayMs);
@@ -1779,6 +1783,7 @@ int main(int Argc, char** Argv)
 		{ "the kit told of every fall, its moves only while it falls", FallStarts == C.Falls && FallStrays == 0, std::to_string(FallStarts) + " starts, " + std::to_string(FallStrays) + " stray", "a start a fall, 0 stray" },
 		{ "debris within its room", MostDebris <= Debris.Most, std::to_string(MostDebris), "at most the room" },
 		{ "every burning aircraft keeps its trail (room 24)", Trails24.RefusedOwn == 0 && Trails24.Peak <= 24, std::to_string(Trails24.RefusedOwn), "0 refused" },
+		{ "every burning aircraft keeps its trail (room 60, the kit's far trails on)", Trails60.RefusedOwn == 0 && Trails60.Peak <= 60, std::to_string(Trails60.RefusedOwn) + " (most lit " + std::to_string(Trails60.Peak) + ")", "0 refused" },
 		{ "no group left on the stand-in model", Guessed == 0, std::to_string(Guessed), "0 views" },
 		{ "parachutes as the battle says", C.Chutes >= EventsChutes * 8 / 10, std::to_string(C.Chutes), "at least 8 in 10 of the battle's" },
 		{ "every way down played as the battle names it", [&]() { int Off = 0; for (const auto& [How, N] : EventsHow) { const auto It = C.FallsBy.find(How); Off += std::abs(N - (It == C.FallsBy.end() ? 0 : It->second)); } return Off <= 2; }(),
