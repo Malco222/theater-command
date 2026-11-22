@@ -227,7 +227,7 @@ namespace
 		return Typed(9.0f, true, 40);
 	}
 
-	/** Where the pieces of the frame are on the screen this frame (absolute): a town's plate or a province's name is not drawn under one. */
+	/** Where the pieces of the frame are on the screen this frame, in the window's (paint) measure, as each was last painted: a town's plate or a province's name is not drawn under one. */
 	TArray<FSlateRect> FrameRects;
 
 	// The frame is made of the things on a staff officer's desk in 1939: calendar paper and typing paper, written

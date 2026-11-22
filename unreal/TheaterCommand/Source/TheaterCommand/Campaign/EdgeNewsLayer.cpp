@@ -565,7 +565,10 @@ namespace
 				}
 			}
 			const FVector2D Local = AllottedGeometry.GetLocalSize();
-			if (Local.X < 1.0 || Local.Y < 1.0)
+			// (the layer's last paint, in the window's measure: what the keep-off boxes are read in, below. None before its
+			// first paint, and then nothing is laid: the seals wait a frame)
+			const FGeometry& Painted = GetPaintSpaceGeometry();
+			if (Local.X < 1.0 || Local.Y < 1.0 || Painted.GetLocalSize().X < 1.0 || Painted.GetLocalSize().Y < 1.0)
 			{
 				return;
 			}
@@ -619,12 +622,19 @@ namespace
 				Shared.Reserved.clear();
 				if (Shared.KeepOffOf)
 				{
-					// (the frame's pieces, and the panels that stand over the map and are none: the staff's note, the adviser)
+					// (the frame's pieces, and the panels that stand over the map and are none: the staff's note, the adviser.
+					// They come in the window's (paint) measure, as each was last painted (FrameRects, EdgeNewsKeepOff), and
+					// are brought into the layer's units by the layer's own last paint, which is in that measure too. Not by
+					// AllottedGeometry: Tick is handed the desktop's measure (SWidget::Paint adds the window's place on the
+					// desktop before it ticks), so in any window off the desktop's corner every box moved up and to the left
+					// by the window's place, and the seals were laid, and painted, under the frame: Mac run 3's "+N" under
+					// the top bar. The last paint is a frame old; the layer fills the screen and stands still, so the lag is
+					// harmless, and a window resized lays the seals again a frame later)
 					Shared.KeepOffOf(Shared.KeepOff);
 					for (const FSlateRect& Piece : Shared.KeepOff)
 					{
-						const FVector2D Min = AllottedGeometry.AbsoluteToLocal(FVector2D(Piece.Left, Piece.Top));
-						const FVector2D Max = AllottedGeometry.AbsoluteToLocal(FVector2D(Piece.Right, Piece.Bottom));
+						const FVector2D Min = Painted.AbsoluteToLocal(FVector2D(Piece.Left, Piece.Top));
+						const FVector2D Max = Painted.AbsoluteToLocal(FVector2D(Piece.Right, Piece.Bottom));
 						Shared.Reserved.push_back(EdgeSeals::FBox{ Min.X, Min.Y, Max.X, Max.Y });
 					}
 				}

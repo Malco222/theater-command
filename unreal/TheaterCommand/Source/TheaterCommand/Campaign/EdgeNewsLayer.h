@@ -19,7 +19,8 @@ struct FSlateBrush;
  * MakeEdgeNewsLayer: the layer laid over the map, under the frame, that holds the seals. Each slides in from the edge
  * nearest its row's place, in card order, about 0.12 s apart, and keeps off every piece of the frame (the right
  * column, the date strip, the tray, the minimap) and every panel that stands over the map (the staff's note, the
- * adviser): KeepOffOf fills an array with them, in absolute measure, as the frame last laid them out (EdgeNewsKeepOff).
+ * adviser): KeepOffOf fills an array with them, in the window's (paint) measure, as the frame last painted them
+ * (EdgeNewsKeepOff).
  * As many stand as the edge has room for, in the card's ranking, and the rest fold into the "+N" seal. A seal wears the
  * colour of the row it opens (the art director's ruling of 22 November: EdgeSeals::LookOf): a dated warning is red and
  * pulses slowly until opened; war and peace and the news wear the news band's brass (a freeing his own side did, its
@@ -30,8 +31,9 @@ struct FSlateBrush;
  * face the "+N" is pressed in.
  *
  * EdgeNewsKeepOff: what the seals keep off, into Out (which keeps its room between frames): the frame's pieces (Frame,
- * absolute), and for each of Panels that stands on the screen now, the box that holds it among the layers of the
- * screen's root (Root): it and every box between it and the root shown. A panel may be given by any widget inside it.
+ * in the window's (paint) measure), and for each of Panels that stands on the screen now, the box that holds it among
+ * the layers of the screen's root (Root), in the same measure: it and every box between it and the root shown. A panel
+ * may be given by any widget inside it.
  *
  * FEdgeNewsCardMarks: on the month's card, the row a seal opened is framed in brass and scrolled to, and the fold of
  * the fronts' rows opens for a row under it. The HUD calls Begin as it lays the card out, Unfolds where the rows fold,
