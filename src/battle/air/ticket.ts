@@ -174,7 +174,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     guns: Object.fromEntries(Object.entries(models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, when), bmr: bomberGuns(k.bmr, n, when) }])),
     // The country round the target, turned as the board is (b384(j)).
     // Open water has no ground to lay, but it keeps its true north (the sun, the wind and a wake's heading can use it).
-    ground: quarry ? { ...OPEN_SEA, north: [Math.round(-Math.sin(turn) * 1e6) / 1e6 + 0, Math.round(Math.cos(turn) * 1e6) / 1e6 + 0] } : groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
+    ground: quarry ? seaGround(turn) : groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
     // The sky that day over the target (sky.ts): drawn from the battle's own seed, so the same battle has the same sky;
     // where the campaign keeps weather, under the sky its card priced (a.sky, ruling 127).
     cloud: cloudOf(T.x, T.y, when, seed, weatherOn(g) ? a.sky : undefined),
@@ -259,6 +259,14 @@ export const harbourOf = (place: string): string => (/\bHarbou?r\b/.test(place) 
 
 /** The ground of a strike at sea: open water across the board (a stage draws its own). */
 const OPEN_SEA: AirGround = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false, north: [0, 1] };
+
+/**
+ * Open water on a board turned by `turn` (radians, counter-clockwise, the ticket's and a stage's own): no ground to lay,
+ * but its true north, the map's north turned as the board is ([0, 1] unturned; [0, -1] turned half round, as Pearl
+ * Harbor's stage is), to the millionth. The ticket's strike at sea and the recorder's set pieces (tools/air-record) both
+ * lay it.
+ */
+export const seaGround = (turn: number): AirGround => ({ ...OPEN_SEA, north: [Math.round(-Math.sin(turn) * 1e6) / 1e6 + 0, Math.round(Math.cos(turn) * 1e6) / 1e6 + 0] });
 
 /** Where a raid's groups fly from, by whether each comes off a carrier. */
 function fromOf(decks: boolean[]): 'land' | 'sea' | 'both' {

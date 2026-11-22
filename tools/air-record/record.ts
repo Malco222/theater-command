@@ -27,7 +27,7 @@ import { deckMix, deckModels, layShips } from '../../src/battle/air/ships';
 import { onBoard, STAGES } from '../../src/battle/air/stages';
 import { cloudOf, skyWord } from '../../src/battle/air/sky';
 import { defenceOf, experience, leanOf, STYLES } from '../../src/battle/air/styles';
-import { airTicket, raidGroups } from '../../src/battle/air/ticket';
+import { airTicket, raidGroups, seaGround } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
 import { seatsOf } from '../../src/campaign/bombers';
 import type { AirUnit, AirPlace } from '../../src/battle/air/types';
@@ -77,7 +77,7 @@ interface SetPiece {
   forecast?: Partial<AirPlace['forecast']>;
 }
 
-const PIECES: SetPiece[] = [
+export const PIECES: SetPiece[] = [
   {
     key: 'oahu', kind: 'harbour', stage: 'oahu', when: { year: 1941, month: 11 }, turn: Math.PI,
     att: JAP, def: USA, title: 'The raid on Pearl Harbor', date: 'December 1941',
@@ -206,7 +206,7 @@ function mapPointOf(lat: number, lon: number): [number, number] {
 }
 
 /** The stand-in's ticket, turned into the record's set piece. */
-function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
+export function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
   const g = standIn(P.kind, P.attNames.length);
   g.seed = seed; g.flags.airBattles = 1;
   const foe = named(g, 'Battle Fleet');
@@ -269,7 +269,9 @@ function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
     [P.def.nat]: { ftr: P.def.nat === 'USA' ? 'Warhawk' : 'Zero', bmr: P.def.nat === 'USA' ? 'B17' : 'G4M' },
   };
   place.guns = Object.fromEntries(Object.entries(place.models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, P.when), bmr: bomberGuns(k.bmr, n, P.when) }]));
-  place.ground = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false };
+  // Open water under the stage, with its true north: the map's north turned as the stage is (AirGround.north; the
+  // ticket's own strike at sea lays it the same way).
+  place.ground = seaGround(P.turn);
   if (P.forecast) place.forecast = { ...place.forecast, ...P.forecast };
   // The sky: the cloud table's base and tops for the stage's own place and the record's month, drawn from this battle's
   // seed (the stand-in's target would give the North Sea's). The kind is history's, not the table's chance: both days
@@ -385,7 +387,10 @@ function record(P: SetPiece | DayRaid, outDir: string, step = 1.0, tries = 60): 
   console.log(`${P.key} (seed ${bestSeed}, like the record ${bestScore}): ${views.length} views, ${over.seconds.toFixed(0)} battle s, ${over.level}, lost att ${JSON.stringify(after.lost.att)} def ${JSON.stringify(after.lost.def)}, down: ${sunk.join(', ')}; ${(JSON.stringify(out).length / 1e6).toFixed(2)} MB`);
 }
 
-const outDir = process.argv[2] ?? 'dist/air-record';
-mkdirSync(outDir, { recursive: true });
-const only = process.argv[3];
-for (const P of [...PIECES, ...RAIDS]) if (!only || P.key === only) record(P, outDir);
+// (Run from the command line; a test imports the set pieces without recording them: vitest sets VITEST.)
+if (!process.env.VITEST) {
+  const outDir = process.argv[2] ?? 'dist/air-record';
+  mkdirSync(outDir, { recursive: true });
+  const only = process.argv[3];
+  for (const P of [...PIECES, ...RAIDS]) if (!only || P.key === only) record(P, outDir);
+}
