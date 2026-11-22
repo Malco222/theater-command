@@ -16,11 +16,36 @@ import { BEND, buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt,
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, gunsOf, reachOf, type Kind, type Motion } from './rules';
-import { armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
-import { bendAt, deploy, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
+import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
+import { turnToDate } from '../../core/ticket';
+import { armyNames, bendAt, deploy, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
+
+/** A hedge line on the field as the 3D game lays it (release 2): its kind and its centre line, metres from the south-west corner. */
+export interface Hedge { kind: string; points: [number, number][] }
+/** A gate or gap in a hedge: where it is, which way the hedge runs (radians from east), and how wide. */
+export interface Gate { x: number; y: number; yaw?: number; width?: number; kind?: string }
+/** The squares the hedge lines are mapped by, for hiding (metres). */
+const HEDGE_CELL = 10;
+/** Ground with nothing to hide men on the move: caught there by an ambush, they are shaken worst (LAND.hide.surprise.open). */
+const OPEN_GROUND: Ground[] = ['open', 'field', 'road', 'bridge', 'marsh'];
+/** The squares the hedge segments are filed by (metres), how far from where a man's way meets a hedge a gate still serves him, and how near a gate's own run ends may be to it. */
+const GATE_CELL = 25, GATE_REACH = 120;
+/** Where along a-b (0 to 1) it crosses c-d, or null. */
+function segHit(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): number | null {
+  const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy, den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-12) return null;
+  const t = ((cx - ax) * sy - (cy - ay) * sx) / den, u = ((cx - ax) * ry - (cy - ay) * rx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
+}
+/** How far a point lies from a line segment. */
+function segGap(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+  const k = l > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l)) : 0;
+  return Math.hypot(px - (ax + k * dx), py - (ay + k * dy));
+}
 
 /**
  * The tank blocks the card counted as covered by their own foot (item 7, never twice: b418): of each side's tank
@@ -177,6 +202,15 @@ export class LandBattle implements BattleSim<LandUnit> {
   hide = false;
   /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
   private hidStarted = false;
+  /** The field's hedges and their gates, as the 3D game handed them over (hedgesOn): empty where it has none. */
+  hedges: Hedge[] = [];
+  gates: Gate[] = [];
+  /** Which 10 m squares lie on a hedge line (LAND.hide.hedge.near), for hiding: null with no hedges. */
+  private hedgeMap: Uint8Array | null = null;
+  /** The hedge lines' segments, [ax, ay, bx, by], by the GATE_CELL square they pass through: for the men's way through the gates. */
+  private hedgeSegs = new Map<number, number[][]>();
+  /** The sides that have been ambushed: their attack fires on the cover ahead from then (LAND.hide.search). */
+  readonly ambushed = new Set<Side>();
   /**
    * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts, LAND.armour): a tank's or a gun's blow on
    * a tank weighs what its gun gets through the face it strikes at that range. Off unless whoever opens the field turns
@@ -418,7 +452,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       case 'hold': {
         const us = mine(c.units);
         hands(us);
-        for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; });
+        for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; delete u.search; delete u.searchR; });
         return us.length > 0;
       }
       case 'withdraw': {
@@ -478,6 +512,16 @@ export class LandBattle implements BattleSim<LandUnit> {
           this.setup = null; this.room = null;
           return true;
         }
+        // Reconnaissance by fire (the historian's check, release 2): { do: 'land:fire', units, x, y } with no target:
+        // the blocks stand and fire on the cover there (LAND.hide.search). Any of his blocks but forts.
+        if (c.do === 'land:fire' && c.target === undefined) {
+          const x = Number(c.x), y = Number(c.y);
+          const us = mine((c.units ?? []) as number[]).filter((u) => u.kind !== 'fort');
+          if (!Number.isFinite(x) || !Number.isFinite(y) || !us.length) return false;
+          hands(us);
+          for (const u of us) give(u, () => { u.order = null; u.path = []; u.keepFace = null; delete u.aim; u.search = [x, y]; delete u.searchR; });
+          return true;
+        }
         if (c.do === 'land:fire') {
           const t = this.unit(Number(c.target));
           const guns = mine((c.units ?? []) as number[]).filter((u) => u.kind === 'art');
@@ -504,7 +548,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   private order(u: LandUnit, go: () => void, air: boolean, from = this.t): void {
     if (!air) { go(); return; }
     const R = LAND.radio, hit = u.state === 'wavering' || u.str < R.hqAt * u.str0;
-    const at = Math.round((from + R.delay * (hit ? R.cut : 1)) * 1000) / 1000;
+    const at = Math.round((from + R.delay * (hit ? R.cut : 1) * this.radioOf(u)) * 1000) / 1000;
     this.pending = this.pending.filter((p) => p.id !== u.id);
     // Given long enough ago (as shown) that it is due already: carried out now.
     if (at <= this.t + 1e-9) { delete u.orderAt; go(); return; }
@@ -539,8 +583,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     u.order = o;
     u.keepFace = o.face ?? null;
-    // Any other order lifts a gun's aim (fire on, stay put).
-    delete u.aim;
+    // Any other order lifts a gun's aim (fire on, stay put), and fire on cover.
+    delete u.aim; delete u.search; delete u.searchR;
     // An attack's way is the one it will walk: to its place in the lane before its target, as the march works it out.
     const t = o.kind === 'attack' && o.target !== undefined ? this.unit(o.target) : undefined;
     const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
@@ -795,7 +839,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   private place(u: LandUnit, x: number, y: number, face?: number): void {
     u.x = x; u.y = y; u.face = face ?? (u.side === 'att' ? 0 : Math.PI);
     u.order = null; u.path = []; u.keepFace = face ?? null;
-    delete u.aim; delete u.stand; delete u.standFor; delete u.standFace; delete u.closing;
+    delete u.aim; delete u.search; delete u.searchR; delete u.stand; delete u.standFor; delete u.standFace; delete u.closing;
     this.ways.delete(u.id);
     u.home = [x, y];
     u.cover = groundAt(this.field, x, y);
@@ -810,6 +854,31 @@ export class LandBattle implements BattleSim<LandUnit> {
   vehicle(u: LandUnit): string | null {
     if (!this.models.has(u.id)) this.models.set(u.id, u.team ? null : vehicleOf(u.kind, u.nat, this.ticket.turn));
     return this.models.get(u.id)!;
+  }
+
+  /**
+   * Names the regiment blocks as their armies did (release 2; the historian's ruling, 22 November: units.ts
+   * regimentWord): "Infanterie-Regiment 33" of the "11th Infantry Division", a British brigade, an American Combat
+   * Command. Before the clock starts only; false once it has begun. Looks only: no number in the fight reads a name.
+   */
+  namesOn(): boolean {
+    if (this.t > 0 || this.over) return false;
+    for (const side of ['att', 'def'] as const) armyNames(this.ticket[side], this.units.filter((u) => u.side === side), this.ticket.turn);
+    return true;
+  }
+
+  /**
+   * The model a block is drawn with, where the 3D set piece picks its own (Normandy's first German tank block is a
+   * Tiger): the rules weigh it as that model from then. False where the block or the model is unknown to the sheet (a
+   * tank block needs a model the sheet has duels for); null hands it back to vehicleOf.
+   */
+  vehicleIs(id: number, model: string | null): boolean {
+    const u = this.unit(id);
+    if (!u) return false;
+    if (model === null) { this.models.delete(id); return true; }
+    if (!ARMOUR.models[model] || (u.kind === 'arm' && !ARMOUR.duels[model])) return false;
+    this.models.set(id, model);
+    return true;
   }
 
   /** What a blow from u on tank block t weighs for t's armour on that face at that range (1 at par); null where unknown. */
@@ -834,19 +903,131 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Whether a side can see a block: its own always; the enemy's unless it is hidden in the woods. */
   sees(side: Side, e: LandUnit): boolean { return e.side === side || !e.hid; }
 
+  /**
+   * The field's hedges (the historian's check, 22 November: the Normandy bocage): the hedge lines and their gates as the
+   * 3D game lays them on this field, metres from its south-west corner. Before the clock starts only; a block on a hedge
+   * line then hides as in woods (LAND.hide). False once it has begun.
+   */
+  hedgesOn(hedges: Hedge[], gates: Gate[] = []): boolean {
+    if (this.t > 0 || this.over) return false;
+    const W = this.field.w, H = this.field.h, C = HEDGE_CELL, near = LAND.hide.hedge.near;
+    const cols = Math.ceil(W / C), rows = Math.ceil(H / C), map = new Uint8Array(cols * rows);
+    const keep: Hedge[] = [];
+    for (const h of hedges) {
+      const pts = (h.points ?? []).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+      if (pts.length < 2 || !pts.some(([x, y]) => x >= 0 && x <= W && y >= 0 && y <= H)) continue;
+      keep.push({ kind: h.kind, points: pts });
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+        const c0 = Math.max(0, Math.floor((Math.min(ax, bx) - near) / C)), c1 = Math.min(cols - 1, Math.floor((Math.max(ax, bx) + near) / C));
+        const r0 = Math.max(0, Math.floor((Math.min(ay, by) - near) / C)), r1 = Math.min(rows - 1, Math.floor((Math.max(ay, by) + near) / C));
+        for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (segGap((c + 0.5) * C, (r + 0.5) * C, ax, ay, bx, by) <= near) map[r * cols + c] = 1;
+      }
+    }
+    this.hedges = keep;
+    this.gates = gates.filter((g) => Number.isFinite(g.x) && Number.isFinite(g.y) && g.x >= 0 && g.x <= W && g.y >= 0 && g.y <= H);
+    this.hedgeMap = keep.length ? map : null;
+    this.hedgeSegs.clear();
+    for (const h of keep) for (let i = 1; i < h.points.length; i++) {
+      const [ax, ay] = h.points[i - 1], [bx, by] = h.points[i], seg = [ax, ay, bx, by];
+      for (let c = Math.floor(Math.min(ax, bx) / GATE_CELL); c <= Math.floor(Math.max(ax, bx) / GATE_CELL); c++)
+        for (let r = Math.floor(Math.min(ay, by) / GATE_CELL); r <= Math.floor(Math.max(ay, by) / GATE_CELL); r++) {
+          const k = c * 4096 + r, l = this.hedgeSegs.get(k);
+          if (l) l.push(seg); else this.hedgeSegs.set(k, [seg]);
+        }
+    }
+    if (this.hide) for (const u of this.units) this.markHid(u);
+    return true;
+  }
+
+  /**
+   * Where a straight way from (x0, y0) to (x1, y1) first meets a hedge line, more than 'skip' metres out: null where it
+   * meets none (the 3D game's men go through the gates: drill.ts).
+   */
+  hedgeCross(x0: number, y0: number, x1: number, y1: number, skip = 0): [number, number] | null {
+    if (!this.hedgeSegs.size) return null;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    if (len <= skip) return null;
+    let best: [number, number] | null = null, bestK = Infinity;
+    const seen = new Set<number[]>();
+    for (let c = Math.floor(Math.min(x0, x1) / GATE_CELL); c <= Math.floor(Math.max(x0, x1) / GATE_CELL); c++)
+      for (let r = Math.floor(Math.min(y0, y1) / GATE_CELL); r <= Math.floor(Math.max(y0, y1) / GATE_CELL); r++)
+        for (const s of this.hedgeSegs.get(c * 4096 + r) ?? []) {
+          if (seen.has(s)) continue;
+          seen.add(s);
+          const k = segHit(x0, y0, x1, y1, s[0], s[1], s[2], s[3]);
+          if (k !== null && k * len > skip && k < bestK) { bestK = k; best = [x0 + (x1 - x0) * k, y0 + (y1 - y0) * k]; }
+        }
+    return best;
+  }
+
+  /**
+   * The gate a man going from (x0, y0) to (x1, y1) goes through, where his straight way meets a hedge (more than 'skip'
+   * metres out): the gate nearest where it meets it, within GATE_REACH, that he can walk to straight. Null where his way
+   * meets no hedge, or no gate serves: he climbs the bank there.
+   */
+  gateOn(x0: number, y0: number, x1: number, y1: number, skip = 0): Gate | null {
+    const at = this.hedgeCross(x0, y0, x1, y1, skip);
+    // A place on the hedge itself (a man lining it) is reached from either side: no gate.
+    if (!at || Math.hypot(at[0] - x1, at[1] - y1) < 0.75) return null;
+    const near = this.gates.map((g) => ({ g, d: Math.hypot(g.x - at[0], g.y - at[1]) })).filter((x) => x.d <= GATE_REACH).sort((a, b) => a.d - b.d);
+    for (const { g } of near) {
+      // Walkable straight to it: nothing in his way short of the gap itself.
+      const to = this.hedgeCross(x0, y0, g.x, g.y, skip);
+      if (!to || Math.hypot(to[0] - g.x, to[1] - g.y) <= LAND.hide.hedge.gap) return g;
+    }
+    return null;
+  }
+
+  /** The way the hedge line nearest (x, y) runs there, a unit vector: null where none passes within LAND.hide.hedge.near. */
+  hedgeDir(x: number, y: number): [number, number] | null {
+    let best = Infinity, dir: [number, number] | null = null;
+    const c = Math.floor(x / GATE_CELL), r = Math.floor(y / GATE_CELL);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const s of this.hedgeSegs.get((c + i) * 4096 + r + j) ?? []) {
+      const l = Math.hypot(s[2] - s[0], s[3] - s[1]), d = segGap(x, y, s[0], s[1], s[2], s[3]);
+      if (l > 0 && d < best) { best = d; dir = [(s[2] - s[0]) / l, (s[3] - s[1]) / l]; }
+    }
+    return best <= LAND.hide.hedge.near ? dir : null;
+  }
+
+  /** On a hedge line (within LAND.hide.hedge.near of one), where the field has hedges. */
+  onHedge(x: number, y: number): boolean {
+    if (!this.hedgeMap || x < 0 || y < 0 || x >= this.field.w || y >= this.field.h) return false;
+    return this.hedgeMap[Math.floor(y / HEDGE_CELL) * Math.ceil(this.field.w / HEDGE_CELL) + Math.floor(x / HEDGE_CELL)] === 1;
+  }
+
   /** Standing in woods (fieldworks dug into woods too): where a block can hide. */
   private inWoods(u: LandUnit): boolean { return coverAt(this.field, u.x, u.y) === 'woods'; }
 
-  /** Hidden if it stands in woods, before the clock starts. Fieldworks are known where they are built. */
+  /** Cover a block can hide in: woods, or a hedge line. */
+  private inCover(u: LandUnit): boolean { return this.inWoods(u) || this.onHedge(u.x, u.y); }
+
+  /** Hidden if it stands in woods or on a hedge line, before the clock starts. Fieldworks are known where they are built. */
   private markHid(u: LandUnit): void {
-    if (live(u) && u.kind !== 'fort' && this.inWoods(u)) u.hid = true;
+    if (live(u) && u.kind !== 'fort' && this.inCover(u)) u.hid = true;
     else delete u.hid;
   }
 
-  /** How close the enemy must come before a hidden block opens fire unbidden: Infinity where it never holds (guns). */
+  /**
+   * How close the enemy must come before a hidden block opens fire unbidden: Infinity where it never holds (guns). In
+   * true forest, foot and machine guns hold to LAND.hide.forest: they could see no further.
+   */
   private ambushAt(u: LandUnit): number {
-    const a = u.team === 'mg' ? LAND.hide.ambush.mg : LAND.hide.ambush[MOTION[u.kind]];
-    return a > 0 ? a : Infinity;
+    const H = LAND.hide, a = u.team === 'mg' ? H.ambush.mg : H.ambush[MOTION[u.kind]];
+    if (a <= 0) return Infinity;
+    return !this.onHedge(u.x, u.y) && this.inWoods(u) ? Math.min(a, H.forest) : a;
+  }
+
+  /**
+   * An army's wait for an order by radio, as a multiple of LAND.radio.delay (the historian's, 22 November): its foot's by
+   * nation and year; a tank block's as its model's share with a set, the rest as its foot.
+   */
+  radioOf(u: LandUnit): number {
+    const year = turnToDate(this.ticket.turn).year;
+    const foot = (LAND.radio.nations[u.nat] ?? []).find(([to]) => year <= to)?.[1] ?? 1;
+    if (u.kind !== 'arm') return foot;
+    const m = this.vehicle(u), r = m ? ARMOUR.models[m]?.radio : undefined;
+    return r === undefined ? foot : r + (1 - r) * foot;
   }
 
   /** The clock starts: the computer's defence lays its ambushes, then every block in woods is hidden. */
@@ -871,14 +1052,15 @@ export class LandBattle implements BattleSim<LandUnit> {
       Math.min(z[0], ...own.map((u) => u.x - u.w / 2)), Math.min(z[1], ...own.map((u) => u.y - u.d / 2)),
       Math.max(z[2], ...own.map((u) => u.x + u.w / 2)), Math.max(z[3], ...own.map((u) => u.y + u.d / 2)),
     ];
-    const foot = own.filter((u) => MOTION[u.kind] === 'foot' && !u.team && !u.dug && u.reserve !== 'held' && !u.taken && !this.inWoods(u));
+    const foot = own.filter((u) => MOTION[u.kind] === 'foot' && !u.team && !u.dug && u.reserve !== 'held' && !u.taken && !this.inCover(u));
     const picks: { u: LandUnit; x: number; y: number; ahead: number }[] = [];
-    const cell = this.field.cell;
+    // Hedge lines are narrow: looked for a hedge square at a time.
+    const cell = this.hedgeMap ? Math.min(this.field.cell, HEDGE_CELL) : this.field.cell;
     for (const u of foot) {
       let best: { x: number; y: number; ahead: number } | null = null;
       for (let dy = -H.back; dy <= H.ahead; dy += cell) for (let dx = -H.across; dx <= H.across; dx += cell) {
         const x = u.x + dx, y = u.y + dir * dy;
-        if (coverAt(this.field, x, y) !== 'woods') continue;
+        if (coverAt(this.field, x, y) !== 'woods' && !this.onHedge(x, y)) continue;
         // The furthest forward, then the nearest across.
         if (best && (dy < best.ahead || (dy === best.ahead && Math.abs(dx) >= Math.abs(best.x - u.x)))) continue;
         if (this.standWhy(u, x, y, room) !== null) continue;
@@ -902,28 +1084,37 @@ export class LandBattle implements BattleSim<LandUnit> {
    * 'fired': it opened fire on 'by'; 'seen': 'by' came close enough to see it; 'out': it left the woods; 'struck': hit
    * from the air. Told to the player as his blocks would report it.
    */
-  private reveal(u: LandUnit, how: 'fired' | 'seen' | 'out' | 'struck', by?: LandUnit): void {
+  private reveal(u: LandUnit, how: 'fired' | 'seen' | 'heard' | 'out' | 'struck' | 'searched', by?: LandUnit): void {
     if (!u.hid) return;
     delete u.hid;
+    // Found by its own fire, it is not yet located: the fire back strikes softer for a while (LAND.hide.locate).
+    if (how === 'fired') u.unloc = Math.round((this.t + LAND.hide.locate.secs) * 1000) / 1000;
     const mineFound = this.ticket[u.side].human, theirs = this.ticket[other(u.side)].human;
     if (theirs) u.found = true;
+    const where = this.inWoods(u) ? 'the woods' : 'the hedges';
     const text = mineFound
-      ? how === 'fired' ? `${this.named(u)} springs its ambush from the woods.` : how === 'seen' ? `${this.named(u)} has been seen in the woods.` : how === 'out' ? `${this.named(u)} has left the woods and can be seen.` : `${this.named(u)} is struck in the woods: the enemy knows it is there.`
+      ? how === 'fired' ? `${this.named(u)} springs its ambush from ${where}.` : how === 'seen' ? `${this.named(u)} has been seen in ${where}.` : how === 'heard' ? `${this.named(u)} has been heard moving in ${where}.` : how === 'out' ? `${this.named(u)} has left cover and can be seen.` : how === 'searched' ? `${this.named(u)} is flushed out of ${where} by fire.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.`
       : theirs
-        ? how === 'fired' && by ? `Enemy troops hidden in the woods open fire on your ${by.name}.` : how === 'seen' && by ? `Your ${by.name} has found enemy troops in the woods.` : how === 'out' ? 'Enemy troops come out of the woods.' : 'Enemy troops found in the woods.'
+        ? how === 'fired' && by ? `Enemy troops hidden in ${where} open fire on your ${by.name}.` : (how === 'seen' || how === 'heard') && by ? `Your ${by.name} has found enemy troops in ${where}.` : how === 'searched' && by ? `Your ${by.name} has flushed enemy troops out of ${where}.` : how === 'out' ? 'Enemy troops come out of cover.' : `Enemy troops found in ${where}.`
         : '';
     this.say({ what: 'land:found', unit: u.id, side: u.side, text, x: u.x, y: u.y, extra: { how, ...(by ? { by: by.id } : {}) } });
   }
 
-  /** Each tick: a hidden block that has left the woods, or that an enemy has come close enough to see, is found. */
+  /**
+   * Each tick: a hidden block that has left cover, or that an enemy has come close enough to see (or to hear: a tank or
+   * lorry on the move), is found; one found by its fire is located once that long has passed or an enemy is that close.
+   */
   private spotHidden(): void {
+    const H = LAND.hide;
     for (const u of this.units) {
+      const sight = H.sight[MOTION[u.kind]];
+      if (u.unloc !== undefined && (this.t >= u.unloc || !live(u) || this.units.some((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= sight))) delete u.unloc;
       if (!u.hid) continue;
       if (!live(u)) { delete u.hid; continue; }
-      if (!this.inWoods(u)) { this.reveal(u, 'out'); continue; }
-      const sight = LAND.hide.sight[MOTION[u.kind]];
-      const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= sight);
-      if (by) this.reveal(u, 'seen', by);
+      if (!this.inCover(u)) { this.reveal(u, 'out'); continue; }
+      const heard = u.speed > 0.5 ? H.heard[MOTION[u.kind]] : 0;
+      const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= Math.max(sight, heard));
+      if (by) this.reveal(u, this.gap(u, by) <= sight ? 'seen' : 'heard', by);
     }
   }
 
@@ -943,22 +1134,35 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
-    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][] }>();
+    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean }>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
       if (!fighting(u)) continue;
       const t = this.targetOf(u);
       u.engaged = t?.id;
-      if (!t) continue;
+      if (!t) {
+        // Firing on cover where nobody is (reconnaissance by fire) still gives a hidden shooter away.
+        if (u.hid && u.search && this.hide) this.reveal(u, 'fired');
+        continue;
+      }
+      // Only fire on cover strikes a block still hidden (targetOf): it lands blind (LAND.hide.search).
+      const blind = !!t.hid;
       if (this.contactAt === null && u.kind !== 'art') this.contactAt = this.t;
       // A hidden block that opens fire gives itself away, and its first fire is the ambush's (release 2, LAND.hide).
       if (u.hid) { u.sprung = this.t; this.reveal(u, 'fired', t); }
+      // An ambushed side shoots at the cover ahead from then on (the historian: "shooting constantly at the hedgerows").
+      if (u.sprung === this.t) this.ambushed.add(t.side);
       // He knows a block one of his has fought, his guns' target too, and one of theirs that has struck his in contact;
-      // their guns firing from far back are not contact (b464(2)).
-      if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; t.found = true; }
+      // their guns firing from far back are not contact (b464(2)). Fire on cover finds nothing yet.
+      if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; if (!blind) t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
+      if (blind) {
+        const F = LAND.hide.search;
+        blow.dmg *= F.blow;
+        if (this.rng.next() < 1 - (1 - F.odds) ** (DT / F.every)) this.reveal(t, 'searched', u);
+      }
       // A side with air strikes still to call holds back the card's share for them, owed to the block it fell on, in
       // what it would be on open ground (air support, below).
       if (this.airLeft[u.side] > 0) {
@@ -968,8 +1172,9 @@ export class LandBattle implements BattleSim<LandUnit> {
         this.airLedger[u.side].withheld += raw;
         kept!.set(t.id, (kept!.get(t.id) ?? 0) + raw);
       }
-      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [] };
+      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
       h.dmg += blow.dmg; h.nerve += blow.nerve;
+      if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
       h.from.push([u, blow.dmg]);
       hurt.set(t.id, h);
@@ -981,7 +1186,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it.
     if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve); }
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from);
+    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind);
     if (this.airOn.att || this.airOn.def) this.flyAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
     for (const u of this.units) if (live(u)) this.move(u);
@@ -1087,6 +1292,15 @@ export class LandBattle implements BattleSim<LandUnit> {
       const s = d * (1 + off) * (e.state === 'routing' ? 2 : 1);
       if (s < score) { score = s; best = e; }
     }
+    // Firing on cover (reconnaissance by fire): nothing else in reach, it strikes blind at what hides near that point.
+    if (!best && u.search && this.hide) {
+      const [sx, sy] = u.search, R = u.searchR ?? LAND.hide.search.reach;
+      for (const e of this.units) {
+        if (e.side === u.side || !live(e) || !e.hid || dist(e.x, e.y, sx, sy) > R + Math.max(e.w, e.d) / 2) continue;
+        const d = this.gap(u, e);
+        if (d <= reach && d < score) { score = d; best = e; }
+      }
+    }
     return best;
   }
 
@@ -1180,8 +1394,16 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Men getting their breath after a run at the double strike softer (direct command, release 2).
     if (u.winded !== undefined && this.t < u.winded) p *= LAND.double.blows;
     let nerveMul = 1;
-    // An ambush's first fire, from close cover (release 2, LAND.hide.surprise).
-    if (u.sprung !== undefined && this.t - u.sprung < LAND.hide.surprise.secs) { p *= LAND.hide.surprise.punch; nerveMul *= LAND.hide.surprise.nerve; }
+    // An ambush's first fire, from close cover (release 2, LAND.hide.surprise): it shakes men caught moving in the open
+    // worst; their mortars, pre-sighted on the gaps, strike what it is firing on harder in those seconds.
+    const SP = LAND.hide.surprise;
+    if (u.sprung !== undefined && this.t - u.sprung < SP.secs) {
+      p *= SP.punch;
+      nerveMul *= t.speed > 0.2 && OPEN_GROUND.includes(coverAt(this.field, t.x, t.y)) && !this.onHedge(t.x, t.y) ? SP.open : SP.nerve;
+    }
+    if (u.team === 'mor' && this.hide && this.units.some((f) => f.side === u.side && f.sprung !== undefined && this.t - f.sprung < SP.secs && f.engaged === t.id)) p *= SP.mortar;
+    // Found by its fire but not yet located: the fire back at it is half aimed (LAND.hide.locate).
+    if (t.unloc !== undefined && this.t < t.unloc) p *= LAND.hide.locate.fire;
     if (u.kind === 'art') {
       const G = gunsOf(u), close = this.gap(u, t) < G.closeAt;
       p *= close ? G.close : G.punch;
@@ -1215,9 +1437,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
-  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = []): void {
-    // A hidden block struck (planes over the woods) is found (release 2).
-    if (t.hid && dmg > 0) this.reveal(t, 'struck');
+  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false): void {
+    // A hidden block struck (planes over the woods) is found (release 2); fire on cover alone finds it by its own odds.
+    if (t.hid && dmg > 0 && !blind) this.reveal(t, 'struck');
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
     const before = t.str, had = t.figures;

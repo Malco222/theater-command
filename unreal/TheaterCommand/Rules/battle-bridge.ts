@@ -39,13 +39,23 @@
 //                                   in woods when the clock starts is hidden from the other side until an enemy comes close, it
 //                                   opens fire, it is struck or it leaves the woods (LAND.hide). Units carry hid: 1 while hidden
 //                                   from the enemy (his: draw the woods mark; the enemy's: draw nothing), in the setup step too
-//                                   as he places them; a land:found event (extra.how: fired, seen, out, struck) says when one is
-//                                   found. An attack or fire order at a hidden block is refused
+//                                   as he places them; a land:found event (extra.how: fired, seen, heard, out, struck, searched)
+//                                   says when one is found. An attack or fire order at a hidden block is refused. The
+//                                   historian's check (22 November): a block on a hedge line hides too (TC.battleHedges); one
+//                                   found by its own fire carries vague: 1 till it is located (25 s, or an enemy close: draw
+//                                   its fire, its men not yet plain); a tank moving in cover is heard at 350 m; fire on cover,
+//                                   { do: 'land:fire', units, x, y } (any of his blocks, no target), makes them stand and fire
+//                                   at that point (search: [x, y] on the block: draw their fire into the hedge or wood there)
+//                                   and flushes out what hides within 60 m of it; the computer's attack does it too once it
+//                                   has been ambushed. Orders by radio wait by each army's sets (LAND.radio.nations)
 //                                   Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z): { armour: true }: a tank's
 //                                   or gun's blow on a tank weighs what its gun gets through the face it strikes at that range
 //                                   (data/battle/armour.json, the modeller's sheet), and the computer's tanks go round to the
 //                                   flank of a tank whose front they cannot get through. Tank kill rounds carry fate (out, burn
 //                                   or blow), by her armour and the face struck, whether or not it is on
+//                                   Army names (release 2; the historian, 22 November): { names: true }: a regiment block's
+//                                   short is its army's own word ("33rd Infantry Regiment", "Grenadier-Regiment 33", "32nd
+//                                   Infantry Brigade", "Combat Command A") and its parent its division's full name
 //                                   Uniforms (release 2, looks only): every land block in a view carries wear, 0.1 (fresh kit) to
 //                                   1 (six weeks or more in the line since its corps was last rested or formed), its corps' own
 //                                   from the campaign, pulled down by its share of fresh drafts; a practice battle's are fresh.
@@ -65,6 +75,11 @@
 //   TC.battleSpeed(speed)        -> { speed }: 0 (paused), 0.5, 1, 2 or 4
 //   TC.battleOrder(command)      -> { ok }: one of the core's commands (src/battle/core/types.ts), for the player's side
 //   TC.battleView()              -> view, without running the clock
+//   TC.battleHedges(hedges, gates) -> { ok, hedges, gates, view }: hands the land field's hedges to the rules, before the clock
+//                                   starts (false once it runs): hedges [{ kind, points: [[x, y], ...] }], gates [{ x, y, yaw,
+//                                   width, kind }], metres from the field's south-west corner as the field's own x and y (the
+//                                   hedge file's shape; lines wholly off the field are dropped). With { hide: true }, a block
+//                                   on a hedge line hides as in woods (the historian's check, 22 November)
 //   TC.battleMen()               -> { t, blocks, rounds }: the men inside the land battle's blocks, man by man, tank by tank, gun
 //                                   by gun (src/battle/land/drill.ts, the squad brain; "The men" below); null for a sea
 //                                   or an air battle. Call it after each battleTick. Looks only: the fight never reads it
@@ -450,7 +465,7 @@ import { DROPS, LOOPS, TOWN } from '../../../src/battle/core/cues';
 import type { BattleSim, BattleView, BreakCause, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
 import { cardKnows, fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
-import { LandBattle } from '../../../src/battle/land/sim';
+import { LandBattle, type Gate, type Hedge } from '../../../src/battle/land/sim';
 import { calFor } from '../../../src/battle/land/shells';
 import { armourYear } from '../../../src/campaign/tech';
 import { staffOnly } from '../../../src/battle/land/offered';
@@ -525,8 +540,10 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     ...(land.crew ? { crew: land.crew } : {}),
     // Direct command (release 2): a block the player has taken in hand, and the seconds till his order on the air reaches it.
     ...(land.taken ? { taken: true } : {}),
-    // Hidden in the woods from the enemy (release 2, LAND.hide).
+    // Hidden in the woods from the enemy (release 2, LAND.hide); found by its fire but not yet located; firing on cover.
     ...(land.hid ? { hid: 1 } : {}),
+    ...(land.unloc !== undefined && t < land.unloc ? { vague: 1 } : {}),
+    ...(land.search ? { search: [Math.round(land.search[0]), Math.round(land.search[1])] } : {}),
     ...(land.orderAt !== undefined ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
     // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line; and the
     // share of its men new this month, in new kit (0 none), which 'wear' counts in.
@@ -633,7 +650,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -675,6 +692,8 @@ export function battleCalls(h: BattleHooks) {
       if (opts?.hide) sim.hideOn();
       // Measured armour (release 2): each tank's armour by face and range weighs the blows on her.
       if (opts?.armour) sim.measured = true;
+      // Army names (release 2): the regiment blocks named as their armies named a third of a division (the historian).
+      if (opts?.names) sim.namesOn();
       const f = sim.field;
       return {
         field: {
@@ -699,6 +718,12 @@ export function battleCalls(h: BattleHooks) {
       const why = !land || !u ? 'Nothing to place.' : land.placeWhy(u, Number(x), Number(y));
       const ok = why === null && ses.sim.command({ do: 'land:place', units: [Number(id)], x: Number(x), y: Number(y), ...(face !== undefined ? { face: Number(face) } : {}) }, ses.me);
       return { ok, why: ok ? null : why, view: viewOut(ses, ses.sim.view(ses.me)) };
+    },
+    battleHedges(hedges: Hedge[], gates: Gate[] = []) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const ok = !!land && Array.isArray(hedges) && land.hedgesOn(hedges, Array.isArray(gates) ? gates : []);
+      return { ok, hedges: land?.hedges.length ?? 0, gates: land?.gates.length ?? 0, view: viewOut(ses, ses.sim.view(ses.me)) };
     },
     battleBegin() {
       const ses = need();

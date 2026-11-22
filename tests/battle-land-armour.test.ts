@@ -52,7 +52,7 @@ describe('the sheet', () => {
     expect(PAR.front).toBeLessThan(PAR.rear);
   });
 
-  it('a German Panzer IV carries her short 75 until March 1942, then the long gun', () => {
+  it('a German Panzer IV carries her short 75 until March 1942, then the long gun; a Japanese Type 97 her 47 from April', () => {
     const feb42 = 30, mar42 = 31;
     expect(turnToDate(feb42)).toMatchObject({ year: 1942, month: 1 });
     expect(turnToDate(mar42)).toMatchObject({ year: 1942, month: 2 });
@@ -60,6 +60,10 @@ describe('the sheet', () => {
     expect(vehicleOf('arm', 'GER', mar42)).toBe('PanzerIV');
     expect(vehicleOf('arm', 'USA', JUNE44)).toBe('Sherman');
     expect(vehicleOf('inf', 'USA', JUNE44)).toBeNull();
+    // The Japanese Type 97: her short 57 until the 47 mm turret (April 1942).
+    expect(vehicleOf('arm', 'JAP', mar42)).toBe('Type97');
+    expect(vehicleOf('arm', 'JAP', mar42 + 1)).toBe('Type97:47');
+    expect(through('Type97:47', 'Sherman', 'side', 500, JUNE44)!).toBeGreaterThan(through('Type97', 'Sherman', 'side', 500, JUNE44)!);
   });
 
   it('weighs a Sherman\'s 75 on a Panther\'s front at all but nothing, her rear above par; the Panther\'s 75 on a Sherman above par', () => {
@@ -101,6 +105,19 @@ describe('tank fights, with measured armour on', () => {
     expect(front(off)).toBeGreaterThan(0.6);
     expect(front(on)).toBeLessThan(front(off) - 0.3);
   }, 300_000);
+
+  it('a block the 3D set piece draws as another model is weighed as that model', () => {
+    const b = new LandBattle(armoured('USA', 'GER', 1));
+    const tk = b.units.find((u) => u.side === 'def' && u.kind === 'arm')!, sh = b.units.find((u) => u.side === 'att' && u.kind === 'arm')!;
+    expect(b.vehicle(tk)).toBe('Panther');
+    expect(b.vehicleIs(tk.id, 'Tiger')).toBe(true);
+    expect(b.vehicle(tk)).toBe('Tiger');
+    expect(b.armourAt(sh, tk, 'side', 500)).toBe(armourWeight('Sherman', 'Tiger', 'side', 500, JUNE44, LAND.armour.lo, LAND.armour.hi));
+    expect(b.vehicleIs(tk.id, 'NoSuchTank')).toBe(false);
+    expect(b.vehicleIs(9999, 'Tiger')).toBe(false);
+    expect(b.vehicleIs(tk.id, null)).toBe(true);
+    expect(b.vehicle(tk)).toBe('Panther');
+  });
 
   it('off, nothing goes round and no blow is weighed', () => {
     const b = new LandBattle(armoured('USA', 'GER', 1));

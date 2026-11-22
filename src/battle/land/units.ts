@@ -10,6 +10,7 @@ import type { CrewMarks } from './crews';
 import type { Calibre, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
 import { BEND, GROUNDS, STREAM, digWorks, type Bend, type LandField } from './field';
 import { LAND, TEAMS, type Kind, type Team } from './rules';
+import { turnToDate } from '../../core/ticket';
 
 export interface LandOrder {
   kind: 'move' | 'attack' | 'withdraw';
@@ -63,6 +64,14 @@ export interface LandUnit extends UnitBase {
   hid?: boolean;
   /** When it sprang its ambush (opened fire while hidden): its first fire strikes harder (LAND.hide.surprise). */
   sprung?: number;
+  /** Found by its fire but not yet located, till this battle time: fire back at it strikes softer (LAND.hide.locate). */
+  unloc?: number;
+  /**
+   * Firing on a stretch of cover to flush out what may hide there (reconnaissance by fire, LAND.hide.search): the point,
+   * and how far round it (LAND.hide.search.reach where not said; the computer's sweep of the cover ahead, wider).
+   */
+  search?: [number, number];
+  searchR?: number;
   home: [number, number];
   /** Seconds since it was last hit, and since it last had an enemy near (for a rally). */
   still: number;
@@ -184,6 +193,67 @@ export function partsFor(forces: ForceTicket[]): BlockPart[][] {
     p.splice(j, 1, ...Array.from({ length: B.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
   }
   return parts;
+}
+
+/** The Commonwealth's armies cut a division into brigades as Britain's did (the historian). */
+const BRIGADES = ['UK', 'CAN', 'AUS', 'NZL', 'NZ', 'SAF', 'IND'];
+
+/**
+ * A regiment block's own word in its army, in the battle's month (the historian's ruling, 22 November; release 2, the
+ * 'namesOn' switch): what a third of a division was called. 'n' is its number, 'i' which third (0 to 2), 'ym' the year
+ * times 12 plus the month from 1.
+ * - Foot: a regiment ("33rd Infantry Regiment", the Soviets' "Rifle Regiment"); Britain and the Commonwealth's armies a
+ *   brigade (three battalions), never a regiment; Germany's Infanterie-Regiment until September 1942, Grenadier-Regiment
+ *   from October 1942. Italy's divisions were binary from 1938: two regiments, and a Blackshirt legion as the third.
+ * - Armour: the American Combat Commands A, B and R; Germany's Panzer-Regiment; the Soviet tank brigade (1942 to 1945,
+ *   a tank regiment before); the British armoured brigade; a tank regiment elsewhere.
+ * The numbers are ours: a division's thirds numbered on from its own (the 11th's are the 31st to 33rd).
+ */
+export function regimentWord(nat: string, kind: Kind, n: number, i: number, ym: number): string {
+  const o = ORD(n);
+  if (kind === 'arm') {
+    if (nat === 'USA') return `Combat Command ${'ABR'[i] ?? 'R'}`;
+    if (nat === 'GER') return `Panzer-Regiment ${n}`;
+    if (nat === 'SOV') return ym >= 1942 * 12 + 1 ? `${o} Tank Brigade` : `${o} Tank Regiment`;
+    if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
+    return `${o} Tank Regiment`;
+  }
+  const arm = kind === 'mtn' ? 'Mountain' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? 'Motorized' : kind === 'eng' ? 'Engineer' : 'Infantry';
+  if (BRIGADES.includes(nat)) return `${o} ${arm} Brigade`;
+  if (nat === 'GER') {
+    const late = ym >= 1942 * 12 + 10;
+    const word = kind === 'mtn' ? 'Gebirgsjäger' : kind === 'cav' ? 'Reiter' : kind === 'mot' ? (late ? 'Panzergrenadier' : 'Infanterie') : kind === 'eng' ? 'Pionier' : late ? 'Grenadier' : 'Infanterie';
+    return `${word}-Regiment ${n}${kind === 'mot' && !late ? ' (mot.)' : ''}`;
+  }
+  if (nat === 'SOV') return `${o} ${kind === 'mtn' ? 'Mountain Rifle' : kind === 'cav' ? 'Cavalry' : kind === 'mot' ? 'Motor Rifle' : kind === 'eng' ? 'Engineer' : 'Rifle'} Regiment`;
+  if (nat === 'ITA' && i === 2 && (kind === 'inf' || kind === 'mtn')) return `${o} Blackshirt Legion`;
+  return `${o} ${arm} Regiment`;
+}
+
+/**
+ * Names a side's regiment blocks as their armies did (regimentWord): its tag the block's own word, its parent its
+ * division's full name, its card name the two together. The blocks of whole divisions keep their names. In the order
+ * makeBlocks made them.
+ */
+export function armyNames(t: SideTicket, units: LandUnit[], turn: number): void {
+  const d = turnToDate(turn), ym = d.year * 12 + d.month + 1;
+  const cut = partsFor(t.forces);
+  let j = 0;
+  t.forces.forEach((f, i) => {
+    const team = teamOf(f);
+    const k = (team ? 'art' : Object.keys(LAND.speed).includes(f.kind) ? f.kind : 'inf') as Kind;
+    for (const p of cut[i]) {
+      const u = units[j++];
+      if (!u || p.regiment === undefined || team) continue;
+      const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
+      const full = div?.name ?? `${ORD(no)} ${KIND_WORD[k]} Division`, short = div?.short ?? `${ORD(no)} ${KIND_WORD[k]}`;
+      const lead = /^(\d+)/.exec(full)?.[1];
+      const n = lead ? (Number(lead) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
+      u.short = regimentWord(u.nat, k, n, p.regiment, ym);
+      u.parent = full;
+      u.name = `${u.short}, ${short}`;
+    }
+  });
 }
 
 /** How many blocks each force gives. */

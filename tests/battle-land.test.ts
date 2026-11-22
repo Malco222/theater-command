@@ -1258,8 +1258,9 @@ describe('the hand-off with a real campaign', () => {
   it('an attack called off under fire pays its own bill for that repulse the same way (b474)', () => {
     type Rep = NonNullable<ReturnType<typeof handBack>>;
     const lost = (x: Rep): number => Math.max(x.attLost, x.attackers.reduce((a, u) => a + u.lost, 0));
-    const call = (bill?: FieldBill): Rep => { const g = playing(5); const { c, r } = anAttack(g); return orderAttack(g, [c], r, 0.9, bill)!; };
-    const staff = lost(call());
+    const call = (bill?: FieldBill, fought: number | null = 0.9): Rep => { const g = playing(5); const { c, r } = anAttack(g); return orderAttack(g, [c], r, fought ?? undefined, bill)!; };
+    // The rules' bill for that defeat at the staff's own roll, as SEND THEM IN draws it (b476(2)), not at the field's ratio.
+    const staff = lost(call(undefined, null));
     for (const bar of [0.4, 0.8, 1]) {
       const rep = call({ corps: {}, att: 0.02, def: 0.01, whole: true, pulled: { side: 'att', bar } });
       expect(lost(rep) / Math.max(staff * bar * bar, 1)).toBeCloseTo(1, 1);

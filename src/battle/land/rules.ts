@@ -70,10 +70,19 @@ export const LAND = {
    * open), and strikes 'blows' as hard for 'winded' seconds after (men getting their breath). Orders by radio: an order
    * of the player's reaches a block 'delay' seconds after he gives it, 'cut' times that when its headquarters is hit
    * (wavering, or under 'hqAt' of its strength: the runners go instead of the wireless). Neither is felt unless the
-   * player orders a run, or the battle is opened with radio on.
+   * player orders a run, or the battle is opened with radio on. 'nations': each army's wait as a multiple of 'delay',
+   * by the last year it held ([through year, times], the first that covers the battle's year; 1 where not listed):
+   * the historian's (22 November 05:20Z, 'L as held'): Soviet 1941-42 twice (few sets below battalion: telephone and
+   * runners), Japanese twice, Italian one and a half, German infantry a quarter more (telephone and runners more than
+   * wireless); 1943 on, the Soviet a quarter more as the German (ours). A tank block waits as its model's share with a
+   * set talks (data/battle/armour.json radio, the modeller's sheet: a radio in every German, American and British
+   * tank; two T-34s in five to 1943) and the rest as its army's foot.
    */
   double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 } as Record<Motion, number>, exposed: 1.25, blows: 0.75, winded: 20 },
-  radio: { delay: 5, cut: 2.5, hqAt: 0.5 },
+  radio: {
+    delay: 5, cut: 3.5, hqAt: 0.5,
+    nations: { SOV: [[1942, 2], [9999, 1.25]], JAP: [[9999, 2]], ITA: [[9999, 1.5]], GER: [[9999, 1.25]] } as Record<string, [number, number][]>,
+  },
   /**
    * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts): off unless the battle is opened with it
    * (LandBattle.measured). A tank block's blow on a tank block, or a gun's over open sights, weighs the chance its
@@ -93,8 +102,7 @@ export const LAND = {
    * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
    * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
    * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
-   * itself away) unless it is ordered to attack
-   * or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
+   * itself away) unless it is ordered to attack or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
    * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
    * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
    * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
@@ -102,11 +110,31 @@ export const LAND = {
    * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
    * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
    * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
+   *
+   * The historian's check (22 November 05:20Z; the Normandy hedgerows, 1944: "they could not see the Germans, but the
+   * Germans could see them"):
+   * - A block on a hedge line (within 'hedge.near' metres of one: hedgerow, lane bank, wood edge, garden hedge or wall,
+   *   where the 3D game has handed the field's hedges over) hides as in woods. In woods themselves (true forest, sight
+   *   25 to 75 m) hidden foot and machine guns hold their fire to 'forest' metres; on a hedge line, to 'ambush'. The men
+   *   drawn on foot cross a hedge at its nearest gate (within 'hedge.gap' metres of the gap's middle; looks only).
+   * - A hidden block that opens fire is found but not yet located: the fire back at it strikes 'locate.fire' as hard for
+   *   'locate.secs' seconds, or until an enemy comes within its 'sight'.
+   * - A tank or lorry moving inside cover is heard at 'heard' metres (by its motion; 0: as 'sight').
+   * - Its ambush shakes a block caught moving in the open 'surprise.open' times (not 'nerve'), and its side's mortar
+   *   teams strike what the ambush is firing on 'surprise.mortar' times as hard in those seconds (pre-sighted on the gaps).
+   * - Reconnaissance by fire: a block told to fire on a stretch of cover (the player's land:fire at a point; the
+   *   computer's attack once it has been ambushed, at the cover ahead in its lane) strikes a block hidden within
+   *   'search.reach' metres of it at 'search.blow', and finds it about 'search.odds' times in 'search.every' seconds.
    */
   hide: {
     sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 } as Record<Motion, number>,
+    heard: { foot: 0, wheels: 0, tracks: 350, guns: 0, fixed: 0 } as Record<Motion, number>,
     ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 } as Record<Motion | 'mg', number>,
-    surprise: { secs: 20, punch: 1.5, nerve: 2 },
+    forest: 100,
+    surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
+    locate: { secs: 25, fire: 0.5 },
+    search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
+    hedge: { near: 12, gap: 3 },
     staff: { blocks: 2, ahead: 400, back: 100, across: 200 },
   },
   teams: {

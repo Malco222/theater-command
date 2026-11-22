@@ -100,18 +100,21 @@ describe('an ambush', () => {
     return { b, d, a };
   }
 
-  it('holds its fire till the enemy is close, and nobody strikes it meanwhile', () => {
+  it('holds its fire till the enemy is close (in true forest, LAND.hide.forest), and nobody strikes it meanwhile', () => {
     const { b, d, a } = ambush(180);
     expect(d.hid).toBe(true);
     expect(b.gap(a, d)).toBeLessThan(LAND.reach.inf);
     expect(b.targetOf(d)).toBeNull();
     expect(b.targetOf(a)?.id).not.toBe(d.id);
+    // Within the hedgerow distance but not the forest's: still holds.
     inFront(b, d, a, 120);
+    expect(b.targetOf(d)).toBeNull();
+    inFront(b, d, a, LAND.hide.forest - 20);
     expect(b.targetOf(d)?.id).toBe(a.id);
   });
 
   it('springs on the enemy at close range: it is found, says so, and its first fire strikes harder', () => {
-    const on = ambush(120), off = ambush(120, false);
+    const on = ambush(80), off = ambush(80, false);
     on.b.step();
     expect(on.d.hid).toBeUndefined();
     expect(on.d.sprung).toBe(0);
@@ -161,10 +164,12 @@ describe('the computer does not know they are there', () => {
       let saw = 0;
       run(b, 3000, () => {
         for (const u of b.units) {
-          if (u.engaged !== undefined) expect(b.unit(u.engaged)!.hid).toBeUndefined();
+          // Only fire on cover (reconnaissance by fire, once its attack has been ambushed) lands on a block still hidden.
+          if (u.engaged !== undefined && b.unit(u.engaged)!.hid) { expect(u.search).toBeDefined(); expect(b.ambushed.has(u.side)).toBe(true); }
           if (u.order?.kind === 'attack') expect(b.unit(u.order.target!)!.hid).toBeUndefined();
           if (u.aim !== undefined) expect(b.unit(u.aim)!.hid).toBeUndefined();
-          if (u.side === 'def' && u.hid && u.reserve !== 'held') { expect(u.order).toBeNull(); saw++; }
+          // (Broken by blind fire while still hidden, it may fall back on its own.)
+          if (u.side === 'def' && u.hid && u.reserve !== 'held') { expect(u.order === null || u.order.kind === 'withdraw').toBe(true); saw++; }
         }
         for (const id of b.plan.att?.main ?? []) expect(b.unit(id)!.hid).toBeUndefined();
       });
