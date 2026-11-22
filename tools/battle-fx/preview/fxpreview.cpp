@@ -10,6 +10,20 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|top|gun]
 //   ./fxpreview /tmp/recipe.txt <out folder> fate <steam|out|cook|glance> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> sea <a name for the frames> <frames> [WxH]
+//
+// The sea shot (the sea battle's range): three ships in line ahead, FX_GAP m (500) apart and FX_SHIP_LONG m (200)
+// long, steaming along +X at FX_KNOTS (25), seen broadside on from FX_DIST m (15000) by an eye FX_EYE_H m (24) up with
+// an FX_LENS degree lens (55), looking at FX_LOOK_X m along the line and FX_LOOK_H m (30) up. The left ship fires four
+// turrets of FX_GUN (howitzer) at the eye at FX_FIRE_AT s (0.98; again every FX_EVERY s); a heavy, a medium and a
+// light shell fall short of the middle one at FX_FALL_AT s (1.18), and she is hit on her deck and on her armour at
+// FX_HIT_AT s (2.48; FX_NO_HIT=1: not); the right one burns from 0 s, FX_BURN m across (20; 0: no fire), and the fire
+// rides with her (BurnMove). FX_USE=sea (as a scene that calls UseSeaDistance), air (UseAirDistance) or none.
+// FX_FUNNEL=<a trail kind>: each funnel smokes, FX_FUNNEL_SPAN m across, from FX_FUNNEL_UP m up (FX_POWER=share of
+// her top speed, FX_POWER_AT=s and FX_POWER_TO=share: she rings up). FX_FOLLOW=1: the eye rides with the ships, from
+// FX_EYE_X m along the line and FX_EYE_Y m toward it. FX_BG=light: a flat ground of that light, to measure opacity. FX_NO_SHIPS=1 leaves
+// the hulls out. Each moment falls a little before a frame, as a game's does. The fate shots take a moving ship too:
+// FX_SHIP=x,y,z is her velocity in m/s (12.9 is 25 knots), FX_SHIP_STOP=s stops her dead, FX_SHIP_STAY=1 holds the eye.
 //
 // The drive shot (the desert dust): a column of FX_VEHICLES (4) tanks, FX_GAP m (30) apart, driving along +X at
 // FX_SPEED m/s (10) on a stony desert ("sand"), FX_RUN s (12) before the first frame, each laying dust from its two
@@ -181,6 +195,18 @@ namespace
 		return 0.5 + 0.3 * A * 0.5 + 0.2 * B;
 	}
 
+	// (FX_SKY=r,g,b: the sky or haze behind the smoke as the game's screen shows it, told to the kit (SetSky); without
+	// it the kit is told nothing and old smoke pales to the recipe's own grey)
+	void SkyFromEnv(Battle& Fx)
+	{
+		const char* Is = std::getenv("FX_SKY");
+		double SkyR = 0.0, SkyG = 0.0, SkyB = 0.0;
+		if (Is && std::sscanf(Is, "%lf,%lf,%lf", &SkyR, &SkyG, &SkyB) == 3)
+		{
+			Fx.SetSky(SkyR, SkyG, SkyB);
+		}
+	}
+
 	// (FX_GROUND=r,g,b: the ground as the game's screen shows it, the same everywhere; without it the game cannot say)
 	bool GroundPaint(void*, double, double, double& R, double& G, double& B)
 	{
@@ -315,14 +341,16 @@ namespace
 			}
 		}
 		const double Area = (Sx[1] - Sx[0]) * (Sy[2] - Sy[0]) - (Sx[2] - Sx[0]) * (Sy[1] - Sy[0]);
-		if (std::fabs(Area) < 1e-9)
+		if (!(std::fabs(Area) >= 1e-9) || !std::isfinite(Area))
 		{
-			return;
+			return; // (no area, or a corner that is no number: an aircraft of a span without end draws nothing)
 		}
-		const int X0 = std::max(0, static_cast<int>(std::floor(std::min({ Sx[0], Sx[1], Sx[2] }))));
-		const int X1 = std::min(C.W - 1, static_cast<int>(std::ceil(std::max({ Sx[0], Sx[1], Sx[2] }))));
-		const int Y0 = std::max(0, static_cast<int>(std::floor(std::min({ Sy[0], Sy[1], Sy[2] }))));
-		const int Y1 = std::min(C.H - 1, static_cast<int>(std::ceil(std::max({ Sy[0], Sy[1], Sy[2] }))));
+		// (a corner a thousand million pixels off, a ship at a wild speed: held before it is made a whole number)
+		auto Whole = [](double Is) { return static_cast<int>(std::clamp(Is, -1.0e9, 1.0e9)); };
+		const int X0 = std::max(0, Whole(std::floor(std::min({ Sx[0], Sx[1], Sx[2] }))));
+		const int X1 = std::min(C.W - 1, Whole(std::ceil(std::max({ Sx[0], Sx[1], Sx[2] }))));
+		const int Y0 = std::max(0, Whole(std::floor(std::min({ Sy[0], Sy[1], Sy[2] }))));
+		const int Y1 = std::min(C.H - 1, Whole(std::ceil(std::max({ Sy[0], Sy[1], Sy[2] }))));
 		for (int Y = Y0; Y <= Y1; ++Y)
 		{
 			for (int X = X0; X <= X1; ++X)
@@ -369,14 +397,16 @@ namespace
 			}
 		}
 		const double Area = (Sx[1] - Sx[0]) * (Sy[2] - Sy[0]) - (Sx[2] - Sx[0]) * (Sy[1] - Sy[0]);
-		if (std::fabs(Area) < 1e-9)
+		if (!(std::fabs(Area) >= 1e-9) || !std::isfinite(Area))
 		{
-			return;
+			return; // (no area, or a corner that is no number: an aircraft of a span without end draws nothing)
 		}
-		const int X0 = std::max(0, static_cast<int>(std::floor(std::min({ Sx[0], Sx[1], Sx[2] }))));
-		const int X1 = std::min(C.W - 1, static_cast<int>(std::ceil(std::max({ Sx[0], Sx[1], Sx[2] }))));
-		const int Y0 = std::max(0, static_cast<int>(std::floor(std::min({ Sy[0], Sy[1], Sy[2] }))));
-		const int Y1 = std::min(C.H - 1, static_cast<int>(std::ceil(std::max({ Sy[0], Sy[1], Sy[2] }))));
+		// (a corner a thousand million pixels off, a ship at a wild speed: held before it is made a whole number)
+		auto Whole = [](double Is) { return static_cast<int>(std::clamp(Is, -1.0e9, 1.0e9)); };
+		const int X0 = std::max(0, Whole(std::floor(std::min({ Sx[0], Sx[1], Sx[2] }))));
+		const int X1 = std::min(C.W - 1, Whole(std::ceil(std::max({ Sx[0], Sx[1], Sx[2] }))));
+		const int Y0 = std::max(0, Whole(std::floor(std::min({ Sy[0], Sy[1], Sy[2] }))));
+		const int Y1 = std::min(C.H - 1, Whole(std::ceil(std::max({ Sy[0], Sy[1], Sy[2] }))));
 		for (int Y = Y0; Y <= Y1; ++Y)
 		{
 			for (int X = X0; X <= X1; ++X)
@@ -441,6 +471,7 @@ namespace
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &FlatSea, nullptr, 3u);
+		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const double Since = EnvNum("FX_SINCE", 0.0);
 		Camera Cam;
@@ -570,6 +601,7 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, bSea ? &FlatSea : &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", bSea ? 3.0 : 1.6), EnvNum("FX_WIND_Y", bSea ? 0.8 : 0.4), 0.0));
 		const double GroundZ = bSea ? 0.0 : Swell(nullptr, 0.0, 0.0);
@@ -653,6 +685,13 @@ namespace
 				Script.push_back({ EnvNum("FX_AT", 0.1) + I * EnvNum("FX_GAP", 0.6), 5 });
 			}
 		}
+		// (FX_SHIP=x,y,z: the thing burning is a ship under way at that velocity, metres a second (12.9 is 25 knots):
+		// its fire, vent and cook-off are moved with it every frame, as the sea battle moves them, and the eye rides
+		// along beside her. FX_SHIP_STOP=s: she stops dead at that moment. FX_SHIP_STAY=1: the eye stays where it was)
+		const bool bShip = std::getenv("FX_SHIP") != nullptr;
+		const Vec ShipVel = EnvVec("FX_SHIP", Vec());
+		const double ShipStop = EnvNum("FX_SHIP_STOP", 1.0e9);
+		auto ShipAt = [&](double Now) { return ShipVel * std::min(std::max(Now, 0.0), ShipStop); };
 		auto Play = [&](double Now)
 		{
 			int Shots = 0;
@@ -669,13 +708,13 @@ namespace
 				case 1:
 					if (BurnAcross > 0.0)
 					{
-						Fx.Burn(D.At, FireAt, BurnAcross, EnvNum("FX_BURN_S", 900.0), 7);
+						Fx.Burn(D.At, FireAt + ShipAt(D.At), BurnAcross, EnvNum("FX_BURN_S", 900.0), 7);
 					}
 					break;
 				case 2:
 				{
 					const char* Kind = std::getenv("FX_STEAM_KIND");
-					Fx.Steam(D.At, 1, At, EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), EnvNum("FX_ACROSS", 2.0), EnvNum("FX_SECONDS", 25.0), Kind ? Kind : "vent");
+					Fx.Steam(D.At, 1, At + ShipAt(D.At), EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), EnvNum("FX_ACROSS", 2.0), EnvNum("FX_SECONDS", 25.0), Kind ? Kind : "vent");
 					break;
 				}
 				case 3:
@@ -685,6 +724,11 @@ namespace
 					break;
 				}
 				case 4:
+					if (bShip)
+					{
+						Fx.CookOff(D.At, At + ShipAt(D.At), EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), EnvNum("FX_ACROSS", 0.6), static_cast<int>(EnvNum("FX_POPS", 7.0)), EnvNum("FX_OVER", 10.0), EnvNum("FX_JET", 5.0), EnvNum("FX_JET_FROM", -1.0), 9);
+						break;
+					}
 					Fx.CookOff(D.At, At, EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), EnvNum("FX_ACROSS", 0.6), static_cast<int>(EnvNum("FX_POPS", 7.0)), EnvNum("FX_OVER", 10.0), EnvNum("FX_JET", 5.0), EnvNum("FX_JET_FROM", -1.0));
 					break;
 				default:
@@ -706,17 +750,43 @@ namespace
 		}
 		Fx.Draw(-0.1, View);
 		std::sort(Frames.begin(), Frames.end());
+		const Vec Eye0 = Cam.Eye;
+		const bool bEyeStays = std::getenv("FX_SHIP_STAY") != nullptr;
+		auto Sail = [&](double Now)
+		{
+			if (!bShip)
+			{
+				return;
+			}
+			const Vec Moved = ShipAt(Now);
+			const Vec Going = Now < ShipStop ? ShipVel : Vec();
+			Fx.BurnMove(Now, 7, FireAt + Moved, Going);
+			Fx.SteamMove(Now, 1, At + Moved, EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), Going);
+			Fx.CookOffMove(Now, 9, At + Moved, EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), Going);
+			if (!bEyeStays)
+			{
+				Cam.Eye = Eye0 + Moved;
+				View.Eye = Cam.Eye;
+			}
+			// (two men on her deck for scale and to show where she is: 3 m ahead of the place and 3 m astern)
+			const Vec Fore = ShipVel.Length() > 1e-6 ? ShipVel.Unit() : Vec(1.0, 0.0, 0.0);
+			Men.clear();
+			Men.push_back(At + Moved + Fore * 3.0 - Vec(0.0, 0.0, 0.5));
+			Men.push_back(At + Moved - Fore * 3.0 - Vec(0.0, 0.0, 0.5));
+		};
 		int Drawn = 0;
 		for (int Frame : Frames)
 		{
 			for (; Drawn < Frame; ++Drawn)
 			{
 				Play(Drawn / 30.0);
+				Sail(Drawn / 30.0);
 				Fx.Draw(Drawn / 30.0, View);
 			}
 			Drawn = Frame + 1;
 			const double Now = Frame / 30.0;
 			Play(Now);
+			Sail(Now);
 			const int N = Fx.Draw(Now, View);
 			Battle::Lamp Lamps[2];
 			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
@@ -747,6 +817,7 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
 		if (ShotName != "above")
 		{
 			Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene does: UseAirDistance)
@@ -814,7 +885,8 @@ namespace
 		const bool bEngineShot = ShotName == "quarter" || ShotName == "beam";
 		const bool bStruck = ShotName == "hit" || ShotName == "trail" || ShotName == "wake" || bEngineShot;
 		// "fall": the aircraft falls from 0.5 s, FX_FALL its way (burn, spin, explode), shedding its debris row into a
-		// deck FX_DECK metres below (400); seen from FX_DIST metres off the beam (140). FX_SPAN its span (11)
+		// deck FX_DECK metres below (400); seen from FX_DIST metres off the beam (140). FX_SPAN its span (11), FX_LOOK the
+		// event's look (0 to 3), FX_BOMBS=1 bombs aboard, FX_STAY=1 the eye stays on an explosion's cloud
 		const bool bFall = ShotName == "fall";
 		const char* FallIs = std::getenv("FX_FALL");
 		const std::string FallKind = FallIs ? FallIs : "burn";
@@ -911,8 +983,12 @@ namespace
 			}
 			else if (ShotName == "burst")
 			{
-				Cam.Eye = BurstAt + StartRight * (std::getenv("FX_FAR") ? 160.0 : 95.0) - StartLevel * 10.0 + ZUp * 8.0;
-				Cam.Forward = (BurstAt + StartLevel * (std::getenv("FX_FAR") ? 22.0 : 8.0) - Cam.Eye).Unit();
+				// (FX_FOLLOW=1: the eye goes with the wind and the burst's own drift, so an old burst stays in the picture;
+				// FX_FAR=1 from 160 m, FX_FAR=2 and so on from that many times 160 m)
+				const double Away = std::getenv("FX_FAR") ? 160.0 * std::clamp(EnvNum("FX_FAR", 1.0), 1.0, 20.0) : 95.0;
+				const Vec Carried = EnvNum("FX_FOLLOW", 0.0) > 0.0 ? Vec(1.6, 0.4, 0.0) * ((1.0 + 0.6 / 1.65) * std::max(0.0, Shown - 0.15)) : Vec();
+				Cam.Eye = BurstAt + Carried + StartRight * Away - StartLevel * 10.0 + ZUp * 8.0;
+				Cam.Forward = (BurstAt + Carried + StartLevel * (std::getenv("FX_FAR") ? 22.0 : 8.0) - Cam.Eye).Unit();
 			}
 			else if (ShotName == "flak")
 			{
@@ -956,7 +1032,8 @@ namespace
 				const Vec L0 = Vec(F0.Fw.X, F0.Fw.Y, 0.0).Unit();
 				const Vec R0 = L0.Cross(ZUp).Unit();
 				const double U = std::max(0.0, Shown - FallFrom);
-				const Vec Look = FallKind == "explode" ? F0.At + L0 * (Speed * 0.7 * (1.0 - std::exp(-U))) - ZUp * (10.0 * std::max(0.0, U - 1.0)) : F.At;
+				// (FX_STAY=1: the eye stays on the explosion's fire cloud and its smoke, which are carried on a little way and hang)
+				const Vec Look = FallKind == "explode" ? (EnvNum("FX_STAY", 0.0) > 0.0 ? F0.At + L0 * (Speed * 0.2 * (1.0 - std::exp(-3.0 * U))) : F0.At + L0 * (Speed * 0.7 * (1.0 - std::exp(-U))) - ZUp * (10.0 * std::max(0.0, U - 1.0))) : F.At;
 				const double Off = EnvNum("FX_DIST", 140.0);
 				Cam.Eye = F0.At + R0 * Off + L0 * (0.6 * Off) + ZUp * (0.15 * Off);
 				Cam.Forward = (Look - Cam.Eye).Unit();
@@ -1057,17 +1134,21 @@ namespace
 				{
 					const Vec Vel = (Fall(T + 0.01).At - F.At) * 100.0;
 					const Vec Engine = Place(F, Vec(EnvNum("FX_FIRE_X", 2.9), 0.75, -0.35));
-					if (Step == 6 && FallKind != "explode")
+					// (FX_FALL_TRAIL: the trail a fall is seen with, "none" for none; unset, smoke on a spin and fire on the rest)
+					const char* FallTrail = std::getenv("FX_FALL_TRAIL");
+					const std::string FallTrailIs = FallTrail ? FallTrail : (FallKind == "spin" ? "smoke" : "fire");
+					const bool bFallTrail = FallKind != "explode" && FallTrailIs != "none";
+					if (Step == 6 && bFallTrail)
 					{
-						Fx.TrailStart(T, 1, Engine, Vel, FallKind == "spin" ? "smoke" : "fire", EnvNum("FX_SPAN", 11.0));
+						Fx.TrailStart(T, 1, Engine, Vel, FallTrailIs.c_str(), EnvNum("FX_SPAN", 11.0), static_cast<int>(EnvNum("FX_LOOK", -1.0)));
 					}
-					if (Step >= 6 && FallKind != "explode")
+					if (Step >= 6 && bFallTrail)
 					{
 						Fx.TrailMove(T, 1, Engine, Vel);
 					}
 					if (Step == static_cast<int>(FallFrom * 60.0))
 					{
-						Fx.AirFall(T, 7, F.At, Vel, FallKind.c_str(), EnvNum("FX_SPAN", 11.0), Height - EnvNum("FX_DECK", 400.0));
+						Fx.AirFall(T, 7, F.At, Vel, FallKind.c_str(), EnvNum("FX_SPAN", 11.0), Height - EnvNum("FX_DECK", 400.0), static_cast<int>(EnvNum("FX_LOOK", -1.0)), EnvNum("FX_BOMBS", 0.0) > 0.0);
 					}
 					else if (Step > static_cast<int>(FallFrom * 60.0))
 					{
@@ -1092,14 +1173,14 @@ namespace
 					const Vec Engine = Place(F, EngineAt);
 					if (Step == 18)
 					{
-						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str(), EnvNum("FX_SPAN", 0.0)); // (FX_SPAN: the aircraft's span, metres)
+						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str(), EnvNum("FX_SPAN", 0.0), static_cast<int>(EnvNum("FX_LOOK", -1.0))); // (FX_SPAN: the aircraft's span, metres)
 					}
 					for (int K = 2; K <= 3; ++K)
 					{
 						const char* Next = std::getenv(K == 2 ? "FX_TRAIL2" : "FX_TRAIL3");
 						if (Next && Step == static_cast<int>(std::lround(EnvNum(K == 2 ? "FX_TRAIL2_AT" : "FX_TRAIL3_AT", 1e9) * 60.0)))
 						{
-							Fx.TrailStart(T, 1, Engine, F.Fw * Speed, Next, EnvNum("FX_SPAN", 0.0));
+							Fx.TrailStart(T, 1, Engine, F.Fw * Speed, Next, EnvNum("FX_SPAN", 0.0), static_cast<int>(EnvNum("FX_LOOK", -1.0)));
 						}
 					}
 					if (Step >= 18)
@@ -1276,12 +1357,219 @@ namespace
 		}
 	}
 
+	/** The sea with three ships' decks on it: a hit that is not on armour is laid on what is under it, as the game's
+	 * ground function says (a deck there, the sea elsewhere). */
+	struct SeaDecks
+	{
+		double Dist = 0.0, Gap = 0.0, Long = 0.0, Up = 0.0, Speed = 0.0, Now = 0.0;
+	};
+	double DeckOrSea(void* Context, double X, double Y)
+	{
+		const SeaDecks& S = *static_cast<const SeaDecks*>(Context);
+		for (int Ship = 0; Ship < 3; ++Ship)
+		{
+			if (std::fabs(X - ((Ship - 1) * S.Gap + S.Speed * S.Now)) <= 0.5 * S.Long && std::fabs(Y - S.Dist) <= 0.07 * S.Long)
+			{
+				return S.Up;
+			}
+		}
+		return 0.0;
+	}
+
+	/** The sea battle's range (see the top of the file): the enemy line seen from a ship's broadside. */
+	int Sea(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		SeaDecks Decks;
+		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
+		const char* UseIs = std::getenv("FX_USE"); // (FX_USE=air: as a scene that calls UseAirDistance; none: neither)
+		const std::string Use = UseIs ? UseIs : "sea";
+		if (Use == "sea")
+		{
+			Fx.UseSea();
+		}
+		else if (Use == "air")
+		{
+			Fx.SetDrawBeyond(Fx.AirBeyond());
+		}
+		const double Dist = EnvNum("FX_DIST", 15000.0), Speed = EnvNum("FX_KNOTS", 25.0) * 0.5144;
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 55.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		// (FX_EYE_X, FX_EYE_Y: the eye that far along the line and toward it (FX_EYE_Y=<FX_DIST> stands it in the line:
+		// with FX_EYE_X under 0, astern of the middle ship). FX_FOLLOW=1: it rides along with the ships)
+		const Vec Eye0 = Vec(EnvNum("FX_EYE_X", 0.0), EnvNum("FX_EYE_Y", 0.0), EnvNum("FX_EYE_H", 24.0));
+		const bool bFollow = std::getenv("FX_FOLLOW") != nullptr;
+		Cam.Eye = Eye0;
+		Cam.Forward = (Vec(EnvNum("FX_LOOK_X", 0.0), Dist, EnvNum("FX_LOOK_H", 30.0)) - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
+		}
+		// (three ships in line ahead, FX_GAP m (500) apart, steaming along +X: the left one fires her broadside at the
+		// eye at FX_FIRE_AT s (0.98) and every FX_EVERY s (0: once); shells fall short of the middle one at FX_FALL_AT s
+		// (1.18), a heavy, a medium and a light, and she is hit at FX_HIT_AT s (2.48; FX_NO_HIT=1: not); the right one
+		// is on fire from 0 s, FX_BURN m across (20), and it rides with her)
+		const double Gap = EnvNum("FX_GAP", 500.0), Long = EnvNum("FX_SHIP_LONG", 200.0), DeckUp = 10.0;
+		Decks.Dist = Dist;
+		Decks.Gap = Gap;
+		Decks.Long = Long;
+		Decks.Up = DeckUp;
+		Decks.Speed = Speed;
+		const char* GunIs = std::getenv("FX_GUN");
+		const std::string Gun = GunIs ? GunIs : "howitzer";
+		// (each moment falls a little before a frame, as a game's does: called on the very frame it is drawn, a flash is
+		// not yet lit)
+		const double FireAt = EnvNum("FX_FIRE_AT", 0.98), Every = EnvNum("FX_EVERY", 0.0), FallAt = EnvNum("FX_FALL_AT", 1.18), BurnAcross = EnvNum("FX_BURN", 20.0);
+		auto ShipAt = [&](int Ship, double Now) { return Vec((Ship - 1) * Gap + Speed * Now, Dist, 0.0); };
+		const Vec ToEye = Vec(0.0, -1.0, 0.0);
+		double NextFire = FireAt;
+		bool bFell = false, bLit = false, bHit = std::getenv("FX_NO_HIT") != nullptr;
+		const double HitAt = EnvNum("FX_HIT_AT", 2.48);
+		// (FX_FUNNEL=smoke: each ship's funnel smokes, a trail of that kind FX_FUNNEL_SPAN m across (0.07 of her length),
+		// from FX_FUNNEL_UP m above the sea (0.125 of her length))
+		// (FX_POWER=share: the share of her top speed each ship says she is making, 0 to 1 (not set: none is given);
+		// FX_POWER_AT=s with FX_POWER_TO=share: it changes to that at s seconds, as when she rings up)
+		const char* FunnelIs = std::getenv("FX_FUNNEL");
+		const double FunnelSpan = EnvNum("FX_FUNNEL_SPAN", 0.07 * Long), FunnelUp = EnvNum("FX_FUNNEL_UP", 0.125 * Long);
+		const double Power0 = EnvNum("FX_POWER", -1.0), PowerAt = EnvNum("FX_POWER_AT", 1.0e9), PowerTo = EnvNum("FX_POWER_TO", 1.0);
+		bool bSmokes = false;
+		auto Play = [&](double Now)
+		{
+			Decks.Now = Now;
+			for (int Ship = 0; Ship < 3 && FunnelIs; ++Ship)
+			{
+				const Vec Top = ShipAt(Ship, Now) + Vec(0.02 * Long, 0.0, FunnelUp);
+				if (!bSmokes)
+				{
+					Fx.TrailStart(Now, 50 + Ship, Top, Vec(Speed, 0.0, 0.0), FunnelIs, FunnelSpan);
+				}
+				Fx.TrailMove(Now, 50 + Ship, Top, Vec(Speed, 0.0, 0.0), Now >= PowerAt ? PowerTo : Power0);
+			}
+			bSmokes = true;
+			if (!bLit && BurnAcross > 0.0)
+			{
+				Fx.Burn(0.0, ShipAt(2, 0.0) + Vec(-20.0, 0.0, DeckUp), BurnAcross, 900.0, 7);
+				bLit = true;
+			}
+			if (bLit)
+			{
+				Fx.BurnMove(Now, 7, ShipAt(2, Now) + Vec(-20.0, 0.0, DeckUp), Vec(Speed, 0.0, 0.0));
+			}
+			while (Now >= NextFire)
+			{
+				// (four turrets, the after two a tenth of a second late)
+				for (int T = 0; T < 4; ++T)
+				{
+					const double Along = (T < 2 ? 55.0 - 25.0 * T : -30.0 - 25.0 * (T - 2));
+					Fx.Muzzle(NextFire + (T >= 2 ? 0.1 : 0.0), ShipAt(0, NextFire) + Vec(Along, -14.0, DeckUp + 3.0), (ToEye + Vec(0.0, 0.0, 0.25)).Unit(), Gun.c_str(), "water");
+				}
+				NextFire = Every > 0.0 ? NextFire + Every : 1.0e9;
+			}
+			if (!bFell && Now >= FallAt)
+			{
+				bFell = true;
+				Fx.Shell(FallAt, ShipAt(1, FallAt) + Vec(-60.0, -150.0, 0.0), "bomb500", "water", false);
+				Fx.Shell(FallAt + 0.15, ShipAt(1, FallAt) + Vec(40.0, -220.0, 0.0), "bomb250", "water", false);
+				Fx.Shell(FallAt + 0.3, ShipAt(1, FallAt) + Vec(130.0, -120.0, 0.0), "how150", "water", false);
+			}
+			if (!bHit && Now >= HitAt)
+			{
+				// (and she is hit: a heavy shell on her deck forward, then a light one on her armour aft)
+				bHit = true;
+				Fx.Shell(HitAt, ShipAt(1, HitAt) + Vec(0.32 * Long, -0.05 * Long, DeckUp), "bomb250", "town", false);
+				Fx.Shell(HitAt + 0.4, ShipAt(1, HitAt + 0.4) + Vec(-0.25 * Long, -0.072 * Long, 6.0), "light", "town", true);
+			}
+		};
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		const std::vector<Vec> Nobody;
+		const double Grey[3] = { 0.16, 0.18, 0.2 };
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Play(Drawn / 30.0);
+				if (bFollow)
+				{
+					View.Eye = Eye0 + Vec(Speed * (Drawn / 30.0), 0.0, 0.0);
+				}
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			if (bFollow)
+			{
+				Cam.Eye = View.Eye = Eye0 + Vec(Speed * Now, 0.0, 0.0);
+			}
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Nobody, false, true);
+			// (FX_BG=light: no sea, sky or ships, every pixel that much light (0 black, 1 white) behind the kit's pieces.
+			// The same frame on black and on white gives a piece's own opacity and colour)
+			const char* BgIs = std::getenv("FX_BG");
+			if (BgIs)
+			{
+				const double Bg = std::atof(BgIs);
+				std::fill(C.R.begin(), C.R.end(), Bg);
+				C.G = C.R;
+				C.B = C.R;
+			}
+			for (int Ship = 0; Ship < 3 && !std::getenv("FX_NO_SHIPS") && !BgIs; ++Ship)
+			{
+				// (a plain hull and a block of upperworks, so the eye has her size: FX_SHIP_LONG m (200) long)
+				Box(C, Cam, ShipAt(Ship, Now), Vec(1.0, 0.0, 0.0), Long, 0.14 * Long, DeckUp, Grey, Ship);
+				Box(C, Cam, ShipAt(Ship, Now) + Vec(0.05 * Long, 0.0, DeckUp), Vec(1.0, 0.0, 0.0), 0.3 * Long, 0.08 * Long, 14.0, Grey, Ship);
+			}
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/sea-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
+		}
+		return 0;
+	}
+
 	/** The desert dust (see the top of the file): a column driving, or a towed gun firing. */
 	int Drive(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Ground, std::vector<int> Frames, int W, int H, const std::string& Shot)
 	{
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &Swell, nullptr, 3u);
+		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind until a scene sets one)
 		const double Speed = EnvNum("FX_SPEED", 10.0), Gap = EnvNum("FX_GAP", 30.0);
 		const int NCars = Shot == "gun" ? 0 : std::max(1, static_cast<int>(EnvNum("FX_VEHICLES", 4.0)));
@@ -1460,6 +1748,10 @@ int main(int Argc, char** Argv)
 	{
 		return Fate(Book, OutDir, Ground, Frames, W, H);
 	}
+	if (Size == "sea")
+	{
+		return Sea(Book, OutDir, Ground, Frames, W, H);
+	}
 	if (Size == "drive")
 	{
 		return Drive(Book, OutDir, Ground, Frames, W, H, Argc > 7 ? Argv[7] : "eye");
@@ -1473,6 +1765,7 @@ int main(int Argc, char** Argv)
 	Battle Fx;
 	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+	SkyFromEnv(Fx);
 	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 	Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind; FX_WIND_X, FX_WIND_Y m/s another)

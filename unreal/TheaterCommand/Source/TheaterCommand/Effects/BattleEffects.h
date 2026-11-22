@@ -123,9 +123,20 @@ public:
 	 * its own. Id: a number that stays the same for that trail. Kind: "smoke" (thin and grey, thickening and
 	 * darkening), "fire" (flame at the root, black smoke) or "glycol" (thin white vapour); TrailStart again on a
 	 * running Id changes its kind (smoke catching fire). SpanMetres: the aircraft's wingspan in metres, so a fire's
-	 * flame is sized to it (half the span, at most 10 m, by the recipe); 0 keeps the recipe's own flame_m. */
-	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f);
-	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
+	 * flame is sized to it (half the span, at most 10 m, by the recipe); 0 keeps the recipe's own flame_m.
+	 * Two kinds for the ways down: "fuel" (a flamer: long torn tongues of fire streaming 1 to 3 aircraft lengths
+	 * behind the point, then thick black smoke) and "mist" (white fuel spraying from a torn wing root; TrailStart
+	 * "fuel" on the same Id when it catches). Look: the battle event's look, 0 to 3, which sets a flamer's length and
+	 * how sooty its flame is; -1 the recipe's usual one. The kit throws no dice for a look.
+	 * A ship's funnel smoke is the kind "funnel": one trail a funnel, At the funnel's top, Velocity the ship's,
+	 * SpanMetres the funnel's width at its top (about 3 m on a destroyer, 4 to 6 on a cruiser, 6 to 10 on a
+	 * battleship or a carrier). Call TrailMove every frame, also when she lies stopped (velocity zero: she smokes on,
+	 * straight up), with Power the share of her top speed she is making, 0 to 1: cruising haze at 0.4 and under,
+	 * full power's dark smoke from 0.75, and a black surge for some seconds when it rises fast (she rings up).
+	 * Power under 0: not given, and her speed over the recipe's top_speed_mps stands in. The smoke keeps none of
+	 * her speed: it drifts with the kit's wind and climbs. */
+	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f, int32 Look = -1);
+	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity, float Power = -1.0f);
 	void TrailStop(int32 Id);
 	/** An aircraft lost: what comes off it as it goes down. AirFall once when it is lost, AirFallMove every frame with
 	 * where it is and its velocity (world units a second), AirFallStop when it is gone (hits the ground or is
@@ -134,8 +145,16 @@ public:
 	 * its fall) or "spin" (out of control: a few pieces, sometimes a wing). SpanMetres: its wingspan, so the pieces
 	 * are sized to it (a bomber, 20 m or more, sheds 60 to 100 at once, a fighter 30 to 50). DeckZ: the world height
 	 * where the pieces leave sight, the cloud deck's top, or the ground under the fight; nothing pops out of view.
-	 * Light torn skin plates flutter and glint as they sink; a few heavy dark pieces drop straight. */
-	void AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ);
+	 * Light torn skin plates flutter and glint as they sink; a few heavy dark pieces drop straight.
+	 * The ways down (the battle event's how): "wing", "tail", "breakup", "struck" and "collide" throw a burst of small
+	 * torn panels at At as they start (the wing root, the tail's joint, the point where two meet), with a sparkle of
+	 * metal and, where two meet, sparks; "pilot" and "glide" throw nothing; "flamer" sheds as "burn" does. The big
+	 * pieces (a wing, the tail, an engine) are the model's own. When a burning one blows up (the event's boom), call
+	 * AirFall "explode" with the same Id. Look: the event's look, 0 to 3: an explosion's size, how long its black
+	 * cloud hangs, how many pieces and how many streaks of burning fuel fall out of it; a burst's size; -1 the usual
+	 * one. bBombs: bombs aboard, a bigger and whiter-hearted explosion that always throws fuel streaks. Far off or on
+	 * a crowded screen a fall throws nothing, and an explosion keeps its flash and its black cloud. */
+	void AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ, int32 Look = -1, bool bBombs = false);
 	void AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
 	void AirFallStop(int32 Id);
 	/** A flak shell bursting at At, at the bombers' height, on the same clock as AirGun. Kind: an air_flak row
@@ -153,6 +172,11 @@ public:
 	 * seat for the first seconds) or "extinguisher" (a tank's crew: a brief pale puff). A fire whose flames are
 	 * already over, or one with no such Id, is left alone. The scorch that stays is the model's to show. */
 	void BurnOut(int32 Id, float OverSeconds = 0.0f, const FString& How = TEXT("water"));
+	/** That fire is on something under way (a ship steaming on after the hit): it is now at WorldAt, going at
+	 * Velocity (world units a second). Call it every frame while she moves, and once more with no velocity when she
+	 * stops. The flames, the glow and the embers stay on her and lean by the wind over her deck; the smoke is left
+	 * to the air and streams astern. A fire with no such Id, or a place that is no number, is left alone. */
+	void BurnMove(int32 Id, const FVector& WorldAt, const FVector& Velocity);
 	/** Steam let go from a hit boiler or engine room, at WorldAt along Way, from an opening AcrossMetres wide, for
 	 * Seconds: a narrow white jet with a clear gap at its mouth, breaking into rags that rise fast and vanish, its
 	 * length and speed falling together to a wavering wisp. Never a bank, never a flash. Kind "vent" (a deck vent,
@@ -162,13 +186,21 @@ public:
 	void Steam(int32 Id, const FVector& WorldAt, const FVector& Way, float AcrossMetres, float Seconds, const FString& Kind = TEXT("vent"));
 	/** That leak stops now; what is in the air evaporates on its own. */
 	void SteamStop(int32 Id);
+	/** That leak is on something under way: its opening is now at WorldAt, facing Way, going at Velocity (world units
+	 * a second). Every frame while she moves, as BurnMove. The jet leaves the opening and bends astern. */
+	void SteamMove(int32 Id, const FVector& WorldAt, const FVector& Way, const FVector& Velocity);
 	/** Ammunition cooking off at WorldAt (a tank's hatch, a ship's gun mount, aircraft parked on a deck), Up the way
 	 * out of it, the opening AcrossMetres wide: Pops small pops over OverSeconds, each a small flash, a grey-black
 	 * puff, embers in short arcs and now and then a tumbling fragment (never a glowing round going skyward); and
 	 * flame roaring from the hatch for JetSeconds (0: none), 3 to 6 m tall from a tank's hatch, in one or two
 	 * pulses, with black smoke off its top. JetFromSeconds says when the jet starts after the call (under 0: just
-	 * after the last pop), so it may come first, between the pops or last. The burning wreck after is Burn's. */
-	void CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds = -1.0f);
+	 * after the last pop), so it may come first, between the pops or last. The burning wreck after is Burn's. Id, 0
+	 * or more: the caller's own number for it, so CookOffMove finds it (under 0: none; it stays where it was laid). */
+	void CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds = -1.0f, int32 Id = -1);
+	/** That cook-off (the Id given to CookOff, 0 or more) is on something under way: its opening is now at WorldAt,
+	 * facing Up, going at Velocity (world units a second). Every frame while she moves, as BurnMove: the pops and
+	 * the jet stay at the hatch. */
+	void CookOffMove(int32 Id, const FVector& WorldAt, const FVector& Up, const FVector& Velocity);
 	/** An armour-piercing shot glancing off armour at WorldAt: Incoming the way it was flying, Normal the plate's
 	 * outward way, CalibreMm its calibre (37 to 88 for tank and anti-tank guns; 203 for a cruiser's shell off a
 	 * battleship's belt). A small two-frame flash, sparks thrown along the glance, a tiny grey puff, and the shot
@@ -187,9 +219,20 @@ public:
 	void OilStop(int32 Id);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
+	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and
+	 * blue as pixel / 255, not linearised; alpha is not read): the horizon's haze for a ground or sea battle, the sky at
+	 * the fight's height for an air one. Old smoke pales toward a shade just under it as it thins, so it goes into the
+	 * air. Call it once the scene's sky is set, and again when the hour or the weather changes it. Not called: the
+	 * recipe's own grey (linger.to) by the hour's light. */
+	void SetSky(const FLinearColor& OnScreen);
 	/** For an air scene: draw out to the recipe's air.draw_beyond_m (4,000 m), so guns, hits and flames are seen from
 	 * the strategy camera 800 to 2,000 m off the fight. Call once after it is made. */
 	void UseAirDistance();
+	/** For a sea battle: draw out to the recipe's sea.draw_beyond_m (16 km), so the far line's gun flashes, shell
+	 * columns and fires are seen 5 to 15 km off, and held to the recipe's sea floors there (a far gun flash a bright
+	 * point with a little glow, a far column a small white pillar). Call once after it is made, in place of
+	 * UseAirDistance. Without a sea row in the recipe it is UseAirDistance. */
+	void UseSeaDistance();
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);

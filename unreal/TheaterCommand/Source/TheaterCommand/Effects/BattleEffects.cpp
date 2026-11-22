@@ -353,19 +353,19 @@ void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal
 	}
 }
 
-void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres)
+void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, int32 Look)
 {
 	if (IsReady())
 	{
-		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres);
+		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, Look);
 	}
 }
 
-void FBattleEffects::TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
+void FBattleEffects::TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity, float Power)
 {
 	if (IsReady())
 	{
-		Core.TrailMove(Now, Id, ToFx(At), ToFx(Velocity));
+		Core.TrailMove(Now, Id, ToFx(At), ToFx(Velocity), Power);
 	}
 }
 
@@ -377,11 +377,11 @@ void FBattleEffects::TrailStop(int32 Id)
 	}
 }
 
-void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ)
+void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ, int32 Look, bool bBombs)
 {
 	if (IsReady())
 	{
-		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre);
+		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre, Look, bBombs);
 	}
 }
 
@@ -425,6 +425,14 @@ void FBattleEffects::BurnOut(int32 Id, float OverSeconds, const FString& How)
 	}
 }
 
+void FBattleEffects::BurnMove(int32 Id, const FVector& WorldAt, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.BurnMove(Time(), Id, ToFx(WorldAt), ToFx(Velocity));
+	}
+}
+
 void FBattleEffects::Steam(int32 Id, const FVector& WorldAt, const FVector& Way, float AcrossMetres, float Seconds, const FString& Kind)
 {
 	if (IsReady())
@@ -441,11 +449,27 @@ void FBattleEffects::SteamStop(int32 Id)
 	}
 }
 
-void FBattleEffects::CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds)
+void FBattleEffects::SteamMove(int32 Id, const FVector& WorldAt, const FVector& Way, const FVector& Velocity)
 {
 	if (IsReady())
 	{
-		Core.CookOff(Time(), ToFx(WorldAt), ToFxWay(Up), AcrossMetres, Pops, OverSeconds, JetSeconds, JetFromSeconds);
+		Core.SteamMove(Time(), Id, ToFx(WorldAt), ToFxWay(Way), ToFx(Velocity));
+	}
+}
+
+void FBattleEffects::CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds, int32 Id)
+{
+	if (IsReady())
+	{
+		Core.CookOff(Time(), ToFx(WorldAt), ToFxWay(Up), AcrossMetres, Pops, OverSeconds, JetSeconds, JetFromSeconds, Id);
+	}
+}
+
+void FBattleEffects::CookOffMove(int32 Id, const FVector& WorldAt, const FVector& Up, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.CookOffMove(Time(), Id, ToFx(WorldAt), ToFxWay(Up), ToFx(Velocity));
 	}
 }
 
@@ -478,11 +502,24 @@ void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 	Core.SetWind(ToFxWay(MetresPerSecond));
 }
 
+void FBattleEffects::SetSky(const FLinearColor& OnScreen)
+{
+	Core.SetSky(255.0 * OnScreen.R, 255.0 * OnScreen.G, 255.0 * OnScreen.B);
+}
+
 void FBattleEffects::UseAirDistance()
 {
 	if (IsReady())
 	{
 		Core.SetDrawBeyond(Core.AirBeyond());
+	}
+}
+
+void FBattleEffects::UseSeaDistance()
+{
+	if (IsReady())
+	{
+		Core.UseSea();
 	}
 }
 
