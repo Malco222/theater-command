@@ -34,7 +34,8 @@ export const DEPTH = data as unknown as {
   start: string;
   cap: { steps: number[]; start: number };
   diplomacy: { keep: number };
-  spies: { guards: number; peace: boolean };
+  /** guards: agents kept at home on guard; hunters (with spy hunters on): agents kept at home hunting on the front. */
+  spies: { guards: number; hunters?: number; peace: boolean };
   build?: { machines?: { each: number; share: number } };
   desks: DeskDef[];
   depths: DepthDef[];
