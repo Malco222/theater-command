@@ -197,7 +197,9 @@ namespace LandEye
 
 	bool Director::TankMoving(double Battle) const
 	{
-		if ((Shot != Kind::Tank && Shot != Kind::Track) || Subject < 0) return false;
+		// (seen driving: a tracking shot. Riding on her hull the meadow only slides by: the third cut held 8.5 s from a
+		// tank over an empty meadow)
+		if (Shot != Kind::Track || Subject < 0) return false;
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(Subject)];
 		return Tr.IsVehicle() && (Tr.Fell < 0.0 || Tr.Fell > Battle) && LandFeed::SpotAt(Tr, Battle).V > 0.5;
 	}
@@ -321,6 +323,7 @@ namespace LandEye
 		}
 		Nerves = NervesWant = 0.0;
 		SinceSquad = 0;
+		UsedSpots.clear();
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
 		LookSwing = Vec();
@@ -748,12 +751,17 @@ namespace LandEye
 
 	bool Director::OwnLost(double Battle) const
 	{
+		return OwnLostFrom(Now, Battle);
+	}
+
+	bool Director::OwnLostFrom(const Pose& From, double Battle) const
+	{
 		Vec Head, Chest;
 		if (!HeadAndChest(Subject, Battle, Head, Chest)) return false;
-		if (!InPicture(Now, Chest, 0.95) && !InPicture(Now, Head, 0.95)) return true;
+		if (!InPicture(From, Chest, 0.95) && !InPicture(From, Head, 0.95)) return true;
 		// (down in corn taller than he lies, seen from more than a few metres: the last metres of the line to his chest
 		// run among the stalks; the second cut held six seconds on a corner of wheat the two men had lain down in)
-		const Vec Way = Now.Eye - Chest;
+		const Vec Way = From.Eye - Chest;
 		const double Long = Way.Length();
 		if (Long < 3.5) return false;
 		const Vec Dir = Way * (1.0 / Long);
@@ -770,7 +778,7 @@ namespace LandEye
 	bool Director::MovingIn(double Battle) const
 	{
 		if (!Rec) return false;
-		if (Subject >= 0 && LandFeed::SpotAt(Rec->Tracks[static_cast<size_t>(Subject)], Battle).V > 0.3) return true;
+		if (Subject >= 0 && Shot != Kind::Tank && LandFeed::SpotAt(Rec->Tracks[static_cast<size_t>(Subject)], Battle).V > 0.3) return true;
 		for (const Track& Tr : Rec->Tracks)
 		{
 			if (Tr.bTwin || Tr.Start() > Battle || (Tr.Fell >= 0.0 && Tr.Fell <= Battle) || (Tr.Out >= 0.0 && Tr.Out < Battle)) continue;
@@ -972,6 +980,11 @@ namespace LandEye
 		// (the cheap asks first, the rays last: a cut tries up to sixteen places in one frame)
 		Vec E, L;
 		Intended(Battle, E, L);
+		// (a place on the ground among the men is used once in the film: the third cut ran the same over-the-shoulder
+		// by a dark bush three times)
+		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && !bLoose)
+			for (const Vec& Was : UsedSpots)
+				if (Flat(Was, E) < Set.SpotOnce) return false;
 		// (no man of the recording walking into the lens in the next two seconds, where the eye will be then)
 		{
 			Vec Eyes[5];
@@ -995,12 +1008,22 @@ namespace LandEye
 		}
 		// (a watched man or a tracked tank in sight, not behind a tree or a hedge's shrubs)
 		if ((Shot == Kind::Watch || Shot == Kind::Track) && !SeenFrom(E, L, Subject)) return false;
+		// (its own man in the picture from its first frame, not down in the corn out of sight: a watch shot opened on a
+		// man already lost to it, and held five seconds)
+		if (!bLoose && Shot != Kind::Tank && Shot != Kind::Track && Subject >= 0 && Rec->Tracks[static_cast<size_t>(Subject)].IsMan())
+		{
+			Pose At;
+			At.Eye = E;
+			At.Look = L;
+			At.Fov = Now.Fov;
+			if (OwnLostFrom(At, Battle)) return false;
+		}
 		// (its own man not filling the picture: the second cut's 1.4 s of a man's back and seat against a bank)
 		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && OwnShare(E, L, Now.Fov, Subject) > Set.OwnMost) return false;
-		if (BadPicture(E, L, Now.Fov, Set.ScreenMost)) return false;
+		if (BadPicture(E, L, Now.Fov, bLoose ? Set.ScreenLeave : Set.ScreenMost)) return false;
 		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
 		// into a hedge)
-		if (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low)
+		if (!bLoose && (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low))
 		{
 			for (const double Later : { 1.5, 3.0 })
 			{
@@ -1246,6 +1269,25 @@ namespace LandEye
 				if (Place(Op.K, Op.Who, Battle, 0)) bPlaced = true;
 			}
 		}
+		// (none fit in the middle of the battle: the same again, a little less choosy (a place used before, a man not yet
+		// in sight, more screened), before the high view: the art director's rule is no aerial in the middle of it)
+		if (!bPlaced && !bAskedNow && Battle > 12.0 && Battle < Rec->End)
+		{
+			bLoose = true;
+			Tries = 0;
+			for (size_t O = 0; O < Options.size() && !bPlaced && Tries < TriesACut / 3; ++O)
+			{
+				const Option& Op = Options[O];
+				if (Op.K == Kind::Wide || Op.K == Kind::Open) continue;
+				for (int V = 0; V < 2 && Tries < TriesACut / 3 && !bPlaced; ++V)
+				{
+					++Tries;
+					bNearWatch = Op.bNear;
+					bPlaced = Place(Op.K, Op.Who, Battle, V) && Fits(Battle);
+				}
+			}
+			bLoose = false;
+		}
 		if (!bPlaced)
 		{
 			bNearWatch = false;
@@ -1255,6 +1297,12 @@ namespace LandEye
 		Recent.push_back(Shot);
 		if (Recent.size() > 4) Recent.erase(Recent.begin());
 		SinceSquad = InSquad(Subject) ? 0 : SinceSquad + 1;
+		if (Shot == Kind::Shoulder || Shot == Kind::Low)
+		{
+			Vec E, L;
+			Intended(Battle, E, L);
+			UsedSpots.push_back(E);
+		}
 		if (Subject >= 0 && static_cast<size_t>(Subject) < ShownAt.size())
 		{
 			ShownAt[static_cast<size_t>(Subject)] = Real;
@@ -1338,7 +1386,8 @@ namespace LandEye
 		bCutAsked = false;
 		// (a shot holding for a fall or a tank's end it shows is not left as dead or lost before it comes: a track shot
 		// on a tank that had stopped was left as dead 0.2 s before she was knocked out)
-		const bool bWaiting = WaitFor >= 0.0 && Battle < WaitFor + 0.2;
+		// (for a moment only: a shot waiting for a tank's end let its own man go lost from the picture for 5 s)
+		const bool bWaiting = WaitFor >= 0.0 && Battle < WaitFor + 0.2 && WaitFor - Battle < Soon(2.5);
 		if (!bHeld && !bCut)
 		{
 			if (Shot == Kind::Open && Held > Set.Opening) { bCut = true; Reason = Why::Opening; }
@@ -1360,7 +1409,7 @@ namespace LandEye
 					NextMoveLook = Real + 0.25;
 					if (MovingIn(Battle)) LastMoved = Real;
 				}
-				if (Real - std::max(LastMoved, std::max(LastAction, ShotStarted)) >= Set.QuietAfter)
+				if (Real - std::max(LastMoved, std::max(LastAction, ShotStarted)) >= (Shot == Kind::Tank ? Set.DeadAfter : Set.QuietAfter))
 				{
 					bCut = true;
 					Reason = Why::Dead;

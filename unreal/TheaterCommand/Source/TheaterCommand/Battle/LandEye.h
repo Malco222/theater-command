@@ -114,6 +114,11 @@ namespace LandEye
 		 *    holds ShakenHold of its length, and the hand shakes harder after a burst near the lens (NervesNear metres:
 		 *    up to NervesMost more wobble, settling over NervesFade real seconds). */
 		int SquadEvery = 3;
+		/** The art director's notes on the third cut (22 November): a place on the ground among the men is used once in
+		 * the film (no shot among them within SpotOnce metres of where one stood before); bushes and banks short of
+		 * the subject screen no more than ScreenMost of a new shot (25%); men pass no nearer the lens than CrossClear
+		 * (2 m); a ride on a tank's hull with nothing happening is left after DeadAfter, before contact too. */
+		double SpotOnce = 5.0;
 		double NearWatch = 0.6, ShakenHold = 0.65;
 		double NervesNear = 30.0, NervesMost = 0.9, NervesFade = 2.0;
 		uint64_t Seed = 1;
@@ -129,7 +134,7 @@ namespace LandEye
 		 * what it looks at (out to ScreenFar metres) turn a shot away, and a shot running past ScreenLeave is left. A ray
 		 * in the picture's upper half meeting the ground within BankNear metres is a bank's face. The running look also
 		 * asks where the eye will be AheadLook real seconds on, so a shot is left before it drives into a hedge. */
-		double ScreenFar = 30.0, ScreenMost = 0.3, ScreenLeave = 0.45, BankNear = 6.0, AheadLook = 0.8;
+		double ScreenFar = 30.0, ScreenMost = 0.25, ScreenLeave = 0.45, BankNear = 6.0, AheadLook = 0.8;
 		/** The shortest a shot holds, real seconds (only a rescue cuts sooner). */
 		double ShotLeast = 3.0;
 		/** Once the armies are near, a shot in which nothing has happened for this long (real seconds) is left. */
@@ -162,7 +167,7 @@ namespace LandEye
 		/** The lens lifted over banks and corn on a spring of this rate (1/s): an operator standing up, not a leap. */
 		double LiftRate = 12.0;
 		double BurstClear = 6.0, BurstBig = 1.4, BurstAround = 3.5, BurstFlash = 0.12;
-		double CrossClear = 1.4, CrossAhead = 2.0;
+		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
 		double EdgeNear = 2.5, EdgeMost = 0.05;
@@ -265,6 +270,10 @@ namespace LandEye
 		double ForeHeld = -1e9;
 		/** The film's own section (Settings::SquadEvery), -1 none, and the shots since one was on its men. */
 		int HeroBlock = -1, HeroK = -1, SinceSquad = 0;
+		/** Where the shots among the men stood (Settings::SpotOnce). */
+		std::vector<Vec> UsedSpots;
+		/** A cut's second, less choosy pass (no fit found in the middle of the battle). */
+		bool bLoose = false;
 		/** The operator's nerves after a burst near the lens (0 to 1), and where they are going. */
 		double Nerves = 0.0, NervesWant = 0.0;
 		/** Heavy rounds landing within Radius of a point between two battle times. */
@@ -390,6 +399,7 @@ namespace LandEye
 		double EdgeShare(const Vec& Eye, const Vec& Look, double Fov, int Except) const;
 		/** Whether its own man is out of the picture or down in corn taller than he lies, seen from the eye. */
 		bool OwnLost(double Battle) const;
+		bool OwnLostFrom(const Pose& From, double Battle) const;
 		/** Whether anything moves in the picture now (before the armies meet: the advance is the action). */
 		bool MovingIn(double Battle) const;
 	};
