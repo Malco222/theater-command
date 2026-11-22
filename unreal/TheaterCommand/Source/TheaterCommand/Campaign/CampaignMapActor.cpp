@@ -15681,6 +15681,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	// (release 2: held under a land battle, the view kept for its release; HoldUpdates)
+	LastAskedDistance = CameraDistance;
+	LastAskedYaw = CameraYaw;
+	LastAskedFocus = CameraFocus;
+	bViewAsked = true;
+	if (bUpdatesHeld)
+	{
+		return;
+	}
 	THEATER_SPEED_SCOPE(MapUpdate);
 	// (lines put off by a press that changed whose ground is whose: see SetHolders)
 	// (Release 2: while an order's result card holds its ink at the start, the front line waits with it, and is drawn in

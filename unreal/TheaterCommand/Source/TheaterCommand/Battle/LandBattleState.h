@@ -15,6 +15,7 @@
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
+#include "Battle/LandWalkPan.h"
 #include "Battle/Fates.h"
 
 #include <memory>
@@ -32,6 +33,8 @@ struct FLandBattleState
 	LandPlay::Replay Play;
 	LandSound::Mixer Mix;
 	LandEye::Director Eye;
+	/** The walk pan's plan once chosen (-TheaterLandWalkPan, the Mac recipe's look 7; it asks EyeWorld below). */
+	LandWalkPan::Plan Pan;
 	LandDesk::Desk Desk;
 	std::unique_ptr<LandField::Ground> Field;
 	/** What stands where, for the camera (LandSight): the field's trees, shrubs and houses laid once, the men and the

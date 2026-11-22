@@ -1161,6 +1161,16 @@ public:
 
 	/** Sends the attack shown on the face-off in. */
 	void ConfirmAttack();
+	/**
+	 * (release 2; Brian, 22 November 21:21Z, asked "fight it yourself?" before each campaign battle) FIGHT IT YOURSELF on
+	 * the attack card, beside SEND THEM IN, which lets his generals decide: the battle the card shows (TC.battleLook) is
+	 * fought by him as the general in the 3D field, and when he presses CONTINUE on its after card the campaign books its
+	 * result (TC.battleSettleLand) and the card shows it, as SEND THEM IN's does. Off with -TheaterLandNoCampaignLive.
+	 */
+	bool CanFightLive() const;
+	void FightLive();
+	/** True while his own battle is open: the map takes no order, key or month's end until it is handed back. */
+	bool IsFightingLive() const { return LiveBattle.IsValid(); }
 	/** (Rules 84.1.) On the card before a march on a guarded town: SEND THEM IN (the assault as they arrive) or LAY SIEGE FIRST. */
 	void ConfirmMarch(bool bAssault);
 	/** On the attack card: pick every corps that can reach the place, and show the attack again as it would then be. */
@@ -1264,6 +1274,10 @@ private:
 	void AfterLanding(int32 RegionId, const FLandingResult& Result);
 	void AfterSiege(int32 RegionId, const FAttackResult& Result);
 	void AfterFight(int32 RegionId, bool bMarch, bool bStorm, bool bSally, const FAttackResult& Result);
+	/** His own battle handed back (FightLive): its result booked by the campaign, then shown on the attack card. */
+	void LiveHandBack(int32 RegionId, const TArray<int32>& CorpsIds, double TicketSeed, const FString& ResultJson);
+	/** The field of his own battle while it is open (FightLive). */
+	TWeakObjectPtr<class ALandBattle> LiveBattle;
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);

@@ -305,6 +305,13 @@ namespace LandEye
 		DarkSince = -1.0;
 		DarkLeft = DarkRunNow = 0;
 		bAskedUnfit = false;
+		bAsked = bAskedBuilding = bShotAsked = false;
+		Houses.clear();
+		bHousesFound = false;
+		AskTries.clear();
+		TryHouse = ShotHouse = -1;
+		AskAgain = 0;
+		AskLeft.clear();
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
 		LookSwing = Vec();
@@ -334,8 +341,14 @@ namespace LandEye
 		// The lists the film looks things up in, made from the recording as it stands: a battle read whole once, a live one
 		// (the general's) afresh when its men are placed again, and kept up as it grows (KeepUp).
 		ShownAt.assign(Rec->Tracks.size(), -1e9);
-		ShownAt.assign(Rec->Tracks.size(), -1e9);
 		ShooterOf.clear();
+		TrackKinds.clear();
+		HiddenStamp.clear();
+		HiddenVal.clear();
+		LeadMen.clear();
+		LeadMenTracks = 0;
+		LeadBlockNow = -1;
+		LeadLookAt = -1e9;
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& Tr = Rec->Tracks[I];
@@ -497,20 +510,274 @@ namespace LandEye
 		}
 	}
 
-	void Director::Ask(Kind K, int InSubject)
+	void Director::Ask(Kind K, int InSubject, bool bBuilding)
 	{
+		AskAgain = 0;
+		AskLeft.clear();
 		bAsked = true;
 		AskedKind = K;
 		AskedSubject = InSubject;
+		bAskedBuilding = bBuilding;
 		bCutAsked = true;
 	}
 
 	void Director::Ride(int Block)
 	{
+		// (the player's own pick: the platoon cam lets go)
+		LeadSide = -1;
+		LeadBlockNow = -1;
+		RideWith(Block);
+	}
+
+	void Director::RideWith(int Block)
+	{
 		if (Block == RideBlock) return;
 		RideBlock = Block < 0 ? -1 : Block;
 		// (to them at once, unless the shot on the screen is already on one of them; let go, the shot holds its course)
 		if (RideBlock >= 0 && Rec && (Subject < 0 || OffRide(Subject))) bCutAsked = true;
+	}
+
+	void Director::FollowLead(int Army)
+	{
+		if (Army == LeadSide) return;
+		// (let go: the platoon ridden for the lead is let go too)
+		if (Army < 0 && LeadBlockNow >= 0 && RideBlock == LeadBlockNow) RideWith(-1);
+		LeadSide = Army < 0 ? -1 : Army;
+		LeadBlockNow = -1;
+		LeadLookAt = -1e9;
+	}
+
+	bool Director::InLead(size_t TrackIndex, double Battle) const
+	{
+		for (const Track::Span& Sp : Rec->Tracks[TrackIndex].Lead)
+			if (Battle >= Sp.From && Battle <= Sp.To) return true;
+		return false;
+	}
+
+	bool Director::InRush(size_t TrackIndex, double Battle) const
+	{
+		for (const Track::Span& Sp : Rec->Tracks[TrackIndex].Element)
+			if (Sp.bMove && Battle >= Sp.From && Battle <= Sp.To) return true;
+		return false;
+	}
+
+	void Director::LookForLead(double Battle, double Real)
+	{
+		if (LeadSide < 0 || !Rec) return;
+		// (the ride let go of itself, none of the platoon standing or seen: the next to lead is looked for at once)
+		if (LeadBlockNow >= 0 && RideBlock != LeadBlockNow)
+		{
+			LeadBlockNow = -1;
+			LeadLookAt = -1e9;
+		}
+		if (Real < LeadLookAt) return;
+		LeadLookAt = Real + 0.5;
+		while (LeadMenTracks < Rec->Tracks.size())
+		{
+			if (!Rec->Tracks[LeadMenTracks].Lead.empty()) LeadMen.push_back(static_cast<int>(LeadMenTracks));
+			++LeadMenTracks;
+		}
+		// (the platoon with the most of its side's leading men up and seen now; on a tie, the one ridden)
+		std::vector<std::pair<int, int>> Count;
+		for (const int I : LeadMen)
+		{
+			const Track& Tr = Rec->Tracks[static_cast<size_t>(I)];
+			if (Tr.bTwin || (Tr.Fell >= 0.0 && Tr.Fell <= Battle) || (Tr.Out >= 0.0 && Tr.Out <= Battle)) continue;
+			if (!InLead(static_cast<size_t>(I), Battle)) continue;
+			const LandFeed::Block* B = BlockOfTrack(I);
+			if (!B || B->Side != LeadSide || HiddenNow(I)) continue;
+			bool bFound = false;
+			for (std::pair<int, int>& C : Count)
+				if (C.first == Tr.Block) { ++C.second; bFound = true; break; }
+			if (!bFound) Count.push_back({ Tr.Block, 1 });
+		}
+		int Best = -1, BestN = 0;
+		for (const std::pair<int, int>& C : Count)
+			if (C.second > BestN || (C.second == BestN && C.first == LeadBlockNow)) { Best = C.first; BestN = C.second; }
+		if (Best >= 0 && Best != LeadBlockNow)
+		{
+			LeadBlockNow = Best;
+			RideWith(Best);
+		}
+	}
+
+	void Director::FindHouses()
+	{
+		bHousesFound = true;
+		Houses.clear();
+		if (!Here.Free || !Rec) return;
+		// (a house's floor or a wall's line is no place for the eye at any height; a wall's line is a few tenths of a metre
+		// across, so a point is a house's only if the eye may not stand 1.5 m (then 0.9 m) round it either)
+		auto Built = [this](double X, double Y) { return !Here.Free(Vec(X, Y, 1.0e4)); };
+		auto Inside = [&Built](double X, double Y, double By) { return Built(X, Y) && Built(X + By, Y) && Built(X - By, Y) && Built(X, Y + By) && Built(X, Y - By); };
+		const double W = Rec->Ground.W > 0 ? Rec->Ground.W : 3000.0, H = Rec->Ground.H > 0 ? Rec->Ground.H : 2000.0;
+		constexpr double Coarse = 6.0, Fine = 2.0;
+		const int Nx = static_cast<int>(W / Coarse) + 1, Ny = static_cast<int>(H / Coarse) + 1;
+		std::vector<uint8_t> Hit(static_cast<size_t>(Nx) * static_cast<size_t>(Ny), 0);
+		for (int J = 0; J < Ny; ++J)
+			for (int I = 0; I < Nx; ++I)
+				if (Inside(I * Coarse, J * Coarse, 1.5)) Hit[static_cast<size_t>(J) * Nx + I] = 1;
+		// (the hits joined to their neighbours: a house, or a row of them along a street, one each)
+		std::vector<int> Stack;
+		for (int J0 = 0; J0 < Ny; ++J0)
+			for (int I0 = 0; I0 < Nx; ++I0)
+			{
+				if (Hit[static_cast<size_t>(J0) * Nx + I0] != 1) continue;
+				int I1 = I0, I2 = I0, J1 = J0, J2 = J0;
+				Stack.assign(1, J0 * Nx + I0);
+				Hit[static_cast<size_t>(J0) * Nx + I0] = 2;
+				while (!Stack.empty())
+				{
+					const int At = Stack.back();
+					Stack.pop_back();
+					const int I = At % Nx, J = At / Nx;
+					I1 = std::min(I1, I); I2 = std::max(I2, I); J1 = std::min(J1, J); J2 = std::max(J2, J);
+					for (int Dj = -1; Dj <= 1; ++Dj)
+						for (int Di = -1; Di <= 1; ++Di)
+						{
+							const int Ii = I + Di, Jj = J + Dj;
+							if (Ii < 0 || Jj < 0 || Ii >= Nx || Jj >= Ny || Hit[static_cast<size_t>(Jj) * Nx + Ii] != 1) continue;
+							Hit[static_cast<size_t>(Jj) * Nx + Ii] = 2;
+							Stack.push_back(Jj * Nx + Ii);
+						}
+				}
+				House Ho;
+				double Sx = 0.0, Sy = 0.0;
+				for (double Y = J1 * Coarse - 6.0; Y <= J2 * Coarse + 6.0; Y += Fine)
+					for (double X = I1 * Coarse - 6.0; X <= I2 * Coarse + 6.0; X += Fine)
+						if (Inside(X, Y, 0.9))
+						{
+							Ho.Inside.push_back(Vec(X, Y, HeightAt(X, Y) + 3.0));
+							Sx += X;
+							Sy += Y;
+						}
+				if (Ho.Inside.empty()) continue;
+				Ho.C = Vec(Sx / Ho.Inside.size(), Sy / Ho.Inside.size(), 0.0);
+				Ho.C.Z = HeightAt(Ho.C.X, Ho.C.Y) + 3.0;
+				for (const Vec& P : Ho.Inside) Ho.R = std::max(Ho.R, Flat(P, Ho.C) + 1.0);
+				Houses.push_back(std::move(Ho));
+			}
+	}
+
+	bool Director::HouseSeenIn(const Vec& Eye, const Vec& Look, double Fov, int H) const
+	{
+		if (H < 0 || static_cast<size_t>(H) >= Houses.size()) return false;
+		const House& Ho = Houses[static_cast<size_t>(H)];
+		// (big enough: its half-width (at most 8 m of a row of them) over its distance, against the picture's half-height)
+		const double Far = std::max(1.0, Flat(Eye, Ho.C));
+		if (std::min(Ho.R, 8.0) / Far < Set.HouseLeast * std::tan(Fov * 0.5 * Pi / 180.0)) return false;
+		Pose P;
+		P.Eye = Eye;
+		P.Look = Look;
+		P.Fov = Fov;
+		// (its points in the picture, a dozen at most asked, seen from the eye: the line to one stops 2.5 m short, so a
+		// point just inside the wall facing the eye is seen and one behind it is not)
+		const size_t Every = std::max<size_t>(1, Ho.Inside.size() / 12);
+		int Seen = 0;
+		for (size_t K = 0; K < Ho.Inside.size(); K += Every)
+		{
+			const Vec& Pt = Ho.Inside[K];
+			if (!InPicture(P, Pt, 0.9)) continue;
+			if (!SeenFrom(Eye, Pt, -1)) continue;
+			if (Here.Open && !Here.Open(Eye, Pt)) continue;
+			if (++Seen >= Set.HouseSeen) return true;
+		}
+		return false;
+	}
+
+	void Director::MakeAskTries(double Battle)
+	{
+		AskTries.clear();
+		AskNext = 1;
+		AskNextV = 0;
+		if (!Rec) return;
+		const bool bAskedValid = AskedSubject >= 0 && static_cast<size_t>(AskedSubject) < Rec->Tracks.size();
+		const bool bManAsked = bAskedValid && Rec->Tracks[static_cast<size_t>(AskedSubject)].IsMan();
+		const bool bTankAsked = bAskedValid && AskedKind == Kind::Tank && Rec->Tracks[static_cast<size_t>(AskedSubject)].Role == "tank";
+		const bool bOthers = (bManAsked && (AskedKind == Kind::Shoulder || AskedKind == Kind::Low)) || bTankAsked;
+		if (!bAskedBuilding && !bOthers) return;
+		const LandFeed::Block* Asked = bAskedValid ? BlockOfTrack(AskedSubject) : nullptr;
+		const int AskedSide = Asked ? Asked->Side : Set.Own;
+		const Track* AskedTr = bManAsked || bTankAsked ? &Rec->Tracks[static_cast<size_t>(AskedSubject)] : nullptr;
+		const bool bFallenAsked = AskedTr && AskedTr->Fell >= 0.0 && AskedTr->Fell <= Battle;
+		const LandFeed::Spot AskedAt = AskedTr ? LandFeed::SpotAt(*AskedTr, Battle) : LandFeed::Spot();
+		// (a man the shot may be of: up, through the next 4 s, or fallen as the asked man is; not in a lorry's bed, not
+		// hidden from the player, not the mortars' or an observer far back)
+		auto May = [&](size_t I) -> bool
+		{
+			const Track& Tr = Rec->Tracks[I];
+			if (Tr.bTwin || Tr.Start() > Battle || (Tr.Out >= 0.0 && Tr.Out < Battle + Soon(4.0))) return false;
+			if (bTankAsked ? Tr.Role != "tank" : !Tr.IsMan()) return false;
+			if (Tr.Role == "mortar" || Tr.Role == "fo") return false;
+			const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= Battle;
+			if (bFallen != bFallenAsked) return false;
+			if (!bFallen && Tr.Fell >= 0.0 && Tr.Fell < Battle + Soon(4.0)) return false;
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+			if (C && C->Pose == "mounted") return false;
+			return !HiddenNow(static_cast<int>(I)) && !OffRide(static_cast<int>(I));
+		};
+		struct Scored
+		{
+			double Score;
+			AskTry Try;
+		};
+		std::vector<Scored> All;
+		if (bAskedBuilding)
+		{
+			if (!bHousesFound) FindHouses();
+			if (Houses.empty()) return;
+			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+			{
+				if (!May(I)) continue;
+				const LandFeed::Spot S = LandFeed::SpotAt(Rec->Tracks[I], Battle);
+				double Gap = Set.HouseFar;
+				AskTry T;
+				T.Track = static_cast<int>(I);
+				for (size_t H = 0; H < Houses.size(); ++H)
+				{
+					if (std::hypot(Houses[H].C.X - S.X, Houses[H].C.Y - S.Y) > Gap + Houses[H].R) continue;
+					for (const Vec& P : Houses[H].Inside)
+					{
+						const double D = std::hypot(P.X - S.X, P.Y - S.Y);
+						if (D < Gap) { Gap = D; T.House = static_cast<int>(H); T.Aim = P; }
+					}
+				}
+				if (T.House < 0) continue;
+				const LandFeed::Block* B = BlockOfTrack(T.Track);
+				// (near a house first, the asked man's side first, the asked man himself first of all)
+				const double Score = (Gap > Set.HouseNear ? 2000.0 : 0.0) + (B && B->Side != AskedSide ? 1000.0 : 0.0) + (T.Track == AskedSubject ? -500.0 : 0.0) + Gap;
+				All.push_back({ Score, T });
+			}
+		}
+		else
+		{
+			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+			{
+				if (static_cast<int>(I) != AskedSubject && !May(I)) continue;
+				const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
+				if (!B || B->Side != AskedSide) continue;
+				const LandFeed::Spot S = LandFeed::SpotAt(Rec->Tracks[I], Battle);
+				const double D = std::hypot(S.X - AskedAt.X, S.Y - AskedAt.Y);
+				if (D > Set.AskWithin) continue;
+				AskTry T;
+				T.Track = static_cast<int>(I);
+				// (his own unit's men first, the nearest first)
+				All.push_back({ static_cast<int>(I) == AskedSubject ? -1.0 : D + (Rec->Tracks[I].Block != AskedTr->Block ? Set.AskWithin : 0.0), T });
+			}
+		}
+		std::sort(All.begin(), All.end(), [](const Scored& A, const Scored& B) { return A.Score < B.Score || (A.Score == B.Score && A.Try.Track < B.Try.Track); });
+		// (spread over the field, each AskApart from those before it: the nearest dozen of the asked officer's men at
+		// Normandy's 148 s were all under the same barrage)
+		std::vector<LandFeed::Spot> Taken;
+		for (size_t K = 0; K < All.size() && static_cast<int>(AskTries.size()) <= Set.AskOthers; ++K)
+		{
+			const LandFeed::Spot S = LandFeed::SpotAt(Rec->Tracks[static_cast<size_t>(All[K].Try.Track)], Battle);
+			bool bNear = false;
+			for (const LandFeed::Spot& T : Taken) bNear = bNear || std::hypot(S.X - T.X, S.Y - T.Y) < Set.AskApart;
+			if (bNear && K > 0) continue;
+			Taken.push_back(S);
+			AskTries.push_back(All[K].Try);
+		}
 	}
 
 	bool Director::MassStretch(Vec& OutAt, Vec& OutAlong, double& OutFrom, double& OutTo) const
@@ -570,6 +837,17 @@ namespace LandEye
 		return B >= 0 ? &Rec->Blocks[static_cast<size_t>(B)] : nullptr;
 	}
 
+	uint8_t Director::KindOf(size_t TrackIndex) const
+	{
+		// (grown with a live battle's new tracks; a track's role is set when it is made)
+		while (TrackKinds.size() < Rec->Tracks.size())
+		{
+			const std::string& Role = Rec->Tracks[TrackKinds.size()].Role;
+			TrackKinds.push_back(Role == "tank" ? KindTank : Role == "gun" ? KindGun : Role == "lorry" ? KindLorry : 0);
+		}
+		return TrackKinds[TrackIndex];
+	}
+
 	void Director::PlaceMen(double T) const
 	{
 		if (MenHead.empty()) MenHead.assign(MenBuckets, -1);
@@ -583,7 +861,7 @@ namespace LandEye
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& Tr = Rec->Tracks[I];
-			if (Tr.bTwin || !Tr.IsMan()) continue;
+			if (Tr.bTwin || IsVehicleAt(I)) continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
 			const size_t B = BucketOf(static_cast<int64_t>(std::floor(S.X / MenSquare)), static_cast<int64_t>(std::floor(S.Y / MenSquare)), MenBuckets);
 			if (MenHead[B] < 0) MenUsed.push_back(static_cast<uint32_t>(B));
@@ -609,12 +887,24 @@ namespace LandEye
 	void Director::Gather(double From, double To)
 	{
 		Ahead.clear();
-		for (size_t I = RoundFrom; I < Rec->Rounds.size(); ++I)
+		// (the rounds landing From to To, by the index of landings, not every round fired in the last minute: Kursk's
+		// tens of thousands; put in firing order, as the walk over them was, so the heats sum as before)
 		{
-			const LandFeed::Round& R = Rec->Rounds[I];
-			if (R.T > To) break; // (rounds are in firing order; none fired after To lands before it)
-			if (R.L < From || R.L > To) continue;
-			Ahead.push_back({ R.X, R.Y, R.L, WeightOf(R.W) * (R.R == LandFeed::Result::Kill ? 3.0 : 1.0) });
+			IndexLandings();
+			auto Lo = std::lower_bound(ByLanding.begin(), ByLanding.end(), From, [this](int K, double V) { return Rec->Rounds[static_cast<size_t>(K)].L < V; });
+			auto Hi = std::upper_bound(Lo, ByLanding.end(), To, [this](double V, int K) { return V < Rec->Rounds[static_cast<size_t>(K)].L; });
+			GatherIx.clear();
+			for (auto It = Lo; It != Hi; ++It)
+			{
+				const size_t I = static_cast<size_t>(*It);
+				if (I >= RoundFrom && Rec->Rounds[I].T <= To) GatherIx.push_back(static_cast<int>(I));
+			}
+			std::sort(GatherIx.begin(), GatherIx.end());
+			for (const int I : GatherIx)
+			{
+				const LandFeed::Round& R = Rec->Rounds[static_cast<size_t>(I)];
+				Ahead.push_back({ R.X, R.Y, R.L, WeightOf(R.W) * (R.R == LandFeed::Result::Kill ? 3.0 : 1.0) });
+			}
 		}
 		for (const Track& Tr : Rec->Tracks)
 		{
@@ -742,14 +1032,15 @@ namespace LandEye
 	{
 		if (!Here.Solid) return true;
 		if (Here.Solid(Eye, Except) != 0) return false;
-		const double Steps[3] = { 0.45, Set.ManClear, Set.ThingClear };
+		const double ManNear = Set.ManClear;
+		const double Steps[3] = { 0.45, ManNear, Set.ThingClear };
 		for (const double R : Steps)
 		{
 			for (int K = 0; K < 14; ++K)
 			{
 				const int What = Here.Solid(Eye + RoundWay(K) * R, Except);
 				if (What == 2 && R <= Set.ThingClear + 1e-9) return false;
-				if (What == 1 && R <= Set.ManClear + 1e-9) return false;
+				if (What == 1 && R <= ManNear + 1e-9) return false;
 			}
 		}
 		return true;
@@ -1014,15 +1305,19 @@ namespace LandEye
 		return Eye;
 	}
 
-	bool Director::Crossing(const Vec* Eyes, const double* Times, int N, int Own) const
+	bool Director::Crossing(const Vec* Eyes, const double* Times, int N, int Own, double Clear) const
 	{
+		const double Near = Clear >= 0.0 ? Clear : Set.CrossClear;
+		// (an asked still lets a man run past nearer than that, to AskCross, if he is within Near for no more than
+		// AskPass on the screen, where the lens is then)
+		const bool bPass = Clear < 0.0 && AskedNow();
 		if (!Rec || N <= 0) return false;
 		double Moved = 0.0;
 		for (int K = 1; K < N; ++K) Moved = std::max(Moved, Flat(Eyes[K], Eyes[0]));
 		const double From = Times[0], To = Times[N - 1];
 		// (a man runs some 6 m a second at most, 12 on the rules' clock, twice life's: farther off than that, none can
 		// reach the lens in time)
-		const double Reach = Set.CrossClear + 12.0 * (To - From) + Moved + 0.5;
+		const double Reach = Near + 12.0 * (To - From) + Moved + 0.5;
 		// (the men by squares where they stood a moment ago, kept half a battle second: those that could be within Reach
 		// now, by how far the fastest man goes, are asked where they are)
 		if (MenTracks != Rec->Tracks.size() || std::abs(From - MenT) > 0.5) PlaceMen(From);
@@ -1048,7 +1343,7 @@ namespace LandEye
 					for (int K = 0; K < N; ++K)
 					{
 						const LandFeed::Spot S = K == 0 ? S0 : LandFeed::SpotAt(Tr, Times[K]);
-						if (std::hypot(S.X - Eyes[K].X, S.Y - Eyes[K].Y) >= Set.CrossClear) continue;
+						if (std::hypot(S.X - Eyes[K].X, S.Y - Eyes[K].Y) >= Near) continue;
 						// (his body from the ground to the top of him: standing, kneeling, lying or fallen)
 						const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= Times[K];
 						const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Times[K]);
@@ -1056,12 +1351,68 @@ namespace LandEye
 						// (a man riding in a lorry's bed is the lorry's, a thing the lens keeps off already)
 						if (Pose == "mounted") continue;
 						const double Top = bFallen || IsDown(Pose) ? 0.45 : (Pose == "fire_kneel" || Pose == "wait" ? 1.1 : 1.75);
-						if (Eyes[K].Z < HeightAt(S.X, S.Y) + Top + 0.3) return true;
+						if (Eyes[K].Z >= HeightAt(S.X, S.Y) + Top + 0.3) continue;
+						if (bPass && !bFallen && Passes(Tr, Eyes[K], Times[K], Near)) continue;
+						return true;
 					}
 				}
 			}
 		}
 		return false;
+	}
+
+	bool Director::Passes(const LandFeed::Track& Tr, const Vec& Eye, double T, double Near) const
+	{
+		// (back and on from T in steps of 0.05 s on the screen, the lens held where it is then: how long he is within
+		// Near of it, and how near he comes)
+		// (a step of at most 0.05 battle seconds whatever the pace: at four times life a runner 0.7 m off the lens could
+		// slip between steps of 0.2 s, the pre-check's arithmetic)
+		const double Step = std::min(Soon(0.05), 0.05), Most = Soon(Set.AskPass);
+		double Nearest = 1e9, Span = 0.0;
+		for (int Way = -1; Way <= 1; Way += 2)
+		{
+			for (double U = Way < 0 ? Step : 0.0; ; U += Step)
+			{
+				const double At = T + Way * U;
+				if (At < Tr.Start() || (Tr.Out >= 0.0 && At > Tr.Out)) break;
+				const LandFeed::Spot S = LandFeed::SpotAt(Tr, At);
+				const double Gap = std::hypot(S.X - Eye.X, S.Y - Eye.Y);
+				if (Gap >= Near) break;
+				Nearest = std::min(Nearest, Gap);
+				Span += Step;
+				if (Span > Most || Nearest < Set.AskCross) return false;
+			}
+		}
+		return true;
+	}
+
+	int Director::MenInPicture(const Pose& P, double Battle, double Within, int Enough, int Except) const
+	{
+		if (!Rec) return 0;
+		if (MenTracks != Rec->Tracks.size() || std::abs(Battle - MenT) > 0.5) PlaceMen(Battle);
+		const double Wide = Within + MenFastest * std::abs(Battle - MenT) + 0.01;
+		const int64_t I0 = static_cast<int64_t>(std::floor((P.Eye.X - Wide) / MenSquare)), I1 = static_cast<int64_t>(std::floor((P.Eye.X + Wide) / MenSquare));
+		const int64_t J0 = static_cast<int64_t>(std::floor((P.Eye.Y - Wide) / MenSquare)), J1 = static_cast<int64_t>(std::floor((P.Eye.Y + Wide) / MenSquare));
+		int Seen = 0;
+		for (int64_t Ia = I0; Ia <= I1; ++Ia)
+			for (int64_t Ja = J0; Ja <= J1; ++Ja)
+				for (int32_t E = MenHead[BucketOf(Ia, Ja, MenBuckets)]; E >= 0; E = MenNext[static_cast<size_t>(E)])
+				{
+					const ManAt& Ma = MenAt[static_cast<size_t>(E)];
+					if (static_cast<int64_t>(std::floor(Ma.X / MenSquare)) != Ia || static_cast<int64_t>(std::floor(Ma.Y / MenSquare)) != Ja) continue;
+					if (Ma.Track == Except) continue;
+					const Track& Tr = Rec->Tracks[static_cast<size_t>(Ma.Track)];
+					if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > Battle || (Tr.Out >= 0.0 && Tr.Out < Battle) || (Tr.Fell >= 0.0 && Tr.Fell <= Battle)) continue;
+					const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
+					const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+					if (C && C->Pose == "mounted") continue;
+					const Vec Chest(S.X, S.Y, HeightAt(S.X, S.Y) + (C && IsDown(C->Pose) ? 0.35 : 1.0));
+					if (Flat(Chest, P.Eye) > Within || !InPicture(P, Chest, 0.95)) continue;
+					// (over the ground's own rise as well: from a low lens a fold of the steppe hides a man 30 m off)
+					if ((Here.Open && !Here.Open(P.Eye, Chest)) || !SeenFrom(P.Eye, Chest, Ma.Track)) continue;
+					if (++Seen >= Enough) return Seen;
+				}
+		return Seen;
 	}
 
 	bool Director::MenCross(const Pose& P, double From, double To) const
@@ -1222,6 +1573,8 @@ namespace LandEye
 	{
 		Shot = K;
 		Subject = TrackIndex;
+		ShotHouse = K == Kind::Watch ? TryHouse : -1;
+		ShotAim = TryAim;
 		FellAt = -1.0;
 		bFallEye = false;
 		bMassNow = false;
@@ -1285,6 +1638,16 @@ namespace LandEye
 			Now.Fov = 50.0 + Roll() * 12.0;
 			break;
 		case Kind::Low:
+			if (Tr.Fell >= 0.0 && Tr.Fell <= Battle)
+			{
+				// A man who has fallen: low in the grass a few metres off him, looking at him (the ground's cut 5 still 09 on
+				// the scene's bodies; on the recording's alone, beside him the low lens had him out of the picture)
+				Back = 2.4 + Roll() * 1.4 + 0.6 * Further;
+				Side = SideSign * (0.4 + Roll() * 0.9);
+				Up = 0.45 + Roll() * 0.2;
+				Now.Fov = 40.0 + Roll() * 10.0;
+				break;
+			}
 			// Beside him in the grass, level with his shoulders, not behind his boots (the second cut's low shot looked up
 			// two men's boots and packs for 4 s).
 			Back = -0.3 + Roll() * 0.7 + 0.4 * Further;
@@ -1315,6 +1678,26 @@ namespace LandEye
 		}
 		case Kind::Watch:
 		{
+			// The village still: the house behind him or beside him, the eye off the far side of him from it, 22 to 46 m,
+			// a lens wide enough for both (the look turned HouseLook of the way toward the house).
+			if (ShotHouse >= 0)
+			{
+				const double From = LandFeed::FacingTo(ShotAim.X, ShotAim.Y, At.X, At.Y);
+				const double Angle = From + SideSign * (0.22 + 0.2 * Further + Roll() * 0.18);
+				const double Away = 22.0 + Roll() * 14.0 + 10.0 * Further;
+				const Vec Base = At + Vec(std::sin(Angle) * Away, std::cos(Angle) * Away, 0.0);
+				Stand = Vec(Base.X, Base.Y, HeightAt(Base.X, Base.Y) + 2.0 + Roll() * 2.5 + Further);
+				Target = At + Vec(0.0, 0.0, 1.0);
+				// (half the picture across holds the man's and the house's angle apart, less the look's turn, the house's
+				// own half-width and a margin)
+				const double ManX = At.X - Stand.X, ManY = At.Y - Stand.Y, HouseX = ShotAim.X - Stand.X, HouseY = ShotAim.Y - Stand.Y;
+				const double ManLong = std::hypot(ManX, ManY), HouseLong = std::hypot(HouseX, HouseY);
+				const double Between = ManLong > 0.0 && HouseLong > 0.0 ? std::acos(std::clamp((ManX * HouseX + ManY * HouseY) / (ManLong * HouseLong), -1.0, 1.0)) : 0.0;
+				const double HalfAcross = (1.0 - Set.HouseLook) * Between + std::atan2(std::min(Houses[static_cast<size_t>(ShotHouse)].R, 8.0), std::max(1.0, HouseLong)) + 0.06;
+				const double Needed = 2.0 * std::atan(std::tan(std::min(HalfAcross, 1.4)) * 9.0 / 16.0) * 180.0 / Pi;
+				Now.Fov = std::clamp(std::max(24.0 + Roll() * 8.0, Needed), 18.0, 52.0);
+				return !Here.Open || Here.Open(Stand, Target);
+			}
 			// Near, for a fall about to come: off his side at a man's height, a long lens. Otherwise from a bank or a rise
 			// off his own side's rear quarter, a long lens on him and the men round him.
 			const double Away = bNearWatch ? 10.0 + Roll() * 8.0 + 3.0 * Further : 28.0 + Roll() * 27.0 + 8.0 * Further;
@@ -1344,6 +1727,7 @@ namespace LandEye
 		{
 			Vec B;
 			OutLook = BodyOf(Subject, Battle, B) ? B : At + Vec(0.0, 0.0, 1.0);
+			if (ShotHouse >= 0) OutLook = OutLook + (ShotAim - OutLook) * Set.HouseLook;
 		}
 		else if (Shot == Kind::Track)
 		{
@@ -1357,6 +1741,10 @@ namespace LandEye
 			OutEye = At + Offset(FacingEased, Back, Side) + Vec(0.0, 0.0, UpNow);
 			OutLook = At + Before(FacingEased, Shot == Kind::Tank ? 70.0 : 35.0);
 			OutLook.Z = HeightAt(OutLook.X, OutLook.Y) + LookOver(UpNow);
+			// (the low shot of a man who has fallen looks at him)
+			const Track& St = Rec->Tracks[static_cast<size_t>(Subject)];
+			Vec Lying;
+			if (Shot == Kind::Low && St.Fell >= 0.0 && St.Fell <= Battle && BodyOf(Subject, Battle, Lying)) OutLook = Lying + Vec(0.0, 0.0, 0.1);
 			if (Shot != Kind::Tank) OutEye = ClearOfOwn(OutEye, Battle);
 			const double Crop = CropAt(OutEye.X, OutEye.Y);
 			if (Crop > 0.0) OutEye.Z = std::max(OutEye.Z, HeightAt(OutEye.X, OutEye.Y) + Crop + OverEars);
@@ -1379,7 +1767,12 @@ namespace LandEye
 		// Sedan's woods the loose ones were a third trees from start to end; nor one over a man's shoulder or beside him,
 		// trunks a third of it for three seconds: the long lenses alone may look through the edge of a wood)
 		const bool bScreenLoose = bLoose && (Shot == Kind::Watch || Shot == Kind::Track);
-		if (Part == 1) return !BadPicture(E, L, Now.Fov, bScreenLoose ? Set.ScreenLeave : Set.ScreenMost);
+		if (Part == 1)
+		{
+			// (the village still: its house in the picture and seen)
+			if (ShotHouse >= 0 && !HouseSeenIn(E, L, Now.Fov, ShotHouse)) return false;
+			return !BadPicture(E, L, Now.Fov, bScreenLoose ? Set.ScreenLeave : Set.ScreenMost);
+		}
 		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
 		// into a hedge)
 		if (Part >= 2)
@@ -1394,8 +1787,13 @@ namespace LandEye
 			if (Flat(Was, E) < Set.DarkClear) return false;
 		// (a place on the ground among the men is used once in the film: the third cut ran the same over-the-shoulder
 		// by a dark bush three times)
-		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && !bLoose)
+		// (an asked still may: the picture run asks the same stills of every light it tries; but not where the same ask
+		// was just left)
+		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && !bLoose && !bChoiceAsked)
 			for (const Vec& Was : UsedSpots)
+				if (Flat(Was, E) < Set.SpotOnce) return false;
+		if (bChoiceAsked)
+			for (const Vec& Was : AskLeft)
 				if (Flat(Was, E) < Set.SpotOnce) return false;
 		// (no man of the recording walking into the lens in the next two seconds, where the eye will be then)
 		{
@@ -1423,13 +1821,25 @@ namespace LandEye
 		if ((Shot == Kind::Watch || Shot == Kind::Track) && !SeenFrom(E, L, Subject)) return false;
 		// (its own man in the picture from its first frame, not down in the corn out of sight: a watch shot opened on a
 		// man already lost to it, and held five seconds)
-		if (!bLoose && Shot != Kind::Tank && Shot != Kind::Track && Subject >= 0 && Rec->Tracks[static_cast<size_t>(Subject)].IsMan())
+		const Track* Own = Subject >= 0 ? &Rec->Tracks[static_cast<size_t>(Subject)] : nullptr;
+		const bool bOwnUp = Own && !(Own->Fell >= 0.0 && Own->Fell <= Battle);
+		if (!bLoose && Shot != Kind::Tank && Shot != Kind::Track && Own && Own->IsMan() && !(bChoiceAsked && Shot == Kind::Low && bOwnUp))
 		{
 			Pose At;
 			At.Eye = E;
 			At.Look = L;
 			At.Fov = Now.Fov;
 			if (OwnLostFrom(At, Battle)) return false;
+		}
+		// (an asked low shot on a man up keeps him beside the lens, so its picture is the men ahead: some of them in it;
+		// Kursk's 04 was a field of corn with no one in it)
+		if (bChoiceAsked && Shot == Kind::Low && bOwnUp && Own && Own->IsMan())
+		{
+			Pose At;
+			At.Eye = E;
+			At.Look = L;
+			At.Fov = Now.Fov;
+			if (MenInPicture(At, Battle, 60.0, 1, Subject) < 1) return false;
 		}
 		// (its own man not filling the picture: the second cut's 1.4 s of a man's back and seat against a bank)
 		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && OwnShare(E, L, Now.Fov, Subject) > Set.OwnMost) return false;
@@ -1457,6 +1867,8 @@ namespace LandEye
 		K.Stand = Stand;
 		K.Target = Target;
 		K.TrackOff = TrackOff;
+		K.House = ShotHouse;
+		K.Aim = ShotAim;
 		return K;
 	}
 
@@ -1479,6 +1891,8 @@ namespace LandEye
 		bMassNow = K.bMass;
 		Stand = K.Stand;
 		Target = K.Target;
+		ShotHouse = K.House;
+		ShotAim = K.Aim;
 		TrackOff = K.TrackOff;
 	}
 
@@ -1510,7 +1924,7 @@ namespace LandEye
 			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 			{
 				const Track& Tr = Rec->Tracks[I];
-				if (!Tr.IsVehicle() || Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(Set.ShotLeast + 2.2)) continue;
+				if (Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(Set.ShotLeast + 2.2) || Tr.bTwin || !IsVehicleAt(I)) continue;
 				if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
@@ -1518,12 +1932,22 @@ namespace LandEye
 				break;
 			}
 		}
+		TryHouse = -1;
+		AskTries.clear();
 		if (bAsked)
 		{
 			bAsked = false;
 			bAskedNow = true;
 			bAskedUnfit = false;
-			Options.push_back({ AskedKind, AskedSubject, false });
+			// (each asked still from its own throw of the dice, not the film's run so far: the photographer's light A/Bs
+			// ask the same stills of runs whose cuts before them part. Thrown by what is asked and how many times it was
+			// asked again, not by a count of asks: a still asked again in one run only once it was taken moved the dice
+			// of every still after it, Kursk's last four)
+			const uint64_t Of = 1 + static_cast<uint64_t>(AskedKind) * 7919ull + static_cast<uint64_t>(AskedSubject + 2) * 104729ull
+				+ (bAskedBuilding ? 31ull : 0ull) + static_cast<uint64_t>(AskAgain) * 613ull;
+			Dice = (Set.Seed + 0x51ED27ull * Of) * 0xD1B54A32D192ED03ull + 11;
+			MakeAskTries(Battle);
+			Options.push_back({ AskedKind, AskTries.empty() ? AskedSubject : AskTries.front().Track, false });
 			Coming = -1;
 		}
 		else if (Battle > Rec->End + 1.0 && !bClosed)
@@ -1581,10 +2005,11 @@ namespace LandEye
 					for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 					{
 						const Track& Tm = Rec->Tracks[I];
-						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle || HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
+						if (static_cast<int>(I) == Coming || Tm.bTwin || IsVehicleAt(I) || Tm.Start() > Battle) continue;
 						if (Tm.Fell >= 0.0 && Tm.Fell < Battle + Soon(6.0)) continue;
 						const LandFeed::Block* Bm = BlockOfTrack(static_cast<int>(I));
 						if (!Bm || !Bf || Bm->Side != Bf->Side) continue;
+						if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 						const LandFeed::Spot Sm = LandFeed::SpotAt(Tm, Battle);
 						const double Gap = std::hypot(Sm.X - Sf.X, Sm.Y - Sf.Y);
 						if (Gap < 3.0 || Gap > 14.0 || Gap >= MateGap) continue;
@@ -1634,15 +2059,16 @@ namespace LandEye
 			// (in the tanks' turn only tanks are weighed, of both sides, while one still stands)
 			bool bTanksOnly = false;
 			if (bTankTurn)
-				for (const Track& Tr : Rec->Tracks) bTanksOnly = bTanksOnly || (Tr.Role == "tank" && Standing(Tr));
+				for (size_t I = 0; I < Rec->Tracks.size() && !bTanksOnly; ++I) bTanksOnly = KindOf(I) == KindTank && Standing(Rec->Tracks[I]);
 			// (and in the film's own section's turn, every SquadEvery shots, only its men, while one still stands)
 			bool bSquadOnly = false;
 			if (!bTanksOnly && RideBlock < 0 && LeanNow < 0 && HeroBlock >= 0 && SinceSquad >= Set.SquadEvery - 1)
 				for (size_t I = 0; I < Rec->Tracks.size() && !bSquadOnly; ++I)
 				{
 					// (not while they ride in their lorries: Sedan's section sat in the lorry beds for its first 70 s)
+					if (!InSquad(static_cast<int>(I)) || !Standing(Rec->Tracks[I])) continue;
 					const LandFeed::Change* Ci = LandFeed::ChangeAt(Rec->Tracks[I], Battle);
-					bSquadOnly = InSquad(static_cast<int>(I)) && Standing(Rec->Tracks[I]) && !(Ci && Ci->Pose == "mounted");
+					bSquadOnly = !(Ci && Ci->Pose == "mounted");
 				}
 			// (the weighing itself goes on in ScanChoice, a frame's share at a time)
 			bScanning = true;
@@ -1691,21 +2117,26 @@ namespace LandEye
 			if (RaySteps - Start >= Budget) return false;
 			const size_t I = ChoiceScan;
 			const Track& Tr = Rec->Tracks[I];
+			// (the scan's own walk over the tracks: a sixteenth of a ray's step each, in the frame's count, so a battle of
+			// thousands of men takes it over more frames, not a longer one: CD0, Kursk's 5,800)
+			if ((I & 15) == 0) ++RaySteps;
 			if (!Standing(Tr)) continue;
-			if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
-			// (nor a man riding in a lorry's bed: Sedan's motorised men sat nine to a lorry 0.6 m apart for 70 s)
-			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
-			if (C && C->Pose == "mounted") continue;
+			// (the cheap questions first, the side before the man's moves: the answers are as before)
+			const uint8_t TrKind = KindOf(I);
+			if (TrKind == KindLorry || TrKind == KindGun) continue;
 			const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
 			if (!B) continue;
-			const bool bTank = Tr.Role == "tank";
+			const bool bTank = TrKind == KindTank;
 			if (bScanTanksOnly && !bTank) continue;
-			if (bScanMenOnly && Tr.IsVehicle()) continue;
+			if (bScanMenOnly && TrKind != 0) continue;
 			if (bScanSquadOnly && !InSquad(static_cast<int>(I))) continue;
 			// (riding with a unit, or the general's order just given: its men alone, of whichever side)
 			if (bScanRide && Tr.Block != ScanBlock) continue;
 			if ((B->Side == Set.Own) != bScanOwnTurn && !bScanTanksOnly && !bScanSquadOnly && !bScanRide && ScanElsewhere == 0) continue;
 			if (HiddenNow(static_cast<int>(I))) continue;
+			// (nor a man riding in a lorry's bed: Sedan's motorised men sat nine to a lorry 0.6 m apart for 70 s)
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+			if (C && C->Pose == "mounted") continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
 			// (weighed again: none near the men no place fit on)
 			bool bAvoided = false;
@@ -1733,6 +2164,9 @@ namespace LandEye
 				// (the tanks get a shot in turn with the men: never two running on tanks unless one is about to die)
 				else if (!Recent.empty() && (Recent.back() == Kind::Tank || Recent.back() == Kind::Track)) Score *= 0.4;
 			}
+			// (the platoon cam: the leading squad's men first, and in a rush the men on the move)
+			if (LeadSide >= 0 && bScanRide && Tr.Block == LeadBlockNow)
+				Score += (InLead(I, Battle) ? 6.0 : 0.0) + (InRush(I, Battle) ? 1.5 : 0.0);
 			if (static_cast<int>(I) == Subject) Score *= 0.3; // not the same man twice running
 			else if (!bTank && Real - ShownAt[I] < 20.0) Score *= 0.6;
 			Score += Roll() * 2.5;
@@ -1853,23 +2287,48 @@ namespace LandEye
 			{
 				const Option& Op = Options[ChoiceO];
 				const int Variants = (Op.K == Kind::Wide || Op.K == Kind::Open) ? 1 : 4;
+				const bool bAskedOp = bChoiceAsked && ChoiceO == 0;
 				for (; ChoiceV < Variants && ChoiceTries < TriesACut; ++ChoiceV)
 				{
 					if (!bTrying && Spent()) return false;
 					bNearWatch = Op.bNear;
+					if (bAskedOp && !AskTries.empty()) { TryHouse = AskTries.front().House; TryAim = AskTries.front().Aim; }
 					const int Fit = TryPlace(Op.K, Op.Who, Battle, ChoiceV, Start, Budget);
 					if (Fit < 0) return false;
 					if (Fit > 0) return true;
 					++ChoiceTries;
 				}
-				if (bChoiceAsked && ChoiceO == 0)
+				if (bAskedOp)
 				{
+					// (the asked kind on the other men it may be of, two places each, before it is placed unfit)
 					bNearWatch = false;
+					for (; AskNext < AskTries.size(); ++AskNext, AskNextV = 0)
+					{
+						for (; AskNextV < 2; ++AskNextV)
+						{
+							TryHouse = AskTries[AskNext].House;
+							TryAim = AskTries[AskNext].Aim;
+							const int Fit = TryPlace(Op.K, AskTries[AskNext].Track, Battle, AskNextV, Start, Budget);
+							if (Fit < 0) return false;
+							if (Fit > 0) return true;
+						}
+					}
+					TryHouse = AskTries.empty() ? -1 : AskTries.front().House;
+					if (!AskTries.empty()) TryAim = AskTries.front().Aim;
 					if (Place(Op.K, Op.Who, Battle, 0))
 					{
 						bAskedUnfit = true;
+						TryHouse = -1;
+						// (framed toward its house, but it keeps the house only if the house is in the picture)
+						if (ShotHouse >= 0)
+						{
+							Vec E, L;
+							Intended(Battle, E, L);
+							if (!HouseSeenIn(E, L, Now.Fov, ShotHouse)) ShotHouse = -1;
+						}
 						return true;
 					}
+					TryHouse = -1;
 				}
 			}
 			ChoiceStage = 1;
@@ -2018,6 +2477,8 @@ namespace LandEye
 		const int Coming = ChoiceComing;
 		bChoosing = false;
 		bLoose = false;
+		TryHouse = -1;
+		bShotAsked = bChoiceAsked;
 		if (Shot == Kind::Wide && Battle > Rec->End) bClosed = true;
 		Recent.push_back(Shot);
 		if (Recent.size() > 4) Recent.erase(Recent.begin());
@@ -2080,13 +2541,27 @@ namespace LandEye
 	{
 		if (!Rec || HeroBlock < 0 || TrackIndex < 0 || static_cast<size_t>(TrackIndex) >= Rec->Tracks.size()) return false;
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
-		return Tr.Block == HeroBlock && Tr.K == HeroK && Tr.IsMan();
+		return Tr.Block == HeroBlock && Tr.K == HeroK && KindOf(static_cast<size_t>(TrackIndex)) == 0;
 	}
 
 	bool Director::HiddenNow(int TrackIndex) const
 	{
 		if (!Rec || !Here.Hidden || TrackIndex < 0 || static_cast<size_t>(TrackIndex) >= Rec->Tracks.size()) return false;
-		return Here.Hidden(Rec->Tracks[static_cast<size_t>(TrackIndex)].Block);
+		// (once a frame for each block: a scan over every man asked the scene 5,800 times a frame at Kursk)
+		BlockOfTrack(TrackIndex);
+		const int B = BlockIx[static_cast<size_t>(TrackIndex)];
+		if (B < 0) return Here.Hidden(Rec->Tracks[static_cast<size_t>(TrackIndex)].Block);
+		if (HiddenStamp.size() != Rec->Blocks.size())
+		{
+			HiddenStamp.assign(Rec->Blocks.size(), 0);
+			HiddenVal.assign(Rec->Blocks.size(), 0);
+		}
+		if (HiddenStamp[static_cast<size_t>(B)] != FrameStamp)
+		{
+			HiddenStamp[static_cast<size_t>(B)] = FrameStamp;
+			HiddenVal[static_cast<size_t>(B)] = Here.Hidden(Rec->Tracks[static_cast<size_t>(TrackIndex)].Block) ? 1 : 0;
+		}
+		return HiddenVal[static_cast<size_t>(B)] != 0;
 	}
 
 	int Director::HeavyNear(double X, double Y, double From, double To, double Radius) const
@@ -2357,11 +2832,15 @@ namespace LandEye
 	{
 		Now.bCut = false;
 		if (!Rec) return Now;
+		// (the scene's answers asked once a frame, such as which blocks are hidden, are asked afresh)
+		++FrameStamp;
 		// (the frame's work so far, by the ground asked under the camera's rays: a cut's choice has what is left of the
 		// frame's share)
 		const long FrameFrom = RaySteps;
 		// (a live battle grown since the last frame: its new tracks, rounds and knocked-out vehicles put in the lists)
 		if (Rec->bLive) KeepUp(Battle);
+		// (the platoon cam: the platoon leading the assault now)
+		LookForLead(Battle, Real);
 		IndexLandings();
 		const double PrevBattle = LastBattle;
 		// (the rounds that may still be in the air: none fired more than a minute before; a seek back starts again)
@@ -2462,8 +2941,8 @@ namespace LandEye
 				const bool bVehicles = N < Rec->Tracks.size();
 				const size_t I = bVehicles ? N : N - Rec->Tracks.size();
 				const Track& Tr = Rec->Tracks[I];
-				if (Tr.IsVehicle() != bVehicles || (!bVehicles && FellAt >= 0.0)) continue;
-				if (Tr.bTwin || Tr.Fell < Battle + Soon(bVehicles ? 0.4 : 1.0) || Tr.Fell > Battle + Soon(2.2)) continue;
+				if (Tr.Fell < Battle + Soon(bVehicles ? 0.4 : 1.0) || Tr.Fell > Battle + Soon(2.2)) continue;
+				if (IsVehicleAt(I) != bVehicles || (!bVehicles && FellAt >= 0.0) || Tr.bTwin) continue;
 				if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
@@ -2621,6 +3100,14 @@ namespace LandEye
 			// shot on the screen kept to be put back if none is placed yet)
 			if (!bChoosing)
 			{
+				// (an asked still left before it can have been taken: asked again, its kind on another man or place, so the
+				// picture run's still is of what it asked: Sedan's 03 ran its man's eye into a tree a second after the ask)
+				if (bShotAsked && Reason != Why::Asked && Real - ShotStarted < Set.AskHold && AskAgain < Set.AskAgainMost)
+				{
+					++AskAgain;
+					AskLeft.push_back(Now.Eye);
+					bAsked = true;
+				}
 				LeftWhy = Reason;
 				// (a shot left for anything but a dark picture held its light: the dark rule's run starts again)
 				if (Reason != Why::Dark) DarkRunNow = 0;
@@ -2925,6 +3412,8 @@ namespace LandEye
 		Now.Roll = (Wave(2, 0.17) * 0.6 + Wave(4, 0.53) * 0.2) * Hand;
 		Now.Shot = Shot;
 		Now.Subject = Subject;
+		// (and for what the scene asks between frames)
+		++FrameStamp;
 		return Now;
 	}
 }

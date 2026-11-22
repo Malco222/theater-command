@@ -41,6 +41,10 @@ public class TheaterCommand : ModuleRules
 		// CampaignHUD.cpp), which lives in ImageCore. Without it the game compiles but does not link on the Mac.
 		PrivateDependencyModuleNames.Add("ImageCore");
 
+		// The ground battle's dark reading (the camera director's dark rule): the drawn frame copied small a few times a
+		// second, without waiting on the card (the engine's frame grabber).
+		PrivateDependencyModuleNames.Add("MovieSceneCapture");
+
 		// The ground battle's hedges, trees and grass: meshes made while the game runs, for instancing.
 		PrivateDependencyModuleNames.AddRange(new string[] { "MeshDescription", "StaticMeshDescription" });
 

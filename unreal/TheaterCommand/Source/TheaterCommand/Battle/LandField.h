@@ -100,6 +100,17 @@ namespace LandField
 		uint64_t Seed = 1;
 		/** The open steppe, where the recording lays it (Steppe.bOn); else the bocage. */
 		SteppeLay Steppe;
+		/**
+		 * The look of the land where it is neither the bocage nor the steppe (LandScape: the desert, the Mediterranean, the
+		 * jungle and the islands, the open farmland, and snow over any of them). Look: the recording's word (field.look:
+		 * "bocage", "desert", "med", "jungle", "island", "farmland"), empty to pick it from the place (Lat, Lon: sky.latLon)
+		 * and the terrain; Snow: the snow lying, 0 to 1 (field.snow), less than 0 to pick it from the place and the month.
+		 * Kit: the region's battle models (Content/Models/<its folder>), each file's text by its name, read by the caller.
+		 */
+		std::string Look;
+		double Lat = 49.0, Lon = 0.0;
+		double Snow = -1.0;
+		std::map<std::string, std::string> Kit;
 
 		/**
 		 * Where men and vehicles go, if known (a recording's men tracks, each man's kept points): a hedge they cross is
@@ -110,8 +121,22 @@ namespace LandField
 		{
 			std::vector<std::pair<double, double>> Points;
 			double HalfWidth = 1.0;
+			/** The recording's track it is (LandFeed::Recording::Tracks' index; -1 where none): for Crossings. */
+			int Track = -1;
 		};
 		std::vector<Way> Ways;
+
+		/**
+		 * The hedge cutters' cuts (release 2; Brian, 22 November 14:19Z: bladed Shermans punch a gap through a hedgerow
+		 * where the player picks): the gap's middle on the bank's line and its width, bank end to bank end. The hedge is
+		 * laid whole there (no way through it opened, no tree in the gap, its shrubs planted as anywhere), so the scene
+		 * tears it open when she bursts through (LandCrater::Field::AddBreach). None: the bocage as before.
+		 */
+		struct Cut
+		{
+			double X = 0.0, Y = 0.0, Width = 4.0;
+		};
+		std::vector<Cut> Cuts;
 
 		double Width() const { return Cols * Cell; }
 		double Depth() const { return Rows * Cell; }
@@ -215,6 +240,25 @@ namespace LandField
 		Sweep,    // a well sweep
 		Haystack,
 		Birch,
+		// a region's kit (LandScape: the Mediterranean's olives and farmhouses, the desert's flat-roofed houses and scrub,
+		// the jungle's trees and stilt houses, ...): each slot the model its region names (Region::KitName), read from
+		// Field::Kit; none where the ground has no region
+		Kit0,
+		Kit1,
+		Kit2,
+		Kit3,
+		Kit4,
+		Kit5,
+		Kit6,
+		Kit7,
+		Kit8,
+		Kit9,
+		Kit10,
+		Kit11,
+		Kit12,
+		Kit13,
+		Kit14,
+		Kit15,
 		Haycock, // a mown meadow's hay forked into cocks to make, 1.2 to 1.6 m, in loose rows (the bocage's July)
 		Tuft,    // clutter: grass tuft (every base from here on is clutter, laid round the eye)
 		TallGrass,
@@ -228,6 +272,16 @@ namespace LandField
 		Trodden, // clutter: a piece of a cow path's bare trodden earth, laid end to end along the path
 		Stalks,  // clutter: standing corn stalk by stalk, with its leaves and its ears, laid where Wheat is and drawn
 		         // only within a few metres of the lens (the art director's cut 4, fix 4), the Wheat there cleared
+		Rosette, // clutter: a broad-leaved dock and a plantain or two lying close to the ground, in the open grass (the
+		         // bracken keeps to the banks: the art director's cut 5 note)
+		// clutter of a region's own (LandScape: the desert's pebbles and camel thorn, the jungle's leaf litter ...), its
+		// mesh the region's (Region::ClutterMesh); none where the ground has no region
+		Clut0,
+		Clut1,
+		Clut2,
+		Clut3,
+		Clut4,
+		Clut5,
 		Count
 	};
 
@@ -245,6 +299,16 @@ namespace LandField
 		float FarFrom = 100.0f;
 		/** The base's size as built (before an instance's scale): radius round its origin and height. */
 		float Radius = 1.0f, Height = 1.0f;
+		/** A region's kit slot: how it stands for the men's and the camera's sight (LandSight), as shares of its built
+		 * size (Mid and Half of its height, Across of its radius) and its trunk in metres; bSight false: seen through. */
+		bool bSight = false;
+		float SightMid = 0.5f, SightHalf = 0.5f, SightAcross = 0.8f, SightTrunk = 0.0f;
+		/** A region's kit or clutter slot: how it is painted (0 solid, as a house or a rock; 1 leaves, the light through
+		 * them; 2 blades, grass and thin stems). The bocage's own bases are painted by their kind. */
+		uint8_t Paint = 0;
+		/** A region's kit slot: a tree. The game draws it far off as a crown of some 40 triangles with no shadow and not
+		 * past its trees' reach (GS9), as the bocage's own trees; the region sets it in KitLook. */
+		bool bTree = false;
 	};
 
 	/**
@@ -283,6 +347,27 @@ namespace LandField
 		double X = 0.0, Y = 0.0, Yaw = 0.0, Width = 0.0;
 		int Kind = 0;   // 0 a gateway, 1 a breach
 		int Men = 0;    // a breach: the recording's men's crossings it gathers (those within 12.5 m of it)
+	};
+
+	/** A recorded vehicle's way through a hedge's bank, opened where the field was laid: the crossing's place, the
+	 * hedge's heading there (radians from east), the gap opened (bank end to bank end), the hedge's kind (HedgeLine's),
+	 * and the way (Field::Ways' index, and its Track) and how far along its points it crossed (K + T: between point K
+	 * and K + 1, T of the way). For the hedge cutters' test switch: which of them a cutter might have made. */
+	struct HedgeCrossing
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, Width = 0.0;
+		int Kind = 0;
+		int Way = -1, Track = -1;
+		double Along = 0.0;
+	};
+
+	/** The nearest bank's middle line to a place: the point on it, its heading (radians from east), the bank's height
+	 * there, and how far its foot reaches either side of the line (where it meets the field), metres; Kind as
+	 * HedgeLine's. */
+	struct BankPlace
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, Height = 0.0, Foot = 0.0;
+		int Kind = 0;
 	};
 
 	/** What was laid and how long it took, for the log and the test. */
@@ -360,6 +445,13 @@ namespace LandField
 		const std::vector<HedgeLine>& Hedges() const;
 		/** The gateways and breaches through them. */
 		const std::vector<HedgeOpening>& Openings() const;
+		/** The recorded vehicles' ways through the hedges, as opened (none where a cut stands: Field::Cuts). */
+		const std::vector<HedgeCrossing>& Crossings() const;
+		/** The nearest bank's middle line within Reach metres of a place (a hedgerow's, a lane's, a wood's edge or a
+		 * garden's; not a wall): false where none is. Any thread. */
+		bool NearestBank(double X, double Y, double Reach, BankPlace& Out) const;
+		/** The banks' rise over the land at a place (0 off them): what a breach through a bank takes away. Any thread. */
+		double BankRise(double X, double Y) const;
 		/** The lanes' middle lines. */
 		const std::vector<std::vector<std::pair<double, double>>>& Lanes() const;
 		/** The parcel at a place (-1 where none: lanes, woods, beyond), for maps and tests. */
@@ -369,6 +461,11 @@ namespace LandField
 		std::string CropOfParcel(int Parcel) const;
 
 		const Tally& Laid() const;
+		/** The look laid (LandScape::NameOf: "bocage", "steppe", "desert", ...) and the snow lying on it (0 to 1). */
+		const char* LookWord() const;
+		double SnowLying() const;
+		/** The shell holes' earth for this ground (LandCrater::SetEarth), empty for the bocage's own. */
+		const char* EarthWord() const;
 
 	private:
 		struct Impl;

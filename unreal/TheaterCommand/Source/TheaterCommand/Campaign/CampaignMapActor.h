@@ -407,6 +407,24 @@ public:
 		}
 	}
 	bool IsPutAway() const { return bAwayForBattle; }
+	/**
+	 * (release 2, the land battle's gate) While the land battle's scene is up the hidden table's per-frame update
+	 * (UpdateForCamera: the lettering, the standards, the smoke) is held: 2.3 ms on every long frame and up to 15 ms
+	 * (the production lead's lit base, 22 Nov). Released, it runs at once with the last view asked, so the table comes
+	 * back as it would have been.
+	 */
+	void HoldUpdates(bool bHold)
+	{
+		if (bUpdatesHeld == bHold)
+		{
+			return;
+		}
+		bUpdatesHeld = bHold;
+		if (!bHold && bViewAsked)
+		{
+			UpdateForCamera(LastAskedDistance, LastAskedYaw, LastAskedFocus);
+		}
+	}
 	/** (release 1) A warm lamp over the army or fleet in hand: it follows the piece, and goes out when the piece is put down. */
 	void SetHandLamp(AArmyPiece* Piece);
 	UMaterialInterface* WashInk();
@@ -1059,6 +1077,9 @@ private:
 	TObjectPtr<UProceduralMeshComponent> EnemyReachMesh; // the dashed line of the enemy's reach, in the front line's own ink and its two weights
 	bool bPiecesShown = true;
 	bool bAwayForBattle = false; // (a name of its own: ApplyCrowds has a local bPutAway)
+	bool bUpdatesHeld = false, bViewAsked = false; // (HoldUpdates, and the last view UpdateForCamera was asked)
+	float LastAskedDistance = 0.0f, LastAskedYaw = 0.0f;
+	FVector LastAskedFocus = FVector::ZeroVector;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> OrdersInk; // the washes laid for an army in hand: dimmed by night, in the chart veil's step
 	UPROPERTY()
