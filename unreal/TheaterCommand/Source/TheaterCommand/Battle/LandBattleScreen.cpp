@@ -623,6 +623,56 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		return Kind == "inf" ? TEXT("RIFLES") : Kind == "arm" ? TEXT("TANKS") : Kind == "art" ? TEXT("GUNS") : Kind == "mot" ? TEXT("MOTORISED") : Kind == "eng" ? TEXT("ENGINEERS")
 			: Kind == "mtn" ? TEXT("MOUNTAIN") : Kind == "cav" ? TEXT("CAVALRY") : Kind == "fort" ? TEXT("WORKS") : TEXT("");
 	};
+	// What it is doing now, in plain words, once the battle runs (the production lead, 22 November 23:10Z: plain feedback
+	// on what each unit is doing): the longer words first and a shorter where the card has no room; empty where a chip
+	// already says how it stands, or nothing is worth saying. Busy words in the desk's ink, a quiet one in the soft ink.
+	auto DoingWords = [](const LandCommand::Tag& T, const TCHAR*& OutShort, bool& bOutBusy) -> const TCHAR*
+	{
+		OutShort = nullptr;
+		bOutBusy = true;
+		const std::string& Act = T.Act;
+		const std::string& Order = T.OrderKind;
+		if (Act == "down" || Act == "rout" || T.State == "routing" || T.State == "gone" || T.State == "withdrawn")
+		{
+			return nullptr;
+		}
+		if (Order == "withdraw" && (Act == "march" || Act == "run" || Act == "turn"))
+		{
+			return TEXT("FALLING BACK");
+		}
+		if (T.State == "wavering")
+		{
+			return TEXT("SHAKEN");
+		}
+		if (T.bSearch)
+		{
+			OutShort = TEXT("FIRING");
+			return TEXT("FIRING INTO COVER");
+		}
+		if (Act == "fight")
+		{
+			return TEXT("FIGHTING");
+		}
+		if (Act == "run")
+		{
+			OutShort = TEXT("RUNNING UP");
+			return Order == "attack" ? TEXT("CHARGING") : TEXT("AT THE DOUBLE");
+		}
+		if (Act == "march")
+		{
+			return Order == "attack" ? TEXT("ADVANCING") : TEXT("MOVING");
+		}
+		if (Act == "turn")
+		{
+			return TEXT("TURNING");
+		}
+		bOutBusy = false;
+		if (T.bHidden)
+		{
+			return TEXT("IN AMBUSH");
+		}
+		return T.OrderIn > 0.5 ? TEXT("AWAITING ORDERS") : TEXT("HOLDING");
+	};
 	// Who commands it (the UI director, 18:26Z: two ideas, not three words): his staff, or himself; an order on the air
 	// is his, with the radio's sign and the time it has left beside it (OutAir, battle seconds; -1 none on the air).
 	auto OwnerOf = [](const LandCommand::Tag& T, FString& OutWords, FLinearColor& OutPaper, FLinearColor& OutInk, double& OutAir)
@@ -633,7 +683,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 		case LandCommand::Chip::Staff: OutWords = TEXT("STAFF"); OutPaper = Track; OutInk = Cream; break;
 		case LandCommand::Chip::Yours: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; break;
-		case LandCommand::Chip::Radio: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; OutAir = FMath::Max(0.0, T.OrderIn); break;
+		// (an order with under half a second left is as good as there: no "0:00" beside it, 22 November 23:15Z)
+		case LandCommand::Chip::Radio: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; OutAir = T.OrderIn >= 0.5 ? T.OrderIn : -1.0; break;
 		default: break;
 		}
 	};
@@ -1341,9 +1392,19 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Forest(Right - 18.0, LineY, 18.0, LeafInk, 14);
 				Right -= 22.0;
 			}
-			// (its kind's word, or where the line has no room for it, the kit's sign: the plate still names it)
+			// (once the battle runs, what it is doing; else, or where neither its words nor their short form fit, its kind's
+			// word, or where the line has no room for that, the kit's sign: the plate still names it)
+			const TCHAR* DoingShort = nullptr;
+			bool bBusy = true;
+			const TCHAR* Doing = Clip.Deploying() || !StateWords.IsEmpty() || bGone ? nullptr : DoingWords(T, DoingShort, bBusy);
+			const TCHAR* DoingFits = Doing && WideOf(Doing, KindFace) <= Right - (X + 6.0) ? Doing
+				: DoingShort && WideOf(DoingShort, KindFace) <= Right - (X + 6.0) ? DoingShort : nullptr;
 			const FString Kind = KindWord(T);
-			if (WideOf(Kind, KindFace) <= Right - (X + 6.0))
+			if (DoingFits)
+			{
+				Write(DoingFits, X + 6.0, LineY + 1.0, KindFace, bBusy ? DeskInk : InkSoft, 14);
+			}
+			else if (WideOf(Kind, KindFace) <= Right - (X + 6.0))
 			{
 				Write(Kind, X + 6.0, LineY + 1.0, KindFace, InkSoft, 14);
 			}
@@ -1378,31 +1439,42 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	{
 		struct FPart { const TCHAR* Label; const TCHAR* Key; const TCHAR* Action; bool bLit; };
 		TArray<FPart> Parts;
-		Parts.Add({ TEXT("AT THE DOUBLE"), TEXT(""), TEXT("general:double"), G.Armed == "double" });
+		Parts.Add({ TEXT("AT THE DOUBLE"), TEXT("G"), TEXT("general:double"), G.Armed == "double" });
 		Parts.Add({ TEXT("HOLD"), TEXT("H"), TEXT("general:hold"), false });
-		Parts.Add({ TEXT("FIRE ON"), TEXT(""), TEXT("general:fire"), G.Armed == "fire" });
+		Parts.Add({ TEXT("FIRE ON"), TEXT("F"), TEXT("general:fire"), G.Armed == "fire" });
 		// (a tank with hedge cutters, a section with smoke left; Brian, 22 November 14:19Z)
 		if (Clip.Cutter() >= 0)
 		{
-			Parts.Add({ TEXT("CUT A GAP"), TEXT(""), TEXT("general:gap"), G.Armed == "gap" });
+			Parts.Add({ TEXT("CUT A GAP"), TEXT("X"), TEXT("general:gap"), G.Armed == "gap" });
 		}
 		if (!Clip.Smokers().empty())
 		{
-			Parts.Add({ TEXT("LAY SMOKE"), TEXT(""), TEXT("general:smoke"), G.Armed == "smoke" });
+			Parts.Add({ TEXT("LAY SMOKE"), TEXT("K"), TEXT("general:smoke"), G.Armed == "smoke" });
 		}
 		Parts.Add({ TEXT("FALL BACK"), TEXT("R"), TEXT("general:fallback"), false });
 		// (hold until relieved: while a corps of his is coming up from next door, for the units on foot in hand)
 		if (Clip.HelpComing() && !Clip.Waiters().empty())
 		{
-			Parts.Add({ TEXT("HOLD TILL RELIEVED"), TEXT(""), TEXT("general:wait"), false });
+			Parts.Add({ TEXT("HOLD TILL RELIEVED"), TEXT("T"), TEXT("general:wait"), false });
 		}
-		Parts.Add({ TEXT("BACK TO STAFF"), TEXT(""), TEXT("general:staff"), false });
+		Parts.Add({ TEXT("BACK TO STAFF"), TEXT("B"), TEXT("general:staff"), false });
 		// (the film with the unit in his hand: Ride with this unit)
 		Parts.Add({ TEXT("RIDE WITH THEM"), TEXT("V"), TEXT("general:ride"), false });
+		// (every order has its key, so a common order is one press with the mouse on the field, 22 November 23:20Z; where
+		// the bar would run past the screen, the key marks go and the keys still work)
 		double Whole = 0.0;
 		for (const FPart& P : Parts)
 		{
 			Whole += ButtonWidth(P.Label, P.Key) + 6.0;
+		}
+		if (Whole > Size.X - 36.0)
+		{
+			Whole = 0.0;
+			for (FPart& P : Parts)
+			{
+				P.Key = TEXT("");
+				Whole += ButtonWidth(P.Label, P.Key) + 6.0;
+			}
 		}
 		double X = FMath::Max(18.0, Size.X - 18.0 - Whole + 6.0);
 		for (const FPart& P : Parts)
@@ -1447,6 +1519,17 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			else if (Men > 0)
 			{
 				Said.Add(Kind.IsEmpty() ? FString::Printf(TEXT("About %s men."), *Many) : Kind + FString::Printf(TEXT("about %s men."), *Many));
+			}
+		}
+		// (his unit, once the battle runs: what it is doing now, the card's words as a sentence)
+		if (Over->bMine && !Clip.Deploying())
+		{
+			const TCHAR* NowShort = nullptr;
+			bool bNowBusy = true;
+			if (const TCHAR* NowDoing = DoingWords(*Over, NowShort, bNowBusy))
+			{
+				const FString NowSaid(NowDoing);
+				Said.Add(TEXT("Now ") + NowSaid.ToLower() + TEXT("."));
 			}
 		}
 		// (his unit holding till relieved: when help arrives, the card's hourglass in words)
@@ -1850,6 +1933,13 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Three) { Pace(4.0); return FReply::Handled(); }
 		else if (Key == EKeys::H) { Scene->GeneralDo(TEXT("hold")); return FReply::Handled(); }
 		else if (Key == EKeys::R) { Scene->GeneralDo(TEXT("fallback")); return FReply::Handled(); }
+		else if (const TCHAR* BarOrder = Key == EKeys::G ? TEXT("general:double") : Key == EKeys::F ? TEXT("general:fire") : Key == EKeys::X ? TEXT("general:gap")
+			: Key == EKeys::K ? TEXT("general:smoke") : Key == EKeys::T ? TEXT("general:wait") : Key == EKeys::B ? TEXT("general:staff") : nullptr; BarOrder && !bSetup)
+		{
+			// (the orders bar's keys: each presses its button where the bar shows it, and does nothing where it does not)
+			PressDrawn(BarOrder);
+			return FReply::Handled();
+		}
 		else if (Key == EKeys::Tab) { Scene->GeneralDo(Event.IsShiftDown() ? TEXT("back") : TEXT("next")); return FReply::Handled(); }
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
