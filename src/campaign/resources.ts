@@ -73,7 +73,14 @@ export const RES = data as unknown as {
     ratio: Record<string, number>; perDiv: number; peace: number; start: Record<string, number>; cap: number;
     short: { fight: number; drafts: number; income: number };
   };
-  will: { sup: number; oil: number; heal: number; per: number; most: number };
+  will: {
+    sup: number; oil: number; heal: number; per: number; most: number;
+    /**
+     * The nations that ask for terms (ruling 196: a row by nation; the far side lays Japan's, the only row): a
+     * computer nation here gives in when an enemy holds 'home' of its home ground by worth and privation is at 'most'.
+     */
+    terms?: Record<string, { home: number }>;
+  };
   lanes: LaneRow[];
   deals: DealRow[];
   ai: { armourAt: number; synthAt: number };
