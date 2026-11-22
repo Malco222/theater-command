@@ -841,7 +841,8 @@ namespace LandParts
 				}
 				double X = 0.0, Y = 0.0, Z = 0.0;
 				float Facing = 0.0f;
-				if (!S.Men->PlaceOf(Man, X, Y, Z, Facing))
+				// (his height as last posed: no ground asked for each of two thousand men a frame)
+				if (!S.Men->PlaceAsPosed(Man, X, Y, Z, Facing))
 				{
 					continue;
 				}
@@ -2865,6 +2866,17 @@ void ALandBattle::MakeMen()
 	}
 	// (six hundred men: a man away from the eye posed every few frames, his place, shots and falls every frame)
 	Crowd->SetThrift(true);
+	// (the men stepped over the cores, a stretch of them each: the same men to the bit as on one; the frame-rate lane,
+	// 22 November. -TheaterLandMenOneCore steps them on the game thread alone, for the A/B)
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMenOneCore")))
+	{
+		Crowd->SetRun([](int Count, const std::function<void(int)>& Job)
+		{
+			ParallelFor(Count, [&Job](int32 K) { Job(K); });
+		});
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the men stepped %s"),
+		FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMenOneCore")) ? TEXT("on the game thread alone (-TheaterLandMenOneCore)") : TEXT("over the cores"));
 	// The levels of detail by the man's share of the picture (the battle-scale plan's GS3), at the usual 50 deg lens and
 	// 665 lines tall: a 1.8 m man over NearPx lines (150) drawn Near, Mid to ShadowTo metres (80, where his shadow
 	// ends), Far beyond; under CullPx lines (2) not drawn but in the wide mass shot. "-TheaterLandNearPx=",
@@ -2990,7 +3002,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man) && (bMass || Crowd.SeenDistance(Man) <= S.MenCullFrom);
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
-		Crowd.PlaceOf(Man, X, Y, Z, Facing);
+		Crowd.PlaceAsPosed(Man, X, Y, Z, Facing); // (his height as last posed: no ground asked a man a frame)
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
 		const bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);

@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -1322,6 +1323,66 @@ int main(int Argc, char** Argv)
 			LongestHeld * Dt * 1000.0, Flickers, CulledTotal / Fs, CullFrom);
 		if (LongestHeld > 30) Fail("a man waited %d frames (over half a second) for his new level under the cap", LongestHeld);
 		if (Flickers > LevelChanges / 50 + 2) Fail("%ld of %ld level changes flicker back within half a second", Flickers, LevelChanges);
+	}
+
+	// Over the cores (SetRun, the frame-rate lane of 22 November): the same men to the bit as one after another, and the
+	// same events in the same order, frame by frame, thrifty, the eye among them; and what it costs each way.
+	{
+		Crowd One, Many;
+		Pool Cores(4);
+		for (Crowd* Cr : { &One, &Many })
+		{
+			Cr->SetLife(Life);
+			for (const auto& KV : Files) Cr->AddSoldier(KV.first, KV.second);
+			Cr->ReadArmies(ReadFile(Argv[3]), Err);
+			Cr->Build(RecText, GroundAt, Err);
+			Cr->SetThrift(true);
+		}
+		Many.SetRun([&Cores](int Count, const std::function<void(int)>& Job) { Cores.For(Count, Job); });
+		double LookX = 0.0, LookY = 0.0, LookZ = 0.0;
+		float LookFacing = 0.f;
+		One.PlaceOf(One.Count() / 2, LookX, LookY, LookZ, LookFacing);
+		long Stepped = 0, ManDiffs = 0, EventDiffs = 0, Posed = 0, Falls = 0;
+		double OneMs = 0.0, ManyMs = 0.0, PosedOff = 0.0;
+		const double Step = 1.0 / 30.0, Until = std::min(End, 240.0);
+		for (double T = 0.0; T <= Until; T += Step, ++Stepped)
+		{
+			One.SetEye(LookX, LookY - 40.0, LookZ + 6.0);
+			Many.SetEye(LookX, LookY - 40.0, LookZ + 6.0);
+			const auto A = std::chrono::steady_clock::now();
+			One.Update(T);
+			const auto B = std::chrono::steady_clock::now();
+			Many.Update(T);
+			const auto Cc = std::chrono::steady_clock::now();
+			OneMs += Ms(A, B);
+			ManyMs += Ms(B, Cc);
+			const std::vector<Event>& E1 = One.Events();
+			const std::vector<Event>& E2 = Many.Events();
+			if (E1.size() != E2.size()) ++EventDiffs;
+			else
+				for (size_t K = 0; K < E1.size(); ++K)
+					if (E1[K].T != E2[K].T || E1[K].Man != E2[K].Man || E1[K].Fx != E2[K].Fx || E1[K].Cue != E2[K].Cue || E1[K].Round != E2[K].Round) { ++EventDiffs; break; }
+			for (int M = 0; M < One.Count(); ++M)
+			{
+				if (One.IsFalling(M)) ++Falls;
+				const Soldier* S1 = One.SoldierOf(M);
+				const Xform* F1 = One.FramesOf(M);
+				const Xform* F2 = Many.FramesOf(M);
+				if (One.Visible(M) != Many.Visible(M) || (S1 && F1 && F2 && std::memcmp(F1, F2, sizeof(Xform) * S1->Bones.size()) != 0)) { ++ManDiffs; continue; }
+				double X1, Y1, Z1, X2, Y2, Z2;
+				float Fa, Fb;
+				if (One.Visible(M) && One.PlaceOf(M, X1, Y1, Z1, Fa) && One.PlaceAsPosed(M, X2, Y2, Z2, Fb))
+				{
+					++Posed;
+					PosedOff = std::max(PosedOff, std::fabs(Z1 - Z2));
+				}
+			}
+		}
+		std::printf("\nover the cores: %ld frames to %.0f s, %d men; men unlike one after another %ld, frames with unlike events %ld (%ld falling a frame summed); "
+			"Update one core %.3f ms, over 4 %.3f ms a frame; PlaceAsPosed off PlaceOf by %.3f m at most (%ld asked)\n",
+			Stepped, Until, One.Count(), ManDiffs, EventDiffs, Falls, OneMs / std::max(1L, Stepped), ManyMs / std::max(1L, Stepped), PosedOff, Posed);
+		if (ManDiffs > 0 || EventDiffs > 0) Fail("the men over the cores are not the men one after another (%ld men, %ld frames of events)", ManDiffs, EventDiffs);
+		if (PosedOff > 0.25) Fail("PlaceAsPosed is %.2f m off PlaceOf", PosedOff);
 	}
 
 	std::printf("\n%s (%d failures)\n", Fails ? "LAND SHOW FAILED" : "land show ok", Fails);

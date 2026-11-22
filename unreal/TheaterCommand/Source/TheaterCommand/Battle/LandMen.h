@@ -260,8 +260,9 @@ namespace LandMen
 	/** A wounded man carried on a stretcher lies this high over the ground (metres): the soldiers thread's stretcher
 	 * clips' four fists at 0.83 m on the mean, the Stretcher prop's root 0.14 m under them and its `lie` 0.11 m over it. */
 	constexpr float CarriedLift = 0.80f;
-	/** The field from the man's own axes for that placing (it reads the ground at the pivot). */
-	Xform WorldOf(const Placing& P, const GroundFn& GroundAt);
+	/** The field from the man's own axes for that placing (it reads the ground at the pivot; OutGround, when given,
+	 * takes the ground's height read there). */
+	Xform WorldOf(const Placing& P, const GroundFn& GroundAt, float* OutGround = nullptr);
 
 	/**
 	 * Skins one mesh by bone frames that already include the man's world (Compose(World, Frame) per bone): positions
@@ -428,6 +429,16 @@ namespace LandMen
 		 * man posed every frame, as before); the scene turns it on.
 		 */
 		void SetThrift(bool bOn);
+		/** Runs Count jobs at once where it can, Job(K) for each K from 0 to Count - 1, and returns when all are done
+		 * (the scene's ParallelFor). */
+		using RunFn = std::function<void(int Count, const std::function<void(int)>& Job)>;
+		/**
+		 * Update steps the men over the cores through Run, a run of men each, where there are some hundreds: a man's step
+		 * reads only his own state and what the crowd holds still meanwhile (the tracks, the soldiers, the bank and the
+		 * GroundFn, which must bear being asked from several threads at once), so every man ends as he would one after
+		 * another, to the bit, and the events come in the same order. Unset (the default): one after another, as before.
+		 */
+		void SetRun(RunFn Run);
 		/**
 		 * Life seconds a battle second: the rules' clock runs faster than life (about twice: a man rushing at 6 m/s, a
 		 * tank across a field at 10), so the scene plays the fight at half the battle's clock. The clips are life's: a
@@ -490,6 +501,10 @@ namespace LandMen
 		bool SocketAt(int Man, const std::string& Socket, Vec3& OutAt, Vec3& OutDir) const;
 		/** Where he stands now (his root on the ground) and his heading. */
 		bool PlaceOf(int Man, double& OutX, double& OutY, double& OutZ, float& OutFacing) const;
+		/** As PlaceOf, but his height the ground's under him as he was last posed (a thrifty far man's some frames ago,
+		 * a falling one's under his pivot), so no ground is asked: for a frame's loops over every man. A few centimetres
+		 * from PlaceOf's at most on a slope; the same as it where he was posed this frame standing. */
+		bool PlaceAsPosed(int Man, double& OutX, double& OutY, double& OutZ, float& OutFacing) const;
 		/** The clip he shows now, for tests and debug lines. */
 		Playing PlayingOf(int Man) const;
 		/** Prop keys Track of the clip he shows now (Clip::Props: "reel", "hands", "grips") at its time now: each field

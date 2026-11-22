@@ -1182,7 +1182,7 @@ namespace LandMen
 		}
 	}
 
-	Xform WorldOf(const Placing& P, const GroundFn& GroundAt)
+	Xform WorldOf(const Placing& P, const GroundFn& GroundAt, float* OutGround)
 	{
 		// The man's own axes are x forward, y to his RIGHT, z up; the field's x east, y north, z up, and his heading is
 		// clockwise from north. Forward goes to (sin f, cos f) and right to (cos f, -sin f): a mirror as well as a turn,
@@ -1207,6 +1207,7 @@ namespace LandMen
 		W.T[0] = static_cast<float>(PX) - RP.X;
 		W.T[1] = static_cast<float>(PY) - RP.Y;
 		W.T[2] = G.Height - RP.Z + P.Lift;
+		if (OutGround) *OutGround = G.Height;
 		return W;
 	}
 
@@ -1584,6 +1585,8 @@ namespace LandMen
 			Xform World;
 			Xform Frames[MaxBones];         // the bones on the field
 			Placing Place;
+			float Footing = 0.f;            // the ground's height read for World (PlaceAsPosed), once bFooting
+			bool bFooting = false;
 			float Lie = 0.f;
 			float RifleDown = 0.f;
 			bool bShooting = false;
@@ -1658,6 +1661,8 @@ namespace LandMen
 		double EyeZoom = 1.0; // (SetEye's Zoom)
 		double Clock = -1.0;  // the battle time of the last Update
 		bool bThrift = false; // far men posed every few frames (SetThrift)
+		Crowd::RunFn Run;     // the men stepped over the cores (SetRun)
+		std::vector<std::vector<Event>> RunOut; // each run's events, joined in the men's order
 		/** Life seconds a battle second (SetLife): a clip's seconds are life's, laid on the battle's clock at 1 / Life. */
 		double Life = 1.0;
 		double NearTo = 25.0, MidTo = 120.0; // the detail levels' bounds (SetLevels)
@@ -3371,7 +3376,8 @@ namespace LandMen
 				Pl.Lift = Lifted.Lift * static_cast<float>(std::clamp(Now - Lifted.T, 0.0, 1.0));
 			}
 			M.Place = Pl;
-			M.World = WorldOf(Pl, GroundAt);
+			M.World = WorldOf(Pl, GroundAt, &M.Footing);
+			M.bFooting = true;
 			const size_t NB = S.Bones.size();
 			for (size_t B = 0; B < NB; ++B) M.Frames[B] = Compose(M.World, M.Model[B]);
 			if (!bQuiet) ShotEvents(M, M.Last, Now, Out);
@@ -3390,7 +3396,8 @@ namespace LandMen
 				R.Lie = 1.f;
 				R.Pivot = M.State == Man::Falling ? M.FallPivot : Vec3();
 				M.Place = R;
-				M.World = WorldOf(R, GroundAt);
+				M.World = WorldOf(R, GroundAt, &M.Footing);
+				M.bFooting = true;
 				for (size_t B = 0; B < NB; ++B) M.Frames[B] = Compose(M.World, M.Model[B]);
 				M.State = Man::Rest;
 				M.Info.Rested = Now;
@@ -4112,14 +4119,14 @@ namespace LandMen
 		}
 		const double Dt = I.Clock < 0.0 ? 0.0 : std::min(0.25, BattleTime - I.Clock);
 		++I.Frame;
-		for (size_t K = 0; K < I.Men.size(); ++K)
+		const auto StepOne = [&I, BattleTime, Dt](size_t K, std::vector<Event>& Out)
 		{
 			Impl::Man& Mn = I.Men[K];
 			// (thrifty: a far man posed in his turn, the men spread over the frames by their number)
 			const int Every = I.bThrift ? Impl::EveryOf(Mn) : 1;
-			I.Step(Mn, BattleTime, Dt, Outbox, false, Every == 1 || (I.Frame + K) % static_cast<uint64_t>(Every) == 0);
+			I.Step(Mn, BattleTime, Dt, Out, false, Every == 1 || (I.Frame + K) % static_cast<uint64_t>(Every) == 0);
 			// The level of detail by the eye's distance, with a little give so a man at the edge does not flicker.
-			if (!Mn.bVisible) continue;
+			if (!Mn.bVisible) return;
 			const double DX = Mn.X - I.EyeX, DY = Mn.Y - I.EyeY, DZ = static_cast<double>(Mn.World.T[2]) - I.EyeZ;
 			// (as the picture sees him: a long lens draws a far man as big as a near one, and he is posed and drawn so)
 			const double D = std::sqrt(DX * DX + DY * DY + DZ * DZ) / I.EyeZoom;
@@ -4129,6 +4136,55 @@ namespace LandMen
 			if (Mn.L == Near && L == Mid && D < I.NearTo * Give) L = Near;
 			if (Mn.L == Mid && L == Far && D < I.MidTo * Give) L = Mid;
 			Mn.L = L;
+		};
+		const size_t N = I.Men.size();
+		if (!I.Run || N < 512)
+		{
+			for (size_t K = 0; K < N; ++K) StepOne(K, Outbox);
+		}
+		else
+		{
+			// Over the cores (SetRun), in stretches of the men's order. A man who starts his fall this frame chooses it
+			// by the falls just shown (FallMemory, the crowd's one): he is stepped alone, between the stretches before
+			// and after him, so the falls are chosen in the men's order as one after another. (Asked a little wider
+			// than Step's own test, never narrower: one stepped alone who does not fall after all is the same man.)
+			const auto MayFall = [&I, BattleTime](size_t K)
+			{
+				const Impl::Man& Mn = I.Men[K];
+				return !Mn.bRider && Mn.State == Impl::Man::Alive && Mn.Info.Dead >= 0.0 && BattleTime >= Mn.Info.Dead;
+			};
+			size_t From = 0;
+			while (From < N)
+			{
+				size_t To = From;
+				while (To < N && !MayFall(To)) ++To;
+				const size_t Count = To - From;
+				if (Count >= 256)
+				{
+					const int Runs = static_cast<int>(std::min<size_t>(16, Count / 128));
+					if (I.RunOut.size() < static_cast<size_t>(Runs)) I.RunOut.resize(static_cast<size_t>(Runs));
+					for (int R = 0; R < Runs; ++R) I.RunOut[static_cast<size_t>(R)].clear();
+					const size_t Base = From;
+					I.Run(Runs, [&I, &StepOne, Base, Count, Runs](int R)
+					{
+						const size_t A = Base + Count * static_cast<size_t>(R) / static_cast<size_t>(Runs);
+						const size_t B = Base + Count * static_cast<size_t>(R + 1) / static_cast<size_t>(Runs);
+						std::vector<Event>& Out = I.RunOut[static_cast<size_t>(R)];
+						for (size_t K = A; K < B; ++K) StepOne(K, Out);
+					});
+					for (int R = 0; R < Runs; ++R)
+					{
+						const std::vector<Event>& Out = I.RunOut[static_cast<size_t>(R)];
+						Outbox.insert(Outbox.end(), Out.begin(), Out.end());
+					}
+				}
+				else
+				{
+					for (size_t K = From; K < To; ++K) StepOne(K, Outbox);
+				}
+				if (To < N) StepOne(To, Outbox);
+				From = To + 1;
+			}
 		}
 		std::stable_sort(Outbox.begin(), Outbox.end(), [](const Event& A, const Event& B) { return A.T < B.T; });
 		I.Clock = BattleTime;
@@ -4152,6 +4208,7 @@ namespace LandMen
 		return Mn.State == Impl::Man::Falling || Mn.State == Impl::Man::Settling;
 	}
 	void Crowd::SetThrift(bool bOn) { Inner->bThrift = bOn; }
+	void Crowd::SetRun(RunFn Run) { Inner->Run = std::move(Run); }
 	void Crowd::SetLife(double LifePerBattleSecond) { Inner->Life = std::clamp(LifePerBattleSecond, 0.25, 4.0); }
 	void Crowd::SetLevels(double NearTo, double MidTo)
 	{
@@ -4192,7 +4249,8 @@ namespace LandMen
 			{
 				continue;
 			}
-			M.World = WorldOf(M.Place, Inner->GroundAt);
+			M.World = WorldOf(M.Place, Inner->GroundAt, &M.Footing);
+			M.bFooting = true;
 			for (size_t B = 0; B < NB; ++B) M.Frames[B] = Compose(M.World, M.Model[B]);
 			for (int L = 0; L < LodCount; ++L) M.bSkinned[L] = false;
 			++M.Stamp;
@@ -4588,6 +4646,18 @@ namespace LandMen
 		OutX = Mn.X;
 		OutY = Mn.Y;
 		OutZ = Mn.bRider ? static_cast<double>(Mn.World.T[2]) : Inner->GroundAt ? Inner->GroundAt(Mn.X, Mn.Y).Height : 0.0;
+		OutFacing = Mn.F;
+		return true;
+	}
+
+	bool Crowd::PlaceAsPosed(int Man, double& OutX, double& OutY, double& OutZ, float& OutFacing) const
+	{
+		if (Man < 0 || Man >= Count()) return false;
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		if (!Mn.bRider && !Mn.bFooting) return PlaceOf(Man, OutX, OutY, OutZ, OutFacing);
+		OutX = Mn.X;
+		OutY = Mn.Y;
+		OutZ = Mn.bRider ? static_cast<double>(Mn.World.T[2]) : static_cast<double>(Mn.Footing);
 		OutFacing = Mn.F;
 		return true;
 	}
