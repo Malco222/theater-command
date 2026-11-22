@@ -799,7 +799,10 @@ namespace TheaterFx
 			const double DustK = Num(G + "dust", 1.0);
 			const double ClodK = Ground == "water" ? 0.0 : Num(G + "clods", 1.0);
 			const double ShowerK = Ground == "water" ? 0.0 : Num(G + "shower", ClodK);
-			const double CrownH = SafeNum(Pick(D, S + "crown_m", 8.0, 12.0), 0.1, 500.0, 10.0);
+			// (on the sea, the size's spout_m where it has one: the white column's height, apart from the land burst's
+			// earth, so the bigger land bursts of 22 November left the sea as it was. One throw of the dice either way)
+			const bool bSpoutOwn = Ground == "water" && Has(S + "spout_m.0");
+			const double CrownH = SafeNum(Pick(D, S + (bSpoutOwn ? "spout_m" : "crown_m"), 8.0, 12.0), 0.1, 500.0, 10.0);
 			// (art director 03:27Z 22 November, on the bigger bursts: "the throw at the flash is near black... a black
 			// comic-book splat with an orange dot. Make it dark earth brown with the faces toward the flash lit warm,
 			// floor about 15". burst.throw: lighter, the jets, spikes, body and foot up to that many times as light as the
@@ -844,7 +847,7 @@ namespace TheaterFx
 			}
 			if (!bQuiet)
 			{
-				Wink(Now, At, Scale, D, Size);
+				Wink(Now, At, Scale, D, Ground == "water" ? std::string() : Size); // (the sea's flash as it was: the sizes' flash and ember were ruled for land)
 			}
 			if (Ground == "water" && Has("grounds.water.spout.rise_s"))
 			{
@@ -983,7 +986,7 @@ namespace TheaterFx
 			RaggedFlash(T0, At, K, Small, FlashGrows, FlashLasts);
 		}
 		const Rgb Glow = Picture("burst.crown.foot_glow.colour", Flame);
-		const bool bEmber = Has("burst.flash.ember.life_s.0");
+		const bool bEmber = !Size.empty() && Has("burst.flash.ember.life_s.0"); // (no size, as on the sea: no ember)
 		const Span EmberLife = Range("burst.flash.ember.life_s", 0.15, 0.3);
 		const double EmberR = 0.46 * SafeNum(Num("burst.flash.ember.share", 0.3), 0.02, 1.0, 0.3) * 1.3 * 0.5 * (SafeNum(Num("burst.flash.reach_m.0", 1.6), 0.05, 20.0, 1.6) + SafeNum(Num("burst.flash.reach_m.1", 2.5), 0.05, 20.0, 2.5)) * K * Small * FlashGrows;
 		const Rgb EmberCol = Picture("burst.flash.ember.colour", Glow * 0.8), EmberTo = Picture("burst.flash.ember.to", Rgb::FromPicture(40, 24, 16));
@@ -2282,7 +2285,7 @@ namespace TheaterFx
 		const Span FrDust = Range(Fr + "dust", 0.0, 0.0); // (how much of the ground's dust is in each puff's smoke: lighter grey-brown)
 		const double FrLow = SafeNum(Num(Fr + "low", 1.3), 0.3, 4.0, 1.3); // (over 1: more of it low)
 		const Span FrHeart = Range(Fr + "heart", 0.4, 0.7);
-		const double FrCloudShade = Num(Fr + "cloud_shade", CloudShade); // (spread wide, its far side is not in the column's shadow as the column's own is)
+		const double FrCloudShade = SafeNum(Num(Fr + "cloud_shade", CloudShade), 0.0, 8.0, CloudShade); // (spread wide, its far side is not in the column's shadow as the column's own is)
 		const double FrFrom = SafeNum(Num(Fr + "from_column", 0.0), 0.0, 1.5, 0.0); // (it begins that share of the column's own half width out: round the column, not inside it)
 		const double FrRough = SafeNum(Num(Fr + "rough", 0.0), 0.0, 1.0, 0.0);
 		// (art director 03:27Z 22 November: the lit top of the cloud at most 90. shade: its smoke that many times as
