@@ -29,11 +29,21 @@ namespace AirDesk
 		bool bQuestion = false;
 		/** The flyover before the battle is on: the battle runs at x1 under it, whatever the run-up would be. */
 		bool bFlyover = false;
+		/** The strike is on (AirShow::Show::StrikeOn, set each frame before Step; the realism audit's 4.2): while bombs
+		 * or torpedoes are in the air, a stick is still to go or a dive is going down, the run-up or the run home is
+		 * held at the player's own pace, and for StrikeHoldS real seconds after; it then eases into x10 over StrikeEaseS. */
+		bool bStrike = false;
+		double StrikeHoldS = 5.0, StrikeEaseS = 3.0;
 		/** Battle seconds to run for Real seconds; Tag is the field's top-left tag (empty for none). */
 		double Step(double Real, const AirFeed::Top& Head, double Scale, std::string& Tag);
+		/** The last Step ran fast (past half way from the player's pace to x10): a bomb's rush near the eye, timed for
+		 * the battle's own pace, is not played. */
+		bool Fast() const { return bFast; }
 
 	private:
 		double SinceMet = -1.0; // real seconds since the formations met (-1 before)
+		double SinceStrike = 1e9; // real seconds since the strike was last on
+		bool bFast = false;
 	};
 
 	/** One group's tag over its formation. */

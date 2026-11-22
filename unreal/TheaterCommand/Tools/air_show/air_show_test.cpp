@@ -136,6 +136,523 @@ namespace
 		std::snprintf(Buf, sizeof Buf, "%.*f", Places, V);
 		return Buf;
 	}
+
+	/**
+	 * The gunnery, watched as the eye will see it (AirShow.cpp, "The gunnery"). Brian, 21 November: "make sure the gun
+	 * fire from the planes actually hit the target and do damage when its a hit"; "i can see a gunner on a bomber and
+	 * its tracers hit a fighter and then it goes down"; "when they do hit a plane or something with gun fire than it
+	 * shows up on the receiving object".
+	 *
+	 * The battle counts every loss and every hit. What the scene owes them is that the eye can follow each: the burst
+	 * that carries one is laid true, its tracers end on the aircraft, its strikes are drawn where they end, and only
+	 * then does the damage begin; every other burst is seen to miss. So this watches what the effects kit will draw.
+	 * Each frame it flies one round of every Gun effect by the kit's own flight (the show's Rounds rows, RoundAt, ended
+	 * at the effect's Tof where it carries one) and keeps what airframes the round entered, how near it passed one it
+	 * did not strike, and where it ended; with them every Hit drawn, every Fall begun and every Moment told to the
+	 * cameras. Closed after the last frame, it sets the rounds beside the strikes and the strikes beside the falls.
+	 *
+	 * A ship's guns are not watched here (ShipGuns; her light guns' streams have keys of their own, from
+	 * ShipGuns::StreamBase up, and her rounds' hits are told as "ship" or "kill"): they are laid by the ships' own
+	 * dice, most of them to miss, and they have their own row, "the ships fire back". Her streams and her hits are
+	 * counted (ShipStreams, ShipHits) and left out of every row on the aircraft's guns.
+	 */
+	struct GunWatch
+	{
+		using Vec = AirShow::Vec;
+		struct Axes { Vec F, R, U; };
+		/** An aircraft's own frame as it is drawn: forward, right, up. */
+		static Axes AxesOf(const AirShow::PlaneOut& P)
+		{
+			const double Rad = 3.14159265358979323846 / 180.0;
+			const double H = P.Heading * Rad, G = P.Pitch * Rad, Bk = P.Bank * Rad;
+			Axes A;
+			A.F = Vec(std::sin(H) * std::cos(G), std::cos(H) * std::cos(G), std::sin(G));
+			const Vec R0(std::cos(H), -std::sin(H), 0.0), U0 = R0.Cross(A.F);
+			A.R = R0 * std::cos(Bk) - U0 * std::sin(Bk);
+			A.U = U0 * std::cos(Bk) + R0 * std::sin(Bk);
+			return A;
+		}
+		static Vec Into(const Axes& A, const Vec& D) { return Vec(D.Dot(A.F), D.Dot(A.R), D.Dot(A.U)); }
+
+		/** An airframe a round came into before its end, and one it passed near. */
+		struct Entry { int Plane = 0; bool bFighter = false, bFalling = false; };
+		struct Pass { int Plane = 0; double Least = 1e9; };
+		struct Round
+		{
+			int Gun = 0;
+			Vec From, Vel;
+			double Born = 0.0, End = 1.2, Drag = 0.36, Drop = 9.81, LastAge = 0.0;
+			bool bEnds = false, bUnder = false;
+			std::vector<Entry> Entered;
+			std::vector<Pass> Passed; // (to 3 m of its skin, coarsely: 0 inside, 0.75, 1.5, 3)
+		};
+		/** A round that ended on an aircraft, a strike drawn on one, a round ended on the ground, a strike drawn there. */
+		struct Ended { int Plane = 0; Vec Local; double At = 0.0; int Gun = 0; bool bMatched = false; };
+		struct Strike { int Plane = 0; Vec Local; double At = 0.0; int Id = 0, Nth = 0; bool bMatched = false; double Off = 1e9; std::set<int> From; };
+		struct Low { Vec At; double From = 0.0, To = 0.0; bool bMatched = false; };
+
+		/** Set to have each thing a row counts told on stderr as it is found (AIR_SHOW_GUNNERY=1). */
+		bool bTell = false;
+
+		// What was drawn.
+		long GunFxEnding = 0, RoundsFlown = 0; // (Gun effects that told an end; rounds flown out, one a Gun effect)
+		long Strikes = 0, Splinters = 0, OddHits = 0, GroundHits = 0;
+		long ShipStreams = 0, ShipHits = 0; // (a ship's light guns' stream frames and her rounds' hits: not the aircraft's)
+		long Falls = 0, FallsStruck = 0; // (falls begun; those with a strike on the aircraft in the 2 s before)
+		// The rounds: through an aircraft that flies on (ThroughEnded of them ended later on something else, ThroughFree
+		// flew out their life), through one already going down, through the shooter's own.
+		long Through = 0, ThroughEnded = 0, ThroughFree = 0, ThroughFalling = 0, ThroughOwn = 0;
+		// Where they ended: on an aircraft; short of their life in the air; on the ground or the sea; and those drawn on
+		// under the ground.
+		long EndOnPlane = 0, EndShort = 0, EndGround = 0, UnderGround = 0;
+		// How near a round passed an airframe it did not end on, the nearest of each round: within 0.75 m, 1.5 m, 3 m.
+		long Graze = 0, Close15 = 0, Close3 = 0;
+		double MostReachOff = 0.0; // metres, the most a Gun effect's Reach lay from where its rounds are at its Tof
+		long PastLife = 0;         // Gun effects whose Tof is past their round's life
+		// The strikes, set beside the rounds (Close).
+		long StrikesNoRound = 0, EndsNoStrike = 0, OffBody = 0, LocalOff = 0, StrikesNoBurst = 0;
+		// How far a strike was drawn from where the nearest of its rounds ended, in the aircraft's own frame: the sum over
+		// the strikes that had a round, and the most.
+		double OffSum = 0.0, OffMost = 0.0;
+		long GroundWrong = 0, GroundEndsBare = 0, GroundHitsBare = 0;
+		// The bursts that struck (a run of strikes with one Id), by what their Moment came to.
+		long BurstsStruck = 0, FighterBurstsStruck = 0, GunnerBurstsStruck = 0, BurstsForNothing = 0, BurstsUntold = 0;
+		// The Moments that ran through to the damage: losses and hits; of them, those whose burst was seen to strike the
+		// aircraft first, by rounds of the guns the Moment names; and the gunners' share of the losses.
+		long Kills = 0, KillsSeen = 0, KillsNoFall = 0, GunnerKills = 0, GunnerKillsSeen = 0, HitsDone = 0, HitsSeen = 0;
+		// A gunner's kill as the cameras are told it: those told; struck less than a second after he opened; with its
+		// times out of order, no window named, or told late.
+		long GunnerKillsTold = 0, GunnerKillsSoon = 0, GunnerKillsOdd = 0;
+		double LeastLead = 1e9;
+		std::map<std::string, int> Kinds, KindsDone;
+
+		void Frame(const AirShow::Show& Show)
+		{
+			const double Air = Show.AirNow(), AirDt = Air - LastAir;
+			const std::vector<AirShow::PlaneOut>& Planes = Show.Planes();
+			std::map<int, const AirShow::PlaneOut*> ByKey;
+			for (const AirShow::PlaneOut& P : Planes) ByKey[P.Key] = &P;
+			for (const AirShow::Show::Moment& M : Show.Moments())
+			{
+				if (!Told.count(M.Id)) ToldAt[M.Id] = Air;
+				Told[M.Id] = M;
+			}
+			auto FloorAt = [&Show](double X, double Y) { return Show.Ground ? Show.Ground(X, Y) : 0.0; };
+			for (const AirShow::Fx& E : Show.Effects)
+			{
+				if (E.Kind == AirShow::FxKind::Hit)
+				{
+					if (E.Text == "ground" || E.Text == "water")
+					{
+						// (on the ground or the sea where it says, and told as what lies there)
+						const double Floor = FloorAt(E.At.X, E.At.Y);
+						if (std::fabs(E.At.Z - Floor) > 0.01 || (E.Text == "water") != (Floor <= 0.5)) ++GroundWrong;
+						++GroundHits;
+						Spurts.push_back(Low{ E.At, Air, Air });
+						continue;
+					}
+					// (a strike that is not gunfire, as flak's splinters once the core tells them by their Text, is counted
+					// apart: no round is owed it)
+					if (E.Key <= 0) { ++OddHits; continue; }
+					if (E.Text == "ship" || E.Text == "kill") { ++ShipHits; continue; }
+					if (E.Text != "air") { ++Splinters; continue; }
+					++Strikes;
+					Strike St;
+					St.Plane = E.Key;
+					St.At = Air;
+					St.Local = E.Aim;
+					St.Id = E.Id;
+					St.Nth = E.Nth;
+					const auto Its = ByKey.find(E.Key);
+					bool bOff = Its == ByKey.end(), bAskew = false;
+					if (!bOff)
+					{
+						const AirShow::PlaneOut& P = *Its->second;
+						bOff = !AirShow::InAirframe(ShapeFor(P), E.Aim, 0.45);
+						bAskew = (Into(AxesOf(P), E.At - P.At) - E.Aim).Length() > 0.05;
+					}
+					OffBody += bOff ? 1 : 0;
+					LocalOff += bAskew ? 1 : 0;
+					if (bTell && (bOff || bAskew))
+						std::fprintf(stderr, "gunnery: strike %s at %.2f on %d (burst %d, strike %d) at %.2f %.2f %.2f of its own frame\n", bOff ? "off the airframe" : "not where it is told", Air, E.Key, E.Id, E.Nth, E.Aim.X, E.Aim.Y, E.Aim.Z);
+					LastStruck[E.Key] = Air;
+					Struck.push_back(St);
+					continue;
+				}
+				if (E.Kind == AirShow::FxKind::Fall)
+				{
+					++Falls;
+					FellAt[E.Key] = Air;
+					const auto Last = LastStruck.find(E.Key);
+					FallsStruck += Last != LastStruck.end() && Air - Last->second < 2.0 ? 1 : 0;
+					continue;
+				}
+				if (E.Kind != AirShow::FxKind::Gun) continue;
+				if (ShipGuns::IsStream(E.Key)) { ++ShipStreams; continue; }
+				Round R;
+				R.Gun = E.Key;
+				R.From = E.At;
+				R.Vel = (E.Aim - E.At).Unit() * (E.Mv > 0.0 ? E.Mv : 870.0) + E.Vel;
+				R.Born = Air;
+				auto Row = Show.Rounds.find(E.What);
+				if (Row == Show.Rounds.end()) Row = Show.Rounds.find("hmg");
+				if (Row != Show.Rounds.end())
+				{
+					R.Drag = Row->second.Drag;
+					R.Drop = Row->second.Drop;
+					R.End = Row->second.Life;
+				}
+				if (E.Tof > 0.0)
+				{
+					// (the kit ends the tracer at the sooner of the two: the reach told must be where the rounds are then,
+					// and an end told past the round's life is one the tracer never reaches)
+					MostReachOff = std::max(MostReachOff, std::fabs((AirShow::RoundAt(R.From, R.Vel, E.Tof, R.Drag, R.Drop) - R.From).Length() - E.Reach));
+					PastLife += E.Tof > R.End + 1e-6 ? 1 : 0;
+					R.End = std::min(R.End, E.Tof);
+					R.bEnds = true;
+					++GunFxEnding;
+				}
+				Flying.push_back(R);
+			}
+			// The rounds fly on to this frame's time: through what, how near, and where they end. Each aircraft is taken
+			// back along its own path of this frame to where it was when the round was at each step.
+			std::vector<Vec> Moved(Planes.size());
+			for (size_t N = 0; N < Planes.size(); ++N)
+			{
+				const auto Was = LastAt.find(Planes[N].Key);
+				if (Was != LastAt.end()) Moved[N] = Planes[N].At - Was->second;
+			}
+			for (size_t K = 0; K < Flying.size();)
+			{
+				Round& R = Flying[K];
+				const double Age = Air - R.Born, To = std::min(Age, R.End);
+				const bool bOver = Age >= R.End;
+				const Vec A = AirShow::RoundAt(R.From, R.Vel, R.LastAge, R.Drag, R.Drop), B = AirShow::RoundAt(R.From, R.Vel, To, R.Drag, R.Drop);
+				const Vec Mid = (A + B) * 0.5;
+				const double Half = (B - A).Length() * 0.5;
+				int EndOn = -1;
+				Vec EndLocal;
+				for (size_t N = 0; N < Planes.size(); ++N)
+				{
+					const AirShow::PlaneOut& P = Planes[N];
+					if (!P.bShown) continue;
+					const double Step = Moved[N].Length();
+					if ((P.At - Moved[N] * 0.5 - Mid).Length() > Half + P.Span + Step + 6.0) continue;
+					const bool bOwn = P.Key == R.Gun / 64;
+					const Axes Fr = AxesOf(P);
+					const AirShow::Shape& Sh = ShapeFor(P);
+					const Vec PlaneVel = AirDt > 1e-9 ? Moved[N] * (1.0 / AirDt) : Vec();
+					const int Steps = std::max(2, static_cast<int>(Half * 2.0 / 0.4));
+					bool bIn = false;
+					double Least = 1e9;
+					for (int S = 0; S <= Steps; ++S)
+					{
+						const double At = R.LastAge + (To - R.LastAge) * (static_cast<double>(S) / Steps);
+						// (its own muzzle stands in or by its own skin: the first 2.5 m are its own)
+						if (bOwn && At * 800.0 < 2.5) continue;
+						const Vec L = Into(Fr, AirShow::RoundAt(R.From, R.Vel, At, R.Drag, R.Drop) - (P.At - PlaneVel * (Air - (R.Born + At))));
+						// (a round that ends: where it ends is its strike, or the mark it stopped short of)
+						const bool bLast = R.bEnds && At >= R.End - 0.0025;
+						if (AirShow::InAirframe(Sh, L, 0.0))
+						{
+							if (bLast) { EndOn = P.Key; EndLocal = L; }
+							else bIn = true;
+							Least = 0.0;
+						}
+						else if (AirShow::InAirframe(Sh, L, 0.75))
+						{
+							Least = std::min(Least, 0.75);
+							if (bLast && bOver && EndOn < 0) { EndOn = P.Key; EndLocal = L; }
+						}
+						else if (AirShow::InAirframe(Sh, L, 1.5)) Least = std::min(Least, 1.5);
+						else if (AirShow::InAirframe(Sh, L, 3.0)) Least = std::min(Least, 3.0);
+					}
+					if (!bOwn && Least <= 3.0)
+					{
+						bool bHad = false;
+						for (Pass& Near : R.Passed) if (Near.Plane == P.Key) { Near.Least = std::min(Near.Least, Least); bHad = true; }
+						if (!bHad) R.Passed.push_back(Pass{ P.Key, Least });
+					}
+					if (!bIn) continue;
+					if (bOwn)
+					{
+						// (a stream through its own aircraft is counted once a quarter second, not once a round)
+						double& Last = LastThrough[std::make_pair(R.Gun, P.Key)];
+						if (Last > 0.0 && Air - Last < 0.25) continue;
+						Last = Air;
+						++ThroughOwn;
+						if (bTell) std::fprintf(stderr, "gunnery: at %.2f gun %d (craft %d slot %d) fires through its own aircraft (%s)\n", Air, R.Gun, R.Gun / 64, R.Gun % 64, P.Model.c_str());
+						continue;
+					}
+					bool bHad = false;
+					for (const Entry& In : R.Entered) bHad = bHad || In.Plane == P.Key;
+					if (!bHad) R.Entered.push_back(Entry{ P.Key, P.bFighter, P.bFalling });
+				}
+				R.LastAge = To;
+				// (drawn on under the ground or the sea: by more than its guns' standing apart can take them. The stream is
+				// reckoned along the nose; a gun 4 m ahead on it ends as far on, and wing guns 3 m out that cross at 300 m
+				// are 6 m out the other way at 900, which in a steep or banked dive is so far under. So 12 m.)
+				if (!R.bUnder && B.Z < FloorAt(B.X, B.Y) - 12.0) R.bUnder = true;
+				if (!bOver) { ++K; continue; }
+				// Its flight over. An aircraft it went into and then ended in is struck, not passed through; any other it
+				// went into, it was drawn through (a stream through one aircraft counted once a quarter second).
+				for (const Entry& In : R.Entered)
+				{
+					if (In.Plane == EndOn) continue;
+					double& Last = LastThrough[std::make_pair(R.Gun, In.Plane)];
+					if (Last > 0.0 && Air - Last < 0.25) continue;
+					Last = Air;
+					if (In.bFalling) { ++ThroughFalling; continue; }
+					++Through;
+					++(R.bEnds ? ThroughEnded : ThroughFree);
+					if (bTell) std::fprintf(stderr, "gunnery: at %.2f a round of gun %d (craft %d, %s) drawn through %s %d, which flies on (%s)\n", Air, R.Gun, R.Gun / 64, R.Gun % 64 >= 32 ? "a gunner's" : "fixed", In.bFighter ? "fighter" : "bomber", In.Plane, R.bEnds ? "it ended farther on" : "it flew out its life");
+				}
+				++RoundsFlown;
+				if (EndOn >= 0)
+				{
+					++EndOnPlane;
+					Ends.push_back(Ended{ EndOn, EndLocal, R.Born + R.End, R.Gun });
+				}
+				else if (R.bEnds && B.Z - FloorAt(B.X, B.Y) <= 3.0)
+				{
+					++EndGround;
+					Downs.push_back(Low{ B, R.Born, R.Born + R.End });
+				}
+				else if (R.bEnds) ++EndShort;
+				if (R.bUnder)
+				{
+					++UnderGround;
+					if (bTell) std::fprintf(stderr, "gunnery: at %.2f a round of gun %d (craft %d slot %d) drawn on under the ground, to %.1f m under it%s\n", Air, R.Gun, R.Gun / 64, R.Gun % 64, FloorAt(B.X, B.Y) - B.Z, R.bEnds ? " where it ends" : ", flying out its life");
+				}
+				double Nearest = 1e9;
+				for (const Pass& Near : R.Passed) if (Near.Plane != EndOn) Nearest = std::min(Nearest, Near.Least);
+				if (Nearest <= 0.75) ++Graze;
+				else if (Nearest <= 1.5) ++Close15;
+				else if (Nearest <= 3.0) ++Close3;
+				Flying[K] = Flying.back();
+				Flying.pop_back();
+			}
+			LastAt.clear();
+			for (const AirShow::PlaneOut& P : Planes) LastAt[P.Key] = P.At;
+			LastAir = Air;
+		}
+
+		/** After the last frame: the strikes set beside the rounds, the bursts beside their Moments, the Moments beside
+		 * the falls. */
+		void Close()
+		{
+			// A strike drawn: was a round seen to end there (on that aircraft, within a fifth of a second)? A round that
+			// ended on an aircraft: was a strike drawn on it?
+			for (Strike& St : Struck)
+			{
+				for (Ended& En : Ends)
+				{
+					if (En.Plane != St.Plane || std::fabs(En.At - St.At) > 0.2) continue;
+					En.bMatched = true;
+					St.bMatched = true;
+					St.Off = std::min(St.Off, (En.Local - St.Local).Length());
+					St.From.insert(En.Gun);
+				}
+				if (St.Id <= 0) ++StrikesNoBurst;
+				if (St.bMatched)
+				{
+					OffSum += St.Off;
+					OffMost = std::max(OffMost, St.Off);
+					continue;
+				}
+				++StrikesNoRound;
+				if (bTell) std::fprintf(stderr, "gunnery: strike at %.2f on %d (burst %d, strike %d) with no round ended there\n", St.At, St.Plane, St.Id, St.Nth);
+			}
+			for (const Ended& En : Ends)
+			{
+				if (En.bMatched) continue;
+				++EndsNoStrike;
+				if (bTell) std::fprintf(stderr, "gunnery: a round of gun %d (craft %d) ended at %.2f on %d and no strike was drawn\n", En.Gun, En.Gun / 64, En.At, En.Plane);
+			}
+			// The ground's: each strike drawn there has a round ending by it (within the stream's scatter, 15 m), fired
+			// no more than a moment after it or ended no more than a moment before; and a round ended there has a strike
+			// drawn near where it ends (the strikes come at the gun's rate, some 13 a second, and the rounds flown here
+			// one a frame: along a stream that walks fast over the ground the nearest strike may be 25 m on; so 40 m).
+			for (Low& Down : Downs)
+			{
+				for (Low& Spurt : Spurts)
+				{
+					if (Spurt.From < Down.From - 0.3 || Spurt.From > Down.To + 0.3) continue;
+					const double Apart = std::hypot(Spurt.At.X - Down.At.X, Spurt.At.Y - Down.At.Y);
+					if (Apart <= 40.0) Down.bMatched = true;
+					if (Apart <= 15.0) Spurt.bMatched = true;
+				}
+				GroundEndsBare += Down.bMatched ? 0 : 1;
+				if (bTell && !Down.bMatched) std::fprintf(stderr, "gunnery: a round fired at %.2f ended on the ground at %.2f (%.0f %.0f) and no strike was drawn near\n", Down.From, Down.To, Down.At.X, Down.At.Y);
+			}
+			for (const Low& Spurt : Spurts)
+			{
+				GroundHitsBare += Spurt.bMatched ? 0 : 1;
+				if (bTell && !Spurt.bMatched) std::fprintf(stderr, "gunnery: a strike on the ground at %.2f (%.0f %.0f) with no round ended near\n", Spurt.From, Spurt.At.X, Spurt.At.Y);
+			}
+			// The bursts that struck, each a run of strikes with its own number: what its Moment came to.
+			std::map<int, int> Runs;
+			for (const Strike& St : Struck) if (St.Id > 0) ++Runs[St.Id];
+			for (const auto& [Id, Count] : Runs)
+			{
+				++BurstsStruck;
+				const auto Its = Told.find(Id);
+				if (Its == Told.end()) { ++BurstsUntold; continue; }
+				++(Its->second.Gun >= 0 ? GunnerBurstsStruck : FighterBurstsStruck);
+				if (Its->second.Stage == -1)
+				{
+					++BurstsForNothing;
+					if (bTell) std::fprintf(stderr, "gunnery: burst %d (%s) drew %d strikes on %d and nothing came of it\n", Id, Its->second.Kind.c_str(), Count, Its->second.Victim);
+				}
+			}
+			const std::set<std::string> Windows = { "nose", "chin", "top", "radio", "ball", "waistL", "waistR", "tail" };
+			for (const auto& [Id, M] : Told)
+			{
+				++Kinds[M.Kind];
+				// (what the eye had of it: the first strike of its burst drawn on the aircraft it names, and whether rounds
+				// of the guns it names were seen to end there)
+				double FirstHit = -1.0;
+				bool bByThose = false;
+				for (const Strike& St : Struck)
+				{
+					if (St.Id != Id || St.Plane != M.Victim) continue;
+					if (M.FallAt >= 0.0 && St.At > M.FallAt + 1e-6) continue;
+					if (FirstHit < 0.0) FirstHit = St.At;
+					for (const int Gun : St.From) bByThose = bByThose || (Gun / 64 == M.Shooter && (M.Gun < 0 ? Gun % 64 < 32 : Gun >= M.Gun && Gun < M.Gun + 4));
+				}
+				const bool bGunnerKill = M.Kind == "gunner-kill";
+				if (bGunnerKill && M.Stage >= 1)
+				{
+					// As the cameras are told it: when he opens, a second or more before his rounds strike, his window
+					// named, his own bomber's mount; then the times in their order.
+					++GunnerKillsTold;
+					const double Struck0 = FirstHit >= 0.0 ? FirstHit : M.StrikeAt;
+					LeastLead = std::min(LeastLead, Struck0 - M.OpenAt);
+					const bool bSoon = Struck0 - M.OpenAt < 1.0 - 1e-6;
+					const bool bOdd = !Windows.count(M.Station) || M.Gun < 0 || M.Gun / 64 != M.Shooter || ToldAt[Id] > M.OpenAt + 0.05 || M.StrikeAt < M.OpenAt ||
+					                  (FirstHit >= 0.0 && std::fabs(M.StrikeAt - FirstHit) > 0.05) || (M.Stage == 2 && (M.FallAt < M.StrikeAt || M.Ended < M.FallAt));
+					GunnerKillsSoon += bSoon ? 1 : 0;
+					GunnerKillsOdd += bOdd ? 1 : 0;
+					if (bTell && (bSoon || bOdd))
+						std::fprintf(stderr, "gunnery: gunner's kill %d told %s: shooter %d gun %d window '%s' victim %d; told at %.2f, opens %.2f, strikes %.2f (seen %.2f), falls %.2f\n", Id, bOdd ? "wrong" : "too late for a camera",
+						             M.Shooter, M.Gun, M.Station.c_str(), M.Victim, ToldAt[Id], M.OpenAt, M.StrikeAt, FirstHit, M.FallAt);
+				}
+				if (M.Stage != 2) continue;
+				++KindsDone[M.Kind];
+				const bool bSeen = FirstHit >= 0.0 && bByThose;
+				if (M.Kind == "kill" || bGunnerKill)
+				{
+					// (and it goes down then: its fall begun as the Moment says, or within half a second after)
+					const auto Fell = FellAt.find(M.Victim);
+					const bool bFell = Fell != FellAt.end() && Fell->second > M.FallAt - 0.05 && Fell->second < M.FallAt + 0.5;
+					++Kills;
+					KillsNoFall += bFell ? 0 : 1;
+					KillsSeen += bSeen && bFell ? 1 : 0;
+					GunnerKills += bGunnerKill ? 1 : 0;
+					GunnerKillsSeen += bGunnerKill && bSeen && bFell ? 1 : 0;
+					if (bTell) std::fprintf(stderr, "gunnery: %s %d by %d on %d at %.2f: %s%s\n", M.Kind.c_str(), Id, M.Shooter, M.Victim, M.FallAt, bSeen ? "seen struck first" : FirstHit >= 0.0 ? "struck, but by no round of those guns" : "no strike drawn", bFell ? "" : ", and no fall begun then");
+				}
+				else
+				{
+					++HitsDone;
+					HitsSeen += bSeen ? 1 : 0;
+				}
+			}
+		}
+
+	private:
+		const AirShow::Shape& ShapeFor(const AirShow::PlaneOut& P)
+		{
+			const std::string Name = P.Model + (P.bFighter ? "/f" : "/b");
+			auto It = Shapes.find(Name);
+			if (It == Shapes.end()) It = Shapes.emplace(Name, AirShow::ShapeOf(P.Model, P.bFighter)).first;
+			return It->second;
+		}
+		std::vector<Round> Flying;
+		std::vector<Ended> Ends;
+		std::vector<Strike> Struck;
+		std::vector<Low> Downs, Spurts;
+		std::map<std::pair<int, int>, double> LastThrough;
+		std::map<int, Vec> LastAt;
+		std::map<int, double> LastStruck, FellAt, ToldAt;
+		std::map<int, AirShow::Show::Moment> Told;
+		std::map<std::string, AirShow::Shape> Shapes;
+		double LastAir = 0.0;
+	};
+
+	/** One play of a battle as the gunnery's watcher saw it, with the core's own checks of that play, and the frames a
+	 * second it was played at. */
+	struct GunPlay
+	{
+		GunWatch Watch;
+		AirShow::Checks Check;
+		double Fps = 60.0;
+	};
+
+	/**
+	 * The recording played once more for the gunnery alone, with dice of its own, set as the scene sets the play it
+	 * is like (its eye, its ground, its deck, the kit's gun budget), at so many frames a second. What the gunnery
+	 * shows hangs on a chaos of small chances (which pilot's nose comes on when), so one play tells little: of six
+	 * plays of the big Bremen raid, one showed no round through an aircraft and another seven.
+	 * LowTo over 0: a made-over copy of the battle flown low, every group brought down together until its lowest
+	 * bombers fly LowTo metres up, so that streams come down on the ground or the sea (in the recordings as they are,
+	 * the fights are too high for any to).
+	 */
+	GunPlay FlyForGuns(const AirFeed::Recording& Rec, const AirShow::Show& Like, uint64_t Seed, double Fps, double LowTo, bool bTell)
+	{
+		GunPlay Out;
+		Out.Watch.bTell = bTell;
+		Out.Fps = Fps;
+		AirShow::Show Show(Seed);
+		AirFeed::Apply(Rec.Board, Show);
+		Show.Eye = Like.Eye;
+		Show.Ground = Like.Ground;
+		Show.CloudTop = Like.CloudTop;
+		Show.DeckAt = Like.DeckAt;
+		Show.DeckReach = Like.DeckReach;
+		Show.DeckBase = Like.DeckBase;
+		Show.MostGuns = Like.MostGuns;
+		double Lower = 0.0;
+		if (LowTo > 0.0)
+		{
+			double Lowest = 1e9;
+			for (const AirFeed::Frame& F : Rec.Views)
+				for (const AirShow::Group& G : F.Groups)
+					if (!G.bFighter && G.Alt > 50.0) Lowest = std::min(Lowest, G.Alt);
+			Lower = Lowest < 1e8 ? std::max(0.0, Lowest - LowTo) : 0.0;
+		}
+		size_t Taken = 0;
+		auto TakeNext = [&]()
+		{
+			const AirFeed::Frame& F = Rec.Views[Taken++];
+			if (Lower <= 0.0)
+			{
+				Show.Take(F.Head.T, F.Groups, F.Events, F.Ships);
+				return;
+			}
+			// (what stands on the ground stays there; nothing is brought under 60 m)
+			std::vector<AirShow::Group> Groups = F.Groups;
+			std::vector<AirShow::Event> Events = F.Events;
+			for (AirShow::Group& G : Groups) if (G.Alt > 50.0) G.Alt = std::max(60.0, G.Alt - Lower);
+			for (AirShow::Event& E : Events) if (E.Alt > 50.0) E.Alt = std::max(60.0, E.Alt - Lower);
+			Show.Take(F.Head.T, Groups, Events, F.Ships);
+		};
+		TakeNext();
+		if (Taken < Rec.Views.size()) TakeNext();
+		double T = Rec.Views.front().Head.T;
+		const double EndT = Rec.Views.back().Head.T, Dt = 1.0 / Fps;
+		while (T < EndT - 1e-9)
+		{
+			T = std::min(EndT, T + Dt);
+			while (Taken < Rec.Views.size() && Rec.Views[Taken - 1].Head.T <= T + 1e-9) TakeNext();
+			Show.Advance(T);
+			Out.Watch.Frame(Show);
+			Show.Effects.clear();
+		}
+		Out.Watch.Close();
+		Out.Check = Show.Checked();
+		return Out;
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -249,6 +766,18 @@ int main(int Argc, char** Argv)
 	// bombers flying in sight from their middle, at its first bomb and the most over the next 120 air seconds.
 	std::map<int, double> BoxFirstBomb, BoxSpreadAt, BoxSpreadMost;
 	double BoxNextT = 0.0;
+	// (seen from outside the core: each level box's bombers' first bombs, by her key, and her box; and each bay bomber's
+	// doors, the air time they were shut again after her last bomb, and those still open BayShutS after it as she flew)
+	// The strike is on (Show::StrikeOn, the audit's 4.2): every frame with a bomb or a torpedo in the air, or a bomber
+	// diving (her nose more than 30 degrees down, not falling), it must be on; and once off, within 5 air s of the last
+	// of those or of the last hit on a ship shown (the bomb or torpedo having struck).
+	long StrikeNeed = 0, StrikeMiss = 0, StrikeOnFrames = 0, StrikeEnds = 0;
+	double StrikeLast = -1e9, StrikeLateMost = 0.0;
+	bool bStrikeWas = false;
+	std::map<int, int> StickBox;
+	std::map<int, double> BayShutAt;
+	std::set<int> BayShutLate;
+	double BayShutMost = 0.0;
 	std::map<int, bool> GunOn;
 	// The ships' anti-aircraft guns (Brian, 21 November 18:06Z: "for the ships being attacked by planes, they can fire
 	// machine gun fire and flak guns at them just like real life"): every stream from a muzzle on its own ship, she
@@ -336,6 +865,21 @@ int main(int Argc, char** Argv)
 			if (E.What == "air:hit") { ++EventsHits; EventsFiresOut += E.Mark == "fireout" ? 1 : 0; }
 			if (E.What == "air:fireout") ++EventsFiresOut;
 			if (E.What == "air:regain") ++EventsRegain;
+		}
+	// The gunnery as the eye will see it (GunWatch, above): a round of every stream flown by the kit's own flight, with
+	// every strike, fall and moment. And what the battle could have laid to guns, counted from the recording itself:
+	// every loss, hit survived and bomber shot out of her box that it gives to neither flak, a collision nor a
+	// falling wreck (the most the core may hold for a burst; an older recording names no guns for some hits).
+	GunWatch Gunnery;
+	Gunnery.bTell = std::getenv("AIR_SHOW_GUNNERY") != nullptr;
+	int EventsGunLost = 0, EventsGunHits = 0, EventsGunnerLost = 0;
+	for (const AirFeed::Frame& F : Rec.Views)
+		for (const AirShow::Event& E : F.Events)
+		{
+			if (E.bByFlak || (E.What != "air:lost" && E.What != "air:hit" && E.What != "air:straggle")) continue;
+			if (E.What == "air:lost" && (E.How == "struck" || E.How == "collide")) continue;
+			if (E.What != "air:lost") ++EventsGunHits;
+			else if (E.By >= 0 || E.GunBox >= 0) { ++EventsGunLost; EventsGunnerLost += E.GunBox >= 0 ? 1 : 0; }
 		}
 
 	const double Dt = 1.0 / Fps;
@@ -448,8 +992,11 @@ int main(int Argc, char** Argv)
 				{
 					if (P.Key != Th.Key || P.bFighter) continue;
 					const auto Box = Show.Groups().find(P.Group);
-					if (Box != Show.Groups().end() && Box->second.Strike != "dive" && Box->second.Strike != "torpedo" && !BoxFirstBomb.count(P.Group))
-						BoxFirstBomb[P.Group] = Show.AirNow();
+					if (Box != Show.Groups().end() && Box->second.Strike != "dive" && Box->second.Strike != "torpedo")
+					{
+						if (!BoxFirstBomb.count(P.Group)) BoxFirstBomb[P.Group] = Show.AirNow();
+						StickBox[P.Key] = P.Group;
+					}
 				}
 				// (her first bomb, in her own frame: inside her bay's racked load, where her model has one)
 				for (const AirShow::PlaneOut& P : PlanesNow)
@@ -480,6 +1027,15 @@ int main(int Argc, char** Argv)
 			BayBomberBankMost = std::max(BayBomberBankMost, std::fabs(P.Bank));
 			if (P.bBombsGone && !BombsGoneAt.count(P.Key)) BombsGoneAt[P.Key] = Show.AirNow();
 			const auto Gone = BombsGoneAt.find(P.Key);
+			if (Gone != BombsGoneAt.end() && !BayShutAt.count(P.Key))
+			{
+				if (P.Bay <= 0.0)
+				{
+					BayShutAt[P.Key] = Show.AirNow();
+					BayShutMost = std::max(BayShutMost, Show.AirNow() - Gone->second);
+				}
+				else if (Show.AirNow() > Gone->second + Show.BayShutS + 0.1) BayShutLate.insert(P.Key);
+			}
 			const auto Open = BayOpenAt.find(P.Key);
 			if (Open != BayOpenAt.end() && (Gone == BombsGoneAt.end() || Show.AirNow() < Gone->second + 1.0))
 				StickBankMost = std::max(StickBankMost, std::fabs(P.Bank));
@@ -489,7 +1045,9 @@ int main(int Argc, char** Argv)
 			BoxNextT = Show.AirNow() + 0.5;
 			for (const auto& [Box, First] : BoxFirstBomb)
 			{
-				if (Show.AirNow() - First > 120.0) continue;
+				// (from its first bomb through its turn for home, until it has rallied: at most 300 air s)
+				const auto Over = Show.Checked().RallyOver.find(Box);
+				if (Show.AirNow() - First > 300.0 || (Over != Show.Checked().RallyOver.end() && Show.AirNow() > Over->second)) continue;
 				std::vector<double> Xs, Ys, Far;
 				for (const AirShow::PlaneOut& P : PlanesNow)
 					if (P.Group == Box && !P.bFighter && !P.bFalling && P.bShown && !P.bOnGround) { Xs.push_back(P.At.X); Ys.push_back(P.At.Y); }
@@ -784,6 +1342,30 @@ int main(int Argc, char** Argv)
 				      << Num(E.At.X + E.Aim.X * 400.0) << ";" << Num(E.At.Y + E.Aim.Y * 400.0) << ";" << Num(E.At.Z + E.Aim.Z * 400.0) << "\n";
 			}
 		}
+		Gunnery.Frame(Show);
+		{
+			bool bNeed = false;
+			for (const AirShow::Thing& Th : Show.Things()) bNeed = bNeed || Th.Kind == AirShow::ThingKind::Bomb;
+			for (const AirShow::PlaneOut& P : PlanesNow) bNeed = bNeed || (!P.bFighter && !P.bFalling && P.bShown && !P.bOnGround && P.Pitch < -30.0);
+			for (const AirShow::Fx& E : Show.Effects)
+				if (E.Kind == AirShow::FxKind::ShipHit || E.Kind == AirShow::FxKind::ShipSunk) StrikeLast = Show.AirNow();
+			const bool bOn = Show.StrikeOn();
+			StrikeOnFrames += bOn ? 1 : 0;
+			if (bNeed)
+			{
+				++StrikeNeed;
+				StrikeMiss += bOn ? 0 : 1;
+				StrikeLast = Show.AirNow();
+			}
+			if (bStrikeWas && !bOn)
+			{
+				++StrikeEnds;
+				StrikeLateMost = std::max(StrikeLateMost, Show.AirNow() - StrikeLast);
+			}
+			// (still on as the battle ends: as late as it has been on since)
+			if (bOn && T >= EndT - 1e-9) StrikeLateMost = std::max(StrikeLateMost, Show.AirNow() - StrikeLast);
+			bStrikeWas = bOn;
+		}
 		Show.Effects.clear();
 		if (std::getenv("AIR_SHOW_TRACE") && std::fmod(Show.Shown(), 10.0) < Dt * 0.999)
 			std::fprintf(stderr, "== %.1f\n%s", Show.Shown(), Show.Describe().c_str());
@@ -856,6 +1438,47 @@ int main(int Argc, char** Argv)
 	            C.FallsByFighters, C.FallsUnderFire, C.FallsHeld, PilotSamples, PilotNoTask, C.LowestFight > 1e8 ? 0.0 : C.LowestFight, C.Hurt, C.Dry);
 	std::printf("  pilots: %d scissors (an overshoot, then each rolling back into the other), %d rolls back in them, %d won from behind, the longest %.1f air s; %d pulls up and over, %d half-rolls away\n",
 	            C.Scissors, C.ScissorTurns, C.ScissorWins, C.LongestScissors, C.YoYos, C.SplitS);
+	// (the gunnery: what the battle laid to guns and what the core says it showed of it; then what a round of every
+	// stream, flown by the kit's flight, was seen to do, in this play)
+	Gunnery.Close();
+	std::printf("  gunnery: to guns %d losses (%d to gunners) and %d hits; the core says %d and %d struck first, %d and %d from a burst before, %d and %d with no strike; gunners' kills seen %d;"
+	            " bursts %d fighters' (%d struck, %d asked) and %d gunners' (%d struck); stream steps %ld (%ld held, %ld laid wide, %ld ended short, %ld on the ground)\n",
+	            C.ToGuns, C.GunnerKills, C.HitsToGuns, C.ToGunsStruck, C.HitsStruck, C.ToGunsLate, C.HitsLate, C.ToGunsUnseen, C.HitsUnseen, C.GunnerKillsSeen,
+	            C.Bursts, C.BurstsOn, C.BurstsAsked, C.GunnerBursts, C.GunnerBurstsOn, C.StreamSteps, C.HeldSteps, C.WideSteps, C.ShortSteps, C.GroundSteps);
+	std::printf("  gunnery, seen: %ld rounds flown, %ld told an end (%ld on an aircraft, %ld in the air, %ld on the ground); %ld strikes on aircraft, %.2f m from where a round ended on the mean, %.2f at most;"
+	            " %ld bursts struck (%ld fighters', %ld gunners'); losses struck first %ld of %ld told, hits %ld of %ld; %ld of %ld falls with a strike on them in the 2 s before\n",
+	            Gunnery.RoundsFlown, Gunnery.GunFxEnding, Gunnery.EndOnPlane, Gunnery.EndShort, Gunnery.EndGround, Gunnery.Strikes,
+	            Gunnery.OffSum / static_cast<double>(std::max(1L, Gunnery.Strikes - Gunnery.StrikesNoRound)), Gunnery.OffMost,
+	            Gunnery.BurstsStruck, Gunnery.FighterBurstsStruck, Gunnery.GunnerBurstsStruck, Gunnery.KillsSeen, Gunnery.Kills, Gunnery.HitsSeen, Gunnery.HitsDone, Gunnery.FallsStruck, Gunnery.Falls);
+	std::printf("  gunnery, moments told:");
+	for (const auto& [Kind, Count] : Gunnery.Kinds) std::printf(" %s %d (%d through to the damage)", Kind.c_str(), Count, Gunnery.KindsDone.count(Kind) ? Gunnery.KindsDone.at(Kind) : 0);
+	std::printf("\n");
+	// One play tells little of the gunnery (FlyForGuns, above): so the battle is flown five times more for it alone,
+	// each with dice of its own (the seed and 7919 times the play's number), the last two at half the frames a second
+	// (the game's frames are not always these), and the gunnery's rows below hold over all six. And twice more made over
+	// to fly low, its lowest bombers 150 m up, where streams come down on the ground or the sea: only the ground's row
+	// reads those.
+	std::vector<GunPlay> GunPlays, LowPlays;
+	GunPlays.push_back(GunPlay{ Gunnery, C, Fps });
+	for (uint64_t Again = 1; Again < 6; ++Again) GunPlays.push_back(FlyForGuns(Rec, Show, (Rec.Seed ? Rec.Seed : 238) + Again * 7919, Again < 4 ? Fps : Fps * 0.5, 0.0, Gunnery.bTell));
+	for (uint64_t Again = 0; Again < 2; ++Again) LowPlays.push_back(FlyForGuns(Rec, Show, (Rec.Seed ? Rec.Seed : 238) + Again * 7919, Again < 1 ? Fps : Fps * 0.5, 150.0, Gunnery.bTell));
+	for (size_t K = 0; K < GunPlays.size(); ++K)
+	{
+		const GunWatch& W = GunPlays[K].Watch;
+		const AirShow::Checks& Ck = GunPlays[K].Check;
+		std::printf("  gunnery, play %zu (%.0f frames a second): falls %d; losses to guns seen struck first %ld of %d (gunners' %ld of %d), hits %ld of %d; %ld bursts struck (%ld for nothing); through %ld, its own %ld, one falling %ld;"
+		            " ends with no strike %ld of %ld, strikes with no round %ld of %ld, off the airframe %ld, not where told %ld; within 0.75 m %ld, 1.5 m %ld, 3 m %ld of %ld rounds\n",
+		            K + 1, GunPlays[K].Fps, Ck.Falls, W.KillsSeen, Ck.ToGuns, W.GunnerKillsSeen, Ck.GunnerKills, W.HitsSeen, Ck.HitsToGuns, W.BurstsStruck, W.BurstsForNothing, W.Through, W.ThroughOwn, W.ThroughFalling,
+		            W.EndsNoStrike, W.EndOnPlane, W.StrikesNoRound, W.Strikes, W.OffBody, W.LocalOff, W.Graze, W.Close15, W.Close3, W.RoundsFlown);
+	}
+	for (size_t K = 0; K < LowPlays.size(); ++K)
+	{
+		const GunWatch& W = LowPlays[K].Watch;
+		const AirShow::Checks& Ck = LowPlays[K].Check;
+		std::printf("  gunnery, flown low, play %zu (%.0f frames a second): falls %d; streams on the ground %ld of %ld steps; %ld rounds ended there (%ld with no strike near), %ld strikes drawn there (%ld with no round near, %ld told or laid wrong);"
+		            " %ld rounds drawn on under it\n",
+		            K + 1, LowPlays[K].Fps, Ck.Falls, Ck.GroundSteps, Ck.StreamSteps, W.EndGround, W.GroundEndsBare, W.GroundHits, W.GroundHitsBare, W.GroundWrong, W.UnderGround);
+	}
 	double SwingMid = 0.0, Swing90 = 0.0, Swing99 = 0.0;
 	if (!Swings.empty())
 	{
@@ -1072,6 +1695,34 @@ int main(int Argc, char** Argv)
 		  std::to_string(C.DropsOnLead) + " sticks on their lead's, " + (C.DropsOnLead ? Num(C.OnLeadLeast, 2) + " to " + Num(C.OnLeadMost, 2) + " air s after his first bomb" : std::string("none")) +
 		  "; " + std::to_string(C.DropsBeforeLead) + " before his",
 		  "none before his; each 0.6 to 1.8 air s after his first bomb" },
+		// (the same, seen from outside the core: in each level box one first bomb leaves before all the others, and each
+		// other's 0.6 to 1.8 air s after it, to a frame)
+		[&]() {
+			std::map<int, std::vector<double>> Firsts;
+			for (const auto& [Key, Box] : StickBox) Firsts[Box].push_back(StickAt[Key]);
+			int Boxes = 0, Off = 0, Tied = 0;
+			double Least = 1e9, Most = 0.0;
+			for (auto& [Box, Ts] : Firsts)
+			{
+				if (Ts.size() < 2) continue;
+				++Boxes;
+				std::sort(Ts.begin(), Ts.end());
+				Tied += Ts[1] - Ts[0] < 0.02 ? 1 : 0;
+				for (size_t K = 1; K < Ts.size(); ++K)
+				{
+					const double After = Ts[K] - Ts[0];
+					Least = std::min(Least, After);
+					Most = std::max(Most, After);
+					Off += After < 0.6 - 0.05 || After > 1.8 + 0.05 ? 1 : 0;
+				}
+			}
+			return Limit{ "in each box one first bomb leads, the others 0.6 to 1.8 air s on", Off == 0 && Tied == 0,
+				Boxes ? std::to_string(Boxes) + " boxes; the others " + Num(Least, 2) + " to " + Num(Most, 2) + " air s after their lead's; " + std::to_string(Off) + " outside, " + std::to_string(Tied) + " boxes with two first" : std::string("no level boxes"),
+				"the lead's alone first; each other 0.6 to 1.8 air s after (to a frame, 0.05)" };
+		}(),
+		{ "each bay's doors shut within BayShutS of her last bomb", BayShutLate.empty(),
+		  std::to_string(BayShutAt.size()) + " shut, the last " + Num(BayShutMost, 2) + " air s after her last bomb; " + std::to_string(BayShutLate.size()) + " still open past it",
+		  "shut within BayShutS (2.5 air s) and a frame, none open past it" },
 		[&]() {
 			bool bTight = true;
 			std::string Boxes;
@@ -1081,11 +1732,11 @@ int main(int Argc, char** Argv)
 				bTight = bTight && Most <= At * 1.5 + 30.0;
 				Boxes += (Boxes.empty() ? "" : ", ") + std::string("box ") + std::to_string(Box) + " " + Num(At, 0) + " m at its first bomb, at most " + Num(Most, 0);
 			}
-			const bool bOk = (C.Rallies > 0 || BoxSpreadAt.empty()) && C.RallyAgainst * 20 <= std::max<long>(C.RallySteps, 1) && C.RallyBankSeen <= 25.0 && bTight;
+			const bool bOk = (C.Rallies > 0 || BoxSpreadAt.empty()) && C.RallyAgainst == 0 && C.RallyBankSeen <= 25.0 && bTight && C.RallyMadeFar <= 1500.0;
 			return Limit{ "each box turns for home on its lead, one way round, together", bOk,
 				std::to_string(C.Rallies) + " rallies; " + std::to_string(C.RallyAgainst) + " of " + std::to_string(C.RallySteps) + " steps banked against the lead's way; most bank " + Num(C.RallyBankSeen, 1) +
-				" deg; " + (Boxes.empty() ? std::string("no level boxes") : Boxes),
-				"under 1 step in 20 against his way, at most 25 deg, each box's middle spread at most 1.5 times (+30 m) its spread at its first bomb, for 120 air s" };
+				" deg; " + (Boxes.empty() ? std::string("no level boxes") : Boxes) + "; models made on the lead at most " + Num(C.RallyMadeFar, 0) + " m from him",
+				"every wing his way round, at most 25 deg, each box's middle spread at most 1.5 times (+30 m) its spread at its first bomb until it has rallied, a model made meanwhile within 1.5 km of its lead" };
 		}(),
 		{ "the strategy camera on aircraft", FocusSamples > 0 && FocusThin * 20 <= FocusSamples,
 		  std::to_string(FocusThin) + " of " + std::to_string(FocusSamples) + " seconds' focus with under 3 aircraft within 1.2 km (the middle of the groups, as before: " + std::to_string(FocusOldEmpty) + " with none)",
@@ -1115,6 +1766,10 @@ int main(int Argc, char** Argv)
 		  std::to_string(StickHits) + " sticks and " + std::to_string(OneHits) + " single bombs heard landing; " + std::to_string(C.Rushes) + " rushes near the eye; " +
 		  std::to_string(Sounds.count("bomb_stick_01") ? Sounds["bomb_stick_01"] : 0) + " stick sounds at the drop",
 		  "a landing heard for each stick, none at the drop" },
+		{ "the strike is on while bombs fall and dives go down", StrikeMiss == 0 && StrikeLateMost <= 5.0 && (StrikeNeed == 0 || StrikeEnds > 0),
+		  std::to_string(StrikeNeed) + " frames with a bomb or torpedo in the air or a bomber diving, " + std::to_string(StrikeMiss) + " of them off; on " + std::to_string(StrikeOnFrames) +
+		  " frames, off " + std::to_string(StrikeEnds) + " times, at most " + Num(StrikeLateMost, 2) + " air s after the last had struck",
+		  "on in every such frame; off within 5 air s after the last bomb, torpedo or dive (or hit on a ship shown)" },
 		{ "fighters pass the bombers", C.Passes > 0, std::to_string(C.Passes), "some" },
 		// The fighter pilots (the pilots' section of AirShow.cpp).
 		{ "the first fighter guns soon after a fight opens", C.FallsByFighters == 0 || (SoonestGuns >= 0.0 && SoonestGuns <= 40.0), Num(SoonestGuns, 1), "within 40 air s (where the battle has fighters bring anything down)" },
@@ -1131,6 +1786,182 @@ int main(int Argc, char** Argv)
 		{ "no fighter fights into the ground", C.LowestFight >= 60.0, Num(C.LowestFight > 1e8 ? 0.0 : C.LowestFight), "at least 60 m over it (a strafing run apart)" },
 		{ "a frame fits the budget", TotalMs / std::max(1L, Frames) < 2.0, Num(TotalMs / std::max(1L, Frames), 3), "under 2 ms on average" },
 	};
+	// The gunnery (AirShow.cpp, "The gunnery"; GunWatch and FlyForGuns, above). Brian, 21 November: "make sure the gun
+	// fire from the planes actually hit the target and do damage when its a hit"; "i can see a gunner on a bomber and
+	// its tracers hit a fighter and then it goes down". The battle's count decides every loss and every hit; these hold
+	// the scene to showing them so that the eye can follow, over this play and the five flown again with other dice:
+	// nothing is struck that no round was seen to strike, no round is drawn through an aircraft that flies on, every
+	// round that ends on an aircraft draws its strike there, and a burst that strikes is one the battle counted.
+	{
+		auto Seen = [&GunPlays](long GunWatch::* Field)
+		{
+			long All = 0;
+			for (const GunPlay& Each : GunPlays) All += Each.Watch.*Field;
+			return All;
+		};
+		auto PlaysWith = [&GunPlays](long GunWatch::* Field)
+		{
+			int Count = 0;
+			for (const GunPlay& Each : GunPlays) Count += Each.Watch.*Field > 0 ? 1 : 0;
+			return std::to_string(Count) + " of " + std::to_string(GunPlays.size()) + " plays";
+		};
+		auto Of = [](long Part, long Whole) { return std::to_string(Part) + " of " + std::to_string(Whole); };
+		const long PlaysFlown = static_cast<long>(GunPlays.size());
+		Limits.push_back({ "every strike on an aircraft has a round ending there", Seen(&GunWatch::StrikesNoRound) == 0,
+		                   Of(Seen(&GunWatch::StrikesNoRound), Seen(&GunWatch::Strikes)) + " strikes with none, in " + PlaysWith(&GunWatch::StrikesNoRound) + "; " +
+		                       std::to_string(Seen(&GunWatch::Splinters)) + " not gunfire, counted apart; " + std::to_string(Seen(&GunWatch::StrikesNoBurst)) + " that name no burst",
+		                   "0 (a round of a drawn stream ended on that aircraft within a fifth of a second of the strike)" });
+		Limits.push_back({ "no round is drawn through an aircraft that flies on", Seen(&GunWatch::Through) == 0,
+		                   std::to_string(Seen(&GunWatch::Through)) + " (" + std::to_string(Seen(&GunWatch::ThroughEnded)) + " ended farther on, " + std::to_string(Seen(&GunWatch::ThroughFree)) + " flew out their life), in " +
+		                       PlaysWith(&GunWatch::Through) + "; " + std::to_string(Seen(&GunWatch::ThroughFalling)) + " more through one already going down",
+		                   "0 (a stream through one aircraft counted once a quarter second)" });
+		Limits.push_back({ "no round is drawn through its own aircraft", Seen(&GunWatch::ThroughOwn) == 0,
+		                   std::to_string(Seen(&GunWatch::ThroughOwn)) + ", in " + PlaysWith(&GunWatch::ThroughOwn), "0 (past its first 2.5 m; a stream counted once a quarter second)" });
+		Limits.push_back({ "every round that ends on an aircraft draws its strike", Seen(&GunWatch::EndsNoStrike) == 0,
+		                   Of(Seen(&GunWatch::EndsNoStrike), Seen(&GunWatch::EndOnPlane)) + " rounds ended on one with no strike drawn, in " + PlaysWith(&GunWatch::EndsNoStrike),
+		                   "0 (ended in its airframe or within 0.75 m of it; a strike on that aircraft within a fifth of a second)" });
+		Limits.push_back({ "strikes lie on the airframe, at the place told", Seen(&GunWatch::OffBody) == 0 && Seen(&GunWatch::LocalOff) == 0 && Seen(&GunWatch::OddHits) == 0,
+		                   std::to_string(Seen(&GunWatch::OffBody)) + " off the airframe, " + std::to_string(Seen(&GunWatch::LocalOff)) + " not where told, of " + std::to_string(Seen(&GunWatch::Strikes)) + " strikes; " +
+		                       std::to_string(Seen(&GunWatch::OddHits)) + " on nothing (no aircraft named, nor the ground or the sea)",
+		                   "0, 0 and 0 (within 0.45 m of its boxes; its place in the aircraft's own frame within 5 cm of where it is drawn)" });
+		// (a Gun effect that tells an end tells its time and its reach: the two must be one place. An end told past the
+		// round's life is counted beside it and not held here: the tracer is gone before it, which harms nothing where
+		// the stream was only to stop short, and where it was to strike, the rows above and the ground's below catch it.)
+		{
+			double ReachOff = 0.0;
+			for (const GunPlay& Each : GunPlays) ReachOff = std::max(ReachOff, Each.Watch.MostReachOff);
+			Limits.push_back({ "a stream's reach told is where its rounds end", ReachOff <= 0.5,
+			                   Num(ReachOff, 2) + " m off at most, over " + std::to_string(Seen(&GunWatch::GunFxEnding)) + " stream frames that told an end; " + std::to_string(Seen(&GunWatch::PastLife)) +
+			                       " of them told one past their round's life",
+			                   "Reach within 0.5 m of the rounds' place at Tof, by the kit's flight" });
+		}
+		// No more bursts strike than the battle counted. The core lays to guns no more than the recording gives them
+		// (what it holds for a burst is the battle's, never its own); in no play do more bursts strike, or more Moments
+		// run through to the damage, than it laid to guns (each such Moment is one event of the battle's); and no burst
+		// draws strikes and then comes to nothing, the aircraft flying on with the strikes seen on it.
+		{
+			bool bWithin = true;
+			long MostStruck = 0, Laid = 0;
+			for (const GunPlay& Each : GunPlays)
+			{
+				const AirShow::Checks& Ck = Each.Check;
+				const GunWatch& W = Each.Watch;
+				bWithin = bWithin && Ck.ToGuns <= EventsGunLost && Ck.HitsToGuns <= EventsGunHits && W.Kills <= Ck.ToGuns && W.HitsDone <= Ck.HitsToGuns && W.BurstsStruck <= Ck.ToGuns + Ck.HitsToGuns;
+				if (W.BurstsStruck >= MostStruck)
+				{
+					MostStruck = W.BurstsStruck;
+					Laid = Ck.ToGuns + Ck.HitsToGuns;
+				}
+			}
+			Limits.push_back({ "no more bursts strike than the battle counted", bWithin && Seen(&GunWatch::BurstsForNothing) == 0 && Seen(&GunWatch::BurstsUntold) == 0,
+			                   std::to_string(MostStruck) + " bursts struck at most in a play, for " + std::to_string(Laid) + " losses and hits laid to guns (the recording gives " + std::to_string(EventsGunLost + EventsGunHits) +
+			                       " at most); " + Of(Seen(&GunWatch::BurstsForNothing), Seen(&GunWatch::BurstsStruck)) + " struck and came to nothing, " + std::to_string(Seen(&GunWatch::BurstsUntold)) + " told no Moment",
+			                   "never more than were laid to guns; 0 that strike and come to nothing; 0 untold" });
+		}
+		// Losses to guns are seen struck first: of the aircraft the battle lost to guns (the recording's own count, each
+		// play), those whose Moment ran through to the fall with strikes of its burst drawn on that aircraft first,
+		// rounds of the guns it names seen to end there, and the fall begun as it says.
+		// THE LIMIT, SET AT THE MERGE: at least 1 in 4, over the six plays together. With the fighters' and the gunners'
+		// parts in, the core shows 335 of 630 on the big Bremen raid, 142 of 174 on the small, 102 of 270 on Oahu and
+		// 87 of 186 on Midway at this test's own dice. Sixteen other dice in the measuring tool (30 frames a second)
+		// gave, in the worst play of each, 48 of 105, 17 of 29, 13 of 45 and 11 of 31: 1 in 4 is about the worst single
+		// play of the two battles that show least, rounded down, and the six plays together stand well clear of it on
+		// every recording. It is a floor under what the eye is shown, not a mark of what is wanted: a loss no gun came
+		// to bear on in its time still shows with no strike, and those are the fighter pilots' to bring down.
+		{
+			long Lost = 0, CoreStruck = 0, CoreLate = 0, CoreUnseen = 0, Least = 1 << 30;
+			for (const GunPlay& Each : GunPlays)
+			{
+				Lost += std::max(EventsGunLost, Each.Check.ToGuns);
+				CoreStruck += Each.Check.ToGunsStruck;
+				CoreLate += Each.Check.ToGunsLate;
+				CoreUnseen += Each.Check.ToGunsUnseen;
+				Least = std::min(Least, Each.Watch.KillsSeen);
+			}
+			const long SeenStruck = Seen(&GunWatch::KillsSeen);
+			Limits.push_back({ "losses to guns are seen struck first", Lost == 0 || (SeenStruck * 4 >= Lost && Seen(&GunWatch::KillsNoFall) == 0),
+			                   Of(SeenStruck, Lost) + " over " + std::to_string(PlaysFlown) + " plays (" + std::to_string(Least) + " in the worst); the core says " + std::to_string(CoreStruck) + " struck first, " +
+			                       std::to_string(CoreLate) + " from a burst some seconds before, " + std::to_string(CoreUnseen) + " with no strike; " + std::to_string(Seen(&GunWatch::KillsNoFall)) + " told fallen with no fall begun",
+			                   "at least 1 in 4 over the plays (the limit set at the merge), where the battle has any; a fall begun for each" });
+			// And fighters lost to a box's gunners are seen struck by a gunner: the same, the rounds from the mount the
+			// Moment names on a bomber of that box.
+			// THE LIMIT, SET AT THE MERGE: at least 2 in 3, over the six plays together. With the gunners' part in, the
+			// core shows 85 of the big Bremen raid's 96, and 12 of 16 in its worst play, at this test's own dice; sixteen
+			// other dice in the measuring tool gave 13.8 of 16 on the mean and 12 in the worst play. Only the big Bremen
+			// raid has the battle lose fighters to gunners; the others have none to show.
+			long GunnersLost = 0;
+			for (const GunPlay& Each : GunPlays) GunnersLost += std::max(EventsGunnerLost, Each.Check.GunnerKills);
+			Limits.push_back({ "fighters lost to gunners are seen struck by a gunner", GunnersLost == 0 || Seen(&GunWatch::GunnerKillsSeen) * 3 >= GunnersLost * 2,
+			                   GunnersLost == 0 ? std::string("the battle has none") : Of(Seen(&GunWatch::GunnerKillsSeen), GunnersLost) + " over " + std::to_string(PlaysFlown) + " plays, in " + PlaysWith(&GunWatch::GunnerKillsSeen),
+			                   "at least 2 in 3 over the plays (the limit set at the merge), where the battle has any" });
+		}
+		// A gunner's kill is told to the cameras before it strikes (Show::Moment, "gunner-kill"): told as he opens, a
+		// second or more before his rounds strike, so a shot can be on his window as he fires; his window named, the
+		// mount his own bomber's; and its times in their order (he opens, his rounds strike as the strikes are drawn,
+		// the fall begins).
+		{
+			double Lead = 1e9;
+			for (const GunPlay& Each : GunPlays) Lead = std::min(Lead, Each.Watch.LeastLead);
+			Limits.push_back({ "a gunner's kill is told to the cameras before it strikes", Seen(&GunWatch::GunnerKillsSoon) == 0 && Seen(&GunWatch::GunnerKillsOdd) == 0,
+			                   std::to_string(Seen(&GunWatch::GunnerKillsTold)) + " told: " + std::to_string(Seen(&GunWatch::GunnerKillsSoon)) + " struck under a second after he opened" +
+			                       (Lead < 1e8 ? " (the soonest " + Num(Lead, 2) + " s)" : std::string()) + ", " + std::to_string(Seen(&GunWatch::GunnerKillsOdd)) + " with no window, the wrong mount or its times out of order",
+			                   "0 and 0 (OpenAt a second or more before the first strike drawn)" });
+		}
+		// A stream that comes down on the ground or the sea strikes it. In the recordings as they are the fights are too
+		// high for any to, so the battle is also flown low (LowPlays): there, and in the plays as recorded, no round is
+		// drawn on under the ground, every round that ends on it has a strike drawn near, each strike lies on the ground
+		// or the sea and is told as which, and each has a round ending by it.
+		// THE LIMIT, SET AT THE MERGE: the last of those at the design's 0, with the rest. The strafing part ends each
+		// gun's rounds of a grounded stream at their own time of flight, and the core shows no strike there with no
+		// round near on any recording flown low (0 of 411, 390, 1,331 and 336 strikes on the four).
+		{
+			long Under = 0, Wrong = 0, Downs = 0, DownsBare = 0, Spurts = 0, SpurtsBare = 0, Steps = 0;
+			bool bMostNear = true;
+			for (const std::vector<GunPlay>* Each : { &GunPlays, &LowPlays })
+			{
+				for (const GunPlay& One : *Each)
+				{
+					Under += One.Watch.UnderGround;
+					Wrong += One.Watch.GroundWrong;
+					Downs += One.Watch.EndGround;
+					DownsBare += One.Watch.GroundEndsBare;
+					Spurts += One.Watch.GroundHits;
+					SpurtsBare += One.Watch.GroundHitsBare;
+					Steps += One.Check.GroundSteps;
+					bMostNear = bMostNear && One.Watch.GroundHitsBare == 0;
+				}
+			}
+			Limits.push_back({ "a stream that comes down on the ground or the sea strikes it", Under == 0 && Wrong == 0 && DownsBare == 0 && bMostNear && (Downs == 0 || Spurts > 0),
+			                   std::to_string(Steps) + " stream steps came down (" + std::to_string(Seen(&GunWatch::EndGround)) + " rounds as recorded, the rest flown low): " + Of(DownsBare, Downs) + " rounds ended there with no strike near, " +
+			                       Of(SpurtsBare, Spurts) + " strikes there with no round near, " + std::to_string(Wrong) + " told or laid wrong, " + std::to_string(Under) + " rounds drawn on under it",
+			                   "0 rounds with no strike, 0 strikes with no round (the limit set at the merge), 0 wrong, 0 under" });
+		}
+		// Misses are seen to miss: how near a round passed an airframe it did not end on (nor its own), the nearest of
+		// each round. A round inside one is the row above's; this is the margin the eye reads. The core lays a miss
+		// 1.2 m or more clear of the aircraft it is fired at and 0.72 m or more clear of any other, as it reckons their
+		// flight; the mark here (1 round in 100 within 0.75 m) catches a lay gone wrong, and is the art director's to
+		// tighten.
+		{
+			const long Flown = Seen(&GunWatch::RoundsFlown), Near = Seen(&GunWatch::Graze);
+			Limits.push_back({ "misses are seen to miss", Near * 100 <= Flown,
+			                   std::to_string(Near) + " rounds within 0.75 m of an airframe they did not strike, " + std::to_string(Seen(&GunWatch::Close15)) + " more within 1.5 m, " +
+			                       std::to_string(Seen(&GunWatch::Close3)) + " within 3 m, of " + std::to_string(Flown) + " flown",
+			                   "at most 1 in 100 within 0.75 m" });
+		}
+		// And the battle's count is kept whatever the dice: in every play a model falls for every aircraft lost, and the
+		// hits survived are shown.
+		{
+			bool bKept = true;
+			std::string Counts;
+			for (const GunPlay& Each : GunPlays)
+			{
+				bKept = bKept && Each.Check.Falls >= EventsLost - 2 && Each.Check.Falls <= EventsLost + 2 && Each.Check.HitsShown >= EventsHits * 9 / 10;
+				Counts += (Counts.empty() ? "" : ", ") + std::to_string(Each.Check.Falls) + " and " + std::to_string(Each.Check.HitsShown);
+			}
+			Limits.push_back({ "the battle's count kept whatever the dice", bKept, "falls and hits shown, each play: " + Counts + " (the battle's " + std::to_string(EventsLost) + " and " + std::to_string(EventsHits) + ")",
+			                   "falls within 2 of the battle's, 9 hits in 10 shown, in every play" });
+		}
+	}
 	// The sky (AirSky): the day the battle gave, laid inside its heights, scattered, within the painter's room, the same
 	// every time, its clearing kept over the target as the wind carries the clouds, and turned to an eye within a
 	// frame's budget.

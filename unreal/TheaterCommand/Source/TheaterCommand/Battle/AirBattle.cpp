@@ -3110,6 +3110,9 @@ void AAirBattle::Tick(float DeltaSeconds)
 	// The screen's clock: x1 is real time; the run-up and the run home at x10; held while a question stands or the card is up.
 	S.Clock.bQuestion = S.Question != 0 || S.bCard;
 	S.Clock.bFlyover = S.bFlying;
+	// (and at the player's pace while the strike is on and 5 s after, so the bombs and the dives are seen at the
+	// battle's own pace: the flight core's Show::StrikeOn, the realism audit's 4.2)
+	S.Clock.bStrike = S.Show.StrikeOn();
 	const double Run = S.Clock.Step(Real, S.Desk.Head(), S.Board.Scale, S.ClockTag);
 	const double End = S.bReplay ? S.Recording.Views.back().Head.T : 1e18;
 	S.BattleT = FMath::Min(End, S.BattleT + Run);
@@ -4671,8 +4674,10 @@ void AAirBattle::PlayEffects()
 			FString Name = AirParts::Wide(E.What);
 			FName Family = TEXT("aircraft");
 			// (a falling bomb's rush near the eye, the mix's impacts.incoming.bomb, timed by the flight core to end at
-			// its landing: only at the battle's own pace, for at x10 the bomb is down long before the take is out)
-			if (Name == TEXT("bomb_release") && (S.Clock.Speed != 1.0 || S.Desk.Head().Contact < 0.0 || S.Desk.Head().bWinding || S.bFlying))
+			// its landing: only at the battle's own pace, for at x10 the bomb is down long before the take is out. The
+			// clock now holds the player's pace while the strike is on, before the formations meet and on the way home
+			// too, so it is muted only when the last step ran fast)
+			if (Name == TEXT("bomb_release") && (S.Clock.Speed != 1.0 || S.Clock.Fast() || S.bFlying))
 			{
 				break;
 			}

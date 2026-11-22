@@ -43,6 +43,8 @@ namespace AirDesk
 	double Clock::Step(double Real, const AirFeed::Top& Head, double Scale, std::string& Tag)
 	{
 		Tag.clear();
+		bFast = false;
+		SinceStrike = bStrike ? 0.0 : SinceStrike + std::max(0.0, Real);
 		if (Head.bOver) return 0.0;
 		if (bQuestion)
 		{
@@ -59,20 +61,20 @@ namespace AirDesk
 			Tag = "HELD";
 			return 0.0;
 		}
-		// Fast until the formations meet, and once the fight has wound down (the play version's mark 1).
-		if (Head.Contact < 0.0)
-		{
-			Tag = "\xC3\x97" "10 UNTIL THE FORMATIONS MEET";
-			return Real * 10.0;
-		}
+		const double Pace = Real * Speed / std::max(Scale, 0.1);
+		// Fast until the formations meet, and once the fight has wound down (the play version's mark 1); but never while
+		// the strike is on, nor StrikeHoldS after it: the bombs and the dives are seen at the player's pace, then the
+		// clock eases into the fast run over StrikeEaseS.
+		const auto RunFast = [&](const char* Words) {
+			const double Share = std::min(1.0, std::max(0.0, (SinceStrike - StrikeHoldS) / std::max(StrikeEaseS, 0.01)));
+			bFast = Share > 0.5;
+			Tag = Share <= 0.0 ? std::string("THE STRIKE \xC2\xB7 RUNNING \xC3\x97") + (Speed == 0.5 ? "\xC2\xBD" : std::to_string(static_cast<int>(Speed))) : std::string(Words);
+			return Pace + (Real * 10.0 - Pace) * Share;
+		};
+		if (Head.Contact < 0.0) return RunFast("\xC3\x97" "10 UNTIL THE FORMATIONS MEET");
 		if (SinceMet < 0.0) SinceMet = 0.0;
 		SinceMet += Real;
-		if (Head.bWinding)
-		{
-			Tag = "\xC3\x97" "10 UNTIL THE LAST ARE HOME";
-			return Real * 10.0;
-		}
-		const double Pace = Real * Speed / std::max(Scale, 0.1);
+		if (Head.bWinding) return RunFast("\xC3\x97" "10 UNTIL THE LAST ARE HOME");
 		if (SinceMet < 3.0) Tag = "THE FORMATIONS MEET \xC2\xB7 RUNNING \xC3\x97" "1";
 		else if (Speed == 0.5) Tag = "RUNNING \xC3\x97\xC2\xBD";
 		else if (Speed != 1.0) Tag = "RUNNING \xC3\x97" + std::to_string(static_cast<int>(Speed));
