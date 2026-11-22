@@ -2211,6 +2211,8 @@ function swingOf(g: Game, route: string, night?: { fought: ConvoyFought; clamped
 export const subScene = { on: SUBSCENE_ENV };
 
 const lookFleet = (f: Fleet, n: number): SubLookFleet => ({ fleet: f.id, nat: f.nat, n });
+/** A raider as the scene stages it: its boats as the month began, and its heavy ships (battleships, carriers, cruisers), which raid too. */
+const lookRaider = (f: Fleet, n: number): SubLookFleet => ({ ...lookFleet(f, n), heavy: f.ships.bb + f.ships.cv + f.ships.ca });
 
 /** This nation's record for this month, made the first time it is written to; anything older than last month is let go. */
 function lookOf(g: Game, nat: string): SubLook {
@@ -2231,11 +2233,17 @@ function lookTorpedo(g: Game, f: Fleet, cls: ShipClass): void {
     let pick = seaRng(g, `look:torpedo:${f.id}`).next() * all;
     for (let i = 0; i < could.length; i++) { pick -= w[i]; if (pick < 0 || i === could.length - 1) { by = could[i].id; break; } }
   }
-  lookOf(g, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, could: could.map((x) => x.id), by });
+  const byNat = by === null ? null : could.find((x) => x.id === by)!.nat;
+  lookOf(g, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, could: could.map((x) => x.id), by, couldNat: could.map((x) => x.nat), byNat });
 }
 
-/** A convoy month as the scene stages it, sea by sea: the month's tons shared by the raiders' strength in each sea (evenly where only a fortress raids). */
-function lookConvoy(g: Game, nat: string, route: string, zones: number[], raiders: Fleet[], escorts: Fleet[], ddAt: Map<number, number>, tons: number): void {
+/**
+ * A convoy month as the scene stages it, sea by sea: the month's tons shared by the raiders' strength in each sea
+ * (evenly where only a fortress raids). The raiders' boats and the escorts' destroyers are as the month began, before
+ * the convoy's own roll (a history campaign's convoy sinks boats as well as destroyers); its strength shares are read
+ * as the fleets stand after it, as before.
+ */
+function lookConvoy(g: Game, nat: string, route: string, zones: number[], raiders: Fleet[], escorts: Fleet[], at: { dd: Map<number, number>; ss: Map<number, number> }, tons: number): void {
   const power = (f: Fleet): number => {
     let p = 0;
     for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
@@ -2247,8 +2255,8 @@ function lookConvoy(g: Game, nat: string, route: string, zones: number[], raider
   const most = zones[by.indexOf(Math.max(...by))];
   const seas = zones.map((z, i) => ({
     zone: z,
-    raiders: raiders.filter((f) => f.zone === z).map((f) => lookFleet(f, f.ships.ss)),
-    escorts: escorts.filter((f) => f.zone === z || (z === most && !zones.includes(f.zone))).map((f) => lookFleet(f, ddAt.get(f.id) ?? f.ships.dd)),
+    raiders: raiders.filter((f) => f.zone === z).map((f) => lookRaider(f, at.ss.get(f.id) ?? f.ships.ss)),
+    escorts: escorts.filter((f) => f.zone === z || (z === most && !zones.includes(f.zone))).map((f) => lookFleet(f, at.dd.get(f.id) ?? f.ships.dd)),
     air: airOver(g, z, nat) * NAVY.convoy.air,
     tons: Math.round((all > 0 ? tons * (by[i] / all) : tons / zones.length) / 1000) * 1000,
   }));
@@ -2270,8 +2278,8 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     const L = swing === undefined ? L0 : Math.min(LANE_CAP, L0 * swing);
     const tons = Math.round((route.tons * L) / 1000) * 1000;
     let subsLost = 0, escortsLost = 0;
-    // (Release 2, ruling 241 D1, record only: the escorts as the month began, before the convoy's roll.)
-    const ddAt = subScene.on ? new Map(escorts.map((f) => [f.id, f.ships.dd])) : null;
+    // (Release 2, ruling 241 D1, record only: the escorts' destroyers and the raiders' boats as the month began, before the convoy's roll.)
+    const at = subScene.on ? { dd: new Map(escorts.map((f) => [f.id, f.ships.dd])), ss: new Map(raiders.map((f) => [f.id, f.ships.ss])) } : null;
     if (raid > 0) {
       // In the grand campaign the submarines have already been hunted, sea by sea, by the destroyers and aircraft alone.
       if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
@@ -2293,7 +2301,7 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     // (Record only, and only with the convoy battle on: the month's swing, and whether a fought night set it.)
     if (swing !== undefined) g.convoys[route.id].swing = swing;
     if (night) g.convoys[route.id].fought = night.clamped ? 'clamped' : 'field';
-    if (ddAt) lookConvoy(g, nat, route.id, zones, raiders, escorts, ddAt, tons);
+    if (at) lookConvoy(g, nat, route.id, zones, raiders, escorts, at, tons);
     storyConvoy(g, raiders, escorts, tons, raid > 0);
     // The monthly figures are news only to the nations fighting over the route.
     if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat))) {

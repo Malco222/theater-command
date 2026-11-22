@@ -677,7 +677,8 @@ export interface ConvoyMonth {
 }
 
 /** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */
-export interface SubLookFleet { fleet: number; nat: string; n: number }
+/** A fleet as the submarine scene stages it: 'n' its boats (or a hunter's destroyers); 'heavy', for a convoy's raider only, its battleships, carriers and cruisers. */
+export interface SubLookFleet { fleet: number; nat: string; n: number; heavy?: number }
 
 /**
  * One nation's month at sea as the submarine scene stages it (release 2, ruling 241 D1; record only, read by no rule).
@@ -689,8 +690,8 @@ export interface SubLook {
   nat: string;
   /** Each sea its hunters went after enemy boats in: its hunting fleets (destroyers), the weight of its own aircraft over the sea, the enemy boats there, and the boats sunk and destroyers lost. */
   hunts: { zone: number; hunters: SubLookFleet[]; air: number; quarry: SubLookFleet[]; sunk: number; cost: number }[];
-  /** Each heavy ship of this nation's torpedoed and sunk: its fleet, sea and class; the enemy boats' fleets in the sea that could have fired (as torpedoRisk counts them); and one of them picked for the look on its own key ('look:torpedo:<fleet>'), so no keyed roll moves. */
-  torpedoes: { fleet: number; zone: number; cls: ShipClass; could: number[]; by: number | null }[];
+  /** Each heavy ship of this nation's torpedoed and sunk: its fleet, sea and class; the enemy boats' fleets in the sea that could have fired (as torpedoRisk counts them) and their nations, in the same order; and one of them picked for the look on its own key ('look:torpedo:<fleet>'), so no keyed roll moves, with its nation. */
+  torpedoes: { fleet: number; zone: number; cls: ShipClass; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }[];
   /** Each convoy route feeding this nation, sea by sea: the raiders (boats) and escorts (destroyers) there, the air guard's strength over it, and the month's tons sunk in it (the month's tons shared by the raiders' strength in each sea). */
   convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number }[] }[];
 }

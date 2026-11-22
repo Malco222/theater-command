@@ -64,8 +64,54 @@ describe('the submarine scene\'s record', () => {
       expect(tp[0].fleet).toBe(home.id);
       expect(tp[0].could).toContain(boats.id);
       expect(tp[0].could).toContain(tp[0].by);
+      // (The production lead's finding 4: the nations of the boats that could have fired and of the one picked.)
+      expect(tp[0].couldNat).toEqual(tp[0].could.map((id) => b.fleets.find((f) => f.id === id)!.nat));
+      expect(tp[0].byNat).toBe(b.fleets.find((f) => f.id === tp[0].by)!.nat);
     }
     expect(seen).toBe(1);
+  });
+
+  it('in a history campaign, stages the raiders\' boats as the month began, before the convoy\'s own roll sinks some', () => {
+    let seen = 0;
+    for (let t = 2; t <= 40 && !seen; t++) {
+      const a = createGame(1, null);
+      a.turn = t;
+      const before = new Map(a.fleets.map((f) => [f.id, f.ships.ss]));
+      const b = twin(a);
+      navalUpkeep(a, 'UK');
+      if (!(a.convoys.atlantic?.subsLost > 0)) continue;
+      seen++;
+      subScene.on = true;
+      navalUpkeep(b, 'UK');
+      subScene.on = false;
+      expect(stripped(b)).toBe(saveGame(a));
+      const raiders = b.subLook!.find((l) => l.nat === 'UK')!.convoys.find((c) => c.route === 'atlantic')!.seas.flatMap((s) => s.raiders);
+      expect(raiders.length).toBeGreaterThan(0);
+      for (const r of raiders) expect(r.n).toBe(before.get(r.fleet));
+      // The roll did sink boats: the record is not the fleets as they stand after it.
+      expect(raiders.some((r) => r.n > b.fleets.find((f) => f.id === r.fleet)!.ships.ss)).toBe(true);
+    }
+    expect(seen).toBe(1);
+  });
+
+  it('records a raider\'s heavy ships, and moves nothing', () => {
+    const a = createGame(1, null);
+    a.turn = 6;
+    const raider = a.fleets.find((f) => f.nat === 'GER' && f.ships.ss > 0 && f.stance === 'raid')!;
+    raider.ships.ca += 1; raider.ships.bb += 1;
+    const heavy = raider.ships.bb + raider.ships.cv + raider.ships.ca;
+    const b = twin(a);
+    navalUpkeep(a, 'UK');
+    subScene.on = true;
+    navalUpkeep(b, 'UK');
+    subScene.on = false;
+    expect(stripped(b)).toBe(saveGame(a));
+    const seas = b.subLook!.find((l) => l.nat === 'UK')!.convoys.flatMap((c) => c.seas);
+    const r = seas.flatMap((s) => s.raiders).find((x) => x.fleet === raider.id)!;
+    expect(r).toBeDefined();
+    expect(r.heavy).toBe(heavy);
+    // Only a convoy's raiders carry it: the escorts and the hunts' fleets do not.
+    expect(seas.flatMap((s) => s.escorts).every((e) => e.heavy === undefined)).toBe(true);
   });
 
   it('keeps this month and last, and goes through a save', () => {
