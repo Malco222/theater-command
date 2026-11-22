@@ -11,7 +11,7 @@ import setup from '../data/campaign/setup-1939.json';
 import open from '../data/campaign/open.json';
 import { createGame } from '../src/campaign/game';
 import { HISTORY, leash, setStop } from '../src/campaign/history';
-import { startOpen } from '../src/campaign/staff';
+import { bookLanding, startOpen } from '../src/campaign/staff';
 import { STRATEGY, torchBook } from '../src/campaign/strategy';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -24,6 +24,8 @@ const start = (seed: number, stop: number, human: string | null = null): Game =>
 type Row = [number, string, string, string, number, string, Record<string, unknown>?];
 const TORCH = (setup as unknown as { torch: { instead: string[]; rows: Row[] } }).torch;
 const ROSTER = (setup as unknown as { expeditions: Row[] }).expeditions;
+type Landing = { corps: string; own?: number; to: string[] };
+const LANDINGS = (nat: string): Landing[] => (open as unknown as { ops: Record<string, { id: string; landings?: Landing[] }[]> }).ops[nat].find((o) => o.id === 'torch')!.landings!;
 
 describe('Operation Torch by the book', () => {
   const was = STRATEGY.torch!.on;
@@ -47,6 +49,9 @@ describe('Operation Torch by the book', () => {
     // America's landings are made from its own corps: every one names a worth, and none names a roster row.
     const usa = (open as unknown as { ops: Record<string, { id: string; landings?: { corps: string; own?: number }[] }[]> }).ops.USA.find((o) => o.id === 'torch')!;
     for (const L of usa.landings!) { expect(L.own).toBeGreaterThan(0); expect(ROSTER.some((r) => r[2] === L.corps)).toBe(false); }
+    // The first shore each landing names is the record's: Algiers for the Eastern force, Casablanca and Oran for America's two.
+    expect(LANDINGS('UK').map((L) => L.to[0])).toEqual(['Algiers']);
+    expect(LANDINGS('USA').map((L) => L.to[0])).toEqual(['Casablanca', 'Oran']);
     // Nothing twice: a row of Torch's that carries a roster row's name stands in for it, and every name stood in for is a roster row's.
     for (const nm of TORCH.instead) expect(ROSTER.some((r) => r[2] === nm), nm).toBe(true);
     for (const row of TORCH.rows) if (ROSTER.some((r) => r[1] === row[1] && r[2] === row[2])) expect(TORCH.instead, row[2]).toContain(row[2]);
@@ -82,11 +87,21 @@ describe('Operation Torch by the book', () => {
       expect(A.date).toBe(L.date);
     }
     for (let seed = 40; seed < 52; seed++) { const g = start(seed, 2); expect(leash(g, 'USA', 'torch').date).toBe(leash(g, 'UK', 'torch').date); }
+    // By the book a landing of Torch's goes to its first-named shore (on its day whatever the odds); with the switch
+    // off, at a stop that keeps no book, or for a player, it is a landing like any other.
+    for (const nat of ['UK', 'USA']) for (const L of LANDINGS(nat)) {
+      expect(bookLanding(start(31, 1), nat, L)).toBe('after');
+      expect(bookLanding(start(31, 3), nat, L)).toBeNull();
+      expect(bookLanding(start(31, 1, nat), nat, L)).toBeNull();
+    }
+    STRATEGY.torch!.on = false;
+    for (const nat of ['UK', 'USA']) for (const L of LANDINGS(nat)) expect(bookLanding(start(31, 1), nat, L)).toBeNull();
+    STRATEGY.torch!.on = true;
     // Germany's own dated operation is untouched by any of it.
     expect(leash(start(31, 1), 'GER', 'weser').kind).toBe('dated');
   });
 
-  it('on, at stop 1: the landings go in November 1942 from America\'s own corps, the French turn follows that month, and nothing comes twice', () => {
+  it('on, at stop 1: the landings go in November 1942 at the record\'s three ports from America\'s own corps, the French turn follows that month, and nothing comes twice', () => {
     STRATEGY.torch!.on = true;
     const g = start(17, 1);
     while (g.turn < 39) runTurnAI(g);
@@ -105,6 +120,13 @@ describe('Operation Torch by the book', () => {
     expect(g.flags['event:darlan']).toBe(39);
     expect(g.nations.VIC.alive).toBe(false);
     for (const nm of ['Casablanca', 'Oran', 'Algiers', 'Constantine']) expect(['UK', 'USA'], nm).toContain(g.byName[nm].ctrl);
+    // The landings went where the record's did, and nowhere else: the 78th is at Algiers and America's two picks at
+    // Casablanca and Oran. (A force the French threw back on the day came ashore at the ceasefire; no note of it is left.)
+    const at = (c: { reg: number } | undefined): string | undefined => (c ? g.regions[c.reg].name : undefined);
+    expect(at(g.corps.find((c) => c.name === 'First Army: 78th Division' && !c.dead))).toBe('Algiers');
+    expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Western Task Force'] - 1 && !c.dead))).toBe('Casablanca');
+    expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Center Task Force'] - 1 && !c.dead))).toBe('Oran');
+    expect(Object.keys(g.flags).some((k) => k.startsWith('torch:off:'))).toBe(false);
     // No new American men for it: the count of its corps moved only by what its own factories and ships did (none struck, none added by Torch).
     expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead && /Task Force/.test(c.name)).length).toBe(0);
     expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead).length).toBeGreaterThanOrEqual(usaBefore);

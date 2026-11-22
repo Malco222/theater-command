@@ -21,7 +21,7 @@ import { DOMINATION, dominating } from './domination';
 import { HISTORY, bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { AIMS, aimHolders, aimMarched, type Aim } from './aims';
 import { lineShut } from './line';
-import { STRATEGY, campaignLog, mounts, plansAhead, sectorTerms } from './strategy';
+import { STRATEGY, campaignLog, mounts, plansAhead, sectorTerms, torchBook } from './strategy';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
@@ -2605,6 +2605,21 @@ const ownKey = (nat: string, L: OpLanding): string => `st:own:${nat}:${L.corps}`
 export function ownPicked(g: Game, nat: string, L: OpLanding): Corps | undefined {
   const id = flag(g, ownKey(nat, L)) - 1;
   return id >= 0 ? g.corps.find((c) => c.id === id && c.nat === nat && !c.dead) : undefined;
+}
+
+/**
+ * A landing of an operation that is the book's alone, where the book has it (Operation Torch at its stops; the design
+ * director's mend of 22 November 2026): 'day' in the month its operation is launched, 'after' in any other month,
+ * null for every other landing and everywhere with the switch off. The book carries the record's moves: such
+ * a landing goes where the record's went, its first-named shore, and on the day whatever the odds: the fight is the
+ * few days the record's defenders resisted. The other shores on its list are for a staff that chooses for itself;
+ * after the day it is the first-named shore still, but no longer against the odds (the record has no second assault).
+ */
+export function bookLanding(g: Game, nat: string, L: OpLanding): 'day' | 'after' | null {
+  if (nat === g.human || !torchBook(g)) return null;
+  const same = (x: OpLanding): boolean => x === L || (x.corps === L.corps && x.to.length === L.to.length && x.to.every((nm, i) => nm === L.to[i]));
+  const op = ops(nat).find((o) => STRATEGY.torch!.ops.includes(`${nat}:${o.id}`) && !!o.landings?.some(same));
+  return !op ? null : flag(g, `st:done:${nat}:${op.id}`) === g.turn ? 'day' : 'after';
 }
 
 /**

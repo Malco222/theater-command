@@ -3331,6 +3331,31 @@ function landVoyages(g: Game, nat: string): void {
 }
 
 /**
+ * Operation Torch by the book: the ceasefire lets in the forces its defenders threw back. A landing of the book's
+ * beaten off on its day is noted with its shore (ai.ts, `landings`); at the turn, a force so noted this month or last
+ * that still waits in a harbour of its side goes ashore at that shore, if the turn gave the place to its side and it
+ * has room: the record's convoys lay off Casablanca and Algiers and entered both ports when the firing stopped. No
+ * lift and no crossing is reckoned (the convoy made its crossing on the day), and the force is as the fight left it.
+ * Called by the turn (diplomacy.ts) and by nobody else; never the player's, whose landings are his own.
+ */
+export function turnedShores(g: Game): void {
+  if (!torchBook(g)) return;
+  for (const key of Object.keys(g.flags).filter((k) => k.startsWith('torch:off:'))) {
+    const [, , at, id] = key.split(':');
+    const to: Region | undefined = g.regions[g.flags[key] - 1], c = g.corps.find((x) => x.id === +id && !x.dead);
+    delete g.flags[key];
+    if (!c || !to || c.nat === g.human || g.turn - +at > 1) continue;
+    const from: Region | undefined = g.regions[c.reg];
+    if (!from || from.id === to.id || !from.port || !allied(g, c.nat, from.ctrl) || !allied(g, c.nat, to.ctrl) || hostileUnits(g, to, c.nat).length) continue;
+    if (friendlyUnits(g, to, c.nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    place(g, c, to);
+    c.hold = false;
+    g.flags[`exp:${c.id}`] = +at + 6;
+    g.supplyDirty = true;
+  }
+}
+
+/**
  * Operation Torch by the book: a row made from the French army that came over at the turn ('turned') forms at the turn
  * itself, where the largest of that army stood (`stood`, largest first), else at its own place or second quays. The
  * ports the French held are then not left empty for the month between. Called by the turn (diplomacy.ts) and by

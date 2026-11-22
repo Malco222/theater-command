@@ -18,7 +18,7 @@ import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, laneBar, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, surpriseOn, useLift, whyNotLand } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen, stopOf, stormHeldBy } from './history';
-import { afterDeclaring, beyondBeach, builtUp, coastRules, coastWatch, decide, deskQuays, doorQuay, farCamp, footholdPorts, frontAshore, heedsCard, holdsAshore, idleArmies, isOpen, joinsOn, keepsDoor, keptForOps, landingRules, lodgment, mainFirst, nearerDesk, neighbourAcrossTheWater, oceanRuns, onTheAttack, onTheDay, opArmies, opensNow, opensOn, opensSoon, opFoe, opLodged, ownForce, ownPicked, probed, probing, quayGuests, quayNamed, rivalRules, RIVALS, seaBase, seaFoe, seasFrom, seasTo, staffPhase, strengthAsked, strengthWatch, theatreStaff, type IdleArmy } from './staff';
+import { afterDeclaring, beyondBeach, builtUp, coastRules, coastWatch, decide, deskQuays, doorQuay, farCamp, footholdPorts, frontAshore, heedsCard, holdsAshore, idleArmies, isOpen, joinsOn, keepsDoor, keptForOps, landingRules, lodgment, mainFirst, nearerDesk, neighbourAcrossTheWater, oceanRuns, onTheAttack, onTheDay, opArmies, opensNow, opensOn, opensSoon, opFoe, opLodged, bookLanding, ownForce, ownPicked, probed, probing, quayGuests, quayNamed, rivalRules, RIVALS, seaBase, seaFoe, seasFrom, seasTo, staffPhase, strengthAsked, strengthWatch, theatreStaff, type IdleArmy } from './staff';
 import { STRATEGY, campaignLog, plansAhead } from './strategy';
 import { STRENGTH, followUp, reckon, stands } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
@@ -1298,7 +1298,10 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
     const force = [c, ...(L.with ?? []).map((nm) => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x): x is Corps => !!x)];
     if (leavesHome(g, nat, from)) force.splice(Math.min(force.length, mayLeave(g, nat)));
     if (!force.length) continue;
-    for (const name of L.to) {
+    // (By the book a dated landing goes where the record's went: its first-named shore, and on its day whatever the
+    // odds. staff.ts, `bookLanding`: Operation Torch at its stops, and nowhere with its switch off.)
+    const record = bookLanding(g, nat, L);
+    for (const name of record ? L.to.slice(0, 1) : L.to) {
       const to = g.byName[name];
       if (!to) continue;
       let ok = false;
@@ -1307,10 +1310,12 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
         // (The war plan: the enemy an operation lands on is its staff's second front from the day. staff.ts, `opFoe`.)
         if (!within) opFoe(g, nat, to);
         // A defended shore is only stormed at fair odds.
-        if (hostileUnits(g, to, nat).length && assess(g, force, to, landingOpts(g, force, to)).odds < (L.minOdds ?? 1.2)) continue;
+        if (record !== 'day' && hostileUnits(g, to, nat).length && assess(g, force, to, landingOpts(g, force, to)).odds < (L.minOdds ?? 1.2)) continue;
         const res = landCorps(g, force, to);
         ok = res.ok && !!res.taken;
         if (res.ok) opWatch.tell?.({ nat, to, force, warned: false, sea: -1, wave: false, taken: ok, from, op: true });
+        // (The book's landing thrown back on its day lies off its shore: should the defenders turn, it goes in. game.ts, `turnedShores`.)
+        if (res.ok && !res.taken && record === 'day') for (const x of force) if (!x.dead) g.flags[`torch:off:${g.turn}:${x.id}`] = to.id + 1;
         if (res.ok && !res.taken) break; // beaten off: the corps is back in port and has had its month
         if (ok && !within) opLodged(g, nat, to);
       }
