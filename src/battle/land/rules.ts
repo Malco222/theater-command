@@ -75,6 +75,16 @@ export const LAND = {
   double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 } as Record<Motion, number>, exposed: 1.25, blows: 0.75, winded: 20 },
   radio: { delay: 5, cut: 2.5, hqAt: 0.5 },
   /**
+   * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts): off unless the battle is opened with it
+   * (LandBattle.measured). A tank block's blow on a tank block, or a gun's over open sights, weighs the chance its
+   * model's gun gets through the face it strikes at that range against the field's par for that face, held within
+   * [lo, hi] (a Sherman's 75 on a Tiger's front all but nothing, a Tiger's 88 on a Sherman twice par and more). The
+   * computer's tank blocks go round to the flank or rear of a tank block whose front they weigh under 'flankBelow' at
+   * 'flankAt' metres, where her side or rear weighs 'flankBetter' times her front or more ('flankFor': the most battle
+   * seconds they spend getting there before they go in anyway).
+   */
+  armour: { lo: 0.15, hi: 3, flankBelow: 0.35, flankBetter: 2, flankAt: 200, flankFor: 150 },
+  /**
    * Hidden in the woods (release 2; Brian, 22 November 04:18Z: "if you put units in the forest then they aren't visible
    * to the enemy until you get close or they start shooting. this allows you to do ambushes"). Off unless the battle is
    * opened with it (LandBattle.hideOn). A block standing in woods when the clock starts is hidden from the other side:

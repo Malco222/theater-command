@@ -41,6 +41,11 @@
 //                                   from the enemy (his: draw the woods mark; the enemy's: draw nothing), in the setup step too
 //                                   as he places them; a land:found event (extra.how: fired, seen, out, struck) says when one is
 //                                   found. An attack or fire order at a hidden block is refused
+//                                   Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z): { armour: true }: a tank's
+//                                   or gun's blow on a tank weighs what its gun gets through the face it strikes at that range
+//                                   (data/battle/armour.json, the modeller's sheet), and the computer's tanks go round to the
+//                                   flank of a tank whose front they cannot get through. Tank kill rounds carry fate (out, burn
+//                                   or blow), by her armour and the face struck, whether or not it is on
 //                                   Uniforms (release 2, looks only): every land block in a view carries wear, 0.1 (fresh kit) to
 //                                   1 (six weeks or more in the line since its corps was last rested or formed), its corps' own
 //                                   from the campaign, pulled down by its share of fresh drafts; a practice battle's are fresh.
@@ -285,6 +290,12 @@
 //   mk, on a tank, a gun or a lorry: its scars, [face, u, h, kind, from], kind gouge (a bounce), hole (a round that went
 //   in), scorch (a shell's blast on armour) or pocks (bullet holes), shown from battle time from to the battle's end
 //   (12 at most). With rounds, play the men's shots from them, not the mix plan's timed near misses.
+//   A tank's machine-gun round (w mg from a tank block) names its gun in g: coax (beside the main gun), hull (the
+//   bow gunner's) or roof (the commander's, up in his hatch: only the armies that carried one, and never buttoned up).
+//   cm: 1 where a round struck a tank's commander in his hatch: he drops inside, and she fights buttoned up from then
+//   (b on her men). fate, on a round that knocked out a tank (r kill): out (she stops, crew bail out), burn (she
+//   catches fire) or blow (she burns and her ammunition goes up), by her measured armour and the face struck (a hit in
+//   a German tank's rear burns and blows up more often). Looks only: draw it; where a kill round has none, draw your own.
 //   Poses, as the soldier's clips (battle-models/land/soldier/README.md): idle, walk, run, advance, creep, crawl, flee,
 //   fire_stand, fire_kneel, fire_prone, lmg_burst, throw_grenade, cower play as named; wait is kneeling, rifle up,
 //   watching (fire_kneel's aim held, no shot); hide is lying still in cover (fire_prone's aim held); observe a spotter
@@ -622,7 +633,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -662,6 +673,8 @@ export function battleCalls(h: BattleHooks) {
       if (opts?.radio) sim.radio = true;
       // Hidden in the woods (release 2): blocks in woods when the clock starts are hidden from the other side.
       if (opts?.hide) sim.hideOn();
+      // Measured armour (release 2): each tank's armour by face and range weighs the blows on her.
+      if (opts?.armour) sim.measured = true;
       const f = sim.field;
       return {
         field: {

@@ -62,8 +62,10 @@ export interface AttackPlan {
 const MAIN = 100000;
 
 export function thinkFor(b: LandBattle, side: Side): void {
+  // Tank blocks going round to a tank block's flank (measured armour, release 2) are on that errand till they are there.
+  const round = b.measured ? flanksNow(b, side) : null;
   // A block the player has taken in hand is his, not his staff's (direct command, release 2: LandUnit.taken).
-  const mine = b.units.filter((u) => u.side === side && ok(u) && u.kind !== 'fort' && !u.taken);
+  const mine = b.units.filter((u) => u.side === side && ok(u) && u.kind !== 'fort' && !u.taken && !round?.has(u.id));
   // Only what its side has found (release 2, hidden in the woods: "the AI will not know they are there").
   const foes = b.units.filter((u) => u.side !== side && ok(u) && !u.hid);
   if (!foes.length) {
@@ -75,9 +77,53 @@ export function thinkFor(b: LandBattle, side: Side): void {
   if (side === 'att') {
     if (style) planned(b, side, style, mine, foes);
     else plain(b, side, mine, foes);
+    if (b.measured) seekFlanks(b, side, mine);
     return;
   }
   defend(b, side, style, mine, foes);
+  // A reserve sent in at a tank block goes round her too; the line's own tanks hold where they stand.
+  if (b.measured) seekFlanks(b, side, mine.filter((u) => u.reserve === 'sent'));
+}
+
+/**
+ * Measured armour (release 2; LAND.armour): a tank block sent at a tank block whose front its gun all but cannot get
+ * through, where her side or rear it can, goes round to that side first, then in: the attack's, and the defence's
+ * reserves sent in to strike back. Never onto close ground, where tanks keep with their foot (CLOSE).
+ */
+function seekFlanks(b: LandBattle, side: Side, mine: LandUnit[]): void {
+  const A = LAND.armour, dir = side === 'att' ? 1 : -1;
+  for (const u of mine) {
+    if (u.kind !== 'arm' || u.order?.kind !== 'attack' || u.order.target === undefined || b.flanking.has(u.id)) continue;
+    const t = b.unit(u.order.target);
+    if (!t || t.kind !== 'arm' || !ok(t) || t.hid) continue;
+    const front = b.armourAt(u, t, 'front', A.flankAt), sideW = b.armourAt(u, t, 'side', A.flankAt), rear = b.armourAt(u, t, 'rear', A.flankAt);
+    if (front === null || sideW === null || rear === null || front >= A.flankBelow || Math.max(sideW, rear) < A.flankBetter * front) continue;
+    // Round her nearer flank; past it, toward her rear, where the rear is the better face.
+    const flank = Math.sign(u.x - t.x) || 1, deep = rear > sideW ? dir * (t.d / 2 + u.d / 2 + 60) : 0;
+    const x = Math.min(b.field.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, t.x + flank * (t.w / 2 + u.w / 2 + 80)));
+    const y = Math.min(b.field.h - u.d / 2 - 10, Math.max(u.d / 2 + 10, t.y + deep));
+    if (CLOSE.includes(groundAt(b.field, x, y))) continue;
+    b.flanking.set(u.id, { target: t.id, at: [x, y], since: b.t });
+    b.command({ do: 'move', units: [u.id], x, y }, side);
+  }
+}
+
+/** The tank blocks still going round (seekFlanks): there, stopped, or too long about it, they go in at her. Their ids. */
+function flanksNow(b: LandBattle, side: Side): Set<number> {
+  const busy = new Set<number>();
+  for (const [id, f] of b.flanking) {
+    const u = b.unit(id), t = b.unit(f.target);
+    if (!u || u.side !== side) continue;
+    if (!ok(u) || u.taken || u.order?.kind === 'withdraw') { b.flanking.delete(id); continue; }
+    if (!t || !ok(t)) { b.flanking.delete(id); continue; }
+    if (!u.order || dist(u.x, u.y, f.at[0], f.at[1]) < 40 || b.t - f.since > LAND.armour.flankFor) {
+      b.flanking.delete(id);
+      by(b, side, u, t);
+      continue;
+    }
+    busy.add(id);
+  }
+  return busy;
 }
 
 /**
