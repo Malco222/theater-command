@@ -29,8 +29,8 @@
 //   events: sea:dive {dive, keel, why}, sea:sonar {on, kind, range, bearing, err, lost?}, sea:torpedo {target, x, y,
 //     running, share, fish, spread, wakeless, dive}, sea:torpedoHit {from}, sea:depthCharge {on, x, y, n, set,
 //     sinking, spread, kind: 'pattern' | 'ahead'}, sea:depthChargeHit {from, harm, keel}, sea:sunk {cls, fleet, how?},
-//     sea:report {by, at}, sea:starshell {by, x, y}, sea:rescue {by, on}, sea:air (an aircraft's attack on a boat)
-//   zones: torpedo, sunk, pattern, oil, datum
+//     sea:report {by, at}, sea:starshell {by, x, y}, sea:rescue {by, on}, sea:air {kind, n, running} (an aircraft seen running in on a boat, letting go `running` s on)
+//   zones: torpedo, sunk, pattern, datum (a boat's oil is the sea scene's wreck model's, as her men are)
 //   header: classes (this scene's own table), subs {scope, deep, crush, dived}, dc {sink, lethal},
 //     light {sun {up, from}, moon {lit, up, from}, vis}
 // Readings the reader fixed where the form left them open: a salvo's `spread` is degrees across (a pattern's, metres);
@@ -94,8 +94,11 @@ export interface SeaFact {
    * route's fortress) shows: boats; surface raiders (a battleship, cruiser or carrier raiding or patrolling there); an
    * enemy-held fortress astride the route (navy.json convoys[].base, as routeForces counts it). The caption says "by
    * submarines" only where boats were the raiders and nothing else raided; a month no boat raided holds no scene.
+   * `sure` false: the record could not settle whether every raider was boats alone (a raider fleet gone from the list,
+   * or one that has lost ships since the raid was counted; without the record, the fleets as the month closed stand
+   * in): the caption then says "on the convoy routes", never "by submarines". Absent, as in a fact made by hand: sure.
    */
-  raidBy?: { boats: boolean; surface: boolean; base: boolean };
+  raidBy?: { boats: boolean; surface: boolean; base: boolean; sure?: boolean };
   // Record-only fields (form D1: "hunters, aircraft and quarry per sea (huntersIn, 1870-1898); a torpedoing's possible
   // attackers (as torpedoRisk, 1966-1972), one picked on look:torpedo:<fleet>; a convoy month's raiders, escorts, air
   // guard and tons by sea"), read from the rules' record `g.subLook` (SubLook below) where it has the month's rows.
@@ -106,6 +109,13 @@ export interface SeaFact {
   quarry?: Record<string, number>;
   /** A torpedoing's possible attackers' nations, the picked one's (look:torpedo:<fleet>) first. */
   attackers?: string[];
+  /**
+   * How attackers[0] stands: 'rules' (and absent, as in a fact made by hand), the rules' own pick (the record's `by`,
+   * its nation known); 'none', the record picked none, and the attackers are the boats that could have fired;
+   * 'unknown', the record's pick is a fleet whose nation is not known (gone from the list and named nowhere else in the
+   * record), and the attackers are the others that could have fired: the scene takes none of them as the one that did.
+   */
+  pick?: 'rules' | 'none' | 'unknown';
   /** A convoy month, in the scene's sea: the raiding boats' nations and the escorts' (the most first), the escorts' destroyers, and the air guard; tons sunk by sea (key: tons). */
   raiders?: string[];
   escorts?: string[];
@@ -116,8 +126,12 @@ export interface SeaFact {
   boatsNat?: string;
 }
 
-/** A fleet in the rules' record: its id, nation and boats or destroyers as the month began (types.ts SubLookFleet). */
-export interface SubLookFleet { fleet: number; nat: string; n: number }
+/**
+ * A fleet in the rules' record: its id, nation and boats or destroyers (types.ts SubLookFleet). `heavy`, a raider's
+ * battleships, cruisers and carriers as the raid was counted, is not in the record yet (asked of the rules builder,
+ * 22 November): where it is given it settles whether the raider was a surface raider.
+ */
+export interface SubLookFleet { fleet: number; nat: string; n: number; heavy?: number }
 
 /**
  * The rules' record for the scene (release 2, ruling 241 D1; written by navy.ts while the viewing setting is on, this
@@ -329,6 +343,10 @@ export interface ScenePick {
   me: 'att' | 'def';
   /** Boats booked sunk in the scene's sea this month, and the hits booked: merchants (a convoy month) or heavy ships. */
   kills: number;
+  /** A torpedoing: the boats sunk in the sea that month by anyone's hunters (the caption's count; `kills` are the guard's own, drawn). */
+  sunkThere?: number;
+  /** A torpedoing: the facts drawn as its hits (the picked fact first). */
+  hits?: SeaFact[];
   ships: number;
   heavy: HeavyClass[];
   /** Where the boats' navy came from: the rules' record, the boats at sea as the month closed, or the data rows. */
@@ -368,9 +386,17 @@ function boatsAgainst(m: MonthFacts, f: SeaFact, struck: string): string[] {
   return Object.keys(at).filter((n) => at[n] > 0 && atWarIn(m, n, struck)).sort((a, b) => at[b] - at[a] || (a < b ? -1 : 1));
 }
 
-/** The boats' navy against a side in a sea, from the record, the boats there, or the basin's rows (its first navy at war with it). */
-function raiderOf(m: MonthFacts, f: SeaFact, struck: string, recorded?: string[]): { nat: string; source: ScenePick['source'] } {
-  if (recorded?.length) return { nat: recorded[0], source: 'record' };
+/**
+ * The boats' navy against a side in a sea: the record's pick, or the one boat navy the record names; among several it
+ * names with none picked, the one with the most boats there (a stand-in); else the boats there, or the basin's rows
+ * (its first navy at war with it).
+ */
+function raiderOf(m: MonthFacts, f: SeaFact, struck: string, recorded?: string[], picked = true): { nat: string; source: ScenePick['source'] } {
+  if (recorded?.length && picked) return { nat: recorded[0], source: 'record' };
+  if (recorded?.length) {
+    const there = boatsAgainst(m, f, struck).filter((n) => recorded.includes(n));
+    return { nat: there[0] ?? recorded[0], source: 'fleets' };
+  }
   const there = boatsAgainst(m, f, struck);
   if (there.length) return { nat: there[0], source: 'fleets' };
   const sea = seaPlace(f.sea), at = monthsAt(f.turn);
@@ -379,18 +405,23 @@ function raiderOf(m: MonthFacts, f: SeaFact, struck: string, recorded?: string[]
   return { nat: foes.find((n) => hasRows(L.boats, n)) ?? foes[0] ?? '_default', source: 'rows' };
 }
 
-/** Whether the player's boats could be the ones in a sea: by the record, by his boats there, or by the basin's rows. */
-function hisBoatsThere(m: MonthFacts, f: SeaFact, recorded?: string[]): boolean {
+/**
+ * Whether the player's boats could be the ones in a sea: by the record (where it picked the boats that fired, only
+ * when it picked his; where its pick's nation is not known, not his: the scene claims no kill the rules may have
+ * given another navy), by his boats there, or by the basin's rows.
+ */
+function hisBoatsThere(m: MonthFacts, f: SeaFact, recorded?: string[], pick: SeaFact['pick'] | 'any' = 'any'): boolean {
   const me = m.human;
-  if (recorded) return recorded.includes(me);
+  if (recorded) return pick === 'rules' || pick === undefined ? recorded[0] === me : pick === 'unknown' ? false : recorded.includes(me);
   if (f.boatsAt) return (f.boatsAt[me] ?? 0) > 0;
   return basinNavies(seaPlace(f.sea).basin, monthsAt(f.turn)).includes(me);
 }
 
 const factOrder = (a: SeaFact, b: SeaFact): number => a.turn - b.turn || a.week - b.week || (a.sea < b.sea ? -1 : a.sea > b.sea ? 1 : 0) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0) || (a.on < b.on ? -1 : a.on > b.on ? 1 : 0);
 
-/** The boats sunk this month in a sea from a navy (the hunts' facts). */
-const huntedIn = (m: MonthFacts, sea: string, nat: string): number => m.facts.filter((f) => f.kind === 'hunt' && f.sea === sea && f.on === nat).reduce((s, f) => s + (f.boats ?? 0), 0);
+/** The boats sunk this month in a sea from a navy (the hunts' facts): by one nation's hunters, or (no `by`) by anyone's. */
+const huntedIn = (m: MonthFacts, sea: string, nat: string, by?: string): number =>
+  m.facts.filter((f) => f.kind === 'hunt' && f.sea === sea && f.on === nat && (by === undefined || f.by === by)).reduce((s, f) => s + (f.boats ?? 0), 0);
 
 /**
  * The scene (form D1), first match wins: his heavy ship lost; his boats' kill; his convoy month (the most tons); his
@@ -410,15 +441,19 @@ export function scenesOf(m: MonthFacts): ScenePick[] {
   if (!me) return out;
   const facts = m.facts.filter((f) => !!f.sea).sort(factOrder);
   // 1. His heavy ship lost to a submarine.
+  // (the kills drawn are the boats his own hunters sank there, as his screen draws them: another navy's kills there are
+  // its hunters', not his fleet's, and the caption counts them, `sunkThere`)
   for (const f of facts) {
     if (f.kind !== 'torpedo' || f.on !== me) continue;
-    const r = raiderOf(m, f, me, f.attackers);
-    out.push(withHits(m, { case: 'heavyLost', fact: f, boats: r.nat, guard: me, me: 'def', kills: huntedIn(m, f.sea, r.nat), ships: 0, heavy: [], source: r.source }));
+    const r = raiderOf(m, f, me, f.attackers, (f.pick ?? 'rules') === 'rules');
+    out.push(withHits(m, { case: 'heavyLost', fact: f, boats: r.nat, guard: me, me: 'def', kills: huntedIn(m, f.sea, r.nat, me), sunkThere: huntedIn(m, f.sea, r.nat), ships: 0, heavy: [], source: r.source }));
   }
-  // 2. His boats' kill: an enemy's heavy ship torpedoed where his boats are.
+  // 2. His boats' kill: an enemy's heavy ship torpedoed where his boats are (where the record picked the boats that
+  // fired, only where it picked his).
   for (const f of facts) {
-    if (f.kind !== 'torpedo' || f.on === me || !atWarIn(m, me, f.on) || !hisBoatsThere(m, f, f.attackers)) continue;
-    out.push(withHits(m, { case: 'boatsKill', fact: f, boats: me, guard: f.on, me: 'att', kills: huntedIn(m, f.sea, me), ships: 0, heavy: [], source: f.attackers ? 'record' : f.boatsAt ? 'fleets' : 'rows' }));
+    if (f.kind !== 'torpedo' || f.on === me || !atWarIn(m, me, f.on) || !hisBoatsThere(m, f, f.attackers, f.pick ?? 'rules')) continue;
+    const source = f.attackers ? ((f.pick ?? 'rules') === 'rules' ? 'record' : 'fleets') : f.boatsAt ? 'fleets' : 'rows';
+    out.push(withHits(m, { case: 'boatsKill', fact: f, boats: me, guard: f.on, me: 'att', kills: huntedIn(m, f.sea, me, f.on), sunkThere: huntedIn(m, f.sea, me), ships: 0, heavy: [], source }));
   }
   // 3. His convoy month: a route he owns, or raids, with tons above 0 (the most tons). A month no boat raided (its
   // tons the fortress's or surface raiders' alone) is not a submarine scene: it gives none, and the order goes on.
@@ -442,12 +477,24 @@ export function scenesOf(m: MonthFacts): ScenePick[] {
   return out;
 }
 
-/** A torpedoing's hits: the heavy ships of the same side torpedoed in the same sea this month, up to the most drawn. */
+/**
+ * A torpedoing's hits: the heavy ships of the same fleet torpedoed in the same sea in the same month, by the scene's
+ * boats (by the record's pick where it made one), up to the most drawn. The torpedoed fleet is drawn as one formation,
+ * so another fleet's ship torpedoed there is not drawn in it: the caption names it (`othersOf`).
+ */
 function withHits(m: MonthFacts, p: ScenePick): ScenePick {
-  const same = m.facts.filter((f) => f.kind === 'torpedo' && f.sea === p.fact.sea && f.on === p.fact.on && f !== p.fact).sort(factOrder);
-  p.heavy = [p.fact, ...same].map((f) => f.cls ?? 'ca').slice(0, L.most.heavy);
+  const same = m.facts.filter((f) => f.kind === 'torpedo' && f !== p.fact && f.sea === p.fact.sea && f.on === p.fact.on && f.turn === p.fact.turn && f.fleet === p.fact.fleet
+    && (!f.attackers || ((f.pick ?? 'rules') === 'rules' ? f.attackers[0] === p.boats : f.pick === 'none' && f.attackers.includes(p.boats)))).sort(factOrder);
+  p.hits = [p.fact, ...same].slice(0, L.most.heavy);
+  p.heavy = p.hits.map((f) => f.cls ?? 'ca');
   p.ships = p.heavy.length;
   return p;
+}
+
+/** The same side's other heavy ships torpedoed in the scene's sea that month, not drawn in it (another fleet's, or other boats'). */
+function othersOf(m: MonthFacts, p: ScenePick): SeaFact[] {
+  const drawn = new Set<SeaFact>(p.hits ?? [p.fact]);
+  return m.facts.filter((f) => f.kind === 'torpedo' && !drawn.has(f) && f.sea === p.fact.sea && f.on === p.fact.on && f.turn === p.fact.turn).sort(factOrder);
 }
 
 // ---- Ships' ways (the show's own limits, so that it follows them as they are written) -------------------------
@@ -686,19 +733,23 @@ interface Plan { end: number; killFirst: boolean }
 const PLANS: Plan[] = [{ end: 900, killFirst: false }, { end: 900, killFirst: true }, { end: 1800, killFirst: true }];
 /** Seconds of track kept past the views' end. */
 export const TRACK_SPARE = 20;
+/**
+ * Seconds an aircraft is seen running in on a boat before it lets go (sea:air's `running`): about 1.5 to 2 km at an
+ * anti-submarine aircraft's speed, and about as long as the sea scene's coastal aircraft take to reach her.
+ */
+export const AIR_RUN = 30;
 
 /** Stages a scene already picked (stageScene's work; the tests call it to stage each case). */
 export function stagePick(m: MonthFacts, pick: ScenePick): Staged {
-  let out = stageWith(m, pick, PLANS[0]);
-  for (const plan of PLANS.slice(1)) {
-    if (out.last + TRACK_SPARE <= out.end) break;
-    out = stageWith(m, pick, plan);
+  // (a plan whose scene would run past its tracks is let go before its views are written, the costliest part)
+  for (let i = 0; ; i++) {
+    const out = stageWith(m, pick, PLANS[i], i === PLANS.length - 1);
+    if (out.staged) return out.staged;
   }
-  return out.staged;
 }
 
 /** Stages a picked scene by a plan; `last` is the views' end and `end` the tracks'. */
-function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged; last: number; end: number } {
+function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan, lastPlan = true): { staged: Staged | null; last: number; end: number } {
   const f = pick.fact;
   const sea = seaPlace(f.sea);
   const at = monthsAt(f.turn);
@@ -722,6 +773,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged
   if (!f.hunters) standIns.push("the kill's share by aircraft: the air row");
   if (pick.case === 'convoy' && f.escortShips === undefined) standIns.push('the escorts: the escort row');
   if (pick.case === 'hunt' && !f.hunters) standIns.push('the hunting group: the escort row');
+  if (pick.case === 'convoy' && f.raidBy?.sure === false) standIns.push(f.raiders ? "who raided: a raider's heavy ships as the scene is read (not in the record)" : 'who raided: the fleets at sea as the month closed');
 
   // ---- The outcome, fixed first ------------------------------------------------------------------------------
   const fan = pick.case !== 'hunt';
@@ -1173,7 +1225,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged
   if (!killFirst) boats.forEach((b, i) => { if (fate[i] === 'escort') planKillOn(b, i); });
 
   // The kills booked: the run that kills her, or an aircraft that finds her surfaced.
-  interface End { boat: Piece; how: 'crushed' | 'scuttled'; by: 'escort' | 'air'; t: number; sunk: number; up?: number; rescue?: number; killer?: Piece }
+  interface End { boat: Piece; how: 'crushed' | 'scuttled'; by: 'escort' | 'air'; t: number; sunk: number; up?: number; rescue?: number; killer?: Piece; seen?: number }
   const ends: End[] = [];
   boats.forEach((b, i) => {
     const by = fate[i], how = endHow[i];
@@ -1194,8 +1246,12 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged
       events.push({ t: tUp, what: 'sea:dive', unit: b.id, side: 'att', x: p.x, y: p.y, text: `${upFirst(an(attAdj))} submarine surfaces to slip away in the dark.`, extra: { dive: 'surfaced', keel: r1(up), why: 'evade' } });
       const h = b.track.at(tUp).h;
       b.track = splice(b.track, tTop, [{ at: tTop, h, v: Math.min(boatRow.surf * 0.6, 5) }], END, b.k);
-      const tAir = tTop + 10, q = b.track.at(tAir);
-      events.push({ t: tAir, what: 'sea:air', unit: b.id, side: 'def', x: q.x, y: q.y, text: `${upFirst(an(defAdj))} ${airRow.name} attacks ${an(attAdj)} submarine on the surface.` });
+      // (the aircraft is told as it is seen running in, AIR_RUN seconds before it lets go over her: `running`, so that the
+      // sea scene can fly it in from that far out and its blow land on her while she is still on the surface; one
+      // aircraft, of the air row's kind, `kind` and `n`)
+      const tSeen = tTop + 4, tAir = tSeen + AIR_RUN, q0 = b.track.at(tSeen), q = b.track.at(tAir);
+      events.push({ t: tSeen, what: 'sea:air', unit: b.id, side: 'def', x: q0.x, y: q0.y, text: `${upFirst(an(defAdj))} ${airRow.name} finds ${an(attAdj)} submarine on the surface and runs in on her.`, extra: { kind: airRow.name, n: 1, running: AIR_RUN } });
+      end.seen = tSeen;
       end.t = tAir;
       if (end.how === 'crushed') {
         // (she tries to go down, holed, and does not come up)
@@ -1225,7 +1281,7 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged
     events.push({ t: end.sunk, what: 'sea:sunk', unit: b.id, side: 'att', x: q.x, y: q.y, cue: 'ship_sinking', text: end.how === 'crushed' ? `${upFirst(an(attAdj))} submarine is destroyed.` : `${upFirst(an(attAdj))} submarine is scuttled by her crew.`, extra: { cls: 'ss', fleet: b.fleetId, how: end.how } });
     events.push({ t: end.sunk, what: 'gone', unit: b.id, side: 'att', x: q.x, y: q.y, text: '' });
     zone('sunk', q, 40, end.sunk, END, 'att', b.id);
-    zone('oil', q, 120, end.sunk + 4, END, 'att', b.id);
+    // (no 'oil' zone: her oil is the sea scene's wreck model's, every sinking's; one here would draw it twice)
     // The escort that forced her up (kept for it since its kill) comes back and stands by her men in the water (the sea
     // scene moves them toward her: Rescue); where the aircraft sank her, the one that can be there soonest (there is one:
     // at most one scuttling for each escort, endHow), if it can be there within LET_GO; else none comes, and her men
@@ -1330,7 +1386,12 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged
         const a = Math.max(1, Math.round(s * 0.4));
         win('end', x.t - 3, x.t + 5, a);
         win('end', x.up - 4, Math.max(x.sunk + 8, Math.min(x.rescue ?? 0, x.sunk + 20)), s - a);
-      } else win('end', x.by === 'air' ? x.t - 4 : x.t - 3, x.sunk + 6, s);
+      } else if (x.by === 'air' && x.seen !== undefined) {
+        // (the aircraft seen running in, then its run's end, its blow and hers)
+        const a = Math.max(1, Math.round(s * 0.3));
+        win('end', x.seen - 2, x.seen + 6, a);
+        win('end', x.t - 6, x.sunk + 6, s - a);
+      } else win('end', x.t - 3, x.sunk + 6, s);
     });
   }
   beats.sort((a, b) => a.from - b.from);
@@ -1344,11 +1405,12 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged
   }
   // (the views run to the last beat, event or burst, and stagePick sees that the tracks run on past it)
   const tEnd = Math.ceil((Math.max(...beats.map((x) => x.to), ...events.map((x) => x.t), ...runs.map((r) => r.last)) + 4) / STEP) * STEP;
+  if (!lastPlan && tEnd + TRACK_SPARE > END) return { staged: null, last: tEnd, end: END };
 
   // ---- The views ---------------------------------------------------------------------------------------------
   events.sort((a, b) => a.t - b.t || (a.what === 'sea:torpedoHit' || a.what === 'sea:depthChargeHit' ? 0 : 1) - (b.what === 'sea:torpedoHit' || b.what === 'sea:depthChargeHit' ? 0 : 1));
   const contactT = events.find((e) => e.what === 'sea:torpedo' || e.what === 'sea:sonar' || e.what === 'sea:report')?.t ?? null;
-  const told = new Map<number, Record<string, string>>();
+  const told = new Map<number, { u: Record<string, unknown>; x: Record<string, unknown> }>();
   /** A piece as the view tells it: whole the first time; then what changed, and what the reader takes afresh. */
   const unitOut = (p: Piece, t: number): Record<string, unknown> => {
     const gone = p.sunk >= 0 && p.sunk <= t + 1e-9;
@@ -1382,17 +1444,19 @@ function stageWith(m: MonthFacts, pick: ScenePick, plan: Plan): { staged: Staged
     }
     u.extra = x;
     const was = told.get(p.id);
-    const now: Record<string, string> = {};
-    for (const [k, v] of Object.entries(u)) if (k !== 'extra') now[k] = JSON.stringify(v);
-    for (const [k, v] of Object.entries(x)) now[`extra.${k}`] = JSON.stringify(v);
-    told.set(p.id, now);
+    // (a value as written, to tell what changed: a number, string or truth as it is, anything else as its JSON)
+    const kept = (v: unknown): unknown => (v !== null && typeof v === 'object' ? JSON.stringify(v) : typeof v === 'number' && !Number.isFinite(v) ? JSON.stringify(v) : v);
+    const nowU: Record<string, unknown> = {}, nowX: Record<string, unknown> = {};
+    for (const k in u) if (k !== 'extra') nowU[k] = kept(u[k]);
+    for (const k in x) nowX[k] = kept(x[k]);
+    told.set(p.id, { u: nowU, x: nowX });
     if (!was) return u;
     // (after the first view: the id, and only what changed or is taken afresh)
     const out: Record<string, unknown> = { id: p.id };
-    for (const k of Object.keys(u)) if (k !== 'extra' && k !== 'id' && was[k] !== now[k]) out[k] = u[k];
-    const ox: Record<string, unknown> = {};
-    for (const k of Object.keys(x)) if (fresh.has(k) || was[`extra.${k}`] !== now[`extra.${k}`]) ox[k] = x[k];
-    if (Object.keys(ox).length) out.extra = ox;
+    for (const k in u) if (k !== 'extra' && k !== 'id' && was.u[k] !== nowU[k]) out[k] = u[k];
+    let ox: Record<string, unknown> | null = null;
+    for (const k in x) if (fresh.has(k) || was.x[k] !== nowX[k]) (ox ??= {})[k] = x[k];
+    if (ox) out.extra = ox;
     return out;
   };
   const views: Record<string, unknown>[] = [];
@@ -1481,8 +1545,12 @@ function captionOf(m: MonthFacts, pick: ScenePick, sea: SeaPlace, year: number, 
     // (the historian, 22 November: about 5,200 GRT a ship, locked; "by submarines", not "by U-boats", and only where
     // boats did it: the route's tons are every raider's, a surface raider's and an enemy fortress's too, navy.ts
     // routeForces, so a month any of those raided is "sunk on the convoy routes")
-    const bySubs = boatsRaided(f) === true && !f.raidBy?.surface && !f.raidBy?.base;
-    const lines = [`${upFirst(f.routeName ?? 'the convoy routes')}, ${when}: ${thousands(f.tons ?? 0)} tons of shipping sunk ${bySubs ? 'by submarines' : 'on the convoy routes'}, about ${thousands(pick.ships)} ship${pick.ships === 1 ? '' : 's'} at about ${thousands(L.caption.grt)} tons a ship.`];
+    // (and only where the record could settle it: raidBy.sure)
+    const bySubs = boatsRaided(f) === true && !f.raidBy?.surface && !f.raidBy?.base && f.raidBy?.sure !== false;
+    // (under half a ship's tonnage the ships are not counted: "about 1 ship at about 5,200 tons a ship" would say more
+    // than the 1,000 or 2,000 tons booked)
+    const counted = (f.tons ?? 0) >= L.caption.grt / 2 ? `, about ${thousands(pick.ships)} ship${pick.ships === 1 ? '' : 's'} at about ${thousands(L.caption.grt)} tons a ship` : '';
+    const lines = [`${upFirst(f.routeName ?? 'the convoy routes')}, ${when}: ${thousands(f.tons ?? 0)} tons of shipping sunk ${bySubs ? 'by submarines' : 'on the convoy routes'}${counted}.`];
     // (the boats lost are the route's month, any raider nation's: named only where the record shows them one nation's)
     if (pick.kills) lines.push(`${thousands(pick.kills)} ${f.boatsNat ? `${adj(f.boatsNat)} ` : ''}submarine${pick.kills === 1 ? '' : 's'} sunk.`);
     return lines;
@@ -1494,8 +1562,13 @@ function captionOf(m: MonthFacts, pick: ScenePick, sea: SeaPlace, year: number, 
     const sunk = one ? subs(pick.kills, pick.boats) : `${thousands(pick.kills)} submarine${pick.kills === 1 ? '' : 's'}`;
     return [`${upFirst(sunk)} sunk in the ${sea.name}, ${when}${cost}.`];
   }
+  // (every hit drawn is the one fleet's, withHits; another fleet's heavy ship torpedoed there is named on a line of its own)
   const lines = [`${pick.heavy.length === 1 ? upFirst(an(CLASS_ONE[pick.heavy[0]])) : `${upFirst(words(pick.heavy.length))} heavy ships`} of ${f.fleet ?? `the ${adj(f.on)} fleet`} torpedoed and sunk in the ${sea.name}, ${when}.`];
-  if (pick.kills) lines.push(`${upFirst(subs(pick.kills, pick.boats))} sunk there this month.`);
+  const others = othersOf(m, pick);
+  if (others.length) lines.push(`Also torpedoed and sunk there: ${others.map((o) => `${an(CLASS_ONE[o.cls ?? 'ca'])} of ${o.fleet ?? `the ${adj(o.on)} fleet`}`).join(', ')}.`);
+  // (the boats sunk there by anyone's hunters; those drawn are the guard's own, pick.kills)
+  const sunk = Math.max(pick.kills, pick.sunkThere ?? 0);
+  if (sunk) lines.push(`${upFirst(subs(sunk, pick.boats))} sunk there this month.`);
   return lines;
 }
 
@@ -1543,10 +1616,22 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
   const rec: SubLook[] = record ?? (g as unknown as { subLook?: SubLook[] }).subLook ?? [];
   const lookOf = (nat: string, turn: number): SubLook | undefined => rec.find((l) => l.turn === turn && l.nat === nat);
   const fleetById = new Map(g.fleets.map((x) => [x.id, x]));
-  /** The record's fleets by nation: boats or destroyers each, and the nations the most first (ties by name). */
-  const byNat = (fs: SubLookFleet[]): { nats: string[]; n: Record<string, number> } => {
+  // A fleet's nation by its id (ids are never given twice, g.nextFleet): the fleets on the list, and failing those the
+  // record's own rows, which name each fleet's nation (a fleet struck from the list since, merged or sunk, is still
+  // there); a torpedoing's `by` and `could` are bare ids, read through this, never guessed.
+  const natOfFleet = new Map<number, string>(g.fleets.map((x) => [x.id, x.nat]));
+  {
+    const add = (y: SubLookFleet): void => { if (!natOfFleet.has(y.fleet)) natOfFleet.set(y.fleet, y.nat); };
+    for (const l of rec) {
+      for (const h of l.hunts) [...h.hunters, ...h.quarry].forEach(add);
+      for (const c of l.convoys) for (const x of c.seas) [...x.raiders, ...x.escorts].forEach(add);
+    }
+  }
+  const natOfRef = (id: number | null): string | undefined => (id === null ? undefined : natOfFleet.get(id));
+  /** The record's fleets by nation: boats or destroyers each, and the nations the most first (ties by name); `keep` lets a fleet of none count. */
+  const byNat = (fs: SubLookFleet[], keep: (x: SubLookFleet) => boolean = (x) => x.n > 0): { nats: string[]; n: Record<string, number> } => {
     const n: Record<string, number> = {};
-    for (const x of fs) if (x.n > 0) n[x.nat] = (n[x.nat] ?? 0) + x.n;
+    for (const x of fs) if (keep(x)) n[x.nat] = (n[x.nat] ?? 0) + x.n;
     return { nats: Object.keys(n).sort((a, b) => n[b] - n[a] || (a < b ? -1 : 1)), n };
   };
   const sum = (fs: SubLookFleet[]): number => fs.reduce((s, x) => s + x.n, 0);
@@ -1561,6 +1646,11 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
   const surfaceClasses = (x: { ships: Partial<Record<string, number>> }): number => (x.ships.bb ?? 0) + (x.ships.ca ?? 0) + (x.ships.cv ?? 0);
   const usedTorpedo = new Set<object>();
   const hs: Headline[] = g.headlines.slice(firstOf(g, from));
+  // (the grand campaign counts a route's raiders after the month's hunts, so a raider's `n` is its boats as it raided;
+  // the history campaigns count them before the convoy's own roll and record them after it, navy.ts convoyWar)
+  const grand = (g.flags as { open?: number }).open === 1;
+  /** Whether the window's news tells of a fleet's ships sunk or lost (since the raid was counted, or before it). */
+  const touched = (name: string): boolean => hs.some((h) => h.text.includes(name) && /\b(sinks?|sunk|scuttled|lost)\b/.test(h.text));
   for (const h of hs) {
     const text = h.text;
     // A torpedoing (navy.ts torpedoes()): "A submarine torpedoes and sinks a cruiser of the Home Fleet in the North Atlantic: ..."
@@ -1574,9 +1664,14 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
       // (the record: the boats' fleets that could have fired, the one picked on look:torpedo:<fleet> first, as nations)
       const r = fleet ? lookOf(h.nat, h.turn)?.torpedoes.find((x) => !usedTorpedo.has(x) && x.fleet === fleet.id && x.zone === z && x.cls === cls) : undefined;
       if (r) usedTorpedo.add(r);
-      const attackers = r ? [...new Set([r.by, ...r.could].map((id) => (id === null ? undefined : fleetById.get(id)?.nat)).filter((n): n is string => !!n))] : [];
+      // (the pick's nation where it is known; where the record picked a fleet whose nation is not, the others that could
+      // have fired, and none of them taken as the one that did)
+      const byNat0 = r ? natOfRef(r.by) : undefined;
+      const pick: SeaFact['pick'] = !r || r.by === null ? 'none' : byNat0 ? 'rules' : 'unknown';
+      const could = r ? r.could.filter((id) => id !== r.by).map(natOfRef) : [];
+      const attackers = r ? [...new Set([byNat0, ...could].filter((n): n is string => !!n))] : [];
       facts.push({ kind: 'torpedo', sea, turn: h.turn, week: h.week, by: '', on: h.nat, cls, fleet: tor[2], ships: fleet ? { ...fleet.ships } : undefined, ...(z >= 0 ? { boatsAt: boatsIn(z, h.nat) } : {}),
-        ...(attackers.length ? { attackers } : {}) });
+        ...(attackers.length ? { attackers, pick } : {}) });
       continue;
     }
     // A hunt (navy.ts huntSubs()): "Destroyers of the Home Fleet sink 2 German submarines in the North Atlantic, for the loss of 1 destroyer."
@@ -1611,27 +1706,50 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
       const look = lookOf(h.nat, h.turn);
       const r = look?.convoys.find((x) => x.route === route.id);
       if (r) {
+        const lost = same ? book.subsLost : said?.[2] ? Number(said[2]) : 0;
+        // Who raided, from the record itself (the fleet list as the scene is read has moved on since: other navies'
+        // months, the beats' groups struck when empty, fleets merged or sunk). A raider is on the record only for its
+        // raid strength (routeForces: battleships, cruisers, carriers, boats). Its battleships, cruisers and carriers
+        // as it raided (`heavy` where the record gives it): with no boats (n 0, where n is its boats as it raided) it
+        // had them; else the fleet now, where it is still on the list and the window's news tells of no loss of its;
+        // else not known. Its boats: n > 0; in a history campaign whose route lost boats, n is after the roll, and a
+        // raider of n 0 had boats where it had no heavy ships.
+        const asRaided = grand || lost === 0;
+        const heavyThen = (y: SubLookFleet): boolean | undefined => {
+          if (y.heavy !== undefined) return y.heavy > 0;
+          if (y.n === 0 && asRaided) return true;
+          const fl = fleetById.get(y.fleet);
+          if (!fl) return undefined;
+          if (surfaceClasses(fl) > 0) return true;
+          return touched(fl.name) ? undefined : false;
+        };
+        const boatsThen = (y: SubLookFleet): boolean | undefined => (y.n > 0 ? true : asRaided ? false : heavyThen(y) === false ? true : undefined);
+        const all = r.seas.flatMap((x) => x.raiders);
+        const maybeBoats = (y: SubLookFleet): boolean => boatsThen(y) !== false;
         // The record. Its sea: where boats raided, his own where he raided it, the most tons (then the most boats).
-        const boatSeas = r.seas.filter((x) => x.raiders.some((y) => y.n > 0));
-        const his = boatSeas.filter((x) => x.raiders.some((y) => y.n > 0 && y.nat === g.human));
+        const boatSeas = r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)).length ? r.seas.filter((x) => x.raiders.some((y) => boatsThen(y) === true)) : r.seas.filter((x) => x.raiders.some(maybeBoats));
+        const his = boatSeas.filter((x) => x.raiders.some((y) => maybeBoats(y) && y.nat === g.human));
         const pool = his.length ? his : boatSeas.length ? boatSeas : r.seas;
         const s0 = [...pool].sort((a, b) => b.tons - a.tons || sum(b.raiders) - sum(a.raiders) || a.zone - b.zone)[0];
         const z = s0 ? s0.zone : zones[0] ?? -1;
         const tonsBy: Record<string, number> = {};
         for (const x of r.seas) if (g.seas[x.zone]) tonsBy[g.seas[x.zone].key] = x.tons;
-        // (the boats lost: the quarry of his hunts that sank them in the route's seas, else the raiding boats)
+        // (the boats lost: the quarry of his hunts that sank them in the route's seas (counted before the hunt), else
+        // every raider that may have had boats, whatever its n: a history campaign's n is after the boats were lost)
         const hunts = (look?.hunts ?? []).filter((x) => zones.includes(x.zone) && x.sunk > 0);
-        const lostNats = byNat(hunts.length ? hunts.flatMap((x) => x.quarry) : r.seas.flatMap((x) => x.raiders)).nats;
+        const lostNats = hunts.length ? byNat(hunts.flatMap((x) => x.quarry)).nats : byNat(all, maybeBoats).nats;
         facts.push({
           kind: 'convoy', sea: z >= 0 && g.seas[z] ? g.seas[z].key : route.zones[0], turn: h.turn, week: h.week, by: '', on: h.nat, route: route.id, routeName: route.name,
-          tons: same ? book.tons : said ? Number(said[1].replace(/,/g, '')) : r.tons, boats: same ? book.subsLost : said?.[2] ? Number(said[2]) : 0, escortsLost: same ? book.escortsLost : 0,
+          tons: same ? book.tons : said ? Number(said[1].replace(/,/g, '')) : r.tons, boats: lost, escortsLost: same ? book.escortsLost : 0,
           ...(z >= 0 ? { boatsAt: boatsIn(z, h.nat, true) } : {}),
           raidBy: {
-            boats: boatSeas.length > 0,
-            surface: r.seas.some((x) => x.raiders.some((y) => { const fl = fleetById.get(y.fleet); return fl ? surfaceClasses(fl) > 0 : false; })),
+            // (boats lost on a history route were its raiders' boats: boats raided)
+            boats: all.some((y) => boatsThen(y) === true) || (!grand && lost > 0),
+            surface: all.some((y) => heavyThen(y) === true),
             base: baseHeld(route),
+            sure: all.every((y) => heavyThen(y) !== undefined && boatsThen(y) !== undefined),
           },
-          raiders: s0 ? byNat(s0.raiders).nats : [], escorts: s0 ? byNat(s0.escorts).nats : [], escortShips: s0 ? sum(s0.escorts) : 0, airGuard: s0 ? s0.air : 0, tonsBy,
+          raiders: s0 ? byNat(s0.raiders, maybeBoats).nats : [], escorts: s0 ? byNat(s0.escorts).nats : [], escortShips: s0 ? sum(s0.escorts) : 0, airGuard: s0 ? s0.air : 0, tonsBy,
           hunters: hunts.length ? huntersOf(hunts) : { ships: s0 ? sum(s0.escorts) : 0, aircraft: s0 ? s0.air : 0 },
           ...(lostNats.length === 1 ? { boatsNat: lostNats[0] } : {}),
         });
@@ -1647,7 +1765,9 @@ export function factsOf(g: Game, routes: RouteRow[], from?: number, record?: Sub
         kind: 'convoy', sea: z >= 0 ? g.seas[z].key : route.zones[0], turn: h.turn, week: h.week, by: '', on: h.nat, route: route.id, routeName: route.name,
         tons: same ? book.tons : said ? Number(said[1].replace(/,/g, '')) : 0, boats: same ? book.subsLost : said?.[2] ? Number(said[2]) : 0, escortsLost: same ? book.escortsLost : 0,
         ...(z >= 0 ? { boatsAt: boatsIn(z, h.nat, true) } : {}),
-        raidBy: { boats: most > 0, surface, base: baseHeld(route) },
+        // (the fleets as the month closed stand in for who raided: not sure enough for "by submarines")
+        // (a history route's boats lost were its raiders' boats, though none is at sea there now)
+        raidBy: { boats: most > 0 || (!grand && (same ? book.subsLost : said?.[2] ? Number(said[2]) : 0) > 0), surface, base: baseHeld(route), sure: false },
       });
     }
   }

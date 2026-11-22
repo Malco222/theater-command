@@ -166,6 +166,14 @@ function expectKillsAsBooked(r: Staged, booked: number): void {
   expect(hits.length + air.length).toBe(lost.length);
   if (!booked) expect(events.some((e) => e.what === 'sea:rescue')).toBe(false);
   for (const s of lost) expect([...hits, ...air].some((h) => h.unit === s.unit && h.t <= s.t)).toBe(true);
+  // An aircraft's kill: one aircraft, seen running in, and she is still on the surface when it lets go (`running` on).
+  for (const a of air) {
+    const run = Number(a.extra!.running), down = lost.find((s) => s.unit === a.unit)!;
+    expect([a.extra!.n, run >= 20, typeof a.extra!.kind]).toEqual([1, true, 'string']);
+    expect(down.t).toBeGreaterThan(a.t + run);
+    const v = (r.views as unknown as View[]).filter((x) => x.t <= a.t + run).pop()!;
+    expect(played.find((p) => p.t === v.t)!.units.get(a.unit!)!.extra!.dive, `${r.key}: the boat as the aircraft lets go`).toBe('surfaced');
+  }
   // The booked run: the escort's last run on her before the blow. Every other pattern's charges burst CLEAR of every boat.
   const killRuns = new Set<Ev>();
   for (const h of hits) {
@@ -510,11 +518,11 @@ describe('the submarine scene stager (form D1)', () => {
     g.nations.UK.atWar = [...g.nations.UK.atWar, 'ITA'];
     g.headlines.push({ turn: g.turn, week: 3, text: 'The Libya convoys: 24,000 tons of shipping sunk this month.', kind: 'info', nat: 'ITA', arm: 'sea', lost: 'ITA' });
     const convoyOf = (): SeaFact => factsOf(g, NAVY.convoys).facts.find((f) => f.kind === 'convoy')!;
-    expect(convoyOf().raidBy).toEqual({ boats: false, surface: false, base: true });
+    expect(convoyOf().raidBy).toEqual({ boats: false, surface: false, base: true, sure: false });
     expect(subSceneOf(g, NAVY.convoys).recording).toBeNull();
     // The Mediterranean Fleet (its battleships and its boats) on patrol across the route: a scene, not "by submarines".
     g.fleets.find((f) => f.nat === 'UK' && f.name === 'Mediterranean Fleet')!.zone = g.seas.findIndex((z) => z.key === 'central');
-    expect(convoyOf().raidBy).toEqual({ boats: true, surface: true, base: true });
+    expect(convoyOf().raidBy).toEqual({ boats: true, surface: true, base: true, sure: false });
     const out = subSceneOf(g, NAVY.convoys);
     expect([out.pick?.case, out.pick?.boats, out.pick?.me]).toEqual(['convoy', 'UK', 'def']);
     const rec = JSON.parse(out.recording!) as Staged;
@@ -585,7 +593,7 @@ describe('the submarine scene stager (form D1)', () => {
     // No record, or only another month's rows: the stand-ins (the boats at sea, the fleets, the data rows).
     const bare = factsOf(g, NAVY.convoys);
     expect(bare.facts.map((f) => [f.kind, f.attackers, f.hunters, f.raiders])).toEqual([['torpedo', undefined, undefined, undefined], ['hunt', undefined, undefined, undefined], ['convoy', undefined, undefined, undefined]]);
-    expect(bare.facts[2].raidBy).toEqual({ boats: true, surface: false, base: false });
+    expect(bare.facts[2].raidBy).toEqual({ boats: true, surface: false, base: false, sure: false });
     g.subLook = [{ ...look, turn: g.turn + 5 }];
     expect(factsOf(g, NAVY.convoys)).toEqual(bare);
     // This month's rows: read from the game, as the bridge hands it over, or passed in.
@@ -594,13 +602,13 @@ describe('the submarine scene stager (form D1)', () => {
     const m = factsOf(g, NAVY.convoys);
     expect(factsOf({ ...g, subLook: undefined } as Game, NAVY.convoys, undefined, [look])).toEqual(m);
     const [tor, hunt, convoy] = m.facts;
-    expect(tor.attackers).toEqual(['ITA', 'GER']);
+    expect([tor.attackers, tor.pick]).toEqual([['ITA', 'GER'], 'rules']);
     expect(hunt.hunters).toEqual({ ships: 5, aircraft: 4 * 0.15 });
     expect(hunt.quarry).toEqual({ GER: 6 });
     // The convoy's sea is where its boats raided (not the most tons, a surface raider's); a surface raider there: no "by submarines".
     expect([convoy.sea, convoy.raiders, convoy.escorts, convoy.escortShips, convoy.airGuard, convoy.boatsNat]).toEqual(['natl', ['GER'], ['UK'], 3, 2, 'GER']);
     expect(convoy.tonsBy).toEqual({ wapp: 90000, natl: 60000, irish: 6000 });
-    expect(convoy.raidBy).toEqual({ boats: true, surface: true, base: false });
+    expect(convoy.raidBy).toEqual({ boats: true, surface: true, base: false, sure: true });
     expect(convoy.hunters).toEqual(hunt.hunters);
     // Staged from it: the torpedoing's picked attacker's boats; the record's numbers; no stand-ins where it spoke.
     const heavy = pickScene(m)!;
@@ -628,5 +636,110 @@ describe('the submarine scene stager (form D1)', () => {
     // A hunt whose quarry was more than one nation's names none.
     const mixed = noteOf(stageScene({ ...m, facts: [{ ...hunt, quarry: { GER: 6, ITA: 2 } }] })!);
     expect(mixed.caption.lines).toEqual([`2 submarines sunk in the ${seaPlace('natl').name}, September 1939, for the loss of 1 destroyer.`]);
+  });
+
+  it('holds to the record\'s own word (review of 22 November): the picked attacker, one fleet a scene, who raided, the boats lost, whose kills', () => {
+    const g = startOpen(createGame(5, 'UK')) as Game & { subLook?: SubLook[] };
+    g.nations.ITA.atWar = [...new Set([...g.nations.ITA.atWar, 'UK'])];
+    g.nations.UK.atWar = [...new Set([...g.nations.UK.atWar, 'ITA'])];
+    const zone = (k: string): number => g.seas.findIndex((z) => z.key === k);
+    const [wapp, natl, irish] = ['wapp', 'natl', 'irish'].map(zone);
+    const fleet = (nat: string, name: string) => g.fleets.find((f) => f.nat === nat && f.name === name)!;
+    const home = fleet('UK', 'Home Fleet'), wa = fleet('UK', 'Western Approaches Fleet');
+    const uboats = fleet('GER', 'U-boat Fleet'), battle = fleet('GER', 'Battle Fleet'), itaBoats = fleet('ITA', 'Submarine Fleet');
+    const at = g.seas[natl].name;
+    const torpedo = (name: string, cls: string, week: number) => ({ turn: g.turn, week, text: `A submarine torpedoes and sinks a ${cls} of the ${name} in the ${at}: the fleet has too few destroyers to screen its heavy ships.`, kind: 'battle' as const, nat: 'UK', arm: 'sea' as const, lost: 'UK' });
+    const mark = g.headlines.length;
+    g.headlines.push(torpedo('Home Fleet', 'battleship', 1));
+    const look = (by: number | null, could = [uboats.id, itaBoats.id]): SubLook => ({ turn: g.turn, nat: 'UK', hunts: [], convoys: [], torpedoes: [{ fleet: home.id, zone: natl, cls: 'bb', could, by }] });
+    const pickFor = (human: string) => { g.human = human; const p = pickScene(factsOf(g, NAVY.convoys, mark)); g.human = 'UK'; return p ? [p.case, p.boats, p.source] : null; };
+    // 1. The rules picked the German boats: an Italian player is shown no kill of his, a German one is, and a British
+    // one sees German boats; the Italian boats only where the rules picked them.
+    g.subLook = [look(uboats.id)];
+    expect([pickFor('ITA'), pickFor('GER'), pickFor('UK')]).toEqual([null, ['boatsKill', 'GER', 'record'], ['heavyLost', 'GER', 'record']]);
+    g.subLook = [look(itaBoats.id)];
+    expect([pickFor('ITA'), pickFor('GER'), pickFor('UK')]).toEqual([['boatsKill', 'ITA', 'record'], null, ['heavyLost', 'ITA', 'record']]);
+    // ... the pick's fleet struck from the list since: its nation from the record's other rows; where nothing names it,
+    // the pick is not known, and no one's boats are shown the kill (his loss is staged with a stand-in, said so).
+    const gone = { fleet: 9001, nat: 'ITA', n: 4 };
+    g.subLook = [{ ...look(9001, [uboats.id, 9001]), hunts: [{ zone: natl, hunters: [{ fleet: wa.id, nat: 'UK', n: 4 }], air: 2, quarry: [gone], sunk: 0, cost: 0 }] }];
+    expect([pickFor('ITA'), pickFor('UK')]).toEqual([['boatsKill', 'ITA', 'record'], ['heavyLost', 'ITA', 'record']]);
+    g.subLook = [look(9001, [uboats.id, 9001])];
+    const unknown = factsOf(g, NAVY.convoys, mark).facts[0];
+    expect([unknown.attackers, unknown.pick]).toEqual([['GER'], 'unknown']);
+    expect([pickFor('ITA'), pickFor('GER'), pickFor('UK')]).toEqual([null, null, ['heavyLost', 'GER', 'fleets']]);
+    expect(noteOf(stagePick(factsOf(g, NAVY.convoys, mark), pickScene(factsOf(g, NAVY.convoys, mark))!)).standIns[0]).toContain("the boats' navy");
+    // 2. Two fleets' heavy ships torpedoed there: the scene draws the picked one's fleet alone, and the caption names
+    // the other on a line of its own.
+    g.subLook = [];
+    g.headlines.push(torpedo('Western Approaches Fleet', 'cruiser', 3));
+    const two = factsOf(g, NAVY.convoys, mark);
+    const p2 = pickScene(two)!;
+    expect([p2.case, p2.heavy]).toEqual(['heavyLost', ['bb']]);
+    expect(noteOf(stagePick(two, p2)).caption.lines.slice(0, 2)).toEqual([`A battleship of the Home Fleet torpedoed and sunk in the ${at}, September 1939.`, 'Also torpedoed and sunk there: a cruiser of the Western Approaches Fleet.']);
+    // 5. Another navy's hunt there: in the caption's count, not drawn as his fleet's screen's kills.
+    g.headlines.push({ turn: g.turn, week: 4, text: `The month in the air and at sea, the United States: 2 German submarines sunk in the ${at}.`, kind: 'info', nat: 'USA' });
+    const usa = factsOf(g, NAVY.convoys, mark);
+    const p5 = pickScene(usa)!;
+    expect([p5.case, p5.boats, p5.kills, p5.sunkThere]).toEqual(['heavyLost', 'GER', 0, 2]);
+    const r5 = stagePick(usa, p5);
+    expect(noteOf(r5).caption.lines[2]).toBe('2 German submarines sunk there this month.');
+    expectKillsAsBooked(r5, 0);
+    g.headlines.splice(mark);
+    // 3. Who raided, from the record: a raider with no boats as it raided was a surface raider, however the fleet list
+    // stands now; a boat raider whose fleet is gone, or has lost ships since, cannot be settled: no "by submarines".
+    g.headlines.push({ turn: g.turn, week: 3, text: 'The Atlantic convoys: 156,000 tons of shipping sunk this month.', kind: 'info', nat: 'UK', arm: 'sea', lost: 'UK' });
+    const convoyLook = (raiders: { zone: number; raiders: { fleet: number; nat: string; n: number; heavy?: number }[]; tons: number }[]): SubLook => ({ turn: g.turn, nat: 'UK', hunts: [], torpedoes: [],
+      convoys: [{ route: 'atlantic', tons: 156000, seas: raiders.map((x) => ({ ...x, escorts: [{ fleet: wa.id, nat: 'UK', n: 6 }], air: 2 })) }] });
+    const cap = (): [SeaFact['raidBy'], string] => { const m = factsOf(g, NAVY.convoys, mark); const f = m.facts[0]; return [f.raidBy, noteOf(stagePick(m, pickScene(m)!)).caption.lines[0]]; };
+    g.subLook = [convoyLook([{ zone: wapp, raiders: [{ fleet: battle.id, nat: 'GER', n: 0 }], tons: 90000 }, { zone: natl, raiders: [{ fleet: uboats.id, nat: 'GER', n: 6 }], tons: 66000 }])];
+    const keep = { ...battle.ships };
+    battle.ships.bb = 0; battle.ships.ca = 0; battle.ships.cv = 0;
+    expect(cap()).toEqual([{ boats: true, surface: true, base: false, sure: true }, expect.stringContaining('sunk on the convoy routes')]);
+    Object.assign(battle.ships, keep);
+    g.fleets.splice(g.fleets.indexOf(battle), 1);
+    expect(cap()[0]).toEqual({ boats: true, surface: true, base: false, sure: true });
+    g.fleets.push(battle);
+    // (boats alone, the fleet still on the list and no loss of its told: "by submarines"; its fleet gone: not settled)
+    g.subLook = [convoyLook([{ zone: natl, raiders: [{ fleet: uboats.id, nat: 'GER', n: 6 }], tons: 156000 }])];
+    expect(cap()).toEqual([{ boats: true, surface: false, base: false, sure: true }, expect.stringContaining('sunk by submarines')]);
+    g.subLook = [convoyLook([{ zone: natl, raiders: [{ fleet: 9002, nat: 'GER', n: 6 }], tons: 156000 }])];
+    expect(cap()).toEqual([{ boats: true, surface: false, base: false, sure: false }, expect.stringContaining('sunk on the convoy routes')]);
+    // (the record's own heavy-ship count, where the rules give it, settles it)
+    g.subLook = [convoyLook([{ zone: natl, raiders: [{ fleet: 9002, nat: 'GER', n: 6, heavy: 0 }], tons: 156000 }])];
+    expect(cap()[0]).toEqual({ boats: true, surface: false, base: false, sure: true });
+    g.headlines.splice(mark);
+    // 6. Under half a ship's tons, the ships are not counted.
+    const small: SeaFact = { kind: 'convoy', sea: 'central', turn: T(1942, 3), week: 2, by: '', on: 'ITA', route: 'libya', routeName: 'the Libya convoys', tons: 2000, boats: 0, escortsLost: 0, raidBy: { boats: true, surface: false, base: false } };
+    expect(noteOf(stageScene(month('ITA', T(1942, 3), [small]))!).caption.lines).toEqual(['The Libya convoys, March 1942: 2,000 tons of shipping sunk by submarines.']);
+  });
+
+  it('reads a history campaign\'s record, whose raiders are counted after the convoy\'s boats were lost (review of 22 November)', () => {
+    const g = createGame(5, 'UK') as Game & { subLook?: SubLook[] };
+    expect((g.flags as { open?: number }).open).not.toBe(1);
+    g.nations.ITA.atWar = [...new Set([...g.nations.ITA.atWar, 'UK'])];
+    g.nations.UK.atWar = [...new Set([...g.nations.UK.atWar, 'ITA'])];
+    const natl = g.seas.findIndex((z) => z.key === 'natl');
+    const fleet = (nat: string, name: string) => g.fleets.find((f) => f.nat === nat && f.name === name)!;
+    const uboats = fleet('GER', 'U-boat Fleet'), itaBoats = fleet('ITA', 'Submarine Fleet'), wa = fleet('UK', 'Western Approaches Fleet');
+    for (const f of [uboats, itaBoats]) { f.ships.bb = 0; f.ships.ca = 0; f.ships.cv = 0; }
+    const mark = g.headlines.length;
+    const month1 = (lost: number, raiders: { fleet: number; nat: string; n: number }[]) => {
+      g.headlines.splice(mark);
+      g.headlines.push({ turn: g.turn, week: 3, text: `The Atlantic convoys: 176,000 tons of shipping sunk this month, ${lost} submarine${lost === 1 ? '' : 's'} destroyed.`, kind: 'info', nat: 'UK', arm: 'sea', lost: 'UK' });
+      g.subLook = [{ turn: g.turn, nat: 'UK', hunts: [], torpedoes: [], convoys: [{ route: 'atlantic', tons: 176000, seas: [{ zone: natl, raiders, escorts: [{ fleet: wa.id, nat: 'UK', n: 8 }], air: 2, tons: 176000 }] }] }];
+      const m = factsOf(g, NAVY.convoys, mark);
+      return { f: m.facts[0], scenes: scenesOf(m), lines: scenesOf(m).length ? noteOf(stagePick(m, scenesOf(m)[0])).caption.lines : [] };
+    };
+    // A German and an Italian boat lost: the Italian fleet's n is 0 after its one boat went, and it still raided: no nation named.
+    const both = month1(2, [{ fleet: uboats.id, nat: 'GER', n: 19 }, { fleet: itaBoats.id, nat: 'ITA', n: 0 }]);
+    expect([both.f.raidBy, both.f.raiders, both.f.boatsNat]).toEqual([{ boats: true, surface: false, base: false, sure: true }, ['GER', 'ITA'], undefined]);
+    expect(both.lines).toEqual(['The Atlantic convoys, September 1939: 176,000 tons of shipping sunk by submarines, about 34 ships at about 5,200 tons a ship.', '2 submarines sunk.']);
+    // A lone raiding group wiped out: its boats raided, and the month has its scene, for him and as his loss.
+    const lone = month1(1, [{ fleet: uboats.id, nat: 'GER', n: 0 }]);
+    expect([lone.f.raidBy, lone.f.boatsNat, lone.scenes.map((p) => [p.case, p.boats, p.kills])]).toEqual([{ boats: true, surface: false, base: false, sure: true }, 'GER', [['convoy', 'GER', 1]]]);
+    expect(lone.lines[1]).toBe('1 German submarine sunk.');
+    // (with no boats lost, a raider of n 0 had none as it raided: a surface raider, and no submarine scene alone)
+    expect(month1(0, [{ fleet: uboats.id, nat: 'GER', n: 0 }]).scenes).toEqual([]);
   });
 });
