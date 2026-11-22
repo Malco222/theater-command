@@ -1891,6 +1891,18 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		// (skinned only when in the picture, or close by: a man out of the picture keeps the pose he had)
 		const LandPlay::Vec At(X, Y, Z + 0.9);
 		const bool bLooked = (At - EyeAt).Length() < 6.0 || LandParts::InPicture(S.Pose, Aspect, At, 1.15);
+		// (no shadow past about 80 m as the picture sees him: a far man's shadow is a smudge of a few pixels, and every
+		// moving one makes the shadow maps draw their pages under him again; GS3)
+		if (D.Mesh.IsValid() && bShown)
+		{
+			const float Seen = Crowd.SeenDistance(Man);
+			const bool bShadow = D.bShadow ? Seen < 84.0f : Seen < 80.0f;
+			if (bShadow != D.bShadow)
+			{
+				D.Mesh->SetCastShadow(bShadow);
+				D.bShadow = bShadow;
+			}
+		}
 		if (!bShown || !bLooked)
 		{
 			if (D.Mesh.IsValid() && !bShown)
@@ -3079,7 +3091,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 	Mark = LandParts::Seconds();
 	if (S.Men)
 	{
-		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z);
+		// (the men's detail by how big the lens draws them, the usual 50 deg lens as one: a long lens's far men drawn as
+		// the near ones they look; the battle-scale plan's GS3)
+		const double Zoom = FMath::Tan(FMath::DegreesToRadians(25.0)) / FMath::Max(0.02, FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(S.Pose.Fov, 2.0, 120.0) * 0.5)));
+		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
 		S.Men->Update(S.Battle);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;

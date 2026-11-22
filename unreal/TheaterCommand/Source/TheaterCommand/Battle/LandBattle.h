@@ -202,6 +202,8 @@ private:
 		TWeakObjectPtr<UProceduralMeshComponent> Mesh;
 		int32 Lod = -1;
 		uint32 Stamp = 0xFFFFFFFFu;
+		/** Whether his mesh casts a shadow now (made with one; none past about 80 m as seen). */
+		bool bShadow = true;
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()
