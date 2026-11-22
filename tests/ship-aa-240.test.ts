@@ -510,6 +510,23 @@ describe("ruling 240, C1: ships' anti-aircraft strength grows with research", ()
     for (const a of [early, mid, late]) expect(`${gunsLine(a)!.value} ${gunsLine(a)!.effect}`).not.toMatch(/radar|gunnery|task force|research/i);
   });
 
+  it('says "almost none" where the share rounds to nothing (the UI director\'s rider 2), and leaves release 1\'s line alone with the switches off', () => {
+    const { g, foe, strike } = duel();
+    foe.ships = { bb: 0, cv: 0, ca: 0, dd: 2, ss: 0 };
+    const off = assessAir(g, [strike], 'fleet', foe.id);
+    expect(Math.round(off.flak * CARRIERS.strike.intensity * 100)).toBe(0);
+    // (Release 1's own words for the smallest fleets: logged by the UI director for release 2, and not this switch's to move.)
+    expect(gunsLine(off)!.effect).toBe('About 0% of the bombers brought down: battleships and carriers carry the most guns');
+    set(true, false, false);
+    const early = assessAir(g, [strike], 'fleet', foe.id);
+    expect(gunsLine(early)).toEqual({ label: GUNS, value: `Weight of anti-aircraft fire ${Math.round(weight(foe) * CARRIERS.flak.stage.early)}, early-war guns`, effect: 'They may bring down almost none of the bombers' });
+    // A share of a half per cent or more is still given as a figure.
+    foe.ships = { bb: 0, cv: 0, ca: 8, dd: 8, ss: 0 };
+    const more = assessAir(g, [strike], 'fleet', foe.id);
+    expect(Math.round(more.flak * CARRIERS.strike.intensity * 100)).toBeGreaterThan(0);
+    expect(gunsLine(more)!.effect).toBe(`They may bring down about ${Math.round(more.flak * CARRIERS.strike.intensity * 100)}% of the bombers: battleships and carriers carry the most guns`);
+  });
+
   it('caps a fleet heavy enough to reach the cap at most x its own multiplier', () => {
     const { g, foe, strike } = duel();
     foe.ships.bb = 40;

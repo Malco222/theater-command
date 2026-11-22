@@ -1532,25 +1532,53 @@ export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = 
 
 const COUNT_WORD = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 
+/** "A cruiser", "an ...": a count of one is "a" wherever it stands (the UI director's rider 2 of 22 November). */
+const aShip = (one: string, head: boolean): string => `${/^[aeiou]/i.test(one) ? (head ? 'An' : 'an') : head ? 'A' : 'a'} ${one}`;
+const andList = (parts: string[]): string => (parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`);
+
 /**
- * Ruling 240: the one line that tells of ships damage control kept afloat, in the UI director's words of 21 November.
- * The game counts ships and never names them: "A cruiser of the Home Fleet is badly hit, but the repair parties keep
- * the ship afloat." A count that opens the sentence is a word and a count inside it a figure ("Two destroyers of ...",
- * "A cruiser and 2 destroyers of ..."). `yours` where a text is addressed to the fleet's owner alone: "One of your
- * cruisers is ...". No pronoun for a ship. Empty when nothing was saved.
+ * How the line for ships kept afloat names their fleet (ruling 240; the UI director's words of 21 November and rider 2
+ * of 22 November): 'fleet' names it, for news every side reads and where nothing before has named it; 'its' follows a
+ * lead-in that has just named the one fleet, so the fleet is named once; 'yours' is for a text addressed to the fleet's
+ * owner alone.
  */
-export function keptAfloat(f: { name: string }, saved: Ships, yours = false): string {
+export type KeptForm = 'fleet' | 'its' | 'yours';
+
+/**
+ * Ruling 240: the one line that tells of ships damage control kept afloat, in the UI director's words of 21 November and
+ * its riders. The game counts ships and never names them: "A cruiser of the Home Fleet is badly hit, but the repair
+ * parties keep the ship afloat." A count that opens the sentence is a word, a count inside it a figure, and a count of
+ * one is "a" ("Two destroyers of ...", "A cruiser and 2 destroyers of ...", "A battleship and a cruiser of ...").
+ * After a lead-in that names the fleet: "One of its cruisers is badly hit, ...". To the owner alone: "One of your
+ * cruisers is ...". No pronoun for a ship. Empty when nothing was saved. (`true` is 'yours' and `false` 'fleet', as the
+ * third argument was before the forms had names.)
+ */
+export function keptAfloat(f: { name: string }, saved: Ships, how: KeptForm | boolean = 'fleet'): string {
   const n = shipCount(saved);
   if (!n) return '';
+  const form: KeptForm = how === true ? 'yours' : how === false ? 'fleet' : how;
   const head = (k: number): string => COUNT_WORD[k] ?? String(k);
   const parts = CLASSES.filter((c) => saved[c] > 0).map((c, i) => {
     const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
-    if (yours) return `${i ? k : head(k)} of your ${many}`;
-    if (i) return `${k} ${k === 1 ? one : many}`;
-    return k === 1 ? `${/^[aeiou]/i.test(one) ? 'An' : 'A'} ${one}` : `${head(k)} ${many}`;
+    if (form !== 'fleet') return `${i ? (k === 1 ? 'one' : k) : head(k)} of ${form === 'its' ? 'its' : 'your'} ${many}`;
+    return k === 1 ? aShip(one, !i) : `${i ? k : head(k)} ${many}`;
   });
-  const ships = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-  return `${ships}${yours ? '' : ` of ${fleetName(f)}`} ${n === 1 ? 'is' : 'are'} badly hit, but the repair parties keep the ${n === 1 ? 'ship' : 'ships'} afloat.`;
+  return `${andList(parts)}${form === 'fleet' ? ` of ${fleetName(f)}` : ''} ${n === 1 ? 'is' : 'are'} badly hit, but the repair parties keep the ${n === 1 ? 'ship' : 'ships'} afloat.`;
+}
+
+/**
+ * Ruling 240, rider 2 (22 November): the same ships told in the past, for a strike's report that sank none: "the repair
+ * parties kept a badly hit cruiser and 2 destroyers afloat" (the caller puts it after "Ships of the Home Fleet were hit,
+ * but none was sunk: "). Empty when nothing was saved.
+ */
+export function keptAfloatPast(saved: Ships): string {
+  if (!shipCount(saved)) return '';
+  const parts = CLASSES.filter((c) => saved[c] > 0).map((c, i) => {
+    const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
+    if (!i) return k === 1 ? `a badly hit ${one}` : `${k} badly hit ${many}`;
+    return k === 1 ? aShip(one, false) : `${k} ${many}`;
+  });
+  return `the repair parties kept ${andList(parts)} afloat`;
 }
 
 // ---- The month at sea -----------------------------------------------------------------------------
@@ -2051,7 +2079,8 @@ function torpedoes(g: Game, nat: string): void {
     f.ready = Math.max(0, f.ready - 0.05);
     if (sinks) headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
     // (The ship is hit and the repair parties save it: the fleet is the less fit for sea all the same.)
-    else headline(g, 'battle', `A submarine attacks ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships. ${keptAfloat(f, { ...none(), [cls]: 1 })}`, nat, undefined, { arm: 'sea' });
+    // (Rider 2 of 22 November: the fleet is named once, "One of its cruisers is badly hit, ...".)
+    else headline(g, 'battle', `A submarine attacks ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships. ${keptAfloat(f, { ...none(), [cls]: 1 }, 'its')}`, nat, undefined, { arm: 'sea' });
   }
 }
 
@@ -2085,7 +2114,8 @@ function airAttack(g: Game, f: Fleet): void {
   const kept = none();
   const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)), seaRng(g, `air:${f.id}`), SURFACE, dcOf(g, f.nat), kept);
   f.ready = Math.max(0, f.ready - 0.1);
-  const afloat = keptAfloat(f, kept);
+  // (Rider 2 of 22 November: the lead-in has named the fleet, so the line names it once: "One of its cruisers is ...".)
+  const afloat = keptAfloat(f, kept, 'its');
   if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of ${fleetName(f)} in the ${g.seas[f.zone].name}.${afloat ? ` ${afloat}` : ''}`, f.nat, undefined, { arm: 'air', lost: f.nat });
   else if (afloat) headline(g, 'battle', `Bombers attack ${fleetName(f)} in the ${g.seas[f.zone].name}. ${afloat}`, f.nat, undefined, { arm: 'air' });
 }

@@ -23,7 +23,7 @@ import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
-import { NAVY, atSea, keptAfloat, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
+import { NAVY, atSea, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
@@ -1567,7 +1567,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const kits = shipGuns > 0 && (shipRule(g, 'stage') || shipRule(g, 'vt')) ? out.ships.map((x) => shipKit(g, x.nat)) : [];
     const stage = (['late', 'mid', 'early'] as const).find((s) => kits.some((k) => k.stage === s));
     const shells = kits.some((k) => k.vt);
-    if (kits.length) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(staged)}${stage ? `, ${stage}-war guns${shells ? ' with proximity shells' : ''}` : shells ? ', with proximity shells' : ''}`, effect: `They may bring down about ${pc(out.flak * I)} of the bombers: battleships and carriers carry the most guns` });
+    // (A share that rounds to nothing says so, as ruled for the city's guns: the UI director's rider 2 of 22 November.)
+    if (kits.length) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(staged)}${stage ? `, ${stage}-war guns${shells ? ' with proximity shells' : ''}` : shells ? ', with proximity shells' : ''}`, effect: Math.round(out.flak * I * 100) === 0 ? 'They may bring down almost none of the bombers' : `They may bring down about ${pc(out.flak * I)} of the bombers: battleships and carriers carry the most guns` });
     else if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
     const decks = out.def.filter((x) => x.f.ship !== undefined);
     if (out.D >= 1) out.lines.push({ label: 'Fighter cover', value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), 'carrier fighter')} over the ships${decks.length < out.def.length ? ', and fighters from the coast' : ''}` : 'Fighters from the coast', effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });
@@ -1705,7 +1706,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // Ruling 240 (C3): one draw for each fleet and class, as ever, on the fleet's own figure; and what that same draw
     // would have sunk without damage control (`plain`: the figure of release 1) says which ships it kept afloat.
     const plain = exp.plain ?? exp.sunk;
-    const afloat: string[] = [];
+    const afloat: { x: Fleet; kept: Ships }[] = [];
+    const keptAll = noShips();
     struck = a.ships.map((x) => ({ nat: x.nat, fleet: x.name, admiral: x.admiral?.name ?? null, ships: { ...x.ships }, sunk: noShips() }));
     a.ships.forEach((x, i) => {
       const kept = noShips();
@@ -1715,9 +1717,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         const [n, n0] = rng.rollBoth(exp.by ? exp.by[i][c] : share, share);
         const k = Math.min(x.ships[c], n);
         kept[c] = Math.min(x.ships[c], n0) - k;
-        x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k;
+        x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k; keptAll[c] += kept[c];
       }
-      if (shipCount(kept)) afloat.push(keptAfloat(x, kept));
+      if (shipCount(kept)) afloat.push({ x, kept });
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
       x.struck = [g.turn, (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
@@ -1731,9 +1733,12 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     result = through <= 0 ? 'No bombers got through.'
       // ("Two battleships, 3 carriers ... of the Pacific Fleet are sunk at anchor": a small opening figure in words, and a verb.)
       : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? 'is' : 'are'} sunk${m === 'harbour' ? ' at anchor' : ''}.`
-      : exp.hits >= 0.5 || afloat.length ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
-    // (Ruling 240: the ships damage control kept afloat, a line for each fleet struck that has any.)
-    if (afloat.length) result += ` ${afloat.join(' ')}`;
+      // (Ruling 240, the UI director's rider 2: a ship saved and none sunk is one sentence in the past, for every fleet struck.)
+      : afloat.length ? `Ships of ${whom} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.`
+      : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
+    // (Ruling 240: beside ships sunk, the ships damage control kept afloat: after the one fleet struck, named once ("One of
+    // its cruisers is ..."); with several fleets, a line for each that has any.)
+    if (shipsSunk && afloat.length) result += ` ${afloat.map((y) => keptAfloat(y.x, y.kept, a.ships.length === 1 ? 'its' : 'fleet')).join(' ')}`;
     // A carrier that goes down takes most of its aircraft with it.
     if (total.cv) syncWings(g);
   } else if (m === 'superiority') {
