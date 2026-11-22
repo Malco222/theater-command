@@ -29,7 +29,7 @@ import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
 import { stationBars, whyStationBars } from './far';
-import { farOn } from './world';
+import { FAR_SEAS_FIRST, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
@@ -729,9 +729,8 @@ export function crossingRisk(g: Game, nat: string, path: number[]): number {
   return 1 - safe;
 }
 
-/** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
-export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
-  if (!from.seas.length || !to.seas.length) return null;
+/** The cheapest way by sea from a coast to every sea it can reach: each sea's cost, and the sea before it on the way. */
+function seaWays(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean }): { cost: Float64Array; prev: Int16Array } {
   const N = g.seas.length;
   const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
   const shut = (z: number): boolean => !o.surprise && closedTo(g, z, nat);
@@ -749,13 +748,59 @@ export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max
       if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; }
     }
   }
-  let end = -1;
-  for (const z of to.seas) if (cost[z] < 1e9 && (end < 0 || cost[z] < cost[end])) end = z;
-  if (end < 0) return null;
+  return { cost, prev };
+}
+/** The seas crossed in order on the way to one of them. */
+function wayTo(prev: Int16Array, end: number): number[] {
   const path: number[] = [];
   for (let z = end; z >= 0; z = prev[z]) path.unshift(z);
   return path;
 }
+
+/** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
+export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
+  if (!from.seas.length || !to.seas.length) return null;
+  const W = seaWays(g, nat, from, o);
+  let end = -1;
+  for (const z of to.seas) if (W.cost[z] < 1e9 && (end < 0 || W.cost[z] < W.cost[end])) end = z;
+  return end < 0 ? null : wayTo(W.prev, end);
+}
+
+/**
+ * The way a landing sails, and the card of the sea off its beach where this had to read it.
+ *
+ * A crossing's way was chosen by the day's risk in each sea (`seaPath`), and its card then read what could come to
+ * the last of them (`seaHold`): a staff weighed by one map and fought by another. Where a beach stands on two seas
+ * it took the one with the less risk today, found that sea's card "can be closed" and waited, while the other
+ * sea's card read open (Sandakan from Jolo in February 1942, seed 19, stop 1: the Celebes Sea for the Sulu Sea).
+ * So on the far side, where a beach can be reached by more than one of its seas and a way to it crosses a sea of
+ * the far side: of the ways (the safest to each of the beach's seas) the landing takes one whose card reads open,
+ * and among those the least risk today. If none reads open it is the safest way as before, and a staff that heeds
+ * the card waits. The old chart's crossings are read as they always were. (The design director's ruling of
+ * 08:53Z, 22 November 2026.)
+ */
+function landingWay(g: Game, nat: string, from: Region, to: Region, surprise: boolean): { path: number[]; hold?: SeaHold } | null {
+  if (!from.seas.length || !to.seas.length) return null;
+  const W = seaWays(g, nat, from, { max: NAVY.landing.range, surprise });
+  let end = -1;
+  for (const z of to.seas) if (W.cost[z] < 1e9 && (end < 0 || W.cost[z] < W.cost[end])) end = z;
+  if (end < 0) return null;
+  const first = wayTo(W.prev, end);
+  const ends = farOn(g) ? to.seas.filter((z) => W.cost[z] < 1e9) : [];
+  if (ends.length < 2) return { path: first };
+  const ways = ends.map((z) => ({ z, path: z === end ? first : wayTo(W.prev, z) }));
+  if (!ways.some((w) => w.path.some((z) => z >= FAR_SEAS_FIRST))) return { path: first };
+  let best: { path: number[]; hold: SeaHold } | null = null, bestCost = Infinity;
+  for (const w of ways) {
+    const hold = seaHold(g, nat, w.path, to);
+    if (w.z === end && hold.open) return { path: first, hold };
+    if (hold.open && W.cost[w.z] < bestCost) { best = { path: w.path, hold }; bestCost = W.cost[w.z]; }
+  }
+  return best ?? { path: first };
+}
+
+/** The seas a landing crosses in order, or null if it cannot sail: `landingWay`. */
+export const landingPath = (g: Game, nat: string, from: Region, to: Region, surprise: boolean): number[] | null => landingWay(g, nat, from, to, surprise)?.path ?? null;
 
 const liftKey = (g: Game, nat: string): string => `lift:${nat}:${g.turn}`;
 /** How many more corps a nation's shipping can carry this month. */
@@ -1261,11 +1306,12 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
     };
   }
   const surprise = surpriseOn(g, nat, to);
-  const path = seaPath(g, nat, g.regions[cs[0].reg], to, { max: NAVY.landing.range, surprise })!;
+  const way = landingWay(g, nat, g.regions[cs[0].reg], to, surprise)!;
+  const path = way.path;
   return {
     why: null, surprise, path, risk: surprise ? 0 : landingRisk(g, nat, path, to), defended,
     ...(surprise ? {} : { account: crossingAccount(g, nat, path, to) }),
-    hold: seaHold(g, nat, path, to),
+    hold: way.hold ?? seaHold(g, nat, path, to),
     sky: sky !== null && allied(g, sky, nat), sortie: surprise ? 0 : sortieAgainst(g, nat, path),
     assess: defended ? assess(g, cs, to, { sea: surprise ? NAVY.landing.surprise : assaultStrength(g, nat), surprise }) : null,
   };
@@ -1300,7 +1346,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   let lostAtSea = 0;
   if (air) g.flags[dropKey(g, nat)] = 1;
   else {
-    const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise })!;
+    const path = landingPath(g, nat, from, to, surprise)!;
     // (What the Pacific's landing ships loaded is counted as it sailed, before the crossing's losses: pacific.ts.)
     useShoreLift(g, nat, to, worthOf(cs));
     lostAtSea = crossing(g, cs, path, surprise, to);
