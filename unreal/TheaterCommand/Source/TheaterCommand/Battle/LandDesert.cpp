@@ -202,19 +202,20 @@ namespace LandScape
 				Grid.resize(static_cast<size_t>(GNX) * static_cast<size_t>(GNY));
 				for (int J = 0; J < GNY; ++J)
 					for (int I = 0; I < GNX; ++I) Grid[static_cast<size_t>(J) * static_cast<size_t>(GNX) + static_cast<size_t>(I)] = static_cast<float>(WadiNoise(GX0 + I * GridStep, GY0 + J * GridStep));
-				// The gravel's patches and the sand sheets, broader, on a 12 m grid over the field and 1.2 km round it
-				// (the ring's first kilometre read from it too), two to a point.
+				// The gravel's patches, the sand sheets and the drifts on them, broader, on a 12 m grid over the field and
+				// 1.2 km round it (the ring's first kilometre read from it too), three to a point.
 				CX0 = -1200.0;
 				CY0 = -1200.0;
 				CNX = static_cast<int>((F.Width() + 2400.0) / CoarseStep) + 2;
 				CNY = static_cast<int>((F.Depth() + 2400.0) / CoarseStep) + 2;
-				Coarse.resize(2 * static_cast<size_t>(CNX) * static_cast<size_t>(CNY));
+				Coarse.resize(3 * static_cast<size_t>(CNX) * static_cast<size_t>(CNY));
 				for (int J = 0; J < CNY; ++J)
 					for (int I = 0; I < CNX; ++I)
 					{
-						const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(CNX) + static_cast<size_t>(I));
+						const size_t K = 3 * (static_cast<size_t>(J) * static_cast<size_t>(CNX) + static_cast<size_t>(I));
 						Coarse[K] = static_cast<float>(VarnNoise(CX0 + I * CoarseStep, CY0 + J * CoarseStep));
 						Coarse[K + 1] = static_cast<float>(SandNoise(CX0 + I * CoarseStep, CY0 + J * CoarseStep));
+						Coarse[K + 2] = static_cast<float>(DriftNoise(CX0 + I * CoarseStep, CY0 + J * CoarseStep));
 					}
 			}
 			Look Which() const override { return Look::Desert; }
@@ -255,16 +256,26 @@ namespace LandScape
 				const double U = 0.7071 * (X + WX) - 0.7071 * (Y + WY), V = 0.7071 * (X + WX) + 0.7071 * (Y + WY);
 				return Smooth(0.1, 0.42, Fbm(0.8 * U, 1.2 * V, 280.0, 3, Seed ^ 0xF6));
 			}
-			/** The gravel's patch (Ch 1) or the sand sheet (Ch 2) here, read between the coarse grid's points. */
+			/** The drifts on the plain: soft paler and darker streaks 10 to 40 m across, drawn out along the wind, where the
+			 * sand lies a little deeper or the lag gravel shows through it (-1 to 1). They carry the ground's breakup from the
+			 * battle camera's height, where the clutter is gone (the art director, 19:17Z). */
+			double DriftNoise(double X, double Y) const
+			{
+				const double WX = 20.0 * Noise(X / 70.0, Y / 70.0, Seed ^ 0xF9), WY = 20.0 * Noise(X / 70.0 + 3.7, Y / 70.0 - 2.2, Seed ^ 0xFA);
+				const double U = 0.7071 * (X + WX) - 0.7071 * (Y + WY), V = 0.7071 * (X + WX) + 0.7071 * (Y + WY);
+				return std::clamp(1.7 * Fbm(0.6 * U, 1.4 * V, 34.0, 2, Seed ^ 0xFB), -1.0, 1.0);
+			}
+			/** The gravel's patch (Ch 1), the sand sheet (Ch 2) or the drift (Ch 3) here, read between the coarse grid's
+			 * points; beyond it the drifts are lost in the haze (0). */
 			double Read(double X, double Y, int Ch) const
 			{
 				const double U = (X - CX0) / CoarseStep, V = (Y - CY0) / CoarseStep;
-				if (!(U >= 0.0 && V >= 0.0 && U < CNX - 1.0 && V < CNY - 1.0)) return Ch == 1 ? VarnNoise(X, Y) : SandNoise(X, Y);
+				if (!(U >= 0.0 && V >= 0.0 && U < CNX - 1.0 && V < CNY - 1.0)) return Ch == 1 ? VarnNoise(X, Y) : Ch == 2 ? SandNoise(X, Y) : 0.0;
 				const int I = static_cast<int>(U), J = static_cast<int>(V);
 				const double FU = U - I, FV = V - J;
-				const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(CNX) + static_cast<size_t>(I)) + static_cast<size_t>(Ch - 1);
-				const size_t Row = 2 * static_cast<size_t>(CNX);
-				const double A = Coarse[K], B = Coarse[K + 2], C = Coarse[K + Row], D = Coarse[K + Row + 2];
+				const size_t K = 3 * (static_cast<size_t>(J) * static_cast<size_t>(CNX) + static_cast<size_t>(I)) + static_cast<size_t>(Ch - 1);
+				const size_t Row = 3 * static_cast<size_t>(CNX);
+				const double A = Coarse[K], B = Coarse[K + 3], C = Coarse[K + Row], D = Coarse[K + Row + 3];
 				return (A + (B - A) * FU) + ((C + (D - C) * FU) - (A + (B - A) * FU)) * FV;
 			}
 			double Wadi(double X, double Y) const
@@ -329,7 +340,7 @@ namespace LandScape
 			 * rules' rough, the stony serir between, its varnished gravel darkening it in patches (Varn) and the sheets
 			 * paling it (Sand). No noise finer than some 30 m: the ground's points lie 4 m apart, and a finer one draws as
 			 * square cells. */
-			static Tone Plain(int Kind, double N1, double N2, double Broad, double W, double Varn, double Sand)
+			static Tone Plain(int Kind, double N1, double N2, double Broad, double W, double Varn, double Sand, double Drift)
 			{
 				// (the art director's read, 18:30Z: the varnished patches 25 to 35 per cent darker than the sand, the
 				// gravel's dark brown to black-brown with some red-brown; the sheets bare pale sand; the rises limestone)
@@ -339,7 +350,10 @@ namespace LandScape
 				T = Mixed(T, Mixed(GravelDark, GravelRed, 0.35 + 0.3 * N1), 0.12 + 0.46 * Varn);
 				T = Mixed(T, Mixed(Limestone, Varnish, 0.25), Rocky);
 				T = Mixed(T, Varied(SandSheet, 1.0 + 0.03 * N1, 0.0), Sandy * (1.0 - 0.6 * Rocky));
-				return Varied(T, 1.0 + 0.04 * Broad + 0.012 * N2, 0.015 * Broad);
+				// (the drifts: on the sheets the lag gravel showing grey-brown through thin sand and the deeper sand paler; on
+				// the serir the pavement a shade lighter or darker; soft, never spots)
+				T = Mixed(T, Mixed(SerirMid, GravelDark, 0.3), 0.32 * Sandy * Smooth(-0.1, -0.7, Drift));
+				return Varied(T, 1.0 + 0.04 * Broad + 0.012 * N2 + (0.07 + 0.06 * Sandy) * Drift, 0.015 * Broad);
 			}
 
 			Tone Colour(const Spot& S) const override
@@ -355,7 +369,7 @@ namespace LandScape
 					const double Phase = Off / 0.85 + 0.6 * Noise(S.X / 38.0, S.Y / 38.0, Seed ^ 0xF7);
 					const double Line = 2.0 * std::fabs(Phase - std::floor(Phase) - 0.5);
 					const double RutK = Smooth(0.7, 0.95, Line) * Smooth(S.LaneHalf + 0.4, S.LaneHalf - 0.8, Off);
-					Tone T = Plain(KOpen, S.N1, S.N2, S.Broad, Wadi(S.X, S.Y), Read(S.X, S.Y, 1), Read(S.X, S.Y, 2));
+					Tone T = Plain(KOpen, S.N1, S.N2, S.Broad, Wadi(S.X, S.Y), Read(S.X, S.Y, 1), Read(S.X, S.Y, 2), Read(S.X, S.Y, 3));
 					T = Mixed(T, Dust, 0.12 * Smooth(S.LaneHalf + 1.5, 0.4 * S.LaneHalf, Off));
 					return Mixed(T, Rut, 0.5 * RutK);
 				}
@@ -367,7 +381,7 @@ namespace LandScape
 				default: break;
 				}
 				const double W = Wadi(S.X, S.Y);
-				Tone T = Plain(S.Kind, S.N1, S.N2, S.Broad, W, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2));
+				Tone T = Plain(S.Kind, S.N1, S.N2, S.Broad, W, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2), Read(S.X, S.Y, 3));
 				if (bSpring) T = Mixed(T, Rgb(150, 150, 104), 0.22 * W + 0.08 * Smooth(0.3, 0.8, S.N1) * (1.0 - W));
 				// (beside a track: the older wheels' spread, the broken crust a little paler than the plain, fading out)
 				if (S.Lane < 30.0) T = Mixed(T, Dust, 0.08 * Smooth(30.0, 3.0, S.Lane) * (0.7 + 0.3 * S.N1));
@@ -376,7 +390,7 @@ namespace LandScape
 
 			Tone Far(const Spot& S, bool /*bWoods*/, double /*Gap*/) const override
 			{
-				Tone T = Plain(S.Kind == KWoods ? static_cast<int>(KOpen) : S.Kind, S.N1, 0.0, S.Broad, 0.0, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2));
+				Tone T = Plain(S.Kind == KWoods ? static_cast<int>(KOpen) : S.Kind, S.N1, 0.0, S.Broad, 0.0, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2), Read(S.X, S.Y, 3));
 				// (the escarpment by its own contrast, which survives the haze better than its height: a scree slope at its
 				// foot, a dark band of shade over it, and the cliff's pale sunlit limestone face above, lit 220 or more:
 				// the art director, 18:51Z)
