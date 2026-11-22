@@ -2298,24 +2298,27 @@ namespace
 				return LayerId;
 			}
 			static const FSlateColorBrush Solid(FLinearColor::White);
+			// (What the card is painted on: the card itself above the fact strip, and below it the card moved down by the strip's
+			// second line where it takes one, so everything under the strip stands where it stood, one line lower.)
+			const FGeometry* Sheet = &Geometry;
 			// (The sheet's sizes are in pixels of the 1600 by 1000 frame; a face here is asked for in points, which are a third larger.)
 			auto Px = [](float Pixels) { return Pixels * 0.75f; };
 			const FLinearColor Desk900(FColor::FromHex(TEXT("1D1610"))), Desk800(FColor::FromHex(TEXT("2A2118"))), Desk700(FColor::FromHex(TEXT("3A2E22"))), Brass700(FColor::FromHex(TEXT("7A6038")));
 			const FLinearColor Amber(FColor::FromHex(TEXT("E0A13C"))), Dim(FColor::FromHex(TEXT("8F8573")));
 			auto Fill = [&](double X, double Y, double W, double H, const FLinearColor& Ink, int32 Layer)
 			{
-				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Sheet->ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
 			};
 			auto Picture = [&](const FSlateBrush* Brush, double X, double Y, double W, double H, int32 Layer)
 			{
 				if (Brush)
 				{
-					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(FVector2D(X, Y))), Brush, ESlateDrawEffect::None, FLinearColor::White);
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Sheet->ToPaintGeometry(FVector2D(W, H), FSlateLayoutTransform(FVector2D(X, Y))), Brush, ESlateDrawEffect::None, FLinearColor::White);
 				}
 			};
 			auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
 			{
-				FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(700.0, 40.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Sheet->ToPaintGeometry(FVector2D(700.0, 40.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
 			};
 			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
 			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
@@ -2352,7 +2355,7 @@ namespace
 			};
 			auto Stroke = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
 			{
-				FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Thick);
+				FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Sheet->ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Thick);
 			};
 			auto Edge = [&](double X, double Y, double W, double H, const FLinearColor& Ink, float Thick, int32 Layer)
 			{
@@ -2461,7 +2464,12 @@ namespace
 			}
 
 			// ---- The fact strip: where he is, what he is doing, what it risks.
-			Edge(18.5, 50.5, 662.0, 29.0, Brass700, 1.0f, 2);
+			// (The UI director, 22 November 21:03Z: no ellipsis. A cut status says nothing, the same rule as the reasons. Where
+			// the status and the risk will not stand on one line the work's name stands alone, with no place, since the place
+			// cell names it; where even that cannot, the strip takes a second line for the risk rather than squeeze it: StripOf.)
+			const FStripLaid Fact = StripOf(*Agent);
+			const double Drop = Fact.bRiskUnder ? StripLine : 0.0;
+			Edge(18.5, 50.5, 662.0, 29.0 + Drop, Brass700, 1.0f, 2);
 			{
 				double X = 34.0;
 				Sign(0, X, 65.0, Brass, 2);
@@ -2471,87 +2479,58 @@ namespace
 				const FString Whose = TEXT("  ·  ") + Agent->HostName;
 				Write(Whose, X, 58.0, Typed12, Muted, 2);
 				X += Wide(Whose, Typed12) + 14.0;
-				Stroke({ FVector2D(X, 51.0), FVector2D(X, 79.0) }, Brass700, 1.0f, 2);
+				Stroke({ FVector2D(X, 51.0), FVector2D(X, 79.0 + Drop) }, Brass700, 1.0f, 2);
 				X += 16.0;
-				// (What he is doing, in the rules' own sentence: its first words lead, the rest follows quietly.)
-				FString Lead = Agent->Doing, Rest;
-				if (Agent->bAtWork && !Agent->Status.IsEmpty())
-				{
-					// (Release 2, the spies thread's six mends, 22 November: at work, the room's status line without its
-					// place, which the strip has just named: "Berlin  .  Germany | Watching and reporting", the same words as
-					// the room. On the road or in training the rules' sentence stays, for where he goes and when.)
-					Lead = Agent->Status.Left(1).ToUpper() + Agent->Status.Mid(1);
-				}
-				else if (!Agent->Doing.Split(TEXT(": "), &Lead, &Rest))
-				{
-					if (Agent->Doing.Split(TEXT(" at "), &Lead, &Rest))
-					{
-						Rest = TEXT("at ") + Rest;
-					}
-					// (the UI director, 18:34Z 22 November: a region is "in", a town is "at": "Watching in the Ruhr")
-					else if (Agent->Doing.Split(TEXT(" in "), &Lead, &Rest))
-					{
-						Rest = TEXT("in ") + Rest;
-					}
-				}
+				// (What he is doing: its first words lead, the rest follows quietly. At work, the room's status line without
+				// its place; on the road or in training, the rules' sentence, for where he goes and when.)
+				const double WorkFrom = X;
 				Sign(Agent->bAtWork ? 1 : 4, X, 65.0, Brass, 2);
 				X += 14.0;
-				if (Agent->bAtWork)
+				Write(Fact.Lead, X, 58.0, Bold12, Cream, 2);
+				X += Wide(Fact.Lead, Bold12);
+				if (!Fact.Rest.IsEmpty())
 				{
-					// (The review of 22 November: at work the risk cell follows on the same line, and a long work, "Will try to
-					// steal the four-engined bomber plans next month" beside a long place, ran it past the strip's frame at
-					// 680.5. The lead gives way: first to the work's own name, "Steal the jet fighter plans", then cut short.)
-					const double RiskWide = 44.0 + (Agent->bAbroad
-						? Wide(FString::Printf(TEXT("%d%%"), Agent->Caught), Bold12) + Wide(TEXT(" caught a month"), Typed12)
-						: Wide(TEXT("No risk"), Bold12) + Wide(TEXT(" at home"), Typed12));
-					const double LeadRoom = 672.0 - X - RiskWide - (Rest.IsEmpty() ? 0.0 : Wide(TEXT("  \u00B7  ") + Rest, Typed12));
-					FString ByLabel, ByRest;
-					if (Wide(Lead, Bold12) > LeadRoom && Agent->Doing.Split(TEXT(": "), &ByLabel, &ByRest) && !ByLabel.IsEmpty()
-						&& Wide(ByLabel, Bold12) < Wide(Lead, Bold12))
-					{
-						Lead = ByLabel;
-					}
-					if (Wide(Lead, Bold12) > LeadRoom)
-					{
-						while (Lead.Len() > 1 && Wide(Lead + TEXT("\u2026"), Bold12) > LeadRoom)
-						{
-							Lead.LeftChopInline(1);
-						}
-						Lead = Lead.TrimEnd() + TEXT("\u2026");
-					}
-				}
-				Write(Lead, X, 58.0, Bold12, Cream, 2);
-				X += Wide(Lead, Bold12);
-				if (!Rest.IsEmpty())
-				{
-					const FString After = TEXT("  ·  ") + Rest;
+					const FString After = TEXT("  \u00B7  ") + Fact.Rest;
 					Write(After, X, 58.0, Typed12, Muted, 2);
 					X += Wide(After, Typed12);
 				}
 				if (Agent->bAtWork)
 				{
-					// (Ruling 169: a chance of 10% or more that he is caught is amber wherever it stands on the card.)
-					X += 14.0;
-					Stroke({ FVector2D(X, 51.0), FVector2D(X, 79.0) }, Brass700, 1.0f, 2);
-					X += 16.0;
-					if (Agent->bAbroad)
+					// (Ruling 169: a chance of 10% or more that he is caught is amber wherever it stands on the card. On the
+					// strip's own line it follows a divider; on the second line it stands under the work, from its sign.)
+					double Y = 58.0;
+					if (Fact.bRiskUnder)
 					{
-						const FLinearColor Risk = Agent->Caught >= 10 ? Amber : Cream;
-						Sign(2, X, 65.0, Agent->Caught >= 10 ? Amber : Brass, 2);
-						X += 14.0;
-						const FString Chance = FString::Printf(TEXT("%d%%"), Agent->Caught);
-						Write(Chance, X, 58.0, Bold12, Risk, 2);
-						Write(TEXT(" caught a month"), X + Wide(Chance, Bold12), 58.0, Typed12, Muted, 2);
+						X = WorkFrom;
+						Y += Drop;
 					}
 					else
 					{
-						Sign(3, X, 65.0, Brass, 2);
 						X += 14.0;
-						Write(TEXT("No risk"), X, 58.0, Bold12, Cream, 2);
-						Write(TEXT(" at home"), X + Wide(TEXT("No risk"), Bold12), 58.0, Typed12, Muted, 2);
+						Stroke({ FVector2D(X, 51.0), FVector2D(X, 79.0) }, Brass700, 1.0f, 2);
+						X += 16.0;
+					}
+					if (Agent->bAbroad)
+					{
+						const FLinearColor Risk = Agent->Caught >= 10 ? Amber : Cream;
+						Sign(2, X, Y + 7.0, Agent->Caught >= 10 ? Amber : Brass, 2);
+						X += 14.0;
+						const FString Chance = FString::Printf(TEXT("%d%%"), Agent->Caught);
+						Write(Chance, X, Y, Bold12, Risk, 2);
+						Write(TEXT(" caught a month"), X + Wide(Chance, Bold12), Y, Typed12, Muted, 2);
+					}
+					else
+					{
+						Sign(3, X, Y + 7.0, Brass, 2);
+						X += 14.0;
+						Write(TEXT("No risk"), X, Y, Bold12, Cream, 2);
+						Write(TEXT(" at home"), X + Wide(TEXT("No risk"), Bold12), Y, Typed12, Muted, 2);
 					}
 				}
 			}
+			// (Everything under the strip is laid in the sheet's own places and painted one line lower where it took two.)
+			const FGeometry Lower = Geometry.MakeChild(FVector2D(CardW, High - Drop), FSlateLayoutTransform(FVector2D(0.0, Drop)));
+			Sheet = &Lower;
 
 			// ---- His picture, in its well; under it, his experience toward the next rank.
 			Fill(18.0, 88.0, 100.0, 124.0, Desk800, 2);
@@ -2722,7 +2701,7 @@ namespace
 			}
 
 			// ---- The foot: how he is sent; or, while he cannot be, the rules' own reason.
-			Write(Player->GetAgentHint(), 18.0, 298.0 + Grow, Hint14, Muted, 2);
+			Write(Player->GetAgentHint(), 18.0, 298.0 + Grow - Drop, Hint14, Muted, 2);
 			return LayerId + 6;
 		}
 
@@ -2787,6 +2766,82 @@ namespace
 		// nothing. It is set at 13 (11 x 10 / 8.5 = 12.94) on lines of its own under the label, every word of it, and the
 		// row, and the card, grow to hold it.)
 		static FSlateFontInfo WhyFace() { return Typed(13.0f * 0.75f); }
+
+		/**
+		 * (The UI director, 22 November 21:03Z.) The fact strip as the card lays it: what he is doing, its quiet rest, and
+		 * whether the risk cell stands on a second line under the work. At work the room's status leads; where it and the
+		 * risk will not stand together on the strip's line (it ends at 672, in from the frame at 680.5), the work's name
+		 * alone, with no place, since the place cell names it; where even that will not, the risk takes a second line and the
+		 * status stands whole if it fits the line alone. Never an ellipsis: a cut status says nothing. The paint, the card's
+		 * height and the pointer all read it from here.
+		 */
+		struct FStripLaid
+		{
+			FString Lead, Rest;
+			bool bRiskUnder = false;
+		};
+		static constexpr double StripLine = 22.0;
+		static FStripLaid StripOf(const FViewAgent& Agent)
+		{
+			FStripLaid Laid;
+			Laid.Lead = Agent.Doing;
+			if (Agent.bAtWork && !Agent.Status.IsEmpty())
+			{
+				// (Release 2, the spies thread's six mends, 22 November: at work, the room's status line without its place.)
+				Laid.Lead = Agent.Status.Left(1).ToUpper() + Agent.Status.Mid(1);
+			}
+			else if (!Agent.Doing.Split(TEXT(": "), &Laid.Lead, &Laid.Rest))
+			{
+				if (Agent.Doing.Split(TEXT(" at "), &Laid.Lead, &Laid.Rest))
+				{
+					Laid.Rest = TEXT("at ") + Laid.Rest;
+				}
+				// (the UI director, 18:34Z 22 November: a region is "in", a town is "at": "Watching in the Ruhr")
+				else if (Agent.Doing.Split(TEXT(" in "), &Laid.Lead, &Laid.Rest))
+				{
+					Laid.Rest = TEXT("in ") + Laid.Rest;
+				}
+			}
+			if (!Agent.bAtWork)
+			{
+				return Laid;
+			}
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const FSlateFontInfo BoldFace = Typed(12.0f * 0.75f, true), PlainFace = Typed(12.0f * 0.75f);
+			auto WideIn = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+			auto Needs = [&](const FString& Head, const FString& Tail)
+			{
+				return WideIn(Head, BoldFace) + (Tail.IsEmpty() ? 0.0 : WideIn(TEXT("  \u00B7  ") + Tail, PlainFace));
+			};
+			// (As the paint lays the strip: the place's sign, the place, its country, a divider, the work's sign.)
+			const double WorkX = 34.0 + 14.0 + WideIn(Agent.Where, BoldFace) + WideIn(TEXT("  \u00B7  ") + Agent.HostName, PlainFace) + 14.0 + 16.0 + 14.0;
+			const double RiskWide = 44.0 + (Agent.bAbroad
+				? WideIn(FString::Printf(TEXT("%d%%"), Agent.Caught), BoldFace) + WideIn(TEXT(" caught a month"), PlainFace)
+				: WideIn(TEXT("No risk"), BoldFace) + WideIn(TEXT(" at home"), PlainFace));
+			const double Line = 672.0 - WorkX;
+			if (Needs(Laid.Lead, Laid.Rest) <= Line - RiskWide)
+			{
+				return Laid;
+			}
+			// (The work's own name: "Steal the jet fighter plans" from "Steal the jet fighter plans: tried next month at Berlin",
+			// "Hunting enemy agents" from "Hunting enemy agents in the Ruhr".)
+			FString Name, Place;
+			const bool bNamed = (Agent.Doing.Split(TEXT(": "), &Name, &Place) || Agent.Doing.Split(TEXT(" at "), &Name, &Place)
+				|| Agent.Doing.Split(TEXT(" in "), &Name, &Place)) && !Name.IsEmpty();
+			if (bNamed && Needs(Name, FString()) <= Line - RiskWide)
+			{
+				Laid.Lead = Name;
+				Laid.Rest.Empty();
+				return Laid;
+			}
+			Laid.bRiskUnder = true;
+			if (bNamed && Needs(Laid.Lead, Laid.Rest) > Line)
+			{
+				Laid.Lead = Name;
+				Laid.Rest.Empty();
+			}
+			return Laid;
+		}
 
 		/**
 		 * (The UI director's read of run 7, 22 November; the review of its mend.) An army in sight as the card lays it:
@@ -2940,14 +2995,16 @@ namespace
 		static double Grown(const FViewAgent& Agent)
 		{
 			// (and the list of armies in sight on the left, whose rows grow where a long name takes a line of its own)
+			// (and the fact strip's second line, where the risk stands under the work: everything under the strip moves down by it)
+			const double Drop = StripOf(Agent).bRiskUnder ? StripLine : 0.0;
 			const double Sight = FMath::Max(0.0, SightBottom(Agent) + 8.0 - 296.0);
 			if (!RowsShown(Agent))
 			{
-				return Sight;
+				return Sight + Drop;
 			}
 			const TArray<FBox2D> Rows = RowBoxes(Agent);
 			const double Under = (Rows.Num() > 0 ? Rows.Last().Max.Y : 106.0) + 8.0;
-			return FMath::Max(Sight, Under + UnderLead * FoldAt(UnderSentence(Agent), UnderFace(), 309.0).Num() - 296.0);
+			return FMath::Max(Sight, Under + UnderLead * FoldAt(UnderSentence(Agent), UnderFace(), 309.0).Num() - 296.0) + Drop;
 		}
 
 		/** What the pointer is on: a row of work by its place, -2 the door to the room, -1 nothing. */
@@ -2961,9 +3018,10 @@ namespace
 			if (Agent && RowsShown(*Agent))
 			{
 				const TArray<FBox2D> Rows = RowBoxes(*Agent);
+				const FVector2D OnSheet = Here - FVector2D(0.0, StripOf(*Agent).bRiskUnder ? StripLine : 0.0);
 				for (int32 Row = 0; Row < Rows.Num(); ++Row)
 				{
-					if (Rows[Row].IsInside(Here))
+					if (Rows[Row].IsInside(OnSheet))
 					{
 						return Row;
 					}
