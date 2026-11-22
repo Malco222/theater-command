@@ -7,7 +7,8 @@
 # with both switches on (TC_BARGAINS=1 TC_LEGIONS=1, seed 1939, Britain at the table, history stop 1, bidding on the
 # first round it can), asked every month: Britain as a bidder, Sweden as a seller and the United States as an outsider
 # in August 1941, Britain with an agent placed by hand in Stockholm on a copy of that month, Britain in June 1940 when
-# Finland's exports to it are first seen cut off at sea, and the answer while both are off.
+# Finland's exports to it are first seen cut off at sea, Britain in October 1939 when every neutral's round opens at once
+# (36 rounds: the most seals), and the answer while both are off.
 # Usage: Tools/bargains/run.sh [fixtures folder]
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

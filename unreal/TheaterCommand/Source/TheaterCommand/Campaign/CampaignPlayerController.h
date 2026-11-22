@@ -963,6 +963,8 @@ public:
 	FString GetPlayerTag() const;
 	/** Says in the notice line why something pressed cannot be done. */
 	void SayWhy(const FString& Why);
+	/** R2 bargains hook: says a note in the notice line with no sound of its own (the caller has played the order's one). */
+	void SayNote(const FString& Note) { Notify(Note, 6.0); }
 	/** The weather in the east this month, for the date plate; empty in clear weather. */
 	FText GetWeatherText() const;
 	// ---- (Rules 84.3.3) FIRST COMMAND: the staff's notes ------------------------------------------------------

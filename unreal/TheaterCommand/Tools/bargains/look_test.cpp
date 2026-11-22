@@ -14,11 +14,13 @@
 #include "look_measure.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <new>
 #include <sstream>
 #include <string>
@@ -132,6 +134,12 @@ namespace
 		if (Tag == "ITA") return 0x4E6B3A;
 		if (Tag == "USA") return 0x5A6F8C;
 		return 0x808080;
+	}
+
+	/** The tests' viewer sees every legion as one (the game asks its view's corps: LookInOf in BargainLayer.cpp). */
+	bool SeesEveryLegion(int, std::string_view)
+	{
+		return true;
 	}
 
 	FRound Round(std::vector<FBid> Bids, std::optional<double> Mine, std::string CanBid, bool bAccept = false)
@@ -487,6 +495,28 @@ namespace
 			CHECK(FlagKey(Tag).find('~') == std::string::npos);
 		}
 		CHECK(Near(PennantShare, 0.7));
+		// The pennant is the picture's triangle (30 long, 16 at the hoist): the hoist on the pole, the point out along the
+		// cloth at half its height, the flag's picture laid so that its bands run together to the point.
+		{
+			const FPennantShape Pennant = PennantShape(5.0, 100.0, 10.0, 0, 1.0);
+			CHECK(Near(Pennant.At[0].X, 5.0) && Near(Pennant.At[0].Y, 100.0) && Near(Pennant.At[1].X, 5.0) && Near(Pennant.At[1].Y, 100.0 - 7.0 * 16.0 / 30.0));
+			CHECK(Near(Pennant.At[2].X, 5.0 + 7.0) && Near(Pennant.At[2].Y, 100.0 - 0.5 * 7.0 * 16.0 / 30.0));
+			CHECK(Near(Pennant.Uv[0].X, 0.0) && Near(Pennant.Uv[0].Y, 0.0) && Near(Pennant.Uv[1].X, 0.0) && Near(Pennant.Uv[1].Y, 1.0) && Near(Pennant.Uv[2].X, 1.0) && Near(Pennant.Uv[2].Y, 0.5));
+			// (under two ally pennants, FlagWidth x 0.46 at 3:2, 0.3 U apart; never more than three slots down)
+			const FPennantShape Under = PennantShape(5.0, 100.0, 10.0, 2, 1.0);
+			CHECK(Near(Under.At[0].Y, 100.0 - 2.0 * (10.0 * 0.46 / 1.5 + 0.3)));
+			CHECK(Near(PennantShape(5.0, 100.0, 10.0, 7, 1.0).At[0].Y, PennantShape(5.0, 100.0, 10.0, 3, 1.0).At[0].Y));
+			// (wound as the old quad's first triangle: hoist top, hoist foot, then out along the cloth)
+			const double Cross = (Pennant.At[1].X - Pennant.At[0].X) * (Pennant.At[2].Y - Pennant.At[0].Y) - (Pennant.At[1].Y - Pennant.At[0].Y) * (Pennant.At[2].X - Pennant.At[0].X);
+			CHECK(Cross > 0.0);
+		}
+		// Money as the game shows it: points x the book's scale, whole.
+		CHECK_TEXT(Money(1.5, 100.0), "150");
+		CHECK_TEXT(Money(5.18, 100.0), "518");
+		CHECK_TEXT(Money(0.52, 100.0), "52");
+		CHECK_TEXT(Money(0.0, 100.0), "0");
+		CHECK_TEXT(Money(2.5, 10.0), "25");
+		CHECK_TEXT(Money(std::numeric_limits<double>::infinity(), 100.0), "0");
 		CHECK(Near(Card::FlagW / Card::FlagH, 1.5) && Near(TrayFlagW / TrayFlagH, 1.5)); // (the house's 3:2)
 	}
 
@@ -495,6 +525,7 @@ namespace
 		FBook Book = BritainsSeat();
 		FLookIn In;
 		In.SrgbOf = ColourOf;
+		In.SeesLegion = SeesEveryLegion;
 		FLook Look;
 		LookAt(Book, In, Look);
 		// Lanes: Britain's own (first), Germany's named overland one, Germany's cut one with its mark.
@@ -627,10 +658,12 @@ namespace
 			Add("sells", false, Round({}, std::nullopt, "It is yours to sell.", true));
 			Add("agent-s", false, Round({}, std::nullopt, No), true, false);
 			Add("agent-b", false, Round({}, std::nullopt, No), false, true);
+			Add("bids-seen", false, Round({ { "GER", 3.0 } }, std::nullopt, No)); // (a bid seen through an agent in the bidder's capital)
 			FLookIn Here = In;
 			Here.OpenRow = "has-bid";
 			FLook Out;
 			LookAt(Seals, Here, Out);
+			// (agent-b, an agent in the holder's capital alone, sees no bid: its seal is a quiet one)
 			CHECK(Out.Seals.size() == 5 + 12);
 			int Opens = 0, Named = 0, Generic = 0, OpenOnes = 0;
 			bool bOrder = true;
@@ -650,10 +683,67 @@ namespace
 					bOrder = bOrder && Named + Generic == 0;
 				}
 			}
-			CHECK(Opens == 5 && Named == 5 && Generic == 7 && bOrder && OpenOnes == 1);
+			CHECK(Opens == 5 && Named == 6 && Generic == 6 && bOrder && OpenOnes == 1);
+			// The card's own seal first, then the rows the viewer is in or sees bids on, then those it may bid on.
+			CHECK(Out.Seals.size() >= 5 && Seals.Rows[Out.Seals[0].Row].Id == "has-bid" && Out.Seals[0].bOpen);
+			CHECK(Out.Seals.size() >= 5 && Seals.Rows[Out.Seals[1].Row].Id == "sells" && Seals.Rows[Out.Seals[2].Row].Id == "agent-s" && Seals.Rows[Out.Seals[3].Row].Id == "bids-seen" && Seals.Rows[Out.Seals[4].Row].Id == "may-bid");
 			Here.bFar = true;
 			LookAt(Seals, Here, Out);
 			CHECK(Out.Seals.size() == 5 && Out.Plates.empty() && Out.Trays.size() == 1);
+		}
+		// At most MostSeals in all, every one of them in reach of the layer's slots: rows the viewer is in before those it
+		// may only bid on, and the quiet ones within what is left.
+		{
+			FBook Seals = Book;
+			Seals.Rows.clear();
+			for (int K = 0; K < 70; ++K)
+			{
+				FRow Row = RowOf(Book, "esp-wolfram");
+				Row.Id = "row-" + std::to_string(K);
+				Row.Round = Round({}, std::nullopt, K % 7 == 3 ? "Only a country at war bids for it." : "");
+				if (K % 10 == 9)
+				{
+					Row.Round->Mine = 1.0;
+				}
+				Seals.Rows.push_back(Row);
+			}
+			FLook Out;
+			LookAt(Seals, In, Out);
+			CHECK(Out.Seals.size() == static_cast<size_t>(MostSeals));
+			int Mine = 0;
+			for (size_t K = 0; K < Out.Seals.size(); ++K)
+			{
+				Mine += Seals.Rows[Out.Seals[K].Row].Round->Mine ? 1 : 0;
+				CHECK(K >= 7 || Seals.Rows[Out.Seals[K].Row].Round->Mine);
+				CHECK(Out.Seals[K].bOpens);
+			}
+			CHECK(Mine == 7);
+		}
+		// The card opens where a bid is seen through an agent in a bidder's capital (the United States, not at war, with an
+		// agent in Berlin, Germany bidding for wolfram Britain holds); an agent in the holder's capital alone opens none.
+		{
+			FBook Usa = Book;
+			Usa.Viewer = "USA";
+			FRow Row = RowOf(Book, "por-wolfram");
+			Row.Rel = ERel::Ally;
+			Row.Buyer = "UK";
+			Row.bAgentSeller = false;
+			Row.bAgentBuyer = false;
+			Row.Round = Round({ { "GER", 3.0 } }, std::nullopt, "Only a country at war bids for it.");
+			Usa.Rows = { Row };
+			FLook Out;
+			LookAt(Usa, In, Out);
+			CHECK(OpensCard(Row) && Out.Seals.size() == 1 && Out.Seals[0].bOpens);
+			CHECK_TEXT(SealTip(Row), "Portuguese wolfram: bids this month. Click to see the bids.");
+			FCard Card;
+			CHECK(LayCard(Row, Usa, KitMeasure, 1.0, Card));
+			std::vector<FCardLine> Lines;
+			CardLines(Row, Usa, Lines);
+			CHECK(Lines.size() == 2 && Lines[0].Kind == ELine::Seen && Lines[0].Nat == "GER" && Lines[0].Figure == "300" && Lines[1].Kind == ELine::Others);
+			Row.Round->Bids.clear();
+			Row.bAgentBuyer = true;
+			CHECK(!OpensCard(Row));
+			CHECK_TEXT(SealTip(Row), "Portuguese wolfram: bids this month. Only a country at war bids for it.");
 		}
 		// Plates for every viewer, trays only for a legion with a corps.
 		{
@@ -664,6 +754,28 @@ namespace
 			FLook Out;
 			LookAt(Away, In, Out);
 			CHECK(Out.Plates.size() == 1 && Out.Plates[0].Line == "1 division abroad" && Out.Trays.empty());
+		}
+		// The tray's pieces only for a corps the viewer's picture shows as a legion: a Soviet viewer, at war with the patron,
+		// whose view has the Blue Division's corps not identified (no vol) gets no flag and no strength, but the sender's
+		// plate line, which is public, stays. Seen exactly (vol sent), the tray is there; a vol of another home is not it.
+		{
+			FBook Enemy = Book;
+			Enemy.Viewer = "SOV";
+			FLookIn Fog = In;
+			Fog.SeesLegion = [](int, std::string_view) { return false; };
+			FLook Out;
+			LookAt(Enemy, Fog, Out);
+			CHECK(Out.Trays.empty() && Out.Plates.size() == 1);
+			Fog.SeesLegion = nullptr;
+			LookAt(Enemy, Fog, Out);
+			CHECK(Out.Trays.empty());
+			Fog.SeesLegion = [](int Corps, std::string_view Home) { return Corps == 363 && Home == "ESP"; };
+			LookAt(Enemy, Fog, Out);
+			CHECK(Out.Trays.size() == 1 && Out.Trays[0].Corps == 363);
+			Fog.SeesLegion = [](int Corps, std::string_view Home) { return Corps == 363 && Home == "POR"; };
+			std::vector<FTrayLook> Trays;
+			TraysOf(Enemy, Fog, Trays);
+			CHECK(Trays.empty());
 		}
 		// Off: nothing.
 		{
@@ -713,8 +825,8 @@ namespace
 		std::vector<FCardLine> Lines;
 		CardLines(RowOf(Book, "por-wolfram"), Book, Lines);
 		CHECK(Lines.size() == 3);
-		CHECK(Lines.size() == 3 && Lines[0].Kind == ELine::Own && Lines[0].Nat == "UK" && Lines[0].Figure == "1.5" && Lines[0].bSteps);
-		CHECK(Lines.size() == 3 && Lines[1].Kind == ELine::Seen && Lines[1].Nat == "GER" && Lines[1].Figure == "2" && !Lines[1].bSteps && !Lines[1].bAccept);
+		CHECK(Lines.size() == 3 && Lines[0].Kind == ELine::Own && Lines[0].Nat == "UK" && Lines[0].Figure == "150" && Lines[0].bSteps);
+		CHECK(Lines.size() == 3 && Lines[1].Kind == ELine::Seen && Lines[1].Nat == "GER" && Lines[1].Figure == "200" && !Lines[1].bSteps && !Lines[1].bAccept);
 		CHECK(Lines.size() == 3 && Lines[2].Kind == ELine::Others && Lines[2].Figure == "?");
 		// The seller sees every bid, the highest first, each with ACCEPT; no own row, no Others.
 		FRow Sell = RowOf(Book, "por-wolfram");
@@ -838,7 +950,7 @@ namespace
 			CHECK(Near(Figures[K]->At.Right(), OX + 161.0 * Px) && Near(Figures[K]->At.Centre().Y, Mid));
 		}
 		CHECK(Flags.size() == 3 && Flags[0]->Key == "UK" && Flags[1]->Key == "GER_PLAIN" && Flags[2]->Kind == EDraw::Box && Near(Flags[2]->Fill.A, 1.0 / 255.0, 1e-9));
-		CHECK(Figures.size() == 3 && Figures[0]->Text == "1.5" && Figures[1]->Text == "2" && Figures[2]->Text == "?");
+		CHECK(Figures.size() == 3 && Figures[0]->Text == "150" && Figures[1]->Text == "200" && Figures[2]->Text == "?"); // (money as the game shows it: points x 100)
 		CHECK(Figures.size() == 3 && Figures[0]->Fill.Srgb == Kit::Ink900 && Figures[2]->Fill.Srgb == 0x7A6A52);
 		const FDraw* Own = TextNamed(Card, "Britain");
 		const FDraw* Yours = TextNamed(Card, ", yours");
@@ -974,7 +1086,7 @@ namespace
 				CHECK(Near(Draw.At.Right(), 11.0 + 140.0));
 			}
 		}
-		CHECK(TextNamed(Card, "5.2") && TextNamed(Card, "0.5")); // (5.18 and 0.52 as the card shows them)
+		CHECK(TextNamed(Card, "518") && TextNamed(Card, "52") && TextNamed(Card, "53")); // (5.18, 0.52 and 0.53 as the game shows money)
 		// Eight bids: six rows, then "+2 more".
 		Sell.Round->Bids.push_back({ "USA", 0.6 });
 		Sell.Round->Bids.push_back({ "SOV", 0.7 });
@@ -994,7 +1106,7 @@ namespace
 		CHECK(Hint.size() == 4 && Card.HintLines == 4);
 		CHECK(Hint.size() == 4 && Hint[0]->Text.rfind("No way is open", 0) == 0 && Hint[2]->Text.rfind("Rival bids show", 0) == 0);
 		CHECK(Card.Buttons.empty() && !TextNamed(Card, ", yours"));
-		// A name and its ", yours" in the room left of the figure (161 - "1" 10.8 - 27 - 4 = 119.2 at Px 1): both where they
+		// A name and its ", yours" in the room left of the figure (161 - "5" 10.8 - 27 - 4 = 119.2 at Px 1): both where they
 		// fit ("Soviet Union" 73.9 + 35.7); the bold name alone where only it fits ("Kingdom of Greece" 109.3); else the
 		// tag. A seen bidder's name too long for its row: its tag.
 		FBook Long = Book;
@@ -1002,8 +1114,8 @@ namespace
 		Long.Nations.push_back(Nation("GRE", "Kingdom of Greece", "Greek", -1));
 		Long.Nations.push_back(Nation("USR", "Union of Soviet Socialist Republics", "Soviet", -1));
 		FRow Far = RowOf(Book, "por-wolfram");
-		Far.Round->Bids = { { "XXL", 1.0 } };
-		Far.Round->Mine = 1.0;
+		Far.Round->Bids = { { "XXL", 0.05 } };
+		Far.Round->Mine = 0.05; // (shown as 5)
 		Long.Viewer = "SOV";
 		LayCard(Far, Long, KitMeasure, 1.0, Card);
 		CHECK(TextNamed(Card, "Soviet Union") && TextNamed(Card, ", yours") && TextNamed(Card, "XXL") && !TextNamed(Card, "The Most Serene Republic of Somewhere"));
@@ -1290,6 +1402,52 @@ namespace
 		const std::vector<FRect> TopBar = { { 0, 0, 1440, 52 } };
 		CHECK(!ExitTag(FPath{ { 262, 520 }, { 150, 60 }, { 120, -100 } }, Screen, TopBar, Text, 1.0, Tag)); // (in the frame)
 		CHECK(ExitTag(FPath{ { 262, 520 }, { 150, 60 }, { 120, -100 } }, FRect{ 0, 52, 1440, 698 }, TopBar, Text, 1.0, Tag) && Near(Tag.Y, 62.0));
+
+		// Across the world map's seam (-TheaterWorld: WorldMinX -500, WorldWidth 9256.14): a lane west from (100, 100) to
+		// (8600, 200) is two pieces, to the seam at -500 and on from 8756.14. With the screen showing map x -700 to 300
+		// (a picture pixel a map unit, x + 700 on the screen), the seller's piece runs west from screen x 800 into the seam
+		// at x 200, and the buyer's piece is far off. Joined, the seam's two ends made a false step to the right, and the tag
+		// stood at the right edge; piece by piece, the lane runs into the seam on the screen, and there is no tag.
+		{
+			FRow Seam = RowOf(BritainsSeat(), "por-wolfram");
+			Seam.Path = { { 100, 100 }, { 8600, 200 } };
+			FLaneShape World;
+			LayLane(Seam, 1.0, -500.0, 9256.14, World);
+			CHECK(World.Raw.Num() == 2 && Near(World.Raw[0].back().X, -500.0) && Near(World.Raw[1].front().X, 8756.14, 1e-6));
+			FPathList OnScreen;
+			FPath Joined;
+			for (size_t P = 0; P < World.Raw.Num(); ++P)
+			{
+				FPath& Piece = OnScreen.Add();
+				for (const FPt& At : World.Raw[P])
+				{
+					Piece.push_back(FPt{ At.X + 700.0, At.Y });
+					Joined.push_back(FPt{ At.X + 700.0, At.Y });
+				}
+			}
+			const FRect Window{ 0, 0, 1000, 900 };
+			CHECK(ExitTag(Joined, Window, NoFrame, Text, 1.0, Tag) && Tag.X > 900.0); // (the old join: the tag at the wrong edge)
+			CHECK(!ExitTagOfPieces(OnScreen, Window, NoFrame, Text, 1.0, Tag));
+			// (the screen over the seam's far side, map x 8650 to 9650: the buyer's piece comes in at x 106 and leaves by
+			// the left edge for the buyer at 8600, off the screen: the tag stands 10 inside that edge)
+			OnScreen.Clear();
+			for (size_t P = 0; P < World.Raw.Num(); ++P)
+			{
+				FPath& Piece = OnScreen.Add();
+				for (const FPt& At : World.Raw[P])
+				{
+					Piece.push_back(FPt{ At.X - 8650.0, At.Y });
+				}
+			}
+			CHECK(ExitTagOfPieces(OnScreen, Window, NoFrame, Text, 1.0, Tag) && Near(Tag.X, Lane::TagInside));
+			// (one piece: as ExitTag)
+			OnScreen.Clear();
+			OnScreen.Add() = FPath{ { 262, 520 }, { 220, 300 }, { 150, 60 }, { 120, -100 } };
+			FRect One;
+			CHECK(ExitTagOfPieces(OnScreen, Screen, NoFrame, Text, 1.0, Tag) && ExitTag(OnScreen[0], Screen, NoFrame, Text, 1.0, One) && Near(Tag.X, One.X) && Near(Tag.Y, One.Y));
+			OnScreen.Clear();
+			CHECK(!ExitTagOfPieces(OnScreen, Screen, NoFrame, Text, 1.0, Tag));
+		}
 	}
 
 	void TestTint()
@@ -1455,6 +1613,21 @@ namespace
 		FRect Tag;
 		FPt At;
 		double Sum = 0.0;
+		// (the lane's pieces on the screen, filled each frame as the layer's Tick fills them, piece by piece)
+		FPathList Pieces;
+		auto Project = [&Pieces, &Lane]()
+		{
+			Pieces.Clear();
+			for (size_t P = 0; P < Lane.Raw.Num(); ++P)
+			{
+				FPath& Seen = Pieces.Add();
+				for (const FPt& Point : Lane.Raw[P])
+				{
+					Seen.push_back(FPt{ Point.X - 100.0, Point.Y });
+				}
+			}
+		};
+		Project();
 		// Every frame: the card's place, the seals, the tag, the crate's point. None may allocate.
 		GNews = 0;
 		GCounting = true;
@@ -1466,6 +1639,8 @@ namespace
 			SealAt(In.Capital, 1.0, Frame, Plates, Laid, At);
 			Laid.push_back(At);
 			Sum += ExitTag(OnScreen, In.Screen, Frame, FPt{ 50, 16 }, 1.0, Tag) ? Tag.X : 0.0;
+			Project();
+			Sum += ExitTagOfPieces(Pieces, In.Screen, Frame, FPt{ 50, 16 }, 1.0, Tag) ? Tag.X : 0.0;
 			Sum += PointAt(Lane.Pieces, CrateShare(CrateRunT(Frame_ / 30.0))).X;
 			Sum += NeedsPlace(Placed, In.Capital, In.Screen, 1.0) ? 1.0 : 0.0;
 		}
@@ -1511,7 +1686,7 @@ namespace
 	void TestSamples(const char* Folder)
 	{
 		const char* Files[] = { "look-bidder-UK-August-1941.json", "look-seller-SWE-August-1941.json", "look-agent-UK-August-1941.json",
-			"look-outsider-USA-August-1941.json", "look-cut-UK-June-1940.json", "look-off.json" };
+			"look-outsider-USA-August-1941.json", "look-cut-UK-June-1940.json", "look-first-UK-October-1939.json", "look-off.json" };
 		int Cards = 0, Lanes = 0, Cuts = 0;
 		for (const char* Name : Files)
 		{
@@ -1522,15 +1697,17 @@ namespace
 			CHECK(bRead && !Text.empty());
 			FLookIn In;
 			In.SrgbOf = ColourOf;
+			In.SeesLegion = SeesEveryLegion;
 			FLook Look;
 			LookAt(Book, In, Look);
+			CHECK(Book.Scale == 100.0 || !Book.bOn);
 			if (std::string(Name) == "look-off.json")
 			{
 				CHECK(!Book.bOn && Look.Lanes.empty() && Look.Seals.empty() && Look.Plates.empty() && Look.Trays.empty());
 				continue;
 			}
 			CHECK(Book.bOn && Look.Lanes.size() <= 16);
-			// (the Blue Division serves near Minsk in August 1941; in June 1940 there are no legions yet)
+			// (the Blue Division serves near Minsk in August 1941; in June 1940 and October 1939 there are no legions yet)
 			if (Book.Legions.empty())
 			{
 				CHECK(Look.Plates.empty() && Look.Trays.empty());
@@ -1578,10 +1755,10 @@ namespace
 			}
 			if (std::string(Name) == "look-bidder-UK-August-1941.json")
 			{
-				// (Britain has bid 1.5 for Sweden's ore, which Germany holds in its last month; the rival bids unseen)
+				// (Britain has bid 1.5 for Sweden's ore, shown as 150, which Germany holds in its last month; the rival bids unseen)
 				FCard Card;
 				const FRow* Ore = Book.Row("swe-ore");
-				CHECK(Ore && LayCard(*Ore, Book, KitMeasure, 1.0, Card) && TextNamed(Card, "1.5") && TextNamed(Card, "Others") && Card.Buttons.size() == 2);
+				CHECK(Ore && LayCard(*Ore, Book, KitMeasure, 1.0, Card) && TextNamed(Card, "150") && TextNamed(Card, "Others") && Card.Buttons.size() == 2);
 				CHECK(TextNamed(Card, "held by Germany, 12 of 12 months") && TextNamed(Card, "Britain") && TextNamed(Card, ", yours") && TextNamed(Card, "ORE") && TextNamed(Card, "Sweden"));
 				CHECK_TEXT(HintOf(Card, 1.0), "Rival bids show with an agent in Stockholm, or in the bidder's capital.");
 				// (Switzerland's goods: no way open to Britain, so the reason leads and there is no bid to make)
@@ -1593,7 +1770,7 @@ namespace
 				// (an agent in Stockholm: every bid seen, no Others row; Britain's own row first with its steps)
 				FCard Card;
 				const FRow* Ore = Book.Row("swe-ore");
-				CHECK(Ore && LayCard(*Ore, Book, KitMeasure, 1.0, Card) && !TextNamed(Card, "Others") && Card.Rows == 6 && TextNamed(Card, "5.2"));
+				CHECK(Ore && LayCard(*Ore, Book, KitMeasure, 1.0, Card) && !TextNamed(Card, "Others") && Card.Rows == 6 && TextNamed(Card, "518") && TextNamed(Card, "150"));
 				CHECK(HintOf(Card, 1.0).empty());
 			}
 			if (std::string(Name) == "look-outsider-USA-August-1941.json")
@@ -1625,6 +1802,204 @@ namespace
 	}
 }
 
+namespace
+{
+	/** Dashes as it was first written (each dash cut from its piece's start): the reference the one-pass walk must match. */
+	void DashesByCutting(const FPathList& Pieces, double Dash, double Gap, double SkipFrom, double SkipTo, FPathList& Out)
+	{
+		Out.Clear();
+		const double Period = Dash + Gap;
+		if (Dash <= 0.0 || Period <= 1e-9)
+		{
+			return;
+		}
+		double Total = 0.0;
+		for (size_t P = 0; P < Pieces.Num(); ++P)
+		{
+			Total += LengthOf(Pieces[P]);
+		}
+		auto Emit = [&](double U, double V)
+		{
+			double Start = 0.0;
+			for (size_t P = 0; P < Pieces.Num(); ++P)
+			{
+				const double Long = LengthOf(Pieces[P]);
+				const double A = std::max(U, Start), B = std::min(V, Start + Long);
+				if (B > A + 1e-9)
+				{
+					FPath& Piece = Out.Add();
+					SubPath(Pieces[P], A - Start, B - Start, Piece);
+					if (Piece.size() < 2)
+					{
+						Out.Count--;
+					}
+				}
+				Start += Long;
+			}
+		};
+		for (int K = 0; K * Period < Total; ++K)
+		{
+			const double U = K * Period, V = std::min(U + Dash, Total);
+			if (SkipTo > SkipFrom && V > SkipFrom && U < SkipTo)
+			{
+				if (SkipFrom > U)
+				{
+					Emit(U, SkipFrom);
+				}
+				if (SkipTo < V)
+				{
+					Emit(SkipTo, V);
+				}
+				continue;
+			}
+			Emit(U, V);
+		}
+	}
+
+	bool SameDashes(const FPathList& A, const FPathList& B)
+	{
+		if (A.Num() != B.Num())
+		{
+			return false;
+		}
+		for (size_t K = 0; K < A.Num(); ++K)
+		{
+			if (A[K].size() != B[K].size())
+			{
+				return false;
+			}
+			for (size_t I = 0; I < A[K].size(); ++I)
+			{
+				if (A[K][I].X != B[K][I].X || A[K][I].Y != B[K][I].Y)
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * The dashes in one pass: the same dashes, to the bit, as cutting each from its piece's start, on the rules' own lanes
+	 * at every eye from the nearest the camera comes (750, UnitScale 10: thousands of dashes a lane) to the farthest, with
+	 * a cut's gap and across the world's seam; and a lane of 200,000 points dashed in well under a second, where cutting
+	 * each dash from the start would take minutes.
+	 */
+	void TestDashesOnePass(const char* Folder)
+	{
+		int Compared = 0;
+		size_t Most = 0;
+		const char* Files[] = { "look-cut-UK-June-1940.json", "look-bidder-UK-August-1941.json", "look-first-UK-October-1939.json" };
+		for (const char* Name : Files)
+		{
+			FBook Book;
+			if (!Folder || !ReadBook(ReadAll(std::string(Folder) + "/" + Name), Book))
+			{
+				continue;
+			}
+			FLookIn In;
+			In.SrgbOf = ColourOf;
+			FLook Look;
+			LookAt(Book, In, Look);
+			for (const double Eye : { 750.0, 1500.0, 4000.0, 12000.0, 30000.0 })
+			{
+				const double Pixel = PixelOf(Eye, 10.0, 1.0, 1000.0 / 900.0);
+				for (const FLaneLook& Each : Look.Lanes)
+				{
+					FLaneShape Shape;
+					LayLane(Book.Rows[Each.Row], Pixel, -500.0, Eye == 1500.0 ? 1200.0 : 0.0, Shape); // (at 1500, a narrow world: seams)
+					FPathList Reference;
+					DashesByCutting(Shape.Pieces, Lane::Dash * Pixel, Lane::Gap * Pixel, Shape.Gap.bOk ? Shape.Gap.From : -1.0, Shape.Gap.bOk ? Shape.Gap.To : -1.0, Reference);
+					CHECK(SameDashes(Shape.Dashes, Reference));
+					Most = std::max(Most, Shape.Dashes.Num());
+					++Compared;
+					// (and with a skip that starts before the first dash, ends past the last, or covers one piece)
+					FPathList Mine;
+					const double Long = Shape.Length;
+					for (const auto& Skip : { std::pair<double, double>{ -5.0, Long * 0.3 }, { Long * 0.7, Long + 5.0 }, { Long * 0.4, Long * 0.41 } })
+					{
+						Dashes(Shape.Pieces, Lane::Dash * Pixel, Lane::Gap * Pixel, Skip.first, Skip.second, Mine);
+						DashesByCutting(Shape.Pieces, Lane::Dash * Pixel, Lane::Gap * Pixel, Skip.first, Skip.second, Reference);
+						CHECK(SameDashes(Mine, Reference));
+					}
+				}
+			}
+		}
+		CHECK(Compared >= 60 && Most >= 1000);
+		// Pieces with nothing in them, a point alone, and a piece of no length among the others.
+		{
+			FPathList Odd;
+			Odd.Add() = FPath{};
+			Odd.Add() = FPath{ { 0, 0 }, { 25, 0 } };
+			Odd.Add() = FPath{ { 30, 0 } };
+			Odd.Add() = FPath{ { 40, 0 }, { 40, 0 }, { 40, 0 } };
+			Odd.Add() = FPath{ { 50, 0 }, { 50, 0 }, { 63, 0 }, { 63, 5 } };
+			FPathList Mine, Reference;
+			Dashes(Odd, 10.0, 7.0, -1.0, -1.0, Mine);
+			DashesByCutting(Odd, 10.0, 7.0, -1.0, -1.0, Reference);
+			CHECK(SameDashes(Mine, Reference) && Mine.Num() >= 3);
+			Dashes(Odd, 10.0, 7.0, 12.0, 30.0, Mine);
+			DashesByCutting(Odd, 10.0, 7.0, 12.0, 30.0, Reference);
+			CHECK(SameDashes(Mine, Reference));
+		}
+		// The bound: 200,000 points a unit apart, a dash every 10: 20,000 dashes. Cutting each from the start is 20,000 x
+		// 200,000 steps; one pass is about 400,000.
+		{
+			FPathList Long;
+			FPath& Line = Long.Add();
+			for (int K = 0; K < 200000; ++K)
+			{
+				Line.push_back(FPt{ static_cast<double>(K), (K % 2) * 0.01 });
+			}
+			FPathList Mine;
+			const auto T0 = std::chrono::steady_clock::now();
+			Dashes(Long, 7.0, 3.0, -1.0, -1.0, Mine);
+			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - T0).count();
+			CHECK(Mine.Num() >= 19990 && Mine.Num() <= 20010);
+			CHECK(Ms < 1500.0);
+			std::printf("dashes: %d lanes matched cut by cut (up to %zu dashes a lane); %zu dashes on 200000 points in %.1f ms\n", Compared, Most, Mine.Num(), Ms);
+		}
+	}
+
+	/** October 1939, the first month with bargains: every round opens at once, and every seal must have a slot. */
+	void TestFirstMonth(const char* Folder)
+	{
+		FBook Book;
+		CHECK(Folder && ReadBook(ReadAll(std::string(Folder) + "/look-first-UK-October-1939.json"), Book) && Book.bOn && Book.Scale == 100.0);
+		int Rounds = 0;
+		for (const FRow& Row : Book.Rows)
+		{
+			Rounds += Row.Round ? 1 : 0;
+		}
+		FLookIn In;
+		In.SrgbOf = ColourOf;
+		FLook Look;
+		LookAt(Book, In, Look);
+		int Opens = 0;
+		for (const FSealLook& Seal : Look.Seals)
+		{
+			Opens += Seal.bOpens ? 1 : 0;
+		}
+		CHECK(Rounds == 36 && Look.Seals.size() == 36 && Opens == 29);
+		CHECK(Look.Seals.size() <= static_cast<size_t>(MostSeals));
+		const size_t SealsNear = Look.Seals.size();
+		// (the five that fell past the old 24 slots: each of them has its seal, and it opens Britain's card)
+		for (const char* Id : { "gen-NOR", "gen-PAN", "gen-PER", "gen-URU", "gen-VEN" })
+		{
+			bool bFound = false;
+			for (const FSealLook& Seal : Look.Seals)
+			{
+				bFound = bFound || (Book.Rows[Seal.Row].Id == Id && Seal.bOpens);
+			}
+			CHECK(bFound);
+		}
+		In.bFar = true;
+		LookAt(Book, In, Look);
+		CHECK(Look.Seals.size() == 29);
+		std::printf("first month: %d rounds, %zu seals (%d open a card; %zu from far off), at most %d\n", Rounds, SealsNear, Opens, Look.Seals.size(), MostSeals);
+	}
+}
+
 int main(int Count, char** Args)
 {
 	TestUnitsAndColours();
@@ -1643,6 +2018,8 @@ int main(int Count, char** Args)
 	if (Count > 1)
 	{
 		TestSamples(Args[1]);
+		TestDashesOnePass(Args[1]);
+		TestFirstMonth(Args[1]);
 	}
 	else
 	{

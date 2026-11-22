@@ -402,7 +402,7 @@ namespace BargainLayer
 			FVector2D TagSize = FVector2D::ZeroVector;
 			FSlateFontInfo TagFont;
 			FText Hover; // the cut's words or the crate's
-			Bargains::FPath OnScreen; // its points on the screen, seller first (ExitTag's)
+			Bargains::FPathList OnScreen; // its pieces' points on the screen, seller first (ExitTagOfPieces')
 			FVector2D CrateAt = FVector2D::ZeroVector;
 			FVector2D RingAt = FVector2D::ZeroVector;
 			FVector2D TagAt = FVector2D::ZeroVector;
@@ -440,7 +440,9 @@ namespace BargainLayer
 			FText Tip;
 		};
 
-		constexpr int32 SealSlots = 24;
+		/** A slot for every seal the look can return (it caps them itself): no seal is left unlaid, unpainted or unpressable. */
+		constexpr int32 SealSlots = Bargains::MostSeals;
+		static_assert(SealSlots >= Bargains::MostSeals, "a seal slot for every seal LookAt can return");
 		constexpr int32 LaneSlots = Bargains::MostLanes;
 		/** The map's pixel (RebuildHighlight's, of the 1600 by 1000 view) to a pixel of the 1440 x 900 picture. */
 		constexpr double PictureTick = 1000.0 / 900.0;
@@ -703,31 +705,10 @@ namespace BargainLayer
 			}
 		}
 
-		/**
-		 * Lays the lanes and the tints for the eye at Eye: section 0 the tints (the border at its alpha, fading to nothing
-		 * 13 px in), 1 the paper casings, 2 the dashes and the cut's ticks in the holder's colour. Nothing is made where
-		 * nothing is drawn: with both rules off, or no lane and no tint, there is no mesh.
-		 */
-		void LayMeshes(FState& S, ACampaignMapActor* Map, double Eye)
+		/** Section 0, the tints: the seller's outer border, coasts and all, as the regions it holds now draw it. */
+		void LayTints(FState& S, ACampaignMapActor* Map, UProceduralMeshComponent* Mesh, double Pixel)
 		{
-			THEATER_SPEED_SCOPE(BargainMeshes);
-			S.LaidAt = Eye;
-			const bool bAny = S.Book.bOn && (!S.Look.Lanes.empty() || !S.Look.Tints.empty());
-			if (!Map || !bAny)
-			{
-				if (UProceduralMeshComponent* Kept = S.Mesh.Get())
-				{
-					Kept->ClearAllMeshSections();
-				}
-				return;
-			}
 			const FCampaignMapData& Data = Map->GetData();
-			const double Pixel = Bargains::PixelOf(Eye, Map->UnitScale, 1.0, PictureTick);
-			const double MinX = Data.WorldMinX, MapW = Data.bWorld ? Data.WorldWidth : 0.0;
-			UProceduralMeshComponent* Mesh = MeshOf(S, Map);
-			Mesh->ClearAllMeshSections();
-
-			// The tints: the seller's outer border, coasts and all, as the regions it holds now draw it.
 			const FCampaignSession* Session = S.Player.IsValid() ? S.Player->GetSession() : nullptr;
 			const TArray<FString>* Holders = Session ? &Session->GetView().RegionHolder : nullptr;
 			S.Tints.resize(S.Look.Tints.size());
@@ -766,8 +747,13 @@ namespace BargainLayer
 				}
 			}
 			Commit(S, Mesh, 0);
+		}
 
-			// The lanes: the paper casing under, then the dashes from the seller and the cut's two ticks.
+		/** Sections 1 and 2, the lanes: the paper casing under, then the dashes from the seller and the cut's two ticks. */
+		void LayLanes(FState& S, ACampaignMapActor* Map, UProceduralMeshComponent* Mesh, double Pixel)
+		{
+			const FCampaignMapData& Data = Map->GetData();
+			const double MinX = Data.WorldMinX, MapW = Data.bWorld ? Data.WorldWidth : 0.0;
 			S.Lanes.resize(S.Look.Lanes.size());
 			for (size_t Each = 0; Each < S.Look.Lanes.size(); ++Each)
 			{
@@ -804,6 +790,53 @@ namespace BargainLayer
 				}
 			}
 			Commit(S, Mesh, 2);
+		}
+
+		/**
+		 * Lays the lanes and the tints for the eye at Eye: section 0 the tints (the border at its alpha, fading to nothing
+		 * 13 px in), 1 the paper casings, 2 the dashes and the cut's ticks in the holder's colour. Nothing is made where
+		 * nothing is drawn: with both rules off, or no lane and no tint, there is no mesh.
+		 */
+		void LayMeshes(FState& S, ACampaignMapActor* Map, double Eye)
+		{
+			THEATER_SPEED_SCOPE(BargainMeshes);
+			S.LaidAt = Eye;
+			const bool bAny = S.Book.bOn && (!S.Look.Lanes.empty() || !S.Look.Tints.empty());
+			if (!Map || !bAny)
+			{
+				if (UProceduralMeshComponent* Kept = S.Mesh.Get())
+				{
+					Kept->ClearAllMeshSections();
+				}
+				return;
+			}
+			const double Pixel = Bargains::PixelOf(Eye, Map->UnitScale, 1.0, PictureTick);
+			UProceduralMeshComponent* Mesh = MeshOf(S, Map);
+			Mesh->ClearAllMeshSections();
+			LayTints(S, Map, Mesh, Pixel);
+			LayLanes(S, Map, Mesh, Pixel);
+		}
+
+		/**
+		 * The book is the same and only the card open (or the eye's side of far) changed: the lanes stand as they are (the
+		 * look's lanes follow the book alone), and only the tints, section 0, are laid again, at the eye the lanes were laid
+		 * for (the zoom's own re-lay follows as it would). A press on a seal near the ground no longer lays every dash again.
+		 */
+		void LayTintsAgain(FState& S, ACampaignMapActor* Map)
+		{
+			if (!Map || !S.Book.bOn || S.LaidAt <= 0.0 || S.MeshMap.Get() != Map)
+			{
+				LayMeshes(S, Map, S.Eye > 0.0 ? S.Eye : EyeOf(S.Player.Get())); // (nothing laid yet for this map: all of it is)
+				return;
+			}
+			if (!S.Mesh.IsValid() && S.Look.Tints.empty())
+			{
+				return; // (no mesh was made, and none is wanted)
+			}
+			THEATER_SPEED_SCOPE(BargainMeshes);
+			UProceduralMeshComponent* Mesh = MeshOf(S, Map);
+			Mesh->ClearMeshSection(0);
+			LayTints(S, Map, Mesh, Bargains::PixelOf(S.LaidAt, Map->UnitScale, 1.0, PictureTick));
 		}
 
 		// -----------------------------------------------------------------------------------------------------------
@@ -876,8 +909,8 @@ namespace BargainLayer
 			S.HotButton = INDEX_NONE;
 		}
 
-		/** Asks the look what the map shows of the book (for the eye's distance and the card open), and lays it all. */
-		void Relook(FState& S)
+		/** What the look is asked with: the nations' colours, the eye's distance, the card open, and the corps the player sees as legions. */
+		Bargains::FLookIn LookInOf(const FState& S)
 		{
 			ACampaignPlayerController* Player = S.Player.Get();
 			ACampaignMapActor* Map = Player ? Player->GetMap() : nullptr;
@@ -890,14 +923,67 @@ namespace BargainLayer
 			};
 			In.bFar = S.bFar;
 			In.OpenRow = S.Open.Row();
-			Bargains::LookAt(S.Book, In, S.Look);
-
-			S.Lanes.clear();
-			S.Lanes.resize(S.Look.Lanes.size());
-			for (size_t Each = 0; Each < S.Look.Lanes.size(); ++Each)
+			// (a legion's tray pieces only for a corps the player's own picture shows as one: the bridge's vol, sent for his
+			// own, an ally's, or a corps known exactly; never the flag or true strength of one not identified)
+			const FCampaignSession* Session = Player ? Player->GetSession() : nullptr;
+			const TArray<FViewCorps>* Corps = Session ? &Session->GetView().Corps : nullptr;
+			In.SeesLegion = [Corps](int Id, std::string_view Home)
 			{
-				S.Lanes[Each].Tag = FromUtf8(S.Look.Lanes[Each].Tag);
-				S.Lanes[Each].Hover = FText::FromString(FromUtf8(S.Look.Lanes[Each].Hover));
+				if (!Corps)
+				{
+					return false;
+				}
+				for (const FViewCorps& Each : *Corps)
+				{
+					if (Each.Id == Id)
+					{
+						return !Each.Vol.IsEmpty() && Each.Vol == FromUtf8(std::string(Home));
+					}
+				}
+				return false;
+			};
+			return In;
+		}
+
+		/** The tray's pieces, from the look's. */
+		void LayTrays(FState& S)
+		{
+			S.Trays.clear();
+			for (const Bargains::FTrayLook& Look : S.Look.Trays)
+			{
+				FTrayLaid& Tray = S.Trays.emplace_back();
+				Tray.Corps = Look.Corps;
+				Tray.Flag = FromUtf8(Look.Flag);
+				Tray.Line = FText::FromString(FromUtf8(Look.Line));
+				Tray.Tip = FText::FromString(FromUtf8(Look.Tip));
+			}
+		}
+
+		/** The tray's pieces again, for the player's picture of the corps as it is now (the book unchanged). */
+		void Retray(FState& S)
+		{
+			Bargains::TraysOf(S.Book, LookInOf(S), S.Look.Trays);
+			LayTrays(S);
+		}
+
+		/** Asks the look what the map shows of the book (for the eye's distance and the card open), and lays it all. */
+		void Relook(FState& S, bool bNewBook = true)
+		{
+			ACampaignPlayerController* Player = S.Player.Get();
+			ACampaignMapActor* Map = Player ? Player->GetMap() : nullptr;
+			Bargains::LookAt(S.Book, LookInOf(S), S.Look);
+
+			// (the look's lanes follow the book alone: with the same book, a card opened or closed, or the eye gone far or
+			// near, leaves them as laid, and only the tints are laid again. A new book lays them again in the same buffers)
+			const bool bLanesStand = !bNewBook && S.LaidAt > 0.0 && S.Lanes.size() == S.Look.Lanes.size();
+			if (!bLanesStand)
+			{
+				S.Lanes.resize(S.Look.Lanes.size());
+				for (size_t Each = 0; Each < S.Look.Lanes.size(); ++Each)
+				{
+					S.Lanes[Each].Tag = FromUtf8(S.Look.Lanes[Each].Tag);
+					S.Lanes[Each].Hover = FText::FromString(FromUtf8(S.Look.Lanes[Each].Hover));
+				}
 			}
 			S.Tints.clear(); // (the seller's border is read again from the regions it holds now)
 			for (int32 Slot = 0; Slot < SealSlots; ++Slot)
@@ -915,16 +1001,15 @@ namespace BargainLayer
 					Plate.Capital = Look.Capital;
 				}
 			}
-			S.Trays.clear();
-			for (const Bargains::FTrayLook& Look : S.Look.Trays)
+			LayTrays(S);
+			if (bLanesStand)
 			{
-				FTrayLaid& Tray = S.Trays.emplace_back();
-				Tray.Corps = Look.Corps;
-				Tray.Flag = FromUtf8(Look.Flag);
-				Tray.Line = FText::FromString(FromUtf8(Look.Line));
-				Tray.Tip = FText::FromString(FromUtf8(Look.Tip));
+				LayTintsAgain(S, Map);
 			}
-			LayMeshes(S, Map, S.Eye > 0.0 ? S.Eye : EyeOf(Player));
+			else
+			{
+				LayMeshes(S, Map, S.Eye > 0.0 ? S.Eye : EyeOf(Player));
+			}
 			LayWords(S);
 		}
 
@@ -992,10 +1077,12 @@ namespace BargainLayer
 			case Bargains::EAct::None:
 				return;
 			}
+			// (one sound for the press, as the court's orders: coins for an order taken, a click for one refused; the note
+			// is said with none of its own, as SayWhy would add a second click)
 			CampaignSounds::Play(Player, bOk ? TEXT("coins") : TEXT("click"));
 			if (!Note.IsEmpty())
 			{
-				Player->SayWhy(Note);
+				Player->SayNote(Note);
 			}
 			// (the order changed the war: the rules' kept answers were forgotten, and the book is read again)
 			BargainLayer::ShowOnMap(Player);
@@ -1016,7 +1103,7 @@ namespace BargainLayer
 			}
 			if (S.Open.Press(S.Book, S.Book.Rows[static_cast<size_t>(Row)].Id))
 			{
-				Relook(S); // (the open card's seller is tinted, and its seal ringed)
+				Relook(S, false); // (the open card's seller is tinted, and its seal ringed; the lanes stand as laid)
 				CampaignSounds::Play(S.Player.Get(), TEXT("click"));
 			}
 			return true;
@@ -1342,7 +1429,10 @@ namespace BargainLayer
 					return;
 				}
 				const FVector2D Local = AllottedGeometry.GetLocalSize();
-				if (Local.X < 1.0 || Local.Y < 1.0)
+				// (the layer's last paint, in the window's measure: what the keep-off boxes are read in, below. None before its
+				// first paint, and then nothing is laid: the marks wait a frame)
+				const FGeometry& Painted = GetPaintSpaceGeometry();
+				if (Local.X < 1.0 || Local.Y < 1.0 || Painted.GetLocalSize().X < 1.0 || Painted.GetLocalSize().Y < 1.0)
 				{
 					return;
 				}
@@ -1364,7 +1454,7 @@ namespace BargainLayer
 				if (bFar != S.bFar)
 				{
 					S.bFar = bFar;
-					Relook(S);
+					Relook(S, false); // (the quiet seals and the plate lines come or go; the lanes stand, and the zoom's re-lay follows)
 				}
 				else if (Bargains::Relay(S.LaidAt, S.Eye))
 				{
@@ -1381,15 +1471,20 @@ namespace BargainLayer
 				}
 
 				// What the marks keep off: the frame's pieces and the panels over the map (but the card itself), and the
-				// town plates drawn.
+				// town plates drawn. The boxes come in the window's (paint) measure, as each was last painted (FrameRects,
+				// EdgeNewsKeepOff), and are brought into the layer's units by the layer's own last paint, which is in that
+				// measure too. Not by AllottedGeometry: Tick is handed the desktop's measure (SWidget::Paint adds the window's
+				// place on the desktop before it ticks), so in any window off the desktop's corner every box would move up
+				// and to the left by the window's place (the edge layer's fix, 1a22b3ed). The last paint is a frame old; the
+				// layer fills the screen and stands still, so the lag is harmless.
 				S.Frame.clear();
 				if (KeepOffOf)
 				{
 					KeepOffOf(S.KeepOff);
 					for (const FSlateRect& Piece : S.KeepOff)
 					{
-						const FVector2D Min = AllottedGeometry.AbsoluteToLocal(FVector2D(Piece.Left, Piece.Top));
-						const FVector2D Max = AllottedGeometry.AbsoluteToLocal(FVector2D(Piece.Right, Piece.Bottom));
+						const FVector2D Min = Painted.AbsoluteToLocal(FVector2D(Piece.Left, Piece.Top));
+						const FVector2D Max = Painted.AbsoluteToLocal(FVector2D(Piece.Right, Piece.Bottom));
 						const Bargains::FRect Rect{ Min.X, Min.Y, Max.X - Min.X, Max.Y - Min.Y };
 						if (S.bPlaced && FMath::Abs(Rect.X - S.Placed.Card.X) < 2.0 && FMath::Abs(Rect.Y - S.Placed.Card.Y) < 2.0 && FMath::Abs(Rect.W - S.Placed.Card.W) < 2.0 && FMath::Abs(Rect.H - S.Placed.Card.H) < 2.0)
 						{
@@ -1501,20 +1596,22 @@ namespace BargainLayer
 					}
 					if (!Lane.Tag.IsEmpty())
 					{
-						Lane.OnScreen.clear();
+						// (piece by piece: a lane across the world's seam is two, and the tag is laid on one of them, never across the jump)
+						Lane.OnScreen.Clear();
 						for (size_t Piece = 0; Piece < Lane.Shape.Raw.Num(); ++Piece)
 						{
+							Bargains::FPath& Seen = Lane.OnScreen.Add();
 							for (const Bargains::FPt& Point : Lane.Shape.Raw[Piece])
 							{
 								FVector2D At(0.0, 0.0);
 								if (Project(Point.X, Point.Y, At))
 								{
-									Lane.OnScreen.push_back(Bargains::FPt{ At.X, At.Y });
+									Seen.push_back(Bargains::FPt{ At.X, At.Y });
 								}
 							}
 						}
 						Bargains::FRect Tag;
-						if (Bargains::ExitTag(Lane.OnScreen, Screen, S.Frame, Bargains::FPt{ Lane.TagSize.X, Lane.TagSize.Y }, Px, Tag))
+						if (Bargains::ExitTagOfPieces(Lane.OnScreen, Screen, S.Frame, Bargains::FPt{ Lane.TagSize.X, Lane.TagSize.Y }, Px, Tag))
 						{
 							Lane.bTag = true;
 							Lane.TagAt = FVector2D(Tag.X, Tag.Y);
@@ -1700,7 +1797,13 @@ namespace BargainLayer
 		const FTCHARToUTF8 Bytes(*Json);
 		if (S.Json.size() == static_cast<size_t>(Bytes.Length()) && FMemory::Memcmp(S.Json.data(), Bytes.Get(), S.Json.size()) == 0)
 		{
-			return; // (the same picture of the bargains: nothing to lay again)
+			// (the same picture of the bargains: nothing to lay again, but the tray's legions follow the player's picture of
+			// the corps, which a new view can change within the month)
+			if (S.Book.bOn)
+			{
+				Impl::Retray(S);
+			}
+			return;
 		}
 		S.Json.assign(Bytes.Get(), static_cast<size_t>(Bytes.Length()));
 		std::string Error;
@@ -1826,18 +1929,21 @@ namespace BargainLayer
 		{
 			return;
 		}
-		// (the first slot under the ally pennants, which are FlagWidth x 0.46 wide, 3:2, 0.3 U apart, three at most)
-		const double AllyHigh = FlagWidth * 0.46 / 1.5;
-		const double Wide = FlagWidth * Bargains::PennantShare, High = Wide / 1.5;
-		const double Top = TopZ - FMath::Min(Allies.Num(), 3) * (AllyHigh + 0.3 * U);
-		const double Far = NearY + Wide;
-		const TArray<FVector> Corners = { FVector(PoleX, NearY, Top), FVector(PoleX, Far, Top), FVector(PoleX, NearY, Top - High), FVector(PoleX, Far, Top - High) };
+		// (a triangle, as the picture's: the hoist on the pole and the point out along the cloth, Spain's bands running
+		// together to it; in the first slot under the ally pennants. Its shape is Bargains::PennantShape's, tested)
+		const Bargains::FPennantShape Shape = Bargains::PennantShape(NearY, TopZ, FlagWidth, Allies.Num(), U);
+		TArray<FVector> Corners;
+		TArray<FVector2D> Cover;
+		for (int32 Each = 0; Each < 3; ++Each)
+		{
+			Corners.Add(FVector(PoleX, Shape.At[Each].X, Shape.At[Each].Y));
+			Cover.Add(FVector2D(Shape.Uv[Each].X, Shape.Uv[Each].Y));
+		}
 		TArray<FVector> Facing;
-		Facing.Init(FVector(-1.0, 0.0, 0.0), 4);
-		const TArray<FVector2D> Cover = { FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0), FVector2D(1.0, 1.0) };
+		Facing.Init(FVector(-1.0, 0.0, 0.0), 3);
 		TArray<FProcMeshTangent> Lie;
-		Lie.Init(FProcMeshTangent(FVector(0.0, 1.0, 0.0), false), 4);
-		Cloth->CreateMeshSection_LinearColor(4, Corners, { 0, 2, 1, 1, 2, 3 }, Facing, Cover, TArray<FLinearColor>(), Lie, false);
+		Lie.Init(FProcMeshTangent(FVector(0.0, 1.0, 0.0), false), 3);
+		Cloth->CreateMeshSection_LinearColor(4, Corners, { 0, 1, 2 }, Facing, Cover, TArray<FLinearColor>(), Lie, false);
 		Cloth->SetMaterial(4, Plain);
 	}
 }

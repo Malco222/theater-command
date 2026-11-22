@@ -214,6 +214,13 @@ namespace Bargains
 	std::string Figure(double Value);
 
 	/**
+	 * Money as the game shows it: production points times the book's scale (budget.json 'scale', a hundred), in whole
+	 * numbers, as the treasury, the rules' notes ("Your bid stands: 150 a month") and the browser's bargains panel show
+	 * it: 1.5 reads 150, 5.18 reads 518. Bids are kept, and ordered, in points.
+	 */
+	std::string Money(double Pp, double Scale);
+
+	/**
 	 * A nation's name (or its tag where the book has no name for it); its name as it follows another word, where the
 	 * book's nations carry one ("held by the United States"; else the name); and its adjective (or its name).
 	 */
@@ -278,11 +285,33 @@ namespace Bargains
 
 	/** The home's pennant under the host's flag on the legion's pole: this share of the flag's width. */
 	inline constexpr double PennantShare = 0.7;
+	/** The pennant's hoist (its height at the pole) as a share of its length: the picture's triangle, 16 high on 30 long. */
+	inline constexpr double PennantHoist = 16.0 / 30.0;
+
+	/**
+	 * The home's pennant as the picture draws it: a triangle on the pole, its hoist at the pole and its point out along the
+	 * cloth, so that Spain's 1:2:1 bands run together to the point. Points are in the pole's plane, X along the cloth (the
+	 * piece's Y) and Y up (the piece's Z): At[0] the hoist's top, At[1] its foot, At[2] the point; Uv the flag picture's
+	 * places for each (V down from its top), one triangle 0, 1, 2. It hangs in the first slot under the ally pennants
+	 * (FlagWidth x 0.46 wide, 3:2, 0.3 U apart, three at most), from the pole's near side.
+	 */
+	struct FPennantShape
+	{
+		FPt At[3];
+		FPt Uv[3];
+	};
+	FPennantShape PennantShape(double NearY, double TopZ, double FlagWidth, int Allies, double U);
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// What the map shows of the book (LookAt runs once per book)
 
-	/** True when the viewer may open the row's card: it has a round, and the viewer may bid, has bid, sells, or has an agent in either capital. */
+	/**
+	 * True when the viewer may open the row's card: it has a round, and the viewer may bid, has bid, sells, has an agent
+	 * in the seller's capital, or sees a bid. By the rules (bargains.ts seesBid) every bid sent is the viewer's own, or
+	 * seen as the seller, or through an agent in the seller's or that bidder's capital: so an agent in a bidder's capital
+	 * opens the card while that country bids. An agent in the holder's capital alone, the holder not bidding, shows no
+	 * bid, and its seal stays quiet.
+	 */
 	bool OpensCard(const FRow& Row);
 
 	/** The viewer's own rows: it buys, it sells, or it has bid in the round. */
@@ -296,6 +325,11 @@ namespace Bargains
 
 	inline constexpr int MostLanes = 16;
 	inline constexpr int MostQuietSeals = 12;
+	/**
+	 * Seals in all, the layer's slots (BargainLayer.cpp SealSlots). A grand campaign's first month of bargains has 36
+	 * rounds, 29 of them opening a card (October 1939, Britain at the table: fixtures/look-first-UK-October-1939.json).
+	 */
+	inline constexpr int MostSeals = 48;
 	inline constexpr double TintAt = 10.0; // |lean| from which the seller's border is tinted
 	inline constexpr double TintStrongAt = 25.0;
 	inline constexpr double TintA = 0.13;
@@ -348,6 +382,13 @@ namespace Bargains
 		std::function<uint32_t(std::string_view Tag)> SrgbOf; // a nation's colour (nations.json; FindNation(tag)->Color)
 		bool bFar = false; // the eye is far off: no quiet seals, no plate lines
 		std::string OpenRow; // the id of the row whose card is open, or ""
+		/**
+		 * Whether the viewer's own picture of the war shows that corps as a legion of that home: the view's corps entry
+		 * carries vol (the bridge sends it only for a corps of the viewer's own, an ally's, or one known exactly; never
+		 * for one not identified or known from a stale report). Unset, or false, and that corps has no tray pieces: the
+		 * tray card would otherwise show the flag and true strength of an enemy corps the viewer cannot see.
+		 */
+		std::function<bool(int Corps, std::string_view Home)> SeesLegion;
 	};
 
 	struct FLook
@@ -367,11 +408,16 @@ namespace Bargains
 	 * - the crate on a drawn lane that is not cut, whose goods moved and something arrived (or the production is unseen);
 	 * - a border tint per seller of the viewer's own rows and of the open card's row, where |lean| >= 10: alpha .22 from
 	 *   |lean| 25, else .13, in the buyer's colour where its bloc is the lean's side, else Germany's (+) or Britain's (-);
-	 * - a sealed-letter sign per row with a round: those that open a card, and at most 12 quiet ones (named rows first),
-	 *   none of them from far off;
-	 * - a plate line per home with legions (for every viewer, not from far off), and a tray line per legion's corps.
+	 * - a sealed-letter sign per row with a round, at most 48: those that open a card first (the open card's own, then
+	 *   the rows the viewer bids on, sells, has an agent at the seller of, or sees bids on, then those it may bid on),
+	 *   then at most 12 quiet ones (named rows first), none of them from far off;
+	 * - a plate line per home with legions (for every viewer, not from far off), and a tray line per legion's corps that
+	 *   the viewer's own picture shows as one (In.SeesLegion).
 	 */
 	void LookAt(const FBook& Book, const FLookIn& In, FLook& Out);
+
+	/** LookAt's tray pieces alone (Out replaced): read again when the viewer's picture of the corps changes in a month. */
+	void TraysOf(const FBook& Book, const FLookIn& In, std::vector<FTrayLook>& Out);
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// One card open at a time
@@ -686,6 +732,14 @@ namespace Bargains
 	 * other). False where the lane does not leave the screen, the buyer's end is on it, or the tag would lie in the frame.
 	 */
 	bool ExitTag(const FPath& OnScreen, const FRect& Screen, const std::vector<FRect>& Frame, FPt TextSize, double Px, FRect& Out);
+
+	/**
+	 * ExitTag for a lane in pieces on the screen (LayLane's Raw pieces, projected): a lane across the world map's seam is
+	 * two, the seller's to the seam and the buyer's on from the other side. The tag is laid on one piece only, the last
+	 * with a point on the screen, never across the jump between them: joined, the seam's two ends made one false step
+	 * across the screen, and the tag stood at the wrong edge. A piece that runs into the seam on the screen gets none.
+	 */
+	bool ExitTagOfPieces(const FPathList& OnScreen, const FRect& Screen, const std::vector<FRect>& Frame, FPt TextSize, double Px, FRect& Out);
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// The border tint (map units)

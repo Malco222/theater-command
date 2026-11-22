@@ -366,6 +366,12 @@ namespace Bargains
 		return Out;
 	}
 
+	std::string Money(double Pp, double Scale)
+	{
+		const double Shown = std::isfinite(Pp) && std::isfinite(Scale) ? Pp * Scale : 0.0;
+		return std::to_string(std::llround(std::clamp(Shown, -1e15, 1e15)));
+	}
+
 	std::string Figure(double Value)
 	{
 		char Buffer[64];
@@ -577,6 +583,21 @@ namespace Bargains
 		return nullptr;
 	}
 
+	FPennantShape PennantShape(double NearY, double TopZ, double FlagWidth, int Allies, double U)
+	{
+		const double AllyHigh = FlagWidth * 0.46 / 1.5;
+		const double Wide = FlagWidth * PennantShare, High = Wide * PennantHoist;
+		const double Top = TopZ - static_cast<double>(std::clamp(Allies, 0, 3)) * (AllyHigh + 0.3 * U);
+		FPennantShape Out;
+		Out.At[0] = FPt{ NearY, Top };
+		Out.At[1] = FPt{ NearY, Top - High };
+		Out.At[2] = FPt{ NearY + Wide, Top - High * 0.5 };
+		Out.Uv[0] = FPt{ 0.0, 0.0 };
+		Out.Uv[1] = FPt{ 0.0, 1.0 };
+		Out.Uv[2] = FPt{ 1.0, 0.5 };
+		return Out;
+	}
+
 	std::string FlagKey(std::string_view Tag)
 	{
 		const FPlainFlag* Plain = PlainFlagOf(Tag);
@@ -588,7 +609,7 @@ namespace Bargains
 
 	bool OpensCard(const FRow& Row)
 	{
-		return Row.Round && (Row.Round->CanBid.empty() || Row.Round->Mine || Row.Round->bAccept || Row.bAgentSeller || Row.bAgentBuyer);
+		return Row.Round && (Row.Round->CanBid.empty() || Row.Round->Mine || Row.Round->bAccept || Row.bAgentSeller || !Row.Round->Bids.empty());
 	}
 
 	bool IsOwn(const FRow& Row, const FBook& Book)
@@ -673,11 +694,14 @@ namespace Bargains
 			}
 		}
 
-		// Seals: those that open a card, then at most MostQuietSeals quiet ones (named rows first), none from far off.
+		// Seals, at most MostSeals: those that open a card first (the open card's own; then the rows the viewer bids on,
+		// sells, has an agent at the seller of, or sees bids on; then those it may bid on), then at most MostQuietSeals
+		// quiet ones (named rows first), none from far off.
+		auto Involved = [](const FRow& Row) { return Row.Round->Mine || Row.Round->bAccept || Row.bAgentSeller || !Row.Round->Bids.empty(); };
 		int Quiet = 0;
-		for (int Pass = 0; Pass < 3; ++Pass)
+		for (int Pass = 0; Pass < 5; ++Pass)
 		{
-			for (int Index = 0; Index < Count; ++Index)
+			for (int Index = 0; Index < Count && static_cast<int>(Out.Seals.size()) < MostSeals; ++Index)
 			{
 				const FRow& Row = Book.Rows[Index];
 				if (!Row.Round)
@@ -685,15 +709,24 @@ namespace Bargains
 					continue;
 				}
 				const bool bOpens = OpensCard(Row);
-				if (Pass == 0 ? !bOpens : (bOpens || In.bFar || Row.bGeneric != (Pass == 2) || Quiet >= MostQuietSeals))
+				const bool bOpen = !In.OpenRow.empty() && Row.Id == In.OpenRow;
+				bool bTake = false;
+				switch (Pass)
+				{
+				case 0: bTake = bOpens && bOpen; break;
+				case 1: bTake = bOpens && !bOpen && Involved(Row); break;
+				case 2: bTake = bOpens && !bOpen && !Involved(Row); break;
+				default: bTake = !bOpens && !In.bFar && Row.bGeneric == (Pass == 4) && Quiet < MostQuietSeals; break;
+				}
+				if (!bTake)
 				{
 					continue;
 				}
-				Quiet += Pass > 0 ? 1 : 0;
+				Quiet += bOpens ? 0 : 1;
 				FSealLook Seal;
 				Seal.Row = Index;
 				Seal.bOpens = bOpens;
-				Seal.bOpen = !In.OpenRow.empty() && Row.Id == In.OpenRow;
+				Seal.bOpen = bOpen;
 				Seal.Tip = SealTip(Row);
 				Out.Seals.push_back(std::move(Seal));
 			}
@@ -713,7 +746,18 @@ namespace Bargains
 					Out.Plates.push_back(std::move(Plate));
 				}
 			}
-			if (Legion.Corps >= 0)
+		}
+		TraysOf(Book, In, Out.Trays);
+	}
+
+	void TraysOf(const FBook& Book, const FLookIn& In, std::vector<FTrayLook>& Out)
+	{
+		// Only for a corps the viewer's own picture shows as a legion: an enemy corps not identified, or known from a stale
+		// report, keeps its flag and its true strength unseen.
+		Out.clear();
+		for (const FLegion& Legion : Book.Legions)
+		{
+			if (Legion.Corps >= 0 && In.SeesLegion && In.SeesLegion(Legion.Corps, Legion.Home))
 			{
 				FTrayLook Tray;
 				Tray.Corps = Legion.Corps;
@@ -721,7 +765,7 @@ namespace Bargains
 				Tray.Flag = FlagKey(Legion.Home);
 				Tray.Line = TrayLine(Legion);
 				Tray.Tip = FlagTip(Legion, Book);
-				Out.Trays.push_back(std::move(Tray));
+				Out.push_back(std::move(Tray));
 			}
 		}
 	}
@@ -839,7 +883,7 @@ namespace Bargains
 			FCardLine Own;
 			Own.Kind = ELine::Own;
 			Own.Nat = Book.Viewer;
-			Own.Figure = Round.Mine ? Figure(*Round.Mine) : std::string(EnDash);
+			Own.Figure = Round.Mine ? Money(*Round.Mine, Book.Scale) : std::string(EnDash);
 			Own.Offer = Round.Mine ? *Round.Mine : 0.0;
 			Own.bSteps = Round.CanBid.empty();
 			Out.push_back(std::move(Own));
@@ -855,7 +899,7 @@ namespace Bargains
 			Seen.Kind = ELine::Seen;
 			Seen.Nat = Bid.Nat;
 			Seen.Offer = Bid.Offer;
-			Seen.Figure = Figure(Bid.Offer);
+			Seen.Figure = Money(Bid.Offer, Book.Scale);
 			Seen.bAccept = Round.bAccept;
 			Out.push_back(std::move(Seen));
 		}
@@ -1364,6 +1408,10 @@ namespace Bargains
 
 	void Dashes(const FPathList& Pieces, double Dash, double Gap, double SkipFrom, double SkipTo, FPathList& Out)
 	{
+		// One pass along the pieces (a lane near the ground has thousands of dashes on thousands of points). The dashes
+		// come in rising order, so a cursor (the piece, its point and the distance there) only moves forward, and each
+		// dash is cut from the cursor, not from the piece's start. The sums run in the same order as SubPath's, so each
+		// dash is what SubPath would cut, to the bit.
 		Out.Clear();
 		const double Period = Dash + Gap;
 		if (Dash <= 0.0 || Period <= 1e-9)
@@ -1375,23 +1423,80 @@ namespace Bargains
 		{
 			Total += LengthOf(Pieces[P]);
 		}
-		auto Emit = [&](double U, double V)
+		size_t P = 0; // the cursor: the piece,
+		double Start = 0.0; // where it starts along the whole,
+		double Long = Pieces.Num() > 0 ? LengthOf(Pieces[0]) : 0.0; // its length,
+		size_t I = 1; // the point the cursor's segment ends at,
+		double S = 0.0; // and the distance along the piece at the point before it
+		auto Cut = [&Out](const FPath& Path, size_t From, double At, double U, double V)
 		{
-			double Start = 0.0;
-			for (size_t P = 0; P < Pieces.Num(); ++P)
+			// (SubPath's walk, from the segment ending at Path[From], At along the piece where it starts)
+			FPath& Piece = Out.Add();
+			for (size_t K = From; K < Path.size(); ++K)
 			{
-				const double Long = LengthOf(Pieces[P]);
-				const double A = std::max(U, Start), B = std::min(V, Start + Long);
-				if (B > A + 1e-9)
+				const FPt A = Path[K - 1], B = Path[K];
+				const double Seg = Distance(A, B);
+				const double At1 = At + Seg;
+				if (Seg > 1e-12 && At1 > U && At < V)
 				{
-					FPath& Piece = Out.Add();
-					SubPath(Pieces[P], A - Start, B - Start, Piece);
-					if (Piece.size() < 2)
+					const FPt Way = Mul(Sub(B, A), 1.0 / Seg);
+					if (Piece.empty())
 					{
-						Out.Count--;
+						Piece.push_back(Add(A, Mul(Way, std::max(U - At, 0.0))));
+					}
+					if (At1 < V)
+					{
+						Piece.push_back(B);
+					}
+					else
+					{
+						Piece.push_back(Add(A, Mul(Way, V - At)));
+						break;
 					}
 				}
+				At = At1;
+			}
+			if (Piece.size() < 2)
+			{
+				Piece.clear();
+				Out.Count--;
+			}
+		};
+		auto Emit = [&](double U, double V)
+		{
+			// (pieces that end before the dash are passed for good: no later dash starts sooner)
+			while (P < Pieces.Num() && Start + Long <= U)
+			{
 				Start += Long;
+				++P;
+				Long = P < Pieces.Num() ? LengthOf(Pieces[P]) : 0.0;
+				I = 1;
+				S = 0.0;
+			}
+			double QStart = Start;
+			for (size_t Q = P; Q < Pieces.Num() && QStart < V; ++Q)
+			{
+				const FPath& Path = Pieces[Q];
+				const double QLong = Q == P ? Long : LengthOf(Path);
+				const double A = std::max(U, QStart), B = std::min(V, QStart + QLong);
+				if (B > A + 1e-9 && Path.size() >= 2 && B - QStart > A - QStart + 1e-9)
+				{
+					if (Q == P)
+					{
+						// (the cursor moves past the segments that end before the dash starts; SubPath would pass them too)
+						while (I < Path.size() && S + Distance(Path[I - 1], Path[I]) <= A - QStart)
+						{
+							S += Distance(Path[I - 1], Path[I]);
+							++I;
+						}
+						Cut(Path, I, S, A - QStart, B - QStart);
+					}
+					else
+					{
+						Cut(Path, 1, 0.0, A - QStart, B - QStart);
+					}
+				}
+				QStart += QLong;
 			}
 		};
 		for (int K = 0; K * Period < Total; ++K)
@@ -1545,6 +1650,19 @@ namespace Bargains
 	}
 
 	FDraw CutRing(FPt Screen, double Px) { return RingDraw(Screen, Lane::RingD * Px, Lane::RingLineW * Px, FInk{ Kit::Brass300, 1.0f }); }
+
+	bool ExitTagOfPieces(const FPathList& OnScreen, const FRect& Screen, const std::vector<FRect>& Frame, FPt TextSize, double Px, FRect& Out)
+	{
+		for (size_t P = OnScreen.Num(); P-- > 0;)
+		{
+			const FPath& Piece = OnScreen[P];
+			if (std::any_of(Piece.begin(), Piece.end(), [&Screen](FPt At) { return Screen.Contains(At); }))
+			{
+				return ExitTag(Piece, Screen, Frame, TextSize, Px, Out);
+			}
+		}
+		return false;
+	}
 
 	bool ExitTag(const FPath& OnScreen, const FRect& Screen, const std::vector<FRect>& Frame, FPt TextSize, double Px, FRect& Out)
 	{

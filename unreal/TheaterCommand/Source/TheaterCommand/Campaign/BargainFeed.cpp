@@ -660,6 +660,10 @@ namespace Bargains
 		Out.Turn = WholeOf(Root, "turn", 0);
 		Out.Term = WholeOf(Root, "term", 12);
 		Out.RoundLen = WholeOf(Root, "round", 1);
+		if (const FValue* Scale = Root.Get("scale"); Scale && Scale->IsNumber() && Scale->Number > 0.0 && Scale->Number < 1e6)
+		{
+			Out.Scale = Scale->Number;
+		}
 		if (const FValue* Nations = Root.Get("nations"); Nations && Nations->IsObject())
 		{
 			Out.Nations.reserve(Nations->Keys.size());

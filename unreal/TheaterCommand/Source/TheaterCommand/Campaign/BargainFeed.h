@@ -107,6 +107,8 @@ namespace Bargains
 		std::string Viewer, Month;
 		/** The turn, the term of a sale in months, and a round's length in months. */
 		int Turn = 0, Term = 12, RoundLen = 1;
+		/** How the game shows money: a production point is shown as this many, in whole numbers (budget.json 'scale'). */
+		double Scale = 100.0;
 		std::vector<FNation> Nations;
 		std::vector<FRow> Rows;
 		std::vector<FLegion> Legions;

@@ -132,7 +132,7 @@ namespace
 			FBook B;
 			Load(Dir, "look-bidder-UK-August-1941.json", B);
 			EveryAnswer(B, "bidder");
-			EXPECT(B.Viewer == "UK" && B.Month == "August" && B.Turn == 24 && B.Term == 12 && B.RoundLen == 1);
+			EXPECT(B.Viewer == "UK" && B.Month == "August" && B.Turn == 24 && B.Term == 12 && B.RoundLen == 1 && Near(B.Scale, 100.0));
 			EXPECT(B.Rows.size() == 24 && B.Nations.size() == 29 && B.Legions.size() == 1);
 			const FNation* UK = B.Nation("UK");
 			EXPECT(UK && UK->Name == "Britain" && UK->Adj == "British" && UK->Bloc == -1 && UK->The == "Britain");
@@ -305,6 +305,14 @@ namespace
 		// Numbers: whole numbers rounded and held within an int; a figure too large for a double is 0.
 		EXPECT(ReadBook(R"({"on":true,"turn":1e12,"term":-1e12,"round":2.6,"rows":[{"lean":1e999,"capital":-0.4}]})", B));
 		EXPECT(B.Turn == 2147483647 && B.Term == -2147483647 - 1 && B.RoundLen == 3 && B.Rows.size() == 1 && Near(B.Rows[0].Lean, 0.0) && B.Rows[0].Capital == 0);
+
+		// How the game shows money (budget.json 'scale'): read where it is a sensible positive number, else a hundred.
+		EXPECT(ReadBook(R"({"on":true,"scale":10})", B) && Near(B.Scale, 10.0));
+		EXPECT(ReadBook(R"({"on":true})", B) && Near(B.Scale, 100.0));
+		for (const char* Odd : { R"({"on":true,"scale":0})", R"({"on":true,"scale":-5})", R"({"on":true,"scale":"100"})", R"({"on":true,"scale":1e999})", R"({"on":true,"scale":null})" })
+		{
+			EXPECT(ReadBook(Odd, B) && Near(B.Scale, 100.0));
+		}
 
 		// Text that is not JSON, or not an object: false, the book emptied and off, and why.
 		const char* Bad[] = {
