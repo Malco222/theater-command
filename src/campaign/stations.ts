@@ -93,11 +93,12 @@
 // rule, line.ts: computer against computer). Nor is a dated attack made on ground he holds. Stops 3 to 5 as before.
 // The data is history.json, 'stations' (the far side's rows: far-pacific-war.json); with none, nothing here happens.
 
-import { DEFENCE, allied, atWar, friendlyUnits, hostileUnits, limitAttackers, men, relocate, removeCorps, resolveBattle, withWorksAside, type AttackOpts } from './game';
+import { DEFENCE, allied, atWar, friendlyUnits, hostileUnits, limitAttackers, men, moveCorps, moveCost, relocate, removeCorps, resolveBattle, withWorksAside, type AttackOpts } from './game';
 import { HISTORY, bookDate, onBook, stopDef, theatreOf } from './history';
 import { lineShut } from './line';
 import { appoint, generalOf } from './commanders';
 import { NAVY, canPass, fleetReach, landCorps, onOwnShipping, rebase, whyNotLand, zoneOf } from './navy';
+import { blocked } from './rivers';
 import { arrive, besieged, fieldCtrl, takeField } from './siege';
 import { STACK, type BattleReport, type Corps, type Game, type Region, type Stance, type Terrain } from './types';
 
@@ -509,9 +510,11 @@ export const bookWatch: { tell: ((e: { row: Attack; what: 'due' | 'made' | 'owed
 /**
  * For the measuring harness: told of each corps a dated attack puts down at its door from where it stood (the design
  * director's bound of 07:44Z, 22 November 2026: a jump of more than a month's march is data to check against the
- * record, not a rule to change). Nothing in the game listens.
+ * record), and of each month of march a corps makes toward its door (`leg`; the director's 11:41Z). `months` is what
+ * the whole road to the door takes it by the move rules (1: within a month), null where there is no road over its
+ * side's ground. Nothing in the game listens.
  */
-export const broughtWatch: { tell: ((e: { row: Attack; corps: Corps; from: Region; to: Region }) => void) | null } = { tell: null };
+export const broughtWatch: { tell: ((e: { row: Attack; corps: Corps; from: Region; to: Region; months?: number | null; leg?: boolean }) => void) | null } = { tell: null };
 
 /**
  * The staff's own reckoning of a book row's later tries at a place (`made`; the design director's ruling of 06:53Z,
@@ -529,6 +532,93 @@ function bring(g: Game, c: Corps, to: Region): boolean {
   if (c.town !== undefined && !takeField(g, c)) return false;
   if (c.reg !== to.id) { relocate(g, c, to); g.supplyDirty = true; }
   return true;
+}
+
+/**
+ * The months of march a road takes a corps by the move rules, a full month's moves in each (game.ts, `moveCorps`: a
+ * step is made with the moves it costs in hand, and any step with four).
+ */
+function monthsBy(g: Game, c: Corps, road: number[]): number {
+  const full = Math.max(1, c.apMax);
+  let months = 1, ap = full, at = c.reg;
+  for (const id of road) {
+    const cost = moveCost(g, c, g.regions[id], at);
+    if (ap <= 0 || ap < Math.min(cost, 4)) { months++; ap = full; }
+    ap = Math.max(0, ap - cost);
+    at = id;
+  }
+  return months;
+}
+
+/**
+ * A corps' road to a door over its side's ground, the door last, and the months of march it needs; null with no such
+ * road. The road is the one a kept march takes (marches.ts, `farGround`: the cheapest by what each step costs a
+ * move, over ground its side holds, by no way closed to it).
+ */
+function wayTo(g: Game, c: Corps, at: Region): { road: number[]; months: number } | null {
+  if (at.id === c.reg || !allied(g, c.nat, at.ctrl)) return null;
+  const cost = new Map<number, number>([[c.reg, 0]]), prev = new Map<number, number>(), done = new Set<number>();
+  for (;;) {
+    let a = -1, best = Infinity;
+    for (const [k, v] of cost) if (!done.has(k) && v < best) { best = v; a = k; }
+    if (a < 0) return null;
+    if (a === at.id) break;
+    done.add(a);
+    for (const j of g.regions[a].nb) {
+      const r = g.regions[j];
+      if (done.has(j) || !allied(g, c.nat, r.ctrl) || blocked(g, c, r, a)) continue;
+      const step = best + Math.max(1, moveCost(g, c, r, a));
+      if (step < (cost.get(j) ?? Infinity)) { cost.set(j, step); prev.set(j, a); }
+    }
+  }
+  const road: number[] = [];
+  for (let k = at.id; k !== c.reg; k = prev.get(k)!) road.unshift(k);
+  return { road, months: monthsBy(g, c, road) };
+}
+
+/**
+ * One month of a corps' road to the door of its dated attack, by the move rules and no further: the month is the
+ * march's, and it does nothing else in it. Once in a month. True if it moved.
+ */
+function stride(g: Game, row: Attack, c: Corps, way: { road: number[]; months: number }): boolean {
+  const mark = `bkm:${c.id}`;
+  if (g.flags[mark] === g.turn) return false;
+  g.flags[mark] = g.turn;
+  if (c.town !== undefined && !takeField(g, c)) return false;
+  const from = g.regions[c.reg];
+  for (const id of way.road) if (!moveCorps(g, c, g.regions[id])) break;
+  c.ap = 0;
+  if (c.reg === from.id) return false;
+  g.supplyDirty = true;
+  broughtWatch.tell?.({ row, corps: c, from, to: g.regions[c.reg], months: way.months, leg: true });
+  return true;
+}
+
+/**
+ * A dated attack by land that is still to come sets out for its door (the design director's 11:41Z of 22 November
+ * 2026 to ruling 234, on the sixteen long moves reported under the 07:44Z bound). The arrival is the record's date
+ * and the march is the game's own: a corps that needs more than a month's march to the row's door leaves early
+ * enough to arrive by the move rules, the last month of its road being the date's own, when it is put down at the
+ * door as it always was. So no corps is moved more than a month's march in a month. It marches over its side's
+ * ground to the first door of the row's that is open to it; with no door open yet, or no road, it does not set out.
+ * A corps an earlier row of the book still names (`claimed`), one that goes with another, and one that has fought
+ * this month, stay.
+ */
+function setsOut(g: Game, nat: string, row: Attack, date: number, claimed: Set<string>, riders: Row[]): void {
+  if (row.sea) return;
+  const to = row.at.map((nm) => g.byName[nm]).find((r) => !!r && !allied(g, nat, r.ctrl));
+  if (!to || !atWar(g, nat, to.ctrl)) return;
+  if (g.human !== null && (to.ctrl === g.human || hostileUnits(g, to, nat).some((u) => u.nat === g.human))) return;
+  const doors = (row.from ?? []).map((nm) => g.byName[nm]).filter((r): r is Region => !!r && to.nb.includes(r.id));
+  for (const nm of row.force) {
+    if (claimed.has(nm) || riders.some((r) => r.corps === nm)) continue;
+    const c = g.corps.find((x) => x.nat === nat && !x.dead && x.name === nm);
+    if (!c || c.fought || c.reg === to.id || to.nb.includes(c.reg)) continue;
+    const at = doors.find((r) => door(g, c, r));
+    const way = at ? wayTo(g, c, at) : null;
+    // (So many months of march, the last of them the date's own.)
+    if (way && way.months - 1 >= date - g.turn) stride(g, row, c, way);
+  }
 }
 
 /**
@@ -629,17 +719,22 @@ export function bookAttacks(g: Game, nat: string): void {
   // (By their months, and within a month in the table's order, which is the record's date order: a row owed from an
   // earlier month goes in before the month's own, as the record's did: rider b599 (i).)
   const order = B.attacks.map((_, i) => i).sort((a, b) => B.attacks![a].month - B.attacks![b].month || a - b);
+  // The corps the rows before it in the book's order still name: none of them sets out for a later row (`setsOut`).
+  const claimed = new Set<string>();
   order.forEach((i) => {
     const row = B.attacks![i];
     const key = `ba:${i}`;
     const slide = slideFor(row);
-    if (slide === null || g.flags[key] || g.turn < row.month + slide || !g.nations[nat].alive) return;
+    if (slide === null || g.flags[key] || !g.nations[nat].alive) return;
+    // (A row still to come: its corps set out in time to arrive by the move rules. The design director's 11:41Z.)
+    if (g.turn < row.month + slide) { setsOut(g, nat, row, row.month + slide, claimed, riders); for (const nm of row.force) claimed.add(nm); return; }
     // A fight at the record's figures that was lost this month, or a row whose place held this month, is not tried again in it.
-    if (g.flags[`bat:${i}`] === g.turn) return;
+    if (g.flags[`bat:${i}`] === g.turn) { for (const nm of row.force) claimed.add(nm); return; }
     if (row.until !== undefined && g.turn > row.until + slide) { g.flags[key] = g.turn; landedFree(g, B, i); bookWatch.tell?.({ row, what: 'over', why: 'the record\'s attack was called off' }); return; }
     const to = row.at.map((nm) => g.byName[nm]).find((r) => !!r && !allied(g, nat, r.ctrl));
     if (!to) { g.flags[key] = g.turn; landedFree(g, B, i); bookWatch.tell?.({ row, what: 'over', why: 'the place is its side\'s' }); return; }
     const force = row.force.map((nm) => g.corps.find((x) => x.nat === nat && !x.dead && x.name === nm)).filter((x): x is Corps => !!x);
+    for (const nm of row.force) claimed.add(nm);
     // The rows that go with another (the tank regiments, rider b581) go in with their divisions and wait for nobody.
     const tanks = force.filter((c) => riders.some((r) => r.corps === c.name)), main = force.filter((c) => !tanks.includes(c));
     // (While it is owed, the corps it landed stay held to it, whatever the plan has let go since: the director's of
@@ -748,8 +843,17 @@ export function bookAttacks(g: Game, nat: string): void {
       if (next(c)) continue;
       // (One standing in the town of a province at the door comes out of it; any other is put down at the first door open.)
       const at = to.nb.includes(c.reg) ? g.regions[c.reg] : doors.find((r) => door(g, c, r));
-      if (at && at.id !== c.reg) broughtWatch.tell?.({ row, corps: c, from: g.regions[c.reg], to: at });
-      if (at) bring(g, c, at);
+      if (!at) continue;
+      if (at.id !== c.reg) {
+        // No corps is moved more than a month's march in a month (the design director's 11:41Z of 22 November
+        // 2026): one further off by road marches its month toward the door, and the row is owed until it is up.
+        // (One with no road over its side's ground is put down as before: its route is asked of the record.)
+        if (g.flags[`bkm:${c.id}`] === g.turn) continue;
+        const way = wayTo(g, c, at);
+        if (way && way.months > 1) { if (!tanks.includes(c)) stride(g, row, c, way); continue; }
+        broughtWatch.tell?.({ row, corps: c, from: g.regions[c.reg], to: at, months: way ? 1 : null });
+      }
+      bring(g, c, at);
     }
     if (!main.every(next)) return owed('not all of its corps stand next to the place');
     const round = main.filter((c) => c.reg === to.id);
