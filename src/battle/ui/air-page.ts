@@ -246,7 +246,8 @@ const ACT_WORD: Record<string, string> = { idle: 'on the ground', march: 'flying
 function startBattle(r: Raid): void {
   const t = r.ticket;
   // Shown, never counted (ruling 237): the stragglers and escorts the UI director worded reach the dispatches.
-  const sim = new AirSim(t, { show: true });
+  // The page draws every model on a flat map: it keeps its own budget (SKY.look.page), apart from the 3D game's.
+  const sim = new AirSim(t, { show: true, look: SKY.look.page });
   S.sim = sim; S.raid = r; S.screen = 'battle';
   const sc = S.scene;
   sc.me = t.att.human ? 'att' : 'def';

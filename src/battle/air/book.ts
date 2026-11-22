@@ -122,10 +122,18 @@ export const SKY = {
    * 'per' is one number for the whole battle (Brian, 21 November 2026: the numbers "proportionate and realistic";
    * "i dont want the defenders to go smaller to be proportionate"): all the aircraft sent up over 'all', rounded up,
    * so about 'all' models fly at the start whatever the battle's size and every model stands for the same number of
-   * aircraft. 'all' is the 3D scene's comfortable load (it asked for 45 to 60 models at once, 80 at most). No side's
-   * numbers are ever cut to make a battle look even: the count is the campaign's.
+   * aircraft. No side's numbers are ever cut to make a battle look even: the count is the campaign's.
+   * 'all' is the 3D game's budget (the production lead's scale plan of 22 November, item AR4: its first step, S1; the
+   * next, 400, waits on the flight core's speed work, AR3, and a warm Mac reading). 'page' is the browser page's own,
+   * which draws every model on a flat map and keeps the old 60.
+   * A model falls only for its share of the losses (AR1, Brian's ask of 22 November 04:07Z: "the bombers get destroyed
+   * a lot"): its group's losses stand for round(lost / per) models, so falls x per = losses, and every aircraft lost is
+   * still told in the dispatches. At one model an aircraft, every loss is a fall, as before.
+   * 'box' is the most models drawn in one box or squadron (AR2): a bomber group's box of 24, the flight core's eight
+   * vics of three, and a fighter squadron of 16, four fours. A group with more models flies more boxes, in trail
+   * ('boxes' in the view's extra), and its box is never drawn wider than one: a big raid is a stream, not a wall.
    */
-  look: { all: 60, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 } },
+  look: { all: 150, page: 60, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 }, box: { ftr: 16, bmr: 24 } },
   /**
    * The sounds that answer what happens: every name is a file in the approved pack (/mnt/project-files/sound/battle-pack/wav/),
    * as the sound director's mix renamed them (18 November, /mnt/project-files/sound/mix/mix.json "rename"). How loud, how

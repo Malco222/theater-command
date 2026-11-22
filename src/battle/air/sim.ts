@@ -28,6 +28,8 @@ const C = SKY.cues;
 /** One of a tick's losses, before how it goes is drawn (AirSim.fated). */
 interface Loss {
   u: AirUnit; fall: Fall; by: number | 'flak' | null | undefined; s: Straggler | null; alt: number; fid: number;
+  /** The models this loss brings down in the picture (AR1: a model falls only for its share of the losses): 0, 1, or the rest at the last. */
+  models: number;
   /** A bomber known by name: its seat in its group's list (-1: none). A fighter that fell to a named box's gunners: that box and the seat of the bomber that got it. */
   seat: number;
   gun: [box: number, seat: number] | null;
@@ -118,6 +120,10 @@ export class AirSim implements BattleSim<AirUnit> {
   private hitRng: Rng;
   /** The aircraft one model stands for, the same for every group in this battle (SKY.look.all). */
   private per = 1;
+  /** The models the battle may show at the start: the 3D game's SKY.look.all, or the browser page's own (its option). */
+  private look: number;
+  /** A box's stragglers that are shown as a model falling out (AR1): the box's next loss is its straggler's, so one is shown only when that loss brings a model down. */
+  private stragShown = new Set<number>();
   private fid = 1;
   private fates: FateMemory = freshMemory();
   /** The bombers lost out of a box's formation in the last moments, that may strike another of it (fates.ts near). */
@@ -171,10 +177,11 @@ export class AirSim implements BattleSim<AirUnit> {
   private after = new Map<number, number>();
   private skill = new Map<number, number>();
 
-  constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean } = {}) {
+  constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean; look?: number } = {}) {
     this.ticket = ticket;
     this.place = ticket.place;
     this.show = opts.show ?? true;
+    this.look = Math.max(1, opts.look ?? SKY.look.all);
     this.when = ticket.place.when ?? { year: 1939, month: 8 };
     this.rng = new Rng(ticket.seed);
     this.fallRng = this.rng.fork(7);
@@ -205,7 +212,8 @@ export class AirSim implements BattleSim<AirUnit> {
     // stands for the same number of aircraft, whichever group it flies in, so the picture shows the true odds.
     let all = 0;
     for (const side of ['att', 'def'] as Side[]) for (const f of ticket[side].forces) if (this.place.starts[f.corps]) all += Math.max(0, f.men);
-    this.per = Math.max(1, Math.ceil(all / SKY.look.all));
+    // How many that is depends only on who draws it (the 3D game's budget or the browser page's): drawing never moves a count.
+    this.per = Math.max(1, Math.ceil(all / this.look));
     let id = 1;
     for (const side of ['att', 'def'] as Side[]) {
       for (const f of ticket[side].forces) {
@@ -266,13 +274,34 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /**
    * How a group of n aircraft is drawn: how many models, one for every 'per' aircraft, in a box of w by d metres.
-   * 'per' is the battle's own (the constructor: all the aircraft sent up over SKY.look.all), the same for every group,
-   * so a group of 160 shows about seven times the models of a group of 24. No group is cut down or made up to a size.
+   * 'per' is the battle's own (the constructor: all the aircraft sent up over the battle's budget), the same for every
+   * group, so a group of 160 shows about seven times the models of a group of 24. No group is cut down or made up to a
+   * size. The box is one box's worth at most (SKY.look.box, AR2): more models fly as more boxes in trail ('boxes' in
+   * the view's extra), never as one ever wider line abreast.
    */
   private drawn(kind: 'ftr' | 'bmr', n: number): { figures0: number; figures: number; per: number; w: number; d: number } {
     const L = SKY.look, per = this.per, figures = Math.max(1, Math.ceil(n / per));
-    const rows = Math.min(L.rows[kind], figures), cols = Math.ceil(figures / rows);
+    const box = Math.min(figures, L.box[kind]);
+    const rows = Math.min(L.rows[kind], box), cols = Math.ceil(box / rows);
     return { figures0: figures, figures, per, w: cols * L.gap[kind], d: rows * L.gap[kind] };
+  }
+
+  /** The boxes (a fighter group's squadrons) its models fly in now (AR2). */
+  private boxesOf(u: AirUnit): number {
+    return Math.max(u.figures > 0 ? 1 : 0, Math.ceil(u.figures / SKY.look.box[u.air]));
+  }
+
+  /**
+   * The models a group shows after it loses one more aircraft (AR1, falls at the model's scale): its losses so far stand
+   * for round(lost / per) models, so falls x per = losses over the battle. A straggler that was shown falling out is the
+   * model that falls; one that was not shown brings none down. It keeps one model while it has an aircraft left, and
+   * none once it has none: the last loss brings down whatever is left. At one model an aircraft it is the aircraft left.
+   */
+  private modelsAfter(u: AirUnit, s: Straggler | null): number {
+    if (u.n <= 0) return 0;
+    const fell = u.figures0 - u.figures, owed = Math.floor((u.n0 - u.n) / u.per + 0.5);
+    const down = s ? (this.stragShown.delete(s.id) ? 1 : 0) : owed > fell ? 1 : 0;
+    return Math.max(1, u.figures - down);
   }
 
   /**
@@ -921,8 +950,9 @@ export class AirSim implements BattleSim<AirUnit> {
         const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
         if (fall.back) u.back++;
         const alt = s ? Math.max(0, u.alt - s.down) : u.alt;
-        lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun });
-        u.figures = Math.max(u.n > 0 ? 1 : 0, Math.ceil(u.n / u.per));
+        const before = u.figures;
+        u.figures = this.modelsAfter(u, s);
+        lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures });
       }
       if (this.show && owed > 0 && u.n > 0) hit.push([u, owed]);
     }
@@ -1008,7 +1038,8 @@ export class AirSim implements BattleSim<AirUnit> {
       // By name: the bomber this is ('bomber'), or the bomber whose gunners brought this fighter down ('gunner').
       const B = L.seat >= 0 ? this.seated.get(u.id) : undefined;
       const named = { ...(B ? { bomber: toldOf(B, L.seat) } : {}), ...(L.gun ? { gunner: { box: L.gun[0], ...toldOf(this.seated.get(L.gun[0])!, L.gun[1]) } } : {}) };
-      this.say('air:lost', u, text, { ...fall, air: u.air, alt: L.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who, ...named }, loud ? C.explode : C.down);
+      // 'models': how many models fall in the picture for it (AR1). Every aircraft lost is still told.
+      this.say('air:lost', u, text, { ...fall, air: u.air, alt: L.alt, models: L.models, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who, ...named }, loud ? C.explode : C.down);
       // One of the group's longest-serving bombers is named as it goes (its seats come old hands first; the campaign's
       // news names the oldest again after the raid, stories.ts bombersFlew). Shown only; the words are the UI director's to rule.
       if (B && L.seat < SKY.named.lines && B.all[L.seat].name && B.all[L.seat].missions >= B.told) {
@@ -1208,6 +1239,11 @@ export class AirSim implements BattleSim<AirUnit> {
     };
     // From its own stream, never a count: its dead engine may be burning as it falls out, and the crew may put it out.
     if (this.stragLook.chance(G.fire.k)) s.fire = this.stragLook.chance(G.fire.stays) ? Infinity : G.fire.out[0] + this.stragLook.next() * (G.fire.out[1] - G.fire.out[0]);
+    // Shown as a model falling out of the box only when the loss it stands for brings a model down (AR1): the box's
+    // losses so far, the stragglers ahead of it and itself, at the model's scale. Never the box's last model.
+    const ahead = b.strag.filter((x) => this.stragShown.has(x.id)).length;
+    const owed = Math.floor((b.n0 - b.n + b.strag.length + 1) / b.per + 0.5);
+    if (b.per <= 1 || (owed > b.figures0 - b.figures + ahead && b.figures - ahead > 1)) this.stragShown.add(s.id);
     b.strag.push(s);
     // By name: the bomber that falls out keeps its seat, and the box's next loss, the straggler's, is that bomber.
     const B = this.seated.get(b.id);
@@ -1218,7 +1254,7 @@ export class AirSim implements BattleSim<AirUnit> {
     const text = single
       ? s.why === 'flak' ? `Flak has hit the engine of ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has taken a hit in the engine and is falling out of formation.`
       : s.why === 'flak' ? `Flak has knocked out an engine on ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has lost an engine and is falling out of formation.`;
-    this.shownSay('air:straggle', b, text, { id: s.id, box: b.id, eng: s.eng, prop: s.prop, why: s.why, by: s.by, ...(s.fire ? { fire: true } : {}), ...(B && seat >= 0 ? { bomber: toldOf(B, seat) } : {}) });
+    this.shownSay('air:straggle', b, text, { id: s.id, box: b.id, model: this.stragShown.has(s.id) ? 1 : 0, eng: s.eng, prop: s.prop, why: s.why, by: s.by, ...(s.fire ? { fire: true } : {}), ...(B && seat >= 0 ? { bomber: toldOf(B, seat) } : {}) });
   }
 
   /** The aircraft a box loses next: its oldest straggler that has been seen to leave and has no escort over it; failing that, one in formation; failing that, any straggler. */
@@ -1311,6 +1347,7 @@ export class AirSim implements BattleSim<AirUnit> {
   /** A straggler that got clear of the fight and is on its way home. */
   private limped(b: AirUnit, s: Straggler, seen = false): void {
     b.away++;
+    this.stragShown.delete(s.id);
     this.seatBack(b, s, 'away');
     // Told only when one is seen to get clear in the fight; those that go home with their box, or at the end, are not.
     this.shownSay('air:limped', b, seen ? `${this.aBomberOf(b, true, 'damaged')} has turned for home on its own.` : '', { id: s.id, box: b.id, ...this.stragAt(b, s) });
@@ -1331,7 +1368,7 @@ export class AirSim implements BattleSim<AirUnit> {
       // and how good its pilots are ('skill').
       const q = flying(u) && !away(u) ? this.after.get(u.id) : undefined;
       u.extra = {
-        model: u.model, cool: coolOf(u.model), form: u.form, style: u.style, ammo: Math.round(ammo * 1000) / 1000,
+        model: u.model, cool: coolOf(u.model), form: u.form, style: u.style, boxes: this.boxesOf(u), ammo: Math.round(ammo * 1000) / 1000,
         ...(u.job.do === 'escort' ? { role: roleOf(u.job), with: u.job.on } : {}),
         ...(q !== undefined ? { quarry: q } : {}),
         skill: this.skill.get(u.id) ?? SKY.pilots.base,
@@ -1343,8 +1380,8 @@ export class AirSim implements BattleSim<AirUnit> {
     }
     const done = u.dropped > 0 || u.jettisoned;
     u.extra = {
-      model: u.model, cool: coolOf(u.model), form: u.form, box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
-      strag: u.strag.map((s) => ({ id: s.id, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down), ...(s.fire ? { fire: true } : {}), ...(s.join ? { join: true } : {}) })),
+      model: u.model, cool: coolOf(u.model), form: u.form, box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', boxes: this.boxesOf(u), away: u.away,
+      strag: u.strag.map((s) => ({ id: s.id, model: this.stragShown.has(s.id) ? 1 : 0, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down), ...(s.fire ? { fire: true } : {}), ...(s.join ? { join: true } : {}) })),
       // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief),
       // and never while their own fighters are going in on it ('hold': the guns are silent for that pass, with the air
       // seconds of it left in 'holdLeft'; between passes 'holdIn' is the air seconds until the next, SKY.flak.hold).
@@ -1383,6 +1420,7 @@ export class AirSim implements BattleSim<AirUnit> {
       if (!done) s.back = Math.min(s.back, G.held);
       else if (s.join && s.back <= 0) {
         u.strag.splice(u.strag.indexOf(s), 1);
+        this.stragShown.delete(s.id);
         this.seatBack(u, s, 'form');
         this.shownSay('air:regain', u, this.regainWords(u, s), { id: s.id, box: u.id, prop: s.prop });
         continue;
@@ -1785,4 +1823,4 @@ export class AirSim implements BattleSim<AirUnit> {
 }
 
 /** A battle from a ticket. */
-export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean }): AirSim => new AirSim(t, opts);
+export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean; look?: number }): AirSim => new AirSim(t, opts);
