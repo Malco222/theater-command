@@ -8,15 +8,17 @@
  * The month's submarine scene, its looks (ruling 241, Part D1: look only; the sea scene thread's d1-hooks.md, section 3,
  * the list of what is ours): a boat surfaced, at periscope depth or deep, and her going down and coming up; a depth
  * charge pattern going in and each charge's burst; a starshell drifting down under its parachute; a boat's end crushed
- * (her air coming up) or scuttled (brought up); the scrambling net down a rescuer's side. Plain C++, no engine:
- * ASeaBattle's marked hooks (Battle/ConvoyLooks) turn what is worked out here into the effects kit's calls, one small
- * mesh and a lamp or two, and the cloud test (Tools/convoy_looks/run.sh) checks it.
+ * (her air coming up) or scuttled (brought up, riding high); the scrambling nets the sea scene's men climb a rescuer's
+ * side by. Plain C++, no engine: ASeaBattle's marked hooks (Battle/ConvoyLooks) turn what is worked out here into the
+ * effects kit's calls, one small mesh and a lamp or two, and the cloud test (Tools/convoy_looks/run.sh) checks it.
  *
  * LOOKS ONLY. The show (SeaShow, the sea scene thread's) says where every boat is, how deep (Keel, eased so that a dive
  * takes 25 to 30 s), when a pattern goes in and when each charge bursts, where a starshell bursts and when it burns out,
  * how a boat ends and who picks up survivors. Nothing here changes any of that or draws from the battle's luck: what is
  * decided here is only how it looks, with the look's own hash dice from the keys the show gives. The men in the water,
- * the oil and the wreckage are the sea scene's.
+ * their rafts and boats, the oil and the wreckage at every sinking, a boat's too, are the sea scene's (SeaShow's wreck
+ * model, drawn by ASeaBattle): nothing here draws them, and the looks only agree with them (a boat's deck where her men
+ * go over it, a rescuer's nets where they climb her side).
  *
  * Places are in board metres (X east, Y north, Z up from the sea), the show's own; headings are degrees clockwise from
  * north (the show's ShipOut.Heading). Time is the battle's clock, in seconds.
@@ -130,6 +132,9 @@ namespace ConvoyLook
 		bool bTowerUnder = false;
 		/** Forced up (a scuttling): from when, and from how far under; below 0 never. */
 		double ForcedAt = -1.0, ForcedFrom = 0.0;
+		/** Her tanks blown (Blow): she rides high, not awash; how far she has come to it (0 to 1, eased). */
+		bool bBlown = false;
+		double Blown = 0.0;
 		std::vector<Swirl> Swirls;
 	};
 
@@ -154,6 +159,8 @@ namespace ConvoyLook
 		/** As the stage draws her model this frame (metres over the still sea, her trim counted): the bridge's highest
 		 * point (its top, the wire's head on it, the gun's muzzles), and the heads of her taller and shorter periscopes. */
 		double BridgeZ = 0.0, ScopeZ = 0.0, LowZ = 0.0;
+		/** Her casing's deck amidships over the still sea, as drawn (her heave on the swell in it). */
+		double DeckZ = 0.0;
 		/** Her taller periscope alone out of the sea (her bridge under): where it stands, from the bridge's top to its head
 		 * (the model's own rod: the looks draw none). */
 		bool bScopeShown = false;
@@ -167,6 +174,14 @@ namespace ConvoyLook
 	BoatOut StepBoat(BoatState& S, const BoatIn& In, const BoatModel& M, const Drawn& D);
 	/** A scuttling: blow her tanks now, so that she is up in ForcedUpFor seconds wherever the show still has her. */
 	void ForceUp(BoatState& S, double T, double Sub);
+	/**
+	 * Her tanks blown (bOn: the show's surfacing "forced", or her scuttling, her crew getting out) or flooded again (a dive):
+	 * blown, she rides high on the surface, her model's own waterline at the sea and her deck some 2.2 m out, not awash
+	 * (the sea scene's men go over her side from her deck's height, its 2.5 m: SeaShow's CompanyOf "ss"); eased over
+	 * BlowFor seconds either way.
+	 */
+	void Blow(BoatState& S, bool bOn);
+	double BlowFor();
 	/** Seconds a boat forced up takes to come up. */
 	double ForcedUpFor();
 	/** A swirl Age seconds old: its radius (metres) and how much of it shows (0 to 1, times its strength); false once
@@ -275,20 +290,69 @@ namespace ConvoyLook
 	// -------------------------------------------------------------------------------------------------------------
 	// Ends and rescue
 
-	/** A boat crushed deep: her air coming up as a hump of white water over where she was, then boils dwindling. Dt after
-	 * the end, Dx, Dy from her last place. */
+	/** A boat crushed deep: her air coming up as a hump of white water over where she was, then boils dwindling (her oil
+	 * and the few pieces of her that come up with it are the scene's wreck model's). Dt after the end, Dx, Dy from her
+	 * last place. */
 	struct BoilShot
 	{
 		double Dt = 0.0, Dx = 0.0, Dy = 0.0;
 	};
 	std::vector<BoilShot> CrushPlan(uint64_t Seed);
 
-	/** A scrambling net down a rescuer's side, toward the survivors: rope lengths (From, To), board metres. Ship: her
-	 * waterline amidships; Aim: where the survivors are. */
+	/**
+	 * A rescue. The men in the water are the sea scene's (SeaShow's wreck model: every ship's crew over her side, a boat's
+	 * too), and so is who swims to a ship standing by and climbs her side, where, and how high. The looks only hang the
+	 * scrambling nets they climb: nets where each of the scene's men climbs her side, and where each one swimming for it
+	 * will (at stations NetWide apart, side by side), while she stands by as the scene has it (stopped, under StandBy metres a second, the rescue's time not over:
+	 * its swimmers give her up otherwise), or while one of them is still on it; hauled in once she is under way and no one
+	 * is on it. Each net NetWide across, from her rail (the scene's height of her deck, FreeOf her class: where its men
+	 * climb to) into the sea, close against her side where the scene's men climb it.
+	 */
+	/** The scene's height of a ship's deck over the sea by her class (its men climb a rescuer's side to it) [SHOW]. */
+	double FreeOf(const std::string& Class);
+	/** Whether a rescuer at this speed (metres a second) stands by, as the scene has it [SHOW]. */
+	bool StandsBy(double Speed);
+	/** A rescuer as the show gives her (ShipOut): her waterline amidships, heading (degrees), length, beam, speed. */
+	struct RescuerIn
+	{
+		P3 At;
+		double Heading = 0.0, Long = 100.0, Beam = 10.0, Speed = 0.0;
+	};
+	/** A man of the scene's as it gives him (ManOut): where, the way he faces (radians clockwise from north, the show's
+	 * own), swimming, climbing a ship's side, or anything else. */
+	enum class ManDoing
+	{
+		Swim,
+		Climb,
+		Other,
+	};
+	struct ManIn
+	{
+		P3 At;
+		double Heading = 0.0;
+		ManDoing Doing = ManDoing::Other;
+	};
+	/** Where on a rescuer's side a man of the scene climbs it now (bOutClimbing), or, swimming for it, will reach it: metres
+	 * along her from amidships, and her side (+1 starboard, -1 port); false where he does neither. */
+	bool ClimbPlace(const RescuerIn& R, const ManIn& M, double& OutAlong, double& OutSide, bool& bOutClimbing);
+	/** A net over her side: which side, its middle along her from amidships, how far down it is (0 in, 1 down). */
+	struct NetHung
+	{
+		double Side = 1.0, Along = 0.0, Out = 0.0;
+	};
+	/** Whether a man climbing at a place on her side is on her nets (all his hold on it within nets down at least Least). */
+	bool OnNets(const std::vector<NetHung>& Nets, double Side, double Along, double Least);
+	/** Seconds a net takes to go down her side, or to come in. */
+	double NetDropFor();
+	/** A rescuer's nets, a step on (Dt seconds): Men the scene's men near her, bRescue her rescue's time not over. */
+	void StepNets(std::vector<NetHung>& Nets, const RescuerIn& R, const std::vector<ManIn>& Men, bool bRescue, double Dt);
+	/** One net's ropes (From, To), board metres: Ship her waterline amidships, her heading (degrees) and the beam it hangs
+	 * against (the show's, or the stage's drawn hull where that is wider), Free her deck's height (FreeOf), the net's
+	 * side, middle and how far down. */
 	struct NetIn
 	{
-		P3 Ship, Aim;
-		double Heading = 0.0, Long = 95.0, Beam = 10.0;
+		P3 Ship;
+		double Heading = 0.0, Beam = 10.0, Free = 5.0, Side = 1.0, Along = 0.0, Out = 1.0;
 	};
 	struct Rope
 	{

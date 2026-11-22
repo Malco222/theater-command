@@ -277,12 +277,30 @@ void FConvoyLooks::Effect(const SeaShow::Fx& E, double InNow, bool bInSkip)
 			S.In.Seed = static_cast<uint64>(static_cast<uint32>(E.Key)) * 2654435761ull + 11ull;
 		}
 		break;
+	case SeaShow::FxKind::Dive:
+		// (a boat forced to the surface has blown all her tanks: she rides high; one diving again floods them)
+		if (E.What == "surface" && E.Text == "forced")
+		{
+			ConvoyLook::Blow(Boats.FindOrAdd(E.Key).State, true);
+		}
+		else if (E.What == "dive")
+		{
+			if (FBoatKept* B = Boats.Find(E.Key))
+			{
+				ConvoyLook::Blow(B->State, false);
+			}
+		}
+		break;
 	case SeaShow::FxKind::Rescue:
 	{
-		FNet& Net = Nets.AddDefaulted_GetRef();
-		Net.Key = E.Key;
-		Net.Aim = P3(E.Aim.X, E.Aim.Y, 0.0);
-		Net.Until = E.Until > Now ? E.Until : Now + 600.0;
+		// (her nets go where the sea scene's men climb her side, while the scene has her standing by: StepNets)
+		FRescue* R = Rescues.FindByPredicate([&E](const FRescue& X) { return X.Key == E.Key; });
+		if (!R)
+		{
+			R = &Rescues.AddDefaulted_GetRef();
+			R->Key = E.Key;
+		}
+		R->Until = FMath::Max(R->Until, E.Until > Now ? E.Until : Now + 600.0);
 		break;
 	}
 	default:
@@ -376,10 +394,12 @@ void FConvoyLooks::End(const SeaShow::Fx& E, bool bInSkip)
 	FBoatKept* B = Boats.Find(E.Key);
 	if (E.What == "scuttled")
 	{
-		// Brought up: her tanks blown, she comes to the surface wherever the show still has her, and goes from there.
+		// Brought up: her tanks blown, she comes to the surface wherever the show still has her, and goes from there,
+		// riding high while her crew get out over her side (the sea scene's men, from her deck's height).
 		if (B)
 		{
 			ForceUp(B->State, Now, B->State.Sub);
+			Blow(B->State, true);
 		}
 		return;
 	}
@@ -409,6 +429,7 @@ void FConvoyLooks::Step()
 	FlyCharges();
 	PlayDue();
 	LightStars();
+	StepNets();
 	if (!bSkipping)
 	{
 		Lay();
@@ -737,7 +758,7 @@ void FConvoyLooks::Clear()
 	Due.Reset();
 	Charges.Reset();
 	Stars.Reset();
-	Nets.Reset();
+	Rescues.Reset();
 	Ended.Reset();
 	if (UProceduralMeshComponent* M = Mesh.Get())
 	{
@@ -745,6 +766,54 @@ void FConvoyLooks::Clear()
 	}
 	SectionsLaid = 0;
 	SteppedAt = -1.0;
+}
+
+void FConvoyLooks::StepNets()
+{
+	using namespace ConvoyLook;
+	if (!Show)
+	{
+		return;
+	}
+	std::vector<ManIn> Near;
+	for (int32 I = Rescues.Num() - 1; I >= 0; --I)
+	{
+		FRescue& R = Rescues[I];
+		const SeaShow::ShipOut* Ship = Show->Ship(R.Key);
+		const bool bRescue = Now <= R.Until;
+		if (!Ship || (!bRescue && R.Nets.empty()))
+		{
+			Rescues.RemoveAtSwap(I);
+			continue;
+		}
+		RescuerIn In;
+		In.At = P3(Ship->At.X, Ship->At.Y, 0.0);
+		In.Heading = Ship->Heading;
+		In.Long = Ship->Long;
+		In.Beam = Ship->Beam;
+		In.Speed = Ship->Speed;
+		// (the scene's men near her: climbing her side, or swimming for it)
+		Near.clear();
+		const double Reach = 0.5 * Ship->Long + 80.0;
+		for (const SeaShow::ManOut& Man : Show->Men())
+		{
+			if (Man.Doing != SeaShow::Swim::Swim && Man.Doing != SeaShow::Swim::Climb)
+			{
+				continue;
+			}
+			if (FMath::Abs(Man.At.X - In.At.X) > Reach || FMath::Abs(Man.At.Y - In.At.Y) > Reach)
+			{
+				continue;
+			}
+			ManIn& M = Near.emplace_back();
+			M.At = P3(Man.At.X, Man.At.Y, Man.At.Z);
+			M.Heading = Man.Heading;
+			M.Doing = Man.Doing == SeaShow::Swim::Climb ? ManDoing::Climb : ManDoing::Swim;
+		}
+		const double Dt = R.SteppedAt >= 0.0 ? FMath::Clamp(Now - R.SteppedAt, 0.0, 10.0) : 0.0;
+		R.SteppedAt = Now;
+		ConvoyLook::StepNets(R.Nets, In, Near, bRescue, Dt);
+	}
 }
 
 void FConvoyLooks::Lay()
@@ -821,29 +890,30 @@ void FConvoyLooks::Lay()
 			}
 		}
 	}
-	// A rescuer's scrambling net down her side toward the survivors, riding her heave.
-	for (int32 I = Nets.Num() - 1; I >= 0; --I)
+	// A rescuer's scrambling nets down her side where the scene's men climb it, riding her heave.
+	for (const FRescue& R : Rescues)
 	{
-		const FNet& Net = Nets[I];
-		const SeaShow::ShipOut* Ship = Show ? Show->Ship(Net.Key) : nullptr;
-		if (Now > Net.Until || !Ship || Ship->Doing != SeaShow::Fate::Line)
+		const SeaShow::ShipOut* Ship = Show ? Show->Ship(R.Key) : nullptr;
+		if (!Ship)
 		{
-			if (Now > Net.Until || !Ship)
-			{
-				Nets.RemoveAtSwap(I);
-			}
 			continue;
 		}
 		ConvoyLook::NetIn In;
 		In.Ship = P3(Ship->At.X, Ship->At.Y, 0.0);
 		In.Heading = Ship->Heading;
-		In.Long = Ship->Long;
-		In.Beam = Ship->Beam;
-		In.Aim = Net.Aim;
+		// (hung on her side as the stage draws her where that is wider than the show has her, so it is never inside her)
+		In.Beam = FMath::Max(Ship->Beam, AirFeed::HullOf(Ship->Class, std::string(), Ship->Nation).Beam);
+		In.Free = ConvoyLook::FreeOf(Ship->Class);
 		const FVector Lift(0.0, 0.0, Ship->Heave * U);
-		for (const ConvoyLook::Rope& R : ConvoyLook::NetOf(In))
+		for (const ConvoyLook::NetHung& N : R.Nets)
 		{
-			Solid.Rod(World(R.From) + Lift, World(R.To) + Lift, 0.04 * LookScale * U, 3, NetRope);
+			In.Side = N.Side;
+			In.Along = N.Along;
+			In.Out = N.Out;
+			for (const ConvoyLook::Rope& Line : ConvoyLook::NetOf(In))
+			{
+				Solid.Rod(World(Line.From) + Lift, World(Line.To) + Lift, 0.04 * LookScale * U, 3, NetRope);
+			}
 		}
 	}
 	const FLaid* Laid[Sections] = { &Solid, &Glow, &Faint };

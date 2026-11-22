@@ -2033,6 +2033,7 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			break;
 		case SeaShow::FxKind::Dive:
 			// D1 hook (convoy looks): Dive
+			if (Looks) { Looks->Effect(E, Now, bSkip); } // D1 hook (convoy looks)
 			break;
 		case SeaShow::FxKind::Starshell:
 			// D1 hook (convoy looks): Starshell

@@ -6,7 +6,11 @@
 // state says: at periscope depth the head of her taller periscope while the show has it up and nothing while it is
 // down, nothing deep, the swirl as the last of her bridge goes under and feathers only with all of it under; every
 // pattern's charges go in where the show bursts them, and before; the ahead thrower's ring is in before its bursts; a
-// starshell lights and sinks. Plain C++, no engine. Usage: Tools/convoy_looks/run.sh (it runs this after the core's).
+// starshell lights and sinks. And against the sea scene's wreck model (the men in the water, every ship's, a boat's too:
+// the show's, which the looks never draw): a boat's men go over her side from her deck as the looks ride her (blown, high,
+// once forced up), and every man climbing a rescuer's side climbs a net the looks have down there, hung while she stands
+// by as the scene has it and in once she is under way with no one on it. Plain C++, no engine. Usage:
+// Tools/convoy_looks/run.sh (it runs this after the core's).
 
 #include "Battle/AirFeed.h"
 #include "Battle/ConvoyLooksCore.h"
@@ -101,6 +105,17 @@ namespace
 		double ScopeSince = -1.0, DownSince = -1.0;
 		int Swirls = 0, Feathers = 0;
 		double SwirlLeast = 99.0, SwirlMost = -99.0, FeatherBridgeMost = -99.0;
+		// (her deck as the looks ride her, over her own waterline: the swell's heave taken off, as the scene's men's heights)
+		double Deck = 0.0, Down = 0.0;
+		bool bNow = false;
+		int HighFrames = 0;
+	};
+
+	/** A rescuer as the looks keep her (FConvoyLooks::FRescue): until when, her nets. */
+	struct RescueSeen
+	{
+		double Until = 0.0, SteppedAt = -1.0, AwaySince = -1.0;
+		std::vector<NetHung> Nets;
 	};
 
 	int PlayNight(const std::string& Path)
@@ -134,6 +149,10 @@ namespace
 		const SeaShow::Field& Board = Night.Board();
 		const double Sky = SkyLit(Board.bLight, Board.SunUp, Board.MoonUp, Board.MoonLit);
 		std::map<int, BoatSeen> Boats;
+		std::map<int, RescueSeen> Rescues;
+		std::map<int, bool> Jumped, Climbed;
+		int Jumpers = 0, ClimbFrames = 0, ClimbOn = 0, ClimbersOn = 0, Climbers = 0, ClimbUnnamed = 0, NetsAway = 0, MostNets = 0, ClimbOver = 0;
+		double JumpWorst = 0.0, JumpRawWorst = 0.0, ClimbHeaveLow = 99.0, ClimbHeaveHigh = -99.0, StoodBy = 0.0, ClimbOffDrawnLow = 99.0, ClimbOffDrawnHigh = -99.0;
 		std::vector<Landing> Landings;
 		int Drops = 0, PatternBursts = 0, AheadBursts = 0, Stars = 0;
 		double WorstMiss = 0.0, LeastLead = 1e9, AheadOff = -1e9;
@@ -143,6 +162,7 @@ namespace
 		while (true)
 		{
 			Night.Advance(T);
+			for (auto& Pair : Boats) Pair.second.bNow = false;
 			for (const SeaShow::ShipOut& Ship : Night.Ships())
 			{
 				if (Ship.Class != "ss" || Ship.Dive.empty()) continue;
@@ -177,13 +197,16 @@ namespace
 					B.WorstPop = std::fabs(Out.Heave - B.LastHeave);
 					B.PopAt = T;
 				}
-				// (surfaced, she rides where the show has her, less her trim awash: the deck of the stage's model 0.5 m out)
+				// (surfaced, she rides where the show has her, less her trim awash: the deck of the stage's model 0.5 m out; her
+				// tanks blown, forced up or scuttled, none of it: riding high, her model's own waterline at the sea)
 				const double ShowHeave = Ship.Heave - Ship.Dived;
-				if (Ship.Dive == "surfaced" && Ship.Dived < 0.05 && std::fabs(Out.Heave - (ShowHeave - (1.65 * B.Stage.Up - 0.5))) > B.WorstOff)
+				const double Awash = (1.65 * B.Stage.Up - 0.5) * (1.0 - Smooth(0.0, 1.0, B.State.Blown));
+				if (Ship.Dive == "surfaced" && Ship.Dived < 0.05 && std::fabs(Out.Heave - (ShowHeave - Awash)) > B.WorstOff)
 				{
-					B.WorstOff = std::fabs(Out.Heave - (ShowHeave - (1.65 * B.Stage.Up - 0.5)));
+					B.WorstOff = std::fabs(Out.Heave - (ShowHeave - Awash));
 					B.OffAt = T;
 				}
+				if (Ship.Dive == "surfaced" && Ship.Dived < 0.05 && B.State.Blown >= 1.0) ++B.HighFrames;
 				// What of the stage's model shows: at periscope depth, settled (the periscope up or down 5 s), the head of her
 				// taller periscope out while the show has it up and nothing while it is down; deep, nothing.
 				const double Bridge = B.Stage.Bridge(Out.Heave, Ship.Pitch), Scope = B.Stage.Scope(Out.Heave, Ship.Pitch), Low = B.Stage.Low(Out.Heave, Ship.Pitch);
@@ -223,10 +246,133 @@ namespace
 					}
 				}
 				B.LastHeave = Out.Heave;
+				B.Deck = Out.DeckZ - Ship.Heave;
+				B.Down = Ship.Down;
+				B.bNow = true;
 				B.bSeen = true;
+			}
+			// The sea scene's men going over a boat's side: from her deck as the looks ride her (the scene lowers its height as
+			// she goes, by four fifths of her going: taken off here, so it is her deck's height the scene had).
+			for (const SeaShow::ManOut& Man : Night.Men())
+			{
+				if (Man.Doing != SeaShow::Swim::Jump || Jumped.count(Man.Key)) continue;
+				Jumped[Man.Key] = true;
+				const auto It = Boats.find(Man.Ship);
+				if (It == Boats.end() || !It->second.bNow) continue;
+				++Jumpers;
+				const double Free = Man.Drop / std::max(0.2, 1.0 - 0.8 * It->second.Down);
+				JumpWorst = std::max(JumpWorst, std::fabs(Free - It->second.Deck));
+				JumpRawWorst = std::max(JumpRawWorst, std::fabs(Man.Drop - It->second.Deck));
+			}
+			// Each rescuer's nets, stepped as the scene steps the looks (before its effects), from the scene's men near her.
+			for (auto It = Rescues.begin(); It != Rescues.end();)
+			{
+				RescueSeen& R = It->second;
+				const SeaShow::ShipOut* Ship = Night.Ship(It->first);
+				const bool bRescue = T <= R.Until;
+				if (!Ship || (!bRescue && R.Nets.empty()))
+				{
+					It = Rescues.erase(It);
+					continue;
+				}
+				RescuerIn In;
+				In.At = P3(Ship->At.X, Ship->At.Y, 0.0);
+				In.Heading = Ship->Heading;
+				In.Long = Ship->Long;
+				In.Beam = Ship->Beam;
+				In.Speed = Ship->Speed;
+				std::vector<ManIn> Near;
+				for (const SeaShow::ManOut& Man : Night.Men())
+				{
+					if (Man.Doing != SeaShow::Swim::Swim && Man.Doing != SeaShow::Swim::Climb) continue;
+					ManIn& M = Near.emplace_back();
+					M.At = P3(Man.At.X, Man.At.Y, Man.At.Z);
+					M.Heading = Man.Heading;
+					M.Doing = Man.Doing == SeaShow::Swim::Climb ? ManDoing::Climb : ManDoing::Swim;
+				}
+				const double Dt = R.SteppedAt >= 0.0 ? std::clamp(T - R.SteppedAt, 0.0, 10.0) : 0.0;
+				R.SteppedAt = T;
+				StepNets(R.Nets, In, Near, bRescue, Dt);
+				MostNets = std::max(MostNets, static_cast<int>(R.Nets.size()));
+				const bool bStanding = bRescue && StandsBy(Ship->Speed);
+				if (bStanding) StoodBy += Step;
+				// (every man the scene has climbing her side is on a net that is down; none climbs over her rail)
+				bool bAnyOn = false;
+				for (const SeaShow::ManOut& Man : Night.Men())
+				{
+					if (Man.Doing != SeaShow::Swim::Climb) continue;
+					ManIn M;
+					M.At = P3(Man.At.X, Man.At.Y, Man.At.Z);
+					M.Doing = ManDoing::Climb;
+					double Along = 0.0, Side = 0.0;
+					bool bClimbing = false;
+					if (!ClimbPlace(In, M, Along, Side, bClimbing)) continue;
+					bAnyOn = true;
+					++ClimbFrames;
+					const bool bOn = OnNets(R.Nets, Side, Along, 1.0);
+					ClimbOn += bOn ? 1 : 0;
+					ClimbOver += Man.At.Z > FreeOf(Ship->Class) + 0.01 ? 1 : 0;
+					if (!Climbed.count(Man.Key))
+					{
+						Climbed[Man.Key] = true;
+						++Climbers;
+						ClimbersOn += bOn ? 1 : 0;
+					}
+					// (how far out from her side as the stage draws her the scene has him: told)
+					const P3 Ri = RightOf(Ship->Heading);
+					const double Out = std::fabs((Man.At.X - Ship->At.X) * Ri.X + (Man.At.Y - Ship->At.Y) * Ri.Y) - 0.5 * AirFeed::HullOf(Ship->Class, std::string(), Ship->Nation).Beam;
+					ClimbOffDrawnLow = std::min(ClimbOffDrawnLow, Out);
+					ClimbOffDrawnHigh = std::max(ClimbOffDrawnHigh, Out);
+					ClimbHeaveLow = std::min(ClimbHeaveLow, Ship->Heave);
+					ClimbHeaveHigh = std::max(ClimbHeaveHigh, Ship->Heave);
+				}
+				// (under way, or her time over, and no one on a net: all in within the time a net takes)
+				R.AwaySince = !bStanding && !bAnyOn ? (R.AwaySince < 0.0 ? T : R.AwaySince) : -1.0;
+				if (R.AwaySince >= 0.0 && T - R.AwaySince > NetDropFor() + 2.0 * Step)
+				{
+					for (const NetHung& N : R.Nets) NetsAway += N.Out > 0.0 ? 1 : 0;
+				}
+				++It;
+			}
+			// (a man of the scene's climbing a ship no rescue named: none should be)
+			for (const SeaShow::ManOut& Man : Night.Men())
+			{
+				if (Man.Doing != SeaShow::Swim::Climb) continue;
+				bool bNamed = false;
+				for (const auto& [Key, R] : Rescues)
+				{
+					const SeaShow::ShipOut* Ship = Night.Ship(Key);
+					if (!Ship) continue;
+					RescuerIn In;
+					In.At = P3(Ship->At.X, Ship->At.Y, 0.0);
+					In.Heading = Ship->Heading;
+					In.Long = Ship->Long;
+					In.Beam = Ship->Beam;
+					ManIn M;
+					M.At = P3(Man.At.X, Man.At.Y, Man.At.Z);
+					M.Doing = ManDoing::Climb;
+					double Along = 0.0, Side = 0.0;
+					bool bClimbing = false;
+					bNamed = bNamed || ClimbPlace(In, M, Along, Side, bClimbing);
+				}
+				ClimbUnnamed += bNamed ? 0 : 1;
 			}
 			for (const SeaShow::Fx& E : Night.Effects)
 			{
+				// (as FConvoyLooks::Effect: a boat forced up blows her tanks, one diving floods them; a boat scuttled is brought up
+				// and blown; a rescue's nets kept until its time is over)
+				if (E.Kind == SeaShow::FxKind::Dive && E.What == "surface" && E.Text == "forced") Blow(Boats[E.Key].State, true);
+				if (E.Kind == SeaShow::FxKind::Dive && E.What == "dive" && Boats.count(E.Key)) Blow(Boats[E.Key].State, false);
+				if (E.Kind == SeaShow::FxKind::Sink && E.What == "scuttled" && Boats.count(E.Key))
+				{
+					ForceUp(Boats[E.Key].State, T, Boats[E.Key].State.Sub);
+					Blow(Boats[E.Key].State, true);
+				}
+				if (E.Kind == SeaShow::FxKind::Rescue)
+				{
+					RescueSeen& R = Rescues[E.Key];
+					R.Until = std::max(R.Until, E.Until > T ? E.Until : T + 600.0);
+				}
 				if (E.Kind == SeaShow::FxKind::ChargeDrop)
 				{
 					++Drops;
@@ -320,7 +466,7 @@ namespace
 		for (const auto& [Key, B] : Boats)
 		{
 			ShowCheck(B.WorstPop < 0.25, Said("boat %.0f never pops where she can be seen (worst %.3f m in a frame, at %.1f s)", Key, B.WorstPop, B.PopAt));
-			ShowCheck(B.WorstOff < 0.3, Said("boat %.0f surfaced rides where the show has her, her casing awash (worst %.2f m off, at %.1f s)", Key, B.WorstOff, B.OffAt));
+			ShowCheck(B.WorstOff < 0.3, Said("boat %.0f surfaced rides where the show has her, her casing awash, or high once blown (worst %.2f m off, at %.1f s)", Key, B.WorstOff, B.OffAt));
 			ShowCheck(B.UpFrames > 0 && B.UpShown == B.UpFrames && B.UpLeast > 0.5,
 			          Said("boat %.0f at periscope depth with the show's periscope up: the stage's model shows its taller periscope's head in every frame (%.0f), at least %.2f m", Key, B.UpFrames, B.UpLeast));
 			ShowCheck(B.UpFrames == 0 || (B.UpLowMost < 0.0 && B.UpBridgeMost < -1.0),
@@ -331,15 +477,25 @@ namespace
 			          Said("boat %.0f: each swirl comes as the last of the stage's model's bridge goes under (%.2f to %.2f m)", Key, B.SwirlLeast, B.SwirlMost));
 			ShowCheck(B.FeatherBridgeMost < 0.0, Said("boat %.0f: feathers (%.0f) only while all of the stage's model's bridge is under (at most %.2f m)", Key, B.Feathers, B.FeatherBridgeMost));
 		}
+		ShowCheck(Jumpers > 0 && JumpWorst < 0.35, Said("a boat's men (%.0f) go over her side from her deck as the looks ride her (at most %.2f m off; %.2f m as they leave it)", Jumpers, JumpWorst, JumpRawWorst));
+		ShowCheck(ClimbFrames > 0 && ClimbOn == ClimbFrames, Said("every man the scene has climbing a rescuer's side is on a net that is down (%.0f of %.0f man-frames)", ClimbOn, ClimbFrames));
+		ShowCheck(Climbers > 0 && ClimbersOn == Climbers, Said("and his net was down before he reached it (%.0f of %.0f men)", ClimbersOn, Climbers));
+		ShowCheck(ClimbOver == 0, Said("no man climbs over the net's top (her deck's height): %.0f man-frames", ClimbOver));
+		ShowCheck(ClimbUnnamed == 0, Said("no man climbs a ship no rescue named (%.0f man-frames)", ClimbUnnamed));
+		ShowCheck(NetsAway == 0, Said("no net down while she is under way or her rescue over and no one is on it (%.0f net-frames)", NetsAway));
 		ShowCheck(PatternBursts > 0 && AheadBursts > 0 && Stars > 0, Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars));
 		std::printf("%s: %zu boats, %d drops, %d pattern bursts (worst %.1f m off a charge drawn going in, the least %.1f s after it), %d ahead bursts (at most %.1f m outside the ring the show aimed), %d starshells\n",
 		            Rec.Key.c_str(), Boats.size(), Drops, PatternBursts, WorstMiss, LeastLead, AheadBursts, AheadOff, Stars);
+		std::printf("  the scene's men: %d went over a boat's side, at most %.2f m off her deck as the looks ride her; %d climbed a rescuer's side, %d man-frames, every one on a net down (most nets on one "
+		            "ship %d); she stood by %.0f s; her heave while men climbed %.2f to %.2f m (the net rides it, the scene's climbers do not); the climbers %.2f to %.2f m out "
+		            "from her side as the stage draws her\n",
+		            Jumpers, JumpWorst, Climbers, ClimbFrames, MostNets, StoodBy, ClimbHeaveLow, ClimbHeaveHigh, ClimbOffDrawnLow, ClimbOffDrawnHigh);
 		for (const auto& [Key, B] : Boats)
 		{
-			std::printf("  boat %d: worst pop %.3f m (at %.1f s); surfaced, at most %.2f m off the show's trim awash (at %.1f s); the stage's model: periscope up %d frames, its head %.2f m out at"
+			std::printf("  boat %d: worst pop %.3f m (at %.1f s); surfaced, at most %.2f m off the show's trim awash or blown (at %.1f s), %d frames riding high; the stage's model: periscope up %d frames, its head %.2f m out at"
 			            " least, the shorter's at most %.2f, the bridge's %.2f; periscope down %d frames, highest point at most %.2f; deep %d frames, at most %.2f; %d swirls as the bridge went"
 			            " under (%.2f to %.2f m), %d feathers (the bridge at most %.2f m)\n",
-			            Key, B.WorstPop, B.PopAt, B.WorstOff, B.OffAt, B.UpFrames, B.UpLeast, B.UpLowMost, B.UpBridgeMost, B.DownFrames, B.DownMost, B.DeepFrames, B.DeepMost, B.Swirls,
+			            Key, B.WorstPop, B.PopAt, B.WorstOff, B.OffAt, B.HighFrames, B.UpFrames, B.UpLeast, B.UpLowMost, B.UpBridgeMost, B.DownFrames, B.DownMost, B.DeepFrames, B.DeepMost, B.Swirls,
 			            B.SwirlLeast, B.SwirlMost, B.Feathers, B.FeatherBridgeMost);
 		}
 		return 0;

@@ -39,10 +39,13 @@ namespace SeaShow
  *  - A starshell: the flare under its small parachute drifting down the wind and sinking until the show's burn-out, its
  *    white-yellow lamp flickering and falling off as it burns down and sinks, its thin smoke trail (the kit's).
  *  - A boat's end: crushed (her air coming up as a hump of white water and boils, no boat) or scuttled (brought up to
- *    the surface, wherever the show still has her). The sinking itself, the men in the water, the oil and the wreckage
- *    are the sea scene's.
- *  - A rescue: a scrambling net down the rescuer's side toward the survivors while it lasts (the survivors and their
- *    rafts are the sea scene's).
+ *    the surface, wherever the show still has her, and riding high, her tanks blown, as she does from the moment the
+ *    show has her forced up: her deck where the sea scene's men go over it). The sinking itself, the men in the water,
+ *    their rafts and boats, the oil and the wreckage are the sea scene's wreck model's (SeaShow's, drawn by the scene),
+ *    a boat's as every ship's: nothing here draws them.
+ *  - A rescue: the scrambling nets the sea scene's men climb a rescuer's side by, where they climb it and where those
+ *    swimming for it will, while she stands by as the scene has it or one of them is on a net; hauled in once she is
+ *    under way and no one is on them.
  *
  * Everything that counts is the show's (the sea scene thread's SeaShow): this only looks. The timing and the shapes
  * are plain C++ (Battle/ConvoyLooksCore, checked by Tools/convoy_looks/run.sh); here only the kit's calls (always on
@@ -69,8 +72,9 @@ public:
 	static double Steer(TUniquePtr<FConvoyLooks>& Held, USceneComponent* InRoot, AAirStage* InStage, FBattleEffects* InKit, const SeaShow::Show& InShow, double InUnitsPerMetre,
 	                    double InNow, bool bInSkip, bool& bOnWater, const SeaShow::ShipOut& Ship);
 
-	/** PlayEffects' hooks (its marked case labels): ChargeDrop, ChargeBurst, Starshell, Rescue and Sink are taken, the
-	 * rest left. bInSkip: a picture run skipping ahead (only what lasts is kept: a boat scuttled is still brought up). */
+	/** PlayEffects' hooks (its marked case labels): ChargeDrop, ChargeBurst, Dive, Starshell, Rescue and Sink are taken,
+	 * the rest left. bInSkip: a picture run skipping ahead (only what lasts is kept: a boat scuttled is still brought up, a
+	 * boat forced up rides high, a rescuer's nets are kept). */
 	void Effect(const SeaShow::Fx& E, double InNow, bool bInSkip);
 
 private:
@@ -112,12 +116,12 @@ private:
 		ConvoyLook::StarIn In;
 		bool bTrail = false;
 	};
-	/** A rescuer's scrambling net: her key, where the survivors are, until when. */
-	struct FNet
+	/** A rescuer (the show's Rescue): her key, until when the scene has her standing by, her nets. */
+	struct FRescue
 	{
 		int32 Key = 0;
-		ConvoyLook::P3 Aim;
-		double Until = 0.0;
+		double Until = 0.0, SteppedAt = -1.0;
+		std::vector<ConvoyLook::NetHung> Nets;
 	};
 
 	TWeakObjectPtr<USceneComponent> Root;
@@ -138,7 +142,7 @@ private:
 	TArray<FDue> Due;
 	TArray<FCharge> Charges;
 	TArray<FStar> Stars;
-	TArray<FNet> Nets;
+	TArray<FRescue> Rescues;
 	TSet<int32> Ended;
 
 	void Begin();
@@ -148,6 +152,7 @@ private:
 	void PlayDue();
 	void FlyCharges();
 	void LightStars();
+	void StepNets();
 	void Lay();
 	void Drop(const SeaShow::Fx& E);
 	void Burst(const SeaShow::Fx& E);

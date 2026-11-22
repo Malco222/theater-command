@@ -1,9 +1,11 @@
 // The submarine scene's looks (Battle/ConvoyLooksCore), checked in the cloud: the boat's states and her dive and her
 // coming up, never a pop, and the faint swirl over her deep where light falls; a depth charge's dome and column by depth
 // and charge; a pattern going in where and when the show bursts it; the ring of ahead-thrown bombs; a starshell's fall
-// and light; a crushed boat's boils; a rescuer's scrambling net. Plain C++, no engine.
+// and light; a crushed boat's boils; a boat blown riding high; a rescuer's scrambling nets where the sea scene's men climb
+// her side. Plain C++, no engine.
 // Usage: Tools/convoy_looks/run.sh   (CONVOY_LOOKS_STORY=1 prints a dive, the bursts by depth and a starshell). Given the
-// game's source folder (run.sh gives it), it also checks the boat rows against the stage's model in its source.
+// game's source folder (run.sh gives it), it also checks the boat rows against the stage's model in its source, and the
+// rescue against the sea scene's wreck model in its.
 
 #include "Battle/ConvoyLooksCore.h"
 
@@ -381,6 +383,66 @@ namespace
 			Check(Most <= 2.5 * Frame + 1e-9, F("forced up, never a pop once in sight: %.3f m a frame", Most));
 		}
 		{
+			// forced up with her tanks blown (the show's surfacing "forced", or her scuttling: Blow), she comes up riding high,
+			// her model's own waterline at the sea, her deck where the sea scene's men go over it; never a pop
+			const BoatModel M = ModelOf("GER");
+			const Drawn D = DrawnOf(M, 95.0, 8.3);
+			BoatState S;
+			double Deck = -99.0, Last = 0.0, Most = 0.0;
+			bool bFirst = true;
+			for (double T = 0.0; T < 40.0; T += Frame)
+			{
+				BoatIn In;
+				In.T = T;
+				In.Keel = 80.0;
+				In.Dived = 80.0 - 4.69;
+				In.Dive = "deep";
+				if (T >= 5.0)
+				{
+					ForceUp(S, 5.0, In.Dived);
+					Blow(S, true);
+				}
+				const BoatOut Out = StepBoat(S, In, M, D);
+				Deck = Out.DeckZ;
+				if (!bFirst && Out.Heave + M.Top * D.Up > -6.0) Most = std::max(Most, std::fabs(Out.Heave - Last));
+				bFirst = false;
+				Last = Out.Heave;
+			}
+			Check(std::fabs(Deck - M.Deck * D.Up) < 0.02, F("blown, she rides high: her deck %.2f m out (her model's own, %.2f)", Deck, M.Deck * D.Up));
+			Check(Most <= 2.5 * Frame + 1e-9, F("blown and forced up, never a pop once in sight: %.3f m a frame", Most));
+		}
+		{
+			// surfaced awash, then her tanks blown (a scuttling with no forced surfacing told), then flooded again: eased
+			// over BlowFor each way, never faster than a metre a second
+			const BoatModel M = ModelOf("GER");
+			const Drawn D = DrawnOf(M, 95.0, 8.3);
+			BoatState S;
+			double Awash = 0.0, High = 0.0, Back = 0.0, Most = 0.0, Last = 0.0, HighAt = -1.0;
+			bool bFirst = true;
+			for (double T = 0.0; T < 30.0; T += Frame)
+			{
+				BoatIn In;
+				In.T = T;
+				In.Keel = 4.69;
+				In.Dive = "surfaced";
+				if (std::fabs(T - 5.0) < 0.5 * Frame) Blow(S, true);
+				if (std::fabs(T - 15.0) < 0.5 * Frame) Blow(S, false);
+				const BoatOut Out = StepBoat(S, In, M, D);
+				if (T < 5.0) Awash = Out.DeckZ;
+				if (T > 5.0 && T < 15.0) High = Out.DeckZ;
+				if (HighAt < 0.0 && Out.DeckZ > M.Deck * D.Up - 0.01) HighAt = T;
+				Back = Out.DeckZ;
+				if (!bFirst) Most = std::max(Most, std::fabs(Out.DeckZ - Last) / Frame);
+				bFirst = false;
+				Last = Out.DeckZ;
+			}
+			Check(std::fabs(Awash - 0.5) < 0.01, F("surfaced, her deck awash, %.2f m out", Awash));
+			Check(std::fabs(High - M.Deck * D.Up) < 0.01 && HighAt > 5.0 && HighAt <= 5.0 + BlowFor() + 0.1,
+			      F("her tanks blown, she rides high (%.2f m) in %.1f s", High, HighAt - 5.0));
+			Check(std::fabs(Back - 0.5) < 0.01, F("flooded again, back awash (%.2f m)", Back));
+			Check(Most <= 1.0, F("riding up or settling, at most %.2f m a second", Most));
+		}
+		{
 			// a swirl's life
 			Swirl W;
 			W.T0 = 10.0;
@@ -750,32 +812,170 @@ namespace
 		Check(First >= 2.0 && Last <= 30.0, F("the hump after %.1f s, the last boil by %.1f s", First, Last));
 		Check(Hump >= 3, "the hump: several boils at once");
 
+	}
+
+	/**
+	 * A rescue: the men in the water are the sea scene's, and so is who climbs a rescuer's side, where and how high
+	 * (SeaShow.cpp RunWrecks); the looks hang the nets they climb. Given the game's source folder, the scene's numbers are
+	 * read from its text, so a change there fails here.
+	 */
+	void TestRescue(const std::string& Root)
+	{
+		Check(StandsBy(2.9) && !StandsBy(3.0), "a rescuer stands by under 3 m/s, as the scene has it");
+		// A destroyer heading east (her starboard side to the south), 100 m by 10, stopped.
+		RescuerIn R;
+		R.At = P3(1000.0, 2000.0, 0.0);
+		R.Heading = 90.0;
+		R.Long = 100.0;
+		R.Beam = 10.0;
+		R.Speed = 0.5;
+		auto Climber = [](double Along, double Side)
+		{
+			ManIn M;
+			M.At = P3(1000.0 + Along, 2000.0 - Side * 5.3, 2.0);
+			M.Doing = ManDoing::Climb;
+			return M;
+		};
+		auto Swimmer = [](double X, double Y, double ToX, double ToY)
+		{
+			ManIn M;
+			M.At = P3(X, Y, 0.0);
+			M.Heading = std::atan2(ToX - X, ToY - Y);
+			M.Doing = ManDoing::Swim;
+			return M;
+		};
+		double Along = 0.0, Side = 0.0;
+		bool bClimbing = false;
+		Check(ClimbPlace(R, Climber(20.0, 1.0), Along, Side, bClimbing) && bClimbing && std::fabs(Along - 20.0) < 1e-9 && Side == 1.0, "a man of the scene's up her starboard side, 20 m forward");
+		Check(ClimbPlace(R, Climber(-30.0, -1.0), Along, Side, bClimbing) && Side == -1.0, "and one up her port side");
+		Check(!ClimbPlace(R, Climber(40.0, 1.0), Along, Side, bClimbing), "none climbs beyond her waist (0.35 of her length from amidships)");
+		// (the scene points a man swimming for her at his place on her side, 1 m out from it)
+		Check(ClimbPlace(R, Swimmer(1000.0, 1964.0, 990.0, 1994.0), Along, Side, bClimbing) && !bClimbing && std::fabs(Along + 10.0) < 1e-6 && Side == 1.0,
+		      F("one swimming for her side, 30 m off, reaches it where he is making for (%.2f m along)", Along));
+		Check(!ClimbPlace(R, Swimmer(1000.0, 1964.0, 1000.0, 1900.0), Along, Side, bClimbing), "one swimming away from her: none");
+		Check(!ClimbPlace(R, Swimmer(1000.0, 1880.0, 990.0, 1994.0), Along, Side, bClimbing), "one swimming for her still more than 60 m off: not yet");
+		Check(!ClimbPlace(R, Swimmer(1000.0, 1964.0, 1080.0, 1994.0), Along, Side, bClimbing), "one swimming past her bow: none");
+
+		// Her nets, at stations 5 m apart from amidships: one hung where the swimmer will climb, down in 2 s; a man
+		// climbing beside it is on it; one further along gets the next station's, alongside it; one at the end of a
+		// station's net takes the next too.
+		std::vector<NetHung> Nets;
+		std::vector<ManIn> Men = { Swimmer(1000.0, 1964.0, 990.0, 1994.0) };
+		StepNets(Nets, R, Men, true, 0.1);
+		Check(Nets.size() == 1 && OnNets(Nets, 1.0, -10.0, 0.0) && Nets[0].Out > 0.0 && Nets[0].Out < 0.1, "standing by, a net goes over where a man swims for her");
+		for (int I = 0; I < 20; ++I) StepNets(Nets, R, Men, true, 0.1);
+		Check(Nets.size() == 1 && Nets[0].Out == 1.0, F("down her side in %.0f s", NetDropFor()));
+		Men = { Climber(-8.5, 1.0), Climber(20.0, 1.0), Climber(-7.0, 1.0), Climber(-7.4, 1.0) };
+		StepNets(Nets, R, Men, true, 0.1);
+		Check(Nets.size() == 3, F("men on it, at the next station and 20 m forward: three nets (%.0f)", static_cast<double>(Nets.size())));
+		bool bBeside = false;
+		for (const NetHung& N : Nets) bBeside = bBeside || (N.Side == 1.0 && std::fabs(N.Along + 5.0) < 1e-9);
+		Check(bBeside, "the one just aft of it alongside it, not over it");
+		for (const ManIn& M : Men)
+		{
+			ClimbPlace(R, M, Along, Side, bClimbing);
+			Check(OnNets(Nets, Side, Along, 0.0), F("each man climbing her side is on her nets (%.1f m along)", Along));
+		}
+		Check(!OnNets(Nets, 1.0, 0.0, 0.0) && !OnNets(Nets, -1.0, -8.5, 0.0) && !OnNets(Nets, 1.0, 22.6, 0.0), "and a place no net is at, or just past a net's end, is not");
+		// Under way (the scene's men give her up): the nets she has no one on come in, the one a man is still on stays.
+		R.Speed = 5.0;
+		Men = { Climber(20.0, 1.0), Swimmer(1000.0, 1964.0, 990.0, 1994.0) };
+		for (int I = 0; I < 25; ++I) StepNets(Nets, R, Men, true, 0.1);
+		Check(Nets.size() == 1 && OnNets(Nets, 1.0, 20.0, 1.0), F("under way: only the net a man is still on stays out (%.0f nets)", static_cast<double>(Nets.size())));
+		Men.clear();
+		for (int I = 0; I < 25; ++I) StepNets(Nets, R, Men, true, 0.1);
+		Check(Nets.empty(), "and once he is aboard, it comes in");
+		// Stopped again with her rescue's time over: none goes over for a man swimming for her.
+		R.Speed = 0.0;
+		Men = { Swimmer(1000.0, 1964.0, 990.0, 1994.0) };
+		StepNets(Nets, R, Men, false, 0.1);
+		Check(Nets.empty(), "her rescue's time over: no net");
+
+		// A net's ropes: from her rail at the scene's deck height into the sea, close against her side where the scene's
+		// men climb it (0.3 m out), 5 m wide, on the side asked; halfway down, halfway.
 		NetIn In;
 		In.Ship = P3(1000.0, 2000.0, 0.0);
-		In.Heading = 90.0; // east: her starboard side to the south
-		In.Long = 95.0;
+		In.Heading = 90.0;
 		In.Beam = 10.0;
-		In.Aim = P3(1100.0, 1700.0, 0.0);
+		In.Free = FreeOf("dd");
+		In.Side = 1.0;
+		In.Along = -10.0;
+		In.Out = 1.0;
 		const std::vector<Rope> Net = NetOf(In);
-		double Top = -99.0, Foot = 99.0, Wide = 0.0, Inboard = 99.0;
-		for (const Rope& R : Net)
+		double Top = -99.0, Foot = 99.0, Wide = 0.0, OutMost = 0.0, OutLeast = 99.0;
+		for (const Rope& L : Net)
 		{
-			for (const P3& P : { R.From, R.To })
+			for (const P3& P : { L.From, L.To })
 			{
 				Top = std::max(Top, P.Z);
 				Foot = std::min(Foot, P.Z);
-				Wide = std::max(Wide, std::fabs(P.X - (1000.0 - 0.05 * 95.0)));
-				Inboard = std::min(Inboard, 2000.0 - P.Y);
+				Wide = std::max(Wide, std::fabs(P.X - 990.0));
+				OutMost = std::max(OutMost, 2000.0 - P.Y - 5.0);
+				OutLeast = std::min(OutLeast, 2000.0 - P.Y - 5.0);
 			}
 		}
-		Check(Net.size() > 40, F("a scrambling net of rope: %.0f lengths", static_cast<double>(Net.size())));
-		Check(Inboard >= 5.0 - 1e-9, F("down her side toward the survivors, not through her: %.2f m out", Inboard));
-		Check(Top > 2.0 && Top < 5.0 && Foot < 0.0 && Foot > -1.0, F("from her rail (%.1f m) into the sea (%.1f m)", Top, Foot));
+		Check(Net.size() >= 30 && Net.size() <= 45, F("a scrambling net of rope: %.0f lengths (each a rod drawn: a few dozen)", static_cast<double>(Net.size())));
+		Check(std::fabs(Top - 5.0) < 1e-9 && Foot < 0.0 && Foot > -1.0, F("from her rail (%.1f m, the scene's height of a destroyer's deck) into the sea (%.1f m)", Top, Foot));
+		Check(OutLeast > 0.0 && OutMost <= 0.3 + 1e-9, F("on her starboard side, between it and the men climbing it (%.2f to %.2f m out)", OutLeast, OutMost));
 		Check(Wide <= 2.5 + 1e-9, F("5 m wide: %.1f m each way", Wide));
-		In.Aim = P3(1100.0, 2300.0, 0.0);
+		In.Out = 0.5;
+		double HalfFoot = 99.0;
+		for (const Rope& L : NetOf(In)) HalfFoot = std::min({ HalfFoot, L.From.Z, L.To.Z });
+		Check(std::fabs(HalfFoot - (5.0 - 0.5 * 5.4)) < 1e-6, F("halfway down: its foot at %.2f m", HalfFoot));
+		In.Out = 0.0;
+		Check(NetOf(In).empty(), "in: nothing");
+		In.Out = 1.0;
+		In.Side = -1.0;
 		double North = 0.0;
-		for (const Rope& R : NetOf(In)) North = std::max(North, R.From.Y - 2000.0);
-		Check(North >= 5.0, "the survivors to port: the net on her port side");
+		for (const Rope& L : NetOf(In)) North = std::max(North, L.From.Y - 2000.0);
+		Check(North >= 5.0, "on her port side when asked");
+
+		// A boat's deck blown and riding high, against the scene's height of it (its men go over her side from there).
+		for (const char* Nation : { "GER", "", "UK", "JAP" })
+		{
+			const BoatModel M = ModelOf(Nation);
+			const Drawn D = DrawnOf(M, 95.0, 8.3);
+			Check(std::fabs(FreeOf("ss") - M.Deck * D.Up) <= 0.35, std::string("[") + Nation + "] " + F("a boat riding high: her deck %.2f m out, the scene's men go over it from %.2f m", M.Deck * D.Up, FreeOf("ss")));
+		}
+		if (Root.empty())
+		{
+			std::printf("(no source folder given: the rescue not read against the sea scene's code)\n");
+			return;
+		}
+		const std::string Show = TextOf(Root + "/Battle/SeaShow.cpp");
+		Check(!Show.empty(), "Battle/SeaShow.cpp read");
+		// (the scene's deck heights: CompanyOf's fifth figure, Free)
+		const size_t Company = Show.find("Company CompanyOf(const std::string& Class)");
+		Check(Company != std::string::npos, "the sea scene's CompanyOf, a ship's company and her deck's height by class");
+		for (const char* Class : { "bb", "cv", "ca", "cl", "de", "ss", "mv" })
+		{
+			const std::string Key = std::string("if (Class == \"") + Class + "\") return { ";
+			const size_t At = Company == std::string::npos ? std::string::npos : Show.find(Key, Company);
+			double Free = -1.0;
+			if (At != std::string::npos)
+			{
+				double A = 0.0, B = 0.0, C = 0.0, E = 0.0;
+				std::sscanf(Show.c_str() + At + Key.size(), "%lf, %lf, %lf, %lf, %lf", &A, &B, &C, &E, &Free);
+			}
+			Check(std::fabs(Free - FreeOf(Class)) < 1e-9, std::string("the scene's deck height for ") + Class + F(": %.1f m, the looks' %.1f", Free, FreeOf(Class)));
+		}
+		Check(Show.find("return { 300, 6, 1, 30, 5.0, 1.0 }; // a destroyer") != std::string::npos && FreeOf("dd") == 5.0, "and any other (a destroyer's): 5.0 m");
+		for (const char* Said : {
+			     "double FreeOf(const std::string& Class) { return CompanyOf(Class).Free; }",
+			     "if (By && (By->Doing == Fate::Gone || By->Spd >= 3.0 || Flat(By->P - M.O.At) > 900.0)) By = nullptr;",
+			     "const double Along = Clamp(Rel.Dot(Ahead(By->Hdg)), -0.35 * Sz.Long, 0.35 * Sz.Long);",
+			     "M.Off = Vec(Along, Side * (0.5 * Sz.Beam + 1.0), 0.0);",
+			     "M.Off = Vec(M.Off.X, M.Off.Y > 0.0 ? 0.5 * SizeOf(By->Class).Beam + 0.3 : -(0.5 * SizeOf(By->Class).Beam + 0.3), Up);",
+			     "M.O.At.Z = FreeOf(By->Class) * Clamp(",
+			     "M.O.Drop = std::max(0.6, W.Free * (1.0 - 0.8 * Down));",
+			     "if (Class == \"ss\") return { 55, 1, 0, 10, 2.5, 0.8 };",
+		     })
+		{
+			Check(Show.find(Said) != std::string::npos, std::string("the sea scene's rescue still has: ") + Said);
+		}
+		// (and the boat's end is the scene's whole: her men, her raft, her wreckage and her oil, by how she went)
+		Check(Show.find("if (How == \"scuttled\") return { 0.95, 0.02, 0.02, 0.5 };") != std::string::npos && Show.find("if (How == \"crushed\") return { 0.0, 0.0, 0.0, 0.0 };") != std::string::npos,
+		      "a boat scuttled leaves most of her men in the water, one crushed none: the scene's");
 	}
 }
 
@@ -788,6 +988,7 @@ int main(int ArgC, char** ArgV)
 	TestPatterns();
 	TestStarshell();
 	TestEnds();
+	TestRescue(ArgC > 1 ? std::string(ArgV[1]) : std::string());
 	std::printf("convoy looks: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

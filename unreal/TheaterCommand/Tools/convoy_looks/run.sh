@@ -2,8 +2,9 @@
 # The submarine scene's looks' cloud test (ruling 241, D1): builds Battle/ConvoyLooksCore (the game's own code, no
 # engine) and checks the boat rows against the stage's code-built model (read from its source), the boat's states and
 # her dive (never a pop), the depth charges' domes and columns by depth, a pattern in the water before its bursts, a
-# starshell's fall and light, a crushed boat's boils, a rescuer's net; then plays the sea show's stand-in convoy night
-# (read only) through the show itself and checks the looks, and the model the stage draws, against it.
+# starshell's fall and light, a crushed boat's boils, a boat blown riding high, a rescuer's nets (and the rescue against the
+# sea scene's wreck model, read from its source); then plays the sea show's stand-in convoy night (read only) through the
+# show itself and checks the looks, the model the stage draws and the scene's men in the water against it.
 # Usage: Tools/convoy_looks/run.sh [recording.json ...]   (default: the stand-in convoy night; CONVOY_LOOKS_STORY=1
 # prints a dive, the bursts and a starshell)
 set -euo pipefail

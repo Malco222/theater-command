@@ -45,6 +45,9 @@ namespace ConvoyLook
 		constexpr double BowPlunge = 0.35, BowEvery = 1.5, BowFast = 4.0;
 		/** [EST] A boat forced up (blowing all tanks) is on the surface in 12 s. */
 		constexpr double UpFor = 12.0;
+		/** [EST] Her tanks blown, she comes up from awash to riding high (her model's own waterline at the sea) in 3 s, and
+		 * flooded again settles back in as long. */
+		constexpr double BlowSeconds = 3.0;
 		/** [EST] Deep, a faint swirl over her where light falls: one every SwirlEvery s while she runs, lasting SwirlLast
 		 * s, from SwirlFrom to SwirlTo metres across; fainter the deeper (by e each SwirlFade metres under periscope
 		 * depth), none under SwirlLeast of light. */
@@ -134,6 +137,10 @@ namespace ConvoyLook
 	}
 
 	double ForcedUpFor() { return UpFor; }
+
+	void Blow(BoatState& S, bool bOn) { S.bBlown = bOn; }
+
+	double BlowFor() { return BlowSeconds; }
 	double SwirlLife() { return SwirlLast; }
 
 	void ForceUp(BoatState& S, double T, double Sub)
@@ -188,7 +195,9 @@ namespace ConvoyLook
 		// or ClearUnder under (down); deeper, the show's depth below periscope depth as drawn (the stage stretches her up by
 		// D.Up, so her depth is stretched alike).
 		const double Going = Clamp(Sub / ScopeSub, 0.0, 1.0);
-		const double Awash = std::max(0.0, DeckDrawn - DeckAwash) * (1.0 - Going);
+		// (her tanks blown, she rides high: none of her trim awash)
+		const double Blown = bJump ? (S.bBlown ? 1.0 : 0.0) : Toward(S.Blown, S.bBlown ? 1.0 : 0.0, Dt / BlowSeconds);
+		const double Awash = std::max(0.0, DeckDrawn - DeckAwash) * (1.0 - Going) * (1.0 - Smooth(0.0, 1.0, Blown));
 		const double AtScope = TopDrawn + ClearUnder - Raised * (ClearUnder + ScopeClearOf(M, D));
 		const double Under = Going * AtScope + std::max(0.0, Sub - ScopeSub) * D.Up;
 		const double Mark = In.Heave - Awash - Under;
@@ -200,6 +209,7 @@ namespace ConvoyLook
 			return Out;
 		}
 		S.Raise = Raise;
+		S.Blown = Blown;
 		const double Rate = !bJump && Dt > 1e-6 ? (Sub - S.Sub) / Dt : 0.0;
 		if (bJump)
 		{
@@ -228,6 +238,7 @@ namespace ConvoyLook
 		Out.ScopeZ = Height(M.ScopeAlong, M.ScopeTop);
 		Out.LowZ = Height(M.LowAlong, M.LowTop);
 		const double DeckZ = S.Heave + DeckDrawn;
+		Out.DeckZ = DeckZ;
 		const P3 ScopeAt = Mid + Fore * (M.ScopeAlong * D.Along * TrimCos);
 		Out.bScopeShown = Out.ScopeZ > 0.0 && Out.BridgeZ < 0.0;
 		if (Out.bScopeShown)
@@ -585,9 +596,17 @@ namespace ConvoyLook
 		/** [EST] The scene's own seconds for a crushed boat's air to come up (in the battle, a minute or more from 250 m:
 		 * the scene's short end cannot wait for it). */
 		constexpr double CrushDelay = 3.0;
-		/** [EST] A scrambling net: 5 m wide, from 0.7 of her freeboard (a twentieth of her length, 2.5 to 7 m) down into
-		 * the sea, its foot 0.6 m out from her side; ropes every 0.6 m across, rungs every 0.5 m. */
-		constexpr double NetWide = 5.0, NetMeshAcross = 0.6, NetMeshDown = 0.5, NetFoot = 0.6, NetUnder = 0.4;
+		/** [EST] A scrambling net: 5 m wide, from her rail down into the sea (0.4 m under), hung 0.1 m off her side and its
+		 * foot 0.2 m further out; ropes every 0.6 m across, rungs every 0.5 m. Nets hang at stations 5 m apart from
+		 * amidships, side by side; a man climbing takes 0.3 m of it each side of his middle. It goes down her side, or
+		 * comes in, in 2 s. */
+		constexpr double NetWide = 5.0, NetMeshAcross = 0.6, NetMeshDown = 0.5, NetOff = 0.1, NetFoot = 0.2, NetUnder = 0.4, NetMargin = 0.3, NetDrop = 2.0;
+		/** [SHOW] The sea scene's rescue (SeaShow.cpp RunWrecks): a rescuer stands by under 3 m/s (and its men give her up
+		 * otherwise); a man swims for her side 1 m out from it, at the nearest place along it within 0.35 of her length of
+		 * amidships, and climbs it 0.3 m out from it. */
+		constexpr double StandByBelow = 3.0, SwimOut = 1.0, ClimbAlong = 0.35, ClimbOut = 0.3;
+		/** [EST] A man swimming for her side gets his net once he is within 60 m of it (a minute or two before he is there). */
+		constexpr double NetSee = 60.0;
 	}
 
 	std::vector<BoilShot> CrushPlan(uint64_t Seed)
@@ -608,29 +627,140 @@ namespace ConvoyLook
 		return Out;
 	}
 
+	double FreeOf(const std::string& Class)
+	{
+		// [SHOW] SeaShow.cpp CompanyOf's deck heights (Free): the scene's men climb a rescuer's side to these
+		if (Class == "bb") return 8.0;
+		if (Class == "cv") return 12.0;
+		if (Class == "ca") return 7.0;
+		if (Class == "cl") return 6.5;
+		if (Class == "de") return 4.5;
+		if (Class == "ss") return 2.5;
+		if (Class == "mv") return 6.0;
+		return 5.0; // a destroyer
+	}
+
+	bool StandsBy(double Speed) { return Speed < StandByBelow; }
+
+	double NetDropFor() { return NetDrop; }
+
+	bool ClimbPlace(const RescuerIn& R, const ManIn& M, double& OutAlong, double& OutSide, bool& bOutClimbing)
+	{
+		bOutClimbing = false;
+		const P3 Fore = AheadOf(R.Heading), Right = RightOf(R.Heading);
+		const double RX = M.At.X - R.At.X, RY = M.At.Y - R.At.Y;
+		const double U = RX * Fore.X + RY * Fore.Y, V = RX * Right.X + RY * Right.Y;
+		const double Side = V >= 0.0 ? 1.0 : -1.0;
+		const double Half = 0.5 * R.Beam, Reach = ClimbAlong * R.Long + 0.5;
+		if (M.Doing == ManDoing::Climb)
+		{
+			// (up her side: 0.3 m out from it, within her waist; on his first moment still where he swam to, 1 m out)
+			const double Out = std::fabs(V) - Half;
+			if (std::fabs(U) > Reach || Out < ClimbOut - 0.4 || Out > SwimOut + 0.3) return false;
+			OutAlong = U;
+			OutSide = Side;
+			bOutClimbing = true;
+			return true;
+		}
+		if (M.Doing != ManDoing::Swim) return false;
+		// (swimming for her side: the scene points him at his place on it, 1 m out from her side, so where his way meets
+		// that line is where he will climb)
+		const double Off = std::fabs(V) - (Half + SwimOut);
+		double Along = U;
+		if (Off > 0.05)
+		{
+			const double WX = std::sin(M.Heading), WY = std::cos(M.Heading);
+			const double In = -Side * (WX * Right.X + WY * Right.Y);
+			if (In < 0.05) return false;
+			const double Run = Off / In;
+			if (Run > NetSee) return false;
+			Along = U + Run * (WX * Fore.X + WY * Fore.Y);
+		}
+		if (std::fabs(Along) > Reach) return false;
+		OutAlong = Along;
+		OutSide = Side;
+		return true;
+	}
+
+	bool OnNets(const std::vector<NetHung>& Nets, double Side, double Along, double Least)
+	{
+		// (each end of his hold on her side within a net down so far: the nets are side by side, so all of it is)
+		for (const double At : { Along - NetMargin, Along, Along + NetMargin })
+		{
+			bool bIn = false;
+			for (const NetHung& N : Nets) bIn = bIn || (N.Side == Side && N.Out >= Least && std::fabs(At - N.Along) <= 0.5 * NetWide + 1e-9);
+			if (!bIn) return false;
+		}
+		return true;
+	}
+
+	void StepNets(std::vector<NetHung>& Nets, const RescuerIn& R, const std::vector<ManIn>& Men, bool bRescue, double Dt)
+	{
+		const bool bStanding = bRescue && StandsBy(R.Speed);
+		std::vector<char> Wanted(Nets.size(), bStanding ? 1 : 0);
+		for (const ManIn& M : Men)
+		{
+			double Along = 0.0, Side = 1.0;
+			bool bClimbing = false;
+			if (!ClimbPlace(R, M, Along, Side, bClimbing) || (!bStanding && !bClimbing)) continue;
+			// (the station his place is at, and the next one too where he is at its end)
+			const double Station = std::round(Along / NetWide), Off = Along - Station * NetWide;
+			for (const double K : { Station, std::fabs(Off) > 0.5 * NetWide - NetMargin ? Station + (Off > 0.0 ? 1.0 : -1.0) : Station })
+			{
+				bool bHung = false;
+				for (size_t I = 0; I < Nets.size(); ++I)
+				{
+					if (Nets[I].Side == Side && std::fabs(Nets[I].Along - K * NetWide) < 1e-6)
+					{
+						Wanted[I] = 1;
+						bHung = true;
+					}
+				}
+				if (!bHung)
+				{
+					NetHung N;
+					N.Side = Side;
+					N.Along = K * NetWide;
+					Nets.push_back(N);
+					Wanted.push_back(1);
+				}
+			}
+		}
+		size_t Kept = 0;
+		for (size_t K = 0; K < Nets.size(); ++K)
+		{
+			NetHung N = Nets[K];
+			N.Out = Toward(N.Out, Wanted[K] ? 1.0 : 0.0, std::max(0.0, Dt) / NetDrop);
+			if (N.Out > 0.0 || Wanted[K]) Nets[Kept++] = N;
+		}
+		Nets.resize(Kept);
+	}
+
 	std::vector<Rope> NetOf(const NetIn& In)
 	{
 		std::vector<Rope> Out;
-		const P3 Fore = AheadOf(In.Heading), Right = RightOf(In.Heading);
-		const P3 ToMen = In.Aim - In.Ship;
-		const double Hand = ToMen.X * Right.X + ToMen.Y * Right.Y >= 0.0 ? 1.0 : -1.0;
-		const P3 Side = Right * Hand;
-		const double Freeboard = Clamp(In.Long / 20.0, 2.5, 7.0) * 0.7;
-		// (amidships, a little abaft: where a ship's waist is lowest)
-		const P3 Mid = P3(In.Ship.X, In.Ship.Y, 0.0) - Fore * (0.05 * In.Long) + Side * (0.5 * In.Beam);
+		const double Free = std::max(1.0, In.Free), Full = Free + NetUnder;
+		const double Hung = Clamp(In.Out, 0.0, 1.0) * Full;
+		if (Hung < 0.05) return Out;
+		const P3 Fore = AheadOf(In.Heading), Side = RightOf(In.Heading) * (In.Side >= 0.0 ? 1.0 : -1.0);
+		// (from her rail at her deck's height, close against her side where the scene's men climb it)
+		const P3 Mid = P3(In.Ship.X, In.Ship.Y, 0.0) + Fore * In.Along + Side * (0.5 * In.Beam + NetOff);
 		const int Across = static_cast<int>(std::round(NetWide / NetMeshAcross));
-		const int Down = static_cast<int>(std::round((Freeboard + NetUnder) / NetMeshDown));
+		const int Down = std::max(1, static_cast<int>(std::round(Hung / NetMeshDown)));
 		auto At = [&](double U, double V)
 		{
-			// U across (-0.5 to 0.5), V down (0 at the rail to 1 at its foot in the sea), hanging out a little at its foot
-			return Mid + Fore * (U * NetWide) + Side * (NetFoot * V * V) + P3(0.0, 0.0, Freeboard - V * (Freeboard + NetUnder));
+			// U across (-0.5 to 0.5), V down what is hung (0 at the rail, 1 at its foot), standing out a little at its foot
+			const double Low = V * Hung / Full;
+			return Mid + Fore * (U * NetWide) + Side * (NetFoot * Low * Low) + P3(0.0, 0.0, Free - V * Hung);
 		};
+		// (its ropes down in three lengths, enough for the little it stands out at its foot; its rungs across)
+		constexpr int Lengths = 3;
 		for (int I = 0; I <= Across; ++I)
 		{
 			const double U = static_cast<double>(I) / Across - 0.5;
-			for (int J = 0; J < Down; ++J)
+			for (int J = 0; J < Lengths; ++J)
 			{
-				Out.push_back({ At(U, static_cast<double>(J) / Down), At(U, static_cast<double>(J + 1) / Down) });
+				Out.push_back({ At(U, static_cast<double>(J) / Lengths), At(U, static_cast<double>(J + 1) / Lengths) });
 			}
 		}
 		for (int J = 0; J <= Down; ++J)
