@@ -13,6 +13,7 @@ class FJsonObject;
 class FLandCrowd; // TK1
 class FLandVat; // SO1
 class FLandLive;
+class FFrameGrabber;
 class SLandBattleScreen;
 class SWidget;
 class UAudioComponent;
@@ -467,6 +468,16 @@ private:
 	bool bWalkPanOn = false;
 	FVector WalkPanLook = FVector::ZeroVector;
 	void WalkPan(double Real);
+	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
+	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 four times a real second
+	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
+	 * back, or with no game viewport, as in the editor). "-TheaterLandNoDarkRead" leaves it off (the rule never asked). */
+	TSharedPtr<FFrameGrabber> DarkGrab;
+	double DarkShare = -1.0, DarkAskAt = 0.0;
+	int32 DarkReads = 0;
+	void StartDarkRead();
+	void ReadDark(double Real);
+	void StopDarkRead();
 	struct FShot
 	{
 		FString Name;

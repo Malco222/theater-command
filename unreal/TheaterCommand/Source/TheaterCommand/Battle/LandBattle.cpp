@@ -30,6 +30,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
+#include "Engine/GameEngine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/PostProcessVolume.h"
 #include "Engine/StaticMesh.h"
@@ -37,6 +38,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
+#include "FrameGrabber.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
@@ -46,6 +48,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ShaderCompiler.h"
+#include "Slate/SceneViewport.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
 #include "Misc/CommandLine.h"
@@ -1397,6 +1400,13 @@ bool ALandBattle::Open()
 		{
 			Set.MassFrom = 0.0;
 		}
+		// (the dark rule's reading of the drawn frame, when the game has its viewport to read)
+		StartDarkRead();
+		if (DarkGrab.IsValid())
+		{
+			TWeakObjectPtr<ALandBattle> Self(this);
+			EyeWorld.DarkNow = [Self]() { return Self.IsValid() ? Self->DarkShare : -1.0; };
+		}
 		S.EyeWorld = EyeWorld;
 		S.Eye.Begin(Rec, EyeWorld, Set);
 	}
@@ -1579,6 +1589,8 @@ bool ALandBattle::Open()
 	if (!ShotFolder.IsEmpty())
 	{
 		IFileManager::Get().MakeDirectory(*ShotFolder, true);
+		// (the houses the village still can frame, found once: 20 to 50 ms, the picture run only; the camera director)
+		State->Eye.FindHouses();
 		const double Contact = Rec.Contact >= 0.0 ? Rec.Contact : 30.0;
 		auto Kind = [](LandEye::Kind K) { return static_cast<int32>(K); };
 		// (a man of the attack who stands through the moment, for the shots among the men)
@@ -4630,6 +4642,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		GeneralView(Real);
 	}
 	WalkPan(Real);
+	ReadDark(Real);
 	S.Words = S.Desk.Update(S.Battle, Real);
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
 
@@ -4845,6 +4858,88 @@ void ALandBattle::WalkPan(double Real)
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-walkpan-%02d.png"), *Key, WalkPanStills)), true, false);
 		++WalkPanStills;
 	}
+}
+
+void ALandBattle::StartDarkRead()
+{
+	StopDarkRead();
+	DarkShare = -1.0;
+	DarkReads = 0;
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoDarkRead")))
+	{
+		return;
+	}
+	// (the game's own viewport: a packaged game or -game; none in the editor's play, where the rule is not asked)
+	UGameEngine* Game = Cast<UGameEngine>(GEngine);
+	if (!Game || !Game->SceneViewport.IsValid())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading off (no game viewport to read): the camera's dark rule not asked"));
+		return;
+	}
+	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
+	DarkGrab->StartCapturingFrames();
+	DarkAskAt = 0.0;
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36 four times a second, its share under L 25 for the camera's dark rule"));
+}
+
+void ALandBattle::ReadDark(double Real)
+{
+	if (!DarkGrab.IsValid())
+	{
+		return;
+	}
+	// Ask for a copy of the frame now and then; take what has come back (a frame or two later), the newest.
+	if (Real >= DarkAskAt && DarkGrab->IsCapturingFrames())
+	{
+		DarkAskAt = Real + 0.25;
+		DarkGrab->CaptureThisFrame(FFramePayloadPtr());
+	}
+	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
+	if (Frames.Num() == 0)
+	{
+		return;
+	}
+	// (a result card up: the whole picture dimmed under it, so no reading till it goes)
+	if (State.IsValid() && State->bCard)
+	{
+		DarkShare = -1.0;
+		return;
+	}
+	const FCapturedFrameData& Last = Frames.Last();
+	const TArray<FColor>& Pixels = Last.ColorBuffer;
+	const int32 Wd = Last.BufferSize.X, Ht = Last.BufferSize.Y;
+	if (Pixels.Num() == 0 || Wd <= 0 || Ht <= 0 || Pixels.Num() < Wd * Ht)
+	{
+		return;
+	}
+	// The top bar's rows left out (the art director's 30% is read on the picture under the words, not the leather bar).
+	const int32 Skip = Screen.IsValid() ? FMath::Clamp(FMath::CeilToInt32(Screen->TopShare() * Ht), 0, Ht - 1) : 0;
+	// L 25 of 255: the picture's own brightness, as the art director reads a still (Rec. 709 weights on its sRGB values).
+	int32 Dark = 0;
+	for (int32 Y = Skip; Y < Ht; ++Y)
+	{
+		for (int32 X = 0; X < Wd; ++X)
+		{
+			const FColor& P = Pixels[Y * Wd + X];
+			if (0.2126f * P.R + 0.7152f * P.G + 0.0722f * P.B < 25.0f)
+			{
+				++Dark;
+			}
+		}
+	}
+	DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);
+	++DarkReads;
+}
+
+void ALandBattle::StopDarkRead()
+{
+	if (DarkGrab.IsValid())
+	{
+		DarkGrab->StopCapturingFrames();
+		DarkGrab->Shutdown();
+		DarkGrab.Reset();
+	}
+	DarkShare = -1.0;
 }
 
 void ALandBattle::AimEye(float DeltaSeconds)
@@ -5869,17 +5964,21 @@ void ALandBattle::TakeShots()
 		return;
 	}
 	FLandBattleState& S = *State;
+	// (a still asked only once the one before it is taken: Sedan asked 05 before 06 was taken, and the second ask
+	// overrode the first. The shots are sorted by their time; the camera director, 22 November)
+	bool bBeforeTaken = true;
 	for (FShot& Shot : Shots)
 	{
 		if (Shot.bTaken)
 		{
 			continue;
 		}
-		// (each asked of the camera two battle seconds before it is taken, so that the cut has settled)
-		if (!Shot.bAsked && Shot.Kind >= 0 && S.Battle >= Shot.At - 2.0)
+		// (each asked of the camera two battle seconds before it is taken, so that the cut has settled; the village's
+		// asks for a house in the frame)
+		if (!Shot.bAsked && Shot.Kind >= 0 && S.Battle >= Shot.At - 2.0 && bBeforeTaken)
 		{
 			Shot.bAsked = true;
-			S.Eye.Ask(static_cast<LandEye::Kind>(Shot.Kind), Shot.Subject);
+			S.Eye.Ask(static_cast<LandEye::Kind>(Shot.Kind), Shot.Subject, Shot.Name == TEXT("08-the-village"));
 		}
 		if (S.Battle >= Shot.At)
 		{
@@ -5887,11 +5986,14 @@ void ALandBattle::TakeShots()
 			// (a still whose asked shot found no fit place and was placed anyway, one the film's own rules would have
 			// turned away, says so in its name: the camera director's AskedUnfit, for the art director's read)
 			const bool bUnfit = Shot.Kind >= 0 && S.Eye.AskedUnfit();
-			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Shot.Name + (bUnfit ? TEXT("-unfit") : TEXT("")) + TEXT(".png")), true, false);
+			// (and the village's still says so when no house is in it)
+			const bool bNoHouse = Shot.Name == TEXT("08-the-village") && !S.Eye.HouseInShot();
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Shot.Name + (bNoHouse ? TEXT("-no-house") : TEXT("")) + (bUnfit ? TEXT("-unfit") : TEXT("")) + TEXT(".png")), true, false);
 			++ShotsTaken;
 			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d%s"), *Shot.Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject,
 				bUnfit ? TEXT(" (no fit place found for it: placed anyway; the film would have turned it away)") : TEXT(""));
 		}
+		bBeforeTaken = Shot.bTaken;
 	}
 	if (S.bCard && !bCardShot)
 	{
@@ -5977,6 +6079,7 @@ void ALandBattle::Finish()
 
 void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
+	StopDarkRead();
 	CloseLive();
 	HideScreen();
 	// (the map's own light trims again, and its sun's contact shadow)
@@ -6010,9 +6113,9 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	if (State.IsValid())
 	{
 		const FLandBattleState& S = *State;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts"),
+		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture, from %d dark readings)"),
 			S.Battle, S.Play.RoundsPlayed(), S.Play.BlastsPaired(), S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsOutOfHearing, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped,
-			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts());
+			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReads);
 		LogSound();
 	}
 	if (Limiter)

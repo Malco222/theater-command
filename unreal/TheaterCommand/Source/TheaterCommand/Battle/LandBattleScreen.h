@@ -50,6 +50,10 @@ public:
 	virtual FReply OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Event) override;
 	virtual void OnFocusLost(const FFocusEvent& Event) override;
 
+	/** The share of the screen's height the top bar takes (its brass line too), as last drawn: the dark read leaves those
+	 * rows out, so it reads the picture under the words (the art director's 30% is read on the picture alone). */
+	double TopShare() const { return LastTopShare; }
+
 private:
 	TWeakObjectPtr<ALandBattle> Battle;
 	struct FButton
@@ -58,6 +62,7 @@ private:
 		FString Action;
 	};
 	mutable TArray<FButton> Buttons;
+	mutable double LastTopShare = 0.0;
 	/** The tags as drawn this frame, for a click on one (local units). */
 	struct FTagBox
 	{
