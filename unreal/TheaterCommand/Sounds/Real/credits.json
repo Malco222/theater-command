@@ -697,7 +697,7 @@
   {
    "moment": "b17_drone_loop",
    "recording": "b17_drone_loop",
-   "what": "A B-17's four engines drone",
+   "what": "A B-17's four engines drone (no longer played since 22 Nov: b17_formation_drone_loop took its place; the file stays in the folder)",
    "sources": [
     {
      "title": "G07-18_B-17 4 Engine Prop Steady Engine Noise",
@@ -1138,7 +1138,7 @@
   {
    "moment": "b17_interior_loop",
    "recording": "b17_interior_loop",
-   "what": "Riding a B-17 in the air battle: its four engines heard from inside the aircraft",
+   "what": "Riding a B-17 in the air battle: its four engines heard from inside the aircraft (no longer played since 22 Nov: b17_interior_whiteman_loop and b17_interior_sioux_loop took its place; the file stays in the folder)",
    "sources": [
     {
      "title": "G07-06_B-17 4 Engine Prop Ambience.wav",
@@ -1146,6 +1146,48 @@
      "licence": "CC0",
      "page": "https://freesound.org/people/craigsmith/sounds/437850/",
      "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "b17_formation_drone_loop",
+   "recording": "b17_formation_drone_loop",
+   "what": "A B-17 formation's engines: three B-17s flying over with five P-51s, heard from the ground",
+   "sources": [
+    {
+     "title": "B-17 fly-over",
+     "creator": "A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video)",
+     "licence": "Public domain",
+     "page": "https://www.dvidshub.net/video/600861",
+     "archive": "DVIDS"
+    }
+   ]
+  },
+  {
+   "moment": "b17_interior_loop",
+   "recording": "b17_interior_whiteman_loop",
+   "what": "Riding a B-17 in the air battle: its four engines heard from inside the aircraft in flight (one of two, by the bomber)",
+   "sources": [
+    {
+     "title": "Wings Over Whiteman B-roll",
+     "creator": "SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video)",
+     "licence": "Public domain",
+     "page": "https://www.dvidshub.net/video/531502",
+     "archive": "DVIDS"
+    }
+   ]
+  },
+  {
+   "moment": "b17_interior_loop",
+   "recording": "b17_interior_sioux_loop",
+   "what": "Riding a B-17 in the air battle: its four engines heard from inside the aircraft (one of two, by the bomber)",
+   "sources": [
+    {
+     "title": "CAF brings Flying Fortress to Sioux City",
+     "creator": "SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video)",
+     "licence": "Public domain",
+     "page": "https://www.dvidshub.net/video/852294",
+     "archive": "DVIDS"
     }
    ]
   }

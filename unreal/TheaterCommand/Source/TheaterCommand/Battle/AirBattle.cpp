@@ -5906,17 +5906,25 @@ void AAirBattle::AirLevels(double Real)
 				bOwnBomber = !P.bFighter;
 				const FString RiddenModel = AirParts::Wide(P.Model);
 				OwnLoop = EngineLoop(RiddenModel);
-				// (inside a B-17: b17_interior_loop, Brian's Good of 21 Nov; a model not listed, or a take not yet in
-				// the game, keeps its drone through the filter)
+				// (inside a B-17: two real recordings from inside one in flight, Brian's Goods of 22 Nov; a model not
+				// listed, or no take of its list yet in the game, keeps its drone through the filter)
 				if (bOwnBomber)
 				{
 					const TCHAR* Own = RiddenModel == TEXT("B17") ? TEXT("B-17") : RiddenModel == TEXT("B24") ? TEXT("B-24") : nullptr;
 					const TSharedPtr<FJsonObject> Inside = AirParts::MixObject(Mix, TEXT("air.closeView.bed.interior"));
-					FString Take;
-					if (Own && Inside.IsValid() && Inside->TryGetStringField(Own, Take) && SoundOf(*Take, true))
+					// (one take or a list: from a list, one per ridden bomber by its key, so two bombers ridden in turn
+					// are heard from inside two aircraft; a take not yet built into the game gives way to the next)
+					const TArray<TSharedPtr<FJsonValue>>* InsideTakes = nullptr;
+					const int32 InsideCount = Own && Inside.IsValid() && Inside->TryGetArrayField(Own, InsideTakes) ? InsideTakes->Num() : 1;
+					for (int32 InsideTry = 0; Own && InsideTry < InsideCount; ++InsideTry)
 					{
-						OwnLoop = Take;
-						bOwnInterior = true;
+						const FString InsideTake = AirParts::MixTake(Inside, Own, P.Key + InsideTry);
+						if (!InsideTake.IsEmpty() && SoundOf(*InsideTake, true))
+						{
+							OwnLoop = InsideTake;
+							bOwnInterior = true;
+							break;
+						}
 					}
 				}
 				// (its dead engines: the drone down by 10 log10(left / engines), air.engineLost; none left, a whisper)

@@ -100,9 +100,13 @@ The game is for personal use only.
 | `stuka_drone_loop` | `stuka_drone_loop.wav` | [G04-07-WWII Stuka engine drone](https://freesound.org/people/craigsmith/sounds/437771/) | Freesound | CC0 | none |
 | `grenade_blast` | `grenade_blast.wav` | [Explosions-LS100152](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
 | `b17_interior_loop` | `b17_interior_loop.wav` | [G07-06_B-17 4 Engine Prop Ambience.wav](https://freesound.org/people/craigsmith/sounds/437850/) | Freesound | CC0 | none |
+| `b17_formation_drone_loop` | `b17_formation_drone_loop.wav` | [B-17 fly-over](https://www.dvidshub.net/video/600861) | DVIDS | Public domain | A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video) |
+| `b17_interior_loop` | `b17_interior_whiteman_loop.wav` | [Wings Over Whiteman B-roll](https://www.dvidshub.net/video/531502) | DVIDS | Public domain | SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video) |
+| `b17_interior_loop` | `b17_interior_sioux_loop.wav` | [CAF brings Flying Fortress to Sioux City](https://www.dvidshub.net/video/852294) | DVIDS | Public domain | SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video) |
 
 ## Credits owed
 
+- **A1C Emily Rupert and SSgt Nathan Tucker, 88th Air Base Wing (U.S. Air Force video)** "B-17 fly-over" · Public domain
 - **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain" · CC BY 4.0
 - **brunoboselli** "Dragging Kayak" · CC BY 4.0
 - **Carlosjvives** "Cinema projector PROYECSON" · CC BY 4.0
@@ -118,6 +122,8 @@ The game is for personal use only.
 - **nebulousflynn** "Moored Boat Metal Grinding, Groaning & Creaking" · CC BY 4.0
 - **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)" · CC BY 3.0
 - **relwin** "b24" · CC BY 4.0
+- **SMSgt Vincent De Groot, 185th Air Refueling Wing (U.S. Air Force video)** "CAF brings Flying Fortress to Sioux City" · Public domain
+- **SrA Lesley Kleyh, 442d Fighter Wing (U.S. Air Force video)** "Wings Over Whiteman B-roll" · Public domain
 - **Subhashish Panigrahi** "Rubber seal dabbed on ink pad" · CC BY 3.0
 - **Work With Sounds / Konrad Gutkowski** "WWS Typewriter" · CC BY 4.0
 - **Work With Sounds / Museum of Municipal Engineering** "WWS Quarter-hourtowerclock" · CC BY 4.0
