@@ -62,9 +62,13 @@ namespace LandScape
 		// (written so the ground lands, lit at noon, on the art director's screen target for the desert: sand about
 		// 190,172,140, red over green 1.08-1.12, blue over green 0.78-0.84; the sky's blue and the haze pale it, so the
 		// paint is darker and warmer than what is seen)
-		const Tone SerirMid = Rgb(176, 150, 110);
-		const Tone SerirPale = Rgb(194, 174, 134);
+		const Tone SerirMid = Rgb(183, 155, 111);
+		const Tone SerirPale = Rgb(201, 178, 134);
 		const Tone Varnish = Rgb(100, 76, 54);
+		/** The varnished gravel's own: dark brown to black-brown, some of it red-brown (the art director's read, 18:30Z:
+		 * about L 25-40, warm). */
+		const Tone GravelDark = Rgb(84, 64, 48);
+		const Tone GravelRed = Rgb(122, 78, 54);
 		const Tone SandSheet = Rgb(198, 174, 130);
 		const Tone Limestone = Rgb(192, 180, 152);
 		const Tone Dust = Rgb(196, 178, 142);
@@ -130,6 +134,20 @@ namespace LandScape
 			W.Tri(M, E, MR);
 		}
 
+		/** Blades' points from First on lit as the sky lights the ground (their normals up, leaning a little outward):
+		 * a thin blade's own normal, flipped toward the eye from behind, faces down and draws it near black. */
+		void LitUp(LandField::Mesh& M, size_t First)
+		{
+			for (size_t P = First; P < M.Points(); ++P)
+			{
+				const double X = M.Positions[3 * P], Y = M.Positions[3 * P + 1], L = std::hypot(X, Y);
+				const double NX = L > 1e-6 ? 0.25 * X / L : 0.0, NY = L > 1e-6 ? 0.25 * Y / L : 0.0, N = std::sqrt(NX * NX + NY * NY + 1.0);
+				M.Normals[3 * P] = static_cast<float>(NX / N);
+				M.Normals[3 * P + 1] = static_cast<float>(NY / N);
+				M.Normals[3 * P + 2] = static_cast<float>(1.0 / N);
+			}
+		}
+
 		/** A kit house's model drawn round its own footprint's middle (the kit's houses stand off their origins). */
 		void Centre(LandField::BaseMesh& M)
 		{
@@ -152,6 +170,18 @@ namespace LandScape
 				}
 		}
 
+		/** A kit model's paint changed: every point of From's colour (within a step or two) takes To's, its own
+		 * shading kept (the near level and the far). */
+		void Repaint(LandField::BaseMesh& M, const Tone& From, const Tone& To)
+		{
+			for (LandField::Mesh* Each : { &M.Near, &M.Far })
+				for (LandField::Rgb8& C : Each->Colours)
+				{
+					if (std::fabs(C.R - From.R) > 5.0 || std::fabs(C.G - From.G) > 5.0 || std::fabs(C.B - From.B) > 5.0) continue;
+					C = Byte(Tone{ To.R * C.R / From.R, To.G * C.G / From.G, To.B * C.B / From.B });
+				}
+		}
+
 		class Desert final : public Region
 		{
 		public:
@@ -170,6 +200,20 @@ namespace LandScape
 				Grid.resize(static_cast<size_t>(GNX) * static_cast<size_t>(GNY));
 				for (int J = 0; J < GNY; ++J)
 					for (int I = 0; I < GNX; ++I) Grid[static_cast<size_t>(J) * static_cast<size_t>(GNX) + static_cast<size_t>(I)] = static_cast<float>(WadiNoise(GX0 + I * GridStep, GY0 + J * GridStep));
+				// The gravel's patches and the sand sheets, broader, on a 12 m grid over the field and 1.2 km round it
+				// (the ring's first kilometre read from it too), two to a point.
+				CX0 = -1200.0;
+				CY0 = -1200.0;
+				CNX = static_cast<int>((F.Width() + 2400.0) / CoarseStep) + 2;
+				CNY = static_cast<int>((F.Depth() + 2400.0) / CoarseStep) + 2;
+				Coarse.resize(2 * static_cast<size_t>(CNX) * static_cast<size_t>(CNY));
+				for (int J = 0; J < CNY; ++J)
+					for (int I = 0; I < CNX; ++I)
+					{
+						const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(CNX) + static_cast<size_t>(I));
+						Coarse[K] = static_cast<float>(VarnNoise(CX0 + I * CoarseStep, CY0 + J * CoarseStep));
+						Coarse[K + 1] = static_cast<float>(SandNoise(CX0 + I * CoarseStep, CY0 + J * CoarseStep));
+					}
 			}
 			Look Which() const override { return Look::Desert; }
 
@@ -187,6 +231,39 @@ namespace LandScape
 				const double Warp = 0.35 * Noise(X / 230.0, Y / 230.0, Seed ^ 0xA2);
 				const double N = Noise(X / 640.0 + Warp, Y / 640.0, Seed ^ 0xA1);
 				return Smooth(0.032, 0.011, std::fabs(N));
+			}
+			/** The varnished gravel's patches: 1 where the pebbles lie thickest, 0 on the pale serir; organic, soft-edged
+			 * shapes tens of metres across (a noise bent by another, so its lattice never shows as square cells), some
+			 * four in ten of the plain. */
+			double VarnNoise(double X, double Y) const
+			{
+				// (broad soft zones a few hundred metres across where the gravel lies thick, broken within by smaller
+				// patches; never one size everywhere, which reads as camouflage from above)
+				const double WX = 60.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0xF1), WY = 60.0 * Noise(X / 170.0 + 5.2, Y / 170.0 - 1.3, Seed ^ 0xF2);
+				const double U = 0.8 * (X + WX) - 0.6 * (Y + WY), V = 0.6 * (X + WX) + 0.8 * (Y + WY);
+				const double Zone = Fbm(U, V, 420.0, 2, Seed ^ 0xF8);
+				const double Patch = Fbm(V, -U, 75.0, 3, Seed ^ 0xF3);
+				return Smooth(-0.3, 0.3, 0.9 * Zone + 0.6 * Patch);
+			}
+			/** The sand sheets: 1 on a sheet, 0 off it; a quarter of the plain in soft shapes a few hundred metres long,
+			 * drawn out a little along the wind (north-west to south-east). */
+			double SandNoise(double X, double Y) const
+			{
+				const double WX = 110.0 * Noise(X / 340.0, Y / 340.0, Seed ^ 0xF4), WY = 110.0 * Noise(X / 340.0 - 2.7, Y / 340.0 + 3.1, Seed ^ 0xF5);
+				const double U = 0.7071 * (X + WX) - 0.7071 * (Y + WY), V = 0.7071 * (X + WX) + 0.7071 * (Y + WY);
+				return Smooth(0.1, 0.42, Fbm(0.8 * U, 1.2 * V, 280.0, 3, Seed ^ 0xF6));
+			}
+			/** The gravel's patch (Ch 1) or the sand sheet (Ch 2) here, read between the coarse grid's points. */
+			double Read(double X, double Y, int Ch) const
+			{
+				const double U = (X - CX0) / CoarseStep, V = (Y - CY0) / CoarseStep;
+				if (!(U >= 0.0 && V >= 0.0 && U < CNX - 1.0 && V < CNY - 1.0)) return Ch == 1 ? VarnNoise(X, Y) : SandNoise(X, Y);
+				const int I = static_cast<int>(U), J = static_cast<int>(V);
+				const double FU = U - I, FV = V - J;
+				const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(CNX) + static_cast<size_t>(I)) + static_cast<size_t>(Ch - 1);
+				const size_t Row = 2 * static_cast<size_t>(CNX);
+				const double A = Coarse[K], B = Coarse[K + 2], C = Coarse[K + Row], D = Coarse[K + Row + 2];
+				return (A + (B - A) * FU) + ((C + (D - C) * FU) - (A + (B - A) * FU)) * FV;
 			}
 			double Wadi(double X, double Y) const
 			{
@@ -208,7 +285,7 @@ namespace LandScape
 			/** The escarpment north of the field: metres north of its foot (negative south of it). */
 			double Scarp(double X, double Y) const
 			{
-				const double Line = Fd.Depth() + 950.0 + 300.0 * Noise(X / 2600.0, 0.5, Seed ^ 0xE1) + 50.0 * Noise(X / 300.0, 1.5, Seed ^ 0xE2);
+				const double Line = Fd.Depth() + 800.0 + 300.0 * Noise(X / 2600.0, 0.5, Seed ^ 0xE1) + 50.0 * Noise(X / 300.0, 1.5, Seed ^ 0xE2);
 				return Y - Line;
 			}
 			double Rolling(double X, double Y, double MeanZ) const override
@@ -216,11 +293,11 @@ namespace LandScape
 				// (the plain undulating a metre or two, the deirs' shallow bowls, and the escarpment stepping up some 70 m
 				// on the northern horizon, its top ragged: a limestone band over its scree)
 				const double S = Scarp(X, Y);
-				const double Up = (70.0 + 10.0 * Noise(X / 700.0, 2.5, Seed ^ 0xE3)) * (0.65 * Smooth(-110.0, 10.0, S) + 0.35 * Smooth(10.0, 45.0, S));
+				const double Up = (85.0 + 15.0 * Noise(X / 700.0, 2.5, Seed ^ 0xE3)) * (0.65 * Smooth(-110.0, 10.0, S) + 0.35 * Smooth(10.0, 45.0, S));
 				return MeanZ + 6.0 * Fbm(X, Y, 3800.0, 3, Seed ^ 0xB1) + 1.5 * Fbm(X, Y, 900.0, 2, Seed ^ 0xB2) + Up;
 			}
-			double LaneDepth(double /*X*/, double /*Y*/) const override { return 0.06; }
-			double LaneHalf(bool bVillage, double U) const override { return (bVillage ? 3.5 : 2.6) + 1.6 * U; }
+			double LaneDepth(double /*X*/, double /*Y*/) const override { return 0.0; } // (a track worn into the crust, no sunken lane)
+			double LaneHalf(bool bVillage, double U) const override { return (bVillage ? 3.5 : 3.2) + 2.0 * U; } // (a desert track braids wide)
 			double PlotMin() const override { return 90000.0; }
 			double PlotMax() const override { return 220000.0; }
 			double FarTilled() const override { return 0.0; }
@@ -246,20 +323,21 @@ namespace LandScape
 
 			// ---------------------------------------------------------------- the paint
 
-			/** The plain by its land, not its parcels: sand in the hollows and the wadis, rock on the rises and the rules'
-			 * rough, the stony serir between, its varnished pebbles darkening it in patches. */
-			static Tone Plain(int Kind, double N1, double N2, double Broad, double W)
+			/** The plain by its land, not its parcels: sand sheets in the hollows and the wadis, rock on the rises and the
+			 * rules' rough, the stony serir between, its varnished gravel darkening it in patches (Varn) and the sheets
+			 * paling it (Sand). No noise finer than some 30 m: the ground's points lie 4 m apart, and a finer one draws as
+			 * square cells. */
+			static Tone Plain(int Kind, double N1, double N2, double Broad, double W, double Varn, double Sand)
 			{
-				// (a quarter of the plain in sand sheets, a third darkened by varnished gravel in patches tens of metres
-				// across, the rest the fawn serir; the rises bare limestone)
-				const double Sandy = Clamp01(Smooth(0.16, 0.48, Broad + 0.3 * N1) + 0.9 * W);
+				// (the art director's read, 18:30Z: the varnished patches 25 to 35 per cent darker than the sand, the
+				// gravel's dark brown to black-brown with some red-brown; the sheets bare pale sand; the rises limestone)
+				const double Sandy = Clamp01(Sand + 0.9 * W);
 				const double Rocky = Kind == KRough ? 0.85 : Smooth(-0.38, -0.62, Broad + 0.2 * N1) * (1.0 - W);
-				const double Varn = Smooth(-0.25, 0.55, 0.75 * N1 + 0.55 * Broad);
-				Tone T = Mixed(SerirMid, SerirPale, 0.42 + 0.25 * N2 - 0.2 * N1);
-				T = Mixed(T, Varnish, 0.36 * Varn + 0.04 * N2);
-				T = Mixed(T, Mixed(Limestone, Varnish, 0.2 + 0.3 * N2), Rocky);
-				T = Mixed(T, Varied(SandSheet, 1.0 + 0.05 * N2, 0.0), Sandy * (1.0 - 0.6 * Rocky));
-				return Varied(T, 1.0 + 0.05 * Broad, 0.015 * Broad);
+				Tone T = Mixed(SerirMid, SerirPale, 0.45 + 0.18 * N1);
+				T = Mixed(T, Mixed(GravelDark, GravelRed, 0.35 + 0.3 * N1), 0.12 + 0.36 * Varn);
+				T = Mixed(T, Mixed(Limestone, Varnish, 0.25), Rocky);
+				T = Mixed(T, Varied(SandSheet, 1.0 + 0.03 * N1, 0.0), Sandy * (1.0 - 0.6 * Rocky));
+				return Varied(T, 1.0 + 0.04 * Broad + 0.012 * N2, 0.015 * Broad);
 			}
 
 			Tone Colour(const Spot& S) const override
@@ -268,12 +346,16 @@ namespace LandScape
 				{
 				case KLane:
 				{
-					// a track: churned powdery dust, the lorries' ruts pressed darker either side of a paler crown
+					// a desert track is no road (the art director's read, 18:30Z): the plain's own ground a little dusted,
+					// braided into wandering ruts where wheels broke the crust, three to six across, feathered out into the
+					// plain at its edge; no paler crown, no kerb
 					const double Off = std::fabs(S.Lane + S.LaneHalf);
-					const double RutK = Smooth(0.5, 0.12, std::fabs(Off - 0.9));
-					Tone T = Mixed(Dust, Rut, 0.65 * RutK);
-					if (S.Lane > 0.0) T = Mixed(T, Plain(KOpen, S.N1, S.N2, S.Broad, 0.0), Smooth(0.0, 1.4, S.Lane));
-					return Varied(T, 1.0 + 0.04 * S.N2, 0.0);
+					const double Phase = Off / 0.85 + 0.6 * Noise(S.X / 38.0, S.Y / 38.0, Seed ^ 0xF7);
+					const double Line = 2.0 * std::fabs(Phase - std::floor(Phase) - 0.5);
+					const double RutK = Smooth(0.7, 0.95, Line) * Smooth(S.LaneHalf + 0.4, S.LaneHalf - 0.8, Off);
+					Tone T = Plain(KOpen, S.N1, S.N2, S.Broad, Wadi(S.X, S.Y), Read(S.X, S.Y, 1), Read(S.X, S.Y, 2));
+					T = Mixed(T, Dust, 0.12 * Smooth(S.LaneHalf + 1.5, 0.4 * S.LaneHalf, Off));
+					return Mixed(T, Rut, 0.5 * RutK);
 				}
 				case KVillage:
 				case KYard: return Varied(Rgb(200, 180, 144), 1.0 + 0.05 * S.N2, 0.01);
@@ -283,28 +365,22 @@ namespace LandScape
 				default: break;
 				}
 				const double W = Wadi(S.X, S.Y);
-				Tone T = Plain(S.Kind, S.N1, S.N2, S.Broad, W);
+				Tone T = Plain(S.Kind, S.N1, S.N2, S.Broad, W, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2));
 				if (bSpring) T = Mixed(T, Rgb(150, 150, 104), 0.22 * W + 0.08 * Smooth(0.3, 0.8, S.N1) * (1.0 - W));
-				// (beside a track: the braided band of older ruts, the broken crust paler than the plain)
-				if (S.Lane < 45.0)
-				{
-					const double Band = Smooth(45.0, 8.0, S.Lane);
-					const double Phase = 0.27 * S.Lane + 0.64 * S.N1;
-					const double Line = 2.0 * std::fabs(Phase - std::floor(Phase) - 0.5); // (a rut every 3.7 m, wandering)
-					T = Mixed(T, Dust, Band * (0.16 + 0.42 * Smooth(0.8, 0.96, Line)));
-				}
+				// (beside a track: the older wheels' spread, the broken crust a little paler than the plain, fading out)
+				if (S.Lane < 30.0) T = Mixed(T, Dust, 0.08 * Smooth(30.0, 3.0, S.Lane) * (0.7 + 0.3 * S.N1));
 				return T;
 			}
 
 			Tone Far(const Spot& S, bool /*bWoods*/, double /*Gap*/) const override
 			{
-				Tone T = Plain(S.Kind == KWoods ? static_cast<int>(KOpen) : S.Kind, S.N1, 0.0, S.Broad, 0.0);
-				// (the escarpment's face: the pale limestone band, darker scree under it)
+				Tone T = Plain(S.Kind == KWoods ? static_cast<int>(KOpen) : S.Kind, S.N1, 0.0, S.Broad, 0.0, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2));
+				// (the escarpment's face: the pale limestone band at its top, the scree under it, and a band of shade along
+				// its foot, the gullies' and the boulders' shadow, so it reads at two kilometres through the haze)
 				const double Sc = Scarp(S.X, S.Y);
-				const double Face = Smooth(-120.0, -70.0, Sc) * Smooth(20.0, -5.0, Sc);
-				// (scree darkening down the face, the cliff band at its top pale and sharp)
-				const Tone Scree = Mixed(Rgb(104, 86, 66), Rgb(150, 128, 98), Smooth(-110.0, -40.0, Sc));
-				return Mixed(T, Mixed(Scree, Rgb(222, 210, 182), Smooth(-22.0, -8.0, Sc)), 0.9 * Face);
+				const double Face = Smooth(-130.0, -80.0, Sc) * Smooth(20.0, -5.0, Sc);
+				const Tone Scree = Mixed(Rgb(78, 64, 50), Rgb(150, 128, 98), Smooth(-112.0, -60.0, Sc));
+				return Mixed(T, Mixed(Scree, Rgb(222, 210, 182), Smooth(-22.0, -8.0, Sc)), 0.95 * Face);
 			}
 
 			// ---------------------------------------------------------------- round the eye
@@ -316,25 +392,28 @@ namespace LandScape
 				if (S.Kind == KVillage || S.Kind == KYard) return Pick < 0.7 ? Grown{ ClutOf(CPebbles), 0.15 } : Grown{ ClutOf(CTwigs), 0.05 };
 				if (S.Kind == KRough)
 				{
-					if (Pick < 0.35) return Grown{ ClutOf(CGravel), 0.7 };
-					return Pick < 0.7 ? Grown{ ClutOf(CPebbles), 0.6 } : Grown{ ClutOf(CSlab), 0.45 };
+					if (Pick < 0.4) return Grown{ ClutOf(CGravel), 1.1 };
+					return Pick < 0.75 ? Grown{ ClutOf(CPebbles), 0.6 } : Grown{ ClutOf(CSlab), 0.3 };
 				}
 				const double W = Wadi(S.X, S.Y);
 				if (W > 0.25 || S.Kind == KWoods || S.Kind == KMarsh)
 				{
 					// (a wadi's sandy floor: dry grass and dead shrubs two to five times thicker than on the plain)
 					if (Pick < 0.4) return Grown{ ClutOf(CGrass), 0.45 };
-					if (Pick < 0.55) return Grown{ ClutOf(CTwigs), 0.35 };
-					if (Pick < 0.8) return Grown{ ClutOf(CGravel), 0.4 };
-					return Grown{ ClutOf(CPebbles), 0.2 };
+					if (Pick < 0.55) return Grown{ ClutOf(CTwigs), 0.3 };
+					if (Pick < 0.8) return Grown{ ClutOf(CGravel), 0.3 };
+					return Grown{ ClutOf(CPebbles), 0.15 };
 				}
-				// the serir: a gravel pavement speckled pale and dark, cobbles a few to the square metre, a flat stone every
-				// twenty square metres, a dry tuft now and then
-				if (Pick < 0.5) return Grown{ ClutOf(CGravel), 1.0 };
-				if (Pick < 0.8) return Grown{ ClutOf(CPebbles), 0.45 };
-				if (Pick < 0.88) return Grown{ ClutOf(CSlab), 0.25 };
-				if (Pick < 0.95) return Grown{ ClutOf(CGrass), 0.25 };
-				return Grown{ ClutOf(CTwigs), 0.2 };
+				// the serir: a pavement of varnished gravel, thickest on its dark patches and thinning to bare sand on the
+				// sheets (the art director's read, 18:30Z), cobbles a few to the square metre, a flat stone in thirty square
+				// metres, a dry tuft now and then
+				const double Bare = Read(S.X, S.Y, 2), Dark = Read(S.X, S.Y, 1);
+				const double Pave = (0.55 + 0.75 * Dark) * (1.0 - 0.85 * Bare);
+				if (Pick < 0.55) return Grown{ ClutOf(CGravel), 1.9 * Pave };
+				if (Pick < 0.8) return Grown{ ClutOf(CPebbles), 0.5 * Pave };
+				if (Pick < 0.86) return Grown{ ClutOf(CSlab), 0.16 * (1.0 - 0.7 * Bare) };
+				if (Pick < 0.95) return Grown{ ClutOf(CGrass), 0.25 + 0.15 * Bare };
+				return Grown{ ClutOf(CTwigs), 0.18 };
 			}
 
 			bool Dress(LandField::Placed& P, const Spot& /*S*/, double U4, double U5, double U6, double U7) const override
@@ -345,28 +424,28 @@ namespace LandScape
 				case CPebbles:
 				case CGravel:
 				{
-					// (their stones pale and varnished as built; a scatter a little lighter or darker as a whole)
-					P.Scale = static_cast<float>(K == CGravel ? 0.75 + 0.5 * U4 : 0.7 + 0.7 * U4 * U4);
+					// (their stones dark and pale as built; a scatter a little lighter or darker as a whole)
+					P.Scale = static_cast<float>(K == CGravel ? 0.75 + 0.5 * U4 : 0.8 + 0.7 * U4 * U4);
 					P.ScaleZ = static_cast<float>(0.7 + 0.6 * U5);
-					const double Pale = 0.9 + 0.18 * U7;
+					const double Pale = 0.9 + 0.16 * U7;
 					P.Tint = Tint(Pale * 1.01, Pale, Pale * 0.97);
 					return true;
 				}
 				case CSlab:
 				{
-					// (six in ten pale limestone, four in ten varnished brown-black on top; its sand tail to the lee)
-					P.Scale = static_cast<float>(0.6 + 0.9 * U4);
+					// (fewer, bigger, nine in ten varnished dark on top, one in ten pale limestone; its sand to the lee)
+					P.Scale = static_cast<float>(0.9 + 0.9 * U4);
 					P.ScaleZ = static_cast<float>(0.7 + 0.6 * U5);
 					P.Yaw = static_cast<float>(Lee + 0.5 * (U6 - 0.5));
 					const double Pale = 0.94 + 0.12 * U7;
-					P.Tint = U6 < 0.4 ? Tint(0.62, 0.54, 0.46) : Tint(Pale * 1.02, Pale, Pale * 0.95);
+					P.Tint = U6 < 0.9 ? Tint(0.5 + 0.1 * U7, 0.42 + 0.08 * U7, 0.36 + 0.06 * U7) : Tint(Pale * 1.02, Pale, Pale * 0.95);
 					return true;
 				}
 				case CGrass:
 				{
-					P.Scale = static_cast<float>(0.6 + 0.7 * U4);
-					P.ScaleZ = static_cast<float>(0.55 + 0.6 * U5);
-					P.Tint = bSpring && U6 < 0.5 ? Tint(0.82, 0.95, 0.72) : Tint(0.95 + 0.1 * U7, 0.95 + 0.06 * U7, 0.92);
+					P.Scale = static_cast<float>(0.7 + 0.6 * U4);
+					P.ScaleZ = static_cast<float>(0.7 + 0.5 * U5);
+					P.Tint = bSpring && U6 < 0.5 ? Tint(0.84, 0.95, 0.74) : Tint(0.97 + 0.08 * U7, 0.97 + 0.05 * U7, 0.95);
 					return true;
 				}
 				case CTwigs:
@@ -385,68 +464,76 @@ namespace LandScape
 			{
 				M.Near = LandField::Mesh();
 				Writer W(M.Near);
+				// (a sand tail is the sand's own colour, low, its flanks the plain's so its edge feathers out: one or two
+				// lengths of its stone, not three or four, and never cream: the art director's read, 18:30Z)
+				const Tone TailRidge = Rgb(192, 170, 128), TailFlank = Rgb(178, 156, 116);
 				switch (K)
 				{
 				case CGrass:
 				{
-					// some fourteen blades from a tight foot, straw-grey, their tips paler, leaning out
-					for (int B = 0; B < 14; ++B)
+					// a dry tuft, pale straw, its foot darker: some twenty short blades from a tight foot, nearly upright
+					for (int B = 0; B < 20; ++B)
 					{
-						const double A = 2.0 * Pi * (B + 0.5 * Unit(Hash(0x6A55, B))) / 14.0;
-						const double Lean = 0.08 + 0.12 * Unit(Hash(0x6A56, B)), High = 0.16 + 0.18 * Unit(Hash(0x6A57, B));
-						const double FX = 0.03 * std::cos(A), FY = 0.03 * std::sin(A);
-						W.Blade(FX, FY, 0.0, FX + Lean * std::cos(A), FY + Lean * std::sin(A), High, 0.012, Rgb(120, 104, 76), Rgb(204, 188, 142));
+						const double A = 2.0 * Pi * (B + 0.5 * Unit(Hash(0x6A55, B))) / 20.0;
+						const double Lean = 0.04 + 0.07 * Unit(Hash(0x6A56, B)), High = 0.09 + 0.12 * Unit(Hash(0x6A57, B));
+						const double FX = 0.04 * std::cos(A), FY = 0.025 * std::sin(A);
+						W.Blade(FX, FY, 0.0, FX + Lean * std::cos(A), FY + Lean * std::sin(A), High, 0.022, Rgb(124, 104, 72), Rgb(178, 152, 100));
 					}
+					LitUp(M.Near, 0);
 					M.Paint = 2;
 					M.FarFrom = 40.0f;
 					break;
 				}
 				case CPebbles:
 				{
-					// four cobbles, fist-sized and smaller: two pale limestone, two varnished dark on top
-					for (int B = 0; B < 4; ++B)
+					// five cobbles, fist-sized and smaller: four varnished dark on top (one of them red-brown), one pale
+					for (int B = 0; B < 5; ++B)
 					{
-						const double A = 2.0 * Pi * Unit(Hash(0x9EB, B)), D = 0.22 * Unit(Hash(0x9EC, B));
+						const double A = 2.0 * Pi * Unit(Hash(0x9EB, B)), D = 0.24 * Unit(Hash(0x9EC, B));
 						const double R = 0.035 + 0.05 * Unit(Hash(0x9ED, B));
-						const bool bDark = B % 2 == 1;
-						Chip(W, D * std::cos(A), D * std::sin(A), R, 0.6 * R, Hash(0x9EE, B), bDark ? Varnish : Limestone, bDark ? VarnishUnder : LimeUnder);
+						const Tone Top = B == 0 ? Limestone : B == 1 ? GravelRed : GravelDark;
+						Chip(W, D * std::cos(A), D * std::sin(A), R, 0.6 * R, Hash(0x9EE, B), Top, B == 0 ? LimeUnder : VarnishUnder);
 					}
 					M.FarFrom = 30.0f;
 					break;
 				}
 				case CGravel:
 				{
-					// a dozen grains a thumbnail to a walnut across over a half-metre: six in ten pale, four varnished
-					for (int B = 0; B < 12; ++B)
+					// two dozen grains a thumbnail to a walnut across, spread evenly over a metre and a half so the
+					// pavement reads as a speckle, not as clusters: dark brown to black-brown, some red-brown, one in ten pale
+					for (int B = 0; B < 24; ++B)
 					{
-						const double A = 2.0 * Pi * Unit(Hash(0x6A7, B)), D = 0.32 * std::sqrt(Unit(Hash(0x6A8, B)));
-						const double R = 0.012 + 0.022 * Unit(Hash(0x6A9, B));
-						const bool bDark = Unit(Hash(0x6AA, B)) < 0.4;
-						Grain(W, D * std::cos(A), D * std::sin(A), R, 0.7 * R, Hash(0x6AB, B), bDark ? Mixed(Varnish, Rgb(70, 56, 44), 0.4) : Limestone, bDark ? VarnishUnder : LimeUnder);
+						const double A = 2.0 * Pi * Unit(Hash(0x6A7, B)), D = 0.8 * std::sqrt(Unit(Hash(0x6A8, B)));
+						const double R = 0.014 + 0.026 * Unit(Hash(0x6A9, B));
+						const double Which = Unit(Hash(0x6AA, B));
+						const Tone Top = Which < 0.1 ? Limestone : Which < 0.3 ? GravelRed : Mixed(GravelDark, Rgb(62, 48, 38), Unit(Hash(0x6AC, B)));
+						Grain(W, D * std::cos(A), D * std::sin(A), R, 0.7 * R, Hash(0x6AB, B), Top, Which < 0.1 ? LimeUnder : Mixed(Top, Rgb(40, 32, 26), 0.4));
 					}
-					M.FarFrom = 22.0f;
+					M.FarFrom = 26.0f;
 					break;
 				}
 				case CSlab:
 				{
+					// a flat stone a forearm across and a chip beside it (tinted dark or pale), its low tail to the lee
 					Chip(W, 0.0, 0.0, 0.16, 0.06, 0x51AB, Limestone, LimeUnder);
 					Chip(W, -0.15, 0.08, 0.05, 0.035, 0x51AC, Limestone, LimeUnder);
-					Tail(W, 0.1, 0.7, 0.26, 0.05, SandSheet, Mixed(SandSheet, SerirMid, 0.5));
+					Tail(W, 0.12, 0.3, 0.3, 0.04, TailRidge, TailFlank);
 					M.FarFrom = 45.0f;
 					break;
 				}
 				case CTwigs:
 				{
-					// a dead shrub: a dozen grey twigs splayed from a sand hummock's crown, its sand tail a metre or two
-					// to the lee
-					Chip(W, 0.0, 0.0, 0.22, 0.08, 0x7A16, SandSheet, Rgb(176, 156, 118));
-					Tail(W, 0.12, 1.4, 0.4, 0.07, SandSheet, Mixed(SandSheet, SerirMid, 0.5));
+					// a dead shrub: a dozen grey twigs splayed from a sand hummock's crown, its short sand tail to the lee
+					Chip(W, 0.0, 0.0, 0.22, 0.08, 0x7A16, TailRidge, TailFlank);
+					Tail(W, 0.14, 0.5, 0.36, 0.04, TailRidge, TailFlank);
+					const size_t Twigs = M.Near.Points();
 					for (int B = 0; B < 12; ++B)
 					{
 						const double A = 2.0 * Pi * Unit(Hash(0x7A17, B)), Out = 0.12 + 0.18 * Unit(Hash(0x7A18, B));
 						const double High = 0.18 + 0.22 * Unit(Hash(0x7A19, B));
 						W.Blade(0.0, 0.0, 0.05, Out * std::cos(A), Out * std::sin(A), High, 0.01, Rgb(92, 84, 72), Rgb(150, 142, 126));
 					}
+					LitUp(M.Near, Twigs);
 					M.Paint = 2;
 					M.FarFrom = 55.0f;
 					break;
@@ -493,14 +580,68 @@ namespace LandScape
 				case KDome:
 					Centre(M);
 					Stands(0.5f, 0.5f, 0.8f, 0.0f, 320.0f);
+					// (a North African town, not grey concrete: whitewashed walls lit about 235-240, a few of ochre mud
+					// brick about 200,165,115, the flat roofs pale; the art director's read, 18:30Z)
+					if (K == KHouseStone)
+					{
+						Repaint(M, Rgb(0xE0, 0xD0, 0xAE), Rgb(206, 166, 112));
+						Repaint(M, Rgb(0xE6, 0xD8, 0xBA), Rgb(214, 184, 140));
+					}
+					else
+					{
+						Repaint(M, Rgb(0xCE, 0xBA, 0x96), Rgb(246, 242, 232));
+						Repaint(M, Rgb(0xE0, 0xD0, 0xAE), Rgb(246, 242, 232));
+						Repaint(M, Rgb(0xD6, 0xC4, 0xA2), Rgb(234, 226, 210));
+						Repaint(M, Rgb(0xE6, 0xD8, 0xBA), Rgb(234, 226, 210));
+					}
 					break;
 				case KBoulder: Stands(0.5f, 0.5f, 0.85f, 0.0f, 200.0f); break;
 				case KSangar: Stands(0.45f, 0.45f, 0.6f, 0.0f, 220.0f); break; // (a man kneels behind it)
 				case KPalm:
+				{
 					// (its near level is five times an oak's: plain from 90 m, a crown from 400 m, as the bocage's trees)
 					Stands(0.88f, 0.12f, 0.75f, 0.25f, 90.0f);
 					M.bTree = true;
+					// (its far level's fronds are thin strips that turn edge-on to a man's eye past a hundred metres and
+					// leave a bare pole: a grove on the skyline read as a burnt forest. The mass of its crown inside them,
+					// half the size of the game's own far crown, darker, and without its post, keeps a palm a palm.)
+					const LandField::Mesh Ball = LandField::CrownOf(M.Far.Empty() ? M.Near : M.Far);
+					if (Ball.Empty()) break;
+					double Top = 0.0, CX = 0.0, CY = 0.0, CZ = 0.0, Lifted = 0.0;
+					for (size_t P = 0; P < Ball.Points(); ++P) Top = std::max(Top, static_cast<double>(Ball.Positions[3 * P + 2]));
+					for (size_t P = 0; P < Ball.Points(); ++P)
+						if (Ball.Positions[3 * P + 2] >= 0.55 * Top)
+						{
+							CZ += Ball.Positions[3 * P + 2];
+							Lifted += 1.0;
+						}
+					CZ = Lifted > 0.0 ? CZ / Lifted : Top;
+					for (size_t P = 0; P < Ball.Points(); ++P)
+					{
+						CX += Ball.Positions[3 * P] / static_cast<double>(Ball.Points());
+						CY += Ball.Positions[3 * P + 1] / static_cast<double>(Ball.Points());
+					}
+					LandField::Mesh& F = M.Far.Empty() ? M.Near : M.Far;
+					const uint32_t Base0 = static_cast<uint32_t>(F.Points());
+					for (size_t P = 0; P < Ball.Points(); ++P)
+					{
+						F.Positions.push_back(static_cast<float>(CX + 0.45 * (Ball.Positions[3 * P] - CX)));
+						F.Positions.push_back(static_cast<float>(CY + 0.45 * (Ball.Positions[3 * P + 1] - CY)));
+						F.Positions.push_back(static_cast<float>(CZ + 0.7 * (Ball.Positions[3 * P + 2] - CZ)));
+						F.Normals.insert(F.Normals.end(), { Ball.Normals[3 * P], Ball.Normals[3 * P + 1], Ball.Normals[3 * P + 2] });
+						const LandField::Rgb8 C = Ball.Colours[P];
+						F.Colours.push_back(Byte(Tone{ 0.78 * C.R, 0.78 * C.G, 0.78 * C.B }));
+					}
+					if (!F.Uvs.empty()) F.Uvs.resize(2 * F.Points(), 0.0f);
+					for (size_t T = 0; T + 2 < Ball.Triangles.size(); T += 3)
+					{
+						const uint32_t A = Ball.Triangles[T], B = Ball.Triangles[T + 1], C = Ball.Triangles[T + 2];
+						const double Low = std::min({ Ball.Positions[3 * A + 2], Ball.Positions[3 * B + 2], Ball.Positions[3 * C + 2] });
+						if (Low < 0.55 * Top) continue; // (not the post)
+						F.Triangles.insert(F.Triangles.end(), { Base0 + A, Base0 + B, Base0 + C });
+					}
 					break;
+				}
 				case KThorn: M.FarFrom = 110.0f; break;
 				case KPole: M.FarFrom = 200.0f; break;
 				default: M.FarFrom = 90.0f; break;
@@ -515,7 +656,7 @@ namespace LandScape
 				case KHouse:
 				case KHouseStone:
 				case KHouseTwo:
-				case KDome: W.Box(0.0, 0.0, 1.6, 4.0, 3.0, 1.6, 0.0, Rgb(214, 198, 166)); break;
+				case KDome: W.Box(0.0, 0.0, 1.6, 4.0, 3.0, 1.6, 0.0, K == KHouseStone ? Rgb(206, 166, 112) : Rgb(240, 236, 226)); break;
 				case KThorn: W.Rock(0.0, 0.0, 0.5, 0.45, 7, Rgb(132, 120, 80), Rgb(96, 88, 62)); break;
 				case KBoulder:
 				case KStones: W.Rock(0.0, 0.0, 0.9, 0.7, 11, Rgb(176, 150, 118), Rgb(120, 100, 80)); break;
@@ -552,7 +693,7 @@ namespace LandScape
 						const double Skip = R.Next(), Jx = R.Range(-1.2, 1.2), Jy = R.Range(-1.2, 1.2), Turn = R.Range(-0.06, 0.06), Kind = R.Next();
 						if (D > 1.0 || Skip < 0.12 + 0.55 * D * D) continue;
 						const double X = TX + U * Ca - V * Sa + Jx, Y = TY + U * Sa + V * Ca + Jy;
-						const int Slot = Kind < 0.2 ? KHouseTwo : Kind < 0.55 ? KHouseStone : KHouse;
+						const int Slot = Kind < 0.2 ? KHouseTwo : Kind < 0.36 ? KHouseStone : KHouse; // (one in six of mud brick)
 						if (H.House(KitOf(Slot), X, Y, Axis + Turn + (Kind > 0.8 ? Pi : 0.0), 11.0, 11.0)) ++Built;
 					}
 				// A domed tomb (a marabout) on a rise outside the town: the plain's landmark.
@@ -699,6 +840,10 @@ namespace LandScape
 			double GX0 = 0.0, GY0 = 0.0;
 			int GNX = 0, GNY = 0;
 			std::vector<float> Grid;
+			static constexpr double CoarseStep = 12.0;
+			double CX0 = 0.0, CY0 = 0.0;
+			int CNX = 0, CNY = 0;
+			std::vector<float> Coarse;
 		};
 	}
 

@@ -2800,6 +2800,7 @@ int main(int Argc, char** Argv)
 			const double Bocage[3] = { 0.62, 0.66, 0.70 };
 			for (int C = 0; C < 3; ++C) Sk.HazeTint[C] = Air.HazeInk[C] / Bocage[C];
 			Sk.HazeThick = Air.HazeDensity / 0.0069;
+			if (Air.Cover >= 0.0) Sk.Cover = Air.Cover;
 		}
 		std::printf("look laid: %s, snow %.2f%s\n", G.LookWord(), G.SnowLying(), Air.bSet ? Fmt(", haze %.2f %.2f %.2f x%.2f", Air.HazeInk[0], Air.HazeInk[1], Air.HazeInk[2], Sk.HazeThick).c_str() : "");
 		if (!LandFieldPicture::Paint(G, F, Sk, Key, Argv[2])) ++Failures;
