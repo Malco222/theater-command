@@ -7,6 +7,7 @@
 #include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
@@ -316,6 +317,8 @@ namespace SeaParts
 	static constexpr double FunnelReach = 12000.0;
 	/** Seconds the camera stands on a shot's subject before its moment (watched; a picture stands on it from the last). */
 	static constexpr double CutBefore = 4.0;
+	/** Frames a picture waits after a cut, for the renderer's history (its sharpening, the light it gathers) to fill. */
+	static constexpr int32 SettleTicks = 10;
 	/** The longest a wake point is kept (seconds: each fades by how far astern it lies, WakeRun), how long a stopped
 	 * torpedo's streak takes to go, and how long a streak is behind its torpedo (metres; the art director's 11-19 ruling:
 	 * 100 to 200 m). */
@@ -676,6 +679,10 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		MoveKnot(0.0, bStartedLater);
 		ShowScreen();
 	}
+	// The eye on its first shot before the first frame (not the camera's spawn spot), told as a cut; and again on the
+	// first tick, when the stage has the ships where the action has them.
+	AimEye();
+	bEyeCut = true;
 	bBegun = true;
 	SetActorTickEnabled(true);
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: %s, %s (%s), %d views, %.0f s, the sun at %.0f degrees and %.0f up at %.1f h, %d shots%s."), *RecordKey,
@@ -2901,8 +2908,30 @@ void ASeaBattle::AimEye()
 		ShotEye(Whole, From, To, Lens);
 	}
 	From.Z = FMath::Max(From.Z, 3.0 * UnitsPerMetre);
+	// A cut: a new shot whose eye is not where the last left it, the first, or after a skip. (The ride strip's pictures
+	// follow on from each other, the eye carried with her: no cut, the history kept.)
+	const FVector Looking = (To - From).GetSafeNormal();
+	const bool bMoved = FVector::Dist(From, EyeAt) > 25.0 * UnitsPerMetre || FMath::Abs(Lens - EyeLens) > 2.0 ||
+		FVector::DotProduct(Looking, EyeFacing.Vector()) < FMath::Cos(FMath::DegreesToRadians(3.0));
+	if (bEyeCut || (Want != ShotNow && bMoved))
+	{
+		bEyeCut = false;
+		TicksSinceCut = 0;
+		UWorld* Here = GetWorld();
+		if (APlayerController* Controller = Here ? Here->GetFirstPlayerController() : nullptr)
+		{
+			if (Controller->PlayerCameraManager)
+			{
+				Controller->PlayerCameraManager->SetGameCameraCutThisFrame();
+			}
+		}
+	}
+	else
+	{
+		TicksSinceCut = FMath::Min(TicksSinceCut + 1, 1000000);
+	}
 	EyeAt = From;
-	EyeFacing = (To - From).Rotation();
+	EyeFacing = Looking.Rotation();
 	EyeLens = Lens;
 	ShotNow = Want;
 	Eye->SetActorLocationAndRotation(EyeAt, EyeFacing);
@@ -2929,7 +2958,7 @@ void ASeaBattle::TakePictures()
 		return;
 	}
 	FShot& Shot = Shots[NextPicture];
-	if (PictureAt < 0.0 && S.BattleT >= Shot.At)
+	if (PictureAt < 0.0 && S.BattleT >= Shot.At && TicksSinceCut >= SeaParts::SettleTicks)
 	{
 		const FString Path = FPaths::Combine(ShotFolder, RecordKey + TEXT("-") + Shot.Name + TEXT(".png"));
 		FScreenshotRequest::RequestScreenshot(Path, true, false); // (with the screen: the bar is in the picture)
@@ -3230,6 +3259,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 			FlakLater.Reset();
 			Later.Reset();
 			bSkippedOn = true;
+			bEyeCut = true;
 			UE_LOG(LogTheater, Display, TEXT("Sea battle: on to %.0f s, 20 s before %s."), S.BattleT, *Shots[NextPicture].Name);
 		}
 	}

@@ -225,6 +225,11 @@ private:
 	FVector EyeAt = FVector::ZeroVector;
 	FRotator EyeFacing = FRotator::ZeroRotator;
 	double EyeLens = 50.0;
+	/** A cut is told to the renderer (so the last shot's smoke, wakes and light are not carried a frame into the new one):
+	 * owed on the first picture and after a skip; and the ticks since the last one, so that a picture waits for its
+	 * shot to settle. */
+	bool bEyeCut = true;
+	int32 TicksSinceCut = 0;
 	/** Where each ship last stood (board metres) and her heading, for a shot on a ship the show no longer draws. */
 	TMap<int32, FVector4> LastSeen;
 
