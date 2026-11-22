@@ -14,8 +14,8 @@ import stageData from '../data/campaign/stage.json';
 import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.json';
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
 import joinData from '../data/campaign/join.json';
-import { addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
-import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, foughtNow, joinShare, joinWatch, joinWord, joinersOf, keptAshore, keptFor, marchWeeks, mayJoin, passedOver, weeksInHand } from '../src/campaign/join';
+import { addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, monthWeeks, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
+import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, foughtNow, joinShare, joinWatch, joinWord, joinersOf, keptAshore, keptFor, marchWeeks, mayJoin, passedOver, weeksInHand, weeksOfMonth } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -310,7 +310,7 @@ describe('when they come up', () => {
     // (Every joiner: the week the move rules give its march in, out of the weeks it has in hand, and the share and word of that week.)
     for (const j of [...a.join!.att, ...a.join!.def]) {
       const c = j.corps;
-      expect(j.weeks).toBe(weekOf(c, moveCost(g, c, target), weeksInHand(g, c)));
+      expect(j.weeks).toBe(weekOf(c, moveCost(g, c, target), weeksInHand(g, c), weeksOfMonth(g, c)));
       expect(j.weeks).toBe(marchWeeks(g, c, target));
       expect(Number.isInteger(j.weeks) && j.weeks >= 1 && j.weeks <= 3).toBe(true);
       expect(j.share).toBe(1 - j.weeks / JOINING.window);
@@ -745,6 +745,30 @@ describe('who could attack, a landing, and the second reckoning (the review of r
     // Had it given ground this month, it was in that battle: it joins none until the next.
     krakow.foughtIn = g.turn;
     expect(mayJoin(g, krakow, target)).toBe(false);
+  });
+
+  it("a corps whose month is still to come reads this month's weeks, as its nation's month will give them, not last month's", () => {
+    const { g, lodz: target } = lodz({ screen: true });
+    const krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
+    expect(g.order.indexOf('POL')).toBeGreaterThan(g.phase);
+    // Last month it was short of fuel, or out of an offensive's first months: three weeks.
+    krakow.apMax = 3; krakow.ap = 0;
+    const m = monthWeeks(g, krakow);
+    expect(m).toBe(4);
+    expect(weeksInHand(g, krakow)).toBe(m);
+    expect(weeksOfMonth(g, krakow)).toBe(m);
+    expect(marchWeeks(g, krakow, target)).toBe(weekOf(krakow, moveCost(g, krakow, target), m, m));
+    expect(marchWeeks(g, krakow, target)).toBe(1);
+    // Once Poland's month has begun, its weeks are what that month gave it.
+    const was = g.phase;
+    g.phase = g.order.indexOf('POL');
+    expect(weeksInHand(g, krakow)).toBe(0);
+    expect(weeksOfMonth(g, krakow)).toBe(3);
+    g.phase = was;
+    // And the weeks startPhase gives every corps are monthWeeks' own.
+    const s = startOpen(createGame(5, null));
+    startPhase(s, 'GER');
+    for (const c of s.corps) if (c.nat === 'GER' && !c.dead) expect(c.apMax).toBe(monthWeeks(s, c));
   });
 
   it("the war's records can count the reserves the keeping passes over at a battle; the watcher moves nothing", () => {

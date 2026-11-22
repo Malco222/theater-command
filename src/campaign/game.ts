@@ -951,10 +951,21 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
 
 /**
  * Which week of the month a corps reaches after spending this many more action points, out of the weeks it has in
- * hand ('ap', its own by default). A march into a battle next door reads the same (release 2, join.ts marchWeeks).
+ * hand ('ap', its own by default) of its month's weeks ('max', its own by default). A march into a battle next door
+ * reads the same (release 2, join.ts marchWeeks).
  */
-export function weekOf(c: Corps, cost: number, ap = c.ap): number {
-  return clamp(Math.ceil(((c.apMax - ap + cost) / Math.max(1, c.apMax)) * 4), 1, 4);
+export function weekOf(c: Corps, cost: number, ap = c.ap, max = c.apMax): number {
+  return clamp(Math.ceil(((max - ap + cost) / Math.max(1, max)) * 4), 1, 4);
+}
+
+/**
+ * The weeks a corps' month gives it as its nation's month opens (startPhase): four, one more for tanks and lorries
+ * in an offensive's first months, its general's extra weeks, and one fewer where fuel is short. 'tempo' is its
+ * nation's offensive as startPhase reads it. A corps next door whose month is still to come reads its weeks from here
+ * (release 2, join.ts weeksInHand).
+ */
+export function monthWeeks(g: Game, c: Corps, tempo = freshOffensive(g, c.nat)): number {
+  return 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c) - (fuelSlows(g, c) ? 1 : 0);
 }
 
 export function corpsBase(g: Game, c: Corps): number {
@@ -3863,7 +3874,7 @@ export function startPhase(g: Game, nat: string): void {
     c.fought = false;
     if (c.blows !== undefined) delete c.blows;
     if (c.gaveWay) delete c.gaveWay;
-    c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c) - (fuelSlows(g, c) ? 1 : 0);
+    c.ap = c.apMax = monthWeeks(g, c, tempo);
     // A corps with an ally's army marches in that army's month, not in its own (the grand campaign).
     if (jointHold(g, c)) c.ap = 0;
     // A garrison keeps to its town until it is ordered out.

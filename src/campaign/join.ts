@@ -23,10 +23,12 @@
 //    keeps for a second wave (ai.ts, twoWaves: AttackOpts 'spare').
 // 2. When: by the game's own move rules, one map for the joiner, the staffs and the player (the design director's
 //    ruling 1, 11:09Z). The week of its month it comes up in is weekOf of its move into the battle province (moveCost),
-//    out of the weeks the corps has in hand this month (marchWeeks): never a fixed minute or a draw of the dice. No
-//    corps comes up by train: the railway takes the whole month. It counts for the part of the battle it is there for:
-//    up in the first week, three quarters of it (early); in the second, half (midway); in the third, a quarter (late).
-//    A corps that comes up in the last week is no part of the battle.
+//    out of the weeks the corps has in hand this month, of its month's weeks (marchWeeks): never a fixed minute or a
+//    draw of the dice. A corps whose month is still to come has the weeks that month will give it, reckoned as its
+//    nation's month will reckon them (monthWeeks), not what last month's fuel or offensive gave it. No corps comes up
+//    by train: the railway takes the whole month. It counts for the part of the battle it is there for: up in the
+//    first week, three quarters of it (early); in the second, half (midway); in the third, a quarter (late). A corps
+//    that comes up in the last week is no part of the battle.
 // 3. Both sides, every nation: assess() reckons the joiners, so the attack card, the battle and every staff's odds are
 //    one reckoning. (A staff's second wave is reckoned without those its first will have spent.)
 // 4. They are in the odds and their losses are booked to them (game.ts), they stay where they stood, and their month
@@ -58,7 +60,7 @@
 import joinData from '../../data/campaign/join.json';
 import { clamp } from '../core/math';
 import type { TicketLine } from '../core/ticket';
-import { NO_MASK, allied, atWar, hostileUnits, moveCost, screens, weekOf } from './game';
+import { NO_MASK, allied, atWar, hostileUnits, monthWeeks, moveCost, screens, weekOf } from './game';
 import { armyOf } from './joint';
 import { lineShut } from './line';
 import { blocked } from './rivers';
@@ -101,10 +103,11 @@ export const joinWord = (share: number): JoinWord => (share > 2 / 3 ? 'early' : 
  * The week of its own month a corps comes up in, by the move rules: its move into the battle province costs what any
  * march there costs (moveCost: the road over ground held since before this month, the ground, the rivers and mines,
  * mud and frost, the railheads), and weekOf reads that out of the weeks the corps has in hand this month
- * (weeksInHand), as it does for every move. A whole week, 1 to 4. The same game always gives the same week.
+ * (weeksInHand) of its month's weeks (weeksOfMonth), as it does for every move. A whole week, 1 to 4. The same game
+ * always gives the same week.
  */
 export function marchWeeks(g: Game, c: Corps, target: Region): number {
-  return weekOf(c, moveCost(g, c, target, c.reg), weeksInHand(g, c));
+  return weekOf(c, moveCost(g, c, target, c.reg), weeksInHand(g, c), weeksOfMonth(g, c));
 }
 
 /** The share of the battle a corps that comes up in that week is there for: 1 less the week over the window. */
@@ -125,7 +128,16 @@ function begun(g: Game, nat: string): boolean {
  * still to come. What it did not spend last month is no part of this one.
  */
 export function weeksInHand(g: Game, c: Corps): number {
-  return begun(g, armyOf(c)) || g.flags[`back:${c.id}`] === g.turn ? c.ap : c.apMax;
+  return begun(g, armyOf(c)) || g.flags[`back:${c.id}`] === g.turn ? c.ap : weeksOfMonth(g, c);
+}
+
+/**
+ * The weeks this month gives a corps: those its nation's month gave it where that month has begun (startPhase), and
+ * where it is still to come, the weeks startPhase will give it, reckoned by the same terms as the game stands
+ * (monthWeeks): never what last month's fuel or offensive gave it.
+ */
+export function weeksOfMonth(g: Game, c: Corps): number {
+  return begun(g, c.nat) || begun(g, armyOf(c)) || g.flags[`back:${c.id}`] === g.turn ? c.apMax : monthWeeks(g, c);
 }
 
 /**
