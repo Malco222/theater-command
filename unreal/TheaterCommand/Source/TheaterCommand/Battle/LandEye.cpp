@@ -305,6 +305,13 @@ namespace LandEye
 			if (W == "mortar" || W == "gun" || W == "tank" || W == "at" || W == "bomb") Heavy.push_back(static_cast<int>(I));
 		}
 		std::sort(Heavy.begin(), Heavy.end(), [this](int A, int B) { return Rec->Rounds[static_cast<size_t>(A)].L < Rec->Rounds[static_cast<size_t>(B)].L; });
+		Burnt.clear();
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			if (!Tr.bTwin && Tr.Fell >= 0.0 && (Tr.Role == "tank" || Tr.Role == "lorry")) Burnt.push_back(static_cast<int>(I));
+		}
+		std::sort(Burnt.begin(), Burnt.end(), [this](int A, int B) { return Rec->Tracks[static_cast<size_t>(A)].Fell < Rec->Tracks[static_cast<size_t>(B)].Fell; });
 		ByLanding.clear();
 		ByLandingRounds = 0;
 		IndexLandings();
@@ -729,8 +736,29 @@ namespace LandEye
 		return Set.CloudShell;
 	}
 
+	bool Director::InFuelBall(const Vec& At, double From, double To, double* OutWhen) const
+	{
+		if (!Rec || Burnt.empty() || To < From) return false;
+		auto It = std::lower_bound(Burnt.begin(), Burnt.end(), From, [this](int I, double V) { return Rec->Tracks[static_cast<size_t>(I)].Fell < V; });
+		for (; It != Burnt.end(); ++It)
+		{
+			const Track& Tr = Rec->Tracks[static_cast<size_t>(*It)];
+			if (Tr.Fell > To) break;
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Tr.Fell);
+			// (the ball's middle a couple of metres over the hull, where it seats and climbs)
+			if ((Vec(S.X, S.Y, HeightAt(S.X, S.Y) + 2.0) - At).Length() < Set.FuelVehicle)
+			{
+				if (OutWhen) *OutWhen = Tr.Fell;
+				return true;
+			}
+		}
+		return false;
+	}
+
 	bool Director::InCloud(const Vec& At, double T) const
 	{
+		// (a fuel ball in its first seconds is held off as a burst's cloud is)
+		if (InFuelBall(At, T - Soon(Set.FuelFor), T)) return true;
 		if (!Rec || Heavy.empty()) return false;
 		// (the bursts landed in the cloud's first seconds before T, in landing order)
 		auto It = std::lower_bound(Heavy.begin(), Heavy.end(), T - Soon(Set.CloudFor),
@@ -747,6 +775,8 @@ namespace LandEye
 
 	bool Director::LensBurst(const Vec& Eye, const Vec& Look, double Fov, double From, double To, int Own, double* OutWhen) const
 	{
+		// (a tank or a lorry going up near the lens, its own shot's tank too: cut on the flash, as for a shell)
+		if (To > From && InFuelBall(Eye, From, To, OutWhen)) return true;
 		if (!Rec || Heavy.empty() || !(To > From)) return false;
 		// (the first to land after From: the list is in landing order)
 		auto It = std::upper_bound(Heavy.begin(), Heavy.end(), From,

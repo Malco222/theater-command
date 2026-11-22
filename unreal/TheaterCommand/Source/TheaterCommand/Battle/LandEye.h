@@ -192,6 +192,11 @@ namespace LandEye
 		 * that near a held shot cuts it on its flash; no shot is placed in a cloud still hanging, and a following shot
 		 * that runs into one is left. */
 		double CloudFor = 4.0, CloudShell = 10.0, CloudMortar = 9.0, CloudGun = 12.0, CloudBomb = 30.0;
+		/** A fuel ball (the art director, 22 November 08:08Z, from the effects kit's fuel_ball: a vehicle's 6 to 10 m
+		 * across): no shot places or holds its lens within FuelVehicle metres of a tank or a lorry knocked out, in the
+		 * ball's first FuelFor seconds on the screen; one going up that near a held shot cuts it on its flash. Held as
+		 * a burst's cloud is (InCloud, LensBurst). Farther off, the ball may fill the picture: that drama is wanted. */
+		double FuelFor = 2.0, FuelVehicle = 16.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -277,6 +282,9 @@ namespace LandEye
 		 * in its first CloudFor seconds at battle time T. */
 		double CloudOf(const LandFeed::Round& R) const;
 		bool InCloud(const Vec& At, double T) const;
+		/** Whether a point is within Settings::FuelVehicle of a vehicle knocked out between two battle times (its fuel
+		 * ball), and when the first went up. InCloud and LensBurst count these too. */
+		bool InFuelBall(const Vec& At, double From, double To, double* OutWhen = nullptr) const;
 		/** Whether a heavy round lands at a pose's lens between two battle times (Settings::BurstClear, CloudShell). */
 		bool BurstAt(const Pose& P, double From, double To) const { return LensBurst(P.Eye, P.Look, P.Fov, From, To, P.Subject, nullptr); }
 		/** How much of a pose's picture its own man fills (0 with no Solid or no man). */
@@ -518,6 +526,8 @@ namespace LandEye
 		double ShoulderUp(double Battle) const;
 		/** The rounds that burst (shells, mortar bombs, tank and anti-tank rounds) by the time they land. */
 		std::vector<int> Heavy;
+		/** The tanks and lorries knocked out (their fuel goes up: Settings::FuelVehicle), by the time they are. */
+		std::vector<int> Burnt;
 		/** The real time to cut on the flash of a shell landing at the lens in this shot, -1 none. */
 		double BurstCutAt = -1.0;
 		/** The look's swing (metres a second at the look point): a spring, so a pan starts and stops without a kick. */

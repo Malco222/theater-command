@@ -85,6 +85,11 @@ namespace
 		// past half a second of the screen's clock)
 		int CloudFrames = 0;
 		double CloudSince = -1.0, CloudLongest = 0.0, CloudAt = 0.0;
+		// (and within a vehicle's fuel ball in its first 2 s on the screen: the art director's 16 m, cut on the flash)
+		// (measured here from the recording, not asked of the director: the tanks and lorries knocked out, by when)
+		int FuelFrames = 0;
+		double FuelSince = -1.0, FuelLongest = 0.0, FuelAt = 0.0, FuelNearest = 1e18, FuelNearestAt = 0.0;
+		std::vector<int> Burnt;
 		// (the whole mass, the production lead's CD1: one wide shot in its window holding 80% of the men drawn in its
 		// picture, every frame of it; every man on the field the player can see, the batteries far back and the fallen too)
 		int MassShots = 0, MassMen = 0;
@@ -96,7 +101,15 @@ namespace
 			++Frames;
 			const bool bAir = P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide;
 			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; }
-			if (Frames == 1) D.MassWindow(MassFrom, MassTo);
+			if (Frames == 1)
+			{
+				D.MassWindow(MassFrom, MassTo);
+				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+				{
+					const LandFeed::Track& Tr = Rec->Tracks[I];
+					if (!Tr.bTwin && Tr.Fell >= 0.0 && (Tr.Role == "tank" || Tr.Role == "lorry")) Burnt.push_back(static_cast<int>(I));
+				}
+			}
 			if (D.MassShot())
 			{
 				if (P.bCut)
@@ -130,6 +143,27 @@ namespace
 				if (R - CloudSince > CloudLongest) { CloudLongest = R - CloudSince; CloudAt = B; }
 			}
 			else CloudSince = -1.0;
+			{
+				// (the nearest the lens is to a ball in its first seconds on the screen; the fight's pace, battle seconds a
+				// screen second, this frame)
+				const double PaceNow = (B - From) / std::max(1e-9, Dt);
+				double Nearest = 1e18;
+				for (const int I : Burnt)
+				{
+					const LandFeed::Track& Tr = Rec->Tracks[static_cast<size_t>(I)];
+					if (Tr.Fell > B || Tr.Fell < B - Set.FuelFor * PaceNow) continue;
+					const LandFeed::Spot S = LandFeed::SpotAt(Tr, Tr.Fell);
+					Nearest = std::min(Nearest, (Vec(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 2.0) - P.Eye).Length());
+				}
+				if (!bAir && Nearest < FuelNearest) { FuelNearest = Nearest; FuelNearestAt = B; }
+				if (!bAir && Nearest < Set.FuelVehicle)
+				{
+					++FuelFrames;
+					if (FuelSince < 0.0 || P.bCut) FuelSince = R;
+					if (R + Dt - FuelSince > FuelLongest) { FuelLongest = R + Dt - FuelSince; FuelAt = B; }
+				}
+				else FuelSince = -1.0;
+			}
 			// Its own man (a man's shot, he not fallen): never within the lens's clearance of his head or chest.
 			const bool bMan = P.Subject >= 0 && !Rec->Tracks[static_cast<size_t>(P.Subject)].IsVehicle();
 			const LandFeed::Track* Own = P.Subject >= 0 ? &Rec->Tracks[static_cast<size_t>(P.Subject)] : nullptr;
@@ -231,6 +265,9 @@ namespace
 				100.0 * OnSquad / std::max(1, FightFrames));
 			std::printf("; the lens in a burst's cloud %.2f%% of frames, the longest %.2f s (battle %.1f)", 100.0 * CloudFrames / std::max(1, Frames), CloudLongest, CloudAt);
 			if (CloudLongest > 0.6) Fault("the lens stayed inside a burst's cloud past half a second (the art director: never black past 0.5 s)");
+			std::printf("; within %.0f m of a vehicle's fuel ball in its first %.0f s %d frames, the longest %.2f s (battle %.1f), the nearest %.0f m (battle %.1f)",
+				Set.FuelVehicle, Set.FuelFor, FuelFrames, FuelLongest, FuelAt, FuelNearest < 1e17 ? FuelNearest : -1.0, FuelNearestAt);
+			if (FuelLongest > 0.35) Fault("the lens stayed within a fuel ball's reach past its flash (the art director: cut on the flash)");
 			std::printf("; the whole mass %d shot%s", MassShots, MassShots == 1 ? "" : "s");
 			if (MassShots > 0)
 				std::printf(", at battle %.1f s (its window %.0f to %.0f s) for %.1f s, %.0f m up and %.0f m from where it looks, the men drawn in its picture %.0f%% at the least (battle %.1f, %d men)",
@@ -1483,6 +1520,30 @@ int main(int argc, char** argv)
 			if (FreeAt < 0.0 || FreeAt > GoneAt + 15.0) Fault("riding with a unit wiped out, the film did not let go of it");
 			if (Aerials > 0) Fault("riding with a unit wiped out, the film went up to an aerial");
 		}
+	}
+	// The art director's fuel ball keep-out (16 m of a vehicle's ball, its first 2 s on the screen) seldom bites on these
+	// recordings: the film's own shots of a tank knocked out stand further off. So the rule is shown working here at a
+	// reach wide enough to bite (60 m): no shot placed in it, and one held there cut on the flash.
+	{
+		LandEye::Settings FS = ES;
+		FS.FuelVehicle = 60.0;
+		LandEye::Director Fd;
+		Fd.Begin(Rec, EW, FS);
+		FilmMeasure FuelFilm;
+		FuelFilm.Rec = &Rec;
+		FuelFilm.Set = FS;
+		double B = 0.0, R = 0.0;
+		while (B < Rec.End + 6.0)
+		{
+			const double BFrom = B;
+			B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
+			R += Dt;
+			PlaceMovers(B);
+			const LandEye::Pose P = Fd.Update(B, R, Dt);
+			FuelFilm.Feed(Fd, P, BFrom, B, R, Dt);
+		}
+		FuelFilm.Report("fuel balls kept at 60 m");
+		std::printf("\n");
 	}
 	// The art director's dark rule (cut 4 fix 6: over 30% of a frame under L 25, reject the shot). The game's scene reads
 	// its own drawn frame; the rays cannot see light, so here a stand-in for that read: the share of the picture short of
