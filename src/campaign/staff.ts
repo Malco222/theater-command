@@ -42,6 +42,7 @@ import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oversea
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
+import { CONVOY_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -146,6 +147,8 @@ export function startOpen(g: Game, wide = true): Game {
   openMorale(g);
   openEscorts(g);
   openTrade(g);
+  // The convoy battle (release 2, ruling 241): set at a campaign's start only, where stage.json switches it on.
+  if (CONVOY_STAGE) g.flags.convoyBattle = 1;
   openGovernment(g);
   openFooting(g);
   openWeather(g);

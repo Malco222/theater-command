@@ -671,6 +671,9 @@ export interface ConvoyMonth {
   loss?: number;
   subsLost: number;
   escortsLost: number;
+  /** Release 2, with the convoy battle on (ruling 241), record only: the month's swing on the share sunk, and whether a night the player fought set it ('field'), or set it with a count held inside the dice's run ('clamped': a bare close result, b331). */
+  swing?: number;
+  fought?: 'field' | 'clamped';
 }
 
 export interface Headline {

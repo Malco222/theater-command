@@ -21,3 +21,11 @@ const forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
 
 /** True where the grand campaign plays on the whole world: the far side's chart is read and its countries exist. */
 export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== '0' : (stage as { far: boolean }).far === true;
+
+// The wolf pack and convoy battle (release 2, ruling 241): the grand campaigns opened while this is true carry the flag
+// 'convoyBattle' (navy.ts convoyRules). A run outside the browser can be given it by its environment: TC_CONVOY=1 node ...
+const C = globalThis as { TC_CONVOY?: unknown; process?: { env?: Record<string, string | undefined> } };
+const convoyForced = C.TC_CONVOY ?? C.process?.env?.TC_CONVOY;
+
+/** True where new grand campaigns open with the convoy battle (data/campaign/stage.json 'convoyBattle'). */
+export const CONVOY_STAGE: boolean = convoyForced !== undefined ? !!convoyForced && convoyForced !== '0' : (stage as { convoyBattle?: boolean }).convoyBattle === true;
