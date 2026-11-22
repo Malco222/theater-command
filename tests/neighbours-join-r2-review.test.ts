@@ -10,14 +10,27 @@
 // 4. The player's hold-back order can be given in the game: the tray, the attack card's chips, the corps card's tag.
 // 5. A corps on foot that comes up into open desert against tanks and lorries is driven round, as the defenders on
 //    foot outside their box are.
+//
+// And its two display nits:
+// 6. The landing card names the enemy next door as the attack card does: where any of it is not identified, only
+//    that armies next door may join.
+// 7. The month card's men lost: his own corps that only came up from next door count, in a battle that is not his;
+//    in his own battles, only his own nation's corps that came up count, not an ally's.
+// And the design director's ruling of 08:16Z:
+// 8. A storm of a town and a garrison's sortie keep taking nobody from next door, on either side, and their cards
+//    say so in one line, with the switch on alone.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import page from '../src/campaign/ui/main.ts?raw';
 import { DESERT, addCorps, assess, createGame, declareWar, ensureSupply, limitAttackers, relocate, resolveBattle, startPhase, type Assessment } from '../src/campaign/game';
 import { twoWaves } from '../src/campaign/ai';
-import { JOIN, battleThisMonth, weeksInHand } from '../src/campaign/join';
+import { JOIN, JOIN_ATTACK, JOIN_DEFENCE, JOIN_NONE, MAY_JOIN, SORTIE_ALONE, STORM_ALONE, battleThisMonth, weeksInHand } from '../src/campaign/join';
+import { identify } from '../src/campaign/intel';
+import { monthCard, monthMark, type CardRow, type MonthCard, type MonthMark } from '../src/campaign/monthcard';
+import { garrison, previewSally } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, candidates, canOrder, endHuman, holdsBack, humanUp, joinChoices, orderAttack, orderHoldBack, orderJoin, stepAI } from '../src/campaign/turn';
-import { type Corps, type Game } from '../src/campaign/types';
+import { beginHuman, candidates, canOrder, endHuman, holdsBack, humanUp, joinChoices, orderAttack, orderHoldBack, orderJoin, orderMove, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
+import { type BattleReport, type Corps, type Game } from '../src/campaign/types';
+import { type TicketLine } from '../src/core/ticket';
 
 /** The player's first month in a seat: the computer's months before his are played. */
 function seat(nat: string, seed = 3): Game {
@@ -248,5 +261,105 @@ describe('5. open desert', () => {
     expect(moving.off.lines.some((l) => l.label === 'Open desert')).toBe(false);
     expect(moving.a.lines.find((l) => l.label === 'Open desert')!.effect).toBe(`Foot infantry defends at ${Math.round(DESERT.open * 100)}%`);
     expect(plain.a.lines.some((l) => l.label === 'Open desert')).toBe(false);
+  });
+});
+
+describe('6. the landing card', () => {
+  it('names the enemy next door only where his staff has identified it, as the attack card does', () => {
+    // Germany's seat: the Konigsberg garrison lands in the Danzig Corridor; Army Pomorze, not identified, stands next door.
+    const g = seat('GER');
+    const from = corps(g, 'GER', 'Konigsberg garrison'), beach = g.byName['Danzig Corridor'];
+    const a = previewLanding(g, [from], beach.id).assess!;
+    expect(a.join!.def.map((j) => j.name)).toEqual(['Army Pomorze']);
+    expect(a.lines.find((l) => l.label === JOIN_DEFENCE)!.value).toMatch(/Army Pomorze/);
+    const seen = ticketSeen(g, a);
+    expect(seen.find((l) => l.label === JOIN_DEFENCE)).toEqual({ label: JOIN_DEFENCE, value: MAY_JOIN });
+    expect(JSON.stringify(seen)).not.toContain('Army Pomorze');
+    // Every other line as the ticket has it: his own side's joiners named.
+    expect(seen.find((l) => l.label === JOIN_ATTACK)).toEqual(a.lines.find((l) => l.label === JOIN_ATTACK));
+    expect(seen.filter((l) => l.label !== JOIN_DEFENCE)).toEqual(a.lines.filter((l) => l.label !== JOIN_DEFENCE));
+    // Identified, named with their shares.
+    identify(g, a.join!.def.map((j) => j.corps), 'GER');
+    expect(ticketSeen(g, a)).toEqual(a.lines);
+    // Off, nobody joins and the ticket is the assessment's own.
+    JOIN.on = false;
+    const off = previewLanding(g, [from], beach.id).assess!;
+    expect(off.join).toBeUndefined();
+    expect(ticketSeen(g, off)).toBe(off.lines);
+    // The page's landing card reads its ticket through it.
+    expect(page).toContain('<h3>Battle Ticket</h3><table class="ticket">${ticketSeen(g, a).map((l) =>');
+    expect(page).not.toContain('<h3>Battle Ticket</h3><table class="ticket">${a.lines.map(');
+  });
+});
+
+describe("7. the month card's men lost", () => {
+  /** France's seat: the 3rd Army attacks the Saar from Lorraine, where London District now stands; it and the 5th Army in Alsace come up. */
+  function saar(): { g: Game; marks: Record<'FRA' | 'UK', MonthMark>; rep: BattleReport } {
+    const g = seat('FRA');
+    relocate(g, corps(g, 'UK', 'London District'), g.byName['Lorraine']);
+    const marks = { FRA: monthMark(g, 'FRA'), UK: monthMark(g, 'UK') };
+    const rep = orderAttack(g, [corps(g, 'FRA', '3rd Army')], g.byName['Saar'])!;
+    return { g, marks, rep };
+  }
+  const lostBox = (g: Game, mark: MonthMark, nat: string): string | undefined => monthCard(g, mark, nat).boxes.find((b) => b.key === 'men')?.figure;
+  const num = (n: number): string => n.toLocaleString('en-US');
+
+  it("count his own corps that only came up, and in his battles none of an ally's that came up", () => {
+    const { g, marks, rep } = saar();
+    const uk = rep.attackers.find((u) => u.nat === 'UK')!, fifth = rep.attackers.find((u) => u.name === '5th Army')!;
+    expect(uk.joined).toBeDefined();
+    expect(fifth.joined).toBeDefined();
+    expect(uk.lost).toBeGreaterThan(0);
+    expect(fifth.lost).toBeGreaterThan(0);
+    // France's battle: his own corps, the 5th Army that came up among them; not London District.
+    const french = rep.attackers.filter((u) => u.nat === 'FRA').reduce((n, u) => n + u.lost, 0);
+    expect(french).toBe(rep.attLost - uk.lost);
+    expect(lostBox(g, marks.FRA, 'FRA')).toBe(num(french));
+    const rowsOf = (card: MonthCard): CardRow[] => [...(card.lead ? [card.lead] : []), ...card.rows];
+    const row = rowsOf(monthCard(g, marks.FRA, 'FRA')).find((r) => r.report?.type === 'land' && r.report.id === rep.id)!;
+    expect(row.figures[0]).toEqual({ n: num(french), label: 'lost' });
+    // Britain's card: no row for a battle it only came up in, and the men London District lost.
+    expect(rowsOf(monthCard(g, marks.UK, 'UK')).some((r) => r.report?.type === 'land' && r.report.id === rep.id)).toBe(false);
+    expect(lostBox(g, marks.UK, 'UK')).toBe(num(uk.lost));
+  });
+
+  it('off, nobody comes up and the card counts the battle as release 1 did', () => {
+    JOIN.on = false;
+    const { g, marks, rep } = saar();
+    expect([...rep.attackers, ...rep.defenders].some((u) => u.joined !== undefined)).toBe(false);
+    expect(lostBox(g, marks.FRA, 'FRA')).toBe(num(rep.attLost));
+    expect(lostBox(g, marks.UK, 'UK')).toBeUndefined();
+  });
+});
+
+describe('8. storms and sorties', () => {
+  it('take nobody from next door, and their cards say so in one line, with the switch on alone', () => {
+    // Germany's seat: Lodz held against her by one Polish corps inside the town, the field cleared, one German corps round it.
+    const g = seat('GER');
+    const town = g.byName['Lodz'];
+    const inside = town.units.find((u) => u.nat === 'POL' && u.kind === 'inf')!;
+    expect(garrison(g, inside)).toBe(true);
+    for (const u of [...town.units]) relocate(g, u, g.byName['Warsaw']);
+    const ger = town.nb.flatMap((j) => g.regions[j].units.filter((u) => u.nat === 'GER' && u.kind !== 'fort' && u.kind !== 'eng' && u.ap > 0));
+    for (const c of ger.slice(0, 2)) orderMove(g, c, town.id);
+    // Corps of both sides still stand next door.
+    expect(ger.length).toBeGreaterThan(2);
+    expect(town.nb.some((j) => g.regions[j].units.some((u) => u.nat === 'POL' && u.kind !== 'fort'))).toBe(true);
+    const read = (): { storm: TicketLine[]; stormOdds: number; sortie: TicketLine[]; sortieOdds: number } => {
+      const st = stormOutlook(g, town.id)!, so = previewSally(g, town, 'POL')!;
+      return { storm: st.lines, stormOdds: st.odds, sortie: so.lines, sortieOdds: so.odds };
+    };
+    const on = read();
+    expect(on.storm.filter((l) => l.label === JOIN_NONE)).toEqual([{ label: JOIN_NONE, value: STORM_ALONE }]);
+    expect(on.sortie.filter((l) => l.label === JOIN_NONE)).toEqual([{ label: JOIN_NONE, value: SORTIE_ALONE }]);
+    for (const lines of [on.storm, on.sortie]) expect(lines.some((l) => l.label === JOIN_ATTACK || l.label === JOIN_DEFENCE)).toBe(false);
+    // Off, no such line, and every other line and the odds as they are with it on.
+    JOIN.on = false;
+    const off = read();
+    for (const lines of [off.storm, off.sortie]) expect(lines.some((l) => l.label === JOIN_NONE)).toBe(false);
+    expect(on.storm.filter((l) => l.label !== JOIN_NONE)).toEqual(off.storm);
+    expect(on.sortie.filter((l) => l.label !== JOIN_NONE)).toEqual(off.sortie);
+    expect(on.stormOdds).toBe(off.stormOdds);
+    expect(on.sortieOdds).toBe(off.sortieOdds);
   });
 });

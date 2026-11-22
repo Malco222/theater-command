@@ -24,7 +24,8 @@
 //    is spent: no weeks left, and counted as having fought; one in the player's army as well (joint.ts, jointMonth).
 //    A corps on foot that comes up into open desert against tanks and lorries is driven round as the defenders there are.
 // 5. The card names them, early, midway or late; to the player an enemy next door his staff has not identified is
-//    "armies next door may join", with no names and no numbers (turn.ts, outlookOf).
+//    "armies next door may join", with no names and no numbers (turn.ts, outlookOf). A storm of a town and a
+//    garrison's sortie take nobody from next door, on either side, and their cards say so in one line (noJoinLine).
 // The historical scenarios reckon them alike: the rule is keyed on its switch alone.
 
 import joinData from '../../data/campaign/join.json';
@@ -202,6 +203,16 @@ export const JOIN_ATTACK = 'Joining the attack';
 export const JOIN_DEFENCE = 'Joining the defence';
 /** What the player's card says where the enemy next door is not identified (b453): no names, no numbers. */
 export const MAY_JOIN = 'Armies next door may join';
+/** The card's line where nobody may come up from next door: a storm of a town, a garrison's sortie (the design director, 08:16Z). */
+export const JOIN_NONE = 'Corps next door';
+export const STORM_ALONE = 'Only the troops on this ground fight a storm';
+export const SORTIE_ALONE = 'Only the garrison and the besiegers fight a sortie';
+
+/** The card's one line for a storm or a sortie, which nobody next door joins on either side; null for any other battle, or with the switch off. */
+export function noJoinLine(opts: { town?: boolean; sally?: boolean }): TicketLine | null {
+  if (!JOIN.on || (!opts.town && !opts.sally)) return null;
+  return { label: JOIN_NONE, value: opts.town ? STORM_ALONE : SORTIE_ALONE };
+}
 
 /** A joiner's month is spent: no weeks left, counted as having fought, and joined this month. It stays where it stood. */
 export function spendJoiner(g: Game, c: Corps): void {

@@ -56,7 +56,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
-import { foughtNow, joinLines, joinersOf, spendJoiner, type Join } from './join';
+import { foughtNow, joinLines, joinersOf, noJoinLine, spendJoiner, type Join } from './join';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -1394,8 +1394,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
         : 'Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates',
     });
   }
-  // Who comes up from next door, and when (release 2).
+  // Who comes up from next door, and when (release 2); a storm or a sortie says nobody does.
   if (join) lines.push(...joinLines(join));
+  else { const none = noJoinLine(opts); if (none) lines.push(none); }
   if (wide && defenders.length) {
     // Training and experience decide as many fights as numbers do: said in words, division for division.
     const grade = (cs: Corps[]): { worth: number; army: number; xp: number } => {

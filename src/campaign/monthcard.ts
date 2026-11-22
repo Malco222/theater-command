@@ -546,7 +546,11 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // (A corps that only came up from next door does not make a battle his: release 2's joiners are left out of his rows.)
     const att = mine(r.attNat) || r.attackers.some((u) => mine(u.nat) && u.joined === undefined);
     const def = !att && (mine(r.defNat) || r.defenders.some((u) => mine(u.nat) && u.joined === undefined));
-    if (!att && !def) continue;
+    if (!att && !def) {
+      // (But the men his corps lost there are his: they are in his count of the lost.)
+      for (const u of [...r.attackers, ...r.defenders]) if (u.joined !== undefined && mine(u.nat)) menOurs += u.lost;
+      continue;
+    }
     fought.add(r.region);
     const reg = g.regions[r.region];
     const size = reg ? townSize(g, reg) : 'village';
@@ -555,7 +559,10 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const place = forTown && reg ? townName(reg) : r.regionName;
     const us = att ? r.attackers : r.defenders;
     // (The defender's loss is his dead and wounded and the men taken prisoner.)
-    const oursLost = att ? r.attLost : r.defLost + r.prisoners, theirsLost = att ? r.defLost + r.prisoners : r.attLost;
+    let oursLost = att ? r.attLost : r.defLost + r.prisoners;
+    const theirsLost = att ? r.defLost + r.prisoners : r.attLost;
+    // (Of the corps that came up from next door on his side, only his own nation's losses are his.)
+    for (const u of us) if (u.joined !== undefined && !mine(u.nat)) oursLost -= u.lost;
     const corps = us.filter((u) => !u.guard && u.joined === undefined).length;
     // A siege laid is the field won and the town still to take: good news for the besieger, a warning to the besieged.
     const good = r.siege ? att : att ? r.taken : !r.taken;

@@ -490,6 +490,18 @@ function joinSeen(g: Game, join: Join): { view: JoinSeen; doubt: Corps[] } {
   const hidden = join.def.some((j) => corpsKnown(g, j.corps, g.human).level === 'none');
   return { view: { att: join.att.map(joinView), def: hidden ? [] : join.def.map(joinView), hidden }, doubt: hidden ? join.def.map((j) => j.corps) : [] };
 }
+/** A ticket's line for the enemy next door as the player's staff can give it: where any of them is not identified, only that armies next door may join (b453). Any other line as it is. */
+const joinLineSeen = (l: TicketLine, seen: JoinSeen | undefined): TicketLine => (l.label === JOIN_DEFENCE && seen?.hidden ? { label: l.label, value: MAY_JOIN } : l);
+/**
+ * A Battle Ticket as the player's staff can give it where the corps next door are concerned (release 2): the landing
+ * card's, whose odds are one figure. The enemy next door is named as the attack card names it (outlookOf). Where
+ * nobody joins, the ticket itself.
+ */
+export function ticketSeen(g: Game, a: Assessment): TicketLine[] {
+  if (!a.join) return a.lines;
+  const seen = joinSeen(g, a.join).view;
+  return a.lines.map((l) => joinLineSeen(l, seen));
+}
 /** One result's bill as the player's staff can state it before the fight. */
 export interface CostSeen { ours: number; theirs: number | null; share: number }
 
@@ -541,7 +553,7 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
   const lines = a.lines.map((l): TicketLine => {
     // (Release 2: the enemy next door the staff has not identified may join, and no more is said: b453.)
-    if (l.label === JOIN_DEFENCE && seenJoin?.view.hidden) return { label: l.label, value: MAY_JOIN };
+    if (l.label === JOIN_DEFENCE) return joinLineSeen(l, seenJoin?.view);
     // (Where every defender is known and only the enemy next door is not, the defence's own lines stand as they are.)
     if (!fogged) return l;
     // (The town's guard fighting beside them (ruling 232) is no secret: its part of the line stays.)
