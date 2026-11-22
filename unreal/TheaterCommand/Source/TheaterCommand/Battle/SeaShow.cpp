@@ -1249,9 +1249,10 @@ namespace SeaShow
 			Wreck* W = WreckOf(E.Unit, E.Ship);
 			if (!W || E.Men < 0) return;
 			++Check.MenMatched;
-			// Her men in the water as the battle counts them (alive, and the dead afloat), and the share of them the show
-			// keeps, as Abandon reckons it: half the room left by the men of other wrecks, and at least a dozen.
-			const int Dead = std::max(0, E.Dead), Real = E.Men + Dead;
+			// Her men in the water as the battle counts them (alive, the men she had picked up back in the water with them,
+			// and the dead afloat), and the share of them the show keeps, as Abandon reckons it: half the room left by the men
+			// of other wrecks, and at least a dozen.
+			const int Dead = std::max(0, E.Dead), Real = E.Men + E.Guests + Dead;
 			int Taken = 0;
 			for (const Man& M : Swimmers) Taken += M.bGoing || &Wrecked[static_cast<size_t>(M.W)] == W ? 0 : 1;
 			for (const Wreck& O : Wrecked) Taken += &O == W ? 0 : O.Men - O.Out;

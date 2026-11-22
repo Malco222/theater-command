@@ -228,6 +228,7 @@ namespace SeaFeed
 			Out.Ship = X["ship"].IsNumber() ? std::clamp(X["ship"].Int(), 0, 64) : 0;
 			Out.Men = Count("men");
 			Out.Dead = Count("dead");
+			Out.Guests = std::max(0, Count("guests"));
 			Out.OilR = X["r"].IsNumber() ? std::clamp(X["r"].Num(), 0.0, 5000.0) : -1.0;
 			Out.LitR = X["litR"].IsNumber() ? std::clamp(X["litR"].Num(), 0.0, 5000.0) : -1.0;
 			Out.OilUntil = X["until"].IsNumber() ? X["until"].Num() : -1.0;

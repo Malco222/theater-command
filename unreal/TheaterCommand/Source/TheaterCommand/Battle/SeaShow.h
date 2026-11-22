@@ -193,6 +193,7 @@ namespace SeaShow
 		int Ship = 0;         // sea:men, sea:oil, sea:abandon: which of the piece's ships lost (0 not said)
 		int Men = -1;         // sea:men: alive in the water; sea:rescue: picked up so far (below 0 not said)
 		int Dead = -1;        // sea:men: killed going in, their bodies afloat (below 0 not said)
+		int Guests = 0;       // sea:men: men she had picked up, back in the water with her own (the naval rules, 18:42Z)
 		double OilR = -1.0, LitR = -1.0, OilUntil = -1.0; // sea:oil: the slick's spread and its burning part's (metres), and when it burns out
 		int WreckOf = -1, WreckShip = 0; // sea:rescue: the wreck she is picking up from ({piece, ship}), -1 not said
 		bool bDone = false;   // sea:rescue: she has finished (left, the wreck empty, or the fight over)
