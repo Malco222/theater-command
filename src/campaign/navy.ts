@@ -1486,16 +1486,30 @@ export function rebase(g: Game, f: Fleet, r: Region): boolean {
 /**
  * A class's share of loss where the hits to sink a ship are multiplied by `dc` (ruling 240, Damage control): navy.json's
  * `tough` divided by it, for surface warships only, never submarines. With `dc` 1 it is `tough` itself to the last
- * bit. The fight (sinkShips) and the forecast (toughOf) both read this one division.
+ * bit. The fight (sinkShips) and the forecast (lossOf) both read this one division, through `dueAt`.
  */
 const toughAt = (c: ShipClass, dc: number): number => NAVY.classes[c].tough / (c === 'ss' ? 1 : dc);
 
 /**
  * A class's share of loss in this fleet: navy.json's `tough`, eased by its nation's damage control (ruling 240; tech.ts
  * dcOf, which is exactly 1 with the switch off, without the research and in every history campaign). Every nation
- * alike. The forecast of a fleet action reads it, so that it and the fight work the same figure.
+ * alike. Whatever else turns a battle's wear into ships sunk should read this figure, or `lossOf` below.
  */
 export const toughOf = (g: Game, f: Fleet, c: ShipClass): number => toughAt(c, dcOf(g, f.nat));
+
+/**
+ * The ships of a class that `n` of them should lose at that share of loss, before the dice (ruling 240). The fight
+ * (sinkShips) rolls about this figure and the forecast of a fleet action (lossOf) rounds it: both read this one
+ * expression, so that the two cannot part by a single bit.
+ */
+const dueAt = (n: number, share: number, c: ShipClass, dc: number): number => n * share * toughAt(c, dc);
+
+/**
+ * The ships of class `c` this fleet should lose at that share of loss, before the dice: the figure sinkShips rolls
+ * about when it is given the fleet's own damage control (dcOf of its nation). The forecast of a fleet action
+ * (seaplan.ts lossAt) reads it.
+ */
+export const lossOf = (g: Game, f: Fleet, c: ShipClass, share: number): number => dueAt(f.ships[c], share, c, dcOf(g, f.nat));
 
 /**
  * Sinks about this share of a fleet's ships, class by class, and returns what went down. `dc` (ruling 240) is what the
@@ -1506,7 +1520,7 @@ export const toughOf = (g: Game, f: Fleet, c: ShipClass): number => toughAt(c, d
 export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES, dc = 1, saved?: Ships): Ships {
   const out = none();
   for (const c of list) {
-    const [n, plain] = rng.rollBoth(f.ships[c] * frac * toughAt(c, dc), f.ships[c] * frac * NAVY.classes[c].tough);
+    const [n, plain] = rng.rollBoth(dueAt(f.ships[c], frac, c, dc), dueAt(f.ships[c], frac, c, 1));
     const k = Math.min(f.ships[c], n);
     if (saved) saved[c] = Math.min(f.ships[c], plain) - k;
     f.ships[c] -= k;

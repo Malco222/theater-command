@@ -9,10 +9,10 @@ import { CARRIERS, assessAir, fly, forecastAir, shipHits, type AirAssess } from 
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { bombard, planBombard } from '../src/campaign/fleets';
 import { createGame, relocate, setWar } from '../src/campaign/game';
-import { FLEETS, NAVY, atSea, keptAfloat, navalUpkeep, sail, seaBattles, shipCount, shipList, sinkShips, torpedoRisk, toughOf, zoneOf } from '../src/campaign/navy';
+import { FLEETS, NAVY, atSea, keptAfloat, lossOf, navalUpkeep, sail, seaBattles, shipCount, shipList, sinkShips, torpedoRisk, toughOf, zoneOf } from '../src/campaign/navy';
 import { PLANS } from '../src/campaign/plans';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { planSeaBattle } from '../src/campaign/seaplan';
+import { lossAt, planSeaBattle, shares } from '../src/campaign/seaplan';
 import { startOpen } from '../src/campaign/staff';
 import { SHIP_RESEARCH, dcOf, techOf } from '../src/campaign/tech';
 import { beginHuman, endHuman, humanUp, orderFleet, runTurnAI, stepAI } from '../src/campaign/turn';
@@ -681,6 +681,81 @@ describe('ruling 240, C3: a fleet action', () => {
       expect(first!.lines.map((l) => l.label)).toEqual(plain.lines.map((l) => l.label));
       expect(first!.lines).toEqual(plain.lines);
     }
+  });
+
+  it('the forecast and the fight work one figure, to the last bit: every fleet and every class, whoever holds the research', () => {
+    R.dc.on = true;
+    // What the fight asks its dice for, in the order it asks: for each fleet, attackers first, each class in turn,
+    // [the ships due to sink, the ships due without damage control].
+    const fought = (g: Game): { rep: ReturnType<typeof seaBattles>[number]; asked: [number, number][] } => {
+      const real = Rng.prototype.rollBoth, asked: [number, number][] = [];
+      Rng.prototype.rollBoth = function (this: Rng, x: number, y: number): [number, number] { asked.push([x, y]); return real.call(this, x, y); };
+      try {
+        const reps = seaBattles(g, 'UK');
+        expect(reps).toHaveLength(1);
+        return { rep: reps[0], asked };
+      } finally { Rng.prototype.rollBoth = real; }
+    };
+    let figures = 0, eased = 0, won = 0, lost = 0;
+    const hold = (g: Game, before: Game, holders: string[]): void => {
+      const { rep, asked } = fought(g);
+      if (rep.won) won++; else lost++;
+      // The forecast's own shares at the odds the dice gave this fight.
+      const s = shares(rep.odds);
+      const sides = [...rep.att.map((x) => ({ x, share: s.ours })), ...rep.def.map((x) => ({ x, share: s.theirs }))];
+      expect(asked).toHaveLength(sides.length * CLASSES.length);
+      sides.forEach(({ x, share }, i) => {
+        // The fleet as it stood before the battle, in a copy of the game the fight never touched.
+        const f = before.fleets.find((y) => y.nat === x.nat && y.name === x.fleet)!;
+        expect(f.ships).toEqual(x.ships);
+        const forecast = lossAt(before, [f], share);
+        CLASSES.forEach((c, k) => {
+          const [due, plain] = asked[i * CLASSES.length + k];
+          const what = `${holders.join('+') || 'nobody'} seed ${g.seed} ${x.fleet} ${c}`;
+          // The fight's figure is navy.ts lossOf, and the forecast's is the same number to the last bit.
+          expect(Object.is(due, lossOf(before, f, c, share)), what).toBe(true);
+          expect(Object.is(forecast[c], Math.min(f.ships[c], due)), what).toBe(true);
+          // Without damage control it is release 1's own expression, and so is every submarine's and every navy's without the research.
+          expect(Object.is(plain, f.ships[c] * share * NAVY.classes[c].tough), what).toBe(true);
+          const holds = holders.includes(x.nat) && c !== 'ss';
+          if (!holds) expect(Object.is(due, plain), what).toBe(true);
+          else { expect(due, what).toBeCloseTo(plain / DC, 12); if (due !== plain) eased++; }
+          figures++;
+        });
+      });
+    };
+    for (const holders of [[], ['UK'], ['GER'], ['UK', 'GER']]) {
+      for (let seed = 1; seed <= 8; seed++) {
+        const { g, home, battle } = meet(seed, ...holders);
+        home.ships.ss = 7; battle.ships.ss = 9;
+        hold(g, copy(g), holders);
+      }
+      // A fight the attacker can lose: the German fleet reinforced until the odds stand just over what the British
+      // admiral wants before he offers battle, so that the dice can turn it.
+      for (let seed = 1; seed <= 10; seed++) {
+        const { g, home, battle, z } = meet(seed, ...holders);
+        while (planSeaBattle(g, home.id, z, null)!.odds!.mid > NAVY.battle.seek + 0.02) battle.ships.dd++;
+        expect(planSeaBattle(g, home.id, z, null)!.offers).toBe(true);
+        hold(g, copy(g), holders);
+      }
+    }
+    // Three fleets in one action: Italy's beside Germany's, each navy with its own research or none.
+    for (const holders of [['ITA'], ['GER'], ['UK', 'ITA']]) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const { g, home, battle, z } = meet(seed, ...holders);
+        const ita = named(g, '2nd Fleet');
+        setWar(g, 'UK', ita.nat);
+        ita.zone = z; ita.stance = 'patrol'; ita.lane = undefined;
+        home.ships.bb = 30; battle.ships.bb = 8; battle.ships.cv = 4;
+        hold(g, copy(g), holders);
+      }
+    }
+    // (Both ends of the fight, and figures enough that are eased, or the test would hold nothing. Measured: 86 fights
+    // won and 4 lost, 990 figures, 324 of them eased.)
+    expect(won).toBeGreaterThan(0);
+    expect(lost).toBeGreaterThan(0);
+    expect(figures).toBeGreaterThan(600);
+    expect(eased).toBeGreaterThan(150);
   });
 });
 

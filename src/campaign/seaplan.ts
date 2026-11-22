@@ -17,7 +17,7 @@ import type { TicketLine } from '../core/ticket';
 import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';
 import { allied, atWar } from './game';
 import { fogOn } from './intel';
-import { CLASSES, NAVY, airOver, atSea, fleetPower, shipCount, surfaceShips, toughOf } from './navy';
+import { CLASSES, NAVY, airOver, atSea, fleetPower, lossOf, shipCount, surfaceShips } from './navy';
 import type { Fleet, Game, ShipClass, Ships } from './types';
 
 /** One fleet on a forecast, as the viewer knows it. */
@@ -86,8 +86,11 @@ const zero = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const oneDp = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
 
-/** The share of its ships a side loses when the two sides' strengths stand at `r` after the dice (ours to his). */
-function shares(r: number): { ours: number; theirs: number } {
+/**
+ * The share of its ships a side loses when the two sides' strengths stand at `r` after the dice (ours to his).
+ * (Exported, with `lossAt`, so that a test can hold the forecast to the fight's own figures.)
+ */
+export function shares(r: number): { ours: number; theirs: number } {
   const won = r >= 1, edge = won ? r : 1 / r;
   const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
   return won ? { ours: light, theirs: hard } : { ours: hard, theirs: light };
@@ -96,12 +99,12 @@ function shares(r: number): { ours: number; theirs: number } {
 /**
  * The ships of each class a side should lose at that share. The fight rolls for each fleet and class about this
  * figure, to the whole number below it or above: `to` rounds each fleet's figure the same way, for the fewest and the most.
- * (Ruling 240: `toughOf` is the figure the fight works, navy.json's `tough` eased by the fleet's damage control, to the
- * last bit; without it, it is `tough` itself.)
+ * (Ruling 240: navy.ts `lossOf` is the figure the fight rolls about, navy.json's `tough` eased by the fleet's own damage
+ * control, to the last bit; without it, it is release 1's figure.)
  */
-function lossAt(g: Game, fleets: Fleet[], share: number, to: (x: number) => number = (x) => x): Ships {
+export function lossAt(g: Game, fleets: Fleet[], share: number, to: (x: number) => number = (x) => x): Ships {
   const out = zero();
-  for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(f.ships[c] * share * toughOf(g, f, c)));
+  for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(lossOf(g, f, c, share)));
   return out;
 }
 
