@@ -11,7 +11,7 @@
 //   63  Kweilin     the 11th Army's rows that hold the 58th and the 40th, from Chuanhsien
 //   63  Liuchow     the 11th Army's 3rd and 13th from the north, the 104th from the south-east
 //   63  Nanning     the 22nd, up the Yu River
-//   64  Tushan      the 3rd and 13th, from Liuchow (the list shuts it again the month after)
+//   64  Tushan      the 3rd and 13th, from Liuchow (its only month: reached and given up in December 1944)
 //   64  Lungchow    the 22nd, from Nanning
 //   65  Waichow     the 104th, east of Canton (Huizhou and Haifeng: one province on the chart)
 //   65  Kukong      the 40th from the north with the 23rd Army's brigades from Canton (the choice of 1945)
@@ -95,11 +95,14 @@ const whats = (name: string): string[] => told.filter((t) => t.name === name).ma
 describe("China's dated attacks in the line file", () => {
   it('ten rows, after the Pacific\'s in the one table, each naming its own choice', () => {
     expect(mine().map((a) => [a.month, a.name, a.at.join('+'), a.force, a.from, a.book])).toEqual(ROWS.map((r) => [r[0], r[1], r[2], r[3], r[4], r[5]]));
+    // (One row has a last month: Tushan's, the month it was reached and given up. The design director's 11:41Z of 22 November 2026.)
+    expect(mine().filter((a) => a.until !== undefined).map((a) => [a.name, a.until])).toEqual([['Tushan', 64]]);
     // (Laid as the file is: its own block holds the ten, and they stand at the table's end.)
     const own = (chinaLine as any).history.stations.attacks as Attack[];
     expect(own).toHaveLength(10);
     expect(table().slice(-10).map((a) => a.name)).toEqual(ROWS.map((r) => r[1]));
-    for (const a of mine()) expect([a.sea, a.met, a.until, HISTORY.theatre[a.book!]], a.name).toEqual([undefined, undefined, undefined, 'china']);
+    // (None by sea, none with a record's fight; one with a last month, Tushan's: see the case above.)
+    for (const a of mine()) expect([a.sea, a.met, a.until, HISTORY.theatre[a.book!]], a.name).toEqual([undefined, undefined, a.name === 'Tushan' ? 64 : undefined, 'china']);
     expect([HISTORY.dates.JAP.ichigo, HISTORY.dates.JAP.kukong45]).toEqual([56, 64]);
   });
 
@@ -203,15 +206,23 @@ describe('up the West River in 1944', () => {
     expect([where(g, a3), where(g, d22), where(g, c104)]).toEqual(['Tushan', 'Lungchow', 'Liuchow']);
   });
 
-  it('Tushan not taken in its month stays owed: the list shuts it again in January, and the row is not asked there', () => {
+  // (Re-pointed by the design director's 11:41Z of 22 November 2026: the row ends in 64. Its purpose is kept: Tushan
+  // is not attacked in January. Before, the row stayed owed and the month list refused it every month to 72.)
+  it('Tushan not taken in its month is over: the record gave it up within days, and the row is not asked in January', () => {
     const g = war(65, { done: ROWS.filter((r) => r[1] !== 'Tushan').map((r) => r[1]) });
     japans(g, 'Liuchow');
     const a3 = stand(g, A3, 'Liuchow');
     open(g, 'Tushan');
     listen();
     bookAttacks(g, 'JAP');
-    expect(told.map((t) => [t.name, t.what, t.why])).toEqual([['Tushan', 'owed', 'the month list keeps the place shut']]);
-    expect([g.byName.Tushan.ctrl, where(g, a3), made(g, 'Tushan')]).toEqual(['CHN', 'Liuchow', false]);
+    expect(told.map((t) => [t.name, t.what, t.why])).toEqual([['Tushan', 'over', 'the record\'s attack was called off']]);
+    expect([g.byName.Tushan.ctrl, where(g, a3), made(g, 'Tushan')]).toEqual(['CHN', 'Liuchow', true]);
+    // (And nothing is told of it the month after.)
+    g.turn = 66;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(told.filter((t) => t.name === 'Tushan')).toEqual([]);
+    expect(where(g, a3)).toBe('Liuchow');
   });
 });
 
