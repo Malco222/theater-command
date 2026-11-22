@@ -308,6 +308,7 @@ namespace AirShow
 					G.X = Lerp(G.X, Next->second.X, F);
 					G.Y = Lerp(G.Y, Next->second.Y, F);
 					G.Alt = Lerp(G.Alt, Next->second.Alt, F);
+					G.CountAlt = Lerp(G.CountAlt, Next->second.CountAlt, F);
 					G.Face = Wrap(G.Face + Wrap(Next->second.Face - G.Face) * F);
 				}
 			}
@@ -319,6 +320,122 @@ namespace AirShow
 			{
 				if (!Now.count(Pair.first) && F > 0.5) Now[Pair.first] = Pair.second;
 			}
+		}
+		Heights();
+	}
+
+	void Show::TrueBand(const Group& G, double& In, double& From)
+	{
+		In = From = 0.0;
+		if (G.bFighter) return;
+		if (G.Strike == "level" && G.Model == "B5N") In = 3000.0;
+		else if (G.Strike == "dive" && G.Model == "D3A") In = From = 4000.0;
+		else if (G.Strike == "dive" && G.Model == "SBD") { In = 5600.0; From = 4500.0; }
+	}
+
+	double Show::TorpedoSpeed(const std::string& Model)
+	{
+		if (Model == "TBD") return 51.0;
+		if (Model == "Swordfish") return 41.0;
+		if (Model == "TBF" || Model == "Barracuda") return 62.0;
+		return 72.0;
+	}
+
+	const Ship* Show::NearestShip(double X, double Y) const
+	{
+		const Ship* Best = nullptr;
+		double Least = 1e18;
+		for (const Ship& S : ShipsNow)
+		{
+			const double D = std::hypot(S.At.X - X, S.At.Y - Y);
+			if (D < Least) { Least = D; Best = &S; }
+		}
+		return Best;
+	}
+
+	void Show::Heights()
+	{
+		// The torpedo planes come down well before the target (the audit's 4.5; the record: Midway's torpedo squadron at
+		// 1,500 feet, down to 150 when the Zeros came, the drop from about a house's height). Each torpedo group's
+		// height drawn is brought down by its distance from the target: from its band at 45 km to about 450 m at 25 km
+		// (and to 450 m at once, as fast as it lets down, when its fight begins), 150 m at 10 km and wave-top from 3 km;
+		// over the ground (Oahu) the same over the highest ground of the next two kilometres. After its drop it flies
+		// home low: TorpedoAwayM for a minute, then no higher than 150 m. Never a climb back to the band. The battle's
+		// own place and time are kept: only the height drawn is the show's.
+		const double Dt = DrawnAt < 0.0 ? 0.0 : std::max(0.0, AirT - DrawnAt);
+		DrawnAt = AirT;
+		// The other bombers at their kind's true height (TrueBand), let down at up to 10 m a second; a dive group low after
+		// its dive, as the torpedo planes after their drop; an escort kept as high over its bombers as the battle has it.
+		std::map<int, double> Lowered;
+		for (auto& Pair : Now)
+		{
+			Group& G = Pair.second;
+			if (G.bFighter || G.Strike == "torpedo") continue;
+			double In = 0.0, From = 0.0;
+			TrueBand(G, In, From);
+			const auto B = Bands.find(G.Id);
+			const bool bDropped = B != Bands.end() && B->second.bDropped;
+			const double Floor = std::max(0.0, GroundAt(G.X, G.Y));
+			double Want = -1.0;
+			if (G.Strike == "dive" && bDropped)
+			{
+				if (!DroppedAt.count(G.Id)) DroppedAt[G.Id] = AirT;
+				Want = Floor + TorpedoAwayM + (150.0 - TorpedoAwayM) * Clamp((AirT - DroppedAt[G.Id] - 60.0) / 120.0, 0.0, 1.0);
+			}
+			else if (In > 0.0)
+			{
+				const double D = std::hypot(G.X - TargetX, G.Y - TargetY);
+				Want = From > 0.0 ? From + (In - From) * Clamp((D - 6000.0) / 9000.0, 0.0, 1.0) : In;
+			}
+			if (Want < 0.0) continue;
+			auto It = DrawnOver.find(G.Id);
+			if (It == DrawnOver.end()) It = DrawnOver.emplace(G.Id, G.Alt).first;
+			// (after its dive, at once: its bombers are already low over the water, and come back to it there)
+			if (G.Strike == "dive" && bDropped) It->second = Want;
+			else It->second += Clamp(Want - It->second, -10.0 * Dt, 3.0 * Dt);
+			if (!bDropped) Lowered[G.Id] = It->second - G.Alt;
+			G.Alt = It->second;
+		}
+		for (auto& Pair : Now)
+		{
+			Group& G = Pair.second;
+			if (!G.bFighter || G.With < 0) continue;
+			const auto L = Lowered.find(G.With);
+			if (L != Lowered.end()) G.Alt = std::max(GroundAt(G.X, G.Y) + 150.0, G.Alt + L->second);
+		}
+		for (auto& Pair : Now)
+		{
+			Group& G = Pair.second;
+			if (G.bFighter || G.Strike != "torpedo") continue;
+			const auto B = Bands.find(G.Id);
+			const bool bDropped = B != Bands.end() && B->second.bDropped;
+			if (G.Doing == Act::Fight || G.Engaged >= 0) Fought.insert(G.Id);
+			const double D = std::hypot(G.X - TargetX, G.Y - TargetY);
+			const Vec F = Ahead(G.Face);
+			double Floor = std::max(0.0, GroundAt(G.X, G.Y));
+			for (double Far : { 700.0, 1400.0, 2100.0 }) Floor = std::max(Floor, GroundAt(G.X + F.X * Far, G.Y + F.Y * Far));
+			const double Height = std::max(TorpedoLowM, G.Alt - Floor);
+			double Want = Height;
+			if (!bDropped)
+			{
+				if (D <= 3000.0) Want = TorpedoLowM;
+				else if (D <= 10000.0) Want = TorpedoLowM + (150.0 - TorpedoLowM) * (D - 3000.0) / 7000.0;
+				else if (D <= 25000.0) Want = 150.0 + 300.0 * (D - 10000.0) / 15000.0;
+				else if (D <= 45000.0) Want = 450.0 + (Height - 450.0) * (D - 25000.0) / 20000.0;
+				if (Fought.count(G.Id)) Want = std::min(Want, 450.0);
+				Want = std::min(Want, Height);
+			}
+			else
+			{
+				if (!DroppedAt.count(G.Id)) DroppedAt[G.Id] = AirT;
+				Want = TorpedoAwayM + (150.0 - TorpedoAwayM) * Clamp((AirT - DroppedAt[G.Id] - 60.0) / 120.0, 0.0, 1.0);
+			}
+			G.bAbreast = !bDropped && D < 25000.0;
+			auto It = DrawnOver.find(G.Id);
+			if (It == DrawnOver.end()) It = DrawnOver.emplace(G.Id, Height).first;
+			// (let down at up to 20 m a second, a shallow glide at its speed; up again, after the drop, at 3)
+			It->second += Clamp(Want - It->second, -20.0 * Dt, 3.0 * Dt);
+			G.Alt = Floor + It->second;
 		}
 	}
 
@@ -373,7 +490,8 @@ namespace AirShow
 			Bk = Vic[V][1] + Wing[J][1] + (Slot / 24) * 3.0;
 			Hi = Vic[V][2] + Wing[J][2];
 			// A torpedo box goes in low abreast, every aircraft on its own line to the ships.
-			if (G.Strike == "torpedo" && G.Alt < 400.0)
+			// (from its let-down on its approach, 25 km out, until its torpedoes have gone: Show::Heights)
+			if (G.Strike == "torpedo" && G.bAbreast)
 			{
 				Rt = (Slot % 2 == 0 ? 1.0 : -1.0) * ((Slot + 1) / 2) * 0.55;
 				Bk = (Slot % 3) * 0.25;
@@ -504,7 +622,9 @@ namespace AirShow
 				}
 				else
 				{
-					Craft& C = Make(G, SlotPlace(G, K), G.Face, Spd, Role::Slot);
+					Vec At = SlotPlace(G, K);
+					At.Z = std::max(At.Z, GroundAt(At.X, At.Y) + TorpedoLowM);
+					Craft& C = Make(G, At, G.Face, Spd, Role::Slot);
 					C.Slot = K;
 				}
 			}
@@ -560,6 +680,8 @@ namespace AirShow
 					if (!bTaken) break;
 					At = At - F * Clear;
 				}
+				// (and never made under the sea or in the ground: a box drawn low, its lower vics stepped down under it)
+				if (bAirborne) At.Z = std::max(At.Z, GroundAt(At.X, At.Y) + TorpedoLowM);
 				if (RallyLead) Check.RallyMadeFar = std::max(Check.RallyMadeFar, Len(At - LeadAt));
 				const Vec Vel = RallyLead ? LeadVel : GroupVelocity(G.Id);
 				Craft& C = Make(G, At, Frame.Face, bIntoFight ? 140.0 : bAirborne ? std::max(Len(Vel) * 1.05, G.bFighter ? 95.0 : 75.0) : 0.0, Doing);
@@ -743,7 +865,29 @@ namespace AirShow
 		// (rounds the battle counted are on their way to it: until they land it flies on by the command it had as they
 		// left, so that they find it where they were sent; see CourseOf)
 		const bool bHeld = AirT < C.HeldTo;
-		const Cmd K = bHeld ? C.Flown : Asked;
+		Cmd K = bHeld ? C.Flown : Asked;
+		// (but never on into the ground or the sea: under 25 m and coming down, held level)
+		if (bHeld && C.Doing != Role::Fall && K.Gam < 0.0 && C.P.Z - GroundAt(C.P.X, C.P.Y) < 25.0) K.Gam = 0.0;
+		// (a fighter in a fight, down low after torpedo planes or bombers drawn low: room to pull out of his dive at
+		// four g before the ground, and never under 100 m, 30 after a torpedo plane over the sea)
+		// (the ground ahead too, high ground coming up; and his wings rolled level as he pulls, so that all his g goes
+		// into the pull: in a hard turn it has none to spare, and he would go on down at the angle he dived)
+		if (C.bFighter && C.Doing == Role::Fight && !C.bStrafing)
+		{
+			const double Over = C.P.Z - FloorAhead(C);
+			const double Least = Chasing(C) > 0.0 ? 30.0 : 100.0;
+			const double SinkNow = std::max(0.0, -std::sin(C.Gam)) * C.Spd;
+			const double Rolling = std::fabs(C.Bank) / std::max(C.RollMax, 0.5);
+			if (Over < Least + SinkNow * SinkNow / (2.0 * Gee * 3.0) + SinkNow * (0.5 + Rolling))
+			{
+				K.Gam = std::max(K.Gam, Over < Least ? 10.0 * Deg : 0.0);
+				if (SinkNow > 5.0 || Over < Least)
+				{
+					K.bBank = true;
+					K.Bank = 0.0;
+				}
+			}
+		}
 		const double S = std::max(C.Spd, 30.0);
 		// The pull a pilot dares: his full g only at speed, easing off as he slows toward the stall.
 		const double GNow = C.Doing == Role::Fall ? C.GMax : std::min(C.GMax, 2.0 + (C.GMax - 2.0) * Clamp((S - C.VMin) / 45.0, 0.0, 1.0));
@@ -840,6 +984,22 @@ namespace AirShow
 				StopTrails(C);
 			}
 		};
+		// (a dive bomber pulled out of her dive, a torpedo plane whose torpedo has gone: how high she flies after, low)
+		if (G && !C.bFighter && C.bDropped && (G->Strike == "torpedo" || G->Strike == "dive") && C.Doing != Role::Ground
+		    && !(C.Doing == Role::Dive && (C.Step == Phase::Peel || C.Step == Phase::Plunge || C.Step == Phase::Pull || C.Step == Phase::Run)))
+			Check.LeftLowMost = std::max(Check.LeftLowMost, C.P.Z - GroundAt(C.P.X, C.P.Y));
+		// A torpedo plane turning in on her run (her group's run begun, or 6 km out), and after her drop breaking away:
+		// PilotTorpedo.
+		// (not one made after her group's drop: she has no run to fly)
+		const auto TB = G ? Bands.find(G->Id) : Bands.end();
+		const bool bGroupDropped = TB != Bands.end() && TB->second.bDropped;
+		if (G && !C.bFighter && G->Strike == "torpedo" && C.Doing == Role::Slot && !C.bRunDone
+		    && (C.bDropped || (!bGroupDropped && (G->Run > 0.0 || std::hypot(G->X - TargetX, G->Y - TargetY) < 6000.0))))
+		{
+			C.Doing = Role::Dive;
+			C.Step = C.bDropped ? Phase::Away : Phase::Run;
+			C.StepT = 0.0;
+		}
 		switch (C.Doing)
 		{
 		case Role::Ground:
@@ -848,7 +1008,7 @@ namespace AirShow
 		case Role::Fight:
 			if (G && G->Doing == Act::Fight && G->Engaged >= 0 && PilotFight(C, *G, Dt))
 			{
-				if (!C.bStrafing && C.Doing == Role::Fight) Check.LowestFight = std::min(Check.LowestFight, C.P.Z - GroundAt(C.P.X, C.P.Y));
+				if (!C.bStrafing && C.Doing == Role::Fight) (Chasing(C) > 0.0 ? Check.LowestChase : Check.LowestFight) = std::min(Chasing(C) > 0.0 ? Check.LowestChase : Check.LowestFight, C.P.Z - GroundAt(C.P.X, C.P.Y));
 				// (one who turned for home in this step flies it as one going home: a step not flown is a stop in the
 				// air, and the rounds laid wide of him as he flew are drawn through him)
 				if (C.Doing == Role::Home) FlyHome();
@@ -921,8 +1081,13 @@ namespace AirShow
 				double Face = G->Face;
 				RallyFrame(C.Group, Box, Face, BoxVel);
 				const Vec F = Ahead(Face);
-				const Vec To = Box - F * (Mine ? Mine->Back : 180.0) - Up * (Mine ? Mine->Down : 18.0) + RightOf(Face) * (C.Hand * G->W * 0.3);
-				Fly(C, Steer(C, To, BoxVel, 0.08, C.VMin, C.VMax), Dt, true);
+				Vec To = Box - F * (Mine ? Mine->Back : 180.0) - Up * (Mine ? Mine->Down : 18.0) + RightOf(Face) * (C.Hand * G->W * 0.3);
+				// (below a box drawn low, a torpedo group's at wave-top: no lower than it, never into the sea)
+				To.Z = std::max(To.Z, std::max(GroundAt(C.P.X, C.P.Y), GroundAt(To.X, To.Y)) + TorpedoLowM);
+				Cmd K = Steer(C, To, BoxVel, 0.08, C.VMin, C.VMax);
+				// (a torpedo plane on her group's run, hurt: slowing for the drop with the rest)
+				if (G->Strike == "torpedo" && !C.bDropped && G->Run > 0.3) K.Spd = std::min(K.Spd, TorpedoSpeed(C.Model));
+				Fly(C, K, Dt, true);
 				return;
 			}
 			// (taken back into the box's count: it flies its place again, closing slowly)
@@ -999,6 +1164,14 @@ namespace AirShow
 			const double Wide = 380.0 + 260.0 * Near;
 			To += RightOf(G->Face) * (Wide * std::sin(W)) + Up * (120.0 * Near);
 			ToVel += RightOf(G->Face) * (Wide * 2.0 * Pi / 34.0 * std::cos(W));
+		}
+		// (a bomber's place drawn low, a torpedo group let down to wave-top, over the ground: never into it, nor the
+		// rising ground a few hundred metres on)
+		if (!C.bFighter)
+		{
+			const Vec F = Ahead(C.Hdg);
+			const double Under = std::max({ GroundAt(C.P.X, C.P.Y), GroundAt(C.P.X + F.X * 400.0, C.P.Y + F.Y * 400.0), GroundAt(C.P.X + F.X * 900.0, C.P.Y + F.Y * 900.0) });
+			To.Z = std::max(To.Z, Under + TorpedoLowM);
 		}
 		const double Gap = Len(To - C.P);
 		if (C.bJoining && Gap < 40.0) C.bJoining = false;
@@ -1497,9 +1670,20 @@ namespace AirShow
 		Check.MostFightSpeed = std::max(Check.MostFightSpeed, C.Spd);
 	}
 
+	double Show::FloorAhead(const Craft& C) const
+	{
+		const Vec Way = Ahead(C.Hdg) * std::max(C.Spd * std::cos(C.Gam), 0.0);
+		double Floor = GroundAt(C.P.X, C.P.Y);
+		for (double T = 1.0; T <= 3.0; T += 1.0) Floor = std::max(Floor, GroundAt(C.P.X + Way.X * T, C.P.Y + Way.Y * T));
+		return Floor;
+	}
+
 	void Show::MindGround(const Craft& C, Cmd& K, double Least) const
 	{
-		const double Over = C.P.Z - GroundAt(C.P.X, C.P.Y);
+		const double Over = C.P.Z - FloorAhead(C);
+		// (after a torpedo plane at wave-top over the sea: down to a little over her)
+		const double Low = Chasing(C);
+		if (Low > 0.0) Least = std::min(Least, std::max(40.0, Low + 15.0));
 		// (the height a dive at this angle still takes to come out of)
 		const double Sink = std::max(0.0, -std::sin(C.Gam)) * C.Spd;
 		if (Over >= Least + Sink * 2.5) return;
@@ -2601,7 +2785,10 @@ namespace AirShow
 		// By the box: above it and out to one side, weaving wide to hold the bombers' speed with fighting speed in hand.
 		const double Side = C.Flight % 2 == 0 ? 1.0 : -1.0;
 		const double Wv = AirT * 2.0 * Pi / 30.0 + C.Weave * 0.2;
-		const Vec To = Box + Rb * (Side * 620.0 + 600.0 * std::sin(Wv)) + Up * 400.0 + Fb * (C.Seat >= 2 ? -350.0 : 150.0);
+		Vec To = Box + Rb * (Side * 620.0 + 600.0 * std::sin(Wv)) + Up * 400.0 + Fb * (C.Seat >= 2 ? -350.0 : 150.0);
+		// (over bombers let down low, torpedo planes at wave-top: high above them, as Midway's Wildcats flew over their
+		// Devastators, never weaving down at the sea)
+		To.Z = std::max(To.Z, GroundAt(To.X, To.Y) + 1200.0);
 		Cmd K = Steer(C, To, Bv + Rb * (600.0 * 2.0 * Pi / 30.0 * std::cos(Wv)), 0.1, 130.0, C.VMax);
 		MindGround(C, K);
 		Fly(C, K, Dt, true);
@@ -3084,7 +3271,11 @@ namespace AirShow
 
 	void Show::PilotDive(Craft& C, const Group& G, double Dt)
 	{
-		(void)G;
+		if (G.Strike == "torpedo")
+		{
+			PilotTorpedo(C, G, Dt);
+			return;
+		}
 		// The dive bombers' attack: over on a wing, down at seventy degrees on the brakes, the bomb at six hundred
 		// metres, the pull-out low over the water and away, then back up to the group.
 		const Ship* Mark = nullptr;
@@ -3146,6 +3337,97 @@ namespace AirShow
 		}
 	}
 
+	void Show::PilotTorpedo(Craft& C, const Group& G, double Dt)
+	{
+		const double Floor = std::max(0.0, GroundAt(C.P.X, C.P.Y));
+		const double Over = C.P.Z - Floor;
+		if (C.Doing != Role::Fall) Check.TorpedoLowest = std::min(Check.TorpedoLowest, Over);
+		if (C.bDropped && C.Step == Phase::Run)
+		{
+			C.Step = Phase::Away;
+			C.StepT = 0.0;
+		}
+		// (her group's torpedoes gone without hers, one made late: no run of her own; round for home with the rest)
+		const auto TB = Bands.find(G.Id);
+		if (!C.bDropped && C.Step == Phase::Run && TB != Bands.end() && TB->second.bDropped)
+		{
+			C.Step = Phase::Egress;
+			C.StepT = 0.0;
+		}
+		switch (C.Step)
+		{
+		case Phase::Run:
+		{
+			// Turned in: her place abreast at the height drawn (wave-top from 3 km out, Heights), slowing over the second
+			// half of the run to her type's own speed for the drop; never under three quarters of wave-top.
+			Vec To = SlotPlace(G, C.Slot);
+			const Vec F = Ahead(C.Hdg);
+			const double Ahead1 = std::max(GroundAt(C.P.X + F.X * 400.0, C.P.Y + F.Y * 400.0), GroundAt(C.P.X + F.X * 900.0, C.P.Y + F.Y * 900.0));
+			const double Own = TorpedoSpeed(C.Model);
+			const double Near = std::hypot(C.P.X - TargetX, C.P.Y - TargetY);
+			const double Slow = std::max(Clamp((G.Run - 0.45) / 0.35, 0.0, 1.0), Clamp((4500.0 - Near) / 2000.0, 0.0, 1.0));
+			// (from the second half of the run, wave-top whatever her place: the drop is from there)
+			To.Z = Slow > 0.0 ? std::max(Floor, Ahead1) + TorpedoLowM : std::max({ To.Z, Floor + TorpedoLowM, Ahead1 + TorpedoLowM });
+			Cmd K = Steer(C, To, GroupVelocity(G.Id), 0.12, Own * 0.95, C.VMax);
+			K.Spd = Clamp(K.Spd, Own * 0.95, Lerp(C.VMax, Own, Slow));
+			if (Over < TorpedoLowM * 0.75) K.Gam = std::max(K.Gam, 2.0 * Deg);
+			Fly(C, K, Dt, true);
+			break;
+		}
+		case Phase::Away:
+		{
+			// Her torpedo gone: straight on, low, past the ships (over a ship's masts if one is in her way), opening up to
+			// full speed; never a climb in front of their guns. A minute of it, then round for home.
+			double Least = TorpedoAwayM;
+			for (const Ship& S : ShipsNow)
+				if (std::hypot(S.At.X - C.P.X, S.At.Y - C.P.Y) < 350.0) Least = TorpedoHopM;
+			Cmd K;
+			K.Hdg = C.RunHdg;
+			K.Gam = Clamp((Floor + Least - C.P.Z) / 150.0, -0.08, 0.08);
+			K.Spd = C.VMax;
+			Fly(C, K, Dt, true);
+			if (C.StepT > 45.0)
+			{
+				C.Step = Phase::Egress;
+				C.StepT = 0.0;
+			}
+			break;
+		}
+		case Phase::Egress:
+		default:
+		{
+			// Round for home after her group, low, in a gentle turn (no more than 30 degrees of bank); then her place again,
+			// the group drawn low (Heights).
+			const Vec To = SlotPlace(G, C.Slot);
+			Cmd K = Toward(C, Vec(To.X, To.Y, C.P.Z), C.VMax);
+			Ease(C, K, 30.0 * Deg);
+			K.Gam = Clamp((Floor + std::max(TorpedoAwayM, To.Z - Floor) - C.P.Z) / 200.0, -0.08, 0.05);
+			Fly(C, K, Dt, true);
+			if (C.StepT > 90.0 || Flat(To - C.P) < 1500.0)
+			{
+				C.Doing = Role::Slot;
+				C.Step = Phase::None;
+				C.bJoining = true;
+				C.bRunDone = true;
+			}
+			break;
+		}
+		}
+	}
+
+	double Show::Chasing(const Craft& C) const
+	{
+		// A fighter after a torpedo plane flying low over the sea: how high that plane is over it (0: not so). He may
+		// follow her down to wave-top, as the Zeros did at Midway, and is not held to a fighter's 60 m in a fight.
+		if (!C.bFighter || C.Target < 0 || GroundAt(C.P.X, C.P.Y) > 1.0) return 0.0;
+		const Craft* Q = Find(C.Target);
+		if (!Q || Q->bFighter) return 0.0;
+		const auto QG = Now.find(Q->Group);
+		if (QG == Now.end() || QG->second.Strike != "torpedo") return 0.0;
+		const double QOver = Q->P.Z - GroundAt(Q->P.X, Q->P.Y);
+		return QOver < 300.0 ? std::max(1.0, QOver) : 0.0;
+	}
+
 	void Show::PilotFall(Craft& C, double Dt)
 	{
 		C.FallT += Dt;
@@ -3176,6 +3458,8 @@ namespace AirShow
 		// never under 8 m/s, never past what the airframe may move.
 		const double Left = std::max(C.Dur - C.FallT, 1.5);
 		const double Sink = std::clamp((C.P.Z - Floor0) / Left, 8.0, C.VTop * 0.95);
+		// (its bank as it was: no fall rolls faster than the eye can follow, below)
+		const double Bank0 = C.Bank;
 		const bool bTumbling = C.Falling == FallHow::Wing || C.Falling == FallHow::Spin || (C.Falling == FallHow::Tail && !C.bHeavy);
 		// Its fire shows (a burning engine's smoke catches; a flamer's wing root), and later it may blow apart.
 		if (!C.bLit && C.FireAt >= 0.0 && C.FallT >= C.FireAt && (C.Falling == FallHow::Burn || C.Falling == FallHow::Flamer || C.Falling == FallHow::Struck))
@@ -3202,10 +3486,13 @@ namespace AirShow
 			C.FallV.Z += (-Sink - C.FallV.Z) * std::min(1.0, Dt * 0.6);
 			if (C.Falling == FallHow::Spin)
 			{
-				// A helix: round its middle line as that comes down. Steep (looks 0, 1): the nose 60 to 80 degrees down,
-				// 1 to 2 turns a second a fighter, 0.3 to 0.6 a heavy; flat (2, 3): the nose 20 to 40 degrees down, lazy.
+				// A helix: round its middle line as that comes down. Steep (looks 0, 1): the nose 60 to 80 degrees down;
+				// flat (2, 3): 20 to 40 degrees down. A fighter winds down one turn every two or three seconds (120 to
+				// 160 degrees a second), a bomber slower and heavier (36 to 54), the turn building over its first second
+				// (the audit's 4.3).
 				const bool bSteep = C.Look < 2;
-				const double Turns = C.bHeavy ? (bSteep ? 0.3 + 0.3 * C.Look : 0.2) : (bSteep ? 1.0 + 1.0 * C.Look : 0.5 + 0.2 * (C.Look - 2));
+				const double Turns = (C.bHeavy ? (bSteep ? 0.1 + 0.05 * C.Look : 0.15) : (bSteep ? 0.34 + 0.08 * C.Look : 0.4 + 0.05 * (C.Look - 2)))
+				                   * Clamp(C.FallT / 1.0, 0.15, 1.0);
 				const double Radius = bSteep ? 6.0 + C.Form.Span * 0.4 : 14.0 + C.Form.Span * 0.8;
 				C.Spin += C.Turn * Turns * 2.0 * Pi * Dt;
 				C.Axis += C.FallV * Dt;
@@ -3213,14 +3500,15 @@ namespace AirShow
 				C.Hdg = Wrap(C.Spin + C.Turn * Pi * 0.5);
 				const double Nose = bSteep ? 60.0 + 10.0 * C.Look : 20.0 + 15.0 * (C.Look - 2);
 				C.Gam += (-Nose * Deg - C.Gam) * std::min(1.0, Dt * 1.5);
-				C.Bank = C.Turn * 40.0 * Deg;
+				C.Bank += Clamp(C.Turn * 40.0 * Deg - C.Bank, -60.0 * Deg * Dt, 60.0 * Deg * Dt);
 				C.Spd = Turns * 2.0 * Pi * Radius;
 			}
 			else if (C.Falling == FallHow::Wing)
 			{
-				// A wing gone: snap-rolling toward it, 2 to 4 rolls a second a fighter, about 1 a heavy, in a fast
-				// spiral, the nose well down.
-				const double Rolls = C.bHeavy ? 0.8 + 0.15 * C.Look : 2.0 + 0.66 * C.Look;
+				// A wing gone: rolling toward it, hard but readably, at most about one and a half rolls a second a fighter
+				// (360 to 500 degrees a second), a third of one a bomber, in a fast spiral, the nose well down; the roll
+				// building over its first 0.8 s (the audit's 4.3).
+				const double Rolls = (C.bHeavy ? 0.25 + 0.05 * C.Look : 1.0 + 0.13 * C.Look) * Clamp(C.FallT / 0.8, 0.1, 1.0);
 				C.Bank = Wrap(C.Bank + C.Turn * Rolls * 2.0 * Pi * Dt);
 				C.Hdg = Wrap(C.Hdg + C.Turn * 0.9 * Dt);
 				C.Gam += (-65.0 * Deg - C.Gam) * std::min(1.0, Dt * 1.2);
@@ -3229,10 +3517,13 @@ namespace AirShow
 			}
 			else
 			{
-				// A fighter's tail gone: the nose down hard and over and over, end over end.
-				C.Spin += (1.0 + 0.4 * C.Look) * 2.0 * Pi * Dt;
-				C.Gam = Wrap(-C.Spin);
-				C.Bank = 0.0;
+				// A fighter's tail gone: the nose pitches down hard, once, over past the vertical, then it plunges in a
+				// steep dive, wavering (the audit's 4.3: one pitch-over, not a tumble end over end).
+				const double Dive = (-80.0 + 6.0 * std::sin(C.FallT * 2.3)) * Deg;
+				if (C.Spin < 1.0) C.Gam -= 150.0 * Deg * Dt; // (the pitch-over: from its line on down to 110 degrees)
+				if (C.Gam < -110.0 * Deg) C.Spin = 1.0;
+				if (C.Spin >= 1.0) C.Gam += Clamp(Dive - C.Gam, -60.0 * Deg * Dt, 60.0 * Deg * Dt);
+				C.Bank += Clamp(-C.Bank, -90.0 * Deg * Dt, 90.0 * Deg * Dt);
 				C.P += C.FallV * Dt;
 				C.Spd = Len(C.FallV);
 			}
@@ -3289,6 +3580,13 @@ namespace AirShow
 			C.P += Ahead(C.Hdg, C.Gam) * (C.Spd * Dt);
 			C.FallV = Ahead(C.Hdg, C.Gam) * C.Spd;
 		}
+		// (no fall rolls faster than the eye can follow: a wing-off roll at most 540 degrees a second, any other 300;
+		// eased in, at most 120 a second, over its first 0.75 s; never over 10 degrees in a sixtieth of a second)
+		if (Dt > 0.0)
+		{
+			const double Most = (C.FallT < 0.75 ? 120.0 : C.Falling == FallHow::Wing ? 540.0 : 300.0) * Deg * Dt;
+			C.Bank = Wrap(Bank0 + Clamp(Wrap(C.Bank - Bank0), -Most, Most));
+		}
 		const Vec Moved = bTumbling ? (C.Falling == FallHow::Spin ? C.FallV + Ahead(C.Hdg) * C.Spd : C.FallV) : Velocity(C);
 		if (C.TrailKey) Emit(FxKind::TrailMove, C.Falling == FallHow::Flamer ? C.P : Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), std::string(), C.TrailKey).Vel = Moved;
 		// (the ground where it is now, after this frame's move: on a steep slope, where it was is not where it lands)
@@ -3333,8 +3631,19 @@ namespace AirShow
 			if (bStruck)
 			{
 				const double Off = std::fabs(C.FallT - C.Dur);
-				(Off <= std::max(6.0, 0.25 * C.Dur) ? Check.FallsOnTime : Check.FallsOffTime) += 1;
-				Check.MostOffTime = std::max(Check.MostOffTime, Off);
+				// (one begun low, a torpedo plane at wave-top, is in the sea at once: sooner than the battle's time for a
+				// fall from its band, which it cannot take; the loss itself is the battle's. So is one begun too low for
+				// the battle's time even at the slowest an aeroplane comes down, 8 m/s, a long glide out of a fight down
+				// low: it took as long as it could, the design director's (a))
+				if (C.FallT < C.Dur && (C.FallHigh < LowFallM || C.FallT >= (C.FallHigh - Floor) / 8.0 - 6.0)) Check.FallsLow++;
+				// (drawn higher than the battle's band, the fall takes as long as an aeroplane takes from there, never
+				// steeper: VTop, the design director's (a))
+				else if (C.FallT > C.Dur && C.FallT <= C.FallHigh / std::max(1.0, C.VTop * 0.95) + 6.0) Check.FallsTrue++;
+				else
+				{
+					(Off <= std::max(6.0, 0.25 * C.Dur) ? Check.FallsOnTime : Check.FallsOffTime) += 1;
+					Check.MostOffTime = std::max(Check.MostOffTime, Off);
+				}
 			}
 			if (bStruck)
 			{
@@ -3588,7 +3897,8 @@ namespace AirShow
 		C.FallName = How;
 		C.Look = std::clamp(E.Look, 0, 3);
 		C.Turn = E.Roll < 0 ? -1.0 : E.Roll > 0 ? 1.0 : (E.Hand < 0 ? -1.0 : E.Hand > 0 ? 1.0 : C.Hand);
-		C.bHeavy = !C.bFighter && C.Form.Engines.size() >= 2;
+		// (every bomber falls as a bomber, slow and heavy: the Kate, the Val and the Dauntless too, the audit's 4.3)
+		C.bHeavy = !C.bFighter;
 		C.FireAt = E.FireAt;
 		C.BoomAt = E.Boom;
 		C.bDitch = E.bDitch;
@@ -3596,6 +3906,7 @@ namespace AirShow
 		C.Ended = -1.0;
 		C.Spin = 0.0;
 		C.FallV = Velocity(C);
+		C.FallHigh = C.P.Z - GroundAt(C.P.X, C.P.Y);
 		// (an old recording says nothing of how long: a fighter is down in under a minute from its height, a heavy longer)
 		C.Dur = E.Dur > 0.0 ? E.Dur : (C.bFighter ? 45.0 : 75.0);
 		// A collision: the fighter comes apart; the bomber loses what it hit, a wing (looks 0, 1) or its tail (2, 3).
@@ -3905,7 +4216,7 @@ namespace AirShow
 			const double For = std::max(E.For, 3.0);
 			if (E.Mark == "fireout")
 			{
-				C.DeadEngines = { Engine };
+				C.DeadEngines.assign(1, Engine); // (not "= { Engine }": GCC 13 under the sanitizers takes that for a read past its end, -Warray-bounds)
 				C.bFeathered = E.bFeather || N > 1;
 				C.bFireOut = true;
 				if (C.SootAt < 0.0) C.SootAt = AirT;
@@ -3945,6 +4256,12 @@ namespace AirShow
 		C.StickSize = C.StickLeft = bTorpedo ? 1 : BombsOf(C.Model, C.Form.Span, C.bFighter);
 		C.bStickTorpedo = bTorpedo;
 		if (!C.bRunHeld) C.RunHdg = C.Hdg;
+		if (bTorpedo)
+		{
+			Check.TorpedoDropAt.push_back(C.P.Z - GroundAt(C.P.X, C.P.Y));
+			Check.TorpedoDropSpeed.push_back(C.Spd);
+			Check.TorpedoDropModel.push_back(C.Model);
+		}
 		const auto G = Now.find(C.Group);
 		C.bStickBay = !C.bFighter && !bTorpedo && C.Doing != Role::Dive && C.StickSize > 1 && (G == Now.end() || G->second.Strike != "dive");
 		C.StickNext = C.bStickBay && C.Bay < 1.0 ? AirT + (1.0 - C.Bay) * BayOpenS + 0.1 : AirT;
@@ -6979,6 +7296,9 @@ namespace AirShow
 			}
 			P.Speed = C.Spd;
 			P.DeadEngines = C.DeadEngines;
+			// (its vapour trail: from the day's trail height, full 600 m over it; none falling or with every engine dead)
+			const bool bEngines = C.Form.Engines.empty() || C.DeadEngines.size() < C.Form.Engines.size();
+			P.Vapour = TrailM > 0.0 && C.Doing != Role::Fall && C.Doing != Role::Gone && C.Doing != Role::Ground && bEngines ? Clamp((C.P.Z - TrailM) / 600.0, 0.0, 1.0) : 0.0;
 			P.bFeathered = C.bFeathered;
 			P.Soot = C.SootAt >= 0.0 ? std::max(0.0, std::min(1.0, (AirT - C.SootAt) / 30.0)) : 0.0;
 			P.Bay = C.Bay * C.Bay * (3.0 - 2.0 * C.Bay); // (eased at both ends)

@@ -95,6 +95,10 @@ namespace AirShow
 		/** The view named no model: the place's main one of its kind stands in until a view names it. */
 		bool bModelGuessed = false;
 		double X = 0.0, Y = 0.0, Alt = 0.0, Face = 0.0, W = 400.0, D = 300.0, Speed = 0.0;
+		/** Alt is the height drawn (the view's extra.drawAlt where it gives one, and the show's own let-down for a
+		 * torpedo group, Show::Heights); CountAlt the battle's own height band (extra.alt), which nothing drawn reads. */
+		double CountAlt = 0.0;
+		bool bAbreast = false; // a torpedo group on its approach: low abreast, each on its own line to the ships
 		double Ammo = 1.0, Run = 0.0;
 		/** The pilots' brief (shown, never counted; -1 where an older recording does not say): the enemy group a fighter
 		 * group is making for, the bomber group an escort guards, and its pilots' skill, 0 to 1. */
@@ -310,6 +314,10 @@ namespace AirShow
 		/** A fighter flying another's wing: his leader's key (-1: he leads, or flies alone). */
 		int Leader = -1;
 		double Speed = 0.0;    // metres a second along its path
+		/** Its vapour trail, 0 to 1 (the audit's 4.12): 0 under the day's trail height (Show::TrailM), building to 1 over
+		 * the 600 m above it; 0 when it is falling or its engines are dead. For the effects kit's vapour trail, one
+		 * strip an engine (the plan's effects item 1; the kit has no such trail kind yet): how thick it streams. */
+		double Vapour = 0.0;
 		/** Its dead engines (from 1, as the model's engine.N), their airscrews feathered (stopped) or windmilling, and
 		 * how far the soot behind them has built, 0 to 1 over about 30 s from when the engine died (the art director:
 		 * it builds over 20 to 40 s and stays, after a fire is out and back in the box too). */
@@ -420,6 +428,19 @@ namespace AirShow
 		long WingSamples = 0, WingFar = 0; // those steps, and those of them over 500 m from his leader
 		double LongestWait = 0.0;          // air seconds the longest any leader went between passes on a box
 		double LowestFight = 1e9;          // metres over the ground or the sea, the lowest a fighter flew in a fight (not a strafing run)
+		double LowestChase = 1e9;          // (and the lowest one flew after a torpedo plane at wave-top, over the sea: not counted above)
+		/** The torpedo planes (the audit's 4.5): the lowest one flew over the sea or the ground, not falling; how many
+		 * torpedoes went and the least, middle and most height and speed of the plane as each left; falls begun low
+		 * (under LowFallM over the ground or the sea, or too low for the battle's time at 8 m/s), which strike sooner
+		 * than the battle's time for the fall. */
+		double TorpedoLowest = 1e9;
+		std::vector<double> TorpedoDropAt, TorpedoDropSpeed;
+		std::vector<std::string> TorpedoDropModel;
+		int FallsLow = 0;
+		int FallsTrue = 0;                 // falls from a height drawn over the battle's band, as long as an aeroplane takes from there
+		/** Dive bombers after their pull-out and torpedo planes after their drop: the highest one flew over the ground or the sea
+		 * (they leave low and never climb back). */
+		double LeftLowMost = 0.0;
 		// The gunnery (AirShow.cpp, "The gunnery"): only a hit the battle counted is drawn striking.
 		int Bursts = 0, BurstsOn = 0;      // fighters' bursts; those of them that struck an aircraft
 		int BurstsAsked = 0;               // of the bursts, those a pilot opened because a hit the battle had counted was his to make
@@ -501,6 +522,14 @@ namespace AirShow
 		 * her place in a box, rolling no faster than HeavyRollMost degrees a second, and no more than HeavyBankMost out of
 		 * it (straggling, covering, going home); falling, she goes as she falls.
 		 */
+		/** The day's vapour-trail height, metres over the sea (0: none that day); AirFeed::Apply sets it from the place
+		 * and month (AirFeed::TrailHeight), never a draw of its own. */
+		double TrailM = 0.0;
+		/** Torpedo planes: wave-top over the sea (metres), the height they break away at, and that past a ship's masts. */
+		double TorpedoLowM = 18.0, TorpedoAwayM = 30.0, TorpedoHopM = 55.0;
+		/** A fall begun lower than this over the ground or the sea strikes as soon as it can (the loss is the battle's;
+		 * only its time down is shorter than the battle's figure for a fall from the band). */
+		double LowFallM = 400.0;
 		double StickSteady = 1.5, RunBankMost = 2.0, RallyBankMost = 20.0, HeavyBankMost = 30.0, HeavyRollMost = 5.0;
 		/**
 		 * Drop on the lead and the rally (Brian, 22 November 04:11Z). A level bombing box lets its bombs go on its lead:
@@ -644,6 +673,7 @@ namespace AirShow
 			double StragAt = -1.0;   // the air time it fell out of its box
 			FallHow Falling = FallHow::None;
 			double FallT = 0.0;
+			double FallHigh = 0.0;   // metres over the ground or the sea as its fall began
 			double FallDeck = 0.0;   // 1 while its fall may still pass into the deck (as Thing::Deck), else 0
 			bool bDebrisToDeck = false; // its debris row was told the deck (it began over a drawn tile's foot)
 			double DebrisDeck = 0.0; // the height its debris row was told, where its pieces leave sight
@@ -737,6 +767,7 @@ namespace AirShow
 			double RunHdg = 0.0;      // (her heading as she dropped: held, wings level, until her stick has gone)
 			bool bRunHeld = false;    // (her doors full open on her run: her heading held from then, as her bombardier flew her)
 			double DropDue = -1.0;    // (the air time she lets her stick go on her lead's: -1, none due)
+			bool bRunDone = false;    // (a torpedo plane: her run in, her drop and her break-away flown; back in her place)
 			Vec LastP;
 			bool bHasLast = false;
 			// The gunnery (AirShow.cpp, "The gunnery"):
@@ -1043,6 +1074,10 @@ namespace AirShow
 		void Squeeze(Craft& C, Craft& T, const Group& G, double Range, double Most, double Lo, double Hi, double Dt);
 		/** Not into the ground: a command eased level, or up, by how low he is and how fast he is coming down. */
 		void MindGround(const Craft& C, Cmd& K, double Least = 220.0) const;
+		/** A fighter after a torpedo plane flying under 300 m over the sea: her height over it (0: not so). */
+		double Chasing(const Craft& C) const;
+		/** The highest ground or sea under an aircraft and on its way over the next 3 s (high ground coming up). */
+		double FloorAhead(const Craft& C) const;
 		void Ease(const Craft& C, Cmd& K, double Most) const;
 		/** A command sharpened for the last of a firing pass: his nose on to the aim as hard as his aircraft turns. */
 		void Bear(const Craft& C, Cmd& K) const;
@@ -1055,6 +1090,30 @@ namespace AirShow
 		int DueAllOn(int Victim, int By) const;
 		int RunsOn(int Box, int By) const;
 		void PilotDive(Craft& C, const Group& G, double Dt);
+		/** A torpedo plane's run in at wave-top, her drop at her type's own speed, and her break-away low and straight on
+		 * past the ships (the audit's 4.5). */
+		void PilotTorpedo(Craft& C, const Group& G, double Dt);
+		/** The heights drawn (the audit's 4.5 and 4.12; the design director's ruling of 22 November, 05:00Z): a
+		 * torpedo group let down by its distance from the target, about 450 m by the time its fight starts (or 25 km
+		 * out), 150 m at 10 km and wave-top, TorpedoLowM, from 3 km; a level or dive group at its kind's true height
+		 * (TrueBand); dive and torpedo groups low after their attack and never back up; an escort kept on its bombers'
+		 * as the battle has it. Each frame, after Interpolate, on the groups shown. */
+		void Heights();
+		/** A bomber group's true height by its kind, metres over the sea, as the record has it (the design director's
+		 * table): In, the height it comes in at; From, the height a dive bomber goes over from (0: the battle's own
+		 * band is kept). The Kate's level bombing at Pearl Harbor about 3,000 m; the Val in at about 4,000 m and over
+		 * from it; the Dauntless in at 4,900 to 6,400 m (5,600) and over from about 4,500 m. The B-17's 7,900 to 8,700 m
+		 * waits on the flak: the battle names Bremen's guns by kind (place.flakGuns), and no heavy gun the count has
+		 * reaches that high, so her band is kept until the design director rules (NOTES.md). */
+		static void TrueBand(const Group& G, double& In, double& From);
+		std::map<int, double> DrawnOver; // a torpedo group's height drawn over the ground or the sea
+		std::set<int> Fought;          // torpedo groups whose fight has begun
+		std::map<int, double> DroppedAt; // the air time a torpedo group's drop began
+		double DrawnAt = -1.0;
+		/** The type's own speed at the drop, metres a second: the Devastator's Mark 13 at about 100 knots, the Kate's
+		 * Type 91 at about 140 (the plan's 45 to 57 and 51 to 82). */
+		static double TorpedoSpeed(const std::string& Model);
+		const Ship* NearestShip(double X, double Y) const;
 		void PilotFall(Craft& C, double Dt);
 		void PilotGround(Craft& C, const Group& G, double Dt);
 		void FireGuns(double Dt);

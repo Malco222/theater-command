@@ -82,10 +82,15 @@ namespace AirFeed
 		bool bNorthGiven = false;
 		/** The place's latitude in degrees north (place.lat), for the sun over a raid with no stage; none given: NaN. */
 		double Latitude = std::numeric_limits<double>::quiet_NaN();
+		/** The day's vapour-trail height, metres (TrailHeight: from the place's weather zone and month, never a draw). */
+		double TrailM = 0.0;
 		/** The day's sky (place.cloud): a deck or scattered cumulus, its base and top; absent, cumulus. */
 		AirSky::Day Cloud;
 	};
 	bool ReadSky(const Json& J, Sky& Out);
+	/** The day's vapour-trail height, metres, by the weather zone (place.cloud.zone), the month (from 0) and the
+	 * latitude (NaN: not given). */
+	double TrailHeight(const std::string& Zone, int Month, double Latitude);
 	/** Hands the board and the loadouts to the show. */
 	void Apply(const Sky& S, AirShow::Show& Show);
 	/** Where and for what battle its sky is laid: the battle's seed, the target, the raid's bands (of the raider's

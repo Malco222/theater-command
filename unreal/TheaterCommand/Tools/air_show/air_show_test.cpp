@@ -772,6 +772,13 @@ int main(int Argc, char** Argv)
 	// diving (her nose more than 30 degrees down, not falling), it must be on; and once off, within 5 air s of the last
 	// of those or of the last hit on a ship shown (the bomb or torpedo having struck).
 	long StrikeNeed = 0, StrikeMiss = 0, StrikeOnFrames = 0, StrikeEnds = 0;
+	// The vapour trails (PlaneOut::Vapour, the audit's 4.12): none under the day's trail height; the most seen.
+	// (falls the eye can follow, the audit's 4.3: each falling aircraft's bank frame to frame, and the air time)
+	std::map<int, std::pair<double, double>> FallBankWas;
+	long FallBankSteps = 0, FallBankFast = 0;
+	double FallBankMost = 0.0;
+	long VapourLow = 0, VapourOn = 0;
+	double VapourMost = 0.0;
 	double StrikeLast = -1e9, StrikeLateMost = 0.0;
 	bool bStrikeWas = false;
 	std::map<int, int> StickBox;
@@ -1349,6 +1356,26 @@ int main(int Argc, char** Argv)
 			for (const AirShow::PlaneOut& P : PlanesNow) bNeed = bNeed || (!P.bFighter && !P.bFalling && P.bShown && !P.bOnGround && P.Pitch < -30.0);
 			for (const AirShow::Fx& E : Show.Effects)
 				if (E.Kind == AirShow::FxKind::ShipHit || E.Kind == AirShow::FxKind::ShipSunk) StrikeLast = Show.AirNow();
+			for (const AirShow::PlaneOut& P : PlanesNow)
+			{
+				VapourLow += P.Vapour > 0.0 && (Show.TrailM <= 0.0 || P.At.Z < Show.TrailM) ? 1 : 0;
+				VapourOn += P.Vapour > 0.0 ? 1 : 0;
+				VapourMost = std::max(VapourMost, P.Vapour);
+				if (!P.bFalling || !P.bShown)
+				{
+					FallBankWas.erase(P.Key);
+					continue;
+				}
+				const auto Was = FallBankWas.find(P.Key);
+				if (Was != FallBankWas.end() && Show.AirNow() > Was->second.second + 1e-9)
+				{
+					const double Rate = std::fabs(std::remainder(P.Bank - Was->second.first, 360.0)) / (Show.AirNow() - Was->second.second);
+					++FallBankSteps;
+					FallBankMost = std::max(FallBankMost, Rate);
+					FallBankFast += Rate > 600.0 ? 1 : 0;
+				}
+				FallBankWas[P.Key] = { P.Bank, Show.AirNow() };
+			}
 			const bool bOn = Show.StrikeOn();
 			StrikeOnFrames += bOn ? 1 : 0;
 			if (bNeed)
@@ -1643,8 +1670,9 @@ int main(int Argc, char** Argv)
 		{ "parachutes as the battle says", C.Chutes >= EventsChutes * 8 / 10, std::to_string(C.Chutes), "at least 8 in 10 of the battle's" },
 		{ "every way down played as the battle names it", [&]() { int Off = 0; for (const auto& [How, N] : EventsHow) { const auto It = C.FallsBy.find(How); Off += std::abs(N - (It == C.FallsBy.end() ? 0 : It->second)); } return Off <= 2; }(),
 		  [&]() { std::string Text; for (const auto& [How, N] : C.FallsBy) Text += How + " " + std::to_string(N) + " "; return Text; }(), "the battle's, within 2" },
-		{ "falls strike when the battle says", C.FallsOffTime <= std::max(1, (C.FallsOnTime + C.FallsOffTime) / 20), std::to_string(C.FallsOnTime) + " on time, " + std::to_string(C.FallsOffTime) + " off, worst " + Num(C.MostOffTime, 1) + " s",
-		  "within a quarter of dur, 1 in 20 may miss" },
+		{ "falls strike when the battle says", C.FallsOffTime <= std::max(1, (C.FallsOnTime + C.FallsOffTime) / 20), std::to_string(C.FallsOnTime) + " on time, " + std::to_string(C.FallsOffTime) + " off, worst " + Num(C.MostOffTime, 1) + " s; " +
+		  std::to_string(C.FallsLow) + " begun too low for the battle's time, in as slowly as an aeroplane comes down; " + std::to_string(C.FallsTrue) + " drawn from over the battle's band, as long as an aeroplane takes",
+		  "within a quarter of dur, 1 in 20 may miss (a fall begun under LowFallM, 400 m, or too low to last the battle's time at 8 m/s, strikes as soon as it can: the audit's 4.5; one drawn higher takes as long as it must, never steeper: 4.12)" },
 		{ "parachutes open when the battle says", C.ChutesOffTime == 0, std::to_string(C.ChutesOffTime), "0 late" },
 		{ "hits survived shown", C.HitsShown >= EventsHits * 9 / 10, std::to_string(C.HitsShown) + " of " + std::to_string(EventsHits), "9 in 10" },
 		{ "fires put out", C.FiresOut >= EventsFiresOut * 7 / 10, std::to_string(C.FiresOut) + " of " + std::to_string(EventsFiresOut), "7 in 10" },
@@ -1766,6 +1794,13 @@ int main(int Argc, char** Argv)
 		  std::to_string(StickHits) + " sticks and " + std::to_string(OneHits) + " single bombs heard landing; " + std::to_string(C.Rushes) + " rushes near the eye; " +
 		  std::to_string(Sounds.count("bomb_stick_01") ? Sounds["bomb_stick_01"] : 0) + " stick sounds at the drop",
 		  "a landing heard for each stick, none at the drop" },
+		{ "dive bombers and torpedo planes leave low, never climbing back", C.LeftLowMost <= 500.0, Num(C.LeftLowMost) + " m the highest one flew after her dive or her drop",
+		  "at most 500 m over the ground or the sea, under her bomb's 600 (the design director's ruling: they leave low, never climb back)" },
+		{ "a fall leans and rolls as the eye can follow", FallBankFast == 0,
+		  std::to_string(FallBankSteps) + " frames of falls; the bank turned at most " + Num(FallBankMost) + " degrees an air second; " + std::to_string(FallBankFast) + " frames faster than 600",
+		  "never over 10 degrees in a sixtieth of an air second (600 a second; the audit's 4.3)" },
+		{ "vapour trails only over the day's trail height", VapourLow == 0, "the day's height " + Num(Show.TrailM) + " m; " + std::to_string(VapourOn) + " aircraft-frames trailing, " + std::to_string(VapourLow) + " under it; most " + Num(VapourMost, 2),
+		  "none under it" },
 		{ "the strike is on while bombs fall and dives go down", StrikeMiss == 0 && StrikeLateMost <= 5.0 && (StrikeNeed == 0 || StrikeEnds > 0),
 		  std::to_string(StrikeNeed) + " frames with a bomb or torpedo in the air or a bomber diving, " + std::to_string(StrikeMiss) + " of them off; on " + std::to_string(StrikeOnFrames) +
 		  " frames, off " + std::to_string(StrikeEnds) + " times, at most " + Num(StrikeLateMost, 2) + " air s after the last had struck",
@@ -1783,7 +1818,23 @@ int main(int Argc, char** Argv)
 		{ "a pilot with an enemy on his tail does something about it", C.Threats < 5 || C.Evasions > 0, std::to_string(C.Evasions) + " evasions for " + std::to_string(C.Threats) + " threats seen", "some" },
 		{ "a scissors is won only after its crossings, and never drags on", C.ScissorTurns >= 2 * C.ScissorWins && C.LongestScissors <= 24.0, std::to_string(C.Scissors) + " scissors, " + std::to_string(C.ScissorTurns) + " rolls back, " + std::to_string(C.ScissorWins) + " won, longest " + Num(C.LongestScissors, 1) + " s", "two rolls back or more for each one won, none over 24 air s" },
 		{ "an escort in a fight goes after the attackers", !bEscortFought || C.FallsByFighters == 0 || C.GuardChases + C.Covers > 0, std::to_string(C.GuardChases) + " chases off its box, " + std::to_string(C.Covers) + " off a partner's tail", "some" },
-		{ "no fighter fights into the ground", C.LowestFight >= 60.0, Num(C.LowestFight > 1e8 ? 0.0 : C.LowestFight), "at least 60 m over it (a strafing run apart)" },
+		{ "no fighter fights into the ground", C.LowestFight >= 60.0 && C.LowestChase >= 10.0, Num(C.LowestFight > 1e8 ? 0.0 : C.LowestFight) + " m; after torpedo planes over the sea " + (C.LowestChase > 1e8 ? std::string("none") : Num(C.LowestChase) + " m"),
+		  "at least 60 m over it (a strafing run apart); after a torpedo plane at wave-top over the sea, at least 10 m" },
+		{ "torpedoes go at wave-top, at the type's own speed", [&]() {
+			  for (size_t K = 0; K < C.TorpedoDropAt.size(); ++K)
+			  {
+				  const std::string& M = C.TorpedoDropModel[K];
+				  const double Lo = M == "TBD" ? 45.0 : M == "B5N" ? 51.0 : 38.0, Hi = M == "TBD" ? 57.0 : M == "B5N" ? 82.0 : 85.0;
+				  if (C.TorpedoDropAt[K] < 10.0 || C.TorpedoDropAt[K] > 25.0 || C.TorpedoDropSpeed[K] < Lo || C.TorpedoDropSpeed[K] > Hi) return false;
+			  }
+			  return C.TorpedoLowest >= 5.0; }(),
+		  [&]() {
+			  if (C.TorpedoDropAt.empty()) return std::string("no torpedoes");
+			  const auto [AtLo, AtHi] = std::minmax_element(C.TorpedoDropAt.begin(), C.TorpedoDropAt.end());
+			  const auto [VLo, VHi] = std::minmax_element(C.TorpedoDropSpeed.begin(), C.TorpedoDropSpeed.end());
+			  return std::to_string(C.TorpedoDropAt.size()) + " torpedoes (" + C.TorpedoDropModel.front() + ") let go " + Num(*AtLo, 1) + " to " + Num(*AtHi, 1) + " m over the sea at " + Num(*VLo, 1) + " to " + Num(*VHi, 1) +
+			         " m/s; the lowest a torpedo plane flew " + Num(C.TorpedoLowest, 1) + " m"; }(),
+		  "10 to 25 m; the Devastator 45 to 57 m/s, the Kate 51 to 82; none under 5 m (never touching the water)" },
 		{ "a frame fits the budget", TotalMs / std::max(1L, Frames) < 2.0, Num(TotalMs / std::max(1L, Frames), 3), "under 2 ms on average" },
 	};
 	// The gunnery (AirShow.cpp, "The gunnery"; GunWatch and FlyForGuns, above). Brian, 21 November: "make sure the gun
@@ -3271,10 +3322,12 @@ int main(int Argc, char** Argv)
 		// (taken from the falls the peak can reach, those begun no higher than its 4.5 km cap and 150 m: a battle whose
 		// fighters fight high, as Midway's patrols do when their staff climbs them over their own fleet, the tactics
 		// panel's S1, still has falls begun under the tiles lifted over it; every fall, where none begins that low)
+		// (and above the deck's laid top: only those can begin above it and under a tile lifted over the peak; not the
+		// torpedo planes' falls at wave-top, nor those of the dive bombers' low run home)
 		std::vector<double> PeakXs, PeakYs, PeakZs;
 		for (const AirSky::Vec& F : FallsAt)
 		{
-			if (F.Z > 4650.0) continue;
+			if (F.Z > 4650.0 || F.Z <= Over.DeckTop) continue;
 			PeakXs.push_back(F.X);
 			PeakYs.push_back(F.Y);
 			PeakZs.push_back(F.Z);
