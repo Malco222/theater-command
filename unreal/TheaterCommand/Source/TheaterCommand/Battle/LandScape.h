@@ -24,6 +24,8 @@
  *   Jungle   Burma, Malaya, New Guinea, the Solomons: canopy, undergrowth, kunai grass, red earth tracks, stilt villages
  *   Island   the Pacific's beaches and atolls: coral sand, palm groves, the reef's edge (the Jungle's file, its shore)
  *   Farmland the open fields of central and eastern Europe (the steppe's country where no recording lays it)
+ *   Dry      the dry steppe east of the Volga: Mongolia and Khalkhin Gol, Kazakhstan, Iran, the Horn of Africa: short dry
+ *            grass, sand, no farms, yurts
  *
  * and Snow over any of them (the Ardennes, Moscow, Stalingrad, Karelia, Cassino's mountains).
  *
@@ -44,6 +46,7 @@ namespace LandScape
 		Jungle,
 		Island,
 		Farmland,
+		Dry,      // LandDry: the dry steppe (Khalkhin Gol, 1939)
 		Count
 	};
 	const char* NameOf(Look L);
@@ -75,6 +78,8 @@ namespace LandScape
 		double Contrast = 1.42;                      // BattleLook's
 		double Toe = 0.55;                           // the film's toe (Unreal's own)
 		double KeyKelvin = 0.0;                      // 0: the battle's own
+		double Cover = -1.0;                         // the cloud's usual share (the desert's clear sky), for the cloud painter where
+		                                             // the recording gives its own; the game keeps the battle's weather draw
 	};
 	Air AirOf(Look L, double Snow);
 
@@ -321,6 +326,8 @@ namespace LandScape
 		virtual void KitLook(int Slot, LandField::BaseMesh& M) const { (void)Slot; (void)M; }
 		/** A plain stand-in for a kit slot whose file is not given. */
 		virtual void KitPlain(int Slot, LandField::BaseMesh& M) const;
+		/** A kit slot the region builds itself in KitPlain (a yurt, a cairn), with no file to read or to miss. */
+		virtual bool KitBuilt(int Slot) const { (void)Slot; return false; }
 		/** A clutter slot's mesh (Clut0..Clut5), built here. */
 		virtual void ClutterMesh(int Slot, LandField::BaseMesh& M) const { (void)Slot; (void)M; }
 
@@ -372,11 +379,12 @@ namespace LandScape
 	std::unique_ptr<Region> Make(Look L, const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnow(double Cover, Look L, uint64_t Seed);
 
-	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandSnow.cpp).
+	// Each region's own file makes it (LandDesert.cpp, LandMed.cpp, LandTropic.cpp, LandFarm.cpp, LandDry.cpp, LandSnow.cpp).
 	std::unique_ptr<Region> MakeDesert(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeMed(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Region> MakeTropic(const LandField::Field& F, uint64_t Seed, bool bIsland);
 	std::unique_ptr<Region> MakeFarm(const LandField::Field& F, uint64_t Seed);
+	std::unique_ptr<Region> MakeDry(const LandField::Field& F, uint64_t Seed);
 	std::unique_ptr<Snow> MakeSnowCover(double Cover, Look L, uint64_t Seed);
 
 	/** A small mesh writer for regions' own meshes (clutter, plain kit): points with normals and colours. */

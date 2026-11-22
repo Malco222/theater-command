@@ -170,6 +170,7 @@ namespace LandScape
 		case Look::Jungle: return "jungle";
 		case Look::Island: return "island";
 		case Look::Farmland: return "farmland";
+		case Look::Dry: return "drysteppe";
 		default: return "";
 		}
 	}
@@ -180,6 +181,7 @@ namespace LandScape
 			if (Word == NameOf(static_cast<Look>(K))) return static_cast<Look>(K);
 		if (Word == "mediterranean" || Word == "drysouth" || Word == "italy") return Look::Med;
 		if (Word == "pacific" || Word == "beach" || Word == "atoll") return Look::Island;
+		if (Word == "dry" || Word == "mongolia" || Word == "khalkhin") return Look::Dry;
 		return Look::Count;
 	}
 
@@ -220,6 +222,9 @@ namespace LandScape
 			}
 			return All && Water * 12 > All ? Look::Island : Look::Jungle;
 		}
+		// The dry steppe east of the Volga (Mongolia, Khalkhin Gol, Kazakhstan, Iran, the Horn): short grass and sand, no
+		// farms. The lower Don and the Volga by Stalingrad stay the east's farmland and its winter.
+		if (Is(C, "steppe") && !(F.Lon > 38.0 && F.Lon < 47.0 && F.Lat > 43.0)) return Look::Dry;
 		// Normandy, Brittany and Maine (the bocage proper) and the hedged fields of England keep the bocage.
 		// (the bocage proper: Normandy, Maine, Brittany and the Vendée; Flanders, Picardy and Champagne east of it are open
 		// farmland, and so is France in 1940 from Sedan to the Somme: the production lead, 22 November)
@@ -245,6 +250,7 @@ namespace LandScape
 		if (F.Terrain == "mountain") W += 0.3;
 		else if (F.Terrain == "hills") W += 0.1;
 		if (L == Look::Med) W = F.Terrain == "mountain" ? 0.6 : F.Terrain == "hills" ? 0.3 : 0.0;
+		if (L == Look::Dry) W *= 0.75; // (the dry steppe's winter is hard, but its snow thin and blown)
 		const int M = F.Month;
 		const double ByMonth = (M == 12 || M == 1 || M == 2) ? 1.0 : (M == 11 || M == 3) ? (W > 0.85 ? 0.9 : 0.5) : (M == 10 || M == 4) ? (W > 0.95 ? 0.4 : 0.0) : 0.0;
 		const double Cold = W * ByMonth;
@@ -282,9 +288,10 @@ namespace LandScape
 			A.bSet = true;
 			Ink(A.HazeInk, 0.85, 0.74, 0.56);
 			Ink(A.HazeOvercast, 0.66, 0.61, 0.52);
-			A.HazeDensity = 0.0071;
+			A.HazeDensity = 0.0055; // (pushed out from the set's 3,400 m to some 4,400 m on a clear day, so the escarpment's face reads at two kilometres: the art director's read, 18:30Z)
 			A.SkyDust = 1.15;
 			Grade(0.55, 0.66, 1.25, -0.6, 0.55, 1.02, 0.96);
+			A.Cover = 0.05; // (the desert's own clear, deep sky and hard shadows: the art director's read, 18:30Z)
 			break;
 		case Look::Med:
 			// (drysouth.json: a blue-grey haze, B3BFCC at 2,400 m; the hills behind fade in steps)
@@ -314,6 +321,16 @@ namespace LandScape
 			break;
 		case Look::Farmland:
 			A.bSet = true;
+			break;
+		case Look::Dry:
+			// (the high continental air of Mongolia in summer: clear, a pale blue-grey haze and a little dust, the sight
+			// long, some 6,000 m; the art director's summer steppe grade)
+			A.bSet = true;
+			Ink(A.HazeInk, 0.68, 0.70, 0.72);
+			Ink(A.HazeOvercast, 0.55, 0.56, 0.57);
+			A.HazeDensity = 0.0042;
+			A.SkyDust = 0.8;
+			Grade(0.50, 0.55, 1.35, -0.5, 0.55, 1.01, 0.99);
 			break;
 		default: break;
 		}
@@ -403,7 +420,7 @@ namespace LandScape
 		if (!R) return false;
 		OutFolder = R->Folder();
 		for (int K = 0; K < 16; ++K)
-			if (const char* Name = R->KitName(K))
+			if (const char* Name = R->KitName(K); Name && !R->KitBuilt(K))
 				if (std::find(OutNames.begin(), OutNames.end(), Name) == OutNames.end()) OutNames.push_back(Name);
 		return !OutFolder.empty() && !OutNames.empty();
 	}
@@ -417,6 +434,7 @@ namespace LandScape
 		case Look::Jungle: return MakeTropic(F, S, false);
 		case Look::Island: return MakeTropic(F, S, true);
 		case Look::Farmland: return MakeFarm(F, S);
+		case Look::Dry: return MakeDry(F, S);
 		default: return nullptr;
 		}
 	}
