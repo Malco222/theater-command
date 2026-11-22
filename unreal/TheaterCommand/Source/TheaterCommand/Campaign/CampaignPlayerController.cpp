@@ -10653,6 +10653,12 @@ void ACampaignPlayerController::WatchNextStep()
 	const double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.Sinkings.Num() > 0 ? 6.4 : Step.SeaFights.Num() > 0 && Step.Battles.Num() == 0 ? (Step.bMine ? 2.4 : 1.4) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
 	Notify(Step.Note, Pause + 0.3);
 	WatchNext = FPlatformTime::Seconds() + Pause;
+	// ---- (release 2, the front you can read: the ink of this step's ground runs within the step, so the next step never cuts it short)
+	if (Map.IsValid())
+	{
+		Map->FitInk(Pause);
+	}
+	// ---- (end release 2)
 }
 
 void ACampaignPlayerController::WatchAgain()
@@ -10690,6 +10696,12 @@ void ACampaignPlayerController::SkipWatching()
 {
 	if (bWatching)
 	{
+		// ---- (release 2, the front you can read: skipped, the month's last changes of ground are laid at once, no ink)
+		if (Map.IsValid())
+		{
+			Map->SkipInk();
+		}
+		// ---- (end release 2)
 		FinishMonth();
 	}
 }
