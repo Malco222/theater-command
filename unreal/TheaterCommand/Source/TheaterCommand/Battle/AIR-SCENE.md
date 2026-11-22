@@ -976,3 +976,48 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    crosses a kilometre; if one does, "-TheaterPlaneShadowM=1500" tries a longer reach (the log then says "Air battle:
    aircraft cast shadows within ..."). Read stat unit's graphics time at Bremen 07 with and without
    "-TheaterPlaneShadowM=100000" (every aircraft casting, as before) and give both.
+31. **Small clouds from above: no cotton balls** (the art director on a1acb552's frames, 22 November 08:13Z, her first
+   mend). Each small cloud (100 to 600 m) is now drawn two to three times as long as it is wide, laid along the wind
+   with a ragged edge, and far off its one far shape is long the same way, never a round dot. They gather: after one,
+   one to five more follow downwind in a short street, with open sea between the clumps and streets; the share of the
+   sky they cover is unchanged. Each casts a soft oval shadow on the sea down-sun (out to 10 km, fading over the last
+   quarter). Look at Pearl 01, 04, 05c, 07 and 09 and Midway 01, 02, 04, 05c and 07: clumps and streets with open sea
+   between, the shadows soft and about 0.75 of the sea's value, no hard edge and no stripes; say if any cloud still
+   reads as a round dot. The cloud check's before and after sheets are in the round's `clouds/` folder.
+32. **The paint flatter again** (her third mend: the P-40 read sand from above, the TBD neutral). The aircraft's paint
+   is now 0.9 rough with 0.15 specular (was 0.78 and 0.3), so the sky's sheen at a grazing look no longer washes it.
+   The log says "Air battle: the aircraft's paint 0.90 rough, 0.15 specular." Pearl 05: the P-40's upper wing olive
+   drab about 95 to 120, red no more than green, blue about 0.65 of green; Midway's TBD blue-grey, blue 10 to 20 over
+   red. If still pale, "-TheaterPlaneInk=0.95,0.08".
+33. **Undersides lit by what is below** (her fourth mend: Bremen 09's B-17 wing 20 to 26 over a deck of 227). The
+   aircraft alone now take a light shining straight up, the colour of what lies under them: over a sunlit cloud deck
+   a near white at 0.67 (the sun is about 7); over the open sea a blue-grey at 0.23; over land a grey-green; none at
+   night. It lights only faces turned down and throws no shadow; the sea, ground, ships and smoke keep their own light.
+   The log says "Air battle: the light from below 0.67, (0.95,0.97,1.00), over ... (the view down 0.77 bright)."
+   Bremen 09: the bellies and wing undersides 80 to 110; Pearl and Midway over the sea 40 to 60, never black.
+   "-TheaterUnderLight=1.5" makes it stronger, 0 takes it away.
+34. **The sea's haze bluer still** (her sixth mend: the horizon at 193,201,212). The haze over the sea is now
+   (0.42, 0.60, 0.88), was (0.40, 0.53, 0.76): blue up some 18 levels at the horizon, green some 10. Midway 01 and
+   Pearl 02: the horizon about 196,212,230; the fade still about 29% of the frame. "-TheaterSeaHazeInk=r,g,b" tries
+   others.
+35. **The strategy view framed by type** (her fifth mend: Bremen's B-17s 145 to 290 pixels, Pearl 01 and Midway 04
+   10 to 25 pixel specks). The look settles on the middle of the aircraft near the crowd it follows (those within
+   350 m), not on empty sky between groups, and stands off so the middle aircraft is about 70 pixels across at 1920 for
+   bombers of 25 m span or more and about 45 for fighters, 250 to 1,500 m away. Each strategy picture writes a line:
+   "Air battle: strategy picture <name>: N groups framed, X m off for a middle span of Y m (about Z pixels across at
+   1920); of N aircraft shown the nearest ... m from the look, ... within 600 m of it; the eye ... m up." On the
+   2881-wide frames a B-17 about 105 pixels, a fighter 60 or more. Send these lines with the frames.
+36. **Bullet holes in walking lines** (her seventh mend; Brian, 04:12Z). A burst's first strike on an aircraft lays a
+   line of holes walking across the skin: machine-gun rounds 6 to 14, 0.3 to 0.8 m apart, each a dark dot about 6 cm
+   wide with a bright bare-metal rim; the same burst's later strikes add 2 or 3. A 20 mm hit lays 2, 0.5 to 1.2 m
+   apart, each a 15 to 25 cm star-shaped tear. Flak lays one torn hole with splinter holes round it out to 1.5 m. The
+   ride for 09 looks at the side with the most marks, from below if most are underneath. Rebuild the decal first
+   (`TC_REBUILD=M_HitMark Tools/build_content.sh`: new Star and MetalColour). Look at 09: lines of small holes, not
+   one big tear; none floating or on the airscrew disc.
+37. **Two new pictures: a dead engine and the parachutes** (her eighth mend). `<key>-10-dead-engine.png` rides an
+   aircraft flying on with an engine out (a bomber before a fighter), the eye on that engine's side, 85 s after the
+   formations meet: its airscrew windmilling slowly or stopped edge-on. Log: "Air battle: dead engine picture on ...:
+   engine N of M out, its airscrew windmilling (or stopped); the eye on its right (or left)", or "... no aircraft flew
+   on with an engine out, so none taken." `<key>-11-parachutes.png` is taken 3 s after three or more open canopies
+   first hang within 1.5 km of each other, the eye some 300 m off them: every canopy drawn. Log: "Air battle:
+   parachutes picture: N open canopies within 1.5 km of the look, the eye ... m from their middle."

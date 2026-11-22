@@ -33,19 +33,24 @@ namespace
 		return 0;
 	}
 
-	/** Each kind's soot, its half width in metres, and its hole's share of that; how dark the soot lies, and how torn the
-	 * edges. A rifle round's hole is a finger's width and its soot a hand's; a 20 mm shell tears a hole the size of a
-	 * plate; a 40 mm or a flak burst's splinters a hole a man could put his head through. Each a little larger than life
-	 * (a few pixels at the ride's 30 to 60 m), as the tracers are drawn brighter than life. */
+	/** Each kind's decal, its half width in metres, and its hole's share of that; how dark the soot lies, how torn the
+	 * edges, and how far a tear's points reach out (M_HitMark's Star, 0 a round hole). The art director on a1acb552's
+	 * frames, 22 November 08:13Z: a machine-gun round's hole a dark dot drawn 5 to 8 cm across (a true 1.5 cm) with a
+	 * bright rim of bare metal, little soot; a 20 mm shell's a star-shaped tear 15 to 25 cm across; a heavy shell's or a
+	 * flak burst's a ragged star some 25 to 40 cm, with its splinters' small holes round it (MarkStrike), not the one
+	 * metre tear Midway 09's Devastator wore. */
 	struct FMarkLook
 	{
-		double Soot, Hole, Dark, Ragged;
+		double Soot, Hole, Dark, Ragged, Star;
 	};
 	constexpr FMarkLook MarkLooks[3] = {
-		{ 0.12, 0.18, 0.75, 0.30 },
-		{ 0.30, 0.30, 0.85, 0.45 },
-		{ 0.55, 0.36, 0.95, 0.60 },
+		{ 0.06, 0.55, 0.35, 0.20, 0.0 },
+		{ 0.20, 0.30, 0.80, 0.35, 0.55 },
+		{ 0.32, 0.35, 0.90, 0.50, 0.35 },
 	};
+	/** The torn skin's bare metal round a hole: bright aluminium, so the rim reads against olive drab and navy blue-grey
+	 * (M_HitMark's own 0.5 grey was lost in the paint). */
+	const FLinearColor MarkMetal(0.78f, 0.79f, 0.80f, 1.0f);
 
 	/** A whole number from an aircraft's key and its strike's count: its holes' places, turns and sizes (no draw of the
 	 * battle's own, so the battle plays the same with or without the marks). */
@@ -137,19 +142,56 @@ void AAirBattle::MarkStrike(const AirShow::Fx& E)
 	const FVector Middle = Attitude.UnrotateVector(Way * Reach);
 	const FVector Out = Attitude.UnrotateVector(Way);
 	++MarkStrikes;
-	// A burst puts its rounds in together: a machine-gun strike is a stitch of three holes within about a metre, a
-	// cannon strike its tear and a round's hole beside it; a heavy shell's is one tear. Each is laid on the skin by
-	// itself (DrawMarks), so a stitch across a wing root runs on over the fuselage.
-	const int32 Holes = Kind == 0 ? 3 : Kind == 1 ? 2 : 1;
+	// A burst puts its rounds in together. A machine-gun strike is a walking line of 6 to 14 holes, 0.3 to 0.8 m apart
+	// (never longer than two fifths of the aircraft's span), across the skin the way the burst walked; a cannon strike
+	// two star tears 0.5 to 1.2 m apart; a heavy shell's one tear and 6 to 10 splinter holes round it within about
+	// 1.5 m. The art director on a1acb552's frames: "make a walking line of small holes". Each is laid on the skin by
+	// itself (DrawMarks), so a line across a wing root runs on over the fuselage.
+	const uint32 Burst = MarkHash(static_cast<uint32>(Struck->Key), static_cast<uint32>(MarkStrikes * 64 + 63));
+	auto BurstShare = [Burst](int32 Bit) { return static_cast<double>((Burst >> Bit) & 255u) / 255.0; };
+	// (a burst's first strike lays its line; a later strike of the same burst (Nth) two or three holes more where it
+	// fell, so a burst is about its 6 to 14 and not that many again for each of its strikes)
+	const bool bLater = E.Nth > 0;
+	const int32 Holes = Kind == 0 ? (bLater ? 2 + static_cast<int32>(BurstShare(0) * 1.99) : 6 + static_cast<int32>(BurstShare(0) * 8.99)) : Kind == 1 ? (bLater ? 1 : 2)
+		: 7 + static_cast<int32>(BurstShare(0) * 4.99);
+	// (the line's way: across the skin there, turned at random about the way out)
+	FVector Across1 = FVector::CrossProduct(Out, FVector(0.0, 0.0, 1.0));
+	if (Across1.SizeSquared() < 1e-4)
+	{
+		Across1 = FVector::CrossProduct(Out, FVector(1.0, 0.0, 0.0));
+	}
+	Across1 = Across1.GetSafeNormal();
+	const FVector Across2 = FVector::CrossProduct(Out, Across1).GetSafeNormal();
+	const double LineTurn = BurstShare(8) * 2.0 * PI;
+	const FVector Line = Across1 * FMath::Cos(LineTurn) + Across2 * FMath::Sin(LineTurn);
+	double Step = Kind == 1 ? 0.5 + 0.7 * BurstShare(16) : 0.3 + 0.5 * BurstShare(16);
+	if (Kind == 0)
+	{
+		Step = FMath::Min(Step, 0.4 * Struck->Span / FMath::Max(1, Holes - 1));
+	}
 	for (int32 J = 0; J < Holes; ++J)
 	{
-		const uint32 Hash = MarkHash(static_cast<uint32>(Struck->Key), static_cast<uint32>(MarkStrikes * 4 + J));
+		const uint32 Hash = MarkHash(static_cast<uint32>(Struck->Key), static_cast<uint32>(MarkStrikes * 64 + J));
 		auto Share = [Hash](int32 Bit) { return static_cast<double>((Hash >> Bit) & 255u) / 255.0; };
 		FMark Mark;
-		Mark.Kind = J == 0 ? Kind : 0;
-		Mark.At = Middle + (J == 0 ? FVector::ZeroVector : FVector(Share(0) - 0.5, Share(8) - 0.5, (Share(16) - 0.5) * 0.3) * 1.2 * U);
+		// (a heavy shell's first its tear, the rest its splinters; every other strike's holes all its own kind)
+		Mark.Kind = Kind == 2 && J > 0 ? 0 : Kind;
+		FVector Place = FVector::ZeroVector;
+		if (Kind == 2)
+		{
+			// (its splinters scattered round it, out to about 1.5 m, the nearer the more)
+			const double Turn = Share(0) * 2.0 * PI, Far = J == 0 ? 0.0 : 0.25 + 1.25 * Share(8) * Share(8);
+			Place = (Across1 * FMath::Cos(Turn) + Across2 * FMath::Sin(Turn)) * Far;
+		}
+		else
+		{
+			// (along the line, each hole a little off it and its spacing a little uneven)
+			Place = Line * ((J - 0.5 * (Holes - 1)) * Step + (Share(0) - 0.5) * 0.3 * Step) + Across2 * ((Share(8) - 0.5) * 0.12);
+		}
+		Mark.At = Middle + Place * U;
 		Mark.Out = Out;
-		Mark.Soot = MarkLooks[Mark.Kind].Soot * (0.8 + 0.45 * Share(24)) * (J == 0 ? 1.0 : 0.85);
+		// (a splinter's hole a little smaller than a round's)
+		Mark.Soot = MarkLooks[Mark.Kind].Soot * (0.8 + 0.45 * Share(24)) * (Kind == 2 && J > 0 ? 0.85 : 1.0);
 		Mark.Hole = MarkLooks[Mark.Kind].Hole;
 		Mark.Turn = static_cast<int32>((Hash >> 4) % 360u);
 		if (Made->Marks.Num() < MostMarks)
@@ -208,6 +250,8 @@ void AAirBattle::DrawMarks(const FVector& EyeAt)
 				Ink->SetScalarParameterValue(TEXT("Hole"), static_cast<float>(Look.Hole));
 				Ink->SetScalarParameterValue(TEXT("Soot"), static_cast<float>(Look.Dark));
 				Ink->SetScalarParameterValue(TEXT("Ragged"), static_cast<float>(Look.Ragged));
+				Ink->SetScalarParameterValue(TEXT("Star"), static_cast<float>(Look.Star));
+				Ink->SetVectorParameterValue(TEXT("MetalColour"), MarkMetal);
 				MarkInks.Add(Ink);
 			}
 		}
@@ -375,6 +419,28 @@ void AAirBattle::LiftMarks(FPlaneMade& Made)
 		}
 		Mark.Decal.Reset();
 	}
+}
+
+void AAirBattle::MarksSide(int32 Key, double& Hand, bool& bUnder) const
+{
+	// (in the mesh's own frame its right hand is toward -Y and up toward +Z)
+	using FMark = FPlaneMade::FMark;
+	Hand = 1.0;
+	bUnder = false;
+	const FPlaneMade* Made = PlaneMade.Find(Key);
+	if (!Made || Made->Marks.Num() == 0)
+	{
+		return;
+	}
+	double Right = 0.0;
+	int32 Down = 0;
+	for (const FMark& Mark : Made->Marks)
+	{
+		Right += -Mark.Out.Y;
+		Down += Mark.Out.Z < -0.3 ? 1 : 0;
+	}
+	Hand = Right >= 0.0 ? 1.0 : -1.0;
+	bUnder = Down * 2 > Made->Marks.Num();
 }
 
 int32 AAirBattle::MostMarked() const

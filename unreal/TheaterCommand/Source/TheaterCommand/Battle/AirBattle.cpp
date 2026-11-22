@@ -279,10 +279,13 @@ namespace AirParts
 	 * with blue over red by 5, and filled the top 40% of the picture; she asks blue over red by 10 to 20, white only at
 	 * the horizon, where the haze band stands). Bluer again, 22 November: on 2b177386's frames the horizon read
 	 * (215,218,225), "only +10 blue", where pale blue is about (196,212,230); the haze band over the sea takes it too.
-	 * "-TheaterSeaHazeInk=0.40,0.53,0.76" tries another. */
+	 * Bluer and greener again on a1acb552's frames: at 0.40, 0.53, 0.76 (with the air's dust at 0.6 over the sea) the
+	 * horizon read (193,201,212), the art director asking blue +18 and green +10, the fade's span as it is (22 November
+	 * 08:13Z); about 145 levels a unit of the ink there, as the last step moved it.
+	 * "-TheaterSeaHazeInk=0.42,0.60,0.88" tries another. */
 	static FLinearColor SeaHazeInk()
 	{
-		double R = 0.40, G = 0.53, B = 0.76;
+		double R = 0.42, G = 0.60, B = 0.88;
 		FString Asked;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaHazeInk="), Asked, false))
 		{
@@ -777,9 +780,11 @@ bool AAirBattle::Open(const FString& Why)
 		};
 		// (the aircraft's paint flat, as service paint was: at 0.5 rough and 0.45 specular a low sun ahead lit an olive
 		// drab P-40's near wing sand, (198,180,161), with a pale sheen farther out (the art director on 2b177386's Pearl
-		// 05, 22 November 04:16Z: Warhawk.json is 4F5236, "matte #555A47"). "-TheaterPlaneInk=0.78,0.3" tries another,
-		// roughness then specular)
-		double PaintRough = 0.78, PaintSpec = 0.3;
+		// 05, 22 November 04:16Z: Warhawk.json is 4F5236, "matte #555A47"). At 0.78 and 0.3 the sky's sheen at a grazing
+		// look still lit the P-40's upper wing sand, (199,177,152), and the Devastator's navy blue-grey (566A78) a neutral
+		// (140,140,133): the art director on a1acb552's frames, 22 November 08:13Z, "try roughness 0.9 and specular 0.15
+		// for flat paints". "-TheaterPlaneInk=0.9,0.15" tries another, roughness then specular)
+		double PaintRough = 0.9, PaintSpec = 0.15;
 		{
 			FString Asked;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneInk="), Asked, false))
@@ -987,6 +992,8 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("06b-guns-fire-back"), 2.5, false, false, false, false, false, true }, // (after the first attack run on a ship begins)
 			{ TEXT("07-the-fight-goes-on"), 120.0, false, false, false },
 			{ TEXT("09-strike-marks"), 105.0, true, false, false, false, false, false, true }, // (riding the aircraft struck the most)
+			{ TEXT("10-dead-engine"), 85.0, true, false, false, false, false, false, false, true }, // (riding an aircraft with an engine out)
+			{ TEXT("11-parachutes"), 3.0, false, false, false, false, false, false, false, false, true }, // (after three canopies first hang together)
 		};
 	}
 	ShowScreen();
@@ -1765,6 +1772,58 @@ void AAirBattle::LightTheBattle()
 	{
 		BounceShown = WeatherBounce;
 	}
+	// The light thrown up on the aircraft (UnderLight): over the sea under the cloud (WeatherBounce at its least, 0.06)
+	// 0.23 of a blue-grey, the bellies 40 to 60; over a whole sunlit deck (Bremen's, about 0.77) 0.67 of a near white,
+	// 80 to 110; between, by how much of the view down is sunlit cloud. Over land with no stage a grey-green. None by
+	// night. Measured against the key's 7 on a sunlit side: the art director's targets on a1acb552's frames.
+	static const float UnderScale = []
+	{
+		float Asked = 1.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterUnderLight="), Asked);
+		return FMath::Clamp(Asked, 0.0f, 4.0f);
+	}();
+	if (!UnderLight && bTableHidden && UnderScale > 0.0f && Root)
+	{
+		UDirectionalLightComponent* Made = NewObject<UDirectionalLightComponent>(this, TEXT("UnderLight"));
+		Made->SetupAttachment(Root);
+		Made->SetMobility(EComponentMobility::Movable);
+		Made->SetCastShadows(false);
+		Made->SetAtmosphereSunLight(false);
+		Made->bAffectTranslucentLighting = false;
+		Made->SetSpecularScale(0.0f);
+		Made->SetVolumetricScatteringIntensity(0.0f);
+		// (the aircraft only: the sea, the ground, the ships and the smoke keep their own light)
+		Made->LightingChannels.bChannel0 = false;
+		Made->LightingChannels.bChannel1 = true;
+		Made->SetIntensity(0.0f);
+		Made->RegisterComponent();
+		// (shining straight up: it lights only faces turned down)
+		Made->SetWorldRotation(FRotator(90.0, 0.0, 0.0));
+		UnderLight = Made;
+	}
+	if (UDirectionalLightComponent* Under = UnderLight.Get())
+	{
+		const bool bNight = State.IsValid() && State->Board.bNight;
+		const bool bOverLand = State.IsValid() && State->Board.StageKey.empty() && !State->Board.Land.empty();
+		const double Cloud = FMath::Clamp((WeatherBounce - 0.06) / 0.71, 0.0, 1.0);
+		const FLinearColor Low = bOverLand ? FLinearColor(0.80f, 0.84f, 0.74f) : FLinearColor(0.62f, 0.80f, 1.0f);
+		const FLinearColor Colour = FMath::Lerp(Low, FLinearColor(0.95f, 0.97f, 1.0f), static_cast<float>(Cloud));
+		const float Want = bNight ? 0.0f : UnderScale * static_cast<float>(0.23 + 0.62 * FMath::Max(0.0, WeatherBounce - 0.06));
+		if (!FMath::IsNearlyEqual(Under->Intensity, Want, 0.005f))
+		{
+			Under->SetIntensity(Want);
+		}
+		if (!Under->GetLightColor().Equals(Colour, 0.004f))
+		{
+			Under->SetLightColor(Colour);
+		}
+		if (UnderLogged < 0.0f || FMath::Abs(Want - UnderLogged) > 0.05f)
+		{
+			UnderLogged = Want;
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the light from below %.2f, (%.2f,%.2f,%.2f), over %s (the view down %.2f bright)."),
+				Want, Colour.R, Colour.G, Colour.B, bOverLand ? TEXT("land") : TEXT("sea or stage"), WeatherBounce);
+		}
+	}
 }
 
 void AAirBattle::KeepTheTableHidden()
@@ -1810,6 +1869,12 @@ void AAirBattle::ShowTheTable()
 		}
 	}
 	BattleLook::AirSkyEnd(); // (the 3D builder, 19 November 2026: the battle's sky goes with the battle)
+	if (UnderLight)
+	{
+		UnderLight->DestroyComponent();
+		UnderLight = nullptr;
+		UnderLogged = -1.0f;
+	}
 	for (const FKeptLamp& Kept : KeptLamps)
 	{
 		if (UDirectionalLightComponent* Light = Kept.Lamp.Get())
@@ -3798,6 +3863,8 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Mesh->SetMobility(EComponentMobility::Movable);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetCastShadow(true);
+	// (lit by the light thrown up from under the eye, UnderLight, as well as the day's)
+	Mesh->LightingChannels.bChannel1 = true;
 	Mesh->bUseAsyncCooking = false;
 	Mesh->RegisterComponent();
 	if (First && First->Points.Num() > 0)
@@ -4921,9 +4988,21 @@ void AAirBattle::AimEye(double Real)
 				// a little past its nose: the whole bomber in the lower middle of the picture, both wingtips inside it,
 				// the sky its attackers come through beyond it.
 				const FVector Toward = Foe ? (World(Foe->At.X, Foe->At.Y, Foe->At.Z) - Body).GetSafeNormal() : FlatRight;
-				const double Hand = FVector::DotProduct(Toward, FlatRight) >= 0.0 ? 1.0 : -1.0;
+				double Hand = FVector::DotProduct(Toward, FlatRight) >= 0.0 ? 1.0 : -1.0;
+				// (the strike-marks picture's eye on the side its strikes are on, and under it when they are mostly
+				// underneath: from behind on the other side they were hidden, the Mac's r2f run)
+				bool bUnder = false;
+				if (Rider->Key == MarksEyeKey)
+				{
+					MarksSide(Rider->Key, Hand, bUnder);
+				}
+				// (the dead-engine picture's on the side of the dead engine)
+				if (Rider->Key == ScrewEyeKey)
+				{
+					Hand = ScrewEyeHand;
+				}
 				const double Size = FMath::Max(12.0, Rider->Span);
-				Want = Body - CloseAhead * Size * 1.8 * U + FlatRight * Hand * Size * 0.55 * U + FVector::UpVector * Size * 0.45 * U;
+				Want = Body - CloseAhead * Size * 1.8 * U + FlatRight * Hand * Size * 0.55 * U + FVector::UpVector * Size * (bUnder ? -0.3 : 0.45) * U;
 				Look = Body + CloseAhead * Size * 1.2 * U;
 			}
 			CloseEye = Want;
@@ -4975,16 +5054,68 @@ void AAirBattle::AimEye(double Real)
 	}
 	// (on the thickest crowd of their aircraft, not the middle of their groups, which kilometres apart was empty sky)
 	AirShow::Vec Crowd;
+	// (and framed by the kind of aircraft in it, at the player's own zoom (Distance over its first 800 m): its middle
+	// aircraft about 70 pixels across at 1920 for heavies, 45 for the rest, through the 55 degree lens; the look on its
+	// aircraft, not on empty sky between them: on the middle of those within 350 m of the crowd's middle, else on the
+	// one nearest it. The art director on a1acb552's frames, 22 November 08:13Z: Bremen's B-17s 145 to 290 pixels,
+	// Pearl 01's and Midway 04's 10 to 25 pixel specks off the middle of the picture)
+	double CrowdSpan = 0.0;
 	if (AirDesk::CrowdOf(S.Show.Planes(), Picked, 1200.0, FocusAnchor, Crowd))
 	{
 		Focus = Crowd;
+		std::vector<double> Spans;
+		const AirShow::PlaneOut* Nearest = nullptr;
+		double NearestFar2 = 1e18;
+		AirShow::Vec Tight;
+		int TightCount = 0;
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			if (!P.bShown || P.bFalling || P.bOnGround || std::find(Picked.begin(), Picked.end(), P.Group) == Picked.end())
+			{
+				continue;
+			}
+			const AirShow::Vec Off = P.At - Crowd;
+			const double Far2 = Off.Dot(Off);
+			if (Far2 > 1200.0 * 1200.0)
+			{
+				continue;
+			}
+			Spans.push_back(P.Span > 1.0 ? P.Span : 12.0);
+			if (Far2 < NearestFar2)
+			{
+				NearestFar2 = Far2;
+				Nearest = &P;
+			}
+			if (Far2 < 350.0 * 350.0)
+			{
+				Tight = Tight + P.At;
+				++TightCount;
+			}
+		}
+		if (!Spans.empty())
+		{
+			std::nth_element(Spans.begin(), Spans.begin() + Spans.size() / 2, Spans.end());
+			CrowdSpan = Spans[Spans.size() / 2];
+		}
+		if (TightCount >= 2)
+		{
+			Focus = Tight * (1.0 / TightCount);
+		}
+		else if (Nearest)
+		{
+			Focus = Nearest->At;
+		}
 	}
 	else if (Count > 0)
 	{
 		Focus = Sum * (1.0 / Count);
 	}
 	FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
-	double Away = Distance, Down = Pitch, Heading = Yaw;
+	const double TypeAway = CrowdSpan > 0.0 ? FMath::Clamp(CrowdSpan * 1920.0 / ((CrowdSpan >= 25.0 ? 70.0 : 45.0) * 2.0 * FMath::Tan(FMath::DegreesToRadians(27.5))), 250.0, 1500.0) : 800.0;
+	double Away = Distance * TypeAway / 800.0, Down = Pitch, Heading = Yaw;
+	StrategyAway = Away;
+	StrategySpan = CrowdSpan;
+	StrategyGroups = static_cast<int32>(Picked.size());
 	// "The ships" picture: the overview cut to the ship that went down, from 1.6 km off and above, her neighbours and
 	// the water round her in the frame (the art director's note: the first run framed the hills, no ship in sight).
 	FVector ShipWorld;
@@ -5174,10 +5305,35 @@ void AAirBattle::AimEye(double Real)
 		Down = -4.0;
 		Heading = GunsEyeHeading;
 	}
+	// The parachutes picture (the art director on a1acb552's frames, item 8): the open canopies that hang together,
+	// followed down, from 300 m off and a little under them, so they stand against the sky with the sea or the cloud
+	// under them; the middle of those within 1.5 km of where they were last.
+	const bool bOnChutes = bChutesLook && !bOnShip && !bOnGuns;
+	if (bOnChutes)
+	{
+		FVector ChuteSum = FVector::ZeroVector;
+		int32 ChuteCount = 0;
+		for (const AirShow::Thing& T : S.Show.Things())
+		{
+			const FVector ChuteAt = World(T.At.X, T.At.Y, T.At.Z);
+			if (T.Kind == AirShow::ThingKind::Chute && T.bOpen && FVector::Dist(ChuteAt, ChutesWorld) < 1500.0 * U)
+			{
+				ChuteSum += ChuteAt;
+				++ChuteCount;
+			}
+		}
+		if (ChuteCount > 0)
+		{
+			ChutesWorld = ChuteSum / ChuteCount;
+		}
+		Wanted = ChutesWorld;
+		Away = 300.0;
+		Down = 4.0;
+	}
 	// (the look carried with the crowd as it moves, and only a jump to another crowd eased: eased all the way, at the
 	// clock's x10 the look trailed the raid by a kilometre and more, and the strategy pictures before the meeting showed
 	// empty sky, the art director on 2b177386's Pearl 01, Midway 01 and Bremen 01, 22 November 04:16Z)
-	if (bLookSet && !bOnShip && !bOnGuns)
+	if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes)
 	{
 		const FVector Moved = Wanted - LookWanted;
 		if (Moved.Size() < 150.0 * U)
@@ -6447,6 +6603,33 @@ void AAirBattle::EngineSounds()
 
 // ---- The picture run -------------------------------------------------------------------------------------------
 
+void AAirBattle::StrategyShotLog(const FString& Name) const
+{
+	// (what the strategy picture framed: the art director measures its aircraft; this says where they stood from the
+	// look, so a picture of empty sky can be told from a look on aircraft hidden in cloud or too small to see)
+	if (!State.IsValid() || !Eye)
+	{
+		return;
+	}
+	const double U = UnitsPerMetre;
+	int32 Shown = 0, Within = 0;
+	double Nearest = 1e18;
+	for (const AirShow::PlaneOut& P : State->Show.Planes())
+	{
+		if (!P.bShown || P.bFalling || P.bOnGround)
+		{
+			continue;
+		}
+		++Shown;
+		const double Far = FVector::Dist(World(P.At.X, P.At.Y, P.At.Z), LookAt) / U;
+		Nearest = FMath::Min(Nearest, Far);
+		Within += Far < 600.0 ? 1 : 0;
+	}
+	const double Pixels = StrategySpan > 0.0 ? StrategySpan * 1920.0 / (2.0 * FMath::Tan(FMath::DegreesToRadians(27.5)) * FMath::Max(1.0, StrategyAway)) : 0.0;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: strategy picture %s: %d groups framed, %.0f m off for a middle span of %.1f m (about %.0f pixels across at 1920); of %d aircraft shown the nearest %.0f m from the look, %d within 600 m of it; the eye %.0f m up."),
+		*Name, StrategyGroups, StrategyAway, StrategySpan, Pixels, Shown, Nearest > 1e17 ? -1.0 : Nearest, Within, Eye->GetActorLocation().Z / U);
+}
+
 void AAirBattle::TakeShots(double Real)
 {
 	(void)Real;
@@ -6471,13 +6654,44 @@ void AAirBattle::TakeShots(double Real)
 			}
 		}
 	}
+	// (the parachutes picture's moment: three or more open canopies shown within 1.5 km of one of them)
+	if (ChutesRealT < 0.0)
+	{
+		TArray<FVector> Open;
+		for (const AirShow::Thing& T : S.Show.Things())
+		{
+			if (T.Kind == AirShow::ThingKind::Chute && T.bOpen)
+			{
+				Open.Add(World(T.At.X, T.At.Y, T.At.Z));
+			}
+		}
+		for (const FVector& One : Open)
+		{
+			FVector Sum = FVector::ZeroVector;
+			int32 Count = 0;
+			for (const FVector& Other : Open)
+			{
+				if (FVector::Dist(One, Other) < 1500.0 * UnitsPerMetre)
+				{
+					Sum += Other;
+					++Count;
+				}
+			}
+			if (Count >= 3)
+			{
+				ChutesRealT = RealT;
+				ChutesWorld = Sum / Count;
+				break;
+			}
+		}
+	}
 	for (FShot& Shot : Shots)
 	{
 		if (Shot.bTaken)
 		{
 			continue;
 		}
-		const double Base = Shot.bGuns ? GunsRealT : Shot.bShips ? ShipRealT : MetRealT;
+		const double Base = Shot.bGuns ? GunsRealT : Shot.bShips ? ShipRealT : Shot.bChutes ? ChutesRealT : MetRealT;
 		if (Base < 0.0)
 		{
 			// (the approach is taken before the formations meet: the clock's x10 brings them together in some 20 s;
@@ -6487,16 +6701,63 @@ void AAirBattle::TakeShots(double Real)
 				Shot.bTaken = true;
 				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
 				++ShotsTaken;
+				StrategyShotLog(Shot.Name);
 			}
 			continue;
 		}
 		const double Due = Base + Shot.At;
-		if (((Shot.bClose && ShipsLook >= 0) || (!Shot.bGuns && GunsLook >= 0) || (Shot.bGuns && ShipsLook >= 0)) && RealT >= Due - 1.5)
+		if (((Shot.bClose && ShipsLook >= 0) || (!Shot.bGuns && GunsLook >= 0) || (Shot.bGuns && ShipsLook >= 0) || (!Shot.bChutes && bChutesLook)
+			|| (Shot.bChutes && (ShipsLook >= 0 || GunsLook >= 0))) && RealT >= Due - 1.5)
 		{
 			// (the ships picture holds the eye: a ride picture due now waits until two seconds after it; the guns fire
 			// back picture holds it from every other, and waits for the ships picture)
 			Shot.At = RealT + 2.0 - Base;
 			continue;
+		}
+		if (Shot.bScrew && ScrewEyeKey == INDEX_NONE && RealT >= Due - 1.5)
+		{
+			// (an aircraft flying with an engine out, a bomber before a fighter: its airscrew windmilling, or stopped
+			// edge-on when feathered; none yet, it waits, and after 400 real seconds of none there is no picture)
+			const AirShow::PlaneOut* Pick = nullptr;
+			for (const AirShow::PlaneOut& P : S.Show.Planes())
+			{
+				if (P.bShown && !P.bFalling && !P.bOnGround && !P.DeadEngines.empty() && (!Pick || (Pick->bFighter && !P.bFighter)))
+				{
+					Pick = &P;
+				}
+			}
+			if (!Pick)
+			{
+				if (RealT > Base + 400.0)
+				{
+					Shot.bTaken = true;
+					UE_LOG(LogTheater, Display, TEXT("Air battle: dead engine picture: no aircraft flew on with an engine out, so none taken."));
+				}
+				else
+				{
+					Shot.At = RealT + 2.0 - Base;
+				}
+				continue;
+			}
+			int32 Left = 0, All = 0;
+			AirParts::LiveEngines(Pick->Model, Pick->bFighter, Pick->DeadEngines, Left, All);
+			// (engines numbered from the left, as the B-17's 1 to 4 are: the first dead one's side)
+			ScrewEyeKey = Pick->Key;
+			ScrewEyeHand = All > 1 && Pick->DeadEngines.front() * 2 <= All ? -1.0 : 1.0;
+			RideOn(Pick->Group, Pick->Key);
+			CloseOffAt = -1.0; // (a ride held from an earlier picture must not take this one off before it is taken)
+			UE_LOG(LogTheater, Display, TEXT("Air battle: dead engine picture on %s (key %d): engine %d of %d out, its airscrew %s; the eye on its %s."),
+				*AirParts::Wide(Pick->Model), Pick->Key, Pick->DeadEngines.front(), All, Pick->bFeathered ? TEXT("stopped") : TEXT("windmilling"), ScrewEyeHand > 0.0 ? TEXT("right") : TEXT("left"));
+		}
+		if (Shot.bChutes && !bChutesLook && RealT >= Due - 2.0)
+		{
+			if (S.bClose)
+			{
+				Press(TEXT("ride"));
+				CloseOffAt = -1.0;
+			}
+			bChutesLook = true;
+			bLookSet = false; // (a cut to them)
 		}
 		if (Shot.bClose && !S.bClose && RealT >= Due - 1.5)
 		{
@@ -6524,6 +6785,7 @@ void AAirBattle::TakeShots(double Real)
 					if (P.Key == Marked)
 					{
 						RideOn(P.Group, P.Key);
+						MarksEyeKey = P.Key;
 						UE_LOG(LogTheater, Display, TEXT("Air battle: strike marks picture on %s (key %d): %d strikes on it, %d laid near the eye, %d kept in all."),
 							*AirParts::Wide(P.Model), P.Key, PlaneMade.Contains(P.Key) ? PlaneMade[P.Key].Marks.Num() : 0, MarkDecals, MarkStrikes);
 					}
@@ -6562,6 +6824,10 @@ void AAirBattle::TakeShots(double Real)
 			Shot.bTaken = true;
 			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
 			++ShotsTaken;
+			if (!Shot.bClose && !Shot.bShips && !Shot.bGuns && !Shot.bChutes)
+			{
+				StrategyShotLog(Shot.Name);
+			}
 			if (Shot.bClose)
 			{
 				CloseOffAt = RealT + RideHold;
@@ -6574,7 +6840,28 @@ void AAirBattle::TakeShots(double Real)
 			{
 				GunsLookOffAt = RealT + 0.5;
 			}
+			if (Shot.bChutes)
+			{
+				ChutesLookOffAt = RealT + 0.5;
+				int32 Hung = 0;
+				for (const AirShow::Thing& T : S.Show.Things())
+				{
+					if (T.Kind == AirShow::ThingKind::Chute && T.bOpen && FVector::Dist(World(T.At.X, T.At.Y, T.At.Z), ChutesWorld) < 1500.0 * UnitsPerMetre)
+					{
+						++Hung;
+					}
+				}
+				const APlayerCameraManager* Cam = GetWorld() && GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->PlayerCameraManager : nullptr;
+				UE_LOG(LogTheater, Display, TEXT("Air battle: parachutes picture: %d open canopies within 1.5 km of the look, the eye %.0f m from their middle."),
+					Hung, Cam ? FVector::Dist(Cam->GetCameraLocation(), ChutesWorld) / UnitsPerMetre : -1.0);
+			}
 		}
+	}
+	if (ChutesLookOffAt >= 0.0 && RealT >= ChutesLookOffAt)
+	{
+		ChutesLookOffAt = -1.0;
+		bChutesLook = false;
+		bLookSet = false; // (a cut back to the fight)
 	}
 	if (GunsLookOffAt >= 0.0 && RealT >= GunsLookOffAt)
 	{
@@ -6593,6 +6880,8 @@ void AAirBattle::TakeShots(double Real)
 	if (CloseOffAt >= 0.0 && RealT >= CloseOffAt)
 	{
 		CloseOffAt = -1.0;
+		MarksEyeKey = INDEX_NONE;
+		ScrewEyeKey = INDEX_NONE;
 		if (S.bClose)
 		{
 			Press(TEXT("ride"));

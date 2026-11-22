@@ -169,8 +169,10 @@ private:
 	 * decals laid at once over all the aircraft near the eye. */
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> MarkInks;
-	static constexpr int32 MostMarks = 24;
-	static constexpr int32 MostMarkDecals = 240;
+	// (a machine-gun burst a walking line of 6 to 14 holes since a1acb552's frames: room for some five such on one
+	// aircraft, and as many decals over all of them near the eye as about thirty bursts)
+	static constexpr int32 MostMarks = 64;
+	static constexpr int32 MostMarkDecals = 400;
 	int32 MarkDecals = 0;
 	/** Strikes kept so far (each one's turn and size are drawn from it and its aircraft's key); the ink looked for once;
 	 * the first decal's line written. */
@@ -188,6 +190,11 @@ private:
 	/** The aircraft flying that has been struck the most, a cannon shell's tear weighed as three rounds and a heavy
 	 * shell's as six (the picture run's strike-marks ride); INDEX_NONE when none has been struck. */
 	int32 MostMarked() const;
+	/** The aircraft the picture run's strike-marks ride is on (INDEX_NONE when none): a bomber's eye then stands on the
+	 * side its strikes are on, and under it when they are mostly underneath (MarksSide). */
+	int32 MarksEyeKey = INDEX_NONE;
+	/** Which side of an aircraft its strikes mostly lie on: Hand 1 its right, -1 its left; Under true when most face down. */
+	void MarksSide(int32 Key, double& Hand, bool& bUnder) const;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;
@@ -312,6 +319,10 @@ private:
 	double Distance = 800.0, Yaw = 200.0, Pitch = -12.0;
 	/** The aircraft the strategy camera's crowd is held on (AirDesk::CrowdOf); -1 none yet. */
 	int FocusAnchor = -1;
+	/** The strategy view as last framed (for the picture run's log): how far off, the crowd's middle span (metres; 0
+	 * none found) and its groups. */
+	double StrategyAway = 0.0, StrategySpan = 0.0;
+	int32 StrategyGroups = 0;
 	bool bLookSet = false;
 	/** The close view: the eye's place and facing, and the ridden aircraft's way eased (what the eye trails along). */
 	FVector CloseEye = FVector::ZeroVector;
@@ -441,7 +452,7 @@ private:
 	 * both rides fell on a Mustang and the German fighters were small in every frame). bChase: one in the chase view,
 	 * taken as he would take it (his first fighter squadron ridden, then one step along it), its plate in the picture.
 	 * bGuns: "the guns fire back", timed from the first attack run on a ship (GunsRealT). */
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; bool bMarks = false; };
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; bool bMarks = false; bool bScrew = false; bool bChutes = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
@@ -455,6 +466,16 @@ private:
 	int32 GunsShip = -1, GunsOn = -1, GunsLook = -1, GunsEyeFor = -1;
 	FVector GunsPlane = FVector::ZeroVector;
 	double GunsEyeHeading = 0.0;
+	/** The dead-engine picture's ride (the art director on a1acb552's frames, item 8: "windmilling airscrews and
+	 * parachutes: the picture run needs a shot of each"): the aircraft, and the side its dead engine is on (1 its right,
+	 * -1 its left), the bomber's eye on that side. */
+	int32 ScrewEyeKey = INDEX_NONE;
+	double ScrewEyeHand = 1.0;
+	/** The parachutes picture: when three or more open canopies first hung within 1.5 km of each other (real seconds;
+	 * -1 not yet), where; and whether the overview is on them now (ChutesLook), until ChutesLookOffAt. */
+	double ChutesRealT = -1.0, ChutesLookOffAt = -1.0;
+	FVector ChutesWorld = FVector::ZeroVector;
+	bool bChutesLook = false;
 	/** Real seconds a ride picture's ride is held after it ("-TheaterAirBattleRideHold=40", 0.5 to 300; a film stays
 	 * behind the fighter through the fight). */
 	double RideHold = 0.5;
@@ -503,6 +524,16 @@ private:
 	 * them, so the bombers' bellies are not black over a bright deck (the art director, round 18d); the dark sea or
 	 * ground under the cloud. WeatherAt sets it, LightTheBattle gives it to the sky light when it has moved. */
 	double WeatherBounce = 0.0, BounceShown = -1.0;
+	/** The light thrown up on the aircraft alone (their lighting channel 1, no other thing's): a shadowless lamp shining
+	 * straight up, as bright and as coloured as what lies under the eye, the sunlit deck or the dark sea, by
+	 * WeatherBounce. The sky light's lower half did not reach them on the Mac: Bremen 09's B-17 wing 20 to 26 over a
+	 * deck of 227, where a bright deck lifts the undersides to about 80 to 110 and the dark sea leaves them at 40 to
+	 * 60 (the art director on a1acb552's frames, 22 November 08:13Z). Made in LightTheBattle, taken down with the
+	 * battle; "-TheaterUnderLight=1" scales it, 0 none. */
+	UPROPERTY()
+	TObjectPtr<UDirectionalLightComponent> UnderLight;
+	/** The UnderLight's strength last told the log (-1 none yet this battle). */
+	float UnderLogged = -1.0f;
 	/** The sky behind the smoke last sent to the air kit and the ground kit (Effects->SetSky; none yet: below 0). */
 	FLinearColor SmokeSkySent = FLinearColor(-1.0f, -1.0f, -1.0f), GroundSkySent = FLinearColor(-1.0f, -1.0f, -1.0f);
 	/** The deck's shade on all under it (AirSky::ShadeOf), the key light's light function M_DeckShade: under a deck
@@ -587,6 +618,8 @@ private:
 	USoundAttenuation* FamilyOf(const TCHAR* Name);
 	void EngineSounds();
 	void TakeShots(double Real);
+	/** The picture run's log line for a strategy picture: how it was framed and where the aircraft stood from the look. */
+	void StrategyShotLog(const FString& Name) const;
 	bool Order(const FString& Command);
 	FVector World(double X, double Y, double Z) const;
 	FVector WorldVector(double X, double Y, double Z) const;

@@ -332,7 +332,19 @@ def build_hit_mark():
     connect(times(m, uv, 3.1, -1600, 550), "", fine, "UVs")
     tear = plus(m, plus(m, (coarse, "R"), times(m, (fine, "R"), 0.5, -1200, 550), -1050, 400), -0.75, -900, 400)
     ragged = times(m, tear, scalar(m, "Ragged", 0.45, -900, 520), -750, 400)
-    r = plus(m, times(m, out, 2.0, -1200, 0), ragged, -600, 0)
+    # (a shell's tear torn out in points, its petals of skin bent back: "Star" how far they reach out past the hole, 0 a
+    # round hole. Five points, turned and pushed about by the noise so no two tears are alike; the art director on
+    # a1acb552's frames, 22 November 2026, "a 20 mm hit: a 15-25 cm star-shaped tear")
+    off = plus(m, uv, -0.5, -1600, 800)
+    off_x = node_from(m, unreal.MaterialExpressionComponentMask, off, -1450, 760, r=True, g=False, b=False, a=False)
+    off_y = node_from(m, unreal.MaterialExpressionComponentMask, off, -1450, 860, r=False, g=True, b=False, a=False)
+    turn = node(m, unreal.MaterialExpressionArctangent2, -1300, 800)
+    _feed(m, turn, "Y", off_y)
+    _feed(m, turn, "X", off_x)
+    points = node_from(m, unreal.MaterialExpressionCosine, plus(m, times(m, turn, 0.7958, -1150, 800), times(m, (coarse, "G"), 0.6, -1150, 900), -1000, 850), -850, 850, period=1.0)
+    petal = plus(m, times(m, points, 0.5, -700, 850), 0.5, -550, 850)
+    star = times(m, times(m, times(m, petal, petal, -400, 850), scalar(m, "Star", 0.0, -400, 950), -250, 900), -0.6, -100, 900)
+    r = plus(m, plus(m, times(m, out, 2.0, -1200, 0), ragged, -600, 0), star, -450, 0)
     hole_at = scalar(m, "Hole", 0.3, -600, 200)
     # The hole: black where r is inside it, its edge a little soft.
     hole = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, hole_at, times(m, r, -1.0, -450, 100), -300, 150), 24.0, -150, 150), 0, 150)

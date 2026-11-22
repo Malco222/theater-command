@@ -161,6 +161,11 @@ namespace AirSky
 		double Trough = 0.0;  // how much less lit its rim is than its heart (a deck's cells: darker where they meet)
 		bool bFlatFoot = false; // a cloud's base: its underside drawn straight and crisp, seen from the side
 		double Shadowed = 0.0;  // 0 to 1: how much of its own cloud lies between it and the sun (laid with the cloud)
+		/** Drawn Long times as long along LongWay (radians, board axes, level) as across it: a small cloud's rag drawn
+		 * out along the wind (the art director on a1acb552's frames, 22 November 08:13Z: from above the small ones
+		 * were a field of cotton balls). Its R is across; 1 is round, as every other puff. */
+		double Long = 1.0;
+		double LongWay = 0.0;
 	};
 
 	/** One cloud (a cumulus, or a tile of the deck): its foot's middle on the laid square, its width and height. */
@@ -168,6 +173,8 @@ namespace AirSky
 	{
 		Vec At;
 		double W = 1000.0, H = 500.0;
+		/** A small cloud W long along LongWay (radians, board axes) and W / Long across it; 1 round. */
+		double Long = 1.0, LongWay = 0.0;
 		int First = 0, Count = 0;
 		/** 0.1 to 0.9: how soon the target's clearing (or the ships' hole) takes it. */
 		double Fate = 0.5;
@@ -369,8 +376,9 @@ namespace AirSky
 		/** How much wider a puff is drawn as a shape than as a soft disc (its shape lies within 0.92 of it, its lumps'
 		 * edges at about 0.75 of it on average: about the soft disc's own edge). */
 		static constexpr double SpriteSpan = 1.2;
-		/** The room for shadows laid apart (the nearest this many). */
-		static constexpr int MostShadows = 96;
+		/** The room for shadows laid apart (the nearest this many; a small cloud's counted as if twice as far, so the big
+		 * ones' keep their room). 96 until the small clouds cast theirs: the art director on a1acb552's frames. */
+		static constexpr int MostShadows = 224;
 		/** The clouds this painter draws (all, unless set); a painter given room for shadows (Paint's OutShadows) lays
 		 * them for every cloud, its own or not. */
 		void SetPart(const Part& InPart) { Only = InPart; }
