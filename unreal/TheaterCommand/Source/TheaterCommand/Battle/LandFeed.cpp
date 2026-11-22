@@ -213,6 +213,148 @@ namespace LandFeed
 					if (P.T >= T.PinFrom) { P.X = T.PinX; P.Y = T.PinY; }
 		}
 
+		/** A man named by the rules: his track's index (a number), or who he is ([b, k, j], found once the men are read). */
+		int ManOf(const Json& J, const Recording& R)
+		{
+			if (J.IsNumber()) return J.Int(-1) >= 0 && J.Int(-1) < static_cast<int>(R.Tracks.size()) ? J.Int(-1) : -1;
+			if (J.IsArray() && J.Count() >= 2) return R.TrackIndexOf(J.At(0).Int(-1), J.At(1).Int(-1), std::max(0, J.At(2).Int(0)));
+			return -1;
+		}
+
+		/** Release 2's bearers and linemen on a man's entry, a whole track's or a delta's: "ln", "br", "wd", "gone", "back"
+		 * (the carries, "cy", once every man is read: ReadCarries). True when any was given. */
+		bool ReadHurt(const Json& J, Track& T)
+		{
+			bool bAny = false;
+			if (J.Has("ln")) { T.bLineman = J["ln"].Truth(); bAny = true; }
+			if (J.Has("br")) { T.bBearer = J["br"].Truth(); bAny = true; }
+			if (J["wd"].IsNumber()) { T.Wounded = J["wd"].Num(); bAny = true; }
+			if (J["gone"].IsNumber()) { T.Gone = J["gone"].Num(); bAny = true; }
+			if (J["back"].IsNumber()) { T.Back = J["back"].Num(); bAny = true; }
+			return bAny;
+		}
+
+		/** A man's carries ("cy": [[from, to, by1, by2]]), added to his own, by time. True when any. */
+		bool ReadCarries(const Json& J, Track& T, const Recording& R)
+		{
+			const Json& Cy = J["cy"];
+			for (const Json& C : Cy.Items)
+			{
+				Track::Carry Row;
+				Row.From = C.At(0).Num(0.0);
+				Row.To = std::max(Row.From, C.At(1).Num(Row.From));
+				Row.By1 = ManOf(C.At(2), R);
+				Row.By2 = ManOf(C.At(3), R);
+				T.Carried.push_back(Row);
+			}
+			std::stable_sort(T.Carried.begin(), T.Carried.end(), [](const Track::Carry& A, const Track::Carry& B) { return A.From < B.From; });
+			return Cy.Count() > 0;
+		}
+
+		/** Release 2's field telephones, aid posts and night patrol at a recording's or a delta's root (the tactics
+		 * thread's "wires", "wireCuts", "wireMends", "held", "aid", "patrol"), added to what R holds. */
+		void ReadLines(const Json& Root, Recording& R)
+		{
+			for (const Json& W : Root["wires"].Items)
+			{
+				Wire Row;
+				Row.Id = W["id"].Int(static_cast<int>(R.Wires.size()));
+				Row.Side = W["side"].Int(1);
+				Row.Hq = W["hq"].Int(-1);
+				Row.Unit = W["unit"].Int(-1);
+				for (const Json& P : W["pts"].Items) Row.Pts.push_back({ P.At(0).Num(0.0), P.At(1).Num(0.0) });
+				if (Row.Pts.size() >= 2) R.Wires.push_back(std::move(Row));
+			}
+			for (const Json& C : Root["wireCuts"].Items)
+			{
+				WireCut Row;
+				Row.T = C["t"].Num(0.0);
+				Row.Wire = C["wire"].Int(0);
+				Row.X = C["x"].Num(0.0);
+				Row.Y = C["y"].Num(0.0);
+				Row.By = C["by"].Str("shell");
+				R.WireCuts.push_back(std::move(Row));
+			}
+			std::stable_sort(R.WireCuts.begin(), R.WireCuts.end(), [](const WireCut& A, const WireCut& B) { return A.T < B.T; });
+			for (const Json& M : Root["wireMends"].Items)
+			{
+				WireMend Row;
+				Row.T = M["t"].Num(0.0);
+				Row.Wire = M["wire"].Int(0);
+				Row.Man = ManOf(M["man"], R);
+				R.WireMends.push_back(Row);
+			}
+			std::stable_sort(R.WireMends.begin(), R.WireMends.end(), [](const WireMend& A, const WireMend& B) { return A.T < B.T; });
+			for (const Json& H : Root["held"].Items)
+			{
+				HeldOrder Row;
+				Row.T = H["t"].Num(0.0);
+				Row.Due = H["due"].Num(Row.T);
+				Row.Went = H["went"].IsNumber() ? H["went"].Num() : -1.0;
+				Row.Unit = H["unit"].Int(-1);
+				R.Held.push_back(Row);
+			}
+			for (const Json& A : Root["aid"].Items)
+			{
+				AidPost Row;
+				Row.Side = A["side"].Int(0);
+				Row.X = A["x"].Num(0.0);
+				Row.Y = A["y"].Num(0.0);
+				R.Aid.push_back(Row);
+			}
+			const Json& P = Root["patrol"];
+			if (P.IsObject())
+			{
+				Patrol& N = R.Night;
+				N.bOn = true;
+				N.Side = P["side"].Int(0);
+				N.T0 = P["t0"].Num(N.T0);
+				N.T1 = std::max(N.T0, P["t1"].Num(N.T1));
+				N.Men.clear();
+				for (const Json& M : P["men"].Items)
+				{
+					const int Man = ManOf(M, R);
+					if (Man >= 0) N.Men.push_back(Man);
+				}
+				const Json& F = P["found"];
+				if (F.IsObject())
+				{
+					N.FoundX = F["x"].Num(0.0);
+					N.FoundY = F["y"].Num(0.0);
+					N.FoundKind = F["kind"].Str("");
+				}
+				N.Alerted = P["alerted"].IsNumber() ? P["alerted"].Num() : -1.0;
+				N.Flares = LandJson::Numbers(P["flares"]);
+				std::sort(N.Flares.begin(), N.Flares.end());
+			}
+		}
+
+		/** The platoon cam's marks: ld [[from, to], ...], e [[from, to, "base" | "move"], ...], cl [t, ...] or
+		 * [[t, x, y], ...]. */
+		void ReadMarks(const Json& J, Track& T)
+		{
+			T.Lead.clear();
+			T.Element.clear();
+			T.Calls.clear();
+			for (const Json& M : J["ld"].Items)
+				T.Lead.push_back({ M.At(0).Num(0.0), M.At(1).Num(0.0), false });
+			for (const Json& M : J["e"].Items)
+				T.Element.push_back({ M.At(0).Num(0.0), M.At(1).Num(0.0), M.At(2).Str("base") == "move" });
+			for (const Json& M : J["cl"].Items)
+			{
+				Track::Call C;
+				if (M.IsNumber()) C.T = M.Num(0.0);
+				else
+				{
+					C.T = M.At(0).Num(0.0);
+					C.bSpot = M.At(1).IsNumber() && M.At(2).IsNumber();
+					C.X = M.At(1).Num(0.0);
+					C.Y = M.At(2).Num(0.0);
+				}
+				T.Calls.push_back(C);
+			}
+		}
+
 		void ReadTrack(const Json& J, Track& T)
 		{
 			ReadWho(J, T);
@@ -223,6 +365,8 @@ namespace LandFeed
 			T.Out = J["out"].IsNumber() ? J["out"].Num() : -1.0;
 			PinWreck(T);
 			ReadScars(J["mk"], T.Marks);
+			ReadHurt(J, T);
+			ReadMarks(J, T);
 		}
 
 		void ReadEvent(const Json& E, Event& Row)
@@ -546,13 +690,18 @@ namespace LandFeed
 			Out.Rounds.push_back(std::move(Row));
 		}
 		std::sort(Out.Rounds.begin(), Out.Rounds.end(), RoundBefore);
+		std::vector<const Json*> MenRead;
 		for (const Json& M : Root["men"].Items)
 		{
 			Track Row;
 			ReadTrack(M, Row);
 			if (Row.At.empty()) continue;
 			Out.Tracks.push_back(std::move(Row));
+			MenRead.push_back(&M);
 		}
+		// (release 2's carries and lines name men by who they are: read once every man is)
+		for (size_t I = 0; I < MenRead.size(); ++I) ReadCarries(*MenRead[I], Out.Tracks[I], Out);
+		ReadLines(Root, Out);
 		for (size_t I = 0; I < Out.Tracks.size(); ++I)
 			for (size_t J = 0; J < I; ++J)
 				if (!Out.Tracks[J].bTwin && Out.Tracks[I].Role == "fo" && SameWalk(Out.Tracks[J], Out.Tracks[I]))
@@ -653,6 +802,8 @@ namespace LandFeed
 				Note(Out.Left, N);
 			}
 			if (M["mk"].IsArray()) { ReadScars(M["mk"], T.Marks); Note(Out.Marked, N); }
+			const bool bHurt = ReadHurt(M, T);
+			if (ReadCarries(M, T, R) || bHurt) Note(Out.Hurt, N);
 		}
 		// Where each moving man stands now: [n, x, y, f] at t, his provisional last point.
 		const Json& Tails = Root["tails"];
@@ -714,6 +865,7 @@ namespace LandFeed
 			R.Events.push_back(std::move(Row));
 		}
 		ReadCuts(Root["cuts"], R.Cuts);
+		ReadLines(Root, R);
 		std::map<int, Crater> Craters;
 		for (const Json& V : Root["views"].Items)
 		{

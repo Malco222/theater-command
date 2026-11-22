@@ -295,6 +295,15 @@ namespace LandEye
 		 * (Riding() then -1). No wide of the whole mass while riding. */
 		void Ride(int Block);
 		int Riding() const { return RideBlock; }
+		/** The platoon cam (Brian's yes, 22 November 02:40Z): the film rides with the platoon leading a side's assault
+		 * (Side as the recording's blocks number it; -1 lets go), as the recording marks it (each man's Lead spans, the
+		 * tactics thread's ld), going on to the next platoon as the lead passes, and among its men most of all to the
+		 * leading squad's and, in a rush, to the men moving. Before anyone leads (the approach) the film is the field's;
+		 * once a platoon has led, the film stays with it until another takes the lead or none of it stands. Ride() lets it
+		 * go: the player's own pick comes first. LeadBlock() is the platoon ridden for the lead, -1 none. */
+		void FollowLead(int Army);
+		int FollowingLead() const { return LeadSide; }
+		int LeadBlock() const { return LeadBlockNow; }
 		/** The general has just given a block an order (a live battle): the film's next cut goes to its men, as a war film
 		 * cuts from the radio call to the men it sends; the shot on the screen is left as soon as it has run its least
 		 * (Settings::ShotLeast), unless it holds for a fall or a tank's end. Not over a tank's end or a fall coming, nor
@@ -438,6 +447,18 @@ namespace LandEye
 		 * the film (up, on the field, not hidden) at a battle time. */
 		int RideBlock = -1;
 		bool OffRide(int Track) const { return RideBlock >= 0 && Rec->Tracks[static_cast<size_t>(Track)].Block != RideBlock; }
+		/** Ride's own work, for the player's pick and the platoon cam's alike. */
+		void RideWith(int Block);
+		/** The platoon cam: the side followed (-1 none), the platoon ridden for the lead, when the marks are next read
+		 * (every half second on the screen); the men with any lead marks, by track, kept up as a live battle grows. */
+		int LeadSide = -1, LeadBlockNow = -1;
+		double LeadLookAt = -1e9;
+		std::vector<int> LeadMen;
+		size_t LeadMenTracks = 0;
+		/** Whether a man leads his side's assault at a battle time (his Lead spans); whether he is in the moving group. */
+		bool InLead(size_t Track, double Battle) const;
+		bool InRush(size_t Track, double Battle) const;
+		void LookForLead(double Battle, double Real);
 		/** The block the general last ordered (Lean), -1 none, and the real time the lean lapses (-1: not yet seen). */
 		int LeanBlock = -1;
 		double LeanUntil = -1.0;
@@ -709,6 +730,19 @@ namespace LandEye
 		mutable std::vector<int> BlockIx;
 		mutable size_t BlockIxTracks = 0, BlockIxBlocks = 0;
 		const LandFeed::Block* BlockOfTrack(int Track) const;
+		/** Each track's kind by bits (KindTank, KindGun, KindLorry), kept while the counts stand: the scans over every
+		 * track compare no names (CD0: at Kursk the first frame of a cut's choice went mostly on 5,800 tracks' names,
+		 * blocks and moves asked before the side was). */
+		static constexpr uint8_t KindTank = 1, KindGun = 2, KindLorry = 4;
+		mutable std::vector<uint8_t> TrackKinds;
+		uint8_t KindOf(size_t Track) const;
+		bool IsVehicleAt(size_t Track) const { return KindOf(Track) != 0; }
+		/** Whether each block is hidden from the player, asked once a frame (FrameStamp) of the scene's Hidden. */
+		mutable std::vector<uint8_t> HiddenVal;
+		mutable std::vector<uint32_t> HiddenStamp;
+		uint32_t FrameStamp = 1;
+		/** The rounds Gather takes, by their place in the recording. */
+		std::vector<int> GatherIx;
 		/** The men where they stood at a battle time (MenT), by 16 m squares in a hashed table of chains; Crossing asks
 		 * the squares round its eye, with room for how far the fastest man of the recording goes from MenT. */
 		struct ManAt

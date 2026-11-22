@@ -244,6 +244,9 @@ namespace LandCrater
 		uint64_t Seed = 1;
 		std::string Earth;
 		std::vector<Hole> Holes;
+		/** The breaches among them (Holes' indexes, in the order laid): BreachFloor looks only at these, never the
+		 * squares' lists, since the ground under every eye ray and every tank's footprint asks it. */
+		std::vector<int> Breaches;
 		/** The patches by number, and their numbers by square. */
 		std::vector<Patch> PatchList;
 		std::unordered_map<int64_t, int> PatchOf;

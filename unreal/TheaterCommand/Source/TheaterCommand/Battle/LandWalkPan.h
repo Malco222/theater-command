@@ -36,6 +36,13 @@ namespace LandWalkPan
 	 * flank: 45 to 100 m from the middle of its walk, a man's height up, or 3.5 m where that is screened. */
 	Plan Choose(const LandFeed::Recording& Rec, const LandEye::World& Here, double T0, double For);
 
+	/** The tank pan (the far tanks' motion vectors: LandCrowd's places a frame before; -TheaterLandTankPan): the tank
+	 * driving most steadily from T0 for For seconds (2 to 9 m/s, alive and on the field throughout) that is seen in the
+	 * open (the best eight tried in turn: a wood's or a town's tank gives way), and the eye off her flank, 170 to 240 m
+	 * from the middle of her drive, so she stays past the 140 m hand-over (drawn by her model's far pieces) the whole
+	 * pan: 2.5 m up, or 6 m, or 10 m where that is screened. Men holds her one track; Block is her block. */
+	Plan ChooseTank(const LandFeed::Recording& Rec, const LandEye::World& Here, double T0, double For);
+
 	/** The block's middle at battle time T, a metre up off the ground; false if none of its men is on the field. */
 	bool Middle(const LandFeed::Recording& Rec, const LandEye::World& Here, const Plan& P, double T, LandPlay::Vec& Out);
 }
