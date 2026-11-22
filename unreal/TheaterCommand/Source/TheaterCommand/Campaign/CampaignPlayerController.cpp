@@ -1975,9 +1975,23 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 	GetViewportSize(Width, Height);
 	const FCampaignView& View = Session->GetView();
 	const FCampaignMapData& Data = Map->GetData();
+	// (Release 2, the art director's read of run 2, 22 November: mend 5. At 0.8 New York wore three marks and still went
+	// with the thinned names.) A town with something on order, works going up or damage keeps its name, and so its dots,
+	// from any height: only a town with nothing of that to say is thinned out with the rest.
+	TSet<int32> FarKept;
+	if (State < 2)
+	{
+		for (const FCityGlance& Marked : View.Glance)
+		{
+			if (!Marked.OrderFigure.IsEmpty() || !Marked.UpFigure.IsEmpty() || !Marked.DamageFigure.IsEmpty())
+			{
+				FarKept.Add(Marked.Region);
+			}
+		}
+	}
 	for (const ACampaignMapActor::FPlateSpot& Spot : Map->GetPlateSpots())
 	{
-		if (Spot.Tier > State)
+		if (Spot.Tier > State && !FarKept.Contains(Spot.Region))
 		{
 			continue;
 		}
@@ -5988,6 +6002,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			const FString Standing = View.RegionStanding.IsValidIndex(TipRegion) ? View.RegionStanding[TipRegion] : FString();
 			FString Line = FString::Printf(TEXT("%s  \u00B7  %s%s"), *Region.Name, Nation ? *Nation->Name : *Holder,
 				Standing == TEXT("own") ? TEXT(" (yours)") : Standing == TEXT("enemy") ? TEXT(" (enemy)") : Standing == TEXT("ally") ? TEXT(" (ally)") : Standing == TEXT("neutral") ? TEXT(" (at peace)") : TEXT(""));
+			// (Release 2, the art director's read of run 2, 22 November: mend 1, two hover tips.) Where the paper card
+			// shows, its title and kind say this first line already, and its garrison line says the holder's own army; what
+			// is left of the slip is folded into the card's foot (see the end of this), so one tip stands by the pointer.
+			const int32 TipHeadEnds = Line.Len();
+			FString TipCardSaid;
 			TArray<FString> Worth;
 			// What the place pays a month, where the rules have said; its victory points where they have not.
 			if (const FTownInfo* Town = Map->TownOf(TipRegion))
@@ -6092,6 +6111,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			for (const TPair<FString, FIntPoint>& Force : Forces)
 			{
 				const FCampaignNation* Whose = Map->GetData().FindNation(Force.Key);
+				const int32 ForceFrom = Line.Len();
+				bool bForceAbout = false;
 				Line += bDim && Force.Value.Y == 0
 					? FString::Printf(TEXT("\n%s army: %d corps, strength unknown"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X)
 					: FString::Printf(TEXT("\n%s army: %d corps, %d division%s"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X, Force.Value.Y, Force.Value.Y == 1 ? TEXT("") : TEXT("s"));
@@ -6121,7 +6142,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					if (About.Num() > 0)
 					{
 						Line += FString::Printf(TEXT(": %s"), *FString::Join(About, TEXT(", ")));
+						bForceAbout = true;
 					}
+				}
+				// (the holder's own army, said by the card's garrison line; where it is dug in, in camp or cut off, the
+				// slip's line says more than the card and is folded in whole)
+				if (GlanceHere && !GlanceHere->GarrisonFigure.IsEmpty() && Force.Key == Holder && !bForceAbout)
+				{
+					TipCardSaid = Line.Mid(ForceFrom);
 				}
 			}
 			// Over an airfield: what it is and what stands on it, and that a click opens it.
@@ -6343,6 +6371,27 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				const FString Refused = Session->WhyNotSendAgent(AgentInHand, TipRegion);
 				Line += TEXT("\n") + (Refused.IsEmpty() ? FString(TEXT("Right-click: the agent goes here, a month on the road.")) : Refused);
+			}
+			// (Release 2, the art director's read of run 2, 22 November: mend 1.) Under the paper card the dark slip said the
+			// city again. Where the card shows, the slip's lines that the card lacks (what the place pays, a cut railway,
+			// the other armies there, what a right-click would do) go into the card's foot over its own line, and the screen
+			// sets the slip's plain words aside (its marked words, in their colours, stay in the slip). The slip itself is
+			// kept whole here: it is what the steps read.
+			if (HoverGlance.bValid)
+			{
+				FString TipFold = Line.Mid(TipHeadEnds);
+				if (!TipCardSaid.IsEmpty())
+				{
+					TipFold.ReplaceInline(*TipCardSaid, TEXT(""));
+				}
+				if (TipFold.StartsWith(TEXT("\n")))
+				{
+					TipFold = TipFold.Mid(1);
+				}
+				if (!TipFold.IsEmpty())
+				{
+					HoverGlance.Foot = TipFold + TEXT("\n") + HoverGlance.Foot;
+				}
 			}
 			HoverTip = FText::FromString(Line);
 			HoverTipMarked = FText::FromString(TipMarked);

@@ -1841,6 +1841,165 @@ namespace
 	};
 
 	/**
+	 * (Release 2, the art director's read of run 2, 22 November: mend 3.) A list set with a hanging indent, a line of the
+	 * text an entry: the entry's first line at its own place and every line it folds onto set in by the hang, so that where
+	 * one entry ends and the next begins is plain to see. An entry written with spaces before it (a corps under its army)
+	 * stands in by the lead. It folds at its spaces and never inside a bracket ("(infantry, 4)" stays whole, and no "4)"
+	 * is left on a line alone), unless the bracket by itself is wider than a folded line. Its slot must give it the whole
+	 * width it may take (HAlign_Fill); every width is measured at the scale it is painted at (PaintWide).
+	 */
+	class SHangingText : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SHangingText) : _Ink(FLinearColor::White), _Lead(16.0f), _Hang(26.0f), _LineHigh(0.0f), _Guess(330.0f) {}
+			SLATE_ATTRIBUTE(FText, Text)
+			SLATE_ARGUMENT(FSlateFontInfo, Face)
+			SLATE_ARGUMENT(FLinearColor, Ink)
+			SLATE_ARGUMENT(float, Lead) // how far in an entry written with spaces before it stands
+			SLATE_ARGUMENT(float, Hang) // how far in from its entry's first line each folded line stands
+			SLATE_ARGUMENT(float, LineHigh) // the step from one line to the next; 0 for the face's own
+			SLATE_ARGUMENT(float, Guess) // the width it folds to before it is first drawn
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Text = Args._Text;
+			Face = Args._Face;
+			Ink = Args._Ink;
+			Lead = FMath::Max(static_cast<double>(Args._Lead), 0.0);
+			Hang = FMath::Max(static_cast<double>(Args._Hang), 0.0);
+			LineHigh = Args._LineHigh;
+			Room = FMath::Max(static_cast<double>(Args._Guess), 24.0);
+		}
+
+		virtual FVector2D ComputeDesiredSize(float LayoutScale) const override
+		{
+			TArray<FHungLine> Hung;
+			Lay(Room, Hung, LayoutScale);
+			double Widest = 0.0;
+			for (const FHungLine& Each : Hung)
+			{
+				Widest = FMath::Max(Widest, Each.Left + PaintWide(Each.Said, Face, LayoutScale));
+			}
+			return FVector2D(FMath::Min(Widest, Room), Hung.Num() * Step());
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			// (the width it is given is the width it folds to from now on)
+			Room = FMath::Max(static_cast<double>(Geometry.GetLocalSize().X), 24.0);
+			TArray<FHungLine> Hung;
+			Lay(Room, Hung, Geometry.Scale);
+			const double High = Step();
+			const FLinearColor Shown = Style.GetColorAndOpacityTint() * Ink;
+			double Y = 0.0;
+			for (const FHungLine& Each : Hung)
+			{
+				const double Wide = PaintWide(Each.Said, Face, Geometry.Scale);
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide + 4.0, High), FSlateLayoutTransform(FVector2D(Each.Left, Y))), Each.Said, Face, ESlateDrawEffect::None, Shown);
+				Y += High;
+			}
+			return LayerId;
+		}
+
+	private:
+		/** One line as it is drawn: its words, and how far in from the left it stands. */
+		struct FHungLine
+		{
+			FString Said;
+			double Left = 0.0;
+		};
+
+		double Step() const
+		{
+			return LineHigh > 0.0f ? static_cast<double>(LineHigh) : static_cast<double>(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->GetMaxCharacterHeight(Face));
+		}
+
+		/** The lines at a width and the scale they are painted at, top to bottom. */
+		void Lay(double Width, TArray<FHungLine>& Out, double Scale) const
+		{
+			TArray<FString> Entries;
+			Text.Get().ToString().ParseIntoArray(Entries, TEXT("\n"), true);
+			for (const FString& Entry : Entries)
+			{
+				const double From = Entry.Len() > 0 && IsGap(Entry[0]) ? Lead : 0.0;
+				const double FirstRoom = Width - From, FoldRoom = Width - From - Hang;
+				// Its pieces: the words, and each bracket whole with what is in it.
+				TArray<FString> Pieces;
+				FString Piece;
+				int32 Deep = 0;
+				for (int32 At = 0; At < Entry.Len(); ++At)
+				{
+					const TCHAR Letter = Entry[At];
+					if (IsGap(Letter) && Deep == 0)
+					{
+						if (!Piece.IsEmpty())
+						{
+							Pieces.Add(Piece);
+							Piece.Reset();
+						}
+						continue;
+					}
+					Piece.AppendChar(Letter);
+					Deep = Letter == TEXT('(') ? Deep + 1 : Letter == TEXT(')') ? FMath::Max(Deep - 1, 0) : Deep;
+				}
+				if (!Piece.IsEmpty())
+				{
+					Pieces.Add(Piece);
+				}
+				// (a bracket wider than a folded line is parted at its spaces after all, so that nothing runs off the edge)
+				TArray<FString> Parts;
+				for (const FString& Each : Pieces)
+				{
+					if (FoldRoom > 24.0 && PaintWide(Each, Face, Scale) > FoldRoom && Each.Contains(TEXT(" ")))
+					{
+						TArray<FString> Parted;
+						Each.ParseIntoArray(Parted, TEXT(" "));
+						Parts.Append(Parted);
+					}
+					else
+					{
+						Parts.Add(Each);
+					}
+				}
+				// Set to the measure: the first line from the entry's own place, the folded ones a hang further in.
+				FString Building;
+				bool bFolded = false;
+				for (const FString& Each : Parts)
+				{
+					const FString Longer = Building.IsEmpty() ? Each : Building + TEXT(" ") + Each;
+					if (!Building.IsEmpty() && PaintWide(Longer, Face, Scale) > (bFolded ? FoldRoom : FirstRoom))
+					{
+						FHungLine& Done = Out.AddDefaulted_GetRef();
+						Done.Said = Building;
+						Done.Left = bFolded ? From + Hang : From;
+						Building = Each;
+						bFolded = true;
+					}
+					else
+					{
+						Building = Longer;
+					}
+				}
+				if (!Building.IsEmpty())
+				{
+					FHungLine& Last = Out.AddDefaulted_GetRef();
+					Last.Said = Building;
+					Last.Left = bFolded ? From + Hang : From;
+				}
+			}
+		}
+
+		TAttribute<FText> Text;
+		FSlateFontInfo Face;
+		FLinearColor Ink = FLinearColor::White;
+		double Lead = 16.0;
+		double Hang = 26.0;
+		float LineHigh = 0.0f;
+		mutable double Room = 330.0;
+	};
+
+	/**
 	 * (The UI director, check 19; the art director's review of 16:40 UTC, 17 November.) One side's corps on the battle
 	 * card, in the roster's two forms. Where every corps of the side fits its column on one line, each stands as on the
 	 * kit: "XIX Corps · armoured, 2 divisions · 30,000 men". Where any does not, every corps of that side takes two
@@ -3164,7 +3323,7 @@ namespace
 			// once to be drawn: the width it gives back counts the "seen" stamp of an enemy's town.
 			const FLinearColor GlancePaper(FColor::FromHex(TEXT("EDE6D6"))), GlanceBrass(FColor::FromHex(TEXT("E0B872"))), GlancePaper3(FColor::FromHex(TEXT("CDBF9C")));
 			const FLinearColor GlanceAlarm(FColor::FromHex(TEXT("E08A6A"))), GlanceAlarmDeep(FColor::FromHex(TEXT("8C2F22"))), GlanceLine(FColor::FromHex(TEXT("8A6B3B")));
-			const FLinearColor GlanceMuted(FColor::FromHex(TEXT("A89F8D"))), GlanceOnBrass(FColor::FromHex(TEXT("1E1608")));
+			const FLinearColor GlanceOnBrass(FColor::FromHex(TEXT("1E1608")));
 			auto GlanceDashes = [&](const FVector2D& A, const FVector2D& B, const FLinearColor& Ink, int32 Layer)
 			{
 				const FPaintGeometry Whole = Geometry.ToPaintGeometry();
@@ -3194,7 +3353,11 @@ namespace
 					if (bDraw)
 					{
 						FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(Wide, Tall), FSlateLayoutTransform(Corner)), &GlanceBare, ESlateDrawEffect::None, GlanceBare.GetTint(InWidgetStyle));
-						const bool bHas[4] = { !Each.GarrisonFigure.IsEmpty(), Each.bGlanceOrders, Each.UpMonths >= 0, Each.Damage > 0 };
+						// (Release 2, the art director's read of run 2, 22 November: mend 5. A town held by its guard alone, whose
+						// plate says "guard", has an empty garrison dot from far off, a ring as the other empty places are: the
+						// guard is news only close up, where the word is read.)
+						const bool bGuardOnly = Each.GarrisonFigure == TEXT("guard");
+						const bool bHas[4] = { !Each.GarrisonFigure.IsEmpty() && !bGuardOnly, Each.bGlanceOrders, Each.UpMonths >= 0, Each.Damage > 0 };
 						const FLinearColor Inks[4] = { GlancePaper, GlanceBrass, GlancePaper3, GlanceAlarm };
 						for (int32 Which = 0; Which < 4; ++Which)
 						{
@@ -3307,17 +3470,20 @@ namespace
 				}
 				const double Wide = FMath::Max(X, Tall);
 				double Whole = Wide;
-				// An enemy's town as last seen: the age of the report, in a small dashed stamp beside the plate (close up).
+				// An enemy's town as last seen: the age of the report beside the plate (close up). (Release 2, the art
+				// director's read of run 2, 22 November: mend 4. The "SEEN THIS MONTH" stamp was a second plate as loud as
+				// the first. A report of this month says nothing more than the dashed frame does, and has no words; an
+				// older one says its age small and quiet, "seen 2 mo ago", in paper-300 at 70%, on no ground.)
 				FString Seen;
-				if (Each.bGlanceSpied && bClose && Each.GlanceAgo >= 0)
+				if (Each.bGlanceSpied && bClose && Each.GlanceAgo > 0)
 				{
-					Seen = Each.GlanceAgo == 0 ? FString(TEXT("SEEN THIS MONTH")) : FString::Printf(TEXT("SEEN %d MO AGO"), Each.GlanceAgo);
+					Seen = FString::Printf(TEXT("seen %d mo ago"), Each.GlanceAgo);
 				}
-				const FSlateFontInfo StampType = Font(TEXT("Bold"), 11);
+				const FSlateFontInfo StampType = Font(TEXT("Regular"), 11);
 				const FVector2D StampSize = Seen.IsEmpty() ? FVector2D::ZeroVector : FVector2D(Measure->Measure(Seen, StampType));
 				if (!Seen.IsEmpty())
 				{
-					Whole += 6.0 + StampSize.X + 12.0;
+					Whole += 6.0 + StampSize.X;
 				}
 				if (!bDraw)
 				{
@@ -3353,10 +3519,8 @@ namespace
 				}
 				if (!Seen.IsEmpty())
 				{
-					const FVector2D StampAt = Corner + FVector2D(Wide + 6.0, (Tall - StampSize.Y - 6.0) * 0.5);
-					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(StampSize.X + 12.0, StampSize.Y + 6.0), FSlateLayoutTransform(StampAt)), &GlanceBare, ESlateDrawEffect::None, GlanceBare.GetTint(InWidgetStyle));
-					GlanceDashes(StampAt, StampAt + FVector2D(StampSize.X + 12.0, StampSize.Y + 6.0), GlanceLine, LayerId + 3);
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(StampSize, FSlateLayoutTransform(StampAt + FVector2D(6.0, 3.0))), Seen, StampType, ESlateDrawEffect::None, GlanceMuted);
+					const FVector2D StampAt = Corner + FVector2D(Wide + 6.0, (Tall - StampSize.Y) * 0.5);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(StampSize, FSlateLayoutTransform(StampAt)), Seen, StampType, ESlateDrawEffect::None, GlancePaper3.CopyWithNewOpacity(0.7f));
 				}
 				return Whole;
 			};
@@ -5512,14 +5676,24 @@ namespace
 							[
 								MakeGlanceCard()
 							]
+							// (Release 2, the art director's read of run 2, 22 November: mend 1, two hover tips. Under the paper card
+							// the dark slip said the city again. While the card shows, the slip's plain words are set aside: the card's
+							// foot carries those it lacks (the controller folds them in), and the slip stands only for its marked words,
+							// in their colours. Wherever no card shows, the slip is as it was.)
 							+ SVerticalBox::Slot().AutoHeight()
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))
+								.Visibility_Lambda([this]()
+								{
+									const bool bCardOnly = Controller.IsValid() && Controller->GetHoverGlance().bValid && Controller->GetHoverTipMarked().IsEmpty();
+									return bCardOnly ? EVisibility::Collapsed : EVisibility::HitTestInvisible;
+								})
 								[
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight()
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f).WrapTextAt(420.0f)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetHoverGlance().bValid ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTip() : FText::GetEmpty(); })
 									]
 									// (Rulings 86 and 87.) Under it, what is said with a mark of its own colour in it: brass for "No
@@ -5945,13 +6119,19 @@ namespace
 										SNew(SPhraseText).Face(Font(TEXT("Regular"), 12)).Ink(Muted).Guess(340.0f)
 										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return Info ? Info->Details : FText::GetEmpty(); })
 									]
+									// (Release 2, the art director's read of run 2, 22 November: mend 3. Over an enemy's town the list ran
+									// to fourteen lines, its folds left "4)" alone on a line, and it pushed the shelves down. Where the
+									// panel has tabs and the list is longer than a line, it goes into the PROVINCE tab, each entry with
+									// a hanging indent; the one line over a town of his own stays here, as it was.)
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(SmallCaps()).ColorAndOpacity(Brass)
+										.Visibility_Lambda([this, Region]() { const FRegionPanelInfo* Info = Region(); return Info && ForcesInProvinceTab(*Info) ? EVisibility::Collapsed : EVisibility::Visible; })
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+										.Visibility_Lambda([this, Region]() { const FRegionPanelInfo* Info = Region(); return Info && ForcesInProvinceTab(*Info) ? EVisibility::Collapsed : EVisibility::Visible; })
 										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return Info ? Info->Forces : FText::GetEmpty(); })
 									]
 									// On home ground: what the province holds, and what can be raised or built there.
@@ -5973,10 +6153,13 @@ namespace
 
 						// The town of the province picked, when nothing is in hand: its building plots as pictures. A click on
 						// a plot lays out above the bar what could go up on it, and a click on one of those orders it.
+						// (Release 2, the art director's read of run 2, 22 November: mend 2. While the panel stands on AT A
+						// GLANCE, whose third shelf shows these plots, the bar is put away; BUILD and the other tabs bring it
+						// back. Only the bar goes: the "?" in the corner stays put away while a town is open, as before.)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
 						[
 							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 11.0f, 14.0f, 13.0f))
-							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsTownBarShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsTownBarShown() && !GlanceTabShown() ? EVisibility::Visible : EVisibility::Collapsed; })
 							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the bar is not the map
 							[
 								SAssignNew(TownBarBox, SVerticalBox)
@@ -8268,6 +8451,20 @@ namespace
 							SNew(STextBlock).Text(Info.OptionsTitle).Font(SmallCaps()).ColorAndOpacity(Brass)
 						];
 					}
+					// (Release 2, the art director's read of run 2, 22 November: mend 3.) The forces of a place whose list runs past
+					// a line, moved here from over the tabs: each army, and each corps under it, an entry with a hanging indent.
+					if (ProvinceTab == 0 && ForcesInProvinceTab(Info))
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(SmallCaps()).ColorAndOpacity(Brass)
+						];
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+						[
+							SNew(SHangingText).Face(Font(TEXT("Regular"), 12)).Ink(Cream).Lead(16.0f).Hang(26.0f).Guess(330.0f)
+							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetRegionPanel().Forces : FText::GetEmpty(); })
+						];
+					}
 					if (ProvinceTab == 3 && bGlance)
 					{
 						LayOutGlance(Info, Recruits);
@@ -10038,6 +10235,39 @@ namespace
 		bool HelpOpen() const
 		{
 			return (Controller.IsValid() && Controller->IsHelpShown()) || (HelpMark.IsValid() && HelpMark->IsHovered());
+		}
+
+		/**
+		 * (Release 2, the art director's read of run 2, 22 November: mend 2.) Whether the picked town's panel stands open on
+		 * AT A GLANCE. Its third shelf shows the town's plots already, so the plot bar along the bottom gives that sixth of
+		 * the screen back to the map, and comes again on BUILD and the other tabs. Read from the panel's own figures, as its
+		 * tabs are laid out from them: AT A GLANCE is the tab shown only where the town wears a plate.
+		 */
+		bool GlanceTabShown() const
+		{
+			if (!Controller.IsValid() || Controller->GetProvinceTab() != 3)
+			{
+				return false;
+			}
+			const FRegionPanelInfo& PanelNow = Controller->GetRegionPanel();
+			return PanelNow.bVisible && PanelNow.Glance.bValid && PanelNow.OptionsTitle.ToString() == TEXT("PROVINCE");
+		}
+
+		/**
+		 * (Release 2, the art director's read of run 2, 22 November: mend 3.) Whether a picked place's forces are listed in
+		 * its PROVINCE tab instead of over the tabs: where the panel has tabs and the list runs to more than one line (an
+		 * enemy's town, with its corps under each army, or several armies in one place). One line, as over a town of his
+		 * own with his army in it, or "No troops here.", stays over the tabs as before; and a panel with no tabs (a fleet's,
+		 * an air fleet's) keeps its list where it was.
+		 */
+		bool ForcesInProvinceTab(const FRegionPanelInfo& PanelNow) const
+		{
+			if (PanelNow.OptionsTitle.ToString() != TEXT("PROVINCE") || !PanelNow.Forces.ToString().Contains(TEXT("\n")))
+			{
+				return false;
+			}
+			// (the tabs stand where there is something to order or build, or a plate to read: see the province's layout)
+			return PanelNow.Options.Num() > 0 || PanelNow.Glance.bValid;
 		}
 
 		/**
