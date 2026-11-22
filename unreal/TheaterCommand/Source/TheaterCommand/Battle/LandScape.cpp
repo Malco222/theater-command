@@ -282,9 +282,10 @@ namespace LandScape
 			A.bSet = true;
 			Ink(A.HazeInk, 0.85, 0.74, 0.56);
 			Ink(A.HazeOvercast, 0.66, 0.61, 0.52);
-			A.HazeDensity = 0.0071;
+			A.HazeDensity = 0.0055; // (pushed out from the set's 3,400 m to some 4,400 m on a clear day, so the escarpment's face reads at two kilometres: the art director's read, 18:30Z)
 			A.SkyDust = 1.15;
 			Grade(0.55, 0.66, 1.25, -0.6, 0.55, 1.02, 0.96);
+			A.Cover = 0.05; // (the desert's own clear, deep sky and hard shadows: the art director's read, 18:30Z)
 			break;
 		case Look::Med:
 			// (drysouth.json: a blue-grey haze, B3BFCC at 2,400 m; the hills behind fade in steps)

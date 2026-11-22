@@ -75,6 +75,8 @@ namespace LandScape
 		double Contrast = 1.42;                      // BattleLook's
 		double Toe = 0.55;                           // the film's toe (Unreal's own)
 		double KeyKelvin = 0.0;                      // 0: the battle's own
+		double Cover = -1.0;                         // the cloud's usual share (the desert's clear sky), for the cloud painter where
+		                                             // the recording gives its own; the game keeps the battle's weather draw
 	};
 	Air AirOf(Look L, double Snow);
 
