@@ -2321,4 +2321,262 @@ namespace AirSky
 		Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba, nullptr, nullptr, &NearUvs);
 		bBoth = true;
 	}
+
+	Chip::Chip(int InRoom, int InSides)
+		: RoomSlots(std::max(1, InRoom)), SideCount(std::max(6, InSides))
+	{
+		// (each puff's ring turned by its own part of a side, as the painter's TurnCos and TurnSin)
+		for (int K = 0; K < 97; ++K)
+		{
+			const double Golden = K * 0.6180339887;
+			const double A = (Golden - std::floor(Golden)) * 2.0 * Pi / SideCount;
+			TurnCos.push_back(std::cos(A));
+			TurnSin.push_back(std::sin(A));
+		}
+		Cells.assign(static_cast<size_t>(Rows()) * Wide * 4, 0.0f);
+	}
+
+	std::vector<int> Chip::Triangles() const
+	{
+		return Painter(SideCount).Triangles(RoomSlots);
+	}
+
+	void Chip::PointPlaces(std::vector<float>& OutRing, std::vector<float>& OutSlot) const
+	{
+		const size_t Points = static_cast<size_t>(RoomSlots) * PerPuff();
+		OutRing.assign(Points * 2, 0.0f);
+		OutSlot.assign(Points * 2, 0.0f);
+		for (int Slot = 0; Slot < RoomSlots; ++Slot)
+		{
+			const float Column = static_cast<float>((Slot % PuffsPerRow) * TexelsPerPuff), Row = static_cast<float>(1 + Slot / PuffsPerRow);
+			for (int P = 0; P < PerPuff(); ++P)
+			{
+				const size_t At = (static_cast<size_t>(Slot) * PerPuff() + P) * 2;
+				// (the middle 0; the heart ring's points 1 to Sides, the rim's after them, as Painter::Triangles lays them)
+				const int Ring = P == 0 ? 0 : P <= SideCount ? 1 : 2;
+				const int K = Ring == 0 ? 0 : Ring == 1 ? P - 1 : P - 1 - SideCount;
+				OutRing[At] = static_cast<float>(K);
+				OutRing[At + 1] = static_cast<float>(Ring);
+				OutSlot[At] = Column;
+				OutSlot[At + 1] = Row;
+			}
+		}
+	}
+
+	void Chip::SetOrderTurn(double InTurn)
+	{
+		Turn = std::isfinite(InTurn) ? Clamp(InTurn, 0.002, 0.2) : DefaultOrderTurn;
+	}
+
+	int Chip::SlotPuff(int Slot) const
+	{
+		return Slot >= 0 && Slot < LastLaid ? Order[static_cast<size_t>(LastDropped + Slot)].Puff : -1;
+	}
+
+	int Chip::SlotCloud(int Slot) const
+	{
+		return Slot >= 0 && Slot < LastLaid ? Order[static_cast<size_t>(LastDropped + Slot)].Cloud : -1;
+	}
+
+	bool Chip::Wants(const Vec& Eye, const Vec& Drift) const
+	{
+		if (!bLaid)
+		{
+			return true;
+		}
+		const double Carried = (Drift - LastDrift).Length();
+		if ((bEasing && Carried > 3.0) || (bClearing && Carried > 15.0))
+		{
+			return true;
+		}
+		return ((Eye - Drift) - LastEye).Length() > LastSlack;
+	}
+
+	void Chip::Lay(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)
+	{
+		// Painter::Paint's gathering, for the sheet's shapes and the whole sky (one painter, all of it), without its
+		// points: which clouds, where (the copy nearest the eye, lifted, squashed, thinned by the clearing), and which of
+		// their puffs, far to near; each out past the reach and its level's fade by the Margin, so that the chip, which
+		// fades them itself, has every puff it could draw before the next lay.
+		const Vec Seen = Eye - Drift;
+		const size_t CloudCount = F.Clouds.size();
+		if (Serial != F.Serial || Lifts.size() != CloudCount)
+		{
+			Lifts.assign(CloudCount, Kept());
+			Serial = F.Serial;
+		}
+		Where.assign(CloudCount, Placed());
+		Order.clear();
+		bEasing = false;
+		bClearing = false;
+		const Vec Carry = F.DriftAt(1.0);
+		const Vec Lead = Carry.Length() > 1e-9 ? Carry * (250.0 / Carry.Length()) : Vec();
+		const Vec SunWay = Sun.Unit(Vec(-0.35, -0.45, 0.82));
+		double Near = 1e18;
+		int Drawn = 0;
+		for (size_t I = 0; I < CloudCount; ++I)
+		{
+			const Cloud& C = F.Clouds[I];
+			const int Index = static_cast<int>(I);
+			const Vec Shift = F.ShiftNear(Index, Seen.X, Seen.Y);
+			const double LX = C.At.X + Shift.X, LY = C.At.Y + Shift.Y;
+			if (std::hypot(LX - Seen.X, LY - Seen.Y) > Reach + C.W + Margin)
+			{
+				continue;
+			}
+			// (its lift eased as the painter eases it)
+			const double WX = LX + Drift.X, WY = LY + Drift.Y;
+			Kept& Lift = Lifts[I];
+			const double Jump = std::hypot(WX - Lift.PX, WY - Lift.PY);
+			bool bStillEasing = false;
+			auto LiftHere = [&F, Index, &Lead](double X, double Y)
+			{
+				const double Now = F.LiftAt(Index, X, Y);
+				return Lead.X == 0.0 && Lead.Y == 0.0 ? Now : std::max(Now, F.LiftAt(Index, X + Lead.X, Y + Lead.Y));
+			};
+			if (Lift.Shown < 0.0 || Jump > 1000.0)
+			{
+				Lift.X = WX;
+				Lift.Y = WY;
+				Lift.Target = LiftHere(WX, WY);
+				Lift.Shown = Lift.Target;
+			}
+			else
+			{
+				if ((WX - Lift.X) * (WX - Lift.X) + (WY - Lift.Y) * (WY - Lift.Y) > 30.0 * 30.0)
+				{
+					Lift.X = WX;
+					Lift.Y = WY;
+					Lift.Target = LiftHere(WX, WY);
+				}
+				Lift.Shown += Clamp(Lift.Target - Lift.Shown, -0.75 * Jump, 1.5 * Jump);
+				bStillEasing = std::fabs(Lift.Target - Lift.Shown) > 0.5;
+			}
+			Lift.PX = WX;
+			Lift.PY = WY;
+			// (a cumulus whose near edge comes within 4 km of the target, where the clearing thins what the wind carries in
+			// (Field::ShownAt): its share shown moves with the wind's carry, so the table is laid again as it does)
+			if (!F.Sky.bDeck && std::hypot(WX - F.TargetX, WY - F.TargetY) - 0.45 * C.W < 4200.0)
+			{
+				bClearing = true;
+			}
+			Placed& Here = Where[I];
+			Here = F.PlaceLifted(Index, Shift, Drift, Lift.Shown);
+			if (Here.Show < 0.002)
+			{
+				continue;
+			}
+			const Vec Middle(LX, LY, C.At.Z + Here.Lift + 0.5 * Here.Squash * C.H);
+			const double Far = (Middle - Seen).Length();
+			// (a small cloud, under 600 m across, drawn out to SmallSight times its width, as the painter's)
+			const double Sight = C.W < 600.0 ? SmallSight * C.W : 0.0;
+			if (Smooth((Reach - (Far - Margin)) / (Reach / 3.0)) <= 0.0 || (Sight > 0.0 && Smooth((Sight - (Far - Margin)) / (0.2 * Sight)) <= 0.0))
+			{
+				continue;
+			}
+			bEasing = bEasing || bStillEasing;
+			const double Haze = Smooth((Reach - Far) / (Reach / 3.0)) * (Sight > 0.0 ? Smooth((Sight - Far) / (0.2 * Sight)) : 1.0);
+			const double NearShare = Smooth((NearAll + 1000.0 - Far) / 1000.0), FarShare = Smooth((FarAll + 1500.0 - Far) / 1500.0);
+			const bool bHeap = C.Count > 1 && F.Puffs[static_cast<size_t>(C.First)].bFlatFoot;
+			for (int K = C.First; K < C.First + C.Count; ++K)
+			{
+				const Puff& Each = F.Puffs[static_cast<size_t>(K)];
+				if ((bHeap && Each.Lod == 2) || Here.Show * Each.Alpha < 0.002)
+				{
+					continue;
+				}
+				// (each level's share is nought only past its own distance: kept if the eye, within the Margin, could
+				// bring it in)
+				const bool bFirst = bHeap && K == C.First;
+				const bool bMay = bFirst || Each.Lod == 0 ? Far - Margin < NearAll + 1000.0 : Each.Lod == 1 ? Far - Margin < FarAll + 1500.0 : Each.Lod == 3 ? Far + Margin > NearAll : true;
+				if (!bMay)
+				{
+					continue;
+				}
+				const Vec At(Each.At.X + Shift.X, Each.At.Y + Shift.Y, C.At.Z + Here.Lift + (Each.At.Z - C.At.Z) * Here.Squash);
+				const Vec D = At - Seen;
+				Order.push_back({ K, Index, D.Dot(D) });
+				// (drawn from here, as the painter would: its nearest, for the order's slack)
+				const double Share = bFirst ? NearShare : Each.Lod == 3 ? 1.0 - NearShare : Each.Lod == 2 ? 1.0 : Each.Lod == 1 ? FarShare : NearShare;
+				if (Haze > 0.0 && Haze * Share * Here.Show * Each.Alpha >= 0.002)
+				{
+					const Vec Mid = bFirst ? Vec(LX, LY, At.Z) : At;
+					Near = std::min(Near, (Mid - Seen).Length() - Each.R * Each.Long);
+					++Drawn;
+				}
+			}
+		}
+		// (far to near, as see-through things are drawn; with no room for them all, the farthest go)
+		auto Farther = [](const Slotted& A, const Slotted& B) { return A.Deep > B.Deep; };
+		const int Count = static_cast<int>(Order.size());
+		LastDropped = std::max(0, Count - RoomSlots);
+		LastLaid = Count - LastDropped;
+		if (LastDropped > 0)
+		{
+			std::nth_element(Order.begin(), Order.begin() + LastDropped, Order.end(), Farther);
+		}
+		std::sort(Order.begin() + LastDropped, Order.end(), Farther);
+		LastDrawn = Drawn;
+
+		// The header: the sun's way and a sheet cell's half width; the paints as the painter's Tone gives them (the
+		// shaded side and the base under the ink's share, by the hour's light); the floor's share, the sprite's span, the
+		// reach, the levels' distances, the puffs laid and a puff's sides.
+		auto Put = [this](int Row, int Texel, double A, double B, double C, double D)
+		{
+			float* At = &Cells[(static_cast<size_t>(Row) * Wide + static_cast<size_t>(Texel)) * 4];
+			At[0] = static_cast<float>(A);
+			At[1] = static_cast<float>(B);
+			At[2] = static_cast<float>(C);
+			At[3] = static_cast<float>(D);
+		};
+		const Rgb BaseInked = BaseSide * (1.0 / Ink), ShadeInked = ShadeSide * (1.0 / Ink);
+		Put(0, 0, SunWay.X, SunWay.Y, SunWay.Z, 0.49 / FragmentCells);
+		Put(0, 1, BaseInked.R * Light.R, BaseInked.G * Light.G, BaseInked.B * Light.B, FragmentFloor / 0.98);
+		Put(0, 2, ShadeInked.R * Light.R, ShadeInked.G * Light.G, ShadeInked.B * Light.B, Painter::SpriteSpan);
+		Put(0, 3, SunSide.R * Light.R, SunSide.G * Light.G, SunSide.B * Light.B, Reach);
+		Put(0, 4, NearAll, FarAll, LastLaid, SideCount);
+
+		// Each puff: eight texels (AirSkyChip.inl).
+		const int SheetCells = FragmentCells * FragmentCells, Tops = SheetCells - FragmentBases - FragmentFeet - FragmentLids;
+		auto SheetU = [](int Pick) { return (Pick % FragmentCells + 0.5) / FragmentCells; };
+		auto SheetV = [](int Pick) { return (Pick / FragmentCells + 0.5) / FragmentCells; };
+		for (int Slot = 0; Slot < LastLaid; ++Slot)
+		{
+			const Slotted& O = Order[static_cast<size_t>(LastDropped + Slot)];
+			const Puff& Each = F.Puffs[static_cast<size_t>(O.Puff)];
+			const Cloud& Cl = F.Clouds[static_cast<size_t>(O.Cloud)];
+			const Placed& Here = Where[static_cast<size_t>(O.Cloud)];
+			const bool bHeapHere = Cl.Count > 1 && F.Puffs[static_cast<size_t>(Cl.First)].bFlatFoot;
+			const bool bFoot = bHeapHere && O.Puff == Cl.First;
+			const bool bFlatFoot = Each.bFlatFoot && (!bHeapHere || bFoot);
+			const bool bLowLump = bHeapHere && Each.bFlatFoot && !bFoot;
+			const double CloudX = Cl.At.X + Here.Shift.X, CloudY = Cl.At.Y + Here.Shift.Y;
+			const double PX = bFoot ? CloudX : Each.At.X + Here.Shift.X, PY = bFoot ? CloudY : Each.At.Y + Here.Shift.Y;
+			const double PZ = Cl.At.Z + Here.Lift + (Each.At.Z - Cl.At.Z) * Here.Squash;
+			const int Row = 1 + Slot / PuffsPerRow, First = (Slot % PuffsPerRow) * TexelsPerPuff;
+			const size_t Phase = static_cast<size_t>(O.Puff % 97);
+			const int FootPick = Tops + FragmentBases + O.Cloud % FragmentFeet;
+			// (a deck's own puffs, its scraps apart, drawn from the lids, lying flat: the painter's bLidTile)
+			const bool bLidTile = F.Sky.bDeck && !Cl.bScrap;
+			const int UpPick = bFoot ? FootPick : Tops + O.Puff % FragmentBases;
+			const int TopPick = bLidTile ? SheetCells - FragmentLids + O.Puff % FragmentLids : bFoot ? FootPick : O.Puff % Tops;
+			const int Flags = (bFlatFoot ? 1 : 0) | (bFoot ? 2 : 0) | (bLowLump ? 4 : 0) | (bHeapHere ? 8 : 0) | (bLidTile ? 16 : 0);
+			// (a small cloud's rag drawn out along its way: a base by its cloud's, a puff by its own)
+			const double LongHere = bFoot ? Cl.Long : Each.Long, LongWay = bFoot ? Cl.LongWay : Each.LongWay;
+			Put(Row, First + 0, PX, PY, PZ, Each.R);
+			Put(Row, First + 1, CloudX, CloudY, Cl.At.Z + Here.Lift, Here.Squash * Cl.H);
+			Put(Row, First + 2, Cl.W, 0.5 * Cl.W * (F.Sky.bDeck && !Cl.bScrap ? 1.25 : 1.0), Here.Squash, Each.Flat);
+			Put(Row, First + 3, Here.Show * Each.Alpha, Each.Lit, Each.Trough, Each.Shadowed);
+			Put(Row, First + 4, TurnCos[Phase], TurnSin[Phase], PhaseSines(false)[Phase], (O.Puff / SheetCells) % 2 == 1 ? -1.0 : 1.0);
+			Put(Row, First + 5, SheetU(TopPick), SheetV(TopPick), SheetU(UpPick), SheetV(UpPick));
+			Put(Row, First + 6, LongHere, std::cos(LongWay), std::sin(LongWay), Each.Long);
+			Put(Row, First + 7, Each.Lod, Flags, Cl.W < 600.0 ? SmallSight * Cl.W : 0.0, bFoot ? 0.4 * Cl.W / std::max(1.0, Cl.Long) : 0.0);
+		}
+		bLaid = true;
+		++LayCount;
+		LastEye = Seen;
+		LastDrift = Drift;
+		LastNear = Drawn > 0 ? std::max(50.0, Near) : 50.0;
+		LastSlack = Clamp(Turn * LastNear, 2.0, Margin);
+	}
 }
