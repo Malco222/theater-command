@@ -4829,7 +4829,10 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 		InThen(Object);
 		return;
 	}
-	RulesMemo.Reset(); // (an order: nothing asked before it holds)
+	if (!IsQuestion(Function))
+	{
+		RulesMemo.Reset(); // (an order: nothing asked before it holds; a question asked aside, PreviewAside's, changes nothing)
+	}
 	const TSharedRef<FAside, ESPMode::ThreadSafe> Job = MakeShared<FAside, ESPMode::ThreadSafe>();
 	Job->Function = Function;
 	Job->Arguments = ArgumentsJson;
@@ -4845,12 +4848,14 @@ void FCampaignSession::Order(const FString& Function, const FString& ArgumentsJs
 		FString Json;
 		Job->bOk = Rules->Call(Job->Function, Job->Arguments, Json, Job->Error);
 		Job->Seconds = FPlatformTime::Seconds() - Began;
-		if (Job->bOk && !(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Job->Answer) && Job->Answer.IsValid()))
+		// (the rules' null, a question with nobody there to ask about: no answer, as CallRules gives it, and no fault)
+		const bool bNull = Job->bOk && Json.Len() <= 8 && Json.TrimStartAndEnd() == TEXT("null");
+		if (Job->bOk && !bNull && !(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Job->Answer) && Job->Answer.IsValid()))
 		{
 			Job->bOk = false;
 			Job->Error = Job->Function + TEXT(": the answer could not be read");
 		}
-		if (Job->bOk)
+		if (Job->bOk && Job->Answer.IsValid())
 		{
 			const TSharedPtr<FJsonObject>* NewView = nullptr;
 			if (Job->Answer->TryGetObjectField(TEXT("view"), NewView))
@@ -4981,7 +4986,10 @@ void FCampaignSession::Settle()
 		View = MoveTemp(Job->View);
 		OnViewChanged.Broadcast();
 	}
-	RulesMemo.Reset(); // (the order changed the war; what was asked ahead after it holds)
+	if (!IsQuestion(Job->Function))
+	{
+		RulesMemo.Reset(); // (the order changed the war; what was asked ahead after it holds)
+	}
 	for (FAside::FKept& Kept : Job->Kept)
 	{
 		TheaterSpeed::NoteRulesCall(Kept.Function, Kept.Seconds, false);
@@ -5203,6 +5211,21 @@ void FCampaignSession::LandAside(const TArray<int32>& CorpsIds, int32 RegionId, 
 		[Read, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
 		{
 			Then(Answer.IsValid() ? *Read : FLandingResult());
+		});
+}
+
+void FCampaignSession::PreviewAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening, bool bAside, TFunction<void(const FAttackPreview&)>&& InThen)
+{
+	if (CorpsIds.Num() == 0)
+	{
+		InThen(FAttackPreview());
+		return;
+	}
+	// (the same arguments as PreviewAttack sends, so that at once it is the same question, kept as that one is)
+	Order(TEXT("previewAttack"), FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false")), bAside, nullptr,
+		[RegionId, Then = MoveTemp(InThen)](const TSharedPtr<FJsonObject>& Answer)
+		{
+			Then(Answer.IsValid() ? ReadPreview(Answer, RegionId) : FAttackPreview());
 		});
 }
 

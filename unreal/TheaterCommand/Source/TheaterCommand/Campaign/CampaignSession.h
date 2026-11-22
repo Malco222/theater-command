@@ -323,6 +323,13 @@ public:
 	void MoveAside(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army, const TArray<int32>& ArmyIds, bool bAside,
 		TFunction<FHandNext(const FMoveAnswer&)>&& Guess, TFunction<void(const FMoveAnswer&)>&& Then);
 	void LandAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bAside, TFunction<FHandNext(const FLandingResult&)>&& Guess, TFunction<void(const FLandingResult&)>&& Then);
+	/**
+	 * (Speed, the UI director's bar of 22 November 2026: every press answers within a tenth of a second.) The attack
+	 * card's forecast, PreviewAttack's, worked out on the rules' own thread as an order is (it changes nothing in the
+	 * war, so nothing kept is forgotten for it); Then is given it on the game thread, from Deliver, a frame or a few
+	 * later, or an empty forecast where the rules failed or found nobody there. bAside false asks it at once, as before.
+	 */
+	void PreviewAside(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening, bool bAside, TFunction<void(const FAttackPreview&)>&& Then);
 	/** Function: "attack", "take" (bAssault as Take's), "storm" or "sally" (no corps: the province says who). */
 	void FightAside(const FString& Function, const TArray<int32>& CorpsIds, int32 RegionId, bool bAssault, bool bAside,
 		TFunction<FHandNext(const FAttackResult&)>&& Guess, TFunction<void(const FAttackResult&)>&& Then);

@@ -490,6 +490,7 @@ struct FFaceOff
 	// (The UI director, 17 November.) The verdict reads "A long shot" or worse: SEND THEM IN is then a plain button
 	// that takes a click only, and the light and Enter go to CALL IT OFF.
 	bool bLongShot = false;
+	bool bPending = false; // (tc.Speed.CardAside) the card stands and its forecast is still being worked out on the rules' thread
 	// (The UI director, 17 November.) The card shows exactly what was picked. Where that pick cannot go (guns or
 	// engineers alone, ruling 211(a)) this is the rules' sentence: it stands at the foot, there is no forecast, SEND
 	// THEM IN is not lit and takes no key, and CALL IT OFF is lit with Enter and Esc.
@@ -1226,6 +1227,8 @@ private:
 	void RefreshOrders();
 	void Notify(const FString& Text, double Seconds = 5.0);
 	void OpenFaceOff(int32 RegionId, bool bOpening = false, const FAttackPreview* Given = nullptr);
+	/** (tc.Speed.CardAside) OpenFaceOff(RegionId, true) with its forecast worked out on the rules' thread: the card stands at once and fills when it comes. */
+	void OpenFaceOffAside(int32 RegionId);
 	/**
 	 * (Rules 84.1.) The army in hand is ordered onto enemy ground with no army in its field. Where the town's guard
 	 * will fight, opens the attack card and returns true. Otherwise returns false (nothing is risked: no card and no

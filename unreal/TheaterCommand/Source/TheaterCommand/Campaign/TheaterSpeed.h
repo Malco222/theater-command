@@ -156,6 +156,12 @@ class APlayerController;
  *                         the leaves) is planted a few squares a frame, about 6 ms of them, the squares in sight first
  *                         and then the nearest; a square out of sight is not drawn, so it can wait. 0: every square in
  *                         the month's frame, as before. The same woods either way.
+ * (Release 2, the UI director's bar of 22 November 2026: every press answers within a tenth of a second.)
+ *   tc.Speed.CardAside    1 (default): the attack card stands the moment the army is ordered at enemy ground, named
+ *                         and in the two sides' colours, the staff at work on the odds; its forecast (previewAttack,
+ *                         the staff's widening with it) is worked out on the rules' own thread, as an order's answer is,
+ *                         and fills the card a frame or a few later. 0: the forecast in the press's frame, as before.
+ *                         The same card either way.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -207,6 +213,7 @@ namespace TheaterSpeed
 	bool SidesKept();
 	float SidesFade(); // (tc.Speed.SidesFade) the seconds the sides view fades in and out over: 0 at once, as before
 	double TreesSpread(); // (tc.Speed.TreesSpread) the ms a frame the woods' month turn may take: 0 all in the month's frame, as before
+	bool CardAside(); // (tc.Speed.CardAside) the attack card's forecast asked on the rules' thread: false in the press's frame, as before
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would

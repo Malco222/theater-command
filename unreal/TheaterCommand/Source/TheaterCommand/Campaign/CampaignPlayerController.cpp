@@ -8837,7 +8837,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	if (Target->bAttack)
 	{
 		AdviserSaw(1);
-		OpenFaceOff(RegionId, true); // (Version 63) the card opens on the best attack to be had
+		OpenFaceOffAside(RegionId); // (Version 63) the card opens on the best attack to be had
 		return;
 	}
 	// (Rules 84.1; rulings 175(c) and 178. Brian, 17 November 2026: "You should be able to take over a territory if no
@@ -9862,6 +9862,60 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	FaceOff.MassIds = Preview.MassIds;
 }
 
+void ACampaignPlayerController::OpenFaceOffAside(int32 RegionId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	if (bScripted || !TheaterSpeed::CardAside() || IsAnswering() || PickedCorps.Num() == 0)
+	{
+		OpenFaceOff(RegionId, true); // (at once, as before: a run's steps and pictures, or the rules busy with an order)
+		return;
+	}
+	// (Speed, the UI director's bar of 22 November 2026: every press answers within a tenth of a second. In map run 7
+	// the forecast took 150 ms of the press's frame.) The card stands now, named, in the two sides' colours, the staff
+	// at work on the odds; the forecast, with the staff's widening, is worked out on the rules' own thread and fills it
+	// a frame or a few later. SEND THEM IN takes no press until it has (the rules are answering), and CALL IT OFF does.
+	const FCampaignMapData& Data = Map->GetData();
+	const FCampaignView& View = Session->GetView();
+	const FCampaignNation* Ours = Data.FindNation(View.Human);
+	const FString TheirTag = View.RegionHolder.IsValidIndex(RegionId) ? View.RegionHolder[RegionId] : FString();
+	const FCampaignNation* Theirs = Data.FindNation(TheirTag);
+	const FString Place = Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Name : FString();
+	FaceOff = FFaceOff();
+	FaceOff.bVisible = true;
+	FaceOff.bPending = true;
+	FaceOffSince = FPlatformTime::Seconds();
+	FaceOff.Region = RegionId;
+	FaceOff.Title = FText::FromString(FString::Printf(TEXT("The attack on %s"), *Place));
+	FaceOff.OurName = FText::FromString(Ours ? Ours->Name : View.Human);
+	FaceOff.TheirName = FText::FromString(Theirs ? Theirs->Name : TheirTag);
+	FaceOff.OurColor = Ours ? FLinearColor(Ours->Color) : FLinearColor::Gray;
+	FaceOff.TheirColor = Theirs ? FLinearColor(Theirs->Color) : FLinearColor::Gray;
+	FaceOff.OurTag = View.Human;
+	FaceOff.TheirTag = TheirTag;
+	FaceOff.OddsLine = FText::FromString(TEXT("The staff are working out the odds..."));
+	const TWeakObjectPtr<ACampaignPlayerController> Self(this);
+	const TArray<int32> Hand = PickedCorps;
+	Session->PreviewAside(Hand, RegionId, true, true, [Self, RegionId, Hand](const FAttackPreview& Preview)
+	{
+		ACampaignPlayerController* Me = Self.Get();
+		if (!Me || !Me->FaceOff.bVisible || !Me->FaceOff.bPending || Me->FaceOff.Region != RegionId)
+		{
+			return; // (called off, or another card stands: this forecast is not wanted)
+		}
+		Me->FaceOff.bVisible = false;
+		if (Me->PickedCorps != Hand)
+		{
+			Me->OpenFaceOff(RegionId, true); // (the pick changed under the card: its forecast is asked again, at once)
+			return;
+		}
+		Me->OpenFaceOff(RegionId, true, &Preview); // (and where the forecast refuses, the card goes and the reason is said)
+	});
+}
+
 void ACampaignPlayerController::OpenGateBox(int32 GateId)
 {
 	FCampaignSession* Session = GetSession();
@@ -10263,7 +10317,7 @@ void ACampaignPlayerController::ConfirmAttack()
 void ACampaignPlayerController::ResolveAttack()
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || IsAnswering())
+	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved || FaceOff.bPending || IsAnswering())
 	{
 		return;
 	}
@@ -10313,7 +10367,7 @@ void ACampaignPlayerController::ResolveAttack()
 bool ACampaignPlayerController::CanFightLive() const
 {
 	// (a plain attack on the card, ready to go in: not a march, a storm, or a sortie, and a pick that can go)
-	return ALandBattle::CampaignLiveOn() && !bScripted && FaceOff.bVisible && !FaceOff.bResolved && !FaceOff.bMarch && !FaceOff.bStorm
+	return ALandBattle::CampaignLiveOn() && !bScripted && FaceOff.bVisible && !FaceOff.bResolved && !FaceOff.bPending && !FaceOff.bMarch && !FaceOff.bStorm
 		&& !FaceOff.bSally && FaceOff.Alone.IsEmpty() && PickedCorps.Num() > 0 && !LiveBattle.IsValid();
 }
 
@@ -10527,7 +10581,7 @@ void ACampaignPlayerController::CloseFaceOff()
 	{
 		return; // (his own battle is open: the card behind it waits for its result)
 	}
-	if (FaceOff.bVisible && !FaceOff.bResolved && IsAnswering())
+	if (FaceOff.bVisible && !FaceOff.bResolved && !FaceOff.bPending && IsAnswering())
 	{
 		return; // (the attack has been sent in and its answer is on its way: the card is not called off under it)
 	}
