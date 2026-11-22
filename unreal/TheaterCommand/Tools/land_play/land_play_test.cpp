@@ -27,6 +27,7 @@
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
+#include "Battle/LandWalkPan.h"
 
 #include <algorithm>
 #include <chrono>
@@ -556,6 +557,32 @@ int main(int argc, char** argv)
 	};
 	EW.Crop = CornAt;
 	EW.Solid = [&Sight](const Vec& At, int Except) { return static_cast<int>(Sight.At(At, Except)); };
+	{
+		// The walk pan (the Mac recipe's look 7, -TheaterLandWalkPan): a block walking steadily, an eye off its flank with
+		// the sight lines open, its men 25 to 140 m off through the pan; asked every 10 s from 30 s, the first that holds.
+		int Asked = 0, Held = 0;
+		double First = -1.0;
+		LandWalkPan::Plan FirstPlan;
+		for (double T = 30.0; T + 20.0 <= Rec.End; T += 10.0)
+		{
+			++Asked;
+			const LandWalkPan::Plan P = LandWalkPan::Choose(Rec, EW, T, 20.0);
+			const double Near = std::min({ P.FromStart, P.FromMiddle, P.FromEnd }), Far = std::max({ P.FromStart, P.FromMiddle, P.FromEnd });
+			if (P.Block < 0 || !P.bOpen || Near < 35.0 || Far > 120.0) continue;
+			++Held;
+			if (First < 0.0)
+			{
+				First = T;
+				FirstPlan = P;
+			}
+		}
+		if (First >= 0.0)
+			std::printf("walk pan (look 7): %d of %d times asked hold; the first at %.0f s: block %d, %zu men at %.1f m/s, the eye %.1f m up, %.0f, %.0f and %.0f m off\n", Held, Asked, First,
+				FirstPlan.Block, FirstPlan.Men.size(), FirstPlan.Speed, FirstPlan.Eye.Z - GroundAt(FirstPlan.Eye.X, FirstPlan.Eye.Y), FirstPlan.FromStart, FirstPlan.FromMiddle, FirstPlan.FromEnd);
+		else
+			std::printf("walk pan (look 7): none of %d times asked holds\n", Asked);
+		if (Held == 0) Fault("no walk pan found for the Mac's look 7 at any time asked");
+	}
 	// The men and vehicles where the recording has them now (the game asks its own cores: the skinned men, the posed tanks).
 	auto PlaceMovers = [&Rec, &Sight, &GroundAt](double T)
 	{

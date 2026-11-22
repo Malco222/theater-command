@@ -48,6 +48,12 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 4. Adding `-TheaterLandBattleShots=<folder>` takes the art director's pictures and then quits: `01-opening`,
    `02-the-advance`, `03-among-the-men`, `04-in-the-grass`, `05-the-tanks`, `06-a-man-falls`, `07-a-tank-knocked-out`,
    `08-the-village`, `09-the-fallen`, `10-after-card`.
+   `-TheaterLandWalkPan=<battle s>[,<seconds>]` (20 s by default) is the photographer for the Mac's look at the
+   crowd's walk (LandWalkPan): from that battle second the eye stands still some 70 m off the flank of the block
+   walking most steadily (45 to 100 m, a man's height up, or 3.5 m where a hedge is in the way) and turns with the
+   block's middle as it walks by, a still each real second (`<key>-walkpan-NN.png` in the stills folder, or
+   Saved/LandWalkPan). No block walking then: asked again 10 s on, up to six times. The same recording gives the same
+   block and place, so the base and `-TheaterLandNoVat` show the same men; the cloud test checks one is found.
 5. Other switches for trying the look: `-TheaterLandHand=0..3` (how unsteady the hand-held camera is, 1 by default),
    `-TheaterLandGrain=` (film grain, 0.25), `-TheaterLandNoFocus` (no shallow focus), `-TheaterLandSize=40..100`
    (screen percentage), `-TheaterLandTextScale=` (the screen's words, 1.25). The day's look (any number left empty

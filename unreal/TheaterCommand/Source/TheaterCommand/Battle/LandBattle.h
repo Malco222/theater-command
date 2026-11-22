@@ -458,6 +458,15 @@ private:
 
 	// ---- The picture run (-TheaterLandBattleShots) ----
 	FString ShotFolder;
+	/** The walk pan ("-TheaterLandWalkPan=<battle s>[,<seconds>]", the Mac recipe's look 7): from that battle second the
+	 * eye stands off a walking block's flank and turns with it (LandWalkPan), a still each real second. Battle second
+	 * it starts at (-1 none), how long, the stills' next real time and count, the tries left to find a walking block
+	 * (10 s later each), whether it holds the eye now, and its look, smoothed. */
+	double WalkPanAt = -1.0, WalkPanFor = 20.0, WalkPanStillAt = -1.0;
+	int32 WalkPanStills = 0, WalkPanTries = 6;
+	bool bWalkPanOn = false;
+	FVector WalkPanLook = FVector::ZeroVector;
+	void WalkPan(double Real);
 	struct FShot
 	{
 		FString Name;

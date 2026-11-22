@@ -848,6 +848,21 @@ bool ALandBattle::BeginReplay(const FString& InKey)
 {
 	Key = InKey;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandBattleShots="), ShotFolder);
+	// (the walk pan, the Mac recipe's look 7: "-TheaterLandWalkPan=<battle s>[,<seconds>]", read past its comma)
+	FString Pan;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWalkPan="), Pan, false))
+	{
+		TArray<FString> Parts;
+		Pan.ParseIntoArray(Parts, TEXT(","), false);
+		if (Parts.Num() > 0 && !Parts[0].TrimStartAndEnd().IsEmpty())
+		{
+			WalkPanAt = FMath::Max(0.0, FCString::Atod(*Parts[0]));
+		}
+		if (Parts.Num() > 1 && !Parts[1].TrimStartAndEnd().IsEmpty())
+		{
+			WalkPanFor = FMath::Clamp(FCString::Atod(*Parts[1]), 4.0, 120.0);
+		}
+	}
 	const FString File = FPaths::ProjectContentDir() / TEXT("Data/LandBattles") / Key + TEXT(".json");
 	FString Text;
 	auto Fail = [this]()
@@ -4614,6 +4629,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	{
 		GeneralView(Real);
 	}
+	WalkPan(Real);
 	S.Words = S.Desk.Update(S.Battle, Real);
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
 
@@ -4762,6 +4778,72 @@ void ALandBattle::Tick(float DeltaSeconds)
 		TornSent = TornBakedCount = 0;
 		TornBakeMostMs = 0.0;
 		PuffsMost = PuffsMostAsked = 0;
+	}
+}
+
+void ALandBattle::WalkPan(double Real)
+{
+	if (WalkPanAt < 0.0 || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	if (S.Battle < WalkPanAt)
+	{
+		return;
+	}
+	if (!bWalkPanOn)
+	{
+		// (the block walking most steadily over the pan, and the eye off its flank: none walking, asked again 10 s on)
+		S.Pan = LandWalkPan::Choose(S.Rec, S.EyeWorld, WalkPanAt, WalkPanFor);
+		if (S.Pan.Block < 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the walk pan (look 7): no block walking from %.0f s%s"), WalkPanAt,
+				WalkPanTries > 0 ? TEXT("; asked again 10 s on") : TEXT("; none taken"));
+			WalkPanAt = WalkPanTries-- > 0 ? WalkPanAt + 10.0 : -1.0;
+			return;
+		}
+		LandPlay::Vec Mid;
+		LandWalkPan::Middle(S.Rec, S.EyeWorld, S.Pan, S.Battle, Mid);
+		WalkPanLook = FVector(Mid.X, Mid.Y, Mid.Z);
+		bWalkPanOn = true;
+		WalkPanStillAt = RealT + 0.5;
+		WalkPanStills = 0;
+		const double Up = S.EyeWorld.Height ? S.Pan.Eye.Z - S.EyeWorld.Height(S.Pan.Eye.X, S.Pan.Eye.Y) : S.Pan.Eye.Z;
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the walk pan (look 7) from %.0f s for %.0f s: block %d, %d men walking %.1f m/s; the eye %.1f m up, %.0f m off their middle at the start, %.0f at the middle, %.0f at the end%s"),
+			WalkPanAt, WalkPanFor, S.Pan.Block, static_cast<int32>(S.Pan.Men.size()), S.Pan.Speed, Up, S.Pan.FromStart, S.Pan.FromMiddle, S.Pan.FromEnd,
+			S.Pan.bOpen ? TEXT("") : TEXT(" (no open line found: a bank or hedge may stand between)"));
+		S.Pose.bCut = true;
+	}
+	if (S.Battle >= WalkPanAt + WalkPanFor)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the walk pan done at %.0f s: %d stills"), S.Battle, WalkPanStills);
+		WalkPanAt = -1.0;
+		bWalkPanOn = false;
+		// (the film's own shot again, laid round as on a cut)
+		S.Pose.bCut = true;
+		return;
+	}
+	// The eye still; its look turned with the block's middle, smoothed over a second and a half (a slow pan).
+	LandPlay::Vec Mid;
+	if (LandWalkPan::Middle(S.Rec, S.EyeWorld, S.Pan, S.Battle, Mid))
+	{
+		const double Ease = 1.0 - FMath::Exp(-FMath::Max(0.0, Real) / 1.5);
+		WalkPanLook = FMath::Lerp(WalkPanLook, FVector(Mid.X, Mid.Y, Mid.Z), Ease);
+	}
+	S.Pose.Eye = S.Pan.Eye;
+	S.Pose.Look = LandPlay::Vec(WalkPanLook.X, WalkPanLook.Y, WalkPanLook.Z);
+	S.Pose.Fov = 26.0;
+	S.Pose.Roll = 0.0;
+	// (sharp through: the low shot's stop, not the watch shot's shallow focus)
+	S.Pose.Shot = LandEye::Kind::Low;
+	S.Pose.Subject = -1;
+	if (RealT >= WalkPanStillAt)
+	{
+		WalkPanStillAt = RealT + 1.0;
+		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LandWalkPan")) : ShotFolder;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-walkpan-%02d.png"), *Key, WalkPanStills)), true, false);
+		++WalkPanStills;
 	}
 }
 
