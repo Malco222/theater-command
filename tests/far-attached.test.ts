@@ -17,7 +17,7 @@ import { bookMonth } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { addCorps, atWar, capitulate, createGame, declareWar, hostileUnits, removeCorps, startPhase } from '../src/campaign/game';
 import { release } from '../src/campaign/ai';
-import { setStop } from '../src/campaign/history';
+import { raisedQuality, setStop } from '../src/campaign/history';
 import { landCorps, liftLeft, navalUpkeep, whyNotLand } from '../src/campaign/navy';
 import { readinessMonth } from '../src/campaign/readiness';
 import { ops, startOpen } from '../src/campaign/staff';
@@ -354,6 +354,28 @@ describe("the 14th Army's rows that land with a division (the Lingayen reading)"
       startPhase(g, 'USA');
       const marines = g.corps.find((c) => c.nat === 'USA' && c.name === '4th Marines' && !c.dead)!;
       expect([g.regions[marines.reg].name, marines.str, marines.full], `stop ${stop}`).toEqual(['Bataan', 0.1, 0.1]);
+    }
+  });
+
+  it('the Philippine Army by row (the director\'s order (4)): men by the record where it gives them, else 6,750, and each division at its December figure', () => {
+    for (const stop of [1, 3]) {
+      const g = december(stop);
+      // (A formation of the opening armies comes in its own month: September 1941, the call-up.)
+      g.turn = 25; startPhase(g, 'USA'); g.turn = 28;
+      const us = (nm: string): Corps => g.corps.find((c) => c.nat === 'USA' && c.name === nm && !c.dead)!;
+      const PA = (n: string): string => `${n} Division, Philippine Army`;
+      // The North Luzon Force is one row of four: the 11th 6,750, the 21st 8,500, the 31st 6,000, the 71st 6,750.
+      const nlf = us('North Luzon Force');
+      expect([nlf.divs, nlf.full], `stop ${stop}`).toEqual([4, 0.467]);
+      expect(Math.abs(nlf.divs * nlf.full * 15000 - 28000)).toBeLessThan(50);
+      expect([PA('91st'), PA('41st'), PA('51st'), PA('61st'), PA('81st'), PA('101st')].map((nm) => us(nm).full), `stop ${stop}`).toEqual([0.4, 0.45, 0.45, 0.35, 0.35, 0.35]);
+      // The first-day row is the 1st Regular Division: 0.45 at its most, from the small regular army of 1939.
+      expect(us('Philippine Army').full, `stop ${stop}`).toBe(0.45);
+      // Quality is the row's own at every stop, weeks into the call-up; nobody has fought.
+      const q = (nm: string): number | null => raisedQuality(g, us(nm));
+      expect([q('North Luzon Force'), q(PA('91st')), q(PA('41st')), q(PA('51st')), q(PA('61st')), q(PA('81st')), q(PA('101st')), q('Philippine Army')], `stop ${stop}`).toEqual([0.35, 0.3, 0.45, 0.3, 0.35, 0.35, 0.35, 0.5]);
+      expect([q('Philippine Division'), q('26th Cavalry, Philippine Scouts')]).toEqual([1, 1]);
+      for (const nm of ['North Luzon Force', PA('91st'), PA('41st'), PA('51st'), PA('61st'), PA('81st'), PA('101st'), 'Philippine Army']) expect(us(nm).xp, nm).toBe(0);
     }
   });
 });

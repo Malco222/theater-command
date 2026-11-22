@@ -285,8 +285,13 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     expect(share(us('Philippine Division'))).toBeCloseTo(1 / g.nations.USA.quality, 6);
     expect(share(laid('8th Australian Division (22nd Brigade)'))).toBeCloseTo(g.nations.AUS.quality / g.nations.UK.quality, 6);
     expect(share(us('26th Cavalry, Philippine Scouts'))).toBeCloseTo(1 / g.nations.USA.quality, 6);
-    expect(share(us('51st Division, Philippine Army'))).toBeCloseTo(0.5 / g.nations.USA.quality, 6);
-    expect(share(us('Philippine Army'))).toBeCloseTo(0.6 / g.nations.USA.quality, 6);
+    // (The Philippine Army by row as it stood in the open in December 1941: the design director's order for Luzon,
+    // (4), of 21 November 2026 and his 22:50Z. The 0.5 the reserve divisions read before was Bataan's, works counted.)
+    expect(share(us('51st Division, Philippine Army'))).toBeCloseTo(0.3 / g.nations.USA.quality, 6);
+    expect(share(us('41st Division, Philippine Army'))).toBeCloseTo(0.45 / g.nations.USA.quality, 6);
+    expect(share(us('North Luzon Force'))).toBeCloseTo(0.35 / g.nations.USA.quality, 6);
+    expect(share(us('101st Division, Philippine Army'))).toBeCloseTo(0.35 / g.nations.USA.quality, 6);
+    expect(share(us('Philippine Army'))).toBeCloseTo(0.5 / g.nations.USA.quality, 6);
     const indian = laid('11th Indian Division (6th and 15th Brigades)');
     g.turn = 41;
     expect(share(indian)).toBe(1);
