@@ -801,8 +801,20 @@ export function lineHome(g: Game, nat: string, t: number): void {
     c.hold = false;
     const ours = (r: Region): boolean => allied(g, nat, ctl(g, r));
     const d = hops(g, c.reg, ours);
-    let goal: Region | null = null;
-    for (const r of g.regions) if (d[r.id] > 0 && allied(g, nat, r.ctrl) && !lineLeaves(g, nat, r, t) && (!goal || d[r.id] < d[goal.id])) goal = r;
+    // (The far side, the design director's 13:08Z of 22 November 2026 to ruling 234: the goal is a place the move can
+    // take it, the nearest ground inside the line that has room. As built the goal was the nearest ground inside the
+    // line whoever stood on it. In war 11 at the book's first stop the 23rd Army's brigades stood at Chuanhsien in
+    // July 1945, the last month of its span; the 11th Army's rows had come back from Kweilin into Kukong before
+    // them, Kukong held five corps and was the goal, and the brigades stood off the line in August with Lingling
+    // next door open. With no ground inside the line that has room the goal is the nearest, as it was.)
+    const roomy = farOn(g);
+    let goal: Region | null = null, full: Region | null = null;
+    for (const r of g.regions) {
+      if (d[r.id] <= 0 || !allied(g, nat, r.ctrl) || lineLeaves(g, nat, r, t)) continue;
+      if (roomy && friendlyUnits(g, r, nat).length >= STACK) { if (!full || d[r.id] < d[full.id]) full = r; }
+      else if (!goal || d[r.id] < d[goal.id]) goal = r;
+    }
+    goal ??= full;
     // With no road home inside the line, it is taken out by sea (the director, 18:59Z): under F to the nearest
     // harbour its country holds there inside the line, or else home. Never stranded beyond the line.
     if (!goal) {
