@@ -858,6 +858,8 @@ void ACampaignPlayerController::EnterCampaign()
 		: FString::Printf(TEXT("%s. End the month to watch the war."), *View.Date), 7.0);
 	// A campaign just begun opens with a flight over the situation, a moment after the table is laid.
 	BriefingAt = bFreshCampaign && Nation && bBriefings && !bScripted ? FPlatformTime::Seconds() + 1.4 : 0.0;
+	// (Release 2.) Its first month keeps the frame open; a campaign picked up from a save does not know it, and folds.
+	SeatTurn = bFreshCampaign ? View.Turn : INDEX_NONE;
 	bFreshCampaign = false;
 	LastYear = FYearCard();
 	WaitingReel.Reset();
@@ -8987,7 +8989,7 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 		if (!Page.Headline.IsEmpty()) { Said.Add(Page.Headline); }
 		if (!Page.Note.IsEmpty()) { Said.Add(Page.Note.Left(400)); }
 	}
-	else if (Tray.bVisible)
+	else if (IsTrayShown()) // (release 2: a look folded away is not on the screen to be read)
 	{
 		Said.Add(Tray.Title.ToString() + TEXT(": ") + Tray.Subtitle.ToString());
 		if (!Tray.Hint.IsEmpty()) { Said.Add(Tray.Hint.ToString()); }
@@ -10875,10 +10877,30 @@ FText ACampaignPlayerController::GetRulesNote() const
 	return FText::FromString(Note);
 }
 
+bool ACampaignPlayerController::IsFrameFolded() const
+{
+	// (Release 2: the map gets the screen.) A watched war keeps its frame as it was: there is no player's month to fold.
+	const FCampaignSession* Session = GetSession();
+	return Session && !Session->GetView().Human.IsEmpty() && (SeatTurn == INDEX_NONE || Session->GetView().Turn > SeatTurn);
+}
+
+bool ACampaignPlayerController::IsTrayShown() const
+{
+	// (Release 2: the map gets the screen.) An army in hand, or a fleet, always has its tray. A look at an army that is
+	// not in hand used to stand until it was closed, whatever was clicked after it; once the frame folds it stands only
+	// while its ground is still the one picked, so that a click elsewhere leaves the bottom of the map clear again.
+	if (!Tray.bVisible)
+	{
+		return false;
+	}
+	return !Tray.bLook || !IsFrameFolded() || (LookRegion != INDEX_NONE && Map.IsValid() && Map->GetSelectedRegion() == LookRegion);
+}
+
 bool ACampaignPlayerController::IsTownBarShown() const
 {
-	// (the bottom of the screen is the army's or the fleet's while one is in hand or being looked at)
-	return TownBar.Plots.Num() > 0 && !Tray.bVisible && Map.IsValid() && Map->GetSelectedRegion() == TownBar.Region && !bWatching && !Newsreel.bOn && !Opening.bVisible;
+	// (the bottom of the screen is the army's or the fleet's while one is in hand or being looked at; from release 2,
+	// once the frame folds, a look gives the bottom up when other ground is picked, and that town's plots may take it)
+	return TownBar.Plots.Num() > 0 && !IsTrayShown() && Map.IsValid() && Map->GetSelectedRegion() == TownBar.Region && !bWatching && !Newsreel.bOn && !Opening.bVisible;
 }
 
 void ACampaignPlayerController::PickTownPlot(int32 Index)

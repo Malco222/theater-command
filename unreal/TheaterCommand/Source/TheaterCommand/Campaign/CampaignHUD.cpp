@@ -282,7 +282,8 @@ namespace
 	 * A small sign drawn in line, as if engraved: the signs on the six doors, and the dial on the control that
 	 * ends the month. Kinds: 0 a shell (the arsenal), 1 a star (the generals), 2 a pair of dividers (research),
 	 * 3 a sealed letter (diplomacy), 4 an open book (the ledger), 5 a medal (honours), 6 a clock's dial, whose
-	 * short hand stands at the hour it is given.
+	 * short hand stands at the hour it is given. (Release 2) 11 an hourglass (what is on order), 12 a coin (the
+	 * treasury on the date card's strip).
 	 */
 	class SLineIcon : public SLeafWidget
 	{
@@ -384,6 +385,17 @@ namespace
 				Line({ { 0.5, 0.1 }, { 0.93, 0.86 }, { 0.07, 0.86 }, { 0.5, 0.1 } });
 				Line({ { 0.5, 0.36 }, { 0.5, 0.6 } });
 				Line({ { 0.5, 0.7 }, { 0.5, 0.75 } });
+				break;
+			case 11: // (release 2) an hourglass between its two boards, the sand run down into the lower glass
+				Line({ { 0.22, 0.1 }, { 0.78, 0.1 } });
+				Line({ { 0.22, 0.9 }, { 0.78, 0.9 } });
+				Line({ { 0.31, 0.1 }, { 0.31, 0.2 }, { 0.5, 0.5 }, { 0.31, 0.8 }, { 0.31, 0.9 } });
+				Line({ { 0.69, 0.1 }, { 0.69, 0.2 }, { 0.5, 0.5 }, { 0.69, 0.8 }, { 0.69, 0.9 } });
+				Line({ { 0.4, 0.82 }, { 0.5, 0.72 }, { 0.6, 0.82 } });
+				break;
+			case 12: // (release 2) a coin: its rim, and the ring struck inside it
+				Ring(0.5, 0.5, 0.42);
+				Ring(0.5, 0.5, 0.22);
 				break;
 			default: // a clock's dial: the long hand at twelve, the short one at the hour
 			{
@@ -5137,6 +5149,24 @@ namespace
 			ChosenCard = MakeButtonStyle(FLinearColor(0.12f, 0.09f, 0.045f, 0.98f), FLinearColor(0.17f, 0.125f, 0.065f, 0.98f), BrightBrass, 2.0f);
 			FootBrush = FSlateRoundedBoxBrush(FLinearColor(0.03f, 0.026f, 0.021f, 0.98f), 5.0f, Brass.CopyWithNewOpacity(0.8f), 1.0f);
 			WatchBrush = FSlateRoundedBoxBrush(FLinearColor(0.16f, 0.15f, 0.13f, 1.0f), 2.0f, Faint, 1.0f);
+			// (Release 2: the map gets the screen; the art director's mock-up of 22 November 2026, in the kit's colours.)
+			// The date card's strip is paper-200 under the binding's red line, and the chief's tag on it a hairline of
+			// paper-300 that darkens to brass-700 under the hand. THIS MONTH is desk-900 with a brass-700 edge, its cells
+			// desk-800 with the kit's line; and a row of the chief's list that is due takes an edge of its tone.
+			DateStripBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(226, 215, 188)), 2.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.75f), 1.0f);
+			DateBindBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(140, 47, 34)), FVector4(2.0f, 2.0f, 0.0f, 0.0f));
+			{
+				const FLinearColor TagEdge(FColor(205, 191, 156)), TagLit(FColor(138, 107, 59));
+				ChiefTagStyle = FButtonStyle();
+				ChiefTagStyle.SetNormal(FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 2.0f, TagEdge, 1.0f));
+				ChiefTagStyle.SetHovered(FSlateRoundedBoxBrush(FLinearColor(0.35f, 0.22f, 0.08f, 0.12f), 2.0f, TagLit, 1.0f));
+				ChiefTagStyle.SetPressed(FSlateRoundedBoxBrush(FLinearColor(0.35f, 0.22f, 0.08f, 0.2f), 2.0f, TagLit, 1.5f));
+				ChiefTagStyle.SetDisabled(FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 2.0f, TagEdge, 1.0f));
+				ChiefTagStyle.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+			}
+			GlanceBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(23, 18, 13)).CopyWithNewOpacity(0.96f), 4.0f, FLinearColor(FColor(138, 107, 59)), 1.0f);
+			GlanceCellStyle = MakeButtonStyle(FLinearColor(FColor(33, 26, 19)), FLinearColor(FColor(45, 36, 26)), FLinearColor(FColor(75, 61, 45)), 1.0f);
+			ToneEdgeBrush = FSlateRoundedBoxBrush(FLinearColor::White, FVector4(2.0f, 0.0f, 0.0f, 2.0f));
 
 			// One side of the face-off: whose army it is, who leads it, how strong it is, and its corps.
 			auto Side = [this, Face](bool bOurs, EHorizontalAlignment Align) -> TSharedRef<SWidget>
@@ -5251,19 +5281,38 @@ namespace
 					// treasury holds, typed.
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f)
 					[
-						Edge(TopLeftPiece, SNew(SBorder).BorderImage(&PaperBrush).Padding(FMargin(1.0f))
+						// (Release 2: folded to its strip, the card's own paper is not drawn round it: the strip is a paper of its own.)
+						Edge(TopLeftPiece, SNew(SBorder).Padding(FMargin(1.0f))
+						.BorderImage_Lambda([this]() -> const FSlateBrush* { return ScreenFold.bDateOpen ? &PaperBrush : &ClearBrush; })
 						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); }) // (paper is not so white by night)
 						.ColorAndOpacity_Lambda([this]() { return InkLight(); }) // (and the ink on it is darker)
 						.Visibility_Lambda([this]() { return PlatesAway() ? EVisibility::Collapsed : EVisibility::Visible; })
-						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the plate is not the map
+						.OnMouseButtonDown_Lambda([this](const FGeometry&, const FPointerEvent& Event)
+						{
+							// The plate is not the map. (Release 2.) Once the frame folds, a click on it keeps the card open, and
+							// another lets it fold again.
+							if (ScreenFold.bFolded && Event.GetEffectingButton() == EKeys::LeftMouseButton)
+							{
+								ScreenFold.bDatePinned = !ScreenFold.bDatePinned;
+							}
+							return FReply::Handled();
+						})
 						[
 							SNew(SVerticalBox)
+							// (Release 2: the map gets the screen.) From the player's second month the card is folded to this one
+							// strip. The card stands whole under it while the pointer rests on it, after a click until another,
+							// and while a lesson's pointer frames something on it: nothing on it is lost.
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								DateStrip()
+							]
 							+ SVerticalBox::Slot().AutoHeight()
 							[
 								// (The UI director, 11:19 on build 1638: the mark rises to the label size, and as a mark it is the
 								// one label that keeps its wide tracking. The binding grows round it.)
 								SNew(SBorder).BorderImage(&BindingBrush).Padding(FMargin(19.0f, 3.0f, 19.0f, 3.0f))
 								.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
+								.Visibility_Lambda([this]() { return ScreenFold.bDateOpen ? EVisibility::Visible : EVisibility::Collapsed; })
 								[
 									SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Typed(9.0f, true, 80)).ColorAndOpacity(TypingPaper.CopyWithNewOpacity(0.92f))
 								]
@@ -5271,6 +5320,7 @@ namespace
 							+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(19.0f, 6.0f, 24.0f, 8.0f))
 							[
 								SNew(SVerticalBox)
+								.Visibility_Lambda([this]() { return ScreenFold.bDateOpen ? EVisibility::Visible : EVisibility::Collapsed; })
 								+ SVerticalBox::Slot().AutoHeight()
 								[
 									SNew(STextBlock).Font(Serif(TEXT("Bold"), 12, 300)).ColorAndOpacity(InkRed)
@@ -5437,10 +5487,21 @@ namespace
 					]
 
 					// The adviser: the first steps of a campaign, each ticked as it is done. He can be sent away.
-					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f, 276.0f, 0.0f, 0.0f)
+					// (Release 2: the map gets the screen.) He stands 12 under the date card, whatever its height now, and
+					// from the player's second month his list folds with the chief's: the strip's CHIEF tag counts his steps
+					// still to do, and a click on it brings him back.
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top)
+					.Padding(TAttribute<FMargin>::CreateLambda([this]()
+					{
+						const FBox2D Date = InFrame(TopLeftPiece);
+						return FMargin(24.0f, Date.bIsValid ? static_cast<float>(Date.Max.Y) + 12.0f : 276.0f, 0.0f, 0.0f);
+					}))
 					[
 						SNew(SBox).WidthOverride(360.0f)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetAdviser().bOn && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.Visibility_Lambda([this]()
+						{
+							return Controller.IsValid() && Controller->GetAdviser().bOn && Controller->IsMapShown() && (!ScreenFold.bFolded || ScreenFold.bChiefOpen) ? EVisibility::Visible : EVisibility::Collapsed;
+						})
 						[
 							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 14.0f, 13.0f))
 							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
@@ -5622,6 +5683,12 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 						[
 							MakeToDo(4)
+						]
+						// (Release 2: the map gets the screen.) From the player's second month, THIS MONTH: the rows above
+						// that are only something left idle fold into its signs and counts, and its head unfolds them again.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MonthGlance()
 						]
 						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 4.0f, 0.0f, 12.0f)
@@ -5868,11 +5935,12 @@ namespace
 							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 							[
+							// (Release 2: the map gets the screen.) From the player's second month the tray stands while an army or
+							// a fleet of his is in hand, and a look at an army only while its ground is the one picked (IsTrayShown).
 							Edge(TrayPiece, SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 10.0f, 14.0f))
-							.Visibility_Lambda([Tray]()
+							.Visibility_Lambda([this]()
 							{
-								const FArmyTray* Info = Tray();
-								return Info && Info->bVisible ? EVisibility::Visible : EVisibility::Collapsed;
+								return Controller.IsValid() && Controller->IsTrayShown() ? EVisibility::Visible : EVisibility::Collapsed;
 							})
 							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the tray is not the map
 							[
@@ -5977,11 +6045,12 @@ namespace
 
 					// The reminder of the controls is folded away into a "?" in the corner: it opens while the pointer is
 					// on the mark or the ? key is held, and it stands open through a new player's first month. With an
-					// army in hand the tray says what to do, and takes the room.
+					// army in hand the tray says what to do, and takes the room. (Release 2: a look whose tray has folded away
+					// gives the room back.)
 					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(24.0f)
 					[
 						SNew(SVerticalBox)
-						.Visibility_Lambda([this, Tray]() { const FArmyTray* Info = Tray(); return (Info && Info->bVisible) || (Controller.IsValid() && (Controller->IsTownBarShown() || !Controller->IsMapShown())) ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
+						.Visibility_Lambda([this]() { return Controller.IsValid() && (Controller->IsTrayShown() || Controller->IsTownBarShown() || !Controller->IsMapShown()) ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 						[
 							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 9.0f))
@@ -7939,6 +8008,7 @@ namespace
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 			UpdateBigCard();
+			UpdateFold(InDeltaTime); // (release 2: before the staff's note, which stands under the date card)
 			PlaceLessonNote();
 			PlaceLessonPointer();
 			LookAtList();
@@ -10702,11 +10772,12 @@ namespace
 					]
 				]
 				// 2. The front is done and the rear is not: a quiet chip, still a button. It never lights and never
-				// breathes, and never holds the light from END THE MONTH.
+				// breathes, and never holds the light from END THE MONTH. (Release 2: from the player's second month it
+				// folds with the chief's list, and THIS MONTH's first cell counts the rear and goes round it.)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SBox).WidthOverride(252.0f).HeightOverride(25.0f)
-					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() > 0 && ListUnfolded() ? EVisibility::Visible : EVisibility::Collapsed; })
 					[
 						SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(0.0f)).IsFocusable(false)
 						.ToolTipText(FText::FromString(TEXT("Every army at the front has its orders. This goes round the armies in the rear that can still move. They do not hold the month. (Tab)")))
@@ -10739,11 +10810,12 @@ namespace
 						]
 					]
 				]
-				// 3. Every army has its orders.
+				// 3. Every army has its orders. (Release 2: folded with the chief's list from his second month, when END THE
+				// MONTH, lit, says as much.)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SBox).WidthOverride(252.0f).HeightOverride(25.0f)
-					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 && ListUnfolded() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 					[
 						SNew(SBorder).BorderImage(&QuietChipBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
 						[
@@ -10757,6 +10829,306 @@ namespace
 								SNew(STextBlock).Text(FText::FromString(TEXT("EVERY ARMY HAS ITS ORDERS"))).Font(Typed(8.5f, true)).ColorAndOpacity(Gain)
 							]
 						]
+					]
+				];
+		}
+
+		/** (Release 2; ruling 161.) Whether the chief's list stands whole: through the player's first month, and after it while unfolded. */
+		bool ListUnfolded() const { return !ScreenFold.bFolded || ScreenFold.bChiefOpen; }
+
+		/**
+		 * (Ruling 161, the design director's standing rule for release 2.) How a row of the chief's list stands: 2, red, he
+		 * loses something he holds this month; 1, amber, the same falls due next month; 0, plain, something left idle. Only
+		 * a plain row folds. The rules give each row its words and the screen it opens, and the tone is read from those: a
+		 * promise or a directive due this month or next, a cabinet about to fall, and a town of his own shut in, red where
+		 * its stores give out this month and amber before that, since a town under siege may be lost in any month.
+		 */
+		static int32 ToDoTone(const FCampaignView& View, int32 Index)
+		{
+			if (!View.ToDo.IsValidIndex(Index))
+			{
+				return 0;
+			}
+			const FCampaignView::FToDo& Row = View.ToDo[Index];
+			if (Row.Text.EndsWith(TEXT("DUE THIS MONTH")) || Row.Text == TEXT("THE CABINET IS ABOUT TO FALL"))
+			{
+				return 2;
+			}
+			if (Row.Text.EndsWith(TEXT("DUE NEXT MONTH")))
+			{
+				return 1;
+			}
+			if (Row.Screen.StartsWith(TEXT("goto:")))
+			{
+				// (the sieges as the player knows them: three numbers each, the town, whether the ring is closed, and the
+				// months of stores left)
+				int32 Least = MAX_int32;
+				for (int32 At = 0; At + 2 < View.Sieges.Num(); At += 3)
+				{
+					const int32 Town = View.Sieges[At];
+					if (View.RegionHolder.IsValidIndex(Town) && View.RegionHolder[Town] == View.Human && View.Sieges[At + 2] >= 0)
+					{
+						Least = FMath::Min(Least, View.Sieges[At + 2]);
+					}
+				}
+				return Least <= 1 ? 2 : 1;
+			}
+			return 0;
+		}
+
+		/**
+		 * (Release 2: the map gets the screen.) Once a frame, what the folded frame shows: whether it is folded at all,
+		 * whether the date card stands whole, the tone of each row of the chief's list, and the counts on the strip and
+		 * on THIS MONTH. Their words are made again only when a count changes, so that a frame in which nothing has
+		 * changed makes nothing, and nothing is laid out again.
+		 */
+		void UpdateFold(float DeltaTime)
+		{
+			FScreenFold& Fold = ScreenFold;
+			const FCampaignSession* Session = Controller.IsValid() ? Controller->GetSession() : nullptr;
+			if (!Session)
+			{
+				Fold.bFolded = Fold.bGlance = false;
+				Fold.bDateOpen = true;
+				return;
+			}
+			const FCampaignView& View = Session->GetView();
+			Fold.bFolded = Controller->IsFrameFolded();
+			if (View.Turn != Fold.Turn)
+			{
+				// (a new month folds again what the last one opened)
+				Fold.Turn = View.Turn;
+				Fold.bChiefOpen = false;
+				Fold.bDatePinned = false;
+			}
+			// The date card stands whole in the first month; after it, while the pointer has rested on it a moment, after
+			// a click until another, and while a lesson's pointer frames something on it (YOUR STAFF, in the red line under
+			// the date: the air and building lessons, where the staff runs those desks).
+			const TSharedPtr<SWidget> Plate = TopLeftPiece.Pin();
+			Fold.HoverFor = Plate.IsValid() && Plate->IsHovered() ? Fold.HoverFor + DeltaTime : 0.0f;
+			static const FName StaffAim(TEXT("depth"));
+			const FLessonAim& Aim = Controller->GetLessonAim();
+			const bool bAimedIn = Aim.Kind == FLessonAim::Screen && Aim.Name == StaffAim;
+			Fold.bDateOpen = !Fold.bFolded || Fold.bDatePinned || Fold.HoverFor >= 0.2f || bAimedIn;
+			// The chief's list as the column shows it: each row's tone, and the plain rows, which fold.
+			const bool bListUp = View.bHumanUp && !View.Human.IsEmpty() && !Controller->IsWatching() && !Controller->GetOpening().bVisible;
+			int32 Tips = 0;
+			for (int32 Index = 0; Index < 5; ++Index)
+			{
+				Fold.Tone[Index] = ToDoTone(View, Index);
+				if (bListUp && View.ToDo.IsValidIndex(Index) && !View.ToDo[Index].Text.IsEmpty() && Fold.Tone[Index] == 0)
+				{
+					++Tips;
+				}
+			}
+			for (int32 Index = 0; Index < 2; ++Index)
+			{
+				if (bListUp && View.Alone.IsValidIndex(Index) && !View.Alone[Index].bRed)
+				{
+					++Tips;
+				}
+			}
+			// (and the adviser's first steps, YOUR CHIEF OF STAFF SUGGESTS, while he stands by: they fold with the list)
+			const FAdviser& Steps = Controller->GetAdviser();
+			if (Steps.bOn && Controller->IsMapShown())
+			{
+				for (const bool bDone : Steps.bDone)
+				{
+					Tips += bDone ? 0 : 1;
+				}
+			}
+			Fold.bGlance = Fold.bFolded && bListUp && Controller->IsMapShown();
+			if (Tips != Fold.Tips)
+			{
+				Fold.Tips = Tips;
+				Fold.TipsText = FText::FromString(Tips == 1 ? FString(TEXT("CHIEF: 1 TIP")) : FString::Printf(TEXT("CHIEF: %d TIPS"), Tips));
+			}
+			const int32 Counts[3] = { Controller->IsWatching() ? 0 : Controller->ArmiesInRear(), Controller->GetIdleTeams(), View.Treasury.bValid ? View.Treasury.Orders.Num() : 0 };
+			for (int32 Which = 0; Which < 3; ++Which)
+			{
+				if (Counts[Which] != Fold.Count[Which])
+				{
+					Fold.Count[Which] = Counts[Which];
+					Fold.CountText[Which] = FText::AsNumber(Counts[Which]);
+				}
+			}
+			// The strip's month, and its treasury: what is in hand, and what each month leaves (in a scenario, where the
+			// forces cost nothing to keep, what comes in).
+			if (View.Date != Fold.Date)
+			{
+				Fold.Date = View.Date;
+				Fold.DateText = FText::FromString(View.Date);
+			}
+			Fold.bTreasury = View.Treasury.bValid;
+			const int32 Left = View.Treasury.bBudget ? View.Treasury.Net : View.Treasury.Gross;
+			if (View.Treasury.Money != Fold.Money || Left != Fold.Net)
+			{
+				Fold.Money = View.Treasury.Money;
+				Fold.Net = Left;
+				Fold.MoneyText = FText::FromString(Cash(Fold.Money));
+				Fold.NetText = FText::FromString(Cash(Left, true));
+			}
+		}
+
+		/**
+		 * (Release 2: the map gets the screen; the art director's mock-up of 22 November 2026.) The date card folded to one
+		 * strip from the player's second month: the month and the year in the serif; the chief of staff's tips folded away,
+		 * as a tag that lays them out; and the treasury as one figure with what each month leaves, typed, in green where it
+		 * grows and in the alarm's red where it shrinks (the kit's deep green and deep red, the ones that read on paper).
+		 * The card stands whole under it while the pointer rests on it, and after a click until another.
+		 */
+		TSharedRef<SWidget> DateStrip()
+		{
+			const FLinearColor Ink600(FColor(92, 80, 64)), GainDeep(FColor(63, 107, 54)), AlarmDeep(FColor(140, 47, 34));
+			return SNew(SBox).MinDesiredWidth(380.0f)
+				.Visibility_Lambda([this]() { return ScreenFold.bFolded ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					SNew(SBorder).BorderImage(&DateStripBrush).Padding(FMargin(0.0f))
+					.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
+					[
+						SNew(SVerticalBox)
+						// (the binding's red line along its top)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SBox).HeightOverride(4.0f)
+							[
+								SNew(SBorder).BorderImage(&DateBindBrush).Padding(FMargin(0.0f))
+								.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
+							]
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(14.0f, 6.0f, 14.0f, 7.0f))
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Font(Serif(TEXT("Bold"), 15)).ColorAndOpacity(DeskInk)
+								.Text_Lambda([this]() { return ScreenFold.DateText; })
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SButton).ButtonStyle(&ChiefTagStyle).ContentPadding(FMargin(7.0f, 2.0f, 7.0f, 3.0f)).IsFocusable(false)
+								.Visibility_Lambda([this]() { return ScreenFold.Tips > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+								.ToolTipText(FText::FromString(TEXT("Your chief of staff's tips: things left idle, folded away after your first month. Click to lay them all out, and again to fold them. Nothing you would lose this month or next is ever folded.")))
+								.OnClicked_Lambda([this]() { ScreenFold.bChiefOpen = !ScreenFold.bChiefOpen; return FReply::Handled(); })
+								[
+									SNew(STextBlock).Font(Typed(9.5f, true)).ColorAndOpacity(Ink600)
+									.Text_Lambda([this]() { return ScreenFold.TipsText; })
+								]
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f)
+							[
+								SNew(SSpacer)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return ScreenFold.bTreasury ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+								[
+									SNew(SLineIcon).Kind(12).Size(14.0f).Weight(1.4f).Ink(Ink600)
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Font(Typed(12.5f, true))
+									.ColorAndOpacity_Lambda([this, AlarmDeep]() { return FSlateColor(ScreenFold.Money < 0 ? AlarmDeep : DeskInk); })
+									.Text_Lambda([this]() { return ScreenFold.MoneyText; })
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Font(Typed(12.5f, true))
+									.ColorAndOpacity_Lambda([this, GainDeep, AlarmDeep, Ink600]() { return FSlateColor(ScreenFold.Net > 0 ? GainDeep : ScreenFold.Net < 0 ? AlarmDeep : Ink600); })
+									.Text_Lambda([this]() { return ScreenFold.NetText; })
+								]
+							]
+						]
+					]
+				];
+		}
+
+		/**
+		 * (Release 2: the map gets the screen; the UI director's gaps 1 and 3, 22 November 2026.) THIS MONTH: from the
+		 * player's second month the right column's chips are tucked under one small panel, each a sign, a figure and a few
+		 * small words with its sentence on hover, and each a button to what it counts: the armies in the rear that can
+		 * still move, the design teams standing idle, and what is on order. Its head lays out the chief's whole list and
+		 * folds it again. A row that is due, red or amber, never folds (ruling 161): it stands above, as it always has.
+		 */
+		TSharedRef<SWidget> MonthGlance()
+		{
+			const FText AllWords = FText::FromString(TEXT("SHOW ALL")), FoldWords = FText::FromString(TEXT("FOLD AWAY"));
+			return Chip(SNew(SBox).WidthOverride(320.0f).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
+				.Visibility_Lambda([this]() { return ScreenFold.bGlance ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					SNew(SBorder).BorderImage(&GlanceBrush).Padding(FMargin(10.0f, 7.0f, 10.0f, 10.0f))
+					.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the panel is not the map
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("THIS MONTH"))).Font(SmallCaps()).ColorAndOpacity(Brass)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(4.0f, 1.0f)).IsFocusable(false)
+								.Visibility_Lambda([this]() { return ScreenFold.Tips > 0 || ScreenFold.bChiefOpen ? EVisibility::Visible : EVisibility::Collapsed; })
+								.ToolTipText(FText::FromString(TEXT("Lays out every row of your chief of staff's list above this panel, the idle ones too, and folds them away again.")))
+								.OnClicked_Lambda([this]() { ScreenFold.bChiefOpen = !ScreenFold.bChiefOpen; return FReply::Handled(); })
+								[
+									SNew(STextBlock).Font(Typed(9.0f, true)).ColorAndOpacity(BrightBrass)
+									.Text_Lambda([this, AllWords, FoldWords]() { return ScreenFold.bChiefOpen ? FoldWords : AllWords; })
+								]
+							]
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)
+							[
+								GlanceCell(8, 0, TEXT("in the rear"), TEXT("Armies in the rear that can still move this month. They never hold the month. A click goes to the next army still waiting for orders, the front first. (Tab)"), [this]() { Controller->NextArmy(); })
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 3.0f, 0.0f)
+							[
+								GlanceCell(2, 1, TEXT("teams idle"), TEXT("Design teams standing idle: a team with nothing to do designs nothing. A click opens RESEARCH, where they are given work. (3)"), [this]() { Controller->OpenResearch(); })
+							]
+							+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)
+							[
+								GlanceCell(11, 2, TEXT("on order"), TEXT("Corps, aircraft, ships and works on order, being raised or built. A click opens the ARSENAL, where more is ordered. (1)"), [this]() { Controller->OpenArsenal(); })
+							]
+						]
+					]
+				]);
+		}
+
+		/** (Release 2.) A cell of THIS MONTH: its sign and its figure over a few small words, and a button to what it counts. */
+		TSharedRef<SWidget> GlanceCell(int32 Sign, int32 Which, const TCHAR* Words, const TCHAR* Tip, TFunction<void()> Do)
+		{
+			const int32 Cell = FMath::Clamp(Which, 0, 2);
+			auto Some = [this, Cell]() { return ScreenFold.Count[Cell] > 0; };
+			return SNew(SButton).ButtonStyle(&GlanceCellStyle).ContentPadding(FMargin(4.0f, 5.0f, 4.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
+				.ToolTipText(FText::FromString(Tip))
+				.OnClicked_Lambda([this, Do]() { if (Controller.IsValid()) { Do(); } return FReply::Handled(); })
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
+						[
+							SNew(SLineIcon).Kind(Sign).Size(14.0f).Weight(1.6f)
+							.Ink_Lambda([Some]() { return Some() ? Cream : Faint; })
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Font(Typed(12.0f, true))
+							.ColorAndOpacity_Lambda([Some]() { return FSlateColor(Some() ? Cream : Muted); })
+							.Text_Lambda([this, Cell]() { return ScreenFold.CountText[Cell]; })
+						]
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 2.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Words)).Font(Typed(9.0f)).ColorAndOpacity(Muted)
 					]
 				];
 		}
@@ -14000,8 +14372,9 @@ namespace
 			auto Px = [](float Pixels) { return Pixels * 0.75f; };
 			const FLinearColor Paper100(FColor::FromHex(TEXT("EDE6D6")));
 			auto Red = [this, Index]() { const FGunsAlone* Row = Controller.IsValid() ? Controller->GetGunsAlone(Index) : nullptr; return Row && Row->bRed; };
+			// (Release 2; ruling 161.) A red row never folds with the chief's list; a plain one does from his second month.
 			return Chip(SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f)).WidthOverride(320.0f)
-				.Visibility_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetGunsAlone(Index) ? EVisibility::Visible : EVisibility::Collapsed; })
+				.Visibility_Lambda([this, Index, Red]() { return Controller.IsValid() && Controller->GetGunsAlone(Index) && (Red() || ListUnfolded()) ? EVisibility::Visible : EVisibility::Collapsed; })
 				[
 					SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(0.0f)).IsFocusable(false)
 					.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PressGunsAlone(Index); } return FReply::Handled(); })
@@ -14029,19 +14402,38 @@ namespace
 				]);
 		}
 
-		/** One of the chips under the END THE MONTH button that say what is still worth doing; a click opens the screen for it. */
+		/**
+		 * One of the chips under the END THE MONTH button that say what is still worth doing; a click opens the screen for it.
+		 * (Release 2; ruling 161.) A row that is due takes an edge of its tone at its left, red for a loss this month and amber
+		 * for one next month, and never folds; a plain row folds with the chief's list from the player's second month.
+		 */
 		TSharedRef<SWidget> MakeToDo(int32 Index)
 		{
+			const FLinearColor DueAmber(FColor(240, 166, 58)); // (the kit's amber, which it keeps for something due)
+			auto Tone = [this, Index]() { return Index >= 0 && Index < 5 ? ScreenFold.Tone[Index] : 0; };
 			// (a plate of leather with a brass edge, its words typed; a little room is left in it for a wider face)
 			return Chip(SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
-				.Visibility_Lambda([this, Index]() { return Controller.IsValid() && !Controller->GetToDoText(Index).IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+				.Visibility_Lambda([this, Index, Tone]() { return Controller.IsValid() && !Controller->GetToDoText(Index).IsEmpty() && (Tone() > 0 || ListUnfolded()) ? EVisibility::Visible : EVisibility::Collapsed; })
 				[
-					SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
-					.ToolTipText_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoTip(Index) : FString()); })
-					.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PressToDo(Index); } return FReply::Handled(); })
+					SNew(SOverlay)
+					+ SOverlay::Slot()
 					[
-						SNew(STextBlock).Font(Typed(8.5f, true)).ColorAndOpacity(BrightBrass.CopyWithNewOpacity(0.9f))
-						.Text_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoText(Index) : FString()); })
+						SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
+						.ToolTipText_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoTip(Index) : FString()); })
+						.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PressToDo(Index); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Font(Typed(8.5f, true)).ColorAndOpacity(BrightBrass.CopyWithNewOpacity(0.9f))
+							.Text_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoText(Index) : FString()); })
+						]
+					]
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Fill).Padding(FMargin(1.5f, 1.5f, 0.0f, 1.5f))
+					[
+						SNew(SBox).WidthOverride(4.0f)
+						.Visibility_Lambda([Tone]() { return Tone() > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+						[
+							SNew(SBorder).BorderImage(&ToneEdgeBrush).Padding(FMargin(0.0f))
+							.BorderBackgroundColor_Lambda([Tone, DueAmber]() { return FSlateColor(Tone() >= 2 ? Alarm : DueAmber); })
+						]
 					]
 				]);
 		}
@@ -15704,12 +16096,13 @@ namespace
 			const FArmyTray& Tray = Controller->GetArmyTray();
 			static int32 Which = 0;
 			static const bool bForPicture = FParse::Param(FCommandLine::Get(), TEXT("TheaterBigCard")) || FParse::Value(FCommandLine::Get(), TEXT("TheaterBigCard="), Which);
-			if (CorpsId == INDEX_NONE && bForPicture && Tray.bVisible && Tray.Cards.Num() > 0 && !Tray.Cards[0].bUnknown)
+			const bool bTrayUp = Controller->IsTrayShown(); // (release 2: a tray folded away holds up no bigger card)
+			if (CorpsId == INDEX_NONE && bForPicture && bTrayUp && Tray.Cards.Num() > 0 && !Tray.Cards[0].bUnknown)
 			{
 				CorpsId = Tray.Cards[0].CorpsId;
 				Part = Which == 2 && Tray.Cards[0].Parts.Num() > 0 ? 0 : INDEX_NONE;
 			}
-			const FTrayCard* Card = Tray.bVisible && CorpsId != INDEX_NONE ? Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& Each) { return Each.CorpsId == CorpsId; }) : nullptr;
+			const FTrayCard* Card = bTrayUp && CorpsId != INDEX_NONE ? Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& Each) { return Each.CorpsId == CorpsId; }) : nullptr;
 			if (!Card)
 			{
 				CorpsId = Part = INDEX_NONE;
@@ -15915,6 +16308,34 @@ namespace
 		TSharedPtr<SHorizontalBox> WatchStrip;
 		TWeakPtr<SWidget> TopLeftPiece; // the calendar plate, and
 		TArray<TWeakPtr<SWidget>> TopChips; // the chips down the right: the news line keeps between them
+		/**
+		 * (Release 2: the map gets the screen; Brian, 22 November 2026.) What the frame folds away from the player's
+		 * second month and what stands in its place, worked out once a frame in UpdateFold.
+		 */
+		struct FScreenFold
+		{
+			bool bFolded = false; // from his second month: the date card is a strip, the chief's list a line
+			bool bDateOpen = true; // the date card stands whole (through the first month it always does)
+			bool bDatePinned = false; // opened by a click on it, and kept open until another or the month's end
+			float HoverFor = 0.0f; // how long the pointer has rested on the strip or the card
+			bool bChiefOpen = false; // the chief's list laid out whole again from its line
+			bool bGlance = false; // THIS MONTH stands
+			bool bTreasury = false; // there is a treasury for the strip
+			int32 Turn = INDEX_NONE; // the month these were worked out for: a new month folds again what the last one opened
+			int32 Tone[5] = { 0, 0, 0, 0, 0 }; // (ruling 161) the tone of each of the five rows the column can show
+			int32 Tips = -1; // the chief's plain tips, folded away
+			int32 Count[3] = { -1, -1, -1 }; // THIS MONTH's figures: the armies in the rear, the teams idle, what is on order
+			int32 Money = MIN_int32; // the treasury's figure, and what each month leaves
+			int32 Net = MIN_int32;
+			FString Date; // the month as the rules write it ("June 1942")
+			FText DateText, TipsText, MoneyText, NetText;
+			FText CountText[3];
+		};
+		FScreenFold ScreenFold;
+		FSlateBrush DateStripBrush, DateBindBrush; // (release 2) the date card's strip: its paper, and the binding's red line along its top
+		FButtonStyle ChiefTagStyle; // and the chief's tag on it
+		FSlateBrush GlanceBrush, ToneEdgeBrush; // THIS MONTH's panel; and the edge of a row of the chief's list that is due
+		FButtonStyle GlanceCellStyle; // THIS MONTH's cells
 		// (Rules 84.3.3) FIRST COMMAND: where the staff's note stands (see PlaceLessonNote), and what it is measured by.
 		TSharedPtr<SOverlay> ScreenRoot; // the frame's own measure, 900 high
 		TWeakPtr<SWidget> SmallMapPiece; // the small map's panel: the second home is under it
