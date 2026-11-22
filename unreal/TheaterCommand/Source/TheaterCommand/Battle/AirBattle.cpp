@@ -13,6 +13,7 @@
 #include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
@@ -428,6 +429,20 @@ namespace AirParts
 		return 1.0 - FMath::Exp(-Real / FMath::Max(0.01, Seconds));
 	}
 
+	/** A cut, told to the renderer: this frame starts afresh, so the last shot's sharpening, light and exposure are not
+	 * carried into the new one (the camera and film director's note of 22 November: at each cut the upscaler's history,
+	 * the bounced light and the eye's adaptation smeared cloud, flak smoke and light for a frame or a few). */
+	static void TellCut(UWorld* Here)
+	{
+		if (APlayerController* Controller = Here ? Here->GetFirstPlayerController() : nullptr)
+		{
+			if (Controller->PlayerCameraManager)
+			{
+				Controller->PlayerCameraManager->SetGameCameraCutThisFrame();
+			}
+		}
+	}
+
 	// The paint of the small things: a canopy's silk, an airman, torn skin, a bomb's casing.
 	static const FLinearColor Silk(0.93f, 0.92f, 0.88f);
 	static const FLinearColor Airman(0.16f, 0.14f, 0.11f);
@@ -839,14 +854,6 @@ bool AAirBattle::Open(const FString& Why)
 			}
 		}
 	}
-	if (APlayerController* Controller = Here->GetFirstPlayerController())
-	{
-		if (Eye)
-		{
-			Controller->SetViewTarget(Eye);
-		}
-		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), false);
-	}
 	// The camera starts behind his own raid, looking along its way.
 	for (const auto& Pair : S.Show.Groups())
 	{
@@ -855,6 +862,18 @@ bool AAirBattle::Open(const FString& Why)
 			Yaw = FMath::RadiansToDegrees(Pair.second.Face);
 			break;
 		}
+	}
+	// (the eye stood on its opening place before it is the view: spawned at the world's middle, the frame drawn before
+	// the battle's first tick was drawn from there, at the stage's sea level; the first tick then cuts to the flyover)
+	AimEye(0.0);
+	if (APlayerController* Controller = Here->GetFirstPlayerController())
+	{
+		if (Eye)
+		{
+			Controller->SetViewTarget(Eye);
+			AirParts::TellCut(Here);
+		}
+		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), false);
 	}
 	// The picture run: the art director's frames, then quit.
 	if (!ShotFolder.IsEmpty())
@@ -2735,6 +2754,11 @@ void AAirBattle::DrawSky()
 	const FVector EyeNow(Seen.X, Seen.Y, Seen.Z);
 	const double Step = FVector::Dist(EyeNow, SkyEyeWas);
 	const bool bCut = Step > SkyCut && (Step > SkyCutJump * SkyStepWas || Step > SkyCutFar);
+	if (bCut)
+	{
+		// (every cut the sky sees is told to the renderer too: the flyover's shots, the pictures, the strategy camera's jumps)
+		AirParts::TellCut(GetWorld());
+	}
 	// (a turn painted aside stands on the picture while the eye goes on a few frames: the painters fade a puff by the
 	// lens along that way (AirSky's SetSweep), so that in a glide of hundreds of metres a frame none shows as a disc
 	// across the lens. The way's length: SkySweep frames of the lesser of this frame's step and the last one's, so one
@@ -4605,6 +4629,11 @@ void AAirBattle::AimEye(double Real)
 			// does not whip the picture round. The eye is set at its place from the aircraft each frame (never eased
 			// toward it), so a fast aircraft does not draw away from it, nor a turning one swing past it.
 			const bool bCut = CloseEye.IsZero();
+			if (bCut)
+			{
+				// (a cut from one aircraft to the next can be shorter than the sky's cut, SkyCut: in a formation, 30 m)
+				AirParts::TellCut(GetWorld());
+			}
 			CloseAhead = bCut || CloseAhead.IsNearlyZero() ? Ahead : (CloseAhead + (Ahead - CloseAhead) * AirParts::Smooth(Real, 0.33)).GetSafeNormal();
 			FVector Flat(CloseAhead.X, CloseAhead.Y, 0.0);
 			Flat = Flat.IsNearlyZero() ? FVector(Ahead.X, Ahead.Y, 0.0).GetSafeNormal() : Flat.GetSafeNormal();
@@ -5291,6 +5320,7 @@ void AAirBattle::Finish()
 	{
 		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), true);
 		Controller->SetViewTarget(Controller->GetPawn());
+		AirParts::TellCut(GetWorld());
 	}
 	ShowTheTable();
 	Destroy();

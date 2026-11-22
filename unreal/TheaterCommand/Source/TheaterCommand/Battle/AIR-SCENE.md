@@ -887,3 +887,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    yard and Ford Island, the quays' and piers' tops paved in slabs about 10 m square, each a little lighter or
    darker, with the yard's patching and stains, the slabs running along each quay (the cloud test's ground line
    counts them, and checks no crack opens between them).
+17. **The cuts** (the camera and film director's note, 22 November). At each cut (the flyover's shots, a picture, a
+   ride from one aircraft to the next, the jump of the strategy camera, and back to the table) cloud, flak smoke and
+   the light start clean on the new shot: no smear or pumping for a frame or a few. The film opens on the flyover,
+   with no frame drawn from sea level at the stage's middle first. Each cut calls SetGameCameraCutThisFrame (AirParts::
+   TellCut: DrawSky's cut, the close view's cut, the view taken and given back); the eye is aimed once before it
+   becomes the view.
