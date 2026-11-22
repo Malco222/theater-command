@@ -11,6 +11,8 @@ import setup from '../data/campaign/setup-1939.json';
 import open from '../data/campaign/open.json';
 import { bareShore, createGame, groundWorks, men, torchRowsOnly, worksOf } from '../src/campaign/game';
 import { HISTORY, leash, setStop } from '../src/campaign/history';
+import { lineShut, lines } from '../src/campaign/line';
+import type { Line } from '../src/campaign/line';
 import { bookLanding, startOpen } from '../src/campaign/staff';
 import { STRATEGY, torchBook, torchWeek } from '../src/campaign/strategy';
 import { techMul } from '../src/campaign/research';
@@ -25,6 +27,7 @@ const start = (seed: number, stop: number, human: string | null = null): Game =>
 type Row = [number, string, string, string, number, string, Record<string, unknown>?];
 const TORCH = (setup as unknown as { torch: { instead: string[]; rows: Row[]; vichy: { nat: string; from: number; ground: string[]; places: [string, number, string][]; bare: string[]; designs: { field: string; of: string; to: string }; air: [string, number, number][] }; america: { nats: string[] } } }).torch;
 const ROSTER = (setup as unknown as { expeditions: Row[] }).expeditions;
+const LINE = (setup as unknown as { torch: { line: Line } }).torch.line;
 type Landing = { corps: string; own?: number; to: string[] };
 const LANDINGS = (nat: string): Landing[] => (open as unknown as { ops: Record<string, { id: string; landings?: Landing[] }[]> }).ops[nat].find((o) => o.id === 'torch')!.landings!;
 
@@ -41,6 +44,21 @@ describe('Operation Torch by the book', () => {
     expect(T.week).toBe(1);
     // Only the two stops that keep to the book.
     expect(T.stops.every((s) => s < 3)).toBe(true);
+    // The record's line for French North Africa (the design director, 14:45Z): drawn on Vichy's African ground and on
+    // no other of Vichy's, open to the Allies at the three landing shores alone, ended by the turn's own flag, in
+    // Torch's own theatre; and with the switch off no line is drawn at all.
+    expect(LINE.land).toBe(TORCH.vichy.nat);
+    expect(LINE.ends).toBe(`event:${T.turn}`);
+    for (const key of T.ops) expect(HISTORY.theatre[key], key).toBe(LINE.theatre);
+    // (Vichy's African ground: every province of Vichy's that a walk over Vichy's ground reaches from Algiers.)
+    const map = start(1, 1), walk = [map.byName.Algiers.id], reached = new Set(walk);
+    for (let i = 0; i < walk.length; i++) for (const j of map.regions[walk[i]].nb) if (map.regions[j].vichy && !reached.has(j)) { reached.add(j); walk.push(j); }
+    const africa = walk.map((id) => map.regions[id].name).sort();
+    expect([...LINE.ground!].sort()).toEqual(africa);
+    for (const nm of TORCH.vichy.ground) expect(LINE.ground, nm).toContain(nm);
+    expect(Object.keys(LINE.spans).sort()).toEqual([...TORCH.vichy.bare].sort());
+    for (const sp of Object.values(LINE.spans)) expect(sp).toEqual([{ from: 1, to: LINE.until, kind: 'landing' }]);
+    expect(lines().some((L) => L.id === LINE.id)).toBe(false);
     // Each operation named is on its staff's menu, dated by the book, and marked the book's alone.
     for (const key of T.ops) {
       const [nat, id] = key.split(':');
@@ -204,7 +222,22 @@ describe('Operation Torch by the book', () => {
     const seen = g.reports.length;
     const wingIds = g.airFleets.filter((f) => f.nat === 'VIC').map((f) => f.id);
     expect(wingIds.length).toBe(2 * TORCH.vichy.air.length);
+    // The record's line: before the turn Vichy's African ground is shut to a computer staff of Britain's side, all
+    // but the three landing shores. Vichy's other ground is not the line's, and the Axis is not bound by it.
+    expect(lines().some((L) => L.id === LINE.id)).toBe(true);
+    for (const nm of LINE.ground!) for (const nat of ['UK', 'USA']) expect(lineShut(g, nat, g.byName[nm]), `${nat} ${nm}`).toBe(!TORCH.vichy.bare.includes(nm));
+    for (const nm of ['Syria', 'Marseille', 'Corsica']) expect(lineShut(g, 'UK', g.byName[nm]), nm).toBe(false);
+    for (const nm of LINE.ground!) expect(lineShut(g, 'GER', g.byName[nm]), `GER ${nm}`).toBe(false);
+    // (Britain's desert army stands at Tunisia's door this war: Tripoli fell to it, or falls this month.)
+    const britishBefore = new Set(g.corps.filter((c) => c.nat === 'UK' && !c.dead).map((c) => c.id));
     runTurnAI(g);
+    // Britain moved before the turn, so by land it entered none of it: the one British fight on that ground is the
+    // landing at Algiers, and no British corps that was in the field before the day stands on it anywhere else.
+    const british = g.reports.slice(seen).filter((r) => r.turn === 39 && r.attNat === 'UK' && LINE.ground!.includes(r.regionName));
+    expect(british.map((r) => r.regionName)).toEqual(['Algiers']);
+    for (const c of g.corps) if (c.nat === 'UK' && !c.dead && britishBefore.has(c.id) && LINE.ground!.includes(g.regions[c.reg].name)) expect(g.regions[c.reg].name, c.name).toBe('Algiers');
+    // The turn ended the line: from now the staffs decide for themselves.
+    for (const nm of LINE.ground!) expect(lineShut(g, 'UK', g.byName[nm]), `after the turn ${nm}`).toBe(false);
     // The day: both staffs went, somebody is ashore in Morocco or Algeria, and the French turned in that month.
     expect(g.flags['st:done:UK:torch']).toBe(39);
     expect(g.flags['st:done:USA:torch']).toBe(39);
