@@ -173,6 +173,13 @@ export const guardPower = (g: Game, r: Region): number => {
   return d > 0 ? d * KIND.inf.def * g.nations[r.owner].quality * Math.sqrt(0.15 + 0.85 * SIEGE.guardOrg) : 0;
 };
 
+/**
+ * The id a town's guard goes by on a battle field (ruling 232: the guard that fights beside the field army stands on the
+ * field as a block of its own, the coordinator's ruling of 22 November): below every corps id, one to a town, so the
+ * field's bill for it comes back apart from the corps'.
+ */
+export const guardForce = (r: Region): number => -1 - r.id;
+
 /** The men in the guard, for a report. */
 export const guardMen = (g: Game, r: Region): number => Math.round(guardOf(g, r) * MEN_PER_DIV);
 

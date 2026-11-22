@@ -10,6 +10,7 @@ import { armyOf } from '../../campaign/joint';
 import { bridgeDown, riverBetween, riverName } from '../../campaign/rivers';
 import { minesAt } from '../../campaign/engineers';
 import { townName, townSize } from '../../campaign/towns';
+import { SIEGE, guardForce, guardMen, guardOf, guardPower } from '../../campaign/siege';
 import { stopOf } from '../../campaign/history';
 import { techRules } from '../../campaign/tech';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
@@ -128,13 +129,14 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
   // defence, its bar at the middle. The safety net reads the card (offered.ts), never the truth behind it.
   const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
   const cardAir = (a as { air?: CardAir }).air;
+  const weighDef = (c: Corps): number => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)));
   return {
     domain: 'land', kind: 'field', seed: hashString(`field:${g.seed}:${g.turn}:${target.id}:${attNat}`) >>> 0,
     turn: g.turn, date: date.label, title: `The Battle of ${target.name}`, place,
     // The card's river line counts the corps that cross as those with the river between them and the place (assess in
     // game.ts): the field lays the river before those, and no others.
     att: { ...sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
-    def: { ...sideOf(g, defNat, a.defenders, (c) => corpsBase(g, c) * KIND[c.kind].def * (1 + 0.25 * Math.min(1, worksOf(c)))), ...onCall(cardAir?.def) },
+    def: { ...withGuard(g, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf(g, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
     reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(band.exact ? {} : { seen: band.mid }) },
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
@@ -142,6 +144,29 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     // The history dial's stop: at 1 to 3 the computer general fights in its nation's style, at 4 and 5 the situation's (styles.ts).
     hist: stopOf(g),
   };
+}
+
+/**
+ * The town's guard where it fights beside the field army (ruling 232): on the field as a block of its own, so what the
+ * field draws is what the card counted and the field's bill falls on the guard as the field had it (the coordinator's
+ * ruling, 22 November; b464). Its share of the defence's power by its worth (guardPower) behind its walls, weighed as a
+ * corps fully dug in is; its men the guard's; depot troops, police and militia (green, loosely held). Id by
+ * guardForce. The side as it was where no guard stands in the field.
+ */
+function withGuard(g: Game, target: Region, guard: number, tot: number, side: SideTicket): SideTicket {
+  const d = guard > 0 ? guardOf(g, target) : 0;
+  if (d <= 0) return side;
+  // Weighed as the corps are ('tot', their weights summed): the corps' shares scale down by what the guard adds.
+  const w = guardPower(g, target) * 1.25, all = tot + w;
+  if (!(all > 0)) return side;
+  const men = guardMen(g, target), n = Math.max(1, Math.round(d)), str = Math.min(1, d / n);
+  const name = `Town guard of ${townName(target)}`, short = `${townName(target)} guard`;
+  const force: ForceTicket = {
+    corps: guardForce(target), name, nat: target.ctrl, kind: 'inf', divs: d, men, str, org: SIEGE.guardOrg, xp: 0.1, mor: 0.5, dug: true,
+    divisions: Array.from({ length: n }, (_, i) => ({ name: n > 1 ? `${name} (${i + 1})` : name, short, str, xp: 0.1, men: Math.round(men / n) })),
+    share: w / all, battles: 0,
+  };
+  return { ...side, forces: [...side.forces.map((f) => ({ ...f, share: (f.share * tot) / all })), force] };
 }
 
 /**
@@ -191,11 +216,16 @@ export function cardKnows(g: Game, t: FieldTicket<LandPlace>): Set<number> {
   const them = t.att.human ? t.def : t.att;
   const out = new Set<number>();
   for (const f of them.forces) {
+    // The town's guard on the field (ruling 232, b464) is no secret: the card names it beside the field army.
+    if (f.corps < 0) { out.add(f.corps); continue; }
     const c = g.corps.find((x) => x.id === f.corps);
     if (c && corpsKnown(g, c, g.human).level !== 'none') out.add(f.corps);
   }
   return out;
 }
+
+/** A side's corps on a field: its forces but the town's guard standing beside them (ruling 232, guardForce). */
+export const corpsOn = (s: SideTicket): number => s.forces.filter((f) => f.corps >= 0).length;
 
 /** Hands a fought battle back: the rules' own attack order, with the field's R in place of the dice. */
 export function handBack(g: Game, corps: Corps[], target: Region, result: FieldResult): BattleReport | null {
