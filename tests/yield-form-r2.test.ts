@@ -486,6 +486,86 @@ describe('the relief as the computer would send it (the review, 22 November)', (
   });
 });
 
+describe("by sea, every sailing the month allows (the review of the 12:38Z form)", () => {
+  /** Germany at war with Belgium and the Netherlands, the Dutch side stripped, `ger` divisions holding `at`. */
+  function sea(at: string, ger: number): Game {
+    const g = open();
+    declareWar(g, 'GER', 'BEL');
+    declareWar(g, 'GER', 'NED');
+    strip(g, 'NED');
+    take(g, 'GER', at, ger);
+    return g;
+  }
+  const weak = (g: Game, nat: string, where: string, n: number): void => {
+    for (let k = 0; k < n; k++) add(g, nat, where, 1).str = 0.05;
+  };
+
+  it('two harbours put in at two harbours: London to Antwerp and Kent to Holland, where one harbour each is not enough', () => {
+    const g = sea('Rotterdam', 15);
+    weak(g, 'BEL', 'Antwerp', 2);
+    weak(g, 'NED', 'Holland', 3);
+    g.nations.UK.sealift = 4;
+    const a = add(g, 'UK', 'London', 10), b = add(g, 'UK', 'London', 4), c = add(g, 'UK', 'Kent', 9), d = add(g, 'UK', 'Kent', 3);
+    const r = reliefInReach(g, 'NED');
+    expect(r?.by).toBe('UK');
+    expect(r!.corps).toEqual(expect.arrayContaining([a.id, b.id, c.id, d.id]));
+  });
+
+  it('lift goes only to corps that have room where their sailing puts in', () => {
+    const g = sea('Rotterdam', 6);
+    weak(g, 'BEL', 'Antwerp', 4);
+    weak(g, 'NED', 'Holland', 4);
+    g.nations.UK.sealift = 2;
+    const a = add(g, 'UK', 'London', 10);
+    add(g, 'UK', 'London', 9);
+    const c = add(g, 'UK', 'Kent', 8);
+    const r = reliefInReach(g, 'NED');
+    expect(r?.by).toBe('UK');
+    expect(r!.corps).toEqual(expect.arrayContaining([a.id, c.id]));
+  });
+
+  it('a harbour\'s corps go where all of them can attack from, though the heaviest could put in elsewhere', () => {
+    const g = sea('Brabant', 3);
+    const x = crossingOf(R(g, 'Holland').id, R(g, 'Brabant').id)!;
+    g.flags[`br:${x.a}:${x.b}`] = g.turn;
+    weak(g, 'BEL', 'Antwerp', 3);
+    weak(g, 'NED', 'Rotterdam', 3);
+    g.nations.UK.sealift = 4;
+    const i = add(g, 'UK', 'London', 10), t = add(g, 'UK', 'London', 4, 'arm');
+    const r = reliefInReach(g, 'NED');
+    expect(r?.by).toBe('UK');
+    expect(r!.corps).toEqual(expect.arrayContaining([i.id, t.id]));
+  });
+
+  it('a corps past the frontage gives its lift to another harbour\'s sailing', () => {
+    const g = sea('Rotterdam', 6);
+    g.nations.UK.sealift = 4;
+    const london = [0, 1, 2, 3].map(() => add(g, 'UK', 'London', 3));
+    const kent = add(g, 'UK', 'Kent', 2);
+    const r = reliefInReach(g, 'NED');
+    expect(r?.by).toBe('UK');
+    expect(r!.corps).toContain(kent.id);
+    expect(r!.corps.filter((id) => london.some((c) => c.id === id))).toHaveLength(3);
+  });
+
+  it('shipping in hand never takes away a relief by land', () => {
+    const g = open();
+    declareWar(g, 'GER', 'BEL');
+    beatenNED(g, 2);
+    const rot = R(g, 'Rotterdam'), ant = R(g, 'Antwerp');
+    for (const p of ['Holland', 'Gelderland', 'Friesland', 'Brabant']) add(g, 'GER', p, 30, 'arm');
+    for (const c of [...ant.units]) removeCorps(g, c);
+    for (const c of rot.units) if (c.nat === 'GER') c.str = 1.2;
+    const inf = [0, 1, 2].map(() => add(g, 'UK', 'Antwerp', 3));
+    add(g, 'UK', 'London', 4, 'cav');
+    g.nations.UK.sealift = 0;
+    const byLand = reliefInReach(g, 'NED');
+    expect(byLand?.corps).toEqual(expect.arrayContaining(inf.map((c) => c.id)));
+    g.nations.UK.sealift = 1;
+    expect(reliefInReach(g, 'NED')).toEqual(byLand);
+  });
+});
+
 describe("the player's seat", () => {
   it('the band first, then the yield a month on', () => {
     const g = open(true, 1, 'NED');

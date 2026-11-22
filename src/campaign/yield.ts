@@ -160,12 +160,15 @@ const weight = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk
 /** A corps that could come, and the provinces it could attack from; shipped, the harbour it sails from. */
 type Stand = { c: Corps; from: number[]; quay?: number };
 
+/** The most plans of sailings weighed for one ally against one place (each gives every harbour one place to put in at). */
+const PLANS = 64;
+
 /**
  * The corps that come by land, each put on a province it could attack from while that province has room (hasRoom's:
  * STACK corps, engineers apart up to 2, its side's corps already there counted, those that stay where they stand
  * first), the strongest first and each where the fewest stand: copies of them standing there, so the attack is weighed
  * from where it would go in (limitAttackers' roads, its sides, assess's rivers and flanks), and nothing in the war is moved.
- * Those shipped up go as their harbours' sailings: one from each harbour, into one harbour beside the place.
+ * Those shipped up come with the one harbour their sailing puts in at (sailingPlans).
  */
 function standThem(g: Game, ally: string, cs: Stand[]): Corps[] {
   const stays = (x: Stand): boolean => x.from.length === 1 && x.from[0] === x.c.reg;
@@ -184,17 +187,62 @@ function standThem(g: Game, ally: string, cs: Stand[]): Corps[] {
   };
   const fits = (c: Corps, id: number): boolean => (c.kind === 'eng' ? at(id).eng < 2 : at(id).line < STACK);
   const out: Corps[] = cs.filter(stays).map((x) => x.c);
-  // (A harbour's one sailing: where its first corps puts in, the rest of that harbour's corps put in too.)
-  const sailsTo = new Map<number, number>();
-  for (const { c, from, quay } of cs.filter((x) => !stays(x)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
-    const to = quay === undefined ? undefined : sailsTo.get(quay);
-    const open = from.filter((id) => (to === undefined || id === to) && fits(c, id)).sort((a, b) => at(a).line - at(b).line || a - b);
+  for (const { c, from } of cs.filter((x) => !stays(x)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
+    const open = from.filter((id) => fits(c, id)).sort((a, b) => at(a).line - at(b).line || a - b);
     if (!open.length) continue;
     if (c.kind === 'eng') at(open[0]).eng++; else at(open[0]).line++;
-    if (quay !== undefined) sailsTo.set(quay, open[0]);
     out.push({ ...c, reg: open[0] });
   }
   return out;
+}
+
+/**
+ * The month's plans of sailings (the design director's 12:38Z): every harbour with corps to ship sends one sailing,
+ * into one harbour of its side beside the place, and each plan names that harbour for every quay. The quays whose
+ * strongest corps is heaviest are planned first; past PLANS plans, the later quays keep the first harbour open to
+ * them (in the wars measured an ally rarely has more than three quays and two harbours to put in at).
+ */
+function sailingPlans(g: Game, shipped: Stand[]): Map<number, number>[] {
+  const opts = new Map<number, { to: number[]; w: number }>();
+  for (const x of shipped) {
+    const o = opts.get(x.quay!) ?? { to: [], w: 0 };
+    for (const id of x.from) if (!o.to.includes(id)) o.to.push(id);
+    o.w = Math.max(o.w, weight(g, x.c));
+    opts.set(x.quay!, o);
+  }
+  let plans: Map<number, number>[] = [new Map()];
+  for (const [q, o] of [...opts].sort(([a, x], [b, y]) => y.w - x.w || a - b)) {
+    const next: Map<number, number>[] = [];
+    for (const p of plans) for (const to of [...o.to].sort((a, b) => a - b)) next.push(new Map(p).set(q, to));
+    plans = next.length > PLANS ? plans.map((p) => new Map(p).set(q, Math.min(...o.to))) : next;
+  }
+  return plans;
+}
+
+/**
+ * The corps a plan of sailings ships, sharing the lift (a corps each): the strongest first, each into its quay's
+ * harbour of the plan while that harbour has room as whyNotShip counts it (STACK of its side's units of every kind),
+ * none twice; under the guns rule a sailing of guns alone takes the strongest corps that fights in its last place.
+ */
+function shipFor(g: Game, ally: string, shipped: Stand[], plan: Map<number, number>, lift: number, skip: Set<number>): Stand[] {
+  const room = new Map<number, number>();
+  const left = (id: number): number => room.get(id) ?? STACK - friendlyUnits(g, g.regions[id], ally).length;
+  const can = shipped.filter((x) => !skip.has(x.c.id) && x.from.includes(plan.get(x.quay!)!)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id);
+  const pick: Stand[] = [];
+  for (const x of can) {
+    if (pick.length >= lift) break;
+    const to = plan.get(x.quay!)!;
+    if (left(to) <= 0) continue;
+    room.set(to, left(to) - 1);
+    pick.push({ c: x.c, from: [to] });
+  }
+  if (pick.length && gunsRule(g) && !pick.some((x) => fights(x.c))) {
+    const last = pick[pick.length - 1];
+    room.set(last.from[0], left(last.from[0]) + 1);
+    const f = can.find((x) => fights(x.c) && left(plan.get(x.quay!)!) > 0);
+    if (f) pick[pick.length - 1] = { c: f.c, from: [plan.get(f.quay!)!] };
+  }
+  return pick;
 }
 
 /**
@@ -259,14 +307,39 @@ function reliefFrom(g: Game, nat: string, friends: string[], may: (c: Corps) => 
         // (Shipped, it sails from the harbour it stands in: its sailing is that harbour's.)
         else (how.ship ? shipped : land).push(how.ship ? { c, from: how.from, quay: c.reg } : { c, from: how.from });
       }
-      // By land, with as many shipped up as the shipping carries, the strongest first: every sailing the month allows
-      // (the design director's 12:38Z), one from each harbour into one harbour of its side beside the place, all
-      // sharing the lift in hand (standThem keeps each harbour's corps to its one sailing).
-      const byShip = strongest(g, shipped, lift, (x) => x.c);
-      const force = limitAttackers(g, standThem(g, ally, [...land, ...byShip]), t);
-      if (force.length) {
+      // By land alone; then with each harbour's sailing on its own (the corps of one harbour shipped into one harbour
+      // of its side beside the place); then with every sailing the month allows (the design director's 12:38Z): one
+      // from each harbour, all in the month, sharing the lift in hand, each plan of sailings weighed in turn. (A corps
+      // shipped up can push a better one off the frontage, so the fewer sailings are weighed as well as the most.) A
+      // shipped corps the attack leaves out (no room once the march is in, or past the frontage) has its lift given to
+      // the next corps of the plan, and the plan is weighed again.
+      const weigh = (sail: Stand[]): Relief | null => {
+        const force = limitAttackers(g, standThem(g, ally, [...land, ...sail]), t);
+        if (!force.length) return null;
         const odds = assess(g, force, t).odds;
-        if (odds >= bar) return { by: ally, target: t.id, odds, corps: force.map((c) => c.id) };
+        return { by: ally, target: t.id, odds, corps: force.map((c) => c.id) };
+      };
+      if (land.length) {
+        const w = weigh([]);
+        if (w && w.odds >= bar) return w;
+      }
+      if (lift > 0 && shipped.length) {
+        const singles = [...new Set(shipped.flatMap((x) => x.from.map((to) => `${x.quay}:${to}`)))].sort().map((k) => new Map([k.split(':').map(Number) as [number, number]]));
+        const plans = sailingPlans(g, shipped);
+        for (const plan of [...singles, ...(plans[0]?.size > 1 ? plans : [])]) {
+          const skip = new Set<number>();
+          for (;;) {
+            const sail = shipFor(g, ally, shipped, plan, lift, skip);
+            if (!sail.length) break;
+            const w = weigh(sail);
+            if (w && w.odds >= bar) return w;
+            const idle = sail.filter((x) => !w?.corps.includes(x.c.id));
+            // (Nothing left out, or nobody left to take the idle corps' places: this plan is weighed.)
+            if (!idle.length) break;
+            for (const x of idle) skip.add(x.c.id);
+            if (!shipped.some((x) => !skip.has(x.c.id) && !sail.some((y) => y.c === x.c) && x.from.includes(plan.get(x.quay!)!))) break;
+          }
+        }
       }
       // Or a landing on the place from one port.
       for (const [, cs] of [...ports].sort(([a], [b]) => a - b)) {
