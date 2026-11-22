@@ -8,6 +8,7 @@
 
 import type { Rng } from '../../core/rng';
 import { SKY } from './book';
+import { aCraftOf, upFirst } from './names';
 import type { AirKind, Fall } from './types';
 
 const pick = (rng: Rng, w: number[]): number => {
@@ -38,9 +39,52 @@ export function drawFall(rng: Rng, kind: AirKind, over: Fall['over'], saved: num
   return { kind: k, chutes: out ? 1 : 0, over, back: false, captured: out ? 1 : 0 };
 }
 
-/** The words for the dispatch strip. Placeholders until the UI director and the design director pass them. */
-export function fallWords(name: string, f: Fall): string {
-  const how = f.kind === 'explode' ? 'blows up in the air' : f.kind === 'burn' ? 'goes down burning' : 'spins down';
-  const chutes = f.chutes === 0 ? '' : f.chutes === 1 ? ', one parachute' : `, ${f.chutes} parachutes`;
-  return `An aircraft of ${name} ${how}${chutes}.`;
+/**
+ * The words for the dispatch strip. The group's own name and the nation word the line adds ('' for one's own), which
+ * sits on the aircraft (the UI director, 14:26Z): 'An aircraft of KG 2', 'An American aircraft of the 15th Pursuit
+ * Group', 'An aircraft of the Home Fleet's strike wing', 'One of the Japanese Shokaku and Zuikaku dive bombers'
+ * (names.ts aCraftOf). The ways down passed as written (ui-director/words-air-battle-dispatches.md, 20 November 15:02Z).
+ */
+export function fallWords(name: string, adj: string, f: Fall): string {
+  const how = f.how ? howWords(f) : f.kind === 'explode' ? 'blows up in the air' : f.kind === 'burn' ? 'goes down burning' : 'spins down';
+  return `${upFirst(aCraftOf(name, 'aircraft', adj))} ${how}${endsOf(f.chutes, f.out ?? 0)}.`;
+}
+
+/** The endings: ', one parachute', ', 3 parachutes'; ', one man climbing out', ', 4 men climbing out' (passed, 15:02Z). */
+function endsOf(chutes: number, out: number): string {
+  const c = chutes === 0 ? '' : chutes === 1 ? ', one parachute' : `, ${chutes} parachutes`;
+  const o = !out ? '' : out === 1 ? ', one man climbing out' : `, ${out} men climbing out`;
+  return c + o;
+}
+
+/**
+ * A collision downs two, so one line says both, each named as the dispatch names it ('a bomber of the 8th Bomb Group',
+ * 'a German fighter of JG 26'), with the endings of the two together (the UI director, 20 November 15:02Z): 'A bomber
+ * of the 8th Bomb Group and a fighter of JG 26 collide, and both go down.' A ram on purpose names the one who rams
+ * first ('A Soviet fighter of 6 IAK rams a German bomber of KG 26, and both go down.'; passed 15:38Z, and "rams" alone
+ * says it was meant). Two of the same group are named once, by `b` left empty and `a` as names.ts twoOf gives it: 'Two
+ * bombers of the 8th Bomb Group collide, and both go down.' (15:38Z).
+ */
+export function collideWords(a: string, b: string, chutes: number, out: number, meant = false): string {
+  const ends = `, and both go down${endsOf(chutes, out)}.`;
+  if (!b) return `${upFirst(a)} collide${ends}`;
+  return meant ? `${upFirst(a)} rams ${b}${ends}` : `${upFirst(a)} and ${b} collide${ends}`;
+}
+
+/** The way down in words (fates.ts). A collision is told by collideWords. */
+function howWords(f: Fall): string {
+  const apart = f.boom !== undefined ? ' and blows apart' : '';
+  switch (f.how) {
+    case 'explode': return 'blows up in the air';
+    case 'flamer': return `goes down in flames${apart}`;
+    case 'burn': return `goes down burning${apart}`;
+    case 'wing': return 'loses a wing and goes down';
+    case 'tail': return 'has its tail shot away and goes down';
+    case 'pilot': return `noses over and dives into the ${f.end === 'sea' ? 'sea' : 'ground'}`;
+    case 'glide': return f.ditch ? 'glides down and ditches in the sea' : f.out ? 'glides down and crash-lands' : 'glides down and crashes';
+    case 'breakup': return 'breaks up in the air';
+    case 'struck': return f.cause === 'debris' ? 'is hit by flying wreckage and goes down' : 'is struck by a falling aircraft and goes down';
+    case 'collide': return 'goes down in a collision';
+    default: return 'spins down';
+  }
 }
