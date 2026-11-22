@@ -936,12 +936,12 @@ namespace AirSky
 			// 1.5 km) a quarter or so, and the small ones (100 to 600 m) the rest, many of them round the bigger; within each
 			// even on a log scale. A cloudier day's cover goes more to the big ones, a fair day's more to the small)
 			const double BigShare = 0.5 + 0.15 * Fatter - 0.3 * Fair, SmallShare = 0.22 - 0.08 * Fatter + 0.25 * Fair;
-			// (the small ones are drawn two to three times as long as wide, and counted at the sky they truly cover, so the
-			// day's cover holds. Laid in streets they now fill their share, where scattered one by one they ran out of
-			// tries short of it: on a scattered or heavy day they take a quarter of their old share, about as many clouds
-			// as a1acb552's sky and its paint's cost, and the big and middling the rest, shared as before; a fair day's
-			// sky is still mostly small ones)
-			const double SmallKept = 0.25 + 0.75 * Fair;
+			// (the small ones are drawn one and a half to two and a half times as long as wide, and counted at the sky they
+			// truly cover, so the day's cover holds. Laid in streets they now fill their share, where scattered one by one
+			// they ran out of tries short of it: on a scattered or heavy day they take a third of their old share, about as
+			// many clouds as a1acb552's sky and its paint's cost, and the big and middling the rest, shared as before; a
+			// fair day's sky is still mostly small ones)
+			const double SmallKept = 0.35 + 0.65 * Fair;
 			const double SmallLaid = SmallShare * SmallKept;
 			const double BigLaid = BigShare + (SmallShare - SmallLaid) * BigShare / std::max(0.05, 1.0 - SmallShare);
 			const double UpTo[3] = { BigLaid, 1.0 - SmallLaid, 1.0 };
@@ -1033,10 +1033,11 @@ namespace AirSky
 				// deep as it is wide, 50 m at least (it was 150 m at least, and from above the 200 to 300 m ones stood as
 				// round balls of one size: the art director on r2e's cloud sheets, 22 November 06:21Z, "flatter, height
 				// about half their width ... some near 100 m")
-				// (a small one drawn out along the wind, two to three times as long as it is across (W its length): from
-				// above, round, they stood as cotton balls, the art director on a1acb552's frames; and half to four fifths as
-				// deep as it is across)
-				const double Aspect = bSmall ? Roll.U(2.0, 3.0) : 1.0, Wide = W / Aspect;
+				// (a small one drawn out along the wind, one and a half to twice as long as it is across, one in seven to two
+				// and a half (W its length): from above, round, they stood as cotton balls, the art director on a1acb552's
+				// frames; at two to three times they read as rice grains, her trim on r2g's sheets, 22 November 11:22Z; and
+				// half to four fifths as deep as it is across)
+				const double Aspect = !bSmall ? 1.0 : Roll.U() < 0.15 ? Roll.U(2.0, 2.5) : Roll.U(1.5, 2.0), Wide = W / Aspect;
 				const double Least = bSmall ? std::max(45.0, Wide * Roll.U(0.55, 0.8)) : 250.0;
 				// (a fair day's shallow, two to three and a half times as wide as tall; a heavy day's taller, a third of its big
 				// ones towering to the day's top)
@@ -1091,7 +1092,7 @@ namespace AirSky
 					const double Flat = K == 0 ? 0.55 : bSmall ? 0.68 : 0.85;
 					const double Low = Rk * Flat * 0.95, High = Rk * 0.85;
 					const double Zk = Foot + Low + std::max(0.0, H - Low - High) * Hk;
-					const int N = bSmall ? (K > 0 && Aspect > 2.5 ? 3 : 2) : static_cast<int>(Clamp(std::round((Wk / Rk) * (Wk / Rk) * 1.0), K + 1 < Layers ? 2.0 : 1.0, 10.0));
+					const int N = bSmall ? (K > 0 && Aspect > 1.75 ? 3 : 2) : static_cast<int>(Clamp(std::round((Wk / Rk) * (Wk / Rk) * 1.0), K + 1 < Layers ? 2.0 : 1.0, 10.0));
 					for (int J = 0; J < N; ++J)
 					{
 						const double A = Roll.U(0.0, 2.0 * Pi), Far = std::sqrt(Roll.U()) * std::max(0.0, Wk - 0.85 * Rk);

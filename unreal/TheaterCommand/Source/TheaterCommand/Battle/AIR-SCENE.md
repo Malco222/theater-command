@@ -977,8 +977,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    aircraft cast shadows within ..."). Read stat unit's graphics time at Bremen 07 with and without
    "-TheaterPlaneShadowM=100000" (every aircraft casting, as before) and give both.
 31. **Small clouds from above: no cotton balls** (the art director on a1acb552's frames, 22 November 08:13Z, her first
-   mend). Each small cloud (100 to 600 m) is now drawn two to three times as long as it is wide, laid along the wind
-   with a ragged edge, and far off its one far shape is long the same way, never a round dot. They gather: after one,
+   mend). Each small cloud (100 to 600 m) is now drawn one and a half to twice as long as it is wide (one in seven to
+   2.5; her trim on the r2g sheets, 11:22Z: past 2.5 they read as rice grains), its top two or three bumps, laid along
+   the wind with a ragged edge, and far off its one far shape is long the same way, never a round dot. They gather: after one,
    one to five more follow downwind in a short street, with open sea between the clumps and streets; the share of the
    sky they cover is unchanged. Each casts a soft oval shadow on the sea down-sun (out to 10 km, fading over the last
    quarter). Look at Pearl 01, 04, 05c, 07 and 09 and Midway 01, 02, 04, 05c and 07: clumps and streets with open sea
