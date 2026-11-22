@@ -245,7 +245,7 @@ function fight(p: SetPiece, seed: number): Fought {
   // A tank's shells by the model it is drawn with, as battleStart sets them (looks only: nothing in the fight reads cal).
   for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
   // Full sections: every man of a section, crew and team drawn and falling on his own (looks only, ruling 217).
-  // As platoons where they fit the battle's one N (GR1, GR3); the header states N, and each block its men0 and str0.
+  // Each block its men0 over the battle's one N (GR1, GR3); the header states N, and each block its men0 and str0.
   const drill = sim.drillOn({ sections: true, platoons: true, scale: true });
   const scale = drill.scale ?? 1;
   const f = sim.field;
@@ -323,7 +323,7 @@ function fight(p: SetPiece, seed: number): Fought {
     + `${rounds.size} rounds (${kills.length} kills, ${tankKills} on tanks), ${tracks.length} tracks, winner ${over.R > 1 ? 'attack' : 'defence'} (R ${r2(over.R)})`;
 
   const out = {
-    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]), each named by block b, figure k and place in its section j (no j: the key man); rounds (j the shooter, oj the man struck) and events each once; blocks every battle second. scale: the battle\'s one N (GR1): no block draws more men than its men0 over it (GR3), as platoons where they fit, else sections, else its key men; each block carries its men0 (men brought) and str0.',
+    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]), each named by block b, figure k and place in its section j (no j: the key man); rounds (j the shooter, oj the man struck) and events each once; blocks every battle second. scale: the battle\'s one N (GR1): each block draws its men0 over N (GR3): its key men always, then their sections in order, then the rifle platoons squad by squad, the last group short; each block carries its men0 (men brought) and str0.',
     recording: true, key: p.key, seed, dt: DT, title: p.title, date: p.date, turn: p.turn, scale,
     sky: { ...p.sky, latLon: p.latLon, hour: p.hour },
     sides: {

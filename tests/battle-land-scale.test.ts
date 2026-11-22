@@ -83,29 +83,53 @@ describe('no block draws more men than its men over N (GR3)', () => {
     expect(JSON.stringify(db.view())).toBe(JSON.stringify(da.view()));
   });
 
-  it('a battle the size of Kursk: each block the most it can draw under its cap, its key men always', () => {
-    const tiers: Record<number, number[]> = {};
+  it('a battle the size of Kursk: each block fills its cap, its key men always and never more than its whole draw', () => {
     for (const N of [25, 45, 60, 70, 125, 400, 600]) {
       const b = battle(3), d = b.drillOn({ ...ALL, scale: N });
-      const whole = battle(3).drillOn(ALL), keys = battle(3).drillOn({}), secs = battle(3).drillOn({ sections: true });
-      const count = [0, 0, 0];
+      const whole = battle(3).drillOn(ALL), keys = battle(3).drillOn({});
       for (const blk of d.view()) {
         const u = b.unit(blk.id)!, cap = Math.floor(u.men0 / N), n = drawn(blk);
         const at = (x: typeof d) => drawn(x.view().find((v) => v.id === blk.id)!);
-        const [k0, k1, k2] = [at(keys), at(secs), at(whole)];
+        const [k0, all] = [at(keys), at(whole)];
         if (u.kind === 'arm') { expect(n).toBe(0); continue; }
-        // The most of platoons, sections and key men that fits; the key men whatever the cap.
-        const want = k2 <= cap ? k2 : k1 <= cap ? k1 : k0;
-        expect(n, `block ${u.id} at 1:${N}`).toBe(want);
-        if (n > k0) expect(n).toBeLessThanOrEqual(cap);
-        count[n === k2 && k2 > k1 ? 2 : n === k0 ? 0 : 1]++;
+        // All of it where it fits; its key men where they alone are more; else its cap to the man.
+        expect(n, `block ${u.id} (${u.nat} ${u.kind}${u.team ?? ''}) at 1:${N}`).toBe(all <= cap ? all : k0 >= cap ? k0 : cap);
       }
-      tiers[N] = count;
     }
-    // At the scale of a battle this size every rifle block is a platoon; at Kursk's, none; at a third of that, key men.
-    expect(tiers[25][2]).toBeGreaterThan(0);
-    expect(tiers[125][2]).toBe(0);
-    expect(tiers[400][2] + tiers[400][1]).toBeLessThan(tiers[125][2] + tiers[125][1]);
+  });
+
+  it('the same N on both sides: every block with more men than its cap draws its men over N, within 5%, both armies', () => {
+    for (const [att, def] of [['USA', 'GER'], ['SOV', 'GER'], ['UK', 'ITA']]) {
+      for (const N of [45, 60, 125, 200]) {
+        const b = new LandBattle(withTeams(sampleTicket('plains', 1.3, { seed: 4, nat: { att, def } })));
+        const d = b.drillOn({ ...ALL, scale: N }), whole = new LandBattle(b.ticket).drillOn(ALL);
+        const keys = new LandBattle(b.ticket).drillOn({});
+        let checked = 0;
+        for (const blk of d.view()) {
+          const u = b.unit(blk.id)!, cap = u.men0 / N;
+          const at = (x: typeof d) => drawn(x.view().find((v) => v.id === blk.id)!);
+          if (u.kind === 'arm' || at(whole) <= cap || at(keys) >= cap) continue;
+          expect(Math.abs(drawn(blk) / cap - 1), `${u.nat} block ${u.id} at 1:${N}`).toBeLessThanOrEqual(0.05);
+          checked++;
+        }
+        if (N >= 60) expect(checked).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('a block drawn short keeps its sections whole in squad order, the last one short, and its leaders by their men', () => {
+    const b = battle(3), d = b.drillOn({ ...ALL, scale: 125 });
+    for (const blk of d.view()) {
+      const u = b.unit(blk.id)!;
+      if (u.kind !== 'inf') continue;
+      const per = new Map<number, number>();
+      for (const m of blk.men) if (m.j !== undefined) per.set(m.k, (per.get(m.k) ?? 0) + 1);
+      const ks = [...per.keys()].sort((a, c) => a - c);
+      // Sections go to the key men in order: no gap before the last one drawn.
+      ks.forEach((k, i) => expect(k).toBe(i));
+      // A rifle key man shows as a leader only with men of his own.
+      for (const m of blk.men) if (m.j === undefined && m.r === 'leader') expect(per.get(m.k) ?? 0).toBeGreaterThan(0);
+    }
   });
 });
 
