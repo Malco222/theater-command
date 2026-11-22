@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 44a51d8f 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f46a0712 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -67796,6 +67796,9 @@
       __publicField(this, "blow", "gun");
       /** Pieces picking up survivors in the fight (form B1), by unit id: the wreck, the men taken aboard and the count last told. */
       __publicField(this, "rescuing", /* @__PURE__ */ new Map());
+      /** The men each piece has taken aboard in the fight and still carries, by the group of men in the water they came
+       *  from: a ship of the piece that is lost takes her share of them with her (the design director, 18:42Z). */
+      __publicField(this, "aboard", /* @__PURE__ */ new Map());
       /** The sinkings of ships their men abandoned, told 'abandon.afloat' seconds after (a looks-only knob): booked already. */
       __publicField(this, "sinkings", []);
       /** The player's sides take the chase in hand with their first order after the enemy breaks off. */
@@ -68063,9 +68066,7 @@
           const rc = c;
           if (!this.sail || !rc.wreck) return false;
           const w = this.wreckFor({ unit: rc.wreck.unit, ship: rc.wreck.ship });
-          if (!w || w.side !== by2 && SAILORS.refuse.navies.includes(w.nat)) return false;
-          this.soak(w, this.t);
-          if (w.alive < 0.5) return false;
+          if (!w || this.aliveIn(this.takers(w, by2)) < 0.5) return false;
           const us = mine4(rc.units);
           for (const u of us) this.orders.set(u.id, { kind: "rescue", unit: w.unit, ship: w.ship });
           return us.length > 0;
@@ -69374,12 +69375,18 @@
      * One ship's crew in the water at her wreck (form A1, A2): her class's crew, less those who went down with her by how
      * she went (sailors.json down) and those killed going in (none until sourced). sea:men tells it; nothing in the fight
      * reads it. 'early': her men left her early, in good order.
+     *
+     * Men her piece had picked up in the fight share her fate (the design director, 18:42Z, as Hammann's men did with
+     * Yorktown's): her share of them, the piece's men aboard over its ships afloat before her loss, go down by the same
+     * share as her people and the rest go into the water at her wreck, a guest group for each fleet they came from, the
+     * sea's clock starting again for them. sea:men's 'guests' counts those (absent where she carried none).
      */
     inWater(u, at4, early) {
       const c = u.extra.cls, f = this.info.get(u.id).fleet, D2 = SAILORS.down;
       const ship2 = (this.wreckOf.get(u.id) ?? 0) + 1;
       this.wreckOf.set(u.id, ship2);
-      const crew = SEA.classes[c].crew, down = Math.round(crew * (this.sudden(u) ? D2.sudden : early ? D2.early : D2.fought));
+      const share = this.sudden(u) ? D2.sudden : early ? D2.early : D2.fought;
+      const crew = SEA.classes[c].crew, down = Math.round(crew * share);
       const dead = Math.round(crew * SAILORS.dead.share), water = Math.max(0, crew - down - dead);
       const w = {
         unit: u.id,
@@ -69401,7 +69408,27 @@
         picked: { att: 0, def: 0 }
       };
       this.wrecks.push(w);
-      this.say({ what: "sea:men", unit: u.id, side: u.side, x: at4.x, y: at4.y, text: "", extra: { ship: ship2, fleet: f.id, men: water, dead, down, early } });
+      const on = this.aboard.get(u.id);
+      let guests = 0;
+      if (on) {
+        const of2 = 1 / (u.extra.ships + 1), keep2 = Math.max(0, 1 - share - SAILORS.dead.share);
+        for (const [g2, n] of on) {
+          const hers = n * of2;
+          on.set(g2, n - hers);
+          g2.picked[u.side] -= hers;
+          const wet = hers * keep2;
+          if (wet <= 0) continue;
+          let h = this.wrecks.find((k) => k.guest && k.unit === u.id && k.ship === ship2 && k.side === g2.side && k.fleet === g2.fleet);
+          if (!h) {
+            h = { unit: u.id, ship: ship2, side: g2.side, fleet: g2.fleet, nat: g2.nat, cls: c, x: at4.x, y: at4.y, t: this.t, crew: 0, down: 0, dead: 0, water: 0, early, alive: 0, at: this.t, picked: { att: 0, def: 0 }, guest: true };
+            this.wrecks.push(h);
+          }
+          h.alive += wet;
+          guests += wet;
+        }
+        if (u.extra.ships <= 0) this.aboard.delete(u.id);
+      }
+      this.say({ what: "sea:men", unit: u.id, side: u.side, x: at4.x, y: at4.y, text: "", extra: { ship: ship2, fleet: f.id, men: water, dead, down, early, ...guests > 0 ? { guests: Math.round(guests) } : {} } });
       return w;
     }
     /**
@@ -69449,9 +69476,21 @@
         this.oil(k.w, k.lit);
       }
     }
-    /** The wreck an order to pick up survivors names, if there is one. */
+    /** The wreck an order to pick up survivors names, if there is one (her own crew's group, never a guest group). */
     wreckFor(o) {
-      return this.wrecks.find((w) => w.unit === o.unit && w.ship === o.ship);
+      return this.wrecks.find((w) => w.unit === o.unit && w.ship === o.ship && !w.guest);
+    }
+    /** The groups of men in the water at a wreck's place who will come aboard a ship of 'side' (all of them, but not an
+     *  enemy's men whose navy refuses an enemy's pick-up: sailors.json refuse), each worn down by the sea to now. */
+    takers(w, side3) {
+      const men2 = this.wrecks.filter((g2) => g2.unit === w.unit && g2.ship === w.ship && (g2.side === side3 || !SAILORS.refuse.navies.includes(g2.nat)));
+      for (const g2 of men2) this.soak(g2, this.t);
+      return men2;
+    }
+    aliveIn(men2) {
+      let n = 0;
+      for (const g2 of men2) n += g2.alive;
+      return n;
     }
     /**
      * Pieces under an order to pick up survivors take men aboard (form B1): once lying stopped beside the wreck, each
@@ -69469,9 +69508,9 @@
           this.rescuing.delete(u.id);
         }
         if (!w) continue;
-        this.soak(w, this.t);
+        const men2 = this.takers(w, u.side);
         let now = this.rescuing.get(u.id);
-        if (!now && w.alive < 0.5) {
+        if (!now && this.aliveIn(men2) < 0.5) {
           this.orders.delete(u.id);
           continue;
         }
@@ -69481,12 +69520,20 @@
           this.rescuing.set(u.id, now);
           this.say({ what: "sea:rescue", unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? "stop" : "stops"} to pick men out of the water.`, extra: { wreck: { unit: w.unit, ship: w.ship }, men: 0, done: false } });
         }
-        const k = Math.min(w.alive, (w.early ? SAILORS.pick.early : SAILORS.pick.wreck) * u.extra.ships * DT / 60);
-        w.alive -= k;
-        w.picked[u.side] += k;
+        const all = this.aliveIn(men2), k = Math.min(all, (w.early ? SAILORS.pick.early : SAILORS.pick.wreck) * u.extra.ships * DT / 60);
+        const on = this.aboard.get(u.id) ?? /* @__PURE__ */ new Map();
+        this.aboard.set(u.id, on);
+        let given3 = 0;
+        men2.forEach((g2, i) => {
+          const kg = i === men2.length - 1 ? k - given3 : k * g2.alive / all;
+          given3 += kg;
+          g2.alive -= kg;
+          g2.picked[u.side] += kg;
+          on.set(g2, (on.get(g2) ?? 0) + kg);
+        });
         now.got += k;
-        if (w.alive < 0.5) {
-          w.alive = 0;
+        if (this.aliveIn(men2) < 0.5) {
+          for (const g2 of men2) g2.alive = 0;
           this.rescueEnds(u, now);
           this.rescuing.delete(u.id);
           this.orders.delete(u.id);
@@ -69507,8 +69554,9 @@
      * every man of both sides still alive 'found.stop' hours after the fight, its own saved and the enemy's its
      * prisoners, but none of a navy whose men refuse an enemy's pick-up (sailors.json refuse): those are lost. On time
      * neither side broke off, and each stops for its own. Men nobody stops for are found 'found.leave' hours after the
-     * fight by their own side, as many as the water has left alive. No draw: what happened, the sea, the month and the
-     * calls decide it all.
+     * fight, as many as the water has left alive, by whoever holds the water: its own saved, the enemy's its prisoners,
+     * under the same refusal (the design director, 18:42Z). Each group's hours in the water run from its own wreck's time,
+     * so men who went in early wait longest. No draw: what happened, the sea, the month and the calls decide it all.
      */
     sailorsAfter(winner, how) {
       const F = SAILORS.found, end = this.t, stops = (s) => this.sail.stop?.[s] ?? "stop";
@@ -69524,7 +69572,7 @@
         o.down += w.down;
         o.dead += w.dead;
         o.water += w.water;
-        if (w.early) o.call.early.push({ unit: w.unit, ship: w.ship });
+        if (w.early && !w.guest) o.call.early.push({ unit: w.unit, ship: w.ship });
         o.saved += Math.round(w.picked[w.side]);
         o.prisoners += Math.round(w.picked[foe]);
         const by2 = how === "time" ? w.side : winner;
@@ -69539,7 +69587,9 @@
           if (men2 > 0) rescue.push({ fleet, wreck: { unit: w.unit, ship: w.ship }, men: men2, prisoners: by2 === w.side ? 0 : men2 });
         } else {
           this.soak(w, end + F.leave * 3600);
-          o.saved += Math.round(w.alive);
+          const men2 = Math.round(w.alive);
+          if (by2 === w.side) o.saved += men2;
+          else o.prisoners += men2;
         }
         w.alive = 0;
       }

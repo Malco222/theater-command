@@ -130,12 +130,14 @@ export interface SeaRescue { fleet: number; wreck: { unit: number; ship: number 
  * 1: {unit, ship} keys a wreck), whose she was, where and when she went, how many she carried and how they went, and
  * the men still alive in the water as of 'at' (battle seconds), which the sea wears down (aliveAfter) and pick-ups take
  * from. 'blow': what sank her (the oil burns on it). 'picked': men taken out of the water in the fight, by the side that
- * took them.
+ * took them. 'guest': not her crew but men she had picked up in the fight, in the water again with her people (the
+ * design director, 18:42Z: they share her fate); their crew, down and water are counted at their own first wreck, so
+ * here they are 0, and side, fleet and navy are theirs. A guest group shares her {unit, ship} and her place.
  */
 interface Wreck {
   unit: number; ship: number; side: Side; fleet: number; nat: string; cls: SeaClass; x: number; y: number; t: number;
   crew: number; down: number; dead: number; water: number; early: boolean; alive: number; at: number;
-  picked: Record<Side, number>;
+  picked: Record<Side, number>; guest?: boolean;
 }
 /** The blow now landing on the field, for who goes down with a ship it sinks and whether her oil burns (SeaSailors):
  *  gunfire, a torpedo salvo, or aircraft (a carrier's strike or the coasts' raid). */
@@ -320,6 +322,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private blow: Blow = 'gun';
   /** Pieces picking up survivors in the fight (form B1), by unit id: the wreck, the men taken aboard and the count last told. */
   private readonly rescuing = new Map<number, { w: Wreck; got: number; told: number }>();
+  /** The men each piece has taken aboard in the fight and still carries, by the group of men in the water they came
+   *  from: a ship of the piece that is lost takes her share of them with her (the design director, 18:42Z). */
+  private readonly aboard = new Map<number, Map<Wreck, number>>();
   /** The sinkings of ships their men abandoned, told 'abandon.afloat' seconds after (a looks-only knob): booked already. */
   private sinkings: { at: number; w: Wreck; lit: boolean; text: string; extra: Record<string, unknown> }[] = [];
 
@@ -567,14 +572,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
       }
       case 'sea:rescue': {
         // Pick up survivors (form B1): the player's own order, never the staff's. Any piece of the side still answering
-        // orders, at any wreck with men alive in the water, but not at an enemy wreck whose navy's men refuse an enemy's
-        // pick-up (sailors.json refuse).
+        // orders, at any wreck with men alive in the water who will come aboard: not an enemy's men whose navy refuses an
+        // enemy's pick-up (sailors.json refuse).
         const rc = c as { units: number[]; wreck?: { unit: number; ship: number } };
         if (!this.sail || !rc.wreck) return false;
         const w = this.wreckFor({ unit: rc.wreck.unit, ship: rc.wreck.ship });
-        if (!w || (w.side !== by && SAILORS.refuse.navies.includes(w.nat))) return false;
-        this.soak(w, this.t);
-        if (w.alive < 0.5) return false;
+        if (!w || this.aliveIn(this.takers(w, by)) < 0.5) return false;
         const us = mine(rc.units);
         for (const u of us) this.orders.set(u.id, { kind: 'rescue', unit: w.unit, ship: w.ship });
         return us.length > 0;
@@ -1946,19 +1949,46 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * One ship's crew in the water at her wreck (form A1, A2): her class's crew, less those who went down with her by how
    * she went (sailors.json down) and those killed going in (none until sourced). sea:men tells it; nothing in the fight
    * reads it. 'early': her men left her early, in good order.
+   *
+   * Men her piece had picked up in the fight share her fate (the design director, 18:42Z, as Hammann's men did with
+   * Yorktown's): her share of them, the piece's men aboard over its ships afloat before her loss, go down by the same
+   * share as her people and the rest go into the water at her wreck, a guest group for each fleet they came from, the
+   * sea's clock starting again for them. sea:men's 'guests' counts those (absent where she carried none).
    */
   private inWater(u: SeaUnit, at: Zone, early: boolean): Wreck {
     const c = u.extra.cls as SeaClass, f = this.info.get(u.id)!.fleet, D = SAILORS.down;
     const ship = (this.wreckOf.get(u.id) ?? 0) + 1;
     this.wreckOf.set(u.id, ship);
-    const crew = SEA.classes[c].crew, down = Math.round(crew * (this.sudden(u) ? D.sudden : early ? D.early : D.fought));
+    const share = this.sudden(u) ? D.sudden : early ? D.early : D.fought;
+    const crew = SEA.classes[c].crew, down = Math.round(crew * share);
     const dead = Math.round(crew * SAILORS.dead.share), water = Math.max(0, crew - down - dead);
     const w: Wreck = {
       unit: u.id, ship, side: u.side, fleet: f.id, nat: f.nat, cls: c, x: at.x, y: at.y, t: this.t,
       crew, down, dead, water, early, alive: water, at: this.t, picked: { att: 0, def: 0 },
     };
     this.wrecks.push(w);
-    this.say({ what: 'sea:men', unit: u.id, side: u.side, x: at.x, y: at.y, text: '', extra: { ship, fleet: f.id, men: water, dead, down, early } });
+    // Her share of the men aboard: loseShip has already taken her from the piece's ships afloat.
+    const on = this.aboard.get(u.id);
+    let guests = 0;
+    if (on) {
+      const of = 1 / (u.extra.ships + 1), keep = Math.max(0, 1 - share - SAILORS.dead.share);
+      for (const [g, n] of on) {
+        const hers = n * of;
+        on.set(g, n - hers);
+        g.picked[u.side] -= hers;
+        const wet = hers * keep;
+        if (wet <= 0) continue;
+        let h = this.wrecks.find((k) => k.guest && k.unit === u.id && k.ship === ship && k.side === g.side && k.fleet === g.fleet);
+        if (!h) {
+          h = { unit: u.id, ship, side: g.side, fleet: g.fleet, nat: g.nat, cls: c, x: at.x, y: at.y, t: this.t, crew: 0, down: 0, dead: 0, water: 0, early, alive: 0, at: this.t, picked: { att: 0, def: 0 }, guest: true };
+          this.wrecks.push(h);
+        }
+        h.alive += wet;
+        guests += wet;
+      }
+      if (u.extra.ships <= 0) this.aboard.delete(u.id);
+    }
+    this.say({ what: 'sea:men', unit: u.id, side: u.side, x: at.x, y: at.y, text: '', extra: { ship, fleet: f.id, men: water, dead, down, early, ...(guests > 0 ? { guests: Math.round(guests) } : {}) } });
     return w;
   }
 
@@ -2006,9 +2036,23 @@ export class SeaSim implements BattleSim<SeaUnit> {
     }
   }
 
-  /** The wreck an order to pick up survivors names, if there is one. */
+  /** The wreck an order to pick up survivors names, if there is one (her own crew's group, never a guest group). */
   private wreckFor(o: { unit: number; ship: number }): Wreck | undefined {
-    return this.wrecks.find((w) => w.unit === o.unit && w.ship === o.ship);
+    return this.wrecks.find((w) => w.unit === o.unit && w.ship === o.ship && !w.guest);
+  }
+
+  /** The groups of men in the water at a wreck's place who will come aboard a ship of 'side' (all of them, but not an
+   *  enemy's men whose navy refuses an enemy's pick-up: sailors.json refuse), each worn down by the sea to now. */
+  private takers(w: Wreck, side: Side): Wreck[] {
+    const men = this.wrecks.filter((g) => g.unit === w.unit && g.ship === w.ship && (g.side === side || !SAILORS.refuse.navies.includes(g.nat)));
+    for (const g of men) this.soak(g, this.t);
+    return men;
+  }
+
+  private aliveIn(men: Wreck[]): number {
+    let n = 0;
+    for (const g of men) n += g.alive;
+    return n;
   }
 
   /**
@@ -2024,22 +2068,32 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const w = o?.kind === 'rescue' && live(u) && steady(u) ? this.wreckFor(o) : undefined;
       if (r && r.w !== w) { this.rescueEnds(u, r); this.rescuing.delete(u.id); }
       if (!w) continue;
-      this.soak(w, this.t);
+      const men = this.takers(w, u.side);
       let now = this.rescuing.get(u.id);
       // A wreck the sea or another ship has emptied before she starts: her order lapses, with nothing to tell.
-      if (!now && w.alive < 0.5) { this.orders.delete(u.id); continue; }
+      if (!now && this.aliveIn(men) < 0.5) { this.orders.delete(u.id); continue; }
       if (u.extra.way > 0 || dist(u.x, u.y, w.x, w.y) > ARRIVE) continue;
       if (!now) {
         now = { w, got: 0, told: 0 };
         this.rescuing.set(u.id, now);
         this.say({ what: 'sea:rescue', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'stop' : 'stops'} to pick men out of the water.`, extra: { wreck: { unit: w.unit, ship: w.ship }, men: 0, done: false } });
       }
-      const k = Math.min(w.alive, ((w.early ? SAILORS.pick.early : SAILORS.pick.wreck) * u.extra.ships * DT) / 60);
-      w.alive -= k;
-      w.picked[u.side] += k;
+      // Of every group at the wreck that will come aboard, in proportion to the men each has alive (the last takes what is
+      // left of the minute's men, so a wreck of one group is taken exactly as before there were guests).
+      const all = this.aliveIn(men), k = Math.min(all, ((w.early ? SAILORS.pick.early : SAILORS.pick.wreck) * u.extra.ships * DT) / 60);
+      const on = this.aboard.get(u.id) ?? new Map<Wreck, number>();
+      this.aboard.set(u.id, on);
+      let given = 0;
+      men.forEach((g, i) => {
+        const kg = i === men.length - 1 ? k - given : (k * g.alive) / all;
+        given += kg;
+        g.alive -= kg;
+        g.picked[u.side] += kg;
+        on.set(g, (on.get(g) ?? 0) + kg);
+      });
       now.got += k;
-      if (w.alive < 0.5) {
-        w.alive = 0;
+      if (this.aliveIn(men) < 0.5) {
+        for (const g of men) g.alive = 0;
         this.rescueEnds(u, now);
         this.rescuing.delete(u.id);
         this.orders.delete(u.id);
@@ -2062,8 +2116,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * every man of both sides still alive 'found.stop' hours after the fight, its own saved and the enemy's its
    * prisoners, but none of a navy whose men refuse an enemy's pick-up (sailors.json refuse): those are lost. On time
    * neither side broke off, and each stops for its own. Men nobody stops for are found 'found.leave' hours after the
-   * fight by their own side, as many as the water has left alive. No draw: what happened, the sea, the month and the
-   * calls decide it all.
+   * fight, as many as the water has left alive, by whoever holds the water: its own saved, the enemy's its prisoners,
+   * under the same refusal (the design director, 18:42Z). Each group's hours in the water run from its own wreck's time,
+   * so men who went in early wait longest. No draw: what happened, the sea, the month and the calls decide it all.
    */
   private sailorsAfter(winner: Side, how: FieldResult['how']): { sailors: Record<Side, SeaMen>; rescue: SeaRescue[]; line: string } {
     const F = SAILORS.found, end = this.t, stops = (s: Side): 'stop' | 'leave' => this.sail!.stop?.[s] ?? 'stop';
@@ -2076,7 +2131,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const w of this.wrecks) {
       const o = out[w.side], foe = other(w.side);
       o.crew += w.crew; o.down += w.down; o.dead += w.dead; o.water += w.water;
-      if (w.early) o.call.early.push({ unit: w.unit, ship: w.ship });
+      if (w.early && !w.guest) o.call.early.push({ unit: w.unit, ship: w.ship });
       o.saved += Math.round(w.picked[w.side]);
       o.prisoners += Math.round(w.picked[foe]);
       const by = how === 'time' ? w.side : winner;
@@ -2091,7 +2146,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
         if (men > 0) rescue.push({ fleet, wreck: { unit: w.unit, ship: w.ship }, men, prisoners: by === w.side ? 0 : men });
       } else {
         this.soak(w, end + F.leave * 3600);
-        o.saved += Math.round(w.alive);
+        const men = Math.round(w.alive);
+        if (by === w.side) o.saved += men; else o.prisoners += men;
       }
       w.alive = 0;
     }
