@@ -11,7 +11,8 @@ CXX="${CXX:-g++}"
 $CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/sea_show_test.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/sea_show_test"
-# (with the stand-ins: a hand-made convoy night until the battle's own recordings of one land, ruling 241)
+# (with the stand-ins: a hand-made convoy night until the battle's own recordings of one land, ruling 241; and the D1 stager's
+# Italian flying boat on a British boat, June 1942, so the aircraft-on-a-boat check is run every time, not only when asked)
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/SeaBattles/*.json "$HERE"/stand-ins/*.json; fi
 STATUS=0
 for F in "$@"; do
