@@ -39,7 +39,7 @@ namespace LandPlay
 	{
 		/** The ground's height at a field point, metres. */
 		std::function<double(double X, double Y)> Height;
-		/** The effects kit's word for the ground at a point: earth, sand, snow, mud, town, woods, water. */
+		/** The effects kit's word for the ground at a point: earth, sand, snow, mud, town, woods, water, rock. */
 		std::function<std::string(double X, double Y)> GroundWord;
 		/** A shooter's muzzle (a man's from his skinned rifle, a tank's or a gun's from its model's socket) at a battle
 		 * time: where and which way, for track index Track. Socket names a vehicle's other gun (TankMg: hull_mg, coax,

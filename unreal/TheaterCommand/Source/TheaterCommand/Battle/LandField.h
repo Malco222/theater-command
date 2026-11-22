@@ -171,8 +171,8 @@ namespace LandField
 		int Ground = 0;
 		/**
 		 * The effects kit's ground word for this place, from the rules' cell as section 7 of the land hand-off asks:
-		 * "earth", "town", "woods", "water", "mud", "sand" (desert terrain) or "snow" (never from the rules: the 3D lays
-		 * winter itself). A static string.
+		 * "earth", "town", "woods", "water", "mud", "sand" (desert terrain), "rock" (the rules' rock, a region's rough
+		 * where it is stone) or "snow" (never from the rules: the 3D lays winter itself). A static string.
 		 */
 		const char* Fx = "earth";
 		Drawn What = Drawn::Pasture;

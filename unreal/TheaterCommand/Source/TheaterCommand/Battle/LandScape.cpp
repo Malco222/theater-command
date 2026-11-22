@@ -234,6 +234,18 @@ namespace LandScape
 		return Look::Farmland;
 	}
 
+	bool LeaflessOf(const LandField::Field& F, Look L)
+	{
+		if (L != Look::Bocage && L != Look::Steppe && L != Look::Farmland) return false;
+		if (F.Month < 1 || F.Month > 12) return false;
+		const double Lat = std::fabs(F.Lat);
+		if (Lat < 28.0) return false;
+		const int M = F.Lat < 0.0 ? (F.Month + 5) % 12 + 1 : F.Month;
+		if (M == 12 || M == 1 || M == 2) return true;
+		if (M == 11 || M == 3) return Lat >= 44.0;
+		return M == 4 && Lat >= 52.0;
+	}
+
 	double SnowOf(const LandField::Field& F, Look L)
 	{
 		if (F.Snow >= 0.0) return Clamp01(F.Snow);
@@ -398,6 +410,11 @@ namespace LandScape
 	{
 		(void)S;
 		return Mixed(C, Rgb(226, 230, 236), Cover);
+	}
+	void Snow::Leafless(LandField::Base B, LandField::BaseMesh& M) const
+	{
+		(void)B;
+		(void)M;
 	}
 	Tone Snow::OverFar(const Tone& C, const Spot& S, bool bWoods) const
 	{

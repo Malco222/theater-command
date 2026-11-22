@@ -1687,6 +1687,11 @@ int main(int Argc, char** Argv)
 			const double Bare = Area > 0.0 && OnArea > 0.0 && Grass > 0.0 ? (OnPath / OnArea) / (Grass / Area) : 1.0;
 			std::printf("  cow paths: %.1f km; %d of %d gateways into a pasture with a path out of them (the nearest the middle at %.0f, %.0f); grass on a path's middle %.2f of the ground round it\n",
 			            T.CowPathKm, Pathed, Into, GateX, GateY, Bare);
+			// (under snow no beasts are out: their paths are laid, and lie under it)
+			if (G.SnowLying() > 0.0)
+				Check(T.CowPathKm > 0.5 && Into > 0 && Pathed == 0, "cow paths along the pastures' hedges laid, and under the snow: none trodden through it",
+				      Fmt("%.1f km, %.0f of %.0f gateways with a path showing", T.CowPathKm, Pathed, Into));
+			else
 			Check(T.CowPathKm > 0.5 && Into > 0 && Pathed * 10 >= Into * 8 && Bare < 0.2, "cow paths along the pastures' hedges and out of eight in ten of their gateways, trodden bare",
 			      Fmt("%.1f km, %.0f of %.0f gateways, grass on them %.2f of round them", T.CowPathKm, Pathed, Into, Bare));
 			// Clumps: the tufts a 2 m square in grazed pasture, over random places (the docks among them, a share of the tufts'
@@ -1726,7 +1731,9 @@ int main(int Argc, char** Argv)
 			const double Mean = Cells > 0.0 ? Sum / Cells : 0.0, Spread = Cells > 0.0 && Mean > 0.0 ? (Sum2 / Cells - Mean * Mean) / Mean : 0.0;
 			std::printf("  grazed pasture's tufts and docks: %.2f a 2 m square, spread over mean %.2f (%.0f squares)\n", Mean, Spread, Cells);
 			// (spread at random they read 1.19 here: b754375e, before the clumps)
-			Check(Cells < 64.0 || Spread >= 1.45, "the pasture's tufts in clumps, not spread even", Fmt("spread over mean %.2f", Spread));
+			// (under snow only what stands out of the drifts shows, so the clumps read looser: still clear of random's 1.19)
+			const double ClumpBar = G.SnowLying() > 0.0 ? 1.3 : 1.45;
+			Check(Cells < 64.0 || Spread >= ClumpBar, "the pasture's tufts in clumps, not spread even", Fmt("spread over mean %.2f (at least %.2f)", Spread, ClumpBar));
 		}
 		Check(!F.bTown || (T.bChurch && T.Houses >= 10), "the village has its church and houses", Fmt("%.0f houses", T.Houses));
 	}
@@ -2752,6 +2759,9 @@ int main(int Argc, char** Argv)
 			CornMidFlat, CornMid, OtherMidFlat, OtherMid, UnderFlat, Under_, BeyondFlat, Beyond, DriveUs, FlatUs, FlatHits);
 		if (bRegion)
 			Check(R.Pieces() > 2000, "tanks driven across the field leave their marks", Fmt("%.0f pieces", R.Pieces()));
+		else if (G.SnowLying() > 0.0) // (under snow the grass is the snow's: marks in it, or on the grass where it shows)
+			Check(R.Pieces() > 2000 && ByKind[1] + ByKind[3] > 100, "tanks driven across the field leave their marks in the snow",
+				Fmt("%.0f pieces, %.0f in the snow or on grass through it", R.Pieces(), ByKind[1] + ByKind[3]));
 		else
 		Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] > 100, "tanks driven across the field leave their marks in corn and on grass",
 			Fmt("%.0f pieces, %.0f in corn, %.0f on grass", R.Pieces(), ByKind[2], ByKind[1]));

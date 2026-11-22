@@ -63,6 +63,10 @@ namespace LandScape
 	/** Snow lying, 0 (none) to 1 (deep and everywhere): the field's own where it gives one (0 or more), else by the place,
 	 * the look and the month (the Ardennes and the Eifel in December and January, Russia from November to March, ...). */
 	double SnowOf(const LandField::Field& F, Look L);
+	/** The broadleaf trees and the hedges' shrubs bare with no snow lying, by the field's month and latitude (December to
+	 * February wherever they grow, November and March from 44 degrees, April from 52; the south half a year on). Never
+	 * for a region that plants its own trees by the season (the Mediterranean's holm oaks keep their leaves) or grows none. */
+	bool LeaflessOf(const LandField::Field& F, Look L);
 
 	/** The day's air over a look: the haze's colour and thickness, the sky's dust, the camera's grade (LandBattle's four
 	 * numbers: darks' and middles' colour kept, red, blue), used where the recording gives none. */
@@ -337,7 +341,7 @@ namespace LandScape
 
 		// ---- the effects
 		/** The effects kit's ground word for a rules ground name (its number: 0 earth, 1 town, 2 woods, 3 water, 4 mud,
-		 * 5 sand, 6 snow), Else LandField's. */
+		 * 5 sand, 6 snow, 7 rock), Else LandField's. */
 		virtual int Fx(const std::string& Ground, int Else) const { (void)Ground; return Else; }
 		/** The shell holes' earth (LandCrater::SetEarth): "loam", "sand", "blackearth", "terrarossa", "laterite", ... */
 		virtual const char* Earth() const { return "loam"; }
@@ -366,6 +370,9 @@ namespace LandScape
 		virtual void Base(LandField::Base B, LandField::BaseMesh& M) const;
 		/** The houses', churches' and walls' built mesh: snow on the roofs and the walls' tops. */
 		virtual void Built(LandField::Mesh& M) const;
+		/** A base bare for the winter with no snow on it (LeaflessOf): the broadleaf trees' and the hedges' leaves gone, as
+		 * Base bares them, nothing white. */
+		virtual void Leafless(LandField::Base B, LandField::BaseMesh& M) const;
 
 		const double Cover;
 		const Look Under;

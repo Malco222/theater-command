@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -68,6 +69,31 @@ namespace LandScape
 		constexpr LandField::Base CStalks = LandField::Base::Clut2;  // dry weed stalks: thistle, mugwort, umbellifer, 0.85 m
 		constexpr LandField::Base CClods = LandField::Base::Clut3;   // the plough's clods, 0.12 m
 		constexpr LandField::Base CShoots = LandField::Base::Clut4;  // the young corn in its drill row, 0.12 m
+
+		/** A house's stove chimney: its brick dulled (it drew bright orange in the low winter sun: the art director, 20:08Z)
+		 * and sooted at its top, its own shading kept (every level of the kit model). */
+		void DullChimney(LandField::BaseMesh& M)
+		{
+			const Tone Brick = Rgb(0x8E, 0x4E, 0x3C), Dull = Rgb(116, 78, 66), Soot = Rgb(46, 41, 38);
+			for (LandField::Mesh* Each : { &M.Near, &M.Mid, &M.Far })
+			{
+				std::vector<size_t> Bricks;
+				float Top = -1e9f;
+				for (size_t K = 0; K < Each->Colours.size(); ++K)
+				{
+					const LandField::Rgb8& C = Each->Colours[K];
+					if (std::abs(C.R - static_cast<int>(Brick.R)) > 6 || std::abs(C.G - static_cast<int>(Brick.G)) > 6 || std::abs(C.B - static_cast<int>(Brick.B)) > 6) continue;
+					Bricks.push_back(K);
+					Top = std::max(Top, Each->Positions[3 * K + 2]);
+				}
+				for (const size_t K : Bricks)
+				{
+					LandField::Rgb8& C = Each->Colours[K];
+					const Tone To = Mixed(Dull, Soot, Smooth(Top - 0.5, Top - 0.05, Each->Positions[3 * K + 2]));
+					C = Byte(Tone{ To.R * C.R / Brick.R, To.G * C.G / Brick.G, To.B * C.B / Brick.B });
+				}
+			}
+		}
 
 		class Farm final : public Region
 		{
@@ -566,6 +592,8 @@ namespace LandScape
 				case KIzba:
 				case KIzbaThatch:
 				case KKhata:
+					DullChimney(M);
+					[[fallthrough]];
 				case KChimney:
 				case KHaystack:
 					M.bSight = true;

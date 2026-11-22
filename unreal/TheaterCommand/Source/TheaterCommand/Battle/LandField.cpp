@@ -593,7 +593,7 @@ namespace LandField
 		struct RegionHost;
 		/** A place as a region sees it (the parcel, its edges, the lanes and ways; with LandField's noises if bNoise). */
 		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
-		Col RegionColour(double X, double Y) const;
+		Col RegionColour(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
 		Col RegionFar(double X, double Y) const;
 		/** A region's road across its floor and the slope to the ground beside (A metres from its middle, Half its half
 		 * width): the region's own track, not the bocage's grassed lane and fern walls. */
@@ -682,8 +682,8 @@ namespace LandField
 
 		// meshes
 		Col GroundColour(double X, double Y) const;
-		Col GroundBare(double X, double Y) const;
-		Col SteppeColour(double X, double Y) const;
+		Col GroundBare(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
+		Col SteppeColour(double X, double Y, const LandScape::Spot* Pre = nullptr) const;
 		Col FarColour(double X, double Y) const;
 		Col FarBare(double X, double Y) const;
 		void MakeTiles();
@@ -821,7 +821,7 @@ namespace LandField
 {
 	namespace
 	{
-		const char* const FxWords[] = { "earth", "town", "woods", "water", "mud", "sand", "snow" };
+		const char* const FxWords[] = { "earth", "town", "woods", "water", "mud", "sand", "snow", "rock" };
 
 		/** Catmull-Rom weights for the four samples round T (0 to 1 between the middle two). */
 		void CatmullRom(double T, double W[4])
@@ -1129,7 +1129,7 @@ namespace LandField
 		if (!Fd.Storeys.empty()) Fd.Storeys.resize(N, 0);
 		bDesert = Fd.Terrain == "desert";
 		PlainFx = bDesert ? 5 : 0;
-		if (Rg) PlainFx = static_cast<uint8_t>(std::clamp(Rg->Fx("open", PlainFx), 0, 6));
+		if (Rg) PlainFx = static_cast<uint8_t>(std::clamp(Rg->Fx("open", PlainFx), 0, 7));
 		if (SnowIs >= 0.5) PlainFx = 6;
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
@@ -1166,8 +1166,9 @@ namespace LandField
 				Fx = 1;
 			}
 			else if (G == "works" || G == "bunker") R = RgWorks;
-			if ((G == "rock" || G == "bunker") && bDesert) Fx = 0;
-			if (Rg) Fx = static_cast<uint8_t>(std::clamp(Rg->Fx(G, Fx), 0, 6));
+			if (G == "bunker" && bDesert) Fx = 0;
+			if (G == "rock") Fx = 7; // (bare rock: a low wide grey spray and stone chips, a pale bruise, not a crater)
+			if (Rg) Fx = static_cast<uint8_t>(std::clamp(Rg->Fx(G, Fx), 0, 7));
 			// (deep snow: a shell throws snow and the earth under it, but not in a wood, a town or the water)
 			if (SnowIs >= 0.5 && (Fx == 0 || Fx == 4 || Fx == 5)) Fx = 6;
 			RgOf[K] = R;
@@ -4106,20 +4107,27 @@ namespace LandField
 	 */
 	Col Ground::Impl::GroundColour(double X, double Y) const
 	{
-		const Col C = GroundBare(X, Y);
-		return SnowLay ? Snowed(C, X, Y, false) : C;
+		if (!SnowLay) return GroundBare(X, Y);
+		if (!InRaster(X, Y)) return Snowed(GroundBare(X, Y), X, Y, false);
+		// (under snow the place read once, for the ground's colour and the snow's both: read twice, the snow cost as much
+		// as the ground under it, and the track marks ask this colour at every step of every tank)
+		const LandScape::Spot S = SpotAt(X, Y, true);
+		const Col C = GroundBare(X, Y, &S);
+		const LandScape::Tone T = SnowLay->Over(LandScape::Tone{ C.R, C.G, C.B }, S);
+		return Col{ T.R, T.G, T.B };
 	}
 
-	Col Ground::Impl::GroundBare(double X, double Y) const
+	Col Ground::Impl::GroundBare(double X, double Y, const LandScape::Spot* Pre) const
 	{
-		if (Rg) return RegionColour(X, Y);
-		if (Sp) return SteppeColour(X, Y);
+		if (Rg) return RegionColour(X, Y, Pre);
+		if (Sp) return SteppeColour(X, Y, Pre);
 		if (!InRaster(X, Y)) return FarBare(X, Y);
 		const size_t P = Pix(X, Y);
 		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
 		const double Edge = Bilinear(DistE, X, Y);
-		const double N1 = Fbm(X, Y, 30.0, 2, Seed ^ 0x11), N2 = Noise(X / 7.0, Y / 7.0, Seed ^ 0x12);
-		const double Broad = Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
+		// (the same three noises a Spot reads: taken from it when the caller has one)
+		const double N1 = Pre ? Pre->N1 : Fbm(X, Y, 30.0, 2, Seed ^ 0x11), N2 = Pre ? Pre->N2 : Noise(X / 7.0, Y / 7.0, Seed ^ 0x12);
+		const double Broad = Pre ? Pre->Broad : Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
 		Col C;
 		switch (Rgn[P])
 		{
@@ -4196,14 +4204,14 @@ namespace LandField
 	 * greener in the hollows; the dirt roads black earth worn to grey dust, their ruts darker, grass along their verges;
 	 * the railway's bank its ballast and cinders, grass taking its sides; the gardens and yards as the bocage's.
 	 */
-	Col Ground::Impl::SteppeColour(double X, double Y) const
+	Col Ground::Impl::SteppeColour(double X, double Y, const LandScape::Spot* Pre) const
 	{
 		if (!InRaster(X, Y)) return FarBare(X, Y);
 		const size_t P = Pix(X, Y);
 		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
 		const double Edge = Bilinear(DistE, X, Y);
-		const double N1 = Fbm(X, Y, 30.0, 2, Seed ^ 0x11), N2 = Noise(X / 7.0, Y / 7.0, Seed ^ 0x12);
-		const double Broad = Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
+		const double N1 = Pre ? Pre->N1 : Fbm(X, Y, 30.0, 2, Seed ^ 0x11), N2 = Pre ? Pre->N2 : Noise(X / 7.0, Y / 7.0, Seed ^ 0x12);
+		const double Broad = Pre ? Pre->Broad : Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
 		Col C;
 		bool bStrip = true; // (the strip at its edge still to lay)
 		switch (Rgn[P])
@@ -4360,10 +4368,10 @@ namespace LandField
 		return S;
 	}
 
-	Col Ground::Impl::RegionColour(double X, double Y) const
+	Col Ground::Impl::RegionColour(double X, double Y, const LandScape::Spot* Pre) const
 	{
 		if (!InRaster(X, Y)) return RegionFar(X, Y);
-		const LandScape::Tone T = Rg->Colour(SpotAt(X, Y, true));
+		const LandScape::Tone T = Rg->Colour(Pre ? *Pre : SpotAt(X, Y, true));
 		return Col{ T.R, T.G, T.B };
 	}
 
@@ -4403,11 +4411,8 @@ namespace LandField
 		}
 		else
 		{
-			LandScape::Spot S = SpotAt(X, Y, true);
-			Drawn What = Drawn::Pasture;
-			S.Z = Top(X, Y, &What);
-			S.Drawn = static_cast<int>(What);
-			T = SnowLay->Over(Bare, S);
+			// (no height or drawn kind: no snow reads them, and the drawn top cost as much as the rest)
+			T = SnowLay->Over(Bare, SpotAt(X, Y, true));
 		}
 		return Col{ T.R, T.G, T.B };
 	}
@@ -4979,6 +4984,20 @@ namespace LandField
 			Tile* T = TileOf(X, Y);
 			return T ? &T->Far : nullptr;
 		};
+		// Under snow the frame's own lanes (the bocage's sunken ones, the steppe's raised road) take it as a region's do in
+		// RegionLane: the road packed and rutted, its sides the plough's banks.
+		// (the place read once a section, at its middle, and moved across it: read at every point, the snow cost more than
+		// the lanes themselves)
+		const auto LaneSnowed = [this](const Col& Bare, const LandScape::Spot& Mid, double X, double Y, double A, double Half) {
+			LandScape::Spot S = Mid;
+			S.X = X;
+			S.Y = Y;
+			S.Kind = LandScape::KLane;
+			S.Lane = A - Half;
+			S.LaneHalf = Half;
+			const LandScape::Tone T = SnowLay->Over(LandScape::Tone{ Bare.R, Bare.G, Bare.B }, S);
+			return Col{ T.R, T.G, T.B };
+		};
 		// The lanes: floor (crowned, rutted), walls up to the field, a strip of the field each side to meet the ground.
 		for (const Lane& Ln : Lanes)
 		{
@@ -4992,6 +5011,8 @@ namespace LandField
 			{
 				const V2 Way = Unit2(Ln.P[std::min(K + 1, Ln.P.size() - 1)] - Ln.P[K > 0 ? K - 1 : 0]), N = Perp(Way);
 				Section S;
+				const bool bSnowLane = SnowLay && !Rg && InRaster(Ln.P[K].X, Ln.P[K].Y);
+				const LandScape::Spot Mid = bSnowLane ? SpotAt(Ln.P[K].X, Ln.P[K].Y, true) : LandScape::Spot{};
 				for (const double Off : D)
 				{
 					const V2 Q = Ln.P[K] + N * Off;
@@ -5016,6 +5037,7 @@ namespace LandField
 						C = Varied(C, 0.92 + 0.08 * N2, 0.0);
 					}
 					else C = GroundColour(Q.X, Q.Y);
+					if (SnowLay && !Rg && A < Half + LaneWall + 0.01) C = bSnowLane ? LaneSnowed(C, Mid, Q.X, Q.Y, A, Half) : Snowed(C, Q.X, Q.Y, false);
 					S.P.push_back({ Q.X, Q.Y, Z });
 					S.C.push_back(C);
 				}
@@ -5033,6 +5055,8 @@ namespace LandField
 				const V2 Way = Unit2(Rn.P[std::min(K + 1, Rn.P.size() - 1)] - Rn.P[K > 0 ? K - 1 : 0]), N = Perp(Way);
 				const double Half = 0.5 * Rn.W[K], High = Rn.H[K];
 				Section S;
+				const bool bSnowBank = SnowLay && InRaster(Rn.P[K].X, Rn.P[K].Y);
+				const LandScape::Spot Mid = bSnowBank ? SpotAt(Rn.P[K].X, Rn.P[K].Y, true) : LandScape::Spot{};
 				for (const double T : BankAcross)
 				{
 					const V2 Q = Rn.P[K] + N * (T * Half);
@@ -5052,6 +5076,24 @@ namespace LandField
 						// (a hedge bank mostly grass and weeds over its earth: the second cut's read as bare clay)
 						C = Mixed(C, Earth, Clamp01(0.25 * Steep - 0.15 + 0.3 * N1) * (Rn.Kind == HkLaneBank ? 1.0 : 0.35));
 					}
+					// (under snow the bank holds it on its top and gentle sides; thinner at the hedge's foot, where the hedge
+					// took the fall, and on a lane bank's steep face, the earth showing through in streaks)
+					if (SnowLay && A <= 1.0)
+					{
+						const double Steep = High / std::max(0.3, 0.35 * Half);
+						const double Hold = A < BankTop + 0.05 ? 0.55 + 0.2 * N1 : Clamp01(0.95 - 0.12 * Steep * (Rn.Kind == HkLaneBank ? 1.0 : 0.5) + 0.15 * N2);
+						Col White;
+						if (bSnowBank)
+						{
+							LandScape::Spot At_ = Mid;
+							At_.X = Q.X;
+							At_.Y = Q.Y;
+							const LandScape::Tone Tn = SnowLay->Over(LandScape::Tone{ C.R, C.G, C.B }, At_);
+							White = Col{ Tn.R, Tn.G, Tn.B };
+						}
+						else White = Snowed(C, Q.X, Q.Y, false);
+						C = Mixed(C, White, Hold);
+					}
 					S.P.push_back({ Q.X, Q.Y, Z });
 					S.C.push_back(Varied(C, 0.94 + 0.1 * N2, 0.0));
 				}
@@ -5063,7 +5105,7 @@ namespace LandField
 					SinceFar = 0.0;
 					Section F;
 					F.P = { S.P[0] + V3{ 0, 0, 0.15 }, (S.P[2] + S.P[3]) * 0.5 - V3{ 0, 0, 0.1 * High }, S.P[5] + V3{ 0, 0, 0.15 } };
-					F.C = { S.C[0], Mixed(HedgeFoot, BankGrass, 0.4), S.C[5] };
+					F.C = { S.C[0], SnowLay ? Mixed(S.C[2], S.C[3], 0.5) : Mixed(HedgeFoot, BankGrass, 0.4), S.C[5] };
 					FarSecs.push_back(F);
 				}
 			}
@@ -6697,6 +6739,12 @@ namespace LandField
 				Bases[K].Mid = Mesh();
 				SnowLay->Base(static_cast<Base>(K), Bases[K]);
 			}
+		// (no snow, but the winter's months: the broadleaf trees and the hedges bare all the same)
+		else if (LandScape::LeaflessOf(Fd, LookIs))
+		{
+			const std::unique_ptr<LandScape::Snow> Bare = LandScape::MakeSnowCover(0.0, LookIs, Seed ^ 0x5D0Bull);
+			for (size_t K = 0; K < Bases.size(); ++K) Bare->Leafless(static_cast<Base>(K), Bases[K]);
+		}
 		for (BaseMesh& B : Bases) Measure(B);
 		// A region's kit slots' classes for the game's far draw, where its KitLook set none: a tree as it marked it, a
 		// slot it laid as a house a house, else a tall thing big and a low one a shrub (the frame budget's classes).
@@ -6869,7 +6917,7 @@ namespace LandField
 		case Drawn::Lane:
 			Fx = CellFx == 1 || (G.Fd.bTown && std::hypot(X - G.Fd.TownX, Y - G.Fd.TownY) < G.Fd.TownR * 0.85) ? 1 : Plain;
 			break;
-		default: Fx = CellFx == 1 ? 1 : Plain; break;
+		default: Fx = CellFx == 1 || CellFx == 7 ? CellFx : Plain; break; // (a town's cell or a rock's its own; else the plain's)
 		}
 		S.Fx = FxWords[Fx];
 		return S;

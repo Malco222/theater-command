@@ -517,8 +517,11 @@ namespace LandScape
 			// between (a few of its big triangles left alone read as paper shards; all of them whole, as a leafy crown),
 			// the soft grey-violet of a bare crown at a distance
 			Stipple(M.Far, 0.55);
+			// (with no snow lying, the leafless months' crowns: no frost's grey-violet, which reads as blossom on green
+			// fields, but the twigs' own dark brown-grey a little softened by the air)
+			const Tone Haze = Cover > 0.0 ? Rgb(156, 150, 158) : Rgb(108, 98, 92);
 			for (LandField::Rgb8& C : M.Far.Colours)
-				if (Leafy(C)) C = Byte(Varied(Mixed(TwigOf, Rgb(156, 150, 158), 0.4), std::clamp(Lum(OfByte(C)) / 88.0, 0.9, 1.05), 0.0));
+				if (Leafy(C)) C = Byte(Varied(Mixed(TwigOf, Haze, 0.4), std::clamp(Lum(OfByte(C)) / 88.0, 0.9, 1.05), 0.0));
 			const double Sn = CapShare * Smooth(0.05, 0.6, Cover);
 			Cap(M.Near, 0.45, Sn, Crust);
 			Cap(M.Cards, 0.55, 0.3 * Sn, Crust);
@@ -543,6 +546,51 @@ namespace LandScape
 			const double Sn = 0.6 * Smooth(0.05, 0.6, Cover);
 			Cap(M.Near, 0.5, Sn, Crust);
 			Cap(M.Far, 0.5, Sn, Crust);
+		}
+
+		void Leafless(LandField::Base B, LandField::BaseMesh& M) const override
+		{
+			// (as Base bares them, the cover nought: no white on the limbs; a kit's middle level, still in leaf, dropped; the
+			// twigs browner than under snow, where the frost greys them: a grey-violet twig mass on green fields reads as
+			// blossom)
+			using K = LandField::Base;
+			const Tone Brown = Rgb(106, 94, 84), Thorn = Rgb(72, 60, 52);
+			const bool bFrame = B == K::Oak || B == K::Beech || B == K::Elm || B == K::Ash || B == K::Pollard || B == K::Apple || B == K::ShrubA || B == K::ShrubB || B == K::ShrubC || B == K::Bramble || B == K::Birch;
+			if (bFrame) M.Mid = LandField::Mesh();
+			switch (B)
+			{
+			case K::Oak:
+			case K::Beech:
+				Bare(M, Brown, 0.2, 0.0, 0x0A + static_cast<uint64_t>(B), 0.08);
+				return;
+			case K::Elm:
+			case K::Ash:
+			case K::Pollard:
+			case K::Apple:
+				Bare(M, Brown, 0.16, 0.0, 0x0A + static_cast<uint64_t>(B));
+				return;
+			case K::ShrubA:
+			case K::ShrubB:
+			case K::Bramble:
+				Bare(M, Thorn, 0.62, 0.0, 0x1A + static_cast<uint64_t>(B));
+				return;
+			case K::ShrubC:
+				Bare(M, Mixed(Thorn, Rgb(40, 56, 40), 0.5), 0.7, 0.0, 0x1A + static_cast<uint64_t>(B));
+				return;
+			case K::Birch:
+				if (M.Near.Tris() > 200) BareKit(M, 0x2B);
+				return;
+			default: break;
+			}
+			if (B >= K::Tuft) return;
+			static const char* const Deciduous[] = { "Birch", "Oak", "Beech", "Poplar", "Willow", "Elm", "Lime", "Chestnut", "Apple", "Plane", "Vine", "Walnut", "Almond", "Fig" };
+			for (const char* D : Deciduous)
+				if (Named(M.Name, D) && !Named(M.Name, "Bare"))
+				{
+					M.Mid = LandField::Mesh();
+					BareKit(M, 0x3C);
+					return;
+				}
 		}
 
 		void Base(LandField::Base B, LandField::BaseMesh& M) const override
