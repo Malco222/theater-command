@@ -11,6 +11,7 @@ import {
 import { fieldClass } from '../src/campaign/air';
 import { ledger, upkeep } from '../src/campaign/economy';
 import { atWar, createGame } from '../src/campaign/game';
+import { DIPLOMACY } from '../src/campaign/diplomacy';
 import { setStop, stopOf } from '../src/campaign/history';
 import { airfieldOpenTo } from '../src/campaign/prizes';
 import { lanesTo } from '../src/campaign/resources';
@@ -389,6 +390,51 @@ describe('a seller that stops selling', () => {
     expect(bargainLanes(g, 'GER').some((l) => l.name === rowById(g, 'swe-ore')!.name)).toBe(false);
     heldOf(g, 'swe-ore')!.price = 9;
     expect(bargainSales(g, 'SWE')).toBe(0);
+  });
+});
+
+describe('goodwill: a sale makes a country lean, never join (the design director, 08:20 UTC)', () => {
+  it('draws the seller toward its buyer\'s side a little each month', () => {
+    const g = world(1);
+    const S = g.nations.SWE;
+    expect(heldOf(g, 'swe-ore')!.buyer).toBe('GER');
+    S.opinion = 40; S.home = 10;
+    bargainsMonth(g);
+    expect(S.opinion).toBeCloseTo(40 + BARGAINS.pull, 9);
+    expect(S.home).toBeCloseTo(10 + BARGAINS.pull / 3, 9);
+  });
+
+  it('gives no month\'s pull that would carry the seller to the mark at which it would join: it stays short, and stays out', () => {
+    const g = world(3);
+    const S = g.nations.SWE;
+    const short = DIPLOMACY.joinAt - BARGAINS.pull / 2;
+    S.opinion = short; S.home = 10;
+    for (let k = 0; k < 6; k++) { bargainsMonth(g); g.turn++; }
+    expect(S.opinion).toBe(short);
+    expect(S.home).toBe(10);
+    expect(S.align).not.toBe('axis');
+  });
+
+  it('a seller carried past the mark by something else is neither drawn on nor held back', () => {
+    const g = world(1);
+    const S = g.nations.SWE;
+    S.opinion = DIPLOMACY.joinAt + 5; S.home = 10;
+    bargainsMonth(g);
+    expect(S.opinion).toBe(DIPLOMACY.joinAt + 5);
+    expect(S.home).toBe(10);
+  });
+
+  it('holds for either side: Ireland, selling to Britain, is drawn toward the Allies and stops short of their mark too', () => {
+    const g = world(1);
+    const S = g.nations.IRL;
+    expect(heldOf(g, 'irl-food')!.buyer).toBe('UK');
+    S.opinion = 80;
+    bargainsMonth(g);
+    expect(S.opinion).toBeCloseTo(80 - BARGAINS.pull, 9);
+    S.opinion = -(DIPLOMACY.joinAt - BARGAINS.pull / 2);
+    g.turn++;
+    bargainsMonth(g);
+    expect(S.opinion).toBe(-(DIPLOMACY.joinAt - BARGAINS.pull / 2));
   });
 });
 

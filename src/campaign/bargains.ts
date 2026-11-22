@@ -21,7 +21,7 @@
 
 import data from '../../data/campaign/bargains.json';
 import { allied, atWar, bloc, headline, theName, warning } from './game';
-import { momentum, majorsOf } from './diplomacy';
+import { DIPLOMACY, momentum, majorsOf } from './diplomacy';
 import { TRADE, tradeRoute, wealthOf, type TradeCtx } from './trade';
 import { RES, keepsStores, needOf, type Lane } from './resources';
 import { NAVY, oreRoute } from './navy';
@@ -408,7 +408,11 @@ function dependence(g: Game): void {
   }
 }
 
-/** A sale draws the seller toward its buyer's side, a little each month. Not a seat in the player's hands: its path is his. */
+/**
+ * A sale draws the seller toward its buyer's side, a little each month. Not a seat in the player's hands: its path is his.
+ * A sale makes a country lean, never join (the design director, 08:20 UTC): no month's pull carries the seller's opinion
+ * to the mark at which it would join that side (diplomacy.json 'joinAt'). What else moves its opinion is not stopped.
+ */
 function goodwill(g: Game): void {
   const bk = book(g);
   const pulls = new Map<string, number>();
@@ -422,6 +426,7 @@ function goodwill(g: Game): void {
     const S = g.nations[seller];
     if (!S || ownPath(g, seller) || seller === g.human) continue;
     const d = BARGAINS.pull * Math.sign(s);
+    if ((S.opinion + d) * Math.sign(d) >= DIPLOMACY.joinAt) continue;
     S.opinion = Math.max(-100, Math.min(100, S.opinion + d));
     S.home = Math.max(-100, Math.min(100, S.home + d / 3));
   }
