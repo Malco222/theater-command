@@ -97,6 +97,10 @@ namespace LandField
 		/** field.place.terrain (plains, forest, hills, mountain, marsh, urban, desert ...). */
 		std::string Terrain = "plains";
 		int Month = 7;
+		/** The campaign's weather word over the place (LandFeed::Recording::WeatherWord: "clear", "rain", "snow", "mud"),
+		 * empty where none. "mud" (the thaw, the autumn rains): open ground's effects word is "mud", not "earth" (the
+		 * holes' soil, the tracks' torn ruts, the rounds' thrown mud); snow lying, sand and rock keep their own. */
+		std::string Weather;
 		uint64_t Seed = 1;
 		/** The open steppe, where the recording lays it (Steppe.bOn); else the bocage. */
 		SteppeLay Steppe;

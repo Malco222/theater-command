@@ -619,6 +619,7 @@ namespace LandFeed
 		Out.Key = Root["key"].Str("");
 		Out.Title = Root["title"].Str("");
 		Out.Date = Root["date"].Str("");
+		Out.WeatherWord = Root["weather"].Str("");
 		Out.Seed = static_cast<uint64_t>(std::max(0.0, Root["seed"].Num(0.0)));
 		Out.Dt = Root["dt"].Num(0.1);
 		Out.Turn = Root["turn"].Int(0);

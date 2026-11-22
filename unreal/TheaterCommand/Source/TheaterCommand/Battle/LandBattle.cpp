@@ -1257,6 +1257,21 @@ bool ALandBattle::Open()
 		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there,
 		// and laid whole where a hedge cutter will tear it)
 		LandField::Field Lay = LandSight::FieldOf(Rec);
+		// (the campaign's weather word over the place, the recording's "weather": "mud" the thaw's mud over open ground;
+		// "-TheaterLandWeather=mud" stands in for it on any field, for the Mac's off/on line, "-TheaterLandWeather=clear"
+		// lays none)
+		{
+			FString Word;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWeather="), Word))
+			{
+				Lay.Weather = LandParts::Narrow(Word.TrimStartAndEnd().ToLower());
+			}
+			if (!Lay.Weather.empty())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle: the campaign's weather over the field: %s%s"), *LandParts::Wide(Lay.Weather),
+					Lay.Weather == "mud" ? TEXT(" (open ground the thaw's mud: the holes' soil, the tracks' ruts, the thrown mud)") : TEXT(""));
+			}
+		}
 		if (Lay.Steppe.bOn)
 		{
 			// The steppe's cottages, ruins, poles, wattle, sweeps, ricks and birches: the east kit's models

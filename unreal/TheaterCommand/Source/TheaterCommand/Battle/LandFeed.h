@@ -384,6 +384,9 @@ namespace LandFeed
 		double Dt = 0.1;
 		int Turn = 0;
 		Sky Weather;
+		/** The campaign's weather over the place in its own word (the battle ticket's weather: "clear", "rain", "snow",
+		 * "mud"; the root's "weather"), empty where it keeps none: "mud" lays the thaw's mud (LandField::Field::Weather). */
+		std::string WeatherWord;
 		SideInfo Sides[2];
 		Field Ground;
 		double Limit = 0.0, Contact = -1.0, End = 0.0;

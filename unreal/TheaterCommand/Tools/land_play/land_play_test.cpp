@@ -978,11 +978,41 @@ int main(int argc, char** argv)
 	// The lens near the ground over corn: frames, and how far over the ears it was at the lowest.
 	int LowOverCorn = 0, LowInCorn = 0, LensBehindStalks = 0;
 	double LeastOverEars = 1e9;
+	// The thaw's mud (release 2, seasons: the campaign's weather word "mud", LandField::Field::Weather): the same field
+	// laid again under it. Where the dry field's word is "earth" the mud field's is "mud" (the holes' soil, the rounds'
+	// thrown mud), every other word and every height the same, and a tank's track on a mud pasture tears it (Ruts'
+	// KindOn: earth, not pressed grass). Run before the scars, so LAND_PLAY_ONLY_SCARS runs it too.
+	{
+		const auto MudT0 = std::chrono::steady_clock::now();
+		LandField::Field MudWords = FieldWords;
+		MudWords.Weather = "mud";
+		const LandField::Ground MudField(MudWords);
+		const LandCrater::Ruts::KindFn DryKind = LandCrater::Ruts::KindOn(Field), MudKind = LandCrater::Ruts::KindOn(MudField);
+		int Asked = 0, EarthToMud = 0, WordOff = 0, HeightOff = 0, GrassTorn = 0, GrassLeft = 0;
+		const double Fw = FieldWords.Cell * FieldWords.Cols, Fh = FieldWords.Cell * FieldWords.Rows;
+		for (double Y = 5.0; Y < Fh; Y += 23.0)
+			for (double X = 5.0; X < Fw; X += 23.0)
+			{
+				++Asked;
+				const LandField::Surface Dry = Field.At(X, Y), Mud = MudField.At(X, Y);
+				const std::string DryWord = Dry.Fx, MudWord = Mud.Fx;
+				if (DryWord == "earth") { if (MudWord == "mud") ++EarthToMud; else ++WordOff; }
+				else if (MudWord != DryWord) ++WordOff;
+				if (std::fabs(Dry.Z - Mud.Z) > 1e-9 || Dry.What != Mud.What) ++HeightOff;
+				if (DryKind(X, Y) == LandCrater::Ruts::Under::Grass) { if (MudKind(X, Y) == LandCrater::Ruts::Under::Earth) ++GrassTorn; else ++GrassLeft; }
+			}
+		std::printf("mud: the field laid again under the thaw's mud in %.2f s; of %d places, %d earth now mud, %d words off, %d heights or surfaces off; pasture torn by a track %d, left pressed grass %d\n",
+			std::chrono::duration<double>(std::chrono::steady_clock::now() - MudT0).count(), Asked, EarthToMud, WordOff, HeightOff, GrassTorn, GrassLeft);
+		if (EarthToMud == 0) Fault("mud: no open earth turned to mud under the weather word");
+		if (WordOff > 0) Fault("mud: a word other than earth's changed, or earth not to mud");
+		if (HeightOff > 0) Fault("mud: the weather word moved the ground or what is drawn on it");
+		if (GrassLeft > 0) Fault("mud: a track on a mud pasture left pressed grass, not torn earth");
+	}
 	// Scarred ground (release 2, looks only): the old holes of two battles fought here before, the last six months
 	// ago, laid as LandBattle's LayScars lays them (every 4th point of every track the fought-over ground; open
 	// ground only), in a field of their own: how many and how fast; none where Dig says no; each weathered (a bare
 	// patch of its own, its bowl silted under a fresh 150's); a fresh round still laid after them; and room left for
-	// the battle's own (checked against its count at the end). LAND_PLAY_ONLY_SCARS: this alone.
+	// the battle's own (checked against its count at the end). LAND_PLAY_ONLY_SCARS: this and the mud's alone.
 	int ScarsLaid = 0;
 	{
 		LandCrater::Field Old;
