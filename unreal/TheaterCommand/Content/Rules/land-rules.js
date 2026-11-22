@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 5f395056 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of caac179b 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1478,12 +1478,14 @@
     }
     return { storeys, landmark, streetEdge };
   }
+  var UNDUG = ["water", "bridge", "blown", "buildings", "industry", "bunker", "works"];
+  var diggable = (g) => !UNDUG.includes(g);
   function digWorks(f, x, y, w, d) {
     for (let yy = y - d / 2 - 15; yy <= y + d / 2 + 15; yy += f.cell / 2) for (let xx = x - w / 2; xx <= x + w / 2; xx += f.cell / 2) {
       const c = Math.floor(xx / f.cell), r = Math.floor(yy / f.cell);
       if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
       const i = r * f.cols + c, k = GROUNDS[f.ground[i]];
-      if (k !== "water" && k !== "bridge" && k !== "blown" && k !== "buildings" && k !== "industry" && k !== "bunker" && k !== "works") {
+      if (diggable(k)) {
         (f.dugInto ?? (f.dugInto = {}))[i] = f.ground[i];
         f.ground[i] = G.works;
       }
@@ -1706,21 +1708,23 @@
       return;
     }
     const style = b.style[side];
+    const stand = b.relief && b.hasJoiners(side) ? relieve(b, side, mine, foes) : null;
     if (side === "att") {
-      sendOn(b, side, mine, foes);
-      const line = mine.some((u) => u.reserve === "sent") ? mine.filter((u) => u.reserve !== "sent") : mine;
+      sendOn(b, side, mine, foes, stand);
+      const line = mine.some((u) => u.reserve === "sent" || stand?.has(u.id)) ? mine.filter((u) => u.reserve !== "sent" && !stand?.has(u.id)) : mine;
       if (style) planned(b, side, style, line, foes);
       else plain(b, side, line, foes);
       if (b.measured) seekFlanks(b, side, mine);
       if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
       return;
     }
-    defend(b, side, style, mine, foes);
+    defend(b, side, style, mine, foes, stand);
     if (b.measured) seekFlanks(b, side, mine.filter((u) => u.reserve === "sent"));
   }
   function searchCover(b, side, mine) {
     const F = LAND.hide.search, dir = side === "att" ? 1 : -1, step = b.hedges.length ? 10 : b.field.cell;
     for (const u of mine) {
+      if (u.waits && !u.waits.free) continue;
       if (u.kind === "art" && !u.team || u.engaged !== void 0 || u.order?.kind === "withdraw") {
         if (u.engaged === void 0) {
           delete u.search;
@@ -1821,12 +1825,30 @@
     }
   }
   var struckOf = (mine, foes) => mine.filter((m) => m.kind !== "art" && m.reserve !== "held" && m.engaged !== void 0 && foes.some((f) => f.id === m.engaged)).sort((a, c) => a.str / a.str0 - c.str / c.str0);
-  function sendOn(b, side, mine, foes) {
-    const sent = mine.filter((u) => u.reserve === "sent" && u.kind !== "art" && u.order?.kind !== "withdraw" && !hasTarget(u, foes));
+  function sendOn(b, side, mine, foes, skip = null) {
+    const sent = mine.filter((u) => u.reserve === "sent" && u.kind !== "art" && u.order?.kind !== "withdraw" && !hasTarget(u, foes) && !skip?.has(u.id));
     if (!sent.length) return;
     const struck = struckOf(mine, foes);
     if (!struck.length) return;
     sent.forEach((u, i) => by(b, side, u, foes.find((f) => f.id === struck[i % struck.length].engaged)));
+  }
+  function relieve(b, side, mine, foes) {
+    const skip = /* @__PURE__ */ new Set();
+    for (const u of struckOf(mine, foes)) if (b.waitWhy(u) === null) b.command({ do: "land:wait", units: [u.id] }, side);
+    const waiting = b.units.filter((u) => u.side === side && ok(u) && u.waits && !u.waits.free).sort((a, c) => a.str / a.str0 - c.str / c.str0 || a.id - c.id);
+    for (const w of waiting) {
+      skip.add(w.id);
+      const near = (r4) => dist(r4.x, r4.y, w.x, w.y);
+      const rs = mine.filter((r4) => r4.corps === w.waits.corps && r4.joined !== void 0 && r4.kind !== "art" && r4.order?.kind !== "withdraw" && !(r4.waits && !r4.waits.free) && !skip.has(r4.id));
+      if (!rs.length) continue;
+      const r = rs.reduce((m, x) => near(x) < near(m) - 1e-9 || Math.abs(near(x) - near(m)) <= 1e-9 && x.id < m.id ? x : m);
+      skip.add(r.id);
+      const foe = w.engaged !== void 0 ? foes.find((f) => f.id === w.engaged) : void 0;
+      if (foe) {
+        if (!(r.order?.kind === "attack" && r.order.target === foe.id)) by(b, side, r, foe);
+      } else if (!(r.order?.kind === "move" && dist(r.order.x, r.order.y, w.x, w.y) <= LAND.alone.near)) b.command({ do: "move", units: [r.id], x: w.x, y: w.y }, side);
+    }
+    return skip;
   }
   var weight = (u) => u.power0 * (0.35 + 0.65 * (u.str / u.str0));
   function makePlan(b, side, s, mine, foes) {
@@ -2035,7 +2057,7 @@
     b.command({ do: "move", units: [u.id], x: want, y: u.home[1], face: Math.PI }, side);
     b.reserveSeen(side, near.foe);
   }
-  function defend(b, side, style, mine, foes) {
+  function defend(b, side, style, mine, foes, skip = null) {
     const leash = style?.defLeash ?? 300, finish = style?.defFinish ?? 150;
     const edge = b.field.streetEdge, cell = b.field.cell;
     const outside = (f) => {
@@ -2052,7 +2074,7 @@
     };
     const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
     for (const u of mine) {
-      if (u.kind === "art" || u.order?.kind === "withdraw") continue;
+      if (u.kind === "art" || u.order?.kind === "withdraw" || skip?.has(u.id)) continue;
       if (u.hid && u.reserve !== "held") continue;
       if (u.reserve === "held") {
         if (struck.length) sendTo(u);
@@ -6480,6 +6502,12 @@
        * it on; off, nothing here is read.
        */
       __publicField(this, "measured", false);
+      /**
+       * Hold until relieved (release 2; Brian, 22 November 12:48Z; "Hold until relieved" below): a block on foot may be told
+       * to dig in and wait for a corps coming up from next door. Off unless whoever opens the field turns it on (the 2D
+       * page's ?relief, the bridge's { relief: true }); off, nothing below is read.
+       */
+      __publicField(this, "relief", false);
       /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
       __publicField(this, "flanking", /* @__PURE__ */ new Map());
       /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
@@ -6496,6 +6524,16 @@
       __publicField(this, "joinedAt", /* @__PURE__ */ new Map());
       /** The corps that come up from next door. */
       __publicField(this, "joinCorps", /* @__PURE__ */ new Set());
+      /**
+       * The rider ahead (release 2; Brian, 22 November 12:48Z: "a courier arrives first; clicking him shows the relief's
+       * strength and arrival time"; the design director, 13:43Z): off unless whoever opens the field turns it on (the 2D
+       * page's ?rider, the bridge's { rider: true }); off, nothing reads him. Looks and words only: the fight never does.
+       */
+      __publicField(this, "rider", false);
+      /** Each joining corps' rider, worked out with its time (comeOn): where he sets out and stands, and when. */
+      __publicField(this, "riders", []);
+      /** The joining corps a block has waited for this battle (hold until relieved): each relieves one block a battle. */
+      __publicField(this, "waitedFor", /* @__PURE__ */ new Set());
       // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
       /** Each side's fighters on call, where it has any. */
       __publicField(this, "airOn", { att: null, def: null });
@@ -6528,6 +6566,11 @@
       __publicField(this, "flankOnRiver", false);
       /** What the held defence's take is multiplied by for that flank: LAND.hold.stream up the field, LAND.hold.join beside a second river. */
       __publicField(this, "flankHold", 1);
+      /**
+       * What waits' cover spared, being paid out: each held block's, at the pace it was spared, shared by men with the blocks
+       * that relieved it (the design director, 13:43Z). Empty with no waits, and then nothing reads it.
+       */
+      __publicField(this, "repay", []);
       /**
        * The way there: straight, unless ground it cannot enter lies across it (a river away from its bridges, rock, marsh
        * for a lorry, a bunker). Then round it, the quickest way over the ground (a road is quicker than a field), cut to as
@@ -6674,6 +6717,10 @@
         const cx = own0.length ? own0.reduce((a, v) => a + v.x, 0) / own0.length : x, cy = own0.length ? own0.reduce((a, v) => a + v.y, 0) / own0.length : y;
         const walk2 = Math.hypot(x - cx, y - cy) / Math.max(1, LAND.speed[u0.kind]);
         const at = Math.round(Math.max(0, (1 - u0.joined) * this.ticket.limit - walk2) * 1e3) / 1e3;
+        if (at > 0) {
+          this.riders.push({ corps, side, f, from: [x, y], mid: [cx, cy], to: [x, y], there: 0, comes: at, edge });
+          this.riderTo(this.riders[this.riders.length - 1]);
+        }
         us.forEach((u, i) => {
           const off = (i - (us.length - 1) / 2) * (u.w + J.gap);
           const px = along ? clamp(x + off, lo + u.w / 2, Math.max(lo + u.w / 2, hi - u.w / 2)) : x, py = along ? y : clamp(y + off, 40, F.h - 40);
@@ -6747,11 +6794,307 @@
       }
       return fit(x, y);
     }
+    /** Where a rider rides to and stands, and when he is there: worked out as the clock is set, and again once the setup step has placed the guns. */
+    riderTo(r) {
+      r.to = this.riderSpot(r.mid[0], r.mid[1]);
+      r.there = Math.round(Math.hypot(r.to[0] - r.from[0], r.to[1] - r.from[1]) / Math.max(...Object.values(LAND.speed)) * 1e3) / 1e3;
+    }
+    /** Where a rider stands: the nearest point to (x, y), outward a half cell at a time, out of the water and off a bridge, clear of every block. */
+    riderSpot(x, y) {
+      const F = this.field, c = LAND.placeClear;
+      const ok2 = (px, py) => {
+        if (px < 10 || py < 10 || px > F.w - 10 || py > F.h - 10) return false;
+        const g = groundAt(F, px, py);
+        return !inRiver(g) && g !== "bridge" && !this.units.some((o) => live2(o) && Math.abs(o.x - px) < o.w / 2 + c && Math.abs(o.y - py) < o.d / 2 + c);
+      };
+      const r13 = (v) => Math.round(v * 10) / 10;
+      if (ok2(r13(x), r13(y))) return [r13(x), r13(y)];
+      for (let r = F.cell / 2; r <= 1e3; r += F.cell / 2) for (let a = 0; a < 16; a++) {
+        const px = r13(x + Math.sin(a * Math.PI / 8) * r), py = r13(y + Math.cos(a * Math.PI / 8) * r);
+        if (ok2(px, py)) return [px, py];
+      }
+      return [r13(x), r13(y)];
+    }
+    /**
+     * The riders the player sees: his own side's only (a courier's news is his own army's), from the first step until his
+     * corps comes up; none whose corps would beat him there (he comes on with it), none once the day is over.
+     */
+    riderView() {
+      if (!this.rider || !this.riders.length || this.over || this.t <= 0) return {};
+      const still = new Set(this.coming.map((c) => c.u.corps));
+      const on = this.riders.filter((r) => this.ticket[r.side].human && still.has(r.corps) && r.there <= r.comes);
+      if (!on.length) return {};
+      const r33 = (v) => Math.round(v * 1e3) / 1e3, r13 = (v) => Math.round(v * 10) / 10;
+      const KIND = { inf: "infantry", mtn: "mountain", cav: "cavalry", eng: "engineer", mot: "motorized", arm: "armoured", art: "artillery", fort: "fortress" };
+      const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+      return {
+        riders: on.map((r) => {
+          const k = r.there > 0 ? Math.min(1, this.t / r.there) : 1;
+          const us = this.coming.filter((c) => c.u.corps === r.corps).map((c) => c.u).sort((a, b) => a.id - b.id);
+          const men = us.reduce((a, u) => a + u.men0, 0), str = men > 0 ? us.reduce((a, u) => a + u.str0 * u.men0, 0) / men : r.f.str;
+          const divs = us.map((u) => u.short), kind = KIND[r.f.kind] ?? r.f.kind;
+          const staff = this.ai[r.side], line = (1 - (us[0]?.joined ?? 1)) * this.ticket.limit;
+          const back = r.edge === (r.side === "att" ? "south" : "north"), by2 = back ? "from behind your line" : `on your ${r.edge} flank`;
+          const list = divs.length > 1 ? `${divs.slice(0, -1).join(", ")} and ${divs[divs.length - 1]}` : divs[0] ?? "";
+          const says = `${r.f.name}: ${divs.length} ${kind} division${divs.length === 1 ? "" : "s"} (${list}), ${Math.round(men).toLocaleString("en-GB")} men, strength ${Math.round(str * 100)}. It comes up ${by2} at ${mmss(r.comes)}${staff ? ` and reaches your line at about ${mmss(line)}` : ", and waits there for your orders"}.`;
+          return {
+            corps: r.corps,
+            side: r.side,
+            x: r13(r.from[0] + (r.to[0] - r.from[0]) * k),
+            y: r13(r.from[1] + (r.to[1] - r.from[1]) * k),
+            face: r33(bearing(r.from[0], r.from[1], r.to[0], r.to[1])),
+            speed: k < 1 ? Math.max(...Object.values(LAND.speed)) : 0,
+            there: r33(r.there),
+            comes: r33(r.comes),
+            edge: r.edge,
+            ...staff ? { line: r33(line) } : {},
+            name: r.f.name,
+            kind: r.f.kind,
+            divs,
+            men: Math.round(men),
+            str: r33(str),
+            says
+          };
+        })
+      };
+    }
     /** The joiners still coming, as the view shows them: those of the player's side and those the player's staff knows. */
     comingView() {
       if (!this.coming.length || this.over) return {};
       const shown = this.coming.filter((c) => this.known(c.u));
       return shown.length ? { coming: shown.map((c) => ({ id: c.u.id, side: c.u.side, corps: c.u.corps, kind: c.u.kind, at: c.at, edge: c.edge, x: c.x, y: c.y, ...c.f.arrive ? { arrive: c.f.arrive } : {} })) } : {};
+    }
+    // ---- Hold until relieved (release 2) -----------------------------------------------------------------------------
+    //
+    // Brian, 22 November 12:48Z ("Do 2 and 3"): "a unit ordered to wait for help digs in harder, but breaks faster if help
+    // never comes"; the design director's rulings of 13:43Z. A block on foot told to wait for a corps coming up from next
+    // door stands where it is, fires on what comes into its reach and never advances; its staff never orders it. While it
+    // keeps to its spot it takes the field's light cover (LAND.cover[LAND.wreck.cover], the wrecks' own figure, within
+    // LAND.dug.keep, never better than its ground gives), and what that cover spares it is kept: the field moves when harm
+    // lands, never how much (b415, b418). It lands with the block if it breaks; else, once the cover ends, it is paid out at
+    // the pace it was spared, shared by men with the blocks that relieved it, never as one blow on men whose friends have
+    // just come; whatever is left lands at the end of the fight. Help is due when the corps' nearest block could reach it
+    // at its own pace, the joiners' own reckoning (comeOn), never a draw; it is relieved once a block of a joining corps
+    // stands beside it (LAND.alone.near). Past due unrelieved, or its corps out of the fight, help never came: the men are
+    // let down, and break where a block starts to waver (LAND.nerve.waver), not at the rout's mark, until relieved. The
+    // player's own order to move, attack, line up or withdraw ends the wait without that mark: men re-ordered are not let
+    // down. Each joining corps relieves one block a battle, the player's and every staff's alike (ai.ts relieve). Nothing
+    // here draws on the dice.
+    /**
+     * Whether this battle has corps coming up from next door, on the field yet or not; with a side, whether that side has
+     * (a side's own help: the player is never told by it of an enemy's that his staff has not identified).
+     */
+    hasJoiners(side) {
+      if (side === void 0) return this.joinCorps.size > 0;
+      return this.coming.some((c) => c.u.side === side) || this.units.some((u) => u.side === side && u.joined !== void 0);
+    }
+    /** A block of a joining corps that helps this one: its side's, of another corps, in the fight, not guns or a team. */
+    helps(r, u) {
+      return r.side === u.side && r.joined !== void 0 && r.corps !== u.corps && fighting2(r) && r.kind !== "art";
+    }
+    /** Help stands beside this block: a block of a joining corps within LAND.alone.near of it, edge to edge. */
+    relieved(u) {
+      return this.units.some((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near);
+    }
+    /** This corps still has a block that is not guns coming up or in the fight: its help may yet come. */
+    canHelp(corps) {
+      return this.coming.some((c) => c.u.corps === corps && c.u.kind !== "art") || this.units.some((r) => r.corps === corps && r.joined !== void 0 && fighting2(r) && r.kind !== "art");
+    }
+    /**
+     * When help could reach this block, and whose: of its side's joining corps not yet waited for, the one whose nearest
+     * block (not guns) could be there soonest, from where it stands, or from its place on its edge at its time while it is
+     * still coming, at its own pace over open ground (comeOn's own reckoning). Null where none can come.
+     */
+    dueAt(u, skip) {
+      let corps = -1, due = Infinity;
+      const take = (c, d) => {
+        if (d < due - 1e-9 || Math.abs(d - due) <= 1e-9 && c < corps) {
+          corps = c;
+          due = d;
+        }
+      };
+      for (const c of this.coming) {
+        if (c.u.side !== u.side || c.u.corps === u.corps || c.u.kind === "art" || this.waitedFor.has(c.u.corps) || skip?.has(c.u.corps)) continue;
+        take(c.u.corps, Math.max(this.t, c.at) + Math.hypot(c.x - u.x, c.y - u.y) / Math.max(1, LAND.speed[c.u.kind]));
+      }
+      for (const r of this.units) if (this.helps(r, u) && !this.waitedFor.has(r.corps) && !skip?.has(r.corps)) take(r.corps, this.t + Math.hypot(r.x - u.x, r.y - u.y) / Math.max(1, LAND.speed[r.kind]));
+      return corps < 0 ? null : { corps, due: Math.round(due * 1e3) / 1e3 };
+    }
+    /**
+     * Why this block may not wait for help now, in the player's words; null where it may (words for the UI director).
+     * 'skip': corps already spoken for by blocks before it in the same order (waitWhyAll).
+     */
+    waitWhy(u, skip) {
+      if (!this.relief || !this.hasJoiners(u.side)) return "No help is coming up from next door.";
+      if (!fighting2(u) || u.kind === "fort") return "It is out of the fight.";
+      if (MOTION[u.kind] !== "foot") return "Only men on foot dig in to wait for help.";
+      if (u.waited) return u.waits && !u.waits.free ? "It is waiting for help already." : "It has waited for help once today.";
+      if (!diggable(coverAt(this.field, u.x, u.y))) return "There is no digging in here.";
+      if (this.relieved(u)) return "Help is beside it already.";
+      const d = this.dueAt(u, skip);
+      if (!d) {
+        const any = this.coming.some((c) => c.u.side === u.side && c.u.corps !== u.corps && c.u.kind !== "art") || this.units.some((r) => this.helps(r, u));
+        return any ? "Each corps coming up relieves one block, and each is spoken for." : "No help is coming up from next door.";
+      }
+      if (d.due > this.ticket.limit) return "Help could not reach it before the day is out.";
+      return null;
+    }
+    /**
+     * Why each of these blocks, told together and in this order, may not wait: each one that may speaks for its corps
+     * before the next is asked, as their orders will land (one block a joining corps).
+     */
+    waitWhyAll(us) {
+      const claimed = /* @__PURE__ */ new Set();
+      return us.map((u) => {
+        const why = this.waitWhy(u, claimed);
+        if (why === null) claimed.add(this.dueAt(u, claimed).corps);
+        return why;
+      });
+    }
+    /** The joining corps' name as the dispatches give it. */
+    corpsName(side, corps) {
+      const f = this.ticket[side].joiners?.find((x) => x.corps === corps);
+      return f ? this.ticket[side].human ? f.name : `the ${this.ticket[side].adj} ${f.name}` : "help";
+    }
+    /** The wait order landing (by radio, the player's): where it may no longer wait, it holds as the core's hold does. */
+    wait(u) {
+      u.order = null;
+      u.path = [];
+      u.keepFace = null;
+      delete u.aim;
+      delete u.search;
+      delete u.searchR;
+      if (this.waitWhy(u) !== null) return;
+      const d = this.dueAt(u);
+      u.waits = { corps: d.corps, due: d.due, at: [u.x, u.y], since: this.t };
+      u.waited = true;
+      this.waitedFor.add(d.corps);
+      if (this.ticket[u.side].human) this.say({ what: "land:waits", unit: u.id, side: u.side, text: `${this.named(u)} digs in to wait for ${this.corpsName(u.side, d.corps)}.`, x: u.x, y: u.y });
+    }
+    /**
+     * Each tick, before the staffs think: a waiting block with help beside it is relieved; one whose help is overdue, or
+     * whose corps can no longer come, has waited in vain.
+     */
+    waitOn() {
+      for (const u of this.units) {
+        if (!u.waits || !fighting2(u)) continue;
+        if (this.relieved(u)) this.endWait(u, "relieved");
+        else if (!u.waits.late && (this.t >= u.waits.due - 1e-9 || !this.canHelp(u.waits.corps))) this.endWait(u, "late");
+      }
+    }
+    /**
+     * A wait ends, or help is late. Late, the block is still waiting: it keeps its spot, its cover and what that cover has
+     * spared it, and now carries the mark of help that never came. Relieved, its wait is over and the mark lifts. The
+     * player's own order, or giving ground at the brink (b496(1)), ends it, keeping the mark only where help was late
+     * already (men let down stay let down until relieved or broken: the design director, 13:43Z). What its cover spared
+     * lands at once if it broke, else, once the wait is over, is paid out from then at the pace it was spared (repay),
+     * shared with the blocks that relieved it.
+     */
+    endWait(u, how) {
+      const w = u.waits;
+      if (!w) return;
+      if (how === "late") w.late = true;
+      else if ((how === "off" || how === "gives") && w.late) w.free = true;
+      else delete u.waits;
+      if (how === "broke") this.landNow(u);
+      else if (how !== "late" && u.debt !== void 0) {
+        const by2 = how === "relieved" ? this.units.filter((r) => this.helps(r, u) && this.gap(r, u) <= LAND.alone.near).map((r) => r.id) : [];
+        const d = u.debt, n = u.debtN ?? 0;
+        delete u.debt;
+        delete u.debtN;
+        if (d > 0) this.repay.push({ held: u.id, by: by2, left: d, nerve: n / d, rate: d / Math.max(DT, this.t - w.since) });
+      }
+      if (!this.ticket[u.side].human) return;
+      if (how === "relieved") this.say({ what: "land:relieved", unit: u.id, side: u.side, text: `${this.corpsName(u.side, w.corps)} has reached ${this.named(u)}.`, x: u.x, y: u.y });
+      if (how === "late") this.say({ what: "land:late", unit: u.id, side: u.side, text: `No help has reached ${this.named(u)}; its men are losing heart.`, x: u.x, y: u.y });
+    }
+    /** Each tick, after the blows: a tick's worth of each repayment lands. */
+    repayNow() {
+      for (const p of this.repay) {
+        const d = Math.min(p.left, p.rate * DT);
+        p.left -= d;
+        this.repayOn(p, d);
+      }
+      this.repay = this.repay.filter((p) => p.left > 1e-12);
+    }
+    /**
+     * The blocks a repayment lands on, each with its share by the men it has now: the held block and its relievers, on the
+     * field or not (one that has left still pays its share, off its strength, as the air's dues are paid: leaving never
+     * escapes it, nor hands it to the others).
+     */
+    repayShares(p) {
+      const on = [p.held, ...p.by].map((id) => this.unit(id)).filter((x) => !!x);
+      const men = on.map((x) => x.men0 * (Math.max(0, x.str) / Math.max(1e-9, x.str0))), all = men.reduce((a, m) => a + m, 0);
+      return on.map((x, i) => [x, all > 0 ? men[i] / all : 1 / on.length]);
+    }
+    /** Lands d of a repayment on its blocks: on the field as a blow, off it off their strength (harm). */
+    repayOn(p, d) {
+      if (d <= 0) return;
+      for (const [x, k] of this.repayShares(p)) this.harm(x, d * k, p.nerve);
+    }
+    /** What a wait's cover spared a block, kept or still being paid out, lands on it at once (it broke). */
+    landNow(u) {
+      const d = u.debt, n = u.debtN ?? 0;
+      delete u.debt;
+      delete u.debtN;
+      if (d !== void 0 && d > 0) this.harm(u, d, n / d);
+      for (const p of this.repay) if (p.held === u.id && p.left > 0) {
+        const left = p.left;
+        p.left = 0;
+        this.harm(u, left, p.nerve);
+      }
+      this.repay = this.repay.filter((p) => p.left > 1e-12);
+    }
+    /**
+     * Kept harm landing on a block: where it still stands, as a blow from whoever had struck it most (whose shells its lost
+     * men go to: looks only); off the field, off its strength alone.
+     */
+    harm(u, d, nerve) {
+      if (d <= 0) return;
+      if (!live2(u)) {
+        this.offStrength(u, d);
+        return;
+      }
+      const owed = u.owed ?? {};
+      let by2;
+      for (const id of Object.keys(owed)) {
+        const s = this.unit(Number(id));
+        if (s && live2(s) && (!by2 || owed[s.id] > owed[by2.id])) by2 = s;
+      }
+      this.suffer(u, d, nerve, by2 ? [[by2, d]] : [], false, true);
+    }
+    /** Harm off a block's strength alone, as the air's dues are paid off the field (offField). */
+    offStrength(u, d) {
+      u.str = Math.max(0, u.str - d / Math.max(1e-9, u.power0) * u.str0);
+      u.figures = u.str <= 0 ? 0 : Math.max(1, Math.ceil(u.tray * u.str));
+    }
+    /** The day is done: what waits' cover spared, kept or still being paid out, lands before the count. */
+    payWaits() {
+      if (!this.relief) return;
+      for (const p of this.repay) {
+        const left = p.left;
+        p.left = 0;
+        this.repayOn(p, left);
+      }
+      this.repay = [];
+      for (const u of this.units) if (u.debt !== void 0) {
+        const d = u.debt, n = u.debtN ?? 0;
+        delete u.debt;
+        delete u.debtN;
+        if (d > 0) this.harm(u, d, n / d);
+      }
+    }
+    /** What blocks on the field are owed, were the day settled now: the fighters on call's, and every wait's (the staff's chance). */
+    dueNow() {
+      let due = this.airDue();
+      if (!this.relief) return due;
+      const add = (id, d) => {
+        due ?? (due = /* @__PURE__ */ new Map());
+        due.set(id, (due.get(id) ?? 0) + d);
+      };
+      for (const u of this.units) if (u.debt && live2(u)) add(u.id, u.debt);
+      for (const p of this.repay) for (const [x, k] of this.repayShares(p)) if (live2(x)) add(x.id, p.left * k);
+      return due;
     }
     /**
      * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
@@ -6784,7 +7127,7 @@
     // ---- Orders -----------------------------------------------------------------------------------------------------
     command(c, by2) {
       if (this.over) return false;
-      const mine = (ids) => ids.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort");
+      const mine = (ids) => ids.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort" && !(this.staffing && u.waits && !u.waits.free));
       const player = !this.staffing && this.ticket[by2].human;
       const hands = (us) => {
         if (this.perUnit && player) for (const u of us) this.take(u);
@@ -6867,6 +7210,7 @@
         case "withdrawAll": {
           if (c.side !== by2) return false;
           this.payAir();
+          this.payWaits();
           this.bar[by2] = this.breaking(by2);
           for (const u of this.units) if (u.side === by2 && fighting2(u)) {
             u.state = "withdrawn";
@@ -6899,6 +7243,15 @@
             this.place(u, x, y, f !== void 0 && Number.isFinite(f) ? f : void 0);
             return true;
           }
+          if (c.do === "land:wait") {
+            if (!this.relief) return false;
+            const all = mine(c.units ?? []), whys = this.waitWhyAll(all);
+            const us = all.filter((_, i) => whys[i] === null);
+            if (!us.length) return false;
+            hands(us);
+            for (const u of us) give(u, () => this.wait(u));
+            return true;
+          }
           if (c.do === "land:staff") {
             const us = mine(c.units ?? []).filter((u) => u.taken);
             for (const u of us) delete u.taken;
@@ -6908,6 +7261,7 @@
             if (by2 !== this.setup) return false;
             this.setup = null;
             this.room = null;
+            for (const r of this.riders) this.riderTo(r);
             return true;
           }
           if (c.do === "land:fire" && c.target === void 0) {
@@ -6981,6 +7335,7 @@
       }
     }
     send(u, o) {
+      if (u.waits && !u.waits.free) this.endWait(u, "off");
       o.x = clamp(o.x, u.w / 2, this.field.w - u.w / 2);
       if (o.kind !== "withdraw") o.y = clamp(o.y, 10, this.field.h - 10);
       if (o.kind === "move" && this.wet(u, o.x, o.y, false) && groundAt(this.field, o.x, o.y) !== "bridge") {
@@ -7259,7 +7614,7 @@
     placeWhy(u, x, y) {
       if (!this.setup || u.side !== this.setup) return "The battle has begun.";
       if (this.placeAll ? u.kind === "fort" || !fighting2(u) : u.kind !== "art" || !fighting2(u)) return this.placeAll ? "Fortifications stay where they are built." : "Only guns and support teams are placed.";
-      if (u.dug) return "It is dug in where it stands.";
+      if (u.dug || u.waits) return "It is dug in where it stands.";
       return this.standWhy(u, x, y, this.room);
     }
     /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
@@ -7572,6 +7927,7 @@
       if (this.hide && !this.hidStarted) this.hideStart();
       if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
       this.landOrders();
+      if (this.relief && this.joinCorps.size) this.waitOn();
       if (this.t >= this.nextThink) {
         this.nextThink = this.t + LAND.think;
         this.staffing = true;
@@ -7640,6 +7996,7 @@
         this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve);
       }
       for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind);
+      if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
       for (const u of this.units) if (live2(u)) this.nerve(u);
       for (const u of this.units) if (live2(u)) this.move(u);
@@ -7867,8 +8224,17 @@
      * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
-    suffer(t, dmg, nerveMul, from = [], blind = false) {
-      if (t.hid && dmg > 0 && !blind) this.reveal(t, "struck");
+    suffer(t, dmg, nerveMul, from = [], blind = false, bare = false) {
+      if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
+      if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
+        const take = this.groundTake(t), f = Math.min(take, LAND.cover[LAND.wreck.cover]) / Math.max(1e-9, take);
+        if (f < 1) {
+          const spared = dmg * (1 - f);
+          t.debt = (t.debt ?? 0) + spared;
+          t.debtN = (t.debtN ?? 0) + spared * nerveMul;
+          dmg *= f;
+        }
+      }
       const share = dmg / Math.max(1e-9, t.power0);
       const before = t.str, had = t.figures;
       t.str = Math.max(0, t.str - share * t.str0);
@@ -7968,7 +8334,7 @@
         return;
       }
       if (u.still > N.still) u.mor = Math.min(u.mor0, u.mor + N.recover * DT);
-      if (u.str <= N.shattered * u.str0 || u.mor < N.rout) {
+      if (u.str <= N.shattered * u.str0 || u.mor < (u.waits?.late ? N.waver : N.rout)) {
         this.rout(u);
         return;
       }
@@ -7985,6 +8351,8 @@
       u.engaged = void 0;
       this.say({ what: "routing", unit: u.id, side: u.side, text: `${this.named(u)} breaks and runs.`, x: u.x, y: u.y });
       for (const f of this.units) if (f !== u && f.side === u.side && fighting2(f) && dist(f.x, f.y, u.x, u.y) < LAND.nerve.near) f.mor = Math.max(0, f.mor - LAND.nerve.friendRuns);
+      if (u.waits) this.endWait(u, "broke");
+      else if (this.repay.length) this.landNow(u);
     }
     move(u) {
       const k = u.kind;
@@ -8415,6 +8783,7 @@
         if (u.gives || this.fresh(u)) continue;
         u.gives = true;
         if (u.order?.kind === "withdraw") continue;
+        if (u.waits) this.endWait(u, "gives");
         this.send(u, { kind: "withdraw", x: u.x, y: s === "att" ? 0 : this.field.h });
         u.engaged = void 0;
         this.say({ what: "land:gives", unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y });
@@ -8480,6 +8849,7 @@
     finish(winner, how, R, why) {
       if (this.over) return;
       this.payAir();
+      this.payWaits();
       const lost = this.lostShares();
       const men = { att: 0, def: 0 };
       for (const u of this.units) {
@@ -8574,7 +8944,7 @@
      * STAFF's question (ruling 226(5)).
      */
     chanceNow() {
-      const k = this.ticket.reckoning, sh = this.standingShares(this.airDue());
+      const k = this.ticket.reckoning, sh = this.standingShares(this.dueNow());
       if (k.odds * k.dice[0] >= RATIO.carry) return 1;
       if (k.odds * k.dice[1] < RATIO.carry) return 0;
       const now = k.odds * (Math.max(1e-6, sh.att) / Math.max(1e-6, sh.def));
@@ -8585,7 +8955,7 @@
      * where the card did not know the defence (b453), so HAND IT TO THE STAFF gives a range and never the true chance.
      */
     chanceAt(card) {
-      const k = this.ticket.reckoning, bal = this.standing(this.airDue()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
+      const k = this.ticket.reckoning, bal = this.standing(this.dueNow()), r = bal.att / Math.max(1e-6, bal.def) / Math.max(1e-6, k.odds);
       if (card * k.dice[0] >= RATIO.carry) return 1;
       if (card * k.dice[1] < RATIO.carry) return 0;
       const now = card * r;
@@ -8597,6 +8967,7 @@
       const k = this.ticket.reckoning;
       for (const s of ["att", "def"]) if (this.airOn[s]) this.airSettled[s] = this.airLeft[s];
       this.payAir();
+      this.payWaits();
       const R = diceNow(k.odds, k.dice, this.standingShares(), this.rng.next());
       this.finish(R >= RATIO.carry ? "att" : "def", "objective", R);
     }
@@ -9040,7 +9411,7 @@
       const ev = this.events;
       this.events = [];
       void as;
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView() };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView() };
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -9499,7 +9870,7 @@
       return tracks;
     }
   };
-  function landUnitOut(u, t, known = true) {
+  function landUnitOut(u, t, known = true, mine = false) {
     const motion = MOTION[u.kind];
     const loops = motion && motion !== "fixed" ? LOOPS[motion] : void 0;
     const town = u.act === "fight" && (u.cover === "buildings" || u.cover === "suburb" || u.cover === "industry") && !!loops && motion !== "guns";
@@ -9544,6 +9915,9 @@
       // Hidden in the woods from the other side (release 2, LAND.hide): his own show the forest mark, the enemy's are not drawn.
       ...u.hid ? { hid: 1 } : {},
       ...u.orderAt !== void 0 ? { orderIn: Math.max(0, r12(u.orderAt - t)) } : {},
+      // Hold until relieved (release 2, sim.relief), his own blocks only: waiting for a corps coming up from next door, dug in
+      // where it stands while not free; late, help never came and its men break sooner.
+      ...mine && u.waits ? { waits: { due: r12(u.waits.due), ...u.waits.late ? { late: true } : {}, ...u.waits.free ? { free: true } : {} } } : {},
       order: u.order ? { kind: u.order.kind, x: r12(u.order.x), y: r12(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r12(x), r12(y)]) } : null
     };
   }
@@ -9582,6 +9956,8 @@
       if (opts.hide !== false) sim.hideOn();
       if (opts.armour !== false) sim.measured = true;
       if (opts.names !== false) sim.namesOn();
+      if (this.me && opts.relief !== false) sim.relief = true;
+      if (this.me && opts.rider !== false) sim.rider = true;
       const tanksSeen = { att: 0, def: 0 };
       this.blocks = sim.allBlocks().map((u) => {
         const a = piece ? u.side === "att" ? piece.att : piece.def : null;
@@ -9697,7 +10073,7 @@
         this.lastView = Math.floor(t);
         this.views.push({
           t: r2(t),
-          units: v.units.map((u) => landUnitOut(u, v.t, !this.me || this.sim.known(u))),
+          units: v.units.map((u) => landUnitOut(u, v.t, !this.me || this.sim.known(u), !!this.me && u.side === this.me)),
           balance: v.balance,
           zones: v.zones,
           ...v.breaking ? { breaking: { att: r32(v.breaking.att), def: r32(v.breaking.def) } } : {},
@@ -9706,6 +10082,8 @@
           ...v.setup ? { setup: v.setup } : {},
           // (the corps still coming up from next door that the player may know of: where on its edge and when)
           ...v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r12(c.at), edge: c.edge, x: r12(c.x), y: r12(c.y), ...c.arrive ? { arrive: c.arrive } : {} })) } : {},
+          // (the rider ahead: his own corps' despatch riders, riding in before it)
+          ...v.riders?.length ? { riders: v.riders } : {},
           ...v.over ? { over: v.over } : {}
         });
       }
@@ -9756,6 +10134,17 @@
     order(c) {
       if (!this.me) return false;
       return this.sim.command(c, this.me);
+    }
+    /**
+     * Hold until relieved: why one of his blocks may not wait for help (null where it may), and the battle second help
+     * could reach it there (null where it may not wait).
+     */
+    waitWhy(id) {
+      const u = this.sim.unit(id);
+      if (!u) return { why: "No such block.", due: null };
+      if (!this.me || u.side !== this.me) return { why: "Only your own troops take your orders.", due: null };
+      const why = this.sim.waitWhy(u);
+      return { why, due: why === null ? this.sim.dueAt(u)?.due ?? null : null };
     }
     /** Why a block may not stand there in the setup step, or null where it may. */
     canPlace(id, x, y) {
@@ -9831,7 +10220,9 @@
         radio: opts?.radio !== false,
         hide: opts?.hide !== false,
         armour: opts?.armour !== false,
-        names: opts?.names !== false
+        names: opts?.names !== false,
+        relief: opts?.relief !== false,
+        rider: opts?.rider !== false
       });
       return live3.header();
     },
@@ -9842,7 +10233,13 @@
       return live3 ? live3.to(t, maxSteps ?? 50) : none;
     },
     landOrder(c) {
-      return { ok: need().order(c) };
+      const ok2 = need().order(c);
+      const o = c;
+      if (!ok2 && o.do === "land:wait" && o.units?.length) return { ok: ok2, why: need().waitWhy(Number(o.units[0])).why ?? "" };
+      return { ok: ok2 };
+    },
+    landWaitWhy(id) {
+      return need().waitWhy(Number(id));
     },
     landCanPlace(id, x, y) {
       const why = need().canPlace(id, x, y);
