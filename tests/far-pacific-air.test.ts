@@ -345,6 +345,18 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     expect(ftr).toBeLessThan(200);
   });
 
+  it("a group reaches as its row's type does: the navy's land bombers 1,181 km, the army's the nation's 1,048", () => {
+    const j = pacificWar(1, 28);
+    airUpkeep(j, 'JAP');
+    // (Both stand on Formosa in December 1941: the 11th Air Fleet's flotillas and the army's 5th Air Group.)
+    const navy = command(j, 'JAP', '11th Air Fleet (21st and 23rd Air Flotillas)').filter((f) => f.bmr > 0), army = command(j, 'JAP', '5th Air Group').filter((f) => f.bmr > 0);
+    expect(navy.length).toBeGreaterThan(0);
+    expect(army.length).toBeGreaterThan(0);
+    for (const f of navy) expect(airRange(f, j).bmr, f.name).toBe(1181);
+    for (const f of army) expect(airRange(f, j).bmr, f.name).toBe(AIR.nations.JAP.bmrRange);
+    expect(AIR.nations.JAP.bmrRange).toBe(1048);
+  });
+
   it('a fallen country\'s command in another\'s keeping still reads its own row', () => {
     const g = war(1, 9);
     declareWar(g, 'GER', 'NED');

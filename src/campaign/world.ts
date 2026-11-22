@@ -92,6 +92,12 @@ export const WORLD_STAGES = FAR_STAGE ? [104, 201, 540] : [104, 201];
  */
 export const FAR_FIRST = WORLD_FIRST + (wholeMap as unknown as WorldMap).stages![1];
 
+/**
+ * The first sea of the far side. The seas keep one order on every stage of the chart, the old chart's first and the
+ * far side's after them, so a sea of the far side is one the old chart (Europe and the Americas) does not draw.
+ */
+export const FAR_SEAS_FIRST = (americasMap as unknown as WorldMap).seas.zones.length;
+
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
 

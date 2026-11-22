@@ -23,6 +23,8 @@
 //                                          shores' rows at the record's weights, their works and their will
 //   data/campaign/far-africa.json          the design director's C of 11:40Z and 13:09Z of 22 November 2026: Italian
 //                                          East Africa and the Sahara posts by the record, and the forces facing them
+//   data/campaign/far-books.json           rulings 194 to 196: Japan's stocks of oil and supplies, the lanes that
+//                                          feed them, and America's submarines' worth against them
 //
 // While the far side's switch is off (stage.ts) nothing here happens and the game reads its data files as they are.
 // With it on, each block is laid over the data file it names, in place and once, as this module loads: objects by
@@ -79,6 +81,7 @@ import farAir from '../../data/campaign/far-air.json';
 import farShores from '../../data/campaign/far-shores.json';
 import farGuards from '../../data/campaign/far-guards.json';
 import farAfrica from '../../data/campaign/far-africa.json';
+import farBooks from '../../data/campaign/far-books.json';
 
 type Obj = Record<string, any>;
 
@@ -102,6 +105,8 @@ const FILES: [string, Obj][] = [
   // (Italian East Africa and the Sahara posts, the design director's C of 22 November 2026: dated rows and the six
   // seats' depot marks. Before the shores file, which stays last.)
   ['far-africa', farAfrica],
+  // (Japan's books, rulings 194 to 196: stocks, lanes and the submarines that raid them.)
+  ['far-books', farBooks],
   // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
   ['far-shores', farShores],
 ];

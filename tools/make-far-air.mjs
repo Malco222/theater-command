@@ -93,6 +93,26 @@ const SET = { JAP: { from: 'Rabaul', to: 'Guadalcanal', km: 1048, record: 1044 }
  */
 const JAPAN = { quality: 1.0, ftrRange: 300, bmrRange: SET.JAP.km };
 /**
+ * The ranges by type (the design director, 12:50Z, 22 November 2026, on section 7 of the historian's paper): where a
+ * row carries one type of aircraft, its bombers reach as that type's record, and the figure stands on the row. As
+ * with SET, `km` is the flight that sets it as the rules measure it, rounded up, and `record` the historian's figure
+ * from the field to the target; the script measures each on the chart.
+ *   Japan's navy land bombers (the G3M and the G4M: the air flotillas' and the air fleets' rows): Kwajalein to Wake.
+ *        From Roi-Namur the Chitose Air Group raided Wake at least seven times in fourteen days of December 1941, 17
+ *        to 36 bombers each (firm). Saigon to Singapore, five raids in seven weeks by the Mihoro and Genzan groups
+ *        (likely), is 1,102 on the chart and inside it. Truk to Rabaul (1,298 on the chart) is not shown as a land
+ *        bombers' raid and does not count. The army's bombers stand at the nation's 1,048 until sourced, and so do
+ *        the home defence rows, which are the army's and the navy's together.
+ *   The Dutch B-25s under Australian command (No. 18 Squadron NEI): Darwin to Koepang. From Batchelor the squadron
+ *        flew against Timor and the islands from May 1943 to July 1945, over 900 sorties (firm).
+ * The Beaufighter (No. 31 Squadron, Coomalie Creek to Penfoei, 871 km, routine) has no row of its own: North-Western
+ * Area's row is Hudsons, Spitfires and Liberators together, and keeps air.json's figure.
+ */
+const TYPES = [
+  { nat: 'JAP', from: 'Kwajalein', to: 'Wake', km: 1181, record: 1103, rows: ['11th Air Fleet (21st and 23rd Air Flotillas)', '22nd Air Flotilla', '24th Air Flotilla', '25th Air Flotilla', '23rd Air Flotilla', '1st Air Fleet', '2nd Air Fleet', '5th Air Fleet'] },
+  { nat: 'AUS', from: 'Darwin', to: 'Koepang', km: 806, record: 863, rows: ['No. 18 Squadron NEI'] },
+];
+/**
  * The ranges' ruling: a nation's fighters by date from a field beyond Europe's chart, [month, km], read from the
  * row's first month in the place of airwar.json's dated row (which is Europe's file and is left alone: it reads 750
  * from September 1940 and 850 from December 1941 for Japan). Japan's is the A6M2's from its first month in China,
@@ -255,11 +275,12 @@ for (const r of rowsIn) {
   if (LEAVES[r.name]) out.leaves = LEAVES[r.name];
   const quality = WEAK[r.name] ?? (r.nat === 'USA' ? USA.quality : undefined);
   if (quality !== undefined) out.quality = quality;
-  const bmrRange = LONG[r.name] ?? (r.nat === 'USA' ? USA.bmrRange : undefined);
+  const typed = TYPES.find((t) => t.nat === r.nat && t.rows.includes(r.name));
+  const bmrRange = LONG[r.name] ?? typed?.km ?? (r.nat === 'USA' ? USA.bmrRange : undefined);
   if (bmrRange !== undefined) out.bmrRange = bmrRange;
   fleets.push(out);
 }
-for (const k of [...Object.keys(WEAK), ...Object.keys(LONG), ...Object.keys(HANDS), ...Object.values(HANDS).flat(), ...Object.keys(LEAVES), ...Object.keys(GOES), ...Object.keys(RULED)]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
+for (const k of [...Object.keys(WEAK), ...Object.keys(LONG), ...TYPES.flatMap((t) => t.rows), ...Object.keys(HANDS), ...Object.values(HANDS).flat(), ...Object.keys(LEAVES), ...Object.keys(GOES), ...Object.keys(RULED)]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
 // A command that hands over ends by the record (its last row reads nothing), and to its own side; what leaves a command is on its row as a fall of at least as much that month.
 for (const [k, to] of Object.entries(HANDS)) {
   const r = fleets.find((x) => x.name === k), last = r.est[r.est.length - 1];
@@ -286,7 +307,7 @@ for (const [nat, rows] of Object.entries(REACH)) sched(rows, `${nat} ftrReach`, 
   const W = chart.world, RAD = Math.PI / 180, kx = W.scale * Math.cos(W.parallel * RAD);
   need([W.north, W.scale, W.parallel, W.width].every((x) => typeof x === 'number'), 'the chart does not give its projection');
   const centre = (name) => { place(name, 'a flight that sets a reach'); return chart.regions.find((r) => r.name === name); };
-  for (const [nat, f] of Object.entries(SET)) {
+  for (const [nat, f] of [...Object.entries(SET), ...TYPES.map((t) => [`${t.nat}, "${t.rows[0]}"`, t])]) {
     const a = centre(f.from), b = centre(f.to);
     let dx = Math.abs(a.x - b.x); if (dx > W.width / 2) dx = W.width - dx;
     const la = (W.north - a.y / W.scale) * RAD, lb = (W.north - b.y / W.scale) * RAD, dl = (dx / kx) * RAD;

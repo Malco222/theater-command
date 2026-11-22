@@ -19,6 +19,8 @@ import { describe, expect, it } from 'vitest';
 import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
 import { NAVY, SeaPicture, airOver, besideIn, closedTo, seaSide, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
+import { groupOverSea, seaKm } from '../src/campaign/air';
+import { skiesOver } from '../src/campaign/pacific';
 import type { Fleet, Game } from '../src/campaign/types';
 
 /** January 1942 on the first day's chart: Japan at war with America, Britain, the Dutch and the dominions; Germany with the Soviet Union and America. */
@@ -73,6 +75,26 @@ describe('a nation counts in a sea\'s read only against those it is at war with 
     // The Soviet Union at war with Japan: its bombers are against her, and count beside America.
     declareWar(g, 'SOV', 'JAP');
     expect(seaSide(g, honshu, 'USA', false).total).toBeCloseTo(was, 9);
+    expect(closedTo(g, honshu, 'USA')).toBe(false);
+    expect(new SeaPicture(g).closed(honshu, 'USA')).toBe(false);
+  });
+
+  it('and with that division at Hsinking, where the first day\'s chart has it, the coast is out of its reach and stays open (the chart\'s kilometre)', () => {
+    const g = war();
+    const honshu = zoneOf(g, 'honshu');
+    const f = fifth(g);
+    const division = g.airFleets.find((a) => a.nat === 'JAP' && a.name === '1st Air Division')!;
+    expect(g.regions[division.base].name).toBe('Hsinking');
+    // The coast's nearest shore to Hsinking is Sapporo, 1,295 km on the globe: outside the 1,048 Japan's bombers reach
+    // on the far side (the map's own line had it 1,149). Bombers in Manchuria are not counted over this coast.
+    expect(Math.round(seaKm(g, division.base, honshu))).toBe(1295);
+    expect(groupOverSea(g, division, honshu, skiesOver(g, honshu)!)).toBe(0);
+    f.stance = 'patrol';
+    // Japan's read of her coast is the fleet's 7 and the 150 aircraft at Tokyo: 12.625, under the 15 that closes a sea.
+    const e = seaSide(g, honshu, 'USA', true);
+    expect(e.ships).toBeCloseTo(7, 9);
+    expect(e.air).toBeCloseTo(5.625, 9);
+    expect(e.total).toBeLessThan(NAVY.closed.min);
     expect(closedTo(g, honshu, 'USA')).toBe(false);
     expect(new SeaPicture(g).closed(honshu, 'USA')).toBe(false);
   });

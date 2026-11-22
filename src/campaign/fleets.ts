@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, boatsOut, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -62,6 +62,8 @@ export interface FleetCard {
   ready: number;
   power: number;
   ships: number;
+  /** The far side's one measure: how many of its submarines are out on patrol, for a fleet at sea where that is not all of them (`boatsOut`). */
+  boatsOut?: number;
   /** One card for each class it has ships of, heaviest first. */
   cards: ShipCard[];
   /** The weight of its guns against a coast, its worth with a convoy, and its weight hunting submarines. */
@@ -114,6 +116,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     port: f.port, base: f.base, zone: f.zone, sea: g.seas[f.zone]?.name ?? '', stance: f.stance,
     order: FLEETS.orders[f.stance].label, lane: f.stance === 'escort' ? f.lane ?? null : null, doing: fleetDoing(g, f),
     ready: f.ready, power: fleetPower(g, f), ships: shipCount(f.ships),
+    ...(atSea(f) && f.ships.ss > 0 && boatsOut(g, f) < f.ships.ss ? { boatsOut: Math.max(1, Math.round(boatsOut(g, f))) } : {}),
     cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => ({ cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] })),
     guns: gunWeight(g, f), escort: escortW * quality(g, f.nat) * fit(g, f),
     hunters: (f.ships.dd + f.ships.cv * FLEETS.hunt.carrier * deckWorth(g, f)) * quality(g, f.nat) * fit(g, f),
@@ -227,6 +230,8 @@ export interface SeaOption {
   huntNow: number;
   /** The chance this fleet loses a heavy ship to a submarine there this month. */
   torpedo: number;
+  /** True for a sea beyond any fleet's reach that this fleet's submarines can still be sent to raid in (navy.ts ownBoatsReach; the far side's beats alone). */
+  raidOnly?: boolean;
 }
 
 /**
@@ -236,7 +241,9 @@ export interface SeaOption {
 export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): SeaOption[] {
   const mine = fleetPower(g, f);
   const fog = viewer !== null && carrierRules(g) && fogOn(g, viewer);
-  return fleetReach(g, f).map((z) => {
+  // (The player's boats raid farther than any fleet patrols, where his navy's group does from that base: those seas follow the others.)
+  const near = fleetReach(g, f), far = fleetReach(g, f, true).filter((z) => !near.includes(z));
+  return [...near, ...far].map((z) => {
     const here = atSea(f) && f.zone === z;
     const us = seaSide(g, z, f.nat, false), them = seaSide(g, z, f.nat, true);
     const pic = fog ? seaPicture(g, z, viewer) : null;
@@ -246,7 +253,7 @@ export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): Sea
       if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
       const k = fog ? fleetKnown(g, x, viewer) : 'exact';
       if (k !== 'exact') { if (k === 'report') reported++; continue; }
-      subs += x.ships.ss;
+      subs += boatsOut(g, x);
       surface += CLASSES.reduce((n, c) => n + (c === 'ss' ? 0 : x.ships[c]), 0);
     }
     const own = us.total + (here ? 0 : mine);
@@ -261,9 +268,11 @@ export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): Sea
       if (keep.lane !== undefined) f.lane = keep.lane;
     }
     return {
-      zone: z, name: g.seas[z].name, here, ours: us.total, theirs: them.total, surface, subs, reported, search: pic?.word ?? '',
+      // (The far side's one measure gives boats out in parts of a boat: the card counts whole boats, never none where some are out.)
+      zone: z, name: g.seas[z].name, here, ours: us.total, theirs: them.total, surface, subs: subs > 0 ? Math.max(1, Math.round(subs)) : 0, reported, search: pic?.word ?? '',
       meet: surface <= 0 ? 'clear' : own >= NAVY.battle.seek * Math.max(1, them.total) ? 'battle' : 'shy',
       hunt, huntNow, torpedo: seaWar(g) ? torpedoRisk(g, f, z) : 0,
+      ...(far.includes(z) ? { raidOnly: true } : {}),
     };
   });
 }

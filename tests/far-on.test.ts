@@ -48,8 +48,8 @@ const at = (g: Game, f: Fleet): string => g.regions[f.base].name;
 const SEATS = ['SAF', 'IRN', 'IRQ', 'SAU', 'AFG', 'YEM', 'NEP', 'LBR', 'CHN', 'AUS', 'NZL', 'THA', 'MAN', 'MGL'];
 
 describe("the far side with its switch on: the rows that are nobody's seat", () => {
-  it('lays the twelve files over the data, in order, and the game reads them as its own', () => {
-    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-guards', 'far-africa', 'far-shores']);
+  it('lays the thirteen files over the data, in order, and the game reads them as its own', () => {
+    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-guards', 'far-africa', 'far-books', 'far-shores']);
     expect(WD.nations.JAP.name).toBe('Japan');
     expect(WD.great).toEqual(['USA', 'JAP']);
     expect(Object.keys(WD.clients)).toEqual(['MAN', 'MGL']);
@@ -482,7 +482,8 @@ describe("the whole world's oil (rulings 194 and 231)", () => {
     const g = grand();
     // What each power's own fields and its wells at home gave on the first day with the far side off: fields, home.
     const old: Record<string, [number, number]> = { GER: [0, 14], UK: [0, 0], FRA: [0, 1], ITA: [0, 2.5], SOV: [56, 8], USA: [100, 20] };
-    expect(Object.keys(old).sort()).toEqual([...RES.nations].sort());
+    // (Japan keeps stocks too with the far side on, ruling 194 point 5: tests/far-oil-book.test.ts.)
+    expect([...Object.keys(old), 'JAP'].sort()).toEqual([...RES.nations].sort());
     for (const [nat, [fields, home]] of Object.entries(old)) {
       const now = (line(g, nat, 'fields')?.amount ?? 0) + (line(g, nat, 'home')?.amount ?? 0);
       expect(now, nat).toBe(fields + home + (nat === 'SOV' ? 1 : 0));

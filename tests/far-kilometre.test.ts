@@ -206,6 +206,36 @@ describe('the ranges as laid by the record: each reach is the flight that sets i
     expect(read('Saipan', 'Tokyo')).toBeLessThanOrEqual(2550);
   });
 
+  it("by type, where a row carries one: Japan's navy land bombers reach Wake from Kwajalein, 1,181 km, and the Dutch B-25s Koepang from Darwin, 806", () => {
+    const rows = AIR.fleets as unknown as { nat: string; name: string; bmrRange?: number }[];
+    const NAVY = ['11th Air Fleet (21st and 23rd Air Flotillas)', '22nd Air Flotilla', '24th Air Flotilla', '25th Air Flotilla', '23rd Air Flotilla', '1st Air Fleet', '2nd Air Fleet', '5th Air Fleet'];
+    // The air flotillas and the air fleets fly the navy's land bombers; the army's rows, and the home defence's two
+    // (the army's and the navy's together), keep the nation's 1,048 until a source gives theirs.
+    for (const r of rows.filter((x) => x.nat === 'JAP')) expect(r.bmrRange, r.name).toBe(NAVY.includes(r.name) ? 1181 : undefined);
+    expect(rows.filter((x) => x.nat === 'JAP' && x.bmrRange !== undefined).map((x) => x.name).sort()).toEqual([...NAVY].sort());
+    // The flight that sets it is in reach, and the figure is no more than the flight rounded up (1,180.03 on the chart).
+    const wake = km(g, at('Kwajalein').id, at('Wake').id);
+    expect(wake).toBeLessThanOrEqual(1181);
+    expect(wake).toBeGreaterThan(1180);
+    // Saigon to Singapore, the record's other routine route, is inside it; so are Kuching, Miri and Brunei from Saigon,
+    // which the 1,048 left out of reach. Truk to Rabaul is not shown as a land bombers' raid, and stays outside.
+    expect([read('Saigon', 'Singapore'), read('Saigon', 'Kuching'), read('Saigon', 'Miri'), read('Saigon', 'Brunei')]).toEqual([1102, 1124, 1081, 1126]);
+    for (const to of ['Singapore', 'Kuching', 'Miri', 'Brunei']) { expect(read('Saigon', to), to).toBeLessThanOrEqual(1181); expect(read('Saigon', to), to).toBeGreaterThan(japan); }
+    expect(read('Truk', 'Rabaul')).toBe(1298);
+    // The army's bombers at Phnom Penh do not reach Kuching (1,277).
+    expect(read('Phnom Penh', 'Kuching')).toBeGreaterThan(japan);
+    // The Dutch squadron under Australian command: Timor from Darwin, and no farther (Ambon is 1,017).
+    const dutch = rows.filter((x) => x.nat === 'AUS' && x.bmrRange !== undefined);
+    expect(dutch.map((x) => [x.name, x.bmrRange])).toEqual([['No. 18 Squadron NEI', 806]]);
+    const koepang = km(g, at('Darwin').id, at('Koepang').id);
+    expect(koepang).toBeLessThanOrEqual(806);
+    expect(koepang).toBeGreaterThan(805);
+    expect(read('Darwin', 'Dili')).toBeLessThanOrEqual(806);
+    expect(read('Darwin', 'Ambon')).toBeGreaterThan(806);
+    // Above the 700 its bombers flew by air.json's default row.
+    expect(AIR.nations._default.bmrRange).toBe(700);
+  });
+
   it("America's escorts: 1,250 km from October 1944, Iwo Jima to Tokyo inside it; Morotai to Balikpapan is beyond it on the chart", () => {
     expect(AIR.jobs).toEqual({ USA: { cover: 550, raid: [[62, 1250]] } });
     expect(read('Iwo Jima', 'Tokyo')).toBeLessThanOrEqual(1250);

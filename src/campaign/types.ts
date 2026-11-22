@@ -621,6 +621,8 @@ export interface Fleet extends Storied {
   fought: number;
   /** The shipping lane the fleet is escorting, while its stance is 'escort' (the grand campaign). */
   lane?: string;
+  /** A submarine group of the far side's beats: how many seas off its base its boats raid (navy.ts boatsReach). No fleet carries it with the far side off. */
+  reach?: number;
   /** Month the fleet last shelled a coast: its guns speak once a month (the grand campaign). */
   shelled?: number;
   /** The month each nation last had this fleet in contact: it fought it, was shelled by it, or was struck by its aircraft (the grand campaign). */
@@ -749,6 +751,12 @@ export interface Headline {
   head?: string;
   /** For a warning: the country the news is about, where that is not the player's own (display only: a band flies its flag). */
   about?: string;
+  /**
+   * Its line on the month card, where the first sentence of the news is too long for a row there (display only: 'War
+   * has reached Japan's home ground.', the UI director's sheet 25). All reports and the newsreel keep the whole text.
+   * Among a country's news of the month it stands next after a fall.
+   */
+  card?: string;
   /**
    * Two tags on news of fighting (Version 80; display only, no rule reads them). `arm` is the arm that did the
    * fighting: on land, at sea or from the air. `won` and `lost` are the nation that had the better of it and the one

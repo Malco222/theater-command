@@ -19,7 +19,7 @@ import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
-import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
+import { RES, fuelAir, fuelMet, fuelSlows, hungerLost, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
 import { honour } from './guarantees';
@@ -2891,6 +2891,60 @@ export function checkCollapse(g: Game, nat: string, by: string): void {
   capitulate(g, nat, by);
 }
 
+/** The share of a nation's home country, by worth, that an enemy holds. With `also`, as it would stand with that province taken too. */
+export function homeTaken(g: Game, nat: string, also?: Region): number {
+  let vp = 0, taken = 0;
+  for (const r of g.regions) if (r.owner === nat && !r.overseas) { vp += r.vp; if (r === also || atWar(g, nat, r.ctrl)) taken += r.vp; }
+  return vp ? taken / vp : 0;
+}
+
+/**
+ * The two conditions on which a nation with a row of terms asks for them (ruling 196; resources.json 'will.terms',
+ * where Japan's is the only row, laid with the far side). The war has reached its home ground: an enemy holds the
+ * row's share of it by worth. And its people can bear no more: privation has worn all it can off its will to fight.
+ * Null for a nation with no row.
+ */
+export function termsOf(g: Game, nat: string): { ground: boolean; privation: boolean; taken: number; share: number } | null {
+  const row = RES.will.terms?.[nat];
+  if (!row || g.flags.open !== 1 || !g.nations[nat]) return null;
+  const taken = homeTaken(g, nat);
+  return { ground: taken >= row.home - 1e-9, privation: hungerLost(g, nat) >= RES.will.most - 1e-9, taken, share: row.home };
+}
+
+/**
+ * A computer nation with a row of terms asks for them at the opening of its month when both conditions hold (ruling
+ * 196): it gives in as any country does, to the enemy `victorOf` names, and its armies lay down their arms. No date
+ * decides it. A player's own country is spared, as a player's Italy is: he decides when he is beaten.
+ */
+export function checkTerms(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  if (!n?.alive || n.capital < 0 || nat === g.human) return false;
+  const t = termsOf(g, nat);
+  if (!t) return false;
+  if (!t.ground || !t.privation) { termsNews(g, nat, t); return false; }
+  const to = victorOf(g, nat);
+  if (!to) return false;
+  capitulate(g, nat, to, `${theName(n, true)} accepts terms and is out of the war.`);
+  return true;
+}
+
+/**
+ * The news of the month each condition first holds with the other not yet (ruling 196, the planner's two lines; the
+ * UI director's sheet 25, box 5): said once each, under the country's own flag. The first carries its line for the
+ * month card, where the whole sentence is a letter or two too long for a row. The month both hold the news is a
+ * fall's, and none of this is said of a player's own country (checkTerms reads nothing for him).
+ */
+function termsNews(g: Game, nat: string, t: { ground: boolean; privation: boolean }): void {
+  const n = g.nations[nat], name = theName(n), Name = theName(n, true);
+  const once = (key: string, text: string, card?: string): void => {
+    if (g.flags[key]) return;
+    g.flags[key] = g.turn;
+    g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind: 'event', nat, ...(card ? { card } : {}) });
+  };
+  if (t.ground) once(`terms:ground:${nat}`, `The war has reached ${name}'s home ground. ${Name} asks for terms when its people can bear no more.`, `War has reached ${name}'s home ground.`);
+  if (t.privation) once(`terms:privation:${nat}`, `${Name}'s people can bear no more. It asks for terms once an enemy holds a part of its home ground.`);
+}
+
 /**
  * Who a beaten country gives in to (the grand campaign): the enemy that holds its capital or stands round it, or
  * else the one with most of its home ground and most troops on its soil and at its borders. Null if no enemy is
@@ -2927,7 +2981,8 @@ function nearestFriendly(g: Game, c: Corps): Region | null {
   return null;
 }
 
-export function capitulate(g: Game, nat: string, by: string): void {
+/** `said`: the news of the fall in other words than "capitulates to" (a country that asks for terms, ruling 196). */
+export function capitulate(g: Game, nat: string, by: string, said?: string): void {
   const X = g.nations[nat];
   if (!X.alive) return;
   X.alive = false;
@@ -2992,7 +3047,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
     if (cap) { cap.cap = true; V.capital = cap.id; g.capDist.VIC = capitalDistances(g, cap.id); }
     headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA', undefined, { arm: 'land', won: by, lost: 'FRA' });
   } else {
-    headline(g, 'fall', `${theName(X, true)} capitulates to ${theName(g.nations[by])}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
+    headline(g, 'fall', said ?? `${theName(X, true)} capitulates to ${theName(g.nations[by])}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
   }
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
@@ -4142,6 +4197,8 @@ export function startPhase(g: Game, nat: string): void {
   jointMonth(g, nat);
   capitalWatch(g, nat);
   checkCollapse(g, nat, n.atWar[0] ?? nat);
+  // (Ruling 196: a nation with a row of terms asks for them at its month's opening. No row, nothing read.)
+  if (RES.will.terms?.[nat]) checkTerms(g, nat);
 }
 
 /**

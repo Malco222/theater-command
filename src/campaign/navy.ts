@@ -29,14 +29,14 @@ import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
 import { stationBars, whyStationBars } from './far';
-import { farOn } from './world';
+import { FAR_SEAS_FIRST, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
-import { RES, fuelFleet, laneStopped } from './resources';
+import { RES, fuelFleet, laneStopped, oilBeside } from './resources';
 import {
   MEN_PER_DIV, STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Nation, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
 } from './types';
@@ -84,9 +84,12 @@ export interface ArrivalDial { stops?: number[]; sunk?: boolean; from?: string; 
  * record's seas where it hunted, by half-year ([from turn, seas]); at stops 1 to 3 its beat is read from them (huntBeat;
  * ruling 233 riders b601 and b603), its dated beat only where no sea in its reach carries that trade. 'admirals': dated
  * changes of its commander, [from turn, name] (rider b601: commanders are facts of the day, at every stop).
+ * 'bases', the far side's form alone (`placeFarBoats`): dated changes of its base, [from turn, province, the port's
+ * name, home sea]. It sails from the latest of them (its row's own base the first) that its side holds.
  */
 export interface BeatGroup extends Partial<Omit<FleetRow, 'name'>> {
   name: string; held?: string; stations?: [number, string][]; hunts?: { to: string; seas: [number, string[]][] }; admirals?: [number, string][];
+  bases?: [number, string, string, string][];
 }
 /**
  * What some of a navy's groups keep when it places its boats by need (ruling 233 rider b598(1)): while a fleet of an
@@ -94,8 +97,18 @@ export interface BeatGroup extends Partial<Omit<FleetRow, 'name'>> {
  * boats in least[1] of all its groups have.
  */
 export interface BeatFloor { groups: string[]; least: [number, number]; seas: string[] }
-/** A navy's submarines by beat: Italy's shared out by the historian's rows, Germany's lent from 'from' to the Mediterranean. */
-export interface Beats { groups: BeatGroup[]; rows: number[][]; from?: string; cause?: { from: number; by: string[]; ground: string[] }; floor?: BeatFloor }
+/**
+ * A navy's submarines by beat: Italy's shared out by the historian's rows, Germany's lent from 'from' to the
+ * Mediterranean. 'far' marks the far side's form (`placeFarBoats`; none in the older files): the rows are boats on
+ * hand by command, lent from the fleets named in 'pools' in their order, and read while the navy is at war with a
+ * nation its groups hunt. 'war': the month of the record's war that the rows are dated by.
+ */
+export interface Beats {
+  groups: BeatGroup[]; rows: number[][]; from?: string; cause?: { from: number; by: string[]; ground: string[] }; floor?: BeatFloor;
+  far?: { war: number }; pools?: string[];
+  /** The far side's one measure: of a navy's boats at sea, the share out on patrol, as rows of [from this turn, boats out, of this many on hand]. */
+  patrol?: [number, number, number][];
+}
 /** A convoy route. 'base' is a fortress on the route whose own submarines and aircraft hunt the convoys while an enemy holds it. */
 interface Route { id: string; name: string; to: string; zones: string[]; share: number; tons: number; base?: { region: string; raid: number; starved: number } }
 
@@ -121,6 +134,12 @@ export const NAVY = data as unknown as {
   moves?: FleetMove[];
   /** The submarines' beats by nation (ruling 233 rider b564). */
   beats?: Record<string, Beats>;
+  /**
+   * The far side (ruling 194, point 6): a navy whose submarines raid at 'share' of their worth in the far side's seas
+   * while their torpedoes fail: until month 'book' where the stop keeps the book, and elsewhere until its 'month'th
+   * month at war with 'foe'. None in the older files. `subsWorth`.
+   */
+  subs?: Record<string, { share: number; book: number; month: number; foe: string }>;
 };
 
 /**
@@ -351,14 +370,35 @@ export function openingStations(g: Game): void {
 // ---- Who holds a sea ------------------------------------------------------------------------
 
 /** How fit a fleet is to fight: its readiness, and in the grand campaign whether it has the fuel to steam. */
-export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fuelFleet(g, f.nat);
+export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fleetFuel(g, f);
+
+/**
+ * True for a fleet based beside the oil (ruling 194, point (g)): its base is a harbour on a sea of the far side that
+ * touches a working oilfield overseas its side holds (resources.ts oilBeside). Read in the far side's seas alone, so
+ * no fleet of Europe's moves.
+ */
+export function besideOil(g: Game, f: Fleet): boolean {
+  if (f.base < 0 || !farOn(g)) return false;
+  const seas = g.regions[f.base]?.seas.filter((z) => z >= FAR_SEAS_FIRST) ?? [];
+  return seas.length > 0 && oilBeside(g, f.nat, seas);
+}
+
+/**
+ * What a fuel shortage leaves of a fleet's fitness for sea: its nation's share, or nothing lost for a fleet based
+ * beside the oil while the nation's stock is dry. Its need stays in the nation's book.
+ */
+export function fleetFuel(g: Game, f: Fleet): number {
+  const k = fuelFleet(g, f.nat);
+  return k < 1 && besideOil(g, f) ? 1 : k;
+}
 const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel * (f.admiral.level - 1) : 0);
 
 /** A fleet's weight in a fleet action. */
 export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
   // A carrier is worth what it can fly: one whose aircraft are spent counts for much less (the grand campaign).
-  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power * (c === 'cv' ? deckWorth(g, f) : 1);
+  // (The far side's one measure: of its submarines only the boats out count; a boat at its base holds no sea. `boatsOut`.)
+  for (const c of CLASSES) p += (c === 'ss' ? boatsOut(g, f) : f.ships[c]) * NAVY.classes[c].power * (c === 'cv' ? deckWorth(g, f) : 1);
   return p * quality(g, f.nat) * fit(g, f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
 }
 
@@ -729,9 +769,8 @@ export function crossingRisk(g: Game, nat: string, path: number[]): number {
   return 1 - safe;
 }
 
-/** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
-export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
-  if (!from.seas.length || !to.seas.length) return null;
+/** The cheapest way by sea from a coast to every sea it can reach: each sea's cost, and the sea before it on the way. */
+function seaWays(g: Game, nat: string, from: Region, o: { max?: number; surprise?: boolean }): { cost: Float64Array; prev: Int16Array } {
   const N = g.seas.length;
   const cost = new Float64Array(N).fill(1e9), prev = new Int16Array(N).fill(-1), len = new Int16Array(N), done = new Uint8Array(N);
   const shut = (z: number): boolean => !o.surprise && closedTo(g, z, nat);
@@ -749,13 +788,59 @@ export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max
       if (c < cost[j]) { cost[j] = c; prev[j] = a; len[j] = len[a] + 1; }
     }
   }
-  let end = -1;
-  for (const z of to.seas) if (cost[z] < 1e9 && (end < 0 || cost[z] < cost[end])) end = z;
-  if (end < 0) return null;
+  return { cost, prev };
+}
+/** The seas crossed in order on the way to one of them. */
+function wayTo(prev: Int16Array, end: number): number[] {
   const path: number[] = [];
   for (let z = end; z >= 0; z = prev[z]) path.unshift(z);
   return path;
 }
+
+/** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
+export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
+  if (!from.seas.length || !to.seas.length) return null;
+  const W = seaWays(g, nat, from, o);
+  let end = -1;
+  for (const z of to.seas) if (W.cost[z] < 1e9 && (end < 0 || W.cost[z] < W.cost[end])) end = z;
+  return end < 0 ? null : wayTo(W.prev, end);
+}
+
+/**
+ * The way a landing sails, and the card of the sea off its beach where this had to read it.
+ *
+ * A crossing's way was chosen by the day's risk in each sea (`seaPath`), and its card then read what could come to
+ * the last of them (`seaHold`): a staff weighed by one map and fought by another. Where a beach stands on two seas
+ * it took the one with the less risk today, found that sea's card "can be closed" and waited, while the other
+ * sea's card read open (Sandakan from Jolo in February 1942, seed 19, stop 1: the Celebes Sea for the Sulu Sea).
+ * So on the far side, where a beach can be reached by more than one of its seas and a way to it crosses a sea of
+ * the far side: of the ways (the safest to each of the beach's seas) the landing takes one whose card reads open,
+ * and among those the least risk today. If none reads open it is the safest way as before, and a staff that heeds
+ * the card waits. The old chart's crossings are read as they always were. (The design director's ruling of
+ * 08:53Z, 22 November 2026.)
+ */
+function landingWay(g: Game, nat: string, from: Region, to: Region, surprise: boolean): { path: number[]; hold?: SeaHold } | null {
+  if (!from.seas.length || !to.seas.length) return null;
+  const W = seaWays(g, nat, from, { max: NAVY.landing.range, surprise });
+  let end = -1;
+  for (const z of to.seas) if (W.cost[z] < 1e9 && (end < 0 || W.cost[z] < W.cost[end])) end = z;
+  if (end < 0) return null;
+  const first = wayTo(W.prev, end);
+  const ends = farOn(g) ? to.seas.filter((z) => W.cost[z] < 1e9) : [];
+  if (ends.length < 2) return { path: first };
+  const ways = ends.map((z) => ({ z, path: z === end ? first : wayTo(W.prev, z) }));
+  if (!ways.some((w) => w.path.some((z) => z >= FAR_SEAS_FIRST))) return { path: first };
+  let best: { path: number[]; hold: SeaHold } | null = null, bestCost = Infinity;
+  for (const w of ways) {
+    const hold = seaHold(g, nat, w.path, to);
+    if (w.z === end && hold.open) return { path: first, hold };
+    if (hold.open && W.cost[w.z] < bestCost) { best = { path: w.path, hold }; bestCost = W.cost[w.z]; }
+  }
+  return best ?? { path: first };
+}
+
+/** The seas a landing crosses in order, or null if it cannot sail: `landingWay`. */
+export const landingPath = (g: Game, nat: string, from: Region, to: Region, surprise: boolean): number[] | null => landingWay(g, nat, from, to, surprise)?.path ?? null;
 
 const liftKey = (g: Game, nat: string): string => `lift:${nat}:${g.turn}`;
 /** How many more corps a nation's shipping can carry this month. */
@@ -1261,17 +1346,24 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
     };
   }
   const surprise = surpriseOn(g, nat, to);
-  const path = seaPath(g, nat, g.regions[cs[0].reg], to, { max: NAVY.landing.range, surprise })!;
+  const way = landingWay(g, nat, g.regions[cs[0].reg], to, surprise)!;
+  const path = way.path;
   return {
     why: null, surprise, path, risk: surprise ? 0 : landingRisk(g, nat, path, to), defended,
     ...(surprise ? {} : { account: crossingAccount(g, nat, path, to) }),
-    hold: seaHold(g, nat, path, to),
+    hold: way.hold ?? seaHold(g, nat, path, to),
     sky: sky !== null && allied(g, sky, nat), sortie: surprise ? 0 : sortieAgainst(g, nat, path),
     assess: defended ? assess(g, cs, to, { sea: surprise ? NAVY.landing.surprise : assaultStrength(g, nat), surprise }) : null,
   };
 }
 
 export interface Landing { ok: boolean; why?: string; taken?: boolean; lostAtSea?: number; report?: BattleReport | null; surprise?: boolean; air?: boolean }
+
+/**
+ * Reading only: a probe is told each landing that sails, once its crossing is run: who, from which coast, to which
+ * shore, by which seas in order, and what the sea took. It changes nothing, and no rule reads it.
+ */
+export const landWatch: { tell: ((e: { nat: string; from: Region; to: Region; path: number[]; surprise: boolean; force: Corps[]; lostAtSea: number }) => void) | null } = { tell: null };
 
 /**
  * Lands corps on an enemy coast. If it is defended they fight their way ashore, at a disadvantage unless the enemy is surprised.
@@ -1294,7 +1386,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   let lostAtSea = 0;
   if (air) g.flags[dropKey(g, nat)] = 1;
   else {
-    const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise })!;
+    const path = landingPath(g, nat, from, to, surprise)!;
     // (What the Pacific's landing ships loaded is counted as it sailed, before the crossing's losses: pacific.ts.)
     useShoreLift(g, nat, to, worthOf(cs));
     lostAtSea = crossing(g, cs, path, surprise, to);
@@ -1302,6 +1394,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
     // (And the ground itself, for the coast watch: a landing on this enemy's homeland is not news to come.)
     g.flags[`landedAt:${to.id}:${nat}`] = g.turn;
+    landWatch.tell?.({ nat, from, to, path, surprise, force: cs, lostAtSea });
   }
   let taken = true;
   let report: BattleReport | null = null;
@@ -1560,16 +1653,38 @@ export function coastReport(g: Game, att: string): void {
 
 // ---- Fleet orders -------------------------------------------------------------------------------
 
-/** Seas a fleet can be sent to: those within reach of its base, through straits open to it. */
-export function fleetReach(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>): number[] {
+/** Where a fleet sails from, for a far-side submarine group how far its boats raid (`Fleet.reach`), and what sails. */
+type Sailing = Pick<Fleet, 'nat' | 'base' | 'home'> & { reach?: number } & Partial<Pick<Fleet, 'ships'>>;
+
+/**
+ * Seas a fleet can be sent to: those within reach of its base, through straits open to it. `raid`: the seas it can be
+ * sent to raid in, which for a submarine group of the far side's beats run as far as the record's boats patrolled
+ * from that base (`Fleet.reach`, set by placeFarBoats), and for the player's own boats as far as his navy's group
+ * raids from that base (ownBoatsReach, read as the month stands); for every other fleet the same seas as for any errand.
+ */
+export function fleetReach(g: Game, f: Sailing, raid = false): number[] {
+  const far = !raid ? undefined : f.nat === g.human ? ownBoatsReach(g, f) : f.reach;
+  const range = far !== undefined ? Math.max(NAVY.range, far) : NAVY.range;
   const d = new Int16Array(g.seas.length).fill(-1);
   const q: number[] = [];
   for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (d[z] < 0) { d[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) {
-    if (d[q[i]] >= NAVY.range) continue;
+    if (d[q[i]] >= range) continue;
     for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
   }
   return q;
+}
+
+/**
+ * How many seas off its base each sea lies for a fleet, counted as its reach is (its base's own seas 1, through
+ * straits open to it) and as far as the chart runs: 0 for a sea it cannot sail to.
+ */
+function seaSteps(g: Game, f: Sailing): Int16Array {
+  const d = new Int16Array(g.seas.length);
+  const q: number[] = [];
+  for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (!d[z]) { d[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!d[j] && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
+  return d;
 }
 
 /**
@@ -1602,7 +1717,7 @@ export const tiedNow = (g: Game, f: Fleet): boolean => f.tied && !tieLapses(g, f
 export function sail(g: Game, f: Fleet, zone: number, stance: Stance, lane?: string): boolean {
   if ((stance === 'escort' || stance === 'hunt') && !seaWar(g)) return false;
   if (stance === 'escort' && !seaRoutes(g).some((r) => r.id === lane && r.zones.includes(zone))) return false;
-  if (stance !== 'port' && (!shipCount(f.ships) || !fleetReach(g, f).includes(zone))) return false;
+  if (stance !== 'port' && (!shipCount(f.ships) || !fleetReach(g, f, stance === 'raid').includes(zone))) return false;
   const to = stance === 'port' ? f.home : zone;
   // Who holds a sea decides which ports can be supplied, so the supply map is redrawn when a fleet moves.
   if (f.zone !== to || f.stance !== stance) g.supplyDirty = true;
@@ -1975,12 +2090,14 @@ export function lanesTo(g: Game, to: string, z: number): number {
  * with more such lanes, then the first in the chart's order), so that its sinkings fall on that trade where the chart
  * carries it; never the list's first sea for its own sake. Only seas within the group's reach from its port count, so
  * that it can sail there. -1 before the list's first half-year, or where no sea in its reach carries such a lane.
+ * (`month`: the month the list is read by, the game's own unless the far side's form reads an early war as the
+ * record's first month.)
  */
-export function huntBeat(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, H: NonNullable<BeatGroup['hunts']>): number {
+export function huntBeat(g: Game, f: Sailing, H: NonNullable<BeatGroup['hunts']>, month: number = g.turn): number {
   let list: string[] | undefined;
-  for (const [turn, seas] of H.seas) if (g.turn >= turn) list = seas;
+  for (const [turn, seas] of H.seas) if (month >= turn) list = seas;
   if (!list) return -1;
-  const reach = new Set(fleetReach(g, f));
+  const reach = new Set(fleetReach(g, f, true));
   const own = list.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
   let best = -1, most = 0;
   for (const z of own) { const n = reach.has(z) ? lanesTo(g, H.to, z) : 0; if (n > most) { best = z; most = n; } }
@@ -2044,6 +2161,7 @@ export function placeBoats(g: Game, nat: string): void {
   const B = NAVY.beats?.[nat];
   // (A player's boats are placed by the rows in his start month alone: rider b639. From then on they are his to move.)
   if (!B || !seaWar(g) || !dialRuns(g, nat) || !g.nations[nat]?.alive) return;
+  if (B.far) { placeFarBoats(g, nat, B); return; }
   const stop = stopOf(g);
   let row: number[] | undefined;
   for (const r of B.rows) if (r[0] <= g.turn) row = r;
@@ -2134,6 +2252,121 @@ export function placeBoats(g: Game, nat: string): void {
   });
 }
 
+/** The base a far-side group sails from this month: the latest of its dated bases that its side holds, its row's own the first. */
+export function baseInForce(g: Game, nat: string, G: BeatGroup): { base: string; port: string; home: string } | null {
+  const list: [number, string, string, string][] = [[0, G.base ?? '', G.port ?? '', G.home ?? ''], ...(G.bases ?? [])];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const [from, base, port, home] = list[i], r = g.byName[base];
+    if (from <= g.turn && r && allied(g, nat, r.ctrl) && r.seas.includes(zoneOf(g, home))) return { base, port, home };
+  }
+  return null;
+}
+
+/** The record's seas where a group hunted in the half-year a month falls in (its 'hunts' list in force), or none before the first. */
+const huntSeas = (G: BeatGroup, month: number): string[] => {
+  let list: string[] = [];
+  for (const [from, seas] of G.hunts?.seas ?? []) if (month >= from) list = seas;
+  return list;
+};
+
+/**
+ * How far a far-side group's boats raid from the base they are in (the design director's note of 13:45Z, 22 November
+ * 2026): no number of ours, but the farthest of the record's seas where the group hunted in that half-year, counted
+ * on the chart from that base as any fleet's reach is counted. Never less than any fleet's reach.
+ */
+export function boatsReach(g: Game, f: Sailing, G: BeatGroup, month: number = g.turn): number {
+  const d = seaSteps(g, f);
+  let far = NAVY.range;
+  for (const k of huntSeas(G, month)) { const z = zoneOf(g, k); if (z >= 0 && d[z] > far) far = d[z]; }
+  return far;
+}
+
+/**
+ * How far the player's own boats raid from the base they are in (the design director's ruling of 17:42Z, 22 November
+ * 2026: a player never lacks a tool the computer has). No staff places his boats after his first month, so no group
+ * carries a reach for him. A fleet of submarines alone raids as far from its base as his navy's group raids from that
+ * base in that half-year (boatsReach): the group whose own base, or a dated base it has by that month, is the place,
+ * and the farther where two groups share it. A war that comes before the record's is read by the record's first
+ * month, as the staff's placing reads it. From any other base, with a surface ship in company, and for a navy whose
+ * beats are not the far side's form: any fleet's reach.
+ */
+export function ownBoatsReach(g: Game, f: Sailing): number {
+  const B = NAVY.beats?.[f.nat];
+  if (!B?.far || !farOn(g) || f.base < 0 || !f.ships || f.ships.ss <= 0 || shipCount(f.ships, SURFACE) > 0) return NAVY.range;
+  const at = g.regions[f.base].name;
+  let far = NAVY.range;
+  for (const G of B.groups) {
+    if (!G.hunts || (G.base !== at && !(G.bases ?? []).some(([from, base]) => from <= g.turn && base === at))) continue;
+    far = Math.max(far, boatsReach(g, f, G, atWar(g, f.nat, G.hunts.to) ? Math.max(g.turn, B.far.war) : g.turn));
+  }
+  return far;
+}
+
+/**
+ * The far side's form of the beats (the design director's notes of 13:45Z, 13:59Z and 14:06Z, 22 November 2026; the
+ * historian's paper sub-patrols-japan-oil.md, sections 4 and 9): America's, Britain's and the Netherlands' boats
+ * against Japan's trade, and Japan's own.
+ *
+ * The rows are boats on hand by command, in port or at sea, the measure of Germany's rows. They are lent from the
+ * navy's own fleets ('pools', in their order) and come home to the first of them: as many as the row asks, up to what
+ * the navy has, so a row above that is a split among the commands and no demand. They are read while the navy is at
+ * war with a nation its groups hunt, and at no other time: with that war over, or not begun, every boat is with its
+ * pool. A war that comes before the record's ('far.war') is read as the record's first month.
+ *
+ * A group sails from the record's base of the day ('bases'), the latest its side holds, at every stop: it moves there
+ * with a line of news, and a group with no such base left sends its boats home. Its boats raid as far from that base
+ * as the record's boats patrolled in that half-year (boatsReach), so the forward bases shorten nothing by a number of
+ * ours: they move the place the reach is counted from. Within that reach its beat is, at stops 1 and 2, the sea of the record's list
+ * for the half-year that carries the most of the hunted nation's lanes, or the nearest to the list that carries one
+ * (huntBeat); at stops 3 to 5 the sea where the enemy's shipping is thickest, the staff's own pick. Where no cargo
+ * sails in its reach it keeps the first of the record's seas for the half-year that it can reach.
+ */
+function placeFarBoats(g: Game, nat: string, B: Beats): void {
+  const stop = stopOf(g);
+  const fleets = B.groups.map((G) => g.fleets.find((f) => f.nat === nat && f.name === G.name));
+  const pools = (B.pools ?? []).map((name) => g.fleets.find((f) => f.nat === nat && f.name === name)).filter((f): f is Fleet => !!f);
+  const quarry = B.groups.some((G) => !!G.hunts && atWar(g, nat, G.hunts.to));
+  if (!quarry && !fleets.some((f) => !!f)) return;
+  const month = quarry ? Math.max(g.turn, B.far!.war) : g.turn;
+  let row: number[] | undefined;
+  for (const r of B.rows) if (r[0] <= month) row = r;
+  const bases = B.groups.map((G) => baseInForce(g, nat, G));
+  const want = B.groups.map((_, i) => (quarry && row && bases[i] ? row[i + 1] : 0));
+  const held = fleets.map((f) => f?.ships.ss ?? 0);
+  const out = held.reduce((a, b) => a + b, 0);
+  // (With no pool left to go home to, the boats stay with the groups: shared by the row, or where they are.)
+  const total = pools.length ? Math.min(want.reduce((a, b) => a + b, 0), out + pools.reduce((n, f) => n + f.ships.ss, 0)) : out;
+  const parts = wholeShares(total, pools.length || want.some((x) => x > 0) ? want : held);
+  // Boats come home before others go out: home to the first pool, out from the pools in their order.
+  if (pools.length) {
+    let need = 0;
+    parts.forEach((x, i) => { if (x < held[i]) pools[0].ships.ss += held[i] - x; else need += x - held[i]; });
+    for (const p of pools) { const k = Math.min(need, p.ships.ss); p.ships.ss -= k; need -= k; }
+  }
+  B.groups.forEach((G, i) => {
+    let f = fleets[i];
+    const at = bases[i];
+    if (!f && parts[i] > 0 && at) {
+      f = addFleet(g, { ...G, nat, base: at.base, port: at.port, home: at.home } as FleetRow);
+      headline(g, 'info', `${cap(fleetName(f))} forms at ${f.port}.`, nat);
+    }
+    if (!f) return;
+    f.ships.ss = parts[i];
+    // A group with no boats left stands down, and forms again, with its line of news, when it has some.
+    if (shipCount(f.ships) === 0) { g.fleets.splice(g.fleets.indexOf(f), 1); return; }
+    // The record's base of the day, while its side holds it.
+    if (at && g.regions[f.base]?.name !== at.base) orderedTo(g, f, { ...at, words: `${cap(fleetName(f))} moves its base to ${at.port}` }, (holder) => allied(g, nat, holder));
+    f.reach = boatsReach(g, f, G, month);
+    if (!G.hunts) return;
+    const reach = fleetReach(g, f, true);
+    let beat = -1;
+    if (stop <= 2) beat = huntBeat(g, f, G.hunts, month);
+    else { let most = 0; for (const z of reach) { const n = shippingIn(g, nat, z); if (n > most) { beat = z; most = n; } } }
+    if (beat < 0) beat = huntSeas(G, month).map((k) => zoneOf(g, k)).find((z) => z >= 0 && reach.includes(z)) ?? -1;
+    if (beat >= 0) f.station = beat;
+  });
+}
+
 /** How much of a fleet's hunting weight falls on a sea: all of it for a fleet sent there to hunt, part for an escort whose lane crosses it or a patrol there. */
 function huntShare(g: Game, f: Fleet, z: number): number {
   const H = FLEETS.hunt;
@@ -2197,13 +2430,14 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     const quarry = g.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g, f.nat, nat));
     if (!quarry.length) continue;
     const h = huntersIn(g, nat, z);
-    const subs = quarry.reduce((s, f) => s + f.ships.ss, 0);
+    // (The far side's one measure: the boats out are the boats that can be found and sunk. `boatsOut`.)
+    const subs = quarry.reduce((s, f) => s + boatsOut(g, f), 0);
     const share = huntShareSunk(h.weight, subs);
     if (share <= 0) continue;
     const rng = seaRng(g, `hunt:${nat}:${z}`);
     let sunk = 0;
     for (const f of quarry) {
-      const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * share));
+      const k = Math.min(f.ships.ss, rng.roll(boatsOut(g, f) * share));
       f.ships.ss -= k; f.lost.ss += k; sunk += k;
     }
     if (!sunk) continue;
@@ -2235,7 +2469,7 @@ export function torpedoRisk(g: Game, f: Fleet, z: number): number {
   const gap = screenGap(f);
   if (gap <= 0) return 0;
   let subs = 0;
-  for (const x of g.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat)) subs += x.ships.ss * quality(g, x.nat) * fit(g, x);
+  for (const x of g.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat)) subs += boatsOut(g, x) * quality(g, x.nat) * fit(g, x);
   return Math.min(FLEETS.screen.most, subs * FLEETS.screen.risk * gap);
 }
 
@@ -2318,6 +2552,46 @@ function airAttack(g: Game, f: Fleet): void {
 const raidShare = (f: Fleet): number => (f.stance === 'raid' ? 1 : f.stance === 'patrol' ? NAVY.convoy.patrolRaid : 0);
 
 /**
+ * The far side (ruling 194, point 6): what a navy's submarines are worth as raiders this month, where its fleet is.
+ * America's raid at a quarter in the far side's seas while their torpedoes fail: until September 1943 where the stop
+ * keeps the book, and where it does not, until America's twenty-second month at war with Japan. 1 for every other
+ * navy, in the old chart's seas, and with the far side off (navy.json has no 'subs' then).
+ */
+export function subsWorth(g: Game, f: Fleet): number {
+  const S = NAVY.subs?.[f.nat];
+  if (!S || f.zone < FAR_SEAS_FIRST || !farOn(g)) return 1;
+  if (stopDef(g).book) return g.turn < S.book ? S.share : 1;
+  const since = Math.max(g.flags[`war:${f.nat}:${S.foe}`] ?? 0, g.flags[`war:${S.foe}:${f.nat}`] ?? 0);
+  return since > 0 && g.turn - since + 1 >= S.month ? 1 : S.share;
+}
+
+/**
+ * The far side's one measure for the boat (the design director's 18:03Z and 18:04Z of 22 November 2026): of a fleet's
+ * submarines, how many are out on patrol this month. The rest are on passage to the beat and back or refitting at the
+ * base. The same number raids the cargoes, is hunted, threatens an unscreened fleet, burns as ships at sea in the oil
+ * book and weighs in holding a sea: before this every boat on hand raided and every boat on hand was hunted, so the
+ * rule sank America's boats at half again the record's count. The share is the record's, by navy and month (navy.json
+ * beats 'patrol', rows of [from this turn, boats out, of this many on hand]; the row in force is the latest begun, the
+ * first before any has). Every boat for a navy with no row, in the old chart's seas, and with the far side off: there
+ * Germany's measure stands, every boat on hand in the theatre at full weight. The rows and the pools stay boats on
+ * hand: this is read only where a boat at sea is counted.
+ */
+export function boatsOut(g: Game, f: Pick<Fleet, 'nat' | 'zone' | 'ships'>): number {
+  const P = NAVY.beats?.[f.nat]?.patrol;
+  if (!P?.length || f.zone < FAR_SEAS_FIRST || !farOn(g)) return f.ships.ss;
+  let row = P[0];
+  for (const r of P) if (r[0] <= g.turn) row = r;
+  return (f.ships.ss * row[1]) / row[2];
+}
+
+/** A fleet's worth as a raider of cargoes, before its navy's quality and its own fitness: its ships by class, its submarines out (`boatsOut`) at `subsWorth`. */
+function raidWorth(g: Game, f: Fleet): number {
+  let p = 0;
+  for (const c of CLASSES) p += (c === 'ss' ? boatsOut(g, f) * subsWorth(g, f) : f.ships[c]) * NAVY.classes[c].raid;
+  return p;
+}
+
+/**
  * How much of its escort worth a friendly fleet at sea brings to the cargoes that cross these seas. In the history
  * campaigns a fleet on patrol in one of them guards them. In the grand campaign the fleets bound to the lane as its
  * escort guard it in full, and a fleet that only patrols or hunts in one of its seas gives distant cover.
@@ -2342,9 +2616,8 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
       if (!atSea(f)) continue;
       if (atWar(g, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
-        let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-        p *= quality(g, f.nat) * fit(g, f) * raidShare(f);
+        // (Its worth times the three together, as it has always been multiplied: the last figure of a sum is in the order.)
+        const p = raidWorth(g, f) * (quality(g, f.nat) * fit(g, f) * raidShare(f));
         if (p > 0) { raid += p; raiders.push(f); }
       } else if (allied(g, f.nat, nat)) {
         const w = guardShare(g, f, zones, route.id);
@@ -2402,9 +2675,7 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
     if (!atSea(f)) continue;
     if (atWar(g, f.nat, nat)) {
       if (!zones.includes(f.zone)) continue;
-      let p = 0;
-      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-      raid += p * quality(g, f.nat) * fit(g, f) * raidShare(f);
+      raid += raidWorth(g, f) * quality(g, f.nat) * fit(g, f) * raidShare(f);
     } else if (allied(g, f.nat, nat)) {
       const w = guardShare(g, f, zones, lane);
       if (w <= 0) continue;
@@ -2912,7 +3183,7 @@ function huntingGround(g: Game, f: Fleet, seas: number[]): number {
     for (const x of g.fleets) {
       if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
       if (surfaceShips(x) > 0) return -1;
-      subs += x.ships.ss;
+      subs += boatsOut(g, x);
     }
     if (subs > most) { most = subs; best = z; }
   }
