@@ -51,6 +51,8 @@ export interface SchoolNums {
   gunStays: boolean;
   /** Metres to which a defence holds its fire, where its army's drill sets it (else by weapon and experience: hold). */
   hold?: number;
+  /** Smoke rounds its platoons lay on the enemy's flank as an assault goes out (none: 0), while BOOK.smoke.on. */
+  smoke: number;
   /** Battle seconds after the enemy reaches a defence's line before its rear platoons counter-attack (a negative: never). */
   counter: number;
 }
@@ -72,6 +74,7 @@ interface BookData {
   hold: { mg: number; rifle: [number, number, number] };
   counter: { at: number; ahead: number; xp: [number, number, number] };
   flank: { rush: [number, number]; out: number };
+  smoke: { on: boolean; every: number; spread: number };
   aside: [number, number, number];
 }
 
@@ -149,7 +152,9 @@ export class Suppression {
     const left: Felt['air'] = [];
     for (const r of f.air) {
       if (r.l > t) { left.push(r); continue; }
-      const [reach, add] = S[r.w];
+      const by = S[r.w];
+      if (!by) continue; // smoke: no harm
+      const [reach, add] = by;
       for (const [g, [x, y]] of groups) {
         const d = Math.hypot(x - r.x, y - r.y);
         if (d < reach) f.lv.set(g, (f.lv.get(g) ?? 0) + add * (1 - (0.5 * d) / reach));

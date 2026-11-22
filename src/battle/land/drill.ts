@@ -165,7 +165,8 @@ export interface Man {
  * What fired a round: a tank's gun, an anti-tank launcher or rifle, a field gun, a machine gun (a rifle section's or a
  * support team's on its tripod), a rifle, a grenade, a support team's mortar (release 2).
  */
-export type Weapon = 'tank' | 'gun' | 'at' | 'mg' | 'rifle' | 'grenade' | 'mortar';
+/** What fired a round. 'smoke' (the drill book, while book.smoke.on): a smoke round, no harm, landing as a mortar's. */
+export type Weapon = 'tank' | 'gun' | 'at' | 'mg' | 'rifle' | 'grenade' | 'mortar' | 'smoke';
 /**
  * What a round did: missed (landed near what it was fired at), glanced (struck armour or a gun's shield and bounced),
  * wore (went in and did harm short of a kill: a tank's armour holed, a lorry shot through) or killed (the rules took
@@ -396,6 +397,9 @@ interface Squad {
   closeAt?: number;
   /** A battery's or a mortar team's shoot at its target, its spotter calling it (tactics.ts Mission). */
   ms?: Mission;
+  /** The drill book's smoke: when its platoons last laid smoke on the enemy's flank, and the rounds still to come. */
+  smokeAt?: number;
+  smokeLeft?: number;
 }
 
 /** A block's men on their feet this step (Drill.memo). */
@@ -1691,6 +1695,9 @@ export class Drill {
     if (e && !home) for (const m of assault) near = Math.min(near, this.toBox(m, e));
     const away: [number, number] | undefined = e && near < BOOK.lift.mg + 15 ? [e.x + fx * e.d / 2, e.y + fy * e.d / 2] : undefined;
     const out = assault.size > 0;
+    // Smoke on the enemy's flank as the assault goes out (its platoons' own light mortars), a round a think.
+    if (BOOK.smoke.on && !home && e && out && S.smoke > 0 && (sq.smokeAt === undefined || t - sq.smokeAt >= BOOK.smoke.every)) { sq.smokeAt = t; sq.smokeLeft = S.smoke; }
+    if (sq.smokeLeft && e && !home) { sq.smokeLeft--; this.smoke(sq, e, men.filter((m) => !assault.has(m)), S.smoke - sq.smokeLeft - 1, S.smoke); }
     for (const m of men) {
       if (m.role === 'officer') continue; // he walks his line (officer)
       const [a, l] = this.slot(sq, m, 'line');
@@ -1743,6 +1750,29 @@ export class Drill {
       if (!stand.some((o) => o !== m && Math.hypot(o.spot[0] - p[0], o.spot[1] - p[1]) < 1.6 && Math.hypot(o.x - p[0], o.y - p[1]) < 3)) return p;
     }
     return undefined;
+  }
+
+  /**
+   * One smoke round (the drill book, while book.smoke.on) from a man of the base of fire (the platoon's headquarters
+   * first: its light mortar) onto the enemy's front corner on the assault's flank, the screen's rounds side by side
+   * along his front (i of n). No harm: it only lands (the 3D draws the screen, drifting with the battle's wind).
+   */
+  private smoke(sq: Squad, e: LandUnit, base: Man[], i: number, n: number): void {
+    const u = sq.u, b = this.b, t = b.t, R = DR.rounds;
+    const squads = platoonOf(u.nat).squads, by = base.find((m) => (m.sub ?? 0) >= squads && m.role === 'rifle') ?? base.find((m) => m.role === 'rifle');
+    if (!by) return;
+    // His front corner on our flank, along his own front (he may stand askew to us).
+    const [rx, ry] = right(u.face), [ex, ey] = right(e.face), [gx, gy] = fwd(e.face), z = Math.round(t * 10);
+    const side = (ex * rx + ey * ry >= 0 ? 1 : -1) * sq.flank, front = (gx * (u.x - e.x) + gy * (u.y - e.y) >= 0 ? 1 : -1) * e.d / 2;
+    const along = side * e.w * 0.4 + (i - (n - 1) / 2) * BOOK.smoke.spread;
+    const ax = e.x + ex * along + gx * front, ay = e.y + ey * along + gy * front;
+    const range = Math.hypot(ax - by.x, ay - by.y), [i0, i1] = R.indirect.mortar, sg = i0 + i1 * range;
+    const x = clamp(ax + gauss(roll(this.seed, u.id, by.n, z, 87), roll(this.seed, u.id, by.n, z, 88)) * sg * 0.35, 1, b.field.w - 1);
+    const y = clamp(ay + gauss(roll(this.seed, u.id, by.n, z, 89), roll(this.seed, u.id, by.n, z, 90)) * sg * 0.35, 1, b.field.h - 1);
+    const r: Round = { t: Math.round(t * 10) / 10, l: Math.round((t + range / R.speed.mortar) * 10) / 10, by: u.id, k: by.k, w: 'smoke', on: e.id, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: 'miss' };
+    if (by.j !== undefined) r.j = by.j;
+    this.book(r);
+    by.v = 0; by.spot = [by.x, by.y]; by.pose = 'wait'; by.aim = [ax, ay]; by.until = t + 1.5;
   }
 
   /** Whether a mate lies within arm's length of him, down. */

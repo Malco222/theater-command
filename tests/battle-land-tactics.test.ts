@@ -182,3 +182,40 @@ describe('in a battle (looks only, ruling 217)', () => {
     expect(t.badPose).toBe(0); expect(t.badEl).toBe(0); expect(t.badCall).toBe(0);
   });
 });
+
+describe('smoke on the flank (off until the 3D scene draws it)', () => {
+  const ticket = () => withTeams(sampleTicket('plains', 1.3, { seed: 5, nat: { att: 'UK', def: 'GER' }, style: { att: 'methodical', def: 'bold' } }));
+  const sig = (b: LandBattle): string => JSON.stringify({ over: b.over, t: b.t, units: b.units.map((u) => [u.id, u.state, u.str, u.mor, u.x, u.y, u.figures]) });
+  const run = (on: boolean) => {
+    const was = BOOK.smoke.on;
+    BOOK.smoke.on = on;
+    try {
+      const b = new LandBattle(ticket()), d = b.drillOn({ sections: true, platoons: true });
+      const smoke: { by: number; on: number; t: number; l: number; off: number }[] = [];
+      let last = 0;
+      for (let k = 0; !b.over && k < 30000; k++) {
+        b.step();
+        for (const r of d.rounds()) { if (r.n <= last) continue; last = r.n; if (r.w !== 'smoke') continue;
+          // How far off the enemy's ground it lands, as he stands when it is fired (a light mortar's scatter).
+          const e = b.unit(r.on)!, dx = r.x - e.x, dy = r.y - e.y, a = Math.abs(dx * Math.cos(e.face) - dy * Math.sin(e.face)), l = Math.abs(dx * Math.sin(e.face) + dy * Math.cos(e.face));
+          smoke.push({ by: r.by!, on: r.on, t: r.t, l: r.l, off: Math.hypot(Math.max(0, a - e.w / 2), Math.max(0, l - e.d / 2)) });
+        }
+      }
+      return { b, smoke };
+    } finally { BOOK.smoke.on = was; }
+  };
+  const off = run(false), on = run(true);
+  it('none while it is off', () => { expect(off.smoke.length).toBe(0); });
+  it('a platoon lays its light mortar\'s smoke on the enemy\'s front as its assault goes out, landing after it is fired, and nothing else changes', () => {
+    expect(on.smoke.filter((x) => on.b.unit(x.by)!.side === 'att').length).toBeGreaterThanOrEqual(BOOK.schools.UK.smoke);
+    for (const s of on.smoke) {
+      const by = on.b.unit(s.by)!, e = on.b.unit(s.on)!;
+      // By a foot block attacking (the defence's too, where it goes forward off its own ground), at its enemy.
+      expect(by.kind).toBe('inf');
+      expect(e.side).not.toBe(by.side);
+      expect(s.l).toBeGreaterThan(s.t);
+      expect(s.off).toBeLessThan(50);
+    }
+    expect(sig(on.b)).toBe(sig(off.b));
+  });
+});
