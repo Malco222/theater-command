@@ -39,6 +39,8 @@ struct FLandBattleState
 	std::vector<std::pair<const LandMen::Soldier*, std::pair<int, int>>> SightBones;
 	/** The shell holes made so far (LandCrater), kept the whole battle. */
 	LandCrater::Field Holes;
+	/** The tanks' and lorries' track marks so far, and the corn their tracks laid flat (LandCrater), kept the whole battle. */
+	LandCrater::Ruts Ruts;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
 	Fates::Table FatesTable;
@@ -53,11 +55,21 @@ struct FLandBattleState
 
 	/** Battle seconds shown, and real seconds since the battle opened. */
 	double Battle = 0.0, Real = 0.0;
-	/** The speed asked for (0: held; 0.5, 1, 2, 4), and whether the scene still sets it itself (twice life until the
-	 * armies are about to meet, then life). */
+	/**
+	 * Life seconds a battle second: the rules' clock runs about twice as fast as life (a man rushing at 6 m/s, a tank
+	 * across a field at 10, every arm alike: the drill thread, 22 November), so the fight is played at half the battle's
+	 * clock and tanks crawl at 5 m/s, men rush at 3. The men's clips and the tanks' are timed in life's seconds by it.
+	 * "-TheaterLandLife=1" plays it as before (the battle's clock taken for life's).
+	 */
+	double Life = 2.0;
+	/** Life seconds played (real seconds times the speed asked for): the effects kit's clock, so a shell's burst, its smoke
+	 * and a burst's tracers run at life's pace while the battle's clock runs at half of it. */
+	double Lived = 0.0;
+	/** The speed asked for, against life (0: held; 1, 2, 4), and whether the scene still sets it itself (four times life
+	 * until the armies are about to meet, then life). */
 	double Speed = 1.0;
 	bool bOwnSpeed = true;
-	/** The speed this frame ran at. */
+	/** The speed this frame ran at, against life (the battle's clock ran at SpeedNow / Life). */
 	double SpeedNow = 1.0;
 
 	/** The battle's end: the last line shown, then the after card a few seconds on. */

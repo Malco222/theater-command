@@ -158,4 +158,115 @@ namespace LandCrater
 		std::unordered_map<int64_t, std::vector<int>> Squares;
 		static int64_t SquareOf(int I, int J);
 	};
+
+	/**
+	 * The tanks' tracks on the ground (Brian, 21 November: "the way the units move and the landscape"; a tank drove over
+	 * standing corn and pasture and left no mark). Under each track, as she drives, a strip of pressed ground: on a
+	 * pasture flattened grass with the soil showing in its middle, in standing corn the straw crushed into the soil, on
+	 * bare earth or a lane a dark rut; in corn the corn between her tracks laid flat as well, the whole of her width. The
+	 * strips fade at their edges to the ground's own colour (Under), as the holes' thrown soil does, and stay for the
+	 * whole battle. They are kept by place as the holes are (a mesh a 64 m square, in sections), laid a few millimetres
+	 * over the ground and under the holes' floors (a hole torn in a rut covers it). Where a track ran, the grass and corn
+	 * laid round the eye leave the ground bare (Flat).
+	 */
+	class Ruts
+	{
+	public:
+		/** What the ground is at a point, for the strips' colour: none where no mark is left (water, a floor, a wall). */
+		enum class Under : uint8_t { None, Grass, Corn, Earth };
+		using KindFn = std::function<Under(double X, double Y)>;
+
+		static constexpr double PatchSize = 64.0;
+		/** Marks a section of a patch's mesh. */
+		static constexpr int PerChunk = 48;
+		/** How far she drives between one laid piece and the next, metres. */
+		static constexpr double Step = 1.2;
+		/** Beyond this many pieces, no more are laid (a guard: a battle's tanks lay some thousands). */
+		static constexpr int Most = 40000;
+
+		struct Patch
+		{
+			int I = 0, J = 0;
+			std::vector<LandField::Mesh> Sections;
+			int Count = 0;
+		};
+		using Place = Field::Place;
+
+		void Begin(HeightFn InHeight, ColourFn InUnder, KindFn InKind);
+		/** What a track leaves on this ground (the game's and the checks' one reading): standing corn laid flat, pasture,
+		 * rough and gardens pressed grass, stubble, plough, woods and marsh torn earth; nothing on a lane's floor (its own
+		 * ruts), a cobbled place, a bank, a wall's line, a house's floor or water. G must outlive the function. */
+		static KindFn KindOn(const LandField::Ground& G)
+		{
+			// (here in the header: a check that never asks it needs no ground of its own)
+			const LandField::Ground* Gp = &G;
+			return [Gp](double X, double Y) {
+				const LandField::Surface Su = Gp->At(X, Y);
+				const std::string Fx = Su.Fx;
+				if (Fx == "town" || Fx == "water") return Under::None;
+				switch (Su.What)
+				{
+				case LandField::Drawn::Crop: return Gp->CornAt(X, Y) ? Under::Corn : Under::Earth;
+				case LandField::Drawn::Pasture:
+				case LandField::Drawn::Rough:
+				case LandField::Drawn::Village:
+				case LandField::Drawn::Beyond:
+					return Fx == "earth" ? Under::Grass : Under::Earth;
+				case LandField::Drawn::Works:
+				case LandField::Drawn::Woods:
+				case LandField::Drawn::Marsh:
+					return Under::Earth;
+				default: return Under::None; // (a lane's floor, a yard, a bank, a wall's line, a floor, water)
+				}
+			};
+		}
+		/** A vehicle's track (or tyre) width, metres, by her model's name and kind: a Tiger's 0.725 m battle tracks, a
+		 * Sherman's 0.42, a Panzer IV's 0.40, a lorry's tyres and a gun's wheels narrower. */
+		static double TrackWidthOf(const std::string& Name, const std::string& Kind);
+		/**
+		 * Vehicle V now: the middles of her two tracks on the ground (field metres; left, right), each track's width. A
+		 * piece of each track is laid once she has driven Step from the last; the first call only marks where she is.
+		 * Returns whether anything was laid.
+		 */
+		bool Drive(int V, double LX, double LY, double RX, double RY, double Width);
+		/** Vehicle V's marks start afresh at her next Drive (she was seen to jump: a seek, or she left the field). */
+		void Lift(int V);
+		/** The sections a piece was laid in since the last call (each to be sent to its patch's mesh again, whole). */
+		std::vector<Place> TakeChanged();
+		int Patches() const { return static_cast<int>(PatchList.size()); }
+		const Patch& PatchAt(int P) const { return PatchList[static_cast<size_t>(P)]; }
+		const LandField::Mesh& Section(const Place& Where) const { return PatchAt(Where.Patch).Sections[static_cast<size_t>(Where.Section)]; }
+		int Pieces() const { return Count; }
+		/** Whether a point is under a track's mark, or between a tank's tracks where she laid the corn flat. */
+		bool Flat(double X, double Y) const;
+
+	private:
+		struct Last
+		{
+			bool bOn = false;
+			double LX = 0.0, LY = 0.0, RX = 0.0, RY = 0.0;
+		};
+		/** A laid piece, for Flat: from A to B the way she drove, her tracks Apart between middles, Width each; Corn:
+		 * the corn between them laid too. */
+		struct Piece
+		{
+			double AX = 0.0, AY = 0.0, BX = 0.0, BY = 0.0, Apart = 0.0, Width = 0.0;
+			bool bCorn = false;
+		};
+		HeightFn Height;
+		ColourFn UnderColour;
+		KindFn Kind;
+		std::vector<Last> Was;
+		std::vector<Piece> Laid;
+		std::vector<Patch> PatchList;
+		std::unordered_map<int64_t, int> PatchOf;
+		std::vector<Place> Changed;
+		std::unordered_map<int64_t, std::vector<int>> Squares;
+		int Count = 0;
+		/** One strip from (AX, AY) to (BX, BY), Half wide each side of its line, Edge more at each side fading to the
+		 * ground; Paint at its middle; Lift metres over the ground. Into the mesh. */
+		void Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift) const;
+		Patch& PatchFor(double X, double Y, Place& OutIn);
+		static int64_t SquareOf(int I, int J) { return (static_cast<int64_t>(I) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(J)); }
+	};
 }

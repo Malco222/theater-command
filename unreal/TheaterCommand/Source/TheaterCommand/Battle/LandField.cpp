@@ -4800,6 +4800,17 @@ namespace LandField
 		return Byte(In->GroundColour(X, Y));
 	}
 
+	bool Ground::CornAt(double X, double Y) const
+	{
+		const Impl& G = *In;
+		if (!G.InRaster(X, Y)) return false;
+		const size_t P = G.Pix(X, Y);
+		if (G.Rgn[P] != RgField) return false;
+		Drawn What = Drawn::Beyond;
+		G.Top(X, Y, &What);
+		return What == Drawn::Crop && IsCorn(G.Parcels[static_cast<size_t>(G.Pid[P])].Crop);
+	}
+
 	/**
 	 * The surface drawn, its normal from the surface a hand's breadth either way, and the effects kit's word for it:
 	 * the rules' cell gives it (hand-off section 7), except where what is drawn says otherwise, so a shell bursting on

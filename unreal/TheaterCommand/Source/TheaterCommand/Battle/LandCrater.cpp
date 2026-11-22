@@ -640,4 +640,229 @@ namespace LandCrater
 		}
 		return bAny;
 	}
+	void Ruts::Begin(HeightFn InHeight, ColourFn InUnder, KindFn InKind)
+	{
+		Height = std::move(InHeight);
+		UnderColour = std::move(InUnder);
+		Kind = std::move(InKind);
+		Was.clear();
+		Laid.clear();
+		PatchList.clear();
+		PatchOf.clear();
+		Changed.clear();
+		Squares.clear();
+		Count = 0;
+	}
+
+	double Ruts::TrackWidthOf(const std::string& Name, const std::string& Kind)
+	{
+		auto Has = [&Name](const char* Word) { return Name.find(Word) != std::string::npos; };
+		if (Has("Tiger")) return 0.725;
+		if (Has("Panther")) return 0.66;
+		if (Has("Sherman")) return 0.42;
+		if (Has("Panzer") || Has("Pz") || Has("StuG")) return 0.40;
+		if (Kind == "tank") return 0.45;
+		if (Kind == "gun") return 0.16;
+		return 0.26; // (a lorry's or a carrier's tyres)
+	}
+
+	void Ruts::Lift(int V)
+	{
+		if (V >= 0 && static_cast<size_t>(V) < Was.size())
+		{
+			Was[static_cast<size_t>(V)].bOn = false;
+		}
+	}
+
+	std::vector<Ruts::Place> Ruts::TakeChanged()
+	{
+		std::vector<Place> Out;
+		Out.swap(Changed);
+		return Out;
+	}
+
+	Ruts::Patch& Ruts::PatchFor(double X, double Y, Place& OutIn)
+	{
+		const int PatchI = static_cast<int>(std::floor(X / PatchSize));
+		const int PatchJ = static_cast<int>(std::floor(Y / PatchSize));
+		const auto Known = PatchOf.find(SquareOf(PatchI, PatchJ));
+		int Number = 0;
+		if (Known == PatchOf.end())
+		{
+			Number = static_cast<int>(PatchList.size());
+			PatchOf.emplace(SquareOf(PatchI, PatchJ), Number);
+			Patch Fresh;
+			Fresh.I = PatchI;
+			Fresh.J = PatchJ;
+			PatchList.push_back(std::move(Fresh));
+		}
+		else
+		{
+			Number = Known->second;
+		}
+		Patch& P = PatchList[static_cast<size_t>(Number)];
+		OutIn.Patch = Number;
+		OutIn.Section = P.Count / PerChunk;
+		if (static_cast<size_t>(OutIn.Section) >= P.Sections.size())
+		{
+			P.Sections.resize(static_cast<size_t>(OutIn.Section) + 1);
+		}
+		++P.Count;
+		return P;
+	}
+
+	void Ruts::Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift) const
+	{
+		const double Dx = BX - AX, Dy = BY - AY;
+		const double Long = std::sqrt(Dx * Dx + Dy * Dy);
+		if (!(Long > 1e-6))
+		{
+			return;
+		}
+		// (across her way, left to right: the faded edge, the pressed strip, the faded edge; laid counter-clockwise)
+		const double Nx = -Dy / Long, Ny = Dx / Long;
+		const double Off[4] = { Half + Edge, Half, -Half, -(Half + Edge) };
+		const size_t FirstPoint = Out.Colours.size(), FirstIndex = Out.Triangles.size();
+		uint32_t A[4], B[4];
+		for (int K = 0; K < 4; ++K)
+		{
+			const bool bEdge = K == 0 || K == 3;
+			for (int End = 0; End < 2; ++End)
+			{
+				const double Px = (End ? BX : AX) + Nx * Off[K], Py = (End ? BY : AY) + Ny * Off[K];
+				const Rgb8 Ground = UnderColour ? UnderColour(Px, Py) : Paint;
+				(End ? B : A)[K] = Put(Out, Px, Py, Height(Px, Py) + Lift, bEdge ? Ground : Paint);
+			}
+		}
+		for (int K = 0; K < 3; ++K)
+		{
+			Tri(Out, A[K], A[K + 1], B[K + 1]);
+			Tri(Out, A[K], B[K + 1], B[K]);
+		}
+		Normals(Out, FirstPoint, FirstIndex);
+	}
+
+	bool Ruts::Drive(int V, double LX, double LY, double RX, double RY, double Width)
+	{
+		if (V < 0 || !Height || !Kind || !(LX == LX) || !(LY == LY) || !(RX == RX) || !(RY == RY) || !(Width > 0.0))
+		{
+			return false;
+		}
+		if (static_cast<size_t>(V) >= Was.size())
+		{
+			Was.resize(static_cast<size_t>(V) + 1);
+		}
+		Last& L = Was[static_cast<size_t>(V)];
+		const double MX = 0.5 * (LX + RX), MY = 0.5 * (LY + RY);
+		const double PX = 0.5 * (L.LX + L.RX), PY = 0.5 * (L.LY + L.RY);
+		const double Moved = std::sqrt((MX - PX) * (MX - PX) + (MY - PY) * (MY - PY));
+		auto Mark = [&]() { L.bOn = true; L.LX = LX; L.LY = LY; L.RX = RX; L.RY = RY; };
+		if (!L.bOn || Moved > 8.0 * Step)
+		{
+			// (her first sight, or a jump: no mark across it)
+			Mark();
+			return false;
+		}
+		if (Moved < Step)
+		{
+			return false;
+		}
+		if (Count >= Most)
+		{
+			Mark();
+			return false;
+		}
+		const double Apart = std::sqrt((LX - RX) * (LX - RX) + (LY - RY) * (LY - RY));
+		const Under Mid = Kind(0.5 * (MX + PX), 0.5 * (MY + PY));
+		Place In;
+		Patch& P = PatchFor(0.5 * (MX + PX), 0.5 * (MY + PY), In);
+		LandField::Mesh& Out = P.Sections[static_cast<size_t>(In.Section)];
+		const double Own = 0.001 * (V % 5); // (each tank her own millimetre, so two crossing never flicker)
+		// In standing corn, the corn between her tracks (and under them) laid flat: straw pressed down, a little paler
+		// and greyer than the standing ears.
+		if (Mid == Under::Corn && Apart > Width)
+		{
+			const Rgb8 Laid_ = Mixed(UnderColour ? UnderColour(MX, MY) : Rgb(150, 136, 96), Rgb(150, 136, 98), 0.45);
+			Strip(Out, PX, PY, MX, MY, 0.5 * Apart, 0.35, Laid_, 0.012 + Own);
+		}
+		// Each track's own strip: pressed grass with the soil in it, crushed straw in the soil, or a dark rut.
+		for (int Side = 0; Side < 2; ++Side)
+		{
+			const double AX = Side ? L.RX : L.LX, AY = Side ? L.RY : L.LY, BX = Side ? RX : LX, BY = Side ? RY : LY;
+			const Under Here = Kind(0.5 * (AX + BX), 0.5 * (AY + BY));
+			if (Here == Under::None)
+			{
+				continue;
+			}
+			const Rgb8 Ground = UnderColour ? UnderColour(0.5 * (AX + BX), 0.5 * (AY + BY)) : Rgb(100, 100, 70);
+			const Rgb8 Paint = Here == Under::Grass ? Mixed(Ground, Rgb(84, 78, 50), 0.5)
+				: Here == Under::Corn ? Mixed(Ground, Rgb(108, 92, 64), 0.6)
+				: Mixed(Ground, Rgb(70, 58, 43), 0.55);
+			Strip(Out, AX, AY, BX, BY, 0.42 * Width, 0.22 * Width, Paint, 0.02 + Own);
+		}
+		Piece Pc;
+		Pc.AX = PX;
+		Pc.AY = PY;
+		Pc.BX = MX;
+		Pc.BY = MY;
+		Pc.Apart = Apart;
+		Pc.Width = Width;
+		Pc.bCorn = Mid == Under::Corn;
+		const int Number = static_cast<int>(Laid.size());
+		Laid.push_back(Pc);
+		const double Reach = 0.5 * Apart + Width;
+		constexpr double Square = 8.0;
+		const int I0 = static_cast<int>(std::floor((std::min(PX, MX) - Reach) / Square)), I1 = static_cast<int>(std::floor((std::max(PX, MX) + Reach) / Square));
+		const int J0 = static_cast<int>(std::floor((std::min(PY, MY) - Reach) / Square)), J1 = static_cast<int>(std::floor((std::max(PY, MY) + Reach) / Square));
+		for (int J = J0; J <= J1; ++J)
+		{
+			for (int I = I0; I <= I1; ++I)
+			{
+				Squares[SquareOf(I, J)].push_back(Number);
+			}
+		}
+		++Count;
+		const bool bListed = std::any_of(Changed.begin(), Changed.end(), [&In](const Place& C) { return C.Patch == In.Patch && C.Section == In.Section; });
+		if (!bListed)
+		{
+			Changed.push_back(In);
+		}
+		Mark();
+		return true;
+	}
+
+	bool Ruts::Flat(double X, double Y) const
+	{
+		if (Squares.empty() || !(X == X) || !(Y == Y))
+		{
+			return false;
+		}
+		constexpr double Square = 8.0;
+		const auto Found = Squares.find(SquareOf(static_cast<int>(std::floor(X / Square)), static_cast<int>(std::floor(Y / Square))));
+		if (Found == Squares.end())
+		{
+			return false;
+		}
+		for (const int K : Found->second)
+		{
+			const Piece& Pc = Laid[static_cast<size_t>(K)];
+			const double Dx = Pc.BX - Pc.AX, Dy = Pc.BY - Pc.AY;
+			const double Long2 = Dx * Dx + Dy * Dy;
+			if (!(Long2 > 1e-12))
+			{
+				continue;
+			}
+			const double T = ((X - Pc.AX) * Dx + (Y - Pc.AY) * Dy) / Long2;
+			if (T < -0.05 || T > 1.05)
+			{
+				continue;
+			}
+			const double Across = std::fabs(((X - Pc.AX) * Dy - (Y - Pc.AY) * Dx) / std::sqrt(Long2));
+			if (Pc.bCorn ? Across <= 0.5 * Pc.Apart + 0.5 * Pc.Width : std::fabs(Across - 0.5 * Pc.Apart) <= 0.5 * Pc.Width)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 }

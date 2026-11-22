@@ -89,8 +89,14 @@ namespace LandSound
 		/** The falls' thuds come from the soldiers' own clips (the body_fall event as the body lands): then a Fall noise
 		 * gives only the cry. Off (the cloud test without the soldiers' core), the thud follows the fall by 0.7 s. */
 		bool bThudFromClips = false;
+		/** Life seconds a battle second: the rules' clock runs about twice as fast as life, so the scene plays the fight
+		 * at half the battle clock (FLandBattleState::Life, 2). Hear's Speed is battle seconds a real second; what life
+		 * times (a sound crossing the ground, Far / 343 s) reaches the ear Far / 343 / (Speed x Life) real seconds
+		 * after its flash. 1: the battle clock is life's. */
+		double Life = 1.0;
 
-		/** A source heard: what to start. Now is the real clock (seconds), Speed the battle clock's against it, Battle
+		/** A source heard: what to start. Now is the real clock (seconds), Speed the battle clock's against it (Life says
+		 * how many life seconds a battle second is), Battle
 		 * the battle time now (a noise's own time may lie a little behind it within the frame). */
 		void Hear(const LandPlay::Noise& N, double Now, double Battle, double Speed, const Listener& Ear, std::vector<Take>& Out);
 		/** A soldier's clip event heard (a footstep, his knee down, his kit, his bolt, a body landing): Cue the take's

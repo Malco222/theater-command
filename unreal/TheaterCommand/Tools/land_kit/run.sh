@@ -13,9 +13,9 @@ OUT="${LAND_KIT_OUT:-${TMPDIR:-/tmp}/land_kit}"
 mkdir -p "$OUT"
 FLAGS="-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I$SRC"
 if command -v clang++ >/dev/null 2>&1; then
-  clang++ $FLAGS -Wunreachable-code-aggressive "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" \
+  clang++ $FLAGS -Wunreachable-code-aggressive "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" \
     -o "$OUT/land_kit_test_clang"
 fi
 CXX="${CXX:-g++}"
-$CXX $FLAGS "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" -o "$OUT/land_kit_test"
+$CXX $FLAGS "$HERE/land_kit_test.cpp" "$SRC/Battle/LandKit.cpp" "$SRC/Battle/Fates.cpp" "$SRC/Battle/LandCrater.cpp" -o "$OUT/land_kit_test"
 "$OUT/land_kit_test" "$ROOT/Content" "$@"

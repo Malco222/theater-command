@@ -719,6 +719,14 @@ bool ALandBattle::Open()
 	PlayWorld.Height = [FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); };
 	PlayWorld.GroundWord = [FieldPtr](double X, double Y) { return std::string(FieldPtr->At(X, Y).Fx); };
 
+	// Life's seconds against the battle's (the fight at half the battle's clock): before the men and the tanks are made,
+	// whose clips are planned by it.
+	{
+		double Life = S.Life;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandLife="), Life);
+		S.Life = FMath::Clamp(Life, 0.5, 4.0);
+	}
+
 	// The men (LandMen) and the tanks (LandKit), each reading the recording for itself.
 	Took = LandParts::Seconds();
 	MakeMen();
@@ -933,6 +941,8 @@ bool ALandBattle::Open()
 	}
 	S.Desk.Begin(Rec, 0);
 	S.Mix.bThudFromClips = S.Men != nullptr;
+	// A bang crosses the ground in life's seconds (Far / 343), not the battle's: the mix's flash-to-bang reads Life.
+	S.Mix.Life = S.Life;
 
 	// The effects kit: shells, guns, tracer, fires, the camera's jolt; the ground under a point is the ground drawn.
 	Effects = MakeUnique<FBattleEffects>();
@@ -963,6 +973,9 @@ bool ALandBattle::Open()
 	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
 	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1,
 		[FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); });
+	// And the tracks' marks, on the same ground and paint.
+	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
+		LandCrater::Ruts::KindOn(*FieldPtr));
 
 	Took = LandParts::Seconds();
 	LayField();
@@ -1369,6 +1382,10 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 		{
 			continue; // (blown away: a shell hole is bare earth)
 		}
+		if (State->Ruts.Flat(One.X, One.Y))
+		{
+			continue; // (laid flat under a tank's tracks, and the corn between them)
+		}
 		const int32 Kind = static_cast<int32>(One.Kind);
 		const int32 Slot = Kind * Shades + ShadeOf(Kind, One.Tint.R, One.Tint.G, One.Tint.B);
 		const int32 Copy = ClutterCopyOf.IsValidIndex(Slot) ? ClutterCopyOf[Slot] : -1;
@@ -1419,6 +1436,7 @@ void ALandBattle::MakeMen()
 		return;
 	}
 	auto Crowd = std::make_unique<LandMen::Crowd>();
+	Crowd->SetLife(S.Life);
 	// The soldier files (Content/Models/Soldiers, the soldiers thread's): each army's own, or the one standing in.
 	const FString Folder = FPaths::ProjectContentDir() / TEXT("Models/Soldiers");
 	TSet<FString> Armies;
@@ -1436,7 +1454,7 @@ void ALandBattle::MakeMen()
 	}
 	// (and each army's files for its other men where it has them: the American's BAR gunner, squad leader, bazooka
 	// gunner and his loader, soldier_USA_bar, _nco, _bazooka and _loader; a file not made yet is passed over below)
-	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader") };
+	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader"), TEXT("_radio") };
 	for (const FString& Army : TArray<FString>(Armies.Array()))
 	{
 		for (const TCHAR* Suffix : OtherMen)
@@ -1688,6 +1706,7 @@ void ALandBattle::MakeArmour()
 		OutNormal = LandKit::V3(Under.NX, Under.NY, Under.NZ);
 	};
 	auto Armour = std::make_unique<LandKit::Battle>();
+	Armour->Life = S.Life;
 	std::string Error;
 	const bool bFates = !S.FatesTable.Ways().empty();
 	if (!Armour->Load(S.RecText, Read, GroundAt, bFates ? &S.FatesTable : nullptr, S.Rec.Seed ? S.Rec.Seed : 1, Error))
@@ -1825,7 +1844,8 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			{
 				continue;
 			}
-			const FVector Velocity = WorldWay(V.Velocity.X, V.Velocity.Y, V.Velocity.Z) * UnitsPerMetre;
+			// (the effects kit runs on life's clock: a battle second's metres are Life life seconds')
+			const FVector Velocity = WorldWay(V.Velocity.X, V.Velocity.Y, V.Velocity.Z) * (UnitsPerMetre / S.Life);
 			const bool bTracked = V.Look().Kind == "tank";
 			const FString Ground = GroundWordAt(V.Root.At.X, V.Root.At.Y);
 			Effects->VehicleDust(static_cast<int32>(K) * 2, World(V.DustLeft.X, V.DustLeft.Y, V.DustLeft.Z), Velocity, Ground, bTracked);
@@ -2668,15 +2688,18 @@ void ALandBattle::Tick(float DeltaSeconds)
 	FLandBattleState& S = *State;
 	const double FrameBegan = LandParts::Seconds();
 
-	// The clock: twice life until the armies are about to meet, then life; held while the after card is up.
+	// The clock, against life: four times life until the armies are about to meet (the approach, as the first two cuts
+	// played it), then life; held while the after card is up. The battle's own clock runs Life times faster than life,
+	// so the fight is played at 1 / Life of it (Brian, 21 November: "the tanks should be moving", as tanks do).
 	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : 0.0;
 	if (S.bOwnSpeed)
 	{
-		S.Speed = S.Battle < Contact - 10.0 ? 2.0 : 1.0;
+		S.Speed = S.Battle < Contact - 10.0 ? 2.0 * S.Life : 1.0;
 	}
 	S.SpeedNow = S.bCard ? 0.0 : S.Speed;
 	const double From = S.Battle;
-	S.Battle = FMath::Min(S.Rec.End + 8.0, S.Battle + Real * S.SpeedNow);
+	S.Battle = FMath::Min(S.Rec.End + 8.0, S.Battle + Real * S.SpeedNow / S.Life);
+	S.Lived += Real * S.SpeedNow;
 	S.Real += Real;
 
 	// The cores, in order: the tanks and the men posed first (their muzzles and hulls are where the rounds start and
@@ -2723,6 +2746,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// (the shell holes' meshes are the field's: their time is counted in FieldMs)
 	Mark = LandParts::Seconds();
 	MakeCraters();
+	MakeRuts();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
 	PlayArmourEvents();
 	PlayMenEvents();
@@ -2736,7 +2760,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 			ViewW = FMath::Max(1, static_cast<int32>(Size.X));
 			ViewH = FMath::Max(1, static_cast<int32>(Size.Y));
 		}
-		const FBattleJolt Jolt = Effects->Tick(S.Battle, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
+		const FBattleJolt Jolt = Effects->Tick(S.Lived, Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW, FLinearColor::White, ViewH);
 		Eye->SetActorLocationAndRotation(Eye->GetActorLocation() + Jolt.Offset, Eye->GetActorRotation() + FRotator(0.0, 0.0, Jolt.RollDegrees));
 	}
 	PlaySound(Real);
@@ -2901,7 +2925,7 @@ void ALandBattle::PlayEffects()
 			Effects->Muzzle(At, WorldWay(E.Way.X, E.Way.Y, E.Way.Z).GetSafeNormal(), Name, Ground);
 			break;
 		case LandPlay::FxKind::Shots:
-			Effects->Shots(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground);
+			Effects->Shots(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground); // (rounds a life second, on the kit's life clock: the mix cuts the burst alike)
 			break;
 		case LandPlay::FxKind::Shell:
 			Effects->Shell(At, Name, Ground, E.bArmour);
@@ -2990,6 +3014,70 @@ void ALandBattle::MakeCraters()
 	}
 }
 
+void ALandBattle::MakeRuts()
+{
+	FLandBattleState& S = *State;
+	if (!S.Field || !S.Armour)
+	{
+		return;
+	}
+	// Each tank, lorry and towed gun that moves on the ground leaves her tracks' marks behind her (the middles of her
+	// tracks are her dust sockets, at her tail): pressed grass, torn stubble or plough, and in standing corn the corn
+	// between her tracks laid flat. A knocked-out tank, or one gone from the field, lays none; seen to jump (a seek), her
+	// marks start afresh.
+	for (const LandKit::Vehicle& V : S.Armour->Vehicles())
+	{
+		if (V.bDead || V.Fade < 0.5)
+		{
+			S.Ruts.Lift(V.Index);
+			continue;
+		}
+		if (!V.bMoving)
+		{
+			continue;
+		}
+		const double Width = LandCrater::Ruts::TrackWidthOf(V.Look().Name, V.Look().Kind);
+		if (S.Ruts.Drive(V.Index, V.DustLeft.X, V.DustLeft.Y, V.DustRight.X, V.DustRight.Y, Width))
+		{
+			// (near the eye, or what it looks at: the grass and corn there laid again, without what she flattened)
+			const FVector2D At(V.Root.At.X, V.Root.At.Y);
+			if (FVector2D::Distance(At, ClutterEyeAt) < 30.0 || FVector2D::Distance(At, ClutterLookAt) < 20.0)
+			{
+				bClutterHoled = true;
+			}
+		}
+	}
+	// The patches' sections with new pieces sent again whole, on the ground's own paint, four times a second at most.
+	if (RealT - RutsSentAt < 0.25)
+	{
+		return;
+	}
+	const std::vector<LandCrater::Ruts::Place> Changed = S.Ruts.TakeChanged();
+	if (Changed.empty())
+	{
+		return;
+	}
+	RutsSentAt = RealT;
+	TArray<FVector> P, N;
+	TArray<FColor> C;
+	TArray<int32> T;
+	for (const LandCrater::Ruts::Place& Where : Changed)
+	{
+		while (RutMeshes.Num() <= Where.Patch)
+		{
+			RutMeshes.Add(LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandRuts%d"), RutMeshes.Num())), true));
+		}
+		UProceduralMeshComponent* Mesh = RutMeshes[Where.Patch];
+		if (!Mesh)
+		{
+			continue;
+		}
+		LandParts::FromField(S.Ruts.Section(Where), UnitsPerMetre, P, N, C, T);
+		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(Where.Section, GroundInk);
+	}
+}
+
 void ALandBattle::PlayArmourEvents()
 {
 	FLandBattleState& S = *State;
@@ -3027,17 +3115,17 @@ void ALandBattle::PlayArmourEvents()
 			}
 			else if (Fx.Contains(TEXT("fire")) || Fx.Contains(TEXT("burn")))
 			{
-				const float Seconds = static_cast<float>(FMath::Max(5.0, (E.bLoop ? E.Until : S.Rec.End + 8.0) - E.T));
+				const float Seconds = static_cast<float>(FMath::Max(5.0, ((E.bLoop ? E.Until : S.Rec.End + 8.0) - E.T) * S.Life));
 				Effects->Burn(At, 2.4f, Seconds, E.Key);
 			}
 			else if (Fx.Contains(TEXT("smoke_column")))
 			{
-				Effects->Burn(At, 3.2f, static_cast<float>(FMath::Max(10.0, S.Rec.End + 8.0 - E.T)), E.Key + 200000);
+				Effects->Burn(At, 3.2f, static_cast<float>(FMath::Max(10.0, (S.Rec.End + 8.0 - E.T) * S.Life)), E.Key + 200000);
 			}
 			else if (Fx.Contains(TEXT("smoke")))
 			{
 				// (a burst of smoke as she is struck; a wreck's smoke goes on until its loop ends)
-				const float Seconds = E.bLoop ? static_cast<float>(FMath::Max(5.0, E.Until - E.T)) : 4.0f;
+				const float Seconds = E.bLoop ? static_cast<float>(FMath::Max(5.0, (E.Until - E.T) * S.Life)) : 4.0f;
 				Effects->Burn(At, E.bLoop ? 1.2f : 0.8f, Seconds, E.Key + 100000);
 			}
 			else if (!Unknown.Contains(Fx))
@@ -3115,7 +3203,7 @@ void ALandBattle::PlaySound(double RealDt)
 	Ear.Yaw = LandFeed::FacingTo(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Look.X, S.Pose.Look.Y);
 	for (const LandPlay::Noise& N : S.Noises)
 	{
-		S.Mix.Hear(N, S.Real, S.Battle, FMath::Max(0.25, S.SpeedNow), Ear, S.Takes);
+		S.Mix.Hear(N, S.Real, S.Battle, FMath::Max(0.25 / S.Life, S.SpeedNow / S.Life), Ear, S.Takes);
 	}
 	// The beds by how much of the battle is fighting round the ear, and the ground the ear stands on.
 	int32 Fighting = 0, Blocks = 0;

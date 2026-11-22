@@ -247,6 +247,9 @@ namespace LandField
 		 * over it, a shell hole's thrown soil, to fade into it (a hole's edge was a hard olive outline on a pale field
 		 * of stubble: the second cut's stills, 21 November). Any thread. */
 		Rgb8 ColourAt(double X, double Y) const;
+		/** Whether ripe or green corn stands here (wheat, barley, oats in a field's crop, not its stubble or a meadow's
+		 * grass): where a tank's tracks lay it flat between them. Any thread. */
+		bool CornAt(double X, double Y) const;
 
 		/** The field's tiles (and its 250 m band), row by row from the south-west. */
 		const std::vector<Tile>& Tiles() const;

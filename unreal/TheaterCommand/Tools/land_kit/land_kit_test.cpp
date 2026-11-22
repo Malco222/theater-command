@@ -5,11 +5,13 @@
 
 #include "Battle/LandKit.h"
 #include "Battle/Fates.h"
+#include "Battle/LandCrater.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -200,7 +202,10 @@ int main(int argc, char** argv)
 		OutZ = 0.0;
 		OutNormal = V3(0.0, 0.0, 1.0);
 	};
+	// (life seconds a battle second, as the scene plays the fight: LAND_KIT_LIFE, 2 by default; 1 as before)
+	const char* LifeEnv = std::getenv("LAND_KIT_LIFE");
 	Battle B;
+	B.Life = LifeEnv ? std::atof(LifeEnv) : 2.0;
 	const auto L0 = Clock::now();
 	if (!B.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, Error))
 	{
@@ -257,6 +262,10 @@ int main(int argc, char** argv)
 	const long Frames = static_cast<long>(std::ceil(B.End / Dt)) + 1;
 	double Previous = -1.0;
 	double LowestTrack = 1e9, HighestTrack = -1e9, LowestWheel = 1e9, HighestWheel = -1e9;
+	// Their track marks as the game lays them (LandBattle::MakeRuts), all on grass here: the most the battle can lay.
+	LandCrater::Ruts Marks;
+	Marks.Begin([](double, double) { return 0.0; }, nullptr, [](double, double) { return LandCrater::Ruts::Under::Grass; });
+	double MarksMs = 0.0;
 	for (long Frame = 0; Frame < Frames; ++Frame)
 	{
 		const double T = std::min(B.End, static_cast<double>(Frame) * Dt);
@@ -310,13 +319,13 @@ int main(int argc, char** argv)
 			if (Frame > 0 && !bDead && M.Turret >= 0 && W.Role == "tank")
 			{
 				const double Step = std::fabs(WrapDeg(V.TurretDeg - LastTurret[I]));
-				const double Most = M.TurretDps * Dt + 1e-3;
+				const double Most = M.TurretDps * B.Life * Dt + 1e-3;
 				Trains.Note(Step <= Most, Step / Dt, Who(V) + " " + std::to_string(Step / Dt) + " deg/s at " + std::to_string(T));
 			}
 			if (Frame > 0 && !bDead && M.Traverse >= 0)
 			{
 				const double Step = std::fabs(V.TraverseDeg - LastTraverse[I]);
-				Traverses.Note(Step <= M.TraverseDps * Dt + 1e-3, Step / Dt, Who(V) + " traverse at " + std::to_string(T));
+				Traverses.Note(Step <= M.TraverseDps * B.Life * Dt + 1e-3, Step / Dt, Who(V) + " traverse at " + std::to_string(T));
 			}
 			LastTurret[I] = V.TurretDeg;
 			LastTraverse[I] = V.TraverseDeg;
@@ -386,6 +395,20 @@ int main(int argc, char** argv)
 				}
 			}
 		}
+		const auto M0 = Clock::now();
+		for (const Vehicle& V : All)
+		{
+			if (V.bDead || V.Fade < 0.5)
+			{
+				Marks.Lift(V.Index);
+				continue;
+			}
+			if (V.bMoving)
+			{
+				Marks.Drive(V.Index, V.DustLeft.X, V.DustLeft.Y, V.DustRight.X, V.DustRight.Y, LandCrater::Ruts::TrackWidthOf(V.Look().Name, V.Look().Kind));
+			}
+		}
+		MarksMs += Ms(M0, Clock::now());
 		Previous = T;
 	}
 	// Every shot stamp has its muzzle flash, at the muzzle, at its time.
@@ -419,6 +442,25 @@ int main(int argc, char** argv)
 	Report("nothing sinks into flat ground by more than 5 cm", Sink, "m");
 	Report("nothing floats over flat ground by more than 5 cm", Float, "m");
 	Report("events come once, in the frame they fall in", EventTimes, "");
+	{
+		// The marks: the whole battle's, uncapped, in a size the scene draws without a thought.
+		long Tris = 0;
+		int Sections = 0;
+		for (int P = 0; P < Marks.Patches(); ++P)
+		{
+			for (const LandField::Mesh& M : Marks.PatchAt(P).Sections)
+			{
+				Tris += static_cast<long>(M.Triangles.size() / 3);
+				++Sections;
+			}
+		}
+		Tally MarksT;
+		MarksT.Note(Marks.Pieces() > 100 && Marks.Pieces() < LandCrater::Ruts::Most * 3 / 4 && Tris < 700000, static_cast<double>(Tris),
+			std::to_string(Marks.Pieces()) + " pieces, " + std::to_string(Tris) + " triangles");
+		std::printf("      track marks over the battle (all on grass): %d pieces, %ld triangles in %d sections of %d patches; %.3f ms a frame for every vehicle\n",
+			Marks.Pieces(), Tris, Sections, Marks.Patches(), MarksMs / static_cast<double>(Frames));
+		Report("the battle's track marks, uncapped and under 700,000 triangles", MarksT, "triangles");
+	}
 	std::printf("  (lowest point of a track: %.3f to %.3f m; of a gun's or lorry's wheel: %.3f to %.3f m)\n", LowestTrack, HighestTrack, LowestWheel, HighestWheel);
 
 	std::printf("\nTHE COST\n");

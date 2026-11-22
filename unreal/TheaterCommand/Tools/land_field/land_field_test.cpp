@@ -1042,6 +1042,131 @@ int main(int Argc, char** Argv)
 			Fmt("%.0f points with no face, %.0f under it, %.0f away said to have one, %.2f microseconds", static_cast<double>(Missed), static_cast<double>(Under), static_cast<double>(AwaySaid), Us));
 	}
 
+	// A tank's marks (LandCrater::Ruts): Tigers and Shermans driven across the field lay their tracks' strips on the
+	// ground: the strips' faded edges the ground's own colour, their pressed middles on the ground drawn (not under it),
+	// the corn between a tank's tracks laid flat in a cornfield (and only there), nothing standing where she has not been;
+	// cheap enough for every tank every frame.
+	{
+		LandCrater::Ruts R;
+		R.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, [&G](double X, double Y) { return G.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(G));
+		const LandCrater::Ruts::KindFn Kind = LandCrater::Ruts::KindOn(G);
+		uint64_t S = 0x7aac5ull;
+		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
+		struct Laid { double LX, LY, RX, RY, PX, PY, Apart, Width; LandCrater::Ruts::Under Mid; };
+		std::vector<Laid> Pieces;
+		std::map<int, int> ByKind;
+		long Drives = 0;
+		double DriveSeconds = 0.0;
+		for (int V = 0; V < 16; ++V)
+		{
+			const bool bTiger = V % 2 == 0;
+			const double Apart = bTiger ? 2.83 : 2.108, Width = LandCrater::Ruts::TrackWidthOf(bTiger ? "Tiger" : "M4 Sherman", "tank");
+			double X = 60.0 + U() * (F.Width() - 120.0), Y = 60.0 + U() * (F.Depth() - 120.0), Head = U() * 6.283, Turn = 0.0;
+			double PX = 0.0, PY = 0.0;
+			bool bHad = false;
+			for (int K = 0; K < 1600; ++K) // (400 m at 0.25 m a frame: 5 m a second at 20 frames)
+			{
+				if (K % 80 == 0) Turn = (U() - 0.5) * 0.02;
+				Head += Turn;
+				X += 0.25 * std::cos(Head);
+				Y += 0.25 * std::sin(Head);
+				if (X < 20.0 || Y < 20.0 || X > F.Width() - 20.0 || Y > F.Depth() - 20.0) break;
+				const double Nx = -std::sin(Head), Ny = std::cos(Head);
+				const double LX = X + Nx * 0.5 * Apart, LY = Y + Ny * 0.5 * Apart, RX = X - Nx * 0.5 * Apart, RY = Y - Ny * 0.5 * Apart;
+				const auto D0 = std::chrono::steady_clock::now();
+				const bool bLaid = R.Drive(V, LX, LY, RX, RY, Width);
+				DriveSeconds += Seconds(D0);
+				++Drives;
+				if (bLaid && bHad)
+				{
+					const LandCrater::Ruts::Under Mid = Kind(0.5 * (X + PX), 0.5 * (Y + PY));
+					Pieces.push_back({ LX, LY, RX, RY, PX, PY, Apart, Width, Mid });
+					++ByKind[static_cast<int>(Mid)];
+				}
+				if (bLaid || !bHad) { PX = X; PY = Y; bHad = true; }
+			}
+		}
+		// The strips' points: 8 a strip, across her way edge, pressed, pressed, edge, each at the piece's two ends.
+		auto Diff = [](const LandField::Rgb8& A, const LandField::Rgb8& B) { return std::abs(A.R - B.R) + std::abs(A.G - B.G) + std::abs(A.B - B.B); };
+		auto DrawnTop = [&G](double X, double Y) {
+			double Z = std::nan("");
+			for (const LandField::Tile& C : G.Tiles())
+				if (X >= C.X0 - 4.0 && X < C.X1 + 4.0 && Y >= C.Y0 - 4.0 && Y < C.Y1 + 4.0)
+				{
+					const double Q = MeshTop(C.Near, X, Y);
+					if (!std::isnan(Q) && (std::isnan(Z) || Q > Z)) Z = Q;
+				}
+			return Z;
+		};
+		long Points = 0, Edges = 0, Tris = 0;
+		int WorstEdge = 0;
+		double EdgeOff = 0.0;
+		std::vector<double> Over;
+		for (int P = 0; P < R.Patches(); ++P)
+			for (const LandField::Mesh& M : R.PatchAt(P).Sections)
+			{
+				const size_t N = M.Colours.size();
+				Points += static_cast<long>(N);
+				Tris += static_cast<long>(M.Triangles.size() / 3);
+				for (size_t I = 0; I < N; ++I)
+				{
+					const size_t Across = I % 8;
+					const double Px = M.Positions[I * 3], Py = M.Positions[I * 3 + 1], Pz = M.Positions[I * 3 + 2];
+					if (Across <= 1 || Across >= 6)
+					{
+						const int D = Diff(M.Colours[I], G.ColourAt(Px, Py));
+						EdgeOff += D;
+						WorstEdge = std::max(WorstEdge, D);
+						++Edges;
+					}
+					else if (I % 37 == 2 && Over.size() < 2500)
+					{
+						const double Z = DrawnTop(Px, Py);
+						if (!std::isnan(Z)) Over.push_back(Pz - Z);
+					}
+				}
+			}
+		const double Buried = static_cast<double>(std::count_if(Over.begin(), Over.end(), [](double O) { return O < -0.002; })) / std::max<size_t>(1, Over.size());
+		// Flat: between a tank's tracks in standing corn, and under each track; not between them on grass or plough, and
+		// not 2.5 m beyond her outer edge (some few where two tanks' ways cross).
+		int CornMid = 0, CornMidFlat = 0, OtherMid = 0, OtherMidFlat = 0, Under_ = 0, UnderFlat = 0, Beyond = 0, BeyondFlat = 0;
+		for (const Laid& L : Pieces)
+		{
+			if (L.Mid == LandCrater::Ruts::Under::None) continue;
+			const double MX = 0.25 * (L.LX + L.RX) + 0.5 * L.PX, MY = 0.25 * (L.LY + L.RY) + 0.5 * L.PY;
+			const double Ax = (L.LX - L.RX) / L.Apart, Ay = (L.LY - L.RY) / L.Apart; // (right to left, unit)
+			const bool bMid = R.Flat(MX, MY);
+			if (L.Mid == LandCrater::Ruts::Under::Corn) { ++CornMid; CornMidFlat += bMid; }
+			else { ++OtherMid; OtherMidFlat += bMid; }
+			if (Kind(MX + Ax * 0.5 * L.Apart, MY + Ay * 0.5 * L.Apart) != LandCrater::Ruts::Under::None)
+			{
+				++Under_;
+				UnderFlat += R.Flat(MX + Ax * 0.5 * L.Apart, MY + Ay * 0.5 * L.Apart);
+			}
+			const double Out = 0.5 * L.Apart + L.Width + 2.5;
+			++Beyond;
+			BeyondFlat += R.Flat(MX + Ax * Out, MY + Ay * Out);
+		}
+		const auto F0 = std::chrono::steady_clock::now();
+		int FlatHits = 0;
+		for (int K = 0; K < 100000; ++K)
+		{
+			const Laid& L = Pieces[static_cast<size_t>(K) % std::max<size_t>(1, Pieces.size())];
+			FlatHits += R.Flat(L.LX + (K % 9 - 4) * 0.7, L.LY + (K % 7 - 3) * 0.7);
+		}
+		const double FlatUs = Seconds(F0) / 100000.0 * 1e6, DriveUs = DriveSeconds / std::max(1L, Drives) * 1e6;
+		std::printf("  track marks: %d pieces (corn %d, grass %d, earth %d, none %d) by 16 tanks, %ld points, %ld triangles; edges off the ground's colour by %.2f (worst %d); pressed strip over the drawn ground: 5%% %.3f, median %.3f, 95%% %.3f m, %.1f%% under it (%zu places); flat between the tracks in corn %d of %d, on grass or earth %d of %d, under a track %d of %d, 2.5 m beyond %d of %d; Drive %.2f us a frame, Flat %.2f us (%d)\n",
+			R.Pieces(), ByKind[2], ByKind[1], ByKind[3], ByKind[0], Points, Tris, EdgeOff / std::max(1L, Edges), WorstEdge, Pctl(Over, 0.05), Pctl(Over, 0.5), Pctl(Over, 0.95), 100.0 * Buried, Over.size(),
+			CornMidFlat, CornMid, OtherMidFlat, OtherMid, UnderFlat, Under_, BeyondFlat, Beyond, DriveUs, FlatUs, FlatHits);
+		Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] > 100, "tanks driven across the field leave their marks in corn and on grass",
+			Fmt("%.0f pieces, %.0f in corn, %.0f on grass", R.Pieces(), ByKind[2], ByKind[1]));
+		Check(EdgeOff / std::max(1L, Edges) < 0.5 && WorstEdge <= 3, "a track mark's edge is the ground's own colour", Fmt("off by %.2f, worst %.0f", EdgeOff / std::max(1L, Edges), WorstEdge));
+		Check(Over.size() > 1000 && Buried < 0.03 && Pctl(Over, 0.95) < 0.12, "a track mark lies on the ground drawn, not under it", Fmt("%.1f%% under, 95%% %.3f m over", 100.0 * Buried, Pctl(Over, 0.95)));
+		Check(CornMid > 50 && CornMidFlat >= CornMid * 0.98 && OtherMid > 50 && OtherMidFlat <= OtherMid * 0.03 && UnderFlat >= Under_ * 0.98 && BeyondFlat <= Beyond * 0.03,
+			"the corn between a tank's tracks lies flat, and only there", Fmt("corn %.0f of %.0f, grass %.0f of %.0f, ", CornMidFlat, CornMid, OtherMidFlat, OtherMid) + Fmt("under %.0f of %.0f, beyond %.0f of ", UnderFlat, Under_, BeyondFlat) + Fmt("%.0f", Beyond));
+		Check(DriveUs < 5.0 && FlatUs < 3.0, "marks cheap enough for every tank every frame", Fmt("Drive %.2f us, Flat %.2f us", DriveUs, FlatUs));
+	}
+
 	if (Argc >= 3)
 	{
 		const auto P0 = std::chrono::steady_clock::now();
