@@ -451,6 +451,13 @@ namespace LandMen
 				Out.Shade.resize(N);
 				for (size_t I = 0; I < N; ++I) Out.Shade[I] = static_cast<float>(Sh.Number(I, 1.0));
 			}
+			// (the soldier files' tint, beside shade: an rgb a point, mud browner and dust paler; held to a sane span)
+			const J& Ti = Src["tint"];
+			if (Ti.Size() == N * 3)
+			{
+				Out.Tint.resize(N * 3);
+				for (size_t I = 0; I < N * 3; ++I) Out.Tint[I] = static_cast<float>(std::min(2.0, std::max(0.0, Ti.Number(I, 1.0))));
+			}
 			if (bInk)
 			{
 				const J& Ik = Src["ink"];
@@ -1287,6 +1294,8 @@ namespace LandMen
 				M.Part2.push_back(Full.Part2[I]);
 				M.W2.push_back(Full.W2[I]);
 				if (!Full.Shade.empty()) M.Shade.push_back(Full.Shade[I]);
+				if (!Full.Tint.empty())
+					for (size_t C = 0; C < 3; ++C) M.Tint.push_back(Full.Tint[I * 3 + C]);
 			}
 			for (size_t T = 0; T < Full.Triangles.size() / 3; ++T)
 			{
@@ -2817,8 +2826,9 @@ namespace LandMen
 		{
 			return 0;
 		}
-		// (a body reaches some 2 m from his root, his head or his feet; one beyond that is not on the new ground)
-		const double Near = Reach + 2.0;
+		// (a body lies within some 2 m of his root, his head or his feet, but a thrown or blown one up to 7 m off it: so
+		// first by his root within that, then by where his bones lie, each within the hole's reach and half a metre)
+		const double Near = Reach + 8.0, Close = Reach + 0.5;
 		int Laid = 0;
 		for (Impl::Man& M : Inner->Men)
 		{
@@ -2826,8 +2836,18 @@ namespace LandMen
 			{
 				continue;
 			}
-			M.World = WorldOf(M.Place, Inner->GroundAt);
 			const size_t NB = M.S->Bones.size();
+			bool bOn = false;
+			for (size_t B = 0; B < NB && !bOn; ++B)
+			{
+				const double Bx = M.Frames[B].T[0] - X, By = M.Frames[B].T[1] - Y;
+				bOn = Bx * Bx + By * By <= Close * Close;
+			}
+			if (!bOn)
+			{
+				continue;
+			}
+			M.World = WorldOf(M.Place, Inner->GroundAt);
 			for (size_t B = 0; B < NB; ++B) M.Frames[B] = Compose(M.World, M.Model[B]);
 			for (int L = 0; L < LodCount; ++L) M.bSkinned[L] = false;
 			++M.Stamp;
@@ -2927,7 +2947,10 @@ namespace LandMen
 			const size_t Pz = static_cast<size_t>(P);
 			const uint8_t Pa = V.M.Paint[Pz];
 			Lk.Paint[Pz] = Pa;
-			Put(Pz, ColourOf(Pa), V.M.Shade.empty() ? 1.f : V.M.Shade[Pz], &Mul[Pz * 3]);
+			float K[3] = { Mul[Pz * 3], Mul[Pz * 3 + 1], Mul[Pz * 3 + 2] };
+			if (V.M.Tint.size() == static_cast<size_t>(Body) * 3)
+				for (size_t A = 0; A < 3; ++A) K[A] *= V.M.Tint[Pz * 3 + A];
+			Put(Pz, ColourOf(Pa), V.M.Shade.empty() ? 1.f : V.M.Shade[Pz], K);
 		}
 		if (Fi)
 		{
@@ -2939,7 +2962,7 @@ namespace LandMen
 				const int Ink = Fm.Ink.empty() ? -1 : Fm.Ink[Pz];
 				Lk.Paint[static_cast<size_t>(Body) + Pz] = Pa;
 				const uint32_t Rgb = Ink >= 0 ? S.Inks[static_cast<size_t>(Ink)] : ColourOf(Pa);
-				Put(static_cast<size_t>(Body) + Pz, Rgb, Fm.Shade.empty() ? 1.f : Fm.Shade[Pz], nullptr);
+				Put(static_cast<size_t>(Body) + Pz, Rgb, Fm.Shade.empty() ? 1.f : Fm.Shade[Pz], Fm.Tint.size() == static_cast<size_t>(Fm.Points) * 3 ? &Fm.Tint[Pz * 3] : nullptr);
 			}
 		}
 		return Lk;

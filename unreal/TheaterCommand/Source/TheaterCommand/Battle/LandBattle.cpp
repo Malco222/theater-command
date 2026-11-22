@@ -1353,6 +1353,17 @@ void ALandBattle::LayThings()
 				Sample.insert(Sample.end(), Square.begin(), Square.end());
 			}
 		}
+		// (and a small square every 150 m over the whole field, so a grass that grows only somewhere the nine miss, the
+		// state farm's at Prokhorovka, is sampled too: unsampled, it drew in its built grey. The pre-check, 22 November)
+		for (double Sy = Y0 + 75.0; Sy < Y1; Sy += 150.0)
+		{
+			for (double Sx = X0 + 75.0; Sx < X1; Sx += 150.0)
+			{
+				Square.clear();
+				G.Clutter(Sx - 10.0, Sy - 10.0, Sx + 10.0, Sy + 10.0, Square);
+				Sample.insert(Sample.end(), Square.begin(), Square.end());
+			}
+		}
 	}
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
