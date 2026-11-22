@@ -683,6 +683,8 @@ export interface SeaSide {
   hulls?: LostHull[];
   /** A strike from the air (ruling 240): the ships damage control kept afloat, where it kept any (a record, for the after card). */
   kept?: Ships;
+  /** A strike from the air with hit rates by kind (strike on deck): its carriers were caught with their strike wing armed aboard (a record, for the after card's words). */
+  armed?: boolean;
 }
 
 export interface SeaReport {

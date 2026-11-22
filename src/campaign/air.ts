@@ -24,7 +24,7 @@ import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, 
 import { techMul, techNotes } from './research';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
-import { fleetKnown, seaStaff, syncWings } from './carriers';
+import { deckOf, fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
 import { nameLosses, nameSide } from './hulls';
@@ -1383,6 +1383,8 @@ export interface AirAssess {
   /** What the bombers that go are worth against ships, beside carrier crews trained for it (1). */
   /** Hit rates by kind (hitrates.ts), only with that switch on: the strike's bombers by kind and each kind's rate. */
   rates?: StrikeRates;
+  /** Strike on deck (hit rates by kind only): whether each fleet's carriers have their strike wing armed aboard (carriers.ts deckOf), in step with `ships`; only where some fleet's carriers do. */
+  armed?: boolean[];
   naval: number;
   /** What is left of a strike on a fleet already struck this month: it is scattered and warned. */
   again: number;
@@ -1447,6 +1449,8 @@ export interface ShipLaw {
   rates?: Record<HitKind, number>;
   mix?: Record<HitKind, number>;
   land?: Record<HitKind, number>;
+  /** Strike on deck (hit rates by kind only): each fleet's carriers armed aboard or not, in step with `fleets` (AirAssess.armed). */
+  armed?: boolean[];
 }
 
 export function shipLaw(a: AirAssess, m: AirMission, found = 1): ShipLaw {
@@ -1457,6 +1461,7 @@ export function shipLaw(a: AirAssess, m: AirMission, found = 1): ShipLaw {
     fleets: a.ships.map((x) => ({ id: x.id, nat: x.nat, name: x.name, ships: { ...x.ships } })),
     ...(a.tough ? { tough: [...a.tough] } : {}),
     ...(a.rates ? { rates: { ...a.rates.rates }, mix: { ...a.rates.mix }, land: { ...a.rates.land } } : {}),
+    ...(a.rates && a.armed ? { armed: [...a.armed] } : {}),
   };
 }
 
@@ -1489,9 +1494,15 @@ export function shipHitsBy(L: ShipLaw, through: number, byKind?: Partial<Record<
     // aim, and each against its own kind's take from the record (the old takes, tuned against the single rate, retire).
     const jug = { bomb: 0, torpedo: 0 };
     for (const k of HIT_KINDS) jug[jugOf(k)] += kinds[k];
+    // Strike on deck: the carriers' share falls on them by number, and those caught armed aboard sink on their own takes.
+    const armedCv = L.armed ? L.fleets.reduce((n, x, i) => n + (L.armed![i] ? x.ships.cv : 0), 0) : 0;
     for (const c of SHIPS) {
       const share = (have[c] * aim[c]) / weight;
-      sunk[c] = Math.min(have[c], sunkByKind(c, jug.bomb * share, jug.torpedo * share, L.harbour));
+      if (c === 'cv' && armedCv > 0) {
+        const on = armedCv / have.cv, off = 1 - on;
+        sunk.cv = Math.min(armedCv, sunkByKind('cv', jug.bomb * share * on, jug.torpedo * share * on, L.harbour, true))
+          + Math.min(have.cv - armedCv, sunkByKind('cv', jug.bomb * share * off, jug.torpedo * share * off, L.harbour));
+      } else sunk[c] = Math.min(have[c], sunkByKind(c, jug.bomb * share, jug.torpedo * share, L.harbour));
       count += sunk[c];
     }
   } else for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / S.takes[c]); count += sunk[c]; }
@@ -1642,6 +1653,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
         return { nat: x.f.nat, bmr: x.bmr, deck, type: deck ? undefined : bomberOf(x.f.nat, designYear(g, x.f.nat, 'bombers')) };
       }), g.turn, m === 'harbour', out.D > 0);
       if (r) out.rates = r;
+      // Strike on deck (the design director's 20:25Z): carriers caught with their strike wing armed aboard sink on
+      // fewer bombs. Read as the strike flies, so whoever strikes first in the month catches the other so.
+      const armed = out.ships.map((x) => x.ships.cv > 0 && deckOf(g, x.id).armed);
+      if (armed.some(Boolean)) out.armed = armed;
     }
     const before = Math.max(0, ...out.ships.map((x) => (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0)));
     out.again = Math.pow(CARRIERS.strike.again, before);
@@ -1892,7 +1907,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const plain = exp.plain ?? exp.sunk;
     const afloat: { x: Fleet; kept: Ships }[] = [];
     const keptAll = noShips();
-    struck = a.ships.map((x) => ({ nat: x.nat, fleet: x.name, admiral: x.admiral?.name ?? null, ships: { ...x.ships }, sunk: noShips() }));
+    struck = a.ships.map((x, i) => ({ nat: x.nat, fleet: x.name, admiral: x.admiral?.name ?? null, ships: { ...x.ships }, sunk: noShips(), ...(a.armed?.[i] ? { armed: true } : {}) }));
     a.ships.forEach((x, i) => {
       const kept = noShips();
       for (const c of SHIPS) {

@@ -42,6 +42,26 @@ export const wingSize = (nat: string): { ftr: number; bmr: number } => CARRIERS.
 /** The wings that fly from one fleet's carriers: fighters first. */
 export const wingsOf = (g: Game, fleet: number): AirFleet[] => g.airFleets.filter((f) => f.ship === fleet).sort((a, b) => (a.kind === 'ftr' ? 0 : 1) - (b.kind === 'ftr' ? 0 : 1));
 const wingOf = (g: Game, fleet: number, kind: WingKind): AirFleet | undefined => g.airFleets.find((f) => f.ship === fleet && f.kind === kind);
+/**
+ * Strike on deck (hit rates by kind; the design director's 20:25Z): whether a fleet's carriers have their strike wing
+ * ARMED ABOARD, fuelled and armed aircraft in the hangar or ranged on deck, as the Midway three were. So while the strike
+ * wing is aboard, fit to fly and has not flown this month (ready, or ordered and not yet gone), or has flown this month
+ * against a land target and is back aboard rearming. OFF once it has flown against ships this month (decks cleared by
+ * the launch, as Yorktown's at Midway), while it rests or is unfit, and with no strike wing aboard (Hermes). Strikes fly
+ * at once in each side's turn, so whoever strikes first catches the other armed aboard. `why` names the state for words.
+ */
+export type DeckWhy = 'ready' | 'rearming' | 'flown' | 'resting' | 'unfit' | 'none';
+export function deckOf(g: Game, fleet: number): { armed: boolean; why: DeckWhy } {
+  const w = wingOf(g, fleet, 'bmr');
+  if (!w || w.bmr <= 0) return { armed: false, why: 'none' };
+  if (w.flew === g.turn && isOffensive(w.mission)) {
+    const ships = w.mission === 'fleet' || w.mission === 'strike' || w.mission === 'harbour';
+    return ships ? { armed: false, why: 'flown' } : { armed: true, why: 'rearming' };
+  }
+  if (w.mission === 'rest') return { armed: false, why: 'resting' };
+  if (w.ready < CARRIERS.ai.ready) return { armed: false, why: 'unfit' };
+  return { armed: true, why: 'ready' };
+}
 const wingName = (c: Fleet, kind: WingKind): string => CARRIERS.names[kind].replace('{fleet}', c.name);
 /** A wing has no airfield, but everything that names a group's place needs a region: its fleet's port, or its capital for a base off the map. */
 const portOf = (g: Game, c: Fleet): number => (c.base >= 0 ? c.base : Math.max(0, g.nations[c.nat]?.capital ?? 0));

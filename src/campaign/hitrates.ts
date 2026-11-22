@@ -34,6 +34,8 @@ export const HITS = data as unknown as {
   kindTakes: Record<Jug, Record<ShipClass, number | null>>;
   kindTakesAnchor: Record<Jug, Partial<Record<ShipClass, number | null>>>;
   aim: Record<ShipClass, number>;
+  /** Strike on deck: the takes of a carrier caught armed aboard (carriers.ts deckOf), where they differ from kindTakes. */
+  armedAboard: Partial<Record<Jug, Partial<Record<ShipClass, number | null>>>>;
 };
 
 /** The kind form's two jugs: bombs (dive, level, mast height) and torpedoes. */
@@ -67,12 +69,14 @@ export function shipAimOf(have: Record<ShipClass, number>): Record<ShipClass, nu
 
 /**
  * Ships of a class that bombs and torpedoes on it should sink (the kind form): each kind's hits over its own take, added.
- * A kind with no case for the class adds nothing: she is hit, not sunk by it (bombs on a battleship at sea).
+ * A kind with no case for the class adds nothing: she is hit, not sunk by it (bombs on a battleship at sea). `armed`: a
+ * carrier caught with her strike wing armed aboard (strike on deck), whose takes are the armedAboard row's where it has one.
  */
-export function sunkByKind(c: ShipClass, bombs: number, torpedoes: number, harbour: boolean): number {
-  const t = kindTakesOf(harbour);
+export function sunkByKind(c: ShipClass, bombs: number, torpedoes: number, harbour: boolean, armed = false): number {
+  const t = kindTakesOf(harbour), A = armed ? HITS.armedAboard : {};
   const part = (hits: number, take: number | null | undefined): number => (take && take > 0 ? hits / take : 0);
-  return part(bombs, t.bomb[c]) + part(torpedoes, t.torpedo[c]);
+  const take = (j: Jug): number | null | undefined => (A[j]?.[c] !== undefined ? A[j]![c] : t[j][c]);
+  return part(bombs, take('bomb')) + part(torpedoes, take('torpedo'));
 }
 
 /** True in a campaign played with hit rates by kind: the grand campaign, begun with the switch on. */

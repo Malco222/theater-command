@@ -3,7 +3,7 @@
 // over the ships, and at anchor by the surprises' rows. Its own switch, off as shipped; off, the law is as it was.
 import { describe, expect, it } from 'vitest';
 import { assessAir, fly, shipHits, shipHitsBy, shipLaw, type ShipLaw } from '../src/campaign/air';
-import { syncWings, wingsOf } from '../src/campaign/carriers';
+import { deckOf, syncWings, wingsOf } from '../src/campaign/carriers';
 import { createGame } from '../src/campaign/game';
 import { HITS, deckMix, hitRate, hitRatesOn, hitRatesShipped, hitsLine, kindTakesOf, landMix, mixOf, setHitRates, shipAimOf, strikeRates, sunkByKind, takesOf } from '../src/campaign/hitrates';
 import { atSea, zoneOf } from '../src/campaign/navy';
@@ -185,7 +185,7 @@ describe('the law with hit rates by kind', () => {
   it('lays the kind form\'s takes: bombs and torpedoes each against their own, from the record\'s pure cases', () => {
     const sea = kindTakesOf(false), anchor = kindTakesOf(true);
     expect(sea.bomb).toEqual({ bb: null, cv: 6.5, ca: 8, dd: 3, ss: 1 });
-    expect(sea.torpedo).toEqual({ bb: 5.25, cv: 4.3333, ca: 8, dd: 1.6667, ss: 1 });
+    expect(sea.torpedo).toEqual({ bb: 5.25, cv: 4.3333, ca: 9, dd: 1.5, ss: 1 });
     expect(anchor.bomb.bb).toBe(10);
     expect(anchor.torpedo.bb).toBe(6);
     expect(anchor.bomb.cv).toBe(6.5);
@@ -213,6 +213,22 @@ describe('the law with hit rates by kind', () => {
     expect(sunkByKind('cv', 0, 3.5, false)).toBeCloseTo(0.81, 2);
   });
 
+  it('sinks a carrier caught armed aboard on 3.25 bombs (strike on deck; the design director\'s 20:25Z to 20:33Z)', () => {
+    expect(HITS.armedAboard).toEqual({ bomb: { cv: 3.25 } });
+    // Akagi 1, Kaga 4, Soryu 3, Princeton 1 sunk; Franklin 2 and Bunker Hill 2 lived (crashes named, not counted): 13 over 4.
+    const pooled = [1, 4, 3, 1, 2, 2].reduce((s, b) => s + sunkByKind('cv', b, 0, false, true), 0);
+    expect(pooled).toBeCloseTo(4, 6);
+    expect(sunkByKind('cv', 2, 0, false, true)).toBeLessThan(1); // Franklin, Bunker Hill: lived
+    expect(sunkByKind('cv', 4, 0, false, true)).toBeGreaterThan(1); // Kaga
+    expect(sunkByKind('cv', 3, 0, false, true)).toBeCloseTo(0.92, 2); // Soryu: a reading, just short
+    expect(sunkByKind('cv', 1, 0, false, true)).toBeCloseTo(0.31, 2); // Akagi and Princeton: readings (one bomb among armed planes)
+    // Torpedoes are the carrier's take in either state; off deck, bombs keep the stand-in 6.5 (a gap, so the switch stays off).
+    expect(sunkByKind('cv', 0, 3, false, true)).toBeCloseTo(sunkByKind('cv', 0, 3, false), 9);
+    expect(sunkByKind('cv', 4, 0, false)).toBeCloseTo(4 / 6.5, 9);
+    // Only carriers have the state: a battleship's takes are as ever.
+    expect(sunkByKind('bb', 2, 6.5, true, true)).toBe(sunkByKind('bb', 2, 6.5, true));
+  });
+
   it('sinks Pearl\'s battleships at anchor by both kinds (CINCPAC\'s report): the eight together as the record has them', () => {
     expect(sunkByKind('bb', 10, 0, true)).toBeCloseTo(1, 6); // bombs 10 at anchor: Arizona's middle 5 and the three that lived
     expect(sunkByKind('bb', 0, 6, true)).toBeCloseTo(1, 6); // torpedoes 6 (Oklahoma's middle)
@@ -231,9 +247,13 @@ describe('the law with hit rates by kind', () => {
 
   it('sinks cruisers and destroyers by their own takes: Mikuma and Mogami one between them, Sims by 3 bombs, 3 by 5 torpedoes', () => {
     expect(sunkByKind('ca', 3, 0, false) + sunkByKind('ca', 5, 0, false)).toBeCloseTo(1, 6);
-    expect(sunkByKind('ca', 0, 8, false)).toBeCloseTo(1, 6); // torpedoes on a cruiser: the all-kind take, a gap
+    // Torpedoes on a cruiser (the design director's 20:29Z): Canberra 1 and Houston 2 lived, Chicago 6 sunk, 9 over 1.
+    expect(sunkByKind('ca', 0, 9, false)).toBeCloseTo(1, 6);
+    expect(sunkByKind('ca', 0, 1, false) + sunkByKind('ca', 0, 2, false)).toBeLessThan(1);
+    expect(sunkByKind('ca', 0, 6, false)).toBeCloseTo(0.67, 2); // Chicago: a reading (two strikes, a tow between them)
     expect(sunkByKind('dd', 3, 0, false)).toBeCloseTo(1, 6);
-    expect(sunkByKind('dd', 0, 5, false)).toBeCloseTo(3, 3);
+    expect(sunkByKind('dd', 0, 6, false)).toBeCloseTo(4, 6); // Hammann, Barton, Jarvis and Hamakaze
+    expect(sunkByKind('dd', 1, 0, false) + sunkByKind('dd', 2, 0, false)).toBeCloseTo(1, 6); // Suzutsuki lived, Kasumi scuttled
   });
 
   it('lays the aim from the record\'s hits by class at sea: carrier 2.34, battleship 1, cruiser 0.148, destroyers none', () => {
@@ -272,7 +292,7 @@ describe('the law with hit rates by kind', () => {
     const L: ShipLaw = { ...law(r), have: { bb: 0, cv: 0, ca: 0, dd: 30, ss: 0 } };
     const h = shipHitsBy(L, 20);
     const bombs = h.kinds!.dive + h.kinds!.level + h.kinds!.mast, torps = h.kinds!.torpedo;
-    expect(h.sunk.dd).toBeCloseTo(bombs / 3 + torps / 1.6667, 8);
+    expect(h.sunk.dd).toBeCloseTo(bombs / 3 + torps / 1.5, 8);
   });
 
   it('reads a strike on a fleet with the switch on, and says the hits by kind on the raid card', () => {
@@ -285,6 +305,42 @@ describe('the law with hit rates by kind', () => {
     expect(exp.kinds).toBeDefined();
     const rep = fly(g, 'UK', 'fleet', foe.id, [strike])!;
     expect(rep.result).toMatch(/Hits: (none|about \w+) from the (torpedo|dive) bombers/);
+  });
+
+  it('reads each fleet\'s carriers armed aboard or not as the strike flies (strike on deck), and only with the switch on', () => {
+    const { g, foe, strike } = duel();
+    foe.ships.cv = 2;
+    syncWings(g);
+    const wing = wingsOf(g, foe.id).find((w) => w.kind === 'bmr')!;
+    expect(wing.bmr).toBeGreaterThan(0);
+    // Off: no state is read, and the law is as it was.
+    expect(assessAir(g, [strike], 'fleet', foe.id).armed).toBeUndefined();
+    setHitRates(g, true);
+    // Its strike wing aboard, fit and not flown this month: armed aboard.
+    expect(deckOf(g, foe.id)).toEqual({ armed: true, why: 'ready' });
+    const on = shipLaw(assessAir(g, [strike], 'fleet', foe.id), 'fleet');
+    expect(on.armed).toEqual([true]);
+    const off: ShipLaw = { ...on, armed: undefined };
+    // The same hits sink more carriers caught armed aboard (bombs 4 against the stand-in 6.5), and nothing else moves.
+    const a = shipHitsBy(on, 40), b = shipHitsBy(off, 40);
+    expect(a.hits).toBeCloseTo(b.hits, 9);
+    expect(b.sunk.cv).toBeLessThan(1);
+    expect(a.sunk.cv).toBeGreaterThan(b.sunk.cv);
+    for (const c of ['bb', 'ca', 'dd'] as const) expect(a.sunk[c]).toBeCloseTo(b.sunk[c], 9);
+    // Flown against a land target this month and back aboard rearming: still armed aboard (the Midway three after the island).
+    wing.flew = g.turn; wing.mission = 'bomb';
+    expect(deckOf(g, foe.id)).toEqual({ armed: true, why: 'rearming' });
+    // Flown against ships this month: decks cleared by the launch.
+    wing.mission = 'fleet';
+    expect(deckOf(g, foe.id)).toEqual({ armed: false, why: 'flown' });
+    expect(assessAir(g, [strike], 'fleet', foe.id).armed).toBeUndefined();
+    // Resting, unfit, or no strike wing aboard: off.
+    wing.flew = undefined; wing.mission = 'rest';
+    expect(deckOf(g, foe.id).why).toBe('resting');
+    wing.mission = 'support'; wing.ready = 0.3;
+    expect(deckOf(g, foe.id).why).toBe('unfit');
+    wing.ready = 1; wing.bmr = 0;
+    expect(deckOf(g, foe.id)).toEqual({ armed: false, why: 'none' });
   });
 
   it('words the hits only for the kinds that flew', () => {
