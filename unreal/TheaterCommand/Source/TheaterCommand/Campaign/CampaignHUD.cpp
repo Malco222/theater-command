@@ -2494,6 +2494,30 @@ namespace
 				}
 				Sign(Agent->bAtWork ? 1 : 4, X, 65.0, Brass, 2);
 				X += 14.0;
+				if (Agent->bAtWork)
+				{
+					// (The review of 22 November: at work the risk cell follows on the same line, and a long work, "Will try to
+					// steal the four-engined bomber plans next month" beside a long place, ran it past the strip's frame at
+					// 680.5. The lead gives way: first to the work's own name, "Steal the jet fighter plans", then cut short.)
+					const double RiskWide = 44.0 + (Agent->bAbroad
+						? Wide(FString::Printf(TEXT("%d%%"), Agent->Caught), Bold12) + Wide(TEXT(" caught a month"), Typed12)
+						: Wide(TEXT("No risk"), Bold12) + Wide(TEXT(" at home"), Typed12));
+					const double LeadRoom = 672.0 - X - RiskWide - (Rest.IsEmpty() ? 0.0 : Wide(TEXT("  \u00B7  ") + Rest, Typed12));
+					FString ByLabel, ByRest;
+					if (Wide(Lead, Bold12) > LeadRoom && Agent->Doing.Split(TEXT(": "), &ByLabel, &ByRest) && !ByLabel.IsEmpty()
+						&& Wide(ByLabel, Bold12) < Wide(Lead, Bold12))
+					{
+						Lead = ByLabel;
+					}
+					if (Wide(Lead, Bold12) > LeadRoom)
+					{
+						while (Lead.Len() > 1 && Wide(Lead + TEXT("\u2026"), Bold12) > LeadRoom)
+						{
+							Lead.LeftChopInline(1);
+						}
+						Lead = Lead.TrimEnd() + TEXT("\u2026");
+					}
+				}
 				Write(Lead, X, 58.0, Bold12, Cream, 2);
 				X += Wide(Lead, Bold12);
 				if (!Rest.IsEmpty())

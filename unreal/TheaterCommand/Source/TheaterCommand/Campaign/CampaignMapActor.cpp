@@ -12284,7 +12284,7 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 {
 	// (Release 2, map run 7: tc.Speed.SidesKept. The Y key's third view laid the wash afresh over every province of the
 	// world on each press, 211 ms. It is laid once, on a mesh of its own, and kept while the view is put away; shown
-	// again, only the provinces whose side has changed are coloured afresh, in place. The same wash either way.)
+	// again, only the provinces whose side has changed are coloured afresh, in place, rim and all. The same wash either way.)
 	if (!bSides && !bWarmOnly)
 	{
 		if (SidesMesh && SidesMesh->IsVisible())
@@ -12301,8 +12301,9 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 		SidesMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		SidesMesh->SetCastShadow(false);
 		// (A mesh of its own is sorted against the orders' washes by distance, which could swap them as the camera
-		// moves. It is held under them all, the reach, the routes and the pointer, as the ground's tint it is.)
-		SidesMesh->SetTranslucentSortPriority(-1);
+		// moves. It is held under them all, the reach, the routes and the pointer, as the ground's tint it is, and under
+		// the firelight of burning towns (-1), which would otherwise swap with it and flare as the camera passed.)
+		SidesMesh->SetTranslucentSortPriority(-2);
 		SidesMesh->SetVisibility(false);
 		SidesMesh->RegisterComponent();
 	}
@@ -12352,11 +12353,18 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 		{
 			const int32 Id = SidesPointRegion[K];
 			FColor& Point = Laid->ProcVertexBuffer[K].Color;
-			if (!Changed.IsValidIndex(Id) || !Changed[Id] || Point.A == 0)
+			if (!Changed.IsValidIndex(Id) || !Changed[Id])
 			{
 				continue;
 			}
+			// (a point off the province, or on its sea, takes the new colour still at nought, as a fresh lay leaves it:
+			// the colour fades across the rim toward it, and an old colour kept there showed as a seam of the old side)
+			const uint8 WasSeen = Point.A;
 			Point = Ink[Id];
+			if (WasSeen == 0)
+			{
+				Point.A = 0;
+			}
 		}
 		SidesColouredFor = SideOf;
 		SidesMesh->MarkRenderStateDirty();
