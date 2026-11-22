@@ -25,12 +25,15 @@ import page from '../src/campaign/ui/main.ts?raw';
 import { DESERT, addCorps, assess, createGame, declareWar, ensureSupply, limitAttackers, relocate, resolveBattle, startPhase, type Assessment } from '../src/campaign/game';
 import { release, twoWaves } from '../src/campaign/ai';
 import { jointMonth } from '../src/campaign/joint';
-import { JOIN, JOIN_ATTACK, JOIN_DEFENCE, JOIN_NONE, MAY_JOIN, SORTIE_ALONE, STORM_ALONE, battleThisMonth, weeksInHand } from '../src/campaign/join';
+import { JOIN, JOIN_ATTACK, JOIN_DEFENCE, JOIN_NONE, MAY_JOIN, SORTIE_ALONE, STORM_ALONE, battleThisMonth, staffHeld, weeksInHand } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { monthCard, monthMark, type CardRow, type MonthCard, type MonthMark } from '../src/campaign/monthcard';
 import { garrison, previewSally } from '../src/campaign/siege';
-import { startOpen } from '../src/campaign/staff';
-import { GARRISON, beginHuman, candidates, canOrder, endHuman, garrisonHover, garrisonNotice, humanUp, joinChoices, keptOutLine, nextDoorCount, orderAttack, orderHold, orderJoin, orderMove, orderSendBack, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
+import { fronts, startOpen } from '../src/campaign/staff';
+import { gunsAlone } from '../src/campaign/danger';
+import { loadGame } from '../src/campaign/save';
+import vancouverSave from './ahead/saves/staged-american-guns-alone-round-vancouver.save.txt?raw';
+import { GARRISON, beginHuman, candidates, canOrder, endHuman, garrisonHover, garrisonNotice, humanUp, joinChoices, keptOutLine, mayHold, nextDoorCount, orderAttack, orderHold, orderJoin, orderMove, orderSendBack, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
 import { type BattleReport, type Corps, type Game, type Region } from '../src/campaign/types';
 import { type TicketLine } from '../src/core/ticket';
 
@@ -349,6 +352,45 @@ describe("4. the player's garrison toggle, in the game (Q3 folded: one mark, one
     for (const gone of ['data-act="joinnext"', 'data-act="joinhold"', 'orderHoldBack', 'holdsBack', 'Stays out', 'Stay out']) expect(page).not.toContain(gone);
     expect(page).toMatch(/note: why\(c\) \|\| joinNote\(c\)/);
   });
+  it("the enemy's staff reads a garrison he sets himself as any corps of his: his toggle hides nothing from it", () => {
+    // (The review of Q3, findings 3 and 11.) Germany's seat: France's staff weighs its front against Germany.
+    const g = seat('GER');
+    const front = () => fronts(g, 'FRA').find((f) => f.enemies.includes('GER'))!;
+    const was = front();
+    const mine = g.corps.filter((c) => was.depth[c.reg] > 0 && was.depth[c.reg] <= 2 && c.nat === 'GER' && mayHold(g, c));
+    // His holds from the setup there, never pressed, read as release 1 reads them.
+    const setup = mine.filter((c) => c.hold);
+    expect(setup.length).toBeGreaterThan(0);
+    for (const c of setup) expect(staffHeld(g, c)).toBe(true);
+    // Freed, or made garrisons again by his own hand, they read alike: he can still send them anywhere.
+    for (const c of mine) orderHold(g, c, false);
+    const free = front();
+    expect(free.threat).toBeGreaterThan(was.threat);
+    for (const c of mine) orderHold(g, c, true);
+    const held = front();
+    expect(held.threat).toBeCloseTo(free.threat, 9);
+    expect(held.def).toBeCloseTo(free.def, 9);
+    for (const c of mine) expect(staffHeld(g, c)).toBe(false);
+    // With the switch off, every hold reads as release 1 reads it.
+    JOIN.on = false;
+    for (const c of mine) expect(staffHeld(g, c)).toBe(true);
+  });
+
+  it('the guns-left-alone row counts his garrisons among those he can send: the hold binds only the join', () => {
+    // (The review of Q3, finding 12.) The Playtester's staged save: American guns alone round Vancouver.
+    const g = loadGame(vancouverSave)!;
+    const row = () => gunsAlone(g, 'USA').find((x) => x.region === g.byName.Vancouver.id)!;
+    const help = row().help.map((id) => g.corps.find((c) => c.id === id)!);
+    expect(row().red).toBe(true);
+    expect(help.length).toBeGreaterThan(0);
+    for (const c of help) expect(orderHold(g, c, true)).toBe(true);
+    expect(row().red).toBe(true);
+    expect(row().help).toEqual(help.map((c) => c.id));
+    // Off, as release 1: a held corps of his is not offered.
+    JOIN.on = false;
+    expect(row().red).toBe(false);
+  });
+
 });
 
 describe('5. open desert', () => {

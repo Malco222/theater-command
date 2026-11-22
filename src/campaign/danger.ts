@@ -21,6 +21,7 @@ import { armyCard } from './armies';
 import { specOf } from './economy';
 import { COLLAPSE, allied, armySize, atWar, capitalLost, exhausted, fights, gunsRule, homeLost, railReachFor, theName, victorOf } from './game';
 import { armyOf } from './joint';
+import { JOIN } from './stage';
 import { sightOf } from './intel';
 import { standsFreed } from './liberation';
 import { farGround, planMarch, type GroundOf } from './marches';
@@ -598,7 +599,8 @@ export function gunsAlone(g: Game, nat: string | null = g.human): GunsAlone[] {
     const round = r.units.filter((c) => !c.dead && c.kind !== 'fort' && allied(g, c.nat, nat));
     if (!round.length || round.some(fights) || !round.some((c) => armyOf(c) === nat)) continue;
     const what = round.every((c) => c.kind === 'eng') ? 'engineers' : round.some((c) => c.kind === 'eng') ? 'guns and engineers' : 'guns';
-    if (!fighters) fighters = g.corps.filter((c) => !c.dead && armyOf(c) === nat && fights(c) && !c.hold && c.town === undefined && c.leave === undefined && c.ap > 0);
+    // (Release 2, its switch on: a garrison of his is still his to send, for the hold binds only the join: it can go.)
+    if (!fighters) fighters = g.corps.filter((c) => !c.dead && armyOf(c) === nat && fights(c) && (!c.hold || JOIN.on) && c.town === undefined && c.leave === undefined && c.ap > 0);
     const can = current(g) === nat ? fighters.filter((c) => reach(g, c).has(r.id)) : [];
     const red = can.length > 0;
     // (A press picks up the corps of one army: the one that stands nearest, and of two as near the larger.)

@@ -20,6 +20,7 @@ import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficu
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { lineShut } from './line';
+import { staffHeld } from './join';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
@@ -327,7 +328,8 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
       for (const u of r.units) {
         if (!foe(u.nat)) continue;
         enemies.add(u.nat);
-        const still = u.hold || u.kind === 'fort';
+        // (Release 2, its switch on: a hold the player set himself binds nothing but the join, and is read as no hold: join.ts staffHeld.)
+        const still = staffHeld(g, u) || u.kind === 'fort';
         // An enemy caught by the Russian winter without the kit for it is weaker than he looks on the map.
         const cold = frozen(g, u.nat, r);
         const p = defP(g, u, r) * (d === 1 ? works(r) : 1) * near * (still && d > 1 ? 0.3 : 1) * (cold ? EASTERN.winter.defence : 1);
@@ -338,7 +340,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
       }
     }
     // A stretch of the edge behind strong works is still a place the enemy can come out of.
-    for (const id of edge) if (depth[id] > 2) for (const u of g.regions[id].units) if (foe(u.nat) && !u.hold && u.kind !== 'fort') threat += atkP(g, u) * 0.6;
+    for (const id of edge) if (depth[id] > 2) for (const u of g.regions[id].units) if (foe(u.nat) && !staffHeld(g, u) && u.kind !== 'fort') threat += atkP(g, u) * 0.6;
 
     // Whoever on this side is at war with someone there, and can get there by land, counts toward the attack.
     const ours = [...f.ours];
@@ -368,7 +370,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     for (const c of g.corps) {
       if (c.dead || side[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g, nat, c.nat) || !fights(c.nat)) continue;
       const r = g.regions[c.reg];
-      if (c.kind === 'fort' || c.hold) {
+      if (c.kind === 'fort' || staffHeld(g, c)) {
         if (f.ours.has(c.reg)) fixed += defP(g, c, r) * (r.fort && worksFor(g, r, c.nat) ? FORT_MUL[r.fort.lv] : 1);
         // A garrison on the front itself would go in with the rest; one further back stays where it is.
         if (c.kind === 'fort' || c.nat !== nat || !close[c.reg]) continue;

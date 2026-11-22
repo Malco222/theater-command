@@ -178,6 +178,17 @@ function standsReady(g: Game, c: Corps, target: Region): boolean {
 }
 
 /**
+ * True where a computer staff reads a corps as one that stays where it is (staff.ts fronts: it adds no threat, and beyond
+ * the first line only part of its defence counts): a corps under a hold, as release 1 reads it. Save, with the switch on,
+ * a hold the player has set or lifted with his own toggle: his garrison keeps his corps out of the battles next door and
+ * binds nothing else, for he still sends it where he will, so the staffs read it as any corps of his (the review of Q3,
+ * findings 3 and 11). His holds from the setup that he has never pressed read as release 1 reads them, and a game with
+ * nobody playing reads every hold as ever.
+ */
+export const staffHeld = (g: Game, c: Corps): boolean =>
+  c.hold && !(JOIN.on && g.human !== null && armyOf(c) === g.human && g.flags[`garrison:${c.id}`] !== undefined);
+
+/**
  * True where a corps standing in a province next door could come up in a battle there, side apart: fit to (standsReady),
  * with no battle yet this month and none joined (one that gave ground in a battle was in it: giveWay counts it,
  * foughtNow), and able to march in this month by the move rules, out of the weeks it has in hand.
