@@ -17,7 +17,21 @@ export const STRATEGY = data as unknown as {
   recall?: { on: boolean; quiet: number; least: number; most: number; risk: number };
   landing?: { second: boolean; waves?: { within: number; share: number; reply: number; tanks?: number; ships?: number } };
   /** The operations and the landings (their own switch and stops: the faults they mend are the usual game's, and par is read at stop 3). */
-  ops?: { on: boolean; stops: number[]; keep: boolean; lead?: number; front: boolean; home?: { guard: number; risk: number }; port?: { size: number; within: number };
+  ops?: { on: boolean; stops: number[]; keep: boolean; lead?: number; front: boolean;
+    /**
+     * `held`, `reach`: the guard as the design director ruled it on 22 November 2026 (19:36Z). The corps the guard
+     * keeps are held where they stand for the month (a keep that marches away is no keep), and the enemy it reckons
+     * with is every enemy corps the staff can see that could strike the ground within a month's march (the reach the
+     * player is shown, marches.ts), in place of those on the ground and next to it.
+     */
+    home?: { guard: number; risk: number; held?: boolean; reach?: boolean }; port?: { size: number; within: number };
+    /**
+     * The coast watch on every coast a side holds (the same ruling): each country's coast is a watch of its own, the
+     * homeland's and each conquered country's, a corps a harbour up to the sum of the sea lift of every enemy whose
+     * ships reach it, with no share of the army set over it (open.json 'coast.share' and 'coast.least' are the
+     * homeland watch's as shipped).
+     */
+    watch?: boolean;
     /** The landing as the design director ruled it on 22 November 2026: the first wave, the quay, the wait for the sky, the fleets, the beach's worth. */
     landing?: { on: boolean; wave: boolean; quay: boolean; wait: boolean; defer: boolean; allies?: boolean; patience?: number; fleet: boolean; beyond?: { marches: number; share: number } } };
   /**

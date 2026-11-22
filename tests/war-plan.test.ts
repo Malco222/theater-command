@@ -29,8 +29,8 @@ const war = (seed: number, stop: number, months: number, human: string | null = 
 const planFlags = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^st:cam/.test(k));
 
 describe('the war plan', () => {
-  const was = { on: STRATEGY.on, staffs: STRATEGY.staffs, stops: STRATEGY.stops, recall: STRATEGY.recall!.on, ops: STRATEGY.ops!.on, landing: STRATEGY.ops!.landing!.on };
-  afterEach(() => { STRATEGY.on = was.on; STRATEGY.staffs = was.staffs; STRATEGY.stops = was.stops; STRATEGY.recall!.on = was.recall; STRATEGY.ops!.on = was.ops; STRATEGY.ops!.landing!.on = was.landing; campaignLog.say = null; });
+  const was = { on: STRATEGY.on, staffs: STRATEGY.staffs, stops: STRATEGY.stops, recall: STRATEGY.recall!.on, ops: STRATEGY.ops!.on, landing: STRATEGY.ops!.landing!.on, watch: STRATEGY.ops!.watch };
+  afterEach(() => { STRATEGY.on = was.on; STRATEGY.staffs = was.staffs; STRATEGY.stops = was.stops; STRATEGY.recall!.on = was.recall; STRATEGY.ops!.on = was.ops; STRATEGY.ops!.landing!.on = was.landing; STRATEGY.ops!.watch = was.watch; campaignLog.say = null; });
 
   it('ships switched off, with its numbers in order', () => {
     expect(STRATEGY.on).toBe(false);
@@ -140,7 +140,11 @@ describe('the war plan', () => {
     // western front before the operation went, one corps took Oslo alone, marched out of it the next month, and died
     // cut off when a Norwegian division walked in behind it. (The operations have a switch of their own, read at
     // stop 3 too: the war plan stays off here.)
+    // (Read as it was measured, before the coast watch on every coast, which has tests of its own. With that watch on,
+    // Germany keeps two corps more in its home harbours, this war's Norway is fed more slowly, two of the three groups
+    // that land are lost, and it falls in seven months, not six. Sent to the design director, 22 November 2026.)
     STRATEGY.ops!.on = true;
+    STRATEGY.ops!.watch = false;
     const said: { t: number; nat: string; what: string; where: string }[] = [];
     campaignLog.say = (g, nat, what, where) => { said.push({ t: g.turn, nat, what, where }); };
     const g = startOpen(createGame(1, null));
@@ -149,6 +153,7 @@ describe('the war plan', () => {
     const force = (): Game['corps'] => g.corps.filter((c) => c.nat === 'GER' && names.includes(c.name));
     const oslo = g.byName.Oslo;
     let landed = 0, fell = 0, kept = 0;
+    const ashore = new Set<string>();
     const enemyNear = (): boolean => {
       const ring = new Set<number>([oslo.id, ...oslo.nb, ...oslo.nb.flatMap((j) => g.regions[j].nb)]);
       ring.delete(oslo.id);
@@ -163,14 +168,16 @@ describe('the war plan', () => {
       }
       runTurnAI(g);
       if (!landed && oslo.ctrl === 'GER') landed = before;
+      for (const c of force()) if (!c.dead && g.regions[c.reg].owner === 'NOR') ashore.add(c.name);
       // From the day Oslo is taken a German corps stands on it every month an enemy field corps is within two marches.
       if (landed && enemyNear()) { kept++; expect(oslo.units.some((c) => c.nat === 'GER' && !c.dead && c.kind !== 'fort')).toBe(true); }
       if (landed && !g.nations.NOR.alive) fell = before;
     }
     expect(landed).toBeGreaterThan(0);
     expect(kept).toBeGreaterThan(0);
-    // More than one of the groups got ashore, and the staff's landing desk took Norway for its own that month.
-    expect(force().filter((c) => c.dead || g.regions[c.reg].owner === 'NOR').length).toBeGreaterThan(1);
+    // More than one of the groups got ashore, and the staff's landing desk took Norway for its own that month. (Counted
+    // as they stand on Norway's ground month by month: a group that is lost is no longer on the roll at the end.)
+    expect(ashore.size).toBeGreaterThan(1);
     expect(said.some((e) => e.nat === 'GER' && e.what === 'opFoe' && e.t === landed)).toBe(true);
     expect(said.some((e) => e.nat === 'GER' && e.what === 'opLodged' && e.where === 'Oslo' && e.t === landed)).toBe(true);
     // Norway falls within the half year (in history two months; in this war, with the plan off, never).
@@ -214,7 +221,12 @@ describe('the war plan', () => {
   it('the operations: the garrison beside a country a staff means to attack is not sailed away', () => {
     // Seed 2 at stop 3: Italy's desk for its army abroad took the whole garrison of Albania for a landing on Cyprus
     // in October 1940; in March 1941 Italy declared war on Greece with nobody there, and Greece took Albania.
+    // (Read as it was measured, before the coast watch on every coast, which has tests of its own: with that watch on,
+    // Italy keeps five corps in its home harbours against Britain's lift and Greece's, the two armies that crossed to
+    // Albania in this war in April 1941 stay at home, and the garrison, not sailed away, is beaten there in May. Sent
+    // to the design director with the watch's first read, 22 November 2026.)
     STRATEGY.ops!.on = true;
+    STRATEGY.ops!.watch = false;
     const g = startOpen(createGame(2, null));
     const albania = g.byName.Albania;
     const mine = (): number => albania.units.filter((c) => c.nat === 'ITA' && !c.dead && c.kind !== 'fort').reduce((s, c) => s + c.divs, 0);

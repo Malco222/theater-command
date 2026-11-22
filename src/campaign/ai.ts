@@ -485,6 +485,15 @@ function campaignMoves(g: Game, nat: string): void {
   try { movesOfTheMonth(g, nat); } finally { for (const c of booked) c.hold = false; }
 }
 
+/**
+ * The guard of an operation that is won, held where it stands for this month's moves (the war plan, 'ops.home.held').
+ * A phase's release does not let these corps go: a keep that marches away is no keep. (A foothold's harbour keeper
+ * is not among them: a release that names its ground still drops its hold in the same month, as before. Seed 1 at
+ * stop 3 with the coast watch: III Corps kept Oslo's harbour in July 1940, was released, attacked into Oppland and
+ * marched in. Named to the design director, 22 November 2026, and not mended here.)
+ */
+let monthKept = new Set<Corps>();
+
 function movesOfTheMonth(g: Game, nat: string): void {
   const n = g.nations[nat];
   // An army overseas fights its own war to its own plan. It stands aside while the main plan is
@@ -497,19 +506,24 @@ function movesOfTheMonth(g: Game, nat: string): void {
   const armies = plansAhead(g, nat) ? idleArmies(g, nat) : [];
   // (And the army of an operation that is won goes home the same way: staff.ts, `opArmies`.)
   const called = new Set(armies.flatMap((A) => A.go));
-  const won = opArmies(g, nat).map((A) => ({ ports: A.ports, go: A.go.filter((c) => !called.has(c)) })).filter((A) => A.go.length);
+  const ops = opArmies(g, nat);
+  const won = ops.map((A) => ({ ports: A.ports, go: A.go.filter((c) => !called.has(c)) })).filter((A) => A.go.length);
   const going = [...armies, ...won].flatMap((A) => A.go);
   // (A corps kept back from an offensive's release for an operation that has since gone, or been given up, is released.)
   freeKept(g, nat);
+  // (The guard of an operation that is won is held where it stands for the month: 'ops.home.held'. A keep that marches away is no keep.)
+  const guard = ops.flatMap((A) => A.keep ?? []).filter((c) => !called.has(c));
+  for (const c of guard) c.hold = true;
   // (The war plan: and the corps that keeps the harbour of a foothold stays on it for the month. `portKeepers`.)
-  const keepers = portKeepers(g, nat).filter((c) => !going.includes(c));
+  const keepers = [...portKeepers(g, nat).filter((c) => !going.includes(c)), ...guard];
   const stays = new Set(keepers);
+  monthKept = new Set(guard);
   for (const c of away) if (!stays.has(c)) c.hold = true;
   for (const c of going) c.hold = true;
   try {
     try { mainCampaign(g, nat); } finally { for (const c of away) if (!stays.has(c)) c.hold = false; for (const c of going) c.hold = true; }
     if (n.alive) overseas(g, nat);
-  } finally { for (const c of going) c.hold = false; for (const c of keepers) c.hold = false; }
+  } finally { for (const c of going) c.hold = false; for (const c of keepers) c.hold = false; monthKept = new Set(); }
   if (n.alive && armies.length) recall(g, nat, armies, STRATEGY.recall?.risk ?? 0);
   if (n.alive && won.length) recall(g, nat, won, STRATEGY.ops?.home?.risk ?? 0, true);
 }
@@ -522,7 +536,7 @@ export function release(g: Game, nat: string, names: string[]): void {
   // (The war plan: the corps a planning staff keeps for an operation it means to launch stay held. staff.ts, `keptForOps`.)
   const kept = keptForOps(g, nat);
   for (const c of g.corps) {
-    if (c.nat !== nat || !c.hold || c.stay || c.kind === 'fort' || !names.includes(g.regions[c.reg].name)) continue;
+    if (c.nat !== nat || !c.hold || c.stay || c.kind === 'fort' || monthKept.has(c) || !names.includes(g.regions[c.reg].name)) continue;
     if (kept.has(c.name)) g.flags[`st:keptBack:${c.id}`] = 1;
     else c.hold = false;
   }
