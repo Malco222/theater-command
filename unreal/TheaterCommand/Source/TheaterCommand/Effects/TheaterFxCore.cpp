@@ -3483,8 +3483,11 @@ namespace TheaterFx
 			const double LobeFrom = D.U(0.0, 2.0 * Pi);
 			for (int I = 0; I < NLobe; ++I)
 			{
-				const double A = LobeFrom + 2.0 * Pi * (I + D.U(-0.25, 0.25)) / std::max(NLobe, 1);
-				Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (D.U(0.75, 1.05) * R), D.U(0.45, 0.65) * R, D.U(1.2, 1.6), A, P.Bruise * D.U(0.95, 1.05), D.U(0.55, 0.7), 0.4, 0.0);
+				// (each lobe its own length, 0.6 to 1.4, and unevenly spaced, so no two scars match and none is a regular
+				// star: the art director's 20:35Z carry)
+				const double A = LobeFrom + 2.0 * Pi * (I + D.U(-0.4, 0.4)) / std::max(NLobe, 1);
+				const double Long = D.U(0.6, 1.4);
+				Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (D.U(0.75, 1.05) * R * (0.5 + 0.5 * Long)), D.U(0.45, 0.65) * R * (0.7 + 0.3 * Long), D.U(1.2, 1.6) * Long, A, P.Bruise * D.U(0.95, 1.05), D.U(0.55, 0.7), 0.4, 0.0);
 			}
 			Mark(At, P.BruiseCore * R, D.U(0.9, 1.2), D.U(0.0, 2.0 * Pi), P.bScar ? P.Scar : P.Heavy * 0.6, 0.85, 0.7, 0.0);
 			const int NChip = D.Whole(10, 16);
