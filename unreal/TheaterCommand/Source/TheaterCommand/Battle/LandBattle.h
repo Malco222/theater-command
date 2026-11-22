@@ -548,6 +548,12 @@ private:
 	/** The map's light trims as they stood when the battle began (console variable, value), put back as it ends; and
 	 * its sun's contact shadow length (under 0: not changed). */
 	TArray<TPair<FString, FString>> KeptTrims;
+	/** The film's shallow focus (E9): r.DepthOfFieldQuality as the battle found it (the map's 0, or a capture run's
+	 * film set), the quality the scene has set now, and whether the camera's close shots may turn it on
+	 * ("-TheaterLandFocusLive=0": never, for a Mac A/B). */
+	int32 FocusQualityKept = -1;
+	int32 FocusQualityNow = -1;
+	bool bFocusLive = true;
 	float KeptContactShadow = -1.0f;
 	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
