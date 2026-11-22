@@ -299,19 +299,22 @@ describe('after the fight (form B2, A4)', () => {
     expect(s.over!.lines.at(-1)).toMatch(/sailors: [\d,]+ saved/);
   });
 
-  it('leave them: their men are found four days later, and only warm water leaves any alive', () => {
+  it('leave them: their men are found four days later by whoever holds the water, and only warm water leaves any alive', () => {
     const run = (water: 'cold' | 'warm', stop: 'stop' | 'leave'): SeaLosses => {
       const s = sim(11, { odds: 0.6, sailors: { water, stop: { att: stop, def: stop } } });
       fight(s);
       return losses(s);
     };
     const coldLeave = run('cold', 'leave'), warmLeave = run('warm', 'leave'), warmStop = run('warm', 'stop');
+    // The holder's own men are saved and the enemy's are its prisoners (the design director, 18:42Z), a little over a
+    // third alive after four days and the minutes before the fight ended.
+    const held = warmLeave.sailors!.att.call.stop ? 'att' : 'def';
     for (const side of ['att', 'def'] as const) {
       expect(coldLeave.sailors![side].saved + coldLeave.sailors![side].prisoners).toBe(0);
-      expect(warmLeave.sailors![side].prisoners).toBe(0);
-      const m = warmLeave.sailors![side];
-      if (m.water > 0) expect(m.saved / m.water).toBeGreaterThan(0.36);
-      if (m.water > 0) expect(m.saved / m.water).toBeLessThan(0.38);
+      const m = warmLeave.sailors![side], found = side === held ? m.saved : m.prisoners;
+      expect(side === held ? m.prisoners : m.saved).toBe(0);
+      if (m.water > 0) expect(found / m.water).toBeGreaterThan(0.36);
+      if (m.water > 0) expect(found / m.water).toBeLessThan(0.38);
     }
     expect(coldLeave.rescue).toEqual([]);
     // Picked up at 1.5 hours after the fight in warm water, all but a hundredth or two are alive (98% at 3 hours).
@@ -321,6 +324,18 @@ describe('after the fight (form B2, A4)', () => {
       const w = warmStop.sailors![side].water;
       if (w > 0) expect(n / w).toBeGreaterThan(0.98);
       expect(n).toBeLessThanOrEqual(w);
+    }
+  });
+
+  it("each wreck's men are in the water from her own sinking: men who went in early wait longest for the pick-up", () => {
+    const s = sim(11, { odds: 0.6, sailors: { water: 'temperate' } });
+    fight(s);
+    const inn = inner(s), end = inn.t, l = losses(s);
+    const mains = inn.wrecks.filter((w: any) => !w.guest);
+    expect(new Set(mains.map((w: any) => w.t)).size).toBeGreaterThan(1);
+    for (const r of l.rescue!) {
+      const w = mains.find((k: any) => k.unit === r.wreck.unit && k.ship === r.wreck.ship);
+      expect(r.men).toBe(Math.round(w.water * aliveAfter('temperate', (end + SAILORS.found.stop * 3600 - w.t) / 3600)));
     }
   });
 
@@ -436,6 +451,35 @@ describe('picking up survivors in the fight (form B1)', () => {
     s.step();
     expect(s.orderOf(mine.id)?.kind).not.toBe('rescue');
     expect(s.view().events.some((e) => e.what === 'sea:rescue')).toBe(false);
+  });
+
+  it("men she has picked up share her fate when a ship of hers is lost: her share go down with her people's share, the rest into the water at her wreck", () => {
+    const s = sim(11, { odds: 0.6, human: 'att', sailors: { water: 'warm' } });
+    s.ai.att = true;
+    const inn = inner(s), dds = s.units.filter((u) => u.side === 'att' && u.extra.cls === 'dd');
+    const [lost, by] = [dds[0], dds.at(-1)!];
+    inn.wear(lost, inn.hullOf(lost) * 0.3);
+    s.view();
+    expect(s.command({ do: 'sea:rescue', units: [by.id], wreck: { unit: lost.id, ship: 1 } } as any, 'att')).toBe(true);
+    for (let i = 0; i < 1e4 && !s.over && !((inn.rescuing.get(by.id)?.got ?? 0) >= 12); i++) s.step();
+    expect(s.over).toBeFalsy();
+    const got = inn.rescuing.get(by.id).got, ships = by.extra.ships, picked = inn.wrecks[0].picked.att;
+    expect(got).toBeGreaterThanOrEqual(12);
+    s.view();
+    inn.wear(by, inn.hullOf(by) * (1 / ships + 0.05));
+    const men = s.view().events.find((e) => e.what === 'sea:men' && e.unit === by.id)!;
+    // A destroyer fought for: a quarter of her share go down with her, the rest swim.
+    const hers = got / ships;
+    expect(x(men).guests).toBe(Math.round(hers * (1 - SAILORS.down.fought)));
+    expect(inn.wrecks[0].picked.att).toBeCloseTo(picked - hers, 6);
+    const guest = inn.wrecks.find((w: any) => w.guest)!;
+    expect(guest).toMatchObject({ unit: by.id, ship: x(men).ship, side: 'att', crew: 0, water: 0 });
+    expect(guest.alive).toBeCloseTo(hers * (1 - SAILORS.down.fought), 6);
+    // The rest of her piece still carries theirs, and the count still adds up at the end.
+    fight(s);
+    const m = losses(s).sailors!.att;
+    expect(m.crew).toBe(m.down + m.dead + m.water);
+    expect(m.lost).toBe(m.crew - m.saved - m.prisoners);
   });
 
   it("no pick-up at an enemy wreck whose navy's men refuse it, nor with nobody alive", () => {
