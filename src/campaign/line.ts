@@ -43,11 +43,17 @@
 // (Kassala, Gallabat and Kurmuk from July 1940, British Somaliland from August, kind 'gain'), and under `shut` the
 // ring of ground round them that Italy never held. As first laid without it, Italy's staff read seventeen to two
 // in its war's first month and took Port Sudan and Khartoum, and Britain's was in Addis Ababa in month 15.
+//
+// The stations (the design director's seam c of 14:18Z and his 18:28Z of 22 November 2026: a book-placed row holds its
+// stations, one rule for every line). While a line binds, a held corps of the invader's own that stands on ground the
+// line gives him this month keeps its hold: its staff's release does not let it go (ai.ts, release). A dated attack
+// of the book still moves its force (stations.ts), and a held corps sent back inside the line when a raid's months
+// are over is held again where it comes to rest (ai.ts, lineHome). `lineKeeps`.
 
 import { allied, atWar } from './game';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf } from './history';
 import { pacificGround } from './pacific';
-import type { Game, Region } from './types';
+import type { Corps, Game, Region } from './types';
 
 /** The months the invader held a province, and how (the historian's kinds: 'day one', 'lasting', 'raid', 'ichigo'). */
 export interface Span { from: number; to: number; kind: string }
@@ -220,6 +226,28 @@ export function lineGives(g: Game, nat: string, t: number): { r: Region; to: str
     }
   }
   return out;
+}
+
+/** The line drawn on a province, if the book has one there: for a report. */
+export const lineOf = (g: Game, r: Region): Line | undefined => lineOn(g, r);
+
+/** For the measuring harness: told of each held corps a line keeps on its station when its staff's release names its ground. Nothing in the game listens. */
+export const lineKeepWatch: { tell: ((e: { line: string; corps: Corps; at: Region }) => void) | null } = { tell: null };
+
+/**
+ * True of a corps of the invader's own standing on ground his line gives him in month `t`, while the line binds: a
+ * held one keeps its station there (the design director's seam c of 14:18Z and his 18:28Z of 22 November 2026, one
+ * rule for every line). In East Africa Italy's staff opened an offensive of its own in June 1940, and a live front
+ * let go every held row on its ground: fourteen of Italy's twenty-two rows were loose that month, Gondar's marched
+ * to Kurmuk in July and stood at Keren in March 1941, where it held the 4th and 5th Indian Divisions a month past
+ * the record. By the book the rows keep their places until their month ends or a dated attack takes their ground.
+ * Never a player's corps, nor on a player's own ground; where no line binds, the staff decides as before.
+ */
+export function lineKeeps(g: Game, c: Corps, t = g.turn): boolean {
+  if (!lines().length || c.nat === g.human) return false;
+  const r = g.regions[c.reg];
+  const L = lineOn(g, r);
+  return !!L && c.nat === L.taker && lineBinds(g, L) && inLine(g, L, r, t);
 }
 
 /** True if any line could bind this nation this month: a quick test before the march home is walked. */

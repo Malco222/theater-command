@@ -301,15 +301,16 @@ describe('Italy\'s gains in East Africa as its own dated attacks (the design dir
 });
 
 describe('Britain\'s takings in East Africa: two wars walked', () => {
-  it('the book\'s first stop: Italy\'s choice goes in July 1940 and its five gains are made in their months; Britain\'s goes in January 1941, and Kassala, Kismayu, Mogadishu, Berbera and Harar are Britain\'s in theirs', () => {
+  it('the book\'s first stop: Italy\'s choice goes in July 1940 and its five gains are made in their months, its rows keeping their stations; Britain\'s goes in January 1941, and Kassala, Kismayu, Mogadishu, Berbera, Keren and Harar are Britain\'s in theirs', () => {
     const g = startOpen(createGame(3, null));
     setStop(g, 1, true);
     const L = lines().find((x) => x.id === 'eastafrica')!;
     const first: Record<string, number> = {}, gained: Record<string, number> = {};
-    // (Keren is not read here: in this war it holds a month past its own, against the 4th and 5th Indian Divisions,
-    // behind a command row that Italy's staff had let go and marched there. Whether Italy's rows keep their stations
-    // at the book's stops is the design director's seam c of 14:18Z, the build after this one.)
-    const watch = ['Kassala', 'Kismayu', 'Mogadishu', 'Berbera', 'Hargeisa', 'Harar'];
+    // (Keren with them: before Italy's rows kept their stations, line.ts `lineKeeps`, a command row its staff had let
+    // go stood there in March 1941 and held the 4th and 5th Indian Divisions a month past the record.)
+    const watch = ['Kassala', 'Kismayu', 'Mogadishu', 'Berbera', 'Hargeisa', 'Keren', 'Harar'];
+    const italy = ROWS.filter((r) => r[1] === 'ITA' && !['Kufra', 'Murzuk', 'Ghat'].includes(r[5]));
+    const went: Record<string, string[]> = { [KF]: ['Kassala'], [GF]: ['Gallabat'], [NF]: ['Hargeisa', 'Berbera', 'Burao'] };
     const gains = ['Kassala', 'Gallabat', 'Hargeisa', 'Berbera', 'Burao'];
     while (g.turn < 20) {
       const t = g.turn;
@@ -317,6 +318,13 @@ describe('Britain\'s takings in East Africa: two wars walked', () => {
       if (g.turn === t) continue;
       // (As each month ends.)
       for (const nm of gains) if (gained[nm] === undefined && g.byName[nm].ctrl === 'ITA') gained[nm] = t;
+      // Through 1940 each of Italy's rows stands held on its station: its own place, or a force on a gain its dated attack took.
+      if (t >= 10 && t <= 16) for (const r of italy) {
+        const c = g.corps.find((x) => !x.dead && x.nat === 'ITA' && x.name === r[2]);
+        if (!c) continue;
+        expect(c.hold, `${r[2]} in month ${t}`).toBe(true);
+        expect([r[5], ...(went[r[2]] ?? [])], `${r[2]} in month ${t}`).toContain(g.regions[c.reg].name);
+      }
       for (const nm of watch) if (first[nm] === undefined && g.byName[nm].ctrl === 'UK' && (!gains.includes(nm) || gained[nm] !== undefined)) first[nm] = t;
       // Britain holds none of Italy's own ground before the province's month.
       for (const [nm, s] of Object.entries(L.spans)) if (s[0].kind === 'own' && g.byName[nm].ctrl === 'UK' && nm !== 'Gambela') expect(t, `${nm} in month ${t}`).toBeGreaterThanOrEqual(L.back![nm]);
@@ -324,7 +332,7 @@ describe('Britain\'s takings in East Africa: two wars walked', () => {
     expect(g.flags['st:done:ITA:eastafrica']).toBe(11);
     expect(gained).toEqual({ Kassala: 11, Gallabat: 11, Hargeisa: 12, Berbera: 12, Burao: 12 });
     expect(g.flags['st:done:UK:eastafrica']).toBe(17);
-    expect(first).toEqual({ Kassala: 17, Kismayu: 18, Mogadishu: 18, Berbera: 19, Hargeisa: 19, Harar: 19 });
+    expect(first).toEqual({ Kassala: 17, Kismayu: 18, Mogadishu: 18, Berbera: 19, Hargeisa: 19, Keren: 19, Harar: 19 });
   }, 600000);
 
   it('a stop that keeps no book: neither choice is ever taken, and no row of Britain\'s or Italy\'s is marked', () => {

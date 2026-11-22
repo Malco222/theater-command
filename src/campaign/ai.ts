@@ -26,7 +26,7 @@ import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from 
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
-import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
+import { frontArmys, lineAny, lineGives, lineKeepWatch, lineKeeps, lineLeaves, lineOf, lineShut } from './line';
 import { alongside, bookAttacks, bookFleets, bookKept, bookReckoning, bookSails, bookStations, bookedAhead, ceilinged, goesWith, ridersOf } from './stations';
 import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, hopMade, hopsRead, offFront, onFront, planWaits, plansHold, plansKeep, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
@@ -579,7 +579,13 @@ function campaignMoves(g: Game, nat: string): void {
  * garrison row marked to stay keeps it (ruling 221, H): an offensive does not empty the bases behind it.
  */
 export function release(g: Game, nat: string, names: string[]): void {
-  const held = (c: Corps): boolean => c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && !planWaits(c) && names.includes(g.regions[c.reg].name);
+  // (By the book a held corps on ground its country's line gives it keeps its station: line.ts, `lineKeeps`.)
+  const kept = (c: Corps): boolean => {
+    if (!lineKeeps(g, c)) return false;
+    lineKeepWatch.tell?.({ line: lineOf(g, g.regions[c.reg])!.id, corps: c, at: g.regions[c.reg] });
+    return true;
+  };
+  const held = (c: Corps): boolean => c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && !planWaits(c) && names.includes(g.regions[c.reg].name) && !kept(c);
   // (A row held for the corps it goes with is let go with that corps and not before it: rider b604 to ruling 234,
   // stations.ts. The tank regiments beside a division that waits on its quay wait with it. None with the far side off.)
   const riders = g.corps.filter((c) => held(c) && goesWith(g, c) !== null);
@@ -795,9 +801,23 @@ export function endStaffMonth(): void { entrusted = new Set(); massed = new Set(
 export function lineHome(g: Game, nat: string, t: number): void {
   if (!lineAny(g, nat)) return;
   if (t === g.turn) lineGiveBack(g, nat);
+  try { lineMarch(g, nat, t); } finally {
+    // (A held corps sent back inside is held again where it comes to rest, this month or a later one: line.ts,
+    // `lineKeeps`. It is marked when it sets out, `lnh`, and the mark goes when it is held again or is no more.)
+    for (const c of g.corps) {
+      const mark = `lnh:${c.id}`;
+      if (c.nat !== nat || g.flags[mark] === undefined) continue;
+      if (c.dead) delete g.flags[mark];
+      else if (lineKeeps(g, c, t)) { c.hold = true; delete g.flags[mark]; }
+    }
+  }
+}
+
+function lineMarch(g: Game, nat: string, t: number): void {
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead || c.kind === 'fort' || tied.has(c.id) || !lineLeaves(g, nat, g.regions[c.reg], t)) continue;
     if (c.town !== undefined && !takeField(g, c)) continue;
+    if (c.hold) g.flags[`lnh:${c.id}`] = 1;
     c.hold = false;
     const ours = (r: Region): boolean => allied(g, nat, ctl(g, r));
     const d = hops(g, c.reg, ours);
