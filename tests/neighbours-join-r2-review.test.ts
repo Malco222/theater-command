@@ -23,13 +23,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import page from '../src/campaign/ui/main.ts?raw';
 import { DESERT, addCorps, assess, createGame, declareWar, ensureSupply, limitAttackers, relocate, resolveBattle, startPhase, type Assessment } from '../src/campaign/game';
-import { twoWaves } from '../src/campaign/ai';
+import { release, twoWaves } from '../src/campaign/ai';
+import { jointMonth } from '../src/campaign/joint';
 import { JOIN, JOIN_ATTACK, JOIN_DEFENCE, JOIN_NONE, MAY_JOIN, SORTIE_ALONE, STORM_ALONE, battleThisMonth, weeksInHand } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { monthCard, monthMark, type CardRow, type MonthCard, type MonthMark } from '../src/campaign/monthcard';
 import { garrison, previewSally } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import { GARRISON, beginHuman, candidates, canOrder, endHuman, garrisonHover, garrisonNotice, humanUp, joinChoices, keptOutLine, nextDoorCount, orderAttack, orderHold, orderJoin, orderMove, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
+import { GARRISON, beginHuman, candidates, canOrder, endHuman, garrisonHover, garrisonNotice, humanUp, joinChoices, keptOutLine, nextDoorCount, orderAttack, orderHold, orderJoin, orderMove, orderSendBack, previewLanding, stepAI, stormOutlook, ticketSeen } from '../src/campaign/turn';
 import { type BattleReport, type Corps, type Game, type Region } from '../src/campaign/types';
 import { type TicketLine } from '../src/core/ticket';
 
@@ -104,6 +105,70 @@ describe("1. an ally's corps in the player's army", () => {
     startPhase(g, 'FRA');
     expect(uk.joint).toBe('FRA');
     expect(uk.ap).toBe(uk.apMax);
+  });
+
+  it("carries the player's mark while it marches with him, and goes home under its own staff's: neither side's choice crosses over", () => {
+    // (The review of the fold, findings 1 and 10.) France's seat, seed 3.
+    const g = seat('FRA');
+    const lorraine = g.byName['Lorraine'];
+    // London District, under Britain's hold from the setup, joins him and starts held; he frees it and sends it back:
+    // Britain's own hold is what comes home.
+    const ld = corps(g, 'UK', 'London District');
+    relocate(g, ld, lorraine);
+    expect(ld.hold).toBe(true);
+    expect(orderJoin(g, ld)).toBe(true);
+    expect(ld.hold).toBe(true);
+    expect(orderHold(g, ld, false)).toBe(true);
+    expect(orderSendBack(g, ld)).toBe(true);
+    expect(ld.joint).toBeUndefined();
+    expect(ld.hold).toBe(true);
+    expect(g.flags[`garrison:${ld.id}`]).toBeUndefined();
+    // A British corps with no hold joins; he makes it a garrison. Its staff's release of that ground, while it marches
+    // with him, does not touch his mark; sent back, it goes home free, as its staff left it.
+    const free = g.corps.find((c) => c.nat === 'UK' && !c.dead && !c.hold && c.kind !== 'fort' && c.town === undefined && c !== ld)!;
+    relocate(g, free, lorraine);
+    expect(orderJoin(g, free)).toBe(true);
+    expect(orderHold(g, free, true)).toBe(true);
+    release(g, 'UK', ['Lorraine']);
+    expect(free.hold).toBe(true);
+    expect(orderSendBack(g, free)).toBe(true);
+    expect(free.hold).toBe(false);
+    expect(g.flags[`garrison:${free.id}`]).toBeUndefined();
+    // (Back home in Lorraine, that release lifted Britain's own hold on London District, as release 1 does.)
+    expect(ld.hold).toBe(false);
+    // London District again, lent under a hold of its staff's: he leaves it held, and Britain's staff releases Lorraine
+    // meanwhile. His mark stands while it is his; the hold at home is lifted, and it goes home free.
+    ld.hold = true;
+    expect(orderJoin(g, ld)).toBe(true);
+    release(g, 'UK', ['Lorraine']);
+    expect(ld.hold).toBe(true);
+    expect(orderSendBack(g, ld)).toBe(true);
+    expect(ld.hold).toBe(false);
+    // With no ally of his beside it, a lent corps goes home as its month opens (jointMonth): the same.
+    ld.hold = true;
+    expect(orderJoin(g, ld)).toBe(true);
+    expect(orderHold(g, ld, false)).toBe(true);
+    relocate(g, ld, g.byName['Alsace']);
+    for (const c of g.regions[ld.reg].units.filter((u) => u.nat === 'FRA')) relocate(g, c, lorraine);
+    jointMonth(g, 'FRA');
+    expect(ld.joint).toBeUndefined();
+    expect(ld.hold).toBe(true);
+  });
+
+  it('with the switch off, a lent corps is lent as release 1 lends it: its hold is not touched, and nothing is written', () => {
+    JOIN.on = false;
+    const g = seat('FRA');
+    const ld = corps(g, 'UK', 'London District');
+    relocate(g, ld, g.byName['Lorraine']);
+    const flags = JSON.stringify(g.flags);
+    expect(orderJoin(g, ld)).toBe(true);
+    expect(JSON.stringify(g.flags)).toBe(flags);
+    release(g, 'UK', ['Lorraine']);
+    expect(ld.hold).toBe(false);
+    ld.hold = true;
+    expect(orderSendBack(g, ld)).toBe(true);
+    expect(ld.hold).toBe(true);
+    expect(Object.keys(g.flags).some((k) => k.startsWith('lenthold:') || k.startsWith('garrison:'))).toBe(false);
   });
 });
 

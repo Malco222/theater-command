@@ -1395,7 +1395,9 @@ export const postureOf = (c: Corps): Posture => (c.yields ? 'back' : c.digs ? 'd
  * an ally's that marches in it (canOrder), as the hold-back order was. It sets ('on') or lifts the corps' hold, the
  * one mark every corps carries and the computer staffs read: a corps under it stays where it is and joins no battle
  * next door (mayJoin, join.ts). His holds from the setup start set, and so does an ally's corps that joins his army
- * under its staff's hold; the mark goes home with it. He can still send a garrison anywhere himself: the move rules
+ * under its staff's hold. While it marches with him the mark is his alone: its staff keeps its own hold for it at home
+ * and never writes his, and when it goes home it takes back its staff's hold and leaves his (joint.ts, joinArmy,
+ * homeHold). He can still send a garrison anywhere himself: the move rules
  * never read his holds. Refused with the switch off: release 1 has no such order, and its holds never touch the
  * player. (Before the fold this was the hold-back order, a mark of its own: a save that carries one loads as the
  * corps' hold, save.ts.)

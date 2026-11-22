@@ -12,6 +12,7 @@
 import arsenalData from '../../data/campaign/arsenal.json';
 import { STACK, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
+import { JOIN } from './stage';
 import { ENGINEERING, bridgeDown, crossingsAt, downBetween, farBank, rebuildAt, riverName, type Crossing } from './rivers';
 import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach } from './game';
 import { orderCorps, raiseSite } from './economy';
@@ -231,7 +232,9 @@ function march(g: Game, c: Corps, goals: Set<number>): number {
  */
 export function aiEngineers(g: Game, nat: string): void {
   if (!groundRules(g) || nat === g.human || !g.nations[nat].alive) return;
-  const mine = g.corps.filter((c) => c.nat === nat && c.kind === 'eng' && !c.dead);
+  // (Release 2, its switch on: never engineers that march in the player's army. Their own staff leaves them alone while
+  // they are away, joint.ts, and the hold it puts on its engineers would be his mark.)
+  const mine = g.corps.filter((c) => c.nat === nat && c.kind === 'eng' && !c.dead && !(JOIN.on && c.joint !== undefined));
   const sites = wanted(g, nat);
   // The crossings somebody is already rebuilding, from either bank, and the other repairs already in hand.
   const covered = new Set<Crossing>();

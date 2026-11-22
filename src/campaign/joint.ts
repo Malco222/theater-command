@@ -17,6 +17,7 @@
 import data from '../../data/campaign/joint.json';
 import type { Corps, Game } from './types';
 import { allied, atWar, headline } from './game';
+import { JOIN } from './stage';
 
 export const JOINT = data as unknown as { share: number; least: number; most: number; capital: number };
 
@@ -72,15 +73,42 @@ export function joinArmy(g: Game, c: Corps, to: string | null = g.human): boolea
   if (whyNotJoin(g, c, to) !== null) return false;
   c.joint = to as string;
   // Its own staff's standing orders do not follow it.
-  delete c.yields; delete c.digs; delete c.holdBack;
+  delete c.yields; delete c.digs;
+  // (Release 2, its switch on: the hold is one mark, and in his army it is his to set and lift with his toggle. Its own
+  // staff's hold is kept for it at home, and given back when it goes home (homeHold). It marches in under that hold, as
+  // a hold from the setup starts set.)
+  if (JOIN.on) g.flags[`lenthold:${c.id}`] = c.hold ? 1 : 0;
   return true;
+}
+
+/**
+ * Release 2, its switch on: its own staff lifts the hold of a corps that marches in the player's army (a theatre plan's
+ * 'release', the line's march home). His mark on it is his and stays as it is; the hold its staff keeps for it at home
+ * is lifted, so it goes home free (homeHold).
+ */
+export function liftAtHome(g: Game, c: Corps): void {
+  if (g.flags[`lenthold:${c.id}`] !== undefined) g.flags[`lenthold:${c.id}`] = 0;
+}
+
+/**
+ * Release 2, its switch on: a corps going home from the player's army takes back its own staff's hold, as it was when it
+ * came to him or as its staff has lifted it since (liftAtHome), and leaves his mark behind: neither side's choice
+ * crosses over. Off, nothing is read or written.
+ */
+function homeHold(g: Game, c: Corps): void {
+  if (!JOIN.on) return;
+  const k = `lenthold:${c.id}`;
+  if (g.flags[k] !== undefined) c.hold = g.flags[k] === 1;
+  delete g.flags[k];
+  delete g.flags[`garrison:${c.id}`];
 }
 
 /** Sends a corps back to its own command. It does not march again for its own staff this month. */
 export function leaveArmy(g: Game, c: Corps): boolean {
   if (c.joint === undefined) return false;
   delete c.joint;
-  delete c.yields; delete c.digs; delete c.holdBack;
+  delete c.yields; delete c.digs;
+  homeHold(g, c);
   if (!c.dead) g.flags[`back:${c.id}`] = g.turn;
   return true;
 }
@@ -94,6 +122,7 @@ export function jointHold(g: Game, c: Corps): boolean {
     if (c.joint === g.human && g.nations[c.joint].alive && allied(g, c.nat, c.joint)) return true;
     // The army it marched with is no more, or is its ally no longer: it is its own country's again, from this month.
     delete c.joint;
+    homeHold(g, c);
     return false;
   }
   const key = `back:${c.id}`;

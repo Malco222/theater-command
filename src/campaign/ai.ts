@@ -28,6 +28,7 @@ import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { joinRules, staffMask } from './join';
+import { liftAtHome } from './joint';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, EASTERN, NO_MASK, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
@@ -504,7 +505,14 @@ function campaignMoves(g: Game, nat: string): void {
  * garrison row marked to stay keeps it (ruling 221, H): an offensive does not empty the bases behind it.
  */
 export function release(g: Game, nat: string, names: string[]): void {
-  for (const c of g.corps) if (c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && names.includes(g.regions[c.reg].name)) c.hold = false;
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.stay || c.kind === 'fort') continue;
+    // (Release 2, its switch on: one that marches in the player's army carries his mark, not its staff's, held or not.
+    // The staff lifts the hold it keeps for it at home, joint.ts.)
+    const lent = joinRules() && c.joint !== undefined;
+    if ((!c.hold && !lent) || !names.includes(g.regions[c.reg].name)) continue;
+    if (lent) liftAtHome(g, c); else c.hold = false;
+  }
 }
 
 /** Runs a nation's corps in each overseas theatre by that theatre's plan. */
@@ -631,7 +639,8 @@ export function lineHome(g: Game, nat: string, t: number): void {
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead || c.kind === 'fort' || !lineLeaves(g, nat, g.regions[c.reg], t)) continue;
     if (c.town !== undefined && !takeField(g, c)) continue;
-    c.hold = false;
+    // (Release 2, its switch on: one that marches in the player's army keeps his mark; its staff's hold at home is lifted, joint.ts.)
+    if (joinRules() && c.joint !== undefined) liftAtHome(g, c); else c.hold = false;
     const ours = (r: Region): boolean => allied(g, nat, ctl(g, r));
     const d = hops(g, c.reg, ours);
     let goal: Region | null = null;
@@ -2250,7 +2259,9 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
 
 function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): void {
   const engaged = (c: Corps): boolean => g.regions[c.reg].nb.some((j) => enemies.has(ctl(g, g.regions[j])) && atWar(g, nat, ctl(g, g.regions[j])));
-  const free = (): Corps[] => g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap >= 4 && !engaged(c));
+  // (Release 2, its switch on: never one that marches in the player's army. Its own staff leaves it alone while it is
+  // away, joint.ts, and a garrison's hold on it would be his mark.)
+  const free = (): Corps[] => g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap >= 4 && !engaged(c) && !(joinRules() && c.joint !== undefined));
   const room = (r: Region): boolean => allied(g, nat, ctl(g, r)) && friendlyUnits(g, r, nat).length < STACK;
   const nearest = (list: Corps[], to: Region): Corps | null => {
     const d = hops(g, to.id, (r) => allied(g, nat, ctl(g, r)));

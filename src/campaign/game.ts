@@ -29,7 +29,7 @@ import { tradeTick } from './trade';
 import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
-import { armyOf, jointHold, jointMonth } from './joint';
+import { armyOf, jointHold, jointMonth, liftAtHome } from './joint';
 import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
@@ -56,7 +56,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
-import { foughtNow, joinLines, joinWatch, joinersOf, keepJoiners, noJoinLine, spendJoiner, type Join } from './join';
+import { JOIN, foughtNow, joinLines, joinWatch, joinersOf, keepJoiners, noJoinLine, spendJoiner, type Join } from './join';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -3299,7 +3299,9 @@ export function nearHarbour(g: Game, nat: string, from: Region, fits: (r: Region
 export function takeOut(g: Game, c: Corps, to: Region): void {
   const from = g.regions[c.reg], N = g.nations[c.nat];
   place(g, c, to);
-  c.str *= 0.75; c.org = Math.min(c.org, 0.3); c.ap = 0; c.hold = false;
+  c.str *= 0.75; c.org = Math.min(c.org, 0.3); c.ap = 0;
+  // (Release 2, its switch on: one that marches in the player's army keeps his mark; its staff's hold at home is lifted, joint.ts.)
+  if (JOIN.on && c.joint !== undefined) liftAtHome(g, c); else c.hold = false;
   if (!g.flags[`evac:${g.turn}`]) {
     g.flags[`evac:${g.turn}`] = 1;
     headline(g, 'event', `${N.adj} troops at ${from.name}, with no road back to their own lines, are taken out by sea to ${to.name}, without their heavy equipment.`, c.nat, from.id, { arm: 'land', lost: c.nat });
