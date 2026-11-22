@@ -2442,7 +2442,8 @@ def convert(name, fine=True):
         cut = False
         if kind == "fin" and fine and s.get("cab"):
             # (her rudder's foot stands in her tail gunner's cabin, and is left out there (in_cab): its nose and cove
-            #  begin at the cabin's roof, and the cap across its foot, which would hang over him, is not drawn)
+            #  begin at the cabin's roof, and so does the cap across its foot, the rudder's own (it closes her rudder
+            #  when it swings out over the box's edge); her fin's cap under it would lie on the roof, and is not drawn)
             _, front, back, _, roof = s["cab"][:5]
             kept = [u for u in us if not (back < W.at(u, hc, True).x < front and W.at(u, hc, True).z < roof - 0.01)]
             cut, us = len(kept) < len(us), kept
@@ -2459,14 +2460,14 @@ def convert(name, fine=True):
         for u, way in ((us[0], -1.0), (us[-1], 1.0)):
             if kind == "fin" and way > 0.0 and u1 > W.tip:
                 continue                                  # (a rudder that runs to the top of its fin)
-            if cut and way < 0.0:
-                continue                                  # (its foot, in the cabin: the cabin's roof closes it)
             ring = [port(W.at(u, c, True)) for c in cs] + [port(W.at(u, c, False)) for c in reversed(cs[:-1])]
             mid = sum(ring, Vector()) / len(ring)
             away = (Z if kind == "fin" else Vector((0.0, -hand, 0.0))) * way
             fan = [(k, (k + 1) % len(ring), len(ring)) for k in range(len(ring))]
             m.use(nm)
             m.add(ring + [mid], fan, "line", False, lambda q, o=away: o)
+            if cut and way < 0.0:
+                continue
             m.use(parent)
             m.add(ring + [mid], fan, "line", False, lambda q, o=away: -o)
 

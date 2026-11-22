@@ -68,9 +68,10 @@ TAILPLANE = ("tail", "elevator", "elevator.port", "elevator.starboard")      # (
 # (a hit meant for her fin that cannot be laid there is laid on her flank instead, this share of the way back from her
 #  fuel to her tail: 0.82, unless she is named here. On the B-17 0.82 now finds the root of her tailplane beside her
 #  tail gunner's box (fitout.cab_hull), where a raking burst laid from above lands under the box's skin and a flak
-#  tear has no skin all round it (her table's model lost the hit); 0.84 lays it on the side of her tail under his
-#  windows, clear of her other hits on that side)
-FIN_FLANK = {"B17": 0.84}
+#  tear has no skin all round it (her table's model lost the hit); nearer her tailplane's trailing edge (0.84) a burst
+#  bridges the corner under it, off her skin, and further forward (0.72) a tear lands on her flak hit there. 0.88 lays
+#  it on the side of the box under his windows, behind her tailplane's root and clear of her other hits)
+FIN_FLANK = {"B17": 0.88}
 
 
 def look(paint, mat, nt, bsdf, mix, **kw):
