@@ -213,7 +213,10 @@ namespace
 		return Laid.Seals[Slot].bRest ? &Board.Rest : Board.Seals.IsValidIndex(Slot) ? &Board.Seals[Slot] : nullptr;
 	}
 
-	/** Draws the discs, rings and bars a seal is made of. Every brush is made with its colours and drawn untinted. */
+	/**
+	 * Draws the discs, rings and bars a seal is made of. MakeBox fills a rounded box with the TINT it is given and never
+	 * reads the brush's own colour (only the outline takes OutlineSettings.Color), so each fill passes its own ink as the tint.
+	 */
 	struct FSealPen
 	{
 		FSlateWindowElementList& Out;
@@ -222,13 +225,16 @@ namespace
 		void Disc(int32 Layer, double MidX, double MidY, double Radius, const FLinearColor& Ink) const
 		{
 			const FSlateRoundedBoxBrush Round(Ink, static_cast<float>(Radius));
-			FSlateDrawElement::MakeBox(Out, Layer, On.ToPaintGeometry(FVector2D(2.0 * Radius, 2.0 * Radius), FSlateLayoutTransform(FVector2D(MidX - Radius, MidY - Radius))), &Round, ESlateDrawEffect::None, FLinearColor::White);
+			FSlateDrawElement::MakeBox(Out, Layer, On.ToPaintGeometry(FVector2D(2.0 * Radius, 2.0 * Radius), FSlateLayoutTransform(FVector2D(MidX - Radius, MidY - Radius))), &Round, ESlateDrawEffect::None, Round.TintColor.GetSpecifiedColor());
 		}
 
 		void Ring(int32 Layer, double MidX, double MidY, double Radius, double Width, const FLinearColor& Ink) const
 		{
-			const FSlateRoundedBoxBrush Round(FLinearColor::Transparent, static_cast<float>(Radius), Ink, static_cast<float>(Width));
-			FSlateDrawElement::MakeBox(Out, Layer, On.ToPaintGeometry(FVector2D(2.0 * Radius, 2.0 * Radius), FSlateLayoutTransform(FVector2D(MidX - Radius, MidY - Radius))), &Round, ESlateDrawEffect::None, FLinearColor::White);
+			// (the fill is the tint: a hair of the ink, not quite 0, so the element is never culled as fully see-through and
+			// its outline, which takes OutlineSettings.Color, still draws; at 1/255 the filled disc cannot be seen)
+			const FLinearColor Hollow = Ink.CopyWithNewOpacity(1.0f / 255.0f);
+			const FSlateRoundedBoxBrush Round(Hollow, static_cast<float>(Radius), Ink, static_cast<float>(Width));
+			FSlateDrawElement::MakeBox(Out, Layer, On.ToPaintGeometry(FVector2D(2.0 * Radius, 2.0 * Radius), FSlateLayoutTransform(FVector2D(MidX - Radius, MidY - Radius))), &Round, ESlateDrawEffect::None, Hollow);
 		}
 
 		/** A bar with rounded ends, Long by Thick, its middle at (MidX, MidY), turned Degrees clockwise. */
@@ -236,7 +242,7 @@ namespace
 		{
 			const FSlateRoundedBoxBrush Round(Ink, static_cast<float>(Thick * 0.5));
 			const FGeometry Turned = On.MakeChild(FVector2D(Long, Thick), FSlateLayoutTransform(FVector2D(MidX - Long * 0.5, MidY - Thick * 0.5)), FSlateRenderTransform(FQuat2D(FMath::DegreesToRadians(static_cast<float>(Degrees)))), FVector2D(0.5, 0.5));
-			FSlateDrawElement::MakeBox(Out, Layer, Turned.ToPaintGeometry(), &Round, ESlateDrawEffect::None, FLinearColor::White);
+			FSlateDrawElement::MakeBox(Out, Layer, Turned.ToPaintGeometry(), &Round, ESlateDrawEffect::None, Round.TintColor.GetSpecifiedColor());
 		}
 	};
 
@@ -739,7 +745,7 @@ namespace
 			const double Since = FPlatformTime::Seconds() - Board.FocusAt;
 			const double Lit = Since < 1.2 ? 1.0 : FMath::Lerp(1.0, 0.6, FMath::Clamp((Since - 1.2) / 0.8, 0.0, 1.0));
 			const FSlateRoundedBoxBrush Frame(SealLitBrass.CopyWithNewOpacity(static_cast<float>(0.12 * Lit)), 4.0f, SealLitBrass.CopyWithNewOpacity(static_cast<float>(Lit)), 2.0f);
-			FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), &Frame, ESlateDrawEffect::None, FLinearColor::White);
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), &Frame, ESlateDrawEffect::None, Frame.TintColor.GetSpecifiedColor());
 			return LayerId + 1;
 		}
 
