@@ -68,6 +68,12 @@ struct FSeaBattleState
 
 namespace SeaParts
 {
+	/** The stage's way down for the show's (a convoy's boat crushed, scuttled, rammed or shelled goes as one that sinks). */
+	static FString StageWay(const std::string& How)
+	{
+		return How == "crushed" || How == "scuttled" || How == "rammed" || How == "shelled" ? FString(TEXT("sink")) : FString(UTF8_TO_TCHAR(How.c_str()));
+	}
+
 	static FString Wide(const std::string& Text)
 	{
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
@@ -1091,7 +1097,10 @@ void ASeaBattle::LayAndSteer()
 				DrawnLong.Add(Ship.Key, Long);
 			}
 		}
-		Stage->Steer(Ship.Key, At, Face, Ship.Heel, Ship.Pitch, Ship.Heave);
+		// A boat (ruling 241) drawn as far under as the show has her dived. D1 hook (convoy looks): the submarine scene's
+		// boat states (surfaced, periscope, deep) may give her own heave here.
+		const double Heave = Ship.Heave - Ship.Dived;
+		Stage->Steer(Ship.Key, At, Face, Ship.Heel, Ship.Pitch, Heave);
 		LastSeen.Add(Ship.Key, FVector4(At.X, At.Y, Ship.Heading, DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long));
 	}
 }
@@ -1125,7 +1134,10 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			Stage->Hit(E.Key, TEXT("torpedo"), Now);
 			break;
 		case SeaShow::FxKind::Sink:
-			Stage->Sink(E.Key, Wide(E.What), E.Size > 0.5, Now);
+			// (a convoy's boat crushed deep, scuttled, rammed or shelled, ruling 241, goes down on the stage as a ship that
+			// sinks: the stage knows a ship's six ways, and is the air scene's too)
+			Stage->Sink(E.Key, StageWay(E.What), E.Size > 0.5, Now);
+			// D1 hook (convoy looks): Sink (E.What "crushed": the hump of air and the boil; "scuttled": men and rafts)
 			break;
 		// (the torpedo tracks: a track begun while a run skips is drawn from where it was fired, its head where it is now)
 		case SeaShow::FxKind::TrackStart:
@@ -1134,8 +1146,8 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			Line.From = Line.Head = FVector2D(E.At.X, E.At.Y);
 			Line.StopT = -1.0;
 			// (a Japanese warship's torpedo from 1938 is the oxygen-driven Type 93: a third of the bubbles; the art director,
-			// Samar r2e frame 07)
-			Line.bOxygen = KitNation(E.Text) == TEXT("jp") && S.Rec.Board.Year >= 1938;
+			// Samar r2e frame 07; and a boat's electric torpedo, ruling 241, leaves no more)
+			Line.bOxygen = (KitNation(E.Text) == TEXT("jp") && S.Rec.Board.Year >= 1938) || E.What == "wakeless";
 			break;
 		}
 		case SeaShow::FxKind::TrackMove:
@@ -1200,6 +1212,24 @@ void ASeaBattle::PlayEffects(bool bSkip)
 		}
 		switch (E.Kind)
 		{
+		// A convoy's night (ruling 241): the submarine scene's looks are the production lead's helper's (new files of its
+		// own), at the hooks marked so; until they land, only the drop is told to the log.
+		case SeaShow::FxKind::ChargeDrop:
+			// D1 hook (convoy looks): ChargeDrop
+			UE_LOG(LogTheater, Verbose, TEXT("Sea battle %.0f s: %s depth charges from ship %d, %d of them"), Now, *Wide(E.What), E.Key, static_cast<int32>(E.Size));
+			break;
+		case SeaShow::FxKind::ChargeBurst:
+			// D1 hook (convoy looks): ChargeBurst
+			break;
+		case SeaShow::FxKind::Dive:
+			// D1 hook (convoy looks): Dive
+			break;
+		case SeaShow::FxKind::Starshell:
+			// D1 hook (convoy looks): Starshell
+			break;
+		case SeaShow::FxKind::Rescue:
+			// D1 hook (convoy looks): Rescue
+			break;
 		case SeaShow::FxKind::Salvo:
 		{
 			// Her turrets' flashes along her deck, laid toward the target and up; her guns heard after the flash.

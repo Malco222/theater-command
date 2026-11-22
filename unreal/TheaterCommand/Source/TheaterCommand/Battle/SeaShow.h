@@ -88,7 +88,17 @@ namespace SeaShow
 		 * windSpeed). A speed of -1: none given, the show takes both from the seed; -2: the bearing alone was given. */
 		double WindFrom = 0.0, WindSpeed = -1.0;
 		double TorpTravel = 75.0, TorpRadius = 800.0, StrikeWindup = 90.0, StrikeRadius = 1500.0;
-		std::map<std::string, ClassSize> Classes; // "bb", "cv", "ca", "dd"
+		std::map<std::string, ClassSize> Classes; // "bb", "cv", "ca", "dd"; a convoy's own also "ss", "mv"
+		/** A convoy's night (ruling 241, its header light{sun, moon, vis}): whether it was given; the sun's height and the
+		 * moon's (degrees, below 0 under the horizon), the moon's bearing (degrees from north) and the share of her lit;
+		 * how far a ship is seen (metres, 0 not said). Look only, apart from vis, which the battle drew. */
+		bool bLight = false;
+		double SunUp = 90.0, MoonUp = -90.0, MoonFrom = 0.0, MoonLit = 0.0, Seeing = 0.0;
+		/** Boats (the header's subs{scope, deep, crush, dived}): the keel's depth at periscope depth, running deep, and where
+		 * her hull fails (metres below the surface); her best speed dived (metres a second: a Type VIIC's 7.6 knots). */
+		double ScopeKeel = 13.0, DeepKeel = 60.0, CrushKeel = 250.0, DivedTop = 3.9;
+		/** Depth charges (dc{sink, lethal}): how fast one sinks (metres a second) and how near it kills (metres). */
+		double ChargeSink = 3.0, ChargeLethal = 6.0;
 	};
 
 	/** One piece as a view gives it (battle-bridge.ts unitOut for a sea piece). */
@@ -115,6 +125,12 @@ namespace SeaShow
 		int LineAt = -1;        // its place in its side's battle line, 0 the guide (the van), -1 in none (the ship plan's R1)
 		std::string Flight;     // carriers: "deck", "out", "back"
 		double Cover = -1.0;    // carriers: 0 to 1, the share of its fighters held over the fleet still up
+		/** A boat (class "ss", ruling 241): "surfaced", "periscope" or "deep" (empty: a ship), her keel's depth (metres,
+		 * below 0 not said: as her state has it), her periscope up. A merchant ("mv"): her column in the convoy (-1 none). */
+		std::string Dive;
+		double Keel = -1.0;
+		bool bScope = false;
+		int ConvoyColumn = -1;
 	};
 
 	/** One event of a view, with what the show needs of its extra. */
@@ -149,6 +165,21 @@ namespace SeaShow
 		bool bShare = false;  // sea:torpedo: how full the bank was, 0 to 1 (Share): that share of the tracks, none at 0
 		std::vector<int> Ships; // sea:flak: the gun ships firing
 		bool bDitch = false;  // sea:recover: the carrier has gone down, her aircraft come down in the sea
+		// A convoy's night (ruling 241: form.md §5, field-side-read.md §3), where the event gives them:
+		std::string Dive;     // sea:dive: the state she goes to ("surfaced", "periscope", "deep"); Why holds why
+		double Keel = -1.0;   // sea:dive, sea:depthChargeHit: her keel's depth (metres), below 0 not said
+		std::string Kind;     // sea:depthCharge: "pattern" or "ahead"; sea:sonar: "asdic", "radar", "sight", "bearing"
+		int On = -1;          // sea:depthCharge, sea:sonar: the piece it is on; sea:rescue: the piece lost; sea:report: the piece reported
+		int N = 0;            // sea:depthCharge: charges in the pattern
+		double Set = -1.0;    // sea:depthCharge: the depth they are set to burst at (metres), below 0 not said
+		double Sinking = -1.0; // sea:depthCharge: seconds from the drop to the burst, below 0 not said
+		double Spread = 0.0;  // sea:depthCharge: the pattern's spread across (metres)
+		double Harm = 0.0;    // sea:depthChargeHit: the share of her the blow took (1: the kill)
+		std::string How;      // sea:sunk: how she went, where the battle says ("crushed", "scuttled", "rammed", "shelled", ...)
+		std::string Lost;     // sea:sonar: why a contact was lost ("close", "deep", "wake", "faded"); empty: one gained
+		int Fish = 0;         // sea:torpedo from a boat: the torpedoes of her salvo (0: not said)
+		double Fan = 0.0;     // sea:torpedo from a boat: the salvo's spread, degrees across
+		bool bWakeless = false; // sea:torpedo: electric torpedoes, leaving almost no track
 	};
 
 	/** A smoke zone (a ship lost: 'sunk', where she went down; 'burning', where she left the line) or a torpedo salvo's
@@ -178,7 +209,7 @@ namespace SeaShow
 		double Funnel = 0.0; // 0 to 1: how hard her funnels smoke (black at flank, thin at rest)
 		double Long = 180.0, Beam = 20.0;
 		Fate Doing = Fate::Line;
-		std::string How;     // sinking: settle, sink, capsize, explode, burn, break
+		std::string How;     // sinking: settle, sink, capsize, explode, burn, break; a boat also crushed, scuttled, rammed, shelled
 		double Down = 0.0;   // sinking: 0 as she starts to go, 1 under
 		double DownFor = 0.0; // sinking: seconds from the first to the last
 		/** Her main turrets: their bearing off her bow (degrees, clockwise) and elevation (degrees); the ship they are
@@ -190,6 +221,13 @@ namespace SeaShow
 		bool bScreen = false; // laying smoke
 		int LineAt = -1;      // in her column, her piece's place in its side's battle line (0 the guide), -1 in none
 		bool bShown = true;
+		/** A boat (class "ss"): the state the battle has her in ("surfaced", "periscope", "deep"; empty for a ship), her
+		 * keel's depth below the surface as drawn now (metres: eased, so a crash dive takes 25 to 30 s), her periscope up.
+		 * Her heave and pitch are her ride (the swell fading as she goes down) and her angle diving or surfacing. */
+		std::string Dive;
+		double Keel = 0.0;
+		bool bScope = false;
+		double Dived = 0.0;  // metres her hull lies below her surfaced trim (her keel less her draught): 0 surfaced
 	};
 
 	/** One aircraft of a carrier's strike or a raid from the coast, as it is to be drawn. */
@@ -249,6 +287,15 @@ namespace SeaShow
 		ShipGun,     // a heavy gun fired: Key (ship), At (its muzzle), Aim, What (the gun), Size (calibre mm); its burst follows
 		PlaneHit,    // rounds striking an aircraft (the kit's AirHit): Key (plane), At, Normal, Vel, What (the kit's row), Text
 		             //   ("kill" for those that bring down one the battle lost to the guns)
+		// A convoy's night (ruling 241; the submarine scene's looks are the production lead's helper's, at the scene's
+		// marked hooks):
+		ChargeDrop,  // an escort's depth charges going in: Key (the escort), At (her stern), Aim (the pattern's middle), What
+		             //   ("pattern" or "ahead"), Size (charges), Spread (metres across), Sinking (seconds to the burst), Side
+		ChargeBurst, // one charge bursting, at its moment: Key (the escort), At (Z: minus the depth it burst at), What ("pattern"
+		             //   or "ahead"), Size (1: the blow the battle booked on the boat, else 0), Side
+		Dive,        // a boat going down or coming up: Key (the boat), At, What ("dive" or "surface"), Text (why), Side
+		Starshell,   // a star shell bursting: Key (its own), At (where it bursts, Z its height), Until (battle time it burns out), Side
+		Rescue,      // a ship picking up survivors: Key (the rescuer), At (her), Aim (where they are), Until (battle time it ends), Side
 	};
 
 	struct Fx
@@ -261,6 +308,7 @@ namespace SeaShow
 		int Side = -1;
 		double Rate = 0.0, Mv = 0.0; // a stream's rounds a minute and their speed (Gun)
 		Vec Normal;                  // PlaneHit
+		double Spread = 0.0, Sinking = 0.0; // ChargeDrop
 	};
 
 	/**
@@ -302,6 +350,10 @@ namespace SeaShow
 		int Sinks = 0, Leaves = 0, TracksRun = 0, Launches = 0, Landings = 0, PlanesDown = 0, FlakBursts = 0, Screens = 0;
 		int SunkEvents = 0, BurningEvents = 0, TorpedoEvents = 0, TorpedoHitEvents = 0, StrikeEvents = 0, StrikeLandEvents = 0, AirEvents = 0, RecoverEvents = 0;
 		int CoverUp = 0;            // fighters of the cover seen over the carriers at the most
+		// A convoy's night (ruling 241): the events told, and what the show made of them.
+		int DiveEvents = 0, SonarEvents = 0, ChargeEvents = 0, ChargeHitEvents = 0, ReportEvents = 0, StarshellEvents = 0, RescueEvents = 0;
+		int ChargeDrops = 0, ChargeBursts = 0, ChargeBurstsBooked = 0, ChargeHitUnmatched = 0, Dives = 0, Starshells = 0, Rescues = 0;
+		double MostKeel = 0.0;      // metres: the deepest a boat was drawn
 		// Ships under air attack (B4, B5.4 of naval-battles/ship-air-defence.md): the big ships put hard over against a
 		// dive, every ship's turn to comb a torpedo plane's drop, those back in their place after, the worst still off it
 		// (metres from where she would have been, as the strike's last aircraft is long gone), and the near misses thrown
@@ -429,6 +481,11 @@ namespace SeaShow
 			double OffTrack = 0.0;    // a follower: metres off his track (plus: to her port), last step; a leader: off her ghost
 			bool bDodgeTurned = false; // her helm has bitten in a dodge since she was last judged (judged only then)
 			double PutOffGap = -1.0;  // metres astern of her place when her judging was last put off as she closed it
+			// A boat (ruling 241): her state, her keel as drawn and where it is going (eased from KeelFrom at KeelSince over
+			// KeelFor seconds), her periscope.
+			std::string Dive;
+			double Keel = -1.0, KeelTo = 0.0, KeelFrom = 0.0, KeelSince = 0.0, KeelFor = 0.0;
+			bool bScope = false;
 		};
 
 		/** A piece's column: its leader's track and its ships. */
@@ -516,6 +573,17 @@ namespace SeaShow
 			std::string Weapon = "shell_medium";
 		};
 
+		/** A depth charge on its way down (ruling 241): the escort's ship and piece, the boat's piece, where and when it
+		 * bursts, and whether it is the blow the battle booked. */
+		struct Charge
+		{
+			int Escort = -1, Piece = -1, Boat = -1, Side = -1;
+			Vec At;
+			double Bursts = 0.0;
+			std::string Kind;
+			bool bHit = false;
+		};
+
 		Field F;
 		Dice Roll;
 		std::deque<View> Views;
@@ -531,6 +599,8 @@ namespace SeaShow
 		std::map<int, double> LastStr;     // by piece: its hull as the view before had it
 		std::map<int, double> AirBlowAt;   // by piece: battle time of the last strike, raid or torpedo hit on it
 		std::vector<Zone> Zones;
+		std::vector<Charge> Charges;   // depth charges sinking, not yet burst
+		std::map<int, double> AheadAt; // by escort piece: battle time of its last ahead-thrown salvo (a hit bursts them)
 		ShipGuns::Gunnery Gunners;   // L9: the ships' anti-aircraft guns
 		bool bGunsUp = false;        // aircraft were up for them last frame
 		double GunDue = 0.0;         // battle seconds since they were last laid
@@ -563,6 +633,12 @@ namespace SeaShow
 		void FlyStrikes(double Dt);
 		void LayScreens();
 		void CoverFleet(double Dt);
+		/** Ruling 241: each boat's keel eased to the depth the battle has her at; the depth charges burst at their moment. */
+		/** (returns how much of the swell still moves her, 1 surfaced; OutSink: metres a second her keel is going down) */
+		double Trim(Hull& H, const Piece* P, double Dt, double& OutSink);
+		void BurstCharges();
+		/** A boat's keel surfaced (metres: her draught). */
+		double SurfacedKeel(const std::string& Class) const;
 		/** Each leader's station (bSettle: at the start, each column laid at it at once). */
 		void KeepClear(double Dt, bool bSettle = false);
 		/** L9: the ships' anti-aircraft guns at the aircraft up, this frame (Dt: since the last), played as the show's Fx. */
@@ -592,7 +668,7 @@ namespace SeaShow
 		/** A ship of a piece by the battle's place along its line (a zone laid for a ship lost: sim.ts smoke). */
 		Hull* ByZone(int PieceId, const Zone* Z);
 		void TakeOut(Hull& H);
-		void Sink(Hull& H, const std::string& Words);
+		void Sink(Hull& H, const std::string& Words, const std::string& How = std::string());
 		void LeaveLine(Hull& H, const std::string& Words);
 		void LightZone(const Zone& Z, const Hull* H);
 		std::string WayDown(const Hull& H);

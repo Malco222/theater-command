@@ -125,6 +125,11 @@ namespace
 		case SeaShow::FxKind::GunStop: return "gunstop";
 		case SeaShow::FxKind::ShipGun: return "shipgun";
 		case SeaShow::FxKind::PlaneHit: return "planehit";
+		case SeaShow::FxKind::ChargeDrop: return "chargedrop";
+		case SeaShow::FxKind::ChargeBurst: return "chargeburst";
+		case SeaShow::FxKind::Dive: return "dive";
+		case SeaShow::FxKind::Starshell: return "starshell";
+		case SeaShow::FxKind::Rescue: return "rescue";
 		}
 		return "?";
 	}
@@ -151,6 +156,9 @@ namespace
 		std::string LineOffFirst;
 		double HeelOut = 0.0;
 		double MostPitch[3] = { 0.0, 0.0, 0.0 }, MostHeave[3] = { 0.0, 0.0, 0.0 }; // the ride on the sea: under 145 m, to 215 m, over
+		double MostBoatAngle = 0.0, MostBoatKeel = 0.0; // a convoy's boats (ruling 241): their angle and the deepest keel drawn
+		int BoatOdd = 0;                                // boat-frames with no state or a keel above the sea
+		int ChargesOffBoat = 0;                         // depth charges booked on a boat that burst out of her reach
 		int SinkingAhead = 0;
 		std::map<int, Vec> EndAt;  // each ship afloat at the end, by key
 		std::string EndWords;
@@ -262,6 +270,16 @@ namespace
 				case SeaShow::FxKind::Fire:
 					if (!ByKey.count(E.Key)) ++Out.FireStray;
 					break;
+				case SeaShow::FxKind::ChargeBurst:
+					// (the blow the battle booked bursts within a charge's lethal reach of a boat, at her depth or near it)
+					if (E.Size > 0.5)
+					{
+						bool bNear = false;
+						for (const SeaShow::ShipOut& S : Ships)
+							if (S.Class == "ss" && std::hypot(S.At.X - E.At.X, S.At.Y - E.At.Y) <= Rec.Board.ChargeLethal + 2.0 && std::fabs(-E.At.Z - S.Keel) <= 15.0) bNear = true;
+						if (!bNear) ++Out.ChargesOffBoat;
+					}
+					break;
 				default: break;
 				}
 				if (Track && (E.Kind != SeaShow::FxKind::ScreenMove && E.Kind != SeaShow::FxKind::TrackMove && E.Kind != SeaShow::FxKind::Dispatch))
@@ -286,7 +304,14 @@ namespace
 				Last[S.Key] = S.At;
 				LastSpeed[S.Key] = S.Speed;
 				if (S.Doing != SeaShow::Fate::Sinking) Out.HeelOut = std::max(Out.HeelOut, std::fabs(S.Heel));
-				if (S.Doing != SeaShow::Fate::Sinking)
+				// (a boat's pitch is mostly her angle diving or surfacing, and her keel goes far under: her own check, below)
+				if (S.Class == "ss")
+				{
+					Out.MostBoatAngle = std::max(Out.MostBoatAngle, std::fabs(S.Pitch));
+					Out.MostBoatKeel = std::max(Out.MostBoatKeel, S.Keel);
+					if (S.Keel < 0.0 || (S.Dive != "surfaced" && S.Dive != "periscope" && S.Dive != "deep")) ++Out.BoatOdd;
+				}
+				else if (S.Doing != SeaShow::Fate::Sinking)
 				{
 					const int Band = S.Long < 145.0 ? 0 : S.Long < 215.0 ? 1 : 2;
 					Out.MostPitch[Band] = std::max(Out.MostPitch[Band], std::fabs(S.Pitch));
@@ -436,6 +461,7 @@ int main(int Argc, char** Argv)
 
 	// What the battle said, for the show to be held to.
 	int Events = 0, Told = 0, LineTurns = 0, Sunk = 0, Burning = 0, TorpSalvos = 0, TorpFull = 0, TorpHits = 0, Strikes = 0, StrikesLanded = 0, Raids = 0;
+	int DiveEvents = 0, ChargeEvents = 0, ChargeHits = 0, Starshells = 0, Rescues = 0, Boats = 0; // a convoy's night (ruling 241)
 	bool bGunfire = false;
 	std::set<int> Pieces;
 	for (const SeaFeed::Frame& F : Rec.Views)
@@ -457,13 +483,22 @@ int main(int Argc, char** Argv)
 			else if (E.What == "sea:strike" && E.Landed > 0.0) ++StrikesLanded;
 			else if (E.What == "sea:air") ++Raids;
 			else if (E.What == "sea:line") ++LineTurns;
+			else if (E.What == "sea:dive") ++DiveEvents;
+			else if (E.What == "sea:depthCharge") ++ChargeEvents;
+			else if (E.What == "sea:depthChargeHit") ++ChargeHits;
+			else if (E.What == "sea:starshell") ++Starshells;
+			else if (E.What == "sea:rescue") ++Rescues;
 		}
 	}
 	const SeaFeed::Frame& Last = Rec.Views.back();
 	std::map<int, int> EndShips;
 	for (const SeaShow::Piece& P : Last.Pieces) EndShips[P.Id] = P.Ships;
 	int ShipsAtStart = 0;
-	for (const SeaShow::Piece& P : Rec.Views.front().Pieces) ShipsAtStart += P.Ships;
+	for (const SeaShow::Piece& P : Rec.Views.front().Pieces)
+	{
+		ShipsAtStart += P.Ships;
+		if (P.Class == "ss") Boats += P.Ships;
+	}
 
 	std::printf("%s: %s (%s), %zu views, %.0f battle s, %zu pieces, %d ships; %d events: %d sunk, %d burning, %d torpedo salvos (%d with tracks, %d hits), %d strikes (%d landed), %d raids\n",
 	            Rec.Key.c_str(), Rec.Board.Title.c_str(), Rec.Board.Date.c_str(), Rec.Views.size(), Last.Head.T - Rec.Views.front().Head.T, Pieces.size(), ShipsAtStart, Events, Sunk, Burning,
@@ -634,6 +669,22 @@ int main(int Argc, char** Argv)
 		                   "the field's" });
 	}
 	Limits.push_back({ "the zig-zag steadied a minute after contact", C.MostZigAfter <= 1.0, Num(C.MostZigAfter, 2) + " m", "1 m or less" });
+	// A convoy's night (ruling 241: the submarine scene). Where the recording has none of it, each holds at nothing.
+	if (Boats > 0 || DiveEvents + ChargeEvents + ChargeHits + Starshells + Rescues > 0)
+	{
+		Limits.push_back({ "every boat drawn with her state, her keel under the sea and above her crush depth", P.BoatOdd == 0 && P.MostBoatKeel <= Rec.Board.CrushKeel,
+		                   std::to_string(P.BoatOdd) + " odd boat-frames, the deepest " + Num(P.MostBoatKeel, 0) + " m (crush " + Num(Rec.Board.CrushKeel, 0) + ")", "0, the crush depth or less" });
+		Limits.push_back({ "a boat's angle diving or surfacing within reason", P.MostBoatAngle <= 15.0, Num(P.MostBoatAngle, 1) + " deg", "15 deg or less" });
+		Limits.push_back({ "every dive told shown going", C.Dives == DiveEvents && C.DiveEvents == DiveEvents, std::to_string(C.Dives) + " of " + std::to_string(DiveEvents), "all" });
+		Limits.push_back({ "every depth-charge attack goes in", C.ChargeDrops == ChargeEvents && C.ChargeEvents == ChargeEvents,
+		                   std::to_string(C.ChargeDrops) + " of " + std::to_string(ChargeEvents) + ", " + std::to_string(C.ChargeBursts) + " charges burst", "all" });
+		Limits.push_back({ "every depth-charge hit the battle booked bursts on the boat", C.ChargeBurstsBooked == ChargeHits && C.ChargeHitUnmatched == 0 && P.ChargesOffBoat == 0,
+		                   std::to_string(C.ChargeBurstsBooked) + " of " + std::to_string(ChargeHits) + ", " + std::to_string(C.ChargeHitUnmatched) + " with no attack before it, " +
+		                       std::to_string(P.ChargesOffBoat) + " out of her reach",
+		                   "all, on her" });
+		Limits.push_back({ "every star shell and rescue shown", C.Starshells == Starshells && C.Rescues == Rescues,
+		                   std::to_string(C.Starshells) + " of " + std::to_string(Starshells) + " star shells, " + std::to_string(C.Rescues) + " of " + std::to_string(Rescues) + " rescues", "all" });
+	}
 	// The tug-of-war bar (release 2; the UI director's ruling, 21 November): the knot each view gives, from the
 	// player's flag. First the rule itself on views made up for it, then the recording's own.
 	{

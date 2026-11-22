@@ -58,6 +58,30 @@ namespace SeaFeed
 		Out.TorpRadius = J["torp"]["radius"].Num(Out.TorpRadius);
 		Out.StrikeWindup = J["strike"]["windup"].Num(Out.StrikeWindup);
 		Out.StrikeRadius = J["strike"]["radius"].Num(Out.StrikeRadius);
+		// A convoy's night (ruling 241, form.md §5): light{sun, moon, vis}, each a number or an object. sun: the sun's height
+		// (degrees, below 0 at night), or {up}; moon: the share of her lit, or {lit, up, from} (her height and bearing,
+		// degrees); vis: how far a ship is seen (metres). And the boats' and the depth charges' own: subs{scope, deep,
+		// crush} (keel depths, metres) and dived (her best speed under, metres a second), dc{sink, lethal} (metres a second,
+		// metres).
+		const Json& Light = J["light"];
+		Out.bLight = Light.IsObject();
+		if (Out.bLight)
+		{
+			const Json& Sun = Light["sun"];
+			Out.SunUp = Sun.IsObject() ? Sun["up"].Num(-20.0) : Sun.Num(-20.0);
+			const Json& Moon = Light["moon"];
+			Out.MoonLit = std::clamp(Moon.IsObject() ? Moon["lit"].Num(0.0) : Moon.Num(0.0), 0.0, 1.0);
+			Out.MoonUp = Moon.IsObject() ? Moon["up"].Num(30.0) : 30.0;
+			Out.MoonFrom = Moon.IsObject() ? Moon["from"].Num(180.0) : 180.0;
+			Out.Seeing = std::max(0.0, Light["vis"].Num(0.0));
+		}
+		const Json& Subs = J["subs"];
+		Out.ScopeKeel = std::max(1.0, Subs["scope"].Num(Out.ScopeKeel));
+		Out.DeepKeel = std::max(Out.ScopeKeel, Subs["deep"].Num(Out.DeepKeel));
+		Out.CrushKeel = std::max(Out.DeepKeel, Subs["crush"].Num(Out.CrushKeel));
+		Out.DivedTop = std::clamp(Subs["dived"].Num(Out.DivedTop), 0.5, 15.0);
+		Out.ChargeSink = std::max(0.5, J["dc"]["sink"].Num(Out.ChargeSink));
+		Out.ChargeLethal = std::max(0.5, J["dc"]["lethal"].Num(Out.ChargeLethal));
 		// The wind: { from, speed } (SeaSim.wind and windSpeed), or the bearing alone (the speed the show's own).
 		const Json& Wind = J["wind"];
 		if (Wind.IsObject())
@@ -132,6 +156,12 @@ namespace SeaFeed
 				P.Flight = X["flight"].Str("");
 				P.Cover = X["cover"].Num(-1.0);
 			}
+			// A convoy's boat and merchant (ruling 241): her state as each view says it (a view without one leaves the show
+			// her last, a view without a keel leaves her keel to her state); her column, as last told.
+			P.Dive = X["dive"].Str("");
+			P.Keel = X["keel"].IsNumber() ? std::clamp(X["keel"].Num(), 0.0, 1000.0) : -1.0;
+			P.bScope = X["scope"].Truth(false);
+			if (X["column"].IsNumber()) P.ConvoyColumn = X["column"].Int();
 			Kept.Still[P.Id] = P;
 		}
 
@@ -141,12 +171,13 @@ namespace SeaFeed
 			Out.What = E["what"].Str("");
 			Out.Cue = E["cue"].Str("");
 			Out.Text = E["text"].Str("");
-			Out.Unit = E["unit"].IsNumber() ? E["unit"].Int() : -1;
+			const Json& X = E["extra"];
+			// (a convoy's events name the piece that acts as by, ruling 241, where the unit is not given)
+			Out.Unit = E["unit"].IsNumber() ? E["unit"].Int() : X["by"].IsNumber() ? X["by"].Int() : -1;
 			Out.Side = SideOf(E["side"].Str(""));
 			Out.bAt = E["x"].IsNumber();
 			Out.X = E["x"].Num();
 			Out.Y = E["y"].Num();
-			const Json& X = E["extra"];
 			Out.Key = X["key"].Str("");
 			Out.Target = X["target"].IsNumber() ? X["target"].Int() : -1;
 			Out.Count = X["count"].Int(0);
@@ -173,6 +204,23 @@ namespace SeaFeed
 			const Json& Ships = X["ships"];
 			for (size_t K = 0; K < Ships.Count(); ++K) Out.Ships.push_back(Ships.At(K).Int());
 			Out.bDitch = X["ditch"].Truth(false);
+			// A convoy's night (ruling 241: form.md §5, field-side-read.md §3), from the extra (or the event itself).
+			auto Field = [&E, &X](const char* Name) -> const Json& { return X[Name].IsNull() ? E[Name] : X[Name]; };
+			Out.Dive = Field("dive").Str("");
+			Out.Keel = Field("keel").IsNumber() ? std::clamp(Field("keel").Num(), 0.0, 1000.0) : -1.0;
+			Out.Kind = Field("kind").Str("");
+			Out.On = Field("on").IsNumber() ? Field("on").Int() : Field("at").IsNumber() ? Field("at").Int() : -1;
+			Out.N = std::clamp(Field("n").Int(0), 0, 64);
+			Out.Set = Field("set").IsNumber() ? std::clamp(Field("set").Num(), 0.0, 1000.0) : -1.0;
+			Out.Sinking = Field("sinking").IsNumber() ? std::clamp(Field("sinking").Num(), 0.0, 600.0) : -1.0;
+			// (spread: metres across for a pattern of depth charges, degrees across for a boat's salvo)
+			Out.Spread = std::clamp(Field("spread").Num(0.0), 0.0, 2000.0);
+			Out.Fan = Out.What == "sea:torpedo" ? std::clamp(Out.Spread, 0.0, 90.0) : 0.0;
+			Out.Harm = std::clamp(Field("harm").Num(0.0), 0.0, 1.0);
+			Out.How = Field("how").Str("");
+			Out.Lost = Field("lost").IsString() ? Field("lost").Str("") : std::string();
+			Out.Fish = std::clamp(Field("fish").Int(0), 0, 12);
+			Out.bWakeless = Field("wakeless").Truth(false);
 		}
 	}
 
