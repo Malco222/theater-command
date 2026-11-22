@@ -8689,7 +8689,42 @@ namespace TheaterFx
 		return R;
 	}
 
-	void Battle::FireGlow(Source& S, double Now, const GlowRow& R)
+	Battle::LateRow Battle::LateRowOf() const
+	{
+		// (fire.late: the ruling, section 3, a long fire burning down. No by_s: never, as before)
+		LateRow R;
+		const std::string P = "fire.late.";
+		R.bOn = Has(P + "by_s");
+		if (!R.bOn)
+		{
+			return R;
+		}
+		const Span From = Range(P + "from_s", 180.0, 300.0);
+		R.From.A = SafeNum(From.A, 0.0, 1.0e6, 180.0);
+		R.From.B = SafeNum(From.B, R.From.A, 1.0e6, std::max(300.0, R.From.A));
+		R.By = SafeNum(Num(P + "by_s", 60.0), 0.1, 1.0e5, 60.0);
+		R.Flames = SafeNum(Num(P + "flames", 0.4), 0.05, 1.0, 0.4);
+		R.Light = SafeNum(Num(P + "light", 0.4), 0.0, 1.0, 0.4);
+		R.Alpha = SafeNum(Num(P + "column_alpha", 0.6), 0.0, 1.0, 0.6);
+		R.Col = Picture(P + "column_colour", Rgb::FromPicture(70, 60, 50));
+		R.Top = Picture(P + "column_top", Rgb::FromPicture(110, 100, 88));
+		return R;
+	}
+
+	double Battle::LateShare(const LateRow& R, uint64_t Seed, double Start, double T)
+	{
+		// (its own moment, by its seed, so a field of wrecks lit together never burn down together; smoothly over by_s)
+		if (!R.bOn)
+		{
+			return 0.0;
+		}
+		Dice D(Seed * 0x9E3779B97F4A7C15ull ^ 0x1A7E5EEDull);
+		const double From = R.From.A + (R.From.B - R.From.A) * D.U();
+		const double G = Clamp01((T - Start - From) / std::max(R.By, 1e-3));
+		return G == G ? G * G * (3.0 - 2.0 * G) : 0.0;
+	}
+
+	void Battle::FireGlow(Source& S, double Now, const GlowRow& R, double LateLight)
 	{
 		// The glow: soft warm pieces lying on the ground under the fire, a new one every Every seconds fading in over a
 		// third of its life, so three overlap and their sum barely moves; all of one fire flicker together by its seed.
@@ -8714,7 +8749,7 @@ namespace TheaterFx
 			B.Grow = 1.0;
 			B.Col = R.Col;
 			B.Col2 = R.Col;
-			B.Alpha = R.Alpha * Left;
+			B.Alpha = R.Alpha * Left * Clamp01(LateLight);
 			B.DayAlpha = R.DayAlpha;
 			B.Over = R.Over;
 			B.FadeIn = R.Life / 3.0;
@@ -8749,7 +8784,7 @@ namespace TheaterFx
 		return false;
 	}
 
-	void Battle::FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& HeartIn, const Rgb& Ember)
+	void Battle::FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& HeartIn, const Rgb& Ember, const LateRow* Late, double LateS)
 	{
 		const Rgb& Heart = R.bBed ? R.Bed : HeartIn; // (fire.tongues.bed: the foot's own colour, the art director's "never white")
 		// One step of a burning thing's flames (fire.tongues). The art director, 17:54Z 20 November, on build 1778's
@@ -8783,6 +8818,9 @@ namespace TheaterFx
 			Dice Fit(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T / 0.3)) * 0xD1B54A32D192ED03ull + 0x70E6ull));
 			Low = std::max(0.12, std::pow(Left, 1.4)) * (Fit.U() > 0.45 + 0.55 * Left ? 0.8 : 1.0);
 		}
+		// (burning down, fire.late: its flames lower and narrower, at as many seats, and its soot greyer)
+		const double LateK = Late && Late->bOn ? Clamp01(LateS) : 0.0;
+		Low *= Late ? std::clamp(1.0 - (1.0 - Late->Flames) * LateK, 0.05, 1.0) : 1.0;
 		const int Shown = std::clamp(static_cast<int>(std::ceil(Seen * (0.25 + 0.75 * std::pow(Left, 1.2)))), 1, Seen);
 		// (the lean: down the wind, and further over the higher up a tongue)
 		// (on a moving ship, BurnMove: the wind over her deck, her own way against the true wind, so they lean aft)
@@ -9090,6 +9128,11 @@ namespace TheaterFx
 			B.Grow = 0.7;
 			B.Col = R.SootCol;
 			B.Col2 = R.SootCol * 1.25;
+			if (LateK > 0.0)
+			{
+				B.Col = B.Col.Mix(Late->Col, LateK);
+				B.Col2 = B.Col2.Mix(Late->Top, LateK);
+			}
 			B.Alpha = 0.85;
 			B.FadeIn = 0.3 * Life;
 			B.Hold = 0.4;
@@ -10513,6 +10556,7 @@ namespace TheaterFx
 		const double FootClear = FootClearIs == FootClearIs ? std::min(10.0, std::max(0.0, FootClearIs)) : 0.0;
 		const TongueRow Tongues = TongueRowOf();
 		const GlowRow Glow = GlowRowOf();
+		const LateRow Late = LateRowOf();
 		// (fire.land_column: a burning vehicle's plain smoke under its own column is only its foot, base_r1 as wide and
 		// base_life as long as it was; the column above carries the rest)
 		const bool bLandBase = Has("fire.land_column.base_r1");
@@ -10556,6 +10600,19 @@ namespace TheaterFx
 					if (!S.Heads.empty() && !S.bStoodDown)
 					{
 						OilColumn(S, T, bPall);
+						if (Late.bOn && S.bLandColumn)
+						{
+							// (a land column over a fire burning down, fire.late: grey-brown and thinner; its fire's seed is its own
+							// turned back, as OwnColumn turned it)
+							const double K = LateShare(Late, S.Seed ^ 0x5C01A3D5EEDull, S.Start, T);
+							if (K > 0.0)
+							{
+								Bit& Old = Bits.back();
+								Old.Col = Old.Col.Mix(Late.Col, K);
+								Old.Col2 = Old.Col2.Mix(Late.Top, K);
+								Old.Alpha *= 1.0 - (1.0 - Late.Alpha) * K;
+							}
+						}
 						// (and a moving ship's column, BurnMove, of any width: her puffs are left astern at her own speed, far
 						// apart for their size, a row of beads. Each is as wide as the way to the next, as a small fire's)
 						if (R.TightM > 0.0 && (S.Across < R.TightM || S.bMoves))
@@ -10773,7 +10830,7 @@ namespace TheaterFx
 				}
 				if (Glow.bOn)
 				{
-					FireGlow(S, Now, Glow);
+					FireGlow(S, Now, Glow, 1.0 - (1.0 - Late.Light) * LateShare(Late, S.Seed, S.Start, Now));
 				}
 				// long ragged tongues rooted where it burns, dying by being eaten away; then a thinning grey column
 				while (S.Next <= Now && S.Next < S.Flames)
@@ -10781,7 +10838,7 @@ namespace TheaterFx
 					if (Tongues.bOn)
 					{
 						// (fire.tongues: ragged tongues at the fire's own seats, in place of the upright cones below)
-						FireTongues(S, S.Next, Tongues, Flame, Heart, Ember);
+						FireTongues(S, S.Next, Tongues, Flame, Heart, Ember, &Late, LateShare(Late, S.Seed, S.Start, S.Next));
 						S.Next += Tongues.Every;
 						continue;
 					}
@@ -10889,6 +10946,13 @@ namespace TheaterFx
 					}
 					B.Col = bFlames ? Rgb::FromPicture(50, 46, 42) : Rgb::FromPicture(110, 108, 104);
 					B.Col2 = B.Col.Mix(Rgb::FromPicture(120, 118, 114), 0.5);
+					if (Late.bOn && bFlames)
+					{
+						// (burning down, fire.late: its own smoke greyer, as its column's)
+						const double LateK = LateShare(Late, S.Seed, S.Start, S.NextSmoke);
+						B.Col = B.Col.Mix(Late.Col, LateK);
+						B.Col2 = B.Col2.Mix(Late.Top, LateK);
+					}
 					if (FootClear > 0.0)
 					{
 						const double BigIs = (S.Across - FootFromA) / std::max(FootFromB - FootFromA, 1e-3);
@@ -13324,6 +13388,7 @@ namespace TheaterFx
 		const Span Hz = Range(P + "flicker_hz", 3.0, 6.0);
 		const double Keep = SafeNum(Num(P + "keep", 1.5), 1.0, 100.0, 1.5);
 		const int Steady = std::clamp(static_cast<int>(SafeNum(Num("game.steady_lamps", 1.0), 0.0, 64.0, 1.0)), 0, Room);
+		const LateRow LateNow = LateRowOf();
 		const double Since = Now == Now && Now >= LampsAt ? std::min(Now - LampsAt, 1.0) : 0.0;
 		struct Lit
 		{
@@ -13417,7 +13482,7 @@ namespace TheaterFx
 			{
 				On *= Clamp01(1.0 - (Now - S.OutAt) / std::max(S.OutOver, 1e-3));
 			}
-			const double Steadily = ByDay * Power * std::sqrt(std::min(S.Across, 5000.0)) * On;
+			const double Steadily = ByDay * Power * std::sqrt(std::min(S.Across, 5000.0)) * On * (1.0 - (1.0 - LateNow.Light) * LateShare(LateNow, S.Seed, S.Start, Now));
 			if (Steadily <= 1e-4)
 			{
 				continue;

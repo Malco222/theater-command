@@ -2047,6 +2047,27 @@
    "base_r1": 0.35,
    "base_life": 0.5
   },
+  "late": {
+   "_how": "A long fire burning down (the ruling, section 3: 'in a long battle, after 3 to 5 minutes the flames drop to 1 to 2 m and the smoke goes grey-brown and thinner'). Each fire picks its own moment between from_s seconds after it was lit (by its seed, so a field of wrecks lit together never burn down together) and over by_s seconds, smoothly, its flames go to flames of their height and width (a tank's 3 m deck fire to about 1 to 1.5 m over the deck), its lamp and ground glow to light of their strength, its soot and its own smoke toward column_colour, and its land column's new puffs toward column_colour at their foot and column_top above, at column_alpha of their ink. Puffs already laid keep their colour, so the column greys from the bottom up. Without by_s: never, as before.",
+   "from_s": [
+    180,
+    300
+   ],
+   "by_s": 60,
+   "flames": 0.4,
+   "light": 0.4,
+   "column_alpha": 0.6,
+   "column_colour": [
+    70,
+    60,
+    50
+   ],
+   "column_top": [
+    110,
+    100,
+    88
+   ]
+  },
   "join": {
    "_how": "A knocked-out tank burns as one fire (the frame study of 22 November: the ground scene lit a wreck as six to eight fires of its own along the whole hull, one for each of the clip's fire and smoke beats, and they flickered and hopped as eight; the art director's ruling, section 3, wants one body of flame as wide as the engine deck). A fire lit within within_m of one already burning (on the level, and no more than up_m above or below it), neither of them over most_m across, joins it: that fire burns on as one, as long as the longer of them, growing smoothly over grow_s toward wide_m across at the most (each newcomer adds add of its own width; it never narrows), with one lamp, one glow and one column. The newcomer's number still finds it for BurnMove and BurnOut (its place kept as an offset; on a joined fire the first number that moves it moves it, the rest are not heard). No ground scene change is needed. Without within_m: every fire burns alone, as before.",
    "within_m": 4.5,

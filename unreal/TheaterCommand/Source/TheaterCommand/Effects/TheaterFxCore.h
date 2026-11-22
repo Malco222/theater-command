@@ -892,6 +892,18 @@ namespace TheaterFx
 			Span FlickerHz{ 1.5, 4.0 };
 			Rgb Col;
 		};
+		/** fire.late: a long fire burning down, read once a frame. */
+		struct LateRow
+		{
+			bool bOn = false;
+			// (the art director's ruling, section 3: "in a long battle, after 3 to 5 minutes the flames drop to 1 to 2 m
+			// and the smoke goes grey-brown and thinner". From From seconds after it was lit (its own, by its seed), over
+			// By seconds: its flames to Flames of their size, its lamp and glow to Light, its land column's puffs to Col at
+			// their foot and Top above, at Alpha of their ink)
+			Span From{ 180.0, 300.0 };
+			double By = 60.0, Flames = 0.4, Light = 0.4, Alpha = 0.6;
+			Rgb Col, Top;
+		};
 		/** The cook_off row, read when it starts. */
 		struct CookRow
 		{
@@ -1271,9 +1283,12 @@ namespace TheaterFx
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
 		TongueRow TongueRowOf() const;
 		GlowRow GlowRowOf() const;
-		void FireGlow(Source& S, double Now, const GlowRow& R); // (fire.glow: a burning thing's warm light on the ground, by the clock)
+		LateRow LateRowOf() const;
+		/** How far a fire lit at Start with seed Seed has burnt down by T (fire.late): 0 not yet, 1 all the way. */
+		static double LateShare(const LateRow& R, uint64_t Seed, double Start, double T);
+		void FireGlow(Source& S, double Now, const GlowRow& R, double Light = 1.0); // (fire.glow: a burning thing's warm light on the ground, by the clock)
 		bool LandColumnStands(int Column, double T) const; // (fire.land_column: that column still stands over its fire at T)
-		void FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& Heart, const Rgb& Ember); // (one step of a burning thing's flames, by fire.tongues)
+		void FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& Heart, const Rgb& Ember, const LateRow* Late = nullptr, double LateS = 0.0); // (one step of a burning thing's flames, by fire.tongues; Late, LateS: burning down, fire.late)
 		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
