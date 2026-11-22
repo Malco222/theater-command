@@ -2149,6 +2149,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Badge.At = Screen - FVector2D(0.0, 30.0);
 			Badge.Name = FString::FromInt(Field.Groups);
 			Badge.bAirfield = true;
+			Badge.Region = Field.Region; // (the UI director's HUD read, 22 November: mend 1: whose airfield it is, for the pointer)
 			Badge.Rank = -1;
 			if (const FCampaignNation* Nation = Data.FindNation(Field.Nation))
 			{
@@ -3276,8 +3277,9 @@ FString ACampaignPlayerController::GetAgentHint() const
 		return FString();
 	}
 	// (Ruling 169(a).) How he is sent, in the army card's own words with his time added; while he cannot be sent, the
-	// rules' own reason stands there instead.
-	return !Agent->Stuck.IsEmpty() ? Agent->Stuck : FString(TEXT("Right-click where the agent should go, or drag him there: a month on the road. Esc puts him down."));
+	// rules' own reason stands there instead. (The UI director's HUD read, 22 November: the line names the piece, not a
+	// man; "drag him there ... Esc puts him down" fixed the agent as one.)
+	return !Agent->Stuck.IsEmpty() ? Agent->Stuck : FString(TEXT("Right-click where the agent should go, or drag the piece there: a month on the road. Esc puts the piece down."));
 }
 
 bool ACampaignPlayerController::GetAgentInHandBox(FBox2D& OutBox) const
@@ -5587,16 +5589,21 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// What the pointer is over: a piece if it is on one (its counters, pole or colours), and the ground behind it.
 	FVector PointerWorld;
 	const bool bOnTable = bHaveMouse && PointerOnTable(PointerWorld);
-	const int32 PointedRegion = bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
+	// (The UI director's HUD read, 22 November: mend 1.) An airfield's badge stands for its airfield, as an army's figure
+	// stands for its ground: the pointer on it points at that field and its province, for the lit ground, the tip
+	// ("6 air groups based here") and a click, which opens the airfield. It is drawn over the table, so no piece behind
+	// it is pointed at.
+	const int32 OnFieldBadge = bHaveMouse ? FieldBadgeUnder(Mouse) : INDEX_NONE;
+	const int32 PointedRegion = OnFieldBadge != INDEX_NONE ? OnFieldBadge : bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
 	PointerMap = bOnTable ? Map->WorldToMap(PointerWorld) : FVector2D::ZeroVector;
 	bPointerOnWater = bOnTable && PointedRegion == INDEX_NONE;
-	PointedField = bOnTable ? Map->AirfieldNear(PointerMap) : INDEX_NONE;
+	PointedField = OnFieldBadge != INDEX_NONE ? OnFieldBadge : bOnTable ? Map->AirfieldNear(PointerMap) : INDEX_NONE;
 	AArmyPiece* PointedPiece = nullptr;
 	AArmyPiece* AimedPiece = nullptr; // (what an order would go to: never the flag that is being carried)
 	int32 PointedAgent = INDEX_NONE;
 	{
 		FVector RayOrigin, RayDirection;
-		if (bHaveMouse && !bScripted && DeprojectMousePositionToWorld(RayOrigin, RayDirection))
+		if (bHaveMouse && !bScripted && OnFieldBadge == INDEX_NONE && DeprojectMousePositionToWorld(RayOrigin, RayDirection))
 		{
 			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection);
 			AimedPiece = (PointedPiece && PointedPiece == HeldPiece.Get()) ? Map->PieceAtRay(RayOrigin, RayDirection, nullptr, PointedPiece) : PointedPiece;
@@ -6162,9 +6169,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				const FCampaignNation* Whose = Map->GetData().FindNation(Force.Key);
 				const int32 ForceFrom = Line.Len();
 				bool bForceAbout = false;
+				// (The UI director's HUD read, 22 November: mend 7.) Over a town's paper card, an army that is not the holder's
+				// says where it stands: under the garrison line, "2 div · German L Corps", a bare "Soviet army: ..." read as
+				// if both held the town. The slip with no card, and the holder's own line the card folds away, keep their words.
+				const TCHAR* ForceWhere = GlanceHere && Force.Key != Holder ? TEXT(" in the province") : TEXT("");
 				Line += bDim && Force.Value.Y == 0
-					? FString::Printf(TEXT("\n%s army: %d corps, strength unknown"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X)
-					: FString::Printf(TEXT("\n%s army: %d corps, %d division%s"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X, Force.Value.Y, Force.Value.Y == 1 ? TEXT("") : TEXT("s"));
+					? FString::Printf(TEXT("\n%s army%s: %d corps, strength unknown"), Whose ? *Whose->Adjective : *Force.Key, ForceWhere, Force.Value.X)
+					: FString::Printf(TEXT("\n%s army%s: %d corps, %d division%s"), Whose ? *Whose->Adjective : *Force.Key, ForceWhere, Force.Value.X, Force.Value.Y, Force.Value.Y == 1 ? TEXT("") : TEXT("s"));
 				// What stands round its base, in words: the same thing the table shows.
 				if (const AArmyPiece* Stands = Map->FindPiece(TipRegion, Force.Key))
 				{

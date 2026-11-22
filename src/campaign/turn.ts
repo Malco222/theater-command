@@ -1142,7 +1142,11 @@ export function asForecast(look: Outlook | null | undefined, rep: BattleReport, 
   return lost <= AS_FORECAST_LOSS * said.ours;
 }
 
-const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
+/**
+ * Men after "about", rounded (the UI director's HUD read, 22 November: "about 5,000 men", never "about 4,973 men"): to
+ * the nearest thousand from 1,000, the nearest hundred under it. Every line that uses it says "about" before it.
+ */
+export const menWord = (n: number): string => (n >= 1000 ? Math.round(n / 1000) * 1000 : n >= 100 ? Math.round(n / 100) * 100 : Math.round(n)).toLocaleString('en-US');
 
 /**
  * A forecast read off a copy of the campaign, kept with the save the copy was made from. The pointer resting over a

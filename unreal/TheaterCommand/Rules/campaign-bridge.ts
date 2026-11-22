@@ -46,7 +46,7 @@ import type { Field, Skill } from '../../../src/campaign/types';
 import { ARSENAL as arsenalBook, airJoinsPlan, factoriesBuilt, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
 import { TECH as TECH_TREE, hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
-import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
+import { commandOf, menWord, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
 import * as everyRule from '../../../src/campaign/turn';
 // (the air war's rules by name too: a rule a later version adds is used when the rules have it, and not missed when they have not)
 import * as everyAirRule from '../../../src/campaign/air';
@@ -1122,7 +1122,9 @@ function glanceShelves(s: Game, id: number) {
     const sure = see.own || see.ally || see.agent || corpsKnown(s, c, s.human).level !== 'report';
     const worth = c.divs * share, about = sure ? '' : 'about ';
     const worthSaid = worth >= 0.95 ? String(Math.round(worth)) : (Math.round(worth * 10) / 10).toFixed(1);
-    return ` at ${about}${Math.round(share * 100)}% strength, worth ${about}${worthSaid}`;
+    // (The UI director's HUD read, 22 November: mend 6. On Tula's card the line broke between "worth" and its figure,
+    // leaving "2" alone on a third line. "worth 2" and "worth about 2" are held by no-break spaces: it breaks before "worth".)
+    return ` at ${about}${Math.round(share * 100)}% strength, worth ${sure ? '' : 'about '}${worthSaid}`;
   };
   for (const c of see.known) {
     const share = glanceStr(s, c, see);
@@ -1153,7 +1155,8 @@ function glanceShelves(s: Game, id: number) {
   const divsIn = see.known.reduce((n, c) => n + c.divs * glanceStr(s, c, see), 0);
   const garrDivs = see.known.length ? Math.max(1, Math.round(divsIn + guard)) : 0;
   const airN = garrison.filter((g) => g.kind === 'air').length, fleetN = garrison.filter((g) => g.kind === 'fleet').length;
-  const garrHead = [garrDivs ? sayDivs(garrDivs) : guard > 0 ? 'guard' : '', airN ? `${airN} air` : '', fleetN ? `${fleetN} fleet${fleetN === 1 ? '' : 's'}` : ''].filter(Boolean).join(' \u00B7 ');
+  // (the UI director's HUD read, 22 November: "1 div · 1 air group", "2 air groups", never a bare "1 air")
+  const garrHead = [garrDivs ? sayDivs(garrDivs) : guard > 0 ? 'guard' : '', airN ? `${airN} air group${airN === 1 ? '' : 's'}` : '', fleetN ? `${fleetN} fleet${fleetN === 1 ? '' : 's'}` : ''].filter(Boolean).join(' \u00B7 ');
   // ON ORDER HERE: one row an order of a unit, with what planes and ships will join; then the dated arrivals.
   let book: CityBook[] = [];
   try { book = ordersBookOf(s); } catch { book = []; }
@@ -1186,8 +1189,9 @@ function glanceShelves(s: Game, id: number) {
     } else if (!c!.spied && b && b.what === 'corps') {
       joins = 'forms here';
     }
-    // (how big it is: so many aircraft or ships in the order, or a corps' divisions)
-    const size = l.holds > 1 ? `${l.holds} ${l.what === 'air' ? 'aircraft' : 'ships'}` : b && b.what === 'corps' && b.divs ? `${b.divs} division${b.divs === 1 ? '' : 's'}` : '';
+    // (how big it is: so many aircraft or ships in the order, or a corps' divisions; the UI director's HUD read, 22
+    // November: a wing counts what it is, "100 bombers" and "100 fighters", as an air group's card says "240 fighters")
+    const size = l.holds > 1 ? `${l.holds} ${l.what === 'air' ? (l.sign === 'bmr' ? 'bombers' : l.sign === 'ftr' ? 'fighters' : 'aircraft') : 'ships'}` : b && b.what === 'corps' && b.divs ? `${b.divs} division${b.divs === 1 ? '' : 's'}` : '';
     const row = {
       sign: l.mark || (l.unit ? l.sign : ''), star: l.elite, name: upFirst(l.label),
       line: [size, joins, l.unit ? '' : `ready ${l.ready}`].filter(Boolean).join(' \u00B7 ') || l.name,
@@ -2379,7 +2383,7 @@ function softenRow(s: Game, corps: Corps[], to: number) {
   // (Version 65) A corps too thin for a full probe does less: said, with what a full one takes.
   const pw = v.probe as typeof v.probe & { weight?: number; full?: number };
   const thin = pw.weight !== undefined && pw.weight < 0.995 ? ` It has the men for ${Math.max(1, Math.round(pw.weight * 100))}% of a full probe${pw.full ? `, which takes ${num(pw.full)} men` : ''}.` : '';
-  const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : 'There is nothing more a probe could find here.');
+  const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${menWord(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : 'There is nothing more a probe could find here.');
   return {
     head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.',
     done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now, true) || `it reads ${done.now}`}.` : ''}` : '',
@@ -2761,7 +2765,8 @@ function takeOutlook(ids: number[], to: number) {
   const r = s.regions[to];
   const size = m.sizeWord.toLowerCase();
   const divisions = `${m.guard.toFixed(1)} division${m.guard === 1 ? '' : 's'}`;
-  const guardMen = `about ${Math.round(m.guardMen).toLocaleString('en-US')} men`;
+  // (the UI director's HUD read, 22 November: the figure after "about" is rounded, as the rules' own lines round it)
+  const guardMen = `about ${menWord(m.guardMen)} men`;
   // The walls, as the ticket states them: the first line of WHAT YOU FACE on the card.
   const wall = m.outlook?.lines.find((l) => l.label === 'The town');
   const walls = wall?.effect ? [{ sign: 'defence', text: `The walls of a ${size}: ${wall.effect.charAt(0).toLowerCase()}${wall.effect.slice(1)}.`, unknown: false }] : [];
@@ -2859,7 +2864,7 @@ function stormLook(region: number) {
     region, forecast: true, meets: guardOnly ? 'guard' : 'garrison', town: v.town, sizeWord: v.sizeWord, guard: v.guard, guardMen: menOfGuard, line: '', going: going.map((c) => c.id),
     favours: choice.favours, forces: '', order: '',
     guardName: guardOnly ? `Town guard of ${v.town}` : `Garrison of ${v.town}`,
-    guardLine: guardOnly ? `${divisions} \u00B7 about ${menOfGuard.toLocaleString('en-US')} men` : `${v.inside < 0 ? 'strength not known' : `${v.inside} corps inside`}${v.guard > 0 ? ` \u00B7 and its town guard, ${divisions}` : ''}`,
+    guardLine: guardOnly ? `${divisions} \u00B7 about ${menWord(menOfGuard)} men` : `${v.inside < 0 ? 'strength not known' : `${v.inside} corps inside`}${v.guard > 0 ? ` \u00B7 and its town guard, ${divisions}` : ''}`,
     guardWho: guardOnly ? 'Depot troops, police and militia \u00B7 no army inside' : against ? `${against.charAt(0).toUpperCase()}${against.slice(1)}` : '',
     nowLabel: choice.hasty ? 'SEND THEM IN  \u00B7  A HASTY ASSAULT' : 'SEND THEM IN  \u00B7  THE ASSAULT, MADE READY',
     laterLabel: choice.prepared ? 'KEEP UP THE SIEGE  \u00B7  THE ASSAULT A MONTH LATER, MADE READY' : choice.ifWait ? 'KEEP UP THE SIEGE  \u00B7  WHAT WAITING BRINGS' : '',
@@ -3698,7 +3703,9 @@ function province(id: number) {
     country: (() => {
       const lines: string[] = [];
       const says = groundSays(s, r);
-      if (says) lines.push(says);
+      // (the UI director's HUD read, 22 November: the ground's line ends with a full stop like the lines under it; the
+      // rules keep it without one, for the browser's heading and the odds table's value)
+      if (says) lines.push(/[.!?]$/.test(says) ? says : `${says}.`);
       // (Damaged cities) Only where the player could know it: his own side's town, or one he has eyes on.
       const ruin = repairView(s, r.id);
       if (ruin && ruin.damage > 0 && (!me || allied(s, r.ctrl, me) || sight(s)[r.id] > 0)) lines.push(`${ruin.town} is ${ruin.pct}% in ruins${ruin.hit ? ', hit this month' : ''}: it pays ${r.ctrl === me ? 'you' : 'its holder'} that much less until it is repaired.`);

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e8476486 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 585a8a19 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -42008,6 +42008,7 @@
     manpowerOf: () => manpowerOf,
     marchOrder: () => marchOrder,
     marchOutlook: () => marchOutlook,
+    menWord: () => menWord,
     moodOf: () => moodOf,
     myAirGroups: () => myAirGroups,
     myFleetCards: () => myFleetCards,
@@ -47769,7 +47770,7 @@
     const lost = Math.max(rep.attLost, rep.attackers.reduce((s, u) => s + u.lost, 0));
     return lost <= AS_FORECAST_LOSS * said.ours;
   }
-  var menWord = (n) => Math.round(n).toLocaleString("en-US");
+  var menWord = (n) => (n >= 1e3 ? Math.round(n / 1e3) * 1e3 : n >= 100 ? Math.round(n / 100) * 100 : Math.round(n)).toLocaleString("en-US");
   var kept = null;
   var plainCopy = (x) => {
     if (Array.isArray(x)) return x.map(plainCopy);
@@ -72575,7 +72576,7 @@
       const sure = see.own || see.ally || see.agent || corpsKnown(s, c2, s.human).level !== "report";
       const worth3 = c2.divs * share, about2 = sure ? "" : "about ";
       const worthSaid = worth3 >= 0.95 ? String(Math.round(worth3)) : (Math.round(worth3 * 10) / 10).toFixed(1);
-      return ` at ${about2}${Math.round(share * 100)}% strength, worth ${about2}${worthSaid}`;
+      return ` at ${about2}${Math.round(share * 100)}% strength, worth ${sure ? "" : "about "}${worthSaid}`;
     };
     for (const c2 of see.known) {
       const share = glanceStr(s, c2, see);
@@ -72610,7 +72611,7 @@
     const divsIn = see.known.reduce((n, c2) => n + c2.divs * glanceStr(s, c2, see), 0);
     const garrDivs = see.known.length ? Math.max(1, Math.round(divsIn + guard)) : 0;
     const airN = garrison2.filter((g2) => g2.kind === "air").length, fleetN = garrison2.filter((g2) => g2.kind === "fleet").length;
-    const garrHead = [garrDivs ? sayDivs(garrDivs) : guard > 0 ? "guard" : "", airN ? `${airN} air` : "", fleetN ? `${fleetN} fleet${fleetN === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+    const garrHead = [garrDivs ? sayDivs(garrDivs) : guard > 0 ? "guard" : "", airN ? `${airN} air group${airN === 1 ? "" : "s"}` : "", fleetN ? `${fleetN} fleet${fleetN === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
     let book = [];
     try {
       book = ordersBookOf(s);
@@ -72650,7 +72651,7 @@
       } else if (!c.spied && b && b.what === "corps") {
         joins = "forms here";
       }
-      const size = l.holds > 1 ? `${l.holds} ${l.what === "air" ? "aircraft" : "ships"}` : b && b.what === "corps" && b.divs ? `${b.divs} division${b.divs === 1 ? "" : "s"}` : "";
+      const size = l.holds > 1 ? `${l.holds} ${l.what === "air" ? l.sign === "bmr" ? "bombers" : l.sign === "ftr" ? "fighters" : "aircraft" : "ships"}` : b && b.what === "corps" && b.divs ? `${b.divs} division${b.divs === 1 ? "" : "s"}` : "";
       const row2 = {
         sign: l.mark || (l.unit ? l.sign : ""),
         star: l.elite,
@@ -73766,7 +73767,7 @@
     const gains = [v.probe.fresh ? `name the ${v.probe.fresh === 1 ? "corps" : `${v.probe.fresh} corps`} the staff cannot see` : "", v.probe.wear > 0 ? `take ${mo(v.probe.wear)} off their fieldworks` : ""].filter(Boolean).join(" and ");
     const pw = v.probe;
     const thin = pw.weight !== void 0 && pw.weight < 0.995 ? ` It has the men for ${Math.max(1, Math.round(pw.weight * 100))}% of a full probe${pw.full ? `, which takes ${num5(pw.full)} men` : ""}.` : "";
-    const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num5(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : "There is nothing more a probe could find here.");
+    const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${menWord(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : "There is nothing more a probe could find here.");
     return {
       head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ", finished" : ""}.` : "The defenders are not dug in.",
       done: done ? `${done.name} has probed this line: it found ${listOf7(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num5(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now, true) || `it reads ${done.now}`}.` : ""}` : "",
@@ -74163,7 +74164,7 @@
     const r = s.regions[to];
     const size = m.sizeWord.toLowerCase();
     const divisions2 = `${m.guard.toFixed(1)} division${m.guard === 1 ? "" : "s"}`;
-    const guardMen2 = `about ${Math.round(m.guardMen).toLocaleString("en-US")} men`;
+    const guardMen2 = `about ${menWord(m.guardMen)} men`;
     const wall = m.outlook?.lines.find((l) => l.label === "The town");
     const walls = wall?.effect ? [{ sign: "defence", text: `The walls of a ${size}: ${wall.effect.charAt(0).toLowerCase()}${wall.effect.slice(1)}.`, unknown: false }] : [];
     return {
@@ -74286,7 +74287,7 @@
       forces: "",
       order: "",
       guardName: guardOnly2 ? `Town guard of ${v.town}` : `Garrison of ${v.town}`,
-      guardLine: guardOnly2 ? `${divisions2} · about ${menOfGuard.toLocaleString("en-US")} men` : `${v.inside < 0 ? "strength not known" : `${v.inside} corps inside`}${v.guard > 0 ? ` · and its town guard, ${divisions2}` : ""}`,
+      guardLine: guardOnly2 ? `${divisions2} · about ${menWord(menOfGuard)} men` : `${v.inside < 0 ? "strength not known" : `${v.inside} corps inside`}${v.guard > 0 ? ` · and its town guard, ${divisions2}` : ""}`,
       guardWho: guardOnly2 ? "Depot troops, police and militia · no army inside" : against ? `${against.charAt(0).toUpperCase()}${against.slice(1)}` : "",
       nowLabel: choice.hasty ? "SEND THEM IN  ·  A HASTY ASSAULT" : "SEND THEM IN  ·  THE ASSAULT, MADE READY",
       laterLabel: choice.prepared ? "KEEP UP THE SIEGE  ·  THE ASSAULT A MONTH LATER, MADE READY" : choice.ifWait ? "KEEP UP THE SIEGE  ·  WHAT WAITING BRINGS" : "",
@@ -75134,7 +75135,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       country: (() => {
         const lines2 = [];
         const says = groundSays(s, r);
-        if (says) lines2.push(says);
+        if (says) lines2.push(/[.!?]$/.test(says) ? says : `${says}.`);
         const ruin = repairView2(s, r.id);
         if (ruin && ruin.damage > 0 && (!me || allied(s, r.ctrl, me) || sight(s)[r.id] > 0)) lines2.push(`${ruin.town} is ${ruin.pct}% in ruins${ruin.hit ? ", hit this month" : ""}: it pays ${r.ctrl === me ? "you" : "its holder"} that much less until it is repaired.`);
         for (const n2 of riverNotes(s, r.id)) {

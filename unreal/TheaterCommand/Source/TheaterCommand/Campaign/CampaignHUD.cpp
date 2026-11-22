@@ -2279,7 +2279,13 @@ namespace
 
 		static constexpr double CardW = 699.0, CardH = 327.0;
 
-		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(CardW, CardH); }
+		// (The UI director's HUD read, 22 November: a refused work's reason is never cut. CardH is the sheet's height and the
+		// least the card stands; it grows by what the rows' whole reasons and the sentence under them need, Grown.)
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			const FViewAgent* Agent = Player.IsValid() ? Player->GetAgentInHand() : nullptr;
+			return FVector2D(CardW, CardH + (Agent ? Grown(*Agent) : 0.0));
+		}
 
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
 		{
@@ -2340,50 +2346,6 @@ namespace
 					Y += Lead;
 				}
 				return Y;
-			};
-			// (Release 2, the spy piece's Mac pictures of 22 November: a locked work's own cause, "There is no oilfield
-			// at Paris.", wrapped down its narrow column and over the lines below it. Words are now folded into so many
-			// lines at most, the last cut short with an ellipsis; the whole sentence still comes up on the pointer.)
-			auto Fold = [&](const FString& FoldText, const FSlateFontInfo& FoldFace, double FoldRoom, int32 FoldMost)
-			{
-				TArray<FString> FoldLines, FoldEach;
-				FoldText.ParseIntoArray(FoldEach, TEXT(" "));
-				FString FoldLine;
-				for (const FString& FoldWord : FoldEach)
-				{
-					const FString FoldLonger = FoldLine.IsEmpty() ? FoldWord : FoldLine + TEXT(" ") + FoldWord;
-					if (!FoldLine.IsEmpty() && Wide(FoldLonger, FoldFace) > FoldRoom)
-					{
-						FoldLines.Add(FoldLine);
-						FoldLine = FoldWord;
-					}
-					else
-					{
-						FoldLine = FoldLonger;
-					}
-				}
-				if (!FoldLine.IsEmpty())
-				{
-					FoldLines.Add(FoldLine);
-				}
-				if (FoldMost > 0 && FoldLines.Num() > FoldMost)
-				{
-					FoldLines.SetNum(FoldMost);
-					FString& FoldLast = FoldLines.Last();
-					// (whole words come off, as the UI director's check 19 asks: no word is cut at an edge)
-					int32 FoldSpace = INDEX_NONE;
-					while (Wide(FoldLast + TEXT("\u2026"), FoldFace) > FoldRoom && FoldLast.FindLastChar(TEXT(' '), FoldSpace) && FoldSpace > 0)
-					{
-						FoldLast.LeftInline(FoldSpace);
-					}
-					FoldLast.TrimEndInline();
-					while (FoldLast.Len() > 1 && (FoldLast.EndsWith(TEXT(".")) || FoldLast.EndsWith(TEXT(",")) || FoldLast.EndsWith(TEXT(":")) || FoldLast.EndsWith(TEXT(";"))))
-					{
-						FoldLast.LeftChopInline(1);
-					}
-					FoldLast += TEXT("\u2026");
-				}
-				return FoldLines;
 			};
 			auto Stroke = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
 			{
@@ -2446,13 +2408,19 @@ namespace
 			};
 			const FSlateFontInfo Head10 = Typed(Px(11.0f), true, 80), Small10 = Typed(Px(11.0f)), Typed12 = Typed(Px(12.0f)), Bold12 = Typed(Px(12.0f), true), Bold13 = Typed(Px(13.0f), true);
 			const FSlateFontInfo Name25 = Serif(TEXT("Regular"), Px(25.0f)), Row14 = Serif(TEXT("Bold"), Px(14.0f)), Body13 = Serif(TEXT("Regular"), Px(13.0f)), Body15 = Serif(TEXT("Regular"), Px(15.0f)), Hint14 = Serif(TEXT("Italic"), Px(14.0f));
+			// (The UI director's HUD read, 22 November: at Brian's 1441 window the column heads and " a month" in the 11
+			// measured 9.2 and a refused work's reason 8.5, under the 10 floor. 11 x 10 / 9.2 = 11.96, so 12; 11 x 10 / 8.5 =
+			// 12.94, so 13. Head10 and Small10 stay as they were for the rank plate, the door and the lines under the picture.)
+			const FSlateFontInfo Head12 = Typed(Px(12.0f), true, 80), Small12 = Typed(Px(12.0f)), Why13 = WhyFace();
 
-			// ---- The panel: solid, edged, with its four clamps.
-			Fill(0.0, 0.0, CardW, CardH, Desk900, 0);
-			Edge(0.5, 0.5, CardW - 1.0, CardH - 1.0, Brass700, 1.0f, 1);
+			// ---- The panel: solid, edged, with its four clamps. (As tall as the sheet's 327, or taller by what the rows'
+			// whole reasons need: the UI director's HUD read, 22 November.)
+			const double Grow = Grown(*Agent), High = CardH + Grow;
+			Fill(0.0, 0.0, CardW, High, Desk900, 0);
+			Edge(0.5, 0.5, CardW - 1.0, High - 1.0, Brass700, 1.0f, 1);
 			for (const FVector2D& Corner : { FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0), FVector2D(1.0, 1.0) })
 			{
-				const double CX = 5.0 + Corner.X * (CardW - 10.0), CY = 5.0 + Corner.Y * (CardH - 10.0);
+				const double CX = 5.0 + Corner.X * (CardW - 10.0), CY = 5.0 + Corner.Y * (High - 10.0);
 				const double DX = Corner.X > 0.5 ? -13.0 : 13.0, DY = Corner.Y > 0.5 ? -13.0 : 13.0;
 				Stroke({ FVector2D(CX + DX, CY), FVector2D(CX, CY), FVector2D(CX, CY + DY) }, Brass, 2.0f, 2);
 			}
@@ -2571,9 +2539,9 @@ namespace
 				// ---- What he sees (abroad), or the threat he guards against (at home).
 				if (Agent->bAbroad)
 				{
-					Write(TEXT("IN SIGHT"), 132.0, 90.0, Head10, Brass, 2);
-					WriteRight(TEXT("CORPS"), 286.0, 90.0, Small10, Muted, 2);
-					WriteRight(TEXT("DIVISIONS"), 358.0, 90.0, Small10, Muted, 2);
+					Write(TEXT("IN SIGHT"), 132.0, 90.0, Head12, Brass, 2);
+					WriteRight(TEXT("CORPS"), 286.0, 90.0, Small12, Muted, 2);
+					WriteRight(TEXT("DIVISIONS"), 358.0, 90.0, Small12, Muted, 2);
 					const int32 Shown = Agent->Sees.Num() > 5 ? 4 : Agent->Sees.Num();
 					for (int32 Row = 0; Row < Shown; ++Row)
 					{
@@ -2596,28 +2564,36 @@ namespace
 				}
 				else
 				{
-					Write(TEXT("SABOTEURS AT HOME"), 132.0, 90.0, Head10, Brass, 2);
+					Write(TEXT("SABOTEURS AT HOME"), 132.0, 90.0, Head12, Brass, 2);
 					Set(Agent->Home, 132.0, 108.0, Body13, Muted, 226.0, 17.0, 2);
 				}
 
 				// ---- The work he can be set where he stands, with its odds. The lamp marks the work in force.
-				Write(TEXT("WORK AT ") + Agent->Where.ToUpper(), 372.0, 90.0, Head10, Brass, 2);
+				// (At 12 a long name ran into COMES OFF, or CAUGHT at home; the fact strip above names the place already, so
+				// there the head says WORK HERE.)
+				{
+					const FString WorkAt = TEXT("WORK AT ") + Agent->Where.ToUpper();
+					const double HeadsFrom = Agent->bAbroad ? 612.0 - Wide(TEXT("COMES OFF"), Small12) : 681.0 - Wide(TEXT("CAUGHT"), Small12);
+					Write(372.0 + Wide(WorkAt, Head12) + 10.0 <= HeadsFrom ? WorkAt : FString(TEXT("WORK HERE")), 372.0, 90.0, Head12, Brass, 2);
+				}
 				if (Agent->bAbroad)
 				{
-					WriteRight(TEXT("COMES OFF"), 612.0, 90.0, Small10, Muted, 2);
+					WriteRight(TEXT("COMES OFF"), 612.0, 90.0, Small12, Muted, 2);
 				}
-				WriteRight(TEXT("CAUGHT"), 681.0, 90.0, Small10, Muted, 2);
+				WriteRight(TEXT("CAUGHT"), 681.0, 90.0, Small12, Muted, 2);
 				const FString Cause = CommonCause(*Agent);
-				for (int32 Row = 0; Row < FMath::Min(Agent->Work.Num(), 6); ++Row)
+				// (the rows as they stand, each as tall as its own reason needs: RowBoxes)
+				const TArray<FBox2D> Rows = RowBoxes(*Agent);
+				for (int32 Row = 0; Row < Rows.Num(); ++Row)
 				{
 					const FAgentWork& Work = Agent->Work[Row];
-					const FBox2D Box = RowBox(Row);
+					const FBox2D& Box = Rows[Row];
 					const double Y = Box.Min.Y, Middle = Y + 13.0;
 					const bool bLocked = !Work.bNow && !Work.Why.IsEmpty();
 					const bool bPointed = Over == Row && Work.bOk;
 					if (bPointed)
 					{
-						Fill(Box.Min.X, Y, Box.GetSize().X, 25.0, Desk800, 1);
+						Fill(Box.Min.X, Y, Box.GetSize().X, Box.GetSize().Y - 1.0, Desk800, 1);
 					}
 					if (Work.bNow)
 					{
@@ -2635,14 +2611,14 @@ namespace
 					Write(Work.Label, 396.0, Y + 4.0, Row14, Work.bNow ? BrightBrass : bLocked ? Dim : bPointed ? BrightBrass : Cream, 2);
 					if (bLocked && Work.Why != Cause)
 					{
-						// (a row with a cause of its own carries it in the figures' place, kept to its row: two lines at most)
-						const double WhyX = 396.0 + Wide(Work.Label, Row14) + 12.0;
-						const TArray<FString> WhyLines = Fold(Work.Why, Small10, 681.0 - WhyX, 2);
-						double WhyY = WhyLines.Num() > 1 ? Y + 0.5 : Y + 7.0;
-						for (const FString& WhyLine : WhyLines)
+						// (a row with a cause of its own carries it on lines of its own under its label, from 396 to 681, every
+						// word of it, and the row has grown to hold them. The UI director's HUD read, 22 November: two lines
+						// beside the label cut "The United Kingdom lays..." short, and it said nothing.)
+						double WhyY = Y + 22.0;
+						for (const FString& WhyLine : FoldAt(Work.Why, Why13, 285.0))
 						{
-							Write(WhyLine, WhyX, WhyY, Small10, Muted, 2);
-							WhyY += 11.5;
+							Write(WhyLine, 396.0, WhyY, Why13, Muted, 2);
+							WhyY += WhyLead;
 						}
 					}
 					else if (!bLocked)
@@ -2653,7 +2629,7 @@ namespace
 						}
 						else if (Agent->bAbroad)
 						{
-							WriteRight(TEXT("·"), 606.0, Y + 6.0, Bold13, Muted, 2);
+							WriteRight(TEXT("·"), 598.0, Y + 6.0, Bold13, Muted, 2); // (clear of a two-figure chance beside " a month" at 12: the UI director's HUD read, 22 November)
 						}
 						if (!Agent->bAbroad)
 						{
@@ -2665,47 +2641,26 @@ namespace
 						}
 						else
 						{
-							// (work that goes on month after month: the chance each month)
+							// (work that goes on month after month: the chance each month; " a month" at 12, the UI director's HUD read, 22 November)
 							const FString Each = TEXT(" a month");
-							WriteRight(Each, 681.0, Y + 8.0, Small10, Muted, 2);
-							WriteRight(FString::Printf(TEXT("%d%%"), Work.Caught), 681.0 - Wide(Each, Small10), Y + 6.0, Bold13, Work.Caught >= 10 ? Amber : Cream, 2);
+							WriteRight(Each, 681.0, Y + 7.0, Small12, Muted, 2);
+							WriteRight(FString::Printf(TEXT("%d%%"), Work.Caught), 681.0 - Wide(Each, Small12), Y + 6.0, Bold13, Work.Caught >= 10 ? Amber : Cream, 2);
 						}
 					}
-					Fill(372.0, Y + 25.0, 309.0, 1.0, Desk700, 2);
+					Fill(372.0, Box.Max.Y - 1.0, 309.0, 1.0, Desk700, 2);
 				}
 				{
 					// One cause, one sentence under the list; and at home, what standing guard is.
-					const double Under = 106.0 + 26.0 * FMath::Min(Agent->Work.Num(), 6) + 8.0;
-					// (Release 2, the same pictures: with six rows a two-line sentence here ran into the foot's line at
-					// 298. Where the card's type does not fit above it, the smaller type is used, cut short if need be.)
-					const auto Under6 = [&](const FString& UnderWords, const FLinearColor& UnderInk)
-					{
-						const double UnderRoom = 296.0 - Under;
-						if (Fold(UnderWords, Body13, 309.0, 0).Num() * 17.0 <= UnderRoom)
-						{
-							Set(UnderWords, 372.0, Under, Body13, UnderInk, 309.0, 17.0, 2);
-							return;
-						}
-						double UnderY = Under;
-						for (const FString& UnderLine : Fold(UnderWords, Small10, 309.0, FMath::Max(1, FMath::FloorToInt32(UnderRoom / 12.0))))
-						{
-							Write(UnderLine, 372.0, UnderY, Small10, UnderInk, 2);
-							UnderY += 12.0;
-						}
-					};
-					if (!Cause.IsEmpty())
-					{
-						Under6(Cause, Cream);
-					}
-					else if (!Agent->bAbroad)
-					{
-						Under6(Agent->Will, Muted);
-					}
+					// (Release 2, the same pictures: with six rows a two-line sentence here ran into the foot's line at 298, and the
+					// smaller type was used, cut short if need be. The UI director's HUD read, 22 November: a reason is never cut.
+					// It is set whole in the card's type under the rows as they stand, and the card grows to hold it: Grown.)
+					const double Under = (Rows.Num() > 0 ? Rows.Last().Max.Y : 106.0) + 8.0;
+					Set(UnderSentence(*Agent), 372.0, Under, UnderFace(), MoreInTheRoom(*Agent) > 0 || !Cause.IsEmpty() ? Cream : Muted, 309.0, UnderLead, 2);
 				}
 			}
 
 			// ---- The foot: how he is sent; or, while he cannot be, the rules' own reason.
-			Write(Player->GetAgentHint(), 18.0, 298.0, Hint14, Muted, 2);
+			Write(Player->GetAgentHint(), 18.0, 298.0 + Grow, Hint14, Muted, 2);
 			return LayerId + 6;
 		}
 
@@ -2764,7 +2719,103 @@ namespace
 
 	private:
 		static FBox2D DoorBox() { return FBox2D(FVector2D(508.0, 14.0), FVector2D(681.0, 42.0)); }
-		static FBox2D RowBox(int32 Row) { return FBox2D(FVector2D(372.0, 106.0 + 26.0 * Row), FVector2D(681.0, 132.0 + 26.0 * Row)); }
+
+		// (The UI director's HUD read, 22 November: at Brian's 1441 window a refused work's reason in the 11 measured 8.5,
+		// under the 10 floor, and folded to two lines beside its label "The United Kingdom lays..." was cut and said
+		// nothing. It is set at 13 (11 x 10 / 8.5 = 12.94) on lines of its own under the label, every word of it, and the
+		// row, and the card, grow to hold it.)
+		static FSlateFontInfo WhyFace() { return Typed(13.0f * 0.75f); }
+		static FSlateFontInfo UnderFace() { return Serif(TEXT("Regular"), 13.0f * 0.75f); }
+		static constexpr double WhyLead = 14.0, UnderLead = 17.0;
+
+		/** Words folded at whole words into lines no wider than the room, every word kept: as Set lays them on the card. */
+		static TArray<FString> FoldAt(const FString& Words, const FSlateFontInfo& Face, double Room)
+		{
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			TArray<FString> Lines, Each;
+			Words.ParseIntoArray(Each, TEXT(" "));
+			FString Line;
+			for (const FString& Word : Each)
+			{
+				const FString Longer = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+				if (!Line.IsEmpty() && static_cast<double>(Measure->Measure(Longer, Face).X) > Room)
+				{
+					Lines.Add(Line);
+					Line = Word;
+				}
+				else
+				{
+					Line = Longer;
+				}
+			}
+			if (!Line.IsEmpty())
+			{
+				Lines.Add(Line);
+			}
+			return Lines;
+		}
+
+		/**
+		 * The rows of work as they stand on the card, the first six, from 106 down: each 26 high, and one whose refusal has
+		 * a cause of its own (not the one said once under the list) taller by a line of 14 for each line of that cause,
+		 * set under its label from 396 to 681. The paint, the pointer and the card's height all read them from here.
+		 */
+		static TArray<FBox2D> RowBoxes(const FViewAgent& Agent)
+		{
+			TArray<FBox2D> Boxes;
+			const FString Cause = CommonCause(Agent);
+			double Top = 106.0;
+			for (int32 Row = 0; Row < FMath::Min(Agent.Work.Num(), 6); ++Row)
+			{
+				const FAgentWork& Work = Agent.Work[Row];
+				const bool bOwnCause = !Work.bNow && !Work.Why.IsEmpty() && Work.Why != Cause;
+				const double High = 26.0 + (bOwnCause ? WhyLead * FoldAt(Work.Why, WhyFace(), 285.0).Num() : 0.0);
+				Boxes.Add(FBox2D(FVector2D(372.0, Top), FVector2D(681.0, Top + High)));
+				Top += High;
+			}
+			return Boxes;
+		}
+
+		/**
+		 * The work that can be done past the sixth row, which the card has no room for (the spies thread, from the UI
+		 * director's ruling, item 4: the rules send the work in force first, then the work that can be done, then the barred).
+		 */
+		static int32 MoreInTheRoom(const FViewAgent& Agent)
+		{
+			int32 More = 0;
+			for (int32 K = 6; K < Agent.Work.Num(); ++K)
+			{
+				More += !Agent.Work[K].bNow && Agent.Work[K].Why.IsEmpty() ? 1 : 0;
+			}
+			return More;
+		}
+
+		/**
+		 * The one sentence under the list: how much more work the room offers, where there is more than six rows hold; else
+		 * the cause most of the refused work shares; else, at home, what standing guard is.
+		 */
+		static FString UnderSentence(const FViewAgent& Agent)
+		{
+			const int32 More = MoreInTheRoom(Agent);
+			if (More > 0)
+			{
+				return FString::Printf(TEXT("and %d more in the room"), More);
+			}
+			const FString Cause = CommonCause(Agent);
+			return !Cause.IsEmpty() ? Cause : !Agent.bAbroad ? Agent.Will : FString();
+		}
+
+		/** How much taller than the sheet's 327 the card stands: what the rows and the whole sentence under them need past 296. */
+		static double Grown(const FViewAgent& Agent)
+		{
+			if (!Agent.bAtWork)
+			{
+				return 0.0;
+			}
+			const TArray<FBox2D> Rows = RowBoxes(Agent);
+			const double Under = (Rows.Num() > 0 ? Rows.Last().Max.Y : 106.0) + 8.0;
+			return FMath::Max(0.0, Under + UnderLead * FoldAt(UnderSentence(Agent), UnderFace(), 309.0).Num() - 296.0);
+		}
 
 		/** What the pointer is on: a row of work by its place, -2 the door to the room, -1 nothing. */
 		int32 At(const FVector2D& Here) const
@@ -2776,9 +2827,10 @@ namespace
 			const FViewAgent* Agent = Player.IsValid() ? Player->GetAgentInHand() : nullptr;
 			if (Agent && Agent->bAtWork)
 			{
-				for (int32 Row = 0; Row < FMath::Min(Agent->Work.Num(), 6); ++Row)
+				const TArray<FBox2D> Rows = RowBoxes(*Agent);
+				for (int32 Row = 0; Row < Rows.Num(); ++Row)
 				{
-					if (RowBox(Row).IsInside(Here))
+					if (Rows[Row].IsInside(Here))
 					{
 						return Row;
 					}
@@ -2787,21 +2839,32 @@ namespace
 			return -1;
 		}
 
-		/** The reason most of the refused work shares, in the rules' sentence: it is said once, under the list. */
+		/**
+		 * The reason most of the refused work shares, in the rules' sentence: it is said once, under the list. (Only the six
+		 * rows on the card are counted: a cause shared by work past them gave the reason for work that is not there. And
+		 * where the line under the list says how much more the room offers, there is no shared cause: each refused row on
+		 * the card carries its own.)
+		 */
 		static FString CommonCause(const FViewAgent& Agent)
 		{
 			FString Most;
 			int32 MostCount = 0;
-			for (const FAgentWork& Work : Agent.Work)
+			if (MoreInTheRoom(Agent) > 0)
 			{
+				return Most;
+			}
+			const int32 OnCard = FMath::Min(Agent.Work.Num(), 6);
+			for (int32 Row = 0; Row < OnCard; ++Row)
+			{
+				const FAgentWork& Work = Agent.Work[Row];
 				if (Work.bNow || Work.Why.IsEmpty())
 				{
 					continue;
 				}
 				int32 Count = 0;
-				for (const FAgentWork& Other : Agent.Work)
+				for (int32 K = 0; K < OnCard; ++K)
 				{
-					Count += !Other.bNow && Other.Why == Work.Why ? 1 : 0;
+					Count += !Agent.Work[K].bNow && Agent.Work[K].Why == Work.Why ? 1 : 0;
 				}
 				if (Count > MostCount)
 				{
@@ -3237,9 +3300,13 @@ namespace
 			// (ruling 86: where the gates' marks are drawn, for the pointer; and the badges drawn, for them to step clear of)
 			TArray<TPair<int32, FBox2D>> GateBoxes;
 			TArray<FBox2D> Badges;
+			// (the UI director's HUD read, 22 November: mend 1. And where each airfield's badge is drawn, with its province, for
+			// the pointer: the badge stands for its airfield, for the tip and a click, as the field itself does.)
+			TArray<TPair<int32, FBox2D>> FieldBoxes;
 			if (Plates.Num() == 0)
 			{
 				Controller->NoteGateMarks(GateBoxes, Geometry.Scale);
+				Controller->NoteFieldBadges(FieldBoxes);
 				DrawnTownPlates.Reset();
 				return LayerId;
 			}
@@ -3745,28 +3812,28 @@ namespace
 				if (Each.bAirfield)
 				{
 					// An airfield in use: a small plate with a little aircraft drawn on it and the number of groups.
+					// (The UI director's HUD read, 22 November: mend 1. Stroked at about 9 px the aircraft closed into a plus, and
+					// "plane 6" read "+ 6", six more on order. It is the kit's own aircraft now, the order sign "ftr" (the plain one:
+					// "bmr" wears engines on its wings), at the size the glance plate draws its order sign close up (Tall 22: 0.68
+					// of it high, half as wide again), in the count's ink. The plate is as tall as that plate, and wide enough.)
 					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 13); // (the typewriter's figures are small for their size: set a size up, in bold)
 					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
-					const double BadgeWide = 31.0 + CountSize.X, BadgeHigh = 17.0;
+					const double SignHigh = 22.0 * 0.68, SignWide = SignHigh * 1.5, SignAt = 11.0, CountAt = SignAt + SignWide + 4.0;
+					const double BadgeWide = CountAt + CountSize.X + 6.0, BadgeHigh = 22.0;
 					const FVector2D Corner(Each.At.X / Scale - BadgeWide * 0.5, Each.At.Y / Scale);
 					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh))))
 					{
 						continue;
 					}
 					Badges.Add(FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh)));
+					FieldBoxes.Add(TPair<int32, FBox2D>(Each.Region, FBox2D(Corner * Scale, (Corner + FVector2D(BadgeWide, BadgeHigh)) * Scale)));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(BadgeWide, BadgeHigh), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, BadgeHigh - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour);
-					// (the aircraft, seen from above with its nose up the plate: a body, wings and a tailplane)
-					const FVector2D Middle = Corner + FVector2D(17.0, BadgeHigh * 0.5);
-					const FPaintGeometry Whole = Geometry.ToPaintGeometry();
-					auto Stroke = [&](const FVector2D& From, const FVector2D& To, float Thick)
+					if (const FSlateBrush* Sign = OrderSignBrush(TEXT("ftr")))
 					{
-						FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, Whole, TArray<FVector2D>{ Middle + From, Middle + To }, ESlateDrawEffect::None, NameInk, true, Thick);
-					};
-					Stroke(FVector2D(0.0, -5.0), FVector2D(0.0, 5.0), 2.0f);
-					Stroke(FVector2D(-5.5, -0.8), FVector2D(5.5, -0.8), 2.2f);
-					Stroke(FVector2D(-2.4, 4.2), FVector2D(2.4, 4.2), 1.6f);
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(25.0, (BadgeHigh - CountSize.Y) * 0.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
+						FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(SignWide, SignHigh), FSlateLayoutTransform(Corner + FVector2D(SignAt, (BadgeHigh - SignHigh) * 0.5))), Sign, ESlateDrawEffect::None, NameInk);
+					}
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(CountAt, (BadgeHigh - CountSize.Y) * 0.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
 					continue;
 				}
 				// (from far off the capitals' plates are small, so the countries' own names can still be read)
@@ -3880,6 +3947,7 @@ namespace
 				}
 			}
 			Controller->NoteGateMarks(GateBoxes, Scale);
+			Controller->NoteFieldBadges(FieldBoxes);
 			DrawnTownPlates = Taken;
 			return LayerId + 1;
 		}
@@ -6243,7 +6311,7 @@ namespace
 							// frame, so the month's seals at the map's edge, and the towns' plates, keep out from under it.)
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 							[
-								Piece(SNew(SBox).WidthOverride(699.0f).HeightOverride(327.0f)
+								Piece(SNew(SBox).WidthOverride(699.0f) // (no height fixed: the card is 327 tall or more, grown for a refused work's whole reason; the UI director's HUD read, 22 November)
 								.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->HasAgentInHand() && Controller->GetAgentInHand() ? EVisibility::Visible : EVisibility::Collapsed; })
 								[
 									SNew(SAgentCard).Player(Controller)
@@ -10934,9 +11002,13 @@ namespace
 
 		TSharedRef<SWidget> KeyCap(const TCHAR* Key, const FLinearColor& Ink)
 		{
-			return SNew(SBorder).BorderImage(&KeyCapBrush).BorderBackgroundColor(Ink.CopyWithNewOpacity(0.85f)).Padding(FMargin(5.0f, 0.0f, 5.0f, 1.0f)).VAlign(VAlign_Center)
+			// (The UI director's HUD read, 22 November: mend 2. ENTER and TAB read about 8 px in Brian's window, under the floor
+			// of 10: 7 x 10/8 = 8.75, set at 9. And the letters stand in the middle of the cap: Courier Prime's capitals ride
+			// 0.07 of the type's size above the middle of its line, so at 9 (12 px at 1,600) the cap is padded 1.7 more above
+			// than below. TAB sat high.)
+			return SNew(SBorder).BorderImage(&KeyCapBrush).BorderBackgroundColor(Ink.CopyWithNewOpacity(0.85f)).Padding(FMargin(5.0f, 1.7f, 5.0f, 0.0f)).VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(FText::FromString(Key)).Font(Typed(7.0f, true)).ColorAndOpacity(Ink)
+					SNew(STextBlock).Text(FText::FromString(Key)).Font(Typed(9.0f, true)).ColorAndOpacity(Ink)
 				];
 		}
 
@@ -11055,8 +11127,9 @@ namespace
 				// 1. Armies at the front remain: the one bright thing.
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					// (wider by a little where its line names both kinds: "12 at the front and 1 newly raised")
-					SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->IsRoundMixed() ? 282.0f : 252.0f); }).HeightOverride(46.0f)
+					// (wider where its line names both kinds: "12 at the front and 1 newly raised". The UI director's HUD read, 22
+					// November, mend 3: set at 10 that line takes 8 px a letter at 1,600, and "12 at the front and 10 newly raised" fits whole.)
+					SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->IsRoundMixed() ? 352.0f : 252.0f); }).HeightOverride(46.0f)
 					.Visibility_Lambda([this]() { return ArmiesWait() ? EVisibility::Visible : EVisibility::Collapsed; })
 					[
 						SNew(SButton).ButtonStyle(&PillStyle).ContentPadding(FMargin(3.0f)).IsFocusable(false)
@@ -11112,14 +11185,15 @@ namespace
 											})
 										]
 										// (Ruling 111(f): where it counts both kinds, the rules' own words say how many of each. The longer
-										// line is set smaller and has the whole width; were it ever longer still, it shrinks to fit and is
-										// never cut short.)
+										// line has the whole width; were it ever longer still, it shrinks to fit and is never cut short. The UI
+										// director's HUD read, 22 November, mend 3: it read about 8.3 px in Brian's window, under the floor of 10:
+										// 7.5 x 10/8.3 = 9.04, set at 10.)
 										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 										[
 											SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly).HAlign(HAlign_Left)
 											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsRoundMixed() && !Controller->GetRoundWords().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 											[
-												SNew(STextBlock).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f)).Font(Typed(7.5f))
+												SNew(STextBlock).ColorAndOpacity(DeskInk.CopyWithNewOpacity(0.85f)).Font(Typed(10.0f))
 												.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() ? Controller->GetRoundWords() : FString()); })
 											]
 										]
@@ -11322,7 +11396,10 @@ namespace
 			if (Tips != Fold.Tips)
 			{
 				Fold.Tips = Tips;
-				Fold.TipsText = FText::FromString(Tips == 1 ? FString(TEXT("CHIEF: 1 TIP")) : FString::Printf(TEXT("CHIEF: %d TIPS"), Tips));
+				// (The UI director's HUD read, 22 November: mend 8. The tag names him as the list's own heading does, YOUR
+				// CHIEF OF STAFF SUGGESTS. It stands in no fixed box: the one-line test below measures it, and at Brian's
+				// window the strip still keeps to one line.)
+				Fold.TipsText = FText::FromString(Tips == 1 ? FString(TEXT("CHIEF OF STAFF: 1 TIP")) : FString::Printf(TEXT("CHIEF OF STAFF: %d TIPS"), Tips));
 			}
 			const int32 Counts[3] = { Controller->IsWatching() ? 0 : Controller->ArmiesInRear(), Controller->GetIdleTeams(), View.Treasury.bValid ? View.Treasury.Orders.Num() : 0 };
 			for (int32 Which = 0; Which < 3; ++Which)
@@ -14702,9 +14779,12 @@ namespace
 							]
 							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 							[
-								SNew(SBox).HeightOverride(24.0f)
+								// (the UI director's HUD read, 22 November, mend 4: "Click to choose a building" read about 8.3 px in Brian's
+								// window, under the floor of 10: 8 x 10/8.3 = 9.64, set at 10. A plot's line then takes up to three lines, as
+								// "Corps resting here or beside it recover 10% faster." does: 23 letters to a line, 13.5 px a line at 1,600.)
+								SNew(SBox).HeightOverride(41.0f)
 								[
-									SNew(STextBlock).Text(FText::FromString(Under)).Font(Font(TEXT("Regular"), 8)).ColorAndOpacity(Plot.bBuilding || (bFree && Bar.bMine) ? BrightBrass : Muted).AutoWrapText(true)
+									SNew(STextBlock).Text(FText::FromString(Under)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Plot.bBuilding || (bFree && Bar.bMine) ? BrightBrass : Muted).AutoWrapText(true)
 								]
 							]
 						]
@@ -14843,7 +14923,10 @@ namespace
 						.ToolTipText_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoTip(Index) : FString()); })
 						.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PressToDo(Index); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Font(Typed(8.5f, true)).ColorAndOpacity(BrightBrass.CopyWithNewOpacity(0.9f))
+							// (the UI director's HUD read, 22 November: NOTHING IS ON ORDER asks for his eye, a factory line standing idle,
+							// so its words take the kit's amber, which the kit keeps for what is due or needs his eye)
+							SNew(STextBlock).Font(Typed(8.5f, true))
+							.ColorAndOpacity_Lambda([this, Index, DueAmber]() { return FSlateColor(Controller.IsValid() && Controller->GetToDoText(Index) == TEXT("NOTHING IS ON ORDER") ? DueAmber : BrightBrass.CopyWithNewOpacity(0.9f)); })
 							.Text_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoText(Index) : FString()); })
 						]
 					]
@@ -16059,7 +16142,10 @@ namespace
 			}
 			if (Men > 0)
 			{
-				What.Add(FString::Printf(TEXT("%s%s men"), *About, *FText::AsNumber(Men).ToString()));
+				// (the UI director's HUD read, 22 November: a figure after "about" is rounded, to the nearest thousand from
+				// 1,000 and the nearest hundred under it, as the rules round theirs)
+				const int32 Said = Card.Stale <= 0 ? Men : Men >= 1000 ? FMath::RoundToInt32(Men / 1000.0) * 1000 : Men >= 100 ? FMath::RoundToInt32(Men / 100.0) * 100 : Men;
+				What.Add(FString::Printf(TEXT("%s%s men"), *About, *FText::AsNumber(Said).ToString()));
 			}
 			Lines->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 7.0f)[SNew(STextBlock).Text(FText::FromString(FString::Join(What, TEXT("  \u00B7  ")))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).WrapTextAt(Wide)];
 			// How much of it is left, and how it holds together: a bar each, with its figure or its word.

@@ -787,6 +787,23 @@ public:
 	/** (Ruling 86.) Where the gates' marks were last drawn, in the window's own pixels: told by the screen as it paints them. */
 	void NoteGateMarks(const TArray<TPair<int32, FBox2D>>& Marks, float PixelsToAUnit = 1.0f) { GateMarks = Marks; GateMarkScale = FMath::Max(PixelsToAUnit, 0.01f); }
 	/**
+	 * (The UI director's HUD read, 22 November: mend 1.) Where the airfields' badges were last drawn, each with its
+	 * airfield's province, in the window's own pixels: told by the screen as it paints them. And the province whose
+	 * badge is under the pointer, or none: the pointer on a badge points at its airfield.
+	 */
+	void NoteFieldBadges(const TArray<TPair<int32, FBox2D>>& Badges) { FieldBadges = Badges; }
+	int32 FieldBadgeUnder(const FVector2D& Pointer) const
+	{
+		for (const TPair<int32, FBox2D>& Badge : FieldBadges)
+		{
+			if (Badge.Value.IsInside(Pointer))
+			{
+				return Badge.Key;
+			}
+		}
+		return INDEX_NONE;
+	}
+	/**
 	 * Where the pointer's box should stand clear of: the mark of the gate it explains, in the screen's own units (the
 	 * units the mark was painted in, whatever the window's pixels are). False when it explains no mark.
 	 */
@@ -1535,6 +1552,7 @@ private:
 	bool bStagedField = false; // (for the photographer: the staged pointer rests on that province's airfield)
 	// (Ruling 86.) The gates' marks as last drawn; the gate under the pointer, and what its box says.
 	TArray<TPair<int32, FBox2D>> GateMarks;
+	TArray<TPair<int32, FBox2D>> FieldBadges; // (the UI director's HUD read, 22 November: mend 1) the airfields' badges as last drawn, by province
 	int32 StagedGate = INDEX_NONE;
 	int32 HoverGate = INDEX_NONE;
 	// (The code checker, 17 November.) The padlock under the pointer when the left button went down: the hover is blanked
