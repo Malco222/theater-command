@@ -1,0 +1,1588 @@
+From cc5b1d606ecd747e81d542f8a3f9d576ee52e2f2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 22 Nov 2026 18:14:28 +0000
+Subject: [PATCH] GS6 patch B (part 1): AirSky::Chip on the air scene's sky
+ (lids, small clouds' sight, drawn-out rags), its cloud test, M_CloudTurned's
+ builder
+
+The same Battle/AirSkyChip.inl as the ground's; Chip::Lay follows this AirSky's painter (SmallSight's haze, Long,
+the deck's lids, FragmentLids). Tools/air_show/air_sky_chip_test.cpp passes against this painter: 1,000,428 points on
+the ground's two skies and the three recordings, 0.010 m at most apart. Not yet wired into AirBattle.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01L4rhyzzCJpbk7hzRiikzLD
+---
+ .../Source/TheaterCommand/Battle/AirSky.cpp   | 258 +++++++++
+ .../Source/TheaterCommand/Battle/AirSky.h     | 106 ++++
+ .../TheaterCommand/Battle/AirSkyChip.inl      | 429 +++++++++++++++
+ .../Tools/air_show/air_sky_chip.h             |  46 ++
+ .../Tools/air_show/air_sky_chip_test.cpp      | 505 ++++++++++++++++++
+ unreal/TheaterCommand/Tools/air_show/run.sh   |   6 +
+ unreal/TheaterCommand/Tools/build_content.py  | 144 ++++-
+ 7 files changed, 1493 insertions(+), 1 deletion(-)
+ create mode 100644 unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSkyChip.inl
+ create mode 100644 unreal/TheaterCommand/Tools/air_show/air_sky_chip.h
+ create mode 100644 unreal/TheaterCommand/Tools/air_show/air_sky_chip_test.cpp
+
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.cpp
+index 50605c15..b9e680c1 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.cpp
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.cpp
+@@ -2321,4 +2321,262 @@ namespace AirSky
+ 		Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba, nullptr, nullptr, &NearUvs);
+ 		bBoth = true;
+ 	}
++
++	Chip::Chip(int InRoom, int InSides)
++		: RoomSlots(std::max(1, InRoom)), SideCount(std::max(6, InSides))
++	{
++		// (each puff's ring turned by its own part of a side, as the painter's TurnCos and TurnSin)
++		for (int K = 0; K < 97; ++K)
++		{
++			const double Golden = K * 0.6180339887;
++			const double A = (Golden - std::floor(Golden)) * 2.0 * Pi / SideCount;
++			TurnCos.push_back(std::cos(A));
++			TurnSin.push_back(std::sin(A));
++		}
++		Cells.assign(static_cast<size_t>(Rows()) * Wide * 4, 0.0f);
++	}
++
++	std::vector<int> Chip::Triangles() const
++	{
++		return Painter(SideCount).Triangles(RoomSlots);
++	}
++
++	void Chip::PointPlaces(std::vector<float>& OutRing, std::vector<float>& OutSlot) const
++	{
++		const size_t Points = static_cast<size_t>(RoomSlots) * PerPuff();
++		OutRing.assign(Points * 2, 0.0f);
++		OutSlot.assign(Points * 2, 0.0f);
++		for (int Slot = 0; Slot < RoomSlots; ++Slot)
++		{
++			const float Column = static_cast<float>((Slot % PuffsPerRow) * TexelsPerPuff), Row = static_cast<float>(1 + Slot / PuffsPerRow);
++			for (int P = 0; P < PerPuff(); ++P)
++			{
++				const size_t At = (static_cast<size_t>(Slot) * PerPuff() + P) * 2;
++				// (the middle 0; the heart ring's points 1 to Sides, the rim's after them, as Painter::Triangles lays them)
++				const int Ring = P == 0 ? 0 : P <= SideCount ? 1 : 2;
++				const int K = Ring == 0 ? 0 : Ring == 1 ? P - 1 : P - 1 - SideCount;
++				OutRing[At] = static_cast<float>(K);
++				OutRing[At + 1] = static_cast<float>(Ring);
++				OutSlot[At] = Column;
++				OutSlot[At + 1] = Row;
++			}
++		}
++	}
++
++	void Chip::SetOrderTurn(double InTurn)
++	{
++		Turn = std::isfinite(InTurn) ? Clamp(InTurn, 0.002, 0.2) : DefaultOrderTurn;
++	}
++
++	int Chip::SlotPuff(int Slot) const
++	{
++		return Slot >= 0 && Slot < LastLaid ? Order[static_cast<size_t>(LastDropped + Slot)].Puff : -1;
++	}
++
++	int Chip::SlotCloud(int Slot) const
++	{
++		return Slot >= 0 && Slot < LastLaid ? Order[static_cast<size_t>(LastDropped + Slot)].Cloud : -1;
++	}
++
++	bool Chip::Wants(const Vec& Eye, const Vec& Drift) const
++	{
++		if (!bLaid)
++		{
++			return true;
++		}
++		const double Carried = (Drift - LastDrift).Length();
++		if ((bEasing && Carried > 3.0) || (bClearing && Carried > 15.0))
++		{
++			return true;
++		}
++		return ((Eye - Drift) - LastEye).Length() > LastSlack;
++	}
++
++	void Chip::Lay(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)
++	{
++		// Painter::Paint's gathering, for the sheet's shapes and the whole sky (one painter, all of it), without its
++		// points: which clouds, where (the copy nearest the eye, lifted, squashed, thinned by the clearing), and which of
++		// their puffs, far to near; each out past the reach and its level's fade by the Margin, so that the chip, which
++		// fades them itself, has every puff it could draw before the next lay.
++		const Vec Seen = Eye - Drift;
++		const size_t CloudCount = F.Clouds.size();
++		if (Serial != F.Serial || Lifts.size() != CloudCount)
++		{
++			Lifts.assign(CloudCount, Kept());
++			Serial = F.Serial;
++		}
++		Where.assign(CloudCount, Placed());
++		Order.clear();
++		bEasing = false;
++		bClearing = false;
++		const Vec Carry = F.DriftAt(1.0);
++		const Vec Lead = Carry.Length() > 1e-9 ? Carry * (250.0 / Carry.Length()) : Vec();
++		const Vec SunWay = Sun.Unit(Vec(-0.35, -0.45, 0.82));
++		double Near = 1e18;
++		int Drawn = 0;
++		for (size_t I = 0; I < CloudCount; ++I)
++		{
++			const Cloud& C = F.Clouds[I];
++			const int Index = static_cast<int>(I);
++			const Vec Shift = F.ShiftNear(Index, Seen.X, Seen.Y);
++			const double LX = C.At.X + Shift.X, LY = C.At.Y + Shift.Y;
++			if (std::hypot(LX - Seen.X, LY - Seen.Y) > Reach + C.W + Margin)
++			{
++				continue;
++			}
++			// (its lift eased as the painter eases it)
++			const double WX = LX + Drift.X, WY = LY + Drift.Y;
++			Kept& Lift = Lifts[I];
++			const double Jump = std::hypot(WX - Lift.PX, WY - Lift.PY);
++			bool bStillEasing = false;
++			auto LiftHere = [&F, Index, &Lead](double X, double Y)
++			{
++				const double Now = F.LiftAt(Index, X, Y);
++				return Lead.X == 0.0 && Lead.Y == 0.0 ? Now : std::max(Now, F.LiftAt(Index, X + Lead.X, Y + Lead.Y));
++			};
++			if (Lift.Shown < 0.0 || Jump > 1000.0)
++			{
++				Lift.X = WX;
++				Lift.Y = WY;
++				Lift.Target = LiftHere(WX, WY);
++				Lift.Shown = Lift.Target;
++			}
++			else
++			{
++				if ((WX - Lift.X) * (WX - Lift.X) + (WY - Lift.Y) * (WY - Lift.Y) > 30.0 * 30.0)
++				{
++					Lift.X = WX;
++					Lift.Y = WY;
++					Lift.Target = LiftHere(WX, WY);
++				}
++				Lift.Shown += Clamp(Lift.Target - Lift.Shown, -0.75 * Jump, 1.5 * Jump);
++				bStillEasing = std::fabs(Lift.Target - Lift.Shown) > 0.5;
++			}
++			Lift.PX = WX;
++			Lift.PY = WY;
++			// (a cumulus whose near edge comes within 4 km of the target, where the clearing thins what the wind carries in
++			// (Field::ShownAt): its share shown moves with the wind's carry, so the table is laid again as it does)
++			if (!F.Sky.bDeck && std::hypot(WX - F.TargetX, WY - F.TargetY) - 0.45 * C.W < 4200.0)
++			{
++				bClearing = true;
++			}
++			Placed& Here = Where[I];
++			Here = F.PlaceLifted(Index, Shift, Drift, Lift.Shown);
++			if (Here.Show < 0.002)
++			{
++				continue;
++			}
++			const Vec Middle(LX, LY, C.At.Z + Here.Lift + 0.5 * Here.Squash * C.H);
++			const double Far = (Middle - Seen).Length();
++			// (a small cloud, under 600 m across, drawn out to SmallSight times its width, as the painter's)
++			const double Sight = C.W < 600.0 ? SmallSight * C.W : 0.0;
++			if (Smooth((Reach - (Far - Margin)) / (Reach / 3.0)) <= 0.0 || (Sight > 0.0 && Smooth((Sight - (Far - Margin)) / (0.2 * Sight)) <= 0.0))
++			{
++				continue;
++			}
++			bEasing = bEasing || bStillEasing;
++			const double Haze = Smooth((Reach - Far) / (Reach / 3.0)) * (Sight > 0.0 ? Smooth((Sight - Far) / (0.2 * Sight)) : 1.0);
++			const double NearShare = Smooth((NearAll + 1000.0 - Far) / 1000.0), FarShare = Smooth((FarAll + 1500.0 - Far) / 1500.0);
++			const bool bHeap = C.Count > 1 && F.Puffs[static_cast<size_t>(C.First)].bFlatFoot;
++			for (int K = C.First; K < C.First + C.Count; ++K)
++			{
++				const Puff& Each = F.Puffs[static_cast<size_t>(K)];
++				if ((bHeap && Each.Lod == 2) || Here.Show * Each.Alpha < 0.002)
++				{
++					continue;
++				}
++				// (each level's share is nought only past its own distance: kept if the eye, within the Margin, could
++				// bring it in)
++				const bool bFirst = bHeap && K == C.First;
++				const bool bMay = bFirst || Each.Lod == 0 ? Far - Margin < NearAll + 1000.0 : Each.Lod == 1 ? Far - Margin < FarAll + 1500.0 : Each.Lod == 3 ? Far + Margin > NearAll : true;
++				if (!bMay)
++				{
++					continue;
++				}
++				const Vec At(Each.At.X + Shift.X, Each.At.Y + Shift.Y, C.At.Z + Here.Lift + (Each.At.Z - C.At.Z) * Here.Squash);
++				const Vec D = At - Seen;
++				Order.push_back({ K, Index, D.Dot(D) });
++				// (drawn from here, as the painter would: its nearest, for the order's slack)
++				const double Share = bFirst ? NearShare : Each.Lod == 3 ? 1.0 - NearShare : Each.Lod == 2 ? 1.0 : Each.Lod == 1 ? FarShare : NearShare;
++				if (Haze > 0.0 && Haze * Share * Here.Show * Each.Alpha >= 0.002)
++				{
++					const Vec Mid = bFirst ? Vec(LX, LY, At.Z) : At;
++					Near = std::min(Near, (Mid - Seen).Length() - Each.R * Each.Long);
++					++Drawn;
++				}
++			}
++		}
++		// (far to near, as see-through things are drawn; with no room for them all, the farthest go)
++		auto Farther = [](const Slotted& A, const Slotted& B) { return A.Deep > B.Deep; };
++		const int Count = static_cast<int>(Order.size());
++		LastDropped = std::max(0, Count - RoomSlots);
++		LastLaid = Count - LastDropped;
++		if (LastDropped > 0)
++		{
++			std::nth_element(Order.begin(), Order.begin() + LastDropped, Order.end(), Farther);
++		}
++		std::sort(Order.begin() + LastDropped, Order.end(), Farther);
++		LastDrawn = Drawn;
++
++		// The header: the sun's way and a sheet cell's half width; the paints as the painter's Tone gives them (the
++		// shaded side and the base under the ink's share, by the hour's light); the floor's share, the sprite's span, the
++		// reach, the levels' distances, the puffs laid and a puff's sides.
++		auto Put = [this](int Row, int Texel, double A, double B, double C, double D)
++		{
++			float* At = &Cells[(static_cast<size_t>(Row) * Wide + static_cast<size_t>(Texel)) * 4];
++			At[0] = static_cast<float>(A);
++			At[1] = static_cast<float>(B);
++			At[2] = static_cast<float>(C);
++			At[3] = static_cast<float>(D);
++		};
++		const Rgb BaseInked = BaseSide * (1.0 / Ink), ShadeInked = ShadeSide * (1.0 / Ink);
++		Put(0, 0, SunWay.X, SunWay.Y, SunWay.Z, 0.49 / FragmentCells);
++		Put(0, 1, BaseInked.R * Light.R, BaseInked.G * Light.G, BaseInked.B * Light.B, FragmentFloor / 0.98);
++		Put(0, 2, ShadeInked.R * Light.R, ShadeInked.G * Light.G, ShadeInked.B * Light.B, Painter::SpriteSpan);
++		Put(0, 3, SunSide.R * Light.R, SunSide.G * Light.G, SunSide.B * Light.B, Reach);
++		Put(0, 4, NearAll, FarAll, LastLaid, SideCount);
++
++		// Each puff: eight texels (AirSkyChip.inl).
++		const int SheetCells = FragmentCells * FragmentCells, Tops = SheetCells - FragmentBases - FragmentFeet - FragmentLids;
++		auto SheetU = [](int Pick) { return (Pick % FragmentCells + 0.5) / FragmentCells; };
++		auto SheetV = [](int Pick) { return (Pick / FragmentCells + 0.5) / FragmentCells; };
++		for (int Slot = 0; Slot < LastLaid; ++Slot)
++		{
++			const Slotted& O = Order[static_cast<size_t>(LastDropped + Slot)];
++			const Puff& Each = F.Puffs[static_cast<size_t>(O.Puff)];
++			const Cloud& Cl = F.Clouds[static_cast<size_t>(O.Cloud)];
++			const Placed& Here = Where[static_cast<size_t>(O.Cloud)];
++			const bool bHeapHere = Cl.Count > 1 && F.Puffs[static_cast<size_t>(Cl.First)].bFlatFoot;
++			const bool bFoot = bHeapHere && O.Puff == Cl.First;
++			const bool bFlatFoot = Each.bFlatFoot && (!bHeapHere || bFoot);
++			const bool bLowLump = bHeapHere && Each.bFlatFoot && !bFoot;
++			const double CloudX = Cl.At.X + Here.Shift.X, CloudY = Cl.At.Y + Here.Shift.Y;
++			const double PX = bFoot ? CloudX : Each.At.X + Here.Shift.X, PY = bFoot ? CloudY : Each.At.Y + Here.Shift.Y;
++			const double PZ = Cl.At.Z + Here.Lift + (Each.At.Z - Cl.At.Z) * Here.Squash;
++			const int Row = 1 + Slot / PuffsPerRow, First = (Slot % PuffsPerRow) * TexelsPerPuff;
++			const size_t Phase = static_cast<size_t>(O.Puff % 97);
++			const int FootPick = Tops + FragmentBases + O.Cloud % FragmentFeet;
++			// (a deck's own puffs, its scraps apart, drawn from the lids, lying flat: the painter's bLidTile)
++			const bool bLidTile = F.Sky.bDeck && !Cl.bScrap;
++			const int UpPick = bFoot ? FootPick : Tops + O.Puff % FragmentBases;
++			const int TopPick = bLidTile ? SheetCells - FragmentLids + O.Puff % FragmentLids : bFoot ? FootPick : O.Puff % Tops;
++			const int Flags = (bFlatFoot ? 1 : 0) | (bFoot ? 2 : 0) | (bLowLump ? 4 : 0) | (bHeapHere ? 8 : 0) | (bLidTile ? 16 : 0);
++			// (a small cloud's rag drawn out along its way: a base by its cloud's, a puff by its own)
++			const double LongHere = bFoot ? Cl.Long : Each.Long, LongWay = bFoot ? Cl.LongWay : Each.LongWay;
++			Put(Row, First + 0, PX, PY, PZ, Each.R);
++			Put(Row, First + 1, CloudX, CloudY, Cl.At.Z + Here.Lift, Here.Squash * Cl.H);
++			Put(Row, First + 2, Cl.W, 0.5 * Cl.W * (F.Sky.bDeck && !Cl.bScrap ? 1.25 : 1.0), Here.Squash, Each.Flat);
++			Put(Row, First + 3, Here.Show * Each.Alpha, Each.Lit, Each.Trough, Each.Shadowed);
++			Put(Row, First + 4, TurnCos[Phase], TurnSin[Phase], PhaseSines(false)[Phase], (O.Puff / SheetCells) % 2 == 1 ? -1.0 : 1.0);
++			Put(Row, First + 5, SheetU(TopPick), SheetV(TopPick), SheetU(UpPick), SheetV(UpPick));
++			Put(Row, First + 6, LongHere, std::cos(LongWay), std::sin(LongWay), Each.Long);
++			Put(Row, First + 7, Each.Lod, Flags, Cl.W < 600.0 ? SmallSight * Cl.W : 0.0, bFoot ? 0.4 * Cl.W / std::max(1.0, Cl.Long) : 0.0);
++		}
++		bLaid = true;
++		++LayCount;
++		LastEye = Seen;
++		LastDrift = Drift;
++		LastNear = Drawn > 0 ? std::max(50.0, Near) : 50.0;
++		LastSlack = Clamp(Turn * LastNear, 2.0, Margin);
++	}
+ }
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.h b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.h
+index 3ded38c5..8c07a98f 100644
+--- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.h
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSky.h
+@@ -528,4 +528,110 @@ namespace AirSky
+ 	 * there, and some 23 at the heart ring (0.27 was only some 13 per cent). */
+ 	constexpr double ShadowDark = 0.5;
+ 	constexpr double ShadowReach = 10000.0;
++
++	/**
++	 * The clouds turned to the eye on the graphics chip (the speed gate's GS6; the graphics audit's item 10). The rooms
++	 * turn every puff to the eye here, on the game's thread, and send all their points to the engine again each time
++	 * the eye moves enough for a turn to show: on the Mac in the ground battle 1.98 ms a turn cool and 5.40 hot, 22 to 64
++	 * turns in 30 s, the near room's 800 puffs (26,400 points) sent each time and the far room's 3,200 on a far turn.
++	 *
++	 * Here the mesh is made once (Triangles, PointPlaces: a slot's 33 points, all at the mesh's own middle) and every
++	 * point is placed, turned, lit and faded where the engine places points (M_CloudTurned, the vertex shader), every
++	 * frame, for the eye as it is then, by AirSkyChip.inl: Painter::Paint's own arithmetic for a puff drawn from the
++	 * sheet's shapes, which the cloud test runs in C++ against the painter's own points. What it reads is a table of
++	 * the puffs round the eye, far to near (Lay, Table): the order the see-through puffs are drawn in is the one thing
++	 * the chip cannot work out for itself, so the table is laid again (and sent: about half a megabyte, no mesh) only
++	 * when the eye has moved far enough for that order to go stale (Wants), a share of the nearest puff's distance
++	 * (SetOrderTurn), and as the wind carries the clouds only while a drawn cloud's lift eases over high ground or a
++	 * cloud stands within the target's clearing.
++	 *
++	 * The table holds every puff that could be drawn while the eye stays within Margin of where it was laid (out past
++	 * the reach and each level's fade by that much), so that a puff the chip fades in between two lays is there.
++	 */
++	class Chip
++	{
++	public:
++		/** Texels (four floats each) a puff, puffs a row, the table's width, and the header's texels in row 0. */
++		static constexpr int TexelsPerPuff = 8;
++		static constexpr int PuffsPerRow = 256;
++		static constexpr int Wide = TexelsPerPuff * PuffsPerRow;
++		static constexpr int HeaderTexels = 5;
++		/** How far the eye may move from where the table was laid before it is laid again whatever else (metres): every
++		 * puff that could be drawn that far off is in the table. */
++		static constexpr double Margin = 400.0;
++		/** The order's staleness: by default the eye may move 2.5 per cent of the nearest drawn puff's distance (the near
++		 * room turned at 0.45 per cent, for the puffs' turn, which the chip makes every frame). */
++		static constexpr double DefaultOrderTurn = 0.025;
++
++		/** InRoom: the puffs the mesh is made with (its slots); a puff a slot. */
++		explicit Chip(int InRoom = 6000, int InSides = 16);
++		int Room() const { return RoomSlots; }
++		int Sides() const { return SideCount; }
++		int PerPuff() const { return 1 + 2 * SideCount; }
++		/** The table's rows: the header's and enough for every slot. */
++		int Rows() const { return 1 + (RoomSlots + PuffsPerRow - 1) / PuffsPerRow; }
++		/** The mesh's triangles: the painter's own for each slot (a middle, a heart ring and a rim ring, both faces). */
++		std::vector<int> Triangles() const;
++		/** Each point's two texture coordinates, two numbers each, a slot's points in a row: its place round its puff
++		 * (OutRing: the point round the ring, 0 to Sides - 1, and which ring, 0 the middle, 1 the heart, 2 the rim) and its
++		 * slot's first texel in the table (OutSlot: column, row). Whole numbers under 2,048, which the engine's half floats
++		 * hold exactly. */
++		void PointPlaces(std::vector<float>& OutRing, std::vector<float>& OutSlot) const;
++		/** The scene's cloud ink, as Painter::SetInk. */
++		void SetInk(double InInk) { Ink = InInk > 0.1 ? InInk : 1.0; }
++		/** The order's staleness, a share of the nearest drawn puff's distance (from 0.002 to 0.2). */
++		void SetOrderTurn(double InTurn);
++		double OrderTurn() const { return Turn; }
++		/** Whether the table wants laying again for this eye (Painter::Paint's terms): never laid, the eye moved past the
++		 * order's slack in the field's own frame, or the wind's carry while a lift eases (3 m) or a cloud stands in the
++		 * clearing (15 m). A few sums: the scene asks it every frame. */
++		bool Wants(const Vec& Eye, const Vec& Drift) const;
++		/** Lays the table for an eye (Painter::Paint's terms; the paints in the header are the painter's Tone for Light
++		 * and the ink). */
++		void Lay(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
++		/** Rows by Wide texels, four floats each, row 0 the header (AirSkyChip.inl gives what each holds). */
++		const std::vector<float>& Table() const { return Cells; }
++		/** The rows the last lay wrote (the header's and the puffs'): the rows to send. Past them, slots the shader
++		 * leaves out by the header's count. */
++		int RowsUsed() const { return 1 + (LastLaid + PuffsPerRow - 1) / PuffsPerRow; }
++		/** The puffs in the table, those it had no room for (the farthest), and those drawn from where it was laid. */
++		int Laid() const { return LastLaid; }
++		int Dropped() const { return LastDropped; }
++		int DrawnThen() const { return LastDrawn; }
++		/** The nearest drawn puff's distance less its radius when laid, and the eye's slack from there (metres). */
++		double Nearest() const { return LastNear; }
++		double Slack() const { return LastSlack; }
++		/** Which of the field's puffs a slot holds (-1 an empty slot), and which cloud. */
++		int SlotPuff(int Slot) const;
++		int SlotCloud(int Slot) const;
++		/** How many times the table has been laid. */
++		int Lays() const { return LayCount; }
++
++	private:
++		int RoomSlots = 6000;
++		int SideCount = 16;
++		double Ink = 1.0;
++		double Turn = DefaultOrderTurn;
++		std::vector<float> Cells;
++		std::vector<double> TurnCos, TurnSin;
++		struct Slotted
++		{
++			int Puff = 0, Cloud = 0;
++			double Deep = 0.0;
++		};
++		std::vector<Slotted> Order;
++		std::vector<Placed> Where;
++		// (each cloud's lift, eased as the painter's: the ground looked up again once its middle has moved 30 m, the lift
++		// drawn eased toward it as the cloud drifts)
++		struct Kept
++		{
++			double X = 1e30, Y = 1e30, PX = 1e30, PY = 1e30, Target = 0.0, Shown = -1.0;
++		};
++		std::vector<Kept> Lifts;
++		uint64_t Serial = 0;
++		bool bLaid = false, bEasing = false, bClearing = false;
++		Vec LastEye, LastDrift;
++		double LastNear = 1000.0, LastSlack = 1.0;
++		int LastLaid = 0, LastDropped = 0, LastDrawn = 0, LayCount = 0;
++	};
+ }
+diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSkyChip.inl b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSkyChip.inl
+new file mode 100644
+index 00000000..4dbc77e5
+--- /dev/null
++++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/AirSkyChip.inl
+@@ -0,0 +1,429 @@
++// The clouds turned to the eye on the graphics chip (the speed gate's GS6): one point of one puff, worked out where the
++// points are placed (the vertex shader), every frame, for the eye as it is then. It is AirSky::Painter::Paint's own
++// arithmetic for a puff drawn from the sheet of shapes (its place, its turn to the eye, its light and shade, its fades
++// by distance and by the lens), so that the picture is the painter's, and nothing is turned or sent from the game's
++// thread as the eye moves (AirSky::Chip lays the table it reads, and lays it again only when the order of the puffs,
++// far to near, has gone stale).
++//
++// ONE TEXT, TWO COMPILERS. This file is read as it stands by Tools/build_content.py into M_CloudTurned's Custom node
++// (HLSL, on the Mac's Metal by way of the shader compiler), and included by the cloud test (Tools/air_show/
++// air_sky_chip.h, C++, beside a few lines that give C++ HLSL's float3 and its functions), which checks every point
++// against the painter's. So it keeps to what the two languages share: floats written with an f, no swizzles but .x .y
++// .z .w, no vector ?: (if and else instead), no references, no out parameters (a struct returned instead), no
++// preprocessor lines, every helper defined before it is used. Keep it so.
++//
++// The table (AirSky::Chip): row 0 is the header, eight floats four to a texel; each puff after it eight texels
++// (TexelsPerPuff), far to near, so that the mesh's own order (a slot's 33 points in the slot's place) draws them as the
++// painter lays them:
++//   H0 the way toward the sun (x, y, z), half a sheet cell's width        H1 the base's paint (r, g, b), the floor's share
++//   H2 the shaded side's paint, the sprite's span                          H3 the sunlit top's paint, the reach
++//   H4 NearAll, FarAll, the puffs laid, the sides of a puff
++//   T0 the puff's middle as placed (x, y, z), its radius                   T1 its cloud's middle (x, y), its foot, its height
++//   T2 the cloud's width, its body's half width, its squash, the puff's own flatness
++//   T3 the puff's alpha by the clearing, its own light, its trough, how shadowed by its own cloud
++//   T4 the turn of its ring (cos, sin), its phase's sine, its mirror (1 or -1)
++//   T5 its place on the sheet, as a top (u, v) and upright (u, v)
++//   T6 how long it is drawn out, the way it is drawn out (cos, sin), the puff's own length
++//   T7 its level (-1: an empty slot), its flags, a small cloud's sight, a base's span
++// The paints in the header carry the hour's light and the cloud ink already (Painter::SetInk). Places are board metres
++// in the field's own frame (the eye less the wind's carry), as the painter's.
++
++struct FSkyChipOut
++{
++	float3 At;
++	float4 Colour;
++	float4 Sheet;
++};
++
++struct FSkyChipPuff
++{
++	float3 Mid;
++	float Bw;
++	float Bd;
++	float3 F;
++	float3 S;
++	float SunZ;
++	float FootZ;
++	float PerHigh;
++	float PerLower;
++	float OwnLit;
++	bool bOwnByHeight;
++	bool bLid;
++	float Trough;
++	float Shadowed;
++	float Facing;
++	float Below;
++	float Against;
++	float Thick;
++};
++
++struct FSkyChip
++{
++	float Pad;
++
++	float Smooth(float T)
++	{
++		float C = clamp(T, 0.0f, 1.0f);
++		return C * C * (3.0f - 2.0f * C);
++	}
++
++	float NearOutline(float Off2)
++	{
++		return Smooth((Off2 - 0.3025f) * (1.0f / 0.6f));
++	}
++
++	float3 Tone(float L, float4 H1, float4 H2, float4 H3)
++	{
++		float3 Base = float3(H1.x, H1.y, H1.z);
++		float3 Shade = float3(H2.x, H2.y, H2.z);
++		float3 Sun = float3(H3.x, H3.y, H3.z);
++		float3 Out = Shade + (Sun - Shade) * ((clamp(L, 0.35f, 0.9f) - 0.35f) / 0.55f);
++		if (L < 0.35f)
++		{
++			Out = Base + (Shade - Base) * (clamp(L, 0.0f, 0.35f) / 0.35f);
++		}
++		return Out;
++	}
++
++	// The cloud's body as the eye sees it at a point of the puff (the painter's FaceAt): x the light on the body's face
++	// where the eye's line through the point meets it, y how far across the body the point lies (squared), z how deep.
++	float3 FaceAt(FSkyChipPuff P, float3 At)
++	{
++		float3 O = float3((At.x - P.Mid.x) * P.Bw, (At.y - P.Mid.y) * P.Bw, (At.z - P.Mid.z) * P.Bd);
++		float Along = dot(O, P.F);
++		float Off2 = max(0.0f, dot(O, O) - Along * Along);
++		float Depth = sqrt(max(0.0f, 1.0f - Off2));
++		float Toward = Depth + Along;
++		float3 A = O - P.F * Toward;
++		float Long2 = (A.x * A.x + A.y * A.y) * P.Bw * P.Bw + A.z * A.z * P.Bd * P.Bd;
++		float Body = P.SunZ;
++		if (Long2 > 1e-18f)
++		{
++			Body = dot(A, P.S) / sqrt(Long2);
++		}
++		return float3(Body, Off2, Depth);
++	}
++
++	// The painter's LitAt for a puff drawn from the sheet: x the light, y how far across the body the point lies.
++	float4 LitAt(FSkyChipPuff P, float3 At, float Rim, float Own)
++	{
++		float3 Face = FaceAt(P, At);
++		float Shape = 0.5f + 0.5f * (0.75f * Face.x + 0.25f * Own);
++		if (P.bLid)
++		{
++			Shape = 0.64f + 0.5f * (0.2f * Face.x + 0.1f * Own);
++		}
++		float OwnLit = P.OwnLit;
++		if (P.bOwnByHeight)
++		{
++			OwnLit = 0.2f + 0.65f * clamp((At.z - P.FootZ) * P.PerHigh, 0.0f, 1.0f);
++		}
++		float Lit = clamp(0.25f * OwnLit + 0.75f * Shape - P.Trough * Rim, 0.0f, 1.0f) * (1.0f - 0.55f * P.Shadowed * clamp(1.0f - P.Facing, 0.0f, 1.0f));
++		float Edge = NearOutline(Face.y);
++		if (P.bLid)
++		{
++			Edge = 0.0f;
++		}
++		float Graded = Lit * (1.0f - 0.6f * P.Below * (1.0f - 0.6f * Edge)) * (0.8f + 0.2f * Smooth((At.z - P.FootZ) * P.PerLower));
++		float Light = Graded * (1.0f - 0.3f * P.Against * P.Thick * Face.z) + 0.25f * P.Against * Edge + 0.12f * P.Against * (1.0f - P.Thick);
++		return float4(Light, Face.y, 0.0f, 0.0f);
++	}
++
++	// A point of a ring: its way out across the picture, turned by the puff's own phase and drawn out along its way
++	// (the painter's TurnedC, TurnedS and DrawnOut). x, y, z the way; w the turned sine (TurnedS).
++	float4 RingWay(int K, float Sides, float TurnC, float TurnS, float3 Right, float3 Up, float LongR, float LongU, float LongMore)
++	{
++		float A = 6.283185307f * (float)K / Sides;
++		float Cs = cos(A);
++		float Sn = sin(A);
++		float TurnedC = Cs * TurnC - Sn * TurnS;
++		float TurnedS = Sn * TurnC + Cs * TurnS;
++		float On = (TurnedC * LongR + TurnedS * LongU) * LongMore;
++		float3 Way = Right * (TurnedC + On * LongR) + Up * (TurnedS + On * LongU);
++		return float4(Way.x, Way.y, Way.z, TurnedS);
++	}
++
++	float RingC(int K, float Sides, float TurnC, float TurnS)
++	{
++		float A = 6.283185307f * (float)K / Sides;
++		return cos(A) * TurnC - sin(A) * TurnS;
++	}
++
++	float4 SheetAt(float CU, float CV, float Half, float Behind, float Ahead, float Lumpy, bool bLid, float Off2, float SX, float SY)
++	{
++		float Outline = 0.0f;
++		if (Ahead > 0.0f && !bLid)
++		{
++			Outline = NearOutline(Off2);
++		}
++		return float4(CU + Half * SX, CV - Half * SY, Behind + Ahead * (1.0f - Lumpy) * (1.0f - Outline), Ahead * (Lumpy + (1.0f - Lumpy) * Outline));
++	}
++
++	FSkyChipOut Vertex(float4 H0, float4 H1, float4 H2, float4 H3, float4 H4, float4 T0, float4 T1, float4 T2, float4 T3, float4 T4, float4 T5, float4 T6, float4 T7,
++		float3 Seen, int Slot, int K, int Ring)
++	{
++		FSkyChipOut Out;
++		float3 C = float3(T0.x, T0.y, T0.z);
++		Out.At = C;
++		Out.Colour = float4(0.0f, 0.0f, 0.0f, 0.0f);
++		Out.Sheet = float4(0.0f, 0.0f, 0.0f, 0.0f);
++		int Lod = (int)floor(T7.x + 0.5f);
++		if (Slot >= (int)floor(H4.z + 0.5f) || Lod < 0)
++		{
++			return Out;
++		}
++		int Flags = (int)floor(T7.y + 0.5f);
++		bool bFlatFoot = (Flags & 1) != 0;
++		bool bFoot = (Flags & 2) != 0;
++		bool bLowLump = (Flags & 4) != 0;
++		bool bLid = (Flags & 16) != 0;
++		float R = T0.w;
++		float CloudX = T1.x;
++		float CloudY = T1.y;
++		float FootZ = T1.z;
++		float HeapH = T1.w;
++		float HeapHigh = max(1.0f, HeapH);
++		float W = T2.x;
++		float Squash = T2.z;
++		float AlphaShow = T3.x;
++		float3 SunWay = float3(H0.x, H0.y, H0.z);
++		float Reach = H3.w;
++		float NearAll = H4.x;
++		float FarAll = H4.y;
++		float Sides = H4.w;
++
++		// Its fades by distance (the painter's Haze, its near and far shares): a point far past them is never drawn.
++		float3 MiddleC = float3(CloudX, CloudY, FootZ + 0.5f * HeapH);
++		float Far = length(MiddleC - Seen);
++		float Haze = Smooth((Reach - Far) / (Reach / 3.0f));
++		if (T7.z > 0.0f)
++		{
++			Haze = Haze * Smooth((T7.z - Far) / (0.2f * T7.z));
++		}
++		float NearShare = Smooth((NearAll + 1000.0f - Far) / 1000.0f);
++		float FarShare = Smooth((FarAll + 1500.0f - Far) / 1500.0f);
++		float Share = NearShare;
++		if (bFoot)
++		{
++			Share = NearShare;
++		}
++		else if (Lod == 3)
++		{
++			Share = 1.0f - NearShare;
++		}
++		else if (Lod == 2)
++		{
++			Share = 1.0f;
++		}
++		else if (Lod == 1)
++		{
++			Share = FarShare;
++		}
++		float Fade = Haze * Share;
++		if (Haze <= 0.0f || Fade * AlphaShow < 0.002f)
++		{
++			return Out;
++		}
++
++		// Turned to the eye.
++		float FootSpan = T7.w;
++		bool bFarDome = Lod == 3 && Seen.z < FootZ + HeapHigh;
++		float Flat = max(0.08f, T2.w * Squash);
++		if (bLowLump)
++		{
++			Flat = max(0.08f, 0.85f * Squash);
++		}
++		if (bFoot)
++		{
++			Flat = clamp(0.5f * HeapHigh / (0.84f * FootSpan), 0.3f, 1.0f);
++		}
++		else if (bFarDome)
++		{
++			Flat = clamp(1.7f * HeapHigh / max(1.0f, W), 0.4f, 1.0f);
++		}
++		float3 Fwd = C - Seen;
++		float Dist = length(Fwd);
++		if (Dist > 1e-9f)
++		{
++			Fwd = Fwd / Dist;
++		}
++		else
++		{
++			Fwd = float3(0.0f, 0.0f, -1.0f);
++		}
++		float3 Right = cross(Fwd, float3(0.0f, 0.0f, 1.0f));
++		if (length(Right) < 1e-6f)
++		{
++			Right = float3(1.0f, 0.0f, 0.0f);
++		}
++		else
++		{
++			Right = normalize(Right);
++		}
++		float3 Up = cross(Right, Fwd);
++		Up.z = Up.z - Up.z * (1.0f - Flat);
++		float Lens = 0.6f * R * T6.w;
++		float Alpha = AlphaShow * Fade * clamp((Dist - Lens) / Lens, 0.0f, 1.0f);
++
++		// Its light (the painter's: the cloud's body as the eye sees it, the puff's own lump, the sun ahead or behind).
++		FSkyChipPuff P;
++		P.Mid = float3(CloudX, CloudY, FootZ + 0.45f * HeapH);
++		P.Bw = 1.0f / max(60.0f, T2.y);
++		P.Bd = 1.0f / max(60.0f, 0.5f * HeapH);
++		float FootOver = FootZ - Seen.z;
++		P.Below = clamp(FootOver / 300.0f, 0.0f, 1.0f) * Smooth((Fwd.z - 0.2f) / 0.5f);
++		P.Facing = -dot(Fwd, SunWay);
++		float3 Fb = float3(Fwd.x * P.Bw, Fwd.y * P.Bw, Fwd.z * P.Bd);
++		P.F = Fb / max(1e-9f, length(Fb));
++		P.S = float3(SunWay.x * P.Bw, SunWay.y * P.Bw, SunWay.z * P.Bd);
++		P.SunZ = SunWay.z;
++		P.FootZ = FootZ;
++		P.PerHigh = 1.0f / HeapHigh;
++		P.PerLower = 1.0f / (0.38f * HeapHigh);
++		P.OwnLit = T3.y;
++		P.bOwnByHeight = bFoot || bLowLump;
++		P.bLid = bLid;
++		P.Trough = T3.z;
++		P.Shadowed = T3.w;
++		float SunAhead = Smooth((-P.Facing - 0.35f) / 0.55f);
++		float BehindShare = Smooth((P.Facing - 0.35f) / 0.55f);
++		float Beneath = clamp(FootOver / 300.0f, 0.0f, 1.0f) * Smooth((Fwd.z - 0.03f) / 0.25f) * (1.0f - BehindShare);
++		P.Against = max(SunAhead, Beneath);
++		P.Thick = Smooth((HeapHigh - 120.0f) / 600.0f);
++
++		// The sheet's shape: which, turned which way, its light from behind the eye and from ahead.
++		float CloudTop = FootZ + HeapH;
++		bool bUpright = !bLid && (bFlatFoot || (Lod == 3 && Seen.z < CloudTop));
++		float CU = T5.x;
++		float CV = T5.y;
++		if (bUpright)
++		{
++			CU = T5.z;
++			CV = T5.w;
++		}
++		float SunAcross = dot(Right, SunWay);
++		float SunUp = dot(Up, SunWay);
++		float Toward = 1.570796327f;
++		if (!bUpright)
++		{
++			if (SunAcross * SunAcross + SunUp * SunUp > 1e-8f)
++			{
++				Toward = atan2(SunUp, SunAcross);
++			}
++			Toward = Toward + 0.3f * T4.z;
++		}
++		float Turn = 1.570796327f - Toward;
++		float CT = cos(Turn);
++		float ST = sin(Turn);
++		float Behind = BehindShare;
++		float Ahead = min(P.Against, 1.0f - BehindShare);
++		float Lumpy = (0.45f + 0.5f * Beneath) * (0.25f + 0.75f * P.Thick);
++		if (bLid)
++		{
++			Lumpy = 0.85f;
++		}
++		float Half = H0.w;
++		float Span = H2.w * R;
++		if (bFoot)
++		{
++			Span = FootSpan;
++		}
++
++		// A puff drawn out along its way (a small cloud's), by as much as that way lies across the picture.
++		float LongR = 0.0f;
++		float LongU = 0.0f;
++		float LongMore = 0.0f;
++		if (T6.x > 1.001f)
++		{
++			float LR = T6.y * Right.x + T6.z * Right.y;
++			float LU = T6.y * Up.x + T6.z * Up.y;
++			float InPicture = sqrt(LR * LR + LU * LU);
++			if (InPicture > 1e-6f)
++			{
++				LongR = LR / InPicture;
++				LongU = LU / InPicture;
++				LongMore = (T6.x - 1.0f) * min(1.0f, InPicture);
++			}
++		}
++
++		// Its middle: a base's flat underside on the cloud's own foot, where the foot is in the picture.
++		float3 Middle = C;
++		if (bUpright)
++		{
++			float Foot = FootZ;
++			float CloudAway = sqrt((CloudX - Seen.x) * (CloudX - Seen.x) + (CloudY - Seen.y) * (CloudY - Seen.y));
++			if (bFlatFoot && FootOver > 0.0f && CloudAway > R)
++			{
++				float Mine = sqrt((C.x - Seen.x) * (C.x - Seen.x) + (C.y - Seen.y) * (C.y - Seen.y));
++				Foot = Foot + clamp(FootOver * (Mine / CloudAway - 1.0f), -0.33f * Span, 0.33f * Span);
++			}
++			Middle.z = Foot + H1.w * Span * max(0.0f, Up.z);
++		}
++		float Shown = Alpha;
++		if (bFlatFoot)
++		{
++			Shown = Alpha * Smooth(clamp(1.0f - (Seen.z - C.z) / (1.5f * R), 0.0f, 1.0f));
++		}
++		float Melt = 0.0f;
++		if (bFlatFoot && !bFoot && !bLid)
++		{
++			Melt = Smooth((CloudTop - (Middle.z + 0.6f * Span)) / (0.6f * Span));
++		}
++
++		if (Ring == 0)
++		{
++			// (the middle point: lit where the puff's own middle is, its alpha the shown share)
++			float4 Lit = LitAt(P, C, 0.0f, P.Facing);
++			float3 Col = Tone(Lit.x, H1, H2, H3);
++			Out.At = Middle;
++			Out.Colour = float4(Col.x, Col.y, Col.z, clamp(Shown, 0.0f, 1.0f));
++			Out.Sheet = SheetAt(CU, CV, Half, Behind, Ahead, Lumpy, bLid, Lit.y, 0.0f, 0.0f);
++			return Out;
++		}
++
++		// A point of the heart ring (0.55 of the span out) or of the rim: lit at every other point, each between two given
++		// the mean of its two neighbours' light and nearness to the outline, as the painter's Mend.
++		float Out55 = 1.0f;
++		float RimShare = 1.0f;
++		if (Ring == 1)
++		{
++			Out55 = 0.55f;
++			RimShare = 0.45f;
++		}
++		float4 Way = RingWay(K, Sides, T4.x, T4.y, Right, Up, LongR, LongU, LongMore);
++		float3 At = Middle + float3(Way.x, Way.y, Way.z) * (Out55 * Span);
++		float Light = 0.0f;
++		float Off2 = 0.0f;
++		if (K % 2 == 0)
++		{
++			float4 Lit = LitAt(P, At, RimShare, P.Facing);
++			Light = Lit.x;
++			Off2 = Lit.y;
++		}
++		else
++		{
++			int Kn = (K + 1) % (int)floor(Sides + 0.5f);
++			float4 WayB = RingWay(K - 1, Sides, T4.x, T4.y, Right, Up, LongR, LongU, LongMore);
++			float4 WayN = RingWay(Kn, Sides, T4.x, T4.y, Right, Up, LongR, LongU, LongMore);
++			float4 LitB = LitAt(P, Middle + float3(WayB.x, WayB.y, WayB.z) * (Out55 * Span), RimShare, P.Facing);
++			float4 LitN = LitAt(P, Middle + float3(WayN.x, WayN.y, WayN.z) * (Out55 * Span), RimShare, P.Facing);
++			Light = 0.5f * (LitB.x + LitN.x);
++			Off2 = 0.5f * (LitB.y + LitN.y);
++		}
++		float TurnedC = RingC(K, Sides, T4.x, T4.y);
++		float TurnedS = Way.w;
++		float SX = T4.w * (TurnedC * CT - TurnedS * ST);
++		float SY = TurnedC * ST + TurnedS * CT;
++		float Upward = Melt * Smooth((TurnedS + 0.3f) / 0.9f);
++		float A = Shown * (1.0f - Upward);
++		if (Ring == 1)
++		{
++			A = Shown * (1.0f - 0.35f * Upward);
++		}
++		float3 Col = Tone(Light, H1, H2, H3);
++		Out.At = At;
++		Out.Colour = float4(Col.x, Col.y, Col.z, clamp(A, 0.0f, 1.0f));
++		Out.Sheet = SheetAt(CU, CV, Half, Behind, Ahead, Lumpy, bLid, Off2, Out55 * SX, Out55 * SY);
++		return Out;
++	}
++};
+diff --git a/unreal/TheaterCommand/Tools/air_show/air_sky_chip.h b/unreal/TheaterCommand/Tools/air_show/air_sky_chip.h
+new file mode 100644
+index 00000000..356c6f4d
+--- /dev/null
++++ b/unreal/TheaterCommand/Tools/air_show/air_sky_chip.h
+@@ -0,0 +1,46 @@
++#pragma once
++
++// The clouds' chip arithmetic (Source/TheaterCommand/Battle/AirSkyChip.inl) in C++, for the cloud test: the same text
++// M_CloudTurned runs on the graphics chip, given the few HLSL types and functions it uses. Nothing else is added here,
++// so that what the test checks is what the chip runs.
++
++#include <algorithm>
++#include <cmath>
++
++namespace AirSkyChipCpp
++{
++	struct float3
++	{
++		float x = 0.0f, y = 0.0f, z = 0.0f;
++		float3() = default;
++		float3(float X, float Y, float Z) : x(X), y(Y), z(Z) {}
++	};
++
++	struct float4
++	{
++		float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
++		float4() = default;
++		float4(float X, float Y, float Z, float W) : x(X), y(Y), z(Z), w(W) {}
++	};
++
++	inline float3 operator+(const float3& A, const float3& B) { return float3(A.x + B.x, A.y + B.y, A.z + B.z); }
++	inline float3 operator-(const float3& A, const float3& B) { return float3(A.x - B.x, A.y - B.y, A.z - B.z); }
++	inline float3 operator*(const float3& A, float S) { return float3(A.x * S, A.y * S, A.z * S); }
++	inline float3 operator*(float S, const float3& A) { return float3(A.x * S, A.y * S, A.z * S); }
++	inline float3 operator/(const float3& A, float S) { return float3(A.x / S, A.y / S, A.z / S); }
++	inline float3 operator-(const float3& A) { return float3(-A.x, -A.y, -A.z); }
++	inline float dot(const float3& A, const float3& B) { return A.x * B.x + A.y * B.y + A.z * B.z; }
++	inline float3 cross(const float3& A, const float3& B) { return float3(A.y * B.z - A.z * B.y, A.z * B.x - A.x * B.z, A.x * B.y - A.y * B.x); }
++	inline float sqrt(float V) { return std::sqrt(V); }
++	inline float length(const float3& A) { return std::sqrt(dot(A, A)); }
++	inline float3 normalize(const float3& A) { return A / length(A); }
++	inline float max(float A, float B) { return A > B ? A : B; }
++	inline float min(float A, float B) { return A < B ? A : B; }
++	inline float clamp(float V, float A, float B) { return min(max(V, A), B); }
++	inline float cos(float V) { return std::cos(V); }
++	inline float sin(float V) { return std::sin(V); }
++	inline float atan2(float Y, float X) { return std::atan2(Y, X); }
++	inline float floor(float V) { return std::floor(V); }
++
++#include "Battle/AirSkyChip.inl"
++}
+diff --git a/unreal/TheaterCommand/Tools/air_show/air_sky_chip_test.cpp b/unreal/TheaterCommand/Tools/air_show/air_sky_chip_test.cpp
+new file mode 100644
+index 00000000..b5bbb76a
+--- /dev/null
++++ b/unreal/TheaterCommand/Tools/air_show/air_sky_chip_test.cpp
+@@ -0,0 +1,505 @@
++// The clouds turned on the graphics chip (the speed gate's GS6): the cloud test of AirSky::Chip and AirSkyChip.inl.
++//
++// The chip's arithmetic is run here in C++ (air_sky_chip.h), the same text M_CloudTurned runs, and checked against the
++// painter's own points (AirSky::Painter::Paint with the sheet's shapes, the whole sky in one painter): every point of
++// every puff drawn, its place, its colour, its alpha and its place on the sheet, from eyes in the ground battle's sky
++// and in the three recorded air battles'. Then the table laid at one eye and read at another within its slack (the
++// chip's own frames between two lays) against a table laid there: the same puffs drawn, the same points. Then a ground
++// battle's eye moving through 30 s of shots: how often the rooms turn and what they send, against how often the chip's
++// table is laid again. Usage: air_sky_chip_test [recording.json ...]
++
++#include "Battle/AirFeed.h"
++#include "Battle/AirGround.h"
++#include "Battle/AirShow.h"
++#include "Battle/AirSky.h"
++#include "air_sky_chip.h"
++
++#include <algorithm>
++#include <chrono>
++#include <cmath>
++#include <cstdio>
++#include <fstream>
++#include <map>
++#include <memory>
++#include <sstream>
++#include <string>
++#include <vector>
++
++namespace
++{
++	using AirSky::Vec;
++	using Clock = std::chrono::steady_clock;
++
++	struct Limit
++	{
++		std::string What;
++		bool bOk = false;
++		std::string Got, Want;
++	};
++
++	std::string Num(double V, int Places = 2)
++	{
++		char Text[64];
++		std::snprintf(Text, sizeof(Text), "%.*f", Places, V);
++		return Text;
++	}
++
++	double Ms(Clock::time_point From) { return std::chrono::duration<double, std::milli>(Clock::now() - From).count(); }
++
++	/** One point as the chip works it out: read from the table by the point's own texture coordinates (Chip::PointPlaces),
++	 * as M_CloudTurned's glue reads it. */
++	struct ChipReader
++	{
++		const AirSky::Chip& Ch;
++		std::vector<float> Ring, Slot;
++		explicit ChipReader(const AirSky::Chip& In) : Ch(In) { Ch.PointPlaces(Ring, Slot); }
++		AirSkyChipCpp::FSkyChipOut At(int SlotIndex, int Point, const Vec& Seen) const
++		{
++			using AirSkyChipCpp::float3;
++			using AirSkyChipCpp::float4;
++			const std::vector<float>& T = Ch.Table();
++			const size_t P = static_cast<size_t>(SlotIndex) * Ch.PerPuff() + static_cast<size_t>(Point);
++			const int Col = static_cast<int>(std::floor(Slot[P * 2] + 0.5f)), Row = static_cast<int>(std::floor(Slot[P * 2 + 1] + 0.5f));
++			const int K = static_cast<int>(std::floor(Ring[P * 2] + 0.5f)), RingIndex = static_cast<int>(std::floor(Ring[P * 2 + 1] + 0.5f));
++			auto Texel = [&T](int R, int C)
++			{
++				const float* A = &T[(static_cast<size_t>(R) * AirSky::Chip::Wide + static_cast<size_t>(C)) * 4];
++				return float4(A[0], A[1], A[2], A[3]);
++			};
++			AirSkyChipCpp::FSkyChip Chip;
++			Chip.Pad = 0.0f;
++			return Chip.Vertex(Texel(0, 0), Texel(0, 1), Texel(0, 2), Texel(0, 3), Texel(0, 4), Texel(Row, Col), Texel(Row, Col + 1), Texel(Row, Col + 2), Texel(Row, Col + 3),
++				Texel(Row, Col + 4), Texel(Row, Col + 5), Texel(Row, Col + 6), Texel(Row, Col + 7),
++				float3(static_cast<float>(Seen.X), static_cast<float>(Seen.Y), static_cast<float>(Seen.Z)), Col / AirSky::Chip::TexelsPerPuff + (Row - 1) * AirSky::Chip::PuffsPerRow, K,
++				RingIndex);
++		}
++		/** Whether the chip draws a slot's puff at all (a puff left out is every point at its middle, no place on the sheet). */
++		bool Drawn(int SlotIndex, const Vec& Seen) const
++		{
++			const AirSkyChipCpp::FSkyChipOut O = At(SlotIndex, 0, Seen);
++			return O.Sheet.x != 0.0f || O.Sheet.y != 0.0f;
++		}
++	};
++
++	int Byte(float V) { return static_cast<int>(std::max(0.0f, std::min(1.0f, V)) * 255.0f + 0.5f); }
++
++	/** The chip's points against the painter's, puff by puff in the order both lay them. */
++	struct Match
++	{
++		long Points = 0, PlaceOff = 0, ColourOff = 0, AlphaOff = 0, SheetOff = 0;
++		double MostPlace = 0.0, MostSheet = 0.0;
++		int MostColour = 0, MostAlpha = 0, Puffs = 0, PainterOnly = 0, ChipOnly = 0;
++		void Add(const Match& O)
++		{
++			Points += O.Points;
++			PlaceOff += O.PlaceOff;
++			ColourOff += O.ColourOff;
++			AlphaOff += O.AlphaOff;
++			SheetOff += O.SheetOff;
++			MostPlace = std::max(MostPlace, O.MostPlace);
++			MostSheet = std::max(MostSheet, O.MostSheet);
++			MostColour = std::max(MostColour, O.MostColour);
++			MostAlpha = std::max(MostAlpha, O.MostAlpha);
++			Puffs += O.Puffs;
++			PainterOnly += O.PainterOnly;
++			ChipOnly += O.ChipOnly;
++		}
++	};
++
++	constexpr double PlaceGive = 0.25; // metres
++	constexpr int ColourGive = 2, AlphaGive = 2; // of 255
++	constexpr double SheetGive = 0.002;
++
++	Match AgainstPainter(const AirSky::Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const AirSky::Rgb& Light, double Ink, AirSky::Chip& Ch)
++	{
++		Match M;
++		AirSky::Painter Paint;
++		Paint.SetSprites(true);
++		Paint.SetInk(Ink);
++		Paint.SetRoom(Ch.Room());
++		std::vector<Vec> Points, Shadows;
++		std::vector<uint8_t> Rgba, ShadowRgba;
++		std::vector<float> Uvs;
++		Paint.Paint(F, Eye, Drift, Sun, Light, Points, Rgba, &Shadows, &ShadowRgba, &Uvs);
++		Ch.SetInk(Ink);
++		Ch.Lay(F, Eye, Drift, Sun, Light);
++		const ChipReader Read(Ch);
++		const Vec Seen = Eye - Drift;
++		const int Per = Paint.PerPuff();
++		const int Spare = Paint.RoomFor(F) - Paint.Drawn();
++		std::vector<int> ChipSlots;
++		for (int S = 0; S < Ch.Laid(); ++S)
++		{
++			if (Read.Drawn(S, Seen))
++			{
++				ChipSlots.push_back(S);
++			}
++		}
++		auto PainterMiddle = [&](int I) { return Points[static_cast<size_t>(Spare + I) * Per]; };
++		auto ChipMiddle = [&](int J)
++		{
++			const AirSkyChipCpp::FSkyChipOut O = Read.At(ChipSlots[static_cast<size_t>(J)], 0, Seen);
++			return Vec(O.At.x, O.At.y, O.At.z);
++		};
++		int I = 0, J = 0;
++		const int PainterN = Paint.Drawn(), ChipN = static_cast<int>(ChipSlots.size());
++		while (I < PainterN && J < ChipN)
++		{
++			if ((PainterMiddle(I) - ChipMiddle(J)).Length() > 1.0)
++			{
++				// (a puff at the edge of being drawn, its fade times its alpha a hair either side of 0.002, drawn by one and
++				// not the other: looked for a few puffs on, either way)
++				int Ahead = 0;
++				for (int Look = 1; Look <= 4 && !Ahead; ++Look)
++				{
++					if (J + Look < ChipN && (PainterMiddle(I) - ChipMiddle(J + Look)).Length() <= 1.0) Ahead = Look;
++					else if (I + Look < PainterN && (PainterMiddle(I + Look) - ChipMiddle(J)).Length() <= 1.0) Ahead = -Look;
++				}
++				if (Ahead > 0)
++				{
++					M.ChipOnly += Ahead;
++					J += Ahead;
++				}
++				else if (Ahead < 0)
++				{
++					M.PainterOnly -= Ahead;
++					I -= Ahead;
++				}
++				else
++				{
++					++M.PainterOnly;
++					++M.ChipOnly;
++					++I;
++					++J;
++				}
++				continue;
++			}
++			++M.Puffs;
++			for (int P = 0; P < Per; ++P)
++			{
++				const size_t Q = static_cast<size_t>(Spare + I) * Per + static_cast<size_t>(P);
++				const AirSkyChipCpp::FSkyChipOut O = Read.At(ChipSlots[static_cast<size_t>(J)], P, Seen);
++				++M.Points;
++				const double Place = (Points[Q] - Vec(O.At.x, O.At.y, O.At.z)).Length();
++				M.MostPlace = std::max(M.MostPlace, Place);
++				if (Place > PlaceGive) ++M.PlaceOff;
++				const int Colour = std::max({ std::abs(Rgba[Q * 4] - Byte(O.Colour.x)), std::abs(Rgba[Q * 4 + 1] - Byte(O.Colour.y)), std::abs(Rgba[Q * 4 + 2] - Byte(O.Colour.z)) });
++				const int Alpha = std::abs(Rgba[Q * 4 + 3] - Byte(O.Colour.w));
++				M.MostColour = std::max(M.MostColour, Colour);
++				M.MostAlpha = std::max(M.MostAlpha, Alpha);
++				if (Colour > ColourGive) ++M.ColourOff;
++				if (Alpha > AlphaGive) ++M.AlphaOff;
++				const double Sheet = std::max({ std::fabs(Uvs[Q * 4] - O.Sheet.x), std::fabs(Uvs[Q * 4 + 1] - O.Sheet.y), std::fabs(Uvs[Q * 4 + 2] - O.Sheet.z), std::fabs(Uvs[Q * 4 + 3] - O.Sheet.w) });
++				M.MostSheet = std::max(M.MostSheet, Sheet);
++				if (Sheet > SheetGive) ++M.SheetOff;
++			}
++			++I;
++			++J;
++		}
++		M.PainterOnly += PainterN - I;
++		M.ChipOnly += ChipN - J;
++		return M;
++	}
++
++	/** The table laid at one eye and read at another (the chip's frames between two lays), against a table laid there:
++	 * puffs drawn by one and not the other, and points that differ. */
++	struct Stale
++	{
++		int Eyes = 0, Missing = 0, Extra = 0;
++		long Points = 0, Differ = 0;
++		void Add(const Stale& O)
++		{
++			Eyes += O.Eyes;
++			Missing += O.Missing;
++			Extra += O.Extra;
++			Points += O.Points;
++			Differ += O.Differ;
++		}
++	};
++
++	Stale ReadElsewhere(const AirSky::Field& F, const Vec& Eye, const Vec& Moved, const Vec& Drift, const Vec& Sun, const AirSky::Rgb& Light, bool bPointsToo)
++	{
++		Stale Out;
++		AirSky::Chip Then, Now;
++		Then.Lay(F, Eye, Drift, Sun, Light);
++		Now.Lay(F, Moved, Drift, Sun, Light);
++		const ChipReader ReadThen(Then), ReadNow(Now);
++		const Vec Seen = Moved - Drift;
++		std::map<int, int> ThenDrawn, NowDrawn;
++		for (int S = 0; S < Then.Laid(); ++S)
++			if (ReadThen.Drawn(S, Seen)) ThenDrawn[Then.SlotPuff(S)] = S;
++		for (int S = 0; S < Now.Laid(); ++S)
++			if (ReadNow.Drawn(S, Seen)) NowDrawn[Now.SlotPuff(S)] = S;
++		++Out.Eyes;
++		for (const auto& Each : NowDrawn)
++		{
++			const auto Found = ThenDrawn.find(Each.first);
++			if (Found == ThenDrawn.end())
++			{
++				++Out.Missing;
++				continue;
++			}
++			for (int P = 0; bPointsToo && P < Then.PerPuff(); ++P)
++			{
++				const AirSkyChipCpp::FSkyChipOut A = ReadThen.At(Found->second, P, Seen), B = ReadNow.At(Each.second, P, Seen);
++				++Out.Points;
++				const double D = std::max({ std::fabs(A.At.x - B.At.x), std::fabs(A.At.y - B.At.y), std::fabs(A.At.z - B.At.z) }) +
++					1000.0 * std::max({ std::fabs(A.Colour.x - B.Colour.x), std::fabs(A.Colour.y - B.Colour.y), std::fabs(A.Colour.z - B.Colour.z), std::fabs(A.Colour.w - B.Colour.w),
++						std::fabs(A.Sheet.x - B.Sheet.x), std::fabs(A.Sheet.y - B.Sheet.y), std::fabs(A.Sheet.z - B.Sheet.z), std::fabs(A.Sheet.w - B.Sheet.w) });
++				if (D > 1e-3) ++Out.Differ;
++			}
++		}
++		for (const auto& Each : ThenDrawn)
++			if (!NowDrawn.count(Each.first)) ++Out.Extra;
++		return Out;
++	}
++
++	double LeastMiddle(const std::function<void()>& Work)
++	{
++		// (the middle of 15, the least of three tries: one slow stretch of a shared machine is not the work's)
++		double Least = 1e18;
++		for (int Try = 0; Try < 3; ++Try)
++		{
++			std::vector<double> Took;
++			for (int Rep = 0; Rep < 15; ++Rep)
++			{
++				const auto T0 = Clock::now();
++				Work();
++				Took.push_back(Ms(T0));
++			}
++			std::nth_element(Took.begin(), Took.begin() + 7, Took.end());
++			Least = std::min(Least, Took[7]);
++		}
++		return Least;
++	}
++
++	/** One sky to check: a field, its sun and light, the eyes it is looked at from, the carry. */
++	struct Case
++	{
++		std::string Name;
++		AirSky::Field F;
++		Vec Sun;
++		AirSky::Rgb Light = AirSky::Rgb(1.0f, 1.0f, 1.0f);
++		double Ink = 1.3;
++		std::vector<Vec> Eyes;
++		Vec Drift;
++	};
++
++	/** The ground battle's sky as LandBattle::LaySky lays it: a summer cumulus over the field (or a deck), the air
++	 * battle's clearing 35 km off, no ground under the clouds. */
++	Case GroundCase(bool bDeck)
++	{
++		Case C;
++		C.Name = bDeck ? "ground battle, a deck" : "ground battle, cumulus";
++		AirSky::Day D;
++		D.bGiven = true;
++		D.bDeck = bDeck;
++		D.Base = bDeck ? 1500.0 : 900.0;
++		D.Top = D.Base + (bDeck ? 600.0 : 1100.0);
++		const double W = 2400.0, H = 2400.0;
++		AirSky::Placing P;
++		P.Seed = 238;
++		P.TargetX = 0.5 * W + 25000.0;
++		P.TargetY = 0.5 * H + 25000.0;
++		P.Band = 0.0;
++		P.LowBand = 0.0;
++		P.bShips = false;
++		C.Sun = Vec(0.42, -0.55, 0.72).Unit();
++		P.Sun = C.Sun;
++		C.F = AirSky::Lay(D, P);
++		C.Light = bDeck ? AirSky::Rgb(0.82f, 0.83f, 0.86f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
++		C.Drift = C.F.DriftAt(240.0);
++		C.Eyes = { Vec(1200.0, 1200.0, 2.5), Vec(400.0, 1800.0, 30.0), Vec(1500.0, 300.0, 400.0), Vec(2600.0, 2400.0, 1800.0) };
++		for (Vec& E : C.Eyes) E += C.Drift;
++		return C;
++	}
++}
++
++int main(int Argc, char** Argv)
++{
++	std::vector<Case> Cases;
++	Cases.push_back(GroundCase(false));
++	Cases.push_back(GroundCase(true));
++	for (int A = 1; A < Argc; ++A)
++	{
++		std::ifstream In(Argv[A], std::ios::binary);
++		std::stringstream Buffer;
++		Buffer << In.rdbuf();
++		AirFeed::Recording Rec;
++		std::string Error;
++		if (!In || !AirFeed::ReadRecording(Buffer.str(), Rec, Error))
++		{
++			std::fprintf(stderr, "cannot read %s: %s\n", Argv[A], Error.c_str());
++			return 2;
++		}
++		Case C;
++		C.Name = Argv[A];
++		C.Name = C.Name.substr(C.Name.find_last_of('/') + 1);
++		AirSky::Placing P = AirFeed::PlacingOf(Rec.Board, Rec.Views.front().Groups, Rec.Seed);
++		// (the board's own land under a battle with no stage, as the cloud test lays it: the clouds lifted and eased over it)
++		const std::shared_ptr<const AirGround::BoardLand> Land =
++			Rec.Board.StageKey.empty() ? std::make_shared<const AirGround::BoardLand>(Rec.Board.Land) : std::shared_ptr<const AirGround::BoardLand>();
++		if (Land && !Land->IsEmpty())
++		{
++			P.Ground = [Land](double X, double Y) { return Land->At(X, Y); };
++			P.GroundTop = AirGround::BoardLand::LandHigh;
++		}
++		C.F = AirSky::Lay(Rec.Board.Cloud, P);
++		C.Sun = P.Sun;
++		C.Drift = C.F.DriftAt(600.0);
++		const double TX = Rec.Board.TargetX, TY = Rec.Board.TargetY;
++		C.Eyes = { Vec(TX, TY - 6000.0, 5000.0), Vec(TX + 3000.0, TY, 1200.0), Vec(TX - 9000.0, TY + 4000.0, 300.0), Vec(TX, TY, 9000.0) };
++		Cases.push_back(C);
++	}
++
++	std::vector<Limit> Limits;
++	Match Whole;
++	Stale Within, Margin;
++	double WorstLayMs = 0.0, WorstAskUs = 0.0;
++	int MostLaid = 0, MostDropped = 0, LeastSlackEye = 1 << 30;
++	double LeastSlack = 1e18;
++	for (const Case& C : Cases)
++	{
++		Match Here;
++		AirSky::Chip Ch;
++		for (const Vec& E : C.Eyes)
++		{
++			const Match M = AgainstPainter(C.F, E, C.Drift, C.Sun, C.Light, C.Ink, Ch);
++			Here.Add(M);
++			MostLaid = std::max(MostLaid, Ch.Laid());
++			MostDropped = std::max(MostDropped, Ch.Dropped());
++			if (Ch.Slack() < LeastSlack)
++			{
++				LeastSlack = Ch.Slack();
++				LeastSlackEye = static_cast<int>(&E - &C.Eyes.front());
++			}
++			// (read elsewhere: eight ways out at 95 per cent of the slack, points and all; and at 95 per cent of the Margin,
++			// the puffs drawn only)
++			for (int Way = 0; Way < 8; ++Way)
++			{
++				const double A = Way * 0.785398, Up = Way % 3 == 0 ? 0.3 : Way % 3 == 1 ? -0.2 : 0.0;
++				const Vec Dir = Vec(std::cos(A), std::sin(A), Up).Unit();
++				Vec Near = E + Dir * (0.95 * Ch.Slack()), Far = E + Dir * (0.95 * AirSky::Chip::Margin);
++				Near.Z = std::max(Near.Z, 1.0);
++				Far.Z = std::max(Far.Z, 1.0);
++				Within.Add(ReadElsewhere(C.F, E, Near, C.Drift, C.Sun, C.Light, true));
++				Margin.Add(ReadElsewhere(C.F, E, Far, C.Drift, C.Sun, C.Light, false));
++			}
++			// (what a lay costs, and the frame's ask)
++			AirSky::Chip Timed;
++			Timed.Lay(C.F, E, C.Drift, C.Sun, C.Light);
++			WorstLayMs = std::max(WorstLayMs, LeastMiddle([&]() { Timed.Lay(C.F, E, C.Drift, C.Sun, C.Light); }));
++			volatile bool bSink = false;
++			const auto T0 = Clock::now();
++			for (int Rep = 0; Rep < 100000; ++Rep) bSink = bSink ^ Timed.Wants(E + Vec(0.0, 0.0, Rep * 1e-6), C.Drift);
++			WorstAskUs = std::max(WorstAskUs, Ms(T0) * 1000.0 / 100000.0);
++		}
++		std::printf("%-26s %d puffs drawn and matched, %ld points: place %.3f m at most (%ld over %.2f), colour %d (%ld over %d), alpha %d (%ld over %d), sheet %.4f (%ld over %.3f); %d drawn by the painter only, %d by the chip only\n",
++		            C.Name.c_str(), Here.Puffs, Here.Points, Here.MostPlace, Here.PlaceOff, PlaceGive, Here.MostColour, Here.ColourOff, ColourGive, Here.MostAlpha, Here.AlphaOff, AlphaGive, Here.MostSheet,
++		            Here.SheetOff, SheetGive, Here.PainterOnly, Here.ChipOnly);
++		Whole.Add(Here);
++	}
++	(void)LeastSlackEye;
++
++	// The ground battle's eye through 30 s of shots at 60 frames a second, the wind carrying the clouds: the rooms (today's
++	// way) against the chip.
++	struct PathRun
++	{
++		int NearTurns = 0, FarTurns = 0, Lays = 0;
++		double TurnMs = 0.0, MostTurnMs = 0.0, LayMs = 0.0, MostLayMs = 0.0;
++		long PointsSent = 0;
++		double BytesSent = 0.0;
++	};
++	std::vector<std::pair<std::string, PathRun>> Paths;
++	for (int CaseIndex = 0; CaseIndex < 2; ++CaseIndex)
++	{
++		const Case& C = Cases[static_cast<size_t>(CaseIndex)];
++		AirSky::Rooms Two;
++		Two.SetSprites(true);
++		Two.SetInk(C.Ink);
++		AirSky::Chip Ch;
++		Ch.SetInk(C.Ink);
++		PathRun Run;
++		auto EyeAt = [](double T)
++		{
++			// (a dolly along the field at 6 m/s; a crane up to 60 m; a cut to a slow orbit of 40 m; a cut to the air, 25 m/s)
++			if (T < 8.0) return Vec(700.0 + 6.0 * T, 1200.0, 2.5);
++			if (T < 12.0) return Vec(748.0 + 3.0 * (T - 8.0), 1200.0, 2.5 + 57.5 * (T - 8.0) / 4.0);
++			if (T < 22.0) return Vec(500.0 + 40.0 * std::cos(0.3 * (T - 12.0)), 1700.0 + 40.0 * std::sin(0.3 * (T - 12.0)), 15.0);
++			return Vec(1200.0, 400.0 + 25.0 * (T - 22.0), 350.0);
++		};
++		const double Start = 240.0;
++		for (int Frame = 0; Frame < 30 * 60; ++Frame)
++		{
++			const double T = Frame / 60.0;
++			const Vec Drift = C.F.DriftAt(Start + T);
++			const Vec E = EyeAt(T) + Drift;
++			auto T0 = Clock::now();
++			const AirSky::Rooms::Sent What = Two.Turn(C.F, E, Drift, C.Sun, C.Light);
++			const double Took = Ms(T0);
++			if (What != AirSky::Rooms::Sent::None)
++			{
++				Run.TurnMs += Took;
++				Run.MostTurnMs = std::max(Run.MostTurnMs, Took);
++				if (What == AirSky::Rooms::Sent::Both)
++				{
++					++Run.FarTurns;
++					Run.PointsSent += static_cast<long>(Two.NearPoints.size() + Two.FarPoints.size());
++				}
++				else
++				{
++					++Run.NearTurns;
++					Run.PointsSent += static_cast<long>(Two.NearPoints.size());
++				}
++			}
++			T0 = Clock::now();
++			if (Ch.Wants(E, Drift))
++			{
++				Ch.Lay(C.F, E, Drift, C.Sun, C.Light);
++				const double Laid = Ms(T0);
++				++Run.Lays;
++				Run.LayMs += Laid;
++				Run.MostLayMs = std::max(Run.MostLayMs, Laid);
++				Run.BytesSent += static_cast<double>(Ch.RowsUsed()) * AirSky::Chip::Wide * 16.0;
++			}
++		}
++		Paths.push_back({ C.Name, Run });
++		const int Turns = std::max(1, Run.NearTurns + Run.FarTurns);
++		std::printf("%-26s 30 s of shots: rooms %d near turns and %d far, %.2f ms a turn (%.2f at most), %ld points sent (%.0f a turn, %.1f MB); chip %d lays, %.2f ms a lay (%.2f at most), %.2f MB of table sent, no points\n",
++		            C.Name.c_str(), Run.NearTurns, Run.FarTurns, Run.TurnMs / Turns, Run.MostTurnMs, Run.PointsSent, static_cast<double>(Run.PointsSent) / Turns,
++		            Run.PointsSent * 36.0 / 1e6, Run.Lays, Run.Lays ? Run.LayMs / Run.Lays : 0.0, Run.MostLayMs, Run.BytesSent / 1e6);
++	}
++
++	const long Over = Whole.PlaceOff + Whole.ColourOff + Whole.AlphaOff + Whole.SheetOff;
++	Limits.push_back({ "the chip's points are the painter's", Whole.Puffs > 0 && Over <= Whole.Points / 1000,
++	                   std::to_string(Whole.Puffs) + " puffs, " + std::to_string(Whole.Points) + " points: place " + Num(Whole.MostPlace, 3) + " m at most, colour " + std::to_string(Whole.MostColour) +
++	                       ", alpha " + std::to_string(Whole.MostAlpha) + ", sheet " + Num(Whole.MostSheet, 4) + "; " + std::to_string(Over) + " points past the give",
++	                   "a point in a thousand at most past " + Num(PlaceGive) + " m, " + std::to_string(ColourGive) + " of colour or alpha in 255, " + Num(SheetGive, 3) + " on the sheet" });
++	Limits.push_back({ "the chip draws the painter's puffs", Whole.PainterOnly + Whole.ChipOnly <= std::max(2, Whole.Puffs / 500),
++	                   std::to_string(Whole.PainterOnly) + " by the painter only, " + std::to_string(Whole.ChipOnly) + " by the chip only, of " + std::to_string(Whole.Puffs),
++	                   "a puff in 500 at most, each at the edge of being drawn" });
++	Limits.push_back({ "a table read within its slack is the table laid there", Within.Missing == 0 && Within.Extra == 0 && Within.Differ == 0,
++	                   std::to_string(Within.Eyes) + " eyes: " + std::to_string(Within.Missing) + " puffs missing, " + std::to_string(Within.Extra) + " extra, " + std::to_string(Within.Differ) + " of " +
++	                       std::to_string(Within.Points) + " points differ",
++	                   "none (the chip's frames between two lays draw what a lay there would)" });
++	Limits.push_back({ "a table read at its margin holds every puff drawn there", Margin.Missing == 0,
++	                   std::to_string(Margin.Eyes) + " eyes " + Num(0.95 * AirSky::Chip::Margin, 0) + " m off: " + std::to_string(Margin.Missing) + " puffs missing", "none" });
++	Limits.push_back({ "the chip's table has room", MostDropped == 0, std::to_string(MostLaid) + " puffs at most of " + std::to_string(AirSky::Chip().Room()) + ", " + std::to_string(MostDropped) + " left out",
++	                   "none left out" });
++	Limits.push_back({ "the chip's table laid within budget", WorstLayMs < 2.5, Num(WorstLayMs, 2) + " ms", "under 2.5 ms (the least of three middles of 15; the painter's turn is under 5)" });
++	Limits.push_back({ "the chip's frame ask within budget", WorstAskUs < 2.0, Num(WorstAskUs, 3) + " us", "under 2 microseconds" });
++	for (const auto& Each : Paths)
++	{
++		const PathRun& R = Each.second;
++		Limits.push_back({ "the ground's 30 s of shots: the chip lays less than the rooms turn (" + Each.first + ")", R.Lays * 3 <= R.NearTurns + R.FarTurns,
++		                   std::to_string(R.Lays) + " lays against " + std::to_string(R.NearTurns + R.FarTurns) + " turns", "a third as many or fewer" });
++	}
++	int Failed = 0;
++	for (const Limit& L : Limits)
++	{
++		std::printf("  %s %-62s %s (%s)\n", L.bOk ? "ok  " : "FAIL", L.What.c_str(), L.Got.c_str(), L.Want.c_str());
++		Failed += L.bOk ? 0 : 1;
++	}
++	std::printf(Failed ? "%d CHECKS FAILED\n" : "ALL CHECKS PASSED\n", Failed);
++	return Failed ? 1 : 0;
++}
+diff --git a/unreal/TheaterCommand/Tools/air_show/run.sh b/unreal/TheaterCommand/Tools/air_show/run.sh
+index 27d44882..cc386470 100755
+--- a/unreal/TheaterCommand/Tools/air_show/run.sh
++++ b/unreal/TheaterCommand/Tools/air_show/run.sh
+@@ -20,6 +20,12 @@ done
+ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+   "$HERE/air_screw_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_screw_test"
+ "$OUT/air_screw_test" "$ROOT"/Content/Models/*.json || STATUS=1
++# The clouds turned on the graphics chip (Battle/AirSky's Chip and Battle/AirSkyChip.inl, the text the chip runs):
++# every point the chip draws against the painter's, on the ground's two skies and every recording given.
++$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
++  "$HERE/air_sky_chip_test.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
++  -o "$OUT/air_sky_chip_test"
++"$OUT/air_sky_chip_test" "$@" || STATUS=1
+ # The sea's face (Battle/SeaFace): each stage's shore picture, as AAirStage makes it from the stage's land and reef,
+ # and the whitecaps' picture; both written to $OUT for the stand-in frames.
+ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+diff --git a/unreal/TheaterCommand/Tools/build_content.py b/unreal/TheaterCommand/Tools/build_content.py
+index d6df32ca..d24fa434 100644
+--- a/unreal/TheaterCommand/Tools/build_content.py
++++ b/unreal/TheaterCommand/Tools/build_content.py
+@@ -680,6 +680,145 @@ def build_stage_sea():
+     finish(m)
+ 
+ 
++def _sky_chip_code():
++    """GS6: M_CloudTurned's Custom node: Battle/AirSkyChip.inl as it stands (the clouds' arithmetic, which the cloud test
++    also compiles as C++ and checks against the painter's), then a few lines that read one puff's texels from the
++    table and hand back where the point goes (the mesh's own units, its own frame) with its colour and its place on
++    the sheet."""
++    import os
++    places = []
++    try:
++        places.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
++    except NameError:  # (run where the script's own path is not given)
++        pass
++    places.append(os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
++    for path in places:
++        if os.path.isfile(path):
++            with open(path, encoding="utf-8") as f:
++                maths = f.read()
++            break
++    else:
++        raise RuntimeError("Battle/AirSkyChip.inl was not found at " + " or ".join(places))
++    texels = ", ".join(f"SkyTable.Load(int3({k}, 0, 0))" for k in range(5)) + ",\n    " + \
++        ", ".join(f"SkyTable.Load(int3(SkyCol + {k}, SkyRow, 0))" for k in range(8))
++    return maths + f"""
++// (the glue: one point of one puff, for the eye where it is this frame)
++FSkyChip SkyChip;
++SkyChip.Pad = 0.0f;
++int SkyCol = (int)(SkySlot.x + 0.5f);
++int SkyRow = (int)(SkySlot.y + 0.5f);
++float3 SkyLocal = SkyEye / SkyUnits;
++FSkyChipOut SkyOut = SkyChip.Vertex({texels},
++    float3(SkyLocal.y, SkyLocal.x, SkyLocal.z), SkyCol / 8 + (SkyRow - 1) * 256, (int)(SkyRing.x + 0.5f), (int)(SkyRing.y + 0.5f));
++SkyColour = SkyOut.Colour;
++SkySheet = SkyOut.Sheet;
++return float3(SkyOut.At.y, SkyOut.At.x, SkyOut.At.z) * SkyUnits;
++"""
++
++
++def build_cloud_turned():
++    """GS6, THE CLOUDS TURNED ON THE GRAPHICS CHIP (the speed gate's sky: the same clouds as M_Cloud, with nothing turned
++    or sent from the game's thread as the eye moves). One mesh, made once, a puff's room for each slot of the table:
++    each point's first texture coordinate is its place round its puff (the point round the ring, and which ring: 0 the
++    middle, 1 the heart, 2 the rim), its second its slot's first texel in "Table" (a float picture the game lays, far
++    to near: AirSky::Chip). Where the points are placed (the vertex shader) the Custom node runs Battle/AirSkyChip.inl,
++    the painter's own arithmetic, for the eye as it is this frame ("UnitsPerMetre": the scene's), and the point is
++    moved there; its colour and its place on the sheet are carried to the pixels, which are M_Cloud's (the "Sheet" of
++    shapes, "Brightness", "Tint", "Opacity"). Light of its own, see-through, seen from both sides."""
++    m = new_material("M_CloudTurned")
++    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
++    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
++    m.set_editor_property("two_sided", True)
++
++    chip = node(m, unreal.MaterialExpressionCustom, -2400, 900)
++    chip.set_editor_property("description", "AirSkyChip")
++    chip.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
++    chip.set_editor_property("code", _sky_chip_code())
++    inputs = []
++    for name in ("SkyTable", "SkyRing", "SkySlot", "SkyEye", "SkyUnits"):
++        each = unreal.CustomInput()
++        each.set_editor_property("input_name", name)
++        inputs.append(each)
++    chip.set_editor_property("inputs", inputs)
++    outputs = []
++    for name in ("SkyColour", "SkySheet"):
++        each = unreal.CustomOutput()
++        each.set_editor_property("output_name", name)
++        each.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
++        outputs.append(each)
++    chip.set_editor_property("additional_outputs", outputs)
++
++    stand = stand_in(True)
++    table = node(m, unreal.MaterialExpressionTextureObjectParameter, -2900, 700, parameter_name="Table", texture=stand, sampler_type=sampler_for(stand))
++    connect(table, "", chip, "SkyTable")
++    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 850, coordinate_index=0), "", chip, "SkyRing")
++    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 950, coordinate_index=1), "", chip, "SkySlot")
++    eye = node(m, unreal.MaterialExpressionTransformPosition, -2700, 1050,
++               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
++               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
++    connect(node(m, unreal.MaterialExpressionCameraPositionWS, -2950, 1050), "", eye, "")
++    connect(eye, "", chip, "SkyEye")
++    connect(scalar(m, "UnitsPerMetre", 100.0, -2900, 1150), "", chip, "SkyUnits")
++
++    # The point moved from where the mesh made it to where the chip puts it, in the world.
++    away = node(m, unreal.MaterialExpressionSubtract, -2100, 900)
++    connect(chip, "", away, "A")
++    connect(node(m, unreal.MaterialExpressionPreSkinnedPosition, -2300, 1050), "", away, "B")
++    moved = node(m, unreal.MaterialExpressionTransform, -1900, 900,
++                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
++                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
++    connect(away, "", moved, "")
++    to_property(moved, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
++
++    # The pixels: M_Cloud's, from the colour and the sheet's place carried from the points.
++    colour = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkyColour"), -1700, -300)
++    carried = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkySheet"), -1700, 300)
++    paint = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, -300, r=True, g=True, b=True, a=False)
++    alpha = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, 650, r=False, g=False, b=False, a=True)
++    place = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1400, 0, r=True, g=True, b=False, a=False)
++    sheet = picture(m, "Sheet", place, -1100, 0, numbers=True)
++    behind = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 400, r=False, g=False, b=True, a=False)
++    ahead = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 520, r=False, g=False, b=False, a=True)
++
++    def less(a, b, x, y):
++        n = node(m, unreal.MaterialExpressionSubtract, x, y)
++        _feed(m, n, "A", a)
++        _feed(m, n, "B", b)
++        return n
++
++    # light = 2 (side + (front - side) behind + (back - side) ahead), as M_Cloud
++    toward = times(m, less((sheet, "G"), (sheet, "R"), -850, 200), behind, -650, 250)
++    against = times(m, less((sheet, "B"), (sheet, "R"), -850, 450), ahead, -650, 450)
++    light = times(m, plus(m, plus(m, (sheet, "R"), toward, -450, 150), against, -300, 250), 2.0, -150, 250)
++    lit = times(m, times(m, paint, light, -150, -200), scalar(m, "Brightness", 1.3, -350, -100), 50, -200)
++    tinted = times(m, lit, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -150, -400), 250, -250)
++    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
++    shown = times(m, times(m, alpha, (sheet, "A"), -450, 650), scalar(m, "Opacity", 1.0, -450, 780), -250, 650)
++    to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, -50, 650), "", unreal.MaterialProperty.MP_OPACITY)
++    finish(m)
++    try:  # (what the points' shader costs, for the next Mac run's notes; an engine without the call says nothing)
++        stats = mel.get_statistics(m)
++        unreal.log(f"Theater Command: M_CloudTurned: {stats.get_editor_property('num_vertex_shader_instructions')} vertex shader instructions, "
++                   f"{stats.get_editor_property('num_pixel_shader_instructions')} pixel")
++    except Exception:
++        pass
++
++
++def build_cloud_turned_or_tell():
++    """GS6: M_CloudTurned is the clouds' on the graphics chip only; without it the scenes turn them on the game's thread
++    as before (LandBattle's LaySky says so). Whatever goes wrong in it is told, and the rest is built as before."""
++    import traceback
++    try:
++        build_cloud_turned()
++    except Exception:
++        unreal.log_error("Theater Command: M_CloudTurned was not built (the clouds are turned on the game's thread, as before):\n" + traceback.format_exc())
++        try:
++            if eal.does_asset_exist(f"{MATERIALS}/M_CloudTurned"):
++                eal.delete_asset(f"{MATERIALS}/M_CloudTurned")
++        except Exception:
++            unreal.log_error("Theater Command: and the half-built M_CloudTurned could not be removed:\n" + traceback.format_exc())
++
++
+ def build_wake():
+     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
+     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
+@@ -1899,7 +2038,10 @@ def build_flak_lit():
+ # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
+ import os
+ REBUILD = os.environ.get("TC_REBUILD", "")
+-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark)):
++# (GS6: M_CloudTurned, the clouds turned on the graphics chip, is built apart and can never stop the rest:
++# TC_REBUILD=M_CloudTurned after a change to Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's
++# pixels, which it repeats.)
++for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark)):
+     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
+         build()
+     else:
+-- 
+2.43.0
+
