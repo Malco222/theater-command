@@ -37,7 +37,8 @@ import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
-import { FIELD, burnedRoom, damageField, fieldRules, fieldShut, fieldTier, planFieldHit, type FieldBlow, type FieldHit } from './fieldstate';
+import { FIELD, burnedRoom, damageField, fieldKnown, fieldRules, fieldShut, fieldTier, planFieldHit, type FieldBlow, type FieldHit } from './fieldstate';
+import { sightOf } from './intel';
 import { RESEARCH } from './research';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
@@ -803,6 +804,7 @@ export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): stri
     if (!allied(g, f.nat, r.ctrl) && !ours) return 'That ground is not in friendly hands.';
     if (!hasAirfield(g, r.id)) return 'There is no airfield there. Engineers can lay one out, and the treasury can build one.';
     const out = prizeOut(g, r, 'airfield');
+    if (out > 0 && g.flags.fields === 1 && fieldRules(g)) return `The runway at ${r.name} is cratered: no aircraft can land until it is repaired${out === 1 ? ' (its crews have it open next month)' : ''}.`;
     if (out > 0) return `The airfield there is wrecked: it will be ${out === 1 ? 'a month' : `${out} months`} before aircraft can use it.`;
     return ours ? 'Airfields taken this month are not yet in use.' : 'The enemy holds the country round the town, and the airfield with it.';
   }
@@ -2409,7 +2411,9 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   const fieldsOn = g.flags.fields === 1 && fieldRules(g);
   const parked = new Map<number, number>();
   if (fieldsOn) for (const x of g.airFleets) if (x.ship === undefined && x.ftr + x.bmr > 0 && atWar(g, nat, x.nat)) parked.set(x.base, (parked.get(x.base) ?? 0) + x.ftr + x.bmr);
-  const fieldsByPlanes = fieldsOn ? [...parked.keys()].sort((a, b) => parked.get(b)! - parked.get(a)! || a - b) : [];
+  // (The design director, 06:21Z: a staff chooses only among fields it knows, by the one gate every reader uses.)
+  const known = fieldsOn ? sightOf(g, nat) : null;
+  const fieldsByPlanes = fieldsOn ? [...parked.keys()].filter((id) => fieldKnown(g, nat, id, known!)).sort((a, b) => parked.get(b)! - parked.get(a)! || a - b) : [];
   // The bombers: so many raids a month as the staff's share of the groups fit to fly, taken to the nearest whole raid by the luck of the month.
   const most = Math.floor(leads().length * rules.share + rng.range(0, 1));
   for (let k = 0; k < most; k++) {

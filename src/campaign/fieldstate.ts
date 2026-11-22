@@ -18,6 +18,8 @@ import { airPool, airRange, airfieldsHold, fieldClass, km } from './air';
 import { prizeHolder, prizeRules, hasPrize } from './prizes';
 import { besieged } from './siege';
 import { PRODUCTION } from './economy';
+import { allied } from './game';
+import { agentAt, sightOf } from './intel';
 
 export const FIELD = (data as unknown as {
   field: {
@@ -108,6 +110,8 @@ export interface FieldHit {
   closed: boolean;
   /** Levels burned by this hit. */
   levels: number;
+  /** True where the hit undoes a repair in hand: it shut the runway, or would have, or burned or ploughed. */
+  cancels: boolean;
   /** Aircraft destroyed on the ground, and how they fell by group. */
   ground: number;
   losses: { id: number; ftr: number; bmr: number }[];
@@ -140,7 +144,7 @@ export function planFieldHit(g: Game, region: number, how: FieldHow, blow?: Fiel
   const had = g.flags[key('flv', region)] ?? 0;
   // A field never burns below one level of room.
   const canBurn = Math.max(0, Math.floor(built / FIELD.room) - 1 - had);
-  let closed = false, levels = 0;
+  let closed = false, levels = 0, cancels = false;
   const losses: FieldHit['losses'] = [];
   let ground = 0;
   if (how === 'agent' || how === 'saboteurs') {
@@ -148,12 +152,15 @@ export function planFieldHit(g: Game, region: number, how: FieldHow, blow?: Fiel
     closed = true;
   } else if (how === 'plough' || how === 'burn') {
     closed = !wasShut;
+    cancels = true;
     levels = Math.min(canBurn, how === 'plough' ? FIELD.plough.order : FIELD.plough.burn);
   } else {
     const b = blow!;
     const through = Math.max(0, b.through);
     closed = !wasShut && through >= FIELD.shut * room;
     levels = Math.min(canBurn, FIELD.levels, Math.floor(through / FIELD.level));
+    // A raid heavy enough to shut a runway undoes the crews' work on one already shut.
+    cancels = through >= FIELD.shut * room || levels > 0;
     // The aircraft on the ground: every bomber based there, and the fighters that did not go up.
     const on = groupsOn(g, region, b.foe);
     const parked = on.map((f) => ({ f, ftr: f.ftr * (1 - Math.min(1, Math.max(0, b.up?.get(f.id) ?? 0))), bmr: f.bmr }));
@@ -182,7 +189,7 @@ export function planFieldHit(g: Game, region: number, how: FieldHow, blow?: Fiel
   if (levels) parts.push(`${levels === 1 ? 'One level' : `${levels} levels`} burned: it serves ${num(after)} of its ${num(built)} aircraft until rebuilt.`);
   if (ground) parts.push(`${num(ground)} aircraft destroyed on the ground.`);
   if (!parts.length && (how === 'raid' || how === 'sky')) parts.push(`The bombs on the field at ${place} were filled in within the day.`);
-  return { region, how, shut, closed, levels, ground, losses, grounded, room: after, built, worth, words: parts.join(' ') };
+  return { region, how, shut, closed, levels, cancels: cancels || closed, ground, losses, grounded, room: after, built, worth, words: parts.join(' ') };
 }
 
 /**
@@ -197,7 +204,7 @@ export function damageField(g: Game, region: number, how: FieldHow, blow?: Field
   if (!hit) return null;
   const strike = hit.closed || hit.levels > 0 || hit.ground > 0 || how === 'raid' || how === 'sky';
   if (strike) g.flags[key('fht', region)] = g.turn;
-  if (hit.closed || hit.levels > 0) { delete g.flags[key('frp', region)]; delete g.flags[key('frc', region)]; }
+  if (hit.cancels) { delete g.flags[key('frp', region)]; delete g.flags[key('frc', region)]; }
   if (hit.closed) g.flags[key('fsh', region)] = g.turn;
   if (hit.levels) g.flags[key('flv', region)] = (g.flags[key('flv', region)] ?? 0) + hit.levels;
   // The field's own crews mend an agent's work by next month at no price.
@@ -242,7 +249,7 @@ export function whyNotFieldRepair(g: Game, nat: string, region: number): string 
   if (!fieldDamaged(g, region)) return `The field at ${r.name} is whole.`;
   if (fieldHolder(g, r) !== nat) return `The field at ${r.name} is not in your hands.`;
   if (besieged(g, r) && r.ctrl === nat && fieldHolder(g, r) !== nat) return `${r.name} is under siege: no work can be done on its field.`;
-  if (g.flags[key('frp', region)] !== undefined) return `The field at ${r.name} is already being repaired.`;
+  if (g.flags[key('frp', region)] !== undefined) return inHandWords(g, region);
   const cost = fieldRepairCost(g, region);
   if ((g.nations[nat]?.pp ?? 0) < cost) return `Not enough production points: the repair costs ${cost}.`;
   return null;
@@ -322,6 +329,72 @@ export function aiFieldRepair(g: Game, nat: string, friends: (n: string) => bool
     if (orderFieldRepair(g, nat, id)) done.push(r.name);
   }
   return done;
+}
+
+/** The words for a repair in hand: why Repair cannot be pressed again. */
+export function inHandWords(g: Game, region: number): string {
+  const left = (g.flags[key('fsh', region)] !== undefined ? 1 : 0) + (g.flags[key('flv', region)] ?? 0);
+  return g.flags[key('fsh', region)] !== undefined ? `Repair in hand: open next month${left > 1 ? `, whole in ${left} months` : ''}.` : `Repair in hand: whole in ${left <= 1 ? 'a month' : `${left} months`}.`;
+}
+
+// ---- Who knows what (the design director, 22 Nov 06:21Z) -------------------------------------------------------
+
+/**
+ * How well a province must be seen for its field's state to be known (intel.ts SIGHT: 1 a glimpse, 2 a full look).
+ * The one constant every reader uses alike: the bridge's fieldRow, the glance, the crater list, and the staffs where
+ * they choose a field to raid or raid again.
+ */
+export const FIELD_SEEN = 2;
+
+/** True where a viewer knows a field's state: its own or an ally's field, one where its agent is placed, or one seen at FIELD_SEEN. */
+export function fieldKnown(g: Game, viewer: string | null, region: number, sight?: Uint8Array): boolean {
+  const r = g.regions[region];
+  if (!viewer || !r) return false;
+  if (allied(g, viewer, r.ctrl) || allied(g, viewer, fieldHolder(g, r))) return true;
+  if (agentAt(g, region, viewer)) return true;
+  return (sight ?? sightOf(g, viewer))[region] >= FIELD_SEEN;
+}
+
+/** The city glance's and the airfield card's reader (by name, from turn.ts): null with the switch off or no field. Shut, levels lost, room now and crowding only where the viewer knows them (false, 0, -1 and false otherwise). */
+export interface FieldRepairView {
+  shut: boolean;
+  lost: number;
+  tier: FieldTier;
+  /** The room the field serves now (-1 where not known); the room as built is public. */
+  roomNow: number;
+  built: number;
+  crowded: boolean;
+  known: boolean;
+  /** The price of Repair now, and why it cannot be pressed (a repair in hand says so: never null while one is). */
+  cost: number;
+  why: string | null;
+  /** True where the viewer may take back a repair ordered this month. */
+  undo: boolean;
+  /** Months until the field is whole: with a repair in hand, from now; else what a repair ordered now would take. 0 when whole. */
+  months: number;
+  /** True with a repair in hand. */
+  repairing: boolean;
+}
+
+export function fieldRepairView(g: Game, region: number, viewer: string | null = g.human, sight?: Uint8Array): FieldRepairView | null {
+  if (!fieldRules(g)) return null;
+  const r = g.regions[region];
+  if (!r || airfieldsHold(g, region) <= 0) return null;
+  const known = fieldKnown(g, viewer, region, sight);
+  const room = airfieldsHold(g, region), lost = g.flags[key('flv', region)] ?? 0;
+  const shut = g.flags[key('fsh', region)] !== undefined;
+  const there = g.airFleets.reduce((s, f) => s + (f.base === region && f.ship === undefined ? f.ftr + f.bmr : 0), 0);
+  const months = (shut ? 1 : 0) + lost;
+  const damaged = shut || lost > 0;
+  return {
+    shut: known && shut, lost: known ? lost : 0, tier: fieldTier(g, region), roomNow: known ? room : -1, built: room + lost * FIELD.room,
+    crowded: known && there > room, known,
+    cost: known && damaged ? fieldRepairCost(g, region) : 0,
+    why: !viewer ? 'Nobody to repair it.' : known ? whyNotFieldRepair(g, viewer, region) : `The field at ${r.name} is not in your hands.`,
+    undo: known && viewer !== null && viewer === g.human && g.flags[key('frc', region)] !== undefined && g.flags[key('frp', region)] === g.turn,
+    months: known ? months : 0,
+    repairing: known && g.flags[key('frp', region)] !== undefined,
+  };
 }
 
 // ---- What a card reads -----------------------------------------------------------------------------------------

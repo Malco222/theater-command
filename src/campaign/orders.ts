@@ -15,7 +15,7 @@
 // together, and a nation's special formations (the starred sign) count apart from plain corps of their kind. The
 // whole number forming at the place is the first thing its list says.
 
-import { ARSENAL } from './arsenal';
+import { ARSENAL, workLabel } from './arsenal';
 import { CIVIC } from './buildings';
 import { PRODUCTION } from './economy';
 import { agentAt } from './intel';
@@ -123,7 +123,8 @@ function lineOf(g: Game, b: Build, nat: string): OrderLine {
     label = 'fortifications';
   } else if (b.what === 'work') {
     sign = b.item ?? 'factory';
-    label = low((ARSENAL.works as unknown as Record<string, { label: string }>)[sign]?.label ?? 'works');
+    // (One switch-aware name: with airfields as targets a field level is a concrete airfield or a field strip.)
+    label = low(workLabel(g, sign, b.kind));
   } else {
     const line = CIVIC.lines.find((x) => x.id === b.item);
     label = line ? `${low(line.name)} building` : 'town building';

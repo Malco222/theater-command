@@ -27,7 +27,7 @@ import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kin
 
 export type Wing = 'ftr' | 'bmr';
 export type Hull = ShipClass | 'tp';
-export type Work = 'factory' | 'yard' | 'aa' | 'field' | 'strip';
+export type Work = 'factory' | 'yard' | 'aa' | 'field';
 
 interface WingSpec { label: string; count: number; cost: number; months: number; factories: number; blurb: string }
 interface HullSpec { label: string; count: number; cost: number; months: number; yard: number; blurb: string }
@@ -81,6 +81,19 @@ export function yardLevel(g: Game, r: Region): number {
 export const isCity = (r: Region): boolean => r.terrain === 'urban' || r.cap || r.fac > 0 || r.vp >= 2;
 
 const queued = (g: Game, nat: string, item: string, region: number): number => g.nations[nat].queue.filter((b) => b.what === 'work' && b.item === item && b.region === region).length;
+
+/** True for an order of a field strip (airfields as targets): a 'field' work marked kind 'strip'. */
+export const isStripBuild = (b: Build): boolean => b.what === 'work' && b.item === 'field' && (b as { kind?: string }).kind === 'strip';
+
+/**
+ * The name of a work as every reader shows it (the book, the plate, the card, the ledger, the news): release 1's
+ * label, except that with airfields as targets a level of 'field' is a "Concrete airfield", or a "Field strip" where
+ * its order is marked 'strip'.
+ */
+export function workLabel(g: Game, item: string, kind?: string): string {
+  if ((item === 'field' || item === 'strip') && fieldRules(g)) return kind === 'strip' || item === 'strip' ? ARSENAL.works.strip.label : 'Concrete airfield';
+  return (ARSENAL.works as unknown as Record<string, { label: string }>)[item]?.label ?? 'Works';
+}
 
 /** What guns and airfields cost a nation to man each month, as lines for its ledger. */
 export function worksUpkeep(g: Game, nat: string): LedgerLine[] {
@@ -576,7 +589,8 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     // Airfields as targets: two offers on the one counter of built levels. A field strip in a month, for fighters, on
     // bare ground or a strip; a concrete level in release 1's months and price, which makes a strip a full airfield.
     const now = r ? workLevel(g, 'field', r.id) : 0;
-    const next = now + (r ? queued(g, nat, 'field', r.id) + queued(g, nat, 'strip', r.id) : 0) + 1;
+    // (A strip is queued as a 'field' work with kind 'strip', so the one count covers both.)
+    const next = now + (r ? queued(g, nat, 'field', r.id) : 0) + 1;
     const mine = !r ? pick : r.ctrl !== nat ? 'That ground is not in your hands.' : null;
     const tier = r ? fieldTier(g, r.id) : 'none';
     for (const what of ['strip', 'field'] as const) {
@@ -623,6 +637,9 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = `${o.label} for ${r.name}`; }
   else if (group === 'ship') { b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
+  // Airfields as targets: a strip goes on the books as a level of 'field' marked 'strip' (one counter, one cap, and a
+  // save an older build loads still delivers it as a level of airfield).
+  if (key === 'work:strip') { b.item = 'field'; (b as { kind?: string }).kind = 'strip'; }
   n.queue.push(b);
   return b;
 }
@@ -719,7 +736,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
   }
   if (r.ctrl !== nat) return; // lost before the works were finished
   // Airfields as targets: a strip level adds to the field's built levels (and is counted as a strip's); a concrete level marks the field concrete.
-  if (what === 'strip') {
+  if (what === 'field' && isStripBuild(b) && fieldRules(g)) {
     if (workLevel(g, 'field', r.id) >= TOP) return;
     g.flags[`wk:field:${r.id}`] = workLevel(g, 'field', r.id) + 1;
     g.flags[`wk:strip:${r.id}`] = (g.flags[`wk:strip:${r.id}`] ?? 0) + 1;
@@ -728,7 +745,9 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
   }
   if (what === 'field') setConcrete(g, r.id);
   g.flags[`wk:${what}:${r.id}`] = Math.min(TOP, workLevel(g, what, r.id) + 1);
-  tell(what === 'aa' ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g, 'aa', r.id)}.` : `The airfields at ${r.name} are ready: level ${workLevel(g, 'field', r.id)}.`);
+  tell(what === 'aa' ? `The anti-aircraft guns at ${r.name} are in place: level ${workLevel(g, 'aa', r.id)}.`
+    : fieldRules(g) ? `The concrete airfield at ${r.name} is ready: level ${workLevel(g, 'field', r.id)}, serving ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft.`
+    : `The airfields at ${r.name} are ready: level ${workLevel(g, 'field', r.id)}.`);
 }
 
 // ---- The computer's use of it -----------------------------------------------------------------------
@@ -758,7 +777,7 @@ function aiAirfields(g: Game, nat: string): void {
   const n = g.nations[nat];
   const wait = AIRWAR.ai.basing.fields;
   if (!airWar(g) || wait === undefined || nat === g.human) return;
-  if (n.queue.some((b) => b.what === 'work' && (b.item === 'field' || b.item === 'strip'))) return;
+  if (n.queue.some((b) => b.what === 'work' && b.item === 'field')) return;
   const key = `bf:${nat}`;
   const bare = bareFront(g, nat);
   if (!bare.length) { delete g.flags[key]; return; }

@@ -55,7 +55,7 @@ export interface CardFigure { n: string; label: string }
 export interface CardReport { type: 'land' | 'sea' | 'air' | 'shore'; id: number }
 
 /** Something on order: a unit or a work, and where it will stand. */
-export interface MonthOrder { id: number; what: string; unit: boolean; mark: string; label: string; plural: string; name: string; region: number }
+export interface MonthOrder { id: number; what: string; unit: boolean; mark: string; label: string; plural: string; name: string; region: number; /** The work's sign ('field', 'aa'...): a field is told by it, not its label, which the airfield switch renames. */ sign?: string }
 
 /** What an interface keeps as the player's month opens: where each list stood and who held what; and, as he ends it, what was on order. */
 export interface MonthMark {
@@ -404,7 +404,7 @@ function buildSign(text: string): string {
 /** What the player has on order. An interface keeps it in the mark as he ends his month. */
 export function monthOrders(g: Game, viewer: string | null = g.human): MonthOrder[] {
   if (!viewer || !g.nations[viewer]) return [];
-  return cityOrders(g, viewer).filter((c) => !c.spied).flatMap((c) => c.lines.map((l) => ({ id: l.id, what: l.what, unit: l.unit, mark: l.mark, label: l.label, plural: l.plural, name: l.name, region: l.stands })));
+  return cityOrders(g, viewer).filter((c) => !c.spied).flatMap((c) => c.lines.map((l) => ({ id: l.id, what: l.what, unit: l.unit, mark: l.mark, label: l.label, plural: l.plural, name: l.name, region: l.stands, sign: l.sign })));
 }
 
 /** What an interface keeps as the player's month opens. */
@@ -1163,7 +1163,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (o.what === 'corps' ? !c : g.regions[o.region]?.ctrl !== me) continue;
     // Guns, airfields and works are not counted: one order is a level of them at a place (ruling 133(g): never
     // '1 anti-aircraft guns finished'). The line says what is ready, and the place and its level stand under it.
-    const item = o.what === 'work' ? (o.label === 'anti-aircraft guns' ? 'aa' : o.label === 'airfields' ? 'field' : null) : null;
+    const item = o.what === 'work' ? (o.label === 'anti-aircraft guns' ? 'aa' : o.label === 'airfields' || o.sign === 'field' ? 'field' : null) : null;
     if (!o.unit && (item || o.label === 'fortifications')) {
       const level = item ? workLevel(g, item, o.region) : 0;
       const town = g.regions[o.region] ? townName(g.regions[o.region]) : '';

@@ -490,7 +490,8 @@ export function prizeMarks(g: Game): PrizeMark[] {
     const burning: PrizeKind[] = [], seized: PrizeKind[] = [];
     for (const kind of PRIZE_KINDS) {
       if (!hasPrize(g, r, kind)) continue;
-      if (kind !== 'junction' && prizeOut(g, r, kind) > 0) burning.push(kind);
+      // (Airfields as targets: a shut field shows its craters, not a burning prize as well.)
+      if (kind !== 'junction' && prizeOut(g, r, kind) > 0 && !(kind === 'airfield' && fieldRules(g))) burning.push(kind);
       if (prizeHolder(g, r, kind) !== r.ctrl) seized.push(kind);
     }
     if (burning.length || seized.length) out.push({ region: r.id, by: seized.length ? fieldCtrl(g, r) : null, burning, seized });
