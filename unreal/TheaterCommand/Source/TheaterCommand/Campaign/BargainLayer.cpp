@@ -1562,10 +1562,11 @@ namespace BargainLayer
 					S.bPlaced = false;
 				}
 
-				// What our own plates and the seals keep off: the frame's pieces, and the card while it is shown (the look
-				// review's finding 2: they step off it as off any frame piece; it is left out of S.Frame for its placing).
+				// What our own plates and the seals keep off: the frame's pieces, and the card and its seal's box on its corner
+				// while it is shown (the look review's finding 2 and the review after the passes, finding 2: they step off
+				// them as off any frame piece; the card is left out of S.Frame for its placing).
 				const bool bCardShown = CardShown();
-				Bargains::AvoidOf(S.Frame, bCardShown, S.Placed.Card, S.Avoid);
+				Bargains::AvoidOf(S.Frame, bCardShown, S.Placed.Card, Px, S.Avoid);
 
 				// Our own plates at the senders' capitals the town plates left without one (none from far off).
 				for (FPlateLaid& Plate : S.Plates)
@@ -1607,6 +1608,9 @@ namespace BargainLayer
 						Seal.bOnCard = true;
 						Seal.At = FVector2D(Corner.X, Corner.Y);
 						S.CardSeal = Slot;
+						// (laid as any seal is, and first, being the look's first: the others keep SealApart from it, so none
+						// stands on its overhang, where the card draws this seal on top but the other's spot would take the press)
+						S.Laid.push_back(Corner);
 						continue;
 					}
 					const int32 Row = S.Look.Seals[static_cast<size_t>(Slot)].Row;
@@ -1965,7 +1969,7 @@ namespace BargainLayer
 		S.PlateBoxes.Reserve(64);
 		S.Frame.reserve(32);
 		S.TownPlates.reserve(64);
-		S.Avoid.reserve(32 + 1 + 64); // (the frame, the card, the plates)
+		S.Avoid.reserve(32 + 2 + 64); // (the frame, the card and its seal, the plates)
 		S.Laid.reserve(Impl::SealSlots);
 		return SNew(Impl::SBargainLayer, Player, MoveTemp(KeepOffOf), MoveTemp(PlatesOf));
 	}

@@ -2032,12 +2032,13 @@ namespace Bargains
 		return false;
 	}
 
-	void AvoidOf(const std::vector<FRect>& Frame, bool bCardShown, const FRect& Card, std::vector<FRect>& Out)
+	void AvoidOf(const std::vector<FRect>& Frame, bool bCardShown, const FRect& Card, double Px, std::vector<FRect>& Out)
 	{
 		Out.assign(Frame.begin(), Frame.end());
 		if (bCardShown)
 		{
 			Out.push_back(Card);
+			Out.push_back(SealBox(CardSealAt(Card), Px)); // (the seal on its corner, with its overhang past the card's top and right)
 		}
 	}
 

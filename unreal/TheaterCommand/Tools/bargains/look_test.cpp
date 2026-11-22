@@ -1782,18 +1782,26 @@ namespace
 
 	/**
 	 * The look review's finding 2: while the card is shown, the other seals and our own plates step off it as off any frame
-	 * piece (AvoidOf adds its rect to what they keep off); while it is not, they keep off the frame alone, as before.
+	 * piece (AvoidOf adds its rect to what they keep off, and, since the review after the passes, finding 2, its seal's box
+	 * on its corner); while it is not, they keep off the frame alone, as before.
 	 */
 	void TestAvoidCard()
 	{
 		const std::vector<FRect> Frame = { { 0, 0, 1440, 52 }, { 0, 750, 1440, 150 }, { 990, 70, 430, 672 } };
 		const FRect Card{ 290, 425, 230, 190 }; // (where preview-card-right's card stands, right of Lisbon)
 		std::vector<FRect> Avoid;
-		AvoidOf(Frame, false, Card, Avoid);
+		AvoidOf(Frame, false, Card, 1.0, Avoid);
 		CHECK(Avoid.size() == Frame.size());
-		AvoidOf(Frame, true, Card, Avoid);
-		AvoidOf(Frame, true, Card, Avoid); // (refilled each frame, never added to)
-		CHECK(Avoid.size() == Frame.size() + 1 && Near(Avoid.back().X, Card.X) && Near(Avoid.back().Y, Card.Y) && Near(Avoid.back().W, Card.W) && Near(Avoid.back().H, Card.H));
+		AvoidOf(Frame, true, Card, 1.0, Avoid);
+		AvoidOf(Frame, true, Card, 1.0, Avoid); // (refilled each frame, never added to)
+		CHECK(Avoid.size() == Frame.size() + 2 && Near(Avoid[Frame.size()].X, Card.X) && Near(Avoid[Frame.size()].Y, Card.Y) && Near(Avoid[Frame.size()].W, Card.W) && Near(Avoid[Frame.size()].H, Card.H));
+		{
+			const FRect Seal = SealBox(CardSealAt(Card), 1.0);
+			CHECK(Near(Avoid.back().X, Seal.X) && Near(Avoid.back().Y, Seal.Y) && Near(Avoid.back().W, Seal.W) && Near(Avoid.back().H, Seal.H));
+			AvoidOf(Frame, true, Card, 1.08, Avoid);
+			const FRect Big = SealBox(CardSealAt(Card), 1.08);
+			CHECK(Avoid.size() == Frame.size() + 2 && Near(Avoid.back().X, Big.X) && Near(Avoid.back().W, Big.W) && Near(Avoid.back().H, Big.H));
+		}
 		for (size_t K = 0; K < Frame.size(); ++K)
 		{
 			CHECK(Near(Avoid[K].X, Frame[K].X) && Near(Avoid[K].W, Frame[K].W));
@@ -1803,23 +1811,49 @@ namespace
 		const FPt Capital{ 300, 640 };
 		const std::vector<FPt> NoSeals;
 		FPt At;
-		AvoidOf(Frame, true, Card, Avoid);
+		AvoidOf(Frame, true, Card, 1.0, Avoid);
 		CHECK(SealAt(Capital, 1.0, Frame, Avoid, NoSeals, At) && Near(At.X, Capital.X + SealOffsets[2].X) && Near(At.Y, Capital.Y + SealOffsets[2].Y) && !Card.Overlaps(SealBox(At, 1.0)));
-		AvoidOf(Frame, false, Card, Avoid);
+		AvoidOf(Frame, false, Card, 1.0, Avoid);
 		CHECK(SealAt(Capital, 1.0, Frame, Avoid, NoSeals, At) && Near(At.X, Capital.X) && Near(At.Y, Capital.Y + SealOffsets[0].Y) && Card.Overlaps(SealBox(At, 1.0)));
 		// Our own plate under the card is not drawn while the card is shown; with the card shut it is, as before.
 		FOwnPlate Own;
 		LayOwnPlate("Madrid", "1 division abroad, Leningrad", FPt{ 400, 480 }, KitMeasure, 1.0, Own);
 		const std::vector<FRect> NoPlates;
 		CHECK(Card.Overlaps(Own.Plate));
-		AvoidOf(Frame, true, Card, Avoid);
+		AvoidOf(Frame, true, Card, 1.0, Avoid);
 		CHECK(!OwnPlateShown(9000.0, Own.Plate, NoPlates, Avoid));
-		AvoidOf(Frame, false, Card, Avoid);
+		AvoidOf(Frame, false, Card, 1.0, Avoid);
 		CHECK(OwnPlateShown(9000.0, Own.Plate, NoPlates, Avoid));
 		// (a plate clear of the card stays, card or no card)
 		LayOwnPlate("Madrid", "1 division abroad, Leningrad", FPt{ 600, 480 }, KitMeasure, 1.0, Own);
-		AvoidOf(Frame, true, Card, Avoid);
+		AvoidOf(Frame, true, Card, 1.0, Avoid);
 		CHECK(!Card.Overlaps(Own.Plate) && OwnPlateShown(9000.0, Own.Plate, NoPlates, Avoid));
+		// The review after the passes, finding 2: a capital just right of the open card's top-right corner. Its seal's first
+		// try misses the card but stands on the card's seal's overhang, its middle 15.8 px from that seal's (SealApart is
+		// 20), where the card draws its own seal on top and the other's spot would take the press. With the card's seal laid
+		// first, as the layer lays it, the other steps to its next try, 39.3 px off; in SealAt's fallback too; and AvoidOf's
+		// box for the card's seal keeps it off by itself.
+		for (const double Px : { 1.0, 1.08 })
+		{
+			const FRect Open{ 400, 300, 260, 180 };
+			const FPt Corner = CardSealAt(Open);
+			const FPt Beside{ 675, 329 };
+			const FPt First{ Beside.X + SealOffsets[0].X * Px, Beside.Y + SealOffsets[0].Y * Px };
+			const FPt Second{ Beside.X + SealOffsets[1].X * Px, Beside.Y + SealOffsets[1].Y * Px };
+			const std::vector<FRect> NoFrame, Everything = { FRect{ 0, 0, 1440, 900 } };
+			std::vector<FRect> Keep = { Open };
+			std::vector<FPt> Seals;
+			// (as it was: the card kept off, its seal not laid)
+			CHECK(SealAt(Beside, Px, NoFrame, Keep, Seals, At) && Near(At.X, First.X) && Near(At.Y, First.Y) && !Open.Overlaps(SealBox(At, Px)));
+			CHECK(SealBox(At, Px).Overlaps(SealBox(Corner, Px)) && Distance(At, Corner) < SealApart * Px);
+			Seals = { Corner };
+			CHECK(SealAt(Beside, Px, NoFrame, Keep, Seals, At) && Near(At.X, Second.X) && Near(At.Y, Second.Y) && !Open.Overlaps(SealBox(At, Px)));
+			CHECK(Distance(At, Corner) >= SealApart * Px && !SealBox(At, Px).Overlaps(SealBox(Corner, Px)));
+			CHECK(SealAt(Beside, Px, NoFrame, Everything, Seals, At) && Near(At.X, Second.X) && Near(At.Y, Second.Y));
+			Seals.clear();
+			AvoidOf(NoFrame, true, Open, Px, Keep);
+			CHECK(SealAt(Beside, Px, NoFrame, Keep, Seals, At) && Near(At.X, Second.X) && Near(At.Y, Second.Y));
+		}
 	}
 
 	/**
@@ -1956,7 +1990,7 @@ namespace
 		std::vector<FPt> Laid;
 		Laid.reserve(8);
 		std::vector<FRect> Avoid;
-		Avoid.reserve(Frame.size() + 1);
+		Avoid.reserve(Frame.size() + 2); // (the frame, the card and its seal: as the layer reserves them)
 		const FRow& Por = RowOf(Book, "por-wolfram");
 		const FRow& Ore = RowOf(Book, "esp-ore");
 		FLaneShape Lane;
@@ -2003,9 +2037,13 @@ namespace
 			const FPlaced Placed = PlaceCard(In);
 			Sum += Placed.Card.X + Placed.Intrusion + KeepOffIntrusion(Placed.Card, In);
 			Laid.clear();
+			if ((Frame_ & 1) != 0)
+			{
+				Laid.push_back(CardSealAt(Placed.Card)); // (the open card's seal, laid first, as the layer lays it)
+			}
 			SealAt(In.Capital, 1.0, Frame, Plates, Laid, At);
 			Laid.push_back(At);
-			AvoidOf(Frame, (Frame_ & 1) != 0, Placed.Card, Avoid);
+			AvoidOf(Frame, (Frame_ & 1) != 0, Placed.Card, 1.0, Avoid);
 			Sum += SealAt(FPt{ 700, 400 }, 1.0, Frame, Avoid, Laid, At) ? At.X : 0.0;
 			Sum += OwnPlateShown(9000.0, Plates[0], Plates, Avoid) ? 1.0 : 0.0;
 			Sum += ExitTag(OnScreen, In.Screen, Frame, FPt{ 50, 16 }, 1.0, Tag) ? Tag.X : 0.0;

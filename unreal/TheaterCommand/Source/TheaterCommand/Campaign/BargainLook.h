@@ -867,18 +867,22 @@ namespace Bargains
 
 	/**
 	 * What the layer's own plates and the seals step off before the town plates are added (the look review's finding 2):
-	 * the frame's pieces, and the bid card's rect while the card is shown, so that they step off the card as off any
-	 * frame piece (the card's own rect is kept out of the frame for its placing, and the card is opaque: a seal or plate
-	 * under it could be neither seen nor pressed). Out is refilled; nothing is allocated once it has grown.
+	 * the frame's pieces, and while the card is shown the bid card's rect and its seal's box on its top-right corner
+	 * (SealBox at CardSealAt, at Px), so that they step off the card and the seal's overhang as off any frame piece (the
+	 * card's own rect is kept out of the frame for its placing, and the card is opaque and paints its seal over the
+	 * layer: a seal or plate under either could be neither seen nor pressed; the review after the passes, finding 2).
+	 * Out is refilled; nothing is allocated once it has grown.
 	 */
-	void AvoidOf(const std::vector<FRect>& Frame, bool bCardShown, const FRect& Card, std::vector<FRect>& Out);
+	void AvoidOf(const std::vector<FRect>& Frame, bool bCardShown, const FRect& Card, double Px, std::vector<FRect>& Out);
 
 	/**
 	 * The open card's seal while its card is shown (the art director's call 6): it leaves the capital, so that the lane's
 	 * end there shows, and its disc's middle stands on the card's top-right corner, where it is the card's close (a
 	 * press on it shuts the card, as a press on it at the capital did). When the card shuts it is back at its capital.
 	 * Only the open card's seal moves. Its box (SealBox) reaches SealMid x Px over the card's top and right, inside the
-	 * card's KeepOff, so it stays on the screen and off the panels; it is clear of the ring and of every button.
+	 * card's KeepOff, so it stays on the screen and off the panels; it is clear of the ring and of every button. It is
+	 * laid first (the look's first seal), so the other seals keep SealApart from it as from any seal laid, and its box is
+	 * in what they step off (AvoidOf).
 	 */
 	FPt CardSealAt(const FRect& Card);
 
