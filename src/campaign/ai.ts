@@ -27,7 +27,7 @@ import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, 
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
-import { alongside, bookAttacks, bookFleets, bookKept, bookReckoning, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
+import { alongside, bookAttacks, bookFleets, bookKept, bookReckoning, bookSails, bookStations, bookedAhead, ceilinged, goesWith, ridersOf } from './stations';
 import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, hopMade, hopsRead, offFront, onFront, planWaits, plansHold, plansKeep, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
@@ -1924,8 +1924,11 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
     if (!c.dead && !c.stay) c.hold = false;
   }
   const waits = (c: Corps): boolean => g.flags[`st:hopUp:${c.id}`] !== undefined;
+  // (The far side, at the stops that keep the book: nor a corps the book names in a dated attack still to come. The
+  // design director's ruling of 03:59Z, 22 November 2026; stations.ts, bookedAhead.)
+  const booked = farOn(g);
   const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.airborne && !c.town && c.joint === undefined && (!c.hold || waits(c))
-    && c.supplied && c.str >= 0.7 * (c.full ?? 1) && c.ap >= c.apMax && !planned.has(c) && !onFront(c);
+    && c.supplied && c.str >= 0.7 * (c.full ?? 1) && c.ap >= c.apMax && !planned.has(c) && !onFront(c) && !(booked && bookedAhead(g, c));
   // The harbours it holds on the Pacific's ground, and who stands ready in each (the weakest first). Nobody is taken
   // from a harbour anywhere else: the Pacific's landings are made by the forces sent there.
   const quays = new Map<number, Corps[]>();

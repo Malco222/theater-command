@@ -28,6 +28,10 @@ const TULAGI = 'Naval landing force (Kure 3rd, for Tulagi)';
 const AIRFIELD = 'Naval landing force (the Guadalcanal airfield party)';
 
 const attacks = (): Attack[] => stations()!.attacks!;
+// (British Borneo's landings are the book's too, laid after the ring's: the design director's rulings of 03:59Z and
+// 04:06Z, 22 November 2026. They are read in tests/far-borneo-book.test.ts and are no rows of the ring.)
+const BORNEO = ['Miri and Seria', 'Brunei', 'Kuching', 'Jesselton', 'Sandakan'];
+const ring = (): Attack[] => attacks().filter((a) => a.sea && !a.name.startsWith('Java') && !BORNEO.includes(a.name));
 const attack = (name: string): Attack => attacks().find((a) => a.name === name)!;
 const index = (name: string): number => attacks().findIndex((a) => a.name === name);
 
@@ -72,7 +76,7 @@ const made = (name: string): Told[] => told.filter((t) => t.name === name && t.w
 
 describe("Japan's second ring by the book (rider b599 (i) to ruling 234)", () => {
   it("lays the historian's rows: each landing's month, force, port and met figures, and the table runs to July 1942", () => {
-    const rows = attacks().filter((a) => a.sea && !a.name.startsWith('Java'));
+    const rows = ring();
     expect(rows.map((a) => [a.month, a.name, a.at, a.force, a.from, a.met ?? null])).toEqual([
       [28, 'Wake: the first try', ['Wake'], [MAIZURU], ['Kwajalein'], [0.03, 0.035]],
       [28, 'Wake: the taking', ['Wake'], [MAIZURU], ['Kwajalein'], [0.1, 0.035]],
@@ -320,7 +324,7 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
   });
 
   it("carries the historian's mark on each dated landing: Wake met the place's works, Rabaul and Ambon one row's, the rest none", () => {
-    const marks = attacks().filter((a) => a.sea && !a.name.startsWith('Java')).map((a) => [a.name, a.works ?? null]);
+    const marks = ring().map((a) => [a.name, a.works ?? null]);
     expect(marks).toEqual([
       ['Wake: the first try', true], ['Wake: the taking', true],
       ['Menado', []], ['Tarakan', []], ['Rabaul', ['Lark Force (2/22nd Battalion)']], ['Kendari', []], ['Balikpapan', []],
