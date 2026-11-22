@@ -39,5 +39,15 @@ public class TheaterCommand : ModuleRules
 
 		// The air battle's master limiter (mix.json buses.master.limiterCeilingDb): the engine's own submix limiter.
 		PrivateDependencyModuleNames.Add("AudioMixer");
+
+		// Meshes made while the game runs, for instancing: the sea battle's sailors (a pose bank), as the ground battle's
+		// hedges, trees and men. (The ground battle's patch adds the same two: each added once, whichever comes first.)
+		foreach (string Module in new string[] { "MeshDescription", "StaticMeshDescription" })
+		{
+			if (!PrivateDependencyModuleNames.Contains(Module))
+			{
+				PrivateDependencyModuleNames.Add(Module);
+			}
+		}
 	}
 }

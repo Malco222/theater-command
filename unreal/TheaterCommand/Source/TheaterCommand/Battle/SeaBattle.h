@@ -12,12 +12,14 @@ class FJsonObject;
 class UAudioComponent;
 class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
+class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
+class UStaticMesh;
 class UTexture2D;
 class SSeaBattleScreen;
 class SWidget;
@@ -236,6 +238,36 @@ private:
 	/** The near wreck mesh's shape as last made: its points' count, then its triangles (DrawWrecks sends only the points
 	 * again while it holds). */
 	TArray<int32> WreckNearShape;
+	/**
+	 * The men in the water drawn as the sailor files' men (Battle/SeaSailors, DrawWrecks): the nearest few skinned afresh
+	 * every frame, each a mesh of his own put where he is (SailorLive, and whom each shows and what its triangles and
+	 * colours were made for); the rest as copies of a pose bank's meshes, one a file, dress, act, pose, level and hand,
+	 * made as first needed (SailorCopies by SailorCopyOf's key, -2 where it cannot be made), each man's copy and slot, the
+	 * slots put away to be used again, and the copies moved this frame.
+	 */
+	UPROPERTY()
+	TArray<TObjectPtr<UProceduralMeshComponent>> SailorLive;
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> SailorCopies;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> SailorMeshes;
+	struct FLiveSailor
+	{
+		int32 Man = 0;
+		int64 Made = -1;
+	};
+	TArray<FLiveSailor> SailorLiveOf;
+	struct FBankedSailor
+	{
+		int32 Copy = -1, Slot = -1;
+		FVector At = FVector::ZeroVector;
+		double Yaw = 0.0;
+		bool bSeen = false;
+	};
+	TMap<int32, FBankedSailor> SailorBanked;
+	TMap<int64, int32> SailorCopyOf;
+	TArray<TArray<int32>> SailorFree;
+	TArray<uint8> SailorDirty;
 	TMap<FString, int32> ShapeOf; // a model's name to its shape's place in Shapes
 	struct FPlaneShape
 	{
@@ -323,6 +355,10 @@ private:
 	void DrawMarks();
 	/** Where ships went down: rafts, boats, wreckage and the men in the water (SeaShow's Floats and Men). */
 	void DrawWrecks();
+	/** The pose bank's copies for one mesh (SeaParts::SailorKey), made if Builds allows (-1 not yet, -2 never). */
+	int32 SailorCopy(int64 Key, int32 File, int32 Dress, int32 What, int32 Pose, int32 Lod, bool bMirror, bool bOiled, int32& Builds);
+	/** A banked man's copy put away (shrunk where he was, its slot kept for the next). */
+	void SailorAway(FBankedSailor& Man);
 	void RunTrails();
 	/** The show played through on its own once (it is the same show every time), to find its moments: the shots. */
 	void PlanShots();

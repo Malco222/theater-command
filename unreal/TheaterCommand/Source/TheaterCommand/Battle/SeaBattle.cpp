@@ -3,6 +3,7 @@
 #include "Battle/AirStage.h"
 #include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
+#include "Battle/SeaSailors.h"
 #include "Battle/SeaShow.h"
 #include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
@@ -18,12 +19,14 @@
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -36,6 +39,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "MeshDescription.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
@@ -46,14 +50,17 @@
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
+#include "StaticMeshAttributes.h"
 #include "TheaterCommand.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "Widgets/Layout/SDPIScaler.h"
 
 #include <cctype>
+#include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 /** What the scene keeps of the action: the recording, the playback core, and the battle's clock. */
 struct FSeaBattleState
@@ -64,6 +71,11 @@ struct FSeaBattleState
 	size_t Taken = 0;       // the recording's views handed to the show so far
 	double BattleT = 0.0;   // the battle's clock now (seconds)
 	double BeginT = 0.0, EndT = 0.0;
+	/** The sailor files read (Content/Models/Soldiers/soldier_<ARMY>_sailor.json), and the navies' dresses over them as
+	 * asked (SeaParts::DressFor): by army, file and variant, their place in Dresses. */
+	SeaSailors::Crew Crew;
+	std::vector<SeaSailors::Dress> Dresses;
+	std::map<std::string, int> DressAt;
 };
 
 namespace SeaParts
@@ -334,7 +346,18 @@ namespace SeaParts
 	 * every WreckFarEvery seconds; a man drawn whole (head, jacket, limbs) where he is 7 pixels or more across, the
 	 * MostDetailedMen of them at the most, the rest as stones in their colours. */
 	static constexpr double LiveReach = 350.0, WreckFarEvery = 0.5;
-	static constexpr int32 MostDetailedMen = 120;
+	static constexpr int32 MostDetailedMen = 240;
+	/**
+	 * The men drawn whole as the sailor files' men (Battle/SeaSailors), where those are read: the nearest LiveMost of them
+	 * LiveLeast pixels or more (his head and shoulders' 0.45 m across) skinned afresh every frame, the near level where
+	 * NearLodFrom or more; the rest as copies of the pose bank's meshes, the mid level where MidLodFrom or more, else the
+	 * far; SailorBuilds of the bank's meshes made a frame at the most (a man whose mesh waits is a stand-in meanwhile), and
+	 * LiveNewMost live meshes made afresh (a new man, level, dress or hand: after a cut, the rest are the bank's copies for a
+	 * frame or three). An oar's blade OarOutboard metres out from its rowlock (a whaleboat's 14 to 15 foot oar, with the
+	 * clip's handle to rowlock).
+	 */
+	static constexpr int32 LiveMost = 10, SailorBuilds = 4, LiveNewMost = 3;
+	static constexpr double LiveLeast = 30.0, NearLodFrom = 70.0, MidLodFrom = 14.0, OarOutboard = 3.6;
 	/** The most men in the water with a ring of white water about them (DrawMarks): the nearest. */
 	static constexpr int32 MostFoamRings = 240;
 	/** How far astern a ship's foam lasts (metres): three of her lengths, never under 300 m nor over 800 m (the art
@@ -751,9 +774,12 @@ namespace SeaParts
 			Floor.Add(Fr.At(U * 0.5 * Long, FMath::Max(BoatHalf(U, Beam) - 0.05, 0.0) * 0.7, 0.12));
 		}
 		M.Face(Floor.GetData(), Floor.Num(), Fr.Z, Shaded(Wood, 0.75));
-		for (const double U : { -0.55, -0.2, 0.15, 0.5 })
+		// (her five thwarts under her oarsmen: the show's rows 2 to 6 of twelve, two abreast, from 0.38 of her length aft
+		// of her middle to as far forward; their tops where the sailors sit, SeaSailors::ThwartTop)
+		for (int32 Row = 2; Row <= 6; ++Row)
 		{
-			M.Box(Fr, U * 0.5 * Long, 0.0, 0.42, 0.24, 2.0 * FMath::Max(BoatHalf(U, Beam) - 0.07, 0.1), 0.05, Wood, Shaded(Wood, 1.08));
+			const double U = 2.0 * (-0.38 + 0.76 * Row / 11.0);
+			M.Box(Fr, U * 0.5 * Long, 0.0, SeaSailors::ThwartTop - 0.025, 0.24, 2.0 * FMath::Max(BoatHalf(U, Beam) - 0.07, 0.1), 0.05, Wood, Shaded(Wood, 1.08));
 		}
 	}
 
@@ -929,6 +955,143 @@ namespace SeaParts
 			break;
 		}
 		}
+	}
+
+	/**
+	 * The dress of a navy's sailors drawn with sailor file File (Battle/SeaSailors), variant 0 or 1, as its place in
+	 * S.Dresses: a navy's own file in its own colours, its variant 1 the file's other dress (the American officer's and
+	 * chief's khaki, the Japanese grey-green); another navy's men, until their own file is made, in the American's rig in
+	 * their own working dress, as the stand-ins wear it (SailorPaint): the Royal Navy's blue overalls, dark cap and grey
+	 * belt; the German, Italian and Soviet navies' blue-grey; a Japanese sailor's white or green.
+	 */
+	static int32 DressFor(FSeaBattleState& S, const std::string& Nation, int32 File, int32 Variant)
+	{
+		const std::string Army = SeaSailors::ArmyOf(Nation);
+		const std::string Key = Army + "/" + std::to_string(File) + "/" + std::to_string(Variant);
+		const auto Found = S.DressAt.find(Key);
+		if (Found != S.DressAt.end())
+		{
+			return Found->second;
+		}
+		SeaSailors::Dress D;
+		const bool bSecond = Variant == 1;
+		if (S.Crew.Army(File) == Army)
+		{
+			if (bSecond)
+			{
+				S.Crew.AltDress(File, D);
+			}
+		}
+		else if (Army == "JAP")
+		{
+			D.Put(SeaSailors::Shirt, bSecond ? 0x767454u : 0xC4C0B2u);
+			D.Put(SeaSailors::Trousers, bSecond ? 0x6A684Cu : 0xBAB6A8u);
+			D.Put(SeaSailors::Hat, bSecond ? 0x1E202Cu : 0xD6D4CCu);
+			D.Put(SeaSailors::Kapok, 0x948660u);
+		}
+		else if (Army == "GBR")
+		{
+			D.Put(SeaSailors::Shirt, bSecond ? 0xAAB0B6u : 0x2C364Au);
+			D.Put(SeaSailors::Trousers, 0x282E3Eu);
+			D.Put(SeaSailors::Hat, 0x1E2028u);
+			D.Put(SeaSailors::Kapok, 0x606462u);
+		}
+		else if (Army == "USA")
+		{
+			D.Put(SeaSailors::Shirt, bSecond ? 0xA6966Cu : 0x768EAAu);
+			D.Put(SeaSailors::Trousers, 0x303A54u);
+			D.Put(SeaSailors::Hat, 0xE2E2DCu);
+			D.Put(SeaSailors::Kapok, 0xA49468u);
+		}
+		else
+		{
+			D.Put(SeaSailors::Shirt, bSecond ? 0x969896u : 0x2E3442u);
+			D.Put(SeaSailors::Trousers, 0x2A2E3Au);
+			D.Put(SeaSailors::Hat, 0x1C1E28u);
+			D.Put(SeaSailors::Kapok, Army == "GER" ? 0x7C7A6Cu : 0x968862u);
+		}
+		S.Dresses.push_back(D);
+		const int32 Index = static_cast<int32>(S.Dresses.size()) - 1;
+		S.DressAt[Key] = Index;
+		return Index;
+	}
+
+	/** A pose bank mesh's key: its file, dress, act, pose, level, whether drawn left for right and whether black with oil. */
+	static int64 SailorKey(int32 File, int32 Dress, int32 What, int32 Pose, int32 Lod, bool bMirror, bool bOiled)
+	{
+		return ((((((static_cast<int64>(File) * 64 + Dress) * 16 + What) * 16 + Pose) * 4 + Lod) * 2 + (bMirror ? 1 : 0)) * 2 + (bOiled ? 1 : 0));
+	}
+
+	/**
+	 * A sailor of the pose bank (one file in one dress, one act's pose, one level of detail) as a mesh of its own on the
+	 * wreckage's material, for instancing: his own axes (x forward, y to his right, z up: the same hand as Unreal's) as the
+	 * mesh's, metres to Unreal's units; colours as sRGB bytes, as the ground scene's bank keeps them. bMirror: drawn left
+	 * for right (an oarsman on her starboard side), each triangle turned the other way round so it faces out still. Null
+	 * where the points, colours and triangles do not agree.
+	 */
+	static UStaticMesh* SailorMesh(UObject* Owner, const FName& Name, const std::vector<float>& At, const std::vector<float>& Facing, const std::vector<uint8_t>& Rgb,
+		const std::vector<uint32_t>& Triangles, bool bMirror, UMaterialInterface* Ink, double U)
+	{
+		const int32 Count = static_cast<int32>(At.size() / 3);
+		if (!Ink || Count <= 0 || Facing.size() != At.size() || Rgb.size() != At.size() || Triangles.empty())
+		{
+			return nullptr;
+		}
+		FMeshDescription D;
+		FStaticMeshAttributes Attributes(D);
+		Attributes.Register();
+		auto Positions = Attributes.GetVertexPositions();
+		auto Normals = Attributes.GetVertexInstanceNormals();
+		auto Tangents = Attributes.GetVertexInstanceTangents();
+		auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+		auto Colours = Attributes.GetVertexInstanceColors();
+		auto Uvs = Attributes.GetVertexInstanceUVs();
+		Uvs.SetNumChannels(1);
+		const FPolygonGroupID Group = D.CreatePolygonGroup();
+		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ink");
+		D.ReserveNewVertices(Count);
+		D.ReserveNewVertexInstances(Count);
+		D.ReserveNewTriangles(static_cast<int32>(Triangles.size() / 3));
+		const float Hand = bMirror ? -1.0f : 1.0f;
+		TArray<FVertexInstanceID> Corners;
+		Corners.SetNum(Count);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const size_t K = static_cast<size_t>(I) * 3;
+			const FVertexID Vertex = D.CreateVertex();
+			Positions[Vertex] = FVector3f(At[K] * U, Hand * At[K + 1] * U, At[K + 2] * U);
+			const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+			const FVector3f Normal = FVector3f(Facing[K], Hand * Facing[K + 1], Facing[K + 2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
+			Normals[Corner] = Normal;
+			// (no normal map: any tangent across the normal will do)
+			const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
+			Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
+			Signs[Corner] = 1.0f;
+			Colours[Corner] = FVector4f(FLinearColor(FColor(Rgb[K], Rgb[K + 1], Rgb[K + 2], 255)));
+			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			Corners[I] = Corner;
+		}
+		for (size_t K = 0; K + 2 < Triangles.size(); K += 3)
+		{
+			const uint32_t A = Triangles[K], B = Triangles[bMirror ? K + 2 : K + 1], C = Triangles[bMirror ? K + 1 : K + 2];
+			if (A >= static_cast<uint32_t>(Count) || B >= static_cast<uint32_t>(Count) || C >= static_cast<uint32_t>(Count))
+			{
+				return nullptr;
+			}
+			const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(A)], Corners[static_cast<int32>(B)], Corners[static_cast<int32>(C)] };
+			D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		TArray<const FMeshDescription*> Levels;
+		Levels.Add(&D);
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levels, Params);
+		return Made;
 	}
 
 	/** The haze at the horizon as the screen shows it, as pixel / 255 (not linearised): the band just above the sea in
@@ -1299,6 +1462,33 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		(*Made)->bUseAsyncCooking = false;
 		(*Made)->RegisterComponent();
 	}
+	// The sailor files (the soldiers thread's: Content/Models/Soldiers/soldier_<ARMY>_sailor.json, the soldiers' man on
+	// their 32 bones with the clips of a man going over the side and in the water): the men drawn whole are their men
+	// where one is read, each navy in its own file or, until that is made, in the American's rig in its own dress. (The
+	// soldiers thread names the Royal Navy's file UK; a navy's first file read is its own.)
+	TSet<FString> NaviesRead;
+	for (const TPair<const TCHAR*, const TCHAR*>& Navy : { TPair<const TCHAR*, const TCHAR*>(TEXT("USA"), TEXT("USA")), TPair<const TCHAR*, const TCHAR*>(TEXT("JAP"), TEXT("JAP")),
+			 TPair<const TCHAR*, const TCHAR*>(TEXT("GBR"), TEXT("UK")), TPair<const TCHAR*, const TCHAR*>(TEXT("GBR"), TEXT("GBR")), TPair<const TCHAR*, const TCHAR*>(TEXT("GER"), TEXT("GER")),
+			 TPair<const TCHAR*, const TCHAR*>(TEXT("ITA"), TEXT("ITA")), TPair<const TCHAR*, const TCHAR*>(TEXT("SOV"), TEXT("SOV")), TPair<const TCHAR*, const TCHAR*>(TEXT("SOV"), TEXT("USSR")) })
+	{
+		const FString Army(Navy.Key);
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Models/Soldiers") / FString::Printf(TEXT("soldier_%s_sailor.json"), Navy.Value);
+		FString Json;
+		if (NaviesRead.Contains(Army) || !FPaths::FileExists(Path) || !FFileHelper::LoadFileToString(Json, *Path))
+		{
+			continue;
+		}
+		std::string Why;
+		if (S.Crew.AddFile(Narrow(Army), Narrow(Json), Why))
+		{
+			NaviesRead.Add(Army);
+		}
+		else
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Sea battle: %s: %s (that navy's men drawn as stand-ins)"), *Path, *Wide(Why));
+		}
+	}
+	UE_LOG(LogTheater, Display, TEXT("Sea battle: %d sailor files read%s."), S.Crew.Files(), S.Crew.Files() == 0 ? TEXT(" (the men in the water drawn as stand-ins)") : TEXT(""));
 
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
@@ -2915,6 +3105,50 @@ void ASeaBattle::DrawWrecks()
 			DetailFrom = Sizes[MostDetailedMen - 1];
 		}
 	}
+	// The men drawn whole as the sailor files' men where those are read (Battle/SeaSailors; the stand-ins where not, and
+	// while a man's bank mesh waits to be made): the nearest LiveMost skinned afresh each frame, each a mesh of his own put
+	// where he is; the rest as copies of the pose bank's meshes. A live mesh or a banked copy not drawn this frame is put
+	// away after.
+	const bool bFiles = S.Crew.Files() > 0 && WreckInk != nullptr;
+	TSet<int32> LiveKeys, SlotsDrawn;
+	if (bFiles)
+	{
+		TArray<TPair<double, int32>> Nearest;
+		for (const SeaShow::ManOut& Man : Men)
+		{
+			const double Pixels = 0.45 * PerRadian / DistanceTo(Man.At.X, Man.At.Y, Man.At.Z);
+			if (Pixels >= FMath::Max(LiveLeast, DetailFrom))
+			{
+				Nearest.Add(TPair<double, int32>(Pixels, Man.Key));
+			}
+		}
+		Nearest.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key > B.Key; });
+		for (int32 K = 0; K < Nearest.Num() && K < LiveMost; ++K)
+		{
+			LiveKeys.Add(Nearest[K].Value);
+		}
+		for (int32 Slot = 0; Slot < SailorLiveOf.Num(); ++Slot)
+		{
+			if (SailorLiveOf[Slot].Man != 0 && !LiveKeys.Contains(SailorLiveOf[Slot].Man))
+			{
+				SailorLiveOf[Slot].Man = 0;
+			}
+		}
+		for (TPair<int32, FBankedSailor>& One : SailorBanked)
+		{
+			One.Value.bSeen = false;
+		}
+	}
+	int32 Builds = SailorBuilds, LiveNew = LiveNewMost;
+	static const FColor OarWood(150, 128, 92);
+	// (an oar: its loom from its handle out through its rowlock, its blade the last 0.55 m, flat to the water)
+	auto DrawOar = [&NearMesh](const FVector& From, const FVector& Tip)
+	{
+		NearMesh.Rod(From, Tip, 0.03, 4, OarWood);
+		const FVector Flat = (Tip - From).GetSafeNormal();
+		const FVector Side = (Flat ^ FVector::UpVector).GetSafeNormal() * 0.08;
+		NearMesh.Quad(Tip - Flat * 0.55 - Side, Tip - Side, Tip + Side, Tip - Flat * 0.55 + Side, FVector::UpVector, OarWood);
+	};
 	int32 Detailed = 0;
 	for (const SeaShow::ManOut& Man : Men)
 	{
@@ -2931,14 +3165,20 @@ void ASeaBattle::DrawWrecks()
 			continue;
 		}
 		FSailorPaint Paint = SailorPaint(KitNation(Man.Nation), Man.Look);
-		if (const float* Share = OilOnMen.Find(Man.Key))
+		const float* OilShare = OilOnMen.Find(Man.Key);
+		if (OilShare)
 		{
-			Paint = SeaParts::Oiled(Paint, *Share);
+			Paint = SeaParts::Oiled(Paint, *OilShare);
 		}
-		// (on a float: its ride on the swell; in a boat under way, his oar if he is one of her ten oarsmen)
+		// (on a float: its ride on the swell; in a boat, whether he is one of her ten oarsmen, on his thwart, pulling while
+		// she is under way and resting on his oar while not; the stand-in's oar)
 		double Lift = 0.0, Pull = 0.0;
-		FVector Handle = FVector::ZeroVector;
+		FVector Handle = FVector::ZeroVector, StandInTip = FVector::ZeroVector;
 		bool bRowing = false;
+		SeaSailors::Aboard Where;
+		FWreckFrame BoatFrame;
+		double BoatU = 0.0, BoatAlong = 0.0, BoatAcross = 0.0, BoatLong = 0.0, BoatBeam = 0.0;
+		bool bOarsman = false, bInBoat = false;
 		if ((Man.Doing == Swim::Raft || Man.Doing == Swim::Boat) && Man.On >= 0)
 		{
 			if (const int32* Index = FloatAt.Find(Man.On))
@@ -2946,15 +3186,33 @@ void ASeaBattle::DrawWrecks()
 				const SeaShow::FloatOut& F = Floats[*Index];
 				const FVector Ride = FloatRide(F.Key, Now, F.Long);
 				Lift = Ride.X;
-				const FVector4* Seen = BoatsSeen.Find(F.Key);
-				if (Man.Doing == Swim::Boat && Seen && Seen->W > 0.25)
+				Where.On = &F;
+				Where.Ride = Lift;
+				if (Man.Doing == Swim::Boat)
 				{
+					const FVector4* Seen = BoatsSeen.Find(F.Key);
+					const bool bUnderWay = Seen && Seen->W > 0.25;
 					const FWreckFrame Fr = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading);
 					const FVector Off(Man.At.X - F.At.X, Man.At.Y - F.At.Y, 0.0);
 					const double Along = FVector::DotProduct(Off, Fr.X), Across = FVector::DotProduct(Off, Fr.Y);
 					const double U = FMath::Clamp(Along / (0.5 * F.Long), -0.95, 0.95);
 					const int32 Row = FMath::RoundToInt32((Along / F.Long + 0.38) / 0.76 * 11.0);
+					bInBoat = true;
+					BoatFrame = Fr;
+					BoatU = U;
+					BoatAlong = Along;
+					BoatAcross = Across;
+					BoatLong = F.Long;
+					BoatBeam = F.Beam;
 					if (Row >= 2 && Row <= 6)
+					{
+						bOarsman = true;
+						Where.bRowing = true;
+						Where.bStarboard = Across >= 0.0;
+						// (her crew pull together, on her own stroke; at rest, his hands at his chest, the blade clear)
+						Where.Stroke = static_cast<float>(bUnderWay ? Now + Hash01(F.Key * 0.37) * 2.4 : 1.15);
+					}
+					if (Row >= 2 && Row <= 6 && bUnderWay)
 					{
 						bRowing = true;
 						const double Hand = Across >= 0.0 ? 1.0 : -1.0;
@@ -2966,23 +3224,227 @@ void ASeaBattle::DrawWrecks()
 						const double Sweep = 0.5 * FMath::Sin(Pull);
 						const FVector Out = (Fr.Y * (Hand * FMath::Cos(Sweep)) + Fr.X * FMath::Sin(Sweep)).GetSafeNormal();
 						const double Blade = -0.47 + 0.15 * FMath::Cos(Pull);
-						const FVector Tip = Lock + Out * 2.6 + FVector(0.0, 0.0, Blade);
+						StandInTip = Lock + Out * 2.6 + FVector(0.0, 0.0, Blade);
 						Handle = Lock - Out * 0.75 + FVector(0.0, 0.0, 0.08);
-						FWreckMesh& Into = NearMesh;
-						Into.Rod(Handle, Tip, 0.03, 4, FColor(150, 128, 92));
-						const FVector Flat = (Tip - Lock).GetSafeNormal();
-						const FVector Side = (Flat ^ FVector::UpVector).GetSafeNormal() * 0.08;
-						Into.Quad(Tip - Flat * 0.55 - Side, Tip - Side, Tip + Side, Tip - Flat * 0.55 + Side, FVector::UpVector, FColor(150, 128, 92));
 					}
 				}
 			}
 		}
 		const bool bDetail = Pixels >= DetailFrom && Detailed < MostDetailedMen && (bLive || !bFarDue);
 		Detailed += bDetail ? 1 : 0;
-		DrawSailor(bInFar ? FarMesh : NearMesh, Man, Paint, bDetail, Now, Lift, bRowing ? &Handle : nullptr, Pull);
-		if (bInFar)
+		bool bByFile = false;
+		const int32 File = bDetail && bFiles ? S.Crew.FileFor(Man.Nation) : -1;
+		if (File >= 0)
 		{
-			FarMen.Add(Man.Key);
+			const double* Landed = MenLanded.Find(Man.Key);
+			SeaSailors::Placed P = S.Crew.Place(File, Man, Where, Now, Landed ? *Landed : -1.0);
+			if (P.What == SeaSailors::Act::Row && bOarsman)
+			{
+				// (across her so his rowlock is on her gunwale)
+				const double Want = (BoatAcross >= 0.0 ? 1.0 : -1.0) * FMath::Max(0.1, BoatHalf(BoatU, BoatBeam) - SeaSailors::LockOut);
+				const FVector Shift = BoatFrame.Y * (Want - BoatAcross);
+				P.X += Shift.X;
+				P.Y += Shift.Y;
+			}
+			else if (bInBoat && P.What != SeaSailors::Act::Row)
+			{
+				// (one sitting on her boards, facing aft, his knees up and his boots 0.55 m aft of him: all of him inside her
+				// sides and her ends, where she narrows toward them)
+				const double Half = 0.5 * BoatLong;
+				const double Along = FMath::Clamp(BoatAlong, -Half + 1.05, Half - 0.7);
+				const double Room = FMath::Min(BoatHalf(Along / Half, BoatBeam), BoatHalf((Along - 0.55) / Half, BoatBeam)) - 0.3;
+				const double Across = FMath::Clamp(BoatAcross, -FMath::Max(0.0, Room), FMath::Max(0.0, Room));
+				const FVector Shift = BoatFrame.X * (Along - BoatAlong) + BoatFrame.Y * (Across - BoatAcross);
+				P.X += Shift.X;
+				P.Y += Shift.Y;
+			}
+			// (about one man in seven in his file's other dress: an officer's or chief's khaki, the later grey-green)
+			const int32 Dress = DressFor(S, Man.Nation, File, ((Man.Look >> 16) & 255u) < 38u ? 1 : 0);
+			const bool bOiled = OilShare && *OilShare >= 0.4f;
+			const FVector Feet = World(P.X, P.Y, P.Z);
+			const FRotator Turn(0.0, FMath::RadiansToDegrees(P.Heading), 0.0);
+			float Shown = P.Time;
+			if (LiveKeys.Contains(Man.Key))
+			{
+				int32 Slot = INDEX_NONE;
+				for (int32 K = 0; K < SailorLiveOf.Num() && Slot == INDEX_NONE; ++K)
+				{
+					Slot = SailorLiveOf[K].Man == Man.Key ? K : INDEX_NONE;
+				}
+				for (int32 K = 0; K < SailorLiveOf.Num() && Slot == INDEX_NONE; ++K)
+				{
+					Slot = SailorLiveOf[K].Man == 0 && !SlotsDrawn.Contains(K) ? K : INDEX_NONE;
+				}
+				if (Slot == INDEX_NONE && SailorLive.Num() < LiveMost)
+				{
+					UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, FName(*FString::Printf(TEXT("SeaSailorLive%d"), SailorLive.Num())));
+					Mesh->SetupAttachment(Root);
+					Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					Mesh->SetCastShadow(true);
+					Mesh->bUseAsyncCooking = false;
+					Mesh->RegisterComponent();
+					Slot = SailorLive.Add(Mesh);
+					SailorLiveOf.AddDefaulted_GetRef();
+				}
+				const LandMen::Lod Level = Pixels >= NearLodFrom ? LandMen::Near : LandMen::Mid;
+				const int64 Made = SailorKey(File, Dress, 0, 0, static_cast<int32>(Level), P.bMirror, bOiled);
+				const bool bAfresh = Slot == INDEX_NONE || SailorLiveOf[Slot].Man != Man.Key || SailorLiveOf[Slot].Made != Made;
+				if (Slot != INDEX_NONE && (!bAfresh || LiveNew > 0))
+				{
+					FLiveSailor& Shows = SailorLiveOf[Slot];
+					UProceduralMeshComponent* Mesh = SailorLive[Slot];
+					std::vector<float> At, Facing;
+					const int32 Count = S.Crew.Skin(File, P.What, P.Time, Level, At, Facing);
+					const double Hand = P.bMirror ? -1.0 : 1.0;
+					TArray<FVector> Points, Normals;
+					Points.Reset(Count);
+					Normals.Reset(Count);
+					for (int32 I = 0; I < Count; ++I)
+					{
+						const size_t K = static_cast<size_t>(I) * 3;
+						Points.Add(FVector(At[K] * UnitsPerMetre, Hand * At[K + 1] * UnitsPerMetre, At[K + 2] * UnitsPerMetre));
+						Normals.Add(FVector(Facing[K], Hand * Facing[K + 1], Facing[K + 2]));
+					}
+					if (bAfresh)
+					{
+						// (a new man or a new level, dress or hand: his triangles and colours with his points)
+						--LiveNew;
+						const std::vector<uint32_t>& Tris = S.Crew.Triangles(File, Level);
+						TArray<int32> Corners;
+						Corners.Reset(static_cast<int32>(Tris.size()));
+						for (size_t K = 0; K + 2 < Tris.size(); K += 3)
+						{
+							Corners.Append({ static_cast<int32>(Tris[K]), static_cast<int32>(Tris[P.bMirror ? K + 2 : K + 1]), static_cast<int32>(Tris[P.bMirror ? K + 1 : K + 2]) });
+						}
+						std::vector<uint8_t> Rgb;
+						S.Crew.Paint(File, Level, S.Dresses[static_cast<size_t>(Dress)], bOiled ? 0.8 : 0.0, Rgb);
+						TArray<FColor> Colours;
+						Colours.Reset(Count);
+						for (int32 I = 0; I < Count; ++I)
+						{
+							const size_t K = static_cast<size_t>(I) * 3;
+							Colours.Add(FColor(Rgb[K], Rgb[K + 1], Rgb[K + 2], 255));
+						}
+						Mesh->ClearAllMeshSections();
+						Mesh->CreateMeshSection(0, Points, Corners, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+						Mesh->SetMaterial(0, WreckInk);
+						Shows.Man = Man.Key;
+						Shows.Made = Made;
+					}
+					else
+					{
+						Mesh->UpdateMeshSection(0, Points, Normals, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
+					}
+					Mesh->SetRelativeLocationAndRotation(Feet, Turn);
+					Mesh->SetVisibility(true);
+					SlotsDrawn.Add(Slot);
+					bByFile = true;
+				}
+			}
+			if (!bByFile)
+			{
+				const int32 Level = Pixels >= MidLodFrom ? LandMen::Mid : LandMen::Far;
+				const int32 Pose = S.Crew.PoseOf(File, P.What, P.Time);
+				const int64 Key = SailorKey(File, Dress, static_cast<int32>(P.What), Pose, Level, P.bMirror, bOiled);
+				const int32 Copy = SailorCopy(Key, File, Dress, static_cast<int32>(P.What), Pose, Level, P.bMirror, bOiled, Builds);
+				if (Copy >= 0)
+				{
+					Shown = S.Crew.PoseTime(File, P.What, Pose);
+					FBankedSailor* Had = SailorBanked.Find(Man.Key);
+					if (!Had)
+					{
+						Had = &SailorBanked.Add(Man.Key, FBankedSailor());
+					}
+					if (Had->Copy != Copy)
+					{
+						// (into the copies of his new pose: a slot put away there before, or a new one)
+						SailorAway(*Had);
+						TArray<int32>& Free = SailorFree[Copy];
+						const FTransform Put(Turn, Feet);
+						if (Free.Num() > 0)
+						{
+							Had->Slot = Free.Pop();
+							SailorCopies[Copy]->UpdateInstanceTransform(Had->Slot, Put, false, false, true);
+						}
+						else
+						{
+							Had->Slot = SailorCopies[Copy]->AddInstance(Put, false);
+						}
+						Had->Copy = Copy;
+						Had->At = Feet;
+						Had->Yaw = Turn.Yaw;
+						SailorDirty[Copy] = 1;
+					}
+					else if (FVector::DistSquared(Had->At, Feet) > 1.0 || FMath::Abs(Had->Yaw - Turn.Yaw) > 0.2)
+					{
+						// (moved a centimetre or more, or turned: put where he is now)
+						SailorCopies[Copy]->UpdateInstanceTransform(Had->Slot, FTransform(Turn, Feet), false, false, true);
+						Had->At = Feet;
+						Had->Yaw = Turn.Yaw;
+						SailorDirty[Copy] = 1;
+					}
+					Had->bSeen = true;
+					bByFile = true;
+				}
+			}
+			if (bByFile && P.What == SeaSailors::Act::Row)
+			{
+				// (his oar: from his hands' track through the clip's rowlock, out to its blade at the water)
+				LandMen::Vec3 Grip, Lock;
+				if (S.Crew.Oar(File, Shown, P.bMirror, Grip, Lock))
+				{
+					const FVector Fwd(FMath::Sin(P.Heading), FMath::Cos(P.Heading), 0.0), Rt(FMath::Cos(P.Heading), -FMath::Sin(P.Heading), 0.0);
+					const FVector Root3(P.X, P.Y, P.Z);
+					const FVector GripAt = Root3 + Fwd * Grip.X + Rt * Grip.Y + FVector(0.0, 0.0, Grip.Z);
+					const FVector LockAt = Root3 + Fwd * Lock.X + Rt * Lock.Y + FVector(0.0, 0.0, Lock.Z);
+					const FVector Way = (LockAt - GripAt).GetSafeNormal();
+					DrawOar(GripAt - Way * 0.12, LockAt + Way * OarOutboard);
+				}
+			}
+		}
+		if (!bByFile)
+		{
+			if (bRowing)
+			{
+				DrawOar(Handle, StandInTip);
+			}
+			DrawSailor(bInFar ? FarMesh : NearMesh, Man, Paint, bDetail, Now, Lift, bRowing ? &Handle : nullptr, Pull);
+			if (bInFar)
+			{
+				FarMen.Add(Man.Key);
+			}
+		}
+	}
+	if (bFiles)
+	{
+		for (int32 Slot = 0; Slot < SailorLive.Num(); ++Slot)
+		{
+			if (!SlotsDrawn.Contains(Slot))
+			{
+				SailorLive[Slot]->SetVisibility(false);
+				SailorLiveOf[Slot].Man = 0;
+			}
+		}
+		TArray<int32> Gone;
+		for (TPair<int32, FBankedSailor>& One : SailorBanked)
+		{
+			if (!One.Value.bSeen)
+			{
+				SailorAway(One.Value);
+				Gone.Add(One.Key);
+			}
+		}
+		for (const int32 Key : Gone)
+		{
+			SailorBanked.Remove(Key);
+		}
+		for (int32 Copy = 0; Copy < SailorCopies.Num(); ++Copy)
+		{
+			if (SailorDirty[Copy])
+			{
+				SailorCopies[Copy]->MarkRenderStateDirty();
+				SailorDirty[Copy] = 0;
+			}
 		}
 	}
 	WrecksMostDrawn = FMath::Max(WrecksMostDrawn, NearMesh.V.Num() + (bFarDue ? FarMesh.V.Num() : 0));
@@ -3019,6 +3481,61 @@ void ASeaBattle::DrawWrecks()
 			WreckFar->SetMaterial(0, WreckInk);
 		}
 	}
+}
+
+int32 ASeaBattle::SailorCopy(int64 Key, int32 File, int32 Dress, int32 What, int32 Pose, int32 Lod, bool bMirror, bool bOiled, int32& Builds)
+{
+	if (const int32* Found = SailorCopyOf.Find(Key))
+	{
+		return *Found;
+	}
+	if (Builds <= 0 || !State.IsValid() || !WreckInk || Dress < 0 || Dress >= static_cast<int32>(State->Dresses.size()))
+	{
+		return -1;
+	}
+	--Builds;
+	FSeaBattleState& S = *State;
+	const SeaSailors::Act A = static_cast<SeaSailors::Act>(What);
+	const LandMen::Lod Level = static_cast<LandMen::Lod>(Lod);
+	std::vector<float> At, Facing;
+	std::vector<uint8_t> Rgb;
+	S.Crew.Skin(File, A, S.Crew.PoseTime(File, A, Pose), Level, At, Facing);
+	S.Crew.Paint(File, Level, S.Dresses[static_cast<size_t>(Dress)], bOiled ? 0.8 : 0.0, Rgb);
+	const FString Name = FString::Printf(TEXT("SeaSailor_%lld"), static_cast<long long>(Key));
+	UStaticMesh* Mesh = SeaParts::SailorMesh(this, FName(*(Name + TEXT("_Mesh"))), At, Facing, Rgb, S.Crew.Triangles(File, Level), bMirror, WreckInk, UnitsPerMetre);
+	if (!Mesh)
+	{
+		SailorCopyOf.Add(Key, -2);
+		return -2;
+	}
+	UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, FName(*Name));
+	Copies->SetupAttachment(Root);
+	Copies->SetStaticMesh(Mesh);
+	Copies->SetMaterial(0, WreckInk);
+	Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Copies->SetCanEverAffectNavigation(false);
+	// (the banked men are past the nearest few: no shadows, as the ground scene's bank)
+	Copies->SetCastShadow(false);
+	Copies->RegisterComponent();
+	const int32 Index = SailorCopies.Add(Copies);
+	SailorMeshes.Add(Mesh);
+	SailorFree.AddDefaulted_GetRef();
+	SailorDirty.Add(0);
+	SailorCopyOf.Add(Key, Index);
+	return Index;
+}
+
+void ASeaBattle::SailorAway(FBankedSailor& Man)
+{
+	if (Man.Copy >= 0 && Man.Copy < SailorCopies.Num())
+	{
+		// (shrunk to nothing where he was, its slot kept for the next man into that pose)
+		SailorCopies[Man.Copy]->UpdateInstanceTransform(Man.Slot, FTransform(FQuat::Identity, Man.At, FVector(1e-3)), false, false, true);
+		SailorFree[Man.Copy].Add(Man.Slot);
+		SailorDirty[Man.Copy] = 1;
+	}
+	Man.Copy = -1;
+	Man.Slot = -1;
 }
 
 void ASeaBattle::RunTrails()
