@@ -433,6 +433,63 @@ namespace LandMen
 		const Soldier* SoldierOf(int Man) const;
 
 		/**
+		 * The pose bank for far men (the true-scale plan's SO1; Content/Models/Soldiers/pose_bank.json, from the soldiers
+		 * thread's battle-models/land/soldier/pose_bank.json): about 70 poses, each a clip at a phase of its length (0 to
+		 * 1), the same names for every army, with each clip's cycle of them and the clip to borrow from where a file
+		 * lacks one (`instead`). Read it before Build or after: each soldier file's far mesh (with or without his own
+		 * helmet, as his men need) is baked once, at Build, and the bank is on.
+		 *
+		 * While it is on, a living man at the far level (Far: seen 120 m off, SeenDistance) shows the bank's pose nearest
+		 * to where his clip has got to (a loop's phase the circle round; a one-shot's held at its end once past it; of two
+		 * clips blending, the one more than half in; the firing clip's while a shot is more than half shown): his bones
+		 * are that pose's as baked (its rifle-down copy where he holds his rifle laid down), nothing is sampled, and he
+		 * is placed every frame (thrifty frames too). Nothing of his play changes: his place, his turns of pose, his
+		 * shots and his clips' events run on the same clocks; only what he looks like between the bank's poses, and no
+		 * blend out there. A clip with no
+		 * cycle (its `instead` neither) and going prone (it slides him) are posed and skinned as before. Falls are not
+		 * banked: a far man's fall plays as before, and he freezes at its end.
+		 *
+		 * To draw far men as instances: men with the same BankKey look alike out there (the same far variant, helmet
+		 * finish and army colours; the file's own face): one mesh for each (key, pose) shown, BankMesh's points with
+		 * BankLook's triangles and colours, placed by WorldFrame. While he is banked his Stamp moves only when his pose
+		 * changes (his place is WorldFrame's, every frame), so skin him (Skin, as before) only when BankPose is -1.
+		 * Returns false (and the bank stays as it was) if the text is not a bank.
+		 */
+		bool ReadPoseBank(const std::string& Text, std::string& OutError);
+		/** On (as soon as a bank is read) or off: off, every man is posed and skinned as before. */
+		void SetPoseBank(bool bOn);
+		bool PoseBankOn() const;
+		/** The bake's cost, milliseconds, all files; and each file's (by the file's name). */
+		double PoseBankMs() const;
+		const std::map<std::string, double>& PoseBankMsByFile() const;
+		/** The bank's poses: how many, and pose k's clip and phase. The second half are the first half's poses with his
+		 * rifle laid down (as a gun's crew and the spotter hold their aim): pose k + BankPoses() / 2 is pose k so. */
+		int BankPoses() const;
+		const std::string& BankClip(int K) const;
+		float BankPhase(int K) const;
+		bool BankRifleDown(int K) const;
+		/** The bank's pose he shows this frame, or -1 while he is skinned (near, mid, falling, at rest, no bank, or a
+		 * clip the bank lacks). */
+		int BankPose(int Man) const;
+		/** His baked set (men alike out there), or -1 with no bank; and how many sets the crowd has. */
+		int BankKey(int Man) const;
+		int BankKeys() const;
+		/**
+		 * Set Key baked in pose Pose: the far points and facings in his own axes (metres; as Skin writes them at Far
+		 * before his place: x forward, y to his RIGHT, z up), the body then his helmet's finish, BankLook(Key).Points
+		 * each. False where the set's file lacks that pose's clip. His own axes are left-handed and the field's right-
+		 * handed, so WorldFrame holds a mirror (its determinant is -1); BankLook's triangles face outward once it is
+		 * applied, as Skin's do. To instance without a mirror, flip y in the mesh (and the triangles' winding) and turn
+		 * him by WorldFrame's matrix times that flip, a plain turn.
+		 */
+		bool BankMesh(int Key, int Pose, std::vector<float>& OutPoints, std::vector<float>& OutFacings) const;
+		/** Set Key's triangles and colours at the far level (his look with the file's own face). */
+		const Look& BankLook(int Key) const;
+		/** His own axes to the field's as last placed (field = R * own + T, R row-major): his heading and, lying, the
+		 * ground's slope under him. */
+		const Xform& WorldFrame(int Man) const;
+
+		/**
 		 * The fall a man will take, named by the lead (a Fates look's kind: forward, back, side, knees, spin, thrown,
 		 * crawl) before he falls; empty lets the crowd choose. Only where the soldier file has the deaths map.
 		 */

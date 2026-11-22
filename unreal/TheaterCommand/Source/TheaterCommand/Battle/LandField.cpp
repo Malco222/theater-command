@@ -5450,7 +5450,7 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks" };
 		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
@@ -5611,26 +5611,102 @@ namespace LandField
 				const V3 Lean = Wind + V3{ R.Range(-0.04, 0.04), R.Range(-0.04, 0.04), 0 };
 				const V3 Crest = Foot + Lean + V3{ 0, 0, High };
 				const V3 Across{ std::cos(A), std::sin(A), 0 };
-				Strip(M, { Foot, Foot + Lean * 0.3 + V3{ 0, 0, High * 0.5 }, Crest }, { 0.007, 0.006, 0.005 }, Across, Rgb(124, 118, 64), Rgb(180, 152, 86));
+				// (each stalk's own value, 12% either way, and the crop darker toward the soil: the art director's cut 4)
+				const double L = R.Range(0.88, 1.12);
+				Strip(M, { Foot, Foot + Lean * 0.3 + V3{ 0, 0, High * 0.5 }, Crest }, { 0.007, 0.006, 0.005 }, Across, Varied(Rgb(124, 118, 64), 0.5 * L, 0.0),
+					  Varied(Rgb(180, 152, 86), L, 0.0));
 				const V3 EarDir = Unit3(Lean + V3{ 0, 0, 0.6 });
-				Strip(M, { Crest, Crest + EarDir * 0.05, Crest + EarDir * 0.1 }, { 0.012, 0.016, 0.004 }, Across, Rgb(186, 158, 92), Rgb(198, 170, 104));
+				Strip(M, { Crest, Crest + EarDir * 0.05, Crest + EarDir * 0.1 }, { 0.012, 0.016, 0.004 }, Across, Varied(Rgb(186, 158, 92), L, 0.0),
+					  Varied(Rgb(198, 170, 104), L, 0.0));
 			}
 		}
-		// Poppies: four stems with their red heads (two crossed cups), and a few leaves.
+		// The same corn near the lens, stalk by stalk (the art director's cut 4, fix 4: at 1.2 m a bundle of stalks read
+		// as one plank and its ear as a lozenge): single stalks over the bundle's ground, each 3 to 4 mm across
+		// with two or three leaves 8 to 12 mm wide hanging off it, bent and some yellowed, and its ear 8 to 10 cm long and
+		// 1.3 cm wide, two zigzag rows of spikelets seen two ways (no awns: wheat); straw gold at the ear, greener and darker
+		// down the stem, each stalk's value its own, darkening to 0.4 at the soil. Four dozen to a clump (each bundle's ground,
+		// with its own scale and tint). Drawn on the stalks' foliage ink, within
+		// a few metres of the lens only.
+		{
+			Mesh& M = At(Base::Stalks).Near;
+			const V3 Wind{ 0.06, 0.02, 0 };
+			for (int K = 0; K < 48; ++K)
+			{
+				const V3 Foot = Around(0.36);
+				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.9, 1.04), L = R.Range(0.88, 1.12);
+				const V3 Lean = Wind + V3{ R.Range(-0.04, 0.04), R.Range(-0.04, 0.04), 0 };
+				const V3 Mid = Foot + Lean * 0.3 + V3{ 0, 0, High * 0.5 };
+				const V3 Crest = Foot + Lean + V3{ 0, 0, High };
+				const V3 Across{ std::cos(A), std::sin(A), 0 };
+				const Col Soil = Varied(Rgb(130, 130, 80), 0.4 * L, 0.0), Green = Varied(Rgb(130, 130, 80), L, 0.0), Straw = Varied(Rgb(176, 150, 92), L, 0.0);
+				Strip(M, { Foot, Foot + Lean * 0.08 + V3{ 0, 0, High * 0.25 }, Mid }, { 0.0019, 0.0018, 0.0017 }, Across, Soil, Green);
+				Strip(M, { Mid, Foot + Lean * 0.65 + V3{ 0, 0, High * 0.78 }, Crest }, { 0.0017, 0.0016, 0.0015 }, Across, Green, Straw);
+				// (its leaves from the nodes, out and drooping, the lower ones darker and more of them yellowed)
+				const int Leaves = R.Next() < 0.5 ? 2 : 3;
+				for (int Lf = 0; Lf < Leaves; ++Lf)
+				{
+					const double NodeH = (0.22 + 0.2 * Lf + R.Range(-0.04, 0.04)) * High, Long = R.Range(0.15, 0.25), Wide = R.Range(0.004, 0.006);
+					const double Turn = A + R.Range(0.6, 2.6) * (Lf % 2 == 0 ? 1.0 : -1.0);
+					const V3 Out{ std::cos(Turn), std::sin(Turn), 0 };
+					const V3 Node = Foot + Lean * (NodeH / High) + V3{ 0, 0, NodeH };
+					const double Dark = 0.4 + 0.6 * NodeH / High;
+					const Col Leaf = Mixed(Rgb(108, 120, 64), Rgb(172, 152, 92), R.Range(0.0, 0.7 - 0.4 * NodeH / High));
+					Strip(M, { Node, Node + Out * (0.35 * Long) + V3{ 0, 0, 0.2 * Long }, Node + Out * (0.75 * Long) + V3{ 0, 0, 0.18 * Long }, Node + Out * Long - V3{ 0, 0, 0.06 * Long } },
+						  { 0.25 * Wide, Wide, 0.75 * Wide, 0.0 }, Unit3(Cross({ 0, 0, 1 }, Out), Across), Varied(Leaf, Dark * L * 0.9, 0.0), Varied(Leaf, Dark * L, 0.0));
+				}
+				// (its ear: two zigzag strips crossed, the spikelets' rows)
+				const V3 EarDir = Unit3(Lean + V3{ 0, 0, 0.6 });
+				const double EarLong = R.Range(0.08, 0.1);
+				for (int Way = 0; Way < 2; ++Way)
+				{
+					const V3 EarAcross = Unit3(Way == 0 ? Across : Cross(EarDir, Across), Across);
+					std::vector<V3> Spine;
+					std::vector<double> Half;
+					for (int Spk = 0; Spk <= 6; ++Spk)
+					{
+						const double T = Spk / 6.0;
+						Spine.push_back(Crest + EarDir * (EarLong * T));
+						Half.push_back(Spk == 6 ? 0.0015 : Spk % 2 == 0 ? 0.0065 : 0.0045);
+					}
+					Strip(M, Spine, Half, EarAcross, Varied(Rgb(186, 156, 96), L, 0.0), Varied(Rgb(196, 168, 106), L, 0.0));
+				}
+			}
+		}
+		// Poppies: four stems, one flower to a stem, a cup of four orange-red petals 5 to 8 cm across round a dark middle
+		// (the art director's cut 4: three flat red hearts on one stem read as nothing like a poppy); two buds nodding on
+		// their crooked stems; a few leaves.
 		{
 			Mesh& M = At(Base::Poppies).Near;
 			for (int K = 0; K < 4; ++K)
 			{
 				const V3 Foot = Around(0.12);
-				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.42, 0.68);
+				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.42, 0.68), Cup = R.Range(0.025, 0.04);
 				const V3 Lean{ R.Range(-0.06, 0.06), R.Range(-0.06, 0.06), 0 };
 				const V3 Head = Foot + Lean + V3{ 0, 0, High };
-				Strip(M, { Foot, Head }, { 0.004, 0.003 }, { std::cos(A), std::sin(A), 0 }, Rgb(78, 100, 48), Rgb(92, 112, 56));
+				Strip(M, { Foot, Head }, { 0.0022, 0.0018 }, { std::cos(A), std::sin(A), 0 }, Rgb(64, 86, 40), Rgb(92, 112, 56));
+				for (int P = 0; P < 4; ++P)
+				{
+					const double Pa = A + P * Pi / 2 + R.Range(-0.15, 0.15);
+					const V3 Out{ std::cos(Pa), std::sin(Pa), 0 };
+					const V3 Side = Unit3(Cross({ 0, 0, 1 }, Out), Out);
+					Strip(M, { Head, Head + Out * (0.45 * Cup) + V3{ 0, 0, 0.35 * Cup }, Head + Out * (0.85 * Cup) + V3{ 0, 0, 0.9 * Cup } }, { 0.15 * Cup, 0.55 * Cup, 0.45 * Cup }, Side,
+						  Rgb(150, 26, 20), Varied(Rgb(200, 40, 30), R.Range(0.92, 1.06), 0.0));
+				}
 				for (int P = 0; P < 2; ++P)
 				{
 					const V3 Across{ std::cos(A + P * Pi / 2), std::sin(A + P * Pi / 2), 0 };
-					Strip(M, { Head - V3{ 0, 0, 0.01 }, Head + V3{ 0, 0, 0.035 }, Head + V3{ 0, 0, 0.06 } }, { 0.012, 0.04, 0.035 }, Across, Rgb(150, 30, 26), Rgb(204, 44, 32));
+					Strip(M, { Head + V3{ 0, 0, 0.004 }, Head + V3{ 0, 0, 0.016 } }, { 0.006, 0.005 }, Across, Rgb(34, 30, 28), Rgb(52, 46, 40));
 				}
+			}
+			for (int K = 0; K < 2; ++K)
+			{
+				const V3 Foot = Around(0.12);
+				const double A = R.Range(0.0, 2.0 * Pi), High = R.Range(0.36, 0.5);
+				const V3 Over{ std::cos(A) * 0.06, std::sin(A) * 0.06, 0 };
+				const V3 Top = Foot + Over * 0.5 + V3{ 0, 0, High };
+				const V3 Hook = Top + Over + V3{ 0, 0, -0.03 };
+				Strip(M, { Foot, Top, Hook }, { 0.002, 0.0018, 0.0015 }, AcrossOf(Over, A), Rgb(64, 86, 40), Rgb(90, 110, 54));
+				Strip(M, { Hook, Hook - V3{ 0, 0, 0.012 }, Hook - V3{ 0, 0, 0.024 } }, { 0.004, 0.007, 0.003 }, AcrossOf(Over, A), Rgb(88, 108, 56), Rgb(104, 118, 62));
 			}
 			for (int K = 0; K < 3; ++K)
 			{
@@ -5743,6 +5819,8 @@ namespace LandField
 		}
 		for (const Base B : { Base::Tuft, Base::TallGrass, Base::Wheat, Base::Poppies, Base::Flowers, Base::Stone, Base::Fern, Base::Stubble }) At(B).FarFrom = 70.0f;
 		At(Base::Sward).FarFrom = 25.0f;
+		// (the corn stalk by stalk only near the lens: its ink fades it out from 3.5 to 5 m, and past 5.5 m it is not drawn)
+		At(Base::Stalks).FarFrom = 5.5f;
 		// The steppe's, from the east kit (each file's text in Fd.Steppe.Kit); plain stand-ins for a model not given.
 		for (const Base B : { Base::Khata, Base::Chimney, Base::Pole, Base::Wattle, Base::Sweep, Base::Haystack, Base::Birch })
 		{
@@ -6275,6 +6353,12 @@ namespace LandField
 					P.ScaleZ = static_cast<float>(ScaleZ);
 					P.Tint = Tint8(TR * Shade, TG * Shade, TB * Shade);
 					Out.push_back(P);
+					// (the same corn stalk by stalk, on the same ground, for the lens close by)
+					if (Gr.Kind == Base::Wheat)
+					{
+						P.Kind = Base::Stalks;
+						Out.push_back(P);
+					}
 				}
 				// The field's stones: none strewn over the grass, only a few grey ones half sunk, in clumps where the plough
 				// and the beasts left them: along the banks' feet, in the gateways and at the lanes' sides; and on the works,

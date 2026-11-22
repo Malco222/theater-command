@@ -68,6 +68,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      the sky light, the rest by the fill), `-TheaterLandSkyBelow=` (0.3: the sky's lower half the field's colour times
      this; 0 black), `-TheaterLandFootShade=` (1: the footprint shade under tanks, guns and men, M_LandShade; 0 none),
      `-TheaterLandTopLight=` (0.08) and `-TheaterLandMapLight`.
+   - `-TheaterLandNoPoseBank`: every man skinned, as before the pose bank (SO1).
 
 Keys on the battle screen: Space holds the clock or lets it run, 1 to 4 the speeds (half, life, twice, four times), C
 cuts to a new shot, H holds this shot, Enter CONTINUE on the after card. A drag looks a little aside; let go and the
@@ -81,6 +82,16 @@ camera comes back to its shot.
 - **A man hit falls and stays.** His fall is one of the soldier file's deaths for his stance (standing, running,
   kneeling, prone, in cover), picked so the same fall does not repeat nearby. He lies where he fell, on the slope of
   the ground, his rifle beside him, for the rest of the battle; the camera's last picture walks past the fallen.
+- **Far men are drawn from the pose bank (the true-scale plan's SO1).** The soldiers thread's
+  `Content/Models/Soldiers/pose_bank.json` is read before the men are made: each soldier file's far mesh is baked in
+  about 70 poses (and each again with the rifle laid down). A man seen 120 m off or more shows the bank's pose nearest
+  to where his clip has got. His play is unchanged; only his look between poses is. Men alike out there (the same far
+  variant, helmet finish and army colours) share one mesh a pose, made the first time it is needed, four a frame at
+  most, and each man is an instance of it, moved only when his frame changes. Nothing of his is skinned or sent: a
+  far man costs the Mac a place in an instance list, not a draw and a mesh of his own. A man whose mesh is not made
+  yet is skinned as before for those frames. A mesh holding no one is hidden. The log gives the bank's sets and bake
+  time, and the meshes' cost at 50, 200 and 500 made. The instances turn his own axes to Unreal's with a plain turn:
+  his frame mirrors (left-handed to the field's right-handed), and the field-to-Unreal swap mirrors back.
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
 - **Smoke at the lens.** The effects kit lays each puff flat to the lens. The land camera stands among the bursts, so a
@@ -113,6 +124,17 @@ camera comes back to its shot.
   low shot the camera chooses for itself where the crop stands over 0.45 m becomes a shoulder shot instead. A low shot
   asked for by name keeps its subject and rises over the ears. The cloud test fails if any frame of those shots has its
   lens fewer than 0.05 m over the crop.
+- **Near the lens the corn is stalks, not bundles (the art director's cut 4, fix 4).** While the eye is under 2.5 m
+  over the ground (until it rises past 3 m), the wheat's bundles within 3.5 m of it along the ground are taken away
+  and each clump is drawn as its own stalks (`LandField`'s `Stalks`: 48 thin stems of two strips, two or three
+  drooping leaves, an ear of crossed zigzag strips, the stem's foot taking the soil's colour; the poppies have cups of
+  four petals and nodding buds). They are on `M_LandStalks` (`build_content.py`): lit as foliage, faded in by dither
+  from 0.6 to 0.9 m of depth so no stalk stands across the lens, and out from 3.5 to 5 m along the ground where the
+  bundles take over, with whole shadows. From higher, the stalks are hidden and the bundles are back (a clearing seen
+  from above would be a bald ring in the corn). The grass squares (`LandCarpet::Clear`) hide and give back the bundles
+  a thing at a time as the eye moves, rises or jumps; the cloud test checks that no bundle is laid within 3.5 m of a
+  low eye and that they come back under a risen one. Without `M_LandStalks` the corn keeps its bundles to the lens,
+  said once in the log.
 - **The camera keeps the art director's rules (her notes on the first film).** A fifth of that film was over 40 per
   cent black: the lens pressed on a German turret for 17 s, under a tree's crown, on a dark hedge, under the ground,
   inside a GI. Now:

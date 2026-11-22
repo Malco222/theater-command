@@ -206,7 +206,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks" };
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
 	/** The highest triangle of a mesh over a place, seen from above (NaN where none). */
@@ -1002,13 +1002,17 @@ int main(int Argc, char** Argv)
 					if (std::hypot(X - Holes[H].X, Y - Holes[H].Y) < Holes[H].R) return true;
 				return false;
 			};
+			// (the corn's bundles cleared within 3.5 m of the lens, where its stalks are drawn one by one: as LayThings)
+			constexpr double ClearCorn = 3.5;
+			C.Clear.assign(Kinds, 0.0);
+			C.Clear[static_cast<size_t>(LandField::Base::Wheat)] = ClearCorn;
 			C.CopyOf = [](const LandField::Placed& P) { return static_cast<int32_t>(P.Kind); };
 			C.Stands = [&InHole](const LandField::Placed& P) { return !InHole(P.X, P.Y); };
 			std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds); // (laid, thing) a place
 			long BadOps = 0, Ops = 0, Puts = 0, Hides = 0;
 			double WorstMoving = 0.0, SumMoving = 0.0, WorstCut = 0.0, OldSum = 0.0, OldWorst = 0.0;
 			int Moving = 0, Cuts = 0, Settled = 0, OldLays = 0, MostMade = 0, Relaid = 0, SinceCut = 0, SlowestFill = 0;
-			long Missing = 0, Wanted = 0, Extra = 0, InHoles = 0;
+			long Missing = 0, Wanted = 0, Extra = 0, InHoles = 0, InClearing = 0, StalksWanted = 0, HighCorn = 0, HighFrames = 0;
 			size_t PeakLaid = 0;
 			std::vector<LandCarpet::Op> Out;
 			const double W = F.Width(), D = F.Depth();
@@ -1040,6 +1044,12 @@ int main(int Argc, char** Argv)
 							HoleCells[{ CI, CJ }].push_back(Holes.size() - 1);
 					C.Mark(Holes.back().X, Holes.back().Y, R);
 				}
+				// (the eye rises out of the corn for 1.5 s in every 6, as the scene lifts it: the clearing let go, and
+				// taken again as it comes down)
+				const bool bHigh = (Frame / 90) % 4 == 3;
+				const double ClearNow = bHigh ? 0.0 : ClearCorn;
+				C.Clear[static_cast<size_t>(LandField::Base::Wheat)] = ClearNow;
+				HighFrames += bHigh ? 1 : 0;
 				std::vector<int32_t> Before(Kinds);
 				for (int K = 0; K < Kinds; ++K) Before[static_cast<size_t>(K)] = C.Count(K);
 				Out.clear();
@@ -1106,6 +1116,9 @@ int main(int Argc, char** Argv)
 				for (const auto& M : Mesh)
 					for (const auto& P : M) Laid += P.first ? 1 : 0;
 				PeakLaid = std::max(PeakLaid, Laid);
+				// (no bundle of corn laid in the clearing round the lens, any frame)
+				for (const auto& P : Mesh[static_cast<size_t>(LandField::Base::Wheat)])
+					if (P.first && std::hypot(P.second.X - EX, P.second.Y - EY) < ClearNow - 1e-3) ++InClearing;
 				// The old way, for its time: the whole box made again every 12 m.
 				if (std::hypot(EX - OldX, EY - OldY) > 12.0 || std::hypot(LX - OldLX, LY - OldLY) > 12.0)
 				{
@@ -1143,6 +1156,9 @@ int main(int Argc, char** Argv)
 					for (const LandField::Placed& P : Box)
 					{
 						if (std::hypot(P.X - EX, P.Y - EY) >= Cull[static_cast<size_t>(P.Kind)] || InHole(P.X, P.Y)) continue;
+						if (P.Kind == LandField::Base::Wheat && std::hypot(P.X - EX, P.Y - EY) < ClearNow) continue;
+						if (P.Kind == LandField::Base::Stalks) ++StalksWanted;
+						if (bHigh && P.Kind == LandField::Base::Wheat && std::hypot(P.X - EX, P.Y - EY) < ClearCorn) ++HighCorn;
 						++Drawn;
 						if (!std::binary_search(Have.begin(), Have.end(), std::make_pair(P.X, P.Y))) ++Missing;
 					}
@@ -1186,6 +1202,9 @@ int main(int Argc, char** Argv)
 			Check(Settled >= 40 && Missing == 0 && InHoles == 0, "the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again",
 			      Fmt("%.0f missing of %.0f, %.0f in holes", static_cast<double>(Missing), static_cast<double>(Wanted), static_cast<double>(InHoles)) + Fmt(", %.0f settled frames", Settled));
 			Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end)", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
+			Check(InClearing == 0 && (HighCorn > 0 || StalksWanted == 0), "no bundle of corn laid within 3.5 m of a low lens (its stalks drawn one by one there), each laid again as the lens leaves it or rises",
+			      Fmt("%.0f laid in the clearing; ", static_cast<double>(InClearing)) + Fmt("%.0f single-stalk clumps wanted near the lens; ", static_cast<double>(StalksWanted)) +
+			      Fmt("%.0f bundles back under a risen lens", static_cast<double>(HighCorn)) + Fmt(" in %.0f frames", static_cast<double>(HighFrames)));
 			Check(Moving > 0 && WorstMoving < 0.5 * OldWorst, "a moving eye's grass costs under half the old box's re-lay in its worst frame",
 			      Fmt("worst %.2f ms against %.2f ms", WorstMoving, OldWorst));
 			Check(WorstCut <= 1.1 * OldWorst && SlowestFill <= 20, "a cut's grass costs no more than the old box's re-lay, and its far squares follow within a third of a second",
