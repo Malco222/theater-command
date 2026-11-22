@@ -6589,6 +6589,7 @@ namespace TheaterFx
 					Tr.Kept.PaleTo = C.bSoft ? (C.PaleBy > 0.0 ? C.PaleTo : 1.0) : -1.0;
 					Tr.Kept.LumpsFrom = C.SmearHold;
 					Tr.Kept.bOn = true;
+					Tr.Kept.CutAt = C.CutAt; // (the pre-check on d2356292: re-pointed field by field, it kept an old cut, and every later piece took it as its far end's)
 					Tr.KeptWay = Way;
 					Tr.KeptAt = At;
 					Tr.bKeptAt = true;
@@ -6685,6 +6686,7 @@ namespace TheaterFx
 			Tr.Prev.PaleTo = B.bSoft ? (B.PaleBy > 0.0 ? B.PaleTo : 1.0) : -1.0;
 			Tr.Prev.LumpsFrom = B.SmearHold;
 			Tr.Prev.bOn = true;
+			Tr.Prev.CutAt = B.CutAt; // (as Kept: a new piece is uncut)
 		}
 		Tr.PuffAt = At;
 		Tr.bPuffAt = true;
