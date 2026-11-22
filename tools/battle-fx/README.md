@@ -1627,8 +1627,8 @@ So it is mended after the grade, on the picture as the screen shows it. M_Battle
 custom depth (translucent custom depth writes, wherever a piece is a tenth seen or more), and M_FireSpread, a
 post-process after tonemapping (Tools/build_content.py), finds the marked pixels the opaque world does not hide and,
 of those, only two sorts: fire's colour (hue between orange-red and yellow, and deep colour, or bright and a little
-coloured; a red tracer is in it), and a bright green light (a Soviet tracer, which the grade leaves grey-green; blue
-and violet are the sky's and left alone). The whitest are left alone, so a white-hot core stays as ruled. Their colour
+coloured; a red tracer is in it), and a bright bluish-green light (a Soviet tracer, which the grade leaves grey-green,
+at about 124 degrees; a field's greens are yellow-green, under 95, and blue and violet are the sky's: all left alone). The whitest are left alone, so a white-hot core stays as ruled. Their colour
 is spread from their own grey by Spread (2.0, the art director's) and the green of fire's orange raised by Warm (1.2;
 on yellow it went lime, and on a sky seen through smoke cyan, the pre-check's find),
 feathered by that "heat" so there is no seam at a flame's edge. Smoke, dust, earth and the field seen through a thin

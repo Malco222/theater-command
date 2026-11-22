@@ -1453,9 +1453,9 @@ def build_battle_puffs():
 
 # The fire's spread, after the scene's grade: in the post-process input (the picture as the screen shows it), a pixel
 # the kit marked and the opaque world does not hide has its colour spread from its own grey by Spread when it is fire's
-# (orange to yellow, deep in colour, or bright and a little coloured) or a green light (bright and coloured: a Soviet
-# tracer, which the grade leaves grey-green; red is fire's hue already, and blue and violet are the sky's, left
-# alone). The whitest are left as they are (a white-hot core stays as ruled). Warm raises green on fire's orange only
+# (orange to yellow, deep in colour, or bright and a little coloured) or a bluish-green light (bright and coloured: a
+# Soviet tracer, which the grade leaves grey-green; red is fire's hue already, a field's greens are yellow-green, and
+# blue and violet are the sky's, all left alone). The whitest are left as they are (a white-hot core stays as ruled). Warm raises green on fire's orange only
 # (on yellow it went lime, on the sky cyan: the pre-check). All else is left as it was. "heat" feathers it, so there
 # is no seam at a flame's edge. tools/battle-fx/land_grade.py is the same sums.
 FIRE_SPREAD_HLSL = """
@@ -1471,7 +1471,7 @@ float hue = smoothstep(-25.0, -12.0, h) * (1.0 - smoothstep(55.0, 65.0, h));
 float y = dot(c, float3(0.2126, 0.7152, 0.0722));
 float top = 1.0 - smoothstep(0.85, 0.95, y);
 float fire = hue * max(smoothstep(0.30, 0.45, s), smoothstep(0.70, 0.85, y) * smoothstep(0.08, 0.18, s) * top);
-float green = smoothstep(70.0, 85.0, h) * (1.0 - smoothstep(160.0, 175.0, h));
+float green = smoothstep(95.0, 108.0, h) * (1.0 - smoothstep(160.0, 175.0, h));
 float lit = green * smoothstep(0.66, 0.78, y) * smoothstep(0.12, 0.20, s) * top;
 float dim = smoothstep(0.01, 0.04, y);
 float heat = max(fire, lit) * dim;

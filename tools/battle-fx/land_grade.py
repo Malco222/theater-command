@@ -72,7 +72,7 @@ def write_for_land(target, most_over=4.0, **kw):
 
 SPREAD = dict(Spread=2.0, Warm=1.2, SatLo=0.30, SatHi=0.45, BrightLo=0.70, BrightHi=0.85, PaleLo=0.08, PaleHi=0.18,
               TopLo=0.85, TopHi=0.95, LitLo=0.66, LitHi=0.78, LitSatLo=0.12, LitSatHi=0.20,
-              LitHueA=70.0, LitHueB=85.0, LitHueC=160.0, LitHueD=175.0,
+              LitHueA=95.0, LitHueB=108.0, LitHueC=160.0, LitHueD=175.0,
               HueA=-25.0, HueB=-12.0, HueC=55.0, HueD=65.0, WarmHueLo=32.0, WarmHueHi=42.0, LumLo=0.01, LumHi=0.04)
 
 
