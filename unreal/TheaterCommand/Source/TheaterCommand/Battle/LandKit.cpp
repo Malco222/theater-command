@@ -3950,6 +3950,7 @@ namespace LandKit
 			Out.Y = V["y"].Num();
 			Out.U = V["u"].Num();
 			Out.H = V["h"].Num();
+			Out.Fate = V["fate"].Str("");
 			OutRounds.push_back(Out);
 		}
 		return true;
@@ -4108,11 +4109,16 @@ namespace LandKit
 			Bl.bMoving = SpeedBefore(W, W.Died) > 0.5;
 			Bl.Unit = W.Block;
 			Bl.Model = W.K;
-			// Her end by her own odds and the face struck (a tank or a self-propelled gun: the fates' tank ways name
-			// theirs, blow, burn or still); the table then picks how that end looks.
+			// Her end: the rules' own where her killing round names it (fate: out, burn or blow, from her measured odds
+			// for the face struck); else drawn here by the same odds (a tank or a self-propelled gun: the fates' tank ways
+			// name theirs, blow, burn or still). The table then picks how that end looks.
 			const Block* Of = BlockOf(W.Block);
 			const auto Odds = Fires.find(Of ? Of->Model : M.Name); // (by the model's file name, as performance-land.json keys it)
-			if (Odds != Fires.end() && (Bl.Family.compare(0, 5, "tank_") == 0 || Bl.Family == "spgun"))
+			if (Kill && (Kill->Fate == "out" || Kill->Fate == "burn" || Kill->Fate == "blow"))
+			{
+				Bl.How = Kill->Fate == "out" ? "still" : Kill->Fate;
+			}
+			else if (Odds != Fires.end() && (Bl.Family.compare(0, 5, "tank_") == 0 || Bl.Family == "spgun"))
 			{
 				const uint64_t H = Mix(Seed ^ 0xF17Eull, static_cast<uint64_t>(W.Block) * 977u + static_cast<uint64_t>(W.K), static_cast<uint64_t>(W.J) + 1u);
 				Bl.How = FireEnd(Odds->second, Bl.Aspect, Unit01(H), Unit01(Mix(H, 0xB10Bull)));

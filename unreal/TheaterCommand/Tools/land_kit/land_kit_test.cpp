@@ -612,6 +612,41 @@ int main(int argc, char** argv)
 		{
 			std::printf("  this battle: %-9s hit %-6s -> %-6s %s\n", E.Model.c_str(), E.Face.empty() ? "(none)" : E.Face.c_str(), E.End.empty() ? "(any)" : E.End.c_str(), E.Fate.c_str());
 		}
+		// Where the rules name her end on her killing round (fate: out, burn or blow, as their recordings carry it from
+		// 22 November), the scene shows theirs: this battle again with every kill round named, by turns.
+		if (bTable)
+		{
+			Tally Theirs;
+			const char* const Named[] = { "out", "burn", "blow" };
+			for (const char* Fate : Named)
+			{
+				std::string Text = Recording;
+				size_t At = 0, Put = 0;
+				while ((At = Text.find("\"r\":\"kill\"", At)) != std::string::npos)
+				{
+					const std::string Add = std::string(",\"fate\":\"") + Fate + "\"";
+					Text.insert(At + 10, Add);
+					At += 10 + Add.size();
+					++Put;
+				}
+				Battle Named1;
+				Named1.Fires = Fires;
+				std::string NamedError;
+				if (Put == 0 || !Named1.Load(Text, Read, Flat, &Table, 79, NamedError))
+				{
+					Theirs.Note(Put == 0, 0.0, std::string("could not load the battle with fate ") + Fate + ": " + NamedError);
+					continue;
+				}
+				const std::string Want = std::string(Fate) == "out" ? "still" : Fate;
+				for (const Battle::KillEnd& E : Named1.Ends)
+				{
+					// (a tank whose table has no blow for her family shows it burning, as the scene's own draw does)
+					const bool bOk = E.End == Want || (Want == "blow" && E.End == "burn" && E.Fate.find("burn") != std::string::npos);
+					Theirs.Note(bOk || E.End.empty(), 0.0, E.Model + " told " + Fate + " ended " + E.End);
+				}
+			}
+			Report("the rules' own end on a killing round is the one shown", Theirs, "");
+		}
 	}
 
 	std::printf("\n%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");

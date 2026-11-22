@@ -215,6 +215,7 @@ namespace LandField
 		Sweep,    // a well sweep
 		Haystack,
 		Birch,
+		Haycock, // a mown meadow's hay forked into cocks to make, 1.2 to 1.6 m, in loose rows (the bocage's July)
 		Tuft,    // clutter: grass tuft (every base from here on is clutter, laid round the eye)
 		TallGrass,
 		Wheat,   // standing ripe corn, a clump of stalks
@@ -224,6 +225,7 @@ namespace LandField
 		Fern,
 		Stubble, // clutter: a cut field's straw stubble in its drill rows, a few straws lying loose
 		Sward,   // clutter: the short grass itself, close round the eye, in the ground's own colour (its tint)
+		Trodden, // clutter: a piece of a cow path's bare trodden earth, laid end to end along the path
 		Count
 	};
 
@@ -282,6 +284,9 @@ namespace LandField
 		double LaneKm = 0.0;
 		double HedgeKm = 0.0;     // banks and walls, after the gaps
 		int Gates = 0;
+		int Haycocks = 0;         // the mown meadows' cocks of hay
+		int HayFields = 0, HayFieldsCocked = 0; // the mown meadows, and those with their hay in cocks
+		double CowPathKm = 0.0;   // the cattle's paths along the pastures' hedges and out of their gateways
 		int WayGaps = 0;          // hedges opened where the recording's vehicles cross them
 		int Breaches = 0;         // hedgerows blown open where the recording's men went over them in numbers
 		int Houses = 0;           // houses, barns and byres (the church counted apart)

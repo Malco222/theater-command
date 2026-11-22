@@ -204,7 +204,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden" };
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
 	/** The highest triangle of a mesh over a place, seen from above (NaN where none). */
@@ -837,6 +837,41 @@ int main(int Argc, char** Argv)
 	const double Build = Seconds(Start);
 	const LandField::Tally& T = G.Laid();
 	std::printf("built in %.2f s (core %.2f s: heights, lanes, parcels, hedges, village, instances; meshes %.2f s: tiles, ring, bases)\n", Build, T.CoreSeconds, T.MeshSeconds);
+	// LAND_FIELD_HEDGES=<folder>: the hedges and their openings as laid, for the rules (<key>-hedges.json): metres from
+	// the field's south-west corner, a hedge's points along its bank's middle after its gaps are cut, an opening's yaw
+	// the hedge's own heading there (radians from east).
+	if (const char* Dir = std::getenv("LAND_FIELD_HEDGES"))
+	{
+		const std::string Path = std::string(Dir) + "/" + Key + "-hedges.json";
+		if (FILE* Out = std::fopen(Path.c_str(), "w"))
+		{
+			static const char* const KindWords[] = { "hedgerow", "lane_bank", "wood_edge", "garden", "wall" };
+			std::fprintf(Out, "{\"field\":\"%s\",\"width\":%.1f,\"depth\":%.1f,\"ways\":%zu,\"hedges\":[", Key.c_str(), F.Width(), F.Depth(), F.Ways.size());
+			bool bFirst = true;
+			int Lines = 0, Gates = 0, Breaches = 0;
+			for (const LandField::HedgeLine& H : G.Hedges())
+			{
+				if (H.Kind < 0 || H.Kind > 4 || H.Points.size() < 2) continue; // (the far ring's strips are scenery)
+				std::fprintf(Out, "%s\n{\"kind\":\"%s\",\"points\":[", bFirst ? "" : ",", KindWords[H.Kind]);
+				for (size_t K = 0; K < H.Points.size(); ++K) std::fprintf(Out, "%s[%.2f,%.2f]", K ? "," : "", H.Points[K].first, H.Points[K].second);
+				std::fprintf(Out, "]}");
+				bFirst = false;
+				++Lines;
+			}
+			std::fprintf(Out, "\n],\"openings\":[");
+			bFirst = true;
+			for (const LandField::HedgeOpening& O : G.Openings())
+			{
+				std::fprintf(Out, "%s\n{\"x\":%.2f,\"y\":%.2f,\"yaw\":%.4f,\"width\":%.2f,\"kind\":\"%s\",\"men\":%d}", bFirst ? "" : ",", O.X, O.Y, O.Yaw, O.Width, O.Kind == 0 ? "gate" : "breach", O.Men);
+				bFirst = false;
+				++(O.Kind == 0 ? Gates : Breaches);
+			}
+			std::fprintf(Out, "\n]}\n");
+			std::fclose(Out);
+			std::printf("  hedges for the rules: %d lines, %d gates, %d breaches -> %s\n", Lines, Gates, Breaches, Path.c_str());
+		}
+		else std::printf("  hedges for the rules: could not write %s\n", Path.c_str());
+	}
 	std::printf("  %d parcels in the field and its band, mean %.0f m across; %d lanes, %.1f km; %.1f km of banks and walls; %d gates; %d hedges opened by the recording's vehicles\n", T.Parcels, T.ParcelMean, T.Lanes,
 	            T.LaneKm, T.HedgeKm, T.Gates, T.WayGaps);
 	std::printf("  village: %d houses, barns and byres (%d damaged), church %s, %d farmsteads\n", T.Houses, T.Damaged, T.bChurch ? "yes" : "no", T.Farmsteads);
@@ -940,6 +975,105 @@ int main(int Argc, char** Argv)
 	{
 		Check(T.ParcelMean >= 80.0 && T.ParcelMean <= 200.0, "parcels 80 to 200 m across", Fmt("mean %.0f m", T.ParcelMean));
 		Check(T.Gates > T.Parcels / 3, "a gate in most parcels", Fmt("%.0f gates, %.0f parcels", T.Gates, T.Parcels));
+		// The floor (the art director's review of 22 November, item 3): the June hay in cocks in half the mown meadows or
+		// more, 1.2 to 1.6 m; the cattle's paths along the pastures' hedges and out of their gateways, bare; the grass
+		// in clumps, not spread even.
+		{
+			std::vector<double> High;
+			const LandField::BaseMesh& Hc = G.BaseOf(LandField::Base::Haycock);
+			for (const LandField::Placed& P : G.Instances(LandField::Base::Haycock)) High.push_back(Hc.Height * P.ScaleZ);
+			const std::vector<LandField::Placed>& Cocks = G.Instances(LandField::Base::Haycock);
+			const LandField::Placed* Mid = nullptr;
+			for (const LandField::Placed& P : Cocks)
+				if (!Mid || std::hypot(P.X - F.Width() / 2.0, P.Y - F.Depth() / 2.0) < std::hypot(Mid->X - F.Width() / 2.0, Mid->Y - F.Depth() / 2.0)) Mid = &P;
+			std::printf("  hay: %d mown meadows, %d with their hay in cocks, %d cocks (%.2f to %.2f m, median %.2f); the cock nearest the middle at %.0f, %.0f\n", T.HayFields,
+			            T.HayFieldsCocked, T.Haycocks, Pctl(High, 0.1), Pctl(High, 0.9), Pctl(High, 0.5), Mid ? Mid->X : 0.0, Mid ? Mid->Y : 0.0);
+			Check(T.HayFields == 0 || (T.HayFieldsCocked * 2 >= T.HayFields && Pctl(High, 0.1) >= 1.15 && Pctl(High, 0.9) <= 1.65),
+			      "the June hay in cocks 1.2 to 1.6 m high, in half the mown meadows or more",
+			      Fmt("%.0f of %.0f meadows, 10%% %.2f m, 90%% %.2f m", T.HayFieldsCocked, T.HayFields, Pctl(High, 0.1), Pctl(High, 0.9)));
+			// Every gateway into a pasture with beasts: its paths, and the grass off them.
+			int Into = 0, Pathed = 0;
+			double GateX = 1e9, GateY = 1e9;
+			double OnPath = 0.0, OnArea = 0.0, Grass = 0.0, Area = 0.0;
+			for (const LandField::HedgeOpening& O : G.Openings())
+			{
+				if (O.Kind != 0) continue;
+				bool bPasture = false;
+				for (const double Side : { -1.0, 1.0 })
+				{
+					const std::string Crop = G.CropOfParcel(G.ParcelAt(O.X - std::sin(O.Yaw) * 4.0 * Side, O.Y + std::cos(O.Yaw) * 4.0 * Side));
+					bPasture = bPasture || Crop == "grazed" || Crop == "lush";
+				}
+				if (!bPasture) continue;
+				++Into;
+				std::vector<LandField::Placed> Out;
+				G.Clutter(O.X - 10.0, O.Y - 10.0, O.X + 10.0, O.Y + 10.0, Out);
+				std::vector<std::pair<float, float>> Bits;
+				for (const LandField::Placed& P : Out)
+					if (P.Kind == LandField::Base::Trodden) Bits.push_back({ P.X, P.Y });
+				if (Bits.size() >= 8)
+				{
+					++Pathed;
+					if (std::hypot(O.X - F.Width() / 2.0, O.Y - F.Depth() / 2.0) < std::hypot(GateX - F.Width() / 2.0, GateY - F.Depth() / 2.0))
+					{
+						GateX = O.X;
+						GateY = O.Y;
+					}
+				}
+				for (const LandField::Placed& P : Out)
+				{
+					if (P.Kind == LandField::Base::Trodden || P.Kind == LandField::Base::Stone) continue;
+					bool bOn = false;
+					for (const auto& [BX, BY] : Bits) bOn = bOn || std::hypot(P.X - BX, P.Y - BY) < 0.15;
+					(bOn ? OnPath : Grass) += 1.0;
+				}
+				OnArea += Bits.size() * 3.14159 * 0.15 * 0.15 * 0.75; // (the pieces' circles overlap a quarter along the path)
+				Area += 400.0;
+			}
+			const double Bare = Area > 0.0 && OnArea > 0.0 && Grass > 0.0 ? (OnPath / OnArea) / (Grass / Area) : 1.0;
+			std::printf("  cow paths: %.1f km; %d of %d gateways into a pasture with a path out of them (the nearest the middle at %.0f, %.0f); grass on a path's middle %.2f of the ground round it\n",
+			            T.CowPathKm, Pathed, Into, GateX, GateY, Bare);
+			Check(T.CowPathKm > 0.5 && Into > 0 && Pathed * 10 >= Into * 8 && Bare < 0.2, "cow paths along the pastures' hedges and out of eight in ten of their gateways, trodden bare",
+			      Fmt("%.1f km, %.0f of %.0f gateways, grass on them %.2f of round them", T.CowPathKm, Pathed, Into, Bare));
+			// Clumps: the tufts a 2 m square in grazed pasture, over random places; their spread over their mean (1 when
+			// spread at random, more in clumps).
+			uint64_t Sd = 777;
+			auto Next = [&Sd]() {
+				Sd = Sd * 6364136223846793005ull + 1442695040888963407ull;
+				return static_cast<double>(Sd >> 11) / 9007199254740992.0;
+			};
+			double Sum = 0.0, Sum2 = 0.0, Cells = 0.0;
+			for (int Try = 0, Boxes = 0; Try < 4000 && Boxes < 40; ++Try)
+			{
+				const double X = 20.0 + Next() * (F.Width() - 40.0), Y = 20.0 + Next() * (F.Depth() - 40.0);
+				if (G.CropOfParcel(G.ParcelAt(X, Y)) != "grazed") continue;
+				bool bAll = true;
+				for (const double DX : { -8.0, 8.0 })
+					for (const double DY : { -8.0, 8.0 })
+					{
+						LandField::Drawn What = LandField::Drawn::Floor;
+						G.HeightAt(X + DX, Y + DY, &What);
+						bAll = bAll && What == LandField::Drawn::Pasture && G.ParcelAt(X + DX, Y + DY) == G.ParcelAt(X, Y);
+					}
+				if (!bAll) continue;
+				++Boxes;
+				std::vector<LandField::Placed> Out;
+				G.Clutter(X - 8.0, Y - 8.0, X + 8.0, Y + 8.0, Out);
+				int N[64] = {};
+				for (const LandField::Placed& P : Out)
+					if (P.Kind == LandField::Base::Tuft) ++N[std::clamp(static_cast<int>((P.X - (X - 8.0)) / 2.0), 0, 7) * 8 + std::clamp(static_cast<int>((P.Y - (Y - 8.0)) / 2.0), 0, 7)];
+				for (const int K : N)
+				{
+					Sum += K;
+					Sum2 += static_cast<double>(K) * K;
+					Cells += 1.0;
+				}
+			}
+			const double Mean = Cells > 0.0 ? Sum / Cells : 0.0, Spread = Cells > 0.0 && Mean > 0.0 ? (Sum2 / Cells - Mean * Mean) / Mean : 0.0;
+			std::printf("  grazed pasture's tufts: %.2f a 2 m square, spread over mean %.2f (%.0f squares)\n", Mean, Spread, Cells);
+			// (spread at random they read 1.19 here: b754375e, before the clumps)
+			Check(Cells < 64.0 || Spread >= 1.45, "the pasture's tufts in clumps, not spread even", Fmt("spread over mean %.2f", Spread));
+		}
 		Check(!F.bTown || (T.bChurch && T.Houses >= 10), "the village has its church and houses", Fmt("%.0f houses", T.Houses));
 	}
 
@@ -1069,7 +1203,7 @@ int main(int Argc, char** Argv)
 	// Nothing standing in a house, and each thing standing on the ground drawn; no tree trunk on a vehicle's way.
 	{
 		int Bad = 0, Off = 0, All = 0, InLane = 0, ShrubsInLane = 0;
-		for (int B = 0; B <= static_cast<int>(LandField::Base::Birch); ++B)
+		for (int B = 0; B < static_cast<int>(LandField::Base::Tuft); ++B)
 			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
 			{
 				if (B == static_cast<int>(LandField::Base::Khata)) continue; // (a cottage stands on its own floor)

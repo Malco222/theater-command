@@ -94,7 +94,30 @@
    },
    "dusk_inner_glow_frames": 4,
    "_dusk": "At dusk and night the flash lights the young smoke from inside for 3 or 4 frames: the most cinematic moment we have.",
-   "_core": "Not a pale heart: yellow, blue channel under 110 (the fortifications burst passed 17:11Z with the pale heart at frame 0 left for the kit to fix)."
+   "_core": "Not a pale heart: yellow, blue channel under 110 (the fortifications burst passed 17:11Z with the pale heart at frame 0 left for the kit to fix).",
+   "ember": {
+    "_what": "What the flash leaves low in the earth: a dull orange glow no wider than 'share' of the flash, dying to dark ('to') over life_s (art director 19:58Z 21 November: at most a third of the flash's width, 0.15 to 0.3 s).",
+    "life_s": [
+     0.15,
+     0.3
+    ],
+    "share": 0.3,
+    "colour": [
+     176,
+     88,
+     36
+    ],
+    "to": [
+     40,
+     24,
+     16
+    ],
+    "nearer": 6.0,
+    "stretch": 1.15,
+    "point": 0.0,
+    "heart": 0.35,
+    "alpha": 0.8
+   }
   },
   "shock_ring": {
    "frames": [
@@ -103,33 +126,33 @@
    ],
    "reach_m": 9,
    "height_m": 1.2,
-   "colour_from_ground": 0.85,
+   "colour_from_ground": 1.0,
    "skirt": {
-    "puffs_outer": 50,
-    "puffs_inner": 90,
+    "puffs_outer": 40,
+    "puffs_inner": 44,
     "inner_speed": 0.6,
-    "end_radius_m": 3.0,
-    "start_radius_m": 0.7,
-    "stretch_along_ring": 1.7,
-    "flatten": 0.75,
+    "end_radius_m": 3.4,
+    "start_radius_m": 1.2,
+    "stretch_along_ring": 1.25,
+    "flatten": 0.9,
     "alpha": [
-     0.22,
-     0.3
+     0.6,
+     0.8
     ],
-    "drag": 8.0,
+    "drag": 2.4,
     "life_s": [
-     2.5,
-     3.5
+     3.0,
+     4.0
     ],
     "upright": true,
-    "rise_mps": 0.3,
-    "haze_by_s": 1.0,
-    "haze_alpha": 0.2,
+    "rise_mps": 0.04,
+    "haze_by_s": 3.0,
+    "haze_alpha": 0.5,
     "grow": 0.25,
-    "front_billow": 1.35,
+    "front_billow": 1.3,
     "shade": 1.8,
     "_shade": "how strongly the skirt is lit on top and shadowed at its foot (1 is every other puff), so it shows its height (art director 17:09Z)",
-    "heart": 0.0,
+    "heart": 0.6,
     "_mend_1931": "Art director 19:31Z: the skirt must be one low continuous haze, never puffs. Its pieces are now drawn as low flattened balls seen from where the eye is (a low wall from the side, the whole round they cover from above, where they used to be thin upright cards that read as separate dabs), larger, more of them, softer and fainter, so they run together.",
     "_budget": "Fewer, larger pieces since they cover their whole round from above (19:45Z): 130 a 105 where 250 overflowed the room in a battery's salvo (the pre-check's count).",
     "inner_radius_k": 1.5,
@@ -137,15 +160,27 @@
      5,
      7
     ],
-    "lobe_least": 0.25,
-    "feather": 0.7,
-    "most_high_m": 1.5,
-    "_mend_0319": "Art director 03:13Z (Brian's battle clips): from a low eye the skirt was a big flat beige pancake that veiled the crown's foot. Cut to reach 9 m, alpha 0.22 to 0.3; its rim broken into lobes (5 to 7, of uneven reach, never less than lobe_least of the reach between them); its outer feather share of the reach fading to a sixth, each piece soft from its middle out (heart 0); its top under most_high_m (times the square root of scale), rising only rise_mps as it hazes. Pass: no visible rim from a 1.7 m eye."
+    "lobe_least": 0.6,
+    "feather": 0.4,
+    "most_high_m": 4.5,
+    "_mend_0319": "Art director 03:13Z (Brian's battle clips): from a low eye the skirt was a big flat beige pancake that veiled the crown's foot. Cut to reach 9 m, alpha 0.22 to 0.3; its rim broken into lobes (5 to 7, of uneven reach, never less than lobe_least of the reach between them); its outer feather share of the reach fading to a sixth, each piece soft from its middle out (heart 0); its top under most_high_m (times the square root of scale), rising only rise_mps as it hazes. Pass: no visible rim from a 1.7 m eye.",
+    "hangs": 1,
+    "hang_keep": 0.25,
+    "hang_wide": 0.3,
+    "hang_spread": 0.3,
+    "inner_alpha": 0.5,
+    "high_vary": 0.55,
+    "rough": 0.35,
+    "inner_high": 0.4,
+    "front_stretch": 1.0
    },
    "grass": "flattens outward, springs back over 0.6 s",
    "heat_shimmer_frames": 2,
    "_note": "One continuous low skirt in the ground's own dust colour, racing out and thinning (art director 16:31Z), with height and a soft billowing top, settling to a low haze by frame 30 (16:53Z). Neighbours overlap by about half; each puff is an upright card, long along the ring, so its foot never cuts into the ground.",
-   "_why_085": "the skirt's tops face the sun and the ground is seen edge-on, so the ground's own dust drawn at full brightness reads paler than the ground; 0.85 matches it"
+   "_why_085": "the skirt's tops face the sun and the ground is seen edge-on, so the ground's own dust drawn at full brightness reads paler than the ground; 0.85 matches it",
+   "of_cloud": 1.5,
+   "roll_ref_m": 22.5,
+   "_ground_skirt": "Art director 19:58Z 21 November: a low ring of dust rolls outward along the ground to 1.5 times the cloud's width over 1 to 2 s, stays low, and hangs with the cloud. of_cloud: the skirt's width across as that many times the size's cloud_m (the metres below are for a reach of roll_ref_m, a 105's, and go by the reach). skirt.hangs: it stays as long as the cloud, going as the cloud goes by the size's own linger times, never climbing; it keeps hang_keep times the cloud's share of its pieces, and widens and spreads hang_wide and hang_spread as much as the cloud's puffs do."
   },
   "crown": {
    "frames": [
@@ -154,8 +189,8 @@
    ],
    "fan_deg": 100,
    "heavy_jets": [
-    3,
-    5
+    8,
+    12
    ],
    "heavy_reach": [
     0.3,
@@ -164,8 +199,8 @@
    "jet_foot_r": 0.05,
    "jet_tip_r": 0.012,
    "heavy_thick": [
-    0.7,
-    2.6
+    0.35,
+    0.9
    ],
    "heavy_shade": [
     0.55,
@@ -221,8 +256,8 @@
    "then": "collapses into the smoke and rains back as a veil",
    "_note": "A wide torn fan (about 100 degrees) thrown outward from the point (art director 16:31Z and 16:53Z): a few heavy dark jets, very uneven in length and width, overlapping and bunched, never spaced like fingers; the gaps filled with lighter dust (fill_jets) so the silhouette is one torn fan; each heavy jet thinnest and torn at its tip, drawn to a point (tip_point), never rounded, with clods flying on beyond it (tip_clod_speed); a dense dark body at the foot from frame 4. Jet thickness is a share of the crown's height (jet_foot_r, jet_tip_r) and puffs are stepped along a jet by their own length (overlap), so a bomb's jets do not bead.",
    "tip_clods": [
-    3,
-    5
+    1,
+    2
    ],
    "tip_breakup": 0.6,
    "overlap": 0.9,
@@ -232,8 +267,8 @@
    ],
    "azimuth": "random round the compass, never evenly spaced: jets overlap and bunch",
    "fill_jets": [
-    10,
-    16
+    9,
+    14
    ],
    "fill_reach": [
     0.3,
@@ -251,13 +286,13 @@
    "fill_scatter": 1.6,
    "fill_stretch": 1.15,
    "tip_stretch": 1.2,
-   "tip_point": 0.45,
-   "tip_alpha": 0.7,
+   "tip_point": 0.2,
+   "tip_alpha": 0.3,
    "tip_grain": 0.55,
    "tip_rough": 0.6,
    "heavy_heart": 0.92,
    "heavy_inner": 0.72,
-   "tip_inner": 0.6,
+   "tip_inner": 0.4,
    "tip_clod_speed": [
     0.9,
     1.05
@@ -268,13 +303,13 @@
    "_edge_rough": "Each jet puff's outline is lumpy by this share (fill jets 0.6 of it), so a jet's sides are clumpy, never a smooth blade, with no more puffs.",
    "root_solid": 0.6,
    "_root": "Art director 19:43Z: earth flying up is heavy at the root and thins only near the tip, with side edges broken as the clods are. Up to root_solid of a heavy jet's length its puffs are denser, and at each step a dense lumpy clump bulges out of its side (side_clumps is the chance).",
-   "side_clumps": 0.7,
+   "side_clumps": 0.2,
    "_tips_1943": "Art director 19:43Z: jet sides read as glass shards or blades. The cause was each big heavy piece's wide see-through band (solid only to half its radius, then thinning to a hard rim), drawn with straight sides between the ring's points. Now a heavy piece is solid out to heavy_inner of its radius (heavy_heart) and fades in a thin soft edge with no rim, so its lumpy outline shows and nothing is glassy. The root stays dense and dark up to root_solid with clumps bulging from its sides (side_clumps); the tip is torn into smaller, rougher, scattered pieces (tip_grain, tip_rough, tip_inner), drawn out and pointed less (tip_stretch 1.2, tip_point 0.45). The lighter dust between the jets is scattered wider, lumpy and soft, never pointed (fill_scatter, fill_rough, fill_stretch).",
    "_heavy_jets_0319": "Art director 03:13Z (Brian's battle clips): 24 to 40 thin dark spiky jets in place of 5 to 8 heavy ones. The shells keep 3 to 5 heavy jets for the mass and add the spikes (burst.crown.spikes); the bombs keep their own passed fan (sizes.<bomb>.crown).",
    "spikes": {
     "count": [
-     24,
-     36
+     20,
+     30
     ],
     "reach": [
      0.45,
@@ -300,7 +335,7 @@
     "ragged": 1.6,
     "pieces": [
      3,
-     5
+     4
     ],
     "lump_share": [
      0.6,
@@ -314,18 +349,37 @@
     "longest_of_median": 1.3,
     "stretch_most": 6,
     "_how": "Thin dark rays of earth among the heavy jets: count of them (halved past burst.debris.shower.halve_past puffs), each a few lumps (pieces) along its length with small gaps (each lump lump_share of its place), edges broken by rough (foot to tip), drawn to a point, reaching reach times the crown's height, leaning lean times half the fan, thick times the jet's foot and tip radius, the heavy colour times shade, alpha falling to tip_alpha at the tip, a lump of tip_clod_m (times the square root of scale) riding each tip. The debris shower streams along them too. droop: the outer lumps fall faster (gravity up to 1 + droop at the tip), so the tip bends down after about 0.3 s. longest_of_median: no spike longer than this times the middle one (a long lone blade reads as a stick). stretch_most: no lump drawn longer than this times its width. Art director 03:28Z."
-   }
+   },
+   "to_dust": 0.3,
+   "jet_hold": 0.35,
+   "heavy_stretch": 4.2,
+   "heavy_swell": [
+    1.3,
+    1.7
+   ],
+   "heavy_droop": 3.0,
+   "tip_life_s": [
+    1.2,
+    1.6
+   ],
+   "tip_heart": 0.4,
+   "_streaks": "Art director 03:27Z 22 November: at half a second the crown was 'a few broad flat wedges with straight edges... cardboard slabs. Keep the mass, but make it more, narrower streaks with soft tips that fall back by about 1.5 s.' So more heavy jets, each thinner (heavy_jets, heavy_thick); heavy_stretch: a heavy jet's pieces drawn that long for their width and stepped as far apart, so a thin jet is a streak of few pieces; heavy_swell: they widen that much over their lives and no more; heavy_droop: a piece falls faster the further up its jet (gravity up to 1 + heavy_droop at the tip), so the tips come back down; tip_life_s: how long the piece at the very tip lasts, the root's as ever; tip_heart, tip_alpha, tip_inner: a soft end. A size may have its own of each. The thin jets are paid for in pieces: fewer clumps on a jet's side, one or two clods off each tip, fewer spikes of fewer lumps, fewer fill jets and foot lumps, so a 105 holds about as many pieces as before (1,104 against 1,037 at most, and a barrage holds fewer).",
+   "tip_swell": [
+    0.5,
+    0.8
+   ],
+   "heart_end": 0.3
   },
   "foot": {
    "count": [
-    90,
-    120
+    75,
+    100
    ],
    "width": 0.4,
    "height": 0.35,
    "lump_r": [
-    0.035,
-    0.09
+    0.018,
+    0.048
    ],
    "shade": [
     0.35,
@@ -447,7 +501,13 @@
     "_why": "Brian's battle video (11-19): what makes a hit read as violent is a dense spray of dark lumps flung higher than the crown and twice as wide, raining back for one to three seconds. Ours threw a few small clods low. The shower: count lumps for a 105 (times the ground's shower share, default its clods share, and the shell's size squared up to most_k2), thrown up_mps and out_mps (both times the fourth root of the shell's scale, so a 105 tops out at 2 to 13 m and lands 1.2 to 3.3 s later), radius r_m (times the square root of scale; small_skew keeps most small), darkened by shade (backlit undersides), resting rest_s on the ground, a landing puff only from landing_puff_r_m. Water throws none. along_jets of them stream along the crown's jets (each within jet_spread of its way, at jet_speed times the speed that carries a lump to that jet's tip, so some fall short inside it and some fly on past), the rest flung every way at up_mps and out_mps.",
     "halve_past": 2000,
     "_halve": "Art director 03:13Z: with more than halve_past puffs live when a shell lands, it throws half the shower and half the spikes."
-   }
+   },
+   "dust_trails": [
+    2,
+    4
+   ],
+   "dust_trail_from_m": 0.08,
+   "_dust_trails": "Art director 19:58Z 21 November: dark clods tumble and fall back within 2 to 3 s (sizes.<size>.clods_back_s), a few trailing thin dust: dust_trails of the clods over dust_trail_from_m in radius (for a 105; by the size) shed a thin line of dust along their flight."
   },
   "smoke": {
    "frames": [
@@ -524,6 +584,108 @@
    "clods_round_it": true,
    "persists": "whole battle",
    "overlap": "craters overlap where hits overlap: a barrage ploughs a green field"
+  },
+  "bulk": {
+   "_what": "A burst with bulk (Brian, 18:30Z 21 November: 'the explosions should be bigger and more more realistic'; the art director's ruling of 19:58Z, art-director/explosions/smoke-burst-fire-ruling-r2.md): more bulk, a denser core and a longer hang, never a ball of soft smoke lifting off the ground. Where a size has cloud_m, its cloud is a column of the ground's own dark earth standing on the hit, many puffs at every height, hiding what is behind it through its first two seconds, in lighter grey-brown smoke and dust that is cloud_m across at the ground by about two seconds. It climbs from its foot and stays on the ground. Remove this row, or a size's cloud_m, and that cloud is the old one.",
+   "_how": "column: 'puffs' of them (more for a bigger burst), in a stack 'wide' of cloud_m across at the ground and top_wide of that at its top, 'tall' of the crown high; each puff_r of cloud_m in radius, as thick as 'alpha', its outline 'rough'; the top stands by climb_s and rises on at rise_mps, the foot not at all; 'soil' and 'shade' its colour between the ground's heavy earth and its soil, going 'settle' of the way to the settled brown-grey over life_s. fringe: 'puffs' of lighter smoke, 'tall' of the crown high, 'taper' narrower at its top than at the ground, rolling out to its place over roll_s.",
+   "column": {
+    "puffs": 60,
+    "wide": 0.45,
+    "top_wide": 0.55,
+    "tall": 0.7,
+    "puff_r": [
+     0.055,
+     0.105
+    ],
+    "alpha": [
+     0.9,
+     0.96
+    ],
+    "life_s": [
+     4.5,
+     6.5
+    ],
+    "shade": [
+     0.7,
+     1.0
+    ],
+    "climb_s": 0.8,
+    "rise_mps": 0.8,
+    "soil": 0.5,
+    "settle": 0.25,
+    "rough": 0.45,
+    "heart": 0.8,
+    "inner": 0.62,
+    "light": 1.4,
+    "hang": 0.3,
+    "life_thick": [
+     1.125,
+     1.625
+    ],
+    "life_least_s": 2.0
+   },
+   "fringe": {
+    "puffs": 90,
+    "tall": 0.95,
+    "taper": 0.55,
+    "puff_r": [
+     0.07,
+     0.12
+    ],
+    "alpha": [
+     0.42,
+     0.62
+    ],
+    "roll_s": 1.2,
+    "top_bigger": 0.3,
+    "born_r": 0.35,
+    "rise_mps": [
+     0.25,
+     0.9
+    ],
+    "outward": 1.6,
+    "low": 1.6,
+    "dust": [
+     0.05,
+     0.3
+    ],
+    "top_share": 0.35,
+    "heart": [
+     0.3,
+     0.6
+    ],
+    "cloud_shade": 1.2,
+    "keep_k": 0.8,
+    "go_by_k": 0.5,
+    "reach": 1.15,
+    "from_column": 0.75,
+    "rough": 0.3,
+    "near_alpha": 0.9,
+    "near_dark": 0.8,
+    "near_heart": 0.75,
+    "shade": 0.8,
+    "light": 0.6
+   },
+   "puff_of": 0.75
+  },
+  "throw": {
+   "_what": "A shell's thrown earth at its flash (art director 03:27Z 22 November, on the bigger bursts: 'the throw at the flash is near black... a black comic-book splat with an orange dot. Make it dark earth brown with the faces toward the flash lit warm, floor about 15'). lighter and body: the jets, the spikes, the body and the foot are made lighter than the ground's heavy earth has them, until its brightest channel is the written value body (75 lands about 50), never more than lighter times: so they have a lit side and a shaded one above the floor, and sand or rubble, light already, stay as they are. mottle: each piece that share lighter or darker than the next, by its own lump seed, so a jet is streaked earth and never one flat fill. floor: no point of the jets, the spikes, the body, the foot or the column of earth is drawn darker than this, in the hour's light. flash_lit: how far the earth nearest the flash goes toward flash_colour on its side toward the flash as it goes off, dying to nothing over flash_lit_s; half as much flash_lit_reach of the flash's own width from it. A piece the eye sees from the flash's side is lit all over, one standing in front of it only on its edge. Not on water. Both colours are written values, aimed through the game's curve (picture._how): the floor lands about 40,33,26, 16 on the art director's scale of 100; flash_colour lands about 180,117,58. Remove the row and the throw is as it was.",
+   "lighter": 3.0,
+   "body": 75,
+   "mottle": 0.3,
+   "floor": [
+    69,
+    62,
+    55
+   ],
+   "flash_lit": 1.0,
+   "flash_lit_s": 0.35,
+   "flash_lit_reach": 1.0,
+   "flash_colour": [
+    165,
+    117,
+    80
+   ]
   }
  },
  "sizes": {
@@ -531,8 +693,8 @@
   "grenade": {
    "scale": 0.2,
    "crown_m": [
-    1.5,
-    2.0
+    3.0,
+    4.0
    ],
    "crater_m": 0.0,
    "scuff": true,
@@ -542,13 +704,18 @@
    ],
    "shake_within_m": 10,
    "mostly": "dust",
-   "cue_size": "grenade"
+   "cue_size": "grenade",
+   "cloud_m": 5.0,
+   "flash_k": 1.21,
+   "flash_s": 0.05,
+   "clods_back_s": 2.0,
+   "cloud_reach": 0.85
   },
   "light": {
    "scale": 0.3,
    "crown_m": [
-    2.0,
-    3.0
+    5.0,
+    7.0
    ],
    "crater_m": 0.5,
    "linger_s": [
@@ -564,13 +731,17 @@
     "57 mm"
    ],
    "cue_size": "grenade",
-   "_proposed": "the effects artist 16:55Z, for the field battle's 'light' shells (37 to 57 mm); the art director to confirm"
+   "_proposed": "the effects artist 16:55Z, for the field battle's 'light' shells (37 to 57 mm); the art director to confirm",
+   "cloud_m": 8.0,
+   "flash_k": 1.47,
+   "flash_s": 0.05,
+   "clods_back_s": 2.2
   },
   "mortar": {
    "scale": 0.5,
    "crown_m": [
-    4.0,
-    6.0
+    10.0,
+    12.0
    ],
    "crater_m": 0.8,
    "linger_s": [
@@ -582,13 +753,20 @@
     "81 mm",
     "82 mm"
    ],
-   "cue_size": "mortar"
+   "cue_size": "mortar",
+   "cloud_m": 12.0,
+   "flash_k": 1.5,
+   "flash_s": 0.06,
+   "clods_back_s": 2.5,
+   "crown": {
+    "piece_max_m": 1.1
+   }
   },
   "gun75": {
    "scale": 0.7,
    "crown_m": [
-    5.0,
-    8.0
+    15.0,
+    19.0
    ],
    "crater_m": 1.0,
    "linger_s": [
@@ -601,13 +779,20 @@
     "76 mm",
     "25-pounder"
    ],
-   "cue_size": "gun"
+   "cue_size": "gun",
+   "cloud_m": 20.0,
+   "flash_k": 1.88,
+   "flash_s": 0.08,
+   "clods_back_s": 2.8,
+   "crown": {
+    "piece_max_m": 1.5
+   }
   },
   "how105": {
    "scale": 1.0,
    "crown_m": [
-    8.0,
-    12.0
+    20.0,
+    25.0
    ],
    "crater_m": 1.7,
    "linger_s": [
@@ -618,13 +803,20 @@
    "calibres": [
     "105 mm"
    ],
-   "cue_size": "howitzer"
+   "cue_size": "howitzer",
+   "cloud_m": 30.0,
+   "flash_k": 2.06,
+   "flash_s": 0.1,
+   "clods_back_s": 3.0,
+   "crown": {
+    "piece_max_m": 1.4
+   }
   },
   "how150": {
    "scale": 1.6,
    "crown_m": [
-    12.0,
-    20.0
+    28.0,
+    35.0
    ],
    "crater_m": 3.0,
    "linger_s": [
@@ -636,13 +828,21 @@
     "150 mm",
     "155 mm"
    ],
-   "cue_size": "heavy"
+   "cue_size": "heavy",
+   "cloud_m": 38.0,
+   "flash_k": 2.19,
+   "flash_s": 0.12,
+   "clods_back_s": 3.5,
+   "crown": {
+    "piece_max_m": 1.8
+   },
+   "cloud_reach": 1.13
   },
   "bomb250": {
    "scale": 3.4,
    "crown_m": [
-    30.0,
-    45.0
+    45.0,
+    60.0
    ],
    "crater_m": 7.0,
    "linger_s": [
@@ -659,8 +859,8 @@
    "crown": {
     "_note": "Art director 20:00Z: a bomb's crown at frame 8 read as rabbit ears, two tall thin jets alone in a V. A bomb throws 5 to 9 heavy jets spaced round the compass (spread_even: each nudged by up to that share of a gap), so the fan shows from every side; the second tallest is clearly shorter than the tallest (second_reach, and heavy_lean at most 0.8 of the half fan, so it is at least a quarter shorter however it leans); at least three more reach half the tallest one's height or over (mid_jets, mid_reach); the rest are short (heavy_reach) and lean further out (short_lean), so the fan spans about 100 degrees at its foot. A dense dark body about a third of the crown's height stands at the root, so the jets rise out of a mass and never stand on the skirt like stalks. Height stays at the size's crown_m.",
     "heavy_jets": [
-     5,
-     9
+     12,
+     18
     ],
     "spread_even": 0.6,
     "heavy_lean": [
@@ -685,8 +885,8 @@
      1.0
     ],
     "heavy_thick": [
-     1.0,
-     2.6
+     0.5,
+     1.3
     ],
     "piece_max_m": 1.8,
     "body": {
@@ -705,13 +905,18 @@
      "rough": 0.35
     },
     "_pieces": "Art director 20:05Z: at bomb size the big pieces showed flat faces with straight edges, like a dark crystal cluster. A piece's outline has the ring's few points however big it is, so a bomb's jets are built of more pieces no bigger than piece_max_m (radius when thrown), scattered across each jet's width, and the body's pieces are lumpy (body.rough) with soft edges (body.rim 0)."
-   }
+   },
+   "cloud_m": 48.0,
+   "flash_k": 2.05,
+   "flash_s": 0.13,
+   "cloud_many": 1.25,
+   "cloud_puff": 1.4
   },
   "bomb500": {
    "scale": 4.6,
    "crown_m": [
-    45.0,
-    60.0
+    60.0,
+    80.0
    ],
    "crater_m": 10.0,
    "linger_s": [
@@ -728,8 +933,8 @@
    "crown": {
     "_note": "Art director 20:00Z: a bomb's crown at frame 8 read as rabbit ears, two tall thin jets alone in a V. A bomb throws 5 to 9 heavy jets spaced round the compass (spread_even: each nudged by up to that share of a gap), so the fan shows from every side; the second tallest is clearly shorter than the tallest (second_reach, and heavy_lean at most 0.8 of the half fan, so it is at least a quarter shorter however it leans); at least three more reach half the tallest one's height or over (mid_jets, mid_reach); the rest are short (heavy_reach) and lean further out (short_lean), so the fan spans about 100 degrees at its foot. A dense dark body about a third of the crown's height stands at the root, so the jets rise out of a mass and never stand on the skirt like stalks. Height stays at the size's crown_m.",
     "heavy_jets": [
-     5,
-     9
+     12,
+     18
     ],
     "spread_even": 0.6,
     "heavy_lean": [
@@ -754,8 +959,8 @@
      1.0
     ],
     "heavy_thick": [
-     1.0,
-     2.6
+     0.5,
+     1.3
     ],
     "piece_max_m": 2.2,
     "body": {
@@ -774,7 +979,13 @@
      "rough": 0.35
     },
     "_pieces": "Art director 20:05Z: at bomb size the big pieces showed flat faces with straight edges, like a dark crystal cluster. A piece's outline has the ring's few points however big it is, so a bomb's jets are built of more pieces no bigger than piece_max_m (radius when thrown), scattered across each jet's width, and the body's pieces are lumpy (body.rough) with soft edges (body.rim 0)."
-   }
+   },
+   "cloud_m": 60.0,
+   "flash_k": 2.33,
+   "flash_s": 0.15,
+   "cloud_reach": 1.0,
+   "cloud_many": 1.3,
+   "cloud_puff": 1.4
   },
   "torpedo": {
    "_what": "a torpedo against a ship's side (the scene passes this size for it; a kit without the row draws a field gun's burst, so pass it only with this recipe). On water: the tallest, narrowest column, over the mast, dark for its lower third.",
@@ -3842,6 +4053,19 @@
    8
   ],
   "_near_eye": "Art director 17:52Z: smoke and dust one can see through fades out as it comes up to the camera, so it never fills the whole frame evenly (a barrage's dust drifting downwind over the eye was a flat beige sheet for about 4 s). near_eye_fade_m: nothing of a piece whose near edge is within the first of these of the eye, all of it from the second on. Never a light, a thrown clod, an aircraft's trail or an oil fire's column. At 2 and 8 the passed bursts at the battle camera (18.75 m off) do not change: a 105's nearest puff edge is 8.4 m off; a mortar's and a 75's nearest drifting puffs (5.7 and 6.3 m) thin by a third at most. Absent: no fade.",
+  "trail_near_eye_fade_m": [
+   20.0,
+   38.0
+  ],
+  "trail_near_eye_looms": [
+   0.06,
+   0.2
+  ],
+  "trail_near_eye_least_m": [
+   5.0,
+   10.0
+  ],
+  "_trail_near_eye": "Art director 04:17Z 22 November, on the air scene's ride and chase cameras (build 2b177386): a trail passing the lens was a wide soft grey band across the frame or a black ribbon, and a strip through the camera's own plane a hard-edged sheet. trail_near_eye_fade_m: by its distance, nothing of an aircraft's smoke trail within the first of these of the camera and all of it from the second on, fading smoothly between. By how far the trail's line is from the camera, each end of a strip by its own, so the strip fades along its length with no step at a join. The art director's first numbers were 30 and 60, then 20 and 45 (04:43Z) so that the 60 m rear quarter film shot's fire trail does not thin toward its corner. That trail passes 39 m from that camera, so the second number is 38 and the shot is as it was (no pixel moves by more than 4 of 255; at 45 it still thinned by up to 54). trail_near_eye_looms: nearer than the second distance a trail still shows while it is small in the picture: all of it while its half width is under the first of these as a share of its distance from the camera, none of it from the second. So the aircraft the camera rides with still trails its smoke from the engine (thin there, and some 20 m off) and loses it as it widens toward the lens, and a wide old trail goes as it comes up to the lens. Without this key the distance alone decides and a ridden aircraft shows no smoke. trail_near_eye_least_m: however small in the picture, none of a trail within the first of these of the camera and no more than the distance leaves until the second, so nothing is drawn at the lens or through the camera's own plane. Flames are lights and stay. A ship's funnel smoke, a burst's smoke and gun smoke go by near_eye_fade_m. Absent: no fade.",
   "draw_beyond_m": 1500,
   "muzzle_smoke": [
    150,
@@ -4546,28 +4770,38 @@
      "thick_s": 1,
      "gone_s": 8,
      "left_third": 0.13,
-     "left_two_thirds": 0.09
+     "left_two_thirds": 0.09,
+     "bulk_left_third": 0.3,
+     "bulk_left_two_thirds": 0.22
     },
     "light": {
      "thick_s": 1.5,
      "gone_s": 11,
      "left_third": 0.28,
-     "left_two_thirds": 0.22
+     "left_two_thirds": 0.22,
+     "bulk_left_third": 0.27,
+     "bulk_left_two_thirds": 0.27
     },
     "mortar": {
      "thick_s": 2,
      "gone_s": 15,
      "left_third": 0.28,
-     "left_two_thirds": 0.18
+     "left_two_thirds": 0.18,
+     "bulk_left_third": 0.45,
+     "bulk_left_two_thirds": 0.32
     },
     "gun75": {
      "thick_s": 3,
      "gone_s": 22,
-     "left_two_thirds": 0.22
+     "left_two_thirds": 0.22,
+     "bulk_left_third": 0.42,
+     "bulk_left_two_thirds": 0.27
     },
     "how105": {
      "thick_s": 4,
-     "gone_s": 30
+     "gone_s": 30,
+     "bulk_left_third": 0.22,
+     "bulk_left_two_thirds": 0.19
     },
     "how150": {
      "thick_s": 5,
@@ -4575,7 +4809,9 @@
      "left_third": 0.22,
      "left_two_thirds": 0.19,
      "wide": 1.5,
-     "spread": 1.0
+     "spread": 1.0,
+     "bulk_left_third": 0.2,
+     "bulk_left_two_thirds": 0.125
     },
     "bomb250": {
      "thick_s": 6,
@@ -4583,7 +4819,9 @@
      "left_third": 0.31,
      "left_two_thirds": 0.16,
      "wide": 1.2,
-     "spread": 0.7
+     "spread": 0.7,
+     "bulk_left_third": 0.09,
+     "bulk_left_two_thirds": 0.047
     },
     "bomb500": {
      "thick_s": 8,
@@ -4591,9 +4829,12 @@
      "left_third": 0.22,
      "left_two_thirds": 0.12,
      "wide": 1.2,
-     "spread": 0.7
+     "spread": 0.7,
+     "bulk_left_third": 0.095,
+     "bulk_left_two_thirds": 0.05
     }
-   }
+   },
+   "stay_low": 0.7
   },
   "gun": {
    "keep": 0.5,
@@ -4680,7 +4921,8 @@
    "pale_by": 1.0,
    "thick_s": 2,
    "gone_s": 15
-  }
+  },
+  "_stay_low": "A burst with bulk: a puff at the cloud's foot is stay_low the likelier to stay to the end than the cloud's share, and one at its top that much the less, so the base holds the smoke and thins last while the smoke above lifts (art director 20:50Z 21 November)."
  },
  "smoke_screen": {
   "_why": "The drill book's smoke screens (22 November): a smoke round makes no crater and no dark cloud. A phosphorus round (wp, the American 60 mm) bursts hard and white and throws burning streamers in a dome, each trailing white smoke that curls over as it falls; a burning bomb or canister (the British 2-inch, the others') gushes from where it lies. From either a low white wall is laid for as long as the round burns (the battle says: a light mortar's about 60 s and 18 m, an 81 mm's 90 s and 24 m, a field gun's 150 s and 30 m), its lumps swelling as they drift down the wind, so it is one screen through its middle with rags at its edges, thickening over build_s and thinning from thin_from of its time.",

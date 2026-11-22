@@ -443,6 +443,8 @@ namespace LandFeed
 			Row.Fc = R["fc"].Str("");
 			Row.U = R["u"].Num(0.0);
 			Row.H = R["h"].Num(0.0);
+			Row.G = R["g"].Str("");
+			Row.bCm = R["cm"].Int(0) != 0;
 			Out.Rounds.push_back(std::move(Row));
 		}
 		std::sort(Out.Rounds.begin(), Out.Rounds.end(), [](const Round& A, const Round& B) { return A.T != B.T ? A.T < B.T : A.N < B.N; });

@@ -214,6 +214,12 @@ The game is for personal use only.
 | `mortar_landing` | `mortar_impact_far_01.wav` | [M224 Mortar Impact  Distant 01](https://freesound.org/people/Nanashi/sounds/426166/) | Freesound | CC BY 4.0 | Nanashi |
 | `mortar_landing` | `mortar_impact_far_02.wav` | [M224 Mortar Impact  Distant 03](https://freesound.org/people/Nanashi/sounds/426167/) | Freesound | CC BY 4.0 | Nanashi |
 | `tank_engine_german` | `panzer_engine_loop.wav` | [Taistelunäytös Lippujuhlan päivä 2014 16 Stug IIIG](https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_16_Stug_IIIG.webm) | Wikimedia Commons | Public domain | none |
+| `maxim_burst` | `maxim_burst.wav` | [Maxim Russian machinegun](https://freesound.org/people/poissonmort/sounds/160773/) | Freesound | CC BY 4.0 | poissonmort |
+| `bolt_mosin` | `bolt_mosin.wav` | [Mosin Nagant Bolt Action Cycle](https://freesound.org/people/Zott820/sounds/370345/) | Freesound | CC0 | none |
+| `russian_order_01` | `russian_order_01.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `russian_order_02` | `russian_order_02.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `russian_order_03` | `russian_order_03.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
+| `russian_order_04` | `russian_order_04.wav` | [Russian Cheeky Soldier Voice](https://freesound.org/people/qubodup/sounds/212429/) | Freesound | CC BY 4.0 | qubodup |
 
 ## Credits owed
 
@@ -235,6 +241,8 @@ The game is for personal use only.
 - **Nanashi** "M224 Mortar Impact Medium Distance 01", "M224 Mortar Impact Medium Distance 02", "M224 Mortar Impact  Distant 01", "M224 Mortar Impact  Distant 03" · CC BY 4.0
 - **nebulousflynn** "Moored Boat Metal Grinding, Groaning & Creaking" · CC BY 4.0
 - **nicStage** "Sherman E8 ("Easy 8") tank starting up and running", "Sherman E8 ("Easy 8") tank driving" · CC BY 4.0
+- **poissonmort** "Maxim Russian machinegun" · CC BY 4.0
+- **qubodup** "Russian Cheeky Soldier Voice" · CC BY 4.0
 - **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)", "File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv" · CC BY 3.0
 - **rakurka** "Incoming Ricochets.wav" · CC BY 3.0
 - **shawshank73** "military01_scottstoked.wav" · CC BY 3.0
