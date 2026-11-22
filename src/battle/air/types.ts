@@ -92,10 +92,15 @@ export interface AirPlace {
   nat: string;
   /** The defender has radar warning: his fighters are up and waiting when the raid comes on, not caught on the ground. */
   radar: boolean;
-  /** The air war's intensity for this mission, the clash between fighters, and the bomber-loss law (L.bombers, L.power). */
+  /**
+   * The air war's intensity for this mission, the clash between fighters, and the bomber-loss law as the raid card
+   * reads it (L.bombers, L.power; the largest share of its bombers a raid can lose; how many times over the escort
+   * counts in the fighting weight, and the bombers' own defence: ruling 227). escort and defence may be absent on a
+   * ticket made before ruling 227 reached the battle: 1 and bomberDefence then.
+   */
   I: number;
   clash: number;
-  law: { bombers: number; power: number; most: number };
+  law: { bombers: number; power: number; most: number; escort?: number; defence?: number };
   /** C.fighters, C.escortShare, C.bomberDefence: the rules' fighter numbers. */
   fighters: number;
   escortShare: number;
@@ -104,8 +109,12 @@ export interface AirPlace {
   gunLoss: number;
   /** Average fighting worth of an aircraft on each side, as assessAir weighs it. */
   worth: Record<Side, number>;
-  /** What the raid card forecast: aircraft each side should lose, and bombers that should get through. */
-  forecast: { foe: number; ftr: number; bmr: number; through: number; bomberLoss: number };
+  /**
+   * What the raid card forecast: aircraft each side should lose, and bombers that should get through. foeGuns: of the
+   * defenders' losses ('foe'), those the bombers' own gunners bring down (ruling 227, forecastAir's foeGuns); the rest
+   * fall to the escort. Absent on a ticket made before ruling 227 reached the battle: none.
+   */
+  forecast: { foe: number; foeGuns?: number; ftr: number; bmr: number; through: number; bomberLoss: number };
   /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
   starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
   /** Fighter pilots who come down over this side's ground fly again at this rate (AIR.pilots.home, away). */
