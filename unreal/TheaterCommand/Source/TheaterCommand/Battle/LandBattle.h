@@ -473,7 +473,7 @@ private:
 	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
 	 * back, or with no game viewport, as in the editor). "-TheaterLandNoDarkRead" leaves it off (the rule never asked). */
 	TSharedPtr<FFrameGrabber> DarkGrab;
-	double DarkShare = -1.0, DarkAskAt = 0.0;
+	double DarkShare = -1.0, DarkAskAt = 0.0, DarkGotAt = 0.0;
 	int32 DarkReads = 0;
 	void StartDarkRead();
 	void ReadDark(double Real);

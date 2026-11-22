@@ -4879,6 +4879,7 @@ void ALandBattle::StartDarkRead()
 	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
 	DarkGrab->StartCapturingFrames();
 	DarkAskAt = 0.0;
+	DarkGotAt = 0.0;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36 four times a second, its share under L 25 for the camera's dark rule"));
 }
 
@@ -4897,8 +4898,14 @@ void ALandBattle::ReadDark(double Real)
 	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
 	if (Frames.Num() == 0)
 	{
+		// (no frame back for a second: the last reading is stale, so the rule is told there is none; pre-check's note)
+		if (DarkShare >= 0.0 && Real - DarkGotAt > 1.0)
+		{
+			DarkShare = -1.0;
+		}
 		return;
 	}
+	DarkGotAt = Real;
 	// (a result card up: the whole picture dimmed under it, so no reading till it goes)
 	if (State.IsValid() && State->bCard)
 	{
