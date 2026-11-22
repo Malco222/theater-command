@@ -569,6 +569,59 @@ namespace EdgeSeals
 		return true;
 	}
 
+	FSealAsk ReadSealAsk(const std::string& Asked)
+	{
+		FSealAsk Ask;
+		size_t At = 0;
+		while (At <= Asked.size())
+		{
+			const size_t End = std::min(Asked.find(',', At), Asked.size());
+			std::string Part;
+			for (size_t Index = At; Index < End; ++Index)
+			{
+				const char Letter = Asked[Index];
+				if (!IsSpace(Letter))
+				{
+					Part += Letter >= 'A' && Letter <= 'Z' ? static_cast<char>(Letter - 'A' + 'a') : Letter;
+				}
+			}
+			At = End + 1;
+			if (Part.empty())
+			{
+				continue;
+			}
+			if (Part == "slide")
+			{
+				Ask.bSlide = true;
+				continue;
+			}
+			// ("open:N", "hover:N": N a whole number from 1, at most two figures)
+			const size_t Colon = Part.find(':');
+			const std::string Word = Part.substr(0, Colon == std::string::npos ? Part.size() : Colon);
+			const std::string Number = Colon == std::string::npos ? std::string() : Part.substr(Colon + 1);
+			int Value = 0;
+			bool bNumber = !Number.empty() && Number.size() <= 2;
+			for (const char Figure : Number)
+			{
+				bNumber = bNumber && Figure >= '0' && Figure <= '9';
+				Value = Value * 10 + (Figure - '0');
+			}
+			if (bNumber && Value >= 1 && Word == "open")
+			{
+				Ask.Open = Value;
+			}
+			else if (bNumber && Value >= 1 && Word == "hover")
+			{
+				Ask.Hover = Value;
+			}
+			else
+			{
+				++Ask.Unknown;
+			}
+		}
+		return Ask;
+	}
+
 	double SlideShare(double Since, int Order, double Stagger, double Slide)
 	{
 		const double Share = (Since - Order * Stagger) / std::max(Slide, 0.001);

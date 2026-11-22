@@ -832,6 +832,25 @@ static void TestUnderFrame()
 	}
 }
 
+/** (0010) The photographer's asks of the seals, "-TheaterSeal=open:N,hover:N,slide", as the layer reads them once. */
+static void TestSealAsk()
+{
+	const FSealAsk None = ReadSealAsk("");
+	CHECK(None.Open == 0 && None.Hover == 0 && !None.bSlide && None.Unknown == 0);
+	const FSealAsk Open = ReadSealAsk("open:3");
+	CHECK(Open.Open == 3 && Open.Hover == 0 && !Open.bSlide && Open.Unknown == 0);
+	const FSealAsk All = ReadSealAsk("hover:2,slide,open:1");
+	CHECK(All.Open == 1 && All.Hover == 2 && All.bSlide && All.Unknown == 0);
+	// (letters in either case, spaces about the parts, an empty part, and the last of two asks of a kind stand)
+	const FSealAsk Loose = ReadSealAsk(" Hover:4 ,, SLIDE,open:2,open:12");
+	CHECK(Loose.Open == 12 && Loose.Hover == 4 && Loose.bSlide && Loose.Unknown == 0);
+	// (a seal is named from 1, in at most two figures: anything else is not known, and left out)
+	const FSealAsk Wrong = ReadSealAsk("open:0,hover:-1,open:x,hover:,open,slid,hover:123,ping:2");
+	CHECK(Wrong.Open == 0 && Wrong.Hover == 0 && !Wrong.bSlide && Wrong.Unknown == 8);
+	const FSealAsk Some = ReadSealAsk("open:2,glow");
+	CHECK(Some.Open == 2 && Some.Unknown == 1);
+}
+
 /** The art director's ruling of 22 November, section 1: a seal wears the colour of the row it opens, and which pulse. */
 static void TestColours()
 {
@@ -2035,6 +2054,7 @@ int main(int ArgCount, char** Args)
 	TestSealLook();
 	TestSealSigns(ArgCount > 1 ? Args[1] : nullptr);
 	TestUnderFrame();
+	TestSealAsk();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

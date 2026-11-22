@@ -283,6 +283,27 @@ namespace EdgeSeals
 		int SeenRevision[Slots] = {};
 	};
 
+	/**
+	 * The photographer's asks of the seals: "-TheaterSeal=" on the command line, its parts joined by commas (a
+	 * development tool, not part of the game; EdgeNewsLayer reads the line once, as the layer is made). A seal is
+	 * named by its place among the seals standing on the edge, in card order, from 1 (the "+N" counted where it stands,
+	 * as the under-frame watch names them).
+	 * - "open:N": the Nth seal shows as opened, in its dull grey (on the screen only: no card opens).
+	 * - "hover:N": the Nth seal as if the pointer rested on it: it grows, the brass ring goes round it, and the ping
+	 *   spreads from its place on the map. Its words go to the log, since the engine's tip is not in a picture.
+	 * - "slide": each laying waits beyond the edge until a picture is taken, and sets off as that picture is taken, so
+	 *   that the photographer's clip after its first picture ("-TheaterClip=30,0.05") holds the slide-in.
+	 * A part it does not know, or a number under 1, is counted in Unknown and left out.
+	 */
+	struct FSealAsk
+	{
+		int Open = 0;
+		int Hover = 0;
+		bool bSlide = false;
+		int Unknown = 0;
+	};
+	FSealAsk ReadSealAsk(const std::string& Asked);
+
 	/** An edge's lane: the line the middles of its seals lie on (Fixed), and the stretch of it they may take (Low to High). */
 	struct FLane
 	{

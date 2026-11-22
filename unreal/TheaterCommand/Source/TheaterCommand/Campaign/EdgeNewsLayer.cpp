@@ -17,14 +17,18 @@
 #include "Input/CursorReply.h"
 #include "Input/Reply.h"
 #include "Layout/Geometry.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
+#include "UnrealClient.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/SOverlay.h"
 
 #include <cmath>
+#include <string>
 #include <vector>
 
 // (Release 2, campaign map plan item 5, "News at the map's edge"; Brian's card of 16 November 2026, ruling 131.)
@@ -99,8 +103,8 @@ namespace
 		float Shown = 1.0f;
 	};
 
-	/** A seal's inks from its colour: the kit's colour shaded, or the news band's own; dull and grey at 55% once opened. */
-	FSealInks SealInksOf(const FEdgeNewsSeal& Seal)
+	/** A seal's inks from its colour: the kit's colour shaded, or the news band's own; dull and grey at 55% once opened (bOpened). */
+	FSealInks SealInksOf(const FEdgeNewsSeal& Seal, bool bOpened)
 	{
 		FSealInks Inks;
 		if (static_cast<EdgeSeals::EWax>(Seal.Wax) == EdgeSeals::EWax::Band)
@@ -134,7 +138,7 @@ namespace
 			Inks.bWallLit = true;
 			Inks.Call = Inks.Wax;
 		}
-		if (Seal.bOpened)
+		if (bOpened)
 		{
 			// (opened: the wax goes dull and grey, and the seal stands back until the next month's are laid)
 			FLinearColor* const Each[] = { &Inks.Wax, &Inks.Shade, &Inks.Hollow, &Inks.Rim, &Inks.Lit, &Inks.Dark, &Inks.Mark, &Inks.MarkWall, &Inks.Call };
@@ -174,6 +178,22 @@ namespace
 
 		int32 Hovered = INDEX_NONE;
 		double HoveredAt = 0.0;
+
+		/**
+		 * The photographer's asks ("-TheaterSeal=open:N,hover:N,slide", EdgeSeals::ReadSealAsk), read once as the layer
+		 * is made; and, for "slide", whether this laying still waits beyond the edge for the first picture, and since when.
+		 */
+		EdgeSeals::FSealAsk Ask;
+		bool bHeld = false;
+		double HeldSince = 0.0;
+		/** Whether this laying has been told to the log (once, when every seal standing has slid all the way in). */
+		bool bLaidTold = false;
+
+		/** The slot the pointer is on: the real pointer's, else the one "-TheaterSeal=hover:N" names; INDEX_NONE for none. */
+		int32 PointedSlot() const
+		{
+			return Hovered != INDEX_NONE ? Hovered : Ask.Hover >= 1 && Ask.Hover <= SealSlots ? Ask.Hover - 1 : INDEX_NONE;
+		}
 		bool bPing = false;
 		FVector2D PingAt = FVector2D::ZeroVector;
 		FLinearColor PingInk = FLinearColor::White;
@@ -368,12 +388,14 @@ namespace
 			WatchUnderFrame(Geometry);
 #endif
 			const double Now = FPlatformTime::Seconds();
-			const bool bHot = Laid->Hovered == SealSlot;
+			// (the pointer on it, or the photographer's "-TheaterSeal=hover:N"; opened, or shown so by "-TheaterSeal=open:N")
+			const bool bHot = Laid->PointedSlot() == SealSlot;
+			const bool bOpened = Seal.bOpened || Laid->Ask.Open == SealSlot + 1;
 			// (a dated warning, and war and peace and the news, call until opened: the seal breathes, a glow comes and goes
 			// under it and a ring spreads from it. EdgeSeals::LookOf says which seals call; Look::CallOf how)
-			const bool bCalling = Seal.bPulse && !Seal.bOpened;
+			const bool bCalling = Seal.bPulse && !bOpened;
 			const EdgeSeals::Look::FCall Call = bCalling ? EdgeSeals::Look::CallOf(Now - Laid->LaidAt) : EdgeSeals::Look::FCall();
-			const FSealInks Inks = SealInksOf(Seal);
+			const FSealInks Inks = SealInksOf(Seal, bOpened);
 			const float Shown = Inks.Shown;
 			// (the frame's units to the screen's pixels, to hold the pressed sign's strokes to 1.5 px: as the layer measures
 			// it each frame, the viewport's pixels over its own size, about 1.84 in Brian's window on the Mac's fine pixels.
@@ -413,7 +435,7 @@ namespace
 				const double Turn = FMath::DegreesToRadians(Run.Degrees);
 				Pen.Disc(Layer, SealMidX + Run.Out * std::cos(Turn), SealMidY + Run.Out * std::sin(Turn), Run.Radius, Inks.Shade);
 			}
-			if (Seal.bOpened)
+			if (bOpened)
 			{
 				// (opened: one flat disc at 55%, neither shaded nor lit. The rim, the hollow and its lips and the sign still
 				// lie over it and so read darker: the hollow about 80%, the sign about 90 to 95%)
@@ -591,6 +613,9 @@ namespace
 				Shared.Revision = Board.Revision;
 				Shared.LaidAt = Board.LaidAt;
 				Shared.Hovered = INDEX_NONE;
+				Shared.bLaidTold = false;
+				Shared.bHeld = Shared.Ask.bSlide;
+				Shared.HeldSince = Now;
 				for (int32 Each = 0; Each < SealSlots; ++Each)
 				{
 					FEdgeNewsLaid::FNow& Seal = Shared.Seals[Each];
@@ -600,6 +625,24 @@ namespace
 					Seal.Edge = -1;
 					Seal.SlideAt = Now + 0.12 * Each;
 				}
+			}
+			if (Shared.bHeld)
+			{
+				// ("-TheaterSeal=slide", for the photographer: the laying waits beyond the edge until a picture is taken,
+				// and sets off as that picture is taken, so that the clip after the first picture, "-TheaterClip=30,0.05",
+				// holds the slide-in. The picture's own paint ticks the layer while the request stands, so the first
+				// picture shows the edge before the seals come. Should no picture come, they set off after 20 s)
+				const bool bPicture = FScreenshotRequest::IsScreenshotRequested();
+				if (!bPicture && Now - Shared.HeldSince < 20.0)
+				{
+					return;
+				}
+				Shared.bHeld = false;
+				for (int32 Each = 0; Each < SealSlots; ++Each)
+				{
+					Shared.Seals[Each].SlideAt = Now + 0.12 * Each;
+				}
+				UE_LOG(LogTheater, Display, TEXT("EdgeNews: the seals set off %s"), bPicture ? TEXT("as the first picture is taken") : TEXT("after 20 s with no picture taken"));
 			}
 			const FVector2D Local = AllottedGeometry.GetLocalSize();
 			// (the layer's last paint, in the window's measure: what the keep-off boxes are read in, below. None before its
@@ -744,20 +787,76 @@ namespace
 				}
 			}
 
-			// The ping: the place of the seal under the pointer, where it is on the screen.
-			if (Shared.Hovered >= 0 && Shared.Hovered < Count && Shared.Seals[Shared.Hovered].bLive && !Shared.Seals[Shared.Hovered].bRest && Board.Seals[Shared.Hovered].HasPlace())
+			// The ping: the place of the seal under the pointer (or the one "-TheaterSeal=hover:N" names), where it is on
+			// the screen.
+			const int32 Pointed = Shared.PointedSlot();
+			if (Pointed >= 0 && Pointed < Count && Shared.Seals[Pointed].bLive && !Shared.Seals[Pointed].bRest && Board.Seals[Pointed].HasPlace())
 			{
 				FVector2D At(0.0, 0.0);
-				if (PlaceOf(Board.Seals[Shared.Hovered], At) && At.X >= 0.0 && At.Y >= 0.0 && At.X <= Local.X && At.Y <= Local.Y)
+				if (PlaceOf(Board.Seals[Pointed], At) && At.X >= 0.0 && At.Y >= 0.0 && At.X <= Local.X && At.Y <= Local.Y)
 				{
 					Shared.bPing = true;
 					Shared.PingAt = At;
-					Shared.PingInk = FMath::Lerp(SealKitOf(Board.Seals[Shared.Hovered].Wax), FLinearColor::White, 0.25f);
+					Shared.PingInk = FMath::Lerp(SealKitOf(Board.Seals[Pointed].Wax), FLinearColor::White, 0.25f);
 				}
 			}
+#if !UE_BUILD_SHIPPING
+			TellLaying(Shared, Board, Painted, View, Local);
+#endif
 		}
 
 	private:
+#if !UE_BUILD_SHIPPING
+		/**
+		 * One line in the log for each laying, once every seal standing has slid all the way in (not in shipping builds):
+		 * the layer's pixels a unit, the window's size, and each seal's slot and its box as painted, in the window's
+		 * pixels (the measure the keep-off boxes and the under-frame watch are in). With "-TheaterSeal=hover:N", a second
+		 * line gives that seal's words, as the pointer's tip would show them.
+		 */
+		static void TellLaying(FEdgeNewsLaid& Shared, const FEdgeNewsBoard& Board, const FGeometry& Painted, const FVector2D& View, const FVector2D& Local)
+		{
+			if (Shared.bLaidTold)
+			{
+				return;
+			}
+			int32 Live = 0;
+			for (const FEdgeNewsLaid::FNow& Seal : Shared.Seals)
+			{
+				if (Seal.bLive && !Seal.bArrived)
+				{
+					return;
+				}
+				Live += Seal.bLive ? 1 : 0;
+			}
+			if (Live == 0)
+			{
+				return;
+			}
+			Shared.bLaidTold = true;
+			FString Line = FString::Printf(TEXT("EdgeNews: laid (revision %d, %d items): %.3f px a unit; the window %.0fx%.0f px, the layer %.0fx%.0f units"),
+				Board.Revision, Board.Items, Shared.PxPerUnit, View.X, View.Y, Local.X, Local.Y);
+			const FVector2D Half(SealBoxW * 0.5, SealBoxH * 0.5);
+			for (int32 Each = 0; Each < SealSlots; ++Each)
+			{
+				const FEdgeNewsLaid::FNow& Seal = Shared.Seals[Each];
+				if (!Seal.bLive)
+				{
+					continue;
+				}
+				const FVector2D Min = Painted.LocalToAbsolute(Seal.Target - Half), Max = Painted.LocalToAbsolute(Seal.Target + Half);
+				Line += FString::Printf(TEXT("; seal %d%s at %.0f,%.0f to %.0f,%.0f"), Each + 1, Seal.bRest ? *FString::Printf(TEXT(", the \"+N\" (%d items),"), Seal.Folded) : TEXT(""),
+					Min.X, Min.Y, Max.X, Max.Y);
+			}
+			UE_LOG(LogTheater, Display, TEXT("%s (the window's pixels)"), *Line);
+			const int32 Asked = Shared.Ask.Hover - 1;
+			if (Asked >= 0 && Asked < SealSlots && Shared.Seals[Asked].bLive)
+			{
+				const FEdgeNewsSeal* Told = EdgeSealInSlot(Shared, Shared.Player.Get(), Asked);
+				UE_LOG(LogTheater, Display, TEXT("EdgeNews: seal %d's words under the pointer: %s"), Asked + 1, Told ? *(Shared.Seals[Asked].bRest ? Shared.Seals[Asked].RestWords : Told->Words) : TEXT("(none)"));
+			}
+		}
+#endif
+
 		TSharedPtr<FEdgeNewsLaid> Laid;
 	};
 
@@ -812,6 +911,14 @@ TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerContro
 	Laid->KeepOffOf = MoveTemp(KeepOffOf);
 	Laid->KeepOff.Reserve(32);
 	Laid->CountFace = CountFace;
+	// (the photographer's "-TheaterSeal=open:N,hover:N,slide", read once: EdgeSeals::ReadSealAsk)
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeal="), Asked, false))
+	{
+		Laid->Ask = EdgeSeals::ReadSealAsk(std::string(TCHAR_TO_UTF8(*Asked)));
+		UE_LOG(LogTheater, Display, TEXT("EdgeNews: -TheaterSeal=%s: open %d, hover %d, slide %s%s"), *Asked, Laid->Ask.Open, Laid->Ask.Hover, Laid->Ask.bSlide ? TEXT("yes") : TEXT("no"),
+			Laid->Ask.Unknown > 0 ? *FString::Printf(TEXT(" (%d parts not known, left out)"), Laid->Ask.Unknown) : TEXT(""));
+	}
 	Laid->Wants.reserve(SealSlots);
 	Laid->Spots.reserve(SealSlots);
 	Laid->Reserved.reserve(32);

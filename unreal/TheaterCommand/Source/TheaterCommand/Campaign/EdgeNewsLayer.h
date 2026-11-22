@@ -28,7 +28,9 @@ struct FSlateBrush;
  * pings its place on the map; a press opens the month's card at its row. SignOf gives the picture pressed for an order
  * sign by its key: the seal set's (Content/CityOrders/Seal/seal-<key>.png, the art director's ruling of 22 November,
  * 06:45Z), never the badges' own, whose strokes are too fine for the wax; null where there is none. CountFace is the
- * face the "+N" is pressed in.
+ * face the "+N" is pressed in. For the photographer, the layer reads "-TheaterSeal=open:N,hover:N,slide" once
+ * (EdgeSeals::ReadSealAsk), and outside shipping builds logs each laying once its seals are in: the pixels a unit, the
+ * window's size and each seal's box in the window's pixels.
  *
  * EdgeNewsKeepOff: what the seals keep off, into Out (which keeps its room between frames): the frame's pieces (Frame,
  * in the window's (paint) measure), and for each of Panels that stands on the screen now, the box that holds it among
