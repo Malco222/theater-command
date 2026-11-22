@@ -10,7 +10,7 @@
 // A desk's month ends in one line of news, tagged with the desk so that an interface can offer to take it back.
 
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
-import { atWar, bloc, headline } from './game';
+import { allied, atWar, bloc, headline } from './game';
 import { turnToDate } from '../core/ticket';
 import { BUDGET, PRODUCTION, aiProduction, aiTeams, armyWorn, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
@@ -31,6 +31,7 @@ import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
 import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
 import { aiRepair } from './repairs';
+import { aiFieldRepair } from './fieldstate';
 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** A list cut to its first few, with the rest counted. */
@@ -228,6 +229,7 @@ function build(g: Game, nat: string): string | null {
     shipping(g, nat);
     // Damaged towns first: a repair pays for itself in a few months (repairs.ts).
     repaired = aiRepair(g, nat);
+    repaired.push(...aiFieldRepair(g, nat, (x) => allied(g, nat, x)).map((x) => `the airfield at ${x}`));
     aiProduction(g, nat);
     aiTeams(g, nat);
     aiArsenal(g, nat);
@@ -355,6 +357,7 @@ function raidWords(g: Game, r: AirReport): string {
     case 'night': return `${at.name} by night`;
     case 'ground': return `the troops at ${at.name}`;
     case 'line': return `the fieldworks at ${at.name}`;
+    case 'airfield': return `the airfield at ${at.name}`;
     case 'town': return `the town of ${at.name}`;
     case 'superiority': return `the sky over ${at.name}`;
     case 'harbour': return `the ships in harbour at ${at.name}`;

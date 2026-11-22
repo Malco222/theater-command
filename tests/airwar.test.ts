@@ -31,7 +31,8 @@ function contested(g: Game, kind: 'bomb' | 'ground' = 'bomb'): { target: number;
 
 describe('the air war data', () => {
   it('names nine kinds of raid, sizes airfields in steps and numbers the groups of each nation', () => {
-    expect(airwar.raids.kinds.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'line', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon']);
+    // (The airfield raid is in the data, offered only with airfields as targets: airfield-targets.test.ts.)
+    expect(airwar.raids.kinds.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'line', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'airfield', 'recon']);
     for (const k of airwar.raids.kinds) { expect(k.label.length).toBeGreaterThan(5); expect(k.blurb.length).toBeGreaterThan(30); expect(['bmr', 'any']).toContain(k.needs); }
     const S = airwar.fields.sizes;
     expect(S[0]).toBe(0);

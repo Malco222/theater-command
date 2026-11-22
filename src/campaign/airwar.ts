@@ -35,8 +35,9 @@ import { townName } from './towns';
 import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
+import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 
-export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
+export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon' | 'airfield';
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
@@ -71,10 +72,11 @@ function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null 
   }
   if (kind === 'harbour') { const p = g.regions[target]?.name ?? ''; return /\bHarbou?r$/.test(p) ? p : `the harbour of ${p}`; }
   if (kind === 'town') return g.regions[target] ? `the defences of ${townName(g.regions[target])}` : '';
+  if (kind === 'airfield') return g.regions[target] ? `the airfield at ${g.regions[target].name}` : '';
   return g.regions[target]?.name ?? '';
 }
 /** The kind of raid a group's orders are, for naming what it flew against. */
-const kindFlown = (m: AirMission): RaidKind => (m === 'strike' || m === 'fleet' || m === 'harbour' || m === 'town' ? m : 'bomb');
+const kindFlown = (m: AirMission): RaidKind => (m === 'strike' || m === 'fleet' || m === 'harbour' || m === 'town' || m === 'airfield' ? m : 'bomb');
 /** Where a group flies from, in words: its airfield's province, or the fleet whose carriers it is aboard. */
 const homeName = (g: Game, f: AirFleet): string => carrierOf(g, f)?.name ?? g.regions[f.base].name;
 /** How far one group is from another's base: nothing where they share an airfield or a fleet. */
@@ -413,6 +415,8 @@ function whyNotSeat(g: Game, f: AirFleet, kind: RaidKind, target: number): strin
     if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
     // Weather (ruling 127): no camera flies from or over a closed sky.
     if (weatherOn(g)) { const why = whyNotSky(g, f, zoneOfRegion(g, target)); if (why) return why; }
+    // (Airfields as targets: nothing takes off from a shut runway, the camera aircraft included.)
+    if (g.flags.fields === 1 && fieldRules(g)) { const why = whyNotField(g, f); if (why) return why; }
     if (!atWar(g, f.nat, r.ctrl)) return 'Only ground held by a nation you are at war with is photographed.';
     const R = airRange(f, g);
     return kmTo(g, f, target) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'It is out of range.';
@@ -464,6 +468,7 @@ function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]
   for (const t of targetIds(g, kind, nat)) {
     if ((kind === 'ground' || kind === 'line') && !troopsSeen(g, nat, t, sight!)) continue;
     if (kind === 'town' && !townWanted(g, nat, t)) continue;
+    if (kind === 'airfield' && (!atWar(g, nat, g.regions[t].ctrl) || airfieldsHold(g, t) <= 0)) continue;
     // Ground in full view has something to show a camera only where an army there is not identified, or known from an old report.
     if (kind === 'recon' && sight![t] === SIGHT.full && !unidentified(g, nat, t)) continue;
     const can = fleets.filter((f) => whyNotSeat(g, f, kind, t) === null);
@@ -487,7 +492,8 @@ function allGrounded(g: Game, nat: string): string | null {
 export function raidKinds(g: Game, nat: string | null = g.human): RaidKindView[] {
   if (!airWar(g) || nat === null) return [];
   const peace = !g.nations[nat].atWar.length;
-  return AIRWAR.raids.kinds.map((k) => {
+  // (Airfields as targets: the airfield raid is on the menu only with its switch on.)
+  return AIRWAR.raids.kinds.filter((k) => k.key !== 'airfield' || fieldRules(g)).map((k) => {
     const n = peace ? 0 : reachable(g, nat, k.key as RaidKind).size;
     return { key: k.key as RaidKind, label: k.label, short: k.short, blurb: k.blurb, targets: n, why: peace ? 'The nation is at peace.' : n ? null : allGrounded(g, nat) ?? 'No group that can still fly this month has a target in reach.' };
   });
@@ -579,6 +585,17 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
     const known = foes.every((c) => corpsKnown(g, c, nat).level === 'exact');
     return sight[t] === SIGHT.full && known ? `${plural(foes.length, 'corps', 'corps')}, ${plural(foes.reduce((s, c) => s + c.divs, 0), 'division')}${foes.some((c) => c.dug) ? ', dug in' : ''}`
       : sight[t] === SIGHT.full ? `${plural(foes.length, 'corps', 'corps')} seen, not identified${foes.some((c) => c.dug) ? ', dug in' : ''}` : `${plural(foes.length, 'corps', 'corps')} seen`;
+  }
+  if (kind === 'airfield') {
+    // (One fog gate, the design director's 06:21Z: the field's state only where the planner's nation knows it.)
+    const v = fieldKnown(g, nat, t, sight) ? fieldView(g, t, null) : null;
+    const seen = sight[t] !== SIGHT.none;
+    const groups = g.airFleets.filter((f) => f.base === t && !afloat(f) && f.ftr + f.bmr > 0 && atWar(g, f.nat, nat));
+    const planesThere = groups.reduce((s, f) => s + f.ftr + f.bmr, 0);
+    const up = fightersOver(g, t, nat);
+    return [v ? `${v.tier === 'strip' ? 'Field strip' : 'Concrete airfield'}${v.shut ? ', shut' : ''}${v.burned ? `, ${plural(v.burned, 'level')} burned` : ''}` : 'An airfield',
+      seen ? (groups.length ? `${plural(groups.length, 'air group')} based there, about ${num(planesThere)} aircraft` : 'no air group seen there') : 'what is based there is not known',
+      up >= 1 ? `about ${num(up)} fighters can come up` : 'no fighters in reach'].join(', ');
   }
   if (kind === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === t && !afloat(f) && flying(f) && atWar(g, f.nat, nat)).length;
@@ -734,6 +751,8 @@ export interface RaidPlan {
 export interface RaidFigures {
   output?: number; national?: number; rail?: number; factory?: number;
   odds?: number; readiness?: number;
+  /** Airfields as targets: what the bombs should do to the field. */
+  field?: { shut: boolean; levels: number; ground: number; grounded: number; room: number; built: number };
   ships?: number; hits?: number; sunk?: Record<string, number>;
   works?: number; worksLeft?: number;
   organisation?: number;
@@ -760,6 +779,11 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
   } else if (kind === 'superiority') {
     out.push(`Fighter odds ${fc.odds >= 9 ? 'overwhelming' : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
     if (fc.cut > 0) out.push(`The air groups based at ${place} should lose about ${pct(fc.cut)} of their readiness, and aircraft on the ground.`);
+    if (fc.field) out.push(...fieldLines(fc.field));
+  } else if (kind === 'airfield') {
+    if (fc.field) out.push(...fieldLines(fc.field));
+    if (!fc.field || (!fc.field.shut && !fc.field.levels && !fc.field.ground)) out.push(`Too few bombers would get through to do ${place} lasting harm: craters are filled in within the day.`);
+    out.push(`Fighter odds ${fc.odds >= 9 ? 'overwhelming' : `${fc.odds.toFixed(1)} to 1`} going in: the fighters based there go up to meet you first.`);
   } else if (kind === 'strike') {
     out.push(shippingWords(g, fc.cut));
   } else if (kind === 'fleet' || kind === 'harbour') {
@@ -783,6 +807,15 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     const dug = g.regions[target].units.some((u) => !u.dead && u.dug && atWar(g, nat, u.nat));
     out.push(`The troops at ${place} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
   }
+  return out;
+}
+
+/** Airfields as targets: the field lines of a raid card. */
+function fieldLines(x: NonNullable<ReturnType<typeof forecastAir>['field']>): string[] {
+  const out: string[] = [];
+  if (x.shut) out.push(`Should shut the field until its owner repairs it${x.grounded ? `: about ${num(x.grounded)} aircraft grounded` : ''}.`);
+  if (x.ground >= 1) out.push(`About ${num(x.ground)} aircraft destroyed on the ground.`);
+  if (x.levels) out.push(`Should burn ${plural(x.levels, 'level')}: it would serve ${num(x.room)} of its ${num(x.built)} aircraft until rebuilt.`);
   return out;
 }
 
@@ -810,7 +843,10 @@ function figuresOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     if (fc.town) { f.town = { ...fc.town }; if (fc.city) f.city = fc.city; }
   } else if (kind === 'ground') {
     f.organisation = fc.cut;
+  } else if (kind === 'airfield') {
+    f.odds = fc.odds;
   }
+  if (fc.field) f.field = { ...fc.field };
   return f;
 }
 
