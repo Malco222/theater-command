@@ -354,8 +354,10 @@ namespace LandMen
 		/** The clip's own muzzle flashes back on (every firing pose loops its clip and shows its shots), for a test. */
 		bool bClipShots = false;
 
-		/** Where the eye is this frame (field metres), for the levels of detail. */
-		void SetEye(double X, double Y, double Z);
+		/** Where the eye is this frame (field metres), for the levels of detail. Zoom: how much bigger the lens draws a
+		 * man than the usual one does (tan of half the usual 50 deg over tan of half this lens's, both vertical): the
+		 * levels go by his distance over Zoom, so a long lens's men 120 m off are drawn at the middle level. */
+		void SetEye(double X, double Y, double Z, double Zoom = 1.0);
 		/** Plays every man to the battle's time. Forward only: going back starts over from the beginning, silently. */
 		void Update(double BattleTime);
 		/**
@@ -395,6 +397,8 @@ namespace LandMen
 		/** Changes whenever his mesh would: skin him again only when it moved. */
 		uint32_t Stamp(int Man) const;
 		Lod LodOf(int Man) const;
+		/** His distance from the eye at the last Update as the picture sees it (over SetEye's Zoom), metres. */
+		float SeenDistance(int Man) const;
 		/** Points a skin of him writes at that level (the body, then his helmet's finish). */
 		int PointsOf(int Man, Lod L) const;
 		/** His triangles and colours at that level (the same all battle: read once). */

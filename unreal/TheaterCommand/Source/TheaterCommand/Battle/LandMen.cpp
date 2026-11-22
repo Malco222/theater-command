@@ -1473,7 +1473,7 @@ namespace LandMen
 			double Last = -1.0;
 			uint32_t Stamp = 0;
 			Lod L = Far;
-			float EyeD = 1e9f;              // his distance from the eye at the last Update
+			float EyeD = 1e9f;              // his distance from the eye at the last Update, as the picture sees it (over the zoom)
 			Pose Now;
 			Xform Model[MaxBones];          // the bones in his own axes
 			Xform World;
@@ -1535,6 +1535,7 @@ namespace LandMen
 		int MonthNo = 0;
 		std::string SeasonName = "summer", Front = "west";
 		double EyeX = 1e9, EyeY = 1e9, EyeZ = 1e9;
+		double EyeZoom = 1.0; // (SetEye's Zoom)
 		double Clock = -1.0;  // the battle time of the last Update
 		bool bThrift = false; // far men posed every few frames (SetThrift)
 		/** Life seconds a battle second (SetLife): a clip's seconds are life's, laid on the battle's clock at 1 / Life. */
@@ -3385,11 +3386,12 @@ namespace LandMen
 		Inner->Fire(Man, T, W);
 	}
 
-	void Crowd::SetEye(double X, double Y, double Z)
+	void Crowd::SetEye(double X, double Y, double Z, double Zoom)
 	{
 		Inner->EyeX = X;
 		Inner->EyeY = Y;
 		Inner->EyeZ = Z;
+		Inner->EyeZoom = Zoom > 0.05 && Zoom < 20.0 ? Zoom : 1.0;
 	}
 
 	void Crowd::Update(double BattleTime)
@@ -3419,7 +3421,8 @@ namespace LandMen
 			// The level of detail by the eye's distance, with a little give so a man at the edge does not flicker.
 			if (!Mn.bVisible) continue;
 			const double DX = Mn.X - I.EyeX, DY = Mn.Y - I.EyeY, DZ = static_cast<double>(Mn.World.T[2]) - I.EyeZ;
-			const double D = std::sqrt(DX * DX + DY * DY + DZ * DZ);
+			// (as the picture sees him: a long lens draws a far man as big as a near one, and he is posed and drawn so)
+			const double D = std::sqrt(DX * DX + DY * DY + DZ * DZ) / I.EyeZoom;
 			Mn.EyeD = static_cast<float>(D);
 			const double Give = 1.05;
 			Lod L = D < 25.0 ? Near : D < 120.0 ? Mid : Far;
@@ -3494,6 +3497,7 @@ namespace LandMen
 	}
 	uint32_t Crowd::Stamp(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Stamp; }
 	Lod Crowd::LodOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].L; }
+	float Crowd::SeenDistance(int Man) const { return Inner->Men[static_cast<size_t>(Man)].EyeD; }
 	const Xform* Crowd::FramesOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Frames; }
 	const Soldier* Crowd::SoldierOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].S; }
 	int Crowd::Month() const { return Inner->MonthNo; }

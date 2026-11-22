@@ -53,10 +53,12 @@ namespace LandCarpet
 		/** A square is let go only 8 m past where it is wanted, so an eye that sways at a square's edge does not make it
 		 * and drop it over and over. */
 		static constexpr double Keep = 8.0;
-		/** Squares this near the eye or what it looks at are made at once, however many; the others a few a frame. On a
-		 * cut, those within CutAtOnce (the rest, farther than 32 m, are small in the picture and follow within a few
-		 * frames): a cut then costs no more than the old box's whole re-lay did. */
-		static constexpr double AtOnce = 20.0, CutAtOnce = 32.0;
+		/** Squares this near the eye or what it looks at are made at once, however many; the others a few a frame. A
+		 * cut makes only these too (32 m round both the eye and a long lens's mark was some 45 squares, 6.5 ms on a
+		 * busy box: a hitch at every cut), and the frames after it make CutFollow a frame, not the caller's few, until
+		 * none wait: the far squares, small in the picture, follow within a few frames. */
+		static constexpr double AtOnce = 20.0;
+		static constexpr int CutFollow = 8;
 		/** A kind drawn only near the eye (the short sward) is laid in a square while the square's nearest point is in
 		 * its reach, and the square laid again only once it is this far over the line, either way. */
 		static constexpr double ReachSway = 4.0;
@@ -71,9 +73,9 @@ namespace LandCarpet
 		 * square is laid. */
 		std::function<bool(const LandField::Placed&)> Stands;
 
-		/** Brings the squares round the eye and what it looks at up to date: those within AtOnce made now (CutAtOnce on
-		 * a cut, or the first frame), and at most MakeMost others, nearest first. Now: the battle's real clock, for the
-		 * marks. The meshes' changes are added to Out. */
+		/** Brings the squares round the eye and what it looks at up to date: those within AtOnce made now, and at most
+		 * MakeMost others, nearest first (CutFollow while a cut's, or the first frame's, are still being made). Now:
+		 * the battle's real clock, for the marks. The meshes' changes are added to Out. */
 		Tally Update(const LandField::Ground& G, double EyeX, double EyeY, double LookX, double LookY, bool bCut, int MakeMost, double Now, std::vector<Op>& Out)
 		{
 			Tally T;
@@ -149,15 +151,16 @@ namespace LandCarpet
 			}
 			std::sort(Fresh.begin(), Fresh.end(), [](const FreshOne& A, const FreshOne& B) { return A.D < B.D || (A.D == B.D && A.IJ < B.IJ); });
 			int Others = 0;
-			const double OnceWithin = bCut ? CutAtOnce : AtOnce;
+			bFollowing = bFollowing || bCut;
+			const int Most = bFollowing ? std::max(MakeMost, CutFollow) : MakeMost;
 			for (const FreshOne& F : Fresh)
 			{
-				if (F.D >= OnceWithin && Others >= MakeMost)
+				if (F.D >= AtOnce && Others >= Most)
 				{
 					++T.Waiting;
 					continue;
 				}
-				if (F.D >= OnceWithin)
+				if (F.D >= AtOnce)
 				{
 					++Others;
 				}
@@ -178,6 +181,7 @@ namespace LandCarpet
 				Lay(Sq, Out, T);
 				++T.Made;
 			}
+			bFollowing = bFollowing && T.Waiting > 0;
 			return T;
 		}
 
@@ -258,6 +262,8 @@ namespace LandCarpet
 		std::vector<std::vector<int32_t>> Free;
 		std::vector<std::pair<int, int>> Wanted;
 		std::vector<FreshOne> Fresh;
+		/** A cut's far squares still being made, CutFollow a frame. */
+		bool bFollowing = false;
 		std::vector<LandField::Placed> Made;
 
 		static uint64_t Key(int I, int J) { return (static_cast<uint64_t>(static_cast<uint32_t>(I)) << 32) | static_cast<uint32_t>(J); }

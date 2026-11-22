@@ -202,6 +202,8 @@ private:
 		TWeakObjectPtr<UProceduralMeshComponent> Mesh;
 		int32 Lod = -1;
 		uint32 Stamp = 0xFFFFFFFFu;
+		/** Whether his mesh casts a shadow now (made with one; none past about 80 m as seen). */
+		bool bShadow = true;
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()
@@ -271,7 +273,7 @@ private:
 
 	// ---- What the table had before the battle took its place (as the air battle keeps it) ----
 	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
-	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
+	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = true; FLinearColor Lower = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
 	TArray<FKeptSky> KeptSkies;
@@ -309,6 +311,7 @@ private:
 	 * its sun's contact shadow length (under 0: not changed). */
 	TArray<TPair<FString, FString>> KeptTrims;
 	float KeptContactShadow = -1.0f;
+	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
 	double LogAt = 0.0, SlowestFrame = 0.0, CoresMs = 0.0, MenMs = 0.0, ArmourMs = 0.0, FieldMs = 0.0;
 	int32 LogFrames = 0;
