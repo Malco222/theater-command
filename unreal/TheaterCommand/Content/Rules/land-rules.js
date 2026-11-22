@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of cb03928e 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 95f30488 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2334,9 +2334,15 @@
     return parts;
   }
   var BRIGADES = ["UK", "CAN", "AUS", "NZL", "NZ", "SAF", "IND"];
-  function kindWord(nat, k) {
-    if (k === "arm") return nat === "USA" ? "Armored" : "Armoured";
-    if (k === "mot") return BRIGADES.includes(nat) ? "Motor" : nat === "POL" ? "Motorised" : "Motorized";
+  function kindWord(nat, k, ym = 0) {
+    if (k === "arm") return nat === "USA" ? "Armored" : nat === "GER" ? "Panzer" : nat === "SOV" || nat === "JAP" ? "Tank" : "Armoured";
+    if (k === "mot") {
+      if (nat === "USA" || nat === "SOV") return "Motorized";
+      if (BRIGADES.includes(nat)) return "Motor";
+      if (nat === "GER") return ym >= 1943 * 12 + 6 ? "Panzergrenadier" : "Motorized";
+      return "Motorised";
+    }
+    if (k === "inf" && nat === "SOV") return "Rifle";
     return KIND_WORD[k];
   }
   function regimentWord(nat, kind, n, i, ym) {
@@ -2348,7 +2354,7 @@
       if (BRIGADES.includes(nat)) return `${o} Armoured Brigade`;
       return `${o} Tank Regiment`;
     }
-    const arm = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? kindWord(nat, "mot") : kind === "eng" ? "Engineer" : "Infantry";
+    const arm = kind === "mtn" ? "Mountain" : kind === "cav" ? "Cavalry" : kind === "mot" ? kindWord(nat, "mot", ym) : kind === "eng" ? "Engineer" : "Infantry";
     if (BRIGADES.includes(nat)) return `${o} ${arm} Brigade`;
     if (nat === "GER") {
       const late = ym >= 1942 * 12 + 10;
@@ -2370,7 +2376,7 @@
         const u = units[j++];
         if (!u || p.regiment === void 0 || team) continue;
         const div = f.divisions?.[p.divs[0]], no = (f.first ?? 1) + p.divs[0];
-        const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k)}`;
+        const full = div?.name ?? `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`, short = div?.short ?? `${ORD(no)} ${kindWord(f.nat, k, ym)}`;
         const lead = /^(\d+)/.exec(full)?.[1];
         const n = lead ? (Number(lead) - 1) * LAND.blocks.regiments + p.regiment + 1 : p.regiment + 1;
         u.short = regimentWord(u.nat, k, n, p.regiment, ym);
@@ -2379,8 +2385,9 @@
       }
     });
   }
-  function makeBlocks(side, t, power, firstId, least = LAND.blocks.least) {
+  function makeBlocks(side, t, power, firstId, least = LAND.blocks.least, turn3) {
     const out = [];
+    const ym = turn3 === void 0 ? 0 : ((d) => d.year * 12 + d.month + 1)(turnToDate(turn3));
     const cut2 = partsFor(t.forces, least);
     t.forces.forEach((f, i) => {
       const team = teamOf(f);
@@ -2390,8 +2397,8 @@
         const own = f.divisions?.[d];
         const no = (f.first ?? 1) + d;
         return {
-          name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k)} Division`),
-          short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD(no)} ${kindWord(f.nat, k)}`),
+          name: own?.name ?? (team ? `${ORD(no)} ${TEAM_WORD[team]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)} Division`),
+          short: own?.short ?? (team ? `${ORD(no)} ${TEAM_WORD[team].split(" ")[0]}` : `${ORD(no)} ${kindWord(f.nat, k, ym)}`),
           str: own?.str ?? f.str,
           xp: own?.xp ?? f.xp,
           men: own?.men ?? f.men / n
@@ -2462,7 +2469,7 @@
     for (const side of ["att", "def"]) {
       const js = (t[side].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined > 0 && f.share > 0);
       if (!js.length) continue;
-      for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0)) {
+      for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0, t.turn)) {
         const j = Math.min(1, js.find((f) => f.corps === u.corps).joined);
         u.joined = j;
         u.priced = u.power0;
@@ -6606,8 +6613,8 @@
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
       const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
       this.power = { att: A, def: D2 };
-      const att = makeBlocks("att", ticket.att, A, 1);
-      const def = makeBlocks("def", ticket.def, D2, att.length + 1);
+      const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
+      const def = makeBlocks("def", ticket.def, D2, att.length + 1, void 0, ticket.turn);
       this.units = [...att, ...def];
       const joining = joinBlocks(ticket, this.power, att.length + def.length + 1);
       this.covered = coveredTanks(ticket, this.units);
