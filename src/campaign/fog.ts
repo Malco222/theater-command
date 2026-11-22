@@ -80,7 +80,7 @@ const groupsWord = (n: number): string => (n === 1 ? 'one air group' : `${n} air
 /**
  * As the player's month opens: the month's news says which of his airfields fog has closed, and, when the fog has
  * lifted from fields that were closed last month, that the groups that sat it out are fit to fly again (the waves, R6:
- * words only). Nothing is counted.
+ * words only). Nothing is counted. (The UI director's words, 22 November: three names, then "and N more"; no brackets.)
  */
 export function fogMonth(g: Game): void {
   if (!fogOn(g) || !g.human) return;
@@ -88,10 +88,12 @@ export function fogMonth(g: Game): void {
   const now = mine.filter((f) => fogAt(g, f.base));
   const was = mine.filter((f) => fogAt(g, f.base, g.turn - 1) && !fogAt(g, f.base));
   if (now.length) {
-    const fields = [...new Set(now.map((f) => f.base))];
-    const names = fields.slice(0, 3).map((r) => g.regions[r].name);
-    const where = fields.length > 3 ? `${names.join(', ')} and ${fields.length - 3} more` : names.join(fields.length === 2 ? ' and ' : ', ');
-    headline(g, 'battle', fill(FOG.words.month, { n: fields.length === 1 ? 'one' : fields.length, where, groups: groupsWord(now.length) }), g.human);
+    const ids = [...new Set(now.map((f) => f.base))];
+    const names = ids.slice(0, 3).map((r) => g.regions[r].name);
+    const more = ids.length - names.length;
+    const list = more > 0 ? `${names.join(', ')} and ${more} more` : names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    const fields = `${ids.length === 1 ? 'airfield' : 'airfields'} at ${list}`;
+    headline(g, 'battle', fill(FOG.words.month, { fields, groups: groupsWord(now.length) }), g.human);
   }
-  if (was.length) headline(g, 'battle', fill(FOG.words.wave, { groups: groupsWord(was.length) }), g.human);
+  if (was.length) headline(g, 'battle', fill(FOG.words.wave, { groups: groupsWord(was.length), verb: was.length === 1 ? 'is' : 'are' }), g.human);
 }

@@ -6215,10 +6215,13 @@ function groupIcon(kind: 'ftr' | 'bmr' | 'mixed', nat: string): string {
 }
 
 /** Every airfield on the map: a patch of grass with its runways, larger for a larger field, rimmed in its holder's colours. A click opens it. */
-/** Fog over an airfield (fog.ts): a pale lid over the pad with the weather map's three bars for fog. No side's colour: the weather takes no side. */
+/**
+ * Fog over an airfield (fog.ts): a soft pale wash over the pad, the same size as the badge, with the weather map's three
+ * bars for fog in pale ink. No side's colour of its own, and the side's colour still shows through (the art director, 22 November).
+ */
 function fogLid(w: number, h: number): string {
-  const bars = [-0.28, 0, 0.28].map((k) => `M${(-w * 0.34).toFixed(1)} ${(h * k).toFixed(1)}H${(w * 0.34).toFixed(1)}`).join('');
-  return `<g class="affog"><title>Fog has closed this airfield this month: nothing there can take off.</title><rect x="${(-w / 2 - 1.5).toFixed(1)}" y="${(-h / 2 - 1.5).toFixed(1)}" width="${(w + 3).toFixed(1)}" height="${(h + 3).toFixed(1)}" rx="3" fill="#d9dde0" fill-opacity="0.6" stroke="#9aa1a6" stroke-width="0.6"/><path d="${bars}" stroke="#6f777d" stroke-width="1.3" stroke-linecap="round" fill="none"/></g>`;
+  const bars = [-0.26, 0, 0.26].map((k) => `M${(-w * 0.34).toFixed(1)} ${(h * k).toFixed(1)}H${(w * 0.34).toFixed(1)}`).join('');
+  return `<g class="affog"><title>Fog has closed this airfield this month: nothing there can take off.</title><rect x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2" fill="#dfe3e6" fill-opacity="0.45"/><path d="${bars}" stroke="#ebebeb" stroke-width="0.65" stroke-linecap="round" fill="none"/></g>`;
 }
 
 function airfieldMarks(): Piece[] {

@@ -18,7 +18,7 @@
   "words": {
     "card": "Fog has closed its airfield this month: nothing there can take off.",
     "why": "Fog has closed the airfield at {base} this month: nothing there can take off.",
-    "month": "Fog closed {n} of your airfields this month ({where}): {groups} stayed on the ground.",
-    "wave": "The fog has lifted: {groups} that sat it out are fit to fly again."
+    "month": "Fog closed your {fields} this month: {groups} stayed on the ground.",
+    "wave": "The fog has lifted: {groups} that sat it out {verb} fit to fly again."
   }
 }

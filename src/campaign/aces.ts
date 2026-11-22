@@ -18,6 +18,7 @@
 
 import data from '../../data/campaign/aces.json';
 import { Rng, hashString } from '../core/rng';
+import { theUnit, thePlace } from './bombers';
 import { headline } from './game';
 import type { AceRecord, AceState, AirAce, AirFleet, AirSide, Game, Storied } from './types';
 
@@ -72,6 +73,9 @@ function newAce(g: Game, f: AirFleet, st: AceState, kills: number): AirAce {
 }
 
 const fill = (s: string, v: Record<string, string | number>): string => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''));
+const upFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+/** A group's name in a sentence, with the article an English-named formation takes (the UI director, 22 November): 'the First Air Force', '11 Group'. */
+const groupWords = (f: AirFleet): { group: string; Group: string } => { const g = theUnit(f.name); return { group: g, Group: upFirst(g) }; };
 
 /** Keeps an ace on the war's record: the player's own, and the enemy's his fighters brought down. */
 function onRecord(g: Game, f: AirFleet, a: AirAce, fell?: number, at?: number): void {
@@ -94,7 +98,6 @@ export function acesFought(g: Game, att: AirSide[], attF: AirFleet[], def: AirSi
   if (!acesOn(g)) return;
   const me = g.human;
   const rows: [AirSide, AirFleet, boolean][] = [...att.map((s, i): [AirSide, AirFleet, boolean] => [s, attF[i], true]), ...def.map((s, i): [AirSide, AirFleet, boolean] => [s, defF[i], false])];
-  const over = place ? `over ${place}` : 'in action';
   for (const [side, f, attacking] of rows) {
     if (!f || !fighters(f) || side.ftr <= 0) continue;
     const st = (f.aces ??= { from: 0, n: 0 });
@@ -107,7 +110,7 @@ export function acesFought(g: Game, att: AirSide[], attF: AirFleet[], def: AirSi
       if (f.nat === me) {
         const a = st.now;
         onRecord(g, f, a);
-        headline(g, 'battle', fill(ACES.words.named, { group: f.name, title: aceRank(f.nat, a), name: a.name, kills: a.kills }), f.nat, where >= 0 ? where : undefined);
+        headline(g, 'battle', fill(ACES.words.named, { ...groupWords(f), title: aceRank(f.nat, a), name: a.name, kills: a.kills }), f.nat, where >= 0 ? where : undefined);
         g.stories.mail.push({ w: 5, m: 'ace', id: -f.id, unit: f.name, reg: f.base, x: aceTitle(f.nat, a) });
       }
       continue;
@@ -122,14 +125,15 @@ export function acesFought(g: Game, att: AirSide[], attF: AirFleet[], def: AirSi
     if (roll >= p) continue;
     // He fell. The news names him for the player's own, and for an enemy's the player's fighters brought down.
     const foes = attacking ? def : att;
-    const words = { group: f.name, title: aceRank(f.nat, a), name: a.name, kills: a.kills, where: over };
+    const words = { ...groupWords(f), title: aceRank(f.nat, a), name: a.name, kills: a.kills };
+    const at = place ? thePlace(place) : '';
     if (f.nat === me) {
       onRecord(g, f, a, g.turn, where);
-      headline(g, 'battle', fill(ACES.words.fell, words), f.nat, where >= 0 ? where : undefined);
+      headline(g, 'battle', fill(ACES.words.fell, { ...words, over: at ? ` over ${at}` : '' }), f.nat, where >= 0 ? where : undefined);
       g.stories.mail.push({ w: 7, m: 'acefell', id: -f.id, unit: f.name, reg: f.base, x: aceTitle(f.nat, a) });
     } else if (me && foes.some((s) => s.nat === me && s.ftr > 0)) {
       onRecord(g, f, a, g.turn, where);
-      headline(g, 'battle', fill(ACES.words.theirs, words), me, where >= 0 ? where : undefined);
+      headline(g, 'battle', upFirst(fill(ACES.words.theirs, { ...words, over: at ? `Over ${at}, ` : '' })), me, where >= 0 ? where : undefined);
     }
     st.now = undefined;
     st.from = down;

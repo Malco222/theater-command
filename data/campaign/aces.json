@@ -89,8 +89,8 @@
   },
   "guard": ["Erich Hartmann", "Gerhard Barkhorn", "Günther Rall", "Adolf Galland", "Werner Mölders", "Hans-Joachim Marseille", "Walter Nowotny", "Hermann Graf", "Richard Bong", "Thomas McGuire", "Francis Gabreski", "Robert Johnson", "Gregory Boyington", "Joe Foss", "Chuck Yeager", "Alexander Pokryshkin", "Ivan Kozhedub", "Saburo Sakai", "Tetsuzo Iwamoto", "Hiroyoshi Nishizawa", "Douglas Bader", "Pat Pattle", "Johnnie Johnson", "Sailor Malan", "Pierre Clostermann", "Ilmari Juutilainen", "Stanisław Skalski", "Witold Urbanowicz", "Adriano Visconti", "Franco Lucchini", "Lydia Litvyak", "Constantin Cantacuzino", "Dezső Szentgyörgyi", "Tom Gleave"],
   "words": {
-    "named": "{group} has an ace: {title} {name}, {kills} victories.",
-    "fell": "{title} {name}, {kills} victories, the ace of {group}, was shot down {where}.",
-    "theirs": "Your pilots {where} brought down {title} {name}, {kills} victories, the ace of {group}."
+    "named": "{Group} has an ace: {title} {name}, {kills} victories.",
+    "fell": "{Group} has lost its ace: {title} {name}, {kills} victories, was shot down{over}.",
+    "theirs": "{over}your fighters brought down the ace of {group}: {title} {name}, {kills} victories."
   }
 }

@@ -111,7 +111,7 @@ describe('named aces (R1, R2)', () => {
     expect(f.aces!.now).toBeUndefined();
     expect(f.aces!.fell).toBe(g.turn);
     expect(f.aces!.from).toBe(80);
-    expect(g.headlines.slice(h0).some((h) => /was shot down over Kent/.test(h.text) && h.text.includes(a.name))).toBe(true);
+    expect(g.headlines.slice(h0).some((h) => /has lost its ace: .*, was shot down over Kent\.$/.test(h.text) && h.text.includes(a.name))).toBe(true);
     expect(g.stories.mail.some((m) => m.m === 'acefell')).toBe(true);
     expect(g.stories.aces!.find((x) => x.since === a.since)!.fell).toBe(g.turn);
     // The next man: 5 more at 0.08 is 63 more downed.
@@ -135,7 +135,7 @@ describe('named aces (R1, R2)', () => {
     expect(storyEdge(g, ger)).toBe(1);
     const h0 = g.headlines.length;
     acesFought(g, [side(ger, 100, 100)], [ger], [side(uk, 100, 0)], [uk], at(g, 'Kent'), 'Kent');
-    expect(g.headlines.slice(h0).some((h) => /^Your pilots over Kent brought down /.test(h.text))).toBe(true);
+    expect(g.headlines.slice(h0).some((h) => /^Over Kent, your fighters brought down the ace of /.test(h.text))).toBe(true);
     expect(g.stories.aces!.length).toBe(1);
   });
 
@@ -160,14 +160,14 @@ describe('recon photos (R3: shown, never counted)', () => {
     const p = raidPhoto(g, { aim: 'works', fac: 3, bombed: 200, through: 100, cut: 0.123, wrecked: true, rail: false, city: 1.25, night: false, sky: 'cloud' })!;
     expect(p).toEqual({ aim: 'works', bombed: 200, on: 0.15, cut: 0.123, wrecked: 1, city: 1.3, sky: 'cloud' });
     expect(raidPhoto(g, { aim: 'works', fac: 0, bombed: 10, through: 0, cut: 0, wrecked: false, rail: true, city: 0, night: true, sky: 'clear' })).toEqual({ aim: 'rail', bombed: 10, on: PHOTOS.least, cut: 0, rail: 1, night: 1 });
-    expect(bombsIn(0.15)).toBe('about 1 bomb in 7');
-    expect(bombsIn(0.04)).toBe('fewer than 1 bomb in 10');
+    expect(bombsIn(0.15)).toBe('about one bomb in seven');
+    expect(bombsIn(0.04)).toBe('fewer than one bomb in ten');
     expect(bombsIn(0.5)).toBe('about half the bombs');
     expect(photoCaption(p, 'Schweinfurt')).toEqual([
-      'Photographed the day after, through breaks in the cloud.',
-      'About 1 bomb in 7 fell inside the works at Schweinfurt; the rest fell in the fields and the village round it.',
-      'Output stopped for a month: 12%.',
-      'One factory is burnt out: it earns nothing until engineers rebuild it.',
+      'Photographed the day after the raid, through breaks in the cloud.',
+      'About one bomb in seven fell inside the works at Schweinfurt; the rest fell in the fields and the village round it.',
+      'The works make 12% less for a month.',
+      'One factory is wrecked: it makes nothing until engineers rebuild it.',
     ]);
   });
 
@@ -235,10 +235,10 @@ describe('fog over the airfields (R4, R5, R6)', () => {
     FOG.odds.nwe[m] = 10;
     const h0 = g.headlines.length;
     fogMonth(g);
-    expect(g.headlines.slice(h0).some((h) => /^Fog closed .* of your airfields this month/.test(h.text))).toBe(true);
+    expect(g.headlines.slice(h0).some((h) => /^Fog closed your airfields? at [^()]+ this month: .* stayed on the ground\.$/.test(h.text))).toBe(true);
     g.turn++;
     const h1 = g.headlines.length;
     fogMonth(g);
-    expect(g.headlines.slice(h1).some((h) => /^The fog has lifted: /.test(h.text))).toBe(true);
+    expect(g.headlines.slice(h1).some((h) => /^The fog has lifted: (one air group that sat it out is|\d+ air groups that sat it out are) fit to fly again\.$/.test(h.text))).toBe(true);
   });
 });

@@ -52,23 +52,25 @@ export function raidPhoto(
   return p;
 }
 
-/** "about 1 bomb in 4": the share on target as the photo interpreters wrote it, in whole bombs. */
+const WORDS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
+/** "about one bomb in four": the share on target as the photo interpreters wrote it, in whole bombs and in words (the UI director, 22 November). */
 export function bombsIn(on: number): string {
   if (on >= 0.45) return 'about half the bombs';
   const n = Math.max(2, Math.round(1 / Math.max(on, 0.01)));
-  return n > 10 ? 'fewer than 1 bomb in 10' : `about 1 bomb in ${n}`;
+  return n > 10 ? 'fewer than one bomb in ten' : `about one bomb in ${WORDS[n]}`;
 }
 
 /** What the interpreters wrote under the prints: where the bombs fell, and what that did. */
 export function photoCaption(p: RaidPhoto, place: string): string[] {
   const target = p.aim === 'oil' ? 'the oil plant' : p.aim === 'rail' ? 'the rail yards' : 'the works';
   const round = p.aim === 'rail' ? 'the streets and fields round them' : 'the fields and the village round it';
-  const lines = [`Photographed the day after${p.night ? ' the night raid' : ''}${p.sky === 'cloud' ? ', through breaks in the cloud' : ''}.`];
+  const lines = [`Photographed the day after the ${p.night ? 'night raid' : 'raid'}${p.sky === 'cloud' ? ', through breaks in the cloud' : ''}.`];
   const head = bombsIn(p.on);
   lines.push(`${head[0].toUpperCase()}${head.slice(1)} fell inside ${target} at ${place}; the rest fell in ${round}.`);
-  if (p.aim !== 'rail' && p.cut > 0) lines.push(`Output stopped for a month: ${Math.max(1, Math.round(p.cut * 100))}%.`);
-  if (p.wrecked) lines.push('One factory is burnt out: it earns nothing until engineers rebuild it.');
-  if (p.rail) lines.push('The tracks are cut: no train runs until engineers relay them.');
+  if (p.aim !== 'rail' && p.cut > 0) lines.push(`${p.aim === 'oil' ? 'The oil plant makes' : 'The works make'} ${Math.max(1, Math.round(p.cut * 100))}% less for a month.`);
+  if (p.wrecked) lines.push('One factory is wrecked: it makes nothing until engineers rebuild it.');
+  if (p.rail) lines.push('The tracks are cut: no train runs until engineers mend them.');
   else if (p.aim === 'rail') lines.push('The tracks are still whole: the trains still run.');
   return lines;
 }
