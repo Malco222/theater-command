@@ -710,7 +710,7 @@ void FBattleEffects::RoomLog(double Now, int32 Laid)
 	}
 	if (Now - LogFrom >= 10.0)
 	{
-		UE_LOG(LogTheater, Log, TEXT("Battle effects room, the kit's clock %.1f to %.1f s: the most drawn %d at %.1f s, asked %d then, of room %d; %d of %d sections in use now"), LogFrom, Now, LogMost, LogMostAt, LogAsked, Core.Room(), SectionsUsed, Sections);
+		UE_LOG(LogTheater, Log, TEXT("Battle effects room, the kit's clock %.1f to %.1f s: the most drawn %d at %.1f s, asked %d then, of room %d; %d of %d sections in use now; land hits so far %d, %d with fewer pieces (burst.far), keeping %.2f of their pieces on average"), LogFrom, Now, LogMost, LogMostAt, LogAsked, Core.Room(), SectionsUsed, Sections, Core.LandHitsMade(), Core.LandHitsThinned(), Core.LandKeptMean());
 		LogFrom = Now;
 		LogMost = -1;
 	}

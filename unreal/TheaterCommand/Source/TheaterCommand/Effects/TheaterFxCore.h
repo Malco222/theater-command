@@ -270,6 +270,7 @@ namespace TheaterFx
 		double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much until SunFrom seconds old and in full by SunBy, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
+		bool bFarCull = false; // (a land hit's piece, burst.far: past gone_beyond_m and under gone_px across at its biggest, it takes no place and is not laid)
 		double LensNear = 0.0; // (game.lens_cap: its burst's own near_m, sizes.<size>.lens_near_m, where that is more than the cap's)
 		double Land = 1e9, Land2 = 1e9;
 		Vec Vel2, At1, At2;
@@ -627,6 +628,10 @@ namespace TheaterFx
 		 *  of 22 November. */
 		int PuffsDrawn() const { return LastDrawn; }
 		int PuffsAsked() const { return static_cast<int>(std::min<size_t>(RoomAsked(), 1000000000u)); }
+		/** burst.far (FX3): land hits since Setup, those laid with fewer pieces, and the mean share of their pieces they kept. */
+		int LandHitsMade() const { return static_cast<int>(std::min<size_t>(LandHits, 1000000000u)); }
+		int LandHitsThinned() const { return static_cast<int>(std::min<size_t>(LandHitsFew, 1000000000u)); }
+		double LandKeptMean() const { return LandHits > 0 ? LandFewSum / static_cast<double>(LandHits) : 1.0; }
 		const std::vector<Vec>& Points() const { return Out; }
 		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
 		bool Busy(double Now) const;
@@ -1394,9 +1399,9 @@ namespace TheaterFx
 		};
 		LandTable LandTableOf() const;
 		void RaggedFlash(double T0, const Vec& At, double K, double Small, double GrowK = 1.0, double LastsS = 0.0); // (a shell's flash by the gun flashes' rule: burst.flash.tongues; GrowK times as big, and LastsS seconds long where that is over 0)
-		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D, const std::string& Size = std::string()); // (Size: a skirt that rolls out to its cloud's width and hangs with it: burst.shock_ring.of_cloud)
+		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D, const std::string& Size = std::string(), double Few = 1.0); // (Size: a skirt that rolls out to its cloud's width and hangs with it: burst.shock_ring.of_cloud. Few: burst.far, that share of its pieces, each as much wider)
 		void Bulk(double T0, const Vec& At, double CrownH, double K, const std::string& Size, const std::string& Ground, const Paint& P, double CloudM, double LooksS, Dice& D, double Many); // (a burst's cloud as a dense column of earth standing on the ground in lighter smoke: burst.bulk)
-		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
+		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D, double Few = 1.0); // (Few: burst.far, see Shell)
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many = 1.0);
 		// (a shell falling in the sea by its calibre, SeaSplash: how its column stands and falls, its foam, its dye and its
 		// floor far off. Given to Spout; none, and the spout is as it always was)
@@ -1611,6 +1616,15 @@ namespace TheaterFx
 		Vec Where(const Bit& B, double Age) const;
 		// (a sea battle's far floors, UseSea: 0 until then, and what is laid is as it always was)
 		bool bSeaFar = false;
+		// (FX3, the production lead's battle-scale plan of 22 November, burst.far: a hit on land outside a sea battle that
+		// stands small in the picture, or lands with the room busy, is fewer and bigger pieces; and far off, a piece of
+		// one too small to see takes no place. No row: as before)
+		bool bLandFar = false;
+		double LandFullPx = 0.0, LandLeast = 0.1, LandHalvePast = 1800.0, LandNearBusy = 0.5, LandOverBusy = 0.125, LandGonePx = 0.0, LandGoneBeyond = 300.0;
+		double LandSmokePow = 0.5, LandSkirtPow = 0.5;
+		bool bLandGoneDirt = false;
+		size_t LandHits = 0, LandHitsFew = 0; // (since Setup: land hits, and those laid with fewer pieces)
+		double LandFewSum = 0.0; // (and the shares they kept, summed)
 		double SeaFlashPx = 0.0, SeaFlashKeep = 0.0, SeaGlowPx = 0.0, SeaGlowAlpha = 0.0, SeaGlowS = 0.0, SeaColumnPx = 0.0, SeaColumnKeep = 0.0;
 		double SeaFlashHot = 0.0, SeaFlashOver = 1.0, SeaGonePx = 0.0, SeaGoneBeyond = 0.0, SeaHitFullPx = 0.0, SeaHitLeast = 1.0, SeaHitOver = 2000.0;
 		Rgb SeaFlashCol;
