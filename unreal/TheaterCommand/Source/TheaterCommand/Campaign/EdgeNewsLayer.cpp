@@ -451,9 +451,10 @@ namespace
 			if (Glyph == EdgeSeals::EGlyph::Sign)
 			{
 				const FSlateBrush* Sign = Laid->SignOf && !Seal.Sign.IsEmpty() ? Laid->SignOf(Seal.Sign) : nullptr;
-				// (the order sign is pressed only where its own thinnest stroke holds 1.5 px on this screen: under that it
-				// turns to a smudge, and the seal takes its drawn mark instead. Look::SignHolds)
-				if (Sign && EdgeSeals::Look::SignHolds(Seal.SignThinnest, Sign->ImageSize.X, Sign->ImageSize.Y, PxPerUnit))
+				// (the seal set's sign, Content/CityOrders/Seal, is pressed only where its finest part, its thinnest stroke
+				// or narrowest gap, holds 1.5 px on this screen: under that a stroke turns to a smudge and a gap fills in,
+				// and the seal takes its drawn mark instead. Look::SignHolds: from 1920 by 1080 up every sign holds)
+				if (Sign && EdgeSeals::Look::SignHolds(Seal.SignFinest, Sign->ImageSize.X, Sign->ImageSize.Y, PxPerUnit))
 				{
 					// (the order sign, fitted into 18 by 12.5 as it was drawn: Look::FitSign)
 					const EdgeSeals::FPoint Fitted = EdgeSeals::Look::FitSign(Sign->ImageSize.X, Sign->ImageSize.Y);

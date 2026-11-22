@@ -578,50 +578,79 @@ namespace EdgeSeals
 			return FPoint{ W * Fit, H * Fit };
 		}
 
-		double SignThinnest(const std::string& Sign)
+		namespace
 		{
-			struct FMeasured
+			/** A seal sign's two measures, in pixels of its picture as drawn SignPictureW wide. */
+			struct FSealMeasure
 			{
 				const char* Sign;
-				double Px;
+				double Stroke; // the thinnest stroke
+				double Gap; // the narrowest gap or counter
 			};
-			// (measured on 22 November from each picture's ink, four times finer than its pixels: for every part, the
-			// widest disc that fits in it. The thinnest stroke each sign is drawn with, its points and corners aside. The
-			// star and the night raid's sign are never pressed: MayPress)
-			static constexpr FMeasured Measured[] = {
-				{ "aa", 7.8 }, // the bar the gun stands on
-				{ "arm", 14.2 }, // the gun
-				{ "art", 17.0 }, // the trail
-				{ "bmr", 9.2 }, // the tail's cut ends
-				{ "cav", 40.0 }, // (the head: nothing thinner, its ear a point)
-				{ "cv", 28.0 }, // the island
-				{ "day", 7.2 }, // the rays, at their inner ends
-				{ "eng", 14.2 }, // the river's wave
-				{ "ftr", 9.4 }, // the tail's cut ends
-				{ "hull", 26.0 }, // the superstructure
-				{ "inf", 13.6 }, // the rifle, under the bayonet's point
-				{ "mot", 12.1 }, // the chassis between the wheels
-				{ "mtn", 6.2 }, // the flag's pole
-				{ "para", 8.2 }, // the middle cord
-				{ "ss", 32.0 }, // the tower
-				{ "tp", 17.0 }, // the funnels
+
+			// (the seal set of 22 November, 06:45Z, Content/CityOrders/Seal: each picture's ink measured at four samples
+			// a pixel, as the widest disc that opens the ink, or the clear ground, taking nothing deeper than a pixel. So a
+			// stroke's round cap and a gap's fillet count at their width, as every other part does. The star and the night
+			// raid's sign have no seal picture and are never pressed: MayPress)
+			// BEGIN seal_signs.py (written by Tools/edge_seals/seal_signs.py --write-table; edge_seals_test.cpp measures
+			// the pictures again and holds these to them)
+			constexpr FSealMeasure SealMeasures[] = {
+				{ "aa", 19.625, 18.125 }, // body merged, cradle and square dropped
+				{ "arm", 20.5, 17.0 }, // turret, hull and tracks merged
+				{ "art", 18.875, 19.0 }, // hub dropped
+				{ "bmr", 16.375, 20.25 }, // offset only
+				{ "cav", 16.875, 17.0 }, // offset only
+				{ "cv", 17.625, 21.0 }, // offset only
+				{ "day", 21.0, 17.5 }, // rays merged into the disc
+				{ "eng", 20.5, 21.0 }, // river dropped
+				{ "ftr", 16.375, 17.75 }, // offset only
+				{ "hull", 17.5, 20.0 }, // offset only
+				{ "inf", 17.0, 18.75 }, // rifle and bayonet dropped
+				{ "mot", 21.0, 21.75 }, // box and cab merged
+				{ "mtn", 17.375, 18.5 }, // flag dropped
+				{ "para", 23.5, 16.5 }, // middle cord and hem scallops dropped
+				{ "ss", 21.5, 20.0 }, // offset only
+				{ "tp", 17.5, 20.0 }, // second funnel dropped
 			};
-			for (const FMeasured& Each : Measured)
+			// END seal_signs.py
+
+			const FSealMeasure* SealMeasureOf(const std::string& Sign)
 			{
-				if (Sign == Each.Sign)
+				for (const FSealMeasure& Each : SealMeasures)
 				{
-					return Each.Px;
+					if (Sign == Each.Sign)
+					{
+						return &Each;
+					}
 				}
+				return nullptr;
 			}
-			return 0.0;
 		}
 
-		bool SignHolds(double Thinnest, double DrawnW, double DrawnH, double PxPerUnit)
+		double SignThinnest(const std::string& Sign)
+		{
+			const FSealMeasure* Measure = SealMeasureOf(Sign);
+			return Measure ? Measure->Stroke : 0.0;
+		}
+
+		double SignNarrowestGap(const std::string& Sign)
+		{
+			const FSealMeasure* Measure = SealMeasureOf(Sign);
+			return Measure ? Measure->Gap : 0.0;
+		}
+
+		double SignFinest(const std::string& Sign)
+		{
+			const FSealMeasure* Measure = SealMeasureOf(Sign);
+			return Measure ? std::min(Measure->Stroke, Measure->Gap) : 0.0;
+		}
+
+		bool SignHolds(double Finest, double DrawnW, double DrawnH, double PxPerUnit)
 		{
 			// (as Stroke takes a screen of no measure: a pixel a unit)
 			const double Scale = PxPerUnit > 0.0 ? PxPerUnit : 1.0;
-			const double Units = Thinnest * FitSign(DrawnW, DrawnH).X / SignPictureW;
-			return Thinnest > 0.0 && Units * Scale >= MinStrokePx;
+			const double Units = Finest * FitSign(DrawnW, DrawnH).X / SignPictureW;
+			return Finest > 0.0 && Units * Scale >= MinStrokePx;
 		}
 
 		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4])

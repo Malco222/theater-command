@@ -104,11 +104,11 @@ namespace
 		const EdgeSeals::FLook Worn = EdgeSeals::LookOf(Item.Section, Tagged, Seal.Tone);
 		Seal.Wax = static_cast<int32>(Worn.Wax);
 		Seal.bPulse = Worn.bPulse;
-		// (our own order signs are pressed in; a star never is. Its thinnest stroke is measured once, here: the screen
-		// presses it only where that holds 1.5 px, EdgeNewsLayer)
+		// (our own order signs are pressed in, from the seal set; a star never is. The finest part of its seal picture is
+		// looked up once, here: the screen presses it only where that holds 1.5 px, EdgeNewsLayer)
 		const std::string Signed = EdgeUtf8(Seal.Sign);
 		Seal.Glyph = static_cast<int32>(EdgeSeals::GlyphOf(Item.Section, Tagged, EdgeSeals::MayPress(Signed)));
-		Seal.SignThinnest = EdgeSeals::Look::SignThinnest(Signed);
+		Seal.SignFinest = EdgeSeals::Look::SignFinest(Signed);
 		return Seal;
 	}
 }

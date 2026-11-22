@@ -3,6 +3,7 @@
 
 #include "Campaign/EdgeSeals.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -873,38 +874,52 @@ static void TestSealLook()
 		Look::FStroke Strokes[4];
 		CHECK(Look::MarkOf(EGlyph::Sign, Reference, Strokes) == 0 && Look::MarkOf(EGlyph::More, Reference, Strokes) == 0);
 	}
-	// The order signs' own strokes: a sign is pressed only where its thinnest stroke holds 1.5 px on the screen, else
-	// the seal takes its drawn mark (never a smudge). Brian's window on the Mac's fine pixels is about 1786 high: 1.84 px
-	// a unit; 1600 by 1000, the reference, 1.03; a 1080 window 1.11.
+	// The seal signs (the art director's ruling of 22 November, 06:45Z): one set, drawn for 1920 by 1080 and used on
+	// every screen, a sign pressed only where its finest part (its thinnest stroke or its narrowest gap or counter, the
+	// less) holds 1.5 px, else the seal takes its drawn mark (never a smudge, never a gap filled in). Brian's window on the
+	// Mac's fine pixels is about 1786 high: 1.84 px a unit; a 1080 window 1.11; 1600 by 1000, the reference, 1.03; 1280
+	// by 720, 0.74. (TestSealSigns measures the pictures themselves.)
 	{
-		const double Mac = (1000.0 / 900.0) * (1786.0 / 1080.0), Full = 1000.0 / 900.0;
-		auto Holds = [](const char* Sign, double Scale) { return Look::SignHolds(Look::SignThinnest(Sign), 192.0, 128.0, Scale); };
-		bool bMacHolds = true, bThin = true, bThickSigns = true;
-		for (const char* Sign : { "arm", "art", "bmr", "cav", "cv", "eng", "ftr", "hull", "inf", "mot", "ss", "tp" })
+		const double Mac = (1000.0 / 900.0) * (1786.0 / 1080.0), Full = 1000.0 / 900.0, Small = (1000.0 / 900.0) * (720.0 / 1080.0);
+		const double FromHere = (1000.0 / 900.0) * (960.0 / 1080.0);
+		const double Finer[] = { Full, (1000.0 / 900.0) * (1200.0 / 1080.0), (1000.0 / 900.0) * (1440.0 / 1080.0), Mac, 2.0 * Mac };
+		const char* const Pressed[] = { "aa", "arm", "art", "bmr", "cav", "cv", "day", "eng", "ftr", "hull", "inf", "mot", "mtn", "para", "ss", "tp" };
+		auto Holds = [](const char* Sign, double Scale) { return Look::SignHolds(Look::SignFinest(Sign), 192.0, 128.0, Scale); };
+		bool bMeasured = true, bFinest = true, bFiner = true, bJudged = true, bBelow = true;
+		for (const char* Sign : Pressed)
 		{
-			bMacHolds = bMacHolds && Holds(Sign, Mac);
+			// (both measures in the table, each at least 16 of 192 less half a pixel for the antialiasing; the finest the less)
+			bMeasured = bMeasured && MayPress(Sign) && Look::SignThinnest(Sign) >= 15.5 && Look::SignNarrowestGap(Sign) >= 15.5;
+			bFinest = bFinest && Look::SignFinest(Sign) == std::min(Look::SignThinnest(Sign), Look::SignNarrowestGap(Sign));
+			// (every seal sign is pressed at 1920 by 1080 and on every finer screen, Brian's among them: no three lines there)
+			for (const double Scale : Finer)
+			{
+				bFiner = bFiner && Holds(Sign, Scale);
+			}
+			// (and at 1600 by 1000, where the seals are judged, and from a window 960 high)
+			bJudged = bJudged && Holds(Sign, Reference) && Holds(Sign, FromHere);
+			// (below 1080p the three lines do show: at 1280 by 720 every seal takes them)
+			bBelow = bBelow && !Holds(Sign, Small);
 		}
-		CHECK(bMacHolds);
-		// (the four whose thinnest stroke falls under 1.5 px even there: the gun's bar, the rays, the flag's pole, the cord)
-		CHECK(!Holds("aa", Mac) && !Holds("day", Mac) && !Holds("mtn", Mac) && !Holds("para", Mac));
-		for (const char* Sign : { "aa", "arm", "bmr", "day", "eng", "ftr", "inf", "mot", "mtn", "para" })
-		{
-			bThin = bThin && !Holds(Sign, Reference) && !Holds(Sign, Full);
-		}
-		for (const char* Sign : { "art", "cav", "cv", "hull", "ss", "tp" })
-		{
-			bThickSigns = bThickSigns && Holds(Sign, Reference) && Holds(Sign, Full);
-		}
-		CHECK(bThin);
-		CHECK(bThickSigns);
-		// (the measure is the thinnest stroke at the screen's scale, at the edge of 1.5 px: the rifle at 13.6 of 192)
-		const double Edge = 1.5 / (13.6 * Look::FitSign(192.0, 128.0).X / Look::SignPictureW);
+		CHECK(bMeasured);
+		CHECK(bFinest);
+		CHECK(bFiner);
+		CHECK(bJudged);
+		CHECK(bBelow);
+		// (the measure is the finest part at the screen's scale, at the edge of 1.5 px)
+		const double Edge = 1.5 / (Look::SignFinest("inf") * Look::FitSign(192.0, 128.0).X / Look::SignPictureW);
 		CHECK(Holds("inf", Edge * 1.0001) && !Holds("inf", Edge * 0.9999));
+		// (a gap counts as a stroke does: the parachute's counter is its finest part, and where its cords would hold but
+		// the counter would fill in, it is not pressed)
+		CHECK(Look::SignNarrowestGap("para") < Look::SignThinnest("para"));
+		const double Between = 1.5 / (0.5 * (Look::SignNarrowestGap("para") + Look::SignThinnest("para")) * Look::FitSign(192.0, 128.0).X / Look::SignPictureW);
+		CHECK(Look::SignHolds(Look::SignThinnest("para"), 192.0, 128.0, Between) && !Holds("para", Between));
 		// (the same sign drawn twice as large keeps the same measure: it is a share of the picture's width)
-		CHECK(Look::SignHolds(13.6, 384.0, 256.0, Mac) == Holds("inf", Mac));
-		// (a sign not measured is not pressed; nor the star or the night raid's, which MayPress refuses)
-		CHECK(Look::SignThinnest("star") == 0.0 && Look::SignThinnest("night") == 0.0 && Look::SignThinnest("") == 0.0);
-		CHECK(!Holds("star", 3.0) && !Holds("", 3.0) && !Look::SignHolds(0.0, 192.0, 128.0, 100.0));
+		CHECK(Look::SignHolds(Look::SignFinest("inf"), 384.0, 256.0, Mac) == Holds("inf", Mac));
+		// (no seal picture, no measure, no press: the star and the night raid's, which MayPress refuses, and a sign unknown)
+		CHECK(Look::SignFinest("star") == 0.0 && Look::SignFinest("night") == 0.0 && Look::SignFinest("") == 0.0);
+		CHECK(Look::SignThinnest("star") == 0.0 && Look::SignNarrowestGap("night") == 0.0 && Look::SignFinest("zz") == 0.0);
+		CHECK(!Holds("star", 3.0) && !Holds("night", 3.0) && !Holds("", 3.0) && !Look::SignHolds(0.0, 192.0, 128.0, 100.0));
 		// (a screen of no measure is taken at a pixel a unit)
 		CHECK(Holds("art", 0.0) == Holds("art", 1.0) && Holds("inf", std::nan("")) == Holds("inf", 1.0));
 	}
@@ -992,34 +1007,657 @@ static void TestSealLook()
 	CHECK(Most > 0.45 && Most <= 0.55);
 }
 
-/** Every order sign in Content/CityOrders that may be pressed has its thinnest stroke measured, so none is pressed unseen. */
-static void TestSignsMeasured(const char* Folder)
+namespace
+{
+	/**
+	 * A small inflate (RFC 1951, after zlib's puff): stored, fixed and dynamic blocks, enough to read the seal signs'
+	 * PNG data with no library. False for data it cannot read.
+	 */
+	class FInflate
+	{
+	public:
+		FInflate(const std::vector<unsigned char>& InData, size_t InAt)
+			: Data(InData), At(InAt)
+		{
+		}
+
+		bool Run(std::vector<unsigned char>& Out)
+		{
+			bool bLast = false;
+			while (!bLast && !bFailed)
+			{
+				bLast = Bits(1) == 1;
+				const int Type = Bits(2);
+				if (Type == 0)
+				{
+					Stored(Out);
+				}
+				else if (Type == 1)
+				{
+					FHuffman Lengths, Distances;
+					short Each[288];
+					for (int Symbol = 0; Symbol < 288; ++Symbol)
+					{
+						Each[Symbol] = static_cast<short>(Symbol < 144 ? 8 : Symbol < 256 ? 9 : Symbol < 280 ? 7 : 8);
+					}
+					Build(Lengths, Each, 288);
+					for (int Symbol = 0; Symbol < 30; ++Symbol)
+					{
+						Each[Symbol] = 5;
+					}
+					Build(Distances, Each, 30);
+					Codes(Out, Lengths, Distances);
+				}
+				else if (Type == 2)
+				{
+					Dynamic(Out);
+				}
+				else
+				{
+					bFailed = true;
+				}
+			}
+			return !bFailed;
+		}
+
+	private:
+		struct FHuffman
+		{
+			short Count[16] = {};
+			short Symbol[288] = {};
+		};
+
+		int Bits(int Need)
+		{
+			long Value = BitBuf;
+			while (BitCount < Need)
+			{
+				if (At >= Data.size())
+				{
+					bFailed = true;
+					return 0;
+				}
+				Value |= static_cast<long>(Data[At++]) << BitCount;
+				BitCount += 8;
+			}
+			BitBuf = Value >> Need;
+			BitCount -= Need;
+			return static_cast<int>(Value & ((1L << Need) - 1));
+		}
+
+		void Stored(std::vector<unsigned char>& Out)
+		{
+			BitBuf = 0;
+			BitCount = 0;
+			if (At + 4 > Data.size())
+			{
+				bFailed = true;
+				return;
+			}
+			const unsigned Length = static_cast<unsigned>(Data[At]) | (static_cast<unsigned>(Data[At + 1]) << 8);
+			const unsigned Check = static_cast<unsigned>(Data[At + 2]) | (static_cast<unsigned>(Data[At + 3]) << 8);
+			At += 4;
+			if (Length != (~Check & 0xFFFFu) || At + Length > Data.size())
+			{
+				bFailed = true;
+				return;
+			}
+			Out.insert(Out.end(), Data.begin() + static_cast<long>(At), Data.begin() + static_cast<long>(At + Length));
+			At += Length;
+		}
+
+		/** The canonical code's next symbol; -1 where the bits make none. */
+		int Decode(const FHuffman& Table)
+		{
+			int Code = 0, First = 0, Index = 0;
+			for (int Length = 1; Length < 16; ++Length)
+			{
+				Code |= Bits(1);
+				const int Count = Table.Count[Length];
+				if (Code - Count < First)
+				{
+					return Table.Symbol[Index + (Code - First)];
+				}
+				Index += Count;
+				First = (First + Count) << 1;
+				Code <<= 1;
+			}
+			return -1;
+		}
+
+		/** Builds a canonical code from its lengths: 0 for a complete code, more for an incomplete one, less for one over-full. */
+		static int Build(FHuffman& Table, const short* Lengths, int Number)
+		{
+			for (short& Count : Table.Count)
+			{
+				Count = 0;
+			}
+			for (int Symbol = 0; Symbol < Number; ++Symbol)
+			{
+				++Table.Count[Lengths[Symbol]];
+			}
+			if (Table.Count[0] == Number)
+			{
+				return 0;
+			}
+			int Left = 1;
+			for (int Length = 1; Length < 16; ++Length)
+			{
+				Left = (Left << 1) - Table.Count[Length];
+				if (Left < 0)
+				{
+					return Left;
+				}
+			}
+			short Offsets[16] = {};
+			for (int Length = 1; Length < 15; ++Length)
+			{
+				Offsets[Length + 1] = static_cast<short>(Offsets[Length] + Table.Count[Length]);
+			}
+			for (int Symbol = 0; Symbol < Number; ++Symbol)
+			{
+				if (Lengths[Symbol] != 0)
+				{
+					Table.Symbol[Offsets[Lengths[Symbol]]++] = static_cast<short>(Symbol);
+				}
+			}
+			return Left;
+		}
+
+		void Codes(std::vector<unsigned char>& Out, const FHuffman& Lengths, const FHuffman& Distances)
+		{
+			static constexpr short LengthBase[29] = { 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258 };
+			static constexpr short LengthExtra[29] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 };
+			static constexpr short DistanceBase[30] = { 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 };
+			static constexpr short DistanceExtra[30] = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 };
+			while (!bFailed)
+			{
+				int Symbol = Decode(Lengths);
+				if (Symbol < 0)
+				{
+					bFailed = true;
+				}
+				else if (Symbol < 256)
+				{
+					Out.push_back(static_cast<unsigned char>(Symbol));
+				}
+				else if (Symbol == 256)
+				{
+					return;
+				}
+				else
+				{
+					Symbol -= 257;
+					if (Symbol >= 29)
+					{
+						bFailed = true;
+						return;
+					}
+					const int Length = LengthBase[Symbol] + Bits(LengthExtra[Symbol]);
+					const int Far = Decode(Distances);
+					if (Far < 0 || Far >= 30)
+					{
+						bFailed = true;
+						return;
+					}
+					const size_t Back = static_cast<size_t>(DistanceBase[Far] + Bits(DistanceExtra[Far]));
+					if (Back > Out.size())
+					{
+						bFailed = true;
+						return;
+					}
+					for (int Each = 0; Each < Length; ++Each)
+					{
+						Out.push_back(Out[Out.size() - Back]);
+					}
+				}
+			}
+		}
+
+		void Dynamic(std::vector<unsigned char>& Out)
+		{
+			static constexpr short Order[19] = { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
+			const int LengthCount = Bits(5) + 257, DistanceCount = Bits(5) + 1, CodeCount = Bits(4) + 4;
+			if (LengthCount > 286 || DistanceCount > 30)
+			{
+				bFailed = true;
+				return;
+			}
+			short Lengths[320] = {};
+			for (int Index = 0; Index < CodeCount; ++Index)
+			{
+				Lengths[Order[Index]] = static_cast<short>(Bits(3));
+			}
+			FHuffman LengthCode, DistanceCode;
+			if (Build(LengthCode, Lengths, 19) != 0)
+			{
+				bFailed = true;
+				return;
+			}
+			int Index = 0;
+			while (Index < LengthCount + DistanceCount && !bFailed)
+			{
+				int Symbol = Decode(LengthCode);
+				if (Symbol < 0)
+				{
+					bFailed = true;
+					return;
+				}
+				if (Symbol < 16)
+				{
+					Lengths[Index++] = static_cast<short>(Symbol);
+					continue;
+				}
+				short Repeat = 0;
+				if (Symbol == 16)
+				{
+					if (Index == 0)
+					{
+						bFailed = true;
+						return;
+					}
+					Repeat = Lengths[Index - 1];
+					Symbol = 3 + Bits(2);
+				}
+				else
+				{
+					Symbol = Symbol == 17 ? 3 + Bits(3) : 11 + Bits(7);
+				}
+				if (Index + Symbol > LengthCount + DistanceCount)
+				{
+					bFailed = true;
+					return;
+				}
+				while (Symbol-- > 0)
+				{
+					Lengths[Index++] = Repeat;
+				}
+			}
+			if (bFailed || Lengths[256] == 0)
+			{
+				bFailed = true;
+				return;
+			}
+			const int LengthLeft = Build(LengthCode, Lengths, LengthCount);
+			const int DistanceLeft = Build(DistanceCode, Lengths + LengthCount, DistanceCount);
+			if (LengthLeft < 0 || (LengthLeft > 0 && LengthCount - LengthCode.Count[0] != 1) || DistanceLeft < 0
+				|| (DistanceLeft > 0 && DistanceCount - DistanceCode.Count[0] != 1))
+			{
+				bFailed = true;
+				return;
+			}
+			Codes(Out, LengthCode, DistanceCode);
+		}
+
+		const std::vector<unsigned char>& Data;
+		size_t At = 0;
+		long BitBuf = 0;
+		int BitCount = 0;
+		bool bFailed = false;
+	};
+
+	/** A picture as the PNG holds it: 8-bit RGBA, row by row. */
+	struct FPicture
+	{
+		int W = 0;
+		int H = 0;
+		std::vector<unsigned char> Rgba;
+	};
+
+	unsigned ReadBig(const std::vector<unsigned char>& Bytes, size_t At)
+	{
+		return (static_cast<unsigned>(Bytes[At]) << 24) | (static_cast<unsigned>(Bytes[At + 1]) << 16) | (static_cast<unsigned>(Bytes[At + 2]) << 8) | Bytes[At + 3];
+	}
+
+	/** Reads an 8-bit RGBA PNG, not interlaced (as the seal signs are written); false for anything else. */
+	bool ReadPng(const std::filesystem::path& Path, FPicture& Out)
+	{
+		std::FILE* File = std::fopen(Path.string().c_str(), "rb");
+		if (!File)
+		{
+			return false;
+		}
+		std::vector<unsigned char> Bytes;
+		unsigned char Block[4096];
+		for (size_t Got; (Got = std::fread(Block, 1, sizeof(Block), File)) > 0;)
+		{
+			Bytes.insert(Bytes.end(), Block, Block + Got);
+		}
+		std::fclose(File);
+		static constexpr unsigned char Signature[8] = { 137, 'P', 'N', 'G', 13, 10, 26, 10 };
+		if (Bytes.size() < 8 || !std::equal(Signature, Signature + 8, Bytes.begin()))
+		{
+			return false;
+		}
+		std::vector<unsigned char> Packed;
+		bool bHead = false;
+		for (size_t At = 8; At + 12 <= Bytes.size();)
+		{
+			const size_t Length = ReadBig(Bytes, At);
+			const std::string Type(Bytes.begin() + static_cast<long>(At + 4), Bytes.begin() + static_cast<long>(At + 8));
+			if (At + 12 + Length > Bytes.size())
+			{
+				return false;
+			}
+			const size_t Body = At + 8;
+			if (Type == "IHDR")
+			{
+				Out.W = static_cast<int>(ReadBig(Bytes, Body));
+				Out.H = static_cast<int>(ReadBig(Bytes, Body + 4));
+				// (8 bits, RGBA, the one compression and filter method, not interlaced)
+				bHead = Length == 13 && Bytes[Body + 8] == 8 && Bytes[Body + 9] == 6 && Bytes[Body + 10] == 0 && Bytes[Body + 11] == 0 && Bytes[Body + 12] == 0
+					&& Out.W > 0 && Out.H > 0 && Out.W <= 4096 && Out.H <= 4096;
+			}
+			else if (Type == "IDAT")
+			{
+				Packed.insert(Packed.end(), Bytes.begin() + static_cast<long>(Body), Bytes.begin() + static_cast<long>(Body + Length));
+			}
+			else if (Type == "IEND")
+			{
+				break;
+			}
+			At += 12 + Length;
+		}
+		// (the zlib wrapper: deflate, no preset dictionary, its check word right)
+		if (!bHead || Packed.size() < 2 || (Packed[0] & 0x0F) != 8 || (Packed[1] & 0x20) != 0 || ((Packed[0] << 8) | Packed[1]) % 31 != 0)
+		{
+			return false;
+		}
+		std::vector<unsigned char> Raw;
+		if (!FInflate(Packed, 2).Run(Raw))
+		{
+			return false;
+		}
+		const size_t Stride = static_cast<size_t>(Out.W) * 4;
+		if (Raw.size() < (Stride + 1) * static_cast<size_t>(Out.H))
+		{
+			return false;
+		}
+		Out.Rgba.assign(Stride * static_cast<size_t>(Out.H), 0);
+		for (int Row = 0; Row < Out.H; ++Row)
+		{
+			const unsigned char Filter = Raw[(Stride + 1) * static_cast<size_t>(Row)];
+			const unsigned char* In = &Raw[(Stride + 1) * static_cast<size_t>(Row) + 1];
+			unsigned char* Line = &Out.Rgba[Stride * static_cast<size_t>(Row)];
+			const unsigned char* Above = Row > 0 ? Line - Stride : nullptr;
+			for (size_t Each = 0; Each < Stride; ++Each)
+			{
+				const int Left = Each >= 4 ? Line[Each - 4] : 0, Up = Above ? Above[Each] : 0, Corner = Above && Each >= 4 ? Above[Each - 4] : 0;
+				int Guess = 0;
+				switch (Filter)
+				{
+				case 0:
+					break;
+				case 1:
+					Guess = Left;
+					break;
+				case 2:
+					Guess = Up;
+					break;
+				case 3:
+					Guess = (Left + Up) / 2;
+					break;
+				case 4:
+				{
+					const int Base = Left + Up - Corner, ToLeft = std::abs(Base - Left), ToUp = std::abs(Base - Up), ToCorner = std::abs(Base - Corner);
+					Guess = ToLeft <= ToUp && ToLeft <= ToCorner ? Left : ToUp <= ToCorner ? Up : Corner;
+					break;
+				}
+				default:
+					return false;
+				}
+				Line[Each] = static_cast<unsigned char>((In[Each] + Guess) & 0xFF);
+			}
+		}
+		return true;
+	}
+
+	// The measure of a seal sign's picture: the same steps as Tools/edge_seals/seal_signs.py's measure(), all in whole
+	// numbers, so that both find the same samples and the same widths.
+	constexpr int MeasureSamples = 4; // samples a pixel, each way
+	constexpr int MeasurePad = 32; // px of clear ground round the picture
+	constexpr int MeasureMost = 512; // the widest measure, in eighths of a px (64 px)
+	constexpr long long MeasureDepth2 = 16; // a sliver deeper than a pixel (4 samples) is a stroke or a gap, not the antialiasing
+	constexpr long long MeasureFar = 1000000000000000LL;
+
+	long long FloorDiv(long long Value, long long By)
+	{
+		return Value >= 0 ? Value / By : -((-Value + By - 1) / By);
+	}
+
+	/** The picture's ink at four samples a pixel each way, on its ground: bilinear between pixel middles, ink where half or more. */
+	std::vector<unsigned char> InkSamples(const FPicture& Picture, int& OutW, int& OutH)
+	{
+		OutW = (Picture.W + 2 * MeasurePad) * MeasureSamples;
+		OutH = (Picture.H + 2 * MeasurePad) * MeasureSamples;
+		std::vector<unsigned char> Ink(static_cast<size_t>(OutW) * static_cast<size_t>(OutH), 0);
+		auto Alpha = [&Picture](long long X, long long Y)
+		{
+			const long long CX = std::min<long long>(std::max<long long>(X, 0), Picture.W - 1), CY = std::min<long long>(std::max<long long>(Y, 0), Picture.H - 1);
+			return static_cast<long long>(Picture.Rgba[(static_cast<size_t>(CY) * static_cast<size_t>(Picture.W) + static_cast<size_t>(CX)) * 4 + 3]);
+		};
+		for (int J = 0; J < Picture.H * MeasureSamples; ++J)
+		{
+			const long long V8 = 2LL * J - 3, Y0 = FloorDiv(V8, 8), WY1 = V8 - 8 * Y0, WY0 = 8 - WY1;
+			for (int K = 0; K < Picture.W * MeasureSamples; ++K)
+			{
+				const long long U8 = 2LL * K - 3, X0 = FloorDiv(U8, 8), WX1 = U8 - 8 * X0, WX0 = 8 - WX1;
+				const long long Sum = (Alpha(X0, Y0) * WX0 + Alpha(X0 + 1, Y0) * WX1) * WY0 + (Alpha(X0, Y0 + 1) * WX0 + Alpha(X0 + 1, Y0 + 1) * WX1) * WY1;
+				Ink[static_cast<size_t>(J + MeasurePad * MeasureSamples) * static_cast<size_t>(OutW) + static_cast<size_t>(K + MeasurePad * MeasureSamples)] = 2 * Sum >= 16320 ? 1 : 0;
+			}
+		}
+		return Ink;
+	}
+
+	/** Each sample's squared distance to the nearest sample of Feature, in samples (exact: Felzenszwalb and Huttenlocher); MeasureFar where there is none. */
+	void SquaredDistance(const std::vector<unsigned char>& Feature, int GW, int GH, std::vector<long long>& Out)
+	{
+		Out.assign(Feature.size(), MeasureFar);
+		std::vector<long long> Across(Feature.size(), MeasureFar);
+		for (int Y = 0; Y < GH; ++Y)
+		{
+			const size_t Row = static_cast<size_t>(Y) * static_cast<size_t>(GW);
+			long long Last = -MeasureFar;
+			for (int X = 0; X < GW; ++X)
+			{
+				Last = Feature[Row + static_cast<size_t>(X)] ? X : Last;
+				Across[Row + static_cast<size_t>(X)] = Last > -MeasureFar ? X - Last : MeasureFar;
+			}
+			Last = MeasureFar;
+			for (int X = GW - 1; X >= 0; --X)
+			{
+				Last = Feature[Row + static_cast<size_t>(X)] ? X : Last;
+				Across[Row + static_cast<size_t>(X)] = std::min(Across[Row + static_cast<size_t>(X)], Last < MeasureFar ? Last - X : MeasureFar);
+			}
+		}
+		std::vector<long long> Squared(static_cast<size_t>(GH)), Where(static_cast<size_t>(GH));
+		std::vector<double> Bound(static_cast<size_t>(GH) + 1);
+		for (int X = 0; X < GW; ++X)
+		{
+			int Top = -1;
+			for (int Y = 0; Y < GH; ++Y)
+			{
+				const long long G = Across[static_cast<size_t>(Y) * static_cast<size_t>(GW) + static_cast<size_t>(X)];
+				if (G >= MeasureFar)
+				{
+					continue;
+				}
+				const long long F = G * G;
+				double Meet = 0.0;
+				while (Top >= 0)
+				{
+					const long long P = Where[static_cast<size_t>(Top)];
+					Meet = static_cast<double>((F + 1LL * Y * Y) - (Squared[static_cast<size_t>(Top)] + P * P)) / (2.0 * static_cast<double>(Y - P));
+					if (Meet > Bound[static_cast<size_t>(Top)])
+					{
+						break;
+					}
+					--Top;
+				}
+				++Top;
+				Where[static_cast<size_t>(Top)] = Y;
+				Squared[static_cast<size_t>(Top)] = F;
+				Bound[static_cast<size_t>(Top)] = Top == 0 ? -1e300 : Meet;
+			}
+			if (Top < 0)
+			{
+				continue;
+			}
+			int Near = 0;
+			for (int Y = 0; Y < GH; ++Y)
+			{
+				while (Near < Top && Bound[static_cast<size_t>(Near) + 1] < Y)
+				{
+					++Near;
+				}
+				const long long Off = Y - Where[static_cast<size_t>(Near)];
+				Out[static_cast<size_t>(Y) * static_cast<size_t>(GW) + static_cast<size_t>(X)] = Off * Off + Squared[static_cast<size_t>(Near)];
+			}
+		}
+	}
+
+	/**
+	 * A seal sign's thinnest stroke (bGap false) or narrowest gap or counter (bGap true), in px of its picture: the widest
+	 * T, in eighths of a px up to 64, for which opening the ink (or the clear ground) with a disc T across takes nothing
+	 * deeper than a pixel. A stroke narrower goes whole; a round cap or a fillet T across, or an antialiased edge, loses
+	 * a sliver at most.
+	 */
+	double MeasureSign(const FPicture& Picture, bool bGap)
+	{
+		int GW = 0, GH = 0;
+		const std::vector<unsigned char> Ink = InkSamples(Picture, GW, GH);
+		std::vector<unsigned char> Part(Ink.size()), Other(Ink.size()), Core(Ink.size());
+		for (size_t Each = 0; Each < Ink.size(); ++Each)
+		{
+			Part[Each] = static_cast<unsigned char>(bGap ? !Ink[Each] : Ink[Each]);
+			Other[Each] = static_cast<unsigned char>(!Part[Each]);
+		}
+		std::vector<long long> Depth2, Reach2;
+		SquaredDistance(Other, GW, GH, Depth2);
+		auto Holds = [&](long long N)
+		{
+			if (N == 0)
+			{
+				return true;
+			}
+			for (size_t Each = 0; Each < Part.size(); ++Each)
+			{
+				Core[Each] = static_cast<unsigned char>(Part[Each] && 16 * Depth2[Each] >= N * N);
+			}
+			SquaredDistance(Core, GW, GH, Reach2);
+			for (size_t Each = 0; Each < Part.size(); ++Each)
+			{
+				if (Part[Each] && !(16 * Reach2[Each] <= N * N) && Depth2[Each] > MeasureDepth2)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+		if (Holds(MeasureMost))
+		{
+			return MeasureMost / 8.0;
+		}
+		long long Low = 0, High = MeasureMost;
+		while (High - Low > 1)
+		{
+			const long long Mid = (Low + High) / 2;
+			(Holds(Mid) ? Low : High) = Mid;
+		}
+		return static_cast<double>(Low) / 8.0;
+	}
+}
+
+/**
+ * The seal set (the art director's ruling of 22 November, 06:45Z), measured from its pictures: every order sign in
+ * Content/CityOrders that may be pressed has its seal picture in Content/CityOrders/Seal (192 by 128, white on clear,
+ * so the layer's tint still works), its thinnest stroke and narrowest gap or counter measured here no thinner than
+ * 16 of its 192 pixels (15.5 allowed: the measure reads the edge at half its alpha, so the antialiasing can take a
+ * quarter to half a pixel), and as EdgeSeals' table has them; the star and the night raid's sign have none.
+ */
+static void TestSealSigns(const char* Folder)
 {
 	if (!Folder)
 	{
-		std::printf("(the order signs' folder was not given: their measures were not checked against it)\n");
+		std::printf("(the order signs' folder was not given: the seal pictures were not measured)\n");
 		return;
 	}
-	int Found = 0;
-	bool bMeasured = true;
+	const std::filesystem::path Orders(Folder), Seals = Orders / "Seal";
+	int Found = 0, Pictures = 0;
+	bool bEach = true, bRead = true, bWhite = true, bFloor = true, bTable = true, bRefused = true, bStray = true;
 	std::error_code Failed;
-	for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(Folder, Failed))
+	std::vector<std::string> Names;
+	for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(Orders, Failed))
 	{
-		const std::string Name = Entry.path().filename().string();
+		Names.push_back(Entry.path().filename().string());
+	}
+	std::sort(Names.begin(), Names.end());
+	for (const std::string& Name : Names)
+	{
 		if (Name.size() <= 10 || Name.compare(0, 6, "order-") != 0 || Name.compare(Name.size() - 4, 4, ".png") != 0)
 		{
 			continue;
 		}
 		const std::string Sign = Name.substr(6, Name.size() - 10);
+		const std::filesystem::path Seal = Seals / ("seal-" + Sign + ".png");
 		++Found;
-		if (MayPress(Sign) && Look::SignThinnest(Sign) <= 0.0)
+		if (!MayPress(Sign))
 		{
-			bMeasured = false;
-			std::printf("not measured: %s\n", Sign.c_str());
+			// (no emblem in the wax: no picture, no measure)
+			bRefused = bRefused && !std::filesystem::exists(Seal) && Look::SignFinest(Sign) == 0.0;
+			continue;
+		}
+		FPicture Picture;
+		if (!std::filesystem::exists(Seal))
+		{
+			bEach = false;
+			std::printf("no seal picture: %s\n", Sign.c_str());
+			continue;
+		}
+		if (!ReadPng(Seal, Picture) || Picture.W != 192 || Picture.H != 128)
+		{
+			bRead = false;
+			std::printf("not read as 192 by 128 RGBA: %s\n", Seal.string().c_str());
+			continue;
+		}
+		++Pictures;
+		for (size_t Each = 0; Each < Picture.Rgba.size(); Each += 4)
+		{
+			bWhite = bWhite && Picture.Rgba[Each] == 255 && Picture.Rgba[Each + 1] == 255 && Picture.Rgba[Each + 2] == 255;
+		}
+		const double Floor = 16.0 / 192.0 * Picture.W - 0.5;
+		const double Stroke = MeasureSign(Picture, false), Gap = MeasureSign(Picture, true);
+		const double TableStroke = Look::SignThinnest(Sign), TableGap = Look::SignNarrowestGap(Sign);
+		std::printf("seal %-4s stroke %6.3f (table %6.3f)  gap %6.3f (table %6.3f)  finest %.2f px at 1920 by 1080\n", Sign.c_str(), Stroke, TableStroke, Gap, TableGap,
+			std::min(Stroke, Gap) * Look::FitSign(Picture.W, Picture.H).X / Look::SignPictureW * (1000.0 / 900.0));
+		if (Stroke < Floor || Gap < Floor)
+		{
+			bFloor = false;
+			std::printf("under 16 of 192: %s\n", Sign.c_str());
+		}
+		if (std::fabs(Stroke - TableStroke) > 0.25 || std::fabs(Gap - TableGap) > 0.25)
+		{
+			bTable = false;
+			std::printf("the table does not match the picture: %s\n", Sign.c_str());
 		}
 	}
-	CHECK(!Failed && Found >= 16);
-	CHECK(bMeasured);
+	// (and no picture in the seal set that no sign presses)
+	std::error_code SealsFailed;
+	for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(Seals, SealsFailed))
+	{
+		const std::string Name = Entry.path().filename().string();
+		const bool bSeal = Name.size() > 9 && Name.compare(0, 5, "seal-") == 0 && Name.compare(Name.size() - 4, 4, ".png") == 0;
+		const std::string Sign = bSeal ? Name.substr(5, Name.size() - 9) : std::string();
+		bStray = bStray && bSeal && MayPress(Sign) && std::filesystem::exists(Orders / ("order-" + Sign + ".png"));
+	}
+	CHECK(!Failed && !SealsFailed && Found >= 18 && Pictures == 16);
+	CHECK(bEach);
+	CHECK(bRead);
+	CHECK(bWhite);
+	CHECK(bFloor);
+	CHECK(bTable);
+	CHECK(bRefused && !std::filesystem::exists(Seals / "seal-star.png") && !std::filesystem::exists(Seals / "seal-night.png"));
+	CHECK(bStray);
 }
 
 int main(int ArgCount, char** Args)
@@ -1032,7 +1670,7 @@ int main(int ArgCount, char** Args)
 	TestMotion();
 	TestColours();
 	TestSealLook();
-	TestSignsMeasured(ArgCount > 1 ? Args[1] : nullptr);
+	TestSealSigns(ArgCount > 1 ? Args[1] : nullptr);
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

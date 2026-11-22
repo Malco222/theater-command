@@ -5,10 +5,14 @@
 # again and again over random frames and places; where the edge is full, the last items folded into "+N" in the card's
 # ranking, none lost without trace; that laying them again allocates nothing; and the art director's ruling of 22
 # November: each seal's colour and pulse (red the dated warning's alone, the news band's brass for war and peace and
-# the news, no star pressed in), and the look's limits (the sign about 18 px with no stroke under 1.5 px, an order sign
-# pressed only where its own thinnest stroke holds 1.5 px, every pressable sign in Content/CityOrders measured, the
-# hollow lit from the upper left, four small uneven runs, short tails, the pulse ring under twice the disc and dimmer
-# than it, rising from nothing).
+# the news, no star pressed in), and the look's limits (the sign about 18 px with no stroke under 1.5 px, the hollow lit
+# from the upper left, four small uneven runs, short tails, the pulse ring under twice the disc and dimmer than it,
+# rising from nothing). And the seal set of the ruling of 22 November, 06:45Z: every pressable order sign in
+# Content/CityOrders has its seal picture in Content/CityOrders/Seal (none for the star or the night raid's), each read
+# from its PNG and measured here, its thinnest stroke and narrowest gap or counter at least 16 of 192 (15.5 allowed for
+# the antialiasing) and as EdgeSeals' table has them; a sign pressed only where its finest part holds 1.5 px, so from
+# 1920 by 1080 up every one, and the three lines below.
+# The seal pictures and the table are drawn and written by Tools/edge_seals/seal_signs.py (python3, PIL and numpy).
 # Usage: Tools/edge_seals/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

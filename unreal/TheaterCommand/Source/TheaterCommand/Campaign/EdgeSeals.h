@@ -48,7 +48,7 @@ namespace EdgeSeals
 	/** What is pressed into a seal: the row's own order sign, or a mark drawn in line where the row has none. */
 	enum class EGlyph : int
 	{
-		Sign = 0, // the order sign named by the item (Content/CityOrders), where it may be pressed (MayPress)
+		Sign = 0, // the order sign named by the item, its seal picture (Content/CityOrders/Seal), where it may be pressed (MayPress)
 		Warning, // a warning that needs his decision: an upright stroke and a dot
 		War, // war declared: two strokes crossed
 		Fallen, // a country fallen: a chevron pointing down
@@ -334,24 +334,35 @@ namespace EdgeSeals
 		/** An order sign's picture, DrawnW by DrawnH, fitted into SignW by SignH as it was drawn: its size (X wide, Y high). */
 		FPoint FitSign(double DrawnW, double DrawnH);
 
-		/** The width the order signs' pictures are drawn at (Content/CityOrders, 192 by 128): SignThinnest's measure. */
+		/**
+		 * The width the seal signs' pictures are drawn at (Content/CityOrders/Seal/seal-<key>.png, 192 by 128, as the
+		 * badges' order-<key>.png are): their measures' unit.
+		 */
 		constexpr double SignPictureW = 192.0;
 
 		/**
-		 * An order sign's thinnest stroke, in pixels of its picture as drawn SignPictureW wide: the narrowest part the
-		 * sign is drawn with (a bar, a pole, a cord, a ray, a barrel, a fin's cut end), as measured from the pictures.
-		 * Points and corners are left out: the tip of a bayonet, a nose or an ear narrows to nothing at any size, and is
-		 * no stroke. 0 for a sign not measured: it is not pressed until it is.
+		 * The seal set (the art director's ruling of 22 November, 06:45Z): each order sign the seals press has a picture
+		 * of its own, drawn for 1920 by 1080 and used on every screen, its strokes thickened by offsetting them (round
+		 * caps kept) so that the thinnest is about 16 of the picture's 192 pixels, and every gap and counter as wide,
+		 * a detail that would close dropped or merged (Tools/edge_seals/seal_signs.py, which draws them and writes these
+		 * measures). The badges elsewhere keep their own pictures.
+		 *
+		 * SignThinnest: a seal sign's thinnest stroke, SignNarrowestGap its narrowest gap or counter, in pixels of its
+		 * picture as drawn SignPictureW wide, as measured from the pictures; SignFinest the less of the two, which is what
+		 * must hold 1.5 px. 0 for a sign with no seal picture: it is not pressed.
 		 */
 		double SignThinnest(const std::string& Sign);
+		double SignNarrowestGap(const std::string& Sign);
+		double SignFinest(const std::string& Sign);
 
 		/**
-		 * Whether an order sign whose thinnest stroke is Thinnest (SignThinnest), its picture DrawnW by DrawnH, keeps that
-		 * stroke at MinStrokePx or more once fitted into SignW by SignH (FitSign) on a screen of PxPerUnit pixels to a
-		 * unit (none, or no measure, is taken at a pixel a unit). Where it does not, the seal takes its drawn mark: under
-		 * 1.5 px a sign turns to a smudge (the art director's ruling of 22 November, section 2).
+		 * Whether a seal sign whose finest part is Finest (SignFinest), its picture DrawnW by DrawnH, keeps that part at
+		 * MinStrokePx or more once fitted into SignW by SignH (FitSign) on a screen of PxPerUnit pixels to a unit (none,
+		 * or no measure, is taken at a pixel a unit). Where it does not, the seal takes its drawn mark: under 1.5 px a
+		 * stroke turns to a smudge and a gap fills in (the art director's ruling of 22 November, section 2). The seal set
+		 * holds from a window about 950 high (1920 by 1080 and up); below it, the three lines.
 		 */
-		bool SignHolds(double Thinnest, double DrawnW, double DrawnH, double PxPerUnit);
+		bool SignHolds(double Finest, double DrawnW, double DrawnH, double PxPerUnit);
 
 		/** One stroke of a drawn mark, from the disc's middle: a bar with round ends (Long by Thick, turned Degrees clockwise), a dot (Long across) or a ring (Long across, its line Thick). */
 		enum class EStroke : int

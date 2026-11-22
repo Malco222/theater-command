@@ -24,8 +24,10 @@ struct FSlateBrush;
  * colour of the row it opens (the art director's ruling of 22 November: EdgeSeals::LookOf): a dated warning is red and
  * pulses slowly until opened; war and peace and the news wear the news band's brass (a freeing his own side did, its
  * green) and pulse; the rest wear their row's colour and stand still. The pointer on a seal gives its eight words and
- * pings its place on the map; a press opens the month's card at its row. SignOf gives an order sign's picture by its
- * key (Content/CityOrders), and CountFace is the face the "+N" is pressed in.
+ * pings its place on the map; a press opens the month's card at its row. SignOf gives the picture pressed for an order
+ * sign by its key: the seal set's (Content/CityOrders/Seal/seal-<key>.png, the art director's ruling of 22 November,
+ * 06:45Z), never the badges' own, whose strokes are too fine for the wax; null where there is none. CountFace is the
+ * face the "+N" is pressed in.
  *
  * EdgeNewsKeepOff: what the seals keep off, into Out (which keeps its room between frames): the frame's pieces (Frame,
  * absolute), and for each of Panels that stands on the screen now, the box that holds it among the layers of the

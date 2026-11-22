@@ -2866,6 +2866,38 @@ namespace
 	}
 
 	/**
+	 * (Release 2, news at the map's edge: merge by hand) The seal set (the art director's ruling of 22 November,
+	 * 06:45Z): the order sign pressed into a news seal's wax (Content/CityOrders/Seal/seal-<key>.png, drawn by
+	 * Tools/edge_seals/seal_signs.py), its strokes and gaps thickened to hold 1.5 px from 1920 by 1080 up. White on a
+	 * clear ground, to be tinted, as the badges are. Read once for the life of the game; null for a key with no seal
+	 * picture (the star and the night raid's are never pressed), and then the seal takes its drawn mark: never the
+	 * badge's own picture, whose finer strokes EdgeSeals' measures are not of.
+	 */
+	const FSlateBrush* SealSignBrush(const FString& Key)
+	{
+		static TMap<FString, TSharedPtr<FSlateBrush>> Kept;
+		if (const TSharedPtr<FSlateBrush>* Found = Kept.Find(Key))
+		{
+			return Found->Get();
+		}
+		TSharedPtr<FSlateBrush> Brush;
+		const FString File = FPaths::ProjectContentDir() / TEXT("CityOrders") / TEXT("Seal") / (TEXT("seal-") + Key + TEXT(".png"));
+		if (FPaths::FileExists(File))
+		{
+			if (UTexture2D* Texture = FImageUtils::ImportFileAsTexture2D(File))
+			{
+				Texture->AddToRoot();
+				Brush = MakeShared<FSlateBrush>();
+				Brush->SetResourceObject(Texture);
+				Brush->ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+				Brush->DrawAs = ESlateBrushDrawType::Image;
+			}
+		}
+		Kept.Add(Key, Brush);
+		return Brush.Get();
+	}
+
+	/**
 	 * (Release 2, the city at a glance.) The UI kit's signs for a town's plate and its panel
 	 * (Content/CityGlance/glance-<key>.png: defence, hourglass, factory, agent, lock, rail, and the art director's
 	 * scaffold and wrench): white strokes on a clear ground, to be tinted. Null for a key not drawn; then the order
@@ -5511,9 +5543,10 @@ namespace
 					]
 					// (Release 2, news at the map's edge: merge by hand) The month's seals on the map's edge, under the
 					// frame and kept off every piece of it, and off the staff's note and the adviser, which stand over them.
+					// Their signs are the seal set's (SealSignBrush), not the badges'.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return OrderSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11))
+						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return SealSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11))
 					]
 
 					// The date plate: a desk calendar. A red binding along its top, the month in red capitals over the
