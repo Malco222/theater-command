@@ -2059,7 +2059,13 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     defenders.forEach((c, i) => {
       // A corps too far gone to fall back as a formation. (By the book only a share of a corps may be in a dated fight,
       // and it is judged whole: stations.ts, rider b580. Nobody else has a share.)
-      const shattered = (c.bookPart ? c.bookPart[1] - c.bookPart[0] * (c.bookPart[1] - c.str) : c.str) < 0.15;
+      const whole = c.bookPart ? c.bookPart[1] - c.bookPart[0] * (c.bookPart[1] - c.str) : c.str;
+      // (The far side: read as a share of the row's own full size, as a fortress crew's is. A small unit is a row of one
+      // division that never fills past its own size (`full`), and at a strength under 0.15 it read as broken from the
+      // day it was placed: 45 far rows could never fall back when beaten, the 2/15th Punjab at Kuching among them with
+      // British ground next door. The design director's ruling of 07:26Z, 22 November 2026, every nation; the 0.15
+      // is unchanged, and a corps of full size reads as it did.)
+      const shattered = (farOn(g) ? whole / (c.full ?? 1) : whole) < 0.15;
       // A garrison has nowhere to go.
       const to = town || overrun || shattered ? null : retreatTarget(g, c, target, banned);
       const N = g.nations[c.nat];
