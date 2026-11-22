@@ -110,8 +110,8 @@ camera comes back to its shot.
   the nearest mid man; facings within 0.02 degrees; every pose inside the grown bounds). Without `M_LandCrowd`, or
   with `-TheaterLandNoVat`, the far men are drawn as above and mid men skinned. A man given back (near again, fallen,
   out of sight) has his place filled by his component's last man, and the places left past the last are removed at
-  the frame's end, so a component draws only men (GS7). Not yet: an instance's move is sent as a jump (no motion
-  vector for his walk, only for his limbs).
+  the frame's end, so a component draws only men (GS7). A man's move from frame to frame is sent with its motion
+  vector for the anti-aliasing, as his limbs' are; only a place new to him is sent as a jump.
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
 - **Fuel going up (release 2).** As a tank brews up (her ammunition's blast), and as a lorry is knocked out (its fire

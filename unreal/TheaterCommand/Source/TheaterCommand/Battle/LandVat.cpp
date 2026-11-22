@@ -407,10 +407,12 @@ void FLandVat::Put(int32 Man, bool bHelmet, int32 Wanted, const FTransform& At, 
 		}
 		return;
 	}
-	// (only what changed: a man lying still is not sent again)
+	// (only what changed: a man lying still is not sent again. Not a jump: the engine keeps his place a frame before, so
+	// his walk has its motion vector for the anti-aliasing, as his limbs have theirs from the poses a frame before. A
+	// place new to him, or filled from the part's end, is sent as a jump above and in Drop)
 	if (!Last.Equals(At, 1e-3))
 	{
-		Copies->UpdateInstanceTransform(Slot, At, false, false, true);
+		Copies->UpdateInstanceTransform(Slot, At, false, false, false);
 		Last = At;
 		P.bDirty = true;
 	}
