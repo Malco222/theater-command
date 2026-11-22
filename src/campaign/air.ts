@@ -41,7 +41,7 @@ import { settleFought, type BombLaw, type FoughtAir } from './airfought';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
 import { photosOn, raidPhoto } from './photos';
-import { HIT_KINDS, hitRatesOn, hitsLine, strikeRates, type HitKind, type StrikeRates } from './hitrates';
+import { HIT_KINDS, type HitKind, hitRatesOn, hitsLine, strikeRates, type StrikeRates, takesOf } from './hitrates';
 import { acesFought } from './aces';
 import { fogBound, whyNotFog } from './fog';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
@@ -1482,7 +1482,9 @@ export function shipHitsBy(L: ShipLaw, through: number, byKind?: Partial<Record<
   const weight = SHIPS.reduce((s, c) => s + have[c] * S.aim[c], 0);
   if (weight <= 0 || hits <= 0) return { hits: 0, sunk, count: 0, value: 0, ...(kinds ? { kinds, flew } : {}) };
   let count = 0;
-  for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / S.takes[c]); count += sunk[c]; }
+  // (with hit rates by kind, the record's hits to sink by class; the old takes, tuned against the single rate, retire)
+  const takes = kinds ? takesOf(L.harbour) : S.takes;
+  for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / takes[c]); count += sunk[c]; }
   // No strike sinks more than so much of what it finds.
   const most = (L.harbour ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
   if (count > most) { for (const c of SHIPS) sunk[c] *= most / count; if (kinds) for (const k of HIT_KINDS) kinds[k] *= most / count; hits *= most / count; count = most; }

@@ -29,7 +29,14 @@ export const HITS = data as unknown as {
   types: Record<string, HitKind>;
   landShares: Record<string, [number, Partial<Record<HitKind, number>>][]>;
   landKinds: Record<string, [number, HitKind[]][]>;
+  takes: Record<'bb' | 'cv' | 'ca' | 'dd' | 'ss', number>;
+  takesAnchor: Partial<Record<'bb' | 'cv' | 'ca' | 'dd' | 'ss', number>>;
 };
+
+/** Hits to sink each class with hit rates by kind (the record's counts; the design director's 19:48Z): at anchor its own rows where it has one. */
+export function takesOf(harbour: boolean): Record<'bb' | 'cv' | 'ca' | 'dd' | 'ss', number> {
+  return harbour ? { ...HITS.takes, ...HITS.takesAnchor } : HITS.takes;
+}
 
 /** True in a campaign played with hit rates by kind: the grand campaign, begun with the switch on. */
 export const hitRatesOn = (g: Game): boolean => g.flags.open === 1 && g.flags.hitKinds === 1;

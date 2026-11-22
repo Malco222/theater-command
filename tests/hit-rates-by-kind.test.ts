@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { assessAir, fly, shipHits, shipHitsBy, shipLaw, type ShipLaw } from '../src/campaign/air';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { createGame } from '../src/campaign/game';
-import { HITS, deckMix, hitRate, hitRatesOn, hitRatesShipped, hitsLine, landMix, mixOf, setHitRates, strikeRates } from '../src/campaign/hitrates';
+import { HITS, deckMix, hitRate, hitRatesOn, hitRatesShipped, hitsLine, landMix, mixOf, setHitRates, strikeRates, takesOf } from '../src/campaign/hitrates';
 import { atSea, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -175,6 +175,19 @@ describe('the law with hit rates by kind', () => {
     const h = shipHitsBy(law(r, true), 400);
     const sum = (h.kinds!.dive + h.kinds!.torpedo + h.kinds!.level + h.kinds!.mast);
     expect(sum).toBeCloseTo(h.hits, 6);
+  });
+
+  it('sinks by the record\'s hits to sink with the switch on: battleship 6.25 (7 at anchor), carrier 5.7, cruiser 8, destroyer 2.25', () => {
+    expect(takesOf(false)).toEqual({ bb: 6.25, cv: 5.7, ca: 8, dd: 2.25, ss: 1 });
+    expect(takesOf(true).bb).toBe(7);
+    const r = strikeRates([{ nat: 'USA', bmr: 100, deck: true }], JUN42, false, true)!;
+    const h = shipHitsBy(law(r), 100);
+    const weight = 40 * 2 + 40 * 3 + 80 * 1 + 160 * 0.5;
+    expect(h.sunk.bb).toBeCloseTo((h.hits * 40 * 2) / weight / 6.25, 8);
+    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 3) / weight / 5.7, 8);
+    expect(h.sunk.dd).toBeCloseTo((h.hits * 160 * 0.5) / weight / 2.25, 8);
+    const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
+    expect(at.sunk.bb).toBeCloseTo((at.hits * 40 * 2) / weight / 7, 8);
   });
 
   it('reads a strike on a fleet with the switch on, and says the hits by kind on the raid card', () => {

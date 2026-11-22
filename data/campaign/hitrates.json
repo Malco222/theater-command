@@ -50,5 +50,9 @@
     "UK": [[0, ["level"]], [14, ["level", "torpedo"]], [29, ["torpedo"]]],
     "USA": [[29, ["level"]], [43, ["mast"]]],
     "SOV": [[0, ["torpedo", "level"]], [29, ["torpedo", "dive"]], [41, ["torpedo", "dive", "mast"]], [53, ["torpedo", "mast"]]]
-  }
+  },
+  "_takes": "Hits to sink each class with the switch on (the design director's 19:48Z on the historian's case count, air-battles/hitrates/historian-hits-to-sink-1122.md): each hit counts one; hits per ship sunk, overkill left out. Battleship under way 6.25 (Repulse and Prince of Wales); at anchor 7; the Yamato class 25.5 (the middle of 20 and 31) once the class rows can tell her, till then 6.25 like every battleship ('yamato', not read yet); carrier 5.7 (Shoho and Hermes out); cruiser 8 (Mikuma and Mogami; Cornwall, Dorsetshire and Yahagi out); destroyer 2.25. Submarines are not aimed at (carriers.json strike.aim 0); their row is the old one. The old takes (carriers.json strike.takes) retire with the switch on.",
+  "takes": {"bb": 6.25, "cv": 5.7, "ca": 8, "dd": 2.25, "ss": 1},
+  "takesAnchor": {"bb": 7},
+  "yamato": 25.5
 }
