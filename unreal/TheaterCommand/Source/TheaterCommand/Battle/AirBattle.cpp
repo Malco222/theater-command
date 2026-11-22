@@ -3987,7 +3987,7 @@ void AAirBattle::Draw(double Real)
 					Disc->SetMeshSectionVisible(0, !bStill);
 					Disc->SetMeshSectionVisible(1, bStill);
 				}
-				const double Own = bStill ? Turning->Phase : bDead ? FMath::Fmod(RealT * ScrewTurns * 0.45 * 360.0 + Turning->Phase, 360.0) : Angle;
+				const double Own = bStill ? Turning->Phase : bDead ? FMath::Fmod(RealT * Turns * 0.45 * 360.0 + Turning->Phase, 360.0) : Angle;
 				Disc->SetRelativeRotation(FRotator(0.0, 0.0, Own + K * 23.0));
 			}
 		}

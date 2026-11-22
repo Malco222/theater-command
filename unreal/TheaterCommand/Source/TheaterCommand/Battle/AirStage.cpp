@@ -1231,9 +1231,9 @@ void AAirStage::LayShip(const FStageShip& Given)
 	if (!Ship.Hull)
 	{
 		FMiniatureMesh Model;
+		const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
 		{
 			TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal)
-			const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
 			if (!Model.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0) || Model.Vertices.Num() == 0)
 			{
 				UE_LOG(LogTheater, Warning, TEXT("Stage: no model for %s; ship %d is not drawn."), *Name, Given.Id);
