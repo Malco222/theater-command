@@ -63,6 +63,10 @@ namespace LandSight
 			case Base::Apple: Out = { 0.65f, 0.35f, 0.85f, 0.15f }; return true;
 			case Base::Well: Out = { 0.5f, 0.5f, 0.9f, 0.0f }; return true;
 			case Base::Cart: Out = { 0.5f, 0.5f, 0.35f, 0.0f }; return true;
+			// the steppe's (a cottage stands as a house; poles, sweeps and wattle are seen through)
+			case Base::Birch: Out = { 0.62f, 0.38f, 0.7f, 0.15f }; return true;
+			case Base::Haystack: Out = { 0.42f, 0.45f, 0.85f, 0.0f }; return true;
+			case Base::Chimney: Out = { 0.5f, 0.5f, 0.12f, 0.0f }; return true; // (the stove and its stack, in its ash)
 			default: return false;
 			}
 		}
@@ -104,6 +108,28 @@ namespace LandSight
 		F.Terrain = G.Terrain.empty() ? std::string("plains") : G.Terrain;
 		F.Month = MonthOf(Rec.Date);
 		F.Seed = Rec.Seed ? Rec.Seed : 1;
+		// (the open steppe, where the recording lays it; the kit's models are the caller's to give, F.Steppe.Kit)
+		if (G.Steppe.bOn)
+		{
+			LandField::SteppeLay& L = F.Steppe;
+			L.bOn = true;
+			L.Turn = G.Steppe.Turn;
+			L.CX = G.Steppe.CX;
+			L.CY = G.Steppe.CY;
+			L.Xs = G.Steppe.Xs;
+			L.Ys = G.Steppe.Ys;
+			L.Shift = G.Steppe.Shift;
+			for (const char Ch : G.Steppe.Patch) L.Patch.push_back(static_cast<uint8_t>(Ch >= '0' && Ch <= '9' ? Ch - '0' : 0));
+			for (const char Ch : G.Steppe.Crop) L.Crop.push_back(static_cast<uint8_t>(Ch >= '0' && Ch <= '9' ? Ch - '0' : 0));
+			L.Balka = G.Steppe.Balka;
+			L.BalkaDeep = G.Steppe.BalkaDeep;
+			L.Rail = G.Steppe.Rail;
+			L.RailBank = G.Steppe.RailBank;
+			L.HillX = G.Steppe.HillX;
+			L.HillY = G.Steppe.HillY;
+			L.HillR = G.Steppe.HillR;
+			L.HillRise = G.Steppe.HillRise;
+		}
 		// (where the men and the vehicles go: a hedge they cross is opened there)
 		for (const LandFeed::Track& T : Rec.Tracks)
 		{

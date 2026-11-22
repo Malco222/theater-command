@@ -1,5 +1,7 @@
 #include "Battle/LandField.h"
 
+#include "Battle/LandSteppe.h"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -396,7 +398,11 @@ namespace LandField
 			CpGarden,
 			CpYard,
 			CpWoods,
-			CpOther
+			CpOther,
+			// the steppe's (LandSteppe): winter rye ripe and tall, the collective farm's pasture and hay, black fallow
+			CpRye,
+			CpSteppe,
+			CpFallow
 		};
 
 		struct Lane
@@ -467,6 +473,8 @@ namespace LandField
 			int Part = 0;  // a church's: 0 nave, 1 chancel, 2 tower
 			uint64_t Key = 0;
 			double Floor = 0.0, Foot = 0.0;
+			bool bKit = false;   // the steppe's cottage: the east kit's Khata stands here (planted, not built)
+			bool bWhite = false; // the steppe's farm buildings: whitewashed, their roofs plank or straw
 		};
 
 		/** A farmstead's yard: its frame (U along the lane, V away from it) and its box in that frame. */
@@ -533,6 +541,16 @@ namespace LandField
 			int What = 0; // 0 well, 1 cart, 2 rubble stones
 		};
 		std::vector<Spot> Props;
+		/** The steppe (Fd.Steppe on): its farm fields, railway and bank; and the kit's things to plant (burnt cottages,
+		 * wattle, well sweeps, haystacks), each where MakeSites put it. */
+		std::unique_ptr<LandSteppe::Plan> Sp;
+		struct KitSpot
+		{
+			Base B = Base::Haystack;
+			V2 P;
+			double Yaw = 0.0, Scale = 1.0, ScaleZ = 1.0;
+		};
+		std::vector<KitSpot> Kits;
 
 		std::vector<HedgeLine> HedgeOut;
 		std::vector<std::vector<std::pair<double, double>>> LaneOut;
@@ -549,10 +567,12 @@ namespace LandField
 		double Outside(double X, double Y) const;
 		double Land(double X, double Y) const;
 		double Ridges(double X, double Y) const;
-		double Terrain(double X, double Y) const { return Land(X, Y) + Ridges(X, Y); }
+		double Terrain(double X, double Y) const { return Land(X, Y) + (Sp ? Sp->BankRise(X, Y) : Ridges(X, Y)); }
 		double Sunk(double X, double Y) const;
 		double Carve(double X, double Y, double Z, double* OutEdge) const;
 		double BankAt(double X, double Y) const;
+		/** The nearest lane's half width (its floor), 2.2 where none is near. */
+		double LaneHalfAt(double X, double Y) const;
 		double Top(double X, double Y, Drawn* What) const;
 		int HouseAt(double X, double Y) const;
 
@@ -583,6 +603,7 @@ namespace LandField
 		void MakeWays();
 		double WayRoom(V2 P) const;
 		void MakeSites();
+		void MakeSteppeSites();
 		bool Fits(const House& H, double Margin) const;
 		void Stamp(const House& H, double Margin);
 		void FloorOf(House& H) const;
@@ -595,6 +616,7 @@ namespace LandField
 
 		// meshes
 		Col GroundColour(double X, double Y) const;
+		Col SteppeColour(double X, double Y) const;
 		Col FarColour(double X, double Y) const;
 		void MakeTiles();
 		void MakeRing();
@@ -692,6 +714,8 @@ namespace LandField
 	/** Beyond the field: the country rolls in long swells of a few metres, as the bocage round Saint-Lo does. */
 	double Ground::Impl::Rolling(double X, double Y) const
 	{
+		// (the steppe's swells are half as high and longer, its balkas cut into them)
+		if (Sp) return MeanZ + 9.0 * Fbm(X, Y, 3400.0, 3, Seed ^ 0xB1) + 2.0 * Fbm(X, Y, 900.0, 2, Seed ^ 0xB2);
 		return MeanZ + 18.0 * Fbm(X, Y, 2600.0, 3, Seed ^ 0xB1) + 5.0 * Fbm(X, Y, 700.0, 2, Seed ^ 0xB2);
 	}
 
@@ -732,7 +756,8 @@ namespace LandField
 	/** How deep a lane runs below the fields: 0.6 to 1.4 m in the bocage, little in the village, none out past the band. */
 	double Ground::Impl::Sunk(double X, double Y) const
 	{
-		double D = 0.6 + 0.8 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1));
+		// (a steppe road is no sunken lane: a dirt track worn a hand or two into the black earth by carts and lorries)
+		double D = Sp ? 0.15 + 0.15 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1)) : 0.6 + 0.8 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1));
 		if (Fd.bTown) D *= 0.15 + 0.85 * Smooth(Fd.TownR * 0.55, Fd.TownR * 1.1, std::hypot(X - Fd.TownX, Y - Fd.TownY));
 		D *= 1.0 - Smooth(Band - 80.0, Band - 15.0, Outside(X, Y));
 		return D;
@@ -766,6 +791,25 @@ namespace LandField
 		}
 		if (OutEdge) *OutEdge = Edge;
 		return Out;
+	}
+
+	double Ground::Impl::LaneHalfAt(double X, double Y) const
+	{
+		const std::vector<uint32_t>* Near = LGrid.At(X, Y);
+		double Best = 1e18, Half = 2.2;
+		if (Near)
+			for (const uint32_t Id : *Near)
+			{
+				const LaneSeg& S = LSegs[Id];
+				double T;
+				const double D = SegDist({ X, Y }, S.A, S.B, T);
+				if (D < Best)
+				{
+					Best = D;
+					Half = Lanes[static_cast<size_t>(S.Lane)].Half;
+				}
+			}
+		return Half;
 	}
 
 	/** The highest bank's rise above the ground here (0 off the banks). */
@@ -1092,6 +1136,7 @@ namespace LandField
 			for (const V2& Q : Ln.P)
 				if (Fd.bTown && std::hypot(Q.X - Fd.TownX, Q.Y - Fd.TownY) < Fd.TownR) bVillage = true;
 			Ln.Half = bVillage ? 2.6 : 2.0 + 0.4 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index)));
+			if (Sp) Ln.Half = (bVillage ? 3.4 : 2.8) + 0.8 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))); // (wide, rutted, unfenced)
 			Lanes.push_back(std::move(Ln));
 			++Index;
 		}
@@ -1153,7 +1198,8 @@ namespace LandField
 	/** Woods out beyond the field: some one ground in six, in blocks of a few hundred metres. */
 	bool Ground::Impl::WoodsBeyond(double X, double Y) const
 	{
-		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > 0.27;
+		// (on the steppe the oak woods are few: some one ground in twenty-five, the groves in the balkas' heads)
+		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > (Sp ? 0.43 : 0.27);
 	}
 
 	void Ground::Impl::MakeRaster()
@@ -1305,6 +1351,15 @@ namespace LandField
 	 */
 	int Ground::Impl::Plot(double X, double Y, double* OutGap, uint8_t* OutKind) const
 	{
+		if (Sp)
+		{
+			// The steppe: the collective farm's great fields as the recording laid them, half a kilometre and more across,
+			// one crop to a field. The number carries the crop (its last three bits), so CropOf reads it back.
+			int Crop = LandSteppe::CropPasture;
+			const int Id = Sp->FieldAt(X, Y, Crop, OutGap);
+			if (OutKind) *OutKind = LandSteppe::IsCorn(Crop) ? static_cast<uint8_t>(RgField) : static_cast<uint8_t>(RgOpen);
+			return (Id % 120000) * 8 + Crop;
+		}
 		const V2 P = PlotFrame(X, Y);
 		auto Corner = [this](int64_t I, int64_t J) {
 			const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x9A05);
@@ -1398,6 +1453,14 @@ namespace LandField
 	int Ground::Impl::CropOf(int SeedIndex, int Kind) const
 	{
 		const double U = Unit(Hash(Seed ^ 0xC80B, static_cast<uint64_t>(SeedIndex), static_cast<uint64_t>(Kind)));
+		if (Sp && SeedIndex >= 0 && (Kind == RgField || Kind == RgOpen))
+		{
+			// (the steppe's field: its crop in its number's last three bits; where the rules' cell and the field disagree
+			// at an edge, the cell's kind wins and the crop follows it)
+			const int Crop = SeedIndex % 8;
+			if (Kind == RgField) return Crop == LandSteppe::CropRye ? CpRye : CpWheat;
+			return Crop == LandSteppe::CropFallow ? CpFallow : CpSteppe;
+		}
 		switch (Kind)
 		{
 		case RgField: return U < 0.46 ? CpWheat : U < 0.66 ? CpBarley : U < 0.78 ? CpOats : U < 0.86 ? CpGreenWheat : U < 0.94 ? CpStubble : CpRoots;
@@ -1519,6 +1582,11 @@ namespace LandField
 	 */
 	void Ground::Impl::MakeSites()
 	{
+		if (Sp)
+		{
+			MakeSteppeSites();
+			return;
+		}
 		Rng R(Seed ^ 0x5173);
 		auto Hurt = [&R](House& H, double Odds) {
 			const double U = R.Next() / Odds;
@@ -1751,6 +1819,156 @@ namespace LandField
 		}
 	}
 
+
+	/**
+	 * The steppe's farm (the state farm on the dry run, its whitewashed cottages strung along the lanes): each household a
+	 * plot along its lane, 18 to 30 m of frontage, its cottage (the east kit's Khata, long side or gable to the lane) set
+	 * back behind a wattle fence, its haystack behind, a well sweep at one plot in four; some two in five of them burnt to
+	 * their stove and chimney (the kit's ruin share for a village fought over in 1943, the art director's ruling of 19
+	 * November). Then the farm's own long sheds and its granary at the edge, whitewashed, under plank or straw. No church,
+	 * no stone wall, no farmstead out in the fields: the collective farm worked the steppe from the village.
+	 */
+	void Ground::Impl::MakeSteppeSites()
+	{
+		if (!Fd.bTown) return;
+		Rng R(Seed ^ 0x5174);
+		constexpr double KhataLong = 9.18, KhataDeep = 6.46, Panel = 4.11;
+		int Burnt = 0;
+		// Near-only marks round a ruin: no tree, shrub or shed on its ash, but men walk through it.
+		auto MarkNear = [this](V2 C, double Reach) {
+			const int I0 = std::max(0, static_cast<int>((C.X - Reach - RX0) / Res)), I1 = std::min(NX - 1, static_cast<int>((C.X + Reach - RX0) / Res));
+			const int J0 = std::max(0, static_cast<int>((C.Y - Reach - RY0) / Res)), J1 = std::min(NY - 1, static_cast<int>((C.Y + Reach - RY0) / Res));
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I)
+					if (std::hypot(RX0 + (I + 0.5) * Res - C.X, RY0 + (J + 0.5) * Res - C.Y) < Reach) OccR[static_cast<size_t>(J) * NX + I] |= OcNear;
+		};
+		auto Free = [this](V2 C) { return InRaster(C.X, C.Y) && !(OccR[Pix(C.X, C.Y)] & (OcHouse | OcVehicle)) && LaneD[Pix(C.X, C.Y)] > 0.5f; };
+		// A run of wattle along a line, in the kit's panels (4.11 m) stretched a little to fit; a gap left at Gap (metres
+		// along it, negative for none), now and then a panel down.
+		auto Fence = [&](V2 A, V2 B, double Gap) {
+			const double L = Len(B - A);
+			if (L < 2.0) return;
+			const int N = std::max(1, static_cast<int>(std::lround(L / Panel)));
+			const V2 T = Unit2(B - A);
+			const double Each = L / N, Yaw = std::atan2(T.Y, T.X);
+			for (int K = 0; K < N; ++K)
+			{
+				const double Mid = (K + 0.5) * Each;
+				if (Gap >= 0.0 && std::fabs(Mid - Gap) < 0.5 * Each) continue;
+				if (R.Next() < 0.1) continue; // knocked down
+				Kits.push_back({ Base::Wattle, A + T * Mid, Yaw + R.Range(-0.03, 0.03), Each / Panel, R.Range(0.85, 1.08) });
+			}
+		};
+		int Placed = 0;
+		for (size_t L = 0; L < Lanes.size(); ++L)
+		{
+			const Line& P = Lanes[L].P;
+			const double Half = Lanes[L].Half;
+			for (int Side = -1; Side <= 1; Side += 2)
+			{
+				size_t K = 0;
+				while (K + 2 < P.size() && Placed < 70)
+				{
+					const V2 At = P[K];
+					if (std::hypot(At.X - Fd.TownX, At.Y - Fd.TownY) > Fd.TownR * 1.1)
+					{
+						++K;
+						continue;
+					}
+					const double Front = R.Range(18.0, 30.0);
+					size_t KE = K;
+					while (KE + 1 < P.size() && Len(P[KE] - At) < Front) ++KE;
+					const V2 T = Unit2(P[KE] - At), N = Perp(T) * static_cast<double>(Side);
+					const double Line0 = Half + LaneWall + 0.6; // the fence, just off the road's edge
+					const bool bGable = R.Next() < 0.3;
+					const double Along = bGable ? KhataDeep : KhataLong, Across = bGable ? KhataLong : KhataDeep;
+					const double Back = R.Range(4.0, 9.0), U = R.Range(0.5 * Along + 2.0, std::max(0.5 * Along + 2.5, Front - 0.5 * Along - 2.0));
+					House H;
+					H.Type = HtHouse;
+					H.bKit = true;
+					H.Long = KhataLong;
+					H.Deep = KhataDeep;
+					H.C = At + T * U + N * (Line0 + Back + 0.5 * Across);
+					H.Yaw = std::atan2(T.Y, T.X) + (bGable ? 0.5 * Pi : 0.0) + R.Range(-0.05, 0.05) + (R.Next() < 0.5 ? Pi : 0.0);
+					H.Key = Mix(R.State);
+					const bool bRuin = R.Next() < 0.4;
+					if (!Fits(H, 1.5))
+					{
+						K += 2;
+						continue;
+					}
+					if (bRuin)
+					{
+						Kits.push_back({ Base::Chimney, H.C, H.Yaw, 1.0, R.Range(0.9, 1.05) });
+						MarkNear(H.C, 6.5);
+						++Burnt;
+					}
+					else
+					{
+						FloorOf(H);
+						Stamp(H, 1.2);
+						Houses.push_back(H);
+					}
+					++Placed;
+					// Its fence along the lane, the gate before the door; a fence down one side now and then.
+					const V2 F0 = At + N * Line0, F1 = At + T * Front + N * Line0;
+					if (R.Next() < 0.85) Fence(F0, F1, U + R.Range(-2.0, 2.0));
+					if (R.Next() < 0.5) Fence(F0 + T * 0.3, F0 + T * 0.3 + N * (Back + Across + R.Range(6.0, 14.0)), -1.0);
+					// The well sweep by the fence, the haystack behind the cottage.
+					if (R.Next() < 0.25)
+					{
+						const V2 W = At + T * R.Range(2.0, std::max(2.5, Front - 2.0)) + N * (Line0 + R.Range(1.6, 3.2));
+						if (Free(W) && Len(W - H.C) > 0.5 * KhataLong + 2.5) Kits.push_back({ Base::Sweep, W, R.Range(0.0, 2.0 * Pi), 1.0, R.Range(0.92, 1.08) });
+					}
+					if (R.Next() < 0.55)
+					{
+						const V2 S = H.C + N * (0.5 * Across + R.Range(4.0, 9.0)) + T * R.Range(-4.0, 4.0);
+						if (Free(S))
+						{
+							const double Sz = R.Range(0.8, 1.15);
+							Kits.push_back({ Base::Haystack, S, R.Range(0.0, 2.0 * Pi), Sz, Sz * R.Range(0.85, 1.1) });
+							MarkNear(S, 2.5);
+						}
+					}
+					K = KE;
+				}
+			}
+		}
+		// The farm's long sheds (cattle, the tractors) and its granary at the village's edge, set to the fields' grain.
+		int Sheds = 0;
+		const double Grain = Sp ? Sp->Lay.Turn : 0.0;
+		for (int Ring = 0; Ring < 8 && Sheds < 4; ++Ring)
+			for (int K = 0; K < 24 && Sheds < 4; ++K)
+			{
+				const double A = K * 2.0 * Pi / 24.0 + Ring * 0.41, D = Fd.TownR * (0.7 + 0.12 * Ring);
+				House H;
+				H.Type = Sheds == 1 ? HtBarn : HtByre;
+				H.bWhite = true;
+				H.Long = H.Type == HtBarn ? R.Range(22.0, 28.0) : R.Range(36.0, 50.0);
+				H.Deep = H.Type == HtBarn ? R.Range(10.0, 12.0) : R.Range(9.0, 11.0);
+				H.C = V2{ Fd.TownX + D * std::cos(A), Fd.TownY + D * std::sin(A) };
+				H.Yaw = Grain + (R.Next() < 0.5 ? 0.0 : 0.5 * Pi) + R.Range(-0.04, 0.04);
+				H.Roof = R.Next() < 0.5 ? 0 : 1;
+				H.Front = R.Next() < 0.5 ? 1 : -1;
+				H.Key = Mix(R.State ^ 0x54ED);
+				const double U = R.Next();
+				H.Hurt = U < 0.15 ? DmShell : U < 0.35 ? DmGable : U < 0.6 ? DmRoofHole : DmNone;
+				if (!Fits(H, 3.0)) continue;
+				FloorOf(H);
+				Stamp(H, 2.0);
+				Houses.push_back(H);
+				++Sheds;
+			}
+		Count.Farmsteads = 0;
+		for (const House& H : Houses)
+		{
+			++Count.Houses;
+			if (H.Hurt != DmNone) ++Count.Damaged;
+		}
+		Count.Houses += Burnt;
+		Count.Damaged += Burnt;
+	}
+
 	// ====================================================================== the parcels
 
 	void Ground::Impl::MakeParcels()
@@ -1970,7 +2188,7 @@ namespace LandField
 			Q.Seed = CompLabel[C] >= 0 && CompLabel[C] < VBase * 16 ? static_cast<int>(CompLabel[C] >> 4) : -1;
 			Q.Crop = CropOf(Q.Seed, Q.Kind);
 			if (Q.Kind == RgVillage && Q.Area > 500.0 && Unit(Mix(Q.Key)) < 0.4) Q.bOrchard = true;
-			if (Q.Kind == RgOpen && Fd.bTown && std::hypot(Q.CX - Fd.TownX, Q.CY - Fd.TownY) < Fd.TownR + 300.0 && Unit(Mix(Q.Key ^ 0x0C)) < 0.12) Q.bOrchard = true;
+			if (Q.Kind == RgOpen && !Sp && Fd.bTown && std::hypot(Q.CX - Fd.TownX, Q.CY - Fd.TownY) < Fd.TownR + 300.0 && Unit(Mix(Q.Key ^ 0x0C)) < 0.12) Q.bOrchard = true;
 			if (IsFarmland(Q.Kind) && Q.CX > -Band && Q.CY > -Band)
 			{
 				FarmArea += Q.Area;
@@ -2188,6 +2406,13 @@ namespace LandField
 	 */
 	void Ground::Impl::MakeHedges()
 	{
+		if (Sp)
+		{
+			// The steppe has no hedges: the fields meet in a grassy strip, the gardens behind their wattle (MakeSteppeSites).
+			BGrid.Init(-Band - 20.0, -Band - 20.0, FW + Band + 20.0, FH + Band + 20.0, 8.0);
+			Inst.assign(static_cast<size_t>(Base::Count), {});
+			return;
+		}
 		auto Kind = [this](int32_t P) { return Parcels[static_cast<size_t>(P)].Kind; };
 		auto Keep = [&Kind](int32_t A, int32_t B) {
 			const int KA = Kind(A), KB = Kind(B);
@@ -2554,6 +2779,7 @@ namespace LandField
 			case Base::Beech: return 18.0;
 			case Base::Pollard: return 8.0;
 			case Base::Apple: return 5.5;
+			case Base::Birch: return 15.0;
 			default: return 1.0;
 			}
 		}
@@ -2583,6 +2809,22 @@ namespace LandField
 			default: High = R.Range(6.0, 9.0); break;
 			}
 			if (bWood) High *= 1.08;
+			return B;
+		}
+
+		/** A tree of the steppe's oak woods and its balkas' groves: oak most, birch, ash, a few elm; no beech (it grows no
+		 * farther east than Poland). */
+		Base SteppeTree(Rng& R, double& High)
+		{
+			const double U = R.Next();
+			const Base B = U < 0.45 ? Base::Oak : U < 0.72 ? Base::Birch : U < 0.9 ? Base::Ash : Base::Elm;
+			switch (B)
+			{
+			case Base::Oak: High = R.Range(11.0, 17.0); break;
+			case Base::Birch: High = R.Range(13.0, 18.0); break;
+			case Base::Ash: High = R.Range(11.0, 16.0); break;
+			default: High = R.Range(13.0, 18.0); break;
+			}
 			return B;
 		}
 
@@ -2755,7 +2997,7 @@ namespace LandField
 					if (Noise(PX / 55.0, PY / 55.0, Seed ^ 0x3006) > 0.5 && R.Next() < 0.75) continue;
 					if (!Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle) || LaneD[Pix(PX, PY)] < LaneWall + 1.5f) continue;
 					double High = 0.0;
-					const Base B = HedgeTree(R, true, High);
+					const Base B = Sp ? SteppeTree(R, High) : HedgeTree(R, true, High);
 					Plant(B, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * R.Range(0.85, 1.1), High / TreeHigh(B), Tint8(R.Range(0.9, 1.05), R.Range(0.92, 1.06), R.Range(0.9, 1.04)));
 				}
 			const double Under = 3.4;
@@ -2813,7 +3055,25 @@ namespace LandField
 							Plant(Base::Apple, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(Base::Apple) * R.Range(0.9, 1.15), High / TreeHigh(Base::Apple), Tint8(R.Range(0.94, 1.06), 1.0, R.Range(0.94, 1.04)));
 						}
 				}
-				else if (Q.Kind == RgOpen && Q.Area > 6000.0 && Unit(Q.Key ^ 0xF1E1D) < 0.2)
+				else if (Sp && Q.Kind == RgOpen && Q.Crop == CpSteppe && Q.Area > 20000.0)
+				{
+					// The steppe's hay: ricks in twos to fours, some one group to ten hectares of pasture.
+					const int Groups = static_cast<int>(std::lround(Q.Area / 100000.0 * R.Range(0.6, 1.4)));
+					for (int Gr = 0; Gr < Groups; ++Gr)
+					{
+						const double Reach = std::sqrt(Q.Area) * 0.4;
+						const double GX = Q.CX + R.Range(-Reach, Reach), GY = Q.CY + R.Range(-Reach, Reach);
+						const int Stacks = 2 + R.Below(3);
+						for (int K = 0; K < Stacks; ++K)
+						{
+							const double PX = GX + R.Range(-12.0, 12.0), PY = GY + R.Range(-12.0, 12.0);
+							if (!InRaster(PX, PY) || static_cast<size_t>(Pid[Pix(PX, PY)]) != C || DistE[Pix(PX, PY)] < 12.0f || !Clear(PX, PY, OcHouse | OcNear | OcMan | OcVehicle)) continue;
+							const double Sz = R.Range(0.8, 1.2);
+							Plant(Base::Haystack, PX, PY, R.Range(0.0, 2.0 * Pi), Sz, Sz * R.Range(0.85, 1.1), Tint8(R.Range(0.95, 1.05), 1.0, R.Range(0.92, 1.04)));
+						}
+					}
+				}
+				else if (Q.Kind == RgOpen && Q.Area > 6000.0 && Unit(Q.Key ^ 0xF1E1D) < (Sp ? 0.08 : 0.2))
 				{
 					const double PX = Q.CX + R.Range(-15.0, 15.0), PY = Q.CY + R.Range(-15.0, 15.0);
 					if (InRaster(PX, PY) && static_cast<size_t>(Pid[Pix(PX, PY)]) == C && DistE[Pix(PX, PY)] > 18.0f && Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle))
@@ -2844,6 +3104,33 @@ namespace LandField
 		{
 			if (S.What == 0) Plant(Base::Well, S.P.X, S.P.Y, S.Yaw, 1.0, 1.0, Tint8(1, 1, 1));
 			else if (S.What == 1) Plant(Base::Cart, S.P.X, S.P.Y, S.Yaw, 1.0, 1.0, Tint8(1, 1, 1));
+		}
+		// The steppe's: the kit's cottages on their floors, the ruins, wattle, sweeps and ricks where the farm put them,
+		// and the telegraph poles along the railway, every 50 m, 8 m to its west, a kilometre on past the tiles each way.
+		if (Sp)
+		{
+			Rng R(Seed ^ 0x6417);
+			for (const House& H : Houses)
+			{
+				if (!H.bKit) continue;
+				std::vector<Placed>& L = Inst[static_cast<size_t>(Base::Khata)];
+				const size_t Was = L.size();
+				Plant(Base::Khata, H.C.X, H.C.Y, H.Yaw, 1.0, 1.0, Tint8(R.Range(0.96, 1.03), R.Range(0.96, 1.02), R.Range(0.95, 1.02)));
+				if (L.size() > Was) L.back().Z = static_cast<float>(H.Floor - 0.13); // (its plinth on the highest ground under it)
+			}
+			for (const KitSpot& K : Kits) Plant(K.B, K.P.X, K.P.Y, K.Yaw, K.Scale, K.ScaleZ, Tint8(R.Range(0.95, 1.04), R.Range(0.95, 1.03), R.Range(0.94, 1.03)));
+			if (Sp->HasRail())
+			{
+				std::vector<std::pair<double, double>> At;
+				std::vector<double> Yaw;
+				LandSteppe::PolesAlongRail(*Sp, -Band - 1000.0, -Band + TilesY() * TileSize + 1000.0, 50.0, 8.0, At, Yaw);
+				for (size_t K = 0; K < At.size(); ++K)
+				{
+					const size_t Was = Inst[static_cast<size_t>(Base::Pole)].size();
+					Plant(Base::Pole, At[K].first, At[K].second, Yaw[K] + R.Range(-0.04, 0.04), 1.0, R.Range(0.94, 1.05), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.04), 1.0));
+					if (Inst[static_cast<size_t>(Base::Pole)].size() > Was) ++Count.Poles;
+				}
+			}
 		}
 		for (const std::vector<Placed>& L : Inst) Count.Instances += L.size();
 	}
@@ -2916,10 +3203,20 @@ namespace LandField
 			case CpGarden: return Garden;
 			case CpYard: return YardEarth;
 			case CpWoods: return Litter;
+			case CpRye: return Rgb(162, 146, 104);
+			case CpSteppe: return Rgb(130, 128, 80);
+			case CpFallow: return Rgb(76, 70, 52);
 			default: return PastureGrazed;
 			}
 		}
-		bool IsCorn(int Crop) { return Crop == CpWheat || Crop == CpBarley || Crop == CpOats || Crop == CpGreenWheat; }
+		bool IsCorn(int Crop) { return Crop == CpWheat || Crop == CpBarley || Crop == CpOats || Crop == CpGreenWheat || Crop == CpRye; }
+		/** A parcel's crop as the steppe's colours know it. */
+		int SteppeCrop(int Crop)
+		{
+			return Crop == CpWheat ? LandSteppe::CropWheat : Crop == CpRye ? LandSteppe::CropRye : Crop == CpFallow ? LandSteppe::CropFallow : LandSteppe::CropPasture;
+		}
+		Col OfTone(const LandSteppe::Tone& T) { return Col{ T.R, T.G, T.B }; }
+		LandSteppe::Tone ToTone(const Col& C) { return LandSteppe::Tone{ C.R, C.G, C.B }; }
 
 		/** Writes meshes: points with their normals and colours, triangles counter-clockwise seen from their front. */
 		struct Builder
@@ -3038,6 +3335,7 @@ namespace LandField
 	 */
 	Col Ground::Impl::GroundColour(double X, double Y) const
 	{
+		if (Sp) return SteppeColour(X, Y);
 		if (!InRaster(X, Y)) return FarColour(X, Y);
 		const size_t P = Pix(X, Y);
 		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
@@ -3112,11 +3410,105 @@ namespace LandField
 		return Varied(C, 1.0 + 0.06 * N2 + 0.05 * Broad, 0.02 * Broad);
 	}
 
+
+	/**
+	 * The steppe's ground (LandSteppe's colours): each farm field its crop, wheat banded by the tractor's drill and
+	 * streaked along its rows, the grassy strip where two fields meet; the balka's and the waste ground's dry grass,
+	 * greener in the hollows; the dirt roads black earth worn to grey dust, their ruts darker, grass along their verges;
+	 * the railway's bank its ballast and cinders, grass taking its sides; the gardens and yards as the bocage's.
+	 */
+	Col Ground::Impl::SteppeColour(double X, double Y) const
+	{
+		if (!InRaster(X, Y)) return FarColour(X, Y);
+		const size_t P = Pix(X, Y);
+		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
+		const double Edge = Bilinear(DistE, X, Y);
+		const double N1 = Fbm(X, Y, 30.0, 2, Seed ^ 0x11), N2 = Noise(X / 7.0, Y / 7.0, Seed ^ 0x12);
+		const double Broad = Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
+		Col C;
+		bool bStrip = true; // (the strip at its edge still to lay)
+		switch (Rgn[P])
+		{
+		case RgWoods:
+			C = Mixed(Litter, WoodGreen, 0.35 + 0.5 * N1 + 0.4 * Smooth(7.0, 1.0, Edge));
+			C = Varied(C, 1.0 + 0.1 * N2, 0.03 * N1);
+			break;
+		case RgWater: return WaterCol;
+		case RgMarsh: return Varied(MarshCol, 1.0 + 0.08 * N1, 0.0);
+		case RgLane:
+		{
+			bStrip = false;
+			const double D = Bilinear(LaneD, X, Y);
+			if (D < 0.0)
+			{
+				// (two ruts a cart's width apart either side of the middle, the middle grassed a little)
+				const double Off = std::fabs(D + LaneHalfAt(X, Y));
+				const double Rut = Smooth(0.5, 0.15, std::fabs(Off - 0.75));
+				C = Mixed(OfTone(LandSteppe::RoadDust()), OfTone(LandSteppe::RoadRut()), 0.7 * Rut);
+				C = Mixed(C, Rgb(110, 110, 72), 0.3 * Smooth(0.35, 0.0, Off) * (0.5 + 0.5 * N1));
+				C = Varied(C, 1.0 + 0.06 * N2, 0.01);
+			}
+			// (its verge: the floor's dust into the grassy strip the fields beside it end in, by the lane's edge)
+			else C = Mixed(Varied(OfTone(LandSteppe::RoadDust()), 1.0 + 0.06 * N2, 0.01), OfTone(LandSteppe::StripTone(N2, Broad)), Smooth(0.0, LaneWall + 0.3, D));
+			break;
+		}
+		case RgYard:
+			C = Mixed(YardEarth, Muck, Smooth(0.1, 0.5, N1));
+			C = Varied(C, 1.0 + 0.08 * N2, 0.02 * N1);
+			break;
+		case RgVillage:
+			C = Mixed(Garden, Rgb(104, 112, 60), 0.5 + 0.5 * N1);
+			C = Varied(C, 1.0 + 0.08 * N2 + 0.05 * Broad, 0.02 * N1);
+			break;
+		case RgWorks:
+			C = Mixed(Rgb(82, 72, 58), Rgb(96, 84, 66), Smooth(0.0, 0.45, N1 + 0.3 * N2)); // black earth dug and thrown up
+			C = Mixed(C, OfTone(LandSteppe::RoughColour(N1, N2)), 0.35 * Smooth(0.2, -0.3, N1));
+			C = Varied(C, 1.0 + 0.07 * N2, 0.0);
+			break;
+		default:
+			if (Q.Kind == RgRough) C = OfTone(LandSteppe::RoughColour(N1, N2));
+			else if (Rgn[P] == RgOpen || Rgn[P] == RgField)
+			{
+				// (the tractor's drill bands across the field's length, some 20 to 30 m apart; its rows streak along it)
+				const double Ca = std::cos(Q.Angle), Sa = std::sin(Q.Angle);
+				const double Along = (X - Q.CX) * Ca + (Y - Q.CY) * Sa, Across = -(X - Q.CX) * Sa + (Y - Q.CY) * Ca;
+				const double Lands = std::cos(2.0 * Pi * Across / (1.6 * Q.Lands));
+				const double Streak = Noise(Along / 40.0, Across / 2.5, Seed ^ 0x14);
+				C = OfTone(LandSteppe::FieldColour(SteppeCrop(Q.Crop), N1, N2, Broad, Lands, Streak, Edge));
+				bStrip = false; // (its own strip at its edge)
+			}
+			else C = OfTone(LandSteppe::RoughColour(N1, N2));
+			break;
+		}
+		// Every edge between two kinds of ground the same grassy strip, so the colour runs on unbroken across it.
+		if (bStrip) C = Mixed(C, OfTone(LandSteppe::StripTone(N2, Broad)), LandSteppe::StripShare(Edge));
+		if (Sp->HasRail())
+		{
+			const double D = Sp->RailDistance(X, Y);
+			if (D < 10.0) C = OfTone(LandSteppe::BankColour(D, N1, N2, ToTone(C)));
+		}
+		return C;
+	}
+
 	/** Beyond the band: the same parcels by their seeds, their crops, woods; hedges as a darkening along the parcels' edges. */
 	Col Ground::Impl::FarColour(double X, double Y) const
 	{
 		const double Broad = Fbm(X, Y, 500.0, 2, Seed ^ 0x15), N1 = Fbm(X, Y, 90.0, 2, Seed ^ 0x16);
 		if (WoodsBeyond(X, Y)) return Varied(CanopyCol, 1.0 + 0.12 * N1, 0.02 * Broad);
+		if (Sp)
+		{
+			// (the steppe's fields on to the haze, the strip between them a faint line; the railway's bank running on)
+			int Crop = LandSteppe::CropPasture;
+			double Gap = 0.0;
+			Sp->FieldAt(X, Y, Crop, &Gap);
+			Col C = OfTone(LandSteppe::FarFieldColour(Crop, N1, Broad, Gap));
+			if (Sp->HasRail())
+			{
+				const double D = Sp->RailDistance(X, Y);
+				if (D < 10.0) C = OfTone(LandSteppe::BankColour(D, N1, 0.0, ToTone(C)));
+			}
+			return C;
+		}
 		double Gap = 0.0;
 		uint8_t Kind = RgOpen;
 		const int S = Plot(X, Y, &Gap, &Kind);
@@ -3292,6 +3684,15 @@ namespace LandField
 				L.Shutter = Paints[R.Below(4)];
 				L.Door = R.Next() < 0.5 ? Rgb(70, 54, 42) : Scaled(L.Shutter, 0.8);
 				L.Frame = Rgb(176, 172, 160);
+				if (H.bWhite)
+				{
+					// The steppe farm's sheds: whitewash over clay and brick, greyed and flaking, under weathered planks or straw.
+					L.Stone = Varied(Rgb(198, 194, 180), Tone, 0.5 * Warm);
+					L.Dressed = Mixed(L.Stone, Rgb(150, 140, 124), 0.25);
+					L.Roof = H.Roof == 1 ? Varied(Rgb(128, 110, 78), R.Range(0.9, 1.06), 0.0) : Varied(Rgb(96, 92, 86), R.Range(0.9, 1.08), 0.0);
+					L.Shutter = Rgb(84, 104, 108);
+					L.Door = Rgb(88, 74, 58);
+				}
 			}
 			const V2 U{ std::cos(H.Yaw), std::sin(H.Yaw) }, V = Perp(U);
 			auto W = [&](double Uu, double Vv, double Z) { return V3{ H.C.X + U.X * Uu + V.X * Vv, H.C.Y + U.Y * Uu + V.Y * Vv, Z }; };
@@ -3629,13 +4030,15 @@ namespace LandField
 			if (I < 0 || J < 0 || I >= TX || J >= TY) return nullptr;
 			return &TileList[static_cast<size_t>(J) * TX + I];
 		};
-		auto NearZ = [this](double X, double Y) {
-			double Edge = 1e6, Z = Terrain(X, Y);
+		// (the steppe's railway bank is swept at its own points: the ground's mesh leaves it out and sinks a little under it)
+		auto Under = [this](double X, double Y) { return Sp ? Land(X, Y) - (Sp->HasRail() ? 0.25 * Smooth(8.4, 7.4, Sp->RailDistance(X, Y)) : 0.0) : Terrain(X, Y); };
+		auto NearZ = [this, Under](double X, double Y) {
+			double Edge = 1e6, Z = Under(X, Y);
 			if (!InRaster(X, Y) || LaneD[Pix(X, Y)] < LaneWall + 3.0f) Z = Carve(X, Y, Z, &Edge);
 			// Under a lane's mesh the ground drops a little more, so the lane is always the one seen.
 			return Z - 0.35 * (1.0 - Smooth(LaneWall + 0.4, LaneWall + 1.0, Edge));
 		};
-		auto FarZ = [this](double X, double Y) { return Terrain(X, Y); };
+		auto FarZ = [Under](double X, double Y) { return Under(X, Y); };
 		auto NearCol = [this](double X, double Y) { return GroundColour(X, Y); };
 		for (int J = 0; J < TY; ++J)
 			for (int I = 0; I < TX; ++I)
@@ -3801,11 +4204,23 @@ namespace LandField
 				}
 			}
 		}
-		// The buildings.
+		// The buildings (the steppe's cottages are the kit's, planted).
 		for (const House& H : Houses)
 		{
+			if (H.bKit) continue;
 			Tile* T = TileOf(H.C.X, H.C.Y);
 			if (T) BuildHouse(T->Built, H);
+		}
+		// The steppe's railway on its bank: ballast, sleepers and rails near, the bank and its ballast far.
+		if (Sp && Sp->HasRail())
+		{
+			const std::function<double(double, double)> Ground = [this](double X, double Y) { return Terrain(X, Y); };
+			const std::function<LandSteppe::Tone(double, double)> Paint = [this](double X, double Y) { return ToTone(GroundColour(X, Y)); };
+			const std::function<Mesh*(double, double)> Near = NearOf, Far = FarOf;
+			double Km = 0.0;
+			LandSteppe::LayRail(*Sp, -Band, -Band + TilesY() * TileSize, false, Ground, Paint, Near, Km);
+			Count.RailKm += Km;
+			LandSteppe::LayRail(*Sp, -Band, -Band + TilesY() * TileSize, true, Ground, Paint, Far, Km);
 		}
 		for (Tile& T : TileList)
 		{
@@ -3827,12 +4242,12 @@ namespace LandField
 	 */
 	double Ground::Impl::Canopy(double X, double Y) const
 	{
-		const double F = Fbm(X, Y, 520.0, 3, Seed ^ 0xD5);
-		if (F <= 0.27) return 0.0;
+		const double F = Fbm(X, Y, 520.0, 3, Seed ^ 0xD5), Edge = Sp ? 0.43 : 0.27;
+		if (F <= Edge) return 0.0;
 		const double OutX = std::max({ 0.0, -Band - X, X - (TilesX() * TileSize - Band) });
 		const double OutY = std::max({ 0.0, -Band - Y, Y - (TilesY() * TileSize - Band) });
 		const double Crowns = 15.5 + 2.5 * Noise(X / 35.0, Y / 35.0, Seed ^ 0xD6) + 1.5 * Noise(X / 90.0, Y / 90.0, Seed ^ 0xDA);
-		return Crowns * Smooth(0.27, 0.29, F) * Smooth(0.0, 30.0, std::hypot(OutX, OutY));
+		return Crowns * Smooth(Edge, Edge + 0.02, F) * Smooth(0.0, 30.0, std::hypot(OutX, OutY));
 	}
 
 	/**
@@ -3893,6 +4308,30 @@ namespace LandField
 			const int K = Which[static_cast<size_t>(J) * NXT + I];
 			return K >= 0 ? &RingList[static_cast<size_t>(K)].Near : nullptr;
 		};
+		if (Sp)
+		{
+			// The steppe has no hedgerows to the horizon. Its railway runs on: in full a kilometre past the tiles each way,
+			// then its bank and ballast alone out to the ring's edge.
+			if (Sp->HasRail())
+			{
+				const std::function<double(double, double)> Ground = [this](double X, double Y) { return Terrain(X, Y); };
+				const std::function<LandSteppe::Tone(double, double)> Paint = [this](double X, double Y) { return ToTone(GroundColour(X, Y)); };
+				const std::function<Mesh*(double, double)> Target = RingOf;
+				double Km = 0.0;
+				LandSteppe::LayRail(*Sp, IY0 - 1000.0, IY0, false, Ground, Paint, Target, Km);
+				Count.RailKm += Km;
+				LandSteppe::LayRail(*Sp, IY1, IY1 + 1000.0, false, Ground, Paint, Target, Km);
+				Count.RailKm += Km;
+				LandSteppe::LayRail(*Sp, IY0 - RingOut, IY0 - 1000.0, true, Ground, Paint, Target, Km);
+				LandSteppe::LayRail(*Sp, IY1 + 1000.0, IY1 + RingOut, true, Ground, Paint, Target, Km);
+			}
+			for (Tile& T : RingList)
+			{
+				Bounds(T);
+				Count.RingTris += T.Near.Tris();
+			}
+			return;
+		}
 		// The near ring's hedgerows: the parcels' edges traced on an 8 m raster a kilometre out from the tiles.
 		constexpr double HR = 8.0, Reach = 1000.0;
 		const double HX0 = IX0 - Reach, HY0 = IY0 - Reach;
@@ -4606,8 +5045,8 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
-		static_assert(sizeof(Names) / sizeof(Names[0]) == static_cast<size_t>(Base::Count), "a name for every base");
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
+		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
 		const uint64_t S = 0xBA5E;
@@ -4894,6 +5333,20 @@ namespace LandField
 		}
 		for (const Base B : { Base::Tuft, Base::TallGrass, Base::Wheat, Base::Poppies, Base::Flowers, Base::Stone, Base::Fern, Base::Stubble }) At(B).FarFrom = 70.0f;
 		At(Base::Sward).FarFrom = 25.0f;
+		// The steppe's, from the east kit (each file's text in Fd.Steppe.Kit); plain stand-ins for a model not given.
+		for (const Base B : { Base::Khata, Base::Chimney, Base::Pole, Base::Wattle, Base::Sweep, Base::Haystack, Base::Birch })
+		{
+			BaseMesh& M = At(B);
+			const auto Found = Fd.Steppe.Kit.find(LandSteppe::KitName(B));
+			std::string Error;
+			const double FarFrom = B == Base::Wattle ? 60.0 : B == Base::Pole ? 110.0 : 150.0;
+			if (Found == Fd.Steppe.Kit.end() || !LandSteppe::ReadKit(Found->second, FarFrom, M, Error))
+			{
+				M.Near = Mesh();
+				M.Far = Mesh();
+				LandSteppe::PlainKit(B, M);
+			}
+		}
 		for (BaseMesh& B : Bases) Measure(B);
 	}
 }
@@ -4913,6 +5366,7 @@ namespace LandField
 		FW = Fd.Width();
 		FH = Fd.Depth();
 		Seed = Mix(Fd.Seed ^ 0x1A2DF1E1Dull);
+		if (Fd.Steppe.bOn) Sp = std::make_unique<LandSteppe::Plan>(Fd.Steppe);
 		ReadCells();
 		MakeLanes();
 		MakeRaster();
@@ -5033,7 +5487,7 @@ namespace LandField
 			double Density = 0.0;
 			Base Kind = Base::Count;
 		};
-		Growth Grow(Drawn What, int Crop, double Edge, double LaneEdge, uint8_t Occ, double Pick)
+		Growth Grow(Drawn What, int Crop, double Edge, double LaneEdge, uint8_t Occ, double Pick, bool bSteppe)
 		{
 			auto Of = [Pick](double Density, std::initializer_list<std::pair<double, Base>> Odds) {
 				Growth G;
@@ -5058,7 +5512,11 @@ namespace LandField
 				else G = Of(1.6, { { 1.0, Base::Tuft } });
 				break;
 			case Drawn::Pasture:
-				if (Edge < 3.0) G = Of(1.2, { { 0.35, Base::TallGrass }, { 0.15, Base::Fern }, { 0.2, Base::Flowers }, { 0.3, Base::Tuft } });
+				// (the steppe's: its pasture tussocky, feather grass in it; its fallow weedy; the strip between fields tall)
+				if (bSteppe && Edge < 3.0) G = Of(1.4, { { 0.5, Base::TallGrass }, { 0.3, Base::Tuft }, { 0.2, Base::Flowers } });
+				else if (Crop == CpSteppe) G = Of(1.3, { { 0.45, Base::Tuft }, { 0.42, Base::TallGrass }, { 0.13, Base::Flowers } });
+				else if (Crop == CpFallow) G = Of(0.9, { { 0.5, Base::Tuft }, { 0.3, Base::TallGrass }, { 0.2, Base::Flowers } });
+				else if (Edge < 3.0) G = Of(1.2, { { 0.35, Base::TallGrass }, { 0.15, Base::Fern }, { 0.2, Base::Flowers }, { 0.3, Base::Tuft } });
 				else if (Crop == CpLush) G = Of(1.45, { { 0.35, Base::Sward }, { 0.4, Base::Tuft }, { 0.18, Base::TallGrass }, { 0.07, Base::Flowers } });
 				else if (Crop == CpHayCut) G = Of(1.2, { { 0.55, Base::Sward }, { 0.4, Base::Tuft }, { 0.05, Base::Flowers } });
 				else if (Crop == CpMeadow) G = Of(1.45, { { 0.2, Base::Sward }, { 0.15, Base::Tuft }, { 0.45, Base::TallGrass }, { 0.12, Base::Flowers }, { 0.08, Base::Poppies } });
@@ -5084,6 +5542,8 @@ namespace LandField
 			case Drawn::Beyond: G = Of(1.2, { { 0.45, Base::Sward }, { 0.45, Base::Tuft }, { 0.06, Base::TallGrass }, { 0.04, Base::Flowers } }); break;
 			default: break; // a floor or water: nothing
 			}
+			// (no bracken on the steppe: dry grass where the bocage has fern)
+			if (bSteppe && G.Kind == Base::Fern) G.Kind = Base::TallGrass;
 			// Trodden: gateways, and where the recording's men and vehicles went.
 			if (Occ & OcVehicle) G.Density *= 0.35;
 			else if (Occ & OcGate) G.Density *= 0.3;
@@ -5127,7 +5587,8 @@ namespace LandField
 					}
 					Drawn What = Drawn::Beyond;
 					const double Z = G.Top(X, Y, &What);
-					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick);
+					if (G.Sp && G.Sp->HasRail() && G.Sp->RailDistance(X, Y) < 3.0) continue; // (nothing grows on the railway's ballast)
+					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
 					if (Gr.Kind == Base::Count || Keep >= Gr.Density / 2.0) continue;
 					Placed P;
 					P.Kind = Gr.Kind;
@@ -5164,6 +5625,14 @@ namespace LandField
 							TG = 0.84;
 							TB = 0.7;
 						}
+						else if (Crop == CpRye)
+						{
+							// (winter rye, ripe and chest high: greyer and paler than the wheat)
+							ScaleZ *= 1.35;
+							TR = 0.98;
+							TG = 0.97;
+							TB = 1.06;
+						}
 						break;
 					case Base::Tuft:
 						Scale = 0.7 + 0.7 * U4;
@@ -5181,6 +5650,19 @@ namespace LandField
 					case Base::TallGrass:
 						Scale = 0.8 + 0.5 * U4;
 						ScaleZ = 0.8 + 0.45 * U5;
+						if (G.Sp && U6 < 0.45)
+						{
+							// (feather grass, its awns silvering in the wind; the rest of the steppe's grass gone buff)
+							TR = 1.18;
+							TG = 1.12;
+							TB = 1.12;
+						}
+						else if (G.Sp)
+						{
+							TR = 1.1;
+							TG = 1.0;
+							TB = 0.86;
+						}
 						break;
 					case Base::Stone:
 						Scale = 0.6 + 1.2 * U4;
@@ -5230,6 +5712,7 @@ namespace LandField
 					const bool bLaneSide = What == Drawn::Lane && G.LaneD[Px] > -1.0f && G.LaneD[Px] < 0.3f;
 					const bool bWorks = What == Drawn::Works;
 					if (!bGate && !bFieldFoot && !bLaneSide && !bWorks) continue;
+					if (G.Sp && !bWorks) continue; // (the black earth has no stones)
 					// Clumps: a stretch of bank foot here and there, the rest bare (on the works fewer and sparser: some 0.007
 					// a square metre over them all).
 					const double Clump = Noise(X / 6.0, Y / 6.0, G.Seed ^ 0x5703ull);

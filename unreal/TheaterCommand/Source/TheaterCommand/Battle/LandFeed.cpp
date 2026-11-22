@@ -65,6 +65,32 @@ namespace LandFeed
 			F.TownSize = Place["townSize"].Str("");
 			ReadBox(J["zones"]["att"], F.ZoneAtt);
 			ReadBox(J["zones"]["def"], F.ZoneDef);
+			const Json& S = J["steppe"];
+			if (S.IsObject())
+			{
+				Field::SteppeLay& L = F.Steppe;
+				const Json& Fields = S["fields"];
+				L.Turn = Fields["turn"].Num(0.0);
+				L.CX = Fields["cx"].Num(F.W * 0.5);
+				L.CY = Fields["cy"].Num(F.H * 0.5);
+				L.Xs = LandJson::Numbers(Fields["xs"]);
+				L.Ys = LandJson::Numbers(Fields["ys"]);
+				L.Shift = LandJson::Numbers(Fields["shift"]);
+				L.Patch = Fields["patch"].Str("");
+				L.Crop = S["crop"].Str("");
+				auto Line = [](const Json& A, std::vector<std::pair<double, double>>& Out) {
+					for (const Json& P : A.Items) Out.push_back({ P.At(0).Num(0.0), P.At(1).Num(0.0) });
+				};
+				Line(S["balka"]["line"], L.Balka);
+				L.BalkaDeep = S["balka"]["deep"].Num(0.0);
+				Line(S["rail"]["line"], L.Rail);
+				L.RailBank = S["rail"]["bank"].Num(0.0);
+				L.HillX = S["hill"]["x"].Num(0.0);
+				L.HillY = S["hill"]["y"].Num(0.0);
+				L.HillR = S["hill"]["r"].Num(0.0);
+				L.HillRise = S["hill"]["rise"].Num(0.0);
+				L.bOn = L.Xs.size() >= 2 && L.Ys.size() >= 2;
+			}
 		}
 
 		void ReadView(const Json& J, View& V)
@@ -289,6 +315,17 @@ namespace LandFeed
 		Out.Weather.Lat = Sky["latLon"].At(0).Num(49.0);
 		Out.Weather.Lon = Sky["latLon"].At(1).Num(0.0);
 		Out.Weather.Hour = Sky["hour"].Num(10.0);
+		if (Sky["wind"].Count() >= 2)
+		{
+			Out.Weather.bWind = true;
+			Out.Weather.WindX = Sky["wind"].At(0).Num(0.0);
+			Out.Weather.WindY = Sky["wind"].At(1).Num(0.0);
+		}
+		if (Sky["grade"].Count() >= 4)
+		{
+			Out.Weather.bGrade = true;
+			for (int K = 0; K < 4; ++K) Out.Weather.Grade[K] = Sky["grade"].At(static_cast<size_t>(K)).Num(Out.Weather.Grade[K]);
+		}
 		const char* SideKeys[2] = { "att", "def" };
 		for (int S = 0; S < 2; ++S)
 		{

@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -203,7 +204,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
 	/** The highest triangle of a mesh over a place, seen from above (NaN where none). */
@@ -574,6 +575,66 @@ int main(int Argc, char** Argv)
 			if (D->S.find(Months[M]) != std::string::npos) F.Month = M + 1;
 	}
 	F.Seed = static_cast<uint64_t>(Rec.Num("seed", 1.0));
+	// The open steppe, where the recording lays it (field.steppe), and the east kit's models beside the recordings
+	// (Content/Models/East: the recording's folder's ../../Models/East), as the game reads them.
+	if (const Json* St = Fj->Get("steppe"); St && St->K == Json::Object)
+	{
+		LandField::SteppeLay& L = F.Steppe;
+		auto Digits = [](const Json* J, std::vector<uint8_t>& Out) {
+			if (J && J->K == Json::String)
+				for (const char Ch : J->S) Out.push_back(static_cast<uint8_t>(Ch >= '0' && Ch <= '9' ? Ch - '0' : 0));
+		};
+		auto Line = [](const Json* J, std::vector<std::pair<double, double>>& Out) {
+			if (J)
+				for (const Json& P : J->A)
+					if (P.A.size() >= 2) Out.push_back({ P.A[0].N, P.A[1].N });
+		};
+		if (const Json* Fl = St->Get("fields"))
+		{
+			L.Turn = Fl->Num("turn", 0.0);
+			L.CX = Fl->Num("cx", F.Width() / 2.0);
+			L.CY = Fl->Num("cy", F.Depth() / 2.0);
+			if (const Json* X = Fl->Get("xs"))
+				for (const Json& N : X->A) L.Xs.push_back(N.N);
+			if (const Json* Y = Fl->Get("ys"))
+				for (const Json& N : Y->A) L.Ys.push_back(N.N);
+			if (const Json* S = Fl->Get("shift"))
+				for (const Json& N : S->A) L.Shift.push_back(N.N);
+			Digits(Fl->Get("patch"), L.Patch);
+		}
+		Digits(St->Get("crop"), L.Crop);
+		if (const Json* B = St->Get("balka"))
+		{
+			Line(B->Get("line"), L.Balka);
+			L.BalkaDeep = B->Num("deep", 0.0);
+		}
+		if (const Json* R = St->Get("rail"))
+		{
+			Line(R->Get("line"), L.Rail);
+			L.RailBank = R->Num("bank", 0.0);
+		}
+		if (const Json* H = St->Get("hill"))
+		{
+			L.HillX = H->Num("x", 0.0);
+			L.HillY = H->Num("y", 0.0);
+			L.HillR = H->Num("r", 0.0);
+			L.HillRise = H->Num("rise", 0.0);
+		}
+		L.bOn = L.Xs.size() >= 2 && L.Ys.size() >= 2;
+		const std::filesystem::path KitDir = std::filesystem::path(Argv[1]).parent_path() / ".." / ".." / "Models" / "East";
+		int Kits = 0;
+		for (const char* Name : { "Khata", "BurntChimney", "TelegraphPole", "WattleFence", "WellSweep", "Haystack", "Birch" })
+		{
+			std::ifstream KitIn(KitDir / (std::string(Name) + ".json"), std::ios::binary);
+			if (!KitIn) continue;
+			std::stringstream KitBuf;
+			KitBuf << KitIn.rdbuf();
+			L.Kit[Name] = KitBuf.str();
+			++Kits;
+		}
+		std::printf("steppe: %zu fields, %zu railway points (bank %.1f m), balka %zu points, the east kit's models %d of 7\n", L.Patch.size(), L.Rail.size(), L.RailBank, L.Balka.size(), Kits);
+	}
+	const bool bSteppe = F.Steppe.bOn;
 	std::string Key = "battle";
 	if (const Json* K = Rec.Get("key"); K && K->K == Json::String) Key = K->S;
 	int Vehicles = 0, Men = 0;
@@ -668,9 +729,26 @@ int main(int Argc, char** Argv)
 
 	Check(Build < 2.0, "built in under two seconds", Fmt("%.2f s", Build));
 	Check(T.NearTris + T.BuiltTris < 1500000, "near level (ground, lanes, banks) and buildings under 1.5 million triangles", Fmt("%.0f + %.0f", static_cast<double>(T.NearTris), static_cast<double>(T.BuiltTris)));
-	Check(T.ParcelMean >= 80.0 && T.ParcelMean <= 200.0, "parcels 80 to 200 m across", Fmt("mean %.0f m", T.ParcelMean));
-	Check(T.Gates > T.Parcels / 3, "a gate in most parcels", Fmt("%.0f gates, %.0f parcels", T.Gates, T.Parcels));
-	Check(!F.bTown || (T.bChurch && T.Houses >= 10), "the village has its church and houses", Fmt("%.0f houses", T.Houses));
+	if (bSteppe)
+	{
+		// The steppe: the collective farm's great fields, no hedge or gate; the farm's cottages and sheds, a share burnt;
+		// the railway on its bank with its telegraph poles.
+		Check(T.ParcelMean >= 250.0 && T.ParcelMean <= 900.0, "the steppe's fields 250 to 900 m across", Fmt("mean %.0f m", T.ParcelMean));
+		Check(T.HedgeKm < 0.01 && T.Gates == 0, "no hedge, bank or gate on the steppe", Fmt("%.2f km, %.0f gates", T.HedgeKm, T.Gates));
+		Check(!F.bTown || (T.Houses >= 15 && T.Damaged >= T.Houses / 5 && !T.bChurch), "the farm has its cottages and sheds, a share of them burnt or hit",
+		      Fmt("%.0f buildings, %.0f burnt or hit", T.Houses, T.Damaged));
+		Check(F.Steppe.Rail.size() < 2 || (T.RailKm > 2.0 && T.Poles > 40), "the railway laid on its bank, its telegraph poles beside it", Fmt("%.1f km, %.0f poles", T.RailKm, T.Poles));
+		int Kit = 0;
+		for (const LandField::Base B : { LandField::Base::Khata, LandField::Base::Chimney, LandField::Base::Pole, LandField::Base::Wattle, LandField::Base::Sweep, LandField::Base::Haystack, LandField::Base::Birch })
+			if (!G.Instances(B).empty()) ++Kit;
+		Check(Kit == 7, "every one of the east kit's models stands somewhere on the steppe", Fmt("%.0f of 7", Kit));
+	}
+	else
+	{
+		Check(T.ParcelMean >= 80.0 && T.ParcelMean <= 200.0, "parcels 80 to 200 m across", Fmt("mean %.0f m", T.ParcelMean));
+		Check(T.Gates > T.Parcels / 3, "a gate in most parcels", Fmt("%.0f gates, %.0f parcels", T.Gates, T.Parcels));
+		Check(!F.bTown || (T.bChurch && T.Houses >= 10), "the village has its church and houses", Fmt("%.0f houses", T.Houses));
+	}
 
 	// What is drawn against what At() says: the highest triangle of the tile's near level over random places.
 	{
@@ -762,25 +840,53 @@ int main(int Argc, char** Argv)
 		std::string Kinds;
 		for (const auto& [K, E] : ByDrawn) Kinds += std::string(" ") + DrawnNames[K] + " " + std::to_string(E.first) + Fmt(" (worst %.2f)", E.second);
 		std::printf("        by what is drawn:%s\n", Kinds.c_str());
-		Check(!BankDiff.empty() && Pct(BankDiff, 0.5) < 0.03 && Pct(BankDiff, 0.95) < 0.12, "At() stands on the drawn banks",
-		      Fmt("%.0f places, median %.3f m, 95%% %.3f m, worst %.3f m", static_cast<double>(BankDiff.size()), Pct(BankDiff, 0.5), Pct(BankDiff, 0.95), BankDiff.empty() ? 0.0 : BankDiff.back()));
-		Check(Banks > 0 && OnBank > Banks * 0.9, "a hedge's line is drawn as its bank", Fmt("%.0f of %.0f", OnBank, Banks));
+		if (!bSteppe)
+		{
+			Check(!BankDiff.empty() && Pct(BankDiff, 0.5) < 0.03 && Pct(BankDiff, 0.95) < 0.12, "At() stands on the drawn banks",
+			      Fmt("%.0f places, median %.3f m, 95%% %.3f m, worst %.3f m", static_cast<double>(BankDiff.size()), Pct(BankDiff, 0.5), Pct(BankDiff, 0.95), BankDiff.empty() ? 0.0 : BankDiff.back()));
+			Check(Banks > 0 && OnBank > Banks * 0.9, "a hedge's line is drawn as its bank", Fmt("%.0f of %.0f", OnBank, Banks));
+		}
 		Check(LanePts > 0 && OnLane > LanePts * 0.97, "a lane's middle is drawn as lane", Fmt("%.0f of %.0f", OnLane, LanePts));
-		Check(SunkN > 0 && Sunk / SunkN > 0.5 && Sunk / SunkN < 2.2, "lanes sunk below the fields beside them (outside the village)", Fmt("mean %.2f m", SunkN ? Sunk / SunkN : 0.0));
+		if (bSteppe)
+			Check(SunkN > 0 && Sunk / SunkN > 0.05 && Sunk / SunkN < 0.6, "the steppe's dirt roads worn a little into the black earth", Fmt("mean %.2f m", SunkN ? Sunk / SunkN : 0.0));
+		else Check(SunkN > 0 && Sunk / SunkN > 0.5 && Sunk / SunkN < 2.2, "lanes sunk below the fields beside them (outside the village)", Fmt("mean %.2f m", SunkN ? Sunk / SunkN : 0.0));
+		if (bSteppe && F.Steppe.Rail.size() >= 2)
+		{
+			// The railway's bank: At() on its top, and the bank as drawn (its swept strip) under a man standing there.
+			std::vector<double> Top;
+			int OnTop = 0, Asked = 0;
+			for (const auto& [RX, RY] : F.Steppe.Rail)
+			{
+				if (RY < 50.0 || RY > F.Depth() - 50.0 || RX < 0.0 || RX > F.Width()) continue;
+				for (const double Off : { -3.0, 3.0 })
+				{
+					++Asked;
+					const LandField::Surface Su = G.At(RX + Off, RY);
+					const LandField::Surface Beside = G.At(RX + Off * 6.0, RY);
+					if (Su.Z > Beside.Z + 0.7 * F.Steppe.RailBank) ++OnTop;
+					const double Z = DrawnTop(RX + Off, RY);
+					if (!std::isnan(Z)) Top.push_back(std::fabs(Z - Su.Z));
+				}
+			}
+			std::sort(Top.begin(), Top.end());
+			Check(Asked > 0 && OnTop >= Asked * 0.9 && !Top.empty() && Pct(Top, 0.5) < 0.05, "the railway's bank stands up from the steppe, and At() stands on it as drawn",
+			      Fmt("%.0f of %.0f places on its top, median %.3f m off the drawn bank", OnTop, Asked, Pct(Top, 0.5)));
+		}
 	}
 	// Nothing standing in a house, and each thing standing on the ground drawn; no tree trunk on a vehicle's way.
 	{
 		int Bad = 0, Off = 0, All = 0, InLane = 0, ShrubsInLane = 0;
-		for (int B = 0; B <= static_cast<int>(LandField::Base::Cart); ++B)
+		for (int B = 0; B <= static_cast<int>(LandField::Base::Birch); ++B)
 			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
 			{
+				if (B == static_cast<int>(LandField::Base::Khata)) continue; // (a cottage stands on its own floor)
 				++All;
 				const LandField::Surface Su = G.At(P.X, P.Y);
 				if (Su.What == LandField::Drawn::Floor) ++Bad;
 				if (std::fabs(Su.Z - P.Z) > 0.02) ++Off;
 				if (Su.What == LandField::Drawn::Lane) ++(B >= static_cast<int>(LandField::Base::Oak) && B <= static_cast<int>(LandField::Base::Apple) ? InLane : ShrubsInLane);
 			}
-		Check(Bad == 0, "no shrub, tree, gate or prop in a house", Fmt("%.0f of %.0f", Bad, All));
+		Check(Bad == 0, "no shrub, tree, gate, prop or kit model in a house", Fmt("%.0f of %.0f", Bad, All));
 		Check(InLane == 0, "no tree in a sunken lane (its floor or walls)", Fmt("%.0f trees (and %.0f shrubs, gates or props)", InLane, ShrubsInLane));
 		Check(Off == 0, "each stands where At() puts the ground", Fmt("%.0f of %.0f off by more than 2 cm", Off, All));
 		int OnWay = 0;
@@ -906,7 +1012,8 @@ int main(int Argc, char** Argv)
 	{
 		double Own = 0.0;
 		const double Median = Bocage(G, F, Own);
-		Check(Median >= 40.0 && Median <= 200.0 && Own >= 0.85, "the bocage closes a field's view at a man's eye", Fmt("median sight line %.0f m, %.0f%% stopped by the field's own hedge", Median, 100.0 * Own));
+		if (bSteppe) Check(Median >= 350.0, "the steppe lies open to a man's eye", Fmt("median sight line %.0f m", Median));
+		else Check(Median >= 40.0 && Median <= 200.0 && Own >= 0.85, "the bocage closes a field's view at a man's eye", Fmt("median sight line %.0f m, %.0f%% stopped by the field's own hedge", Median, 100.0 * Own));
 	}
 	// The effects kit's words, as a shell would read them.
 	{
@@ -1327,7 +1434,10 @@ int main(int Argc, char** Argv)
 		Check(Over.size() > 1000 && Buried < 0.03 && Pctl(Over, 0.95) < 0.12, "a track mark lies on the ground drawn, not under it", Fmt("%.1f%% under, 95%% %.3f m over", 100.0 * Buried, Pctl(Over, 0.95)));
 		Check(CornMid > 50 && CornMidFlat >= CornMid * 0.98 && OtherMid > 50 && OtherMidFlat <= OtherMid * 0.03 && UnderFlat >= Under_ * 0.98 && BeyondFlat <= Beyond * 0.03,
 			"the corn between a tank's tracks lies flat, and only there", Fmt("corn %.0f of %.0f, grass %.0f of %.0f, ", CornMidFlat, CornMid, OtherMidFlat, OtherMid) + Fmt("under %.0f of %.0f, beyond %.0f of ", UnderFlat, Under_, BeyondFlat) + Fmt("%.0f", Beyond));
-		Check(DriveUs < 5.0 && FlatUs < 3.0, "marks cheap enough for every tank every frame", Fmt("Drive %.2f us, Flat %.2f us", DriveUs, FlatUs));
+		// (on the steppe most of the ground is standing corn, so nearly every piece lays its flattened strip as well: a
+		// little more a frame, still a quarter of a millisecond for forty tanks)
+		const double DriveMost = bSteppe ? 7.0 : 5.0;
+		Check(DriveUs < DriveMost && FlatUs < 3.0, "marks cheap enough for every tank every frame", Fmt("Drive %.2f us, Flat %.2f us", DriveUs, FlatUs));
 	}
 
 	if (Argc >= 3)

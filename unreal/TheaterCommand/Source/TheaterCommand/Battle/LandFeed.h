@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -175,6 +176,24 @@ namespace LandFeed
 		double ZoneAtt[4] = { 0, 0, 0, 0 };
 		double ZoneDef[4] = { 0, 0, 0, 0 };
 
+		/**
+		 * field.steppe, where the recording lays the open steppe (Tools/land_record, openSteppe; LandField::SteppeLay says
+		 * what each is): the farms' fields (a point turned by -Turn about CX, CY falls in a column of Xs and a row of Ys
+		 * moved by that column's Shift, Patch each field's crop digit row by row), each cell's crop digit (Crop, as Ground), the balka's and the
+		 * railway's lines, the rise the defence holds.
+		 */
+		struct SteppeLay
+		{
+			bool bOn = false;
+			double Turn = 0.0, CX = 0.0, CY = 0.0;
+			std::vector<double> Xs, Ys, Shift;
+			std::string Patch, Crop;
+			std::vector<std::pair<double, double>> Balka, Rail;
+			double BalkaDeep = 0.0, RailBank = 0.0;
+			double HillX = 0.0, HillY = 0.0, HillR = 0.0, HillRise = 0.0;
+		};
+		SteppeLay Steppe;
+
 		/** The cell's ground word at a point (clamped to the field). */
 		const std::string& GroundAt(double X, double Y) const;
 		/** The cells' heights, bilinear, at a point (clamped). The ground core draws the finer ground; this is the
@@ -188,6 +207,14 @@ namespace LandFeed
 		std::string Kind = "cumulus";
 		double Lat = 49.0, Lon = 0.0;
 		double Hour = 10.0;
+		/** sky.wind, where the recording sets it: the wind's way and strength (metres a second, east and north) for the
+		 * smoke and dust. */
+		bool bWind = false;
+		double WindX = 0.0, WindY = 0.0;
+		/** sky.grade, where the recording sets it: the battle camera's grade (darks, middles, red, blue), as
+		 * LandBattle's -TheaterLandGrade takes it. */
+		bool bGrade = false;
+		double Grade[4] = { 0.45, 0.48, 1.0, 1.02 };
 	};
 
 	struct SideInfo

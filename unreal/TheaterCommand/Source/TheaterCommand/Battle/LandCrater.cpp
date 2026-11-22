@@ -256,6 +256,18 @@ namespace LandCrater
 			P.Clod = Rgb(130, 110, 82);
 			P.Turf = Rgb(120, 104, 76);
 		}
+		else if (Ground == "blackearth")
+		{
+			// (the steppe's chernozem, a metre deep: near black in the hollow, dry grey-brown crumbs on the crest, thrown
+			// dark over the ripe corn and the buff grass; the art director's to check)
+			P.Hollow = Rgb(34, 29, 25);
+			P.Wall = Rgb(48, 41, 35);
+			P.Crest = Rgb(80, 72, 62);
+			P.Thrown = Rgb(58, 51, 44);
+			P.Edge = Rgb(98, 92, 64);
+			P.Clod = Rgb(52, 45, 38);
+			P.Turf = Rgb(106, 102, 66);
+		}
 		else if (Ground == "snow")
 		{
 			P.Hollow = Rgb(46, 38, 31);
@@ -611,7 +623,7 @@ namespace LandCrater
 		// (laid on what is there now: the floor of an older hole where it is torn in one)
 		const HeightFn Surface = [this](double Px, double Py) { return SurfaceAt(Px, Py); };
 		std::vector<double> CutLine;
-		Lay(X, Y, S, SoilOf(Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr);
+		Lay(X, Y, S, SoilOf(Ground == "earth" && !Earth.empty() ? Earth : Ground), Own, Surface, 0.004 * (Number % 7), Into, Under, S.Deep > 0.0 ? &CutLine : nullptr);
 		H.Deep = CutLine.empty() ? 0.0 : S.Deep;
 		H.X = X;
 		H.Y = Y;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -46,6 +47,38 @@ namespace LandField
 		uint8_t R = 128, G = 128, B = 128;
 	};
 
+	/**
+	 * The open steppe (Brian, 22 November 2026: "a battle in an open field so we can see them battle more clearly";
+	 * Prokhorovka, July 1943), as the recording's field.steppe lays it over the rules' plains: the collective farms' great
+	 * fields of wheat and rye, pasture and fallow, a balka (a dry gully) in from a flank, a railway on its bank, the
+	 * state farm's whitewashed cottages. Where it is given (On), the ground is laid as the steppe (Battle/LandSteppe)
+	 * and not as the bocage: no hedgerows, no sunken lanes, the east kit's cottages, fences, wells and telegraph poles.
+	 */
+	struct SteppeLay
+	{
+		bool bOn = false;
+		/** The farms' fields: a point turned by -Turn about (CX, CY) into (U, V) falls in a column of Xs and a row of Ys
+		 * moved north by the column's Shift (so the fields of one column do not line up with the next's, as the farms' do
+		 * not; none given, none); Patch is each field's crop, row by row (Ys), Xs.size() - 1 to a row: 1 wheat, 2 rye,
+		 * 3 pasture, 4 fallow. */
+		double Turn = 0.0, CX = 0.0, CY = 0.0;
+		std::vector<double> Xs, Ys, Shift;
+		std::vector<uint8_t> Patch;
+		/** Each rules cell's crop (row by row, as Field::Ground): 0 where it is not a crop (a road, the farm, the gully). */
+		std::vector<uint8_t> Crop;
+		/** The balka's middle line (metres, from its mouth at the field's edge to its head) and how deep its mouth is. */
+		std::vector<std::pair<double, double>> Balka;
+		double BalkaDeep = 0.0;
+		/** The railway's line (south to north, on past the field's ends) and the height of its bank. */
+		std::vector<std::pair<double, double>> Rail;
+		double RailBank = 0.0;
+		/** The rise the defence holds: its top, how far its slopes run, how high (the rules' heights carry it already). */
+		double HillX = 0.0, HillY = 0.0, HillR = 0.0, HillRise = 0.0;
+		/** The east kit's models (battle-models/east, Content/Models/East: Khata, BurntChimney, TelegraphPole, WattleFence,
+		 * WellSweep, Haystack, Birch), by name: each file's text, read by the caller. A model not given is drawn plainly. */
+		std::map<std::string, std::string> Kit;
+	};
+
 	/** The rules' field, as the recording or the bridge gives it (field.*). */
 	struct Field
 	{
@@ -65,6 +98,8 @@ namespace LandField
 		std::string Terrain = "plains";
 		int Month = 7;
 		uint64_t Seed = 1;
+		/** The open steppe, where the recording lays it (Steppe.bOn); else the bocage. */
+		SteppeLay Steppe;
 
 		/**
 		 * Where men and vehicles go, if known (a recording's men tracks, each man's kept points): a hedge they cross is
@@ -172,7 +207,15 @@ namespace LandField
 		Gate,    // a five-bar field gate on its post
 		Well,
 		Cart,
-		Tuft,    // clutter: grass tuft
+		// the steppe's, from the east kit (SteppeLay::Kit)
+		Khata,    // a whitewashed cottage under thatch
+		Chimney,  // a burnt cottage: its stove and chimney standing in the ash
+		Pole,     // a telegraph pole
+		Wattle,   // a length of woven wattle fence
+		Sweep,    // a well sweep
+		Haystack,
+		Birch,
+		Tuft,    // clutter: grass tuft (every base from here on is clutter, laid round the eye)
 		TallGrass,
 		Wheat,   // standing ripe corn, a clump of stalks
 		Poppies,
@@ -234,6 +277,8 @@ namespace LandField
 		int Damaged = 0;
 		bool bChurch = false;
 		int Farmsteads = 0;
+		int Poles = 0;            // the steppe's telegraph poles
+		double RailKm = 0.0;      // and its railway, laid
 		size_t NearTris = 0, FarTris = 0, BuiltTris = 0, RingTris = 0;
 		size_t Instances = 0;
 		double CoreSeconds = 0.0; // heights, lanes, parcels, hedges, village, instances

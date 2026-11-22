@@ -129,6 +129,9 @@ namespace LandCrater
 
 		/** InUnder: the ground's own colour (Lay's Under), or none for the earth colours alone. */
 		void Begin(HeightFn InHeight, uint64_t InSeed, ColourFn InUnder = ColourFn());
+		/** The soil a hole on plain ground ("earth") throws, where the ground is not the bocage's loam: "blackearth" on
+		 * the steppe. Empty for the loam. */
+		void SetEarth(const std::string& Word) { Earth = Word; }
 		/** A round landed at X, Y on Ground (the effects kit's word): its hole laid, by its name and calibre (SizeOf).
 		 * False when it leaves none (a name of no size, water, the guard reached). Dug only where Dig says it may be
 		 * (open ground: a field, a pasture, a garden; not a lane, a bank, a yard), when Dig is given. */
@@ -201,6 +204,7 @@ namespace LandCrater
 		HeightFn Height;
 		ColourFn Under;
 		uint64_t Seed = 1;
+		std::string Earth;
 		std::vector<Hole> Holes;
 		/** The patches by number, and their numbers by square. */
 		std::vector<Patch> PatchList;

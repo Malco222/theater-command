@@ -77,10 +77,11 @@ namespace LandParts
 	 * her first item, "one switch, every shot: the biggest lift"): with red 1.08 and blue 0.87 the frames measured
 	 * saturation 0.30 to 0.48 and blue under red by 37 to 62, wheat orange-gold and grass lime; she asks red 1.00, blue
 	 * 1.02, the middle tones' colour 0.45 to 0.50 and the darks' 0.45, for saturation 0.15 to 0.25 and blue under red
-	 * by 15 to 0. "-TheaterLandGrade=darks,middles,red,blue,stops" tries other numbers (leave one empty to keep it);
-	 * "-TheaterNoBattleGrade" leaves both off.
+	 * by 15 to 0. A recording may set its own (sky.grade: the steppe's July morning is warmer, its wheat and dust gold
+	 * under the haze); "-TheaterLandGrade=darks,middles,red,blue,stops" tries other numbers over either (leave one
+	 * empty to keep it); "-TheaterNoBattleGrade" leaves both off.
 	 */
-	static void Grade(FPostProcessSettings& Lens)
+	static void Grade(FPostProcessSettings& Lens, const LandFeed::Sky* Sky = nullptr)
 	{
 		BattleLook::Grade(Lens);
 		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterNoBattleGrade")))
@@ -90,6 +91,13 @@ namespace LandParts
 		// (and half a stop down: the art director on the third cut's field sheets, 22 November: the stop brings hay,
 		// wheat, barley and meadow into 120-165 and keeps the contrast's shadows, where a softer contrast flattens them)
 		double Darks = 0.45, Middles = 0.48, Red = 1.0, Blue = 1.02, Stops = -0.5;
+		if (Sky && Sky->bGrade)
+		{
+			Darks = Sky->Grade[0];
+			Middles = Sky->Grade[1];
+			Red = Sky->Grade[2];
+			Blue = Sky->Grade[3];
+		}
 		FString Asked;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked))
 		{
@@ -749,7 +757,26 @@ bool ALandBattle::Open()
 	double Took = LandParts::Seconds();
 	{
 		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there)
-		S.Field = std::make_unique<LandField::Ground>(LandSight::FieldOf(Rec));
+		LandField::Field Lay = LandSight::FieldOf(Rec);
+		if (Lay.Steppe.bOn)
+		{
+			// The steppe's cottages, ruins, poles, wattle, sweeps, ricks and birches: the east kit's models
+			// (Content/Models/East, from battle-models/east); a model not found is drawn plainly, and said.
+			const FString Kit = FPaths::ProjectContentDir() / TEXT("Models/East");
+			for (const TCHAR* Name : { TEXT("Khata"), TEXT("BurntChimney"), TEXT("TelegraphPole"), TEXT("WattleFence"), TEXT("WellSweep"), TEXT("Haystack"), TEXT("Birch") })
+			{
+				FString Text;
+				if (FFileHelper::LoadFileToString(Text, *(Kit / (FString(Name) + TEXT(".json")))))
+				{
+					Lay.Steppe.Kit[LandParts::Narrow(FString(Name))] = LandParts::Narrow(Text);
+				}
+				else
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Land battle: the east kit's %s is not in Content/Models/East; drawn plainly"), Name);
+				}
+			}
+		}
+		S.Field = std::make_unique<LandField::Ground>(Lay);
 		S.Sight.Lay(S.Field.get());
 	}
 	const double FieldSeconds = LandParts::Seconds() - Took;
@@ -1007,8 +1034,9 @@ bool ALandBattle::Open()
 		Effects->SetLensFade(1.0f, 5.0f, 0.3f);
 		Effects->SetCraters(false);
 		Effects->SetSun(TowardSun);
-		// (a summer morning's breeze from the west-south-west, some 3 m a second: the smoke leans east over the field)
-		Effects->SetWind(WorldWay(2.6, 1.2, 0.0));
+		// (a summer morning's breeze from the west-south-west, some 3 m a second: the smoke leans east over the field;
+		// or the recording's own wind)
+		Effects->SetWind(Rec.Weather.bWind ? WorldWay(Rec.Weather.WindX, Rec.Weather.WindY, 0.0) : WorldWay(2.6, 1.2, 0.0));
 	}
 
 	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
@@ -1044,6 +1072,10 @@ bool ALandBattle::Open()
 		S.Holes.Dig = [](double, double) { return false; };
 	}
 	S.Dug.Begin(&FieldPtr->Tiles());
+	if (Rec.Ground.Steppe.bOn)
+	{
+		S.Holes.SetEarth("blackearth"); // (the steppe's chernozem, not the bocage's loam)
+	}
 	// And the tracks' marks, on the same ground and paint (none across a dug hole's bowl).
 	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
 		LandCrater::Ruts::KindOn(*FieldPtr));
@@ -1067,7 +1099,7 @@ bool ALandBattle::Open()
 		// (a narrow shutter: the staccato, crisp look of a war film's battle, not a smear)
 		Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
-		LandParts::Grade(Lens->PostProcessSettings);
+		LandParts::Grade(Lens->PostProcessSettings, &Rec.Weather);
 		// The grain of the film stock, a little (the art director's to tune: "-TheaterLandGrain=0.3").
 		float Grain = 0.25f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrain="), Grain);
@@ -2265,7 +2297,7 @@ void ALandBattle::HideTheTable()
 			Over->bEnabled = true;
 			Over->Priority = 0.0f;
 			Over->BlendWeight = 1.0f;
-			LandParts::Grade(Over->Settings);
+			LandParts::Grade(Over->Settings, State.IsValid() ? &State->Rec.Weather : nullptr);
 			Day.Grade = Over;
 		}
 	}
