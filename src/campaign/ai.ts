@@ -1296,7 +1296,7 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
         if (hostileUnits(g, to, nat).length && assess(g, force, to, landingOpts(g, force, to)).odds < (L.minOdds ?? 1.2)) continue;
         const res = landCorps(g, force, to);
         ok = res.ok && !!res.taken;
-        if (res.ok) landingWatch.tell?.({ nat, to, force, warned: false, sea: -1, wave: false, taken: ok, from, op: true });
+        if (res.ok) opWatch.tell?.({ nat, to, force, warned: false, sea: -1, wave: false, taken: ok, from, op: true });
         if (res.ok && !res.taken) break; // beaten off: the corps is back in port and has had its month
         if (ok && !within) opLodged(g, nat, to);
       }
@@ -1312,6 +1312,8 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
  * ashore. Nothing in the game listens.
  */
 export const landingWatch: { tell: ((e: { nat: string; to: Region; force: Corps[]; warned: boolean; sea: number; wave: boolean; taken: boolean; from?: Region; op?: boolean }) => void) | null } = { tell: null };
+/** For the measuring harness: told of every landing an operation of a staff's menu makes (open.json 'ops'; its groups land as the plan names them, one corps at a time). Its own listener: `landingWatch` is the landing desk's alone. Nothing in the game listens. */
+export const opWatch: typeof landingWatch = { tell: null };
 /** For the measuring harness: told why a staff's landing desk passed over each harbour of the enemy's its force could reach, or what it was worth to it. Nothing in the game listens. */
 export const aimWatch: { tell: ((e: { nat: string; slot: number; quay: Region; at: Region; why: string; worth?: number }) => void) | null } = { tell: null };
 
@@ -2058,7 +2060,7 @@ function follow(g: Game, nat: string, O: OverseasRules): void {
  * fighters fight for the sky over the beach (airAI), and the landing goes in the month the way is open. A beach
  * the fleet and the fighters cannot open in half a year is given up for a year, and the staff looks at the next.
  */
-function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[], L: { odds: number; near: number }, you: string, waveFor: ((r: Region, least?: number) => Corps[] | null) | null = null, pool: Corps[] = force): boolean {
+function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[], L: { odds: number; near: number; risk?: number }, you: string, waveFor: ((r: Region, least?: number) => Corps[] | null) | null = null, pool: Corps[] = force): boolean {
   const key = `st:aim:${nat}${sfx}`, at = `st:aimAt:${nat}${sfx}`, via = `st:aimQuay:${nat}${sfx}`;
   // (The landing as ruled, strategy.json 'ops.landing'; staff.ts. Null with the switch off, and nothing below is changed.)
   const R = landingRules(g, nat);
@@ -2082,12 +2084,18 @@ function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[]
   if (R?.quay && !quays.includes(quay)) quays.push(quay);
   const seas = quays.map((q) => seasFrom(g, nat, q));
   const stands = (q: Region): number => q.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng').length;
+  // (Fewest seas is not the safest way: a quay with a way open to the troopships this month, no riskier than the
+  // staff takes, comes before a nearer one whose crossing it would refuse. In the first wars measured the desks went
+  // to Tripoli, two seas from Sardinia through the Italian fleet's water, and were refused the crossing month after
+  // month, where Cornwall and Gibraltar, three seas off through seas the Allies held, had landed.)
+  const safe = (q: Region, r: Region): boolean => { const path = seaPath(g, nat, q, r, { max: NAVY.landing.range }); return !!path && crossingRisk(g, nat, path) <= (L.risk ?? 1); };
   const nearest = (r: Region): { q: Region; d: number } | null => {
-    let b: { q: Region; d: number } | null = null;
+    let b: { q: Region; d: number; ok: boolean } | null = null;
     quays.forEach((q, i) => {
       const d = seasTo(seas[i], r);
       if (d === Infinity) return;
-      if (!b || d < b.d || (d === b.d && b.q !== quay && (q === quay || stands(q) > stands(b.q)))) b = { q, d };
+      const ok = safe(q, r);
+      if (!b || (ok && !b.ok) || (ok === b.ok && (d < b.d || (d === b.d && b.q !== quay && (q === quay || stands(q) > stands(b.q)))))) b = { q, d, ok };
     });
     return b;
   };

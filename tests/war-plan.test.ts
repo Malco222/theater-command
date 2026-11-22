@@ -6,14 +6,16 @@
 // full foothold is widened. The recall of an army that has won its theatre is built and has its own switch, off: in
 // the wars measured it put Italy out of the war later, not sooner (strategy.json). Its third part: a staff keeps the
 // force of an operation it means to launch, keeps the harbour of a foothold, and feeds an operation's landing from
-// the day it is made (the playtester's traces of 22 November 2026: Norway and Albania).
+// the day it is made (the playtester's traces of 22 November 2026: Norway and Albania); the army of an operation
+// that is won sails home; and a landing is mounted as the design director ruled it that day (strategy.json
+// 'ops.landing'). These have a switch of their own, read at stop 3 too, and off.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { ARSENAL } from '../src/campaign/arsenal';
 import { allied } from '../src/campaign/game';
-import { campaignOf, idleArmies, landingForce, startOpen } from '../src/campaign/staff';
+import { campaignOf, idleArmies, landingForce, landingRules, opArmies, startOpen } from '../src/campaign/staff';
 import { STRATEGY, campaignLog, plansAhead } from '../src/campaign/strategy';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -27,8 +29,8 @@ const war = (seed: number, stop: number, months: number, human: string | null = 
 const planFlags = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^st:cam/.test(k));
 
 describe('the war plan', () => {
-  const was = { on: STRATEGY.on, staffs: STRATEGY.staffs, stops: STRATEGY.stops, recall: STRATEGY.recall!.on, ops: STRATEGY.ops!.on };
-  afterEach(() => { STRATEGY.on = was.on; STRATEGY.staffs = was.staffs; STRATEGY.stops = was.stops; STRATEGY.recall!.on = was.recall; STRATEGY.ops!.on = was.ops; campaignLog.say = null; });
+  const was = { on: STRATEGY.on, staffs: STRATEGY.staffs, stops: STRATEGY.stops, recall: STRATEGY.recall!.on, ops: STRATEGY.ops!.on, landing: STRATEGY.ops!.landing!.on };
+  afterEach(() => { STRATEGY.on = was.on; STRATEGY.staffs = was.staffs; STRATEGY.stops = was.stops; STRATEGY.recall!.on = was.recall; STRATEGY.ops!.on = was.ops; STRATEGY.ops!.landing!.on = was.landing; campaignLog.say = null; });
 
   it('ships switched off, with its numbers in order', () => {
     expect(STRATEGY.on).toBe(false);
@@ -64,6 +66,16 @@ describe('the war plan', () => {
     expect(O.front).toBe(true);
     expect(O.port!.size).toBeGreaterThanOrEqual(1);
     expect(O.port!.within).toBeGreaterThanOrEqual(1);
+    // The army of an operation that is won goes home but for a guard, over no crossing riskier than a landing takes.
+    expect(O.home!.guard).toBeGreaterThanOrEqual(1);
+    expect(O.home!.risk).toBeLessThanOrEqual(0.25);
+    // The landing as ruled has a switch of its own under the operations', off: it is read only where both are on.
+    expect(O.landing!.on).toBe(false);
+    // Nobody waits on a nearer army for longer than a beach stays named (six months).
+    expect(O.landing!.patience!).toBeGreaterThanOrEqual(1);
+    expect(O.landing!.patience!).toBeLessThan(6);
+    // (And with the switch off no army is called home and no landing rule is read.)
+    expect(opArmies(startOpen(createGame(1, null)), 'GER')).toEqual([]);
   });
 
   it('off, no staff plans and nothing of the plan is written into a game', () => {
@@ -164,7 +176,40 @@ describe('the war plan', () => {
     // Norway falls within the half year (in history two months; in this war, with the plan off, never).
     expect(fell).toBeGreaterThan(0);
     expect(fell - landed).toBeLessThanOrEqual(6);
+    // The operation won, its army goes home (strategy.json 'ops.home'): within five months the Germans on Norway's
+    // ground are down to a guard, the corps their orders hold there and the weakest of the rest up to 'guard'
+    // divisions, and the others have sailed. (Before, every corps fed into Norway stood there when the attack on the
+    // Soviet Union opened: eight corps of sixty in one war, and Germany fell three months sooner over 24.)
+    const inNorway = (): Game['corps'] => g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.kind !== 'fort' && g.regions[c.reg].owner === 'NOR');
+    const divs = (cs: Game['corps']): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
+    const atFall = inNorway();
+    for (let t = 0; t < 5; t++) runTurnAI(g);
+    expect(said.some((e) => e.nat === 'GER' && e.what === 'recall' && e.t > fell)).toBe(true);
+    expect(inNorway().length).toBeLessThan(atFall.length);
+    expect(divs(inNorway())).toBeLessThan(STRATEGY.ops!.home!.guard + 3.01);
+    expect(atFall.filter((c) => !c.dead && g.regions[c.reg].owner !== 'NOR').length).toBeGreaterThan(0);
   }, 240_000);
+
+  it('the landing as ruled is read only with both switches on, by computer staffs at the named stops', () => {
+    const g = startOpen(createGame(1, null));
+    expect(landingRules(g, 'UK')).toBeNull();
+    // (The landing's own switch alone does nothing: it is under the operations'.)
+    STRATEGY.ops!.landing!.on = true;
+    expect(landingRules(g, 'UK')).toBeNull();
+    STRATEGY.ops!.on = true;
+    expect(landingRules(g, 'UK')).toBe(STRATEGY.ops!.landing);
+    // (The operations alone leave the landing as release 1 has it.)
+    STRATEGY.ops!.landing!.on = false;
+    expect(landingRules(g, 'UK')).toBeNull();
+    // Never for the player's own country, and never at the two stops that keep to the book.
+    STRATEGY.ops!.landing!.on = true;
+    const mine = startOpen(createGame(1, 'UK'));
+    expect(landingRules(mine, 'UK')).toBeNull();
+    expect(landingRules(mine, 'USA')).toBe(STRATEGY.ops!.landing);
+    const book = startOpen(createGame(1, null));
+    setStop(book, 1, true);
+    expect(landingRules(book, 'UK')).toBeNull();
+  });
 
   it('the operations: the garrison beside a country a staff means to attack is not sailed away', () => {
     // Seed 2 at stop 3: Italy's desk for its army abroad took the whole garrison of Albania for a landing on Cyprus

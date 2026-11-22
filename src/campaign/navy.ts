@@ -2350,7 +2350,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     // what all their free fleets within reach could bring there together, not each fleet by itself. Before, each
     // weighed the sea alone: two British fleets of 44 and 53 stood either side of an Italian 93 on the lane to
     // Libya, each the weaker, and the sea stayed shut to a landing force for the rest of the war. Seed 23.)
-    if (gathers === null) gathers = mounts(g, nat) && !!STRATEGY.ops?.landing?.fleet;
+    if (gathers === null) gathers = mounts(g, nat) && !!STRATEGY.ops?.landing?.on && !!STRATEGY.ops.landing.fleet;
     const together = (z: number): number => {
       let v = massed.get(z);
       if (v === undefined) {

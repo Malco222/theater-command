@@ -19,7 +19,7 @@ export const STRATEGY = data as unknown as {
   /** The operations and the landings (their own switch and stops: the faults they mend are the usual game's, and par is read at stop 3). */
   ops?: { on: boolean; stops: number[]; keep: boolean; lead?: number; front: boolean; home?: { guard: number; risk: number }; port?: { size: number; within: number };
     /** The landing as the design director ruled it on 22 November 2026: the first wave, the quay, the wait for the sky, the fleets, the beach's worth. */
-    landing?: { wave: boolean; quay: boolean; wait: boolean; defer: boolean; allies?: boolean; fleet: boolean; beyond?: { marches: number; share: number } } };
+    landing?: { on: boolean; wave: boolean; quay: boolean; wait: boolean; defer: boolean; allies?: boolean; patience?: number; fleet: boolean; beyond?: { marches: number; share: number } } };
 };
 
 /** True where a computer staff plans campaigns: the grand campaign, at the dial's stops named, never the player's own nation. */

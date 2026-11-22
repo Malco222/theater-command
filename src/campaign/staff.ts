@@ -31,7 +31,7 @@ import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
 import { STRENGTH, reckon, type Reckoning } from './ashore';
-import { NAVY, canPass, closedTo, seaPath, seaRisk } from './navy';
+import { NAVY, canPass, closedTo, crossingRisk, seaPath, seaRisk } from './navy';
 import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
@@ -2524,7 +2524,7 @@ export function opArmies(g: Game, nat: string): IdleArmy[] {
 // or a closed sea bars is waited for, while the fighters and the fleets open the way, for its season.
 
 /** The landing's rules as ruled, for a staff that mounts its operations as wholes; null where the switch is off. */
-export const landingRules = (g: Game, nat: string): NonNullable<NonNullable<typeof STRATEGY.ops>['landing']> | null => (mounts(g, nat) ? STRATEGY.ops!.landing ?? null : null);
+export const landingRules = (g: Game, nat: string): NonNullable<NonNullable<typeof STRATEGY.ops>['landing']> | null => (mounts(g, nat) && STRATEGY.ops!.landing?.on ? STRATEGY.ops!.landing : null);
 
 /**
  * The harbours a desk's army could mount a landing from (slot 0 the army at home, 1 the army abroad): for the home
@@ -2629,14 +2629,23 @@ function aimQuay(g: Game, nat: string, slot: number, you: string): Region | null
  * one than the `seas` this desk would cross. The nearest army of the side mounts the landing; the others do not
  * spend their force on the same enemy's shores from further off. (Before: America's army in Cornwall landed on
  * Sardinia, three seas away, in June 1943 while Britain's army stood at Tripoli, two seas from it and one from
- * Sicily. Seed 23 at stop 3.) A beach is named for six months at most (ai.ts `takeAim`), so nobody waits longer on
- * an army that cannot go.
+ * Sicily. Seed 23 at stop 3.) It leaves it only to an army that could sail this month, by a way open to its
+ * troopships and no riskier than a staff takes ('descent.risk'), and for 'patience' months from the month that army
+ * named its beach: fewest seas is not the safest way. (In the first 24 wars measured Tripoli was two seas from
+ * Sardinia through the Italian fleet's water, a crossing refused in 24 desk-months of 1943, and Cornwall three
+ * through seas the Allies held; the armies in Cornwall waited on the one at Tripoli, 7 wars of 24 saw no landing on
+ * Italy's home ground at all, and Italy left the war four months later.)
  */
 export function nearerDesk(g: Game, nat: string, slot: number, r: Region, seas: number): boolean {
   const nearer = (id: string, o: string): boolean => {
     const aim = g.regions[flag(g, `st:aim:${id}${o}`) - 1], quay = g.regions[flag(g, `st:quay:${id}${o}`) - 1];
     if (!aim || !quay || aim.ctrl !== r.ctrl || !atWar(g, id, aim.ctrl) || !allied(g, id, quay.ctrl)) return false;
-    return seasTo(seasFrom(g, id, quay), r) < seas;
+    // (Nobody waits long on an army that cannot go: only while its beach is newly named, 'patience' months.)
+    if (g.turn - flag(g, `st:aimAt:${id}${o}`) >= (STRATEGY.ops?.landing?.patience ?? 3)) return false;
+    if (seasTo(seasFrom(g, id, quay), r) >= seas) return false;
+    // (And only on an army that could sail this month: a way open to its troopships, no riskier than a staff takes.)
+    const path = seaPath(g, id, quay, r, { max: NAVY.landing.range });
+    return !!path && crossingRisk(g, id, path) <= (OPEN.descent?.risk ?? 0);
   };
   if (nearer(nat, SLOT[slot ? 0 : 1])) return true;
   if (!STRATEGY.ops?.landing?.allies) return false;
