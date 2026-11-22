@@ -30,12 +30,17 @@ SPACE = 0.16                 # (between two letters, of the capitals' height)
 WORD = 0.45                  # (a space between words, of the capitals' height)
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"      # (livery.BLOCK: the block hand of a unit's sign painter)
 DARK, PALE, YELLOW = "1A1A1A", "F2F0E8", "D9B43A"
+SKIN = ("upper", "upper2", "under", "nose", "band")      # (her paints, for the paint under her name: not a rivet, a seam or a
+                                                         #  line scribed on them)
+REACH = 0.02                 # (that paint is the one with the most of her skin within this of the point; the scene, 20:25Z)
 LIGHT_L = 50.0               # (tallies.LIGHT_L: a finish is light when its lightness L* is at least this)
-INK = ("one colour. Read the paint under the middle of the line as she flies (her scheme, her owner's colours, a "
-       "mottle). On an American machine (her owner the USA) where that paint is olive drab (a dark brownish green: L* "
-       "under 45, its red and green within a tenth of each other and both 15 or more above its blue): yellow D9B43A (the "
-       "art director, 2026-11-22). Otherwise the bombers' record rule (tallies.py): black 1A1A1A where its lightness L* is "
-       "50 or more (bare metal, light grey, a pale mottle), else off-white F2F0E8")
+INK = ("one colour. Read the paint under the middle of the line as she flies (her scheme, her owner's colours; a "
+       "second colour where it has faces of its own there; a sprayed mottle's soft blend is not read, so a line partly "
+       "on one takes her base coat's ink, as the C202's does). On an American machine (her owner the USA) where that "
+       "paint is olive drab (a dark brownish green: L* under 45, its red and green within a tenth of each other, both 10 or more above its blue and at least 1.15 times "
+       "it): yellow D9B43A (the art director, 2026-11-22). Otherwise the bombers' record rule (tallies.py): black 1A1A1A "
+       "where its lightness L* is 50 or more (bare metal, light grey, sand), else off-white F2F0E8. The paint "
+       "under a point is the one with the most of her skin within 2 cm of it, not the nearest face (often a rivet)")
 LETTERS = ("plain block capitals, even stroke, about 0.7 as wide as high, no outline, shadow or script, upright on her "
            "side; the rank short as his nation wrote it, then his name (ACES.md): F/LT T. HARLAND. Fit it to `long` at "
            "`cap`, smaller down to `cap_min`; longer still, his first names to initials, then rank and surname, then the "
@@ -79,7 +84,9 @@ def lightness(hexcol):
 def olive_drab(hexcol):
     """An American olive drab: a dark brownish green (as INK says)."""
     r, g, b = (int(hexcol[i:i + 2], 16) for i in (0, 2, 4))
-    return lightness(hexcol) < 45.0 and abs(r - g) <= 0.1 * max(r, g) and min(r, g) - b >= 15
+    # (10 and 1.15 times, not 15: the game's matte recoat 555A47 is only 14 over its blue; the scene thread, 20:25Z)
+    return (lightness(hexcol) < 45.0 and abs(r - g) <= 0.1 * max(r, g) and min(r, g) - b >= 10
+            and min(r, g) >= 1.15 * b)
 
 
 def ink_on(hexcol, nation=None):
@@ -177,22 +184,42 @@ def fitted(entry, text):
     return " ".join(ws), entry["long"] / max(run(ws), 1e-6)
 
 
-def ink_under(model, entry, nation=None):
-    """For the pictures: the ink for the paint under the middle of her line (her skin's paint there, as her paints
-    give it as she flies: a mottle's own colour where the line lies on it), as INK says."""
+def paint_under(model, at, facing, reach=None):
+    """The name of her paint under `at` (the model's own axes): the one that covers the most of her skin within `reach`
+    of it, as seen straight in along `facing`. Her skin is a few large triangles, her rivets and seams many small
+    ones: the nearest face to a point is often a rivet, so this counts area instead (64 sights spread evenly over the
+    disc, each cast in from just outside her), and a rivet wins only its own small share. None if no paint of SKIN is
+    hit."""
     from mathutils import Vector
     from mathutils.bvhtree import BVHTree
+    reach = REACH if reach is None else reach
+    tree = BVHTree.FromPolygons([tuple(v) for v in model.verts], [tuple(f) for f in model.faces])
+    n = Vector(facing).normalized()
+    a = Vector((1, 0, 0)) if abs(n.x) < 0.9 else Vector((0, 0, 1))
+    u = (a - n * a.dot(n)).normalized()
+    v = n.cross(u)
+    names = list(model.paints)
+    area = {}
+    for k in range(64):                                   # (a sunflower: each sight stands for the same area)
+        r = reach * math.sqrt((k + 0.5) / 64.0)
+        t = k * 2.399963
+        o = Vector(at) + u * (r * math.cos(t)) + v * (r * math.sin(t))
+        hit = tree.ray_cast(o + n * reach, -n, 2.0 * reach)
+        if hit[2] is not None:
+            nm = names[model.fpaint[hit[2]]]
+            area[nm] = area.get(nm, 0) + 1
+    skin = {nm: c for nm, c in area.items() if nm in SKIN}
+    return max(skin, key=lambda nm: (skin[nm], -SKIN.index(nm))) if skin else None
+
+
+def ink_under(model, entry, nation=None):
+    """For the pictures: the ink for the paint under the middle of her line (her faces' paint there, as her paints
+    give it as she flies; a sprayed mottle's blend is not read; see paint_under), as INK says."""
     pts = entry["line"]
     mid = pts[len(pts) // 2]
-    tree = BVHTree.FromPolygons([tuple(v) for v in model.verts], [tuple(f) for f in model.faces])
-    hit = tree.find_nearest(Vector((mid[0], -mid[1], mid[2])), 0.1)          # (the model's y is to port)
-    names = list(model.paints)
-    colour = None
-    if hit[2] is not None:
-        colour = model.paints.get(names[model.fpaint[hit[2]]])
-    if not colour or names[model.fpaint[hit[2]]] not in ("upper", "upper2", "under", "nose"):
-        colour = model.paints.get("upper")
-    return ink_on(colour, nation)
+    nm = paint_under(model, (mid[0], -mid[1], mid[2]), (mid[3], -mid[4], mid[5]))   # (the model's y is to port)
+    colour = model.paints.get(nm) if nm else None
+    return ink_on(colour or model.paints.get("upper"), nation)
 
 
 def marks(entry, text, ink):
