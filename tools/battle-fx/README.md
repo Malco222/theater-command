@@ -646,6 +646,12 @@ Gouges and scorch that stay are the MODEL's to show.
   half (`jet_torn`), a pulse that only takes from its height (`jet_pulse`), a lean with the wind (`jet_lean`),
   sparks up in it (`jet_sparks`), black smoke off its sides and top by the clock (`jet_smoke_every_s`) so the
   column above is one torn piece, and an orange lamp on hull and ground (`jet_lamp`, `jet_lamp_day`).
+- **`Burn(WorldAt, AcrossMetres, Seconds, Id, bOnShip)`.** `bOnShip` true: a fire on a ship's deck (anything
+  afloat). A small, low, still fire on land takes the burning tank's look (`fire.land_tongues`, `fire.land_column`,
+  the land lamp) and joins a fire beside it (`fire.join`); a scene's ground under a ship is her deck, so a deck
+  fire would too. With the flag it never does, and burns as a ship's fire (the pre-check of 22 November: a ship's
+  fire 2.5 m across at rest drew 426 pieces with a column and a lamp four times as strong; with the flag 100, as
+  at 07d21fff). False (the default): as before. The sea scene and the air stage pass it for every fire on a ship.
 - **`Burn(WorldAt, AcrossMetres, Seconds, Id)`, `BurnOut(Id, OverSeconds, How)`** (row `fire.put_out`). The
   flames are eaten back from the edges to the seat, shrinking steadily: half their height by two fifths of the
   time, fewer tongues as it goes, never all gone and back. `How` "water": a surge of the vent's own steam rags
@@ -738,7 +744,9 @@ behind a recipe row or key and throws no dice an old recipe's path throws: the l
 - **Preview.** `fxpreview <recipe> <dir> air <gun row> <frames> WxH <shot>`; shots `far`, `chase`, `close`, `hit`,
   and for an engine's trail `beam` and `quarter` with `FX_TRAIL` (and `FX_TRAIL2`, `FX_TRAIL2_AT` for a change of
   kind), `FX_ENGINE=x,y,z`, `FX_PLANE`, `FX_SPEED`, `FX_SPAN`; `FX_NATION` whose guns. Stills:
-  `battle-fx/stills/air-*.png`.
+  `battle-fx/stills/air-*.png`. For measuring a trail: `FX_FLAT_BACK=r,g,b` paints the sky one flat colour (run it
+  over 0,0,0 and 255,255,255 and the two pictures give the trail's opacity and its own colour), and `FX_WAKE_UP`
+  (250 m) is how high the `wake` shot's eye rides over the trail (0: level with it, seen side-on).
 
 ## The art director's mends to the air look (after head ea8c1ba)
 

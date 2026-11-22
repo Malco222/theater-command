@@ -4782,7 +4782,7 @@ namespace TheaterFx
 			R.SmokeAlpha = SafeNum(Num(P + "smoke_alpha", 0.1), 0.0, 1.0, 0.1);
 			R.Licks = static_cast<int>(SafeNum(Num(P + "licks", 0.0), 0.0, 16.0, 0.0)); // (held to 16: a wild recipe value asked a billion licks a shot, the fuzz of 22 November)
 			R.Lamp = SafeNum(Num(P + "lamp", 0.0), 0.0, 100.0, 0.0);
-			R.FlashLeastPx = std::max(0.0, Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)));
+			R.FlashLeastPx = SafeNum(Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)), 0.0, 100.0, 0.0);
 			// (the close view: what only shows within a few tens of metres of the eye)
 			const std::string C = "air_guns.close.";
 			R.CloseLicks = Range(P + "close_licks", 0.0, 0.0);
@@ -8000,7 +8000,7 @@ namespace TheaterFx
 		return (IsAPlace(In) ? In : Usual).Unit(Usual);
 	}
 
-	void Battle::Burn(double Now, const Vec& At, double Across, double Seconds, int Id)
+	void Battle::Burn(double Now, const Vec& At, double Across, double Seconds, int Id, bool bOnShip)
 	{
 		if (!IsAPlace(At))
 		{
@@ -8027,13 +8027,14 @@ namespace TheaterFx
 				}
 			}
 		}
-		if (JoinBurn(Now, At, Across, Seconds, Id))
+		if (!bOnShip && JoinBurn(Now, At, Across, Seconds, Id))
 		{
 			return;
 		}
 		Source S;
 		S.At = At;
 		S.Kind = 0;
+		S.bOnShip = bOnShip;
 		S.Id = Id >= 0 ? Id : -1;
 		S.Start = Now;
 		S.Next = Now;
@@ -8044,7 +8045,7 @@ namespace TheaterFx
 		S.Seed = ++Seeds * 49979687ull ^ PlaceKey(At);
 		S.Bank = BankRowOf(S.Across, S.Seed);
 		S.Column = OwnColumn(Now, S);
-		if (S.Column < 0)
+		if (S.Column < 0 && !bOnShip)
 		{
 			S.Column = OwnColumn(Now, S, true); // (a burning vehicle on land: its own black column, fire.land_column)
 		}
@@ -8079,7 +8080,7 @@ namespace TheaterFx
 		double Best = Within * Within;
 		for (Source& H : Sources)
 		{
-			if (H.Kind != 0 || H.OutAt >= 0.0 || H.Flames <= Now || Now < H.Start || std::max(H.Across, H.AcrossTo) > Most)
+			if (H.Kind != 0 || H.bOnShip || H.OutAt >= 0.0 || H.Flames <= Now || Now < H.Start || std::max(H.Across, H.AcrossTo) > Most)
 			{
 				continue;
 			}
@@ -8911,7 +8912,7 @@ namespace TheaterFx
 	{
 		const double Wide = std::max(Fire.Across, Fire.AcrossTo);
 		const double Below = SafeNum(Num("fire.smoke_column.from_m", 8.0), 0.0, 1e6, 8.0), Above = SafeNum(Num("fire.land_column.above_m", 6.0), 0.0, 1e6, 6.0);
-		return Wide < Below && !(Fire.At.Z - Height(Fire.At.X, Fire.At.Y) > Above) && !Fire.bMoves;
+		return Wide < Below && !(Fire.At.Z - Height(Fire.At.X, Fire.At.Y) > Above) && !Fire.bMoves && !Fire.bOnShip;
 	}
 
 	Battle::TongueRow Battle::TongueRowOf(bool bLand) const

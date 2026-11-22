@@ -172,8 +172,9 @@ public:
 	 * the near cloud does. Id: the stick's own number (one stick per number while its bombs land). */
 	void BombStick(double Now, int32 Id, const FVector& First, const FVector& Last, int32 Count, const FString& Size, const FString& Ground, float OverSeconds = -1.0f);
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. Id, 0 or more: the
-	 * caller's own number for this fire, so BurnOut finds it (under 0: none). */
-	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
+	 * caller's own number for this fire, so BurnOut finds it (under 0: none). bOnShip: true for a fire on a ship's
+	 * deck (anything afloat), so it burns as a ship's fire, never as a burning tank's, however small, low or still. */
+	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1, bool bOnShip = false);
 	/** Fuel going up: a ragged ball of burning fuel about AcrossMetres wide that rolls and rises and turns to black
 	 * smoke boiling off its top, lighting the ground while it burns. A vehicle's fuel 6 to 10 m (about 1 to 1.5 s),
 	 * an aircraft's crash or a fuel dump 15 to 25 m (1.5 to 2 s). Velocity: what it was moving at (a crashing

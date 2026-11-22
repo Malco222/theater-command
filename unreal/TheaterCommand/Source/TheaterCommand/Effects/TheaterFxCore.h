@@ -484,8 +484,11 @@ namespace TheaterFx
 		void BombStick(double Now, int Id, const Vec& First, const Vec& Last, int Count, const char* Size, const char* Ground, double Over = -1.0);
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. Id, 0 or
 		 * more: the caller's own number for this fire, so BurnOut finds it (under 0: none). A fire lit later under the
-		 * same number takes the number; the earlier one burns on as it was. */
-		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
+		 * same number takes the number; the earlier one burns on as it was. bOnShip: a fire on a ship's deck (or
+		 * anything afloat). It never takes a burning tank's look (fire.land_tongues, fire.land_column, the land lamp) and
+		 * never joins another fire (fire.join), however small, low or still it is: the kit cannot tell a deck from the
+		 * ground, and a scene's ground under a ship is her deck. The pre-check of 22 November. */
+		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1, bool bOnShip = false);
 		/** Fuel going up at At (the recipe's fuel_ball; no such row: nothing): a ragged ball of burning fuel about
 		 * Across metres wide that rolls and rises as it burns and turns to black smoke boiling off its top, the art
 		 * director's ruling of 21 November: a vehicle's fuel 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
@@ -1032,6 +1035,7 @@ namespace TheaterFx
 			Vec Vel;
 			double MovedAt = 0.0;
 			bool bMoves = false;
+			bool bOnShip = false; // (a burning thing: lit on a ship's deck, Burn's bOnShip; never the land look, never joined)
 			uint32_t Ride = 0;
 			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			bool bStoodDown = false; // (a big fire's own column: burning oil has stood over her once, so this column never stands again; see fire.smoke_column's most)

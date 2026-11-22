@@ -744,7 +744,7 @@ namespace
 				case 1:
 					if (BurnAcross > 0.0)
 					{
-						Fx.Burn(D.At, FireAt + ShipAt(D.At), BurnAcross, EnvNum("FX_BURN_S", 900.0), 7);
+						Fx.Burn(D.At, FireAt + ShipAt(D.At), BurnAcross, EnvNum("FX_BURN_S", 900.0), 7, true);
 					}
 					break;
 				case 2:
@@ -1086,7 +1086,7 @@ namespace
 			{
 				// (the whole trail laid so far, from far off the beam: FX_DIST metres, 2500)
 				const Vec Mid = Fly(0.5 * Shown).At;
-				Cam.Eye = Mid + StartRight * EnvNum("FX_DIST", 2500.0) + ZUp * 250.0;
+				Cam.Eye = Mid + StartRight * EnvNum("FX_DIST", 2500.0) + ZUp * EnvNum("FX_WAKE_UP", 250.0); // (FX_WAKE_UP: how far above it, 250)
 				Cam.Forward = (Mid - Cam.Eye).Unit();
 			}
 			else if (ShotName == "map")
@@ -1301,6 +1301,18 @@ namespace
 			Battle::Lamp AirLamps[2];
 			const int NAirLamps = bAbove ? Fx.Lamps(Now, AirLamps, 2, Fx.DayOf(View.SmokeLight)) : 0; // (over the fields: the flash's lamp on the ground)
 			Paint(C, Cam, AirLamps, NAirLamps, {}, false);
+			if (const char* FlatIs = std::getenv("FX_FLAT_BACK"))
+			{
+				// (FX_FLAT_BACK=r,g,b: the whole picture behind the kit one flat colour, so that a trail drawn over two of
+				// them shows its own opacity and colour: see trailmeasure.py)
+				double Fr = 0.0, Fg = 0.0, Fb = 0.0;
+				if (std::sscanf(FlatIs, "%lf,%lf,%lf", &Fr, &Fg, &Fb) == 3)
+				{
+					std::fill(C.R.begin(), C.R.end(), ToLinear(Fr));
+					std::fill(C.G.begin(), C.G.end(), ToLinear(Fg));
+					std::fill(C.B.begin(), C.B.end(), ToLinear(Fb));
+				}
+			}
 			// the aircraft: a plain olive-drab shape, lit by the sun, so the flash and streams are judged on a wing
 			if (!(bFall && FallKind == "explode" && Now > FallFrom))
 			{
@@ -1773,7 +1785,7 @@ namespace
 			bSmokes = true;
 			if (!bLit && BurnAcross > 0.0)
 			{
-				Fx.Burn(0.0, ShipAt(2, 0.0) + Vec(-20.0, 0.0, DeckUp), BurnAcross, 900.0, 7);
+				Fx.Burn(0.0, ShipAt(2, 0.0) + Vec(-20.0, 0.0, DeckUp), BurnAcross, 900.0, 7, true);
 				bLit = true;
 			}
 			if (bLit)
@@ -2557,14 +2569,14 @@ namespace
 				{
 					for (; Lit < Early && T >= LostAt - EarlyS + Lit * 20.0; ++Lit)
 					{
-						Fx.Burn(T, Ship + Bow * (EarlyShares[Lit] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, 239000 + Lit);
+						Fx.Burn(T, Ship + Bow * (EarlyShares[Lit] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, 239000 + Lit, true);
 					}
 					if (!bLost && T >= LostAt)
 					{
 						bLost = true;
 						for (int K = 0; K < std::max(2, 5 - Early); ++K)
 						{
-							Fx.Burn(T, Ship + Bow * (Shares[K] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0);
+							Fx.Burn(T, Ship + Bow * (Shares[K] * Long) + ZUp * DeckFire, Beam * 0.45, 1800.0, -1, true);
 						}
 						if (!std::getenv("FX_NO_OIL"))
 						{
@@ -2578,7 +2590,7 @@ namespace
 					const Vec Burning = Ship - Bow * EnvNum("FX_ABLAZE", 1200.0);
 					for (int K = 0; K < 5; ++K)
 					{
-						Fx.Burn(T, Burning + Bow * (Shares[K] * 260.7) + ZUp * DeckFire, 31.3 * 0.45, 1800.0);
+						Fx.Burn(T, Burning + Bow * (Shares[K] * 260.7) + ZUp * DeckFire, 31.3 * 0.45, 1800.0, -1, true);
 					}
 					Fx.OilFire(T, 238001, Burning, 0.6 * 260.7, OilIs ? OilIs : "ablaze", 0.0, EnvNum("FX_OIL_SINCE", 180.0));
 				}
