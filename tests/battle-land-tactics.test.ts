@@ -121,7 +121,8 @@ describe('in a battle (looks only, ruling 217)', () => {
   const sig = (b: LandBattle): string => JSON.stringify({ over: b.over, t: b.t, units: b.units.map((u) => [u.id, u.state, u.str, u.mor, u.x, u.y, u.face, u.figures, u.engaged]) });
   const ticket = () => withTeams(sampleTicket('plains', 1.3, { seed: 5, nat: { att: 'USA', def: 'GER' }, style: { att: 'methodical', def: 'bold' } }));
   const b = new LandBattle(ticket()), d = b.drillOn({ sections: true, platoons: true });
-  const t = { fights: 0, both: 0, upright: 0, assault: 0, badPose: 0, badEl: 0, badCall: 0 };
+  const t = { fights: 0, both: 0, upright: 0, assault: 0, badPose: 0, badEl: 0, badCall: 0, spots: 0, badSpot: 0 };
+  const spotted = new Map<number, number>();
   const fire = new Map<number, number[]>(), calls = new Map<number, number[]>();
   // The platoon cam: how many blocks carry the leading squad's mark at once (by side), marks on fallen men, how often
   // the lead goes from one block to another, how far the attack's lead is behind its foremost man (both measured to
@@ -171,6 +172,16 @@ describe('in a battle (looks only, ruling 217)', () => {
         if (m.e !== undefined && m.e !== 1 && m.e !== 2) t.badEl++;
         if (m.cl !== undefined && m.r !== 'fo') t.badCall++;
         if (m.cl !== undefined) { const l = calls.get(blk.id) ?? []; if (!l.includes(m.cl)) l.push(m.cl); calls.set(blk.id, l); }
+        // The call's spot (cs): on the block called on, its middle as he began the call (looked at once per call).
+        if (m.cl !== undefined && spotted.get(blk.id) !== m.cl) {
+          spotted.set(blk.id, m.cl);
+          if (!m.cs) t.badSpot++;
+          else {
+            t.spots++;
+            const near = b.units.filter((e) => e.side !== u.side).reduce((g, e) => Math.min(g, Math.hypot(e.x - m.cs![0], e.y - m.cs![1])), Infinity);
+            if (near > 40) t.badSpot++;
+          }
+        }
       }
       if (blk.ph !== 'fight' || u.side !== 'att' || u.kind !== 'inf') continue;
       const live = blk.men.filter((m) => m.d === undefined), e2 = live.filter((m) => m.e === 2);
@@ -230,6 +241,7 @@ describe('in a battle (looks only, ruling 217)', () => {
 
   it('only poses the 3D game has; the element is 1 or 2; only the spotter\'s pair carry a call', () => {
     expect(t.badPose).toBe(0); expect(t.badEl).toBe(0); expect(t.badCall).toBe(0);
+    expect(t.spots).toBeGreaterThan(0); expect(t.badSpot).toBe(0);
   });
 });
 
