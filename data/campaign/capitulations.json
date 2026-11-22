@@ -1,0 +1,17 @@
+{
+  "_about": "The record's capitulations for the yield form at stops 1-2 (the design director's 05:30Z, 07:20Z and 07:28Z of 22 November 2026; the historian's historian/capitulations-1939-45.md, corrected 07:20Z, whose Turn column reads first blow to yield). A row: [nation, the enemy it yields to, months from that enemy's first blow on its home ground to the yield, the book's theatre or null, mark]. At stops 1-2 a computer-run country yields at its month's opening once that many months have passed since the first blow of the enemy victorOf names; if victorOf names an enemy whose blow the row does not date, or the theatre's book is closed, the row lapses and the country yields by the cause, as at stops 3-5. The player's own country never yields by a row (ruling 99; the dial never leashes the player).",
+  "_left": "Not rows: the Baltic states and Romania's lands (ultimatums, diplomacy.json 'baltic' and its partition events), Iraq, Iran, Vichy North Africa, Italy, Romania 1944 and Bulgaria (their own dated events in diplomacy.json), Vichy Syria (a campaign, not a country's yield), Finland (not a capitulation), Germany and Japan (the Turn column dates no first blow: the end of the war is the fall's and the score's), and the Netherlands East Indies (the far side keeps its own ruled rows).",
+  "_marks": "'judgment' where the record gives a range and the rules builder took one end: Poland's 1-2 is taken at 2, the last field force at Kock on 6 October (Warsaw yielded on 28 September, month 1); Hungary's 61-65 at Debrecen's armistice of 20 January 1945 (Horthy's of 15 October failed).",
+  "rows": [
+    ["POL", "GER", 1, null, "judgment"],
+    ["DEN", "GER", 0, "north", ""],
+    ["NOR", "GER", 2, "north", ""],
+    ["LUX", "GER", 0, "west", ""],
+    ["NED", "GER", 0, "west", ""],
+    ["BEL", "GER", 0, "west", ""],
+    ["FRA", "GER", 1, "west", ""],
+    ["YUG", "GER", 0, "balkans", ""],
+    ["GRE", "GER", 0, "balkans", ""],
+    ["HUN", "SOV", 4, "east", "judgment"]
+  ]
+}

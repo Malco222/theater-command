@@ -6,6 +6,7 @@
 // What comes out is an ordinary plan phase, so the armies carry it out by the same rules as in
 // Historical mode. The numbers and the list of choices live in data/campaign/open.json.
 
+import { YIELD_STAGE } from './stage';
 import { deterred } from './league';
 import { openTraits } from './traits';
 import { openTech } from './tech';
@@ -118,6 +119,9 @@ export function startOpen(g: Game, wide = true): Game {
   // (Ruling 232, rider b606: the garrisons that are the ruling's own join the roster before anything is counted from it.)
   raiseGarrisons(g);
   g.flags.open = 1;
+  // The yield form (stage.ts YIELD_STAGE): the switch is set as the campaign opens. (A test may set the flag on the
+  // game it opens.)
+  if (YIELD_STAGE || g.flags.yieldRule === 1) g.flags.yieldRule = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
