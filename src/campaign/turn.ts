@@ -42,7 +42,7 @@ import { phaseFor, runAI } from './ai';
 import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
-import { awardOf, cashHonour } from './stories';
+import { awardOf, cashHonour, whyNoSchool } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
@@ -288,8 +288,8 @@ export function runTurnAI(g: Game): void {
 // ---- The player's orders -----------------------------------------------------------------
 
 export function canOrder(g: Game, c: Corps): boolean {
-  // A corps sent home on a bond tour or to the schools takes no orders until it is back.
-  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined) return false;
+  // A corps sent home on a bond tour or to the schools takes no orders until it is back; nor does one at the battle schools this month.
+  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined || c.school) return false;
   // An ally's corps that marches with the player's army takes his orders too (the grand campaign).
   return c.nat === g.human || (c.joint === g.human && allied(g, c.nat, g.human));
 }
@@ -1858,6 +1858,22 @@ export function orderCash(g: Game, award: number, how: Cash): boolean {
 export function orderSeen(g: Game, award: number): void {
   const a = awardOf(g, award);
   if (a && a.nat === g.human) a.seen = true;
+}
+
+/**
+ * The player sends a corps to the battle schools for this month, or calls it back before the month is out (release 2).
+ * See whyNoSchool for who can go. A corps called back has had no term: it is free to march and fight again.
+ */
+export function orderSchool(g: Game, c: Corps, go: boolean): boolean {
+  if (g.human === null || current(g) !== g.human || c.nat !== g.human || c.dead) return false;
+  if (!go) {
+    if (!c.school) return false;
+    delete c.school;
+    return true;
+  }
+  if (whyNoSchool(g, c) !== null) return false;
+  c.school = true;
+  return true;
 }
 
 /** The player's standing order for a corps: take drafts as they come, or keep the veterans together and take none. */

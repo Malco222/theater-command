@@ -8,6 +8,7 @@ import { groundAt } from '../land/field';
 import { LAND } from '../land/rules';
 import type { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
+import { dotAt, dotsOf, pageScale, type PageScale } from './dots';
 import { PAINT, type Painted } from './paint';
 
 export interface Camera { x: number; y: number; z: number }
@@ -42,6 +43,13 @@ export interface Scene {
    * group. A hover label keeps 8 clear of them (the UI director, b464).
    */
   avoid?: [number, number, number, number][];
+  /** The rider ahead (release 2): the corps whose rider is under the pointer, for his label. */
+  rider?: number | null;
+  /**
+   * Hedge cutters or smoke on call armed (release 2: C or K): the next click on the field gives that order to the blocks
+   * in hand; for smoke, the line being dragged out (field metres). Null when not armed.
+   */
+  arm?: { kind: 'cut' | 'smoke'; line: [number, number, number, number] | null } | null;
 }
 
 export const toScreen = (s: Scene, x: number, y: number): [number, number] => [s.W / 2 + (x - s.cam.x) * s.cam.z, s.H / 2 - (y - s.cam.y) * s.cam.z];
@@ -114,7 +122,7 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   works(x, b, s, k);
   if (field.forts.length) {
     x.strokeStyle = INK; x.lineWidth = 0.5 * k; x.lineJoin = 'miter'; x.lineCap = 'butt';
-    const under = (mx: number, my: number): boolean => b.units.some((u) => u.side === 'def' && u.kind !== 'art' && Math.abs(u.home[0] - mx) < u.w / 2 + 12 && Math.abs(u.home[1] - my) < u.d / 2 + 30);
+    const under = (mx: number, my: number): boolean => b.units.some((u) => u.side === 'def' && u.kind !== 'art' && u.joined === undefined && Math.abs(u.home[0] - mx) < u.w / 2 + 12 && Math.abs(u.home[1] - my) < u.d / 2 + 30);
     // At the wide zooms the row thins on the screen so no two signs stand closer than about three sign widths, and
     // closer in every one shows (the art director, slice 3): a row of fifteen at the whole field read as a wall.
     const gap = 18 * k;
@@ -213,6 +221,13 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   const colour: Record<Side, string> = s.colours ?? { att: b.ticket.att.color, def: b.ticket.def.color };
   const byId = new Map(b.units.map((u) => [u.id, u]));
 
+  // Hedges, the gaps cut through them and the smoke screens standing (release 2), under the orders and the blocks.
+  hedgeMarks(x, b, s);
+  // Field telephone lines (release 2): the defence's wires, its headquarters and its linemen, under the blocks too.
+  if (b.phones) wireMarks(x, b, s);
+  // Stretcher bearers (release 2): his blocks' aid posts, and a faint way to each from a block whose bearers are out.
+  aidMarks(x, b, s);
+
   // Orders of the player's own blocks (the UI director, 6): the lines of those in hand in the selection gold; once put
   // down, the staff's pencil, ink and thinner. Gold is what you hold, pencil is what stands ordered; never red. An
   // attack ends in a small head at its target, a march in a dot.
@@ -261,6 +276,10 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   // while it makes it.
   airMarks(x, b, s, colour);
 
+  // The rider ahead (release 2): each despatch rider of a corps coming up on his side, a small disc in his army's colour
+  // with a tick the way he rides; nothing at the edge before him, no trail. A click on him puts his news in the dispatch.
+  riderMarks(x, b, s, colour);
+
   // A line being drawn: the ghosts of where the blocks will stand.
   if (s.line) {
     const [a, c] = toScreen(s, s.line.x0, s.line.y0), [d, e] = toScreen(s, s.line.x1, s.line.y1);
@@ -306,6 +325,94 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   x.restore();
 }
 
+/**
+ * Hedges and what is done to them (release 2), plainly: each hedge line a thin dark green line; a gap cut through one
+ * (hedge cutters) a short bright brass bar across it from the moment it opens (a faint one while it is being cut); a
+ * smoke screen standing (smoke on call) a soft grey band along its line, thinning towards its end; a smoke line being
+ * dragged out, brass. As the player's side sees them (the view's cuts and screens).
+ */
+function hedgeMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void {
+  if (b.hedges.length) {
+    x.strokeStyle = 'rgba(38,74,34,.85)'; x.lineWidth = Math.max(1, Math.min(3, 2.5 * s.cam.z)); x.lineCap = 'round';
+    x.beginPath();
+    for (const h of b.hedges) h.points.forEach(([px, py], i) => { const [a, c] = toScreen(s, px, py); if (i) x.lineTo(a, c); else x.moveTo(a, c); });
+    x.stroke();
+  }
+  for (const c of b.cutView(s.me).cuts ?? []) {
+    const open = b.t >= c.t1, [a, e] = toScreen(s, c.x, c.y), half = Math.max(4, (c.width / 2) * s.cam.z);
+    const dx = Math.cos(c.yaw) * half, dy = -Math.sin(c.yaw) * half;
+    x.strokeStyle = open ? BRASS : 'rgba(224,184,114,.45)'; x.lineWidth = open ? 3 : 2;
+    x.beginPath(); x.moveTo(a - dx, e - dy); x.lineTo(a + dx, e + dy); x.stroke();
+  }
+  for (const sc of b.screenView(s.me).screens ?? []) {
+    const k = Math.max(0, Math.min(1, (sc.until - b.t) / Math.max(1e-6, sc.until - sc.t)));
+    const [a, c] = toScreen(s, sc.x0, sc.y0), [d, e] = toScreen(s, sc.x1, sc.y1);
+    x.strokeStyle = `rgba(214,214,208,${(0.2 + 0.5 * k).toFixed(3)})`; x.lineWidth = Math.max(4, 24 * s.cam.z); x.lineCap = 'round';
+    x.beginPath(); x.moveTo(a, c); x.lineTo(d, e); x.stroke();
+  }
+  if (s.arm?.line) {
+    const [a, c] = toScreen(s, s.arm.line[0], s.arm.line[1]), [d, e] = toScreen(s, s.arm.line[2], s.arm.line[3]);
+    x.strokeStyle = BRASS; x.lineWidth = 2; x.setLineDash([6, 4]); x.beginPath(); x.moveTo(a, c); x.lineTo(d, e); x.stroke(); x.setLineDash([]);
+  }
+  x.lineCap = 'butt';
+}
+
+/**
+ * Field telephone lines (release 2), plainly, as the player's side sees them (the view's phones): the headquarters a
+ * small dark square; each wire a thin dark line from it to its block, dashed while it is down; each cut not yet
+ * mended a short red cross; each lineman out a brass dot, moving along his wire.
+ */
+function wireMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void {
+  const P = b.phonesView(s.me).phones;
+  if (!P) return;
+  const [hx, hy] = toScreen(s, P.hq[0], P.hq[1]);
+  x.fillStyle = 'rgba(40,40,36,.9)'; x.fillRect(hx - 4, hy - 4, 8, 8);
+  x.lineWidth = 1;
+  for (const w of P.wires) {
+    const [a, c] = toScreen(s, w.pts[1][0], w.pts[1][1]);
+    x.strokeStyle = w.cut >= w.lines ? 'rgba(150,40,30,.7)' : 'rgba(40,40,36,.45)';
+    if (w.cut >= w.lines) x.setLineDash([4, 4]);
+    x.beginPath(); x.moveTo(hx, hy); x.lineTo(a, c); x.stroke(); x.setLineDash([]);
+  }
+  // A cut stands until its wire's next mend (or the end, where none is out).
+  const mended = new Map<number, number[]>();
+  for (const m of P.mends) if (m.t <= b.t) mended.set(m.wire, [...(mended.get(m.wire) ?? []), m.t]);
+  x.strokeStyle = 'rgba(190,40,30,.9)'; x.lineWidth = 2;
+  for (const c of P.cuts) {
+    if ((mended.get(c.wire) ?? []).some((t) => t >= c.t)) continue;
+    const [a, e] = toScreen(s, c.x, c.y);
+    x.beginPath(); x.moveTo(a - 4, e - 4); x.lineTo(a + 4, e + 4); x.moveTo(a + 4, e - 4); x.lineTo(a - 4, e + 4); x.stroke();
+  }
+  x.fillStyle = BRASS;
+  for (const m of P.mends) {
+    const d = Math.hypot(m.x - P.hq[0], m.y - P.hq[1]), home = m.t + d / LAND.speed.inf;
+    if (b.t < m.t0 || b.t >= home) continue;
+    const k = b.t < m.t1 ? (b.t - m.t0) / Math.max(1e-6, m.t1 - m.t0) : b.t < m.t ? 1 : Math.max(0, 1 - ((b.t - m.t) * LAND.speed.inf) / Math.max(1e-6, d));
+    const [a, e] = toScreen(s, P.hq[0] + (m.x - P.hq[0]) * k, P.hq[1] + (m.y - P.hq[1]) * k);
+    x.beginPath(); x.arc(a, e, 3, 0, Math.PI * 2); x.fill();
+  }
+}
+
+/**
+ * Stretcher bearers (release 2), plainly: each of the player's aid posts (the view's aid) a small white square with a red
+ * cross; from a block of his with bearers out (the view's bearers), a faint dashed way back to its post.
+ */
+function aidMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void {
+  const v = b.bearerView(s.me);
+  if (!v.aid) return;
+  const out = new Set((v.bearers ?? []).filter((r) => r.out > 0).map((r) => r.unit));
+  for (const a of v.aid) {
+    const [px, py] = toScreen(s, a.x, a.y), u = b.unit(a.unit);
+    if (u && out.has(a.unit)) {
+      const [ux, uy] = toScreen(s, u.x, u.y);
+      x.strokeStyle = 'rgba(244,240,232,.45)'; x.lineWidth = 1; x.setLineDash([3, 4]);
+      x.beginPath(); x.moveTo(ux, uy); x.lineTo(px, py); x.stroke(); x.setLineDash([]);
+    }
+    x.fillStyle = '#f4f0e8'; x.fillRect(px - 5, py - 5, 10, 10);
+    x.fillStyle = '#b8322a'; x.fillRect(px - 1.2, py - 4, 2.4, 8); x.fillRect(px - 4, py - 1.2, 8, 2.4);
+  }
+}
+
 function airMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: Record<Side, string>): void {
   const band = (r: [number, number, number, number], fill: string, stroke: string | null): void => {
     const [a, c] = toScreen(s, r[0], r[1]), [d, e] = toScreen(s, r[2], r[3]);
@@ -322,6 +429,58 @@ function airMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: 
     x.beginPath(); x.moveTo(0, -k * 1.4); x.lineTo(k, k); x.lineTo(0, k * 0.4); x.lineTo(-k, k); x.closePath();
     x.fillStyle = colour[f.side]; x.fill(); x.strokeStyle = INK; x.lineWidth = 1.2; x.stroke();
     x.restore();
+  }
+}
+
+/** Where each rider listed in the view stands on the screen: riders on one spot stand a mark apart, by corps. */
+function riderSpots(b: LandBattle, s: Scene): { r: NonNullable<ReturnType<LandBattle['riderView']>['riders']>[number]; px: number; py: number }[] {
+  const rs = b.riderView().riders ?? [];
+  const seen = new Map<string, number>();
+  return rs.map((r) => {
+    const [px, py] = toScreen(s, r.x, r.y), key = `${Math.round(px / 14)}:${Math.round(py / 14)}`, n = seen.get(key) ?? 0;
+    seen.set(key, n + 1);
+    return { r, px: px + n * 14, py };
+  });
+}
+
+/** The rider under a point on the screen, within 'reach' pixels: his corps, or null. */
+export function riderAt(b: LandBattle, s: Scene, px: number, py: number, reach: number): number | null {
+  let best: number | null = null, d = reach;
+  for (const m of riderSpots(b, s)) { const e = Math.hypot(m.px - px, m.py - py); if (e <= d) { d = e; best = m.r.corps; } }
+  return best;
+}
+
+/** The rider's words for a click, for his corps. */
+export function riderNews(b: LandBattle, corps: number): string | null {
+  return b.riderView().riders?.find((r) => r.corps === corps)?.says ?? null;
+}
+
+function riderMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: Record<Side, string>): void {
+  const k = 7;
+  for (const { r, px, py } of riderSpots(b, s)) {
+    const hot = s.rider === r.corps;
+    x.save(); x.translate(px, py);
+    if (hot) { x.beginPath(); x.arc(0, 0, k * 1.2, 0, Math.PI * 2); x.fillStyle = 'rgba(224,184,114,.45)'; x.fill(); }
+    x.beginPath(); x.arc(0, 0, k * 0.7, 0, Math.PI * 2);
+    x.fillStyle = colour[r.side]; x.fill(); x.strokeStyle = INK; x.lineWidth = 1.2; x.stroke();
+    x.beginPath(); x.arc(0, 0, k * 0.4, 0, Math.PI * 2); x.strokeStyle = PAPER; x.lineWidth = 1; x.stroke();
+    if (r.speed > 0) { x.rotate(r.face); x.beginPath(); x.moveTo(0, -k * 0.75); x.lineTo(0, -k * 1.5); x.strokeStyle = INK; x.lineWidth = 1.5; x.stroke(); }
+    x.restore();
+    if (hot) {
+      const label = `Rider from ${r.name} · Click for his news`;
+      x.save();
+      x.font = '700 12px "Courier Prime", ui-monospace, monospace';
+      const tw = x.measureText(label).width, lx = Math.min(s.W - tw - 14, Math.max(6, px - tw / 2 - 6));
+      let ly = Math.min(s.H - 24, py + k + 8);
+      // Never under the dispatch, the tag or the zoom group (as a block's hover label, b464): below them, 8 clear.
+      const under = (y: number): [number, number, number, number] | undefined => s.avoid?.find((q) => lx < q[2] + 8 && lx + tw + 12 > q[0] - 8 && y < q[3] + 8 && y + 20 > q[1] - 8);
+      for (let q = under(ly), n = 0; q && n < 4; q = under(ly), n++) ly = q[3] + 8;
+      ly = Math.min(s.H - 24, ly);
+      x.fillStyle = '#e2d7bc'; x.strokeStyle = '#cdbf9c'; x.lineWidth = 1;
+      x.fillRect(lx, ly, tw + 12, 20); x.strokeRect(lx, ly, tw + 12, 20);
+      x.fillStyle = '#2a2118'; x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText(label, lx + 6, ly + 10.5);
+      x.restore();
+    }
   }
 }
 
@@ -370,6 +529,8 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
   x.fillStyle = color;
   x.fillRect(-w / 2, -d / 2, w, d);
   x.shadowBlur = 0;
+  // Its men, as plain dots at the page's one N (GR5).
+  menDots(x, s, u, b, w, d);
   // The front edge, heavier: which way it faces.
   x.strokeStyle = INK; x.lineWidth = 1;
   x.strokeRect(-w / 2, -d / 2, w, d);
@@ -391,7 +552,7 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     x.strokeStyle = PAPER; x.fillStyle = PAPER; x.lineWidth = Math.max(1, Math.min(2, sh / 7)); x.lineCap = 'round';
     sign(x, u.kind, sw, sh);
   }
-  // TODO(polish): its models. The 3D game stands figures0 models in ranks inside this box and fades one for each share lost (figures).
+  // Its men are the dots above (GR5); the 3D game stands its figures in ranks inside this box.
   // In its works: a short run of the dug line, three notches of its square wave in paper along the block's front edge,
   // inside it (the art director, slice 3), so it never doubles the fortress troops' own notched sign.
   if (shown && inWorks(u, b) && w >= 16) {
@@ -415,6 +576,44 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
   x.restore();
 }
 
+/** The page's one N for each battle (seen from the player's side), and each block's dots as drawn (GR5). */
+const SCALES = new WeakMap<LandBattle, PageScale & { me: Side }>();
+interface DotSprite { c: HTMLCanvasElement; n: number; w: number; h: number }
+const SPRITES = new WeakMap<LandBattle, Map<number, DotSprite>>();
+
+/**
+ * A block's men as plain dots on its box (GR5, dots.ts): drawn once into a small picture of the block's own, and laid
+ * again only when its count changes or its size on screen moves a quarter, so a big battle costs one picture a block
+ * a frame.
+ */
+function menDots(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandBattle, w: number, d: number): void {
+  let sc = SCALES.get(b);
+  if (!sc || sc.me !== s.me) { sc = { ...pageScale(b, s.me), me: s.me }; SCALES.set(b, sc); }
+  const n = dotsOf(b, u, sc);
+  const k = Math.min(2, Math.max(1, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1));
+  const pw = Math.max(1, Math.round(w * k)), ph = Math.max(1, Math.round(d * k));
+  let all = SPRITES.get(b);
+  if (!all) { all = new Map(); SPRITES.set(b, all); }
+  let sp = all.get(u.id);
+  // While the camera zooms, the picture stretches with it, laid again once it is a quarter off its size.
+  const off = (a: number, c: number): boolean => a > c * 1.25 || a < c * 0.8;
+  if (!sp || sp.n !== n || off(pw, sp.w) || off(ph, sp.h)) {
+    const c = sp?.c ?? document.createElement('canvas');
+    c.width = pw; c.height = ph;
+    const g = c.getContext('2d');
+    if (!g) return;
+    // Each dot a small square, smaller as they crowd, never below a pixel's worth.
+    const r = Math.max(0.8, Math.min(2.2, Math.sqrt((pw * ph) / n) * 0.45));
+    g.fillStyle = 'rgba(241,233,212,.6)';
+    g.beginPath();
+    for (let i = 0; i < n; i++) { const [fx, fy] = dotAt(u.id, i); g.rect(fx * (pw - r), fy * (ph - r), r, r); }
+    g.fill();
+    sp = { c, n, w: pw, h: ph };
+    all.set(u.id, sp);
+  }
+  x.drawImage(sp.c, -w / 2, -d / 2, w, d);
+}
+
 /**
  * The name, for the one under the pointer (the UI director's words for ruling 226(7)): the enemy's with its country,
  * strength and what to do; his own as built. The state word only when not Steady. Drawn over every block.
@@ -427,7 +626,9 @@ function hoverLabel(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandB
   const mine = u.side === s.me;
   x.save();
   {
-    const st = u.fellBack ? ' · Falling back' : u.state === 'steady' ? '' : ` · ${u.state[0].toUpperCase()}${u.state.slice(1)}`;
+    // Waiting for help (hold until relieved, release 2): his own blocks' only.
+    const wait = mine && u.waits && u.state !== 'routing' ? (u.waits.late ? ' · No help has come' : u.waits.free ? '' : ' · Waiting for help') : '';
+    const st = (u.fellBack ? ' · Falling back' : u.state === 'steady' ? '' : ` · ${u.state[0].toUpperCase()}${u.state.slice(1)}`) + wait;
     const attack = s.sel.size ? ' · Right-click to attack' : '';
     // One he has not met (b464(2), the UI director's words): his country and "troops", never a division, a strength or a state.
     const label = mine ? `${u.name}${st}` : !b.known(u) ? `${b.ticket[u.side].adj} troops, not identified${attack}` : `${b.ticket[u.side].adj} ${u.name} · Strength ${Math.round(u.str * 100)}${st}${attack}`;
@@ -480,9 +681,11 @@ function inWorks(u: LandUnit, b: LandBattle): boolean {
   if (u.state === 'routing') return false;
   const atHome = Math.hypot(u.x - u.home[0], u.y - u.home[1]);
   if (u.dug && atHome < LAND.dug.keep) return true;
+  // Dug in to wait for help (hold until relieved, release 2): the player's own only, never giving away the enemy's.
+  if (u.waits && !u.waits.free && b.ticket[u.side].human && Math.hypot(u.x - u.waits.at[0], u.y - u.waits.at[1]) <= LAND.dug.keep) return true;
   // The defenders' front row behind fortress works stands in them while it holds its place.
   if (u.side === 'def' && b.ticket.place.fort > 0 && atHome < 40) {
-    const front = Math.min(...b.units.filter((x) => x.side === 'def' && x.kind !== 'art').map((x) => x.home[1]));
+    const front = Math.min(...b.units.filter((x) => x.side === 'def' && x.kind !== 'art' && x.joined === undefined).map((x) => x.home[1]));
     if (Math.abs(u.home[1] - front) < 30) return true;
   }
   const g = groundAt(b.field, u.x, u.y);
@@ -496,7 +699,8 @@ function inWorks(u: LandUnit, b: LandBattle): boolean {
  * where they were dug: they stay if the defenders leave.
  */
 function works(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, k: number): void {
-  const def = b.units.filter((u) => u.side === 'def' && u.kind !== 'art');
+  // (The line as drawn up: a corps come up from next door stands on no works.)
+  const def = b.units.filter((u) => u.side === 'def' && u.kind !== 'art' && u.joined === undefined);
   if (!def.length || !(b.ticket.place.fort > 0 || def.some((u) => u.dug))) return;
   const front = Math.min(...def.map((u) => u.home[1]));
   const row = def.filter((u) => Math.abs(u.home[1] - front) < 30);

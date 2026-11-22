@@ -2,7 +2,7 @@
 // fought through it, the way the game will call it, and settled through the campaign's own attack order.
 import { describe, expect, it } from 'vitest';
 import { battleCalls, planOut, unitOut } from '../unreal/TheaterCommand/Rules/battle-bridge';
-import { practiceTicket, PRACTICE_GROUNDS, LandBattle, sampleTicket, withTeams } from '../src/battle/land';
+import { LAND, practiceTicket, PRACTICE_GROUNDS, LandBattle, sampleTicket, withTeams } from '../src/battle/land';
 import { newCampaign, offers } from '../src/battle/ui/campaign';
 import { attackOutlook, orderAttack } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -155,7 +155,7 @@ describe('the battle doorway for the 3D game', () => {
     men = TC.battleMen() as M;
     expect(men.blocks.filter((b) => mine.includes(b.id)).some((b) => b.men.some((m) => m.v > 0))).toBe(true);
   });
-  it('the setup step (release 2): only when asked; the clock waits while his guns are placed, then runs from Begin', () => {
+  it('the setup step (release 2): only when asked; the clock waits while his army is placed, then runs from Begin', () => {
     const { g, TC } = rig();
     // An attack of two corps, the second made guns for the test: the campaign's opening offers bring none.
     const o = offers(g).find((x) => x.corps.length >= 2)!;
@@ -168,13 +168,12 @@ describe('the battle doorway for the 3D game', () => {
     const st = TC.battleStart(ids, o.target.id, { setup: true })! as typeof plain & { setup: { room: number[] } };
     expect(st.setup.room).toHaveLength(4);
     expect((st.view as { setup?: string }).setup).toBe('att');
-    // A speed or a tick while placing runs nothing; a block that is no gun is refused, with why.
+    // A speed or a tick while placing runs nothing. Every block of his side is placed, his foot as his guns (the
+    // general's controls, release 2), and turned the way he drags it.
     expect(TC.battleTick(5).t).toBe(0);
     const units = st.view.units as { id: number; side: string; kind: string; x: number; y: number }[];
     const foot = units.find((u) => u.side === 'att' && u.kind !== 'art')!;
-    const no = TC.battlePlace(foot.id, foot.x, foot.y - 30);
-    expect(no.ok).toBe(false);
-    expect(no.why).toMatch(/Only guns/);
+    expect(TC.battleCanPlace(foot.id, foot.x, foot.y - 30).why ?? '').not.toMatch(/Only guns/);
     const gun = units.find((u) => u.side === 'att' && u.kind === 'art')!;
     expect(gun).toBeDefined();
     {
@@ -184,7 +183,7 @@ describe('the battle doorway for the 3D game', () => {
       for (let x = x0 + 80; x < x1 - 80 && at < 0; x += 30) if (TC.battleCanPlace(gun.id, x, y1 - 40).why === null) at = x;
       expect(at).toBeGreaterThan(0);
       expect((TC.battleView().units as { id: number; y: number }[]).find((u) => u.id === gun.id)!.y).not.toBeCloseTo(y1 - 40, 0);
-      expect(TC.battleCanPlace(foot.id, foot.x, foot.y - 30).why).toMatch(/Only guns/);
+      expect(TC.battleCanPlace(foot.id, foot.x, foot.y - 30).why ?? '').not.toMatch(/Only guns/);
       const theirs = units.find((u) => u.side === 'def')!;
       expect(TC.battleCanPlace(theirs.id, theirs.x, theirs.y).why).toMatch(/your own/);
       const put = TC.battlePlace(gun.id, at, y1 - 40);
@@ -198,6 +197,31 @@ describe('the battle doorway for the 3D game', () => {
     expect(go.view.speed).toBe(1);
     expect(TC.battleTick(1).t).toBeGreaterThan(0);
     expect(TC.battlePlace(foot.id, foot.x, foot.y).ok).toBe(false);
+  });
+  it('direct command (release 2): his staff fights what he has not taken in hand, and his orders go by radio', () => {
+    const { g, TC } = rig();
+    const o = offers(g)[0];
+    const st = TC.battleStart(o.corps.map((c) => c.id), o.target.id, { staff: true, radio: true })!;
+    const me = (st.view as { me: string }).me;
+    expect((st.view as { ai: Record<string, boolean> }).ai[me]).toBe(true);
+    TC.battleSpeed(1);
+    TC.battleTick(2);
+    type U = { id: number; side: string; kind: string; x: number; y: number; taken?: boolean; orderIn?: number };
+    const units = TC.battleView().units as U[];
+    expect(units.some((u) => u.taken)).toBe(false);
+    const mine = units.find((u) => u.side === me && u.kind !== 'art')!;
+    expect(TC.battleOrder({ do: 'move', units: [mine.id], x: mine.x, y: mine.y + (me === 'att' ? 60 : -60), run: true }).ok).toBe(true);
+    const sent = (TC.battleView().units as U[]).find((u) => u.id === mine.id)!;
+    expect(sent.taken).toBe(true);
+    expect(sent.orderIn).toBeGreaterThan(0);
+    expect(sent.orderIn).toBeLessThanOrEqual(LAND.radio.delay * LAND.radio.cut);
+    for (let i = 0; i < 16; i++) TC.battleTick(1);
+    const there = (TC.battleView().units as U[]).find((u) => u.id === mine.id)!;
+    expect(there.orderIn).toBeUndefined();
+    expect(there.taken).toBe(true);
+    // Handed back to the staff.
+    expect(TC.battleOrder({ do: 'land:staff', units: [mine.id] }).ok).toBe(true);
+    expect((TC.battleView().units as U[]).find((u) => u.id === mine.id)!.taken).toBeUndefined();
   });
   it('a support team is sent as a gun block with its team, so the 3D game draws its own models (release 2)', () => {
     const b = new LandBattle(withTeams(practiceTicket(PRACTICE_GROUNDS[0], { seed: 7, humanAtt: true })));

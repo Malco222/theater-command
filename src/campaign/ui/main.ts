@@ -21,7 +21,7 @@ import {
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
-  orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
+  orderCash, orderDrafts, orderSchool, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
@@ -91,7 +91,7 @@ import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vac
 import { DIVISIONS, ordinal, type DivisionCard } from '../armies';
 import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
-import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
+import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { setTeams, TEAMS_RELEASE } from '../teams';
@@ -2289,7 +2289,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${mine ? marchTag(c) : ''}${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const flags = `${mine ? marchTag(c) : ''}${c.school && mine ? '<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>' : resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
@@ -4411,6 +4411,7 @@ function storyTags(c: Corps): string[] {
   if (isGuards(g, c)) out.push(`<span class="tag hon" title="Named in the order of the day: the highest honour a formation can earn.">${esc(designation(c.nat))}</span>`);
   if (c.leave !== undefined) out.push(`<span class="tag" title="At home with its fame. It cannot be given orders until it is back.">At home until ${date(c.leave)}</span>`);
   if (c.lean && mine) out.push('<span class="tag" title="This corps takes no drafts. It stays as small as its losses leave it, and keeps what it knows.">Veterans only</span>');
+  if (c.school && mine) out.push('<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>');
   const r = rivalryOf(g, c.rival);
   if (r && !r.over && mine) out.push(`<span class="tag hon" title="The two have met ${r.met} times. This corps fights ${Math.round(STORIES.rivals.edge * 100)}% harder in any battle its old enemy is in.">Old enemy: ${esc(r.theirsName)}</span>`);
   if (mine && c.rec?.exile && c.home !== undefined) out.push(`<span class="tag bad" title="The place this corps was raised in is in enemy hands.">${esc(g.regions[c.home].name)} lost</span>`);
@@ -4529,6 +4530,17 @@ function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
       const t = Math.round(training(g, c.nat) * 100);
       extra += `<h3>Replacements</h3><p class="sub" style="margin:0 0 7px">Drafts bring a corps back to strength, but men who have never been under fire thin out what it knows. Drafts reach the front at experience ${t} (${esc(grade(t / 100).toLowerCase())}); this corps stands at ${Math.round(c.xp * 100)}. A corps kept to veterans only stays as small as its losses leave it and keeps its edge.</p>
         <div class="seg"><button class="btn small${c.lean ? '' : ' on'}" data-act="drafts" data-id="${c.id}" data-v="take" ${up ? '' : 'disabled'}>Take drafts</button><button class="btn small${c.lean ? ' on' : ''}" data-act="drafts" data-id="${c.id}" data-v="lean" ${up ? '' : 'disabled'}>Veterans only</button></div>`;
+      // The battle schools (release 2): a quiet month at home, and the corps comes back a grade better.
+      if (g.flags.open === 1) {
+        const no = c.school ? null : whyNoSchool(g, c);
+        const to = drillTo(c.xp);
+        extra += `<h3>Battle school</h3><p class="sub" style="margin:0 0 7px">${c.school
+          ? `At the battle schools this month. If it is left in peace it comes back ${esc(grade(to).toLowerCase())} when your next month opens. It takes no orders until then.`
+          : `A whole quiet month at the battle schools at home brings a corps up one grade${to > c.xp ? `: this one would come back ${esc(grade(to).toLowerCase())}` : ''}. It takes no orders while it is there, and if it has to fight the term is lost. The schools teach drill; only battle makes an elite.`}${no ? ` <b>${esc(no)}</b>` : ''}</p>
+        <div class="seg">${c.school
+          ? `<button class="btn small" data-act="school" data-id="${c.id}" data-v="back" ${up ? '' : 'disabled'}>Call it back</button>`
+          : `<button class="btn small" data-act="school" data-id="${c.id}" data-v="go" ${up && !no ? '' : 'disabled'}>Send to battle school</button>`}</div>`;
+      }
     }
   } else if (kind === 'air') {
     const f = u as AirFleet;
@@ -8578,6 +8590,13 @@ function onClick(e: MouseEvent): void {
     case 'drafts': {
       const c = g.corps.find((x) => x.id === id);
       if (c && orderDrafts(g, c, t.dataset.v === 'take')) queueSave();
+      refresh();
+      openModal({ kind: 'unit', type: 'corps', id });
+      break;
+    }
+    case 'school': {
+      const c = g.corps.find((x) => x.id === id);
+      if (c && orderSchool(g, c, t.dataset.v === 'go')) { ui.picked.delete(c.id); queueSave(); }
       refresh();
       openModal({ kind: 'unit', type: 'corps', id });
       break;

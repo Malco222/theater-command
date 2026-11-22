@@ -40,6 +40,9 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, 
     battles: c.rec?.battles ?? 0,
     // A corps the card has come on with no river before it does not cross on the field either (b464(5)).
     ...(crosses && !crosses(c) ? { cross: false } : {}),
+    // How worn its uniforms and kit look (release 2, looks only): absent while it is fresh.
+    ...(c.wear !== undefined ? { wear: c.wear } : {}),
+    ...(c.fresh ? { fresh: c.fresh } : {}),
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;
@@ -75,6 +78,21 @@ function dryEnd(g: Game, going: Corps[], target: Region): 'west' | 'east' | null
   const [mx, my] = mid(going), dx = target.x - mx, dy = target.y - my;
   const left = (cs: Corps[]): number => { const [x, y] = mid(cs); return (x - mx) * dy - (y - my) * dx; };
   return left(dry) >= left(wet) ? 'west' : 'east';
+}
+
+/** The attack's compass heading on the campaign map, which is the field's north: the same reckoning as the city river's below. */
+export function attackHeading(g: Game, going: Corps[], target: Region): number {
+  const mx = going.reduce((s, c) => s + g.regions[c.reg].x, 0) / going.length, my = going.reduce((s, c) => s + g.regions[c.reg].y, 0) / going.length;
+  return bearingOf(mx, my, target.x, target.y);
+}
+
+/**
+ * ForceTicket.toward for a corps joining from next door (neighbours join, part (a) fills it): the way from the battle's
+ * province to the joiner's, in the field's frame, radians from 0 (the attack's heading, the field's north) clockwise,
+ * PI/2 the field's east. The field picks the edge the corps walks on by from it (sim.ts joinEdge).
+ */
+export function joinToward(from: { x: number; y: number }, at: { x: number; y: number }, heading: number): number {
+  return ((((bearingOf(at.x, at.y, from.x, from.y) - heading) % 360) + 360) % 360) * Math.PI / 180;
 }
 
 /**
@@ -171,7 +189,8 @@ export function pursuitLine(t: FieldTicket<LandPlace>, result: FieldResult, rep:
   if (!s || (s === 'def') !== result.R >= 1.2) return null;
   const us = s === 'att' ? rep.attackers : rep.defenders;
   const lost = Math.max(s === 'att' ? rep.attLost : rep.defLost, us.reduce((a, u) => a + u.lost, 0));
-  const onField = Math.round(result.lost[s] * t[s].forces.reduce((a, f) => a + f.men, 0));
+  // A corps that joined fought with its share of its men only (ForceTicket.joined): the rest never reached the field.
+  const onField = Math.round(result.lost[s] * (t[s].forces.reduce((a, f) => a + f.men, 0) + (t[s].joiners ?? []).reduce((a, f) => a + f.men * Math.min(1, Math.max(0, f.joined ?? 1)), 0)));
   const more = lost - onField;
   if (more <= Math.max(10, onField * 0.01)) return null;
   const army = t[s].human ? 'your army' : `the ${t[s].adj} army`;
@@ -187,7 +206,7 @@ export function pursuitLine(t: FieldTicket<LandPlace>, result: FieldResult, rep:
 export function cardKnows(g: Game, t: FieldTicket<LandPlace>): Set<number> {
   const them = t.att.human ? t.def : t.att;
   const out = new Set<number>();
-  for (const f of them.forces) {
+  for (const f of [...them.forces, ...(them.joiners ?? [])]) {
     const c = g.corps.find((x) => x.id === f.corps);
     if (c && corpsKnown(g, c, g.human).level !== 'none') out.add(f.corps);
   }
