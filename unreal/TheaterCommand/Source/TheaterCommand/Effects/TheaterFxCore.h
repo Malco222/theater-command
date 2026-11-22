@@ -408,6 +408,21 @@ namespace TheaterFx
 		/** Whether a shell leaves its flat painted crater (Scar) in the kit's own mesh: on as made. A scene that lays
 		 * craters of its own in the ground (the land battle's torn earth) turns it off; nothing else of a shell changes. */
 		void SetScars(bool bOn) { bScars = bOn; }
+		/** The scene grades its picture as the land battle does (most of the colour out of the darks and the middles,
+		 * contrast 1.42: tools/battle-fx/land_grade.py), not by the game's own curve the recipe's colours are written
+		 * for. With it the recipe's land_grade row stands in for what it names: colours (the clods' paint, the tracer's)
+		 * and the clods' shade and tint, written to land in that grade as the art director ruled them (cut 5: a clod
+		 * earth brown about 70,58,45 with its form, never a black silhouette; a yellow tracer yellow, not khaki). Off as
+		 * made and at every Setup (a kit set up again for another scene is off until that scene asks); without the row
+		 * nothing changes. */
+		void SetLandGrade(bool bOn);
+		/** The scene's material fades every piece where it meets the ground or a hull, over Metres (the land battle's,
+		 * FBattleEffects::SetSoftContact: the art director's cut 5, still 07, a burning wreck's flame cut along a
+		 * straight line where it met the hull). A piece lying on the ground (a thrown clod or fragment come to rest, a
+		 * spent case, a crater's mark) would fade with it, so it is drawn game.soft_contact.lie_nearer times Metres
+		 * nearer the eye along its own line of sight and smaller to match: the same picture, every point of it that far
+		 * in front of what it lies on, so it stays whole. 0: off, as made and at every Setup. */
+		void SetSoftContact(double Metres);
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -621,6 +636,13 @@ namespace TheaterFx
 		int Ring() const { return Sides; }
 		/** What the picture must multiply the colours by (the material's brightness): picture.lit_gain, 1 by default. */
 		double PictureGain() const { return LitGain; }
+		/** How the colours go into the bytes (Colours()). false: the light itself, a byte 1/255 of it, as M_Highlight reads
+		 * them. true: raised to 1/2.2 first, as M_BattlePuffs reads them (its Power of 2.2), so a dark smoke keeps its hue:
+		 * in plain bytes a charcoal, written lit_gain times darker, is one to four steps a channel, and its red, green and
+		 * blue round apart (a big far piece of dark earth read olive over grass, 55,59,37; the dusk specks). Set by the
+		 * scene for the material it draws with, once, before the first Draw; Setup leaves it as it is. false by default. */
+		void SetSrgbBytes(bool bOn) { bSrgbBytes = bOn; }
+		bool SrgbBytes() const { return bSrgbBytes; }
 		int PerPuff() const { return PointsPerPuff; }
 		int Room() const { return MaxPuffs; }
 		/** What the last Draw laid (puffs), and the room asked for as it stands: on the screen at that Draw, and what has
@@ -632,6 +654,11 @@ namespace TheaterFx
 		int LandHitsMade() const { return static_cast<int>(std::min<size_t>(LandHits, 1000000000u)); }
 		int LandHitsThinned() const { return static_cast<int>(std::min<size_t>(LandHitsFew, 1000000000u)); }
 		double LandKeptMean() const { return LandHits > 0 ? LandFewSum / static_cast<double>(LandHits) : 1.0; }
+		/** game.smoke_budget (FX9): the smoke the last Draw laid, in screens of fill (its pieces' areas on the screen,
+		 *  each clipped to one screen, over the screen's), and the share of the big smoke near the lens left out then.
+		 *  0 and 0 with the row off, or the view's width not given. For a scene's log, beside PuffsDrawn. */
+		double SmokeScreens() const { return SmokeLaidScreens; }
+		double SmokeThinned() const { return ThinShare; }
 		const std::vector<Vec>& Points() const { return Out; }
 		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
 		bool Busy(double Now) const;
@@ -1152,6 +1179,7 @@ namespace TheaterFx
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		Rgb LayShadow; // (while laying one bit: its shadow side's colour, Bit::ShadowCol in the hour's light, and how far it goes to it)
 		double LayShadowK = 0.0;
+		bool bSrgbBytes = false; // (SetSrgbBytes)
 		double LayFadeHead = 1.0, LayFadeTail = 1.0; bool bLayFade = false; // (fx-air r2, while laying one bit: its opacity runs evenly from its tail end to its head, a ship's tracer or hose)
 		double LayHeartRound = 0.0; // (while laying one bit: Bit::HeartRound)
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
@@ -1221,6 +1249,38 @@ namespace TheaterFx
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
+		Span ClodTint; // (burst.debris.clods.tint: each clod's own shade of its paint, 0.8 to 1.2 as made)
+		double ThrownLong = 0.0; // (burst.debris.clods.most_long: a thrown lump drawn no longer than that times its width; 0, as before)
+		bool bLandGrade = false; // (SetLandGrade)
+		double LieNearer = 0.0, LieNearerK = 1.5; // (SetSoftContact: how much nearer the eye a lying piece is drawn; game.soft_contact.lie_nearer)
+		double LayNear = 1.0; // (while laying one bit: every point of it this share of the way from the eye to where it is, LayEye; see SetSoftContact)
+		Vec LayEye;
+		// (FX9, game.smoke_budget, the production lead's battle-scale plan of 22 November: a budget for the screen's area
+		// of smoke. A piece of smoke under skip_px.0 across at its biggest takes no place and is not laid, whole by
+		// skip_px.1; past screens of fill, the big smoke near the lens, over thin_from_px across, is thinned: a share of
+		// its pieces left out, by each one's own lot, and the rest that much darker, so a cloud of many keeps its weight.
+		// The share follows what is asked over thin_s seconds, never more than thin_most; only with thin 1 as well (the art
+		// director refused the thinning at 17:43Z, so thin is 0). on 0 or no row: as before.
+		// Smoke here is a puff or a low skirt of a burst or a fire, not a light, a column kept, a trail, a thrown piece,
+		// a far form or a funnel's even plume: Smoky)
+		double SkipPxLo = 0.0, SkipPxHi = 0.0, ThinScreens = 0.0, ThinFromPx = 150.0, ThinMost = 0.5, ThinS = 1.0, ThinBand = 0.15;
+		double ThinShare = 0.0, ThinAt = -1.0e9, ScreenPx = 0.0, ScreenHalfX = 0.0, ScreenHalfY = 0.0, FillSmall = 0.0, FillBig = 0.0, FillLaid = 0.0, SmokeLaidScreens = 0.0;
+		bool Smoky(const Bit& B) const;
+		// (FX7, game.six_sided, the production lead's battle-scale plan of 22 November: a piece under under_px across on the
+		// screen, its long way, is laid as six sides, not Sides. The ring is worked out at six of its points (SixSlot:
+		// the first, the one half way round, where a piece's point and tail are, and four between) and every other point
+		// of it is a copy of the nearest of those (SixOf), so the mesh is the same and the triangles between two copies
+		// cover nothing. At under 8 px the six sides lie within half a pixel of the round. on 0 or no row: as before)
+		double SixUnderPx = 0.0;
+		bool LaySix = false; // (while laying one bit's own fans: it is small enough, see LayBit)
+		int SixSlot[6] = { 0, 0, 0, 0, 0, 0 };
+		std::vector<int> SixOf;
+		double MostRad(const Bit& B, double Now) const; // (a piece's radius at its biggest by Now, its long way: never under what LayBit lays)
+		/** What the scene's grade changes (SetLandGrade), read at Setup and again when it changes: the clods' shade and
+		 * tint and every colour Setup keeps (Picture), each from land_grade.<its path> where the scene is under that grade. */
+		void ReadGradeLooks();
+		double GradeNum(const std::string& Path, double Fallback) const;
+		Span GradeRange(const std::string& Path, double Low, double High) const;
 		// (fire.lamp: the steady lamps lit at the last frame, by their source's seed, and how far each has come up, so a
 		// fire's lamp comes up smoothly and keeps its place against near equals instead of hopping between them)
 		struct LampKept
@@ -1250,6 +1310,7 @@ namespace TheaterFx
 		std::vector<TrailCut> TrailCuts;
 		double TrailCutFade = 3.0;
 		void CutTrails();
+		double CutOf(uint32_t Run_, double Born, double Was) const;
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
 		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)
@@ -1622,6 +1683,11 @@ namespace TheaterFx
 		bool bLandFar = false;
 		double LandFullPx = 0.0, LandLeast = 0.1, LandHalvePast = 1800.0, LandNearBusy = 0.5, LandOverBusy = 0.125, LandGonePx = 0.0, LandGoneBeyond = 300.0;
 		double LandSmokePow = 0.5, LandSkirtPow = 0.5;
+		// (burst.far.alpha_pow, the art director 12:33Z: a see-through piece laid Bigger is as much thicker, up to alpha_most,
+		// so where fewer layers lie the ground does not show through and tint the smoke. FewAlphaPow is alpha_pow only while
+		// Shell lays a land hit that keeps Few under 1; 0 otherwise, so a sea hit's far pieces are as they were)
+		double LandAlphaPow = 0.0, LandAlphaMost = 0.9, FewAlphaPow = 0.0;
+		double Thicker(double Alpha, double Bigger) const;
 		bool bLandGoneDirt = false;
 		size_t LandHits = 0, LandHitsFew = 0; // (since Setup: land hits, and those laid with fewer pieces)
 		double LandFewSum = 0.0; // (and the shares they kept, summed)
