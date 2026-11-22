@@ -15204,6 +15204,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	// (release 2: held under a land battle, the view kept for its release; HoldUpdates)
+	LastAskedDistance = CameraDistance;
+	LastAskedYaw = CameraYaw;
+	LastAskedFocus = CameraFocus;
+	bViewAsked = true;
+	if (bUpdatesHeld)
+	{
+		return;
+	}
 	THEATER_SPEED_SCOPE(MapUpdate);
 	// (lines put off by a press that changed whose ground is whose: see SetHolders)
 	if (FrontLineDue != 0 && GFrameCounter >= FrontLineDue)

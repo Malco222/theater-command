@@ -365,6 +365,33 @@ namespace
 	}
 
 	double PictureGain = 1.0; // (what the game's material multiplies the kit's colours by: Battle::PictureGain)
+	bool GammaBytes = false; // (while Puffs paints the kit's puffs whose bytes are raised to 1/2.2: Battle::SrgbBytes, as M_BattlePuffs reads them)
+	// (FX_BYTES=srgb: the kit writes its colours as the game does when it draws with M_BattlePuffs, raised to 1/2.2 so a
+	// dark smoke keeps its hue; unset or linear: plain bytes, as with M_Highlight, and every picture as it was)
+	bool GammaWanted()
+	{
+		const char* Is = std::getenv("FX_BYTES");
+		return Is && std::string(Is) == "srgb";
+	}
+
+	// (FX_LAND_GRADE=1: the kit's colours as written for the land battle's grade, Battle::SetLandGrade; see the frames
+	// through that grade with land_grade.py, not game_curve.py)
+	bool LandGradeWanted()
+	{
+		const char* Is = std::getenv("FX_LAND_GRADE");
+		return Is && std::string(Is) == "1";
+	}
+
+	// (FX_SOFT_CONTACT=metres: the land battle's soft contact, FBattleEffects::SetSoftContact. The kit lays its lying
+	// pieces nearer the eye, and here, as M_BattlePuffsSoft does, every piece fades where it comes within that depth in
+	// front of the ground, a box or a man)
+	double SoftWanted()
+	{
+		const char* Is = std::getenv("FX_SOFT_CONTACT");
+		const double M = Is ? std::atof(Is) : 0.0;
+		return M > 0.0 && M < 100.0 ? M : 0.0;
+	}
+	const double SoftFadeM = SoftWanted();
 
 	void Triangle(Canvas& C, const Camera& Cam, const Vec P[3], const unsigned char* Rgba[3])
 	{
@@ -405,14 +432,21 @@ namespace
 				{
 					continue; // (behind the ground or a man: as Unreal's depth test for see-through things)
 				}
-				const double A = (W0 * Rgba[0][3] + W1 * Rgba[1][3] + W2 * Rgba[2][3]) / 255.0;
+				double A = (W0 * Rgba[0][3] + W1 * Rgba[1][3] + W2 * Rgba[2][3]) / 255.0;
+				if (SoftFadeM > 0.0)
+				{
+					A *= std::clamp((C.Depth[I] - Deep) / SoftFadeM, 0.0, 1.0);
+				}
 				if (A <= 0.0)
 				{
 					continue;
 				}
-				const double Cr = (W0 * Rgba[0][0] + W1 * Rgba[1][0] + W2 * Rgba[2][0]) / 255.0 * PictureGain;
-				const double Cg = (W0 * Rgba[0][1] + W1 * Rgba[1][1] + W2 * Rgba[2][1]) / 255.0 * PictureGain;
-				const double Cb = (W0 * Rgba[0][2] + W1 * Rgba[1][2] + W2 * Rgba[2][2]) / 255.0 * PictureGain;
+				// (the material reads the bytes as the GPU blends them across the triangle, and M_BattlePuffs then raises
+				// that to 2.2)
+				auto Read = [](double Blended) { return GammaBytes ? std::pow(Blended, 2.2) : Blended; };
+				const double Cr = Read((W0 * Rgba[0][0] + W1 * Rgba[1][0] + W2 * Rgba[2][0]) / 255.0) * PictureGain;
+				const double Cg = Read((W0 * Rgba[0][1] + W1 * Rgba[1][1] + W2 * Rgba[2][1]) / 255.0) * PictureGain;
+				const double Cb = Read((W0 * Rgba[0][2] + W1 * Rgba[1][2] + W2 * Rgba[2][2]) / 255.0) * PictureGain;
 				C.R[I] = C.R[I] * (1.0 - A) + Cr * A;
 				C.G[I] = C.G[I] * (1.0 - A) + Cg * A;
 				C.B[I] = C.B[I] * (1.0 - A) + Cb * A;
@@ -476,6 +510,7 @@ namespace
 		const std::vector<uint8_t>& Rgba = Fx.Colours();
 		const int Rim = Fx.Ring();
 		PictureGain = Fx.PictureGain();
+		GammaBytes = Fx.SrgbBytes();
 		for (int Each = 0; Each < N; ++Each)
 		{
 			const int First = Each * Fx.PerPuff();
@@ -494,6 +529,7 @@ namespace
 				Tri(In0, Out1, Out0);
 			}
 		}
+		GammaBytes = false;
 	}
 }
 
@@ -507,6 +543,9 @@ namespace
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &FlatSea, nullptr, 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const double Since = EnvNum("FX_SINCE", 0.0);
@@ -637,6 +676,9 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, bSea ? &FlatSea : &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", bSea ? 3.0 : 1.6), EnvNum("FX_WIND_Y", bSea ? 0.8 : 0.4), 0.0));
@@ -853,6 +895,9 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		if (ShotName != "above")
 		{
@@ -1487,6 +1532,9 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
@@ -1700,6 +1748,9 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		SeaDecks Decks;
 		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const char* UseIs = std::getenv("FX_USE"); // (FX_USE=air: as a scene that calls UseAirDistance; none: neither)
@@ -1888,6 +1939,9 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		SeaDecks Decks; // (no decks: a flat sea)
 		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		const bool bScreen = Shot.compare(0, 6, "screen") == 0;
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 0.8), EnvNum("FX_WIND_Y", bScreen ? 3.0 : 0.8), 0.0));
@@ -2070,6 +2124,9 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, +[](void*, double, double) { return 0.0; }, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 4.0), EnvNum("FX_WIND_Y", 1.0), 0.0));
@@ -2282,6 +2339,9 @@ namespace
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &Swell, nullptr, 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind until a scene sets one)
 		const double Speed = EnvNum("FX_SPEED", 10.0), Gap = EnvNum("FX_GAP", 30.0);
@@ -2418,6 +2478,9 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &FlatSea, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 		SkyFromEnv(Fx);
 		Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene: UseAirDistance)
 		const Vec Wind(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", -2.0), 0.0); // (the air scene's own, AirSky::Wind)
@@ -2761,6 +2824,9 @@ int main(int Argc, char** Argv)
 	Battle Fx;
 	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+	Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
 	SkyFromEnv(Fx);
 	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };

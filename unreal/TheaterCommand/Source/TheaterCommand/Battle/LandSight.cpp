@@ -161,6 +161,11 @@ namespace LandSight
 		F.Terrain = G.Terrain.empty() ? std::string("plains") : G.Terrain;
 		F.Month = MonthOf(Rec.Date);
 		F.Seed = Rec.Seed ? Rec.Seed : 1;
+		// (the look of the land: the recording's word and snow where it names them, else by the place and the month)
+		F.Look = G.Look;
+		F.Snow = G.Snow;
+		F.Lat = Rec.Weather.Lat;
+		F.Lon = Rec.Weather.Lon;
 		// (the open steppe, where the recording lays it; the kit's models are the caller's to give, F.Steppe.Kit)
 		if (G.Steppe.bOn)
 		{
@@ -192,12 +197,236 @@ namespace LandSight
 			}
 			LandField::Field::Way& W = F.Ways.emplace_back();
 			W.HalfWidth = T.Role == "tank" ? 1.8 : T.Role == "gun" ? 1.4 : T.Role == "lorry" ? 1.3 : 0.6;
+			W.Track = static_cast<int>(&T - Rec.Tracks.data());
 			for (const LandFeed::Point& P : T.At)
 			{
 				W.Points.emplace_back(P.X, P.Y);
 			}
 		}
+		// (the hedge cutters' cuts: the hedge laid whole there, to be torn open when she bursts through)
+		for (const LandFeed::Cut& C : Rec.Cuts)
+		{
+			LandField::Field::Cut& Into = F.Cuts.emplace_back();
+			Into.X = C.X;
+			Into.Y = C.Y;
+			Into.Width = C.Width;
+		}
 		return F;
+	}
+
+	std::vector<LandFeed::Cut> CutsFromCrossings(const LandFeed::Recording& Rec, const LandField::Ground& G, int N)
+	{
+		std::vector<LandFeed::Cut> Out;
+		if (N <= 0)
+		{
+			return Out;
+		}
+		std::vector<LandFeed::Cut> Each;
+		for (const LandField::HedgeCrossing& C : G.Crossings())
+		{
+			// (a hedgerow's bank or a lane's: kinds 0 and 1; the attacker's tanks only, the side that carried the blades)
+			if (C.Kind > 1 || C.Track < 0 || static_cast<size_t>(C.Track) >= Rec.Tracks.size())
+			{
+				continue;
+			}
+			const LandFeed::Track& T = Rec.Tracks[static_cast<size_t>(C.Track)];
+			const LandFeed::Block* B = Rec.BlockOf(T.Block);
+			if (T.Role != "tank" || !B || B->Side != 0 || T.At.size() < 2)
+			{
+				continue;
+			}
+			// (not where she drove through a field's gateway: no bank there to cut)
+			bool bGate = false;
+			for (const LandField::HedgeOpening& O : G.Openings())
+			{
+				bGate = bGate || (O.Kind == 0 && std::hypot(O.X - C.X, O.Y - C.Y) < 0.5 * (O.Width + 4.0) + 3.0);
+			}
+			if (bGate)
+			{
+				continue;
+			}
+			const size_t K = std::min(static_cast<size_t>(std::max(0.0, std::floor(C.Along))), T.At.size() - 2);
+			const double F = std::clamp(C.Along - static_cast<double>(K), 0.0, 1.0);
+			const LandFeed::Point& A = T.At[K];
+			const LandFeed::Point& Bp = T.At[K + 1];
+			const double When = A.T + (Bp.T - A.T) * F;
+			LandFeed::Cut Cut;
+			Cut.T1 = std::max(0.0, When - 0.3);
+			Cut.T0 = std::max(0.0, Cut.T1 - 2.5);
+			Cut.X = C.X;
+			Cut.Y = C.Y;
+			Cut.Yaw = std::atan2(Bp.Y - A.Y, Bp.X - A.X);
+			Cut.Width = 4.0;
+			Cut.Unit = C.Track;
+			Each.push_back(Cut);
+		}
+		std::stable_sort(Each.begin(), Each.end(), [](const LandFeed::Cut& A, const LandFeed::Cut& B) { return A.T1 < B.T1; });
+		for (const LandFeed::Cut& C : Each)
+		{
+			bool bNear = false;
+			for (const LandFeed::Cut& O : Out)
+			{
+				bNear = bNear || std::hypot(C.X - O.X, C.Y - O.Y) < 80.0;
+			}
+			if (bNear)
+			{
+				continue;
+			}
+			Out.push_back(C);
+			if (static_cast<int>(Out.size()) >= N)
+			{
+				break;
+			}
+		}
+		return Out;
+	}
+
+	void PhonesFromBattle(LandFeed::Recording& Rec, double MendAfter)
+	{
+		if (!Rec.Wires.empty())
+		{
+			return;
+		}
+		// Each side's men's middle at the start: the line from the attacker's to the defender's is "back"; the
+		// headquarters is the defender's key man (an officer, an observer, a gun's, mortar's or heavy gun's first man)
+		// standing farthest back along it, the battery or command post behind the line.
+		double AX = 0.0, AY = 0.0, DX = 0.0, DY = 0.0;
+		int Attackers = 0, Defenders = 0;
+		for (const LandFeed::Track& T : Rec.Tracks)
+		{
+			const LandFeed::Block* B = Rec.BlockOf(T.Block);
+			if (!B || !T.IsMan() || T.At.empty())
+			{
+				continue;
+			}
+			(B->Side == 0 ? AX : DX) += T.At.front().X;
+			(B->Side == 0 ? AY : DY) += T.At.front().Y;
+			++(B->Side == 0 ? Attackers : Defenders);
+		}
+		if (Attackers == 0 || Defenders == 0)
+		{
+			return;
+		}
+		AX /= Attackers;
+		AY /= Attackers;
+		DX /= Defenders;
+		DY /= Defenders;
+		const double Apart = std::max(1e-6, std::hypot(DX - AX, DY - AY));
+		const double Ux = (DX - AX) / Apart, Uy = (DY - AY) / Apart;
+		auto BackOf = [&](const LandFeed::Point& P) { return (P.X - AX) * Ux + (P.Y - AY) * Uy; };
+		int Hq = -1;
+		std::vector<int> Ends;
+		for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+		{
+			const LandFeed::Track& T = Rec.Tracks[K];
+			const LandFeed::Block* B = Rec.BlockOf(T.Block);
+			const bool bKey = T.Role == "officer" || T.Role == "fo" || T.Role == "mortar" || T.Role == "gun" || T.Role == "hmg";
+			if (!B || B->Side != 1 || T.At.empty() || T.J != 0 || !bKey)
+			{
+				continue;
+			}
+			// (a heavy weapon's line goes to its first piece only)
+			const bool bFirst = T.Role == "officer" || T.Role == "fo" || Rec.TrackIndexOf(T.Block, T.K - 1) < 0
+				|| Rec.Tracks[static_cast<size_t>(Rec.TrackIndexOf(T.Block, T.K - 1))].Role != T.Role;
+			if (Hq < 0 || BackOf(T.At.front()) > BackOf(Rec.Tracks[static_cast<size_t>(Hq)].At.front()))
+			{
+				Hq = static_cast<int>(K);
+			}
+			if (bFirst)
+			{
+				Ends.push_back(static_cast<int>(K));
+			}
+		}
+		if (Hq < 0)
+		{
+			return;
+		}
+		// (the lines run first to the posts nearest the enemy: the companies and the observers)
+		std::stable_sort(Ends.begin(), Ends.end(), [&](int A, int B) { return BackOf(Rec.Tracks[static_cast<size_t>(A)].At.front()) < BackOf(Rec.Tracks[static_cast<size_t>(B)].At.front()); });
+		const LandFeed::Point& From = Rec.Tracks[static_cast<size_t>(Hq)].At.front();
+		std::vector<std::pair<double, double>> Done = { { From.X, From.Y } };
+		for (const int K : Ends)
+		{
+			const LandFeed::Track& T = Rec.Tracks[static_cast<size_t>(K)];
+			const LandFeed::Point& To = T.At.front();
+			const double Long = std::hypot(To.X - From.X, To.Y - From.Y);
+			bool bNear = false;
+			for (const auto& D : Done)
+			{
+				bNear = bNear || std::hypot(D.first - To.X, D.second - To.Y) < 30.0;
+			}
+			if (bNear || Rec.Wires.size() >= 6)
+			{
+				continue;
+			}
+			Done.push_back({ To.X, To.Y });
+			LandFeed::Wire W;
+			W.Id = static_cast<int>(Rec.Wires.size());
+			W.Side = 1;
+			W.Hq = Rec.Tracks[static_cast<size_t>(Hq)].Block;
+			W.Unit = T.Block;
+			// (a slow wander either side, each line its own, nothing at its two ends)
+			const int Steps = std::max(2, static_cast<int>(std::ceil(Long / 5.0)));
+			const double Nx = -(To.Y - From.Y) / Long, Ny = (To.X - From.X) / Long;
+			const double Phase = 1.7 * static_cast<double>(W.Id), Wave = 1.0 + 0.6 * std::sin(2.3 * static_cast<double>(W.Id) + 0.4);
+			for (int I = 0; I <= Steps; ++I)
+			{
+				const double F = static_cast<double>(I) / static_cast<double>(Steps);
+				const double Off = std::sin(3.14159265358979 * F) * Wave * std::sin(Phase + F * Long / 23.0);
+				W.Pts.push_back({ From.X + (To.X - From.X) * F + Nx * Off, From.Y + (To.Y - From.Y) * F + Ny * Off });
+			}
+			Rec.Wires.push_back(std::move(W));
+		}
+		// Each line cut by the rounds that land beside it while it is whole, mended MendAfter seconds on.
+		std::vector<double> WholeFrom(Rec.Wires.size(), -1e9);
+		for (const LandFeed::Round& R : Rec.Rounds)
+		{
+			if (R.R != LandFeed::Result::Miss || (R.W != "mortar" && R.W != "gun" && R.W != "tank"))
+			{
+				continue;
+			}
+			for (size_t K = 0; K < Rec.Wires.size(); ++K)
+			{
+				if (R.L < WholeFrom[K])
+				{
+					continue;
+				}
+				const std::vector<std::pair<double, double>>& P = Rec.Wires[K].Pts;
+				double Best = 1e9, BX = 0.0, BY = 0.0;
+				for (size_t I = 0; I + 1 < P.size(); ++I)
+				{
+					const double Dx = P[I + 1].first - P[I].first, Dy = P[I + 1].second - P[I].second;
+					const double Len2 = std::max(1e-9, Dx * Dx + Dy * Dy);
+					const double F = std::clamp(((R.X - P[I].first) * Dx + (R.Y - P[I].second) * Dy) / Len2, 0.0, 1.0);
+					const double X = P[I].first + Dx * F, Y = P[I].second + Dy * F;
+					const double D = std::hypot(R.X - X, R.Y - Y);
+					if (D < Best)
+					{
+						Best = D;
+						BX = X;
+						BY = Y;
+					}
+				}
+				if (Best > 5.0)
+				{
+					continue;
+				}
+				LandFeed::WireCut Cut;
+				Cut.T = R.L;
+				Cut.Wire = Rec.Wires[K].Id;
+				Cut.X = BX;
+				Cut.Y = BY;
+				Cut.By = "shell";
+				Rec.WireCuts.push_back(Cut);
+				LandFeed::WireMend Mend;
+				Mend.T = R.L + MendAfter;
+				Mend.Wire = Cut.Wire;
+				Rec.WireMends.push_back(Mend);
+				WholeFrom[K] = Mend.T;
+			}
+		}
+		std::stable_sort(Rec.WireCuts.begin(), Rec.WireCuts.end(), [](const LandFeed::WireCut& A, const LandFeed::WireCut& B) { return A.T < B.T; });
+		std::stable_sort(Rec.WireMends.begin(), Rec.WireMends.end(), [](const LandFeed::WireMend& A, const LandFeed::WireMend& B) { return A.T < B.T; });
 	}
 
 	Machine Machine::Plain(int Track, const Vec& Root, double Heading, double Turret, double Long, double Wide, double High, bool bWithTurret)
@@ -239,12 +468,17 @@ namespace LandSight
 		for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
 		{
 			const LandField::Base Kind = static_cast<LandField::Base>(B);
+			const LandField::BaseMesh& Built = Ground->BaseOf(Kind);
 			Shape S;
-			if (!ShapeOf(Kind, S))
+			if (Built.bSight)
+			{
+				// (a region's kit: its own shape, LandScape's KitLook)
+				S = { Built.SightMid, Built.SightHalf, Built.SightAcross, Built.SightTrunk };
+			}
+			else if (!ShapeOf(Kind, S))
 			{
 				continue;
 			}
-			const LandField::BaseMesh& Built = Ground->BaseOf(Kind);
 			for (const LandField::Placed& P : Ground->Instances(Kind))
 			{
 				Thing T;

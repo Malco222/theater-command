@@ -155,8 +155,12 @@ FLandCrowd::FLandCrowd(AActor* InOwner, USceneComponent* InParent, UMaterialInte
 {
 	bOff = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCrowd"));
 	bLinksAlways = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandLinksAlways"));
-	UE_LOG(LogTheater, Display, TEXT("Land battle: far tanks, guns and lorries %s (TK1); track links posed %s (TK3)."),
+	bPrev = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCrowdNoPrev"));
+	OneAt.SetNum(1);
+	OneBefore.SetNum(1);
+	UE_LOG(LogTheater, Display, TEXT("Land battle: far tanks, guns and lorries %s (TK1)%s; track links posed %s (TK3)."),
 		bOff ? TEXT("each by its own meshes (-TheaterLandNoCrowd)") : TEXT("as instances of their models' far pieces past 140 m"),
+		bOff ? TEXT("") : bPrev ? TEXT(", each with her place a frame before (her motion vector)") : TEXT(", drawn as still when they move (-TheaterLandCrowdNoPrev)"),
 		bLinksAlways ? TEXT("on every near moving tank (-TheaterLandLinksAlways)") : TEXT("only while she is in the picture"));
 }
 
@@ -262,6 +266,13 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 		Copies->SetNumCustomDataFloats(1);
 		// (places removed off the end only, as LandVat's: swap-removal keeps its arrays from shrinking and growing again)
 		Copies->SetRemoveSwap();
+		if (bPrev)
+		{
+			// (each instance's place a frame before kept, for a far vehicle's motion vector: set before the component is
+			// registered, as its draw is made then; never on a static component, which the engine forbids. LandVat's)
+			Copies->SetMobility(EComponentMobility::Movable);
+			Copies->SetHasPerInstancePrevTransforms(true);
+		}
 		// (hidden until one of its vehicles is far)
 		Copies->SetVisibility(false);
 		Copies->RegisterComponent();
@@ -276,7 +287,23 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 	return Index;
 }
 
-void FLandCrowd::Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q)
+void FLandCrowd::SetPlace(UInstancedStaticMeshComponent* Copies, int32 Slot, const FVector& At, const FQuat& Q, const FVector& Before, const FQuat& BeforeQ)
+{
+	if (!bPrev)
+	{
+		Copies->UpdateInstanceTransform(Slot, FTransform(Q, At, FVector::OneVector), true, false, true);
+		return;
+	}
+	// (the engine's batch update is the one that takes the place a frame before, by the instance's place in the
+	// component; both put in the component's own frame here, from the world's this crowd keeps, so the place a frame
+	// before is never left to the engine to turn; sent with the rest at the end of Draw. LandVat's SetPlace)
+	const FTransform& Home = Copies->GetComponentTransform();
+	OneAt[0] = FTransform(Q, At, FVector::OneVector).GetRelativeTransform(Home);
+	OneBefore[0] = FTransform(BeforeQ, Before, FVector::OneVector).GetRelativeTransform(Home);
+	Copies->BatchUpdateInstancesTransforms(Slot, OneAt, OneBefore, false, false, false);
+}
+
+void FLandCrowd::Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q, const FVector& Before, const FQuat& BeforeQ)
 {
 	FKind& Kind = Kinds[static_cast<size_t>(One.Kind)];
 	UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get();
@@ -284,23 +311,37 @@ void FLandCrowd::Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, c
 	{
 		return;
 	}
+	// (her place a frame before, where her anchor was drawn by her own meshes or the other piece: a move only if it is
+	// one, as Draw counts a move)
+	const bool bMoving = bPrev && (!Before.Equals(At, 0.5) || !BeforeQ.Equals(Q, 1e-5));
+	const FVector& From = bMoving ? Before : At;
+	const FQuat& FromQ = bMoving ? BeforeQ : Q;
 	// (the place after the piece's last vehicle: one left over from a vehicle given back this frame, before Draw removes
 	// it at its end, or one added)
 	const int32 Slot = Kind.Holder[Piece].Add(Vehicle);
-	const FTransform Where(Q, At, FVector::OneVector);
 	if (Slot < Copies->GetInstanceCount())
 	{
-		Copies->UpdateInstanceTransform(Slot, Where, true, false, true);
+		// (its place a frame before was the given-back vehicle's: set here too, to hers)
+		SetPlace(Copies, Slot, At, Q, From, FromQ);
 	}
 	else
 	{
-		const int32 Added = Copies->AddInstance(Where, true);
+		// (a place added: the engine gives it its place now as its place a frame before; hers sent after, if she moved)
+		const int32 Added = Copies->AddInstance(FTransform(Q, At, FVector::OneVector), true);
 		ensureMsgf(Added == Slot, TEXT("LandCrowd: a piece's instance %d added for its vehicle's place %d"), Added, Slot);
+		if (bMoving)
+		{
+			SetPlace(Copies, Slot, At, Q, From, FromQ);
+		}
 	}
 	Copies->SetCustomDataValue(Slot, 0, FMath::Max(One.Soot, 0.0f), false);
 	One.Slot[Piece] = Slot;
 	One.At[Piece] = At;
 	One.Q[Piece] = Q;
+	One.Before[Piece] = From;
+	One.BeforeQ[Piece] = FromQ;
+	One.Moved[Piece] = bMoving ? Frame : 0;
+	SentMoving += bMoving ? 1 : 0;
 	Kind.bDirty[Piece] = true;
 }
 
@@ -308,6 +349,7 @@ void FLandCrowd::Drop(FOne& One, int32 Piece)
 {
 	const int32 Slot = One.Slot[Piece];
 	One.Slot[Piece] = -1;
+	One.Moved[Piece] = 0;
 	if (Slot < 0 || One.Kind < 0 || static_cast<size_t>(One.Kind) >= Kinds.size())
 	{
 		return;
@@ -317,13 +359,14 @@ void FLandCrowd::Drop(FOne& One, int32 Piece)
 	const int32 LastSlot = Holder.Num() - 1;
 	if (Slot < LastSlot)
 	{
-		// (kept packed: the piece's last vehicle moved into her place, with her place and soot, so the places past the
-		// last hold nobody and Draw removes them; nothing hidden is drawn)
+		// (kept packed: the piece's last vehicle moved into her place, with her place, her own place a frame before (her
+		// move as it was, no jump) and soot, so the places past the last hold nobody and Draw removes them; nothing
+		// hidden is drawn)
 		const int32 Moved = Holder[LastSlot];
 		FOne& Other = Ones[static_cast<size_t>(Moved)];
 		if (UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get())
 		{
-			Copies->UpdateInstanceTransform(Slot, FTransform(Other.Q[Piece], Other.At[Piece], FVector::OneVector), true, false, true);
+			SetPlace(Copies, Slot, Other.At[Piece], Other.Q[Piece], Other.Before[Piece], Other.BeforeQ[Piece]);
 			Copies->SetCustomDataValue(Slot, 0, FMath::Max(Other.Soot, 0.0f), false);
 		}
 		Holder[Slot] = Moved;
@@ -475,6 +518,23 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 		{
 			One.Soot = Soot;
 		}
+		// Where each piece's anchor body is drawn now (as DrawArmour puts a body's own mesh), whether her pieces draw her
+		// or not: kept for the frame after, as the place a frame before of a piece that then starts drawing her (at the
+		// hand-over, or her lid's copy swapped in), where her own meshes or the other piece drew her.
+		const bool bPlaced = bShown && V.Bodies().size() == Kind.Model->Bodies.size();
+		const bool bWas = bPrev && One.WasFrame != 0 && One.WasFrame + 1 == Frame;
+		FVector AtNow[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+		FQuat QNow[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		for (int32 Piece = 0; Piece < PieceCount && bPlaced; ++Piece)
+		{
+			const int32 Anchor = SplitPiece(Kind.Split, Piece).Anchor;
+			if (Anchor >= 0 && static_cast<size_t>(Anchor) < V.Bodies().size())
+			{
+				const LandKit::Place& Place = V.Bodies()[static_cast<size_t>(Anchor)];
+				AtNow[Piece] = World(Place.At.X, Place.At.Y, Place.At.Z);
+				QNow[Piece] = FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W);
+			}
+		}
 		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
 			UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get();
@@ -485,20 +545,39 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 				Drop(One, Piece);
 				continue;
 			}
-			// Where her anchor body is drawn (as DrawArmour puts a body's own mesh), and her soot.
-			const LandKit::Place& Place = V.Bodies()[static_cast<size_t>(Anchor)];
-			const FVector At = World(Place.At.X, Place.At.Y, Place.At.Z);
-			const FQuat Q(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W);
+			// Her anchor's place, and her soot.
+			const FVector& At = AtNow[Piece];
+			const FQuat& Q = QNow[Piece];
 			if (One.Slot[Piece] < 0)
 			{
-				Put(static_cast<int32>(K), One, Piece, At, Q);
+				Put(static_cast<int32>(K), One, Piece, At, Q, bWas ? One.Was[Piece] : At, bWas ? One.WasQ[Piece] : Q);
 				continue;
 			}
 			if (!At.Equals(One.At[Piece], 0.5) || !Q.Equals(One.Q[Piece], 1e-5))
 			{
-				Copies->UpdateInstanceTransform(One.Slot[Piece], FTransform(Q, At, FVector::OneVector), true, false, true);
+				// (a move: sent with where her instance was drawn the frame before, her motion vector's other end)
+				SetPlace(Copies, One.Slot[Piece], At, Q, One.At[Piece], One.Q[Piece]);
+				One.Before[Piece] = One.At[Piece];
+				One.BeforeQ[Piece] = One.Q[Piece];
 				One.At[Piece] = At;
 				One.Q[Piece] = Q;
+				if (bPrev)
+				{
+					One.Moved[Piece] = Frame;
+					++SentMoving;
+				}
+				Kind.bDirty[Piece] = true;
+			}
+			else if (One.Moved[Piece] != 0 && One.Moved[Piece] != Frame)
+			{
+				// (sent moving the frame before and not this frame: she stopped, or crept less than the threshold. Her
+				// place a frame before made her place now, once, or she would be drawn smeared along her last step for
+				// as long as she stands)
+				SetPlace(Copies, One.Slot[Piece], At, Q, At, Q);
+				One.At[Piece] = One.Before[Piece] = At;
+				One.Q[Piece] = One.BeforeQ[Piece] = Q;
+				One.Moved[Piece] = 0;
+				++MadeStill;
 				Kind.bDirty[Piece] = true;
 			}
 			if (bSootNew)
@@ -506,6 +585,15 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 				Copies->SetCustomDataValue(One.Slot[Piece], 0, Soot, false);
 				Kind.bDirty[Piece] = true;
 			}
+		}
+		if (bPlaced)
+		{
+			for (int32 Piece = 0; Piece < PieceCount; ++Piece)
+			{
+				One.Was[Piece] = AtNow[Piece];
+				One.WasQ[Piece] = QNow[Piece];
+			}
+			One.WasFrame = Frame;
 		}
 	}
 	// Each piece's mesh shown while it holds a vehicle, and sent once for all its changes.
@@ -545,6 +633,11 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 		}
 	}
 	++Frames;
+	++Frame;
+	if (Frame == 0)
+	{
+		Frame = 1;
+	}
 	Tell(Shown);
 }
 
@@ -570,8 +663,9 @@ void FLandCrowd::Tell(int32 Shown)
 		}
 	}
 	const double PerFrame = 1.0 / static_cast<double>(Frames);
-	UE_LOG(LogTheater, Display, TEXT("Land battle crowd: of %d vehicles shown, a frame %.1f far drawn as instances (TK1; %d instances on %d meshes now) and %.1f far by their own meshes; track links posed %.1f a frame, held out of the picture %.1f (TK3)"),
-		Shown, HeldFrames * PerFrame, Instances, Meshes, OwnFarFrames * PerFrame, LinksPosed * PerFrame, LinksHeld * PerFrame);
+	UE_LOG(LogTheater, Display, TEXT("Land battle crowd: of %d vehicles shown, a frame %.1f far drawn as instances (TK1; %d instances on %d meshes now; places sent moving %.1f a frame, made still again %.1f%s) and %.1f far by their own meshes; track links posed %.1f a frame, held out of the picture %.1f (TK3)"),
+		Shown, HeldFrames * PerFrame, Instances, Meshes, SentMoving * PerFrame, MadeStill * PerFrame, bPrev ? TEXT("") : TEXT(", no places a frame before"),
+		OwnFarFrames * PerFrame, LinksPosed * PerFrame, LinksHeld * PerFrame);
 	TellAt = Now;
-	Frames = HeldFrames = OwnFarFrames = LinksPosed = LinksHeld = 0;
+	Frames = HeldFrames = OwnFarFrames = LinksPosed = LinksHeld = SentMoving = MadeStill = 0;
 }

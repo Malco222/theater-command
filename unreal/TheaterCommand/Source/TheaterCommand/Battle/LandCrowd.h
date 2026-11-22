@@ -52,8 +52,19 @@ class USceneComponent;
  * her open_up clip played to its end) in that piece's stead, so past the hand-over her lid stands up and her commander
  * stands clear of it, not through a shut lid. A third instanced mesh a model, no more instances a vehicle shown.
  *
+ * Her motion vector: each piece's mesh keeps every instance's place a frame before (SetHasPerInstancePrevTransforms, set
+ * before it is registered, Movable; LandVat's pattern for the men, 3073236c), so a far tank driving across the picture,
+ * or one the lens follows, has her own motion for the anti-aliasing and the motion blur, as her near meshes have theirs.
+ * Without it the engine draws an instance moved inside its mesh as still: she smears, or the lens following her blurs
+ * her with the ground behind. Each move sends both places (BatchUpdateInstancesTransforms): where she is and where her
+ * instance was drawn the frame before. One not moved again is made still at the next frame (or she would be drawn
+ * smeared along her last step for as long as she stands); one moved into a given-back place carries her own place a
+ * frame before; one newly drawn by a piece (at the hand-over, or her lid's copy swapped in) takes her anchor body's
+ * place a frame before, where her own meshes or the other piece drew her, so neither change shows as a jump.
+ *
  * "-TheaterLandNoCrowd" turns TK1 off (every body drawn by its own meshes, as before: the A/B). "-TheaterLandLinksAlways"
- * turns TK3 off (every near moving tank's links posed every frame, as before).
+ * turns TK3 off (every near moving tank's links posed every frame, as before). "-TheaterLandCrowdNoPrev" turns the places
+ * a frame before off (the pieces as before: an instance moved is drawn as still; the look A/B with -TheaterLandTankPan).
  */
 class FLandCrowd
 {
@@ -126,6 +137,15 @@ private:
 		int32 Slot[PieceCount] = { -1, -1, -1 };
 		FVector At[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
 		FQuat Q[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		/** The place a frame before sent with At, Q (the motion vector's other end; the same: still). */
+		FVector Before[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+		FQuat BeforeQ[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		/** The frame (Frame) each piece's instance was last sent moving; 0: still. */
+		uint32 Moved[PieceCount] = { 0, 0, 0 };
+		/** Each piece's anchor body's place at the frame WasFrame (drawn by a piece or not), for one newly put there. */
+		FVector Was[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+		FQuat WasQ[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
+		uint32 WasFrame = 0;
 		float Soot = -1.0f;
 		bool bHeld = false;
 		bool bSeen = true;
@@ -138,11 +158,15 @@ private:
 		return Piece == LidUp ? Split.Open : Split.Pieces[Piece];
 	}
 	UMaterialInterface* InkFor(const LandKit::Model& Model);
-	/** Vehicle Vehicle (One) put in piece Piece at At, Q: the place after the piece's last vehicle, with her soot. */
-	void Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q);
+	/** Vehicle Vehicle (One) put in piece Piece at At, Q: the place after the piece's last vehicle, with her soot; her
+	 * place a frame before Before, BeforeQ (the same: no move). */
+	void Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q, const FVector& Before, const FQuat& BeforeQ);
 	/** Her instance in piece Piece given back: the piece's last vehicle moved into it (Draw removes the tail). */
 	void Drop(FOne& One, int32 Piece);
 	void Release(FOne& One);
+	/** Instance Slot of Copies put at At, Q (world), its place a frame before Before, BeforeQ (the same: no move); with the
+	 * places a frame before off, put as before. */
+	void SetPlace(UInstancedStaticMeshComponent* Copies, int32 Slot, const FVector& At, const FQuat& Q, const FVector& Before, const FQuat& BeforeQ);
 	void Tell(int32 Shown);
 
 	TWeakObjectPtr<AActor> Owner;
@@ -154,6 +178,12 @@ private:
 	WorldFn World;
 	TArray<TObjectPtr<UObject>>* Keep = nullptr;
 	bool bOff = false, bLinksAlways = false;
+	/** Each piece keeps its instances' places a frame before (off: -TheaterLandCrowdNoPrev). */
+	bool bPrev = true;
+	/** The frame, counted at each Draw (from 1; 0 is "still"). */
+	uint32 Frame = 1;
+	/** One instance's place and place a frame before, for the engine's batch update (kept: no array made a move). */
+	TArray<FTransform> OneAt, OneBefore;
 	// (std::vector: a kind holds LandKit's own vectors, which are moved, never copied bit by bit as a TArray would)
 	std::vector<FKind> Kinds;
 	std::vector<FOne> Ones;
@@ -161,4 +191,6 @@ private:
 	// held out of the picture.
 	double TellAt = -1.0;
 	int64 Frames = 0, HeldFrames = 0, OwnFarFrames = 0, LinksPosed = 0, LinksHeld = 0;
+	// (and the places sent moving and made still again, with the places a frame before)
+	int64 SentMoving = 0, MadeStill = 0;
 };

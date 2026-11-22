@@ -247,6 +247,30 @@ namespace LandEye
 		/** Riding with a unit (or going to the men the general sent), its other men this far from the four none fit on
 		 * are weighed once before the field: Kursk's ride left its 120 men for 7 s in 80. */
 		double ElsewhereRide = 20.0;
+		/** The picture run's asked shots (the ground's cut 5: "among the men" and "in the grass" asked of the attack's
+		 * first man, an officer waiting among his headquarters' men, every place by him crossed by one of them; "the
+		 * fallen" asked of a man lost in the grass): an asked shoulder, low, tank or village shot that will not fit on its man is
+		 * tried on up to AskOthers other men, his own unit's first, then his side's within AskWithin metres (standing, or
+		 * fallen as he is), each AskApart from the others tried, two places each, before it is placed unfit. */
+		int AskOthers = 12;
+		double AskWithin = 400.0, AskApart = 30.0;
+		/** An asked still keeps other men CrossClear and ManClear off (2 m) like any shot. A man may come nearer, to
+		 * AskCross metres, only running past: within CrossClear of the lens for no more than AskPass seconds on the
+		 * screen, a blur through the picture, never held (the art director on 83749bb4's 04: "a man that close is mostly
+		 * out of frame, and our near model shows its blocks"; cut 5's 04 read well with its nearest man at about 2 m).
+		 * And an asked low shot on a man up keeps him beside the lens, out of the picture, as the low shot is made (the
+		 * grass and the men ahead are its picture). */
+		double AskCross = 0.9, AskPass = 0.5;
+		/** An asked still left within AskHold real seconds (before the picture run can have taken it: it asks two battle
+		 * seconds ahead) is asked again, at most AskAgainMost times, not where it was left. */
+		double AskHold = 3.0;
+		int AskAgainMost = 2;
+		/** The village still (Ask's Building): a man within HouseNear metres of a house first, else within HouseFar; the
+		 * look turned HouseLook of the way from him toward the house; the house at least HouseLeast of the picture's height
+		 * across (half its width over the distance) and seen at HouseSeen of its points in the picture at the least. */
+		double HouseNear = 120.0, HouseFar = 320.0;
+		double HouseLook = 0.35, HouseLeast = 0.08;
+		int HouseSeen = 2;
 	};
 
 	class Director
@@ -259,8 +283,11 @@ namespace LandEye
 		/** Forces a cut on the next update (a key), or holds the shot it has (Hold true) until let go. */
 		void CutNow() { bCutAsked = true; }
 		void Hold(bool bHold) { bHeld = bHold; }
-		/** A shot of a kind on a subject asked for (the picture run). Subject -1: the director's choice. */
-		void Ask(Kind K, int Subject = -1);
+		/** A shot of a kind on a subject asked for (the picture run). Subject -1: the director's choice. Building true: a
+		 * house is kept in the picture with its man (the art director's village still, cut 5: a watch shot of a German
+		 * in a hedge and wheat, no house anywhere in it): the asked man if he stands near one, else the man of his side
+		 * nearest a house, else of either side, and the eye placed so the house stands behind or beside him. */
+		void Ask(Kind K, int Subject = -1, bool bBuilding = false);
 		/** Ride with this unit (Brian's yes, 22 November 03:36Z): the film stays with one block's men or tanks (its id as
 		 * the recording numbers it), cutting among them by the same rules as among the field's: their falls and a tank's
 		 * end are gone to, no one else's. It cuts to them at once unless the shot on the screen is already on one of them.
@@ -268,6 +295,15 @@ namespace LandEye
 		 * (Riding() then -1). No wide of the whole mass while riding. */
 		void Ride(int Block);
 		int Riding() const { return RideBlock; }
+		/** The platoon cam (Brian's yes, 22 November 02:40Z): the film rides with the platoon leading a side's assault
+		 * (Side as the recording's blocks number it; -1 lets go), as the recording marks it (each man's Lead spans, the
+		 * tactics thread's ld), going on to the next platoon as the lead passes, and among its men most of all to the
+		 * leading squad's and, in a rush, to the men moving. Before anyone leads (the approach) the film is the field's;
+		 * once a platoon has led, the film stays with it until another takes the lead or none of it stands. Ride() lets it
+		 * go: the player's own pick comes first. LeadBlock() is the platoon ridden for the lead, -1 none. */
+		void FollowLead(int Army);
+		int FollowingLead() const { return LeadSide; }
+		int LeadBlock() const { return LeadBlockNow; }
 		/** The general has just given a block an order (a live battle): the film's next cut goes to its men, as a war film
 		 * cuts from the radio call to the men it sends; the shot on the screen is left as soon as it has run its least
 		 * (Settings::ShotLeast), unless it holds for a fall or a tank's end. Not over a tank's end or a fall coming, nor
@@ -285,6 +321,15 @@ namespace LandEye
 		/** Whether the last asked shot found no fit place and was placed anyway (its kind kept for the picture run): a
 		 * still the film's own rules would have turned away. */
 		bool AskedUnfit() const { return bAskedUnfit; }
+		/** Whether the shot on the screen keeps a house in its picture (a village shot asked with Building, placed): false
+		 * where no house fit, or none stands on the field (the steppe's cottages are things, not houses), so the picture run
+		 * can name the still for what it shows. */
+		bool HouseInShot() const { return ShotHouse >= 0 && Shot == Kind::Watch; }
+		/** The houses found on the field for the village shot (once, at its first ask), for the test. */
+		int HousesFound() const { return static_cast<int>(Houses.size()); }
+		/** Finds the field's houses for the village still now (else at its ask, in that frame: some 20 to 40 ms over a
+		 * 3 by 2 km field): the picture run calls it as the battle opens. */
+		void FindHouses();
 		/** The ground asked under the camera's rays so far (the measure of its work a frame, the same on any machine). */
 		long Steps() const { return RaySteps; }
 		/** Whether the shot on the screen is the whole mass (Settings::MassFrom), and the battle time it was cut to (-1:
@@ -352,6 +397,7 @@ namespace LandEye
 		bool bAsked = false;
 		Kind AskedKind = Kind::Wide;
 		int AskedSubject = -1;
+		bool bAskedBuilding = false;
 		/** Where the eye stands relative to its subject for this shot (metres: behind, beside, up) and its own place
 		 * for a still shot (Watch, Wide). */
 		double Back = 1.0, Side = 0.5, Up = 1.5;
@@ -401,6 +447,18 @@ namespace LandEye
 		 * the film (up, on the field, not hidden) at a battle time. */
 		int RideBlock = -1;
 		bool OffRide(int Track) const { return RideBlock >= 0 && Rec->Tracks[static_cast<size_t>(Track)].Block != RideBlock; }
+		/** Ride's own work, for the player's pick and the platoon cam's alike. */
+		void RideWith(int Block);
+		/** The platoon cam: the side followed (-1 none), the platoon ridden for the lead, when the marks are next read
+		 * (every half second on the screen); the men with any lead marks, by track, kept up as a live battle grows. */
+		int LeadSide = -1, LeadBlockNow = -1;
+		double LeadLookAt = -1e9;
+		std::vector<int> LeadMen;
+		size_t LeadMenTracks = 0;
+		/** Whether a man leads his side's assault at a battle time (his Lead spans); whether he is in the moving group. */
+		bool InLead(size_t Track, double Battle) const;
+		bool InRush(size_t Track, double Battle) const;
+		void LookForLead(double Battle, double Real);
 		/** The block the general last ordered (Lean), -1 none, and the real time the lean lapses (-1: not yet seen). */
 		int LeanBlock = -1;
 		double LeanUntil = -1.0;
@@ -446,6 +504,10 @@ namespace LandEye
 		double NextLook = 0.0, BadSince = -1.0;
 		/** The look's second half due this frame: where the picture will be and the men coming (the look in two frames). */
 		bool bLookAhead = false;
+		/** The shot on the screen was asked (the picture run's still): men run past it as near as Settings::AskCross. */
+		bool bShotAsked = false;
+		/** Whether the shot being chosen, or else the one on the screen, was asked. */
+		bool AskedNow() const { return bChoosing ? bChoiceAsked : bShotAsked; }
 		/** Cutting away from its own man come into the lens at once: the next shot is being chosen, the eye not shoved
 		 * clear of him meanwhile (shoved, it jolted 0.43 m in the frame before the cut). */
 		bool bShoveCut = false;
@@ -553,6 +615,35 @@ namespace LandEye
 		/** And men alone, when every one no place fit on was a tank (Sedan's tanks in the woods at 38 s, while a
 		 * battalion ran up the road on foot). */
 		bool bScanMenOnly = false;
+		/** The houses on the field (a house's floor or a wall's line is no place for the eye at any height: World::Free),
+		 * found by a 6 m search of the whole field at the first village ask, each by its points 2 m apart inside it. */
+		struct House
+		{
+			Vec C;
+			double R = 0.0;
+			std::vector<Vec> Inside;
+		};
+		std::vector<House> Houses;
+		bool bHousesFound = false;
+		/** Whether a house is in a picture: HouseSeen of its points in it and seen from the eye, and big enough. */
+		bool HouseSeenIn(const Vec& Eye, const Vec& Look, double Fov, int H) const;
+		/** An asked shot's men to try (AskOthers): each with the house (and the point of it nearest him) it is framed
+		 * against for the village shot, -1 otherwise. The first is the one the asked option is on. */
+		struct AskTry
+		{
+			int Track = -1;
+			int House = -1;
+			Vec Aim;
+		};
+		std::vector<AskTry> AskTries;
+		size_t AskNext = 1;
+		int AskNextV = 0;
+		void MakeAskTries(double Battle);
+		/** The house of the place being tried and of the shot placed (-1: none), and the point of it the look turns to. */
+		int TryHouse = -1, ShotHouse = -1;
+		Vec TryAim, ShotAim;
+		int AskAgain = 0;
+		std::vector<Vec> AskLeft;
 		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
 		 * tries before the high view. */
 		bool bChoiceMiddle = false;
@@ -567,6 +658,8 @@ namespace LandEye
 			double FellAt = -1.0, Fov = 50.0, FacingEased = 0.0, VariantSide = 1.0, Back = 1.0, Side = 0.5, Up = 1.5, UpJitter = 0.0, TrackUp = 2.0;
 			bool bFallEye = false, bNearWatch = false, bLoose = false, bMass = false;
 			Vec Stand, Target, TrackOff;
+			int House = -1;
+			Vec Aim;
 		};
 		ShotKept KeepShot() const;
 		void PutShot(const ShotKept& K);
@@ -615,7 +708,12 @@ namespace LandEye
 		double LookOver(double UpNow) const;
 		/** Whether a man (not Own) walks within CrossClear of an eye at N times (the eye where it will be then), read from
 		 * the recording. */
-		bool Crossing(const Vec* Eyes, const double* Times, int N, int Own) const;
+		bool Crossing(const Vec* Eyes, const double* Times, int N, int Own, double Clear = -1.0) const;
+		/** Whether a man within Near of a held lens at T is only running past it: within Near no more than
+		 * Settings::AskPass on the screen, and never within Settings::AskCross. */
+		bool Passes(const LandFeed::Track& Tr, const Vec& Eye, double T, double Near) const;
+		/** How many men up (Enough at most) stand in a picture within Within metres and are seen from its eye. */
+		int MenInPicture(const Pose& P, double Battle, double Within, int Enough, int Except) const;
 		/** The last real time something moved in the picture before the armies met, and when it is next looked for. */
 		double LastMoved = -1.0, NextMoveLook = 0.0;
 		/** The share of a picture filled by a thing within EdgeNear of the lens (leaves, a trunk; not men, not ground). */
@@ -632,6 +730,19 @@ namespace LandEye
 		mutable std::vector<int> BlockIx;
 		mutable size_t BlockIxTracks = 0, BlockIxBlocks = 0;
 		const LandFeed::Block* BlockOfTrack(int Track) const;
+		/** Each track's kind by bits (KindTank, KindGun, KindLorry), kept while the counts stand: the scans over every
+		 * track compare no names (CD0: at Kursk the first frame of a cut's choice went mostly on 5,800 tracks' names,
+		 * blocks and moves asked before the side was). */
+		static constexpr uint8_t KindTank = 1, KindGun = 2, KindLorry = 4;
+		mutable std::vector<uint8_t> TrackKinds;
+		uint8_t KindOf(size_t Track) const;
+		bool IsVehicleAt(size_t Track) const { return KindOf(Track) != 0; }
+		/** Whether each block is hidden from the player, asked once a frame (FrameStamp) of the scene's Hidden. */
+		mutable std::vector<uint8_t> HiddenVal;
+		mutable std::vector<uint32_t> HiddenStamp;
+		uint32_t FrameStamp = 1;
+		/** The rounds Gather takes, by their place in the recording. */
+		std::vector<int> GatherIx;
 		/** The men where they stood at a battle time (MenT), by 16 m squares in a hashed table of chains; Crossing asks
 		 * the squares round its eye, with room for how far the fastest man of the recording goes from MenT. */
 		struct ManAt
