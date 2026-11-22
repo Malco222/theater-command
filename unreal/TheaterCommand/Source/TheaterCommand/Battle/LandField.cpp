@@ -1095,7 +1095,7 @@ namespace LandField
 					case RgMarsh: *What = Drawn::Marsh; break;
 					case RgLane: *What = Drawn::Lane; break;
 					default:
-						*What = Pid[P] >= 0 && Parcels[static_cast<size_t>(Pid[P])].Kind == RgField ? Drawn::Crop : Drawn::Pasture;
+						*What = P < Pid.size() && Pid[P] >= 0 && Parcels[static_cast<size_t>(Pid[P])].Kind == RgField ? Drawn::Crop : Drawn::Pasture;
 						break;
 					}
 				}
@@ -4342,7 +4342,10 @@ namespace LandField
 			return S;
 		}
 		const size_t P = Pix(X, Y);
-		const int Id = Pid[P];
+		// (a region's sites are laid before the parcels: until MakeParcels no parcel and no edge distance, not a read
+		// past the end)
+		const bool bParcels = Pid.size() == Rgn.size();
+		const int Id = bParcels ? Pid[P] : -1;
 		int K = Rgn[P];
 		if (Id >= 0)
 		{
@@ -4357,7 +4360,7 @@ namespace LandField
 			S.Across = -(X - Q.CX) * Sa + (Y - Q.CY) * Ca;
 		}
 		S.Kind = K < LandScape::KCount ? K : static_cast<int>(LandScape::KOpen);
-		S.Edge = bNoise ? Bilinear(DistE, X, Y) : DistE[P];
+		S.Edge = DistE.size() != Rgn.size() ? 1e6 : bNoise ? Bilinear(DistE, X, Y) : DistE[P];
 		S.Lane = bNoise ? Bilinear(LaneD, X, Y) : LaneD[P];
 		if (S.Lane < LaneWall + 3.0) S.LaneHalf = LaneHalfAt(X, Y);
 		const uint8_t O = OccR[P];
