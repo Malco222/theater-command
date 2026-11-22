@@ -16,6 +16,7 @@ import { BEND, buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt,
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, gunsOf, reachOf, type Kind, type Motion } from './rules';
+import { armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
 import { bendAt, deploy, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 
@@ -176,6 +177,16 @@ export class LandBattle implements BattleSim<LandUnit> {
   hide = false;
   /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
   private hidStarted = false;
+  /**
+   * Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z; armour.ts, LAND.armour): a tank's or a gun's blow on
+   * a tank weighs what its gun gets through the face it strikes at that range. Off unless whoever opens the field turns
+   * it on; off, nothing here is read.
+   */
+  measured = false;
+  /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
+  readonly flanking = new Map<number, { target: number; at: [number, number]; since: number }>();
+  /** Each block's tank or gun model, as the rules weigh it (armour.ts vehicleOf): null for the rest. */
+  private models = new Map<number, string | null>();
   /** The player's orders on the air (radio): each block's, with the battle time it lands. */
   private pending: { at: number; id: number; go: () => void }[] = [];
 
@@ -793,6 +804,20 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.drill?.relay(u);
   }
 
+  // ---- Measured armour (release 2; armour.ts) ----------------------------------------------------------------------
+
+  /** The tank or gun model a block fights with in this battle's month, where the sheet knows it: null for the rest. */
+  vehicle(u: LandUnit): string | null {
+    if (!this.models.has(u.id)) this.models.set(u.id, u.team ? null : vehicleOf(u.kind, u.nat, this.ticket.turn));
+    return this.models.get(u.id)!;
+  }
+
+  /** What a blow from u on tank block t weighs for t's armour on that face at that range (1 at par); null where unknown. */
+  armourAt(u: LandUnit, t: LandUnit, face: ArmourFace, range: number): number | null {
+    const s = this.vehicle(u), v = this.vehicle(t);
+    return s && v ? armourWeight(s, v, face, range, this.ticket.turn, LAND.armour.lo, LAND.armour.hi) : null;
+  }
+
   // ---- Hidden in the woods (release 2; Brian, 22 November 04:18Z; LAND.hide) -------------------------------------
 
   /**
@@ -1169,6 +1194,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (rise > LAND.height.over) p *= LAND.height.up; else if (rise < -LAND.height.over) p *= LAND.height.down;
     const aspect = rearguard ? 'front' : aspectOf(t.face, t.x, t.y, u.x, u.y);
     const [am, nm] = LAND.aspect[aspect];
+    // Measured armour (release 2): a tank's blow on a tank, or a gun's over open sights, by the face and the range.
+    let amx = 1;
+    if (this.measured && t.kind === 'arm' && (u.kind === 'arm' || (u.kind === 'art' && !u.team && this.gap(u, t) < gunsOf(u).closeAt))) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
     const ground = this.groundTake(t);
     let take = ground;
     // Tanks that have left their infantry on close ground take the card's own figure for tanks alone there (item 7).
@@ -1177,7 +1205,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Upright and running in the open, at the double: struck harder (direct command, release 2).
     if (t.order?.kind === 'move' && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
-    const dmg = p * am * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
+    const dmg = p * am * amx * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
     return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground };
   }
 
@@ -1207,7 +1235,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       for (const [u] of from) if (!by || owed[u.id] > owed[by.id]) by = u;
       if (!by) { this.drill?.fromAir(t.id, k); continue; }
       owed[by.id] -= model;
-      if (SHELLS_FROM.includes(by.kind) && by.team !== 'mg') this.shell(by, t, k, w);
+      // A tank block's man off the enemy's foot may go to her machine guns, not a shell (the drill book; looks only).
+      if (SHELLS_FROM.includes(by.kind) && by.team !== 'mg' && !(by.kind === 'arm' && this.drill?.mgKill(by, t, k))) this.shell(by, t, k, w);
       else this.drill?.struckBy(by.id, t.id, k);
     }
   }

@@ -40,6 +40,7 @@ import { GROUNDS, type Ground, type LandField } from './field';
 import { LAND, MOTION, type Kind, type Team } from './rules';
 import type { LandBattle } from './sim';
 import type { LandUnit } from './units';
+import { fateOf } from './armour';
 import { BOOK, Suppression, boundOf, missionStep, schoolNums, turnOf, turns, type Bound, type Mission } from './tactics';
 
 /**
@@ -159,6 +160,8 @@ export interface Man {
   due?: number;
   /** A tank's machine guns on the enemy's foot (the drill book: against infantry mostly machine guns). */
   coax?: true;
+  /** A tank's commander struck up in his hatch (BOOK.tankMg): the battle time; she fights buttoned up from then. */
+  cmdDown?: number;
 }
 
 /**
@@ -189,6 +192,12 @@ export type Mark = [Face, number, number, 'gouge' | 'hole' | 'scorch' | 'pocks',
 export interface Round {
   t: number; l: number; by?: number; k?: number; j?: number; w: Weapon; on: number; ok?: number; oj?: number; x: number; y: number; r: Struck;
   fc?: Face; u?: number; h?: number;
+  /** A tank's machine-gun round: which gun fired it, the coaxial beside the main gun, the hull gunner's, or the commander's on the roof (BOOK.tankMg). */
+  g?: 'coax' | 'hull' | 'roof';
+  /** It struck the tank's commander, up in his hatch: he drops inside, and she fights buttoned up from then. */
+  cm?: 1;
+  /** A tank knocked out ('kill'): how she ends, out of the fight, burning, or blown up (armour.ts fateOf: by her model and the face struck). */
+  fate?: 'out' | 'burn' | 'blow';
 }
 
 /** A block's men as the 3D game reads them (LandBattle.menView). Numbers rounded; absent fields are off. */
@@ -804,7 +813,7 @@ export class Drill {
     const owed = u.owed ?? {};
     for (const id of Object.keys(owed).map(Number)) { const e = b.unit(id); if (e && live(e) && e.side !== u.side && (!by || owed[id] > owed[by.id])) by = e; }
     by ??= this.threat(u) ?? undefined;
-    const shell = !!by && (by.kind === 'arm' || (by.kind === 'art' && by.team !== 'mg'));
+    const shell = !!by && ((by.kind === 'arm' && !this.mgKill(by, u, sq.lost)) || (by.kind === 'art' && by.team !== 'mg'));
     const from: [number, number] = by ? [by.x, by.y] : [u.x, u.y];
     let burst: [number, number] | undefined;
     while (n-- > 0 && cand.length) {
@@ -2283,7 +2292,7 @@ export class Drill {
     let behind = Infinity;
     if (close && foot.length) for (const f of foot) behind = Math.min(behind, (f.x - u.x) * fx + (f.y - u.y) * fy + f.d / 2 - 15);
     tanks.forEach((m, i) => {
-      m.buttoned = lone || (e !== null && b.gap(u, e) < 120) || undefined;
+      m.buttoned = lone || (e !== null && b.gap(u, e) < 120) || m.cmdDown !== undefined || undefined;
       // The drill book: her machine guns on the enemy's foot while her block fights it.
       m.coax = (this.byBook && !!e && FOOT_KINDS.includes(e.kind) && u.engaged !== undefined && b.gap(u, e) < 600) || undefined;
       const n = sq.u.figures0 - 1 - m.k;
@@ -2868,6 +2877,7 @@ export class Drill {
     const l = Math.round((t + range / R.speed[w]) * 10) / 10, k0 = Math.round(t * 10);
     const base: Round = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on.id, x: 0, y: 0, r: 'miss' };
     if (m.j !== undefined) base.j = m.j;
+    if (w === 'mg' && m.role === 'tank') base.g = this.tankGun(u, m, aim, k0);
     const [lx, ly] = range > 0.01 ? [(v.x - m.x) / range, (v.y - m.y) / range] : fwd(m.face);
     // Everything is placed where it will be when the round lands (at l): what it is fired at, and every vehicle near.
     const fly = l - t;
@@ -2883,7 +2893,8 @@ export class Drill {
         const [a, h] = this.spotOn(hitV, u.id, m.n, k0), [hx, hy] = this.ahead(hitV, fly);
         const glance = roll(this.seed, u.id, m.n, k0, 65) < R.glance.top;
         this.duck(hx, hy);
-        this.book({ ...base, ok: hitV.k, x: Math.round(hx * 10) / 10, y: Math.round(hy * 10) / 10, r: glance ? 'glance' : 'worn', fc: 'top', u: a, h }, hitV, 'scorch');
+        const cm = this.commanderHit(hitV, BOOK.tankMg.splinter, u.id, m.n, k0);
+        this.book({ ...base, ok: hitV.k, x: Math.round(hx * 10) / 10, y: Math.round(hy * 10) / 10, r: glance ? 'glance' : 'worn', fc: 'top', u: a, h, ...(cm ? { cm: 1 as const } : {}) }, hitV, 'scorch');
         return;
       }
       // On any other vehicle (a lorry or a gun it would wreck, which the rules never do; another block's tank or a wreck
@@ -2911,7 +2922,7 @@ export class Drill {
       const fc = this.faceOf(v, m.x, m.y), [a, h] = this.spotOn(v, u.id, m.n, k0), [vx, vy] = this.ahead(v, fly);
       const at = { ...base, ok: v.k, x: Math.round(vx * 10) / 10, y: Math.round(vy * 10) / 10, fc, u: a, h };
       // Small arms only rattle a tank (no scar); they hole a lorry and pock a gun's shield. A grenade scorches.
-      if (v.role === 'tank' && small) this.book({ ...at, r: 'glance' });
+      if (v.role === 'tank' && small) this.book({ ...at, r: 'glance', ...(this.commanderHit(v, BOOK.tankMg.commander, u.id, m.n, k0) ? { cm: 1 as const } : {}) });
       else if (small) this.book({ ...at, r: v.role === 'lorry' ? 'worn' : 'glance' }, v, 'pocks');
       else if (w === 'grenade') this.book({ ...at, r: 'glance' }, v, 'scorch');
       else { const glance = roll(this.seed, u.id, m.n, k0, 67) < R.glance[fc]; this.book({ ...at, r: glance ? 'glance' : 'worn' }, v, glance ? 'gouge' : 'hole'); }
@@ -2933,6 +2944,37 @@ export class Drill {
   }
 
   /**
+   * Whether the man (model k, or a section's man as the block's count of losses) a tank block took off the enemy's
+   * foot went to her machine guns, not her main gun's shells (BOOK.tankMg.kill: more in the open). The drill book only;
+   * fixed by the blocks and the count, never the battle's dice. Looks only: the rules took him either way.
+   */
+  mgKill(by: LandUnit, t: LandUnit, k: number): boolean {
+    if (!this.byBook || by.kind !== 'arm' || !FOOT_KINDS.includes(t.kind) || t.kind === 'fort') return false;
+    const close = CLOSE.includes(groundOf(this.b.field, t.x, t.y)) || t.dug;
+    return roll(this.seed, by.id, t.id, k, 97) < (close ? BOOK.tankMg.kill.cover : BOOK.tankMg.kill.open);
+  }
+
+  /**
+   * Which of a tank's machine guns fires this burst (BOOK.tankMg): the commander's on the roof only in the armies that
+   * carried one, only with him up in his hatch, a share of the time; the hull gunner's at what is before her bow; else
+   * the coaxial beside the main gun.
+   */
+  private tankGun(u: LandUnit, m: Man, at: [number, number], n: number): 'coax' | 'hull' | 'roof' {
+    const T = BOOK.tankMg;
+    if (!m.buttoned && m.cmdDown === undefined && T.roof.includes(u.nat) && roll(this.seed, u.id, m.n, n, 98) < T.roofShare) return 'roof';
+    const off = Math.abs(wrap(bearing(m.x, m.y, at[0], at[1]) - m.face)) * (180 / Math.PI);
+    return off <= T.hullArc ? 'hull' : 'coax';
+  }
+
+  /** A round striking a tank strikes her commander, up in his hatch, this share of the time: he drops inside, and she buttons up. */
+  private commanderHit(v: Man, odds: number, ...ns: number[]): boolean {
+    if (v.role !== 'tank' || v.buttoned || v.cmdDown !== undefined || roll(this.seed, ...ns, 99) >= odds) return false;
+    v.cmdDown = this.b.t;
+    v.buttoned = true;
+    return true;
+  }
+
+  /**
    * The round that cost a model the rules took: from the striking block's tank or gun (a shell, Drill.shelled, landing
    * at p) or, on foot, its man nearest who could have fired it (on a tank: its anti-tank man, else a grenade). It is
    * the hit, landing as it is fired; on a tank it leaves the hole it went in by.
@@ -2943,24 +2985,29 @@ export class Drill {
     let s: Man | undefined, w: Weapon = p ? (by?.kind === 'arm' ? 'tank' : by?.team === 'mor' ? 'mortar' : 'gun') : 'rifle';
     if (tq) {
       const shells = (x: Man): boolean => x.role === 'tank' || x.role === 'gun' || x.role === 'mortar';
-      const can = this.standing(tq).filter((x) => x.role !== 'lorry' && x.role !== 'holder' && (p ? shells(x) : !shells(x)));
+      // A tank block's man taken by no shell went to her machine guns (BOOK.tankMg).
+      const mg = !p && by?.kind === 'arm';
+      const can = this.standing(tq).filter((x) => x.role !== 'lorry' && x.role !== 'holder' && (mg ? x.role === 'tank' : p ? shells(x) : !shells(x)));
       const pref = v.role === 'tank' && !p && by?.team !== 'mg' ? can.filter((x) => x.role === 'at') : can.filter((x) => SMALL_ARMS.has(x.pose) || shells(x) || x.role === 'hmg');
       const from = pref.length ? pref : can;
       let dd = Infinity;
       for (const x of from) { const d = Math.hypot(x.x - at[0], x.y - at[1]); if (d < dd) { dd = d; s = x; } }
     }
-    if (!p && s) w = s.role === 'hmg' ? 'mg' : v.role === 'tank' ? (s.role === 'at' ? 'at' : 'grenade') : s.role === 'mg' ? 'mg' : 'rifle';
+    if (!p && s) w = s.role === 'hmg' || s.role === 'tank' ? 'mg' : v.role === 'tank' ? (s.role === 'at' ? 'at' : 'grenade') : s.role === 'mg' ? 'mg' : 'rifle';
     const r: Round = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at[0] * 10) / 10, y: Math.round(at[1] * 10) / 10, r: 'kill' };
     if (v.j !== undefined) r.oj = v.j;
     if (by) r.by = by.id;
     if (s) {
       r.k = s.k;
       if (s.j !== undefined) r.j = s.j;
+      if (w === 'mg' && s.role === 'tank' && by) r.g = this.tankGun(by, s, at, Math.round(t * 10));
       // Its shot is seen: a tank's, a gun's, a launcher's or a grenade's stamp (small arms are in the firing already).
       if (w !== 'rifle' && w !== 'mg') { s.shot = t; s.fired = t; s.aim = [v.x, v.y]; if (s.role === 'gun' || s.role === 'mortar') s.pose = 'fire'; }
     }
     if (VEHICLE.has(v.role)) {
       const fc: Face = w === 'gun' || w === 'mortar' ? 'top' : s ? this.faceOf(v, s.x, s.y) : 'front', [a, h] = this.spotOn(v, vq.u.id, v.n, Math.round(t * 10), 9);
+      // A tank's end, by her measured armour: a rear hit burns more often (Brian, 22 November 04:16Z).
+      if (v.role === 'tank') r.fate = fateOf(this.b.vehicle(vq.u), fc === 'front' ? 'front' : fc === 'rear' ? 'rear' : 'side', roll(this.seed, vq.u.id, v.n, 96), roll(this.seed, vq.u.id, v.n, 95));
       this.book({ ...r, fc, u: a, h }, v, 'hole');
     } else this.book(r);
   }
