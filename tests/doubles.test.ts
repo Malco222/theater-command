@@ -75,7 +75,7 @@ describe('you turn theirs', () => {
     expect(INTEL.names).toContain(d.name);
     expect(g.intel.foes.map((f) => f.id)).toEqual([2, 3]);
     expect(doublesOf(g).map((x) => x.name)).toEqual([d.name]);
-    expect(g.headlines.at(-1)!.text).toBe(`The German agent at London is turned. As double agent ${d.name} it goes back to the German service and works for you.`);
+    expect(g.headlines.at(-1)!.text).toBe(`The German agent at London is turned. As double agent ${d.name} they go back to the German service and work for you.`);
     // One a service: the next can only be arrested.
     expect(whyNotTurn(g, 'UK', 2)).toBe('You already run a double agent in the German service. Arrest this one.');
     expect(turnFoe(g, 'UK', 2)).toBeNull();
@@ -371,7 +371,7 @@ describe('they turn yours, with a tell', () => {
     g.turn++;
     intelTick(g, 'UK');
     expect(g.intel.agents).not.toContain(a);
-    expect(g.headlines.map((h) => h.text)).toContain(`Agent ${a.name} has been working for Germany. It is arrested.`);
+    expect(g.headlines.map((h) => h.text)).toContain(`Agent ${a.name} has been working for Germany. The agent is arrested.`);
     // The words say no more than that.
     const said = g.intel.notes.filter((n) => n.agent === a.name).map((n) => n.text).join(' ');
     expect(said).not.toMatch(/interrogat|execut|shot|hanged|tortur/i);

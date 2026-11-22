@@ -247,11 +247,11 @@ describe('what a watcher does', () => {
     intelTick(g, 'FIN');
     const found = foesFound(g);
     expect(found.length).toBe(1);
-    expect(g.headlines.some((x) => x.text === `Agent ${h.name} uncovers a Soviet agent watching your defences at ${r.name}. Arrest it: until you do, attacks there by the Soviet Union and its allies go in harder.`)).toBe(true);
+    expect(g.headlines.some((x) => x.text === `Agent ${h.name} uncovers a Soviet agent watching your defences at ${r.name}. Arrest the agent: until you do, attacks there by the Soviet Union and its allies go in harder.`)).toBe(true);
     const row = spyRoom(g)!.found![0];
     expect(row.watch).toBe(true);
     expect(row.text).toBe(`A Soviet agent watching your defences at ${r.name}, uncovered this month`);
-    expect(row.then).toBe(`Until it is arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
+    expect(row.then).toBe(`Until they are arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
     expect(arrest(g, 'FIN', found[0].id)).toBe(true);
     expect(watchers(g)).toEqual([]);
   });
@@ -263,7 +263,7 @@ describe('what a watcher does', () => {
     expect(help).toMatch(/up to about one every 3 months, a smaller country half as many, most of them watchers/);
     expect(help).toMatch(/no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on/);
     expect(help).toMatch(/With no land front they watch your coast facing the enemy/);
-    expect(help).toMatch(new RegExp(`from the month after it arrives, attacks there by its country and its allies go in ${Math.round(W.attack * 100)}% harder, until it is arrested`));
+    expect(help).toMatch(new RegExp(`from the month after they arrive, attacks there by their country and its allies go in ${Math.round(W.attack * 100)}% harder, until they are arrested`));
     expect(help).toMatch(/Guards do not stop watchers/);
     // At the easiest level no service works against him, and the line says only that.
     // Without every country's service at work, the smaller countries are not said to send any.
@@ -277,16 +277,16 @@ describe('what a watcher does', () => {
     const g = scene();
     const { r } = faceOff(g);
     plant(g, r.id, 'SOV', g.turn + 1).found = g.turn;
-    expect(spyRoom(g)!.found![0].then).toBe(`From next month, until it is arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
+    expect(spyRoom(g)!.found![0].then).toBe(`From next month, until they are arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
   });
 
-  it("the hunt says what it stops: before it strikes, and with watchers, before it helps more of the enemy's attacks", () => {
+  it("the hunt says what it stops: before the agent strikes, and with watchers, before they help more of the enemy's attacks", () => {
     const g = scene();
     hunter(g, g.nations.FIN.capital);
     const offer = (): string => spyRoom(g)!.agents.find((a) => !a.abroad)!.missions.find((m) => m.id === 'hunt')!.text;
-    expect(offer()).toBe("Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes, or, if it is watching your defences, before it helps more of the enemy's attacks.");
+    expect(offer()).toBe("Searches this province and the provinces around it for the other side's agents. An enemy agent uncovered can be arrested before they strike or, if they are watching your defences, before they help more of the enemy's attacks.");
     setSecretWar(g, 'watch', false);
-    expect(offer()).toBe("Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes.");
+    expect(offer()).toBe("Searches this province and the provinces around it for the other side's agents. An enemy agent uncovered can be arrested before they strike.");
   });
 
   it('a double agent in its service warns of it the month it lands', () => {

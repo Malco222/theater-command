@@ -516,7 +516,7 @@ export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text:
   oil: { label: 'Fire the oilfield', doing: 'preparing to fire the oilfield', text: `The wells are set alight: the field gives ${Math.round((1 - (data as any).missions.oil.cut) * 100)}% of its oil for ${(data as any).missions.oil.months} months. Tried once, next month, and then the agent must lie low.` },
   airfield: { label: 'Wreck the airfield', doing: 'preparing to wreck the airfield', text: 'Runways cratered and the fuel dump set alight: every enemy air group based on the field is grounded for the month. Tried once, next month, and then the agent must lie low.' },
   orders: { label: 'Steal the orders', doing: 'stealing the orders', text: "Next month's orders of the bomber groups on this field: which groups, how many bombers, the target, by day or by night. Tried each month the agent stays on it. A stolen order is never false; the gamble is in getting it." },
-  hunt: { label: 'Hunt enemy agents', doing: 'hunting enemy agents', text: "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes." },
+  hunt: { label: 'Hunt enemy agents', doing: 'hunting enemy agents', text: "Searches this province and the provinces around it for the other side's agents. An enemy agent uncovered can be arrested before they strike." },
   // (Read when asked for, not as the module loads: plans.ts and this file import each other through game.ts.)
   get bbPlans() { return theftText('bb'); },
   get cvPlans() { return theftText('cv'); },
@@ -922,8 +922,8 @@ function foesMonth(g: Game, nat: string): void {
       f.found = g.turn;
       const F = g.nations[f.nat], at = g.regions[f.reg];
       const text = f.kind === 'watch'
-        ? `Agent ${a.name} uncovers ${aAn(F?.adj ?? 'enemy')} ${F?.adj ?? 'enemy'} agent watching your defences at ${at.name}. Arrest it: until you do, attacks there by ${F ? theName(F) : 'the enemy'} and its allies go in harder.`
-        : `Agent ${a.name} uncovers ${aAn(F?.adj ?? 'enemy')} ${F?.adj ?? 'enemy'} agent at ${at.name}. Arrest it before it strikes.`;
+        ? `Agent ${a.name} uncovers ${aAn(F?.adj ?? 'enemy')} ${F?.adj ?? 'enemy'} agent watching your defences at ${at.name}. Arrest the agent: until you do, attacks there by ${F ? theName(F) : 'the enemy'} and its allies go in harder.`
+        : `Agent ${a.name} uncovers ${aAn(F?.adj ?? 'enemy')} ${F?.adj ?? 'enemy'} agent at ${at.name}. Arrest the agent before they strike.`;
       note(g, a, f.reg, 'uncovered', text, true);
       headline(g, 'event', text, nat, f.reg);
       learn(g, a, 1);
@@ -1169,7 +1169,7 @@ export function turnFoe(g: Game, nat: string, id: number): DoubleAgent | null {
   const d: DoubleAgent = { id: n, name: codename(g, n, 'double:'), of: f.nat, by: nat, since: g.turn };
   (g.intel.doubles ??= []).push(d);
   const F = g.nations[f.nat], r = g.regions[f.reg];
-  const text = `The ${F.adj} agent at ${r.name} is turned. As double agent ${d.name} it goes back to the ${F.adj} service and works for you.`;
+  const text = `The ${F.adj} agent at ${r.name} is turned. As double agent ${d.name} they go back to the ${F.adj} service and work for you.`;
   note(g, { name: d.name, nat }, r.id, 'turned', text, true);
   headline(g, 'info', text, nat, r.id);
   return d;
@@ -1329,7 +1329,7 @@ export function intelTick(g: Game, nat: string): void {
       if (doubles && a.turned !== undefined) {
         if (draw(g, g.turn, a.id, 'home') < DOUBLES().home) {
           const F = g.nations[a.turnedFor ?? ''];
-          lose(g, a, `Agent ${a.name} has been working for ${F ? theName(F) : 'the enemy'}. It is arrested.`, 'arrested');
+          lose(g, a, `Agent ${a.name} has been working for ${F ? theName(F) : 'the enemy'}. The agent is arrested.`, 'arrested');
         } else note(g, a, r.id, 'quiet', `Agent ${a.name}, ${r.name}: all quiet, and not one enemy agent anywhere near.`, true);
       }
       continue;
@@ -1436,15 +1436,15 @@ export function watchHelp(g: Game): string {
   if (each <= 0) return 'At this level of the campaign the enemy\'s services send no agents against you.';
   const k = SMALLER(), ready = WATCHERS().ready;
   const smaller = everyoneOn(g) ? `, a smaller country ${k === 0.5 ? 'half as many' : `${Math.round(k * 100)}% as many`}` : '';
-  const from = ready <= 1 ? 'from the month after it arrives' : `from ${ready} months after it arrives`;
-  return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of its province: ${from}, attacks there by its country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until it is arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
+  const from = ready <= 1 ? 'from the month after they arrive' : `from ${ready} months after they arrive`;
+  return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of the province they are in: ${from}, attacks there by their country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until they are arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
 }
 
 /** With watchers (release 2): the hunt offer's words, since an uncovered watcher never strikes but helps the enemy's attacks. */
-const HUNT_WATCH_TEXT = "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes, or, if it is watching your defences, before it helps more of the enemy's attacks.";
+const HUNT_WATCH_TEXT = "Searches this province and the provinces around it for the other side's agents. An enemy agent uncovered can be arrested before they strike or, if they are watching your defences, before they help more of the enemy's attacks.";
 
 /** The room's warning, in plain words: an agent can be turned, and a turned agent's reports are too good to be true. */
-export const TURNED_HELP = 'An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent\'s reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.';
+export const TURNED_HELP = 'An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent\'s reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: they will soon be found out.';
 
 function viewOf(g: Game, a: Agent): AgentView {
   const r = g.regions[a.reg], out = abroad(g, a), work = atWork(g, a);
@@ -1491,13 +1491,13 @@ export function spyRoom(g: Game, nat: string | null = g.human): SpyRoom | null {
       found: foesFound(g, nat).map((f) => ({
         id: f.id, nat: f.nat, reg: f.reg, where: g.regions[f.reg].name, watch: f.kind === 'watch',
         text: `${aAn(g.nations[f.nat]?.adj ?? 'enemy', true)} ${g.nations[f.nat]?.adj ?? 'enemy'} agent ${f.kind === 'watch' ? 'watching your defences ' : ''}at ${g.regions[f.reg].name}, uncovered ${f.found === g.turn ? 'this month' : 'earlier'}`,
-        then: f.kind === 'watch' ? `${f.strike > g.turn ? `${f.strike - g.turn === 1 ? 'From next month' : `In ${f.strike - g.turn} months`}, until it is arrested, attacks` : 'Until it is arrested, attacks'} there by ${g.nations[f.nat] ? theName(g.nations[f.nat]) : 'the enemy'} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : 'It strikes unless it is arrested.',
+        then: f.kind === 'watch' ? `${f.strike > g.turn ? `${f.strike - g.turn === 1 ? 'From next month' : `In ${f.strike - g.turn} months`}, until they are arrested, attacks` : 'Until they are arrested, attacks'} there by ${g.nations[f.nat] ? theName(g.nations[f.nat]) : 'the enemy'} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : 'The agent strikes unless they are arrested.',
       })),
     } : {}),
     ...(watchersOn(g) ? { watchHelp: watchHelp(g) } : {}),
     ...(ordersOn(g) ? { orders: enemyOrders(g, nat) } : {}),
     ...(doublesOn(g) ? {
-      doubles: doublesOf(g, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g.nations[d.of]?.adj ?? 'enemy'} service since ${monthOf(d.since)}: it warns of every new ${g.nations[d.of]?.adj ?? 'enemy'} agent sent against you, and opens ${g.nations[d.of]?.name ?? 'that country'}'s books.` })),
+      doubles: doublesOf(g, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g.nations[d.of]?.adj ?? 'enemy'} service since ${monthOf(d.since)}: they warn of every new ${g.nations[d.of]?.adj ?? 'enemy'} agent sent against you, and open ${g.nations[d.of]?.name ?? 'that country'}'s books.` })),
       turnedHelp: TURNED_HELP,
     } : {}),
   };

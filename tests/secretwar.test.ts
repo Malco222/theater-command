@@ -109,7 +109,7 @@ describe('spies who hunt spies (ruling 151(c))', () => {
     intelTick(g, 'UK');
     expect(hunter.mission).toBe('hunt');
     expect(foesFound(g).map((f) => f.id)).toEqual([1]);
-    expect(g.headlines.some((h) => /^Agent .+ uncovers a German agent at London\. Arrest it before it strikes\.$/.test(h.text))).toBe(true);
+    expect(g.headlines.some((h) => /^Agent .+ uncovers a German agent at London\. Arrest the agent before they strike\.$/.test(h.text))).toBe(true);
     expect(spyRoom(g)!.found![0].text).toMatch(/^A German agent at London, uncovered this month$/);
     expect(arrest(g, 'UK', 1)).toBe(true);
     expect(g.intel.foes).toEqual([]);
