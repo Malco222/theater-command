@@ -2426,11 +2426,25 @@ namespace LandKit
 				Open.push_back(S[static_cast<size_t>(H)].Turn);
 				S[static_cast<size_t>(H)].Turn = 0.0;
 			}
+			// a lid's lift up its post, as its hatch: as far up as either puts it, not both added
+			std::vector<std::pair<size_t, double>> Lifted;
+			for (size_t P = 0; P < M.Parts.size(); ++P)
+			{
+				if (M.Parts[P].Kind == PartKind::Slide && M.Parts[P].Name.find("_lift") != std::string::npos)
+				{
+					Lifted.emplace_back(P, S[P].Slide);
+					S[P].Slide = 0.0;
+				}
+			}
 			M.Play(C, Age, 1.0, S);
 			for (size_t I = 0; I < M.Hatches.size(); ++I)
 			{
 				double& Turn = S[static_cast<size_t>(M.Hatches[I])].Turn;
 				Turn = std::max(Turn, Open[I]);
+			}
+			for (const auto& L : Lifted)
+			{
+				S[L.first].Slide = std::max(S[L.first].Slide, L.second);
 			}
 			if (M.Gun >= 0 && M.Parts[static_cast<size_t>(M.Gun)].bLimits)
 			{

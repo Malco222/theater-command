@@ -4809,9 +4809,13 @@ void ALandBattle::TakeShots()
 		if (S.Battle >= Shot.At)
 		{
 			Shot.bTaken = true;
-			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
+			// (a still whose asked shot found no fit place and was placed anyway, one the film's own rules would have
+			// turned away, says so in its name: the camera director's AskedUnfit, for the art director's read)
+			const bool bUnfit = Shot.Kind >= 0 && S.Eye.AskedUnfit();
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Shot.Name + (bUnfit ? TEXT("-unfit") : TEXT("")) + TEXT(".png")), true, false);
 			++ShotsTaken;
-			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d"), *Shot.Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject);
+			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d%s"), *Shot.Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject,
+				bUnfit ? TEXT(" (no fit place found for it: placed anyway; the film would have turned it away)") : TEXT(""));
 		}
 	}
 	if (S.bCard && !bCardShot)
