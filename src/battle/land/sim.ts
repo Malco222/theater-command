@@ -15,7 +15,7 @@ import { STYLE, styleFor, type Style } from './styles';
 import { BEND, buildField, coverAt, diggable, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
-import { LAND, MOTION, gunsOf, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
+import { LAND, MOTION, bearerShare, gunsOf, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
 import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
 import { turnToDate } from '../../core/ticket';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
@@ -39,6 +39,14 @@ export interface Cut { t0: number; t1: number; unit: number; side: Side; x: numb
  * to x1, y1, standing while t < until. Numbered from 1 in the order laid.
  */
 export interface Screen { id: number; side: Side; unit: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }
+/**
+ * A block's stretcher bearers and its wounded (stretcher bearers, release 2; LAND.bearers), in strength as its str counts
+ * it: its bearers in all ('all') and out carrying now ('out', the bearers of every trip still out: 'trips', each with the
+ * battle second its bearers are back and how many); the litter cases lying where they fell ('waiting'); the light cases
+ * at their dressing ('light', each lot with the battle second it is back in the line and how many); its aid post
+ * ('aid'); whether its side has been told its bearers are out ('told'). Made at its first loss.
+ */
+export interface Litter { all: number; out: number; trips: { back: number; by: number }[]; waiting: number; light: { at: number; n: number }[]; aid: [number, number]; told: boolean }
 /** The squares the hedge lines are mapped by, for hiding (metres). */
 const HEDGE_CELL = 10;
 /** Ground with nothing to hide men on the move: caught there by an ambush, they are shaken worst (LAND.hide.surprise.open). */
@@ -302,6 +310,21 @@ export class LandBattle implements BattleSim<LandUnit> {
   smoke = false;
   /** Every screen laid this battle (smoke on call), in the order laid: standing while t < until. Empty while the switch is off. */
   readonly screens: Screen[] = [];
+  /**
+   * Stretcher bearers (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+   * someone doesnt want it"; the design director's rulings Q4 and Q5, 18:36Z; LAND.bearers; "Stretcher bearers" below):
+   * a block's wounded lie for its bearers, who carry them back to its aid post, its own blows the weaker by the men away;
+   * its light cases are back in the line after their dressing. Off unless whoever opens the field turns it on (the 2D
+   * page's ?bearers, the bridge's { bearers: true }); off, nothing below is read.
+   */
+  bearers = false;
+  /** Each block's bearers and wounded (Litter), from its first loss. Empty while the switch is off. */
+  private readonly litters = new Map<number, Litter>();
+  /**
+   * The light cases back in the line (stretcher bearers): when, the block and how much strength, a block's returns in one
+   * battle second taken together (at the first one's time). Empty while the switch is off.
+   */
+  readonly returns: { t: number; unit: number; n: number }[] = [];
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -2003,6 +2026,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
+    // Stretcher bearers (release 2): bearers home and light cases back in the line, then bearers out to the wounded.
+    if (this.bearers) this.carry();
     for (const u of this.units) if (live(u)) this.nerve(u);
     // Hedge cutters (release 2): where each block stood before it moved, to find where its way crossed a hedge.
     const before = this.cutters && this.hedges.length ? new Map(this.units.map((u): [number, [number, number]] => [u.id, [u.x, u.y]])) : null;
@@ -2205,6 +2230,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number } {
     const gu = coverAt(this.field, u.x, u.y);
     let p = u.power0 * (0.35 + 0.65 * (u.str / u.str0)) * LAND.rate;
+    // Stretcher bearers (release 2): the men out carrying the wounded back strike nothing.
+    if (this.bearers) p *= this.atHand(u);
     if (u.state === 'wavering') p *= LAND.wavering;
     // A block giving ground at the brink (giveGround) leaves a rearguard facing the enemy: a blow on it lands at the
     // weight of one struck by an enemy on the move (LAND.moving), as the enemy must come on after it, and on its front,
@@ -2282,6 +2309,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
+    // Stretcher bearers (release 2): its wounded lie for its bearers, its light cases go to their dressing. A model lost
+    // stays lost (its wreck laid once): the light cases come back as strength, never as a model stood up again.
+    if (this.bearers) { this.wounded(t, before - t.str); t.figures = Math.min(had, t.figures); }
     const owed = (t.owed ??= {}), model = t.power0 / Math.max(1e-9, t.tray * t.str0);
     for (const [u, d] of from) owed[u.id] = (owed[u.id] ?? 0) + d;
     for (let k = t.figures; k < had; k++) {
@@ -2685,6 +2715,114 @@ export class LandBattle implements BattleSim<LandUnit> {
     const r = LAND.turn[u.kind] * DT;
     const d = turn(u.face, want);
     u.face = Math.abs(d) <= r ? want : u.face + Math.sign(d) * r;
+  }
+
+  // ---- Stretcher bearers (release 2) --------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it"); the
+  // design director's rulings Q4 and Q5 (18:36Z), and the light cases (18:38Z); LAND.bearers. Of each loss of strength a
+  // block suffers (suffer: the blows, the air, kept harm landing), LAND.bearers.killed are dead and the rest wounded. Of
+  // the wounded, light.share are dressed at the block and back in the line light.dress seconds later (with no walk while
+  // light.at is 0), if the block is still fighting then: running, fled or gone, it takes none back. They come back as
+  // strength, up to what it started with, never raising its nerve: the only upward write to strength in the fight. The
+  // rest are litter cases: while they lie waiting and its bearers (share of its strength at the start, by army) are home,
+  // a block still fighting sends a trip, litter bearers a case, out to its aid post (LAND.bearers.aid behind where it
+  // started, toward its own edge) and back at LAND.bearers.pace: 2 x aid / pace, 330 s. Bearers out are still counted in
+  // its strength, its nerve, the day's count and its size: they only weaken its own blows, by the share of its strength
+  // away (atHand). One land:bearers event a block, to the player's own side, as its bearers first go out. Nothing here
+  // draws on the dice. The drill draws the men (drill.ts): the wounded, the bearers and the carries, looks only.
+
+  /** Where a block's aid post stands: LAND.bearers.aid metres behind its start place, toward its own back edge, on the field. */
+  aidOf(u: LandUnit): [number, number] {
+    const back = u.side === 'att' ? -1 : 1;
+    return [clamp(u.home[0], 0, this.field.w), clamp(u.home[1] + back * LAND.bearers.aid, 0, this.field.h)];
+  }
+
+  /** A block's bearers and wounded, as the rules count them (strength): none before its first loss, or with the switch off. */
+  litter(u: LandUnit): Readonly<Litter> | undefined { return this.bearers ? this.litters.get(u.id) : undefined; }
+
+  /** A loss of strength d on a block: its share of wounded, the light cases to their dressing, the rest lying for the bearers. */
+  private wounded(u: LandUnit, d: number): void {
+    if (!(d > 0)) return;
+    const B = LAND.bearers, L = B.light;
+    let l = this.litters.get(u.id);
+    if (!l) { l = { all: bearerShare(u.nat) * u.str0, out: 0, trips: [], waiting: 0, light: [], aid: this.aidOf(u), told: false }; this.litters.set(u.id, l); }
+    const hurt = d * (1 - B.killed), light = hurt * L.share, foot = LAND.speed.inf;
+    const at = Math.round((this.t + (L.at > 0 ? L.at / (foot * L.out) : 0) + L.dress + (L.at > 0 ? L.at / (foot * L.back) : 0)) * 1000) / 1000;
+    const last = l.light[l.light.length - 1];
+    if (last && last.at === at) last.n += light; else if (light > 0) l.light.push({ at, n: light });
+    l.waiting += hurt - light;
+  }
+
+  /**
+   * Each tick, after the harm: the bearers whose trip is done are home; the light cases whose dressing is done are back
+   * in the line, where their block still fights (up to its strength at the start); then, while litter cases wait and
+   * bearers are home, a block still fighting sends them out: min(waiting, home / litter) cases, litter bearers each.
+   */
+  private carry(): void {
+    const B = LAND.bearers, trip = (2 * B.aid) / B.pace, t = this.t;
+    for (const u of this.units) {
+      const l = this.litters.get(u.id);
+      if (!l) continue;
+      if (l.trips.length && l.trips[0].back <= t + 1e-9) {
+        while (l.trips.length && l.trips[0].back <= t + 1e-9) l.trips.shift();
+        l.out = l.trips.reduce((a, x) => a + x.by, 0);
+      }
+      while (l.light.length && l.light[0].at <= t + 1e-9) {
+        const n = l.light.shift()!.n, was = u.str;
+        if (!fighting(u)) continue;
+        u.str = Math.min(u.str0, u.str + n);
+        if (u.str <= was) continue;
+        let r: (typeof this.returns)[number] | undefined;
+        for (let i = this.returns.length - 1; i >= 0 && !r; i--) if (this.returns[i].unit === u.id) r = this.returns[i];
+        if (r && Math.floor(r.t) === Math.floor(t)) r.n += u.str - was;
+        else this.returns.push({ t: Math.round(t * 1000) / 1000, unit: u.id, n: u.str - was });
+      }
+      if (!fighting(u) || l.waiting <= 1e-12) continue;
+      const home = l.all - l.out;
+      if (home <= 1e-12) continue;
+      const cases = Math.min(l.waiting, home / B.litter), by = cases * B.litter;
+      l.waiting -= cases; l.out += by;
+      l.trips.push({ back: Math.round((t + trip) * 1000) / 1000, by });
+      if (!l.told) {
+        l.told = true;
+        if (this.ticket[u.side].human) this.say({ what: 'land:bearers', unit: u.id, side: u.side, text: `${this.named(u)}'s stretcher bearers are carrying the wounded back.`, x: u.x, y: u.y });
+      }
+    }
+  }
+
+  /** The share of a block's strength at hand to strike with: all of it, less its bearers out carrying (none below nothing). */
+  private atHand(u: LandUnit): number {
+    const l = this.litters.get(u.id);
+    if (!l || l.out <= 0 || u.str <= 0) return 1;
+    return Math.max(0, u.str - l.out) / u.str;
+  }
+
+  /**
+   * The bearers' part of the view, a side's own blocks (every side's with no side given, as a recording is): each block's
+   * bearers out and litter cases waiting, in men (strength times its men at full strength), and the battle second the
+   * next of its bearers are back (null with none out); the aid post of each block that has had wounded; and the light
+   * cases back in the line in the last two battle seconds (when, the block, how many men), each told once by its t and
+   * block. Left out with the switch off, and before anyone is hurt.
+   */
+  bearerView(as?: Side): Pick<BattleView, 'bearers' | 'aid' | 'returns'> {
+    if (!this.bearers || !this.litters.size) return {};
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    const ours = (u: LandUnit | undefined): u is LandUnit => !!u && (as === undefined || u.side === as);
+    const men = (u: LandUnit, s: number): number => Math.round((s * u.men0) / Math.max(1e-9, u.str0));
+    const bearers: NonNullable<BattleView['bearers']> = [], aid: NonNullable<BattleView['aid']> = [], returns: NonNullable<BattleView['returns']> = [];
+    for (const [id, l] of [...this.litters].sort((a, c) => a[0] - c[0])) {
+      const u = this.unit(id);
+      if (!ours(u)) continue;
+      aid.push({ side: u.side, unit: id, x: r1(l.aid[0]), y: r1(l.aid[1]) });
+      const out = men(u, l.out), waiting = men(u, l.waiting);
+      if (out > 0 || waiting > 0) bearers.push({ unit: id, out, waiting, back: l.trips.length ? l.trips[0].back : null });
+    }
+    for (const r of this.returns) {
+      const u = this.unit(r.unit);
+      if (r.t >= this.t - 2 - 1e-9 && ours(u)) returns.push({ t: r.t, unit: r.unit, n: men(u, r.n) });
+    }
+    return { ...(bearers.length ? { bearers } : {}), ...(aid.length ? { aid } : {}), ...(returns.length ? { returns } : {}) };
   }
 
   // ---- The end --------------------------------------------------------------------------------------------------
@@ -3419,7 +3557,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.events = [];
     // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
     // and screens a side sees (hedge cutters, smoke on call; release 2).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as) };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as), ...this.bearerView(as) };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

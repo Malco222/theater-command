@@ -223,6 +223,8 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
 
   // Hedges, the gaps cut through them and the smoke screens standing (release 2), under the orders and the blocks.
   hedgeMarks(x, b, s);
+  // Stretcher bearers (release 2): his blocks' aid posts, and a faint way to each from a block whose bearers are out.
+  aidMarks(x, b, s);
 
   // Orders of the player's own blocks (the UI director, 6): the lines of those in hand in the selection gold; once put
   // down, the staff's pencil, ink and thinner. Gold is what you hold, pencil is what stands ordered; never red. An
@@ -351,6 +353,26 @@ function hedgeMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void 
     x.strokeStyle = BRASS; x.lineWidth = 2; x.setLineDash([6, 4]); x.beginPath(); x.moveTo(a, c); x.lineTo(d, e); x.stroke(); x.setLineDash([]);
   }
   x.lineCap = 'butt';
+}
+
+/**
+ * Stretcher bearers (release 2), plainly: each of the player's aid posts (the view's aid) a small white square with a red
+ * cross; from a block of his with bearers out (the view's bearers), a faint dashed way back to its post.
+ */
+function aidMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene): void {
+  const v = b.bearerView(s.me);
+  if (!v.aid) return;
+  const out = new Set((v.bearers ?? []).filter((r) => r.out > 0).map((r) => r.unit));
+  for (const a of v.aid) {
+    const [px, py] = toScreen(s, a.x, a.y), u = b.unit(a.unit);
+    if (u && out.has(a.unit)) {
+      const [ux, uy] = toScreen(s, u.x, u.y);
+      x.strokeStyle = 'rgba(244,240,232,.45)'; x.lineWidth = 1; x.setLineDash([3, 4]);
+      x.beginPath(); x.moveTo(ux, uy); x.lineTo(px, py); x.stroke(); x.setLineDash([]);
+    }
+    x.fillStyle = '#f4f0e8'; x.fillRect(px - 5, py - 5, 10, 10);
+    x.fillStyle = '#b8322a'; x.fillRect(px - 1.2, py - 4, 2.4, 8); x.fillRect(px - 4, py - 1.2, 8, 2.4);
+  }
 }
 
 function airMarks(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, colour: Record<Side, string>): void {

@@ -558,6 +558,18 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * second it is gone (until). A direct blow across it strikes at half. Left out where none stands.
    */
   screens?: { id: number; side: Side; unit?: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }[];
+  /**
+   * Land, stretcher bearers (release 2; Brian, 22 November 17:33Z; the design director's Q4 and Q5, 18:36Z;
+   * LandBattle.bearers on), a side's own blocks (every side's with no side given, as a recording is). bearers: each block
+   * with bearers out carrying ('out') or litter cases lying for them ('waiting'), in men, and the battle second the next
+   * of its bearers are back ('back', null with none out). aid: the aid post of each block that has had wounded, where its
+   * bearers carry them. returns: the light cases back in the line in the last two battle seconds, each the battle second,
+   * the block and how many men (a block's in one battle second together): tell each once, by its t and block. Left out
+   * where none.
+   */
+  bearers?: { unit: number; out: number; waiting: number; back: number | null }[];
+  aid?: { side: Side; unit: number; x: number; y: number }[];
+  returns?: { t: number; unit: number; n: number }[];
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

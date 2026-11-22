@@ -37,7 +37,7 @@
 import data from '../../../data/battle/drill.json';
 import { DT, type Side, type Zone } from '../core/types';
 import { GROUNDS, type Ground, type LandField } from './field';
-import { LAND, MOTION, type Kind, type Team } from './rules';
+import { LAND, MOTION, bearerShare, type Kind, type Team } from './rules';
 import type { LandBattle, Screen } from './sim';
 import type { LandUnit } from './units';
 import { fateOf } from './armour';
@@ -65,7 +65,10 @@ export type Role = 'officer' | 'rifle' | 'mg' | 'at' | 'sapper' | 'holder' | 'ta
 export type Pose =
   | 'idle' | 'walk' | 'run' | 'advance' | 'creep' | 'crawl' | 'flee' | 'fire_stand' | 'fire_kneel' | 'fire_prone' | 'lmg_burst'
   | 'throw_grenade' | 'cower' | 'wait' | 'hide' | 'observe' | 'mounted' | 'ride' | 'horses' | 'down'
-  | 'drive' | 'halt' | 'fire' | 'reverse' | 'towed' | 'deployed' | 'parked';
+  | 'drive' | 'halt' | 'fire' | 'reverse' | 'towed' | 'deployed' | 'parked'
+  // Stretcher bearers (release 2; LandBattle.bearers): a wounded man lying for the bearers (or for his dressing), the man
+  // on the stretcher (head first, his head toward the front bearer), and the stretcher's front and rear bearers.
+  | 'wounded' | 'carried' | 'stretcher_front' | 'stretcher_rear';
 /** What the block as a whole is doing, as its men see it. */
 export type Phase = 'column' | 'deploy' | 'bound' | 'startline' | 'fight' | 'hold' | 'rest' | 'pinned' | 'fallback' | 'flee' | 'rally' | 'gone' | 'battery' | 'limbered';
 /** What shelters a man where he stands. */
@@ -176,7 +179,27 @@ export interface Man {
   coax?: true;
   /** A tank's commander struck up in his hatch (BOOK.tankMg): the battle time; she fights buttoned up from then. */
   cmdDown?: number;
+  /**
+   * Stretcher bearers (release 2; LandBattle.bearers): the battle time he fell wounded, not killed (wd), lying for the
+   * bearers or, a light case (light), for his dressing; the time a light case is back in the line (back); the carry that
+   * took him to his block's aid post (cy: [from, to, by1, by2], by1 the front bearer, each bearer as k x 1000 + j) and
+   * the time he reached it (gone). A bearer (br), and the carry he is on now (job): off his block's drill while on it.
+   */
+  wd?: number;
+  light?: true;
+  back?: number;
+  cy?: [number, number, number, number][];
+  gone?: number;
+  br?: true;
+  job?: Carry;
 }
+
+/**
+ * A stretcher's carry (stretcher bearers, release 2): the man carried, his front and rear bearers; fetching him (the
+ * bearers walking to him), lifting (at his side, turning to the way), carrying him to the aid post, or walking home; where
+ * he was lifted, the aid post and the way between; the battle times the carry began and reaches the aid post.
+ */
+interface Carry { man: Man; front: Man; rear: Man; stage: 'fetch' | 'lift' | 'carry' | 'home'; from: [number, number]; to: [number, number]; way: number; t0: number; t1: number }
 
 /**
  * What fired a round: a tank's gun, an anti-tank launcher or rifle, a field gun, a machine gun (a rifle section's or a
@@ -239,6 +262,13 @@ export interface MenOut {
   e?: 1 | 2; cl?: number;
   /** Platoon cam (release 2): one of the squad leading his side's assault (Drill.leads). The camera's button drops onto these men. */
   ld?: 1;
+  /**
+   * Stretcher bearers (release 2; LandBattle.bearers): wd, the battle time he fell wounded (p wounded while he lies); cy,
+   * the carry that took him to the aid post, [from, to, by1, by2] (p carried from 'from', his bearers by1 at the front and
+   * by2 at the rear, each named as k x 1000 + j); gone, the time he reached the aid post; back, the time a light case got
+   * up again; br, one of the block's stretcher bearers.
+   */
+  wd?: number; cy?: [number, number, number, number][]; gone?: number; back?: number; br?: 1;
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -276,7 +306,7 @@ const isFoot = (u: LandUnit): boolean => MOTION[u.kind] === 'foot' || u.kind ===
 const CLOSE: Ground[] = ['woods', 'buildings', 'industry', 'suburb'];
 const BUILT: Ground[] = ['buildings', 'industry', 'suburb'];
 /** Poses that carry a man over the ground: the 3D plays them only while he moves (walk: one he reaches his place in ends). */
-const MOVING: ReadonlySet<Pose> = new Set<Pose>(['walk', 'run', 'advance', 'creep', 'crawl', 'flee', 'drive', 'reverse', 'towed']);
+const MOVING: ReadonlySet<Pose> = new Set<Pose>(['walk', 'run', 'advance', 'creep', 'crawl', 'flee', 'drive', 'reverse', 'towed', 'stretcher_front', 'stretcher_rear']);
 /** Poses that go with whatever carries him (a horse, a lorry, the horses he leads): they move at any speed. */
 const CARRIED: ReadonlySet<Pose> = new Set<Pose>(['ride', 'mounted', 'horses']);
 /** Poses a rifleman or a machine gun fires from (each shot a round: Drill.fire). */
@@ -439,6 +469,14 @@ interface Squad {
   smokeLeft?: number;
   /** Smoke on call (release 2): the screen the rules laid for it, being drawn as rounds, the next i of n. */
   screenQ?: { s: Screen; i: number; n: number };
+  /**
+   * Stretcher bearers (release 2): its bearers, picked from its riflemen the first step the switch is on; its litter cases
+   * lying for them, earliest first; its light cases lying at their dressing; and the carries under way.
+   */
+  brs?: Man[];
+  lying?: Man[];
+  dressing?: Man[];
+  carries?: Carry[];
 }
 
 /** A block's men on their feet this step (Drill.memo). */
@@ -697,6 +735,8 @@ export class Drill {
       // fast seconds wears off then, and is gone once it has stood a second.
       sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
       this.falls(sq);
+      // Stretcher bearers (release 2): the bearers fetch, carry and come home (off the block's drill while they do).
+      if (b.bearers) this.litters(sq);
       if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (sq.screenQ) this.screenRound(sq); }
       this.walk(sq);
       this.fire(sq);
@@ -754,6 +794,8 @@ export class Drill {
     const won = this.b.over?.winner;
     for (const sq of this.squads.values()) {
       const u = sq.u;
+      // Stretcher bearers (release 2): a stretcher on the way is set down where it is.
+      for (const c of sq.carries ?? []) if (c.stage === 'carry') c.man.pose = 'wounded';
       for (const m of [...sq.men, ...sq.veh, ...(sq.fo ?? [])]) {
         if (m.fell !== undefined) continue;
         m.v = 0; m.went = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.hidden = undefined;
@@ -822,6 +864,7 @@ export class Drill {
       if (!shell && by !== undefined) this.killRound(this.b.unit(by), sq, m);
       m.pose = 'down';
       m.spot = [m.x, m.y];
+      if (this.b.bearers) this.hurt(sq, m);
       this.aid(sq, m);
       if (sq.tier >= 1) this.regroup(sq, m);
     }
@@ -873,8 +916,11 @@ export class Drill {
     let up = 0;
     for (const m of sq.men) if (this.stands(sq, m) || (m.j !== undefined && m.fell === undefined)) up++;
     let n = up - want;
+    // Stretcher bearers (release 2): its strength back above its men on their feet, its light cases dressed get up.
+    if (n < 0 && this.b.bearers) { this.rise(sq, -n); return; }
     if (n <= 0) return;
-    const cand = sq.men.filter((m) => m.j !== undefined && m.fell === undefined);
+    // (Bearers on a carry go on with it: never the next to fall.)
+    const cand = sq.men.filter((m) => m.j !== undefined && m.fell === undefined && !m.job);
     if (!cand.length) return;
     // Who struck: the enemy block owed most for the harm, else the one it faces.
     let by: LandUnit | undefined;
@@ -899,9 +945,144 @@ export class Drill {
       if (by) this.killRound(by, sq, m, shell ? burst : undefined);
       m.pose = 'down';
       m.spot = [m.x, m.y];
+      if (b.bearers) this.hurt(sq, m);
       this.aid(sq, m);
     }
     sq.memo = undefined;
+  }
+
+  // ---- Stretcher bearers (release 2) ------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z; the design director's rulings Q4 and Q5 (18:36Z); LandBattle.bearers and LAND.bearers.
+  // The rules count the bearers and the wounded (LandBattle.litter); the drill draws them, looks only. Of the men who
+  // fall, the rules' share (1 - killed) lie wounded: a man of a section a light case at the rules' share, lying for his
+  // dressing and up again once it is done and his block's strength has them back (thin, rise); the rest lie for the
+  // bearers. The bearers are riflemen of the block (br), two to a stretcher, as many stretchers as the rules' bearers
+  // carry cases at once (its army's share of its men over LAND.bearers.litter). A pair fetches the litter case fallen
+  // earliest, lifts him and carries him head first to its aid post (LandBattle.aidOf) at LAND.bearers.pace, his place the
+  // stretcher's middle, the front bearer 1.12 m ahead of him and the rear 1.35 m behind; he stays there (gone), and they
+  // walk home. A block running, fled or gone sends no stretcher out; one on its way goes on. Every choice is the drill's
+  // own dice: the men drawn and the fight are the same as without them.
+
+  /** A man who falls, with the bearers on: wounded at the rules' share (else killed), a man of a section a light case at theirs. */
+  private hurt(sq: Squad, m: Man): void {
+    if (VEHICLE.has(m.role) || CREWED.has(m.role) || m.wd !== undefined) return;
+    const B = LAND.bearers, u = sq.u;
+    if (roll(this.seed, u.id, m.n, 71) >= 1 - B.killed) return;
+    m.wd = this.b.t; m.pose = 'wounded';
+    if (m.j !== undefined && roll(this.seed, u.id, m.n, 72) < B.light.share) { m.light = true; (sq.dressing ??= []).push(m); }
+    else (sq.lying ??= []).push(m);
+  }
+
+  /** Its light cases whose dressing is done get up, up to n of them, the earliest hurt first, while its block fights. */
+  private rise(sq: Squad, n: number): void {
+    const u = sq.u, t = this.b.t, L = LAND.bearers.light, foot = LAND.speed.inf;
+    if (!fighting(u) || !sq.dressing?.length) return;
+    const walk = L.at > 0 ? L.at / (foot * L.out) + L.at / (foot * L.back) : 0;
+    while (n > 0 && sq.dressing.length && sq.dressing[0].wd! + walk + L.dress <= t + 1e-9) {
+      const m = sq.dressing.shift()!;
+      m.light = undefined; m.fell = undefined; m.back = t;
+      m.pose = 'wait'; m.v = 0; m.spot = [m.x, m.y]; m.slotAt = [m.x, m.y]; m.until = t + 1;
+      // His section's key man fallen meanwhile, he joins the nearest section still on its feet (as regroup).
+      if (!this.memo(sq).keyOf.has(m.sec ?? m.k)) {
+        const to = this.nearest(this.memo(sq).keys.filter((x) => !VEHICLE.has(x.role) && !CREWED.has(x.role)), m)?.[0];
+        if (to) { m.sec = to.k; m.sub = undefined; m.lead = undefined; }
+      }
+      sq.memo = undefined;
+      n--;
+    }
+  }
+
+  /** A bearer named in a carry: his model and his place in it. */
+  private byId(m: Man): number { return m.k * 1000 + (m.j ?? 0); }
+
+  /**
+   * Each step with the bearers on: its bearers picked (the first time), each pair free of a carry and on its feet sent
+   * for the next litter case (its block fighting, its men down), and every carry moved on a step.
+   */
+  private litters(sq: Squad): void {
+    const u = sq.u, b = this.b, t = b.t, B = LAND.bearers, f = b.field;
+    if (!sq.brs) {
+      const cand = sq.men.filter((m) => m.j !== undefined && m.role === 'rifle' && !m.pr && !m.scout && !m.lead && m.fell === undefined)
+        .sort((a, c) => roll(this.seed, u.id, a.n, 73) - roll(this.seed, u.id, c.n, 73) || a.n - c.n);
+      const pairs = Math.min(Math.floor(cand.length / 2), Math.max(1, Math.round((bearerShare(u.nat) * sq.m0) / B.litter)));
+      sq.brs = cand.slice(0, 2 * pairs);
+      for (const m of sq.brs) m.br = true;
+    }
+    const carries = (sq.carries ??= []);
+    // Free pairs out to the earliest fallen: by their places in the block's list, two by two.
+    if (sq.lying?.length && fighting(u) && sq.down && sq.boarding === undefined) {
+      const free = sq.brs.filter((m) => !m.job && this.stands(sq, m) && !CARRIED.has(m.pose));
+      for (let i = 0; i + 1 < free.length && sq.lying.length; i += 2) {
+        const man = sq.lying.shift()!, [ax, ay] = b.aidOf(u);
+        const to: [number, number] = [clamp(ax, 3, f.w - 3), clamp(ay, 3, f.h - 3)], way = bearing(man.x, man.y, to[0], to[1]);
+        const c: Carry = { man, front: free[i], rear: free[i + 1], stage: 'fetch', from: [man.x, man.y], to, way, t0: t, t1: t };
+        for (const m of [c.front, c.rear]) { m.job = c; m.aim = undefined; m.hidden = undefined; m.pose = 'walk'; m.v = B.pace; }
+        carries.push(c);
+        sq.memo = undefined;
+      }
+    }
+    for (const c of carries) this.carryStep(sq, c);
+    // A carry is done once both its bearers are home.
+    if (carries.some((c) => c.front.job !== c && c.rear.job !== c)) sq.carries = carries.filter((c) => c.front.job === c || c.rear.job === c);
+  }
+
+  /** A carry's step: the bearers walk to the man, lift him, carry him to the aid post and walk home. */
+  private carryStep(sq: Squad, c: Carry): void {
+    const u = sq.u, t = this.b.t, B = LAND.bearers, rate = TURN.foot * DT, [wx, wy] = fwd(c.way);
+    const FRONT = 1.12, REAR = 1.35;
+    // One step toward p at pace v, turning as he can (he turns before he goes): whether he is there.
+    const stride = (m: Man, p: [number, number], v: number): boolean => {
+      const ddx = p[0] - m.x, ddy = p[1] - m.y, d = Math.hypot(ddx, ddy);
+      if (d < 0.05) { m.went = 0; return true; }
+      const want = Math.atan2(ddx, ddy);
+      m.face = turnTo(m.face, want, rate);
+      const s = Math.min(d, v * DT) * Math.max(0, Math.cos(wrap(want - m.face)));
+      m.x += (ddx / d) * s; m.y += (ddy / d) * s; m.went = s / DT;
+      return s >= d - 1e-9;
+    };
+    const bearers = [c.front, c.rear];
+    if (c.stage === 'fetch') {
+      const at = (m: Man): [number, number] => (m === c.front ? [c.man.x + wx * FRONT, c.man.y + wy * FRONT] : [c.man.x - wx * REAR, c.man.y - wy * REAR]);
+      let there = 0;
+      for (const m of bearers) if (stride(m, at(m), B.pace)) there++;
+      if (there === 2) { c.stage = 'lift'; for (const m of bearers) { m.pose = 'wait'; m.v = 0; m.went = 0; } }
+      return;
+    }
+    if (c.stage === 'lift') {
+      // At his side, all three turned to the way (he is lifted head first, his head toward the front bearer).
+      for (const m of [...bearers, c.man]) m.face = turnTo(m.face, c.way, rate);
+      if (![...bearers, c.man].every((m) => Math.abs(wrap(m.face - c.way)) < 1e-6)) return;
+      c.stage = 'carry'; c.t0 = t;
+      c.t1 = Math.round((t + Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y) / B.pace) * 1000) / 1000;
+      c.from = [c.man.x, c.man.y];
+      (c.man.cy ??= []).push([c.t0, c.t1, this.byId(c.front), this.byId(c.rear)]);
+      c.man.pose = 'carried'; c.front.pose = 'stretcher_front'; c.rear.pose = 'stretcher_rear';
+      for (const m of bearers) m.v = B.pace;
+      return;
+    }
+    if (c.stage === 'carry') {
+      const left = Math.hypot(c.to[0] - c.man.x, c.to[1] - c.man.y), s = Math.min(left, B.pace * DT);
+      c.man.x += wx * s; c.man.y += wy * s; c.man.spot = [c.man.x, c.man.y];
+      c.front.x = c.man.x + wx * FRONT; c.front.y = c.man.y + wy * FRONT;
+      c.rear.x = c.man.x - wx * REAR; c.rear.y = c.man.y - wy * REAR;
+      for (const m of bearers) { m.face = c.way; m.went = s / DT; }
+      if (s < left - 1e-9) return;
+      // At the aid post: he is set down there, and the bearers walk home.
+      c.man.gone = t; c.man.pose = 'wounded';
+      c.stage = 'home';
+      for (const m of bearers) { m.pose = 'walk'; m.v = B.pace; }
+      return;
+    }
+    // Home: back into the block's ground, where its drill takes them up again. A block gone off the field takes them with it.
+    for (const m of bearers) {
+      if (m.job !== c) continue;
+      const p = this.leash(sq, [m.x, m.y], -4);
+      if (!live(u) || stride(m, p, B.pace)) {
+        m.job = undefined; m.pose = 'wait'; m.v = 0; m.went = 0; m.spot = [m.x, m.y]; m.slotAt = [m.x, m.y]; m.until = t + 1;
+        sq.memo = undefined;
+      }
+    }
   }
 
   // ---- What the block is doing ------------------------------------------------------------------------------------
@@ -1159,7 +1340,7 @@ export class Drill {
     }
     this.ambush(sq);
     this.officer(sq);
-    for (const m of sq.men) if (m.fell === undefined && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
+    for (const m of sq.men) if (m.fell === undefined && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
   }
 
   /**
@@ -1194,7 +1375,7 @@ export class Drill {
    * Whether a man is on his feet: a key man while the rules keep his model; the rest of a section while their block is
    * on the field and he has not fallen (falls).
    */
-  private stands(sq: Squad, m: Man): boolean { return m.fell === undefined && (m.j === undefined ? m.k < sq.u.figures : live(sq.u)); }
+  private stands(sq: Squad, m: Man): boolean { return m.fell === undefined && !m.job && (m.j === undefined ? m.k < sq.u.figures : live(sq.u)); }
 
   /**
    * The block's men on their feet, worked out again only when that changes: a man falls or joins another section (falls,
@@ -2724,7 +2905,7 @@ export class Drill {
     // Drawn as sections, the men on foot where they stand, by 2 m cell: a man on the move steps round a mate in his way.
     const crowd = sq.tier >= 1 ? new Map<number, Man[]>() : null;
     if (crowd) for (const m of sq.men) {
-      if (m.fell !== undefined || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
+      if (m.fell !== undefined || m.job || VEHICLE.has(m.role) || CARRIED.has(m.pose)) continue;
       const key = Math.floor(m.x / SPACE.cell) * 65536 + Math.floor(m.y / SPACE.cell);
       let l = crowd.get(key);
       if (!l) crowd.set(key, (l = []));
@@ -2845,6 +3026,8 @@ export class Drill {
     for (const m of sq.veh) step(m);
     for (const m of sq.men) {
       if (m.fell !== undefined) { m.went = 0; continue; }
+      // A bearer on a carry goes his own way (litters).
+      if (m.job) continue;
       // Aboard: he sits in his seat in his lorry, wherever it goes (in the stride he climbs in, from beside it to his seat).
       if (m.pose === 'mounted' && (u.kind === 'mot' || m.role === 'crew') && sq.veh.length) {
         const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = this.seat(sq, m);
@@ -3173,6 +3356,11 @@ export class Drill {
       if (m.marks?.length) o.mk = m.marks.map((x) => [...x] as Mark);
       if (m.el && this.byBook) o.e = m.el;
       if (m.call !== undefined) o.cl = r1(m.call);
+      if (m.wd !== undefined) o.wd = r1(m.wd);
+      if (m.cy) o.cy = m.cy.map((c) => [r1(c[0]), r1(c[1]), c[2], c[3]]);
+      if (m.gone !== undefined) o.gone = r1(m.gone);
+      if (m.back !== undefined) o.back = r1(m.back);
+      if (m.br) o.br = 1;
       return o;
     };
     for (const sq of this.squads.values()) {
@@ -3180,7 +3368,7 @@ export class Drill {
       const lead = this.leads.get(u.side), mark = lead && lead[0] === u.id ? lead[1] : undefined;
       if (as !== undefined && u.side !== as && !b.known(u)) continue;
       if (u.state === 'withdrawn' && !sq.men.some((m) => m.fell !== undefined)) continue;
-      const men = sq.men.filter((m) => m.fell !== undefined || (this.stands(sq, m) && live(u))).map((m) => {
+      const men = sq.men.filter((m) => m.fell !== undefined || m.job !== undefined || (this.stands(sq, m) && live(u))).map((m) => {
         const o = one(m);
         if (mark !== undefined && m.fell === undefined && grp(m) === mark && m.role !== 'lorry' && m.role !== 'holder') o.ld = 1;
         return o;
