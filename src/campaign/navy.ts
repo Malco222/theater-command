@@ -2237,15 +2237,38 @@ function torpedoes(g: Game, nat: string): void {
   }
 }
 
-/** A fleet whose base has fallen makes for the nearest port its nation still holds. Returns false if there is none and the fleet is lost. */
-function newBase(g: Game, f: Fleet): boolean {
+/**
+ * The far side's haven for a fleet whose base has fallen (the design director's ruling of 03:42Z, 22 November 2026, on
+ * the Asiatic Fleet's bases; every nation, no number): a fed port held by the fleet's own nation or by an ally at war
+ * with the enemy the base fell to, and never one lying in a sea that is closed to the fleet's nation. Fed is the
+ * fleet's own nation's supply picture as it stands: whether its own forces are supplied there (the holder's picture,
+ * where the fleet's nation has no army on the board to draw one).
+ */
+export function haven(g: Game, f: Fleet, r: Region): boolean {
+  if (!r.port || !r.seas.length) return false;
+  const foe = f.base >= 0 ? g.regions[f.base].ctrl : '';
+  if (r.ctrl !== f.nat && !(allied(g, f.nat, r.ctrl) && !!foe && atWar(g, f.nat, foe) && atWar(g, r.ctrl, foe))) return false;
+  if (!(g.supply[f.nat] ?? g.supply[r.ctrl])?.[r.id]) return false;
+  return !closedTo(g, r.seas[0], f.nat);
+}
+
+/**
+ * A fleet whose base has fallen makes for the nearest port its nation still holds. Returns false if there is none and
+ * the fleet is lost. On the far side it makes for the nearest haven first (`haven`: fed, its own nation's or an ally's
+ * at war with the same enemy, and in no closed sea); with none in its reach it reads as it did.
+ */
+function newBase(g: Game, f: Fleet, form: boolean = farOn(g)): boolean {
   const old = g.regions[f.base];
-  let best: Region | null = null, bd = 1e9;
-  for (const r of g.regions) {
-    if (!r.port || !r.seas.length || r.ctrl !== f.nat || !canSailTo(g, f, r)) continue;
-    const d = mapDist(g, r.x, r.y, old.x, old.y);
-    if (d < bd) { bd = d; best = r; }
-  }
+  const nearest = (ok: (r: Region) => boolean): Region | null => {
+    let best: Region | null = null, bd = 1e9;
+    for (const r of g.regions) {
+      if (!r.port || !r.seas.length || !ok(r) || !canSailTo(g, f, r)) continue;
+      const d = mapDist(g, r.x, r.y, old.x, old.y);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  };
+  const best = (form ? nearest((r) => haven(g, f, r)) : null) ?? nearest((r) => r.ctrl === f.nat);
   if (best) {
     rebase(g, f, best);
     headline(g, 'event', `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
