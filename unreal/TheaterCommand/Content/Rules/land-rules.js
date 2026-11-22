@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 82aeaf34 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of fdfb52e1 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -9921,6 +9921,28 @@
       order: u.order ? { kind: u.order.kind, x: r12(u.order.x), y: r12(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r12(x), r12(y)]) } : null
     };
   }
+  function yearOf(t) {
+    const m = /(19[34]\d)/.exec(t.date ?? "");
+    return m ? Number(m[1]) : 1942;
+  }
+  function standInModel(kind, nat, year, n) {
+    const axis = ["GER", "ITA", "JAP", "HUN", "ROM", "BUL", "FIN"].includes(nat);
+    if (kind === "art") return nat === "SOV" ? "ZiS3" : axis ? "leFH18" : "Howitzer105";
+    if (nat === "GER") return year >= 1943 ? ["PanzerIV", "PanzerIV", "Tiger", "StuG3"][n % 4] : year >= 1941 ? ["PanzerIV", "StuG3", "LightTank"][n % 3] : ["LightTank", "PanzerIV"][n % 2];
+    if (nat === "SOV") return year >= 1941 ? ["T34", "T34", "LightTank"][n % 3] : "LightTank";
+    if (axis) return year >= 1943 && nat !== "JAP" ? ["StuG3", "LightTank"][n % 2] : "LightTank";
+    return year >= 1942 ? ["Sherman", "Sherman", "LightTank"][n % 3] : "LightTank";
+  }
+  function ticketSky(t) {
+    const w = (t.weather ?? "").toLowerCase();
+    const lean = (t.seed % 21 - 10) / 100;
+    const c = (x) => Math.round(Math.min(1, Math.max(0, x + lean)) * 100) / 100;
+    if (w === "rain") return { cover: c(0.85), base: 600, kind: "deck", hour: 11 };
+    if (w === "snow") return { cover: c(0.9), base: 500, kind: "deck", hour: 11 };
+    if (w === "mud") return { cover: c(0.7), base: 800, kind: "deck", hour: 11 };
+    if (w === "clear") return { cover: c(0.2), base: 1400, kind: "cumulus", hour: 10 };
+    return { cover: c(0.45), base: 1e3, kind: "cumulus", hour: 10 };
+  }
   var LiveBattle = class {
     constructor(ticket, piece, opts = {}) {
       __publicField(this, "ticket", ticket);
@@ -9929,6 +9951,8 @@
       __publicField(this, "drill");
       __publicField(this, "me");
       __publicField(this, "keeper", new LiveKeeper());
+      /** A campaign battle's sky (no set piece): as given, or drawn from its ticket. */
+      __publicField(this, "skyOf");
       __publicField(this, "steppe");
       __publicField(this, "blocks");
       __publicField(this, "seen", /* @__PURE__ */ new Set());
@@ -9941,6 +9965,7 @@
       __publicField(this, "placed", false);
       __publicField(this, "sentOver", false);
       this.me = opts.me ?? null;
+      this.skyOf = opts.sky ?? ticketSky(ticket);
       const sim = this.sim = new LandBattle(ticket);
       this.steppe = piece?.open === "steppe" ? openSteppe(sim.field, ticket.seed) : null;
       if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
@@ -9969,6 +9994,7 @@
         if (a && u.kind === "arm") model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
         else if (a && u.kind === "art" && !u.team) model = a.gun;
         if (model) sim.vehicleIs(u.id, model);
+        else if (!piece && (u.kind === "arm" || u.kind === "art" && !u.team)) model = standInModel(u.kind, u.nat, opts.designYears?.[u.nat] ?? yearOf(ticket), tanksSeen[u.side]++);
         return {
           id: u.id,
           side: u.side,
@@ -10007,7 +10033,7 @@
         title: t.title,
         date: t.date,
         turn: t.turn,
-        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : {},
+        ...p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf },
         sides: {
           att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...p ? { army: p.att.army, ...p.att.standIn ? { standIn: p.att.standIn } : {} } : {} },
           def: { nat: t.def.nat, adj: t.def.adj, color: t.def.color, ...p ? { army: p.def.army, ...p.def.standIn ? { standIn: p.def.standIn } : {} } : {} }
@@ -10239,21 +10265,25 @@
      * the card's fog (fog, seen: the corps it identified) and each nation's armour design year, with the same switches as
      * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
      */
-    landStartTicket(ticket, opts) {
+    landStartTicket(ticketOrLook, opts) {
+      const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
+      const ticket = look ? look.ticket : ticketOrLook;
+      const o = { ...look?.live ?? {}, ...opts ?? {} };
       live3 = liveTicket(ticket, {
-        me: opts?.me ?? null,
-        setup: !!opts?.setup,
-        platoons: opts?.platoons !== false,
-        staff: opts?.staff !== false,
-        radio: opts?.radio !== false,
-        hide: opts?.hide !== false,
-        armour: opts?.armour !== false,
-        names: opts?.names !== false,
-        relief: opts?.relief !== false,
-        rider: opts?.rider !== false,
-        fog: !!opts?.fog,
-        seen: opts?.seen ?? [],
-        designYears: opts?.designYears ?? {}
+        me: o.me ?? null,
+        setup: !!o.setup,
+        platoons: o.platoons !== false,
+        staff: o.staff !== false,
+        radio: o.radio !== false,
+        hide: o.hide !== false,
+        armour: o.armour !== false,
+        names: o.names !== false,
+        relief: o.relief !== false,
+        rider: o.rider !== false,
+        fog: !!o.fog,
+        seen: o.seen ?? [],
+        designYears: o.designYears ?? {},
+        ...o.sky ? { sky: o.sky } : {}
       });
       return live3.header();
     },
@@ -10288,6 +10318,9 @@
       const l = need();
       const ok2 = Array.isArray(hedges) && l.hedges(hedges, Array.isArray(gates) ? gates : []);
       return { ok: ok2, hedges: l.sim.hedges.length, gates: l.sim.gates.length };
+    },
+    landResult() {
+      return { over: live3?.sim.over ?? null };
     },
     landEnd() {
       const over = live3?.sim.over ?? null;
