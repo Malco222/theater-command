@@ -24,7 +24,7 @@ class SWidget;
 struct FSeaBattleState;
 
 /** The sea battle camera's kinds of shot (ASeaBattle::ShotEye). */
-enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning, Funnels };
+enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning, Funnels, Water };
 
 /**
  * The fleet action's 3D scene (the ship behaviour plan's B0: the sea battle had no scene, so its ships' seamanship could

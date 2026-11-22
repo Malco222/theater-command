@@ -172,6 +172,7 @@ namespace SeaShow
 		Vec At;              // her waterline amidships (Z 0 afloat)
 		/** Degrees: heading clockwise from north; heel (plus: starboard side down), pitch (plus: bow up). */
 		double Heading = 0.0, Heel = 0.0, Pitch = 0.0;
+		double Heave = 0.0;  // metres: how far the swell lifts her (plus) or lets her fall from her waterline
 		double Speed = 0.0;  // metres a second through the water
 		double Wake = 0.0;   // 0 to 1: her bow wave and wake, by her speed against her flank speed
 		double Funnel = 0.0; // 0 to 1: how hard her funnels smoke (black at flank, thin at rest)
@@ -360,6 +361,9 @@ namespace SeaShow
 		/** The wind (metres a second, the way it blows toward) and the sea's state on the Beaufort scale. */
 		Vec Wind() const { return WindV; }
 		double SeaState() const { return Beaufort; }
+		/** The wind's speed at 10 m (metres a second), and where it blows from (radians, the board's bearing). */
+		double WindSpeed() const { return WindU; }
+		double WindFrom() const { return WindFromR; }
 		/** A piece's column as shown now: its middle and its leader's heading; false where there is none afloat. */
 		bool PieceMiddle(int PieceId, Vec& OutAt, double& OutFace) const;
 		/** A ship as shown now, by her key. */
@@ -394,7 +398,7 @@ namespace SeaShow
 			Fate Doing = Fate::Line;
 			Vec P;
 			double Hdg = 0.0, Spd = 0.0, Rate = 0.0; // radians, m/s, radians a second
-			double Heel = 0.0, Pitch = 0.0;
+			double Heel = 0.0, Pitch = 0.0, Heave = 0.0;
 			double Back = 0.0;      // a follower: metres of track behind her leader, as she has closed up so far
 			double SOn = 0.0;       // a follower: where she is along his track (how far he had steamed when he passed there)
 			double Roll0 = 0.0, RollT = 10.0, PitchT = 7.0; // her own phase on the swell, and her roll and pitch periods
@@ -543,6 +547,7 @@ namespace SeaShow
 		int NextKey = 1;
 		Vec WindV;
 		double Beaufort = 3.0;
+		double WindU = 0.0, WindFromR = 0.0;
 		Checks Check;
 
 		void Interpolate();

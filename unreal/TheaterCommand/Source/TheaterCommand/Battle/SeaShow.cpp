@@ -53,20 +53,65 @@ namespace SeaShow
 		{
 			return Class == "bb" ? 12.0 : Class == "cv" ? 8.0 : Class == "ca" ? 8.0 : 3.0;
 		}
-		/** How hard a ship of the class heels in a turn (a share of the angle whose tangent is her turn's g) and her
-		 * roll and pitch on the swell (degrees for each step of the Beaufort scale), and their periods (seconds). */
+		/** How hard a ship of the class heels in a turn (a share of the angle whose tangent is her turn's g). */
 		struct Motion
 		{
-			double TurnHeel, Roll, RollT, Pitch, PitchT;
+			double TurnHeel;
 		};
 		Motion MotionOf(const std::string& Class)
 		{
-			// (a destroyer at 40 knots hard over heeled 10 to 12 degrees, a battleship 4 to 6; a destroyer rolled 5 to 8 in
-			// a fresh breeze, a battleship 2 or 3)
-			if (Class == "dd") return { 0.55, 0.75, 8.0, 0.55, 5.5 };
-			if (Class == "ca") return { 0.45, 0.45, 11.0, 0.3, 7.0 };
-			if (Class == "cv") return { 0.4, 0.35, 15.0, 0.2, 9.0 };
-			return { 0.35, 0.3, 14.0, 0.18, 8.5 }; // a battleship
+			// (a destroyer at 40 knots hard over heeled 10 to 12 degrees, a battleship 4 to 6)
+			if (Class == "dd") return { 0.55 };
+			if (Class == "ca") return { 0.45 };
+			if (Class == "cv") return { 0.4 };
+			return { 0.35 }; // a battleship
+		}
+		/**
+		 * A ship's ride on the sea by her length and the wind (the art director's fleet water targets, 21 November
+		 * 23:44Z, section 3): her roll and pitch (degrees either way) at Beaufort 3, 4, 5 and 6, their periods (seconds),
+		 * and how much of the waves' height she rises and falls by, either way. A destroyer or destroyer escort (110 m
+		 * and under), a cruiser or escort carrier (180 m), a battleship or fleet carrier (250 m and over); between them,
+		 * between their rows.
+		 */
+		struct Ride
+		{
+			double Roll[4], Pitch[4], RollT, PitchT, Heave;
+		};
+		Ride RideOf(double Long)
+		{
+			static const Ride Small = { { 1.5, 3.0, 5.5, 9.5 }, { 0.5, 1.25, 2.5, 4.0 }, 9.0, 5.5, 0.2 };
+			static const Ride Middle = { { 0.75, 1.5, 3.0, 5.5 }, { 0.3, 0.75, 1.25, 2.0 }, 12.5, 7.5, 0.15 };
+			static const Ride Big = { { 0.35, 0.75, 1.5, 3.0 }, { 0.2, 0.4, 0.75, 1.25 }, 16.0, 10.0, 0.075 };
+			const double K = Clamp((Long - 110.0) / 140.0, 0.0, 1.0) * 2.0;
+			const Ride& A = K < 1.0 ? Small : Middle;
+			const Ride& B = K < 1.0 ? Middle : Big;
+			const double T = K < 1.0 ? K : K - 1.0;
+			Ride R;
+			for (int I = 0; I < 4; ++I)
+			{
+				R.Roll[I] = A.Roll[I] + (B.Roll[I] - A.Roll[I]) * T;
+				R.Pitch[I] = A.Pitch[I] + (B.Pitch[I] - A.Pitch[I]) * T;
+			}
+			R.RollT = A.RollT + (B.RollT - A.RollT) * T;
+			R.PitchT = A.PitchT + (B.PitchT - A.PitchT) * T;
+			R.Heave = A.Heave + (B.Heave - A.Heave) * T;
+			return R;
+		}
+		/** One of a ride's rows at a Beaufort number that need not be whole: between 3 and 6 between the columns, under 3
+		 * less to nothing in a calm, over 6 as at 6. */
+		double AtForce(const double (&Row)[4], double Force)
+		{
+			if (Force <= 3.0) return Row[0] * Clamp(Force / 3.0, 0.0, 1.0);
+			const double K = std::min(Force, 6.0) - 3.0;
+			const int I = std::min(static_cast<int>(K), 2);
+			return Row[I] + (Row[I + 1] - Row[I]) * (K - I);
+		}
+		/** Three swells summed, their periods within 15% of each other, so a ship's ride never repeats (and never bobs
+		 * like a toy): about 1 at its most. */
+		double Swells(double T, double Period, double Phase)
+		{
+			const double W = 2.0 * Pi / Period;
+			return 0.6 * std::sin(W * T + Phase) + 0.28 * std::sin(W * 0.885 * T + 1.9 * Phase + 1.0) + 0.17 * std::sin(W * 1.14 * T + 2.7 * Phase + 2.0);
 		}
 		/** Where a worst one was, for the cloud test's report. */
 		template <typename HullT> std::string Worst(const HullT& H, double T)
@@ -134,6 +179,8 @@ namespace SeaShow
 			Speed = 4.0 + Mix(F.Seed * 31 + 11) * 7.0;
 		}
 		WindV = Ahead(From) * -Speed;
+		WindU = Speed;
+		WindFromR = From;
 		const double Steps[] = { 0.3, 1.5, 3.3, 5.5, 7.9, 10.7, 13.8 };
 		Beaufort = 7.0;
 		for (int K = 0; K < 7; ++K)
@@ -374,7 +421,6 @@ namespace SeaShow
 			}
 			C.S = Back;
 			C.bStarted = true;
-			const Motion M = MotionOf(P.Class);
 			for (int K = 0; K < P.Ships; ++K)
 			{
 				Hull H;
@@ -390,8 +436,9 @@ namespace SeaShow
 				H.Hdg = H.CourseHdg = P.Face;
 				H.Spd = P.Speed;
 				H.Roll0 = Mix(static_cast<uint64_t>(H.Key) * 97 + F.Seed) * 2.0 * Pi;
-				H.RollT = M.RollT * (0.9 + 0.2 * Mix(static_cast<uint64_t>(H.Key) * 13 + 5));
-				H.PitchT = M.PitchT * (0.9 + 0.2 * Mix(static_cast<uint64_t>(H.Key) * 17 + 3));
+				const Ride R = RideOf(SizeOf(H.Class).Long);
+				H.RollT = R.RollT * (0.9 + 0.2 * Mix(static_cast<uint64_t>(H.Key) * 13 + 5));
+				H.PitchT = R.PitchT * (0.9 + 0.2 * Mix(static_cast<uint64_t>(H.Key) * 17 + 3));
 				Hulls[H.Key] = H;
 				C.Line.push_back(H.Key);
 			}
@@ -1669,17 +1716,24 @@ namespace SeaShow
 				if (ShownT - H.SinkAt >= H.SinkFor) H.Doing = Fate::Gone;
 			}
 		}
-		// Heel and pitch: outward in a turn by her rate of turn and speed, and her own roll and pitch on the swell.
+		// Heel, pitch and heave: outward in a turn by her rate of turn and speed, and her own ride on the sea by her length
+		// and the wind (the art director's table): her roll the most with the sea on her beam, her pitch the most head
+		// or stern on, and she rises and falls by a share of the waves' height (about 0.021 U^2 in a sea the wind has
+		// fully raised).
+		const double Force = std::pow(WindU / 0.836, 2.0 / 3.0), High = 0.021 * WindU * WindU;
 		for (auto& Pair : Hulls)
 		{
 			Hull& H = Pair.second;
 			if (H.Doing == Fate::Gone) continue;
 			const Motion M = MotionOf(H.Class);
+			const Ride R = RideOf(SizeOf(H.Class).Long);
+			const double Beam = std::fabs(std::sin(H.Hdg - WindFromR));
 			const double TurnHeel = -std::atan(H.Spd * H.Rate / Gee) / Deg * M.TurnHeel;
-			const double Swell = M.Roll * std::min(Beaufort, 5.0) * std::sin(2.0 * Pi * ShownT / H.RollT + H.Roll0);
+			const double Swell = AtForce(R.Roll, Force) * (0.35 + 0.65 * Beam) * Swells(ShownT, H.RollT, H.Roll0);
 			const double Want = TurnHeel + Swell;
 			H.Heel += (Want - H.Heel) * Clamp(Dt / 2.0, 0.0, 1.0);
-			H.Pitch = M.Pitch * std::min(Beaufort, 5.0) * std::sin(2.0 * Pi * ShownT / H.PitchT + H.Roll0 * 1.7);
+			H.Pitch = AtForce(R.Pitch, Force) * (0.35 + 0.65 * std::sqrt(std::max(0.0, 1.0 - Beam * Beam))) * Swells(ShownT, H.PitchT, H.Roll0 * 1.7 + 0.5);
+			H.Heave = R.Heave * High * Swells(ShownT, H.PitchT * 1.05, H.Roll0 * 2.3 + 1.3);
 			if (H.Doing != Fate::Sinking && std::fabs(H.Heel) > Check.MostHeel)
 			{
 				Check.MostHeel = std::fabs(H.Heel);
@@ -2317,6 +2371,7 @@ namespace SeaShow
 			S.Heading = Wrap(H.Hdg + H.Rate * On) / Deg;
 			S.Heel = H.Heel;
 			S.Pitch = H.Pitch;
+			S.Heave = H.Heave;
 			S.Speed = H.Spd;
 			S.Wake = Clamp(H.Spd / (Sz.Speed * 1.3), 0.0, 1.0);
 			S.Funnel = H.Doing == Fate::Sinking ? 0.0 : Clamp(0.25 + 0.75 * H.Spd / (Sz.Speed * 1.3), 0.0, 1.0);

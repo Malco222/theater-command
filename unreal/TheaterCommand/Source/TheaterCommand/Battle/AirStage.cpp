@@ -786,8 +786,32 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	float Strength = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaWaves="), Strength);
 	const double WorldPerMetre = UnitsPerMetre * FMath::Max(GetActorScale3D().X, 0.0001);
-	// (downwind, as BuildSea lays the trade wind's streaks, turned into the world's frame)
-	const double Downwind = FMath::DegreesToRadians(HeadingToYaw(FMath::DegreesToRadians(250.0) - StageTurn));
+	// (downwind, as BuildSea lays the trade wind's streaks, turned into the world's frame; a fleet action's own wind
+	// where SetSeaWind gave one)
+	const double Downwind = FMath::DegreesToRadians(HeadingToYaw(FMath::DegreesToRadians(SeaDownwind) - StageTurn));
+	// THE FLEET ACTION'S OWN SEA (SetSeaWind; Brian, 21 November 23:37Z: "make the water more realistic"). With a wind
+	// given, the sea is that wind's, against the trade wind's 7.5 m/s it was made for (the art director's fleet water
+	// targets, 23:44Z): the chop as long as the square of the wind has it (a sea the wind has raised runs about
+	// 0.83 U^2 metres from crest to crest), the swell with the wind, each read travelling at its own waves' speed and its
+	// slopes a little steeper in a stronger wind; the whitecaps over as much of the sea as Monahan's 3.84e-6 U^3.41
+	// covers, against the trade wind's share, bigger (0.8 m across at Beaufort 3, 1.2 at 4, 2 at 5, 3 at 6), flashing
+	// longer and leaving more foam behind. With none, Pearl's sea as made.
+	const bool bWind = SeaWind > 0.0;
+	const double Wind = bWind ? FMath::Clamp(SeaWind, 2.0, 14.0) : 7.5;
+	auto Knots = [Wind](const double (&At)[4], const double (&Is)[4])
+	{
+		if (Wind <= At[0]) return Is[0];
+		for (int32 K = 1; K < 4; ++K)
+		{
+			if (Wind <= At[K]) return Is[K - 1] + (Is[K] - Is[K - 1]) * (Wind - At[K - 1]) / (At[K] - At[K - 1]);
+		}
+		return Is[3];
+	};
+	static const double Forces[4] = { 4.4, 6.7, 9.4, 12.3 }; // (the middle of Beaufort 3, 4, 5 and 6, metres a second)
+	static const double CapSizes[4] = { 0.8, 1.2, 2.0, 3.0 }, FoamLives[4] = { 0.3, 1.0, 1.6, 2.0 };
+	const double ChopScale = FMath::Clamp(FMath::Square(Wind / 7.5), 0.35, 2.4), SwellScale = FMath::Clamp(Wind / 7.5, 0.6, 1.6);
+	const double Steep = FMath::Clamp(0.8 + 0.4 * (Wind - 4.0) / 7.0, 0.75, 1.25);
+	const double CapScale = Knots(Forces, CapSizes) / 1.2;
 	const FVector Way = GetActorTransform().TransformVectorNoScale(FVector(FMath::Cos(Downwind), FMath::Sin(Downwind), 0.0)).GetSafeNormal2D();
 	const double Base = FMath::Atan2(Way.Y, Way.X);
 	// Each read: the picture's length in metres (its slopes run from a seventh of it down to a fifty-sixth); its
@@ -804,8 +828,18 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 		{ TEXT("ChopA"), 64.0, 25.0, 3.8, 0.11 }, { TEXT("ChopB"), 80.0, -18.0, 4.2, 0.09 },
 		{ TEXT("RippleA"), 13.0, -40.0, 1.7, 0.08 }, { TEXT("RippleB"), 17.0, 55.0, 1.9, 0.07 },
 	};
-	for (const FRead& Read : Reads)
+	for (const FRead& Given : Reads)
 	{
+		FRead Read = Given;
+		if (bWind)
+		{
+			// (the swell's two reads, then the chop's, then the ripples', which the wind's own puffs keep as they are)
+			const int32 Which = static_cast<int32>(&Given - Reads);
+			const double Scale = Which < 2 ? SwellScale : Which < 4 ? ChopScale : 1.0;
+			Read.Length *= Scale;
+			Read.Speed = FMath::Sqrt(9.81 * (Read.Length / 7.0) / (2.0 * UE_DOUBLE_PI));
+			Read.Lean *= Which < 4 ? Steep : 1.0;
+		}
 		const double Heading = Base + FMath::DegreesToRadians(Read.Off);
 		const double Across = Read.Length * WorldPerMetre;
 		Made->SetVectorParameterValue(Read.Name, FLinearColor(static_cast<float>(FMath::Cos(Heading) / Across), static_cast<float>(FMath::Sin(Heading) / Across),
@@ -833,11 +867,11 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	// Cat's-paws and slicks: patches some hundreds of metres across the wind and four times as long along it, riding
 	// the trade wind at about its own speed (15 knots). (The art director, 07:20Z: drawn out 3 to 5 times along the wind.)
 	const double GustAcross = 2400.0, GustAlong = GustAcross * 4.0;
-	Slid(TEXT("Gusts"), GustAlong, 0.0, 7.5, FMath::Clamp(Strength, 0.0f, 1.0f));
+	Slid(TEXT("Gusts"), GustAlong, 0.0, Wind, FMath::Clamp(Strength, 0.0f, 1.0f));
 	Made->SetVectorParameterValue(TEXT("GustsAcross"), FLinearColor(static_cast<float>(-FMath::Sin(Base) / (GustAcross * WorldPerMetre)),
 		static_cast<float>(FMath::Cos(Base) / (GustAcross * WorldPerMetre)), 0.0f, 0.0f));
 	// (their edges broken into fingers some 50 to 200 m across, riding with them; the art director on v3, 08:07Z)
-	Slid(TEXT("GustFingers"), 600.0, 0.0, 7.5, 0.6 * FMath::Clamp(Strength, 0.0f, 1.0f));
+	Slid(TEXT("GustFingers"), 600.0, 0.0, Wind, 0.6 * FMath::Clamp(Strength, 0.0f, 1.0f));
 	// Whitecaps: the whitecaps' picture read twice, 160 and 190 m to it, drifting downwind with the water at about a
 	// metre a second while each crest runs on through its foam (the art director's notes, 07:20Z); put out of step
 	// from place to place by the waves picture's slow unevenness, 640 m to it, so its repeats do not break together;
@@ -855,8 +889,23 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	}
 	Made->SetTextureParameterValue(TEXT("Foam"), SeaFoam);
 	const double Caps = FMath::Clamp(Strength, 0.0f, 1.5f);
-	Slid(TEXT("FoamA"), 160.0, 0.0, 0.8, Caps);
-	Slid(TEXT("FoamB"), 190.0, 5.0, 1.0, Caps);
+	if (bWind)
+	{
+		// (a whitecap's picture as much bigger as its caps, its crest as much longer running down them; how many break,
+		// and how long they flash and their foam lasts, by the wind)
+		Slid(TEXT("FoamA"), 160.0 * CapScale, 0.0, 0.8 * Wind / 7.5, Caps);
+		Slid(TEXT("FoamB"), 190.0 * CapScale, 5.0, 1.0 * Wind / 7.5, Caps);
+		const double Covered = 3.84e-6 * FMath::Pow(Wind, 3.41), TradeCovered = 3.84e-6 * FMath::Pow(7.5, 3.41);
+		Made->SetScalarParameterValue(TEXT("CapShare"), static_cast<float>(FMath::Clamp(Covered / TradeCovered, 0.03, 4.0)));
+		Made->SetScalarParameterValue(TEXT("TailLife"), static_cast<float>(Knots(Forces, FoamLives)));
+		Made->SetScalarParameterValue(TEXT("FoamRun"), static_cast<float>(1.8 * FMath::Sqrt(CapScale)));
+		Made->SetScalarParameterValue(TEXT("HeadFade"), static_cast<float>(1.2 * FMath::Pow(CapScale, 0.8)));
+	}
+	else
+	{
+		Slid(TEXT("FoamA"), 160.0, 0.0, 0.8, Caps);
+		Slid(TEXT("FoamB"), 190.0, 5.0, 1.0, Caps);
+	}
 	Slid(TEXT("FoamShift"), 640.0, 30.0, 0.3, 4.0);
 	Made->SetScalarParameterValue(TEXT("FoamNear"), static_cast<float>(400.0 * WorldPerMetre));
 	Made->SetScalarParameterValue(TEXT("FoamSpan"), static_cast<float>(1100.0 * WorldPerMetre));
@@ -927,7 +976,7 @@ void AAirStage::BuildSea()
 	const FVector Middle = BoardToLocal(BoardTarget, 0.0);
 	// (the trade wind from about 070, so its streaks run 070 to 250: a true heading, turned into the stage's own axes
 	// as the sun's and the hangars' are)
-	const double WindYaw = FMath::DegreesToRadians(HeadingToYaw(FMath::DegreesToRadians(250.0) - StageTurn));
+	const double WindYaw = FMath::DegreesToRadians(HeadingToYaw(FMath::DegreesToRadians(SeaDownwind) - StageTurn));
 	const FVector2D Along(FMath::Cos(WindYaw), FMath::Sin(WindYaw)), Across(-Along.Y, Along.X);
 	auto Height = [&Along, &Across](double X, double Y)
 	{
@@ -969,7 +1018,7 @@ void AAirStage::BuildSea()
 			const double Dx = (Height(Mx + Step, My) - Height(Mx - Step, My)) * Edge / (2.0 * Step);
 			const double Dy = (Height(Mx, My + Step) - Height(Mx, My - Step)) * Edge / (2.0 * Step);
 			// (a tilt of up to some 5 degrees, as before the smaller patches were made broader and their slopes gentler)
-			const double Tilt = 60.0;
+			const double Tilt = SeaPatchTilt;
 			V.Add(Middle + FVector(X, Y, 0.0));
 			OnShore.Add(Shored(V.Last()));
 			N.Add(FVector(-Dx * Tilt, -Dy * Tilt, 1.0).GetSafeNormal());
@@ -1588,7 +1637,7 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 		if (Looks.Pose(Ship.Given.Id, Now, List, Trim, Settle) || Ship.bUnderWay)
 		{
 			Settle = Ship.bDocked ? FMath::Min(Settle, 0.5) : Settle;
-			Ship.Hull->SetRelativeLocationAndRotation(Ship.Base - FVector(0.0, 0.0, Settle * UnitsPerMetre), FRotator(Trim + Ship.WayTrim, Ship.Yaw, List + Ship.WayList));
+			Ship.Hull->SetRelativeLocationAndRotation(Ship.Base - FVector(0.0, 0.0, (Settle - Ship.WayHeave) * UnitsPerMetre), FRotator(Trim + Ship.WayTrim, Ship.Yaw, List + Ship.WayList));
 		}
 		return;
 	}
@@ -1644,7 +1693,7 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 	}
 	Roll += WasList + Ship.WayList;
 	Pitch += WasTrim + Ship.WayTrim;
-	Depth += WasSettle;
+	Depth += WasSettle - Ship.WayHeave;
 	if (Ship.bDocked)
 	{
 		// (on a dock's floor she goes no lower: Cassin and Downes burned out where they lay, Cassin rolled onto Downes)
@@ -1780,13 +1829,59 @@ bool AAirStage::RaiseSea(const FVector2D& Middle, double InSunAzimuth, double In
 	// (the sea and the ships' steel as Raise makes them; there is no ground to ink)
 	SeaInk = Ink(0.2f, 0.5f);
 	SteelInk = Ink(0.55f, 0.4f);
+	// THE MOVING SEA for the fleet action (Brian, 21 November 23:37Z: "make the water more realistic"): Pearl's moving
+	// sea, with the battle's own wind (SetSeaWind), seen from the fleet camera's low eye, 28 to 60 m up with the ships
+	// 1 to 3 km off (the art director's fleet water targets, 23:44Z): the sea mirrors the sky looked at low across it,
+	// so it lightens to nearly the sky's own colour at the horizon (0.8 to 0.9 of it), to 0.55 to 0.7 of it where the
+	// ships are, and keeps its blue-grey near; the waves' detail folds into a smooth mirror by about 5 km, and the open
+	// sea's long patches tilt it a degree or so, not five (which a low eye squeezed into stripes 40 levels deep). Without
+	// the material, or with -TheaterFlatSea, the still sea as before. "-TheaterSeaReflect=" scales how much of the sky
+	// the sea mirrors (1 as set; 0 none), "-TheaterSeaTint=r,g,b" its paint.
+	if (UMaterialInstanceDynamic* Moving = MovingSea(false))
+	{
+		SeaInk = Moving;
+		float Reflect = 1.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaReflect="), Reflect);
+		const FLinearColor Sky = SeaSky.A > 0.0f ? SeaSky : FLinearColor(0.85f, 0.86f, 0.88f);
+		Moving->SetScalarParameterValue(TEXT("SkyReflect"), FMath::Max(Reflect, 0.0f));
+		Moving->SetVectorParameterValue(TEXT("SkyColour"), FLinearColor(Sky.R, Sky.G, Sky.B, 1.0f));
+		const double WorldPerMetre = UnitsPerMetre * FMath::Max(GetActorScale3D().X, 0.0001);
+		Moving->SetScalarParameterValue(TEXT("FarDepth"), static_cast<float>(3500.0 * WorldPerMetre));
+		Moving->SetScalarParameterValue(TEXT("FarLean"), 0.2f);
+		// (the whitecaps out to 1.6 km in a light breeze and 3.4 km in a strong one, gone 2.5 km further)
+		const double Caps = 1000.0 + 800.0 * FMath::Clamp(0.8 + (SeaWind - 4.4) * (2.2 / 7.9), 0.8, 3.0);
+		Moving->SetScalarParameterValue(TEXT("FoamFadeFrom"), static_cast<float>(Caps * WorldPerMetre));
+		Moving->SetScalarParameterValue(TEXT("FoamFadeSpan"), static_cast<float>(2500.0 * WorldPerMetre));
+		// (the near water a deep blue-grey, blue over red by 20 to 35 and green over red by 10 to 20 after the battle's
+		// grade, not teal: the paint a little bluer than Pearl's)
+		FLinearColor Tint(0.92f, 0.95f, 1.12f);
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaTint="), Asked, false))
+		{
+			TArray<FString> Bits;
+			Asked.ParseIntoArray(Bits, TEXT(","));
+			if (Bits.Num() == 3)
+			{
+				Tint = FLinearColor(FCString::Atof(*Bits[0]), FCString::Atof(*Bits[1]), FCString::Atof(*Bits[2]));
+			}
+		}
+		Moving->SetVectorParameterValue(TEXT("Tint"), Tint);
+		SeaPatchTilt = 15.0;
+	}
 	BuildSea();
 	bRaised = true;
 	UE_LOG(LogTheater, Display, TEXT("Stage: the open sea raised round (%.0f, %.0f), the sun at %.0f degrees, %.0f up."), Middle.X, Middle.Y, SunAzimuth, SunElevation);
 	return true;
 }
 
-void AAirStage::Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch)
+void AAirStage::SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon)
+{
+	SeaDownwind = FMath::RadiansToDegrees(Downwind);
+	SeaWind = FMath::Max(Speed, 0.0);
+	SeaSky = FLinearColor(SkyAtHorizon.R, SkyAtHorizon.G, SkyAtHorizon.B, 1.0f);
+}
+
+void AAirStage::Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch, double Heave)
 {
 	FShip* Ship = Ships.Find(Id);
 	if (!Ship || Ship->bGone)
@@ -1805,6 +1900,7 @@ void AAirStage::Steer(int32 Id, const FVector2D& At, double Face, double Heel, d
 	// by the bow)
 	Ship->WayList = -Heel;
 	Ship->WayTrim = -Pitch;
+	Ship->WayHeave = Heave;
 }
 
 // ---------------------------------------------------------------------------------------------------------------

@@ -74,12 +74,19 @@ public:
 	 */
 	bool RaiseSea(const FVector2D& Middle, double InSunAzimuth, double InSunElevation, double InUnitsPerMetre, FBattleEffects* InEffects, uint64 Seed);
 	/**
+	 * The fleet action's own sea, before RaiseSea (Brian, 21 November 23:37Z: "make the water more realistic"): the wind
+	 * the waves run with (Downwind, radians: the board's heading it blows toward; Speed, metres a second at 10 m), so the
+	 * moving sea's waves, chop, whitecaps and their foam are the wind's own (the art director's fleet water targets,
+	 * 23:44Z), and the sky's colour at the horizon (linear), which the sea mirrors when looked at low across it.
+	 */
+	void SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon);
+	/**
 	 * A ship under way (the fleet action's, each frame): where she is on the board (metres), her heading (radians
 	 * clockwise from north, the board's), her heel (degrees, plus: her starboard side down) and her pitch on the swell
 	 * (degrees, plus: her bow up). Her looks' list, trim and settle, and her end once she goes down, are laid over it
 	 * by Advance. A ship never steered lies where she was laid, as before.
 	 */
-	void Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch);
+	void Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch, double Heave = 0.0);
 
 	/** The ships of the battle, as they lie at the start. A ship already laid is moved, not made again. */
 	void SetShips(const TArray<FStageShip>& Ships);
@@ -170,6 +177,7 @@ private:
 		// side, her port side once turned; a trim plus puts her bow down), laid over her looks' and her end's.
 		bool bUnderWay = false;
 		double WayList = 0.0, WayTrim = 0.0;
+		double WayHeave = 0.0; // metres the swell lifts her from her waterline (minus: lets her fall)
 		double NextChurn = -1.0; // when the sea next boils round her as she goes (MoveShip)
 	};
 
@@ -226,6 +234,11 @@ private:
 	 * laid it; the sea and the shallows carry where each of their points falls on it as their first texture
 	 * coordinate (ShoreAt). */
 	double ShoreWest = -1.0, ShoreSouth = -1.0, ShoreSpan = 2.0;
+	/** The sea's wind (SetSeaWind; Raise keeps Pearl's trade wind): the true heading its waves and long patches run
+	 * toward (degrees), its speed (metres a second; 0, the sea as made for the trade wind), how far the open sea's long
+	 * patches tilt its face (60 as made: a low eye squeezed their tilt into stripes), and the sky it mirrors. */
+	double SeaDownwind = 250.0, SeaWind = 0.0, SeaPatchTilt = 60.0;
+	FLinearColor SeaSky = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */

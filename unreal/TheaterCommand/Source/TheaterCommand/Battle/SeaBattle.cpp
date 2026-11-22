@@ -352,6 +352,21 @@ namespace SeaParts
 	 * afternoon, 221, 221, 223 in each). */
 	static const FLinearColor SkyOnScreen(221.0f / 255.0f, 221.0f / 255.0f, 223.0f / 255.0f);
 
+	/** The sky just over the horizon as a still shows it (SkyOnScreen), or "-TheaterSeaSky=red,green,blue" (0 to 255). */
+	static FLinearColor SkyColour()
+	{
+		FLinearColor Sky = SkyOnScreen;
+		FString Asked;
+		TArray<FString> Bits;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaSky="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(","), false) == 3)
+		{
+			Sky.R = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[0]), 0.0, 255.0) / 255.0);
+			Sky.G = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[1]), 0.0, 255.0) / 255.0);
+			Sky.B = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[2]), 0.0, 255.0) / 255.0);
+		}
+		return Sky;
+	}
+
 	/** Tells the kit the horizon's haze, where the kit takes it (the effects head 86d71f2: smoke far off pales into it,
 	 * a mid grey until it is told), so this builds on the kit before and after. "-TheaterSeaSky=red,green,blue" (0 to
 	 * 255, as a still's pixel) tries another. The scene's sky and hour are set once a battle and have no weather yet,
@@ -361,16 +376,7 @@ namespace SeaParts
 	{
 		if constexpr (requires(TKit* K) { K->SetSky(FLinearColor()); })
 		{
-			FLinearColor Sky = SkyOnScreen;
-			FString Asked;
-			TArray<FString> Bits;
-			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaSky="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(","), false) == 3)
-			{
-				Sky.R = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[0]), 0.0, 255.0) / 255.0);
-				Sky.G = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[1]), 0.0, 255.0) / 255.0);
-				Sky.B = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[2]), 0.0, 255.0) / 255.0);
-			}
-			Kit->SetSky(Sky);
+			Kit->SetSky(SkyColour());
 		}
 		else
 		{
@@ -523,6 +529,16 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	// The open sea and its ships: the Pearl Harbor stage's sea, hulls, hit looks and ends, raised with no land.
 	Stage = Here->SpawnActor<AAirStage>(FVector::ZeroVector, FRotator::ZeroRotator);
 	const double Middle = S.Rec.Board.Size * 0.5;
+	if (Stage)
+	{
+		// (its sea the battle's own wind's, Brian's 23:37Z "make the water more realistic": the waves run the way it
+		// blows, as long, as steep and as broken by whitecaps as its speed raises them; and the sky it mirrors low across
+		// it, the sky a still shows over the horizon at about 0.97 of its light, the battle's grade bringing it back up)
+		const SeaShow::Vec Blow = S.Show.Wind();
+		const double Blowing = S.Show.WindSpeed();
+		const FLinearColor Sky = SeaParts::SkyColour();
+		Stage->SetSeaWind(Blowing > 0.0 ? FMath::Atan2(Blow.X, Blow.Y) : 0.0, Blowing, FLinearColor(Sky.R * 0.97f, Sky.G * 0.97f, Sky.B * 0.97f));
+	}
 	if (!Stage || !Stage->RaiseSea(FVector2D(Middle, Middle), SunAzimuth, SunElevation, UnitsPerMetre, Effects.Get(), Seed))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Sea battle: the open sea could not be raised."));
@@ -964,7 +980,7 @@ void ASeaBattle::LayAndSteer()
 				DrawnLong.Add(Ship.Key, Long);
 			}
 		}
-		Stage->Steer(Ship.Key, At, Face, Ship.Heel, Ship.Pitch);
+		Stage->Steer(Ship.Key, At, Face, Ship.Heel, Ship.Pitch, Ship.Heave);
 		LastSeen.Add(Ship.Key, FVector4(At.X, At.Y, Ship.Heading, DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long));
 	}
 }
@@ -2103,6 +2119,15 @@ void ASeaBattle::PlanShots()
 	double Contact = -1.0;
 	bool bBigGuns = false;
 	auto Rank = [](const std::string& Class) { return Class == "bb" ? 4 : Class == "cv" ? 3 : Class == "ca" ? 2 : 1; };
+	// THE WATER'S CHECK SHEET ("-TheaterSeaWaterSheet", in place of the battle's shots; the art director's fleet water
+	// targets, 21 November 23:44Z): a minute and a half in, the open sea from 28 m and from 60 m, looking away from the
+	// sun and toward it, with the ships 1 to 3 km off; then ten seconds at two pictures a second of the smallest ship and
+	// the biggest lying nearest her, side by side, to read their roll and pitch from the masthead.
+	static const bool bWaterSheet = FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaWaterSheet"));
+	const double SheetT = FMath::Min(S.BeginT + 90.0, FMath::Max(S.BeginT + 5.0, S.EndT - 30.0));
+	FShot Ride;
+	Ride.Kind = ESeaShot::Water;
+	Ride.At = -1.0;
 	for (double T = S.BeginT; T <= S.EndT + 1e-6; T += 0.25)
 	{
 		while (Given < S.Rec.Views.size() && S.Rec.Views[Given - 1].Head.T <= T + 1e-9)
@@ -2113,6 +2138,33 @@ void ASeaBattle::PlanShots()
 		if (Contact < 0.0 && Trial.ContactAt() >= 0.0)
 		{
 			Contact = Trial.ContactAt();
+		}
+		if (bWaterSheet && Ride.At < 0.0 && T >= SheetT)
+		{
+			// (the smallest ship afloat in a line, and the biggest nearest her: a destroyer and a battleship, as near as the
+			// battle has them)
+			const SeaShow::ShipOut* Small = nullptr;
+			for (const SeaShow::ShipOut& Ship : Trial.Ships())
+			{
+				if (Ship.Doing == SeaShow::Fate::Line && (!Small || Ship.Long < Small->Long))
+				{
+					Small = &Ship;
+				}
+			}
+			const SeaShow::ShipOut* Big = nullptr;
+			double Best = TNumericLimits<double>::Max();
+			for (const SeaShow::ShipOut& Ship : Trial.Ships())
+			{
+				const double Away = Small ? FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), FVector2D(Small->At.X, Small->At.Y)) : 0.0;
+				if (Small && Ship.Doing == SeaShow::Fate::Line && Ship.Long >= Small->Long + 40.0 && Away - Ship.Long * 10.0 < Best)
+				{
+					Best = Away - Ship.Long * 10.0;
+					Big = &Ship;
+				}
+			}
+			Ride.At = T;
+			Ride.Subject = Small ? Small->Key : -1;
+			Ride.Other = Big ? Big->Key : -1;
 		}
 		// The fleets: the attacker's biggest column, by its leader.
 		if (Fleets.Subject < 0)
@@ -2355,11 +2407,28 @@ void ASeaBattle::PlanShots()
 	{
 		Add(Whole, TEXT("the-end"), S.EndT - 8.0);
 	}
+	if (bWaterSheet)
+	{
+		Shots.Reset();
+		static const TCHAR* const Names[4] = { TEXT("water-28m-away-from-sun"), TEXT("water-28m-toward-sun"), TEXT("water-60m-away-from-sun"), TEXT("water-60m-toward-sun") };
+		for (int32 K = 0; K < 4; ++K)
+		{
+			FShot Sea;
+			Sea.Kind = ESeaShot::Water;
+			Sea.Spot = FVector2D(K < 2 ? 28.0 : 60.0, K % 2 ? 1.0 : 0.0); // (its height, and whether toward the sun)
+			Add(Sea, Names[K], SheetT + K * 1.0);
+		}
+		for (int32 K = 0; K < 20; ++K)
+		{
+			Ride.Spot = FVector2D(-1.0, 0.0); // (the pair, side on)
+			Add(Ride, *FString::Printf(TEXT("ride-%02d"), K), SheetT + 6.0 + K * 0.5);
+		}
+	}
 	Shots.RemoveAll([&S](const FShot& Shot) { return Shot.At < S.BeginT + 2.0; });
 	Shots.StableSort([](const FShot& A, const FShot& B) { return A.At < B.At; });
 	for (int32 K = 0; K < Shots.Num(); ++K)
 	{
-		Shots[K].At = FMath::Min(K > 0 ? FMath::Max(Shots[K].At, Shots[K - 1].At + 1.0) : Shots[K].At, S.EndT + 4.0);
+		Shots[K].At = FMath::Min(K > 0 ? FMath::Max(Shots[K].At, Shots[K - 1].At + (bWaterSheet ? 0.5 : 1.0)) : Shots[K].At, S.EndT + 4.0);
 		Shots[K].Name = FString::Printf(TEXT("%02d-%s"), K + 1, *Shots[K].Name);
 		UE_LOG(LogTheater, Display, TEXT("Sea battle: shot %s at %.1f s (ship %d)."), *Shots[K].Name, Shots[K].At, Shots[K].Subject);
 	}
@@ -2677,6 +2746,90 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		const FVector2D From = Middle + Starboard(Heading) * (Way * FMath::Max(650.0, Apart * 1.2 + Long)) - Ahead(Heading) * (Long * 0.4);
 		OutEye = World(From.X, From.Y, 16.0);
 		OutLook = World(Middle.X, Middle.Y, 22.0);
+		OutLens = 50.0;
+		return true;
+	}
+	case ESeaShot::Water:
+	{
+		// The water's check sheet (PlanShots): the eye 28 or 60 m up, 2 km short of the ships' middle, looking over them
+		// away from the sun or toward it through a 50 degree lens, a little down, the horizon a little above the frame's
+		// middle; or the pair side by side, from 1.2 km off on the sun's side, 30 m up.
+		const FVector Lit = Stage ? Stage->TowardSun() : FVector(1.0, 0.0, 0.5);
+		FVector2D Sun = FVector2D(Lit.Y, Lit.X).GetSafeNormal();
+		Sun = Sun.IsNearlyZero() ? FVector2D(0.0, 1.0) : Sun;
+		// (how far the nearest ship afloat lies from a point: the eye is never put among them)
+		auto Clear = [&S](const FVector2D& At)
+		{
+			double Nearest = TNumericLimits<double>::Max();
+			for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+			{
+				if (Ship.Doing != SeaShow::Fate::Sinking)
+				{
+					Nearest = FMath::Min(Nearest, FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), At));
+				}
+			}
+			return Nearest;
+		};
+		if (Shot.Spot.X < 0.0)
+		{
+			FVector2D A, B;
+			double HeadingA = 0.0, HeadingB = 0.0, LongA = 100.0, LongB = 200.0;
+			if (!Find(Shot.Subject, A, HeadingA, LongA))
+			{
+				return false;
+			}
+			if (!Find(Shot.Other, B, HeadingB, LongB))
+			{
+				B = A;
+				LongB = LongA;
+			}
+			const FVector2D Middle = (A + B) * 0.5;
+			FVector2D Abeam = FVector2D(Ahead(HeadingB).Y, -Ahead(HeadingB).X);
+			Abeam = FVector2D::DotProduct(Abeam, Sun) < 0.0 ? -Abeam : Abeam;
+			const double Span = FVector2D::Distance(A, B) + 0.5 * (LongA + LongB) + 120.0;
+			// (on her sunlit side 1.2 to 1.8 km off where no other ship lies within 600 m of the eye, else her shaded side,
+			// else wherever the nearest ship lies farthest)
+			FVector2D From = Middle + Abeam * 1200.0;
+			double Off = 1200.0, Roomiest = -1.0;
+			bool bFound = false;
+			for (int32 Try = 0; Try < 6 && !bFound; ++Try)
+			{
+				const double Far = 1200.0 + 300.0 * (Try % 3);
+				const FVector2D Here = Middle + (Try < 3 ? Abeam : -Abeam) * Far;
+				const double Room = Clear(Here);
+				bFound = Room >= 600.0;
+				if (bFound || Room > Roomiest)
+				{
+					Roomiest = Room;
+					From = Here;
+					Off = Far;
+				}
+			}
+			OutEye = World(From.X, From.Y, 30.0);
+			OutLook = World(Middle.X, Middle.Y, 12.0);
+			OutLens = FMath::Clamp(FMath::RadiansToDegrees(2.0 * FMath::Atan(0.5 * Span / Off)), 15.0, 55.0);
+			return true;
+		}
+		FVector2D Sum = FVector2D::ZeroVector;
+		int32 Count = 0;
+		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+		{
+			if (Ship.Doing == SeaShow::Fate::Line)
+			{
+				Sum += FVector2D(Ship.At.X, Ship.At.Y);
+				++Count;
+			}
+		}
+		const FVector2D Middle = Count ? Sum / static_cast<double>(Count) : FVector2D(S.Rec.Board.Size * 0.5, S.Rec.Board.Size * 0.5);
+		const FVector2D Way = Shot.Spot.Y > 0.5 ? Sun : -Sun;
+		// (2 km short of the ships' middle, and farther back until the nearest ship is a kilometre off)
+		FVector2D From = Middle - Way * 2000.0;
+		for (double Back = 2000.0; Back <= 6000.0 && Clear(From) < 1000.0; Back += 250.0)
+		{
+			From = Middle - Way * Back;
+		}
+		OutEye = World(From.X, From.Y, Shot.Spot.X);
+		OutLook = World(Middle.X, Middle.Y, 0.0);
 		OutLens = 50.0;
 		return true;
 	}

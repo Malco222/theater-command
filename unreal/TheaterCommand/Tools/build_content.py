@@ -490,6 +490,9 @@ def build_stage_sea():
     # ("FarCount" of the share near), so that the specks are as few as the art director passed in v2 and bright by
     # their size.
     run = scalar(m, "FoamRun", 1.8, -2350, 5000)
+    # (how long a whitecap's foam lasts behind it, times its 3 to 6 s: "TailLife", 1 for Pearl; little foam in a light
+    # breeze, grey-white foam for 10 to 20 s in a strong one, within the read's cycle)
+    tail_life = scalar(m, "TailLife", 1.0, -1450, 5500)
     depth = node(m, unreal.MaterialExpressionPixelDepth, -3200, 4300)
 
     def beyond(start, span, x, y):
@@ -503,6 +506,10 @@ def build_stage_sea():
     close = one_in(m, unreal.MaterialExpressionOneMinus, blend, -2400, 4400)
     fade = one_in(m, unreal.MaterialExpressionOneMinus, beyond(scalar(m, "FoamFadeFrom", 400000.0, -3200, 4200), scalar(m, "FoamFadeSpan", 600000.0, -3200, 4280), -3000, 4200), -2400, 4200)
     gather = times(m, times(m, fetched, fade, -2250, 4250), one_in(m, SAT, times(m, plus(m, gusty, -0.6, -1700, 4400), 1.6, -1550, 4400), -1400, 4400), -1250, 4300)
+    # (how many of them break, by the wind: "CapShare", 1 for Pearl's trade wind, the fleet battle's own wind setting
+    # it by the share of the sea whitecaps cover, Monahan's 3.84e-6 U^3.41, against the trade wind's; the art
+    # director's fleet water targets, 21 November 23:44Z)
+    gather = times(m, gather, scalar(m, "CapShare", 1.0, -1400, 4150), -1100, 4250)
     count = times(m, gather, lerp(m, 1.0, scalar(m, "FarCount", 0.12, -1400, 4500), blend, -1250, 4500), -1100, 4400)
     share = lerp(m, 1.0, scalar(m, "FarShare", 0.75, -1400, 4600), blend, -1250, 4600)
     run_close = times(m, run, close, -2200, 5000)
@@ -551,7 +558,7 @@ def build_stage_sea():
         connect(head_lace, "", behind, "B")
         laced = lerp(m, 1.0, mottle, times(m, one_in(m, SAT, behind, -1150, y + 520), close, -1000, y + 520), -850, y + 520)
         head = times(m, foam, times(m, times(m, times(m, fresh, rising, -1000, y + 440), laced, -850, y + 480), share, -850, y + 440), -700, y + 300)
-        life = lerp(m, 3.0, 6.0, one_in(m, unreal.MaterialExpressionFrac, times(m, (sample, "G"), 7.31, -1600, y + 560), -1450, y + 560), -1300, y + 560)
+        life = times(m, lerp(m, 3.0, 6.0, one_in(m, unreal.MaterialExpressionFrac, times(m, (sample, "G"), 7.31, -1600, y + 560), -1450, y + 560), -1300, y + 560), tail_life, -1200, y + 560)
         fading = node(m, unreal.MaterialExpressionDivide, -1300, y + 640)
         connect(age, "", fading, "A")
         connect(life, "", fading, "B")
@@ -600,6 +607,25 @@ def build_stage_sea():
     painted = lerp(m, painted, vector(m, "ReefColour", (0.021, 0.30, 0.26, 1.0), -650, -1000), times(m, reef, scalar(m, "ReefShare", 0.6, -800, -900), -650, -900), -400, -950)
     painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, times(m, coral, scalar(m, "CoralDark", 0.45, -800, -1250), -650, -1200), -500, -1200), -300, -1000)
     painted = times(m, painted, lerp(m, scalar(m, "SlickLight", 1.12, -550, -800), scalar(m, "GustDark", 0.88, -550, -700), gust, -400, -750), -250, -600)
+    # THE SKY ON THE WATER (the sea battle's low eye, Brian, 21 November 23:37Z: "make the water more realistic"). Looked
+    # at low across it, water mirrors the sky, more the lower the look (Schlick's Fresnel, a fifth of a twentieth
+    # straight down): the sea lightens toward the horizon to nearly the sky's own colour, and the paint's long patches,
+    # which a low look squeezed into stripes, give way to it. The facet the sky is seen in is the waves' slope at
+    # "SkyLean" of it (a shading normal hides nothing behind a crest, so the full slope would mirror the sky in the
+    # backs of the waves too). "SkyReflect" how much (0 for Pearl, which keeps the engine's own reflection alone),
+    # "SkyColour" the sky's colour at the horizon; the foam covers it.
+    reflect = scalar(m, "SkyReflect", 0.0, -650, 1400)
+    sky_level = node(m, unreal.MaterialExpressionConstant, -650, 1650, r=0.0)
+    facet = one_in(m, unreal.MaterialExpressionNormalize, plus(m, up, pair(m, times(m, slope, scalar(m, "SkyLean", 0.5, -650, 1550), -500, 1550), sky_level, -350, 1550), -200, 1500), -50, 1500)
+    facing = node(m, DOT, 100, 1500)
+    connect(facet, "", facing, "A")
+    connect(node(m, unreal.MaterialExpressionCameraVectorWS, -50, 1650), "", facing, "B")
+    grazing = one_in(m, unreal.MaterialExpressionOneMinus, one_in(m, SAT, one_in(m, unreal.MaterialExpressionAbs, facing, 250, 1500), 400, 1500), 550, 1500)
+    fifth = node(m, unreal.MaterialExpressionPower, 700, 1500, const_exponent=5.0)
+    connect(grazing, "", fifth, "Base")
+    schlick = plus(m, times(m, fifth, 0.98, 850, 1500), 0.02, 1000, 1500)
+    mirrored = one_in(m, SAT, times(m, schlick, reflect, 1150, 1450), 1300, 1450)
+    painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, mirrored, -400, -300), -300, -450)
     painted = lerp(m, painted, vector(m, "TailColour", (0.50, 0.62, 0.62, 1.0), -250, -450), tail, -100, -500)
     painted = lerp(m, painted, vector(m, "HeadColour", (0.79, 0.81, 0.82, 1.0), -100, -350), head, 50, -450)
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
@@ -611,6 +637,9 @@ def build_stage_sea():
     rough = times(m, lerp(m, scalar(m, "Roughness", 0.07, -500, 600), scalar(m, "RoughFar", 0.22, -500, 700), far, -300, 650),
                   lerp(m, scalar(m, "SlickRough", 0.3, -500, 800), scalar(m, "GustRough", 1.35, -500, 900), gust, -300, 850), -200, 700)
     frothy = lerp(m, head, 1.0, times(m, tail, 0.8, -300, 1000), -150, 950)
+    sky = times(m, times(m, vector(m, "SkyColour", (0.85, 0.86, 0.88, 1.0), 1150, 1650), mirrored, 1300, 1600),
+                one_in(m, unreal.MaterialExpressionOneMinus, frothy, 1300, 1700), 1450, 1650)
+    to_property(sky, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     to_property(lerp(m, rough, 0.6, frothy, -100, 650), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(lerp(m, scalar(m, "SlickSpecular", 0.7, -500, 1100), scalar(m, "GustSpecular", 0.4, -500, 1200), gust, -300, 1150),
                 "", unreal.MaterialProperty.MP_SPECULAR)

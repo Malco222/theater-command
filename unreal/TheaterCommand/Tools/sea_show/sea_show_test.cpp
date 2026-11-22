@@ -150,6 +150,7 @@ namespace
 		int LineOff = 0, LineOffEnd = 0;
 		std::string LineOffFirst;
 		double HeelOut = 0.0;
+		double MostPitch[3] = { 0.0, 0.0, 0.0 }, MostHeave[3] = { 0.0, 0.0, 0.0 }; // the ride on the sea: under 145 m, to 215 m, over
 		int SinkingAhead = 0;
 		std::map<int, Vec> EndAt;  // each ship afloat at the end, by key
 		std::string EndWords;
@@ -285,6 +286,12 @@ namespace
 				Last[S.Key] = S.At;
 				LastSpeed[S.Key] = S.Speed;
 				if (S.Doing != SeaShow::Fate::Sinking) Out.HeelOut = std::max(Out.HeelOut, std::fabs(S.Heel));
+				if (S.Doing != SeaShow::Fate::Sinking)
+				{
+					const int Band = S.Long < 145.0 ? 0 : S.Long < 215.0 ? 1 : 2;
+					Out.MostPitch[Band] = std::max(Out.MostPitch[Band], std::fabs(S.Pitch));
+					Out.MostHeave[Band] = std::max(Out.MostHeave[Band], std::fabs(S.Heave));
+				}
 				if (S.Doing == SeaShow::Fate::Sinking && (S.Down < 0.0 || S.Down > 1.0)) ++Out.SinkingAhead;
 				const Capsule CI = HullOf(S);
 				for (size_t J = I + 1; J < Ships.size(); ++J)
@@ -540,6 +547,17 @@ int main(int Argc, char** Argv)
 	Limits.push_back({ "no ship pops (the test's own eye, every ship)", P.MostPop <= 0.5, Num(P.MostPop, 2) + " m", "0.5 m or less" });
 	// (a destroyer hard over at her best speed heeled 10 to 12 degrees, and rolled 5 or so more on a fresh sea)
 	Limits.push_back({ "heel in a turn and on the swell, afloat", P.HeelOut <= 18.0 && C.MostHeel <= 18.0, Num(std::max(P.HeelOut, C.MostHeel), 1) + " deg", "18 deg or less" });
+	// (the art director's table, 21 November 23:44Z: a destroyer pitched 3 to 5 degrees and rose and fell some 1.3 m at
+	// Beaufort 6; the show's three swells sum to about 1.05 of the table's figure at their most)
+	{
+		const double U = Flat(P.Wind), Force = std::pow(U / 0.836, 2.0 / 3.0);
+		char Ride[200];
+		std::snprintf(Ride, sizeof Ride, "B%.1f: small %.1f deg %.2f m, middle %.1f deg %.2f m, big %.1f deg %.2f m", Force, P.MostPitch[0], P.MostHeave[0],
+		              P.MostPitch[1], P.MostHeave[1], P.MostPitch[2], P.MostHeave[2]);
+		const bool bRides = P.MostPitch[0] <= 4.4 && P.MostPitch[1] <= 2.2 && P.MostPitch[2] <= 1.4 && P.MostHeave[0] <= 0.23 * 0.021 * U * U + 0.01
+		                    && P.MostPitch[0] >= P.MostPitch[2];
+		Limits.push_back({ "ships ride the sea by their size and the wind (pitch, heave)", bRides, Ride, "the table's at the most, small ships the most" });
+	}
 	Limits.push_back({ "no two ships of a line one through the other", P.SameLineTouching == 0,
 	                   P.SameLineTouching ? std::to_string(P.SameLineTouching) + " pair-frames (first " + P.SameLineFirst + ")" : "0", "0" });
 	Limits.push_back({ "the line's ships as many as the battle's", P.LineOff == 0, P.LineOff ? std::to_string(P.LineOff) + " frames off (" + P.LineOffFirst + ")" : "always",
