@@ -784,6 +784,11 @@ int main(int Argc, char** Argv)
 	// (falls the eye can follow, the audit's 4.3: each falling aircraft's bank frame to frame, and the air time)
 	std::map<int, std::pair<double, double>> FallBankWas;
 	long FallBankSteps = 0, FallBankFast = 0;
+	// (each fall's end, a crash or a splash: its velocity against the aircraft's last FallMove, at the same place)
+	AirShow::Vec EndFrom, EndVel;
+	bool bEndFrom = false;
+	long EndsSeen = 0, EndsVelWrong = 0;
+	double EndSpeedLeast = 1e9, EndSpeedMost = 0.0;
 	double FallBankMost = 0.0;
 	long VapourLow = 0, VapourOn = 0;
 	double VapourMost = 0.0;
@@ -1338,6 +1343,15 @@ int main(int Argc, char** Argv)
 				if (E.What != "explode") FallsOpen[E.Key] = E.What;
 			}
 			if (E.Kind == AirShow::FxKind::FallMove && !FallsOpen.count(E.Key)) ++FallStrays;
+			if (E.Kind == AirShow::FxKind::FallMove) { EndFrom = E.At; EndVel = E.Vel; bEndFrom = true; }
+			if ((E.Kind == AirShow::FxKind::Crash || E.Kind == AirShow::FxKind::Splash) && (E.What == "plane" || E.What == "ditch" || E.What == "belly"))
+			{
+				++EndsSeen;
+				const bool bSame = bEndFrom && std::fabs(EndFrom.X - E.At.X) < 1e-6 && std::fabs(EndFrom.Y - E.At.Y) < 1e-6;
+				if (!bSame || (E.Vel - EndVel).Length() > 1e-9 || E.Vel.Length() < 1.0) ++EndsVelWrong;
+				EndSpeedLeast = std::min(EndSpeedLeast, E.Vel.Length());
+				EndSpeedMost = std::max(EndSpeedMost, E.Vel.Length());
+			}
 			if (E.Kind == AirShow::FxKind::FallStop && FallsOpen.erase(E.Key) == 0) ++FallStrays;
 			if (E.Kind == AirShow::FxKind::FallStop && E.What == "boom") FallBegan.erase(E.Key); // (blown apart in the air: it ends there)
 			if (E.Kind == AirShow::FxKind::FallStop)
@@ -1794,6 +1808,12 @@ int main(int Argc, char** Argv)
 		  std::to_string(C.Sticks) + " sticks, " + std::to_string(C.StickBombs) + " bombs; " + std::to_string(BayMost.size()) + " bays seen open; " +
 		  std::to_string(C.BombsThroughShutDoors) + " bombs through shut doors, " + std::to_string(C.BaysLeftOpen) + " bays left open",
 		  "0 and 0 (bays seen open where a stick fell)" },
+		// The scene's ask (core-r2-8): a fall's crash or splash carries the aircraft's velocity as it struck, for the
+		// fireball to keep a little of.
+		{ "a crash or a splash carries the aircraft's velocity as it struck", EndsVelWrong == 0 && (EndsSeen > 0 || FallStarts == 0),
+		  std::to_string(EndsSeen) + " ends, " + std::to_string(EndsVelWrong) + " not its last FallMove's velocity there" +
+		  (EndsSeen > 0 ? "; " + Num(EndSpeedLeast) + " to " + Num(EndSpeedMost) + " m/s" : std::string()),
+		  "0 (each the velocity of its aircraft's last FallMove, at the same place)" },
 		{ "a stick let go wings level, a bomber's turns gentle", StickBankMost <= 3.0 && BayBomberBankMost <= 30.5,
 		  BayMost.empty() ? std::string("no bays") : "most bank " + Num(StickBankMost, 1) + " deg from her doors open to her stick gone, " + Num(BayBomberBankMost, 1) + " ever",
 		  "at most 3 on the run, 30 ever" },
@@ -3481,63 +3501,73 @@ int main(int Argc, char** Argv)
 		// or a parachute through a lower one beside it.
 		{
 			// (the step laid across the way the most of the main play's falls drifted east, halfway along one of them, so
-			// that some cross it to be judged; the middle of where they began if none drifted east)
-			double SX = FallXs.empty() ? TX : FallXs[FallXs.size() / 2];
+			// that some cross it to be judged; then, if none crossed there, at the middle of where they began)
+			const double Middle = FallXs.empty() ? TX : FallXs[FallXs.size() / 2];
+			std::vector<double> Steps;
 			int Across = 0;
+			double Best = Middle;
 			for (const auto& [From, To] : FallSpans)
 			{
 				if (To - From < 100.0) continue;
 				const double At = 0.5 * (From + To);
 				int N = 0;
 				for (const auto& [From2, To2] : FallSpans) N += From2 < At - 25.0 && To2 > At + 25.0 ? 1 : 0;
-				if (N > Across) { Across = N; SX = At; }
+				if (N > Across) { Across = N; Best = At; }
 			}
+			if (Across > 0) Steps.push_back(Best);
+			Steps.push_back(Middle);
 			const double LowFoot = 100.0, LowHide = 3000.0, LowEnds = LowHide - 150.0;
-			AirShow::Show Stepped(Rec.Seed ? Rec.Seed : 238);
-			AirFeed::Apply(Rec.Board, Stepped);
-			Stepped.Eye = MainEye;
-			Stepped.DeckAt = [SX, LowFoot, LowHide](double X, double)
+			int Crossed = 0, Stuck = 0, ThingsStuck = 0, Tried = 0;
+			for (const double SX : Steps)
 			{
-				AirShow::DeckSpan Here;
-				Here.Foot = X < SX ? 20000.0 : LowFoot;
-				Here.Hide = X < SX ? 20500.0 : LowHide;
-				return Here;
-			};
-			std::map<int, bool> BegunWest;
-			int Crossed = 0, Stuck = 0, ThingsStuck = 0;
-			size_t Next = 0;
-			for (double At = Rec.Views.front().Head.T; At < EndT - 1e-9;)
-			{
-				At = std::min(EndT, At + 1.0 / 30.0);
-				while (Next < Rec.Views.size() && Rec.Views[Next].Head.T <= At + 1.0 + 1e-9)
+				if (Crossed > 0) break;
+				++Tried;
+				AirShow::Show Stepped(Rec.Seed ? Rec.Seed : 238);
+				AirFeed::Apply(Rec.Board, Stepped);
+				Stepped.Eye = MainEye;
+				Stepped.DeckAt = [SX, LowFoot, LowHide](double X, double)
 				{
-					Stepped.Take(Rec.Views[Next].Head.T, Rec.Views[Next].Groups, Rec.Views[Next].Events, Rec.Views[Next].Ships);
-					++Next;
-				}
-				Stepped.Advance(At);
-				for (const AirShow::Fx& E : Stepped.Effects)
+					AirShow::DeckSpan Here;
+					Here.Foot = X < SX ? 20000.0 : LowFoot;
+					Here.Hide = X < SX ? 20500.0 : LowHide;
+					return Here;
+				};
+				std::map<int, bool> BegunWest;
+				size_t Next = 0;
+				for (double At = Rec.Views.front().Head.T; At < EndT - 1e-9;)
 				{
-					if (E.Kind == AirShow::FxKind::Fall) BegunWest[E.Key] = E.At.X < SX;
-					if (E.Kind != AirShow::FxKind::FallStop) continue;
-					const auto Found = BegunWest.find(E.Key);
-					if (Found == BegunWest.end()) continue;
-					if (Found->second && E.At.X >= SX && E.At.Z > LowFoot && E.At.Z <= LowEnds + 0.5) ++Crossed;
-					BegunWest.erase(Found);
+					At = std::min(EndT, At + 1.0 / 30.0);
+					while (Next < Rec.Views.size() && Rec.Views[Next].Head.T <= At + 1.0 + 1e-9)
+					{
+						Stepped.Take(Rec.Views[Next].Head.T, Rec.Views[Next].Groups, Rec.Views[Next].Events, Rec.Views[Next].Ships);
+						++Next;
+					}
+					Stepped.Advance(At);
+					for (const AirShow::Fx& E : Stepped.Effects)
+					{
+						if (E.Kind == AirShow::FxKind::Fall) BegunWest[E.Key] = E.At.X < SX;
+						if (E.Kind != AirShow::FxKind::FallStop) continue;
+						const auto Found = BegunWest.find(E.Key);
+						if (Found == BegunWest.end()) continue;
+						if (Found->second && E.At.X >= SX && E.At.Z > LowFoot && E.At.Z <= LowEnds + 0.5) ++Crossed;
+						BegunWest.erase(Found);
+					}
+					for (const AirShow::PlaneOut& P : Stepped.Planes())
+					{
+						if (P.bFalling && P.bShown && P.At.X >= SX && P.At.Z > LowFoot && P.At.Z < LowEnds - 0.5) ++Stuck;
+					}
+					for (const AirShow::Thing& Th : Stepped.Things())
+					{
+						if (Th.Kind != AirShow::ThingKind::Bomb && Th.At.X >= SX && Th.At.Z > LowFoot && Th.At.Z < LowEnds - 1.0) ++ThingsStuck;
+					}
+					Stepped.Effects.clear();
 				}
-				for (const AirShow::PlaneOut& P : Stepped.Planes())
-				{
-					if (P.bFalling && P.bShown && P.At.X >= SX && P.At.Z > LowFoot && P.At.Z < LowEnds - 0.5) ++Stuck;
-				}
-				for (const AirShow::Thing& Th : Stepped.Things())
-				{
-					if (Th.Kind != AirShow::ThingKind::Bomb && Th.At.X >= SX && Th.At.Z > LowFoot && Th.At.Z < LowEnds - 1.0) ++ThingsStuck;
-				}
-				Stepped.Effects.clear();
 			}
 			Limits.push_back({ "a fall under one tile's foot still ends in a lower one beside it",
 			                   Crossed > 0 && Stuck == 0 && ThingsStuck == 0,
-			                   std::to_string(Crossed) + " falls begun west of the step end in the low tile east of it; " + std::to_string(Stuck) +
-			                       " frames of a plane left falling in it, " + std::to_string(ThingsStuck) + " of a piece or parachute",
+			                   std::to_string(Crossed) + " falls begun west of the step end in the low tile east of it (" + std::to_string(Tried) + " of " +
+			                       std::to_string(Steps.size()) + " steps laid); " + std::to_string(Stuck) + " frames of a plane left falling in it, " +
+			                       std::to_string(ThingsStuck) + " of a piece or parachute",
 			                   "some cross and end there; none left falling inside" });
 		}
 	}
