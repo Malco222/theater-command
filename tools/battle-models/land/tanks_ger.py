@@ -248,7 +248,10 @@ ROOF_MG_HOW = ("roof_mg: the machine gun on her roof that only her commander fir
 # Measured mesh against mesh (22 November), for the art director's review of the roof guns and hatches:
 # - MG34_LIFT: the MG 34 turns about the cupola's middle, so its butt always hangs over the open hatch; tipping the
 #   muzzle up swings the butt down into it. At 15 degrees the butt plate's lowest corner is 3 cm over the hatch's dark
-#   disc, at 17 it is 1 cm, by 18 it is in (at the old 45 it was 23 cm in). The same on all three German tanks.
+#   disc, at 17 it is 1 cm, by 18 it is in (at 45 it is 23 cm in). The same on all three German tanks.
+#   KEPT AT 45 all the same: the dark disc is the open hatch, where the commander stands, and the butt going down into it
+#   at his shoulder is what the real mount did when he fired up at aircraft. A 15 degree cap would leave the gun no
+#   use against planes, which is half of why it was there.
 # - The seven-periscope cupola's lid (Tiger, Panther): its post on the cupola's top ring at the left-rear (-130, + to the
 #   right), 0.33 out from the middle; it lifts 3 cm and swings 105 degrees clockwise seen from above, to lie behind the
 #   cupola, its middle 0.52 out (clear of the hole). Swinging, it crosses the rail's circle from 119 to 221.5 degrees, so
@@ -258,7 +261,7 @@ ROOF_MG_HOW = ("roof_mg: the machine gun on her roof that only her commander fir
 # - The Tiger's hull lids, hung on their outboard edges, cleared the turret's front corners but their inboard edges
 #   still rose into the ends of the mantlet (which hangs 9 cm over the roof) between 10 and 30 degrees open: their
 #   middles moved 10 cm forward, to x 1.65, they clear the turret and the mantlet all the way, gun level or drooped.
-MG34_LIFT = 15.0
+MG34_LIFT = 45.0
 CUPOLA_POST, CUPOLA_SWING, CUPOLA_LIFT = -130.0, 105.0, 0.03
 TIGER_RAIL_GAP, TIGER_MG_ARC = (116.0, 225.0), (-118.0, 108.0)
 PANTHER_RAIL_GAP, PANTHER_MG_ARC = (116.0, 225.0), (-118.0, 108.0)
@@ -664,7 +667,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     # the MG 34 on the anti-aircraft rail round the cupola: only he fires it, standing up in it (Brian, 22 November);
     # all round but where his lid stands open behind him: to the right as far as 125 degrees, to the left only 110 (its
     # belt drum hangs on the gun's left and met the lid from -120). Its lift stops where the butt, swinging down
-    # over the open hatch, would sink into it (MG34_LIFT: the butt plate's lowest corner stays 3 cm over the hatch's dark)
+    # over the open hatch, and goes down into it as the muzzle lifts at aircraft (MG34_LIFT: see there)
     v.roof_gun("mg34", cup, arc=(-110.0, 125.0), lay=(-10.0, MG34_LIFT), ring=0.335 + 0.045)
     v.vent((x0 + 0.42, -0.2, 2.245), 0.12, 0.05)
     v.port((x0 + 0.2, 0.32, 2.262), Z, 0.05)
