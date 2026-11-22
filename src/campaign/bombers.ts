@@ -278,7 +278,7 @@ export function seatsOf(g: Game, f: AirFleet, n: number, seed: number): BomberSe
       name: m.name, mark: m.mark, art: style === 'nose' ? b[0] : 0, missions: b[2], kills: b[3], ...(b[6] ? { by: { ...b[6] } } : {}),
       crew: b[5], grade: crewGrade(b, f.nat), risk: riskOf(b), row: copyRow(b),
     }));
-  return { style, told: BOMBERS.told, flown: flownWord(f.nat), gunners: BOMBERS.gunners, escorted: BOMBERS.escorted, seats };
+  return { style, told: BOMBERS.told, flown: flownWord(f.nat), seats };
 }
 
 /**

@@ -206,14 +206,17 @@ export function foughtAir(o: AirOutcome): FoughtAir {
   }
   // The bombers the battle knew by name: which of them fell, and what their gunners shot down.
   const fell: NonNullable<FoughtAir['fell']> = {}, shot: NonNullable<FoughtAir['shot']> = {};
+  // And every group's gunners' kills, whether its bombers were known by name or not (ruling 227).
+  const guns: NonNullable<FoughtAir['guns']> = {};
   for (const gr of o.groups) {
     if (gr.fell) fell[gr.id] = [...(fell[gr.id] ?? []), ...gr.fell];
     if (gr.shot) shot[gr.id] = [...(shot[gr.id] ?? []), ...gr.shot];
+    if (gr.guns) guns[gr.id] = (guns[gr.id] ?? 0) + gr.guns;
   }
   return {
     lost, dropped: o.dropped, jettisoned: o.jettisoned, lostBefore: o.lostBefore, lostAfter: o.lostAfter, flew, chance: o.chance,
     ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.staff ? { staff: o.staff } : {}), ...(o.rolls ? { rolls: o.rolls } : {}),
-    ...(Object.keys(fell).length ? { fell, shot } : {}),
+    ...(Object.keys(fell).length ? { fell, shot } : {}), ...(Object.keys(guns).length ? { guns } : {}),
   };
 }
 

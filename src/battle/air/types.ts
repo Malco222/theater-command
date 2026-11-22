@@ -241,6 +241,8 @@ export interface AirOutcome {
     /** A group whose bombers the battle knew by name (AirPlace.bombers): the rows of those that fell, in the order they fell, and what each one's gunners shot down. */
     fell?: BomberRow[];
     shot?: BomberShot[];
+    /** A bomber group's gunners' kills: the enemy fighters whose loss the battle booked to its boxes (ruling 227). */
+    guns?: number;
   }[];
   /** The raid card's chance of success, for the after card's reckoning line. */
   chance: number;

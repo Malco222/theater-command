@@ -36,7 +36,7 @@ interface Loss {
 }
 
 /** A box whose bombers are known by name (AirPlace.bombers): the seats in formation, those that limped home, those that fell, and each one's gunners' kills by nation. */
-interface Seated { all: BomberSeat[]; told: number; flown: string; gunners: number; escorted: number; form: number[]; away: number[]; spare: number; fell: number[]; shot: Map<number, Record<string, number>> }
+interface Seated { all: BomberSeat[]; told: number; flown: string; form: number[]; away: number[]; spare: number; fell: number[]; shot: Map<number, Record<string, number>> }
 
 /** A named bomber as an event carries it. */
 const toldOf = (B: Seated, seat: number): BomberTold => {
@@ -138,11 +138,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private passes = new Map<string, Pass>();
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
   private owedBy = new Map<number, Map<number | 'flak', number>>();
+  /** Each bomber group's gunners' kills: the enemy fighters whose loss was booked to it (ruling 227), for the campaign's record. */
+  private gunKills = new Map<number, number>();
   private stragId = 1;
   /**
    * Bombers by name (AirPlace.bombers): each such box's seats, and the seat each straggler holds. Which bomber a loss
-   * is, and whose gunners brought a fighter down, is drawn from a stream of its own in shown and unshown battles
-   * alike, and is never a count: the same aircraft fall at the same moments with the names or without them.
+   * is, and which of a box's bombers got a fighter booked to the box, is drawn from a stream of its own in shown and
+   * unshown battles alike, and is never a count: the same aircraft fall at the same moments with the names or without them.
    */
   private seatRng: Rng;
   private seated = new Map<number, Seated>();
@@ -246,7 +248,7 @@ export class AirSim implements BattleSim<AirUnit> {
       const B = u.air === 'bmr' ? this.place.bombers?.[u.corps] : undefined;
       if (!B || !B.seats.length) continue;
       const k = Math.min(u.n0, B.seats.length);
-      this.seated.set(u.id, { all: B.seats, told: B.told, flown: B.flown, gunners: B.gunners, escorted: B.escorted ?? 1, form: Array.from({ length: k }, (_, i) => i), away: [], spare: u.n0 - k, fell: [], shot: new Map() });
+      this.seated.set(u.id, { all: B.seats, told: B.told, flown: B.flown, form: Array.from({ length: k }, (_, i) => i), away: [], spare: u.n0 - k, fell: [], shot: new Map() });
     }
     // The raid comes on as one stream: its bomber boxes side by side on one line to the target, the escorts with them.
     const raid = this.units.filter((u) => u.side === 'att');
@@ -975,6 +977,8 @@ export class AirSim implements BattleSim<AirUnit> {
         // Which bomber by name it is, or which bomber's gunners got this fighter: never a count either.
         const seat = u.air === 'bmr' ? this.seatDown(u, s) : -1;
         const gun = u.air === 'ftr' ? this.gunnerOf(u, by) : null;
+        // A fighter booked to a box is its gunners' kill (ruling 227): kept for the campaign's record, named or not.
+        if (u.air === 'ftr' && typeof by === 'number' && this.unit(by)?.air === 'bmr') this.gunKills.set(by, (this.gunKills.get(by) ?? 0) + 1);
         u.n--;
         u.mor = clamp01(u.mor - SKY.morale.perLoss / u.n0);
         const over = u.side === 'att' ? 'enemy' : 'own';
@@ -1334,22 +1338,14 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   /**
-   * Whether a fighter that falls while it fires on a box known by name fell to that box's gunners, and to which
-   * bomber's. The chance is the campaign's own share of a raid's kills for the gunners (bombers.ts: a bomber's guns
-   * weigh 'gunners' of a fighter), between the box it presses hardest and the group the loss is booked to, and never
-   * more than 'escorted' when that group is an escort: a great box with a thin escort does not make its gunners the
-   * better shots (the historian). The loss and who it is booked to ('by') stand as they are: this only names the
-   * bomber the campaign paints the kill on (bombers.ts credit). Returns the box and the seat, or null.
+   * Which bomber's gunners brought down a fighter whose loss is booked to a box known by name. The gunners' kills are
+   * the box's that owed them (ruling 227): the loss's creditor ('by', the group that owed it the most) is the box, and
+   * the box is credited, one of its bombers by the battle's own stream. A loss booked to an escort or to the guns is
+   * theirs, and no lot moves it. Returns the box and the seat, or null.
    */
   private gunnerOf(u: AirUnit, by: number | 'flak' | null | undefined): [number, number] | null {
-    if (!this.seated.size) return null;
-    let box: AirUnit | undefined, most = 0;
-    for (const f of u.fire) if (f.rate > most && this.seated.has(f.on)) { most = f.rate; box = this.unit(f.on); }
-    if (!box) return null;
-    const B = this.seated.get(box.id)!;
-    const esc = typeof by === 'number' ? this.unit(by) : undefined;
-    const w = box.n * B.gunners;
-    if (this.seatRng.next() >= (esc && esc.air === 'ftr' ? Math.min(B.escorted, w / (esc.n + w)) : 1)) return null;
+    if (typeof by !== 'number' || !this.seated.has(by)) return null;
+    const box = this.unit(by)!, B = this.seated.get(by)!;
     // Any bomber still in formation; failing that, one of the box's stragglers.
     const pool = B.form.length ? B.form : box.strag.map((s) => this.stragSeat.get(s.id)).filter((k): k is number => k !== undefined);
     if (!pool.length) return null;
@@ -1775,6 +1771,8 @@ export class AirSim implements BattleSim<AirUnit> {
       if (u.air === 'ftr') { row.lostFtr += u.n0 - u.n; row.flewFtr += u.n0; } else { row.lostBmr += u.n0 - u.n; row.flewBmr += u.n0; }
       row.back += u.back;
       // The bombers known by name: the rows of those that fell, and what each one's gunners shot down.
+      // A bomber group's gunners' kills: every fighter whose loss was booked to it (ruling 227), named or not.
+      if (this.gunKills.get(u.id)) row.guns = (row.guns ?? 0) + this.gunKills.get(u.id)!;
       const B = this.seated.get(u.id);
       if (B) {
         row.fell = [...(row.fell ?? []), ...B.fell.map((k) => B.all[k].row)];

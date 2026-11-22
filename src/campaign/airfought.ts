@@ -56,6 +56,11 @@ export interface FoughtAir {
    */
   fell?: Record<number, BomberRow[]>;
   shot?: Record<number, BomberShot[]>;
+  /**
+   * By campaign air group id: the enemy fighters its bombers' gunners shot down, every loss the field booked to its
+   * boxes (ruling 227), for the group's record (stories.ts bombersFlew). Never a count: the losses are in 'lost'.
+   */
+  guns?: Record<number, number>;
 }
 
 /**

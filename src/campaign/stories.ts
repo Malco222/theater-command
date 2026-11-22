@@ -765,9 +765,9 @@ export function toursWords(unit: string, t: ToursDone): string {
  * A bomber group's bombers after an operation (bombers.ts): the lost are struck off its roster (those the field saw
  * fall, 'fallen', where the raid was fought out), and after a month of bombing each bomber has its missions, the
  * gunners their kills (first the bombers the field saw make them, 'seen'), and the crews that have finished a tour go home. Told to the player; for everyone else it is
- * kept and no more.
+ * kept and no more. 'guns' are the raid's own gunners' kills for the group (ruling 227: the field's, or fly()'s dice).
  */
-function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: number, sea: boolean, fallen?: BomberRow[], foe?: string, seen?: BomberShot[]): void {
+function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: number, sea: boolean, fallen?: BomberRow[], foe?: string, seen?: BomberShot[], guns?: number): void {
   if (!keptByName(f)) return;
   const struck = muster(g, f, fallen);
   if (!f.bombers) return;
@@ -776,17 +776,18 @@ function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: 
   const old = struck.filter((b) => b[0] && b[2] >= BOMBERS.told).sort((a, b) => b[2] - a[2])[0];
   if (mine && old) headline(g, 'info', `The bomber ${bomberName(g, f, old)} of ${theUnit(f.name)}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${sea ? (placeName(g, 'fleet', at) ? `the ${placeName(g, 'fleet', at)}` : 'the raid') : thePlace(placeName(g, 'air', at)) || 'the raid'}.`, f.nat, sea ? undefined : at);
   if (!bombing) return;
-  // Of a mixed fleet's kills, the gunners' share is the bombers' weight beside its fighters', and never more than
-  // 'escorted' of them: where there was an escort it took most of the kills, however many the bombers (the historian).
+  // The gunners' kills are the raid's own (ruling 227): those the field booked to the group's boxes, or the gunners'
+  // part of fly()'s dice. Told only the kills (a caller that does not count the gunners'), of a mixed fleet's the
+  // gunners have the bombers' weight beside its fighters', and never more than 'escorted' of them (the historian).
   const share = f.ftr > 0 ? Math.min(BOMBERS.escorted, (f.bmr * BOMBERS.gunners) / (f.ftr + f.bmr * BOMBERS.gunners)) : 1;
-  const done = flownMonth(g, f, Math.round(kills * share), foe, seen);
+  const done = flownMonth(g, f, guns ?? Math.round(kills * share), foe, seen);
   if (!done) return;
   // Counted on the group's record; the bombers' own roll says which crews they were, so the group's diary does not.
   bump(f, 'tours', done.done.length);
   if (mine) headline(g, 'info', toursWords(f.name, done), f.nat);
 }
 
-export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number; fallen?: Record<number, BomberRow[]>; shot?: Record<number, BomberShot[]> }): void {
+export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number; fallen?: Record<number, BomberRow[]>; shot?: Record<number, BomberShot[]>; guns?: Record<number, number> }): void {
   const sea = mission === 'strike';
   const bombing = mission === 'bomb' || mission === 'night' || sea;
   // Whose fighters the bombers' gunners shot at: the nation with the most of them up.
@@ -802,7 +803,7 @@ export function storyAir(g: Game, mission: string, target: number, att: AirFleet
     const had = f.hon?.length ?? 0;
     earn(g, 'air', f, sea ? -1 : target);
     if (f.nat === g.human && (f.hon?.length ?? 0) > had && honoursOf(g, f).slice(had).some((a) => a.hon === 'tour')) g.stories.mail.push({ w: 7, m: 'tour', id: -f.id, unit: f.name, reg: f.base });
-    bombersFlew(g, f, bombing, facts.defLost ? Math.round(facts.defLost / att.length) : 0, target, sea, facts.fallen?.[f.id], foe, facts.shot?.[f.id]);
+    bombersFlew(g, f, bombing, facts.defLost ? Math.round(facts.defLost / att.length) : 0, target, sea, facts.fallen?.[f.id], foe, facts.shot?.[f.id], facts.guns?.[f.id]);
   }
   const fighters = def.reduce((s, x) => s + x.ftr, 0);
   for (const f of def) {

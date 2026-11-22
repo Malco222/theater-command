@@ -23,7 +23,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { hasTech } from './tech';
-import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
+import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, wholeShares, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
@@ -1715,6 +1715,17 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     down(x.f, att[i], a.E > 0 ? eLoss * (x.ftr / a.E) : 0, false, staff?.rest.ftr);
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
+  // The bombers' gunners' kills, for each group's record (ruling 227). Fought, those the field booked to its boxes.
+  // Rolled, the gunners' part (gunKills beside the fighters' dLoss) of the fighters the defence lost, shared by bombers;
+  // handed to the staff, the field's so far and that part of what the dice added.
+  const guns: Record<number, number> = {};
+  if (fix) for (const x of a.att) guns[x.f.id] = battle?.guns?.[x.f.id] ?? 0;
+  else {
+    const lostD = def.reduce((s, x) => s + x.lostFtr, 0), was = a.def.reduce((s, x) => s + had(x.f).ftr, 0);
+    const part = dLoss + gunKills > 0 ? gunKills / (dLoss + gunKills) : 0;
+    const more = wholeShares(Math.round(Math.max(0, lostD - was) * part), a.att.map((x) => x.bmr));
+    a.att.forEach((x, i) => { guns[x.f.id] = (staff ? battle?.guns?.[x.f.id] ?? 0 : 0) + more[i]; });
+  }
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
   // The bombers that bomb: fought, those that reached the release on the field, including any lost after it (b384(a));
   // handed to the staff, all but those lost on the way in and those that had turned back.
@@ -1915,7 +1926,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // The grand campaign keeps what the raid was worth beside what it cost: a staff learns from its own results.
   if (g.flags.open === 1) rep.worth = Math.round(value);
   g.airReports.push(rep);
-  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
+  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
 
   // Groups of one fleet name the fleet once: "The Mobile Fleet's strike wing and carrier fighters" (the UI director, mend 6).
   const flying = fleets.filter((f) => a.att.some((x) => x.f === f));
