@@ -564,7 +564,9 @@ export function techRule(t: Tech, g?: Game, nat?: string): string {
   if (rest) out.push(rest);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
-  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month, where no raider can reach it. A country that keeps no stocks of oil has no use for it.`);
+  // (The design director, 22 November 20:46Z, in the UI director's words of 20:48Z: the air campaigns' oil raids cut a
+  // bombed plant's yield (ruling 236.2), so this oil is safe from submarines, not from bombers.)
+  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month. Submarines cannot touch this oil, but bombers can hit the plants. A country that keeps no stocks of oil has no use for it.`);
   // The Intelligence branch (rider b542): what it does for the nation's agents (intel.ts).
   const x = t.spy;
   if (x?.caught !== undefined) out.push(`Its agents abroad are caught ${pct(1 - x.caught)} less often.`);
