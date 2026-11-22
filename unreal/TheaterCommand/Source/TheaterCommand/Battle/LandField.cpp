@@ -1139,6 +1139,7 @@ namespace LandField
 		PlainFx = bDesert ? 5 : 0;
 		if (Rg) PlainFx = static_cast<uint8_t>(std::clamp(Rg->Fx("open", PlainFx), 0, 7));
 		if (SnowIs >= 0.5) PlainFx = 6;
+		if (Fd.Weather == "mud" && PlainFx == 0) PlainFx = 4; // (the thaw's mud over open earth: Field::Weather)
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
 		for (size_t K = 0; K < Fd.Grounds.size(); ++K)

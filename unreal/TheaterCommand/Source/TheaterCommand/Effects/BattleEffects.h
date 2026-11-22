@@ -25,7 +25,9 @@ struct FBattleJolt
 	float RollDegrees = 0.0f;
 };
 
-/** The recipe, Content/Effects/battle-fx.json, read for the effects (paths "sizes.how105.crown_m.0"). */
+/** The recipe, Content/Effects/battle-fx.json, read for the effects (paths "sizes.how105.crown_m.0"). A launch line
+ * -TheaterFxSet=game.from_above.on=1,grounds.rock.on=1 sets those numbers over the file's at each Load (for the Mac's
+ * switch off/on runs, with no file changed and nothing rebuilt); each one set is logged. */
 class FBattleFxRecipe final : public TheaterFx::Recipe
 {
 public:

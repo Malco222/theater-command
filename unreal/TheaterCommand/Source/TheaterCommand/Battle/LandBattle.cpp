@@ -1257,6 +1257,21 @@ bool ALandBattle::Open()
 		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there,
 		// and laid whole where a hedge cutter will tear it)
 		LandField::Field Lay = LandSight::FieldOf(Rec);
+		// (the campaign's weather word over the place, the recording's "weather": "mud" the thaw's mud over open ground;
+		// "-TheaterLandWeather=mud" stands in for it on any field, for the Mac's off/on line, "-TheaterLandWeather=clear"
+		// lays none)
+		{
+			FString Word;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWeather="), Word))
+			{
+				Lay.Weather = LandParts::Narrow(Word.TrimStartAndEnd().ToLower());
+			}
+			if (!Lay.Weather.empty())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle: the campaign's weather over the field: %s%s"), *LandParts::Wide(Lay.Weather),
+					Lay.Weather == "mud" ? TEXT(" (open ground the thaw's mud: the holes' soil, the tracks' ruts, the thrown mud)") : TEXT(""));
+			}
+		}
 		// (the looks on trial, each behind its switch until the art director passes it and the Mac holds its frame rate:
 		// "-TheaterLandTrial=church,walltop,spruce,edge,kunai" or "=all"; LandField::Field::Trial)
 		{
@@ -1505,7 +1520,7 @@ bool ALandBattle::Open()
 		{
 			std::vector<LandField::Placed> Near;
 			FieldPtr->Clutter(X - 0.7, Y - 0.7, X + 0.7, Y + 0.7, Near);
-			const double Ground = FieldPtr->At(X, Y).Z;
+			const double Ground = FieldPtr->HeightAt(X, Y); // (At's Z, a fifth of its cost: no normal or word asked)
 			double Top = 0.0;
 			for (const LandField::Placed& One : Near)
 			{
@@ -1596,6 +1611,18 @@ bool ALandBattle::Open()
 		float Hand = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHand="), Hand);
 		Set.Hand = FMath::Clamp(static_cast<double>(Hand), 0.0, 3.0);
+		// (the film's shallow focus, E9: OFF until the Mac's A/B holds 45 fps and the art director passes its stills, the
+		// production lead's rule for every new look, 22 Nov 23:28Z; "-TheaterLandFocusLive=1" turns it on. Off, the camera
+		// asks nothing for it a frame)
+		{
+			int32 FocusLive = 0;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFocusLive="), FocusLive);
+			bFocusLive = FocusLive != 0;
+			if (!bFocusLive)
+			{
+				Set.FocusFar = 0.0;
+			}
+		}
 		// (the production lead's A/B: the whole mass's wide, the dearest shot until the men are instanced, turned off)
 		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoMassWide")))
 		{
@@ -1622,7 +1649,7 @@ bool ALandBattle::Open()
 	Effects = MakeUnique<FBattleEffects>();
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
-			return FVector(Point.X, Point.Y, FieldPtr->At(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre).Z * UnitsPerMetre);
+			return FVector(Point.X, Point.Y, FieldPtr->HeightAt(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre) * UnitsPerMetre);
 		}))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the effects kit did not begin (its recipe or material is missing): no guns, shells or smoke are drawn."));
@@ -1707,6 +1734,7 @@ bool ALandBattle::Open()
 
 	Took = LandParts::Seconds();
 	LayField();
+	LayScars();
 	const double LaySeconds = LandParts::Seconds() - Took;
 	MakeFlags();
 	HideTheTable();
@@ -1736,6 +1764,7 @@ bool ALandBattle::Open()
 	if (Effects && Eye)
 	{
 		Effects->SetLandGrade(true);
+		Effects->SetFromAbove(true); // (inert while game.from_above.on is 0; the Mac flips it with -TheaterFxSet=game.from_above.on=1)
 		int32 FireSpread = 1, SoftContact = 1;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFireSpread="), FireSpread);
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSoftContact="), SoftContact);
@@ -1776,6 +1805,16 @@ bool ALandBattle::Open()
 			BattleKey->ContactShadowLengthInWS = Contact > 0.0f;
 			BattleKey->ContactShadowLength = Contact > 0.0f ? FMath::Clamp(Contact, 0.02f, 3.0f) * static_cast<float>(UnitsPerMetre) : 0.05f;
 			BattleKey->MarkRenderStateDirty();
+		}
+	}
+	// The film's shallow focus (the graphics audit's E9, Brian's D3): depth of field drawn only while the camera holds a
+	// close follow shot (LandEye::Pose::Focus), the map's trims keeping it off everywhere else; put back as it ends.
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.DepthOfFieldQuality")))
+		{
+			FocusQualityKept = Variable->GetInt();
+			FocusQualityNow = FocusQualityKept;
+			KeptTrims.Add(TPair<FString, FString>(TEXT("r.DepthOfFieldQuality"), Variable->GetString()));
 		}
 	}
 	int32 LandSize = 0;
@@ -2752,7 +2791,7 @@ double ALandBattle::GroundZ(double X, double Y) const
 {
 	if (State.IsValid() && State->Field)
 	{
-		return State->Field->At(X, Y).Z;
+		return State->Field->HeightAt(X, Y);
 	}
 	return State.IsValid() ? State->Rec.Ground.HeightAt(X, Y) : 0.0;
 }
@@ -5999,10 +6038,23 @@ void ALandBattle::AimEye(float DeltaSeconds)
 	FPostProcessSettings& Grade = Lens->PostProcessSettings;
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoFocus")))
 	{
+		// (the camera's close follow shots name the distance held sharp, pulled after the man; the quality is switched
+		// only as such a shot starts or ends, never inside one, and on while the shaders are first made, so the pass is
+		// ready before the first close shot asks for it)
+		const bool bShallow = bFocusLive && S.Pose.Focus > 0.0;
+		const int32 Want = bShallow || (bFocusLive && !bShadersReady) ? FMath::Max(1, FocusQualityKept) : FocusQualityKept;
+		if (FocusQualityKept >= 0 && Want != FocusQualityNow)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.DepthOfFieldQuality")))
+			{
+				Variable->Set(Want, ECVF_SetByCode);
+				FocusQualityNow = Want;
+			}
+		}
 		Grade.bOverride_DepthOfFieldFocalDistance = true;
 		Grade.bOverride_DepthOfFieldFstop = true;
-		Grade.DepthOfFieldFocalDistance = static_cast<float>((To - From).Size());
-		Grade.DepthOfFieldFstop = S.Pose.Shot == LandEye::Kind::Watch || S.Pose.Shot == LandEye::Kind::Track ? 2.8f : 11.0f;
+		Grade.DepthOfFieldFocalDistance = static_cast<float>(bShallow ? S.Pose.Focus * UnitsPerMetre : (To - From).Size());
+		Grade.DepthOfFieldFstop = bShallow ? 2.8f : 11.0f;
 	}
 	// The ear: the mix's listener stands over what the eye looks at; down among the men it is the eye.
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
@@ -6975,6 +7027,69 @@ void ALandBattle::MakeCraters()
 		Mesh->SetMaterial(Where.Section, GroundInk);
 		TornChanged(0, Where.Patch, Where.Section);
 	}
+}
+
+void ALandBattle::LayScars()
+{
+	// Scarred ground (release 2; the ideas Brian took at 21:21Z, "Do all of these": a field fought over keeps its craters
+	// next time; looks only, the design director's ruling): the recording's "scars" {count, months} where the player's
+	// switch has it on; -TheaterLandScars=N (battles before) and -TheaterLandScarMonths=M stand in for it on any field,
+	// for the Mac's off/on line; -TheaterLandNoScars lays none.
+	FLandBattleState& S = *State;
+	if (!S.Field)
+	{
+		return;
+	}
+	int32 Battles = S.Rec.ScarCount;
+	double Months = S.Rec.ScarMonths;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandScars="), Battles);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandScarMonths="), Months);
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoScars")))
+	{
+		Battles = 0;
+	}
+	if (Battles <= 0)
+	{
+		return;
+	}
+	std::vector<std::pair<double, double>> Fought;
+	for (const LandFeed::Track& T : S.Rec.Tracks)
+	{
+		for (size_t K = 0; K < T.At.size(); K += 4)
+		{
+			Fought.emplace_back(T.At[K].X, T.At[K].Y);
+		}
+	}
+	const LandField::Ground* FieldPtr = S.Field.get();
+	const LandCrater::Field* HolesPtr = &S.Holes;
+	const double Took = LandParts::Seconds();
+	const int Laid = LandCrater::LayScars(S.Holes, Fought, Battles, Months, S.Rec.Seed ? S.Rec.Seed : 1,
+		[FieldPtr, HolesPtr](double X, double Y) -> std::string
+		{
+			// (open ground only: a floor, a wall, water or marsh none; a lane or a yard mended since, none)
+			const LandField::Surface Under = FieldPtr->At(X, Y);
+			if (Under.What == LandField::Drawn::Floor || Under.What == LandField::Drawn::Wall || Under.What == LandField::Drawn::Water || Under.What == LandField::Drawn::Marsh)
+			{
+				return std::string();
+			}
+			if (HolesPtr->Dig && !HolesPtr->Dig(X, Y))
+			{
+				return std::string();
+			}
+			return std::string(Under.Fx);
+		});
+	// (their meshes and the ground's cuts made now, before the first frame; the grass and corn already laid round the
+	// eye laid again without what stands over an old bowl)
+	MakeCraters();
+	if (Carpet.IsValid())
+	{
+		for (const LandCrater::Field::Hole& H : S.Holes.All())
+		{
+			Carpet->Mark(H.X, H.Y, FMath::Max(H.Out, 1.2 * H.R) + 0.5);
+		}
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: scarred ground: %d old holes of %d battle(s) fought here before, the last %.0f months ago, laid in %.2f s (-TheaterLandNoScars: none)"),
+		Laid, Battles, Months, LandParts::Seconds() - Took);
 }
 
 void ALandBattle::SendDug()

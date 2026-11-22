@@ -160,6 +160,7 @@ namespace LandSight
 		F.TownR = G.TownR;
 		F.Terrain = G.Terrain.empty() ? std::string("plains") : G.Terrain;
 		F.Month = MonthOf(Rec.Date);
+		F.Weather = Rec.WeatherWord;
 		F.Seed = Rec.Seed ? Rec.Seed : 1;
 		// (the look of the land: the recording's word and snow where it names them, else by the place and the month)
 		F.Look = G.Look;

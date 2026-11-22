@@ -1521,6 +1521,7 @@ namespace TheaterFx
 		bool Has(const std::string& Path) const;
 		double Height(double X, double Y) const;
 		Paint PaintOf(const std::string& Ground) const;
+		const char* GroundOn(const char* Ground) const; // (grounds.<ground>.on off: "earth"; else Ground as given)
 		void Throw(Bit& B) const; // a clod's flight worked out against the ground
 		void Chunk(Bit& B, Dice& D) const; // a clod's lumpy, tumbling, lit-and-dark shape
 

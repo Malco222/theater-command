@@ -34,6 +34,29 @@ bool FBattleFxRecipe::Load(const FString& Path)
 	Numbers.clear();
 	Words.clear();
 	Walk(MakeShared<FJsonValueObject>(File), std::string());
+	// (-TheaterFxSet=path=number,path=number: numbers set over the file's, for a switch flipped at launch)
+	FString Sets;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFxSet="), Sets, false))
+	{
+		TArray<FString> Parts;
+		Sets.ParseIntoArray(Parts, TEXT(","), true);
+		for (const FString& Part : Parts)
+		{
+			FString Key, Val;
+			const bool bSplit = Part.Split(TEXT("="), &Key, &Val);
+			Key.TrimStartAndEndInline();
+			Val.TrimStartAndEndInline();
+			if (bSplit && !Key.IsEmpty() && !Val.IsEmpty() && FCString::IsNumeric(*Val)) // (IsNumeric takes "" as a number)
+			{
+				Numbers[std::string(TCHAR_TO_UTF8(*Key))] = FCString::Atod(*Val);
+				UE_LOG(LogTheater, Display, TEXT("Battle effects: the recipe's %s set to %s from the launch line"), *Key, *Val);
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Battle effects: -TheaterFxSet part \"%s\" is not path=number; left out"), *Part);
+			}
+		}
+	}
 	return true;
 }
 

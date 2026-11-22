@@ -553,6 +553,12 @@ private:
 	/** The map's light trims as they stood when the battle began (console variable, value), put back as it ends; and
 	 * its sun's contact shadow length (under 0: not changed). */
 	TArray<TPair<FString, FString>> KeptTrims;
+	/** The film's shallow focus (E9): r.DepthOfFieldQuality as the battle found it (the map's 0, or a capture run's
+	 * film set), the quality the scene has set now, and whether the camera's close shots may turn it on
+	 * (off unless "-TheaterLandFocusLive=1", until the Mac's A/B and the art director pass it). */
+	int32 FocusQualityKept = -1;
+	int32 FocusQualityNow = -1;
+	bool bFocusLive = false;
 	float KeptContactShadow = -1.0f;
 	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
@@ -684,6 +690,8 @@ private:
 	bool Open();
 	void LoadInks();
 	void LayField();
+	/** Scarred ground (release 2): the old holes of the battles fought here before, laid as the battle opens. */
+	void LayScars();
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
 	void LayThings();
 	/** A thing's shade, 0 to 8: three times its brightness third, and its warmth third (the middle one, 1, for a thing

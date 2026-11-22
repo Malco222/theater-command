@@ -52,6 +52,8 @@ namespace LandCrater
 		int Sides = 20;
 		/** How deep its bowl goes under the ground at its middle, metres (0: laid over the ground, nothing cut). */
 		double Deep = 0.0;
+		/** 0 a fresh hole; up to 1 one long weathered (scarred ground: Field::Add's Months): no blast soot in it. */
+		double Weathered = 0.0;
 	};
 
 	/**
@@ -158,6 +160,13 @@ namespace LandCrater
 		 * False when it leaves none (a name of no size, water, the guard reached). Dug only where Dig says it may be
 		 * (open ground: a field, a pasture, a garden; not a lane, a bank, a yard), when Dig is given. */
 		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground);
+		/**
+		 * An old hole from a battle fought here before (scarred ground, release 2: looks only), Months ago: laid as Add
+		 * lays a round's, then weathered as the months go, to about a year's: its soot washed out and its clods broken
+		 * at once; its bowl silted and slumped, its crest worn down, its thrown soil and then its walls grown over
+		 * toward the ground's own colour; the grass round it left standing but over its bowl.
+		 */
+		bool AddOld(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months);
 		/** A hedge cutter's breach torn (Breach), laid as a hole is: its own points in its patch's section, the ground
 		 * drawn and older holes cut over the bank's footprint (TakeCuts), the grass round the eye left bare over it and
 		 * its spoil. Rise: the banks' rise (the gap's floor is Begin's Height less it). Ground: the effects kit's word
@@ -228,6 +237,8 @@ namespace LandCrater
 			double Out = 0.0;
 			/** A dug hole's bowl depth and its cut's outline (x, y pairs; empty: laid over the ground). */
 			double Deep = 0.0;
+			/** How far round it the grass and corn are kept off (Bare), metres; 0: 1.2 of R, a fresh hole's. */
+			double BareR = 0.0;
 			std::vector<double> Cut;
 			/** A hedge cutter's breach (AddBreach), not a shell's hole: its points a grid in the bank's frame (u along
 			 * Yaw, v to its left), NU by NV from First, Step apart from U0, V0; the gap's cut CutU along and CutV across,
@@ -239,6 +250,8 @@ namespace LandCrater
 		const std::vector<Hole>& All() const { return Holes; }
 
 	private:
+		/** Add and AddOld: Months under 0 a fresh round's hole. */
+		bool AddAged(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground, double Months);
 		HeightFn Height;
 		ColourFn Under;
 		uint64_t Seed = 1;
@@ -425,4 +438,17 @@ namespace LandCrater
 		Patch& PatchFor(double X, double Y, Place& OutIn);
 		static int64_t SquareOf(int I, int J) { return (static_cast<int64_t>(I) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(J)); }
 	};
+
+	/**
+	 * Scarred ground (release 2; Brian 21:21Z, "a field fought over keeps its craters next time"; the design director:
+	 * looks only, nothing drawn by the rules reads it): the old holes of Battles fought here before, the last of them
+	 * Months ago, laid into Holes before the battle opens (Field::AddOld, weathered by their age). In clusters, a
+	 * barrage's or a mortar's few, over the middle of where this battle's men and machines go (Fought: points of their
+	 * tracks; its middle four fifths each way, at least 300 m); some 150 for each battle before, at most a sixth of
+	 * Field::Most so the battle's own rounds keep their room. GroundWord: the effects kit's word for the ground at a
+	 * place, empty where no old hole is left (a floor, a wall, water, a lane or a yard mended since: the scene's). An
+	 * earlier battle's holes are older still. Seeded: the same field and seed, the same holes. Returns how many.
+	 */
+	int LayScars(Field& Holes, const std::vector<std::pair<double, double>>& Fought, int Battles, double Months, uint64_t Seed,
+		const std::function<std::string(double X, double Y)>& GroundWord);
 }

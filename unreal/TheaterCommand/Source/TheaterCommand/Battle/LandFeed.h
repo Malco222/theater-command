@@ -384,6 +384,9 @@ namespace LandFeed
 		double Dt = 0.1;
 		int Turn = 0;
 		Sky Weather;
+		/** The campaign's weather over the place in its own word (the battle ticket's weather: "clear", "rain", "snow",
+		 * "mud"; the root's "weather"), empty where it keeps none: "mud" lays the thaw's mud (LandField::Field::Weather). */
+		std::string WeatherWord;
 		SideInfo Sides[2];
 		Field Ground;
 		double Limit = 0.0, Contact = -1.0, End = 0.0;
@@ -405,6 +408,13 @@ namespace LandFeed
 		std::vector<HeldOrder> Held;
 		std::vector<AidPost> Aid;
 		Patrol Night;
+		/**
+		 * Scarred ground (release 2, Brian 21:21Z: "a field fought over keeps its craters next time"; the design
+		 * director: looks only, no draw reads it): root "scars" {"count": battles fought here before, "months": since
+		 * the last}. Count 0 where none is given (the player's switch off, or a fresh field).
+		 */
+		int ScarCount = 0;
+		double ScarMonths = 0.0;
 		Over Result;
 
 		// A live battle (release 2: the general's, fought as it is shown; src/battle/land/live.ts). Read from the header
