@@ -18,8 +18,9 @@ import { holds } from '../src/campaign/diplomacy';
 import { addCorps, atWar, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { HISTORY, bookIf, leash, setStop, theatreOf } from '../src/campaign/history';
 import { lines } from '../src/campaign/line';
+import { liftLeft, useLift } from '../src/campaign/navy';
 import { ops, startOpen } from '../src/campaign/staff';
-import { bookAttacks, stations, type Attack } from '../src/campaign/stations';
+import { bookAttacks, bookWatch, stations, type Attack } from '../src/campaign/stations';
 import { stepAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
 import africa from '../data/campaign/far-africa.json';
@@ -297,6 +298,100 @@ describe('Italy\'s gains in East Africa as its own dated attacks (the design dir
     bookAttacks(c, 'UK');
     bookAttacks(c, 'JAP');
     expect(c.byName['Kassala'].ctrl).toBe('UK');
+  });
+});
+
+describe('Britain\'s two landings from Aden (the design director, 19:04Z of 22 November 2026: a test of their own)', () => {
+  // The table's sea rows were read by one file, Japan's second ring (tests/far-ring.test.ts), which Britain's two
+  // joined at stage 2 and which now reads Japan's alone. These are read here: the rows as laid, and each landing made
+  // on a board set by hand. (The month before a landing is the quay rule's: tests/far-quay-ahead.test.ts.)
+  const AD = 'Aden Striking Force (two Punjab battalions)';
+  const landings = (): Attack[] => mine().filter((r) => r.sea);
+  const index = (place: string): number => stations()!.attacks!.findIndex((r) => r.book === BOOK && r.sea && r.at[0] === place);
+  /** Britain and Italy at war, the choice gone in 17, the place Italy's and empty, and the Aden force on its quay. */
+  const aden = (stop: number, turn: number, place: string, human: string | null = null): { g: Game; c: Corps } => {
+    const g = board(stop, turn, human);
+    if (!atWar(g, 'ITA', 'UK')) declareWar(g, 'ITA', 'UK');
+    const P = g.byName[place];
+    for (const u of P.units) u.dead = true;
+    P.units = [];
+    P.ctrl = 'ITA';
+    g.flags['st:done:UK:eastafrica'] = 17;
+    const c = addCorps(g, 'UK', AD, 'inf', 1, 'Aden', { str: 0.2 });
+    g.supplyDirty = true;
+    return { g, c };
+  };
+  const where = (g: Game, c: Corps): string => g.regions[c.reg].name;
+
+  it('the rows: Berbera in March 1941 and Assab in June, each by the Aden force from Aden, and no other row of Britain\'s goes by sea', () => {
+    expect(landings().map((r) => [r.month, r.name, r.at, r.force, r.from, r.book])).toEqual([
+      [19, 'Berbera, from Aden (16 March 1941)', ['Berbera'], [AD], ['Aden'], BOOK],
+      [22, 'Assab, from Aden (11 June 1941)', ['Assab'], [AD], ['Aden'], BOOK],
+    ]);
+    // The force is one row of Britain's, which comes to Aden in the first landing's month at the record's size.
+    expect(ROWS.filter((x) => x[1] === 'UK' && x[2] === AD).map((x) => [x[0], x[5], x[6].str])).toEqual([[19, 'Aden', 0.2]]);
+    // Aden is Britain's port, and neither shore has a road from it: each is a landing or nothing.
+    const g = board(1, 19);
+    const A = g.byName['Aden'];
+    expect([A.port, A.ctrl]).toEqual([true, 'UK']);
+    for (const nm of ['Berbera', 'Assab']) { expect(g.byName[nm].port, nm).toBe(true); expect(A.nb, nm).not.toContain(g.byName[nm].id); }
+    // The force's three rows in the record's order: ashore at Berbera, on to Hargeisa by land that month, and Assab
+    // from Aden in June. No row of Japan's names it.
+    expect(stations()!.attacks!.filter((r) => r.force.includes(AD)).map((r) => [r.month, r.at[0], !!r.sea, r.from, r.book]))
+      .toEqual([[19, 'Berbera', true, ['Aden'], BOOK], [19, 'Hargeisa', false, ['Berbera'], BOOK], [22, 'Assab', true, ['Aden'], BOOK]]);
+  });
+
+  it('Berbera in March 1941: the force sails from Aden and the port is Britain\'s that month, the row marked in 19; it is then held for Assab', () => {
+    const { g, c } = aden(1, 19, 'Berbera');
+    const told: string[] = [];
+    bookWatch.tell = (e) => { if (e.row.book === BOOK && e.row.sea) told.push(`${e.row.at[0]} ${e.what}`); };
+    try { bookAttacks(g, 'UK'); } finally { bookWatch.tell = null; }
+    expect(g.byName['Berbera'].ctrl).toBe('UK');
+    expect(where(g, c)).toBe('Berbera');
+    expect(g.flags[`ba:${index('Berbera')}`]).toBe(19);
+    expect(told).toContain('Berbera made');
+    // Assab's row is three months off: nothing of it is asked yet, and its place is untouched.
+    expect(g.flags[`ba:${index('Assab')}`]).toBeUndefined();
+    expect(g.byName['Assab'].ctrl).toBe('ITA');
+  });
+
+  it('Assab in June 1941: the same force sails from Aden again, the row marked in 22, and with no row left it is its staff\'s own', () => {
+    const { g, c } = aden(1, 22, 'Assab');
+    g.flags[`ba:${index('Berbera')}`] = 19;
+    bookAttacks(g, 'UK');
+    expect(g.byName['Assab'].ctrl).toBe('UK');
+    expect(where(g, c)).toBe('Assab');
+    expect(g.flags[`ba:${index('Assab')}`]).toBe(22);
+    expect([c.hold, g.flags[`bkl:${c.id}`]]).toEqual([false, undefined]);
+  });
+
+  it('each sails on the record\'s own shipping, as the table\'s other landings do: with Britain\'s lift all used it still lands, and draws none', () => {
+    const { g } = aden(1, 19, 'Berbera');
+    useLift(g, 'UK', g.nations.UK.sealift);
+    expect(liftLeft(g, 'UK')).toBe(0);
+    bookAttacks(g, 'UK');
+    expect(g.byName['Berbera'].ctrl).toBe('UK');
+    expect(g.flags[`lift:UK:${g.turn}`]).toBe(g.nations.UK.sealift);
+    const { g: h } = aden(1, 22, 'Assab');
+    bookAttacks(h, 'UK');
+    expect(h.byName['Assab'].ctrl).toBe('UK');
+    expect(liftLeft(h, 'UK')).toBe(h.nations.UK.sealift);
+  });
+
+  it('neither is made before its month, at a stop that keeps no book, before Britain\'s choice, or for a player\'s Britain', () => {
+    const early = aden(1, 18, 'Berbera');
+    bookAttacks(early.g, 'UK');
+    expect([early.g.byName['Berbera'].ctrl, where(early.g, early.c)]).toEqual(['ITA', 'Aden']);
+    const loose = aden(3, 19, 'Berbera');
+    bookAttacks(loose.g, 'UK');
+    expect([loose.g.byName['Berbera'].ctrl, where(loose.g, loose.c)]).toEqual(['ITA', 'Aden']);
+    const waiting = aden(1, 19, 'Berbera');
+    delete waiting.g.flags['st:done:UK:eastafrica'];
+    bookAttacks(waiting.g, 'UK');
+    expect([waiting.g.byName['Berbera'].ctrl, where(waiting.g, waiting.c)]).toEqual(['ITA', 'Aden']);
+    const played = aden(1, 22, 'Assab', 'UK');
+    bookAttacks(played.g, 'UK');
+    expect([played.g.byName['Assab'].ctrl, where(played.g, played.c)]).toEqual(['ITA', 'Aden']);
   });
 });
 
