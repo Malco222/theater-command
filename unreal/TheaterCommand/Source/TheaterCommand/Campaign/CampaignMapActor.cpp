@@ -17469,22 +17469,33 @@ void ACampaignMapActor::RebuildHighlight()
 	const float Moon = FMath::Clamp(GetMoonlight(), 0.0f, 1.0f);
 	HighlightMoon = Moon;
 	auto ByMoon = [Moon](const FLinearColor& Day, const FLinearColor& Night) { return FMath::Lerp(Day, Night, Moon); };
+	// (with an agent in hand the province pointed at wears the edge of the ground he would watch, and not this pale wash)
+	// (Release 2: drawn first, in sections 0 and 1, so that on the side it shares with the picked province its wide pale
+	// edge lies under the picked one's thin brass line and does not cover it: one mesh draws its sections in order.)
+	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion && WatchRegion == INDEX_NONE)
+	{
+		AddRegionOverlay(HoveredRegion, ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.12f), FLinearColor(0.5f, 0.56f, 0.68f, 0.07f)),
+			ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), FLinearColor(0.5f, 0.56f, 0.68f, 0.42f)), 0);
+	}
 	if (SelectedRegion != INDEX_NONE)
 	{
 		// (a light wash and a bright edge: the ground keeps the colour of whoever holds it while it is picked)
 		// (Release 2, the art director's read of run 2, 22 November: mend 9. The edge was a thick line of near white, the
 		// loudest line on the map. It is now brass-300, two pixels wide from any height, over a dark under-stroke a pixel
-		// wider each side, as the town plate's lit edge is: KeepPickedEdge draws it again as the eye rises or comes down.)
+		// wider each side, as the town plate's lit edge is: KeepPickedEdge draws it again as the eye rises or comes down.
+		// The mesh's colours reach this paint as plain light and it brightens them 1.6 times, so the kit's colours, which
+		// are screen colours, are turned to light and taken down by that much first; by moonlight the brass is dimmer.)
+		auto KitInk = [](const FColor& Screen, float Share, float Opacity)
+		{
+			FLinearColor Light = FLinearColor(Screen) * (Share / 1.6f);
+			Light.A = Opacity;
+			return Light;
+		};
+		const FColor Brass300(224, 184, 114), Desk950(14, 11, 8);
 		const double Pixel = 0.00037 * (PickedEdgeAt > 0.0f ? PickedEdgeAt : 4000.0f) / UnitScale;
 		AddRegionOverlay(SelectedRegion, ByMoon(FLinearColor(1.0f, 0.82f, 0.42f, 0.11f), FLinearColor(0.62f, 0.56f, 0.4f, 0.07f)),
-			ByMoon(FLinearColor(224.0f / 255.0f, 184.0f / 255.0f, 114.0f / 255.0f, 1.0f), FLinearColor(0.55f, 0.45f, 0.28f, 0.9f)), 0,
-			1.0 * Pixel, ByMoon(FLinearColor(14.0f / 255.0f, 11.0f / 255.0f, 8.0f / 255.0f, 0.7f), FLinearColor(14.0f / 255.0f, 11.0f / 255.0f, 8.0f / 255.0f, 0.55f)), 2.0 * Pixel);
-	}
-	// (with an agent in hand the province pointed at wears the edge of the ground he would watch, and not this pale wash)
-	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion && WatchRegion == INDEX_NONE)
-	{
-		AddRegionOverlay(HoveredRegion, ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.12f), FLinearColor(0.5f, 0.56f, 0.68f, 0.07f)),
-			ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), FLinearColor(0.5f, 0.56f, 0.68f, 0.42f)), 2);
+			ByMoon(KitInk(Brass300, 1.0f, 1.0f), KitInk(Brass300, 0.7f, 0.9f)), 2,
+			1.0 * Pixel, ByMoon(KitInk(Desk950, 1.0f, 0.7f), KitInk(Desk950, 1.0f, 0.55f)), 2.0 * Pixel);
 	}
 }
 

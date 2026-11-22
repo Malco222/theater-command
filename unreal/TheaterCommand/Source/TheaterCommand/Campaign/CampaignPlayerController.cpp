@@ -6107,9 +6107,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					Said.Words = GlanceHere->DamageWords;
 					Said.bAlarm = true;
 				}
-				HoverGlance.Foot = ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion
-					? FString(TEXT("click: open the city \u00B7 right-click: send the army in hand here"))
-					: FString(TEXT("click: open the city"));
+				// (With an army in hand the slip always says what a right-click would do here, or why it cannot: folded into
+				// this foot as plain words, or standing in the slip in its own colours. The foot does not say it again.)
+				HoverGlance.Foot = TEXT("click: open the city");
 			}
 			// (Ruling 46: pointing at a city lists everything it has on order, the total first.)
 			if (const FCityOrders* City = GlanceHere && !GlanceHere->OrderFigure.IsEmpty() ? nullptr : View.CityOrders.FindByPredicate([TipRegion](const FCityOrders& Each) { return Each.Region == TipRegion; }))
@@ -6418,10 +6418,6 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				}
 				if (!TipFold.IsEmpty())
 				{
-					if (TipFold.Contains(TEXT("Right-click")))
-					{
-						HoverGlance.Foot = TEXT("click: open the city"); // (the slip's own right-click line says more, and once)
-					}
 					HoverGlance.Foot = TipFold + TEXT("\n") + HoverGlance.Foot;
 				}
 			}
