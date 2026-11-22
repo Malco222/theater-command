@@ -54,6 +54,15 @@ export interface LandUnit extends UnitBase {
   dug: boolean;
   /** How worn its uniforms and kit look, from its corps' time in the line (release 2, looks only): absent, fresh. */
   wear?: number;
+  /** Its share of men new this month, in new kit (release 2, looks only): absent, none. */
+  fresh?: number;
+  /**
+   * Hidden in the woods from the other side (release 2, LAND.hide): stood in woods when the clock started and not yet
+   * found. Its enemies never strike it nor are sent at it; it holds its fire till they are close. Once found, never again.
+   */
+  hid?: boolean;
+  /** When it sprang its ambush (opened fire while hidden): its first fire strikes harder (LAND.hide.surprise). */
+  sprung?: number;
   home: [number, number];
   /** Seconds since it was last hit, and since it last had an enemy near (for a rally). */
   still: number;
@@ -228,6 +237,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         order: null, path: [], dug: !!f.dug, home: [0, 0], still: 99, clear: 99, pinned: false, flankedAt: -99, keepFace: null, met: false,
         ...(f.cross === false ? { dry: true } : {}),
         ...(f.wear !== undefined ? { wear: f.wear } : {}),
+        ...(f.fresh ? { fresh: f.fresh } : {}),
       });
     }
   });

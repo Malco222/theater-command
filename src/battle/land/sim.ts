@@ -169,6 +169,13 @@ export class LandBattle implements BattleSim<LandUnit> {
   radio = false;
   /** True while a staff (ai.ts) is giving its orders: those are the computer's, never taken in hand nor sent by radio. */
   private staffing = false;
+  /**
+   * Hidden in the woods (release 2; Brian, 22 November 04:18Z: ambushes; LAND.hide): off unless whoever opens the field
+   * turns it on (hideOn). Off, no block is ever hidden and nothing here is read.
+   */
+  hide = false;
+  /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
+  private hidStarted = false;
   /** The player's orders on the air (radio): each block's, with the battle time it lands. */
   private pending: { at: number; id: number; go: () => void }[] = [];
 
@@ -366,7 +373,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       case 'attack': {
         const t = this.unit(c.target);
         const us = mine(c.units);
-        if (!t || t.side === by || !live(t) || !us.length) return false;
+        // Never at a block hidden from his side (release 2): nobody there knows it is there.
+        if (!t || t.side === by || !live(t) || t.hid || !us.length) return false;
         hands(us);
         // Several blocks sent at one: they come on abreast, each in its own lane, the outer ones round the target's
         // flanks, instead of all making for its middle. One block alone goes straight for it (the computer general's way).
@@ -378,7 +386,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         // A lane that runs past the target's flank takes the enemy block nearest it in that lane instead, so a whole
         // army sent at one block falls on their line there, block against block (the computer general's own way),
         // and never crowds one block while its neighbours take the attack in the flank (ruling 226(4)).
-        const foes = this.units.filter((e) => e.side !== by && fighting(e));
+        const foes = this.units.filter((e) => e.side !== by && fighting(e) && !e.hid);
         // The computer general's groups go in together, its tanks keeping with their foot (ai.ts); and the player's group
         // attack too (ruling 239(5), 7b), as the card's Combined arms line assumes. A block sent alone goes alone.
         const together = c.together !== undefined ? { together: c.together } : us.length > 1 && LAND.together.player ? { together: ++this.groupIds } : {};
@@ -462,7 +470,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (c.do === 'land:fire') {
           const t = this.unit(Number(c.target));
           const guns = mine((c.units ?? []) as number[]).filter((u) => u.kind === 'art');
-          if (!t || t.side === by || !live(t) || !guns.length) return false;
+          if (!t || t.side === by || !live(t) || t.hid || !guns.length) return false;
           hands(guns);
           for (const u of guns) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; });
           return true;
@@ -746,8 +754,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (!this.setup || u.side !== this.setup) return 'The battle has begun.';
     if (this.placeAll ? u.kind === 'fort' || !fighting(u) : u.kind !== 'art' || !fighting(u)) return this.placeAll ? 'Fortifications stay where they are built.' : 'Only guns and support teams are placed.';
     if (u.dug) return 'It is dug in where it stands.';
+    return this.standWhy(u, x, y, this.room!);
+  }
+
+  /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
+  private standWhy(u: LandUnit, x: number, y: number, r: [number, number, number, number]): string | null {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return 'Off the field.';
-    const r = this.room!, hw = u.w / 2, hd = u.d / 2;
+    const hw = u.w / 2, hd = u.d / 2;
     if (x - hw < r[0] || x + hw > r[2] || y - hd < r[1] || y + hd > r[3]) return 'Outside your ground.';
     if (this.wet(u, x, y, false) || wetUnder(this.field, { ...u, x, y })) return 'Not on water, a bridge or ground it cannot stand on.';
     // A river bend: the attack's lanes either side of it are each the card's own (b464(5)); a block keeps to its lane.
@@ -775,12 +788,126 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.ways.delete(u.id);
     u.home = [x, y];
     u.cover = groundAt(this.field, x, y);
+    // Placed in the woods, it will start hidden (release 2): shown so while he places.
+    if (this.hide && !this.hidStarted) this.markHid(u);
     this.drill?.relay(u);
+  }
+
+  // ---- Hidden in the woods (release 2; Brian, 22 November 04:18Z; LAND.hide) -------------------------------------
+
+  /**
+   * Turns concealment on: before the clock starts only. Every block standing in woods shows as hidden at once (the setup
+   * step shows his so as he places them); who is hidden is settled when the clock starts. False once it has begun.
+   */
+  hideOn(): boolean {
+    if (this.t > 0 || this.over) return false;
+    this.hide = true;
+    for (const u of this.units) this.markHid(u);
+    return true;
+  }
+
+  /** Whether a side can see a block: its own always; the enemy's unless it is hidden in the woods. */
+  sees(side: Side, e: LandUnit): boolean { return e.side === side || !e.hid; }
+
+  /** Standing in woods (fieldworks dug into woods too): where a block can hide. */
+  private inWoods(u: LandUnit): boolean { return coverAt(this.field, u.x, u.y) === 'woods'; }
+
+  /** Hidden if it stands in woods, before the clock starts. Fieldworks are known where they are built. */
+  private markHid(u: LandUnit): void {
+    if (live(u) && u.kind !== 'fort' && this.inWoods(u)) u.hid = true;
+    else delete u.hid;
+  }
+
+  /** How close the enemy must come before a hidden block opens fire unbidden: Infinity where it never holds (guns). */
+  private ambushAt(u: LandUnit): number {
+    const a = u.team === 'mg' ? LAND.hide.ambush.mg : LAND.hide.ambush[MOTION[u.kind]];
+    return a > 0 ? a : Infinity;
+  }
+
+  /** The clock starts: the computer's defence lays its ambushes, then every block in woods is hidden. */
+  private hideStart(): void {
+    this.hidStarted = true;
+    // Only the computer's: the player's own staff never moves the blocks he drew up.
+    if (this.ai.def && !this.ticket.def.human) this.layAmbush('def');
+    for (const u of this.units) this.markHid(u);
+  }
+
+  /**
+   * The computer's defence puts a block or two of its line into woods on the enemy's way in, before the clock starts
+   * (LAND.hide.staff): foot of its line (not its held reserve, nor a block dug in), each to the furthest-forward wood
+   * within 'ahead' metres before it or 'back' behind it and 'across' to either side, inside its own ground as the
+   * player's setup step allows his, clear of every other block. Where no woods lie near, none goes.
+   */
+  private layAmbush(side: Side): void {
+    const H = LAND.hide.staff, dir = side === 'att' ? 1 : -1;
+    const z = this.field.zones[side];
+    const own = this.units.filter((u) => u.side === side && live(u));
+    const room: [number, number, number, number] = [
+      Math.min(z[0], ...own.map((u) => u.x - u.w / 2)), Math.min(z[1], ...own.map((u) => u.y - u.d / 2)),
+      Math.max(z[2], ...own.map((u) => u.x + u.w / 2)), Math.max(z[3], ...own.map((u) => u.y + u.d / 2)),
+    ];
+    const foot = own.filter((u) => MOTION[u.kind] === 'foot' && !u.team && !u.dug && u.reserve !== 'held' && !u.taken && !this.inWoods(u));
+    const picks: { u: LandUnit; x: number; y: number; ahead: number }[] = [];
+    const cell = this.field.cell;
+    for (const u of foot) {
+      let best: { x: number; y: number; ahead: number } | null = null;
+      for (let dy = -H.back; dy <= H.ahead; dy += cell) for (let dx = -H.across; dx <= H.across; dx += cell) {
+        const x = u.x + dx, y = u.y + dir * dy;
+        if (coverAt(this.field, x, y) !== 'woods') continue;
+        // The furthest forward, then the nearest across.
+        if (best && (dy < best.ahead || (dy === best.ahead && Math.abs(dx) >= Math.abs(best.x - u.x)))) continue;
+        if (this.standWhy(u, x, y, room) !== null) continue;
+        best = { x, y, ahead: dy };
+      }
+      if (best) picks.push({ u, ...best });
+    }
+    // The furthest forward first, one to a stretch of the line.
+    picks.sort((a, b) => b.ahead - a.ahead || a.u.id - b.u.id);
+    let laid = 0;
+    for (const p of picks) {
+      if (laid >= H.blocks) break;
+      if (this.standWhy(p.u, p.x, p.y, room) !== null) continue;
+      this.place(p.u, p.x, p.y);
+      laid++;
+    }
+  }
+
+  /**
+   * Found (release 2): no longer hidden from the other side, and known to the player if it is the enemy's (b464(2)).
+   * 'fired': it opened fire on 'by'; 'seen': 'by' came close enough to see it; 'out': it left the woods; 'struck': hit
+   * from the air. Told to the player as his blocks would report it.
+   */
+  private reveal(u: LandUnit, how: 'fired' | 'seen' | 'out' | 'struck', by?: LandUnit): void {
+    if (!u.hid) return;
+    delete u.hid;
+    const mineFound = this.ticket[u.side].human, theirs = this.ticket[other(u.side)].human;
+    if (theirs) u.found = true;
+    const text = mineFound
+      ? how === 'fired' ? `${this.named(u)} springs its ambush from the woods.` : how === 'seen' ? `${this.named(u)} has been seen in the woods.` : how === 'out' ? `${this.named(u)} has left the woods and can be seen.` : `${this.named(u)} is struck in the woods: the enemy knows it is there.`
+      : theirs
+        ? how === 'fired' && by ? `Enemy troops hidden in the woods open fire on your ${by.name}.` : how === 'seen' && by ? `Your ${by.name} has found enemy troops in the woods.` : how === 'out' ? 'Enemy troops come out of the woods.' : 'Enemy troops found in the woods.'
+        : '';
+    this.say({ what: 'land:found', unit: u.id, side: u.side, text, x: u.x, y: u.y, extra: { how, ...(by ? { by: by.id } : {}) } });
+  }
+
+  /** Each tick: a hidden block that has left the woods, or that an enemy has come close enough to see, is found. */
+  private spotHidden(): void {
+    for (const u of this.units) {
+      if (!u.hid) continue;
+      if (!live(u)) { delete u.hid; continue; }
+      if (!this.inWoods(u)) { this.reveal(u, 'out'); continue; }
+      const sight = LAND.hide.sight[MOTION[u.kind]];
+      const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= sight);
+      if (by) this.reveal(u, 'seen', by);
+    }
   }
 
   step(): void {
     if (this.setup) return;
     if (this.over) { this.drill?.step(); return; }
+    // Hidden in the woods (release 2): as the clock starts, the computer's defence lays its ambushes and every block
+    // then standing in woods is hidden from the other side.
+    if (this.hide && !this.hidStarted) this.hideStart();
     // The player's orders on the air that have reached their blocks (direct command, release 2).
     this.landOrders();
     if (this.t >= this.nextThink) {
@@ -800,6 +927,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       u.engaged = t?.id;
       if (!t) continue;
       if (this.contactAt === null && u.kind !== 'art') this.contactAt = this.t;
+      // A hidden block that opens fire gives itself away, and its first fire is the ambush's (release 2, LAND.hide).
+      if (u.hid) { u.sprung = this.t; this.reveal(u, 'fired', t); }
       // He knows a block one of his has fought, his guns' target too, and one of theirs that has struck his in contact;
       // their guns firing from far back are not contact (b464(2)).
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; t.found = true; }
@@ -832,6 +961,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     for (const u of this.units) if (live(u)) this.nerve(u);
     for (const u of this.units) if (live(u)) this.move(u);
     this.spread();
+    if (this.hide) this.spotHidden();
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     this.judge();
     this.drill?.step();
@@ -916,12 +1046,15 @@ export class LandBattle implements BattleSim<LandUnit> {
     const marching = u.order && u.order.kind !== 'attack' && u.path.length > 0;
     if (u.kind === 'art' && marching) return null;
     if (u.order?.kind === 'withdraw') return null;
-    const reach = reachOf(u);
+    let reach = reachOf(u);
     // Guns told to fire on one block strike it whenever it is in their reach (ai.ts; ruling 239(6)).
-    if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && this.gap(u, a) <= reach) return a; }
+    if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
+    // Hidden in the woods (release 2): it holds its fire till the enemy is close, unless it is sent in.
+    if (u.hid && u.order?.kind !== 'attack') reach = Math.min(reach, this.ambushAt(u));
     let best: LandUnit | null = null, score = Infinity;
     for (const e of this.units) {
-      if (e.side === u.side || !live(e)) continue;
+      // A block hidden from its side is never struck: nobody there knows it is there.
+      if (e.side === u.side || !live(e) || e.hid) continue;
       const d = this.gap(u, e);
       if (d > reach) continue;
       if (u.order?.kind === 'attack' && u.order.target === e.id) return e;
@@ -1022,6 +1155,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Men getting their breath after a run at the double strike softer (direct command, release 2).
     if (u.winded !== undefined && this.t < u.winded) p *= LAND.double.blows;
     let nerveMul = 1;
+    // An ambush's first fire, from close cover (release 2, LAND.hide.surprise).
+    if (u.sprung !== undefined && this.t - u.sprung < LAND.hide.surprise.secs) { p *= LAND.hide.surprise.punch; nerveMul *= LAND.hide.surprise.nerve; }
     if (u.kind === 'art') {
       const G = gunsOf(u), close = this.gap(u, t) < G.closeAt;
       p *= close ? G.close : G.punch;
@@ -1053,6 +1188,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
   private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = []): void {
+    // A hidden block struck (planes over the woods) is found (release 2).
+    if (t.hid && dmg > 0) this.reveal(t, 'struck');
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
     const before = t.str, had = t.figures;
@@ -1822,7 +1959,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   airRunAt(s: Side, x: number, y: number): [number, number, number, number] {
     // Only a block the player knows of (b464(2)): a run that found one he has not would tell him where it is.
-    const foes = this.units.filter((e) => e.side !== s && live(e) && e.kind !== 'fort' && this.known(e));
+    const foes = this.units.filter((e) => e.side !== s && live(e) && e.kind !== 'fort' && this.known(e) && !e.hid);
     const near = foes.reduce<LandUnit | null>((m, e) => (dist(e.x, e.y, x, y) < (m ? dist(m.x, m.y, x, y) : LAND.air.near) ? e : m), null);
     return near ? this.frontageRun(near) : this.clipRun([x - LAND.air.minRun / 2, y, x + LAND.air.minRun / 2, y]);
   }

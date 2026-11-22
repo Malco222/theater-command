@@ -612,7 +612,7 @@ function drawView() {
       // (Release 2) the battle schools: at them this month, the grade a month there brings it to, and why it cannot go ('' if it can).
       school: !!c.school, schoolTo: grade(drillTo(c.xp)), schoolWhy: c.nat === s.human && !c.school ? whyNoSchool(s, c) ?? '' : '',
       // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
-      wear: wearOf(c),
+      wear: wearOf(c), fresh: c.fresh ?? 0,
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.

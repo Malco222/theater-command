@@ -639,7 +639,7 @@ export class Drill {
     const LEAD_BY = 25, LEAD_RUSH = 15, t = this.b.t;
     const live_ = [...this.squads.values()].filter((sq) => live(sq.u));
     for (const side of ['att', 'def'] as Side[]) {
-      const foes = live_.filter((sq) => sq.u.side !== side);
+      const foes = live_.filter((sq) => sq.u.side !== side && !sq.u.hid);
       const near = (x: number, y: number): number => foes.reduce((d, f) => Math.min(d, Math.hypot(f.u.x - x, f.u.y - y)), Infinity);
       type Cand = { id: number; g: number; d: number; on: boolean };
       const cands: Cand[] = [];
@@ -865,7 +865,7 @@ export class Drill {
   /** Metres from this block's edge to the nearest enemy that is still fighting. */
   private nearestGap(u: LandUnit): number {
     let g = Infinity;
-    for (const e of this.b.units) if (e.side !== u.side && fighting(e)) g = Math.min(g, this.b.gap(u, e));
+    for (const e of this.b.units) if (e.side !== u.side && fighting(e) && !e.hid) g = Math.min(g, this.b.gap(u, e));
     return g;
   }
 
@@ -875,7 +875,7 @@ export class Drill {
     if (u.engaged !== undefined) { const e = b.unit(u.engaged); if (e && live(e)) return e; }
     if (u.order?.target !== undefined) { const e = b.unit(u.order.target); if (e && live(e)) return e; }
     let best: LandUnit | null = null, d = 1500;
-    for (const e of b.units) if (e.side !== u.side && fighting(e)) { const g = b.gap(u, e); if (g < d) { d = g; best = e; } }
+    for (const e of b.units) if (e.side !== u.side && fighting(e) && !e.hid) { const g = b.gap(u, e); if (g < d) { d = g; best = e; } }
     return best;
   }
   private threatDir(sq: Squad): [number, number] {
@@ -2210,7 +2210,7 @@ export class Drill {
     const u = sq.u, b = this.b, t = b.t;
     if (!fighting(u) || sq.phase === 'fallback' || sq.phase === 'flee' || sq.phase === 'column') return;
     const at = this.up(sq).find((m) => m.role === 'at');
-    const tanks = b.units.filter((e) => e.side !== u.side && e.kind === 'arm' && fighting(e) && b.gap(u, e) < DR.ranges.ambush);
+    const tanks = b.units.filter((e) => e.side !== u.side && e.kind === 'arm' && fighting(e) && !e.hid && b.gap(u, e) < DR.ranges.ambush);
     if (at) {
       if (!tanks.length || sq.speed > 0.6) at.hidden = undefined;
       else {

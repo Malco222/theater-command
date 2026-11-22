@@ -352,6 +352,8 @@ export interface Corps extends Storied {
   line?: number;
   /** How worn its uniforms and kit look, 0.1 (fresh) to 1 (six weeks or more in the line); absent: fresh. Looks only. */
   wear?: number;
+  /** Its share of men who joined it this month, in new kit (release 2, looks only): absent, none. 'wear' counts them in. */
+  fresh?: number;
   /** The work an engineer corps has in hand: what, where, and the month it is finished. Lost if the corps leaves the place. */
   job?: { what: string; reg: number; eta: number; ap?: number };
   /** The rivalry it is part of: an id on the list of rivalries. */

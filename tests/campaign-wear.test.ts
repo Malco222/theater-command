@@ -84,6 +84,10 @@ describe('a month in the line', () => {
     const fresh = (c.str - 0.5) / c.str;
     expect(c.wear!).toBeLessThan(d.wear!);
     expect(c.wear!).toBeCloseTo(0.7 * (1 - fresh) + 0.1 * fresh, 2);
+    // The share of new men, for a picture that draws them clean: the rest read the old hands' wear, 0.7.
+    expect(c.fresh!).toBeCloseTo(fresh, 2);
+    expect(d.fresh).toBeUndefined();
+    expect((c.wear! - 0.1 * c.fresh!) / (1 - c.fresh!)).toBeCloseTo(0.7, 2);
   });
 
   it('a whole term at the battle schools is a refit; standing at the front wears it even without a fight', () => {
@@ -113,13 +117,13 @@ describe('a month in the line', () => {
 describe('the 3D battle reads it on every land block', () => {
   it('a worn corps\' blocks carry its wear; a practice battle\'s are fresh', () => {
     const t = withTeams(sampleTicket('plains', 1.3, { seed: 5 }));
-    t.att.forces[0].wear = 0.85;
+    t.att.forces[0].wear = 0.85; t.att.forces[0].fresh = 0.2;
     const b = new LandBattle(t);
     const first = t.att.forces[0].corps;
     const mine = b.units.filter((u) => u.side === 'att' && u.corps === first);
     expect(mine.length).toBeGreaterThan(0);
-    for (const u of mine) { expect(u.wear).toBe(0.85); expect(unitOut(u).wear).toBe(0.85); }
-    for (const u of b.units.filter((x) => x.corps !== first)) expect(unitOut(u).wear).toBeCloseTo(0.1, 9);
+    for (const u of mine) { expect(u.wear).toBe(0.85); expect(unitOut(u).wear).toBe(0.85); expect(unitOut(u).fresh).toBe(0.2); }
+    for (const u of b.units.filter((x) => x.corps !== first)) { expect(unitOut(u).wear).toBeCloseTo(0.1, 9); expect(unitOut(u).fresh).toBe(0); }
   });
 
   it('the campaign\'s attack carries each corps\' wear onto the field, and the fight comes out the same', () => {

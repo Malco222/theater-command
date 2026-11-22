@@ -35,9 +35,17 @@
 //                                   block a few seconds later, longer when its headquarters is hit (units carry orderIn, the
 //                                   seconds left); an order may carry at, the battle time he gave it as shown, and the wait
 //                                   counts from there (never before it). A 'move' with run: true goes at the double. Off unless asked
+//                                   Hidden in the woods (release 2; Brian, 22 November 04:18Z, ambushes): { hide: true }: a block
+//                                   in woods when the clock starts is hidden from the other side until an enemy comes close, it
+//                                   opens fire, it is struck or it leaves the woods (LAND.hide). Units carry hid: 1 while hidden
+//                                   from the enemy (his: draw the woods mark; the enemy's: draw nothing), in the setup step too
+//                                   as he places them; a land:found event (extra.how: fired, seen, out, struck) says when one is
+//                                   found. An attack or fire order at a hidden block is refused
 //                                   Uniforms (release 2, looks only): every land block in a view carries wear, 0.1 (fresh kit) to
 //                                   1 (six weeks or more in the line since its corps was last rested or formed), its corps' own
-//                                   from the campaign, pulled down by its share of fresh drafts; a practice battle's are fresh
+//                                   from the campaign, pulled down by its share of fresh drafts; a practice battle's are fresh.
+//                                   With it, fresh: the share of its men who joined this month (0 to 1). wear is the whole
+//                                   block's; drawing that share clean (0.1), the rest read (wear - 0.1 x fresh) / (1 - fresh)
 //   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
 //                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
 //                                   red ghost with the words beside it). Moves nothing (release 2)
@@ -506,9 +514,12 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     ...(land.crew ? { crew: land.crew } : {}),
     // Direct command (release 2): a block the player has taken in hand, and the seconds till his order on the air reaches it.
     ...(land.taken ? { taken: true } : {}),
+    // Hidden in the woods from the enemy (release 2, LAND.hide).
+    ...(land.hid ? { hid: 1 } : {}),
     ...(land.orderAt !== undefined ? { orderIn: Math.max(0, Math.round((land.orderAt - t) * 10) / 10) } : {}),
-    // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
-    ...(land.short ? { wear: land.wear ?? WEAR_FRESH } : {}),
+    // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line; and the
+    // share of its men new this month, in new kit (0 none), which 'wear' counts in.
+    ...(land.short ? { wear: land.wear ?? WEAR_FRESH, fresh: land.fresh ?? 0 } : {}),
     // What its guns throw, as the art director's explosions sheet sizes it (src/battle/land/shells.ts).
     ...(land.cal ? { cal: land.cal } : {}),
     // A tank block that has left its foot on close ground and is paying for it this second (item 7): buttoned up,
@@ -534,6 +545,7 @@ function hiddenOut(u: UnitBase): Record<string, unknown> {
   return {
     id: u.id, side: u.side, known: false, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, face: Math.round(u.face * 1000) / 1000,
     w, d, act: off ? 'down' : u.speed > 0.05 ? 'march' : 'idle', speed: Math.round(u.speed * 10) / 10, cover: u.cover ?? '', state: off ? u.state : 'unknown',
+    ...((u as LandUnit).hid ? { hid: 1 } : {}),
   };
 }
 
@@ -610,7 +622,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -648,6 +660,8 @@ export function battleCalls(h: BattleHooks) {
       // Direct command (release 2): his staff fights the blocks he has not taken in hand, and his orders go by radio.
       if (opts?.staff) { sim.perUnit = true; sim.ai[ses.me] = true; }
       if (opts?.radio) sim.radio = true;
+      // Hidden in the woods (release 2): blocks in woods when the clock starts are hidden from the other side.
+      if (opts?.hide) sim.hideOn();
       const f = sim.field;
       return {
         field: {

@@ -643,11 +643,13 @@ export function wearMonth(g: Game, c: Corps, before: number, schooled = false): 
   const W = STORIES.wear;
   const marched = c.town !== undefined || c.joint !== undefined ? 0 : Math.max(0, c.apMax - c.ap);
   const weeks = schooled || c.born === g.turn ? 0 : c.fought || c.pressed || !c.supplied || inLine(g, c) ? W.month : marched;
-  if (weeks <= 0) { delete c.line; delete c.wear; return; }
+  if (weeks <= 0) { delete c.line; delete c.wear; delete c.fresh; return; }
   c.line = (c.line ?? 0) + weeks;
   const old = Math.min(1, wearOf(c) + ((1 - W.fresh) * weeks) / W.weeks);
   const fresh = c.str > before + 1e-9 ? (c.str - before) / c.str : 0;
   c.wear = Math.round((old * (1 - fresh) + W.fresh * fresh) * 1000) / 1000;
+  // The share of its men who are new this month, for a picture that draws them clean among the old hands.
+  if (fresh > 0) c.fresh = Math.round(fresh * 1000) / 1000; else delete c.fresh;
 }
 
 // ---- The monthly round ----------------------------------------------------------------------

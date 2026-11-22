@@ -42,6 +42,7 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, 
     ...(crosses && !crosses(c) ? { cross: false } : {}),
     // How worn its uniforms and kit look (release 2, looks only): absent while it is fresh.
     ...(c.wear !== undefined ? { wear: c.wear } : {}),
+    ...(c.fresh ? { fresh: c.fresh } : {}),
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;

@@ -89,6 +89,8 @@ export interface ForceTicket {
    * 0.1 fresh to 1 after six weeks or more in the line, from the campaign (wearOf). Absent, fresh. Nothing in the fight reads it.
    */
   wear?: number;
+  /** Land, looks only: its share of men who joined it this month, in new kit (Corps.fresh). Absent, none. */
+  fresh?: number;
 }
 
 export interface SideTicket {
