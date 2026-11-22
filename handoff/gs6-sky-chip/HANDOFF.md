@@ -1,6 +1,9 @@
-# GS6 sky on the graphics chip: handoff (stopped 22 Nov 17:28Z on the coordinator's word: usage goes to release 1)
+# GS6 sky on the graphics chip: handoff
 
-Status: DESIGN DONE, ONE FILE WRITTEN, NOTHING BUILT OR PATCHED. No branch of any other thread was touched or pushed.
+Status 22 Nov 18:35Z: RESUMED 17:37Z and BUILT. Patch A (ground) and patch B (air scene) are written, tested in the
+cloud, and saved; patch A passed the pre-check's Mac-flags compile. See NOTES.md for the switch, the numbers and the
+Mac run asks. Steps 1-6 below are all done. What is left: patch B's pre-check verdict, the Mac picture/timing runs,
+and each owning thread choosing the default.
 
 ## What exists
 - `AirSkyChip.inl` (this folder; also untracked in the lane's ground worktree, branch gs6-sky-chip-uhhxrn on uhhxrn 79bd6bc0).
