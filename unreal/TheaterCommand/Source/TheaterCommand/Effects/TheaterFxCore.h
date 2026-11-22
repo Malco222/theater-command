@@ -482,6 +482,13 @@ namespace TheaterFx
 		 * more: the caller's own number for this fire, so BurnOut finds it (under 0: none). A fire lit later under the
 		 * same number takes the number; the earlier one burns on as it was. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
+		/** Fuel going up at At (the recipe's fuel_ball; no such row: nothing): a ragged ball of burning fuel about
+		 * Across metres wide that rolls and rises as it burns and turns to black smoke boiling off its top, the art
+		 * director's ruling of 21 November: a vehicle's fuel 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
+		 * dump 15 to 25 m for 1.5 to 2 s, its time by its width. Velocity: what it was moving at (a crashing
+		 * aeroplane's, a truck's), which the fire carries a little of. It lights the ground round it while it burns. A
+		 * fire that burns on after it is the caller's Burn. */
+		void FuelBall(double Now, const Vec& At, double Across, const Vec& Velocity = Vec());
 		/** That fire's crew puts it out (the recipe's fire.put_out; no such row, or no fire burning under that number:
 		 * nothing). Over Over seconds (0 or less: the row's own) its flames are eaten back from the edges to its seat,
 		 * lower and sputtering, never thinner. How "water" (a ship's hoses): a surge of white steam at the seat for the
@@ -1193,6 +1200,16 @@ namespace TheaterFx
 		std::vector<Bit> Bits; // alive or still to be born
 		std::vector<Bit> Marks; // craters: for the whole battle
 		std::vector<Flash> Flashes;
+		// (a fuel ball's lamp, FuelBall: lit while it burns, up as it swells and down as it goes to smoke, rising with it)
+		struct BallLamp
+		{
+			Vec At, Vel;
+			double Born = 0.0, Life = 1.0, Strength = 0.0, Radius = 10.0, Lift = 0.0;
+			uint64_t Seed = 0;
+			Rgb Col;
+		};
+		std::vector<BallLamp> BallLamps;
+		bool BallLampAt(const BallLamp& L, double Now, double Day, Lamp& Into) const; // (false when it is not lit at Now)
 		std::vector<Knock> Knocks;
 		std::vector<Source> Sources;
 		std::vector<int> GunRounds; // rounds fired by each gun so far

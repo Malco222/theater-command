@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn, FuelBall); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -174,6 +174,12 @@ public:
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. Id, 0 or more: the
 	 * caller's own number for this fire, so BurnOut finds it (under 0: none). */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
+	/** Fuel going up: a ragged ball of burning fuel about AcrossMetres wide that rolls and rises and turns to black
+	 * smoke boiling off its top, lighting the ground while it burns. A vehicle's fuel 6 to 10 m (about 1 to 1.5 s),
+	 * an aircraft's crash or a fuel dump 15 to 25 m (1.5 to 2 s). Velocity: what it was moving at (a crashing
+	 * aeroplane's, a truck's), of which the fire keeps a little. Call it at the moment the fuel goes; a fire that
+	 * burns on after it is Burn's, called with it. */
+	void FuelBall(const FVector& WorldAt, float AcrossMetres, const FVector& Velocity = FVector::ZeroVector);
 	/** The crew puts that fire out over OverSeconds (0: the recipe's 6 to 12 s): its flames are eaten back from the
 	 * edges to the seat, shrinking steadily and never all gone and back; a dull glow and small flickering embers
 	 * stay 10 to 20 s; its smoke pales from black through grey to grey-white and is gone inside about a minute. How "water" (a ship's hoses: a surge of white steam at the

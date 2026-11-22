@@ -1452,6 +1452,29 @@ The preview's `raid` shot: `FX_KIT_PX=0.90031 FX_DIST=11000 ./fxpreview recipe.t
 3200x1800` (see the top of fxpreview.cpp: FX_STICKS, FX_BOMBS, FX_BOX_GAP, FX_EYE_H, FX_BACK_MPS for the hand-over,
 FX_REF=1 for the same bombs as Shell calls).
 
+## Fuel going up: the fuel ball (head D)
+
+The art director's ruling of 21 November, section 2: a shell or bomb burst is earth and smoke, never a petrol
+fireball; rolling fireballs come only from fuel, a vehicle's 6 to 10 m for 1 to 1.5 s, an aircraft's crash or a fuel
+dump 15 to 25 m for 1.5 to 2 s, with black smoke from its top after half a second.
+
+- **The call** `FuelBall(Now, At, Across, Velocity)` (the game's `FBattleEffects::FuelBall`). Call it at the moment
+  the fuel goes; a fire that burns on after it is the caller's `Burn`, called with it. Velocity is what it was moving
+  at (a crashing aeroplane's, a truck's); the fire keeps a little of it. Without the recipe's `fuel_ball` row:
+  nothing.
+- **What it draws.** Its time comes from its width (`small_s` at `small_m`, `big_s` at `big_m`). Its lobes are thrown
+  out and up from a seat just above the ground and slowed by the air. The whole ball climbs `rise_of_across` of its
+  width while it burns, faster as it goes, and each lobe rolls as it climbs. The fire is lit from within: white-hot
+  knots (`hearts`) for its first moment, then saturated orange billows, some deeper toward the outside
+  (`deep_mix`). They cool to a dark ember and go into black smoke, never pink over the sky. No lobe goes before its
+  smoke can take it. From `smoke_from_s` black smoke boils off the top (`top_puffs_per_m`), and each lobe's smoke
+  trails a ragged stem. The smoke goes as `linger.fuel` says (thick 3 s, gone by 25 s). A lamp of `lamp` times the
+  root of its width lights the ground while it burns, rising with it.
+- **Preview.** `FX_SCRIPT=fuel` on the wreck shot: her fuel goes up at 0.5 s, `FX_FUEL_M` across (8), at the engine
+  deck, and she burns on. `FX_SCRIPT=crash`: an aeroplane's fuel, 20 m at the ground, coming in at 60 m/s, with no tank.
+  `FX_SCRIPT=dump`: the same standing still. For example
+  `FX_SCRIPT=crash FX_DIST=110 FX_LOOK_H=14 FX_LOOK_X=0 fxpreview recipe.txt out wreck far 18,36,54 960x540`.
+
 ## Oil fires at sea
 
 ```cpp

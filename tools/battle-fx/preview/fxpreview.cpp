@@ -1487,7 +1487,7 @@ namespace
 		struct Due
 		{
 			double At = 0.0;
-			int What = 0; // (1 Burn, 2 the hatch's cook-off)
+			int What = 0; // (1 Burn, 2 the hatch's cook-off, 3 a fuel ball)
 			Vec Where;
 			double Across = 0.0, Seconds = 0.0;
 			int Key = -1;
@@ -1496,9 +1496,17 @@ namespace
 		const double Long = EnvNum("FX_BURN_S", 900.0);
 		std::vector<Due> Script;
 		const std::string Kind = std::getenv("FX_SCRIPT") ? std::getenv("FX_SCRIPT") : "ground";
+		// (FX_SCRIPT=fuel: her fuel goes up at 0.5 s, a FuelBall FX_FUEL_M across (8) at the engine deck, and she burns
+		// on as the ground script has it; crash: an aeroplane's fuel, FX_FUEL_M (20) across at the ground at 0.5 s,
+		// coming in at 60 m/s, with no tank (FX_NOTANK too); dump: a fuel dump's, the same but standing still)
+		const bool bNoTank = Kind == "crash" || Kind == "dump" || std::getenv("FX_NOTANK") != nullptr;
 		if (Kind == "one")
 		{
 			Script.push_back({ 1.2, 1, Engine, 2.4, Long, 3 });
+		}
+		else if (Kind == "crash" || Kind == "dump")
+		{
+			Script.push_back({ 0.5, 3, Vec(0.0, 0.0, G), EnvNum("FX_FUEL_M", 20.0), Kind == "crash" ? 60.0 : 0.0, -1 });
 		}
 		else
 		{
@@ -1511,6 +1519,10 @@ namespace
 			Script.push_back({ 3.0, 1, Fire2, 2.4, Long, 7 });
 			Script.push_back({ 3.0, 1, Fire3, 2.4, Long, 8 });
 			Script.push_back({ 3.0, 1, Engine, 1.2, Long, 100009 });
+			if (Kind == "fuel")
+			{
+				Script.push_back({ 0.5, 3, Engine, EnvNum("FX_FUEL_M", 8.0), 0.0, -1 });
+			}
 		}
 		auto Play = [&](double Now)
 		{
@@ -1524,6 +1536,10 @@ namespace
 				if (D.What == 1)
 				{
 					Fx.Burn(D.At, D.Where, D.Across, D.Seconds, D.Key);
+				}
+				else if (D.What == 3)
+				{
+					Fx.FuelBall(D.At, D.Where, D.Across, Vec(D.Seconds, 0.0, -0.15 * D.Seconds)); // (Seconds: its speed in, along +X and a little down)
 				}
 				else
 				{
@@ -1606,12 +1622,15 @@ namespace
 			Paint(C, Cam, Lamps, NL, Men, false);
 			const Vec Sun = View.Sun.Unit();
 			const double SunShare = bDusk ? 0.0 : 0.6;
-			LitBox(C, Cam, Vec(-3.2, -1.75, G), Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.2, 1.15, G), Vec(3.2, 1.75, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.0, -1.15, G + 0.4), Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-3.2, -1.6, G + 1.2), Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(-1.6, -1.2, G + 1.83), Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
-			LitBox(C, Cam, Vec(1.2, -0.12, G + 2.1), Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			if (!bNoTank)
+			{
+				LitBox(C, Cam, Vec(-3.2, -1.75, G), Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.2, 1.15, G), Vec(3.2, 1.75, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.0, -1.15, G + 0.4), Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-3.2, -1.6, G + 1.2), Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(-1.6, -1.2, G + 1.83), Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
+				LitBox(C, Cam, Vec(1.2, -0.12, G + 2.1), Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			}
 			if (bDusk)
 			{
 				for (size_t I = 0; I < C.R.size(); ++I)

@@ -425,6 +425,14 @@ void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seco
 	}
 }
 
+void FBattleEffects::FuelBall(const FVector& WorldAt, float AcrossMetres, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.FuelBall(Time(), ToFx(WorldAt), AcrossMetres, ToFx(Velocity));
+	}
+}
+
 void FBattleEffects::BurnOut(int32 Id, float OverSeconds, const FString& How)
 {
 	if (IsReady())

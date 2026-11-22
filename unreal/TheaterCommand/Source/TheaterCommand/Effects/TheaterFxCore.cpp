@@ -384,6 +384,7 @@ namespace TheaterFx
 		EyeMoved = EyeTurned = 0.0;
 		DustInSight = DustSince = 0;
 		CaseUntil.clear();
+		BallLamps.clear();
 		LampsKept.clear(); // (the pre-check, 22 November: kept lamps outlived a Clear, so a fire lit again with the clock set back
 		LampsAt = -1.0e18; // had no lamp until the clock passed where it was)
 		for (size_t I = 0; I < OutRgba.size(); ++I)
@@ -11983,10 +11984,257 @@ namespace TheaterFx
 		}
 	}
 
+	void Battle::FuelBall(double Now, const Vec& AtIn, double AcrossIn, const Vec& VelIn)
+	{
+		// fuel_ball, the art director's ruling of 21 November (section 2): bursts are earth and smoke, never a petrol
+		// fireball; "rolling fireballs only from fuel: a vehicle 6 to 10 m for 1 to 1.5 s, an aircraft crash or a dump
+		// 15 to 25 m for 1.5 to 2 s", the black smoke boiling from its top after half a second. Fire as the air
+		// fireball's was ruled (06:00Z 20 November): lit from within, a near white-yellow heart for its first moment,
+		// a saturated orange body cooling to deep red at its rims and into black smoke, never pale peach or salmon,
+		// each lump near opaque to its edge. Its lumps are thrown out and up from the seat, slowed by the air, and the
+		// whole climbs faster as it goes (the hot gas rising), each lump rolling as it climbs
+		const std::string P = "fuel_ball.";
+		if (!Has(P + "lobes.0") || !(Now == Now) || std::fabs(Now) > 1.0e9 || !IsAPlace(AtIn))
+		{
+			return;
+		}
+		auto Held = [&](const std::string& Path, double A, double B, double Least, double Most)
+		{
+			Span S = Range(Path, A, B);
+			S.A = SafeNum(S.A, Least, Most, A);
+			S.B = SafeNum(S.B, Least, Most, B);
+			if (S.B < S.A)
+			{
+				std::swap(S.A, S.B);
+			}
+			return S;
+		};
+		const double Across = SafeNum(AcrossIn, 1.0, 60.0, 8.0);
+		const Vec Vel = IsAPlace(VelIn) && VelIn.Length() < 400.0 ? VelIn : Vec();
+		Dice D(++Seeds * 6151ull ^ PlaceKey(AtIn));
+		const size_t First = Bits.size();
+		// (its time by its width: small_s at small_m across, big_s at big_m, between them in proportion)
+		const double SmallM = SafeNum(Num(P + "small_m", 8.0), 0.5, 100.0, 8.0), BigM = std::max(SmallM + 0.5, SafeNum(Num(P + "big_m", 20.0), 0.5, 200.0, 20.0));
+		const Span SmallS = Held(P + "small_s", 1.0, 1.5, 0.1, 10.0), BigS = Held(P + "big_s", 1.5, 2.0, 0.1, 10.0);
+		const double Kw = Clamp01((Across - SmallM) / (BigM - SmallM));
+		const double FireS = (SmallS.A + (BigS.A - SmallS.A) * Kw) + D.U() * ((SmallS.B - SmallS.A) + ((BigS.B - SmallS.B) - (BigS.A - SmallS.A)) * Kw);
+		const double Rc = 0.5 * Across;
+		const double Ground = Height(AtIn.X, AtIn.Y);
+		const Vec At(AtIn.X, AtIn.Y, std::max(AtIn.Z, Ground == Ground ? Ground : AtIn.Z));
+		// (how far the whole climbs while it burns, rise_of_across of its width: from rest, faster and faster)
+		const double Lift = SafeNum(Num(P + "rise_of_across", 0.7), 0.0, 5.0, 0.7) * Across;
+		const double Buoy = 2.0 * Lift / std::max(FireS * FireS, 1e-3);
+		const Rgb FireCol = Picture(P + "colour", Rgb::FromPicture(250, 136, 22));
+		const Rgb HotCol = Picture(P + "hot_colour", Rgb::FromPicture(255, 222, 90));
+		const Rgb EmberCol = Picture(P + "ember", Rgb::FromPicture(140, 40, 16));
+		const Rgb EdgeCol = Picture(P + "edge_colour", EmberCol);
+		const Rgb SmokeCol = Picture(P + "smoke_colour", Rgb::FromPicture(34, 31, 29));
+		const Rgb SmokeOld = Picture(P + "smoke_old", Rgb::FromPicture(96, 92, 88));
+		const Span HeartMix = Held(P + "heart_mix", 0.1, 0.5, 0.0, 1.0);
+		const Span Reach = Held(P + "reach", 0.3, 0.9, 0.0, 3.0), LobeR = Held(P + "lobe_r", 0.2, 0.32, 0.01, 2.0), LobeGrow = Held(P + "lobe_grow", 1.6, 2.2, 1.0, 10.0);
+		const Span Roll = Held(P + "roll_rad_s", 1.5, 3.0, 0.0, 30.0);
+		const double Edge = SafeNum(Num(P + "edge", 0.5), 0.0, 1.0, 0.5), Rim = SafeNum(Num(P + "rim", 0.85), 0.0, 1.0, 0.85);
+		const double Rough = SafeNum(Num(P + "rough", 0.4), 0.0, 1.0, 0.4), Cool = SafeNum(Num(P + "cool", 1.3), 0.0, 20.0, 1.3);
+		const double Over = SafeNum(Num(P + "over", 1.3), 1.0, 4.0, 1.3), TwinPx = SafeNum(Num(P + "twin_px", 40.0), 0.0, 1000.0, 40.0);
+		const Span Lobes = Held(P + "lobes", 16.0, 64.0, 1.0, 200.0);
+		const int N = static_cast<int>(std::lround(std::clamp(SafeNum(Num(P + "lobes_per_m", 3.0), 0.0, 50.0, 3.0) * Across, Lobes.A, Lobes.B)));
+		const double SmokeFrom = SafeNum(Num(P + "smoke_from_s", 0.5), 0.0, 10.0, 0.5);
+		const Span SmokeGrow = Held(P + "smoke_grow", 2.5, 3.5, 1.0, 20.0);
+		const double SmokeAlpha = SafeNum(Num(P + "smoke_alpha", 0.9), 0.0, 1.0, 0.9), SmokeRise = SafeNum(Num(P + "smoke_rise_mps", 1.2), 0.0, 50.0, 1.2);
+		const double SmokeRough = SafeNum(Num(P + "smoke_rough", 0.5), 0.0, 1.0, 0.5);
+		const Span SmokeS = Held(P + "smoke_s", 12.0, 20.0, 0.5, 600.0);
+		const Span LifeShare = Held(P + "life_share", 0.7, 1.0, 0.05, 1.0); // (each lump burns this share of the ball's time)
+		const double DeepMix = SafeNum(Num(P + "deep_mix", 0.0), 0.0, 1.0, 0.0);
+		const Vec Seat = At + ZUp * (0.3 * Rc);
+		for (int I = 0; I < N; ++I)
+		{
+			// (thrown out and up from the seat, most of them upward: the ball stands on the ground and climbs off it)
+			const Vec Toward = Vec(D.Bell(), D.Bell(), 0.35 + 0.8 * std::fabs(D.Bell())).Unit(ZUp);
+			const double Reached = Rc * Reach.Pick(D), Starts = Reached * D.U(0.05, 0.25);
+			Bit B;
+			B.Born = Now + D.U(0.0, 0.12) * FireS; // (it swells over its first tenth)
+			// (no lump goes before its smoke can take it: each burns past smoke_from_s, so nothing of the ball fades out
+			// over the bare sky, where thin fire reads pink)
+			B.Life = std::max(FireS * LifeShare.Pick(D) - (B.Born - Now), (SmokeFrom + 0.15 - (B.Born - Now)) / 0.85);
+			B.Drag = 3.5;
+			B.From = Seat + Toward * Starts;
+			B.Vel = Vel * 0.5 + Toward * ((Reached - Starts) * B.Drag / (1.0 - std::exp(-B.Drag * B.Life)));
+			B.Gravity = -Buoy * D.U(0.8, 1.2); // (it climbs faster and faster: the hot gas rising)
+			B.Windage = 0.3;
+			const double In = 1.0 - Clamp01(Reached / std::max(Rc * Reach.B, 1e-3)); // (1 at the middle, 0 at the far rim)
+			B.R0 = Rc * LobeR.Pick(D);
+			B.R1 = B.R0 * LobeGrow.Pick(D);
+			B.Grow = 0.5;
+			B.Col = FireCol.Mix(HotCol, Clamp01(HeartMix.Pick(D) + 0.4 * In));
+			if (DeepMix > 0.0)
+			{
+				B.Col = B.Col.Mix(EdgeCol, D.U(0.0, DeepMix) * (1.0 - In)); // (some lumps toward the outside a deeper orange-red: billows, never one flat orange)
+			}
+			B.Col2 = EmberCol;
+			B.Cool = Cool;
+			B.Alpha = 1.0;
+			B.FadeIn = 0.01;
+			B.Hold = 0.92; // (whole until its smoke has it, then gone in a frame or two: a see-through fade over the sky is pink)
+			B.Heart = 1.0;
+			B.Rim = Rim;
+			B.Rough = Rough;
+			B.Edge = EdgeCol;
+			B.EdgeK = Edge;
+			B.TwinPx = TwinPx;
+			B.Over = 1.0 + (Over - 1.0) * In; // (its middle burns brighter)
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.TurnRate = Roll.Pick(D) * (Toward.X >= 0.0 ? -1.0 : 1.0); // (its lumps roll out and over as it climbs)
+			B.bLight = true;
+			B.bWhole = true;
+			Bits.push_back(B);
+			// (the black smoke each lump goes into as it dies, never before smoke_from_s: born round it a little higher,
+			// so the smoke boils off the ball's top and the fire is never seen fading over the bare sky)
+			const double Dies = std::max(0.7 * B.Life, Now + SmokeFrom - B.Born);
+			if (Dies < 0.9 * B.Life)
+			{
+				Bit M;
+				M.Born = B.Born + Dies;
+				M.From = Where(B, Dies) + ZUp * (0.25 * B.R1);
+				const Vec Was = Going(B, Dies);
+				// (each keeps its own share of the ball's climb, and its lumps drift apart: a ragged cloud trailing a dark
+				// stem back toward the ground, never one black ball lifting off)
+				M.Vel = (IsAPlace(Was) ? Was * D.U(0.15, 0.7) : Vec()) + Vec(D.Bell(), D.Bell(), 0.4 * D.Bell()) * (0.18 * Rc);
+				M.Drag = 1.2;
+				M.Rise = SmokeRise * D.U(0.7, 1.3);
+				M.Windage = D.U(0.8, 1.1);
+				M.Life = SmokeS.Pick(D);
+				M.R0 = 1.1 * (B.R0 + (B.R1 - B.R0) * std::sqrt(Dies / B.Life));
+				M.R1 = M.R0 * SmokeGrow.Pick(D);
+				M.Grow = 0.45;
+				M.Col = SmokeCol;
+				M.Col2 = SmokeCol.Mix(SmokeOld, 0.7);
+				M.Alpha = SmokeAlpha * D.U(0.85, 1.05);
+				M.FadeIn = std::min(0.05, 0.15 / std::max(M.Life, 0.5));
+				M.Hold = 0.3;
+				M.Heart = 0.75;
+				M.Rim = 0.0;
+				M.Rough = SmokeRough;
+				M.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+				M.Turn = D.U(0.0, 2.0 * Pi);
+				M.TurnRate = 0.3 * B.TurnRate;
+				M.LeastPx = 2.0;
+				M.LeastKeep = 0.4;
+				Bits.push_back(M);
+			}
+		}
+		// (top_puffs_per_m: black smoke boiling off the ball's top from smoke_from_s while it still burns below, born at
+		// the top as the ball has climbed by then and climbing on with it, so the fire wears a black cap that grows)
+		const int Tops = static_cast<int>(std::lround(std::clamp(SafeNum(Num(P + "top_puffs_per_m", 0.0), 0.0, 20.0, 0.0) * Across, 0.0, 200.0)));
+		for (int I = 0; I < Tops && SmokeFrom < FireS; ++I)
+		{
+			const double T = SmokeFrom + (FireS - SmokeFrom) * (I + D.U()) / Tops;
+			const Vec Side = Vec(D.Bell(), D.Bell(), 0.0) * (0.35 * Rc);
+			Bit M;
+			M.Born = Now + T;
+			M.From = Seat + Vel * (0.5 * (1.0 - std::exp(-3.5 * T)) / 3.5) + ZUp * (0.5 * Buoy * T * T + Rc * D.U(0.6, 0.95)) + Side;
+			M.Vel = ZUp * (Buoy * T * 0.6) + Side * 0.5;
+			M.Drag = 1.0;
+			M.Rise = SmokeRise * D.U(0.8, 1.3);
+			M.Windage = D.U(0.8, 1.1);
+			M.Life = SmokeS.Pick(D);
+			M.R0 = Rc * LobeR.Pick(D) * 1.2;
+			M.R1 = M.R0 * SmokeGrow.Pick(D) * 1.3;
+			M.Grow = 0.45;
+			M.Col = SmokeCol;
+			M.Col2 = SmokeCol.Mix(SmokeOld, 0.7);
+			M.Alpha = SmokeAlpha * D.U(0.85, 1.05);
+			M.FadeIn = std::min(0.05, 0.2 / std::max(M.Life, 0.5));
+			M.Hold = 0.3;
+			M.Heart = 0.75;
+			M.Rim = 0.0;
+			M.Rough = SmokeRough;
+			M.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			M.Turn = D.U(0.0, 2.0 * Pi);
+			M.TurnRate = D.U(-0.6, 0.6);
+			M.LeastPx = 2.0;
+			M.LeastKeep = 0.4;
+			Bits.push_back(M);
+		}
+		// (the white-hot heart, a few knots low in the middle for its first moment, drawn over the lumps round it)
+		const Span HeartsIs = Held(P + "hearts", 3.0, 6.0, 0.0, 32.0);
+		const int Hearts = static_cast<int>(std::lround(HeartsIs.Pick(D)));
+		const double HeartS = SafeNum(Num(P + "heart_s", 0.18), 0.01, 2.0, 0.18), HeartR = SafeNum(Num(P + "heart_r", 0.3), 0.01, 2.0, 0.3);
+		const Rgb HeartCol = Picture(P + "heart_colour", Rgb::FromPicture(255, 240, 170));
+		for (int I = 0; I < Hearts; ++I)
+		{
+			const Vec Toward = Vec(D.Bell(), D.Bell(), 0.5 + std::fabs(D.Bell())).Unit(ZUp);
+			Bit H;
+			H.Born = Now;
+			H.From = Seat + Toward * (Rc * D.U(0.0, 0.15));
+			H.Vel = Vel * 0.5 + Toward * (Rc * D.U(0.4, 1.0)); // (it stays low inside the ball: never a pale shape over its top)
+			H.Drag = 4.0;
+			H.Gravity = -Buoy;
+			H.Life = HeartS * D.U(0.8, 1.2);
+			H.R0 = Rc * HeartR * D.U(0.6, 1.0);
+			H.R1 = H.R0 * 1.6;
+			H.Col = Rgb::FromPicture(255, 252, 236);
+			H.Col2 = HeartCol;
+			H.Edge = HotCol;
+			H.EdgeK = 0.6;
+			H.Alpha = 1.0;
+			H.FadeIn = 0.002;
+			H.Hold = 0.85;
+			H.Heart = 1.0;
+			H.Rim = Rim;
+			H.Rough = 0.35;
+			H.TwinPx = TwinPx; // (never a pale plate with straight sides seen close)
+			H.Over = Over;
+			H.Nearer = 0.5 * Rc;
+			H.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			H.Turn = D.U(0.0, 2.0 * Pi);
+			H.bLight = true;
+			H.bWhole = true;
+			Bits.push_back(H);
+		}
+		// (its smoke hangs and goes as the linger row's fuel says: thick a few seconds, then into the air)
+		LingerFrom(First, LingerOf("fuel"), Now, At, 0.9, Across);
+		// (and its lamp, while it burns)
+		const double LampIs = SafeNum(Num(P + "lamp", 0.9), 0.0, 100.0, 0.9);
+		if (LampIs > 0.0)
+		{
+			BallLamp L;
+			L.At = Seat + ZUp * (0.3 * Rc);
+			L.Vel = Vel * 0.5;
+			L.Born = Now;
+			L.Life = FireS;
+			L.Strength = LampIs * std::sqrt(Across);
+			L.Radius = SafeNum(Num(P + "lamp_reach", 4.0), 0.1, 100.0, 4.0) * Across;
+			L.Lift = Buoy;
+			L.Seed = static_cast<uint64_t>(D.U() * 4294967295.0) * 2654435761ull + 0xBA11ull;
+			L.Col = FireCol.Mix(HotCol, 0.3);
+			BallLamps.push_back(L);
+		}
+	}
+
+	bool Battle::BallLampAt(const BallLamp& L, double Now, double Day, Lamp& Into) const
+	{
+		const double Age = Now - L.Born;
+		if (!(Age >= 0.0) || Age > L.Life)
+		{
+			return false;
+		}
+		// (up over its first tenth as the ball swells, full, then down over its last two fifths as it goes to smoke)
+		const double X = Age / std::max(L.Life, 1e-3);
+		const double On = Clamp01(X / 0.1) * Clamp01((1.0 - X) / 0.4);
+		const double ByDay = 1.0 + (DayLampShare - 1.0) * Clamp01(Day);
+		Into.At = L.At + L.Vel * Age + ZUp * (0.5 * L.Lift * Age * Age);
+		Into.Col = L.Col.Mix(DayLampCol, Clamp01(Day));
+		Into.Strength = L.Strength * On * ByDay;
+		Into.Radius = L.Radius;
+		return Into.Strength > 1e-4;
+	}
+
 	void Battle::Prune(double Now)
 	{
 		auto Gone = [Now](const Bit& B) { return Now > B.Born + B.Life && (!Unseen(B) || Now > B.Born + 0.5); };
 		Bits.erase(std::remove_if(Bits.begin(), Bits.end(), Gone), Bits.end());
+		BallLamps.erase(std::remove_if(BallLamps.begin(), BallLamps.end(), [Now](const BallLamp& L) { return !(Now <= L.Born + L.Life + 1.0); }), BallLamps.end());
 		// (a flash goes once its lamp has had its two frames, or after half a second unseen)
 		Flashes.erase(std::remove_if(Flashes.begin(), Flashes.end(), [this, Now](const Flash& F) { return (F.FirstFrame >= 0 && FrameNo - F.FirstFrame >= 2) || Now > F.Born + 0.5; }), Flashes.end());
 		Firings.erase(std::remove_if(Firings.begin(), Firings.end(), [Now](const Firing& F) { return Now - F.Last > 30.0; }), Firings.end());
@@ -14683,6 +14931,14 @@ namespace TheaterFx
 			L.Radius = 8.0 * S.Across;
 			All.push_back(L);
 		}
+		for (const BallLamp& Ball : BallLamps)
+		{
+			Lamp L;
+			if (BallLampAt(Ball, Now, Day, L))
+			{
+				All.push_back(L);
+			}
+		}
 		std::sort(All.begin(), All.end(), [](const Lamp& L, const Lamp& R) { return L.Strength > R.Strength; });
 		const int N = std::min(Room, static_cast<int>(All.size()));
 		for (int I = 0; I < N; ++I)
@@ -14827,6 +15083,17 @@ namespace TheaterFx
 			Is.L.Radius = std::max(ReachLeast, (bOnLand ? ReachLand : Reach) * std::min(S.Across, 5000.0));
 			Is.Rank = RankOf(Is, Steadily);
 			Steadies.push_back(Is);
+		}
+		for (const BallLamp& Ball : BallLamps)
+		{
+			// (a fuel ball's, FuelBall: steady while it burns, as a fire's is)
+			Lit Is;
+			Is.Seed = Ball.Seed;
+			if (BallLampAt(Ball, Now, Day, Is.L))
+			{
+				Is.Rank = RankOf(Is, Is.L.Strength);
+				Steadies.push_back(Is);
+			}
 		}
 		auto ByRank = [](const Lit& L, const Lit& R) { return L.Rank > R.Rank; };
 		std::stable_sort(Steadies.begin(), Steadies.end(), ByRank);
