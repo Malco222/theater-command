@@ -2819,13 +2819,13 @@ void ALandBattle::MakeMen()
 	Crowd->SetLife(S.Life);
 	// The armies' colours and stand-ins (armies.json), read first: an army with no soldier file of its own is drawn with
 	// the file its row names, else the Pole's (LandMen's MakeMan; never a side left blank).
-	FString ArmiesText;
-	std::string Error;
-	if (FFileHelper::LoadFileToString(ArmiesText, *(FPaths::ProjectContentDir() / TEXT("Data/LandBattles/armies.json"))))
 	{
-		if (!Crowd->ReadArmies(LandParts::Narrow(ArmiesText), Error))
+		FString ArmiesText;
+		std::string ArmiesError;
+		if (FFileHelper::LoadFileToString(ArmiesText, *(FPaths::ProjectContentDir() / TEXT("Data/LandBattles/armies.json")))
+			&& !Crowd->ReadArmies(LandParts::Narrow(ArmiesText), ArmiesError))
 		{
-			UE_LOG(LogTheater, Warning, TEXT("Land battle: armies.json: %s"), *LandParts::Wide(Error));
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: armies.json: %s"), *LandParts::Wide(ArmiesError));
 		}
 	}
 	// The soldier files (Content/Models/Soldiers, the soldiers thread's): each army's own, or the one standing in.
@@ -2911,6 +2911,7 @@ void ALandBattle::MakeMen()
 		Crowd->AddSoldier(LandParts::Narrow(Army), One);
 		++Files;
 	}
+	std::string Error;
 	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
 	// little over the drawn ground, and a body laid across a rim lies on it, not sunk in it)
 	const LandCrater::Field* HolesPtr = &S.Holes;
