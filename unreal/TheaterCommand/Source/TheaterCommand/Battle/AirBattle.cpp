@@ -3892,23 +3892,76 @@ namespace AirParts
 			X = Of(0);
 			return true;
 		};
-		// The paint under a point: the nearest point of the shape that faces the same way (not a stripe's edge on the
-		// other side of a seam).
-		auto PaintUnder = [&Shape](const FVector& At, const FVector& Out)
+		// The paint under a point: the colour with the most of her skin about it, each of her triangles that faces the
+		// same way and comes within 2 cm counting for its area, less the farther it lies. Her skin is a few large
+		// triangles and her rivets and seams many small points, so the nearest point alone was a rivet's or a seam's
+		// under a third of the slots (the 16 fighters of 22 November: 0 of 748 off her skin this way). Where none is
+		// that close, the nearest point that faces the same way (not a stripe's edge on the other side of a seam).
+		const double SkinReach = 0.02 * U * Fit;
+		auto PaintUnder = [&Shape, SkinReach](const FVector& At, const FVector& Out)
 		{
-			double Best = TNumericLimits<double>::Max();
-			FColor Under(96, 96, 96, 255);
-			for (int32 P = 0; P < Shape.Points.Num() && P < Shape.Colors.Num() && P < Shape.Normals.Num(); ++P)
+			const int32 Known = FMath::Min3(Shape.Points.Num(), Shape.Colors.Num(), Shape.Normals.Num());
+			TMap<uint32, double> Votes;
+			for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
 			{
-				if (FVector::DotProduct(Shape.Normals[P], Out) < 0.5)
+				const int32 I0 = Shape.Triangles[T], I1 = Shape.Triangles[T + 1], I2 = Shape.Triangles[T + 2];
+				if (I0 < 0 || I1 < 0 || I2 < 0 || I0 >= Known || I1 >= Known || I2 >= Known)
 				{
 					continue;
 				}
-				const double D = FVector::DistSquared(Shape.Points[P], At);
-				if (D < Best)
+				const FVector& A = Shape.Points[I0];
+				const FVector& B = Shape.Points[I1];
+				const FVector& C = Shape.Points[I2];
+				// (a quick look first: within reach of the triangle's box)
+				if (At.X < FMath::Min3(A.X, B.X, C.X) - SkinReach || At.X > FMath::Max3(A.X, B.X, C.X) + SkinReach
+					|| At.Y < FMath::Min3(A.Y, B.Y, C.Y) - SkinReach || At.Y > FMath::Max3(A.Y, B.Y, C.Y) + SkinReach
+					|| At.Z < FMath::Min3(A.Z, B.Z, C.Z) - SkinReach || At.Z > FMath::Max3(A.Z, B.Z, C.Z) + SkinReach)
 				{
-					Best = D;
-					Under = Shape.Colors[P];
+					continue;
+				}
+				// (its facing from its points' own, whichever way round its corners run)
+				if (FVector::DotProduct((Shape.Normals[I0] + Shape.Normals[I1] + Shape.Normals[I2]).GetSafeNormal(), Out) < 0.5)
+				{
+					continue;
+				}
+				const double Away = FVector::Dist(FMath::ClosestPointOnTriangleToPoint(At, A, B, C), At);
+				if (Away > SkinReach)
+				{
+					continue;
+				}
+				const double Weight = FVector::CrossProduct(B - A, C - A).Size() / 6.0 * FMath::Square(1.0 - Away / SkinReach);
+				for (const int32 I : { I0, I1, I2 })
+				{
+					FColor Paint = Shape.Colors[I];
+					Paint.A = 255;
+					Votes.FindOrAdd(Paint.ToPackedARGB()) += Weight;
+				}
+			}
+			FColor Under(96, 96, 96, 255);
+			double Most = 0.0;
+			for (const TPair<uint32, double>& Vote : Votes)
+			{
+				if (Vote.Value > Most)
+				{
+					Most = Vote.Value;
+					Under = FColor(Vote.Key);
+				}
+			}
+			if (Most <= 0.0)
+			{
+				double Best = TNumericLimits<double>::Max();
+				for (int32 P = 0; P < Known; ++P)
+				{
+					if (FVector::DotProduct(Shape.Normals[P], Out) < 0.5)
+					{
+						continue;
+					}
+					const double D = FVector::DistSquared(Shape.Points[P], At);
+					if (D < Best)
+					{
+						Best = D;
+						Under = Shape.Colors[P];
+					}
 				}
 			}
 			Under.A = 255;

@@ -169,6 +169,28 @@ namespace
 		{ "Zero", 0.05, 0.035, 1.18, 10, 30 },
 	};
 
+	/** A number in a model file: the first after Key at or after From (no JSON reader here; the files are the modeller's
+	 * own, one key order). At is left after it; npos where there is none. */
+	double NumberAfter(const std::string& Text, const std::string& Key, size_t From, size_t& At)
+	{
+		At = From == std::string::npos ? std::string::npos : Text.find("\"" + Key + "\":", From);
+		if (At == std::string::npos) return 0.0;
+		At += Key.size() + 3;
+		return std::strtod(Text.c_str() + At, nullptr);
+	}
+
+	/** How many slots a list of them holds, [[x, y, z, nx, ny, nz], ...], from its opening bracket. */
+	int SlotsAt(const std::string& Text, size_t Open)
+	{
+		int Depth = 0, Count = 0;
+		for (size_t K = Open; K < Text.size(); ++K)
+		{
+			if (Text[K] == '[' && ++Depth == 2) ++Count;
+			if (Text[K] == ']' && --Depth == 0) break;
+		}
+		return Count;
+	}
+
 	/** Titles as the rules give them (aces.ts aceTitle, aces.json's ranks and names), and what is painted. */
 	struct Title
 	{
@@ -183,6 +205,14 @@ namespace
 		{ "USA", "Captain Don Merrick", "CAPT. D. MERRICK" },
 		{ "USA", "Lieutenant Colonel Jack Calder", "LT. COL. J. CALDER" },
 		{ "USA", "Lieutenant Ray Ashford", "LT. R. ASHFORD" },
+		// (a carrier group's ace: the rules' navy lists, 4a9caaee)
+		{ "USA", "Ensign Tom Harland", "ENS. T. HARLAND" },
+		{ "USA", "Lieutenant (junior grade) Walt Brenner", "LT.(JG) W. BRENNER" },
+		{ "USA", "Lieutenant Commander Ed Mallory", "LCDR. E. MALLORY" },
+		{ "UK", "Sub-Lieutenant Peter Lisle", "S/LT P. LISLE" },
+		{ "UK", "Lieutenant Hugh Carver", "LT H. CARVER" },
+		{ "UK", "Lieutenant Commander Robert Allingham", "LT CDR R. ALLINGHAM" },
+		{ "UK", "Commander Giles Ashby", "CDR G. ASHBY" },
 		{ "GER", "Oberleutnant Kurt Vossler", "OBLT. K. VOSSLER" },
 		{ "GER", "Feldwebel Hans Albrecht", "FW. H. ALBRECHT" },
 		{ "SOV", "Senior Lieutenant Ivan Veresov", "ST. LT. I. VERESOV" },
@@ -274,6 +304,9 @@ int main(int Argc, char** Argv)
 		const std::vector<std::string> Tries = AirTally::NameTries("UK", "Flight Lieutenant Tom Harland");
 		const bool bOrder = Tries.size() == 3 && Tries[1] == "F/LT HARLAND" && Tries[2] == "HARLAND";
 		Bad += Check(bOrder, "shortened in order: rank and surname, then the surname alone", Joined(Tries));
+		const std::vector<std::string> Navy = AirTally::NameTries("UK", "Lieutenant Commander Robert Allingham");
+		const bool bWhole = Navy.size() == 3 && Navy[1] == "LT CDR ALLINGHAM" && Navy[2] == "ALLINGHAM";
+		Bad += Check(bWhole, "a two-word rank kept whole when shortened (the Fleet Air Arm's LT CDR)", Joined(Navy));
 		bool bSamples = true;
 		for (const char* Nation : { "UK", "USA", "GER", "SOV", "JAP", "ITA", "FRA", "POL", "FIN", "NED", "NOR", "ROM", "HUN", "CHN" })
 			bSamples = bSamples && !AirTally::NameTries(Nation, AirTally::SampleTitle(Nation)).empty();
@@ -283,7 +316,9 @@ int main(int Argc, char** Argv)
 	// His ink: yellow on an American machine's olive drab, else black on light paint and off-white on dark.
 	{
 		const bool bInk = AirTally::NameInk(0x4F5236, "USA") == 0xD9B43Au && AirTally::NameInk(0x4C4B35, "USA") == 0xD9B43Au
-			&& AirTally::NameInk(0x565C3A, "USA") == 0xD9B43Au && AirTally::NameInk(0x4F5236, "UK") == 0xF2F0E8u
+			&& AirTally::NameInk(0x565C3A, "USA") == 0xD9B43Au && AirTally::NameInk(0x555A47, "USA") == 0xD9B43Au
+			&& AirTally::NameInk(0x4F5236, "UK") == 0xF2F0E8u && AirTally::NameInk(0x84878A, "USA") == 0x1A1A1Au
+			&& AirTally::NameInk(0x4B5C68, "USA") == 0xF2F0E8u && AirTally::NameInk(0x2A3850, "USA") == 0xF2F0E8u
 			&& AirTally::NameInk(0xC0C4C8, "USA") == 0x1A1A1Au && AirTally::NameInk(0x5A6E8C, "USA") == 0xF2F0E8u
 			&& AirTally::NameInk(0xD8CFAE, "ITA") == 0x1A1A1Au && AirTally::NameInk(0x2E2E2E, "GER") == 0xF2F0E8u;
 		Bad += Check(bInk, "his ink for the paint under his name (the owner decides the olive drab)", "");
@@ -298,6 +333,38 @@ int main(int Argc, char** Argv)
 		AirTally::Letters Hand;
 		const bool bRead = AirTally::ReadLetters(Json, Hand);
 		Bad += Check(bRead, "the letters' sheet's index read", Path);
+		// (the game's own fighters, Content/Models beside Content/Data: each carries the line laid on here)
+		{
+			const size_t Data = Path.find("Data/Tally/");
+			const std::string Models = Data == std::string::npos ? std::string("Content/Models/") : Path.substr(0, Data) + "Models/";
+			int Carry = 0, Absent = 0;
+			std::string Off;
+			for (const Line& L : Lines)
+			{
+				std::ifstream File(Models + L.Name + ".json", std::ios::binary);
+				if (!File) { ++Absent; continue; }
+				const std::string Text((std::istreambuf_iterator<char>(File)), std::istreambuf_iterator<char>());
+				size_t At = Text.find("\"tally\":");
+				const size_t Name = At == std::string::npos ? At : Text.find("\"name\":{", At);
+				const double Cap = NumberAfter(Text, "cap", Name, At);
+				const double CapMin = NumberAfter(Text, "cap_min", Name, At);
+				const double Long = NumberAfter(Text, "long", Name, At);
+				const size_t Kills = Name == std::string::npos ? Name : Text.find("\"kills\":{", Name);
+				const int PerRow = static_cast<int>(NumberAfter(Text, "per_row", Kills, At));
+				const size_t Slots = At == std::string::npos ? At : Text.find("\"slots\":[", At);
+				const int Held = Slots == std::string::npos ? 0 : SlotsAt(Text, Slots + 8);
+				if (Name == std::string::npos || std::abs(Cap - L.Cap) > 1e-9 || std::abs(CapMin - L.CapMin) > 1e-9 || std::abs(Long - L.Long) > 1e-9
+					|| PerRow != L.PerRow || Held != L.Slots)
+				{
+					char Got[160];
+					std::snprintf(Got, sizeof(Got), " %s (cap %.3f, least %.3f, long %.2f, %d a row, %d slots)", L.Name, Cap, CapMin, Long, PerRow, Held);
+					Off += Got;
+				}
+				else ++Carry;
+			}
+			Bad += Check(Off.empty() && Carry >= 14, "the game's own fighters carry the name lines and kill rows laid on here",
+				std::to_string(Carry) + " of " + std::to_string(std::size(Lines)) + " (" + std::to_string(Absent) + " not in the game: the what-ifs)" + Off);
+		}
 		if (bRead)
 		{
 			std::string Missing;

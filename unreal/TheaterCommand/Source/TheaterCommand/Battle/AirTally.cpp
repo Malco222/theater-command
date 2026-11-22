@@ -297,7 +297,11 @@ namespace AirTally
 				{ "uk", "Squadron Leader", "S/LDR" }, { "uk", "Wing Commander", "W/CDR" }, { "uk", "Sergeant", "SGT" },
 				{ "uk", "Flight Sergeant", "F/SGT" },
 				{ "us", "Lieutenant", "LT." }, { "us", "Captain", "CAPT." }, { "us", "Major", "MAJ." }, { "us", "Lieutenant Colonel", "LT. COL." },
-				{ "us", "Ensign", "ENS." }, { "us", "Lieutenant (jg)", "LT.(JG)" }, { "us", "Lieutenant Commander", "LCDR." },
+				// (a carrier group's ace holds his navy's ranks: the rules' names.us.navy and names.uk.navy, ACES.md's
+				//  short forms; the Fleet Air Arm's plain Lieutenant is the only one in Britain's lists, the RAF has none)
+				{ "us", "Ensign", "ENS." }, { "us", "Lieutenant (junior grade)", "LT.(JG)" }, { "us", "Lieutenant Commander", "LCDR." },
+				{ "uk", "Sub-Lieutenant", "S/LT" }, { "uk", "Lieutenant", "LT" }, { "uk", "Lieutenant Commander", "LT CDR" },
+				{ "uk", "Commander", "CDR" },
 				{ "de", "Unteroffizier", "UFFZ." }, { "de", "Feldwebel", "FW." }, { "de", "Oberfeldwebel", "OFW." }, { "de", "Leutnant", "LT." },
 				{ "de", "Oberleutnant", "OBLT." }, { "de", "Hauptmann", "HPTM." }, { "de", "Major", "MAJ." },
 				{ "ru", "Junior Lieutenant", "ML. LT." }, { "ru", "Lieutenant", "LT." }, { "ru", "Senior Lieutenant", "ST. LT." },
@@ -487,7 +491,11 @@ namespace AirTally
 	bool OliveDrab(unsigned Rgb)
 	{
 		const int R = static_cast<int>((Rgb >> 16) & 0xFFu), G = static_cast<int>((Rgb >> 8) & 0xFFu), B = static_cast<int>(Rgb & 0xFFu);
-		return Lightness(Rgb) < 45.0 && std::abs(R - G) <= 0.1 * std::max(R, G) && std::min(R, G) - B >= 15;
+		// (ACES.md: dark, red and green within a tenth of each other, both well above blue. "Above" as a share of blue
+		//  as well as a step, so the art director's matte olive drab 555A47 on the game's own Mustang, 14 above blue,
+		//  is one; a grey or a navy blue-grey never is)
+		return Lightness(Rgb) < 45.0 && std::abs(R - G) <= 0.1 * std::max(R, G) && std::min(R, G) - B >= 10
+			&& std::min(R, G) >= 1.15 * B;
 	}
 
 	unsigned NameInk(unsigned SkinRgb, const std::string& Owner)

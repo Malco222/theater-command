@@ -1096,21 +1096,28 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    modeller's tally.name on every fighter, battle-models/air-next/ACES.md, after the art director's pass of 19:47Z 22
    November). Over his kill rows, on the line the modeller laid under the port cockpit sill: his rank short as his nation
    wrote it, his initials and surname, in plain block capitals (`F/LT T. HARLAND`, `OBLT. K. VOSSLER`, `ST. LT. I.
-   VERESOV`; Japan's and the nations ACES.md gives no short ranks for, initial and surname: `T. KAWANO`). At the
+   VERESOV`; a carrier group's ace his navy's: `ENS.`, `LT.(JG)`, `LCDR.`, the Fleet Air Arm's `S/LT`, `LT CDR`, `CDR`;
+   Japan's and the nations ACES.md gives no short ranks for, initial and surname: `T. KAWANO`). At the
    file's `cap` (5 cm; 4 on the Bf 109 and Me 262, 7 on the Hurricane, Warhawk and the plain fighters), smaller down to
    `cap_min` to fit the line, then shortened: rank and surname, then the surname alone (Battle/AirTally NameTries and
    LayName, the rules of acepanel.py). One small square a letter at its place along the line, upright, facing her skin
    there, so the name follows her curve; drawn with M_TallyMark from the letters' sheet (Content/Data/Tally/name-letters,
    Tools/name_letters.py: the modeller's hand, DejaVu Sans Bold narrowed to 0.72, 100 capitals with the accented ones the
    rules' Polish, Hungarian, Finnish and Romanian names use). One ink for the paint under the middle of the line: yellow
-   D9B43A on an American machine's olive drab, else black 1A1A1A on paint of L* 50 or more and off-white F2F0E8 under
-   it. A German pilot (the painter's nation decides, as the modeller's marks.record does) wears no victims' marks on his
+   D9B43A on an American machine's olive drab (dark, red and green close, both 10 or more and 1.15 times over blue, so
+   the game Mustang's matte 555A47 is one), else black 1A1A1A on paint of L* 50 or more and off-white F2F0E8 under it.
+   The paint under a mark, a bar or the name is the colour with the most of her skin within 2 cm about it, by area,
+   not the nearest point (a rivet's or a seam's under a third of the slots). A German pilot (the painter's nation decides, as the modeller's marks.record does) wears no victims' marks on his
    side: his kills are white bars (DAD8CE) on his rudder's port face, one a kill, from the modeller's tally.rudder; the
    scene's rudders do not turn. Each part fades by its own size (a capital, a mark, a bar) from 7 px to 4. A fighter's
    marks to a row are her file's (`per_row`: the Spitfire's nine, her number covering a tenth column, 27 at most). The
    test ace without a title takes his nation's sample (`Flight Lieutenant Tom Harland`). The log says "Air battle:
    aces: "F/LT T. HARLAND" painted under Spitfire's cockpit (key N), capitals 5.0 cm, off-white ink" and "... painted as
-   N bars on Bf109's rudder". The game's fighters carry the line once the staged models are imported (held for Brian's
-   word, as the modeller's move into battle-models/air/ is); until then a model without one flies with its marks only.
+   N bars on Bf109's rudder". The game's fighters are the modeller's battle models with the line (Brian's yes, 20:12Z
+   22 November): the Spitfire, Hurricane, Bf 109, Fw 190, Zero, Yak, Warhawk and the plain fighter replace the old
+   Blender sculpts, which stay in Content/Models/Old (`-TheaterOldVehicles` draws them instead, to compare and time
+   only: the battle's airscrews and marks still read the new files; Tools/build_plane.py now writes there); the Mustang takes the modeller's shape and keeps the game's own paint
+   and paint by date; the Hellcat, Wildcat, C.202 and Me 262 their new files; the carrier fighter the unit table names
+   is new. The two what-if fighters wait for something to name them. A model without the line flies with marks only.
    Look for: the letters upright and reading from the nose aft (not mirrored), on her skin, not over the sill, the glass
    or the number; even spacing; the ink as the rule says; no shimmer as he moves off.

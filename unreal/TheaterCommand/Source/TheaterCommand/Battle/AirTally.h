@@ -115,8 +115,9 @@ namespace AirTally
 	/** A colour's lightness L* (0 black, 100 white), from its sRGB 0xRRGGBB. */
 	double Lightness(unsigned Rgb);
 
-	/** An American olive drab: a dark brownish green (L* under 45, red and green within a tenth of each other, both 15
-	 * or more over blue: the Warhawk's 4F5236, the Mustang's 4C4B35). */
+	/** An American olive drab: a dark brownish green (L* under 45, red and green within a tenth of each other, both 10
+	 * or more over blue and at least 1.15 times it: the Warhawk's 4F5236, the modeller's Mustang 4C4B35, the game's
+	 * Mustang in the art director's matte 555A47, the unit table's 565C3A). */
 	bool OliveDrab(unsigned Rgb);
 
 	/** The ink of his name for the paint under it (ACES.md, the art director's 19:47Z): yellow 0xD9B43A on an American
