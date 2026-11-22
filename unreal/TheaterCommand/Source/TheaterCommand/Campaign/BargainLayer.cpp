@@ -1819,7 +1819,8 @@ namespace BargainLayer
 		/**
 		 * The tray card's legion line under its title (call 13): one line in PT Serif 12, paper-300. It asks for no width of
 		 * its own, so it never widens the card (the title row sets the card's width, about 355 px for one division at 1441),
-		 * and takes the width the card gives it; where the words are longer it is cut at a whole word with the ellipsis.
+		 * and takes the width the card gives it under the title's text (312 px there); where the words are longer it is cut
+		 * at a whole word with the ellipsis.
 		 * The cut is made again only when that width or the words change: painting it allocates nothing once laid.
 		 */
 		class SLegionLine : public SLeafWidget
@@ -1989,7 +1990,7 @@ namespace BargainLayer
 
 	TSharedRef<SWidget> TrayFlag(int32 CorpsId)
 	{
-		return SNew(SBox).Padding(FMargin(0.0f, 0.0f, 6.0f, 0.0f)).VAlign(VAlign_Center)
+		return SNew(SBox).Padding(FMargin(0.0f, 0.0f, static_cast<float>(Bargains::TrayFlagGap), 0.0f)).VAlign(VAlign_Center)
 			.Visibility_Lambda([CorpsId]() { return Impl::TrayOf(CorpsId) ? EVisibility::Visible : EVisibility::Collapsed; })
 			.ToolTipText_Lambda([CorpsId]() { const Impl::FTrayLaid* Tray = Impl::TrayOf(CorpsId); return Tray ? Tray->Tip : FText::GetEmpty(); })
 			[
@@ -2015,9 +2016,10 @@ namespace BargainLayer
 
 	TSharedRef<SWidget> TrayLegion(int32 CorpsId)
 	{
-		// (under the title, a pixel below it as the kind line is, and short of the card's right side by its 4; collapsed
-		// for any corps the tray's flag and Courier line are not shown for: the same TrayOf, fogged as they are)
-		return SNew(SBox).Padding(FMargin(0.0f, 1.0f, 4.0f, 0.0f))
+		// (under the title's text, past the corner flag and its gap (TrayLegionIndent: the line shows only where the flag
+		// does), a pixel below the title as the kind line is, and short of the card's right side by its 4; collapsed for any
+		// corps the tray's flag and Courier line are not shown for: the same TrayOf, fogged as they are)
+		return SNew(SBox).Padding(FMargin(static_cast<float>(Bargains::TrayLegionIndent(true)), 1.0f, 4.0f, 0.0f))
 			.Visibility_Lambda([CorpsId]() { return Impl::TrayOf(CorpsId) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 			[
 				SNew(Impl::SLegionLine, CorpsId)

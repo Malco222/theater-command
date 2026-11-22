@@ -1772,7 +1772,9 @@ namespace
 	 * Calls 11 and 13 on the tray card. The corner flag is the size the other tray cards' flags are: an ally's corps's in
 	 * CampaignHUD's MakeCard, read from the source here so the two cannot part. The legion's line under the title is one
 	 * line in the card's width, never wider: the game's one-division card is 355 px at 1441, and the line has that less the
-	 * button's padding (8 and 4) and its own 4 on the right; cut at a whole word with the ellipsis where it is too long.
+	 * button's padding (8 and 4), its own 4 on the right and, on the left, the corner flag and its gap, so that it starts
+	 * under the title's text (the look review's finding 1, option a); cut at a whole word with the ellipsis where it is too
+	 * long.
 	 */
 	void TestTrayCard()
 	{
@@ -1808,12 +1810,22 @@ namespace
 		const FFace Face = TrayLegionFace(1.0);
 		CHECK(Face.Family == EFamily::Serif && Face.Style == EStyle::Regular && Near(Face.Size, 12.0) && Near(TrayLegionFace(1.08).Size, 12.0 * 1.08));
 		CHECK(Face.Family == PlateLineFace(1.0).Family && Near(Face.Size, PlateLineFace(1.0).Size));
-		const double Inside = 355.0 - 8.0 - 4.0 - 4.0;
+		// (under the title's text: the corner flag's 21 and its gap of 6 while the flag shows, as in MakeCard's title row,
+		// where the title follows TrayFlag; flush where no flag shows. The line shows only with the flag)
+		CHECK(Near(TrayFlagGap, 6.0) && Near(TrayLegionIndent(true), 27.0) && Near(TrayLegionIndent(true), TrayFlagW + TrayFlagGap) && Near(TrayLegionIndent(false), 0.0));
+		const double Flush = 355.0 - 8.0 - 4.0 - 4.0;
+		const double Inside = Flush - TrayLegionIndent(true);
+		CHECK(Near(Flush, 339.0) && Near(Inside, 312.0));
 		const std::string Blue = "Spanish volunteers, with the German army, Leningrad front";
-		std::string Fit;
-		CHECK(FitLine(Blue, Face, Inside, KitMeasure, Fit) && Fit == Blue && KitMeasure(Blue, Face).X <= Inside);
-		CHECK(KitMeasure(Blue, FaceOf(EFamily::Serif, EStyle::Regular, 13.0, 1.0)).X > Inside); // (why 12, not the picture's 13)
 		const std::string Dots = "\xE2\x80\xA6";
+		std::string Fit;
+		// (flush with the flag the whole line would fit at 12; under the title's text it is cut at a word, at 12 and at the
+		// picture's 13 alike: the face is the art director's to rule, NOTES)
+		CHECK(FitLine(Blue, Face, Flush, KitMeasure, Fit) && Fit == Blue && KitMeasure(Blue, Face).X <= Flush);
+		CHECK(!FitLine(Blue, Face, Inside, KitMeasure, Fit) && Fit == "Spanish volunteers, with the German army, Leningrad" + Dots && KitMeasure(Fit, Face).X <= Inside);
+		const FFace Picture = FaceOf(EFamily::Serif, EStyle::Regular, 13.0, 1.0);
+		CHECK(KitMeasure(Blue, Picture).X > Flush);
+		CHECK(!FitLine(Blue, Picture, Inside, KitMeasure, Fit) && Fit == "Spanish volunteers, with the German army" + Dots && KitMeasure(Fit, Picture).X <= Inside);
 		auto EndsDots = [&Dots](const std::string& Text) { return Text.size() >= Dots.size() && Text.compare(Text.size() - Dots.size(), Dots.size(), Dots) == 0; };
 		// Too long: cut at a whole word, the comma before the cut dropped, the ellipsis after it, no wider than the line.
 		const double Short = KitMeasure("Spanish volunteers, with the German army, Leningrad", Face).X;
@@ -1832,7 +1844,8 @@ namespace
 		const std::string Whole = LegionLine(Far, Long);
 		CHECK_TEXT(Whole, "Volunteers from The Most Serene Republic of Somewhere, with the German army, Kalinin and Novgorod front");
 		CHECK(!FitLine(Whole, Face, Inside, KitMeasure, Fit) && EndsDots(Fit) && KitMeasure(Fit, Face).X <= Inside && Fit.find('\n') == std::string::npos);
-		CHECK(Whole.rfind(Fit.substr(0, Fit.size() - Dots.size()), 0) == 0 && Whole[Fit.size() - Dots.size()] == ',' && Fit == "Volunteers from The Most Serene Republic of Somewhere" + Dots);
+		CHECK(Whole.rfind(Fit.substr(0, Fit.size() - Dots.size()), 0) == 0 && Whole[Fit.size() - Dots.size()] == ' ' && Fit == "Volunteers from The Most Serene Republic of" + Dots);
+		CHECK(!FitLine(Whole, Face, Flush, KitMeasure, Fit) && Whole[Fit.size() - Dots.size()] == ',' && Fit == "Volunteers from The Most Serene Republic of Somewhere" + Dots);
 		// One word too long: by letters; nothing where not even the ellipsis fits; nothing to fit fits.
 		CHECK(!FitLine("Unterseebootsflottille", Face, 40.0, KitMeasure, Fit) && EndsDots(Fit) && KitMeasure(Fit, Face).X <= 40.0 && Fit == "Unte" + Dots);
 		CHECK(!FitLine(Blue, Face, 2.0, KitMeasure, Fit) && Fit.empty());

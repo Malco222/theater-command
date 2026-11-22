@@ -886,14 +886,24 @@ namespace Bargains
 	/** The tray's corner flag: the size the other tray cards' flags are (call 11), an ally's corps's in MakeCard, 21 x 14 (look_test reads it there). */
 	inline constexpr double TrayFlagW = 21.0;
 	inline constexpr double TrayFlagH = 14.0;
+	/** The corner flag's gap before the title: TrayFlag's right padding, the 6 MakeCard gives an ally's flag. */
+	inline constexpr double TrayFlagGap = 6.0;
+	/**
+	 * The legion line's left padding on the tray card (the look review's finding 1, option a): under the title's text, as
+	 * the picture has it (its title, legion line and Courier line on one left edge), so past the corner flag and its gap
+	 * while the flag shows, and flush with the card where it does not. The line shows only where the flag does (the same
+	 * TrayOf), so in the game it is always TrayFlagW + TrayFlagGap, 27. The Courier line stays where MakeCard puts it.
+	 */
+	constexpr double TrayLegionIndent(bool bFlagShown) { return bFlagShown ? TrayFlagW + TrayFlagGap : 0.0; }
 
 	FFace PlateLineFace(double Px); // PT Serif 12, paper-300
 	FFace PlateNameFace(double Px); // PT Serif 13, paper-200
 	FFace TrayLineFace(double Px); // Courier Prime 13, brass-300
 	/**
 	 * The tray's legion line under the title: PT Serif 12 in paper-300, the face of the legion's line on its home's plate
-	 * (PlateLineFace). The picture's 13 would cut "front" off on the game's one-division card (355 px at 1441, its words
-	 * 344.6 at 13 against 339 inside the card; 318.1 at 12).
+	 * (PlateLineFace); the picture's is 13, which is the art director's to rule (NOTES). On the game's one-division card
+	 * (355 px at 1441) the line has 312 px under the title's text (TrayLegionIndent): the Blue Division's words measure
+	 * 318.1 at 12, cut to "... Leningrad" and the ellipsis, and 344.6 at 13, cut to "... German army" and the ellipsis.
 	 */
 	FFace TrayLegionFace(double Px);
 	FFace TagFace(double Px); // PT Serif 12, paper-200
