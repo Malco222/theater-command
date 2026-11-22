@@ -25,15 +25,16 @@
 import data from '../../data/campaign/capitulations.json';
 import { reliefBar } from './ai';
 import { skyDenies } from './air';
-import { allied, assess, atWar, capitulate, ensureSupply, headline, limitAttackers, railReachFor, theName, victorOf } from './game';
+import { allied, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, hostileUnits, limitAttackers, railReachFor, theName, thornGround, victorOf } from './game';
 import { stopDef, stopOf } from './history';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { standsFreed } from './liberation';
-import { planMarch } from './marches';
+import { farGround, marchMonths } from './marches';
 import { fieldCtrl } from './siege';
-import { NAVY, seaPath } from './navy';
-import type { Corps, Game, Region } from './types';
+import { NAVY, landingOpts, seaPath, surpriseOn } from './navy';
+import { prizeOut } from './prizes';
+import { KIND, STACK, type Corps, type Game, type Region } from './types';
 
 /** [nation, the enemy it yields to, months from that enemy's first blow to the yield, the book's theatre or null, mark]. */
 export type YieldRow = [string, string, number, string | null, string];
@@ -81,52 +82,98 @@ function stepsFrom(g: Game, from: number, most: number): Map<number, number> {
   return d;
 }
 
+/** How an ally's corps could come to strike the place: the provinces it could attack from, or a landing on it from its port. */
+type Coming = { from: number[]; ship: boolean } | { landing: number };
+
+/** A corps' moves as if its month were whole, while `f` asks where it could go; its own moves are put back after. */
+function fresh<T>(c: Corps, f: () => T): T {
+  const had = c.ap;
+  c.ap = Math.max(c.ap, c.apMax ?? c.ap);
+  try { return f(); } finally { c.ap = had; }
+}
+
 /**
- * Whether a corps of an ally can stand on the place or beside it this month or next, ready to attack: already there;
- * a train takes it there this month; a march of a month brings it; or ships carry it there, landing on the enemy's
- * shore where a landing could go (navy.ts whyNotLand's own tests: shipping, a port to sail from, the ground not barred
- * to it, the sea's path within a landing's range, the sky not denied, the book's line open), or into a harbour its side
- * holds. Moves already spent and shipping already in use this month do not count against it: the question is next month.
+ * How a corps of an ally could come to attack the place this month or next. By land: the provinces of its side beside
+ * the place, clear of the enemy, that it stands on already, that a train takes it to this month, or that a march of a
+ * month brings it to over friendly ground. By ship: those of them with a harbour its side holds, from a harbour of its
+ * own (navy.ts whyNotShip's tests). Or a landing on the place itself from its port, where the place is the enemy's
+ * (whyNotLand's tests for the corps: the ground not barred to it, the book's line open, the sea's path within a
+ * landing's range, the sky not denied). Moves already spent and shipping already in use this month do not count against
+ * it: the question is next month. Where it stands on the place or beside it, it attacks from there.
  */
-function canCome(g: Game, c: Corps, t: Region, steps: Map<number, number>, rails: Map<number, Set<number>>): boolean {
+function canCome(g: Game, c: Corps, t: Region, steps: Map<number, number>, kept: { rails: Map<number, Set<number>>; ground: Map<number, Map<number, { cost: number }>> }): Coming | null {
   const at = g.regions[c.reg];
-  const goals = [t, ...t.nb.map((j) => g.regions[j])];
-  if (goals.some((p) => p.id === at.id)) return true;
+  if (at.id === t.id || t.nb.includes(at.id)) return { from: [at.id], ship: false };
+  // (Ground of its side beside the place, clear of the enemy's army: somewhere to stand and attack from.)
+  const beside = t.nb.map((j) => g.regions[j]).filter((p) => allied(g, c.nat, p.ctrl) && !hostileUnits(g, p, c.nat).length);
+  const from = new Set<number>();
   const hops = steps.get(at.id);
-  // By rail this month, to its side's ground on or beside the place.
-  if (hops !== undefined && hops <= RAIL_HOPS) {
-    let r = rails.get(c.id);
-    if (!r) { r = railReachFor(g, [c]); rails.set(c.id, r); }
-    if (goals.some((p) => allied(g, c.nat, p.ctrl) && r!.has(p.id))) return true;
+  // By rail this month.
+  if (hops !== undefined && hops <= RAIL_HOPS && beside.length) {
+    let r = kept.rails.get(c.id);
+    if (!r) { r = fresh(c, () => railReachFor(g, [c])); kept.rails.set(c.id, r); }
+    for (const p of beside) if (r.has(p.id)) from.add(p.id);
   }
-  // By road, a month's march to its side's ground on or beside the place.
-  if (hops !== undefined && hops <= ROAD_HOPS) {
-    for (const p of goals) {
-      if (!allied(g, c.nat, p.ctrl)) continue;
-      const plan = planMarch(g, c, p.id);
-      if (plan.ok && Math.max(1, plan.months) <= 1) return true;
-    }
+  // By road, a month's march over friendly ground (marches.ts farGround: the march a staff could order, whoever's month it is).
+  if (hops !== undefined && hops <= ROAD_HOPS && beside.length) {
+    let m = kept.ground.get(c.id);
+    if (!m) { m = farGround(g, c); kept.ground.set(c.id, m); }
+    for (const p of beside) { const e = m.get(p.id); if (e && marchMonths(c, e.cost) <= 1) from.add(p.id); }
   }
-  // By sea, from a harbour its side holds.
-  if (at.port && allied(g, c.nat, at.ctrl) && g.nations[c.nat].sealift > 0) {
-    for (const p of goals) {
-      if (!p.seas.length || lineShut(g, c.nat, p)) continue;
-      if (atWar(g, c.nat, p.ctrl)) { if (!whyBarred(g, c, p) && seaPath(g, c.nat, at, p, { max: NAVY.landing.range }) && !skyDenies(g, c.nat, p.id)) return true; }
-      else if (p.port && allied(g, c.nat, p.ctrl) && seaPath(g, c.nat, at, p)) return true;
-    }
+  if (from.size) return { from: [...from], ship: false };
+  const n = g.nations[c.nat];
+  if (!at.port || !allied(g, c.nat, at.ctrl) || n.sealift <= 0 || c.kind === 'fort' || prizeOut(g, at, 'harbour') > 0) return null;
+  // By ship, into a harbour of its side beside the place.
+  for (const p of beside) {
+    if (!p.port || thornGround(g, p, c.nat) || lineShut(g, c.nat, p) || prizeOut(g, p, 'harbour') > 0 || whyBarred(g, c, p)) continue;
+    if (seaPath(g, c.nat, at, p)) from.add(p.id);
   }
-  return false;
+  if (from.size) return { from: [...from], ship: true };
+  // A landing on the place itself, where it is the enemy's.
+  if (t.seas.length && atWar(g, c.nat, t.ctrl) && !allied(g, c.nat, t.ctrl) && !lineShut(g, c.nat, t) && !whyBarred(g, c, t)) {
+    const surprise = surpriseOn(g, c.nat, t);
+    if (seaPath(g, c.nat, at, t, { max: NAVY.landing.range, surprise }) && (surprise || !skyDenies(g, c.nat, t.id))) return { landing: at.id };
+  }
+  return null;
 }
 
 /** A relief in reach: who brings it, where it would strike, and the odds it would go in at. */
 export interface Relief { by: string; target: number; odds: number; corps: number[] }
 
+/** A corps' weight in an attack, as limitAttackers ranks it. */
+const weight = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
+
+/**
+ * The corps that come by land, each put on a province it could attack from while that province has room (STACK, its
+ * side's corps already there counted), the strongest first and each where the fewest stand: copies of them standing
+ * there, so the attack is weighed from where it would go in (limitAttackers' roads, its sides, assess's rivers and
+ * flanks), and nothing in the war is moved.
+ */
+function standThem(g: Game, ally: string, cs: { c: Corps; from: number[] }[]): Corps[] {
+  const mine = new Set(cs.map((x) => x.c));
+  const load = new Map<number, number>();
+  const room = (id: number): number => { if (!load.has(id)) load.set(id, friendlyUnits(g, g.regions[id], ally).filter((u) => !mine.has(u as Corps)).length); return load.get(id)!; };
+  const out: Corps[] = [];
+  for (const { c, from } of [...cs].sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
+    // (One already on the place or beside it attacks from where it stands.)
+    if (from.length === 1 && from[0] === c.reg) { out.push(c); load.set(c.reg, room(c.reg) + 1); continue; }
+    const open = from.filter((id) => room(id) < STACK).sort((a, b) => room(a) - room(b) || a - b);
+    if (!open.length) continue;
+    load.set(open[0], room(open[0]) + 1);
+    out.push({ ...c, reg: open[0] });
+  }
+  return out;
+}
+
 /**
  * (ii) An ally's relief in reach of the country, or null. Each ally at war with its enemies is reckoned on its own: its
- * corps in supply in the field that could stand on or beside a province of the country's home ground where the enemy's
- * army stands, this month or next, sent in as the computer would send them (limitAttackers) and weighed as it weighs a
- * relief (assess, the garrison's sortie included where the place is a besieged town). In reach when the odds reach
- * the bar the computer asks before it goes to a relief: 1.25 at a capital or great city, 1.5 elsewhere (reliefBar).
+ * corps in supply in the field that could attack a province of the country's home ground where the enemy's army
+ * stands, this month or next, weighed as the computer weighs a relief (assess, the garrison's sortie included where the
+ * place is a besieged town) and sent in as it would send them: by land from the provinces they would attack from
+ * (limitAttackers), with as many shipped there as its shipping carries (sealift, a corps each); or as a landing on the
+ * place from one port, no more than its shipping carries nor than STACK, at a landing's strength (landingOpts). In reach
+ * when the odds reach the bar the computer asks before it goes to a relief: 1.25 at a capital or great city, 1.5
+ * elsewhere (reliefBar).
  */
 export function reliefInReach(g: Game, nat: string): Relief | null {
   const foes = new Set(g.nations[nat].atWar.filter((e) => g.nations[e]?.alive));
@@ -139,20 +186,38 @@ export function reliefInReach(g: Game, nat: string): Relief | null {
   if (!friends.length) return null;
   const free = g.corps.filter((c) => !c.dead && friends.includes(c.nat) && c.kind !== 'fort' && c.town === undefined && c.leave === undefined && c.supplied && g.regions[c.reg]?.units.includes(c));
   if (!free.length) return null;
-  const rails = new Map<number, Set<number>>();
+  const kept = { rails: new Map<number, Set<number>>(), ground: new Map<number, Map<number, { cost: number }>>() };
   for (const t of targets) {
     const steps = stepsFrom(g, t.id, RAIL_HOPS);
     // (The enemy there: whose army stands on it.)
     const foe = t.units.find((u) => !u.dead && foes.has(u.nat))?.nat;
     if (!foe) continue;
+    const bar = reliefBar(g, t);
     for (const ally of friends) {
       if (!atWar(g, ally, foe)) continue;
-      const pool = free.filter((c) => c.nat === ally && canCome(g, c, t, steps, rails));
-      if (!pool.length) continue;
-      const force = limitAttackers(g, pool, t);
-      if (!force.length) continue;
-      const odds = assess(g, force, t).odds;
-      if (odds >= reliefBar(g, t)) return { by: ally, target: t.id, odds, corps: force.map((c) => c.id) };
+      const lift = g.nations[ally].sealift;
+      const land: { c: Corps; from: number[] }[] = [], shipped: { c: Corps; from: number[] }[] = [], ports = new Map<number, Corps[]>();
+      for (const c of free) {
+        if (c.nat !== ally) continue;
+        const how = canCome(g, c, t, steps, kept);
+        if (!how) continue;
+        if ('landing' in how) { if (!ports.has(how.landing)) ports.set(how.landing, []); ports.get(how.landing)!.push(c); }
+        else (how.ship ? shipped : land).push({ c, from: how.from });
+      }
+      // By land, with as many shipped up as the shipping carries, the strongest first.
+      const byShip = shipped.sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id).slice(0, Math.max(0, lift));
+      const force = limitAttackers(g, standThem(g, ally, [...land, ...byShip]), t);
+      if (force.length) {
+        const odds = assess(g, force, t).odds;
+        if (odds >= bar) return { by: ally, target: t.id, odds, corps: force.map((c) => c.id) };
+      }
+      // Or a landing on the place from one port.
+      for (const [, cs] of [...ports].sort(([a], [b]) => a - b)) {
+        const group = cs.sort((a, b) => weight(g, b) - weight(g, a) || a.id - b.id).slice(0, Math.min(lift, STACK));
+        if (!group.length || (gunsRule(g) && !group.some(fights))) continue;
+        const odds = assess(g, group, t, landingOpts(g, group, t)).odds;
+        if (odds >= bar) return { by: ally, target: t.id, odds, corps: group.map((c) => c.id) };
+      }
     }
   }
   return null;
@@ -174,7 +239,8 @@ function noteBlows(g: Game, nat: string): void {
       const r = g.regions[rep.region];
       if (rep.attNat === e && r && r.owner === nat && !r.overseas) at = Math.min(at ?? rep.turn, rep.turn);
     }
-    if (at === undefined && g.regions.some((r) => r.owner === nat && !r.overseas && (r.ctrl === e || r.units.some((u) => !u.dead && u.nat === e)))) at = g.turn;
+    // (With no battle to date it: an enemy that plays after the country in the month came in its own phase of the last.)
+    if (at === undefined && g.regions.some((r) => r.owner === nat && !r.overseas && (r.ctrl === e || r.units.some((u) => !u.dead && u.nat === e)))) at = g.order.indexOf(e) > g.order.indexOf(nat) ? g.turn - 1 : g.turn;
     if (at !== undefined) g.flags[key] = at;
   }
 }
@@ -210,7 +276,8 @@ export function yieldMonth(g: Game, nat: string): void {
   // A country that has been liberated stands for as long as its capital does, as it does against the fall.
   if (standsFreed(g, n)) { delete g.flags[key]; return; }
   const mine = nat === g.human;
-  if (!mine && stopOf(g) <= 2 && stopDef(g).book) {
+  // (The record's row is the first fall's. A country liberated since falls again by the cause.)
+  if (!mine && !n.freedOn && stopOf(g) <= 2 && stopDef(g).book) {
     const by = victorOf(g, nat);
     const row = by ? bookRow(g, nat, by) : undefined;
     if (by && row) {

@@ -10,7 +10,8 @@ import nations from '../data/campaign/nations.json';
 import stage from '../data/campaign/stage.json';
 import { reliefBar } from '../src/campaign/ai';
 import { fallWarning } from '../src/campaign/danger';
-import { addCorps, allied, createGame, declareWar, removeCorps, victorOf } from '../src/campaign/game';
+import { addCorps, allied, createGame, declareWar, frontage, railReachFor, removeCorps, victorOf } from '../src/campaign/game';
+import { cutRail } from '../src/campaign/rails';
 import { setStop, stopOf } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { joinTown } from '../src/campaign/siege';
@@ -197,8 +198,9 @@ describe('the cause, stops 3-5', () => {
     const bra = R(g, 'Brabant');
     for (const c of [...bra.units]) removeCorps(g, c);
     bra.ctrl = 'NED';
-    // A great relief beside the capital: in reach at the capital's bar (1.25), the garrison's sortie counted.
-    const big = [add(g, 'FRA', 'Brabant', 6, 'arm'), add(g, 'FRA', 'Brabant', 6, 'mot')];
+    // A relief beside the capital at the capital's bar (1.25) and short of 1.5: in reach only at a capital's bar, and
+    // only with the garrison's sortie counted.
+    const big = [add(g, 'FRA', 'Brabant', 2)];
     expect(reliefBar(g, holland)).toBe(1.25);
     const help = reliefInReach(g, 'NED');
     expect(big.every((c) => c.supplied)).toBe(true);
@@ -206,6 +208,7 @@ describe('the cause, stops 3-5', () => {
     expect(help!.by).toBe('FRA');
     expect(help!.target).toBe(holland.id);
     expect(help!.odds).toBeGreaterThanOrEqual(1.25);
+    expect(help!.odds).toBeLessThan(1.5);
     yieldMonth(g, 'NED');
     expect(g.nations.NED.alive).toBe(true);
 
@@ -260,7 +263,7 @@ describe('the cause, stops 3-5', () => {
     expect(g.nations.NOR.fellOn?.to).toBe('GER');
   });
 
-  it('Norway: a British army in a home port across the North Sea is in reach by ship, and not without shipping', () => {
+  it('Norway: a British army in a home port across the North Sea is in reach by ship as far as the shipping carries it, at a landing\'s strength', () => {
     const g = open();
     declareWar(g, 'GER', 'NOR');
     strip(g, 'NOR');
@@ -268,10 +271,15 @@ describe('the cause, stops 3-5', () => {
     const bergen = R(g, 'Bergen');
     const quay = g.regions.find((r) => r.owner === 'UK' && r.ctrl === 'UK' && !r.overseas && r.port && r.seas.some((z) => bergen.seas.includes(z)))!;
     expect(quay).toBeDefined();
-    addCorps(g, 'UK', 'Expeditionary force', 'inf', 4, quay.id, {});
-    expect(g.nations.UK.sealift).toBeGreaterThan(0);
+    for (let k = 0; k < 3; k++) addCorps(g, 'UK', `Expeditionary force ${k + 1}`, 'inf', 4, quay.id, {});
+    // Three corps in the lift: in reach.
+    g.nations.UK.sealift = 3;
     const help = reliefInReach(g, 'NOR');
     expect(help?.by).toBe('UK');
+    expect(help!.corps).toHaveLength(3);
+    // Shipping for one: one corps going ashore at a landing's strength cannot win against a division in the mountains.
+    g.nations.UK.sealift = 1;
+    expect(reliefInReach(g, 'NOR')).toBeNull();
     g.nations.UK.sealift = 0;
     expect(reliefInReach(g, 'NOR')).toBeNull();
   });
@@ -282,6 +290,97 @@ describe('the cause, stops 3-5', () => {
     g.nations.NED.freedOn = { turn: g.turn - 1, week: 1, by: 'UK' };
     yieldMonth(g, 'NED');
     expect(g.nations.NED.alive).toBe(true);
+  });
+});
+
+describe('the relief as the computer would send it (the review, 22 November)', () => {
+  /** Belgium in the war on the Allied side, the Netherlands beaten, Germans round Amsterdam and in Brabant. */
+  function lowCountries(): Game {
+    const g = open();
+    declareWar(g, 'GER', 'BEL');
+    beatenNED(g, 2);
+    return g;
+  }
+
+  it('an ally\'s corps that has moved this month still comes by train: the question is next month', () => {
+    const g = lowCountries();
+    const f = add(g, 'FRA', 'Lille', 6, 'arm');
+    f.ap = 0;
+    expect(reliefInReach(g, 'NED')?.by).toBe('FRA');
+    expect(f.ap).toBe(0);
+  });
+
+  it('where no train runs, a march of a month brings it, whoever\'s month it is', () => {
+    const g = lowCountries();
+    const f = add(g, 'FRA', 'Lille', 6, 'arm');
+    expect(cutRail(g, R(g, 'Lille').id)).toBe(true);
+    f.ap = 4;
+    expect(railReachFor(g, [f]).size).toBe(0);
+    f.ap = 0;
+    expect(g.human).toBeNull();
+    expect(reliefInReach(g, 'NED')?.by).toBe('FRA');
+  });
+
+  it('it is weighed from where it would stand: corps with no room beside the place do not count', () => {
+    const g = lowCountries();
+    const t = R(g, 'Brabant');
+    // The ground of the Allies' side beside Brabant, clear of the enemy, filled with a weak Belgian army.
+    const beside = t.nb.map((j) => g.regions[j]).filter((p) => allied(g, 'FRA', p.ctrl) && !p.units.some((u) => !u.dead && !allied(g, u.nat, 'FRA')));
+    expect(beside.length).toBeGreaterThan(0);
+    for (const p of beside) for (let k = p.units.filter((u) => allied(g, u.nat, 'FRA')).length; k < 5; k++) { const b = add(g, 'BEL', p.name, 1); b.str = 0.05; }
+    const far = ['Paris', 'Calais', 'Somme', 'Rouen'].map((n) => add(g, 'FRA', n, 6, 'arm'));
+    expect(reliefInReach(g, 'NED')).toBeNull();
+    // Room again: the same French army is in reach.
+    for (const p of beside) for (const b of p.units.filter((u) => u.nat === 'BEL')) removeCorps(g, b);
+    const help = reliefInReach(g, 'NED');
+    expect(help?.by).toBe('FRA');
+    expect(help!.corps.every((id) => far.some((c) => c.id === id))).toBe(true);
+  });
+
+  it('and goes in by the roads from there: an army spread over France counts no more corps than one province\'s roads carry', () => {
+    const g = lowCountries();
+    const t = R(g, 'Brabant');
+    // Liege full of a weak Belgian army: Antwerp is the one province of the Allies' side the French could stand on.
+    const lie = R(g, 'Liege');
+    for (let k = lie.units.filter((u) => allied(g, u.nat, 'FRA')).length; k < 5; k++) { const b = add(g, 'BEL', 'Liege', 1); b.str = 0.05; }
+    const far = ['Paris', 'Calais', 'Somme', 'Rouen', 'Normandy', 'Champagne'].map((n) => add(g, 'FRA', n, 2, 'inf'));
+    const help = reliefInReach(g, 'NED');
+    expect(help?.by).toBe('FRA');
+    expect(help!.target).toBe(t.id);
+    expect(help!.corps.length).toBeLessThanOrEqual(frontage(t));
+    expect(help!.corps.length).toBeLessThan(far.length);
+  });
+
+  it('a country liberated since falls again by the cause, not by the record\'s row for its first fall', () => {
+    const g = open(true, 1, null, 1);
+    const holland = beatenNED(g, 1);
+    g.flags['blow:NED:GER'] = g.turn - 5;
+    g.nations.NED.freedOn = { turn: g.turn - 3, week: 1, by: 'UK' };
+    // Its capital lost again, its army gone, and a French relief at the capital's door.
+    holland.ctrl = 'GER';
+    declareWar(g, 'GER', 'BEL');
+    const bra = R(g, 'Brabant');
+    for (const c of [...bra.units]) removeCorps(g, c);
+    bra.ctrl = 'NED';
+    add(g, 'FRA', 'Brabant', 6, 'arm');
+    expect(stopOf(g)).toBe(1);
+    yieldMonth(g, 'NED');
+    expect(g.nations.NED.alive).toBe(true);
+  });
+
+  it('a first blow with no battle to date it is dated by the month\'s order: an enemy that plays later came the month before', () => {
+    const g = open();
+    declareWar(g, 'SOV', 'HUN');
+    const hu = g.regions.find((r) => r.owner === 'HUN' && !r.overseas && r.id !== g.nations.HUN.capital)!;
+    take(g, 'SOV', hu.name);
+    expect(g.reports.some((rep) => rep.attNat === 'SOV')).toBe(false);
+    yieldMonth(g, 'HUN');
+    expect(g.flags['blow:HUN:SOV']).toBe(g.turn - 1);
+    const h = open();
+    declareWar(h, 'GER', 'NED');
+    take(h, 'GER', 'Friesland');
+    yieldMonth(h, 'NED');
+    expect(h.flags['blow:NED:GER']).toBe(h.turn);
   });
 });
 
