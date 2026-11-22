@@ -16,7 +16,7 @@ import { RATIO, levelOf } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceBill, practiceHedges, practiceTicket, withJoiners, withTeams, wornWords, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, fieldHedges, kitchenTicket, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
 import { LAND } from '../land/rules';
 import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
@@ -202,14 +202,8 @@ function showChooser(): void {
   app.querySelectorAll<HTMLElement>('[data-ground]').forEach((el) => el.addEventListener('click', () => {
     const p = PRACTICE_GROUNDS[Number(el.dataset.ground)];
     const t0 = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceTitle(p) });
-    // ?teams (release 2): each side brings a machine-gun team and a mortar team.
-    const t1 = flagged('teams') ? withTeams(t0) : t0;
-    // ?join (release 2, the test kitchen until the campaign's cards carry them): a corps comes up from next door for
-    // each side, his midway on his east flank, theirs late from behind their line.
-    const t2 = flagged('join') ? withJoiners(t1, { att: [{ joined: 0.5, toward: Math.PI / 2 }], def: [{ joined: 0.3 }] }) : t1;
-    // ?cutters (release 2): the practice field is fought from July 1944, when tanks carry hedge cutters (LAND.cutters.from).
-    const t = flagged('cutters') ? { ...t2, turn: Math.max(t2.turn, LAND.cutters.from) } : t2;
-    startBattle(t, null, p);
+    // ?teams, ?join, ?july44 (release 2): the test kitchen's tickets (sample.ts kitchenTicket).
+    startBattle(kitchenTicket(t0, flagged), null, p);
   }));
   app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
 }
@@ -268,14 +262,16 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   // page has no other way to turn hiding on); with ?setup his attack sends one from the block in hand (N) as he places.
   if (flagged('patrol')) { b.patrol = true; b.hideOn(); }
   // ?cutters, ?smoke (release 2, ruling 242): hedge cutters (C, then click a hedge) and smoke on call (K, then click or
-  // drag). ?hedges: three test hedge lines with gateways across the middle of the field (the browser's fields have
-  // none), laid before the clock, so cutters can be tried.
+  // drag). ?hedges: three test hedge lines with gateways across the middle of the field, and one where a line crosses a
+  // road or a bridge (the browser's fields have none), laid before the clock, so cutters can be tried.
   b.cutters = flagged('cutters'); b.smoke = flagged('smoke');
   // ?phones (release 2; the design director, 18:36Z): the defence's field telephone lines; guns, mortars and tanks cut them.
   b.phones = flagged('phones');
   // ?bearers (release 2): stretcher bearers carry each block's wounded to its aid post; its light cases come back.
   b.bearers = flagged('bearers');
-  if (flagged('hedges')) { const H = practiceHedges(b.field.w, b.field.h); b.hedgesOn(H.hedges, H.gates); }
+  // ?bocage (release 2, ruling 242 C1-B): tanks without cutters cross a hedge only at a gap (try it with ?hedges).
+  b.bocage = flagged('bocage');
+  if (flagged('hedges')) { const H = fieldHedges(b.field); b.hedgesOn(H.hedges, H.gates); }
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false; S.rushByHand = false;
@@ -318,7 +314,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="ftop"><div class="dispatch tc-paper" id="dispatch"></div><div class="fwarn tc-paper" id="fwarn" hidden>Your army is near breaking: pull back the worn, or hand it to the staff.</div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
-    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(b.relief && b.hasJoiners(S.scene.me) ? ['<span class="tc-key">U</span> dig in, wait for help'] : []), ...(b.rider && b.hasJoiners(S.scene.me) ? ['Click a rider: his news'] : []), ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), ...(b.cutters && b.allBlocks().some((u) => u.side === S.scene.me && b.cutterOf(u)) ? ['<span class="tc-key">C</span> cut a gap, then click the hedge'] : []), ...(b.smoke && b.allBlocks().some((u) => u.side === S.scene.me && b.smokeOf(u)) ? ['<span class="tc-key">K</span> lay smoke, then click or drag'] : []), ...(b.patrol && placing && S.scene.me === 'att' ? ['<span class="tc-key">N</span> send a night patrol'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
+    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(b.relief && b.hasJoiners(S.scene.me) ? ['<span class="tc-key">U</span> dig in, wait for help'] : []), ...(b.rider && b.hasJoiners(S.scene.me) ? ['Click a rider: his news'] : []), ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), ...(b.cutters && b.allBlocks().some((u) => u.side === S.scene.me && b.cutterOf(u)) ? ['<span class="tc-key">C</span> cut a gap, then click the hedge'] : b.cutters && b.ticket.turn < LAND.cutters.from ? ['Hedge cutters from July 1944 (?july44)'] : []), ...(b.smoke && b.allBlocks().some((u) => u.side === S.scene.me && b.smokeOf(u)) ? ['<span class="tc-key">K</span> lay smoke, then click or drag'] : []), ...(b.patrol && placing && S.scene.me === 'att' ? ['<span class="tc-key">N</span> send a night patrol'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
     <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.allBlocks().filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = byId('field') as HTMLCanvasElement;

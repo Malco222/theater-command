@@ -99,8 +99,10 @@ export function thinkFor(b: LandBattle, side: Side): void {
  * Smoke on call (release 2, ruling 242 S5-A: both staffs alike). A block of foot (or lorried infantry) going in at a
  * block of theirs, with smoke to lay and no screen of its own standing, lays one once its target is within its fire's
  * reach (LAND.reach): the attack's in its assault (an attack with a plan, once its main effort has gone in; the pinning
- * line too from then), the defence's in a counter-attack, a reserve sent forward or a block gone out after a wavering
- * enemy; never a block standing in its works (within LAND.hold.within of its place, as the drill's 'home'). The screen
+ * line too from then), the defence's in a counter-attack, a reserve sent forward; never a block standing in its works
+ * (within LAND.hold.within of its place, as the drill's 'home'). So on the defence only a reserve sent forward lays
+ * smoke: a line block gone out after a wavering enemy, or round a neighbour's flank, is never further from its place
+ * than its leash (every style's defLeash, 300 m, LAND.hold.within's own), so it fights from its works. The screen
  * lies square to the way to its target, its front long, its middle min(its army's reach, half the gap) beyond the
  * middle of its front: across the ground it must cross. Ordered as every staff order is (no radio).
  */

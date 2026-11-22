@@ -6,10 +6,12 @@
 // (S1-A to S6) halves a direct blow across a live screen (never on top of the vague share; fire from far back untouched),
 // one screen a block at a time, the army's count a battle, laid within its army's reach of its front and at most its
 // front long, both staffs alike as their foot goes in, the drill drawing each screen as its rounds in place of its own
-// salvoes. Off, nothing of either is read: the battle of 3bda466e to the last number.
+// salvoes. Off, nothing of either is read: the battle of 3bda466e to the last number. The bocage (C1-B, built as the
+// 17:45Z amendment asks: "unfitted tanks cross only at gaps"), under its own switch: a tank block without cutters crosses
+// a hedge only at a gap, a gateway or a cut once open; measured against off (LONG=1).
 import { describe, expect, it } from 'vitest';
 import type { FieldEvent, FieldTicket, Side } from '../src/battle/core';
-import { LAND, LandBattle, practiceHedges, sampleTicket, smokeMeans, withTeams, type Cut, type LandPlace, type LandUnit, type Screen } from '../src/battle/land';
+import { LAND, LandBattle, PRACTICE_GROUNDS, fieldHedges, kitchenTicket, practiceHedges, practiceTicket, sampleTicket, smokeMeans, withTeams, type Cut, type LandPlace, type LandUnit, type Screen } from '../src/battle/land';
 import { newCampaign, offers } from '../src/battle/ui/campaign';
 import { orderAttack } from '../src/campaign/turn';
 import { Rng, hashString } from '../src/core/rng';
@@ -193,6 +195,50 @@ describe('(2) hedge cutters on: the fight is the same, and the gaps are cut', ()
   });
 });
 
+describe('(2b) cut orders: a group keeps its shape along the hedge, one gap is never cut twice, a shove is no way of its own', () => {
+  /** His two tank blocks on the hedged field, nobody else near, the switch on; nobody's staff thinking. */
+  const two = (): { b: LandBattle; a: LandUnit; c: LandUnit; y: number } => {
+    const b = field();
+    b.cutters = true; b.ai.att = b.ai.def = false;
+    const y = hedgeY(b), tanks = b.units.filter((u) => u.side === 'att' && u.kind === 'arm');
+    const [a, c] = tanks;
+    for (const x of b.units) if (x !== a && x !== c) { x.x = x.side === 'att' ? 60 + x.id * 10 : b.field.w - 60 - x.id * 10; x.y = x.side === 'att' ? 60 : b.field.h - 60; x.order = null; x.path = []; }
+    a.x = 1000; c.x = 2000; a.y = c.y = y - 150; a.face = c.face = 0;
+    return { b, a, c, y };
+  };
+  it('two blocks told to cut at one point: each cuts its own gap at its place in the group, as a move keeps its shape', () => {
+    const { b, a, c, y } = two();
+    expect(b.command({ do: 'land:cut', units: [a.id, c.id], x: 1500, y }, 'att')).toBe(true);
+    steps(b, 400);
+    const cuts = b.cuts.map((q) => [q.unit, Math.round(q.x), q.y]).sort((p, q) => p[1] - q[1]);
+    expect(cuts).toEqual([[a.id, 1000, y], [c.id, 2000, y]]);
+  });
+  it('a block sent to cut where a gap stands already (a gateway) goes through it: no cut, no event, no second gate', () => {
+    const { b, a, y } = two();
+    const g = b.gates.find((q) => Math.abs(q.y - y) < 1e-6)!;
+    a.x = g.x;
+    const gates = b.gates.length;
+    expect(b.command({ do: 'land:cut', units: [a.id], x: g.x, y }, 'att')).toBe(true);
+    steps(b, 400);
+    expect(a.y).toBeGreaterThan(y);
+    expect(b.cuts.length).toBe(0);
+    expect(b.log.some((e) => e.what === 'land:cut')).toBe(false);
+    expect(b.gates.length).toBe(gates);
+  });
+  it('a staff tank standing still, shoved over a hedge line by a friend easing past it, cuts nothing', () => {
+    const { b, a, c, y } = two();
+    b.ai.att = true;
+    (b as unknown as { nextThink: number }).nextThink = Infinity;
+    a.y = y - 0.3; a.speed = 0;
+    // A friend on the same ground just behind it: the two are eased apart along their depth, the tank over the hedge.
+    c.x = a.x; c.y = a.y - (a.d + c.d) / 2 + 3; c.face = 0; c.speed = 0;
+    steps(b, 5);
+    expect(a.y).toBeGreaterThan(y);
+    expect(a.order).toBeNull();
+    expect(b.cuts.length).toBe(0);
+  });
+});
+
 // ---- (3) why not, in his words --------------------------------------------------------------------------------------
 
 describe('(3) every refusal says why, in the player\'s words (129(d))', () => {
@@ -300,19 +346,73 @@ describe('(4) by radio: the order waits on the air, and is checked again as it l
     landed(b, u);
     expect(u.cut).toBeUndefined();
   });
+  // A smoke order has its own place on the air (4b), and leaves orderAt to the block's move or attack: on the air while
+  // the rules hold it pending.
+  const onAir = (b: LandBattle, u: LandUnit): boolean => (b as unknown as { pending: { id: number }[] }).pending.some((p) => p.id === u.id);
+  const aired = (b: LandBattle, u: LandUnit): void => { for (let k = 0; k < 400 && onAir(b, u); k++) b.step(); };
   it('smoke: laid as it lands, not before; not laid where one of theirs went up meanwhile', () => {
     const b = radio(), u = footOf(b);
     expect(b.command({ do: 'land:smoke', units: [u.id], x0: u.x - 80, y0: u.y + 100, x1: u.x + 80, y1: u.y + 100 }, 'att')).toBe(true);
     expect(b.screens.length).toBe(0);
-    landed(b, u);
+    expect(onAir(b, u)).toBe(true);
+    aired(b, u);
     expect(b.screens.length).toBe(1);
     expect(b.screens[0].t).toBeGreaterThan(0);
     const v = b.units.filter((x) => x.side === 'att' && x.kind === 'inf')[1];
     b.command({ do: 'land:smoke', units: [v.id], x0: v.x - 80, y0: v.y + 100, x1: v.x + 80, y1: v.y + 100 }, 'att');
     screenAt(b, v, v.x - 50, v.y + 60, v.x + 50, v.y + 60);
-    landed(b, v);
+    aired(b, v);
+    expect(onAir(b, v)).toBe(false);
     expect(b.screens.filter((s) => s.unit === v.id).length).toBe(1);
     expect(v.smokeLeft).toBeUndefined();
+  });
+});
+
+describe('(4b) by radio, smoke has its own place on the air: it and his move or attack both land, in either order', () => {
+  const radio = (): LandBattle => {
+    const b = new LandBattle({ ...sampleTicket('plains', 1.0, { seed: 2, humanAtt: true, nat: { att: 'USA', def: 'GER' } }), turn: 60 });
+    b.ai.att = b.ai.def = false; b.radio = true; b.perUnit = true; b.smoke = true;
+    steps(b, 10);
+    return b;
+  };
+  const line = (u: LandUnit): { x0: number; y0: number; x1: number; y1: number } => ({ x0: u.x - 80, y0: u.y + u.d / 2 + 100, x1: u.x + 80, y1: u.y + u.d / 2 + 100 });
+  const both = (b: LandBattle, u: LandUnit): void => { for (let k = 0; k < 600 && (u.orderAt !== undefined || !b.screens.some((s) => s.unit === u.id)); k++) b.step(); };
+  it('a move, then smoke to cover it: the move lands and the screen is laid', () => {
+    const b = radio(), u = footOf(b), y0 = u.y;
+    expect(b.command({ do: 'move', units: [u.id], x: u.x, y: u.y + 300 }, 'att')).toBe(true);
+    const due = u.orderAt!;
+    expect(b.command({ do: 'land:smoke', units: [u.id], ...line(u) }, 'att')).toBe(true);
+    // The smoke leaves the move's time on the air alone.
+    expect(u.orderAt).toBe(due);
+    both(b, u);
+    expect(b.screens.filter((s) => s.unit === u.id).length).toBe(1);
+    expect(u.order?.kind).toBe('move');
+    steps(b, 300);
+    expect(u.y - y0).toBeGreaterThan(100);
+  });
+  it('smoke, then a move: the screen is laid and the move lands', () => {
+    const b = radio(), u = footOf(b), y0 = u.y;
+    expect(b.command({ do: 'land:smoke', units: [u.id], ...line(u) }, 'att')).toBe(true);
+    expect(u.orderAt).toBeUndefined();
+    expect(b.command({ do: 'move', units: [u.id], x: u.x, y: u.y + 300 }, 'att')).toBe(true);
+    both(b, u);
+    expect(b.screens.filter((s) => s.unit === u.id).length).toBe(1);
+    expect(u.order?.kind).toBe('move');
+    steps(b, 300);
+    expect(u.y - y0).toBeGreaterThan(100);
+  });
+  it('a second smoke order on the air replaces the first (one screen), and a second move replaces the first', () => {
+    const b = radio(), u = footOf(b), [x0, y0] = [u.x, u.y];
+    b.command({ do: 'land:smoke', units: [u.id], ...line(u) }, 'att');
+    b.command({ do: 'move', units: [u.id], x: x0 + 200, y: y0 }, 'att');
+    b.command({ do: 'land:smoke', units: [u.id], ...line(u) }, 'att');
+    b.command({ do: 'move', units: [u.id], x: x0, y: y0 + 300 }, 'att');
+    both(b, u);
+    steps(b, 50);
+    expect(b.screens.filter((s) => s.unit === u.id).length).toBe(1);
+    expect(b.log.filter((e) => e.what === 'land:smoke').length).toBe(1);
+    expect(u.order?.kind).toBe('move');
+    expect([u.order!.x, u.order!.y]).toEqual([x0, y0 + 300]);
   });
 });
 
@@ -360,6 +460,35 @@ describe('(5) a screen halves a direct blow across it, and nothing else', () => 
     s.until = b.t + 30;
     expect(weigh(b, u, t) / plain).toBeCloseTo(LAND.smoke.share, 12);
   });
+  it('never on top of fire on cover at a block still hidden (blind, already fire at a place)', () => {
+    const { b, u, t } = faced();
+    t.hid = true;
+    const blind = weigh(b, u, t);
+    screenAt(b, t, 1300, 1000, 1700, 1000);
+    expect(weigh(b, u, t)).toBe(blind);
+    delete t.hid;
+    expect(weigh(b, u, t) / blind).toBeCloseTo(LAND.smoke.share, 12);
+  });
+  it('the air is not touched: the share held back for air strikes is the same with a screen across the blow or not', () => {
+    const run = (screened: boolean): { bank: number; withheld: number; str: number } => {
+      const b = new LandBattle(practiceTicket(PRACTICE_GROUNDS.find((p) => p.air)!, { seed: 2, nat: { att: 'USA', def: 'GER' } }));
+      b.ai.att = b.ai.def = false; b.smoke = true;
+      const u = footOf(b, 'att'), t = footOf(b, 'def');
+      for (const x of b.units) if (x !== u && x !== t) { x.x = x.side === 'att' ? 100 : b.field.w - 100; x.y = x.side === 'att' ? 60 : b.field.h - 60; }
+      u.x = 1500; u.y = 900; u.face = 0; t.x = 1500; t.y = 1100; t.face = Math.PI;
+      if (screened) screenAt(b, u, 1300, 1000, 1700, 1000, 600);
+      const s0 = t.str;
+      steps(b, 1);
+      const A = b as unknown as { airBank: Record<Side, Map<number, number>>; airLedger: Record<Side, { withheld: number }> };
+      return { bank: A.airBank.att.get(t.id) ?? 0, withheld: A.airLedger.att.withheld, str: s0 - t.str };
+    };
+    const open = run(false), smoke = run(true);
+    expect(open.withheld).toBeGreaterThan(0);
+    expect(smoke.bank).toBeCloseTo(open.bank, 12);
+    expect(smoke.withheld).toBeCloseTo(open.withheld, 12);
+    // The ground's own part is the part the screen spoils.
+    expect(smoke.str).toBeLessThan(open.str * 0.75);
+  });
   it('with hiding on, a hidden block is not seen through it', () => {
     const b = new LandBattle(sampleTicket('plains', 1.0, { seed: 2, nat: { att: 'USA', def: 'GER' } }));
     b.ai.att = b.ai.def = false; b.smoke = true;
@@ -398,7 +527,9 @@ describe('(5) a screen halves a direct blow across it, and nothing else', () => 
     const means: [string, number, number, number][] = [['USA', 195, 30, 2], ['UK', 457, 30, 3], ['GER', 30, 22, 2], ['SOV', 30, 22, 2], ['JAP', 188, 22, 2], ['ITA', 0, 19, 2]];
     for (const [nat, reach, hang, count] of means) { const m = smokeMeans(nat)!; expect([m.reach, m.hang, m.count ?? LAND.smoke.count]).toEqual([reach, hang, count]); }
     for (const kin of ['CAN', 'AUS', 'NZL', 'SAF', 'IND']) expect(smokeMeans(kin)).toBe(smokeMeans('UK'));
-    for (const none of ['FRA', 'VIC', 'RED', 'BLU', 'POL']) expect(smokeMeans(none)).toBeNull();
+    for (const none of ['FRA', 'VIC', 'FFR', 'RED', 'BLU', 'POL']) expect(smokeMeans(none)).toBeNull();
+    // The 240 form (plans.kin on the air branch's arsenal.json): Vichy and Free France both follow France.
+    expect(LAND.smoke.kin).toEqual({ CAN: 'UK', AUS: 'UK', NZL: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA', FFR: 'FRA' });
   });
   it('the line is clipped to the block\'s front about its middle; an army whose means is set down at its own front lays it there', () => {
     const { b, u } = faced();
@@ -408,8 +539,16 @@ describe('(5) a screen halves a direct blow across it, and nothing else', () => 
     expect(Math.hypot(s.x1 - s.x0, s.y1 - s.y0)).toBeCloseTo(u.w, 0);
     expect((s.x0 + s.x1) / 2).toBeCloseTo(u.x, 0);
     expect((s.y0 + s.y1) / 2).toBeCloseTo(my, 0);
-    const ita = faced({ att: 'ITA', def: 'GER' });
-    expect(ita.b.command({ do: 'land:smoke', units: [ita.u.id], x0: ita.u.x + 400, y0: ita.u.y + 400, x1: ita.u.x + 500, y1: ita.u.y + 300 }, 'att')).toBe(true);
+    const ita = faced({ att: 'ITA', def: 'GER' }), iu = ita.u, front = iu.y + iu.d / 2;
+    // A line drawn far off is refused, saying why (129(d)): Italy's pot is set down along its own front.
+    expect(ita.b.smokeWhy(iu, iu.x + 400, iu.y + 400, iu.x + 500, iu.y + 300)).toBe('They set their smoke down along their own front.');
+    expect(ita.b.smokeWhy(iu, iu.x, front + LAND.smoke.front + 5)).toBe('They set their smoke down along their own front.');
+    expect(ita.b.command({ do: 'land:smoke', units: [iu.id], x0: iu.x + 400, y0: iu.y + 400, x1: iu.x + 500, y1: iu.y + 300 }, 'att')).toBe(false);
+    expect(ita.b.screens.length).toBe(0);
+    // On its own ground, or within a throw of its front: laid along its front.
+    expect(ita.b.smokeWhy(iu, iu.x, iu.y)).toBeNull();
+    expect(ita.b.smokeWhy(iu, iu.x + 20, front + LAND.smoke.front - 5)).toBeNull();
+    expect(ita.b.command({ do: 'land:smoke', units: [iu.id], x0: iu.x - 60, y0: front + 20, x1: iu.x + 100, y1: front + 25 }, 'att')).toBe(true);
     const q = ita.b.screens[0];
     expect((q.y0 + q.y1) / 2).toBeCloseTo(ita.u.y + ita.u.d / 2, 0);
     expect((q.x0 + q.x1) / 2).toBeCloseTo(ita.u.x, 0);
@@ -418,37 +557,53 @@ describe('(5) a screen halves a direct blow across it, and nothing else', () => 
   });
 });
 
+describe('(5b) the 2D test kitchen: ?cutters alone leaves the field\'s date, ?july44 moves it', () => {
+  it('kitchenTicket', () => {
+    const t0 = practiceTicket(PRACTICE_GROUNDS[0], { humanAtt: true, seed: 5 });
+    expect(kitchenTicket(t0, (f) => f === 'cutters' || f === 'smoke' || f === 'hedges')).toBe(t0);
+    const t = kitchenTicket(t0, (f) => f === 'july44');
+    expect([t.turn, t.date]).toEqual([LAND.cutters.from, 'July 1944']);
+    expect(t0.turn).toBeLessThan(LAND.cutters.from);
+  });
+});
+
 // ---- (6) both staffs ------------------------------------------------------------------------------------------------
 
 describe('(6) both staffs lay screens as their foot goes in, never from their works', () => {
-  const fought = (t: T, human = false): { b: LandBattle; laid: { s: Screen; went: number | null; home: boolean; target: boolean; kind: string }[] } => {
+  type Laid = { s: Screen; planned: boolean; went: number | null; home: boolean; sent: boolean; target: boolean; kind: string };
+  const fought = (t: T, human = false): { b: LandBattle; laid: Laid[] } => {
     const b = new LandBattle(t);
     b.ai.att = b.ai.def = true; b.smoke = true;
     if (human) b.perUnit = true;
-    const laid: { s: Screen; went: number | null; home: boolean; target: boolean; kind: string }[] = [];
+    const laid: Laid[] = [];
     for (let k = 0; !b.over && k < 30000; k++) {
       const n = b.screens.length;
       b.step();
       for (const s of b.screens.slice(n)) {
-        const u = b.unit(s.unit)!;
-        laid.push({ s, went: b.plan[s.side]?.went ?? null, home: u.side === 'def' && u.reserve !== 'sent' && Math.hypot(u.x - u.home[0], u.y - u.home[1]) < LAND.hold.within, target: u.order?.kind === 'attack', kind: u.kind });
+        const u = b.unit(s.unit)!, P = b.plan[s.side];
+        laid.push({ s, planned: !!P, went: P?.went ?? null, home: u.side === 'def' && u.reserve !== 'sent' && Math.hypot(u.x - u.home[0], u.y - u.home[1]) < LAND.hold.within, sent: u.reserve === 'sent', target: u.order?.kind === 'attack', kind: u.kind });
       }
     }
     return { b, laid };
   };
   const ai = fought(sampleTicket('plains', 1.1, { seed: 3, nat: { att: 'USA', def: 'GER' } }));
   const mine = fought(sampleTicket('plains', 1.0, { seed: 2, humanAtt: true, nat: { att: 'GER', def: 'UK' } }), true);
-  it('the attack\'s in its assault, the defence\'s in counter-attacks; at their targets, foot only', () => {
+  it('the attack\'s in its assault (once its main effort has gone in), the defence\'s reserves sent forward; at their targets, foot only', () => {
     for (const { laid } of [ai, mine]) {
       expect(laid.filter((x) => x.s.side === 'att').length).toBeGreaterThan(0);
       expect(laid.filter((x) => x.s.side === 'def').length).toBeGreaterThan(0);
       for (const x of laid) {
         expect(x.kind).toBe('inf');
         expect(x.target).toBe(true);
-        if (x.s.side === 'att' && x.went !== null) expect(x.s.t).toBeGreaterThanOrEqual(x.went);
+        // An attack with a plan lays none before its main effort has gone in.
+        if (x.s.side === 'att' && x.planned) { expect(x.went).not.toBeNull(); expect(x.s.t).toBeGreaterThanOrEqual(x.went!); }
         expect(x.home).toBe(false);
+        // On the defence, only a reserve sent forward: a line block never leaves its works (its leash is LAND.hold.within).
+        if (x.s.side === 'def') expect(x.sent).toBe(true);
       }
     }
+    // The computer's attack fights to a plan (its main effort waits at its start line, then goes in).
+    expect(ai.laid.some((x) => x.s.side === 'att' && x.planned)).toBe(true);
   });
   it('his own staff lays them too (the player\'s blocks he has not taken in hand)', () => {
     expect(mine.b.ticket.att.human).toBe(true);
@@ -549,11 +704,11 @@ describe('(8) the bridge: the switches, the why calls, the flags and the fog', (
     const b = field();
     b.cutters = true; b.smoke = true;
     const tank = tankOf(b), foot = footOf(b), gun = b.units.find((u) => u.side === 'def' && u.kind === 'art')!;
-    expect(unitOut(tank, 0, 'att', b).cutter).toBe(1);
-    expect(unitOut(tank, 0, 'def', b).cutter).toBe(1);
+    expect(unitOut(tank, 0, 'att', b).cutter).toBe(LAND.cutters.share);
+    expect(unitOut(tank, 0, 'def', b).cutter).toBe(LAND.cutters.share);
     tank.hid = true;
     expect(unitOut(tank, 0, 'def', b).cutter).toBeUndefined();
-    expect(unitOut(tank, 0, 'att', b).cutter).toBe(1);
+    expect(unitOut(tank, 0, 'att', b).cutter).toBe(LAND.cutters.share);
     delete tank.hid;
     expect(unitOut(foot, 0, 'att', b).cutter).toBeUndefined();
     expect(unitOut(foot, 0, 'att', b).smoke).toBe(2);
@@ -629,6 +784,145 @@ describe('(9) the field with smoke on against off (a measure: LONG=1)', () => {
         }
         const gap = (w1 - w0) / n;
         const row = `${ground.padEnd(6)} ${army} ${side === 'att' ? 'attacking' : 'defending'} odds ${odds.toFixed(1)}: off ${w0}/${n}, on ${w1}/${n}, on-off ${gap.toFixed(3)}; R ratio on/off ${Math.exp(lr / n).toFixed(3)}; screens ${(laid / n).toFixed(1)} a battle`;
+        rows.push(row);
+        env?.stdout?.write(`${row}\n`);
+        if (Math.abs(gap) > 0.1) bad.push(row);
+      }
+    }
+    expect(rows.length).toBeGreaterThan(0);
+    expect(bad, bad.join('\n')).toEqual([]);
+  }, 7_200_000);
+});
+
+// ---- (10) the bocage (C1-B) -------------------------------------------------------------------------------------------
+
+/**
+ * Ruling 242 C1-B, built as its 17:45Z amendment asks ("unfitted tanks cross only at gaps"), under its own switch
+ * (LandBattle.bocage). Off, the pins above (the battle of 3bda466e) hold. On, a tank block without cutters crosses a
+ * hedge line only at a gap in it, a gateway or a cut once open, within a cell or so of it (the field's grain), and goes
+ * round to one; a tank block with cutters goes on as before, so with every tank fitted the fight is the very same.
+ */
+describe('(10) the bocage: tanks without cutters cross a hedge only at a gap', () => {
+  const CELL = 25, NEAR = 1.6 * CELL;
+  /** His one tank block south of the three practice hedges, nobody else near, nobody's staff thinking. */
+  const lone = (turn: number, o: { bocage?: boolean; cutters?: boolean } = {}): { b: LandBattle; u: LandUnit } => {
+    const b = new LandBattle({ ...sampleTicket('plains', 1.0, { seed: 2, humanAtt: true, nat: { att: 'USA', def: 'GER' } }), turn });
+    b.ai.att = b.ai.def = false; b.bocage = !!o.bocage; b.cutters = !!o.cutters;
+    const H = practiceHedges(b.field.w, b.field.h); b.hedgesOn(H.hedges, H.gates);
+    const u = tankOf(b);
+    for (const x of b.units) if (x !== u) { x.x = x.side === 'att' ? 60 + x.id * 10 : b.field.w - 60 - x.id * 10; x.y = x.side === 'att' ? 60 : b.field.h - 60; x.order = null; x.path = []; }
+    u.x = 1500; u.y = 700; u.face = 0;
+    return { b, u };
+  };
+  /** Where its middle crossed each hedge line (y), driving north to (1500, 1300). */
+  const drive = (b: LandBattle, u: LandUnit, n = 3000): { y: number; x: number }[] => {
+    const lines = [0.42, 0.5, 0.58].map((f) => Math.round(b.field.h * f)), out: { y: number; x: number }[] = [];
+    expect(b.command({ do: 'move', units: [u.id], x: 1500, y: 1300 }, 'att')).toBe(true);
+    for (let k = 0; k < n && u.order; k++) {
+      const [x0, y0] = [u.x, u.y];
+      b.step();
+      for (const y of lines) if ((y0 - y) * (u.y - y) < 0) out.push({ y, x: x0 + ((u.x - x0) * (y - y0)) / (u.y - y0) });
+    }
+    return out;
+  };
+  it('off: straight over the hedges; on, without cutters: over each only at a gateway, and there all the same', () => {
+    const off = lone(50), on = lone(50, { bocage: true });
+    expect(on.b.heldBack(on.u)).toBe(true);
+    expect(off.b.heldBack(off.u)).toBe(false);
+    const a = drive(off.b, off.u), c = drive(on.b, on.u);
+    expect(a.length).toBe(3);
+    for (const p of a) expect(Math.abs(p.x - 1500)).toBeLessThan(1);
+    expect(c.map((p) => p.y)).toEqual(a.map((p) => p.y));
+    for (const p of c) expect(Math.min(...on.b.gates.filter((g) => g.y === p.y).map((g) => Math.abs(g.x - p.x)))).toBeLessThan(NEAR);
+    expect(Math.hypot(on.u.x - 1500, on.u.y - 1300)).toBeLessThan(8);
+    // The way round costs it time.
+    expect(on.b.t).toBeGreaterThan(off.b.t + 10);
+  });
+  it('a gap cut and open serves any tank: one without cutters goes through it', () => {
+    const { b, u } = lone(50, { bocage: true, cutters: true });
+    expect(b.cutterOf(u)).toBe(false);
+    // A cutter tank's gap, begun now (an enemy's: the cut is the hedge's, whoever cut it), open from t1.
+    const y = hedgeY(b), foe = footOf(b, 'def');
+    inside(b).cutBegin(foe, 1500, y, 0);
+    for (let k = 0; k < 400 && b.t < b.cuts[0].t1 + 1; k++) b.step();
+    expect(b.gates.some((g) => g.kind === 'cut' && g.x === 1500)).toBe(true);
+    const c = drive(b, u);
+    expect(Math.abs(c[0].x - 1500)).toBeLessThan(NEAR);
+  });
+  it('never eased over a hedge but at a gap: a friend shoving it at the hedge moves it along, not over', () => {
+    const { b, u } = lone(50, { bocage: true });
+    const y = hedgeY(b), f = b.units.filter((x) => x.side === 'att' && x.kind === 'arm')[1];
+    u.y = y - 0.3; u.speed = 0;
+    f.x = u.x; f.y = u.y - (u.d + f.d) / 2 + 3; f.face = 0; f.speed = 0;
+    steps(b, 5);
+    expect(u.y).toBeLessThan(y);
+    // Off, the same shove puts it over.
+    const o = lone(50), fo = o.b.units.filter((x) => x.side === 'att' && x.kind === 'arm')[1];
+    o.u.y = y - 0.3; o.u.speed = 0; fo.x = o.u.x; fo.y = o.u.y - (o.u.d + fo.d) / 2 + 3; fo.face = 0; fo.speed = 0;
+    steps(o.b, 5);
+    expect(o.u.y).toBeGreaterThan(y);
+  });
+  it('a tank block standing at a hedge walks off it on its own side', () => {
+    const { b, u } = lone(50, { bocage: true });
+    const y = hedgeY(b);
+    u.y = y - 0.3;
+    expect(b.command({ do: 'move', units: [u.id], x: 1500, y: 600 }, 'att')).toBe(true);
+    let over = false;
+    for (let k = 0; k < 400 && u.order; k++) { b.step(); if (u.y > y) over = true; }
+    expect(over).toBe(false);
+    expect(Math.abs(u.y - 600)).toBeLessThan(8);
+  });
+  it('with every tank fitted (cutters, July 1944), the bocage changes nothing: the very same fight', () => {
+    const run = (bocage: boolean): string => {
+      const b = field();
+      b.cutters = true; b.bocage = bocage;
+      expect(b.units.filter((u) => u.kind === 'arm').every((u) => !b.heldBack(u))).toBe(true);
+      return signed(b);
+    };
+    expect(run(true)).toBe(run(false));
+  }, 300_000);
+});
+
+/**
+ * The bocage against off (a measure: LONG=1, ruling 242 C1-B "measured against the card"): on the hedged practice field
+ * (three hedge lines across the middle, two gateways each, and one wherever a line crosses a road or a bridge: fieldHedges,
+ * as no hedge closes a lane; laid straight over a river's bridges, the river's attack lost its tanks for want of any way
+ * over), before July 1944 (no tank carries cutters), both staffs, no
+ * player orders, BOCAGE_SEEDS seeds (80) at odds 1.0 and 1.4, the attack's win rate with the bocage on against the same
+ * battles with it off: within a tenth (b418). BOCAGE_GROUND runs one ground.
+ */
+describe('(10b) the bocage on against off (a measure: LONG=1)', () => {
+  const LONG = !!env?.env.LONG;
+  const GROUNDS: [string, (seed: number, odds: number) => T][] = [
+    ['plains', (seed, odds) => sampleTicket('plains', odds, { seed })],
+    ['forest', (seed, odds) => sampleTicket('forest', odds, { seed })],
+    ['hills', (seed, odds) => sampleTicket('hills', odds, { seed })],
+    ['city', (seed, odds) => sampleTicket('urban', odds, { seed, town: 'city' })],
+    ['river', (seed, odds) => sampleTicket('plains', odds, { seed, river: true })],
+  ];
+  const only = env?.env.BOCAGE_GROUND, seeds = Number(env?.env.BOCAGE_SEEDS ?? 80);
+  it.runIf(LONG)('every ground, each odds: the bocage moves the attack\'s win rate within a tenth of off', () => {
+    const rows: string[] = [], bad: string[] = [];
+    for (const [ground, make] of GROUNDS) {
+      if (only && only !== ground) continue;
+      for (const odds of [1.0, 1.4]) {
+        let w0 = 0, w1 = 0, n = 0, lr = 0;
+        for (let seed = 1; seed <= seeds; seed++) {
+          const R: number[] = [];
+          for (const on of [false, true]) {
+            const b = new LandBattle({ ...make(seed, odds), turn: LAND.cutters.from - 1 });
+            b.ai.att = b.ai.def = true; b.bocage = on;
+            const H = fieldHedges(b.field); b.hedgesOn(H.hedges, H.gates);
+            for (let k = 0; !b.over && k < 30000; k++) b.step();
+            R.push(b.over!.R);
+            const win = b.over!.R >= b.ticket.reckoning.even ? 1 : 0;
+            if (on) w1 += win; else w0 += win;
+          }
+          lr += Math.log(Math.max(1e-6, R[1]) / Math.max(1e-6, R[0]));
+          n++;
+        }
+        const gap = (w1 - w0) / n;
+        const row = `${ground.padEnd(6)} bocage odds ${odds.toFixed(1)}: off ${w0}/${n}, on ${w1}/${n}, on-off ${gap.toFixed(3)}; R ratio on/off ${Math.exp(lr / n).toFixed(3)}`;
         rows.push(row);
         env?.stdout?.write(`${row}\n`);
         if (Math.abs(gap) > 0.1) bad.push(row);

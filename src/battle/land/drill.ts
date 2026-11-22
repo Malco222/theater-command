@@ -175,6 +175,8 @@ export interface Man {
   el?: 1 | 2;
   rapid?: number;
   call?: number;
+  /** A spotter's signaller: where his last call brought the fire, the middle of the block it was called on as he began it. */
+  callAt?: [number, number];
   /** A gun's or a mortar's round of the salvo called: the battle time it fires (every gun within a second or two). */
   due?: number;
   /** A tank's machine guns on the enemy's foot (the drill book: against infantry mostly machine guns). */
@@ -265,8 +267,9 @@ export interface MenOut {
   k: number; j?: number; r: Role; x: number; y: number; f: number; p: Pose; v: number; c: CoverKind;
   a?: [number, number]; s?: number; d?: number; h?: 1; b?: 1; mk?: Mark[];
   /** The drill book (tactics.ts): his element (1 the base of fire, 2 moving), and a signaller's call stamp (the radio
-   * man's call_support clip plays once from it). */
-  e?: 1 | 2; cl?: number;
+   * man's call_support clip plays once from it), with cs the spot that call brings the fire on (the middle of the block
+   * called on as he began it: the ranging rounds fall about half its depth beyond, then short, then the salvos on it). */
+  e?: 1 | 2; cl?: number; cs?: [number, number];
   /** Platoon cam (release 2): one of the squad leading his side's assault (Drill.leads). The camera's button drops onto these men. */
   ld?: 1;
   /** Field telephone lines (release 2): a lineman, outside the block's squads (MenBlock.ln). */
@@ -2897,7 +2900,7 @@ export class Drill {
       sq.foWith = base.id; sq.foOn = e.id; sq.foAt = [base.x, base.y];
     }
     // The drill book: his signaller on the handset for each call of the guns' mission (the radio man's call_support).
-    if (this.byBook && sq.ms && sq.ms.on === e.id) sq.fo[1].call = sq.ms.call;
+    if (this.byBook && sq.ms && sq.ms.on === e.id && sq.fo[1].call !== sq.ms.call) { sq.fo[1].call = sq.ms.call; sq.fo[1].callAt = [e.x, e.y]; }
     for (const m of sq.fo) {
       const d = Math.hypot(m.x - m.spot[0], m.y - m.spot[1]);
       if (d < 1 && m.v === 0) { m.pose = m.k === 200 ? 'observe' : 'wait'; m.aim = [e.x, e.y]; }
@@ -3370,6 +3373,7 @@ export class Drill {
       if (m.gone !== undefined) o.gone = r1(m.gone);
       if (m.back !== undefined) o.back = r1(m.back);
       if (m.br) o.br = 1;
+      if (m.call !== undefined && m.callAt) o.cs = [r1(m.callAt[0]), r1(m.callAt[1])];
       return o;
     };
     for (const sq of this.squads.values()) {

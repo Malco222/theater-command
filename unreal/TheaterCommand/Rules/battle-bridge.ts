@@ -95,18 +95,26 @@
 //                                   (below). Looks and words only
 //                                   Hedge cutters (release 2; Brian, 22 November 14:19Z; the design director's ruling 242,
 //                                   C1-A to C4-A): { cutters: true }: from July 1944 (turn 59), on a field with hedges
-//                                   (TC.battleHedges), every army's tank blocks carry hedge cutters (units carry cutter: 1,
-//                                   both sides', as kit is seen: draw the blades on three tanks in five). TC.battleOrder({ do:
+//                                   (TC.battleHedges), every army's tank blocks carry hedge cutters (units carry cutter, both
+//                                   sides', as kit is seen: the share of the block's drawn tanks that wear the blades, 0.6,
+//                                   three in five: LAND.cutters.share; draw them on that share). TC.battleOrder({ do:
 //                                   'land:cut', units, x, y[, at] }) sends his tank blocks to cut a gap through the hedge at
 //                                   that point and drive on through it (TC.battleCutWhy first, for the card's why); his staff's
 //                                   tanks, and the computer's, cut wherever their way crosses a hedge with no gap near.
 //                                   view.cuts (below) and a land:cut event say where and when; the gap opens 6 battle seconds
 //                                   after the cut begins, and the drawn men walk through it from then. Looks only: the fight
 //                                   is the same, cut or not. Off: no block ever carries cutter, and there are no cuts
+//                                   The bocage (release 2; ruling 242 C1-B, as amended 17:45Z): { bocage: true }: on a field
+//                                   with hedges, a tank block without cutters (before July 1944, or without { cutters })
+//                                   crosses a hedge line only at a gap, a gateway or a cut once open (drawn as cuts below),
+//                                   and goes round to one: draw its tanks filing through the gap. The fight changes with it
+//                                   (slower tanks in hedge country). Off: tanks cross hedges anywhere, as before
 //                                   Smoke on call (release 2; ruling 242, S1-A to S6, as amended 17:45Z): { smoke: true }: TC.
 //                                   battleOrder({ do: 'land:smoke', units, x0, y0, x1, y1[, at] }) has his blocks on foot (or
 //                                   lorried infantry) lay a smoke screen along that line, clipped to the block's own front about
 //                                   the line's middle (TC.battleSmokeWhy first; a click is a 160 m line across the front there).
+//                                   By radio it has its own place on the air: it never replaces his move or attack order still
+//                                   on the way to that block, nor is replaced by one (orderIn stays the move's or attack's).
 //                                   His own blocks with smoke to lay carry smoke: N (the screens they have left). While a
 //                                   screen stands, a direct blow across it strikes at half its weight (guns firing from far
 //                                   back, mortar teams and the air are not touched), and no hidden block is seen through it.
@@ -152,8 +160,9 @@
 //   TC.battleSmokeWhy(id[, x0, y0, x1, y1]) -> { why }: smoke on call, the same for the smoke order: with no line, whether
 //                                   the block may lay smoke at all; with a line (or only its middle, x0, y0), whether there:
 //                                   "Only troops on foot lay smoke.", "Your army has no smoke to lay.", "They can lay smoke up
-//                                   to 195 m ahead.", "Their last screen still stands.", "They have no smoke left." ... Moves
-//                                   nothing
+//                                   to 195 m ahead.", "They set their smoke down along their own front." (Italy's pot: a line
+//                                   on its own ground or within 30 m of its front, laid along its front), "Their last screen
+//                                   still stands.", "They have no smoke left." ... Moves nothing
 //   TC.battlePatrolWhy(id)       -> { why }: night patrol, while he places his army: null where that block of his may go
 //                                   out on patrol tonight, else the reason in words for its card (129(d)): "Only the
 //                                   attacker sends out a patrol.", "Only men on foot go out on patrol.", "One patrol a night:
@@ -743,7 +752,8 @@ export function unitOut(u: UnitBase, t = 0, me?: Side, sim?: LandBattle): Record
     ...(land.waits && me !== undefined && u.side === me ? { waits: { due: land.waits.due, ...(land.waits.late ? { late: true } : {}), ...(land.waits.free ? { free: true } : {}) } } : {}),
     // Hedge cutters (release 2): a tank block carrying them, either side's (kit is seen; never on an enemy hidden from
     // him, in the woods or not yet met: hiddenOut).
-    ...(sim?.cutters && sim.cutterOf(land) && !(land.hid && u.side !== me) ? { cutter: 1 } : {}),
+    // cutter: the share of its drawn tanks that wear the blades (LAND.cutters.share, three in five: ruling 242 C2-A).
+    ...(sim?.cutters && sim.cutterOf(land) && !(land.hid && u.side !== me) ? { cutter: LAND.cutters.share } : {}),
     // Smoke on call (release 2): the screens one of the player's own blocks has left to lay (never the enemy's).
     ...(sim?.smoke && me !== undefined && u.side === me ? smokeOut(sim, land) : {}),
     // Field telephone lines (release 2): one of the player's own blocks whose wire is down (never the enemy's).
@@ -874,7 +884,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; patrol?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; phones?: boolean; bearers?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; patrol?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean; bocage?: boolean; phones?: boolean; bearers?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -933,6 +943,7 @@ export function battleCalls(h: BattleHooks) {
       if (opts?.rider) sim.rider = true;
       // Hedge cutters and smoke on call (release 2, ruling 242): each by its own switch.
       if (opts?.cutters) sim.cutters = true;
+      if (opts?.bocage) sim.bocage = true;
       if (opts?.smoke) sim.smoke = true;
       // Field telephone lines (release 2; the design director, 18:36Z): by its own switch.
       sim.phones = opts?.phones !== false;

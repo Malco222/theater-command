@@ -88,7 +88,8 @@ const OFF: [string, () => T, ((b: LandBattle) => void)?, [number, number, string
     () => withJoiners(sampleTicket('hills', 1.2, { seed: 11, air: PRACTICE_AIR, date: PRACTICE_AIR_DATE }), { att: [{ joined: 0.5 }] }), (b) => { b.relief = true; }, [1.44, 283, 'a1bd3b60b565d961']],
 ];
 /** The drill of the first, sections and platoons, on ec6f8e9c: its view each 25th step and every round, digested. */
-const OFF_DRILL: [number, number, string] = [70702, 94, '4acdf5c8010c6cf1'];
+// On the tactics branch at 15d6fb65 (the signaller's call spot, cs, of 73ff3254 in its men, looks only): the same.
+const OFF_DRILL: [number, number, string] = [70702, 94, 'c8e5dc03a07fa312'];
 
 describe('(1) switched off: the battle of ec6f8e9c, and nothing of the bearers', () => {
   for (const [name, make, setup, pin] of OFF) it(name, () => {
